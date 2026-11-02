@@ -9,6 +9,7 @@
 //  · 오더 필드: 운임구분(규칙 이름) · 운임수동(true면 기사운임을 사람이 직접 고친 것 → 자동 계산하지 않음)
 //  · 규칙을 바꿔도 이미 저장된 오더는 다시 계산하지 않는다(새로 수정하거나 [↺ 규칙대로]를 누를 때만)
 import React from "react";
+import { createPortal } from "react-dom";
 import { doc, onSnapshot } from "firebase/firestore";
 import { db } from "./firebase";
 import { getTenant } from "./fsTenant";
@@ -160,42 +161,120 @@ export const fareIsManual = (form, rules) => {
 const h = React.createElement;
 
 // 운임구분 선택 — rules: 회사 규칙 전체(비활성 규칙은 현재 값일 때만 보여 준다)
-export function FareTypeSelect({ value, onChange, rules = [], className = "", disabled = false, compact = false, placeholder = "운임구분", id }) {
+// ⭐ 2026-11-02 운임구분 선택 — 프로그램 스타일 드롭다운(버튼 + 떠 있는 목록). 옛 <select> 대신
+//  compact: 작은 알약 버튼(라벨 줄·표 칸) / 기본: 입력칸 높이(40px)
+const fmtRuleVal = (r) => (r.type === "fixed" ? `${Math.round(toNum(r.value)).toLocaleString()}원` : `${toNum(r.value)}%`);
+export function FareTypeSelect({ value, onChange, rules = [], className = "", disabled = false, compact = false, placeholder = "운임구분", id, align = "left", noneLabel = "선택 안 함 · 직접 계산", extraOpts = [] }) {
   const list = (rules || []).filter((r) => r && String(r.name || "").trim() && (r.active !== false || String(r.name) === String(value || "")));
+  const cur = list.find((r) => String(r.name) === String(value || "")) || null;
+  const curExtra = extraOpts.find((o) => String(o.name) === String(value || "")) || null;
+  const [open, setOpen] = React.useState(false);
+  const [pos, setPos] = React.useState(null);
+  const [act, setAct] = React.useState(0);
+  const btn = React.useRef(null);
+  const menu = React.useRef(null);
+  const opts = [{ name: "", none: true }, ...list, ...extraOpts.map((o) => ({ ...o, extra: true }))];
+  const place = React.useCallback(() => {
+    const el = btn.current; if (!el) return;
+    const r = el.getBoundingClientRect();
+    const w = Math.max(r.width, 220);
+    const mh = Math.min(320, opts.length * 44 + 46);
+    const up = r.bottom + mh + 8 > window.innerHeight && r.top > mh + 8;
+    let left = align === "right" ? r.right - w : r.left;
+    left = Math.max(8, Math.min(left, window.innerWidth - w - 8));
+    setPos({ left, top: up ? r.top - mh - 6 : r.bottom + 6, width: w, up });
+  }, [opts.length, align]);
+  const openIt = () => {
+    if (disabled) return;
+    place();
+    setAct(Math.max(0, opts.findIndex((o) => String(o.name) === String(value || ""))));
+    setOpen(true);
+  };
+  const pick = (o) => { setOpen(false); onChange?.(o.none ? "" : o.name); setTimeout(() => btn.current?.focus(), 0); };
+  React.useEffect(() => {
+    if (!open) return undefined;
+    const down = (e) => { if (btn.current?.contains(e.target) || menu.current?.contains(e.target)) return; setOpen(false); };
+    const re = (e) => { if (menu.current?.contains(e.target)) return; setOpen(false); };
+    document.addEventListener("mousedown", down, true);
+    window.addEventListener("scroll", re, true);
+    window.addEventListener("resize", re);
+    return () => { document.removeEventListener("mousedown", down, true); window.removeEventListener("scroll", re, true); window.removeEventListener("resize", re); };
+  }, [open]);
+  const onKey = (e) => {
+    if (!open) { if (e.key === "ArrowDown" || e.key === "Enter" || e.key === " ") { e.preventDefault(); e.stopPropagation(); openIt(); } return; }
+    if (e.key === "Escape" || e.key === "Tab") { if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); } setOpen(false); return; }
+    if (e.key === "ArrowDown") { e.preventDefault(); e.stopPropagation(); setAct((i) => Math.min(opts.length - 1, i + 1)); }
+    if (e.key === "ArrowUp") { e.preventDefault(); e.stopPropagation(); setAct((i) => Math.max(0, i - 1)); }
+    if (e.key === "Enter") { e.preventDefault(); e.stopPropagation(); pick(opts[act]); }
+  };
+  const chev = h("svg", { width: 10, height: 10, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 3.2, strokeLinecap: "round", strokeLinejoin: "round", className: `shrink-0 transition-transform ${open ? "rotate-180" : ""}`, "aria-hidden": true }, h("path", { d: "M6 9l6 6 6-6" }));
+  const on = !!cur || !!curExtra;
   const base = compact
-    ? "h-[28px] px-2 rounded-md border border-[#C9D5EA] bg-white text-[12.5px] font-bold text-[#1B2B4B] focus:outline-none focus:ring-2 focus:ring-[#8FB0F0]"
-    : "w-full h-[40px] px-3 rounded-lg border border-[#C9D5EA] bg-white text-[14px] font-semibold text-[#1B2B4B] focus:outline-none focus:ring-2 focus:ring-[#8FB0F0]";
-  return h("select", {
-    id,
-    "data-fare-type": "1",
-    value: value || "",
-    disabled,
-    onChange: (e) => onChange?.(e.target.value),
-    onClick: (e) => e.stopPropagation(),
-    className: `${base} ${className}`,
-    title: "운임구분 — 회사관리 › 운임 규칙에서 정한 계산으로 기사운임·수수료를 자동으로 채웁니다",
-  },
-  h("option", { value: "" }, compact ? `${placeholder} 없음` : `${placeholder} 선택 안 함`),
-  ...list.map((r) => h("option", { key: r.id || r.name, value: r.name }, `${r.name} · ${r.type === "fixed" ? `${Math.round(toNum(r.value)).toLocaleString()}원` : `${toNum(r.value)}%`}`)));
+    ? `inline-flex items-center gap-1.5 h-[26px] pl-2 pr-1.5 rounded-full border text-[12px] font-extrabold whitespace-nowrap transition ${on
+      ? "bg-[#1B2B4B] border-[#1B2B4B] text-white hover:bg-[#2D4C82]"
+      : "bg-white border-[#C9D5EA] text-[#5B6B85] hover:border-[#4B6CB7] hover:text-[#1B2B4B]"}`
+    : `flex items-center justify-between gap-2 w-full h-[40px] px-3 rounded-[11px] border text-[13.5px] font-bold transition ${on
+      ? "bg-white border-[#4B6CB7] text-[#0F1A30]"
+      : "bg-[#F7F9FC] border-[#E3E8F0] text-[#8E9BB2] hover:border-[#4B6CB7]"}`;
+  const label = cur
+    ? h("span", { className: "inline-flex items-center gap-1.5 min-w-0" },
+      h("span", { className: "truncate" }, cur.name),
+      // 작은 알약(라벨 줄·표 칸)은 자리가 좁아 이름만 — 계산 값은 목록·마우스 올림 설명에서
+      compact ? null : h("span", { className: "tabular-nums px-1.5 rounded-full text-[11px] font-black bg-[#EAF0FB] text-[#2D4C82]" }, fmtRuleVal(cur)))
+    : h("span", { className: "truncate" }, curExtra ? curExtra.label : placeholder);
+  return h(React.Fragment, null,
+    h("button", {
+      id, ref: btn, type: "button", disabled,
+      "data-fare-type": "1", "data-value": value || "",
+      "aria-haspopup": "listbox", "aria-expanded": open,
+      onClick: (e) => { e.preventDefault(); e.stopPropagation(); open ? setOpen(false) : openIt(); },
+      onMouseDown: (e) => e.stopPropagation(),
+      onKeyDown: onKey,
+      className: `${base} focus:outline-none focus:ring-4 focus:ring-[#4B6CB7]/15 disabled:opacity-50 disabled:cursor-not-allowed ${className}`,
+      title: cur ? `운임구분: ${cur.name} (${cur.type === "fixed" ? `수수료 고정 ${fmtRuleVal(cur)}` : `수수료 ${fmtRuleVal(cur)}`}) — 눌러서 바꾸기` : "운임구분 — 회사관리 › 운임 규칙에서 정한 계산으로 기사운임·수수료를 자동으로 채웁니다",
+    }, label, chev),
+    open && pos ? createPortal(h("div", {
+      ref: menu, role: "listbox", "data-fare-menu": "1",
+      onMouseDown: (e) => e.stopPropagation(), onClick: (e) => e.stopPropagation(),
+      style: { position: "fixed", left: pos.left, top: pos.top, width: pos.width, zIndex: 2147483000 },
+      className: "rounded-2xl bg-white border border-[#E3E8F0] shadow-[0_18px_44px_rgba(15,26,48,0.22)] overflow-hidden",
+    },
+    h("div", { className: "px-3.5 pt-2.5 pb-2 flex items-center justify-between border-b border-[#EEF2F7] bg-[#F7F9FC]" },
+      h("span", { className: "text-[10.5px] font-black tracking-[0.16em] text-[#4B6CB7]" }, "FARE TYPE · 운임구분"),
+      h("span", { className: "text-[10.5px] font-bold text-[#9AA9C3]" }, "↑↓ · Enter")),
+    h("div", { className: "max-h-[272px] overflow-y-auto py-1" },
+      ...opts.map((o, i) => {
+        const sel = String(o.name) === String(value || "");
+        return h("div", {
+          key: o.id || o.name || "__none", role: "option", "aria-selected": sel,
+          onMouseEnter: () => setAct(i),
+          onClick: () => pick(o),
+          className: `mx-1 px-2.5 h-[40px] rounded-xl flex items-center gap-2.5 cursor-pointer select-none ${i === act ? "bg-[#EEF3FC]" : ""}`,
+        },
+        h("span", { className: `w-4 h-4 rounded-full border-2 grid place-items-center shrink-0 ${sel ? "border-[#1B2B4B] bg-[#1B2B4B]" : "border-[#C9D5EA]"}` },
+          sel ? h("span", { className: "w-1.5 h-1.5 rounded-full bg-white" }) : null),
+        o.none
+          ? h("span", { className: "flex-1 text-[13px] font-bold text-[#8E9BB2]" }, noneLabel)
+          : o.extra ? h("span", { className: "flex-1 text-[13px] font-extrabold text-[#5B6B85]" }, o.label)
+          : h(React.Fragment, null,
+            h("span", { className: "flex-1 min-w-0 truncate text-[13.5px] font-extrabold text-[#0F1A30]" }, o.name, o.active === false ? h("span", { className: "ml-1 text-[11px] font-bold text-[#B54708]" }, "(사용 안 함)") : null),
+            h("span", { className: "shrink-0 tabular-nums px-2 h-[22px] inline-flex items-center rounded-full bg-[#1B2B4B] text-[#E9C46A] text-[11.5px] font-black" }, o.type === "fixed" ? `고정 ${fmtRuleVal(o)}` : `수수료 ${fmtRuleVal(o)}`)));
+      })),
+    list.length === 0 ? h("div", { className: "px-4 py-3 text-[12px] font-bold text-[#9AA9C3] border-t border-[#EEF2F7]" }, "회사관리 › 운임 규칙에서 규칙을 먼저 만들어 주세요") : null),
+    document.body) : null);
 }
 
-// "일대 7% 적용" + (수동이면) [↺ 규칙대로]
+// 규칙대로 계산 중이면 아무것도 안 보인다(칸이 운임구분을 이미 보여 줌).
+// 기사운임을 사람이 직접 고쳤을 때만 [↺ 규칙대로] 버튼 하나
 export function FareRuleHint({ form, rules, onReapply, className = "", dark = false }) {
   const rule = findFareRule(rules, form?.운임구분);
-  if (!rule) return null;
-  const manual = fareIsManual(form, rules);
-  return h("span", { className: `inline-flex items-center gap-1.5 flex-wrap ${className}`, "data-fare-hint": "1" },
-    h("span", {
-      className: `inline-flex items-center whitespace-nowrap px-1.5 py-[1px] rounded text-[12px] font-extrabold tabular-nums ${manual
-        ? (dark ? "bg-amber-400/20 text-amber-200" : "bg-amber-50 text-amber-700 border border-amber-200")
-        : (dark ? "bg-[#2D4C82] text-[#DCE7FB]" : "bg-[#EAF0FB] text-[#2D4C82] border border-[#C9D5EA]")}`,
-    }, manual ? `${rule.name} · 기사운임 직접 입력` : fareRuleHint(rule)),
-    manual && onReapply ? h("button", {
-      type: "button",
-      onClick: (e) => { e.preventDefault(); e.stopPropagation(); onReapply(); },
-      className: `whitespace-nowrap px-1.5 py-[1px] rounded text-[12px] font-extrabold ${dark ? "bg-white/10 text-white hover:bg-white/20" : "bg-[#1B2B4B] text-white hover:bg-[#2D4C82]"}`,
-      title: "운임 규칙대로 기사운임·수수료를 다시 계산",
-    }, "↺ 규칙대로") : null);
+  if (!rule || !fareIsManual(form, rules) || !onReapply) return null;
+  return h("button", {
+    type: "button", "data-fare-hint": "1",
+    onClick: (e) => { e.preventDefault(); e.stopPropagation(); onReapply(); },
+    className: `${className} inline-flex items-center gap-1 whitespace-nowrap h-[24px] px-2 rounded-full text-[11.5px] font-extrabold transition ${dark ? "bg-amber-400/20 text-amber-200 hover:bg-amber-400/30" : "bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100"}`,
+    title: `기사운임을 직접 고쳐서 ${rule.name} 규칙(${fareRuleHint(rule)})과 다릅니다. 누르면 규칙대로 다시 계산합니다`,
+  }, "↺ 규칙대로");
 }
 
 // 배열 → 운임구분별 합계 [{ name, count, sale, driver, fee }]

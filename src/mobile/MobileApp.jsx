@@ -10535,7 +10535,7 @@ function QuickEditModal({ order, drivers, cardVersionB, onClose, onSuccess, disp
             <div className="col-span-2">
               <label className={labelCls}>운임구분</label>
               <div className="flex items-center gap-2 flex-wrap">
-                <FareTypeSelect compact className="flex-1 min-w-[150px] !h-[38px] !text-[14px]" rules={fareRK.rules} value={fareT.운임구분} onChange={(v) => fareK("운임구분", v)} />
+                <FareTypeSelect className="flex-1 min-w-[150px] !h-[40px] !text-[14px]" rules={fareRK.rules} value={fareT.운임구분} onChange={(v) => fareK("운임구분", v)} />
                 <FareRuleHint form={{ ...fareT, 청구운임: String(claim).replace(/[^\d]/g, ""), 기사운임: String(fee).replace(/[^\d]/g, "") }} rules={fareRK.rules} onReapply={() => fareK("__reapply", null)} />
               </div>
             </div>
@@ -11607,7 +11607,7 @@ function QuickEditSheet({ order, onClose, onSaved, cardVersionB, clients = [], b
             {fareRQ.on && (
               <QuickField label="운임구분">
                 <div className="flex flex-col gap-1">
-                  <FareTypeSelect compact className="w-full !h-[36px] !text-[14px]" rules={fareRQ.rules} value={f.운임구분 || ""} onChange={(v) => fareQ("운임구분", v)} />
+                  <FareTypeSelect className="w-full !h-[38px] !text-[14px]" rules={fareRQ.rules} value={f.운임구분 || ""} onChange={(v) => fareQ("운임구분", v)} />
                   <FareRuleHint form={{ ...f, 청구운임: f.청구운임 === "" ? "" : toNum(f.청구운임), 기사운임: toNum(f.기사운임) }} rules={fareRQ.rules} onReapply={() => fareQ("__reapply", null)} />
                 </div>
               </QuickField>
@@ -16078,7 +16078,7 @@ const pickDrop = (c) => {
               label="운임구분"
               input={
                 <div className="flex items-center gap-1.5 min-w-0">
-                  <FareTypeSelect compact className="flex-1 min-w-0 !h-[32px] !text-[14px] !border-0 !border-b-2 !border-gray-300 !rounded-none !bg-transparent" rules={fareRM.rules} value={form.운임구분 || ""} onChange={(v) => updateMoney("운임구분", v)} />
+                  <FareTypeSelect className="flex-1 min-w-0 !h-[38px] !text-[14px]" rules={fareRM.rules} value={form.운임구분 || ""} onChange={(v) => updateMoney("운임구분", v)} />
                   <FareRuleHint className="shrink-0" form={form} rules={fareRM.rules} onReapply={() => updateMoney("__reapply", null)} />
                 </div>
               }

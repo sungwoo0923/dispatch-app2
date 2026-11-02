@@ -2146,8 +2146,9 @@ const CpField = ({ label, children }) => (
     <div className="min-w-0">{children}</div>
   </div>
 );
+// ⭐ 2026-11-02 칸 구분이 흐리다는 의견 — 밑줄(연한 1px) → 테두리 박스형(칸마다 또렷하게). 입력 중이면 네이비 테두리 + 링
 const cpInputStyle =
-  "w-full border-0 border-b border-[#D5DEEC] rounded-none px-1 py-1.5 text-[14.5px] font-bold text-gray-900 bg-transparent focus:outline-none focus:border-b-[3px] focus:border-[#2D4C82] focus:text-[#0B1428] transition";
+  "w-full h-9 border border-[#C9D5EA] rounded-lg px-2.5 py-1.5 text-[14.5px] font-bold text-gray-900 bg-[#F9FBFE] hover:border-[#9FB2D3] focus:outline-none focus:bg-white focus:border-[#2D4C82] focus:ring-4 focus:ring-[#2D4C82]/10 focus:text-[#0B1428] disabled:bg-[#F1F4F9] disabled:text-gray-500 transition";
 
 const todayStr = () => {
   const d = new Date();
@@ -3396,6 +3397,34 @@ function KpDeleteConfirm({ rows = [], note = "삭제 후에도 되돌리기로 �
 
 // ⭐ PC 길게 눌러 선택 모드(2026-10-27) — 오더 줄을 마우스로 0.5초 이상 누르고 있으면 선택 모드가 켜지고,
 //    그 뒤로는 줄 어디를 눌러도 체크된다(입력칸·버튼은 그대로 동작). 아래 가운데 막대로 지금 모드를 표시, ESC로 끝.
+// ⭐ 2026-11-02 기사 등록·수정 — 차량종류 드롭다운 + "직접입력"(목록에 없는 값은 글자 칸으로 적는다)
+const DRIVER_VTYPES = ["라보/다마스", "카고", "윙바디", "탑차", "냉장/냉동윙", "냉장/냉동탑"];
+function DriverVehicleTypeField({ value, onChange, className = "", SelectEl = "select" }) {
+  const v = String(value || "");
+  const [direct, setDirect] = React.useState(() => !!v && !DRIVER_VTYPES.includes(v));
+  React.useEffect(() => { if (v && !DRIVER_VTYPES.includes(v)) setDirect(true); else if (v) setDirect(false); }, [v]);
+  const inRef = React.useRef(null);
+  const sel = direct ? "__direct" : v;
+  return (
+    <div className="flex flex-col gap-1.5">
+      <SelectEl className={className} value={sel}
+        onChange={(e) => {
+          const x = e.target.value;
+          if (x === "__direct") { setDirect(true); onChange(DRIVER_VTYPES.includes(v) ? "" : v); setTimeout(() => inRef.current?.focus(), 30); }
+          else { setDirect(false); onChange(x); }
+        }}>
+        <option value="">선택</option>
+        {DRIVER_VTYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+        <option value="__direct">직접입력</option>
+      </SelectEl>
+      {direct && (
+        <input ref={inRef} autoComplete="off" className={className} placeholder="차량종류 직접 입력 (예: 트레일러)"
+          value={v} onChange={(e) => onChange(e.target.value)} />
+      )}
+    </div>
+  );
+}
+
 function useKpLongPressSelect({ toggle, isSelected }) {
   const [mode, setMode] = React.useState(false);
   const timer = React.useRef(null);
@@ -16623,7 +16652,7 @@ className={`
     </div>
 
     {/* 기사운임 */}
-    <div className={fareOn ? "relative pb-[34px]" : undefined}>
+    <div>
       <label className={`${labelCls} flex items-center gap-2`}>
         <EditableText id="orderForm.label.기사운임" defaultText="기사운임" />
 
@@ -16653,18 +16682,20 @@ className={`
           onChange("기사운임", raw);
         }}
       />
-      {/* ⭐ 2026-11-02 운임규칙 — 운임구분 + "일대 7% 적용"/[↺ 규칙대로] — 칸 수를 바꾸지 않도록 기사·수수료 칸 아래 한 줄 */}
-      {fareOn && (
-        <div className="absolute left-0 bottom-0 flex items-center gap-1.5 whitespace-nowrap z-[2]" style={{ width: "200%" }} data-fare-row="1">
-          <FareTypeSelect compact id="order-fare-type" rules={fareR.rules} value={form.운임구분 || ""} placeholder="운임구분" onChange={(v) => onChange("운임구분", v)} />
-          <FareRuleHint form={form} rules={fareR.rules} onReapply={() => onChange("__reapply")} />
-        </div>
-      )}
     </div>
 
     {/* 수수료 */}
     <div>
-      <label className={labelCls}><EditableText id="orderForm.label.수수료" defaultText="수수료" /></label>
+      {/* ⭐ 2026-11-02 운임규칙 — 운임구분은 수수료 라벨 줄 오른쪽 알약 버튼(특수운임 칩과 같은 자리 방식 · 칸 배치 그대로) */}
+      <div className={`${labelCls} flex items-center gap-1.5 whitespace-nowrap`}>
+        <span className="shrink-0"><EditableText id="orderForm.label.수수료" defaultText="수수료" /></span>
+        {fareOn && (
+          <span className="ml-auto inline-flex items-center gap-1" data-fare-row="1">
+            <FareRuleHint form={form} rules={fareR.rules} onReapply={() => onChange("__reapply")} />
+            <FareTypeSelect compact align="right" id="order-fare-type" rules={fareR.rules} value={form.운임구분 || ""} placeholder="운임구분" onChange={(v) => onChange("운임구분", v)} />
+          </span>
+        )}
+      </div>
       <input autoComplete="off"
         className={`${inputCls} bg-gray-100`}
         value={form.수수료 ? Number(form.수수료).toLocaleString() : form.수수료}
@@ -18566,7 +18597,8 @@ className={`
 <div className="flex items-stretch gap-3 w-full mb-4" style={{ minWidth: 0 }}>
   {/* 왼쪽: 폼 */}
   {/* ⭐ 2026-11-01 화면이 좁으면(노트북·125% 배율 1536px 등) 입력칸이 겹쳐 화물내용 칸을 못 누를 정도였다 — 1800px 미만은 폼을 넓게 */}
-  <div className="basis-[74%] max-w-[74%] min-[1800px]:basis-[62%] min-[1800px]:max-w-[62%]" style={{ flexGrow: 0, flexShrink: 0, minWidth: 0, overflow: "hidden" }}>
+  {/* ⭐ 2026-11-02 수수료 라벨 줄(운임구분)이 좁아지지 않게 입력 칸 74→77%(넓은 화면 62→66%) · 옆 달력은 그만큼 살짝 작게 */}
+  <div className="basis-[77%] max-w-[77%] min-[1800px]:basis-[66%] min-[1800px]:max-w-[66%]" style={{ flexGrow: 0, flexShrink: 0, minWidth: 0, overflow: "hidden" }}>
     {renderForm()}
   </div>
 
@@ -30607,7 +30639,8 @@ value={copyTarget?.화물수량 || ""}
           <div className="px-5 pt-3.5 pb-0"><h3 className="text-[14px] font-bold text-[#1B2B4B] flex items-center gap-1.5"><span className="w-1 h-3.5 bg-[#1B2B4B] rounded-full inline-block"></span>결제 정보</h3></div>
           <div className="px-5 py-3">
 
-          <div className="grid grid-cols-3 xl:grid-cols-5 gap-x-5 gap-y-1">
+          {/* ⭐ 2026-11-02 위 기사정보·화물정보와 같은 3칸 배치(5칸은 칸이 너무 좁아 입력칸이 짧게 보였다) */}
+          <div className="grid grid-cols-3 gap-x-5 gap-y-1.5">
 
             <CpField label="청구운임">
               <input autoComplete="off"
@@ -30639,7 +30672,7 @@ value={copyTarget?.화물수량 || ""}
 
             <CpField label="수수료">
               {(() => { const _f = Number(copyTarget.청구운임||0) - Number(copyTarget.기사운임||0); return (
-              <div className={`bg-[#EEF2F8] rounded-md px-2 py-1.5 font-black text-[15px] text-right whitespace-nowrap tabular-nums ${_f < 0 ? "text-red-600" : "text-[#1B2B4B]"}`}>
+              <div className={`h-9 flex items-center justify-end bg-[#EEF2F8] border border-[#DCE4F0] rounded-lg px-2.5 font-black text-[15px] whitespace-nowrap tabular-nums ${_f < 0 ? "text-red-600" : "text-[#1B2B4B]"}`}>
                 {_f.toLocaleString()} 원
               </div>
               ); })()}
@@ -30662,12 +30695,9 @@ value={copyTarget?.화물수량 || ""}
 </CpField>
 {/* ⭐ 2026-11-02 운임규칙 — 오더 복사·수정 패널 운임구분 */}
 {fareOn && (
-  <div className="col-span-2"><CpField label="운임구분">
-    <div className="flex items-center gap-1.5 flex-wrap">
-      <FareTypeSelect compact className="min-w-[120px]" rules={fareR.rules} value={copyTarget?.운임구분 || ""} onChange={(v) => setCopyTarget(p => fareFormChange(p, "운임구분", v, fareR.rules))} />
-      <FareRuleHint form={copyTarget} rules={fareR.rules} onReapply={() => setCopyTarget(p => fareFormChange(p, "__reapply", null, fareR.rules))} />
-    </div>
-  </CpField></div>
+  <CpField label={<>운임구분<FareRuleHint className="ml-1" form={copyTarget} rules={fareR.rules} onReapply={() => setCopyTarget(p => fareFormChange(p, "__reapply", null, fareR.rules))} /></>}>
+    <FareTypeSelect className="!h-9 !rounded-lg" rules={fareR.rules} value={copyTarget?.운임구분 || ""} onChange={(v) => setCopyTarget(p => fareFormChange(p, "운임구분", v, fareR.rules))} />
+  </CpField>
 )}
 
 <CpField label="배차방식">
@@ -32528,7 +32558,7 @@ value={copyTarget?.화물수량 || ""}
             {fareOn && (
               <div className="mb-3 flex items-center gap-2 flex-wrap">
                 <label className="shrink-0">운임구분</label>
-                <FareTypeSelect compact className="min-w-[160px]" rules={fareR.rules} value={editTarget.운임구분 || ""}
+                <FareTypeSelect className="min-w-[180px] !w-auto" rules={fareR.rules} value={editTarget.운임구분 || ""}
                   onChange={(v) => setEditTarget((p) => { const n = fareFormChange(p, "운임구분", v, fareR.rules); return { ...n, 수수료: Number(n.수수료) || 0 }; })} />
                 <FareRuleHint form={editTarget} rules={fareR.rules} onReapply={() => setEditTarget((p) => { const n = fareFormChange(p, "__reapply", null, fareR.rules); return { ...n, 수수료: Number(n.수수료) || 0 }; })} />
               </div>
@@ -39427,12 +39457,8 @@ return (
         <div className="ml-auto flex items-center gap-1 flex-shrink-0 flex-wrap justify-end">
           {/* ⭐ 2026-11-02 운임규칙 — 운임구분 필터(규칙 사용 회사만) */}
           {fareOn && (
-            <select data-fare-filter="1" value={fareTypeFilter} onChange={(e) => { setFareTypeFilter(e.target.value); setPage(0); }}
-              className={`h-[26px] px-1.5 rounded-lg border text-[12px] font-bold ${fareTypeFilter ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-[#1B2B4B] border-[#C9D5EA]"}`} title="운임구분으로 거르기">
-              <option value="">운임구분 전체</option>
-              {fareR.rules.filter((x) => String(x?.name || "").trim()).map((x) => <option key={x.id || x.name} value={x.name}>{x.name}</option>)}
-              <option value="__none">미지정</option>
-            </select>
+            <span data-fare-filter="1"><FareTypeSelect compact align="right" rules={fareR.rules} value={fareTypeFilter} placeholder="운임구분 전체" noneLabel="운임구분 전체"
+              extraOpts={[{ name: "__none", label: "운임구분 미지정" }]} onChange={(v) => { setFareTypeFilter(v); setPage(0); }} /></span>
           )}
           <button onClick={()=>{setTempSortKey(sortKey||"");setTempSortDir(sortDir||"asc");setTempFilterConditions([...filterConditions]);setSortModalOpen(true);}} className={`px-2 py-1 rounded-lg text-white text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap ${(sortKey||filterConditions.length>0)?"bg-[#1B2B4B]":"bg-slate-500"}`}><EditableText id="status.toolbar.정렬필터" defaultText="정렬/필터" />{filterConditions.length>0?` (${filterConditions.length})`:""}</button>
           <button onClick={()=>{if(selected.size===0)return showAlert("복사할 항목을 선택하세요.");if(selected.size>1)return showAlert("1개만 선택할 수 있습니다.");setCopyModalOpen(true);}} className="px-2 py-1 rounded-lg bg-gray-800 text-white text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap"><EditableText id="status.toolbar.기사복사" defaultText="기사복사" /></button>
@@ -41019,7 +41045,7 @@ return (
             {fareOn && (
               <div className="mb-3 flex items-center gap-2 flex-wrap">
                 <label className="shrink-0">운임구분</label>
-                <FareTypeSelect compact className="min-w-[160px]" rules={fareR.rules} value={editTarget.운임구분 || ""}
+                <FareTypeSelect className="min-w-[180px] !w-auto" rules={fareR.rules} value={editTarget.운임구분 || ""}
                   onChange={(v) => setEditTarget((p) => { const n = fareFormChange(p, "운임구분", v, fareR.rules); return { ...n, 수수료: Number(n.수수료) || 0 }; })} />
                 <FareRuleHint form={editTarget} rules={fareR.rules} onReapply={() => setEditTarget((p) => { const n = fareFormChange(p, "__reapply", null, fareR.rules); return { ...n, 수수료: Number(n.수수료) || 0 }; })} />
               </div>
@@ -42402,7 +42428,7 @@ setCopyPlaceOptions(list);
 {fareOn && (
   <div className="col-span-2"><Field label="운임구분">
     <div className="flex items-center gap-1.5 flex-wrap">
-      <FareTypeSelect compact className="min-w-[120px]" rules={fareR.rules} value={copyTarget?.운임구분 || ""} onChange={(v) => setCopyTarget(p => fareFormChange(p, "운임구분", v, fareR.rules))} />
+      <FareTypeSelect className="min-w-[180px] !w-auto" rules={fareR.rules} value={copyTarget?.운임구분 || ""} onChange={(v) => setCopyTarget(p => fareFormChange(p, "운임구분", v, fareR.rules))} />
       <FareRuleHint form={copyTarget} rules={fareR.rules} onReapply={() => setCopyTarget(p => fareFormChange(p, "__reapply", null, fareR.rules))} />
     </div>
   </Field></div>
@@ -56504,11 +56530,9 @@ function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, sho
                   </div>
                   <div>
                     <label className="text-[11px] font-semibold text-gray-500 mb-1 block">차량종류</label>
-                    <CustomSelect className="border-2 border-gray-200 rounded-lg px-3 py-2 w-full text-[13px] outline-none focus:border-[#1B2B4B]"
-                      value={newForm.차량종류 || ""} onChange={e => setNewForm(p => ({ ...p, 차량종류: e.target.value }))}>
-                      <option value="">선택</option>
-                      {["라보/다마스","카고","윙바디","탑차","냉장/냉동윙","냉장/냉동탑","직접입력"].map(t => <option key={t} value={t}>{t}</option>)}
-                    </CustomSelect>
+                    {/* ⭐ 2026-11-02 차량종류 "직접입력" — 고르면 글자 칸이 열려 직접 적는다 */}
+                    <DriverVehicleTypeField SelectEl={CustomSelect} className="border-2 border-gray-200 rounded-lg px-3 py-2 w-full text-[13px] outline-none focus:border-[#1B2B4B]"
+                      value={newForm.차량종류 || ""} onChange={(v) => setNewForm(p => ({ ...p, 차량종류: v }))} />
                   </div>
                   <div>
                     <label className="text-[11px] font-semibold text-gray-500 mb-1 block">톤수</label>
@@ -56730,12 +56754,10 @@ function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, sho
                   </div>
                   <div>
                     <label className="block text-[12px] font-semibold text-gray-500 mb-1">차량종류</label>
-                    <select className="border border-gray-200 rounded-lg px-3 py-2 text-[13px] w-full focus:border-[#1B2B4B] outline-none bg-white"
+                    {/* ⭐ 2026-11-02 차량종류 "직접입력" — 고르면 글자 칸이 열려 직접 적는다 */}
+                    <DriverVehicleTypeField className="border border-gray-200 rounded-lg px-3 py-2 text-[13px] w-full focus:border-[#1B2B4B] outline-none bg-white"
                       value={editDriverModal.차량종류||""}
-                      onChange={(e) => setEditDriverModal(p => ({ ...p, 차량종류: e.target.value }))}>
-                      <option value="">선택</option>
-                      {["라보/다마스","카고","윙바디","탑차","냉장/냉동윙","냉장/냉동탑","직접입력"].map(t => <option key={t} value={t}>{t}</option>)}
-                    </select>
+                      onChange={(v) => setEditDriverModal(p => ({ ...p, 차량종류: v }))} />
                   </div>
                   <div>
                     <label className="block text-[12px] font-semibold text-gray-500 mb-1">톤수</label>
