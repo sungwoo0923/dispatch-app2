@@ -98,3 +98,63 @@ export function sheetToForm(rawRows, guessKind) {
   });
   return { columns, groups: groups.length ? groups : [{ name: "기본", 상차지명: "", 상차지주소: "", defaults: [] }] };
 }
+
+// ── 배차표 → 시트 쓰기 계획 ──────────────────────────────────
+//  시트의 같은 묶음 표에서 도착지가 같은 줄(같은 도착지가 여러 줄이면 순서대로)을 찾아 칸 값을 바꾼다.
+//  쓰는 칸: 차량번호·이름·전화번호·시간·메모·수량·참고(운송업체 등). 도착지·시군구·거래처·운임·합계·순번은 쓰지 않는다.
+//  배차표에서 빈 칸은 시트 값을 지우지 않는다(덮어쓰기만).
+const WRITE_FIELDS = new Set(["차량번호", "이름", "전화번호", "상차시간", "하차시간", "메모", "차량톤수", "차량종류"]);
+const isTimeCol = (c) => c.field === "상차시간" || c.field === "하차시간";
+const cmp = (c, v) => { const s = cell(v); if (isTimeCol(c)) return s.replace(/^0(\d)/, "$1"); if (c.field === "전화번호") return s.replace(/\D/g, ""); return s.replace(/\s+/g, ""); };
+export const colLetter = (i) => { let s = ""; let n = i + 1; while (n > 0) { const m = (n - 1) % 26; s = String.fromCharCode(65 + m) + s; n = Math.floor((n - 1) / 26); } return s; };
+
+export function planSheetWrite(form, rawRows, boardGroups) {
+  const rows = (rawRows || []).map((r) => (r || []).map(cell));
+  const cols = form.columns.filter((c) => c.kind !== "no" && c.kind !== "sum");
+  const writeCols = cols.filter((c) => c.kind === "qty" || c.kind === "extra" || (c.kind === "field" && WRITE_FIELDS.has(c.field)));
+  const nameCol = cols.find((c) => c.field === "하차지명");
+  const heads = headerRows(rows, cols.map((c) => c.label));
+  const updates = []; const notFound = []; const usedGroups = new Set();
+  if (!nameCol) return { updates, notFound: ["양식에 하차지명(도착지) 칸이 없습니다."], headers: heads.length };
+  heads.forEach((hi, k) => {
+    const end = k + 1 < heads.length ? heads[k + 1] : rows.length;
+    const title = rows.slice(Math.max(0, hi - 4), hi).filter(sparse).flat().join(" ");
+    const g = form.groups.find((x) => x.name && nm(title).includes(nm(x.name))) || form.groups[Math.min(k, form.groups.length - 1)];
+    if (!g || usedGroups.has(g.name)) return;
+    usedGroups.add(g.name);
+    const idx = {};
+    cols.forEach((c) => {
+      const cand = rows[hi].map((h, i) => (nm(h) === nm(c.label) ? i : -1)).filter((i) => i >= 0);
+      if (cand.length) idx[c.id] = cand.map((i) => ({ i, n: rows.slice(hi + 1, end).filter((r) => cell(r[i])).length })).sort((a, b) => b.n - a.n || b.i - a.i)[0].i;
+    });
+    if (idx[nameCol.id] == null) return;
+    // 시트 줄: 도착지 → [줄 번호…]
+    const byName = new Map();
+    for (let ri = hi + 1; ri < end; ri++) {
+      const r = rows[ri] || [];
+      if (isNoise(r)) continue;
+      const key = nm(r[idx[nameCol.id]]);
+      if (!key) continue;
+      if (!byName.has(key)) byName.set(key, []);
+      byName.get(key).push(ri);
+    }
+    const seen = new Map();
+    (boardGroups[g.name] || []).forEach((v) => {
+      const key = nm(v[nameCol.id]);
+      if (!key) return;
+      const n = seen.get(key) || 0; seen.set(key, n + 1);
+      const ri = byName.get(key)?.[n];
+      if (ri == null) { notFound.push(`${g.name} · ${v[nameCol.id]}${n ? ` (${n + 1}번째)` : ""}`); return; }
+      writeCols.forEach((c) => {
+        const ci = idx[c.id]; if (ci == null) return;
+        let val = cell(v[c.id]);
+        if (!val) return; // 빈 칸은 시트 값을 지우지 않는다
+        if (isTimeCol(c)) val = val.replace(/^0(\d)/, "$1");
+        const old = cell(rows[ri][ci]);
+        if (cmp(c, old) === cmp(c, val)) return;
+        updates.push({ a1: `${colLetter(ci)}${ri + 1}`, value: val, old, label: c.label, name: v[nameCol.id], group: g.name });
+      });
+    });
+  });
+  return { updates, notFound, headers: heads.length };
+}

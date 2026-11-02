@@ -5233,6 +5233,7 @@ exports.gsheetMine = functions.runWith({ timeoutSeconds: 540, memory: "512MB" })
 //  시트를 dispatch-app-9b92f@appspot.gserviceaccount.com 에 '뷰어'로 공유해야 읽힌다.
 //  - tabs: 탭 이름 목록(최근 탭이 보통 뒤에 있음)
 //  - read: 탭 하나의 값(2차원 배열, 최대 3000줄) — 칸 맞추기·묶음 나누기는 화면에서
+//  - write: 배차표 값을 시트 칸에 쓰기(시트를 '편집자'로 공유해야 함)
 exports.routeBoardSheet = functions.runWith({ timeoutSeconds: 120, memory: "512MB" }).https.onRequest(async (req, res) => {
   res.set("Access-Control-Allow-Origin", "*");
   res.set("Access-Control-Allow-Methods", "POST, OPTIONS");
@@ -5255,6 +5256,25 @@ exports.routeBoardSheet = functions.runWith({ timeoutSeconds: 120, memory: "512M
       const got = await sheetsApiFor(id, "GET", `/values/${encodeURIComponent(`${quoteTab(tab)}!A1:AZ3000`)}?valueRenderOption=FORMATTED_VALUE&dateTimeRenderOption=FORMATTED_STRING`);
       console.log(`[배차표 시트] ${me.company} ${me.email} ${id} ${tab}`);
       res.json({ title: meta.properties?.title || "", tab, rows: got.values || [] });
+      return;
+    }
+    // ⭐ write: 배차표 → 시트(화면이 정한 칸만 — 차량·기사·수량·운송업체·시간·비고). 도착지·시군구·합계 칸은 화면에서 빼고 보낸다.
+    if (body.action === "write") {
+      const tab = String(body.tab || "");
+      if (!tabs.includes(tab)) { res.status(400).json({ error: "탭을 찾을 수 없습니다." }); return; }
+      const ups = (Array.isArray(body.updates) ? body.updates : []).filter((u) => /^[A-Z]{1,3}\d{1,5}$/.test(String(u?.a1 || ""))).slice(0, 3000);
+      if (!ups.length) { res.json({ updated: 0 }); return; }
+      try {
+        await sheetsApiFor(id, "POST", "/values:batchUpdate", { data: {
+          valueInputOption: "USER_ENTERED",
+          data: ups.map((u) => ({ range: `${quoteTab(tab)}!${u.a1}`, values: [[String(u.value ?? "")]] })),
+        } });
+      } catch (e) {
+        if (e.status === 400) throw Object.assign(new Error("시트에 쓸 수 없습니다. 시트 공유에 dispatch-app-9b92f@appspot.gserviceaccount.com 을(를) '편집자'로 추가했는지 확인해 주세요."), { status: 400 });
+        throw e;
+      }
+      console.log(`[배차표 시트 쓰기] ${me.company} ${me.email} ${id} ${tab} ${ups.length}칸`);
+      res.json({ updated: ups.length });
       return;
     }
     res.status(400).json({ error: "알 수 없는 요청입니다." });

@@ -13,7 +13,7 @@
 import React from "react";
 import { collection, doc, onSnapshot, query, where, getDocs, setDoc, addDoc, updateDoc, deleteDoc, serverTimestamp } from "firebase/firestore";
 import { db, auth, FUNCTIONS_BASE } from "./firebase";
-import { parseBoardTab, sheetToForm, tabDate } from "./routeBoardSheet"; // ⭐ 2026-11-02 구글시트 날짜 탭 불러오기
+import { parseBoardTab, sheetToForm, tabDate, planSheetWrite } from "./routeBoardSheet"; // ⭐ 2026-11-02 구글시트 날짜 탭 불러오기
 import { coDocKey } from "./coKey";
 import { deleteOrderWithLog } from "./orderHistory";
 import CustomDatePicker from "./CustomDatePicker";
@@ -198,6 +198,68 @@ function SheetLoad({ form, date, onApply, onClose }) {
   );
 }
 
+// 배차표 → 시트 보내기(미리보기 후 쓰기) — 도착지가 같은 줄에 차량·기사·수량·운송업체·시간·비고만 쓴다
+function SheetSend({ form, date, rows, onClose, onDone }) {
+  const [tabs, setTabs] = React.useState(null);
+  const [tab, setTab] = React.useState("");
+  const [busy, setBusy] = React.useState("tabs");
+  const [err, setErr] = React.useState("");
+  const [plan, setPlan] = React.useState(null);
+  React.useEffect(() => {
+    sheetApi({ action: "tabs", url: form.sheetUrl }).then((d) => {
+      setTabs(d.tabs);
+      const y = +date.slice(0, 4);
+      setTab(d.tabs.find((t) => tabDate(t, y) === date) || d.tabs.find((t) => tabDate(t, y) === addDays(date, toInt(form.dropOffset))) || d.tabs[d.tabs.length - 1] || "");
+    }).catch((e) => setErr(e.message)).finally(() => setBusy(""));
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const preview = async () => {
+    setBusy("read"); setErr(""); setPlan(null);
+    try {
+      const d = await sheetApi({ action: "read", url: form.sheetUrl, tab });
+      const board = {}; Object.entries(rows).forEach(([g, arr]) => { board[g] = arr.map((r) => r.v); });
+      const p = planSheetWrite(form, d.rows, board);
+      if (!p.headers) throw new Error("이 탭에서 양식의 제목줄(칸 이름)을 찾지 못했습니다.");
+      setPlan(p);
+    } catch (e) { setErr(e.message); } finally { setBusy(""); }
+  };
+  const write = async () => {
+    if (!(await kpConfirm(`'${tab}' 탭에 ${plan.updates.length}칸을 씁니다. 진행할까요?`))) return;
+    setBusy("write"); setErr("");
+    try { const r = await sheetApi({ action: "write", url: form.sheetUrl, tab, updates: plan.updates.map(({ a1, value }) => ({ a1, value })) }); onDone(`시트 '${tab}' 탭에 ${r.updated}칸을 썼습니다.`); }
+    catch (e) { setErr(e.message); setBusy(""); }
+  };
+  return (
+    <div className="fixed inset-0 z-[90] bg-black/40 flex items-start justify-center overflow-auto p-4" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+      <div className={`${card} w-full max-w-[640px] my-10 p-6`}>
+        <div className="text-[18px] font-black text-[#0F1A30] mb-1">구글시트로 보내기</div>
+        <div className="text-[13px] text-[#7A8AA6] mb-4">시트에서 <b>도착지가 같은 줄</b>을 찾아 차량번호·기사·수량·운송업체·시간·비고 칸만 씁니다. 도착지·시군구·총계 칸과 배차표에서 비어 있는 칸은 건드리지 않습니다.</div>
+        {tabs && (
+          <div className="flex gap-2 mb-3">
+            <select value={tab} onChange={(e) => { setTab(e.target.value); setPlan(null); }} className={inp}>{[...tabs].reverse().map((t) => <option key={t} value={t}>{t}</option>)}</select>
+            <button onClick={preview} disabled={!!busy || !tab} className={`${btn} border border-[#DCE3EE] text-[#2D4C82]`}>{busy === "read" ? "확인 중…" : "바뀔 칸 보기"}</button>
+          </div>
+        )}
+        {busy === "tabs" && <div className="text-[13.5px] text-[#7A8AA6]">탭 목록을 읽는 중…</div>}
+        {err && <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-[13.5px] font-semibold text-red-700 mb-3">{err}</div>}
+        {plan && (
+          <div className="rounded-xl border border-[#E3E8F0] bg-[#F8FAFD] p-4 text-[13px] text-[#3A4A66]">
+            <div className="font-black text-[#0F1A30] mb-2">바뀔 칸 {plan.updates.length}개</div>
+            <div className="max-h-[260px] overflow-auto space-y-0.5">
+              {plan.updates.slice(0, 300).map((u) => <div key={u.a1}><span className="font-mono text-[#7A8AA6]">{u.a1}</span> {u.group} · {u.name} · <b>{u.label}</b>: <span className="text-[#9AA9C3] line-through">{u.old || "(빈칸)"}</span> → <b className="text-[#0F1A30]">{u.value}</b></div>)}
+              {!plan.updates.length && <div className="text-[#7A8AA6]">시트와 배차표가 같습니다.</div>}
+            </div>
+            {plan.notFound.length > 0 && <div className="mt-3 text-amber-700"><b>시트에 같은 도착지 줄이 없음 {plan.notFound.length}건</b>(시트에 줄을 추가한 뒤 다시 보내 주세요): {plan.notFound.slice(0, 20).join(", ")}</div>}
+          </div>
+        )}
+        <div className="flex justify-end gap-2 mt-5">
+          <button onClick={onClose} className={`${btn} text-[#5B6B85]`}>닫기</button>
+          {plan && plan.updates.length > 0 && <button onClick={write} disabled={!!busy} className={`${btn} bg-[#0F1A30] text-white`}>{busy === "write" ? "쓰는 중…" : `시트에 ${plan.updates.length}칸 쓰기`}</button>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── 양식 편집 ──────────────────────────────────────────────
 function FormEditor({ init, onClose, onSaved, co }) {
   const [f, setF] = React.useState(() => JSON.parse(JSON.stringify(init)));
@@ -344,6 +406,7 @@ export default function RouteBoard({ companyName = "" }) {
   const [places, setPlaces] = React.useState([]);
   const [msg, setMsg] = React.useState("");
   const [sheetOpen, setSheetOpen] = React.useState(false);
+  const [sendOpen, setSendOpen] = React.useState(false); // ⭐ 배차표 → 시트 보내기
   const [pending, setPending] = React.useState(null); // { date, res } — 시트에서 읽은 줄(그 날짜 오더를 읽은 뒤 넣는다)
   const form = forms.find((f) => f.id === formId) || null;
 
@@ -551,6 +614,7 @@ export default function RouteBoard({ companyName = "" }) {
             <button onClick={() => setDate(addDays(date, 1))} className="h-10 w-10 rounded-xl border border-[#DCE3EE] font-black text-[#3A4A66]">›</button>
             <span className="text-[13px] font-bold text-[#3A4A66] whitespace-nowrap">상차 {dLabel(date)} → 하차 {dLabel(drop)}</span>
             {form.sheetUrl && <button onClick={() => setSheetOpen(true)} disabled={!!busy} className={`${btn} border border-[#2D4C82] text-[#2D4C82]`}>시트 불러오기</button>}
+            {form.sheetUrl && <button onClick={() => (dirty ? kpAlert("먼저 [저장]을 눌러 주세요. 저장한 내용만 시트로 보냅니다.") : setSendOpen(true))} disabled={!!busy} className={`${btn} border border-[#2D4C82] text-[#2D4C82]`}>시트로 보내기</button>}
             <button onClick={copyPrev} disabled={!!busy} className={`${btn} border border-[#DCE3EE] text-[#3A4A66]`}>{busy === "copy" ? "복사 중…" : "전날 복사"}</button>
             <button onClick={save} disabled={!!busy || !dirty} className={`${btn} bg-[#0F1A30] text-white px-6`}>{busy === "save" ? "저장 중…" : dirty ? "저장" : "저장됨"}</button>
           </>
@@ -639,6 +703,7 @@ export default function RouteBoard({ companyName = "" }) {
         </>
       )}
 
+      {sendOpen && form && <SheetSend form={form} date={date} rows={rows} onClose={() => setSendOpen(false)} onDone={(m) => { setSendOpen(false); setMsg(m); }} />}
       {sheetOpen && form && <SheetLoad form={form} date={date} onApply={applySheet} onClose={() => setSheetOpen(false)} />}
       {edit && <FormEditor init={edit} co={co} onClose={() => setEdit(null)} onSaved={(id) => { setEdit(null); setFormId(id); setMsg("양식을 저장했습니다."); }} />}
     </div>
