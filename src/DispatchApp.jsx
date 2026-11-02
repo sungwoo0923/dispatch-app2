@@ -22028,7 +22028,8 @@ function StopEditModal({ open, onClose, onSave, list, type, placeRows = [], time
 
   const inputCls = "w-full border border-gray-300 rounded-lg px-3 py-2 text-[13px] outline-none focus:border-[#1B2B4B] bg-white";
 
-  return (
+  // ⭐ 2026-11-02 표 안(스크롤·변형된 칸)에서 열리면 화면 가운데가 아니라 표 영역에 갇혀 잘려 보였다 → 항상 화면 맨 위(body)에 띄운다
+  return createPortal(
     <div className="fixed inset-0 z-[99999]" onKeyDown={e => {
       if (e.key === "Enter") {
         if (deleteIdx !== null) {
@@ -22344,7 +22345,8 @@ function StopEditModal({ open, onClose, onSave, list, type, placeRows = [], time
           </div>
         )}
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 // ===================== /StopEditModal =====================
