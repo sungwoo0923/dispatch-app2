@@ -7,6 +7,7 @@ import { useCustomRoles, findCustomRole, getMenuAccess, roleScreen } from "../cu
 import { useReadOnlyGuard } from "../readOnlyGuard";
 import { confirmLeave } from "../leaveGuard";
 import { hideBlind, isBlindHidden, canSeeBlind, autoBlindNew } from "../blind";
+import { cleanMgrRows, mgrName } from "../mgrPlaceholder";
 import { imeFocusRef } from "../imeFocus";
 import { checkHolidayDispatch, findRestConflict, confirmRestDispatch, restAckKey } from "../holidayConfirm";
 import { html2canvas } from "../lazyLoad"; // ⭐ 2026-11-02 속도 — 캡처 라이브러리는 처음 캡처할 때 받는다
@@ -2448,7 +2449,7 @@ const quickRange = (days) => {
   // --------------------------------------------------
   // ⭐ 블라인드 오더(최고관리자 전용)는 어떤 경로로 들어오든 여기서 걸러진다.
   const [orders, setOrdersRaw] = useState([]);
-  const setOrders = React.useCallback((v) => setOrdersRaw(prev => hideBlind(typeof v === "function" ? v(prev) : v)), []);
+  const setOrders = React.useCallback((v) => setOrdersRaw(prev => cleanMgrRows(hideBlind(typeof v === "function" ? v(prev) : v))), []); // 고정노선 자리 채움 "담당자" → 빈 값
   const [canceledOrders, setCanceledOrdersRaw] = useState([]);
   const setCanceledOrders = React.useCallback((v) => setCanceledOrdersRaw(prev => hideBlind(typeof v === "function" ? v(prev) : v)), []); // ★ 취소내역 화면용
   // ⭐ 앱을 백그라운드에 뒀다가 다시 열었을 때, 서버 재조회가 오래 걸리는 동안(기기가
@@ -2595,7 +2596,7 @@ const quickRange = (days) => {
   // 화면에서 쓰는 전체 목록 = 실시간 오더 + 불러온 예전 오더(같은 오더면 실시간 쪽 우선)
   // 예전 오더 목록 정리(블라인드 제외·취소 분리)는 보관소가 바뀔 때만 한 번
   const extraSplit = useMemo(() => {
-    const all = hideBlind([...extraMap.values()]);
+    const all = cleanMgrRows(hideBlind([...extraMap.values()]));
     return {
       active: all.filter((o) => !CANCELED_STATUS_LIST.includes(o.상태)),
       canceled: all.filter((o) => CANCELED_STATUS_LIST.includes(o.상태)),
@@ -4078,13 +4079,22 @@ if (appliedSearchType === "메모")
   // 배차현황용
   const filteredStatusOrders = filteredOrders;
 // ✅ 미배차 오더 (차량번호 없는 것)
+// ⭐ 2026-11-02 PC 미배차 기준과 통일 — 배차중(또는 상태 비어 있음) + 차량번호 없음 + 취소 아님 + 같은 오더는 한 번만
 const unassignedOrders = useMemo(() => {
-  return allOrders.filter(
-    (o) =>
-      !String(o.차량번호 || "").trim() &&
-      (o.상차지명 || o.하차지명) &&   // ★ 상/하차지 없는 빈 오더 제외
-      getPickupDate(o)                  // ★ 날짜 없는 오더 제외
-  );
+  const seen = new Set();
+  return allOrders.filter((o) => {
+    const st = String(o.배차상태 || "").trim();
+    if (st && st !== "배차중") return false;          // 승인대기·배차완료·배차취소 등은 미배차가 아님
+    if (String(o.차량번호 || "").trim()) return false;
+    if (CANCELED_STATUS_LIST.includes(String(o.상태 || "").trim()) || o.지급방식 === "취소") return false;
+    if (o.source === "transport_transmit") return false;
+    if (!(String(o.상차지명 || "").trim() || String(o.하차지명 || "").trim())) return false; // ★ 상/하차지 없는 빈 오더 제외
+    if (!getPickupDate(o)) return false;              // ★ 날짜 없는 오더 제외
+    const k = `${o.__col || ""}/${o._id || ""}`;
+    if (o._id && seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  });
 }, [allOrders]);
 
 // 📤 정보미전달 오더 (오늘 이후 + 전달미완료)
@@ -12504,7 +12514,7 @@ const handleAssignClick = () => {
       <div className="text-[10px] font-bold text-[#7A879C]">경유 {kind}{i + 1}</div>
       <div className="text-[13px] font-bold text-[#1F2A44]">{s.업체명 || "-"}</div>
       {s.주소 && <div className="text-[11.5px] text-[#7A879C]">{s.주소}</div>}
-      {s.담당자 && <div className="text-[11.5px] text-[#5B6B85]">{s.담당자}{s.담당자번호 ? ` · ${formatPhone(s.담당자번호)}` : ""}</div>}
+      {mgrName(s.담당자) && <div className="text-[11.5px] text-[#5B6B85]">{mgrName(s.담당자)}{s.담당자번호 ? ` · ${formatPhone(s.담당자번호)}` : ""}</div>}
       {(s.화물내용 || s.차량톤수 || s.톤수값) && (
         <div className="text-[12px] font-semibold text-[#1F2A44] mt-0.5">{[s.화물내용, toTonUnit(s.차량톤수 || (s.톤수값 ? `${s.톤수값}${s.톤수타입 || "kg"}` : ""))].filter(Boolean).join(" · ")}</div>
       )}
@@ -20030,7 +20040,7 @@ const [showAddressConfirmPopup, setShowAddressConfirmPopup] = useState(false);
       const map = new Map();
       dispatchCache.forEach(r => map.set(r.id, r));
       ordersCache.forEach(r => map.set(r.id, r));
-      setDispatchData(hideBlind(Array.from(map.values())));
+      setDispatchData(cleanMgrRows(hideBlind(Array.from(map.values()))));
     };
     const mapDoc = (d) => {
       const data = d.data();

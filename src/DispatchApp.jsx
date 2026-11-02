@@ -10,6 +10,7 @@ import PlatformNoticeBanner from "./PlatformNoticeBanner";
 import { loadTmap } from "./tmapLoader";
 import { imeFocusRef } from "./imeFocus";
 import { hideBlind, isBlindHidden, canSeeBlind, autoBlindNew } from "./blind";
+import { cleanMgrRows, mgrName } from "./mgrPlaceholder";
 import { checkHolidayDispatch, findRestConflict, confirmRestDispatch, restAckKey } from "./holidayConfirm";
 import { drawTmapTrafficRoute, TRAFFIC_LEGEND } from "./mapStyle";
 // ⭐ 2026-11-02 속도 — 캡처·PDF 라이브러리는 저장 버튼을 누를 때 받는다(첫 로딩에서 약 580KB 제외)
@@ -54,7 +55,7 @@ const StaffManager = lazyView(() => import("./StaffManager"));
 import { calcFare } from "./fareUtil";
 const FixedClients = lazyView(() => import("./FixedClients"));
 const FleetManagement = lazyView(() => import("./FleetManagement"));
-import { FleetSettlementMenu, useFleetDrivers } from "./FleetPayDocs";
+import { FleetSettlementMenu } from "./FleetPayDocs";
 import HomeDashboard from "./HomeDashboard";
 import { EditModeProvider, EditableText, EditModeToggleButton } from "./EditMode";
 import { useCompanyDropdownOptions, DropdownOptionsManageButton, useCompanyDropdownSync, dropdownList } from "./companyDropdownOptions";
@@ -3538,13 +3539,13 @@ function useRealtimeCollections(user, userCompany, role) {
   //    직전 세션에서 safeSave로 남겨둔 로컬 캐시를 초기값으로 먼저 그려주고,
   //    실시간 리스너가 응답하는 즉시 최신 데이터로 교체한다(정확성에는 영향 없음, 최초 페인트만 개선).
   // ⭐ 블라인드 오더(최고관리자 전용)는 어떤 경로로 들어오든 여기서 걸러진다.
-  const [dispatchDataLive, setDispatchDataRaw] = useState(() => hideBlind(safeLoad("dispatchData", [])));
+  const [dispatchDataLive, setDispatchDataRaw] = useState(() => cleanMgrRows(hideBlind(safeLoad("dispatchData", []))));
   // ⭐ 예전 오더 보관소 — 실시간 범위(최근 7일~) 밖 오더를 화면이 필요할 때만 불러와 담는다.
   const [historyMap, setHistoryMap] = useState(() => new Map());
   // 화면에서 바로 고치는 값(함수형 업데이트)은 실시간 목록·예전 오더 양쪽에 똑같이 적용한다.
   // 배열을 통째로 넣는 건 실시간 리스너뿐이라 실시간 목록만 바꾼다.
   const setDispatchData = React.useCallback((v) => {
-    setDispatchDataRaw(prev => hideBlind(typeof v === "function" ? v(prev) : v));
+    setDispatchDataRaw(prev => cleanMgrRows(hideBlind(typeof v === "function" ? v(prev) : v))); // 고정노선 자리 채움 "담당자" → 빈 값
     if (typeof v === "function") {
       setHistoryMap(prev => {
         if (prev.size === 0) return prev;
@@ -3561,7 +3562,7 @@ function useRealtimeCollections(user, userCompany, role) {
   const dispatchData = React.useMemo(() => {
     if (historyMap.size === 0) return dispatchDataLive;
     const liveKeys = new Set(dispatchDataLive.map(r => `${r.__col}/${r._id}`));
-    const extra = hideBlind([...historyMap.values()].filter(r => !liveKeys.has(`${r.__col}/${r._id}`)));
+    const extra = cleanMgrRows(hideBlind([...historyMap.values()].filter(r => !liveKeys.has(`${r.__col}/${r._id}`))));
     return [...dispatchDataLive, ...extra];
   }, [dispatchDataLive, historyMap]);
   const [historyLoading, setHistoryLoading] = useState(0);
@@ -3699,7 +3700,7 @@ function useRealtimeCollections(user, userCompany, role) {
   // 실시간 데이터. 위 dispatchData(최근 13개월)보다도 훨씬 작아서, 그 화면들이
   // 매번 큰 배열을 필터링/재계산하며 겪던 버벅임과 저장 후 팝업 딜레이를 줄여준다.
   const [recentDispatchData, setRecentDispatchDataRaw] = useState([]);
-  const setRecentDispatchData = React.useCallback((v) => setRecentDispatchDataRaw(prev => hideBlind(typeof v === "function" ? v(prev) : v)), []);
+  const setRecentDispatchData = React.useCallback((v) => setRecentDispatchDataRaw(prev => cleanMgrRows(hideBlind(typeof v === "function" ? v(prev) : v))), []);
   const [recentLiveDataReady, setRecentLiveDataReady] = useState(false);
   // 날짜가 바뀌면(자정 경과) 아래 "어제~내일" 실시간 구독 범위도 하루 밀려야 하므로,
   // 창을 열어둔 채 자정을 넘겨도 자동으로 갱신되도록 KST 기준 날짜가 바뀔 때만 값이
@@ -5324,6 +5325,34 @@ const upsertPlace = async (place) => {
 /* -------------------------------------------------
    공통
 --------------------------------------------------*/
+// ⭐ 2026-11-02 미배차 기준 하나로 통일 — 배차현황/미배차현황 메뉴 숫자와 미배차현황 목록이 같은 규칙을 쓴다.
+//   예전엔 숫자는 "배차상태가 배차중"만 셌는데, 그 중엔 차량번호가 이미 들어간(상태값만 안 바뀐) 오더·
+//   거래처/상·하차지가 모두 빈 빈 줄·취소 표시 오더·같은 오더가 두 번 들어온 경우가 섞여
+//   실제 미배차는 1건인데 2로 보였다(모바일은 이미 "차량번호 없음 + 상/하차지 있음" 기준).
+const UNASSIGNED_CANCELED = ["취소", "배차취소", "오더취소", "취소됨"];
+const isUnassignedOrder = (r) => {
+  if (!r) return false;
+  const st = String(r.배차상태 || "").trim();
+  if (st && st !== "배차중") return false; // 승인대기·배차완료·배차취소 등은 미배차가 아님(모바일과 같은 기준)
+  if (String(r.차량번호 || "").trim()) return false; // 차량이 이미 붙은 오더는 배차된 것
+  if (UNASSIGNED_CANCELED.includes(String(r.상태 || "").trim()) || r.지급방식 === "취소") return false;
+  if (r.source === "transport_transmit") return false;
+  if (!String(r.상차지명 || "").trim() && !String(r.하차지명 || "").trim()) return false; // 빈 줄(상·하차지 없음)
+  if (!String(r.상차일 || "").trim()) return false; // 날짜 없는 오더
+  return true;
+};
+// 같은 오더(같은 문서)가 실시간·예전 오더 양쪽에서 들어와도 한 번만
+const pickUnassignedOrders = (rows) => {
+  const seen = new Set();
+  return (rows || []).filter((r) => {
+    if (!isUnassignedOrder(r)) return false;
+    const k = `${r.__col || ""}/${r._id || ""}`;
+    if (r._id && seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  });
+};
+
 const StatusBadge = ({ s }) => (
   <span className={`px-2 py-1 rounded text-xs ${s === "배차완료" ? "bg-green-100 text-green-700"
     : s === "취소" ? "bg-red-100 text-red-700"
@@ -7910,9 +7939,34 @@ const newVer = useNewVersion(); // ★ 새 버전이 배포되면 버전 표시 
   const [_cargoAddQty, _setCargoAddQty] = React.useState("");
   const [_cargoAddType, _setCargoAddType] = React.useState("");
   const [_cargoEditValue, _setCargoEditValue] = React.useState("");
+  // ⭐ 2026-11-02 한글 입력 중(조합 중) Enter — 윈도우 크롬은 이 Enter를 "Process"(229)로 보내 추가가 안 되던 원인.
+  //   조합 중 Enter면 표시만 해 두고, 글자 조합이 끝나는 순간(compositionend) 최종 글자로 추가한다.
+  const _cargoComposingRef = React.useRef(false);
+  const _cargoEnterAfterImeRef = React.useRef(false);
   // 화주사 수정요청 승인/거절 팝업 (T161 — window.confirm 대신 프로그램 디자인에 맞춘 모달)
   const [editReqPopup, setEditReqPopup] = React.useState(null);
   React.useEffect(() => { if (cargoAddPopup) _setCargoEditValue(cargoAddPopup.initialValue || ""); }, [cargoAddPopup]);
+  // ⭐ 2026-11-02 화물내용 추가 팝업이 떠 있는 동안 Enter/Esc는 팝업 몫 — 포커스가 팝업 밖(바탕)에 있어도
+  //   뒤에 깔린 등록폼·복사/수정 패널이 Enter로 저장되거나 Esc로 같이 닫히지 않게 가장 먼저(capture) 가로챈다.
+  const cargoPopupOpen = !!cargoAddPopup;
+  React.useEffect(() => {
+    if (!cargoPopupOpen) return undefined;
+    const onKey = (e) => {
+      if (e.key === "Escape") {
+        e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation?.();
+        setCargoAddPopup(null); _setCargoAddQty(""); _setCargoAddType("");
+        return;
+      }
+      const isEnter = e.key === "Enter" || e.code === "Enter" || e.code === "NumpadEnter";
+      if (!isEnter) return;
+      const t = e.target;
+      if (t && t.closest && t.closest("[data-cargo-popup]")) return; // 팝업 안 입력칸·버튼은 각자 처리
+      e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation?.();
+      document.querySelector("[data-cargo-add-input]")?.focus?.();
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [cargoPopupOpen]);
 
   if (!user) {
     return (
@@ -8506,7 +8560,7 @@ return (
 
         {menu === "배차현황" && (
           <KpSubNav code="DISPATCH" title="배차현황" icon="truck" active={배차현황Tab} onSelect={set배차현황Tab}
-            items={(() => { const n = (dispatchDataFiltered || []).filter((r) => (r.배차상태 || "") === "배차중").length; return [{ key: "배차현황", label: "배차현황", en: "ALL ORDERS", icon: "list", badge: n, badgeTitle: `미배차 ${n}건` }, { key: "미배차현황", label: "미배차현황", en: "PENDING", icon: "hourglass", badge: n, badgeTitle: `미배차 ${n}건` }]; })()}>
+            items={(() => { const n = pickUnassignedOrders(dispatchDataFiltered).length; return [{ key: "배차현황", label: "배차현황", en: "ALL ORDERS", icon: "list", badge: n, badgeTitle: `미배차 ${n}건` }, { key: "미배차현황", label: "미배차현황", en: "PENDING", icon: "hourglass", badge: n, badgeTitle: `미배차 ${n}건` }]; })()}>
             {배차현황Tab === "배차현황" && (
               <DispatchStatus
                 key={`ds-${viewResetKey}`}
@@ -8733,6 +8787,7 @@ return (
             <div className="p-4">
               <PaymentManagement
                 dispatchData={dispatchDataFiltered}
+                drivers={drivers}
                 patchDispatch={patchDispatchSafe}
                 companyName={(localStorage.getItem("loginCompany") || userCompany || localStorage.getItem("userCompany") || DEFAULT_COMPANY || "").trim()}
                 canEditPayDay={role === "admin" || role === "totalMaster"}
@@ -9091,10 +9146,13 @@ return (
   const parts = String(_cargoEditValue || "").split("+").filter(Boolean);
   const base = parts[0] || "";
   const extras = parts.slice(1);
-  const pending = (_cargoAddType ? `${_cargoAddQty}${_cargoAddType}` : _cargoAddQty).trim();
-  const addCargo = () => {
-    if (!pending) return;
-    const newVal = _cargoEditValue ? _cargoEditValue + "+" + pending : pending;
+  const pendingOf = (qty) => { const q = String(qty || "").trim(); return q ? (_cargoAddType ? `${q}${_cargoAddType}` : q) : ""; };
+  const pending = pendingOf(_cargoAddQty);
+  // qtyNow: 입력칸의 지금 글자(조합이 막 끝난 한글까지 포함) — 화면 상태가 아직 안 바뀌었어도 정확히 추가
+  const addCargo = (qtyNow) => {
+    const add = typeof qtyNow === "string" ? pendingOf(qtyNow) : pending;
+    if (!add) return;
+    const newVal = _cargoEditValue ? _cargoEditValue + "+" + add : add;
     _setCargoEditValue(newVal);
     cargoAddPopup.onCommit(newVal);
     _setCargoAddQty(""); _setCargoAddType("");
@@ -9108,7 +9166,7 @@ return (
   };
   const UNITS = ["", "파레트", "박스", "통", "롤"];
   return createPortal(
-    <div className="fixed inset-0 z-[9999999] bg-[#0B1428]/55 backdrop-blur-[2px] flex items-center justify-center p-4"
+    <div data-cargo-popup="1" className="fixed inset-0 z-[9999999] bg-[#0B1428]/55 backdrop-blur-[2px] flex items-center justify-center p-4"
       onMouseDown={closeCargo}
       onKeyDown={(e) => { if (e.key === "Escape") { e.stopPropagation(); closeCargo(); } }}>
       <div className="w-[440px] max-w-full bg-white rounded-[22px] shadow-[0_30px_80px_rgba(8,14,30,0.45)] overflow-hidden" onMouseDown={(e) => e.stopPropagation()}>
@@ -9161,7 +9219,21 @@ return (
               value={_cargoAddQty}
               onChange={e => _setCargoAddQty(e.target.value)}
               ref={imeFocusRef}
-              onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); addCargo(); } }}
+              onCompositionStart={() => { _cargoComposingRef.current = true; }}
+              onCompositionEnd={(e) => {
+                _cargoComposingRef.current = false;
+                if (!_cargoEnterAfterImeRef.current) return;
+                _cargoEnterAfterImeRef.current = false;
+                addCargo(e.currentTarget.value);
+              }}
+              onKeyDown={e => {
+                const isEnter = e.key === "Enter" || e.code === "Enter" || e.code === "NumpadEnter";
+                if (!isEnter) return;
+                // 뒤에 깔린 오더 등록폼·복사/수정 패널의 Enter(저장·다음 칸 이동)로 넘어가지 않게
+                e.preventDefault(); e.stopPropagation();
+                if (e.nativeEvent?.isComposing || e.keyCode === 229 || _cargoComposingRef.current) { _cargoEnterAfterImeRef.current = true; return; }
+                addCargo(e.currentTarget.value);
+              }}
             />
             <div className="mt-2.5">
               <div className="text-[12px] font-bold text-[#5B6B85] mb-1.5">단위</div>
@@ -9184,7 +9256,7 @@ return (
         <div className="px-6 pb-5 flex gap-2">
           <button type="button" onClick={closeCargo}
             className="h-11 px-5 rounded-xl border border-[#DCE3EE] bg-white text-[14px] font-black text-[#3A4A66] hover:bg-[#F5F8FD]"><EditableText id="misc.btn.7406.닫기" defaultText="닫기" /></button>
-          <button type="button" onClick={addCargo} disabled={!pending}
+          <button type="button" onClick={() => addCargo()} disabled={!pending}
             className="flex-1 h-11 rounded-xl bg-[#1B2B4B] text-white text-[14.5px] font-black hover:bg-[#0F1A30] disabled:opacity-40 disabled:cursor-not-allowed shadow-[0_8px_18px_rgba(15,26,48,0.22)]">
             <EditableText id="misc.btn.7404.추가" defaultText="추가" /> <span className="ml-1 text-[11px] font-bold text-white/55">ENTER</span>
           </button>
@@ -14824,7 +14896,7 @@ React.useEffect(() => {
       onClick={() => { setOrderScanInit(null); setShowOrderParser(true); }}
       className="px-3 py-1.5 text-sm font-bold rounded-lg bg-[#1B2B4B] text-white hover:bg-[#243a60] transition"
     >
-      오더 붙여넣기
+      <EditableText id="dm.btn.orderScan" defaultText="오더스캔" />
     </button>
 
     {/* 운임조회 */}
@@ -25148,7 +25220,8 @@ const formatPhone = (value) => {
   return digits;
 };
 
-const buildContactLine = (name, phone) => {
+const buildContactLine = (name0, phone) => {
+  const name = mgrName(name0); // 고정노선 자리 채움 "담당자"는 빈 값
   if (!name && !phone) return null;
 
   return phone
@@ -36971,7 +37044,8 @@ const getPalletCount = (text = "") => {
   // =======================
   // 📞 담당자 라인 생성 (기사복사용)
   // =======================
-  const buildContactLine = (name, phone) => {
+  const buildContactLine = (name0, phone) => {
+    const name = mgrName(name0); // 고정노선 자리 채움 "담당자"는 빈 값
     if (!name && !phone) return "";
 
     const cleanName = String(name || "").trim();
@@ -49467,7 +49541,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
   };
 
   const filtered = React.useMemo(() => {
-    let result = (dispatchData || []).filter((r) => (r.배차상태 || "") === "배차중");
+    let result = pickUnassignedOrders(dispatchData);
     if (startDate && endDate) {
       result = result.filter((r) => (r.상차일 || "") >= startDate && (r.상차일 || "") <= endDate);
     }
@@ -55029,7 +55103,7 @@ const handleBatchSettle = async (targetStatus) => {
 // ===================== DispatchApp.jsx (PART 8/8) — END =====================
 
 // ===================== DispatchApp.jsx (PART 9/9) — START =====================
-function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], drivers = [], companyName = "", canEditPayDay = false }) {
+function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], drivers: driversProp = null, companyName = "", canEditPayDay = false }) {
   const fareRP = useFareRules(companyName); // ⭐ 2026-11-02 운임규칙 — 엑셀에 운임구분 열(규칙 사용 회사만)
 
   const todayStr9 = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
@@ -55082,17 +55156,40 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
 
   // ─── 기초 데이터 ───
   // 🚚 용차지급관리 — 지입·직영·임대 기사님 오더는 빼고(지입정산관리에서 따로) 일반 용차만
-  const fleetDrivers = useFleetDrivers();
-  const fleetPlates = useMemo(() => new Set(fleetDrivers.map((d) => String(d.차량번호 || "").trim()).filter((p) => p && p !== "-")), [fleetDrivers]);
+  // ⭐ 2026-11-02 용차 = 일반 차량. 기사관리에서 지입·직영·임대로 등록된 차량(우리 회사 기사 목록, 차량번호 공백·하이픈 무시)의
+  //   오더는 빼고, 일반·블랙·미등록 차량 오더만 보인다.
+  //   예전엔 ① 기사 목록이 늦게 도착해도 목록을 다시 계산하지 않아(의존성 누락) 처음엔 지입·직영·임대 오더까지 보였다가
+  //   지급상태 버튼을 누르는 등 다른 값이 바뀐 뒤에야 걸러졌고(6건 → 1건), ② 다른 회사 기사까지 섞여 있었다.
+  const [ownDrivers, setOwnDrivers] = useState(null);
+  const needOwnDrivers = !Array.isArray(driversProp);
+  useEffect(() => {
+    if (!needOwnDrivers) return undefined;
+    const co = String(companyName || "").trim() || DEFAULT_COMPANY;
+    return onSnapshot(collection(db, "drivers"), (snap) => {
+      setOwnDrivers(snap.docs.map((d) => ({ id: d.id, ...d.data() })).filter((d) => (d.companyName || DEFAULT_COMPANY) === co));
+    }, () => setOwnDrivers([]));
+  }, [needOwnDrivers, companyName]);
+  const payDrivers = needOwnDrivers ? ownDrivers : driversProp;
+  const fleetPlates = useMemo(() => {
+    const set = new Set();
+    (payDrivers || []).forEach((d) => {
+      if (!["지입", "직영", "임대"].includes(String(d.등급 || "").trim())) return;
+      const pl = normalizePlate(d.차량번호 || d.carNo || "");
+      if (pl && pl !== "-") set.add(pl);
+    });
+    return set;
+  }, [payDrivers]);
+  const driversReady = Array.isArray(payDrivers); // 기사 목록이 오기 전엔 지입 차량을 가려낼 수 없어 잠깐 비워 둔다
   const base = useMemo(
-    () => (Array.isArray(dispatchData) ? dispatchData : []).filter(r => (r.배차상태 || "") === "배차완료" && !fleetPlates.has(String(r.차량번호 || "").trim())),
-    [dispatchData]
+    () => (!driversReady ? [] : (Array.isArray(dispatchData) ? dispatchData : []).filter(r => (r.배차상태 || "") === "배차완료" && !fleetPlates.has(normalizePlate(r.차량번호 || "")))),
+    [dispatchData, fleetPlates, driversReady]
   );
 
   const filtered = useMemo(() => {
     if (!searched) return [];
     let rows = [...base];
-    if (statusFilter !== "전체") rows = rows.filter(r => (r.지급상태 || "지급중") === statusFilter);
+    // 지급완료가 아니면 모두 미지급(지급중·빈 값·"미지급" 등 예전 값 포함)
+    if (statusFilter !== "전체") rows = rows.filter(r => ((r.지급상태 || "") === "지급완료" ? "지급완료" : "지급중") === statusFilter);
     if (loadStart) rows = rows.filter(r => (r.상차일 || "") >= loadStart);
     if (loadEnd) rows = rows.filter(r => (r.상차일 || "") <= loadEnd);
     if (payMethodFilter !== "전체") rows = rows.filter(r => r.지급방식 === payMethodFilter);
