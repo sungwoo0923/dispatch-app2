@@ -14,6 +14,10 @@ import { auth, db, FUNCTIONS_BASE } from "./firebase";
 import { pushTenantBypass } from "./fsTenant";
 import KpSubNav from "./KpSubNav";
 import PlatformMonitor, { estimateBill, usePhone } from "./PlatformMonitor";
+// ⭐ 2026-11-02 관리자센터 — 실시간 계정·접속 층 + 운영 위젯
+import { PlatformLiveProvider, usePlatformLive, mergeCompanies, LiveNowPanel, SignupTimeline, DupeWarning, HeaderLivePill, Panel as LivePanel, normCo } from "./PlatformLive";
+import { ShellIcon } from "./AdminShell";
+import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts";
 import { useSalesPricing } from "./SalesQuote";
 import { ContractBuilder, ContractList, ContractTemplates } from "./ContractCenter";
 import { NotifTemplatePanel, LandingPageEditPanel, ShipperForceUpdatePanel } from "./AdminMenu";
@@ -31,6 +35,7 @@ const SECTIONS = [
   { key: "home", label: "대시보드", en: "DASHBOARD", icon: "pulse", items: [
     { key: "todo", label: "오늘 할 일", en: "TODAY", icon: "check" },
     { key: "overview", label: "플랫폼 개요", en: "OVERVIEW", icon: "pulse" },
+    { key: "live", label: "실시간 접속", en: "LIVE", icon: "users" }, // ⭐ 2026-11-02 관리자센터
   ] },
   { key: "clients", label: "고객사", en: "CLIENTS", icon: "building", items: [
     { key: "companies", label: "운송사 관제", en: "CARRIERS", icon: "building" },
@@ -108,6 +113,7 @@ const msOf = (v) => (v?.toMillis ? v.toMillis() : v?.seconds ? v.seconds * 1000 
 
 // ═══════════════════════ 오늘 할 일 ═══════════════════════
 function TodayPanel({ go }) {
+  const live = usePlatformLive(); // ⭐ 2026-11-02 관리자센터 — 운송사 가입 승인 대기 · 직원 승인 대기 · 비슷한 회사명
   const quotes = useCol("salesQuotes");
   const contracts = useCol("contracts");
   const inquiries = useCol("landingInquiries");
@@ -122,6 +128,9 @@ function TodayPanel({ go }) {
     ...(invoices || []).filter((v) => v.payNotice && v.status !== "입금완료").map((v) => ({ code: "PAID?", text: `${v.company} 입금 알림 — ${Number(v.amount || 0).toLocaleString()}원 (${v.month})`, sub: `${v.payNotice.name || ""} ${v.payNotice.date || ""} · 통장 확인 후 입금완료 처리`, to: "payments", lv: 2 })),
     ...(inquiries || []).filter((q) => !q.status || q.status === "신규").map((q) => ({ code: "LEAD", text: `${q.companyName || "업체"} 도입 문의 — 아직 연락 전`, sub: q.phone || "", to: "inquiries", lv: 2 })),
     ...apps.filter((a) => a.status === "pending").map((a) => ({ code: "APPLY", text: `${a.companyName || a.name || "화주사"} 가입 승인 대기`, sub: "", to: "applications", lv: 2 })),
+    ...(live?.pending.transport || []).map((a) => ({ code: "APPLY", text: `${normCo(a.companyName) || "운송사"} ${a.type && a.type !== "신규" ? `${a.type} ` : ""}운송사 가입 승인 대기`, sub: `${a.name || a.representative || ""} ${a.phone || ""}`.trim(), to: "applications", lv: 2 })),
+    ...(live?.dupes.length ? [{ code: "NAME", text: `비슷한 회사명 ${live.dupes.length}건 — 숫자가 나뉘어 집계됨`, sub: live.dupes.slice(0, 3).map((d) => d.names.map((x) => `"${x.raw}"`).join(" / ")).join(" · "), to: "companies", lv: 1 }] : []),
+    ...(live?.pending.staffByCo || []).map((c) => ({ code: "STAFF", text: `${c.name} 직원 승인 대기 ${c.n}명`, sub: "그 운송사 관리자가 승인 — 오래 걸리면 안내", to: "companies", lv: 0 })),
     ...(contracts || []).filter((c) => c.status === "발송").map((c) => ({ code: "SIGN", text: `${c.vars?.고객사 || c.title || "계약"} 계약서 서명 대기 ${c.viewedAt ? "(열람함)" : "(미열람)"}`, sub: c.no, to: "contract:list", lv: 1 })),
     ...(contracts || []).filter((c) => c.status === "서명완료" && c.vars?.종료일 >= today && c.vars?.종료일 <= soonLimit).map((c) => ({ code: "RENEW", text: `${c.vars?.고객사} 계약 만료 임박 — ${c.vars?.종료일}`, sub: "재계약·갱신 안내", to: "contract:list", lv: 1 })),
     ...(quotes || []).filter((q) => ["발송", "협의 중"].includes(q.status) && Date.now() - msOf(q.createdAt) > 7 * 86400000).map((q) => ({ code: "FOLLOW", text: `${q.customer} 견적 발송 후 7일 경과 — 후속 연락`, sub: q.no, to: "sales:history", lv: 0 })),
@@ -136,6 +145,7 @@ function TodayPanel({ go }) {
   return (
     <div className="space-y-4">
       <Hero en="PLATFORM · TODAY" title="오늘 할 일" desc="영업·계약·가입·문의에서 지금 손대야 할 것만 모았습니다. 누르면 해당 화면으로 갑니다." right={<Clock />} />
+      <DupeWarning compact />
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         {kpi.map(([l, v, u], i) => (
           <div key={l} className={`rounded-[16px] px-4 py-3.5 border ${i === 3 ? "bg-[#0F1A30] text-white border-[#0F1A30]" : "bg-white border-[#E3E8F0]"}`}>
@@ -144,6 +154,7 @@ function TodayPanel({ go }) {
           </div>
         ))}
       </div>
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_380px] items-start">
       <Card code="QUEUE" title={`처리할 일 ${tasks.length}건`} bodyClass="p-2">
         {tasks.length === 0 ? <div className="py-14 text-center text-[#9AA9C3]">지금 처리할 일이 없습니다 ✓</div> : tasks.map((t, i) => (
           <button key={i} type="button" onClick={() => go(t.to)} className="w-full flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-[#F5F8FD] text-left">
@@ -153,6 +164,11 @@ function TodayPanel({ go }) {
           </button>
         ))}
       </Card>
+      <div className="grid gap-4">
+        <LiveNowPanel compact onMore={() => go("live")} />
+        <SignupTimeline max={6} />
+      </div>
+      </div>
     </div>
   );
 }
@@ -210,6 +226,7 @@ function InquiriesPanel({ toQuote }) {
 // ═══════════════════════ 수납 관리 ═══════════════════════
 const PAY_STATUS = ["미청구", "청구", "입금완료", "연체"];
 function PaymentsPanel() {
+  const live = usePlatformLive(); // ⭐ 2026-11-02 관리자센터 — 직원 수(추가 계정 요금)는 실시간
   const [stats, setStats] = React.useState(null);
   const [pricing, setPricing] = React.useState(null);
   const [month, setMonth] = React.useState(() => ymd().slice(0, 7));
@@ -242,7 +259,7 @@ function PaymentsPanel() {
   };
   if (!stats || !pricing) return <div className="py-20 text-center text-[#9AA9C3]">불러오는 중…</div>;
   const days = new Date(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 0).getDate();
-  const companies = (stats.companies || []).map((c) => ({ ...c, bill: planBill(c, estimateBill(c, pricing, days, days)) }));
+  const companies = mergeCompanies(stats.companies, live).map((c) => ({ ...c, bill: planBill(c, estimateBill(c, pricing, days, days)) }));
   const key = (c) => `${month}_${c.name}`.replace(/\//g, "_");
   const amountOf = (c) => rows[key(c)]?.amount ?? c.bill.total;
   const sum = (st) => companies.filter((c) => (rows[key(c)]?.status || "미청구") === st).reduce((a, c) => a + amountOf(c), 0);
@@ -452,28 +469,103 @@ function SessionLogsPanel() {
   );
 }
 
+// ═══════════════════════ 실시간 접속 ═══════════════════════
+// ⭐ 2026-11-02 관리자센터 — 지금 누가(회사·PC/모바일·마지막 활동) 쓰고 있는지 + 회사별 접속 + 최근 가입
+function LiveTab({ openCompany }) {
+  const live = usePlatformLive();
+  const phone = usePhone();
+  if (!live) return null;
+  const t = live.totals;
+  const coRows = Object.values(live.companies).filter((c) => c.online24h > 0).sort((a, b) => (b.onlineNow - a.onlineNow) || (b.online24h - a.online24h)).slice(0, 12)
+    .map((c) => ({ name: c.name, now: c.onlineNow, day: Math.max(0, c.online24h - c.onlineNow) }));
+  const kpi = [
+    ["NOW", "지금 접속 (10분)", t.onlineNow, `운송사 ${t.onlineNow - t.shipperNow} · 화주 ${t.shipperNow}`, true],
+    ["24H", "24시간 접속", t.online24h, `운송사 ${t.online24h - t.shipper24h} · 화주 ${t.shipper24h}`],
+    ["PC", "PC 사용자", t.pcNow, `24시간 ${t.pc24h}명`],
+    ["MOBILE", "모바일 사용자", t.mobileNow, `24시간 ${t.mobile24h}명`],
+  ];
+  return (
+    <div className="space-y-4">
+      <Hero en="DASHBOARD · LIVE" title="실시간 접속" desc="사람(계정) 기준입니다 — 한 사람이 PC와 휴대폰을 같이 써도 1명. 10분 안에 활동하면 '지금 접속'." right={<Clock />} />
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        {kpi.map(([code, l, v, foot, dark]) => (
+          <div key={code} className={`rounded-[16px] px-4 py-3.5 border min-w-0 ${dark ? "bg-[linear-gradient(135deg,#0F1A30,#1B2B4B_60%,#2D4C82)] text-white border-[#0F1A30]" : "bg-white border-[#E3E8F0]"}`}>
+            <div className="flex items-center justify-between gap-2"><span className={`text-[13px] font-bold truncate ${dark ? "text-white/70" : "text-[#5B6B85]"}`}>{l}</span><span className={`text-[10px] font-extrabold tracking-[0.16em] ${dark ? "text-[#8FB0F0]" : "text-[#94A3B8]"}`} style={{ fontFamily: MONO }}>{code}</span></div>
+            <div className="text-[28px] font-black mt-1 leading-none" style={{ fontFamily: MONO }}>{live.ready ? v : "-"}<span className={`text-[13px] ml-1 ${dark ? "text-white/50" : "text-[#9AA9C3]"}`}>명</span></div>
+            <div className={`text-[12px] font-semibold mt-1.5 truncate ${dark ? "text-white/60" : "text-[#7A879C]"}`}>{foot}</div>
+          </div>
+        ))}
+      </div>
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)] items-start">
+        <LiveNowPanel onCompany={openCompany} />
+        <div className="grid gap-4 min-w-0">
+          <LivePanel code="BY COMPANY" title="회사별 접속 (24시간)" right={<span className="text-[12px] font-bold text-[#7A879C] inline-flex items-center gap-3"><span className="inline-flex items-center gap-1"><i className="w-2.5 h-2.5 rounded-sm bg-[#1B2B4B] inline-block" />지금</span><span className="inline-flex items-center gap-1"><i className="w-2.5 h-2.5 rounded-sm bg-[#B9C8E4] inline-block" />24시간</span></span>}>
+            {coRows.length === 0 ? <div className="py-10 text-center text-[#9AA9C3] text-[14px]">최근 24시간 접속이 없습니다</div> : (
+              <div style={{ height: Math.max(140, coRows.length * 34 + 20) }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={coRows} layout="vertical" margin={{ top: 0, right: 12, left: 0, bottom: 0 }} onClick={(e) => e?.activeLabel && openCompany?.(e.activeLabel)}>
+                    <CartesianGrid stroke="#EEF1F6" horizontal={false} />
+                    <XAxis type="number" allowDecimals={false} axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: "#9ca3af", fontFamily: MONO }} />
+                    <YAxis type="category" dataKey="name" width={phone ? 84 : 110} axisLine={false} tickLine={false} tick={{ fontSize: 12.5, fill: "#0F1A30", fontWeight: 700 }} />
+                    <Tooltip cursor={{ fill: "rgba(27,43,75,.05)" }} formatter={(v, n) => [`${v}명`, n === "now" ? "지금 접속" : "24시간(지금 제외)"]} contentStyle={{ borderRadius: 10, border: "1px solid #E3E8F0", fontSize: 13, fontWeight: 700 }} />
+                    <Bar dataKey="now" stackId="a" fill="#1B2B4B" radius={[4, 0, 0, 4]} barSize={16} />
+                    <Bar dataKey="day" stackId="a" fill="#B9C8E4" radius={[0, 4, 4, 0]} barSize={16} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            )}
+          </LivePanel>
+          <SignupTimeline max={14} onCompany={openCompany} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ═══════════════════════ 본체 ═══════════════════════
+// ⭐ 2026-11-02 관리자센터 — 실시간 층(PlatformLiveProvider)으로 감싼다. 회사 거르기 해제는 구독보다 먼저(렌더 중)
 export default function PlatformCenter({ user }) {
-  const navigate = useNavigate();
   // 🏢 관리센터는 모든 운송사를 봐야 하므로 회사 거르기를 끈다(자식 화면 구독보다 먼저 — 렌더 중에)
   const [releaseBypass] = React.useState(() => pushTenantBypass());
   React.useEffect(() => releaseBypass, [releaseBypass]);
+  return <PlatformLiveProvider><PlatformCenterInner user={user} /></PlatformLiveProvider>;
+}
+function PlatformCenterInner({ user }) {
+  const navigate = useNavigate();
+  const live = usePlatformLive();
   const [tab, setTabState] = React.useState(() => { try { return localStorage.getItem("pcTab") || "todo"; } catch { return "todo"; } });
-  const setTab = (t) => { setTabState(t); try { localStorage.setItem("pcTab", t); } catch { /* 무시 */ } };
+  const setTab = React.useCallback((t) => { setTabState(t); try { localStorage.setItem("pcTab", t); } catch { /* 무시 */ } }, []);
   const [contractCtx, setContractCtx] = React.useState({ initial: null, fromQuote: null, key: 0 });
+  const [focusCompany, setFocusCompany] = React.useState(null);
   const section = sectionOf(tab);
   const phone = usePhone();
   React.useEffect(() => { document.title = "KP-Flow 관리자 관리센터"; }, []);
   const toApp = () => { try { sessionStorage.setItem("kpEntry", "app"); } catch { /* 무시 */ } navigate("/app"); };
   const logout = async () => { if (!window.confirm("로그아웃할까요?")) return; try { sessionStorage.removeItem("kpEntry"); } catch { /* 무시 */ } await signOut(auth).catch(() => {}); navigate("/login"); };
   const openContract = (patch) => { setContractCtx((c) => ({ initial: null, fromQuote: null, ...patch, key: c.key + 1 })); setTab("contract:new"); };
+  // 회사 이름을 누르면 → 운송사 관제의 상세 패널(이미 관제 화면이면 그 자리에서)
+  const openCompany = React.useCallback((name) => { if (!name) return; setFocusCompany(name); setTab(MONITOR_TABS.includes(tab) && tab !== "applications" && !tab.startsWith("sales:") && tab !== "billing" ? tab : "companies"); }, [tab, setTab]);
+  const clearFocus = React.useCallback(() => setFocusCompany(null), []);
+
+  // 메뉴 배지(처리 대기 개수)
+  const P = live?.pending;
+  const badges = {
+    applications: P ? P.transport.length + P.shipper.length : 0,
+    inquiries: P ? P.inquiries.length : 0,
+    payments: P ? P.planReqs.length : 0,
+  };
+  const liveBadge = live?.ready ? live.totals.onlineNow : 0;
+  const sectionsView = SECTIONS.map((s) => ({ ...s, items: s.items.map((it) => (it.key === "live" ? { ...it, badge: liveBadge, soft: true } : badges[it.key] ? { ...it, badge: badges[it.key] } : it)) }));
+  const sectionView = sectionsView.find((s) => s.key === section.key) || sectionsView[0];
+  const secBadge = (s) => s.items.reduce((a, it) => a + (it.key !== "live" && typeof it.badge === "number" ? it.badge : 0), 0);
 
   let body = null;
   if (MONITOR_TABS.includes(tab)) {
     body = (
-      <PlatformMonitorWithContract tab={tab} setTab={setTab} onContract={(q) => openContract({ fromQuote: q })} />
+      <PlatformMonitor bare tab={tab} onTab={setTab} onContract={(q) => openContract({ fromQuote: q })} focusCompany={focusCompany} onFocusDone={clearFocus} />
     );
   } else if (tab === "todo") body = <TodayPanel go={setTab} />;
+  else if (tab === "live") body = <LiveTab openCompany={openCompany} />;
   else if (tab === "inquiries") body = <InquiriesPanel toQuote={(q) => { try { sessionStorage.setItem("kpQuoteSeed", JSON.stringify({ customer: q.companyName || "", contact: q.name || "", phone: q.phone || "" })); } catch { /* 무시 */ } setTab("sales:quote"); }} />;
   else if (tab === "contract:list") body = <><Hero en="CONTRACTS · STATUS" title="계약 현황" desc="작성 → 서명 요청 → 고객 전자서명 → 체결까지 한 곳에서. 만료 2개월 전부터 갱신 대상으로 표시됩니다." /><ContractList onNew={() => openContract({})} onEdit={(c) => openContract({ initial: c })} /></>;
   else if (tab === "contract:new") body = <><Hero en="CONTRACTS · NEW" title={contractCtx.initial ? "계약서 수정" : "계약서 작성"} desc="견적을 불러오면 요금·기간이 자동으로 채워집니다. 저장하고 서명 요청을 누르면 고객용 서명 링크가 복사됩니다." /><ContractBuilder key={contractCtx.key} initial={contractCtx.initial} fromQuoteDoc={contractCtx.fromQuote} onDone={() => setTab("contract:list")} /></>;
@@ -489,46 +581,60 @@ export default function PlatformCenter({ user }) {
   else if (tab === "sheetImport") body = <><Hero en="DATA · IMPORT" title="배차일지 가져오기" desc="구글시트·엑셀 배차일지를 운송사 데이터로 옮깁니다(초기 세팅용)." /><SheetImportPanel /></>;
   else if (tab === "companyReset") body = <><Hero en="DATA · RESET" title="운송사 초기화" desc="⚠ 운송사 데이터를 지웁니다 — 백업 후 신중히 사용하세요." /><CompanyResetPanel /></>;
 
-  if (phone) return <PlatformMobileShell user={user} section={section} tab={tab} setTab={setTab} toApp={toApp} logout={logout}>{body}</PlatformMobileShell>;
+  if (phone) return <PlatformMobileShell user={user} sections={sectionsView} section={sectionView} tab={tab} setTab={setTab} toApp={toApp} logout={logout} secBadge={secBadge}>{body}</PlatformMobileShell>;
 
   return (
-    <div className="kp-pc min-h-screen bg-[#EEF1F6]">
-      {/* ── 상단 바 ── */}
-      <header className="kp-topnav sticky top-0 z-40 h-[60px] flex items-center gap-3 px-4 text-white" style={{ background: "linear-gradient(90deg,#0B1428 0%,#13213F 55%,#1B2B4B 100%)" }}>
+    <div className="kp-pc kp-pcenter min-h-screen bg-[#EEF1F6]">
+      <style>{PC_HEADER_CSS}</style>
+      {/* ── 상단 바 ── ⭐ 2026-11-02 관리자센터: 메뉴 버튼 h-10 · 14px · 아이콘 · 처리 대기 배지 · 좁으면 가로 스크롤 */}
+      <header className="kp-pc-head sticky top-0 z-40 h-16 flex items-center gap-3 px-4 2xl:px-6 text-white">
         <div className="flex items-center gap-2.5 shrink-0">
-          <img src="/logo.png" alt="" className="w-8 h-8 rounded-lg bg-white object-contain p-0.5" onError={(e) => { e.currentTarget.style.display = "none"; }} />
-          <div className="leading-none"><div className="text-[15px] font-black tracking-[0.04em]">KP-Flow</div><div className="text-[9px] font-extrabold tracking-[0.3em] text-[#8FB0F0] mt-1" style={{ fontFamily: MONO }}>PLATFORM</div></div>
-          <span className="ml-1 px-2 py-0.5 rounded-md bg-white/10 ring-1 ring-white/15 text-[11px] font-black">관리자 관리센터</span>
+          <img src="/logo.png" alt="" className="w-9 h-9 rounded-[10px] bg-white object-contain p-0.5" onError={(e) => { e.currentTarget.style.display = "none"; }} />
+          <div className="leading-none">
+            <div className="text-[16px] font-black tracking-[0.02em] whitespace-nowrap">KP-Flow</div>
+            <div className="text-[9.5px] font-extrabold tracking-[0.3em] text-[#8FB0F0] mt-1 whitespace-nowrap" style={{ fontFamily: MONO }}>PLATFORM ADMIN</div>
+          </div>
         </div>
-        <nav className="flex-1 flex items-center justify-center gap-0.5 overflow-x-auto">
-          {SECTIONS.map((s) => {
+        <span className="hidden 2xl:block w-px h-7 bg-white/15 shrink-0" />
+        <nav className="kp-pc-nav flex-1 min-w-0 flex items-center gap-1 overflow-x-auto">
+          {sectionsView.map((s) => {
             const on = s.key === section.key;
+            const b = secBadge(s);
             return (
-              <button key={s.key} type="button" onClick={() => setTab(s.items[0].key)}
-                className={`kp-nav-btn relative px-3 h-[34px] rounded-[10px] text-[13.5px] whitespace-nowrap transition ${on ? "bg-white text-[#0F1A30] font-extrabold shadow-[0_4px_14px_rgba(0,0,0,0.25)]" : "text-white/65 font-semibold hover:text-white hover:bg-white/[0.09]"}`}>
+              <button key={s.key} type="button" onClick={() => setTab(s.items[0].key)} aria-current={on ? "page" : undefined}
+                className={`kp-pc-navbtn relative shrink-0 h-10 px-3.5 2xl:px-4 rounded-xl text-[14px] whitespace-nowrap inline-flex items-center gap-2 transition ${on ? "kp-on font-black" : "font-bold text-white/70 hover:text-white hover:bg-white/[0.09]"}`}>
+                <ShellIcon name={s.icon} size={16} className={`hidden 2xl:block ${on ? "text-[#2D4C82]" : "text-[#8FB0F0]"}`} />
                 {s.label}
-                {on && <span className="absolute left-1/2 -translate-x-1/2 -bottom-[7px] w-5 h-[3px] bg-[#6E95E8] rounded-full" />}
+                {b > 0 && <span className={`min-w-[20px] h-5 px-1.5 rounded-full text-[11px] font-black inline-flex items-center justify-center ${on ? "bg-[#1B2B4B] text-white" : "bg-white text-[#0F1A30]"}`} style={{ fontFamily: MONO }}>{b > 99 ? "99+" : b}</span>}
               </button>
             );
           })}
         </nav>
         <div className="flex items-center gap-2 shrink-0">
-          <span className="hidden xl:inline-flex items-center gap-1.5 px-2.5 h-8 rounded-lg bg-white/[0.06] ring-1 ring-white/10"><span className="w-1.5 h-1.5 rounded-full bg-[#CFE0FF] animate-pulse" /><Clock /></span>
-          <button type="button" onClick={toApp} className="kp-chip-btn text-[12px]" title="배차 프로그램으로 전환">배차 프로그램 ↗</button>
-          <span className="hidden lg:inline text-[12px] text-white/55 max-w-[180px] truncate">{user?.email}</span>
-          <button type="button" onClick={logout} className="h-8 px-3 rounded-lg bg-white/10 ring-1 ring-white/15 text-[12.5px] font-black hover:bg-white/20">로그아웃</button>
+          <HeaderLivePill onClick={() => setTab("live")} />
+          <span className="hidden 2xl:inline-flex items-center gap-1.5 px-3 h-10 rounded-xl bg-white/[0.06] ring-1 ring-white/10"><Clock /></span>
+          <button type="button" onClick={toApp} className="h-10 px-3.5 rounded-xl bg-white text-[#0F1A30] text-[14px] font-black whitespace-nowrap hover:bg-[#E9F0FC]" title="배차 프로그램으로 전환">배차 프로그램 ↗</button>
+          <span className="hidden min-[1700px]:inline text-[12.5px] text-white/55 max-w-[180px] truncate">{user?.email}</span>
+          <button type="button" onClick={logout} className="h-10 px-3.5 rounded-xl bg-white/10 ring-1 ring-white/15 text-[14px] font-black whitespace-nowrap hover:bg-white/20" title={user?.email || ""}>로그아웃</button>
         </div>
       </header>
 
       {/* ── 왼쪽 메뉴 + 본문 ── */}
       <div className="px-4 py-4">
-        <KpSubNav code={section.en} title={section.label} icon={section.icon} active={tab} onSelect={setTab} items={section.items}>
+        <KpSubNav code={sectionView.en} title={sectionView.label} icon={sectionView.icon} active={tab} onSelect={setTab} items={sectionView.items}>
           {body}
         </KpSubNav>
       </div>
     </div>
   );
 }
+const PC_HEADER_CSS = `
+.kp-pcenter .kp-pc-head { background: radial-gradient(700px 120px at 30% -60px, rgba(75,108,183,.35), transparent 70%), linear-gradient(90deg,#0B1428 0%,#0F1A30 45%,#1B2B4B 100%); box-shadow: 0 1px 0 rgba(255,255,255,.06) inset, 0 8px 24px rgba(11,20,40,.28); }
+.kp-pcenter .kp-pc-head::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 1px; background: linear-gradient(90deg, transparent, rgba(143,176,240,.5), transparent); pointer-events: none; }
+.kp-pcenter .kp-pc-nav { scrollbar-width: none; mask-image: linear-gradient(90deg, #000 calc(100% - 24px), transparent); }
+.kp-pcenter .kp-pc-nav::-webkit-scrollbar { display: none; }
+.kp-pcenter .kp-pc-navbtn.kp-on { background: linear-gradient(180deg,#FFFFFF 0%,#E9F0FC 100%); color: #0F1A30; box-shadow: 0 6px 16px rgba(0,0,0,.28), 0 0 0 1px rgba(255,255,255,.6) inset, 0 0 18px rgba(143,176,240,.3); }
+`;
 
 // ═══════════════════════ 📱 모바일 관리센터 ═══════════════════════
 //  PC와 같은 메뉴·화면을 폰 폭에 맞춰 보여준다.
@@ -547,13 +653,15 @@ const PM_MOBILE_CSS = `
 .kp-pm main .pm-tile > div:first-child > span:last-child, .kp-pm main .pm-tile-dark > div:first-child > span:last-child { display: none; }
 .kp-pm main .pm-tile span[style*="font-size: 28px"], .kp-pm main .pm-tile-dark span[style*="font-size: 28px"] { font-size: 21px !important; }
 .kp-pm main .pm-tile > div:last-child, .kp-pm main .pm-tile-dark > div:last-child { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.kp-pm main .pm-spark { display: none; } /* ⭐ 2026-11-02 관리자센터 — 폰 타일에선 스파크라인 숨김 */
 .kp-pm main [class*="max-w-[1180px]"] { padding: 20px 16px !important; }
 .kp-pm main .kp-contract h1 { white-space: normal; font-size: 20px !important; letter-spacing: .08em; }
 .kp-pm main .kp-contract { font-size: 14px; }
 .kp-pm main { word-break: keep-all; }
 .kp-pm main [style*="min-width: 1220px"], .kp-pm main [style*="min-width: 960px"], .kp-pm main [style*="min-width: 820px"] { font-size: 13px; }
 `;
-function PlatformMobileShell({ user, section, tab, setTab, toApp, logout, children }) {
+// ⭐ 2026-11-02 관리자센터 — 버튼을 손가락 크기로(큰 메뉴 h-10·14px, 속메뉴 h-9·13.5px), 처리 대기 배지, 지금 접속 알약
+function PlatformMobileShell({ user, sections = SECTIONS, section, tab, setTab, toApp, logout, secBadge = () => 0, children }) {
   const secRef = React.useRef(null);
   const subRef = React.useRef(null);
   // 고른 메뉴가 화면 밖이면 가운데로 끌어온다
@@ -565,31 +673,42 @@ function PlatformMobileShell({ user, section, tab, setTab, toApp, logout, childr
     <div className="kp-pm min-h-screen bg-[#EEF1F6]">
       <style>{PM_MOBILE_CSS}</style>
       <header className="sticky top-0 z-40 text-white shadow-[0_6px_18px_rgba(11,20,40,0.28)]" style={{ background: "linear-gradient(90deg,#0B1428 0%,#13213F 55%,#1B2B4B 100%)", paddingTop: "env(safe-area-inset-top, 0px)" }}>
-        <div className="h-[52px] flex items-center gap-2 px-3">
+        <div className="h-[56px] flex items-center gap-2 px-3">
           <img src="/logo.png" alt="" className="w-7 h-7 rounded-lg bg-white object-contain p-0.5 shrink-0" onError={(e) => { e.currentTarget.style.display = "none"; }} />
           <div className="min-w-0 flex-1 leading-none">
             <div className="text-[14px] font-black whitespace-nowrap">관리자 관리센터</div>
             <div className="text-[9px] font-extrabold tracking-[0.26em] text-[#8FB0F0] mt-1 truncate whitespace-nowrap" style={{ fontFamily: MONO }}>{user?.email || "PLATFORM"}</div>
           </div>
-          <button type="button" onClick={toApp} className="shrink-0 h-8 px-2.5 rounded-lg bg-white text-[#0F1A30] text-[12px] font-black whitespace-nowrap">배차앱 ↗</button>
-          <button type="button" onClick={logout} className="shrink-0 h-8 px-2.5 rounded-lg bg-white/10 ring-1 ring-white/15 text-[12px] font-black whitespace-nowrap">로그아웃</button>
+          <HeaderLivePill phone onClick={() => setTab("live")} />
+          <button type="button" onClick={toApp} className="shrink-0 h-9 px-2.5 rounded-[10px] bg-white text-[#0F1A30] text-[13px] font-black whitespace-nowrap">배차앱 ↗</button>
+          <button type="button" onClick={logout} aria-label="로그아웃" className="shrink-0 h-9 w-9 rounded-[10px] bg-white/10 ring-1 ring-white/15 flex items-center justify-center" title="로그아웃">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9" /></svg>
+          </button>
         </div>
         <nav ref={secRef} className="kp-pm-scroll flex gap-1 overflow-x-auto px-3 pb-2">
-          {SECTIONS.map((s) => {
+          {sections.map((s) => {
             const on = s.key === section.key;
+            const b = secBadge(s);
             return (
               <button key={s.key} type="button" data-on={on ? "1" : "0"} onClick={() => setTab(s.items[0].key)}
-                className={`shrink-0 h-8 px-3 rounded-[9px] text-[13px] whitespace-nowrap transition ${on ? "bg-white text-[#0F1A30] font-extrabold" : "text-white/65 font-semibold active:bg-white/10"}`}>{s.label}</button>
+                className={`shrink-0 h-10 px-3.5 rounded-[11px] text-[14px] whitespace-nowrap transition inline-flex items-center gap-1.5 ${on ? "bg-white text-[#0F1A30] font-black" : "text-white/70 font-bold active:bg-white/10"}`}>
+                {s.label}
+                {b > 0 && <span className={`min-w-[18px] h-[18px] px-1 rounded-full text-[10.5px] font-black inline-flex items-center justify-center ${on ? "bg-[#1B2B4B] text-white" : "bg-white text-[#0F1A30]"}`}>{b > 99 ? "99+" : b}</span>}
+              </button>
             );
           })}
         </nav>
       </header>
-      <div ref={subRef} className="kp-pm-scroll sticky z-30 flex gap-1.5 overflow-x-auto px-3 py-2 bg-[#F7F9FC] border-b border-[#E3E8F0]" style={{ top: "calc(92px + env(safe-area-inset-top, 0px))" }}>
+      <div ref={subRef} className="kp-pm-scroll sticky z-30 flex gap-1.5 overflow-x-auto px-3 py-2 bg-[#F7F9FC] border-b border-[#E3E8F0]" style={{ top: "calc(104px + env(safe-area-inset-top, 0px))" }}>
         {section.items.map((it) => {
           const on = it.key === tab;
+          const hb = typeof it.badge === "number" && it.badge > 0;
           return (
             <button key={it.key} type="button" data-on={on ? "1" : "0"} onClick={() => setTab(it.key)}
-              className={`shrink-0 h-8 px-3 rounded-full text-[12.5px] font-black whitespace-nowrap border transition ${on ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-[#3A4A66] border-[#DCE3EE]"}`}>{it.label}</button>
+              className={`shrink-0 h-9 px-3.5 rounded-full text-[13.5px] font-black whitespace-nowrap border transition inline-flex items-center gap-1.5 ${on ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-[#3A4A66] border-[#DCE3EE]"}`}>
+              {it.label}
+              {hb && <span className={`min-w-[18px] h-[18px] px-1 rounded-full text-[10.5px] font-black inline-flex items-center justify-center ${on ? "bg-white text-[#0F1A30]" : it.soft ? "bg-[#EEF2F8] text-[#1B2B4B]" : "bg-[#1B2B4B] text-white"}`}>{it.badge}</span>}
+            </button>
           );
         })}
       </div>
@@ -598,10 +717,6 @@ function PlatformMobileShell({ user, section, tab, setTab, toApp, logout, childr
   );
 }
 
-// 견적 이력에 "계약서 만들기"를 끼워 넣기 위한 얇은 감싸개
-function PlatformMonitorWithContract({ tab, setTab, onContract }) {
-  return <PlatformMonitor bare tab={tab} onTab={setTab} onContract={onContract} />;
-}
 
 // ═══════════════════════ 진입 선택(/choose) ═══════════════════════
 export function EntryChooser({ user }) {
