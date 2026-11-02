@@ -175,6 +175,11 @@ service cloud.firestore {
       allow read, update, delete: if isOfficeStaff() && coMatch(resource.data);
       allow create: if isOfficeStaff() && coCreate();
     }
+    // ⭐ 2026-11-02 배차표 양식(고정노선 › 배차표) — 회사 직원(기사·화주 제외)만
+    match /routeBoards/{id} {
+      allow read, update, delete: if isOfficeStaff() && coMatch(resource.data);
+      allow create: if isOfficeStaff() && coCreate();
+    }
     // ⭐ 2026-11-02 운임규칙 — 회사별 운임 규칙(fareRules/{회사}) — 그 회사 직원(기사·화주 제외)만 읽고,
     //  조회전용(viewer)이 아닌 직원은 누구나 수정. 문서 이름 = 회사명이라 잠금 스위치와 상관없이 다른 회사는 못 본다.
     function fareRulesStaff(co) {
@@ -704,7 +709,7 @@ service cloud.firestore {
       }
     }
     match /{col}/{rest=**} {
-      allow read, write: if isApproved() && !(col in ['adminSecrets', 'resetBackups', 'resetLogs', 'resetJobs', 'loginSessions', 'orderTrash', 'recurringRuns', 'internalMails', 'approvals', 'boardPosts', 'notices', 'handovers', 'salesQuotes', 'contracts', 'platformNotices', 'platformInvoices', 'companyPlans', 'publicPricing', 'planRequests', 'userPrefs', 'companyRoleOverrides', 'customRoles', 'supportRequests', 'supportSessions', 'driverStatements', 'fleetPenalties', 'fixedRoutes', 'publicCompanies', 'companyContracts',
+      allow read, write: if isApproved() && !(col in ['adminSecrets', 'resetBackups', 'resetLogs', 'resetJobs', 'loginSessions', 'orderTrash', 'recurringRuns', 'internalMails', 'approvals', 'boardPosts', 'notices', 'handovers', 'salesQuotes', 'contracts', 'platformNotices', 'platformInvoices', 'companyPlans', 'publicPricing', 'planRequests', 'userPrefs', 'companyRoleOverrides', 'customRoles', 'supportRequests', 'supportSessions', 'driverStatements', 'fleetPenalties', 'fixedRoutes', 'routeBoards', 'publicCompanies', 'companyContracts',
         // 🔒 회사별로 잠근 컬렉션(위에서 따로 정함)
         'orders', 'dispatch', 'dispatch_test', 'fixedClients', 'drivers', 'clients', 'places', 'recurringOrders', 'deletedOrders',
         'driver_completed_archive', 'notifications', 'schedules', 'scheduledEmails', 'emailLogs', 'hrResumes', 'attendanceRequests',

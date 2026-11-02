@@ -5046,17 +5046,18 @@ function FleetSettlementTab({ drivers = [], dispatchData = [], role = "", compan
 
 // ─── CheckInLocModal ─────────────────────────────────────────────────────────
 
-// 🛣 고정노선 — 새 고정노선 / 예전 엑셀 경로 정리(인수증)
+// 🛣 고정노선 — 새 고정노선 / 배차표(화주사 시트 모양) / 예전 엑셀 경로 정리(인수증)
+import RouteBoard from "./RouteBoard"; // ⭐ 2026-11-02 배차표
 function FixedRoutesModes(props) {
   const [mode, setMode] = useState("routes");
   return (
     <div>
       <div className="inline-flex p-1 rounded-2xl bg-white border border-[#E3E8F0] mb-3 gap-1">
-        {[["routes", "고정노선"], ["excel", "엑셀 경로 정리"]].map(([k, l]) => (
+        {[["routes", "고정노선"], ["board", "배차표"], ["excel", "엑셀 경로 정리"]].map(([k, l]) => (
           <button key={k} type="button" onClick={() => setMode(k)} className={`h-9 px-4 rounded-xl text-[13px] font-black ${mode === k ? "bg-[#0F1A30] text-white" : "text-[#5B6B85] hover:bg-[#F3F6FA]"}`}>{l}</button>
         ))}
       </div>
-      {mode === "routes" ? <FixedRoutes {...props} /> : <DeliverySignaturePage />}
+      {mode === "routes" ? <FixedRoutes {...props} /> : mode === "board" ? <RouteBoard companyName={props.companyName} /> : <DeliverySignaturePage />}
     </div>
   );
 }
