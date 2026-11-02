@@ -7771,10 +7771,10 @@ const newVer = useNewVersion(); // ★ 새 버전이 배포되면 버전 표시 
   //   (예전 고정노선 자동 생성·서버 안전망이 가입 여부를 보지 않고 승인대기를 걸었다) 수락 화면은 기사앱에 가입한 지입 기사에게만 있다.
   const fixedAwaitRef = React.useRef(new Set());
   React.useEffect(() => {
-    if (isViewer || !drivers?.length || !dispatchDataLive?.length) return;
+    if (isViewer || !drivers?.length || !dispatchData?.length) return;
     const byPlate = new Map();
     drivers.forEach((d) => { const k = normalizePlate(d.차량번호 || ""); if (k) byPlate.set(k, [...(byPlate.get(k) || []), d]); });
-    dispatchDataLive.forEach((r) => {
+    dispatchData.forEach((r) => {
       if (r?.배차상태 !== "승인대기" || r?.기사확인상태 !== "대기" || !r?.차량번호 || !r?._id) return;
       const key = `${r.__col || "orders"}/${r._id}`;
       if (fixedAwaitRef.current.has(key)) return;
@@ -7784,7 +7784,7 @@ const newVer = useNewVersion(); // ★ 새 버전이 배포되면 버전 표시 
       fixedAwaitRef.current.add(key);
       updateDoc(doc(db, r.__col || "orders", r._id), { 기사확인상태: null, 배차상태: "배차완료", 상태: "배차완료" }).catch(() => fixedAwaitRef.current.delete(key));
     });
-  }, [isViewer, drivers, dispatchDataLive]);
+  }, [isViewer, drivers, dispatchData]);
   const approveEditRequestSafe = isViewer ? _viewerBlock : approveEditRequestPC;
   const rejectEditRequestSafe = isViewer ? _viewerBlock : rejectEditRequestPC;
   const upsertDriverSafe = isViewer ? _viewerBlock : upsertDriver;
@@ -41324,40 +41324,37 @@ return (
 
     <div
       className={copyPanelStyle === "B"
-        ? "absolute rounded-2xl bg-gray-50 shadow-2xl overflow-y-auto"
-        : "absolute top-0 right-0 h-full w-[1100px] bg-gray-50 shadow-2xl border-l overflow-y-auto"}
+        ? "absolute rounded-2xl bg-[#F4F6FA] shadow-2xl overflow-y-auto"
+        : "absolute top-0 right-0 h-full w-[min(1180px,96vw)] bg-[#F4F6FA] shadow-2xl border-l overflow-y-auto"}
       style={copyPanelStyle === "B" ? {
-        top: "50%", left: "50%", width: "min(1100px, 92vw)", maxHeight: "88vh",
+        top: "50%", left: "50%", width: "min(1180px, 94vw)", maxHeight: "92vh",
         transform: `translate(-50%, -50%) translate(${copyPanelDrag.x}px, ${copyPanelDrag.y}px)`,
       } : undefined}
     >
 
-      <div className="p-10 space-y-10 text-[14px]">
+      <div className="cp-compact px-5 pb-5 space-y-4 text-[14px]">
 
         {/* HEADER — B스타일에서는 이 영역을 드래그 손잡이로 사용 */}
 <div
-  className="flex justify-between items-center bg-white rounded-xl border border-gray-200 px-6 py-4 shadow-sm"
+  className="sticky top-0 z-20 -mx-5 mb-1 flex justify-between items-center gap-3 px-5 py-2.5 text-white shadow-[0_6px_18px_rgba(11,20,40,0.25)]"
   onMouseDown={copyPanelStyle === "B" ? handleCopyPanelDragStart : undefined}
-  style={copyPanelStyle === "B" ? { cursor: "grab" } : undefined}
+  style={{ background: "linear-gradient(120deg,#0B1428 0%,#1B2B4B 60%,#2D4C82 100%)", ...(copyPanelStyle === "B" ? { cursor: "grab" } : {}) }}
 >
-  <div>
-    <h2 className="text-[18px] font-bold text-[#1B2B4B]"><EditableText id="copyPanel.title" defaultText="오더 복사 / 수정 패널" /></h2>
-    <p className="text-[13px] text-gray-500 mt-0.5">{copyTarget?.거래처명} · {copyTarget?.상차지명} → {copyTarget?.하차지명}</p>
+  <div className="min-w-0">
+    <div className="text-[9.5px] font-extrabold tracking-[0.24em] text-[#8FB0F0]" style={{ fontFamily: "'JetBrains Mono',ui-monospace,monospace" }}>ORDER · COPY / EDIT</div>
+    <h2 className="text-[18px] font-black leading-tight"><EditableText id="copyPanel.title" defaultText="오더 복사 / 수정 패널" /> <span className="ml-1 text-[13.5px] font-semibold text-white/60">{copyTarget?.거래처명} · {copyTarget?.상차지명} → {copyTarget?.하차지명}</span></h2>
   </div>
   <div className="flex gap-2 items-center">
     {/* A/B 스타일 전환 */}
     <button type="button" onClick={toggleCopyPanelStyle}
-      className="w-8 h-8 flex items-center justify-center rounded-lg bg-[#1B2B4B]/10 hover:bg-[#1B2B4B]/20 text-[#1B2B4B] text-[13px] font-bold transition"
+      className="w-8 h-8 flex items-center justify-center rounded-lg bg-white/10 hover:bg-white/20 text-white text-[13px] font-bold transition"
       title="패널 스타일 전환 (A: 우측고정 / B: 중앙이동)">
       {copyPanelStyle}
     </button>
     <CopyPanelExtras order={copyTarget} userNameMap={userNameMap} />
     <button
     onClick={handleCopyFareSearch}
-    className="px-4 py-2 rounded-lg text-[13px] font-bold transition
-      bg-gradient-to-r from-amber-500 to-orange-500
-      hover:from-amber-600 hover:to-orange-600
-      text-white shadow-md hover:shadow-lg"
+    className="px-3.5 h-8 rounded-lg text-[13px] font-bold transition bg-white/10 hover:bg-white/20 ring-1 ring-white/25 text-white"
   >
     <EditableText id="copyPanel.운임조회" defaultText="운임조회" />
   </button>
@@ -41425,7 +41422,7 @@ return (
 
 
   }}
-  className="px-4 py-2 bg-green-600 text-white rounded-lg font-semibold"
+  className="px-3.5 h-8 bg-white text-[#0F1A30] rounded-lg text-[13px] font-black hover:bg-[#EEF3FB] transition"
 >
   <EditableText id="copyPanel.수정저장" defaultText="수정 저장" />
 </button>
@@ -41461,7 +41458,7 @@ return (
     }
 
   }}
-    className="px-4 py-2 bg-[#1B2B4B] text-white rounded-lg text-[13px] font-bold hover:bg-[#243a60] transition"
+    className="px-3.5 h-8 bg-[#8FB0F0] text-[#0B1428] rounded-lg text-[13px] font-black hover:bg-[#CFE0FF] transition"
 >
   <EditableText id="copyPanel.복사등록" defaultText="복사 등록" />
 </button>
@@ -41471,7 +41468,7 @@ return (
 {/* 닫기 */}
 <button
   onClick={() => { setCopyPanelOpen(false); setDailyCloseIssueCtx(null); }}
-  className="text-slate-500 hover:text-red-500 text-xl"
+  className="w-8 h-8 flex items-center justify-center rounded-lg border border-white/25 text-white/70 hover:text-white hover:bg-white/10 transition text-lg"
 >
   ✕
 </button>
@@ -41507,18 +41504,19 @@ return (
   </div>
 )}
 {/* ================= 오더 유형 버튼 ================= */}
-<div className="flex items-center gap-2 flex-wrap bg-white rounded-xl border border-gray-200 px-6 py-4 shadow-sm">
+<div className="flex items-center gap-2 flex-wrap bg-white rounded-xl border border-[#E3E8F0] px-5 py-2.5">
+  <span className="text-[13.5px] font-bold text-[#5B6B85] mr-1">오더 유형</span>
   <button type="button"
     onClick={() => setCopyTarget(p => ({ ...p, 독차: !p.독차, 혼적: p.독차 ? p.혼적 : false }))}
-    className={`px-4 py-1.5 rounded-lg text-xs font-semibold border transition-all ${copyTarget.독차 ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"}`}
+    className={`px-4 py-1.5 rounded-lg text-[13px] font-bold border transition-all ${copyTarget.독차 ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"}`}
   ><EditableText id="misc.btn.38146.독차" defaultText="독차" /></button>
   <button type="button"
     onClick={() => setCopyTarget(p => ({ ...p, 혼적: !p.혼적, 독차: p.혼적 ? p.독차 : false }))}
-    className={`px-4 py-1.5 rounded-lg text-xs font-semibold border transition-all ${copyTarget.혼적 ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"}`}
+    className={`px-4 py-1.5 rounded-lg text-[13px] font-bold border transition-all ${copyTarget.혼적 ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"}`}
   ><EditableText id="misc.btn.38150.혼적" defaultText="혼적" /></button>
   <button type="button"
     onClick={() => setCopyTarget(p => (p.운행유형 === "왕복" ? { ...p, 운행유형: "편도", 회전수: 1, 메모: withRotationMemo(p.메모, 1) } : { ...p, 운행유형: "왕복" }))}
-    className={`px-4 py-1.5 rounded-lg text-xs font-semibold border transition-all ${copyTarget.운행유형 === "왕복" ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"}`}
+    className={`px-4 py-1.5 rounded-lg text-[13px] font-bold border transition-all ${copyTarget.운행유형 === "왕복" ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"}`}
   ><EditableText id="misc.btn.38154.왕복" defaultText="왕복" /></button>
   {/* ⭐ 왕복일 때만 회전수 선택 (기존 오더 수정/복사는 한 오더로 묶기) */}
   {copyTarget.운행유형 === "왕복" && (
@@ -41527,13 +41525,13 @@ return (
   )}
   <button type="button"
     onClick={() => setCopyTarget(p => ({ ...p, 긴급: !p.긴급 }))}
-    className={`px-4 py-1.5 rounded-lg text-xs font-semibold border transition-all ${copyTarget.긴급 ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"}`}
+    className={`px-4 py-1.5 rounded-lg text-[13px] font-bold border transition-all ${copyTarget.긴급 ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"}`}
   ><EditableText id="misc.btn.38158.긴급" defaultText="긴급" /></button>
 </div>
 {/* ================= 거래처 정보 ================= */}
-<section className="bg-white rounded-xl border border-gray-200 shadow-sm">
-  <div className="bg-[#1B2B4B] px-6 py-3 rounded-t-xl"><h3 className="text-[14px] font-bold text-white"><EditableText id="copyPanel.section.거래처정보" defaultText="거래처 정보" /></h3></div>
-  <div className="p-6">
+<section className="bg-white rounded-xl border border-[#E3E8F0]">
+  <div className="bg-[#1B2B4B] px-5 py-2 rounded-t-xl"><h3 className="text-[14px] font-bold text-white"><EditableText id="copyPanel.section.거래처정보" defaultText="거래처 정보" /></h3></div>
+  <div className="px-5 py-3">
 
   <div className="space-y-1">
     <div className="flex items-center justify-between">
@@ -41544,7 +41542,7 @@ return (
     <div className="relative">
       <input autoComplete="off"
       disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
-        className={inputStyle}
+        className={cpInputStyle}
         value={copyTarget?.거래처명 ?? ""}
         onChange={(e)=>{
           const v = e.target.value;
@@ -41637,16 +41635,16 @@ setCopyTarget(prev=>({
   </div>
 </section>
         {/* ================= 상하차 정보 ================= */}
-<section className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-  <div className="bg-[#1B2B4B] px-6 py-3"><h3 className="text-[14px] font-bold text-white"><EditableText id="copyPanel.section.상하차정보" defaultText="상하차 정보" /></h3></div>
-  <div className="p-6">
+<section className="bg-white rounded-xl border border-[#E3E8F0] overflow-hidden">
+  <div className="bg-[#1B2B4B] px-5 py-2"><h3 className="text-[14px] font-bold text-white"><EditableText id="copyPanel.section.상하차정보" defaultText="상하차 정보" /></h3></div>
+  <div className="px-5 py-3">
 
-  <div className="grid grid-cols-2 gap-16">
+  <div className="grid grid-cols-2 gap-x-8">
 
     {/* 상차 */}
-    <div className="space-y-4">
+    <div className="space-y-1.5">
       <div className="text-[12px] font-bold text-blue-600 pb-1 border-b border-blue-100">상차</div>
-      <Field label={<>
+      <CpField label={<>
         상차일
         {/* ⭐ 묶음(다중근무일) 오더는 상차일 한 칸만 바꿔서는 일정 전체를 옮길 수 없다는
             피드백으로, 근무일 전체를 다시 고를 수 있는 달력 편집 버튼을 추가한다. */}
@@ -41663,7 +41661,7 @@ setCopyTarget(prev=>({
       </>}>
         <CustomDatePicker
         disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
-          className={inputStyle}
+          className={cpInputStyle}
           value={copyTarget?.상차일 ?? ""}
           onChange={(e)=>setCopyTarget(p=>({...p, 상차일:e.target.value}))}
           multiSelect
@@ -41691,34 +41689,34 @@ setCopyTarget(prev=>({
           onClearWorkDates={() => setCopyTarget(p => ({ ...p, 근무일자목록: [], 복수근무일: false }))}
           displayOverride={(() => { const wd = _parseWorkDates(copyTarget?.근무일자목록); return wd.length > 1 ? `${copyTarget?.상차일 || ""} 외 ${wd.length - 1}일` : undefined; })()}
         />
-      </Field>
+      </CpField>
 
-      <Field label="상차시간">
+      <CpField label="상차시간">
         <TimeAmPmPicker
         disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
           value={copyTarget?.상차시간 ?? ""}
           onChange={v => setCopyTarget(p=>({...p, 상차시간:v}))}
-          selectCls={inputStyle}
+          selectCls={cpInputStyle}
         />
-      </Field>
-      <Field label="상차방법">
+      </CpField>
+      <CpField label="상차방법">
   <CustomSelect
   disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
-    className={inputStyle}
+    className={cpInputStyle}
     value={copyTarget?.상차방법 ?? ""}
     onChange={(e)=>setCopyTarget(p=>({...p, 상차방법:e.target.value}))}
   >
     <option value="">선택</option>
     {loadMethodOptions.map(v => <option key={v} value={v}>{v}</option>)}
   </CustomSelect>
-</Field>
+</CpField>
 
       {/* 🔥 상차지명 자동완성 */}
-      <Field label={<span className="flex items-center gap-1.5">상차지명<OrderMemoIconButton onClick={() => openPanelMemoC5("pickup")} hasMemo={hasPanelMemoC5("pickup")} /></span>}>
+      <CpField label={<span className="flex items-center gap-1.5">상차지명<OrderMemoIconButton onClick={() => openPanelMemoC5("pickup")} hasMemo={hasPanelMemoC5("pickup")} /></span>}>
         <div className="relative">
           <input autoComplete="off"
           disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
-            className={inputStyle}
+            className={cpInputStyle}
             value={copyTarget?.상차지명 ?? ""}
             onChange={(e)=>{
               const v = e.target.value;
@@ -41815,37 +41813,37 @@ setCopyPlaceOptions(list);
             </div>
           )}
         </div>
-      </Field>
+      </CpField>
 
       {/* 🔥 다시 추가된 칸들 */}
-      <Field label={<span className="flex items-center gap-1.5">상차지주소{(copyTarget?.상차지주소 || "").length > 30 && (
+      <CpField label={<span className="flex items-center gap-1.5">상차지주소{(copyTarget?.상차지주소 || "").length > 30 && (
         <button type="button" tabIndex={-1} onClick={() => showAlert(copyTarget?.상차지주소 || "")} className="text-[11px] text-[#1B2B4B] font-semibold underline"><EditableText id="misc.btn.38453.더보기" defaultText="더보기" /></button>
       )}</span>}>
         <input autoComplete="off"
         disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
-          className={inputStyle}
+          className={cpInputStyle}
           value={copyTarget?.상차지주소 ?? ""}
           onChange={(e)=>setCopyTarget(p=>({...p, 상차지주소:e.target.value}))}
         />
-      </Field>
+      </CpField>
 
-      <Field label={<span className="flex items-center justify-between w-full">상차지 담당자명<ContactPickerIconButton title="상차지 담당자명 선택" onClick={() => { const nm = copyTarget?.상차지명 || ""; if (!nm.trim()) return showAlert("상차지명을 먼저 입력하세요."); const p = (mergedClients || []).find(x => nameKeyOf(x.업체명) === nameKeyOf(nm)); const cs = uniqueContactsOf(p); if (!cs.length) return showAlert("등록된 담당자가 없습니다."); setPanelContactPopup5({ type: "pickup", place: p, contacts: cs, setter: setCopyTarget }); }} /></span>}>
+      <CpField label={<span className="flex items-center justify-between w-full">상차지 담당자명<ContactPickerIconButton title="상차지 담당자명 선택" onClick={() => { const nm = copyTarget?.상차지명 || ""; if (!nm.trim()) return showAlert("상차지명을 먼저 입력하세요."); const p = (mergedClients || []).find(x => nameKeyOf(x.업체명) === nameKeyOf(nm)); const cs = uniqueContactsOf(p); if (!cs.length) return showAlert("등록된 담당자가 없습니다."); setPanelContactPopup5({ type: "pickup", place: p, contacts: cs, setter: setCopyTarget }); }} /></span>}>
         <input autoComplete="off"
         disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
-          className={inputStyle}
+          className={cpInputStyle}
           value={copyTarget?.상차지담당자 ?? ""}
           onChange={(e)=>setCopyTarget(p=>({...p, 상차지담당자:e.target.value}))}
         />
-      </Field>
+      </CpField>
 
-      <Field label="상차지 연락처">
+      <CpField label="상차지 연락처">
         <input autoComplete="off"
         disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
-          className={inputStyle}
+          className={cpInputStyle}
           value={copyTarget?.상차지담당자번호 ?? ""}
           onChange={(e)=>setCopyTarget(p=>({...p, 상차지담당자번호:formatPhone(e.target.value)}))}
         />
-      </Field>
+      </CpField>
 
       {/* ── 상차 경유지 표시 ── */}
       {(() => {
@@ -41857,41 +41855,41 @@ setCopyPlaceOptions(list);
     </div>
 
 {/* 하차 */}
-    <div className="space-y-4">
+    <div className="space-y-1.5">
       <div className="text-[12px] font-bold text-red-500 pb-1 border-b border-red-100">하차</div>
-      <Field label="하차일">
+      <CpField label="하차일">
         <CustomDatePicker
         disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
-          className={inputStyle}
+          className={cpInputStyle}
           value={copyTarget?.하차일 ?? ""}
           onChange={(e)=>setCopyTarget(p=>({...p, 하차일:e.target.value}))}
         />
-      </Field>
+      </CpField>
 
-      <Field label="하차시간">
+      <CpField label="하차시간">
         <TimeAmPmPicker
         disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
           value={copyTarget?.하차시간 ?? ""}
           onChange={v => setCopyTarget(p=>({...p, 하차시간:v}))}
-          selectCls={inputStyle}
+          selectCls={cpInputStyle}
         />
-      </Field>
-<Field label="하차방법">
+      </CpField>
+<CpField label="하차방법">
   <CustomSelect
   disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
-    className={inputStyle}
+    className={cpInputStyle}
     value={copyTarget?.하차방법 ?? ""}
     onChange={(e)=>setCopyTarget(p=>({...p, 하차방법:e.target.value}))}
   >
     <option value="">선택</option>
     {loadMethodOptions.map(v => <option key={v} value={v}>{v}</option>)}
   </CustomSelect>
-</Field>
-      <Field label={<span className="flex items-center gap-1.5">하차지명<OrderMemoIconButton onClick={() => openPanelMemoC5("drop")} hasMemo={hasPanelMemoC5("drop")} /></span>}>
+</CpField>
+      <CpField label={<span className="flex items-center gap-1.5">하차지명<OrderMemoIconButton onClick={() => openPanelMemoC5("drop")} hasMemo={hasPanelMemoC5("drop")} /></span>}>
         <div className="relative">
           <input autoComplete="off"
           disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
-            className={inputStyle}
+            className={cpInputStyle}
             value={copyTarget?.하차지명 ?? ""}
             onChange={(e)=>{
               const v = e.target.value;
@@ -41988,37 +41986,37 @@ setCopyPlaceOptions(list);
             </div>
           )}
         </div>
-      </Field>
+      </CpField>
 
       {/* 🔥 다시 추가된 하차 칸들 */}
-      <Field label={<span className="flex items-center gap-1.5">하차지주소{(copyTarget?.하차지주소 || "").length > 30 && (
+      <CpField label={<span className="flex items-center gap-1.5">하차지주소{(copyTarget?.하차지주소 || "").length > 30 && (
         <button type="button" tabIndex={-1} onClick={() => showAlert(copyTarget?.하차지주소 || "")} className="text-[11px] text-[#1B2B4B] font-semibold underline"><EditableText id="misc.btn.38630.더보기" defaultText="더보기" /></button>
       )}</span>}>
         <input autoComplete="off"
         disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
-          className={inputStyle}
+          className={cpInputStyle}
           value={copyTarget?.하차지주소 ?? ""}
           onChange={(e)=>setCopyTarget(p=>({...p, 하차지주소:e.target.value}))}
         />
-      </Field>
+      </CpField>
 
-      <Field label={<span className="flex items-center justify-between w-full">하차지 담당자명<ContactPickerIconButton title="하차지 담당자명 선택" onClick={() => { const nm = copyTarget?.하차지명 || ""; if (!nm.trim()) return showAlert("하차지명을 먼저 입력하세요."); const p = (mergedClients || []).find(x => nameKeyOf(x.업체명) === nameKeyOf(nm)); const cs = uniqueContactsOf(p); if (!cs.length) return showAlert("등록된 담당자가 없습니다."); setPanelContactPopup5({ type: "drop", place: p, contacts: cs, setter: setCopyTarget }); }} /></span>}>
+      <CpField label={<span className="flex items-center justify-between w-full">하차지 담당자명<ContactPickerIconButton title="하차지 담당자명 선택" onClick={() => { const nm = copyTarget?.하차지명 || ""; if (!nm.trim()) return showAlert("하차지명을 먼저 입력하세요."); const p = (mergedClients || []).find(x => nameKeyOf(x.업체명) === nameKeyOf(nm)); const cs = uniqueContactsOf(p); if (!cs.length) return showAlert("등록된 담당자가 없습니다."); setPanelContactPopup5({ type: "drop", place: p, contacts: cs, setter: setCopyTarget }); }} /></span>}>
         <input autoComplete="off"
         disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
-          className={inputStyle}
+          className={cpInputStyle}
           value={copyTarget?.하차지담당자 ?? ""}
           onChange={(e)=>setCopyTarget(p=>({...p, 하차지담당자:e.target.value}))}
         />
-      </Field>
+      </CpField>
 
-      <Field label="하차지 연락처">
+      <CpField label="하차지 연락처">
         <input autoComplete="off"
         disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
-          className={inputStyle}
+          className={cpInputStyle}
           value={copyTarget?.하차지담당자번호 ?? ""}
           onChange={(e)=>setCopyTarget(p=>({...p, 하차지담당자번호:formatPhone(e.target.value)}))}
         />
-      </Field>
+      </CpField>
 
       {/* ── 하차 경유지 표시 ── */}
       {(() => {
@@ -42033,12 +42031,12 @@ setCopyPlaceOptions(list);
 </div>
 </section>
 {/* ===== 스마트 기사 검색 (복사패널) ===== */}
-<section className="bg-white rounded-xl border border-gray-200 shadow-sm divide-y divide-gray-100 overflow-hidden">
-  <div className="px-6 pt-5 pb-1"><h3 className="text-[13px] font-bold text-[#1B2B4B] flex items-center gap-1.5"><span className="w-1 h-3.5 bg-[#1B2B4B] rounded-full inline-block"></span>기사 스마트 검색</h3></div>
-  <div className="p-4">
+<section className="bg-white rounded-xl border border-[#E3E8F0] divide-y divide-gray-100 overflow-hidden">
+  <div className="px-5 pt-3.5 pb-0"><h3 className="text-[14px] font-bold text-[#1B2B4B] flex items-center gap-1.5"><span className="w-1 h-3.5 bg-[#1B2B4B] rounded-full inline-block"></span>기사 스마트 검색</h3></div>
+  <div className="px-4 py-2">
     <div className="relative">
       <input autoComplete="off"
-        className="w-full border-2 border-[#1B2B4B] rounded-xl px-4 py-3 text-[13px] bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-200 placeholder:text-gray-500"
+        className="w-full border-2 border-[#1B2B4B] rounded-lg px-3 py-2 text-[14px] bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-200 placeholder:text-gray-500"
         placeholder="이름·차량번호·전화번호 또는 문자 복붙 → 엔터로 자동 적용"
         value={smartQ5}
         onChange={e=>handleSmart5Input(e.target.value)}
@@ -42065,14 +42063,14 @@ setCopyPlaceOptions(list);
   </div>
 
 {/* ================= 기사정보 ================= */}
-  <div className="px-6 pt-5 pb-1"><h3 className="text-[13px] font-bold text-[#1B2B4B] flex items-center gap-1.5"><span className="w-1 h-3.5 bg-[#1B2B4B] rounded-full inline-block"></span>기사정보</h3></div>
-  <div className="p-6">
+  <div className="px-5 pt-3.5 pb-0"><h3 className="text-[14px] font-bold text-[#1B2B4B] flex items-center gap-1.5"><span className="w-1 h-3.5 bg-[#1B2B4B] rounded-full inline-block"></span>기사정보</h3></div>
+  <div className="px-5 py-3">
 
-  <div className="grid grid-cols-3 gap-6">
+  <div className="grid grid-cols-3 gap-x-6 gap-y-1.5">
 
-   <Field label="차량번호">
+   <CpField label="차량번호">
 <input autoComplete="off"
-  className={inputStyle}
+  className={cpInputStyle}
   value={copyTarget?.차량번호 || ""}
 
   onKeyDown={(e)=>{
@@ -42152,37 +42150,37 @@ setCopyPlaceOptions(list);
 
     }}
   />
-</Field>
+</CpField>
 
-    <Field label="기사명">
+    <CpField label="기사명">
       <input autoComplete="off"
-        className={inputStyle}
+        className={cpInputStyle}
         value={copyTarget?.이름 || ""}
         readOnly
       />
-    </Field>
+    </CpField>
 
-    <Field label="전화번호">
+    <CpField label="전화번호">
       <input autoComplete="off"
-        className={inputStyle}
+        className={cpInputStyle}
        value={formatPhone(copyTarget?.전화번호 || "")}
         readOnly
       />
-    </Field>
+    </CpField>
 
   </div>
 </div>
 {/* ================= 화물정보 ================= */}
-  <div className="px-6 pt-5 pb-1"><h3 className="text-[13px] font-bold text-[#1B2B4B] flex items-center gap-1.5"><span className="w-1 h-3.5 bg-[#1B2B4B] rounded-full inline-block"></span>화물정보</h3></div>
-  <div className="p-6">
+  <div className="px-5 pt-3.5 pb-0"><h3 className="text-[14px] font-bold text-[#1B2B4B] flex items-center gap-1.5"><span className="w-1 h-3.5 bg-[#1B2B4B] rounded-full inline-block"></span>화물정보</h3></div>
+  <div className="px-5 py-3">
 
-  <div className="grid grid-cols-3 gap-6">
+  <div className="grid grid-cols-3 gap-x-6 gap-y-1.5">
 
-    <Field label="차량종류">
-      <VehicleTypePicker className={inputStyle} value={copyTarget?.차량종류 ?? ""} disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")} base={["라보/다마스", "카고", "윙/카고", "윙바디", "탑차", "냉장탑", "냉동탑", "냉장윙", "냉동윙", "냉장/냉동탑", "냉장/냉동윙", "리프트", "오토바이", "기타"]} placeholder="선택" noneLabel="선택" onChange={(__v) => ((e)=>setCopyTarget(p=>({...p, 차량종류:e.target.value})))({ target: { value: __v } })} />
-    </Field>
+    <CpField label="차량종류">
+      <VehicleTypePicker className={cpInputStyle} value={copyTarget?.차량종류 ?? ""} disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")} base={["라보/다마스", "카고", "윙/카고", "윙바디", "탑차", "냉장탑", "냉동탑", "냉장윙", "냉동윙", "냉장/냉동탑", "냉장/냉동윙", "리프트", "오토바이", "기타"]} placeholder="선택" noneLabel="선택" onChange={(__v) => ((e)=>setCopyTarget(p=>({...p, 차량종류:e.target.value})))({ target: { value: __v } })} />
+    </CpField>
 
- <Field label="차량톤수">
+ <CpField label="차량톤수">
 
   <div className="flex items-center border rounded-lg overflow-hidden bg-white">
 
@@ -42228,9 +42226,9 @@ setCopyPlaceOptions(list);
 
   </div>
 
-</Field>
+</CpField>
 
-<Field label={<span className="flex items-center gap-1 flex-wrap">화물내용<button type="button" tabIndex={-1} className="ml-1 px-1.5 py-0.5 text-[10px] font-bold rounded bg-[#1B2B4B] text-white hover:bg-[#243d6a] cursor-pointer" onClick={() => setCargoAddPopup({ initialValue: copyTarget?.화물내용||"", onCommit: (v) => setCopyTarget(p=>({...p,화물내용:v})) })}>+ 추가</button><CargoExtraChips value={copyTarget?.화물내용} /></span>}>
+<CpField label={<span className="flex items-center gap-1 flex-wrap">화물내용<button type="button" tabIndex={-1} className="ml-1 px-1.5 py-0.5 text-[10px] font-bold rounded bg-[#1B2B4B] text-white hover:bg-[#243d6a] cursor-pointer" onClick={() => setCargoAddPopup({ initialValue: copyTarget?.화물내용||"", onCommit: (v) => setCopyTarget(p=>({...p,화물내용:v})) })}>+ 추가</button><CargoExtraChips value={copyTarget?.화물내용} /></span>}>
 
   <div className="flex items-center border rounded-lg overflow-hidden bg-white">
 
@@ -42268,19 +42266,19 @@ setCopyPlaceOptions(list);
 
   </div>
 
-</Field>
+</CpField>
 
   </div>
 </div>
         {/* ================= 결제 정보 ================= */}
-          <div className="px-6 pt-5 pb-1"><h3 className="text-[13px] font-bold text-[#1B2B4B] flex items-center gap-1.5"><span className="w-1 h-3.5 bg-[#1B2B4B] rounded-full inline-block"></span>결제 정보</h3></div>
-          <div className="p-6">
+          <div className="px-5 pt-3.5 pb-0"><h3 className="text-[14px] font-bold text-[#1B2B4B] flex items-center gap-1.5"><span className="w-1 h-3.5 bg-[#1B2B4B] rounded-full inline-block"></span>결제 정보</h3></div>
+          <div className="px-5 py-3">
 
-          <div className="grid grid-cols-5 gap-8">
+          <div className="grid grid-cols-3 gap-x-5 gap-y-1.5">
 
-            <Field label="청구운임">
+            <CpField label="청구운임">
               <input autoComplete="off"
-  className={inputStyle}
+  className={cpInputStyle}
   value={copyTarget.청구운임 ? Number(copyTarget.청구운임).toLocaleString() : ""}
   onChange={(e)=>{
     const v = e.target.value
@@ -42290,11 +42288,11 @@ setCopyPlaceOptions(list);
     setCopyTarget(p=> fareOn ? fareFormChange(p, "청구운임", v, fareR.rules) : ({...p, 청구운임: v})) // ⭐ 2026-11-02 운임규칙
   }}
 />
-            </Field>
+            </CpField>
 
-            <Field label="기사운임">
+            <CpField label="기사운임">
               <input autoComplete="off"
-  className={inputStyle}
+  className={cpInputStyle}
   value={copyTarget.기사운임 ? Number(copyTarget.기사운임).toLocaleString() : ""}
   onChange={(e)=>{
     const v = e.target.value
@@ -42304,19 +42302,19 @@ setCopyPlaceOptions(list);
     setCopyTarget(p=> fareOn ? fareFormChange(p, "기사운임", v, fareR.rules) : ({...p, 기사운임: v})) // ⭐ 2026-11-02 운임규칙
   }}
 />
-            </Field>
+            </CpField>
 
-            <Field label="수수료">
+            <CpField label="수수료">
               {(() => { const _f = Number(copyTarget.청구운임||0) - Number(copyTarget.기사운임||0); return (
-              <div className={`bg-slate-100 rounded-lg px-4 py-3 font-bold text-lg text-center ${_f < 0 ? "text-red-600" : "text-[#1B2B4B]"}`}>
+              <div className={`h-9 flex items-center justify-end bg-[#EEF2F8] border border-[#DCE4F0] rounded-lg px-2.5 font-black text-[15px] whitespace-nowrap tabular-nums ${_f < 0 ? "text-red-600" : "text-[#1B2B4B]"}`}>
                 {_f.toLocaleString()} 원
               </div>
               ); })()}
-            </Field>
-<Field label="지급방식">
+            </CpField>
+<CpField label="지급방식">
   <CustomSelect
   disabled={copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile"}
-    className={inputStyle}
+    className={cpInputStyle}
     value={copyTarget?.지급방식 ?? ""}
     onChange={(e)=>setCopyTarget(p=>({...p, 지급방식:e.target.value}))}
   >
@@ -42328,44 +42326,41 @@ setCopyPlaceOptions(list);
     <option value="개인">개인</option>
     <option value="취소">취소</option>
   </CustomSelect>
-</Field>
+</CpField>
 {/* ⭐ 2026-11-02 운임규칙 — 오더 복사·수정 패널 운임구분 */}
 {fareOn && (
-  <div className="col-span-2"><Field label="운임구분">
-    <div className="flex items-center gap-1.5 flex-wrap">
-      <FareTypeSelect className="min-w-[180px] !w-auto" rules={fareR.rules} value={copyTarget?.운임구분 || ""} onChange={(v) => setCopyTarget(p => fareFormChange(p, "운임구분", v, fareR.rules))} />
-      <FareRuleHint form={copyTarget} rules={fareR.rules} onReapply={() => setCopyTarget(p => fareFormChange(p, "__reapply", null, fareR.rules))} />
-    </div>
-  </Field></div>
+  <CpField label={<>운임구분<FareRuleHint className="ml-1" form={copyTarget} rules={fareR.rules} onReapply={() => setCopyTarget(p => fareFormChange(p, "__reapply", null, fareR.rules))} /></>}>
+    <FareTypeSelect className="!h-9 !rounded-lg" rules={fareR.rules} value={copyTarget?.운임구분 || ""} onChange={(v) => setCopyTarget(p => fareFormChange(p, "운임구분", v, fareR.rules))} />
+  </CpField>
 )}
 
-<Field label="배차방식">
+<CpField label="배차방식">
   <CustomSelect
-    className={inputStyle}
+    className={cpInputStyle}
     value={copyTarget?.배차방식 === "선택없음" ? "" : (copyTarget?.배차방식 ?? "")}
     onChange={(e)=>setCopyTarget(p=>({...p, 배차방식:e.target.value}))}
   >
     <option value="">선택</option>
     {dropdownList("배차방식", ["24시", "직접배차", "인성"], copyTarget?.배차방식 === "선택없음" ? "" : copyTarget?.배차방식).map((v) => <option key={v} value={v}>{v}</option>)}
   </CustomSelect>
-</Field>
+</CpField>
           </div>
 </div>
 {/* ================= 메모 + 전달사항 ================= */}
-  <div className="px-6 pt-5 pb-1"><h3 className="text-[13px] font-bold text-[#1B2B4B] flex items-center gap-1.5"><span className="w-1 h-3.5 bg-[#1B2B4B] rounded-full inline-block"></span>메모 / 전달사항</h3></div>
-  <div className="p-6 grid grid-cols-2 gap-4">
+  <div className="px-5 pt-3.5 pb-0"><h3 className="text-[14px] font-bold text-[#1B2B4B] flex items-center gap-1.5"><span className="w-1 h-3.5 bg-[#1B2B4B] rounded-full inline-block"></span>메모 / 전달사항</h3></div>
+  <div className="px-5 py-3 grid grid-cols-2 gap-3">
     <div>
-      <label className="block text-[13px] font-semibold text-gray-700 mb-2">메모</label>
+      <label className="block text-[13.5px] font-bold text-[#5B6B85] mb-1">메모</label>
       <textarea
-        className="w-full min-h-[140px] px-4 py-3 text-[13px] rounded-xl border-2 border-gray-300 bg-white resize-y focus:outline-none focus:ring-2 focus:ring-[#1B2B4B]/25 focus:border-[#1B2B4B] placeholder:text-gray-500 transition-all"
+        className="w-full min-h-[96px] px-3 py-2 text-[14px] rounded-lg border border-[#D5DEEC] bg-white resize-y focus:outline-none focus:ring-2 focus:ring-[#1B2B4B]/25 focus:border-[#1B2B4B] placeholder:text-gray-500 transition-all"
         placeholder="메모를 입력하세요"
         value={copyTarget?.메모 ?? ""}
         onChange={(e)=>setCopyTarget(p=>({...p, 메모:e.target.value}))}
       />
     </div>
     <div>
-      <div className="flex items-center justify-between mb-2">
-        <label className="text-[13px] font-semibold text-gray-700">전달사항</label>
+      <div className="flex items-center justify-between mb-1">
+        <label className="text-[13.5px] font-bold text-[#5B6B85]">전달사항</label>
         <button type="button"
           onClick={() => setCopyTarget(p => ({ ...p, 전달사항고정: !p.전달사항고정 }))}
           className={`px-2 py-0.5 rounded text-xs font-semibold border transition-all ${copyTarget?.전달사항고정 ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"}`}>
@@ -42373,7 +42368,7 @@ setCopyPlaceOptions(list);
         </button>
       </div>
       <textarea
-        className="w-full min-h-[140px] px-4 py-3 text-[13px] rounded-xl border-2 border-gray-300 bg-white resize-y focus:outline-none focus:ring-2 focus:ring-[#1B2B4B]/25 focus:border-[#1B2B4B] placeholder:text-gray-500 transition-all"
+        className="w-full min-h-[96px] px-3 py-2 text-[14px] rounded-lg border border-[#D5DEEC] bg-white resize-y focus:outline-none focus:ring-2 focus:ring-[#1B2B4B]/25 focus:border-[#1B2B4B] placeholder:text-gray-500 transition-all"
         placeholder="기사에게 전달할 내용"
         value={copyTarget?.전달사항 ?? ""}
         onChange={(e)=>setCopyTarget(p=>({...p, 전달사항:e.target.value}))}
@@ -42382,21 +42377,11 @@ setCopyPlaceOptions(list);
   </div>
 </section>
 
-{/* ===================== 수정이력 ===================== */}
-{Array.isArray(copyTarget.history) && copyTarget.history.length > 0 && (
-  <div className="bg-white rounded-xl border border-gray-200 px-6 py-4 shadow-sm">
-    <div className="text-[13px] font-bold text-[#1B2B4B] mb-3">수정이력</div>
-    <div className="max-h-48 overflow-y-auto space-y-2">
-      {[...copyTarget.history].reverse().map((h, i) => (
-        <div key={i} className="flex items-start gap-3 text-[12px] pb-2 border-b border-gray-50 last:border-b-0">
-          <span className="text-gray-500 whitespace-nowrap shrink-0">{new Date(h.at).toLocaleString("ko-KR", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })}</span>
-          <span className="text-gray-500 shrink-0">{h.user}</span>
-          <span className="text-gray-700"><span className="font-semibold">{h.field}</span>: <span className="text-gray-500">{String(h.before ?? "없음")}</span> → <span className="font-semibold text-[#1B2B4B]">{String(h.after ?? "없음")}</span></span>
-        </div>
-      ))}
-    </div>
-  </div>
-)}
+{/* ===================== 변경 이력(공용 타임라인) — 실시간 패널과 같은 모양 ===================== */}
+<details className="bg-white rounded-xl border border-[#E3E8F0] px-4 py-2 group">
+  <summary className="cursor-pointer select-none text-[13.5px] font-bold text-[#1B2B4B] list-none flex items-center gap-1.5"><span className="inline-block transition-transform group-open:rotate-90">›</span>변경 이력 <span className="font-semibold text-[#9AA9C3]">(눌러서 펼치기 · 위 '변경 이력' 버튼으로도 볼 수 있음)</span></summary>
+  <div className="mt-2 max-h-64 overflow-y-auto pr-1"><OrderTimeline order={copyTarget} size="sm" userName={(u) => userNameMap?.get?.(String(u || "").trim().toLowerCase())} /></div>
+</details>
 
 {/* ===================== 복사패널 운임조회(Part5) - 이력없음 확인 ===================== */}
 {copyAddrConfirmOpen && (
