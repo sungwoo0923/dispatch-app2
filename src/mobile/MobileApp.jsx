@@ -2,6 +2,7 @@
 import { subscribeUsersLive } from "../usersLive"; // ⭐ 2026-11-02 속도 — 직원 명부 구독 공유
 import { useMyProfile } from "../userNames";
 import { useCompanyDropdownSync, dropdownList } from "../companyDropdownOptions";
+import { CompanyOptionPicker } from "../companyOptionPicker"; // 🧾 2026-11-02 지급방식·배차방식·상/하차방법 공용 선택기(＋ 추가)
 import { AttendanceQuickButton, officeRadii } from "../attendanceQuick";
 import { useCustomRoles, findCustomRole, getMenuAccess, roleScreen } from "../customRoles";
 import { useReadOnlyGuard } from "../readOnlyGuard";
@@ -8714,8 +8715,9 @@ function MobileOrderList({
     if (/냉장|냉동/.test(t)) return "냉장냉동";
     return "일반";
   };
-  const ASSIGN_METHOD_KEYS = [...dropdownList("배차방식", ["24시", "직접배차", "인성", "고정기사"]), "미지정"];
-  const PAY_TYPE_KEYS = ["계산서", "착불", "선불", "손실", "개인", "취소", "미지정"];
+  // ⭐ 2026-11-02 필터 칩도 회사 목록(편집모드·[＋ 추가]로 넣은 이름 포함)
+  const ASSIGN_METHOD_KEYS = [...dropdownList("배차방식"), "미지정"];
+  const PAY_TYPE_KEYS = [...dropdownList("지급방식"), "미지정"];
   const classifyAssignMethod = (o) => ASSIGN_METHOD_KEYS.includes(o?.배차방식) ? o.배차방식 : "미지정";
   const classifyPayType = (o) => PAY_TYPE_KEYS.includes(o?.지급방식) ? o.지급방식 : "미지정";
   const activeFilterCount = orderTypeFilter.size + assignMethodFilter.size + payTypeFilter.size
@@ -10586,17 +10588,11 @@ function QuickEditModal({ order, drivers, cardVersionB, onClose, onSuccess, disp
         <div className="grid grid-cols-2 gap-3 mb-4">
           <div>
             <label className={labelCls}>지급방식</label>
-            <MobileSelect className={`${inputCls} ${isShipperOrder ? "bg-gray-100 text-gray-400" : ""}`} value={payType} disabled={isShipperOrder} onChange={e => setPayType(e.target.value)}>
-              <option value="">선택</option>
-              {["계산서","착불","선불","손실","개인","취소"].map(v => <option key={v}>{v}</option>)}
-            </MobileSelect>
+            <CompanyOptionPicker optKey="지급방식" placeholder="선택" noneLabel="선택" style={{ minHeight: 40 }} className={`${inputCls} ${isShipperOrder ? "bg-gray-100 text-gray-400" : ""}`} value={payType} disabled={isShipperOrder} onChange={(__v) => (e => setPayType(e.target.value))({ target: { value: __v } })} />
           </div>
           <div>
             <label className={labelCls}>배차방식</label>
-            <MobileSelect className={inputCls} value={dispType} onChange={e => setDispType(e.target.value)}>
-              <option value="">선택</option>
-              {dropdownList("배차방식", ["24시","직접배차","인성","고정기사"], dispType).map(v => <option key={v}>{v}</option>)}
-            </MobileSelect>
+            <CompanyOptionPicker optKey="배차방식" placeholder="선택" noneLabel="선택" style={{ minHeight: 40 }} className={inputCls} value={dispType} onChange={(__v) => (e => setDispType(e.target.value))({ target: { value: __v } })} />
           </div>
         </div>
 
@@ -11404,8 +11400,6 @@ const SmartTextarea = React.memo(function SmartTextarea({ onSearch, onCommit, te
 });
 
 // ⭐ 사용자 요청 — 상세보기에서 바로 주요 항목만 고치는 "빠른수정" 시트
-const QUICK_EDIT_PAY = ["계산서", "착불", "선불", "손실", "개인"];
-const QUICK_EDIT_ASSIGN = ["24시", "직접배차", "인성", "고정기사"];
 const QUICK_EDIT_CAR = ["라보/다마스", "카고", "윙/카고", "윙바디", "탑차", "냉장탑", "냉동탑", "냉장윙", "냉동윙", "냉장/냉동탑", "냉장/냉동윙", "리프트", "오토바이", "기타"];
 // (렌더 함수 밖에 둬야 입력할 때마다 칸이 새로 만들어져 포커스가 풀리지 않는다)
 function QuickField({ label, children, span = 1 }) {
@@ -11617,16 +11611,10 @@ function QuickEditSheet({ order, onClose, onSaved, cardVersionB, clients = [], b
               </MobileSelect>
             </QuickField>
             <QuickField label="배차방식">
-              <MobileSelect className={inp} value={f.배차방식} onChange={set("배차방식")}>
-                <option value="">선택없음</option>
-                {dropdownList("배차방식", QUICK_EDIT_ASSIGN, f.배차방식).map(v => <option key={v}>{v}</option>)}
-              </MobileSelect>
+              <CompanyOptionPicker optKey="배차방식" placeholder="선택없음" noneLabel="선택없음" style={{ minHeight: 40 }} className={inp} value={f.배차방식} onChange={(__v) => (set("배차방식"))({ target: { value: __v } })} />
             </QuickField>
             <QuickField label="지급방식">
-              <MobileSelect className={inp} value={f.지급방식} onChange={set("지급방식")}>
-                <option value="">선택없음</option>
-                {QUICK_EDIT_PAY.map(v => <option key={v}>{v}</option>)}
-              </MobileSelect>
+              <CompanyOptionPicker optKey="지급방식" placeholder="선택없음" noneLabel="선택없음" style={{ minHeight: 40 }} className={inp} value={f.지급방식} onChange={(__v) => (set("지급방식"))({ target: { value: __v } })} />
             </QuickField>
             <QuickField label="톤수">
               {unitBox(f.톤수값, setVal("톤수값"), f.톤수타입, setVal("톤수타입"), ["톤", "kg"], 62, "예: 1")}
@@ -15909,30 +15897,8 @@ const pickDrop = (c) => {
           label="상/하차방법"
           input={
             <div className="flex flex-wrap gap-1.5">
-              <MobileSelect
-                className="flex-1 min-w-[90px] border-0 border-b-2 border-gray-300 rounded-none px-1 py-1.5 text-[13px] font-semibold text-gray-900 bg-transparent focus:outline-none focus:border-[var(--reg-accent)] transition"
-                value={form.상차방법}
-                onChange={(e) => update("상차방법", e.target.value)}
-              >
-                <option value="">상차방법</option>
-                <option value="지게차">지게차</option>
-                <option value="크레인">크레인</option>
-                <option value="수작업">수작업</option>
-                <option value="직접수작업">직접수작업</option>
-                <option value="수도움">수도움</option>
-              </MobileSelect>
-              <MobileSelect
-                className="flex-1 min-w-[90px] border-0 border-b-2 border-gray-300 rounded-none px-1 py-1.5 text-[13px] font-semibold text-gray-900 bg-transparent focus:outline-none focus:border-[var(--reg-accent)] transition"
-                value={form.하차방법}
-                onChange={(e) => update("하차방법", e.target.value)}
-              >
-                <option value="">하차방법</option>
-                <option value="지게차">지게차</option>
-                <option value="크레인">크레인</option>
-                <option value="수작업">수작업</option>
-                <option value="직접수작업">직접수작업</option>
-                <option value="수도움">수도움</option>
-              </MobileSelect>
+              <CompanyOptionPicker optKey="상하차방법" title="상차방법" placeholder="상차방법" noneLabel="상차방법" style={{ minHeight: 40 }} className="flex-1 min-w-[90px] border-0 border-b-2 border-gray-300 rounded-none px-1 py-1.5 text-[13px] font-semibold text-gray-900 bg-transparent focus:outline-none focus:border-[var(--reg-accent)] transition" value={form.상차방법} onChange={(__v) => ((e) => update("상차방법", e.target.value))({ target: { value: __v } })} />
+              <CompanyOptionPicker optKey="상하차방법" title="하차방법" placeholder="하차방법" noneLabel="하차방법" style={{ minHeight: 40 }} className="flex-1 min-w-[90px] border-0 border-b-2 border-gray-300 rounded-none px-1 py-1.5 text-[13px] font-semibold text-gray-900 bg-transparent focus:outline-none focus:border-[var(--reg-accent)] transition" value={form.하차방법} onChange={(__v) => ((e) => update("하차방법", e.target.value))({ target: { value: __v } })} />
             </div>
           }
         />
@@ -15948,32 +15914,11 @@ const pickDrop = (c) => {
           input={
             <div className="flex flex-wrap gap-1.5">
               <fieldset disabled={isLockedShipperEdit} style={{ display: "contents" }}>
-                <MobileSelect
-                  ref={payTypeSelectRef}
-                  className={`flex-1 min-w-[90px] border-0 border-b-2 rounded-none px-1 py-1.5 text-[13px] font-semibold text-gray-900 bg-transparent focus:outline-none transition ${
+                <CompanyOptionPicker optKey="지급방식" placeholder="지급방식" noneLabel="지급방식" style={{ minHeight: 40 }} ref={payTypeSelectRef} className={`flex-1 min-w-[90px] border-0 border-b-2 rounded-none px-1 py-1.5 text-[13px] font-semibold text-gray-900 bg-transparent focus:outline-none transition ${
                     requiredErrors.has("지급방식") ? "border-red-500 ring-2 ring-red-300 animate-pulse" : "border-gray-300 focus:border-[var(--reg-accent)]"
-                  }`}
-                  value={form.지급방식}
-                  onChange={(e) => update("지급방식", e.target.value)}
-                >
-                  <option value="">지급방식</option>
-                  <option value="계산서">계산서</option>
-                  <option value="착불">착불</option>
-                  <option value="선불">선불</option>
-                  <option value="손실">손실</option>
-                  <option value="개인">개인</option>
-                  <option value="취소">취소</option>
-                </MobileSelect>
+                  }`} value={form.지급방식} onChange={(__v) => ((e) => update("지급방식", e.target.value))({ target: { value: __v } })} />
               </fieldset>
-              <MobileSelect
-                className="flex-1 min-w-[90px] border-0 border-b-2 border-gray-300 rounded-none px-1 py-1.5 text-[13px] font-semibold text-gray-900 bg-transparent focus:outline-none focus:border-[var(--reg-accent)] transition"
-                value={form.배차방식}
-                onChange={(e) => update("배차방식", e.target.value)}
-              >
-                <option value="">배차방식</option>
-                {/* ⭐ 2026-11-01 PC 편집모드에서 바꾼 회사별 배차방식 옵션을 모바일도 그대로 */}
-                {dropdownList("배차방식", ["24시", "직접배차", "인성", "고정기사"], form.배차방식).map((v) => <option key={v} value={v}>{v}</option>)}
-              </MobileSelect>
+              <CompanyOptionPicker optKey="배차방식" placeholder="배차방식" noneLabel="배차방식" style={{ minHeight: 40 }} className="flex-1 min-w-[90px] border-0 border-b-2 border-gray-300 rounded-none px-1 py-1.5 text-[13px] font-semibold text-gray-900 bg-transparent focus:outline-none focus:border-[var(--reg-accent)] transition" value={form.배차방식} onChange={(__v) => ((e) => update("배차방식", e.target.value))({ target: { value: __v } })} />
             </div>
           }
         />
@@ -17506,18 +17451,10 @@ const pickDrop = (c) => {
             {/* 상/하차방법 */}
             <div>
               <div className="text-[10px] text-gray-500 font-semibold mb-1">{stopSheet === "pickup" ? "상차방법" : "하차방법"}</div>
-              <MobileSelect
-                className="w-full border border-gray-200 rounded-xl px-2 py-2 text-sm bg-white focus:outline-none"
+              <CompanyOptionPicker optKey="상하차방법" title={stopSheet === "pickup" ? "상차방법" : "하차방법"} placeholder={stopSheet === "pickup" ? "상차방법" : "하차방법"} noneLabel="선택 안 함"
+                className="w-full border border-gray-200 rounded-xl px-2 py-2 text-sm bg-white focus:outline-none" style={{ minHeight: 40 }}
                 value={stop.방법 || ""}
-                onChange={e => setStopList(prev => prev.map((s, i) => i === idx ? { ...s, 방법: e.target.value } : s))}
-              >
-                <option value="">{stopSheet === "pickup" ? "상차방법" : "하차방법"}</option>
-                <option value="지게차">지게차</option>
-                <option value="크레인">크레인</option>
-                <option value="수작업">수작업</option>
-                <option value="직접수작업">직접수작업</option>
-                <option value="수도움">수도움</option>
-              </MobileSelect>
+                onChange={(v) => setStopList(prev => prev.map((s, i) => i === idx ? { ...s, 방법: v } : s))} />
             </div>
             {/* 메모 */}
             <input autoComplete="off"

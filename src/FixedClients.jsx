@@ -8,6 +8,7 @@ import { Dialog } from "@headlessui/react";
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip } from "recharts";
 import { fmtMoney, fmtPhone, moneyDigits } from "./formatInput";
 import { CustomSelect } from "./CustomSelect";
+import { CompanyOptionPicker } from "./companyOptionPicker"; // 🧾 2026-11-02 지급방식·배차방식·상/하차방법 공용 선택기(＋ 추가)
 
 const fmt = (n) => (n ? Number(n).toLocaleString() : "0");
 
@@ -420,15 +421,7 @@ function FastRowCard({ idx, row, drivers, rows, getClientConfigs, onUpdate, onSe
         </div>
         <div>
           <label className="block text-[12px] font-bold text-[#5B6B85] mb-1">지급방식</label>
-          <CustomSelect className="w-full border border-[#DCE3EE] rounded-xl px-2.5 py-1.5 text-[13.5px] font-semibold text-[#0F1A30] bg-white outline-none focus:border-[#4B6CB7]" value={row.지급방식 || ""} onChange={e => onUpdate("지급방식", e.target.value)}>
-            <option value="">선택</option>
-            <option value="계산서">계산서</option>
-            <option value="착불">착불</option>
-            <option value="선불">선불</option>
-            <option value="손실">손실</option>
-            <option value="개인">개인</option>
-            <option value="취소">취소</option>
-          </CustomSelect>
+          <CompanyOptionPicker optKey="지급방식" placeholder="선택" noneLabel="선택" className="w-full border border-[#DCE3EE] rounded-xl px-2.5 py-1.5 text-[13.5px] font-semibold text-[#0F1A30] bg-white outline-none focus:border-[#4B6CB7]" value={row.지급방식 || ""} onChange={(v) => onUpdate("지급방식", v)} />
         </div>
       </div>
       <div className="grid grid-cols-4 gap-3 pt-2 border-t border-gray-200">
@@ -1088,15 +1081,7 @@ export default function FixedClients({ drivers = [], upsertDriver, userCompany =
                     </div>
                     <div>
                       <label className="block text-[12px] font-bold text-[#5B6B85] mb-1">지급방식</label>
-                      <CustomSelect className="w-full border border-[#DCE3EE] rounded-xl px-2.5 py-1.5 text-[13.5px] font-semibold text-[#0F1A30] bg-white outline-none focus:border-[#4B6CB7]" value={editPopupRow.지급방식 || ""} onChange={e => updateEditPopupField("지급방식", e.target.value)}>
-                        <option value="">선택</option>
-                        <option value="계산서">계산서</option>
-                        <option value="착불">착불</option>
-                        <option value="선불">선불</option>
-                        <option value="손실">손실</option>
-                        <option value="개인">개인</option>
-                        <option value="취소">취소</option>
-                      </CustomSelect>
+                      <CompanyOptionPicker optKey="지급방식" placeholder="선택" noneLabel="선택" className="w-full border border-[#DCE3EE] rounded-xl px-2.5 py-1.5 text-[13.5px] font-semibold text-[#0F1A30] bg-white outline-none focus:border-[#4B6CB7]" value={editPopupRow.지급방식 || ""} onChange={(v) => updateEditPopupField("지급방식", v)} />
                     </div>
                   </div>
                   <div className="grid grid-cols-4 gap-3 pt-2 border-t border-gray-200">
@@ -1224,6 +1209,8 @@ export default function FixedClients({ drivers = [], upsertDriver, userCompany =
                         <span className={`flex-1 text-[12px] font-medium px-3 py-1.5 rounded-lg ${enabled ? "text-[#1B2B4B] bg-[#1B2B4B]/10" : "text-gray-400 bg-gray-100"}`}>
                           수량 × 360원 자동 계산
                         </span>
+                      ) : type === "select" && key === "지급방식" ? (
+                        <CompanyOptionPicker optKey="지급방식" allowNone={false} placeholder="선택" disabled={!enabled} className={`flex-1 min-w-0 border rounded-lg px-2 py-1.5 text-[13px] outline-none transition-all ${enabled ? "border-[#1B2B4B]/30 bg-white text-gray-800" : "border-gray-200 bg-gray-50 text-gray-400"}`} value={bulkFields[key]?.value || ""} onChange={(v) => setBulkFields(p => ({ ...p, [key]: { ...p[key], value: v } }))} />
                       ) : type === "select" ? (
                         <CustomSelect disabled={!enabled} className={`flex-1 border rounded-lg px-2 py-1.5 text-[13px] outline-none transition-all ${enabled ? "border-[#1B2B4B]/30 bg-white text-gray-800" : "border-gray-200 bg-gray-50 text-gray-400"}`} value={bulkFields[key]?.value || ""} onChange={e => setBulkFields(p => ({ ...p, [key]: { ...p[key], value: e.target.value } }))}>
                           {options.map(o => <option key={o} value={o}>{o}</option>)}

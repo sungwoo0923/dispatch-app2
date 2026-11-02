@@ -27,6 +27,7 @@ import { useCompanyDropdownOptions } from "./companyDropdownOptions";
 import RouteMapModal from "./RouteMapModal";
 // ⭐ 2026-11-02 운임규칙 — 노선·정류지 기본 운임구분(규칙 사용 회사만) → 기사운임 자동 계산, 만든 오더에 운임구분
 import { VehicleTypePicker } from "./vehicleTypes"; // 🚚 2026-11-02 회사 공용 차량종류
+import { CompanyOptionPicker } from "./companyOptionPicker"; // 🧾 2026-11-02 지급방식·배차방식·상/하차방법 공용 선택기(＋ 추가)
 import { useFareRules, FareTypeSelect, findFareRule, applyFareRule, fareRuleHint } from "./fareRules";
 import { fmtPhone } from "./formatInput";
 
@@ -435,14 +436,12 @@ const fareProblems = (f) => {
 };
 // 지급방식 고르기 — 회사별 목록(편집모드에서 바꾼 목록) · 빠지면 빨간 테두리 + 안내
 function PaySelect({ id, value, onChange, options, error, compact = false }) {
-  const opts = value && !options.includes(value) ? [value, ...options] : options;
+  // ⭐ 2026-11-02 회사 공용 지급방식 선택기(＋ 지급방식 추가) — 목록은 편집모드와 같은 회사 목록(options는 예전 호환용)
+  void options;
   return (
     <div id={id} className="min-w-0">
-      <CustomSelect value={value || ""} onChange={(e) => onChange(e.target.value)}
-        className={`${inp} ${compact ? "!h-10 !text-[13px]" : ""} ${error ? "!border-[#E5484D] !ring-2 !ring-[#E5484D]/20 !bg-[#FFF6F6] !text-[#C4262C]" : value ? "" : "!text-[#9AA9C3]"}`}>
-        <option value="">지급방식 선택 *</option>
-        {opts.map((v) => <option key={v} value={v}>{v}</option>)}
-      </CustomSelect>
+      <CompanyOptionPicker optKey="지급방식" value={value || ""} onChange={(v) => onChange(v)} placeholder="지급방식 선택 *" noneLabel="선택 안 함"
+        className={`${inp} ${compact ? "!h-10 !text-[13px]" : ""} ${error ? "!border-[#E5484D] !ring-2 !ring-[#E5484D]/20 !bg-[#FFF6F6] !text-[#C4262C]" : value ? "" : "!text-[#9AA9C3]"}`} />
       {error && <div className="mt-1 text-[12px] font-black text-[#D93036]">지급방식을 골라 주세요</div>}
     </div>
   );

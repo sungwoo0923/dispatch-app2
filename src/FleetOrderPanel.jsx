@@ -16,7 +16,7 @@ import CustomDatePicker from "./CustomDatePicker";
 import { CustomSelect } from "./CustomSelect";
 import { VehicleTypePicker } from "./vehicleTypes";
 import { useFareRules, FareTypeSelect, FareRuleHint, fareFormChange } from "./fareRules";
-import { useCompanyDropdownOptions } from "./companyDropdownOptions";
+import { CompanyOptionPicker } from "./companyOptionPicker"; // 🧾 2026-11-02 지급방식·배차방식·상/하차방법 공용 선택기(＋ 추가)
 import { fmtPhone } from "./formatInput";
 
 const MONO = "'JetBrains Mono',ui-monospace,monospace";
@@ -92,9 +92,6 @@ export default function FleetOrderPanel({ order, onClose, onCopy, companyName = 
   const co = String(getTenant() || companyName || "").trim();
   const fareR = useFareRules(co);
   const fareOn = !!fareR.on;
-  const loadMethods = useCompanyDropdownOptions("상하차방법");
-  const payTypes = useCompanyDropdownOptions("지급방식");
-  const dispTypes = useCompanyDropdownOptions("배차방식");
   const [form, setForm] = React.useState(() => initForm(order));
   const base = React.useRef(initForm(order));
   const [saving, setSaving] = React.useState(false);
@@ -154,9 +151,6 @@ export default function FleetOrderPanel({ order, onClose, onCopy, companyName = 
     return () => { window.removeEventListener("keydown", k); document.body.style.overflow = prev; };
   }, [tryClose]);
 
-  const payOpts = [...new Set([...payTypes, "손실", "개인", "취소", form.지급방식].filter(Boolean))];
-  const loadOpts = [...new Set([...loadMethods, form.상차방법, form.하차방법].filter(Boolean))];
-  const dispOpts = [...new Set([...dispTypes, form.배차방식].filter((v) => v && v !== "선택없음"))];
   const route = [order?.상차지명, order?.하차지명].filter(Boolean).join(" → ");
 
   const side = (kind) => {
@@ -170,9 +164,7 @@ export default function FleetOrderPanel({ order, onClose, onCopy, companyName = 
         <CpField label={`${p}일`}><CustomDatePicker className={cpInputStyle} value={form[`${p}일`]} onChange={(e) => set(`${p}일`)(e.target.value)} openOnFocus={false} /></CpField>
         <CpField label={`${p}시간`}><TimeAmPm value={form[`${p}시간`]} onChange={set(`${p}시간`)} /></CpField>
         <CpField label={`${p}방법`}>
-          <CustomSelect className={cpInputStyle} value={form[`${p}방법`]} onChange={set(`${p}방법`)}>
-            <option value="">선택</option>{loadOpts.map((v) => <option key={v} value={v}>{v}</option>)}
-          </CustomSelect>
+          <CompanyOptionPicker optKey="상하차방법" title={`${p}방법`} placeholder="선택" noneLabel="선택" className={cpInputStyle} value={form[`${p}방법`]} onChange={(v) => set(`${p}방법`)({ target: { value: v } })} />
         </CpField>
         <CpField label={`${p}지명`}><input autoComplete="off" className={cpInputStyle} value={form[`${p}지명`]} onChange={set(`${p}지명`)} /></CpField>
         <CpField label={`${p}지주소`}><input autoComplete="off" className={cpInputStyle} value={form[`${p}지주소`]} onChange={set(`${p}지주소`)} title={form[`${p}지주소`]} /></CpField>
@@ -247,9 +239,7 @@ export default function FleetOrderPanel({ order, onClose, onCopy, companyName = 
                 <div className={`h-9 flex items-center justify-end bg-[#EEF2F8] border border-[#DCE4F0] rounded-lg px-2.5 font-black text-[15px] whitespace-nowrap tabular-nums ${fee < 0 ? "text-red-600" : "text-[#1B2B4B]"}`} style={{ fontFamily: MONO }}>{fee.toLocaleString()} 원</div>
               </CpField>
               <CpField label="지급방식">
-                <CustomSelect className={cpInputStyle} value={form.지급방식} onChange={set("지급방식")}>
-                  <option value="">선택</option>{payOpts.map((v) => <option key={v} value={v}>{v}</option>)}
-                </CustomSelect>
+                <CompanyOptionPicker optKey="지급방식" placeholder="선택" noneLabel="선택" className={cpInputStyle} value={form.지급방식} onChange={(v) => set("지급방식")({ target: { value: v } })} />
               </CpField>
               {fareOn && (
                 <CpField label={<>운임구분<FareRuleHint className="ml-1" form={form} rules={fareR.rules} onReapply={() => setFare("__reapply", null)} /></>}>
@@ -257,9 +247,7 @@ export default function FleetOrderPanel({ order, onClose, onCopy, companyName = 
                 </CpField>
               )}
               <CpField label="배차방식">
-                <CustomSelect className={cpInputStyle} value={form.배차방식 === "선택없음" ? "" : form.배차방식} onChange={set("배차방식")}>
-                  <option value="">선택</option>{dispOpts.map((v) => <option key={v} value={v}>{v}</option>)}
-                </CustomSelect>
+                <CompanyOptionPicker optKey="배차방식" placeholder="선택" noneLabel="선택" className={cpInputStyle} value={form.배차방식 === "선택없음" ? "" : form.배차방식} onChange={(v) => set("배차방식")({ target: { value: v } })} />
               </CpField>
             </div>
             <div className="mx-5 border-t border-dashed border-[#E3E8F0]" />
