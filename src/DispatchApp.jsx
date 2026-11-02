@@ -18039,7 +18039,7 @@ className={`
     <div className="bg-white border border-gray-100 rounded-lg overflow-hidden flex-1 flex flex-col">
       <div className="px-3 py-2 border-b border-gray-50 flex items-center justify-between shrink-0">
         <span className="text-[11px] font-bold text-[#1B2B4B]">거래처 TOP 5</span>
-        <span className="text-[9px] text-gray-400 font-medium">오늘 오더</span>
+        <span className="text-[11px] text-gray-400 font-medium">오늘 오더</span>
       </div>
       <div className="px-3 py-2 flex-1 flex flex-col justify-center">
         {(() => {
@@ -18120,8 +18120,8 @@ className={`
                   <div className="text-[11px] font-bold text-gray-500 uppercase tracking-widest mb-2">상차지</div>
                   <div className="grid grid-cols-4 gap-3">
                     <div className="flex flex-col gap-0.5">
-                      <span className="text-[10px] text-gray-500 font-medium">시도</span>
-                      <CustomSelect className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-blue-400"
+                      <span className="text-[11px] text-gray-500 font-semibold">시도</span>
+                      <CustomSelect className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-[#1B2B4B]"
                         value={send24Data.startWide ?? ""} disabled={send24Sending || call24MetaLoading}
                         onChange={e => handleCall24WideChange("start", e.target.value)}>
                         <option value="">선택</option>
@@ -18129,8 +18129,8 @@ className={`
                       </CustomSelect>
                     </div>
                     <div className="flex flex-col gap-0.5">
-                      <span className="text-[10px] text-gray-500 font-medium">시군구</span>
-                      <CustomSelect className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-blue-400"
+                      <span className="text-[11px] text-gray-500 font-semibold">시군구</span>
+                      <CustomSelect className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-[#1B2B4B]"
                         value={send24Data.startSgg ?? ""} disabled={send24Sending || call24MetaLoading || !send24Data.startWide}
                         onChange={e => handleCall24SggChange("start", send24Data.startWide, e.target.value)}>
                         <option value="">선택</option>
@@ -18138,8 +18138,8 @@ className={`
                       </CustomSelect>
                     </div>
                     <div className="flex flex-col gap-0.5">
-                      <span className="text-[10px] text-gray-500 font-medium">읍면동</span>
-                      <CustomSelect className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-blue-400"
+                      <span className="text-[11px] text-gray-500 font-semibold">읍면동</span>
+                      <CustomSelect className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-[#1B2B4B]"
                         value={send24Data.startDong ?? ""} disabled={send24Sending || call24MetaLoading || !send24Data.startSgg}
                         onChange={e => setSend24Data(d => ({ ...d, startDong: e.target.value }))}>
                         <option value="">선택</option>
@@ -18149,15 +18149,15 @@ className={`
                     {[["상세주소","startDetail"],
                       ["상차예정일 (YYYYMMDD)","startPlanDt"]].map(([lbl,key]) => (
                       <div key={key} className="flex flex-col gap-0.5">
-                        <span className="text-[10px] text-gray-500 font-medium">{lbl}</span>
-                        <input autoComplete="off" className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-blue-400"
+                        <span className="text-[11px] text-gray-500 font-semibold">{lbl}</span>
+                        <input autoComplete="off" className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-[#1B2B4B]"
                           value={send24Data[key] ?? ""} disabled={send24Sending}
                           onChange={e => { const v = e.target.value; setSend24Data(d => ({ ...d, [key]: v })); }} />
                       </div>
                     ))}
                     <div className="flex flex-col gap-0.5">
-                      <span className="text-[10px] text-gray-500 font-medium">상차방법</span>
-                      <CustomSelect className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-blue-400"
+                      <span className="text-[11px] text-gray-500 font-semibold">상차방법</span>
+                      <CustomSelect className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-[#1B2B4B]"
                         value={send24Data.startLoad ?? ""} disabled={send24Sending}
                         onChange={e => setSend24Data(d => ({ ...d, startLoad: e.target.value }))}>
                         {["수작업","지게차","호이스트","크레인","컨베이어","기타"].map(v => <option key={v} value={v}>{v}</option>)}
@@ -18171,8 +18171,8 @@ className={`
                   <div className="text-[11px] font-bold text-gray-500 uppercase tracking-widest mb-2">하차지</div>
                   <div className="grid grid-cols-4 gap-3">
                     <div className="flex flex-col gap-0.5">
-                      <span className="text-[10px] text-gray-500 font-medium">시도</span>
-                      <CustomSelect className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-blue-400"
+                      <span className="text-[11px] text-gray-500 font-semibold">시도</span>
+                      <CustomSelect className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-[#1B2B4B]"
                         value={send24Data.endWide ?? ""} disabled={send24Sending || call24MetaLoading}
                         onChange={e => handleCall24WideChange("end", e.target.value)}>
                         <option value="">선택</option>
@@ -18180,8 +18180,8 @@ className={`
                       </CustomSelect>
                     </div>
                     <div className="flex flex-col gap-0.5">
-                      <span className="text-[10px] text-gray-500 font-medium">시군구</span>
-                      <CustomSelect className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-blue-400"
+                      <span className="text-[11px] text-gray-500 font-semibold">시군구</span>
+                      <CustomSelect className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-[#1B2B4B]"
                         value={send24Data.endSgg ?? ""} disabled={send24Sending || call24MetaLoading || !send24Data.endWide}
                         onChange={e => handleCall24SggChange("end", send24Data.endWide, e.target.value)}>
                         <option value="">선택</option>
@@ -18189,8 +18189,8 @@ className={`
                       </CustomSelect>
                     </div>
                     <div className="flex flex-col gap-0.5">
-                      <span className="text-[10px] text-gray-500 font-medium">읍면동</span>
-                      <CustomSelect className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-blue-400"
+                      <span className="text-[11px] text-gray-500 font-semibold">읍면동</span>
+                      <CustomSelect className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-[#1B2B4B]"
                         value={send24Data.endDong ?? ""} disabled={send24Sending || call24MetaLoading || !send24Data.endSgg}
                         onChange={e => setSend24Data(d => ({ ...d, endDong: e.target.value }))}>
                         <option value="">선택</option>
@@ -18200,15 +18200,15 @@ className={`
                     {[["상세주소","endDetail"],
                       ["하차예정일 (YYYYMMDD)","endPlanDt"],["하차지연락처","endAreaPhone"]].map(([lbl,key]) => (
                       <div key={key} className="flex flex-col gap-0.5">
-                        <span className="text-[10px] text-gray-500 font-medium">{lbl}</span>
-                        <input autoComplete="off" className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-blue-400"
+                        <span className="text-[11px] text-gray-500 font-semibold">{lbl}</span>
+                        <input autoComplete="off" className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-[#1B2B4B]"
                           value={send24Data[key] ?? ""} disabled={send24Sending}
                           onChange={e => { const v = e.target.value; setSend24Data(d => ({ ...d, [key]: v })); }} />
                       </div>
                     ))}
                     <div className="flex flex-col gap-0.5">
-                      <span className="text-[10px] text-gray-500 font-medium">하차방법</span>
-                      <CustomSelect className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-blue-400"
+                      <span className="text-[11px] text-gray-500 font-semibold">하차방법</span>
+                      <CustomSelect className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-[#1B2B4B]"
                         value={send24Data.endLoad ?? ""} disabled={send24Sending}
                         onChange={e => setSend24Data(d => ({ ...d, endLoad: e.target.value }))}>
                         {["수작업","지게차","호이스트","크레인","컨베이어","기타"].map(v => <option key={v} value={v}>{v}</option>)}
@@ -18222,8 +18222,8 @@ className={`
                   <div className="text-[11px] font-bold text-gray-500 uppercase tracking-widest mb-2">화물 / 차량</div>
                   <div className="grid grid-cols-4 gap-3">
                     <div className="flex flex-col gap-0.5">
-                      <span className="text-[10px] text-gray-500 font-medium">차량톤수</span>
-                      <CustomSelect className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-blue-400"
+                      <span className="text-[11px] text-gray-500 font-semibold">차량톤수</span>
+                      <CustomSelect className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-[#1B2B4B]"
                         value={send24Data.cargoTon ?? ""} disabled={send24Sending || call24MetaLoading}
                         onChange={e => handleCall24CargoTonChange(e.target.value)}>
                         <option value="">선택</option>
@@ -18231,8 +18231,8 @@ className={`
                       </CustomSelect>
                     </div>
                     <div className="flex flex-col gap-0.5">
-                      <span className="text-[10px] text-gray-500 font-medium">차량종류</span>
-                      <CustomSelect className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-blue-400"
+                      <span className="text-[11px] text-gray-500 font-semibold">차량종류</span>
+                      <CustomSelect className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-[#1B2B4B]"
                         value={send24Data.truckType ?? ""} disabled={send24Sending || call24MetaLoading || !send24Data.cargoTon}
                         onChange={e => setSend24Data(d => ({ ...d, truckType: e.target.value }))}>
                         <option value="">선택</option>
@@ -18241,8 +18241,8 @@ className={`
                     </div>
                     {[["화물중량(t)","frgton"],["화물내용","cargoDsc"]].map(([lbl,key]) => (
                       <div key={key} className="flex flex-col gap-0.5">
-                        <span className="text-[10px] text-gray-500 font-medium">{lbl}</span>
-                        <input autoComplete="off" className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-blue-400"
+                        <span className="text-[11px] text-gray-500 font-semibold">{lbl}</span>
+                        <input autoComplete="off" className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-[#1B2B4B]"
                           value={send24Data[key] ?? ""} disabled={send24Sending}
                           onChange={e => { const v = e.target.value; setSend24Data(d => ({ ...d, [key]: v })); }} />
                       </div>
@@ -18256,23 +18256,23 @@ className={`
                   <div className="grid grid-cols-4 gap-3">
                     {[["청구운임","fare"],["기사운임","fee"]].map(([lbl,key]) => (
                       <div key={key} className="flex flex-col gap-0.5">
-                        <span className="text-[10px] text-gray-500 font-medium">{lbl}</span>
-                        <input autoComplete="off" inputMode="numeric" className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] text-right focus:outline-none focus:border-blue-400"
+                        <span className="text-[11px] text-gray-500 font-semibold">{lbl}</span>
+                        <input autoComplete="off" inputMode="numeric" className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] text-right focus:outline-none focus:border-[#1B2B4B]"
                           value={send24Data[key] ? Number(String(send24Data[key]).replace(/[^\d]/g, "") || 0).toLocaleString() : ""} disabled={send24Sending}
                           onChange={e => { const v = e.target.value.replace(/[^\d]/g, ""); setSend24Data(d => ({ ...d, [key]: v })); }} />
                       </div>
                     ))}
                     <div className="flex flex-col gap-0.5">
-                      <span className="text-[10px] text-gray-500 font-medium">결제방식</span>
-                      <CustomSelect className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-blue-400"
+                      <span className="text-[11px] text-gray-500 font-semibold">결제방식</span>
+                      <CustomSelect className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-[#1B2B4B]"
                         value={send24Data.farePaytype ?? ""} disabled={send24Sending}
                         onChange={e => setSend24Data(d => ({ ...d, farePaytype: e.target.value }))}>
                         {["인수증","선착불","카드"].map(v => <option key={v} value={v}>{v}</option>)}
                       </CustomSelect>
                     </div>
                     <div className="flex flex-col gap-0.5">
-                      <span className="text-[10px] text-gray-500 font-medium">세금계산서</span>
-                      <CustomSelect className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-blue-400"
+                      <span className="text-[11px] text-gray-500 font-semibold">세금계산서</span>
+                      <CustomSelect className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-[#1B2B4B]"
                         value={send24Data.taxbillType ?? ""} disabled={send24Sending}
                         onChange={e => setSend24Data(d => ({ ...d, taxbillType: e.target.value }))}>
                         <option value="Y">Y - 발행</option>
@@ -18287,8 +18287,8 @@ className={`
                   <div className="text-[11px] font-bold text-gray-500 uppercase tracking-widest mb-2">화주 정보</div>
                   <div className="grid grid-cols-4 gap-3">
                     <div className="flex flex-col gap-0.5">
-                      <span className="text-[10px] text-gray-500 font-medium">화주유형</span>
-                      <CustomSelect className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-blue-400"
+                      <span className="text-[11px] text-gray-500 font-semibold">화주유형</span>
+                      <CustomSelect className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-[#1B2B4B]"
                         value={send24Data.firstType ?? ""} disabled={send24Sending}
                         onChange={e => setSend24Data(d => ({ ...d, firstType: e.target.value }))}>
                         <option value="01">01 - 직접화주</option>
@@ -18297,8 +18297,8 @@ className={`
                     </div>
                     {[["화주명","firstShipperNm"],["화주연락처","firstShipperInfo"],["사업자번호","firstShipperBizNo"]].map(([lbl,key]) => (
                       <div key={key} className="flex flex-col gap-0.5">
-                        <span className="text-[10px] text-gray-500 font-medium">{lbl}</span>
-                        <input autoComplete="off" className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-blue-400"
+                        <span className="text-[11px] text-gray-500 font-semibold">{lbl}</span>
+                        <input autoComplete="off" className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-[#1B2B4B]"
                           value={send24Data[key] ?? ""} disabled={send24Sending}
                           onChange={e => { const v = e.target.value; setSend24Data(d => ({ ...d, [key]: v })); }} />
                       </div>
@@ -18311,14 +18311,14 @@ className={`
                   <div className="text-[11px] font-bold text-gray-500 uppercase tracking-widest mb-2">기타</div>
                   <div className="grid grid-cols-4 gap-3">
                     <div className="flex flex-col gap-0.5">
-                      <span className="text-[10px] text-gray-500 font-medium">24시콜 아이디 (ddID)</span>
-                      <input autoComplete="off" className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-blue-400"
+                      <span className="text-[11px] text-gray-500 font-semibold">24시콜 아이디 (ddID)</span>
+                      <input autoComplete="off" className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-[#1B2B4B]"
                         value={send24Data.ddID ?? ""} disabled={send24Sending}
                         onChange={e => { const v = e.target.value; setSend24Data(d => ({ ...d, ddID: v })); }} />
                     </div>
                     <div className="flex flex-col gap-0.5">
-                      <span className="text-[10px] text-gray-500 font-medium">24시콜 비밀번호 (ddPwd)</span>
-                      <input autoComplete="off" type="password" className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-blue-400"
+                      <span className="text-[11px] text-gray-500 font-semibold">24시콜 비밀번호 (ddPwd)</span>
+                      <input autoComplete="off" type="password" className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-[#1B2B4B]"
                         value={send24Data.ddPwd ?? ""} disabled={send24Sending}
                         onChange={e => { const v = e.target.value; setSend24Data(d => ({ ...d, ddPwd: v })); }} />
                     </div>
@@ -20355,7 +20355,7 @@ setConfirmChange(null);
                           return (
                             <td key={c.id} className={`px-3 py-2.5 text-center whitespace-nowrap ${isMatch ? "bg-[#1B2B4B]/5 ring-2 ring-inset ring-[#1B2B4B] animate-pulse" : ""}`}>
                               {v ? <span className="font-bold text-blue-700">{v.toLocaleString()}원</span> : <span className="text-gray-400">-</span>}
-                              {isMatch && <div className="text-[9px] font-bold text-[#1B2B4B] mt-0.5">입력한 톤수</div>}
+                              {isMatch && <div className="text-[11px] font-bold text-[#1B2B4B] mt-0.5">입력한 톤수</div>}
                             </td>
                           );
                         })}
@@ -31303,7 +31303,7 @@ value={copyTarget?.화물수량 || ""}
                                       return (
                                         <td key={c.id} className={`px-3 py-2.5 text-center whitespace-nowrap ${isMatch ? "bg-[#1B2B4B]/5 ring-2 ring-inset ring-[#1B2B4B] animate-pulse" : ""}`}>
                                           {v ? <span className="font-bold text-blue-700">{v.toLocaleString()}원</span> : <span className="text-gray-400">-</span>}
-                                          {isMatch && <div className="text-[9px] font-bold text-[#1B2B4B] mt-0.5">입력한 톤수</div>}
+                                          {isMatch && <div className="text-[11px] font-bold text-[#1B2B4B] mt-0.5">입력한 톤수</div>}
                                         </td>
                                       );
                                     })}
@@ -42881,7 +42881,7 @@ setCopyPlaceOptions(list);
                                 return (
                                   <td key={c.id} className={`px-3 py-2.5 text-center whitespace-nowrap ${isMatch ? "bg-[#1B2B4B]/5 ring-2 ring-inset ring-[#1B2B4B] animate-pulse" : ""}`}>
                                     {v ? <span className="font-bold text-blue-700">{v.toLocaleString()}원</span> : <span className="text-gray-400">-</span>}
-                                    {isMatch && <div className="text-[9px] font-bold text-[#1B2B4B] mt-0.5">입력한 톤수</div>}
+                                    {isMatch && <div className="text-[11px] font-bold text-[#1B2B4B] mt-0.5">입력한 톤수</div>}
                                   </td>
                                 );
                               })}
@@ -49826,19 +49826,19 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
             value={q}
             onChange={(e) => setQ(e.target.value)}
             placeholder="통합검색 (거래처명 / 상차지명 / 차량번호 등)"
-            className="border border-gray-200 rounded-lg px-3 py-1.5 text-[13px] w-72 focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100"
+            className="border border-gray-200 rounded-lg px-3 py-1.5 text-[13px] w-72 focus:outline-none focus:border-[#1B2B4B] focus:ring-1 focus:ring-[#1B2B4B]/10"
           />
           <div className="flex items-center gap-1">
-            <CustomDatePicker className="border border-gray-200 rounded-lg px-2 py-1.5 text-[13px] focus:outline-none focus:border-blue-400 bg-white" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+            <CustomDatePicker className="border border-gray-200 rounded-lg px-2 py-1.5 text-[13px] focus:outline-none focus:border-[#1B2B4B] bg-white" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
             <span className="text-gray-500 text-[13px]">~</span>
-            <CustomDatePicker className="border border-gray-200 rounded-lg px-2 py-1.5 text-[13px] focus:outline-none focus:border-blue-400 bg-white" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
+            <CustomDatePicker className="border border-gray-200 rounded-lg px-2 py-1.5 text-[13px] focus:outline-none focus:border-[#1B2B4B] bg-white" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
           </div>
           <div className="flex items-center gap-1">
-            <CustomSelect value={filterType} onChange={(e) => setFilterType(e.target.value)} className="border border-gray-200 rounded-lg px-2 py-1.5 text-[13px] focus:outline-none focus:border-blue-400">
+            <CustomSelect value={filterType} onChange={(e) => setFilterType(e.target.value)} className="border border-gray-200 rounded-lg px-2 py-1.5 text-[13px] focus:outline-none focus:border-[#1B2B4B]">
               <option value="거래처명">거래처명</option>
               <option value="차량종류">차량종류</option>
             </CustomSelect>
-            <input autoComplete="off" value={filterValue} onChange={(e) => setFilterValue(e.target.value)} placeholder={`${filterType} 검색`} className="border border-gray-200 rounded-lg px-3 py-1.5 text-[13px] w-40 focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100" />
+            <input autoComplete="off" value={filterValue} onChange={(e) => setFilterValue(e.target.value)} placeholder={`${filterType} 검색`} className="border border-gray-200 rounded-lg px-3 py-1.5 text-[13px] w-40 focus:outline-none focus:border-[#1B2B4B] focus:ring-1 focus:ring-[#1B2B4B]/10" />
           </div>
           <button onClick={() => { setQ(""); setStartDate(""); setEndDate(""); setFilterValue(""); }} className="px-3 py-1.5 text-[13px] font-semibold rounded-lg bg-white border border-gray-200 text-gray-500 hover:bg-gray-50 transition">
             초기화
@@ -50052,11 +50052,11 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
               </div>
               <div>
                 <label className="block text-[12px] font-semibold text-gray-500 mb-1">기사명 *</label>
-                <input autoComplete="off" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400" value={newDriverData.이름} onChange={(e) => setNewDriverData(p => ({...p, 이름: e.target.value}))} placeholder="기사명 입력" />
+                <input autoComplete="off" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-[#1B2B4B]" value={newDriverData.이름} onChange={(e) => setNewDriverData(p => ({...p, 이름: e.target.value}))} placeholder="기사명 입력" />
               </div>
               <div>
                 <label className="block text-[12px] font-semibold text-gray-500 mb-1">전화번호 *</label>
-                <input autoComplete="off" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400" value={newDriverData.전화번호} onChange={(e) => setNewDriverData(p => ({...p, 전화번호: formatPhone(e.target.value)}))} placeholder="010-0000-0000" />
+                <input autoComplete="off" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-[#1B2B4B]" value={newDriverData.전화번호} onChange={(e) => setNewDriverData(p => ({...p, 전화번호: formatPhone(e.target.value)}))} placeholder="010-0000-0000" />
               </div>
             </div>
             <div className="flex gap-2 px-6 pb-6">
@@ -50437,7 +50437,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                         disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
                           value={copyTarget?.상차시간 ?? ""}
                           onChange={v => setCopyTarget(p => ({...p, 상차시간: v}))}
-                          selectCls="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400"
+                          selectCls="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-[#1B2B4B]"
                         />
                        </CpField>
                       <CpField label="상차방법">
@@ -50504,7 +50504,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                         </div>
                       </CpField>
                       <CpField label="상차지주소">
-                        <textarea rows={2} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] resize-none leading-snug focus:outline-none focus:border-blue-400" value={copyTarget?.상차지주소 ?? ""} onChange={(e) => setCopyTarget(p => ({...p, 상차지주소: e.target.value}))} disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")} />
+                        <textarea rows={2} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] resize-none leading-snug focus:outline-none focus:border-[#1B2B4B]" value={copyTarget?.상차지주소 ?? ""} onChange={(e) => setCopyTarget(p => ({...p, 상차지주소: e.target.value}))} disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")} />
                       </CpField>
                       <CpField label={<span className="flex items-center justify-between w-full">상차지 담당자명<ContactPickerIconButton title="상차지 담당자명 선택" onClick={() => { const nm = copyTarget?.상차지명 || ""; if (!nm.trim()) return alert("상차지명을 먼저 입력하세요."); const p = filterPlaces(nm).find(x => nameKeyOf(x.업체명) === nameKeyOf(nm)); const cs = uniqueContactsOf(p); if (!cs.length) return alert("등록된 담당자가 없습니다."); setCopyContactChooser({ type: "pickup", contacts: cs }); }} /></span>}>
                         <input autoComplete="off" className={cpInputStyle} value={copyTarget?.상차지담당자 ?? ""} onChange={(e) => setCopyTarget(p => ({...p, 상차지담당자: e.target.value}))} disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")} />
@@ -50532,7 +50532,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                         disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
                           value={copyTarget?.하차시간 ?? ""}
                           onChange={v => setCopyTarget(p => ({...p, 하차시간: v}))}
-                          selectCls="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400"
+                          selectCls="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-[#1B2B4B]"
                         />
                        </CpField>
                       <CpField label="하차방법">
@@ -50599,7 +50599,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                         </div>
                       </CpField>
                       <CpField label="하차지주소">
-                        <textarea rows={2} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] resize-none leading-snug focus:outline-none focus:border-blue-400" value={copyTarget?.하차지주소 ?? ""} onChange={(e) => setCopyTarget(p => ({...p, 하차지주소: e.target.value}))} disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")} />
+                        <textarea rows={2} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] resize-none leading-snug focus:outline-none focus:border-[#1B2B4B]" value={copyTarget?.하차지주소 ?? ""} onChange={(e) => setCopyTarget(p => ({...p, 하차지주소: e.target.value}))} disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")} />
                       </CpField>
                       <CpField label={<span className="flex items-center justify-between w-full">하차지 담당자명<ContactPickerIconButton title="하차지 담당자명 선택" onClick={() => { const nm = copyTarget?.하차지명 || ""; if (!nm.trim()) return alert("하차지명을 먼저 입력하세요."); const p = filterPlaces(nm).find(x => nameKeyOf(x.업체명) === nameKeyOf(nm)); const cs = uniqueContactsOf(p); if (!cs.length) return alert("등록된 담당자가 없습니다."); setCopyContactChooser({ type: "drop", contacts: cs }); }} /></span>}>
                         <input autoComplete="off" className={cpInputStyle} value={copyTarget?.하차지담당자 ?? ""} onChange={(e) => setCopyTarget(p => ({...p, 하차지담당자: e.target.value}))} disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")} />
@@ -50632,7 +50632,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                       <textarea
                         ref={smart7Ref}
                         rows={2}
-                        className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400 resize-none"
+                        className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-[#1B2B4B] resize-none"
                         placeholder="차량번호 · 기사명 · 연락처 · 문자 복붙"
                         value={smartQ7}
                         onChange={(e) => handleSmart7Input(e.target.value)}
@@ -50647,13 +50647,13 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                                 <div className="px-4 py-3 bg-blue-50">
                                   <div className="text-[11px] font-semibold text-gray-500 mb-1">{d.차량번호}</div>
                                   <input autoComplete="off"
-                                    className="w-full border border-gray-300 rounded-lg px-2 py-1 text-[13px] mb-1.5 focus:outline-none focus:border-blue-400"
+                                    className="w-full border border-gray-300 rounded-lg px-2 py-1 text-[13px] mb-1.5 focus:outline-none focus:border-[#1B2B4B]"
                                     placeholder="기사 이름"
                                     value={editingDriver7Data.이름}
                                     onChange={e => setEditingDriver7Data(p => ({ ...p, 이름: e.target.value }))}
                                   />
                                   <input autoComplete="off"
-                                    className="w-full border border-gray-300 rounded-lg px-2 py-1 text-[13px] mb-2 focus:outline-none focus:border-blue-400"
+                                    className="w-full border border-gray-300 rounded-lg px-2 py-1 text-[13px] mb-2 focus:outline-none focus:border-[#1B2B4B]"
                                     placeholder="전화번호"
                                     value={editingDriver7Data.전화번호}
                                     onChange={e => setEditingDriver7Data(p => ({ ...p, 전화번호: formatPhone(e.target.value) }))}
@@ -50693,7 +50693,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                     <CpField label="차량번호">
                       <div className="flex gap-2">
                         <input autoComplete="off"
-                          className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400"
+                          className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-[#1B2B4B]"
                           value={copyTarget?.차량번호 ?? ""}
                           onChange={(e) => {
                             const v = e.target.value;
@@ -52513,7 +52513,7 @@ const handleBatchSettle = async (targetStatus) => {
     >
       {label}
       {badge > 0 && (
-        <span className="absolute -top-1 -right-1 w-4 h-4 bg-[#F3F6FA]0 text-white text-[9px] font-bold rounded-full flex items-center justify-center">
+        <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 bg-rose-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center leading-none">
           {badge > 9 ? "9+" : badge}
         </span>
       )}
@@ -55035,7 +55035,7 @@ const handleBatchSettle = async (targetStatus) => {
                 ><EditableText id="misc.btn.51744.선택해제" defaultText="선택해제" /></button>
                 <button
                   onClick={() => setBulkDeleteConfirm(true)}
-                  className="ml-auto px-4 py-1.5 rounded-lg bg-[#F3F6FA]0 text-white text-[13px] font-bold hover:bg-[#0B1428] transition"
+                  className="ml-auto px-4 py-1.5 rounded-lg bg-[#0F1A30] text-white text-[13px] font-bold hover:bg-[#0B1428] transition"
                 ><EditableText id="misc.btn.51748.선택 삭제" defaultText="선택 삭제" /></button>
               </div>
             )}
