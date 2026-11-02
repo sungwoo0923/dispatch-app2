@@ -30,6 +30,7 @@ import { compressImage } from "./InternalMail";
 import { RemoteSupportAdminPanel } from "./RemoteSupport"; // ⭐ 2026-11-02 원격지원 —
 import { CustomSelect } from "./CustomSelect";
 import "./pcTheme.css";
+import { fmtPhone } from "./formatInput";
 
 const MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
 const pad = (n) => String(n).padStart(2, "0");
@@ -200,7 +201,7 @@ function InquiriesPanel({ toQuote }) {
                 <tr key={q.id} onClick={() => setSel(q.id)} className={`border-t border-[#EEF1F6] cursor-pointer ${sel === q.id ? "bg-[#EEF3FB]" : "hover:bg-[#F5F8FD]"}`}>
                   <td className="px-3 py-2.5 font-black text-[#0F1A30]">{q.companyName}{q.type === "무료체험" && <span className="ml-1.5 px-1.5 py-0.5 rounded-md border border-[#1B2B4B] text-[10.5px] font-black text-[#1B2B4B]">무료체험</span>}</td>
                   <td className="px-3 py-2.5 text-center">{q.name}</td>
-                  <td className="px-3 py-2.5 text-center" style={{ fontFamily: MONO }}>{q.phone}</td>
+                  <td className="px-3 py-2.5 text-center" style={{ fontFamily: MONO }}>{fmtPhone(q.phone) || q.phone}</td>
                   <td className="px-3 py-2.5 text-center text-[#5B6B85]">{q.vehicles || "-"}</td>
                   <td className="px-3 py-2.5 text-center text-[12.5px] text-[#5B6B85]" style={{ fontFamily: MONO }}>{msOf(q.createdAt) ? ymd(new Date(msOf(q.createdAt))) : "-"}</td>
                   <td className="px-3 py-2.5 text-center"><span className={`px-2 py-0.5 rounded-md text-[12px] font-black ${(!q.status || q.status === "신규") ? "bg-[#0F1A30] text-white" : "bg-[#EEF2F8] text-[#1B2B4B]"}`}>{q.status || "신규"}</span></td>
@@ -211,7 +212,7 @@ function InquiriesPanel({ toQuote }) {
         <Card code="DETAIL" title={cur ? cur.companyName : "문의를 선택하세요"}>
           {!cur ? <div className="py-10 text-center text-[#9AA9C3]">왼쪽 목록에서 문의를 누르면 상세가 보입니다.</div> : (
             <div className="space-y-3">
-              {[["담당자", cur.name], ["연락처", cur.phone], ["이메일", cur.email], ["차량·규모", cur.vehicles], ["문의 유형", cur.type], ["문의 내용", cur.message || cur.content]].filter(([, v]) => v).map(([k, v]) => (
+              {[["담당자", cur.name], ["연락처", fmtPhone(cur.phone) || cur.phone], ["이메일", cur.email], ["차량·규모", cur.vehicles], ["문의 유형", cur.type], ["문의 내용", cur.message || cur.content]].filter(([, v]) => v).map(([k, v]) => (
                 <div key={k} className="grid grid-cols-[80px_1fr] gap-2 text-[14px]"><span className="font-bold text-[#7A879C]">{k}</span><span className="font-semibold text-[#0F1A30] whitespace-pre-wrap">{v}</span></div>
               ))}
               <div><div className="text-[12px] font-bold text-[#7A879C] mb-1.5">상담 단계</div>

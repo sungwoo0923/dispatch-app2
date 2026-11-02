@@ -10,6 +10,7 @@ import React from "react";
 import { createPortal } from "react-dom";
 import { parseOrderScan, splitOrders } from "./orderScanParser";
 import { verifyAddress } from "./tmapFareCalc";
+import { fmtPhone } from "./formatInput";
 
 const MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
 const ROLE_STYLE = {
@@ -462,7 +463,7 @@ export default function OrderScanModal({ onClose, onApply, places: placesRaw = [
                                 </span>
                                 <span className="w-[66px] shrink-0 text-[12px] font-bold text-[#5B6B85] whitespace-nowrap">{label}</span>
                                 <input value={k === "청구운임" && vals[k] ? Number(String(vals[k]).replace(/[^\d]/g, "") || 0).toLocaleString() : (vals[k] ?? "")}
-                                  onChange={(e) => setVals((p) => ({ ...p, [k]: k === "청구운임" ? e.target.value.replace(/[^\d]/g, "") : e.target.value }))}
+                                  onChange={(e) => setVals((p) => ({ ...p, [k]: k === "청구운임" ? e.target.value.replace(/[^\d]/g, "") : /(담당자번호|연락처)$/.test(k) ? fmtPhone(e.target.value) : e.target.value }))}
                                   placeholder={has ? "" : "인식 못함"}
                                   className={`flex-1 min-w-0 h-8 px-2 rounded-[8px] text-[13px] font-bold outline-none focus:bg-[#F2F6FC] ${has ? "text-[#0F1A30]" : "placeholder:text-[#C2CBD9] placeholder:font-semibold"}`} />
                                 {f?.via ? <span className="shrink-0 text-[10px] font-bold text-[#4B6CB7] whitespace-nowrap hidden sm:inline">{f.via}</span> : st === "guess" ? <span className="shrink-0 text-[10px] font-bold text-[#9AA9C3]">추정</span> : null}

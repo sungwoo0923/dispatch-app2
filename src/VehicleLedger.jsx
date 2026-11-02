@@ -18,6 +18,7 @@ import {
 import VehicleCarePanel from "./VehicleCarePanel";
 import { careSummary, vehicleDefaults } from "./vehicleCare";
 import { useVehicleTypes, VehicleTypePicker, VT_DEFAULTS } from "./vehicleTypes"; // 🚚 2026-11-02 회사 공용 차량종류
+import { fmtPhone as fmtPhoneLive } from "./formatInput"; // 입력 중 하이픈(02·031·010 등)
 
 const C = { ink: "#0B1428", navy: "#0F1A30", mid: "#1B2B4B", blue: "#2D4C82", sky: "#8FB0F0", line: "#E3E8F0", soft: "#F4F6FA", sub: "#5B6B85", mute: "#9AA9C3", pale: "#EEF2F9" };
 const MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
@@ -316,7 +317,7 @@ function RowEditor({ kind, row, onSave, onClose, kindOpts, onDelete }) {
             </Field>
           );
           if (t === "date") return <Field key={k} label={L}><input type="date" value={r[k] || ""} onChange={(e) => setR({ ...r, [k]: e.target.value })} style={inp} /></Field>;
-          if (t === "phone") return <Field key={k} label={L}><input inputMode="tel" value={r[k] || ""} onChange={(e) => setR({ ...r, [k]: e.target.value })} onBlur={(e) => setR({ ...r, [k]: fmtPhone(e.target.value) })} style={inp} /></Field>;
+          if (t === "phone") return <Field key={k} label={L}><input inputMode="tel" value={r[k] || ""} onChange={(e) => setR({ ...r, [k]: fmtPhoneLive(e.target.value) })} onBlur={(e) => setR({ ...r, [k]: fmtPhone(e.target.value) })} style={inp} /></Field>;
           return <Field key={k} label={L}><input value={r[k] || ""} onChange={(e) => setR({ ...r, [k]: e.target.value })} style={inp} /></Field>;
         })}
       </div>
@@ -808,7 +809,7 @@ function Ledger({ v, co, appDriver, linkRaw, drivers, canEdit, by, narrow, purpo
                 options={drivers.map((d) => ({ v: d.id, label: `${d.이름 || d.name || "-"} · ${d.차량번호 || "-"}`, sub: d.등급 || "" }))} />
             </Field>
             <Field label="기사 이름 *"><input value={drvForm.이름} onChange={(e) => setDrvForm({ ...drvForm, 이름: e.target.value })} style={inp} /></Field>
-            <Field label="연락처"><input inputMode="tel" value={drvForm.연락처} onChange={(e) => setDrvForm({ ...drvForm, 연락처: e.target.value })} onBlur={(e) => setDrvForm({ ...drvForm, 연락처: fmtPhone(e.target.value) })} style={inp} /></Field>
+            <Field label="연락처"><input inputMode="tel" value={drvForm.연락처} onChange={(e) => setDrvForm({ ...drvForm, 연락처: fmtPhoneLive(e.target.value) })} onBlur={(e) => setDrvForm({ ...drvForm, 연락처: fmtPhone(e.target.value) })} style={inp} /></Field>
             <Field label="기사 변경일(탑승 시작)"><input type="date" value={drvForm.시작} onChange={(e) => setDrvForm({ ...drvForm, 시작: e.target.value })} style={inp} /></Field>
             <Field label="비고"><input value={drvForm.비고} onChange={(e) => setDrvForm({ ...drvForm, 비고: e.target.value })} style={inp} /></Field>
           </div>

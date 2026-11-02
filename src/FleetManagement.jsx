@@ -6074,7 +6074,7 @@ function VehicleCareTab({ drivers = [], driversRaw = [], by = "" }) {
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontFamily: FC_MONO, fontSize: 10.5, fontWeight: 800, letterSpacing: "0.24em", color: "#8FB0F0" }}>VEHICLE CARE · DETAIL</div>
                 <div style={{ fontSize: 24, fontWeight: 900, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{cur.차량번호}</div>
-                <div style={{ fontSize: 13.5, color: "rgba(255,255,255,.7)" }}>{cur.이름} · {cur.전화번호} · {[cur.v.톤, cur.v.적재함].filter(Boolean).join(" ")}</div>
+                <div style={{ fontSize: 13.5, color: "rgba(255,255,255,.7)" }}>{cur.이름} · {formatPhone(cur.전화번호) || cur.전화번호} · {[cur.v.톤, cur.v.적재함].filter(Boolean).join(" ")}</div>
               </div>
               <button type="button" onClick={() => setSel(null)} style={{ height: 42, padding: "0 18px", borderRadius: 12, border: "none", background: "#fff", color: "#0F1A30", fontSize: 14, fontWeight: 900, cursor: "pointer" }}>닫기</button>
             </div>

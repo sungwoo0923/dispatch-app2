@@ -420,7 +420,7 @@ function RequesterModal({ uid, user, profile, company, mobile, active, latest, h
                 </div>
               )}
               {active.sessionId && <SupportChat sessionId={active.sessionId} me="requester" myName={active.name} height={170} />}
-              {!active.sessionId && ["approved"].includes(active.status) && mode === "remote" && <div className="text-[13px] text-[#7A879C]">관리자가 연락처({active.phone})로 전화할 수 있습니다.</div>}
+              {!active.sessionId && ["approved"].includes(active.status) && mode === "remote" && <div className="text-[13px] text-[#7A879C]">관리자가 연락처({fmtPhone(active.phone) || active.phone})로 전화할 수 있습니다.</div>}
               {["pending", "approved"].includes(active.status) && (
                 <button type="button" onClick={cancel} data-testid="support-cancel" className="w-full h-11 rounded-xl border border-[#DCE3EE] bg-white text-[#5B6B85] text-[14.5px] font-black hover:bg-[#F7F9FC]">요청 취소</button>
               )}

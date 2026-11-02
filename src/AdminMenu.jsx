@@ -38,7 +38,7 @@ import TrashPanel from "./TrashPanel";
 import { useCustomRoles, roleScreen } from "./customRoles";
 import { EditableText } from "./EditMode";
 import { useLoadOrderRange, monthEnd, monthStart } from "./orderHistory";
-import { fmtPhone } from "./formatInput";
+import { fmtBizNo, fmtPhone } from "./formatInput";
 
 // 전화번호 하이픈 자동 포맷 (DispatchApp.jsx formatPhone과 동일 규칙)
 // 전화번호 하이픈 — 공용 규칙(src/formatInput.js: 02·031·010·1588 등, 입력 중에도 적용)
@@ -1600,7 +1600,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
                 {[
                   ["신청 유형", managingLinkedApp.type === "신규" ? "신규 가입" : "기존 회사 추가"],
                   ["화주사명", managingLinkedApp.companyName],
-                  ["사업자번호", managingLinkedApp.businessNumber || "-"],
+                  ["사업자번호", (managingLinkedApp.businessNumber && (fmtBizNo(managingLinkedApp.businessNumber) || managingLinkedApp.businessNumber)) || "-"],
                   ["이름", managingLinkedApp.name],
                   ["연락처", managingLinkedApp.phone ? formatPhone(managingLinkedApp.phone) : managingLinkedApp.phone],
                   ["직책", managingLinkedApp.position || "-"],
@@ -2038,7 +2038,7 @@ function MemberManageModal({ u, me, isTotalMaster, roles, roleLabels, f, onClose
           <div className="min-w-0">
             <div className="text-[10px] font-extrabold tracking-[0.26em] text-[#8FB0F0] whitespace-nowrap">{pending ? "MEMBER · 가입 승인" : "MEMBER · 정보 수정"}</div>
             <div className="text-[20px] font-black whitespace-nowrap overflow-hidden text-ellipsis">{u.name || u.email}</div>
-            <div className="text-[12.5px] text-white/70 whitespace-nowrap overflow-hidden text-ellipsis">{u.email}{u.phone ? ` · ${u.phone}` : ""}</div>
+            <div className="text-[12.5px] text-white/70 whitespace-nowrap overflow-hidden text-ellipsis">{u.email}{u.phone ? ` · ${fmtPhone(u.phone) || u.phone}` : ""}</div>
           </div>
           <span className={`shrink-0 h-8 px-3 inline-flex items-center rounded-full text-[12px] font-black ${pending ? "bg-[#8FB0F0] text-[#0B1428]" : resigned ? "bg-white/10 text-white border border-white/25" : "bg-white text-[#0B1428]"}`}>{resigned ? "퇴사" : pending ? "승인 대기" : "승인 완료"}</span>
         </div>

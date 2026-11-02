@@ -23,6 +23,7 @@ import { CustomSelect } from "./CustomSelect";
 import { TimeSelect, korTimeLabel, MonthPicker, kstYm } from "./kpInputs";
 import { scanPenaltyImage, parsePenaltyText } from "./penaltyScan";
 import { savePng as savePngA4, savePdf as savePdfA4, printA4 } from "./a4Export";
+import { fmtPhone } from "./formatInput";
 
 const toInt = (v) => parseInt(String(v ?? "0").replace(/[^\d-]/g, ""), 10) || 0;
 const CANCELED = ["배차취소", "취소", "오더취소", "취소됨"];
@@ -314,7 +315,7 @@ export function BatchStatementsPanel({ drivers = [], dispatchData = [], companyN
                 <td className={`${TD} text-[#7A89A3] font-bold tabular-nums`} style={{ fontFamily: MONO }}>{i + 1}</td>
                 <td className={`${TD} font-black text-[#0F1A30]`}>{r.d.차량번호 || "-"}</td>
                 <td className={`${TD} font-black text-[#0F1A30]`}>{r.d.이름}{!r.d.appUid && <span className="ml-1.5 text-[11.5px] font-bold text-[#9AA9C3]">앱 미가입</span>}</td>
-                <td className={`${TD} tabular-nums text-[#3A4A66]`}>{r.d.전화번호 || "-"}</td>
+                <td className={`${TD} tabular-nums text-[#3A4A66]`}>{(r.d.전화번호 && (fmtPhone(r.d.전화번호) || r.d.전화번호)) || "-"}</td>
                 <td className={`${TD} tabular-nums text-[#3A4A66]`}>{r.d.사업자번호 ? fmtBiz(r.d.사업자번호) : "-"}</td>
                 <td className={`${TD} text-[#3A4A66]`}>{r.d.사업자상호 || "-"}</td>
                 <td className={`${TD} font-bold text-[#0F1A30] tabular-nums`}>{r.d.정산계좌?.acct ? acctLine(r.d.정산계좌) : <span className="text-[#9AA9C3]">미등록</span>}</td>
@@ -455,7 +456,7 @@ export function SingleStatementPanel({ drivers = [], dispatchData = [], companyN
                 <div className="min-w-0 flex-1">
                   <div className="text-[22px] font-black text-[#0F1A30]">{cur.d.이름} <span className="text-[15px] font-bold text-[#5B6B85]">{cur.d.차량번호}</span></div>
                   <div className="text-[13.5px] text-[#5B6B85] mt-0.5 flex flex-wrap gap-x-3">
-                    <span>{cur.d.전화번호 || "-"}</span><span>사업자 {cur.d.사업자번호 ? fmtBiz(cur.d.사업자번호) : "-"}</span><span>{cur.d.사업자상호 || ""}</span>
+                    <span>{(cur.d.전화번호 && (fmtPhone(cur.d.전화번호) || cur.d.전화번호)) || "-"}</span><span>사업자 {cur.d.사업자번호 ? fmtBiz(cur.d.사업자번호) : "-"}</span><span>{cur.d.사업자상호 || ""}</span>
                     <span>{cur.d.정산계좌?.acct ? acctLine(cur.d.정산계좌) : "계좌 미등록"}</span>
                   </div>
                 </div>
@@ -880,7 +881,7 @@ export function PenaltyCenter({ drivers = [], companyName = "", supplier = {} })
                 <td className={TD}><Chip>{p.kind}</Chip></td>
                 <td className={`${TD} font-black text-[#0F1A30]`}>{p.carNo || "-"}</td>
                 <td className={`${TD} font-black text-[#0F1A30]`}>{p.driverName || "-"}</td>
-                <td className={`${TD} tabular-nums text-[#3A4A66]`}>{p.phone || "-"}</td>
+                <td className={`${TD} tabular-nums text-[#3A4A66]`}>{(p.phone && (fmtPhone(p.phone) || p.phone)) || "-"}</td>
                 <td className={`${TD} font-bold text-[#1B2B4B]`}>{p.summary || penaltySummary(p)}</td>
                 <td className={`${TD} text-[#3A4A66] max-w-[300px] overflow-hidden text-ellipsis`} title={p.detail}>{p.detail || "-"}</td>
                 <td className={`${TD} text-[#3A4A66] max-w-[240px] overflow-hidden text-ellipsis`} title={p.place}>{p.place || "-"}</td>

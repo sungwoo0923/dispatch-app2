@@ -9,7 +9,7 @@ import {
   collection, onSnapshot, doc, updateDoc, getDoc, setDoc, serverTimestamp, query, where, deleteDoc, addDoc,
 } from "firebase/firestore";
 import { EditableText } from "./EditMode";
-import { fmtPhone } from "./formatInput";
+import { fmtBizNo, fmtPhone } from "./formatInput";
 
 // 전화번호 하이픈 자동 포맷 (DispatchApp.jsx formatPhone과 동일 규칙)
 // 전화번호 하이픈 — 공용 규칙(src/formatInput.js: 02·031·010·1588 등, 입력 중에도 적용)
@@ -787,7 +787,7 @@ export default function CompanyApplications() {
                       </span>
                     </td>
                     <td className="px-3 py-3 text-center font-black text-[#0F1A30] whitespace-nowrap">{app.companyName}</td>
-                    <td className="px-3 py-3 text-center text-gray-500 text-[12px]">{app.businessNumber || "-"}</td>
+                    <td className="px-3 py-3 text-center text-gray-500 text-[12px]">{(app.businessNumber && (fmtBizNo(app.businessNumber) || app.businessNumber)) || "-"}</td>
                     <td className="px-3 py-3 text-center text-gray-800">{app.name}</td>
                     <td className="px-3 py-3 text-center text-gray-500 text-[12px]">{app.phone ? formatPhone(app.phone) : app.phone}</td>
                     <td className="px-3 py-3 text-center text-gray-500 text-[12px]">{app.position || "-"}</td>
@@ -965,7 +965,7 @@ export default function CompanyApplications() {
                     <InfoRow label="신청 유형" value={managingApp.type === "신규" ? "신규 가입신청" : "기존 회사 추가 가입"} />
                     <InfoRow label="신청 일시" value={fmtDate(managingApp.createdAt)} />
                     <InfoRow label="회사명" value={managingApp.companyName} />
-                    <InfoRow label="사업자번호" value={managingApp.businessNumber} />
+                    <InfoRow label="사업자번호" value={managingApp.businessNumber && (fmtBizNo(managingApp.businessNumber) || managingApp.businessNumber)} />
                     <InfoRow label="이메일" value={managingApp.email} />
                     <InfoRow label="이름" value={managingApp.name} />
                     <InfoRow label="연락처" value={managingApp.phone ? formatPhone(managingApp.phone) : managingApp.phone} />

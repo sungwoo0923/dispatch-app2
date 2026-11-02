@@ -9,6 +9,7 @@
 import React from "react";
 import { createPortal } from "react-dom";
 import { bankText, formatAccount } from "./bankUtil";
+import { fmtPhone } from "./formatInput";
 
 export const MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
 export const won = (n) => `${Math.round(Number(n) || 0).toLocaleString("ko-KR")}`;
@@ -105,7 +106,7 @@ export function PenaltyDoc({ p, supplier = {}, onPhoto, wide }) {
       </div>
       <div style={{ padding: "16px 22px" }}>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))", gap: 8, marginBottom: 14 }}>
-          {[["대상 기사", p.driverName], ["차량번호", p.carNo], ["연락처", p.phone]].map(([k, v]) => (
+          {[["대상 기사", p.driverName], ["차량번호", p.carNo], ["연락처", fmtPhone(p.phone) || p.phone]].map(([k, v]) => (
             <div key={k} style={{ background: "#F5F8FD", border: "1px solid #E3E8F0", borderRadius: 10, padding: "8px 12px" }}>
               <div style={{ fontSize: 12, color: "#5B6B85", fontWeight: 800 }}>{k}</div>
               <div style={{ fontSize: 15, fontWeight: 900, color: "#0B1428", overflowWrap: "anywhere" }}>{v || "-"}</div>
