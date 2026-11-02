@@ -23833,8 +23833,6 @@ ${
       : "bg-red-50 border-l-2 border-l-red-400 hover:bg-red-100"
     : isSelected
     ? isDark ? "bg-blue-900/40" : "bg-blue-50"
-    : idx % 2
-    ? isDark ? "bg-gray-800 hover:bg-gray-700" : "bg-gray-50 hover:bg-blue-50/60"
     : isDark ? "bg-gray-900 hover:bg-gray-700" : "bg-white hover:bg-blue-50/60"
 }
 ${isHighlighted ? "animate-pulse bg-blue-100" : ""}
@@ -23850,7 +23848,8 @@ ${isHighlighted ? "animate-pulse bg-blue-100" : ""}
                     />
                   </td>
 
-                  <td className={cell}>{idx + 1}</td>
+                  {/* ⚡ 순번은 CSS 카운터로(.kp-rt-body) — 정렬로 줄 순서가 바뀌어도 줄 전체를 다시 그리지 않게 */}
+                  <td className={`${cell} kp-rt-no`} />
   <td className={`${cell} overflow-visible`}>
   <HoverInfoTrigger
     className="underline decoration-dotted underline-offset-2 cursor-default"
@@ -24204,7 +24203,7 @@ ${isHighlighted ? "animate-pulse bg-blue-100" : ""}
 function realtimeRowPropsEqual(prev, next) {
   return (
     prev.r === next.r &&
-    prev.idx === next.idx &&
+    // ⚡ idx(순번)는 비교하지 않는다 — 순번·줄무늬를 CSS로 그려서, 정렬해도 바뀐 줄만 다시 그린다
     prev.isSelected === next.isSelected &&
     prev.isFading === next.isFading &&
     prev.isHighlighted === next.isHighlighted &&
@@ -29560,7 +29559,7 @@ const head = isDark
             </tr>
           </thead>
 
-          <tbody {...rtLongPress.tbodyProps} className={rtLongPress.selectMode ? "kp-select-mode" : ""}>
+          <tbody {...rtLongPress.tbodyProps} className={`kp-rt-body ${isDark ? "kp-rt-dark" : ""} ${rtLongPress.selectMode ? "kp-select-mode" : ""}`}>
             {filtered.length === 0 && (
               <tr>
                 <td colSpan={27} className="py-16 text-center text-[13px] text-gray-500">
@@ -34741,6 +34740,13 @@ setConfirmChange(null);
     animation: highlightFade 1.1s cubic-bezier(0.22, 1, 0.36, 1) forwards;
     will-change: background-color, box-shadow;
   }
+  /* ⚡ 실시간배차현황 순번 — 줄 순서대로 CSS가 매김(정렬해도 줄을 다시 그리지 않음) */
+  .kp-rt-body { counter-reset: kprtno; }
+  .kp-rt-body > tr { counter-increment: kprtno; }
+  .kp-rt-body > tr > td.kp-rt-no::before { content: counter(kprtno); }
+  /* 다크모드 줄무늬 */
+  .kp-rt-body.kp-rt-dark > tr.bg-gray-900:nth-child(even) { background-color: rgb(31 41 55); }
+  .kp-rt-body.kp-rt-dark > tr.bg-gray-900:hover { background-color: rgb(55 65 81); }
 `}</style>
 
 {/* 🔥 블랙/주의업체 팝업 */}

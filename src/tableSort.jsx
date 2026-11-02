@@ -62,8 +62,29 @@ export function useTableSort(storageKey) {
   return { sort, toggle, reset };
 }
 
+// "09:30" / "9:00" / "오전 9시" / "오후 2시 30분" / "오후 2:30" → 하루 중 분(分). 시간이 아니면 null.
+const TIME_HM = /^(\d{1,2}):(\d{2})(?::\d{2})?$/;
+const TIME_KO = /^(오전|오후|AM|PM|am|pm)\s*(\d{1,2})(?:\s*[:시]\s*(\d{1,2})?\s*분?)?\s*$/;
+export const toSortTime = (v) => {
+  const s = String(v ?? "").trim();
+  if (!s) return null;
+  let m = TIME_HM.exec(s);
+  if (m) { const h = +m[1], mi = +m[2]; return h < 48 && mi < 60 ? h * 60 + mi : null; }
+  m = TIME_KO.exec(s);
+  if (m) {
+    let h = +m[2] % 12; const mi = m[3] ? +m[3] : 0;
+    if (/오후|PM|pm/.test(m[1])) h += 12;
+    return mi < 60 ? h * 60 + mi : null;
+  }
+  return null;
+};
+const LEAD_NUM = /^\s*(\d+(?:\.\d+)?)/; // "2.5톤", "3.5톤광폭", "11톤축" 처럼 숫자로 시작하는 값
+
 /**
  * 정렬된 새 배열(정렬 꺼짐이면 원본 그대로).
+ * 칸의 값을 보고 비교 방식을 정한다:
+ *   전부 숫자/금액 → 숫자 크기 · 대부분 시간 → 시각 순 · 대부분 숫자로 시작(톤수) → 앞 숫자 크기
+ *   그 밖 → 한국어 사전순(숫자는 크기순). 빈 값은 오름·내림 상관없이 항상 맨 아래.
  * @param {Array} rows 이미 걸러진 목록
  * @param {{key,dir}|null} sort
  * @param {(row, key, index)=>any} [getValue] 컬럼 값 꺼내기(기본: row[key])
@@ -73,31 +94,43 @@ export function sortRows(rows, sort, getValue) {
   const { key, dir } = sort;
   const n = rows.length;
   const vals = new Array(n);
-  let allNum = true, anyVal = false;
+  let filled = 0, numCnt = 0, timeCnt = 0, leadCnt = 0;
   for (let i = 0; i < n; i++) {
     const v = getValue ? getValue(rows[i], key, i) : rows[i]?.[key];
-    vals[i] = v;
-    if (isEmpty(v)) continue;
-    anyVal = true;
-    if (allNum && toSortNumber(v) === null) allNum = false;
+    if (isEmpty(v)) { vals[i] = null; continue; }
+    vals[i] = v; filled++;
+    if (toSortNumber(v) !== null) numCnt++;
+    else if (typeof v === "string") {
+      if (toSortTime(v) !== null) timeCnt++;
+      else if (LEAD_NUM.test(v)) leadCnt++;
+    }
   }
-  if (!anyVal) return rows;
-  // 정렬 키를 미리 한 번만 계산 — 비교 중에는 가공하지 않는다.
-  const keys = new Array(n);
+  if (!filled) return rows;
+  const mode = numCnt === filled ? "num"
+    : timeCnt > 0 && timeCnt + numCnt >= filled * 0.8 ? "time"
+    : leadCnt + numCnt >= filled * 0.8 ? "lead" : "str";
+  // 정렬 키를 행마다 한 번만 계산 — 비교 중에는 가공하지 않는다. k1: 숫자(없으면 null) · k2: 글자
+  const k1 = new Array(n), k2 = new Array(n), empty = new Uint8Array(n);
   for (let i = 0; i < n; i++) {
     const v = vals[i];
-    keys[i] = isEmpty(v) ? null : allNum ? toSortNumber(v) : String(v).trim();
+    if (v === null) { empty[i] = 1; continue; }
+    const str = String(v).trim();
+    k2[i] = str;
+    if (mode === "num") k1[i] = toSortNumber(v);
+    else if (mode === "time") k1[i] = toSortTime(str);
+    else if (mode === "lead") { const m = LEAD_NUM.exec(str); k1[i] = m ? parseFloat(m[1]) : null; }
+    else k1[i] = null;
   }
   const idx = new Array(n);
   for (let i = 0; i < n; i++) idx[i] = i;
   const sign = dir === "desc" ? -1 : 1;
   idx.sort((a, b) => {
-    const ka = keys[a], kb = keys[b];
-    if (ka === null || kb === null) {
-      if (ka === kb) return a - b;
-      return ka === null ? 1 : -1; // 빈 값은 오름·내림 상관없이 항상 맨 아래
-    }
-    const c = allNum ? ka - kb : collator.compare(ka, kb);
+    if (empty[a] || empty[b]) return empty[a] === empty[b] ? a - b : empty[a] ? 1 : -1;
+    let c = 0;
+    const na = k1[a], nb = k1[b];
+    if (na !== null && na !== undefined && nb !== null && nb !== undefined) c = na - nb;
+    else if (mode !== "str" && (na == null) !== (nb == null)) c = na == null ? 1 : -1; // 숫자·시간으로 못 읽은 값은 그 뒤에
+    if (c === 0) c = collator.compare(k2[a], k2[b]);
     return c !== 0 ? c * sign : a - b; // 같은 값이면 원래 순서 유지(안정 정렬)
   });
   const out = new Array(n);

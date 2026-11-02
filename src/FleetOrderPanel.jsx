@@ -129,7 +129,11 @@ export default function FleetOrderPanel({ order, onClose, onCopy, companyName = 
         if (String(form.운임구분 || "").trim()) patch.운임수동 = !!form.운임수동;
       }
       if (patch.거래처명 !== undefined && !patch.거래처명) delete patch.거래처명; // 거래처명은 비워 저장하지 않음
-      await updateDoc(doc(db, order.__col || "orders", id), patch);
+      // 서버 확인(ack)이 늦어도 화면은 바로 반영된다(Firestore 즉시 반영) — 1.2초 안에 거부되면 패널을 그대로 두고 알림,
+      //  그 뒤 실패하면 닫힌 뒤에라도 알린다(배차관리 오더 수정 패널과 같은 방식)
+      const pr = updateDoc(doc(db, order.__col || "orders", id), patch);
+      const early = await Promise.race([pr.then(() => "ok"), new Promise((r) => setTimeout(() => r("wait"), 1200))]);
+      if (early === "wait") pr.catch((e) => { console.error("[노선관리 오더 수정] 저장 실패", e); kpAlert(`오더 저장이 서버에서 거부되었습니다${e?.code ? ` (${e.code})` : ""}. 다시 열어 확인해 주세요.`); });
       onClose(true);
     } catch (e) {
       console.error("[노선관리 오더 수정] 저장 실패", e);
