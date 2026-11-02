@@ -55092,6 +55092,35 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
     return Array.from(map.values()).sort((a, b) => b.기사운임합 - a.기사운임합);
   }, [filtered]);
 
+  // ─── ⭐ 머리글 클릭 정렬(▲→▼→해제) — 이 브라우저에만 기억. 걸러진 목록만 따로 정렬 ───
+  const paySort = useTableSort("payment.list");
+  const paySorted = useMemo(() => sortRows(filtered, paySort.sort, (r, key, i) => {
+    switch (key) {
+      case "순번": return i;
+      case "상차지": return r.상차지명;
+      case "하차지": return r.하차지명;
+      case "기사명": return r.이름;
+      case "청구운임": return toInt(r.청구운임);
+      case "기사운임": return toInt(r.기사운임);
+      case "부가세(10%)": return Math.round(toInt(r.기사운임) * vatRate);
+      case "산재보험료": return Math.round(toInt(r.기사운임) * insuranceRate / 100);
+      case "수수료": return toInt(r.청구운임) - toInt(r.기사운임);
+      case "지급상태": return r.지급상태 || "지급중";
+      default: return r[key];
+    }
+  }), [filtered, paySort.sort, vatRate, insuranceRate]); // eslint-disable-line react-hooks/exhaustive-deps
+  const payDrvSort = useTableSort("payment.byDriver");
+  const payDrvSorted = useMemo(() => sortRows(driverSummary, payDrvSort.sort, (d, key) => {
+    switch (key) {
+      case "기사명": return d.이름;
+      case "총 건수": return d.cnt;
+      case "기사운임 합계": return d.기사운임합;
+      case "미지급 건수": return d.미지급;
+      case "미지급 금액": return d.미지급액;
+      default: return d[key];
+    }
+  }), [driverSummary, payDrvSort.sort]);
+
   // ─── 지급 처리 ───
   // 🔗 2026-11-01 지급완료/취소 → 수입·지출 장부(지급일별 "기사운임 지급")에 자동 반영
   const syncPayLedger = (row, nextStatus, nextDate) => {
@@ -55465,8 +55494,8 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
             <table className="w-full text-[12px]">
               <thead>
                 <tr className="bg-[#0B1428]">
-                  {["", "순번", "상차일", "거래처명", "상차지", "하차지", "차량번호", "기사명", "전화번호", "청구운임", "기사운임", "부가세(10%)", `산재보험료(${insuranceRate}%)`, "수수료", "지급방식", "배차방식", "지급상태", "지급일"].map(h => (
-                    <th key={h} className="px-3 py-3 text-white font-bold text-center whitespace-nowrap border-b border-white/10">{h ? <EditableText id={`settlement.table.header.${h}`} defaultText={h} /> : h}</th>
+                  {["", "순번", "상차일", "거래처명", "상차지", "하차지", "차량번호", "기사명", "전화번호", "청구운임", "기사운임", "부가세(10%)", `산재보험료(${insuranceRate}%)`, "수수료", "지급방식", "배차방식", "지급상태", "지급일"].map((h, hi) => (
+                    <SortTh key={h || "_chk"} k={h ? (hi === 12 ? "산재보험료" : h) : ""} sort={paySort.sort} onSort={paySort.toggle} className="px-3 py-3 text-white font-bold text-center whitespace-nowrap border-b border-white/10">{h ? <EditableText id={`settlement.table.header.${h}`} defaultText={h} /> : h}</SortTh>
                   ))}
                 </tr>
               </thead>
@@ -55475,7 +55504,7 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
                   <tr><td colSpan={16} className="text-center py-20 text-gray-500 text-[13px]">이번달 / 지난달 버튼 또는 날짜를 설정하고 <b className="text-[#1B2B4B]">조회</b> 버튼을 눌러주세요.</td></tr>
                 ) : filtered.length === 0 ? (
                   <tr><td colSpan={16} className="text-center py-16 text-gray-500 text-[13px]">조회된 데이터가 없습니다.</td></tr>
-                ) : filtered.map((r, i) => {
+                ) : paySorted.map((r, i) => {
                   const isDone = (r.지급상태 || "지급중") === "지급완료";
                   const fee = toInt(r.청구운임) - toInt(r.기사운임);
                   return (
@@ -55538,7 +55567,7 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
               <thead>
                 <tr className="bg-[#0B1428]">
                   {["차량번호", "기사명", "전화번호", "총 건수", "기사운임 합계", "지급완료", "미지급 건수", "미지급 금액", "일괄 지급"].map(h => (
-                    <th key={h} className="px-3 py-3 text-white font-bold text-center whitespace-nowrap border-b border-white/10"><EditableText id={`settlement.byDriver.header.${h}`} defaultText={h} /></th>
+                    <SortTh key={h} k={h === "일괄 지급" ? "" : h} sort={payDrvSort.sort} onSort={payDrvSort.toggle} className="px-3 py-3 text-white font-bold text-center whitespace-nowrap border-b border-white/10"><EditableText id={`settlement.byDriver.header.${h}`} defaultText={h} /></SortTh>
                   ))}
                 </tr>
               </thead>
@@ -55547,7 +55576,7 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
                   <tr><td colSpan={9} className="text-center py-20 text-gray-500 text-[13px]">이번달 / 지난달 버튼 또는 날짜를 설정하고 <b className="text-[#1B2B4B]">조회</b> 버튼을 눌러주세요.</td></tr>
                 ) : driverSummary.length === 0 ? (
                   <tr><td colSpan={9} className="text-center py-16 text-gray-500 text-[13px]">데이터가 없습니다.</td></tr>
-                ) : driverSummary.map((d, i) => (
+                ) : payDrvSorted.map((d, i) => (
                   <tr key={d.차량번호} className={`${i % 2 === 0 ? "bg-white" : "bg-gray-50/60"} hover:bg-[#EEF3FC]/40 transition`}>
                     <td className="px-3 py-3 text-center border-b border-gray-100">{d.차량번호}</td>
                     <td className="px-3 py-3 text-center font-semibold border-b border-gray-100">{d.이름 || "-"}</td>
@@ -55920,12 +55949,28 @@ function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, sho
     for (const r of filtered) { const n = mgrOf(r); if (n) m.set(n, (m.get(n) || 0) + 1); }
     return [...m.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], "ko"));
   }, [filtered]);
+  // ⭐ 머리글 클릭 정렬(▲→▼→해제, 담당자 칸은 위 담당자 목록 기능 그대로) — 이 브라우저에만 기억
+  const drvSort = useTableSort("drivers");
+  const drvOnSort = React.useCallback((k) => { drvSort.toggle(k); setPage(1); }, [drvSort.toggle]);
+  const sortedDrivers = React.useMemo(() => sortRows(filtered, drvSort.sort, (r, key, i) => {
+    const g = r.등급 || "일반";
+    const fleet = g === "지입" || g === "직영" || g === "임대";
+    switch (key) {
+      case "순번": return i;
+      case "등록일": return displayRegDate(r);
+      case "거주지": return fleet ? r.거주지 : "";
+      case "근무가능요일": return fleet && Array.isArray(r.근무요일) ? r.근무요일.join(",") : "";
+      case "등급": return g;
+      case "팝업": return !(r.메모 || "").trim() ? "" : (g === "블랙" ? "ON" : r.팝업표시 === true ? "ON" : "OFF");
+      default: return r[key];
+    }
+  }), [filtered, drvSort.sort]);
   const ordered = React.useMemo(() => {
-    if (!mgrFocus) return filtered;
+    if (!mgrFocus) return sortedDrivers;
     const top = [], rest = [];
-    for (const r of filtered) (mgrOf(r) === mgrFocus ? top : rest).push(r);
+    for (const r of sortedDrivers) (mgrOf(r) === mgrFocus ? top : rest).push(r);
     return [...top, ...rest];
-  }, [filtered, mgrFocus]);
+  }, [sortedDrivers, mgrFocus]);
   React.useEffect(() => { setPage(1); }, [mgrFocus]);
   React.useEffect(() => {
     if (!mgrMenu) return undefined;
@@ -56336,7 +56381,7 @@ function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, sho
                           </button>
                         </th>
                       ) : (
-                      <th key={h} className={`px-3 py-3 text-white font-bold text-center whitespace-nowrap ${w}`}><EditableText id={`driver.table.header.${h}`} defaultText={h} /></th>
+                      <SortTh key={h} k={h === "삭제" ? "" : h} sort={drvSort.sort} onSort={drvOnSort} className={`px-3 py-3 text-white font-bold text-center whitespace-nowrap ${w}`}><EditableText id={`driver.table.header.${h}`} defaultText={h} /></SortTh>
                       )
                     ))}
                   </tr>
@@ -57273,6 +57318,15 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
   //   지금 목록(검색·전체보기 결과)에 보이는 거래처 전부를 선택/해제한다.
   const clientRowId = (r) => r.id || r.거래처명 || "";
   const filteredClientIds = React.useMemo(() => filtered.map(clientRowId).filter(Boolean), [filtered]); // eslint-disable-line react-hooks/exhaustive-deps
+  // ⭐ 머리글 클릭 정렬(▲→▼→해제) — 이 브라우저에만 기억
+  const clientSort = useTableSort("clients");
+  const sortedClients = React.useMemo(() => sortRows(filtered, clientSort.sort, (r, key, i) => {
+    if (key === "순번") return i;
+    if (key === "등급") return r.등급 || "일반";
+    if (key === "일반메모") return r.메모;
+    if (key === "안내사항") return _hasRealDriverNotice(r.기사전달주의사항) ? "등록" : "미등록";
+    return r[key];
+  }), [filtered, clientSort.sort]);
   const clientSelInView = React.useMemo(() => filteredClientIds.reduce((n, id) => n + (selected.has(id) ? 1 : 0), 0), [filteredClientIds, selected]);
   const clientAllChecked = filteredClientIds.length > 0 && clientSelInView === filteredClientIds.length;
   const toggleAll = () => {
@@ -57736,6 +57790,15 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
   const togglePlaceOne = (id) => setPlaceSelected((prev) => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
   // ⭐ 2026-11-02 전체선택은 "더 보기"로 아직 안 펼친 줄까지 지금 검색결과 전체를 고른다(개수는 선택삭제 버튼에 표시)
   const filteredPlaceIds = React.useMemo(() => filteredPlaces.map((p) => p.id || p.업체명).filter(Boolean), [filteredPlaces]);
+  // ⭐ 머리글 클릭 정렬(▲→▼→해제) — 이 브라우저에만 기억. 걸러진 목록만 정렬하고 "더 보기"는 그 순서대로
+  const placeSort = useTableSort("places");
+  const sortedPlaces = React.useMemo(() => sortRows(filteredPlaces, placeSort.sort, (r, key, i) => {
+    if (key === "순번") return i;
+    if (key === "등급") return r.등급 || "일반";
+    if (key === "일반메모") return r.메모;
+    if (key === "안내사항") return _hasRealDriverNotice(r.기사전달주의사항) ? "등록" : "미등록";
+    return r[key];
+  }), [filteredPlaces, placeSort.sort]);
   const placeSelInView = React.useMemo(() => filteredPlaceIds.reduce((n, id) => n + (placeSelected.has(id) ? 1 : 0), 0), [filteredPlaceIds, placeSelected]);
   const placeAllChecked = filteredPlaceIds.length > 0 && placeSelInView === filteredPlaceIds.length;
   const togglePlaceAll = () => {
@@ -58010,13 +58073,14 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
                         <KpCheckbox onChange={togglePlaceAll} checked={placeAllChecked} indeterminate={placeSelInView > 0}
                           title={placeAllChecked ? "전체 해제" : `검색결과 ${filteredPlaceIds.length.toLocaleString()}건 전체 선택`} />
                       </th>
-                      {["업체명","주소","담당자","담당자번호","등급","일반메모","오더메모","안내사항","삭제"].map((h) => (
-                        <th key={h} className="px-3 py-3 text-white font-bold text-center whitespace-nowrap"><EditableText id={`client.table.header.${h}`} defaultText={h} /></th>
+                      {/* ⭐ 순번 → 담당자(담당자번호) 순서로 앞에 */}
+                      {["순번","담당자","담당자번호","업체명","주소","등급","일반메모","오더메모","안내사항","삭제"].map((h) => (
+                        <SortTh key={h} k={h === "삭제" ? "" : h} sort={placeSort.sort} onSort={placeSort.toggle} className="px-3 py-3 text-white font-bold text-center whitespace-nowrap"><EditableText id={`client.table.header.${h}`} defaultText={h} /></SortTh>
                       ))}
                     </tr>
                   </thead>
                   <tbody>
-                    {filteredPlaces.slice(0, placeShowN).map((r, i) => {
+                    {sortedPlaces.slice(0, placeShowN).map((r, i) => {
                       const id = r.id || r.업체명 || `${i}`;
                       const grade = r.등급 || "일반";
                       return (
@@ -58034,15 +58098,16 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
                           <td className="px-3 py-2.5 text-center" onClick={e => e.stopPropagation()} style={placeSelected.has(id) ? { boxShadow: "inset 3px 0 0 #2D4C82" } : undefined}>
                             <KpCheckbox checked={placeSelected.has(id)} onChange={() => togglePlaceOne(id)} />
                           </td>
-                          <td className="px-2 py-2.5 text-[13px] font-semibold text-gray-800 max-w-[190px] truncate text-center">{r.업체명||""}</td>
-                          <td className="px-2 py-2.5 text-[13px] text-gray-600 max-w-[250px] truncate text-center">{r.주소||""}</td>
-                          <td className="px-2 py-2.5 text-[13px] text-gray-700 text-center">
+                          <td className="px-2 py-2.5 text-[13px] text-gray-500 text-center tabular-nums">{i + 1}</td>
+                          <td className="px-2 py-2.5 text-[13px] text-gray-700 text-center whitespace-nowrap">
                             {r.담당자||""}
                             {r._allContacts && r._allContacts.length > 1 && (
                               <span className="ml-1 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-[#1B2B4B] text-white">+{r._allContacts.length - 1}명</span>
                             )}
                           </td>
-                          <td className="px-2 py-2.5 text-[13px] text-gray-700 text-center">{r.담당자번호||""}</td>
+                          <td className="px-2 py-2.5 text-[13px] text-gray-700 text-center whitespace-nowrap">{r.담당자번호||""}</td>
+                          <td className="px-2 py-2.5 text-[13px] font-semibold text-gray-800 max-w-[190px] truncate text-center">{r.업체명||""}</td>
+                          <td className="px-2 py-2.5 text-[13px] text-gray-600 max-w-[250px] truncate text-center">{r.주소||""}</td>
                           <td className="px-2 py-2.5 text-center" onClick={e => e.stopPropagation()}
                             onDoubleClick={e => { e.stopPropagation(); if (grade === "일반") return; showAlert(r.등급변경일 ? `${grade} 등급 지정일: ${r.등급변경일}` : `${grade} 등급으로 지정되어 있으나 지정일 기록이 없습니다.`); }}
                             title={grade !== "일반" ? "더블클릭하면 지정일을 볼 수 있습니다" : undefined}>
@@ -58653,13 +58718,14 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
                         <KpCheckbox onChange={toggleAll} checked={clientAllChecked} indeterminate={clientSelInView > 0}
                           title={clientAllChecked ? "전체 해제" : `목록 ${filteredClientIds.length.toLocaleString()}건 전체 선택`} />
                       </th>
-                      {["거래처명","사업자번호","대표자","업태","종목","주소","담당자","연락처","이메일","등급","일반메모","오더메모","안내사항"].map(h => (
-                        <th key={h} className="px-3 py-3 text-white font-bold text-center whitespace-nowrap"><EditableText id={`client.table.header.${h}`} defaultText={h} /></th>
+                      {/* ⭐ 순번 → 담당자(연락처) 순서로 앞에 */}
+                      {["순번","담당자","연락처","거래처명","사업자번호","대표자","업태","종목","주소","이메일","등급","일반메모","오더메모","안내사항"].map(h => (
+                        <SortTh key={h} k={h} sort={clientSort.sort} onSort={clientSort.toggle} className="px-3 py-3 text-white font-bold text-center whitespace-nowrap"><EditableText id={`client.table.header.${h}`} defaultText={h} /></SortTh>
                       ))}
                     </tr>
                   </thead>
                   <tbody>
-                    {filtered.map((r, i) => {
+                    {sortedClients.map((r, i) => {
                       const id = r.id || r.거래처명;
                       const isEditing = editingClientId === id;
                       return (
@@ -58675,6 +58741,12 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
                           <td className="px-3 py-2.5 text-center" style={selected.has(id) ? { boxShadow: "inset 3px 0 0 #2D4C82" } : undefined}>
                             <KpCheckbox checked={selected.has(id)} onChange={(e) => { e.stopPropagation(); toggleOne(id); }} onClick={e => e.stopPropagation()} />
                           </td>
+                          <td className="px-2 py-2.5 text-center text-[13px] text-gray-500 tabular-nums">{i + 1}</td>
+                          {["담당자","연락처"].map(key => (
+                            <td key={key} className="px-2 py-2.5 text-center">
+                              <span className="text-[13px] text-gray-700 whitespace-nowrap">{r[key] || ""}</span>
+                            </td>
+                          ))}
                           {["거래처명","사업자번호"].map(key => (
                             <td key={key} className="px-2 py-2.5 text-center">
                               <span className="text-[13px] text-gray-700 whitespace-nowrap">{r[key] || ""}</span>
@@ -58694,7 +58766,7 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
                               )}
                             </td>
                           ))}
-                          {["담당자","연락처","이메일"].map(key => (
+                          {["이메일"].map(key => (
                             <td key={key} className="px-2 py-2.5 text-center">
                               <span className="text-[13px] text-gray-700 whitespace-nowrap">{r[key] || ""}</span>
                             </td>
