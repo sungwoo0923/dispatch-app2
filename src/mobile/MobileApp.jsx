@@ -1,4 +1,5 @@
 // ======================= src/mobile/MobileApp.jsx (PART 1/3) =======================
+import { subscribeUsersLive } from "../usersLive"; // ⭐ 2026-11-02 속도 — 직원 명부 구독 공유
 import { useMyProfile } from "../userNames";
 import { useCompanyDropdownSync, dropdownList } from "../companyDropdownOptions";
 import { AttendanceQuickButton, officeRadii } from "../attendanceQuick";
@@ -8,15 +9,14 @@ import { confirmLeave } from "../leaveGuard";
 import { hideBlind, isBlindHidden, canSeeBlind, autoBlindNew } from "../blind";
 import { imeFocusRef } from "../imeFocus";
 import { checkHolidayDispatch, findRestConflict, confirmRestDispatch, restAckKey } from "../holidayConfirm";
-import html2canvas from "html2canvas";
+import { html2canvas } from "../lazyLoad"; // ⭐ 2026-11-02 속도 — 캡처 라이브러리는 처음 캡처할 때 받는다
 import { LoginManagerModal } from "../LoginManager";
-import { useCompanyInfo } from "../RateCard";
-import MobileFleetView from "./MobileFleetView";
-import MobileAttendanceBoard from "./MobileAttendanceBoard";
-import MobileIntelView from "./MobileIntelView";
+import { useCompanyInfo } from "../companyInfo"; // ⭐ 2026-11-02 속도 — RateCard(엑셀 라이브러리 포함) 대신 작은 파일에서
+// ⭐ 2026-11-02 속도 — 안 쓰던 import(지입차 지도·지도운임·팔레트) 제거 → leaflet·지도 데이터가 첫 로딩에서 빠짐. 자주 안 여는 화면은 열 때 받는다
+import { lazyView } from "../lazyLoad";
+const MobileAttendanceBoard = lazyView(() => import("./MobileAttendanceBoard"));
+const MobileIntelView = lazyView(() => import("./MobileIntelView"));
 import InternalMessenger from "../InternalMessenger";
-import MobileMapFare from "./MobileMapFare";
-import PalletSimulator from "../PalletSimulator";
 import { subscribeOrderSync, deleteOrderWithLog, historyStartDate } from "../orderHistory";
 import CustomDatePicker from "../CustomDatePicker";
 import RouteMapModal from "../RouteMapModal";
@@ -44,8 +44,8 @@ const resyncCheckingStore = createMiniStore(false);
 const bootStageStore = createMiniStore({ server: 0, apply: 0, applyCount: 0, ready: 0 });
 import { createPortal } from "react-dom";
 import "./mobileTheme.css";
-import BlindMinePanel from "../BlindMinePanel";
-import GsheetMinePanel from "../GsheetMinePanel";
+const BlindMinePanel = lazyView(() => import("../BlindMinePanel"));
+const GsheetMinePanel = lazyView(() => import("../GsheetMinePanel"));
 import { OrderTimeline } from "../OrderTimeline"; // ★ 모바일 A/B 디자인 + 알록달록 금지(남색 계열)
 import KpBootScreen from "../KpBootScreen";
 import { isMeaningfulChange } from "../bootProgress";
@@ -94,7 +94,7 @@ import { useNewVersion, openUpdatePopup } from "../VersionCheck";
 import { calcLeaveBalance } from "../leaveUtils";
 import { RotationPicker, RotationBadge, expandRotation, rotationNotice } from "../rotation";
 import { isWeekend, findApprovedLeaveForDate, isHoliday } from "../attendanceUtils";
-import MonthCompareAnalysis from "../MonthCompareAnalysis";
+const MonthCompareAnalysis = lazyView(() => import("../MonthCompareAnalysis"));
 import { MailHeaderButton } from "../InternalMail";
 import BannerCenter from "../BannerCenter";
 import OrderCongratsPopup from "../OrderCongratsPopup";
@@ -2282,11 +2282,12 @@ useEffect(() => {
 // 🔔 공지 / 일정 (PC 연동)
 const [notices, setNotices] = useState([]);
 const [schedules, setSchedules] = useState([]);
-const sortedSchedules = [...schedules].sort((a, b) => {
+// ⭐ 2026-11-02 속도 — 화면이 다시 그려질 때마다(오더 스냅샷·입력마다) 일정 전체를 다시 정렬하던 것을 일정이 바뀔 때만
+const sortedSchedules = useMemo(() => [...schedules].sort((a, b) => {
   const da = a.startDate || a.start || "";
   const db = b.startDate || b.start || "";
   return db.localeCompare(da);
-});
+}), [schedules]);
 // 🆕 NEW 뱃지 상태
 const [hasNewNotice, setHasNewNotice] = useState(false);
 const [hasNewSchedule, setHasNewSchedule] = useState(false);
@@ -3302,10 +3303,8 @@ useEffect(() => {
 
 // 👥 전체 사용자 목록 구독
 useEffect(() => {
-  const unsub = onSnapshot(collection(db, "users"), (snap) => {
-    setMobileUsers(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-  });
-  return () => unsub();
+  // ⭐ 2026-11-02 속도 — 앱 공용 users 구독(usersLive)을 같이 쓴다(알림·월비교와 중복 구독 제거, 받는 데이터 동일)
+  return subscribeUsersLive((list) => setMobileUsers(list));
 }, []);
 
 // 🔔 상차 임박 2시간 이내 감지 (⏱ 시간 흐름 포함)

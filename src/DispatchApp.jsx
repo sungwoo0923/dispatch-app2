@@ -12,8 +12,8 @@ import { imeFocusRef } from "./imeFocus";
 import { hideBlind, isBlindHidden, canSeeBlind, autoBlindNew } from "./blind";
 import { checkHolidayDispatch, findRestConflict, confirmRestDispatch, restAckKey } from "./holidayConfirm";
 import { drawTmapTrafficRoute, TRAFFIC_LEGEND } from "./mapStyle";
-import html2canvas from "html2canvas";
-import jsPDF from "jspdf";
+// ⭐ 2026-11-02 속도 — 캡처·PDF 라이브러리는 저장 버튼을 누를 때 받는다(첫 로딩에서 약 580KB 제외)
+import { html2canvas, loadJsPDF, lazyView, prefetchWhenIdle } from "./lazyLoad";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { withCo, getTenant } from "./fsTenant";
 import { coDocKey } from "./coKey";
@@ -26,7 +26,9 @@ import { sendOrderTo24Proxy as sendOrderTo24 } from "../api/24CallProxy";
 import { useNewVersion, openUpdatePopup } from "./VersionCheck";
 import CustomDatePicker, { specialDemandInfo, KOREAN_HOLIDAYS, shortHolidayLabel } from "./CustomDatePicker";
 import { ensureWeatherLoaded, getWeatherSpecialInfo } from "./weatherUtil";
-import AdminMenu, { subscribeUsersLive } from "./AdminMenu";
+// ⭐ 2026-11-02 속도 — 관리자메뉴(엑셀 가져오기 등 포함)는 열 때 받는다. 직원 명부 구독은 usersLive 하나를 공유
+import { subscribeUsersLive } from "./usersLive";
+const AdminMenu = lazyView(() => import("./AdminMenu"));
 import FleetExtraFields from "./FleetDriverExtra";
 import { useFixedRouteAutoDispatch, FixedRouteEditNotice } from "./FixedRoutes";
 import { deptModeOf } from "./DeptDashboard";
@@ -42,28 +44,27 @@ import { AssetManager } from "./OfficeBooks";
 import { FundsWorkspace, FundsBoard, isCeoPosition } from "./FundsBoard";
 import { AccountingOverview, RetireDesk, useYearOrders } from "./AcctSuite";
 import HrHub from "./HrHub";
-import DriverAccounts from "./DriverAccounts";
-import ClassicResume from "./ClassicResume";
+// ⭐ 2026-11-02 속도 — 메뉴를 눌러야 보이는 큰 화면은 따로 떼어 처음 열 때 받는다(첫 실행 JS 감소) — 사용 안 하던 StandardFare·DispatchFormNew import 제거
+const DriverAccounts = lazyView(() => import("./DriverAccounts"));
+const ClassicResume = lazyView(() => import("./ClassicResume"));
 import { LeaveLedger, OnboardingBoard, CertIssuer } from "./HrTools";
-import DriverDocsReview from "./DriverDocsReview";
-import StaffManager from "./StaffManager";
+const DriverDocsReview = lazyView(() => import("./DriverDocsReview"));
+const StaffManager = lazyView(() => import("./StaffManager"));
 import { calcFare } from "./fareUtil";
-import FixedClients from "./FixedClients";
-import FleetManagement from "./FleetManagement";
+const FixedClients = lazyView(() => import("./FixedClients"));
+const FleetManagement = lazyView(() => import("./FleetManagement"));
 import { FleetSettlementMenu, useFleetDrivers } from "./FleetPayDocs";
 import HomeDashboard from "./HomeDashboard";
 import { EditModeProvider, EditableText, EditModeToggleButton } from "./EditMode";
 import { useCompanyDropdownOptions, DropdownOptionsManageButton, useCompanyDropdownSync, dropdownList } from "./companyDropdownOptions";
-import StandardFare from "./StandardFare";
-import RateCard from "./RateCard";
-import DispatchFormNew from "./DispatchFormNew";
+const RateCard = lazyView(() => import("./RateCard"));
 import AiAssistant from "./AiAssistant";
 import InternalMessenger from "./InternalMessenger";
 import { calcLeaveBalance } from "./leaveUtils";
 import { TEAM_OPTIONS, POSITION_OPTIONS, TEAM_BADGE_CLASS, TEAM_BADGE_CLASS_UNASSIGNED } from "./hrConstants";
-import AttendanceBoard from "./AttendanceBoard";
+const AttendanceBoard = lazyView(() => import("./AttendanceBoard"));
 import { todayStr as attendanceTodayStr, isWeekend, findApprovedLeaveForDate, isHoliday, isScheduleApproved, LEAVE_TYPE_LABEL, ATTENDANCE_STATUS_COLOR, approvalLeaveOn, hrLeaveOn } from "./attendanceUtils";
-import FreightRateInquiry from "./FreightRateInquiry";
+const FreightRateInquiry = lazyView(() => import("./FreightRateInquiry"));
 import { isNotificationsEnabled, setNotificationsEnabled, useNotificationsEnabled } from "./notificationSettings";
 import { CustomSelect } from "./CustomSelect";
 import { estimateDistanceFare, geocodeAddress, haversineKm, specialSurcharge } from "./tmapFareCalc";
@@ -71,12 +72,12 @@ import { useCustomRoles, findCustomRole, getMenuAccess, roleScreen } from "./cus
 import { useReadOnlyGuard } from "./readOnlyGuard";
 import { confirmLeave } from "./leaveGuard";
 import RouteMapModal from "./RouteMapModal";
-import MonthCompareAnalysis from "./MonthCompareAnalysis";
-import MonthlyReport from "./MonthlyReport";
+const MonthCompareAnalysis = lazyView(() => import("./MonthCompareAnalysis"));
+const MonthlyReport = lazyView(() => import("./MonthlyReport"));
 import { IdleFleetButton } from "./fleetRecommend";
 import { subscribeOrderSync, deleteOrderWithLog, logOrderDeletion, OrderHistoryContext, useOrderHistory, useLoadOrderRange, useLoadFullOrderHistory, pcLiveWindowStart, pcPrevDay, kstToday as histToday, monthStartAgo, monthEnd, monthStart, historyStartDate } from "./orderHistory";
-import MonthCloseCheck from "./MonthCloseCheck";
-import StaffPerformance from "./StaffPerformance";
+const MonthCloseCheck = lazyView(() => import("./MonthCloseCheck"));
+const StaffPerformance = lazyView(() => import("./StaffPerformance"));
 import { RotationPicker, RotationBadge, expandRotation, rotationNotice, withRotationMemo } from "./rotation";
 import { generateMonthlyReportPPT, PPT_TEMPLATES } from "./pptReportUtil";
 
@@ -268,7 +269,7 @@ function FareCertModal({ row, companyName, onClose }) {
     const canvas = await captureCanvas();
     if (!canvas) return;
     const imgData = canvas.toDataURL("image/png");
-    const pdf = new jsPDF("p", "mm", "a4");
+    const pdf = new (await loadJsPDF())("p", "mm", "a4");
     const pdfWidth = 210;
     const imgHeight = (canvas.height * pdfWidth) / canvas.width;
     pdf.addImage(imgData, "PNG", 0, 0, pdfWidth, Math.min(imgHeight, 297));
@@ -442,6 +443,16 @@ function _scheduleDateLabel(d) {
    이름은 CustomDatePicker의 달력과 동일하게 한 줄(줄바꿈 없이)로 표시한다.
    덤으로 실시간 디지털 시계를 헤더에 넣어 데스크 시계처럼도 쓸 수 있게 했다.
 --------------------------------------------------*/
+// ⭐ 2026-11-02 속도 — 오더 달력 머리의 디지털 시계(매초 이 글자만 다시 그린다)
+function OrderPanelClock() {
+  const [clock, setClock] = React.useState(() => new Date());
+  React.useEffect(() => {
+    const t = setInterval(() => setClock(new Date()), 1000);
+    return () => clearInterval(t);
+  }, []);
+  const p2 = (n) => String(n).padStart(2, "0");
+  return <>{`${p2(clock.getHours())}:${p2(clock.getMinutes())}:${p2(clock.getSeconds())}`}</>;
+}
 function OrderCalendarPanel({ pickupDate, dropDate, onPickupChange, onDropChange, companyName, multiMode, workDates, onToggleWorkDate, footer }) {
   const pad2 = (n) => String(n).padStart(2, "0");
   const fmt = (y, m, d) => `${y}-${pad2(m + 1)}-${pad2(d)}`;
@@ -452,13 +463,8 @@ function OrderCalendarPanel({ pickupDate, dropDate, onPickupChange, onDropChange
 
   const [viewDate, setViewDate] = React.useState(() => parseValidDate(pickupDate) || parseValidDate(dropDate) || new Date());
   const [target, setTarget] = React.useState("pickup"); // "pickup" | "drop" — 달력 클릭 시 어느 필드에 반영할지
-  const [clock, setClock] = React.useState(() => new Date());
+  // ⭐ 2026-11-02 속도 — 1초 시계를 작은 컴포넌트(OrderPanelClock)로 분리. 예전엔 매초 달력 전체(날짜칸·특수일·일정)를 다시 그려 오더 입력이 끊겼다
   const [schedules, setSchedules] = React.useState([]);
-
-  React.useEffect(() => {
-    const t = setInterval(() => setClock(new Date()), 1000);
-    return () => clearInterval(t);
-  }, []);
 
   // 휴가/외근 승인 현황(인사관리 > 출근기록부와 동일한 "schedules" 컬렉션)을 구독해서,
   // 승인 완료된 연차·외근·병가 등을 달력 날짜 칸에 함께 표시한다.
@@ -532,8 +538,6 @@ function OrderCalendarPanel({ pickupDate, dropDate, onPickupChange, onDropChange
   const minWorkDate = sortedWorkDates[0];
   const maxWorkDate = sortedWorkDates[sortedWorkDates.length - 1];
 
-  const clockStr = `${pad2(clock.getHours())}:${pad2(clock.getMinutes())}:${pad2(clock.getSeconds())}`;
-
   return (
     <div className="bg-white border border-[#E3E8F0] rounded-[24px] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_12px_30px_rgba(16,24,40,0.07)] overflow-hidden flex flex-col" style={{ flex: "1 1 0%", minWidth: 240 }}>
       {/* 헤더 — 오늘 날짜 + 디지털 시계 */}
@@ -545,7 +549,7 @@ function OrderCalendarPanel({ pickupDate, dropDate, onPickupChange, onDropChange
         <div className="text-right">
           <div className="text-[10px] text-white/50 font-semibold tracking-widest">TIME</div>
           <div className="text-[20px] font-black text-white leading-none tabular-nums" style={{ fontFamily: "'DM Mono','Consolas',monospace" }}>
-            {clockStr}
+            <OrderPanelClock />
           </div>
         </div>
       </div>
@@ -1278,7 +1282,7 @@ function ScheduleChartModal({ rows, companyName, authorName, onClose }) {
     const node = captureRef.current;
     const canvas = await captureCanvas(node);
     if (!canvas) return;
-    const pdf = new jsPDF("p", "mm", "a4");
+    const pdf = new (await loadJsPDF())("p", "mm", "a4");
     const pdfWidth = 210;
     const pdfPageHeight = 297;
     const totalHeightMm = (canvas.height * pdfWidth) / canvas.width;
@@ -7074,7 +7078,7 @@ useEffect(() => {
     const arr = snap.docs
       .map(d => ({ id: d.id, ...d.data() }))
       .filter(r => (r.companyName || DEFAULT_COMPANY) === viewCompany);
-    setFixedRows(arr);
+    React.startTransition(() => setFixedRows(arr)); // ⭐ 2026-11-02 속도 — 최상위 전체를 다시 그리는 갱신이라 낮은 우선순위로(입력·클릭 먼저)
   });
 
   return () => unsub();
@@ -7087,18 +7091,17 @@ useEffect(() => {
   // (DispatchApp)에서 한 번만 구독해 두 화면에 동일한 userNameMap을 props로 내려준다.
   const [userNameMap, setUserNameMap] = React.useState(new Map());
   React.useEffect(() => {
-    const unsub = onSnapshot(collection(db, "users"), (snap) => {
+    // ⭐ 2026-11-02 속도 — users 전체를 따로 구독하던 것을 앱 공용 구독(usersLive)으로(받는 데이터 동일, 중복 구독 제거)
+    return subscribeUsersLive((_list, raw) => {
       const map = new Map();
-      snap.docs.forEach(d => {
-        const data = d.data() || {};
+      raw.forEach(({ id, data }) => {
         const name = (data.name || "").trim();
         if (!name) return;
-        map.set(d.id, name);
+        map.set(id, name);
         if (data.email) map.set(String(data.email).trim().toLowerCase(), name);
       });
       setUserNameMap(map);
-    }, () => {});
-    return () => unsub();
+    });
   }, []);
 
   // ⭐ "최적화" 버튼 — 새로고침(전체 재접속/전체 재읽기) 없이, 오래 켜두고 오더를
@@ -7224,8 +7227,10 @@ useEffect(() => {
       snap.docChanges().forEach(ch => {
         if (ch.type === "added") {
           const d = ch.doc.data();
-          if (d.status === "출근") {
-            sflowToast(`${d.name || "직원"}님이 출근처리 되었습니다.`, "system");
+          // ⭐ 2026-11-02 출근 알림은 본인 것만 — 예전엔 같은 회사 누가 출근해도 전 직원 화면에 떴다.
+          //  (자동 출근은 출근 처리 쪽에서 이미 본인에게 알리므로, 여기서는 다른 기기·관리자가 대신 처리한 본인 출근만 알린다)
+          if (d.status === "출근" && d.uid === user?.uid && d.source !== "auto") {
+            sflowToast(`출근 처리되었습니다.`, "system");
           }
         }
       });
@@ -7338,6 +7343,15 @@ useEffect(() => {
     }, 4000);
     return () => { clearTimeout(t); if (idleId && window.cancelIdleCallback) window.cancelIdleCallback(idleId); };
   }, [pcBootDone, user, loadFullHistory]);
+  // ⭐ 2026-11-02 속도 — 따로 떼어 둔 큰 화면들을 첫 로딩이 끝나고 한가할 때 하나씩 미리 받아 둔다(메뉴 처음 열 때 기다림 없음)
+  useEffect(() => {
+    if (!pcBootDone) return undefined;
+    return prefetchWhenIdle([
+      AdminMenu.preload, FleetManagement.preload, FreightRateInquiry.preload, StaffManager.preload, AttendanceBoard.preload,
+      RateCard.preload, FixedClients.preload, DriverDocsReview.preload, DriverAccounts.preload, MonthlyReport.preload,
+      MonthCloseCheck.preload, StaffPerformance.preload, MonthCompareAnalysis.preload, ClassicResume.preload,
+    ], 12000);
+  }, [pcBootDone]);
 
   // ⚠️ 아래 dispatchDataFiltered에서 커스텀 권한(관리자메뉴 > 권한관리에서 만든 역할)
   // 여부를 판단하는 데 필요해서, 원래 더 아래(구 "역할별 차단 메뉴" 구역)에 있던
@@ -22395,7 +22409,7 @@ function PalletSlipModal({ rows, clients = [], userCompany, userNameMap, patchDi
     try {
       const canvas = await captureCanvas();
       if (!canvas) return;
-      const pdf = new jsPDF("l", "mm", "a4");
+      const pdf = new (await loadJsPDF())("l", "mm", "a4");
       const pdfWidth = 297, pdfPageHeight = 210;
       const totalHeightMm = (canvas.height * pdfWidth) / canvas.width;
       if (totalHeightMm <= pdfPageHeight) {
@@ -47558,7 +47572,7 @@ function Settlement({ dispatchData, fixedRows = [], clients = [], places = [], i
       return;
     }
     const imgData = canvas.toDataURL("image/png");
-    const pdf = new jsPDF("p", "mm", "a4");
+    const pdf = new (await loadJsPDF())("p", "mm", "a4");
     const pdfWidth = 210;
     const pdfHeight = 297;
     const imgWidth = pdfWidth;
@@ -51162,7 +51176,7 @@ const patchMonthOnDoc = async (id, yyyymm, status, dateStr) => {
   const savePDF = async () => {
     const area = document.getElementById("invoiceArea");
     const canvas = await html2canvas(area, { scale: 2, backgroundColor: "#ffffff", useCORS: true });
-    const pdf = new jsPDF("p", "mm", "a4");
+    const pdf = new (await loadJsPDF())("p", "mm", "a4");
     addCanvasAsMultiPagePdf(pdf, canvas, { format: "PNG" });
     pdf.save(`${client || "거래명세서"}.pdf`);
   };
@@ -53247,7 +53261,7 @@ const handleBatchSettle = async (targetStatus) => {
                   await new Promise(r => setTimeout(r, 200));
                   const canvas = await html2canvas(div, { scale: 1.5, backgroundColor: "#ffffff", useCORS: true });
                   document.body.removeChild(div);
-                  const pdf = new jsPDF("p", "mm", "a4");
+                  const pdf = new (await loadJsPDF())("p", "mm", "a4");
                   addCanvasAsMultiPagePdf(pdf, canvas, { format: "JPEG", quality: 0.85 });
                   attachments.push({
                     filename: `거래명세서_${item.name}_${item.start}~${item.end}.pdf`,
@@ -53469,7 +53483,7 @@ const handleBatchSettle = async (targetStatus) => {
                         const area = document.getElementById("invoiceArea");
                         if (area) {
                           const canvas = await html2canvas(area, { scale: 1.5, backgroundColor: "#ffffff", useCORS: true });
-                          const pdf = new jsPDF("p", "mm", "a4");
+                          const pdf = new (await loadJsPDF())("p", "mm", "a4");
                           addCanvasAsMultiPagePdf(pdf, canvas, { format: "JPEG", quality: 0.85 });
                           fileAttachments.push({
                             filename: `거래명세서_${client}_${start||""}~${end||""}.pdf`,
@@ -54710,7 +54724,7 @@ const handleBatchSettle = async (targetStatus) => {
                         const canvas = await html2canvas(div, { scale:1.5, backgroundColor:"#f9fafb", useCORS:true });
                         document.body.removeChild(div);
                         const imgData = canvas.toDataURL("image/jpeg", 0.88);
-                        const pdf = new jsPDF("p","mm","a4");
+                        const pdf = new (await loadJsPDF())("p","mm","a4");
                         const imgW = 210, imgH = (canvas.height * imgW) / canvas.width;
                         let left = imgH, pos = 0;
                         pdf.addImage(imgData,"JPEG",0,pos,imgW,imgH);
@@ -55874,9 +55888,9 @@ function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, sho
   // totalMaster/admin/user)으로 배차자 목록을 가져온다.
   const [companyStaff, setCompanyStaff] = React.useState([]);
   React.useEffect(() => {
-    const unsub = onSnapshot(collection(db, "users"), (snap) => {
-      const list = snap.docs
-        .map(d => ({ id: d.id, ...d.data() }))
+    // ⭐ 2026-11-02 속도 — 앱 공용 users 구독(usersLive)을 같이 쓴다(받는 데이터 동일)
+    const unsub = subscribeUsersLive((all) => {
+      const list = all
         .filter(u => ["totalMaster", "admin", "user"].includes(u.role) && (!userCompany || u.companyName === userCompany))
         .map(u => ({ id: u.id, name: u.name || u.email || "이름없음" }))
         .sort((a, b) => a.name.localeCompare(b.name, "ko"));
@@ -60025,7 +60039,7 @@ function HRManagementPage({ userCompany, role, userId, focusUid = null, selfOnly
     try {
       const canvas = await html2canvas(el, { scale: 2, useCORS: true, backgroundColor: "#ffffff" });
       const imgData = canvas.toDataURL("image/png");
-      const pdf = new jsPDF("p", "mm", "a4");
+      const pdf = new (await loadJsPDF())("p", "mm", "a4");
       const pdfWidth = 210;
       const pdfHeight = 297;
       const imgWidth = pdfWidth;

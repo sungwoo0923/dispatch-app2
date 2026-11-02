@@ -15,7 +15,8 @@ import { beforeAuthStateChanged } from "firebase/auth";
 export const SESSIONS_COLL = "loginSessions";
 const LS_KEY = "kpLoginSession"; // { uid, id }
 const STALE_DAYS = 30; // 30일 넘게 활동이 없던 세션은 중복 판단에서 뺀다(브라우저를 지웠거나 안 쓰는 기기)
-const HEARTBEAT_MS = 10 * 60 * 1000;
+// ⭐ 2026-11-02 관리자센터 — "지금 접속 중"(10분 안 활동)을 정확히 보려면 활동 기록이 10분보다 자주 남아야 한다 → 5분
+const HEARTBEAT_MS = 5 * 60 * 1000;
 
 export const KIND_LABEL = { pc: "PC", mobile: "모바일" };
 export const END_REASON_LABEL = {
@@ -159,7 +160,7 @@ export function watchMySession(id, onRevoked) {
   return unsub;
 }
 
-// 마지막 활동 시각 갱신(10분마다, 화면이 보일 때만)
+// 마지막 활동 시각 갱신(5분마다, 화면이 보일 때만)
 export function startHeartbeat(id) {
   const beat = () => {
     if (document.visibilityState !== "visible") return;

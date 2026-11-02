@@ -5,6 +5,7 @@ import { CopyTemplateEditor } from "./CopyTemplateEditor";
 import { openSetupWizard, openTutorial } from "./Onboarding";
 import AdminShell from "./AdminShell";
 import React, { useEffect, useState, useMemo } from "react";
+import { subscribeUsersLive, getUsersLiveList } from "./usersLive"; // ⭐ 2026-11-02 속도 — 직원 명부 구독 공유
 import { auth, db, storage, FUNCTIONS_BASE, DEFAULT_COMPANY } from "./firebase";
 import { masterHasHr } from "./hrHandover";
 import { WORK_TIME_OPTIONS } from "./autoAttendance";
@@ -88,17 +89,8 @@ const DotBadge = ({ active, label, activeLabel, inactiveLabel }) => (
 );
 
 // ⚡ 직원 목록 실시간 캐시 — 한 번 구독하면 화면을 닫아도 유지하고, 다시 열면 마지막 목록을 즉시 보여준다
-let usersLive = { list: null, unsub: null, subs: new Set() };
-export function subscribeUsersLive(fn) {
-  if (fn) { usersLive.subs.add(fn); if (usersLive.list) fn(usersLive.list); }
-  if (!usersLive.unsub) {
-    usersLive.unsub = onSnapshot(collection(db, "users"), (snap) => {
-      usersLive.list = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-      usersLive.subs.forEach((f) => f(usersLive.list));
-    }, () => { usersLive.unsub = null; });
-  }
-  return () => { if (fn) usersLive.subs.delete(fn); };
-}
+// ⭐ 2026-11-02 속도 — 구현은 usersLive.js로 옮겨 앱 전체가 같은 구독 하나를 나눠 쓴다(기존 import 호환용으로 다시 내보냄)
+export { subscribeUsersLive };
 
 export default function AdminMenu({ parentRole = "", parentCompany = "", isViewer = false, dispatchData = [], places = [], deptMode = null }) {
   const [adminTab, setAdminTab] = useState("members");
@@ -106,7 +98,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
   const [sessionLogEventFilter, setSessionLogEventFilter] = useState("all");
   const [sessionLogPage, setSessionLogPage] = useState(1);
   const SESSION_LOG_PAGE_SIZE = 20;
-  const [users, setUsers] = useState(() => usersLive.list || []);
+  const [users, setUsers] = useState(() => getUsersLiveList() || []);
   const [allShipperApps, setAllShipperApps] = useState([]);
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState("all");
@@ -183,7 +175,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
   }, [me?.uid]);
 
   // ⚡ 직원 목록은 앱이 켜질 때부터 받아 두고 계속 살려 둔다(관리자메뉴를 열 때마다 처음부터 받던 지연 제거)
-  useEffect(() => subscribeUsersLive(setUsers), []);
+  useEffect(() => subscribeUsersLive((l) => setUsers(l)), []);
 
   // 최고관리자 전용 접속이력(로그인/로그아웃) — 탭을 열었을 때만 구독한다.
   useEffect(() => {

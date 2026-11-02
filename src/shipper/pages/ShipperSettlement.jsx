@@ -3,7 +3,7 @@ import { DeckStrip, SegTabs } from "../ShipUi";
 import { db, auth } from "../../firebase";
 import { collection, query, where, onSnapshot, getDocs } from "firebase/firestore";
 import { doc, getDoc } from "firebase/firestore";
-import html2canvas from "html2canvas";
+import { html2canvas } from "../../lazyLoad"; // ⭐ 2026-11-02 속도 — 캡처 라이브러리는 처음 캡처할 때 받는다
 import jsPDF from "jspdf";
 
 // 전화번호 하이픈 자동 포맷 (DispatchApp.jsx formatPhone과 동일 규칙)

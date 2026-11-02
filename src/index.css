@@ -74,8 +74,10 @@ html, body {
   }
 }
 
+/* ⭐ 2026-11-02 속도 — transition: all 은 버튼의 크기·여백 변화까지 0.2초 동안 매 프레임 레이아웃을 다시 계산하게 해
+   표·목록의 버튼이 많은 화면에서 끊김을 만들었다. 눈에 보이는 색·투명도·그림자·이동만 부드럽게 바뀌도록 한정한다. */
 button {
-  transition: all 0.2s ease;
+  transition: opacity 0.2s ease, color 0.2s ease, background-color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
 }
 
 button:hover {

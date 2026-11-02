@@ -1,4 +1,5 @@
 // src/mobile/MobileFleetView.jsx — 지입차량 관제 (모바일)
+import { subscribeUsersLive } from "../usersLive"; // ⭐ 2026-11-02 속도 — 직원 명부 구독 공유
 import React, { useEffect, useState, useMemo, useCallback, useRef } from "react";
 import "leaflet/dist/leaflet.css";
 import { db, auth } from "../firebase";
@@ -670,9 +671,7 @@ export default function MobileFleetView({ dispatchData = [], userCompany = "", o
     subs.push(onSnapshot(query(collection(db, "users"), where("role", "==", "driver")),
       (snap) => { const m = {}; snap.docs.forEach(d => { m[d.id] = d.data(); }); setUsersMap(m); }
     ));
-    subs.push(onSnapshot(collection(db, "users"),
-      (snap) => setCompanyStaffRaw(snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(u => ["totalMaster","admin","user"].includes(u.role)))
-    ));
+    subs.push(subscribeUsersLive((all) => setCompanyStaffRaw(all.filter(u => ["totalMaster","admin","user"].includes(u.role))))); // ⭐ 2026-11-02 속도 — 앱 공용 users 구독 공유
     subs.push(onSnapshot(
       query(collection(db, "driver_logs"), orderBy("timestamp", "desc"), limit(30)),
       (snap) => setActivityLogs(snap.docs.map(d => ({ id: d.id, ...d.data() })))

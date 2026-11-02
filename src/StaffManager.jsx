@@ -1,5 +1,6 @@
 // ======================= src/StaffManager.jsx =======================
 // 👥 직원 관리(관리자·마스터·경리·인사) — 직원 가입 승인·권한, 기사 가입 승인. PC·모바일 공용(KpSubNav: 휴대폰은 위쪽 가로 탭)
+import { subscribeUsersLive } from "./usersLive"; // ⭐ 2026-11-02 속도 — 직원 명부 구독 공유
 import React from "react";
 import { createPortal } from "react-dom";
 import { doc, setDoc, getDocs, updateDoc, deleteDoc, query, where, collection, serverTimestamp, onSnapshot } from "firebase/firestore";
@@ -19,16 +20,16 @@ export function usePendingSignups(company, enabled = true) {
   const [n, setN] = React.useState({ staff: 0, drivers: 0 });
   React.useEffect(() => {
     if (!enabled || !company) return undefined;
-    return onSnapshot(collection(db, "users"), (s) => {
+    // ⭐ 2026-11-02 속도 — 앱 공용 users 구독(usersLive)을 같이 쓴다(받는 데이터 동일)
+    return subscribeUsersLive((_l, raw) => {
       let staff = 0; let drivers = 0;
-      s.docs.forEach((d) => {
-        const u = d.data();
+      raw.forEach(({ data: u }) => {
         if (u.approved !== false || u.employmentStatus === "퇴사" || (u.companyName || DEFAULT_COMPANY) !== company) return;
         if (u.role === "driver") drivers += 1;
         else if (!["shipper", "cafeUser", "totalMaster"].includes(u.role)) staff += 1;
       });
       setN({ staff, drivers });
-    }, () => setN({ staff: 0, drivers: 0 }));
+    });
   }, [company, enabled]);
   return n;
 }
@@ -50,7 +51,7 @@ export default function StaffManager({ company, role, myUid, initialTab = "pendi
   const [retire, setRetire] = React.useState({});
   React.useEffect(() => { if (!company) return undefined; return onSnapshot(query(collection(db, "approvals"), where("company", "==", company), where("cat", "==", "report")), (s) => setResigns(s.docs.map((d) => ({ id: d.id, ...d.data() })).filter((a) => a.form === "resign")), () => setResigns([])); }, [company]);
   React.useEffect(() => { if (!company) return undefined; return onSnapshot(query(collection(db, "retireCases"), where("companyName", "==", company)), (s) => { const m = {}; s.docs.forEach((d) => { m[d.id] = d.data(); }); setRetire(m); }, () => setRetire({})); }, [company]);
-  React.useEffect(() => onSnapshot(collection(db, "users"), (s) => setUsers(s.docs.map((d) => ({ id: d.id, ...d.data() }))), () => setUsers([])), []);
+  React.useEffect(() => subscribeUsersLive((list) => setUsers(list)), []); // ⭐ 2026-11-02 속도 — 앱 공용 users 구독 공유
   const me = (users || []).find((u) => u.id === myUid);
   const isTotal = role === "totalMaster";
   const isMaster = isTotal || me?.isMaster === true;

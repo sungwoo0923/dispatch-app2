@@ -1,6 +1,7 @@
 // ======================= src/DriverDocsReview.jsx =======================
 // 📑 기사 서류 관리 — 기사앱에서 올라온 필수 서류를 확인·반려·저장한다. PC·모바일 공용.
 //  2026-10-31 리디자인: 왼쪽 기사 목록(완비율 링) + 오른쪽 서류 갤러리(큰 미리보기), 칸마다 [저장] · 기사별 [전체 저장]
+import { subscribeUsersLive } from "./usersLive"; // ⭐ 2026-11-02 속도 — 직원 명부 구독 공유
 import React from "react";
 import { addDoc, collection, doc, onSnapshot, serverTimestamp, updateDoc } from "firebase/firestore";
 import { db, auth, DEFAULT_COMPANY } from "./firebase";
@@ -44,11 +45,12 @@ export default function DriverDocsReview({ company, isViewer = false }) {
   const upTarget = React.useRef(null);
   React.useEffect(() => {
     if (!company) return undefined;
-    return onSnapshot(collection(db, "users"), (s) => {
-      setDrivers(s.docs.map((d) => ({ uid: d.id, ...d.data() }))
+    // ⭐ 2026-11-02 속도 — 앱 공용 users 구독(usersLive)을 같이 쓴다(받는 데이터 동일)
+    return subscribeUsersLive((_l, raw) => {
+      setDrivers(raw.map(({ id, data }) => ({ uid: id, ...data }))
         .filter((u) => u.role === "driver" && (u.companyName || DEFAULT_COMPANY) === company)
         .sort((a, b) => String(a.name || "").localeCompare(String(b.name || ""), "ko")));
-    }, () => setDrivers([]));
+    });
   }, [company]);
 
   const rows = (drivers || []).map((d) => {
