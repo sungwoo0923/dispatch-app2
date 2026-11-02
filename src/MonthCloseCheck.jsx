@@ -91,7 +91,7 @@ export default function MonthCloseCheck({ dispatchData = [], onClose, isViewer =
       <div onClick={(e) => e.stopPropagation()} style={{ background: "#f4f6f9", width: "min(1500px, 100%)", height: "min(95vh, 1200px)", borderRadius: 18, display: "flex", flexDirection: "column", overflow: "hidden", boxShadow: "0 20px 60px rgba(0,0,0,.3)" }}>
         <div style={{ background: NAVY, padding: "16px 22px", display: "flex", alignItems: "center", gap: 12 }}>
           <div style={{ color: "#fff", fontSize: 19, fontWeight: 900, flex: 1 }}>월 마감 점검</div>
-          <CustomSelect value={month} onChange={(e) => setMonth(e.target.value)} style={{ height: 36, borderRadius: 8, border: "none", padding: "0 10px", fontSize: 15, fontWeight: 800 }}>
+          <CustomSelect value={month} onChange={(e) => setMonth(e.target.value)} style={{ height: 36, borderRadius: 8, border: "none", padding: "0 26px 0 10px", fontSize: 15, fontWeight: 800, background: "#fff", color: "#0F1A30" }}>
             {(months.length ? months : [month]).map((m) => <option key={m} value={m}>{m.slice(0, 4)}년 {Number(m.slice(5))}월</option>)}
           </CustomSelect>
           <button onClick={onClose} style={{ border: "none", background: "transparent", color: "rgba(255,255,255,.85)", fontSize: 24, cursor: "pointer" }}>✕</button>
@@ -145,7 +145,7 @@ export default function MonthCloseCheck({ dispatchData = [], onClose, isViewer =
                           <td style={{ padding: "8px", textAlign: "center", fontWeight: 900, color: s - d < 0 ? "#b91c1c" : s - d === 0 ? "#92400e" : "#047857", whiteSpace: "nowrap" }}>{(s - d).toLocaleString()}</td>
                           <td style={{ padding: "8px", textAlign: "center" }}>
                             {editable && !fixed ? (
-                              <CustomSelect value={val(r, "지급방식")} onChange={(e) => setVal(r, "지급방식", e.target.value)} style={{ height: 34, borderRadius: 7, border: "1px solid #cbd5e1", fontSize: 14, fontWeight: 700 }}>
+                              <CustomSelect value={val(r, "지급방식")} onChange={(e) => setVal(r, "지급방식", e.target.value)} style={{ height: 34, borderRadius: 7, border: "1px solid #DCE3EE", padding: "0 24px 0 8px", fontSize: 14, fontWeight: 700, background: "#fff", color: "#0F1A30" }}>
                                 <option value="">미입력</option>
                                 {[...new Set([...PAY_OPTIONS, r.지급방식].filter(Boolean))].map((p) => <option key={p} value={p}>{p}</option>)}
                               </CustomSelect>

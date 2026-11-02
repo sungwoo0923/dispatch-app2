@@ -160,7 +160,7 @@ function DateRangePicker({ range, onChange, allData }) {
   const selStyle = {
     border: "1px solid #d1d5db",
     borderRadius: 6,
-    padding: "4px 8px",
+    padding: "4px 22px 4px 8px",
     fontSize: 13,
     color: "#1B2B4B",
     background: "white",

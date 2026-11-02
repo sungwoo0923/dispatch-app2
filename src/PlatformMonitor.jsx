@@ -438,7 +438,7 @@ export default function PlatformMonitor({ demoStats = null, tab: tabProp, onTab,
           <Card code="CARRIERS" title={`운송사 ${sorted.length === companies.length ? companies.length : `${sorted.length} / ${companies.length}`}곳`} right={
             <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
               <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="회사명·코드 검색" style={{ height: 40, width: phone ? "100%" : 200, padding: "0 12px", borderRadius: 10, border: "1px solid #DCE3EF", fontSize: 14.5, outline: "none" }} />
-              <CustomSelect value={sortKey} onChange={(e) => setSortKey(e.target.value)} style={{ height: 40, borderRadius: 10, border: "1px solid #DCE3EF", padding: "0 8px", fontSize: 14.5, fontWeight: 700, color: NAVY }}>
+              <CustomSelect value={sortKey} onChange={(e) => setSortKey(e.target.value)} style={{ height: 40, borderRadius: 10, border: "1px solid #DCE3EF", padding: "0 24px 0 10px", fontSize: 14.5, fontWeight: 700, color: NAVY, background: "#fff" }}>
                 {[["orders", "이번 달 오더순"], ["risk", "주의 필요순"], ["online", "지금 접속순"], ["recent", "최근 접속순"], ["gmv", "운송액순"], ["bill", "청구액순"], ["health", "건강도순"], ["staff", "계정 수순"], ["data", "데이터량순"]].map(([k, l]) => <option key={k} value={k}>{l}</option>)}
               </CustomSelect>
               <div style={{ display: "inline-flex", padding: 3, borderRadius: 11, background: "#EEF2F8" }}>
