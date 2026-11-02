@@ -250,6 +250,7 @@ export function routeOrdersFor(r, date) {
       배차방식: "고정기사", 지급방식: G.pay, 운행유형: "편도", 혼적여부: "독차",
       메모: [`[고정노선] ${r.name || ""}`, memoFare, !isMain ? "같은 차량·같은 운행(대표 오더와 함께)" : "", r.memo || ""].filter(Boolean).join(" · "),
       고정노선Id: r.id, 고정노선명: r.name || "",
+      ...(r.companyName ? { companyName: r.companyName } : {}), // ⭐ 2026-11-03 노선의 회사로 고정(최고관리자가 탭마다 다른 회사를 열어도 다른 회사로 안 새게)
       작성자: auth.currentUser?.email || "", 등록기기: "고정노선", createdAt: serverTimestamp(), _lastModified: Date.now(),
     };
   });

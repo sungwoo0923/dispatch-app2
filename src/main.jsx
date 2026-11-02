@@ -7,6 +7,20 @@ import "./index.css";
 import { preloadTmapWhenIdle } from "./tmapLoader";
 import { trimLocalStorage } from "./safeStorage";
 
+// ⭐ 2026-11-03 최고관리자 — 탭마다 다른 운송사를 열 수 있게 "지금 회사"(loginCompany·userCompany)를 탭별로 기억한다.
+//  예전엔 브라우저 전체에 하나라, 오른쪽 탭에서 돌캐로 들어가면 왼쪽 태진 탭도 몰래 돌캐로 바뀌어
+//  태진에서 만든 고정노선 오더가 돌캐 회사로 저장됐다. 새 탭은 마지막으로 들어간 회사로 시작한다.
+(function perTabCompany() {
+  try {
+    const KEYS = new Set(["loginCompany", "userCompany"]);
+    const ls = window.localStorage; const ss = window.sessionStorage;
+    const P = Storage.prototype; const get = P.getItem; const set = P.setItem; const rem = P.removeItem;
+    P.getItem = function (k) { if (this === ls && KEYS.has(k)) { const v = get.call(ss, k); if (v !== null) return v; } return get.call(this, k); };
+    P.setItem = function (k, v) { if (this === ls && KEYS.has(k)) { try { set.call(ss, k, v); } catch { /* 무시 */ } } return set.call(this, k, v); };
+    P.removeItem = function (k) { if (this === ls && KEYS.has(k)) { try { rem.call(ss, k); } catch { /* 무시 */ } } return rem.call(this, k); };
+  } catch { /* 저장공간을 못 쓰는 브라우저 — 예전처럼 */ }
+})();
+
 // ⭐ 브라우저 저장공간(약 5MB)이 캐시로 꽉 차면 로그인 정보 저장이 실패해 로그인이 안 된다 — 시작할 때 미리 정리
 trimLocalStorage();
 
