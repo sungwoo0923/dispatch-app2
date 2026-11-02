@@ -3425,23 +3425,15 @@ function DriverVehicleTypeField({ value, onChange, className = "", SelectEl = "s
   );
 }
 
-// ⭐ 2026-11-02 기사관리 표 — 차량종류(암롤·윙바디 등)를 색 배지로 한눈에 + 톤수
+// ⭐ 2026-11-02 기사관리 표 — 차량종류(암롤·윙바디 등)를 한눈에 · 한 가지 색(네이비 톤)으로 깔끔하게 + 톤수(숫자 글꼴)
 function VehicleTypeBadge({ type, ton }) {
   const t = String(type || "").trim();
   const tn = String(ton || "").trim();
   if (!t && !tn) return <span className="text-gray-300">-</span>;
-  const tone = /암롤/.test(t) ? "bg-[#FFF1DC] text-[#9A5B00] border-[#F5D29B]"
-    : /윙/.test(t) && /냉/.test(t) ? "bg-[#E3F5FA] text-[#0B6E86] border-[#A9DDEA]"
-    : /윙/.test(t) ? "bg-[#E8EFFC] text-[#2D4C82] border-[#BFD0EE]"
-    : /냉/.test(t) ? "bg-[#E3F5FA] text-[#0B6E86] border-[#A9DDEA]"
-    : /탑/.test(t) ? "bg-[#E6F6EE] text-[#17734A] border-[#A9DDC2]"
-    : /카고/.test(t) ? "bg-[#EEF1F6] text-[#3A4A66] border-[#D3DAE6]"
-    : /라보|다마스/.test(t) ? "bg-[#F3EEFB] text-[#5B3FA0] border-[#D7C9F0]"
-    : "bg-[#F1F3F7] text-[#1B2B4B] border-[#D3DAE6]";
   return (
-    <span className="inline-flex items-center gap-1.5">
-      {t && <span className={`inline-flex items-center h-[22px] px-2 rounded-full border text-[12px] font-extrabold ${tone}`}>{t}</span>}
-      {tn && <span className="text-[11.5px] font-bold text-[#8E9BB2] tabular-nums">{tn}</span>}
+    <span className="inline-flex items-stretch h-[22px] rounded-md overflow-hidden border border-[#C9D5EA] bg-white text-[12px] leading-none">
+      <span className={`inline-flex items-center px-2 font-extrabold ${t ? "text-[#0F1A30]" : "text-[#B4BFD0]"}`}>{t || "미지정"}</span>
+      {tn && <span className="inline-flex items-center px-1.5 bg-[#1B2B4B] text-white font-bold tabular-nums" style={{ fontFamily: "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace", fontSize: 11 }}>{tn}</span>}
     </span>
   );
 }
