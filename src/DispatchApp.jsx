@@ -8181,7 +8181,8 @@ return (
       <OrderCongratsPopup uid={user?.uid} profile={myProfileDoc} />
       <BirthdayPopup uid={user?.uid} profile={myProfileDoc} company={deptCompany} />
       {/* ⭐ 2026-11-02 관리자센터2 — 선택한 운송사 대상 공지도 받도록 회사 전달 */}
-      <PlatformNoticeBanner audience="carrier" company={role === "totalMaster" ? (localStorage.getItem("loginCompany") || userCompany || "") : (userCompany || localStorage.getItem("userCompany") || "")} />
+      {/* ⭐ 2026-11-03 배너를 누르면 펼치지 않고 홈 › 공지사항의 그 글로 바로 이동 */}
+      <PlatformNoticeBanner audience="carrier" onOpen={(id) => { window.__kpOpenNotice = `plat:${id}`; setMenu("HOME"); setTimeout(() => window.dispatchEvent(new CustomEvent("kp:openNotice")), 0); }} company={role === "totalMaster" ? (localStorage.getItem("loginCompany") || userCompany || "") : (userCompany || localStorage.getItem("userCompany") || "")} />
       <CopyTemplateHost canEdit={role === "admin" || role === "totalMaster"} />
       <PlanValueSync planId={planId} />
       <PlanLockHost userEmail={user?.email || ""} userName={myRealName || ""} canRequest={role === "totalMaster" || ["test", "hrAcct"].includes(realRole) || /경리|회계/.test(String(myProfileDoc?.team || ""))} />

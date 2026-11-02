@@ -19,6 +19,9 @@ export function usePlatformNotices({ audience = "carrier", company = "" } = {}) 
   const [byAud, setByAud] = React.useState([]);
   const [byCo, setByCo] = React.useState([]);
   const co = String(company || "").trim();
+  // ⭐ 2026-11-03 예약 게시 — 1분마다 다시 확인해 예약 시각이 되면 나타나게
+  const [tick, setTick] = React.useState(0);
+  React.useEffect(() => { const t = setInterval(() => setTick((v) => v + 1), 60000); return () => clearInterval(t); }, []);
   React.useEffect(() => {
     const q = query(collection(db, "platformNotices"), where("audience", "in", ["all", audience === "shipper" ? "shipper" : "carrier"]));
     return onSnapshot(q, (s) => setByAud(s.docs.map((d) => ({ id: d.id, ...d.data() }))), () => setByAud([]));
@@ -29,28 +32,30 @@ export function usePlatformNotices({ audience = "carrier", company = "" } = {}) 
     return onSnapshot(q, (s) => setByCo(s.docs.map((d) => ({ id: d.id, ...d.data() }))), () => setByCo([]));
   }, [co, audience]);
   return React.useMemo(() => {
-    const today = todayYmd();
+    const today = todayYmd(); const now = Date.now();
     const m = new Map();
     [...byAud, ...byCo].forEach((n) => {
       if (n.active === false || (n.endDate && n.endDate < today)) return;
+      if ((n.publishAt || 0) > now) return; // 예약 시각 전(아직 안 보임)
       if (n.audience === "selected" && !(n.targetCompanies || []).includes(co)) return;
       m.set(n.id, n);
     });
-    return [...m.values()].sort((a, b) => toMs(b.createdAt) - toMs(a.createdAt));
-  }, [byAud, byCo, co]);
+    return [...m.values()].sort((a, b) => (b.publishAt || toMs(b.createdAt)) - (a.publishAt || toMs(a.createdAt)));
+  }, [byAud, byCo, co, tick]);
 }
 
 // 회사 공지사항 목록(NoticeBoard)에 섞을 모양으로 — id 앞에 plat: 를 붙여 회사 공지와 섞이지 않게
 export const toBoardNotice = (n) => ({
   ...n, id: `plat:${n.id}`, platformId: n.id, _platform: true,
-  content: n.body || "", category: n.level || "안내", author: n.author || "KP-Flow 운영팀",
+  content: n.body || "", contentHtml: n.bodyHtml || "", category: n.level || "안내", author: n.author || "KP-Flow 운영팀",
+  ...(n.publishAt ? { createdAt: n.publishAt } : {}), // 예약 게시는 게시 시각을 작성일로
   teams: [], readBy: [], audience: "platform",
 });
 // 회사 공지 + 플랫폼 공지를 합친 목록(최신순)
 export function useBoardNoticesWithPlatform(notices, company, dateOf) {
   const plat = usePlatformNotices({ audience: "carrier", company });
   return React.useMemo(() => {
-    const extra = plat.filter((n) => n.board !== false).map((n) => { const b = toBoardNotice(n); return dateOf ? { ...b, date: dateOf(n.createdAt) } : b; });
+    const extra = plat.filter((n) => n.board !== false).map((n) => { const b = toBoardNotice(n); return dateOf ? { ...b, date: dateOf(b.createdAt) } : b; });
     return [...extra, ...(notices || [])].sort((a, b) => toMs(b.createdAt) - toMs(a.createdAt));
   }, [plat, notices, dateOf]);
 }
@@ -67,7 +72,9 @@ export function PlatformBadge({ size = "sm" }) {
   );
 }
 
-export default function PlatformNoticeBanner({ audience = "carrier", company = "" }) {
+// ⭐ 2026-11-03 onOpen(id)을 주면 배너를 눌렀을 때 펼치지 않고 그 공지 글(홈 › 공지사항)로 바로 이동한다(운송사 PC).
+//  onOpen이 없는 화면(화주사)은 예전처럼 펼쳐 보기.
+export default function PlatformNoticeBanner({ audience = "carrier", company = "", onOpen }) {
   const all = usePlatformNotices({ audience, company });
   const [dismissed, setDismissed] = React.useState(readDismissed);
   const [open, setOpen] = React.useState(null);
@@ -84,13 +91,13 @@ export default function PlatformNoticeBanner({ audience = "carrier", company = "
     <div className="relative text-white" style={{ background: strong ? "linear-gradient(90deg,#0B1428,#1B2B4B)" : "linear-gradient(90deg,#1B2B4B,#2D4C82)" }}>
       <div className="flex items-center gap-3 px-4 py-2 text-[13px]">
         <span className="shrink-0 px-2 py-0.5 rounded-md bg-white/10 border border-white/20 text-[10.5px] font-black tracking-[0.14em] text-[#8FB0F0]">{n.level || "안내"}</span>
-        <button type="button" onClick={() => setOpen(open === n.id ? null : n.id)} className="flex-1 min-w-0 text-left font-bold truncate">
-          {n.title}{n.body ? <span className="ml-2 text-white/50 font-semibold">{open === n.id ? "접기 ▲" : "자세히 ▼"}</span> : null}
+        <button type="button" onClick={() => (onOpen ? onOpen(n.id) : setOpen(open === n.id ? null : n.id))} className="flex-1 min-w-0 text-left font-bold truncate">
+          {n.title}{onOpen ? <span className="ml-2 text-white/50 font-semibold">공지 보기 ›</span> : n.body ? <span className="ml-2 text-white/50 font-semibold">{open === n.id ? "접기 ▲" : "자세히 ▼"}</span> : null}
         </button>
         {items.length > 1 && <span className="shrink-0 text-[11.5px] text-white/50">+{items.length - 1}</span>}
         <button type="button" onClick={dismiss} className="shrink-0 h-7 px-2.5 rounded-lg text-[12px] font-bold text-white/70 hover:text-white hover:bg-white/10">닫기 ✕</button>
       </div>
-      {open === n.id && n.body && <div className="px-4 pb-3 text-[13px] leading-relaxed text-white/80 whitespace-pre-wrap">{n.body}</div>}
+      {!onOpen && open === n.id && n.body && <div className="px-4 pb-3 text-[13px] leading-relaxed text-white/80 whitespace-pre-wrap">{n.body}</div>}
     </div>
   );
 }

@@ -4,6 +4,7 @@
 //  · 상단 고정(최대 5개) — 맨 위에 고정 표시 + 굵은 글씨.
 //  · 세부 공개 대상(팀) — 내부용 공지를 특정 팀에만 보이게(작성자·관리자는 항상 보임).
 import React from "react";
+import { RichHtml } from "./richText";
 import { db } from "./firebase";
 import { doc, updateDoc, deleteDoc, arrayUnion } from "firebase/firestore";
 import { PlatformBadge } from "./PlatformNoticeBanner";
@@ -101,7 +102,7 @@ export default function NoticeBoard({ notices = [], me, canWrite, isViewer, onEd
           </div>
         </div>
         <div className="px-4 sm:px-8 py-6 sm:py-7 space-y-5">
-          <div className="text-[15.5px] text-[#1F2A44] leading-[1.95] whitespace-pre-wrap break-words">{cur.content}</div>
+          <RichHtml html={cur.contentHtml} text={cur.content} className="text-[15.5px] text-[#1F2A44] leading-[1.95]" />{/* ⭐ 2026-11-03 꾸민 글(플랫폼 공지) */}
           {/* ⭐ 2026-10-31 공문(인사발령 등) 이미지 — 작게 보이던 문제: 본문 폭 가득(최대 920px), 누르면 원본 크기로 */}
           {cur.image && (
             <div className="space-y-2">

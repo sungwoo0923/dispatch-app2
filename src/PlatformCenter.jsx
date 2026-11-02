@@ -29,6 +29,9 @@ import { toBoardNotice } from "./PlatformNoticeBanner";
 import { compressImage } from "./InternalMail";
 import { RemoteSupportAdminPanel } from "./RemoteSupport"; // ⭐ 2026-11-02 원격지원 —
 import { CustomSelect } from "./CustomSelect";
+import { RichTextEditor, htmlToText, textToHtml, sanitizeHtml } from "./richText"; // ⭐ 2026-11-03 공지 글자 꾸미기
+import CustomDatePicker from "./CustomDatePicker";
+import { TimeSelect } from "./kpInputs";
 import "./pcTheme.css";
 import { fmtPhone } from "./formatInput";
 
@@ -389,7 +392,10 @@ function PlatformNoticePreview({ draft, onClose }) {
 }
 function NoticesPanel() {
   const list = useCol("platformNotices");
-  const blank = { title: "", body: "", level: "안내", audience: "all", targetCompanies: [], active: true, endDate: "", pinned: false, banner: true, push: true, image: "" };
+  const blank = { title: "", body: "", bodyHtml: "", level: "안내", audience: "all", targetCompanies: [], active: true, endDate: "", pinned: false, banner: true, push: true, image: "", schedule: false, pubDate: "", pubTime: "" };
+  // ⭐ 2026-11-03 예약 게시 — 한국 시각(날짜+시각) → ms
+  const pubMsOf = (d, t) => (d ? Date.parse(`${d}T${t || "09:00"}:00+09:00`) || 0 : 0);
+  const kstParts = (ms) => { const k = new Date(ms + 9 * 3600e3).toISOString(); return { pubDate: k.slice(0, 10), pubTime: k.slice(11, 16) }; };
   const [f, setF] = React.useState(blank);
   const [editId, setEditId] = React.useState(null);
   const [writing, setWriting] = React.useState(false);
@@ -402,9 +408,16 @@ function NoticesPanel() {
   const save = async () => {
     if (!f.title.trim()) { window.alert("제목을 입력해 주세요."); return; }
     if (f.audience === "selected" && !f.targetCompanies.length) { window.alert("공지를 받을 운송사를 한 곳 이상 골라 주세요."); return; }
+    const publishAt = f.schedule ? pubMsOf(f.pubDate, f.pubTime) : 0;
+    if (f.schedule && !publishAt) { window.alert("예약 게시 날짜를 골라 주세요."); return; }
+    if (f.schedule && publishAt <= Date.now()) { window.alert("예약 시각이 이미 지났습니다. 지금 게시하려면 '예약 게시'를 끄세요."); return; }
     setBusy(true);
     try {
-      const data = { title: f.title.trim().slice(0, 200), body: f.body || "", level: f.level, category: f.level, audience: f.audience,
+      const bodyHtml = sanitizeHtml(f.bodyHtml || "");
+      const prev = editId ? (list || []).find((x) => x.id === editId) : null;
+      // 예약이면 그 시각에 서버가 푸시(sendScheduledPlatformNotices) — 아직 푸시 안 한 공지만
+      const pushPending = !!publishAt && (editId ? (prev?.push !== false && !prev?.pushedAt) : f.push !== false);
+      const data = { title: f.title.trim().slice(0, 200), body: htmlToText(bodyHtml) || f.body || "", bodyHtml, publishAt, pushPending, level: f.level, category: f.level, audience: f.audience,
         targetCompanies: f.audience === "selected" ? f.targetCompanies : [], active: f.active !== false, endDate: f.endDate || "",
         pinned: !!f.pinned, banner: f.banner !== false, board: true, image: f.image || "", author: "KP-Flow 운영팀" };
       if (editId) await updateDoc(doc(db, "platformNotices", editId), { ...data, updatedAt: serverTimestamp() });
@@ -464,14 +477,28 @@ function NoticesPanel() {
             </label>
           ))}
           <label className="inline-flex items-center gap-2 text-[14px] font-black text-[#0F1A30] whitespace-nowrap">게시 종료일
-            <input type="date" value={f.endDate || ""} onChange={(e) => set({ endDate: e.target.value })} className="h-10 px-3 rounded-xl border border-[#DCE3EE] text-[14px] font-semibold" />
+            <span className="w-[150px]"><CustomDatePicker value={f.endDate || ""} onChange={(e) => set({ endDate: e.target.value })} className="h-10 w-full px-3 rounded-xl border border-[#DCE3EE] text-[14px] font-semibold" placeholder="계속" /></span>
             <span className="text-[13px] font-semibold text-[#9AA9C3]">(비우면 계속)</span>
           </label>
+        </div>
+        {/* ⭐ 2026-11-03 예약 게시 — 정한 시각부터 대상 회사에 보이고(배너·공지사항), 그때 푸시도 보낸다 */}
+        <div className={`flex flex-wrap items-center gap-3 px-4 py-3 rounded-xl border ${f.schedule ? "bg-[#F5F8FD] border-[#C9D6EE]" : "bg-white border-[#E3E8F0]"}`}>
+          <label className="inline-flex items-center gap-2 text-[14px] font-black text-[#0F1A30] cursor-pointer whitespace-nowrap">
+            <input type="checkbox" checked={!!f.schedule} onChange={(e) => set(e.target.checked ? { schedule: true, ...(f.pubDate ? {} : kstParts(Date.now() + 3600e3)) } : { schedule: false })} className="w-4 h-4 accent-[#1B2B4B]" />
+            예약 게시 <span className="text-[13px] font-semibold text-[#9AA9C3]">(정한 시각에 올라가고 푸시도 그때)</span>
+          </label>
+          {f.schedule && (
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="w-[150px]"><CustomDatePicker value={f.pubDate || ""} onChange={(e) => set({ pubDate: e.target.value })} className="h-10 w-full px-3 rounded-xl border border-[#DCE3EE] text-[14px] font-semibold" /></span>
+              <TimeSelect value={f.pubTime || ""} onChange={(v) => set({ pubTime: v })} emptyLabel="시각 선택" minuteStep={10} />
+              {pubMsOf(f.pubDate, f.pubTime) > 0 && <span className="text-[13px] font-bold text-[#2D4C82]">{new Date(pubMsOf(f.pubDate, f.pubTime)).toLocaleString("ko-KR", { month: "numeric", day: "numeric", weekday: "short", hour: "2-digit", minute: "2-digit" })}에 게시</span>}
+            </div>
+          )}
         </div>
         <div><Label>제목</Label>
           <input value={f.title} onChange={(e) => set({ title: e.target.value })} placeholder="예: 11/9(일) 02:00~04:00 정기 점검 안내" className={`${inp} h-12 text-[16px] font-bold`} /></div>
         <div><Label>내용</Label>
-          <textarea value={f.body} onChange={(e) => set({ body: e.target.value })} rows={14} placeholder="공지할 내용을 입력하세요" className={`${inp} py-3.5 leading-[1.85] resize-y min-h-[300px]`} /></div>
+          <RichTextEditor value={f.bodyHtml} onChange={(h) => set({ bodyHtml: h })} placeholder="공지할 내용을 입력하세요 — 위 단추로 굵게·크기·색·형광펜·정렬·목록" minHeight={300} /></div>
         <div className="flex items-end justify-between gap-4 flex-wrap">
           <div><Label hint="(1장)">이미지</Label>
             {f.image ? (
@@ -520,12 +547,14 @@ function NoticesPanel() {
                       {n.audience === "selected" && <span className="font-semibold text-[#3A4A66] truncate max-w-[360px]">{tc.slice(0, 3).join(", ")}{tc.length > 3 ? ` 외 ${tc.length - 3}곳` : ""}</span>}
                       <span style={{ fontFamily: MONO }}>{msOf(n.createdAt) ? ymd(new Date(msOf(n.createdAt))) : ""}{n.endDate ? ` ~ ${n.endDate}` : ""}</span>
                       {n.banner === false && <span>배너 없음</span>}
-                      <span className={`font-black ${on ? "text-[#1B2B4B]" : "text-[#9AA9C3]"}`}>{on ? "● 게시 중" : expired ? "기간 종료" : "내림"}</span>
+                      {on && (n.publishAt || 0) > Date.now()
+                        ? <span className="px-2 py-0.5 rounded-md font-black bg-[#FFF3B0] text-[#7A5B00]">⏰ 예약 {new Date(n.publishAt).toLocaleString("ko-KR", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })}</span>
+                        : <span className={`font-black ${on ? "text-[#1B2B4B]" : "text-[#9AA9C3]"}`}>{on ? "● 게시 중" : expired ? "기간 종료" : "내림"}</span>}
                     </div>
                   </div>
                   <div className="w-full lg:w-auto flex justify-end gap-1.5 shrink-0 [&_button]:whitespace-nowrap">
                     <button type="button" onClick={() => updateDoc(doc(db, "platformNotices", n.id), { active: n.active === false })} className="h-9 px-3.5 rounded-lg border border-[#DCE3EE] text-[13.5px] font-black text-[#1B2B4B]">{n.active === false ? "다시 게시" : "내리기"}</button>
-                    <button type="button" onClick={() => { setEditId(n.id); setF({ ...blank, ...n, targetCompanies: tc }); setWriting(true); }} className="h-9 px-3.5 rounded-lg bg-[#0F1A30] text-white text-[13.5px] font-black">수정</button>
+                    <button type="button" onClick={() => { setEditId(n.id); setF({ ...blank, ...n, targetCompanies: tc, bodyHtml: n.bodyHtml || textToHtml(n.body || ""), schedule: (n.publishAt || 0) > Date.now(), ...((n.publishAt || 0) > 0 ? kstParts(n.publishAt) : {}) }); setWriting(true); }} className="h-9 px-3.5 rounded-lg bg-[#0F1A30] text-white text-[13.5px] font-black">수정</button>
                     <button type="button" onClick={() => window.confirm("공지를 삭제할까요?\n대상 회사 공지사항 목록에서도 함께 사라집니다.") && deleteDoc(doc(db, "platformNotices", n.id))} className="h-9 px-3.5 rounded-lg border border-[#DCE3EE] text-[13.5px] font-bold text-[#7A879C]">삭제</button>
                   </div>
                 </div>

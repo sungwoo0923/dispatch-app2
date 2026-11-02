@@ -4770,12 +4770,11 @@ exports.notifyNotice = functions.firestore.document("notices/{id}").onCreate(asy
 // ⭐ 2026-11-02 관리자센터2 — 📢 플랫폼 공지 푸시: 관리자 관리센터에서 공지를 올리면 대상 회사 직원에게
 //  audience: all(운송사 직원 + 화주) · carrier(운송사 직원) · shipper(화주 계정) · selected(targetCompanies의 운송사 직원)
 //  기사·카페 계정 · 승인 대기 · 퇴사자 제외, 각자 "공지사항" 알림을 끈 사람 제외. 공지에 push:false면 보내지 않는다.
-exports.notifyPlatformNotice = functions.firestore.document("platformNotices/{id}").onCreate(async (snap) => {
-  const n = snap.data() || {};
-  if (n.push === false || n.active === false) return null;
+// ⭐ 2026-11-03 예약 게시 — publishAt(ms)이 미래면 만들 때는 보내지 않고, 5분마다 도는 sendScheduledPlatformNotices가 그 시각에 보낸다
+async function sendPlatformNoticePush(n) {
   const aud = n.audience || "all";
   const targets = new Set((Array.isArray(n.targetCompanies) ? n.targetCompanies : []).map((c) => String(c || "").trim()).filter(Boolean));
-  if (aud === "selected" && !targets.size) return null;
+  if (aud === "selected" && !targets.size) return 0;
   const users = await db.collection("users").get();
   const tokens = [];
   users.forEach((d) => {
@@ -4795,6 +4794,28 @@ exports.notifyPlatformNotice = functions.firestore.document("platformNotices/{id
   // 한 번에 최대 500개(FCM 멀티캐스트 한도) — 전체 공지는 나눠 보낸다
   for (let i = 0; i < all.length; i += 500) {
     await sendPushAndCleanup(all.slice(i, i + 500), { notification: { title, body }, android: { priority: "high" } }, "공지사항").catch((e) => console.error("플랫폼 공지 푸시 실패:", e));
+  }
+  return all.length;
+}
+exports.notifyPlatformNotice = functions.firestore.document("platformNotices/{id}").onCreate(async (snap) => {
+  const n = snap.data() || {};
+  if (n.push === false || n.active === false) return null;
+  if ((n.publishAt || 0) > Date.now() + 60000) return null; // 예약 — 그 시각에 보냄
+  await sendPlatformNoticePush(n);
+  await snap.ref.set({ pushPending: false, pushedAt: FieldValue.serverTimestamp() }, { merge: true }).catch(() => {});
+  return null;
+});
+exports.sendScheduledPlatformNotices = functions.pubsub.schedule("every 5 minutes").timeZone("Asia/Seoul").onRun(async () => {
+  const snap = await db.collection("platformNotices").where("pushPending", "==", true).get();
+  const now = Date.now();
+  for (const d of snap.docs) {
+    const n = d.data() || {};
+    if ((n.publishAt || 0) > now) continue;
+    // 먼저 표시를 바꿔 두 번 보내지 않게(다음 실행과 겹쳐도)
+    await d.ref.set({ pushPending: false, pushedAt: FieldValue.serverTimestamp() }, { merge: true });
+    if (n.push === false || n.active === false || (n.endDate && n.endDate < kstDateStr())) continue;
+    const cnt = await sendPlatformNoticePush(n).catch((e) => { console.error("예약 공지 푸시 실패:", e); return 0; });
+    console.log(`[예약 공지] ${d.id} ${n.title} → ${cnt}대`);
   }
   return null;
 });

@@ -1,5 +1,6 @@
 // ======================= src/mobile/MobileApp.jsx (PART 1/3) =======================
 import { subscribeUsersLive } from "../usersLive"; // ⭐ 2026-11-02 속도 — 직원 명부 구독 공유
+import { RichHtml } from "../richText"; // ⭐ 2026-11-03 공지 꾸민 글 보여주기
 import { isMasterKey } from "../monthCompare"; // ⭐ 2026-11-03 최고관리자 계정은 "최고관리자"로
 import { useMyProfile } from "../userNames";
 import { useCompanyDropdownSync, dropdownList } from "../companyDropdownOptions";
@@ -3687,6 +3688,7 @@ useEffect(() => {
   const uid = currentUser.uid;
   const name = currentUser.displayName || currentUser.email?.split("@")[0] || "";
   let checkedIn = false; let busy = false;
+  let nextOutTry = 0; // ⭐ 2026-11-03 자동 퇴근 재시도 시각(ms) — 반경 밖에서 매 위치마다 서버를 읽지 않게
 
   // ⭐ 2026-11-01 회사별 반경(출근지 설정) — 값이 없으면 예전처럼 100m / 300m
   const { inM, outM } = officeRadii(mobileOfficeLocation);
@@ -3699,9 +3701,13 @@ useEffect(() => {
       _autoCheckIn(co, uid, name, showSuccess).then((ok) => { checkedIn = !!ok; }).catch(() => {}).finally(() => { busy = false; });
     }
     // 오차가 너무 큰 위치(200m 이상)로는 자동 퇴근하지 않는다(엉뚱한 퇴근 방지) · 퇴근시간 1시간 전부터만
-    if (dist > outM && checkedIn && acc < 200 && !busy) {
+    // ⭐ 2026-11-03 퇴근이 안 찍히던 문제 — 예전엔 "이번에 앱을 연 동안 반경 안에서 출근을 확인했을 때(checkedIn)"만
+    //  자동 퇴근을 시도해서, 출근 뒤 앱을 닫았다가 퇴근길·집에서 다시 열면(새 세션 → checkedIn=false) 퇴근이 영영 안 찍혔다.
+    //  이제 오늘 출근 기록이 있는지는 서버 기록(tryAutoCheckOut 안에서 출근O·퇴근X 확인)으로 판단하고,
+    //  너무 자주 읽지 않도록 실패하면 2분 뒤에 다시 시도한다
+    if (dist > outM && acc < 200 && !busy && Date.now() >= nextOutTry) {
       busy = true;
-      _autoCheckOut(co, uid, name, showSuccess).then((ok) => { if (ok) checkedIn = false; }).catch(() => {}).finally(() => { busy = false; });
+      _autoCheckOut(co, uid, name, showSuccess).then((ok) => { if (ok) checkedIn = false; else nextOutTry = Date.now() + 120000; }).catch(() => { nextOutTry = Date.now() + 120000; }).finally(() => { busy = false; });
     }
   };
   // 위치 변화 감지(앱이 화면에 켜져 있는 동안)
@@ -6251,7 +6257,7 @@ onGoAttendance={() => {
         <div>
           <div className="text-[11px] text-gray-400 mb-0.5">내용</div>
           {selectedNotice.image && <img src={selectedNotice.image} alt="" className="w-full rounded-lg border border-gray-200 mb-2" />}
-          <div className="whitespace-pre-wrap bg-gray-50 rounded-lg p-3 text-gray-700 leading-relaxed">{selectedNotice.content}</div>
+          <RichHtml html={selectedNotice.contentHtml} text={selectedNotice.content} className="bg-gray-50 rounded-lg p-3 text-gray-700 leading-relaxed" />{/* ⭐ 2026-11-03 꾸민 글 */}
         </div>
         {(() => {
           // ⭐ 2026-11-02 점검 — 규칙(isBoardAdmin)과 맞춤: 공지 관리 권한자만 수정·삭제 버튼 표시

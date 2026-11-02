@@ -236,3 +236,13 @@ table tbody tr.kp-row-hit:hover td {
     .fixed:not(body), [style*="position: fixed"]:not(body), [style*="position:fixed"]:not(body) { will-change: transform; }
   }
 }
+
+/* ✍️ 2026-11-03 글자 꾸미기 편집기·공지 본문(richText.jsx) — Tailwind가 지운 목록·구분선 모양 되살리기 */
+.kp-rich ul { list-style: disc; padding-left: 1.4em; margin: 0.3em 0; }
+.kp-rich ol { list-style: decimal; padding-left: 1.6em; margin: 0.3em 0; }
+.kp-rich hr { border: 0; border-top: 1px solid #DCE3EE; margin: 0.8em 0; }
+.kp-rich font[size="2"] { font-size: 13px; }
+.kp-rich font[size="3"] { font-size: 15.5px; }
+.kp-rich font[size="5"] { font-size: 21px; }
+.kp-rich font[size="6"] { font-size: 27px; font-weight: 800; }
+.kp-rich blockquote { border-left: 3px solid #DCE3EE; padding-left: 0.8em; color: #5B6B85; }

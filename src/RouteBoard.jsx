@@ -11,12 +11,14 @@
 //   · 오더에 남기는 것: 배차표Id·배차표명·배차표묶음·배차표순번, 품목수량{칸이름:수량}, 추가정보{칸이름:값}
 //   · 배차관리에서 고친 차량·기사·시간도 이 화면에 그대로 보인다(같은 오더를 읽으므로).
 import React from "react";
+import { createPortal } from "react-dom";
 import { collection, doc, onSnapshot, query, where, getDocs, setDoc, addDoc, updateDoc, deleteDoc, serverTimestamp } from "firebase/firestore";
 import { db, auth, FUNCTIONS_BASE } from "./firebase";
 import { parseBoardTab, sheetToForm, tabDate, planSheetWrite } from "./routeBoardSheet"; // ⭐ 2026-11-02 구글시트 날짜 탭 불러오기
 import { coDocKey } from "./coKey";
 import { deleteOrderWithLog } from "./orderHistory";
 import CustomDatePicker from "./CustomDatePicker";
+import { CustomSelect } from "./CustomSelect"; // ⭐ 2026-11-03 프로그램 공용 선택 목록(기본 select 대신)
 import { kpConfirm, kpAlert } from "./kpDialog";
 
 const DAYS = ["일", "월", "화", "수", "목", "금", "토"];
@@ -122,6 +124,80 @@ function orderFromRow(form, g, r, i, date, co, isNew, prevStatus) {
   };
 }
 
+// ── 자동완성(등록된 거래처·상하차지·기사) — 고정노선과 같은 모양, 표 안에서도 잘리지 않게 화면 위에 띄운다 ──
+//  "도외 목포"처럼 띄어 쓰면 첫 낱말은 이름, 나머지는 주소·담당자 등(sub)에서 찾는다. ↑↓ 이동 · Enter 선택 · Esc 닫기
+export function BoardSuggest({ value, onChange, onPick, items, k, sub = () => "", placeholder, className, onKeyDown, onBlur, title = "거래처관리", inputProps = {} }) {
+  const [open, setOpen] = React.useState(false);
+  const [hi, setHi] = React.useState(0);
+  const [pos, setPos] = React.useState(null);
+  const inRef = React.useRef(null); const listRef = React.useRef(null);
+  const toks = String(value || "").trim().toLowerCase().split(/\s+/).filter(Boolean).map(norm);
+  const list = React.useMemo(() => {
+    if (!toks.length) return items.slice(0, 30);
+    const [f, ...rest] = toks;
+    return items.map((x) => {
+      const n = norm(x[k]); const hay = n + norm(sub(x));
+      let sc = n === f ? 3 : n.startsWith(f) ? 2 : n.includes(f) ? 1 : 0;
+      if (!sc && rest.length && hay.includes(f)) sc = 0.5;
+      if (!sc || !rest.every((t) => hay.includes(t))) return null;
+      return { x, sc };
+    }).filter(Boolean).sort((a, b) => b.sc - a.sc || String(a.x[k] || "").localeCompare(String(b.x[k] || ""), "ko")).slice(0, 40).map((o) => o.x);
+  }, [items, k, toks.join("|")]); // eslint-disable-line react-hooks/exhaustive-deps
+  const live = React.useRef({ list, hi }); live.current = { list, hi };
+  const show = open && list.length > 0;
+  const place = React.useCallback(() => {
+    const r = inRef.current?.getBoundingClientRect(); if (!r) return;
+    const vh = window.innerHeight; const below = vh - r.bottom - 8; const above = r.top - 8; const up = below < 220 && above > below;
+    const w = Math.min(Math.max(r.width, 340), window.innerWidth - 16);
+    setPos({ left: Math.max(8, Math.min(r.left, window.innerWidth - w - 8)), width: w, top: up ? undefined : r.bottom + 4, bottom: up ? vh - r.top + 4 : undefined, maxH: Math.max(160, Math.min(340, up ? above : below)) });
+  }, []);
+  React.useLayoutEffect(() => {
+    if (!show) return undefined;
+    place(); window.addEventListener("scroll", place, true); window.addEventListener("resize", place);
+    return () => { window.removeEventListener("scroll", place, true); window.removeEventListener("resize", place); };
+  }, [show, place]);
+  React.useEffect(() => { if (hi >= list.length) setHi(Math.max(0, list.length - 1)); }, [list.length, hi]);
+  React.useEffect(() => { if (show) listRef.current?.querySelector(`[data-i="${hi}"]`)?.scrollIntoView({ block: "nearest" }); }, [hi, show]);
+  const pick = (x) => { if (!x) return; onPick(x); setOpen(false); };
+  const onKey = (e) => {
+    const key = e.key;
+    if (!show) { if (key === "ArrowDown" && !onKeyDown && list.length) { e.preventDefault(); setOpen(true); setHi(0); return; } onKeyDown?.(e); return; }
+    if (key === "Escape") { e.preventDefault(); e.stopPropagation(); setOpen(false); return; }
+    if (key === "Tab") { setOpen(false); return; }
+    if (key !== "ArrowDown" && key !== "ArrowUp" && key !== "Enter") return;
+    e.preventDefault();
+    const composing = e.nativeEvent?.isComposing || e.keyCode === 229;
+    const run = () => { const { list: L, hi: H } = live.current; if (!L.length) return;
+      if (key === "ArrowDown") setHi(Math.min(L.length - 1, H + 1)); else if (key === "ArrowUp") setHi(Math.max(0, H - 1)); else pick(L[Math.min(H, L.length - 1)]); };
+    if (composing) setTimeout(run, 30); else run();
+  };
+  return (
+    <>
+      <input ref={inRef} value={value} onChange={(e) => { onChange(e.target.value); setOpen(true); setHi(0); }} onFocus={() => setOpen(!!String(value || "").trim())}
+        onBlur={() => { setTimeout(() => setOpen(false), 150); onBlur?.(); }} onKeyDown={onKey} placeholder={placeholder} className={className} autoComplete="off"
+        role="combobox" aria-expanded={show} aria-autocomplete="list" {...inputProps} />
+      {show && pos && createPortal(
+        <div onMouseDown={(e) => e.preventDefault()} className="fixed z-[2147483000] rounded-xl border border-[#1B2B4B]/25 bg-white shadow-[0_18px_44px_rgba(11,20,40,.28)] overflow-hidden flex flex-col"
+          style={{ left: pos.left, width: pos.width, top: pos.top, bottom: pos.bottom, maxHeight: pos.maxH }}>
+          <div className="shrink-0 flex items-center justify-between gap-2 px-3 h-8 bg-[#1B2B4B] text-white">
+            <span className="text-[12px] font-black tracking-wide whitespace-nowrap">{title} · {list.length}{list.length >= 40 ? "+" : ""}건</span>
+            <span className="min-w-0 truncate text-[11px] font-bold text-white/60 whitespace-nowrap">↑↓ 이동 · Enter 선택 · Esc 닫기</span>
+          </div>
+          <div ref={listRef} role="listbox" className="overflow-y-auto">
+            {list.map((x, i) => { const on = i === hi; return (
+              <button key={x.id || x._id || `${x[k]}_${i}`} data-i={i} role="option" aria-selected={on} type="button" tabIndex={-1} onClick={() => pick(x)} onMouseEnter={() => setHi(i)}
+                className={`w-full text-left px-3.5 py-2 border-b last:border-0 ${on ? "bg-[#1B2B4B] border-[#1B2B4B]" : "bg-white border-[#EEF1F6] hover:bg-[#F3F6FB]"}`}>
+                <div className={`text-[14px] font-black truncate ${on ? "text-white" : "text-[#0F1A30]"}`}>{x[k]}</div>
+                {sub(x) && <div className={`text-[13px] font-semibold truncate ${on ? "text-white/75" : "text-[#7A89A3]"}`}>{sub(x)}</div>}
+              </button>
+            ); })}
+          </div>
+        </div>, document.body)}
+    </>
+  );
+}
+const placeSub = (p) => [p.주소, p.담당자 || (p.contacts || [])[0]?.name].filter(Boolean).join(" · ");
+
 // ── 구글시트 읽기(서버 routeBoardSheet) ──────────────────────
 const SERVICE_EMAIL = "dispatch-app-9b92f@appspot.gserviceaccount.com";
 async function sheetApi(body) {
@@ -171,9 +247,9 @@ function SheetLoad({ form, date, onApply, onClose }) {
         <div className="text-[13px] text-[#7A8AA6] mb-4 break-all">{form.sheetUrl}</div>
         {tabs && (
           <div className="flex gap-2 mb-3">
-            <select value={tab} onChange={(e) => { setTab(e.target.value); setRes(null); }} className={inp}>
+            <CustomSelect value={tab} onChange={(e) => { setTab(e.target.value); setRes(null); }} className={inp}>
               {[...tabs].reverse().map((t) => <option key={t} value={t}>{t}</option>)}
-            </select>
+            </CustomSelect>
             <button onClick={read} disabled={!!busy || !tab} className={`${btn} bg-[#0F1A30] text-white`}>{busy === "read" ? "읽는 중…" : "읽기"}</button>
           </div>
         )}
@@ -235,7 +311,7 @@ function SheetSend({ form, date, rows, onClose, onDone }) {
         <div className="text-[13px] text-[#7A8AA6] mb-4">시트에서 <b>도착지가 같은 줄</b>을 찾아 차량번호·기사·수량·운송업체·시간·비고 칸만 씁니다. 도착지·시군구·총계 칸과 배차표에서 비어 있는 칸은 건드리지 않습니다.</div>
         {tabs && (
           <div className="flex gap-2 mb-3">
-            <select value={tab} onChange={(e) => { setTab(e.target.value); setPlan(null); }} className={inp}>{[...tabs].reverse().map((t) => <option key={t} value={t}>{t}</option>)}</select>
+            <CustomSelect value={tab} onChange={(e) => { setTab(e.target.value); setPlan(null); }} className={inp}>{[...tabs].reverse().map((t) => <option key={t} value={t}>{t}</option>)}</CustomSelect>
             <button onClick={preview} disabled={!!busy || !tab} className={`${btn} border border-[#DCE3EE] text-[#2D4C82]`}>{busy === "read" ? "확인 중…" : "바뀔 칸 보기"}</button>
           </div>
         )}
@@ -261,7 +337,7 @@ function SheetSend({ form, date, rows, onClose, onDone }) {
 }
 
 // ── 양식 편집 ──────────────────────────────────────────────
-function FormEditor({ init, onClose, onSaved, co }) {
+function FormEditor({ init, onClose, onSaved, co, clients = [], places = [] }) {
   const [f, setF] = React.useState(() => JSON.parse(JSON.stringify(init)));
   const [busy, setBusy] = React.useState(false);
   const [sheet, setSheet] = React.useState({ tabs: null, tab: "", busy: "", err: "" }); // ⭐ 시트 제목줄로 칸 만들기
@@ -316,11 +392,12 @@ function FormEditor({ init, onClose, onSaved, co }) {
         </div>
         <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mb-6">
           <label className="block"><span className="text-[12.5px] font-black text-[#3A4A66]">양식 이름</span><input value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} className={inp} placeholder="예: 태진 삼다수" /></label>
-          <label className="block"><span className="text-[12.5px] font-black text-[#3A4A66]">거래처명(청구처)</span><input value={f.client} onChange={(e) => setF({ ...f, client: e.target.value })} className={inp} placeholder="모든 줄에 같은 거래처" /></label>
+          <label className="block"><span className="text-[12.5px] font-black text-[#3A4A66]">거래처명(청구처)</span><BoardSuggest value={f.client} onChange={(v) => setF((p) => ({ ...p, client: v }))} onPick={(c) => setF((p) => ({ ...p, client: c.거래처명 }))}
+            items={clients} k="거래처명" sub={(c) => [c.주소, c.담당자].filter(Boolean).join(" · ")} className={inp} placeholder="모든 줄에 같은 거래처" title="기본거래처" /></label>
           <label className="block"><span className="text-[12.5px] font-black text-[#3A4A66]">하차일</span>
-            <select value={f.dropOffset} onChange={(e) => setF({ ...f, dropOffset: +e.target.value })} className={inp}>
+            <CustomSelect value={f.dropOffset} onChange={(e) => setF({ ...f, dropOffset: +e.target.value })} className={inp}>
               <option value={0}>상차일과 같은 날</option><option value={1}>상차 다음 날</option><option value={2}>상차 이틀 뒤</option>
-            </select></label>
+            </CustomSelect></label>
           <label className="block"><span className="text-[12.5px] font-black text-[#3A4A66]">지급방식(기본)</span><input value={f.payMethod} onChange={(e) => setF({ ...f, payMethod: e.target.value })} className={inp} placeholder="예: 계산서" /></label>
         </div>
 
@@ -330,7 +407,7 @@ function FormEditor({ init, onClose, onSaved, co }) {
             <input value={f.sheetUrl || ""} onChange={(e) => { setF({ ...f, sheetUrl: e.target.value }); setSheet({ tabs: null, tab: "", busy: "", err: "" }); }} className={`${inp} flex-1 min-w-[240px]`} placeholder="https://docs.google.com/spreadsheets/d/…" />
             {!sheet.tabs ? <button type="button" onClick={loadTabs} disabled={!!sheet.busy} className={`${btn} border border-[#DCE3EE] text-[#2D4C82]`}>{sheet.busy === "tabs" ? "여는 중…" : "시트 열기"}</button> : (
               <>
-                <select value={sheet.tab} onChange={(e) => setSheet((s) => ({ ...s, tab: e.target.value }))} className={`${inp} w-[160px]`}>{[...sheet.tabs].reverse().map((t) => <option key={t}>{t}</option>)}</select>
+                <CustomSelect value={sheet.tab} onChange={(e) => setSheet((s) => ({ ...s, tab: e.target.value }))} className={`${inp} w-[160px]`}>{[...sheet.tabs].reverse().map((t) => <option key={t}>{t}</option>)}</CustomSelect>
                 <button type="button" onClick={colsFromSheet} disabled={!!sheet.busy} className={`${btn} bg-[#2D4C82] text-white`}>{sheet.busy === "read" ? "읽는 중…" : "이 탭 제목줄로 칸 만들기"}</button>
               </>
             )}
@@ -346,13 +423,13 @@ function FormEditor({ init, onClose, onSaved, co }) {
             <div key={c.id} className="flex flex-wrap items-center gap-2">
               <span className="w-6 text-[12px] font-black text-[#9AA9C3] text-right">{i + 1}</span>
               <input value={c.label} onChange={(e) => { const g = guessKind(e.target.value); setCol(i, c.label ? { label: e.target.value } : { label: e.target.value, ...g }); }} className={`${fieldInp} w-[150px]`} placeholder="칸 이름" />
-              <select value={c.kind} onChange={(e) => setCol(i, { kind: e.target.value, field: e.target.value === "field" ? (c.field || guessKind(c.label).field || "메모") : undefined })} className={`${fieldInp} w-[130px]`}>
+              <CustomSelect value={c.kind} onChange={(e) => setCol(i, { kind: e.target.value, field: e.target.value === "field" ? (c.field || guessKind(c.label).field || "메모") : undefined })} className={`${fieldInp} w-[130px]`}>
                 {KINDS.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
-              </select>
+              </CustomSelect>
               {c.kind === "field" && (
-                <select value={c.field || ""} onChange={(e) => setCol(i, { field: e.target.value })} className={`${fieldInp} w-[130px]`}>
+                <CustomSelect value={c.field || ""} onChange={(e) => setCol(i, { field: e.target.value })} className={`${fieldInp} w-[130px]`}>
                   {FIELDS.map((x) => <option key={x}>{x}</option>)}
-                </select>
+                </CustomSelect>
               )}
               <button onClick={() => moveCol(i, -1)} className="h-9 w-8 rounded-lg border border-[#DCE3EE] text-[#5B6B85]">↑</button>
               <button onClick={() => moveCol(i, 1)} className="h-9 w-8 rounded-lg border border-[#DCE3EE] text-[#5B6B85]">↓</button>
@@ -369,7 +446,8 @@ function FormEditor({ init, onClose, onSaved, co }) {
             <div key={i} className="rounded-xl border border-[#E3E8F0] p-3">
               <div className="grid grid-cols-1 md:grid-cols-[160px_1fr_1.4fr_auto] gap-2 mb-2">
                 <input value={g.name} onChange={(e) => setGroup(i, { name: e.target.value })} className={fieldInp} placeholder="묶음 이름(1센터)" />
-                <input value={g.상차지명} onChange={(e) => setGroup(i, { 상차지명: e.target.value })} className={fieldInp} placeholder="상차지명(비우면 묶음 이름)" />
+                <BoardSuggest value={g.상차지명} onChange={(v) => setGroup(i, { 상차지명: v })} onPick={(p) => setGroup(i, { 상차지명: p.업체명, 상차지주소: p.주소 || g.상차지주소 })}
+                  items={places} k="업체명" sub={placeSub} className={fieldInp} placeholder="상차지명(비우면 묶음 이름)" title="상하차지거래처" />
                 <input value={g.상차지주소} onChange={(e) => setGroup(i, { 상차지주소: e.target.value })} className={fieldInp} placeholder="상차지 주소" />
                 <button onClick={() => setF((p) => ({ ...p, groups: p.groups.filter((_, j) => j !== i) }))} className="h-9 px-2.5 rounded-lg text-[12.5px] font-bold text-red-500">삭제</button>
               </div>
@@ -404,6 +482,7 @@ export default function RouteBoard({ companyName = "" }) {
   const [edit, setEdit] = React.useState(null);
   const [drivers, setDrivers] = React.useState([]);
   const [places, setPlaces] = React.useState([]);
+  const [clients, setClients] = React.useState([]); // ⭐ 2026-11-03 양식 거래처명 자동완성
   const [msg, setMsg] = React.useState("");
   const [sheetOpen, setSheetOpen] = React.useState(false);
   const [sendOpen, setSendOpen] = React.useState(false); // ⭐ 배차표 → 시트 보내기
@@ -415,7 +494,9 @@ export default function RouteBoard({ companyName = "" }) {
     const u1 = onSnapshot(query(collection(db, "routeBoards"), where("companyName", "==", co)), (s) => setForms(s.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => String(a.name).localeCompare(String(b.name), "ko"))), () => setForms([]));
     const u2 = onSnapshot(collection(db, "drivers"), (s) => setDrivers(s.docs.map((d) => ({ id: d.id, ...d.data() })).filter((d) => d.차량번호)), () => setDrivers([]));
     const u3 = onSnapshot(collection(db, "places"), (s) => setPlaces(s.docs.map((d) => ({ _id: d.id, ...d.data() })).filter((p) => (!p.companyName || p.companyName === co) && p.업체명)), () => setPlaces([]));
-    return () => { u1(); u2(); u3(); };
+    const u4 = onSnapshot(collection(db, "clients"), (s) => setClients(s.docs.map((d) => { const c = { id: d.id, ...d.data() }; return { ...c, 거래처명: String(c.거래처명 || c.업체명 || "").trim() }; })
+      .filter((c) => (!c.companyName || c.companyName === co) && c.거래처명).sort((a, b) => a.거래처명.localeCompare(b.거래처명, "ko"))), () => setClients([]));
+    return () => { u1(); u2(); u3(); u4(); };
   }, [co]);
   React.useEffect(() => { if (!form && forms.length) setFormId(forms[0].id); }, [forms, form]);
   React.useEffect(() => { try { if (formId) localStorage.setItem("routeBoard:last", formId); } catch { /* 무시 */ } }, [formId]);
@@ -439,7 +520,7 @@ export default function RouteBoard({ companyName = "" }) {
     } else if (fromDefaults) {
       const cN = form.columns.find((c) => c.field === "하차지명"); const cA = form.columns.find((c) => c.field === "하차지주소");
       form.groups.forEach((g) => { out[g.name] = (g.defaults || []).filter((d) => d.하차지명).map((d) => {
-        const p = findPlace(d.하차지명);
+        const p = findPlace(d.하차지명, d.하차지주소);
         return { key: rid(), v: { ...(cN ? { [cN.id]: d.하차지명 } : {}), ...(cA ? { [cA.id]: p?.주소 || d.하차지주소 } : {}) }, dirty: true, extra: placeContact(p) };
       }); });
     }
@@ -459,7 +540,14 @@ export default function RouteBoard({ companyName = "" }) {
     setRows(buildRows(orders, true));
   }, [orders, form, dirty, pending]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const findPlace = (name) => { const k = norm(name); return k ? places.find((p) => norm(p.업체명) === k) : null; };
+  // ⭐ 2026-11-03 같은 이름이 여러 곳(주소만 다름)이면 주소 힌트(시군구 등)로 고르고, 못 고르면 비워 둔다(엉뚱한 주소로 바꾸지 않게)
+  const findPlace = (name, addrHint = "") => {
+    const k = norm(name); if (!k) return null;
+    const m = places.filter((p) => norm(p.업체명) === k);
+    if (m.length <= 1) return m[0] || null;
+    const h = norm(addrHint); if (!h) return null;
+    return m.find((p) => norm(p.주소) === h) || m.find((p) => norm(p.주소).includes(h)) || null;
+  };
   const placeContact = (p) => {
     if (!p) return {};
     const c = (p.contacts || []).find((x) => x.isPrimary) || (p.contacts || [])[0];
@@ -474,12 +562,14 @@ export default function RouteBoard({ companyName = "" }) {
     return null;
   };
 
+  // ⭐ 2026-11-03 저장 안 한 줄이 있을 때 날짜·양식을 바꾸면 말없이 사라지던 문제 — 먼저 묻는다
+  const guard = async (go) => { if (dirty && !(await kpConfirm("저장하지 않은 내용이 있습니다.\n저장하지 않고 이동할까요?"))) return; go(); };
   const colOf = (field) => form?.columns.find((c) => c.kind === "field" && c.field === field);
   // 시트에서 온 줄 — 등록된 하차지는 풀주소·담당자, 기사관리에 있는 차량은 이름·전화번호 채우기
   const enrich = (v0) => {
     const v = { ...v0 }; let extra = {};
     const cN = colOf("하차지명"), cA = colOf("하차지주소"), cP = colOf("차량번호"), cNm = colOf("이름"), cPh = colOf("전화번호");
-    const p = cN ? findPlace(v[cN.id]) : null;
+    const p = cN ? findPlace(v[cN.id], cA ? v[cA.id] : "") : null;
     if (p) { if (cA && p.주소) v[cA.id] = p.주소; extra = placeContact(p); }
     const d = cP ? findDriver(v[cP.id]) : null;
     if (d) { v[cP.id] = d.차량번호; if (cNm && !v[cNm.id]) v[cNm.id] = d.이름 || ""; if (cPh && !v[cPh.id]) v[cPh.id] = d.전화번호 || ""; }
@@ -500,8 +590,8 @@ export default function RouteBoard({ companyName = "" }) {
     const r = rows[g]?.[i]; if (!r) return;
     const val = r.v[c.id];
     if (c.field === "하차지명") {
-      const p = findPlace(val); const cA = colOf("하차지주소");
-      if (p) setRows((s) => ({ ...s, [g]: s[g].map((x, j) => (j === i ? { ...x, v: { ...x.v, ...(cA && p.주소 ? { [cA.id]: p.주소 } : {}) }, extra: placeContact(p), dirty: true } : x)) }));
+      const cA = colOf("하차지주소"); const p = findPlace(val, cA ? r.v[cA.id] : "");
+      if (p && !(cA && r.v[cA.id] === p.주소)) setRows((s) => ({ ...s, [g]: s[g].map((x, j) => (j === i ? { ...x, v: { ...x.v, ...(cA && p.주소 ? { [cA.id]: p.주소 } : {}) }, extra: placeContact(p), dirty: true } : x)) }));
     }
     if (c.field === "차량번호") {
       const d = findDriver(val); if (!d) return;
@@ -510,6 +600,15 @@ export default function RouteBoard({ companyName = "" }) {
         ...(cN && !String(x.v[cN.id] || "").trim() ? { [cN.id]: d.이름 || "" } : {}),
         ...(cP && !String(x.v[cP.id] || "").trim() ? { [cP.id]: d.전화번호 || "" } : {}) } } : x)) }));
     }
+  };
+  // 자동완성에서 고른 경우 — 고른 그 곳(주소까지)으로 바로 채움
+  const pickPlace = (g, i, p) => {
+    const cN = colOf("하차지명"); const cA = colOf("하차지주소"); setDirty(true);
+    setRows((s) => ({ ...s, [g]: s[g].map((x, j) => (j === i ? { ...x, dirty: true, extra: placeContact(p), v: { ...x.v, ...(cN ? { [cN.id]: p.업체명 } : {}), ...(cA && p.주소 ? { [cA.id]: p.주소 } : {}) } } : x)) }));
+  };
+  const pickDriver = (g, i, d) => {
+    const cP = colOf("차량번호"); const cN = colOf("이름"); const cPh = colOf("전화번호"); setDirty(true);
+    setRows((s) => ({ ...s, [g]: s[g].map((x, j) => (j === i ? { ...x, dirty: true, v: { ...x.v, ...(cP ? { [cP.id]: d.차량번호 } : {}), ...(cN ? { [cN.id]: d.이름 || "" } : {}), ...(cPh ? { [cPh.id]: d.전화번호 || "" } : {}) } } : x)) }));
   };
   const addRow = (g) => { setDirty(true); setRows((p) => ({ ...p, [g]: [...(p[g] || []), { key: rid(), v: {}, dirty: true }] })); };
   const delRow = (g, i) => {
@@ -599,19 +698,19 @@ export default function RouteBoard({ companyName = "" }) {
   return (
     <div className="space-y-4">
       <div className={`${card} p-4 flex flex-wrap items-center gap-2`}>
-        <select value={formId} onChange={(e) => setFormId(e.target.value)} className={`${inp} w-[220px]`}>
+        <CustomSelect value={formId} onChange={(e) => guard(() => setFormId(e.target.value))} className={`${inp} w-[220px]`}>
           {!forms.length && <option value="">양식 없음</option>}
           {forms.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
-        </select>
+        </CustomSelect>
         <button onClick={() => setEdit(BLANK())} className={`${btn} border border-[#DCE3EE] text-[#2D4C82]`}>＋ 새 양식</button>
         {form && <button onClick={() => setEdit(form)} className={`${btn} border border-[#DCE3EE] text-[#3A4A66]`}>양식 수정</button>}
         {form && <button onClick={delForm} className={`${btn} text-red-500`}>양식 삭제</button>}
         <div className="flex-1" />
         {form && (
           <>
-            <button onClick={() => setDate(addDays(date, -1))} className="h-10 w-10 rounded-xl border border-[#DCE3EE] font-black text-[#3A4A66]">‹</button>
-            <div className="w-[150px]"><CustomDatePicker value={date} onChange={(e) => e.target.value && setDate(e.target.value)} className={inp} /></div>
-            <button onClick={() => setDate(addDays(date, 1))} className="h-10 w-10 rounded-xl border border-[#DCE3EE] font-black text-[#3A4A66]">›</button>
+            <button onClick={() => guard(() => setDate(addDays(date, -1)))} className="h-10 w-10 rounded-xl border border-[#DCE3EE] font-black text-[#3A4A66]">‹</button>
+            <div className="w-[150px]"><CustomDatePicker value={date} onChange={(e) => { const v = e.target.value; if (v) guard(() => setDate(v)); }} className={inp} /></div>
+            <button onClick={() => guard(() => setDate(addDays(date, 1)))} className="h-10 w-10 rounded-xl border border-[#DCE3EE] font-black text-[#3A4A66]">›</button>
             <span className="text-[13px] font-bold text-[#3A4A66] whitespace-nowrap">상차 {dLabel(date)} → 하차 {dLabel(drop)}</span>
             {form.sheetUrl && <button onClick={() => setSheetOpen(true)} disabled={!!busy} className={`${btn} border border-[#2D4C82] text-[#2D4C82]`}>시트 불러오기</button>}
             {form.sheetUrl && <button onClick={() => (dirty ? kpAlert("먼저 [저장]을 눌러 주세요. 저장한 내용만 시트로 보냅니다.") : setSendOpen(true))} disabled={!!busy} className={`${btn} border border-[#2D4C82] text-[#2D4C82]`}>시트로 보내기</button>}
@@ -660,10 +759,16 @@ export default function RouteBoard({ companyName = "" }) {
                             <td key={c.id} className="border border-[#E3E8F0] p-0.5">
                               {c.kind === "no" ? <div className="text-center text-[#7A8AA6] font-bold">{i + 1}</div>
                                 : c.kind === "sum" ? <div className="text-center font-black text-[#0F1A30]">{rowSum(form, r) || ""}</div>
-                                  : (
+                                  : c.field === "하차지명" || c.field === "차량번호" ? (
+                                    <BoardSuggest value={r.v[c.id] ?? ""} onChange={(v) => setCell(g.name, i, c, v)} onBlur={() => onLeave(g.name, i, c)} onKeyDown={onKey}
+                                      onPick={(x) => (c.field === "하차지명" ? pickPlace(g.name, i, x) : pickDriver(g.name, i, x))}
+                                      items={c.field === "하차지명" ? places : drivers} k={c.field === "하차지명" ? "업체명" : "차량번호"}
+                                      sub={c.field === "하차지명" ? placeSub : (d) => [d.이름, d.전화번호, d.등급].filter(Boolean).join(" · ")}
+                                      title={c.field === "하차지명" ? "상하차지거래처" : "기사관리"} className={cellCls}
+                                      inputProps={{ "data-g": g.name, "data-r": i, "data-c": ci }} />
+                                  ) : (
                                     <input value={r.v[c.id] ?? ""} onChange={(e) => setCell(g.name, i, c, e.target.value)} onBlur={() => onLeave(g.name, i, c)} onKeyDown={onKey}
                                       data-g={g.name} data-r={i} data-c={ci}
-                                      list={c.field === "하차지명" ? "rb-places" : c.field === "차량번호" ? "rb-plates" : undefined}
                                       inputMode={c.kind === "qty" || MONEY_FIELDS.has(c.field) ? "numeric" : undefined}
                                       placeholder={TIME_FIELDS.has(c.field) ? "16:00" : ""}
                                       className={`${cellCls} ${c.kind === "qty" ? "text-center" : ""}`} />
@@ -698,14 +803,12 @@ export default function RouteBoard({ companyName = "" }) {
               <span className="text-[#3A4A66]">총계 <b className="text-[#0F1A30]">{grand.sum}</b></span>
             </div>
           )}
-          <datalist id="rb-places">{places.slice(0, 3000).map((p) => <option key={p._id} value={p.업체명}>{p.주소}</option>)}</datalist>
-          <datalist id="rb-plates">{drivers.slice(0, 3000).map((d) => <option key={d.id} value={d.차량번호}>{d.이름}</option>)}</datalist>
         </>
       )}
 
       {sendOpen && form && <SheetSend form={form} date={date} rows={rows} onClose={() => setSendOpen(false)} onDone={(m) => { setSendOpen(false); setMsg(m); }} />}
       {sheetOpen && form && <SheetLoad form={form} date={date} onApply={applySheet} onClose={() => setSheetOpen(false)} />}
-      {edit && <FormEditor init={edit} co={co} onClose={() => setEdit(null)} onSaved={(id) => { setEdit(null); setFormId(id); setMsg("양식을 저장했습니다."); }} />}
+      {edit && <FormEditor init={edit} co={co} clients={clients} places={places} onClose={() => setEdit(null)} onSaved={(id) => { setEdit(null); setFormId(id); setMsg("양식을 저장했습니다."); }} />}
     </div>
   );
 }

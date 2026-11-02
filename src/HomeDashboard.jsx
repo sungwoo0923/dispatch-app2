@@ -704,6 +704,18 @@ export default function HomeDashboard({ role, user, userCompany = "", pending, d
 
   // ⭐ 2026-11-02 관리자센터2 — 관리자 관리센터에서 올린 플랫폼 공지(우리 회사 대상)를 공지사항 목록에 함께(읽기 전용 · "플랫폼 공지" 표시)
   const boardNotices = useBoardNoticesWithPlatform(notices, getViewCompany(), formatCreatedAt);
+  // ⭐ 2026-11-03 맨 위 플랫폼 공지 배너를 누르면 → 공지사항 탭을 열고 그 글을 바로 펼친다(목록이 아직 안 왔으면 오면 연다)
+  React.useEffect(() => {
+    const tryOpen = () => {
+      const id = window.__kpOpenNotice; if (!id) return;
+      const n = boardNotices.find((x) => x.id === id); if (!n) return;
+      window.__kpOpenNotice = ""; setBoardTab("공지사항"); setSelectedNotice(n);
+      setTimeout(() => window.scrollTo({ top: 0, behavior: "smooth" }), 50);
+    };
+    tryOpen();
+    window.addEventListener("kp:openNotice", tryOpen);
+    return () => window.removeEventListener("kp:openNotice", tryOpen);
+  }, [boardNotices]); // eslint-disable-line react-hooks/exhaustive-deps
   const noticeTotalPages = Math.ceil(notices.length / NOTICE_PAGE_SIZE);
   const pagedNotices = useMemo(() => { const s = (noticePage - 1) * NOTICE_PAGE_SIZE; return notices.slice(s, s + NOTICE_PAGE_SIZE); }, [notices, noticePage]);
   const filteredSchedules = useMemo(() => {
