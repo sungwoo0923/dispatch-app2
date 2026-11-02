@@ -7224,8 +7224,10 @@ useEffect(() => {
       snap.docChanges().forEach(ch => {
         if (ch.type === "added") {
           const d = ch.doc.data();
-          if (d.status === "출근") {
-            sflowToast(`${d.name || "직원"}님이 출근처리 되었습니다.`, "system");
+          // ⭐ 2026-11-02 출근 알림은 본인 것만 — 예전엔 같은 회사 누가 출근해도 전 직원 화면에 떴다.
+          //  (자동 출근은 출근 처리 쪽에서 이미 본인에게 알리므로, 여기서는 다른 기기·관리자가 대신 처리한 본인 출근만 알린다)
+          if (d.status === "출근" && d.uid === user?.uid && d.source !== "auto") {
+            sflowToast(`출근 처리되었습니다.`, "system");
           }
         }
       });
