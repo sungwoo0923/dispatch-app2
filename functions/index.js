@@ -4676,7 +4676,10 @@ exports.hourlyJobs = functions.runWith({ timeoutSeconds: 300, memory: "512MB" })
   }
   const old = await db.collection("orderTrash").where("expireAt", "<", Timestamp.now()).limit(400).get();
   if (!old.empty) { const wb = db.batch(); old.docs.forEach((d) => wb.delete(d.ref)); await wb.commit(); }
-  if (hour === 4) await computePlatformStats().catch((e) => console.error("플랫폼 관제 집계 실패:", e)); // ◇ 관리센터 숫자 매일 갱신
+  // ⭐ 2026-11-02 관리자센터 — 매일 4시 한 번만 집계하니 그 뒤 가입한 직원·접속이 다음 날까지 안 보였다.
+  //   낮 시간(06~23시)은 매시간 다시 집계하고, 데이터량(문서 수 count)은 비용 때문에 새벽 4시 전체 집계 때만 새로 센다.
+  //   (계정·접속 숫자는 관리센터 화면이 users·loginSessions를 실시간으로 읽어 덮어쓴다)
+  if (hour === 4 || hour >= 6) await computePlatformStats({ full: hour === 4 }).catch((e) => console.error("플랫폼 관제 집계 실패:", e));
   return null;
 });
 
@@ -5258,7 +5261,8 @@ exports.sheetImport = functions
 // 이 프로그램에 가입한 운송사·화주사별 사용량(계정·접속·오더·데이터량)을 한 번에 모아
 // siteConfig/platformStats 한 문서에 저장한다. 화면은 이 문서만 읽는다(읽기 비용 최소화).
 //  - 매일 새벽 4시(hourlyJobs)에 자동 갱신 + 관리센터의 "지금 갱신" 버튼(10분에 1번까지)
-async function computePlatformStats() {
+// ⭐ 2026-11-02 관리자센터 — 06~23시 매시간 갱신(full=false면 데이터량 count는 지난 값 재사용), 접속은 "사람(uid)" 기준으로 센다
+async function computePlatformStats({ full = true } = {}) {
   const today = kstDateStr();
   const month = today.slice(0, 7);
   const pmDate = new Date(`${month}-01T00:00:00Z`); pmDate.setUTCMonth(pmDate.getUTCMonth() - 1);
@@ -5269,8 +5273,8 @@ async function computePlatformStats() {
   const co = (name) => {
     const k = String(name || "돌캐").trim() || "돌캐";
     if (!companies[k]) companies[k] = {
-      name: k, kind: "transport", staff: 0, admins: 0, drivers: 0, shippers: 0, pending: 0,
-      online: 0, onlinePc: 0, onlineMobile: 0, lastSeen: 0,
+      name: k, kind: "transport", staff: 0, admins: 0, drivers: 0, shippers: 0, pending: 0, quit: 0,
+      online: 0, onlineNow: 0, onlinePc: 0, onlineMobile: 0, lastSeen: 0,
       m: { cnt: 0, sale: 0, profit: 0 }, pm: { cnt: 0, sale: 0, profit: 0 }, pmSame: { cnt: 0, sale: 0 },
       daily: {}, lastOrder: "", totalOrders: 0, places: 0, clients: 0, fleet: 0, appliedAt: 0, code: "", rep: "", phone: "", linked: "",
     };
@@ -5295,7 +5299,7 @@ async function computePlatformStats() {
     shippers[k] = {
       name: k, kind: "shipper", appliedAt: tsMs(a.createdAt), status: a.status || "pending", code: a.companyCode || "",
       linked: a.linkedTransportCompany?.companyName || "", linkStatus: a.transportApprovalStatus || "", rep: a.name || "", phone: a.phone || a.phoneNumber || "",
-      users: 0, online: 0, lastSeen: 0,
+      users: 0, online: 0, onlineNow: 0, lastSeen: 0,
     };
   });
 
@@ -5305,33 +5309,54 @@ async function computePlatformStats() {
   users.docs.forEach((d) => {
     const u = d.data() || {};
     if (u.role === "totalMaster" || u.email === "tjddnqkf@naver.com" || u.role === "cafeUser") return;
-    userCompany[d.id] = u.companyName || "돌캐";
+    userCompany[d.id] = String(u.companyName || "").trim() || "돌캐"; // ⭐ 2026-11-02 관리자센터 — 회사명 앞뒤 공백 제거
     if (u.role === "shipper") {
       const k = String(u.companyName || "").trim();
       if (shippers[k]) shippers[k].users += 1;
-      else if (k) shippers[k] = { name: k, kind: "shipper", appliedAt: 0, status: "approved", linked: "", users: 1, online: 0, lastSeen: 0 };
+      else if (k) shippers[k] = { name: k, kind: "shipper", appliedAt: 0, status: "approved", linked: "", users: 1, online: 0, onlineNow: 0, lastSeen: 0 };
       return;
     }
     const c = co(u.companyName);
     if (u.role === "driver") { c.drivers += 1; return; }
+    if (u.employmentStatus === "퇴사") { c.quit += 1; return; } // ⭐ 2026-11-02 관리자센터 — 퇴사자는 직원 수에서 뺀다
     c.staff += 1;
     if (u.role === "admin") c.admins += 1;
     if (u.approved === false) c.pending += 1;
   });
 
   // 3) 접속(로그인 세션)
+  // ⭐ 2026-11-02 관리자센터 — 예전에는 세션 "문서"(기기, 오래된 기기 포함)를 셌다 → 한 사람이 PC·폰·예전 브라우저로 3명처럼 보였다.
+  //   이제 사람(uid) 기준: onlineNow = 10분 안에 활동, online = 24시간 안에 활동, PC/모바일은 그 종류로 접속한 사람 수
   const sess = await db.collection("loginSessions").where("active", "==", true).get();
-  const dayAgo = Date.now() - 86400000;
+  const now = Date.now();
+  const dayAgo = now - 86400000;
+  const nowAgo = now - 10 * 60 * 1000;
+  const sets = {}; // 회사/화주사 키 → { day, now, pc, mobile } (uid Set)
+  const setOf = (key) => sets[key] || (sets[key] = { day: new Set(), now: new Set(), pc: new Set(), mobile: new Set() });
   sess.docs.forEach((d) => {
     const s = d.data() || {};
-    if (s.role === "totalMaster") return;
-    const seen = tsMs(s.lastSeen) || tsMs(s.createdAt);
-    const k = String(s.companyName || userCompany[s.uid] || "").trim();
-    if (s.role === "shipper" && shippers[k]) { if (seen > dayAgo) shippers[k].online += 1; shippers[k].lastSeen = Math.max(shippers[k].lastSeen, seen); return; }
-    if (!k) return;
-    const c = co(k);
-    c.lastSeen = Math.max(c.lastSeen, seen);
-    if (seen > dayAgo) { c.online += 1; if (s.kind === "mobile") c.onlineMobile += 1; else c.onlinePc += 1; }
+    if (s.role === "totalMaster" || s.email === "tjddnqkf@naver.com") return;
+    const seen = Math.max(tsMs(s.lastSeen), tsMs(s.createdAt));
+    const uid = s.uid || d.id;
+    const k = String(userCompany[s.uid] || s.companyName || "").trim();
+    let key;
+    if (s.role === "shipper" && shippers[k]) { shippers[k].lastSeen = Math.max(shippers[k].lastSeen, seen); key = `S:${k}`; }
+    else {
+      if (!k) return;
+      const c = co(k);
+      c.lastSeen = Math.max(c.lastSeen, seen);
+      key = `C:${c.name}`;
+    }
+    const st = setOf(key);
+    if (seen > dayAgo) { st.day.add(uid); (s.kind === "mobile" ? st.mobile : st.pc).add(uid); }
+    if (seen > nowAgo) st.now.add(uid);
+  });
+  Object.entries(sets).forEach(([key, st]) => {
+    const name = key.slice(2);
+    const t = key[0] === "S" ? shippers[name] : companies[name];
+    if (!t) return;
+    t.online = st.day.size; t.onlineNow = st.now.size;
+    if (key[0] === "C") { t.onlinePc = st.pc.size; t.onlineMobile = st.mobile.size; }
   });
 
   // 4) 오더(이번 달·전월·최근 30일) — 필요한 칸만 읽는다
@@ -5362,7 +5387,20 @@ async function computePlatformStats() {
   }
 
   // 5) 데이터량(문서 수) — 회사별 count 집계(문서 1천 개당 읽기 1회)
-  const names = Object.keys(companies);
+  // ⭐ 2026-11-02 관리자센터 — 매시간 집계(full=false)일 때는 지난 집계의 데이터량을 그대로 쓰고, 처음 보는 회사만 센다
+  let names = Object.keys(companies);
+  if (!full) {
+    const prevDoc = await db.collection("siteConfig").doc("platformStats").get().catch(() => null);
+    const prevMap = {};
+    ((prevDoc && prevDoc.exists && prevDoc.data().companies) || []).forEach((p) => { if (p && p.name) prevMap[p.name] = p; });
+    names = names.filter((n) => {
+      const p = prevMap[n];
+      if (!p) return true;
+      const c = companies[n];
+      c.totalOrders = Number(p.totalOrders || 0); c.places = Number(p.places || 0); c.clients = Number(p.clients || 0); c.fleet = Number(p.fleet || 0);
+      return false;
+    });
+  }
   const countOf = async (col, name) => {
     try { const r = await db.collection(col).where("companyName", "==", name).count().get(); return r.data().count || 0; } catch { return 0; }
   };
@@ -5377,7 +5415,7 @@ async function computePlatformStats() {
   Object.keys(companies).forEach((k) => { const c = companies[k]; if (!c.staff && !c.totalOrders && !c.appliedAt) delete companies[k]; });
 
   const out = {
-    updatedAt: FieldValue.serverTimestamp(), updatedAtMs: Date.now(), today, month, prevMonth,
+    updatedAt: FieldValue.serverTimestamp(), updatedAtMs: Date.now(), today, month, prevMonth, full, onlineBasis: "uid", // ⭐ 2026-11-02 관리자센터
     companies: Object.values(companies), shippers: Object.values(shippers), platformDaily,
   };
   await db.collection("siteConfig").doc("platformStats").set(out);
