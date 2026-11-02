@@ -34,7 +34,9 @@ import { useLeaveGuard, draftStore, confirmLeave } from "./leaveGuard";
 import {
   APPROVAL_CATS, APPROVAL_FORMS, formOf, formsOfCat, initialData, missingFields, fieldText, suggestLine,
   itemsTotal, costsTotal, fmtWon, dayDiff, bizDays, leaveEntitlement, leaveUseOf,
+  blankSpendRow, spendRowTotal, spendLinesOf, spendTotals, wonKorean,
 } from "./approvalForms";
+import { bankText } from "./bankUtil";
 
 const MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
 const toMs = (v) => (v?.toMillis ? v.toMillis() : typeof v === "number" ? v : v?.seconds ? v.seconds * 1000 : 0);
@@ -151,6 +153,79 @@ const captureAt1x = async (el, opts) => {
   try { return await html2canvas(el, opts); } finally { if (box) box.style.zoom = prev; }
 };
 
+// 🧾 2026-11-02 지출결의 지출 내역 표(문서·인쇄) — 종이 양식(NO·발생일·업체명·적요·지출금액(공급가액·세액)·합계·비고(입금 계좌번호))과 같은 배치.
+//    맨 위 「금 액」 줄에 한글 금액(金 ○○ 원整)과 숫자. 휴대폰(compact)에서는 행마다 카드로 쌓는다.
+const n0 = (v) => (Number(v) ? Number(v).toLocaleString("ko-KR") : "");
+const SPEND_COLS = "30px 86px minmax(0,1fr) minmax(0,1.15fr) 78px 64px 84px minmax(0,1.25fr)";
+function SpendLinesPaper({ label, rows, last, compact: c }) {
+  const t = spendTotals(rows);
+  const list = rows.length ? rows : [{}];
+  const th = "border-[#0F1A30]/40 bg-[#F5F7FB] font-black px-1.5 py-1.5 text-center whitespace-nowrap";
+  const td = "border-[#0F1A30]/25 px-1.5 py-1.5 min-w-0 break-words";
+  return (
+    <>
+      <div className={`flex ${c ? "flex-col" : ""} border-b border-[#0F1A30]/60`} data-spend-total>
+        <div className={`${c ? "px-2.5 py-1.5 text-[12.5px] border-b border-[#0F1A30]/30" : "w-[118px] px-3 py-3 text-[14px] border-r border-[#0F1A30]/60 flex items-center"} shrink-0 bg-[#EEF1F6] font-black text-[#0F1A30]`}>금 액</div>
+        <div className={`flex-1 min-w-0 ${c ? "px-2.5 py-2" : "px-3.5 py-3"} flex flex-wrap items-baseline gap-x-3 gap-y-0.5 text-[#0F1A30]`}>
+          <span className={`${c ? "text-[15px]" : "text-[17px]"} font-black tracking-[0.06em] break-keep`}>{t.total ? `金 ${wonKorean(t.total)} 원整` : <span className="text-[#B4BFD0]">金 　　　　 원整</span>}</span>
+          <span className={`${c ? "text-[13px]" : "text-[14.5px]"} font-bold tabular-nums text-[#3A4A66]`}>(₩ {t.total.toLocaleString("ko-KR")})</span>
+        </div>
+      </div>
+      <div className={`${last ? "" : "border-b"} border-[#0F1A30]/60`}>
+        <div className={`bg-[#EEF1F6] border-b border-[#0F1A30]/30 ${c ? "px-2.5 py-1.5 text-[12.5px]" : "px-3 py-2 text-[14px]"} font-black text-[#0F1A30] flex items-center justify-between`}>
+          <span>{label}</span><span className="text-[12px] font-bold text-[#5A6A85]">{rows.length}건</span>
+        </div>
+        {c ? (
+          <div>
+            {list.map((r, i) => (
+              <div key={i} className="px-2.5 py-2 border-b border-[#0F1A30]/20 last:border-b-0 text-[12.5px] text-[#0F1A30]">
+                <div className="flex items-start gap-2">
+                  <span className="w-5 h-5 shrink-0 rounded bg-[#0F1A30] text-white text-[11px] font-black flex items-center justify-center mt-0.5">{i + 1}</span>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-start justify-between gap-2"><b className="text-[13.5px] break-words min-w-0">{r.vendor || "-"}</b><b className="text-[13.5px] tabular-nums whitespace-nowrap">{n0(spendRowTotal(r)) || "-"}</b></div>
+                    <div className="text-[#3A4A66] break-words">{[r.date, r.memo].filter(Boolean).join(" · ")}</div>
+                    {(Number(r.supply) > 0 || Number(r.vat) > 0) && <div className="text-[#5A6A85] tabular-nums">공급가액 {n0(r.supply) || 0} · 세액 {n0(r.vat) || 0}</div>}
+                    {bankText(r.bank) && <div className="text-[#1B2B4B] font-bold tabular-nums break-words">입금 {bankText(r.bank)}</div>}
+                    {r.note && <div className="text-[#5A6A85] break-words">비고 {r.note}</div>}
+                  </div>
+                </div>
+              </div>
+            ))}
+            <div className="px-2.5 py-2 bg-[#F5F7FB] border-t border-[#0F1A30]/40 flex justify-between text-[13px] font-black"><span>합계{t.vat ? ` (세액 ${n0(t.vat)})` : ""}</span><span className="tabular-nums">{n0(t.total) || 0}</span></div>
+          </div>
+        ) : (
+          // 표는 div 그리드로(전역 table td 스타일 — 줄바꿈 금지·15px 강제 — 을 피함)
+          <div className="text-[12.5px] text-[#0F1A30]" style={{ display: "grid", gridTemplateColumns: SPEND_COLS }}>
+            {[["NO", 1, 2], ["발생일", 2, 2], ["업체명", 3, 2], ["적요", 4, 2], ["지출금액", 5, 1, 2], ["합계", 7, 2]].map(([h, col, rs, cs]) => (
+              <div key={h} className={`${th} border-b border-r flex items-center justify-center`} style={{ gridColumn: `${col} / span ${cs || 1}`, gridRow: `1 / span ${rs}` }}>{h}</div>
+            ))}
+            <div className={`${th} border-b flex flex-col items-center justify-center leading-tight`} style={{ gridColumn: "8", gridRow: "1 / span 2" }}>비고<span className="text-[11px] font-bold text-[#5A6A85]">(입금 계좌번호)</span></div>
+            <div className={`${th} border-b border-r`} style={{ gridColumn: "5", gridRow: "2" }}>공급가액</div>
+            <div className={`${th} border-b border-r`} style={{ gridColumn: "6", gridRow: "2" }}>세액</div>
+            {list.map((r, i) => (
+              <React.Fragment key={i}>
+                <div className={`${td} border-b border-r text-center font-bold`}>{rows.length ? i + 1 : ""}</div>
+                <div className={`${td} border-b border-r text-center tabular-nums !px-1 text-[12px]`}>{r.date || ""}</div>
+                <div className={`${td} border-b border-r font-bold`}>{r.vendor || ""}</div>
+                <div className={`${td} border-b border-r whitespace-pre-wrap`}>{r.memo || ""}</div>
+                <div className={`${td} border-b border-r text-right tabular-nums`}>{n0(r.supply)}</div>
+                <div className={`${td} border-b border-r text-right tabular-nums`}>{n0(r.vat)}</div>
+                <div className={`${td} border-b border-r text-right tabular-nums font-black`}>{n0(spendRowTotal(r))}</div>
+                <div className={`${td} border-b text-[11.5px] leading-snug`}>{bankText(r.bank) && <div className="tabular-nums font-bold text-[#1B2B4B]">{bankText(r.bank)}</div>}{r.note && <div className="text-[#3A4A66]">{r.note}</div>}</div>
+              </React.Fragment>
+            ))}
+            <div className="bg-[#F5F7FB] font-black border-r border-[#0F1A30]/25 px-2 py-1.5 text-center tracking-[0.3em]" style={{ gridColumn: "1 / span 4" }}>합 계</div>
+            <div className="bg-[#F5F7FB] font-black border-r border-[#0F1A30]/25 px-1.5 py-1.5 text-right tabular-nums">{n0(t.supply)}</div>
+            <div className="bg-[#F5F7FB] font-black border-r border-[#0F1A30]/25 px-1.5 py-1.5 text-right tabular-nums">{n0(t.vat)}</div>
+            <div className="bg-[#F5F7FB] font-black border-r border-[#0F1A30]/25 px-1.5 py-1.5 text-right tabular-nums">{n0(t.total) || 0}</div>
+            <div className="bg-[#F5F7FB]" />
+          </div>
+        )}
+      </div>
+    </>
+  );
+}
+
 export function ApprovalPaper({ form, data, title, line, cc, drafter, docNo, createdMs, staff, status, paperRef }) {
   const cols = [{ uid: drafter?.uid, name: drafter?.name, position: drafter?.position || "기안", kind: "기안", status: "approved", at: createdMs }, ...(line || [])];
   const fields = form.fields || [];
@@ -214,6 +289,7 @@ export function ApprovalPaper({ form, data, title, line, cc, drafter, docNo, cre
               </Cell>
             );
           }
+          if (f.type === "spendLines") return <SpendLinesPaper key={f.k} label={f.label} rows={spendLinesOf(data)} last={last} compact={c} />;
           if (f.type === "costs") {
             return (
               <Cell key={f.k} label={f.label} last={last}>
@@ -334,7 +410,78 @@ function ReasonSelect({ f, value, onChange }) {
     </div>
   );
 }
+// 🧾 2026-11-02 지출결의 지출 내역 입력 — 행마다 카드(발생일·지출처·적요·공급가액·세액·합계·입금계좌·비고), [+ 행 추가]/[복사]/[삭제]
+//    합계는 공급가액+세액으로 자동(합계만 알면 합계 칸에 바로 입력 가능). [부가세 10%]·[합계에서 나누기] 빠른 계산.
+const moneyIn = (v) => String(v || "").replace(/[^\d]/g, "");
+function SpendLinesInput({ value, onChange }) {
+  const rows = Array.isArray(value) && value.length ? value : [blankSpendRow()];
+  const set = (i, patch) => onChange(rows.map((r, j) => {
+    if (j !== i) return r;
+    const n = { ...r, ...patch };
+    if ("supply" in patch || "vat" in patch) { const s = (Number(n.supply) || 0) + (Number(n.vat) || 0); n.total = s ? String(s) : ""; }
+    return n;
+  }));
+  const add = () => onChange([...rows, blankSpendRow(rows[rows.length - 1]?.date)]);
+  const dup = (i) => onChange([...rows.slice(0, i + 1), { ...rows[i], memo: "", supply: "", vat: "", total: "", note: "" }, ...rows.slice(i + 1)]);
+  const del = async (i) => {
+    const r = rows[i];
+    if ((r.vendor || r.memo || spendRowTotal(r)) && !await kpConfirm(`${i + 1}번 행${r.vendor ? `(${r.vendor})` : ""}을 삭제할까요?`)) return;
+    onChange(rows.length > 1 ? rows.filter((_, j) => j !== i) : [blankSpendRow(r.date)]);
+  };
+  const t = spendTotals(rows);
+  const lab = "block text-[11.5px] font-extrabold text-[#5B6B85] mb-1";
+  const won = (k, r, i, ph) => (
+    <div className="relative">
+      <input inputMode="numeric" value={n0(r[k])} onChange={(e) => set(i, { [k]: moneyIn(e.target.value) })} placeholder={ph || "0"} className={`${inp} pr-8 text-right tabular-nums`} />
+      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[12.5px] font-bold text-[#5B6B85]">원</span>
+    </div>
+  );
+  return (
+    <div className="space-y-2.5" data-spend-lines>
+      {rows.map((r, i) => {
+        const sum = (Number(r.supply) || 0) + (Number(r.vat) || 0);
+        const off = sum > 0 && Number(r.total) > 0 && Number(r.total) !== sum;
+        return (
+          <div key={i} data-spend-row={i} className="rounded-2xl border border-[#DCE3EE] bg-[#FAFBFD] overflow-hidden">
+            <div className="flex items-center gap-2 px-3 py-2 bg-white border-b border-[#E3E8F0]">
+              <span className="w-6 h-6 rounded-lg bg-[#0F1A30] text-white text-[12px] font-black flex items-center justify-center tabular-nums">{i + 1}</span>
+              <span className="flex-1 min-w-0 truncate text-[13.5px] font-black text-[#0F1A30]">{r.vendor || <span className="text-[#9AA9C3] font-bold">지출처 미입력</span>}</span>
+              <span className="text-[13.5px] font-black text-[#0F1A30] tabular-nums whitespace-nowrap">{spendRowTotal(r) ? fmtWon(spendRowTotal(r)) : ""}</span>
+              <button type="button" onClick={() => dup(i)} title="같은 지출처·계좌로 아래에 행 추가" className="h-7 px-2 rounded-lg border border-[#DCE3EE] bg-white text-[12px] font-black text-[#3A4A66] hover:border-[#4B6CB7] whitespace-nowrap">복사</button>
+              <button type="button" onClick={() => del(i)} title="행 삭제" aria-label={`${i + 1}번 행 삭제`} className="w-7 h-7 rounded-lg text-[#5B6B85] hover:bg-[#EEF3FC] hover:text-[#0F1A30]">✕</button>
+            </div>
+            <div className="p-3 grid grid-cols-2 gap-x-2 gap-y-2.5">
+              <div className="col-span-2 sm:col-span-1"><span className={lab}>발생일(납입일)</span><CustomDatePicker value={r.date || ""} onChange={(e) => set(i, { date: e.target.value })} className={inp} showIcon placeholder="날짜 선택" /></div>
+              <div className="col-span-2 sm:col-span-1"><span className={lab}>지출처(업체명) *</span><input value={r.vendor || ""} onChange={(e) => set(i, { vendor: e.target.value })} placeholder="예) ○○특장 김제공장" className={inp} /></div>
+              <div className="col-span-2"><span className={lab}>적요</span><input value={r.memo || ""} onChange={(e) => set(i, { memo: e.target.value })} placeholder="예) 5956 김태균 박스 고리 작업" className={inp} /></div>
+              <div><span className={lab}>공급가액</span>{won("supply", r, i)}</div>
+              <div><span className={lab}>세액(부가세)</span>{won("vat", r, i, "없으면 비움")}</div>
+              <div className="col-span-2"><span className={lab}>합계 *</span>{won("total", r, i)}
+                <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                  <button type="button" disabled={!(Number(r.supply) > 0)} onClick={() => set(i, { vat: String(Math.round(Number(r.supply) * 0.1)) })} className="h-7 px-2.5 rounded-lg border border-[#C9D6EE] bg-[#F3F6FA] text-[12px] font-black text-[#1B2B4B] hover:bg-[#EEF3FC] disabled:opacity-40">부가세 10%</button>
+                  <button type="button" disabled={!(Number(r.total) > 0)} onClick={() => { const tt = Number(r.total); const sp = Math.round(tt / 1.1); set(i, { supply: String(sp), vat: String(tt - sp) }); }} className="h-7 px-2.5 rounded-lg border border-[#C9D6EE] bg-[#F3F6FA] text-[12px] font-black text-[#1B2B4B] hover:bg-[#EEF3FC] disabled:opacity-40">합계에서 공급가·세액 나누기</button>
+                  {off && <span className="text-[12px] font-bold text-[#2D4C82]">! 공급가액+세액({n0(sum)})과 다릅니다</span>}
+                </div>
+              </div>
+              <div className="col-span-2"><span className={lab}>입금 계좌</span><BankAccountInput value={r.bank} onChange={(b) => set(i, { bank: b })} stacked /></div>
+              <div className="col-span-2"><span className={lab}>비고</span><input value={r.note || ""} onChange={(e) => set(i, { note: e.target.value })} placeholder="선택" className={inp} /></div>
+            </div>
+          </div>
+        );
+      })}
+      <button type="button" onClick={add} className="w-full h-11 rounded-2xl border-2 border-dashed border-[#9AB0D6] bg-white text-[14px] font-black text-[#1B2B4B] hover:bg-[#F5F8FD] hover:border-[#2D4C82]">+ 행 추가</button>
+      <div className="rounded-2xl text-white px-4 py-3" style={{ background: "linear-gradient(120deg,#0F1A30,#1B2B4B)" }}>
+        <div className="flex items-center justify-between gap-3">
+          <span className="text-[11.5px] font-extrabold tracking-[0.2em] text-[#9AB0D6]" style={{ fontFamily: MONO }}>TOTAL · {rows.filter((r) => spendRowTotal(r) > 0).length}건</span>
+          <span className="text-[18px] font-black tabular-nums">{fmtWon(t.total)}</span>
+        </div>
+        <div className="mt-0.5 text-[12.5px] font-bold text-[#C9D6EE] break-keep">金 {wonKorean(t.total)} 원整{t.vat ? ` · 공급가액 ${n0(t.supply) || 0} / 세액 ${n0(t.vat)}` : ""}</div>
+      </div>
+    </div>
+  );
+}
 function FieldInput({ f, value, onChange, staff, meUid }) {
+  if (f.type === "spendLines") return <SpendLinesInput value={value} onChange={onChange} />;
   if (f.type === "bank") return <BankAccountInput value={value} onChange={onChange} stacked />;
   if (f.type === "textarea" && f.templates) return <ReasonSelect f={f} value={value} onChange={onChange} />;
   if (f.type === "textarea") return <textarea value={value || ""} onChange={(e) => onChange(e.target.value)} rows={f.rows || 3} placeholder={f.ph || ""} className={`${inp} h-auto py-2 leading-relaxed resize-y`} />;
@@ -699,7 +846,7 @@ function Composer({ company, me, staff, cat, preset, onDone, leave, getLive, myD
   const init = draft && formOf(draft.formKey)?.cat === cat ? draft : preset;
   const [formKey, setFormKey] = React.useState(init?.form && formOf(init.form).cat === cat ? init.form : init?.formKey && formOf(init.formKey).cat === cat ? init.formKey : forms[0].key);
   const form = formOf(formKey);
-  const [data, setData] = React.useState(() => (init?.data && (init.form === formKey || init.formKey === formKey) ? init.data : initialData(form)));
+  const [data, setData] = React.useState(() => { const d0 = init?.data && (init.form === formKey || init.formKey === formKey) ? init.data : initialData(form); return form.normalize ? form.normalize(d0) : d0; }); // ⭐ 2026-11-02 예전 지출결의(지출처 1곳)도 지출 내역 행으로
   const [title, setTitle] = React.useState(init?.title || "");
   const [line, setLine] = React.useState(init?.line || []);
   const [cc, setCc] = React.useState(init?.cc || []);
@@ -747,6 +894,7 @@ function Composer({ company, me, staff, cat, preset, onDone, leave, getLive, myD
       return;
     }
     if (!line.length) { setMsg("결재자를 1명 이상 지정해 주세요."); return; }
+    const pd = form.prepare ? form.prepare(data) : data; // ⭐ 2026-11-02 지출결의 — 빈 행 빼고 예전 칸(지출처·입금계좌·지출일) 채움
     if (editId) {
       const live = getLive?.(editId);
       if (!live || !canEdit(live, me.uid)) { setMsg("결재자가 이미 문서를 열어봐서 수정할 수 없습니다. 회수 후 재기안해 주세요."); return; }
@@ -755,7 +903,7 @@ function Composer({ company, me, staff, cat, preset, onDone, leave, getLive, myD
       try {
         const imgs = await fitApprovalImages(images); // ⭐ 2026-11-02 점검 — 첨부 이미지 크기 맞춤
         await updateDoc(doc(db, "approvals", editId), {
-          title: finalTitle, data, images: imgs, summary: form.summary ? form.summary(data) : "", amount: form.amount ? form.amount(data) : 0, days: form.days ? form.days(data) : 0,
+          title: finalTitle, data: pd, images: imgs, summary: form.summary ? form.summary(pd) : "", amount: form.amount ? form.amount(pd) : 0, days: form.days ? form.days(pd) : 0,
           updatedAt: serverTimestamp(), history: arrayUnion({ at: Date.now(), uid: me.uid, name: me.name, action: "수정", comment: "" }),
         });
         onDone();
@@ -775,8 +923,8 @@ function Composer({ company, me, staff, cat, preset, onDone, leave, getLive, myD
         : { uid: s.uid, name: s.name, position: s.position || "", team: s.team || "", kind: s.kind || "결재", status: i === 0 ? "pending" : "wait", at: 0, comment: "" }));
       const payload = {
         company, docNo, cat, form: form.key, formLabel: form.label, title: finalTitle,
-        summary: form.summary ? form.summary(data) : "", amount: form.amount ? form.amount(data) : 0, days: form.days ? form.days(data) : 0,
-        data, images: imgs, drafterUid: me.uid, drafter: { uid: me.uid, name: me.name, team: me.team || "", position: me.position || "" },
+        summary: form.summary ? form.summary(pd) : "", amount: form.amount ? form.amount(pd) : 0, days: form.days ? form.days(pd) : 0,
+        data: pd, images: imgs, drafterUid: me.uid, drafter: { uid: me.uid, name: me.name, team: me.team || "", position: me.position || "" },
         line: L, cc, ccUids: cc.map((c) => c.uid), participants: [...new Set([me.uid, ...L.map((s) => s.uid), ...cc.map((c) => c.uid)])],
         step: auto ? L.length : 0, status: auto ? "approved" : "pending", createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
         history: [{ at: Date.now(), uid: me.uid, name: me.name, action: "상신", comment: "" }, ...(auto ? [{ at: Date.now(), uid: "auto", name: "자동 승인", action: "승인", comment: "임원 설정 — 일일 업무일지 자동 승인" }] : [])], redraftOf: preset?.id || null,

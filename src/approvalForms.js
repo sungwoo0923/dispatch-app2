@@ -193,17 +193,20 @@ export const APPROVAL_FORMS = [
     summary: (d) => `${d.date || ""} ${d.kind || ""} ${d.from || ""}~${d.to || ""}` },
 
   // ───────── 비용·지출 ─────────
+  // ⭐ 2026-11-02 지출결의 여러 건 한 장에 — 운송사 경리 요청("지출건마다 한 개씩 올리는 번거로움").
+  //    지출 내역 표(spendLines): 행마다 발생일·지출처·적요·공급가액·세액·합계·입금계좌·비고, [행 추가]/[행 삭제].
+  //    예전 문서(지출처·입금계좌·품목 한 벌)는 spendLinesOf()가 표 행으로 바꿔 보여주고,
+  //    저장할 때 prepare()가 예전 칸(date·vendor·bank·items)도 첫 행/합계로 채워 장부 자동 기록·목록이 그대로 동작.
   { key: "spend", cat: "expense", label: "지출결의서", title: "지 출 결 의 서", code: "EX",
     fields: [
-      { k: "date", label: "지출일", type: "date", required: true },
-      { k: "vendor", label: "지출처(거래처)", type: "text", required: true },
-      { k: "account", label: "계정과목", type: "select", options: ACCOUNTS, def: "소모품비" },
-      { k: "pay", label: "결제 수단", type: "select", options: PAY, def: "법인카드" },
-      { k: "items", label: "지출 내역", type: "items", required: true },
-      { k: "bank", label: "입금 계좌", type: "bank" },
+      { k: "account", label: "계정과목", type: "select", options: ACCOUNTS, def: "소모품비", half: true },
+      { k: "pay", label: "결제 수단", type: "select", options: PAY, def: "법인카드", half: true },
+      { k: "lines", label: "지출 내역", type: "spendLines", required: true },
       { k: "reason", label: "지출 사유", templates: ["사무용품 구매", "차량 정비·수리", "유류비 정산", "거래처 접대", "직원 복리후생(식대·간식)", "택배·운송비", "통신비", "교육·세미나", "긴급 부품 구매"], type: "textarea", required: true },
     ],
-    amount: (d) => itemsTotal(d.items), summary: (d) => `${d.vendor || ""} · ${d.account || ""} · ${won(itemsTotal(d.items))}` },
+    prepare: (d) => spendPrepare(d), normalize: (d) => ({ ...d, lines: spendLinesOf(d, true) }),
+    amount: (d) => spendTotals(spendLinesOf(d)).total,
+    summary: (d) => { const r = spendLinesOf(d); const v = (r[0]?.vendor || "").trim(); return `${v}${r.length > 1 ? ` 외 ${r.length - 1}건` : ""} · ${d.account || ""} · ${won(spendTotals(r).total)}`; } },
   { key: "card", cat: "expense", label: "법인카드 사용보고", title: "법 인 카 드 사 용 보 고 서", code: "EC",
     fields: [
       { k: "date", label: "사용일", type: "date", required: true },
@@ -415,6 +418,67 @@ export const APPROVAL_FORMS = [
     summary: (d) => `퇴직 희망일 ${d.last || ""}` },
 ];
 
+// ───────── 지출결의 지출 내역(여러 행) ─────────
+const kstYmd = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
+export const blankSpendRow = (date) => ({ date: date || kstYmd(), vendor: "", memo: "", supply: "", vat: "", total: "", bank: { bank: "", acct: "", holder: "" }, note: "" });
+export const spendRowTotal = (r) => Number(r?.total) || ((Number(r?.supply) || 0) + (Number(r?.vat) || 0));
+const hasBank = (b) => !!bankText(b).trim();
+const rowFilled = (r) => !!(String(r?.vendor || "").trim() || String(r?.memo || "").trim() || spendRowTotal(r) > 0);
+// 문서 data → 지출 내역 행. 새 문서는 data.lines, 예전 문서(지출처 1곳 + 품목표)는 품목마다 한 행으로 바꿔 보여준다.
+//  keepBlank: 작성 화면(빈 행도 그대로) / 기본: 내용 있는 행만
+export function spendLinesOf(d, keepBlank = false) {
+  const x = d || {};
+  if (Array.isArray(x.lines) && x.lines.length) return keepBlank ? x.lines : x.lines.filter(rowFilled);
+  const items = (x.items || []).filter((r) => String(r.name || "").trim() || Number(r.price));
+  const base = { date: x.date || "", vendor: x.vendor || "", supply: "", vat: "", note: "" };
+  let rows = items.map((r, i) => {
+    const q = Number(r.qty) || 0; const p = Number(r.price) || 0;
+    return { ...base, memo: `${r.name || ""}${q && q !== 1 ? ` (${q} × ${p.toLocaleString("ko-KR")})` : ""}`, total: String(q * p), bank: i === 0 ? (x.bank || "") : "" };
+  });
+  if (!rows.length && (x.vendor || x.date || hasBank(x.bank))) rows = [{ ...base, memo: "", total: "", bank: x.bank || "" }];
+  if (!rows.length && keepBlank) rows = [blankSpendRow(x.date)];
+  return rows;
+}
+export function spendTotals(rows) {
+  return (rows || []).reduce((a, r) => ({ supply: a.supply + (Number(r.supply) || 0), vat: a.vat + (Number(r.vat) || 0), total: a.total + spendRowTotal(r) }), { supply: 0, vat: 0, total: 0 });
+}
+// 저장 직전 — 빈 행 빼고, 예전 칸(date·vendor·bank·items)을 첫 행/합계로 채움(장부 자동 기록·목록·가져오기 호환)
+export function spendPrepare(d) {
+  const all = spendLinesOf(d, true);
+  const rows = all.filter(rowFilled);
+  const use = rows.length ? rows : all.slice(0, 1);
+  const first = use[0] || {};
+  const t = spendTotals(use);
+  return {
+    ...d,
+    lines: use.map((r) => ({ ...r, total: String(spendRowTotal(r) || "") })),
+    date: first.date || "",
+    vendor: `${String(first.vendor || "").trim()}${use.length > 1 ? ` 외 ${use.length - 1}건` : ""}`,
+    bank: (use.find((r) => hasBank(r.bank)) || {}).bank || "",
+    items: use.map((r) => ({ name: [r.vendor, r.memo].map((v) => String(v || "").trim()).filter(Boolean).join(" · "), qty: 1, price: String(spendRowTotal(r)) })),
+    supplyTotal: t.supply, vatTotal: t.vat,
+  };
+}
+// 금액 한글(지출결의 "金 일십칠만칠천오백 원整")
+export function wonKorean(n) {
+  let v = Math.floor(Math.abs(Number(n) || 0));
+  if (!v) return "영";
+  const D = ["", "일", "이", "삼", "사", "오", "육", "칠", "팔", "구"];
+  const U = ["", "십", "백", "천"];
+  const B = ["", "만", "억", "조", "경"];
+  let out = ""; let g = 0;
+  while (v > 0 && g < B.length) {
+    const part = v % 10000; v = Math.floor(v / 10000);
+    if (part) {
+      let s = ""; let p = part;
+      for (let i = 0; i < 4 && p > 0; i++) { const dg = p % 10; p = Math.floor(p / 10); if (dg) s = D[dg] + U[i] + s; }
+      out = s + B[g] + out;
+    }
+    g += 1;
+  }
+  return out;
+}
+
 export const formOf = (key) => APPROVAL_FORMS.find((f) => f.key === key) || APPROVAL_FORMS[0];
 export const formsOfCat = (cat) => APPROVAL_FORMS.filter((f) => f.cat === cat);
 
@@ -423,6 +487,7 @@ export function initialData(form) {
   (form.fields || []).forEach((f) => {
     if (f.def !== undefined) d[f.k] = f.def;
     if (f.type === "items") d[f.k] = [{ name: "", qty: 1, price: "" }];
+    if (f.type === "spendLines") d[f.k] = [blankSpendRow()];
     if (f.type === "costs") d[f.k] = (f.preset || ["항목"]).map((l) => ({ label: l, amount: "" }));
     if (f.type === "daterange") d[f.k] = { start: "", end: "" };
     if (f.type === "checks") d[f.k] = [];
@@ -440,6 +505,7 @@ export function missingFields(form, d) {
     if (f.type === "notice") return false;
     if (f.type === "checks") return (v || []).length < (f.options || []).length;
     if (f.type === "items") return !(v || []).some((r) => String(r.name || "").trim() && Number(r.price));
+    if (f.type === "spendLines") { const rows = spendLinesOf(d, true).filter(rowFilled); return !rows.length || rows.some((r) => !String(r.vendor || "").trim() || !(spendRowTotal(r) > 0)); }
     return v === undefined || v === null || String(v).trim() === "";
   }).map((f) => f.label);
 }
@@ -449,6 +515,7 @@ export function fieldText(f, v, staff) {
   if (f.type === "notice") return (f.text || []).join("\n");
   if (v === undefined || v === null || v === "") return "";
   if (f.type === "bank") return bankText(v);
+  if (f.type === "spendLines") return (Array.isArray(v) ? v : []).filter(rowFilled).map((r, i) => `${i + 1}. ${r.date || ""} ${r.vendor || ""} ${r.memo || ""} ${won(spendRowTotal(r))}`.replace(/\s+/g, " ")).join("\n");
   if (f.type === "daterange") { const n = dayDiff(v); const b = bizDays(v); return v.start ? `${rangeText(v)}${n ? ` (${n}일${b !== n ? ` · 주말·공휴일 빼고 ${b}일` : ""})` : ""}` : ""; }
   if (f.type === "money") return Number(v) ? won(v) : "";
   if (f.type === "checks") return (v || []).map((x) => `☑ ${x}`).join("\n");
