@@ -73,7 +73,7 @@ function Suggest({ value, onChange, onPick, items, k, sub, tag, placeholder, tit
     if (!r) return;
     const vh = window.innerHeight; const below = vh - r.bottom - 8; const above = r.top - 8;
     const up = below < 220 && above > below;
-    const w = Math.min(Math.max(r.width, 300), window.innerWidth - 16);
+    const w = Math.min(Math.max(r.width, 340), window.innerWidth - 16);
     setPos({ left: Math.max(8, Math.min(r.left, window.innerWidth - w - 8)), width: w, top: up ? undefined : r.bottom + 4, bottom: up ? vh - r.top + 4 : undefined, maxH: Math.max(160, Math.min(340, up ? above : below)) });
   }, []);
   React.useLayoutEffect(() => {
@@ -112,7 +112,7 @@ function Suggest({ value, onChange, onPick, items, k, sub, tag, placeholder, tit
           style={{ left: pos.left, width: pos.width, top: pos.top, bottom: pos.bottom, maxHeight: pos.maxH }}>
           <div className="shrink-0 flex items-center justify-between gap-2 px-3 h-8 bg-[#1B2B4B] text-white">
             <span className="text-[12px] font-black tracking-wide whitespace-nowrap">{title} · {list.length}{list.length >= (q ? 12 : 30) ? "+" : ""}건</span>
-            <span className="text-[11px] font-bold text-white/60 whitespace-nowrap">↑↓ 이동 · Enter 선택 · Esc 닫기</span>
+            <span className="min-w-0 truncate text-[11px] font-bold text-white/60 whitespace-nowrap">↑↓ 이동 · Enter 선택 · Esc 닫기</span>
           </div>
           <div ref={listRef} role="listbox" className="overflow-y-auto">
             {list.map((x, i) => {
