@@ -1201,7 +1201,7 @@ export default function HomeDashboard({ role, user, userCompany = "", pending, d
                 <div className="text-[11px] text-gray-500 mb-1">작성자</div>
                 <CustomSelect className={formInput} value={scheduleForm.authorName} onChange={e => setScheduleForm({ ...scheduleForm, authorName: e.target.value })}>
                   <option value="">선택</option>
-                  {users.map(u => <option key={u.id} value={u.name}>{u.name}{u.email ? ` (${u.email.split("@")[0]})` : ""}</option>)}
+                  {users.filter(u => u.role !== "totalMaster").map(u => <option key={u.id} value={u.name}>{u.name}{u.email ? ` (${u.email.split("@")[0]})` : ""}</option>)}
                 </CustomSelect>
               </div>
             )}
@@ -1228,7 +1228,7 @@ export default function HomeDashboard({ role, user, userCompany = "", pending, d
                     }}
                   >
                     <option value="">결재자 선택</option>
-                    {users.filter(u => (u.uid || u.id) !== user?.uid).map(u => <option key={u.id} value={u.uid || u.id}>{u.name}{u.email ? ` (${u.email.split("@")[0]})` : ""}</option>)}
+                    {users.filter(u => (u.uid || u.id) !== user?.uid && u.role !== "totalMaster").map(u => <option key={u.id} value={u.uid || u.id}>{u.name}{u.email ? ` (${u.email.split("@")[0]})` : ""}</option>)}
                   </CustomSelect>
                   <button onClick={() => setScheduleForm({ ...scheduleForm, approvers: scheduleForm.approvers.filter((_, j) => j !== i) })}
                     className="text-red-400 text-lg font-bold px-1">×</button>
@@ -1440,7 +1440,7 @@ export default function HomeDashboard({ role, user, userCompany = "", pending, d
             <div className="space-y-3">
               <CustomSelect className={formInput} value={handoverForm.receiver} onChange={e => { const s = users.find(u => u.name === e.target.value); setHandoverForm({ ...handoverForm, receiver: s?.name || "", receiverUid: s?.uid || s?.id }); }}>
                 <option value="">받는 사람 선택</option>
-                {users.map(u => <option key={u.id} value={u.name}>{u.name}</option>)}
+                {users.filter(u => u.role !== "totalMaster").map(u => <option key={u.id} value={u.name}>{u.name}</option>)}
               </CustomSelect>
               <input type="date" className={formInput} value={handoverForm.date} onChange={e => setHandoverForm({ ...handoverForm, date: e.target.value })} />
               <textarea rows={4} className={formInput} value={handoverForm.text} onChange={e => setHandoverForm({ ...handoverForm, text: e.target.value })} />

@@ -13,7 +13,7 @@
 import { subscribeUsersLive } from "./usersLive"; // ⭐ 2026-11-02 속도 — 직원 명부 구독 공유
 import { useEffect, useState } from "react";
 import { collection, onSnapshot } from "firebase/firestore";
-import { db } from "./firebase";
+import { db, auth } from "./firebase";
 
 export const toWon = (v) => parseInt(String(v ?? "0").replace(/[^\d-]/g, ""), 10) || 0;
 
@@ -32,16 +32,30 @@ export function statsOf(list) {
 
 // 👤 담당자는 무조건 "이름"으로 — 오더에는 계정 이메일(작성자)만 있는 경우가 많아 직원 명부(users)로 바꾼다
 const STAFF_NAME = new Map();
+// ⭐ 2026-11-03 최고관리자(플랫폼 운영 계정)는 직원이 아니라 담당자 순위·매출에서 뺀다 — 최고관리자 문서는 다른 회사 소속이라
+//  회사별로 걸러진 직원 명부에 안 들어와 "tjddnqkf"처럼 계정명으로 보였다. 이메일·uid로 따로 알아본다.
+const MASTER_KEYS = new Set(["tjddnqkf@naver.com", "tjddnqkf"]);
+const rememberMaster = (email, uid) => {
+  const em = String(email || "").trim().toLowerCase();
+  if (em) { MASTER_KEYS.add(em); MASTER_KEYS.add(em.split("@")[0]); }
+  if (uid) MASTER_KEYS.add(String(uid).toLowerCase());
+};
+// 지금 로그인한 사람이 최고관리자면 그 계정도(다른 이메일로 최고관리자를 준 경우)
+const rememberMe = () => { try { if (localStorage.getItem("role") === "totalMaster" && auth.currentUser) rememberMaster(auth.currentUser.email, auth.currentUser.uid); } catch { /* 무시 */ } };
+export const isMasterKey = (k) => MASTER_KEYS.has(String(k || "").trim().toLowerCase());
 const nameSubs = new Set();
 let nameStarted = false;
 export function ensureStaffNames() {
   if (nameStarted) return;
   nameStarted = true;
   // ⭐ 2026-11-02 속도 — 앱 공용 users 구독(usersLive)을 같이 쓴다(받는 데이터 동일)
+  rememberMe();
   subscribeUsersLive((_l, raw) => {
+    rememberMe();
     STAFF_NAME.clear();
     raw.forEach(({ id, data: u }) => {
-      const n = String(u.name || u.이름 || u.담당자명 || u.displayName || "").trim();
+      if (u.role === "totalMaster") rememberMaster(u.email, id);
+      const n = String(u.name || u.이름 || u.담당자명 || u.성명 || u.displayName || "").trim();
       if (!n) return;
       const em = String(u.email || "").trim().toLowerCase();
       if (em) { STAFF_NAME.set(em, n); STAFF_NAME.set(em.split("@")[0], n); }
@@ -58,8 +72,9 @@ export function useStaffNames() {
 }
 export const creatorOf = (r) => {
   const named = String(r.등록자명 || r.createdByName || "").trim();
-  if (named && !named.includes("@")) return STAFF_NAME.get(named.toLowerCase()) || named;
   const raw = String(r.등록자 || r.작성자 || r.createdByEmail || named || "").trim();
+  if (isMasterKey(raw) || isMasterKey(named) || named === "최고관리자") return "최고관리자"; // ⭐ 순위·매출에서 빠짐
+  if (named && !named.includes("@")) return STAFF_NAME.get(named.toLowerCase()) || named;
   if (!raw) return "";
   const key = raw.toLowerCase();
   return STAFF_NAME.get(key) || STAFF_NAME.get(key.split("@")[0]) || (raw.includes("@") ? raw.split("@")[0] : raw);

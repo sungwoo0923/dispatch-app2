@@ -33,6 +33,7 @@ import { subscribeUsersLive } from "./usersLive";
 const AdminMenu = lazyView(() => import("./AdminMenu"));
 import FleetExtraFields from "./FleetDriverExtra";
 import { useFixedRouteAutoDispatch, FixedRouteEditNotice } from "./FixedRoutes";
+import { isMasterKey } from "./monthCompare"; // ⭐ 2026-11-03 최고관리자 계정은 담당자 이름 대신 "최고관리자"
 import { deptModeOf } from "./DeptDashboard";
 import { ExecApprovals, TeamSchedule, ApprovalWorkspace, ExecScheduleBoard } from "./ExecSuite";
 import { useMyProfile } from "./userNames";
@@ -3510,6 +3511,7 @@ const _ORDER_CREATOR_KEYS = ["작성자", "createdByEmail", "createdByUid", "cre
 const _orderStaffNameRaw = (r, nameMap) => {
   if (!r) return "";
   if (String(r.등록기기 || "").trim() === ORDER_MGR_FIXED || String(r.배차확정자 || "").trim() === ORDER_MGR_FIXED || r.source === "fixedRoute") return ORDER_MGR_FIXED;
+  if (_ORDER_CREATOR_KEYS.some((k) => isMasterKey(r[k]))) return "최고관리자"; // ⭐ 2026-11-03 계정명(tjddnqkf) 대신
   for (const k of _ORDER_CREATOR_KEYS) {
     const s = String(r[k] || "").trim();
     if (!s) continue;

@@ -15,6 +15,7 @@ function aggregate(list) {
   const m = new Map();
   for (const r of list) {
     const k = r.__fixed ? "고정거래처" : (creatorOf(r) || "미지정");
+    if (k === "최고관리자") continue; // ⭐ 2026-11-03 최고관리자 계정은 담당자 실적에서 뺌
     if (!m.has(k)) m.set(k, { key: k, cnt: 0, sale: 0, driver: 0, low: 0, neg: 0, clients: new Set() });
     const g = m.get(k);
     const s = toWon(r.청구운임), d = toWon(r.기사운임);

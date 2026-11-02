@@ -1,5 +1,6 @@
 // ======================= src/mobile/MobileApp.jsx (PART 1/3) =======================
 import { subscribeUsersLive } from "../usersLive"; // ⭐ 2026-11-02 속도 — 직원 명부 구독 공유
+import { isMasterKey } from "../monthCompare"; // ⭐ 2026-11-03 최고관리자 계정은 "최고관리자"로
 import { useMyProfile } from "../userNames";
 import { useCompanyDropdownSync, dropdownList } from "../companyDropdownOptions";
 import { CompanyOptionPicker } from "../companyOptionPicker"; // 🧾 2026-11-02 지급방식·배차방식·상/하차방법 공용 선택기(＋ 추가)
@@ -1722,6 +1723,7 @@ function DispatchRequestModal({ order, onApprove, onReject, onClose }) {
 function resolveCreatorName(order, mobileUsers) {
   const raw = order?.등록자명 || order?.createdByName || order?.등록자 || order?.createdByEmail || order?.createdBy || order?.작성자 || "";
   if (!raw) return "";
+  if ([order?.작성자, order?.createdByEmail, order?.등록자, raw].some((v) => isMasterKey(v))) return "최고관리자"; // ⭐ 2026-11-03
   if (/[가-힣]/.test(raw) && !raw.includes("@")) return raw; // 이미 한글 실명
   const key = String(raw).trim().toLowerCase();
   const match = (mobileUsers || []).find((u) => u.id === raw || (u.email && u.email.trim().toLowerCase() === key));
@@ -6038,7 +6040,7 @@ onGoAttendance={() => {
               onChange={e => setScheduleForm(f => ({ ...f, authorName: e.target.value }))}
             >
               <option value="">선택</option>
-              {mobileUsers.filter(u => !["shipper","driver","cafeUser"].includes(u.role)).map(u => <option key={u.id} value={u.name}>{u.name}{u.email ? ` (${u.email.split("@")[0]})` : ""}</option>)}
+              {mobileUsers.filter(u => !["shipper","driver","cafeUser","totalMaster"].includes(u.role)).map(u => <option key={u.id} value={u.name}>{u.name}{u.email ? ` (${u.email.split("@")[0]})` : ""}</option>)}
             </MobileSelect>
           </div>
         )}
@@ -6097,7 +6099,7 @@ onGoAttendance={() => {
                 }}
               >
                 <option value="">결재자 선택</option>
-                {mobileUsers.filter(u => (u.uid || u.id) !== currentUser?.uid && !["shipper","driver","cafeUser"].includes(u.role)).map(u => <option key={u.id} value={u.uid || u.id}>{u.name}{u.email ? ` (${u.email.split("@")[0]})` : ""}</option>)}
+                {mobileUsers.filter(u => (u.uid || u.id) !== currentUser?.uid && !["shipper","driver","cafeUser","totalMaster"].includes(u.role)).map(u => <option key={u.id} value={u.uid || u.id}>{u.name}{u.email ? ` (${u.email.split("@")[0]})` : ""}</option>)}
               </MobileSelect>
               <button onClick={() => setScheduleForm(f => ({ ...f, approvers: f.approvers.filter((_, j) => j !== i) }))}
                 className="text-red-400 text-lg font-bold px-1">×</button>
@@ -6349,7 +6351,7 @@ onGoAttendance={() => {
         }}
       >
         <option value="">받는 사람 선택</option>
-        {mobileUsers.filter(u => !["shipper","driver","cafeUser"].includes(u.role)).map(u => <option key={u.id} value={u.name}>{u.name}</option>)}
+        {mobileUsers.filter(u => !["shipper","driver","cafeUser","totalMaster"].includes(u.role)).map(u => <option key={u.id} value={u.name}>{u.name}</option>)}
       </MobileSelect>
       <CustomDatePicker
         className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none"
@@ -6408,7 +6410,7 @@ onGoAttendance={() => {
             }}
           >
             <option value="">받는 사람 선택</option>
-            {mobileUsers.filter(u => !["shipper","driver","cafeUser"].includes(u.role)).map(u => <option key={u.id} value={u.name}>{u.name}</option>)}
+            {mobileUsers.filter(u => !["shipper","driver","cafeUser","totalMaster"].includes(u.role)).map(u => <option key={u.id} value={u.name}>{u.name}</option>)}
           </MobileSelect>
           <CustomDatePicker
             className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none"
