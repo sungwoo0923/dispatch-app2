@@ -3532,7 +3532,7 @@ const orderMgrName = (getName, r) => (getName ? getName(r) : "");
 // 정렬용 값 꺼내기 — 배차담당자 칸은 위에서, 나머지는 orderSortValue
 
 // ⚡ 큰 표를 나눠 그리기 — 표 아래에 닿으면(또는 버튼을 누르면) 다음 묶음을 붙인다
-const RT_ROW_STEP = 300;
+const RT_ROW_STEP = 150;
 function KpMoreRows({ shown, total, onMore }) {
   const ref = React.useRef(null);
   React.useEffect(() => {
@@ -27620,7 +27620,7 @@ const driverPanelCallbackRef = React.useRef(null);
   const rtMgrMap = useOrderStaffName(userNameMap, userCompany); // ⭐ 배차담당자 칸(회사별 기능 꺼지면 null)
   const filtered = React.useMemo(() => sortRows(filteredBase, rtSort.sort, makeOrderSortValue(rtMgrMap)), [filteredBase, rtSort.sort, rtMgrMap]);
   // ⚡ 그리는 줄 수 제한 — 하루 오더가 수천 건이면 표 전체를 한꺼번에 그리고 배치하는 데만 수 초가 걸려
-  //   정렬·검색 클릭이 멈춘 것처럼 보였다. 처음엔 300줄만 그리고, 아래로 내리면 300줄씩 자동으로 더 붙인다.
+  //   정렬·검색 클릭이 멈춘 것처럼 보였다. 처음엔 150줄만 그리고, 아래로 내리면 150줄씩 자동으로 더 붙인다.
   //   (전체선택·엑셀·합계는 그대로 전체 목록 기준)
   const [rtShowN, setRtShowN] = React.useState(RT_ROW_STEP);
   React.useEffect(() => { setRtShowN(RT_ROW_STEP); }, [rtSort.sort, q, rtSearchType, dayMode, statusFilter, filterErrorIds]);
