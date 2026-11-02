@@ -4,7 +4,6 @@
 //  - 기사: 차량번호·이름·전화번호 + 등급(일반/지입 등, 미리보기에서 고름). 같은 차량번호는 1건만.
 //  - 이미 프로그램에 있는 건 건너뛴다. 저장한 묶음은 importBatchId로 [가져오기 취소] 가능(SheetImportPanel 기록 표).
 import React from "react";
-import * as XLSX from "xlsx";
 import { auth, db, FUNCTIONS_BASE, DEFAULT_COMPANY } from "./firebase";
 import { collection, doc, getDoc, getDocs, query, where, writeBatch, setDoc, serverTimestamp } from "firebase/firestore";
 import { coDocKey } from "./coKey";
@@ -83,7 +82,7 @@ export default function SheetPlaceDriverImport({ companies = [], url: initUrl = 
   const [allGrade, setAllGrade] = React.useState("일반");
   const [onlyFull, setOnlyFull] = React.useState(true);
   const [done, setDone] = React.useState(null);
-  const gridsRef = React.useRef({ grids: [], title: "", src: "" }); // ⭐ 그림 글자 읽기 후 다시 합칠 때 씀
+  const rawRef = React.useRef({ places: [], drivers: [], tabs: [], title: "", src: "" }); // ⭐ 그림 글자 읽기 후 다시 합칠 때 씀
   const [imgs, setImgs] = React.useState([]); // 엑셀 속 그림(같은 그림 제외)
   const [ocr, setOcr] = React.useState(null); // { done, total, found, error }
   const excelRef = React.useRef(null);
@@ -96,19 +95,20 @@ export default function SheetPlaceDriverImport({ companies = [], url: initUrl = 
     getDoc(doc(db, "users", uid)).then((s) => setIsMaster(s.data()?.role === "totalMaster")).catch(() => setIsMaster(false));
   }, []);
 
-  const analyze = async (grids, title, src, extraPlaces = []) => {
-    gridsRef.current = { grids, title, src };
+  // raw = { places, drivers, tabs } — 시트·엑셀에서 뽑은 후보(중복·기존 확인 전)
+  const analyze = async (raw, title, src, extraPlaces = []) => {
+    rawRef.current = { ...raw, title, src };
     const [exP, exD] = await Promise.all([loadCompanyDocs("places", company), loadCompanyDocs("drivers", company)]);
     const exPlaceKeys = new Set(exP.map((p) => `${normKey(p.업체명)}|${normKey(p.주소)}`));
     const exPlaceNames = new Set(exP.map((p) => normKey(p.업체명)));
     const exPlates = new Set(exD.map((d) => normPlate(d.차량번호)).filter(Boolean));
-    const places = dedupePlaces([...grids.flatMap((g) => parsePlacesFromGrid(g.rows, g.title)), ...extraPlaces]).map((p) => ({
+    const places = dedupePlaces([...raw.places, ...extraPlaces]).map((p) => ({
       ...p, __key: `${normKey(p.업체명)}|${normKey(p.주소)}`,
       __exists: exPlaceKeys.has(`${normKey(p.업체명)}|${normKey(p.주소)}`),
       __sameName: exPlaceNames.has(normKey(p.업체명)),
     }));
-    const drivers = dedupeDrivers(grids.flatMap((g) => parseDriversFromGrid(g.rows, g.title))).map((d) => ({ ...d, __exists: exPlates.has(d.차량번호) }));
-    setRes({ title, source: src, tabs: grids.map((g) => g.title), places, drivers });
+    const drivers = dedupeDrivers(raw.drivers).map((d) => ({ ...d, __exists: exPlates.has(d.차량번호) }));
+    setRes({ title, source: src, tabs: raw.tabs, places, drivers });
     setSkip({}); setGrade({}); setDone(null);
   };
 
@@ -125,7 +125,7 @@ export default function SheetPlaceDriverImport({ companies = [], url: initUrl = 
         const d = await callApi("sheetImport", { action: "read", url: url.trim(), tabs: titles.slice(i, i + 15).map((title) => ({ title, headerRow: 0 })) });
         d.tabs.forEach((t) => grids.push({ title: t.title, rows: [t.header, ...t.rows] }));
       }
-      await analyze(grids, meta.title, "sheet");
+      await analyze({ places: grids.flatMap((g) => parsePlacesFromGrid(g.rows, g.title)), drivers: grids.flatMap((g) => parseDriversFromGrid(g.rows, g.title)), tabs: grids.map((g) => g.title) }, meta.title, "sheet");
     } catch (e) { setErr(e.message); } finally { setBusy(""); }
   };
   const openExcel = async (file) => {
@@ -134,10 +134,21 @@ export default function SheetPlaceDriverImport({ companies = [], url: initUrl = 
     setErr(""); setBusy("open"); setRes(null); setImgs([]); setOcr(null);
     try {
       const buf = await file.arrayBuffer();
-      const wb = XLSX.read(buf, { type: "array" });
-      const grids = wb.SheetNames.map((name) => ({ title: name, rows: XLSX.utils.sheet_to_json(wb.Sheets[name], { header: 1, raw: false, defval: "" }) }));
-      await analyze(grids, file.name, "excel");
-      if (/\.xlsx$/i.test(file.name)) setImgs(await extractXlsxImages(buf).catch(() => []));
+      // ⭐ 그림 꺼내기(화면 안 멈춤)와 칸 읽기(백그라운드 작업자)를 동시에
+      const imgP = /\.xlsx$/i.test(file.name) ? extractXlsxImages(buf).catch(() => []) : Promise.resolve([]);
+      const raw = await new Promise((ok, no) => {
+        const w = new Worker(new URL("./xlsxParseWorker.js", import.meta.url), { type: "module" });
+        w.onmessage = (ev) => {
+          const d = ev.data || {};
+          if (d.progress) setBusy(`open:${d.progress}/${d.total}`);
+          else if (d.error) { w.terminate(); no(new Error(d.error)); }
+          else if (d.done) { w.terminate(); ok(d); }
+        };
+        w.onerror = (ev) => { w.terminate(); no(new Error(ev.message || "읽기 실패")); };
+        w.postMessage(buf.slice(0));
+      });
+      setImgs(await imgP);
+      await analyze(raw, file.name, "excel");
     } catch (e) { setErr(`엑셀 파일을 읽지 못했습니다: ${e?.message || e}`); } finally { setBusy(""); }
   };
 
@@ -158,8 +169,8 @@ export default function SheetPlaceDriverImport({ companies = [], url: initUrl = 
     };
     await Promise.all([worker(), worker(), worker(), worker()]);
     if (fail) { setOcr((o) => ({ ...o, error: fail })); return; }
-    const g = gridsRef.current;
-    await analyze(g.grids, g.title, g.src, found);
+    const g = rawRef.current;
+    await analyze(g, g.title, g.src, found);
     setWhat("places");
     setOcr((o) => ({ ...o, finished: true }));
   };
@@ -264,7 +275,7 @@ export default function SheetPlaceDriverImport({ companies = [], url: initUrl = 
               </div>
             ) : (
               <div className="flex items-center gap-3">
-                <button onClick={() => excelRef.current?.click()} disabled={!!busy} className="px-6 py-3 rounded-xl bg-[#1B2B4B] text-white text-[14.5px] font-bold disabled:opacity-60">{busy === "open" ? "읽는 중…" : "엑셀 파일 선택"}</button>
+                <button onClick={() => excelRef.current?.click()} disabled={!!busy} className="px-6 py-3 rounded-xl bg-[#1B2B4B] text-white text-[14.5px] font-bold disabled:opacity-60">{busy.startsWith("open") ? `읽는 중… ${busy.split(":")[1] || ""}` : "엑셀 파일 선택"}</button>
                 <input ref={excelRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={(e) => { openExcel(e.target.files?.[0]); e.target.value = ""; }} />
               </div>
             )}
