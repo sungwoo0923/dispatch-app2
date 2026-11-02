@@ -317,9 +317,14 @@ service cloud.firestore {
             && request.resource.data.signatureImg is string
             && request.resource.data.signatureImg.size() < 600000);
     }
-    // 📢 플랫폼 공지(관리센터 → 전체 고객사 배너) — 로그인 사용자 읽기, 최고관리자 쓰기
+    // 📢 플랫폼 공지(관리센터 → 고객사 배너 + 운송사 공지사항 목록) — 최고관리자 쓰기
+    // ⭐ 2026-11-02 관리자센터2 — 대상별 읽기: 전체/전체 운송사/전체 화주사 공지는 로그인 사용자 누구나,
+    //  "선택한 운송사" 공지(audience 'selected')는 targetCompanies에 내 회사가 있을 때만.
+    //  앱 조회: where(audience in [...]) 와 where(targetCompanies array-contains 우리 회사) 두 가지 — 둘 다 이 규칙으로 증명된다.
     match /platformNotices/{id} {
-      allow read: if isSignedIn();
+      allow read: if isTotalMasterUser()
+        || (isSignedIn() && (resource.data.audience in ['all', 'carrier', 'shipper']
+            || myCo() in resource.data.targetCompanies));
       allow write: if isTotalMasterUser();
     }
     // 🧾 플랫폼 청구·입금 기록 — 최고관리자는 전부, 고객사는 자기 회사 청구서만 읽고 "입금 알림(payNotice)"만 남길 수 있다

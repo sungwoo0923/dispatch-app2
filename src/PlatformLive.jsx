@@ -295,8 +295,8 @@ const Avatar = ({ name, on }) => (
 );
 const KindChips = ({ p, now }) => (
   <span className="inline-flex gap-1">
-    {now - p.pc < DAY_MS && <span className={`h-5 px-1.5 rounded text-[10.5px] font-extrabold inline-flex items-center ${now - p.pc < NOW_MS ? "bg-[#1B2B4B] text-white" : "bg-[#EEF2F8] text-[#5B6B85]"}`} style={{ fontFamily: MONO }}>PC</span>}
-    {now - p.mobile < DAY_MS && <span className={`h-5 px-1.5 rounded text-[10.5px] font-extrabold inline-flex items-center ${now - p.mobile < NOW_MS ? "bg-[#1B2B4B] text-white" : "bg-[#EEF2F8] text-[#5B6B85]"}`} style={{ fontFamily: MONO }}>MOBILE</span>}
+    {now - p.pc < DAY_MS && <span className={`h-6 px-2 rounded-md text-[10.5px] font-extrabold inline-flex items-center ${now - p.pc < NOW_MS ? "bg-[#1B2B4B] text-white" : "bg-[#EEF2F8] text-[#5B6B85]"}`} style={{ fontFamily: MONO }}>PC</span>}
+    {now - p.mobile < DAY_MS && <span className={`h-6 px-2 rounded-md text-[10.5px] font-extrabold inline-flex items-center ${now - p.mobile < NOW_MS ? "bg-[#1B2B4B] text-white" : "bg-[#EEF2F8] text-[#5B6B85]"}`} style={{ fontFamily: MONO }}>MOBILE</span>}
   </span>
 );
 
@@ -345,18 +345,19 @@ export function LiveNowPanel({ compact = false, onMore, onCompany }) {
         : shown.length === 0 ? <div className="py-12 text-center text-[#9AA9C3] text-[14px]">{mode === "now" ? "최근 10분 안에 활동한 사람이 없습니다" : "최근 24시간 접속이 없습니다"}</div> : (
           <ul className={`divide-y divide-[#EEF1F6] ${compact ? "" : "max-h-[640px] overflow-y-auto"}`}>
             {shown.map((p) => (
-              <li key={p.uid} className="flex items-center gap-3 px-4 sm:px-5 py-2.5 hover:bg-[#F7F9FC]">
+              // ⭐ 2026-11-02 관리자센터2 — 줄 높이 64px · 기기 칩과 "N분 전"을 한 줄에 나란히(세로로 눌려 보이던 문제) · 시간은 고정폭 칸 · 줄바꿈 없음
+              <li key={p.uid} className="flex items-center gap-3 px-4 sm:px-5 min-h-[66px] py-3 hover:bg-[#F7F9FC]">
                 <Avatar name={p.name} on={p.now} />
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-1.5 min-w-0">
-                    <span className="text-[14.5px] font-black text-[#0F1A30] truncate">{p.name}</span>
-                    <span className="text-[11.5px] font-bold text-[#7A879C] whitespace-nowrap">{ROLE_LABELS[p.role] || p.role || ""}</span>
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="text-[15.5px] font-black text-[#0F1A30] truncate leading-tight">{p.name}</span>
+                    <span className="text-[13px] font-bold text-[#7A879C] whitespace-nowrap">{ROLE_LABELS[p.role] || p.role || ""}</span>
                   </div>
-                  <button type="button" onClick={() => onCompany?.(p.company)} className="block max-w-full text-left text-[12.5px] font-semibold text-[#5B6B85] truncate hover:underline">{p.isShipper ? "화주 · " : ""}{p.company}</button>
+                  <button type="button" onClick={() => onCompany?.(p.company)} className="block max-w-full mt-0.5 text-left text-[13.5px] font-semibold text-[#5B6B85] truncate hover:underline leading-tight">{p.isShipper ? "화주 · " : ""}{p.company}</button>
                 </div>
-                <div className="text-right shrink-0">
+                <div className="shrink-0 flex items-center gap-2.5 sm:gap-3">
                   <KindChips p={p} now={now} />
-                  <div className={`text-[12px] font-bold mt-0.5 ${p.now ? "text-[#1B2B4B]" : "text-[#94A3B8]"}`} style={{ fontFamily: MONO }}>{agoText(p.lastSeen, now)}</div>
+                  <span className={`min-w-[64px] text-right text-[14.5px] font-black whitespace-nowrap tabular-nums ${p.now ? "text-[#1B2B4B]" : "text-[#94A3B8]"}`}>{agoText(p.lastSeen, now)}</span>
                 </div>
               </li>
             ))}
@@ -494,7 +495,7 @@ export function HealthCard({ c, today, onOpen }) {
       <div className="flex items-start gap-2 min-w-0">
         <div className="flex-1 min-w-0">
           <div className="text-[16px] font-black text-[#0F1A30] truncate">{c.name}</div>
-          <div className="text-[11.5px] text-[#94A3B8] font-bold truncate" style={{ fontFamily: MONO }}>{c.code || "-"} · 마지막 접속 {agoText(c.lastSeen, now)}</div>
+          <div className="text-[12.5px] text-[#7A879C] font-bold truncate mt-0.5"><span style={{ fontFamily: MONO }}>{c.code || "-"}</span> · 마지막 접속 {agoText(c.lastSeen, now)}</div>
         </div>
         {c.status && <Pill tone={{ active: "solid", new: "soft", drop: "line", dormant: "dash" }[c.status.key]}>{c.status.label}</Pill>}
       </div>
@@ -539,7 +540,7 @@ export function StaffList({ list = [] }) {
   return (
     <ul className="divide-y divide-[#EEF1F6] -mx-1">
       {rows.map((s) => (
-        <li key={s.uid} className="flex items-center gap-3 px-1 py-2.5">
+        <li key={s.uid} className="flex items-center gap-3 px-1 min-h-[62px] py-3">
           <Avatar name={s.name} on={s.now} />
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-1.5 min-w-0 flex-wrap">
@@ -551,7 +552,7 @@ export function StaffList({ list = [] }) {
           </div>
           <div className="text-right shrink-0">
             <div className="flex justify-end"><KindChips p={s} now={now} /></div>
-            <div className={`text-[12px] font-bold ${s.now ? "text-[#1B2B4B]" : "text-[#94A3B8]"}`} style={{ fontFamily: MONO }}>{s.lastSeen ? agoText(s.lastSeen, now) : "접속 기록 없음"}</div>
+            <div className={`mt-1 text-[13.5px] font-black whitespace-nowrap tabular-nums ${s.now ? "text-[#1B2B4B]" : "text-[#94A3B8]"}`}>{s.lastSeen ? agoText(s.lastSeen, now) : "접속 기록 없음"}</div>
           </div>
         </li>
       ))}

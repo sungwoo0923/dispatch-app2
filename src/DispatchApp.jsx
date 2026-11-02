@@ -7925,7 +7925,8 @@ return (
       <BannerCenter />
       <OrderCongratsPopup uid={user?.uid} profile={myProfileDoc} />
       <BirthdayPopup uid={user?.uid} profile={myProfileDoc} company={deptCompany} />
-      <PlatformNoticeBanner audience="carrier" />
+      {/* ⭐ 2026-11-02 관리자센터2 — 선택한 운송사 대상 공지도 받도록 회사 전달 */}
+      <PlatformNoticeBanner audience="carrier" company={role === "totalMaster" ? (localStorage.getItem("loginCompany") || userCompany || "") : (userCompany || localStorage.getItem("userCompany") || "")} />
       <CopyTemplateHost canEdit={role === "admin" || role === "totalMaster"} />
       <PlanValueSync planId={planId} />
       <PlanLockHost userEmail={user?.email || ""} userName={myRealName || ""} canRequest={role === "totalMaster" || ["test", "hrAcct"].includes(realRole) || /경리|회계/.test(String(myProfileDoc?.team || ""))} />

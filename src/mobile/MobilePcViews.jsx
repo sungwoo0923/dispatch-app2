@@ -12,6 +12,7 @@ import FleetManagement from "../FleetManagement";
 import ApprovalCenter, { useApprovalCounts } from "../Approval";
 import HandoverCenter, { useHandoverUnread } from "../HandoverCenter";
 import NoticeBoard from "../NoticeBoard";
+import { useBoardNoticesWithPlatform } from "../PlatformNoticeBanner";
 import { NoticeWriter, NOTICE_WRITER_ROLES } from "../HomeWriters";
 import { OrderHistoryContext } from "../orderHistory";
 import StaffManager from "../StaffManager";
@@ -115,12 +116,14 @@ function ApprovalView({ company, me, initialPage = "inbox" }) {
 
 // ── 공지사항 — PC 홈 › 공지사항과 같은 목록(NoticeBoard)·작성 양식(NoticeWriter) ──
 function NoticeView({ company, me }) {
-  const [notices, setNotices] = React.useState([]);
+  const [ownNotices, setNotices] = React.useState([]);
   const [writer, setWriter] = React.useState(null); // { initial }
   const [obit, setObit] = React.useState(false);
   const [openId, setOpenId] = React.useState(null);
   // ⭐ 2026-11-02 최신 글이 위로(PC 홈과 같게)
   React.useEffect(() => onSnapshot(collection(db, "notices"), (s) => setNotices(s.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => ((b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0)))), () => setNotices([])), []);
+  // ⭐ 2026-11-02 관리자센터2 — 플랫폼 공지(우리 회사 대상)도 같은 목록에 "플랫폼 공지" 표시로
+  const notices = useBoardNoticesWithPlatform(ownNotices, company);
   const isViewer = me?.role === "viewer";
   const canWrite = NOTICE_WRITER_ROLES.includes(me?.role) && !isViewer;
   const thisMonth = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 7);

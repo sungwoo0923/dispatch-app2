@@ -6,6 +6,13 @@
 import React from "react";
 import { db } from "./firebase";
 import { doc, updateDoc, deleteDoc, arrayUnion } from "firebase/firestore";
+import { PlatformBadge } from "./PlatformNoticeBanner";
+
+// ⭐ 2026-11-02 관리자센터2 — 플랫폼 공지(_platform)는 관리자 관리센터가 올린 글: 회사에서 고치거나 지울 수 없고,
+//  읽음 표시는 서버 문서 대신 이 브라우저에만 기록한다(다른 회사 직원 uid가 한 문서에 쌓이지 않게).
+const PLAT_READ_KEY = "kpPlatNoticeRead";
+const platRead = () => { try { return JSON.parse(localStorage.getItem(PLAT_READ_KEY) || "[]"); } catch { return []; } };
+const markPlatRead = (id) => { try { const l = platRead(); if (!l.includes(id)) localStorage.setItem(PLAT_READ_KEY, JSON.stringify([...l, id].slice(-300))); } catch { /* 무시 */ } };
 
 const MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
 export const MAX_PINNED = 5;
@@ -33,7 +40,12 @@ export default function NoticeBoard({ notices = [], me, canWrite, isViewer, onEd
   const [q, setQ] = React.useState("");
   const [page, setPage] = React.useState(1);
   const visible = React.useMemo(() => notices.filter((n) => canSeeNotice(n, me)), [notices, me]);
-  const pinned = React.useMemo(() => visible.filter((n) => n.pinned).sort((a, b) => toMs(b.pinnedAt || b.createdAt) - toMs(a.pinnedAt || a.createdAt)).slice(0, MAX_PINNED), [visible]);
+  // 플랫폼 공지 고정글은 회사 고정 5개와 따로 — 맨 위
+  const pinned = React.useMemo(() => [
+    ...visible.filter((n) => n._platform && n.pinned).sort((a, b) => toMs(b.createdAt) - toMs(a.createdAt)),
+    ...visible.filter((n) => !n._platform && n.pinned).sort((a, b) => toMs(b.pinnedAt || b.createdAt) - toMs(a.pinnedAt || a.createdAt)).slice(0, MAX_PINNED),
+  ], [visible]);
+  const [, bumpRead] = React.useState(0);
   const rest = React.useMemo(() => {
     const kw = q.trim();
     return visible.filter((n) => !pinned.includes(n)).filter((n) => !kw || [n.title, n.content, n.author].some((v) => String(v || "").includes(kw)));
@@ -42,13 +54,14 @@ export default function NoticeBoard({ notices = [], me, canWrite, isViewer, onEd
   const shown = rest.slice((page - 1) * PAGE, page * PAGE);
   const cur = openId ? notices.find((n) => n.id === openId) : null;
   React.useEffect(() => {
+    if (cur?._platform) { markPlatRead(cur.id); bumpRead((x) => x + 1); return; }
     if (cur && me?.uid && !(cur.readBy || []).includes(me.uid)) updateDoc(doc(db, "notices", cur.id), { readBy: arrayUnion(me.uid) }).catch(() => {});
   }, [cur, me?.uid]);
   const isNew = (n) => Date.now() - toMs(n.createdAt) < 24 * 3600e3;
   const isSA = ["superadmin", "totalMaster"].includes(me?.role);
-  const canManage = (n) => !isViewer && (isSA || (canWrite && (n.authorUid ? n.authorUid === me?.uid : true)));
+  const canManage = (n) => !n._platform && !isViewer && (isSA || (canWrite && (n.authorUid ? n.authorUid === me?.uid : true)));
   const togglePin = async (n) => {
-    if (!n.pinned && visible.filter((x) => x.pinned).length >= MAX_PINNED) { window.alert(`상단 고정은 ${MAX_PINNED}개까지입니다. 다른 고정을 먼저 해제해 주세요.`); return; }
+    if (!n.pinned && visible.filter((x) => x.pinned && !x._platform).length >= MAX_PINNED) { window.alert(`상단 고정은 ${MAX_PINNED}개까지입니다. 다른 고정을 먼저 해제해 주세요.`); return; }
     await updateDoc(doc(db, "notices", n.id), { pinned: !n.pinned, pinnedAt: n.pinned ? null : Date.now() }).catch((e) => window.alert(e.message));
   };
   const remove = (n) => confirm("공지사항을 삭제하시겠습니까?", async () => { await deleteDoc(doc(db, "notices", n.id)); setOpenId(null); });
@@ -69,6 +82,7 @@ export default function NoticeBoard({ notices = [], me, canWrite, isViewer, onEd
             )}
           </div>
           <div className="mt-4 flex items-center gap-1.5 flex-wrap">
+            {cur._platform && <PlatformBadge size="lg" />}
             {cur.pinned && <span className="px-2 py-0.5 rounded-md bg-[#0F1A30] text-[#8FB0F0] text-[11px] font-black">• 고정</span>}
             {cur.category && <span className={`px-2 py-0.5 rounded-md text-[11px] font-black ${cur.category === "부고" ? "bg-[#1A1A1A] text-white" : "bg-[#EEF3FC] text-[#1B2B4B]"}`}>{cur.category}</span>}
             {cur.audience === "shipper" && <span className="px-2 py-0.5 rounded-md border border-[#C9D6EE] text-[#2D4C82] text-[11px] font-black">화주사 공개</span>}
@@ -76,10 +90,12 @@ export default function NoticeBoard({ notices = [], me, canWrite, isViewer, onEd
           </div>
           <h2 className="mt-2 text-[20px] sm:text-[24px] font-black text-[#0F1A30] leading-snug break-words">{cur.title || "공지사항"}</h2>
           <div className="mt-3 flex items-center gap-3">
-            <span className="w-10 h-10 rounded-xl flex items-center justify-center text-white font-black" style={{ background: "linear-gradient(135deg,#1B2B4B,#2D4C82)" }}>{String(cur.author || "?").slice(0, 1)}</span>
+            {cur._platform
+              ? <span className="w-10 h-10 rounded-xl flex items-center justify-center text-[13px] font-black" style={{ background: "linear-gradient(135deg,#0B1428,#1B2B4B)", color: "#E9C46A", boxShadow: "inset 0 0 0 1px rgba(233,196,106,.45)" }}>KP</span>
+              : <span className="w-10 h-10 rounded-xl flex items-center justify-center text-white font-black" style={{ background: "linear-gradient(135deg,#1B2B4B,#2D4C82)" }}>{String(cur.author || "?").slice(0, 1)}</span>}
             <div className="leading-tight">
               <div className="text-[14px] font-black text-[#0F1A30]">{cur.author || "-"}</div>
-              <div className="text-[12px] text-[#7A879C] tabular-nums">{fullDate(ms)} · 읽음 {(cur.readBy || []).length}</div>
+              <div className="text-[12px] text-[#7A879C] tabular-nums">{fullDate(ms)}{cur._platform ? (cur.updatedAt ? ` · 수정 ${fullDate(toMs(cur.updatedAt))}` : "") + " · KP-Flow 운영팀이 보낸 공지입니다" : ` · 읽음 ${(cur.readBy || []).length}`}</div>
               {cur.revisedAt && <div className="text-[12px] font-bold text-[#B54708] tabular-nums">{cur.hrOrder?.status === "cancelled" ? "취소" : "수정"} {fullDate(toMs(cur.revisedAt))}{cur.revisedBy ? ` · ${cur.revisedBy}` : ""}</div>}
             </div>
           </div>
@@ -105,17 +121,18 @@ export default function NoticeBoard({ notices = [], me, canWrite, isViewer, onEd
   }
 
   const Row = ({ n, no, pin }) => {
-    const unread = me?.uid && !(n.readBy || []).includes(me.uid);
+    const unread = n._platform ? !platRead().includes(n.id) : me?.uid && !(n.readBy || []).includes(me.uid);
     return (
       <button type="button" onClick={() => setOpenId(n.id)}
-        className={`w-full grid grid-cols-[52px_minmax(0,1fr)_auto] md:grid-cols-[64px_minmax(0,1fr)_120px_110px] items-center gap-2.5 md:gap-3 px-3 md:px-5 h-[60px] md:h-[56px] border-b border-[#F1F4F9] text-left transition hover:bg-[#F5F8FD] ${pin ? "bg-[#F3F6FB]" : ""}`}>
+        className={`w-full grid grid-cols-[52px_minmax(0,1fr)_auto] md:grid-cols-[64px_minmax(0,1fr)_120px_110px] items-center gap-2.5 md:gap-3 px-3 md:px-5 h-[60px] md:h-[56px] border-b border-[#F1F4F9] text-left transition hover:bg-[#F5F8FD] ${n._platform ? "bg-[linear-gradient(90deg,#FBF7EC,#F6F8FC_40%)]" : pin ? "bg-[#F3F6FB]" : ""}`}>
         <span className="text-center">
           {pin ? <span className="inline-flex items-center justify-center whitespace-nowrap h-6 px-1.5 rounded-md bg-[#0F1A30] text-[#8FB0F0] text-[10.5px] font-black">• 고정</span>
             : <span className="text-[14px] font-bold text-[#5B6B85] tabular-nums" style={{ fontFamily: MONO }}>{no}</span>}
         </span>
         <span className="min-w-0 flex flex-col md:flex-row md:items-center gap-0.5 md:gap-1.5">
         <span className="min-w-0 flex items-center gap-1.5 whitespace-nowrap">
-          {n.category && n.category !== "공지사항" && <span className={`shrink-0 px-1.5 py-0.5 rounded text-[10.5px] font-black ${n.category === "부고" ? "bg-[#1A1A1A] text-white" : "bg-[#EEF3FC] text-[#1B2B4B]"}`}>{n.category}</span>}
+          {n._platform && <span className="hidden md:inline-flex"><PlatformBadge /></span>}
+          {n.category && n.category !== "공지사항" && <span className={`${n._platform ? "hidden md:inline-block" : ""} shrink-0 px-1.5 py-0.5 rounded text-[10.5px] font-black ${n.category === "부고" ? "bg-[#1A1A1A] text-white" : "bg-[#EEF3FC] text-[#1B2B4B]"}`}>{n.category}</span>}
           {n.audience === "shipper" && <span className="shrink-0 px-1.5 py-0.5 rounded border border-[#C9D6EE] text-[#2D4C82] text-[10.5px] font-black">화주사</span>}
           {(n.teams || []).length > 0 && <span className="shrink-0 px-1.5 py-0.5 rounded border border-[#C9D6EE] text-[#2D4C82] text-[10.5px] font-black">{n.teams.length === 1 ? n.teams[0] : `${n.teams[0]} 외 ${n.teams.length - 1}`}</span>}
           <span className={`truncate ${pin ? "text-[15.5px] font-black text-[#0B1428]" : unread ? "text-[15px] font-black text-[#0F1A30]" : "text-[15px] font-semibold text-[#3A4A66]"}`}>{n.title || "공지사항"}</span>
@@ -124,9 +141,11 @@ export default function NoticeBoard({ notices = [], me, canWrite, isViewer, onEd
           {isNew(n) && unread && <span className="shrink-0 w-[18px] h-[18px] rounded-full bg-[#1B2B4B] text-white text-[10px] font-black flex items-center justify-center">N</span>}
         </span>
         {/* 휴대폰 — 작성자는 제목 아래 줄로 */}
-        <span className="md:hidden truncate text-[12px] font-bold text-[#7A879C]">{n.author || "-"}</span>
+        {n._platform
+          ? <span className="md:hidden flex items-center gap-1.5 min-w-0"><PlatformBadge /><span className="truncate text-[12px] font-bold text-[#8A6A16]">{n.category}</span></span>
+          : <span className="md:hidden truncate text-[12px] font-bold text-[#7A879C]">{n.author || "-"}</span>}
         </span>
-        <span className="hidden md:block truncate text-[14px] font-bold text-[#1B2B4B]">{n.author || "-"}</span>
+        <span className={`hidden md:block truncate text-[14px] font-bold ${n._platform ? "text-[#8A6A16]" : "text-[#1B2B4B]"}`}>{n.author || "-"}</span>
         <span className="text-right text-[14px] font-semibold text-[#3A4A66] tabular-nums whitespace-nowrap" style={{ fontFamily: MONO }}>{shortDate(toMs(n.createdAt))}</span>
       </button>
     );
@@ -140,7 +159,7 @@ export default function NoticeBoard({ notices = [], me, canWrite, isViewer, onEd
             className="w-full h-10 pl-9 pr-3 rounded-xl border border-[#DCE3EE] bg-[#F8FAFD] text-[13.5px] text-[#0F1A30] outline-none focus:border-[#2D4C82]" />
           <svg className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9AA9C3]" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
         </div>
-        <span className="ml-auto shrink-0 whitespace-nowrap text-[12px] md:text-[12.5px] font-bold text-[#9AA9C3]">고정 {pinned.length}/{MAX_PINNED} · {visible.length}개의 글</span>
+        <span className="ml-auto shrink-0 whitespace-nowrap text-[12px] md:text-[12.5px] font-bold text-[#9AA9C3]">고정 {pinned.filter((n) => !n._platform).length}/{MAX_PINNED} · {visible.length}개의 글</span>
       </div>
       <div className="grid grid-cols-[52px_minmax(0,1fr)_auto] md:grid-cols-[64px_minmax(0,1fr)_120px_110px] gap-2.5 md:gap-3 px-3 md:px-5 h-11 items-center bg-[#F3F6FA] border-b border-[#E3E8F0] text-[13.5px] md:text-[14px] font-black text-[#1B2B4B] whitespace-nowrap">
         <span className="text-center">번호</span><span>제목</span><span className="hidden md:block">작성자</span><span className="text-right">날짜</span>

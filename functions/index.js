@@ -4766,6 +4766,38 @@ exports.notifyNotice = functions.firestore.document("notices/{id}").onCreate(asy
   return null;
 });
 
+// ⭐ 2026-11-02 관리자센터2 — 📢 플랫폼 공지 푸시: 관리자 관리센터에서 공지를 올리면 대상 회사 직원에게
+//  audience: all(운송사 직원 + 화주) · carrier(운송사 직원) · shipper(화주 계정) · selected(targetCompanies의 운송사 직원)
+//  기사·카페 계정 · 승인 대기 · 퇴사자 제외, 각자 "공지사항" 알림을 끈 사람 제외. 공지에 push:false면 보내지 않는다.
+exports.notifyPlatformNotice = functions.firestore.document("platformNotices/{id}").onCreate(async (snap) => {
+  const n = snap.data() || {};
+  if (n.push === false || n.active === false) return null;
+  const aud = n.audience || "all";
+  const targets = new Set((Array.isArray(n.targetCompanies) ? n.targetCompanies : []).map((c) => String(c || "").trim()).filter(Boolean));
+  if (aud === "selected" && !targets.size) return null;
+  const users = await db.collection("users").get();
+  const tokens = [];
+  users.forEach((d) => {
+    const u = d.data() || {};
+    if (!userTokens(u).length || u.approved === false || u.employmentStatus === "퇴사") return;
+    if (["driver", "cafeUser", "totalMaster"].includes(u.role)) return;
+    const isShipper = u.role === "shipper";
+    if (aud === "carrier" && isShipper) return;
+    if (aud === "shipper" && !isShipper) return;
+    if (aud === "selected" && (isShipper || !targets.has(String(u.companyName || PUSH_DEFAULT_COMPANY).trim()))) return;
+    if (!isPushTypeEnabled(u.pushPrefs, "공지사항")) return;
+    tokens.push(...userTokens(u));
+  });
+  const title = `◆ KP-Flow 플랫폼 공지 · ${n.level || "안내"}`;
+  const body = `${n.title || ""}${n.body ? `\n${String(n.body).replace(/\s+/g, " ").slice(0, 80)}` : ""}`;
+  const all = [...new Set(tokens)];
+  // 한 번에 최대 500개(FCM 멀티캐스트 한도) — 전체 공지는 나눠 보낸다
+  for (let i = 0; i < all.length; i += 500) {
+    await sendPushAndCleanup(all.slice(i, i + 500), { notification: { title, body }, android: { priority: "high" } }, "공지사항").catch((e) => console.error("플랫폼 공지 푸시 실패:", e));
+  }
+  return null;
+});
+
 // 🙋 가입 신청 푸시(2026-10-31) — 직원·기사가 가입 신청하면(승인 대기) 그 회사 관리자 이상 전원에게
 // 📱 한 기기 = 한 계정(2026-11-01) — 같은 휴대폰으로 다른 회사 계정에 로그인하면, 예전 계정 문서에 남은
 //  같은 기기 토큰을 지운다(안 지우면 지금 쓰지 않는 회사의 공지·발령 알림이 이 기기로 온다).
