@@ -5770,10 +5770,10 @@ function OrderInfoModal({ row, onClose, lunchByName }) {
   const pickupTimeTxt = row.상차시간 ? fmtDispatchTime(row.상차시간, row.상차시간기준 || row.상차시간구분) : "즉시";
   const dropTimeTxt = row.하차시간 ? fmtDispatchTime(row.하차시간, row.하차시간기준 || row.하차시간구분) : "즉시";
   const stops = [
-    { kind: "상차", isMain: true, name: row.상차지명, addr: row.상차지주소, time: `${row.상차일 ? row.상차일.slice(5).replace("-", "/") + " " : ""}${pickupTimeTxt}`, extra: [row.상차방법 && `상차방법 ${row.상차방법}`, pickupLunch && `휴게 ${lunchValue(pickupLunch, row.상차시간)}`, (row.상차지담당자 || row.상차지담당자번호) && `담당 ${row.상차지담당자 || ""} ${fmtPhone(row.상차지담당자번호 || "")}`.trim()] },
+    { kind: "상차", isMain: true, name: row.상차지명, addr: row.상차지주소, time: `${row.상차일 ? row.상차일.slice(5).replace("-", "/") + " " : ""}${pickupTimeTxt}`, extra: [row.상차방법 && `상차방법 ${row.상차방법}`, pickupLunch && `휴게 ${lunchValue(pickupLunch, row.상차시간)}`, (mgrName(row.상차지담당자) || row.상차지담당자번호) && `담당 ${mgrName(row.상차지담당자)} ${fmtPhone(row.상차지담당자번호 || "")}`.replace(/\s+/g, " ").trim()] },
     ...pickupStops.map((s) => ({ kind: "상차 경유", name: s.업체명, addr: s.주소, time: s.상차시간, extra: [(s.화물내용 || s.화물수량) && `화물 ${s.화물내용 || s.화물수량}`, s.차량톤수 && `톤수 ${s.차량톤수}`, s.방법 && `방법 ${s.방법}`] })),
     ...dropStops.map((s) => ({ kind: "하차 경유", name: s.업체명, addr: s.주소, time: s.하차시간, extra: [(s.화물내용 || s.화물수량) && `화물 ${s.화물내용 || s.화물수량}`, s.차량톤수 && `톤수 ${s.차량톤수}`, s.방법 && `방법 ${s.방법}`] })),
-    { kind: "하차", isMain: true, name: row.하차지명, addr: row.하차지주소, time: `${row.하차일 && row.하차일 !== row.상차일 ? row.하차일.slice(5).replace("-", "/") + " " : ""}${dropTimeTxt}`, extra: [row.하차방법 && `하차방법 ${row.하차방법}`, dropLunch && `휴게 ${lunchValue(dropLunch, row.하차시간)}`, (row.하차지담당자 || row.하차지담당자번호) && `담당 ${row.하차지담당자 || ""} ${fmtPhone(row.하차지담당자번호 || "")}`.trim()] },
+    { kind: "하차", isMain: true, name: row.하차지명, addr: row.하차지주소, time: `${row.하차일 && row.하차일 !== row.상차일 ? row.하차일.slice(5).replace("-", "/") + " " : ""}${dropTimeTxt}`, extra: [row.하차방법 && `하차방법 ${row.하차방법}`, dropLunch && `휴게 ${lunchValue(dropLunch, row.하차시간)}`, (mgrName(row.하차지담당자) || row.하차지담당자번호) && `담당 ${mgrName(row.하차지담당자)} ${fmtPhone(row.하차지담당자번호 || "")}`.replace(/\s+/g, " ").trim()] },
   ];
   const hasMap = !!(row.상차지주소 && row.하차지주소);
   const status = row.배차상태 || (row.차량번호 ? "배차완료" : "배차중");
@@ -21924,7 +21924,7 @@ function WaypointViewModal({ list = [], type = "drop", orderDate = "", onClose, 
                       {s.지급방식 && <span className="ml-auto px-2 py-0.5 rounded-md bg-[#0F1A30] text-white text-[12px] font-black">{s.지급방식}{s.운임별도오더 ? " · 별도 오더" : ""}</span>}
                     </div>
                     {s.주소 && <div className="text-[13.5px] font-semibold text-[#3A4A66] mt-1 break-words">{s.주소}</div>}
-                    {(s.담당자 || s.담당자번호) && <div className="text-[13px] text-[#5B6B85] mt-0.5">담당 {s.담당자 || ""}{s.담당자번호 ? ` · ${s.담당자번호}` : ""}</div>}
+                    {(mgrName(s.담당자) || s.담당자번호) && <div className="text-[13px] text-[#5B6B85] mt-0.5">담당 {mgrName(s.담당자)}{s.담당자번호 ? `${mgrName(s.담당자) ? " · " : ""}${s.담당자번호}` : ""}</div>}
                     {(cargo || ton || s.메모) && (
                       <div className="flex flex-wrap gap-1.5 mt-2.5">
                         {cargo && <span className="h-7 px-2.5 rounded-lg bg-[#F3F6FA] border border-[#E3E8F0] text-[12.5px] font-bold text-[#1B2B4B] inline-flex items-center">화물 {cargo}</span>}
@@ -45990,6 +45990,18 @@ function AccountingDashboard({ dispatchData = [], fixedRows = [], clients = [], 
     </div>
   );
 
+  // ⭐ 머리글 클릭 정렬(▲→▼→해제) — 이 브라우저에만 기억
+  const acArSort = useTableSort("accounting.ar");
+  const acApSort = useTableSort("accounting.ap");
+  const acTypeSort = useTableSort("accounting.costByType");
+  const acMethodSort = useTableSort("accounting.costByMethod");
+  const AC_AR_KEY = { "거래처": "client", "청구액": "invoiced", "수금액": "paid", "미수금": "outstanding", "연체 구분": "ageDays" };
+  const AC_AP_KEY = { "기사명": "driver", "차량번호": "carNo", "기사운임 합계": "total", "지급액": "paid", "미지급": "outstanding" };
+  const AC_COST_KEY = { "차량 종류": "type", "배차 방식": "method", "건수": "count", "매출": "sales", "원가(기사운임)": "costs", "원가": "costs", "이익": "profit", "이익률": "margin" };
+  const arByClientSorted = React.useMemo(() => sortRows(arByClient, acArSort.sort, (r, k) => (k === "연체 구분" ? (r.outstanding > 0 ? r.ageDays : -1) : r[AC_AR_KEY[k]])), [arByClient, acArSort.sort]); // eslint-disable-line react-hooks/exhaustive-deps
+  const apByDriverSorted = React.useMemo(() => sortRows(apByDriver, acApSort.sort, (r, k) => r[AC_AP_KEY[k]]), [apByDriver, acApSort.sort]); // eslint-disable-line react-hooks/exhaustive-deps
+  const costByTypeSorted = React.useMemo(() => sortRows(costByType, acTypeSort.sort, (r, k) => r[AC_COST_KEY[k]]), [costByType, acTypeSort.sort]); // eslint-disable-line react-hooks/exhaustive-deps
+  const costByMethodSorted = React.useMemo(() => sortRows(costByMethod, acMethodSort.sort, (r, k) => r[AC_COST_KEY[k]]), [costByMethod, acMethodSort.sort]); // eslint-disable-line react-hooks/exhaustive-deps
   const thStyle = { padding: "8px 12px", textAlign: "left", fontSize: 11, fontWeight: 700, color: "#6b7280", letterSpacing: ".06em", textTransform: "uppercase", borderBottom: "1px solid #e5e7eb", whiteSpace: "nowrap", background: "#f8f9fb" };
   const tdStyle = { padding: "9px 12px", fontSize: 13, color: "#374151", borderBottom: "1px solid #f0f2f5", whiteSpace: "nowrap" }; // ⭐ 2026-11-02 화면 점검 — 금액 "원"이 다음 줄로 떨어지던 문제
   const tdR = { ...tdStyle, textAlign: "right" };
@@ -46040,14 +46052,14 @@ function AccountingDashboard({ dispatchData = [], fixedRows = [], clients = [], 
               <thead>
                 <tr>
                   {["거래처","청구액","수금액","미수금","연체 구분",""].map((h, i) => (
-                    <th key={i} style={{ ...thStyle, textAlign: i >= 1 && i <= 3 ? "right" : "left" }}>{h && <EditableText id={`settlement.ar.header.${h}`} defaultText={h} />}</th>
+                    <SortTh key={i} k={h} sort={acArSort.sort} onSort={acArSort.toggle} align={i >= 1 && i <= 3 ? "right" : "left"} style={{ ...thStyle, textAlign: i >= 1 && i <= 3 ? "right" : "left" }}>{h && <EditableText id={`settlement.ar.header.${h}`} defaultText={h} />}</SortTh>
                   ))}
                 </tr>
               </thead>
               <tbody>
                 {arByClient.length === 0 ? (
                   <tr><td colSpan={6} style={{ ...tdStyle, textAlign: "center", color: "#9ca3af" }}>배차완료 데이터가 없습니다</td></tr>
-                ) : arByClient.map(r => {
+                ) : arByClientSorted.map(r => {
                   const age = ageLabel(r.ageDays);
                   return (
                     <tr key={r.client} style={{ background: r.outstanding > 0 ? "#fff" : "#f9fafb" }}>
@@ -46098,14 +46110,14 @@ function AccountingDashboard({ dispatchData = [], fixedRows = [], clients = [], 
               <thead>
                 <tr>
                   {["기사명","차량번호","기사운임 합계","지급액","미지급",""].map((h, i) => (
-                    <th key={i} style={{ ...thStyle, textAlign: i >= 2 && i <= 4 ? "right" : "left" }}>{h && <EditableText id={`settlement.ap.header.${h}`} defaultText={h} />}</th>
+                    <SortTh key={i} k={h} sort={acApSort.sort} onSort={acApSort.toggle} align={i >= 2 && i <= 4 ? "right" : "left"} style={{ ...thStyle, textAlign: i >= 2 && i <= 4 ? "right" : "left" }}>{h && <EditableText id={`settlement.ap.header.${h}`} defaultText={h} />}</SortTh>
                   ))}
                 </tr>
               </thead>
               <tbody>
                 {apByDriver.length === 0 ? (
                   <tr><td colSpan={6} style={{ ...tdStyle, textAlign: "center", color: "#9ca3af" }}>배차완료 데이터가 없습니다</td></tr>
-                ) : apByDriver.map(r => (
+                ) : apByDriverSorted.map(r => (
                   <tr key={r.driver} style={{ background: r.outstanding > 0 ? "#fff" : "#f9fafb" }}>
                     <td style={tdStyle}><span className="font-semibold">{r.driver}</span></td>
                     <td style={tdStyle}>{r.carNo || "–"}</td>
@@ -46223,14 +46235,14 @@ function AccountingDashboard({ dispatchData = [], fixedRows = [], clients = [], 
                 <thead>
                   <tr>
                     {["차량 종류","건수","매출","원가(기사운임)","이익","이익률"].map((h, i) => (
-                      <th key={i} style={{ ...thStyle, textAlign: i >= 1 ? "right" : "left" }}><EditableText id={`settlement.costByType.header.${h}`} defaultText={h} /></th>
+                      <SortTh key={i} k={h} sort={acTypeSort.sort} onSort={acTypeSort.toggle} align={i >= 1 ? "right" : "left"} style={{ ...thStyle, textAlign: i >= 1 ? "right" : "left" }}><EditableText id={`settlement.costByType.header.${h}`} defaultText={h} /></SortTh>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
                   {costByType.length === 0 ? (
                     <tr><td colSpan={6} style={{ ...tdStyle, textAlign: "center", color: "#9ca3af" }}>데이터 없음</td></tr>
-                  ) : costByType.map(r => (
+                  ) : costByTypeSorted.map(r => (
                     <tr key={r.type}>
                       <td style={{ ...tdStyle, fontWeight: 600 }}>{r.type}</td>
                       <td style={tdR}>{r.count.toLocaleString()}</td>
@@ -46272,14 +46284,14 @@ function AccountingDashboard({ dispatchData = [], fixedRows = [], clients = [], 
                 <thead>
                   <tr>
                     {["배차 방식","건수","매출","원가","이익","이익률"].map((h, i) => (
-                      <th key={i} style={{ ...thStyle, textAlign: i >= 1 ? "right" : "left" }}><EditableText id={`settlement.costByMethod.header.${h}`} defaultText={h} /></th>
+                      <SortTh key={i} k={h} sort={acMethodSort.sort} onSort={acMethodSort.toggle} align={i >= 1 ? "right" : "left"} style={{ ...thStyle, textAlign: i >= 1 ? "right" : "left" }}><EditableText id={`settlement.costByMethod.header.${h}`} defaultText={h} /></SortTh>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
                   {costByMethod.length === 0 ? (
                     <tr><td colSpan={6} style={{ ...tdStyle, textAlign: "center", color: "#9ca3af" }}>데이터 없음</td></tr>
-                  ) : costByMethod.map(r => (
+                  ) : costByMethodSorted.map(r => (
                     <tr key={r.method}>
                       <td style={{ ...tdStyle, fontWeight: 600 }}>{r.method}</td>
                       <td style={tdR}>{r.count.toLocaleString()}</td>
@@ -47965,6 +47977,9 @@ function ClientPeriodQuery({ rows = [], clients = [] }) {
     return Array.from(map.values()).sort((a, b) => a.date.localeCompare(b.date));
   }, [rows, queryState]);
 
+  // ⭐ 머리글 클릭 정렬(▲→▼→해제) — 이 브라우저에만 기억
+  const pqSort = useTableSort("settlement.periodQuery");
+  const resultsSorted = React.useMemo(() => sortRows(results, pqSort.sort, (r, k) => (k === "rate" ? (r.sale ? r.fee / r.sale : 0) : r[k])), [results, pqSort.sort]);
   const totals = results.reduce(
     (a, r) => ({ sale: a.sale + r.sale, driver: a.driver + r.driver, fee: a.fee + r.fee, count: a.count + r.count }),
     { sale: 0, driver: 0, fee: 0, count: 0 }
@@ -48076,16 +48091,13 @@ function ClientPeriodQuery({ rows = [], clients = [] }) {
               <table className="w-full text-[13px] border-collapse text-center">
                 <thead className="bg-gray-50 text-gray-600">
                   <tr>
-                    <th className="border p-2"><EditableText id="settlement.dateQuery.header.날짜" defaultText="날짜" /></th>
-                    <th className="border p-2"><EditableText id="settlement.dateQuery.header.오더건수" defaultText="오더건수" /></th>
-                    <th className="border p-2"><EditableText id="settlement.dateQuery.header.청구운임" defaultText="청구운임" /></th>
-                    <th className="border p-2"><EditableText id="settlement.dateQuery.header.기사운임" defaultText="기사운임" /></th>
-                    <th className="border p-2"><EditableText id="settlement.dateQuery.header.수수료" defaultText="수수료" /></th>
-                    <th className="border p-2"><EditableText id="settlement.dateQuery.header.수익률" defaultText="수익률" /></th>
+                    {[["date","날짜"],["count","오더건수"],["sale","청구운임"],["driver","기사운임"],["fee","수수료"],["rate","수익률"]].map(([k, h]) => (
+                      <SortTh key={k} k={k} sort={pqSort.sort} onSort={pqSort.toggle} className="border p-2"><EditableText id={`settlement.dateQuery.header.${h}`} defaultText={h} /></SortTh>
+                    ))}
                   </tr>
                 </thead>
                 <tbody>
-                  {results.map((r) => {
+                  {resultsSorted.map((r) => {
                     const rate = r.sale ? (r.fee / r.sale) * 100 : 0;
                     return (
                       <tr key={r.date} className="hover:bg-gray-50">
@@ -48426,21 +48438,21 @@ function SettlementTop10Drop({ rows = [], targetMonth }) {
 }
 
 function SettlementNewClients({ rows = [] }) {
+  const ncSort = useTableSort("settlement.newClients"); // ⭐ 머리글 클릭 정렬 — 이 브라우저에만 기억
+  const sorted = React.useMemo(() => sortRows(rows, ncSort.sort), [rows, ncSort.sort]);
   if (!rows.length) return null;
   return (
     <div className="rounded-xl border border-gray-200 bg-gray-50/50 p-5">
       <table className="w-full text-[13px] text-center border-collapse">
         <thead className="bg-gray-50">
           <tr>
-            <th className="border p-2"><EditableText id="settlement.newClients.header.거래처" defaultText="거래처" /></th>
-            <th className="border p-2"><EditableText id="settlement.newClients.header.첫거래일" defaultText="첫 거래일" /></th>
-            <th className="border p-2"><EditableText id="settlement.newClients.header.건수" defaultText="건수" /></th>
-            <th className="border p-2"><EditableText id="settlement.newClients.header.매출" defaultText="매출" /></th>
-            <th className="border p-2"><EditableText id="settlement.newClients.header.수익" defaultText="수익" /></th>
+            {[["client","거래처","거래처"],["firstDate","첫거래일","첫 거래일"],["cnt","건수","건수"],["sale","매출","매출"],["profit","수익","수익"]].map(([k, id, h]) => (
+              <SortTh key={k} k={k} sort={ncSort.sort} onSort={ncSort.toggle} className="border p-2"><EditableText id={`settlement.newClients.header.${id}`} defaultText={h} /></SortTh>
+            ))}
           </tr>
         </thead>
         <tbody>
-          {rows.map((r) => (
+          {sorted.map((r) => (
             <tr key={r.client} className="hover:bg-gray-50">
               <td className="border p-2 font-semibold">{r.client}</td>
               <td className="border p-2">{r.firstDate}</td>
@@ -48647,6 +48659,9 @@ function SettlementDetailPopup({ client, rows = [], onClose }) {
   const sale = rows.reduce((a, r) => a + toInt(r.청구운임), 0);
   const driver = rows.reduce((a, r) => a + toInt(r.기사운임), 0);
   const profit = sale - driver;
+  // ⭐ 머리글 클릭 정렬 — 이 브라우저에만 기억
+  const dpSort = useTableSort("settlement.detailPopup");
+  const dpRows = React.useMemo(() => sortRows(rows, dpSort.sort, (r, k) => (k === "매출" ? toInt(r.청구운임) : k === "수익" ? toInt(r.청구운임) - toInt(r.기사운임) : r[k])), [rows, dpSort.sort]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center">
@@ -48664,13 +48679,13 @@ function SettlementDetailPopup({ client, rows = [], onClose }) {
           <table className="w-full text-[12px] border-collapse text-center">
             <thead className="bg-gray-50">
               <tr>
-                <th className="border p-1.5"><EditableText id="settlement.byLoadDate.header.상차일" defaultText="상차일" /></th>
-                <th className="border p-1.5"><EditableText id="settlement.byLoadDate.header.매출" defaultText="매출" /></th>
-                <th className="border p-1.5"><EditableText id="settlement.byLoadDate.header.수익" defaultText="수익" /></th>
+                {["상차일","매출","수익"].map((h) => (
+                  <SortTh key={h} k={h} sort={dpSort.sort} onSort={dpSort.toggle} className="border p-1.5"><EditableText id={`settlement.byLoadDate.header.${h}`} defaultText={h} /></SortTh>
+                ))}
               </tr>
             </thead>
             <tbody>
-              {rows.map((r, i) => (
+              {dpRows.map((r, i) => (
                 <tr key={i} className="hover:bg-gray-50">
                   <td className="border p-1.5">{r.상차일}</td>
                   <td className="border p-1.5">{toInt(r.청구운임).toLocaleString()}</td>
@@ -51294,6 +51309,31 @@ const monthRowsRaw = useMemo(() => {
     if (statusFilter !== "전체") rows = rows.filter(r => r.정산상태 === statusFilter || (statusFilter === "미정산" && r.정산상태 === "일부입금"));
     return rows;
   }, [monthRowsRaw, statusFilter]);
+  // ⭐ 머리글 클릭 정렬(▲→▼→해제) — 이 브라우저에만 기억(표에 보이는 값 기준)
+  const arSort = useTableSort("settlement.monthly");
+  const monthRowsSorted = useMemo(() => sortRows(monthRows, arSort.sort, (row, key, i) => {
+    const 청구VAT = Math.round((row.총청구금액 || 0) * 1.1);
+    const 입금 = row.정산상태 === "정산완료" ? 청구VAT : (row.입금누계 || 0);
+    const 잔 = row.정산상태 === "정산완료" ? 0 : Math.max(0, 청구VAT - 입금);
+    switch (key) {
+      case "순번": return i;
+      case "거래처": return row.거래처명;
+      case "청구월": return row.yyyymm;
+      case "건수": return row.건수;
+      case "총 청구금액": return row.총청구금액;
+      case "입금액": return 입금;
+      case "잔액": return 잔;
+      case "결제 예정일":
+      case "경과": {
+        const rule = ((clients || []).find((c) => c.거래처명 === (row.거래처명 || selClient)) || {}).결제일;
+        const due = arDueDate(row.yyyymm, rule);
+        if (key === "결제 예정일") return due;
+        return due && 잔 > 0 ? Math.floor((Date.now() - new Date(`${due}T23:59:59+09:00`).getTime()) / 86400000) : null;
+      }
+      case "메모": return memoMap[row.k];
+      default: return row[key];
+    }
+  }), [monthRows, arSort.sort, clients, selClient]); // eslint-disable-line react-hooks/exhaustive-deps -- 메모는 입력 중 줄이 튀지 않게 머리글을 누를 때 기준
 
   const kpi = useMemo(() => ({
     전체건수: monthRows.reduce((s, r) => s + r.건수, 0),
@@ -53876,7 +53916,7 @@ const handleBatchSettle = async (targetStatus) => {
                     />
                   </th>
                   {[...(selClient === AR_ALL ? ["거래처"] : []), "순번","청구월","건수","총 청구금액","입금액","잔액","결제 예정일","경과","정산상태","정산일","메모"].map(label=>(
-                    <th key={label} className="px-3 py-3 text-white font-bold text-center whitespace-nowrap"><EditableText id={`settlement.monthly.header.${label}`} defaultText={label} /></th>
+                    <SortTh key={label} k={label} sort={arSort.sort} onSort={arSort.toggle} className="px-3 py-3 text-white font-bold text-center whitespace-nowrap"><EditableText id={`settlement.monthly.header.${label}`} defaultText={label} /></SortTh>
                   ))}
                 </tr>
               </thead>
@@ -53886,7 +53926,7 @@ const handleBatchSettle = async (targetStatus) => {
                 ) : monthRows.length === 0 ? (
                   <tr><td colSpan={13} className="text-center text-gray-500 py-16 text-[14px]">표시할 데이터가 없습니다.</td></tr>
                 ) : (
-                  monthRows.map((row, idx) => (
+                  monthRowsSorted.map((row, idx) => (
                     <tr key={row.k} className={idx%2===0?"bg-white":"bg-gray-50/60"}>
                       <td
                         className="px-3 py-3 text-center border-b border-gray-100 cursor-pointer select-none"
