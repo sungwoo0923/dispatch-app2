@@ -18257,9 +18257,9 @@ className={`
                     {[["청구운임","fare"],["기사운임","fee"]].map(([lbl,key]) => (
                       <div key={key} className="flex flex-col gap-0.5">
                         <span className="text-[10px] text-gray-500 font-medium">{lbl}</span>
-                        <input autoComplete="off" className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-blue-400"
-                          value={send24Data[key] ?? ""} disabled={send24Sending}
-                          onChange={e => { const v = e.target.value; setSend24Data(d => ({ ...d, [key]: v })); }} />
+                        <input autoComplete="off" inputMode="numeric" className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] text-right focus:outline-none focus:border-blue-400"
+                          value={send24Data[key] ? Number(String(send24Data[key]).replace(/[^\d]/g, "") || 0).toLocaleString() : ""} disabled={send24Sending}
+                          onChange={e => { const v = e.target.value.replace(/[^\d]/g, ""); setSend24Data(d => ({ ...d, [key]: v })); }} />
                       </div>
                     ))}
                     <div className="flex flex-col gap-0.5">
@@ -45606,10 +45606,16 @@ function ProfitLossReport({ dispatchData = [], fixedRows = [], clients = [], pla
       return (
         <td className="px-1 py-0.5 text-center border-r border-gray-100">
           <input autoComplete="off"
-            type="number"
-            defaultValue={val || ""}
+            inputMode="numeric"
+            defaultValue={val ? Number(val).toLocaleString() : ""}
             className="w-full text-center text-[12px] border border-blue-400 rounded px-1 outline-none"
             autoFocus
+            onChange={(e) => {
+              // 금액 입력 중 천단위 콤마 자동 — 음수(-) 허용, 저장은 updateCell에서 숫자로 변환
+              const t = e.target.value.trim();
+              const d = t.replace(/[^\d]/g, "");
+              e.target.value = (t.startsWith("-") ? "-" : "") + (d ? Number(d).toLocaleString() : "");
+            }}
             onBlur={(e) => {
               updateCell(rowKey, month, e.target.value);
               setEditingCell(null);
@@ -46610,9 +46616,9 @@ function AccountingDashboard({ dispatchData = [], fixedRows = [], clients = [], 
             <div className="text-[12px] text-gray-500 mb-4">{arModal}</div>
             <div className="mb-1 text-[12px] text-gray-500">미수금 잔액: <strong>{(arByClient.find(r => r.client === arModal)?.outstanding || 0).toLocaleString()}원</strong></div>
             <input autoComplete="off"
-              type="number"
-              value={arInput}
-              onChange={e => setArInput(e.target.value)}
+              inputMode="numeric"
+              value={arInput ? Number(String(arInput).replace(/[^\d]/g, "") || 0).toLocaleString() : ""}
+              onChange={e => setArInput(e.target.value.replace(/[^\d]/g, ""))}
               placeholder="입금액 입력 (원)"
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-[13px] mb-4 outline-none focus:border-[#1B2B4B]"
               autoFocus
@@ -46638,9 +46644,9 @@ function AccountingDashboard({ dispatchData = [], fixedRows = [], clients = [], 
             <div className="text-[12px] text-gray-500 mb-4">{apModal}</div>
             <div className="mb-1 text-[12px] text-gray-500">미지급 잔액: <strong>{(apByDriver.find(r => r.driver === apModal)?.outstanding || 0).toLocaleString()}원</strong></div>
             <input autoComplete="off"
-              type="number"
-              value={apInput}
-              onChange={e => setApInput(e.target.value)}
+              inputMode="numeric"
+              value={apInput ? Number(String(apInput).replace(/[^\d]/g, "") || 0).toLocaleString() : ""}
+              onChange={e => setApInput(e.target.value.replace(/[^\d]/g, ""))}
               placeholder="지급액 입력 (원)"
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-[13px] mb-4 outline-none focus:border-[#1B2B4B]"
               autoFocus
