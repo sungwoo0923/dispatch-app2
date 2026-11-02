@@ -7,6 +7,7 @@ import React from "react";
 import { doc, setDoc, serverTimestamp, arrayUnion } from "firebase/firestore";
 import { db, auth } from "./firebase";
 import { useFareRules, applyFareRule, fareRuleCalcLabel } from "./fareRules";
+import { kpConfirm } from "./kpDialog";
 
 const MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
 const won = (n) => Math.round(Number(n) || 0).toLocaleString();
@@ -101,6 +102,7 @@ export default function FareRulesSettings({ company, canEdit = true, myName = ""
   const [editing, setEditing] = React.useState(null); // null | {} | rule
   const [busy, setBusy] = React.useState(false);
   const [msg, setMsg] = React.useState("");
+  const [saved, setSaved] = React.useState("");
   const by = myName || auth?.currentUser?.displayName || (auth?.currentUser?.email || "").split("@")[0] || "";
 
   const save = async (patch, change) => {
@@ -116,6 +118,7 @@ export default function FareRulesSettings({ company, canEdit = true, myName = ""
         updatedAt: serverTimestamp(),
         updatedBy: by,
       }, { merge: true });
+      setSaved("저장했습니다"); setTimeout(() => setSaved(""), 1800);
     } catch (e) {
       setMsg(`저장하지 못했습니다: ${e?.code || e?.message || e}`);
     } finally { setBusy(false); }
@@ -128,7 +131,7 @@ export default function FareRulesSettings({ company, canEdit = true, myName = ""
     await save({ rules }, prev ? `규칙 수정 ${ruleLabel(prev)} → ${ruleLabel(r)}` : `규칙 추가 ${ruleLabel(r)}`);
   };
   const onDelete = async (r) => {
-    if (!window.confirm(`'${r.name}' 규칙을 삭제할까요?\n이미 저장된 오더의 운임은 바뀌지 않습니다.`)) return;
+    if (!(await kpConfirm(`'${r.name}' 규칙을 삭제할까요?\n이미 저장된 오더의 운임은 바뀌지 않습니다.`))) return;
     await save({ rules: fr.rules.filter((x) => x.id !== r.id) }, `규칙 삭제 ${ruleLabel(r)}`);
   };
   const onToggleRule = (r, on) => save({ rules: fr.rules.map((x) => (x.id === r.id ? { ...x, active: on } : x)) }, `${r.name} ${on ? "사용" : "사용 안 함"}`);
@@ -137,7 +140,7 @@ export default function FareRulesSettings({ company, canEdit = true, myName = ""
   const history = [...(fr.history || [])].sort((a, b) => (b.at || 0) - (a.at || 0)).slice(0, 30);
 
   return (
-    <div className={`flex flex-col gap-4 ${mobile ? "" : "max-w-[1180px]"}`} data-fare-settings="1">
+    <div className="flex flex-col gap-4 w-full" data-fare-settings="1">
       {/* 머리 카드 — 사용 스위치 */}
       <div className="rounded-[20px] bg-[#0F1A30] text-white p-5 md:p-6 shadow-[0_10px_28px_rgba(11,20,40,0.25)] relative overflow-hidden">
         <div className="absolute -right-10 -top-10 w-48 h-48 rounded-full bg-[#2D4C82]/40 blur-2xl pointer-events-none" />
@@ -158,7 +161,12 @@ export default function FareRulesSettings({ company, canEdit = true, myName = ""
             <Toggle big on={fr.enabled} onChange={onMaster} disabled={!canEdit || busy || !fr.loaded} label="운임 규칙 사용" />
           </div>
         </div>
-        {!canEdit && <div className="relative mt-3 text-[13.5px] font-bold text-amber-200">조회전용 권한 — 보기만 할 수 있습니다.</div>}
+        {!canEdit && <div className="relative mt-3 text-[14px] font-bold text-amber-200">조회전용 권한 — 보기만 할 수 있습니다.</div>}
+        <div className="relative mt-3 flex items-center gap-2 text-[13px] font-bold text-[#B9C7E3] min-h-[20px]" aria-live="polite">
+          {!fr.loaded ? <span>불러오는 중…</span> : busy ? <span className="inline-flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-[#8FB0F0] animate-pulse" />저장 중…</span>
+            : saved ? <span className="inline-flex items-center gap-1.5 text-[#CFE0FF]"><span className="w-1.5 h-1.5 rounded-full bg-emerald-300" />{saved}</span>
+            : fr.data?.updatedBy ? <span>마지막 변경 · {fr.data.updatedBy}</span> : null}
+        </div>
       </div>
 
       {msg && <div className="rounded-xl bg-red-50 border border-red-200 px-4 py-3 text-[14px] font-bold text-red-700">{msg}</div>}
@@ -166,8 +174,10 @@ export default function FareRulesSettings({ company, canEdit = true, myName = ""
       {/* 규칙 카드 목록 */}
       <div className="rounded-[20px] bg-white border border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_10px_28px_rgba(16,24,40,0.06)] p-4 md:p-5">
         <div className="flex items-center gap-2 mb-3">
-          <div className="text-[16px] font-extrabold text-[#0F1A30]">규칙 목록</div>
-          <span className="text-[13px] font-bold text-[#6B7A99]">{fr.rules.length}개</span>
+          <div>
+            <div className="text-[10.5px] font-extrabold tracking-[0.24em] text-[#2D4C82]" style={{ fontFamily: MONO }}>RULES</div>
+            <div className="text-[16px] font-extrabold text-[#0F1A30] leading-tight">규칙 목록 <span className="text-[13px] font-bold text-[#6B7A99] tabular-nums">{fr.rules.length}개</span></div>
+          </div>
           {canEdit && (
             <button type="button" onClick={() => setEditing({})} disabled={busy}
               className="ml-auto h-[40px] px-4 rounded-xl bg-[#1B2B4B] text-white text-[14px] font-extrabold hover:bg-[#2D4C82] disabled:opacity-50" data-fare-add="1">
@@ -175,10 +185,15 @@ export default function FareRulesSettings({ company, canEdit = true, myName = ""
             </button>
           )}
         </div>
-        {fr.rules.length === 0 ? (
+        {!fr.loaded ? (
+          <div className="grid gap-3 grid-cols-1 md:grid-cols-2 xl:grid-cols-3">
+            {[0, 1].map((i) => <div key={i} className="h-[190px] rounded-2xl border border-[#E3E8F0] bg-[#F3F6FB] animate-pulse" />)}
+          </div>
+        ) : fr.rules.length === 0 ? (
           <div className="rounded-2xl border-2 border-dashed border-[#D9E0EA] py-10 text-center">
             <div className="text-[15px] font-bold text-[#1B2B4B]">아직 규칙이 없습니다</div>
             <div className="text-[14px] text-[#6B7A99] mt-1">예: 일대 7% · 월대 5% · 정액 30,000원</div>
+            {canEdit && <button type="button" onClick={() => setEditing({})} className="mt-3 h-[40px] px-4 rounded-xl border border-[#C9D5EA] text-[14px] font-extrabold text-[#1B2B4B] hover:bg-[#EAF0FB]">첫 규칙 만들기</button>}
           </div>
         ) : (
           <div className={`grid gap-3 ${mobile ? "grid-cols-1" : "grid-cols-1 md:grid-cols-2 xl:grid-cols-3"}`}>
@@ -196,11 +211,13 @@ export default function FareRulesSettings({ company, canEdit = true, myName = ""
                       <Toggle on={on} onChange={(v) => onToggleRule(r, v)} disabled={!canEdit || busy} label={`${r.name} 사용`} />
                     </div>
                   </div>
-                  <div className="text-[24px] font-black text-[#1B2B4B] leading-none" style={{ fontFamily: MONO }}>
+                  <div className="text-[24px] font-black text-[#1B2B4B] leading-none tabular-nums" style={{ fontFamily: MONO }}>
                     {r.type === "fixed" ? `${won(r.value)}원` : `${Number(r.value) || 0}%`}
                   </div>
-                  <div className="rounded-xl bg-white border border-[#E3E8F0] px-3 py-2 text-[14px] text-[#1B2B4B] leading-snug">
-                    청구 {won(EXAMPLE_SALE)}원 → 수수료 <b>{won(ex.수수료)}</b> · 기사운임 <b>{won(ex.기사운임)}</b>
+                  <div className="rounded-xl bg-white border border-[#E3E8F0] px-3 py-2 text-[14px] text-[#1B2B4B] leading-snug tabular-nums flex flex-wrap gap-x-1.5">
+                    <span className="whitespace-nowrap">청구 {won(EXAMPLE_SALE)}원 →</span>
+                    <span className="whitespace-nowrap">수수료 <b>{won(ex.수수료)}</b> ·</span>
+                    <span className="whitespace-nowrap">기사운임 <b>{won(ex.기사운임)}</b></span>
                   </div>
                   {r.memo && <div className="text-[13.5px] text-[#6B7A99] font-semibold">{r.memo}</div>}
                   {canEdit && (
@@ -214,7 +231,7 @@ export default function FareRulesSettings({ company, canEdit = true, myName = ""
             })}
           </div>
         )}
-        <div className="mt-3 text-[13.5px] text-[#6B7A99] leading-relaxed">
+        <div className="mt-3 text-[14px] text-[#6B7A99] leading-relaxed break-keep">
           · 수수료 = 퍼센트면 청구운임 × % (원 단위 반올림), 정액이면 그 금액 · 기사운임 = 청구운임 − 수수료<br />
           · 기사운임을 직접 고친 오더는 그 값을 유지하고, [↺ 규칙대로]를 누르면 다시 계산합니다. 규칙을 바꿔도 이미 저장된 오더는 바뀌지 않습니다.
         </div>
@@ -222,15 +239,20 @@ export default function FareRulesSettings({ company, canEdit = true, myName = ""
 
       {/* 변경 이력 */}
       <div className="rounded-[20px] bg-white border border-[#E3E8F0] p-4 md:p-5">
-        <div className="text-[16px] font-extrabold text-[#0F1A30] mb-2">변경 이력</div>
+        <div className="mb-2">
+          <div className="text-[10.5px] font-extrabold tracking-[0.24em] text-[#2D4C82]" style={{ fontFamily: MONO }}>HISTORY</div>
+          <div className="text-[16px] font-extrabold text-[#0F1A30] leading-tight">변경 이력</div>
+        </div>
         {history.length === 0 ? (
-          <div className="text-[14px] text-[#8A97B0] py-3">변경 이력이 없습니다.</div>
+          <div className="text-[14px] text-[#8A97B0] py-3">아직 변경 이력이 없습니다. 규칙을 추가하거나 바꾸면 누가 언제 바꿨는지 여기에 남습니다.</div>
         ) : (
           <ul className="divide-y divide-[#EEF2F8]" data-fare-history="1">
             {history.map((h, i) => (
-              <li key={`${h.at}-${i}`} className="py-2.5 flex items-start gap-3 flex-wrap">
-                <span className="text-[13px] font-bold text-[#6B7A99] shrink-0" style={{ fontFamily: MONO }}>{fmtAt(h.at)}</span>
-                <span className="text-[14px] font-bold text-[#2D4C82] shrink-0">{h.by || "-"}</span>
+              <li key={`${h.at}-${i}`} className={`py-2.5 ${mobile ? "flex flex-col gap-0.5" : "grid grid-cols-[150px_110px_minmax(0,1fr)] items-baseline gap-3"}`}>
+                <span className={mobile ? "flex items-baseline gap-2" : "contents"}>
+                  <span className="text-[13px] font-bold text-[#6B7A99] tabular-nums" style={{ fontFamily: MONO }}>{fmtAt(h.at)}</span>
+                  <span className="text-[14px] font-bold text-[#2D4C82] truncate">{h.by || "-"}</span>
+                </span>
                 <span className="text-[14px] text-[#1B2B4B] min-w-0 break-keep">{h.change}</span>
               </li>
             ))}
