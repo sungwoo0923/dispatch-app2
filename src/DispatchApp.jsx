@@ -7113,7 +7113,7 @@ export default function DispatchApp({ role: realRole, user, userCompany = "", fo
   // 받아오면 되므로 최상위 컴포넌트에서 호출한다.
   useEffect(() => { ensureWeatherLoaded(); }, []);
   useCopyTemplates(); // ▤ 기사복사 문구(회사별 설정) 실시간 반영
-  useVehicleTypes(userCompany); // 🚚 2026-11-02 회사 공용 차량종류(추가한 이름이 모든 화면 목록에 바로 보이게 구독 유지)
+  useVehicleTypes(getTenant() || userCompany); // 🚚 2026-11-02 회사 공용 차량종류(추가한 이름이 모든 화면 목록에 바로 보이게 구독 유지)
   // 💳 회사 요금제(미지정이면 전체 기능) — 메뉴 잠금·프로 기능 판단에 쓴다
   const planCompany = (role === "totalMaster" ? (localStorage.getItem("loginCompany") || userCompany) : (userCompany || localStorage.getItem("userCompany")) || "").trim();
   const planId = useCompanyPlanId(planCompany);
@@ -7767,6 +7767,24 @@ const newVer = useNewVersion(); // ★ 새 버전이 배포되면 버전 표시 
   const addDispatchSafe = isViewer ? _viewerBlock : addDispatch;
   const patchDispatchSafe = isViewer ? _viewerBlock : patchDispatch;
   const removeDispatchSafe = isViewer ? _viewerBlock : removeDispatch;
+  // ⭐ 2026-11-02 기사앱을 아직 가입하지 않은 기사(또는 지입이 아닌 직영·임대 등)가 배정됐는데 "승인대기"로 멈춘 오더 → 배차완료로 바로잡는다.
+  //   (예전 고정노선 자동 생성·서버 안전망이 가입 여부를 보지 않고 승인대기를 걸었다) 수락 화면은 기사앱에 가입한 지입 기사에게만 있다.
+  const fixedAwaitRef = React.useRef(new Set());
+  React.useEffect(() => {
+    if (isViewer || !drivers?.length || !dispatchDataLive?.length) return;
+    const byPlate = new Map();
+    drivers.forEach((d) => { const k = normalizePlate(d.차량번호 || ""); if (k) byPlate.set(k, [...(byPlate.get(k) || []), d]); });
+    dispatchDataLive.forEach((r) => {
+      if (r?.배차상태 !== "승인대기" || r?.기사확인상태 !== "대기" || !r?.차량번호 || !r?._id) return;
+      const key = `${r.__col || "orders"}/${r._id}`;
+      if (fixedAwaitRef.current.has(key)) return;
+      const list = byPlate.get(normalizePlate(r.차량번호)) || [];
+      if (!list.length) return; // 기사 목록에 없는 차량은 판단하지 않는다
+      if (list.some((d) => d.등급 === "지입" && !!d.uid)) return; // 기사앱 가입한 지입 기사 → 수락을 기다리는 게 맞다
+      fixedAwaitRef.current.add(key);
+      updateDoc(doc(db, r.__col || "orders", r._id), { 기사확인상태: null, 배차상태: "배차완료", 상태: "배차완료" }).catch(() => fixedAwaitRef.current.delete(key));
+    });
+  }, [isViewer, drivers, dispatchDataLive]);
   const approveEditRequestSafe = isViewer ? _viewerBlock : approveEditRequestPC;
   const rejectEditRequestSafe = isViewer ? _viewerBlock : rejectEditRequestPC;
   const upsertDriverSafe = isViewer ? _viewerBlock : upsertDriver;
@@ -9435,7 +9453,7 @@ function MultiRegCombo({ id, value, onChange, onSelect, items, placeholder, clas
       const loadMethodOptions = useCompanyDropdownOptions("상하차방법", role, userCompany);
       const payTypeOptionsCustom = useCompanyDropdownOptions("지급방식", role, userCompany);
       // ⭐ 2026-11-02 운임규칙 — 회사가 "운임 규칙 사용"을 켠 경우에만 운임구분 칸을 보인다
-      const fareR = useFareRules(userCompany);
+      const fareR = useFareRules(getTenant() || userCompany);
       const fareOn = fareR.on;
       const dispatchTypeOptionsCustom = useCompanyDropdownOptions("배차방식", role, userCompany);
       const cargoTypeOptionsCustom = useCompanyDropdownOptions("화물타입", role, userCompany);
@@ -24403,7 +24421,7 @@ function RealtimeStatus({
   approvedShippers = [],
 }) {
 // ⭐ 2026-11-02 운임규칙 — 오더 복사·수정 패널 / 수정 창 / 운임구분 열(규칙 사용 회사만)
-const fareR = useFareRules(userCompany);
+const fareR = useFareRules(getTenant() || userCompany);
 const fareOn = fareR.on;
 const cpCargoTypeOptions = useCompanyDropdownOptions("화물타입", role, userCompany); // 오더복사 수정 창 단위(회사별 설정)
 const cpTonTypeOptions = useCompanyDropdownOptions("톤수타입", role, userCompany);
@@ -35062,7 +35080,7 @@ function DispatchStatus({
   userNameMap = new Map(),
 }) {
 // ⭐ 2026-11-02 운임규칙 — 오더 복사·수정 패널 / 수정 창 / 운임구분 열(규칙 사용 회사만)
-const fareR = useFareRules(userCompany);
+const fareR = useFareRules(getTenant() || userCompany);
 const fareOn = fareR.on;
 const cpCargoTypeOptions = useCompanyDropdownOptions("화물타입", role, userCompany); // 오더복사 수정 창 단위(회사별 설정)
 const cpTonTypeOptions = useCompanyDropdownOptions("톤수타입", role, userCompany);
@@ -47574,7 +47592,7 @@ const isKrHoliday = (dateStr) => {
 
 // ===================== DispatchApp.jsx (PART 6/8 — Settlement Premium) — START =====================
 function Settlement({ dispatchData, fixedRows = [], clients = [], places = [], isViewer = false, role, userCompany = "", showAlert = (m) => alert(m) }) {
-  const fareRS = useFareRules(userCompany); // ⭐ 2026-11-02 운임규칙 — 운임구분별 합계·내보내기(규칙 사용 회사만)
+  const fareRS = useFareRules(getTenant() || userCompany); // ⭐ 2026-11-02 운임규칙 — 운임구분별 합계·내보내기(규칙 사용 회사만)
 
   // ⭐ 연간 매출 목표(순수 운송료 목표 금액 / 제외 거래처 성장률)는 회사마다 다르므로
   // 하드코딩하지 않고 매출 대시보드 › 목표 달성 카드에서 설정한 값을 불러온다.
@@ -50815,7 +50833,7 @@ function ArClientInfo({ client, name, upsertClient, isViewer }) {
 }
 
 function ClientSettlement({ dispatchData, setDispatchData, userCompany = "", clients = [], setClients, upsertClient, showAlert = (m) => alert(m), patchDispatch, cardImage, setCardImage, cardImageUploading, setCardImageUploading, isViewer = false }) {
-  const fareRC = useFareRules(userCompany); // ⭐ 2026-11-02 운임규칙
+  const fareRC = useFareRules(getTenant() || userCompany); // ⭐ 2026-11-02 운임규칙
   const [bankBulkOpen, setBankBulkOpen] = React.useState(false);
 
   // ★ 오더 상세 팝업
@@ -59874,7 +59892,7 @@ function CompanyManagementWrapper({ userCompany, role, userId, user, todayStats,
   const canViewHR = role === "totalMaster" || role === "hrManager" || (!!coStaffCM && masterHasHr(myDocCM, coStaffCM, user?.uid));
   const tabs0 = role === "hrManager" ? ["회사정보", "조직도", "내정보", "내 이력서"] : canViewHR ? ["회사정보", "조직도", "내정보", "내 이력서", "출근기록부", "인사관리부"] : ["회사정보", "조직도", "내정보", "내 이력서", "출근기록부"];
   // ⭐ 2026-11-02 운임규칙 — 최고관리자가 이 회사에 켜 준 경우에만(관리자센터 › 회사별 맞춤 기능). 회사 직원 누구나 보고 고친다(조회전용은 보기만)
-  const fareCM = useFareRules(userCompany);
+  const fareCM = useFareRules(getTenant() || userCompany);
   const tabs = !fareCM.feature || role === "driver" || role === "shipper" ? tabs0 : [...tabs0.slice(0, 2), "운임 규칙", ...tabs0.slice(2)];
 
   // ⭐ 디자인 개편 — 관리자메뉴와 같은 왼쪽 메뉴바 + 상단 인사 카드(AdminShell 공용 레이아웃)

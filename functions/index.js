@@ -591,7 +591,8 @@ exports.notifyFleetDriverNewOrder =
       if (nextPlateW && nextPlateW !== prevPlateW && after["기사확인상태"] !== "대기" && !(after["자동수락"] && after["기사확인상태"] === "수락")) {
         // ⭐ 2026-11-02 점검 — 다른 회사 같은 번호 기사의 등급으로 승인대기를 잘못 거는 것 방지
         const wDriverDoc = await findDriverByPlate(after["차량번호"], after.companyName);
-        if (wDriverDoc?.data()?.["등급"] === "지입") {
+        // ⭐ 2026-11-02 기사앱에 가입한(uid가 있는) 지입 기사만 — 아직 가입 안 한 차량은 수락할 화면이 없어 승인대기로 멈춘다
+        if (wDriverDoc?.data()?.["등급"] === "지입" && !!wDriverDoc.data().uid) {
           await change.after.ref.update({
             기사확인상태: "대기",
             기사거절사유: null,
