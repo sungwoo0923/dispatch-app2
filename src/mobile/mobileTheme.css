@@ -50,6 +50,7 @@
 /* ── 입력칸 ── */
 .kp-m input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):focus,
 .kp-m select:focus,
+.kp-m .kp-msel:focus-visible,
 .kp-m textarea:focus {
   outline: none;
   border-color: var(--m-accent) !important;
@@ -76,12 +77,15 @@
 .kp-m-form .kp-m-form-card .border-t { border-top-color: #EEF1F6 !important; }
 .kp-m-form .kp-m-form-card input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
 .kp-m-form .kp-m-form-card select,
+.kp-m-form .kp-m-form-card .kp-msel:not([class~="text-white"]),
 .kp-m-form .kp-m-form-card textarea { border-color: #DCE3EE; }
 .kp-m-form .kp-m-form-card input:not([class~="text-white"]),
 .kp-m-form .kp-m-form-card select:not([class~="text-white"]),
+.kp-m-form .kp-m-form-card .kp-msel:not([class~="text-white"]),
 .kp-m-form .kp-m-form-card textarea:not([class~="text-white"]) { color: #0F1A30; }
 .kp-m-form .kp-m-form-card input[class~="rounded"],
 .kp-m-form .kp-m-form-card select[class~="rounded"],
+.kp-m-form .kp-m-form-card .kp-msel[class~="rounded"],
 .kp-m-form .kp-m-form-card textarea[class~="rounded"] { border-radius: 10px; }
 .kp-m-form .kp-m-form-card input::placeholder,
 .kp-m-form .kp-m-form-card textarea::placeholder { color: #A7B3C6; }
@@ -373,3 +377,8 @@
 .kp-m-b .kp-m-drawer-item { border-radius: 12px; }
 /* B형 바텀시트·흰 박스 공통 — 모서리 크게, 테두리 은은하게 */
 .kp-m-b [class~="rounded-t-2xl"] { border-top-left-radius: 24px; border-top-right-radius: 24px; }
+
+/* ⭐ 2026-11-02 MobileSelect(바텀시트 선택기) — 버튼이 눌렸을 때 살짝 눌림 효과 */
+.kp-msel { -webkit-tap-highlight-color: transparent; cursor: pointer; }
+.kp-msel:active:not(:disabled) { filter: brightness(0.97); }
+.kp-msel:disabled { cursor: default; opacity: .65; }

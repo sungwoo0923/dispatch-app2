@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { collection, doc, onSnapshot, query, setDoc, where } from "firebase/firestore";
 import { db, DEFAULT_COMPANY } from "../firebase";
+import MobileSelect from "./MobileSelect"; // ⭐ 2026-11-02 기본 select → 남색 바텀시트 선택기
 import { ATTENDANCE_STATUS_COLOR, isWeekend, isHoliday, findApprovedLeaveForDate } from "../attendanceUtils";
 import { RadiusEditor, officeRadii, DEFAULT_IN_RADIUS, DEFAULT_OUT_RADIUS } from "../attendanceQuick";
 import { checkInsideOffice, workWindow } from "../autoAttendance";
@@ -640,10 +641,10 @@ export default function MobileAttendanceBoard({ userCompany, role, currentUser, 
             )}
             <div>
               <div className="text-[12px] font-semibold text-gray-600 mb-2">상태</div>
-              <select value={mobileChangeReqStatus} onChange={e => setMobileChangeReqStatus(e.target.value)}
+              <MobileSelect title="근태 상태" value={mobileChangeReqStatus} onChange={e => setMobileChangeReqStatus(e.target.value)}
                 className="w-full px-3 py-2.5 rounded-xl border-2 border-gray-200 text-[14px] font-bold text-[var(--attn-accent)] focus:border-[var(--attn-accent)] outline-none">
                 {["출근","휴무","연차","오전반차","오후반차","외근","병가","경조사","조퇴"].map(o => <option key={o} value={o}>{o}</option>)}
-              </select>
+              </MobileSelect>
             </div>
             {mobileChangeReqStatus === "출근" && (
               <>

@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from "react";
 import southKorea from "@svg-maps/south-korea";
+import MobileSelect from "./MobileSelect"; // ⭐ 2026-11-02 기본 select → 남색 바텀시트 선택기
 
 const KO_TO_ID = {
   서울:"seoul", 인천:"incheon", 경기:"gyeonggi",
@@ -433,13 +434,14 @@ export default function MobileMapFare() {
         <>
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
             <div className="text-[11px] font-bold text-gray-400 mb-2 uppercase tracking-wide">차량 종류</div>
-            <select
+            <MobileSelect
+              title="차량 종류"
               className="w-full px-3 py-2.5 text-[14px] rounded-xl border border-gray-200 bg-white"
               value={vehicle}
               onChange={e => setVehicle(e.target.value)}
             >
               {VEHICLE_TYPES.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
-            </select>
+            </MobileSelect>
           </div>
 
           {result && (
