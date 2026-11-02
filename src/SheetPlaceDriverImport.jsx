@@ -6,7 +6,7 @@
 import React from "react";
 import * as XLSX from "xlsx";
 import { auth, db, FUNCTIONS_BASE, DEFAULT_COMPANY } from "./firebase";
-import { collection, doc, getDocs, query, where, writeBatch, setDoc, serverTimestamp } from "firebase/firestore";
+import { collection, doc, getDoc, getDocs, query, where, writeBatch, setDoc, serverTimestamp } from "firebase/firestore";
 import { coDocKey } from "./coKey";
 import { parsePlacesFromGrid, dedupePlaces, parseDriversFromGrid, dedupeDrivers, normKey, normPlate } from "./placeDriverParse";
 
@@ -49,6 +49,14 @@ export default function SheetPlaceDriverImport({ companies = [], url: initUrl = 
   const [onlyFull, setOnlyFull] = React.useState(true);
   const [done, setDone] = React.useState(null);
   const excelRef = React.useRef(null);
+  // ⭐ 최고관리자만 — 메뉴·서버에서도 막혀 있지만 화면에서도 한 번 더 확인
+  const [isMaster, setIsMaster] = React.useState(null);
+  React.useEffect(() => {
+    const uid = auth.currentUser?.uid;
+    if (!uid) { setIsMaster(false); return; }
+    if (auth.currentUser?.email === "tjddnqkf@naver.com") { setIsMaster(true); return; }
+    getDoc(doc(db, "users", uid)).then((s) => setIsMaster(s.data()?.role === "totalMaster")).catch(() => setIsMaster(false));
+  }, []);
 
   const analyze = async (grids, title, src) => {
     const [exP, exD] = await Promise.all([loadCompanyDocs("places", company), loadCompanyDocs("drivers", company)]);
@@ -153,6 +161,9 @@ export default function SheetPlaceDriverImport({ companies = [], url: initUrl = 
   const Badge = ({ c, children }) => <span className={`px-2 py-0.5 rounded-full text-[12px] font-bold ${c}`}>{children}</span>;
   const th = "px-3 py-2.5 text-center font-bold whitespace-nowrap";
   const td = "px-3 py-2 text-[13.5px]";
+
+  if (isMaster === null) return null;
+  if (!isMaster) return <div className={`${CARD} p-6 text-[14px] text-gray-500`}>최고관리자만 사용할 수 있습니다.</div>;
 
   return (
     <div className="space-y-6">
