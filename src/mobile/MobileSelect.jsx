@@ -99,7 +99,13 @@ const MobileSelect = React.forwardRef(function MobileSelect(
         <div
           className="kp-msel-ov"
           data-kp-popup="1"
-          onClick={() => setOpen(false)}
+          // 시트는 document.body에 그려지지만 React 이벤트는 부모 컴포넌트로 거슬러 올라간다 —
+          // 바깥(카드 클릭·모달 닫기 등) 핸들러가 잘못 실행되지 않게 여기서 끊는다.
+          onClick={(e) => { e.stopPropagation(); setOpen(false); }}
+          onMouseDown={(e) => e.stopPropagation()}
+          onPointerDown={(e) => e.stopPropagation()}
+          onTouchStart={(e) => e.stopPropagation()}
+          onKeyDown={(e) => e.stopPropagation()}
           style={{ position: "fixed", inset: 0, zIndex: 2147483000, background: "rgba(15,26,48,0.45)", display: "flex", alignItems: "flex-end", justifyContent: "center" }}
         >
           <style>{SHEET_CSS}</style>
@@ -113,7 +119,7 @@ const MobileSelect = React.forwardRef(function MobileSelect(
             </div>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 18px 10px" , borderBottom: "1px solid #EEF1F6" }}>
               <div style={{ fontSize: 15, fontWeight: 800, color: "#0F1A30", letterSpacing: "-0.01em" }}>{sheetTitle}</div>
-              <button type="button" onClick={() => setOpen(false)} style={{ fontSize: 13, fontWeight: 700, color: "#5B6B85", padding: "6px 4px" }}>닫기</button>
+              <button type="button" onClick={() => setOpen(false)} style={{ fontSize: 13, fontWeight: 700, color: "#5B6B85", padding: "6px 4px", border: 0, background: "transparent", fontFamily: "inherit" }}>닫기</button>
             </div>
             <div ref={listRef} style={{ overflowY: "auto", WebkitOverflowScrolling: "touch", padding: "6px 10px 12px" }}>
               {selectable.length === 0 && (
@@ -134,7 +140,7 @@ const MobileSelect = React.forwardRef(function MobileSelect(
                     className="kp-msel-item"
                     style={{
                       width: "100%", minHeight: 48, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10,
-                      padding: "0 14px", margin: "2px 0", borderRadius: 12, textAlign: "left",
+                      padding: "0 14px", margin: "2px 0", borderRadius: 12, textAlign: "left", border: 0, fontFamily: "inherit", cursor: o.disabled ? "default" : "pointer",
                       fontSize: 15, fontWeight: on ? 800 : 500,
                       color: o.disabled ? "#C3CEDF" : on ? "#1B2B4B" : "#0F1A30",
                       background: on ? "#EEF3FB" : "transparent",
