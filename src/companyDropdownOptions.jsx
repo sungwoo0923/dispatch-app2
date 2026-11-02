@@ -8,30 +8,97 @@
 // 회사별 설정(결제일규칙, 매출목표, 차량제원표수정 등)을 담는 관행과도 일치한다.
 // 회사가 한 번도 커스터마이즈하지 않았으면(필드 없음) 아래 DEFAULTS를 그대로
 // 보여준다 — 그래서 아무도 손대지 않으면 전과 100% 동일한 화면이 된다.
-import React, { useEffect, useState, useCallback } from "react";
-import { db, doc, onSnapshot, setDoc, DEFAULT_COMPANY } from "./firebase";
+import React, { useState } from "react";
+import { db, doc, onSnapshot, setDoc, getDoc, DEFAULT_COMPANY } from "./firebase";
+import { arrayUnion } from "firebase/firestore";
+import { getTenant } from "./fsTenant";
 import { useEditMode } from "./EditMode";
 
 // ⭐ 기존 하드코딩 값 그대로 + 사용자가 요청한 "리프트" 추가(상/하차방법만)
+// ⭐ 2026-11-02 화면마다 조금씩 달랐던 목록(등록폼: 계좌이체 / 표·수정창: 손실·개인·취소 / 실시간: 고정기사)을
+//  하나로 합쳤다 — 이제 모든 화면(PC·모바일)과 편집모드가 같은 목록을 쓴다. 회사가 바꾼 적이 있으면 그 목록.
 export const DEFAULT_DROPDOWN_OPTIONS = {
   상하차방법: ["지게차", "수작업", "직접수작업", "수도움", "크레인", "리프트"],
-  지급방식: ["계산서", "착불", "선불", "계좌이체"],
-  배차방식: ["24시", "인성", "직접배차", "24시(외부업체)"],
+  지급방식: ["계산서", "착불", "선불", "계좌이체", "손실", "개인", "취소"],
+  배차방식: ["24시", "인성", "직접배차", "고정기사", "24시(외부업체)"],
   화물타입: ["파레트", "박스", "통"],
   톤수타입: ["톤", "kg"],
 };
 
-// Part A의 resolveCompany와 완전히 동일한 규칙 — role/userCompany를 못 받는
-// 자리(깊이 중첩된 팝업 등)에서는 role 없이도 쓸 수 있도록 role을 생략 가능하게 함.
-function resolveCompanyKey(role, userCompany) {
-  if (role === undefined) {
-    // role을 모르는 자리 — 이 파일 안에서도 여러 곳이 쓰는 localStorage 전용 대체 규칙
-    // (예: DispatchApp.jsx의 `localStorage.getItem("loginCompany") || localStorage.getItem("userCompany")`)
-    return localStorage.getItem("loginCompany") || localStorage.getItem("userCompany") || DEFAULT_COMPANY;
+// 회사 정하기 — 앱 전체와 같은 규칙: 지금 로그인한 회사(getTenant) → 넘겨받은 회사 → 저장된 회사.
+//  (최고관리자는 로그인 때 고른 회사가 tenant이고, 직원은 본인 회사가 tenant다. 관리센터처럼 tenant가 비는
+//   화면에서만 아래 예전 규칙을 쓴다.) 차량종류(vehicleTypes.js)와 똑같이 맞췄다.
+export function resolveCompanyKey(role, userCompany) {
+  let t = "";
+  try { t = String(getTenant() || "").trim(); } catch { t = ""; }
+  if (t) return t;
+  const ls = (k) => { try { return localStorage.getItem(k) || ""; } catch { return ""; } };
+  if (role === undefined || role === "") {
+    return String(userCompany || "").trim() || ls("loginCompany") || ls("userCompany") || DEFAULT_COMPANY;
   }
   return role === "totalMaster"
-    ? (localStorage.getItem("loginCompany") || userCompany || DEFAULT_COMPANY)
-    : (userCompany || localStorage.getItem("userCompany") || DEFAULT_COMPANY);
+    ? (ls("loginCompany") || userCompany || DEFAULT_COMPANY)
+    : (userCompany || ls("userCompany") || DEFAULT_COMPANY);
+}
+
+// ── 회사별 구독 공유(같은 회사 문서는 onSnapshot 하나만 — 표 칸 수백 개가 같이 써도 가볍게) ──
+const clean = (v) => String(v ?? "").replace(/\s+/g, " ").trim().slice(0, 30);
+const EMPTY = Object.freeze({ loaded: false, opts: Object.freeze({}) });
+const stores = new Map();
+function getStore(co) {
+  let st = stores.get(co);
+  if (!st) { st = { state: EMPTY, listeners: new Set(), unsub: null, timer: null }; stores.set(co, st); }
+  return st;
+}
+const emit = (st) => st.listeners.forEach((fn) => { try { fn(); } catch { /* 무시 */ } });
+function startStore(co, st) {
+  if (st.unsub || !co) return;
+  try {
+    st.unsub = onSnapshot(doc(db, "companySettings", co), (snap) => {
+      const d = (snap.exists() && snap.data()?.dropdownOptions) || {};
+      st.state = { loaded: true, opts: d };
+      emit(st);
+    }, () => { st.state = { loaded: true, opts: {} }; emit(st); });
+  } catch { st.state = { loaded: true, opts: {} }; }
+}
+export function subscribeCompanyOptions(co, cb) {
+  if (!co) return () => {};
+  const st = getStore(co);
+  if (st.timer) { clearTimeout(st.timer); st.timer = null; }
+  st.listeners.add(cb);
+  startStore(co, st);
+  return () => {
+    st.listeners.delete(cb);
+    if (st.listeners.size === 0 && st.unsub) st.timer = setTimeout(() => {
+      st.timer = null;
+      if (st.listeners.size === 0 && st.unsub) { try { st.unsub(); } catch { /* 무시 */ } st.unsub = null; st.state = EMPTY; }
+    }, 5000);
+  };
+}
+export const companyOptionsSnapshot = (co) => (co ? getStore(co).state : EMPTY);
+
+// 회사 목록(바꾼 적 없으면 기본 목록) — key별
+export function listFromStored(stored, key, fallback) {
+  if (Array.isArray(stored) && stored.length > 0) {
+    const out = []; const seen = new Set();
+    stored.forEach((v) => { const c = clean(v); if (c && !seen.has(c)) { seen.add(c); out.push(c); } });
+    if (out.length) return out;
+  }
+  return fallback && fallback.length ? fallback : (DEFAULT_DROPDOWN_OPTIONS[key] || []);
+}
+
+// 훅 — { company, loaded, list, customized }
+export function useCompanyOptionList(key, role, userCompany) {
+  const co = resolveCompanyKey(role, userCompany);
+  const subscribe = React.useCallback((cb) => subscribeCompanyOptions(co, cb), [co]);
+  const getSnap = React.useCallback(() => companyOptionsSnapshot(co), [co]);
+  const st = React.useSyncExternalStore(subscribe, getSnap, getSnap);
+  const stored = st.opts?.[key];
+  return React.useMemo(() => ({
+    company: co, loaded: st.loaded,
+    list: listFromStored(stored, key),
+    customized: Array.isArray(stored) && stored.length > 0,
+  }), [co, st.loaded, stored, key]);
 }
 
 /**
@@ -40,47 +107,26 @@ function resolveCompanyKey(role, userCompany) {
  * 반환값: 문자열 배열 — 회사가 커스터마이즈한 적 없으면 DEFAULT_DROPDOWN_OPTIONS[key]
  */
 export function useCompanyDropdownOptions(key, role, userCompany) {
-  const defaultList = DEFAULT_DROPDOWN_OPTIONS[key] || [];
-  const [options, setOptions] = useState(defaultList);
-
-  useEffect(() => {
-    const companyKey = resolveCompanyKey(role, userCompany);
-    const unsub = onSnapshot(
-      doc(db, "companySettings", companyKey),
-      (snap) => {
-        const stored = snap.exists() ? snap.data()?.dropdownOptions?.[key] : null;
-        setOptions(Array.isArray(stored) && stored.length > 0 ? stored : defaultList);
-      },
-      () => setOptions(defaultList)
-    );
-    return () => unsub();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [key, role, userCompany]);
-
-  return options;
+  return useCompanyOptionList(key, role, userCompany).list;
 }
 
 // ⭐ 2026-11-01 표 칸·빠른수정·모바일 등 "훅을 못 쓰는 자리"용 — 앱 맨 위(PC DispatchApp·모바일 MobileApp)에서
 //  useCompanyDropdownSync()로 회사 설정을 한 번 구독해 두고, 각 자리는 dropdownList()로 읽는다.
-//  회사가 편집모드에서 옵션을 바꾼 적이 없으면 그 자리의 원래 목록(fallback)을 그대로 쓴다(화면 변화 없음).
-const _ddCache = {};
+//  ⭐ 2026-11-02 위 공유 구독을 그대로 쓴다(따로 문서를 또 구독하지 않음) — 회사 목록이 없으면 기본 목록.
+let _syncCo = "";
 export function useCompanyDropdownSync(role, userCompany) {
-  const [, force] = useState(0);
-  useEffect(() => {
-    const companyKey = resolveCompanyKey(role, userCompany);
-    const unsub = onSnapshot(doc(db, "companySettings", companyKey), (snap) => {
-      const d = (snap.exists() && snap.data()?.dropdownOptions) || {};
-      Object.keys(_ddCache).forEach((k) => { delete _ddCache[k]; });
-      Object.assign(_ddCache, d);
-      force((x) => x + 1);
-    }, () => {});
-    return () => unsub();
-  }, [role, userCompany]);
+  const co = resolveCompanyKey(role, userCompany);
+  _syncCo = co;
+  const subscribe = React.useCallback((cb) => subscribeCompanyOptions(co, cb), [co]);
+  const getSnap = React.useCallback(() => companyOptionsSnapshot(co), [co]);
+  React.useSyncExternalStore(subscribe, getSnap, getSnap);
 }
+// eslint-disable-next-line no-unused-vars
 export function dropdownList(key, fallback = [], current) {
-  const stored = _ddCache[key];
-  let list = Array.isArray(stored) && stored.length > 0 ? stored : fallback;
-  if (current && !list.includes(current)) list = [...list, current]; // 예전에 저장된 값도 보이게
+  const co = _syncCo || resolveCompanyKey();
+  let list = listFromStored(companyOptionsSnapshot(co).opts?.[key], key);
+  const cur = clean(current);
+  if (cur && !list.includes(cur)) list = [...list, cur]; // 예전에 저장된 값도 보이게
   return list;
 }
 
@@ -92,6 +138,32 @@ export async function saveCompanyDropdownOptions(key, list, role, userCompany) {
     { dropdownOptions: { [key]: list } },
     { merge: true }
   );
+}
+
+// ⭐ 2026-11-02 선택 목록의 [＋ 추가] — 회사 목록에 하나 덧붙인다(편집모드 목록과 같은 자리).
+//  회사가 아직 목록을 바꾼 적이 없으면(기본 목록 상태) 기본 목록 + 새 이름으로 처음 저장한다 — 기본값이 사라지지 않게.
+export async function addCompanyDropdownOption(key, name, company) {
+  const co = String(company || "").trim() || resolveCompanyKey();
+  const v = clean(name);
+  if (!co) throw new Error("회사 정보를 찾지 못했습니다");
+  if (!v) throw new Error("이름을 입력해 주세요");
+  const ref = doc(db, "companySettings", co);
+  let stored = companyOptionsSnapshot(co).opts?.[key];
+  if (!companyOptionsSnapshot(co).loaded) {
+    try { const snap = await getDoc(ref); stored = snap.exists() ? snap.data()?.dropdownOptions?.[key] : null; } catch { /* 아래에서 기본 목록으로 */ }
+  }
+  const has = Array.isArray(stored) && stored.length > 0;
+  const payload = has ? arrayUnion(v) : [...listFromStored(null, key).filter((x) => x !== v), v];
+  await setDoc(ref, { dropdownOptions: { [key]: payload } }, { merge: true });
+  // 서버 응답 전에도 화면에 바로 보이게
+  const st = getStore(co);
+  const cur = listFromStored(st.state.opts?.[key], key);
+  if (!has || !cur.includes(v)) {
+    const nextList = has ? [...cur.filter((x) => x !== v), v] : payload;
+    st.state = { loaded: true, opts: { ...(st.state.opts || {}), [key]: nextList } };
+    emit(st);
+  }
+  return v;
 }
 
 // ⭐ 편집모드일 때만 드롭다운 옆에 붙는 "옵션 관리" 버튼 + 모달 — EditableText와

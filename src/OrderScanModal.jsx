@@ -295,7 +295,7 @@ export default function OrderScanModal({ onClose, onApply, places: placesRaw = [
           </div>
           <div className="relative min-w-0">
             <div className="text-[10.5px] font-extrabold tracking-[0.3em] text-[#8FB0F0]" style={{ fontFamily: MONO }}>ORDER SCAN</div>
-            <div className="text-[18px] font-black leading-tight">오더 붙여넣기</div>
+            <div className="text-[18px] font-black leading-tight">오더스캔</div>
           </div>
           <div className="relative ml-4 hidden md:flex items-center gap-2 text-[12px] font-bold text-white/60">
             <kbd className="px-2 h-6 inline-flex items-center rounded-md bg-white/10 ring-1 ring-white/15 text-white" style={{ fontFamily: MONO }}>Ctrl</kbd>+<kbd className="px-2 h-6 inline-flex items-center rounded-md bg-white/10 ring-1 ring-white/15 text-white" style={{ fontFamily: MONO }}>V</kbd>

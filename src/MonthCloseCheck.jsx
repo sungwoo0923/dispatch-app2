@@ -11,13 +11,13 @@ import { db } from "./firebase";
 import { toWon } from "./monthCompare";
 import { useLoadOrderRange, monthEnd } from "./orderHistory";
 import { CustomSelect } from "./CustomSelect";
+import { CompanyOptionPicker } from "./companyOptionPicker"; // 🧾 2026-11-02 지급방식·배차방식·상/하차방법 공용 선택기(＋ 추가)
 import { fmtMoney } from "./formatInput";
 
 const NAVY = "#1B2B4B";
 const kstMonth = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 7);
 const shiftMonth = (m, d) => { const [y, mm] = m.split("-").map(Number); const t = new Date(y, mm - 1 + d, 1); return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, "0")}`; };
 const isCanceled = (r) => r?.배차상태 === "배차취소" || r?.상태 === "취소";
-const PAY_OPTIONS = ["계산서", "착불", "선불", "계좌이체", "개인", "손실"];
 
 export const CLOSE_CHECKS = [
   { key: "noSale", label: "청구운임 미입력", tone: "bad", desc: "기사운임만 있고 청구운임이 0원 — 매출이 빠짐", test: (r) => toWon(r.청구운임) === 0 && toWon(r.기사운임) > 0 },
@@ -145,10 +145,7 @@ export default function MonthCloseCheck({ dispatchData = [], onClose, isViewer =
                           <td style={{ padding: "8px", textAlign: "center", fontWeight: 900, color: s - d < 0 ? "#b91c1c" : s - d === 0 ? "#92400e" : "#047857", whiteSpace: "nowrap" }}>{(s - d).toLocaleString()}</td>
                           <td style={{ padding: "8px", textAlign: "center" }}>
                             {editable && !fixed ? (
-                              <CustomSelect value={val(r, "지급방식")} onChange={(e) => setVal(r, "지급방식", e.target.value)} style={{ height: 34, borderRadius: 7, border: "1px solid #DCE3EE", padding: "0 24px 0 8px", fontSize: 14, fontWeight: 700, background: "#fff", color: "#0F1A30" }}>
-                                <option value="">미입력</option>
-                                {[...new Set([...PAY_OPTIONS, r.지급방식].filter(Boolean))].map((p) => <option key={p} value={p}>{p}</option>)}
-                              </CustomSelect>
+                              <CompanyOptionPicker optKey="지급방식" placeholder="미입력" noneLabel="미입력" value={val(r, "지급방식")} onChange={(v) => setVal(r, "지급방식", v)} style={{ height: 34, minWidth: 96, borderRadius: 7, border: "1px solid #DCE3EE", padding: "0 8px", fontSize: 14, fontWeight: 700, background: "#fff", color: "#0F1A30" }} />
                             ) : (r.지급방식 || "-")}
                           </td>
                           <td style={{ padding: "8px", textAlign: "center", whiteSpace: "nowrap" }}>

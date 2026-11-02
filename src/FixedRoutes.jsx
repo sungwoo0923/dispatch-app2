@@ -19,7 +19,7 @@ import { createPortal } from "react-dom";
 import React from "react";
 import { kpConfirm, kpAlert } from "./kpDialog";
 import { collection, doc, onSnapshot, query, where, addDoc, updateDoc, deleteDoc, setDoc, getDoc, serverTimestamp, arrayUnion } from "firebase/firestore";
-import { db, auth } from "./firebase";
+import { db, auth, DEFAULT_COMPANY } from "./firebase";
 import CustomDatePicker from "./CustomDatePicker";
 import { CustomSelect } from "./CustomSelect";
 import { TimeSelect, MultiDateSelect, korTimeLabel } from "./kpInputs";
@@ -27,6 +27,7 @@ import { useCompanyDropdownOptions } from "./companyDropdownOptions";
 import RouteMapModal from "./RouteMapModal";
 // ⭐ 2026-11-02 운임규칙 — 노선·정류지 기본 운임구분(규칙 사용 회사만) → 기사운임 자동 계산, 만든 오더에 운임구분
 import { VehicleTypePicker } from "./vehicleTypes"; // 🚚 2026-11-02 회사 공용 차량종류
+import { CompanyOptionPicker } from "./companyOptionPicker"; // 🧾 2026-11-02 지급방식·배차방식·상/하차방법 공용 선택기(＋ 추가)
 import { useFareRules, FareTypeSelect, findFareRule, applyFareRule, fareRuleHint } from "./fareRules";
 import { fmtPhone } from "./formatInput";
 
@@ -53,31 +54,83 @@ const Step = ({ n, title, sub }) => (
   </div>
 );
 
-// 🔎 배차관리처럼 — 입력하면 등록된 거래처·상하차지가 바로 뜬다(↑↓ Enter)
-function Suggest({ value, onChange, onPick, items, k, sub, placeholder, showAll = false }) {
+// 🔎 배차관리처럼 — 입력하면 거래처관리에 등록된 거래처·상하차지가 바로 뜬다(↑↓ 이동 · Enter 선택 · Esc 닫기)
+//  ⭐ 2026-11-02 목록을 화면 맨 위(portal)에 띄운다 — 정류지 카드·운임 상자 안에서 잘리거나 다음 칸에 가려지던 문제.
+//   한글 입력 중(조합 중) Enter·방향키는 조합이 끝난 뒤의 목록으로 처리(마지막 글자가 빠진 채 골라지던 문제).
+function Suggest({ value, onChange, onPick, items, k, sub, tag, placeholder, title = "거래처관리" }) {
   const [open, setOpen] = React.useState(false);
   const [hi, setHi] = React.useState(0);
+  const [pos, setPos] = React.useState(null);
+  const inRef = React.useRef(null);
+  const listRef = React.useRef(null);
   const q = norm(value);
-  // ⭐ 2026-11-02 칸을 누르기만 해도(빈 칸) 목록이 뜨게 — 배차관리에서 등록한 거래처·상하차지를 바로 고를 수 있다
-  void showAll;
-  const list = items.filter((x) => !q || norm(x[k]).includes(q)).sort((a, b) => (norm(a[k]).startsWith(q) ? 0 : 1) - (norm(b[k]).startsWith(q) ? 0 : 1) || String(a[k] || "").localeCompare(String(b[k] || ""), "ko")).slice(0, q ? 10 : 30);
-  const pick = (x) => { onPick(x); setOpen(false); };
+  const list = React.useMemo(() => items.filter((x) => !q || norm(x[k]).includes(q))
+    .sort((a, b) => (norm(a[k]) === q ? 0 : norm(a[k]).startsWith(q) ? 1 : 2) - (norm(b[k]) === q ? 0 : norm(b[k]).startsWith(q) ? 1 : 2) || String(a[k] || "").localeCompare(String(b[k] || ""), "ko"))
+    .slice(0, q ? 12 : 30), [items, k, q]);
+  const live = React.useRef({ list, hi }); live.current = { list, hi };
+  const show = open && list.length > 0;
+  const place = React.useCallback(() => {
+    const r = inRef.current?.getBoundingClientRect();
+    if (!r) return;
+    const vh = window.innerHeight; const below = vh - r.bottom - 8; const above = r.top - 8;
+    const up = below < 220 && above > below;
+    const w = Math.min(Math.max(r.width, 340), window.innerWidth - 16);
+    setPos({ left: Math.max(8, Math.min(r.left, window.innerWidth - w - 8)), width: w, top: up ? undefined : r.bottom + 4, bottom: up ? vh - r.top + 4 : undefined, maxH: Math.max(160, Math.min(340, up ? above : below)) });
+  }, []);
+  React.useLayoutEffect(() => {
+    if (!show) return undefined;
+    place();
+    window.addEventListener("scroll", place, true); window.addEventListener("resize", place);
+    return () => { window.removeEventListener("scroll", place, true); window.removeEventListener("resize", place); };
+  }, [show, place]);
+  React.useEffect(() => { if (hi >= list.length) setHi(Math.max(0, list.length - 1)); }, [list.length, hi]);
+  React.useEffect(() => { if (show) listRef.current?.querySelector(`[data-i="${hi}"]`)?.scrollIntoView({ block: "nearest" }); }, [hi, show]);
+  const pick = (x) => { if (!x) return; onPick(x); setOpen(false); };
+  const onKey = (e) => {
+    const key = e.key;
+    if (key === "Escape") { if (open) { e.preventDefault(); e.stopPropagation(); setOpen(false); } return; }
+    if (key === "Tab") { setOpen(false); return; }
+    if (key !== "ArrowDown" && key !== "ArrowUp" && key !== "Enter") return;
+    if (!open) { if (key === "ArrowDown") { e.preventDefault(); setOpen(true); setHi(0); } return; }
+    const composing = e.nativeEvent?.isComposing || e.keyCode === 229;
+    if (!live.current.list.length && !composing) return;
+    e.preventDefault();
+    const run = () => {
+      const { list: L, hi: H } = live.current;
+      if (!L.length) return;
+      if (key === "ArrowDown") setHi(Math.min(L.length - 1, H + 1));
+      else if (key === "ArrowUp") setHi(Math.max(0, H - 1));
+      else pick(L[Math.min(H, L.length - 1)]);
+    };
+    if (composing) setTimeout(run, 30); else run();
+  };
   return (
     <div className="relative flex-1 min-w-0">
-      <input value={value} onChange={(e) => { onChange(e.target.value); setOpen(true); setHi(0); }} onFocus={() => setOpen(true)} onBlur={() => setTimeout(() => setOpen(false), 150)}
-        onKeyDown={(e) => { if (!open || !list.length) return; if (e.key === "ArrowDown") { e.preventDefault(); setHi((h) => Math.min(list.length - 1, h + 1)); } else if (e.key === "ArrowUp") { e.preventDefault(); setHi((h) => Math.max(0, h - 1)); } else if (e.key === "Enter") { e.preventDefault(); pick(list[hi]); } }}
-        placeholder={placeholder} className={inp} autoComplete="off" />
-      {open && list.length > 0 && (
-        <div className="absolute z-30 left-0 right-0 top-full mt-1 rounded-xl border border-[#DCE3EE] bg-white shadow-[0_18px_40px_rgba(15,26,48,.18)] overflow-hidden max-h-[300px] overflow-y-auto">
-          {list.map((x, i) => (
-            <button key={x.id || x._id || x[k] + i} type="button" tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={() => pick(x)} onMouseEnter={() => setHi(i)}
-              className={`w-full text-left px-3.5 py-2.5 border-b border-[#EEF1F6] last:border-0 ${i === hi ? "bg-[#EEF3FC]" : "bg-white"}`}>
-              <div className="text-[14px] font-black text-[#0F1A30] truncate">{x[k]}</div>
-              {sub(x) && <div className="text-[12px] text-[#7A89A3] truncate">{sub(x)}</div>}
-            </button>
-          ))}
-        </div>
-      )}
+      <input ref={inRef} value={value} onChange={(e) => { onChange(e.target.value); setOpen(true); setHi(0); }} onFocus={() => setOpen(true)} onClick={() => setOpen(true)} onBlur={() => setTimeout(() => setOpen(false), 150)}
+        onKeyDown={onKey} placeholder={placeholder} className={inp} autoComplete="off" role="combobox" aria-expanded={show} aria-autocomplete="list" />
+      {show && pos && createPortal(
+        <div data-fr-suggest="" onMouseDown={(e) => e.preventDefault()} className="fixed z-[2147483000] rounded-xl border border-[#1B2B4B]/25 bg-white shadow-[0_18px_44px_rgba(11,20,40,.28)] overflow-hidden flex flex-col"
+          style={{ left: pos.left, width: pos.width, top: pos.top, bottom: pos.bottom, maxHeight: pos.maxH }}>
+          <div className="shrink-0 flex items-center justify-between gap-2 px-3 h-8 bg-[#1B2B4B] text-white">
+            <span className="text-[12px] font-black tracking-wide whitespace-nowrap">{title} · {list.length}{list.length >= (q ? 12 : 30) ? "+" : ""}건</span>
+            <span className="min-w-0 truncate text-[11px] font-bold text-white/60 whitespace-nowrap">↑↓ 이동 · Enter 선택 · Esc 닫기</span>
+          </div>
+          <div ref={listRef} role="listbox" className="overflow-y-auto">
+            {list.map((x, i) => {
+              const on = i === hi; const t = tag ? tag(x) : "";
+              return (
+                <button key={x._key || x.id || x._id || `${x[k]}_${i}`} data-i={i} role="option" aria-selected={on} type="button" tabIndex={-1} onClick={() => pick(x)} onMouseEnter={() => setHi(i)}
+                  className={`w-full text-left px-3.5 py-2 border-b last:border-0 ${on ? "bg-[#1B2B4B] border-[#1B2B4B]" : "bg-white border-[#EEF1F6] hover:bg-[#F3F6FB]"}`}>
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <span className={`text-[14px] font-black truncate ${on ? "text-white" : "text-[#0F1A30]"}`}>{x[k]}</span>
+                    {t && <span className={`shrink-0 h-[18px] px-1.5 inline-flex items-center rounded text-[10.5px] font-black ${on ? "bg-white/15 text-white" : "bg-[#EEF3FC] text-[#2D4C82]"}`}>{t}</span>}
+                  </div>
+                  {sub(x) && <div className={`text-[13px] font-semibold truncate ${on ? "text-white/75" : "text-[#7A89A3]"}`}>{sub(x)}</div>}
+                </button>
+              );
+            })}
+          </div>
+        </div>, document.body)}
     </div>
   );
 }
@@ -117,7 +170,7 @@ function NewClientModal({ data, setData, busy, onClose, onSave }) {
     </div>
   );
 }
-const blankStop = (type = "하차") => ({ type, name: "", addr: "", time: "", contact: "", memo: "", cargo: "", cargoType: "", tonVal: "", tonType: "", fareClient: "", fareDriver: "", payMethod: "", client: "" });
+const blankStop = (type = "하차") => ({ type, name: "", addr: "", time: "", contact: "", memo: "", cargo: "", cargoType: "", tonVal: "", tonType: "", fareClient: "", fareDriver: "", payMethod: "", client: "", manager: "" });
 export const VEHICLE_TYPES_FR = ["라보", "다마스", "오토바이", "윙바디", "탑", "카고", "윙/카고", "냉장윙", "냉동윙", "냉장탑", "냉동탑", "냉장/냉동탑", "냉장/냉동윙", "리프트"];
 const cargoText = (s) => (s.cargo ? `${s.cargo}${s.cargoType || ""}` : "");
 const tonText = (s) => (s.tonVal ? `${s.tonVal}${s.tonType || "톤"}` : "");
@@ -203,7 +256,7 @@ export function routeOrdersFor(r, date) {
       const n = stops.indexOf(s) + 1;
       const pay = segOf.get(n);
       return {
-        업체명: s.name || "", 주소: s.addr || "", 담당자: "담당자", 담당자번호: s.contact || "", 메모: s.memo || "",
+        업체명: s.name || "", 주소: s.addr || "", 담당자: s.manager || "", 담당자번호: s.contact || "", 메모: s.memo || "",
         화물내용: cargoText(s), 화물타입: s.cargoType || "", 화물수량: s.cargo || "", 톤수값: s.tonVal || "", 톤수타입: s.tonType || "", 차량톤수: tonText(s),
         상차일: dateKey === "상차일" ? date : "", 상차시간: timeKey === "상차시간" ? korTime(s.time) : "", 하차일: dateKey === "하차일" ? date : "", 하차시간: timeKey === "하차시간" ? korTime(s.time) : "", 방법: "",
         구분: s.type,
@@ -227,8 +280,8 @@ export function routeOrdersFor(r, date) {
       등록일: kst(), 상차일: date, 하차일: date,
       상차시간: korTime(first.time || r.startTime), 하차시간: korTime(last.time),
       거래처명: G.payer || routeClient(r), // ⭐ 2026-11-01 그 묶음의 거래처(청구처)
-      상차지명: first.name || "", 상차지주소: first.addr || "", 상차지담당자: "담당자", 상차지담당자번호: first.contact || "",
-      하차지명: last.name || "", 하차지주소: last.addr || "", 하차지담당자: "담당자", 하차지담당자번호: last.contact || "",
+      상차지명: first.name || "", 상차지주소: first.addr || "", 상차지담당자: first.manager || "", 상차지담당자번호: first.contact || "",
+      하차지명: last.name || "", 하차지주소: last.addr || "", 하차지담당자: last.manager || "", 하차지담당자번호: last.contact || "",
       // 배차관리 등록폼과 같은 모양(목록 화면이 늘 배열이 있다고 본다)
       경유지_상차: pickVia, 경유상차목록: pickVia, 경유지_하차: dropVia, 경유하차목록: dropVia, 근무일자목록: [],
       차량톤수: r.tonnage || "", 톤수: r.tonnage || "", 차량종류: r.vehicleType || "",
@@ -384,14 +437,12 @@ const fareProblems = (f) => {
 };
 // 지급방식 고르기 — 회사별 목록(편집모드에서 바꾼 목록) · 빠지면 빨간 테두리 + 안내
 function PaySelect({ id, value, onChange, options, error, compact = false }) {
-  const opts = value && !options.includes(value) ? [value, ...options] : options;
+  // ⭐ 2026-11-02 회사 공용 지급방식 선택기(＋ 지급방식 추가) — 목록은 편집모드와 같은 회사 목록(options는 예전 호환용)
+  void options;
   return (
     <div id={id} className="min-w-0">
-      <CustomSelect value={value || ""} onChange={(e) => onChange(e.target.value)}
-        className={`${inp} ${compact ? "!h-10 !text-[13px]" : ""} ${error ? "!border-[#E5484D] !ring-2 !ring-[#E5484D]/20 !bg-[#FFF6F6] !text-[#C4262C]" : value ? "" : "!text-[#9AA9C3]"}`}>
-        <option value="">지급방식 선택 *</option>
-        {opts.map((v) => <option key={v} value={v}>{v}</option>)}
-      </CustomSelect>
+      <CompanyOptionPicker optKey="지급방식" value={value || ""} onChange={(v) => onChange(v)} placeholder="지급방식 선택 *" noneLabel="선택 안 함"
+        className={`${inp} ${compact ? "!h-10 !text-[13px]" : ""} ${error ? "!border-[#E5484D] !ring-2 !ring-[#E5484D]/20 !bg-[#FFF6F6] !text-[#C4262C]" : value ? "" : "!text-[#9AA9C3]"}`} />
       {error && <div className="mt-1 text-[12px] font-black text-[#D93036]">지급방식을 골라 주세요</div>}
     </div>
   );
@@ -457,7 +508,9 @@ function StopFareBadge({ r, on = false }) {
 }
 
 export default function FixedRoutes({ drivers = [], companyName = "", dispatchData = [] }) {
-  const co = String(companyName || "").trim();
+  // ⭐ 2026-11-02 지금 보고 있는 회사(getTenant) 우선 — 통합관리자가 다른 회사를 볼 때·회원 문서에 회사명이 없는 예전 계정(기본 회사)에서
+  //  회사가 비거나 달라서 거래처·상하차지·노선 목록이 통째로 비던 문제(자동완성이 안 뜨던 원인)
+  const co = String(getTenant() || companyName || "").trim();
   const fareR = useFareRules(co); // ⭐ 2026-11-02 운임규칙
   const [routes, setRoutes] = React.useState([]);
   const [selId, setSelId] = React.useState(null);
@@ -476,11 +529,37 @@ export default function FixedRoutes({ drivers = [], companyName = "", dispatchDa
   React.useEffect(() => { if (!form) setTried(false); }, [form]);
   React.useEffect(() => {
     if (!co) return undefined;
-    const u1 = onSnapshot(collection(db, "clients"), (s) => setClients(s.docs.map((d) => { // ⭐ 2026-11-02 거래처 이름이 업체명 칸에만 있는 문서도 목록에 나오게(배차관리 등록분)
-      const c = { id: d.id, ...d.data() }; return { ...c, 거래처명: String(c.거래처명 || c.업체명 || "").trim() }; }).filter((c) => !c.companyName || c.companyName === co).filter((c) => c.거래처명)), () => setClients([]));
-    const u2 = onSnapshot(collection(db, "places"), (s) => setPlaces(s.docs.map((d) => ({ _id: d.id, ...d.data() })).filter((p) => (!p.companyName || p.companyName === co) && p.업체명)), () => setPlaces([]));
+    // ⭐ 2026-11-02 거래처관리(배차관리)와 같은 기준 — 회사명 없는 예전 문서 = 기본 회사, 이름 칸이 다른 문서(업체명·name·상호·회사명)도 목록에
+    const mine = (x) => (String(x.companyName || "").trim() || DEFAULT_COMPANY) === co;
+    const nameOf = (x) => String(x.거래처명 || x.업체명 || x.name || x.상호 || x.회사명 || x.title || "").trim();
+    const u1 = onSnapshot(collection(db, "clients"), (s) => setClients(s.docs.map((d) => {
+      const c = { id: d.id, ...d.data() }; return { ...c, 거래처명: nameOf(c) }; }).filter((c) => mine(c) && c.거래처명)), (e) => { console.warn("[고정노선] 거래처 목록을 못 읽었습니다", e?.code || e); setClients([]); });
+    const u2 = onSnapshot(collection(db, "places"), (s) => setPlaces(s.docs.map((d) => { const p = { _id: d.id, ...d.data() }; return { ...p, 업체명: String(p.업체명 || p.name || p.상호 || "").trim() }; })
+      .filter((p) => mine(p) && p.업체명)), (e) => { console.warn("[고정노선] 상하차지 목록을 못 읽었습니다", e?.code || e); setPlaces([]); });
     return () => { u1(); u2(); };
   }, [co]);
+  // ⭐ 2026-11-02 상·하차지·경유·거점 검색 목록 = 배차관리와 같은 통합 목록(기본거래처 먼저 + 기본거래처에 없는 하차지거래처)
+  //  하차지 칸에서 기본거래처로만 등록된 곳이 안 뜨던 문제. 고르면 이름·주소·담당자·연락처가 같이 채워진다.
+  const placePool = React.useMemo(() => {
+    const out = []; const seen = new Set();
+    const prim = (cs) => (Array.isArray(cs) ? (cs.find((c) => c?.isPrimary) || cs[0]) : null);
+    clients.forEach((c) => {
+      const n = norm(c.거래처명); if (!n) return;
+      const pc = prim(c.contacts);
+      out.push({ _key: `c_${c.id}`, _src: "기본", 업체명: c.거래처명, 주소: c.주소 || "", 담당자: c.담당자 || pc?.name || "", 담당자번호: c.연락처 || c.담당자번호 || pc?.phone || "", 메모: c.메모 || "" });
+      seen.add(n);
+    });
+    places.forEach((p) => {
+      const n = norm(p.업체명); if (!n || seen.has(n)) return;
+      const pc = prim(p.contacts);
+      out.push({ _key: `p_${p._id}`, _src: "하차지", 업체명: p.업체명, 주소: p.주소 || "", 담당자: p.담당자 || pc?.name || "", 담당자번호: p.담당자번호 || pc?.phone || "", 메모: p.메모 || "" });
+    });
+    return out;
+  }, [clients, places]);
+  const knownPlace = (name) => { const n = norm(name); return !!n && placePool.some((x) => norm(x.업체명) === n); };
+  const knownClient = (name) => { const n = norm(name); return !!n && clients.some((c) => norm(c.거래처명 || c.id) === n); };
+  const placeSub = (x) => [x.주소, [x.담당자, x.담당자번호].filter(Boolean).join(" ")].filter(Boolean).join(" · ");
+  const clientSub = (c) => [c.주소, [c.담당자, c.연락처].filter(Boolean).join(" ")].filter(Boolean).join(" · ");
   React.useEffect(() => {
     if (!co) return undefined;
     return onSnapshot(query(collection(db, "fixedRoutes"), where("companyName", "==", co)), (s) => setRoutes(s.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => String(a.name).localeCompare(String(b.name), "ko"))), () => setRoutes([]));
@@ -552,9 +631,24 @@ export default function FixedRoutes({ drivers = [], companyName = "", dispatchDa
       let id = form.id;
       if (id) await updateDoc(doc(db, "fixedRoutes", id), data);
       else { const ref = await addDoc(collection(db, "fixedRoutes"), { ...data, createdAt: serverTimestamp() }); id = ref.id; }
-      // 신규 상하차지는 하차지 목록에도 등록(배차관리 자동완성에 바로 뜨도록)
-      await Promise.all(data.stops.filter((st) => st.name.trim() && !places.some((p) => norm(p.업체명) === norm(st.name))).map((st) =>
-        setDoc(doc(db, "places", placeKey(st.name) ? coDocKey(getTenant(), placeKey(st.name)) : `fr_${Date.now()}`), { 업체명: st.name.trim(), 주소: st.addr || "", 담당자번호: st.contact || "", 메모: st.memo || "", companyName: co }, { merge: true }).catch(() => {})));
+      // 신규 상하차지·거래처는 거래처관리에도 등록(배차관리 자동완성에 바로 뜨도록) — 배차관리 오더 저장과 같은 방식
+      //  · 상·하차지·경유·거점: 기본거래처·하차지거래처 어디에도 없는 이름만 하차지거래처(places)로 (같은 이름은 한 번만)
+      //  · 노선·정류지 거래처(청구처): 기본거래처(clients)에 없는 이름만 기본거래처로
+      //  문서 이름은 배차관리와 같은 회사별 키(coDocKey(회사, 정규화한 이름)) → 다시 저장해도 중복이 생기지 않는다
+      const seenP = new Set(); const seenC = new Set();
+      const newPlaces = data.stops.filter((st) => { const n = norm(st.name); if (!n || seenP.has(n) || knownPlace(st.name)) return false; seenP.add(n); return true; });
+      const newClients = [data.client, ...data.stops.map((st) => st.client)].map((v) => String(v || "").trim()).filter((v) => { const n = norm(v); if (!n || seenC.has(n) || knownClient(v)) return false; seenC.add(n); return true; });
+      await Promise.all([
+        ...newPlaces.map((st) => {
+          const nm = st.name.trim(); const ph = String(st.contact || "").trim(); const mg = String(st.manager || "").trim();
+          return setDoc(doc(db, "places", coDocKey(co, placeKey(nm) || `fr_${Date.now()}`)), {
+            업체명: nm, 주소: String(st.addr || "").trim(), 담당자: mg, 담당자번호: ph,
+            contacts: ph || mg ? [{ name: mg, phone: ph, isPrimary: true }] : [],
+            메모: st.memo || "", 등급: "일반", 팝업표시: true, isActive: true, companyName: co, updatedAt: serverTimestamp(),
+          }, { merge: true }).catch(() => {});
+        }),
+        ...newClients.map((nm) => setDoc(doc(db, "clients", coDocKey(co, nm)), { id: coDocKey(co, nm), 거래처명: nm, 등급: "일반", companyName: co }, { merge: true }).catch(() => {})),
+      ]);
       setForm(null); setReview(false); setSelId(id);
       // ⭐ 노선을 고치면 이미 만들어 둔 앞으로의 오더 중 "배차현황에서 따로 고치지 않은 것"에 같이 반영
       const prev = form.id ? routes.find((x) => x.id === form.id) : null;
@@ -582,7 +676,7 @@ export default function FixedRoutes({ drivers = [], companyName = "", dispatchDa
   if (form) {
     const stops = form.stops || [];
     const fp = fareProblems(form); const fareMiss = fp.miss;
-    const clientNew = form.client.trim() && !clients.some((c) => norm(c.거래처명 || c.id) === norm(form.client));
+    const clientNew = form.client.trim() && !knownClient(form.client);
     return (
       <div>
         <div className="relative overflow-hidden rounded-[22px] px-4 py-4 md:px-7 md:py-6 text-white flex items-center justify-between gap-4 flex-wrap mb-4"
@@ -607,7 +701,7 @@ export default function FixedRoutes({ drivers = [], companyName = "", dispatchDa
               <div>
                 <label className={lab}>거래처(청구처) {clientNew && <NewTag />}</label>
                 <div className="flex gap-1.5">
-                  <Suggest value={form.client} onChange={(v) => set("client", v)} items={clients} k="거래처명" sub={(c) => c.주소 || c.담당자 || ""} placeholder="거래처명 검색" onPick={(c) => set("client", c.거래처명 || c.id)} />
+                  <Suggest value={form.client} onChange={(v) => set("client", v)} items={clients} k="거래처명" sub={clientSub} title="기본거래처" placeholder="거래처명 검색" onPick={(c) => set("client", c.거래처명 || c.id)} />
                   <button type="button" tabIndex={-1} onClick={() => setNewClient({ name: form.client.trim(), addr: "", manager: "", phone: "", email: "", memo: "", grade: "일반" })} className="h-11 px-3.5 rounded-xl border border-[#DCE3EE] bg-white text-[13.5px] font-black text-[#1B2B4B] whitespace-nowrap hover:bg-[#F5F8FD]">+ 신규등록</button>
                 </div>
               </div>
@@ -619,7 +713,7 @@ export default function FixedRoutes({ drivers = [], companyName = "", dispatchDa
             <div className="relative">
               <div className="absolute left-[15px] md:left-[19px] top-5 bottom-5 w-[2px] bg-gradient-to-b from-[#0F1A30] via-[#C9D6EE] to-[#0F1A30]" />
               {stops.map((s, i) => {
-                const isNew = (s.name || "").trim() && !places.some((p) => norm(p.업체명) === norm(s.name));
+                const isNew = (s.name || "").trim() && !knownPlace(s.name);
                 return (
                   <div key={i} className="relative flex gap-2 md:gap-3 mb-3">
                     <span className={`relative z-[1] mt-3 w-8 h-8 md:w-10 md:h-10 shrink-0 rounded-full flex items-center justify-center text-[13px] font-black shadow ${i === 0 || i === stops.length - 1 ? "bg-[#0F1A30] text-white" : "bg-white border-2 border-[#2D4C82] text-[#2D4C82]"}`} style={{ fontFamily: MONO }}>{String(i + 1).padStart(2, "0")}</span>
@@ -637,8 +731,8 @@ export default function FixedRoutes({ drivers = [], companyName = "", dispatchDa
                         </div>
                       </div>
                       <div className="grid grid-cols-1 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)] gap-2">
-                        <Suggest value={s.name} onChange={(v) => setStop(i, { name: v })} items={places} k="업체명" sub={(p) => p.주소 || ""} placeholder={`${s.type}지 검색 (업체·장소명)`}
-                          onPick={(p) => setStop(i, { name: p.업체명 || "", addr: p.주소 || s.addr, contact: p.담당자번호 || s.contact, memo: s.memo || p.메모 || "" })} />
+                        <Suggest value={s.name} onChange={(v) => setStop(i, { name: v, manager: "" })} items={placePool} k="업체명" sub={placeSub} tag={(x) => x._src} title={`${s.type}지 · 거래처관리`} placeholder={`${s.type}지 검색 (업체·장소명)`}
+                          onPick={(p) => setStop(i, { name: p.업체명 || "", addr: p.주소 || s.addr, manager: p.담당자 || "", contact: p.담당자번호 ? fmtPhone(p.담당자번호) : s.contact, memo: s.memo || p.메모 || "" })} />
                         <input value={s.addr} onChange={(e) => setStop(i, { addr: e.target.value })} placeholder="주소" className={inp} />
                         <input value={s.contact} inputMode="tel" onChange={(e) => setStop(i, { contact: fmtPhone(e.target.value) })} placeholder="연락처(선택)" className={inp} />
                         <input value={s.memo} onChange={(e) => setStop(i, { memo: e.target.value })} placeholder="메모(출입·하역 방법 등)" className={inp} />
@@ -686,12 +780,12 @@ export default function FixedRoutes({ drivers = [], companyName = "", dispatchDa
                             {/* ⭐ 2026-11-01 이 곳 거래처(청구처) — 비우면 노선 거래처 · 착불 경유지는 다른 회사가 낼 수 있다 */}
                             {(() => {
                               const sc = String(s.client || "").trim();
-                              const scNew = sc && !clients.some((c) => norm(c.거래처명 || c.id) === norm(sc));
+                              const scNew = sc && !knownClient(sc);
                               const other = sc && norm(sc) !== norm(form.client || form.name);
                               return (
                                 <div className="mt-2 flex items-center gap-2">
                                   <span className="shrink-0 text-[12px] font-black text-[#3A4A66] w-[64px]">거래처</span>
-                                  <Suggest value={s.client || ""} onChange={(v) => setStop(i, { client: v })} items={clients} k="거래처명" sub={(c) => c.주소 || c.담당자 || ""}
+                                  <Suggest value={s.client || ""} onChange={(v) => setStop(i, { client: v })} items={clients} k="거래처명" sub={clientSub} title="기본거래처"
                                     placeholder={`비우면 노선 거래처${form.client ? ` (${form.client})` : ""}`} onPick={(c) => setStop(i, { client: c.거래처명 || c.id })} />
                                   {scNew && <NewTag />}
                                   {other && <span className="shrink-0 h-5 px-1.5 inline-flex items-center rounded-md bg-[#FFF3D6] text-[#7A5300] text-[10.5px] font-black">다른 거래처</span>}

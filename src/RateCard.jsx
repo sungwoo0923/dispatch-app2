@@ -6,6 +6,7 @@ import { useLoadFullOrderHistory } from "./orderHistory";
 import { db } from "./firebase";
 import { collection, doc, addDoc, updateDoc, deleteDoc, onSnapshot, query, where, serverTimestamp } from "firebase/firestore";
 import KpSubNav from "./KpSubNav";
+import { useTableSort, sortRows, SortTh } from "./tableSort";
 
 // 단가표 메뉴 전체에서 쓰는 표준 차량톤수 목록 — 다목적지 단가표의 기본(삭제 불가) 컬럼으로도 사용된다.
 const STANDARD_TON_LABELS = ["다마스/라보","1톤","1.4톤","2.5톤","3.5톤","3.5톤광폭","5톤","5톤축","5톤플축","8톤","11톤","11톤축","15톤","18톤","25톤"];
@@ -171,7 +172,18 @@ const confidence = (c) => {
   return           { label:"낮음", color:"text-gray-500",    bg:"bg-gray-50 border-gray-200" };
 };
 
-function OrderDetailModal({ rows, bucket, fareField, onClose }) {
+const _rcInt = (v) => Number(String(v || 0).replace(/[^\d]/g, "")) || 0;
+const RC_DETAIL_KEY = { "거래처": "거래처명", "상차지": "상차지명", "하차지": "하차지명", "차량": "차량종류", "톤수": "차량톤수", "화물": "화물내용" };
+function OrderDetailModal({ rows: rowsIn, bucket, fareField, onClose }) {
+  // ⭐ 머리글 클릭 정렬(▲→▼→해제) — 이 브라우저에만 기억
+  const odSort = useTableSort("ratecard.detail");
+  const rows = useMemo(() => sortRows(rowsIn || [], odSort.sort, (r, k) => {
+    if (k === "청구운임") return _rcInt(r.청구운임);
+    if (k === "기사운임") return _rcInt(r.기사운임);
+    if (k === "수수료") return _rcInt(r.청구운임) - _rcInt(r.기사운임);
+    if (k === "혼적") return r.혼적 ? "혼적" : "독차";
+    return r[RC_DETAIL_KEY[k] || k];
+  }), [rowsIn, odSort.sort]);
   if (!rows||!rows.length) return null;
   const avgFare = roundDown10k(rows.reduce((s,r)=>s+Number(String(r.청구운임||0).replace(/[^\d]/g,"")),0)/rows.length);
   const avgDriver = roundDown10k(rows.reduce((s,r)=>s+Number(String(r.기사운임||0).replace(/[^\d]/g,"")),0)/rows.length);
@@ -191,7 +203,7 @@ function OrderDetailModal({ rows, bucket, fareField, onClose }) {
             <thead className="sticky top-0 bg-gray-50 border-b border-gray-200">
               <tr>
                 {["상차일","거래처","상차지","하차지","차량","톤수","화물","청구운임","기사운임","수수료","혼적"].map(h=>(
-                  <th key={h} className="px-3 py-2.5 text-center font-semibold text-gray-600 text-[12px] whitespace-nowrap">{h}</th>
+                  <SortTh key={h} k={h} sort={odSort.sort} onSort={odSort.toggle} className="px-3 py-2.5 text-center font-semibold text-gray-600 text-[12px] whitespace-nowrap">{h}</SortTh>
                 ))}
               </tr>
             </thead>
@@ -832,8 +844,17 @@ ${sheet.note ? `<div class="notice">${esc(sheet.note)}</div>` : ""}
   const boxInput = "w-full h-11 px-3.5 rounded-xl bg-[#F5F8FD] border border-[#E3E8F0] text-[14px] font-semibold text-[#0F1A30] placeholder:text-[#9AA9C3] placeholder:font-medium focus:bg-white focus:outline-none transition";
   const PrintIcon = () => <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9V3h12v6M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" /><path d="M6 14h12v7H6z" /></svg>;
   const resetRoute = () => { setPickup(""); setDrop(""); setVGroup(""); setMixedFilter("전체"); setFareField("청구운임"); setViewMode("톤수별"); setExcludeQuery(""); setExcludeList([]); setExcludeDropdown([]); setResult(null); setSearched(false); };
-  const resultRows = result?.rows || [];
-  const bestRow = resultRows.length ? resultRows.reduce((a, b) => (b.stats.count > a.stats.count ? b : a), resultRows[0]) : null;
+  // ⭐ 머리글 클릭 정렬(▲→▼→해제) — 이 브라우저에만 기억. 첫 칸(톤수/파렛 수)은 원래 순서 기준
+  const rateSort = useTableSort("ratecard.result");
+  const resultRows = useMemo(() => sortRows(result?.rows || [], rateSort.sort, (row, k, i) => {
+    const st = row.stats || {};
+    if (k === "권장 단가") return st.avg;
+    if (k === "운임 범위") return st.min;
+    if (k === "데이터 수" || k === "신뢰도") return st.count;
+    if (k === "변동성") return st.variance;
+    return i;
+  }), [result, rateSort.sort]);
+  const bestRow = (result?.rows || []).length ? result.rows.reduce((a, b) => (b.stats.count > a.stats.count ? b : a), result.rows[0]) : null;
 
   return (
     <KpSubNav code="RATE CARD" title="단가표" icon="money" active={pageMode} onSelect={setPageMode}
@@ -1058,7 +1079,7 @@ ${sheet.note ? `<div class="notice">${esc(sheet.note)}</div>` : ""}
                   <thead>
                     <tr className="bg-[#F5F8FD] border-b border-[#E3E8F0]">
                       {[result.viewMode === "파렛수별" ? "파렛 수" : "차량 톤수", "권장 단가", "운임 범위", "데이터 수", "신뢰도", "변동성"].map(h => (
-                        <th key={h} className="px-4 py-3 text-center text-[12px] font-extrabold text-[#5B6B85] tracking-wide">{h}</th>
+                        <SortTh key={h} k={h} sort={rateSort.sort} onSort={rateSort.toggle} className="px-4 py-3 text-center text-[12px] font-extrabold text-[#5B6B85] tracking-wide">{h}</SortTh>
                       ))}
                     </tr>
                   </thead>

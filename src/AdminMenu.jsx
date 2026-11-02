@@ -7,6 +7,7 @@ import AdminShell from "./AdminShell";
 import React, { useEffect, useState, useMemo } from "react";
 import { subscribeUsersLive, getUsersLiveList } from "./usersLive"; // ⭐ 2026-11-02 속도 — 직원 명부 구독 공유
 import { auth, db, storage, FUNCTIONS_BASE, DEFAULT_COMPANY } from "./firebase";
+import { getTenant } from "./fsTenant"; // ⭐ 2026-11-02 회사 분리 — 지금 거르는 회사(최고관리자 회사 전환 포함)
 import { masterHasHr } from "./hrHandover";
 import { WORK_TIME_OPTIONS } from "./autoAttendance";
 import {
@@ -154,7 +155,11 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
   const ROLES = isTotalMaster
     ? ["totalMaster", "admin", "hrManager", "hrAcct", "user", "viewer", "driver", "shipper", "test", ...customRoles.map(r => r.key).filter((k) => !["admin", "hrManager", "hrAcct", "user", "viewer", "test"].includes(k))]
     : ["admin", "hrManager", "hrAcct", "user", "viewer", "test", ...customRoles.map(r => r.key).filter((k) => !["admin", "hrManager", "hrAcct", "user", "viewer", "test"].includes(k))];
-  const effectiveCompany = myCompany || parentCompany || localStorage.getItem("userCompany") || DEFAULT_COMPANY;
+  // ⭐ 2026-11-02 회사 분리 — 최고관리자는 본인 문서의 회사(예: 돌캐)가 아니라 "지금 들어가 있는 회사"(로그인 회사)를 기준으로.
+  //  예전엔 최고관리자가 태진에 들어가도 연동 화주사·화주사 전송·인사 설정이 본인 문서 회사로 잡혔다.
+  const effectiveCompany = isTotalMaster
+    ? (String(parentCompany || localStorage.getItem("loginCompany") || myCompany || DEFAULT_COMPANY).trim() || DEFAULT_COMPANY)
+    : (myCompany || parentCompany || localStorage.getItem("userCompany") || DEFAULT_COMPANY);
   // 휴지통이 다루는 회사 — 최고관리자는 지금 들어가 있는 회사
   const autoCompany = (isTotalMaster && localStorage.getItem("loginCompany")) || effectiveCompany;
 
@@ -252,7 +257,9 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
   // ⭐ 2026-11-01 회원관리에서는 가입 승인·거절만(승인 권한자) — 재직 직원 정보·권한·계정 처리는 인사관리부에서.
   //  본인 계정은 이름·핸드폰번호만 고칠 수 있다(아래 saveEdit 본인 경로). 최고관리자만 예외
   // ⭐ 2026-11-02 점검 — approved 필드가 없는 예전 계정은 승인으로 본다(App.jsx·규칙과 동일). 대기 = approved===false 이고 퇴사·삭제·탈퇴 아님
-  const isPending = (u) => !!u && u.approved === false && u.employmentStatus !== "퇴사" && !["deleted", "withdrawn"].includes(u.status);
+  //  ⭐ 2026-11-02 회사 분리 — 연동 화주 계정의 승인은 "연동 운송사" 탭(1차 승인 → 최고관리자 최종 승인)에서 하므로
+  //  운송사 관리자 회원관리에서는 승인 대기로 세지도, 승인 창을 열지도 않는다(최고관리자만 예외)
+  const isPending = (u) => !!u && u.approved === false && u.employmentStatus !== "퇴사" && !["deleted", "withdrawn"].includes(u.status) && (isTotalMaster || u.role !== "shipper");
   // ⭐ 2026-11-02 점검 — !u.approved 대신 isPending — 예전 승인 계정에 승인·거절 창이 열려 거절로 잠기던 문제
   const canEditMember = (u) => !!u && (isTotalMaster || (canApprove && isPending(u)));
   const assignableRoles = (cur) => {
@@ -293,14 +300,41 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
     } catch (e) { alert(`위임 실패: ${e.message}`); }
   };
 
+  // ⭐ 2026-11-02 회사 분리 — 화주 계정은 fsTenant가 "여러 운송사와 연동되는 거래 상대"라 회사 거르기 없이 다 넘겨준다.
+  //  그래서 최고관리자가 태진에 들어가면 돌캐에 연동된 화주 계정(신선대표계정·크레팜대표계정 등)까지 회원관리에 보였다.
+  //  화주 계정은 "지금 회사에 연동된 것"만 남긴다 — users.linkedTransportCompany 또는 화주 가입신청(companyApplications)의 연동 운송사.
+  //  연동 정보가 하나도 없는 예전 화주 계정은 기본 회사(DEFAULT_COMPANY) 것으로 본다(fsTenant의 예전 문서 규칙과 같음).
+  const shipperLinkCompanies = useMemo(() => {
+    const byUid = new Map(); const byCo = new Map();
+    const add = (m, k, co) => { if (!k || !co) return; if (!m.has(k)) m.set(k, new Set()); m.get(k).add(co); };
+    allShipperApps.forEach((a) => {
+      const co = String(a.linkedTransportCompany?.companyName || "").trim();
+      if (!co || a.transportApprovalStatus === "rejected") return;
+      add(byUid, a.userId, co);
+      add(byCo, String(a.companyName || "").trim(), co);
+    });
+    return { byUid, byCo };
+  }, [allShipperApps]);
+  const shipperLinkedTo = (u, co) => {
+    const own = String(u.linkedTransportCompany?.companyName || "").trim();
+    const set = new Set([...(shipperLinkCompanies.byUid.get(u.id) || []), ...(shipperLinkCompanies.byCo.get(String(u.companyName || "").trim()) || [])]);
+    if (own) set.add(own);
+    if (!set.size) return co === DEFAULT_COMPANY;
+    return set.has(co);
+  };
+  // 최고관리자가 회사 거르기 없이(관리센터 등) 볼 때만 화주 계정 전체
+  const tenantNow = getTenant();
   const visibleUsers = useMemo(() => {
-    if (isTotalMaster) return users;
+    if (isTotalMaster) {
+      if (!tenantNow) return users;
+      return users.filter((u) => u.role !== "shipper" || shipperLinkedTo(u, effectiveCompany));
+    }
     return users.filter(u =>
       u.email !== TOTAL_MASTER_EMAIL &&
       u.role !== "totalMaster" &&
-      (u.companyName || DEFAULT_COMPANY) === effectiveCompany
+      (u.role === "shipper" ? shipperLinkedTo(u, effectiveCompany) : (u.companyName || DEFAULT_COMPANY) === effectiveCompany)
     );
-  }, [users, isTotalMaster, effectiveCompany]);
+  }, [users, isTotalMaster, effectiveCompany, shipperLinkCompanies, tenantNow]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const ROLE_ORDER = ["totalMaster","admin","user","test","viewer","driver","shipper"];
   const filtered = useMemo(() => {
@@ -804,7 +838,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
     .filter((g) => g.tabs.length > 0);
   const activeGroup = tabGroups.find((g) => g.tabs.includes(adminTab)) || tabGroups[0];
   // ⭐ 2026-11-01 회원 관리 탭에도 가입 승인 대기 숫자
-  const membersPendingCount = visibleUsers.filter((u) => u.approved === false && u.employmentStatus !== "퇴사" && !["deleted", "withdrawn"].includes(u.status)).length;
+  const membersPendingCount = visibleUsers.filter(isPending).length;
   const tabBadgeCounts = { members: membersPendingCount, linked: linkedPendingCount, inquiries: unansweredInquiryCount, landingInquiries: newLandingInquiryCount };
   const groupBadgeTotal = (g) => g.tabs.reduce((sum, t) => sum + (tabBadgeCounts[t] || 0), 0);
 

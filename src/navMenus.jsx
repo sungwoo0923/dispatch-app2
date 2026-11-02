@@ -14,7 +14,7 @@ export const MENU_SUBS = {
   배차현황: { code: "DISPATCH", items: [["배차현황", "배차현황"], ["미배차현황", "미배차현황"]] },
   단가표: { code: "RATE CARD", items: [["노선별", "노선별 단가표"], ["다목적지", "다목적지 단가표"], ["manual", "직접 작성"], ["history", "발행 이력"]] },
   기사관리: { code: "DRIVERS", items: [["drv", "기사관리"], ["acc:pending", "가입 승인"], ["acc:drivers", "승인된 기사"], ["docs:driver", "기사 제출 서류"], ["docs:penalty", "과태료 · 사고 서류"]] },
-  거래처관리: { code: "CLIENTS", items: [["하차지거래처", "하차지거래처"], ["기본거래처", "기본거래처"], ["고정거래처관리", "고정거래처관리"]] },
+  거래처관리: { code: "CLIENTS", items: [["하차지거래처", "상하차지거래처"], ["기본거래처", "기본거래처"]] }, // ⭐ 2026-11-02 고정거래처관리 메뉴 제거 · 하차지거래처 → 상하차지거래처(key는 그대로)
   매출관리: { code: "REVENUE", items: [["dashboard", "매출 대시보드"], ["target", "목표·전망"], ["clients", "거래처 순위·신규"], ["trend", "거래처 동향 분석"], ["yearly", "연간 요약"], ["query", "거래처 기간 조회"]] },
   정산관리: { code: "SETTLEMENT", items: [["거래처정산", "거래처정산"], ["지급관리", "용차지급관리"], ["지입정산관리", "지입정산관리"]] },
   전자결재: { code: "E-APPROVAL", items: [["inbox", "결재함"], ["leave", "근태·휴가 신청"], ["expense", "비용·지출 결의"], ["draft", "업무 기안·품의"], ["report", "업무 보고·인사"], ["handover", "인수인계"], ["mine", "내 기안함"], ["lines", "결재선 관리"]] },
