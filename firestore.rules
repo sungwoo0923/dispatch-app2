@@ -647,8 +647,41 @@ service cloud.firestore {
     match /userPrefs/{uid} {
       allow read, write: if isSignedIn() && request.auth.uid == uid;
     }
+    // ⭐ 2026-11-02 원격지원 — 직원 → 최고관리자 원격 지원 요청 · 화면 공유 세션(WebRTC 신호·채팅)
+    //  요청: 승인된 직원이 "내 uid · 내 회사 · 대기" 로만 만든다. 읽기는 요청한 본인과 최고관리자.
+    //  본인 수정은 취소 · 원격 번호 · 화면 공유 세션 연결(in_session/done)만. 최고관리자는 모두.
+    function supAff() {
+      return request.resource.data.diff(resource.data).affectedKeys();
+    }
+    match /supportRequests/{id} {
+      allow create: if isApproved() && !isShipperUser()
+        && request.resource.data.get('uid', '') == request.auth.uid
+        && request.resource.data.get('companyName', '') == myCo()
+        && request.resource.data.get('status', '') == 'pending';
+      allow read: if isTotalMasterUser() || (isSignedIn() && resource.data.get('uid', '') == request.auth.uid);
+      allow update: if isTotalMasterUser();
+      allow update: if isSignedIn() && resource.data.get('uid', '') == request.auth.uid
+        && supAff().hasOnly(['status', 'anydeskId', 'sessionId', 'updatedAt', 'cancelledAt', 'endedAt'])
+        && (request.resource.data.get('status', '') == resource.data.get('status', '')
+          || (request.resource.data.get('status', '') == 'cancelled' && resource.data.get('status', '') in ['pending', 'approved'])
+          || (request.resource.data.get('status', '') == 'in_session' && resource.data.get('status', '') == 'approved')
+          || (request.resource.data.get('status', '') == 'done' && resource.data.get('status', '') == 'in_session'));
+      allow delete: if isTotalMasterUser();
+    }
+    //  세션: 요청한 직원(requesterUid)과 최고관리자만. 하위 컬렉션(callerCandidates · calleeCandidates · messages)도 같게.
+    match /supportSessions/{sid} {
+      allow create: if isApproved() && request.resource.data.get('requesterUid', '') == request.auth.uid;
+      allow read: if isTotalMasterUser() || (isSignedIn() && resource.data.get('requesterUid', '') == request.auth.uid);
+      allow update: if isTotalMasterUser() || (isSignedIn() && resource.data.get('requesterUid', '') == request.auth.uid
+        && request.resource.data.get('requesterUid', '') == resource.data.get('requesterUid', ''));
+      allow delete: if isTotalMasterUser();
+      match /{sub}/{docId} {
+        allow read, write: if isTotalMasterUser() || (isSignedIn()
+          && get(/databases/$(database)/documents/supportSessions/$(sid)).data.get('requesterUid', '') == request.auth.uid);
+      }
+    }
     match /{col}/{rest=**} {
-      allow read, write: if isApproved() && !(col in ['adminSecrets', 'resetBackups', 'resetLogs', 'resetJobs', 'loginSessions', 'orderTrash', 'recurringRuns', 'internalMails', 'approvals', 'boardPosts', 'notices', 'handovers', 'salesQuotes', 'contracts', 'platformNotices', 'platformInvoices', 'companyPlans', 'publicPricing', 'planRequests', 'userPrefs', 'companyRoleOverrides', 'customRoles', 'driverStatements', 'fleetPenalties', 'fixedRoutes', 'publicCompanies', 'companyContracts',
+      allow read, write: if isApproved() && !(col in ['adminSecrets', 'resetBackups', 'resetLogs', 'resetJobs', 'loginSessions', 'orderTrash', 'recurringRuns', 'internalMails', 'approvals', 'boardPosts', 'notices', 'handovers', 'salesQuotes', 'contracts', 'platformNotices', 'platformInvoices', 'companyPlans', 'publicPricing', 'planRequests', 'userPrefs', 'companyRoleOverrides', 'customRoles', 'supportRequests', 'supportSessions', 'driverStatements', 'fleetPenalties', 'fixedRoutes', 'publicCompanies', 'companyContracts',
         // 🔒 회사별로 잠근 컬렉션(위에서 따로 정함)
         'orders', 'dispatch', 'dispatch_test', 'fixedClients', 'drivers', 'clients', 'places', 'recurringOrders', 'deletedOrders',
         'driver_completed_archive', 'notifications', 'schedules', 'scheduledEmails', 'emailLogs', 'hrResumes', 'attendanceRequests',

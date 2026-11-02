@@ -4826,6 +4826,39 @@ exports.dedupeFcmToken = functions.firestore.document("users/{uid}").onWrite(asy
   return null;
 });
 
+// ⭐ 2026-11-02 원격지원 — 직원이 원격 지원을 요청하면 최고관리자(role totalMaster 또는 고정 이메일)에게,
+//  최고관리자가 승인·거절하면 요청한 직원에게 푸시
+const SUPPORT_SUPER_EMAIL = "tjddnqkf@naver.com";
+exports.notifySupportRequest = functions.firestore.document("supportRequests/{id}").onCreate(async (snap) => {
+  const r = snap.data() || {};
+  if (r.status && r.status !== "pending") return null;
+  const [a, b] = await Promise.all([
+    db.collection("users").where("role", "==", "totalMaster").get(),
+    db.collection("users").where("email", "==", SUPPORT_SUPER_EMAIL).get(),
+  ]);
+  const tokens = [];
+  [...a.docs, ...b.docs].forEach((d) => tokens.push(...userTokens(d.data())));
+  const who = [r.name, r.position].filter(Boolean).join(" ");
+  const title = `◆ 원격 지원 요청 · ${r.companyName || ""}`;
+  const body = `${who}${r.team ? ` (${r.team})` : ""} · ${r.method === "remote" ? "원격 프로그램" : "화면 공유"}\n${String(r.message || "").replace(/\s+/g, " ").slice(0, 80)}`;
+  await sendPushAndCleanup([...new Set(tokens)], { notification: { title, body }, android: { priority: "high" } }, "원격지원").catch((e) => console.error("원격지원 요청 푸시 실패:", e));
+  return null;
+});
+exports.notifySupportDecision = functions.firestore.document("supportRequests/{id}").onUpdate(async (chg) => {
+  const b = chg.before.data() || {};
+  const a = chg.after.data() || {};
+  if (a.status === b.status || !["approved", "rejected"].includes(a.status) || !a.uid) return null;
+  const u = await db.collection("users").doc(a.uid).get();
+  const tok = u.exists ? userTokens(u.data()) : [];
+  if (!tok.length) return null;
+  const title = a.status === "approved" ? "✓ 원격 지원 승인" : "↩ 원격 지원 요청 거절";
+  const body = a.status === "approved"
+    ? ((a.mode || a.method) === "remote" ? "앱을 열어 원격 프로그램 안내를 확인하고 원격 번호를 보내 주세요." : "앱을 열어 [화면 공유 시작]을 눌러 주세요.")
+    : `사유: ${a.rejectReason || "-"}`;
+  await sendPushAndCleanup(tok, { notification: { title, body }, android: { priority: "high" } }, "원격지원").catch((e) => console.error("원격지원 결과 푸시 실패:", e));
+  return null;
+});
+
 // ⭐ 2026-11-01 onCreate → onWrite — 예전 계정 문서를 다시 쓰는 재가입(같은 uid)도 새 가입 신청으로 알린다
 exports.notifySignup = functions.firestore.document("users/{uid}").onWrite(async (chg) => {
   if (!chg.after.exists) return null;

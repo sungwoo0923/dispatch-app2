@@ -63,6 +63,8 @@ export function PlatformLiveProvider({ children }) {
   const inquiries = useLiveCol(() => query(collection(db, "landingInquiries"), orderBy("createdAt", "desc"), limit(300)), []);
   const plans = useLiveCol(() => collection(db, "companyPlans"), []);
   const invoices = useLiveCol(() => collection(db, "platformInvoices"), []);
+  // ⭐ 2026-11-02 원격지원 — 직원의 원격 지원 요청(승인 대기 수를 처리 대기·메뉴 배지에)
+  const supportReqs = useLiveCol(() => query(collection(db, "supportRequests"), orderBy("createdAt", "desc"), limit(200)), []);
   // 30초마다 "지금/24시간" 경계를 다시 계산
   const [now, setNow] = React.useState(() => Date.now());
   React.useEffect(() => { const t = setInterval(() => setNow(Date.now()), 30000); return () => clearInterval(t); }, []);
@@ -158,6 +160,7 @@ export function PlatformLiveProvider({ children }) {
     const pendingC = (cApps || []).filter((a) => a.status === "pending").sort((a, b) => tsMs(b.createdAt) - tsMs(a.createdAt));
     const openPlanReqs = (planReqs || []).filter((r) => r.status === "요청");
     const newInquiries = (inquiries || []).filter((q) => !q.status || q.status === "신규");
+    const pendingSupport = (supportReqs || []).filter((r) => r.status === "pending"); // ⭐ 2026-11-02 원격지원 —
     const pendingStaffByCo = Object.values(companies).filter((c) => c.pending > 0).map((c) => ({ name: c.name, n: c.pending })).sort((a, b) => b.n - a.n);
 
     // 5) 최근 가입(회사·직원) — 30일
@@ -188,11 +191,11 @@ export function PlatformLiveProvider({ children }) {
 
     return {
       ready, now, companies, shippers, onlineList, totals, appInfo, signups, dupes,
-      pending: { transport: pendingT, shipper: pendingC, planReqs: openPlanReqs, inquiries: newInquiries, staffByCo: pendingStaffByCo,
-        total: pendingT.length + pendingC.length + openPlanReqs.length + newInquiries.length },
+      pending: { transport: pendingT, shipper: pendingC, planReqs: openPlanReqs, inquiries: newInquiries, staffByCo: pendingStaffByCo, support: pendingSupport,
+        total: pendingT.length + pendingC.length + openPlanReqs.length + newInquiries.length + pendingSupport.length },
       planMap, invoiceMap, planReqMap, month,
     };
-  }, [users, sessions, tApps, cApps, planReqs, inquiries, plans, invoices, now]);
+  }, [users, sessions, tApps, cApps, planReqs, inquiries, plans, invoices, supportReqs, now]);
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
 
@@ -422,6 +425,7 @@ export function PendingPanel({ go }) {
     { k: "APPLY", label: "운송사 가입 승인 대기", n: P.transport.length, sub: P.transport.slice(0, 3).map((a) => `${normCo(a.companyName)}${a.type && a.type !== "신규" ? `(${a.type})` : ""}`).join(" · "), to: "applications" },
     { k: "SHIP", label: "화주사 가입 승인 대기", n: P.shipper.length, sub: P.shipper.slice(0, 3).map((a) => normCo(a.companyName)).join(" · "), to: "applications" },
     { k: "PLAN", label: "요금제 변경 요청", n: P.planReqs.length, sub: P.planReqs.slice(0, 3).map((r) => `${r.company} → ${PLAN_NAMES[r.to] || r.toName || r.to || ""}`).join(" · "), to: "payments" },
+    { k: "HELP", label: "원격 지원 요청", n: P.support.length, sub: P.support.slice(0, 3).map((r) => `${normCo(r.companyName)} ${r.name || ""}`).join(" · "), to: "support" }, // ⭐ 2026-11-02 원격지원 —
     { k: "LEAD", label: "미답변 도입 문의", n: P.inquiries.length, sub: P.inquiries.slice(0, 3).map((q) => q.companyName || q.name || "").join(" · "), to: "inquiries" },
   ];
   return (

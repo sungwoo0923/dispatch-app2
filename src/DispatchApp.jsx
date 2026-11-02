@@ -2744,6 +2744,7 @@ import { useMobileAlerts } from "./mobile/mobileAlerts";
 import { loadAcctPayments, saveAcctPayments, loadPlManual, savePlManual } from "./acctPayments";
 import { bumpDriverPayout, addClientCollection, removeClientCollections } from "./ledgerAuto";
 import BannerCenter from "./BannerCenter";
+import { RemoteSupportHost, openRemoteSupport, SUPPORT_ICON } from "./RemoteSupport"; // ⭐ 2026-11-02 원격지원 —
 import OrderCongratsPopup from "./OrderCongratsPopup";
 import BirthdayPopup from "./BirthdayPopup";
 import { tryAutoCheckIn } from "./autoAttendance";
@@ -7923,6 +7924,8 @@ return (
         groups={deptMode ? DEPT_SIDE_GROUPS[deptMode] : KP_SIDE_GROUPS}
       />
       <BannerCenter />
+      {/* ⭐ 2026-11-02 원격지원 — 요청 상태 막대 · 승인 배너 · 화면 공유 · 포인터(앱 전체에 한 번) */}
+      <RemoteSupportHost user={user} profile={myProfileDoc} company={userCompany || localStorage.getItem("userCompany") || ""} />
       <OrderCongratsPopup uid={user?.uid} profile={myProfileDoc} />
       <BirthdayPopup uid={user?.uid} profile={myProfileDoc} company={deptCompany} />
       {/* ⭐ 2026-11-02 관리자센터2 — 선택한 운송사 대상 공지도 받도록 회사 전달 */}
@@ -8081,6 +8084,12 @@ return (
               {user?.email}
             </span>
             <MailHeaderButton company={role === "totalMaster" ? (localStorage.getItem("loginCompany") || userCompany || DEFAULT_COMPANY) : (userCompany || DEFAULT_COMPANY)} myName={myRealName} />
+            {/* ⭐ 2026-11-02 원격지원 — 머리말 도움 버튼 */}
+            {role !== "totalMaster" && (
+              <button onClick={openRemoteSupport} className="kp-icon-btn transition" title="원격 지원 요청" aria-label="원격 지원 요청" data-testid="support-open-header">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">{SUPPORT_ICON}</svg>
+              </button>
+            )}
             <button
               onClick={() => { setMyInfoNameDraft(myRealName); setMyInfoPhoneDraft(myPhone); setShowMyInfo(true); }}
               className="kp-icon-btn transition"
@@ -8800,6 +8809,19 @@ return (
               로그인 관리 · 비밀번호 변경
             </button>
             {loginMgrOpen && <LoginManagerModal user={user} onClose={() => setLoginMgrOpen(false)} />}
+
+            {/* ⭐ 2026-11-02 원격지원 — 사용이 어려울 때 관리자에게 화면 공유·원격 지원 요청 */}
+            {role !== "totalMaster" && (
+              <button
+                onClick={() => { setShowMyInfo(false); openRemoteSupport(); }}
+                data-testid="support-open-myinfo"
+                className="w-full py-3 rounded-xl text-white text-[14px] font-bold transition flex items-center justify-center gap-2 hover:opacity-90"
+                style={{ background: "linear-gradient(90deg,#0F1A30,#2D4C82)" }}
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">{SUPPORT_ICON}</svg>
+                원격 지원 요청
+              </button>
+            )}
 
             {/* 명함 이미지 */}
             <div>
