@@ -44,7 +44,10 @@ const ShipperMobileApp = React.lazy(() => import("./mobile/ShipperMobileApp"));
     if (!(p === "/" || p.startsWith("/app") || p === "/login" || p === "/transport-login")) return;
     const ua = navigator.userAgent.toLowerCase();
     const phone = /iphone|ipod|android(?!.*tablet)/.test(ua) || window.innerWidth < 768;
-    (phone ? import("./mobile/MobileApp") : import("./DispatchApp")).catch(() => {});
+    // ⭐ 2026-11-02 속도 — 삼항식 하나로 쓰면 빌드 도구(vite)가 두 쪽의 미리받기 목록을 합쳐서, 휴대폰에서도
+    //  PC 프로그램 전체(약 5MB)를 같이 받고 있었다. if/else로 나눠 각자 필요한 파일만 받게 한다.
+    if (phone) import("./mobile/MobileApp").catch(() => {});
+    else import("./DispatchApp").catch(() => {});
   } catch { /* 미리받기 실패는 무시 — 원래대로 필요할 때 받는다 */ }
 })();
 
