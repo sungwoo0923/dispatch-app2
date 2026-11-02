@@ -248,11 +248,10 @@ export default function ContractStudio({ company = "", me = {} }) {
           <span className="block text-[11px] font-extrabold tracking-[0.22em] text-[#4B6CB7] mb-1.5" style={{ fontFamily: MONO }}>CONTRACT TYPE · 계약서 종류</span>
           <span className="relative block">
             <CustomSelect value={tab} onChange={(e) => setTab(e.target.value)}
-              className="appearance-none w-full h-[52px] pl-12 pr-11 rounded-2xl border-2 border-[#1B2B4B] bg-white text-[16px] font-black text-[#0F1A30] outline-none shadow-[0_6px_18px_rgba(15,26,48,0.10)] focus:ring-4 focus:ring-[#2D4C82]/15 cursor-pointer">
+              className="appearance-none w-full h-[52px] pl-12 pr-8 rounded-2xl border-2 border-[#1B2B4B] bg-white text-[16px] font-black text-[#0F1A30] outline-none shadow-[0_6px_18px_rgba(15,26,48,0.10)] focus:ring-4 focus:ring-[#2D4C82]/15 cursor-pointer">
               {[["driver", "운송계약서 (지입·직영·임대)"], ["labor", "근로계약서"], ["client", "거래처 운송계약서"], ["free", "자율양식 계약서"], ["box", `계약서 보관함 · ${docs.length}건`]].map(([k, l]) => <option key={k} value={k}>{l}</option>)}
             </CustomSelect>
             <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 w-8 h-8 rounded-xl bg-[#0F1A30] text-white grid place-items-center text-[14px]">{tab === "box" ? "▤" : "✎"}</span>
-            <svg className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-[#1B2B4B]" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9l6 6 6-6" /></svg>
           </span>
         </label>
       </div>
