@@ -23719,8 +23719,12 @@ function StickyHScrollbar({ targetRef }) {
   React.useEffect(() => {
     const el = targetRef.current;
     if (!el) return;
-    const update = () => setSizes({ scrollWidth: el.scrollWidth, clientWidth: el.clientWidth });
-    update();
+    // ⚡ 표 내용이 바뀔 때마다(정렬·실시간 반영) 그 자리에서 scrollWidth를 읽으면 브라우저가 큰 표 배치를
+    //   즉시 강제로 계산한다 — 다음 화면 그릴 때 한 번만 읽도록 모은다.
+    let raf = 0;
+    const measure = () => { raf = 0; setSizes((p) => (p.scrollWidth === el.scrollWidth && p.clientWidth === el.clientWidth ? p : { scrollWidth: el.scrollWidth, clientWidth: el.clientWidth })); };
+    const update = () => { if (!raf) raf = requestAnimationFrame(measure); };
+    measure();
     const ro = new ResizeObserver(update);
     ro.observe(el);
     const mo = new MutationObserver(update);
@@ -23734,6 +23738,7 @@ function StickyHScrollbar({ targetRef }) {
     el.addEventListener("scroll", onTableScroll);
 
     return () => {
+      if (raf) cancelAnimationFrame(raf);
       ro.disconnect();
       mo.disconnect();
       window.removeEventListener("resize", update);
@@ -27592,19 +27597,54 @@ const driverPanelCallbackRef = React.useRef(null);
   // 생략될 뿐 기능에는 전혀 영향 없다.
   const rowPositionsRef = React.useRef(new Map()); // id -> 직전 렌더의 화면상 top(px)
   const rowOrderKey = React.useMemo(() => filtered.map(r => r._id).join(","), [filtered]);
+  const rowOrderPrevRef = React.useRef(null); // 직전 줄 순서(id 배열)
+  const rowCaptureTimerRef = React.useRef(0);
+  React.useEffect(() => () => clearTimeout(rowCaptureTimerRef.current), []);
   React.useLayoutEffect(() => {
     const prevPositions = rowPositionsRef.current;
     const nextPositions = new Map();
-    let animatedCount = 0;
+    // ⚡ 머리글 정렬처럼 줄 순서가 크게 바뀐 경우 — 화면을 그리기 전에 줄 위치를 재면 브라우저가
+    //   표 전체 배치를 그 자리에서 강제로 계산해 클릭이 굼떴다. 몇 줄이 옮겨졌는지는 id 순서로만 세고,
+    //   많이 바뀌었으면 효과 없이 바로 그린 뒤 위치 기록은 그린 다음(배치가 끝난 뒤)에 조용히 한다.
+    const prevOrder = rowOrderPrevRef.current;
+    const curOrder = filtered.map((r) => r._id);
+    rowOrderPrevRef.current = curOrder;
+    if (prevOrder) {
+      const prevIdx = new Map(prevOrder.map((id, i) => [id, i]));
+      // 줄 하나 추가·이동은 나머지 줄이 한 칸씩 같이 밀릴 뿐 — "밀린 정도가 바뀌는 곳" 수로 센다(정렬이면 수백 곳)
+      let breaks = 0, lastDelta = null;
+      for (let i = 0; i < curOrder.length && breaks <= 40; i++) {
+        const pi = prevIdx.get(curOrder[i]);
+        if (pi == null) continue;
+        const d = pi - i;
+        if (lastDelta !== null && d !== lastDelta) breaks++;
+        lastDelta = d;
+      }
+      if (breaks > 40) {
+        clearTimeout(rowCaptureTimerRef.current);
+        rowPositionsRef.current = new Map();
+        rowCaptureTimerRef.current = setTimeout(() => {
+          const m = new Map();
+          try { for (const id of curOrder) { const el = document.getElementById(`row-${id}`); if (el) m.set(id, el.getBoundingClientRect().top); } } catch { /* 무시 */ }
+          rowPositionsRef.current = m;
+        }, 400);
+        return;
+      }
+    }
     try {
-      filtered.forEach((r) => {
+      // ⚡ 1단계: 위치를 먼저 전부 읽기만 한다. 예전엔 "읽기 → transform 쓰기"를 줄마다 번갈아 해서
+      //   줄 하나 쓸 때마다 브라우저가 표 전체 배치를 다시 계산했다(머리글 정렬 시 수 초씩 멈추던 원인).
+      const moved = [];
+      for (const r of filtered) {
         const el = document.getElementById(`row-${r._id}`);
-        if (!el) return;
+        if (!el) continue;
         const top = el.getBoundingClientRect().top;
         nextPositions.set(r._id, top);
         const prevTop = prevPositions.get(r._id);
-        if (prevTop != null && Math.abs(prevTop - top) > 2 && animatedCount < 80) {
-          const dy = prevTop - top;
+        if (prevTop != null && Math.abs(prevTop - top) > 2) moved.push([el, prevTop - top]);
+      }
+      // 2단계: 몇 줄만 자리를 옮긴 경우(배차상태 변경 등)에만 미끄러지는 효과. 정렬처럼 많이 바뀌면 바로 보여준다.
+      if (moved.length <= 80) moved.forEach(([el, dy]) => {
           el.style.transition = "none";
           el.style.transform = `translateY(${dy}px)`;
           requestAnimationFrame(() => {
@@ -27618,8 +27658,6 @@ const driverPanelCallbackRef = React.useRef(null);
               setTimeout(() => { if (el.style.transform === "") el.style.transition = ""; }, 220);
             });
           });
-          animatedCount++;
-        }
       });
     } catch {}
     rowPositionsRef.current = nextPositions;
