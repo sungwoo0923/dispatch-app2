@@ -9,6 +9,7 @@ import { doc, onSnapshot, setDoc } from "firebase/firestore";
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, Cell, AreaChart, Area, PieChart, Pie } from "recharts";
 import { db, auth, FUNCTIONS_BASE } from "./firebase";
 import KpSubNav from "./KpSubNav";
+import { COMPANY_FEATURES, useCompanyFeatures, setCompanyFeature } from "./companyFeatures"; // ⭐ 2026-11-02 회사별 맞춤 기능
 import CompanyApplications from "./CompanyApplications";
 import { PricingEditor, QuoteBuilder, QuoteHistory, useSalesPricing, applyPlanBill } from "./SalesQuote";
 // ⭐ 2026-11-02 관리자센터 — 실시간 계정·접속(users·loginSessions) + 운영 위젯
@@ -646,40 +647,36 @@ export default function PlatformMonitor({ demoStats = null, tab: tabProp, onTab,
   );
 }
 
-// ⭐ 2026-11-02 운임규칙 — 회사별 맞춤 기능: companyFeatures/{회사} = { fareRules: bool, updatedAt, updatedBy }
-//  특정 운송사만 쓰는 기능을 최고관리자가 회사별로 켜 준다(켜진 회사에만 메뉴·칸이 보인다).
-const COMPANY_FEATURES = [
-  { key: "fareRules", name: "운임 규칙", desc: "회사관리 › 운임 규칙 메뉴 + 오더 화면의 운임구분(일대·월대 등 → 기사운임·수수료 자동 계산)" },
-];
+// ⭐ 2026-11-02 회사별 맞춤 기능 — src/companyFeatures.js의 COMPANY_FEATURES를 돌며 토글(새 기능은 배열에 한 줄만 추가)
 function CompanyFeaturesCard({ company }) {
+  const feat0 = useCompanyFeatures(company);
   const [feat, setFeat] = useState(null);
   const [busy, setBusy] = useState("");
   const [err, setErr] = useState("");
+  // 마지막 변경자 표시용(규칙: 최고관리자만 이 화면을 연다)
   useEffect(() => {
     if (!company) return undefined;
-    setFeat(null);
-    return onSnapshot(doc(db, "companyFeatures", company), (snap) => setFeat(snap.exists() ? snap.data() : {}), (e) => { setFeat({}); setErr(String(e?.code || e?.message || e)); });
+    return onSnapshot(doc(db, "companyFeatures", company), (snap) => setFeat(snap.exists() ? snap.data() : {}), () => setFeat({}));
   }, [company]);
   const toggle = async (key, on) => {
     setBusy(key); setErr("");
-    try {
-      await setDoc(doc(db, "companyFeatures", company), { companyName: company, [key]: on, updatedAt: Date.now(), updatedBy: auth?.currentUser?.email || "" }, { merge: true });
-    } catch (e) { setErr(`저장 실패: ${e?.code || e?.message || e}`); } finally { setBusy(""); }
+    try { await setCompanyFeature(company, key, on, auth?.currentUser?.email || ""); }
+    catch (e) { setErr(`저장 실패: ${e?.code || e?.message || e}`); } finally { setBusy(""); }
   };
   return (
     <Card code="FEATURES" title="회사별 맞춤 기능">
       <div data-company-features="1">
         {COMPANY_FEATURES.map((f) => {
-          const on = feat?.[f.key] === true;
+          const on = feat0[f.key] === true;
           return (
             <div key={f.key} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 0", borderTop: "1px solid #EEF1F6" }}>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 15, fontWeight: 900, color: "#0F1A30" }}>{f.name}</div>
+                <div style={{ fontSize: 15, fontWeight: 900, color: "#0F1A30" }}>{f.label}</div>
                 <div style={{ fontSize: 13.5, color: "#6b7280", fontWeight: 600, marginTop: 2, lineHeight: 1.45 }}>{f.desc}</div>
               </div>
-              <button type="button" role="switch" aria-checked={on} aria-label={`${f.name} 켜기`} data-feature={f.key} disabled={feat == null || busy === f.key}
+              <button type="button" role="switch" aria-checked={on} aria-label={`${f.label} 켜기`} data-feature={f.key} disabled={!feat0.loaded || busy === f.key}
                 onClick={() => toggle(f.key, !on)}
-                style={{ position: "relative", width: 56, height: 30, borderRadius: 999, border: "none", background: on ? "#2D4C82" : "#CBD3E1", cursor: "pointer", flexShrink: 0, opacity: feat == null || busy === f.key ? 0.5 : 1 }}>
+                style={{ position: "relative", width: 56, height: 30, borderRadius: 999, border: "none", background: on ? "#2D4C82" : "#CBD3E1", cursor: "pointer", flexShrink: 0, opacity: !feat0.loaded || busy === f.key ? 0.5 : 1 }}>
                 <span style={{ position: "absolute", top: 3, left: on ? 29 : 3, width: 24, height: 24, borderRadius: 999, background: "#fff", boxShadow: "0 1px 3px rgba(0,0,0,.25)", transition: "left .15s" }} />
               </button>
             </div>

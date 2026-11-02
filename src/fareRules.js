@@ -12,6 +12,7 @@ import React from "react";
 import { doc, onSnapshot } from "firebase/firestore";
 import { db } from "./firebase";
 import { getTenant } from "./fsTenant";
+import { useCompanyFeatures } from "./companyFeatures";
 
 const resolveCompany = (company) => {
   const c = String(company || "").trim();
@@ -20,63 +21,26 @@ const resolveCompany = (company) => {
 };
 
 // ── 회사별 구독 공유(같은 회사를 여러 화면이 보면 onSnapshot 하나만) ──
-//  ⭐ 최고관리자가 관리자센터에서 회사별로 켜 주는 맞춤 기능(companyFeatures/{회사}.fareRules)이 true인 회사만
-//   운임 규칙 메뉴·운임구분 칸이 보인다. 회사 쪽 "운임 규칙 사용" 스위치는 그 안에서만 의미가 있다.
-const EMPTY = Object.freeze({ loaded: false, feature: false, enabled: false, rules: [], history: [], data: null });
-const stores = new Map(); // company -> { state, listeners:Set, unsubs }
+//  ⭐ 최고관리자가 관리자센터에서 회사별로 켜 주는 맞춤 기능(companyFeatures/{회사}.fareRules — src/companyFeatures.js)이
+//   true인 회사만 운임 규칙 메뉴·운임구분 칸이 보인다. 회사 쪽 "운임 규칙 사용" 스위치는 그 안에서만 의미가 있다.
+const EMPTY_RULES = Object.freeze({ loaded: false, data: null });
+const stores = new Map(); // company -> { state, listeners:Set, unsub }
 function getStore(co) {
   let s = stores.get(co);
-  if (!s) {
-    s = { state: EMPTY, listeners: new Set(), unsubs: null, feat: null, rule: null, ruleOk: false, featOk: false };
-    stores.set(co, s);
-  }
+  if (!s) { s = { state: EMPTY_RULES, listeners: new Set(), unsub: null }; stores.set(co, s); }
   return s;
 }
-function emit(s) {
-  const d = s.rule;
-  s.state = {
-    loaded: s.featOk && (s.ruleOk || !s.feat),
-    feature: !!s.feat,
-    enabled: !!s.feat && !!d?.enabled,
-    rules: Array.isArray(d?.rules) ? d.rules : [],
-    history: Array.isArray(d?.history) ? d.history : [],
-    data: d,
-  };
-  s.listeners.forEach((fn) => fn());
-}
 function startStore(co, s) {
-  if (s.unsubs || !co) return;
-  s.unsubs = [];
-  const startRules = () => {
-    if (s.ruleUnsub) return;
-    try {
-      s.ruleUnsub = onSnapshot(doc(db, "fareRules", co), (snap) => {
-        s.rule = snap.exists() ? snap.data() : null; s.ruleOk = true; emit(s);
-      }, () => { s.rule = null; s.ruleOk = true; emit(s); });
-    } catch { s.ruleOk = true; emit(s); }
-  };
+  if (s.unsub || !co) return;
   try {
-    s.unsubs.push(onSnapshot(doc(db, "companyFeatures", co), (snap) => {
-      s.feat = snap.exists() && snap.data()?.fareRules === true;
-      s.featOk = true;
-      // 기능이 켜진 회사만 운임 규칙 문서를 구독(꺼진 회사는 읽지 않음 — 화면도 예전 그대로)
-      if (s.feat) startRules();
-      else if (s.ruleUnsub) { try { s.ruleUnsub(); } catch { /* 무시 */ } s.ruleUnsub = null; s.rule = null; s.ruleOk = false; }
-      emit(s);
-    }, () => { s.feat = false; s.featOk = true; emit(s); }));
-  } catch { s.featOk = true; emit(s); }
+    s.unsub = onSnapshot(doc(db, "fareRules", co), (snap) => {
+      s.state = { loaded: true, data: snap.exists() ? snap.data() : null };
+      s.listeners.forEach((fn) => fn());
+    }, () => { s.state = { loaded: true, data: null }; s.listeners.forEach((fn) => fn()); });
+  } catch { s.state = { loaded: true, data: null }; }
 }
-function stopStore(s) {
-  (s.unsubs || []).forEach((u) => { try { u(); } catch { /* 무시 */ } });
-  if (s.ruleUnsub) { try { s.ruleUnsub(); } catch { /* 무시 */ } }
-  s.unsubs = null; s.ruleUnsub = null; s.rule = null; s.feat = null; s.ruleOk = false; s.featOk = false; s.state = EMPTY;
-}
-
-// 운임 규칙 구독 — { loaded, feature, enabled, on, rules, activeRules, history, data, company }
-//  feature: 최고관리자가 이 회사에 기능을 켜 줌(회사관리 › 운임 규칙 메뉴 표시)
-//  on: feature && 회사가 "운임 규칙 사용"을 켬(오더 화면에 운임구분 표시)
-export function useFareRules(company) {
-  const co = resolveCompany(company);
+// 기능이 켜진 회사만 fareRules 문서를 구독(꺼진 회사는 읽지 않음)
+function useRulesDoc(co) {
   const subscribe = React.useCallback((cb) => {
     if (!co) return () => {};
     const s = getStore(co);
@@ -84,20 +48,34 @@ export function useFareRules(company) {
     startStore(co, s);
     return () => {
       s.listeners.delete(cb);
-      if (s.listeners.size === 0 && s.unsubs) {
-        // 화면 전환 중 잠깐 0이 되는 경우를 위해 조금 뒤에 정리
-        setTimeout(() => { if (s.listeners.size === 0 && s.unsubs) stopStore(s); }, 3000);
-      }
+      if (s.listeners.size === 0 && s.unsub) setTimeout(() => {
+        if (s.listeners.size === 0 && s.unsub) { try { s.unsub(); } catch { /* 무시 */ } s.unsub = null; s.state = EMPTY_RULES; }
+      }, 3000);
     };
   }, [co]);
-  const getSnap = React.useCallback(() => (co ? getStore(co).state : EMPTY), [co]);
-  const st = React.useSyncExternalStore(subscribe, getSnap, getSnap);
-  return React.useMemo(() => ({
-    ...st,
-    company: co,
-    on: st.enabled,
-    activeRules: st.enabled ? st.rules.filter((r) => r && r.active !== false && String(r.name || "").trim()) : [],
-  }), [st, co]);
+  const getSnap = React.useCallback(() => (co ? getStore(co).state : EMPTY_RULES), [co]);
+  return React.useSyncExternalStore(subscribe, getSnap, getSnap);
+}
+
+// 운임 규칙 구독 — { loaded, feature, enabled, on, rules, activeRules, history, data, company }
+//  feature: 최고관리자가 이 회사에 기능을 켜 줌(회사관리 › 운임 규칙 메뉴 표시)
+//  on: feature && 회사가 "운임 규칙 사용"을 켬(오더 화면에 운임구분 표시)
+export function useFareRules(company) {
+  const co = resolveCompany(company);
+  const feats = useCompanyFeatures(co);
+  const feature = feats.fareRules === true;
+  const rd = useRulesDoc(feature ? co : "");
+  return React.useMemo(() => {
+    const d = feature ? rd.data : null;
+    const rules = Array.isArray(d?.rules) ? d.rules : [];
+    const enabled = feature && !!d?.enabled;
+    return {
+      loaded: feats.loaded && (!feature || rd.loaded),
+      feature, enabled, on: enabled, company: co, data: d, rules,
+      history: Array.isArray(d?.history) ? d.history : [],
+      activeRules: enabled ? rules.filter((r) => r && r.active !== false && String(r.name || "").trim()) : [],
+    };
+  }, [feats, feature, rd, co]);
 }
 
 const toNum = (v) => {
