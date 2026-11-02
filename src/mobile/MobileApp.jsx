@@ -6027,7 +6027,7 @@ onGoAttendance={() => {
               onChange={e => setScheduleForm(f => ({ ...f, authorName: e.target.value }))}
             >
               <option value="">선택</option>
-              {mobileUsers.map(u => <option key={u.id} value={u.name}>{u.name}{u.email ? ` (${u.email.split("@")[0]})` : ""}</option>)}
+              {mobileUsers.filter(u => !["shipper","driver","cafeUser"].includes(u.role)).map(u => <option key={u.id} value={u.name}>{u.name}{u.email ? ` (${u.email.split("@")[0]})` : ""}</option>)}
             </MobileSelect>
           </div>
         )}
@@ -6086,7 +6086,7 @@ onGoAttendance={() => {
                 }}
               >
                 <option value="">결재자 선택</option>
-                {mobileUsers.filter(u => (u.uid || u.id) !== currentUser?.uid).map(u => <option key={u.id} value={u.uid || u.id}>{u.name}{u.email ? ` (${u.email.split("@")[0]})` : ""}</option>)}
+                {mobileUsers.filter(u => (u.uid || u.id) !== currentUser?.uid && !["shipper","driver","cafeUser"].includes(u.role)).map(u => <option key={u.id} value={u.uid || u.id}>{u.name}{u.email ? ` (${u.email.split("@")[0]})` : ""}</option>)}
               </MobileSelect>
               <button onClick={() => setScheduleForm(f => ({ ...f, approvers: f.approvers.filter((_, j) => j !== i) }))}
                 className="text-red-400 text-lg font-bold px-1">×</button>
@@ -6338,7 +6338,7 @@ onGoAttendance={() => {
         }}
       >
         <option value="">받는 사람 선택</option>
-        {mobileUsers.map(u => <option key={u.id} value={u.name}>{u.name}</option>)}
+        {mobileUsers.filter(u => !["shipper","driver","cafeUser"].includes(u.role)).map(u => <option key={u.id} value={u.name}>{u.name}</option>)}
       </MobileSelect>
       <CustomDatePicker
         className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none"
@@ -6397,7 +6397,7 @@ onGoAttendance={() => {
             }}
           >
             <option value="">받는 사람 선택</option>
-            {mobileUsers.map(u => <option key={u.id} value={u.name}>{u.name}</option>)}
+            {mobileUsers.filter(u => !["shipper","driver","cafeUser"].includes(u.role)).map(u => <option key={u.id} value={u.name}>{u.name}</option>)}
           </MobileSelect>
           <CustomDatePicker
             className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none"
