@@ -127,7 +127,7 @@ export default function VehicleCarePanel({ driverId, drv = {}, by = "", staff = 
       {tab === "spec" && <Spec {...{ driverId, by, vehicle, busy, run, large }} />}
       {tab === "logs" && <Logs {...{ driverId, by, logs, odo, busy, run, items }} />}
 
-      {drv.careUpdatedBy && <div style={{ marginTop: 12, fontSize: 11.5, color: "#9AA9C3", textAlign: "right", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>마지막 수정 · {drv.careUpdatedBy}{drv.careUpdatedAt?.toDate ? ` · ${drv.careUpdatedAt.toDate().toLocaleString("ko-KR", { hour12: false })}` : ""}</div>}
+      {drv.careUpdatedBy && <div style={{ marginTop: 12, fontSize: 12.5, color: "#7A879C", textAlign: "right", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>마지막 수정 · {drv.careUpdatedBy}{drv.careUpdatedAt?.toDate ? ` · ${drv.careUpdatedAt.toDate().toLocaleString("ko-KR", { hour12: false })}` : ""}</div>}
     </div>
   );
 }
@@ -148,11 +148,11 @@ function Summary({ driverId, by, vehicle, care, sum, odo, logs, busy, run, setTa
     <>
       <div style={{ marginTop: 12, borderRadius: 16, padding: "14px 16px", color: "#fff", background: "linear-gradient(135deg,#0B1428 0%,#1B2B4B 60%,#2D4C82 100%)" }}>
         <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "baseline" }}>
-          <span style={{ fontFamily: MONO, fontSize: 10, fontWeight: 800, letterSpacing: "0.24em", color: "#8FB0F0", whiteSpace: "nowrap" }}>ODOMETER</span>
-          <span style={{ fontSize: 11.5, color: "rgba(255,255,255,.6)", whiteSpace: "nowrap" }}>{[vehicle.톤, vehicle.적재함, vehicle.모델].filter(Boolean).join(" · ") || "제원 미입력"}</span>
+          <span style={{ fontFamily: MONO, fontSize: 11, fontWeight: 800, letterSpacing: "0.2em", color: "#8FB0F0", whiteSpace: "nowrap" }}>ODOMETER · 주행거리</span>
+          <span style={{ fontSize: 13, color: "rgba(255,255,255,.72)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{[vehicle.톤, vehicle.적재함, vehicle.모델].filter(Boolean).join(" · ") || "제원 미입력"}</span>
         </div>
         <div style={{ fontFamily: MONO, fontSize: 30, fontWeight: 800, marginTop: 4, whiteSpace: "nowrap" }}>{odo ? odo.toLocaleString() : "—"}<span style={{ fontSize: 14, marginLeft: 4, opacity: 0.6 }}>km</span></div>
-        <div style={{ fontSize: 12, color: "rgba(255,255,255,.6)", whiteSpace: "nowrap" }}>{care.odometerAt ? `${care.odometerAt} 기준` : "아직 입력 전"} · {CLASS_LABEL[tonClass(vehicle.톤, vehicle.적재함)]} 정비 기준</div>
+        <div style={{ fontSize: 13, color: "rgba(255,255,255,.72)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{care.odometerAt ? `${care.odometerAt} 기준` : "아직 입력 전"} · {CLASS_LABEL[tonClass(vehicle.톤, vehicle.적재함)]} 정비 기준</div>
         <div style={{ display: "flex", gap: 6, marginTop: 10 }}>
           <input inputMode="numeric" value={comma(km)} onChange={(e) => setKm(e.target.value.replace(/[^\d]/g, ""))} placeholder="현재 계기판 km" style={{ ...inp, height: 40, background: "rgba(255,255,255,.95)" }} />
           <button type="button" disabled={busy} onClick={submit} style={{ ...btn(false), border: "none" }}>입력</button>
@@ -161,9 +161,10 @@ function Summary({ driverId, by, vehicle, care, sum, odo, logs, busy, run, setTa
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(3,minmax(0,1fr))", gap: 6, marginTop: 8 }}>
         {[["교체 지남", sum.over, "건"], ["곧 교체", sum.soon, "건"], ["이달 비용", monthCost ? Math.round(monthCost / 10000) : 0, "만원"]].map(([l, v, u]) => (
-          <div key={l} style={{ ...box, padding: "9px 10px" }}>
-            <div style={{ fontSize: 11.5, fontWeight: 700, color: "#7A879C", whiteSpace: "nowrap" }}>{l}</div>
-            <div style={{ fontFamily: MONO, fontSize: 20, fontWeight: 800, whiteSpace: "nowrap" }}>{v}<span style={{ fontSize: 11, color: "#9AA9C3", marginLeft: 2 }}>{u}</span></div>
+          <div key={l} style={{ ...box, padding: "11px 12px" }}>
+            {/* ⭐ 2026-11-02 글씨 키움(교체 지남·곧 교체·이달 비용이 작아서 안 보인다는 의견) */}
+            <div style={{ fontSize: 13.5, fontWeight: 800, color: "#5B6B85", whiteSpace: "nowrap" }}>{l}</div>
+            <div style={{ fontFamily: MONO, fontSize: 25, fontWeight: 800, whiteSpace: "nowrap", marginTop: 2 }}>{v}<span style={{ fontSize: 13.5, color: "#7A879C", marginLeft: 3 }}>{u}</span></div>
           </div>
         ))}
       </div>
@@ -237,8 +238,8 @@ function Items({ driverId, by, items, care, odo, busy, run, staff, large }) {
               <div style={{ fontSize: 13.5, fontWeight: 800, color: st.level === 2 ? INK : "#5B6B85", marginTop: 6, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{st.text}</div>
               {edit && (
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, marginTop: 8 }}>
-                  <label><div style={lbl}>주기 km</div><input inputMode="numeric" defaultValue={it.km ? Number(it.km).toLocaleString() : ""} onInput={(e) => { e.target.value = comma(e.target.value); }} onBlur={(e) => run(() => save(driverId, by, { care: { intervals: { [it.key]: { km: num(e.target.value), months: it.months } } } }), "주기를 바꿨습니다")} style={inp} /></label>
-                  <label><div style={lbl}>주기 개월</div><input inputMode="numeric" defaultValue={it.months || ""} onBlur={(e) => run(() => save(driverId, by, { care: { intervals: { [it.key]: { km: it.km, months: num(e.target.value) } } } }), "주기를 바꿨습니다")} style={inp} /></label>
+                  <label><div style={lbl}>주기 km</div><input inputMode="numeric" defaultValue={it.km ? Number(it.km).toLocaleString() : ""} onInput={(e) => { e.target.value = comma(e.target.value); }} onBlur={(e) => { const x = num(e.target.value); if (x === (Number(it.km) || 0)) return; run(() => save(driverId, by, { care: { intervals: { [it.key]: { km: x, months: it.months } } } }), "주기를 바꿨습니다"); }} style={inp} /></label>
+                  <label><div style={lbl}>주기 개월</div><input inputMode="numeric" defaultValue={it.months || ""} onBlur={(e) => { const x = num(e.target.value); if (x === (Number(it.months) || 0)) return; run(() => save(driverId, by, { care: { intervals: { [it.key]: { km: it.km, months: x } } } }), "주기를 바꿨습니다"); }} style={inp} /></label>
                 </div>
               )}
               {open === it.key && (
@@ -255,26 +256,46 @@ function Items({ driverId, by, items, care, odo, busy, run, staff, large }) {
           );
         })}
       </div>
-      <div style={{ fontSize: 11.5, color: "#9AA9C3", marginTop: 8, lineHeight: 1.6 }}>※ 화물 사업용(짐 싣고 자주 운행) 기준 권장 주기입니다. 차량 설명서·정비소 안내와 다르면 {staff ? "'주기 조정'으로" : "회사에 말씀하시면"} 바꿀 수 있습니다.</div>
+      <div style={{ fontSize: 12.5, color: "#7A879C", marginTop: 8, lineHeight: 1.6 }}>※ 화물 사업용(짐 싣고 자주 운행) 기준 권장 주기입니다. 차량 설명서·정비소 안내와 다르면 {staff ? "'주기 조정'으로" : "회사에 말씀하시면"} 바꿀 수 있습니다.</div>
     </>
   );
 }
 
 // ─── 만기 ───
 function Dates({ driverId, by, care, busy, run, large }) {
+  // ⭐ 2026-11-02 예전엔 달력에서 날짜를 누르는 순간 저장돼 실수로 바꿔도 되돌릴 수 없었다 →
+  //   날짜를 고르면 [저장]·[취소]가 나오고, [저장]을 눌러야 저장된다. 달력의 '지우기'로 비운 뒤 저장하면 만기일을 없앤다.
+  const [draft, setDraft] = React.useState({}); // { key: "YYYY-MM-DD" | "" }
+  const saveOne = (d, v) => {
+    const x = draft[d.key];
+    run(async () => {
+      await save(driverId, by, { care: { dates: { [d.key]: x || "" } } }, { kind: "만기", item: d.key, itemLabel: d.label, date: today(), memo: x ? `${v || "없음"} → ${x}` : `${v} → 지움` });
+      setDraft((p) => { const n = { ...p }; delete n[d.key]; return n; });
+    }, x ? "만기일을 저장했습니다" : "만기일을 지웠습니다");
+  };
   return (
     <>
       <Head code="EXPIRY" title="검사 · 보험 · 계약 만기" />
       <div style={{ display: "grid", gridTemplateColumns: large ? "repeat(2,minmax(0,1fr))" : "1fr", gap: 8 }}>
         {CARE_DATES.map((d) => {
           const v = care.dates?.[d.key] || ""; const st = dateStatus(v);
+          const has = Object.prototype.hasOwnProperty.call(draft, d.key);
+          const editing = has && draft[d.key] !== v;
+          const shownV = has ? draft[d.key] : v;
           return (
             <div key={d.key} style={{ ...box, padding: "10px 12px" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                 <Badge level={st.level}>{st.level === -1 ? "미입력" : st.text}</Badge>
                 <span style={{ fontSize: 15.5, fontWeight: 900, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{d.label}</span>
               </div>
-              <div style={{ marginTop: 8 }}><DateIn value={v} disabled={busy} placeholder="만기일 선택" onChange={(x) => x !== v && run(() => save(driverId, by, { care: { dates: { [d.key]: x } } }, { kind: "만기", item: d.key, itemLabel: d.label, date: today(), memo: x }))} /></div>
+              <div style={{ marginTop: 8 }}><DateIn value={shownV} disabled={busy} placeholder="만기일 선택" onChange={(x) => setDraft((p) => ({ ...p, [d.key]: x || "" }))} /></div>
+              {editing && (
+                <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 8 }}>
+                  <span style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 800, color: "#2D4C82", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{v || "없음"} → {draft[d.key] || "지움"}</span>
+                  <button type="button" disabled={busy} onClick={() => setDraft((p) => { const n = { ...p }; delete n[d.key]; return n; })} style={{ ...btn(false), height: 36, fontSize: 13.5, padding: "0 12px" }}>취소</button>
+                  <button type="button" disabled={busy} onClick={() => saveOne(d, v)} style={{ ...btn(), height: 36, fontSize: 13.5, padding: "0 14px" }}>{busy ? "저장 중…" : "저장"}</button>
+                </div>
+              )}
               {d.hint && <div style={{ fontSize: 12.5, color: "#7A879C", marginTop: 5 }}>{d.hint}</div>}
             </div>
           );
@@ -326,7 +347,7 @@ function Spec({ driverId, by, vehicle, busy, run, large }) {
         {F({ k: "리프트", label: "리프트·특장", list: ["없음", "파워게이트(리프트)", "윙 개폐", "크레인", "기타"] })}
         {F({ k: "차대번호", label: "차대번호(VIN)" })}
       </div>
-      {s && <div style={{ fontSize: 11.5, color: "#7A879C", marginTop: 6, lineHeight: 1.6 }}>{v.톤} 표준 — 적재함 {s.l}×{s.w}{s.h ? `×${s.h}` : ""}cm · 최대 {s.maxKg.toLocaleString()}kg · {s.axle} · 대표 차종 {s.models.join(", ")}</div>}
+      {s && <div style={{ fontSize: 12.5, color: "#7A879C", marginTop: 6, lineHeight: 1.6 }}>{v.톤} 표준 — 적재함 {s.l}×{s.w}{s.h ? `×${s.h}` : ""}cm · 최대 {s.maxKg.toLocaleString()}kg · {s.axle} · 대표 차종 {s.models.join(", ")}</div>}
       <button type="button" disabled={busy} onClick={() => run(() => save(driverId, by, { vehicle: v, ...(v.톤 ? { 차량톤수: v.톤 } : {}), ...(v.적재함 ? { 차량종류: v.적재함 } : {}) }, { kind: "제원", date: today(), memo: [v.톤, v.적재함, v.모델].filter(Boolean).join(" ") }))} style={{ ...btn(), width: "100%", marginTop: 10 }}>{busy ? "저장 중…" : "제원 저장"}</button>
     </>
   );
@@ -356,16 +377,16 @@ function Logs({ driverId, by, logs, odo, busy, run }) {
         <input value={f.memo} onChange={(e) => setF({ ...f, memo: e.target.value })} placeholder={f.kind === "사고" ? "사고 내용·보험 접수번호" : "메모"} style={{ ...inp, gridColumn: "1 / -1" }} />
         <button type="button" disabled={busy} onClick={add} style={{ ...btn(), gridColumn: "1 / -1" }}>{busy ? "저장 중…" : `${f.kind} 기록 저장`}</button>
       </div>
-      {f.kind === "주유" && <div style={{ fontSize: 11.5, color: "#9AA9C3", marginTop: 4 }}>가득 주유할 때마다 주행거리와 주유량을 넣으면 연비가 자동 계산됩니다.</div>}
+      {f.kind === "주유" && <div style={{ fontSize: 12.5, color: "#7A879C", marginTop: 4 }}>가득 주유할 때마다 주행거리와 주유량을 넣으면 연비가 자동 계산됩니다.</div>}
 
       <Head code="HISTORY" title={`이력 ${shown.length}건`} />
       <div style={{ ...box, padding: 4 }}>
         {shown.length === 0 ? <div style={{ padding: "16px 8px", textAlign: "center", fontSize: 13.5, color: "#9AA9C3" }}>아직 기록이 없습니다</div> : shown.map((l, i) => (
           <div key={`${l.at}_${i}`} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 8px", borderTop: i ? "1px solid #EEF1F6" : "none" }}>
-            <span style={{ width: 44, flexShrink: 0, textAlign: "center", padding: "3px 0", borderRadius: 6, background: l.kind === "정비" ? INK : "#EEF2F8", color: l.kind === "정비" ? "#fff" : NAVY, fontSize: 11.5, fontWeight: 800 }}>{l.kind}</span>
+            <span style={{ width: 44, flexShrink: 0, textAlign: "center", padding: "3px 0", borderRadius: 6, background: l.kind === "정비" ? INK : "#EEF2F8", color: l.kind === "정비" ? "#fff" : NAVY, fontSize: 12.5, fontWeight: 800 }}>{l.kind}</span>
             <div style={{ minWidth: 0, flex: 1 }}>
               <div style={{ fontSize: 13.5, fontWeight: 800, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{l.itemLabel || l.memo || l.kind}{l.liters ? ` · ${l.liters}L` : ""}</div>
-              <div style={{ fontSize: 11.5, color: "#7A879C", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{[l.date, l.km ? `${Number(l.km).toLocaleString()}km` : "", l.shop, l.by].filter(Boolean).join(" · ")}</div>
+              <div style={{ fontSize: 12.5, color: "#7A879C", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{[l.date, l.km ? `${Number(l.km).toLocaleString()}km` : "", l.shop, l.by].filter(Boolean).join(" · ")}</div>
             </div>
             {l.cost ? <span style={{ fontFamily: MONO, fontSize: 13, fontWeight: 800, whiteSpace: "nowrap" }}>{won(l.cost)}</span> : null}
           </div>
@@ -390,9 +411,9 @@ export function ModelSearch({ value, onPick, ton, maker, style, placeholder }) {
           {list.map((m) => (
             <button key={m.maker + m.model} type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => { onPick({ 모델: m.model, 제조사: m.maker }); setOpen(false); }}
               style={{ display: "flex", width: "100%", alignItems: "center", gap: 8, padding: "10px 12px", border: "none", borderBottom: "1px solid #EEF1F6", background: "#fff", textAlign: "left", cursor: "pointer" }}>
-              <span style={{ fontSize: 11.5, fontWeight: 800, color: "#7A879C", minWidth: 56 }}>{m.maker}</span>
+              <span style={{ fontSize: 12.5, fontWeight: 800, color: "#7A879C", minWidth: 56 }}>{m.maker}</span>
               <span style={{ fontSize: 14.5, fontWeight: 900, color: "#0F1A30", flex: 1 }}>{m.model}</span>
-              <span style={{ fontSize: 11.5, fontWeight: 800, color: "#2D4C82" }}>{m.hint}</span>
+              <span style={{ fontSize: 12.5, fontWeight: 800, color: "#2D4C82" }}>{m.hint}</span>
             </button>
           ))}
         </div>

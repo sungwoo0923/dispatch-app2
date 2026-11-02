@@ -7,7 +7,7 @@
 //  휴대폰(좁은 화면)에서는 표 대신 카드로 그린다.
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { collection, doc, onSnapshot, query, where, setDoc, deleteDoc, runTransaction } from "firebase/firestore";
+import { collection, doc, onSnapshot, query, where, setDoc, deleteDoc, runTransaction, serverTimestamp } from "firebase/firestore";
 import * as XLSX from "xlsx";
 import { db, auth } from "./firebase";
 import { kpConfirm } from "./kpDialog";
@@ -16,7 +16,8 @@ import {
   currentDriver, parseSheetRows, saveEvidence, loadEvidence, deleteEvidence, dataUrlToBlobUrl, repairVat, ledgerPrintHtml, printHtml,
 } from "./vehicleLedgerData";
 import VehicleCarePanel from "./VehicleCarePanel";
-import { careSummary, vehicleDefaults } from "./vehicleCare";
+import CustomDatePicker from "./CustomDatePicker"; // 📅 프로그램 달력(배차관리와 같은 달력)
+import { careSummary, vehicleDefaults, TRUCK_MODELS } from "./vehicleCare";
 import { useVehicleTypes, VehicleTypePicker, VT_DEFAULTS } from "./vehicleTypes"; // 🚚 2026-11-02 회사 공용 차량종류
 import { fmtPhone as fmtPhoneLive } from "./formatInput"; // 입력 중 하이픈(02·031·010 등)
 
@@ -52,6 +53,15 @@ function Field({ label, children, wide }) {
     </label>
   );
 }
+// ⭐ 2026-11-02 날짜 칸 — 기본(구식) 달력 대신 프로그램 달력. 지우기로 비울 수 있다
+const DATE_CLS = "w-full h-10 px-3 rounded-[10px] border border-[#D5DDEA] bg-white text-[15px] font-semibold text-[#0F1A30]";
+function DateField({ value, onChange, placeholder = "날짜 선택" }) {
+  return <CustomDatePicker value={value || ""} onChange={(e) => onChange(e.target.value || "")} placeholder={placeholder} className={DATE_CLS} showIcon openOnFocus={false} />;
+}
+// 모델(제조사·모델 목록) · 연식(연도 목록) — 목록에 없으면 직접입력
+const MODEL_OPTS = TRUCK_MODELS.map(([mk, md, hint]) => ({ v: md, label: `${mk} ${md}`, sub: hint }));
+const makerOf = (model) => TRUCK_MODELS.find((m) => m[1] === model)?.[0] || "";
+const YEAR_OPTS = Array.from({ length: new Date().getFullYear() + 1 - 1995 + 1 }, (_, i) => String(new Date().getFullYear() + 1 - i)).map((y) => ({ v: y, label: `${y}년` }));
 // ⭐ 2026-11-02 선택 목록(프로그램 스타일) — 버튼 + 떠 있는 목록(찾기·↑↓·Enter·Esc) + 맨 아래 [직접입력]
 //   목록에 없는 값도 그대로 보이고, [직접입력]을 누르면 글자 칸으로 바뀐다.
 //   options: ["값", …] 또는 [{ v, sub }] · group 이름은 { group: "제목" }
@@ -165,13 +175,26 @@ function LedgerSelect({ value, onChange, options = [], placeholder = "선택", a
 function SelectOrType({ value, onChange, options, placeholder = "선택" }) {
   return <LedgerSelect value={value} onChange={onChange} options={options} placeholder={placeholder} />;
 }
-function Modal({ title, onClose, children, footer, width = 640 }) {
+function Modal({ title, onClose, children, footer, width = 760 }) {
+  // ⭐ 2026-11-02 Esc로 닫기(맨 위 창만 · 안쪽 목록·달력이 열려 있으면 그것 먼저) — 바깥(어두운 곳)을 눌러도 닫히지 않는다
+  const me = useRef(null);
+  useEffect(() => {
+    const k = (e) => {
+      if (e.key !== "Escape") return;
+      if (document.querySelector("[data-ls-menu], [data-vt-menu], [data-kp-popup], [data-kp-dialog]")) return;
+      const all = document.querySelectorAll(".vl-modal");
+      if (all[all.length - 1] !== me.current) return;
+      e.preventDefault(); e.stopPropagation(); onClose?.();
+    };
+    window.addEventListener("keydown", k, true);
+    return () => window.removeEventListener("keydown", k, true);
+  }, [onClose]);
   return (
-    <div className="vl-modal" style={{ position: "fixed", inset: 0, zIndex: 9600, background: "rgba(11,20,40,.55)", display: "flex", alignItems: "center", justifyContent: "center", padding: 12 }}>
+    <div ref={me} className="vl-modal" style={{ position: "fixed", inset: 0, zIndex: 9600, background: "rgba(11,20,40,.55)", display: "flex", alignItems: "center", justifyContent: "center", padding: 12 }}>
       <div style={{ width: `min(${width}px, 100%)`, maxHeight: "calc(100vh - 24px)", background: "#fff", borderRadius: 18, display: "flex", flexDirection: "column", overflow: "hidden", boxShadow: "0 30px 60px rgba(11,20,40,.35)" }}>
         <div style={{ padding: "14px 18px", background: "linear-gradient(120deg,#0B1428,#1B2B4B)", color: "#fff", display: "flex", alignItems: "center", gap: 10 }}>
           <div style={{ flex: 1, fontSize: 17, fontWeight: 900 }}>{title}</div>
-          <button type="button" onClick={onClose} style={{ background: "transparent", border: "none", color: "#fff", fontSize: 24, lineHeight: 1, cursor: "pointer" }}>×</button>
+          <button type="button" onClick={onClose} title="닫기 (Esc)" style={{ background: "rgba(255,255,255,.1)", border: "1px solid rgba(143,176,240,.35)", color: "#fff", height: 34, padding: "0 12px", borderRadius: 9, fontSize: 14, fontWeight: 800, cursor: "pointer" }}>✕ 닫기</button>
         </div>
         <div style={{ padding: 18, overflowY: "auto", flex: 1 }}>{children}</div>
         {footer && <div style={{ padding: "12px 18px", borderTop: `1px solid ${C.line}`, display: "flex", justifyContent: "flex-end", gap: 8, flexWrap: "wrap" }}>{footer}</div>}
@@ -184,7 +207,7 @@ const EqDot = ({ on, label }) => (
 );
 
 // ── 기본 정보 입력 폼(등록·수정 공용) ──
-const BASIC_KEYS = ["차량번호", "용도", "톤수", "회사", "차대번호", "보험사", "차주명", "유류카드사", "유류카드번호", "하이패스", "GPS", "덮개", "박스", "박스메모", "메모"];
+const BASIC_KEYS = ["차량번호", "용도", "톤수", "제조사", "모델", "연식", "회사", "차대번호", "보험사", "차주명", "유류카드사", "유류카드번호", "하이패스", "GPS", "덮개", "박스", "박스메모", "메모"];
 const LEDGER_TYPE_BASE = Array.from(new Set([...VT_DEFAULTS, ...LEDGER_TYPE_EXTRA]));
 // 소제목 줄
 const FormGroup = ({ title, code, children }) => (
@@ -207,6 +230,8 @@ function BasicForm({ v, set, purposeOpts, companyOpts, isNew, company }) {
         <Field label="차량번호 *"><input {...f("차량번호")} placeholder="예) 경기12가3456" /></Field>
         <Field label="차량종류"><VehicleTypePicker value={v.용도 || ""} onChange={(x) => set({ ...v, 용도: x })} base={typeBase} company={company} placeholder="선택" style={{ ...inp, cursor: "pointer", fontWeight: v.용도 ? 800 : 600, color: v.용도 ? C.navy : "#9AA9C3" }} /></Field>
         <Field label="톤수">{sel("톤수", TON_OPTS, { customPlaceholder: "예) 6.5톤" })}</Field>
+        <Field label="모델 (제조사·모델)"><LedgerSelect value={v.모델 || ""} onChange={(x) => set({ ...v, 모델: x, 제조사: makerOf(x) || (x ? v.제조사 || "" : "") })} options={MODEL_OPTS} placeholder="모델 선택" customPlaceholder="예) 엑시언트 25.5톤" /></Field>
+        <Field label="연식"><LedgerSelect value={v.연식 || ""} onChange={(x) => set({ ...v, 연식: String(x || "").replace(/[^\d]/g, "").slice(0, 4) })} options={YEAR_OPTS} placeholder="연식 선택" customPlaceholder="예) 2019" /></Field>
         <Field label="차대번호"><input {...f("차대번호")} placeholder="17자리 영문·숫자" style={{ ...inp, fontFamily: MONO, textTransform: "uppercase" }} /></Field>
       </FormGroup>
       <FormGroup title="소속·보험" code="OWNER">
@@ -316,7 +341,7 @@ function RowEditor({ kind, row, onSave, onClose, kindOpts, onDelete }) {
               <input inputMode="numeric" value={r.부가세 === "" || r.부가세 == null ? "" : won(num(r.부가세))} onChange={(e) => setR({ ...r, 부가세: e.target.value.replace(/[^\d]/g, "") })} style={{ ...inp, textAlign: "right", fontFamily: MONO }} placeholder={`${won(autoVat)} (자동)`} />
             </Field>
           );
-          if (t === "date") return <Field key={k} label={L}><input type="date" value={r[k] || ""} onChange={(e) => setR({ ...r, [k]: e.target.value })} style={inp} /></Field>;
+          if (t === "date") return <Field key={k} label={L}><DateField value={r[k] || ""} onChange={(x) => setR({ ...r, [k]: x })} /></Field>;
           if (t === "phone") return <Field key={k} label={L}><input inputMode="tel" value={r[k] || ""} onChange={(e) => setR({ ...r, [k]: fmtPhoneLive(e.target.value) })} onBlur={(e) => setR({ ...r, [k]: fmtPhone(e.target.value) })} style={inp} /></Field>;
           return <Field key={k} label={L}><input value={r[k] || ""} onChange={(e) => setR({ ...r, [k]: e.target.value })} style={inp} /></Field>;
         })}
@@ -418,7 +443,8 @@ function Ledger({ v, co, appDriver, linkRaw, drivers, canEdit, by, narrow, purpo
   const ref = doc(db, VL_COL, v.id);
   const [edit, setEdit] = useState(null); // 기본 정보 수정 중 값
   const [editor, setEditor] = useState(null); // { kind, row }
-  const startEdit = () => { setEdit(Object.fromEntries(BASIC_KEYS.map((k) => [k, v[k] || ""]))); setTimeout(() => document.getElementById("vl-basic")?.scrollIntoView({ behavior: "smooth", block: "start" }), 30); };
+  const appVeh = linkRaw?.vehicle || {}; // 기사앱(기사 문서)에 입력된 제원 — 모델·연식은 기사앱과 같은 곳을 쓴다
+  const startEdit = () => { setEdit(Object.fromEntries(BASIC_KEYS.map((k) => [k, (["제조사", "모델", "연식"].includes(k) ? (appVeh[k] || v[k]) : v[k]) || ""]))); setTimeout(() => document.getElementById("vl-basic")?.scrollIntoView({ behavior: "smooth", block: "start" }), 30); };
   // ⭐ 2026-11-02 표에서 두 번 누르면(더블클릭) 오른쪽 패널이 열리면서 바로 기본 정보 수정
   const sigRef = useRef(0);
   useEffect(() => { if (editSignal !== sigRef.current) { sigRef.current = editSignal; if (canEdit) startEdit(); } }, [editSignal]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -443,9 +469,16 @@ function Ledger({ v, co, appDriver, linkRaw, drivers, canEdit, by, narrow, purpo
   };
 
   // 배열 이력은 트랜잭션으로(여러 명이 동시에 고쳐도 덮어쓰지 않게)
+  // ⭐ 2026-11-02 대장 미작성 차량은 열기만 해서는 아무것도 만들지 않는다 — 처음 무언가를 저장할 때 대장을 만든다
   const mutate = (fn) => runTransaction(db, async (tx) => {
     const s = await tx.get(ref);
-    if (!s.exists()) throw new Error("차량이 삭제되었습니다");
+    if (!s.exists()) {
+      if (!v.__base) throw new Error("차량이 삭제되었습니다");
+      const base = { ...v.__base, createdAt: Date.now() };
+      const patch = fn(base);
+      tx.set(ref, { ...base, ...patch, updatedAt: Date.now(), updatedBy: by });
+      return;
+    }
     const patch = fn(s.data());
     tx.update(ref, { ...patch, updatedAt: Date.now(), updatedBy: by });
   });
@@ -484,8 +517,9 @@ function Ledger({ v, co, appDriver, linkRaw, drivers, canEdit, by, narrow, purpo
   // 기본 정보 저장 — 바뀐 칸은 '변경 이력'에 자동으로 남긴다
   const saveBasic = async () => {
     const next = {}; const changes = [];
+    const effective = (k) => (["제조사", "모델", "연식"].includes(k) ? (appVeh[k] || v[k]) : v[k]);
     BASIC_KEYS.forEach((k) => {
-      const a = String(v[k] ?? "").trim(); const b = String(edit[k] ?? "").trim();
+      const a = String(effective(k) ?? "").trim(); const b = String(edit[k] ?? "").trim();
       if (a !== b) { next[k] = b; changes.push({ id: uid(), 일자: today(), 내용: `${k === "용도" ? "차량종류" : k} 변경`, 구분: "변경", 날짜: today(), 세부내용: `${a || "(없음)"} → ${b || "(없음)"}`, 비고: `자동 기록 · ${by}`, createdAt: Date.now(), by }); }
     });
     if (!normPlate(edit.차량번호)) { toast("차량번호를 입력하세요"); return; }
@@ -493,6 +527,11 @@ function Ledger({ v, co, appDriver, linkRaw, drivers, canEdit, by, narrow, purpo
     if (next.차량번호 !== undefined) next.plateKey = normPlate(next.차량번호);
     if (next.용도 !== undefined) next.차량종류 = next.용도; // ⭐ 2026-11-02 다른 화면과 같은 이름(차량종류)으로도 저장
     await mutate((d) => ({ ...next, logs: [...(d.logs || []), ...changes] }));
+    // ⭐ 모델·연식은 기사앱 '제원'과 같은 곳(기사 문서 vehicle)에도 저장 → 기사앱에 그대로 보인다
+    const vk = ["제조사", "모델", "연식"].filter((k) => next[k] !== undefined);
+    if (vk.length && linkRaw?.id) {
+      try { await setDoc(doc(db, "drivers", linkRaw.id), { vehicle: Object.fromEntries(vk.map((k) => [k, next[k]])), careUpdatedAt: serverTimestamp(), careUpdatedBy: by }, { merge: true }); } catch { /* 권한·오프라인 — 대장에는 저장됨 */ }
+    }
     setEdit(null); toast(`${changes.length}개 항목을 저장했습니다`);
   };
   // 기사 변경 — 이전 기사의 탑승을 시작일로 닫고 새 줄 추가
@@ -540,7 +579,7 @@ function Ledger({ v, co, appDriver, linkRaw, drivers, canEdit, by, narrow, purpo
   const maxM = Math.max(1, ...monthly);
 
   const info = [
-    ["차량번호", v.차량번호], ["차량종류", v.용도], ["톤수", v.톤수], ["회사", v.회사], ["차대번호", v.차대번호], ["보험사", v.보험사], ["차주명", v.차주명],
+    ["차량번호", v.차량번호], ["차량종류", v.용도], ["톤수", v.톤수], ["모델", [appVeh.제조사 || v.제조사, appVeh.모델 || v.모델].filter(Boolean).join(" ")], ["연식", (appVeh.연식 || v.연식) ? `${appVeh.연식 || v.연식}년` : ""], ["회사", v.회사], ["차대번호", v.차대번호], ["보험사", v.보험사], ["차주명", v.차주명],
     ["현재 기사", cur ? cur.이름 : appDriver ? `${appDriver.이름} (기사관리)` : ""], ["기사 연락처", cur ? cur.연락처 : appDriver?.전화번호 || ""], ["기사 변경일", cur?.시작 || ""],
   ];
   const nav = [["vl-basic", "기본 정보"], ["vl-care", "점검·소모품"], ["vl-timeline", "타임라인"], ["vl-repairs", `정비 ${reps.length}`], ["vl-structures", `구조변경 ${(v.structures || []).length}`], ["vl-driverHist", `기사 ${(v.driverHist || []).length}`], ["vl-logs", `변경·기타 ${(v.logs || []).length}`]];
@@ -549,7 +588,7 @@ function Ledger({ v, co, appDriver, linkRaw, drivers, canEdit, by, narrow, purpo
   const events = [
     ...reps.map((r) => ({ k: "repairs", d: r.일자, t: [r.구분, r.내용].filter(Boolean).join(" · ") || "정비", s: [r.업체, r.비고].filter(Boolean).join(" · "), amt: num(r.공가) + repairVat(r), files: r.files?.length || 0 })),
     ...(v.structures || []).map((r) => ({ k: "structures", d: r.일자, t: r.내용 || "구조변경", s: [r.업체, r.비고].filter(Boolean).join(" · "), amt: num(r.금액), files: r.files?.length || 0 })),
-    ...(v.driverHist || []).flatMap((r) => [{ k: "driverHist", d: r.시작, t: `${r.이름} 탑승 시작`, s: r.연락처 || "" }, ...(r.종료 ? [{ k: "driverHist", d: r.종료, t: `${r.이름} 탑승 종료`, s: "" }] : [])]),
+    ...(v.driverHist || []).flatMap((r) => [{ k: "driverHist", d: r.시작, t: `${r.이름} 기사 배정 (이 차량 운행 시작)`, s: r.연락처 || "" }, ...(r.종료 ? [{ k: "driverHist", d: r.종료, t: `${r.이름} 기사 교체 (운행 종료)`, s: "" }] : [])]),
     ...(v.logs || []).map((r) => ({ k: "logs", d: r.일자, t: `${r.내용 || "이력"}${r.구분 ? ` (${r.구분})` : ""}`, s: r.세부내용 || r.비고 || "" })),
   ].filter((e) => tlKind === "all" || e.k === tlKind).sort((a, b) => String(b.d || "").localeCompare(String(a.d || "")));
   const evShown = tlMore ? events : events.slice(0, 12);
@@ -621,10 +660,15 @@ function Ledger({ v, co, appDriver, linkRaw, drivers, canEdit, by, narrow, purpo
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           <Btn kind="light" onClick={() => printHtml(ledgerPrintHtml(v, co))}>인쇄(A4)</Btn>
           <Btn kind="light" onClick={exportXlsx}>엑셀 저장</Btn>
-          {canEdit && <Btn kind="light" onClick={removeVehicle}>차량 삭제</Btn>}
+          {canEdit && !v.virtual && <Btn kind="light" onClick={removeVehicle}>차량 삭제</Btn>}
         </div>
         </div>
       </div>
+      {v.virtual && (
+        <div style={{ padding: "12px 16px", borderRadius: 14, border: `1.5px dashed ${C.sky}`, background: "#F4F8FF", color: C.mid, fontSize: 14.5, fontWeight: 700, lineHeight: 1.6 }}>
+          <b style={{ color: C.navy }}>대장 미작성 차량</b> — 기사관리에 있는 지입·직영·임대 차량이지만 아직 대장에 저장한 내용이 없습니다. 기본 정보·정비·구조변경·기사 이력 중 하나를 저장하면 대장이 만들어집니다. (열어 보기만 해서는 아무것도 바뀌지 않습니다)
+        </div>
+      )}
       {/* 바로가기 */}
       <div style={{ position: "sticky", top: 0, zIndex: 5, display: "flex", gap: 6, overflowX: "auto", padding: 6, background: "rgba(244,246,250,.94)", backdropFilter: "blur(6px)", borderRadius: 12, border: `1px solid ${C.line}` }}>
         {nav.map(([id, l]) => <button key={id} type="button" onClick={() => go(id)} style={{ flexShrink: 0, height: 36, padding: "0 14px", borderRadius: 9, border: "none", background: "#fff", color: C.mid, fontSize: 14.5, fontWeight: 800, cursor: "pointer", boxShadow: "0 1px 2px rgba(16,24,40,.06)" }}>{l}</button>)}
@@ -778,7 +822,7 @@ function Ledger({ v, co, appDriver, linkRaw, drivers, canEdit, by, narrow, purpo
 
       {/* 기사 탑승 */}
       <Section id="vl-driverHist" title="기사 탑승 이력" code="DRIVER" right={canEdit && <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-        {!cur && appDriver && !(v.driverHist || []).length && <Btn onClick={() => saveRow("driverHist", { 이름: appDriver.이름, 연락처: appDriver.전화번호, 시작: today(), 종료: "", 비고: "기사관리에서 가져옴", driverId: appDriver.id })}>기사관리 기사로 시작</Btn>}
+        {!v.virtual && !cur && appDriver && !(v.driverHist || []).length && <Btn onClick={() => saveRow("driverHist", { 이름: appDriver.이름, 연락처: appDriver.전화번호, 시작: today(), 종료: "", 비고: "기사관리에서 가져옴", driverId: appDriver.id })}>기사관리 기사로 시작</Btn>}
         <Btn onClick={() => setEditor({ kind: "driverHist", row: null })}>+ 과거 이력</Btn>
         <Btn kind="primary" onClick={() => setDrvForm({ 이름: "", 연락처: "", 시작: today(), driverId: "", 비고: "" })}>기사 변경</Btn>
       </div>}>
@@ -810,7 +854,7 @@ function Ledger({ v, co, appDriver, linkRaw, drivers, canEdit, by, narrow, purpo
             </Field>
             <Field label="기사 이름 *"><input value={drvForm.이름} onChange={(e) => setDrvForm({ ...drvForm, 이름: e.target.value })} style={inp} /></Field>
             <Field label="연락처"><input inputMode="tel" value={drvForm.연락처} onChange={(e) => setDrvForm({ ...drvForm, 연락처: fmtPhoneLive(e.target.value) })} onBlur={(e) => setDrvForm({ ...drvForm, 연락처: fmtPhone(e.target.value) })} style={inp} /></Field>
-            <Field label="기사 변경일(탑승 시작)"><input type="date" value={drvForm.시작} onChange={(e) => setDrvForm({ ...drvForm, 시작: e.target.value })} style={inp} /></Field>
+            <Field label="기사 변경일(탑승 시작)"><DateField value={drvForm.시작} onChange={(x) => setDrvForm({ ...drvForm, 시작: x })} /></Field>
             <Field label="비고"><input value={drvForm.비고} onChange={(e) => setDrvForm({ ...drvForm, 비고: e.target.value })} style={inp} /></Field>
           </div>
         </Modal>
@@ -826,23 +870,23 @@ function LedgerDrawer({ onClose, onDouble, narrow, children }) {
   useEffect(() => {
     const prev = document.body.style.overflow; document.body.style.overflow = "hidden";
     const k = (e) => {
-      if (e.key !== "Escape") return;
-      if (document.querySelector(".vl-modal, [data-ls-menu], [data-vt-menu], [data-vt-dialog], [data-kp-dialog]")) return; // 안쪽 창·목록이 먼저 닫힌다
+      if (e.key !== "Escape" || e.defaultPrevented) return; // 안쪽 창이 이미 Esc를 처리했으면 그대로 둔다
+      if (document.querySelector(".vl-modal, [data-ls-menu], [data-vt-menu], [data-vt-dialog], [data-kp-dialog], [data-kp-popup]")) return; // 안쪽 창·목록·달력이 먼저 닫힌다
       onClose();
     };
     window.addEventListener("keydown", k);
     return () => { document.body.style.overflow = prev; window.removeEventListener("keydown", k); };
   }, [onClose]);
+  // ⭐ 2026-11-02 바깥(어두운 곳)을 눌러도 닫히지 않는다 — Esc 또는 [✕ 닫기]로만 닫는다(입력하다 실수로 닫히지 않게)
+  //   표에서 더블클릭하면 두 번째 클릭이 바탕에 떨어진다 → '수정'으로
   const onBackdrop = (e) => {
-    // 표에서 더블클릭하면 두 번째 클릭이 바탕에 떨어진다 → 닫지 말고 '수정'으로
-    if (Date.now() - openedAt.current < 600) { if (e.detail >= 2) onDouble?.(); return; }
-    onClose();
+    if (Date.now() - openedAt.current < 600 && e.detail >= 2) onDouble?.();
   };
   return createPortal(
     <div data-vl-drawer="1" style={{ position: "fixed", inset: 0, zIndex: 9500 }}>
       <div onClick={onBackdrop} style={{ position: "absolute", inset: 0, background: "rgba(11,20,40,.42)", backdropFilter: "blur(1.5px)", opacity: shown ? 1 : 0, transition: "opacity .22s ease" }} />
       <aside role="dialog" aria-modal="true" aria-label="차량 정보"
-        style={{ position: "absolute", top: 0, right: 0, bottom: 0, width: narrow ? "100%" : "min(780px, 94vw)", background: C.soft, boxShadow: "-24px 0 60px rgba(11,20,40,.28)", display: "flex", flexDirection: "column",
+        style={{ position: "absolute", top: 0, right: 0, bottom: 0, width: narrow ? "100%" : "min(1000px, 96vw)", background: C.soft, boxShadow: "-24px 0 60px rgba(11,20,40,.28)", display: "flex", flexDirection: "column",
           transform: shown ? "translateX(0)" : "translateX(100%)", transition: "transform .28s cubic-bezier(.2,.8,.2,1)", borderTopLeftRadius: narrow ? 0 : 20, borderBottomLeftRadius: narrow ? 0 : 20, overflow: "hidden" }}>
         <div style={{ flex: 1, overflowY: "auto", padding: narrow ? 10 : 16, fontFamily: "'Pretendard','Noto Sans KR',sans-serif" }}>{children}</div>
       </aside>
@@ -864,7 +908,7 @@ function RowActs({ onEdit, onDel }) {
 // ─────────────────────────────────────────────────────────────────────────────
 // 기존 "차량 관리"(기사앱 점검·소모품) 칸 + 태진 "차량 전체 현황" 칸
 const COLS = [
-  ["차량번호", "차량번호", 140], ["용도", "차량종류", 110], ["톤수", "톤수", 70], ["회사", "회사", 110], ["현재기사", "현재 기사", 100], ["기사연락처", "기사 연락처", 136], ["기사변경일", "기사 변경일", 116],
+  ["순번", "순번", 56], ["차량번호", "차량번호", 150], ["용도", "차량종류", 110], ["톤수", "톤수", 70], ["회사", "회사", 110], ["현재기사", "현재 기사", 118], ["담당자", "담당자", 96], ["기사연락처", "기사 연락처", 136], ["기사변경일", "기사 변경일", 116],
   ["차대번호", "차대번호", 180], ["보험사", "보험사", 90], ["유류카드번호", "유류", 120], ["하이패스", "하이패스", 100], ["GPS", "GPS", 80], ["덮개", "덮개", 70], ["박스", "박스", 90], ["차주명", "차주명", 90],
   ["모델연식", "모델·연식", 140], ["주행거리", "주행거리", 110], ["엔진오일", "엔진오일", 100], ["점검알림", "점검 알림", 200],
 ];
@@ -898,12 +942,13 @@ function VehicleCard({ r, onOpen }) {
         <Plate text={r.차량번호} />
         {r.용도 && <span style={{ padding: "2px 8px", borderRadius: 6, background: C.pale, color: C.blue, fontSize: 13, fontWeight: 800, whiteSpace: "nowrap" }}>{r.용도}</span>}
         {r.톤수 && <span style={{ fontSize: 13.5, color: C.sub, fontWeight: 700, whiteSpace: "nowrap" }}>{r.톤수}</span>}
-        {r.virtual && <span style={{ marginLeft: "auto", padding: "2px 7px", borderRadius: 6, border: `1px dashed ${C.sky}`, color: C.blue, fontSize: 12.5, fontWeight: 800, whiteSpace: "nowrap" }}>대장 미작성</span>}
+        {r.virtual && <span title="아직 대장에 아무것도 저장하지 않은 차량" style={{ marginLeft: "auto", padding: "2px 7px", borderRadius: 6, border: `1px dashed ${C.sky}`, color: C.blue, fontSize: 12.5, fontWeight: 800, whiteSpace: "nowrap" }}>대장 미작성</span>}
       </div>
       <div style={{ display: "flex", alignItems: "baseline", gap: 8, fontSize: 14.5, color: r.현재기사 ? C.navy : C.mute, fontWeight: 800, minWidth: 0 }}>
         <span style={{ whiteSpace: "nowrap" }}>{r.현재기사 || "기사 미배정"}</span>
+        {r.appJoined && <span style={{ padding: "1px 7px", borderRadius: 6, background: C.mid, color: "#fff", fontSize: 12, fontWeight: 800, whiteSpace: "nowrap" }}>앱 가입</span>}
         {r.기사연락처 && <span style={{ color: C.blue, fontWeight: 600, whiteSpace: "nowrap", ...TAB }}>{r.기사연락처}</span>}
-        <span style={{ marginLeft: "auto", fontSize: 13.5, color: C.sub, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.회사}</span>
+        <span style={{ marginLeft: "auto", fontSize: 13.5, color: C.sub, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{[r.담당자 && `담당 ${r.담당자}`, r.회사].filter(Boolean).join(" · ")}</span>
       </div>
       <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>{EQUIP.map((e) => <EqDot key={e.key} on={hasEquip(r[e.key])} label={e.label} />)}</div>
       <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13.5, color: C.sub, fontWeight: 700, borderTop: "1px dashed #E3E8F0", paddingTop: 8 }}>
@@ -927,7 +972,13 @@ export default function VehicleLedger({ company = "", drivers = [], canEdit = tr
   const [fCo, setFCo] = useState("");
   const [fEq, setFEq] = useState("");
   const [fCare, setFCare] = useState(false);
-  const [sort, setSort] = useState({ k: "차량번호", d: 1 });
+  // ⭐ 2026-11-02 정렬은 이 브라우저(내 화면)에만 기억 — 서버에 저장하지 않아 다른 직원 화면에는 영향 없음
+  const [sort, setSortRaw] = useState(() => { try { const x = JSON.parse(localStorage.getItem("vlSort") || "null"); if (x && x.k) return x; } catch { /* 무시 */ } return { k: "차량번호", d: 1 }; });
+  const setSort = (fn) => setSortRaw((p) => { const n = typeof fn === "function" ? fn(p) : fn; try { localStorage.setItem("vlSort", JSON.stringify(n)); } catch { /* 무시 */ } return n; });
+  // 내 차량만 보기(내가 담당자인 차량) — 이 브라우저에만 기억
+  const [mine, setMineRaw] = useState(() => { try { return localStorage.getItem("vlMine") === "1"; } catch { return false; } });
+  const setMine = (on) => { setMineRaw(on); try { localStorage.setItem("vlMine", on ? "1" : "0"); } catch { /* 무시 */ } };
+  const myUid = auth.currentUser?.uid || "";
   const [mode, setMode] = useState(() => { try { return localStorage.getItem("vlMode") || "table"; } catch { return "table"; } });
   const [creating, setCreating] = useState(null);
   const [importing, setImporting] = useState(false);
@@ -948,7 +999,9 @@ export default function VehicleLedger({ company = "", drivers = [], canEdit = tr
   const fleetDrivers = useMemo(() => drivers.filter((d) => ["지입", "직영", "임대"].includes(d.등급)), [drivers]);
   const drvByPlate = useMemo(() => {
     const m = new Map();
-    drivers.forEach((d) => { const p = d.차량번호 || d.carNo; const k = plateCore(p); if (!k) return; if (!m.has(k) || ["지입", "직영", "임대"].includes(d.등급)) m.set(k, d); });
+    // 같은 번호판이 여럿이면: 기사앱 가입(uid 있는) 문서 > 지입·직영·임대 > 나머지 — 기사앱이 쓰는 문서와 같은 곳을 본다
+    const rank = (d) => (d.uid ? 2 : 0) + (["지입", "직영", "임대"].includes(d.등급) ? 1 : 0);
+    drivers.forEach((d) => { const p = d.차량번호 || d.carNo; const k = plateCore(p); if (!k) return; const ex = m.get(k); if (!ex || rank(d) >= rank(ex)) m.set(k, d); });
     return m;
   }, [drivers]);
   const drvById = useMemo(() => new Map(drivers.map((d) => [d.id, d])), [drivers]);
@@ -964,11 +1017,14 @@ export default function VehicleLedger({ company = "", drivers = [], canEdit = tr
       const cv = linkRaw ? vehicleDefaults(linkRaw) : null;
       const cs = linkRaw ? careSummary({ vehicle: cv, care: linkRaw.care || {} }) : null;
       const reps = v.repairs || [];
+      const av = linkRaw?.vehicle || {}; // 기사앱에 실제로 입력된 제원(추정값 아님)
+      const mdl = [av.제조사 || v.제조사, av.모델 || v.모델].filter(Boolean).join(" "); const yr = av.연식 || v.연식 || "";
       return {
         ...v, virtual, linkRaw, appDriver: app, cv, cs,
+        담당자: linkRaw?.담당자?.name || "", 담당자Uid: linkRaw?.담당자?.uid || "", appJoined: !!linkRaw?.uid,
         용도: v.용도 || v.차량종류 || (virtual ? cv?.적재함 || "" : ""), 톤수: v.톤수 || cv?.톤 || "",
         현재기사: cur?.이름 || app?.이름 || "", 기사연락처: cur?.연락처 || app?.전화번호 || "", 기사변경일: cur?.시작 || "", fromApp: !cur && !!app,
-        모델연식: cv ? [cv.모델, cv.연식 && `${cv.연식}년`].filter(Boolean).join(" · ") : "",
+        모델연식: [mdl, yr && `${yr}년`].filter(Boolean).join(" · "),
         주행거리: cs?.odometer || 0, 점검알림: cs ? cs.alerts.length : -1, 엔진오일: cs ? (cs.alerts.find((a) => a.key === "engineOil")?.level ?? (linkRaw?.care?.items?.engineOil ? 0 : -1)) : -2,
         yearCost: reps.filter((x) => String(x.일자 || "").startsWith(thisYear)).reduce((s, x) => s + num(x.공가) + repairVat(x), 0),
         monthCost: reps.filter((x) => String(x.일자 || "").startsWith(thisMonth)).reduce((s, x) => s + num(x.공가) + repairVat(x), 0),
@@ -981,10 +1037,17 @@ export default function VehicleLedger({ company = "", drivers = [], canEdit = tr
     fleetDrivers.forEach((d) => {
       const plate = String(d.차량번호 || d.carNo || "").trim(); const k = plateCore(plate);
       if (!k || have.has(k) || seen.has(k)) return; seen.add(k);
-      out.push(mk({ id: `virt:${d.id}`, 차량번호: plate, driverHist: [], repairs: [], structures: [], logs: [] }, true));
+      const key = normPlate(plate); const cv0 = vehicleDefaults(d);
+      // 대장 미작성 — 문서는 만들지 않고, 처음 저장할 때 이 기본값으로 만든다(Ledger의 mutate)
+      const __base = {
+        companyName: co, plateKey: key, 차량번호: plate, 용도: cv0.적재함 || d.차량종류 || "", 차량종류: cv0.적재함 || d.차량종류 || "", 톤수: String(cv0.톤 || d.차량톤수 || ""), 회사: "", 차주명: "",
+        repairs: [], structures: [], logs: [],
+        driverHist: [{ id: uid(), 이름: d.이름 || d.name || "", 연락처: fmtPhone(d.전화번호 || d.phone || ""), 시작: today(), 종료: "", 비고: "기사관리에서 가져옴", driverId: d.id, createdAt: Date.now(), by }],
+      };
+      out.push(mk({ id: `virt:${d.id}`, docId: vehicleDocId(co, key), 차량번호: plate, driverHist: [], repairs: [], structures: [], logs: [], __base }, true));
     });
     return out;
-  }, [list, fleetDrivers, drvByPlate, drvById, thisYear, thisMonth]);
+  }, [list, fleetDrivers, drvByPlate, drvById, thisYear, thisMonth, co]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const vtCo = useVehicleTypes(); // 🚚 2026-11-02 회사 공용 차량종류(추가한 이름도 용도·형태 목록에)
   const purposeOpts = useMemo(() => Array.from(new Set([...PURPOSE_PRESETS, ...vtCo.custom, ...list.map((v) => v.용도).filter(Boolean)])), [list, vtCo.custom]);
@@ -992,21 +1055,40 @@ export default function VehicleLedger({ company = "", drivers = [], canEdit = tr
   const kindOpts = useMemo(() => Array.from(new Set([...REPAIR_KINDS, ...list.flatMap((v) => (v.repairs || []).map((r) => r.구분)).filter(Boolean)])), [list]);
 
   const shown = useMemo(() => {
-    const qq = q.trim().replace(/\s/g, "").toLowerCase();
+    const nz = (x) => String(x || "").replace(/[\s\-·.]/g, "").toLowerCase(); // 띄어쓰기·하이픈 무시(차대번호·전화번호도 일부만 쳐서 찾기)
+    const qq = nz(q.trim());
     const [ek, ev] = fEq.split(":");
     return rows
       .filter((r) => !fPurpose || (r.용도 || "") === fPurpose)
       .filter((r) => !fCo || (r.회사 || "") === fCo)
       .filter((r) => !ek || (ek === "any" ? EQ_KEYS.some((k) => !hasEquip(r[k])) : hasEquip(r[ek]) === (ev === "1")))
       .filter((r) => !fCare || (r.cs && (r.cs.over || r.cs.soon)))
-      .filter((r) => !qq || [r.차량번호, r.현재기사, r.기사연락처, r.차주명, r.차대번호, r.회사, r.보험사, r.용도, r.유류카드번호, r.하이패스, r.모델연식].some((x) => String(x || "").replace(/\s/g, "").toLowerCase().includes(qq)))
+      .filter((r) => !mine || (myUid && r.담당자Uid === myUid) || (!r.담당자Uid && myName && r.담당자 === myName))
+      .filter((r) => !qq || [r.차량번호, r.현재기사, r.기사연락처, r.차주명, r.차대번호, r.회사, r.보험사, r.용도, r.유류카드번호, r.하이패스, r.모델연식, r.담당자].some((x) => nz(x).includes(qq)))
       .sort((a, b) => {
         const x = a[sort.k]; const y = b[sort.k];
         if (typeof x === "number" && typeof y === "number") return sort.d * (x - y);
         return sort.d * String(x || "￿").localeCompare(String(y || "￿"), "ko", { numeric: true });
       });
-  }, [rows, q, fPurpose, fCo, fEq, fCare, sort]);
-  const sel = rows.find((r) => r.id === selId) || null;
+  }, [rows, q, fPurpose, fCo, fEq, fCare, sort, mine, myUid, myName]);
+  // 대장 미작성 차량은 열어도 문서를 만들지 않으므로 docId로 고른다 → 처음 저장해 대장이 생기면 같은 칸이 진짜 대장으로 바뀐다
+  const sel = rows.find((r) => r.id === selId) || rows.find((r) => r.virtual && r.docId === selId) || null;
+  const selV = sel ? (sel.virtual ? { ...sel, id: sel.docId } : sel) : null;
+  const mineCount = useMemo(() => rows.filter((r) => (myUid && r.담당자Uid === myUid) || (!r.담당자Uid && myName && r.담당자 === myName)).length, [rows, myUid, myName]);
+  // 기사가 나중에 기사앱에 가입하면(또는 기사관리에 등록되면) PC에서 넣어 둔 모델·연식을 기사 문서(기사앱 제원)에도 한 번 채워 준다
+  const vSynced = useRef(new Set());
+  useEffect(() => {
+    if (!canEdit) return;
+    rows.forEach((r) => {
+      if (r.virtual || !r.linkRaw?.id) return;
+      const av = r.linkRaw.vehicle || {};
+      const need = ["제조사", "모델", "연식"].filter((k) => r[k] && !av[k]);
+      const key = `${r.linkRaw.id}:${need.join(",")}`;
+      if (!need.length || vSynced.current.has(key)) return;
+      vSynced.current.add(key);
+      setDoc(doc(db, "drivers", r.linkRaw.id), { vehicle: Object.fromEntries(need.map((k) => [k, r[k]])) }, { merge: true }).catch(() => {});
+    });
+  }, [rows, canEdit]);
 
   const createVehicle = async (v) => {
     const key = normPlate(v.차량번호);
@@ -1028,20 +1110,10 @@ export default function VehicleLedger({ company = "", drivers = [], canEdit = tr
   const [editReq, setEditReq] = useState({ id: "", n: 0 });
   const askEdit = (id) => setEditReq((p) => ({ id, n: p.n + 1 }));
   const closeDrawer = React.useCallback(() => { pick(null); setEditReq((p) => ({ id: "", n: p.n })); }, []); // eslint-disable-line react-hooks/exhaustive-deps
-  const openRow = async (r, edit = false) => {
-    if (!r.virtual) { pick(r.id); if (edit) askEdit(r.id); return; }
-    if (!canEdit) { toast("관리대장이 아직 없는 차량입니다"); return; }
-    const d = r.linkRaw; const key = normPlate(r.차량번호); const id = vehicleDocId(co, key);
-    setOpening(r.id);
-    try {
-      await setDoc(doc(db, VL_COL, id), {
-        companyName: co, plateKey: key, 차량번호: r.차량번호, 용도: r.cv?.적재함 || "", 차량종류: r.cv?.적재함 || "", 톤수: String(r.cv?.톤 || ""), 회사: "", 차주명: "",
-        repairs: [], structures: [], logs: [],
-        driverHist: d ? [{ id: uid(), 이름: d.이름 || d.name || "", 연락처: fmtPhone(d.전화번호 || d.phone || ""), 시작: today(), 종료: "", 비고: "기사관리에서 가져옴", driverId: d.id, createdAt: Date.now(), by }] : [],
-        createdAt: Date.now(), updatedAt: Date.now(), updatedBy: by,
-      }, { merge: true });
-      pick(id); if (edit) askEdit(id);
-    } catch (e) { toast(`관리대장을 만들지 못했습니다(${e?.code || "오류"})`); } finally { setOpening(""); }
+  // ⭐ 2026-11-02 대장 미작성 차량도 열기만 한다(예전엔 여는 순간 대장을 만들어 '미작성'·'앱' 표시가 사라졌다)
+  const openRow = (r, edit = false) => {
+    const id = r.virtual ? r.docId : r.id;
+    pick(id); if (edit && canEdit) askEdit(id);
   };
   const importRows = async (rowsIn) => {
     const byKey = new Map(list.map((v) => [normPlate(v.차량번호), v]));
@@ -1075,8 +1147,8 @@ export default function VehicleLedger({ company = "", drivers = [], canEdit = tr
   };
   const exportList = () => {
     const head = COLS.map((c) => c[1]).concat(["유류카드사", "박스 사용처", "메모", `${thisYear} 정비비`]);
-    const val = (r, k) => (k === "주행거리" ? (r.주행거리 || "") : k === "엔진오일" ? (careCells(r).oil?.text || (r.엔진오일 === 0 ? "정상" : "")) : k === "점검알림" ? (r.cs ? r.cs.alerts.map((a) => a.label).join(", ") : "") : r[k] || "");
-    const aoa = [head, ...shown.map((r) => COLS.map(([k]) => val(r, k)).concat([r.유류카드사 || "", r.박스메모 || "", r.메모 || "", r.yearCost || ""]))];
+    const val = (r, k, i) => (k === "순번" ? i + 1 : k === "주행거리" ? (r.주행거리 || "") : k === "엔진오일" ? (careCells(r).oil?.text || (r.엔진오일 === 0 ? "정상" : "")) : k === "점검알림" ? (r.cs ? r.cs.alerts.map((a) => a.label).join(", ") : "") : r[k] || "");
+    const aoa = [head, ...shown.map((r, i) => COLS.map(([k]) => val(r, k, i)).concat([r.유류카드사 || "", r.박스메모 || "", r.메모 || "", r.yearCost || ""]))];
     const ws = XLSX.utils.aoa_to_sheet(aoa); ws["!cols"] = head.map((h, i) => ({ wch: i < COLS.length ? Math.round(COLS[i][2] / 8) : 14 }));
     const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "차량 전체 현황");
     XLSX.writeFile(wb, `차량전체현황_${co}_${today()}.xlsx`);
@@ -1098,12 +1170,13 @@ export default function VehicleLedger({ company = "", drivers = [], canEdit = tr
   const virtualN = rows.filter((r) => r.virtual).length;
   const sortBy = (k) => setSort((s) => (s.k === k ? { k, d: -s.d } : { k, d: 1 }));
   const tile = (active) => ({ textAlign: "left", padding: "12px 14px", borderRadius: 14, border: `1px solid ${active ? "#fff" : "rgba(143,176,240,.28)"}`, background: active ? "rgba(255,255,255,.16)" : "rgba(255,255,255,.05)", color: "#fff", minWidth: 0, cursor: "pointer", display: "flex", flexDirection: "column", gap: 4 });
-  const kpiLabel = { fontFamily: MONO, fontSize: 11, fontWeight: 800, letterSpacing: "0.18em", color: C.sky, whiteSpace: "nowrap" };
-  const kpiNum = { fontFamily: MONO, fontSize: narrow ? 22 : 28, fontWeight: 800, lineHeight: 1.1, whiteSpace: "nowrap", ...TAB };
-  const kpiSub = { fontSize: 13, color: "rgba(255,255,255,.66)", fontWeight: 600, wordBreak: "keep-all", lineHeight: 1.35 };
+  // ⭐ 2026-11-02 글씨 키움(작아서 안 보인다는 의견)
+  const kpiLabel = { fontFamily: MONO, fontSize: 12.5, fontWeight: 800, letterSpacing: "0.12em", color: C.sky, whiteSpace: "nowrap" };
+  const kpiNum = { fontFamily: MONO, fontSize: narrow ? 24 : 30, fontWeight: 800, lineHeight: 1.1, whiteSpace: "nowrap", ...TAB };
+  const kpiSub = { fontSize: 14.5, color: "rgba(255,255,255,.78)", fontWeight: 700, wordBreak: "keep-all", lineHeight: 1.4 };
   const maxP = Math.max(1, ...purposeCnt.map((x) => x[1]));
   const cardMode = narrow || mode === "card";
-  const resetFilters = () => { setQ(""); setFPurpose(""); setFCo(""); setFEq(""); setFCare(false); };
+  const resetFilters = () => { setQ(""); setFPurpose(""); setFCo(""); setFEq(""); setFCare(false); setMine(false); };
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 14, ...TAB }}>
@@ -1168,8 +1241,14 @@ export default function VehicleLedger({ company = "", drivers = [], canEdit = tr
             options={[{ v: "any:0", label: "장비 미등록 있음" }, ...EQUIP.flatMap((e) => [{ v: `${e.key}:1`, label: `${e.label} 있음` }, { v: `${e.key}:0`, label: `${e.label} 없음` }])]} /></div>
           {narrow && (
             <div style={{ width: "100%" }}><LedgerSelect compact allowCustom={false} value={`${sort.k}:${sort.d}`} onChange={(x) => { if (!x) return; const [k, d] = x.split(":"); setSort({ k, d: Number(d) }); }} noneLabel="정렬 기본" style={{ height: 38 }}
-              options={COLS.filter(([k]) => !["엔진오일", "점검알림"].includes(k)).flatMap(([k, l]) => [{ v: `${k}:1`, label: `정렬: ${l} ↑` }, { v: `${k}:-1`, label: `정렬: ${l} ↓` }])} /></div>
+              options={COLS.filter(([k]) => !["순번", "엔진오일", "점검알림"].includes(k)).flatMap(([k, l]) => [{ v: `${k}:1`, label: `정렬: ${l} ↑` }, { v: `${k}:-1`, label: `정렬: ${l} ↓` }])} /></div>
           )}
+          {/* ⭐ 2026-11-02 내 차량만 보기 — 기사관리에서 내가 담당자로 지정된 차량 */}
+          <button type="button" onClick={() => setMine(!mine)} title="기사관리에서 내가 담당자로 지정된 차량만 봅니다 (이 화면에만 적용)"
+            style={{ height: 38, padding: "0 14px", borderRadius: 10, border: `1px solid ${mine ? C.mid : "#D5DDEA"}`, background: mine ? C.mid : "#fff", color: mine ? "#fff" : C.mid, fontSize: 14.5, fontWeight: 800, cursor: "pointer", whiteSpace: "nowrap", display: "inline-flex", alignItems: "center", gap: 6 }}>
+            <span style={{ width: 16, height: 16, borderRadius: 5, border: `2px solid ${mine ? "#fff" : "#9FB2D3"}`, display: "grid", placeItems: "center", fontSize: 11, lineHeight: 1 }}>{mine ? "✓" : ""}</span>
+            내 차량만 보기 <span style={{ fontFamily: MONO, fontSize: 13, opacity: 0.8 }}>{mineCount}</span>
+          </button>
           <div style={{ marginLeft: "auto", display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
             {!narrow && (
               <div style={{ display: "inline-flex", padding: 3, borderRadius: 10, background: "#E8EDF5" }}>
@@ -1181,10 +1260,10 @@ export default function VehicleLedger({ company = "", drivers = [], canEdit = tr
             {canEdit && <Btn kind="primary" onClick={() => setCreating({})}>+ 차량 등록</Btn>}
           </div>
         </div>
-        {(fPurpose || fCo || fEq || fCare || q) && (
+        {(fPurpose || fCo || fEq || fCare || q || mine) && (
           <div style={{ padding: "8px 14px", display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center", borderBottom: "1px solid #EEF1F6", fontSize: 14, color: C.sub }}>
             <span style={{ fontWeight: 800 }}>필터</span>
-            {[q && `검색 "${q}"`, fPurpose && `차량종류 ${fPurpose}`, fCo && `회사 ${fCo}`, fEq && (fEq === "any:0" ? "장비 미등록" : `${EQUIP.find((e) => e.key === fEq.split(":")[0])?.label} ${fEq.endsWith(":1") ? "있음" : "없음"}`), fCare && "점검 필요"].filter(Boolean).map((t) => <span key={t} style={{ padding: "2px 9px", borderRadius: 99, background: C.pale, color: C.blue, fontWeight: 800 }}>{t}</span>)}
+            {[q && `검색 "${q}"`, fPurpose && `차량종류 ${fPurpose}`, fCo && `회사 ${fCo}`, fEq && (fEq === "any:0" ? "장비 미등록" : `${EQUIP.find((e) => e.key === fEq.split(":")[0])?.label} ${fEq.endsWith(":1") ? "있음" : "없음"}`), fCare && "점검 필요", mine && "내 차량만"].filter(Boolean).map((t) => <span key={t} style={{ padding: "2px 9px", borderRadius: 99, background: C.pale, color: C.blue, fontWeight: 800 }}>{t}</span>)}
             <button type="button" onClick={resetFilters} style={{ border: "none", background: "none", color: C.sub, textDecoration: "underline", cursor: "pointer", fontSize: 14 }}>모두 지우기</button>
           </div>
         )}
@@ -1204,22 +1283,24 @@ export default function VehicleLedger({ company = "", drivers = [], canEdit = tr
           ) : (
             <div style={{ overflow: "auto", maxHeight: "calc(100vh - 360px)", minHeight: 320 }}>
               <table style={{ width: "100%", borderCollapse: "separate", borderSpacing: 0, minWidth: 2100 }}>
-                <thead><tr>{COLS.map(([k, l, w], i) => (
-                  <th key={k} onClick={() => sortBy(k)} style={{ ...th, minWidth: w, cursor: "pointer", userSelect: "none", ...(k === "차량번호" ? { left: 0, zIndex: 3, textAlign: "left" } : {}), ...(i === 15 ? { borderLeft: "2px solid #8FB0F0" } : {}) }}>
-                    {l}<span style={{ marginLeft: 4, fontSize: 12, color: sort.k === k ? "#fff" : "rgba(143,176,240,.55)" }}>{sort.k === k ? (sort.d > 0 ? "▲" : "▼") : "↕"}</span>
+                <thead><tr>{COLS.map(([k, l, w]) => (
+                  <th key={k} onClick={() => k !== "순번" && sortBy(k)} title={k === "순번" ? "" : "누르면 정렬 (내 화면에만 적용)"} style={{ ...th, minWidth: w, cursor: k === "순번" ? "default" : "pointer", userSelect: "none", ...(k === "순번" ? { left: 0, zIndex: 3, width: 56 } : {}), ...(k === "차량번호" ? { left: 56, zIndex: 3, textAlign: "left" } : {}), ...(k === "모델연식" ? { borderLeft: "2px solid #8FB0F0" } : {}) }}>
+                    {l}{k !== "순번" && <span style={{ marginLeft: 4, fontSize: 12, color: sort.k === k ? "#fff" : "rgba(143,176,240,.55)" }}>{sort.k === k ? (sort.d > 0 ? "▲" : "▼") : "↕"}</span>}
                   </th>
                 ))}</tr></thead>
                 <tbody>
-                  {shown.map((r) => {
+                  {shown.map((r, ri) => {
                     const cc = careCells(r);
                     return (
                       <tr key={r.id} className="vl-row" title="누르면 오른쪽에 차량 정보 · 두 번 누르면 바로 수정" onClick={(e) => openRow(r, e.detail >= 2)} style={{ cursor: "pointer", opacity: opening === r.id ? 0.5 : 1 }}>
                         {COLS.map(([k], i) => {
                           const val = r[k];
                           const eq = EQ_KEYS.includes(k);
-                          const base = { ...td, whiteSpace: "nowrap", textAlign: "center", borderTop: "none", borderBottom: "1px solid #EEF1F6", ...(i === 15 ? { borderLeft: "2px solid #DCE6F7" } : {}) };
-                          if (k === "차량번호") return <td key={k} style={{ ...base, position: "sticky", left: 0, background: "inherit", textAlign: "left", zIndex: 1, boxShadow: "1px 0 0 #EEF1F6" }}><span style={{ fontWeight: 900, fontSize: 15 }}>{val}</span>{r.virtual && <span title="기사관리 차량 · 누르면 관리대장이 만들어집니다" style={{ marginLeft: 6, padding: "1px 6px", borderRadius: 5, border: `1px dashed ${C.sky}`, fontSize: 12, color: C.blue, fontWeight: 800 }}>미작성</span>}</td>;
-                          if (k === "현재기사") return <td key={k} style={{ ...base, fontWeight: 800 }}>{val || <span style={{ color: "#C0CADB" }}>-</span>}{r.fromApp && <span title="기사관리 등록 기사(탑승 이력 없음)" style={{ marginLeft: 4, fontSize: 12, color: C.mute }}>앱</span>}</td>;
+                          const base = { ...td, whiteSpace: "nowrap", textAlign: "center", borderTop: "none", borderBottom: "1px solid #EEF1F6", ...(k === "모델연식" ? { borderLeft: "2px solid #DCE6F7" } : {}) };
+                          if (k === "순번") return <td key={k} style={{ ...base, position: "sticky", left: 0, background: "inherit", zIndex: 1, width: 56, fontFamily: MONO, fontSize: 14, color: C.sub, fontWeight: 800 }}>{ri + 1}</td>;
+                          if (k === "차량번호") return <td key={k} style={{ ...base, position: "sticky", left: 56, background: "inherit", textAlign: "left", zIndex: 1, boxShadow: "1px 0 0 #EEF1F6" }}><span style={{ fontWeight: 900, fontSize: 15 }}>{val}</span>{r.virtual && <span title="관리대장 미작성 — 기사관리에 있는 지입·직영·임대 차량이지만 아직 대장에 아무것도 저장하지 않은 차량입니다. 정보를 저장하면 대장이 만들어지고 이 표시는 사라집니다." style={{ marginLeft: 6, padding: "2px 7px", borderRadius: 6, border: `1px dashed ${C.sky}`, fontSize: 12.5, color: C.blue, fontWeight: 800 }}>대장 미작성</span>}</td>;
+                          if (k === "현재기사") return <td key={k} style={{ ...base, fontWeight: 800 }}>{val || <span style={{ color: "#C0CADB" }}>-</span>}{r.appJoined && <span title="이 기사님은 기사앱에 가입했습니다(점검·소모품·제원이 기사앱과 연동)" style={{ marginLeft: 6, padding: "1px 7px", borderRadius: 6, background: C.mid, color: "#fff", fontSize: 12, fontWeight: 800 }}>앱 가입</span>}</td>;
+                          if (k === "담당자") return <td key={k} style={{ ...base, fontWeight: 800, color: val ? (r.담당자Uid && r.담당자Uid === myUid ? C.blue : C.navy) : "#C0CADB" }}>{val || "-"}</td>;
                           if (k === "용도") return <td key={k} style={base}>{val ? <span style={{ padding: "2px 8px", borderRadius: 6, background: C.pale, color: C.blue, fontSize: 13.5, fontWeight: 800 }}>{val}</span> : <span style={{ color: "#C0CADB" }}>-</span>}</td>;
                           if (eq) {
                             const on = hasEquip(val);
@@ -1248,9 +1329,9 @@ export default function VehicleLedger({ company = "", drivers = [], canEdit = tr
         </Modal>
       )}
       {importing && <ImportModal existing={list} onClose={() => setImporting(false)} onImport={importRows} />}
-      {sel && !sel.virtual && (
-        <LedgerDrawer key={sel.id} narrow={narrow} onClose={closeDrawer} onDouble={() => askEdit(sel.id)}>
-          <Ledger v={sel} co={co} appDriver={sel.appDriver} linkRaw={sel.linkRaw} drivers={drivers} canEdit={canEdit} by={by} narrow purposeOpts={purposeOpts} companyOpts={companyOpts} kindOpts={kindOpts} onBack={closeDrawer} toast={toast} drawer editSignal={editReq.id === sel.id ? editReq.n : 0} />
+      {selV && (
+        <LedgerDrawer key={selV.id} narrow={narrow} onClose={closeDrawer} onDouble={() => canEdit && askEdit(selV.id)}>
+          <Ledger v={selV} co={co} appDriver={selV.appDriver} linkRaw={selV.linkRaw} drivers={drivers} canEdit={canEdit} by={by} narrow={narrow} purposeOpts={purposeOpts} companyOpts={companyOpts} kindOpts={kindOpts} onBack={closeDrawer} toast={toast} drawer editSignal={editReq.id === selV.id ? editReq.n : 0} />
         </LedgerDrawer>
       )}
       <style>{VL_CSS}</style>
