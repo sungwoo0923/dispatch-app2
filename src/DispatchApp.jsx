@@ -3148,7 +3148,7 @@ const KP_PAGE_META = {
   단가표: { en: "RATE CARD", desc: "거래처·구간별 운임 단가", icon: "M4 4h16v16H4zM4 10h16M10 4v16" },
   // 운임조회는 화면 자체 머리말(FARE LOOKUP 헤더 + 전국/자사 탭)이 있어 생략
   기사관리: { en: "DRIVERS", desc: "기사 정보와 차량 관리", icon: "M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM4 21c0-4 4-6 8-6s8 2 8 6" },
-  거래처관리: { en: "CLIENTS", desc: "거래처·하차지·고정 노선 관리", icon: "M4 21V7l8-4 8 4v14M9 21v-6h6v6" },
+  거래처관리: { en: "CLIENTS", desc: "상하차지거래처·기본거래처 관리", icon: "M4 21V7l8-4 8 4v14M9 21v-6h6v6" },
   // 지입차관리는 화면 자체 머리말(지입차량 관제)이 있어 생략
   매출관리: { en: "REVENUE", desc: "매출·매입·수익 분석", icon: "M4 20V10M10 20V4M16 20v-7M22 20H2" },
   정산관리: { en: "SETTLEMENT", desc: "거래처 정산과 기사 지급 관리", icon: "M3 6h18v12H3zM3 10h18M7 15h4" },
@@ -8574,7 +8574,9 @@ return (
         {menu === "거래처관리" && (role === "admin" || role === "totalMaster" || role === "user" || role === "test" || isViewer || !!customRole) && (
           <KpSubNav code="CLIENTS" title="거래처관리" icon="building" active={거래처관리Tab} onSelect={set거래처관리Tab}
             groups={[
-              { label: "거래처", items: [{ key: "하차지거래처", label: "하차지거래처", en: "PLACES", icon: "pin" }, { key: "기본거래처", label: "기본거래처", en: "CLIENTS", icon: "building" }, { key: "고정거래처관리", label: "고정거래처관리", en: "FIXED", icon: "idcard" }] },
+              { label: "거래처", items: [{ key: "하차지거래처", label: "상하차지거래처", en: "PLACES", icon: "pin" }, { key: "기본거래처", label: "기본거래처", en: "CLIENTS", icon: "building" }] },
+              // ⭐ 2026-11-02 "고정거래처관리" 탭은 쓰지 않아 메뉴에서만 뺐다(데이터·FixedClients 컴포넌트는 그대로 — 고정노선 등 다른 화면이 계속 읽는다).
+              // 탭 key "하차지거래처"는 내부 값이라 그대로 두고 화면 이름만 "상하차지거래처"로 바꿨다.
             ]}>
           {(거래처관리Tab === "하차지거래처" || 거래처관리Tab === "기본거래처") && (
             <ClientManagement
@@ -8590,7 +8592,7 @@ return (
               userCompany={userCompany}
             />
           )}
-          {거래처관리Tab === "고정거래처관리" && (
+          {false && 거래처관리Tab === "고정거래처관리" && (
             <div className="p-4">
               <FixedClients drivers={drivers} upsertDriver={upsertDriverSafe} userCompany={userCompany || localStorage.getItem("userCompany") || ""} role={role} isViewer={isViewer} />
             </div>
@@ -49133,7 +49135,7 @@ const tableData = React.useMemo(() => {
       <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
         <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between">
           <div>
-            <h3 className="text-[15px] font-bold text-white">하차지 거래처별 동기간 비교</h3>
+            <h3 className="text-[15px] font-bold text-white">상하차지 거래처별 동기간 비교</h3>
             <p className="text-[11px] text-white/50 mt-0.5">클릭하면 상세 추이를 확인합니다</p>
           </div>
           <div className="text-[11px] text-white/40 flex gap-4">
@@ -49208,7 +49210,7 @@ const tableData = React.useMemo(() => {
                 );
               })}
               {!tableData.length && (
-                <tr><td colSpan={12} className="text-center text-gray-500 py-16 text-[14px]">등록된 하차지 거래처가 없습니다</td></tr>
+                <tr><td colSpan={12} className="text-center text-gray-500 py-16 text-[14px]">등록된 상하차지 거래처가 없습니다</td></tr>
               )}
             </tbody>
             {/* 합계 행 */}
@@ -57192,6 +57194,16 @@ const KP_BTN = "h-11 px-4 rounded-[13px] bg-white border border-[#E3E8F0] text-[
 const KP_BTN_PRIMARY = "h-11 px-4 rounded-[13px] text-white text-[13.5px] font-black shadow-[0_10px_22px_rgba(15,26,48,0.25)] hover:brightness-110 transition whitespace-nowrap";
 const KP_BTN_PRIMARY_BG = { background: "linear-gradient(120deg,#0F1A30,#2D4C82)" };
 const KP_BTN_DANGER = "h-11 px-4 rounded-[13px] bg-white border border-[#0F1A30] text-[#0F1A30] text-[13px] font-black hover:bg-[#0F1A30] hover:text-white transition whitespace-nowrap";
+// ⭐ 2026-11-02 거래처관리 표 체크박스 — 배차현황 표(.kp-grid input[type=checkbox])와 같은 모양(15px · 남색 #2D4C82 체크).
+//   indeterminate(일부 선택)도 표시한다.
+function KpCheckbox({ checked = false, indeterminate = false, onChange, onClick, title }) {
+  const ref = React.useRef(null);
+  React.useEffect(() => { if (ref.current) ref.current.indeterminate = !!indeterminate && !checked; }, [indeterminate, checked]);
+  return (
+    <input ref={ref} autoComplete="off" type="checkbox" checked={!!checked} onChange={onChange} onClick={onClick} title={title}
+      className="w-[15px] h-[15px] accent-[#2D4C82] cursor-pointer align-middle" />
+  );
+}
 function KpStatTile({ on, en, label, value, onClick }) {
   return (
     <button onClick={onClick}
@@ -57520,9 +57532,16 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
   }, [rows, q, showAllClients]);
 
   const toggleOne = (id) => setSelected((prev) => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  // ⭐ 2026-11-02 전체선택이 일부만 되던 문제 — 행 체크박스·선택삭제·선택수정은 (id || 거래처명)을 키로 쓰는데
+  //   전체선택만 거래처명으로 넣어서, id가 있는 거래처는 체크가 안 보이고 삭제도 안 됐다. 같은 키로 맞추고,
+  //   지금 목록(검색·전체보기 결과)에 보이는 거래처 전부를 선택/해제한다.
+  const clientRowId = (r) => r.id || r.거래처명 || "";
+  const filteredClientIds = React.useMemo(() => filtered.map(clientRowId).filter(Boolean), [filtered]); // eslint-disable-line react-hooks/exhaustive-deps
+  const clientSelInView = React.useMemo(() => filteredClientIds.reduce((n, id) => n + (selected.has(id) ? 1 : 0), 0), [filteredClientIds, selected]);
+  const clientAllChecked = filteredClientIds.length > 0 && clientSelInView === filteredClientIds.length;
   const toggleAll = () => {
-    if (selected.size === filtered.length) setSelected(new Set());
-    else setSelected(new Set(filtered.map((r) => r.거래처명).filter(Boolean)));
+    if (clientAllChecked) setSelected((prev) => { const n = new Set(prev); filteredClientIds.forEach((id) => n.delete(id)); return n; });
+    else setSelected((prev) => { const n = new Set(prev); filteredClientIds.forEach((id) => n.add(id)); return n; });
   };
 
   const handleBlur = async (row, key, val) => {
@@ -57778,15 +57797,15 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
     />
   ) : (
     <BulkUploadChooser
-      title="하차지거래처 대용량 업로드" subtitle="엑셀로 하차지를 한꺼번에 등록합니다. 처음이면 양식부터 받아 주세요."
+      title="상하차지거래처 대용량 업로드" subtitle="엑셀로 상하차지를 한꺼번에 등록합니다. 처음이면 양식부터 받아 주세요."
       templateDesc="업체명·주소·담당자·담당자번호·메모 열과 예시, 작성 안내가 들어 있는 양식을 받습니다."
       templateTips={["업체명·주소는 필수", "같은 주소가 이미 있으면 건너뜀(중복 방지)"]}
       uploadDesc="작성한 양식을 고르면 새로 등록될 건수를 먼저 보여드리고, 확인 후 반영합니다."
       uploadTips={["빈 줄·주소 없는 줄은 건너뜀", "주소는 도로명/지번 모두 가능"]}
       onClose={() => setClientBulkKind(null)}
-      onTemplate={() => downloadTemplateXlsx(XLSX, "하차지거래처_양식.xlsx", "하차지", ["업체명", "주소", "담당자", "담당자번호", "메모"],
+      onTemplate={() => downloadTemplateXlsx(XLSX, "상하차지거래처_양식.xlsx", "상하차지", ["업체명", "주소", "담당자", "담당자번호", "메모"],
         [["CJ 대구센터", "대구 달서구 성서로 10", "박과장", "010-2222-3333", "하차 09시 이후"], ["이마트 광주센터", "광주 광산구 하남산단 5", "", "", ""]],
-        [["예시 2줄", "예시 줄은 지우고 하차지를 한 줄에 하나씩 입력하세요."], ["업체명 · 주소", "필수. 주소가 없으면 그 줄은 건너뜁니다."], ["중복", "이미 같은 주소로 등록된 하차지는 건너뜁니다."]])}
+        [["예시 2줄", "예시 줄은 지우고 상하차지를 한 줄에 하나씩 입력하세요."], ["업체명 · 주소", "필수. 주소가 없으면 그 줄은 건너뜁니다."], ["중복", "이미 같은 주소로 등록된 상하차지는 건너뜁니다."]])}
       onFile={(e) => { setClientBulkKind(null); onExcelPlaces(e); }}
     />
   ));
@@ -57979,9 +57998,13 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
   }, [mergedPlaceRows, placeQ, placeSearched, placeFilterType, placeGradeFilter, subTab]);
 
   const togglePlaceOne = (id) => setPlaceSelected((prev) => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  // ⭐ 2026-11-02 전체선택은 "더 보기"로 아직 안 펼친 줄까지 지금 검색결과 전체를 고른다(개수는 선택삭제 버튼에 표시)
+  const filteredPlaceIds = React.useMemo(() => filteredPlaces.map((p) => p.id || p.업체명).filter(Boolean), [filteredPlaces]);
+  const placeSelInView = React.useMemo(() => filteredPlaceIds.reduce((n, id) => n + (placeSelected.has(id) ? 1 : 0), 0), [filteredPlaceIds, placeSelected]);
+  const placeAllChecked = filteredPlaceIds.length > 0 && placeSelInView === filteredPlaceIds.length;
   const togglePlaceAll = () => {
-    if (placeSelected.size === filteredPlaces.length) setPlaceSelected(new Set());
-    else setPlaceSelected(new Set(filteredPlaces.map((p) => p.id || p.업체명).filter(Boolean)));
+    if (placeAllChecked) setPlaceSelected((prev) => { const n = new Set(prev); filteredPlaceIds.forEach((id) => n.delete(id)); return n; });
+    else setPlaceSelected((prev) => { const n = new Set(prev); filteredPlaceIds.forEach((id) => n.add(id)); return n; });
   };
 
   const handlePlaceBlur = async (row, key, val) => {
@@ -58069,8 +58092,8 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
         for (const p of placeRows) { const k = normalizePlace(p.주소 || ""); if (k) addrMap.set(k, p); }
         let ok = 0;
         const newRows = json.filter((r) => { const n = (r.업체명||r["하차지명"]||r["상호"]||"").toString().trim(); const k = normalizePlace((r.주소||r["하차지주소"]||"").toString().trim()); return n && k && !addrMap.has(k); });
-        if (!newRows.length) { showAlert("새로 등록할 하차지가 없습니다.\n(업체명·주소가 비었거나, 이미 같은 주소로 등록된 하차지입니다)"); return; }
-        if (!await kpConfirm(`하차지 ${newRows.length}곳을 새로 등록할까요?${json.length - newRows.length ? `\n(빈 줄·주소 없음·이미 등록된 ${json.length - newRows.length}줄은 건너뜁니다)` : ""}`)) return;
+        if (!newRows.length) { showAlert("새로 등록할 상하차지가 없습니다.\n(업체명·주소가 비었거나, 이미 같은 주소로 등록된 상하차지입니다)"); return; }
+        if (!await kpConfirm(`상하차지 ${newRows.length}곳을 새로 등록할까요?${json.length - newRows.length ? `\n(빈 줄·주소 없음·이미 등록된 ${json.length - newRows.length}줄은 건너뜁니다)` : ""}`)) return;
         for (const r of newRows) {
           const 업체명 = (r.업체명||r["하차지명"]||r["상호"]||"").toString().trim(); if (!업체명) continue;
           const 주소 = (r.주소||r["하차지주소"]||"").toString().trim();
@@ -58092,8 +58115,8 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
       담당자번호: r.담당자번호||"", 등급: r.등급||"일반", 메모: r.메모||"",
     })));
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "하차지목록");
-    XLSX.writeFile(wb, "하차지_목록.xlsx");
+    XLSX.utils.book_append_sheet(wb, ws, "상하차지목록");
+    XLSX.writeFile(wb, "상하차지_목록.xlsx");
   };
 
   // ═══════════════════════════════════════════════════
@@ -58107,7 +58130,7 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
       {!hideTabs && (
         <div className="flex gap-2 mb-4">
           {[
-            { key: "하차지", label: "하차지 거래처", count: gradeStats.전체 },
+            { key: "하차지", label: "상하차지 거래처", count: gradeStats.전체 },
             { key: "기본", label: "기본 거래처", count: rows.length },
           ].map(({ key, label, count }) => (
             <button key={key} onClick={() => setSubTab(key)}
@@ -58131,7 +58154,7 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
 
           {duplicatePlaceGroups.length > 0 && (
             <div className="flex items-center gap-2 bg-[#1B2B4B]/5 border border-[#1B2B4B]/20 rounded-lg px-4 py-2 text-sm text-[#1B2B4B]">
-              주소 기준 중복 하차지 <b>{duplicatePlaceGroups.length}건</b> 발견됨
+              주소 기준 중복 상하차지 <b>{duplicatePlaceGroups.length}건</b> 발견됨
               <button onClick={() => setShowDupPreview(true)}
                 className="ml-2 px-3 py-1 bg-[#1B2B4B] text-white rounded text-xs font-semibold hover:bg-[#243a60] transition"><EditableText id="misc.btn.54416.미리보기" defaultText="미리보기" /></button>
             </div>
@@ -58154,9 +58177,12 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
           <div className="flex flex-wrap items-center gap-2">
             <KpSearchBar options={["업체명", "주소"]} field={placeFilterType} onField={setPlaceFilterType}
               value={placeQ} onChange={(v) => { setPlaceQ(v); setPlaceSearched(false); }} onSearch={() => setPlaceSearched(true)}
-              placeholder="하차지 업체명 · 주소로 찾기 (Enter)" />
+              placeholder="상하차지 업체명 · 주소로 찾기 (Enter)" />
             {(placeSearched || placeGradeFilter !== "전체") && (
               <span className="text-[13px] font-bold text-[#5B6B85] px-1 whitespace-nowrap">검색결과 <b className="text-[#0F1A30] tabular-nums">{filteredPlaces.length}</b>건</span>
+            )}
+            {placeSelInView > 0 && (
+              <span className="text-[13px] font-bold text-[#5B6B85] px-1 whitespace-nowrap">선택 <b className="text-[#2D4C82] tabular-nums">{placeSelInView.toLocaleString()}</b>건</span>
             )}
             <div className="ml-auto flex items-center gap-2">
               <button onClick={() => setShowNewPlaceForm(true)}
@@ -58184,7 +58210,7 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
             <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/40">
               <div className="bg-white rounded-2xl shadow-2xl w-[600px] overflow-hidden" onClick={e => e.stopPropagation()}>
                 <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between">
-                  <h3 className="text-white font-bold text-[15px]"><EditableText id="client.newPlaceForm.title" defaultText="신규 하차지 등록" /></h3>
+                  <h3 className="text-white font-bold text-[15px]"><EditableText id="client.newPlaceForm.title" defaultText="신규 상하차지 등록" /></h3>
                   <button onClick={() => setShowNewPlaceForm(false)} className="text-white/60 hover:text-white text-xl leading-none">✕</button>
                 </div>
                 <div className="px-6 py-5 grid grid-cols-2 gap-4">
@@ -58245,8 +58271,8 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
                   <thead>
                     <tr className="bg-[#1B2B4B]">
                       <th className="px-3 py-3 text-white font-bold text-center w-10">
-                        <input autoComplete="off" type="checkbox" onChange={togglePlaceAll}
-                          checked={filteredPlaces.length > 0 && placeSelected.size === filteredPlaces.length} />
+                        <KpCheckbox onChange={togglePlaceAll} checked={placeAllChecked} indeterminate={placeSelInView > 0}
+                          title={placeAllChecked ? "전체 해제" : `검색결과 ${filteredPlaceIds.length.toLocaleString()}건 전체 선택`} />
                       </th>
                       {["업체명","주소","담당자","담당자번호","등급","일반메모","오더메모","안내사항","삭제"].map((h) => (
                         <th key={h} className="px-3 py-3 text-white font-bold text-center whitespace-nowrap"><EditableText id={`client.table.header.${h}`} defaultText={h} /></th>
@@ -58267,10 +58293,10 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
                             기사전달주의사항: (r.기사전달주의사항 || "").trim() ? r.기사전달주의사항 : defaultDriverNoticeTemplate(r.업체명),
                           })}
                           className={`hover:bg-blue-50/60 transition border-b border-gray-100 cursor-pointer ${
-                            grade === "블랙" ? "bg-gray-100" : grade === "주의" ? "bg-orange-50/60" : grade === "이탈" ? "bg-red-50/40" : i%2 ? "bg-gray-50/50" : "bg-white"
+                            placeSelected.has(id) ? "bg-[#EAF1FF] hover:bg-[#E1EBFD]" : grade === "블랙" ? "bg-gray-100" : grade === "주의" ? "bg-orange-50/60" : grade === "이탈" ? "bg-red-50/40" : i%2 ? "bg-gray-50/50" : "bg-white"
                           }`}>
-                          <td className="px-3 py-2.5 text-center" onClick={e => e.stopPropagation()}>
-                            <input autoComplete="off" type="checkbox" checked={placeSelected.has(id)} onChange={() => togglePlaceOne(id)} />
+                          <td className="px-3 py-2.5 text-center" onClick={e => e.stopPropagation()} style={placeSelected.has(id) ? { boxShadow: "inset 3px 0 0 #2D4C82" } : undefined}>
+                            <KpCheckbox checked={placeSelected.has(id)} onChange={() => togglePlaceOne(id)} />
                           </td>
                           <td className="px-2 py-2.5 text-[13px] font-semibold text-gray-800 max-w-[190px] truncate text-center">{r.업체명||""}</td>
                           <td className="px-2 py-2.5 text-[13px] text-gray-600 max-w-[250px] truncate text-center">{r.주소||""}</td>
@@ -58327,7 +58353,7 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
   <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/40">
     <div className="bg-white rounded-2xl shadow-2xl w-[820px] max-h-[85vh] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
       <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between shrink-0">
-        <h3 className="text-white font-bold text-[15px]"><EditableText id="client.dupPopup.title" defaultText="하차지거래처 중복정리" /></h3>
+        <h3 className="text-white font-bold text-[15px]"><EditableText id="client.dupPopup.title" defaultText="상하차지거래처 중복정리" /></h3>
         <button onClick={() => setPlaceDupOpen(false)} className="text-white/60 hover:text-white text-xl">✕</button>
       </div>
       <div className="flex-1 overflow-y-auto p-6">
@@ -58546,7 +58572,7 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
           {/* 툴바 */}
           <div className="flex flex-wrap items-center gap-2">
             <KpSearchBar value={q} onChange={setQ} onSearch={() => {}} placeholder="거래처명 · 사업자번호 · 담당자로 바로 찾기" />
-            <span className="text-[13px] font-bold text-[#5B6B85] px-1 whitespace-nowrap"><b className="text-[#0F1A30] tabular-nums">{filtered.length}</b>건</span>
+            <span className="text-[13px] font-bold text-[#5B6B85] px-1 whitespace-nowrap"><b className="text-[#0F1A30] tabular-nums">{filtered.length}</b>건{clientSelInView > 0 && <> · 선택 <b className="text-[#2D4C82] tabular-nums">{clientSelInView}</b>건</>}</span>
             <button
               onClick={() => { setShowAllClients(v => !v); setQ(""); }}
               className={showAllClients ? "h-11 px-4 rounded-[13px] bg-[#0F1A30] text-white text-[13px] font-bold whitespace-nowrap" : KP_BTN}>
@@ -58555,7 +58581,7 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
             <div className="ml-auto flex flex-wrap items-center gap-2">
               <button onClick={() => { setShowImportPopup(true); setImportQ(""); setImportSelected([]); }}
                 className={KP_BTN}>
-                <EditableText id="client.baseClient.toolbar.하차지에서불러오기" defaultText="하차지에서 불러오기" />
+                <EditableText id="client.baseClient.toolbar.하차지에서불러오기" defaultText="상하차지에서 불러오기" />
               </button>
               {mismatchCandidates.length > 0 && (
                 <button onClick={() => { setMismatchSelected(new Set(mismatchCandidates.map(m => m.client.id || m.client.거래처명))); setShowMismatchPopup(true); }}
@@ -58704,7 +58730,7 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
                   </div>
                   <div className="col-span-2">
                     <label className="block text-[12px] font-semibold text-gray-500 mb-1"><EditableText id="clientEdit.label.안내사항" defaultText="안내사항 (기사전달주의사항)" /></label>
-                    <div className="text-[11px] text-gray-500 mb-1">이 거래처가 상/하차지로 포함된 오더를 "기사전달용"으로 복사할 때 자동으로 함께 붙습니다. 하차지거래처에 같은 이름이 있으면 자동으로 동기화됩니다.</div>
+                    <div className="text-[11px] text-gray-500 mb-1">이 거래처가 상/하차지로 포함된 오더를 "기사전달용"으로 복사할 때 자동으로 함께 붙습니다. 상하차지거래처에 같은 이름이 있으면 자동으로 동기화됩니다.</div>
                     <textarea rows={3} className="border border-gray-200 rounded-lg px-3 py-2 text-[13px] w-full focus:border-[#1B2B4B] outline-none resize-y"
                       placeholder="예: 안전화 착용 필수"
                       value={editClientModal.기사전달주의사항 || ""}
@@ -58888,8 +58914,8 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
                   <thead>
                     <tr className="bg-[#1B2B4B]">
                       <th className="px-3 py-3 text-white font-bold text-center w-10">
-                        <input autoComplete="off" type="checkbox" onChange={toggleAll}
-                          checked={filtered.length > 0 && selected.size === filtered.length} />
+                        <KpCheckbox onChange={toggleAll} checked={clientAllChecked} indeterminate={clientSelInView > 0}
+                          title={clientAllChecked ? "전체 해제" : `목록 ${filteredClientIds.length.toLocaleString()}건 전체 선택`} />
                       </th>
                       {["거래처명","사업자번호","대표자","업태","종목","주소","담당자","연락처","이메일","등급","일반메모","오더메모","안내사항"].map(h => (
                         <th key={h} className="px-3 py-3 text-white font-bold text-center whitespace-nowrap"><EditableText id={`client.table.header.${h}`} defaultText={h} /></th>
@@ -58902,7 +58928,7 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
                       const isEditing = editingClientId === id;
                       return (
                         <tr key={id}
-                          className={`transition border-b border-gray-100 ${i%2?"bg-gray-50/50":"bg-white"} hover:bg-blue-50/30 cursor-pointer`}
+                          className={`transition border-b border-gray-100 ${selected.has(id) ? "bg-[#EAF1FF] hover:bg-[#E1EBFD]" : `${i%2?"bg-gray-50/50":"bg-white"} hover:bg-blue-50/30`} cursor-pointer`}
                           onDoubleClick={() => setEditClientModal({
                             ...r,
                             contacts: Array.isArray(r.contacts) && r.contacts.length
@@ -58910,8 +58936,8 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
                               : (r.담당자 ? [{ name: r.담당자, phone: r.연락처 || "", isPrimary: true }] : []),
                             기사전달주의사항: (r.기사전달주의사항 || "").trim() ? r.기사전달주의사항 : defaultDriverNoticeTemplate(r.거래처명),
                           })}>
-                          <td className="px-3 py-2.5 text-center">
-                            <input autoComplete="off" type="checkbox" checked={selected.has(id)} onChange={(e) => { e.stopPropagation(); toggleOne(id); }} onClick={e => e.stopPropagation()} />
+                          <td className="px-3 py-2.5 text-center" style={selected.has(id) ? { boxShadow: "inset 3px 0 0 #2D4C82" } : undefined}>
+                            <KpCheckbox checked={selected.has(id)} onChange={(e) => { e.stopPropagation(); toggleOne(id); }} onClick={e => e.stopPropagation()} />
                           </td>
                           {["거래처명","사업자번호"].map(key => (
                             <td key={key} className="px-2 py-2.5 text-center">
@@ -58986,7 +59012,7 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
         <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/40">
           <div className="bg-white rounded-2xl shadow-2xl w-[580px] max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
             <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between sticky top-0 z-10">
-              <h3 className="text-white font-bold text-[15px]">하차지 수정 — {editPlaceModal.업체명}</h3>
+              <h3 className="text-white font-bold text-[15px]">상하차지 수정 — {editPlaceModal.업체명}</h3>
               <button onClick={() => setEditPlaceModal(null)} className="text-white/60 hover:text-white text-xl">✕</button>
             </div>
             <div className="px-6 py-5 grid grid-cols-2 gap-4">
@@ -59117,7 +59143,7 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
             <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between shrink-0">
               <div>
                 <h3 className="text-white font-bold text-[15px]"><EditableText id="client.mismatchPopup.title" defaultText="담당자 불일치 복구" /></h3>
-                <p className="text-white/55 text-[12px] mt-0.5">이름이 같은 기본거래처/하차지거래처인데 담당자 목록이 서로 다른 항목입니다. 선택하면 양쪽 담당자를 합쳐서 반영하고, 이후로는 자동으로 서로 동기화됩니다.</p>
+                <p className="text-white/55 text-[12px] mt-0.5">이름이 같은 기본거래처/상하차지거래처인데 담당자 목록이 서로 다른 항목입니다. 선택하면 양쪽 담당자를 합쳐서 반영하고, 이후로는 자동으로 서로 동기화됩니다.</p>
               </div>
               <button onClick={() => setShowMismatchPopup(false)}
                 className="text-white/60 hover:text-white text-xl leading-none">×</button>
@@ -59148,8 +59174,8 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
                         <div className="flex-1 min-w-0">
                           <div className="text-[13px] font-bold text-gray-800">{m.client.거래처명}</div>
                           <div className="text-[12px] text-gray-500 mt-0.5">기본거래처 담당자: {m.cContacts.map(c => c.name).filter(Boolean).join(", ") || "-"}</div>
-                          <div className="text-[12px] text-gray-500 mt-0.5">하차지거래처 담당자: {m.pContacts.map(c => c.name).filter(Boolean).join(", ") || "-"}</div>
-                          {m.onlyInPlace.length > 0 && <div className="text-[12px] text-orange-600 mt-0.5">하차지에만 있음: {m.onlyInPlace.join(", ")}</div>}
+                          <div className="text-[12px] text-gray-500 mt-0.5">상하차지거래처 담당자: {m.pContacts.map(c => c.name).filter(Boolean).join(", ") || "-"}</div>
+                          {m.onlyInPlace.length > 0 && <div className="text-[12px] text-orange-600 mt-0.5">상하차지에만 있음: {m.onlyInPlace.join(", ")}</div>}
                           {m.onlyInClient.length > 0 && <div className="text-[12px] text-orange-600 mt-0.5">기본거래처에만 있음: {m.onlyInClient.join(", ")}</div>}
                         </div>
                       </label>
@@ -59176,7 +59202,7 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
           <div className="bg-white rounded-2xl shadow-2xl w-[640px] max-h-[85vh] flex flex-col overflow-hidden">
             <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between shrink-0">
               <div>
-                <h3 className="text-white font-bold text-[15px]"><EditableText id="client.importPopup.title" defaultText="하차지에서 기본 거래처 불러오기" /></h3>
+                <h3 className="text-white font-bold text-[15px]"><EditableText id="client.importPopup.title" defaultText="상하차지에서 기본 거래처 불러오기" /></h3>
                 <p className="text-white/55 text-[12px] mt-0.5"><EditableText id="client.importPopup.subtitle" defaultText="담당자, 연락처, 메모 정보가 그대로 반영됩니다" /></p>
               </div>
               <button onClick={() => setShowImportPopup(false)}
