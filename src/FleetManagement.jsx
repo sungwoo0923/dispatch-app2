@@ -44,13 +44,13 @@ import VehicleCarePanel from "./VehicleCarePanel";
 import { BatchStatementsPanel, PenaltyCenter } from "./FleetPayDocs";
 import { AppStatusBadge } from "./FleetDriverExtra";
 import FixedRoutes from "./FixedRoutes";
+import FleetOrderPanel from "./FleetOrderPanel"; // ⭐ 2026-11-02 노선관리 오더 더블클릭 → 오더 복사/수정 패널
 import DeliverySignaturePage from "./DeliverySignaturePage";
 import { careSummary, vehicleDefaults } from "./vehicleCare";
 // ⭐ 2026-11-02 차량관리대장 — 회사별 맞춤 기능(companyFeatures.vehicleLedger)이 켜진 회사에만 모듈이 보인다
 import { useCompanyFeatures } from "./companyFeatures";
 import { lazyView } from "./lazyLoad";
-import { fmtMoney, fmtPhone } from "./formatInput";
-import { VehicleTypePicker } from "./vehicleTypes"; // 🚚 2026-11-02 회사 공용 차량종류
+import { fmtPhone } from "./formatInput";
 const VehicleLedger = lazyView(() => import("./VehicleLedger"));
 
 // ─── 상수 ────────────────────────────────────────────────────────────────────
@@ -2159,75 +2159,9 @@ function OrderContextMenu({ x, y, items, onClose }) {
   );
 }
 
-// ─── 오더 수정 모달 ───────────────────────────────────────────────────────────
-// ⭐ 사용자 요청 — DispatchApp.jsx의 "오더복사/수정 패널"은 이 화면과 다른 파일/
-// state에 묶여있어 그대로 재사용하기 어렵다(editTarget/copyTarget이 DispatchApp
-// 내부 state). 그 대신 자주 고치는 핵심 필드만 담은 가벼운 자체 수정 모달로
-// 구현 — 저장은 이 화면 다른 쓰기들과 동일하게 r.__col 기준 updateDoc 직접 호출.
-function OrderEditModal({ order, onClose }) {
-  const [form, setForm] = useState(() => ({
-    상차지명: order.상차지명 || "",
-    상차지주소: order.상차지주소 || "",
-    하차지명: order.하차지명 || "",
-    하차지주소: order.하차지주소 || "",
-    상차일: order.상차일 || "",
-    상차시간: order.상차시간 || "",
-    하차일: order.하차일 || "",
-    하차시간: order.하차시간 || "",
-    화물내용: order.화물내용 || "",
-    차량톤수: order.차량톤수 || "",
-    차량종류: order.차량종류 || "",
-    기사운임: order.기사운임 ? String(order.기사운임).replace(/[^\d]/g, "") : "",
-    전달사항: order.전달사항 || "",
-  }));
-  const [saving, setSaving] = useState(false);
-  const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
-
-  const save = async () => {
-    setSaving(true);
-    try {
-      const patch = { ...form, 기사운임: form.기사운임 ? Number(form.기사운임) : 0 };
-      await updateDoc(doc(db, order.__col || "orders", order._id), patch);
-      onClose();
-    } catch {
-      window.alert("저장에 실패했습니다.");
-      setSaving(false);
-    }
-  };
-
-  const inputStyle = { width: "100%", padding: "8px 10px", borderRadius: 8, border: "1px solid #d1d5db", fontSize: 13, color: "#111827", boxSizing: "border-box" };
-  const labelStyle = { fontSize: 12, fontWeight: 700, color: "#6b7280", marginBottom: 4, display: "block" };
-
-  return (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.45)", zIndex: 100010, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }} onClick={onClose}>
-      <div style={{ background: "#fff", borderRadius: 14, width: "min(560px, 100%)", maxHeight: "88vh", overflowY: "auto", boxShadow: "0 10px 40px rgba(0,0,0,.3)" }} onClick={(e) => e.stopPropagation()}>
-        <div style={{ background: NAVY, padding: "14px 18px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <span style={{ color: "#fff", fontWeight: 800, fontSize: 15 }}>오더 수정</span>
-          <button onClick={onClose} style={{ border: "none", background: "transparent", color: "#fff", fontSize: 18, cursor: "pointer" }}>✕</button>
-        </div>
-        <div style={{ padding: 18, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-          <div><label style={labelStyle}>상차지명</label><input style={inputStyle} value={form.상차지명} onChange={set("상차지명")} /></div>
-          <div><label style={labelStyle}>하차지명</label><input style={inputStyle} value={form.하차지명} onChange={set("하차지명")} /></div>
-          <div style={{ gridColumn: "1 / -1" }}><label style={labelStyle}>상차지 주소</label><input style={inputStyle} value={form.상차지주소} onChange={set("상차지주소")} /></div>
-          <div style={{ gridColumn: "1 / -1" }}><label style={labelStyle}>하차지 주소</label><input style={inputStyle} value={form.하차지주소} onChange={set("하차지주소")} /></div>
-          <div><label style={labelStyle}>상차일</label><CustomDatePicker value={form.상차일} onChange={(e) => setForm((f) => ({ ...f, 상차일: e.target.value }))} /></div>
-          <div><label style={labelStyle}>상차시간</label><input style={inputStyle} value={form.상차시간} onChange={set("상차시간")} placeholder="즉시" /></div>
-          <div><label style={labelStyle}>하차일</label><CustomDatePicker value={form.하차일} onChange={(e) => setForm((f) => ({ ...f, 하차일: e.target.value }))} /></div>
-          <div><label style={labelStyle}>하차시간</label><input style={inputStyle} value={form.하차시간} onChange={set("하차시간")} placeholder="즉시" /></div>
-          <div><label style={labelStyle}>화물내용</label><input style={inputStyle} value={form.화물내용} onChange={set("화물내용")} /></div>
-          <div><label style={labelStyle}>차량톤수</label><input style={inputStyle} value={form.차량톤수} onChange={set("차량톤수")} /></div>
-          <div><label style={labelStyle}>차량종류</label><VehicleTypePicker style={{ ...inputStyle, background: "#fff", cursor: "pointer", fontWeight: 700 }} value={form.차량종류} placeholder="선택" noneLabel="선택 안 함" onChange={(v) => setForm((f) => ({ ...f, 차량종류: v }))} /></div>{/* 🚚 2026-11-02 회사 공용 차량종류 */}
-          <div><label style={labelStyle}>기사운임</label><input style={{ ...inputStyle, textAlign: "right" }} inputMode="numeric" value={fmtMoney(form.기사운임)} onChange={(e) => setForm((f) => ({ ...f, 기사운임: e.target.value.replace(/[^\d]/g, "") }))} /></div>
-          <div style={{ gridColumn: "1 / -1" }}><label style={labelStyle}>메모(전달사항)</label><textarea style={{ ...inputStyle, minHeight: 70, resize: "vertical" }} value={form.전달사항} onChange={set("전달사항")} /></div>
-        </div>
-        <div style={{ padding: "0 18px 18px", display: "flex", gap: 8 }}>
-          <button onClick={onClose} style={{ flex: 1, padding: "10px 0", borderRadius: 9, border: "1px solid #d1d5db", background: "#fff", color: "#6b7280", fontWeight: 700, fontSize: 13, cursor: "pointer" }}>취소</button>
-          <button onClick={save} disabled={saving} style={{ flex: 1, padding: "10px 0", borderRadius: 9, border: "none", background: NAVY, color: "#fff", fontWeight: 700, fontSize: 13, cursor: saving ? "default" : "pointer", opacity: saving ? .6 : 1 }}>{saving ? "저장중…" : "저장"}</button>
-        </div>
-      </div>
-    </div>
-  );
-}
+// ─── 오더 수정 패널 ───────────────────────────────────────────────────────────
+// ⭐ 2026-11-02 예전 가벼운 "오더 수정" 모달 → 배차관리 4/5파트 "오더 복사 / 수정 패널"과 같은 모양의
+//  FleetOrderPanel(src/FleetOrderPanel.jsx)로 교체 — 오더 줄 더블클릭 · 오른쪽 메뉴 "수정" 둘 다 이 패널.
 
 // ─── 기사복사 모달 ────────────────────────────────────────────────────────────
 // ⭐ 사용자 요청 — DispatchApp.jsx "복사 방식 선택"(기사복사) 팝업과 완전동일한
@@ -3065,7 +2999,9 @@ function DriverRouteCard({ driver, orders, selectedDate, rangeEndDate, isSingleD
                   const seqIdx = activeSeq.findIndex(x => (x._id ?? x.id) === (r._id ?? r.id));
                   const prevOrder = seqIdx > 0 ? activeSeq[seqIdx - 1] : null;
                   return (
-                    <tr key={r._id || i} style={{ borderTop: i > 0 ? "1px solid #f3f4f6" : "none", background: isDone ? "#f6f7f9" : undefined, position: "relative" }} onContextMenu={(e) => openRowMenu(e, r)}>
+                    <tr key={r._id || i} title="두 번 누르면 오더 수정 패널 · 오른쪽 버튼은 메뉴" style={{ borderTop: i > 0 ? "1px solid #f3f4f6" : "none", background: isDone ? "#f6f7f9" : undefined, position: "relative", cursor: "default" }} onContextMenu={(e) => openRowMenu(e, r)}
+                      onMouseDown={(e) => { if (e.detail > 1 && !e.target.closest("input,textarea")) e.preventDefault(); }}
+                      onDoubleClick={(e) => { if (e.target.closest("button,a,input,select,textarea,[role=button],[data-no-dbl]")) return; setEditOrder(r); }}>
                       <td style={{ ...dimCell, padding: "10px 6px", textAlign: "center", fontSize: 13, fontWeight: 700, color: "#9ca3af" }}>{i + 1}</td>
                       <td style={{ ...dimCell, padding: "10px 16px", textAlign: "center", whiteSpace: "nowrap" }}>
                         <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
@@ -3190,7 +3126,7 @@ function DriverRouteCard({ driver, orders, selectedDate, rangeEndDate, isSingleD
           onClose={() => setRouteMapOrder(null)}
         />
       )}
-      {editOrder && <OrderEditModal order={editOrder} onClose={() => setEditOrder(null)} />}
+      {editOrder && <FleetOrderPanel order={editOrder} onClose={() => setEditOrder(null)} onCopy={() => { const o = editOrder; setEditOrder(null); setCopyOrder(o); }} />}
       {copyOrder && <OrderCopyModal order={copyOrder} driver={driver} onClose={() => setCopyOrder(null)} />}
       {journeyOpen && <DriverJourneyPanel driver={driver} orders={displayOrders} live={live} dispatchData={dispatchData} onClose={() => setJourneyOpen(false)} />}
     </div>

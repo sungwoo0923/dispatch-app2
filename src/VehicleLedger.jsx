@@ -24,7 +24,7 @@ import { fmtPhone as fmtPhoneLive } from "./formatInput"; // 입력 중 하이�
 const C = { ink: "#0B1428", navy: "#0F1A30", mid: "#1B2B4B", blue: "#2D4C82", sky: "#8FB0F0", line: "#E3E8F0", soft: "#F4F6FA", sub: "#5B6B85", mute: "#9AA9C3", pale: "#EEF2F9" };
 const MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
 const TAB = { fontVariantNumeric: "tabular-nums" };
-const VL_CSS = `.vl-row{background:#fff}.vl-row:hover{background:#F2F6FD}.vl-card{transition:box-shadow .15s,border-color .15s}.vl-card:hover{border-color:#8FB0F0 !important;box-shadow:0 8px 22px rgba(27,43,75,.10)}
+const VL_CSS = `.vl-row{background:#fff}.vl-row:hover{background:#F2F6FD}.vl-row.vl-hot{background:#E6EEFB}.vl-row.vl-hot>td:first-child{box-shadow:inset 3px 0 0 #2D4C82}.vl-row:focus-visible{background:#E6EEFB}.vl-card{transition:box-shadow .15s,border-color .15s}.vl-card:hover{border-color:#8FB0F0 !important;box-shadow:0 8px 22px rgba(27,43,75,.10)}
         .vl-spin{display:inline-block;width:14px;height:14px;border:2px solid #DCE3EE;border-top-color:#1B2B4B;border-radius:50%;animation:vlspin .8s linear infinite;vertical-align:-2px;margin-right:6px}@keyframes vlspin{to{transform:rotate(360deg)}}`;
 const HERO_BG = "linear-gradient(rgba(143,176,240,.06) 1px, transparent 1px) 0 0/22px 22px, linear-gradient(90deg, rgba(143,176,240,.06) 1px, transparent 1px) 0 0/22px 22px, linear-gradient(120deg,#0B1428 0%,#1B2B4B 60%,#2D4C82 100%)";
 
@@ -908,7 +908,8 @@ function RowActs({ onEdit, onDel }) {
 // ─────────────────────────────────────────────────────────────────────────────
 // 기존 "차량 관리"(기사앱 점검·소모품) 칸 + 태진 "차량 전체 현황" 칸
 const COLS = [
-  ["순번", "순번", 56], ["차량번호", "차량번호", 150], ["용도", "차량종류", 110], ["톤수", "톤수", 70], ["회사", "회사", 110], ["현재기사", "현재 기사", 118], ["담당자", "담당자", 96], ["기사연락처", "기사 연락처", 136], ["기사변경일", "기사 변경일", 116],
+  // ⭐ 2026-11-02 담당자는 순번 바로 뒤(고정 칸) — 누가 맡은 차량인지 먼저 보이게
+  ["순번", "순번", 56], ["담당자", "담당자", 96], ["차량번호", "차량번호", 150], ["용도", "차량종류", 110], ["톤수", "톤수", 70], ["회사", "회사", 110], ["현재기사", "현재 기사", 118], ["기사연락처", "기사 연락처", 136], ["기사변경일", "기사 변경일", 116],
   ["차대번호", "차대번호", 180], ["보험사", "보험사", 90], ["유류카드번호", "유류", 120], ["하이패스", "하이패스", 100], ["GPS", "GPS", 80], ["덮개", "덮개", 70], ["박스", "박스", 90], ["차주명", "차주명", 90],
   ["모델연식", "모델·연식", 140], ["주행거리", "주행거리", 110], ["엔진오일", "엔진오일", 100], ["점검알림", "점검 알림", 200],
 ];
@@ -934,10 +935,12 @@ function careCells(r) {
   return { oil, oilLast: r.linkRaw?.care?.items?.engineOil, alerts: cs.alerts };
 }
 
-function VehicleCard({ r, onOpen }) {
+// ⭐ 2026-11-02 PC: 한 번 누르면 선택만, 두 번 눌러야 열림 · 휴대폰(터치): 두 번 탭은 확대·지연이 생겨 한 번 탭으로 연다(오른쪽 '열기 ›' 표시)
+function VehicleCard({ r, onOpen, onSelect, touch = false, hot = false }) {
   const { alerts } = careCells(r);
   return (
-    <button type="button" onClick={onOpen} className="vl-card" style={{ textAlign: "left", border: `1px solid ${C.line}`, background: "#fff", borderRadius: 14, padding: 14, cursor: "pointer", display: "flex", flexDirection: "column", gap: 9, minWidth: 0, width: "100%" }}>
+    <button type="button" onClick={touch ? onOpen : onSelect} onDoubleClick={touch ? undefined : onOpen} onKeyDown={(e) => { if (!touch && e.key === "Enter") { e.preventDefault(); onOpen(); } }}
+      title={touch ? "" : "두 번 누르면 차량 정보 · 수정 패널이 열립니다"} className={`vl-card${hot ? " vl-hot" : ""}`} style={{ textAlign: "left", border: `1px solid ${hot ? C.mid : C.line}`, background: "#fff", borderRadius: 14, padding: 14, cursor: "pointer", display: "flex", flexDirection: "column", gap: 9, minWidth: 0, width: "100%" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", minWidth: 0 }}>
         <Plate text={r.차량번호} />
         {r.용도 && <span style={{ padding: "2px 8px", borderRadius: 6, background: C.pale, color: C.blue, fontSize: 13, fontWeight: 800, whiteSpace: "nowrap" }}>{r.용도}</span>}
@@ -955,6 +958,7 @@ function VehicleCard({ r, onOpen }) {
         <span style={{ fontFamily: MONO, ...TAB }}>{r.cs?.odometer ? `${r.cs.odometer.toLocaleString()}km` : "주행거리 -"}</span>
         <span style={{ marginLeft: "auto" }}>{alerts?.length ? <span style={{ padding: "2px 8px", borderRadius: 6, background: r.cs.over ? C.navy : "#DCE6F7", color: r.cs.over ? "#fff" : C.mid, fontWeight: 800 }}>점검 {alerts.length}</span> : r.linkRaw ? (r.cs?.setupDone || r.cs?.odometer ? "점검 정상" : "점검 미설정") : "점검 데이터 없음"}</span>
         {r.yearCost > 0 && <span style={{ fontFamily: MONO, color: C.navy, ...TAB }}>정비 {won(r.yearCost)}</span>}
+        {touch && <span aria-hidden="true" style={{ flexShrink: 0, height: 26, padding: "0 10px", borderRadius: 8, background: C.navy, color: "#fff", fontSize: 13, fontWeight: 800, display: "inline-flex", alignItems: "center", whiteSpace: "nowrap" }}>열기 ›</span>}
       </div>
     </button>
   );
@@ -1111,6 +1115,7 @@ export default function VehicleLedger({ company = "", drivers = [], canEdit = tr
   const askEdit = (id) => setEditReq((p) => ({ id, n: p.n + 1 }));
   const closeDrawer = React.useCallback(() => { pick(null); setEditReq((p) => ({ id: "", n: p.n })); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   // ⭐ 2026-11-02 대장 미작성 차량도 열기만 한다(예전엔 여는 순간 대장을 만들어 '미작성'·'앱' 표시가 사라졌다)
+  const [hot, setHot] = useState(null); // 한 번 누른(선택한) 줄 — 표시만, 열지 않음
   const openRow = (r, edit = false) => {
     const id = r.virtual ? r.docId : r.id;
     pick(id); if (edit && canEdit) askEdit(id);
@@ -1230,7 +1235,7 @@ export default function VehicleLedger({ company = "", drivers = [], canEdit = tr
         {/* 도구 줄 */}
         <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", padding: "12px 14px", background: "#F7F9FC", borderBottom: `1px solid #E8EDF4` }}>
           <div style={{ display: "flex", flexDirection: "column", marginRight: 6 }}>
-            <span style={{ fontFamily: MONO, fontSize: 10.5, fontWeight: 800, letterSpacing: "0.22em", color: C.mute }}>FLEET LIST</span>
+            <span style={{ fontFamily: MONO, fontSize: 10.5, fontWeight: 800, letterSpacing: "0.22em", color: C.mute, whiteSpace: "nowrap" }}>FLEET LIST <span style={{ fontFamily: "'Pretendard','Noto Sans KR',sans-serif", fontSize: 11.5, letterSpacing: 0, color: C.blue, fontWeight: 800, marginLeft: 6 }}>{narrow ? "· 탭하면 열기" : "· 두 번 눌러 열기"}</span></span>
             <span style={{ fontSize: 16, fontWeight: 900, color: C.navy, whiteSpace: "nowrap" }}>차량 전체 현황 <span style={{ fontFamily: MONO, color: C.blue }}>{shown.length}</span><span style={{ fontSize: 14, color: C.mute }}> / {rows.length}대</span></span>
           </div>
           <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="차량번호·기사·차주·차대번호 검색" style={{ ...inp, width: narrow ? "100%" : 250, height: 38 }} />
@@ -1277,14 +1282,14 @@ export default function VehicleLedger({ company = "", drivers = [], canEdit = tr
             </div>
           ) : cardMode ? (
             <div style={{ padding: narrow ? 10 : 14, display: "grid", gridTemplateColumns: narrow ? "minmax(0,1fr)" : "repeat(auto-fill, minmax(320px, 1fr))", gap: 10 }}>
-              {shown.map((r) => <VehicleCard key={r.id} r={r} onOpen={() => openRow(r)} />)}
+              {shown.map((r) => <VehicleCard key={r.id} r={r} touch={narrow} hot={hot === r.id} onSelect={() => setHot(r.id)} onOpen={() => { setHot(r.id); openRow(r); }} />)}
               {!shown.length && <div style={{ padding: 30, textAlign: "center", color: C.mute, fontSize: 14.5, gridColumn: "1 / -1" }}>조건에 맞는 차량이 없습니다</div>}
             </div>
           ) : (
             <div style={{ overflow: "auto", maxHeight: "calc(100vh - 360px)", minHeight: 320 }}>
               <table style={{ width: "100%", borderCollapse: "separate", borderSpacing: 0, minWidth: 2100 }}>
                 <thead><tr>{COLS.map(([k, l, w]) => (
-                  <th key={k} onClick={() => k !== "순번" && sortBy(k)} title={k === "순번" ? "" : "누르면 정렬 (내 화면에만 적용)"} style={{ ...th, minWidth: w, cursor: k === "순번" ? "default" : "pointer", userSelect: "none", ...(k === "순번" ? { left: 0, zIndex: 3, width: 56 } : {}), ...(k === "차량번호" ? { left: 56, zIndex: 3, textAlign: "left" } : {}), ...(k === "모델연식" ? { borderLeft: "2px solid #8FB0F0" } : {}) }}>
+                  <th key={k} onClick={() => k !== "순번" && sortBy(k)} title={k === "순번" ? "" : "누르면 정렬 (내 화면에만 적용)"} style={{ ...th, minWidth: w, cursor: k === "순번" ? "default" : "pointer", userSelect: "none", ...(k === "순번" ? { left: 0, zIndex: 3, width: 56 } : {}), ...(k === "담당자" ? { left: 56, zIndex: 3, width: 96 } : {}), ...(k === "차량번호" ? { left: 152, zIndex: 3, textAlign: "left" } : {}), ...(k === "모델연식" ? { borderLeft: "2px solid #8FB0F0" } : {}) }}>
                     {l}{k !== "순번" && <span style={{ marginLeft: 4, fontSize: 12, color: sort.k === k ? "#fff" : "rgba(143,176,240,.55)" }}>{sort.k === k ? (sort.d > 0 ? "▲" : "▼") : "↕"}</span>}
                   </th>
                 ))}</tr></thead>
@@ -1292,15 +1297,17 @@ export default function VehicleLedger({ company = "", drivers = [], canEdit = tr
                   {shown.map((r, ri) => {
                     const cc = careCells(r);
                     return (
-                      <tr key={r.id} className="vl-row" title="누르면 오른쪽에 차량 정보 · 두 번 누르면 바로 수정" onClick={(e) => openRow(r, e.detail >= 2)} style={{ cursor: "pointer", opacity: opening === r.id ? 0.5 : 1 }}>
+                      <tr key={r.id} className={`vl-row${hot === r.id ? " vl-hot" : ""}`} tabIndex={0} aria-selected={hot === r.id} title="두 번 누르면 차량 정보 · 수정 패널이 열립니다"
+                        onMouseDown={(e) => { if (e.detail > 1) e.preventDefault(); }} onClick={() => setHot(r.id)} onDoubleClick={() => { setHot(r.id); openRow(r); }} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); openRow(r); } }}
+                        style={{ cursor: "default", outline: "none", opacity: opening === r.id ? 0.5 : 1 }}>
                         {COLS.map(([k], i) => {
                           const val = r[k];
                           const eq = EQ_KEYS.includes(k);
                           const base = { ...td, whiteSpace: "nowrap", textAlign: "center", borderTop: "none", borderBottom: "1px solid #EEF1F6", ...(k === "모델연식" ? { borderLeft: "2px solid #DCE6F7" } : {}) };
                           if (k === "순번") return <td key={k} style={{ ...base, position: "sticky", left: 0, background: "inherit", zIndex: 1, width: 56, fontFamily: MONO, fontSize: 14, color: C.sub, fontWeight: 800 }}>{ri + 1}</td>;
-                          if (k === "차량번호") return <td key={k} style={{ ...base, position: "sticky", left: 56, background: "inherit", textAlign: "left", zIndex: 1, boxShadow: "1px 0 0 #EEF1F6" }}><span style={{ fontWeight: 900, fontSize: 15 }}>{val}</span>{r.virtual && <span title="관리대장 미작성 — 기사관리에 있는 지입·직영·임대 차량이지만 아직 대장에 아무것도 저장하지 않은 차량입니다. 정보를 저장하면 대장이 만들어지고 이 표시는 사라집니다." style={{ marginLeft: 6, padding: "2px 7px", borderRadius: 6, border: `1px dashed ${C.sky}`, fontSize: 12.5, color: C.blue, fontWeight: 800 }}>대장 미작성</span>}</td>;
+                          if (k === "차량번호") return <td key={k} style={{ ...base, position: "sticky", left: 152, background: "inherit", textAlign: "left", zIndex: 1, boxShadow: "1px 0 0 #EEF1F6" }}><span style={{ fontWeight: 900, fontSize: 15 }}>{val}</span>{r.virtual && <span title="관리대장 미작성 — 기사관리에 있는 지입·직영·임대 차량이지만 아직 대장에 아무것도 저장하지 않은 차량입니다. 정보를 저장하면 대장이 만들어지고 이 표시는 사라집니다." style={{ marginLeft: 6, padding: "2px 7px", borderRadius: 6, border: `1px dashed ${C.sky}`, fontSize: 12.5, color: C.blue, fontWeight: 800 }}>대장 미작성</span>}</td>;
                           if (k === "현재기사") return <td key={k} style={{ ...base, fontWeight: 800 }}>{val || <span style={{ color: "#C0CADB" }}>-</span>}{r.appJoined && <span title="이 기사님은 기사앱에 가입했습니다(점검·소모품·제원이 기사앱과 연동)" style={{ marginLeft: 6, padding: "1px 7px", borderRadius: 6, background: C.mid, color: "#fff", fontSize: 12, fontWeight: 800 }}>앱 가입</span>}</td>;
-                          if (k === "담당자") return <td key={k} style={{ ...base, fontWeight: 800, color: val ? (r.담당자Uid && r.담당자Uid === myUid ? C.blue : C.navy) : "#C0CADB" }}>{val || "-"}</td>;
+                          if (k === "담당자") return <td key={k} style={{ ...base, position: "sticky", left: 56, background: "inherit", zIndex: 1, width: 96, maxWidth: 96, overflow: "hidden", textOverflow: "ellipsis", fontWeight: 800, color: val ? (r.담당자Uid && r.담당자Uid === myUid ? C.blue : C.navy) : "#C0CADB" }}>{val || "-"}</td>;
                           if (k === "용도") return <td key={k} style={base}>{val ? <span style={{ padding: "2px 8px", borderRadius: 6, background: C.pale, color: C.blue, fontSize: 13.5, fontWeight: 800 }}>{val}</span> : <span style={{ color: "#C0CADB" }}>-</span>}</td>;
                           if (eq) {
                             const on = hasEquip(val);
@@ -1330,7 +1337,7 @@ export default function VehicleLedger({ company = "", drivers = [], canEdit = tr
       )}
       {importing && <ImportModal existing={list} onClose={() => setImporting(false)} onImport={importRows} />}
       {selV && (
-        <LedgerDrawer key={selV.id} narrow={narrow} onClose={closeDrawer} onDouble={() => canEdit && askEdit(selV.id)}>
+        <LedgerDrawer key={selV.id} narrow={narrow} onClose={closeDrawer}>
           <Ledger v={selV} co={co} appDriver={selV.appDriver} linkRaw={selV.linkRaw} drivers={drivers} canEdit={canEdit} by={by} narrow={narrow} purposeOpts={purposeOpts} companyOpts={companyOpts} kindOpts={kindOpts} onBack={closeDrawer} toast={toast} drawer editSignal={editReq.id === selV.id ? editReq.n : 0} />
         </LedgerDrawer>
       )}

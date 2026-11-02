@@ -19,7 +19,7 @@ import { createPortal } from "react-dom";
 import React from "react";
 import { kpConfirm, kpAlert } from "./kpDialog";
 import { collection, doc, onSnapshot, query, where, addDoc, updateDoc, deleteDoc, setDoc, getDoc, serverTimestamp, arrayUnion } from "firebase/firestore";
-import { db, auth } from "./firebase";
+import { db, auth, DEFAULT_COMPANY } from "./firebase";
 import CustomDatePicker from "./CustomDatePicker";
 import { CustomSelect } from "./CustomSelect";
 import { TimeSelect, MultiDateSelect, korTimeLabel } from "./kpInputs";
@@ -255,7 +255,7 @@ export function routeOrdersFor(r, date) {
       const n = stops.indexOf(s) + 1;
       const pay = segOf.get(n);
       return {
-        업체명: s.name || "", 주소: s.addr || "", 담당자: s.manager || "담당자", 담당자번호: s.contact || "", 메모: s.memo || "",
+        업체명: s.name || "", 주소: s.addr || "", 담당자: s.manager || "", 담당자번호: s.contact || "", 메모: s.memo || "",
         화물내용: cargoText(s), 화물타입: s.cargoType || "", 화물수량: s.cargo || "", 톤수값: s.tonVal || "", 톤수타입: s.tonType || "", 차량톤수: tonText(s),
         상차일: dateKey === "상차일" ? date : "", 상차시간: timeKey === "상차시간" ? korTime(s.time) : "", 하차일: dateKey === "하차일" ? date : "", 하차시간: timeKey === "하차시간" ? korTime(s.time) : "", 방법: "",
         구분: s.type,
@@ -279,8 +279,8 @@ export function routeOrdersFor(r, date) {
       등록일: kst(), 상차일: date, 하차일: date,
       상차시간: korTime(first.time || r.startTime), 하차시간: korTime(last.time),
       거래처명: G.payer || routeClient(r), // ⭐ 2026-11-01 그 묶음의 거래처(청구처)
-      상차지명: first.name || "", 상차지주소: first.addr || "", 상차지담당자: first.manager || "담당자", 상차지담당자번호: first.contact || "",
-      하차지명: last.name || "", 하차지주소: last.addr || "", 하차지담당자: last.manager || "담당자", 하차지담당자번호: last.contact || "",
+      상차지명: first.name || "", 상차지주소: first.addr || "", 상차지담당자: first.manager || "", 상차지담당자번호: first.contact || "",
+      하차지명: last.name || "", 하차지주소: last.addr || "", 하차지담당자: last.manager || "", 하차지담당자번호: last.contact || "",
       // 배차관리 등록폼과 같은 모양(목록 화면이 늘 배열이 있다고 본다)
       경유지_상차: pickVia, 경유상차목록: pickVia, 경유지_하차: dropVia, 경유하차목록: dropVia, 근무일자목록: [],
       차량톤수: r.tonnage || "", 톤수: r.tonnage || "", 차량종류: r.vehicleType || "",
@@ -508,7 +508,9 @@ function StopFareBadge({ r, on = false }) {
 }
 
 export default function FixedRoutes({ drivers = [], companyName = "", dispatchData = [] }) {
-  const co = String(companyName || "").trim();
+  // ⭐ 2026-11-02 지금 보고 있는 회사(getTenant) 우선 — 통합관리자가 다른 회사를 볼 때·회원 문서에 회사명이 없는 예전 계정(기본 회사)에서
+  //  회사가 비거나 달라서 거래처·상하차지·노선 목록이 통째로 비던 문제(자동완성이 안 뜨던 원인)
+  const co = String(getTenant() || companyName || "").trim();
   const fareR = useFareRules(co); // ⭐ 2026-11-02 운임규칙
   const [routes, setRoutes] = React.useState([]);
   const [selId, setSelId] = React.useState(null);
@@ -527,9 +529,13 @@ export default function FixedRoutes({ drivers = [], companyName = "", dispatchDa
   React.useEffect(() => { if (!form) setTried(false); }, [form]);
   React.useEffect(() => {
     if (!co) return undefined;
-    const u1 = onSnapshot(collection(db, "clients"), (s) => setClients(s.docs.map((d) => { // ⭐ 2026-11-02 거래처 이름이 업체명 칸에만 있는 문서도 목록에 나오게(배차관리 등록분)
-      const c = { id: d.id, ...d.data() }; return { ...c, 거래처명: String(c.거래처명 || c.업체명 || "").trim() }; }).filter((c) => !c.companyName || c.companyName === co).filter((c) => c.거래처명)), () => setClients([]));
-    const u2 = onSnapshot(collection(db, "places"), (s) => setPlaces(s.docs.map((d) => ({ _id: d.id, ...d.data() })).filter((p) => (!p.companyName || p.companyName === co) && p.업체명)), () => setPlaces([]));
+    // ⭐ 2026-11-02 거래처관리(배차관리)와 같은 기준 — 회사명 없는 예전 문서 = 기본 회사, 이름 칸이 다른 문서(업체명·name·상호·회사명)도 목록에
+    const mine = (x) => (String(x.companyName || "").trim() || DEFAULT_COMPANY) === co;
+    const nameOf = (x) => String(x.거래처명 || x.업체명 || x.name || x.상호 || x.회사명 || x.title || "").trim();
+    const u1 = onSnapshot(collection(db, "clients"), (s) => setClients(s.docs.map((d) => {
+      const c = { id: d.id, ...d.data() }; return { ...c, 거래처명: nameOf(c) }; }).filter((c) => mine(c) && c.거래처명)), (e) => { console.warn("[고정노선] 거래처 목록을 못 읽었습니다", e?.code || e); setClients([]); });
+    const u2 = onSnapshot(collection(db, "places"), (s) => setPlaces(s.docs.map((d) => { const p = { _id: d.id, ...d.data() }; return { ...p, 업체명: String(p.업체명 || p.name || p.상호 || "").trim() }; })
+      .filter((p) => mine(p) && p.업체명)), (e) => { console.warn("[고정노선] 상하차지 목록을 못 읽었습니다", e?.code || e); setPlaces([]); });
     return () => { u1(); u2(); };
   }, [co]);
   // ⭐ 2026-11-02 상·하차지·경유·거점 검색 목록 = 배차관리와 같은 통합 목록(기본거래처 먼저 + 기본거래처에 없는 하차지거래처)
