@@ -26,6 +26,7 @@ import { TimeSelect, MultiDateSelect, korTimeLabel } from "./kpInputs";
 import { useCompanyDropdownOptions } from "./companyDropdownOptions";
 import RouteMapModal from "./RouteMapModal";
 // ⭐ 2026-11-02 운임규칙 — 노선·정류지 기본 운임구분(규칙 사용 회사만) → 기사운임 자동 계산, 만든 오더에 운임구분
+import { VehicleTypePicker } from "./vehicleTypes"; // 🚚 2026-11-02 회사 공용 차량종류
 import { useFareRules, FareTypeSelect, findFareRule, applyFareRule, fareRuleHint } from "./fareRules";
 
 const MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
@@ -737,7 +738,8 @@ export default function FixedRoutes({ drivers = [], companyName = "", dispatchDa
               </CustomSelect>
               <div className="grid grid-cols-2 gap-2.5 mt-2.5">
                 <div><label className={lab}>톤수</label><input value={form.tonnage} onChange={(e) => set("tonnage", e.target.value)} placeholder="예: 5톤" className={inp} /></div>
-                <div><label className={lab}>차량 종류</label><Suggest value={form.vehicleType} onChange={(v) => set("vehicleType", v)} items={VEHICLE_TYPES_FR.map((v) => ({ v }))} k="v" sub={() => ""} placeholder="입력 또는 선택" onPick={(x) => set("vehicleType", x.v)} showAll /></div>
+                {/* 🚚 2026-11-02 회사 공용 차량종류(＋ 추가 포함) */}
+                <div><label className={lab}>차량 종류</label><VehicleTypePicker className={inp} value={form.vehicleType} base={VEHICLE_TYPES_FR} placeholder="선택" noneLabel="선택 안 함" onChange={(v) => set("vehicleType", v)} /></div>
               </div>
               {/* ⭐ 2026-11-01 운임 — 정류지별 운임이 있으면 기본 운임 칸은 잠기고 정류지 합계를 보여준다 */}
               {(() => {

@@ -16,6 +16,7 @@ import {
 } from "./vehicleLedgerData";
 import VehicleCarePanel from "./VehicleCarePanel";
 import { careSummary, vehicleDefaults } from "./vehicleCare";
+import { useVehicleTypes } from "./vehicleTypes"; // 🚚 2026-11-02 회사 공용 차량종류
 
 const C = { ink: "#0B1428", navy: "#0F1A30", mid: "#1B2B4B", blue: "#2D4C82", sky: "#8FB0F0", line: "#E3E8F0", soft: "#F4F6FA", sub: "#5B6B85", mute: "#9AA9C3", pale: "#EEF2F9" };
 const MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
@@ -827,7 +828,8 @@ export default function VehicleLedger({ company = "", drivers = [], canEdit = tr
     return out;
   }, [list, fleetDrivers, drvByPlate, drvById, thisYear, thisMonth]);
 
-  const purposeOpts = useMemo(() => Array.from(new Set([...PURPOSE_PRESETS, ...list.map((v) => v.용도).filter(Boolean)])), [list]);
+  const vtCo = useVehicleTypes(); // 🚚 2026-11-02 회사 공용 차량종류(추가한 이름도 용도·형태 목록에)
+  const purposeOpts = useMemo(() => Array.from(new Set([...PURPOSE_PRESETS, ...vtCo.custom, ...list.map((v) => v.용도).filter(Boolean)])), [list, vtCo.custom]);
   const companyOpts = useMemo(() => Array.from(new Set(list.map((v) => v.회사).filter(Boolean))).sort((a, b) => a.localeCompare(b, "ko")), [list]);
   const kindOpts = useMemo(() => Array.from(new Set([...REPAIR_KINDS, ...list.flatMap((v) => (v.repairs || []).map((r) => r.구분)).filter(Boolean)])), [list]);
 

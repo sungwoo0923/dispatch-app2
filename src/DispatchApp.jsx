@@ -15,6 +15,7 @@ import { drawTmapTrafficRoute, TRAFFIC_LEGEND } from "./mapStyle";
 // ⭐ 2026-11-02 속도 — 캡처·PDF 라이브러리는 저장 버튼을 누를 때 받는다(첫 로딩에서 약 580KB 제외)
 import { html2canvas, loadJsPDF, lazyView, prefetchWhenIdle } from "./lazyLoad";
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { VehicleTypePicker, VehicleTypeAddButton, useVehicleTypes, withCustomVehicleTypes, VT_DEFAULTS } from "./vehicleTypes"; // ⭐ 2026-11-02 회사 공용 차량종류
 import { withCo, getTenant } from "./fsTenant";
 import { coDocKey } from "./coKey";
 import { createPortal } from "react-dom";
@@ -3398,31 +3399,9 @@ function KpDeleteConfirm({ rows = [], note = "삭제 후에도 되돌리기로 �
 // ⭐ PC 길게 눌러 선택 모드(2026-10-27) — 오더 줄을 마우스로 0.5초 이상 누르고 있으면 선택 모드가 켜지고,
 //    그 뒤로는 줄 어디를 눌러도 체크된다(입력칸·버튼은 그대로 동작). 아래 가운데 막대로 지금 모드를 표시, ESC로 끝.
 // ⭐ 2026-11-02 기사 등록·수정 — 차량종류 드롭다운 + "직접입력"(목록에 없는 값은 글자 칸으로 적는다)
-const DRIVER_VTYPES = ["라보/다마스", "카고", "윙바디", "탑차", "냉장/냉동윙", "냉장/냉동탑"];
-function DriverVehicleTypeField({ value, onChange, className = "", SelectEl = "select" }) {
-  const v = String(value || "");
-  const [direct, setDirect] = React.useState(() => !!v && !DRIVER_VTYPES.includes(v));
-  React.useEffect(() => { if (v && !DRIVER_VTYPES.includes(v)) setDirect(true); else if (v) setDirect(false); }, [v]);
-  const inRef = React.useRef(null);
-  const sel = direct ? "__direct" : v;
-  return (
-    <div className="flex flex-col gap-1.5">
-      <SelectEl className={className} value={sel}
-        onChange={(e) => {
-          const x = e.target.value;
-          if (x === "__direct") { setDirect(true); onChange(DRIVER_VTYPES.includes(v) ? "" : v); setTimeout(() => inRef.current?.focus(), 30); }
-          else { setDirect(false); onChange(x); }
-        }}>
-        <option value="">선택</option>
-        {DRIVER_VTYPES.map((t) => <option key={t} value={t}>{t}</option>)}
-        <option value="__direct">직접입력</option>
-      </SelectEl>
-      {direct && (
-        <input ref={inRef} autoComplete="off" className={className} placeholder="차량종류 직접 입력 (예: 트레일러)"
-          value={v} onChange={(e) => onChange(e.target.value)} />
-      )}
-    </div>
-  );
+function DriverVehicleTypeField({ value, onChange, className = "" }) {
+  // 🚚 2026-11-02 회사 공용 차량종류 — 목록에서 고르거나 맨 아래 [＋ 차량종류 추가]로 새 이름을 넣으면 모든 화면 목록에 추가된다
+  return <VehicleTypePicker className={className} value={value} onChange={onChange} base={VT_DEFAULTS} placeholder="선택" noneLabel="선택 안 함" />;
 }
 
 // ⭐ 2026-11-02 기사관리 표 — 차량종류(암롤·윙바디 등)를 한눈에 · 한 가지 색(네이비 톤)으로 깔끔하게 + 톤수(숫자 글꼴)
@@ -7132,6 +7111,7 @@ export default function DispatchApp({ role: realRole, user, userCompany = "", fo
   // 받아오면 되므로 최상위 컴포넌트에서 호출한다.
   useEffect(() => { ensureWeatherLoaded(); }, []);
   useCopyTemplates(); // ▤ 기사복사 문구(회사별 설정) 실시간 반영
+  useVehicleTypes(userCompany); // 🚚 2026-11-02 회사 공용 차량종류(추가한 이름이 모든 화면 목록에 바로 보이게 구독 유지)
   // 💳 회사 요금제(미지정이면 전체 기능) — 메뉴 잠금·프로 기능 판단에 쓴다
   const planCompany = (role === "totalMaster" ? (localStorage.getItem("loginCompany") || userCompany) : (userCompany || localStorage.getItem("userCompany")) || "").trim();
   const planId = useCompanyPlanId(planCompany);
@@ -10636,10 +10616,11 @@ const mergedClients = React.useMemo(() => {
     // 🚗 차량종류 자동완성 필터 (★ 반드시 전역)
 const filterVehicles = (q) => {
   const query = String(q || "").trim();
-  if (!query) return VEHICLE_TYPES;
+  const all = withCustomVehicleTypes(VEHICLE_TYPES); // 🚚 2026-11-02 회사에서 추가한 차량종류 포함
+  if (!query) return all;
 
   const nq = normalizeKey(query);
-  return VEHICLE_TYPES.filter((v) =>
+  return all.filter((v) =>
     normalizeKey(v).includes(nq)
   );
 };
@@ -15424,7 +15405,8 @@ shadow-[0_1px_2px_rgba(16,24,40,0.04),0_12px_30px_rgba(16,24,40,0.07)]
               </div>
 
               <div>
-                <label className={mrLabelCls}><EditableText id="orderForm.multi.label.차량종류" defaultText="차량종류" /></label>
+                <label className={`${mrLabelCls} flex items-center justify-between gap-2`}><EditableText id="orderForm.multi.label.차량종류" defaultText="차량종류" />
+                  <VehicleTypeAddButton label="＋ 추가" onAdded={(v) => { updateMultiSlot("차량종류", v); setMultiRegVehicleQuery(v); }} /></label>
                 <MultiRegCombo
                   className={mrInputCls}
                   placeholder="차량종류 입력 또는 선택"
@@ -15432,7 +15414,8 @@ shadow-[0_1px_2px_rgba(16,24,40,0.04),0_12px_30px_rgba(16,24,40,0.07)]
                   onChange={(v) => { setMultiRegVehicleQuery(v); updateMultiSlot("차량종류", v); }}
                   items={(() => {
                     const q = (multiRegVehicleQuery || currentMultiSlot.차량종류 || "").trim();
-                    const list = q ? VEHICLE_TYPES.filter(v => v.includes(q)) : VEHICLE_TYPES;
+                    const all = withCustomVehicleTypes(VEHICLE_TYPES); // 🚚 2026-11-02 회사 추가 차량종류 포함
+                    const list = q ? all.filter(v => v.includes(q)) : all;
                     return list.map((v, i) => ({ key: i, label: v, raw: v }));
                   })()}
                   onSelect={(it) => { updateMultiSlot("차량종류", it.raw); setMultiRegVehicleQuery(it.raw); }}
@@ -16457,6 +16440,7 @@ className={`
     차량·파렛
   </button>
 </div>
+  {/* 🚚 2026-11-02 회사 공용 차량종류 추가 — 목록 맨 아래 [＋ 차량종류 추가] */}
 
   <input autoComplete="off"
     data-arrownav
@@ -16509,7 +16493,7 @@ className={`
   />
 
   {showVehicleDropdown && (
-    <div className="absolute z-50 bg-white border rounded-lg shadow-lg w-full max-h-48 overflow-auto">
+    <div className="absolute z-50 bg-white border border-[#E3E8F0] rounded-xl shadow-[0_14px_34px_rgba(15,26,48,0.18)] w-full max-h-60 overflow-auto py-1" onMouseDown={(e) => e.preventDefault()}>
       {filterVehicles(vehicleQuery).map((v, i) => (
         <div
           key={`${v}-${i}`}
@@ -16528,6 +16512,14 @@ className={`
           {v}
         </div>
       ))}
+      <div className="sticky bottom-0 bg-white border-t border-[#EEF2F7] px-1.5 pt-1.5 pb-1 mt-1 shadow-[0_-8px_12px_rgba(255,255,255,0.95)]">
+        <VehicleTypeAddButton
+          initial={(vehicleQuery || "").trim() && !filterVehicles(vehicleQuery).includes((vehicleQuery || "").trim()) ? vehicleQuery : ""}
+          label="＋ 차량종류 추가"
+          className="w-full h-8 rounded-lg border-[1.5px] border-dashed border-[#9FB2D3] bg-white text-[#1B2B4B] text-[12.5px] font-black hover:bg-[#F5F8FD]"
+          onAdded={(v) => { onChange("차량종류", v); setVehicleQuery(v); setShowVehicleDropdown(false); }}
+        />
+      </div>
     </div>
   )}
   
@@ -28785,10 +28777,7 @@ const openDailyCloseIssueDetail = (rowId) => {
     }
     if (key === "차량종류") {
       return (
-        <CustomSelect
-          className="border p-1 rounded w-full"
-          value={val || ""}
-          onChange={(e) => {
+        <VehicleTypePicker className="border p-1 rounded w-full" value={val || ""} base={["라보/다마스", "카고", "윙/카고", "윙바디", "리프트", "탑차", "냉장탑", "냉동탑", "냉장윙", "냉동윙", "냉장/냉동탑", "냉장/냉동윙", "오토바이", "기타"]} placeholder="선택" noneLabel="선택" onChange={(__v) => ((e) => {
             const next = e.target.value;
             if (next === val) return;
 
@@ -28798,23 +28787,7 @@ const openDailyCloseIssueDetail = (rowId) => {
               before: val || "",
               after: next,
             });
-          }}
-        >
-          <option value="">선택</option>
-          <option value="라보/다마스">라보/다마스</option>
-          <option value="카고">카고</option><option value="윙/카고">윙/카고</option>
-          <option value="윙바디">윙바디</option>
-          <option value="리프트">리프트</option>
-          <option value="탑차">탑차</option>
-          <option value="냉장탑">냉장탑</option>
-          <option value="냉동탑">냉동탑</option>
-          <option value="냉장윙">냉장윙</option>
-          <option value="냉동윙">냉동윙</option>
-          <option value="냉장/냉동탑">냉장/냉동탑</option>
-          <option value="냉장/냉동윙">냉장/냉동윙</option>
-          <option value="오토바이">오토바이</option>
-          <option value="기타">기타</option>
-        </CustomSelect>
+          })({ target: { value: __v } })} />
       );
     }
     return (
@@ -30522,27 +30495,7 @@ checkWarningStatus(c.거래처명, "거래처");
   <div className="grid grid-cols-3 gap-x-6 gap-y-1.5">
 
     <CpField label="차량종류">
-      <CustomSelect
-      disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
-        className={cpInputStyle}
-        value={copyTarget?.차량종류 ?? ""}
-        onChange={(e)=>setCopyTarget(p=>({...p, 차량종류:e.target.value}))}
-      >
-        <option value="">선택</option>
-        <option value="라보/다마스">라보/다마스</option>
-        <option value="카고">카고</option><option value="윙/카고">윙/카고</option>
-        <option value="윙바디">윙바디</option>
-        <option value="탑차">탑</option>
-        <option value="냉장탑">냉장탑</option>
-        <option value="냉동탑">냉동탑</option>
-        <option value="냉장윙">냉장윙</option>
-        <option value="냉동윙">냉동윙</option>
-        <option value="냉장/냉동탑">냉장/냉동탑</option>
-        <option value="냉장/냉동윙">냉장/냉동윙</option>
-        <option value="리프트">리프트</option>
-        <option value="오토바이">오토바이</option>
-        <option value="기타">기타</option>
-      </CustomSelect>
+      <VehicleTypePicker className={cpInputStyle} value={copyTarget?.차량종류 ?? ""} disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")} base={["라보/다마스", "카고", "윙/카고", "윙바디", "탑차", "냉장탑", "냉동탑", "냉장윙", "냉동윙", "냉장/냉동탑", "냉장/냉동윙", "리프트", "오토바이", "기타"]} placeholder="선택" noneLabel="선택" onChange={(__v) => ((e)=>setCopyTarget(p=>({...p, 차량종류:e.target.value})))({ target: { value: __v } })} />
     </CpField>
 
 <CpField label="차량톤수">
@@ -32225,32 +32178,11 @@ value={copyTarget?.화물수량 || ""}
   {/* ================= 차량종류 ================= */}
   <div>
     <label>차량종류</label>
-    <CustomSelect
-      className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-500"
-      disabled={(editTarget?.source === "shipper" || editTarget?.source === "shipper_mobile")}
-      value={editTarget.차량종류 || ""}
-      onChange={(e) =>
+    <VehicleTypePicker className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-500" value={editTarget.차량종류 || ""} disabled={(editTarget?.source === "shipper" || editTarget?.source === "shipper_mobile")} base={["라보/다마스", "카고", "윙/카고", "윙바디", "리프트", "탑차", "냉장탑", "냉동탑", "냉장윙", "냉동윙", "냉장/냉동탑", "냉장/냉동윙", "오토바이", "기타"]} placeholder="선택 없음" noneLabel="선택 없음" onChange={(__v) => ((e) =>
         setEditTarget((p) => ({
           ...p,
           차량종류: e.target.value,
-        }))
-      }
-    >
-      <option value="">선택 없음</option>
-      <option value="라보/다마스">라보/다마스</option>
-      <option value="카고">카고</option><option value="윙/카고">윙/카고</option>
-      <option value="윙바디">윙바디</option>
-      <option value="리프트">리프트</option>
-      <option value="탑차">탑차</option>
-      <option value="냉장탑">냉장탑</option>
-      <option value="냉동탑">냉동탑</option>
-      <option value="냉장윙">냉장윙</option>
-      <option value="냉동윙">냉동윙</option>
-      <option value="냉장/냉동탑">냉장/냉동탑</option>
-      <option value="냉장/냉동윙">냉장/냉동윙</option>
-      <option value="오토바이">오토바이</option>
-      <option value="기타">기타</option>
-    </CustomSelect>
+        })))({ target: { value: __v } })} />
   </div>
 
   {/* ================= 차량톤수 ================= */}
@@ -34715,7 +34647,7 @@ setConfirmChange(null);
                       {["배차방식","지급방식","배차상태","차량종류"].includes(cond.field)?(
                         <CustomSelect className="border border-gray-200 rounded-lg px-2 py-1.5 text-[12px] flex-1 focus:outline-none focus:border-[#1B2B4B]" value={cond.value} onChange={e=>{const n=[...tempFilterConditions];n[idx]={...n[idx],value:e.target.value};setTempFilterConditions(n);}}>
                           <option value="">값 선택</option>
-                          {(cond.field==="배차방식"?dropdownList("배차방식", ["24시","직접배차","인성","고정기사"]):cond.field==="지급방식"?["계산서","착불","선불","손실","개인","취소"]:cond.field==="배차상태"?["배차중","배차완료","배차취소"]:["라보/다마스","카고","윙/카고","윙바디","리프트","탑차","냉장탑","냉동탑","냉장윙","냉동윙","냉장/냉동탑","냉장/냉동윙","오토바이","기타"]).map(v=><option key={v} value={v}>{v}</option>)}
+                          {(cond.field==="배차방식"?dropdownList("배차방식", ["24시","직접배차","인성","고정기사"]):cond.field==="지급방식"?["계산서","착불","선불","손실","개인","취소"]:cond.field==="배차상태"?["배차중","배차완료","배차취소"]:withCustomVehicleTypes(["라보/다마스","카고","윙/카고","윙바디","리프트","탑차","냉장탑","냉동탑","냉장윙","냉동윙","냉장/냉동탑","냉장/냉동윙","오토바이","기타"])).map(v=><option key={v} value={v}>{v}</option>)}
                         </CustomSelect>
                       ):(
                         <input autoComplete="off" type="text" className="border border-gray-200 rounded-lg px-2 py-1.5 text-[12px] flex-1 focus:outline-none focus:border-[#1B2B4B]" value={cond.value} onChange={e=>{const n=[...tempFilterConditions];n[idx]={...n[idx],value:e.target.value};setTempFilterConditions(n);}} placeholder="검색어 입력" />
@@ -39690,28 +39622,8 @@ return (
       <span className="font-extrabold text-[#1B2B4B]">{row.차량종류 || "-"}</span>
 
     ) : key === "차량종류" ? (
-      <CustomSelect
-        className="border rounded px-1 py-0.5 w-full text-center font-extrabold text-[#1B2B4B]"
-        value={row.차량종류 || ""}
-        onChange={(e) =>
-          handleImmediateSelectChange(row, "차량종류", e.target.value)
-        }
-      >
-        <option value="">선택없음</option>
-        <option value="라보/다마스">라보/다마스</option>
-        <option value="카고">카고</option><option value="윙/카고">윙/카고</option>
-        <option value="윙바디">윙바디</option>
-        <option value="리프트">리프트</option>
-        <option value="탑차">탑차</option>
-        <option value="냉장탑">냉장탑</option>
-        <option value="냉동탑">냉동탑</option>
-        <option value="냉장윙">냉장윙</option>
-        <option value="냉동윙">냉동윙</option>
-        <option value="냉장/냉동탑">냉장/냉동탑</option>
-        <option value="냉장/냉동윙">냉장/냉동윙</option>
-        <option value="오토바이">오토바이</option>
-        <option value="기타">기타</option>
-      </CustomSelect>
+      <VehicleTypePicker className="border rounded px-1 py-0.5 w-full text-center font-extrabold text-[#1B2B4B]" value={row.차량종류 || ""} base={["라보/다마스", "카고", "윙/카고", "윙바디", "리프트", "탑차", "냉장탑", "냉동탑", "냉장윙", "냉동윙", "냉장/냉동탑", "냉장/냉동윙", "오토바이", "기타"]} placeholder="선택없음" noneLabel="선택없음" onChange={(__v) => ((e) =>
+          handleImmediateSelectChange(row, "차량종류", e.target.value))({ target: { value: __v } })} />
 
     ) : key === "상차지주소" || key === "하차지주소" ? (
       <AddressCell text={row[key] || ""} max={5} />
@@ -40734,28 +40646,8 @@ return (
 <div className="grid grid-cols-2 gap-3">
 
   <Field label="차량종류">
-    <CustomSelect
-      className="border p-2 rounded w-full"
-      value={editTarget?.차량종류 || ""}
-      onChange={(e) =>
-        setEditTarget((p) => ({ ...p, 차량종류: e.target.value }))
-      }
-    >
-        <option value="">선택</option>
-        <option value="라보/다마스">라보/다마스</option>
-        <option value="카고">카고</option><option value="윙/카고">윙/카고</option>
-        <option value="윙바디">윙바디</option>
-        <option value="탑차">탑</option>
-        <option value="냉장탑">냉장탑</option>
-        <option value="냉동탑">냉동탑</option>
-        <option value="냉장윙">냉장윙</option>
-        <option value="냉동윙">냉동윙</option>
-        <option value="냉장/냉동탑">냉장/냉동탑</option>
-        <option value="냉장/냉동윙">냉장/냉동윙</option>
-        <option value="리프트">리프트</option>
-        <option value="오토바이">오토바이</option>
-        <option value="기타">기타</option>
-    </CustomSelect>
+    <VehicleTypePicker className="border p-2 rounded w-full" value={editTarget?.차량종류 || ""} base={["라보/다마스", "카고", "윙/카고", "윙바디", "탑차", "냉장탑", "냉동탑", "냉장윙", "냉동윙", "냉장/냉동탑", "냉장/냉동윙", "리프트", "오토바이", "기타"]} placeholder="선택" noneLabel="선택" onChange={(__v) => ((e) =>
+        setEditTarget((p) => ({ ...p, 차량종류: e.target.value })))({ target: { value: __v } })} />
   </Field>
 
 
@@ -42267,27 +42159,7 @@ setCopyPlaceOptions(list);
   <div className="grid grid-cols-3 gap-6">
 
     <Field label="차량종류">
-      <CustomSelect
-      disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
-        className={inputStyle}
-        value={copyTarget?.차량종류 ?? ""}
-        onChange={(e)=>setCopyTarget(p=>({...p, 차량종류:e.target.value}))}
-      >
-        <option value="">선택</option>
-        <option value="라보/다마스">라보/다마스</option>
-        <option value="카고">카고</option><option value="윙/카고">윙/카고</option>
-        <option value="윙바디">윙바디</option>
-        <option value="탑차">탑</option>
-        <option value="냉장탑">냉장탑</option>
-        <option value="냉동탑">냉동탑</option>
-        <option value="냉장윙">냉장윙</option>
-        <option value="냉동윙">냉동윙</option>
-        <option value="냉장/냉동탑">냉장/냉동탑</option>
-        <option value="냉장/냉동윙">냉장/냉동윙</option>
-        <option value="리프트">리프트</option>
-        <option value="오토바이">오토바이</option>
-        <option value="기타">기타</option>
-      </CustomSelect>
+      <VehicleTypePicker className={inputStyle} value={copyTarget?.차량종류 ?? ""} disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")} base={["라보/다마스", "카고", "윙/카고", "윙바디", "탑차", "냉장탑", "냉동탑", "냉장윙", "냉동윙", "냉장/냉동탑", "냉장/냉동윙", "리프트", "오토바이", "기타"]} placeholder="선택" noneLabel="선택" onChange={(__v) => ((e)=>setCopyTarget(p=>({...p, 차량종류:e.target.value})))({ target: { value: __v } })} />
     </Field>
 
  <Field label="차량톤수">
@@ -43778,7 +43650,7 @@ setCopyPlaceOptions(list);
                       {["배차방식","지급방식","배차상태","차량종류"].includes(cond.field)?(
                         <CustomSelect className="border border-gray-200 rounded-lg px-2 py-1.5 text-[12px] flex-1 focus:outline-none focus:border-[#1B2B4B]" value={cond.value} onChange={e=>{const n=[...tempFilterConditions];n[idx]={...n[idx],value:e.target.value};setTempFilterConditions(n);}}>
                           <option value="">값 선택</option>
-                          {(cond.field==="배차방식"?dropdownList("배차방식", ["24시","직접배차","인성","고정기사"]):cond.field==="지급방식"?["계산서","착불","선불","손실","개인","취소"]:cond.field==="배차상태"?["배차중","배차완료","배차취소"]:["라보/다마스","카고","윙/카고","윙바디","리프트","탑차","냉장탑","냉동탑","냉장윙","냉동윙","냉장/냉동탑","냉장/냉동윙","오토바이","기타"]).map(v=><option key={v} value={v}>{v}</option>)}
+                          {(cond.field==="배차방식"?dropdownList("배차방식", ["24시","직접배차","인성","고정기사"]):cond.field==="지급방식"?["계산서","착불","선불","손실","개인","취소"]:cond.field==="배차상태"?["배차중","배차완료","배차취소"]:withCustomVehicleTypes(["라보/다마스","카고","윙/카고","윙바디","리프트","탑차","냉장탑","냉동탑","냉장윙","냉동윙","냉장/냉동탑","냉장/냉동윙","오토바이","기타"])).map(v=><option key={v} value={v}>{v}</option>)}
                         </CustomSelect>
                       ):(
                         <input autoComplete="off" type="text" className="border border-gray-200 rounded-lg px-2 py-1.5 text-[12px] flex-1 focus:outline-none focus:border-[#1B2B4B]" value={cond.value} onChange={e=>{const n=[...tempFilterConditions];n[idx]={...n[idx],value:e.target.value};setTempFilterConditions(n);}} placeholder="검색어 입력" />
@@ -45402,27 +45274,7 @@ function NewOrderPopup({
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label>차량종류</label>
-              <CustomSelect
-                className="border p-2 rounded w-full"
-                value={newOrder.차량종류}
-                onChange={(e) => handleChange("차량종류", e.target.value)}
-              >
-                <option value="">선택 없음</option>
-                <option value="라보">라보</option>
-                <option value="다마스">다마스</option>
-                <option value="카고">카고</option><option value="윙/카고">윙/카고</option>
-                <option value="윙바디">윙바디</option>
-                <option value="리프트">리프트</option>
-                <option value="탑차">탑차</option>
-                <option value="냉장탑">냉장탑</option>
-                <option value="냉동탑">냉동탑</option>
-                <option value="냉장윙">냉장윙</option>
-                <option value="냉동윙">냉동윙</option>
-                <option value="냉장/냉동탑">냉장/냉동탑</option>
-                <option value="냉장/냉동윙">냉장/냉동윙</option>
-                <option value="오토바이">오토바이</option>
-                <option value="기타">기타</option>
-              </CustomSelect>
+              <VehicleTypePicker className="border p-2 rounded w-full" value={newOrder.차량종류} base={["라보", "다마스", "카고", "윙/카고", "윙바디", "리프트", "탑차", "냉장탑", "냉동탑", "냉장윙", "냉동윙", "냉장/냉동탑", "냉장/냉동윙", "오토바이", "기타"]} placeholder="선택 없음" noneLabel="선택 없음" onChange={(__v) => ((e) => handleChange("차량종류", e.target.value))({ target: { value: __v } })} />
             </div>
 
 
@@ -50829,10 +50681,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                 <div className="p-6">
                   <div className="grid grid-cols-3 gap-6">
                     <Field label="차량종류">
-                      <CustomSelect className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400" value={copyTarget?.차량종류 ?? ""} onChange={(e) => setCopyTarget(p => ({...p, 차량종류: e.target.value}))} disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}>
-                        <option value="">선택</option>
-                        <option value="라보/다마스">라보/다마스</option><option value="카고">카고</option><option value="윙/카고">윙/카고</option><option value="윙바디">윙바디</option><option value="탑차">탑차</option><option value="냉장탑">냉장탑</option><option value="냉동탑">냉동탑</option><option value="냉장윙">냉장윙</option><option value="냉동윙">냉동윙</option><option value="냉장/냉동탑">냉장/냉동탑</option><option value="냉장/냉동윙">냉장/냉동윙</option><option value="리프트">리프트</option><option value="오토바이">오토바이</option><option value="기타">기타</option>
-                      </CustomSelect>
+                      <VehicleTypePicker className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400" value={copyTarget?.차량종류 ?? ""} disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")} base={["라보/다마스", "카고", "윙/카고", "윙바디", "탑차", "냉장탑", "냉동탑", "냉장윙", "냉동윙", "냉장/냉동탑", "냉장/냉동윙", "리프트", "오토바이", "기타"]} placeholder="선택" noneLabel="선택" onChange={(__v) => ((e) => setCopyTarget(p => ({...p, 차량종류: e.target.value})))({ target: { value: __v } })} />
                     </Field>
                     <Field label="차량톤수">
                       <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden bg-white">
@@ -56568,7 +56417,7 @@ function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, sho
                   <div>
                     <label className="text-[11px] font-semibold text-gray-500 mb-1 block">차량종류</label>
                     {/* ⭐ 2026-11-02 차량종류 "직접입력" — 고르면 글자 칸이 열려 직접 적는다 */}
-                    <DriverVehicleTypeField SelectEl={CustomSelect} className="border-2 border-gray-200 rounded-lg px-3 py-2 w-full text-[13px] outline-none focus:border-[#1B2B4B]"
+                    <DriverVehicleTypeField className="border-2 border-gray-200 rounded-lg px-3 py-2 w-full text-[13px] outline-none focus:border-[#1B2B4B]"
                       value={newForm.차량종류 || ""} onChange={(v) => setNewForm(p => ({ ...p, 차량종류: v }))} />
                   </div>
                   <div>

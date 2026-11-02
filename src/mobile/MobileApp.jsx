@@ -104,6 +104,7 @@ import { tryAutoCheckIn, tryAutoCheckOut, undoAutoCheckOut } from "../autoAttend
 import OrderScanModal, { scanDropDate } from "../OrderScanModal";
 // ⭐ 2026-11-02 운임규칙 — 회사별 운임 규칙(운임구분 → 기사운임·수수료 자동)
 import { useFareRules, FareTypeSelect, FareRuleHint, fareFormChange } from "../fareRules";
+import { VehicleTypePicker, currentCustomVehicleTypes, useVehicleTypes } from "../vehicleTypes"; // 🚚 2026-11-02 회사 공용 차량종류
 
 
 
@@ -1954,6 +1955,7 @@ const mobileLiveStart = () => new Date(Date.now() + 9 * 3600e3 - MOBILE_LIVE_DAY
 const prevDayStr = (ymd) => { const d = new Date(`${ymd}T00:00:00Z`); d.setUTCDate(d.getUTCDate() - 1); return d.toISOString().slice(0, 10); };
 
 export default function MobileApp({ role: realRole, user, userCompany = "", forceExec = false }) {
+  useVehicleTypes(userCompany); // 🚚 2026-11-02 회사 공용 차량종류(추가한 이름이 모든 목록에 바로 보이게 구독 유지)
   // 🔀 통합인사관리자(hrAcct) — 메뉴에서 경리 화면 ↔ 인사 화면 전환
   const [hrAcctView, setHrAcctView] = useState(() => { try { return localStorage.getItem("kpHrAcctView") || "acct"; } catch { return "acct"; } });
   const role = realRole === "hrAcct" ? (hrAcctView === "hr" ? "hrManager" : "test") : realRole;
@@ -9062,6 +9064,7 @@ const summary = useMemo(() => {
                     <option value="냉장/냉동윙">냉장/냉동윙</option>
                     <option value="리프트">리프트</option>
                     <option value="오토바이">오토바이</option>
+                    {currentCustomVehicleTypes().map((v) => <option key={`vt_${v}`} value={v}>{v}</option>)}{/* 🚚 2026-11-02 회사 추가 차량종류 */}
                   </select>
                   <IconChevronDown className={`w-3.5 h-3.5 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none ${icon}`} />
                 </div>
@@ -11592,11 +11595,8 @@ function QuickEditSheet({ order, onClose, onSaved, cardVersionB, clients = [], b
               {unitBox(f.톤수값, setVal("톤수값"), f.톤수타입, setVal("톤수타입"), ["톤", "kg"], 62, "예: 1")}
             </QuickField>
             <QuickField label="차량종류">
-              <select className={inp} value={f.차량종류} onChange={set("차량종류")}>
-                <option value="">차량종류 선택</option>
-                {f.차량종류 && !QUICK_EDIT_CAR.includes(f.차량종류) && <option value={f.차량종류}>{f.차량종류}</option>}
-                {QUICK_EDIT_CAR.map(v => <option key={v} value={v}>{v}</option>)}
-              </select>
+              {/* 🚚 2026-11-02 회사 공용 차량종류(＋ 추가) */}
+              <VehicleTypePicker className={inp} value={f.차량종류} base={QUICK_EDIT_CAR} placeholder="차량종류 선택" noneLabel="선택 안 함" onChange={(v) => set("차량종류")({ target: { value: v } })} />
             </QuickField>
             <QuickField label="화물내용" span={2}>
               {unitBox(f.화물수량, setVal("화물수량"), f.화물타입, setVal("화물타입"), ["파레트", "박스", "통", "롤"], 76, "예: 3")}
@@ -15727,26 +15727,7 @@ const pickDrop = (c) => {
         <RowLabelInput
           label="차량종류"
           input={
-            <select
-              className="w-full border-0 border-b-2 border-gray-300 rounded-none px-1 py-1.5 text-[13px] font-semibold text-gray-900 bg-transparent focus:outline-none focus:border-[var(--reg-accent)] transition"
-              value={form.차종}
-              onChange={(e) => update("차종", e.target.value)}
-            >
-              <option value="">차량종류 선택</option>
-              <option value="라보/다마스">라보/다마스</option>
-              <option value="카고">카고</option><option value="윙/카고">윙/카고</option>
-              <option value="윙바디">윙바디</option>
-              <option value="탑차">탑차</option>
-              <option value="냉장탑">냉장탑</option>
-              <option value="냉동탑">냉동탑</option>
-              <option value="냉장윙">냉장윙</option>
-              <option value="냉동윙">냉동윙</option>
-              <option value="냉장/냉동탑">냉장/냉동탑</option>
-              <option value="냉장/냉동윙">냉장/냉동윙</option>
-              <option value="리프트">리프트</option>
-              <option value="오토바이">오토바이</option>
-              <option value="기타">기타</option>
-            </select>
+            <VehicleTypePicker className="w-full border-0 border-b-2 border-gray-300 rounded-none px-1 py-1.5 text-[13px] font-semibold text-gray-900 bg-transparent focus:outline-none focus:border-[var(--reg-accent)] transition" value={form.차종} base={["라보/다마스", "카고", "윙/카고", "윙바디", "탑차", "냉장탑", "냉동탑", "냉장윙", "냉동윙", "냉장/냉동탑", "냉장/냉동윙", "리프트", "오토바이", "기타"]} placeholder="차량종류 선택" noneLabel="차량종류 선택" onChange={(__v) => ((e) => update("차종", e.target.value))({ target: { value: __v } })} />
           }
         />
         {/* 톤수 */}
@@ -20521,6 +20502,7 @@ const runNationalFareInPopup = async () => {
                 <option value="냉동탑">냉동탑</option>
                 <option value="리프트">리프트</option>
                 <option value="오토바이">오토바이</option>
+                {currentCustomVehicleTypes().map((v) => <option key={`vt_${v}`} value={v}>{v}</option>)}{/* 🚚 2026-11-02 회사 추가 차량종류 */}
               </select>
             </div>
             <div>
