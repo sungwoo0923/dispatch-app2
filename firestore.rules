@@ -175,6 +175,19 @@ service cloud.firestore {
       allow read, update, delete: if isOfficeStaff() && coMatch(resource.data);
       allow create: if isOfficeStaff() && coCreate();
     }
+    // ⭐ 2026-11-02 운임규칙 — 회사별 운임 규칙(fareRules/{회사}) — 그 회사 직원(기사·화주 제외)만 읽고,
+    //  조회전용(viewer)이 아닌 직원은 누구나 수정. 문서 이름 = 회사명이라 잠금 스위치와 상관없이 다른 회사는 못 본다.
+    function fareRulesStaff(co) {
+      return isTotalMasterUser() || (isOfficeStaff() && myCo() == co);
+    }
+    match /fareRules/{co} {
+      allow read: if fareRulesStaff(co);
+      allow create: if fareRulesStaff(co) && myUser().get('role', '') != 'viewer'
+        && request.resource.data.get('companyName', '') == co;
+      allow update: if fareRulesStaff(co) && myUser().get('role', '') != 'viewer'
+        && request.resource.data.get('companyName', '') == co;
+      allow delete: if fareRulesStaff(co) && isCompanyAdmin(co);
+    }
     // 🔒 회사 데이터(거래처·하차지·정기오더·삭제기록·알림·일정·메일·인사·근태신청·회계·결재선)
     // ⭐ 2026-11-02 점검 — approvalSettings(결재 설정)는 아래 전자결재 쪽 전용 규칙으로 옮김(누구나 임원 자동 승인을 켜던 문제)
     match /{tcol}/{id} {

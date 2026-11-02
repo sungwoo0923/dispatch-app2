@@ -2755,6 +2755,9 @@ import RevenueDashboard from "./RevenueDashboard";
 import { TargetPage, ClientsPage, TrendPage, YearlyPage, QueryPage } from "./RevenuePages";
 import { RecurringManagerModal, CloseReportModal } from "./AutomationPanels";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
+// ⭐ 2026-11-02 운임규칙 — 회사별 운임 규칙(운임구분 → 기사운임·수수료 자동 계산)
+import FareRulesSettings from "./FareRulesSettings";
+import { useFareRules, FareTypeSelect, FareRuleHint, fareFormChange, farePatchOf, findFareRule, applyFareRule, FareTypeBreakdown } from "./fareRules";
 
 // 기사전달용 업로드 링크 단축 — /upload?id=...&t=... (길고 낯설어 기사들이 거부감을
 // 느낄 수 있는 형태)를 /u/{code} 형태로 줄인다. code는 토큰에서 파생시켜, 같은
@@ -9385,6 +9388,9 @@ function MultiRegCombo({ id, value, onChange, onSelect, items, placeholder, clas
       // 한 번만 구독한다. 커스터마이즈 안 한 회사는 기존 하드코딩 값 그대로 보인다.
       const loadMethodOptions = useCompanyDropdownOptions("상하차방법", role, userCompany);
       const payTypeOptionsCustom = useCompanyDropdownOptions("지급방식", role, userCompany);
+      // ⭐ 2026-11-02 운임규칙 — 회사가 "운임 규칙 사용"을 켠 경우에만 운임구분 칸을 보인다
+      const fareR = useFareRules(userCompany);
+      const fareOn = fareR.on;
       const dispatchTypeOptionsCustom = useCompanyDropdownOptions("배차방식", role, userCompany);
       const cargoTypeOptionsCustom = useCompanyDropdownOptions("화물타입", role, userCompany);
       const tonTypeOptionsCustom = useCompanyDropdownOptions("톤수타입", role, userCompany);
@@ -11868,6 +11874,10 @@ const updateMultiSlot = (key, value) => {
     }
     // ⭐ 3파트 등록폼과 동일: 청구운임/기사운임을 입력할 때마다 수수료(차액)를
     // 자동으로 다시 계산한다.
+    // ⭐ 2026-11-02 운임규칙 — 다중등록도 운임구분 → 기사운임·수수료 자동
+    if (fareOn && (key === "운임구분" || key === "청구운임" || key === "기사운임" || key === "__reapply")) {
+      return fareFormChange(s, key, value, fareR.rules);
+    }
     if (key === "청구운임" || key === "기사운임") {
       const next = { ...s, [key]: value };
       const sale = parseInt(next.청구운임 || 0, 10) || 0;
@@ -11978,6 +11988,7 @@ const submitMultiRegister = async () => {
         메모: s.메모 || "",
         긴급: !!s.긴급,
         배차상태: s.지급방식 === "취소" ? "배차취소" : (슬롯기사확인상태.기사확인상태 === "대기" ? "승인대기" : (s.차량번호?.trim() ? "배차완료" : "배차중")),
+        ...(fareOn ? farePatchOf(s) : {}), // ⭐ 2026-11-02 운임규칙
         등록일: _todayStr(),
         ...슬롯기사확인상태,
       });
@@ -12293,6 +12304,11 @@ function swapPickupDrop() {
         // 사용자가 직접 토글을 건드리면, 이후 상차일이 바뀌어 자동감지 결과가 새로
         // 계산되기 전까지는 그 판단을 그대로 존중한다(자동감지가 수동 선택을 덮어쓰지 않음).
         setForm((p) => ({ ...p, 특수운임: value, 특수운임수동: true, 특수운임사유: value ? (p.특수운임사유 || "수동 지정") : "" }));
+        return;
+      }
+      // ⭐ 2026-11-02 운임규칙 — 운임구분·청구운임·기사운임 → 규칙대로 기사운임·수수료 자동 계산(기사운임을 직접 고치면 유지)
+      if (fareOn && canMoney && (key === "운임구분" || key === "청구운임" || key === "기사운임" || key === "__reapply")) {
+        setForm((p) => fareFormChange(p, key, value, fareR.rules));
         return;
       }
       if (canMoney && (key === "청구운임" || key === "기사운임")) {
@@ -14186,6 +14202,8 @@ const applyCopy = (r) => {
     운행유형: r.운행유형 || "편도",
     긴급: r.긴급 === true,
     운임보정: r.운임보정 || null,
+    // ⭐ 2026-11-02 운임규칙 — 복사해 오는 오더의 운임구분도 함께(규칙 사용 회사만)
+    ...(fareOn && r.운임구분 ? { 운임구분: r.운임구분, 운임수동: false } : {}),
   };
   setForm((p) => ({ ...p, ...keep }));
 
@@ -15533,7 +15551,13 @@ shadow-[0_1px_2px_rgba(16,24,40,0.04),0_12px_30px_rgba(16,24,40,0.07)]
                 <input autoComplete="off" readOnly className={`${mrInputCls} bg-gray-100`}
                   value={currentMultiSlot.수수료 ? Number(currentMultiSlot.수수료).toLocaleString() : currentMultiSlot.수수료 || ""} />
               </div>
-              <div />
+              {/* ⭐ 2026-11-02 운임규칙 — 다중등록 운임구분(규칙 사용 회사만, 빈 칸 자리) */}
+              {fareOn ? (
+                <div>
+                  <label className={mrLabelCls}>운임구분 <FareRuleHint className="ml-1.5" form={currentMultiSlot} rules={fareR.rules} onReapply={() => updateMultiSlot("__reapply")} /></label>
+                  <FareTypeSelect compact className="w-full" rules={fareR.rules} value={currentMultiSlot.운임구분 || ""} onChange={(v) => updateMultiSlot("운임구분", v)} />
+                </div>
+              ) : <div />}
 
               <div className="col-span-2">
                 <label className={mrLabelCls}><EditableText id="orderForm.multi.label.메모" defaultText="메모" /></label>
@@ -16580,6 +16604,10 @@ className={`
     <div>
       <label className={`${labelCls} flex items-center gap-2`}>
         <EditableText id="orderForm.label.기사운임" defaultText="기사운임" />
+        {/* ⭐ 2026-11-02 운임규칙 — 운임구분(규칙 사용 회사만) — 칸 배치를 바꾸지 않도록 라벨 줄 안에 */}
+        {fareOn && (
+          <FareTypeSelect compact className="ml-auto normal-case" id="order-fare-type" rules={fareR.rules} value={form.운임구분 || ""} onChange={(v) => onChange("운임구분", v)} />
+        )}
 
         {fareCompare.driver === "high" && (
           <span className="text-[11px] font-semibold text-red-600">
@@ -16611,7 +16639,10 @@ className={`
 
     {/* 수수료 */}
     <div>
-      <label className={labelCls}><EditableText id="orderForm.label.수수료" defaultText="수수료" /></label>
+      <label className={`${labelCls}${fareOn ? " flex items-center gap-2" : ""}`}><EditableText id="orderForm.label.수수료" defaultText="수수료" />
+        {/* ⭐ 2026-11-02 운임규칙 — "일대 7% 적용" · 직접 고쳤으면 [↺ 규칙대로] */}
+        {fareOn && <FareRuleHint className="ml-auto normal-case" form={form} rules={fareR.rules} onReapply={() => onChange("__reapply")} />}
+      </label>
       <input autoComplete="off"
         className={`${inputCls} bg-gray-100`}
         value={form.수수료 ? Number(form.수수료).toLocaleString() : form.수수료}
@@ -19472,6 +19503,13 @@ setConfirmChange(null);
             <div className="rounded-xl bg-[#F4F7FC] border border-[#E3E8F0] px-3 py-2">
               <div className="text-[12px] font-bold text-gray-500">지급방식</div>
               <div className="text-[15px] font-black text-[#1B2B4B]">{form.지급방식}</div>
+            </div>
+          )}
+          {/* ⭐ 2026-11-02 운임규칙 — 등록 확인에 운임구분 */}
+          {fareOn && form.운임구분 && (
+            <div className="rounded-xl bg-[#EAF0FB] border border-[#C9D5EA] px-3 py-2 col-span-2">
+              <div className="text-[12px] font-bold text-gray-500">운임구분</div>
+              <div className="text-[15px] font-black text-[#1B2B4B]">{form.운임구분} <span className="text-[12.5px] font-bold text-[#2D4C82]">수수료 {(Number(form.청구운임 || 0) - Number(form.기사운임 || 0)).toLocaleString()}원</span></div>
             </div>
           )}
         </div>
@@ -24292,6 +24330,9 @@ function RealtimeStatus({
   markEditRequestSeen = () => {},
   approvedShippers = [],
 }) {
+// ⭐ 2026-11-02 운임규칙 — 오더 복사·수정 패널 / 수정 창 / 운임구분 열(규칙 사용 회사만)
+const fareR = useFareRules(userCompany);
+const fareOn = fareR.on;
 const cpCargoTypeOptions = useCompanyDropdownOptions("화물타입", role, userCompany); // 오더복사 수정 창 단위(회사별 설정)
 const cpTonTypeOptions = useCompanyDropdownOptions("톤수타입", role, userCompany);
 const loadMethodOptions = useCompanyDropdownOptions("상하차방법", role, userCompany);
@@ -28551,6 +28592,17 @@ const openDailyCloseIssueDetail = (rowId) => {
   // 📌 editable input
   // ------------------------
   const handleEditChange = (id, key, value) => {
+    // ⭐ 2026-11-02 운임규칙 — 운임구분이 있는 오더는 청구운임을 고치면 기사운임·수수료도 규칙대로(기사운임을 고치면 수동 표시)
+    if (fareOn && (key === "청구운임" || key === "기사운임" || key === "운임구분" || key === "__reapply")) {
+      setEdited((prev) => {
+        const base = (dispatchData || []).find((r) => r._id === id) || {};
+        const merged = { ...base, ...(prev[id] || {}) };
+        if (!merged.운임구분 && key !== "운임구분") return { ...prev, [id]: { ...(prev[id] || {}), ...(key === "__reapply" ? {} : { [key]: value }) } };
+        const n = fareFormChange(merged, key, value, fareR.rules);
+        return { ...prev, [id]: { ...(prev[id] || {}), ...(key === "__reapply" ? {} : { [key]: value }), 운임구분: n.운임구분 || "", 기사운임: n.기사운임, 수수료: n.수수료, 운임수동: !!n.운임수동 } };
+      });
+      return;
+    }
     setEdited((prev) => ({
       ...prev,
       [id]: { ...(prev[id] || {}), [key]: value },
@@ -30532,7 +30584,7 @@ value={copyTarget?.화물수량 || ""}
       .replace(/[^\d-]/g, "")
       .replace(/(?!^)-/g, "");
 
-    setCopyTarget(p=>({...p, 청구운임: v}))
+    setCopyTarget(p=> fareOn ? fareFormChange(p, "청구운임", v, fareR.rules) : ({...p, 청구운임: v})) // ⭐ 2026-11-02 운임규칙
   }}
 />
             </CpField>
@@ -30546,7 +30598,7 @@ value={copyTarget?.화물수량 || ""}
       .replace(/[^\d-]/g, "")
       .replace(/(?!^)-/g, "");
 
-    setCopyTarget(p=>({...p, 기사운임: v}))
+    setCopyTarget(p=> fareOn ? fareFormChange(p, "기사운임", v, fareR.rules) : ({...p, 기사운임: v})) // ⭐ 2026-11-02 운임규칙
   }}
 />
             </CpField>
@@ -30574,6 +30626,15 @@ value={copyTarget?.화물수량 || ""}
     <option value="취소">취소</option>
   </CustomSelect>
 </CpField>
+{/* ⭐ 2026-11-02 운임규칙 — 오더 복사·수정 패널 운임구분 */}
+{fareOn && (
+  <CpField label="운임구분">
+    <div className="flex flex-col gap-1">
+      <FareTypeSelect compact className="w-full" rules={fareR.rules} value={copyTarget?.운임구분 || ""} onChange={(v) => setCopyTarget(p => fareFormChange(p, "운임구분", v, fareR.rules))} />
+      <FareRuleHint form={copyTarget} rules={fareR.rules} onReapply={() => setCopyTarget(p => fareFormChange(p, "__reapply", null, fareR.rules))} />
+    </div>
+  </CpField>
+)}
 
 <CpField label="배차방식">
   <CustomSelect
@@ -32381,6 +32442,7 @@ value={copyTarget?.화물수량 || ""}
       .replace(/(?!^)-/g, "");  // -는 맨 앞만
 
     setEditTarget((p) => {
+      if (fareOn) { const n = fareFormChange(p, "청구운임", raw, fareR.rules); return { ...n, 수수료: Number(n.수수료) || 0 }; } // ⭐ 2026-11-02 운임규칙
       const 청구 = parseInt(raw || "0", 10);
       const 기사 = parseInt(p.기사운임 || "0", 10);
 
@@ -32405,6 +32467,7 @@ value={copyTarget?.화물수량 || ""}
       .replace(/(?!^)-/g, "");
 
     setEditTarget((p) => {
+      if (fareOn) { const n = fareFormChange(p, "기사운임", raw, fareR.rules); return { ...n, 수수료: Number(n.수수료) || 0 }; } // ⭐ 2026-11-02 운임규칙
       const 청구 = parseInt(p.청구운임 || "0", 10);
       const 기사 = parseInt(raw || "0", 10);
 
@@ -32427,6 +32490,15 @@ value={copyTarget?.화물수량 || ""}
                 />
               </div>
             </div>
+            {/* ⭐ 2026-11-02 운임규칙 — 수정 창 운임구분 */}
+            {fareOn && (
+              <div className="mb-3 flex items-center gap-2 flex-wrap">
+                <label className="shrink-0">운임구분</label>
+                <FareTypeSelect compact className="min-w-[160px]" rules={fareR.rules} value={editTarget.운임구분 || ""}
+                  onChange={(v) => setEditTarget((p) => { const n = fareFormChange(p, "운임구분", v, fareR.rules); return { ...n, 수수료: Number(n.수수료) || 0 }; })} />
+                <FareRuleHint form={editTarget} rules={fareR.rules} onReapply={() => setEditTarget((p) => { const n = fareFormChange(p, "__reapply", null, fareR.rules); return { ...n, 수수료: Number(n.수수료) || 0 }; })} />
+              </div>
+            )}
 
             {/* ------------------------------------------------ */}
             {/* 🔵 지급/배차 방식 */}
@@ -32611,6 +32683,7 @@ const ALLOWED_FIELDS = [
   "차량종류", "차량톤수",
   "차량번호", "이름", "전화번호",
   "청구운임", "기사운임",
+  "운임구분", "운임수동", // ⭐ 2026-11-02 운임규칙
   "지급방식", "배차방식",
   "메모",
   "메모중요도",
@@ -34977,6 +35050,9 @@ function DispatchStatus({
   // 중복으로 읽어들였다).
   userNameMap = new Map(),
 }) {
+// ⭐ 2026-11-02 운임규칙 — 오더 복사·수정 패널 / 수정 창 / 운임구분 열(규칙 사용 회사만)
+const fareR = useFareRules(userCompany);
+const fareOn = fareR.on;
 const cpCargoTypeOptions = useCompanyDropdownOptions("화물타입", role, userCompany); // 오더복사 수정 창 단위(회사별 설정)
 const cpTonTypeOptions = useCompanyDropdownOptions("톤수타입", role, userCompany);
 const loadMethodOptions = useCompanyDropdownOptions("상하차방법", role, userCompany);
@@ -40807,6 +40883,7 @@ return (
       .replace(/(?!^)-/g, "");  // -는 맨 앞만
 
     setEditTarget((p) => {
+      if (fareOn) { const n = fareFormChange(p, "청구운임", raw, fareR.rules); return { ...n, 수수료: Number(n.수수료) || 0 }; } // ⭐ 2026-11-02 운임규칙
       const 청구 = parseInt(raw || "0", 10);
       const 기사 = parseInt(p.기사운임 || "0", 10);
 
@@ -40831,6 +40908,7 @@ return (
       .replace(/(?!^)-/g, "");
 
     setEditTarget((p) => {
+      if (fareOn) { const n = fareFormChange(p, "기사운임", raw, fareR.rules); return { ...n, 수수료: Number(n.수수료) || 0 }; } // ⭐ 2026-11-02 운임규칙
       const 청구 = parseInt(p.청구운임 || "0", 10);
       const 기사 = parseInt(raw || "0", 10);
 
@@ -40852,6 +40930,15 @@ return (
                 />
               </div>
             </div>
+            {/* ⭐ 2026-11-02 운임규칙 — 수정 창 운임구분 */}
+            {fareOn && (
+              <div className="mb-3 flex items-center gap-2 flex-wrap">
+                <label className="shrink-0">운임구분</label>
+                <FareTypeSelect compact className="min-w-[160px]" rules={fareR.rules} value={editTarget.운임구분 || ""}
+                  onChange={(v) => setEditTarget((p) => { const n = fareFormChange(p, "운임구분", v, fareR.rules); return { ...n, 수수료: Number(n.수수료) || 0 }; })} />
+                <FareRuleHint form={editTarget} rules={fareR.rules} onReapply={() => setEditTarget((p) => { const n = fareFormChange(p, "__reapply", null, fareR.rules); return { ...n, 수수료: Number(n.수수료) || 0 }; })} />
+              </div>
+            )}
 
             {/* ------------------------------------------------ */}
             {/* 🔵 지급/배차 방식 */}
@@ -41037,6 +41124,7 @@ return (
       "차량종류", "차량톤수",
       "차량번호", "이름", "전화번호",
       "청구운임", "기사운임",
+      "운임구분", "운임수동", // ⭐ 2026-11-02 운임규칙
       "지급방식", "배차방식",
       "메모",
       "메모중요도",
@@ -42183,7 +42271,7 @@ setCopyPlaceOptions(list);
       .replace(/[^\d-]/g, "")
       .replace(/(?!^)-/g, "");
 
-    setCopyTarget(p=>({...p, 청구운임: v}))
+    setCopyTarget(p=> fareOn ? fareFormChange(p, "청구운임", v, fareR.rules) : ({...p, 청구운임: v})) // ⭐ 2026-11-02 운임규칙
   }}
 />
             </Field>
@@ -42197,7 +42285,7 @@ setCopyPlaceOptions(list);
       .replace(/[^\d-]/g, "")
       .replace(/(?!^)-/g, "");
 
-    setCopyTarget(p=>({...p, 기사운임: v}))
+    setCopyTarget(p=> fareOn ? fareFormChange(p, "기사운임", v, fareR.rules) : ({...p, 기사운임: v})) // ⭐ 2026-11-02 운임규칙
   }}
 />
             </Field>
@@ -42225,6 +42313,15 @@ setCopyPlaceOptions(list);
     <option value="취소">취소</option>
   </CustomSelect>
 </Field>
+{/* ⭐ 2026-11-02 운임규칙 — 오더 복사·수정 패널 운임구분 */}
+{fareOn && (
+  <Field label="운임구분">
+    <div className="flex flex-col gap-1">
+      <FareTypeSelect compact className="w-full" rules={fareR.rules} value={copyTarget?.운임구분 || ""} onChange={(v) => setCopyTarget(p => fareFormChange(p, "운임구분", v, fareR.rules))} />
+      <FareRuleHint form={copyTarget} rules={fareR.rules} onReapply={() => setCopyTarget(p => fareFormChange(p, "__reapply", null, fareR.rules))} />
+    </div>
+  </Field>
+)}
 
 <Field label="배차방식">
   <CustomSelect
@@ -59734,10 +59831,12 @@ function CompanyManagementWrapper({ userCompany, role, userId, user, todayStats,
   // ⭐ 2026-11-01 마스터는 인사 담당자(인사관리자·경리+인사·인사 부서)가 없을 때만 인사관리부 — 생기면 자동으로 넘어간다
   const coStaffCM = useCompanyStaff(myDocCM?.isMaster === true ? userCompany : "");
   const canViewHR = role === "totalMaster" || role === "hrManager" || (!!coStaffCM && masterHasHr(myDocCM, coStaffCM, user?.uid));
-  const tabs = role === "hrManager" ? ["회사정보", "조직도", "내정보", "내 이력서"] : canViewHR ? ["회사정보", "조직도", "내정보", "내 이력서", "출근기록부", "인사관리부"] : ["회사정보", "조직도", "내정보", "내 이력서", "출근기록부"];
+  const tabs0 = role === "hrManager" ? ["회사정보", "조직도", "내정보", "내 이력서"] : canViewHR ? ["회사정보", "조직도", "내정보", "내 이력서", "출근기록부", "인사관리부"] : ["회사정보", "조직도", "내정보", "내 이력서", "출근기록부"];
+  // ⭐ 2026-11-02 운임규칙 — 회사 직원 누구나 보고 고친다(조회전용은 보기만)
+  const tabs = role === "driver" || role === "shipper" ? tabs0 : [...tabs0.slice(0, 2), "운임 규칙", ...tabs0.slice(2)];
 
   // ⭐ 디자인 개편 — 관리자메뉴와 같은 왼쪽 메뉴바 + 상단 인사 카드(AdminShell 공용 레이아웃)
-  const TAB_ICONS = { 회사정보: "building", 조직도: "users", 내정보: "user", "내 이력서": "idcard", 출근기록부: "clock", 인사관리부: "idcard" };
+  const TAB_ICONS = { 회사정보: "building", 조직도: "users", "운임 규칙": "money", 내정보: "user", "내 이력서": "idcard", 출근기록부: "clock", 인사관리부: "idcard" };
   const won = (n) => `${Math.round(Number(n) || 0).toLocaleString()}원`;
   const myName = user?.displayName || (user?.email || "").split("@")[0] || "";
   return (
@@ -59760,6 +59859,8 @@ function CompanyManagementWrapper({ userCompany, role, userId, user, todayStats,
         <CompanyProfile userCompany={userCompany} role={role} userId={userId} />
       )}
       {tab === "조직도" && <OrgChart userCompany={userCompany} />}
+      {/* ⭐ 2026-11-02 운임규칙 — 회사관리 › 운임 규칙 */}
+      {tab === "운임 규칙" && <FareRulesSettings company={userCompany} canEdit={role !== "viewer"} myName={myDocCM?.name || myName} />}
       {tab === "내 이력서" && <HRManagementPage userCompany={userCompany} role={role} userId={userId} selfOnly />}
       {tab === "내정보" && (
         <MyProfilePage
