@@ -27,6 +27,7 @@ import SheetImportPanel from "./SheetImportPanel";
 import NoticeBoard from "./NoticeBoard";
 import { toBoardNotice } from "./PlatformNoticeBanner";
 import { compressImage } from "./InternalMail";
+import { RemoteSupportAdminPanel } from "./RemoteSupport"; // ⭐ 2026-11-02 원격지원 —
 import "./pcTheme.css";
 
 const MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
@@ -39,6 +40,7 @@ const SECTIONS = [
     { key: "todo", label: "오늘 할 일", en: "TODAY", icon: "check" },
     { key: "overview", label: "플랫폼 개요", en: "OVERVIEW", icon: "pulse" },
     { key: "live", label: "실시간 접속", en: "LIVE", icon: "users" }, // ⭐ 2026-11-02 관리자센터
+    { key: "support", label: "원격 지원", en: "SUPPORT", icon: "phone" }, // ⭐ 2026-11-02 원격지원 —
   ] },
   { key: "clients", label: "고객사", en: "CLIENTS", icon: "building", items: [
     { key: "companies", label: "운송사 관제", en: "CARRIERS", icon: "building" },
@@ -127,6 +129,8 @@ function TodayPanel({ go }) {
   const today = ymd();
   const soonLimit = (() => { const d = new Date(); d.setMonth(d.getMonth() + 2); return ymd(d); })();
   const tasks = [
+    // ⭐ 2026-11-02 원격지원 — 직원의 원격 지원 요청(승인 대기)을 맨 위에
+    ...(live?.pending.support || []).map((r) => ({ code: "HELP", text: `${normCo(r.companyName) || "운송사"} ${r.name || ""} 원격 지원 요청`, sub: `${r.method === "remote" ? "원격 프로그램" : "화면 공유"} · ${String(r.message || "").slice(0, 40)}`, to: "support", lv: 3 })),
     ...(planReqs || []).filter((r) => r.status === "요청").map((r) => ({ code: "PLAN", text: `${r.company} 요금제 변경 요청 → ${r.toName || r.to}`, sub: `${r.byName || r.by || ""} · 청구 › 수납 관리에서 요금제 지정`, to: "payments", lv: 2 })),
     ...(invoices || []).filter((v) => v.payNotice && v.status !== "입금완료").map((v) => ({ code: "PAID?", text: `${v.company} 입금 알림 — ${Number(v.amount || 0).toLocaleString()}원 (${v.month})`, sub: `${v.payNotice.name || ""} ${v.payNotice.date || ""} · 통장 확인 후 입금완료 처리`, to: "payments", lv: 2 })),
     ...(inquiries || []).filter((q) => !q.status || q.status === "신규").map((q) => ({ code: "LEAD", text: `${q.companyName || "업체"} 도입 문의 — 아직 연락 전`, sub: q.phone || "", to: "inquiries", lv: 2 })),
@@ -161,7 +165,7 @@ function TodayPanel({ go }) {
       <Card code="QUEUE" title={`처리할 일 ${tasks.length}건`} bodyClass="p-2">
         {tasks.length === 0 ? <div className="py-14 text-center text-[#9AA9C3]">지금 처리할 일이 없습니다 ✓</div> : tasks.map((t, i) => (
           <button key={i} type="button" onClick={() => go(t.to)} className="w-full flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-[#F5F8FD] text-left">
-            <span className={`w-16 shrink-0 text-center py-1 rounded-md text-[10.5px] font-extrabold tracking-[0.12em] ${t.lv === 2 ? "bg-[#0F1A30] text-white" : t.lv === 1 ? "bg-[#DCE6F7] text-[#1B2B4B]" : "border border-[#DCE3EE] text-[#5B6B85]"}`} style={{ fontFamily: MONO }}>{t.code}</span>
+            <span className={`w-16 shrink-0 text-center py-1 rounded-md text-[10.5px] font-extrabold tracking-[0.12em] ${t.lv >= 2 ? "bg-[#0F1A30] text-white" : t.lv === 1 ? "bg-[#DCE6F7] text-[#1B2B4B]" : "border border-[#DCE3EE] text-[#5B6B85]"}`} style={{ fontFamily: MONO }}>{t.code}</span>
             <span className="flex-1 min-w-0"><span className="block text-[14.5px] font-black text-[#0F1A30] truncate">{t.text}</span>{t.sub && <span className="block text-[12px] text-[#7A89A3]" style={{ fontFamily: MONO }}>{t.sub}</span>}</span>
             <span className="text-[#9AA9C3]">›</span>
           </button>
@@ -727,6 +731,7 @@ function PlatformCenterInner({ user }) {
     applications: P ? P.transport.length + P.shipper.length : 0,
     inquiries: P ? P.inquiries.length : 0,
     payments: P ? P.planReqs.length : 0,
+    support: P?.support ? P.support.length : 0, // ⭐ 2026-11-02 원격지원 —
   };
   const liveBadge = live?.ready ? live.totals.onlineNow : 0;
   const sectionsView = SECTIONS.map((s) => ({ ...s, items: s.items.map((it) => (it.key === "live" ? { ...it, badge: liveBadge, soft: true } : badges[it.key] ? { ...it, badge: badges[it.key] } : it)) }));
@@ -740,6 +745,8 @@ function PlatformCenterInner({ user }) {
     );
   } else if (tab === "todo") body = <TodayPanel go={setTab} />;
   else if (tab === "live") body = <LiveTab openCompany={openCompany} />;
+  // ⭐ 2026-11-02 원격지원 — 요청 목록 · 승인/거절/완료 · 화면 보기 · 원격 번호
+  else if (tab === "support") body = <><Hero en="DASHBOARD · SUPPORT" title="원격 지원" desc="직원이 보낸 원격 지원 요청 — 승인하면 직원 화면을 실시간으로 보거나(화면 공유) 원격 프로그램 번호를 받습니다." right={<Clock />} /><RemoteSupportAdminPanel me={user} /></>;
   else if (tab === "inquiries") body = <InquiriesPanel toQuote={(q) => { try { sessionStorage.setItem("kpQuoteSeed", JSON.stringify({ customer: q.companyName || "", contact: q.name || "", phone: q.phone || "" })); } catch { /* 무시 */ } setTab("sales:quote"); }} />;
   else if (tab === "contract:list") body = <><Hero en="CONTRACTS · STATUS" title="계약 현황" desc="작성 → 서명 요청 → 고객 전자서명 → 체결까지 한 곳에서. 만료 2개월 전부터 갱신 대상으로 표시됩니다." /><ContractList onNew={() => openContract({})} onEdit={(c) => openContract({ initial: c })} /></>;
   else if (tab === "contract:new") body = <><Hero en="CONTRACTS · NEW" title={contractCtx.initial ? "계약서 수정" : "계약서 작성"} desc="견적을 불러오면 요금·기간이 자동으로 채워집니다. 저장하고 서명 요청을 누르면 고객용 서명 링크가 복사됩니다." /><ContractBuilder key={contractCtx.key} initial={contractCtx.initial} fromQuoteDoc={contractCtx.fromQuote} onDone={() => setTab("contract:list")} /></>;

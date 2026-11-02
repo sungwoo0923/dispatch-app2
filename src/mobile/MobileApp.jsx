@@ -97,6 +97,7 @@ import { isWeekend, findApprovedLeaveForDate, isHoliday } from "../attendanceUti
 const MonthCompareAnalysis = lazyView(() => import("../MonthCompareAnalysis"));
 import { MailHeaderButton } from "../InternalMail";
 import BannerCenter from "../BannerCenter";
+import { RemoteSupportHost, openRemoteSupport } from "../RemoteSupport"; // ⭐ 2026-11-02 원격지원 —
 import OrderCongratsPopup from "../OrderCongratsPopup";
 import BirthdayPopup from "../BirthdayPopup";
 import { tryAutoCheckIn, tryAutoCheckOut, undoAutoCheckOut } from "../autoAttendance";
@@ -5502,6 +5503,8 @@ const title =
 )}
 
       <BannerCenter bottom={86} />
+      {/* ⭐ 2026-11-02 원격지원 — 요청 상태 막대 · 승인 배너 · 포인터 */}
+      <RemoteSupportHost user={user} profile={myProfM} company={userCompany || localStorage.getItem("userCompany") || ""} mobile />
       <OrderCongratsPopup uid={user?.uid} profile={myProfM} mobile />
       <BirthdayPopup uid={user?.uid} profile={myProfM} company={myProfM?.companyName || ""} mobile />
       <MobileHeader
@@ -7758,6 +7761,8 @@ function MobileSideMenu({
             <MenuItem label="내정보" icon="idcard" onClick={onGoMyInfo} dark={dark} />
             <MenuItem label="내 이력서" icon="file" onClick={() => onGo?.("dept:myresume")} dark={dark} />
             <MenuItem label="설정" icon="key" onClick={onGoSettings} dark={dark} />
+            {/* ⭐ 2026-11-02 원격지원 — 사용이 어려울 때 관리자에게 요청 */}
+            {role !== "totalMaster" && <MenuItem label="원격 지원 요청" icon="phone" onClick={() => { onClose?.(); openRemoteSupport(); }} dark={dark} />}
           </MenuSection>
 
           {dark ? (
@@ -22276,6 +22281,8 @@ function MobileSettingsPage({ onBack, cardVersionB, setCardVersionB, alarmEnable
           <KpmRow label="회사" value={userCompany || "-"} />
           <KpmRow label="권한" value={ROLE_KO[role] || role || "-"} />
           <KpmRow label="로그인 관리" sub="로그인된 기기 확인·연결 끊기 · 비밀번호 변경" onClick={() => setLoginMgrOpen(true)} right={go("열기")} />
+          {/* ⭐ 2026-11-02 원격지원 — */}
+          {role !== "totalMaster" && <KpmRow label="원격 지원 요청" sub="사용이 어려울 때 관리자에게 화면 공유·원격 지원 요청" onClick={openRemoteSupport} right={go("요청")} />}
           {loginMgrOpen && <LoginManagerModal user={currentUser} onClose={() => setLoginMgrOpen(false)} />}
           <KpmRow label="로그아웃" danger onClick={() => setShowLogoutConfirm(true)} />
         </KpmCard>
