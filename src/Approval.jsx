@@ -1355,10 +1355,10 @@ function ListTools({ f, setF, drafters }) {
           {f.q && <button type="button" onClick={() => setF({ ...f, q: "" })} className="absolute right-2 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full text-[#9AA9C3]">✕</button>}
         </div>
         {drafters && drafters.length > 1 && (
-          <select value={f.who} onChange={(e) => setF({ ...f, who: e.target.value })} className="h-10 max-w-[42%] px-3 rounded-xl border border-[#DCE3EE] bg-white text-[13.5px] font-bold text-[#0F1A30] outline-none">
+          <CustomSelect value={f.who} onChange={(e) => setF({ ...f, who: e.target.value })} className="h-10 max-w-[42%] px-3 rounded-xl border border-[#DCE3EE] bg-white text-[13.5px] font-bold text-[#0F1A30] outline-none">
             <option value="">기안자 전체</option>
             {drafters.map(([uid, name]) => <option key={uid} value={uid}>{name}</option>)}
-          </select>
+          </CustomSelect>
         )}
       </div>
       {/* ⭐ 2026-10-31 기간 — 빠른 선택 옆에 짧게(날짜칸이 화면 끝까지 길던 문제) */}

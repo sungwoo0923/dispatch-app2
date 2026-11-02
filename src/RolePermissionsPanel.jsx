@@ -25,6 +25,7 @@ import {
   roleScreen,
   ROLE_SCREENS,
 } from "./customRoles";
+import { CustomSelect } from "./CustomSelect";
 
 const genRoleKey = () => `role_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
 
@@ -316,10 +317,10 @@ export default function RolePermissionsPanel({ users: allUsers = [], roleLabels 
               {creating && (
                 <div className="rounded-xl border border-[#1B2B4B]/30 bg-white p-3 space-y-2 mb-2">
                   <input ref={imeFocusRef} autoComplete="off" value={newLabel} onChange={(e) => setNewLabel(e.target.value)} placeholder="역할 이름 (예: 부관리자)" className="w-full border border-gray-300 rounded-lg px-3 py-2 text-[13px] outline-none focus:border-[#1B2B4B]" />
-                  <select value={copyFrom} onChange={(e) => setCopyFrom(e.target.value)} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-[13px] outline-none bg-white">
+                  <CustomSelect value={copyFrom} onChange={(e) => setCopyFrom(e.target.value)} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-[13px] outline-none bg-white">
                     <option value="">처음부터 (HOME만 보이게)</option>
                     {allEditable.map((r) => <option key={r.key} value={r.key}>{r.label} 권한 복사해서 시작</option>)}
-                  </select>
+                  </CustomSelect>
                   <div className="grid grid-cols-2 gap-2">
                     <button onClick={() => { setCreating(false); setNewLabel(""); }} className="py-2 rounded-lg border border-gray-300 text-[12.5px] font-bold text-gray-600">취소</button>
                     <button onClick={createRole} className="py-2 rounded-lg bg-[#1B2B4B] text-white text-[12.5px] font-bold">만들기</button>
@@ -387,10 +388,10 @@ export default function RolePermissionsPanel({ users: allUsers = [], roleLabels 
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="text-[12px] font-bold text-gray-500 mr-1">빠른 설정</span>
                     {PRESETS.map((p) => <button key={p.label} onClick={() => setDraft((d) => ({ ...d, menus: p.make() }))} className="px-3 py-1.5 rounded-lg border border-gray-300 text-[12.5px] font-semibold text-gray-700 hover:bg-gray-50">{p.label}</button>)}
-                    <select value="" onChange={(e) => e.target.value && setDraft((d) => ({ ...d, menus: effectiveMenus(e.target.value, customRoles) }))} className="px-3 py-1.5 rounded-lg border border-gray-300 text-[12.5px] font-semibold text-gray-700 bg-white">
+                    <CustomSelect value="" onChange={(e) => e.target.value && setDraft((d) => ({ ...d, menus: effectiveMenus(e.target.value, customRoles) }))} className="px-3 py-1.5 rounded-lg border border-gray-300 text-[12.5px] font-semibold text-gray-700 bg-white">
                       <option value="">다른 역할 권한 복사…</option>
                       {allEditable.filter((r) => r.key !== selectedKey).map((r) => <option key={r.key} value={r.key}>{r.label}</option>)}
-                    </select>
+                    </CustomSelect>
                   </div>
                   <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
                     {MENU_GROUPS.map((g) => (
@@ -435,9 +436,9 @@ export default function RolePermissionsPanel({ users: allUsers = [], roleLabels 
                             <td className="py-2.5 text-gray-600">{u.companyName || "-"}</td>
                             <td className="py-2.5 text-gray-600">{[u.team, u.position].filter(Boolean).join(" · ") || "-"}</td>
                             <td className="py-2.5">
-                              <select value={u.role || "user"} onChange={(e) => changeUserRole(u, e.target.value)} className="border border-gray-300 rounded-lg px-2 py-1 text-[12.5px] bg-white">
+                              <CustomSelect value={u.role || "user"} onChange={(e) => changeUserRole(u, e.target.value)} className="border border-gray-300 rounded-lg px-2 py-1 text-[12.5px] bg-white">
                                 {[...allEditable, { key: "hrAcct", label: "통합인사관리자" }].map((r) => <option key={r.key} value={r.key}>{r.label}</option>)}
-                              </select>
+                              </CustomSelect>
                             </td>
                           </tr>
                         ))}

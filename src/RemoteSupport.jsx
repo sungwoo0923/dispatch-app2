@@ -14,6 +14,7 @@ import { createPortal } from "react-dom";
 import { addDoc, collection, doc, limit, onSnapshot, orderBy, query, serverTimestamp, setDoc, updateDoc, where } from "firebase/firestore";
 import { db } from "./firebase";
 import { BannerCard, BannerStyles } from "./BannerCenter";
+import { fmtPhone } from "./formatInput";
 
 const MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
 const ICE = { iceServers: [{ urls: ["stun:stun.l.google.com:19302", "stun:stun1.l.google.com:19302"] }] };
@@ -35,7 +36,6 @@ const msOf = (v) => (v?.toMillis ? v.toMillis() : v?.seconds ? v.seconds * 1000 
 const pad = (n) => String(n).padStart(2, "0");
 const fmt = (v) => { const ms = msOf(v); if (!ms) return "-"; const d = new Date(ms); return `${d.getMonth() + 1}/${d.getDate()} ${pad(d.getHours())}:${pad(d.getMinutes())}`; };
 const ago = (v) => { const ms = msOf(v); if (!ms) return "방금"; const s = Math.max(0, (Date.now() - ms) / 1000); if (s < 60) return "방금"; if (s < 3600) return `${Math.floor(s / 60)}분 전`; if (s < 86400) return `${Math.floor(s / 3600)}시간 전`; return fmt(v); };
-const fmtPhone = (v) => { const d = String(v || "").replace(/\D/g, "").slice(0, 11); if (d.length < 4) return d; if (d.length < 8) return `${d.slice(0, 3)}-${d.slice(3)}`; return `${d.slice(0, 3)}-${d.slice(3, d.length - 4)}-${d.slice(-4)}`; };
 export const canShareScreen = () => typeof navigator !== "undefined" && !!navigator.mediaDevices?.getDisplayMedia;
 const isPhoneUA = () => typeof navigator !== "undefined" && /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent || "");
 // 어디서든 이 함수(또는 window 이벤트 "kp-open-remote-support")로 요청 창을 연다

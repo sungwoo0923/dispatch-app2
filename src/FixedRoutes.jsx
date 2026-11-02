@@ -28,6 +28,7 @@ import RouteMapModal from "./RouteMapModal";
 // ⭐ 2026-11-02 운임규칙 — 노선·정류지 기본 운임구분(규칙 사용 회사만) → 기사운임 자동 계산, 만든 오더에 운임구분
 import { VehicleTypePicker } from "./vehicleTypes"; // 🚚 2026-11-02 회사 공용 차량종류
 import { useFareRules, FareTypeSelect, findFareRule, applyFareRule, fareRuleHint } from "./fareRules";
+import { fmtPhone } from "./formatInput";
 
 const MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
 const DAYS = ["월", "화", "수", "목", "금", "토", "일"];
@@ -638,7 +639,7 @@ export default function FixedRoutes({ drivers = [], companyName = "", dispatchDa
                         <Suggest value={s.name} onChange={(v) => setStop(i, { name: v })} items={places} k="업체명" sub={(p) => p.주소 || ""} placeholder={`${s.type}지 검색 (업체·장소명)`}
                           onPick={(p) => setStop(i, { name: p.업체명 || "", addr: p.주소 || s.addr, contact: p.담당자번호 || s.contact, memo: s.memo || p.메모 || "" })} />
                         <input value={s.addr} onChange={(e) => setStop(i, { addr: e.target.value })} placeholder="주소" className={inp} />
-                        <input value={s.contact} onChange={(e) => setStop(i, { contact: e.target.value })} placeholder="연락처(선택)" className={inp} />
+                        <input value={s.contact} inputMode="tel" onChange={(e) => setStop(i, { contact: fmtPhone(e.target.value) })} placeholder="연락처(선택)" className={inp} />
                         <input value={s.memo} onChange={(e) => setStop(i, { memo: e.target.value })} placeholder="메모(출입·하역 방법 등)" className={inp} />
                       </div>
                       <div className="grid gap-2 mt-2 grid-cols-2">

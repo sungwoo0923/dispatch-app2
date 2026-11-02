@@ -8,6 +8,7 @@
 import React, { useMemo, useState } from "react";
 import { statsOf, toWon } from "./monthCompare";
 import { useLoadOrderRange, monthEnd, monthStartAgo } from "./orderHistory";
+import { CustomSelect } from "./CustomSelect";
 
 const MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
 const kstMonth = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 7);
@@ -66,7 +67,7 @@ export default function MonthlyReport({ rows = [], isExcluded = () => false, has
             <div style={{ fontSize: 21, fontWeight: 900 }}>월간 경영 보고서</div>
           </div>
           {hasExcluded && <div style={{ display: "flex", padding: 3, borderRadius: 12, background: "rgba(255,255,255,.1)" }}>{[["pure", "순수 운송"], ["all", "전체"]].map(([k, l]) => <button key={k} type="button" onClick={() => setScope(k)} style={{ height: 34, padding: "0 12px", borderRadius: 9, border: "none", background: scope === k ? "#fff" : "transparent", color: scope === k ? "#0F1A30" : "#fff", fontSize: 13, fontWeight: 900, cursor: "pointer" }}>{l}</button>)}</div>}
-          <select value={month} onChange={(e) => setMonth(e.target.value)} style={{ height: 38, borderRadius: 10, border: "none", padding: "0 10px", fontSize: 14, fontWeight: 900, color: "#0F1A30" }}>{months.map((m) => <option key={m} value={m}>{m.replace("-", "년 ")}월</option>)}</select>
+          <CustomSelect value={month} onChange={(e) => setMonth(e.target.value)} style={{ height: 38, borderRadius: 10, border: "none", padding: "0 10px", fontSize: 14, fontWeight: 900, color: "#0F1A30" }}>{months.map((m) => <option key={m} value={m}>{m.replace("-", "년 ")}월</option>)}</CustomSelect>
           <button type="button" onClick={() => window.print()} style={{ height: 38, padding: "0 14px", borderRadius: 10, border: "1px solid rgba(255,255,255,.25)", background: "rgba(255,255,255,.1)", color: "#fff", fontSize: 13.5, fontWeight: 900, cursor: "pointer" }}>인쇄</button>
           <button type="button" onClick={onClose} style={{ height: 38, padding: "0 16px", borderRadius: 10, border: "none", background: "#fff", color: "#0F1A30", fontSize: 13.5, fontWeight: 900, cursor: "pointer" }}>닫기</button>
         </div>

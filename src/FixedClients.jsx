@@ -6,16 +6,14 @@ import { db, DEFAULT_COMPANY } from "./firebase";
 import { collection, onSnapshot, setDoc, doc, deleteDoc, getDocs, updateDoc } from "firebase/firestore";
 import { Dialog } from "@headlessui/react";
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip } from "recharts";
+import { fmtMoney, fmtPhone, moneyDigits } from "./formatInput";
+import { CustomSelect } from "./CustomSelect";
 
 const fmt = (n) => (n ? Number(n).toLocaleString() : "0");
 
 // 전화번호 하이픈 자동 포맷 (DispatchApp.jsx formatPhone과 동일 규칙)
-const formatPhone = (phone) => {
-  const p = String(phone ?? "").replace(/[^\d]/g, "");
-  if (p.length === 11) return `${p.slice(0, 3)}-${p.slice(3, 7)}-${p.slice(7)}`;
-  if (p.length === 10) return `${p.slice(0, 3)}-${p.slice(3, 6)}-${p.slice(6)}`;
-  return p;
-};
+// 전화번호 하이픈 — 공용 규칙(src/formatInput.js: 02·031·010·1588 등, 입력 중에도 적용)
+const formatPhone = (phone) => fmtPhone(phone);
 
 // ── 첨부파일 뷰어 (고정거래처) ──
 function FCAttachViewer({ row, onClose }) {
@@ -226,7 +224,7 @@ function TonnageInput({ value, onChange }) {
         placeholder="수치"
         onChange={e => { setNum(e.target.value); emit(e.target.value, unit); }}
       />
-      <select
+      <CustomSelect
         className="border border-gray-200 rounded-lg px-1 py-1.5 text-[13px] shrink-0"
         value={unit}
         onChange={e => { setUnit(e.target.value); emit(num, e.target.value); }}
@@ -234,7 +232,7 @@ function TonnageInput({ value, onChange }) {
         <option value="없음">없음</option>
         <option value="톤">톤</option>
         <option value="kg">kg</option>
-      </select>
+      </CustomSelect>
     </div>
   );
 }
@@ -403,26 +401,26 @@ function FastRowCard({ idx, row, drivers, rows, getClientConfigs, onUpdate, onSe
         </div>
         <div>
           <label className="block text-[11px] font-semibold text-gray-500 mb-1">기사단가</label>
-          <input type="number" className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-[13px]" value={row.기사단가} onChange={e => onUpdate("기사단가", e.target.value)} />
+          <input inputMode="numeric" className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-[13px] text-right tabular-nums" value={fmtMoney(row.기사단가)} onChange={e => onUpdate("기사단가", moneyDigits(e.target.value))} />
         </div>
         <div>
           <label className="block text-[11px] font-semibold text-gray-500 mb-1">수수료단가</label>
-          <input type="number" className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-[13px]" value={row.수수료단가} onChange={e => onUpdate("수수료단가", e.target.value)} />
+          <input inputMode="numeric" className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-[13px] text-right tabular-nums" value={fmtMoney(row.수수료단가)} onChange={e => onUpdate("수수료단가", moneyDigits(e.target.value))} />
         </div>
         <div>
           <label className="block text-[11px] font-semibold text-gray-500 mb-1">수수료기준</label>
-          <select className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-[13px]" value={row.수수료기준 || "수량"} onChange={e => onUpdate("수수료기준", e.target.value)}>
+          <CustomSelect className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-[13px]" value={row.수수료기준 || "수량"} onChange={e => onUpdate("수수료기준", e.target.value)}>
             <option value="수량">수량 기준</option>
             <option value="톤수">톤수 기준</option>
-          </select>
+          </CustomSelect>
         </div>
         <div>
           <label className="block text-[11px] font-semibold text-gray-500 mb-1">선결제</label>
-          <input type="number" className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-[13px]" value={row.선결제 || 0} onChange={e => onUpdate("선결제", e.target.value)} />
+          <input inputMode="numeric" className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-[13px] text-right tabular-nums" value={fmtMoney(row.선결제 || 0)} onChange={e => onUpdate("선결제", moneyDigits(e.target.value))} />
         </div>
         <div>
           <label className="block text-[11px] font-semibold text-gray-500 mb-1">지급방식</label>
-          <select className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-[13px]" value={row.지급방식 || ""} onChange={e => onUpdate("지급방식", e.target.value)}>
+          <CustomSelect className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-[13px]" value={row.지급방식 || ""} onChange={e => onUpdate("지급방식", e.target.value)}>
             <option value="">선택</option>
             <option value="계산서">계산서</option>
             <option value="착불">착불</option>
@@ -430,7 +428,7 @@ function FastRowCard({ idx, row, drivers, rows, getClientConfigs, onUpdate, onSe
             <option value="손실">손실</option>
             <option value="개인">개인</option>
             <option value="취소">취소</option>
-          </select>
+          </CustomSelect>
         </div>
       </div>
       <div className="grid grid-cols-4 gap-3 pt-2 border-t border-gray-200">
@@ -1071,26 +1069,26 @@ export default function FixedClients({ drivers = [], upsertDriver, userCompany =
                     </div>
                     <div>
                       <label className="block text-[11px] font-semibold text-gray-500 mb-1">기사단가</label>
-                      <input type="number" className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-[13px]" value={editPopupRow.기사단가 || 0} onChange={e => updateEditPopupField("기사단가", e.target.value)} />
+                      <input inputMode="numeric" className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-[13px] text-right tabular-nums" value={fmtMoney(editPopupRow.기사단가)} onChange={e => updateEditPopupField("기사단가", moneyDigits(e.target.value))} />
                     </div>
                     <div>
                       <label className="block text-[11px] font-semibold text-gray-500 mb-1">수수료단가</label>
-                      <input type="number" className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-[13px]" value={editPopupRow.수수료단가 || 0} onChange={e => updateEditPopupField("수수료단가", e.target.value)} />
+                      <input inputMode="numeric" className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-[13px] text-right tabular-nums" value={fmtMoney(editPopupRow.수수료단가)} onChange={e => updateEditPopupField("수수료단가", moneyDigits(e.target.value))} />
                     </div>
                     <div>
                       <label className="block text-[11px] font-semibold text-gray-500 mb-1">수수료기준</label>
-                      <select className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-[13px]" value={editPopupRow.수수료기준 || "수량"} onChange={e => updateEditPopupField("수수료기준", e.target.value)}>
+                      <CustomSelect className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-[13px]" value={editPopupRow.수수료기준 || "수량"} onChange={e => updateEditPopupField("수수료기준", e.target.value)}>
                         <option value="수량">수량 기준</option>
                         <option value="톤수">톤수 기준</option>
-                      </select>
+                      </CustomSelect>
                     </div>
                     <div>
                       <label className="block text-[11px] font-semibold text-gray-500 mb-1">선결제</label>
-                      <input type="number" className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-[13px]" value={editPopupRow.선결제 || 0} onChange={e => updateEditPopupField("선결제", e.target.value)} />
+                      <input inputMode="numeric" className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-[13px] text-right tabular-nums" value={fmtMoney(editPopupRow.선결제 || 0)} onChange={e => updateEditPopupField("선결제", moneyDigits(e.target.value))} />
                     </div>
                     <div>
                       <label className="block text-[11px] font-semibold text-gray-500 mb-1">지급방식</label>
-                      <select className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-[13px]" value={editPopupRow.지급방식 || ""} onChange={e => updateEditPopupField("지급방식", e.target.value)}>
+                      <CustomSelect className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-[13px]" value={editPopupRow.지급방식 || ""} onChange={e => updateEditPopupField("지급방식", e.target.value)}>
                         <option value="">선택</option>
                         <option value="계산서">계산서</option>
                         <option value="착불">착불</option>
@@ -1098,7 +1096,7 @@ export default function FixedClients({ drivers = [], upsertDriver, userCompany =
                         <option value="손실">손실</option>
                         <option value="개인">개인</option>
                         <option value="취소">취소</option>
-                      </select>
+                      </CustomSelect>
                     </div>
                   </div>
                   <div className="grid grid-cols-4 gap-3 pt-2 border-t border-gray-200">
@@ -1227,18 +1225,18 @@ export default function FixedClients({ drivers = [], upsertDriver, userCompany =
                           수량 × 360원 자동 계산
                         </span>
                       ) : type === "select" ? (
-                        <select disabled={!enabled} className={`flex-1 border rounded-lg px-2 py-1.5 text-[13px] outline-none transition-all ${enabled ? "border-[#1B2B4B]/30 bg-white text-gray-800" : "border-gray-200 bg-gray-50 text-gray-400"}`} value={bulkFields[key]?.value || ""} onChange={e => setBulkFields(p => ({ ...p, [key]: { ...p[key], value: e.target.value } }))}>
+                        <CustomSelect disabled={!enabled} className={`flex-1 border rounded-lg px-2 py-1.5 text-[13px] outline-none transition-all ${enabled ? "border-[#1B2B4B]/30 bg-white text-gray-800" : "border-gray-200 bg-gray-50 text-gray-400"}`} value={bulkFields[key]?.value || ""} onChange={e => setBulkFields(p => ({ ...p, [key]: { ...p[key], value: e.target.value } }))}>
                           {options.map(o => <option key={o} value={o}>{o}</option>)}
-                        </select>
+                        </CustomSelect>
                       ) : type === "number" ? (
-                        <input type="number" disabled={!enabled} className={`flex-1 border rounded-lg px-2 py-1.5 text-[13px] outline-none transition-all ${enabled ? "border-[#1B2B4B]/30 bg-white text-gray-800" : "border-gray-200 bg-gray-50 text-gray-400"}`} value={bulkFields[key]?.value ?? ""} onChange={e => setBulkFields(p => ({ ...p, [key]: { ...p[key], value: Number(e.target.value) } }))} />
+                        <input inputMode="numeric" disabled={!enabled} className={`flex-1 border rounded-lg px-2 py-1.5 text-[13px] text-right tabular-nums outline-none transition-all ${enabled ? "border-[#1B2B4B]/30 bg-white text-gray-800" : "border-gray-200 bg-gray-50 text-gray-400"}`} value={fmtMoney(bulkFields[key]?.value ?? "")} onChange={e => setBulkFields(p => ({ ...p, [key]: { ...p[key], value: Number(moneyDigits(e.target.value)) } }))} />
                       ) : type === "text" ? (
                         <input type="text" disabled={!enabled} className={`flex-1 border rounded-lg px-2 py-1.5 text-[13px] outline-none transition-all ${enabled ? "border-[#1B2B4B]/30 bg-white text-gray-800" : "border-gray-200 bg-gray-50 text-gray-400"}`} value={bulkFields[key]?.value || ""} onChange={e => setBulkFields(p => ({ ...p, [key]: { ...p[key], value: e.target.value } }))} />
                       ) : (
-                        <select disabled={!enabled} className={`flex-1 border rounded-lg px-2 py-1.5 text-[13px] outline-none transition-all ${enabled ? "border-[#1B2B4B]/30 bg-white text-gray-800" : "border-gray-200 bg-gray-50 text-gray-400"}`} value={String(bulkFields[key]?.value)} onChange={e => setBulkFields(p => ({ ...p, [key]: { ...p[key], value: e.target.value === "true" } }))}>
+                        <CustomSelect disabled={!enabled} className={`flex-1 border rounded-lg px-2 py-1.5 text-[13px] outline-none transition-all ${enabled ? "border-[#1B2B4B]/30 bg-white text-gray-800" : "border-gray-200 bg-gray-50 text-gray-400"}`} value={String(bulkFields[key]?.value)} onChange={e => setBulkFields(p => ({ ...p, [key]: { ...p[key], value: e.target.value === "true" } }))}>
                           <option value="true">완료</option>
                           <option value="false">미정산</option>
-                        </select>
+                        </CustomSelect>
                       )}
                     </div>
                   );

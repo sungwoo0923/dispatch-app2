@@ -2,7 +2,7 @@ import React from "react";
 import { createPortal } from "react-dom";
 
 const CustomSelect = React.forwardRef(function CustomSelect(
-  { value, onChange, className = "", disabled = false, children, placeholder, onFocus, onBlur, onKeyDown, id, name, openOnFocus = false, arrowNav = false },
+  { value, onChange, className = "", disabled = false, children, placeholder, onFocus, onBlur, onKeyDown, id, name, openOnFocus = false, arrowNav = false, style, title },
   ref
 ) {
   const [open, setOpen] = React.useState(false);
@@ -156,6 +156,8 @@ const CustomSelect = React.forwardRef(function CustomSelect(
         type="button"
         id={id}
         name={name}
+        title={title}
+        style={style}
         ref={btnRef}
         disabled={disabled}
         data-arrownav={arrowNav ? "true" : undefined}

@@ -6,6 +6,7 @@ import {
 } from "recharts";
 import { EditableText } from "./EditMode";
 import { useLoadFullOrderHistory } from "./orderHistory";
+import { CustomSelect } from "./CustomSelect";
 
 // ─────────────────────────────────────────────────────────
 //  PIN GATE
@@ -184,19 +185,19 @@ function DateRangePicker({ range, onChange, allData }) {
   return (
     <div className="flex items-center gap-2 flex-wrap">
       <span className="text-[13px] font-semibold text-gray-500">기간</span>
-      <select style={selStyle} value={startY} onChange={e => onChange({ ...range, startY: Number(e.target.value) })}>
+      <CustomSelect style={selStyle} value={startY} onChange={e => onChange({ ...range, startY: Number(e.target.value) })}>
         {yearOptions.map(y => <option key={y} value={y}>{y}년</option>)}
-      </select>
-      <select style={selStyle} value={startM} onChange={e => onChange({ ...range, startM: Number(e.target.value) })}>
+      </CustomSelect>
+      <CustomSelect style={selStyle} value={startM} onChange={e => onChange({ ...range, startM: Number(e.target.value) })}>
         {months.map(m => <option key={m} value={m}>{m}월</option>)}
-      </select>
+      </CustomSelect>
       <span className="text-[13px] text-gray-400 font-medium">부터</span>
-      <select style={selStyle} value={endY} onChange={e => onChange({ ...range, endY: Number(e.target.value) })}>
+      <CustomSelect style={selStyle} value={endY} onChange={e => onChange({ ...range, endY: Number(e.target.value) })}>
         {yearOptions.map(y => <option key={y} value={y}>{y}년</option>)}
-      </select>
-      <select style={selStyle} value={endM} onChange={e => onChange({ ...range, endM: Number(e.target.value) })}>
+      </CustomSelect>
+      <CustomSelect style={selStyle} value={endM} onChange={e => onChange({ ...range, endM: Number(e.target.value) })}>
         {months.map(m => <option key={m} value={m}>{m}월</option>)}
-      </select>
+      </CustomSelect>
       <span className="text-[13px] text-gray-400 font-medium">까지</span>
       <button style={btnStyle(isThisYear)} onClick={setThisYear}><EditableText id="executive.dateRange.올해" defaultText="올해" /></button>
       <button style={btnStyle(isAll)} onClick={setAll}><EditableText id="executive.dateRange.전체" defaultText="전체" /></button>

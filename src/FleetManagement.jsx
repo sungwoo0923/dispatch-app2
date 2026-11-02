@@ -49,6 +49,7 @@ import { careSummary, vehicleDefaults } from "./vehicleCare";
 // ⭐ 2026-11-02 차량관리대장 — 회사별 맞춤 기능(companyFeatures.vehicleLedger)이 켜진 회사에만 모듈이 보인다
 import { useCompanyFeatures } from "./companyFeatures";
 import { lazyView } from "./lazyLoad";
+import { fmtMoney, fmtPhone } from "./formatInput";
 import { VehicleTypePicker } from "./vehicleTypes"; // 🚚 2026-11-02 회사 공용 차량종류
 const VehicleLedger = lazyView(() => import("./VehicleLedger"));
 
@@ -59,12 +60,8 @@ const NAVY_DARK = "#131e35";
 const NAVY_LIGHT = "#243454";
 
 // 전화번호 하이픈 자동 포맷 (DispatchApp.jsx formatPhone과 동일 규칙)
-function formatPhone(phone) {
-  const p = String(phone ?? "").replace(/[^\d]/g, "");
-  if (p.length === 11) return `${p.slice(0, 3)}-${p.slice(3, 7)}-${p.slice(7)}`;
-  if (p.length === 10) return `${p.slice(0, 3)}-${p.slice(3, 6)}-${p.slice(6)}`;
-  return p;
-}
+// 전화번호 하이픈 — 공용 규칙(src/formatInput.js: 02·031·010·1588 등, 입력 중에도 적용)
+const formatPhone = (phone) => fmtPhone(phone);
 
 // KPI 카드용 단색 라인 아이콘(path만) — 모바일 지입차관리와 동일한 스타일.
 // <svg stroke={accent}> 안에 그대로 끼워 쓴다.
@@ -1097,11 +1094,11 @@ const regTonNum = (t) => { const n = parseFloat(String(t || "").replace(/[^\d.]/
 const regPlate = (v) => String(v || "").replace(/\s/g, "");
 function RegSelect({ value, onChange, options, label }) {
   return (
-    <select value={value} onChange={e => onChange(e.target.value)}
+    <CustomSelect value={value} onChange={e => onChange(e.target.value)}
       style={{ height: 40, padding: "0 10px", borderRadius: 8, border: `1.5px solid ${value ? NAVY : "#d1d5db"}`, background: value ? "#eef1f6" : "#fff", color: "#111827", fontSize: 15, fontWeight: 700, cursor: "pointer" }}>
       <option value="">{label} 전체</option>
       {options.map(o => <option key={o} value={o}>{o}</option>)}
-    </select>
+    </CustomSelect>
   );
 }
 
@@ -2220,7 +2217,7 @@ function OrderEditModal({ order, onClose }) {
           <div><label style={labelStyle}>화물내용</label><input style={inputStyle} value={form.화물내용} onChange={set("화물내용")} /></div>
           <div><label style={labelStyle}>차량톤수</label><input style={inputStyle} value={form.차량톤수} onChange={set("차량톤수")} /></div>
           <div><label style={labelStyle}>차량종류</label><VehicleTypePicker style={{ ...inputStyle, background: "#fff", cursor: "pointer", fontWeight: 700 }} value={form.차량종류} placeholder="선택" noneLabel="선택 안 함" onChange={(v) => setForm((f) => ({ ...f, 차량종류: v }))} /></div>{/* 🚚 2026-11-02 회사 공용 차량종류 */}
-          <div><label style={labelStyle}>기사운임</label><input style={inputStyle} value={form.기사운임} onChange={(e) => setForm((f) => ({ ...f, 기사운임: e.target.value.replace(/[^\d]/g, "") }))} /></div>
+          <div><label style={labelStyle}>기사운임</label><input style={{ ...inputStyle, textAlign: "right" }} inputMode="numeric" value={fmtMoney(form.기사운임)} onChange={(e) => setForm((f) => ({ ...f, 기사운임: e.target.value.replace(/[^\d]/g, "") }))} /></div>
           <div style={{ gridColumn: "1 / -1" }}><label style={labelStyle}>메모(전달사항)</label><textarea style={{ ...inputStyle, minHeight: 70, resize: "vertical" }} value={form.전달사항} onChange={set("전달사항")} /></div>
         </div>
         <div style={{ padding: "0 18px 18px", display: "flex", gap: 8 }}>
@@ -3775,7 +3772,7 @@ function FleetLiveMapModal({ drivers, liveById, dispatchData, onClose }) {
                 placeholder="기사명 · 차량번호 · 전화번호 검색"
                 style={{ height: 42, padding: "0 14px", borderRadius: 9, border: "1px solid #d1d5db", fontSize: 15, fontWeight: 600, color: "#111827", outline: "none" }}
               />
-              <select
+              <CustomSelect
                 value={region}
                 onChange={e => {
                   const rg = LIVE_MAP_REGIONS.find(x => x.name === e.target.value);
@@ -3786,7 +3783,7 @@ function FleetLiveMapModal({ drivers, liveById, dispatchData, onClose }) {
               >
                 <option value="">지역 선택 → 지도 이동</option>
                 {LIVE_MAP_REGIONS.map(rg => <option key={rg.name} value={rg.name}>{rg.name}</option>)}
-              </select>
+              </CustomSelect>
               <div style={{ display: "flex", gap: 4 }}>
                 {FILTERS.map(([k, l]) => (
                   <button key={k} onClick={() => setFilter(k)}
@@ -4876,14 +4873,14 @@ function FleetSettlementTab({ drivers = [], dispatchData = [], role = "", compan
       <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 12, padding: "14px 18px", marginBottom: 16 }}>
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
           <span style={{ fontSize: 16, fontWeight: 800, color: NAVY, whiteSpace: "nowrap" }}>지입기사 정산서</span>
-          <select
+          <CustomSelect
             value={selId}
             onChange={e => setSelId(e.target.value)}
             style={{ flex: "0 0 auto", width: 190, maxWidth: 220, padding: "7px 10px", border: "1px solid #e5e7eb", borderRadius: 7, fontSize: 15, color: "#374151", background: "#fafafa", outline: "none" }}
           >
             <option value="">기사 선택</option>
             {drivers.map(d => <option key={d.id} value={d.id}>{d.이름} ({d.차량번호})</option>)}
-          </select>
+          </CustomSelect>
           <CustomDatePicker value={rangeStart} onChange={e => setRangeStart(e.target.value)} placeholder="시작일"
             className="h-[34px] px-3 rounded-lg text-[13px] font-bold border border-gray-300 bg-white cursor-pointer" />
           <span style={{ color: "#9ca3af", fontSize: 13 }}>~</span>
@@ -5689,9 +5686,9 @@ function TemperatureTab({ drivers }) {
     <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
       {/* 필터 + 버튼 바 */}
       <div style={{ background: "white", border: "1px solid #e5e7eb", borderRadius: 10, padding: "12px 16px", display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 12 }}>
-        <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} style={{ padding: "7px 10px", borderRadius: 8, border: "1px solid #e5e7eb", fontSize: 15, color: "#374151", background: "#f9fafb" }}>
+        <CustomSelect value={filterStatus} onChange={e => setFilterStatus(e.target.value)} style={{ padding: "7px 10px", borderRadius: 8, border: "1px solid #e5e7eb", fontSize: 15, color: "#374151", background: "#f9fafb" }}>
           {["전체", "정상", "이탈", "오프라인", "미연결"].map(s => <option key={s}>{s}</option>)}
-        </select>
+        </CustomSelect>
         <div style={{ position: "relative", flex: "1 1 160px" }}>
           <input value={searchQ} onChange={e => setSearchQ(e.target.value)} placeholder="차량번호, 이름..." style={{ width: "100%", padding: "7px 10px 7px 32px", borderRadius: 8, border: "1px solid #e5e7eb", fontSize: 15, background: "#f9fafb", outline: "none", boxSizing: "border-box" }} />
           <svg width="14" height="14" fill="none" stroke="#9ca3af" strokeWidth="2" viewBox="0 0 24 24" style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)" }}><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35" strokeLinecap="round"/></svg>
@@ -5805,9 +5802,9 @@ function TemperatureTab({ drivers }) {
                   </div>
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                  <select value={newAlarm.condition} onChange={e => setNewAlarm(p => ({...p, condition: e.target.value}))} style={{ flex: 1, padding: "8px 10px", borderRadius: 8, border: "1px solid #e5e7eb", fontSize: 15, background: "white" }}>
+                  <CustomSelect value={newAlarm.condition} onChange={e => setNewAlarm(p => ({...p, condition: e.target.value}))} style={{ flex: 1, padding: "8px 10px", borderRadius: 8, border: "1px solid #e5e7eb", fontSize: 15, background: "white" }}>
                     {["하나 이상 이탈 시", "모두 이탈 시"].map(c => <option key={c}>{c}</option>)}
-                  </select>
+                  </CustomSelect>
                   <button onClick={() => { if (!newAlarm.name.trim()) return; setAlarmSettings(prev => [...prev, { ...newAlarm, id: Date.now() }]); setNewAlarm({ name: "", minA: "", maxA: "", minB: "", maxB: "", condition: "하나 이상 이탈 시" }); }} style={{ padding: "8px 18px", borderRadius: 8, background: NAVY, color: "white", border: "none", fontSize: 15, fontWeight: 700, cursor: "pointer" }}>추가</button>
                 </div>
               </div>

@@ -7,6 +7,8 @@ import { addDoc, collection, doc, increment, serverTimestamp, updateDoc } from "
 import { db } from "./firebase";
 import { compressImage, sendInternalMail, useCompanyStaff } from "./InternalMail";
 import CustomDatePicker from "./CustomDatePicker";
+import { fmtPhone } from "./formatInput";
+import { CustomSelect } from "./CustomSelect";
 
 const MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
 const inp = "h-11 w-full px-3 rounded-xl border border-[#DCE3EE] bg-white text-[14px] font-semibold text-[#0F1A30] outline-none focus:border-[#2D4C82]";
@@ -130,10 +132,10 @@ export default function ObituaryWriter({ company, me = {}, onCancel, onSaved, in
         <div className="space-y-3">
           <div className="rounded-[20px] bg-white border border-[#E3E8F0] p-5 space-y-3">
             <div className="text-[11px] font-extrabold tracking-[0.22em] text-[#4B6CB7]" style={{ fontFamily: MONO }}>STEP 1 · 상주 직원</div>
-            <select value={f.empUid} onChange={(e) => pickEmp(e.target.value)} className={inp}>
+            <CustomSelect value={f.empUid} onChange={(e) => pickEmp(e.target.value)} className={inp}>
               <option value="">직원 선택(우리 회사 직원의 부고일 때)</option>
               {staff.map((u) => <option key={u.uid} value={u.uid}>{[u.name, u.team, u.position].filter(Boolean).join(" · ")}</option>)}
-            </select>
+            </CustomSelect>
             <div><L>고인과의 관계</L><div className="flex flex-wrap gap-1.5">{RELS.map((r) => <button key={r} type="button" onClick={() => set("rel", r)} className={`h-8 px-3 rounded-full text-[12.5px] font-black border ${f.rel === r ? "bg-[#111] text-white border-[#111]" : "bg-white text-[#5B6B85] border-[#DCE3EE]"}`}>{r}</button>)}</div></div>
           </div>
           <div className="rounded-[20px] bg-white border border-[#E3E8F0] p-5 space-y-3">
@@ -142,7 +144,7 @@ export default function ObituaryWriter({ company, me = {}, onCancel, onSaved, in
             <div className="grid grid-cols-2 gap-2"><div><L>별세일</L><CustomDatePicker value={f.date} onChange={(e) => set("date", e.target.value)} className={inp} showIcon /></div><div><L>시각(선택)</L><input type="time" value={f.time} onChange={(e) => set("time", e.target.value)} className={inp} /></div></div>
             <div className="grid grid-cols-[1fr_120px] gap-2"><div><L>빈소(장례식장) *</L><input value={f.hall} onChange={(e) => set("hall", e.target.value)} className={inp} placeholder="예: ○○대학교병원 장례식장" /></div><div><L>호실</L><input value={f.room} onChange={(e) => set("room", e.target.value)} className={inp} placeholder="특1호실" /></div></div>
             <div><L>주소</L><input value={f.address} onChange={(e) => set("address", e.target.value)} className={inp} /></div>
-            <div><L>장례식장 연락처</L><input value={f.hallTel} onChange={(e) => set("hallTel", e.target.value)} className={inp} /></div>
+            <div><L>장례식장 연락처</L><input value={f.hallTel} inputMode="tel" placeholder="02-000-0000" onChange={(e) => set("hallTel", fmtPhone(e.target.value))} className={inp} /></div>
             <div className="grid grid-cols-2 gap-2"><div><L>발인일</L><CustomDatePicker value={f.outDate} onChange={(e) => set("outDate", e.target.value)} className={inp} showIcon /></div><div><L>발인 시각</L><input type="time" value={f.outTime} onChange={(e) => set("outTime", e.target.value)} className={inp} /></div></div>
             <div><L>장지</L><input value={f.burial} onChange={(e) => set("burial", e.target.value)} className={inp} placeholder="예: ○○추모공원" /></div>
             <div><L>상주</L><input value={f.chief} onChange={(e) => set("chief", e.target.value)} className={inp} placeholder="예: 아들 ○○○, 딸 ○○○" /></div>

@@ -16,6 +16,8 @@ import ObituaryWriter from "./ObituaryWriter";
 import { WORK_TIME_OPTIONS } from "./autoAttendance";
 import { useRoleOptions } from "./customRoles";
 import { RULE_CATS, RULE_TEMPLATES, fillCompany } from "./companyRuleTemplates";
+import { fmtPhone } from "./formatInput";
+import { CustomSelect } from "./CustomSelect";
 
 const kstDay = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
 const inp = "h-11 w-full px-3 rounded-xl border border-[#DCE3EE] bg-white text-[14px] font-semibold text-[#0F1A30] outline-none focus:border-[#2D4C82]";
@@ -79,15 +81,15 @@ export function StaffRegister({ company, onDone }) {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div><Label>이름 *</Label><input value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} className={inp} /></div>
             <div><Label>생년월일</Label><BirthSelect value={f.birthDate} onChange={(v) => setF((p) => ({ ...p, birthDate: v }))} selectClass={inp} /></div>
-            <div><Label>연락처</Label><input value={f.phone} onChange={(e) => setF({ ...f, phone: e.target.value })} className={inp} placeholder="010-0000-0000" /></div>
+            <div><Label>연락처</Label><input value={f.phone} inputMode="tel" onChange={(e) => setF({ ...f, phone: fmtPhone(e.target.value) })} className={inp} placeholder="010-0000-0000" /></div>
             <div><Label>이메일(선택)</Label><input value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} className={inp} /></div>
             <div className="md:col-span-2"><Label>주소</Label><AddressField value={f.address} onChange={(v) => setF((p) => ({ ...p, address: v }))} /></div>
           </div>
         </BookCard>
         <BookCard en="POSITION" title="소속 · 입사">
           <div className="space-y-3">
-            <div><Label>부서</Label><select value={f.team} onChange={(e) => { const team = e.target.value; setF({ ...f, team, position: hr.positionsFor(team).includes(f.position) ? f.position : "" }); }} className={inp}><option value="">미배정</option>{hr.teams.map((t) => <option key={t}>{t}</option>)}</select></div>
-            <div><Label>직책</Label><select value={f.position} onChange={(e) => setF({ ...f, position: e.target.value })} className={inp}><option value="">미설정</option>{hr.positionsFor(f.team).map((p) => <option key={p}>{p}</option>)}</select></div>
+            <div><Label>부서</Label><CustomSelect value={f.team} onChange={(e) => { const team = e.target.value; setF({ ...f, team, position: hr.positionsFor(team).includes(f.position) ? f.position : "" }); }} className={inp}><option value="">미배정</option>{hr.teams.map((t) => <option key={t}>{t}</option>)}</CustomSelect></div>
+            <div><Label>직책</Label><CustomSelect value={f.position} onChange={(e) => setF({ ...f, position: e.target.value })} className={inp}><option value="">미설정</option>{hr.positionsFor(f.team).map((p) => <option key={p}>{p}</option>)}</CustomSelect></div>
             <div><Label>고용 형태</Label><div className="flex flex-wrap gap-1.5">{["정규직", "계약직", "수습", "파트타임", "일용직"].map((k) => <Chip key={k} on={f.employType === k} onClick={() => setF({ ...f, employType: k })}>{k}</Chip>)}</div></div>
             <div><Label>입사일</Label><input type="date" value={f.hireDate} onChange={(e) => setF({ ...f, hireDate: e.target.value })} className={inp} /></div>
             <div className="rounded-xl bg-[#F5F8FD] border border-[#E3E8F0] px-3 py-2 text-[12px] text-[#5B6B85]">권한: <b className="text-[#0F1A30]">{ro.label(suggestFor({ team: f.team, position: f.position }, ro.execKeys))}</b> (부서·직책 기준) · 계정이 없으므로 로그인은 안 됩니다</div>
@@ -388,21 +390,21 @@ export function StaffInfoBoard({ company, canManage }) {
                 <Section no="01" en="Basic" title="기본 정보">
                   <div className="grid grid-cols-2 gap-4">
                     <Field label="이름"><input value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} className={fi} /></Field>
-                    <Field label="연락처"><input value={f.phone} onChange={(e) => setF({ ...f, phone: e.target.value })} className={`${fi} tabular-nums`} placeholder="010-0000-0000" /></Field>
+                    <Field label="연락처"><input value={f.phone} inputMode="tel" onChange={(e) => setF({ ...f, phone: fmtPhone(e.target.value) })} className={`${fi} tabular-nums`} placeholder="010-0000-0000" /></Field>
                   </div>
                 </Section>
                 <Section no="02" en="Organization" title="소속 · 권한">
                   <div className="grid grid-cols-2 gap-4">
-                    <Field label="부서"><select value={f.team} onChange={(e) => { const team = e.target.value; const position = hr.positionsFor(team).includes(f.position) ? f.position : ""; setF({ ...f, team, position, role: suggestFor({ team, position }, ro.execKeys) }); }} className={fi}><option value="">미배정</option>{hr.teams.map((t) => <option key={t}>{t}</option>)}</select></Field>
-                    <Field label="직책"><select value={f.position} onChange={(e) => setF({ ...f, position: e.target.value, role: suggestFor({ team: f.team, position: e.target.value }, ro.execKeys) })} className={fi}><option value="">미설정</option>{[...new Set([...hr.positionsFor(f.team), f.position].filter(Boolean))].map((p) => <option key={p}>{p}</option>)}</select></Field>
-                    <Field label="권한" hint={sel.isMaster ? "마스터 계정은 권한을 바꿀 수 없습니다" : ROLE_DESC[f.role] || (ro.execKeys.includes(f.role) ? "임원 화면(경영 브리핑) — 권한 관리에서 만든 역할" : "권한 관리에서 만든 역할 — 메뉴는 그 설정을 따릅니다")}><select value={f.role} disabled={sel.isMaster} onChange={(e) => setF({ ...f, role: e.target.value })} className={fi}>{[...ro.options, ...(ro.options.some(([k]) => k === f.role) ? [] : [[f.role, ro.label(f.role)]])].map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select></Field>
-                    <Field label="고용 형태"><select value={f.employType} onChange={(e) => setF({ ...f, employType: e.target.value })} className={fi}>{["정규직", "계약직", "수습", "파트타임", "일용직"].map((k) => <option key={k}>{k}</option>)}</select></Field>
+                    <Field label="부서"><CustomSelect value={f.team} onChange={(e) => { const team = e.target.value; const position = hr.positionsFor(team).includes(f.position) ? f.position : ""; setF({ ...f, team, position, role: suggestFor({ team, position }, ro.execKeys) }); }} className={fi}><option value="">미배정</option>{hr.teams.map((t) => <option key={t}>{t}</option>)}</CustomSelect></Field>
+                    <Field label="직책"><CustomSelect value={f.position} onChange={(e) => setF({ ...f, position: e.target.value, role: suggestFor({ team: f.team, position: e.target.value }, ro.execKeys) })} className={fi}><option value="">미설정</option>{[...new Set([...hr.positionsFor(f.team), f.position].filter(Boolean))].map((p) => <option key={p}>{p}</option>)}</CustomSelect></Field>
+                    <Field label="권한" hint={sel.isMaster ? "마스터 계정은 권한을 바꿀 수 없습니다" : ROLE_DESC[f.role] || (ro.execKeys.includes(f.role) ? "임원 화면(경영 브리핑) — 권한 관리에서 만든 역할" : "권한 관리에서 만든 역할 — 메뉴는 그 설정을 따릅니다")}><CustomSelect value={f.role} disabled={sel.isMaster} onChange={(e) => setF({ ...f, role: e.target.value })} className={fi}>{[...ro.options, ...(ro.options.some(([k]) => k === f.role) ? [] : [[f.role, ro.label(f.role)]])].map(([k, l]) => <option key={k} value={k}>{l}</option>)}</CustomSelect></Field>
+                    <Field label="고용 형태"><CustomSelect value={f.employType} onChange={(e) => setF({ ...f, employType: e.target.value })} className={fi}>{["정규직", "계약직", "수습", "파트타임", "일용직"].map((k) => <option key={k}>{k}</option>)}</CustomSelect></Field>
                   </div>
                 </Section>
                 <Section no="03" en="Work Time" title="출근 · 퇴근 시간">
                   <div className="grid grid-cols-2 gap-4">
-                    <Field label="출근 시간" hint="이 시간 3시간 전부터 자동 출근 · 지각 기준"><select value={f.workStartTime} onChange={(e) => setF({ ...f, workStartTime: e.target.value })} className={`${fi} tabular-nums`}>{WORK_TIME_OPTIONS.map((t) => <option key={t} value={t}>{t}</option>)}</select></Field>
-                    <Field label="퇴근 시간" hint="이 시간 1시간 전부터 자동 퇴근(출근지 반경 밖)"><select value={f.workEndTime} onChange={(e) => setF({ ...f, workEndTime: e.target.value })} className={`${fi} tabular-nums`}>{WORK_TIME_OPTIONS.map((t) => <option key={t} value={t}>{t}</option>)}</select></Field>
+                    <Field label="출근 시간" hint="이 시간 3시간 전부터 자동 출근 · 지각 기준"><CustomSelect value={f.workStartTime} onChange={(e) => setF({ ...f, workStartTime: e.target.value })} className={`${fi} tabular-nums`}>{WORK_TIME_OPTIONS.map((t) => <option key={t} value={t}>{t}</option>)}</CustomSelect></Field>
+                    <Field label="퇴근 시간" hint="이 시간 1시간 전부터 자동 퇴근(출근지 반경 밖)"><CustomSelect value={f.workEndTime} onChange={(e) => setF({ ...f, workEndTime: e.target.value })} className={`${fi} tabular-nums`}>{WORK_TIME_OPTIONS.map((t) => <option key={t} value={t}>{t}</option>)}</CustomSelect></Field>
                   </div>
                   <div className="text-[12px] text-[#7A879C] mt-2">반차는 이 시간 기준으로 계산돼요 — 오전반차 출근 {(() => { const [h, m] = String(f.workStartTime || "09:00").split(":").map(Number); return `${String(Math.min(23, h + 4)).padStart(2, "0")}:${String(m).padStart(2, "0")}`; })()} · 오후반차 퇴근 같은 시각.</div>
                   {canManage && <div className="mt-3 flex justify-end"><button type="button" disabled={busy} onClick={saveInfo} className="h-10 px-5 rounded-xl bg-[#0F1A30] text-white text-[13.5px] font-black disabled:opacity-50 whitespace-nowrap">{busy ? "저장 중…" : "출퇴근 시간 저장"}</button></div>}

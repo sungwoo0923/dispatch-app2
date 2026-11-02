@@ -13,6 +13,7 @@ import { BirthSelect } from "./ResumeInputs";
 import {
   doc, getDoc, setDoc, serverTimestamp, collection, query, where, getDocs, addDoc, updateDoc,
 } from "firebase/firestore";
+import { fmtPhone } from "./formatInput";
 
 // 운송사 목록 — 가입 화면이 열릴 때 한 번 받아 두고, 입력할 때마다 바로 거른다(드롭다운 즉시)
 let companyListPromise = null;
@@ -97,12 +98,8 @@ const PRIVACY_TERMS = `수집하는 개인정보 항목
 이용자 권리
 이용자는 언제든지 개인정보 열람, 수정, 삭제를 요청할 수 있습니다.`;
 
-const formatPhone = (val) => {
-  const v = val.replace(/[^0-9]/g, "");
-  if (v.length <= 3) return v;
-  if (v.length <= 7) return `${v.slice(0, 3)}-${v.slice(3)}`;
-  return `${v.slice(0, 3)}-${v.slice(3, 7)}-${v.slice(7, 11)}`;
-};
+// 전화번호 하이픈 — 공용 규칙(src/formatInput.js: 02·031·010·1588 등, 입력 중에도 적용)
+const formatPhone = (phone) => fmtPhone(phone);
 
 const formatBizNum = (val) => {
   const v = val.replace(/[^0-9]/g, "");
@@ -531,7 +528,7 @@ function SignupForm({ signupType, onBack }) {
 
           {signupType === "신규" && (
             <Field label="사업자번호" required>
-              <input value={businessNumber}
+              <input value={businessNumber} inputMode="numeric"
                 onChange={(e) => setBusinessNumber(formatBizNum(e.target.value))}
                 placeholder="000-00-00000" maxLength={12}
                 className="w-full h-12 border border-[#DCE3EE] rounded-xl px-4 text-[15px] font-semibold text-[#0F1A30] placeholder:text-[#8E9BB2] focus:outline-none focus:border-[#2D4C82] focus:ring-2 focus:ring-[#2D4C82]/15" />
@@ -580,7 +577,7 @@ function SignupForm({ signupType, onBack }) {
           </Field>
 
           <Field label="핸드폰번호" required>
-            <input value={phone}
+            <input value={phone} inputMode="tel"
               onChange={(e) => setPhone(formatPhone(e.target.value))}
               placeholder="010-0000-0000" maxLength={13}
               className="w-full h-12 border border-[#DCE3EE] rounded-xl px-4 text-[15px] font-semibold text-[#0F1A30] placeholder:text-[#8E9BB2] focus:outline-none focus:border-[#2D4C82] focus:ring-2 focus:ring-[#2D4C82]/15" />

@@ -12,6 +12,7 @@ import { db, auth, DEFAULT_COMPANY } from "./firebase";
 import { BookHero, BookCard, Chip, Sheet, MONO } from "./OfficeBooks";
 import { isTMUser } from "./staffFilter";
 import { leaveEntitlement, leaveUseOf } from "./approvalForms";
+import { CustomSelect } from "./CustomSelect";
 
 const toInt = (v) => parseInt(String(v ?? "0").replace(/[^\d-]/g, ""), 10) || 0;
 const won = (n) => Math.round(Number(n) || 0).toLocaleString("ko-KR");
@@ -269,7 +270,7 @@ function RetireCaseSheet({ company, u, c, profile, resign, approvals, isViewer, 
           <div><div className="text-[12.5px] font-black text-[#3A4A66] mb-1.5">최근 3개월 월평균 임금</div><input inputMode="numeric" value={f.avgMonthly ? won(f.avgMonthly) : ""} onChange={(e) => setF((p) => ({ ...p, avgMonthly: e.target.value.replace(/[^\d]/g, "") }))} className={`${inp} text-right tabular-nums`} style={{ fontFamily: MONO }} placeholder="세전 · 상여 포함" /></div>
           <div><div className="text-[12.5px] font-black text-[#3A4A66] mb-1.5">미사용 연차(일)</div><input inputMode="decimal" value={f.unusedLeave} onChange={(e) => setF((p) => ({ ...p, unusedLeave: e.target.value.replace(/[^\d.]/g, "") }))} className={`${inp} text-right`} /></div>
           <div><div className="text-[12.5px] font-black text-[#3A4A66] mb-1.5">1일 통상임금(선택)</div><input inputMode="numeric" value={f.dailyOrdinary ? won(f.dailyOrdinary) : ""} onChange={(e) => setF((p) => ({ ...p, dailyOrdinary: e.target.value.replace(/[^\d]/g, "") }))} className={`${inp} text-right`} placeholder="비우면 월급÷209×8" /></div>
-          <div><div className="text-[12.5px] font-black text-[#3A4A66] mb-1.5">퇴직연금</div><select value={f.pension} onChange={(e) => setF((p) => ({ ...p, pension: e.target.value }))} className={inp}>{["미가입", "DB형", "DC형", "IRP"].map((x) => <option key={x}>{x}</option>)}</select></div>
+          <div><div className="text-[12.5px] font-black text-[#3A4A66] mb-1.5">퇴직연금</div><CustomSelect value={f.pension} onChange={(e) => setF((p) => ({ ...p, pension: e.target.value }))} className={inp}>{["미가입", "DB형", "DC형", "IRP"].map((x) => <option key={x}>{x}</option>)}</CustomSelect></div>
         </div>
       </div>
       <div className="rounded-2xl bg-white border border-[#E3E8F0] p-4">

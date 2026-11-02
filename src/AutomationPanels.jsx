@@ -8,6 +8,7 @@ import { db, auth } from "./firebase";
 import { collection, doc, onSnapshot, query, where, addDoc, updateDoc, deleteDoc, serverTimestamp } from "firebase/firestore";
 import { callFn, kstToday, addDays, won } from "./kpApi";
 import { isTMUser } from "./staffFilter";
+import { CustomSelect } from "./CustomSelect";
 
 const DAYS = ["일", "월", "화", "수", "목", "금", "토"];
 const WEEKDAYS = [1, 2, 3, 4, 5];
@@ -84,13 +85,13 @@ function ScheduleFields({ days, setDays, hour, setHour, when, setWhen, sm }) {
         <button type="button" onClick={() => setDays([0, 1, 2, 3, 4, 5, 6])} className="text-[12px] font-bold text-[#4B6CB7]">매일</button>
       </div>
       <div className="flex items-center gap-1.5 text-[13px] font-bold text-[#3A4A66]">
-        <select value={when} onChange={(e) => setWhen(e.target.value)} className={sel}>
+        <CustomSelect value={when} onChange={(e) => setWhen(e.target.value)} className={sel}>
           <option value="prev">전날</option>
           <option value="same">당일</option>
-        </select>
-        <select value={hour} onChange={(e) => setHour(Number(e.target.value))} className={sel}>
+        </CustomSelect>
+        <CustomSelect value={hour} onChange={(e) => setHour(Number(e.target.value))} className={sel}>
           {HOURS.map((h) => <option key={h} value={h}>{String(h).padStart(2, "0")}시</option>)}
-        </select>
+        </CustomSelect>
         <span>에 자동 등록</span>
       </div>
     </div>

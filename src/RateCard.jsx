@@ -16,6 +16,7 @@ const STANDARD_TON_LABELS = ["다마스/라보","1톤","1.4톤","2.5톤","3.5톤
 // 회사마다 자기 정보로 찍히게 한다 — RateCard 컴포넌트 안 useCompanyInfo 훅 참고.
 // ⭐ 2026-11-02 속도 — 회사 정보 훅은 작은 파일(companyInfo.js)로 옮김(모바일 첫 로딩에서 이 화면·엑셀 라이브러리 제외). 기존 import 호환을 위해 다시 내보낸다
 import { useCompanyInfo } from "./companyInfo";
+import { CustomSelect } from "./CustomSelect";
 export { useCompanyInfo };
 // 🧾 단가표 인쇄 양식(가로) — 1톤부터 톤수가 가로로 쭉, 위에 거래처·구간·독차/혼적·차량종류
 //  [편집] 누르면 칸을 바로 고쳐서 인쇄할 수 있다.
@@ -1512,7 +1513,7 @@ ${sheet.note ? `<div class="notice">${esc(sheet.note)}</div>` : ""}
                             />
                           </td>
                           <td className="px-2 py-2">
-                            <select
+                            <CustomSelect
                               className="w-full px-2 py-1.5 text-[12px] rounded border border-gray-200 focus:outline-none text-center"
                               value={row.varianceLabel}
                               onChange={e => updateManualRow(i, "varianceLabel", e.target.value)}
@@ -1520,10 +1521,10 @@ ${sheet.note ? `<div class="notice">${esc(sheet.note)}</div>` : ""}
                               <option value="낮음">낮음</option>
                               <option value="보통">보통</option>
                               <option value="높음">높음</option>
-                            </select>
+                            </CustomSelect>
                           </td>
                           <td className="px-2 py-2">
-                            <select
+                            <CustomSelect
                               className="w-full px-2 py-1.5 text-[12px] rounded border border-gray-200 focus:outline-none text-center"
                               value={row.confLabel}
                               onChange={e => updateManualRow(i, "confLabel", e.target.value)}
@@ -1531,7 +1532,7 @@ ${sheet.note ? `<div class="notice">${esc(sheet.note)}</div>` : ""}
                               <option value="낮음">낮음</option>
                               <option value="보통">보통</option>
                               <option value="높음">높음</option>
-                            </select>
+                            </CustomSelect>
                           </td>
                           <td className="px-2 py-2 text-center">
                             {manualRows.length > 1 && (

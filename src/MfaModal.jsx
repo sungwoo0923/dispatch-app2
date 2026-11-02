@@ -21,6 +21,7 @@ import { initializeApp, getApps } from "firebase/app";
 import { getAuth, signInWithPhoneNumber, signOut } from "firebase/auth";
 import { doc, setDoc, deleteField } from "firebase/firestore";
 import { auth as mainAuth, db } from "./firebase";
+import { fmtPhone } from "./formatInput";
 
 export const MASTER_EMAIL = "tjddnqkf@naver.com";
 
@@ -305,7 +306,7 @@ export function MfaEnrollSection({ user: userProp }) {
       ) : (
         <div className="space-y-2.5">
           <input type="password" autoComplete="current-password" placeholder="현재 비밀번호" value={pw} onChange={(e) => setPw(e.target.value)} className={input} />
-          <input type="tel" inputMode="tel" placeholder="휴대폰 번호 (010-0000-0000)" value={phone} onChange={(e) => setPhone(e.target.value)} className={input} />
+          <input type="tel" inputMode="tel" placeholder="휴대폰 번호 (010-0000-0000)" value={phone} onChange={(e) => setPhone(fmtPhone(e.target.value))} className={input} />
           <button onClick={sendCode} disabled={busy === "send"} className="w-full py-3 rounded-xl bg-[#1B2B4B] text-white text-[14px] font-bold hover:bg-[#243a60] disabled:opacity-60">
             {busy === "send" ? "문자 보내는 중…" : "인증번호 받기"}
           </button>
@@ -497,7 +498,7 @@ export function PcVerifySection({ user: userProp, phone }) {
         </div>
       ) : (
         <div className="space-y-2.5">
-          <input type="tel" inputMode="tel" placeholder="휴대폰 번호 (010-0000-0000)" value={newPhone} onChange={(e) => setNewPhone(e.target.value)} className={input} />
+          <input type="tel" inputMode="tel" placeholder="휴대폰 번호 (010-0000-0000)" value={newPhone} onChange={(e) => setNewPhone(fmtPhone(e.target.value))} className={input} />
           <div className="flex gap-2">
             <button onClick={startSend} disabled={busy === "send"} className="flex-1 py-3 rounded-xl bg-[#1B2B4B] text-white text-[14px] font-bold hover:bg-[#243a60] disabled:opacity-60">
               {busy === "send" ? "문자 보내는 중…" : "인증번호 받기"}

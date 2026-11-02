@@ -3,6 +3,7 @@
 import React, { useMemo, useState, useEffect } from "react";
 import { toWon, creatorOf, useStaffNames } from "./monthCompare";
 import { useLoadOrderRange, monthEnd, monthStartAgo } from "./orderHistory";
+import { CustomSelect } from "./CustomSelect";
 
 const NAVY = "#1B2B4B";
 const kstMonth = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 7);
@@ -64,9 +65,9 @@ export default function StaffPerformance({ rows = [], isExcluded = () => false, 
       <div onClick={(e) => e.stopPropagation()} style={{ background: "#f4f6f9", width: "min(1500px, 100%)", height: "min(95vh, 1200px)", borderRadius: 18, display: "flex", flexDirection: "column", overflow: "hidden", boxShadow: "0 20px 60px rgba(0,0,0,.3)" }}>
         <div style={{ background: NAVY, padding: "16px 22px", display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
           <div style={{ color: "#fff", fontSize: 19, fontWeight: 900, flex: 1 }}>배차담당자별 실적 <span style={{ fontSize: 12, fontWeight: 700, color: "rgba(255,255,255,.7)", marginLeft: 6 }}>관리자 전용</span></div>
-          <select value={month} onChange={(e) => setMonth(e.target.value)} style={{ height: 36, borderRadius: 8, border: "none", padding: "0 10px", fontSize: 15, fontWeight: 800 }}>
+          <CustomSelect value={month} onChange={(e) => setMonth(e.target.value)} style={{ height: 36, borderRadius: 8, border: "none", padding: "0 10px", fontSize: 15, fontWeight: 800 }}>
             {(months.length ? months : [month]).map((m) => <option key={m} value={m}>{m.slice(0, 4)}년 {Number(m.slice(5))}월</option>)}
-          </select>
+          </CustomSelect>
           {hasExcluded && (
             <div style={{ display: "flex", gap: 4, background: "rgba(255,255,255,.12)", borderRadius: 9, padding: 3 }}>
               {[["pure", "순수 운송"], ["all", "전체"]].map(([k, l]) => (

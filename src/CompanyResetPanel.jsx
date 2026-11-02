@@ -8,6 +8,7 @@
 import React from "react";
 import { auth, db, FUNCTIONS_BASE } from "./firebase";
 import { doc, onSnapshot } from "firebase/firestore";
+import { CustomSelect } from "./CustomSelect";
 
 // 초기화·복원 실행은 60분까지 돌 수 있는 companyResetJob, 나머지(목록·상태)는 companyReset
 async function callReset(body, fn = "companyReset") {
@@ -231,12 +232,12 @@ export default function CompanyResetPanel() {
           <div className="space-y-3">
             <label className="block">
               <span className="text-[13px] font-semibold text-gray-600">초기화할 운송사</span>
-              <select value={company} onChange={(e) => setCompany(e.target.value)} className="mt-1.5 w-full h-[46px] px-3.5 rounded-xl border border-gray-300 text-[15px] font-semibold outline-none focus:border-[#1B2B4B] bg-white">
+              <CustomSelect value={company} onChange={(e) => setCompany(e.target.value)} className="mt-1.5 w-full h-[46px] px-3.5 rounded-xl border border-gray-300 text-[15px] font-semibold outline-none focus:border-[#1B2B4B] bg-white">
                 <option value="">운송사 선택</option>
                 {companies.map((c) => (
                   <option key={c.name} value={c.name}>{c.name}{c.code ? ` (${c.code})` : ""} · 계정 {c.users}명</option>
                 ))}
-              </select>
+              </CustomSelect>
             </label>
             <label className="flex items-center gap-2.5 text-[14px] text-gray-800 font-semibold">
               <input type="checkbox" checked={deleteAccounts} onChange={(e) => setDeleteAccounts(e.target.checked)} className="w-[18px] h-[18px]" />

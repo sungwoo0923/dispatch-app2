@@ -12,6 +12,7 @@ import { auth, db, FUNCTIONS_BASE } from "./firebase";
 import {
   collection, doc, getDoc, getDocs, query, where, writeBatch, setDoc, onSnapshot, orderBy, limit, serverTimestamp,
 } from "firebase/firestore";
+import { CustomSelect } from "./CustomSelect";
 
 const SERVICE_EMAIL = "dispatch-app-9b92f@appspot.gserviceaccount.com";
 const ORDER_COLL = "orders";
@@ -379,10 +380,10 @@ export default function SheetImportPanel() {
         <div className="grid grid-cols-1 lg:grid-cols-[320px_minmax(0,1fr)] gap-5">
           <label className="block">
             <span className="text-[13px] font-semibold text-gray-600">가져올 운송사</span>
-            <select value={company} onChange={(e) => { setCompany(e.target.value); setChecked(null); }} className={`mt-1.5 ${input} h-[46px] font-semibold`}>
+            <CustomSelect value={company} onChange={(e) => { setCompany(e.target.value); setChecked(null); }} className={`mt-1.5 ${input} h-[46px] font-semibold`}>
               <option value="">운송사 선택</option>
               {companies.map((c) => <option key={c.name} value={c.name}>{c.name}{c.code ? ` (${c.code})` : ""}</option>)}
-            </select>
+            </CustomSelect>
           </label>
           <div>
             <div className="inline-flex rounded-xl bg-gray-100 p-1 mb-2">
@@ -433,9 +434,9 @@ export default function SheetImportPanel() {
                     <span className="text-[12.5px] text-gray-500">약 {Math.max(0, t.rowCount - 1).toLocaleString()}줄</span>
                     {on && (
                       <label className="ml-auto flex items-center gap-1.5 text-[12.5px] text-gray-600">제목줄
-                        <select value={hr} onChange={(e) => { setPicked((p) => ({ ...p, [t.title]: +e.target.value })); setChecked(null); }} className="border border-gray-300 rounded-md px-1.5 py-0.5 bg-white" disabled={book.source !== "excel" && false}>
+                        <CustomSelect value={hr} onChange={(e) => { setPicked((p) => ({ ...p, [t.title]: +e.target.value })); setChecked(null); }} className="border border-gray-300 rounded-md px-1.5 py-0.5 bg-white" disabled={book.source !== "excel" && false}>
                           {[0, 1, 2, 3, 4, 5].map((n) => <option key={n} value={n}>{n + 1}번째 줄</option>)}
-                        </select>
+                        </CustomSelect>
                       </label>
                     )}
                   </div>
@@ -460,11 +461,11 @@ export default function SheetImportPanel() {
             {FIELDS.map((f) => (
               <label key={f.key} className="flex items-center gap-3">
                 <span className="w-[86px] shrink-0 text-[14px] font-bold text-[#0F1A30]">{f.label || f.key}{f.req && <span className="text-red-500"> *</span>}</span>
-                <select value={mapping[f.key] || ""} onChange={(e) => { setMapping((m) => ({ ...m, [f.key]: e.target.value })); setChecked(null); }}
+                <CustomSelect value={mapping[f.key] || ""} onChange={(e) => { setMapping((m) => ({ ...m, [f.key]: e.target.value })); setChecked(null); }}
                   className={`flex-1 min-w-0 border rounded-xl px-3 py-2 text-[14px] bg-white outline-none ${mapping[f.key] ? "border-[#1B2B4B]/40 text-[#0F1A30] font-semibold" : f.req ? "border-red-300 text-gray-400" : "border-gray-300 text-gray-400"}`}>
                   <option value="">— 가져오지 않음 —</option>
                   {allHeaders.map((h) => <option key={h} value={h}>{h}</option>)}
-                </select>
+                </CustomSelect>
               </label>
             ))}
           </div>

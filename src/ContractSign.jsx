@@ -7,6 +7,7 @@ import React from "react";
 import { doc, getDoc, serverTimestamp, updateDoc } from "firebase/firestore";
 import { db } from "./firebase";
 import { CONTRACT_CSS, C_MONO, printContract, signBlockHtml } from "./ContractCenter";
+import { fmtPhone } from "./formatInput";
 
 async function sha256(text) {
   try {
@@ -123,7 +124,7 @@ export default function ContractSign({ id }) {
           <div className="grid sm:grid-cols-3 gap-2.5 mt-3">
             {[["name", "서명자 이름 *"], ["title", "직위 (예: 대표이사)"], ["phone", "연락처"]].map(([k, l]) => (
               <label key={k} className="block"><span className="text-[12px] font-bold text-[#7A879C]">{l}</span>
-                <input value={signer[k]} onChange={(e) => setSigner((p) => ({ ...p, [k]: e.target.value }))} className="mt-1 h-11 w-full px-3 rounded-xl border border-[#DCE3EE] text-[15px] font-semibold outline-none focus:border-[#4B6CB7]" /></label>
+                <input value={signer[k]} inputMode={k === "phone" ? "tel" : undefined} onChange={(e) => setSigner((p) => ({ ...p, [k]: k === "phone" ? fmtPhone(e.target.value) : e.target.value }))} className="mt-1 h-11 w-full px-3 rounded-xl border border-[#DCE3EE] text-[15px] font-semibold outline-none focus:border-[#4B6CB7]" /></label>
             ))}
           </div>
           <div className="mt-3"><SignPad onChange={setSig} /></div>
