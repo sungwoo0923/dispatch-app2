@@ -610,6 +610,8 @@ export default function PlatformMonitor({ demoStats = null, tab: tabProp, onTab,
               <Card code="STAFF" title={`직원 ${detail.staffList?.length || 0}명`} right={<span style={{ fontSize: 13.5, fontWeight: 700, color: "#6b7280" }}>지금 접속 순 · 실시간</span>}>
                 <StaffList list={detail.staffList || []} />
               </Card>
+              {/* ⭐ 2026-11-02 운임규칙 — 회사별 맞춤 기능(최고관리자만 켜고 끔) */}
+              <CompanyFeaturesCard company={detail.name} />
               <Card code="PLAN" title="요금제 · 청구 상태">
                 {[
                   ["요금제", detail.plan?.planId ? `${PLAN_NAMES[detail.plan.planId] || detail.plan.planId}${detail.plan.since ? ` (${detail.plan.since}부터)` : ""}` : "미지정(전체 기능)"],
@@ -641,6 +643,52 @@ export default function PlatformMonitor({ demoStats = null, tab: tabProp, onTab,
         </div>
       )}
     </NavWrap>
+  );
+}
+
+// ⭐ 2026-11-02 운임규칙 — 회사별 맞춤 기능: companyFeatures/{회사} = { fareRules: bool, updatedAt, updatedBy }
+//  특정 운송사만 쓰는 기능을 최고관리자가 회사별로 켜 준다(켜진 회사에만 메뉴·칸이 보인다).
+const COMPANY_FEATURES = [
+  { key: "fareRules", name: "운임 규칙", desc: "회사관리 › 운임 규칙 메뉴 + 오더 화면의 운임구분(일대·월대 등 → 기사운임·수수료 자동 계산)" },
+];
+function CompanyFeaturesCard({ company }) {
+  const [feat, setFeat] = useState(null);
+  const [busy, setBusy] = useState("");
+  const [err, setErr] = useState("");
+  useEffect(() => {
+    if (!company) return undefined;
+    setFeat(null);
+    return onSnapshot(doc(db, "companyFeatures", company), (snap) => setFeat(snap.exists() ? snap.data() : {}), (e) => { setFeat({}); setErr(String(e?.code || e?.message || e)); });
+  }, [company]);
+  const toggle = async (key, on) => {
+    setBusy(key); setErr("");
+    try {
+      await setDoc(doc(db, "companyFeatures", company), { companyName: company, [key]: on, updatedAt: Date.now(), updatedBy: auth?.currentUser?.email || "" }, { merge: true });
+    } catch (e) { setErr(`저장 실패: ${e?.code || e?.message || e}`); } finally { setBusy(""); }
+  };
+  return (
+    <Card code="FEATURES" title="회사별 맞춤 기능">
+      <div data-company-features="1">
+        {COMPANY_FEATURES.map((f) => {
+          const on = feat?.[f.key] === true;
+          return (
+            <div key={f.key} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 0", borderTop: "1px solid #EEF1F6" }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 15, fontWeight: 900, color: "#0F1A30" }}>{f.name}</div>
+                <div style={{ fontSize: 13.5, color: "#6b7280", fontWeight: 600, marginTop: 2, lineHeight: 1.45 }}>{f.desc}</div>
+              </div>
+              <button type="button" role="switch" aria-checked={on} aria-label={`${f.name} 켜기`} data-feature={f.key} disabled={feat == null || busy === f.key}
+                onClick={() => toggle(f.key, !on)}
+                style={{ position: "relative", width: 56, height: 30, borderRadius: 999, border: "none", background: on ? "#2D4C82" : "#CBD3E1", cursor: "pointer", flexShrink: 0, opacity: feat == null || busy === f.key ? 0.5 : 1 }}>
+                <span style={{ position: "absolute", top: 3, left: on ? 29 : 3, width: 24, height: 24, borderRadius: 999, background: "#fff", boxShadow: "0 1px 3px rgba(0,0,0,.25)", transition: "left .15s" }} />
+              </button>
+            </div>
+          );
+        })}
+        {feat?.updatedBy && <div style={{ fontSize: 13, color: "#8A97B0", marginTop: 4 }}>마지막 변경: {feat.updatedBy}{feat.updatedAt ? ` · ${new Date(feat.updatedAt).toLocaleString("ko-KR", { hour12: false })}` : ""}</div>}
+        {err && <div style={{ fontSize: 13.5, color: "#B91C1C", fontWeight: 800, marginTop: 6 }}>{err}</div>}
+      </div>
+    </Card>
   );
 }
 

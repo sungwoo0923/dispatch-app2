@@ -7,6 +7,7 @@
 // 시트 읽기와 취소는 서버(functions/index.js sheetImport), 저장은 이 화면이 직접 한다.
 import React from "react";
 import * as XLSX from "xlsx";
+import { useFareRules, findFareRule, applyFareRule } from "./fareRules";
 import { auth, db, FUNCTIONS_BASE } from "./firebase";
 import {
   collection, doc, getDoc, getDocs, query, where, writeBatch, setDoc, onSnapshot, orderBy, limit, serverTimestamp,
@@ -57,6 +58,8 @@ const FIELDS = [
   { key: "배차방식", syn: ["배차방식", "프로그램", "배차경로"] },
   { key: "배차상태", syn: ["배차상태", "상태"] },
   { key: "메모", syn: ["메모", "비고", "특이사항", "비고고유값고정값"] },
+  // ⭐ 2026-11-02 운임규칙 — 운임구분 열(있을 때만 · 운임 규칙을 켠 회사만 저장)
+  { key: "운임구분", syn: ["운임구분"] },
 ];
 const norm = (s) => String(s || "").replace(/[\s()（）/·.\-_]/g, "").toLowerCase();
 
@@ -136,6 +139,7 @@ const fmtTime = (t) => { const ms = t?.toMillis ? t.toMillis() : t?.seconds ? t.
 export default function SheetImportPanel() {
   const [companies, setCompanies] = React.useState([]);
   const [company, setCompany] = React.useState("");
+  const fareR = useFareRules(company || "__none__"); // ⭐ 2026-11-02 운임규칙
   const [source, setSource] = React.useState("sheet"); // sheet | excel
   const [url, setUrl] = React.useState("");
   const [book, setBook] = React.useState(null); // { title, tabs:[{title,rowCount,headerRow,header, rows?}] , source }
@@ -252,6 +256,11 @@ export default function SheetImportPanel() {
           r.등록일 = parseDate(r.등록일, hint) || r.상차일;
           r.청구운임 = parseMoney(r.청구운임);
           r.기사운임 = parseMoney(r.기사운임);
+          // ⭐ 2026-11-02 운임규칙 — 운임구분이 규칙에 있으면 저장, 기사운임이 비면 규칙대로 계산
+          { const rule = fareR.on ? findFareRule(fareR.rules, r.운임구분) : null;
+            if (!rule) r.운임구분 = "";
+            else { r.운임구분 = rule.name; const blank = String(get("기사운임")) === ""; const c = applyFareRule(rule, r.청구운임);
+              if (blank) { r.기사운임 = c.기사운임; r.운임수동 = false; } else r.운임수동 = Number(r.기사운임) !== c.기사운임; } }
           const problems = [];
           if (!r.상차일) problems.push(`상차일 형식 확인("${get("상차일")}")`);
           if (!client) problems.push("거래처명 없음");
@@ -316,6 +325,7 @@ export default function SheetImportPanel() {
           const _id = newId();
           const rec = {};
           FIELDS.forEach((f) => { if (r[f.key] !== "" && r[f.key] != null) rec[f.key] = r[f.key]; });
+          if (rec.운임구분) rec.운임수동 = !!r.운임수동; // ⭐ 2026-11-02 운임규칙
           const status = ["배차중", "배차완료", "배차취소"].includes(r.배차상태) ? r.배차상태 : (normPlate(r.차량번호) ? "배차완료" : "배차중");
           b.set(doc(db, ORDER_COLL, _id), {
             ...rec, _id, 배차상태: status, companyName: company, 작성자: me,

@@ -1745,9 +1745,18 @@ function BulkEditModal({ rows, patchDispatch, onClose, onDateShift }) {
       const id = r._id || r.id;
       init[id] = {};
       for (const f of BULK_EDIT_FIELDS) init[id][f.key] = r[f.key] ?? "";
+      init[id].운임구분 = r.운임구분 ?? ""; init[id].운임수동 = !!r.운임수동; // ⭐ 2026-11-02 운임규칙
     }
     return init;
   });
+  // ⭐ 2026-11-02 운임규칙 — 규칙 사용 회사만 "운임구분" 열 + 청구운임 → 기사운임 자동
+  const fareRb = useFareRules();
+  const FIELDS = fareRb.on ? [...BULK_EDIT_FIELDS, { key: "운임구분", label: "운임구분", type: "fare" }] : BULK_EDIT_FIELDS;
+  const fareCell = (r, cur, key, value) => {
+    const n = fareFormChange({ ...r, ...cur }, key, value, fareRb.rules, { withFee: false });
+    return { ...cur, 청구운임: n.청구운임 ?? "", 기사운임: n.기사운임 ?? "", 운임구분: n.운임구분 || "", 운임수동: !!n.운임수동 };
+  };
+  const isFareKey = (key) => fareRb.on && (key === "청구운임" || key === "기사운임" || key === "운임구분");
   const [bulkValues, setBulkValues] = React.useState({});
   const [saving, setSaving] = React.useState(false);
   const [saveProgress, setSaveProgress] = React.useState({ done: 0, total: 0 });
@@ -1758,13 +1767,18 @@ function BulkEditModal({ rows, patchDispatch, onClose, onDateShift }) {
   if (!rows || rows.length === 0) return null;
 
   const setCell = (id, key, value) => {
+    if (isFareKey(key)) {
+      const r = rows.find(x => (x._id || x.id) === id) || {};
+      setEdited(prev => ({ ...prev, [id]: fareCell(r, prev[id] || {}, key, value) }));
+      return;
+    }
     setEdited(prev => ({ ...prev, [id]: { ...prev[id], [key]: value } }));
   };
   const applyBulk = (key) => {
     const v = bulkValues[key] ?? "";
     setEdited(prev => {
       const next = { ...prev };
-      for (const r of rows) { const id = r._id || r.id; next[id] = { ...next[id], [key]: v }; }
+      for (const r of rows) { const id = r._id || r.id; next[id] = isFareKey(key) ? fareCell(r, next[id] || {}, key, v) : { ...next[id], [key]: v }; }
       return next;
     });
   };
@@ -1778,11 +1792,12 @@ function BulkEditModal({ rows, patchDispatch, onClose, onDateShift }) {
       const id = r._id || r.id;
       const patch = {};
       let changed = false;
-      for (const f of BULK_EDIT_FIELDS) {
+      for (const f of FIELDS) {
         const newVal = edited[id]?.[f.key] ?? "";
         const oldVal = r[f.key] ?? "";
         if (String(newVal) !== String(oldVal)) { patch[f.key] = newVal; changed = true; }
       }
+      if (fareRb.on && changed && String(edited[id]?.운임구분 || "")) patch.운임수동 = !!edited[id]?.운임수동; // ⭐ 2026-11-02 운임규칙
       return changed ? { id, col: r.__col, patch } : null;
     }).filter(Boolean);
 
@@ -1864,16 +1879,18 @@ function BulkEditModal({ rows, patchDispatch, onClose, onDateShift }) {
             <thead>
               <tr>
                 <th className="border border-gray-200 bg-gray-100 px-2.5 py-2 font-bold text-gray-600 text-left w-[230px]"><EditableText id="bulkEdit.table.header.오더" defaultText="오더" /></th>
-                {BULK_EDIT_FIELDS.map(f => (
+                {FIELDS.map(f => (
                   <th key={f.key} className="border border-gray-200 bg-gray-100 px-2 py-2 font-bold text-gray-600 min-w-[130px]"><EditableText id={`bulkEdit.table.header.${f.key}`} defaultText={f.label} /></th>
                 ))}
               </tr>
               <tr>
                 <td className="border border-gray-200 px-2.5 py-1.5 text-[11px] font-extrabold text-gray-500 bg-gray-50"><EditableText id="bulkEdit.table.일괄입력" defaultText="일괄입력" /></td>
-                {BULK_EDIT_FIELDS.map(f => (
+                {FIELDS.map(f => (
                   <td key={f.key} className="border border-gray-200 px-2 py-1.5 bg-gray-50">
                     <div className="flex gap-1">
-                      {f.type === "select" ? (
+                      {f.type === "fare" ? (
+                        <FareTypeSelect compact className="flex-1" rules={fareRb.rules} value={bulkValues[f.key] ?? ""} onChange={(v) => setBulkValues(p => ({ ...p, [f.key]: v }))} />
+                      ) : f.type === "select" ? (
                         <select className="flex-1 border border-gray-300 rounded px-1 py-1 text-[11px]" value={bulkValues[f.key] ?? ""} onChange={(e) => setBulkValues(v => ({ ...v, [f.key]: e.target.value }))}>
                           <option value="">-</option>
                           {(f.key === "배차방식" || f.key === "지급방식" ? dropdownList(f.key, f.options) : f.options).map(o => <option key={o} value={o}>{o}</option>)}
@@ -1899,9 +1916,14 @@ function BulkEditModal({ rows, patchDispatch, onClose, onDateShift }) {
                       <div className="text-gray-600 text-[11px]">{r.상차지명 || "-"} → {r.하차지명 || "-"}</div>
                       <div className="text-gray-500 text-[11px]">{r.이름 || "기사 미배정"}{r.차량번호 ? ` · ${r.차량번호}` : ""}</div>
                     </td>
-                    {BULK_EDIT_FIELDS.map((f) => (
+                    {FIELDS.map((f) => (
                       <td key={f.key} className="border border-gray-200 px-2 py-1.5">
-                        {f.type === "select" ? (
+                        {f.type === "fare" ? (
+                          <div className="flex flex-col gap-0.5">
+                            <FareTypeSelect compact className="w-full" rules={fareRb.rules} value={edited[id]?.운임구분 ?? ""} onChange={(v) => setCell(id, "운임구분", v)} />
+                            <FareRuleHint form={{ ...r, ...(edited[id] || {}) }} rules={fareRb.rules} onReapply={() => { setEdited(prev => ({ ...prev, [id]: fareCell(r, prev[id] || {}, "__reapply", null) })); }} />
+                          </div>
+                        ) : f.type === "select" ? (
                           <select className="w-full border border-gray-300 rounded px-1 py-1 text-[12px]" value={edited[id]?.[f.key] ?? ""} onChange={(e) => setCell(id, f.key, e.target.value)}>
                             <option value="">-</option>
                             {(f.key === "배차방식" || f.key === "지급방식" ? dropdownList(f.key, f.options) : f.options).map(o => <option key={o} value={o}>{o}</option>)}
@@ -23549,6 +23571,7 @@ function RealtimeRowBase({
   driverConfirmOpen, memoAlert, blackAlert,
   setCancelReqPopup, markEditRequestSeen, setEditReqPopup, setConfirmChange,
   flashRow, setAttachViewer, setLiveLocViewer, setDeliveryConfirm, setWorkDatesEditRow,
+  fareRules = null, // ⭐ 2026-11-02 운임규칙 — 규칙 사용 회사만 배열(아니면 null → 예전 그대로)
 }) {
   const sale = toInt(editedForRow?.청구운임 ?? r.청구운임);
   const drv = toInt(editedForRow?.기사운임 ?? r.기사운임);
@@ -23898,7 +23921,7 @@ ${isHighlighted ? "animate-pulse bg-blue-100" : ""}
                       <input autoComplete="off"
                         type="text"
                         className="border p-1 rounded w-full"
-                        defaultValue={r.기사운임 || ""}
+                        {...(fareRules ? { value: String(editedForRow?.기사운임 ?? r.기사운임 ?? "") } : { defaultValue: r.기사운임 || "" })}
                         onChange={(e) =>
                           handleEditChange(r._id, "기사운임", e.target.value)
                         }
@@ -23913,6 +23936,15 @@ ${isHighlighted ? "animate-pulse bg-blue-100" : ""}
                     <span className={`font-bold ${fee < 0 ? "text-red-600" : "text-blue-600"}`}>
                       {formatComma(fee)}
                     </span>
+                    {/* ⭐ 2026-11-02 운임규칙 — 운임구분(수정모드면 선택, 아니면 작은 표시) */}
+                    {fareRules && (canEdit("청구운임", r._id) ? (
+                      <div className="mt-0.5 flex flex-col items-end gap-0.5">
+                        <FareTypeSelect compact rules={fareRules} value={editedForRow?.운임구분 ?? r.운임구분 ?? ""} onChange={(v) => handleEditChange(r._id, "운임구분", v)} />
+                        <FareRuleHint form={{ ...r, ...(editedForRow || {}) }} rules={fareRules} onReapply={() => handleEditChange(r._id, "__reapply", null)} />
+                      </div>
+                    ) : (r.운임구분 ? (
+                      <div className="mt-0.5"><span className="inline-block px-1.5 rounded bg-[#EAF0FB] text-[#2D4C82] text-[11.5px] font-extrabold" data-fare-chip="1">{r.운임구분}</span></div>
+                    ) : null))}
                   </td>
 
                   <td className={cell} style={{maxWidth:120,minWidth:100}}>{editableInput("지급방식", r.지급방식, r._id)}</td>
@@ -24001,7 +24033,8 @@ function realtimeRowPropsEqual(prev, next) {
     prev.memoAlert === next.memoAlert &&
     prev.blackAlert === next.blackAlert &&
     prev.isFirstPickupLunch === next.isFirstPickupLunch &&
-    prev.isFirstDropLunch === next.isFirstDropLunch
+    prev.isFirstDropLunch === next.isFirstDropLunch &&
+    prev.fareRules === next.fareRules
   );
 }
 
@@ -29326,7 +29359,7 @@ const head = isDark
     row.화물내용=mergeViaCargoText(r.화물내용,[r.경유상차목록,r.경유하차목록])||"";
     row.차량종류=r.차량종류||"";
     row.차량톤수=mergeViaTonnage(r.차량톤수,[r.경유상차목록,r.경유하차목록])||"";
-    Object.assign(row,{차량번호:r.차량번호||"",기사명:r.이름||"",전화번호:r.전화번호||"",배차상태:r.배차상태||"",청구운임:toInt(r.청구운임),기사운임:toInt(r.기사운임),수수료:toInt(r.청구운임)-toInt(r.기사운임),지급방식:r.지급방식||"",배차방식:r.배차방식||"",메모:r.메모||""});
+    Object.assign(row,{차량번호:r.차량번호||"",기사명:r.이름||"",전화번호:r.전화번호||"",배차상태:r.배차상태||"",청구운임:toInt(r.청구운임),기사운임:toInt(r.기사운임),수수료:toInt(r.청구운임)-toInt(r.기사운임),...(fareOn?{운임구분:r.운임구분||""}:{}),지급방식:r.지급방식||"",배차방식:r.배차방식||"",메모:r.메모||""});
     return row;
   });
   const ws=XLSX.utils.json_to_sheet(rowsExcel);const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,"실시간배차현황");XLSX.writeFile(wb,"실시간배차현황.xlsx");
@@ -29460,6 +29493,7 @@ const head = isDark
                 setLiveLocViewer={setLiveLocViewer}
                 setDeliveryConfirm={setDeliveryConfirm}
                 setWorkDatesEditRow={setWorkDatesEditRow}
+                fareRules={fareOn ? fareR.rules : null}
               />
             ))}
           </tbody>
@@ -30852,7 +30886,7 @@ value={copyTarget?.화물수량 || ""}
                 { label: "최고 운임", sub: "가장 높은 이력",   value: fareMax },
               ].map(({ label, sub, value }) => (
                 <button key={label}
-                  onClick={() => { setCopyTarget(p => ({ ...p, 청구운임: String(value) })); setCopyFarePanelOpen(false); }}
+                  onClick={() => { setCopyTarget(p => fareOn ? fareFormChange(p, "청구운임", String(value), fareR.rules) : ({ ...p, 청구운임: String(value) })); setCopyFarePanelOpen(false); }}
                   className="rounded-xl border border-gray-200 bg-gray-50 hover:bg-[#1B2B4B] hover:text-white hover:border-[#1B2B4B] px-3 py-3 text-center transition group active:scale-95">
                   <div className="text-[10px] font-bold text-gray-500 group-hover:text-white/60 mb-1">{label}</div>
                   <div className="text-[18px] font-extrabold text-[#1B2B4B] group-hover:text-white leading-none">{value.toLocaleString()}</div>
@@ -31002,7 +31036,7 @@ value={copyTarget?.화물수량 || ""}
                             ) : <span className="text-[11px] text-gray-500 ml-1">평균</span>}
                           </div>
                           <button
-                            onClick={() => { setCopyTarget(p => ({ ...p, 청구운임: String(fare) })); setCopyFarePanelOpen(false); }}
+                            onClick={() => { setCopyTarget(p => fareOn ? fareFormChange(p, "청구운임", String(fare), fareR.rules) : ({ ...p, 청구운임: String(fare) })); setCopyFarePanelOpen(false); }}
                             className="px-3 py-1.5 rounded-lg bg-[#1B2B4B] text-white text-[12px] font-bold hover:bg-[#243a60] transition active:scale-95">
                             적용
                           </button>
@@ -31305,7 +31339,7 @@ value={copyTarget?.화물수량 || ""}
               ].map(({ label, sub, value }) => (
                 <button key={label}
                   onClick={() => {
-                    setEditTarget(p => ({ ...p, 청구운임: value, 수수료: value - Number(p.기사운임 || 0) }));
+                    setEditTarget(p => { if (fareOn) { const n = fareFormChange(p, "청구운임", value, fareR.rules); return { ...n, 수수료: Number(n.수수료) || 0 }; } return { ...p, 청구운임: value, 수수료: value - Number(p.기사운임 || 0) }; });
                     setFarePanelOpen(false);
                   }}
                   className="rounded-xl border border-gray-200 bg-gray-50 hover:bg-[#1B2B4B] hover:text-white hover:border-[#1B2B4B] px-3 py-3 text-center transition group active:scale-95">
@@ -31459,7 +31493,7 @@ value={copyTarget?.화물수량 || ""}
                           </div>
                           <button
                             onClick={() => {
-                              setEditTarget(p => ({ ...p, 청구운임: fare, 수수료: fare - Number(p.기사운임 || 0) }));
+                              setEditTarget(p => { if (fareOn) { const n = fareFormChange(p, "청구운임", fare, fareR.rules); return { ...n, 수수료: Number(n.수수료) || 0 }; } return { ...p, 청구운임: fare, 수수료: fare - Number(p.기사운임 || 0) }; });
                               setFarePanelOpen(false);
                             }}
                             className="px-3 py-1.5 rounded-lg bg-[#1B2B4B] text-white text-[12px] font-bold hover:bg-[#243a60] transition active:scale-95">
@@ -36311,6 +36345,7 @@ const [appliedEndDate, setAppliedEndDate] = React.useState("");
   const [sortDir2, setSortDir2] = React.useState("asc");
   const [sortModalOpen, setSortModalOpen] = React.useState(false);
   const [filterConditions, setFilterConditions] = React.useState([]);
+  const [fareTypeFilter, setFareTypeFilter] = React.useState(""); // ⭐ 2026-11-02 운임규칙 — 운임구분 필터("" 전체 · "__none" 미지정)
   const [tempFilterConditions, setTempFilterConditions] = React.useState([]);
   const [tempSortKey, setTempSortKey] = React.useState("");
   const [tempSortDir, setTempSortDir] = React.useState("asc");
@@ -37849,7 +37884,9 @@ if (mode === "driver") {
 
   // 대용량 업로드 엑셀 양식(첫 줄 = 열 이름, 둘째 줄 = 예시)
   const [bulkChooserOpen, setBulkChooserOpen] = useState(false);
-  const BULK_COLS = ["상차일", "상차시간", "하차일", "하차시간", "거래처명", "상차지명", "상차지주소", "하차지명", "하차지주소", "화물내용", "차량종류", "차량톤수", "차량번호", "기사명", "전화번호", "청구운임", "기사운임", "지급방식", "배차방식", "메모"];
+  const BULK_COLS0 = ["상차일", "상차시간", "하차일", "하차시간", "거래처명", "상차지명", "상차지주소", "하차지명", "하차지주소", "화물내용", "차량종류", "차량톤수", "차량번호", "기사명", "전화번호", "청구운임", "기사운임", "지급방식", "배차방식", "메모"];
+  // ⭐ 2026-11-02 운임규칙 — 규칙 사용 회사는 양식에 "운임구분" 열(비우면 예전처럼)
+  const BULK_COLS = fareOn ? [...BULK_COLS0, "운임구분"] : BULK_COLS0;
   const downloadBulkTemplate = () => {
     const today = new Date(); const ymd = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
     const t1 = new Date(today.getTime() + 86400000);
@@ -37857,7 +37894,7 @@ if (mode === "driver") {
       [ymd(t1), "오전 9시", ymd(t1), "오후 3시 30분", "동원F&B", "동원F&B 이천센터", "경기 이천시 마장면 100", "CJ 대구센터", "대구 달서구 성서로 10", "16파레트", "윙바디", "11톤", "경기12가3456", "김기사", "010-1234-5678", 450000, 400000, "계산서", "24시", ""],
       [ymd(t1), "오후 2시", ymd(t1), "오후 6시", "오뚜기", "오뚜기 평택공장", "경기 평택시 포승읍 1", "이마트 광주센터", "광주 광산구 하남산단 5", "8파레트", "카고", "5톤", "", "", "", 320000, 280000, "착불", "직접배차", ""],
     ];
-    const ws = XLSX.utils.aoa_to_sheet([BULK_COLS, ...samples]);
+    const ws = XLSX.utils.aoa_to_sheet([BULK_COLS, ...(fareOn ? samples.map((x) => [...x, ""]) : samples)]);
     ws["!cols"] = BULK_COLS.map((c) => ({ wch: c === "메모" ? 40 : c.includes("주소") ? 26 : Math.max(11, c.length * 2 + 4) }));
     const guide = XLSX.utils.aoa_to_sheet([
       ["항목", "작성 방법"],
@@ -37866,6 +37903,7 @@ if (mode === "driver") {
       ["상차시간 · 하차시간", "오전 9시, 오후 3시 30분 처럼 입력 (09:00 으로 써도 자동 변환)"],
       ["차량번호 · 기사명 · 전화번호", "입력하면 '배차완료', 비워두면 '배차중'으로 등록됩니다. 등록된 기사의 차량번호만 써도 기사명·전화번호가 자동으로 채워집니다."],
       ["청구운임 · 기사운임", "숫자만 입력 (수수료는 자동 계산)"],
+      ...(fareOn ? [["운임구분", `회사관리 › 운임 규칙 이름(${fareR.rules.map((x) => x.name).filter(Boolean).join(", ") || "예: 일대"}) — 기사운임을 비우면 규칙대로 자동 계산`]] : []),
       ["열 이름", "첫 줄(열 이름)은 바꾸지 마세요. 기사명 대신 '이름'이라고 써도 인식합니다."],
     ]);
     guide["!cols"] = [{ wch: 26 }, { wch: 90 }];
@@ -37922,6 +37960,15 @@ if (mode === "driver") {
           메모: row["메모"] || "",
           배차상태: "배차중",
         };
+        // ⭐ 2026-11-02 운임규칙 — "운임구분" 열이 있으면 함께(기사운임이 비어 있으면 규칙대로 계산)
+        const _ft = fareOn ? String(row["운임구분"] || "").trim() : "";
+        const _rule = _ft ? findFareRule(fareR.rules, _ft) : null;
+        if (_rule) {
+          mappedRow.운임구분 = _rule.name;
+          const _blank = String(row["기사운임"] ?? "").trim() === "";
+          if (_blank) { const c = applyFareRule(_rule, mappedRow.청구운임); mappedRow.기사운임 = c.기사운임; mappedRow.수수료 = c.수수료; mappedRow.운임수동 = false; }
+          else mappedRow.운임수동 = mappedRow.기사운임 !== applyFareRule(_rule, mappedRow.청구운임).기사운임;
+        }
 
         // ====================================================
         // 🚛 자동 기사 매칭 (차량번호 → 이름/전화번호 자동입력)
@@ -37999,6 +38046,17 @@ if (mode === "driver") {
 
   const updateEdited = (row, key, value) =>
     setEdited((prev) => {
+      // ⭐ 2026-11-02 운임규칙 — 운임구분이 있는 오더: 청구운임 → 기사운임·수수료 자동(기사운임을 고치면 수동)
+      if (fareOn && (key === "청구운임" || key === "기사운임" || key === "운임구분" || key === "__reapply")) {
+        const merged = { ...row, ...(prev[getId(row)] || {}) };
+        const cur0 = { ...(prev[getId(row)] || {}), ...(key === "__reapply" ? {} : { [key]: value }) };
+        if (merged.운임구분 || key === "운임구분") {
+          const n = fareFormChange(merged, key, value, fareR.rules, { asString: false });
+          Object.assign(cur0, { 운임구분: n.운임구분 || "", 기사운임: n.기사운임, 운임수동: !!n.운임수동 });
+        }
+        cur0.수수료 = toInt(cur0.청구운임 ?? row.청구운임) - toInt(cur0.기사운임 ?? row.기사운임);
+        return { ...prev, [getId(row)]: cur0 };
+      }
       const cur = { ...(prev[getId(row)] || {}), [key]: value };
       if (key === "청구운임" || key === "기사운임") {
         const sale = toInt(cur.청구운임 ?? row.청구운임);
@@ -38324,6 +38382,7 @@ if (first) {
         청구운임: toMoney(r.청구운임),
         기사운임: toMoney(r.기사운임),
         수수료: toMoney(r.청구운임) - toMoney(r.기사운임),
+        ...(fareOn ? { 운임구분: r.운임구분 || "" } : {}), // ⭐ 2026-11-02 운임규칙
         지급방식: r.지급방식 || "",
         배차방식: r.배차방식 || "",
         메모: r.메모 || "",
@@ -38528,6 +38587,10 @@ const filtered = React.useMemo(() => {
     data = data.filter(r => filterErrorIds.includes(r._id));
   }
 
+  // ⭐ 2026-11-02 운임규칙 — 운임구분 필터(규칙 사용 회사만)
+  if (fareOn && fareTypeFilter) {
+    data = data.filter(r => fareTypeFilter === "__none" ? !String(r.운임구분 || "").trim() : String(r.운임구분 || "") === fareTypeFilter);
+  }
   // 필터 조건 적용 (같은 필드=OR, 다른 필드=AND, 제외조건=AND NOT)
   if (filterConditions.length > 0) {
     const includes = filterConditions.filter(c => !c.exclude && c.field && c.value);
@@ -38576,6 +38639,8 @@ const filtered = React.useMemo(() => {
   focusOrderId,
   filterErrorIds,
   filterConditions,
+  fareOn,
+  fareTypeFilter,
 ]);
 
   // ⭐⭐⭐ 페이지 데이터 (정렬된 filtered 기준)
@@ -39360,6 +39425,15 @@ return (
 
         {/* 우측 버튼들 */}
         <div className="ml-auto flex items-center gap-1 flex-shrink-0 flex-wrap justify-end">
+          {/* ⭐ 2026-11-02 운임규칙 — 운임구분 필터(규칙 사용 회사만) */}
+          {fareOn && (
+            <select data-fare-filter="1" value={fareTypeFilter} onChange={(e) => { setFareTypeFilter(e.target.value); setPage(0); }}
+              className={`h-[26px] px-1.5 rounded-lg border text-[12px] font-bold ${fareTypeFilter ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-[#1B2B4B] border-[#C9D5EA]"}`} title="운임구분으로 거르기">
+              <option value="">운임구분 전체</option>
+              {fareR.rules.filter((x) => String(x?.name || "").trim()).map((x) => <option key={x.id || x.name} value={x.name}>{x.name}</option>)}
+              <option value="__none">미지정</option>
+            </select>
+          )}
           <button onClick={()=>{setTempSortKey(sortKey||"");setTempSortDir(sortDir||"asc");setTempFilterConditions([...filterConditions]);setSortModalOpen(true);}} className={`px-2 py-1 rounded-lg text-white text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap ${(sortKey||filterConditions.length>0)?"bg-[#1B2B4B]":"bg-slate-500"}`}><EditableText id="status.toolbar.정렬필터" defaultText="정렬/필터" />{filterConditions.length>0?` (${filterConditions.length})`:""}</button>
           <button onClick={()=>{if(selected.size===0)return showAlert("복사할 항목을 선택하세요.");if(selected.size>1)return showAlert("1개만 선택할 수 있습니다.");setCopyModalOpen(true);}} className="px-2 py-1 rounded-lg bg-gray-800 text-white text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap"><EditableText id="status.toolbar.기사복사" defaultText="기사복사" /></button>
           <button onClick={()=>{
@@ -39433,7 +39507,7 @@ return (
                 "선택", "순번", "등록일", "상차일", "상차시간", "하차일", "하차시간",
                 "거래처명", "상차지명", "상차지주소", "하차지명", "하차지주소",
                 "화물내용", "차량종류", "차량톤수", "혼적", "차량번호", "기사명", "전화번호",
-               "배차상태", "청구운임", "기사운임", "수수료", "지급방식", "배차방식", "메모", "전달사항", "첨부", "전달상태",
+               "배차상태", "청구운임", "기사운임", "수수료", ...(fareOn ? ["운임구분"] : []), "지급방식", "배차방식", "메모", "전달사항", "첨부", "전달상태",
 
               ].map((h) => {
                 const clickSortable = columnClickSortEnabled && CLICK_SORTABLE_COLUMNS.includes(h);
@@ -39785,7 +39859,7 @@ return (
                       {editMode && selected.has(id) ? (
                         <input autoComplete="off"
                           className="border rounded px-1 py-0.5 w-full text-right"
-                          defaultValue={toInt(row[key])}
+                          {...(fareOn && key === "기사운임" ? { value: String(toInt(row[key])) } : { defaultValue: toInt(row[key]) })}
                           onChange={(e) => updateEdited(row, key, e.target.value)}
                         />
                       ) : (
@@ -39797,6 +39871,17 @@ return (
                 <td className="border text-right pr-2">
                     <span className={`font-bold ${fee < 0 ? "text-red-500" : "text-blue-600"}`}>{fee.toLocaleString()}</span>
                   </td>
+                  {/* ⭐ 2026-11-02 운임규칙 — 운임구분 열(규칙 사용 회사만) */}
+                  {fareOn && (
+                    <td className="border text-center px-1" data-fare-cell="1">
+                      {editMode && selected.has(id) ? (
+                        <div className="flex flex-col items-center gap-0.5">
+                          <FareTypeSelect compact rules={fareR.rules} value={row.운임구분 || ""} onChange={(v) => updateEdited(row, "운임구분", v)} />
+                          <FareRuleHint form={row} rules={fareR.rules} onReapply={() => updateEdited(row, "__reapply", null)} />
+                        </div>
+                      ) : (row.운임구분 ? <span className="inline-block px-1.5 py-[1px] rounded bg-[#EAF0FB] text-[#2D4C82] text-[12.5px] font-extrabold">{row.운임구분}{row.운임수동 ? " ·수동" : ""}</span> : <span className="text-gray-300">-</span>)}
+                    </td>
+                  )}
 
                   {/* 지급 / 배차 방식 — 화주사 오더의 지급방식은 화주사만 변경 가능 */}
                   <td className="border text-center">
@@ -42549,7 +42634,7 @@ setCopyPlaceOptions(list);
                 { label: "최고 운임", sub: "가장 높은 이력",   value: fareMax },
               ].map(({ label, sub, value }) => (
                 <button key={label}
-                  onClick={() => { setCopyTarget(p => ({ ...p, 청구운임: String(value) })); setCopyFarePanelOpen(false); }}
+                  onClick={() => { setCopyTarget(p => fareOn ? fareFormChange(p, "청구운임", String(value), fareR.rules) : ({ ...p, 청구운임: String(value) })); setCopyFarePanelOpen(false); }}
                   className="rounded-xl border border-gray-200 bg-gray-50 hover:bg-[#1B2B4B] hover:text-white hover:border-[#1B2B4B] px-3 py-3 text-center transition group active:scale-95">
                   <div className="text-[10px] font-bold text-gray-500 group-hover:text-white/60 mb-1">{label}</div>
                   <div className="text-[18px] font-extrabold text-[#1B2B4B] group-hover:text-white leading-none">{value.toLocaleString()}</div>
@@ -42699,7 +42784,7 @@ setCopyPlaceOptions(list);
                             ) : <span className="text-[11px] text-gray-500 ml-1">평균</span>}
                           </div>
                           <button
-                            onClick={() => { setCopyTarget(p => ({ ...p, 청구운임: String(fare) })); setCopyFarePanelOpen(false); }}
+                            onClick={() => { setCopyTarget(p => fareOn ? fareFormChange(p, "청구운임", String(fare), fareR.rules) : ({ ...p, 청구운임: String(fare) })); setCopyFarePanelOpen(false); }}
                             className="px-3 py-1.5 rounded-lg bg-[#1B2B4B] text-white text-[12px] font-bold hover:bg-[#243a60] transition active:scale-95">
                             적용
                           </button>
@@ -42927,7 +43012,7 @@ setCopyPlaceOptions(list);
               ].map(({ label, sub, value }) => (
                 <button key={label}
                   onClick={() => {
-                    setEditTarget(p => ({ ...p, 청구운임: value, 수수료: value - Number(p.기사운임 || 0) }));
+                    setEditTarget(p => { if (fareOn) { const n = fareFormChange(p, "청구운임", value, fareR.rules); return { ...n, 수수료: Number(n.수수료) || 0 }; } return { ...p, 청구운임: value, 수수료: value - Number(p.기사운임 || 0) }; });
                     setFareModalOpen(false);
                   }}
                   className="rounded-xl border border-gray-200 bg-gray-50 hover:bg-[#1B2B4B] hover:text-white hover:border-[#1B2B4B] px-3 py-3 text-center transition group active:scale-95">
@@ -43030,7 +43115,7 @@ setCopyPlaceOptions(list);
                           <span className="text-[20px] font-extrabold text-[#1B2B4B]">{fare.toLocaleString()}원</span>
                           <button
                             onClick={() => {
-                              setEditTarget(p => ({ ...p, 청구운임: fare, 수수료: fare - Number(p.기사운임 || 0) }));
+                              setEditTarget(p => { if (fareOn) { const n = fareFormChange(p, "청구운임", fare, fareR.rules); return { ...n, 수수료: Number(n.수수료) || 0 }; } return { ...p, 청구운임: fare, 수수료: fare - Number(p.기사운임 || 0) }; });
                               setFareModalOpen(false);
                             }}
                             className="px-3 py-1.5 rounded-lg bg-[#1B2B4B] text-white text-[12px] font-bold hover:bg-[#243a60] transition active:scale-95">
@@ -47596,6 +47681,7 @@ const isKrHoliday = (dateStr) => {
 
 // ===================== DispatchApp.jsx (PART 6/8 — Settlement Premium) — START =====================
 function Settlement({ dispatchData, fixedRows = [], clients = [], places = [], isViewer = false, role, userCompany = "", showAlert = (m) => alert(m) }) {
+  const fareRS = useFareRules(userCompany); // ⭐ 2026-11-02 운임규칙 — 운임구분별 합계·내보내기(규칙 사용 회사만)
 
   // ⭐ 연간 매출 목표(순수 운송료 목표 금액 / 제외 거래처 성장률)는 회사마다 다르므로
   // 하드코딩하지 않고 매출 대시보드 › 목표 달성 카드에서 설정한 값을 불러온다.
@@ -48012,7 +48098,7 @@ function Settlement({ dispatchData, fixedRows = [], clients = [], places = [], i
   };
   const rvPage = RV_PAGES[activeTab] ? activeTab : "dashboard";
   const exportCsv = () => {
-    const headers = ["상차일","거래처명","상차지명","하차지명","청구운임","기사운임","수수료","배차상태"];
+    const headers = ["상차일","거래처명","상차지명","하차지명","청구운임","기사운임","수수료",...(fareRS.on ? ["운임구분"] : []),"배차상태"];
                 const csvRows = [headers.join(",")];
                 monthRows.forEach((r) => {
                   csvRows.push(headers.map((h) => `"${String(r[h] || "").replace(/"/g, '""')}"`).join(","));
@@ -48083,6 +48169,8 @@ function Settlement({ dispatchData, fixedRows = [], clients = [], places = [], i
           onOpenClient={setDetailClient}
         />
       )}
+      {/* ⭐ 2026-11-02 운임규칙 — 이번 달 운임구분별 합계(규칙 사용 회사만) */}
+      {rvPage === "dashboard" && fareRS.on && <FareTypeBreakdown className="mt-4" rows={monthRows} title={`${targetMonth} 운임구분별 합계`} />}
 
       {rvPage === "target" && (
         <TargetPage rows={rows} targetMonth={targetMonth} yearTarget={PURE_TARGET_2026} isExcluded={isExcludedFast} hasExcluded={hasExcludedClients}
@@ -50837,6 +50925,7 @@ function ArClientInfo({ client, name, upsertClient, isViewer }) {
 }
 
 function ClientSettlement({ dispatchData, setDispatchData, userCompany = "", clients = [], setClients, upsertClient, showAlert = (m) => alert(m), patchDispatch, cardImage, setCardImage, cardImageUploading, setCardImageUploading, isViewer = false }) {
+  const fareRC = useFareRules(userCompany); // ⭐ 2026-11-02 운임규칙
   const [bankBulkOpen, setBankBulkOpen] = React.useState(false);
 
   // ★ 오더 상세 팝업
@@ -52700,6 +52789,8 @@ const handleBatchSettle = async (targetStatus) => {
                 <span className="text-[#2D4C82]">청구 합계 <b>{won(합계공급가 + 합계세액)}원</b></span>
               </div>
             )}
+            {/* ⭐ 2026-11-02 운임규칙 — 선택 기간·거래처의 운임구분별 합계(규칙 사용 회사만) */}
+            {searched && fareRC.on && selectedRowsInvoice.length > 0 && <FareTypeBreakdown className="mt-3" rows={selectedRowsInvoice} title="운임구분별 합계 (선택한 오더)" />}
           </div>
 
           {/* 미조회 상태 */}
@@ -55215,6 +55306,7 @@ const handleBatchSettle = async (targetStatus) => {
 
 // ===================== DispatchApp.jsx (PART 9/9) — START =====================
 function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], drivers = [], companyName = "", canEditPayDay = false }) {
+  const fareRP = useFareRules(companyName); // ⭐ 2026-11-02 운임규칙 — 엑셀에 운임구분 열(규칙 사용 회사만)
 
   const todayStr9 = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
   const thisMonthStr = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 7);
@@ -55364,6 +55456,7 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
       차량번호: r.차량번호 || "", 기사명: r.이름 || "", 전화번호: r.전화번호 || "",
       청구운임: toInt(r.청구운임), 기사운임: toInt(r.기사운임),
       수수료: toInt(r.청구운임) - toInt(r.기사운임),
+      ...(fareRP.on ? { 운임구분: r.운임구분 || "" } : {}),
       지급방식: r.지급방식 || "", 배차방식: r.배차방식 || "", 메모: r.메모 || "",
     }));
     const ws = XLSX.utils.json_to_sheet(rows);
@@ -59832,8 +59925,9 @@ function CompanyManagementWrapper({ userCompany, role, userId, user, todayStats,
   const coStaffCM = useCompanyStaff(myDocCM?.isMaster === true ? userCompany : "");
   const canViewHR = role === "totalMaster" || role === "hrManager" || (!!coStaffCM && masterHasHr(myDocCM, coStaffCM, user?.uid));
   const tabs0 = role === "hrManager" ? ["회사정보", "조직도", "내정보", "내 이력서"] : canViewHR ? ["회사정보", "조직도", "내정보", "내 이력서", "출근기록부", "인사관리부"] : ["회사정보", "조직도", "내정보", "내 이력서", "출근기록부"];
-  // ⭐ 2026-11-02 운임규칙 — 회사 직원 누구나 보고 고친다(조회전용은 보기만)
-  const tabs = role === "driver" || role === "shipper" ? tabs0 : [...tabs0.slice(0, 2), "운임 규칙", ...tabs0.slice(2)];
+  // ⭐ 2026-11-02 운임규칙 — 최고관리자가 이 회사에 켜 준 경우에만(관리자센터 › 회사별 맞춤 기능). 회사 직원 누구나 보고 고친다(조회전용은 보기만)
+  const fareCM = useFareRules(userCompany);
+  const tabs = !fareCM.feature || role === "driver" || role === "shipper" ? tabs0 : [...tabs0.slice(0, 2), "운임 규칙", ...tabs0.slice(2)];
 
   // ⭐ 디자인 개편 — 관리자메뉴와 같은 왼쪽 메뉴바 + 상단 인사 카드(AdminShell 공용 레이아웃)
   const TAB_ICONS = { 회사정보: "building", 조직도: "users", "운임 규칙": "money", 내정보: "user", "내 이력서": "idcard", 출근기록부: "clock", 인사관리부: "idcard" };
@@ -59860,7 +59954,7 @@ function CompanyManagementWrapper({ userCompany, role, userId, user, todayStats,
       )}
       {tab === "조직도" && <OrgChart userCompany={userCompany} />}
       {/* ⭐ 2026-11-02 운임규칙 — 회사관리 › 운임 규칙 */}
-      {tab === "운임 규칙" && <FareRulesSettings company={userCompany} canEdit={role !== "viewer"} myName={myDocCM?.name || myName} />}
+      {tab === "운임 규칙" && fareCM.feature && <FareRulesSettings company={userCompany} canEdit={role !== "viewer"} myName={myDocCM?.name || myName} />}
       {tab === "내 이력서" && <HRManagementPage userCompany={userCompany} role={role} userId={userId} selfOnly />}
       {tab === "내정보" && (
         <MyProfilePage

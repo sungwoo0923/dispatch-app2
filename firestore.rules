@@ -180,11 +180,21 @@ service cloud.firestore {
     function fareRulesStaff(co) {
       return isTotalMasterUser() || (isOfficeStaff() && myCo() == co);
     }
+    // 회사별 맞춤 기능(companyFeatures/{회사} = { fareRules: true, … }) — 최고관리자(관리자센터)만 켜고 끈다.
+    //  그 회사 승인 직원은 읽기만(켜진 회사에만 메뉴가 보이게)
+    match /companyFeatures/{co} {
+      allow read: if isTotalMasterUser() || (isApproved() && myCo() == co);
+      allow write: if isTotalMasterUser();
+    }
+    function fareFeatureOn(co) {
+      return exists(/databases/$(database)/documents/companyFeatures/$(co))
+        && get(/databases/$(database)/documents/companyFeatures/$(co)).data.get('fareRules', false) == true;
+    }
     match /fareRules/{co} {
       allow read: if fareRulesStaff(co);
-      allow create: if fareRulesStaff(co) && myUser().get('role', '') != 'viewer'
+      allow create: if fareRulesStaff(co) && myUser().get('role', '') != 'viewer' && (isTotalMasterUser() || fareFeatureOn(co))
         && request.resource.data.get('companyName', '') == co;
-      allow update: if fareRulesStaff(co) && myUser().get('role', '') != 'viewer'
+      allow update: if fareRulesStaff(co) && myUser().get('role', '') != 'viewer' && (isTotalMasterUser() || fareFeatureOn(co))
         && request.resource.data.get('companyName', '') == co;
       allow delete: if fareRulesStaff(co) && isCompanyAdmin(co);
     }

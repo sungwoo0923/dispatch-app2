@@ -27,6 +27,7 @@ import HrHub, { CompanyRules } from "../HrHub";
 import AttendanceBoard from "../AttendanceBoard";
 import { useMyProfile, personName } from "../userNames";
 import MobileFleetView from "./MobileFleetView";
+import FareRulesSettings from "../FareRulesSettings"; // ⭐ 2026-11-02 운임규칙
 
 // 매출관리는 PC 배차 프로그램 안에 있는 화면이라 그 묶음을 필요할 때만 받아온다
 const PcSettlement = React.lazy(() => import("../DispatchApp").then((m) => ({ default: m.PcSettlement })));
@@ -192,6 +193,7 @@ export default function MobilePcView({ kind, dispatchData = [], fixedRows = [], 
       renderAttendance={() => <AttendanceBoard userCompany={userCompany} role={role} user={me} />} /></div>;
     else if (k === "cashbook") body = <div className="kp-m-pc"><FundsWorkspace company={userCompany} isViewer={isViewer} /></div>;
     else if (k === "myresume") body = <div className="kp-m-pc"><React.Suspense fallback={<Loading />}><PcHrPage userCompany={userCompany} role={role} userId={me?.uid || ""} selfOnly /></React.Suspense></div>;
+    else if (k === "farerules") body = wrap(<FareRulesSettings company={userCompany} mobile canEdit={role !== "viewer"} myName={me?.name || ""} />); // ⭐ 2026-11-02 운임규칙
     else if (k === "rules") body = wrap(<CompanyRules company={userCompany} canEdit={role === "hrManager" || role === "totalMaster"} />);
     else if (k === "funds") body = wrap(<FundsBoard company={userCompany} canEdit={false} />);
     else if (k === "execsched") body = <div className="px-2 py-2"><ExecScheduleBoard company={userCompany} me={me} canWrite={canWriteExecSchedule({ dept: deptMode, role, team: me?.team })} /></div>;
