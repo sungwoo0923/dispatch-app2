@@ -7,6 +7,7 @@ import { arrayUnion, doc, serverTimestamp, setDoc } from "firebase/firestore";
 import { db } from "./firebase";
 import CustomDatePicker from "./CustomDatePicker";
 import { CustomSelect } from "./CustomSelect";
+import { useVehicleTypes } from "./vehicleTypes"; // 🚚 2026-11-02 회사 공용 차량종류
 import { CARE_DATES, CLASS_LABEL, FUELS, GEARS, TONS, VEHICLE_KINDS, careSummary, dateStatus, itemStatus, itemsFor, specFor, tonClass, today, vehicleDefaults, searchTruckModels, TRUCK_MODELS } from "./vehicleCare";
 
 const NAVY = "#1B2B4B";
@@ -285,6 +286,7 @@ function Dates({ driverId, by, care, busy, run, large }) {
 
 // ─── 제원 ───
 function Spec({ driverId, by, vehicle, busy, run, large }) {
+  const vtKinds = useVehicleTypes(undefined, VEHICLE_KINDS); // 🚚 2026-11-02 회사 공용 차량종류(추가한 이름도 적재함 형태에)
   const [v, setV] = React.useState(vehicle);
   React.useEffect(() => { setV(vehicle); }, [JSON.stringify(vehicle)]); // eslint-disable-line react-hooks/exhaustive-deps
   const set = (k, x) => setV((p) => ({ ...p, [k]: x }));
@@ -307,7 +309,7 @@ function Spec({ driverId, by, vehicle, busy, run, large }) {
       <Head code="SPEC" title="차량 제원" right={<button type="button" onClick={fill} style={{ ...btn(false), height: 30, fontSize: 12.5 }}>톤급 표준값 채우기</button>} />
       <div style={{ ...box, display: "grid", gridTemplateColumns: large ? "repeat(3,minmax(0,1fr))" : "1fr 1fr", gap: 10 }}>
         {F({ k: "톤", label: "톤수", list: TONS })}
-        {F({ k: "적재함", label: "적재함 형태", list: VEHICLE_KINDS })}
+        {F({ k: "적재함", label: "적재함 형태", list: vtKinds.all })}
         <MakerModelFields v={v} setV={setV} />
         {F({ k: "연식", label: "연식", unit: "년", numeric: true })}
         {F({ k: "연료", label: "연료", list: FUELS })}
@@ -400,6 +402,7 @@ export function ModelSearch({ value, onPick, ton, maker, style, placeholder }) {
 }
 
 export function VehicleSetupWizard({ driverId, drv = {}, by = "", onClose }) {
+  const vtKinds = useVehicleTypes(undefined, VEHICLE_KINDS); // 🚚 2026-11-02 회사 공용 차량종류
   const base = vehicleDefaults(drv);
   const [step, setStep] = React.useState(0);
   const [v, setV] = React.useState(base);
@@ -442,7 +445,7 @@ export function VehicleSetupWizard({ driverId, drv = {}, by = "", onClose }) {
           <div style={{ fontSize: 16, fontWeight: 900, color: INK, marginTop: 12 }}>{step + 1}. {steps[step]}</div>
           {step === 0 && <>
             {field("톤수", <CustomSelect value={v.톤 || ""} onChange={(e) => set("톤", e.target.value)} className="w-full h-11 px-3 rounded-[10px] border border-[#DCE3EF] bg-white text-[15px] font-semibold text-[#0F1A30]"><option value="">선택</option>{TONS.map((x) => <option key={x} value={x}>{x}</option>)}</CustomSelect>)}
-            {field("적재함 형태", <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>{VEHICLE_KINDS.map((x) => <button key={x} type="button" onClick={() => set("적재함", x)} style={{ height: 36, padding: "0 12px", borderRadius: 10, border: `1px solid ${v.적재함 === x ? NAVY : "#DCE3EF"}`, background: v.적재함 === x ? NAVY : "#fff", color: v.적재함 === x ? "#fff" : "#3A4A66", fontSize: 13.5, fontWeight: 800, whiteSpace: "nowrap" }}>{x}</button>)}</div>)}
+            {field("적재함 형태", <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>{vtKinds.all.map((x) => <button key={x} type="button" onClick={() => set("적재함", x)} style={{ height: 36, padding: "0 12px", borderRadius: 10, border: `1px solid ${v.적재함 === x ? NAVY : "#DCE3EF"}`, background: v.적재함 === x ? NAVY : "#fff", color: v.적재함 === x ? "#fff" : "#3A4A66", fontSize: 13.5, fontWeight: 800, whiteSpace: "nowrap" }}>{x}</button>)}</div>)}
             {s && <div style={{ ...box, marginTop: 10, fontSize: 12.5, color: "#5B6B85", lineHeight: 1.7 }}>
               <b style={{ color: INK }}>{v.톤} 표준 제원</b><br />적재함 {s.l}×{s.w}{s.h ? `×${s.h}` : ""}cm · 최대 {s.maxKg.toLocaleString()}kg<br />{s.axle} · 타이어 {s.tires}개 · {CLASS_LABEL[tonClass(v.톤, v.적재함)]} 정비 기준 적용
             </div>}

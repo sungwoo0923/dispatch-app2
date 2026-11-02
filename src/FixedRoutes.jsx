@@ -25,6 +25,9 @@ import { CustomSelect } from "./CustomSelect";
 import { TimeSelect, MultiDateSelect, korTimeLabel } from "./kpInputs";
 import { useCompanyDropdownOptions } from "./companyDropdownOptions";
 import RouteMapModal from "./RouteMapModal";
+// ⭐ 2026-11-02 운임규칙 — 노선·정류지 기본 운임구분(규칙 사용 회사만) → 기사운임 자동 계산, 만든 오더에 운임구분
+import { VehicleTypePicker } from "./vehicleTypes"; // 🚚 2026-11-02 회사 공용 차량종류
+import { useFareRules, FareTypeSelect, findFareRule, applyFareRule, fareRuleHint } from "./fareRules";
 
 const MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
 const DAYS = ["월", "화", "수", "목", "금", "토", "일"];
@@ -128,7 +131,7 @@ const tonText = (s) => (s.tonVal ? `${s.tonVal}${s.tonType || "톤"}` : "");
 //  · 예전 노선(fareMode 없음)에 기본 운임과 정류지 운임이 같이 있으면 예전처럼 "기본 + 정류지" 합계(대표 오더에 기본 운임)
 const namedStops = (r) => (r.stops || []).filter((s) => s.name || s.addr);
 const stopPaid = (s) => !!(toInt(s.fareClient) || toInt(s.fareDriver));
-export const routeSegments = (r) => namedStops(r).map((s, i) => ({ s, i })).filter(({ s, i }) => i > 0 && stopPaid(s)).map(({ s, i }) => ({ name: s.name || s.addr, 구분: s.type, 청구: toInt(s.fareClient), 기사: toInt(s.fareDriver), 지급방식: s.payMethod || "", 거래처: String(s.client || "").trim(), 순번: i + 1 }));
+export const routeSegments = (r) => namedStops(r).map((s, i) => ({ s, i })).filter(({ s, i }) => i > 0 && stopPaid(s)).map(({ s, i }) => ({ name: s.name || s.addr, 구분: s.type, 청구: toInt(s.fareClient), 기사: toInt(s.fareDriver), 지급방식: s.payMethod || "", 거래처: String(s.client || "").trim(), 순번: i + 1, 운임구분: String(s.fareType || r.fareType || "").trim() }));
 // 정류지 거래처(청구처) — 비우면 노선 거래처
 export const routeClient = (r) => String(r.client || r.name || "").trim();
 // 노선 거래처와 띄어쓰기·(주)만 다르면 같은 거래처로 본다
@@ -187,7 +190,7 @@ export function routeOrdersFor(r, date) {
   const segOf = new Map(); // 정류지 순번 → 지급방식
   const payerOfN = new Map(); // 정류지 순번 → 거래처명
   seg.forEach((g) => { segOf.set(g.순번, payOfSeg(g)); payerOfN.set(g.순번, payerOf(r, g)); });
-  const fareRow = (g) => ({ 이름: g.name, 구분: g.구분, 거래처명: payerOf(r, g), 청구운임: g.청구, 기사운임: g.기사, 수수료: g.청구 - g.기사, 지급방식: payOfSeg(g) });
+  const fareRow = (g) => ({ 이름: g.name, 구분: g.구분, 거래처명: payerOf(r, g), 청구운임: g.청구, 기사운임: g.기사, 수수료: g.청구 - g.기사, 지급방식: payOfSeg(g), ...(g.운임구분 ? { 운임구분: g.운임구분 } : {}) });
   return groups.map((G, gi) => {
     const isMain = gi === 0;
     const inG = new Set(G.segs.map((g) => g.순번));
@@ -212,6 +215,9 @@ export function routeOrdersFor(r, date) {
     const dropVia = mid.filter((s) => s.type !== "상차").map((s) => wp(s, "하차일", "하차시간"));
     const mainCargo = own.find((s) => s.cargo) || {};
     const rows = G.segs.map(fareRow);
+    // ⭐ 2026-11-02 운임규칙 — 오더 운임구분 = 이 묶음 정류지의 운임구분(모두 같을 때) · 아니면 노선 기본
+    const ftList = [...new Set(G.segs.map((g) => g.운임구분).filter(Boolean))];
+    const ft = ftList.length === 1 ? ftList[0] : (ftList.length ? "" : String(r.fareType || "").trim());
     const memoFare = seg.length
       ? `정류지별 운임 ${seg.length}곳${split ? ` · 거래처·지급방식별 ${groups.length}건 중 ${gi + 1}(${groupLabel(r, G)}${rows.length ? `: ${rows.map((x) => x.이름).join(", ")}` : ""})` : ""}`
       : "";
@@ -227,6 +233,7 @@ export function routeOrdersFor(r, date) {
       차량톤수: r.tonnage || "", 톤수: r.tonnage || "", 차량종류: r.vehicleType || "",
       화물내용: cargoText(mainCargo), 화물타입: mainCargo.cargoType || "",
       청구운임: G.client, 기사운임: G.driver, 수수료: String(G.client - G.driver),
+      ...(ft ? { 운임구분: ft, 운임수동: false } : {}), // ⭐ 2026-11-02 운임규칙
       // 정류지별 금액 — 구간운임(기사앱이 읽는 예전 모양)과 정류지운임(이름·구분·청구·기사·수수료·지급방식)
       구간운임: G.segs.map((g) => ({ name: g.name, 구분: g.구분, 청구: g.청구, 기사: g.기사, 지급방식: payOfSeg(g), 거래처명: payerOf(r, g) })),
       정류지운임: rows,
@@ -307,7 +314,7 @@ export function FixedRouteEditNotice({ order, className = "" }) {
 // 노선이 바뀌었을 때 — 오늘 이후 아직 운행 전이고, 배차현황에서 따로 고치지 않은(예전 노선으로 만든 값 그대로인) 오더만 새 노선 값으로
 // ⭐ 2026-11-01 지급방식도 비교·반영 · 정류지운임(정류지별 금액·지급방식)도 함께 · 지급방식 분리 오더도 하나하나
 const ROUTE_KEYS = ["상차지명", "상차지주소", "하차지명", "하차지주소", "상차시간", "하차시간", "청구운임", "기사운임", "지급방식", "차량번호", "차량톤수", "차량종류", "화물내용", "거래처명"];
-const ROUTE_WRITE = [...ROUTE_KEYS, "상차지담당자번호", "하차지담당자번호", "경유지_상차", "경유상차목록", "경유지_하차", "경유하차목록", "톤수", "화물타입", "수수료", "구간운임", "정류지운임", "정류지별운임", "정류지운임전체", "지급방식분리", "이름", "전화번호", "메모", "고정노선명"];
+const ROUTE_WRITE = [...ROUTE_KEYS, "상차지담당자번호", "하차지담당자번호", "경유지_상차", "경유상차목록", "경유지_하차", "경유하차목록", "톤수", "화물타입", "수수료", "구간운임", "정류지운임", "정류지별운임", "정류지운임전체", "지급방식분리", "이름", "전화번호", "메모", "고정노선명", "운임구분", "운임수동"];
 const started = (d) => d.배차상태 === "배차취소" || d.상차완료 || d.상차완료일시 || d.상차지도착일시 || d.하차완료 || d.운송완료;
 export async function syncFutureRouteOrders(oldR, newR, days = 7) {
   let n = 0;
@@ -448,6 +455,7 @@ function StopFareBadge({ r, on = false }) {
 
 export default function FixedRoutes({ drivers = [], companyName = "", dispatchData = [] }) {
   const co = String(companyName || "").trim();
+  const fareR = useFareRules(co); // ⭐ 2026-11-02 운임규칙
   const [routes, setRoutes] = React.useState([]);
   const [selId, setSelId] = React.useState(null);
   const [form, setForm] = React.useState(null);
@@ -479,8 +487,28 @@ export default function FixedRoutes({ drivers = [], companyName = "", dispatchDa
   const today = kst(); const todayDay = dayOf(today);
   const todayRuns = routes.filter((r) => r.active && (r.days || []).includes(todayDay) && !(r.skipDates || []).includes(today));
   const shown = routes.filter((r) => !q.trim() || `${r.name}${r.client}${r.driverName}${r.carNo}`.includes(q.trim()));
-  const set = (k, v) => setForm((p) => ({ ...p, [k]: v }));
-  const setStop = (i, patch) => setForm((p) => ({ ...p, stops: p.stops.map((s, j) => (j === i ? { ...s, ...patch } : s)) }));
+  // ⭐ 2026-11-02 운임규칙 — 운임구분이 정해진 노선·정류지는 청구운임을 넣으면 기사운임을 규칙대로(기사운임을 직접 고치면 유지)
+  const set = (k, v) => setForm((p) => {
+    if (!fareR.on || !["fareClient", "fareDriver", "fareType"].includes(k)) return { ...p, [k]: v };
+    const n = { ...p, [k]: v };
+    const calcOf = (sale, ft) => { const rule = findFareRule(fareR.rules, ft); return rule && String(sale || "") !== "" ? String(applyFareRule(rule, sale).기사운임) : null; };
+    if (k === "fareDriver") { const c = calcOf(n.fareClient, n.fareType); n.fareManual = c != null && String(toInt(v)) !== c; return n; }
+    if (k === "fareType") n.fareManual = false;
+    if (!n.fareManual) { const c = calcOf(n.fareClient, n.fareType); if (c != null) n.fareDriver = c; }
+    if (k === "fareType") n.stops = (n.stops || []).map((s, i) => { if (i === 0 || s.fareType || s.fareManual) return s; const c = calcOf(s.fareClient, v); return c != null ? { ...s, fareDriver: c } : s; });
+    return n;
+  });
+  const setStop = (i, patch) => setForm((p) => ({ ...p, stops: p.stops.map((s, j) => {
+    if (j !== i) return s;
+    const n = { ...s, ...patch };
+    if (fareR.on && ("fareClient" in patch || "fareDriver" in patch || "fareType" in patch)) {
+      const rule = findFareRule(fareR.rules, n.fareType || p.fareType);
+      const c = rule && String(n.fareClient || "") !== "" ? String(applyFareRule(rule, n.fareClient).기사운임) : null;
+      if ("fareDriver" in patch) n.fareManual = c != null && String(toInt(patch.fareDriver)) !== c;
+      else { if ("fareType" in patch) n.fareManual = false; if (!n.fareManual && c != null) n.fareDriver = c; }
+    }
+    return n;
+  }) }));
   const moveStop = (i, d) => setForm((p) => { const a = [...p.stops]; const j = i + d; if (j < 0 || j >= a.length) return p; [a[i], a[j]] = [a[j], a[i]]; return { ...p, stops: a }; });
   const pickDriver = (key) => { const d = drivers.find((x) => x.id === key); setForm((p) => ({ ...p, driverKey: key, driverName: d?.이름 || "", carNo: d?.차량번호 && d.차량번호 !== "-" ? d.차량번호 : "", phone: d?.전화번호 && d.전화번호 !== "-" ? d.전화번호 : "", tonnage: d?.차량톤수 || p.tonnage || "", vehicleType: d?.차량종류 || p.vehicleType || "" })); };
   const [review, setReview] = React.useState(false);
@@ -643,6 +671,15 @@ export default function FixedRoutes({ drivers = [], companyName = "", dispatchDa
                               <input inputMode="numeric" value={s.fareDriver ? won(s.fareDriver) : ""} onChange={(e) => setStop(i, { fareDriver: e.target.value.replace(/[^\d]/g, "") })} placeholder="기사운임" className={`${inp} !h-10 text-right tabular-nums`} style={{ fontFamily: MONO }} />
                               <div className="col-span-2 md:col-span-1"><PaySelect id={`fr-pay-${i}`} compact value={s.payMethod} onChange={(v) => setStop(i, { payMethod: v })} options={payTypes} error={err} /></div>
                             </div>
+                            {/* ⭐ 2026-11-02 운임규칙 — 이 곳 운임구분(비우면 노선 기본) */}
+                            {fareR.on && (
+                              <div className="mt-2 flex items-center gap-2 flex-wrap">
+                                <span className="text-[12.5px] font-black text-[#1B2B4B]">운임구분</span>
+                                <FareTypeSelect compact rules={fareR.rules} value={s.fareType || ""} placeholder={form.fareType ? `노선 기본(${form.fareType})` : "운임구분"} onChange={(v) => setStop(i, { fareType: v })} />
+                                {(() => { const rule = findFareRule(fareR.rules, s.fareType || form.fareType); return rule ? <span className={`text-[12px] font-extrabold ${s.fareManual ? "text-amber-700" : "text-[#2D4C82]"}`}>{s.fareManual ? "기사운임 직접 입력" : fareRuleHint(rule)}</span> : null; })()}
+                                {s.fareManual && <button type="button" onClick={() => setStop(i, { fareType: s.fareType || "" })} className="h-6 px-2 rounded bg-[#1B2B4B] text-white text-[11.5px] font-extrabold">↺ 규칙대로</button>}
+                              </div>
+                            )}
                             {/* ⭐ 2026-11-01 이 곳 거래처(청구처) — 비우면 노선 거래처 · 착불 경유지는 다른 회사가 낼 수 있다 */}
                             {(() => {
                               const sc = String(s.client || "").trim();
@@ -701,7 +738,8 @@ export default function FixedRoutes({ drivers = [], companyName = "", dispatchDa
               </CustomSelect>
               <div className="grid grid-cols-2 gap-2.5 mt-2.5">
                 <div><label className={lab}>톤수</label><input value={form.tonnage} onChange={(e) => set("tonnage", e.target.value)} placeholder="예: 5톤" className={inp} /></div>
-                <div><label className={lab}>차량 종류</label><Suggest value={form.vehicleType} onChange={(v) => set("vehicleType", v)} items={VEHICLE_TYPES_FR.map((v) => ({ v }))} k="v" sub={() => ""} placeholder="입력 또는 선택" onPick={(x) => set("vehicleType", x.v)} showAll /></div>
+                {/* 🚚 2026-11-02 회사 공용 차량종류(＋ 추가 포함) */}
+                <div><label className={lab}>차량 종류</label><VehicleTypePicker className={inp} value={form.vehicleType} base={VEHICLE_TYPES_FR} placeholder="선택" noneLabel="선택 안 함" onChange={(v) => set("vehicleType", v)} /></div>
               </div>
               {/* ⭐ 2026-11-01 운임 — 정류지별 운임이 있으면 기본 운임 칸은 잠기고 정류지 합계를 보여준다 */}
               {(() => {
@@ -725,6 +763,15 @@ export default function FixedRoutes({ drivers = [], companyName = "", dispatchDa
                         ? <span className="inline-flex items-center gap-1.5 h-6 px-2.5 rounded-lg bg-[#0F1A30] text-white text-[12px] font-black"><span className="w-1.5 h-1.5 rounded-full bg-[#8FB0F0]" />정류지별 운임 적용 중 · {t.seg.length}곳</span>
                         : <span className="inline-flex items-center h-6 px-2.5 rounded-lg bg-[#F3F6FA] border border-[#E3E8F0] text-[#3A4A66] text-[12px] font-black">단일 운임</span>}
                     </div>
+                    {/* ⭐ 2026-11-02 운임규칙 — 노선 기본 운임구분 */}
+                    {fareR.on && (
+                      <div className="mb-2.5 flex items-center gap-2 flex-wrap" data-fr-fare-type="1">
+                        <label className={`${lab} !mb-0`}>운임구분(노선 기본)</label>
+                        <FareTypeSelect compact rules={fareR.rules} value={form.fareType || ""} onChange={(v) => set("fareType", v)} />
+                        {(() => { const rule = findFareRule(fareR.rules, form.fareType); return rule ? <span className={`text-[12.5px] font-extrabold ${form.fareManual && !lock ? "text-amber-700" : "text-[#2D4C82]"}`}>{form.fareManual && !lock ? "기사운임 직접 입력" : fareRuleHint(rule)}</span> : null; })()}
+                        {form.fareManual && !lock && <button type="button" onClick={() => set("fareType", form.fareType || "")} className="h-6 px-2 rounded bg-[#1B2B4B] text-white text-[11.5px] font-extrabold">↺ 규칙대로</button>}
+                      </div>
+                    )}
                     <div className="grid grid-cols-2 gap-2.5">
                       {fareInp("fareClient", "기본 청구운임(1회)", t.client)}
                       {fareInp("fareDriver", "기본 기사운임(1회)", t.driver)}

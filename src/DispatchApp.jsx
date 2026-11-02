@@ -15,6 +15,7 @@ import { drawTmapTrafficRoute, TRAFFIC_LEGEND } from "./mapStyle";
 // ⭐ 2026-11-02 속도 — 캡처·PDF 라이브러리는 저장 버튼을 누를 때 받는다(첫 로딩에서 약 580KB 제외)
 import { html2canvas, loadJsPDF, lazyView, prefetchWhenIdle } from "./lazyLoad";
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { VehicleTypePicker, VehicleTypeAddButton, useVehicleTypes, withCustomVehicleTypes, VT_DEFAULTS } from "./vehicleTypes"; // ⭐ 2026-11-02 회사 공용 차량종류
 import { withCo, getTenant } from "./fsTenant";
 import { coDocKey } from "./coKey";
 import { createPortal } from "react-dom";
@@ -1745,9 +1746,18 @@ function BulkEditModal({ rows, patchDispatch, onClose, onDateShift }) {
       const id = r._id || r.id;
       init[id] = {};
       for (const f of BULK_EDIT_FIELDS) init[id][f.key] = r[f.key] ?? "";
+      init[id].운임구분 = r.운임구분 ?? ""; init[id].운임수동 = !!r.운임수동; // ⭐ 2026-11-02 운임규칙
     }
     return init;
   });
+  // ⭐ 2026-11-02 운임규칙 — 규칙 사용 회사만 "운임구분" 열 + 청구운임 → 기사운임 자동
+  const fareRb = useFareRules();
+  const FIELDS = fareRb.on ? [...BULK_EDIT_FIELDS, { key: "운임구분", label: "운임구분", type: "fare" }] : BULK_EDIT_FIELDS;
+  const fareCell = (r, cur, key, value) => {
+    const n = fareFormChange({ ...r, ...cur }, key, value, fareRb.rules, { withFee: false });
+    return { ...cur, 청구운임: n.청구운임 ?? "", 기사운임: n.기사운임 ?? "", 운임구분: n.운임구분 || "", 운임수동: !!n.운임수동 };
+  };
+  const isFareKey = (key) => fareRb.on && (key === "청구운임" || key === "기사운임" || key === "운임구분");
   const [bulkValues, setBulkValues] = React.useState({});
   const [saving, setSaving] = React.useState(false);
   const [saveProgress, setSaveProgress] = React.useState({ done: 0, total: 0 });
@@ -1758,13 +1768,18 @@ function BulkEditModal({ rows, patchDispatch, onClose, onDateShift }) {
   if (!rows || rows.length === 0) return null;
 
   const setCell = (id, key, value) => {
+    if (isFareKey(key)) {
+      const r = rows.find(x => (x._id || x.id) === id) || {};
+      setEdited(prev => ({ ...prev, [id]: fareCell(r, prev[id] || {}, key, value) }));
+      return;
+    }
     setEdited(prev => ({ ...prev, [id]: { ...prev[id], [key]: value } }));
   };
   const applyBulk = (key) => {
     const v = bulkValues[key] ?? "";
     setEdited(prev => {
       const next = { ...prev };
-      for (const r of rows) { const id = r._id || r.id; next[id] = { ...next[id], [key]: v }; }
+      for (const r of rows) { const id = r._id || r.id; next[id] = isFareKey(key) ? fareCell(r, next[id] || {}, key, v) : { ...next[id], [key]: v }; }
       return next;
     });
   };
@@ -1778,11 +1793,12 @@ function BulkEditModal({ rows, patchDispatch, onClose, onDateShift }) {
       const id = r._id || r.id;
       const patch = {};
       let changed = false;
-      for (const f of BULK_EDIT_FIELDS) {
+      for (const f of FIELDS) {
         const newVal = edited[id]?.[f.key] ?? "";
         const oldVal = r[f.key] ?? "";
         if (String(newVal) !== String(oldVal)) { patch[f.key] = newVal; changed = true; }
       }
+      if (fareRb.on && changed && String(edited[id]?.운임구분 || "")) patch.운임수동 = !!edited[id]?.운임수동; // ⭐ 2026-11-02 운임규칙
       return changed ? { id, col: r.__col, patch } : null;
     }).filter(Boolean);
 
@@ -1864,16 +1880,18 @@ function BulkEditModal({ rows, patchDispatch, onClose, onDateShift }) {
             <thead>
               <tr>
                 <th className="border border-gray-200 bg-gray-100 px-2.5 py-2 font-bold text-gray-600 text-left w-[230px]"><EditableText id="bulkEdit.table.header.오더" defaultText="오더" /></th>
-                {BULK_EDIT_FIELDS.map(f => (
+                {FIELDS.map(f => (
                   <th key={f.key} className="border border-gray-200 bg-gray-100 px-2 py-2 font-bold text-gray-600 min-w-[130px]"><EditableText id={`bulkEdit.table.header.${f.key}`} defaultText={f.label} /></th>
                 ))}
               </tr>
               <tr>
                 <td className="border border-gray-200 px-2.5 py-1.5 text-[11px] font-extrabold text-gray-500 bg-gray-50"><EditableText id="bulkEdit.table.일괄입력" defaultText="일괄입력" /></td>
-                {BULK_EDIT_FIELDS.map(f => (
+                {FIELDS.map(f => (
                   <td key={f.key} className="border border-gray-200 px-2 py-1.5 bg-gray-50">
                     <div className="flex gap-1">
-                      {f.type === "select" ? (
+                      {f.type === "fare" ? (
+                        <FareTypeSelect compact className="flex-1" rules={fareRb.rules} value={bulkValues[f.key] ?? ""} onChange={(v) => setBulkValues(p => ({ ...p, [f.key]: v }))} />
+                      ) : f.type === "select" ? (
                         <select className="flex-1 border border-gray-300 rounded px-1 py-1 text-[11px]" value={bulkValues[f.key] ?? ""} onChange={(e) => setBulkValues(v => ({ ...v, [f.key]: e.target.value }))}>
                           <option value="">-</option>
                           {(f.key === "배차방식" || f.key === "지급방식" ? dropdownList(f.key, f.options) : f.options).map(o => <option key={o} value={o}>{o}</option>)}
@@ -1899,9 +1917,14 @@ function BulkEditModal({ rows, patchDispatch, onClose, onDateShift }) {
                       <div className="text-gray-600 text-[11px]">{r.상차지명 || "-"} → {r.하차지명 || "-"}</div>
                       <div className="text-gray-500 text-[11px]">{r.이름 || "기사 미배정"}{r.차량번호 ? ` · ${r.차량번호}` : ""}</div>
                     </td>
-                    {BULK_EDIT_FIELDS.map((f) => (
+                    {FIELDS.map((f) => (
                       <td key={f.key} className="border border-gray-200 px-2 py-1.5">
-                        {f.type === "select" ? (
+                        {f.type === "fare" ? (
+                          <div className="flex flex-col gap-0.5">
+                            <FareTypeSelect compact className="w-full" rules={fareRb.rules} value={edited[id]?.운임구분 ?? ""} onChange={(v) => setCell(id, "운임구분", v)} />
+                            <FareRuleHint form={{ ...r, ...(edited[id] || {}) }} rules={fareRb.rules} onReapply={() => { setEdited(prev => ({ ...prev, [id]: fareCell(r, prev[id] || {}, "__reapply", null) })); }} />
+                          </div>
+                        ) : f.type === "select" ? (
                           <select className="w-full border border-gray-300 rounded px-1 py-1 text-[12px]" value={edited[id]?.[f.key] ?? ""} onChange={(e) => setCell(id, f.key, e.target.value)}>
                             <option value="">-</option>
                             {(f.key === "배차방식" || f.key === "지급방식" ? dropdownList(f.key, f.options) : f.options).map(o => <option key={o} value={o}>{o}</option>)}
@@ -2124,8 +2147,9 @@ const CpField = ({ label, children }) => (
     <div className="min-w-0">{children}</div>
   </div>
 );
+// ⭐ 2026-11-02 칸 구분이 흐리다는 의견 — 밑줄(연한 1px) → 테두리 박스형(칸마다 또렷하게). 입력 중이면 네이비 테두리 + 링
 const cpInputStyle =
-  "w-full border-0 border-b border-[#D5DEEC] rounded-none px-1 py-1.5 text-[14.5px] font-bold text-gray-900 bg-transparent focus:outline-none focus:border-b-[3px] focus:border-[#2D4C82] focus:text-[#0B1428] transition";
+  "w-full h-9 border border-[#C9D5EA] rounded-lg px-2.5 py-1.5 text-[14.5px] font-bold text-gray-900 bg-[#F9FBFE] hover:border-[#9FB2D3] focus:outline-none focus:bg-white focus:border-[#2D4C82] focus:ring-4 focus:ring-[#2D4C82]/10 focus:text-[#0B1428] disabled:bg-[#F1F4F9] disabled:text-gray-500 transition";
 
 const todayStr = () => {
   const d = new Date();
@@ -2755,6 +2779,9 @@ import RevenueDashboard from "./RevenueDashboard";
 import { TargetPage, ClientsPage, TrendPage, YearlyPage, QueryPage } from "./RevenuePages";
 import { RecurringManagerModal, CloseReportModal } from "./AutomationPanels";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
+// ⭐ 2026-11-02 운임규칙 — 회사별 운임 규칙(운임구분 → 기사운임·수수료 자동 계산)
+import FareRulesSettings from "./FareRulesSettings";
+import { useFareRules, FareTypeSelect, FareRuleHint, fareFormChange, farePatchOf, findFareRule, applyFareRule, FareTypeBreakdown } from "./fareRules";
 
 // 기사전달용 업로드 링크 단축 — /upload?id=...&t=... (길고 낯설어 기사들이 거부감을
 // 느낄 수 있는 형태)를 /u/{code} 형태로 줄인다. code는 토큰에서 파생시켜, 같은
@@ -3371,6 +3398,27 @@ function KpDeleteConfirm({ rows = [], note = "삭제 후에도 되돌리기로 �
 
 // ⭐ PC 길게 눌러 선택 모드(2026-10-27) — 오더 줄을 마우스로 0.5초 이상 누르고 있으면 선택 모드가 켜지고,
 //    그 뒤로는 줄 어디를 눌러도 체크된다(입력칸·버튼은 그대로 동작). 아래 가운데 막대로 지금 모드를 표시, ESC로 끝.
+// ⭐ 2026-11-02 기사 등록·수정 — 차량종류 드롭다운 + "직접입력"(목록에 없는 값은 글자 칸으로 적는다)
+function DriverVehicleTypeField({ value, onChange, className = "" }) {
+  // 🚚 2026-11-02 회사 공용 차량종류 — 목록에서 고르거나 맨 아래 [＋ 차량종류 추가]로 새 이름을 넣으면 모든 화면 목록에 추가된다
+  return <VehicleTypePicker className={className} value={value} onChange={onChange} base={VT_DEFAULTS} placeholder="선택" noneLabel="선택 안 함" />;
+}
+
+// ⭐ 2026-11-02 기사관리 표 — 차량종류(암롤·윙바디 등)를 한눈에 · 한 가지 색(네이비 톤)으로 깔끔하게 + 톤수(숫자 글꼴)
+function VehicleTypeBadge({ type, ton }) {
+  // 예전에 "직접입력"이라는 글자 자체가 저장된 기사는 차종이 없는 것과 같다 → 미지정
+  const t0 = String(type || "").trim();
+  const t = t0 === "직접입력" ? "" : t0;
+  const tn = String(ton || "").trim();
+  if (!t && !tn) return <span className="text-gray-300">-</span>;
+  return (
+    <span className="inline-flex items-stretch h-[27px] rounded-md overflow-hidden border border-[#C9D5EA] bg-white text-[14px] leading-none">
+      <span className={`inline-flex items-center px-2.5 font-extrabold ${t ? "text-[#0F1A30]" : "text-[#B4BFD0]"}`}>{t || "미지정"}</span>
+      {tn && <span className="inline-flex items-center px-2 bg-[#1B2B4B] text-white font-bold tabular-nums" style={{ fontFamily: "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace", fontSize: 13 }}>{tn}</span>}
+    </span>
+  );
+}
+
 function useKpLongPressSelect({ toggle, isSelected }) {
   const [mode, setMode] = React.useState(false);
   const timer = React.useRef(null);
@@ -7065,6 +7113,7 @@ export default function DispatchApp({ role: realRole, user, userCompany = "", fo
   // 받아오면 되므로 최상위 컴포넌트에서 호출한다.
   useEffect(() => { ensureWeatherLoaded(); }, []);
   useCopyTemplates(); // ▤ 기사복사 문구(회사별 설정) 실시간 반영
+  useVehicleTypes(userCompany); // 🚚 2026-11-02 회사 공용 차량종류(추가한 이름이 모든 화면 목록에 바로 보이게 구독 유지)
   // 💳 회사 요금제(미지정이면 전체 기능) — 메뉴 잠금·프로 기능 판단에 쓴다
   const planCompany = (role === "totalMaster" ? (localStorage.getItem("loginCompany") || userCompany) : (userCompany || localStorage.getItem("userCompany")) || "").trim();
   const planId = useCompanyPlanId(planCompany);
@@ -9385,6 +9434,9 @@ function MultiRegCombo({ id, value, onChange, onSelect, items, placeholder, clas
       // 한 번만 구독한다. 커스터마이즈 안 한 회사는 기존 하드코딩 값 그대로 보인다.
       const loadMethodOptions = useCompanyDropdownOptions("상하차방법", role, userCompany);
       const payTypeOptionsCustom = useCompanyDropdownOptions("지급방식", role, userCompany);
+      // ⭐ 2026-11-02 운임규칙 — 회사가 "운임 규칙 사용"을 켠 경우에만 운임구분 칸을 보인다
+      const fareR = useFareRules(userCompany);
+      const fareOn = fareR.on;
       const dispatchTypeOptionsCustom = useCompanyDropdownOptions("배차방식", role, userCompany);
       const cargoTypeOptionsCustom = useCompanyDropdownOptions("화물타입", role, userCompany);
       const tonTypeOptionsCustom = useCompanyDropdownOptions("톤수타입", role, userCompany);
@@ -10566,10 +10618,11 @@ const mergedClients = React.useMemo(() => {
     // 🚗 차량종류 자동완성 필터 (★ 반드시 전역)
 const filterVehicles = (q) => {
   const query = String(q || "").trim();
-  if (!query) return VEHICLE_TYPES;
+  const all = withCustomVehicleTypes(VEHICLE_TYPES); // 🚚 2026-11-02 회사에서 추가한 차량종류 포함
+  if (!query) return all;
 
   const nq = normalizeKey(query);
-  return VEHICLE_TYPES.filter((v) =>
+  return all.filter((v) =>
     normalizeKey(v).includes(nq)
   );
 };
@@ -11868,6 +11921,10 @@ const updateMultiSlot = (key, value) => {
     }
     // ⭐ 3파트 등록폼과 동일: 청구운임/기사운임을 입력할 때마다 수수료(차액)를
     // 자동으로 다시 계산한다.
+    // ⭐ 2026-11-02 운임규칙 — 다중등록도 운임구분 → 기사운임·수수료 자동
+    if (fareOn && (key === "운임구분" || key === "청구운임" || key === "기사운임" || key === "__reapply")) {
+      return fareFormChange(s, key, value, fareR.rules);
+    }
     if (key === "청구운임" || key === "기사운임") {
       const next = { ...s, [key]: value };
       const sale = parseInt(next.청구운임 || 0, 10) || 0;
@@ -11978,6 +12035,7 @@ const submitMultiRegister = async () => {
         메모: s.메모 || "",
         긴급: !!s.긴급,
         배차상태: s.지급방식 === "취소" ? "배차취소" : (슬롯기사확인상태.기사확인상태 === "대기" ? "승인대기" : (s.차량번호?.trim() ? "배차완료" : "배차중")),
+        ...(fareOn ? farePatchOf(s) : {}), // ⭐ 2026-11-02 운임규칙
         등록일: _todayStr(),
         ...슬롯기사확인상태,
       });
@@ -12293,6 +12351,11 @@ function swapPickupDrop() {
         // 사용자가 직접 토글을 건드리면, 이후 상차일이 바뀌어 자동감지 결과가 새로
         // 계산되기 전까지는 그 판단을 그대로 존중한다(자동감지가 수동 선택을 덮어쓰지 않음).
         setForm((p) => ({ ...p, 특수운임: value, 특수운임수동: true, 특수운임사유: value ? (p.특수운임사유 || "수동 지정") : "" }));
+        return;
+      }
+      // ⭐ 2026-11-02 운임규칙 — 운임구분·청구운임·기사운임 → 규칙대로 기사운임·수수료 자동 계산(기사운임을 직접 고치면 유지)
+      if (fareOn && canMoney && (key === "운임구분" || key === "청구운임" || key === "기사운임" || key === "__reapply")) {
+        setForm((p) => fareFormChange(p, key, value, fareR.rules));
         return;
       }
       if (canMoney && (key === "청구운임" || key === "기사운임")) {
@@ -14186,6 +14249,8 @@ const applyCopy = (r) => {
     운행유형: r.운행유형 || "편도",
     긴급: r.긴급 === true,
     운임보정: r.운임보정 || null,
+    // ⭐ 2026-11-02 운임규칙 — 복사해 오는 오더의 운임구분도 함께(규칙 사용 회사만)
+    ...(fareOn && r.운임구분 ? { 운임구분: r.운임구분, 운임수동: false } : {}),
   };
   setForm((p) => ({ ...p, ...keep }));
 
@@ -15342,7 +15407,8 @@ shadow-[0_1px_2px_rgba(16,24,40,0.04),0_12px_30px_rgba(16,24,40,0.07)]
               </div>
 
               <div>
-                <label className={mrLabelCls}><EditableText id="orderForm.multi.label.차량종류" defaultText="차량종류" /></label>
+                <label className={`${mrLabelCls} flex items-center justify-between gap-2`}><EditableText id="orderForm.multi.label.차량종류" defaultText="차량종류" />
+                  <VehicleTypeAddButton label="＋ 추가" onAdded={(v) => { updateMultiSlot("차량종류", v); setMultiRegVehicleQuery(v); }} /></label>
                 <MultiRegCombo
                   className={mrInputCls}
                   placeholder="차량종류 입력 또는 선택"
@@ -15350,7 +15416,8 @@ shadow-[0_1px_2px_rgba(16,24,40,0.04),0_12px_30px_rgba(16,24,40,0.07)]
                   onChange={(v) => { setMultiRegVehicleQuery(v); updateMultiSlot("차량종류", v); }}
                   items={(() => {
                     const q = (multiRegVehicleQuery || currentMultiSlot.차량종류 || "").trim();
-                    const list = q ? VEHICLE_TYPES.filter(v => v.includes(q)) : VEHICLE_TYPES;
+                    const all = withCustomVehicleTypes(VEHICLE_TYPES); // 🚚 2026-11-02 회사 추가 차량종류 포함
+                    const list = q ? all.filter(v => v.includes(q)) : all;
                     return list.map((v, i) => ({ key: i, label: v, raw: v }));
                   })()}
                   onSelect={(it) => { updateMultiSlot("차량종류", it.raw); setMultiRegVehicleQuery(it.raw); }}
@@ -15533,7 +15600,13 @@ shadow-[0_1px_2px_rgba(16,24,40,0.04),0_12px_30px_rgba(16,24,40,0.07)]
                 <input autoComplete="off" readOnly className={`${mrInputCls} bg-gray-100`}
                   value={currentMultiSlot.수수료 ? Number(currentMultiSlot.수수료).toLocaleString() : currentMultiSlot.수수료 || ""} />
               </div>
-              <div />
+              {/* ⭐ 2026-11-02 운임규칙 — 다중등록 운임구분(규칙 사용 회사만, 빈 칸 자리) */}
+              {fareOn ? (
+                <div>
+                  <label className={mrLabelCls}>운임구분 <FareRuleHint className="ml-1.5" form={currentMultiSlot} rules={fareR.rules} onReapply={() => updateMultiSlot("__reapply")} /></label>
+                  <FareTypeSelect compact className="w-full" rules={fareR.rules} value={currentMultiSlot.운임구분 || ""} onChange={(v) => updateMultiSlot("운임구분", v)} />
+                </div>
+              ) : <div />}
 
               <div className="col-span-2">
                 <label className={mrLabelCls}><EditableText id="orderForm.multi.label.메모" defaultText="메모" /></label>
@@ -16369,6 +16442,7 @@ className={`
     차량·파렛
   </button>
 </div>
+  {/* 🚚 2026-11-02 회사 공용 차량종류 추가 — 목록 맨 아래 [＋ 차량종류 추가] */}
 
   <input autoComplete="off"
     data-arrownav
@@ -16421,7 +16495,7 @@ className={`
   />
 
   {showVehicleDropdown && (
-    <div className="absolute z-50 bg-white border rounded-lg shadow-lg w-full max-h-48 overflow-auto">
+    <div className="absolute z-50 bg-white border border-[#E3E8F0] rounded-xl shadow-[0_14px_34px_rgba(15,26,48,0.18)] w-full max-h-60 overflow-auto py-1" onMouseDown={(e) => e.preventDefault()}>
       {filterVehicles(vehicleQuery).map((v, i) => (
         <div
           key={`${v}-${i}`}
@@ -16440,6 +16514,14 @@ className={`
           {v}
         </div>
       ))}
+      <div className="sticky bottom-0 bg-white border-t border-[#EEF2F7] px-1.5 pt-1.5 pb-1 mt-1 shadow-[0_-8px_12px_rgba(255,255,255,0.95)]">
+        <VehicleTypeAddButton
+          initial={(vehicleQuery || "").trim() && !filterVehicles(vehicleQuery).includes((vehicleQuery || "").trim()) ? vehicleQuery : ""}
+          label="＋ 차량종류 추가"
+          className="w-full h-8 rounded-lg border-[1.5px] border-dashed border-[#9FB2D3] bg-white text-[#1B2B4B] text-[12.5px] font-black hover:bg-[#F5F8FD]"
+          onAdded={(v) => { onChange("차량종류", v); setVehicleQuery(v); setShowVehicleDropdown(false); }}
+        />
+      </div>
     </div>
   )}
   
@@ -16611,7 +16693,16 @@ className={`
 
     {/* 수수료 */}
     <div>
-      <label className={labelCls}><EditableText id="orderForm.label.수수료" defaultText="수수료" /></label>
+      {/* ⭐ 2026-11-02 운임규칙 — 운임구분은 수수료 라벨 줄 오른쪽 알약 버튼(특수운임 칩과 같은 자리 방식 · 칸 배치 그대로) */}
+      <div className={`${labelCls} flex items-center gap-1.5 whitespace-nowrap`}>
+        <span className="shrink-0"><EditableText id="orderForm.label.수수료" defaultText="수수료" /></span>
+        {fareOn && (
+          <span className="ml-auto inline-flex items-center gap-1" data-fare-row="1">
+            <FareRuleHint form={form} rules={fareR.rules} onReapply={() => onChange("__reapply")} />
+            <FareTypeSelect compact align="right" id="order-fare-type" rules={fareR.rules} value={form.운임구분 || ""} placeholder="운임구분" onChange={(v) => onChange("운임구분", v)} />
+          </span>
+        )}
+      </div>
       <input autoComplete="off"
         className={`${inputCls} bg-gray-100`}
         value={form.수수료 ? Number(form.수수료).toLocaleString() : form.수수료}
@@ -18513,7 +18604,8 @@ className={`
 <div className="flex items-stretch gap-3 w-full mb-4" style={{ minWidth: 0 }}>
   {/* 왼쪽: 폼 */}
   {/* ⭐ 2026-11-01 화면이 좁으면(노트북·125% 배율 1536px 등) 입력칸이 겹쳐 화물내용 칸을 못 누를 정도였다 — 1800px 미만은 폼을 넓게 */}
-  <div className="basis-[74%] max-w-[74%] min-[1800px]:basis-[62%] min-[1800px]:max-w-[62%]" style={{ flexGrow: 0, flexShrink: 0, minWidth: 0, overflow: "hidden" }}>
+  {/* ⭐ 2026-11-02 수수료 라벨 줄(운임구분)이 좁아지지 않게 입력 칸 74→77%(넓은 화면 62→66%) · 옆 달력은 그만큼 살짝 작게 */}
+  <div className="basis-[77%] max-w-[77%] min-[1800px]:basis-[66%] min-[1800px]:max-w-[66%]" style={{ flexGrow: 0, flexShrink: 0, minWidth: 0, overflow: "hidden" }}>
     {renderForm()}
   </div>
 
@@ -19472,6 +19564,13 @@ setConfirmChange(null);
             <div className="rounded-xl bg-[#F4F7FC] border border-[#E3E8F0] px-3 py-2">
               <div className="text-[12px] font-bold text-gray-500">지급방식</div>
               <div className="text-[15px] font-black text-[#1B2B4B]">{form.지급방식}</div>
+            </div>
+          )}
+          {/* ⭐ 2026-11-02 운임규칙 — 등록 확인에 운임구분 */}
+          {fareOn && form.운임구분 && (
+            <div className="rounded-xl bg-[#EAF0FB] border border-[#C9D5EA] px-3 py-2 col-span-2">
+              <div className="text-[12px] font-bold text-gray-500">운임구분</div>
+              <div className="text-[15px] font-black text-[#1B2B4B]">{form.운임구분} <span className="text-[12.5px] font-bold text-[#2D4C82]">수수료 {(Number(form.청구운임 || 0) - Number(form.기사운임 || 0)).toLocaleString()}원</span></div>
             </div>
           )}
         </div>
@@ -23511,6 +23610,7 @@ function RealtimeRowBase({
   driverConfirmOpen, memoAlert, blackAlert,
   setCancelReqPopup, markEditRequestSeen, setEditReqPopup, setConfirmChange,
   flashRow, setAttachViewer, setLiveLocViewer, setDeliveryConfirm, setWorkDatesEditRow,
+  fareRules = null, // ⭐ 2026-11-02 운임규칙 — 규칙 사용 회사만 배열(아니면 null → 예전 그대로)
 }) {
   const sale = toInt(editedForRow?.청구운임 ?? r.청구운임);
   const drv = toInt(editedForRow?.기사운임 ?? r.기사운임);
@@ -23860,7 +23960,7 @@ ${isHighlighted ? "animate-pulse bg-blue-100" : ""}
                       <input autoComplete="off"
                         type="text"
                         className="border p-1 rounded w-full"
-                        defaultValue={r.기사운임 || ""}
+                        {...(fareRules ? { value: String(editedForRow?.기사운임 ?? r.기사운임 ?? "") } : { defaultValue: r.기사운임 || "" })}
                         onChange={(e) =>
                           handleEditChange(r._id, "기사운임", e.target.value)
                         }
@@ -23875,6 +23975,15 @@ ${isHighlighted ? "animate-pulse bg-blue-100" : ""}
                     <span className={`font-bold ${fee < 0 ? "text-red-600" : "text-blue-600"}`}>
                       {formatComma(fee)}
                     </span>
+                    {/* ⭐ 2026-11-02 운임규칙 — 운임구분(수정모드면 선택, 아니면 작은 표시) */}
+                    {fareRules && (canEdit("청구운임", r._id) ? (
+                      <div className="mt-0.5 flex flex-col items-end gap-0.5">
+                        <FareTypeSelect compact rules={fareRules} value={editedForRow?.운임구분 ?? r.운임구분 ?? ""} onChange={(v) => handleEditChange(r._id, "운임구분", v)} />
+                        <FareRuleHint form={{ ...r, ...(editedForRow || {}) }} rules={fareRules} onReapply={() => handleEditChange(r._id, "__reapply", null)} />
+                      </div>
+                    ) : (r.운임구분 ? (
+                      <div className="mt-0.5"><span className="inline-block px-1.5 rounded bg-[#EAF0FB] text-[#2D4C82] text-[11.5px] font-extrabold" data-fare-chip="1">{r.운임구분}</span></div>
+                    ) : null))}
                   </td>
 
                   <td className={cell} style={{maxWidth:120,minWidth:100}}>{editableInput("지급방식", r.지급방식, r._id)}</td>
@@ -23963,7 +24072,8 @@ function realtimeRowPropsEqual(prev, next) {
     prev.memoAlert === next.memoAlert &&
     prev.blackAlert === next.blackAlert &&
     prev.isFirstPickupLunch === next.isFirstPickupLunch &&
-    prev.isFirstDropLunch === next.isFirstDropLunch
+    prev.isFirstDropLunch === next.isFirstDropLunch &&
+    prev.fareRules === next.fareRules
   );
 }
 
@@ -24292,6 +24402,9 @@ function RealtimeStatus({
   markEditRequestSeen = () => {},
   approvedShippers = [],
 }) {
+// ⭐ 2026-11-02 운임규칙 — 오더 복사·수정 패널 / 수정 창 / 운임구분 열(규칙 사용 회사만)
+const fareR = useFareRules(userCompany);
+const fareOn = fareR.on;
 const cpCargoTypeOptions = useCompanyDropdownOptions("화물타입", role, userCompany); // 오더복사 수정 창 단위(회사별 설정)
 const cpTonTypeOptions = useCompanyDropdownOptions("톤수타입", role, userCompany);
 const loadMethodOptions = useCompanyDropdownOptions("상하차방법", role, userCompany);
@@ -28551,6 +28664,17 @@ const openDailyCloseIssueDetail = (rowId) => {
   // 📌 editable input
   // ------------------------
   const handleEditChange = (id, key, value) => {
+    // ⭐ 2026-11-02 운임규칙 — 운임구분이 있는 오더는 청구운임을 고치면 기사운임·수수료도 규칙대로(기사운임을 고치면 수동 표시)
+    if (fareOn && (key === "청구운임" || key === "기사운임" || key === "운임구분" || key === "__reapply")) {
+      setEdited((prev) => {
+        const base = (dispatchData || []).find((r) => r._id === id) || {};
+        const merged = { ...base, ...(prev[id] || {}) };
+        if (!merged.운임구분 && key !== "운임구분") return { ...prev, [id]: { ...(prev[id] || {}), ...(key === "__reapply" ? {} : { [key]: value }) } };
+        const n = fareFormChange(merged, key, value, fareR.rules);
+        return { ...prev, [id]: { ...(prev[id] || {}), ...(key === "__reapply" ? {} : { [key]: value }), 운임구분: n.운임구분 || "", 기사운임: n.기사운임, 수수료: n.수수료, 운임수동: !!n.운임수동 } };
+      });
+      return;
+    }
     setEdited((prev) => ({
       ...prev,
       [id]: { ...(prev[id] || {}), [key]: value },
@@ -28655,10 +28779,7 @@ const openDailyCloseIssueDetail = (rowId) => {
     }
     if (key === "차량종류") {
       return (
-        <CustomSelect
-          className="border p-1 rounded w-full"
-          value={val || ""}
-          onChange={(e) => {
+        <VehicleTypePicker className="border p-1 rounded w-full" value={val || ""} base={["라보/다마스", "카고", "윙/카고", "윙바디", "리프트", "탑차", "냉장탑", "냉동탑", "냉장윙", "냉동윙", "냉장/냉동탑", "냉장/냉동윙", "오토바이", "기타"]} placeholder="선택" noneLabel="선택" onChange={(__v) => ((e) => {
             const next = e.target.value;
             if (next === val) return;
 
@@ -28668,23 +28789,7 @@ const openDailyCloseIssueDetail = (rowId) => {
               before: val || "",
               after: next,
             });
-          }}
-        >
-          <option value="">선택</option>
-          <option value="라보/다마스">라보/다마스</option>
-          <option value="카고">카고</option><option value="윙/카고">윙/카고</option>
-          <option value="윙바디">윙바디</option>
-          <option value="리프트">리프트</option>
-          <option value="탑차">탑차</option>
-          <option value="냉장탑">냉장탑</option>
-          <option value="냉동탑">냉동탑</option>
-          <option value="냉장윙">냉장윙</option>
-          <option value="냉동윙">냉동윙</option>
-          <option value="냉장/냉동탑">냉장/냉동탑</option>
-          <option value="냉장/냉동윙">냉장/냉동윙</option>
-          <option value="오토바이">오토바이</option>
-          <option value="기타">기타</option>
-        </CustomSelect>
+          })({ target: { value: __v } })} />
       );
     }
     return (
@@ -29274,7 +29379,7 @@ const head = isDark
     row.화물내용=mergeViaCargoText(r.화물내용,[r.경유상차목록,r.경유하차목록])||"";
     row.차량종류=r.차량종류||"";
     row.차량톤수=mergeViaTonnage(r.차량톤수,[r.경유상차목록,r.경유하차목록])||"";
-    Object.assign(row,{차량번호:r.차량번호||"",기사명:r.이름||"",전화번호:r.전화번호||"",배차상태:r.배차상태||"",청구운임:toInt(r.청구운임),기사운임:toInt(r.기사운임),수수료:toInt(r.청구운임)-toInt(r.기사운임),지급방식:r.지급방식||"",배차방식:r.배차방식||"",메모:r.메모||""});
+    Object.assign(row,{차량번호:r.차량번호||"",기사명:r.이름||"",전화번호:r.전화번호||"",배차상태:r.배차상태||"",청구운임:toInt(r.청구운임),기사운임:toInt(r.기사운임),수수료:toInt(r.청구운임)-toInt(r.기사운임),...(fareOn?{운임구분:r.운임구분||""}:{}),지급방식:r.지급방식||"",배차방식:r.배차방식||"",메모:r.메모||""});
     return row;
   });
   const ws=XLSX.utils.json_to_sheet(rowsExcel);const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,"실시간배차현황");XLSX.writeFile(wb,"실시간배차현황.xlsx");
@@ -29408,6 +29513,7 @@ const head = isDark
                 setLiveLocViewer={setLiveLocViewer}
                 setDeliveryConfirm={setDeliveryConfirm}
                 setWorkDatesEditRow={setWorkDatesEditRow}
+                fareRules={fareOn ? fareR.rules : null}
               />
             ))}
           </tbody>
@@ -30391,27 +30497,7 @@ checkWarningStatus(c.거래처명, "거래처");
   <div className="grid grid-cols-3 gap-x-6 gap-y-1.5">
 
     <CpField label="차량종류">
-      <CustomSelect
-      disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
-        className={cpInputStyle}
-        value={copyTarget?.차량종류 ?? ""}
-        onChange={(e)=>setCopyTarget(p=>({...p, 차량종류:e.target.value}))}
-      >
-        <option value="">선택</option>
-        <option value="라보/다마스">라보/다마스</option>
-        <option value="카고">카고</option><option value="윙/카고">윙/카고</option>
-        <option value="윙바디">윙바디</option>
-        <option value="탑차">탑</option>
-        <option value="냉장탑">냉장탑</option>
-        <option value="냉동탑">냉동탑</option>
-        <option value="냉장윙">냉장윙</option>
-        <option value="냉동윙">냉동윙</option>
-        <option value="냉장/냉동탑">냉장/냉동탑</option>
-        <option value="냉장/냉동윙">냉장/냉동윙</option>
-        <option value="리프트">리프트</option>
-        <option value="오토바이">오토바이</option>
-        <option value="기타">기타</option>
-      </CustomSelect>
+      <VehicleTypePicker className={cpInputStyle} value={copyTarget?.차량종류 ?? ""} disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")} base={["라보/다마스", "카고", "윙/카고", "윙바디", "탑차", "냉장탑", "냉동탑", "냉장윙", "냉동윙", "냉장/냉동탑", "냉장/냉동윙", "리프트", "오토바이", "기타"]} placeholder="선택" noneLabel="선택" onChange={(__v) => ((e)=>setCopyTarget(p=>({...p, 차량종류:e.target.value})))({ target: { value: __v } })} />
     </CpField>
 
 <CpField label="차량톤수">
@@ -30521,7 +30607,8 @@ value={copyTarget?.화물수량 || ""}
           <div className="px-5 pt-3.5 pb-0"><h3 className="text-[14px] font-bold text-[#1B2B4B] flex items-center gap-1.5"><span className="w-1 h-3.5 bg-[#1B2B4B] rounded-full inline-block"></span>결제 정보</h3></div>
           <div className="px-5 py-3">
 
-          <div className="grid grid-cols-3 xl:grid-cols-5 gap-x-5 gap-y-1">
+          {/* ⭐ 2026-11-02 위 기사정보·화물정보와 같은 3칸 배치(5칸은 칸이 너무 좁아 입력칸이 짧게 보였다) */}
+          <div className="grid grid-cols-3 gap-x-5 gap-y-1.5">
 
             <CpField label="청구운임">
               <input autoComplete="off"
@@ -30532,7 +30619,7 @@ value={copyTarget?.화물수량 || ""}
       .replace(/[^\d-]/g, "")
       .replace(/(?!^)-/g, "");
 
-    setCopyTarget(p=>({...p, 청구운임: v}))
+    setCopyTarget(p=> fareOn ? fareFormChange(p, "청구운임", v, fareR.rules) : ({...p, 청구운임: v})) // ⭐ 2026-11-02 운임규칙
   }}
 />
             </CpField>
@@ -30546,14 +30633,14 @@ value={copyTarget?.화물수량 || ""}
       .replace(/[^\d-]/g, "")
       .replace(/(?!^)-/g, "");
 
-    setCopyTarget(p=>({...p, 기사운임: v}))
+    setCopyTarget(p=> fareOn ? fareFormChange(p, "기사운임", v, fareR.rules) : ({...p, 기사운임: v})) // ⭐ 2026-11-02 운임규칙
   }}
 />
             </CpField>
 
             <CpField label="수수료">
               {(() => { const _f = Number(copyTarget.청구운임||0) - Number(copyTarget.기사운임||0); return (
-              <div className={`bg-[#EEF2F8] rounded-md px-2 py-1.5 font-black text-[15px] text-right whitespace-nowrap tabular-nums ${_f < 0 ? "text-red-600" : "text-[#1B2B4B]"}`}>
+              <div className={`h-9 flex items-center justify-end bg-[#EEF2F8] border border-[#DCE4F0] rounded-lg px-2.5 font-black text-[15px] whitespace-nowrap tabular-nums ${_f < 0 ? "text-red-600" : "text-[#1B2B4B]"}`}>
                 {_f.toLocaleString()} 원
               </div>
               ); })()}
@@ -30574,6 +30661,12 @@ value={copyTarget?.화물수량 || ""}
     <option value="취소">취소</option>
   </CustomSelect>
 </CpField>
+{/* ⭐ 2026-11-02 운임규칙 — 오더 복사·수정 패널 운임구분 */}
+{fareOn && (
+  <CpField label={<>운임구분<FareRuleHint className="ml-1" form={copyTarget} rules={fareR.rules} onReapply={() => setCopyTarget(p => fareFormChange(p, "__reapply", null, fareR.rules))} /></>}>
+    <FareTypeSelect className="!h-9 !rounded-lg" rules={fareR.rules} value={copyTarget?.운임구분 || ""} onChange={(v) => setCopyTarget(p => fareFormChange(p, "운임구분", v, fareR.rules))} />
+  </CpField>
+)}
 
 <CpField label="배차방식">
   <CustomSelect
@@ -30791,7 +30884,7 @@ value={copyTarget?.화물수량 || ""}
                 { label: "최고 운임", sub: "가장 높은 이력",   value: fareMax },
               ].map(({ label, sub, value }) => (
                 <button key={label}
-                  onClick={() => { setCopyTarget(p => ({ ...p, 청구운임: String(value) })); setCopyFarePanelOpen(false); }}
+                  onClick={() => { setCopyTarget(p => fareOn ? fareFormChange(p, "청구운임", String(value), fareR.rules) : ({ ...p, 청구운임: String(value) })); setCopyFarePanelOpen(false); }}
                   className="rounded-xl border border-gray-200 bg-gray-50 hover:bg-[#1B2B4B] hover:text-white hover:border-[#1B2B4B] px-3 py-3 text-center transition group active:scale-95">
                   <div className="text-[10px] font-bold text-gray-500 group-hover:text-white/60 mb-1">{label}</div>
                   <div className="text-[18px] font-extrabold text-[#1B2B4B] group-hover:text-white leading-none">{value.toLocaleString()}</div>
@@ -30941,7 +31034,7 @@ value={copyTarget?.화물수량 || ""}
                             ) : <span className="text-[11px] text-gray-500 ml-1">평균</span>}
                           </div>
                           <button
-                            onClick={() => { setCopyTarget(p => ({ ...p, 청구운임: String(fare) })); setCopyFarePanelOpen(false); }}
+                            onClick={() => { setCopyTarget(p => fareOn ? fareFormChange(p, "청구운임", String(fare), fareR.rules) : ({ ...p, 청구운임: String(fare) })); setCopyFarePanelOpen(false); }}
                             className="px-3 py-1.5 rounded-lg bg-[#1B2B4B] text-white text-[12px] font-bold hover:bg-[#243a60] transition active:scale-95">
                             적용
                           </button>
@@ -31244,7 +31337,7 @@ value={copyTarget?.화물수량 || ""}
               ].map(({ label, sub, value }) => (
                 <button key={label}
                   onClick={() => {
-                    setEditTarget(p => ({ ...p, 청구운임: value, 수수료: value - Number(p.기사운임 || 0) }));
+                    setEditTarget(p => { if (fareOn) { const n = fareFormChange(p, "청구운임", value, fareR.rules); return { ...n, 수수료: Number(n.수수료) || 0 }; } return { ...p, 청구운임: value, 수수료: value - Number(p.기사운임 || 0) }; });
                     setFarePanelOpen(false);
                   }}
                   className="rounded-xl border border-gray-200 bg-gray-50 hover:bg-[#1B2B4B] hover:text-white hover:border-[#1B2B4B] px-3 py-3 text-center transition group active:scale-95">
@@ -31398,7 +31491,7 @@ value={copyTarget?.화물수량 || ""}
                           </div>
                           <button
                             onClick={() => {
-                              setEditTarget(p => ({ ...p, 청구운임: fare, 수수료: fare - Number(p.기사운임 || 0) }));
+                              setEditTarget(p => { if (fareOn) { const n = fareFormChange(p, "청구운임", fare, fareR.rules); return { ...n, 수수료: Number(n.수수료) || 0 }; } return { ...p, 청구운임: fare, 수수료: fare - Number(p.기사운임 || 0) }; });
                               setFarePanelOpen(false);
                             }}
                             className="px-3 py-1.5 rounded-lg bg-[#1B2B4B] text-white text-[12px] font-bold hover:bg-[#243a60] transition active:scale-95">
@@ -32087,32 +32180,11 @@ value={copyTarget?.화물수량 || ""}
   {/* ================= 차량종류 ================= */}
   <div>
     <label>차량종류</label>
-    <CustomSelect
-      className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-500"
-      disabled={(editTarget?.source === "shipper" || editTarget?.source === "shipper_mobile")}
-      value={editTarget.차량종류 || ""}
-      onChange={(e) =>
+    <VehicleTypePicker className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-500" value={editTarget.차량종류 || ""} disabled={(editTarget?.source === "shipper" || editTarget?.source === "shipper_mobile")} base={["라보/다마스", "카고", "윙/카고", "윙바디", "리프트", "탑차", "냉장탑", "냉동탑", "냉장윙", "냉동윙", "냉장/냉동탑", "냉장/냉동윙", "오토바이", "기타"]} placeholder="선택 없음" noneLabel="선택 없음" onChange={(__v) => ((e) =>
         setEditTarget((p) => ({
           ...p,
           차량종류: e.target.value,
-        }))
-      }
-    >
-      <option value="">선택 없음</option>
-      <option value="라보/다마스">라보/다마스</option>
-      <option value="카고">카고</option><option value="윙/카고">윙/카고</option>
-      <option value="윙바디">윙바디</option>
-      <option value="리프트">리프트</option>
-      <option value="탑차">탑차</option>
-      <option value="냉장탑">냉장탑</option>
-      <option value="냉동탑">냉동탑</option>
-      <option value="냉장윙">냉장윙</option>
-      <option value="냉동윙">냉동윙</option>
-      <option value="냉장/냉동탑">냉장/냉동탑</option>
-      <option value="냉장/냉동윙">냉장/냉동윙</option>
-      <option value="오토바이">오토바이</option>
-      <option value="기타">기타</option>
-    </CustomSelect>
+        })))({ target: { value: __v } })} />
   </div>
 
   {/* ================= 차량톤수 ================= */}
@@ -32381,6 +32453,7 @@ value={copyTarget?.화물수량 || ""}
       .replace(/(?!^)-/g, "");  // -는 맨 앞만
 
     setEditTarget((p) => {
+      if (fareOn) { const n = fareFormChange(p, "청구운임", raw, fareR.rules); return { ...n, 수수료: Number(n.수수료) || 0 }; } // ⭐ 2026-11-02 운임규칙
       const 청구 = parseInt(raw || "0", 10);
       const 기사 = parseInt(p.기사운임 || "0", 10);
 
@@ -32405,6 +32478,7 @@ value={copyTarget?.화물수량 || ""}
       .replace(/(?!^)-/g, "");
 
     setEditTarget((p) => {
+      if (fareOn) { const n = fareFormChange(p, "기사운임", raw, fareR.rules); return { ...n, 수수료: Number(n.수수료) || 0 }; } // ⭐ 2026-11-02 운임규칙
       const 청구 = parseInt(p.청구운임 || "0", 10);
       const 기사 = parseInt(raw || "0", 10);
 
@@ -32427,6 +32501,15 @@ value={copyTarget?.화물수량 || ""}
                 />
               </div>
             </div>
+            {/* ⭐ 2026-11-02 운임규칙 — 수정 창 운임구분 */}
+            {fareOn && (
+              <div className="mb-3 flex items-center gap-2 flex-wrap">
+                <label className="shrink-0">운임구분</label>
+                <FareTypeSelect className="min-w-[180px] !w-auto" rules={fareR.rules} value={editTarget.운임구분 || ""}
+                  onChange={(v) => setEditTarget((p) => { const n = fareFormChange(p, "운임구분", v, fareR.rules); return { ...n, 수수료: Number(n.수수료) || 0 }; })} />
+                <FareRuleHint form={editTarget} rules={fareR.rules} onReapply={() => setEditTarget((p) => { const n = fareFormChange(p, "__reapply", null, fareR.rules); return { ...n, 수수료: Number(n.수수료) || 0 }; })} />
+              </div>
+            )}
 
             {/* ------------------------------------------------ */}
             {/* 🔵 지급/배차 방식 */}
@@ -32611,6 +32694,7 @@ const ALLOWED_FIELDS = [
   "차량종류", "차량톤수",
   "차량번호", "이름", "전화번호",
   "청구운임", "기사운임",
+  "운임구분", "운임수동", // ⭐ 2026-11-02 운임규칙
   "지급방식", "배차방식",
   "메모",
   "메모중요도",
@@ -34565,7 +34649,7 @@ setConfirmChange(null);
                       {["배차방식","지급방식","배차상태","차량종류"].includes(cond.field)?(
                         <CustomSelect className="border border-gray-200 rounded-lg px-2 py-1.5 text-[12px] flex-1 focus:outline-none focus:border-[#1B2B4B]" value={cond.value} onChange={e=>{const n=[...tempFilterConditions];n[idx]={...n[idx],value:e.target.value};setTempFilterConditions(n);}}>
                           <option value="">값 선택</option>
-                          {(cond.field==="배차방식"?dropdownList("배차방식", ["24시","직접배차","인성","고정기사"]):cond.field==="지급방식"?["계산서","착불","선불","손실","개인","취소"]:cond.field==="배차상태"?["배차중","배차완료","배차취소"]:["라보/다마스","카고","윙/카고","윙바디","리프트","탑차","냉장탑","냉동탑","냉장윙","냉동윙","냉장/냉동탑","냉장/냉동윙","오토바이","기타"]).map(v=><option key={v} value={v}>{v}</option>)}
+                          {(cond.field==="배차방식"?dropdownList("배차방식", ["24시","직접배차","인성","고정기사"]):cond.field==="지급방식"?["계산서","착불","선불","손실","개인","취소"]:cond.field==="배차상태"?["배차중","배차완료","배차취소"]:withCustomVehicleTypes(["라보/다마스","카고","윙/카고","윙바디","리프트","탑차","냉장탑","냉동탑","냉장윙","냉동윙","냉장/냉동탑","냉장/냉동윙","오토바이","기타"])).map(v=><option key={v} value={v}>{v}</option>)}
                         </CustomSelect>
                       ):(
                         <input autoComplete="off" type="text" className="border border-gray-200 rounded-lg px-2 py-1.5 text-[12px] flex-1 focus:outline-none focus:border-[#1B2B4B]" value={cond.value} onChange={e=>{const n=[...tempFilterConditions];n[idx]={...n[idx],value:e.target.value};setTempFilterConditions(n);}} placeholder="검색어 입력" />
@@ -34977,6 +35061,9 @@ function DispatchStatus({
   // 중복으로 읽어들였다).
   userNameMap = new Map(),
 }) {
+// ⭐ 2026-11-02 운임규칙 — 오더 복사·수정 패널 / 수정 창 / 운임구분 열(규칙 사용 회사만)
+const fareR = useFareRules(userCompany);
+const fareOn = fareR.on;
 const cpCargoTypeOptions = useCompanyDropdownOptions("화물타입", role, userCompany); // 오더복사 수정 창 단위(회사별 설정)
 const cpTonTypeOptions = useCompanyDropdownOptions("톤수타입", role, userCompany);
 const loadMethodOptions = useCompanyDropdownOptions("상하차방법", role, userCompany);
@@ -36235,6 +36322,7 @@ const [appliedEndDate, setAppliedEndDate] = React.useState("");
   const [sortDir2, setSortDir2] = React.useState("asc");
   const [sortModalOpen, setSortModalOpen] = React.useState(false);
   const [filterConditions, setFilterConditions] = React.useState([]);
+  const [fareTypeFilter, setFareTypeFilter] = React.useState(""); // ⭐ 2026-11-02 운임규칙 — 운임구분 필터("" 전체 · "__none" 미지정)
   const [tempFilterConditions, setTempFilterConditions] = React.useState([]);
   const [tempSortKey, setTempSortKey] = React.useState("");
   const [tempSortDir, setTempSortDir] = React.useState("asc");
@@ -37773,7 +37861,9 @@ if (mode === "driver") {
 
   // 대용량 업로드 엑셀 양식(첫 줄 = 열 이름, 둘째 줄 = 예시)
   const [bulkChooserOpen, setBulkChooserOpen] = useState(false);
-  const BULK_COLS = ["상차일", "상차시간", "하차일", "하차시간", "거래처명", "상차지명", "상차지주소", "하차지명", "하차지주소", "화물내용", "차량종류", "차량톤수", "차량번호", "기사명", "전화번호", "청구운임", "기사운임", "지급방식", "배차방식", "메모"];
+  const BULK_COLS0 = ["상차일", "상차시간", "하차일", "하차시간", "거래처명", "상차지명", "상차지주소", "하차지명", "하차지주소", "화물내용", "차량종류", "차량톤수", "차량번호", "기사명", "전화번호", "청구운임", "기사운임", "지급방식", "배차방식", "메모"];
+  // ⭐ 2026-11-02 운임규칙 — 규칙 사용 회사는 양식에 "운임구분" 열(비우면 예전처럼)
+  const BULK_COLS = fareOn ? [...BULK_COLS0, "운임구분"] : BULK_COLS0;
   const downloadBulkTemplate = () => {
     const today = new Date(); const ymd = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
     const t1 = new Date(today.getTime() + 86400000);
@@ -37781,7 +37871,7 @@ if (mode === "driver") {
       [ymd(t1), "오전 9시", ymd(t1), "오후 3시 30분", "동원F&B", "동원F&B 이천센터", "경기 이천시 마장면 100", "CJ 대구센터", "대구 달서구 성서로 10", "16파레트", "윙바디", "11톤", "경기12가3456", "김기사", "010-1234-5678", 450000, 400000, "계산서", "24시", ""],
       [ymd(t1), "오후 2시", ymd(t1), "오후 6시", "오뚜기", "오뚜기 평택공장", "경기 평택시 포승읍 1", "이마트 광주센터", "광주 광산구 하남산단 5", "8파레트", "카고", "5톤", "", "", "", 320000, 280000, "착불", "직접배차", ""],
     ];
-    const ws = XLSX.utils.aoa_to_sheet([BULK_COLS, ...samples]);
+    const ws = XLSX.utils.aoa_to_sheet([BULK_COLS, ...(fareOn ? samples.map((x) => [...x, ""]) : samples)]);
     ws["!cols"] = BULK_COLS.map((c) => ({ wch: c === "메모" ? 40 : c.includes("주소") ? 26 : Math.max(11, c.length * 2 + 4) }));
     const guide = XLSX.utils.aoa_to_sheet([
       ["항목", "작성 방법"],
@@ -37790,6 +37880,7 @@ if (mode === "driver") {
       ["상차시간 · 하차시간", "오전 9시, 오후 3시 30분 처럼 입력 (09:00 으로 써도 자동 변환)"],
       ["차량번호 · 기사명 · 전화번호", "입력하면 '배차완료', 비워두면 '배차중'으로 등록됩니다. 등록된 기사의 차량번호만 써도 기사명·전화번호가 자동으로 채워집니다."],
       ["청구운임 · 기사운임", "숫자만 입력 (수수료는 자동 계산)"],
+      ...(fareOn ? [["운임구분", `회사관리 › 운임 규칙 이름(${fareR.rules.map((x) => x.name).filter(Boolean).join(", ") || "예: 일대"}) — 기사운임을 비우면 규칙대로 자동 계산`]] : []),
       ["열 이름", "첫 줄(열 이름)은 바꾸지 마세요. 기사명 대신 '이름'이라고 써도 인식합니다."],
     ]);
     guide["!cols"] = [{ wch: 26 }, { wch: 90 }];
@@ -37846,6 +37937,15 @@ if (mode === "driver") {
           메모: row["메모"] || "",
           배차상태: "배차중",
         };
+        // ⭐ 2026-11-02 운임규칙 — "운임구분" 열이 있으면 함께(기사운임이 비어 있으면 규칙대로 계산)
+        const _ft = fareOn ? String(row["운임구분"] || "").trim() : "";
+        const _rule = _ft ? findFareRule(fareR.rules, _ft) : null;
+        if (_rule) {
+          mappedRow.운임구분 = _rule.name;
+          const _blank = String(row["기사운임"] ?? "").trim() === "";
+          if (_blank) { const c = applyFareRule(_rule, mappedRow.청구운임); mappedRow.기사운임 = c.기사운임; mappedRow.수수료 = c.수수료; mappedRow.운임수동 = false; }
+          else mappedRow.운임수동 = mappedRow.기사운임 !== applyFareRule(_rule, mappedRow.청구운임).기사운임;
+        }
 
         // ====================================================
         // 🚛 자동 기사 매칭 (차량번호 → 이름/전화번호 자동입력)
@@ -37923,6 +38023,17 @@ if (mode === "driver") {
 
   const updateEdited = (row, key, value) =>
     setEdited((prev) => {
+      // ⭐ 2026-11-02 운임규칙 — 운임구분이 있는 오더: 청구운임 → 기사운임·수수료 자동(기사운임을 고치면 수동)
+      if (fareOn && (key === "청구운임" || key === "기사운임" || key === "운임구분" || key === "__reapply")) {
+        const merged = { ...row, ...(prev[getId(row)] || {}) };
+        const cur0 = { ...(prev[getId(row)] || {}), ...(key === "__reapply" ? {} : { [key]: value }) };
+        if (merged.운임구분 || key === "운임구분") {
+          const n = fareFormChange(merged, key, value, fareR.rules, { asString: false });
+          Object.assign(cur0, { 운임구분: n.운임구분 || "", 기사운임: n.기사운임, 운임수동: !!n.운임수동 });
+        }
+        cur0.수수료 = toInt(cur0.청구운임 ?? row.청구운임) - toInt(cur0.기사운임 ?? row.기사운임);
+        return { ...prev, [getId(row)]: cur0 };
+      }
       const cur = { ...(prev[getId(row)] || {}), [key]: value };
       if (key === "청구운임" || key === "기사운임") {
         const sale = toInt(cur.청구운임 ?? row.청구운임);
@@ -38248,6 +38359,7 @@ if (first) {
         청구운임: toMoney(r.청구운임),
         기사운임: toMoney(r.기사운임),
         수수료: toMoney(r.청구운임) - toMoney(r.기사운임),
+        ...(fareOn ? { 운임구분: r.운임구분 || "" } : {}), // ⭐ 2026-11-02 운임규칙
         지급방식: r.지급방식 || "",
         배차방식: r.배차방식 || "",
         메모: r.메모 || "",
@@ -38452,6 +38564,10 @@ const filtered = React.useMemo(() => {
     data = data.filter(r => filterErrorIds.includes(r._id));
   }
 
+  // ⭐ 2026-11-02 운임규칙 — 운임구분 필터(규칙 사용 회사만)
+  if (fareOn && fareTypeFilter) {
+    data = data.filter(r => fareTypeFilter === "__none" ? !String(r.운임구분 || "").trim() : String(r.운임구분 || "") === fareTypeFilter);
+  }
   // 필터 조건 적용 (같은 필드=OR, 다른 필드=AND, 제외조건=AND NOT)
   if (filterConditions.length > 0) {
     const includes = filterConditions.filter(c => !c.exclude && c.field && c.value);
@@ -38500,6 +38616,8 @@ const filtered = React.useMemo(() => {
   focusOrderId,
   filterErrorIds,
   filterConditions,
+  fareOn,
+  fareTypeFilter,
 ]);
 
   // ⭐⭐⭐ 페이지 데이터 (정렬된 filtered 기준)
@@ -39284,6 +39402,11 @@ return (
 
         {/* 우측 버튼들 */}
         <div className="ml-auto flex items-center gap-1 flex-shrink-0 flex-wrap justify-end">
+          {/* ⭐ 2026-11-02 운임규칙 — 운임구분 필터(규칙 사용 회사만) */}
+          {fareOn && (
+            <span data-fare-filter="1"><FareTypeSelect compact align="right" rules={fareR.rules} value={fareTypeFilter} placeholder="운임구분 전체" noneLabel="운임구분 전체"
+              extraOpts={[{ name: "__none", label: "운임구분 미지정" }]} onChange={(v) => { setFareTypeFilter(v); setPage(0); }} /></span>
+          )}
           <button onClick={()=>{setTempSortKey(sortKey||"");setTempSortDir(sortDir||"asc");setTempFilterConditions([...filterConditions]);setSortModalOpen(true);}} className={`px-2 py-1 rounded-lg text-white text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap ${(sortKey||filterConditions.length>0)?"bg-[#1B2B4B]":"bg-slate-500"}`}><EditableText id="status.toolbar.정렬필터" defaultText="정렬/필터" />{filterConditions.length>0?` (${filterConditions.length})`:""}</button>
           <button onClick={()=>{if(selected.size===0)return showAlert("복사할 항목을 선택하세요.");if(selected.size>1)return showAlert("1개만 선택할 수 있습니다.");setCopyModalOpen(true);}} className="px-2 py-1 rounded-lg bg-gray-800 text-white text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap"><EditableText id="status.toolbar.기사복사" defaultText="기사복사" /></button>
           <button onClick={()=>{
@@ -39357,7 +39480,7 @@ return (
                 "선택", "순번", "등록일", "상차일", "상차시간", "하차일", "하차시간",
                 "거래처명", "상차지명", "상차지주소", "하차지명", "하차지주소",
                 "화물내용", "차량종류", "차량톤수", "혼적", "차량번호", "기사명", "전화번호",
-               "배차상태", "청구운임", "기사운임", "수수료", "지급방식", "배차방식", "메모", "전달사항", "첨부", "전달상태",
+               "배차상태", "청구운임", "기사운임", "수수료", ...(fareOn ? ["운임구분"] : []), "지급방식", "배차방식", "메모", "전달사항", "첨부", "전달상태",
 
               ].map((h) => {
                 const clickSortable = columnClickSortEnabled && CLICK_SORTABLE_COLUMNS.includes(h);
@@ -39501,28 +39624,8 @@ return (
       <span className="font-extrabold text-[#1B2B4B]">{row.차량종류 || "-"}</span>
 
     ) : key === "차량종류" ? (
-      <CustomSelect
-        className="border rounded px-1 py-0.5 w-full text-center font-extrabold text-[#1B2B4B]"
-        value={row.차량종류 || ""}
-        onChange={(e) =>
-          handleImmediateSelectChange(row, "차량종류", e.target.value)
-        }
-      >
-        <option value="">선택없음</option>
-        <option value="라보/다마스">라보/다마스</option>
-        <option value="카고">카고</option><option value="윙/카고">윙/카고</option>
-        <option value="윙바디">윙바디</option>
-        <option value="리프트">리프트</option>
-        <option value="탑차">탑차</option>
-        <option value="냉장탑">냉장탑</option>
-        <option value="냉동탑">냉동탑</option>
-        <option value="냉장윙">냉장윙</option>
-        <option value="냉동윙">냉동윙</option>
-        <option value="냉장/냉동탑">냉장/냉동탑</option>
-        <option value="냉장/냉동윙">냉장/냉동윙</option>
-        <option value="오토바이">오토바이</option>
-        <option value="기타">기타</option>
-      </CustomSelect>
+      <VehicleTypePicker className="border rounded px-1 py-0.5 w-full text-center font-extrabold text-[#1B2B4B]" value={row.차량종류 || ""} base={["라보/다마스", "카고", "윙/카고", "윙바디", "리프트", "탑차", "냉장탑", "냉동탑", "냉장윙", "냉동윙", "냉장/냉동탑", "냉장/냉동윙", "오토바이", "기타"]} placeholder="선택없음" noneLabel="선택없음" onChange={(__v) => ((e) =>
+          handleImmediateSelectChange(row, "차량종류", e.target.value))({ target: { value: __v } })} />
 
     ) : key === "상차지주소" || key === "하차지주소" ? (
       <AddressCell text={row[key] || ""} max={5} />
@@ -39709,7 +39812,7 @@ return (
                       {editMode && selected.has(id) ? (
                         <input autoComplete="off"
                           className="border rounded px-1 py-0.5 w-full text-right"
-                          defaultValue={toInt(row[key])}
+                          {...(fareOn && key === "기사운임" ? { value: String(toInt(row[key])) } : { defaultValue: toInt(row[key]) })}
                           onChange={(e) => updateEdited(row, key, e.target.value)}
                         />
                       ) : (
@@ -39721,6 +39824,17 @@ return (
                 <td className="border text-right pr-2">
                     <span className={`font-bold ${fee < 0 ? "text-red-500" : "text-blue-600"}`}>{fee.toLocaleString()}</span>
                   </td>
+                  {/* ⭐ 2026-11-02 운임규칙 — 운임구분 열(규칙 사용 회사만) */}
+                  {fareOn && (
+                    <td className="border text-center px-1" data-fare-cell="1">
+                      {editMode && selected.has(id) ? (
+                        <div className="flex flex-col items-center gap-0.5">
+                          <FareTypeSelect compact rules={fareR.rules} value={row.운임구분 || ""} onChange={(v) => updateEdited(row, "운임구분", v)} />
+                          <FareRuleHint form={row} rules={fareR.rules} onReapply={() => updateEdited(row, "__reapply", null)} />
+                        </div>
+                      ) : (row.운임구분 ? <span className="inline-block px-1.5 py-[1px] rounded bg-[#EAF0FB] text-[#2D4C82] text-[12.5px] font-extrabold">{row.운임구분}{row.운임수동 ? " ·수동" : ""}</span> : <span className="text-gray-300">-</span>)}
+                    </td>
+                  )}
 
                   {/* 지급 / 배차 방식 — 화주사 오더의 지급방식은 화주사만 변경 가능 */}
                   <td className="border text-center">
@@ -40534,28 +40648,8 @@ return (
 <div className="grid grid-cols-2 gap-3">
 
   <Field label="차량종류">
-    <CustomSelect
-      className="border p-2 rounded w-full"
-      value={editTarget?.차량종류 || ""}
-      onChange={(e) =>
-        setEditTarget((p) => ({ ...p, 차량종류: e.target.value }))
-      }
-    >
-        <option value="">선택</option>
-        <option value="라보/다마스">라보/다마스</option>
-        <option value="카고">카고</option><option value="윙/카고">윙/카고</option>
-        <option value="윙바디">윙바디</option>
-        <option value="탑차">탑</option>
-        <option value="냉장탑">냉장탑</option>
-        <option value="냉동탑">냉동탑</option>
-        <option value="냉장윙">냉장윙</option>
-        <option value="냉동윙">냉동윙</option>
-        <option value="냉장/냉동탑">냉장/냉동탑</option>
-        <option value="냉장/냉동윙">냉장/냉동윙</option>
-        <option value="리프트">리프트</option>
-        <option value="오토바이">오토바이</option>
-        <option value="기타">기타</option>
-    </CustomSelect>
+    <VehicleTypePicker className="border p-2 rounded w-full" value={editTarget?.차량종류 || ""} base={["라보/다마스", "카고", "윙/카고", "윙바디", "탑차", "냉장탑", "냉동탑", "냉장윙", "냉동윙", "냉장/냉동탑", "냉장/냉동윙", "리프트", "오토바이", "기타"]} placeholder="선택" noneLabel="선택" onChange={(__v) => ((e) =>
+        setEditTarget((p) => ({ ...p, 차량종류: e.target.value })))({ target: { value: __v } })} />
   </Field>
 
 
@@ -40807,6 +40901,7 @@ return (
       .replace(/(?!^)-/g, "");  // -는 맨 앞만
 
     setEditTarget((p) => {
+      if (fareOn) { const n = fareFormChange(p, "청구운임", raw, fareR.rules); return { ...n, 수수료: Number(n.수수료) || 0 }; } // ⭐ 2026-11-02 운임규칙
       const 청구 = parseInt(raw || "0", 10);
       const 기사 = parseInt(p.기사운임 || "0", 10);
 
@@ -40831,6 +40926,7 @@ return (
       .replace(/(?!^)-/g, "");
 
     setEditTarget((p) => {
+      if (fareOn) { const n = fareFormChange(p, "기사운임", raw, fareR.rules); return { ...n, 수수료: Number(n.수수료) || 0 }; } // ⭐ 2026-11-02 운임규칙
       const 청구 = parseInt(p.청구운임 || "0", 10);
       const 기사 = parseInt(raw || "0", 10);
 
@@ -40852,6 +40948,15 @@ return (
                 />
               </div>
             </div>
+            {/* ⭐ 2026-11-02 운임규칙 — 수정 창 운임구분 */}
+            {fareOn && (
+              <div className="mb-3 flex items-center gap-2 flex-wrap">
+                <label className="shrink-0">운임구분</label>
+                <FareTypeSelect className="min-w-[180px] !w-auto" rules={fareR.rules} value={editTarget.운임구분 || ""}
+                  onChange={(v) => setEditTarget((p) => { const n = fareFormChange(p, "운임구분", v, fareR.rules); return { ...n, 수수료: Number(n.수수료) || 0 }; })} />
+                <FareRuleHint form={editTarget} rules={fareR.rules} onReapply={() => setEditTarget((p) => { const n = fareFormChange(p, "__reapply", null, fareR.rules); return { ...n, 수수료: Number(n.수수료) || 0 }; })} />
+              </div>
+            )}
 
             {/* ------------------------------------------------ */}
             {/* 🔵 지급/배차 방식 */}
@@ -41037,6 +41142,7 @@ return (
       "차량종류", "차량톤수",
       "차량번호", "이름", "전화번호",
       "청구운임", "기사운임",
+      "운임구분", "운임수동", // ⭐ 2026-11-02 운임규칙
       "지급방식", "배차방식",
       "메모",
       "메모중요도",
@@ -42055,27 +42161,7 @@ setCopyPlaceOptions(list);
   <div className="grid grid-cols-3 gap-6">
 
     <Field label="차량종류">
-      <CustomSelect
-      disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
-        className={inputStyle}
-        value={copyTarget?.차량종류 ?? ""}
-        onChange={(e)=>setCopyTarget(p=>({...p, 차량종류:e.target.value}))}
-      >
-        <option value="">선택</option>
-        <option value="라보/다마스">라보/다마스</option>
-        <option value="카고">카고</option><option value="윙/카고">윙/카고</option>
-        <option value="윙바디">윙바디</option>
-        <option value="탑차">탑</option>
-        <option value="냉장탑">냉장탑</option>
-        <option value="냉동탑">냉동탑</option>
-        <option value="냉장윙">냉장윙</option>
-        <option value="냉동윙">냉동윙</option>
-        <option value="냉장/냉동탑">냉장/냉동탑</option>
-        <option value="냉장/냉동윙">냉장/냉동윙</option>
-        <option value="리프트">리프트</option>
-        <option value="오토바이">오토바이</option>
-        <option value="기타">기타</option>
-      </CustomSelect>
+      <VehicleTypePicker className={inputStyle} value={copyTarget?.차량종류 ?? ""} disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")} base={["라보/다마스", "카고", "윙/카고", "윙바디", "탑차", "냉장탑", "냉동탑", "냉장윙", "냉동윙", "냉장/냉동탑", "냉장/냉동윙", "리프트", "오토바이", "기타"]} placeholder="선택" noneLabel="선택" onChange={(__v) => ((e)=>setCopyTarget(p=>({...p, 차량종류:e.target.value})))({ target: { value: __v } })} />
     </Field>
 
  <Field label="차량톤수">
@@ -42183,7 +42269,7 @@ setCopyPlaceOptions(list);
       .replace(/[^\d-]/g, "")
       .replace(/(?!^)-/g, "");
 
-    setCopyTarget(p=>({...p, 청구운임: v}))
+    setCopyTarget(p=> fareOn ? fareFormChange(p, "청구운임", v, fareR.rules) : ({...p, 청구운임: v})) // ⭐ 2026-11-02 운임규칙
   }}
 />
             </Field>
@@ -42197,7 +42283,7 @@ setCopyPlaceOptions(list);
       .replace(/[^\d-]/g, "")
       .replace(/(?!^)-/g, "");
 
-    setCopyTarget(p=>({...p, 기사운임: v}))
+    setCopyTarget(p=> fareOn ? fareFormChange(p, "기사운임", v, fareR.rules) : ({...p, 기사운임: v})) // ⭐ 2026-11-02 운임규칙
   }}
 />
             </Field>
@@ -42225,6 +42311,15 @@ setCopyPlaceOptions(list);
     <option value="취소">취소</option>
   </CustomSelect>
 </Field>
+{/* ⭐ 2026-11-02 운임규칙 — 오더 복사·수정 패널 운임구분 */}
+{fareOn && (
+  <div className="col-span-2"><Field label="운임구분">
+    <div className="flex items-center gap-1.5 flex-wrap">
+      <FareTypeSelect className="min-w-[180px] !w-auto" rules={fareR.rules} value={copyTarget?.운임구분 || ""} onChange={(v) => setCopyTarget(p => fareFormChange(p, "운임구분", v, fareR.rules))} />
+      <FareRuleHint form={copyTarget} rules={fareR.rules} onReapply={() => setCopyTarget(p => fareFormChange(p, "__reapply", null, fareR.rules))} />
+    </div>
+  </Field></div>
+)}
 
 <Field label="배차방식">
   <CustomSelect
@@ -42452,7 +42547,7 @@ setCopyPlaceOptions(list);
                 { label: "최고 운임", sub: "가장 높은 이력",   value: fareMax },
               ].map(({ label, sub, value }) => (
                 <button key={label}
-                  onClick={() => { setCopyTarget(p => ({ ...p, 청구운임: String(value) })); setCopyFarePanelOpen(false); }}
+                  onClick={() => { setCopyTarget(p => fareOn ? fareFormChange(p, "청구운임", String(value), fareR.rules) : ({ ...p, 청구운임: String(value) })); setCopyFarePanelOpen(false); }}
                   className="rounded-xl border border-gray-200 bg-gray-50 hover:bg-[#1B2B4B] hover:text-white hover:border-[#1B2B4B] px-3 py-3 text-center transition group active:scale-95">
                   <div className="text-[10px] font-bold text-gray-500 group-hover:text-white/60 mb-1">{label}</div>
                   <div className="text-[18px] font-extrabold text-[#1B2B4B] group-hover:text-white leading-none">{value.toLocaleString()}</div>
@@ -42602,7 +42697,7 @@ setCopyPlaceOptions(list);
                             ) : <span className="text-[11px] text-gray-500 ml-1">평균</span>}
                           </div>
                           <button
-                            onClick={() => { setCopyTarget(p => ({ ...p, 청구운임: String(fare) })); setCopyFarePanelOpen(false); }}
+                            onClick={() => { setCopyTarget(p => fareOn ? fareFormChange(p, "청구운임", String(fare), fareR.rules) : ({ ...p, 청구운임: String(fare) })); setCopyFarePanelOpen(false); }}
                             className="px-3 py-1.5 rounded-lg bg-[#1B2B4B] text-white text-[12px] font-bold hover:bg-[#243a60] transition active:scale-95">
                             적용
                           </button>
@@ -42830,7 +42925,7 @@ setCopyPlaceOptions(list);
               ].map(({ label, sub, value }) => (
                 <button key={label}
                   onClick={() => {
-                    setEditTarget(p => ({ ...p, 청구운임: value, 수수료: value - Number(p.기사운임 || 0) }));
+                    setEditTarget(p => { if (fareOn) { const n = fareFormChange(p, "청구운임", value, fareR.rules); return { ...n, 수수료: Number(n.수수료) || 0 }; } return { ...p, 청구운임: value, 수수료: value - Number(p.기사운임 || 0) }; });
                     setFareModalOpen(false);
                   }}
                   className="rounded-xl border border-gray-200 bg-gray-50 hover:bg-[#1B2B4B] hover:text-white hover:border-[#1B2B4B] px-3 py-3 text-center transition group active:scale-95">
@@ -42933,7 +43028,7 @@ setCopyPlaceOptions(list);
                           <span className="text-[20px] font-extrabold text-[#1B2B4B]">{fare.toLocaleString()}원</span>
                           <button
                             onClick={() => {
-                              setEditTarget(p => ({ ...p, 청구운임: fare, 수수료: fare - Number(p.기사운임 || 0) }));
+                              setEditTarget(p => { if (fareOn) { const n = fareFormChange(p, "청구운임", fare, fareR.rules); return { ...n, 수수료: Number(n.수수료) || 0 }; } return { ...p, 청구운임: fare, 수수료: fare - Number(p.기사운임 || 0) }; });
                               setFareModalOpen(false);
                             }}
                             className="px-3 py-1.5 rounded-lg bg-[#1B2B4B] text-white text-[12px] font-bold hover:bg-[#243a60] transition active:scale-95">
@@ -43557,7 +43652,7 @@ setCopyPlaceOptions(list);
                       {["배차방식","지급방식","배차상태","차량종류"].includes(cond.field)?(
                         <CustomSelect className="border border-gray-200 rounded-lg px-2 py-1.5 text-[12px] flex-1 focus:outline-none focus:border-[#1B2B4B]" value={cond.value} onChange={e=>{const n=[...tempFilterConditions];n[idx]={...n[idx],value:e.target.value};setTempFilterConditions(n);}}>
                           <option value="">값 선택</option>
-                          {(cond.field==="배차방식"?dropdownList("배차방식", ["24시","직접배차","인성","고정기사"]):cond.field==="지급방식"?["계산서","착불","선불","손실","개인","취소"]:cond.field==="배차상태"?["배차중","배차완료","배차취소"]:["라보/다마스","카고","윙/카고","윙바디","리프트","탑차","냉장탑","냉동탑","냉장윙","냉동윙","냉장/냉동탑","냉장/냉동윙","오토바이","기타"]).map(v=><option key={v} value={v}>{v}</option>)}
+                          {(cond.field==="배차방식"?dropdownList("배차방식", ["24시","직접배차","인성","고정기사"]):cond.field==="지급방식"?["계산서","착불","선불","손실","개인","취소"]:cond.field==="배차상태"?["배차중","배차완료","배차취소"]:withCustomVehicleTypes(["라보/다마스","카고","윙/카고","윙바디","리프트","탑차","냉장탑","냉동탑","냉장윙","냉동윙","냉장/냉동탑","냉장/냉동윙","오토바이","기타"])).map(v=><option key={v} value={v}>{v}</option>)}
                         </CustomSelect>
                       ):(
                         <input autoComplete="off" type="text" className="border border-gray-200 rounded-lg px-2 py-1.5 text-[12px] flex-1 focus:outline-none focus:border-[#1B2B4B]" value={cond.value} onChange={e=>{const n=[...tempFilterConditions];n[idx]={...n[idx],value:e.target.value};setTempFilterConditions(n);}} placeholder="검색어 입력" />
@@ -45181,27 +45276,7 @@ function NewOrderPopup({
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label>차량종류</label>
-              <CustomSelect
-                className="border p-2 rounded w-full"
-                value={newOrder.차량종류}
-                onChange={(e) => handleChange("차량종류", e.target.value)}
-              >
-                <option value="">선택 없음</option>
-                <option value="라보">라보</option>
-                <option value="다마스">다마스</option>
-                <option value="카고">카고</option><option value="윙/카고">윙/카고</option>
-                <option value="윙바디">윙바디</option>
-                <option value="리프트">리프트</option>
-                <option value="탑차">탑차</option>
-                <option value="냉장탑">냉장탑</option>
-                <option value="냉동탑">냉동탑</option>
-                <option value="냉장윙">냉장윙</option>
-                <option value="냉동윙">냉동윙</option>
-                <option value="냉장/냉동탑">냉장/냉동탑</option>
-                <option value="냉장/냉동윙">냉장/냉동윙</option>
-                <option value="오토바이">오토바이</option>
-                <option value="기타">기타</option>
-              </CustomSelect>
+              <VehicleTypePicker className="border p-2 rounded w-full" value={newOrder.차량종류} base={["라보", "다마스", "카고", "윙/카고", "윙바디", "리프트", "탑차", "냉장탑", "냉동탑", "냉장윙", "냉동윙", "냉장/냉동탑", "냉장/냉동윙", "오토바이", "기타"]} placeholder="선택 없음" noneLabel="선택 없음" onChange={(__v) => ((e) => handleChange("차량종류", e.target.value))({ target: { value: __v } })} />
             </div>
 
 
@@ -47499,6 +47574,7 @@ const isKrHoliday = (dateStr) => {
 
 // ===================== DispatchApp.jsx (PART 6/8 — Settlement Premium) — START =====================
 function Settlement({ dispatchData, fixedRows = [], clients = [], places = [], isViewer = false, role, userCompany = "", showAlert = (m) => alert(m) }) {
+  const fareRS = useFareRules(userCompany); // ⭐ 2026-11-02 운임규칙 — 운임구분별 합계·내보내기(규칙 사용 회사만)
 
   // ⭐ 연간 매출 목표(순수 운송료 목표 금액 / 제외 거래처 성장률)는 회사마다 다르므로
   // 하드코딩하지 않고 매출 대시보드 › 목표 달성 카드에서 설정한 값을 불러온다.
@@ -47915,7 +47991,7 @@ function Settlement({ dispatchData, fixedRows = [], clients = [], places = [], i
   };
   const rvPage = RV_PAGES[activeTab] ? activeTab : "dashboard";
   const exportCsv = () => {
-    const headers = ["상차일","거래처명","상차지명","하차지명","청구운임","기사운임","수수료","배차상태"];
+    const headers = ["상차일","거래처명","상차지명","하차지명","청구운임","기사운임","수수료",...(fareRS.on ? ["운임구분"] : []),"배차상태"];
                 const csvRows = [headers.join(",")];
                 monthRows.forEach((r) => {
                   csvRows.push(headers.map((h) => `"${String(r[h] || "").replace(/"/g, '""')}"`).join(","));
@@ -47986,6 +48062,8 @@ function Settlement({ dispatchData, fixedRows = [], clients = [], places = [], i
           onOpenClient={setDetailClient}
         />
       )}
+      {/* ⭐ 2026-11-02 운임규칙 — 이번 달 운임구분별 합계(규칙 사용 회사만) */}
+      {rvPage === "dashboard" && fareRS.on && <FareTypeBreakdown className="mt-4" rows={monthRows} title={`${targetMonth} 운임구분별 합계`} />}
 
       {rvPage === "target" && (
         <TargetPage rows={rows} targetMonth={targetMonth} yearTarget={PURE_TARGET_2026} isExcluded={isExcludedFast} hasExcluded={hasExcludedClients}
@@ -50605,10 +50683,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                 <div className="p-6">
                   <div className="grid grid-cols-3 gap-6">
                     <Field label="차량종류">
-                      <CustomSelect className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400" value={copyTarget?.차량종류 ?? ""} onChange={(e) => setCopyTarget(p => ({...p, 차량종류: e.target.value}))} disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}>
-                        <option value="">선택</option>
-                        <option value="라보/다마스">라보/다마스</option><option value="카고">카고</option><option value="윙/카고">윙/카고</option><option value="윙바디">윙바디</option><option value="탑차">탑차</option><option value="냉장탑">냉장탑</option><option value="냉동탑">냉동탑</option><option value="냉장윙">냉장윙</option><option value="냉동윙">냉동윙</option><option value="냉장/냉동탑">냉장/냉동탑</option><option value="냉장/냉동윙">냉장/냉동윙</option><option value="리프트">리프트</option><option value="오토바이">오토바이</option><option value="기타">기타</option>
-                      </CustomSelect>
+                      <VehicleTypePicker className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400" value={copyTarget?.차량종류 ?? ""} disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")} base={["라보/다마스", "카고", "윙/카고", "윙바디", "탑차", "냉장탑", "냉동탑", "냉장윙", "냉동윙", "냉장/냉동탑", "냉장/냉동윙", "리프트", "오토바이", "기타"]} placeholder="선택" noneLabel="선택" onChange={(__v) => ((e) => setCopyTarget(p => ({...p, 차량종류: e.target.value})))({ target: { value: __v } })} />
                     </Field>
                     <Field label="차량톤수">
                       <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden bg-white">
@@ -50740,6 +50815,7 @@ function ArClientInfo({ client, name, upsertClient, isViewer }) {
 }
 
 function ClientSettlement({ dispatchData, setDispatchData, userCompany = "", clients = [], setClients, upsertClient, showAlert = (m) => alert(m), patchDispatch, cardImage, setCardImage, cardImageUploading, setCardImageUploading, isViewer = false }) {
+  const fareRC = useFareRules(userCompany); // ⭐ 2026-11-02 운임규칙
   const [bankBulkOpen, setBankBulkOpen] = React.useState(false);
 
   // ★ 오더 상세 팝업
@@ -52603,6 +52679,8 @@ const handleBatchSettle = async (targetStatus) => {
                 <span className="text-[#2D4C82]">청구 합계 <b>{won(합계공급가 + 합계세액)}원</b></span>
               </div>
             )}
+            {/* ⭐ 2026-11-02 운임규칙 — 선택 기간·거래처의 운임구분별 합계(규칙 사용 회사만) */}
+            {searched && fareRC.on && selectedRowsInvoice.length > 0 && <FareTypeBreakdown className="mt-3" rows={selectedRowsInvoice} title="운임구분별 합계 (선택한 오더)" />}
           </div>
 
           {/* 미조회 상태 */}
@@ -55118,6 +55196,7 @@ const handleBatchSettle = async (targetStatus) => {
 
 // ===================== DispatchApp.jsx (PART 9/9) — START =====================
 function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], drivers = [], companyName = "", canEditPayDay = false }) {
+  const fareRP = useFareRules(companyName); // ⭐ 2026-11-02 운임규칙 — 엑셀에 운임구분 열(규칙 사용 회사만)
 
   const todayStr9 = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
   const thisMonthStr = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 7);
@@ -55267,6 +55346,7 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
       차량번호: r.차량번호 || "", 기사명: r.이름 || "", 전화번호: r.전화번호 || "",
       청구운임: toInt(r.청구운임), 기사운임: toInt(r.기사운임),
       수수료: toInt(r.청구운임) - toInt(r.기사운임),
+      ...(fareRP.on ? { 운임구분: r.운임구분 || "" } : {}),
       지급방식: r.지급방식 || "", 배차방식: r.배차방식 || "", 메모: r.메모 || "",
     }));
     const ws = XLSX.utils.json_to_sheet(rows);
@@ -56037,7 +56117,31 @@ function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, sho
 
   React.useEffect(() => setPage(1), [q, gradeFilter, showAll, searched]);
 
-  const paged = React.useMemo(() => filtered.slice((page-1)*perPage, page*perPage), [filtered, page]);
+  // ⭐ 2026-11-02 담당자 칸 머리를 누르면 담당자 목록 → 고른 담당자의 차량이 맨 위로(줄 강조) · 다시 고르면 해제
+  const [mgrFocus, setMgrFocus] = React.useState("");
+  const [mgrMenu, setMgrMenu] = React.useState(null); // { left, top }
+  const mgrOf = (r) => String(r?.담당자?.name || "").trim();
+  const mgrCounts = React.useMemo(() => {
+    const m = new Map();
+    for (const r of filtered) { const n = mgrOf(r); if (n) m.set(n, (m.get(n) || 0) + 1); }
+    return [...m.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], "ko"));
+  }, [filtered]);
+  const ordered = React.useMemo(() => {
+    if (!mgrFocus) return filtered;
+    const top = [], rest = [];
+    for (const r of filtered) (mgrOf(r) === mgrFocus ? top : rest).push(r);
+    return [...top, ...rest];
+  }, [filtered, mgrFocus]);
+  React.useEffect(() => { setPage(1); }, [mgrFocus]);
+  React.useEffect(() => {
+    if (!mgrMenu) return undefined;
+    const close = (e) => { if (e.target.closest && e.target.closest("[data-mgr-menu]")) return; setMgrMenu(null); };
+    const onScroll = (e) => { if (e.target?.closest && e.target.closest("[data-mgr-menu]")) return; setMgrMenu(null); };
+    const t = setTimeout(() => document.addEventListener("mousedown", close), 0);
+    window.addEventListener("scroll", onScroll, true);
+    return () => { clearTimeout(t); document.removeEventListener("mousedown", close); window.removeEventListener("scroll", onScroll, true); };
+  }, [mgrMenu]);
+  const paged = React.useMemo(() => ordered.slice((page-1)*perPage, page*perPage), [ordered, page]);
   const totalPages = Math.ceil(filtered.length / perPage);
 
   const toggleOne = (id) => setSelected(prev => {
@@ -56314,11 +56418,9 @@ function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, sho
                   </div>
                   <div>
                     <label className="text-[11px] font-semibold text-gray-500 mb-1 block">차량종류</label>
-                    <CustomSelect className="border-2 border-gray-200 rounded-lg px-3 py-2 w-full text-[13px] outline-none focus:border-[#1B2B4B]"
-                      value={newForm.차량종류 || ""} onChange={e => setNewForm(p => ({ ...p, 차량종류: e.target.value }))}>
-                      <option value="">선택</option>
-                      {["라보/다마스","카고","윙바디","탑차","냉장/냉동윙","냉장/냉동탑","직접입력"].map(t => <option key={t} value={t}>{t}</option>)}
-                    </CustomSelect>
+                    {/* ⭐ 2026-11-02 차량종류 "직접입력" — 고르면 글자 칸이 열려 직접 적는다 */}
+                    <DriverVehicleTypeField className="border-2 border-gray-200 rounded-lg px-3 py-2 w-full text-[13px] outline-none focus:border-[#1B2B4B]"
+                      value={newForm.차량종류 || ""} onChange={(v) => setNewForm(p => ({ ...p, 차량종류: v }))} />
                   </div>
                   <div>
                     <label className="text-[11px] font-semibold text-gray-500 mb-1 block">톤수</label>
@@ -56393,6 +56495,28 @@ function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, sho
           )}
 
           {/* 테이블 */}
+          {mgrMenu && (
+            <div data-mgr-menu="1" style={{ position: "fixed", left: mgrMenu.left, top: mgrMenu.top, width: 240, zIndex: 99990 }}
+              className="rounded-2xl bg-white border border-[#E3E8F0] shadow-[0_18px_44px_rgba(15,26,48,0.22)] overflow-hidden">
+              <div className="px-3.5 pt-2.5 pb-2 border-b border-[#EEF2F7] bg-[#F7F9FC]">
+                <div className="flex items-baseline gap-1.5"><span className="text-[14px] font-black text-[#0F1A30]">담당자별 보기</span><span className="text-[10.5px] font-extrabold tracking-[0.12em] text-[#4B6CB7]">MANAGER</span></div>
+                <div className="text-[12.5px] font-bold text-[#5B6B85] mt-0.5">고른 담당자의 차량이 맨 위로 모입니다</div>
+              </div>
+              <div className="max-h-[300px] overflow-y-auto py-1">
+                <button type="button" onClick={() => { setMgrFocus(""); setMgrMenu(null); }}
+                  className={`w-[calc(100%-8px)] mx-1 px-2.5 h-9 rounded-xl flex items-center text-[13px] font-bold hover:bg-[#EEF3FC] ${!mgrFocus ? "text-[#1B2B4B]" : "text-[#8E9BB2]"}`}>기본 순서{!mgrFocus ? " ✓" : ""}</button>
+                {mgrCounts.length === 0 && <div className="px-3.5 py-3 text-[12px] font-bold text-[#9AA9C3]">담당자가 지정된 차량이 없습니다 (지입·직영·임대)</div>}
+                {mgrCounts.map(([n, c]) => (
+                  <button key={n} type="button" onClick={() => { setMgrFocus(f => f === n ? "" : n); setMgrMenu(null); }}
+                    className={`w-[calc(100%-8px)] mx-1 px-2.5 h-10 rounded-xl flex items-center gap-2 hover:bg-[#EEF3FC] ${mgrFocus === n ? "bg-[#FFF8E6]" : ""}`}>
+                    <span className="w-7 h-7 rounded-full grid place-items-center bg-[#1B2B4B] text-white text-[11.5px] font-black shrink-0">{n.slice(0, 1)}</span>
+                    <span className="flex-1 text-left text-[13.5px] font-extrabold text-[#0F1A30] truncate">{n}</span>
+                    <span className="tabular-nums px-2 h-[22px] inline-flex items-center rounded-full bg-[#EEF3FC] text-[#2D4C82] text-[11.5px] font-black">{c}대</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
           {(showAll || searched) && (
             <div className="bg-white rounded-[22px] border border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_12px_30px_rgba(16,24,40,0.07)] overflow-hidden">
               <table className="w-full text-[13px]">
@@ -56405,15 +56529,28 @@ function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, sho
                         checked={filtered.length > 0 && selected.size === filtered.length}
                       />
                     </th>
-                    {[["순번",""],["차량번호","w-[92px]"],["이름",""],["전화번호",""],["등록일",""],["담당자",""],["거주지",""],["근무가능요일",""],["등급",""],["메모",""],["팝업",""],["삭제",""]].map(([h,w]) => (
+                    {[["순번",""],["담당자",""],["차량번호","w-[92px]"],["차량종류",""],["이름",""],["전화번호",""],["등록일",""],["거주지",""],["근무가능요일",""],["등급",""],["메모",""],["팝업",""],["삭제",""]].map(([h,w]) => (
+                      h === "담당자" ? (
+                        <th key={h} className={`px-2 py-2 text-white font-bold text-center whitespace-nowrap ${w}`}>
+                          {/* ⭐ 2026-11-02 누르면 담당자 목록 — 고른 담당자의 차량이 맨 위로 */}
+                          <button type="button" data-mgr-menu="1"
+                            onClick={(e) => { const r = e.currentTarget.getBoundingClientRect(); setMgrMenu(m => m ? null : { left: Math.min(r.left, window.innerWidth - 248), top: r.bottom + 6 }); }}
+                            className={`inline-flex items-center gap-1 h-7 px-2.5 rounded-full transition ${mgrFocus ? "bg-[#E9C46A] text-[#0F1A30]" : "hover:bg-white/10"}`}
+                            title="담당자별로 모아 보기">
+                            {mgrFocus ? `담당 ${mgrFocus}` : <EditableText id={`driver.table.header.${h}`} defaultText={h} />}
+                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9l6 6 6-6" /></svg>
+                          </button>
+                        </th>
+                      ) : (
                       <th key={h} className={`px-3 py-3 text-white font-bold text-center whitespace-nowrap ${w}`}><EditableText id={`driver.table.header.${h}`} defaultText={h} /></th>
+                      )
                     ))}
                   </tr>
                 </thead>
                 <tbody>
                   {paged.length === 0 ? (
                     <tr>
-                      <td colSpan={13} className="text-center py-16 text-gray-500 text-[14px]">
+                      <td colSpan={14} className="text-center py-16 text-gray-500 text-[14px]">
                         {q.trim() ? "검색 결과가 없습니다." : "데이터가 없습니다."}
                       </td>
                     </tr>
@@ -56422,19 +56559,22 @@ function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, sho
                     if (!docId) return null;
                     const grade = r.등급 || "일반";
                     const memoPopupOn = grade === "블랙" ? !!(r.메모 && String(r.메모).trim()) : r.팝업표시 === true;
+                    const mgrHit = !!mgrFocus && mgrOf(r) === mgrFocus;
+                    const mgrLast = mgrHit && !(paged[i + 1] && mgrOf(paged[i + 1]) === mgrFocus);
                     return (
                       <tr key={`${docId}_${i}`}
-                        className={`border-b border-gray-100 transition hover:bg-blue-50/40 cursor-pointer ${grade==="블랙" ? "bg-gray-100" : i%2===0 ? "bg-white" : "bg-gray-50/50"}`}
+                        className={`transition hover:bg-blue-50/40 cursor-pointer ${mgrLast ? "border-b-2 border-[#1B2B4B]/30" : "border-b border-gray-100"} ${mgrHit ? "kp-row-hit" : grade==="블랙" ? "bg-gray-100" : i%2===0 ? "bg-white" : "bg-gray-50/50"}`}
                         onDoubleClick={() => setEditDriverModal({ ...r })}>
-                        <td className="px-3 py-2.5 text-center">
+                        <td className="px-3 py-2.5 text-center" style={mgrHit ? { boxShadow: "inset 4px 0 0 #E9C46A" } : undefined}>
                           <input autoComplete="off" type="checkbox" checked={selected.has(docId)} onChange={(e) => { e.stopPropagation(); toggleOne(docId); }} onClick={e => e.stopPropagation()} />
                         </td>
                         <td className="px-3 py-2.5 text-center text-gray-500">{(page-1)*perPage+i+1}</td>
+                        <td className={`px-3 py-2.5 text-center whitespace-nowrap ${mgrHit ? "font-black text-[#0F1A30]" : "text-gray-500"}`}>{(grade==="지입"||grade==="직영"||grade==="임대") ? (r.담당자?.name || "-") : "-"}</td>
                         <td className="px-2 py-2.5 text-center font-semibold text-[#1B2B4B] whitespace-nowrap w-[92px] overflow-hidden text-ellipsis">{r.차량번호||"-"}</td>
+                        <td className="px-2 py-2.5 text-center whitespace-nowrap"><VehicleTypeBadge type={r.차량종류} ton={r.차량톤수} /></td>
                         <td className="px-3 py-2.5 text-center whitespace-nowrap">{r.이름||"-"}</td>
                         <td className="px-3 py-2.5 text-center whitespace-nowrap">{formatPhone(r.전화번호)||"-"}</td>
                         <td className="px-3 py-2.5 text-center whitespace-nowrap text-gray-500 text-[12px]">{displayRegDate(r) || "-"}</td>
-                        <td className="px-3 py-2.5 text-center whitespace-nowrap text-gray-500">{(grade==="지입"||grade==="직영"||grade==="임대") ? (r.담당자?.name || "-") : "-"}</td>
                         <td className="px-3 py-2.5 text-center whitespace-nowrap text-gray-500">{(grade==="지입"||grade==="직영"||grade==="임대") ? (r.거주지 || "-") : "-"}</td>
                         <td className="px-3 py-2.5 text-center whitespace-nowrap text-gray-500 text-[12px]">{(grade==="지입"||grade==="직영"||grade==="임대") ? ((r.근무요일 && r.근무요일.length) ? r.근무요일.join(",") : "-") : "-"}</td>
                         <td className="px-3 py-2.5 text-center">
@@ -56540,12 +56680,10 @@ function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, sho
                   </div>
                   <div>
                     <label className="block text-[12px] font-semibold text-gray-500 mb-1">차량종류</label>
-                    <select className="border border-gray-200 rounded-lg px-3 py-2 text-[13px] w-full focus:border-[#1B2B4B] outline-none bg-white"
+                    {/* ⭐ 2026-11-02 차량종류 "직접입력" — 고르면 글자 칸이 열려 직접 적는다 */}
+                    <DriverVehicleTypeField className="border border-gray-200 rounded-lg px-3 py-2 text-[13px] w-full focus:border-[#1B2B4B] outline-none bg-white"
                       value={editDriverModal.차량종류||""}
-                      onChange={(e) => setEditDriverModal(p => ({ ...p, 차량종류: e.target.value }))}>
-                      <option value="">선택</option>
-                      {["라보/다마스","카고","윙바디","탑차","냉장/냉동윙","냉장/냉동탑","직접입력"].map(t => <option key={t} value={t}>{t}</option>)}
-                    </select>
+                      onChange={(v) => setEditDriverModal(p => ({ ...p, 차량종류: v }))} />
                   </div>
                   <div>
                     <label className="block text-[12px] font-semibold text-gray-500 mb-1">톤수</label>
@@ -59734,10 +59872,13 @@ function CompanyManagementWrapper({ userCompany, role, userId, user, todayStats,
   // ⭐ 2026-11-01 마스터는 인사 담당자(인사관리자·경리+인사·인사 부서)가 없을 때만 인사관리부 — 생기면 자동으로 넘어간다
   const coStaffCM = useCompanyStaff(myDocCM?.isMaster === true ? userCompany : "");
   const canViewHR = role === "totalMaster" || role === "hrManager" || (!!coStaffCM && masterHasHr(myDocCM, coStaffCM, user?.uid));
-  const tabs = role === "hrManager" ? ["회사정보", "조직도", "내정보", "내 이력서"] : canViewHR ? ["회사정보", "조직도", "내정보", "내 이력서", "출근기록부", "인사관리부"] : ["회사정보", "조직도", "내정보", "내 이력서", "출근기록부"];
+  const tabs0 = role === "hrManager" ? ["회사정보", "조직도", "내정보", "내 이력서"] : canViewHR ? ["회사정보", "조직도", "내정보", "내 이력서", "출근기록부", "인사관리부"] : ["회사정보", "조직도", "내정보", "내 이력서", "출근기록부"];
+  // ⭐ 2026-11-02 운임규칙 — 최고관리자가 이 회사에 켜 준 경우에만(관리자센터 › 회사별 맞춤 기능). 회사 직원 누구나 보고 고친다(조회전용은 보기만)
+  const fareCM = useFareRules(userCompany);
+  const tabs = !fareCM.feature || role === "driver" || role === "shipper" ? tabs0 : [...tabs0.slice(0, 2), "운임 규칙", ...tabs0.slice(2)];
 
   // ⭐ 디자인 개편 — 관리자메뉴와 같은 왼쪽 메뉴바 + 상단 인사 카드(AdminShell 공용 레이아웃)
-  const TAB_ICONS = { 회사정보: "building", 조직도: "users", 내정보: "user", "내 이력서": "idcard", 출근기록부: "clock", 인사관리부: "idcard" };
+  const TAB_ICONS = { 회사정보: "building", 조직도: "users", "운임 규칙": "money", 내정보: "user", "내 이력서": "idcard", 출근기록부: "clock", 인사관리부: "idcard" };
   const won = (n) => `${Math.round(Number(n) || 0).toLocaleString()}원`;
   const myName = user?.displayName || (user?.email || "").split("@")[0] || "";
   return (
@@ -59760,6 +59901,8 @@ function CompanyManagementWrapper({ userCompany, role, userId, user, todayStats,
         <CompanyProfile userCompany={userCompany} role={role} userId={userId} />
       )}
       {tab === "조직도" && <OrgChart userCompany={userCompany} />}
+      {/* ⭐ 2026-11-02 운임규칙 — 회사관리 › 운임 규칙 */}
+      {tab === "운임 규칙" && fareCM.feature && <FareRulesSettings company={userCompany} canEdit={role !== "viewer"} myName={myDocCM?.name || myName} />}
       {tab === "내 이력서" && <HRManagementPage userCompany={userCompany} role={role} userId={userId} selfOnly />}
       {tab === "내정보" && (
         <MyProfilePage

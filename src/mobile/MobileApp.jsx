@@ -102,6 +102,9 @@ import OrderCongratsPopup from "../OrderCongratsPopup";
 import BirthdayPopup from "../BirthdayPopup";
 import { tryAutoCheckIn, tryAutoCheckOut, undoAutoCheckOut } from "../autoAttendance";
 import OrderScanModal, { scanDropDate } from "../OrderScanModal";
+// ⭐ 2026-11-02 운임규칙 — 회사별 운임 규칙(운임구분 → 기사운임·수수료 자동)
+import { useFareRules, FareTypeSelect, FareRuleHint, fareFormChange } from "../fareRules";
+import { VehicleTypePicker, currentCustomVehicleTypes, useVehicleTypes } from "../vehicleTypes"; // 🚚 2026-11-02 회사 공용 차량종류
 
 
 
@@ -1952,6 +1955,7 @@ const mobileLiveStart = () => new Date(Date.now() + 9 * 3600e3 - MOBILE_LIVE_DAY
 const prevDayStr = (ymd) => { const d = new Date(`${ymd}T00:00:00Z`); d.setUTCDate(d.getUTCDate() - 1); return d.toISOString().slice(0, 10); };
 
 export default function MobileApp({ role: realRole, user, userCompany = "", forceExec = false }) {
+  useVehicleTypes(userCompany); // 🚚 2026-11-02 회사 공용 차량종류(추가한 이름이 모든 목록에 바로 보이게 구독 유지)
   // 🔀 통합인사관리자(hrAcct) — 메뉴에서 경리 화면 ↔ 인사 화면 전환
   const [hrAcctView, setHrAcctView] = useState(() => { try { return localStorage.getItem("kpHrAcctView") || "acct"; } catch { return "acct"; } });
   const role = realRole === "hrAcct" ? (hrAcctView === "hr" ? "hrManager" : "test") : realRole;
@@ -2049,7 +2053,7 @@ export default function MobileApp({ role: realRole, user, userCompany = "", forc
   useEffect(() => {
     if (!["list", "detail", "form"].includes(page)) deptListOkRef.current = false;
     if (deptMode && page === "list" && !(deptMode === "acct" && deptListOkRef.current)) setPage("dept");
-    if (!deptMode && (page === "dept" || (String(page).startsWith("dept:") && page !== "dept:execsched" && page !== "dept:schedule" && page !== "dept:rules" && page !== "dept:myresume" && !(DEPT_PAGE_MENU[page] && deptOkM(DEPT_PAGE_MENU[page]))))) setPage("list");
+    if (!deptMode && (page === "dept" || (String(page).startsWith("dept:") && page !== "dept:execsched" && page !== "dept:schedule" && page !== "dept:rules" && page !== "dept:farerules" && page !== "dept:myresume" && !(DEPT_PAGE_MENU[page] && deptOkM(DEPT_PAGE_MENU[page]))))) setPage("list");
   }, [deptMode, page]);
   const toggleExecFull = () => { const v = !execFull; setExecFull(v); try { localStorage.setItem("kpExecFull", v ? "1" : "0"); } catch { /* 무시 */ } setPage(v ? "list" : "dept"); };
   const listScrollYRef = useRef(0); // 리스트 스크롤 위치 저장
@@ -4440,6 +4444,8 @@ const groupedByDate = useMemo(() => {
       청구운임,
       기사운임,
       수수료,
+      // ⭐ 2026-11-02 운임규칙 — 운임구분을 고른 적이 있거나(규칙 사용 회사) 원래 있던 오더만
+      ...(form.운임구분 !== undefined ? { 운임구분: form.운임구분 || "", 운임수동: !!form.운임수동 } : {}),
 
       // 상태 PC/모바일 동일
       배차상태: (form.차량번호 || "").trim() ? "배차완료" : "배차중",
@@ -4795,6 +4801,7 @@ const handleOrderDuplicateWithDriver = (order) => {
     기사운임: order.기사운임 || 0,
     수수료: (Number(order.청구운임) || 0) - (Number(order.기사운임) || 0),
     산재보험료: order.산재보험료 || 0,
+    ...(order.운임구분 ? { 운임구분: order.운임구분, 운임수동: !!order.운임수동 } : {}), // ⭐ 2026-11-02 운임규칙
     차량번호: order.차량번호 || "",
     기사명: order.기사명 || "",
     전화번호: order.전화번호 || "",
@@ -5164,7 +5171,7 @@ const title =
   : page === "approval" ? "전자결재"
   : page === "staff" ? "직원 관리"
   : page === "dept" ? (deptMode === "exec" ? "경영 브리핑" : deptMode === "hr" ? "인사관리" : "경리·회계")
-  : String(page).startsWith("dept:") ? ({ "dept:settle": "정산관리", "dept:acct": "회계관리", "dept:assets": "비품·자산", "dept:hr": "인사관리부", "dept:leave": "연차 관리", "dept:onboarding": "입·퇴사 관리", "dept:cert": "증명서 발급", "dept:driverdocs": "기사 서류", "dept:approvals": "결재함", "dept:schedule": "직원 일정", "dept:funds": "자금 현황", "dept:execsched": "임원 일정", "dept:rules": "사내 규정", "dept:cashbook": "자금 관리", "dept:myresume": "내 이력서" }[page] || "")
+  : String(page).startsWith("dept:") ? ({ "dept:settle": "정산관리", "dept:acct": "회계관리", "dept:assets": "비품·자산", "dept:hr": "인사관리부", "dept:leave": "연차 관리", "dept:onboarding": "입·퇴사 관리", "dept:cert": "증명서 발급", "dept:driverdocs": "기사 서류", "dept:approvals": "결재함", "dept:schedule": "직원 일정", "dept:funds": "자금 현황", "dept:execsched": "임원 일정", "dept:rules": "사내 규정", "dept:farerules": "운임 규칙", "dept:cashbook": "자금 관리", "dept:myresume": "내 이력서" }[page] || "")
   : page === "status" ? "배차현황"
   : page === "unassigned" ? "미배차현황"
   : page === "canceled" ? "취소내역"
@@ -7545,6 +7552,7 @@ function MobileSideMenu({
   menuOk = () => true,
   deptOk = () => false,
 }) {
+  const fareMenu = useFareRules(); // ⭐ 2026-11-02 운임규칙 — 최고관리자가 켜 준 회사만 메뉴 표시
   const isAdminRole = ["admin", "totalMaster", "superadmin"].includes(role);
   const ok = menuOk;
   const canRevenue = ["admin", "totalMaster", "superadmin", "test", "viewer"].includes(role);
@@ -7729,6 +7737,7 @@ function MobileSideMenu({
             {/* ⭐ 2026-11-01 직원 일정(연차·외근 등 부재 달력)은 모든 직원이 본다 — PC 홈 › 사내 게시판과 같게 */}
             <MenuItem label="직원 일정" icon="clock" onClick={() => onGo?.("dept:schedule")} dark={dark} />
             <MenuItem label="사내 규정" icon="list" onClick={() => onGo?.("dept:rules")} dark={dark} />
+            {fareMenu.feature && role !== "driver" && role !== "shipper" && <MenuItem label="운임 규칙" icon="money" onClick={() => onGo?.("dept:farerules")} dark={dark} />}{/* ⭐ 2026-11-02 운임규칙 */}
             {ok("전자결재") && <MenuItem label="전자결재" icon="stamp" onClick={() => onGo?.("approval")} badge={(alertCounts?.approval || 0) + (alertCounts?.handover || 0) || null} dark={dark} />}
             <MenuItem label="공지사항" icon="bell" onClick={onGoNotice} badge={alertCounts?.notice ? alertCounts.notice : hasNewNotice ? "NEW" : null} dark={dark} />
             <MenuItem label="출근기록부" icon="clock" onClick={onGoAttendance} dark={dark} />
@@ -9055,6 +9064,7 @@ const summary = useMemo(() => {
                     <option value="냉장/냉동윙">냉장/냉동윙</option>
                     <option value="리프트">리프트</option>
                     <option value="오토바이">오토바이</option>
+                    {currentCustomVehicleTypes().map((v) => <option key={`vt_${v}`} value={v}>{v}</option>)}{/* 🚚 2026-11-02 회사 추가 차량종류 */}
                   </select>
                   <IconChevronDown className={`w-3.5 h-3.5 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none ${icon}`} />
                 </div>
@@ -10150,6 +10160,7 @@ function MobileOrderInfoModal({ order: row, onClose }) {
             <InfoRow label="청구운임" value={fmtMoney(row.청구운임)} />
             <InfoRow label="기사운임" value={fmtMoney(row.기사운임)} />
             <InfoRow label="수수료" value={fee ? fee.toLocaleString() + "원" : null} />
+            {row.운임구분 && <InfoRow label="운임구분" value={row.운임구분} />}{/* ⭐ 2026-11-02 운임규칙 */}
           </Section>
           <Section title="차량 정보">
             <InfoRow label="차량번호" value={row.차량번호} />
@@ -10272,6 +10283,16 @@ function QuickEditModal({ order, drivers, cardVersionB, onClose, onSuccess, disp
   const [driverPhone, setDriverPhone] = useState(order.전화번호 || "");
   const [claim, setClaim] = useState(order.청구운임 ? Number(order.청구운임).toLocaleString() : "");
   const [fee, setFee] = useState(order.기사운임 ? Number(order.기사운임).toLocaleString() : "");
+  // ⭐ 2026-11-02 운임규칙 — 일부 수정 운임구분
+  const fareRK = useFareRules();
+  const [fareT, setFareT] = useState({ 운임구분: order.운임구분 || "", 운임수동: !!order.운임수동 });
+  const fareK = (key, value) => {
+    const num = (x) => (String(x).trim() === "" ? "" : Number(String(x).replace(/[^\d]/g, "")) || 0);
+    const cur = { 청구운임: num(claim), 기사운임: num(fee), ...fareT };
+    const n = fareFormChange(cur, key, key === "청구운임" || key === "기사운임" ? num(value) : value, fareRK.rules, { asString: false, withFee: false });
+    const fmt = (x) => (x === "" || x == null ? "" : Number(x).toLocaleString());
+    setClaim(fmt(n.청구운임)); setFee(fmt(n.기사운임)); setFareT({ 운임구분: n.운임구분 || "", 운임수동: !!n.운임수동 });
+  };
   const [payType, setPayType] = useState(order.지급방식 || "");
   const [dispType, setDispType] = useState(order.배차방식 || "");
   const [deliverState, setDeliverState] = useState(order.업체전달상태 || "미전달");
@@ -10403,6 +10424,7 @@ function QuickEditModal({ order, drivers, cardVersionB, onClose, onSuccess, disp
       const patch = {
         청구운임: Number(String(claim).replace(/[^\d]/g, "")) || 0,
         기사운임: Number(String(fee).replace(/[^\d]/g, "")) || 0,
+        ...(fareRK.on && (fareT.운임구분 || order.운임구분) ? { 운임구분: fareT.운임구분 || "", 운임수동: !!fareT.운임수동 } : {}), // ⭐ 2026-11-02 운임규칙
         ...(isShipperOrder ? {} : { 지급방식: payType }),
         배차방식: dispType,
         업체전달상태: deliverState,
@@ -10505,12 +10527,22 @@ function QuickEditModal({ order, drivers, cardVersionB, onClose, onSuccess, disp
         <div className="grid grid-cols-2 gap-3 mb-4">
           <div>
             <label className={labelCls}>청구운임</label>
-            <input autoComplete="off" type="text" className={inputCls} placeholder="0" inputMode="numeric" value={claim} onChange={e => { const v = e.target.value.replace(/[^\d]/g, ""); setClaim(v ? Number(v).toLocaleString() : ""); }} />
+            <input autoComplete="off" type="text" className={inputCls} placeholder="0" inputMode="numeric" value={claim} onChange={e => { if (fareRK.on) return fareK("청구운임", e.target.value); const v = e.target.value.replace(/[^\d]/g, ""); setClaim(v ? Number(v).toLocaleString() : ""); }} />
           </div>
           <div>
             <label className={labelCls}>기사운임</label>
-            <input autoComplete="off" type="text" className={inputCls} placeholder="0" inputMode="numeric" value={fee} onChange={e => { const v = e.target.value.replace(/[^\d]/g, ""); setFee(v ? Number(v).toLocaleString() : ""); }} />
+            <input autoComplete="off" type="text" className={inputCls} placeholder="0" inputMode="numeric" value={fee} onChange={e => { if (fareRK.on) return fareK("기사운임", e.target.value); const v = e.target.value.replace(/[^\d]/g, ""); setFee(v ? Number(v).toLocaleString() : ""); }} />
           </div>
+          {/* ⭐ 2026-11-02 운임규칙 — 운임구분 */}
+          {fareRK.on && (
+            <div className="col-span-2">
+              <label className={labelCls}>운임구분</label>
+              <div className="flex items-center gap-2 flex-wrap">
+                <FareTypeSelect className="flex-1 min-w-[150px] !h-[40px] !text-[14px]" rules={fareRK.rules} value={fareT.운임구분} onChange={(v) => fareK("운임구분", v)} />
+                <FareRuleHint form={{ ...fareT, 청구운임: String(claim).replace(/[^\d]/g, ""), 기사운임: String(fee).replace(/[^\d]/g, "") }} rules={fareRK.rules} onReapply={() => fareK("__reapply", null)} />
+              </div>
+            </div>
+          )}
         </div>
 
         {/* 지급/배차방식 */}
@@ -11414,12 +11446,22 @@ function QuickEditSheet({ order, onClose, onSaved, cardVersionB, clients = [], b
       톤수값: ton.v, 톤수타입: ton.u,
       청구운임: order.청구운임 ? toNum(order.청구운임).toLocaleString() : "",
       기사운임: order.기사운임 ? toNum(order.기사운임).toLocaleString() : "",
+      운임구분: order.운임구분 || "", 운임수동: !!order.운임수동, // ⭐ 2026-11-02 운임규칙
     };
   });
-  const [saving, setSaving] = useState(false);
+  const fareRQ = useFareRules(); // ⭐ 2026-11-02 운임규칙
+  // 운임구분 적용 — 금액 칸이 "1,000" 문자열이라 숫자로 계산한 뒤 다시 콤마
+  const fareQ = (key, value) => setF((p) => {
+    const num = { ...p, 청구운임: p.청구운임 === "" ? "" : toNum(p.청구운임), 기사운임: p.기사운임 === "" ? "" : toNum(p.기사운임) };
+    const v = key === "청구운임" || key === "기사운임" ? (String(value).trim() === "" ? "" : toNum(value)) : value;
+    const n = fareFormChange(num, key, v, fareRQ.rules, { asString: false, withFee: false });
+    const fmt = (x) => (x === "" || x == null ? "" : toNum(x).toLocaleString());
+    return { ...p, 운임구분: n.운임구분 || "", 운임수동: !!n.운임수동, 청구운임: fmt(n.청구운임), 기사운임: fmt(n.기사운임) };
+  });
   const set = (k) => (e) => setF(p => ({ ...p, [k]: e.target.value }));
   const setVal = (k) => (v) => setF(p => ({ ...p, [k]: v }));
   const setMoney = (k) => (e) => {
+    if (fareRQ.on && (k === "청구운임" || k === "기사운임")) return fareQ(k, e.target.value);
     const n = toNum(e.target.value);
     setF(p => ({ ...p, [k]: e.target.value.trim() === "" ? "" : n.toLocaleString() }));
   };
@@ -11459,6 +11501,7 @@ function QuickEditSheet({ order, onClose, onSaved, cardVersionB, clients = [], b
       배차방식: f.배차방식, 지급방식: f.지급방식,
       화물내용: cargo, 차량종류: f.차량종류, 차종: f.차량종류, 차량톤수: ton, 톤수: ton,
       청구운임: toNum(f.청구운임), 기사운임: toNum(f.기사운임), 수수료: fee,
+      ...(fareRQ.on || order.운임구분 ? { 운임구분: f.운임구분 || "", ...(f.운임구분 ? { 운임수동: !!f.운임수동 } : {}) } : {}), // ⭐ 2026-11-02 운임규칙
     };
     // 바뀐 항목만 저장
     const changed = {};
@@ -11552,17 +11595,23 @@ function QuickEditSheet({ order, onClose, onSaved, cardVersionB, clients = [], b
               {unitBox(f.톤수값, setVal("톤수값"), f.톤수타입, setVal("톤수타입"), ["톤", "kg"], 62, "예: 1")}
             </QuickField>
             <QuickField label="차량종류">
-              <select className={inp} value={f.차량종류} onChange={set("차량종류")}>
-                <option value="">차량종류 선택</option>
-                {f.차량종류 && !QUICK_EDIT_CAR.includes(f.차량종류) && <option value={f.차량종류}>{f.차량종류}</option>}
-                {QUICK_EDIT_CAR.map(v => <option key={v} value={v}>{v}</option>)}
-              </select>
+              {/* 🚚 2026-11-02 회사 공용 차량종류(＋ 추가) */}
+              <VehicleTypePicker className={inp} value={f.차량종류} base={QUICK_EDIT_CAR} placeholder="차량종류 선택" noneLabel="선택 안 함" onChange={(v) => set("차량종류")({ target: { value: v } })} />
             </QuickField>
             <QuickField label="화물내용" span={2}>
               {unitBox(f.화물수량, setVal("화물수량"), f.화물타입, setVal("화물타입"), ["파레트", "박스", "통", "롤"], 76, "예: 3")}
             </QuickField>
             <QuickField label="청구운임"><input inputMode="numeric" className={inp} value={f.청구운임} onChange={setMoney("청구운임")} /></QuickField>
             <QuickField label="기사운임"><input inputMode="numeric" className={inp} value={f.기사운임} onChange={setMoney("기사운임")} /></QuickField>
+            {/* ⭐ 2026-11-02 운임규칙 — 빠른 수정 운임구분 */}
+            {fareRQ.on && (
+              <QuickField label="운임구분">
+                <div className="flex flex-col gap-1">
+                  <FareTypeSelect className="w-full !h-[38px] !text-[14px]" rules={fareRQ.rules} value={f.운임구분 || ""} onChange={(v) => fareQ("운임구분", v)} />
+                  <FareRuleHint form={{ ...f, 청구운임: f.청구운임 === "" ? "" : toNum(f.청구운임), 기사운임: toNum(f.기사운임) }} rules={fareRQ.rules} onReapply={() => fareQ("__reapply", null)} />
+                </div>
+              </QuickField>
+            )}
           </div>
           <div className="mt-3 flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2">
             <span className="text-[12px] font-bold text-gray-500">수수료</span>
@@ -11906,6 +11955,7 @@ function MobileOrderDetail({
       기사운임: drv != null ? drv : (order.기사운임 || 0),
       수수료: (claim != null ? claim : (Number(order.청구운임)||0)) - (drv != null ? drv : (Number(order.기사운임)||0)),
       산재보험료: order.산재보험료 || 0,
+      ...(order.운임구분 ? { 운임구분: order.운임구분, 운임수동: !!order.운임수동 } : {}), // ⭐ 2026-11-02 운임규칙
       차량번호: order.차량번호 || "",
       혼적여부: order.혼적여부 || "독차",
       긴급: order.긴급 === true,
@@ -12393,6 +12443,7 @@ const handleAssignClick = () => {
       청구운임: order.청구운임 || 0, 기사운임: order.기사운임 || 0,
       수수료: (Number(order.청구운임) || 0) - (Number(order.기사운임) || 0),
       산재보험료: order.산재보험료 || 0, 차량번호: carNo || "",
+      ...(order.운임구분 ? { 운임구분: order.운임구분, 운임수동: !!order.운임수동 } : {}), // ⭐ 2026-11-02 운임규칙
       혼적여부: order.혼적여부 || "독차", 긴급: order.긴급 === true, 운행유형: order.운행유형 || "", 회전수: Number(order.회전수) > 1 ? Number(order.회전수) : 1,
       적요: order.메모 || "",
       전달사항: order.전달사항 || "",
@@ -12415,6 +12466,7 @@ const handleAssignClick = () => {
     order.혼적여부 && order.혼적여부 !== "독차" && { k: "혼적", v: order.혼적여부 },
     { k: "배차방식", v: order.배차방식 || "-" },
     { k: "지급방식", v: order.지급방식 || "-" },
+    order.운임구분 && { k: "운임구분", v: `${order.운임구분}${order.운임수동 ? " · 수동" : ""}` }, // ⭐ 2026-11-02 운임규칙
     order.상차지주소 && { k: "이동거리", v: routeInfo === "loading" ? "조회중" : routeInfo === "error" || !routeInfo ? "-" : `${routeInfo.distanceKm.toFixed(1)}km` },
     order.상차지주소 && { k: "소요시간", v: routeInfo === "loading" ? "조회중" : routeInfo === "error" || !routeInfo ? "-" : routeInfo.durationText },
   ].filter(Boolean);
@@ -14679,9 +14731,14 @@ const orderCopyList = useMemo(() => {
   const formWorkDates = _parseWorkDates(form.근무일자목록);
   const isMultiWorkForm = formWorkDates.length > 1 || !!form.복수근무일;
 
+  // ⭐ 2026-11-02 운임규칙 — 규칙 사용 회사만: 운임구분 + 청구운임 → 기사운임·수수료 자동(기사운임을 고치면 유지)
+  const fareRM = useFareRules();
   const updateMoney = (key, value) =>
     
     setForm((p) => {
+      if (fareRM.on && (key === "청구운임" || key === "기사운임" || key === "운임구분" || key === "__reapply")) {
+        return fareFormChange(p, key, key === "운임구분" || key === "__reapply" ? value : toNumber(value), fareRM.rules, { asString: false });
+      }
       const next = { ...p, [key]: toNumber(value) };
       if (key === "청구운임" || key === "기사운임") {
         const 청구 = toNumber(next.청구운임);
@@ -15670,26 +15727,7 @@ const pickDrop = (c) => {
         <RowLabelInput
           label="차량종류"
           input={
-            <select
-              className="w-full border-0 border-b-2 border-gray-300 rounded-none px-1 py-1.5 text-[13px] font-semibold text-gray-900 bg-transparent focus:outline-none focus:border-[var(--reg-accent)] transition"
-              value={form.차종}
-              onChange={(e) => update("차종", e.target.value)}
-            >
-              <option value="">차량종류 선택</option>
-              <option value="라보/다마스">라보/다마스</option>
-              <option value="카고">카고</option><option value="윙/카고">윙/카고</option>
-              <option value="윙바디">윙바디</option>
-              <option value="탑차">탑차</option>
-              <option value="냉장탑">냉장탑</option>
-              <option value="냉동탑">냉동탑</option>
-              <option value="냉장윙">냉장윙</option>
-              <option value="냉동윙">냉동윙</option>
-              <option value="냉장/냉동탑">냉장/냉동탑</option>
-              <option value="냉장/냉동윙">냉장/냉동윙</option>
-              <option value="리프트">리프트</option>
-              <option value="오토바이">오토바이</option>
-              <option value="기타">기타</option>
-            </select>
+            <VehicleTypePicker className="w-full border-0 border-b-2 border-gray-300 rounded-none px-1 py-1.5 text-[13px] font-semibold text-gray-900 bg-transparent focus:outline-none focus:border-[var(--reg-accent)] transition" value={form.차종} base={["라보/다마스", "카고", "윙/카고", "윙바디", "탑차", "냉장탑", "냉동탑", "냉장윙", "냉동윙", "냉장/냉동탑", "냉장/냉동윙", "리프트", "오토바이", "기타"]} placeholder="차량종류 선택" noneLabel="차량종류 선택" onChange={(__v) => ((e) => update("차종", e.target.value))({ target: { value: __v } })} />
           }
         />
         {/* 톤수 */}
@@ -16014,6 +16052,20 @@ const pickDrop = (c) => {
 
       {/* 금액 */}
       <div className="border-t border-gray-100">
+        {/* ⭐ 2026-11-02 운임규칙 — 운임구분(규칙 사용 회사만) · 고르고 청구운임을 넣으면 기사운임·수수료 자동 */}
+        {fareRM.on && (
+          <div data-m-fare="1">
+            <RowLabelInput
+              label="운임구분"
+              input={
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <FareTypeSelect className="flex-1 min-w-0 !h-[38px] !text-[14px]" rules={fareRM.rules} value={form.운임구분 || ""} onChange={(v) => updateMoney("운임구분", v)} />
+                  <FareRuleHint className="shrink-0" form={form} rules={fareRM.rules} onReapply={() => updateMoney("__reapply", null)} />
+                </div>
+              }
+            />
+          </div>
+        )}
         <RowLabelInput
           label="청구운임"
           input={
@@ -20450,6 +20502,7 @@ const runNationalFareInPopup = async () => {
                 <option value="냉동탑">냉동탑</option>
                 <option value="리프트">리프트</option>
                 <option value="오토바이">오토바이</option>
+                {currentCustomVehicleTypes().map((v) => <option key={`vt_${v}`} value={v}>{v}</option>)}{/* 🚚 2026-11-02 회사 추가 차량종류 */}
               </select>
             </div>
             <div>
@@ -21481,6 +21534,7 @@ function CanceledOrderDetailModal({ order: o, cardVersionB = false, mobileUsers 
         <Section title="배차정보">
           <Row label="배차방식" value={o.배차방식} />
           <Row label="지급방식" value={o.지급방식} />
+          {o.운임구분 && <Row label="운임구분" value={o.운임구분} />}{/* ⭐ 2026-11-02 운임규칙 */}
           <Row label="차량번호" value={o.차량번호} />
           <Row label="기사명" value={o.기사명} />
           <Row label="기사 연락처" value={o.전화번호} />

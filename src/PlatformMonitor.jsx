@@ -9,6 +9,7 @@ import { doc, onSnapshot, setDoc } from "firebase/firestore";
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, Cell, AreaChart, Area, PieChart, Pie } from "recharts";
 import { db, auth, FUNCTIONS_BASE } from "./firebase";
 import KpSubNav from "./KpSubNav";
+import { COMPANY_FEATURES, useCompanyFeatures, setCompanyFeature } from "./companyFeatures"; // ⭐ 2026-11-02 회사별 맞춤 기능
 import CompanyApplications from "./CompanyApplications";
 import { PricingEditor, QuoteBuilder, QuoteHistory, useSalesPricing, applyPlanBill } from "./SalesQuote";
 // ⭐ 2026-11-02 관리자센터 — 실시간 계정·접속(users·loginSessions) + 운영 위젯
@@ -610,6 +611,8 @@ export default function PlatformMonitor({ demoStats = null, tab: tabProp, onTab,
               <Card code="STAFF" title={`직원 ${detail.staffList?.length || 0}명`} right={<span style={{ fontSize: 13.5, fontWeight: 700, color: "#6b7280" }}>지금 접속 순 · 실시간</span>}>
                 <StaffList list={detail.staffList || []} />
               </Card>
+              {/* ⭐ 2026-11-02 운임규칙 — 회사별 맞춤 기능(최고관리자만 켜고 끔) */}
+              <CompanyFeaturesCard company={detail.name} />
               <Card code="PLAN" title="요금제 · 청구 상태">
                 {[
                   ["요금제", detail.plan?.planId ? `${PLAN_NAMES[detail.plan.planId] || detail.plan.planId}${detail.plan.since ? ` (${detail.plan.since}부터)` : ""}` : "미지정(전체 기능)"],
@@ -641,6 +644,48 @@ export default function PlatformMonitor({ demoStats = null, tab: tabProp, onTab,
         </div>
       )}
     </NavWrap>
+  );
+}
+
+// ⭐ 2026-11-02 회사별 맞춤 기능 — src/companyFeatures.js의 COMPANY_FEATURES를 돌며 토글(새 기능은 배열에 한 줄만 추가)
+function CompanyFeaturesCard({ company }) {
+  const feat0 = useCompanyFeatures(company);
+  const [feat, setFeat] = useState(null);
+  const [busy, setBusy] = useState("");
+  const [err, setErr] = useState("");
+  // 마지막 변경자 표시용(규칙: 최고관리자만 이 화면을 연다)
+  useEffect(() => {
+    if (!company) return undefined;
+    return onSnapshot(doc(db, "companyFeatures", company), (snap) => setFeat(snap.exists() ? snap.data() : {}), () => setFeat({}));
+  }, [company]);
+  const toggle = async (key, on) => {
+    setBusy(key); setErr("");
+    try { await setCompanyFeature(company, key, on, auth?.currentUser?.email || ""); }
+    catch (e) { setErr(`저장 실패: ${e?.code || e?.message || e}`); } finally { setBusy(""); }
+  };
+  return (
+    <Card code="FEATURES" title="회사별 맞춤 기능">
+      <div data-company-features="1">
+        {COMPANY_FEATURES.map((f) => {
+          const on = feat0[f.key] === true;
+          return (
+            <div key={f.key} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 0", borderTop: "1px solid #EEF1F6" }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 15, fontWeight: 900, color: "#0F1A30" }}>{f.label}</div>
+                <div style={{ fontSize: 13.5, color: "#6b7280", fontWeight: 600, marginTop: 2, lineHeight: 1.45 }}>{f.desc}</div>
+              </div>
+              <button type="button" role="switch" aria-checked={on} aria-label={`${f.label} 켜기`} data-feature={f.key} disabled={!feat0.loaded || busy === f.key}
+                onClick={() => toggle(f.key, !on)}
+                style={{ position: "relative", width: 56, height: 30, borderRadius: 999, border: "none", background: on ? "#2D4C82" : "#CBD3E1", cursor: "pointer", flexShrink: 0, opacity: !feat0.loaded || busy === f.key ? 0.5 : 1 }}>
+                <span style={{ position: "absolute", top: 3, left: on ? 29 : 3, width: 24, height: 24, borderRadius: 999, background: "#fff", boxShadow: "0 1px 3px rgba(0,0,0,.25)", transition: "left .15s" }} />
+              </button>
+            </div>
+          );
+        })}
+        {feat?.updatedBy && <div style={{ fontSize: 13, color: "#8A97B0", marginTop: 4 }}>마지막 변경: {feat.updatedBy}{feat.updatedAt ? ` · ${new Date(feat.updatedAt).toLocaleString("ko-KR", { hour12: false })}` : ""}</div>}
+        {err && <div style={{ fontSize: 13.5, color: "#B91C1C", fontWeight: 800, marginTop: 6 }}>{err}</div>}
+      </div>
+    </Card>
   );
 }
 

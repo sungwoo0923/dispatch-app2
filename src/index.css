@@ -183,6 +183,12 @@ table tbody tr:nth-child(odd) td {
   background-color: #ffffff;
 }
 
+/* ⭐ 2026-11-02 기사관리 — 고른 담당자의 차량 줄 강조 */
+table tbody tr.kp-row-hit td,
+table tbody tr.kp-row-hit:hover td {
+  background-color: #FFF6DF;
+}
+
 
 /* ⭐ 끊김 개선(2026-10-27) — 배경 흐림(backdrop-filter)은 뒤에 있는 큰 표·목록을 매 프레임 다시 흐리게 그려서
    팝업에서 글자를 칠 때마다(PC 오더복사수정패널 기준 키 입력 1번에 약 2배) 화면이 버벅였다. 흐림만 끄고 어두운 배경은 그대로 둔다. */
