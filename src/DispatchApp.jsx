@@ -10831,9 +10831,12 @@ const mergedClients = React.useMemo(() => {
   // 주소가 우연히 다르게 남아있어도 자동완성 드롭다운에 기본거래처 항목 하나만
   // 뜨면 된다(같은 회사가 드롭다운에 2개로 중복되어 보이던 문제).
   const clientNameSet = new Set(clients.map(c => normalizeKey(c.업체명 || c.거래처명 || "")).filter(Boolean));
+  // ⭐ 2026-11-03 같은 이름의 하차지가 여러 곳(지점·창고가 주소만 다름, 예: (도외)위탁 55곳)이면 건너뛰지 않고 모두 보여준다
+  //  (기본거래처와 1:1로 동기화된 사본 1곳일 때만 건너뜀 — 예전엔 기본거래처 1건만 떠서 55곳 중 1건만 보였다)
+  const placeNameCnt = {}; placeList.forEach(p => { const k = normalizeKey(p.업체명); if (k) placeNameCnt[k] = (placeNameCnt[k] || 0) + 1; });
   placeList.forEach(p => {
     const nameKey = normalizeKey(p.업체명);
-    if (!nameKey || clientNameSet.has(nameKey)) return;
+    if (!nameKey || (clientNameSet.has(nameKey) && placeNameCnt[nameKey] < 2)) return;
     const key = mkKey(p.업체명, p.주소);
     if (!map.has(key)) map.set(key, p);
   });
@@ -24604,9 +24607,11 @@ const mergedClients = React.useMemo(() => {
   // 기본거래처와 이름이 같은 하차지거래처는 이제 서로 동기화되므로(주소가 우연히
   // 다르게 남아있어도) 자동완성 드롭다운에 기본거래처 항목 하나만 뜨도록 건너뛴다.
   const clientNameSet = new Set((clients || []).map(c => (c.업체명 || c.거래처명 || "").toLowerCase().replace(/\s+/g, "")).filter(Boolean));
+  // ⭐ 2026-11-03 같은 이름의 하차지가 여러 곳이면(주소만 다름) 모두 보여준다 — 기본거래처와 1:1 사본 1곳일 때만 건너뜀
+  const placeNameCnt = {}; (placeRows || []).forEach(p => { const k = (p.업체명 || "").toLowerCase().replace(/\s+/g, ""); if (k) placeNameCnt[k] = (placeNameCnt[k] || 0) + 1; });
   (placeRows || []).forEach(p => {
     const nameKey = (p.업체명 || "").toLowerCase().replace(/\s+/g, "");
-    if (!nameKey || clientNameSet.has(nameKey)) return;
+    if (!nameKey || (clientNameSet.has(nameKey) && placeNameCnt[nameKey] < 2)) return;
     const k = mkKey(p.업체명, p.주소);
     if (!map.has(k)) map.set(k, p);
   });
@@ -35086,9 +35091,11 @@ const mergedClients = React.useMemo(() => {
   // 기본거래처와 이름이 같은 하차지거래처는 이제 서로 동기화되므로(주소가 우연히
   // 다르게 남아있어도) 자동완성 드롭다운에 기본거래처 항목 하나만 뜨도록 건너뛴다.
   const clientNameSet = new Set((clients || []).map(c => (c.업체명 || c.거래처명 || "").toLowerCase().replace(/\s+/g, "")).filter(Boolean));
+  // ⭐ 2026-11-03 같은 이름의 하차지가 여러 곳이면(주소만 다름) 모두 보여준다 — 기본거래처와 1:1 사본 1곳일 때만 건너뜀
+  const placeNameCnt = {}; (placeRows || []).forEach(p => { const k = (p.업체명 || "").toLowerCase().replace(/\s+/g, ""); if (k) placeNameCnt[k] = (placeNameCnt[k] || 0) + 1; });
   (placeRows || []).forEach(p => {
     const nameKey = (p.업체명 || "").toLowerCase().replace(/\s+/g, "");
-    if (!nameKey || clientNameSet.has(nameKey)) return;
+    if (!nameKey || (clientNameSet.has(nameKey) && placeNameCnt[nameKey] < 2)) return;
     const k = mkKey(p.업체명, p.주소);
     if (!map.has(k)) map.set(k, p);
   });
