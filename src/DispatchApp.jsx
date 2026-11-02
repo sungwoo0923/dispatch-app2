@@ -5376,18 +5376,48 @@ export const toInt = (v) => {
   return isNaN(n) ? 0 : n;
 };
 export const fmtWon = (n) => `${Number(n || 0).toLocaleString()}원`;
-// 📌 전화번호 하이픈 자동 적용 함수
+// 📌 전화번호 하이픈 자동 적용 함수 (프로그램 공용 — 입력 중에도 단계적으로 하이픈)
+//  · 010-1234-5678 / 011-123-4567 / 02-123-4567 / 02-1234-5678 / 031-123-4567
+//  · 0505-123-4567 (050X 안심번호) / 1588-1234 (대표번호) / 070-1234-5678
+//  · 숫자가 없으면 "" , 규칙보다 긴 숫자는 숫자만 그대로 돌려준다(잘라내지 않음).
+//  · 10·11자리 일반 번호는 예전 함수와 결과가 같아 저장 포맷이 바뀌지 않는다.
 function formatPhone(phone) {
-  const p = String(phone ?? "").replace(/[^\d]/g, "");
-
-  if (p.length === 11) {
-    return `${p.slice(0, 3)}-${p.slice(3, 7)}-${p.slice(7)}`;
+  const raw = String(phone ?? "");
+  const d = raw.replace(/[^\d]/g, "");
+  if (!d) return "";
+  const n = d.length;
+  // 서울 02
+  if (d.startsWith("02")) {
+    if (n > 10) return d;
+    if (n <= 2) return d;
+    if (n <= 5) return `${d.slice(0, 2)}-${d.slice(2)}`;
+    if (n <= 9) return `${d.slice(0, 2)}-${d.slice(2, 5)}-${d.slice(5)}`;
+    return `${d.slice(0, 2)}-${d.slice(2, 6)}-${d.slice(6)}`;
   }
-  if (p.length === 10) {
-    return `${p.slice(0, 3)}-${p.slice(3, 6)}-${p.slice(6)}`;
+  // 050X 안심번호(4자리 국번)
+  if (/^050\d/.test(d)) {
+    if (n > 12) return d;
+    if (n <= 4) return d;
+    if (n <= 7) return `${d.slice(0, 4)}-${d.slice(4)}`;
+    if (n <= 11) return `${d.slice(0, 4)}-${d.slice(4, 7)}-${d.slice(7)}`;
+    return `${d.slice(0, 4)}-${d.slice(4, 8)}-${d.slice(8)}`;
   }
-
-  return p;
+  // 1588/1544 등 전국 대표번호(8자리)
+  if (/^1[5-9]/.test(d)) {
+    if (n > 8) return d;
+    if (n <= 4) return d;
+    return `${d.slice(0, 4)}-${d.slice(4)}`;
+  }
+  if (n > 11) return d;
+  if (n <= 3) return d;
+  // 010 휴대폰은 항상 3-4-4
+  if (d.startsWith("010")) {
+    if (n <= 7) return `${d.slice(0, 3)}-${d.slice(3)}`;
+    return `${d.slice(0, 3)}-${d.slice(3, 7)}-${d.slice(7)}`;
+  }
+  if (n <= 6) return `${d.slice(0, 3)}-${d.slice(3)}`;
+  if (n <= 10) return `${d.slice(0, 3)}-${d.slice(3, 6)}-${d.slice(6)}`;
+  return `${d.slice(0, 3)}-${d.slice(3, 7)}-${d.slice(7)}`;
 }
 function makeFullDetailText(r) {
 
@@ -5686,7 +5716,7 @@ function OrderInfoModal({ row, onClose, lunchByName }) {
   const mergedTon = mergeViaTonnage(row.차량톤수, [row.경유상차목록, row.경유지_상차, row.경유하차목록, row.경유지_하차]);
   const hasWaypointCargo = pickupStops.length > 0 || dropStops.length > 0;
   const fee = (Number(row.청구운임) || 0) - (Number(row.기사운임) || 0);
-  const fmtPhone = (p) => { const d = String(p || "").replace(/[^\d]/g, ""); if (d.length === 11) return `${d.slice(0,3)}-${d.slice(3,7)}-${d.slice(7)}`; if (d.length === 10) return `${d.slice(0,3)}-${d.slice(3,6)}-${d.slice(6)}`; return p || "-"; };
+  const fmtPhone = (p) => formatPhone(p) || p || "-"; // 공용 formatPhone 사용
   const fmtMoney = (v) => v ? Number(v).toLocaleString() + "원" : "-";
   const MONO = "'JetBrains Mono','IBM Plex Mono',ui-monospace,monospace";
   // ⭐ 상/하차지에 등록된 휴게(점심)시간 — 그 거래처가 실제로 설정해둔 경우에만 표시
@@ -10130,24 +10160,7 @@ React.useEffect(() => {
 const [popupType, setPopupType] = React.useState(null);
 
 const [statusPopup, setStatusPopup] = React.useState(null);
-// ⭐ 전화번호 숫자→하이폰 포맷 변환
-function formatPhone(raw) {
-  if (!raw) return "";
-  
-  const str = String(raw);   // ★ 어떤 타입이 와도 문자열로 강제
-
-  const num = str.replace(/[^\d]/g, ""); // 숫자만 추출
-
-  if (num.length === 11) {
-    return `${num.slice(0, 3)}-${num.slice(3, 7)}-${num.slice(7)}`;
-  }
-
-  if (num.length === 10) {
-    return `${num.slice(0, 3)}-${num.slice(3, 6)}-${num.slice(6)}`;
-  }
-
-  return str;   // 기본 문자열 리턴(하이픈 없는 경우 등)
-}
+// ⭐ 전화번호 포맷은 파일 상단 공용 formatPhone(단계적 하이픈) 사용
 
 // ========================================================
 // 🔷 Today Dashboard 데이터 계산 (UI 대시보드에서 사용)
@@ -22747,7 +22760,7 @@ function PalletSlipModal({ rows, clients = [], userCompany, userNameMap, patchDi
                   </div>
                   <div>
                     <div className="text-[11px] font-bold text-gray-500 mb-1">발송지(거래처) 연락처</div>
-                    <input value={f.senderPhone} onChange={(e) => updateForm(id, { senderPhone: e.target.value })} placeholder="연락처" className={inputCls} />
+                    <input value={f.senderPhone} onChange={(e) => updateForm(id, { senderPhone: formatPhone(e.target.value) })} placeholder="010-0000-0000" inputMode="tel" className={inputCls} />
                   </div>
                   <div>
                     <div className="text-[11px] font-bold text-gray-500 mb-1">품목</div>
@@ -32456,7 +32469,7 @@ value={copyTarget?.화물수량 || ""}
         }}
       >
         <div className="font-medium">{d.이름}</div>
-        <div className="text-xs text-gray-500">{d.전화번호}</div>
+        <div className="text-xs text-gray-500">{formatPhone(d.전화번호)}</div>
       </button>
     ))}
   </div>
@@ -32478,7 +32491,7 @@ value={copyTarget?.화물수량 || ""}
                 <label>전화번호</label>
                 <input autoComplete="off"
                   className="border p-2 rounded w-full bg-gray-100"
-                  value={editTarget.전화번호 || ""}
+                  value={formatPhone(editTarget.전화번호) || ""}
                   readOnly
                 />
               </div>
@@ -40904,7 +40917,7 @@ return (
         }}
       >
         <div className="font-medium">{d.이름}</div>
-        <div className="text-xs text-gray-500">{d.전화번호}</div>
+        <div className="text-xs text-gray-500">{formatPhone(d.전화번호)}</div>
       </button>
     ))}
   </div>
@@ -50658,7 +50671,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                                   <button type="button" className="flex-1 text-left px-4 py-3"
                                     onClick={() => selectSmart7Driver(d)}>
                                     <div className="font-bold text-gray-900 text-[13px]">{d.이름 || "-"}</div>
-                                    <div className="text-[11px] text-gray-500 mt-0.5">{d.차량번호} · {d.전화번호}</div>
+                                    <div className="text-[11px] text-gray-500 mt-0.5">{d.차량번호} · {formatPhone(d.전화번호)}</div>
                                   </button>
                                   <button type="button" className="px-3 py-3 text-gray-500 hover:text-blue-500 text-xs"
                                     onClick={() => { setEditingDriver7Id(d.id || i); setEditingDriver7Data({ 이름: d.이름 || "", 전화번호: d.전화번호 || "" }); }}><EditableText id="misc.btn.47470.수정" defaultText="수정" /></button>
@@ -56900,7 +56913,7 @@ function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, sho
                         <tr key={d.id || i} className={`border-b border-gray-100 ${i%2?"bg-gray-50/50":"bg-white"}`}>
                           <td className="px-4 py-3 text-[13px] font-semibold text-[#1B2B4B] whitespace-nowrap">{d.차량번호 || "-"}</td>
                           <td className="px-4 py-3 text-[13px] text-gray-800 whitespace-nowrap">{d.이름 || "-"}</td>
-                          <td className="px-4 py-3 text-[13px] text-gray-500 whitespace-nowrap">{d.전화번호}</td>
+                          <td className="px-4 py-3 text-[13px] text-gray-500 whitespace-nowrap">{formatPhone(d.전화번호)}</td>
                           <td className="px-4 py-3 text-[13px] font-semibold text-[#1B2B4B] whitespace-nowrap">{normalizePhone(d.전화번호)}</td>
                           <td className="px-4 py-3 text-center">
                             <button onClick={async () => {
@@ -59565,12 +59578,7 @@ function MyProfilePage({ user, todayStats, myStats, cardImage, setCardImage, car
   const [draftName, setDraftName] = useState("");
   const [draftPhone, setDraftPhone] = useState("");
   const [savingInfo, setSavingInfo] = useState(false);
-  const fmtPhone = (v) => {
-    const d = String(v || "").replace(/\D/g, "").slice(0, 11);
-    if (d.length < 4) return d;
-    if (d.length < 8) return `${d.slice(0, 3)}-${d.slice(3)}`;
-    return d.length === 11 ? `${d.slice(0, 3)}-${d.slice(3, 7)}-${d.slice(7)}` : `${d.slice(0, 3)}-${d.slice(3, 6)}-${d.slice(6)}`;
-  };
+  const fmtPhone = (v) => formatPhone(String(v || "").replace(/\D/g, "").slice(0, 12)); // 공용 formatPhone 사용
   const openEdit = () => { setDraftName(displayName || ""); setDraftPhone(phone); setEditOpen(true); };
   const saveInfo = async () => {
     if (!user?.uid) return;
@@ -60909,7 +60917,7 @@ function PCERPPage({ userCompany = "", drivers = [], clients = [], places = [], 
               </div>
               <div style={{ flex:1,minWidth:0 }}>
                 <div style={{ fontSize:14,fontWeight:700,color:"#111",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{d.차량번호||"-"}</div>
-                <div style={{ fontSize:12,color:"#6b7280",marginTop:2 }}>{d.이름||"-"}{d.전화번호?` · ${d.전화번호}`:""}</div>
+                <div style={{ fontSize:12,color:"#6b7280",marginTop:2 }}>{d.이름||"-"}{d.전화번호?` · ${formatPhone(d.전화번호)}`:""}</div>
               </div>
             </div>
           ))}
