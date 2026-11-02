@@ -390,6 +390,67 @@ function PlatformNoticePreview({ draft, onClose }) {
     </div>
   );
 }
+// 🔔 2026-11-03 푸시 점검 — 이 공지를 누가 받고(○) 누가 왜 못 받는지(✕ 이유), 한 사람에게 테스트 푸시(기기별 결과)
+async function pushDiagApi(body) {
+  const token = await auth.currentUser?.getIdToken();
+  let r;
+  try { r = await fetch(`${FUNCTIONS_BASE}/pushDiag`, { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify(body) }); }
+  catch { throw new Error("서버 응답이 없습니다. pushDiag 서버 배포를 확인해 주세요."); }
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(d.error || `요청 실패 (${r.status})`);
+  return d;
+}
+const PUSH_ERR_KO = { "messaging/registration-token-not-registered": "기기 토큰 만료(앱 재설치·알림 차단·오래 안 씀) — 그 폰에서 앱을 다시 열고 알림 허용", "messaging/invalid-registration-token": "잘못된 기기 토큰", "messaging/mismatched-credential": "다른 프로젝트 토큰", "messaging/third-party-auth-error": "아이폰/웹 인증 설정 오류" };
+function PushDiagModal({ notice, onClose }) {
+  const [rows, setRows] = React.useState(null);
+  const [err, setErr] = React.useState("");
+  const [test, setTest] = React.useState({}); // uid → { busy, result }
+  React.useEffect(() => { pushDiagApi({ action: "list", audience: notice.audience, targetCompanies: notice.targetCompanies || [] }).then((d) => setRows(d.rows)).catch((e) => setErr(e.message)); }, [notice]);
+  const runTest = async (u) => {
+    setTest((t) => ({ ...t, [u.uid]: { busy: true } }));
+    try { const r = await pushDiagApi({ action: "test", uid: u.uid }); setTest((t) => ({ ...t, [u.uid]: { result: r } })); }
+    catch (e) { setTest((t) => ({ ...t, [u.uid]: { result: { error: e.message } } })); }
+  };
+  const okN = (rows || []).filter((r) => r.ok).length;
+  return (
+    <div className="fixed inset-0 z-[9999] bg-black/40 flex items-start justify-center overflow-auto p-4" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="w-full max-w-[860px] my-8 rounded-[18px] bg-white border border-[#E3E8F0] shadow-xl">
+        <div className="flex items-center gap-3 px-5 py-4 border-b border-[#EEF1F6]">
+          <div className="flex-1 min-w-0"><div className="text-[17px] font-black text-[#0F1A30]">푸시 받는 사람 확인</div><div className="text-[13px] text-[#7A879C] truncate">{notice.title} · {pnAudLabel(notice)}</div></div>
+          <button type="button" onClick={onClose} className="h-9 px-4 rounded-lg border border-[#DCE3EE] text-[13.5px] font-bold text-[#3A4A66]">닫기</button>
+        </div>
+        <div className="px-5 py-3 text-[13px] text-[#5B6B85] bg-[#F7F9FC] border-b border-[#EEF1F6]">
+          ○ 받음 {rows ? okN : "-"}명 · ✕ 못 받음 {rows ? rows.length - okN : "-"}명 — [테스트]를 누르면 그 사람의 등록된 기기 전부로 테스트 알림을 보내고 기기별 결과를 보여줍니다.
+        </div>
+        {err && <div className="m-5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-[13.5px] font-semibold text-red-700">{err}</div>}
+        {!rows && !err && <div className="py-12 text-center text-[#9AA9C3]">확인 중…</div>}
+        {rows && (
+          <div className="divide-y divide-[#EEF1F6] max-h-[65vh] overflow-auto">
+            {rows.map((u) => { const t = test[u.uid]; return (
+              <div key={u.uid} className="px-5 py-3">
+                <div className="flex items-center gap-3 flex-wrap">
+                  <span className={`w-6 text-center font-black ${u.ok ? "text-[#067647]" : "text-[#D92D20]"}`}>{u.ok ? "○" : "✕"}</span>
+                  <div className="flex-1 min-w-[200px]"><div className="text-[14.5px] font-black text-[#0F1A30]">{u.name || "(이름 없음)"} <span className="text-[12.5px] font-semibold text-[#9AA9C3]">{u.email}</span></div>
+                    <div className="text-[12.5px] text-[#7A879C]">{u.company} · 기기 {u.devices}대{u.tokenAt ? ` · 마지막 등록 ${new Date(u.tokenAt).toLocaleString("ko-KR", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })}` : ""}{u.why ? <span className="ml-1 font-bold text-[#D92D20]"> · {u.why}</span> : ""}</div></div>
+                  {u.devices > 0 && <button type="button" onClick={() => runTest(u)} disabled={t?.busy} className="h-8 px-3 rounded-lg bg-[#0F1A30] text-white text-[12.5px] font-black disabled:opacity-50">{t?.busy ? "보내는 중…" : "테스트"}</button>}
+                </div>
+                {t?.result && (
+                  <div className="mt-2 ml-9 rounded-lg bg-[#F5F8FD] border border-[#E3E8F0] px-3 py-2 text-[12.5px] text-[#3A4A66] space-y-0.5">
+                    {t.result.error ? <div className="text-[#D92D20] font-bold">{t.result.error}</div> : (t.result.results || []).map((x) => (
+                      <div key={x.device}>기기 {x.device} (…{x.tail}): {x.ok ? <b className="text-[#067647]">성공 — 폰에 알림이 떴는지 확인</b> : <b className="text-[#D92D20]">실패 · {PUSH_ERR_KO[x.code] || x.code} {x.msg && !PUSH_ERR_KO[x.code] ? `(${x.msg})` : ""}</b>}</div>
+                    ))}
+                    {t.result.note && <div>{t.result.note}</div>}
+                  </div>
+                )}
+              </div>
+            ); })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function NoticesPanel() {
   const list = useCol("platformNotices");
   const blank = { title: "", body: "", bodyHtml: "", level: "안내", audience: "all", targetCompanies: [], active: true, endDate: "", pinned: false, banner: true, push: true, image: "", schedule: false, pubDate: "", pubTime: "" };
@@ -402,6 +463,7 @@ function NoticesPanel() {
   const [preview, setPreview] = React.useState(false);
   const [busy, setBusy] = React.useState(false);
   const [filter, setFilter] = React.useState("all");
+  const [diag, setDiag] = React.useState(null); // ⭐ 푸시 점검할 공지
   const fileRef = React.useRef(null);
   const set = (patch) => setF((p) => ({ ...p, ...patch }));
   const close = () => { setF(blank); setEditId(null); setWriting(false); };
@@ -553,6 +615,7 @@ function NoticesPanel() {
                     </div>
                   </div>
                   <div className="w-full lg:w-auto flex justify-end gap-1.5 shrink-0 [&_button]:whitespace-nowrap">
+                    <button type="button" onClick={() => setDiag(n)} className="h-9 px-3.5 rounded-lg border border-[#DCE3EE] text-[13.5px] font-black text-[#2D4C82]">푸시 확인</button>
                     <button type="button" onClick={() => updateDoc(doc(db, "platformNotices", n.id), { active: n.active === false })} className="h-9 px-3.5 rounded-lg border border-[#DCE3EE] text-[13.5px] font-black text-[#1B2B4B]">{n.active === false ? "다시 게시" : "내리기"}</button>
                     <button type="button" onClick={() => { setEditId(n.id); setF({ ...blank, ...n, targetCompanies: tc, bodyHtml: n.bodyHtml || textToHtml(n.body || ""), schedule: (n.publishAt || 0) > Date.now(), ...((n.publishAt || 0) > 0 ? kstParts(n.publishAt) : {}) }); setWriting(true); }} className="h-9 px-3.5 rounded-lg bg-[#0F1A30] text-white text-[13.5px] font-black">수정</button>
                     <button type="button" onClick={() => window.confirm("공지를 삭제할까요?\n대상 회사 공지사항 목록에서도 함께 사라집니다.") && deleteDoc(doc(db, "platformNotices", n.id))} className="h-9 px-3.5 rounded-lg border border-[#DCE3EE] text-[13.5px] font-bold text-[#7A879C]">삭제</button>
@@ -563,6 +626,7 @@ function NoticesPanel() {
           </div>
         )}
       </Card>
+      {diag && <PushDiagModal notice={diag} onClose={() => setDiag(null)} />}
     </div>
   );
 }

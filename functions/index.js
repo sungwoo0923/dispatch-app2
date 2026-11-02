@@ -4805,6 +4805,62 @@ exports.notifyPlatformNotice = functions.firestore.document("platformNotices/{id
   await snap.ref.set({ pushPending: false, pushedAt: FieldValue.serverTimestamp() }, { merge: true }).catch(() => {});
   return null;
 });
+// 🔔 2026-11-03 푸시 점검(최고관리자) — "안드로이드만 안 온다" 같은 문의 확인용
+//  list: 이 공지(또는 회사)의 대상 직원마다 받는지/안 받는지와 이유(기기 없음·알림 끔·승인 대기·퇴사·최고관리자 등)
+//  test: 한 사람의 등록된 기기 전부에 테스트 푸시 → 기기별 성공/실패(오류 코드) 그대로 돌려준다
+exports.pushDiag = functions.runWith({ timeoutSeconds: 60, memory: "256MB" }).https.onRequest(async (req, res) => {
+  res.set("Access-Control-Allow-Origin", "*");
+  res.set("Access-Control-Allow-Methods", "POST, OPTIONS");
+  res.set("Access-Control-Allow-Headers", "Authorization, Content-Type");
+  if (req.method === "OPTIONS") { res.status(204).send(""); return; }
+  if (req.method !== "POST") { res.status(405).json({ error: "POST만 허용됩니다." }); return; }
+  let body = req.body;
+  if (typeof body === "string") { try { body = JSON.parse(body); } catch { body = {}; } }
+  body = body || {};
+  try {
+    await requireTotalMaster(req);
+    if (body.action === "list") {
+      const aud = body.audience || "all";
+      const targets = new Set((Array.isArray(body.targetCompanies) ? body.targetCompanies : []).map((c) => String(c || "").trim()).filter(Boolean));
+      const users = await db.collection("users").get();
+      const rows = [];
+      users.forEach((d) => {
+        const u = d.data() || {};
+        if (["driver", "cafeUser"].includes(u.role)) return;
+        const co = String(u.companyName || PUSH_DEFAULT_COMPANY).trim();
+        const isShipper = u.role === "shipper";
+        if (aud === "selected" && !targets.has(co)) return;
+        if (aud === "carrier" && isShipper) return;
+        if (aud === "shipper" && !isShipper) return;
+        const tokens = userTokens(u);
+        let why = "";
+        if (u.role === "totalMaster") why = "최고관리자 계정은 공지 푸시 제외";
+        else if (aud === "selected" && isShipper) why = "화주 계정(선택 운송사 공지 대상 아님)";
+        else if (u.approved === false) why = "승인 대기";
+        else if (u.employmentStatus === "퇴사") why = "퇴사";
+        else if (!tokens.length) why = "알림 받을 기기 없음(앱에서 알림 허용 안 함 또는 로그아웃)";
+        else if (!isPushTypeEnabled(u.pushPrefs, "공지사항")) why = "본인이 '공지사항' 알림을 끔";
+        const at = u.fcmTokenAt?.toMillis ? u.fcmTokenAt.toMillis() : (typeof u.fcmTokenAt === "number" ? u.fcmTokenAt : 0);
+        rows.push({ uid: d.id, name: u.name || u.이름 || "", email: u.email || "", company: co, role: u.role || "", devices: tokens.length, tokenAt: at, ok: !why, why });
+      });
+      rows.sort((a, b) => Number(a.ok) - Number(b.ok) || a.company.localeCompare(b.company) || a.name.localeCompare(b.name));
+      res.json({ rows });
+      return;
+    }
+    if (body.action === "test") {
+      const u = (await db.collection("users").doc(String(body.uid || "x")).get()).data();
+      const tokens = userTokens(u);
+      if (!tokens.length) { res.json({ sent: 0, results: [], note: "등록된 기기가 없습니다." }); return; }
+      const r = await sendPushAndCleanup(tokens, { notification: { title: "◆ KP-Flow 테스트 알림", body: "이 알림이 보이면 푸시가 정상입니다." }, android: { priority: "high" } }, "푸시 점검");
+      const results = (r?.responses || []).map((x, i) => ({ device: i + 1, tail: String(tokens[i]).slice(-8), ok: x.success, code: x.error?.code || "", msg: x.error?.message || "" }));
+      res.json({ sent: r?.successCount || 0, failed: r?.failureCount || 0, results });
+      return;
+    }
+    res.status(400).json({ error: "알 수 없는 요청입니다." });
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e?.message || String(e) });
+  }
+});
 exports.sendScheduledPlatformNotices = functions.pubsub.schedule("every 5 minutes").timeZone("Asia/Seoul").onRun(async () => {
   const snap = await db.collection("platformNotices").where("pushPending", "==", true).get();
   const now = Date.now();
