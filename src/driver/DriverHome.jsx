@@ -2839,11 +2839,26 @@ export default function DriverHome() {
             ) : (
               <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-                  <select value={vehicleInfoEdit.차량종류} onChange={e => setVehicleInfoEdit(p => ({ ...p, 차량종류: e.target.value }))}
-                    style={{ padding: "9px 10px", borderRadius: 8, border: "1px solid #E3E8F0", fontSize: 13, background: "white" }}>
-                    <option value="">차량종류 선택</option>
-                    {VEHICLE_CATEGORIES.map(t => <option key={t} value={t}>{t}</option>)}
-                  </select>
+                  {/* ⭐ 2026-11-02 "직접입력"을 고르면 글자 칸이 열린다(예전엔 "직접입력"이라는 글자 자체가 저장됐다) */}
+                  {(() => {
+                    const cur = vehicleInfoEdit.차량종류 || "";
+                    const direct = vehicleInfoEdit.__vtDirect || (!!cur && !VEHICLE_CATEGORIES.includes(cur)) || cur === "직접입력";
+                    return (
+                      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                        <select value={direct ? "직접입력" : cur}
+                          onChange={e => { const v = e.target.value; setVehicleInfoEdit(p => v === "직접입력" ? ({ ...p, __vtDirect: true, 차량종류: VEHICLE_CATEGORIES.includes(p.차량종류 || "") ? "" : (p.차량종류 || "") }) : ({ ...p, __vtDirect: false, 차량종류: v })); }}
+                          style={{ padding: "9px 10px", borderRadius: 8, border: "1px solid #E3E8F0", fontSize: 13, background: "white" }}>
+                          <option value="">차량종류 선택</option>
+                          {VEHICLE_CATEGORIES.map(t => <option key={t} value={t}>{t}</option>)}
+                        </select>
+                        {direct && (
+                          <input value={cur === "직접입력" ? "" : cur} placeholder="차량종류 입력 (예: 암롤)" autoFocus
+                            onChange={e => setVehicleInfoEdit(p => ({ ...p, __vtDirect: true, 차량종류: e.target.value }))}
+                            style={{ padding: "9px 10px", borderRadius: 8, border: "1px solid #C9D5EA", fontSize: 13, background: "white" }} />
+                        )}
+                      </div>
+                    );
+                  })()}
                   <select value={vehicleInfoEdit.차량톤수} onChange={e => setVehicleInfoEdit(p => ({ ...p, 차량톤수: e.target.value }))}
                     style={{ padding: "9px 10px", borderRadius: 8, border: "1px solid #E3E8F0", fontSize: 13, background: "white" }}>
                     <option value="">톤수 선택</option>

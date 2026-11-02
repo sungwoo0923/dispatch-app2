@@ -3425,6 +3425,27 @@ function DriverVehicleTypeField({ value, onChange, className = "", SelectEl = "s
   );
 }
 
+// ⭐ 2026-11-02 기사관리 표 — 차량종류(암롤·윙바디 등)를 색 배지로 한눈에 + 톤수
+function VehicleTypeBadge({ type, ton }) {
+  const t = String(type || "").trim();
+  const tn = String(ton || "").trim();
+  if (!t && !tn) return <span className="text-gray-300">-</span>;
+  const tone = /암롤/.test(t) ? "bg-[#FFF1DC] text-[#9A5B00] border-[#F5D29B]"
+    : /윙/.test(t) && /냉/.test(t) ? "bg-[#E3F5FA] text-[#0B6E86] border-[#A9DDEA]"
+    : /윙/.test(t) ? "bg-[#E8EFFC] text-[#2D4C82] border-[#BFD0EE]"
+    : /냉/.test(t) ? "bg-[#E3F5FA] text-[#0B6E86] border-[#A9DDEA]"
+    : /탑/.test(t) ? "bg-[#E6F6EE] text-[#17734A] border-[#A9DDC2]"
+    : /카고/.test(t) ? "bg-[#EEF1F6] text-[#3A4A66] border-[#D3DAE6]"
+    : /라보|다마스/.test(t) ? "bg-[#F3EEFB] text-[#5B3FA0] border-[#D7C9F0]"
+    : "bg-[#F1F3F7] text-[#1B2B4B] border-[#D3DAE6]";
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      {t && <span className={`inline-flex items-center h-[22px] px-2 rounded-full border text-[12px] font-extrabold ${tone}`}>{t}</span>}
+      {tn && <span className="text-[11.5px] font-bold text-[#8E9BB2] tabular-nums">{tn}</span>}
+    </span>
+  );
+}
+
 function useKpLongPressSelect({ toggle, isSelected }) {
   const [mode, setMode] = React.useState(false);
   const timer = React.useRef(null);
@@ -56253,7 +56274,31 @@ function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, sho
 
   React.useEffect(() => setPage(1), [q, gradeFilter, showAll, searched]);
 
-  const paged = React.useMemo(() => filtered.slice((page-1)*perPage, page*perPage), [filtered, page]);
+  // ⭐ 2026-11-02 담당자 칸 머리를 누르면 담당자 목록 → 고른 담당자의 차량이 맨 위로(줄 강조) · 다시 고르면 해제
+  const [mgrFocus, setMgrFocus] = React.useState("");
+  const [mgrMenu, setMgrMenu] = React.useState(null); // { left, top }
+  const mgrOf = (r) => String(r?.담당자?.name || "").trim();
+  const mgrCounts = React.useMemo(() => {
+    const m = new Map();
+    for (const r of filtered) { const n = mgrOf(r); if (n) m.set(n, (m.get(n) || 0) + 1); }
+    return [...m.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], "ko"));
+  }, [filtered]);
+  const ordered = React.useMemo(() => {
+    if (!mgrFocus) return filtered;
+    const top = [], rest = [];
+    for (const r of filtered) (mgrOf(r) === mgrFocus ? top : rest).push(r);
+    return [...top, ...rest];
+  }, [filtered, mgrFocus]);
+  React.useEffect(() => { setPage(1); }, [mgrFocus]);
+  React.useEffect(() => {
+    if (!mgrMenu) return undefined;
+    const close = (e) => { if (e.target.closest && e.target.closest("[data-mgr-menu]")) return; setMgrMenu(null); };
+    const onScroll = (e) => { if (e.target?.closest && e.target.closest("[data-mgr-menu]")) return; setMgrMenu(null); };
+    const t = setTimeout(() => document.addEventListener("mousedown", close), 0);
+    window.addEventListener("scroll", onScroll, true);
+    return () => { clearTimeout(t); document.removeEventListener("mousedown", close); window.removeEventListener("scroll", onScroll, true); };
+  }, [mgrMenu]);
+  const paged = React.useMemo(() => ordered.slice((page-1)*perPage, page*perPage), [ordered, page]);
   const totalPages = Math.ceil(filtered.length / perPage);
 
   const toggleOne = (id) => setSelected(prev => {
@@ -56607,6 +56652,28 @@ function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, sho
           )}
 
           {/* 테이블 */}
+          {mgrMenu && (
+            <div data-mgr-menu="1" style={{ position: "fixed", left: mgrMenu.left, top: mgrMenu.top, width: 240, zIndex: 99990 }}
+              className="rounded-2xl bg-white border border-[#E3E8F0] shadow-[0_18px_44px_rgba(15,26,48,0.22)] overflow-hidden">
+              <div className="px-3.5 pt-2.5 pb-2 border-b border-[#EEF2F7] bg-[#F7F9FC]">
+                <div className="text-[10.5px] font-black tracking-[0.16em] text-[#4B6CB7]">MANAGER · 담당자별 보기</div>
+                <div className="text-[11.5px] font-bold text-[#8E9BB2] mt-0.5">고른 담당자의 차량이 맨 위로 모입니다</div>
+              </div>
+              <div className="max-h-[300px] overflow-y-auto py-1">
+                <button type="button" onClick={() => { setMgrFocus(""); setMgrMenu(null); }}
+                  className={`w-[calc(100%-8px)] mx-1 px-2.5 h-9 rounded-xl flex items-center text-[13px] font-bold hover:bg-[#EEF3FC] ${!mgrFocus ? "text-[#1B2B4B]" : "text-[#8E9BB2]"}`}>기본 순서{!mgrFocus ? " ✓" : ""}</button>
+                {mgrCounts.length === 0 && <div className="px-3.5 py-3 text-[12px] font-bold text-[#9AA9C3]">담당자가 지정된 차량이 없습니다 (지입·직영·임대)</div>}
+                {mgrCounts.map(([n, c]) => (
+                  <button key={n} type="button" onClick={() => { setMgrFocus(f => f === n ? "" : n); setMgrMenu(null); }}
+                    className={`w-[calc(100%-8px)] mx-1 px-2.5 h-10 rounded-xl flex items-center gap-2 hover:bg-[#EEF3FC] ${mgrFocus === n ? "bg-[#FFF8E6]" : ""}`}>
+                    <span className="w-7 h-7 rounded-full grid place-items-center bg-[#1B2B4B] text-white text-[11.5px] font-black shrink-0">{n.slice(0, 1)}</span>
+                    <span className="flex-1 text-left text-[13.5px] font-extrabold text-[#0F1A30] truncate">{n}</span>
+                    <span className="tabular-nums px-2 h-[22px] inline-flex items-center rounded-full bg-[#EEF3FC] text-[#2D4C82] text-[11.5px] font-black">{c}대</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
           {(showAll || searched) && (
             <div className="bg-white rounded-[22px] border border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_12px_30px_rgba(16,24,40,0.07)] overflow-hidden">
               <table className="w-full text-[13px]">
@@ -56619,15 +56686,28 @@ function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, sho
                         checked={filtered.length > 0 && selected.size === filtered.length}
                       />
                     </th>
-                    {[["순번",""],["차량번호","w-[92px]"],["이름",""],["전화번호",""],["등록일",""],["담당자",""],["거주지",""],["근무가능요일",""],["등급",""],["메모",""],["팝업",""],["삭제",""]].map(([h,w]) => (
+                    {[["순번",""],["차량번호","w-[92px]"],["차량종류",""],["이름",""],["전화번호",""],["등록일",""],["담당자",""],["거주지",""],["근무가능요일",""],["등급",""],["메모",""],["팝업",""],["삭제",""]].map(([h,w]) => (
+                      h === "담당자" ? (
+                        <th key={h} className={`px-2 py-2 text-white font-bold text-center whitespace-nowrap ${w}`}>
+                          {/* ⭐ 2026-11-02 누르면 담당자 목록 — 고른 담당자의 차량이 맨 위로 */}
+                          <button type="button" data-mgr-menu="1"
+                            onClick={(e) => { const r = e.currentTarget.getBoundingClientRect(); setMgrMenu(m => m ? null : { left: Math.min(r.left, window.innerWidth - 248), top: r.bottom + 6 }); }}
+                            className={`inline-flex items-center gap-1 h-7 px-2.5 rounded-full transition ${mgrFocus ? "bg-[#E9C46A] text-[#0F1A30]" : "hover:bg-white/10"}`}
+                            title="담당자별로 모아 보기">
+                            {mgrFocus ? `담당 ${mgrFocus}` : <EditableText id={`driver.table.header.${h}`} defaultText={h} />}
+                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9l6 6 6-6" /></svg>
+                          </button>
+                        </th>
+                      ) : (
                       <th key={h} className={`px-3 py-3 text-white font-bold text-center whitespace-nowrap ${w}`}><EditableText id={`driver.table.header.${h}`} defaultText={h} /></th>
+                      )
                     ))}
                   </tr>
                 </thead>
                 <tbody>
                   {paged.length === 0 ? (
                     <tr>
-                      <td colSpan={13} className="text-center py-16 text-gray-500 text-[14px]">
+                      <td colSpan={14} className="text-center py-16 text-gray-500 text-[14px]">
                         {q.trim() ? "검색 결과가 없습니다." : "데이터가 없습니다."}
                       </td>
                     </tr>
@@ -56636,19 +56716,22 @@ function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, sho
                     if (!docId) return null;
                     const grade = r.등급 || "일반";
                     const memoPopupOn = grade === "블랙" ? !!(r.메모 && String(r.메모).trim()) : r.팝업표시 === true;
+                    const mgrHit = !!mgrFocus && mgrOf(r) === mgrFocus;
+                    const mgrLast = mgrHit && !(paged[i + 1] && mgrOf(paged[i + 1]) === mgrFocus);
                     return (
                       <tr key={`${docId}_${i}`}
-                        className={`border-b border-gray-100 transition hover:bg-blue-50/40 cursor-pointer ${grade==="블랙" ? "bg-gray-100" : i%2===0 ? "bg-white" : "bg-gray-50/50"}`}
+                        className={`transition hover:bg-blue-50/40 cursor-pointer ${mgrLast ? "border-b-2 border-[#1B2B4B]/30" : "border-b border-gray-100"} ${mgrHit ? "kp-row-hit" : grade==="블랙" ? "bg-gray-100" : i%2===0 ? "bg-white" : "bg-gray-50/50"}`}
                         onDoubleClick={() => setEditDriverModal({ ...r })}>
-                        <td className="px-3 py-2.5 text-center">
+                        <td className="px-3 py-2.5 text-center" style={mgrHit ? { boxShadow: "inset 4px 0 0 #E9C46A" } : undefined}>
                           <input autoComplete="off" type="checkbox" checked={selected.has(docId)} onChange={(e) => { e.stopPropagation(); toggleOne(docId); }} onClick={e => e.stopPropagation()} />
                         </td>
                         <td className="px-3 py-2.5 text-center text-gray-500">{(page-1)*perPage+i+1}</td>
                         <td className="px-2 py-2.5 text-center font-semibold text-[#1B2B4B] whitespace-nowrap w-[92px] overflow-hidden text-ellipsis">{r.차량번호||"-"}</td>
+                        <td className="px-2 py-2.5 text-center whitespace-nowrap"><VehicleTypeBadge type={r.차량종류} ton={r.차량톤수} /></td>
                         <td className="px-3 py-2.5 text-center whitespace-nowrap">{r.이름||"-"}</td>
                         <td className="px-3 py-2.5 text-center whitespace-nowrap">{formatPhone(r.전화번호)||"-"}</td>
                         <td className="px-3 py-2.5 text-center whitespace-nowrap text-gray-500 text-[12px]">{displayRegDate(r) || "-"}</td>
-                        <td className="px-3 py-2.5 text-center whitespace-nowrap text-gray-500">{(grade==="지입"||grade==="직영"||grade==="임대") ? (r.담당자?.name || "-") : "-"}</td>
+                        <td className={`px-3 py-2.5 text-center whitespace-nowrap ${mgrHit ? "font-black text-[#0F1A30]" : "text-gray-500"}`}>{(grade==="지입"||grade==="직영"||grade==="임대") ? (r.담당자?.name || "-") : "-"}</td>
                         <td className="px-3 py-2.5 text-center whitespace-nowrap text-gray-500">{(grade==="지입"||grade==="직영"||grade==="임대") ? (r.거주지 || "-") : "-"}</td>
                         <td className="px-3 py-2.5 text-center whitespace-nowrap text-gray-500 text-[12px]">{(grade==="지입"||grade==="직영"||grade==="임대") ? ((r.근무요일 && r.근무요일.length) ? r.근무요일.join(",") : "-") : "-"}</td>
                         <td className="px-3 py-2.5 text-center">
