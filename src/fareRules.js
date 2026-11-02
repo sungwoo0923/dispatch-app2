@@ -186,14 +186,14 @@ export function FareRuleHint({ form, rules, onReapply, className = "", dark = fa
   const manual = fareIsManual(form, rules);
   return h("span", { className: `inline-flex items-center gap-1.5 flex-wrap ${className}`, "data-fare-hint": "1" },
     h("span", {
-      className: `inline-flex items-center px-1.5 py-[1px] rounded text-[11.5px] font-extrabold ${manual
+      className: `inline-flex items-center whitespace-nowrap px-1.5 py-[1px] rounded text-[12px] font-extrabold tabular-nums ${manual
         ? (dark ? "bg-amber-400/20 text-amber-200" : "bg-amber-50 text-amber-700 border border-amber-200")
         : (dark ? "bg-[#2D4C82] text-[#DCE7FB]" : "bg-[#EAF0FB] text-[#2D4C82] border border-[#C9D5EA]")}`,
     }, manual ? `${rule.name} · 기사운임 직접 입력` : fareRuleHint(rule)),
     manual && onReapply ? h("button", {
       type: "button",
       onClick: (e) => { e.preventDefault(); e.stopPropagation(); onReapply(); },
-      className: `px-1.5 py-[1px] rounded text-[11.5px] font-extrabold ${dark ? "bg-white/10 text-white hover:bg-white/20" : "bg-[#1B2B4B] text-white hover:bg-[#2D4C82]"}`,
+      className: `whitespace-nowrap px-1.5 py-[1px] rounded text-[12px] font-extrabold ${dark ? "bg-white/10 text-white hover:bg-white/20" : "bg-[#1B2B4B] text-white hover:bg-[#2D4C82]"}`,
       title: "운임 규칙대로 기사운임·수수료를 다시 계산",
     }, "↺ 규칙대로") : null);
 }

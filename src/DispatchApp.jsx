@@ -30662,12 +30662,12 @@ value={copyTarget?.화물수량 || ""}
 </CpField>
 {/* ⭐ 2026-11-02 운임규칙 — 오더 복사·수정 패널 운임구분 */}
 {fareOn && (
-  <CpField label="운임구분">
-    <div className="flex flex-col gap-1">
-      <FareTypeSelect compact className="w-full" rules={fareR.rules} value={copyTarget?.운임구분 || ""} onChange={(v) => setCopyTarget(p => fareFormChange(p, "운임구분", v, fareR.rules))} />
+  <div className="col-span-2"><CpField label="운임구분">
+    <div className="flex items-center gap-1.5 flex-wrap">
+      <FareTypeSelect compact className="min-w-[120px]" rules={fareR.rules} value={copyTarget?.운임구분 || ""} onChange={(v) => setCopyTarget(p => fareFormChange(p, "운임구분", v, fareR.rules))} />
       <FareRuleHint form={copyTarget} rules={fareR.rules} onReapply={() => setCopyTarget(p => fareFormChange(p, "__reapply", null, fareR.rules))} />
     </div>
-  </CpField>
+  </CpField></div>
 )}
 
 <CpField label="배차방식">
@@ -42400,12 +42400,12 @@ setCopyPlaceOptions(list);
 </Field>
 {/* ⭐ 2026-11-02 운임규칙 — 오더 복사·수정 패널 운임구분 */}
 {fareOn && (
-  <Field label="운임구분">
-    <div className="flex flex-col gap-1">
-      <FareTypeSelect compact className="w-full" rules={fareR.rules} value={copyTarget?.운임구분 || ""} onChange={(v) => setCopyTarget(p => fareFormChange(p, "운임구분", v, fareR.rules))} />
+  <div className="col-span-2"><Field label="운임구분">
+    <div className="flex items-center gap-1.5 flex-wrap">
+      <FareTypeSelect compact className="min-w-[120px]" rules={fareR.rules} value={copyTarget?.운임구분 || ""} onChange={(v) => setCopyTarget(p => fareFormChange(p, "운임구분", v, fareR.rules))} />
       <FareRuleHint form={copyTarget} rules={fareR.rules} onReapply={() => setCopyTarget(p => fareFormChange(p, "__reapply", null, fareR.rules))} />
     </div>
-  </Field>
+  </Field></div>
 )}
 
 <Field label="배차방식">
