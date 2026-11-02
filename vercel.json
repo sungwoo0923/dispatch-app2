@@ -1,8 +1,7 @@
 {
   "git": {
     "deploymentEnabled": {
-      "claude/*": false,
-      "claude/exciting-euler-0juj68": true
+      "claude/*": false
     }
   },
   "functions": {
