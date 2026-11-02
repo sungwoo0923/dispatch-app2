@@ -131,6 +131,14 @@ function FitPaper({ children, base = 820, max = 1.5 }) {
   const ref = React.useRef(null);
   const [z, setZ] = React.useState(1);
   const [compact, setCompact] = React.useState(() => typeof window !== "undefined" && window.innerWidth < 640);
+  // ⭐ 2026-11-02 인쇄·PDF는 칸 폭과 상관없이 늘 종이 양식(표) 모양으로 — 좁은 미리보기 칸에서 찍어도 카드로 나오지 않게
+  const [full, setFull] = React.useState(false);
+  React.useEffect(() => {
+    const el = ref.current; if (!el) return undefined;
+    const on = (e) => setFull(!!e.detail);
+    el.addEventListener("kp-paper-full", on);
+    return () => el.removeEventListener("kp-paper-full", on);
+  }, []);
   React.useLayoutEffect(() => {
     const el = ref.current;
     if (!el || typeof ResizeObserver === "undefined") return;
@@ -144,8 +152,15 @@ function FitPaper({ children, base = 820, max = 1.5 }) {
     ro.observe(el);
     return () => ro.disconnect();
   }, [base, max]);
-  return <div ref={ref}><PaperCompact.Provider value={compact}><div data-fitpaper style={{ zoom: z }}>{children}</div></PaperCompact.Provider></div>;
+  return <div ref={ref} data-fithost><PaperCompact.Provider value={full ? false : compact}><div data-fitpaper style={full ? { zoom: 1, width: 780 } : { zoom: z }}>{children}</div></PaperCompact.Provider></div>;
 }
+// 인쇄·PDF 직전 종이 모양(표·1배)으로 바꾸고 화면이 다시 그려질 때까지 기다린다 → 끝나면 되돌린다
+const paperFull = async (el, on) => {
+  const host = el?.closest?.("[data-fithost]");
+  if (!host) return;
+  host.dispatchEvent(new CustomEvent("kp-paper-full", { detail: on }));
+  await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+};
 const captureAt1x = async (el, opts) => {
   const box = el?.closest?.("[data-fitpaper]");
   const prev = box?.style.zoom;
@@ -161,7 +176,7 @@ function SpendLinesPaper({ label, rows, last, compact: c }) {
   const t = spendTotals(rows);
   const list = rows.length ? rows : [{}];
   const th = "border-[#0F1A30]/40 bg-[#F5F7FB] font-black px-1.5 py-1.5 text-center whitespace-nowrap";
-  const td = "border-[#0F1A30]/25 px-1.5 py-1.5 min-w-0 break-words";
+  const td = "border-[#0F1A30]/25 px-1.5 py-1.5 min-w-0 break-keep [overflow-wrap:anywhere]";
   return (
     <>
       <div className={`flex ${c ? "flex-col" : ""} border-b border-[#0F1A30]/60`} data-spend-total>
@@ -1151,7 +1166,8 @@ function Viewer({ d, me, staff, company, onClose, onRedraft, onEdit, inline = fa
   const print = async () => {
     const box = paperRef.current?.closest?.("[data-fitpaper]"); const prev = box?.style.zoom;
     if (box) box.style.zoom = "1";
-    try { await printA4(paperRef.current, d.docNo); } finally { if (box) box.style.zoom = prev; }
+    await paperFull(paperRef.current, true);
+    try { await printA4(paperRef.current, d.docNo); } finally { await paperFull(paperRef.current, false); if (box) box.style.zoom = prev; }
   };
   // ⭐ 2026-11-01 PDF 저장(A4 나눔) — 모든 결재 문서
   const [pdfBusy, setPdfBusy] = React.useState(false);
@@ -1159,7 +1175,8 @@ function Viewer({ d, me, staff, company, onClose, onRedraft, onEdit, inline = fa
     const box = paperRef.current?.closest?.("[data-fitpaper]"); const prev = box?.style.zoom;
     if (box) box.style.zoom = "1";
     setPdfBusy(true);
-    try { await savePdf(paperRef.current, `${d.docNo || "전자결재"}_${String(d.title || d.formLabel || "").replace(/[\\/:*?"<>|]/g, "_")}`); } catch (e) { window.alert(`PDF 저장 실패: ${e.message}`); } finally { if (box) box.style.zoom = prev; setPdfBusy(false); }
+    await paperFull(paperRef.current, true);
+    try { await savePdf(paperRef.current, `${d.docNo || "전자결재"}_${String(d.title || d.formLabel || "").replace(/[\\/:*?"<>|]/g, "_")}`); } catch (e) { window.alert(`PDF 저장 실패: ${e.message}`); } finally { await paperFull(paperRef.current, false); if (box) box.style.zoom = prev; setPdfBusy(false); }
   };
 
   // ⭐ 2026-10-31 inline — 넓은 화면에서는 결재함 오른쪽에 바로 미리보기(왼쪽 목록 · 오른쪽 문서)
