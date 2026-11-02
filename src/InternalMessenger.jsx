@@ -9,14 +9,11 @@ import {
 } from "firebase/firestore";
 import { db, auth, storage } from "./firebase";
 import { ref as storageRef, uploadBytes, getDownloadURL } from "firebase/storage";
+import { fmtPhone } from "./formatInput";
 
 // 전화번호 하이픈 자동 포맷 (DispatchApp.jsx formatPhone과 동일 규칙)
-function formatPhone(phone) {
-  const p = String(phone ?? "").replace(/[^\d]/g, "");
-  if (p.length === 11) return `${p.slice(0, 3)}-${p.slice(3, 7)}-${p.slice(7)}`;
-  if (p.length === 10) return `${p.slice(0, 3)}-${p.slice(3, 6)}-${p.slice(6)}`;
-  return p;
-}
+// 전화번호 하이픈 — 공용 규칙(src/formatInput.js: 02·031·010·1588 등, 입력 중에도 적용)
+const formatPhone = (phone) => fmtPhone(phone);
 
 const ROOMS_COLL = "chat_rooms";
 const MSGS_COLL = "chat_messages";
@@ -1624,7 +1621,7 @@ function ChatView({ room, roomName, roomPhoto, messages, myUid, myProfile, input
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 14, fontWeight: 700, color: "#fff", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{roomName}</div>
           {room.type === "group" && room.members && (
-            <div style={{ fontSize: 10, color: "rgba(255,255,255,0.5)" }}>{room.members.length}명</div>
+            <div style={{ fontSize: 11, color: "rgba(255,255,255,0.5)" }}>{room.members.length}명</div>
           )}
         </div>
         <button onClick={() => setShowSearch(p => !p)} style={{ background: "none", border: "none", color: showSearch ? "#fff" : "rgba(255,255,255,0.5)", cursor: "pointer", padding: 4 }}>
@@ -1711,7 +1708,7 @@ function ChatView({ room, roomName, roomPhoto, messages, myUid, myProfile, input
                             </div>
                             <div style={{ flex: 1, minWidth: 0 }}>
                               <div style={{ fontSize: 12, fontWeight: 700, color: isMine ? "#fff" : "#111827", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{msg.fileName}</div>
-                              <div style={{ fontSize: 10, color: isMine ? "rgba(255,255,255,0.6)" : "#9ca3af", marginTop: 2 }}>{msg.fileSize ? `${(msg.fileSize / 1024).toFixed(1)} KB` : ""}</div>
+                              <div style={{ fontSize: 11, color: isMine ? "rgba(255,255,255,0.6)" : "#9ca3af", marginTop: 2 }}>{msg.fileSize ? `${(msg.fileSize / 1024).toFixed(1)} KB` : ""}</div>
                             </div>
                           </div>
                         </a>
@@ -1793,7 +1790,7 @@ function ChatView({ room, roomName, roomPhoto, messages, myUid, myProfile, input
                               boxShadow: "0 1px 3px rgba(0,0,0,0.08)",
                             }}>
                             {msg.text}
-                            {msg.edited && <span style={{ fontSize: 10, opacity: 0.6, marginLeft: 4 }}>(수정됨)</span>}
+                            {msg.edited && <span style={{ fontSize: 11, opacity: 0.6, marginLeft: 4 }}>(수정됨)</span>}
                           </div>
                           {/* 이모티콘 반응 표시 */}
                           {msg.reactions && Object.keys(msg.reactions).length > 0 && (
@@ -1819,7 +1816,7 @@ function ChatView({ room, roomName, roomPhoto, messages, myUid, myProfile, input
                       {/* 시간 + 액션 */}
                       {isLast && msg.type !== "deleted" && (
                         <div style={{ display: "flex", flexDirection: "column", alignItems: isMine ? "flex-end" : "flex-start", gap: 2, flexShrink: 0 }}>
-                          <span style={{ fontSize: 10, color: "#9ca3af", whiteSpace: "nowrap" }}>{fmtTime(msg.createdAt)}</span>
+                          <span style={{ fontSize: 11, color: "#9ca3af", whiteSpace: "nowrap" }}>{fmtTime(msg.createdAt)}</span>
                           {/* 읽음 표시 */}
                           {isMine && msg.type !== "deleted" && (() => {
                             const total = msg.totalMembers || room.members?.length || 1;
@@ -1828,7 +1825,7 @@ function ChatView({ room, roomName, roomPhoto, messages, myUid, myProfile, input
                             if (unreadCount > 0) {
                               return <span style={{ fontSize: 10, color: "#f59e0b", fontWeight: 700, whiteSpace: "nowrap" }}>{unreadCount}</span>;
                             }
-                            return <span style={{ fontSize: 10, color: "#6b7280", whiteSpace: "nowrap" }}>읽음</span>;
+                            return <span style={{ fontSize: 11, color: "#6b7280", whiteSpace: "nowrap" }}>읽음</span>;
                           })()}
                         </div>
                       )}

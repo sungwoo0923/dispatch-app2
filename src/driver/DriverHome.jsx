@@ -32,6 +32,7 @@ import { careSummary, vehicleDefaults } from "../vehicleCare";
 import DriverDocBox, { useDriverInbox, DriverPayInfoCard } from "./DriverDocBox";
 import { useDriverDocs, docProblems } from "../driverRequiredDocs";
 import { useVehicleTypes } from "../vehicleTypes"; // 🚚 2026-11-02 회사 공용 차량종류
+import MobileSelect from "../mobile/MobileSelect"; // ⭐ 2026-11-02 기본 select → 남색 바텀시트 선택기
 
 // ⭐ 오더 타임라인 — 기사 행동(수락/거절/수정확인/상차지도착/상차완료/운송완료 등)을
 // 오더 문서의 기사타임라인 배열에 "덮어쓰지 않고" 계속 쌓는다(관리자 지입차관리 타임라인).
@@ -2849,12 +2850,12 @@ export default function DriverHome() {
                     const direct = vehicleInfoEdit.__vtDirect || (!!cur && !vehicleCats.includes(cur)) || cur === "직접입력";
                     return (
                       <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                        <select value={direct ? "직접입력" : cur}
+                        <MobileSelect title="차량종류" value={direct ? "직접입력" : cur}
                           onChange={e => { const v = e.target.value; setVehicleInfoEdit(p => v === "직접입력" ? ({ ...p, __vtDirect: true, 차량종류: vehicleCats.includes(p.차량종류 || "") ? "" : (p.차량종류 || "") }) : ({ ...p, __vtDirect: false, 차량종류: v })); }}
-                          style={{ padding: "9px 10px", borderRadius: 8, border: "1px solid #E3E8F0", fontSize: 13, background: "white" }}>
+                          style={{ padding: "9px 10px", borderRadius: 8, border: "1px solid #E3E8F0", fontSize: 13, background: "white", color: "#0F1A30", width: "100%" }}>
                           <option value="">차량종류 선택</option>
                           {vehicleCats.map(t => <option key={t} value={t}>{t}</option>)}
-                        </select>
+                        </MobileSelect>
                         {direct && (
                           <input value={cur === "직접입력" ? "" : cur} placeholder="차량종류 입력 (예: 암롤)" autoFocus
                             onChange={e => setVehicleInfoEdit(p => ({ ...p, __vtDirect: true, 차량종류: e.target.value }))}
@@ -2863,25 +2864,25 @@ export default function DriverHome() {
                       </div>
                     );
                   })()}
-                  <select value={vehicleInfoEdit.차량톤수} onChange={e => setVehicleInfoEdit(p => ({ ...p, 차량톤수: e.target.value }))}
-                    style={{ padding: "9px 10px", borderRadius: 8, border: "1px solid #E3E8F0", fontSize: 13, background: "white" }}>
+                  <MobileSelect title="톤수" value={vehicleInfoEdit.차량톤수} onChange={e => setVehicleInfoEdit(p => ({ ...p, 차량톤수: e.target.value }))}
+                    style={{ padding: "9px 10px", borderRadius: 8, border: "1px solid #E3E8F0", fontSize: 13, background: "white", color: "#0F1A30", width: "100%" }}>
                     <option value="">톤수 선택</option>
                     {TON_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
-                  </select>
+                  </MobileSelect>
                 </div>
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-                  <select value={vehicleInfoEdit.residenceProvince}
+                  <MobileSelect title="거주지 (시/도)" value={vehicleInfoEdit.residenceProvince}
                     onChange={e => setVehicleInfoEdit(p => ({ ...p, residenceProvince: e.target.value, residenceCity: "" }))}
-                    style={{ padding: "9px 10px", borderRadius: 8, border: "1px solid #E3E8F0", fontSize: 13, background: "white" }}>
+                    style={{ padding: "9px 10px", borderRadius: 8, border: "1px solid #E3E8F0", fontSize: 13, background: "white", color: "#0F1A30", width: "100%" }}>
                     <option value="">거주지(시/도)</option>
                     {RESIDENCE_PROVINCES.map(t => <option key={t} value={t}>{t}</option>)}
-                  </select>
+                  </MobileSelect>
                   {RESIDENCE_SUB_REGIONS[vehicleInfoEdit.residenceProvince] ? (
-                    <select value={vehicleInfoEdit.residenceCity} onChange={e => setVehicleInfoEdit(p => ({ ...p, residenceCity: e.target.value }))}
-                      style={{ padding: "9px 10px", borderRadius: 8, border: "1px solid #E3E8F0", fontSize: 13, background: "white" }}>
+                    <MobileSelect title="거주지 (시/군)" value={vehicleInfoEdit.residenceCity} onChange={e => setVehicleInfoEdit(p => ({ ...p, residenceCity: e.target.value }))}
+                      style={{ padding: "9px 10px", borderRadius: 8, border: "1px solid #E3E8F0", fontSize: 13, background: "white", color: "#0F1A30", width: "100%" }}>
                       <option value="">시/군 선택</option>
                       {RESIDENCE_SUB_REGIONS[vehicleInfoEdit.residenceProvince].map(t => <option key={t} value={t}>{t}</option>)}
-                    </select>
+                    </MobileSelect>
                   ) : <div />}
                 </div>
                 <textarea value={vehicleInfoEdit.요청사항} onChange={e => setVehicleInfoEdit(p => ({ ...p, 요청사항: e.target.value }))}

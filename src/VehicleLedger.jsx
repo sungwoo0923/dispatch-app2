@@ -6,17 +6,19 @@
 //     기본정보 변경·기타 이력 — 한 페이지에서 한눈에, A4 인쇄·엑셀 저장
 //  휴대폰(좁은 화면)에서는 표 대신 카드로 그린다.
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { collection, doc, onSnapshot, query, where, setDoc, deleteDoc, runTransaction } from "firebase/firestore";
 import * as XLSX from "xlsx";
 import { db, auth } from "./firebase";
 import { kpConfirm } from "./kpDialog";
 import {
-  VL_COL, PURPOSE_PRESETS, REPAIR_KINDS, EQUIP, today, uid, won, num, normPlate, plateCore, vehicleDocId, hasEquip, fmtPhone, normDate,
+  VL_COL, PURPOSE_PRESETS, REPAIR_KINDS, TON_OPTS, INSURER_OPTS, FUEL_CARD_OPTS, HIPASS_OPTS, GPS_OPTS, COVER_OPTS, BOX_OPTS, LEDGER_TYPE_EXTRA, EQUIP, today, uid, won, num, normPlate, plateCore, vehicleDocId, hasEquip, fmtPhone, normDate,
   currentDriver, parseSheetRows, saveEvidence, loadEvidence, deleteEvidence, dataUrlToBlobUrl, repairVat, ledgerPrintHtml, printHtml,
 } from "./vehicleLedgerData";
 import VehicleCarePanel from "./VehicleCarePanel";
 import { careSummary, vehicleDefaults } from "./vehicleCare";
-import { useVehicleTypes } from "./vehicleTypes"; // 🚚 2026-11-02 회사 공용 차량종류
+import { useVehicleTypes, VehicleTypePicker, VT_DEFAULTS } from "./vehicleTypes"; // 🚚 2026-11-02 회사 공용 차량종류
+import { fmtPhone as fmtPhoneLive } from "./formatInput"; // 입력 중 하이픈(02·031·010 등)
 
 const C = { ink: "#0B1428", navy: "#0F1A30", mid: "#1B2B4B", blue: "#2D4C82", sky: "#8FB0F0", line: "#E3E8F0", soft: "#F4F6FA", sub: "#5B6B85", mute: "#9AA9C3", pale: "#EEF2F9" };
 const MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
@@ -50,23 +52,118 @@ function Field({ label, children, wide }) {
     </label>
   );
 }
-// 선택 + 직접 입력(목록에 없는 값은 "직접 입력…"으로)
-function SelectOrType({ value, onChange, options, placeholder = "선택" }) {
-  const opts = useMemo(() => Array.from(new Set([...options, value].filter(Boolean))), [options, value]);
+// ⭐ 2026-11-02 선택 목록(프로그램 스타일) — 버튼 + 떠 있는 목록(찾기·↑↓·Enter·Esc) + 맨 아래 [직접입력]
+//   목록에 없는 값도 그대로 보이고, [직접입력]을 누르면 글자 칸으로 바뀐다.
+//   options: ["값", …] 또는 [{ v, sub }] · group 이름은 { group: "제목" }
+const VL_OPT = (o) => (typeof o === "string" ? { v: o } : o);
+function LedgerSelect({ value, onChange, options = [], placeholder = "선택", allowCustom = true, noneLabel = "선택 안 함", customLabel = "직접입력", customPlaceholder = "직접 입력", style, compact = false, title }) {
+  const cur = String(value ?? "");
+  const list = useMemo(() => options.map(VL_OPT).filter((o) => o && (o.group || String(o.v ?? "").trim())), [options]);
+  const vals = useMemo(() => list.filter((o) => !o.group).map((o) => String(o.v)), [list]);
   const [typing, setTyping] = useState(false);
+  const [open, setOpen] = useState(false);
+  const [pos, setPos] = useState(null);
+  const [q, setQ] = useState("");
+  const [act, setAct] = useState(0);
+  const btn = useRef(null); const menu = useRef(null); const search = useRef(null); const typeRef = useRef(null);
+  const nq = q.replace(/\s/g, "").toLowerCase();
+  const items = useMemo(() => {
+    const base = nq ? list.filter((o) => !o.group && String(o.label ?? o.v).replace(/\s/g, "").toLowerCase().includes(nq)) : list;
+    const out = [];
+    if (!nq) out.push({ v: "", none: true });
+    if (!nq && cur && !vals.includes(cur)) out.push({ v: cur, legacy: true });
+    base.forEach((o) => out.push(o));
+    if (allowCustom) out.push({ v: "__custom", custom: true });
+    return out;
+  }, [list, vals, nq, cur, allowCustom]);
+  const pickable = items.map((o, i) => (o.group ? -1 : i)).filter((i) => i >= 0);
+  const place = () => {
+    const el = btn.current; if (!el) return;
+    const r = el.getBoundingClientRect();
+    const w = Math.max(r.width, 260);
+    const below = window.innerHeight - r.bottom - 14; const above = r.top - 14;
+    const up = below < 280 && above > below;
+    const left = Math.max(8, Math.min(r.left, window.innerWidth - w - 8));
+    setPos(up ? { left, bottom: window.innerHeight - r.top + 6, width: w, maxH: above } : { left, top: r.bottom + 6, width: w, maxH: below });
+  };
+  const openIt = () => {
+    place(); setQ("");
+    const i = items.findIndex((o) => !o.group && !o.custom && String(o.v) === cur);
+    setAct(i >= 0 ? i : pickable[0] ?? 0); setOpen(true);
+    let touch = false; try { touch = window.matchMedia("(pointer: coarse)").matches; } catch { /* 무시 */ }
+    setTimeout(() => (touch ? menu.current : search.current)?.focus?.(), 20);
+  };
+  const close = (refocus = true) => { setOpen(false); if (refocus) setTimeout(() => btn.current?.focus(), 0); };
+  const pick = (o) => {
+    if (o.custom) { setOpen(false); setTyping(true); if (vals.includes(cur)) onChange(""); setTimeout(() => typeRef.current?.focus(), 20); return; }
+    close(); if (String(o.v) !== cur) onChange(String(o.v));
+  };
+  useEffect(() => {
+    if (!open) return undefined;
+    const down = (e) => { if (btn.current?.contains(e.target) || menu.current?.contains(e.target)) return; close(false); };
+    const re = (e) => { if (menu.current?.contains(e.target)) return; close(false); };
+    document.addEventListener("mousedown", down, true); document.addEventListener("touchstart", down, true);
+    window.addEventListener("scroll", re, true); window.addEventListener("resize", re);
+    return () => { document.removeEventListener("mousedown", down, true); document.removeEventListener("touchstart", down, true); window.removeEventListener("scroll", re, true); window.removeEventListener("resize", re); };
+  }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (open) menu.current?.querySelector(`[data-ls-idx="${act}"]`)?.scrollIntoView?.({ block: "nearest" }); }, [act, open]);
+  const step = (d) => { const k = pickable.indexOf(act); const n = pickable[Math.max(0, Math.min(pickable.length - 1, (k < 0 ? 0 : k) + d))]; if (n != null) setAct(n); };
+  const onKey = (e) => {
+    e.stopPropagation();
+    if (e.key === "Escape") { e.preventDefault(); close(); return; }
+    if (e.key === "Tab") { close(false); return; }
+    if (e.key === "ArrowDown") { e.preventDefault(); step(1); }
+    if (e.key === "ArrowUp") { e.preventDefault(); step(-1); }
+    if (e.key === "Enter") { e.preventDefault(); const o = items[act]; if (o && !o.group) pick(o); else if (nq && allowCustom) { close(); onChange(q.trim()); } }
+  };
+  const h = compact ? 38 : 40;
   if (typing) return (
     <div style={{ display: "flex", gap: 6 }}>
-      <input autoFocus value={value || ""} onChange={(e) => onChange(e.target.value)} placeholder="직접 입력" style={inp} />
-      <Btn onClick={() => setTyping(false)} style={{ flexShrink: 0 }}>목록</Btn>
+      <input ref={typeRef} value={cur} onChange={(e) => onChange(e.target.value)} placeholder={customPlaceholder} style={{ ...inp, height: h, border: "1.5px solid #1B2B4B" }}
+        onKeyDown={(e) => { if (e.key === "Escape") { e.stopPropagation(); setTyping(false); } }} />
+      <button type="button" onClick={() => setTyping(false)} title="목록에서 고르기"
+        style={{ flexShrink: 0, height: h, padding: "0 12px", borderRadius: 10, border: "1px solid #D5DDEA", background: "#fff", color: C.mid, fontSize: 14, fontWeight: 800, cursor: "pointer", whiteSpace: "nowrap" }}>목록</button>
     </div>
   );
-  return (
-    <select value={value || ""} onChange={(e) => { if (e.target.value === "__type") { setTyping(true); onChange(""); } else onChange(e.target.value); }} style={inp}>
-      <option value="">{placeholder}</option>
-      {opts.map((o) => <option key={o} value={o}>{o}</option>)}
-      <option value="__type">직접 입력…</option>
-    </select>
-  );
+  const chev = <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, transition: "transform .15s", transform: open ? "rotate(180deg)" : "none", color: C.sub }}><path d="M6 9l6 6 6-6" /></svg>;
+  return (<>
+    <button ref={btn} type="button" data-ls="1" aria-haspopup="listbox" aria-expanded={open} title={title}
+      onClick={(e) => { e.preventDefault(); e.stopPropagation(); open ? close() : openIt(); }}
+      onKeyDown={(e) => { if (!open && (e.key === "ArrowDown" || e.key === "Enter" || e.key === " ")) { e.preventDefault(); e.stopPropagation(); openIt(); } }}
+      style={{ ...inp, height: h, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, cursor: "pointer", textAlign: "left", fontWeight: cur ? 800 : 600, color: cur ? C.navy : "#9AA9C3", borderColor: open ? C.blue : "#D5DDEA", boxShadow: open ? "0 0 0 4px rgba(45,76,130,.12)" : "none", ...(style || {}) }}>
+      <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0 }}>{cur ? (list.find((o) => !o.group && String(o.v) === cur)?.label ?? cur) : placeholder}</span>{chev}
+    </button>
+    {open && pos && createPortal(
+      <div ref={menu} role="listbox" tabIndex={-1} data-ls-menu="1" onKeyDown={onKey} onMouseDown={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()}
+        style={{ position: "fixed", left: pos.left, top: pos.top, bottom: pos.bottom, width: pos.width, zIndex: 2147483000, background: "#fff", border: `1px solid ${C.line}`, borderRadius: 16, boxShadow: "0 18px 44px rgba(15,26,48,.22)", overflow: "hidden", display: "flex", flexDirection: "column", maxHeight: Math.max(220, Math.min(420, pos.maxH || 420)), fontFamily: "'Pretendard','Noto Sans KR',sans-serif", outline: "none" }}>
+        <div style={{ padding: "10px 10px 8px", background: "#F7F9FC", borderBottom: "1px solid #EEF2F7" }}>
+          <input ref={search} value={q} onChange={(e) => { setQ(e.target.value); setAct(0); }} onKeyDown={onKey} placeholder="찾기"
+            style={{ width: "100%", height: 36, borderRadius: 10, border: "1px solid #DCE3EE", padding: "0 11px", fontSize: 14.5, fontWeight: 700, color: C.navy, outline: "none", boxSizing: "border-box", background: "#fff" }} />
+        </div>
+        <div style={{ overflowY: "auto", padding: "5px 0", flex: 1 }}>
+          {items.map((o, i) => o.group ? (
+            <div key={`g_${o.group}_${i}`} style={{ padding: "8px 16px 4px", fontSize: 12.5, fontWeight: 900, color: C.blue }}>{o.group}</div>
+          ) : (
+            <div key={`${o.v}_${i}`} role="option" data-ls-idx={i} aria-selected={!o.custom && String(o.v) === cur}
+              onMouseEnter={() => setAct(i)} onMouseDown={(e) => e.preventDefault()} onClick={() => pick(o)}
+              style={{ display: "flex", alignItems: "center", gap: 10, minHeight: 38, margin: o.custom ? "4px 6px 2px" : "0 6px", padding: "0 10px", borderRadius: 10, cursor: "pointer", userSelect: "none",
+                background: i === act ? "#EEF3FC" : "transparent", ...(o.custom ? { border: "1.5px dashed #9FB2D3", justifyContent: "center", color: C.mid, fontWeight: 900, fontSize: 14 } : {}) }}>
+              {o.custom ? <>✎ {customLabel}</> : (<>
+                <span style={{ width: 15, height: 15, borderRadius: 999, flexShrink: 0, display: "grid", placeItems: "center", border: `2px solid ${String(o.v) === cur && !o.none ? "#1B2B4B" : (o.none && !cur ? "#1B2B4B" : "#C9D5EA")}`, background: (String(o.v) === cur && !o.none) || (o.none && !cur) ? "#1B2B4B" : "#fff" }}>{((String(o.v) === cur && !o.none) || (o.none && !cur)) && <span style={{ width: 5, height: 5, borderRadius: 99, background: "#fff" }} />}</span>
+                <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: 14.5, fontWeight: o.none ? 700 : 800, color: o.none ? "#8E9BB2" : C.navy }}>{o.none ? noneLabel : (o.label ?? o.v)}</span>
+                {o.sub && <span style={{ flexShrink: 0, fontSize: 12.5, fontWeight: 700, color: C.mute }}>{o.sub}</span>}
+                {o.legacy && <span style={{ flexShrink: 0, fontSize: 12, fontWeight: 800, color: "#B54708" }}>직접 입력값</span>}
+              </>)}
+            </div>
+          ))}
+          {nq && !items.some((o) => !o.group && !o.custom) && <div style={{ padding: "10px 16px", fontSize: 13.5, fontWeight: 700, color: C.mute }}>찾는 항목이 없습니다 · Enter로 "{q.trim()}" 그대로 입력</div>}
+        </div>
+      </div>, document.body)}
+  </>);
+}
+// 예전 이름 그대로(수리 구분 등) — 새 선택 목록으로
+function SelectOrType({ value, onChange, options, placeholder = "선택" }) {
+  return <LedgerSelect value={value} onChange={onChange} options={options} placeholder={placeholder} />;
 }
 function Modal({ title, onClose, children, footer, width = 640 }) {
   return (
@@ -88,25 +185,45 @@ const EqDot = ({ on, label }) => (
 
 // ── 기본 정보 입력 폼(등록·수정 공용) ──
 const BASIC_KEYS = ["차량번호", "용도", "톤수", "회사", "차대번호", "보험사", "차주명", "유류카드사", "유류카드번호", "하이패스", "GPS", "덮개", "박스", "박스메모", "메모"];
-function BasicForm({ v, set, purposeOpts, companyOpts, isNew }) {
+const LEDGER_TYPE_BASE = Array.from(new Set([...VT_DEFAULTS, ...LEDGER_TYPE_EXTRA]));
+// 소제목 줄
+const FormGroup = ({ title, code, children }) => (
+  <div style={{ border: `1px solid ${C.line}`, borderRadius: 14, overflow: "hidden" }}>
+    <div style={{ padding: "9px 14px", background: "#F7F9FC", borderBottom: `1px solid ${C.line}`, display: "flex", alignItems: "baseline", gap: 8 }}>
+      <span style={{ fontSize: 14.5, fontWeight: 900, color: C.navy }}>{title}</span>
+      {code && <span style={{ fontFamily: MONO, fontSize: 10.5, fontWeight: 800, letterSpacing: "0.12em", color: C.blue }}>{code}</span>}
+    </div>
+    <div style={{ padding: 14, display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(190px, 1fr))", gap: 12 }}>{children}</div>
+  </div>
+);
+function BasicForm({ v, set, purposeOpts, companyOpts, isNew, company }) {
   const f = (k) => ({ value: v[k] || "", onChange: (e) => set({ ...v, [k]: e.target.value }), style: inp });
+  const sel = (k, options, extra = {}) => <LedgerSelect value={v[k] || ""} onChange={(x) => set({ ...v, [k]: x })} options={options} {...extra} />;
+  // 차량종류 — 다른 화면과 같은 회사 공용 목록(＋ 차량종류 추가 포함). 대장에만 있던 형태(암롤 등)도 목록에
+  const typeBase = Array.from(new Set([...LEDGER_TYPE_BASE, ...(purposeOpts || [])]));
   return (
-    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(190px, 1fr))", gap: 12 }}>
-      <Field label="차량번호 *"><input {...f("차량번호")} placeholder="예) 경기12가3456" disabled={!isNew && false} /></Field>
-      <Field label="용도·형태"><SelectOrType value={v.용도} onChange={(x) => set({ ...v, 용도: x })} options={purposeOpts} /></Field>
-      <Field label="톤수"><input {...f("톤수")} placeholder="예) 5톤" /></Field>
-      <Field label="회사(소속)"><input {...f("회사")} list="vl-co-list" placeholder="소속·차주 회사" /><datalist id="vl-co-list">{companyOpts.map((c) => <option key={c} value={c} />)}</datalist></Field>
-      <Field label="차대번호"><input {...f("차대번호")} /></Field>
-      <Field label="보험사"><input {...f("보험사")} /></Field>
-      <Field label="차주명"><input {...f("차주명")} /></Field>
-      <Field label="유류카드 카드사"><input {...f("유류카드사")} placeholder="예) 신한" /></Field>
-      <Field label="유류카드 번호"><input {...f("유류카드번호")} /></Field>
-      <Field label="하이패스"><input {...f("하이패스")} placeholder="번호 또는 O/X" /></Field>
-      <Field label="GPS"><input {...f("GPS")} placeholder="단말·업체 또는 O/X" /></Field>
-      <Field label="덮개"><input {...f("덮개")} placeholder="O/X 또는 종류" /></Field>
-      <Field label="박스"><input {...f("박스")} placeholder="O/X 또는 종류" /></Field>
-      <Field label="박스 사용처·제작사"><input {...f("박스메모")} placeholder="어디서 쓰는 박스인지" /></Field>
-      <Field label="메모" wide><input {...f("메모")} /></Field>
+    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+      <FormGroup title="차량" code="VEHICLE">
+        <Field label="차량번호 *"><input {...f("차량번호")} placeholder="예) 경기12가3456" /></Field>
+        <Field label="차량종류"><VehicleTypePicker value={v.용도 || ""} onChange={(x) => set({ ...v, 용도: x })} base={typeBase} company={company} placeholder="선택" style={{ ...inp, cursor: "pointer", fontWeight: v.용도 ? 800 : 600, color: v.용도 ? C.navy : "#9AA9C3" }} /></Field>
+        <Field label="톤수">{sel("톤수", TON_OPTS, { customPlaceholder: "예) 6.5톤" })}</Field>
+        <Field label="차대번호"><input {...f("차대번호")} placeholder="17자리 영문·숫자" style={{ ...inp, fontFamily: MONO, textTransform: "uppercase" }} /></Field>
+      </FormGroup>
+      <FormGroup title="소속·보험" code="OWNER">
+        <Field label="회사(소속)">{sel("회사", companyOpts, { customPlaceholder: "소속·차주 회사" })}</Field>
+        <Field label="차주명"><input {...f("차주명")} placeholder="차주 이름" /></Field>
+        <Field label="보험사">{sel("보험사", INSURER_OPTS, { customPlaceholder: "보험사 이름" })}</Field>
+      </FormGroup>
+      <FormGroup title="장비" code="EQUIPMENT">
+        <Field label="유류카드 카드사">{sel("유류카드사", FUEL_CARD_OPTS, { customPlaceholder: "카드사 이름" })}</Field>
+        <Field label="유류카드 번호"><input {...f("유류카드번호")} inputMode="numeric" placeholder="카드 번호" style={{ ...inp, fontFamily: MONO }} /></Field>
+        <Field label="하이패스">{sel("하이패스", HIPASS_OPTS, { customPlaceholder: "카드·단말 번호" })}</Field>
+        <Field label="GPS">{sel("GPS", GPS_OPTS, { customPlaceholder: "단말·업체 이름" })}</Field>
+        <Field label="덮개">{sel("덮개", COVER_OPTS, { customPlaceholder: "덮개 종류" })}</Field>
+        <Field label="박스">{sel("박스", BOX_OPTS, { customPlaceholder: "박스 종류" })}</Field>
+        <Field label="박스 사용처·제작사" wide><input {...f("박스메모")} placeholder="어디서 쓰는 박스인지 · 제작사" /></Field>
+      </FormGroup>
+      <Field label="메모" wide><textarea value={v.메모 || ""} onChange={(e) => set({ ...v, 메모: e.target.value })} rows={2} placeholder="메모" style={{ ...inp, height: "auto", padding: 10, resize: "vertical", fontFamily: "inherit" }} /></Field>
     </div>
   );
 }
@@ -192,7 +309,7 @@ function RowEditor({ kind, row, onSave, onClose, kindOpts, onDelete }) {
           const L = label || k;
           if (t === "textarea") return <Field key={k} label={L} wide><textarea value={r[k] || ""} onChange={(e) => setR({ ...r, [k]: e.target.value })} rows={3} style={{ ...inp, height: "auto", padding: 10, resize: "vertical", fontFamily: "inherit" }} /></Field>;
           if (t === "kind") return <Field key={k} label={L}><SelectOrType value={r[k]} onChange={(x) => setR({ ...r, [k]: x })} options={kindOpts} /></Field>;
-          if (t === "logkind") return <Field key={k} label={L}><select value={r[k] || "이력"} onChange={(e) => setR({ ...r, [k]: e.target.value })} style={inp}><option>변경</option><option>이력</option></select></Field>;
+          if (t === "logkind") return <Field key={k} label={L}><LedgerSelect allowCustom={false} value={r[k] || "이력"} onChange={(x) => setR({ ...r, [k]: x || "이력" })} options={["변경", "이력"]} noneLabel="이력" /></Field>;
           if (t === "money") return <Field key={k} label={L}><input inputMode="numeric" value={r[k] === "" || r[k] == null ? "" : won(num(r[k]))} onChange={(e) => setR({ ...r, [k]: e.target.value.replace(/[^\d]/g, "") })} style={{ ...inp, textAlign: "right", fontFamily: MONO }} placeholder="0" /></Field>;
           if (t === "vat") return (
             <Field key={k} label={L}>
@@ -200,7 +317,7 @@ function RowEditor({ kind, row, onSave, onClose, kindOpts, onDelete }) {
             </Field>
           );
           if (t === "date") return <Field key={k} label={L}><input type="date" value={r[k] || ""} onChange={(e) => setR({ ...r, [k]: e.target.value })} style={inp} /></Field>;
-          if (t === "phone") return <Field key={k} label={L}><input inputMode="tel" value={r[k] || ""} onChange={(e) => setR({ ...r, [k]: e.target.value })} onBlur={(e) => setR({ ...r, [k]: fmtPhone(e.target.value) })} style={inp} /></Field>;
+          if (t === "phone") return <Field key={k} label={L}><input inputMode="tel" value={r[k] || ""} onChange={(e) => setR({ ...r, [k]: fmtPhoneLive(e.target.value) })} onBlur={(e) => setR({ ...r, [k]: fmtPhone(e.target.value) })} style={inp} /></Field>;
           return <Field key={k} label={L}><input value={r[k] || ""} onChange={(e) => setR({ ...r, [k]: e.target.value })} style={inp} /></Field>;
         })}
       </div>
@@ -263,7 +380,7 @@ function ImportModal({ onClose, onImport, existing }) {
         <div style={{ margin: "14px 0 8px", fontSize: 14, fontWeight: 800, color: C.sub }}>맞춘 칸: {Object.values(res.map).join(" · ")}</div>
         <div style={{ maxHeight: 320, overflow: "auto", border: `1px solid ${C.line}`, borderRadius: 12 }}>
           <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 760 }}>
-            <thead><tr>{["차량번호", "용도", "회사", "현재기사", "기사연락처", "기사변경일", "보험사", "차주명"].map((h) => <th key={h} style={{ position: "sticky", top: 0, background: C.mid, color: "#fff", padding: "8px 10px", fontSize: 14, whiteSpace: "nowrap" }}>{h}</th>)}</tr></thead>
+            <thead><tr>{["차량번호", "차량종류", "회사", "현재기사", "기사연락처", "기사변경일", "보험사", "차주명"].map((h) => <th key={h} style={{ position: "sticky", top: 0, background: C.mid, color: "#fff", padding: "8px 10px", fontSize: 14, whiteSpace: "nowrap" }}>{h}</th>)}</tr></thead>
             <tbody>{res.rows.slice(0, 200).map((r, i) => (
               <tr key={i} style={{ background: exKeys.has(normPlate(r.차량번호)) ? undefined : "#F3F8EE" }}>
                 {["차량번호", "용도", "회사", "현재기사", "기사연락처", "기사변경일", "보험사", "차주명"].map((k) => <td key={k} style={{ padding: "7px 10px", fontSize: 14, borderTop: `1px solid ${C.line}`, whiteSpace: "nowrap" }}>{r[k] || ""}</td>)}
@@ -297,10 +414,14 @@ function Section({ id, title, code, right, children }) {
 const th = { position: "sticky", top: 0, zIndex: 1, background: C.mid, color: "#fff", padding: "10px 10px", fontSize: 14, fontWeight: 800, whiteSpace: "nowrap", textAlign: "center" };
 const td = { padding: "10px 10px", fontSize: 14.5, fontWeight: 600, color: C.navy, borderTop: "1px solid #EEF1F6", verticalAlign: "top" };
 
-function Ledger({ v, co, appDriver, linkRaw, drivers, canEdit, by, narrow, purposeOpts, companyOpts, kindOpts, onBack, toast }) {
+function Ledger({ v, co, appDriver, linkRaw, drivers, canEdit, by, narrow, purposeOpts, companyOpts, kindOpts, onBack, toast, drawer = false, editSignal = 0 }) {
   const ref = doc(db, VL_COL, v.id);
   const [edit, setEdit] = useState(null); // 기본 정보 수정 중 값
   const [editor, setEditor] = useState(null); // { kind, row }
+  const startEdit = () => { setEdit(Object.fromEntries(BASIC_KEYS.map((k) => [k, v[k] || ""]))); setTimeout(() => document.getElementById("vl-basic")?.scrollIntoView({ behavior: "smooth", block: "start" }), 30); };
+  // ⭐ 2026-11-02 표에서 두 번 누르면(더블클릭) 오른쪽 패널이 열리면서 바로 기본 정보 수정
+  const sigRef = useRef(0);
+  useEffect(() => { if (editSignal !== sigRef.current) { sigRef.current = editSignal; if (canEdit) startEdit(); } }, [editSignal]); // eslint-disable-line react-hooks/exhaustive-deps
   const [drvForm, setDrvForm] = useState(null); // { 이름, 연락처, 시작, driverId }
   const [year, setYear] = useState(String(new Date().getFullYear()));
   const [month, setMonth] = useState(0);
@@ -365,11 +486,12 @@ function Ledger({ v, co, appDriver, linkRaw, drivers, canEdit, by, narrow, purpo
     const next = {}; const changes = [];
     BASIC_KEYS.forEach((k) => {
       const a = String(v[k] ?? "").trim(); const b = String(edit[k] ?? "").trim();
-      if (a !== b) { next[k] = b; changes.push({ id: uid(), 일자: today(), 내용: `${k} 변경`, 구분: "변경", 날짜: today(), 세부내용: `${a || "(없음)"} → ${b || "(없음)"}`, 비고: `자동 기록 · ${by}`, createdAt: Date.now(), by }); }
+      if (a !== b) { next[k] = b; changes.push({ id: uid(), 일자: today(), 내용: `${k === "용도" ? "차량종류" : k} 변경`, 구분: "변경", 날짜: today(), 세부내용: `${a || "(없음)"} → ${b || "(없음)"}`, 비고: `자동 기록 · ${by}`, createdAt: Date.now(), by }); }
     });
     if (!normPlate(edit.차량번호)) { toast("차량번호를 입력하세요"); return; }
     if (!changes.length) { setEdit(null); return; }
     if (next.차량번호 !== undefined) next.plateKey = normPlate(next.차량번호);
+    if (next.용도 !== undefined) next.차량종류 = next.용도; // ⭐ 2026-11-02 다른 화면과 같은 이름(차량종류)으로도 저장
     await mutate((d) => ({ ...next, logs: [...(d.logs || []), ...changes] }));
     setEdit(null); toast(`${changes.length}개 항목을 저장했습니다`);
   };
@@ -388,7 +510,7 @@ function Ledger({ v, co, appDriver, linkRaw, drivers, canEdit, by, narrow, purpo
   };
   const exportXlsx = () => {
     const wb = XLSX.utils.book_new();
-    const kv = [["항목", "내용"], ["차량번호", v.차량번호], ["용도·형태", v.용도], ["톤수", v.톤수], ["회사", v.회사], ["차대번호", v.차대번호], ["보험사", v.보험사], ["차주명", v.차주명],
+    const kv = [["항목", "내용"], ["차량번호", v.차량번호], ["차량종류", v.용도], ["톤수", v.톤수], ["회사", v.회사], ["차대번호", v.차대번호], ["보험사", v.보험사], ["차주명", v.차주명],
       ["현재 기사", cur?.이름 || ""], ["기사 연락처", cur?.연락처 || ""], ["기사 변경일", cur?.시작 || ""], ["유류카드 카드사", v.유류카드사], ["유류카드 번호", v.유류카드번호], ["하이패스", v.하이패스], ["GPS", v.GPS], ["덮개", v.덮개], ["박스", v.박스], ["박스 사용처", v.박스메모], ["메모", v.메모]];
     const add = (name, aoa, w) => { const ws = XLSX.utils.aoa_to_sheet(aoa); ws["!cols"] = w.map((x) => ({ wch: x })); XLSX.utils.book_append_sheet(wb, ws, name); };
     add("기본정보", kv, [16, 40]);
@@ -418,7 +540,7 @@ function Ledger({ v, co, appDriver, linkRaw, drivers, canEdit, by, narrow, purpo
   const maxM = Math.max(1, ...monthly);
 
   const info = [
-    ["차량번호", v.차량번호], ["용도·형태", v.용도], ["톤수", v.톤수], ["회사", v.회사], ["차대번호", v.차대번호], ["보험사", v.보험사], ["차주명", v.차주명],
+    ["차량번호", v.차량번호], ["차량종류", v.용도], ["톤수", v.톤수], ["회사", v.회사], ["차대번호", v.차대번호], ["보험사", v.보험사], ["차주명", v.차주명],
     ["현재 기사", cur ? cur.이름 : appDriver ? `${appDriver.이름} (기사관리)` : ""], ["기사 연락처", cur ? cur.연락처 : appDriver?.전화번호 || ""], ["기사 변경일", cur?.시작 || ""],
   ];
   const nav = [["vl-basic", "기본 정보"], ["vl-care", "점검·소모품"], ["vl-timeline", "타임라인"], ["vl-repairs", `정비 ${reps.length}`], ["vl-structures", `구조변경 ${(v.structures || []).length}`], ["vl-driverHist", `기사 ${(v.driverHist || []).length}`], ["vl-logs", `변경·기타 ${(v.logs || []).length}`]];
@@ -467,7 +589,13 @@ function Ledger({ v, co, appDriver, linkRaw, drivers, canEdit, by, narrow, purpo
     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
       {/* 머리 — 차량 사진 + 번호판 */}
       <div style={{ borderRadius: 18, padding: narrow ? 14 : "18px 22px", color: "#fff", background: HERO_BG, display: "flex", alignItems: "center", gap: narrow ? 12 : 18, flexWrap: "wrap" }}>
-        <div style={{ width: narrow ? "100%" : "auto" }}><Btn kind="light" onClick={onBack}>← 차량 목록</Btn></div>
+        {drawer ? (
+          <div style={{ width: "100%", display: "flex", alignItems: "center", gap: 8 }}>
+            <span style={{ fontFamily: MONO, fontSize: 11, fontWeight: 800, letterSpacing: "0.18em", color: C.sky, flex: 1, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{narrow ? "VEHICLE" : "VEHICLE · 차량 정보"}</span>
+            {canEdit && !edit && <Btn kind="light" onClick={startEdit}>✎ 기본 정보 수정</Btn>}
+            <Btn kind="light" onClick={onBack} title="닫기 (Esc)">✕ 닫기</Btn>
+          </div>
+        ) : <div style={{ width: narrow ? "100%" : "auto" }}><Btn kind="light" onClick={onBack}>← 차량 목록</Btn></div>}
         <button type="button" onClick={() => canEdit && photoRef.current?.click()} title={canEdit ? "차량 사진 바꾸기" : ""} style={{ position: "relative", width: narrow ? 92 : 132, height: narrow ? 70 : 96, borderRadius: 14, border: "1px solid rgba(143,176,240,.35)", background: photo ? `center/cover no-repeat url(${photo})` : "rgba(255,255,255,.06)", display: "flex", alignItems: "center", justifyContent: "center", cursor: canEdit ? "pointer" : "default", flexShrink: 0, overflow: "hidden", padding: 0 }}>
           {!photo && <TruckIcon s={narrow ? 34 : 44} />}
           {canEdit && <span style={{ position: "absolute", left: 0, right: 0, bottom: 0, padding: "3px 0", background: "rgba(11,20,40,.62)", fontSize: 12, fontWeight: 800, color: "#fff" }}>{photo ? "사진 변경" : "+ 차량 사진"}</span>}
@@ -503,9 +631,9 @@ function Ledger({ v, co, appDriver, linkRaw, drivers, canEdit, by, narrow, purpo
       </div>
 
       {/* 기본 정보 */}
-      <Section id="vl-basic" title="기본 정보" code="BASIC" right={canEdit && (edit ? <div style={{ display: "flex", gap: 6 }}><Btn onClick={() => setEdit(null)}>취소</Btn><Btn kind="primary" onClick={saveBasic}>저장</Btn></div> : <Btn onClick={() => setEdit(Object.fromEntries(BASIC_KEYS.map((k) => [k, v[k] || ""])))}>수정</Btn>)}>
+      <Section id="vl-basic" title="기본 정보" code="BASIC" right={canEdit && (edit ? <div style={{ display: "flex", gap: 6 }}><Btn onClick={() => setEdit(null)}>취소</Btn><Btn kind="primary" onClick={saveBasic}>저장</Btn></div> : <Btn onClick={startEdit}>수정</Btn>)}>
         <div style={{ padding: 16 }}>
-          {edit ? <BasicForm v={edit} set={setEdit} purposeOpts={purposeOpts} companyOpts={companyOpts} /> : (<>
+          {edit ? <BasicForm v={edit} set={setEdit} purposeOpts={purposeOpts} companyOpts={companyOpts} company={co} /> : (<>
             <div style={{ display: "grid", gridTemplateColumns: narrow ? "repeat(2, minmax(0,1fr))" : "repeat(5, minmax(0,1fr))", gap: 0, border: `1px solid ${C.line}`, borderRadius: 12, overflow: "hidden" }}>
               {info.map(([k, val]) => (
                 <div key={k} style={{ padding: "10px 12px", borderRight: `1px solid ${C.line}`, borderBottom: `1px solid ${C.line}`, minWidth: 0 }}>
@@ -571,7 +699,7 @@ function Ledger({ v, co, appDriver, linkRaw, drivers, canEdit, by, narrow, purpo
 
       {/* 수리·정비 */}
       <Section id="vl-repairs" title="수리·정비 이력" code="REPAIR" right={<div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
-        <select value={year} onChange={(e) => { setYear(e.target.value); setMonth(0); }} style={{ ...inp, width: 110, height: 38 }}>{years.map((y) => <option key={y} value={y}>{y}년</option>)}<option value="all">전체</option></select>
+        <div style={{ width: 120 }}><LedgerSelect compact allowCustom={false} value={year} onChange={(x) => { setYear(x || "all"); setMonth(0); }} noneLabel="전체" placeholder="전체" options={[...years.map((y) => ({ v: y, label: `${y}년` })), { v: "all", label: "전체" }]} style={{ height: 38 }} /></div>
         {canEdit && <Btn kind="primary" onClick={() => setEditor({ kind: "repairs", row: null })}>+ 정비 추가</Btn>}
       </div>}>
         <div style={{ padding: "14px 16px", display: "flex", gap: 16, flexWrap: "wrap", alignItems: "stretch", borderBottom: `1px solid #EEF1F6` }}>
@@ -676,13 +804,12 @@ function Ledger({ v, co, appDriver, linkRaw, drivers, canEdit, by, narrow, purpo
           <div style={{ fontSize: 14.5, color: C.sub, marginBottom: 12, lineHeight: 1.6 }}>{cur ? <>지금 기사 <b style={{ color: C.navy }}>{cur.이름}</b>의 탑승은 시작일로 자동 종료되고, 새 기사가 현재 기사가 됩니다.</> : "새 기사가 현재 기사가 됩니다."}</div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px,1fr))", gap: 12 }}>
             <Field label="기사관리에서 고르기" wide>
-              <select value={drvForm.driverId} onChange={(e) => { const d = drivers.find((x) => x.id === e.target.value); setDrvForm({ ...drvForm, driverId: e.target.value, 이름: d ? (d.이름 || d.name || "") : drvForm.이름, 연락처: d ? fmtPhone(d.전화번호 || d.phone || "") : drvForm.연락처 }); }} style={inp}>
-                <option value="">직접 입력</option>
-                {drivers.map((d) => <option key={d.id} value={d.id}>{d.이름 || d.name} · {d.차량번호 || "-"} {d.등급 ? `(${d.등급})` : ""}</option>)}
-              </select>
+              <LedgerSelect allowCustom={false} value={drvForm.driverId} noneLabel="직접 입력 (아래 칸에 이름·연락처)" placeholder="직접 입력"
+                onChange={(id) => { const d = drivers.find((x) => x.id === id); setDrvForm({ ...drvForm, driverId: id, 이름: d ? (d.이름 || d.name || "") : drvForm.이름, 연락처: d ? fmtPhone(d.전화번호 || d.phone || "") : drvForm.연락처 }); }}
+                options={drivers.map((d) => ({ v: d.id, label: `${d.이름 || d.name || "-"} · ${d.차량번호 || "-"}`, sub: d.등급 || "" }))} />
             </Field>
             <Field label="기사 이름 *"><input value={drvForm.이름} onChange={(e) => setDrvForm({ ...drvForm, 이름: e.target.value })} style={inp} /></Field>
-            <Field label="연락처"><input inputMode="tel" value={drvForm.연락처} onChange={(e) => setDrvForm({ ...drvForm, 연락처: e.target.value })} onBlur={(e) => setDrvForm({ ...drvForm, 연락처: fmtPhone(e.target.value) })} style={inp} /></Field>
+            <Field label="연락처"><input inputMode="tel" value={drvForm.연락처} onChange={(e) => setDrvForm({ ...drvForm, 연락처: fmtPhoneLive(e.target.value) })} onBlur={(e) => setDrvForm({ ...drvForm, 연락처: fmtPhone(e.target.value) })} style={inp} /></Field>
             <Field label="기사 변경일(탑승 시작)"><input type="date" value={drvForm.시작} onChange={(e) => setDrvForm({ ...drvForm, 시작: e.target.value })} style={inp} /></Field>
             <Field label="비고"><input value={drvForm.비고} onChange={(e) => setDrvForm({ ...drvForm, 비고: e.target.value })} style={inp} /></Field>
           </div>
@@ -691,6 +818,37 @@ function Ledger({ v, co, appDriver, linkRaw, drivers, canEdit, by, narrow, purpo
     </div>
   );
 }
+// ⭐ 2026-11-02 오른쪽에서 밀려 나오는 차량 정보·수정 패널(예전엔 화면 전체가 대장으로 바뀌어 위에서 수정창이 열렸다)
+function LedgerDrawer({ onClose, onDouble, narrow, children }) {
+  const openedAt = useRef(Date.now());
+  const [shown, setShown] = useState(false);
+  useEffect(() => { const t = requestAnimationFrame(() => setShown(true)); return () => cancelAnimationFrame(t); }, []);
+  useEffect(() => {
+    const prev = document.body.style.overflow; document.body.style.overflow = "hidden";
+    const k = (e) => {
+      if (e.key !== "Escape") return;
+      if (document.querySelector(".vl-modal, [data-ls-menu], [data-vt-menu], [data-vt-dialog], [data-kp-dialog]")) return; // 안쪽 창·목록이 먼저 닫힌다
+      onClose();
+    };
+    window.addEventListener("keydown", k);
+    return () => { document.body.style.overflow = prev; window.removeEventListener("keydown", k); };
+  }, [onClose]);
+  const onBackdrop = (e) => {
+    // 표에서 더블클릭하면 두 번째 클릭이 바탕에 떨어진다 → 닫지 말고 '수정'으로
+    if (Date.now() - openedAt.current < 600) { if (e.detail >= 2) onDouble?.(); return; }
+    onClose();
+  };
+  return createPortal(
+    <div data-vl-drawer="1" style={{ position: "fixed", inset: 0, zIndex: 9500 }}>
+      <div onClick={onBackdrop} style={{ position: "absolute", inset: 0, background: "rgba(11,20,40,.42)", backdropFilter: "blur(1.5px)", opacity: shown ? 1 : 0, transition: "opacity .22s ease" }} />
+      <aside role="dialog" aria-modal="true" aria-label="차량 정보"
+        style={{ position: "absolute", top: 0, right: 0, bottom: 0, width: narrow ? "100%" : "min(780px, 94vw)", background: C.soft, boxShadow: "-24px 0 60px rgba(11,20,40,.28)", display: "flex", flexDirection: "column",
+          transform: shown ? "translateX(0)" : "translateX(100%)", transition: "transform .28s cubic-bezier(.2,.8,.2,1)", borderTopLeftRadius: narrow ? 0 : 20, borderBottomLeftRadius: narrow ? 0 : 20, overflow: "hidden" }}>
+        <div style={{ flex: 1, overflowY: "auto", padding: narrow ? 10 : 16, fontFamily: "'Pretendard','Noto Sans KR',sans-serif" }}>{children}</div>
+      </aside>
+    </div>, document.body);
+}
+
 function RowActs({ onEdit, onDel }) {
   const b = { height: 32, padding: "0 10px", borderRadius: 8, fontSize: 13.5, fontWeight: 800, cursor: "pointer", background: "#fff" };
   return (
@@ -706,7 +864,7 @@ function RowActs({ onEdit, onDel }) {
 // ─────────────────────────────────────────────────────────────────────────────
 // 기존 "차량 관리"(기사앱 점검·소모품) 칸 + 태진 "차량 전체 현황" 칸
 const COLS = [
-  ["차량번호", "차량번호", 140], ["용도", "용도·형태", 96], ["톤수", "톤수", 70], ["회사", "회사", 110], ["현재기사", "현재 기사", 100], ["기사연락처", "기사 연락처", 136], ["기사변경일", "기사 변경일", 116],
+  ["차량번호", "차량번호", 140], ["용도", "차량종류", 110], ["톤수", "톤수", 70], ["회사", "회사", 110], ["현재기사", "현재 기사", 100], ["기사연락처", "기사 연락처", 136], ["기사변경일", "기사 변경일", 116],
   ["차대번호", "차대번호", 180], ["보험사", "보험사", 90], ["유류카드번호", "유류", 120], ["하이패스", "하이패스", 100], ["GPS", "GPS", 80], ["덮개", "덮개", 70], ["박스", "박스", 90], ["차주명", "차주명", 90],
   ["모델연식", "모델·연식", 140], ["주행거리", "주행거리", 110], ["엔진오일", "엔진오일", 100], ["점검알림", "점검 알림", 200],
 ];
@@ -808,7 +966,7 @@ export default function VehicleLedger({ company = "", drivers = [], canEdit = tr
       const reps = v.repairs || [];
       return {
         ...v, virtual, linkRaw, appDriver: app, cv, cs,
-        용도: v.용도 || (virtual ? cv?.적재함 || "" : ""), 톤수: v.톤수 || cv?.톤 || "",
+        용도: v.용도 || v.차량종류 || (virtual ? cv?.적재함 || "" : ""), 톤수: v.톤수 || cv?.톤 || "",
         현재기사: cur?.이름 || app?.이름 || "", 기사연락처: cur?.연락처 || app?.전화번호 || "", 기사변경일: cur?.시작 || "", fromApp: !cur && !!app,
         모델연식: cv ? [cv.모델, cv.연식 && `${cv.연식}년`].filter(Boolean).join(" · ") : "",
         주행거리: cs?.odometer || 0, 점검알림: cs ? cs.alerts.length : -1, 엔진오일: cs ? (cs.alerts.find((a) => a.key === "engineOil")?.level ?? (linkRaw?.care?.items?.engineOil ? 0 : -1)) : -2,
@@ -857,6 +1015,7 @@ export default function VehicleLedger({ company = "", drivers = [], canEdit = tr
     const id = vehicleDocId(co, key);
     const data = { companyName: co, plateKey: key, repairs: [], structures: [], driverHist: [], logs: [], createdAt: Date.now(), updatedAt: Date.now(), updatedBy: by };
     BASIC_KEYS.forEach((k) => { data[k] = String(v[k] ?? "").trim(); });
+    data.차량종류 = data.용도 || "";
     const app = drvByPlate.get(plateCore(v.차량번호));
     if (app) data.driverHist = [{ id: uid(), 이름: app.이름 || app.name || "", 연락처: fmtPhone(app.전화번호 || app.phone || ""), 시작: today(), 종료: "", 비고: "기사관리에서 가져옴", driverId: app.id, createdAt: Date.now(), by }];
     try {
@@ -865,19 +1024,23 @@ export default function VehicleLedger({ company = "", drivers = [], canEdit = tr
     } catch (e) { toast(`등록하지 못했습니다(${e?.code || e?.message || "오류"})`); }
   };
   // 대장 미작성 차량(기사관리 차량)을 누르면 대장을 만들고 연다
-  const openRow = async (r) => {
-    if (!r.virtual) { pick(r.id); return; }
+  // 두 번 누르면 그 차량을 바로 '기본 정보 수정'으로 연다 — { id, n }(n이 바뀔 때마다 수정 시작)
+  const [editReq, setEditReq] = useState({ id: "", n: 0 });
+  const askEdit = (id) => setEditReq((p) => ({ id, n: p.n + 1 }));
+  const closeDrawer = React.useCallback(() => { pick(null); setEditReq((p) => ({ id: "", n: p.n })); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const openRow = async (r, edit = false) => {
+    if (!r.virtual) { pick(r.id); if (edit) askEdit(r.id); return; }
     if (!canEdit) { toast("관리대장이 아직 없는 차량입니다"); return; }
     const d = r.linkRaw; const key = normPlate(r.차량번호); const id = vehicleDocId(co, key);
     setOpening(r.id);
     try {
       await setDoc(doc(db, VL_COL, id), {
-        companyName: co, plateKey: key, 차량번호: r.차량번호, 용도: r.cv?.적재함 || "", 톤수: String(r.cv?.톤 || ""), 회사: "", 차주명: "",
+        companyName: co, plateKey: key, 차량번호: r.차량번호, 용도: r.cv?.적재함 || "", 차량종류: r.cv?.적재함 || "", 톤수: String(r.cv?.톤 || ""), 회사: "", 차주명: "",
         repairs: [], structures: [], logs: [],
         driverHist: d ? [{ id: uid(), 이름: d.이름 || d.name || "", 연락처: fmtPhone(d.전화번호 || d.phone || ""), 시작: today(), 종료: "", 비고: "기사관리에서 가져옴", driverId: d.id, createdAt: Date.now(), by }] : [],
         createdAt: Date.now(), updatedAt: Date.now(), updatedBy: by,
       }, { merge: true });
-      pick(id);
+      pick(id); if (edit) askEdit(id);
     } catch (e) { toast(`관리대장을 만들지 못했습니다(${e?.code || "오류"})`); } finally { setOpening(""); }
   };
   const importRows = async (rowsIn) => {
@@ -890,6 +1053,7 @@ export default function VehicleLedger({ company = "", drivers = [], canEdit = tr
         const id = ex?.id || vehicleDocId(co, key);
         const patch = { companyName: co, plateKey: key, updatedAt: Date.now(), updatedBy: by };
         BASIC_KEYS.forEach((k) => { if (r[k] != null && String(r[k]).trim() !== "") patch[k] = String(r[k]).trim(); });
+        if (patch.용도) patch.차량종류 = patch.용도;
         if (!ex) Object.assign(patch, { repairs: [], structures: [], logs: [], driverHist: [], createdAt: Date.now() });
         const hist = [...(ex?.driverHist || [])];
         const cur = currentDriver({ driverHist: hist });
@@ -922,10 +1086,6 @@ export default function VehicleLedger({ company = "", drivers = [], canEdit = tr
   const toastEl = msg && <div style={{ position: "fixed", bottom: 30, left: "50%", transform: "translateX(-50%)", background: C.navy, color: "#fff", padding: "11px 18px", borderRadius: 12, fontSize: 14.5, fontWeight: 800, zIndex: 9999, maxWidth: "90vw", boxShadow: "0 12px 30px rgba(11,20,40,.3)" }}>{msg}</div>;
 
   if (!co) return <div style={{ padding: 40, textAlign: "center", color: C.mute, fontSize: 15 }}>회사 정보를 불러오는 중…</div>;
-  if (sel && !sel.virtual) return (<>
-    <Ledger key={sel.id} v={sel} co={co} appDriver={sel.appDriver} linkRaw={sel.linkRaw} drivers={drivers} canEdit={canEdit} by={by} narrow={narrow} purposeOpts={purposeOpts} companyOpts={companyOpts} kindOpts={kindOpts} onBack={() => pick(null)} toast={toast} />
-    {toastEl}
-  </>);
 
   // KPI
   const purposeCnt = Object.entries(rows.reduce((m, r) => { const k = r.용도 || "미지정"; m[k] = (m[k] || 0) + 1; return m; }, {})).sort((a, b) => b[1] - a[1]);
@@ -963,7 +1123,7 @@ export default function VehicleLedger({ company = "", drivers = [], canEdit = tr
             <span style={kpiSub}>{narrow ? `배정 ${assigned} · 미작성 ${virtualN}` : `기사 배정 ${assigned} · 대장 미작성 ${virtualN}`}</span>
           </button>
           <div style={{ ...tile(false), cursor: "default", gridColumn: narrow ? "1 / -1" : undefined, order: narrow ? 9 : undefined }}>
-            <span style={kpiLabel}>BY TYPE · 용도별</span>
+            <span style={kpiLabel}>BY TYPE · 차량종류별</span>
             <div style={{ display: "flex", flexDirection: "column", gap: 4, marginTop: 2 }}>
               {purposeCnt.slice(0, 4).map(([k, n]) => (
                 <button key={k} type="button" onClick={() => setFPurpose(fPurpose === k || k === "미지정" ? "" : k)} style={{ display: "grid", gridTemplateColumns: "64px 1fr 30px", alignItems: "center", gap: 8, background: "none", border: "none", padding: 0, color: "#fff", cursor: "pointer" }}>
@@ -1001,17 +1161,14 @@ export default function VehicleLedger({ company = "", drivers = [], canEdit = tr
             <span style={{ fontSize: 16, fontWeight: 900, color: C.navy, whiteSpace: "nowrap" }}>차량 전체 현황 <span style={{ fontFamily: MONO, color: C.blue }}>{shown.length}</span><span style={{ fontSize: 14, color: C.mute }}> / {rows.length}대</span></span>
           </div>
           <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="차량번호·기사·차주·차대번호 검색" style={{ ...inp, width: narrow ? "100%" : 250, height: 38 }} />
-          <select value={fPurpose} onChange={(e) => setFPurpose(e.target.value)} style={{ ...inp, width: narrow ? "calc(33% - 6px)" : 120, height: 38 }}><option value="">용도 전체</option>{purposeOpts.filter((p) => rows.some((v) => v.용도 === p)).map((p) => <option key={p}>{p}</option>)}</select>
-          <select value={fCo} onChange={(e) => setFCo(e.target.value)} style={{ ...inp, width: narrow ? "calc(33% - 6px)" : 130, height: 38 }}><option value="">회사 전체</option>{companyOpts.map((p) => <option key={p}>{p}</option>)}</select>
-          <select value={fEq} onChange={(e) => setFEq(e.target.value)} style={{ ...inp, width: narrow ? "calc(34% - 6px)" : 140, height: 38 }}>
-            <option value="">장비 전체</option>
-            <option value="any:0">장비 미등록 있음</option>
-            {EQUIP.flatMap((e) => [<option key={e.key + 1} value={`${e.key}:1`}>{e.label} 있음</option>, <option key={e.key + 0} value={`${e.key}:0`}>{e.label} 없음</option>])}
-          </select>
+          {/* ⭐ 2026-11-02 거르기 — 프로그램 스타일 선택 목록(용도 → 차량종류) */}
+          <div style={{ width: narrow ? "calc(33% - 6px)" : 150 }}><LedgerSelect compact allowCustom={false} value={fPurpose} onChange={setFPurpose} noneLabel="차량종류 전체" placeholder="차량종류 전체" options={purposeOpts.filter((p) => rows.some((v) => v.용도 === p))} style={{ height: 38 }} /></div>
+          <div style={{ width: narrow ? "calc(33% - 6px)" : 140 }}><LedgerSelect compact allowCustom={false} value={fCo} onChange={setFCo} noneLabel="회사 전체" placeholder="회사 전체" options={companyOpts} style={{ height: 38 }} /></div>
+          <div style={{ width: narrow ? "calc(34% - 6px)" : 160 }}><LedgerSelect compact allowCustom={false} value={fEq} onChange={setFEq} noneLabel="장비 전체" placeholder="장비 전체" style={{ height: 38 }}
+            options={[{ v: "any:0", label: "장비 미등록 있음" }, ...EQUIP.flatMap((e) => [{ v: `${e.key}:1`, label: `${e.label} 있음` }, { v: `${e.key}:0`, label: `${e.label} 없음` }])]} /></div>
           {narrow && (
-            <select value={`${sort.k}:${sort.d}`} onChange={(e) => { const [k, d] = e.target.value.split(":"); setSort({ k, d: Number(d) }); }} style={{ ...inp, height: 38 }}>
-              {COLS.filter(([k]) => !["엔진오일", "점검알림"].includes(k)).flatMap(([k, l]) => [<option key={k + "a"} value={`${k}:1`}>정렬: {l} ↑</option>, <option key={k + "d"} value={`${k}:-1`}>정렬: {l} ↓</option>])}
-            </select>
+            <div style={{ width: "100%" }}><LedgerSelect compact allowCustom={false} value={`${sort.k}:${sort.d}`} onChange={(x) => { if (!x) return; const [k, d] = x.split(":"); setSort({ k, d: Number(d) }); }} noneLabel="정렬 기본" style={{ height: 38 }}
+              options={COLS.filter(([k]) => !["엔진오일", "점검알림"].includes(k)).flatMap(([k, l]) => [{ v: `${k}:1`, label: `정렬: ${l} ↑` }, { v: `${k}:-1`, label: `정렬: ${l} ↓` }])} /></div>
           )}
           <div style={{ marginLeft: "auto", display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
             {!narrow && (
@@ -1027,7 +1184,7 @@ export default function VehicleLedger({ company = "", drivers = [], canEdit = tr
         {(fPurpose || fCo || fEq || fCare || q) && (
           <div style={{ padding: "8px 14px", display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center", borderBottom: "1px solid #EEF1F6", fontSize: 14, color: C.sub }}>
             <span style={{ fontWeight: 800 }}>필터</span>
-            {[q && `검색 "${q}"`, fPurpose && `용도 ${fPurpose}`, fCo && `회사 ${fCo}`, fEq && (fEq === "any:0" ? "장비 미등록" : `${EQUIP.find((e) => e.key === fEq.split(":")[0])?.label} ${fEq.endsWith(":1") ? "있음" : "없음"}`), fCare && "점검 필요"].filter(Boolean).map((t) => <span key={t} style={{ padding: "2px 9px", borderRadius: 99, background: C.pale, color: C.blue, fontWeight: 800 }}>{t}</span>)}
+            {[q && `검색 "${q}"`, fPurpose && `차량종류 ${fPurpose}`, fCo && `회사 ${fCo}`, fEq && (fEq === "any:0" ? "장비 미등록" : `${EQUIP.find((e) => e.key === fEq.split(":")[0])?.label} ${fEq.endsWith(":1") ? "있음" : "없음"}`), fCare && "점검 필요"].filter(Boolean).map((t) => <span key={t} style={{ padding: "2px 9px", borderRadius: 99, background: C.pale, color: C.blue, fontWeight: 800 }}>{t}</span>)}
             <button type="button" onClick={resetFilters} style={{ border: "none", background: "none", color: C.sub, textDecoration: "underline", cursor: "pointer", fontSize: 14 }}>모두 지우기</button>
           </div>
         )}
@@ -1056,7 +1213,7 @@ export default function VehicleLedger({ company = "", drivers = [], canEdit = tr
                   {shown.map((r) => {
                     const cc = careCells(r);
                     return (
-                      <tr key={r.id} className="vl-row" onClick={() => openRow(r)} style={{ cursor: "pointer", opacity: opening === r.id ? 0.5 : 1 }}>
+                      <tr key={r.id} className="vl-row" title="누르면 오른쪽에 차량 정보 · 두 번 누르면 바로 수정" onClick={(e) => openRow(r, e.detail >= 2)} style={{ cursor: "pointer", opacity: opening === r.id ? 0.5 : 1 }}>
                         {COLS.map(([k], i) => {
                           const val = r[k];
                           const eq = EQ_KEYS.includes(k);
@@ -1086,11 +1243,16 @@ export default function VehicleLedger({ company = "", drivers = [], canEdit = tr
 
       {creating && (
         <Modal title="차량 등록" onClose={() => setCreating(null)} width={820} footer={<><Btn onClick={() => setCreating(null)}>취소</Btn><Btn kind="primary" onClick={() => createVehicle(creating)}>등록</Btn></>}>
-          <BasicForm v={creating} set={setCreating} purposeOpts={purposeOpts} companyOpts={companyOpts} isNew />
+          <BasicForm v={creating} set={setCreating} purposeOpts={purposeOpts} companyOpts={companyOpts} company={co} isNew />
           {drvByPlate.get(plateCore(creating.차량번호)) && <div style={{ marginTop: 12, fontSize: 14.5, color: C.blue, fontWeight: 800 }}>기사관리에 이 차량의 기사({drvByPlate.get(plateCore(creating.차량번호)).이름})가 있어 현재 기사로 함께 등록됩니다.</div>}
         </Modal>
       )}
       {importing && <ImportModal existing={list} onClose={() => setImporting(false)} onImport={importRows} />}
+      {sel && !sel.virtual && (
+        <LedgerDrawer key={sel.id} narrow={narrow} onClose={closeDrawer} onDouble={() => askEdit(sel.id)}>
+          <Ledger v={sel} co={co} appDriver={sel.appDriver} linkRaw={sel.linkRaw} drivers={drivers} canEdit={canEdit} by={by} narrow purposeOpts={purposeOpts} companyOpts={companyOpts} kindOpts={kindOpts} onBack={closeDrawer} toast={toast} drawer editSignal={editReq.id === sel.id ? editReq.n : 0} />
+        </LedgerDrawer>
+      )}
       <style>{VL_CSS}</style>
       {toastEl}
     </div>

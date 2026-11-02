@@ -1167,10 +1167,10 @@ function NationalFareTab() {
                 {result.refrigFee>0&&<span className="text-[10px] font-bold px-2 py-1 rounded-full bg-white/20 text-white">냉장/냉동</span>}
                 {result.isWeather&&<span className="text-[10px] font-bold px-2 py-1 rounded-full bg-white/20 text-white">기상악화+15%</span>}
                 {result.viaCount>0&&<span className="text-[10px] font-bold px-2 py-1 rounded-full bg-white/20 text-white">경유{result.viaCount}</span>}
-                <span className="text-[10px] text-white/40 font-semibold ml-auto">{result.mode==="독차"?VEHICLE_TYPES.find(v=>v.id===vehicle)?.name:""} {fromP}→{toP}</span>
+                <span className="text-[11px] text-white/40 font-semibold ml-auto">{result.mode==="독차"?VEHICLE_TYPES.find(v=>v.id===vehicle)?.name:""} {fromP}→{toP}</span>
               </div>
               <div className="mb-3">
-                <div className="text-[10px] text-white/40 font-semibold mb-1">예상 운임 (VAT 별도)</div>
+                <div className="text-[11px] text-white/40 font-semibold mb-1">예상 운임 (VAT 별도)</div>
                 <div className="flex items-baseline gap-2">
                   <span className="text-[26px] font-black text-white tabular-nums">{fmtMoney(result.min)}</span>
                   <span className="text-white/30 text-[18px]">~</span>
@@ -1198,7 +1198,7 @@ function NationalFareTab() {
                   ...(result.viaCount>0?[{l:"경유지",v:`${result.viaCount}곳 (+${Number((result.viaFee/10000).toFixed(0))}만원)`}]:[]),
                 ].map(({l,v})=>(
                   <div key={l} className="bg-white/6 rounded-xl px-3 py-2">
-                    <div className="text-[9px] text-white/35 font-semibold">{l}</div>
+                    <div className="text-[11px] text-white/35 font-semibold">{l}</div>
                     <div className="text-[12px] font-bold text-white/85">{v}</div>
                   </div>
                 ))}
@@ -1207,20 +1207,20 @@ function NationalFareTab() {
               {/* 자사 실데이터 참고 운임 */}
               {refData&&(
                 <div className="mt-3 border-t border-white/10 pt-3">
-                  <div className="text-[10px] text-white/40 font-semibold mb-2">자사 실거래 참고 · 동일 조건 ({refData.count}건)</div>
+                  <div className="text-[11px] text-white/40 font-semibold mb-2">자사 실거래 참고 · 동일 조건 ({refData.count}건)</div>
                   <div className="grid grid-cols-2 gap-2">
                     {refData.charge&&(
                       <div className="bg-white/6 rounded-xl px-3 py-2">
-                        <div className="text-[9px] text-white/35 font-semibold mb-1">청구운임</div>
+                        <div className="text-[11px] text-white/35 font-semibold mb-1">청구운임</div>
                         <div className="text-[11px] font-bold text-[#CFE0FF]">{fmtMoney(refData.charge.avg)} 평균</div>
-                        <div className="text-[10px] text-white/40">{fmtMoney(refData.charge.min)}~{fmtMoney(refData.charge.max)}</div>
+                        <div className="text-[11px] text-white/40">{fmtMoney(refData.charge.min)}~{fmtMoney(refData.charge.max)}</div>
                       </div>
                     )}
                     {refData.driver&&(
                       <div className="bg-white/6 rounded-xl px-3 py-2">
-                        <div className="text-[9px] text-white/35 font-semibold mb-1">기사운임</div>
+                        <div className="text-[11px] text-white/35 font-semibold mb-1">기사운임</div>
                         <div className="text-[11px] font-bold text-white">{fmtMoney(refData.driver.avg)} 평균</div>
-                        <div className="text-[10px] text-white/40">{fmtMoney(refData.driver.min)}~{fmtMoney(refData.driver.max)}</div>
+                        <div className="text-[11px] text-white/40">{fmtMoney(refData.driver.min)}~{fmtMoney(refData.driver.max)}</div>
                       </div>
                     )}
                   </div>

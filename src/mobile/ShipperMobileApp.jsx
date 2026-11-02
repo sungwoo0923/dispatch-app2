@@ -23,6 +23,7 @@ import InternalMessenger from "../InternalMessenger";
 import { html2canvas } from "../lazyLoad"; // ⭐ 2026-11-02 속도 — 캡처 라이브러리는 처음 캡처할 때 받는다
 import { deleteOrderWithLog } from "../orderHistory";
 import "../kpNavyTheme.css";
+import MobileSelect from "./MobileSelect"; // ⭐ 2026-11-02 기본 select → 남색 바텀시트 선택기
 
 // ======================================================================
 // 유틸
@@ -33,6 +34,26 @@ const formatPhone = (phone) => {
   if (p.length === 11) return `${p.slice(0, 3)}-${p.slice(3, 7)}-${p.slice(7)}`;
   if (p.length === 10) return `${p.slice(0, 3)}-${p.slice(3, 6)}-${p.slice(6)}`;
   return p;
+};
+// ⭐ 2026-11-02 입력 중 실시간 하이픈(완성된 번호는 formatPhone과 같은 결과 → 저장 형식 동일)
+const formatPhoneLive = (phone) => {
+  const d = String(phone ?? "").replace(/\D/g, "");
+  if (d.length > 11) return d;
+  if (d.startsWith("02")) {
+    if (d.length <= 2) return d;
+    if (d.length <= 5) return `${d.slice(0, 2)}-${d.slice(2)}`;
+    if (d.length <= 9) return `${d.slice(0, 2)}-${d.slice(2, 5)}-${d.slice(5)}`;
+    return `${d.slice(0, 2)}-${d.slice(2, 6)}-${d.slice(6)}`;
+  }
+  if (/^1[5-9]/.test(d)) return d.length <= 4 ? d : `${d.slice(0, 4)}-${d.slice(4, 8)}`;
+  if (d.length <= 3) return d;
+  if (d.startsWith("010")) {
+    if (d.length <= 7) return `${d.slice(0, 3)}-${d.slice(3)}`;
+    return `${d.slice(0, 3)}-${d.slice(3, 7)}-${d.slice(7)}`;
+  }
+  if (d.length <= 6) return `${d.slice(0, 3)}-${d.slice(3)}`;
+  if (d.length <= 10) return `${d.slice(0, 3)}-${d.slice(3, 6)}-${d.slice(6)}`;
+  return `${d.slice(0, 3)}-${d.slice(3, 7)}-${d.slice(7)}`;
 };
 
 const todayStr = () => {
@@ -1328,7 +1349,7 @@ function ShipperOrderM({ user, userData, orders = [], showToast, onDone, onBack,
         </MRow>
         <MRow label="상차지주소"><input className="input-m" value={form.상차지주소} onChange={(e) => update("상차지주소", e.target.value)} placeholder="주소" /></MRow>
         <MRow label="담당자명"><input className="input-m" value={form.상차지담당자} onChange={(e) => update("상차지담당자", e.target.value)} placeholder="담당자명" /></MRow>
-        <MRow label="담당자번호"><input className="input-m" value={form.상차지담당자번호} onChange={(e) => update("상차지담당자번호", formatPhone(e.target.value))} placeholder="연락처" /></MRow>
+        <MRow label="담당자번호"><input className="input-m" inputMode="tel" value={form.상차지담당자번호} onChange={(e) => update("상차지담당자번호", formatPhoneLive(e.target.value))} placeholder="010-0000-0000" /></MRow>
         <MRow label="상차일">
           <div className="flex gap-2">
             <input type="date" className="input-m flex-1" value={form.상차일} onChange={(e) => update("상차일", e.target.value)} />
@@ -1338,14 +1359,14 @@ function ShipperOrderM({ user, userData, orders = [], showToast, onDone, onBack,
         </MRow>
         <MRow label="상차시간">
           <div className="flex gap-2">
-            <select className="input-m" style={{ flex: 3 }} value={form.상차시간} onChange={(e) => update("상차시간", e.target.value)}>
+            <MobileSelect className="input-m" style={{ flex: 3 }} title="상차시간" value={form.상차시간} onChange={(e) => update("상차시간", e.target.value)}>
               {TIME_OPTIONS.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
-            </select>
-            <select className="input-m" style={{ flex: 1, minWidth: 0 }} value={form.상차시간구분} onChange={(e) => update("상차시간구분", e.target.value)}>
+            </MobileSelect>
+            <MobileSelect className="input-m" style={{ flex: 1, minWidth: 0 }} value={form.상차시간구분} onChange={(e) => update("상차시간구분", e.target.value)}>
               <option value="이후">이후</option>
               <option value="이전">이전</option>
               <option value="정각">정각</option>
-            </select>
+            </MobileSelect>
           </div>
         </MRow>
       </MSection>
@@ -1377,7 +1398,7 @@ function ShipperOrderM({ user, userData, orders = [], showToast, onDone, onBack,
         </MRow>
         <MRow label="하차지주소"><input className="input-m" value={form.하차지주소} onChange={(e) => update("하차지주소", e.target.value)} placeholder="주소" /></MRow>
         <MRow label="담당자명"><input className="input-m" value={form.하차지담당자} onChange={(e) => update("하차지담당자", e.target.value)} placeholder="담당자명" /></MRow>
-        <MRow label="담당자번호"><input className="input-m" value={form.하차지담당자번호} onChange={(e) => update("하차지담당자번호", formatPhone(e.target.value))} placeholder="연락처" /></MRow>
+        <MRow label="담당자번호"><input className="input-m" inputMode="tel" value={form.하차지담당자번호} onChange={(e) => update("하차지담당자번호", formatPhoneLive(e.target.value))} placeholder="010-0000-0000" /></MRow>
         <MRow label="하차일">
           <div className="flex gap-2">
             <input type="date" className="input-m flex-1" value={form.하차일} onChange={(e) => update("하차일", e.target.value)} />
@@ -1387,14 +1408,14 @@ function ShipperOrderM({ user, userData, orders = [], showToast, onDone, onBack,
         </MRow>
         <MRow label="하차시간">
           <div className="flex gap-2">
-            <select className="input-m" style={{ flex: 3 }} value={form.하차시간} onChange={(e) => update("하차시간", e.target.value)}>
+            <MobileSelect className="input-m" style={{ flex: 3 }} title="하차시간" value={form.하차시간} onChange={(e) => update("하차시간", e.target.value)}>
               {TIME_OPTIONS.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
-            </select>
-            <select className="input-m" style={{ flex: 1, minWidth: 0 }} value={form.하차시간구분} onChange={(e) => update("하차시간구분", e.target.value)}>
+            </MobileSelect>
+            <MobileSelect className="input-m" style={{ flex: 1, minWidth: 0 }} value={form.하차시간구분} onChange={(e) => update("하차시간구분", e.target.value)}>
               <option value="이후">이후</option>
               <option value="이전">이전</option>
               <option value="정각">정각</option>
-            </select>
+            </MobileSelect>
           </div>
         </MRow>
       </MSection>
@@ -1402,19 +1423,19 @@ function ShipperOrderM({ user, userData, orders = [], showToast, onDone, onBack,
       {/* 화물 / 차량 */}
       <MSection title="화물 / 차량">
         <MRow label="차량종류">
-          <select className="input-m" value={form.차량종류} onChange={(e) => update("차량종류", e.target.value)}>
+          <MobileSelect className="input-m" title="차량종류" value={form.차량종류} onChange={(e) => update("차량종류", e.target.value)}>
             <option value="">선택</option>
             {차량종류목록.map(v => <option key={v}>{v}</option>)}
-          </select>
+          </MobileSelect>
         </MRow>
         <MRow label="톤수">
           <div className="flex gap-2">
             <input className="input-m" style={{ flex: 2 }} value={form.톤수값}
               placeholder="숫자 입력" inputMode="decimal"
               onChange={(e) => update("톤수값", e.target.value.replace(/[^0-9.]/g, ""))} />
-            <select className="input-m" style={{ flex: 1, minWidth: 0 }} value={form.톤수단위} onChange={(e) => update("톤수단위", e.target.value)}>
+            <MobileSelect className="input-m" style={{ flex: 1, minWidth: 0 }} title="톤수 단위" value={form.톤수단위} onChange={(e) => update("톤수단위", e.target.value)}>
               {톤수단위목록.map(v => <option key={v}>{v}</option>)}
-            </select>
+            </MobileSelect>
           </div>
         </MRow>
         <MRow label={`화물내용 (최대 3개)`}>
@@ -1424,17 +1445,17 @@ function ShipperOrderM({ user, userData, orders = [], showToast, onDone, onBack,
                 <input className="input-m" style={{ flex: 2 }} value={row.qty}
                   onChange={(e) => updateCargoRow(idx, "qty", e.target.value.replace(/[^0-9.]/g, ""))}
                   placeholder="수량" inputMode="decimal" />
-                <select className="input-m" style={{ flex: 1, minWidth: 0 }} value={row.unit}
+                <MobileSelect className="input-m" style={{ flex: 1, minWidth: 0 }} title="화물 단위" value={row.unit}
                   onChange={(e) => updateCargoRow(idx, "unit", e.target.value)}>
                   {화물단위목록.map(v => <option key={v}>{v}</option>)}
-                </select>
+                </MobileSelect>
                 {row.unit === "파레트" && (
-                  <select className="input-m" style={{ flex: 1, minWidth: 0 }} value={row.palletCo}
+                  <MobileSelect className="input-m" style={{ flex: 1, minWidth: 0 }} value={row.palletCo}
                     onChange={(e) => updateCargoRow(idx, "palletCo", e.target.value)}>
                     <option value="">파렛트사</option>
                     <option value="아주">아주</option>
                     <option value="KPP">KPP</option>
-                  </select>
+                  </MobileSelect>
                 )}
                 {cargoRows.length > 1 && (
                   <button type="button" onClick={() => removeCargoRow(idx)}
@@ -1479,19 +1500,19 @@ function ShipperOrderM({ user, userData, orders = [], showToast, onDone, onBack,
           </div>
         </MRow>
         <MRow label="상차방법">
-          <select className="input-m" value={form.상차방법} onChange={(e) => update("상차방법", e.target.value)}>
+          <MobileSelect className="input-m" title="상차방법" value={form.상차방법} onChange={(e) => update("상차방법", e.target.value)}>
             <option value="">선택</option><option>지게차</option><option>수작업</option><option>수도움</option><option>크레인</option>
-          </select>
+          </MobileSelect>
         </MRow>
         <MRow label="하차방법">
-          <select className="input-m" value={form.하차방법} onChange={(e) => update("하차방법", e.target.value)}>
+          <MobileSelect className="input-m" title="하차방법" value={form.하차방법} onChange={(e) => update("하차방법", e.target.value)}>
             <option value="">선택</option><option>지게차</option><option>수작업</option><option>수도움</option><option>크레인</option>
-          </select>
+          </MobileSelect>
         </MRow>
         <MRow label="지급방식">
-          <select className="input-m" value={form.지급방식} onChange={(e) => update("지급방식", e.target.value)}>
+          <MobileSelect className="input-m" title="지급방식" value={form.지급방식} onChange={(e) => update("지급방식", e.target.value)}>
             <option value="">선택</option><option>계산서</option><option>선불</option><option>착불</option><option>계좌이체</option>
-          </select>
+          </MobileSelect>
         </MRow>
       </MSection>
 
@@ -1512,12 +1533,12 @@ function ShipperOrderM({ user, userData, orders = [], showToast, onDone, onBack,
             <div className="px-3 py-2 border-b space-y-2">
               <div className="flex gap-2">
                 <div className="w-24 shrink-0">
-                  <select className="input-m" value={copyType} onChange={(e) => setCopyType(e.target.value)}>
+                  <MobileSelect className="input-m" title="검색 구분" value={copyType} onChange={(e) => setCopyType(e.target.value)}>
                     <option value="통합">통합</option>
                     <option value="상차지">상차지</option>
                     <option value="하차지">하차지</option>
                     <option value="거래처">거래처</option>
-                  </select>
+                  </MobileSelect>
                 </div>
                 <input className="input-m flex-1" value={copySearch}
                   onChange={(e) => setCopySearch(e.target.value)}
@@ -1563,7 +1584,7 @@ function ShipperOrderM({ user, userData, orders = [], showToast, onDone, onBack,
         </div>
       )}
 
-      <style>{`.input-m { width: 100%; border: 1px solid #e5e7eb; border-radius: 8px; padding: 8px 10px; font-size: 14px; background: white; outline: none; box-sizing: border-box; }`}</style>
+      <style>{`.input-m { width: 100%; border: 1px solid #DCE3EE; border-radius: 10px; padding: 8px 10px; font-size: 14px; color: #0F1A30; background: white; outline: none; box-sizing: border-box; } .input-m:focus { border-color: #1B2B4B; box-shadow: 0 0 0 3px rgba(27,43,75,0.12); } .input-m::placeholder { color: #A7B3C6; }`}</style>
     </div>
   );
 }
@@ -1685,23 +1706,23 @@ function ShipperHistoryM({ orders, onSelect, onBack, onEdit, user, minAllowedDat
 
       <div className="bg-white border border-gray-200 rounded-xl p-3 space-y-2">
         <div className="flex items-center gap-1 flex-wrap">
-          <select className="border border-gray-200 rounded-lg px-1 py-1.5 text-sm min-w-0"
+          <MobileSelect className="border border-gray-200 rounded-lg px-1 py-1.5 text-sm min-w-0"
             value={draftStart.month} onChange={(e) => setDraftStart(p => ({ ...p, month: Number(e.target.value) }))}>
             {Array.from({ length: 12 }, (_, i) => i + 1).map(m => <option key={m} value={m}>{m}월</option>)}
-          </select>
-          <select className="border border-gray-200 rounded-lg px-1 py-1.5 text-sm min-w-0"
+          </MobileSelect>
+          <MobileSelect className="border border-gray-200 rounded-lg px-1 py-1.5 text-sm min-w-0"
             value={draftStart.day} onChange={(e) => setDraftStart(p => ({ ...p, day: Number(e.target.value) }))}>
             {Array.from({ length: daysInMonth(draftStart.month) }, (_, i) => i + 1).map(d => <option key={d} value={d}>{d}일</option>)}
-          </select>
+          </MobileSelect>
           <span className="text-gray-400 text-sm shrink-0">~</span>
-          <select className="border border-gray-200 rounded-lg px-1 py-1.5 text-sm min-w-0"
+          <MobileSelect className="border border-gray-200 rounded-lg px-1 py-1.5 text-sm min-w-0"
             value={draftEnd.month} onChange={(e) => setDraftEnd(p => ({ ...p, month: Number(e.target.value) }))}>
             {Array.from({ length: 12 }, (_, i) => i + 1).map(m => <option key={m} value={m}>{m}월</option>)}
-          </select>
-          <select className="border border-gray-200 rounded-lg px-1 py-1.5 text-sm min-w-0"
+          </MobileSelect>
+          <MobileSelect className="border border-gray-200 rounded-lg px-1 py-1.5 text-sm min-w-0"
             value={draftEnd.day} onChange={(e) => setDraftEnd(p => ({ ...p, day: Number(e.target.value) }))}>
             {Array.from({ length: daysInMonth(draftEnd.month) }, (_, i) => i + 1).map(d => <option key={d} value={d}>{d}일</option>)}
-          </select>
+          </MobileSelect>
           <button onClick={applyDateQuery}
             className="px-3 py-1.5 text-xs font-semibold text-white rounded-lg shrink-0" style={{ background: NAVY }}>
             조회
@@ -1711,14 +1732,14 @@ function ShipperHistoryM({ orders, onSelect, onBack, onEdit, user, minAllowedDat
           <div className="text-[11px] text-gray-400">※ 최근 6개월까지 조회 가능</div>
         )}
         <div className="flex gap-2">
-          <select className="border border-gray-200 rounded-lg px-2 py-1.5 text-sm w-24 shrink-0"
+          <MobileSelect className="border border-gray-200 rounded-lg px-2 py-1.5 text-sm w-24 shrink-0"
             value={searchType} onChange={(e) => setSearchType(e.target.value)}>
             <option value="통합">통합</option>
             <option value="상차지">상차지</option>
             <option value="하차지">하차지</option>
             <option value="거래처">거래처</option>
             <option value="차량번호">차량번호</option>
-          </select>
+          </MobileSelect>
           <input className="flex-1 border border-gray-200 rounded-lg px-3 py-1.5 text-sm"
             placeholder="검색어 입력"
             value={keyword} onChange={(e) => setKeyword(e.target.value)} />
@@ -2111,7 +2132,7 @@ function ShipperMyPageM({ user, userData, onBack, showToast, orders }) {
               {pwSaving ? "변경 중..." : "비밀번호 변경"}
             </button>
           </div>
-          <style>{`.input-m { width: 100%; border: 1px solid #e5e7eb; border-radius: 8px; padding: 8px 10px; font-size: 14px; background: white; outline: none; box-sizing: border-box; }`}</style>
+          <style>{`.input-m { width: 100%; border: 1px solid #DCE3EE; border-radius: 10px; padding: 8px 10px; font-size: 14px; color: #0F1A30; background: white; outline: none; box-sizing: border-box; } .input-m:focus { border-color: #1B2B4B; box-shadow: 0 0 0 3px rgba(27,43,75,0.12); } .input-m::placeholder { color: #A7B3C6; }`}</style>
         </MCard>
       )}
     </div>
@@ -2336,7 +2357,7 @@ function ShipperInquiryM({ user, userData, onBack, showToast }) {
               {submitting ? "등록 중..." : "문의 등록"}
             </button>
           </div>
-          <style>{`.input-m { width: 100%; border: 1px solid #e5e7eb; border-radius: 8px; padding: 8px 10px; font-size: 14px; background: white; outline: none; box-sizing: border-box; }`}</style>
+          <style>{`.input-m { width: 100%; border: 1px solid #DCE3EE; border-radius: 10px; padding: 8px 10px; font-size: 14px; color: #0F1A30; background: white; outline: none; box-sizing: border-box; } .input-m:focus { border-color: #1B2B4B; box-shadow: 0 0 0 3px rgba(27,43,75,0.12); } .input-m::placeholder { color: #A7B3C6; }`}</style>
         </MCard>
       )}
     </div>
@@ -2561,10 +2582,10 @@ function ShipperSettlementM({ orders = [], user, userData, onBack }) {
 
       <div className="flex items-center justify-between">
         <div className="text-sm font-bold text-gray-700">오더 목록 ({sorted.length}건)</div>
-        <select className="border border-gray-200 rounded-lg px-2 py-1.5 text-xs"
+        <MobileSelect compact title="정렬" className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] font-semibold"
           value={sortKey} onChange={(e) => setSortKey(e.target.value)}>
           {SORT_OPTIONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-        </select>
+        </MobileSelect>
       </div>
 
       {sorted.length === 0 ? (
@@ -2591,11 +2612,11 @@ function ShipperSettlementM({ orders = [], user, userData, onBack }) {
               <button onClick={() => setShowInvoice(false)} className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-gray-500 text-lg font-bold">×</button>
             </div>
             <div className="px-4 py-2 border-b border-gray-100 shrink-0">
-              <select value={invoiceTransport} onChange={e => setInvoiceTransport(e.target.value)}
+              <MobileSelect title="운송사" value={invoiceTransport} onChange={e => setInvoiceTransport(e.target.value)}
                 className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-sm">
                 <option value="">운송사 전체</option>
                 {invoiceTransportOptions.map(t => <option key={t} value={t}>{t}</option>)}
-              </select>
+              </MobileSelect>
             </div>
             <div className="flex-1 overflow-auto p-3 bg-gray-100">
               {/* 화면 폭에 맞춰 축소 표시하되, 혹시 축소 계산이 늦거나 빗나가도

@@ -1892,10 +1892,10 @@ function BulkEditModal({ rows, patchDispatch, onClose, onDateShift }) {
                       {f.type === "fare" ? (
                         <FareTypeSelect compact className="flex-1" rules={fareRb.rules} value={bulkValues[f.key] ?? ""} onChange={(v) => setBulkValues(p => ({ ...p, [f.key]: v }))} />
                       ) : f.type === "select" ? (
-                        <select className="flex-1 border border-gray-300 rounded px-1 py-1 text-[11px]" value={bulkValues[f.key] ?? ""} onChange={(e) => setBulkValues(v => ({ ...v, [f.key]: e.target.value }))}>
+                        <CustomSelect className="flex-1 border border-gray-300 rounded px-1 py-1 text-[11px]" value={bulkValues[f.key] ?? ""} onChange={(e) => setBulkValues(v => ({ ...v, [f.key]: e.target.value }))}>
                           <option value="">-</option>
                           {(f.key === "배차방식" || f.key === "지급방식" ? dropdownList(f.key, f.options) : f.options).map(o => <option key={o} value={o}>{o}</option>)}
-                        </select>
+                        </CustomSelect>
                       ) : f.type === "money" ? (
                         <MoneyInput value={bulkValues[f.key]} onChange={(v) => setBulkValues(p => ({ ...p, [f.key]: v }))} />
                       ) : (
@@ -1925,10 +1925,10 @@ function BulkEditModal({ rows, patchDispatch, onClose, onDateShift }) {
                             <FareRuleHint form={{ ...r, ...(edited[id] || {}) }} rules={fareRb.rules} onReapply={() => { setEdited(prev => ({ ...prev, [id]: fareCell(r, prev[id] || {}, "__reapply", null) })); }} />
                           </div>
                         ) : f.type === "select" ? (
-                          <select className="w-full border border-gray-300 rounded px-1 py-1 text-[12px]" value={edited[id]?.[f.key] ?? ""} onChange={(e) => setCell(id, f.key, e.target.value)}>
+                          <CustomSelect className="w-full border border-gray-300 rounded px-1 py-1 text-[12px]" value={edited[id]?.[f.key] ?? ""} onChange={(e) => setCell(id, f.key, e.target.value)}>
                             <option value="">-</option>
                             {(f.key === "배차방식" || f.key === "지급방식" ? dropdownList(f.key, f.options) : f.options).map(o => <option key={o} value={o}>{o}</option>)}
-                          </select>
+                          </CustomSelect>
                         ) : f.type === "money" ? (
                           <MoneyInput value={edited[id]?.[f.key]} onChange={(v) => setCell(id, f.key, v)} />
                         ) : (
@@ -5376,18 +5376,48 @@ export const toInt = (v) => {
   return isNaN(n) ? 0 : n;
 };
 export const fmtWon = (n) => `${Number(n || 0).toLocaleString()}원`;
-// 📌 전화번호 하이픈 자동 적용 함수
+// 📌 전화번호 하이픈 자동 적용 함수 (프로그램 공용 — 입력 중에도 단계적으로 하이픈)
+//  · 010-1234-5678 / 011-123-4567 / 02-123-4567 / 02-1234-5678 / 031-123-4567
+//  · 0505-123-4567 (050X 안심번호) / 1588-1234 (대표번호) / 070-1234-5678
+//  · 숫자가 없으면 "" , 규칙보다 긴 숫자는 숫자만 그대로 돌려준다(잘라내지 않음).
+//  · 10·11자리 일반 번호는 예전 함수와 결과가 같아 저장 포맷이 바뀌지 않는다.
 function formatPhone(phone) {
-  const p = String(phone ?? "").replace(/[^\d]/g, "");
-
-  if (p.length === 11) {
-    return `${p.slice(0, 3)}-${p.slice(3, 7)}-${p.slice(7)}`;
+  const raw = String(phone ?? "");
+  const d = raw.replace(/[^\d]/g, "");
+  if (!d) return "";
+  const n = d.length;
+  // 서울 02
+  if (d.startsWith("02")) {
+    if (n > 10) return d;
+    if (n <= 2) return d;
+    if (n <= 5) return `${d.slice(0, 2)}-${d.slice(2)}`;
+    if (n <= 9) return `${d.slice(0, 2)}-${d.slice(2, 5)}-${d.slice(5)}`;
+    return `${d.slice(0, 2)}-${d.slice(2, 6)}-${d.slice(6)}`;
   }
-  if (p.length === 10) {
-    return `${p.slice(0, 3)}-${p.slice(3, 6)}-${p.slice(6)}`;
+  // 050X 안심번호(4자리 국번)
+  if (/^050\d/.test(d)) {
+    if (n > 12) return d;
+    if (n <= 4) return d;
+    if (n <= 7) return `${d.slice(0, 4)}-${d.slice(4)}`;
+    if (n <= 11) return `${d.slice(0, 4)}-${d.slice(4, 7)}-${d.slice(7)}`;
+    return `${d.slice(0, 4)}-${d.slice(4, 8)}-${d.slice(8)}`;
   }
-
-  return p;
+  // 1588/1544 등 전국 대표번호(8자리)
+  if (/^1[5-9]/.test(d)) {
+    if (n > 8) return d;
+    if (n <= 4) return d;
+    return `${d.slice(0, 4)}-${d.slice(4)}`;
+  }
+  if (n > 11) return d;
+  if (n <= 3) return d;
+  // 010 휴대폰은 항상 3-4-4
+  if (d.startsWith("010")) {
+    if (n <= 7) return `${d.slice(0, 3)}-${d.slice(3)}`;
+    return `${d.slice(0, 3)}-${d.slice(3, 7)}-${d.slice(7)}`;
+  }
+  if (n <= 6) return `${d.slice(0, 3)}-${d.slice(3)}`;
+  if (n <= 10) return `${d.slice(0, 3)}-${d.slice(3, 6)}-${d.slice(6)}`;
+  return `${d.slice(0, 3)}-${d.slice(3, 7)}-${d.slice(7)}`;
 }
 function makeFullDetailText(r) {
 
@@ -5638,13 +5668,13 @@ function sortFareHistory(list, mode) {
 }
 function FareSortDropdown({ value, onChange }) {
   return (
-    <select
+    <CustomSelect
       value={value}
       onChange={(e) => onChange(e.target.value)}
       className="text-[11px] font-bold text-[#1B2B4B] border border-gray-200 rounded-lg px-2 py-1 outline-none cursor-pointer bg-white"
     >
       {FARE_SORT_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-    </select>
+    </CustomSelect>
   );
 }
 
@@ -5686,7 +5716,7 @@ function OrderInfoModal({ row, onClose, lunchByName }) {
   const mergedTon = mergeViaTonnage(row.차량톤수, [row.경유상차목록, row.경유지_상차, row.경유하차목록, row.경유지_하차]);
   const hasWaypointCargo = pickupStops.length > 0 || dropStops.length > 0;
   const fee = (Number(row.청구운임) || 0) - (Number(row.기사운임) || 0);
-  const fmtPhone = (p) => { const d = String(p || "").replace(/[^\d]/g, ""); if (d.length === 11) return `${d.slice(0,3)}-${d.slice(3,7)}-${d.slice(7)}`; if (d.length === 10) return `${d.slice(0,3)}-${d.slice(3,6)}-${d.slice(6)}`; return p || "-"; };
+  const fmtPhone = (p) => formatPhone(p) || p || "-"; // 공용 formatPhone 사용
   const fmtMoney = (v) => v ? Number(v).toLocaleString() + "원" : "-";
   const MONO = "'JetBrains Mono','IBM Plex Mono',ui-monospace,monospace";
   // ⭐ 상/하차지에 등록된 휴게(점심)시간 — 그 거래처가 실제로 설정해둔 경우에만 표시
@@ -9041,89 +9071,115 @@ return (
   </div>
 )}
 
-{/* ── 화물내용 +추가 팝업 ── */}
-{cargoAddPopup && (
-  <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999999]"
-    onClick={() => { setCargoAddPopup(null); _setCargoAddQty(""); _setCargoAddType(""); }}>
-    <div className="bg-white rounded-2xl shadow-2xl w-[400px] border" onClick={e => e.stopPropagation()}>
-      <div className="bg-[#1B2B4B] px-5 py-3 rounded-t-2xl flex items-center justify-between">
-        <div className="text-[14px] font-bold text-white">화물내용 관리</div>
-        <button onClick={() => { setCargoAddPopup(null); _setCargoAddQty(""); _setCargoAddType(""); }} className="text-white/60 hover:text-white text-lg font-bold">✕</button>
-      </div>
-      <div className="p-5">
-        {(() => {
-          const parts = _cargoEditValue.split("+").filter(Boolean);
-          const base = parts[0] || "";
-          const extras = parts.slice(1);
-          return extras.length > 0 ? (
-            <div className="mb-4">
-              <div className="text-[12px] font-semibold text-gray-500 mb-2">등록된 추가 항목 (× 누르면 삭제)</div>
+{/* ── 화물내용 +추가 팝업 ── ⭐ 2026-11-02 리디자인(프로그램 스타일 · 단위는 버튼 · 미리보기 · Enter 추가 / Esc 닫기) */}
+{cargoAddPopup && (() => {
+  const closeCargo = () => { setCargoAddPopup(null); _setCargoAddQty(""); _setCargoAddType(""); };
+  const parts = String(_cargoEditValue || "").split("+").filter(Boolean);
+  const base = parts[0] || "";
+  const extras = parts.slice(1);
+  const pending = (_cargoAddType ? `${_cargoAddQty}${_cargoAddType}` : _cargoAddQty).trim();
+  const addCargo = () => {
+    if (!pending) return;
+    const newVal = _cargoEditValue ? _cargoEditValue + "+" + pending : pending;
+    _setCargoEditValue(newVal);
+    cargoAddPopup.onCommit(newVal);
+    _setCargoAddQty(""); _setCargoAddType("");
+    setTimeout(() => document.querySelector("[data-cargo-add-input]")?.focus?.(), 0);
+  };
+  const removeExtra = (i) => {
+    const newEx = extras.filter((_, j) => j !== i);
+    const newVal = newEx.length ? base + "+" + newEx.join("+") : base;
+    _setCargoEditValue(newVal);
+    cargoAddPopup.onCommit(newVal);
+  };
+  const UNITS = ["", "파레트", "박스", "통", "롤"];
+  return createPortal(
+    <div className="fixed inset-0 z-[9999999] bg-[#0B1428]/55 backdrop-blur-[2px] flex items-center justify-center p-4"
+      onMouseDown={closeCargo}
+      onKeyDown={(e) => { if (e.key === "Escape") { e.stopPropagation(); closeCargo(); } }}>
+      <div className="w-[440px] max-w-full bg-white rounded-[22px] shadow-[0_30px_80px_rgba(8,14,30,0.45)] overflow-hidden" onMouseDown={(e) => e.stopPropagation()}>
+        {/* 머리 */}
+        <div className="relative px-6 pt-5 pb-4 text-white" style={{ background: "radial-gradient(120% 140% at 0% 0%, #2D4C82 0%, #1B2B4B 45%, #0F1A30 100%)" }}>
+          <div className="absolute inset-0 opacity-[0.07] pointer-events-none" style={{ backgroundImage: "linear-gradient(#fff 1px,transparent 1px),linear-gradient(90deg,#fff 1px,transparent 1px)", backgroundSize: "22px 22px" }} />
+          <div className="relative flex items-start justify-between gap-3">
+            <div>
+              <div className="flex items-baseline gap-2"><span className="text-[17px] font-black">화물내용 추가</span><span className="text-[10.5px] font-extrabold tracking-[0.14em] text-[#8FB0F0]">CARGO</span></div>
+              <div className="text-[12.5px] font-semibold text-[#C9D6EE] mt-1">기본 화물에 함께 싣는 항목을 더합니다</div>
+            </div>
+            <button type="button" onClick={closeCargo} className="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 text-white text-[14px] font-black" title="닫기 (Esc)">✕</button>
+          </div>
+          {/* 지금 화물내용 미리보기 */}
+          <div className="relative mt-3.5 rounded-xl bg-white/10 border border-white/15 px-3.5 py-2.5">
+            <div className="text-[11px] font-bold text-[#8FB0F0] mb-1">지금 화물내용</div>
+            <div className="text-[15px] font-black break-all leading-snug">{_cargoEditValue ? String(_cargoEditValue).split("+").filter(Boolean).join(" + ") : <span className="text-white/50 font-bold">아직 없음</span>}</div>
+          </div>
+        </div>
+
+        <div className="px-6 py-5 space-y-5">
+          {/* 등록된 추가 항목 */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-[13.5px] font-black text-[#0F1A30]">추가된 항목</span>
+              <span className="text-[12px] font-bold text-[#8E9BB2]">{extras.length}개 · ✕ 누르면 삭제</span>
+            </div>
+            {extras.length > 0 ? (
               <div className="flex flex-wrap gap-2">
                 {extras.map((item, i) => (
-                  <span key={i} className="inline-flex items-center gap-1 text-[13px] font-bold text-[#1B2B4B] bg-[#e8ecf5] px-3 py-1 rounded-full">
+                  <span key={i} className="inline-flex items-center gap-1.5 h-8 pl-3 pr-1.5 rounded-lg border border-[#C9D5EA] bg-[#F7F9FC] text-[13.5px] font-extrabold text-[#0F1A30]">
                     {item}
-                    <button type="button" onClick={() => {
-                      const newEx = extras.filter((_,j) => j !== i);
-                      const newVal = newEx.length ? base+"+"+newEx.join("+") : base;
-                      _setCargoEditValue(newVal);
-                      cargoAddPopup.onCommit(newVal);
-                    }} className="text-[#1B2B4B]/50 hover:text-red-500 font-bold text-[15px] leading-none cursor-pointer">×</button>
+                    <button type="button" onClick={() => removeExtra(i)} title="삭제"
+                      className="w-6 h-6 rounded-md grid place-items-center text-[#8E9BB2] hover:bg-[#FDECEC] hover:text-[#C0352B] text-[12px] font-black">✕</button>
                   </span>
                 ))}
               </div>
+            ) : (
+              <div className="h-10 rounded-xl border border-dashed border-[#D5DEEC] grid place-items-center text-[13px] font-bold text-[#9AA9C3]">추가된 항목이 없습니다</div>
+            )}
+          </div>
+
+          {/* 새 항목 */}
+          <div>
+            <div className="text-[13.5px] font-black text-[#0F1A30] mb-2">새 항목</div>
+            <input autoComplete="off"
+              className="w-full h-11 px-3.5 rounded-xl border border-[#C9D5EA] bg-[#F9FBFE] text-[15px] font-bold text-[#0F1A30] placeholder:text-[#A7B3C6] placeholder:font-semibold focus:outline-none focus:bg-white focus:border-[#2D4C82] focus:ring-4 focus:ring-[#2D4C82]/10"
+              data-cargo-add-input="1"
+              placeholder="수량 또는 내용 (예: 2 · 자동차 부품)"
+              value={_cargoAddQty}
+              onChange={e => _setCargoAddQty(e.target.value)}
+              ref={imeFocusRef}
+              onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); addCargo(); } }}
+            />
+            <div className="mt-2.5">
+              <div className="text-[12px] font-bold text-[#5B6B85] mb-1.5">단위</div>
+              <div className="grid grid-cols-5 gap-1.5">
+                {UNITS.map((u) => (
+                  <button key={u || "none"} type="button" onClick={() => _setCargoAddType(u)}
+                    className={`h-9 rounded-lg text-[13px] font-extrabold border transition ${_cargoAddType === u ? "bg-[#1B2B4B] border-[#1B2B4B] text-white" : "bg-white border-[#D5DEEC] text-[#3A4A66] hover:border-[#4B6CB7]"}`}>
+                    {u || "없음"}
+                  </button>
+                ))}
+              </div>
             </div>
-          ) : (
-            <div className="mb-4 text-[12px] text-gray-500">추가된 항목이 없습니다.</div>
-          );
-        })()}
-        <div className="text-[12px] font-semibold text-gray-500 mb-2">새 항목 추가</div>
-        <div className="flex gap-2 mb-2">
-          <input autoComplete="off"
-            className="flex-1 min-w-0 border border-gray-300 rounded-lg px-3 py-2 text-[13px] outline-none focus:border-[#1B2B4B]"
-            placeholder="수량 (예: 2)"
-            value={_cargoAddQty}
-            onChange={e => _setCargoAddQty(e.target.value)}
-            ref={imeFocusRef}
-            onKeyDown={e => {
-              if (e.key === "Enter") {
-                const item = _cargoAddType ? `${_cargoAddQty}${_cargoAddType}` : _cargoAddQty;
-                if (item.trim()) {
-                  const newVal = _cargoEditValue ? _cargoEditValue+"+"+item.trim() : item.trim();
-                  _setCargoEditValue(newVal);
-                  cargoAddPopup.onCommit(newVal);
-                  _setCargoAddQty(""); _setCargoAddType("");
-                }
-              }
-            }}
-          />
-          <select
-            className="w-[90px] shrink-0 border border-gray-300 rounded-lg px-2 py-2 text-[12px] font-bold bg-[#1B2B4B] text-white outline-none"
-            value={_cargoAddType}
-            onChange={e => _setCargoAddType(e.target.value)}
-          >
-            <option value="">없음</option>
-            <option value="파레트">파레트</option>
-            <option value="박스">박스</option>
-            <option value="통">통</option>
-            <option value="롤">롤</option>
-          </select>
+            <div className="mt-3 h-10 px-3.5 rounded-xl bg-[#EEF3FC] flex items-center justify-between">
+              <span className="text-[12.5px] font-bold text-[#5B6B85]">추가될 항목</span>
+              <span className={`text-[14px] font-black ${pending ? "text-[#1B2B4B]" : "text-[#A7B3C6]"}`}>{pending || "—"}</span>
+            </div>
+          </div>
         </div>
-        <button className="w-full py-2 rounded-lg bg-[#1B2B4B] text-white text-[13px] font-bold mb-4"
-          onClick={() => {
-            const item = _cargoAddType ? `${_cargoAddQty}${_cargoAddType}` : _cargoAddQty;
-            if (item.trim()) {
-              const newVal = _cargoEditValue ? _cargoEditValue+"+"+item.trim() : item.trim();
-              _setCargoEditValue(newVal);
-              cargoAddPopup.onCommit(newVal);
-              _setCargoAddQty(""); _setCargoAddType("");
-            }
-          }}><EditableText id="misc.btn.7404.추가" defaultText="추가" /></button>
-        <button className="w-full py-2 rounded-xl bg-gray-100 text-gray-700 text-[13px] font-semibold"
-          onClick={() => { setCargoAddPopup(null); _setCargoAddQty(""); _setCargoAddType(""); }}><EditableText id="misc.btn.7406.닫기" defaultText="닫기" /></button>
+
+        <div className="px-6 pb-5 flex gap-2">
+          <button type="button" onClick={closeCargo}
+            className="h-11 px-5 rounded-xl border border-[#DCE3EE] bg-white text-[14px] font-black text-[#3A4A66] hover:bg-[#F5F8FD]"><EditableText id="misc.btn.7406.닫기" defaultText="닫기" /></button>
+          <button type="button" onClick={addCargo} disabled={!pending}
+            className="flex-1 h-11 rounded-xl bg-[#1B2B4B] text-white text-[14.5px] font-black hover:bg-[#0F1A30] disabled:opacity-40 disabled:cursor-not-allowed shadow-[0_8px_18px_rgba(15,26,48,0.22)]">
+            <EditableText id="misc.btn.7404.추가" defaultText="추가" /> <span className="ml-1 text-[11px] font-bold text-white/55">ENTER</span>
+          </button>
+        </div>
       </div>
-    </div>
-  </div>
-)}
+    </div>,
+    document.body
+  );
+})()}
 
     </ToastProvider>
     </EditModeProvider>
@@ -9274,7 +9330,7 @@ if (!prices.length || !items.length) {
 return (
     <div className="flex items-center gap-4 bg-[#1B2B4B] text-white px-4 py-1.5 rounded-lg shadow text-sm overflow-hidden border border-[#243a60]">
 
-      <select
+      <CustomSelect
         value={area}
         onChange={(e) => setArea(e.target.value)}
         className="bg-white text-black text-xs rounded px-2 py-1"
@@ -9282,7 +9338,7 @@ return (
         {AREA_OPTIONS.map(a => (
           <option key={a.code} value={a.code}>{a.name}</option>
         ))}
-      </select>
+      </CustomSelect>
 
       <div className="relative h-6 overflow-hidden flex-1">
         <div
@@ -10104,24 +10160,7 @@ React.useEffect(() => {
 const [popupType, setPopupType] = React.useState(null);
 
 const [statusPopup, setStatusPopup] = React.useState(null);
-// ⭐ 전화번호 숫자→하이폰 포맷 변환
-function formatPhone(raw) {
-  if (!raw) return "";
-  
-  const str = String(raw);   // ★ 어떤 타입이 와도 문자열로 강제
-
-  const num = str.replace(/[^\d]/g, ""); // 숫자만 추출
-
-  if (num.length === 11) {
-    return `${num.slice(0, 3)}-${num.slice(3, 7)}-${num.slice(7)}`;
-  }
-
-  if (num.length === 10) {
-    return `${num.slice(0, 3)}-${num.slice(3, 6)}-${num.slice(6)}`;
-  }
-
-  return str;   // 기본 문자열 리턴(하이픈 없는 경우 등)
-}
+// ⭐ 전화번호 포맷은 파일 상단 공용 formatPhone(단계적 하이픈) 사용
 
 // ========================================================
 // 🔷 Today Dashboard 데이터 계산 (UI 대시보드에서 사용)
@@ -15011,7 +15050,7 @@ React.useEffect(() => {
       내일
     </button>
     <button type="button"
-    className="px-2.5 py-1 text-[12px] font-semibold rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 transition"
+    className="px-2.5 py-1 text-[12px] font-semibold rounded-lg bg-[#1B2B4B] text-white hover:bg-[#0F1A30] transition"
     onClick={() => {
       const d = new Date();
       const day = d.getDay(); // 0=일 1=월 ... 6=토
@@ -15114,7 +15153,7 @@ React.useEffect(() => {
     </button>
     {/* ✅ 추가 */}
   <button type="button"
-    className="px-2.5 py-1 text-[12px] font-semibold rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 transition"
+    className="px-2.5 py-1 text-[12px] font-semibold rounded-lg bg-[#1B2B4B] text-white hover:bg-[#0F1A30] transition"
     onClick={() => {
       const d = new Date();
       const day = d.getDay();
@@ -18000,7 +18039,7 @@ className={`
     <div className="bg-white border border-gray-100 rounded-lg overflow-hidden flex-1 flex flex-col">
       <div className="px-3 py-2 border-b border-gray-50 flex items-center justify-between shrink-0">
         <span className="text-[11px] font-bold text-[#1B2B4B]">거래처 TOP 5</span>
-        <span className="text-[9px] text-gray-400 font-medium">오늘 오더</span>
+        <span className="text-[11px] text-gray-400 font-medium">오늘 오더</span>
       </div>
       <div className="px-3 py-2 flex-1 flex flex-col justify-center">
         {(() => {
@@ -18081,8 +18120,8 @@ className={`
                   <div className="text-[11px] font-bold text-gray-500 uppercase tracking-widest mb-2">상차지</div>
                   <div className="grid grid-cols-4 gap-3">
                     <div className="flex flex-col gap-0.5">
-                      <span className="text-[10px] text-gray-500 font-medium">시도</span>
-                      <CustomSelect className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-blue-400"
+                      <span className="text-[11px] text-gray-500 font-semibold">시도</span>
+                      <CustomSelect className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-[#1B2B4B]"
                         value={send24Data.startWide ?? ""} disabled={send24Sending || call24MetaLoading}
                         onChange={e => handleCall24WideChange("start", e.target.value)}>
                         <option value="">선택</option>
@@ -18090,8 +18129,8 @@ className={`
                       </CustomSelect>
                     </div>
                     <div className="flex flex-col gap-0.5">
-                      <span className="text-[10px] text-gray-500 font-medium">시군구</span>
-                      <CustomSelect className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-blue-400"
+                      <span className="text-[11px] text-gray-500 font-semibold">시군구</span>
+                      <CustomSelect className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-[#1B2B4B]"
                         value={send24Data.startSgg ?? ""} disabled={send24Sending || call24MetaLoading || !send24Data.startWide}
                         onChange={e => handleCall24SggChange("start", send24Data.startWide, e.target.value)}>
                         <option value="">선택</option>
@@ -18099,8 +18138,8 @@ className={`
                       </CustomSelect>
                     </div>
                     <div className="flex flex-col gap-0.5">
-                      <span className="text-[10px] text-gray-500 font-medium">읍면동</span>
-                      <CustomSelect className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-blue-400"
+                      <span className="text-[11px] text-gray-500 font-semibold">읍면동</span>
+                      <CustomSelect className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-[#1B2B4B]"
                         value={send24Data.startDong ?? ""} disabled={send24Sending || call24MetaLoading || !send24Data.startSgg}
                         onChange={e => setSend24Data(d => ({ ...d, startDong: e.target.value }))}>
                         <option value="">선택</option>
@@ -18110,15 +18149,15 @@ className={`
                     {[["상세주소","startDetail"],
                       ["상차예정일 (YYYYMMDD)","startPlanDt"]].map(([lbl,key]) => (
                       <div key={key} className="flex flex-col gap-0.5">
-                        <span className="text-[10px] text-gray-500 font-medium">{lbl}</span>
-                        <input autoComplete="off" className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-blue-400"
+                        <span className="text-[11px] text-gray-500 font-semibold">{lbl}</span>
+                        <input autoComplete="off" className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-[#1B2B4B]"
                           value={send24Data[key] ?? ""} disabled={send24Sending}
                           onChange={e => { const v = e.target.value; setSend24Data(d => ({ ...d, [key]: v })); }} />
                       </div>
                     ))}
                     <div className="flex flex-col gap-0.5">
-                      <span className="text-[10px] text-gray-500 font-medium">상차방법</span>
-                      <CustomSelect className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-blue-400"
+                      <span className="text-[11px] text-gray-500 font-semibold">상차방법</span>
+                      <CustomSelect className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-[#1B2B4B]"
                         value={send24Data.startLoad ?? ""} disabled={send24Sending}
                         onChange={e => setSend24Data(d => ({ ...d, startLoad: e.target.value }))}>
                         {["수작업","지게차","호이스트","크레인","컨베이어","기타"].map(v => <option key={v} value={v}>{v}</option>)}
@@ -18132,8 +18171,8 @@ className={`
                   <div className="text-[11px] font-bold text-gray-500 uppercase tracking-widest mb-2">하차지</div>
                   <div className="grid grid-cols-4 gap-3">
                     <div className="flex flex-col gap-0.5">
-                      <span className="text-[10px] text-gray-500 font-medium">시도</span>
-                      <CustomSelect className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-blue-400"
+                      <span className="text-[11px] text-gray-500 font-semibold">시도</span>
+                      <CustomSelect className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-[#1B2B4B]"
                         value={send24Data.endWide ?? ""} disabled={send24Sending || call24MetaLoading}
                         onChange={e => handleCall24WideChange("end", e.target.value)}>
                         <option value="">선택</option>
@@ -18141,8 +18180,8 @@ className={`
                       </CustomSelect>
                     </div>
                     <div className="flex flex-col gap-0.5">
-                      <span className="text-[10px] text-gray-500 font-medium">시군구</span>
-                      <CustomSelect className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-blue-400"
+                      <span className="text-[11px] text-gray-500 font-semibold">시군구</span>
+                      <CustomSelect className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-[#1B2B4B]"
                         value={send24Data.endSgg ?? ""} disabled={send24Sending || call24MetaLoading || !send24Data.endWide}
                         onChange={e => handleCall24SggChange("end", send24Data.endWide, e.target.value)}>
                         <option value="">선택</option>
@@ -18150,8 +18189,8 @@ className={`
                       </CustomSelect>
                     </div>
                     <div className="flex flex-col gap-0.5">
-                      <span className="text-[10px] text-gray-500 font-medium">읍면동</span>
-                      <CustomSelect className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-blue-400"
+                      <span className="text-[11px] text-gray-500 font-semibold">읍면동</span>
+                      <CustomSelect className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-[#1B2B4B]"
                         value={send24Data.endDong ?? ""} disabled={send24Sending || call24MetaLoading || !send24Data.endSgg}
                         onChange={e => setSend24Data(d => ({ ...d, endDong: e.target.value }))}>
                         <option value="">선택</option>
@@ -18161,15 +18200,15 @@ className={`
                     {[["상세주소","endDetail"],
                       ["하차예정일 (YYYYMMDD)","endPlanDt"],["하차지연락처","endAreaPhone"]].map(([lbl,key]) => (
                       <div key={key} className="flex flex-col gap-0.5">
-                        <span className="text-[10px] text-gray-500 font-medium">{lbl}</span>
-                        <input autoComplete="off" className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-blue-400"
+                        <span className="text-[11px] text-gray-500 font-semibold">{lbl}</span>
+                        <input autoComplete="off" className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-[#1B2B4B]"
                           value={send24Data[key] ?? ""} disabled={send24Sending}
                           onChange={e => { const v = e.target.value; setSend24Data(d => ({ ...d, [key]: v })); }} />
                       </div>
                     ))}
                     <div className="flex flex-col gap-0.5">
-                      <span className="text-[10px] text-gray-500 font-medium">하차방법</span>
-                      <CustomSelect className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-blue-400"
+                      <span className="text-[11px] text-gray-500 font-semibold">하차방법</span>
+                      <CustomSelect className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-[#1B2B4B]"
                         value={send24Data.endLoad ?? ""} disabled={send24Sending}
                         onChange={e => setSend24Data(d => ({ ...d, endLoad: e.target.value }))}>
                         {["수작업","지게차","호이스트","크레인","컨베이어","기타"].map(v => <option key={v} value={v}>{v}</option>)}
@@ -18183,8 +18222,8 @@ className={`
                   <div className="text-[11px] font-bold text-gray-500 uppercase tracking-widest mb-2">화물 / 차량</div>
                   <div className="grid grid-cols-4 gap-3">
                     <div className="flex flex-col gap-0.5">
-                      <span className="text-[10px] text-gray-500 font-medium">차량톤수</span>
-                      <CustomSelect className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-blue-400"
+                      <span className="text-[11px] text-gray-500 font-semibold">차량톤수</span>
+                      <CustomSelect className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-[#1B2B4B]"
                         value={send24Data.cargoTon ?? ""} disabled={send24Sending || call24MetaLoading}
                         onChange={e => handleCall24CargoTonChange(e.target.value)}>
                         <option value="">선택</option>
@@ -18192,8 +18231,8 @@ className={`
                       </CustomSelect>
                     </div>
                     <div className="flex flex-col gap-0.5">
-                      <span className="text-[10px] text-gray-500 font-medium">차량종류</span>
-                      <CustomSelect className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-blue-400"
+                      <span className="text-[11px] text-gray-500 font-semibold">차량종류</span>
+                      <CustomSelect className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-[#1B2B4B]"
                         value={send24Data.truckType ?? ""} disabled={send24Sending || call24MetaLoading || !send24Data.cargoTon}
                         onChange={e => setSend24Data(d => ({ ...d, truckType: e.target.value }))}>
                         <option value="">선택</option>
@@ -18202,8 +18241,8 @@ className={`
                     </div>
                     {[["화물중량(t)","frgton"],["화물내용","cargoDsc"]].map(([lbl,key]) => (
                       <div key={key} className="flex flex-col gap-0.5">
-                        <span className="text-[10px] text-gray-500 font-medium">{lbl}</span>
-                        <input autoComplete="off" className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-blue-400"
+                        <span className="text-[11px] text-gray-500 font-semibold">{lbl}</span>
+                        <input autoComplete="off" className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-[#1B2B4B]"
                           value={send24Data[key] ?? ""} disabled={send24Sending}
                           onChange={e => { const v = e.target.value; setSend24Data(d => ({ ...d, [key]: v })); }} />
                       </div>
@@ -18217,23 +18256,23 @@ className={`
                   <div className="grid grid-cols-4 gap-3">
                     {[["청구운임","fare"],["기사운임","fee"]].map(([lbl,key]) => (
                       <div key={key} className="flex flex-col gap-0.5">
-                        <span className="text-[10px] text-gray-500 font-medium">{lbl}</span>
-                        <input autoComplete="off" className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-blue-400"
-                          value={send24Data[key] ?? ""} disabled={send24Sending}
-                          onChange={e => { const v = e.target.value; setSend24Data(d => ({ ...d, [key]: v })); }} />
+                        <span className="text-[11px] text-gray-500 font-semibold">{lbl}</span>
+                        <input autoComplete="off" inputMode="numeric" className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] text-right focus:outline-none focus:border-[#1B2B4B]"
+                          value={send24Data[key] ? Number(String(send24Data[key]).replace(/[^\d]/g, "") || 0).toLocaleString() : ""} disabled={send24Sending}
+                          onChange={e => { const v = e.target.value.replace(/[^\d]/g, ""); setSend24Data(d => ({ ...d, [key]: v })); }} />
                       </div>
                     ))}
                     <div className="flex flex-col gap-0.5">
-                      <span className="text-[10px] text-gray-500 font-medium">결제방식</span>
-                      <CustomSelect className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-blue-400"
+                      <span className="text-[11px] text-gray-500 font-semibold">결제방식</span>
+                      <CustomSelect className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-[#1B2B4B]"
                         value={send24Data.farePaytype ?? ""} disabled={send24Sending}
                         onChange={e => setSend24Data(d => ({ ...d, farePaytype: e.target.value }))}>
                         {["인수증","선착불","카드"].map(v => <option key={v} value={v}>{v}</option>)}
                       </CustomSelect>
                     </div>
                     <div className="flex flex-col gap-0.5">
-                      <span className="text-[10px] text-gray-500 font-medium">세금계산서</span>
-                      <CustomSelect className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-blue-400"
+                      <span className="text-[11px] text-gray-500 font-semibold">세금계산서</span>
+                      <CustomSelect className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-[#1B2B4B]"
                         value={send24Data.taxbillType ?? ""} disabled={send24Sending}
                         onChange={e => setSend24Data(d => ({ ...d, taxbillType: e.target.value }))}>
                         <option value="Y">Y - 발행</option>
@@ -18248,8 +18287,8 @@ className={`
                   <div className="text-[11px] font-bold text-gray-500 uppercase tracking-widest mb-2">화주 정보</div>
                   <div className="grid grid-cols-4 gap-3">
                     <div className="flex flex-col gap-0.5">
-                      <span className="text-[10px] text-gray-500 font-medium">화주유형</span>
-                      <CustomSelect className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-blue-400"
+                      <span className="text-[11px] text-gray-500 font-semibold">화주유형</span>
+                      <CustomSelect className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-[#1B2B4B]"
                         value={send24Data.firstType ?? ""} disabled={send24Sending}
                         onChange={e => setSend24Data(d => ({ ...d, firstType: e.target.value }))}>
                         <option value="01">01 - 직접화주</option>
@@ -18258,8 +18297,8 @@ className={`
                     </div>
                     {[["화주명","firstShipperNm"],["화주연락처","firstShipperInfo"],["사업자번호","firstShipperBizNo"]].map(([lbl,key]) => (
                       <div key={key} className="flex flex-col gap-0.5">
-                        <span className="text-[10px] text-gray-500 font-medium">{lbl}</span>
-                        <input autoComplete="off" className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-blue-400"
+                        <span className="text-[11px] text-gray-500 font-semibold">{lbl}</span>
+                        <input autoComplete="off" className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-[#1B2B4B]"
                           value={send24Data[key] ?? ""} disabled={send24Sending}
                           onChange={e => { const v = e.target.value; setSend24Data(d => ({ ...d, [key]: v })); }} />
                       </div>
@@ -18272,14 +18311,14 @@ className={`
                   <div className="text-[11px] font-bold text-gray-500 uppercase tracking-widest mb-2">기타</div>
                   <div className="grid grid-cols-4 gap-3">
                     <div className="flex flex-col gap-0.5">
-                      <span className="text-[10px] text-gray-500 font-medium">24시콜 아이디 (ddID)</span>
-                      <input autoComplete="off" className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-blue-400"
+                      <span className="text-[11px] text-gray-500 font-semibold">24시콜 아이디 (ddID)</span>
+                      <input autoComplete="off" className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-[#1B2B4B]"
                         value={send24Data.ddID ?? ""} disabled={send24Sending}
                         onChange={e => { const v = e.target.value; setSend24Data(d => ({ ...d, ddID: v })); }} />
                     </div>
                     <div className="flex flex-col gap-0.5">
-                      <span className="text-[10px] text-gray-500 font-medium">24시콜 비밀번호 (ddPwd)</span>
-                      <input autoComplete="off" type="password" className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-blue-400"
+                      <span className="text-[11px] text-gray-500 font-semibold">24시콜 비밀번호 (ddPwd)</span>
+                      <input autoComplete="off" type="password" className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-[#1B2B4B]"
                         value={send24Data.ddPwd ?? ""} disabled={send24Sending}
                         onChange={e => { const v = e.target.value; setSend24Data(d => ({ ...d, ddPwd: v })); }} />
                     </div>
@@ -19842,7 +19881,7 @@ setConfirmChange(null);
       <div className="flex justify-end gap-2 mb-4">
         {/* 예 → 신규 등록 */}
         <button
-          className="px-4 py-2 bg-blue-600 text-white rounded"
+          className="px-4 py-2 bg-[#1B2B4B] text-white rounded"
           onClick={() => {
   const { name } = dupPopup.input;
 
@@ -20053,7 +20092,7 @@ setConfirmChange(null);
       </div>
 
       <button
-        className="w-full bg-blue-600 hover:bg-blue-700 text-white py-2 rounded-md text-sm mt-5"
+        className="w-full bg-[#1B2B4B] hover:bg-[#0F1A30] text-white py-2 rounded-md text-sm mt-5"
         onClick={() => setStatusPopup(null)}
       >
         닫기
@@ -20098,7 +20137,7 @@ setConfirmChange(null);
       </div>
 
       <button
-        className="w-full bg-blue-600 hover:bg-blue-700 text-white py-2 rounded-md text-sm mt-5"
+        className="w-full bg-[#1B2B4B] hover:bg-[#0F1A30] text-white py-2 rounded-md text-sm mt-5"
         onClick={() => setPopupType(null)}
       >
         닫기
@@ -20316,7 +20355,7 @@ setConfirmChange(null);
                           return (
                             <td key={c.id} className={`px-3 py-2.5 text-center whitespace-nowrap ${isMatch ? "bg-[#1B2B4B]/5 ring-2 ring-inset ring-[#1B2B4B] animate-pulse" : ""}`}>
                               {v ? <span className="font-bold text-blue-700">{v.toLocaleString()}원</span> : <span className="text-gray-400">-</span>}
-                              {isMatch && <div className="text-[9px] font-bold text-[#1B2B4B] mt-0.5">입력한 톤수</div>}
+                              {isMatch && <div className="text-[11px] font-bold text-[#1B2B4B] mt-0.5">입력한 톤수</div>}
                             </td>
                           );
                         })}
@@ -20642,14 +20681,14 @@ setConfirmChange(null);
                 });
                 const tabs = ["all", "완전일치", "부분일치", "톤수일치", "경로일치"];
                 return (
-                  <select value={fare3Filter} onChange={e => setFare3Filter(e.target.value)}
+                  <CustomSelect value={fare3Filter} onChange={e => setFare3Filter(e.target.value)}
                     className="mb-3 text-[12px] font-bold text-[#1B2B4B] border border-gray-200 rounded-lg px-2.5 py-1.5 outline-none cursor-pointer bg-white">
                     {tabs.map(t => {
                       const cnt = t === "all" ? sortedHistory.length : (counts[t] || 0);
                       if (t !== "all" && cnt === 0) return null;
                       return <option key={t} value={t}>{t === "all" ? `전체 ${cnt}건` : `${t} ${cnt}건`}</option>;
                     })}
-                  </select>
+                  </CustomSelect>
                 );
               })()}
               <div className="space-y-2">
@@ -22205,13 +22244,12 @@ function StopEditModal({ open, onClose, onSave, list, type, placeRows = [], time
                     setEditList(prev=>{const c=[...prev];c[idx].화물내용=v;return c;});
                   }} />
                 <div className="absolute top-0 right-0 h-full flex items-center pr-[1px]">
-                  <select className="w-[58px] h-[calc(100%-2px)] px-1 text-[11px] font-bold rounded-r-lg bg-[#1B2B4B] text-white border-0 appearance-none cursor-pointer"
+                  <CustomSelect className="w-[58px] h-[calc(100%-2px)] px-1 text-[11px] font-bold rounded-r-lg bg-[#1B2B4B] text-white border-0 appearance-none cursor-pointer"
                     value={stop.화물타입||""}
                     onChange={e=>{const t=e.target.value;setEditList(prev=>{const c=[...prev];c[idx]={...c[idx],화물타입:t,화물내용:t?String(c[idx].화물내용||"").replace(/[^\d.]/g,""):c[idx].화물내용};return c;});}}>
                     <option value="">없음</option>
                     {cargoTypeOptionsCustom.map(v => <option key={v} value={v}>{v}</option>)}
-                  </select>
-                  <span className="absolute right-1.5 text-white/70 text-[10px] pointer-events-none">▾</span>
+                  </CustomSelect>
                 </div>
               </div>
                 );
@@ -22235,13 +22273,12 @@ function StopEditModal({ open, onClose, onSave, list, type, placeRows = [], time
                     setEditList(prev=>{const c=[...prev];if(tonIsUnit){c[idx].톤수값=v;c[idx].차량톤수=`${v}${c[idx].톤수타입}`;}else{c[idx].차량톤수=v;c[idx].톤수값=v;}return c;});
                   }} />
                 <div className="absolute top-0 right-0 h-full flex items-center pr-[1px]">
-                  <select className="w-[48px] h-[calc(100%-2px)] px-1 text-[11px] font-bold rounded-r-lg bg-[#1B2B4B] text-white border-0 appearance-none cursor-pointer"
+                  <CustomSelect className="w-[48px] h-[calc(100%-2px)] px-1 text-[11px] font-bold rounded-r-lg bg-[#1B2B4B] text-white border-0 appearance-none cursor-pointer"
                     value={stop.톤수타입||""}
                     onChange={e=>{const t=e.target.value;setEditList(prev=>{const c=[...prev];const tv=t?String(c[idx].톤수값||c[idx].차량톤수||"").replace(/[^\d.]/g,""):(c[idx].톤수값||c[idx].차량톤수||"");c[idx]={...c[idx],톤수타입:t,톤수값:tv,차량톤수:t?(tv?`${tv}${t}`:""):tv};return c;});}}>
                     <option value="">없음</option>
                     {tonTypeOptionsCustom.map(v => <option key={v} value={v}>{v}</option>)}
-                  </select>
-                  <span className="absolute right-1 text-white/70 text-[10px] pointer-events-none">▾</span>
+                  </CustomSelect>
                 </div>
               </div>
                 );
@@ -22295,13 +22332,13 @@ function StopEditModal({ open, onClose, onSave, list, type, placeRows = [], time
             {/* 방법 */}
             <div>
               <label className="text-[11px] font-semibold text-gray-500 mb-0.5 block">{label}방법</label>
-              <select className={inputCls} value={stop.방법||""}
+              <CustomSelect className={inputCls} value={stop.방법||""}
                 onChange={e=>{const v=e.target.value;setEditList(prev=>{const c=[...prev];c[idx]={...c[idx],방법:v};return c;});}}>
                 <option value="">선택</option>
                 {loadMethodOptions.map(v=>(
                   <option key={v} value={v}>{v}</option>
                 ))}
-              </select>
+              </CustomSelect>
             </div>
 
             {/* 삭제 */}
@@ -22721,7 +22758,7 @@ function PalletSlipModal({ rows, clients = [], userCompany, userNameMap, patchDi
                   </div>
                   <div>
                     <div className="text-[11px] font-bold text-gray-500 mb-1">발송지(거래처) 연락처</div>
-                    <input value={f.senderPhone} onChange={(e) => updateForm(id, { senderPhone: e.target.value })} placeholder="연락처" className={inputCls} />
+                    <input value={f.senderPhone} onChange={(e) => updateForm(id, { senderPhone: formatPhone(e.target.value) })} placeholder="010-0000-0000" inputMode="tel" className={inputCls} />
                   </div>
                   <div>
                     <div className="text-[11px] font-bold text-gray-500 mb-1">품목</div>
@@ -22869,15 +22906,15 @@ function NewDriverModal({ data, onClose, onConfirm }) {
             </div>
             <div>
               <label className="block text-[12px] font-semibold text-slate-500 mb-1">등급</label>
-              <select
+              <CustomSelect
                 className="w-full border border-slate-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-[#1B2B4B] bg-white"
-                value={form.등급}
+                value={form.등급 || "일반"}
                 onChange={e => setForm(p => ({ ...p, 등급: e.target.value }))}
               >
                 {["일반", "우수", "VIP", "블랙", "신규"].map(g => (
                   <option key={g} value={g}>{g}</option>
                 ))}
-              </select>
+              </CustomSelect>
             </div>
             <div>
               <label className="block text-[12px] font-semibold text-slate-500 mb-1">메모</label>
@@ -23330,25 +23367,25 @@ function AttachStatusPanel({ open, onClose, initialClient, dispatchData, db, com
               <label className="text-[13px] font-bold text-gray-700"><EditableText id="attachStatus.label.기간" defaultText="기간" /></label>
               <div className="flex items-center gap-2">
                 <div className="flex items-center gap-1 border border-gray-300 rounded-lg px-2 py-2 bg-white">
-                  <select value={dateFrom.slice(0,4)} onChange={e => setDateFrom(`${e.target.value}-${dateFrom.slice(5,7)}-${dateFrom.slice(8,10)}`)} className="text-[14px] outline-none bg-transparent">
+                  <CustomSelect value={dateFrom.slice(0,4)} onChange={e => setDateFrom(`${e.target.value}-${dateFrom.slice(5,7)}-${dateFrom.slice(8,10)}`)} className="text-[14px] outline-none bg-transparent">
                     {Array.from({length:5},(_,i)=>now.getFullYear()-2+i).map(y=><option key={y} value={y}>{y}년</option>)}
-                  </select>
-                  <select value={dateFrom.slice(5,7)} onChange={e => setDateFrom(`${dateFrom.slice(0,4)}-${e.target.value}-${dateFrom.slice(8,10)}`)} className="text-[14px] outline-none bg-transparent">
+                  </CustomSelect>
+                  <CustomSelect value={dateFrom.slice(5,7)} onChange={e => setDateFrom(`${dateFrom.slice(0,4)}-${e.target.value}-${dateFrom.slice(8,10)}`)} className="text-[14px] outline-none bg-transparent">
                     {Array.from({length:12},(_,i)=>String(i+1).padStart(2,"0")).map(m=><option key={m} value={m}>{Number(m)}월</option>)}
-                  </select>
+                  </CustomSelect>
                 </div>
                 <span className="text-gray-500 text-[13px] font-medium">부터</span>
                 <div className="flex items-center gap-1 border border-gray-300 rounded-lg px-2 py-2 bg-white">
-                  <select value={dateTo.slice(0,4)} onChange={e => setDateTo(`${e.target.value}-${dateTo.slice(5,7)}-${dateTo.slice(8,10)}`)} className="text-[14px] outline-none bg-transparent">
+                  <CustomSelect value={dateTo.slice(0,4)} onChange={e => setDateTo(`${e.target.value}-${dateTo.slice(5,7)}-${dateTo.slice(8,10)}`)} className="text-[14px] outline-none bg-transparent">
                     {Array.from({length:5},(_,i)=>now.getFullYear()-2+i).map(y=><option key={y} value={y}>{y}년</option>)}
-                  </select>
-                  <select value={dateTo.slice(5,7)} onChange={e => {
+                  </CustomSelect>
+                  <CustomSelect value={dateTo.slice(5,7)} onChange={e => {
                     const y = dateTo.slice(0,4); const m = e.target.value;
                     const lastD = new Date(Number(y), Number(m), 0).getDate();
                     setDateTo(`${y}-${m}-${String(lastD).padStart(2,"0")}`);
                   }} className="text-[14px] outline-none bg-transparent">
                     {Array.from({length:12},(_,i)=>String(i+1).padStart(2,"0")).map(m=><option key={m} value={m}>{Number(m)}월</option>)}
-                  </select>
+                  </CustomSelect>
                 </div>
                 <span className="text-gray-500 text-[13px] font-medium">까지</span>
               </div>
@@ -31266,7 +31303,7 @@ value={copyTarget?.화물수량 || ""}
                                       return (
                                         <td key={c.id} className={`px-3 py-2.5 text-center whitespace-nowrap ${isMatch ? "bg-[#1B2B4B]/5 ring-2 ring-inset ring-[#1B2B4B] animate-pulse" : ""}`}>
                                           {v ? <span className="font-bold text-blue-700">{v.toLocaleString()}원</span> : <span className="text-gray-400">-</span>}
-                                          {isMatch && <div className="text-[9px] font-bold text-[#1B2B4B] mt-0.5">입력한 톤수</div>}
+                                          {isMatch && <div className="text-[11px] font-bold text-[#1B2B4B] mt-0.5">입력한 톤수</div>}
                                         </td>
                                       );
                                     })}
@@ -32430,7 +32467,7 @@ value={copyTarget?.화물수량 || ""}
         }}
       >
         <div className="font-medium">{d.이름}</div>
-        <div className="text-xs text-gray-500">{d.전화번호}</div>
+        <div className="text-xs text-gray-500">{formatPhone(d.전화번호)}</div>
       </button>
     ))}
   </div>
@@ -32452,7 +32489,7 @@ value={copyTarget?.화물수량 || ""}
                 <label>전화번호</label>
                 <input autoComplete="off"
                   className="border p-2 rounded w-full bg-gray-100"
-                  value={editTarget.전화번호 || ""}
+                  value={formatPhone(editTarget.전화번호) || ""}
                   readOnly
                 />
               </div>
@@ -32678,7 +32715,7 @@ value={copyTarget?.화물수량 || ""}
               </button>
 
               <button
-  className="px-5 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold"
+  className="px-5 py-2 rounded-lg bg-[#1B2B4B] hover:bg-[#0F1A30] text-white font-semibold"
   onClick={async () => {
     if (isViewer) return showAlert("조회전용 권한으로 저장할 수 없습니다.");
     // ✅ 저장 직전 경유지 + 화물내용 최종 동기화
@@ -34385,12 +34422,12 @@ setConfirmChange(null);
                                 {paymentItems.length > 0 && (
                                   <div className="flex items-center gap-1.5 bg-gray-50 border border-gray-200 rounded-lg px-2.5 py-1.5">
                                     <span className="text-[11px] font-semibold text-gray-600">지급방식 불일치 {paymentItems.length}건 →</span>
-                                    <select className="border border-gray-300 rounded px-1.5 py-0.5 text-[11px] bg-white"
+                                    <CustomSelect className="border border-gray-300 rounded px-1.5 py-0.5 text-[11px] bg-white"
                                       value={closeFileBulkValue[payKey] || ""}
                                       onChange={e => setCloseFileBulkValue(p => ({ ...p, [payKey]: e.target.value }))}>
                                       <option value="">선택</option>
                                       {["계산서", "착불", "선불", "손실", "개인", "취소"].map(v => <option key={v} value={v}>{v}</option>)}
-                                    </select>
+                                    </CustomSelect>
                                     <button type="button"
                                       className="px-2 py-0.5 rounded bg-[#1B2B4B] text-white text-[11px] font-bold hover:bg-[#243a60] transition"
                                       onClick={() => bulkFixCloseFileIssues(paymentItems, "지급방식", closeFileBulkValue[payKey])}>
@@ -34401,12 +34438,12 @@ setConfirmChange(null);
                                 {dispatchItems.length > 0 && (
                                   <div className="flex items-center gap-1.5 bg-gray-50 border border-gray-200 rounded-lg px-2.5 py-1.5">
                                     <span className="text-[11px] font-semibold text-gray-600">배차방식 불일치 {dispatchItems.length}건 →</span>
-                                    <select className="border border-gray-300 rounded px-1.5 py-0.5 text-[11px] bg-white"
+                                    <CustomSelect className="border border-gray-300 rounded px-1.5 py-0.5 text-[11px] bg-white"
                                       value={closeFileBulkValue[dispKey] || ""}
                                       onChange={e => setCloseFileBulkValue(p => ({ ...p, [dispKey]: e.target.value }))}>
                                       <option value="">선택</option>
                                       {dropdownList("배차방식", ["24시", "직접배차", "인성", "고정기사"]).map(v => <option key={v} value={v}>{v}</option>)}
-                                    </select>
+                                    </CustomSelect>
                                     <button type="button"
                                       className="px-2 py-0.5 rounded bg-[#1B2B4B] text-white text-[11px] font-bold hover:bg-[#243a60] transition"
                                       onClick={() => bulkFixCloseFileIssues(dispatchItems, "배차방식", closeFileBulkValue[dispKey])}>
@@ -34888,7 +34925,7 @@ function MemoMore({ text = "" }) {
 
             <div className="text-right mt-4">
               <button
-                className="px-3 py-1 bg-blue-600 text-white rounded"
+                className="px-3 py-1 bg-[#1B2B4B] text-white rounded"
                 onClick={() => setOpen(false)}
               >
                 닫기
@@ -40878,7 +40915,7 @@ return (
         }}
       >
         <div className="font-medium">{d.이름}</div>
-        <div className="text-xs text-gray-500">{d.전화번호}</div>
+        <div className="text-xs text-gray-500">{formatPhone(d.전화번호)}</div>
       </button>
     ))}
   </div>
@@ -41142,7 +41179,7 @@ return (
               </button>
 
              <button
-  className="px-5 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold"
+  className="px-5 py-2 rounded-lg bg-[#1B2B4B] hover:bg-[#0F1A30] text-white font-semibold"
   onClick={async () => {
     // 1) Firestore 저장
     const ALLOWED_FIELDS = [
@@ -42189,7 +42226,7 @@ setCopyPlaceOptions(list);
     {/* 숫자 */}
     <input autoComplete="off"
     disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
-      className="flex-1 px-3 py-2 outline-none"
+      className="flex-1 min-w-0 w-0 px-3 py-2 text-[14.5px] font-bold outline-none"
       value={copyTarget?.톤수값 || ""}
       onChange={(e) => {
         const v = e.target.value;
@@ -42208,7 +42245,7 @@ setCopyPlaceOptions(list);
     {/* 단위 */}
     <CustomSelect
     disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
-      className="px-3 py-2 bg-[#1B2B4B] text-white font-bold cursor-pointer"
+      className="shrink-0 w-[78px] pl-3 pr-6 py-2 bg-[#1B2B4B] text-white text-[14px] font-bold outline-none cursor-pointer"
       value={copyTarget?.톤수타입 || ""}
       onChange={(e) => {
         const type = e.target.value;
@@ -42237,7 +42274,7 @@ setCopyPlaceOptions(list);
     {/* 수량 */}
     <input autoComplete="off"
     disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
-      className="flex-1 px-3 py-2 outline-none"
+      className="flex-1 min-w-0 w-0 px-3 py-2 text-[14.5px] font-bold outline-none"
       value={copyTarget?.화물수량 || ""}
       onChange={(e) => {
         const v = e.target.value;
@@ -42252,7 +42289,7 @@ setCopyPlaceOptions(list);
     {/* 타입 */}
     <CustomSelect
     disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
-      className="px-3 py-2 bg-[#1B2B4B] text-white font-bold cursor-pointer"
+      className="shrink-0 w-[96px] pl-3 pr-6 py-2 bg-[#1B2B4B] text-white text-[14px] font-bold outline-none cursor-pointer"
       value={copyTarget?.화물타입 || ""}
       onChange={(e) => {
         const type = e.target.value;
@@ -42844,7 +42881,7 @@ setCopyPlaceOptions(list);
                                 return (
                                   <td key={c.id} className={`px-3 py-2.5 text-center whitespace-nowrap ${isMatch ? "bg-[#1B2B4B]/5 ring-2 ring-inset ring-[#1B2B4B] animate-pulse" : ""}`}>
                                     {v ? <span className="font-bold text-blue-700">{v.toLocaleString()}원</span> : <span className="text-gray-400">-</span>}
-                                    {isMatch && <div className="text-[9px] font-bold text-[#1B2B4B] mt-0.5">입력한 톤수</div>}
+                                    {isMatch && <div className="text-[11px] font-bold text-[#1B2B4B] mt-0.5">입력한 톤수</div>}
                                   </td>
                                 );
                               })}
@@ -43903,12 +43940,12 @@ setCopyPlaceOptions(list);
                                 {paymentItems.length > 0 && (
                                   <div className="flex items-center gap-1.5 bg-gray-50 border border-gray-200 rounded-lg px-2.5 py-1.5">
                                     <span className="text-[11px] font-semibold text-gray-600">지급방식 불일치 {paymentItems.length}건 →</span>
-                                    <select className="border border-gray-300 rounded px-1.5 py-0.5 text-[11px] bg-white"
+                                    <CustomSelect className="border border-gray-300 rounded px-1.5 py-0.5 text-[11px] bg-white"
                                       value={closeFileBulkValue[payKey] || ""}
                                       onChange={e => setCloseFileBulkValue(p => ({ ...p, [payKey]: e.target.value }))}>
                                       <option value="">선택</option>
                                       {["계산서", "착불", "선불", "손실", "개인", "취소"].map(v => <option key={v} value={v}>{v}</option>)}
-                                    </select>
+                                    </CustomSelect>
                                     <button type="button"
                                       className="px-2 py-0.5 rounded bg-[#1B2B4B] text-white text-[11px] font-bold hover:bg-[#243a60] transition"
                                       onClick={() => bulkFixCloseFileIssues(paymentItems, "지급방식", closeFileBulkValue[payKey])}>
@@ -43919,12 +43956,12 @@ setCopyPlaceOptions(list);
                                 {dispatchItems.length > 0 && (
                                   <div className="flex items-center gap-1.5 bg-gray-50 border border-gray-200 rounded-lg px-2.5 py-1.5">
                                     <span className="text-[11px] font-semibold text-gray-600">배차방식 불일치 {dispatchItems.length}건 →</span>
-                                    <select className="border border-gray-300 rounded px-1.5 py-0.5 text-[11px] bg-white"
+                                    <CustomSelect className="border border-gray-300 rounded px-1.5 py-0.5 text-[11px] bg-white"
                                       value={closeFileBulkValue[dispKey] || ""}
                                       onChange={e => setCloseFileBulkValue(p => ({ ...p, [dispKey]: e.target.value }))}>
                                       <option value="">선택</option>
                                       {dropdownList("배차방식", ["24시", "직접배차", "인성", "고정기사"]).map(v => <option key={v} value={v}>{v}</option>)}
-                                    </select>
+                                    </CustomSelect>
                                     <button type="button"
                                       className="px-2 py-0.5 rounded bg-[#1B2B4B] text-white text-[11px] font-bold hover:bg-[#243a60] transition"
                                       onClick={() => bulkFixCloseFileIssues(dispatchItems, "배차방식", closeFileBulkValue[dispKey])}>
@@ -44957,7 +44994,7 @@ function MemoCell({ text }) {
             <div className="text-right mt-3">
               <button
                 onClick={() => setShowFull(false)} // ✓ ▲ 이게 핵심
-                className="px-3 py-1 bg-blue-600 text-white rounded"
+                className="px-3 py-1 bg-[#1B2B4B] text-white rounded"
               >
                 닫기
               </button>
@@ -45567,10 +45604,16 @@ function ProfitLossReport({ dispatchData = [], fixedRows = [], clients = [], pla
       return (
         <td className="px-1 py-0.5 text-center border-r border-gray-100">
           <input autoComplete="off"
-            type="number"
-            defaultValue={val || ""}
+            inputMode="numeric"
+            defaultValue={val ? Number(val).toLocaleString() : ""}
             className="w-full text-center text-[12px] border border-blue-400 rounded px-1 outline-none"
             autoFocus
+            onChange={(e) => {
+              // 금액 입력 중 천단위 콤마 자동 — 음수(-) 허용, 저장은 updateCell에서 숫자로 변환
+              const t = e.target.value.trim();
+              const d = t.replace(/[^\d]/g, "");
+              e.target.value = (t.startsWith("-") ? "-" : "") + (d ? Number(d).toLocaleString() : "");
+            }}
             onBlur={(e) => {
               updateCell(rowKey, month, e.target.value);
               setEditingCell(null);
@@ -46571,9 +46614,9 @@ function AccountingDashboard({ dispatchData = [], fixedRows = [], clients = [], 
             <div className="text-[12px] text-gray-500 mb-4">{arModal}</div>
             <div className="mb-1 text-[12px] text-gray-500">미수금 잔액: <strong>{(arByClient.find(r => r.client === arModal)?.outstanding || 0).toLocaleString()}원</strong></div>
             <input autoComplete="off"
-              type="number"
-              value={arInput}
-              onChange={e => setArInput(e.target.value)}
+              inputMode="numeric"
+              value={arInput ? Number(String(arInput).replace(/[^\d]/g, "") || 0).toLocaleString() : ""}
+              onChange={e => setArInput(e.target.value.replace(/[^\d]/g, ""))}
               placeholder="입금액 입력 (원)"
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-[13px] mb-4 outline-none focus:border-[#1B2B4B]"
               autoFocus
@@ -46599,9 +46642,9 @@ function AccountingDashboard({ dispatchData = [], fixedRows = [], clients = [], 
             <div className="text-[12px] text-gray-500 mb-4">{apModal}</div>
             <div className="mb-1 text-[12px] text-gray-500">미지급 잔액: <strong>{(apByDriver.find(r => r.driver === apModal)?.outstanding || 0).toLocaleString()}원</strong></div>
             <input autoComplete="off"
-              type="number"
-              value={apInput}
-              onChange={e => setApInput(e.target.value)}
+              inputMode="numeric"
+              value={apInput ? Number(String(apInput).replace(/[^\d]/g, "") || 0).toLocaleString() : ""}
+              onChange={e => setApInput(e.target.value.replace(/[^\d]/g, ""))}
               placeholder="지급액 입력 (원)"
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-[13px] mb-4 outline-none focus:border-[#1B2B4B]"
               autoFocus
@@ -49273,6 +49316,8 @@ const tableData = React.useMemo(() => {
 function UnassignedStatus({ dispatchData, setDispatchData = () => {}, drivers = [], patchDispatch, removeDispatch, clients = [], places = [], upsertDriver, upsertClient, isViewer = false, setCargoAddPopup = () => {}, approvedShippers = [], role, userCompany = "" }) {
   // ⭐ 회사별 커스텀 드롭다운 옵션(Part B) — 오더복사/수정 패널의 상/하차방법·화물타입·톤수타입에 사용.
   const loadMethodOptions = useCompanyDropdownOptions("상하차방법", role, userCompany);
+  const fareRU = useFareRules(getTenant() || userCompany); // ⭐ 2026-11-02 운임규칙 — 오더 복사·수정 패널 운임구분(규칙 사용 회사만)
+  const fareOnU = fareRU.on;
   const cargoTypeOptionsCustom = useCompanyDropdownOptions("화물타입", role, userCompany);
   const tonTypeOptionsCustom = useCompanyDropdownOptions("톤수타입", role, userCompany);
   // 오더복사/수정 패널에서 담당자를 새로 입력해도 거래처관리(기본거래처/하차지거래처)에
@@ -49781,19 +49826,19 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
             value={q}
             onChange={(e) => setQ(e.target.value)}
             placeholder="통합검색 (거래처명 / 상차지명 / 차량번호 등)"
-            className="border border-gray-200 rounded-lg px-3 py-1.5 text-[13px] w-72 focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100"
+            className="border border-gray-200 rounded-lg px-3 py-1.5 text-[13px] w-72 focus:outline-none focus:border-[#1B2B4B] focus:ring-1 focus:ring-[#1B2B4B]/10"
           />
           <div className="flex items-center gap-1">
-            <CustomDatePicker className="border border-gray-200 rounded-lg px-2 py-1.5 text-[13px] focus:outline-none focus:border-blue-400 bg-white" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+            <CustomDatePicker className="border border-gray-200 rounded-lg px-2 py-1.5 text-[13px] focus:outline-none focus:border-[#1B2B4B] bg-white" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
             <span className="text-gray-500 text-[13px]">~</span>
-            <CustomDatePicker className="border border-gray-200 rounded-lg px-2 py-1.5 text-[13px] focus:outline-none focus:border-blue-400 bg-white" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
+            <CustomDatePicker className="border border-gray-200 rounded-lg px-2 py-1.5 text-[13px] focus:outline-none focus:border-[#1B2B4B] bg-white" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
           </div>
           <div className="flex items-center gap-1">
-            <select value={filterType} onChange={(e) => setFilterType(e.target.value)} className="border border-gray-200 rounded-lg px-2 py-1.5 text-[13px] focus:outline-none focus:border-blue-400">
+            <CustomSelect value={filterType} onChange={(e) => setFilterType(e.target.value)} className="border border-gray-200 rounded-lg px-2 py-1.5 text-[13px] focus:outline-none focus:border-[#1B2B4B]">
               <option value="거래처명">거래처명</option>
               <option value="차량종류">차량종류</option>
-            </select>
-            <input autoComplete="off" value={filterValue} onChange={(e) => setFilterValue(e.target.value)} placeholder={`${filterType} 검색`} className="border border-gray-200 rounded-lg px-3 py-1.5 text-[13px] w-40 focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100" />
+            </CustomSelect>
+            <input autoComplete="off" value={filterValue} onChange={(e) => setFilterValue(e.target.value)} placeholder={`${filterType} 검색`} className="border border-gray-200 rounded-lg px-3 py-1.5 text-[13px] w-40 focus:outline-none focus:border-[#1B2B4B] focus:ring-1 focus:ring-[#1B2B4B]/10" />
           </div>
           <button onClick={() => { setQ(""); setStartDate(""); setEndDate(""); setFilterValue(""); }} className="px-3 py-1.5 text-[13px] font-semibold rounded-lg bg-white border border-gray-200 text-gray-500 hover:bg-gray-50 transition">
             초기화
@@ -49987,7 +50032,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
             <input autoComplete="off" placeholder="지불운임" className="border p-2 rounded w-full mb-4" />
             <div className="flex justify-end gap-2">
               <button onClick={() => setQuickAssignOpen(false)} className="px-4 py-2 border rounded"><EditableText id="misc.btn.46835.취소" defaultText="취소" /></button>
-              <button onClick={() => setQuickAssignOpen(false)} className="px-4 py-2 bg-indigo-600 text-white rounded"><EditableText id="misc.btn.46836.배차완료" defaultText="배차완료" /></button>
+              <button onClick={() => setQuickAssignOpen(false)} className="px-4 py-2 bg-[#1B2B4B] text-white rounded"><EditableText id="misc.btn.46836.배차완료" defaultText="배차완료" /></button>
             </div>
           </div>
         </div>
@@ -50007,11 +50052,11 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
               </div>
               <div>
                 <label className="block text-[12px] font-semibold text-gray-500 mb-1">기사명 *</label>
-                <input autoComplete="off" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400" value={newDriverData.이름} onChange={(e) => setNewDriverData(p => ({...p, 이름: e.target.value}))} placeholder="기사명 입력" />
+                <input autoComplete="off" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-[#1B2B4B]" value={newDriverData.이름} onChange={(e) => setNewDriverData(p => ({...p, 이름: e.target.value}))} placeholder="기사명 입력" />
               </div>
               <div>
                 <label className="block text-[12px] font-semibold text-gray-500 mb-1">전화번호 *</label>
-                <input autoComplete="off" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400" value={newDriverData.전화번호} onChange={(e) => setNewDriverData(p => ({...p, 전화번호: formatPhone(e.target.value)}))} placeholder="010-0000-0000" />
+                <input autoComplete="off" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-[#1B2B4B]" value={newDriverData.전화번호} onChange={(e) => setNewDriverData(p => ({...p, 전화번호: formatPhone(e.target.value)}))} placeholder="010-0000-0000" />
               </div>
             </div>
             <div className="flex gap-2 px-6 pb-6">
@@ -50230,14 +50275,14 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
             />
           )}
           <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setCopyPanelOpen(false)} />
-          <div className="absolute top-0 right-0 h-full w-[1100px] bg-gray-50 shadow-2xl border-l overflow-y-auto">
-            <div className="p-8 space-y-6">
+          <div className="absolute top-0 right-0 h-full w-[min(1180px,96vw)] bg-[#F4F6FA] shadow-2xl border-l overflow-y-auto">
+            <div className="cp-compact px-5 pb-5 space-y-4 text-[14px]">
 
               {/* 패널 헤더 */}
-              <div className="flex justify-between items-center bg-white rounded-xl border border-gray-200 px-6 py-4 shadow-sm">
-                <div>
-                  <h2 className="text-[18px] font-bold text-[#1B2B4B]"><EditableText id="copyPanel.title" defaultText="오더 복사 / 수정 패널" /></h2>
-                  <p className="text-[12px] text-gray-500 mt-0.5">{copyTarget.거래처명} · {copyTarget.상차지명} → {copyTarget.하차지명}</p>
+              <div className="sticky top-0 z-20 -mx-5 mb-1 flex justify-between items-center gap-3 px-5 py-2.5 text-white shadow-[0_6px_18px_rgba(11,20,40,0.25)]" style={{ background: "linear-gradient(120deg,#0B1428 0%,#1B2B4B 60%,#2D4C82 100%)" }}>
+                <div className="min-w-0">
+                  <div className="text-[9.5px] font-extrabold tracking-[0.24em] text-[#8FB0F0]" style={{ fontFamily: "'JetBrains Mono',ui-monospace,monospace" }}>ORDER · COPY / EDIT</div>
+                  <h2 className="text-[18px] font-black leading-tight"><EditableText id="copyPanel.title" defaultText="오더 복사 / 수정 패널" /> <span className="ml-1 text-[13.5px] font-semibold text-white/60">{copyTarget.거래처명} · {copyTarget.상차지명} → {copyTarget.하차지명}</span></h2>
                 </div>
                 <div className="flex gap-2 items-center">
                   <button
@@ -50254,7 +50299,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                       if (copyTarget.상차지명) syncPlaceContactSimple(copyTarget.상차지명, copyTarget.상차지주소 || "", copyTarget.상차지담당자 || "", copyTarget.상차지담당자번호 || "");
                       if (copyTarget.하차지명) syncPlaceContactSimple(copyTarget.하차지명, copyTarget.하차지주소 || "", copyTarget.하차지담당자 || "", copyTarget.하차지담당자번호 || "");
                     }}
-                    className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-[13px] font-bold hover:bg-emerald-700 transition"
+                    className="px-3.5 h-8 bg-white text-[#0F1A30] rounded-lg text-[13px] font-black hover:bg-[#EEF3FB] transition"
                   >
                     <EditableText id="copyPanel.수정저장" defaultText="수정 저장" />
                   </button>
@@ -50270,21 +50315,21 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                       if (copyTarget.상차지명) syncPlaceContactSimple(copyTarget.상차지명, copyTarget.상차지주소 || "", copyTarget.상차지담당자 || "", copyTarget.상차지담당자번호 || "");
                       if (copyTarget.하차지명) syncPlaceContactSimple(copyTarget.하차지명, copyTarget.하차지주소 || "", copyTarget.하차지담당자 || "", copyTarget.하차지담당자번호 || "");
                     }}
-                    className="px-4 py-2 bg-[#1B2B4B] text-white rounded-lg text-[13px] font-bold hover:bg-[#243a60] transition"
+                    className="px-3.5 h-8 bg-[#8FB0F0] text-[#0B1428] rounded-lg text-[13px] font-black hover:bg-[#CFE0FF] transition"
                   >
                     <EditableText id="copyPanel.복사등록" defaultText="복사 등록" />
                   </button>
-                  <button onClick={() => setCopyPanelOpen(false)} className="w-8 h-8 flex items-center justify-center rounded-lg border border-gray-200 text-gray-500 hover:text-red-500 hover:border-red-200 transition text-lg">✕</button>
+                  <button onClick={() => setCopyPanelOpen(false)} className="w-8 h-8 flex items-center justify-center rounded-lg border border-white/25 text-white/70 hover:text-white hover:bg-white/10 transition text-lg">✕</button>
                 </div>
               </div>
 
               {/* 섹션 공통 스타일 */}
               {/* 거래처 정보 */}
-              <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-                <div className="bg-[#1B2B4B] px-6 py-3">
+              <div className="bg-white rounded-xl border border-[#E3E8F0] overflow-hidden">
+                <div className="bg-[#1B2B4B] px-5 py-2">
                   <h3 className="text-[14px] font-bold text-white">거래처 정보</h3>
                 </div>
-                <div className="p-6">
+                <div className="px-5 py-3">
                   <div className="space-y-1">
                     <div className="flex items-center justify-between">
                       <div className="text-[13px] font-bold text-gray-900">거래처명</div>
@@ -50294,7 +50339,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                     <div className="relative">
                       <input autoComplete="off"
                       disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
-                        className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100"
+                        className={cpInputStyle}
                         value={copyTarget?.거래처명 ?? ""}
                         onChange={(e) => {
                           const v = e.target.value;
@@ -50338,16 +50383,16 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
               </div>
 
               {/* 상하차 정보 */}
-              <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-                <div className="bg-[#1B2B4B] px-6 py-3">
+              <div className="bg-white rounded-xl border border-[#E3E8F0] overflow-hidden">
+                <div className="bg-[#1B2B4B] px-5 py-2">
                   <h3 className="text-[14px] font-bold text-white">상하차 정보</h3>
                 </div>
-                <div className="p-6">
-                  <div className="grid grid-cols-2 gap-10">
+                <div className="px-5 py-3">
+                  <div className="grid grid-cols-2 gap-x-8">
                     {/* 상차 */}
-                    <div className="space-y-4">
+                    <div className="space-y-1.5">
                       <div className="text-[12px] font-bold text-blue-600 pb-1 border-b border-blue-100">상차</div>
-                      <Field label={<>
+                      <CpField label={<>
                         상차일
                         <button
                           type="button"
@@ -50360,7 +50405,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                           </svg>
                         </button>
                       </>}>
-                        <CustomDatePicker className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400" value={copyTarget?.상차일 ?? ""} onChange={(e) => setCopyTarget(p => ({...p, 상차일: e.target.value}))} disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
+                        <CustomDatePicker className={cpInputStyle} value={copyTarget?.상차일 ?? ""} onChange={(e) => setCopyTarget(p => ({...p, 상차일: e.target.value}))} disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
                           multiSelect
                           multiActive={copyTarget?.복수근무일 === true ? true : copyTarget?.복수근무일 === false ? false : _parseWorkDates(copyTarget?.근무일자목록).length > 1}
                           onToggleMulti={() => setCopyTarget(p => {
@@ -50386,26 +50431,26 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                           onClearWorkDates={() => setCopyTarget(p => ({ ...p, 근무일자목록: [], 복수근무일: false }))}
                           displayOverride={(() => { const wd = _parseWorkDates(copyTarget?.근무일자목록); return wd.length > 1 ? `${copyTarget?.상차일 || ""} 외 ${wd.length - 1}일` : undefined; })()}
                         />
-                      </Field>
-                       <Field label="상차시간">
+                      </CpField>
+                       <CpField label="상차시간">
                         <TimeAmPmPicker
                         disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
                           value={copyTarget?.상차시간 ?? ""}
                           onChange={v => setCopyTarget(p => ({...p, 상차시간: v}))}
-                          selectCls="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400"
+                          selectCls="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-[#1B2B4B]"
                         />
-                       </Field>
-                      <Field label="상차방법">
-                        <CustomSelect className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400" value={copyTarget?.상차방법 ?? ""} onChange={(e) => setCopyTarget(p => ({...p, 상차방법: e.target.value}))} disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}>
+                       </CpField>
+                      <CpField label="상차방법">
+                        <CustomSelect className={cpInputStyle} value={copyTarget?.상차방법 ?? ""} onChange={(e) => setCopyTarget(p => ({...p, 상차방법: e.target.value}))} disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}>
                           <option value="">선택</option>
                           {loadMethodOptions.map(v => <option key={v} value={v}>{v}</option>)}
                         </CustomSelect>
-                      </Field>
-                      <Field label="상차지명">
+                      </CpField>
+                      <CpField label="상차지명">
                         <div className="relative">
                           <input autoComplete="off"
                           disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
-                            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400"
+                            className={cpInputStyle}
                             value={copyTarget?.상차지명 ?? ""}
                             onChange={(e) => {
                               const v = e.target.value;
@@ -50457,16 +50502,16 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                             </div>
                           )}
                         </div>
-                      </Field>
-                      <Field label="상차지주소">
-                        <textarea rows={2} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] resize-none leading-snug focus:outline-none focus:border-blue-400" value={copyTarget?.상차지주소 ?? ""} onChange={(e) => setCopyTarget(p => ({...p, 상차지주소: e.target.value}))} disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")} />
-                      </Field>
-                      <Field label={<span className="flex items-center justify-between w-full">상차지 담당자명<ContactPickerIconButton title="상차지 담당자명 선택" onClick={() => { const nm = copyTarget?.상차지명 || ""; if (!nm.trim()) return alert("상차지명을 먼저 입력하세요."); const p = filterPlaces(nm).find(x => nameKeyOf(x.업체명) === nameKeyOf(nm)); const cs = uniqueContactsOf(p); if (!cs.length) return alert("등록된 담당자가 없습니다."); setCopyContactChooser({ type: "pickup", contacts: cs }); }} /></span>}>
-                        <input autoComplete="off" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400" value={copyTarget?.상차지담당자 ?? ""} onChange={(e) => setCopyTarget(p => ({...p, 상차지담당자: e.target.value}))} disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")} />
-                      </Field>
-                      <Field label="상차지 연락처">
-                        <input autoComplete="off" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400" value={copyTarget?.상차지담당자번호 ?? ""} onChange={(e) => setCopyTarget(p => ({...p, 상차지담당자번호: formatPhone(e.target.value)}))} disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")} />
-                      </Field>
+                      </CpField>
+                      <CpField label="상차지주소">
+                        <textarea rows={2} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] resize-none leading-snug focus:outline-none focus:border-[#1B2B4B]" value={copyTarget?.상차지주소 ?? ""} onChange={(e) => setCopyTarget(p => ({...p, 상차지주소: e.target.value}))} disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")} />
+                      </CpField>
+                      <CpField label={<span className="flex items-center justify-between w-full">상차지 담당자명<ContactPickerIconButton title="상차지 담당자명 선택" onClick={() => { const nm = copyTarget?.상차지명 || ""; if (!nm.trim()) return alert("상차지명을 먼저 입력하세요."); const p = filterPlaces(nm).find(x => nameKeyOf(x.업체명) === nameKeyOf(nm)); const cs = uniqueContactsOf(p); if (!cs.length) return alert("등록된 담당자가 없습니다."); setCopyContactChooser({ type: "pickup", contacts: cs }); }} /></span>}>
+                        <input autoComplete="off" className={cpInputStyle} value={copyTarget?.상차지담당자 ?? ""} onChange={(e) => setCopyTarget(p => ({...p, 상차지담당자: e.target.value}))} disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")} />
+                      </CpField>
+                      <CpField label="상차지 연락처">
+                        <input autoComplete="off" className={cpInputStyle} value={copyTarget?.상차지담당자번호 ?? ""} onChange={(e) => setCopyTarget(p => ({...p, 상차지담당자번호: formatPhone(e.target.value)}))} disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")} />
+                      </CpField>
                       {/* 경유 상차지 */}
                       {(() => {
                         const _sp7 = (v) => { if (Array.isArray(v)) return v; if (typeof v === "string") { try { const p = JSON.parse(v); return Array.isArray(p) ? p : []; } catch { return []; } } return []; };
@@ -50477,30 +50522,30 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                     </div>
 
                     {/* 하차 */}
-                    <div className="space-y-4">
+                    <div className="space-y-1.5">
                       <div className="text-[12px] font-bold text-red-500 pb-1 border-b border-red-100">하차</div>
-                      <Field label="하차일">
-                        <CustomDatePicker className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400" value={copyTarget?.하차일 ?? ""} onChange={(e) => setCopyTarget(p => ({...p, 하차일: e.target.value}))} disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")} />
-                      </Field>
-                       <Field label="하차시간">
+                      <CpField label="하차일">
+                        <CustomDatePicker className={cpInputStyle} value={copyTarget?.하차일 ?? ""} onChange={(e) => setCopyTarget(p => ({...p, 하차일: e.target.value}))} disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")} />
+                      </CpField>
+                       <CpField label="하차시간">
                         <TimeAmPmPicker
                         disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
                           value={copyTarget?.하차시간 ?? ""}
                           onChange={v => setCopyTarget(p => ({...p, 하차시간: v}))}
-                          selectCls="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400"
+                          selectCls="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-[#1B2B4B]"
                         />
-                       </Field>
-                      <Field label="하차방법">
-                        <CustomSelect className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400" value={copyTarget?.하차방법 ?? ""} onChange={(e) => setCopyTarget(p => ({...p, 하차방법: e.target.value}))} disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}>
+                       </CpField>
+                      <CpField label="하차방법">
+                        <CustomSelect className={cpInputStyle} value={copyTarget?.하차방법 ?? ""} onChange={(e) => setCopyTarget(p => ({...p, 하차방법: e.target.value}))} disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}>
                           <option value="">선택</option>
                           {loadMethodOptions.map(v => <option key={v} value={v}>{v}</option>)}
                         </CustomSelect>
-                      </Field>
-                      <Field label="하차지명">
+                      </CpField>
+                      <CpField label="하차지명">
                         <div className="relative">
                           <input autoComplete="off"
                           disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
-                            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400"
+                            className={cpInputStyle}
                             value={copyTarget?.하차지명 ?? ""}
                             onChange={(e) => {
                               const v = e.target.value;
@@ -50552,16 +50597,16 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                             </div>
                           )}
                         </div>
-                      </Field>
-                      <Field label="하차지주소">
-                        <textarea rows={2} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] resize-none leading-snug focus:outline-none focus:border-blue-400" value={copyTarget?.하차지주소 ?? ""} onChange={(e) => setCopyTarget(p => ({...p, 하차지주소: e.target.value}))} disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")} />
-                      </Field>
-                      <Field label={<span className="flex items-center justify-between w-full">하차지 담당자명<ContactPickerIconButton title="하차지 담당자명 선택" onClick={() => { const nm = copyTarget?.하차지명 || ""; if (!nm.trim()) return alert("하차지명을 먼저 입력하세요."); const p = filterPlaces(nm).find(x => nameKeyOf(x.업체명) === nameKeyOf(nm)); const cs = uniqueContactsOf(p); if (!cs.length) return alert("등록된 담당자가 없습니다."); setCopyContactChooser({ type: "drop", contacts: cs }); }} /></span>}>
-                        <input autoComplete="off" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400" value={copyTarget?.하차지담당자 ?? ""} onChange={(e) => setCopyTarget(p => ({...p, 하차지담당자: e.target.value}))} disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")} />
-                      </Field>
-                      <Field label="하차지 연락처">
-                        <input autoComplete="off" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400" value={copyTarget?.하차지담당자번호 ?? ""} onChange={(e) => setCopyTarget(p => ({...p, 하차지담당자번호: formatPhone(e.target.value)}))} disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")} />
-                      </Field>
+                      </CpField>
+                      <CpField label="하차지주소">
+                        <textarea rows={2} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] resize-none leading-snug focus:outline-none focus:border-[#1B2B4B]" value={copyTarget?.하차지주소 ?? ""} onChange={(e) => setCopyTarget(p => ({...p, 하차지주소: e.target.value}))} disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")} />
+                      </CpField>
+                      <CpField label={<span className="flex items-center justify-between w-full">하차지 담당자명<ContactPickerIconButton title="하차지 담당자명 선택" onClick={() => { const nm = copyTarget?.하차지명 || ""; if (!nm.trim()) return alert("하차지명을 먼저 입력하세요."); const p = filterPlaces(nm).find(x => nameKeyOf(x.업체명) === nameKeyOf(nm)); const cs = uniqueContactsOf(p); if (!cs.length) return alert("등록된 담당자가 없습니다."); setCopyContactChooser({ type: "drop", contacts: cs }); }} /></span>}>
+                        <input autoComplete="off" className={cpInputStyle} value={copyTarget?.하차지담당자 ?? ""} onChange={(e) => setCopyTarget(p => ({...p, 하차지담당자: e.target.value}))} disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")} />
+                      </CpField>
+                      <CpField label="하차지 연락처">
+                        <input autoComplete="off" className={cpInputStyle} value={copyTarget?.하차지담당자번호 ?? ""} onChange={(e) => setCopyTarget(p => ({...p, 하차지담당자번호: formatPhone(e.target.value)}))} disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")} />
+                      </CpField>
                       {/* 경유 하차지 */}
                       {(() => {
                         const _sp7 = (v) => { if (Array.isArray(v)) return v; if (typeof v === "string") { try { const p = JSON.parse(v); return Array.isArray(p) ? p : []; } catch { return []; } } return []; };
@@ -50575,19 +50620,19 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
               </div>
 
              {/* 기사정보 */}
-              <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-                <div className="bg-[#1B2B4B] px-6 py-3">
+              <div className="bg-white rounded-xl border border-[#E3E8F0] overflow-hidden">
+                <div className="bg-[#1B2B4B] px-5 py-2">
                   <h3 className="text-[14px] font-bold text-white"><EditableText id="copyPanel.section.기사정보" defaultText="기사정보" /></h3>
                 </div>
-                <div className="p-6 space-y-4">
+                <div className="px-5 py-3 space-y-1.5">
 
                   {/* 스마트 검색 */}
-                  <Field label="스마트 검색">
+                  <CpField label="스마트 검색">
                     <div className="relative">
                       <textarea
                         ref={smart7Ref}
                         rows={2}
-                        className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400 resize-none"
+                        className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-[#1B2B4B] resize-none"
                         placeholder="차량번호 · 기사명 · 연락처 · 문자 복붙"
                         value={smartQ7}
                         onChange={(e) => handleSmart7Input(e.target.value)}
@@ -50602,19 +50647,19 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                                 <div className="px-4 py-3 bg-blue-50">
                                   <div className="text-[11px] font-semibold text-gray-500 mb-1">{d.차량번호}</div>
                                   <input autoComplete="off"
-                                    className="w-full border border-gray-300 rounded-lg px-2 py-1 text-[13px] mb-1.5 focus:outline-none focus:border-blue-400"
+                                    className="w-full border border-gray-300 rounded-lg px-2 py-1 text-[13px] mb-1.5 focus:outline-none focus:border-[#1B2B4B]"
                                     placeholder="기사 이름"
                                     value={editingDriver7Data.이름}
                                     onChange={e => setEditingDriver7Data(p => ({ ...p, 이름: e.target.value }))}
                                   />
                                   <input autoComplete="off"
-                                    className="w-full border border-gray-300 rounded-lg px-2 py-1 text-[13px] mb-2 focus:outline-none focus:border-blue-400"
+                                    className="w-full border border-gray-300 rounded-lg px-2 py-1 text-[13px] mb-2 focus:outline-none focus:border-[#1B2B4B]"
                                     placeholder="전화번호"
                                     value={editingDriver7Data.전화번호}
                                     onChange={e => setEditingDriver7Data(p => ({ ...p, 전화번호: formatPhone(e.target.value) }))}
                                   />
                                   <div className="flex gap-2">
-                                    <button type="button" className="flex-1 py-1.5 rounded-lg bg-blue-600 text-white text-xs font-bold"
+                                    <button type="button" className="flex-1 py-1.5 rounded-lg bg-[#1B2B4B] text-white text-xs font-bold"
                                       onClick={async () => {
                                         if (isViewer) { alert("조회전용 권한으로는 수정할 수 없습니다."); return; }
                                         if (!editingDriver7Data.이름.trim()) return;
@@ -50630,7 +50675,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                                   <button type="button" className="flex-1 text-left px-4 py-3"
                                     onClick={() => selectSmart7Driver(d)}>
                                     <div className="font-bold text-gray-900 text-[13px]">{d.이름 || "-"}</div>
-                                    <div className="text-[11px] text-gray-500 mt-0.5">{d.차량번호} · {d.전화번호}</div>
+                                    <div className="text-[11px] text-gray-500 mt-0.5">{d.차량번호} · {formatPhone(d.전화번호)}</div>
                                   </button>
                                   <button type="button" className="px-3 py-3 text-gray-500 hover:text-blue-500 text-xs"
                                     onClick={() => { setEditingDriver7Id(d.id || i); setEditingDriver7Data({ 이름: d.이름 || "", 전화번호: d.전화번호 || "" }); }}><EditableText id="misc.btn.47470.수정" defaultText="수정" /></button>
@@ -50641,14 +50686,14 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                         </div>
                       )}
                     </div>
-                  </Field>
+                  </CpField>
 
                   {/* 직접 입력 */}
-                  <div className="grid grid-cols-3 gap-6">
-                    <Field label="차량번호">
+                  <div className="grid grid-cols-3 gap-x-6 gap-y-1.5">
+                    <CpField label="차량번호">
                       <div className="flex gap-2">
                         <input autoComplete="off"
-                          className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400"
+                          className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-[#1B2B4B]"
                           value={copyTarget?.차량번호 ?? ""}
                           onChange={(e) => {
                             const v = e.target.value;
@@ -50669,88 +50714,94 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                       {copyTarget?.차량번호 && normalizePlate(copyTarget.차량번호).length >= 4 && !copyTarget?.이름 && (
                         <div className="text-xs text-amber-600 mt-1">⚠ 등록되지 않은 차량입니다</div>
                       )}
-                    </Field>
-                    <Field label="기사명">
-                      <input autoComplete="off" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] bg-gray-50" value={copyTarget?.이름 ?? ""} readOnly />
-                    </Field>
-                    <Field label="전화번호">
-                      <input autoComplete="off" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] bg-gray-50" value={formatPhone(copyTarget?.전화번호 ?? "")} readOnly />
-                    </Field>
+                    </CpField>
+                    <CpField label="기사명">
+                      <input autoComplete="off" className={`${cpInputStyle} !bg-[#F1F4F9]`} value={copyTarget?.이름 ?? ""} readOnly />
+                    </CpField>
+                    <CpField label="전화번호">
+                      <input autoComplete="off" className={`${cpInputStyle} !bg-[#F1F4F9]`} value={formatPhone(copyTarget?.전화번호 ?? "")} readOnly />
+                    </CpField>
                   </div>
                 </div>
               </div>
 
               {/* 화물정보 */}
-              <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-                <div className="bg-[#1B2B4B] px-6 py-3">
+              <div className="bg-white rounded-xl border border-[#E3E8F0] overflow-hidden">
+                <div className="bg-[#1B2B4B] px-5 py-2">
                   <h3 className="text-[14px] font-bold text-white"><EditableText id="copyPanel.section.화물정보" defaultText="화물정보" /></h3>
                 </div>
-                <div className="p-6">
-                  <div className="grid grid-cols-3 gap-6">
-                    <Field label="차량종류">
-                      <VehicleTypePicker className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400" value={copyTarget?.차량종류 ?? ""} disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")} base={["라보/다마스", "카고", "윙/카고", "윙바디", "탑차", "냉장탑", "냉동탑", "냉장윙", "냉동윙", "냉장/냉동탑", "냉장/냉동윙", "리프트", "오토바이", "기타"]} placeholder="선택" noneLabel="선택" onChange={(__v) => ((e) => setCopyTarget(p => ({...p, 차량종류: e.target.value})))({ target: { value: __v } })} />
-                    </Field>
-                    <Field label="차량톤수">
-                      <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden bg-white">
-                        <input autoComplete="off" className="flex-1 px-3 py-2 text-[13px] outline-none" value={copyTarget?.톤수값 || ""} onChange={(e) => { const v = e.target.value; setCopyTarget(p => ({...p, 톤수값: v, 차량톤수: p.톤수타입 ? `${v}${p.톤수타입}` : v})); }} placeholder="1" disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")} />
-                        <CustomSelect className="px-3 py-2 bg-[#1B2B4B] text-white font-bold outline-none cursor-pointer text-[13px]" value={copyTarget?.톤수타입 || ""} onChange={(e) => { const type = e.target.value; setCopyTarget(p => ({...p, 톤수타입: type, 차량톤수: type ? `${p.톤수값 || ""}${type}` : (p.톤수값 || "")})); }} disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}>
+                <div className="px-5 py-3">
+                  <div className="grid grid-cols-3 gap-x-6 gap-y-1.5">
+                    <CpField label="차량종류">
+                      <VehicleTypePicker className={cpInputStyle} value={copyTarget?.차량종류 ?? ""} disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")} base={["라보/다마스", "카고", "윙/카고", "윙바디", "탑차", "냉장탑", "냉동탑", "냉장윙", "냉동윙", "냉장/냉동탑", "냉장/냉동윙", "리프트", "오토바이", "기타"]} placeholder="선택" noneLabel="선택" onChange={(__v) => ((e) => setCopyTarget(p => ({...p, 차량종류: e.target.value})))({ target: { value: __v } })} />
+                    </CpField>
+                    <CpField label="차량톤수">
+                      <div className="flex items-center border rounded-lg overflow-hidden bg-white">
+                        <input autoComplete="off" className="flex-1 min-w-0 w-0 px-3 py-2 text-[14.5px] font-bold outline-none" value={copyTarget?.톤수값 || ""} onChange={(e) => { const v = e.target.value; setCopyTarget(p => ({...p, 톤수값: v, 차량톤수: p.톤수타입 ? `${v}${p.톤수타입}` : v})); }} placeholder="1" disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")} />
+                        <CustomSelect className="shrink-0 w-[78px] pl-3 pr-6 py-2 bg-[#1B2B4B] text-white text-[14px] font-bold outline-none cursor-pointer" value={copyTarget?.톤수타입 || ""} onChange={(e) => { const type = e.target.value; setCopyTarget(p => ({...p, 톤수타입: type, 차량톤수: type ? `${p.톤수값 || ""}${type}` : (p.톤수값 || "")})); }} disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}>
                           <option value="">선택</option>
                           {tonTypeOptionsCustom.map(v => <option key={v} value={v}>{v}</option>)}
                         </CustomSelect>
                       </div>
-                    </Field>
-                    <Field label={<span className="flex items-center gap-1 flex-wrap">화물내용<button type="button" tabIndex={-1} className="ml-1 px-1.5 py-0.5 text-[10px] font-bold rounded bg-[#1B2B4B] text-white hover:bg-[#243d6a] cursor-pointer" onClick={() => setCargoAddPopup({ initialValue: copyTarget?.화물내용||"", onCommit: (v) => setCopyTarget(p=>({...p,화물내용:v})) })}>+ 추가</button><CargoExtraChips value={copyTarget?.화물내용} /></span>}>
-                      <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden bg-white">
-                        <input autoComplete="off" className="flex-1 px-3 py-2 text-[13px] outline-none" value={copyTarget?.화물수량 || ""} onChange={(e) => { const v = e.target.value; setCopyTarget(p => ({...p, 화물수량: v, 화물내용: p.화물타입 ? `${v}${p.화물타입}` : v})); }} placeholder="1" disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")} />
-                        <CustomSelect className="px-3 py-2 bg-[#1B2B4B] text-white font-bold outline-none cursor-pointer text-[13px]" value={copyTarget?.화물타입 || ""} onChange={(e) => { const type = e.target.value; setCopyTarget(p => ({...p, 화물타입: type, 화물내용: type ? `${p.화물수량 || ""}${type}` : (p.화물수량 || "")})); }} disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}>
+                    </CpField>
+                    <CpField label={<span className="flex items-center gap-1 flex-wrap">화물내용<button type="button" tabIndex={-1} className="ml-1 px-1.5 py-0.5 text-[10px] font-bold rounded bg-[#1B2B4B] text-white hover:bg-[#243d6a] cursor-pointer" onClick={() => setCargoAddPopup({ initialValue: copyTarget?.화물내용||"", onCommit: (v) => setCopyTarget(p=>({...p,화물내용:v})) })}>+ 추가</button><CargoExtraChips value={copyTarget?.화물내용} /></span>}>
+                      <div className="flex items-center border rounded-lg overflow-hidden bg-white">
+                        <input autoComplete="off" className="flex-1 min-w-0 w-0 px-3 py-2 text-[14.5px] font-bold outline-none" value={copyTarget?.화물수량 || ""} onChange={(e) => { const v = e.target.value; setCopyTarget(p => ({...p, 화물수량: v, 화물내용: p.화물타입 ? `${v}${p.화물타입}` : v})); }} placeholder="1" disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")} />
+                        <CustomSelect className="shrink-0 w-[96px] pl-3 pr-6 py-2 bg-[#1B2B4B] text-white text-[14px] font-bold outline-none cursor-pointer" value={copyTarget?.화물타입 || ""} onChange={(e) => { const type = e.target.value; setCopyTarget(p => ({...p, 화물타입: type, 화물내용: type ? `${p.화물수량 || ""}${type}` : (p.화물수량 || "")})); }} disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}>
                           <option value="">없음</option>
                           {cargoTypeOptionsCustom.map(v => <option key={v} value={v}>{v}</option>)}
                         </CustomSelect>
                       </div>
-                    </Field>
+                    </CpField>
                   </div>
                 </div>
               </div>
 
               {/* 결제 정보 */}
-              <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-                <div className="bg-[#1B2B4B] px-6 py-3">
+              <div className="bg-white rounded-xl border border-[#E3E8F0] overflow-hidden">
+                <div className="bg-[#1B2B4B] px-5 py-2">
                   <h3 className="text-[14px] font-bold text-white"><EditableText id="copyPanel.section.결제정보" defaultText="결제 정보" /></h3>
                 </div>
-                <div className="p-6">
-                  <div className="grid grid-cols-5 gap-6">
-                    <Field label="청구운임">
-                      <input autoComplete="off" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400" value={copyTarget.청구운임 ? Number(copyTarget.청구운임).toLocaleString() : ""} onChange={(e) => { const v = e.target.value.replace(/[^\d]/g, ""); setCopyTarget(p => ({...p, 청구운임: v})); }} />
-                    </Field>
-                    <Field label="기사운임">
-                      <input autoComplete="off" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400" value={copyTarget.기사운임 ? Number(copyTarget.기사운임).toLocaleString() : ""} onChange={(e) => { const v = e.target.value.replace(/[^\d]/g, ""); setCopyTarget(p => ({...p, 기사운임: v})); }} />
-                    </Field>
-                    <Field label="수수료">
-                      <div className="bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-[14px] font-bold text-[#1B2B4B] text-center">
-                        {(Number(copyTarget.청구운임 || 0) - Number(copyTarget.기사운임 || 0)).toLocaleString()}원
+                <div className="px-5 py-3">
+                  <div className="grid grid-cols-3 gap-x-5 gap-y-1.5">
+                    <CpField label="청구운임">
+                      <input autoComplete="off" className={cpInputStyle} value={copyTarget.청구운임 ? Number(copyTarget.청구운임).toLocaleString() : ""} onChange={(e) => { const v = e.target.value.replace(/[^\d]/g, ""); setCopyTarget(p => fareOnU ? fareFormChange(p, "청구운임", v, fareRU.rules) : ({...p, 청구운임: v})); }} />
+                    </CpField>
+                    <CpField label="기사운임">
+                      <input autoComplete="off" className={cpInputStyle} value={copyTarget.기사운임 ? Number(copyTarget.기사운임).toLocaleString() : ""} onChange={(e) => { const v = e.target.value.replace(/[^\d]/g, ""); setCopyTarget(p => fareOnU ? fareFormChange(p, "기사운임", v, fareRU.rules) : ({...p, 기사운임: v})); }} />
+                    </CpField>
+                    <CpField label="수수료">
+                      <div className={`h-9 flex items-center justify-end bg-[#EEF2F8] border border-[#DCE4F0] rounded-lg px-2.5 font-black text-[15px] whitespace-nowrap tabular-nums ${(Number(copyTarget.청구운임 || 0) - Number(copyTarget.기사운임 || 0)) < 0 ? "text-red-600" : "text-[#1B2B4B]"}`}>
+                        {(Number(copyTarget.청구운임 || 0) - Number(copyTarget.기사운임 || 0)).toLocaleString()} 원
                       </div>
-                    </Field>
-                    <Field label="지급방식">
-                      <CustomSelect className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400" value={copyTarget?.지급방식 ?? ""} onChange={(e) => setCopyTarget(p => ({...p, 지급방식: e.target.value}))} disabled={copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile"}>
+                    </CpField>
+                    <CpField label="지급방식">
+                      <CustomSelect className={cpInputStyle} value={copyTarget?.지급방식 ?? ""} onChange={(e) => setCopyTarget(p => ({...p, 지급방식: e.target.value}))} disabled={copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile"}>
                         <option value="">선택</option><option value="계산서">계산서</option><option value="착불">착불</option><option value="선불">선불</option><option value="손실">손실</option><option value="개인">개인</option><option value="취소">취소</option>
                       </CustomSelect>
-                    </Field>
-                    <Field label="배차방식">
-                      <CustomSelect className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400" value={copyTarget?.배차방식 === "선택없음" ? "" : (copyTarget?.배차방식 ?? "")} onChange={(e) => setCopyTarget(p => ({...p, 배차방식: e.target.value}))}>
+                    </CpField>
+                    {/* ⭐ 2026-11-02 운임규칙 — 운임구분(실시간·배차현황 패널과 같은 자리) */}
+                    {fareOnU && (
+                      <CpField label={<>운임구분<FareRuleHint className="ml-1" form={copyTarget} rules={fareRU.rules} onReapply={() => setCopyTarget(p => fareFormChange(p, "__reapply", null, fareRU.rules))} /></>}>
+                        <FareTypeSelect className="!h-9 !rounded-lg" rules={fareRU.rules} value={copyTarget?.운임구분 || ""} onChange={(v) => setCopyTarget(p => fareFormChange(p, "운임구분", v, fareRU.rules))} />
+                      </CpField>
+                    )}
+                    <CpField label="배차방식">
+                      <CustomSelect className={cpInputStyle} value={copyTarget?.배차방식 === "선택없음" ? "" : (copyTarget?.배차방식 ?? "")} onChange={(e) => setCopyTarget(p => ({...p, 배차방식: e.target.value}))}>
                         <option value="">선택</option>{dropdownList("배차방식", ["24시", "직접배차", "인성"], copyTarget?.배차방식 === "선택없음" ? "" : copyTarget?.배차방식).map((v) => <option key={v} value={v}>{v}</option>)}
                       </CustomSelect>
-                    </Field>
+                    </CpField>
                   </div>
                 </div>
               </div>
 
               {/* 메모 */}
-              <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-                <div className="bg-[#1B2B4B] px-6 py-3">
+              <div className="bg-white rounded-xl border border-[#E3E8F0] overflow-hidden">
+                <div className="bg-[#1B2B4B] px-5 py-2">
                   <h3 className="text-[14px] font-bold text-white"><EditableText id="copyPanel.section.메모" defaultText="메모" /></h3>
                 </div>
-                <div className="p-6">
-                  <textarea className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] h-24 focus:outline-none focus:border-blue-400 resize-none" value={copyTarget?.메모 ?? ""} onChange={(e) => setCopyTarget(p => ({...p, 메모: e.target.value}))} />
+                <div className="px-5 py-3">
+                  <textarea className="w-full min-h-[96px] px-3 py-2 text-[14px] rounded-lg border border-[#D5DEEC] bg-white resize-y focus:outline-none focus:ring-2 focus:ring-[#1B2B4B]/25 focus:border-[#1B2B4B] placeholder:text-gray-500 transition-all" value={copyTarget?.메모 ?? ""} onChange={(e) => setCopyTarget(p => ({...p, 메모: e.target.value}))} />
                 </div>
               </div>
 
@@ -52462,7 +52513,7 @@ const handleBatchSettle = async (targetStatus) => {
     >
       {label}
       {badge > 0 && (
-        <span className="absolute -top-1 -right-1 w-4 h-4 bg-[#F3F6FA]0 text-white text-[9px] font-bold rounded-full flex items-center justify-center">
+        <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 bg-rose-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center leading-none">
           {badge > 9 ? "9+" : badge}
         </span>
       )}
@@ -52510,14 +52561,14 @@ const handleBatchSettle = async (targetStatus) => {
               {/* ★ 검색 타입 + 입력 + 드롭다운 */}
               <div className="relative" ref={dropdownRef}>
                 <div className="flex items-center border-2 border-[#1B2B4B] rounded-lg overflow-hidden h-[38px]">
-                  <select
+                  <CustomSelect
                     className="px-2 h-full text-[13px] bg-[#1B2B4B] text-white outline-none cursor-pointer"
                     value={searchType}
                     onChange={e => { setSearchType(e.target.value); setSearchInput(""); setClient(""); setSearched(false); setDropdownOpen(false); }}
                   >
                     <option value="거래처명">거래처명</option>
                     <option value="기사명">기사명</option>
-                  </select>
+                  </CustomSelect>
                   <input autoComplete="off"
                     ref={inputRef}
                     className="px-3 h-full text-[13px] w-52 outline-none"
@@ -53408,7 +53459,7 @@ const handleBatchSettle = async (targetStatus) => {
               showAlert(`발송 완료 (실패 ${failed.length}건: ${failed.map(f => f.name).join(", ")})`);
             }
           }}
-          className="flex-1 py-2.5 rounded-xl bg-indigo-600 text-white font-bold text-[13px] hover:bg-indigo-700 disabled:opacity-50 transition"
+          className="flex-1 py-2.5 rounded-xl bg-[#1B2B4B] text-white font-bold text-[13px] hover:bg-[#0F1A30] disabled:opacity-50 transition"
         >{batchSending ? `발송 중 (${batchSendProgress.done}/${batchSendProgress.total})...` : `일괄 발송 (${batchSendList.length}건)`}</button>
         <button
           disabled={batchSending}
@@ -53834,42 +53885,42 @@ const handleBatchSettle = async (targetStatus) => {
               <div className="flex flex-col">
                 <label className="text-[12px] font-semibold text-gray-500 mb-1">기간</label>
                 <div className="flex items-center gap-1.5">
-                  <select className="border-2 border-[#1B2B4B] rounded-lg px-3 py-2 text-[13px] font-semibold text-[#1B2B4B] outline-none"
+                  <CustomSelect className="border-2 border-[#1B2B4B] rounded-lg px-3 py-2 text-[13px] font-semibold text-[#1B2B4B] outline-none"
                     value={yearFrom} onChange={e=>{ setYearFrom(e.target.value); clearSel(); }}>
                     {Array.from({length:3},(_,i)=>String(THIS_YEAR - 1 + i)).map(y=>(
                       <option key={y} value={y}>{y}년</option>
                     ))}
-                  </select>
-                  <select className="border-2 border-[#1B2B4B] rounded-lg px-3 py-2 text-[13px] font-semibold text-[#1B2B4B] outline-none"
+                  </CustomSelect>
+                  <CustomSelect className="border-2 border-[#1B2B4B] rounded-lg px-3 py-2 text-[13px] font-semibold text-[#1B2B4B] outline-none"
                     value={monthFrom} onChange={e=>{ setMonthFrom(e.target.value); clearSel(); }}>
                     {Array.from({length:12},(_,i)=>String(i+1).padStart(2,"0")).map(mm=>(
                       <option key={mm} value={mm}>{parseInt(mm,10)}월</option>
                     ))}
-                  </select>
+                  </CustomSelect>
                   <span className="text-gray-500 font-semibold text-[13px]">부터</span>
-                  <select className="border-2 border-[#1B2B4B] rounded-lg px-3 py-2 text-[13px] font-semibold text-[#1B2B4B] outline-none"
+                  <CustomSelect className="border-2 border-[#1B2B4B] rounded-lg px-3 py-2 text-[13px] font-semibold text-[#1B2B4B] outline-none"
                     value={yearTo} onChange={e=>{ setYearTo(e.target.value); clearSel(); }}>
                     {Array.from({length:3},(_,i)=>String(THIS_YEAR - 1 + i)).map(y=>(
                       <option key={y} value={y}>{y}년</option>
                     ))}
-                  </select>
-                  <select className="border-2 border-[#1B2B4B] rounded-lg px-3 py-2 text-[13px] font-semibold text-[#1B2B4B] outline-none"
+                  </CustomSelect>
+                  <CustomSelect className="border-2 border-[#1B2B4B] rounded-lg px-3 py-2 text-[13px] font-semibold text-[#1B2B4B] outline-none"
                     value={monthTo} onChange={e=>{ setMonthTo(e.target.value); clearSel(); }}>
                     {Array.from({length:12},(_,i)=>String(i+1).padStart(2,"0")).map(mm=>(
                       <option key={mm} value={mm}>{parseInt(mm,10)}월</option>
                     ))}
-                  </select>
+                  </CustomSelect>
                   <span className="text-gray-500 font-semibold text-[13px]">까지</span>
                 </div>
               </div>
               <div className="flex flex-col">
                 <label className="text-[12px] font-semibold text-gray-500 mb-1">정산상태</label>
-                <select className="border-2 border-[#1B2B4B] rounded-lg px-3 py-2 text-[13px] font-semibold text-[#1B2B4B] outline-none"
+                <CustomSelect className="border-2 border-[#1B2B4B] rounded-lg px-3 py-2 text-[13px] font-semibold text-[#1B2B4B] outline-none"
                   value={statusFilter} onChange={e=>setStatusFilter(e.target.value)}>
                   <option value="전체">전체</option>
                   <option value="미정산">미정산</option>
                   <option value="정산완료">정산완료</option>
-                </select>
+                </CustomSelect>
               </div>
               <button className="px-3 py-2 rounded-lg bg-gray-200 text-gray-700 text-[13px] font-semibold hover:bg-gray-300 transition"
                 onClick={()=>{setSelClient("");setArInput("");setYearFrom(String(THIS_YEAR));setMonthFrom("01");setYearTo(String(THIS_YEAR));setMonthTo("12");setStatusFilter("전체");clearSel();setArDropOpen(false);}}>
@@ -54184,31 +54235,31 @@ const handleBatchSettle = async (targetStatus) => {
       <div className="px-6 pt-4 pb-3 border-b border-gray-100 shrink-0">
         <div className="text-[12px] font-bold text-gray-500 mb-2">조회 기간</div>
         <div className="flex items-center gap-2">
-          <select className="border-2 border-[#1B2B4B] rounded-lg px-2 py-2 text-[13px] font-bold text-[#1B2B4B] outline-none"
+          <CustomSelect className="border-2 border-[#1B2B4B] rounded-lg px-2 py-2 text-[13px] font-bold text-[#1B2B4B] outline-none"
             value={arFromYear} onChange={e => setArFromYear(e.target.value)}>
             {Array.from({length:3},(_,i)=>String(THIS_YEAR - 1 + i)).map(y=>(
               <option key={y} value={y}>{y}년</option>
             ))}
-          </select>
-          <select className="border-2 border-[#1B2B4B] rounded-lg px-2 py-2 text-[13px] font-bold text-[#1B2B4B] outline-none"
+          </CustomSelect>
+          <CustomSelect className="border-2 border-[#1B2B4B] rounded-lg px-2 py-2 text-[13px] font-bold text-[#1B2B4B] outline-none"
             value={arFromMM} onChange={e => setArFromMM(e.target.value)}>
             {Array.from({length:12},(_,i)=>String(i+1).padStart(2,"00")).map(mm=>(
               <option key={mm} value={mm}>{parseInt(mm,10)}월</option>
             ))}
-          </select>
+          </CustomSelect>
           <span className="text-gray-500 font-semibold">부터</span>
-          <select className="border-2 border-[#1B2B4B] rounded-lg px-2 py-2 text-[13px] font-bold text-[#1B2B4B] outline-none"
+          <CustomSelect className="border-2 border-[#1B2B4B] rounded-lg px-2 py-2 text-[13px] font-bold text-[#1B2B4B] outline-none"
             value={arToYear} onChange={e => setArToYear(e.target.value)}>
             {Array.from({length:3},(_,i)=>String(THIS_YEAR - 1 + i)).map(y=>(
               <option key={y} value={y}>{y}년</option>
             ))}
-          </select>
-          <select className="border-2 border-[#1B2B4B] rounded-lg px-2 py-2 text-[13px] font-bold text-[#1B2B4B] outline-none"
+          </CustomSelect>
+          <CustomSelect className="border-2 border-[#1B2B4B] rounded-lg px-2 py-2 text-[13px] font-bold text-[#1B2B4B] outline-none"
             value={arToMM} onChange={e => setArToMM(e.target.value)}>
             {Array.from({length:12},(_,i)=>String(i+1).padStart(2,"00")).map(mm=>(
               <option key={mm} value={mm}>{parseInt(mm,10)}월</option>
             ))}
-          </select>
+          </CustomSelect>
           <span className="text-gray-500 font-semibold">까지</span>
         </div>
       </div>
@@ -54379,31 +54430,31 @@ const handleBatchSettle = async (targetStatus) => {
                 <div className="px-6 py-4 border-b border-gray-100 shrink-0">
                   <div className="text-[12px] font-bold text-gray-500 mb-2">기간 선택</div>
                   <div className="flex items-center gap-2 flex-wrap">
-                    <select className="border-2 border-[#1B2B4B] rounded-lg px-2 py-2 text-[13px] font-bold text-[#1B2B4B] outline-none"
+                    <CustomSelect className="border-2 border-[#1B2B4B] rounded-lg px-2 py-2 text-[13px] font-bold text-[#1B2B4B] outline-none"
                       value={batchFromYear} onChange={e => setBatchFromYear(e.target.value)}>
                       {Array.from({length:3},(_,i)=>String(THIS_YEAR - 1 + i)).map(y=>(
                         <option key={y} value={y}>{y}년</option>
                       ))}
-                    </select>
-                    <select className="border-2 border-[#1B2B4B] rounded-lg px-2 py-2 text-[13px] font-bold text-[#1B2B4B] outline-none"
+                    </CustomSelect>
+                    <CustomSelect className="border-2 border-[#1B2B4B] rounded-lg px-2 py-2 text-[13px] font-bold text-[#1B2B4B] outline-none"
                       value={batchFromMM} onChange={e => setBatchFromMM(e.target.value)}>
                       {Array.from({length:12},(_,i)=>String(i+1).padStart(2,"0")).map(mm=>(
                         <option key={mm} value={mm}>{parseInt(mm,10)}월</option>
                       ))}
-                    </select>
+                    </CustomSelect>
                     <span className="text-gray-500 font-semibold">부터</span>
-                    <select className="border-2 border-[#1B2B4B] rounded-lg px-2 py-2 text-[13px] font-bold text-[#1B2B4B] outline-none"
+                    <CustomSelect className="border-2 border-[#1B2B4B] rounded-lg px-2 py-2 text-[13px] font-bold text-[#1B2B4B] outline-none"
                       value={batchToYear} onChange={e => setBatchToYear(e.target.value)}>
                       {Array.from({length:3},(_,i)=>String(THIS_YEAR - 1 + i)).map(y=>(
                         <option key={y} value={y}>{y}년</option>
                       ))}
-                    </select>
-                    <select className="border-2 border-[#1B2B4B] rounded-lg px-2 py-2 text-[13px] font-bold text-[#1B2B4B] outline-none"
+                    </CustomSelect>
+                    <CustomSelect className="border-2 border-[#1B2B4B] rounded-lg px-2 py-2 text-[13px] font-bold text-[#1B2B4B] outline-none"
                       value={batchToMM} onChange={e => setBatchToMM(e.target.value)}>
                       {Array.from({length:12},(_,i)=>String(i+1).padStart(2,"0")).map(mm=>(
                         <option key={mm} value={mm}>{parseInt(mm,10)}월</option>
                       ))}
-                    </select>
+                    </CustomSelect>
                     <span className="text-gray-500 font-semibold">까지</span>
                   </div>
                 </div>
@@ -54602,7 +54653,7 @@ const handleBatchSettle = async (targetStatus) => {
                   <div>
                     <label className="text-[13px] font-bold text-gray-700 mb-2 block">기간 선택 ({THIS_YEAR}년)</label>
                     <div className="flex items-center gap-2">
-                      <select
+                      <CustomSelect
                         className="border-2 border-[#1B2B4B] rounded-lg px-3 py-2 text-[13px] font-bold text-[#1B2B4B] outline-none"
                         value={arEmailFromMM}
                         onChange={e => {
@@ -54617,9 +54668,9 @@ const handleBatchSettle = async (targetStatus) => {
                         {Array.from({length:12},(_,i)=>String(i+1).padStart(2,"0")).map(mm=>(
                           <option key={mm} value={mm}>{parseInt(mm,10)}월</option>
                         ))}
-                      </select>
+                      </CustomSelect>
                       <span className="text-[13px] font-semibold text-gray-600">부터</span>
-                      <select
+                      <CustomSelect
                         className="border-2 border-[#1B2B4B] rounded-lg px-3 py-2 text-[13px] font-bold text-[#1B2B4B] outline-none"
                         value={arEmailToMM}
                         onChange={e => {
@@ -54634,7 +54685,7 @@ const handleBatchSettle = async (targetStatus) => {
                         {Array.from({length:12},(_,i)=>String(i+1).padStart(2,"0")).map(mm=>(
                           <option key={mm} value={mm}>{parseInt(mm,10)}월</option>
                         ))}
-                      </select>
+                      </CustomSelect>
                       <span className="text-[13px] font-semibold text-gray-600">까지</span>
                     </div>
                     <div className="mt-2 flex gap-2">
@@ -54950,16 +55001,16 @@ const handleBatchSettle = async (targetStatus) => {
                 <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-500" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
               </div>
               {/* 정렬 */}
-              <select
+              <CustomSelect
                 className="border-2 border-gray-200 rounded-lg px-3 py-2 text-[13px] outline-none focus:border-[#1B2B4B]"
                 value={mailSort}
                 onChange={e => setMailSort(e.target.value)}
               >
                 <option value="newest">최신순</option>
                 <option value="oldest">오래된순</option>
-              </select>
+              </CustomSelect>
               {/* 전체 유형 선택 */}
-              <select
+              <CustomSelect
                 className="border-2 border-[#1B2B4B] rounded-lg px-3 py-2 text-[13px] font-semibold text-[#1B2B4B] outline-none"
                 value={mailTypeFilter}
                 onChange={e => { setMailTypeFilter(e.target.value); setSelectedMails(new Set()); }}
@@ -54968,7 +55019,7 @@ const handleBatchSettle = async (targetStatus) => {
                 <option value="거래명세서">거래명세서</option>
                 <option value="미수금">미수금</option>
                 <option value="일반이메일">일반이메일</option>
-              </select>
+              </CustomSelect>
             </div>
             {/* 선택/삭제 액션 바 */}
             {selectedMails.size > 0 && (
@@ -54984,7 +55035,7 @@ const handleBatchSettle = async (targetStatus) => {
                 ><EditableText id="misc.btn.51744.선택해제" defaultText="선택해제" /></button>
                 <button
                   onClick={() => setBulkDeleteConfirm(true)}
-                  className="ml-auto px-4 py-1.5 rounded-lg bg-[#F3F6FA]0 text-white text-[13px] font-bold hover:bg-[#0B1428] transition"
+                  className="ml-auto px-4 py-1.5 rounded-lg bg-[#0F1A30] text-white text-[13px] font-bold hover:bg-[#0B1428] transition"
                 ><EditableText id="misc.btn.51748.선택 삭제" defaultText="선택 삭제" /></button>
               </div>
             )}
@@ -55610,25 +55661,25 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
           </div>
           <div className="flex flex-col gap-1">
             <label className="text-[11px] font-bold text-gray-500">지급상태</label>
-            <select className="border border-gray-200 rounded-lg px-2 py-1.5 text-[12px] outline-none focus:border-[#1B2B4B]" value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
+            <CustomSelect className="border border-gray-200 rounded-lg px-2 py-1.5 text-[12px] outline-none focus:border-[#1B2B4B]" value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
               <option value="전체">전체</option>
               <option value="지급중">미지급</option>
               <option value="지급완료">지급완료</option>
-            </select>
+            </CustomSelect>
           </div>
           <div className="flex flex-col gap-1">
             <label className="text-[11px] font-bold text-gray-500">지급방식</label>
-            <select className="border border-gray-200 rounded-lg px-2 py-1.5 text-[12px] outline-none focus:border-[#1B2B4B]" value={payMethodFilter} onChange={e => setPayMethodFilter(e.target.value)}>
+            <CustomSelect className="border border-gray-200 rounded-lg px-2 py-1.5 text-[12px] outline-none focus:border-[#1B2B4B]" value={payMethodFilter} onChange={e => setPayMethodFilter(e.target.value)}>
               <option value="전체">전체</option>
               {PAY_METHODS.map(m => <option key={m} value={m}>{m}</option>)}
-            </select>
+            </CustomSelect>
           </div>
           <div className="flex flex-col gap-1">
             <label className="text-[11px] font-bold text-gray-500">배차방식</label>
-            <select className="border border-gray-200 rounded-lg px-2 py-1.5 text-[12px] outline-none focus:border-[#1B2B4B]" value={dispatchMethodFilter} onChange={e => setDispatchMethodFilter(e.target.value)}>
+            <CustomSelect className="border border-gray-200 rounded-lg px-2 py-1.5 text-[12px] outline-none focus:border-[#1B2B4B]" value={dispatchMethodFilter} onChange={e => setDispatchMethodFilter(e.target.value)}>
               <option value="전체">전체</option>
               {DISPATCH_METHODS.map(m => <option key={m} value={m}>{m}</option>)}
-            </select>
+            </CustomSelect>
           </div>
           <input autoComplete="off" placeholder="차량번호" className="border border-gray-200 rounded-lg px-3 py-1.5 text-[12px] w-28 outline-none focus:border-[#1B2B4B]" value={carNoQ} onChange={e => setCarNoQ(e.target.value)} />
           <input autoComplete="off" placeholder="기사명" className="border border-gray-200 rounded-lg px-3 py-1.5 text-[12px] w-24 outline-none focus:border-[#1B2B4B]" value={nameQ} onChange={e => setNameQ(e.target.value)} />
@@ -56308,10 +56359,10 @@ function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, sho
       {/* 검색바 + 작업 버튼 */}
       <div className="flex flex-wrap items-center gap-2.5 mb-4">
         <div className="flex items-center h-12 flex-1 min-w-[420px] max-w-[720px] rounded-[16px] bg-white border border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_8px_20px_rgba(16,24,40,0.05)] focus-within:border-[#4B6CB7] focus-within:ring-4 focus-within:ring-[#4B6CB7]/10 overflow-hidden">
-          <select className="h-full pl-4 pr-2 bg-transparent text-[13.5px] font-black text-[#0F1A30] outline-none border-r border-[#EEF1F6] cursor-pointer"
+          <CustomSelect className="h-full pl-4 pr-2 bg-transparent text-[13.5px] font-black text-[#0F1A30] outline-none border-r border-[#EEF1F6] cursor-pointer"
             value={qField} onChange={e => { setQField(e.target.value); setSearched(false); }}>
             {["전체","차량번호","기사명","연락처"].map(o => <option key={o} value={o}>{o}</option>)}
-          </select>
+          </CustomSelect>
           <svg className="ml-3 shrink-0 text-[#9AA9C3]" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="m21 21-5-5" /></svg>
           <input autoComplete="off"
             className="flex-1 min-w-0 h-full px-2.5 bg-transparent text-[14.5px] font-bold text-[#0F1A30] outline-none placeholder:text-[#A7B3C6] placeholder:font-medium"
@@ -56663,7 +56714,7 @@ function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, sho
               </div>
               <div>
                 <label className="block text-[12px] font-semibold text-gray-500 mb-1">등급</label>
-                <select className="border border-gray-200 rounded-lg px-3 py-2 text-[13px] w-full focus:border-[#1B2B4B] outline-none bg-white"
+                <CustomSelect className="border border-gray-200 rounded-lg px-3 py-2 text-[13px] w-full focus:border-[#1B2B4B] outline-none bg-white"
                   value={editDriverModal.등급||"일반"}
                   onChange={(e) => setEditDriverModal(p => ({ ...p, 등급: e.target.value }))}>
                   <option value="일반">일반</option>
@@ -56671,7 +56722,7 @@ function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, sho
                   <option value="직영">직영</option>
                   <option value="임대">임대</option>
                   <option value="블랙">블랙</option>
-                </select>
+                </CustomSelect>
               </div>
               {/* 지입/직영 기사 전용 — 거주지 / 근무가능요일 (노선관리 관제에 연동) */}
               {(editDriverModal.등급 === "지입" || editDriverModal.등급 === "직영" || editDriverModal.등급 === "임대") && (
@@ -56692,12 +56743,12 @@ function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, sho
                   </div>
                   <div>
                     <label className="block text-[12px] font-semibold text-gray-500 mb-1">톤수</label>
-                    <select className="border border-gray-200 rounded-lg px-3 py-2 text-[13px] w-full focus:border-[#1B2B4B] outline-none bg-white"
+                    <CustomSelect className="border border-gray-200 rounded-lg px-3 py-2 text-[13px] w-full focus:border-[#1B2B4B] outline-none bg-white"
                       value={editDriverModal.차량톤수||""}
                       onChange={(e) => setEditDriverModal(p => ({ ...p, 차량톤수: e.target.value }))}>
                       <option value="">선택</option>
                       {CARGO_VEHICLE_SPEC_TABLE.map(v => v.name).map(t => <option key={t} value={t}>{t}</option>)}
-                    </select>
+                    </CustomSelect>
                   </div>
                   <div>
                     <label className="block text-[12px] font-semibold text-gray-500 mb-1">요청사항</label>
@@ -56707,7 +56758,7 @@ function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, sho
                   </div>
                   <div>
                     <label className="block text-[12px] font-semibold text-gray-500 mb-1">담당자</label>
-                    <select className="border border-gray-200 rounded-lg px-3 py-2 text-[13px] w-full focus:border-[#1B2B4B] outline-none bg-white"
+                    <CustomSelect className="border border-gray-200 rounded-lg px-3 py-2 text-[13px] w-full focus:border-[#1B2B4B] outline-none bg-white"
                       value={editDriverModal.담당자?.uid || ""}
                       onChange={(e) => {
                         const s = companyStaff.find(x => x.id === e.target.value);
@@ -56715,7 +56766,7 @@ function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, sho
                       }}>
                       <option value="">미지정</option>
                       {companyStaff.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                    </select>
+                    </CustomSelect>
                   </div>
                   <div className="col-span-2">
                     <label className="block text-[12px] font-semibold text-gray-500 mb-1">근무가능요일</label>
@@ -56805,13 +56856,13 @@ function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, sho
             {/* 검색바 */}
             <div className="px-5 py-3 border-b border-gray-100 flex items-center gap-2 shrink-0">
               <div className="flex items-center border-2 border-[#1B2B4B] rounded-lg overflow-hidden h-[34px]">
-                <select className="px-2 h-full text-[13px] bg-[#1B2B4B]/5 border-r border-[#1B2B4B]/30 outline-none text-[#1B2B4B] font-semibold"
+                <CustomSelect className="px-2 h-full text-[13px] bg-[#1B2B4B]/5 border-r border-[#1B2B4B]/30 outline-none text-[#1B2B4B] font-semibold"
                   value={cleanupQField} onChange={e => setCleanupQField(e.target.value)}>
                   <option value="전체">전체</option>
                   <option value="차량번호">차량번호</option>
                   <option value="기사명">기사명</option>
                   <option value="연락처">연락처</option>
-                </select>
+                </CustomSelect>
                 <input autoComplete="off" className="px-3 h-full text-[13px] w-44 outline-none"
                   placeholder="검색어 입력..."
                   value={cleanupQ}
@@ -56866,7 +56917,7 @@ function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, sho
                         <tr key={d.id || i} className={`border-b border-gray-100 ${i%2?"bg-gray-50/50":"bg-white"}`}>
                           <td className="px-4 py-3 text-[13px] font-semibold text-[#1B2B4B] whitespace-nowrap">{d.차량번호 || "-"}</td>
                           <td className="px-4 py-3 text-[13px] text-gray-800 whitespace-nowrap">{d.이름 || "-"}</td>
-                          <td className="px-4 py-3 text-[13px] text-gray-500 whitespace-nowrap">{d.전화번호}</td>
+                          <td className="px-4 py-3 text-[13px] text-gray-500 whitespace-nowrap">{formatPhone(d.전화번호)}</td>
                           <td className="px-4 py-3 text-[13px] font-semibold text-[#1B2B4B] whitespace-nowrap">{normalizePhone(d.전화번호)}</td>
                           <td className="px-4 py-3 text-center">
                             <button onClick={async () => {
@@ -57159,9 +57210,9 @@ function KpSearchBar({ options, field, onField, value, onChange, onSearch, place
   return (
     <div className="flex items-center h-12 flex-1 min-w-[380px] max-w-[680px] rounded-[16px] bg-white border border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_8px_20px_rgba(16,24,40,0.05)] focus-within:border-[#4B6CB7] focus-within:ring-4 focus-within:ring-[#4B6CB7]/10 overflow-hidden">
       {options && (
-        <select className="h-full pl-4 pr-2 bg-transparent text-[13.5px] font-black text-[#0F1A30] outline-none border-r border-[#EEF1F6] cursor-pointer" value={field} onChange={(e) => onField(e.target.value)}>
+        <CustomSelect className="h-full pl-4 pr-2 bg-transparent text-[13.5px] font-black text-[#0F1A30] outline-none border-r border-[#EEF1F6] cursor-pointer" value={field} onChange={(e) => onField(e.target.value)}>
           {options.map((o) => <option key={o} value={o}>{o}</option>)}
-        </select>
+        </CustomSelect>
       )}
       <svg className="ml-3 shrink-0 text-[#9AA9C3]" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="m21 21-5-5" /></svg>
       <input autoComplete="off" className="flex-1 min-w-0 h-full px-2.5 bg-transparent text-[14.5px] font-bold text-[#0F1A30] outline-none placeholder:text-[#A7B3C6] placeholder:font-medium"
@@ -58234,7 +58285,7 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
                             onDoubleClick={e => { e.stopPropagation(); if (grade === "일반") return; showAlert(r.등급변경일 ? `${grade} 등급 지정일: ${r.등급변경일}` : `${grade} 등급으로 지정되어 있으나 지정일 기록이 없습니다.`); }}
                             title={grade !== "일반" ? "더블클릭하면 지정일을 볼 수 있습니다" : undefined}>
                             <div className="flex items-center justify-center">
-                              <select
+                              <CustomSelect
                                 className={`px-2 py-1 rounded text-xs font-bold cursor-pointer w-[68px] ${등급색상(grade)}`}
                                 value={grade}
                                 onChange={(e) => handlePlaceBlur(r,"등급",e.target.value)}>
@@ -58242,7 +58293,7 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
                                 <option value="블랙">블랙</option>
                                 <option value="주의">주의</option>
                                 <option value="이탈">이탈</option>
-                              </select>
+                              </CustomSelect>
                             </div>
                           </td>
                           <td className="px-2 py-2.5 text-[13px] text-gray-600 max-w-[160px] truncate text-center">{r.메모||""}</td>
@@ -58564,14 +58615,14 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
                   </div>
                   <div>
                     <label className="block text-[12px] font-semibold text-gray-500 mb-1">등급</label>
-                    <select className="border border-gray-200 rounded-lg px-3 py-2 text-[13px] w-full focus:border-[#1B2B4B] outline-none bg-white"
+                    <CustomSelect className="border border-gray-200 rounded-lg px-3 py-2 text-[13px] w-full focus:border-[#1B2B4B] outline-none bg-white"
                       value={newForm.등급||"일반"}
                       onChange={(e) => setNewForm(p => ({ ...p, 등급: e.target.value }))}>
                       <option value="일반">일반</option>
                       <option value="블랙">블랙</option>
                       <option value="주의">주의</option>
                       <option value="이탈">이탈</option>
-                    </select>
+                    </CustomSelect>
                   </div>
                   <div>
                     <label className="block text-[12px] font-semibold text-gray-500 mb-1"><EditableText id="clientEdit.label.일반메모" defaultText="일반메모" /></label>
@@ -58629,14 +58680,14 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
                   </div>
                   <div>
                     <label className="block text-[12px] font-semibold text-gray-500 mb-1"><EditableText id="clientEdit.label.등급" defaultText="등급" /></label>
-                    <select className="border border-gray-200 rounded-lg px-3 py-2 text-[13px] w-full focus:border-[#1B2B4B] outline-none bg-white"
+                    <CustomSelect className="border border-gray-200 rounded-lg px-3 py-2 text-[13px] w-full focus:border-[#1B2B4B] outline-none bg-white"
                       value={editClientModal.등급||"일반"}
                       onChange={(e) => setEditClientModal(p => ({ ...p, 등급: e.target.value }))}>
                       <option value="일반">일반</option>
                       <option value="블랙">블랙</option>
                       <option value="주의">주의</option>
                       <option value="이탈">이탈</option>
-                    </select>
+                    </CustomSelect>
                   </div>
                   <div>
                     <label className="block text-[12px] font-semibold text-gray-500 mb-1"><EditableText id="clientEdit.label.일반메모" defaultText="일반메모" /></label>
@@ -58956,14 +59007,14 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
               </div>
               <div>
                 <label className="block text-[12px] font-semibold text-gray-500 mb-1">등급</label>
-                <select className="border border-gray-200 rounded-lg px-3 py-2 text-[13px] w-full focus:border-[#1B2B4B] outline-none bg-white"
+                <CustomSelect className="border border-gray-200 rounded-lg px-3 py-2 text-[13px] w-full focus:border-[#1B2B4B] outline-none bg-white"
                   value={editPlaceModal.등급||"일반"}
                   onChange={(e) => setEditPlaceModal(p => ({ ...p, 등급: e.target.value }))}>
                   <option value="일반">일반</option>
                   <option value="블랙">블랙</option>
                   <option value="주의">주의</option>
                   <option value="이탈">이탈</option>
-                </select>
+                </CustomSelect>
               </div>
               <div className="col-span-2">
                 <label className="block text-[12px] font-semibold text-gray-500 mb-1">주소</label>
@@ -59531,12 +59582,7 @@ function MyProfilePage({ user, todayStats, myStats, cardImage, setCardImage, car
   const [draftName, setDraftName] = useState("");
   const [draftPhone, setDraftPhone] = useState("");
   const [savingInfo, setSavingInfo] = useState(false);
-  const fmtPhone = (v) => {
-    const d = String(v || "").replace(/\D/g, "").slice(0, 11);
-    if (d.length < 4) return d;
-    if (d.length < 8) return `${d.slice(0, 3)}-${d.slice(3)}`;
-    return d.length === 11 ? `${d.slice(0, 3)}-${d.slice(3, 7)}-${d.slice(7)}` : `${d.slice(0, 3)}-${d.slice(3, 6)}-${d.slice(6)}`;
-  };
+  const fmtPhone = (v) => formatPhone(String(v || "").replace(/\D/g, "").slice(0, 12)); // 공용 formatPhone 사용
   const openEdit = () => { setDraftName(displayName || ""); setDraftPhone(phone); setEditOpen(true); };
   const saveInfo = async () => {
     if (!user?.uid) return;
@@ -60429,11 +60475,11 @@ function HRManagementPage({ userCompany, role, userId, focusUid = null, selfOnly
                     <span>{selected.position || "직책 미설정"}</span>
                     <span className="text-white/30">·</span>
                     {canManage ? (
-                      <select value={selected.team || "미배정"} onChange={e => setTeam(selected.uid, e.target.value)}
+                      <CustomSelect value={selected.team || "미배정"} onChange={e => setTeam(selected.uid, e.target.value)}
                         className="h-7 px-2 rounded-lg bg-white/10 border border-white/20 text-white text-[13px] font-bold focus:outline-none [&>option]:text-[#0F1A30]">
                         {hrOpt.teams.map(t => <option key={t} value={t}>{t}</option>)}
                         <option value="미배정">미배정</option>
-                      </select>
+                      </CustomSelect>
                     ) : <span>{selected.team || "미배정"}</span>}
                   </div>
                   {/* ⭐ 2026-11-02 화면 점검 — 모바일 390px에서 4칸이면 글자가 세로로 깨져 2칸 → sm 이상 4칸 */}
@@ -60875,7 +60921,7 @@ function PCERPPage({ userCompany = "", drivers = [], clients = [], places = [], 
               </div>
               <div style={{ flex:1,minWidth:0 }}>
                 <div style={{ fontSize:14,fontWeight:700,color:"#111",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{d.차량번호||"-"}</div>
-                <div style={{ fontSize:12,color:"#6b7280",marginTop:2 }}>{d.이름||"-"}{d.전화번호?` · ${d.전화번호}`:""}</div>
+                <div style={{ fontSize:12,color:"#6b7280",marginTop:2 }}>{d.이름||"-"}{d.전화번호?` · ${formatPhone(d.전화번호)}`:""}</div>
               </div>
             </div>
           ))}
@@ -61485,7 +61531,7 @@ function CompanyProfile({ userCompany = "", role = "", userId = "" }) {
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="block text-[12px] font-semibold text-gray-500 mb-1.5"><EditableText id="companyProfile.bankForm.label.은행" defaultText="은행" /></label>
-                    <select
+                    <CustomSelect
                       className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B] bg-white"
                       value={bankForm.bank}
                       onChange={e => setBankForm(p => ({ ...p, bank: e.target.value }))}
@@ -61494,7 +61540,7 @@ function CompanyProfile({ userCompany = "", role = "", userId = "" }) {
                       {["국민은행","신한은행","우리은행","하나은행","기업은행","농협은행","카카오뱅크","케이뱅크","토스뱅크","SC제일은행","씨티은행","대구은행","부산은행","경남은행","광주은행","전북은행","제주은행","우체국","새마을금고","신협"].map(b => (
                         <option key={b} value={b}>{b}</option>
                       ))}
-                    </select>
+                    </CustomSelect>
                   </div>
                   <div>
                     <label className="block text-[12px] font-semibold text-gray-500 mb-1.5"><EditableText id="companyProfile.bankForm.label.예금주" defaultText="예금주" /></label>

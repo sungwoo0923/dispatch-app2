@@ -291,10 +291,10 @@ export default function MarginReportModal({ rows, initialMonth, isExcluded, hasE
           {/* 조회 조건 */}
           <div className="flex flex-wrap items-center gap-3 text-[14px] bg-white rounded-2xl border border-gray-200 px-5 py-3">
             <label className="font-bold text-gray-600">전월(기준)</label>
-            <input type="month" value={prevKey} onChange={(e) => setPrevKey(e.target.value)} className="border border-gray-300 rounded-lg px-2 py-1.5 font-semibold" />
+            <input type="month" value={prevKey} onChange={(e) => setPrevKey(e.target.value)} className="border border-[#DCE3EE] rounded-lg px-2 py-1.5 font-semibold" />
             <span className="text-gray-400 font-bold">→</span>
             <label className="font-bold text-[#1B2B4B]">당월</label>
-            <input type="month" value={monthKey} onChange={(e) => { setMonthKey(e.target.value); setPrevKey(prevMonthOf(e.target.value)); }} className="border border-gray-300 rounded-lg px-2 py-1.5 font-semibold" />
+            <input type="month" value={monthKey} onChange={(e) => { setMonthKey(e.target.value); setPrevKey(prevMonthOf(e.target.value)); }} className="border border-[#DCE3EE] rounded-lg px-2 py-1.5 font-semibold" />
             {hasExcluded && (
               <label className="flex items-center gap-1.5 ml-3 font-semibold text-gray-700">
                 <input type="checkbox" checked={pureOnly} onChange={(e) => setPureOnly(e.target.checked)} className="w-4 h-4" /> 순수 운송 매출만(제외 거래처 빼기)
@@ -399,7 +399,7 @@ export default function MarginReportModal({ rows, initialMonth, isExcluded, hasE
                     <Td className={`text-right font-black ${s.gap > 0 ? "text-red-600" : "text-gray-400"}`}>{s.gap > 0 ? won(s.gap) : "-"}</Td>
                   </tr>
                 ))}
-                <tr className="border-t-2 border-gray-300 bg-gray-50 font-black">
+                <tr className="border-t-2 border-[#DCE3EE] bg-gray-50 font-black">
                   <Td>합계</Td>
                   <Td className="text-right border-l">{P.cnt}건</Td><Td className="text-right">{won(P.sale)}</Td><Td className="text-right">{won(P.profit)}</Td>
                   <Td className="text-right border-l">{C.cnt}건</Td><Td className="text-right">{won(C.sale)}</Td><Td className="text-right">{won(C.profit)}</Td>
@@ -417,7 +417,7 @@ export default function MarginReportModal({ rows, initialMonth, isExcluded, hasE
               <div className="text-[16px] font-black text-[#1B2B4B]">보고서</div>
               <button
                 onClick={() => { try { navigator.clipboard.writeText(lines.join("\n")); setCopied(true); setTimeout(() => setCopied(false), 1500); } catch { /* 무시 */ } }}
-                className="px-4 py-1.5 rounded-lg border border-gray-300 text-[13px] font-bold hover:bg-gray-50"
+                className="px-4 py-1.5 rounded-lg border border-[#DCE3EE] text-[13px] font-bold hover:bg-gray-50"
               >{copied ? "복사됨" : "복사"}</button>
             </div>
             <div className="text-[15px] leading-[1.85] text-gray-900">
@@ -436,7 +436,7 @@ export default function MarginReportModal({ rows, initialMonth, isExcluded, hasE
               <div className="mr-no-capture ml-auto flex items-center gap-1.5 text-[13px]">
                 <button onClick={saveClientImage} disabled={capturing} className="px-3 py-1.5 rounded-lg font-bold border border-emerald-600 bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-60 mr-2">{capturing ? "저장 중…" : "이미지 저장"}</button>
                 {[["gap", "덜 남은 이익 순"], ["dSale", "매출 증가 순"], ["sale", `${B} 매출 순`]].map(([k, l]) => (
-                  <button key={k} onClick={() => setClientSort(k)} className={`px-3 py-1.5 rounded-lg font-bold border ${clientSort === k ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"}`}>{l}</button>
+                  <button key={k} onClick={() => setClientSort(k)} className={`px-3 py-1.5 rounded-lg font-bold border ${clientSort === k ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-700 border-[#DCE3EE] hover:bg-gray-50"}`}>{l}</button>
                 ))}
               </div>
             </div>

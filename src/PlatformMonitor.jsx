@@ -14,6 +14,8 @@ import CompanyApplications from "./CompanyApplications";
 import { PricingEditor, QuoteBuilder, QuoteHistory, useSalesPricing, applyPlanBill } from "./SalesQuote";
 // ⭐ 2026-11-02 관리자센터 — 실시간 계정·접속(users·loginSessions) + 운영 위젯
 import { usePlatformLive, mergeCompanies, mergeShippers, StatsStamp, LiveNowPanel, SignupTimeline, PendingPanel, DupeWarning, HealthCard, StaffList, Spark, PLAN_NAMES } from "./PlatformLive";
+import { CustomSelect } from "./CustomSelect";
+import { fmtMoney, parseMoney } from "./formatInput";
 
 // 📱 폰(관리자 관리센터 모바일) — 가로 칸 수를 줄인다
 export function usePhone() {
@@ -436,9 +438,9 @@ export default function PlatformMonitor({ demoStats = null, tab: tabProp, onTab,
           <Card code="CARRIERS" title={`운송사 ${sorted.length === companies.length ? companies.length : `${sorted.length} / ${companies.length}`}곳`} right={
             <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
               <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="회사명·코드 검색" style={{ height: 40, width: phone ? "100%" : 200, padding: "0 12px", borderRadius: 10, border: "1px solid #DCE3EF", fontSize: 14.5, outline: "none" }} />
-              <select value={sortKey} onChange={(e) => setSortKey(e.target.value)} style={{ height: 40, borderRadius: 10, border: "1px solid #DCE3EF", padding: "0 8px", fontSize: 14.5, fontWeight: 700, color: NAVY }}>
+              <CustomSelect value={sortKey} onChange={(e) => setSortKey(e.target.value)} style={{ height: 40, borderRadius: 10, border: "1px solid #DCE3EF", padding: "0 24px 0 10px", fontSize: 14.5, fontWeight: 700, color: NAVY, background: "#fff" }}>
                 {[["orders", "이번 달 오더순"], ["risk", "주의 필요순"], ["online", "지금 접속순"], ["recent", "최근 접속순"], ["gmv", "운송액순"], ["bill", "청구액순"], ["health", "건강도순"], ["staff", "계정 수순"], ["data", "데이터량순"]].map(([k, l]) => <option key={k} value={k}>{l}</option>)}
-              </select>
+              </CustomSelect>
               <div style={{ display: "inline-flex", padding: 3, borderRadius: 11, background: "#EEF2F8" }}>
                 {[["cards", "카드"], ["table", "표"]].map(([k, l]) => (
                   <button key={k} type="button" onClick={() => setView(k)} style={{ height: 34, padding: "0 14px", borderRadius: 8, border: "none", fontSize: 14.5, fontWeight: 800, cursor: "pointer", background: view === k ? NAVY : "transparent", color: view === k ? "#fff" : "#5B6B85" }}>{l}</button>
@@ -523,7 +525,7 @@ export default function PlatformMonitor({ demoStats = null, tab: tabProp, onTab,
               <label key={k} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, padding: "9px 0", borderTop: "1px solid #EEF1F6" }}>
                 <span style={{ fontSize: 14.5, fontWeight: 700, color: "#374151" }}>{l}</span>
                 <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-                  <input type="number" min="0" value={pricing[k]} onChange={(e) => setPricing({ ...pricing, [k]: Number(e.target.value) || 0 })} onBlur={() => savePricing(pricing)}
+                  <input inputMode="numeric" value={fmtMoney(pricing[k] ?? "")} onChange={(e) => setPricing({ ...pricing, [k]: parseMoney(e.target.value) || 0 })} onBlur={() => savePricing(pricing)}
                     style={{ width: 110, height: 34, borderRadius: 8, border: "1px solid #DCE3EF", padding: "0 10px", fontFamily: MONO, fontSize: 15, fontWeight: 800, color: NAVY, textAlign: "right" }} />
                   <span style={{ fontSize: 14, color: "#6b7280", width: 18 }}>{u}</span>
                 </span>

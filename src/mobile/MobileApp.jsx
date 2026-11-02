@@ -19,6 +19,7 @@ const MobileIntelView = lazyView(() => import("./MobileIntelView"));
 import InternalMessenger from "../InternalMessenger";
 import { subscribeOrderSync, deleteOrderWithLog, historyStartDate } from "../orderHistory";
 import CustomDatePicker from "../CustomDatePicker";
+import MobileSelect from "./MobileSelect"; // ⭐ 2026-11-02 기본 select → 남색 바텀시트 선택기
 import RouteMapModal from "../RouteMapModal";
 import southKorea from "@svg-maps/south-korea";
 import { canSeeNotice } from "../NoticeBoard";
@@ -354,13 +355,15 @@ function sortFareHistoryMobile(list, mode, dateKey = "상차일", fareKey = "청
 }
 function FareSortDropdownMobile({ value, onChange }) {
   return (
-    <select
+    <MobileSelect
       value={value}
       onChange={(e) => onChange(e.target.value)}
-      className="text-[11px] font-bold text-[#1B2B4B] border border-gray-200 rounded-lg px-2 py-1 outline-none bg-white"
+      className="text-[12px] font-bold text-[#1B2B4B] border border-gray-200 rounded-lg px-2.5 py-1.5 outline-none bg-white"
+      compact
+      title="정렬"
     >
       {FARE_SORT_OPTIONS_MOBILE.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-    </select>
+    </MobileSelect>
   );
 }
 
@@ -1930,6 +1933,27 @@ const formatPhone = (phone) => {
   }
   if (digits.length === 8) return digits.replace(/(\d{4})(\d{4})/, "$1-$2");
   return digits;
+};
+// ⭐ 2026-11-02 입력 중 실시간 하이픈 — 숫자를 치는 동안 바로 010-1234-5678 / 02-123-4567 모양으로.
+// 다 입력된 번호는 formatPhone과 같은 결과(저장값 형식 동일).
+const formatPhoneLive = (phone) => {
+  const d = String(phone ?? "").replace(/\D/g, "");
+  if (d.length > 11) return d; // 0504 등 12자리 특수번호는 숫자 그대로
+  if (d.startsWith("02")) {
+    if (d.length <= 2) return d;
+    if (d.length <= 5) return `${d.slice(0, 2)}-${d.slice(2)}`;
+    if (d.length <= 9) return `${d.slice(0, 2)}-${d.slice(2, 5)}-${d.slice(5)}`;
+    return `${d.slice(0, 2)}-${d.slice(2, 6)}-${d.slice(6)}`;
+  }
+  if (/^1[5-9]/.test(d)) return d.length <= 4 ? d : `${d.slice(0, 4)}-${d.slice(4, 8)}`; // 1588-0000 등 대표번호
+  if (d.length <= 3) return d;
+  if (d.startsWith("010")) {
+    if (d.length <= 7) return `${d.slice(0, 3)}-${d.slice(3)}`;
+    return `${d.slice(0, 3)}-${d.slice(3, 7)}-${d.slice(7)}`;
+  }
+  if (d.length <= 6) return `${d.slice(0, 3)}-${d.slice(3)}`;
+  if (d.length <= 10) return `${d.slice(0, 3)}-${d.slice(3, 6)}-${d.slice(6)}`;
+  return `${d.slice(0, 3)}-${d.slice(3, 7)}-${d.slice(7)}`;
 };
 // ======================================================================
 //  메인 컴포넌트
@@ -5997,17 +6021,17 @@ onGoAttendance={() => {
         {role === "totalMaster" && selectedSchedule?.id && (
           <div>
             <div className="text-[11px] text-gray-400 mb-1">작성자</div>
-            <select
+            <MobileSelect
               className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#1B2B4B]"
               value={scheduleForm.authorName}
               onChange={e => setScheduleForm(f => ({ ...f, authorName: e.target.value }))}
             >
               <option value="">선택</option>
               {mobileUsers.map(u => <option key={u.id} value={u.name}>{u.name}{u.email ? ` (${u.email.split("@")[0]})` : ""}</option>)}
-            </select>
+            </MobileSelect>
           </div>
         )}
-        <select
+        <MobileSelect
           className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#1B2B4B]"
           value={scheduleForm.type}
           onChange={e => setScheduleForm(f => ({ ...f, type: e.target.value }))}
@@ -6019,7 +6043,7 @@ onGoAttendance={() => {
           <option>병가</option>
           <option>경조사</option>
           <option>조퇴</option>
-        </select>
+        </MobileSelect>
         <div className="grid grid-cols-2 gap-2">
           <div>
             <div className="text-[11px] text-gray-400 mb-1">시작일</div>
@@ -6051,7 +6075,7 @@ onGoAttendance={() => {
           <div className="text-[11px] text-gray-400 font-semibold">결재자 ({scheduleForm.approvers.length}/3)</div>
           {scheduleForm.approvers.map((a, i) => (
             <div key={i} className="flex gap-2 items-center">
-              <select
+              <MobileSelect
                 className="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#1B2B4B]"
                 value={a.uid}
                 onChange={e => {
@@ -6063,7 +6087,7 @@ onGoAttendance={() => {
               >
                 <option value="">결재자 선택</option>
                 {mobileUsers.filter(u => (u.uid || u.id) !== currentUser?.uid).map(u => <option key={u.id} value={u.uid || u.id}>{u.name}{u.email ? ` (${u.email.split("@")[0]})` : ""}</option>)}
-              </select>
+              </MobileSelect>
               <button onClick={() => setScheduleForm(f => ({ ...f, approvers: f.approvers.filter((_, j) => j !== i) }))}
                 className="text-red-400 text-lg font-bold px-1">×</button>
             </div>
@@ -6252,7 +6276,7 @@ onGoAttendance={() => {
             </button>
           ))}
         </div>
-        <select
+        <MobileSelect
           className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none"
           value={noticeForm.category}
           onChange={e => setNoticeForm(f => ({ ...f, category: e.target.value }))}
@@ -6262,7 +6286,7 @@ onGoAttendance={() => {
           <option>안내</option>
           <option>긴급</option>
           <option>인사발령</option>
-        </select>
+        </MobileSelect>
         <div className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-gray-50 text-gray-700">작성자 <b>{noticeForm.author || mobileUsers.find(u => u.id === currentUser?.uid)?.name || ""}</b> <span className="text-gray-400">(자동)</span></div>
         <textarea
           rows={4}
@@ -6305,7 +6329,7 @@ onGoAttendance={() => {
         <h3 className="font-bold text-base text-gray-800">인수인계 등록</h3>
         <button onClick={() => setHandoverOpen(false)} className="text-gray-400 text-xl leading-none">✕</button>
       </div>
-      <select
+      <MobileSelect
         className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none"
         value={handoverForm.receiver}
         onChange={e => {
@@ -6315,7 +6339,7 @@ onGoAttendance={() => {
       >
         <option value="">받는 사람 선택</option>
         {mobileUsers.map(u => <option key={u.id} value={u.name}>{u.name}</option>)}
-      </select>
+      </MobileSelect>
       <CustomDatePicker
         className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none"
         value={handoverForm.date}
@@ -6364,7 +6388,7 @@ onGoAttendance={() => {
       </div>
       {handoverEditMode ? (
         <>
-          <select
+          <MobileSelect
             className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none"
             value={handoverForm.receiver}
             onChange={e => {
@@ -6374,7 +6398,7 @@ onGoAttendance={() => {
           >
             <option value="">받는 사람 선택</option>
             {mobileUsers.map(u => <option key={u.id} value={u.name}>{u.name}</option>)}
-          </select>
+          </MobileSelect>
           <CustomDatePicker
             className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none"
             value={handoverForm.date}
@@ -7058,9 +7082,9 @@ function MobileSalesPage({ data = [], fixedData = [], onBack, cardVersionB = fal
             <div key={i} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-2.5 flex flex-col items-center text-center gap-1">
               <Dial pct={k.pct} color={k.color} size={52} />
               <div className="w-full min-w-0">
-                <div className="text-[9px] text-gray-400 font-semibold leading-tight">{k.label}</div>
-                <div className="text-[12px] font-extrabold leading-tight text-gray-900">{fmtWon(k.value)}<span className="text-[9px] font-normal text-gray-400 ml-0.5">원</span></div>
-                <div className="text-[9px] text-gray-400 mt-0.5">{k.sub}</div>
+                <div className="text-[11px] text-gray-500 font-semibold leading-tight">{k.label}</div>
+                <div className="text-[12px] font-extrabold leading-tight text-gray-900">{fmtWon(k.value)}<span className="text-[10px] font-normal text-gray-400 ml-0.5">원</span></div>
+                <div className="text-[10.5px] text-gray-400 mt-0.5">{k.sub}</div>
               </div>
             </div>
           ))}
@@ -9047,9 +9071,10 @@ const summary = useMemo(() => {
               {/* 차량종류 / 배차상태 드롭다운 */}
               <div className="flex gap-2 text-sm">
                 <div className="relative flex-1 min-w-0">
-                  <select
+                  <MobileSelect
                     className={`w-full appearance-none rounded-xl pl-3 pr-8 py-1.5 text-[13px] focus:outline-none focus:ring-2 transition ${field}`}
                     value={vehicleFilter}
+                    compact noArrow
                     onChange={(e) => setVehicleFilter(e.target.value)}
                   >
                     <option value="">차종 전체</option>
@@ -9065,20 +9090,21 @@ const summary = useMemo(() => {
                     <option value="리프트">리프트</option>
                     <option value="오토바이">오토바이</option>
                     {currentCustomVehicleTypes().map((v) => <option key={`vt_${v}`} value={v}>{v}</option>)}{/* 🚚 2026-11-02 회사 추가 차량종류 */}
-                  </select>
+                  </MobileSelect>
                   <IconChevronDown className={`w-3.5 h-3.5 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none ${icon}`} />
                 </div>
 
                 <div className="relative flex-1 min-w-0">
-                  <select
+                  <MobileSelect
                     className={`w-full appearance-none rounded-xl pl-3 pr-8 py-1.5 text-[13px] focus:outline-none focus:ring-2 transition ${field}`}
                     value={assignFilter}
+                    compact noArrow
                     onChange={(e) => setAssignFilter(e.target.value)}
                   >
                     <option value="">배차 전체</option>
                     <option value="배차중">배차중</option>
                     <option value="배차완료">배차완료</option>
-                  </select>
+                  </MobileSelect>
                   <IconChevronDown className={`w-3.5 h-3.5 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none ${icon}`} />
                 </div>
               </div>
@@ -9086,9 +9112,10 @@ const summary = useMemo(() => {
               {/* 검색줄 */}
               <div className="flex gap-2 text-sm">
                 <div className="relative w-28 shrink-0">
-                  <select
+                  <MobileSelect
                     className={`w-full appearance-none rounded-xl pl-3 pr-7 py-1.5 text-[13px] focus:outline-none focus:ring-2 transition ${field}`}
                     value={searchType}
+                    compact noArrow
                     onChange={(e) => setSearchType(e.target.value)}
                   >
                     <option value="거래처명">거래처명</option>
@@ -9099,7 +9126,7 @@ const summary = useMemo(() => {
                     <option value="하차지명">하차지명</option>
                     <option value="하차지주소">하차지주소</option>
                     <option value="메모">메모</option>
-                  </select>
+                  </MobileSelect>
                   <IconChevronDown className={`w-3 h-3 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none ${icon}`} />
                 </div>
                 <div className="relative flex-1 min-w-0">
@@ -10549,17 +10576,17 @@ function QuickEditModal({ order, drivers, cardVersionB, onClose, onSuccess, disp
         <div className="grid grid-cols-2 gap-3 mb-4">
           <div>
             <label className={labelCls}>지급방식</label>
-            <select className={`${inputCls} ${isShipperOrder ? "bg-gray-100 text-gray-400" : ""}`} value={payType} disabled={isShipperOrder} onChange={e => setPayType(e.target.value)}>
+            <MobileSelect className={`${inputCls} ${isShipperOrder ? "bg-gray-100 text-gray-400" : ""}`} value={payType} disabled={isShipperOrder} onChange={e => setPayType(e.target.value)}>
               <option value="">선택</option>
               {["계산서","착불","선불","손실","개인","취소"].map(v => <option key={v}>{v}</option>)}
-            </select>
+            </MobileSelect>
           </div>
           <div>
             <label className={labelCls}>배차방식</label>
-            <select className={inputCls} value={dispType} onChange={e => setDispType(e.target.value)}>
+            <MobileSelect className={inputCls} value={dispType} onChange={e => setDispType(e.target.value)}>
               <option value="">선택</option>
               {dropdownList("배차방식", ["24시","직접배차","인성","고정기사"], dispType).map(v => <option key={v}>{v}</option>)}
-            </select>
+            </MobileSelect>
           </div>
         </div>
 
@@ -10633,7 +10660,7 @@ function QuickEditModal({ order, drivers, cardVersionB, onClose, onSuccess, disp
             </div>
             <div>
               <label className={labelCls}>연락처</label>
-              <input autoComplete="off" className={inputCls} value={driverPhone} onChange={e => setDriverPhone(formatPhone(e.target.value))} onBlur={checkManualConflict} placeholder="010-0000-0000" inputMode="tel" />
+              <input autoComplete="off" className={inputCls} value={driverPhone} onChange={e => setDriverPhone(formatPhoneLive(e.target.value))} onBlur={checkManualConflict} placeholder="010-0000-0000" inputMode="tel" />
             </div>
           </div>
         </div>
@@ -11531,10 +11558,10 @@ function QuickEditSheet({ order, onClose, onSaved, cardVersionB, clients = [], b
         placeholder={ph} inputMode={unit ? "decimal" : "text"} value={qty}
         onChange={(e) => onQty(unit ? e.target.value.replace(/[^0-9.]/g, "") : e.target.value)} />
       <div className="relative shrink-0" style={{ width: w }}>
-        <select className={`${unitSel} w-full`} value={unit} onChange={(e) => onUnit(e.target.value)}>
+        <MobileSelect compact noArrow className={`${unitSel} w-full`} value={unit} onChange={(e) => onUnit(e.target.value)}>
           <option value="">없음</option>
           {units.map(u => <option key={u} value={u}>{u}</option>)}
-        </select>
+        </MobileSelect>
         <IconChevronDown className="w-3 h-3 absolute right-1 top-1/2 -translate-y-1/2 pointer-events-none text-white" />
       </div>
     </div>
@@ -11562,10 +11589,10 @@ function QuickEditSheet({ order, onClose, onSaved, cardVersionB, clients = [], b
             </QuickField>
             <QuickField label="상차일"><CustomDatePicker className={inp} value={f.상차일} onChange={set("상차일")} /></QuickField>
             <QuickField label="상차시간">
-              <select className={inp} value={f.상차시간} onChange={set("상차시간")}>
+              <MobileSelect className={inp} value={f.상차시간} onChange={set("상차시간")}>
                 <option value="">상차시간</option>
                 {timeOpts(f.상차시간).map(t => <option key={t} value={t}>{t}</option>)}
-              </select>
+              </MobileSelect>
             </QuickField>
             <QuickField label="하차지명" span={2}>
               <QuickSuggestInput className={inp} value={f.하차지명} withAddr list={clients}
@@ -11574,22 +11601,22 @@ function QuickEditSheet({ order, onClose, onSaved, cardVersionB, clients = [], b
             </QuickField>
             <QuickField label="하차일"><CustomDatePicker className={inp} value={f.하차일} onChange={set("하차일")} /></QuickField>
             <QuickField label="하차시간">
-              <select className={inp} value={f.하차시간} onChange={set("하차시간")}>
+              <MobileSelect className={inp} value={f.하차시간} onChange={set("하차시간")}>
                 <option value="">하차시간</option>
                 {timeOpts(f.하차시간).map(t => <option key={t} value={t}>{t}</option>)}
-              </select>
+              </MobileSelect>
             </QuickField>
             <QuickField label="배차방식">
-              <select className={inp} value={f.배차방식} onChange={set("배차방식")}>
+              <MobileSelect className={inp} value={f.배차방식} onChange={set("배차방식")}>
                 <option value="">선택없음</option>
                 {dropdownList("배차방식", QUICK_EDIT_ASSIGN, f.배차방식).map(v => <option key={v}>{v}</option>)}
-              </select>
+              </MobileSelect>
             </QuickField>
             <QuickField label="지급방식">
-              <select className={inp} value={f.지급방식} onChange={set("지급방식")}>
+              <MobileSelect className={inp} value={f.지급방식} onChange={set("지급방식")}>
                 <option value="">선택없음</option>
                 {QUICK_EDIT_PAY.map(v => <option key={v}>{v}</option>)}
-              </select>
+              </MobileSelect>
             </QuickField>
             <QuickField label="톤수">
               {unitBox(f.톤수값, setVal("톤수값"), f.톤수타입, setVal("톤수타입"), ["톤", "kg"], 62, "예: 1")}
@@ -12757,8 +12784,8 @@ const handleAssignClick = () => {
                     {editingDriverId === (d.id || i) ? (
                       <div className="px-4 py-3 bg-blue-50">
                         <div className="text-[11px] font-semibold text-gray-500 mb-1">{d.차량번호}</div>
-                        <input autoComplete="off" className="w-full border border-gray-300 rounded-lg px-2 py-1 text-sm mb-1.5 focus:outline-none focus:border-blue-400" placeholder="기사 이름" value={editingDriverData.이름} onChange={e => setEditingDriverData(p => ({ ...p, 이름: e.target.value }))} onPointerDown={e => e.stopPropagation()} />
-                        <input autoComplete="off" className="w-full border border-gray-300 rounded-lg px-2 py-1 text-sm mb-2 focus:outline-none focus:border-blue-400" placeholder="전화번호" value={editingDriverData.전화번호} onChange={e => setEditingDriverData(p => ({ ...p, 전화번호: formatPhone(e.target.value) }))} onPointerDown={e => e.stopPropagation()} />
+                        <input autoComplete="off" className="w-full border border-gray-300 rounded-lg px-2 py-1 text-sm mb-1.5 focus:outline-none focus:border-[#1B2B4B]" placeholder="기사 이름" value={editingDriverData.이름} onChange={e => setEditingDriverData(p => ({ ...p, 이름: e.target.value }))} onPointerDown={e => e.stopPropagation()} />
+                        <input autoComplete="off" className="w-full border border-gray-300 rounded-lg px-2 py-1 text-sm mb-2 focus:outline-none focus:border-[#1B2B4B]" placeholder="전화번호" inputMode="tel" value={editingDriverData.전화번호} onChange={e => setEditingDriverData(p => ({ ...p, 전화번호: formatPhoneLive(e.target.value) }))} onPointerDown={e => e.stopPropagation()} />
                         <div className="flex gap-2">
                           <button type="button" className="flex-1 py-1.5 rounded-lg bg-blue-600 text-white text-xs font-bold"
                             onPointerDown={async (e) => { e.preventDefault(); if (!editingDriverData.이름.trim()) return; await updateDoc(doc(db, "drivers", d.id), { 이름: editingDriverData.이름, 전화번호: editingDriverData.전화번호 }); setSmartMatched(prev => prev.map(m => m.id === d.id ? { ...m, 이름: editingDriverData.이름, 전화번호: editingDriverData.전화번호 } : m)); setEditingDriverId(null); }}>저장</button>
@@ -12787,15 +12814,15 @@ const handleAssignClick = () => {
         // 가로로 나란히 정렬해서 잘리지 않고 다 보이게 한다.
         <div className="grid grid-cols-3 gap-2 mb-3 [@media(max-aspect-ratio:2/5)]:!grid-cols-1 [@media(max-aspect-ratio:2/5)]:!gap-1.5">
           <div className="text-center bg-gray-50 rounded-xl py-2 px-1 min-w-0 [@media(max-aspect-ratio:2/5)]:!flex [@media(max-aspect-ratio:2/5)]:!items-center [@media(max-aspect-ratio:2/5)]:!justify-between [@media(max-aspect-ratio:2/5)]:!text-left [@media(max-aspect-ratio:2/5)]:!px-3">
-            <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-0.5 [@media(max-aspect-ratio:2/5)]:!mb-0 shrink-0">차량번호</div>
+            <div className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-0.5 [@media(max-aspect-ratio:2/5)]:!mb-0 shrink-0">차량번호</div>
             <div className="text-[12px] font-bold text-gray-800 truncate">{carNo || "-"}</div>
           </div>
           <div className="text-center bg-gray-50 rounded-xl py-2 px-1 min-w-0 [@media(max-aspect-ratio:2/5)]:!flex [@media(max-aspect-ratio:2/5)]:!items-center [@media(max-aspect-ratio:2/5)]:!justify-between [@media(max-aspect-ratio:2/5)]:!text-left [@media(max-aspect-ratio:2/5)]:!px-3">
-            <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-0.5 [@media(max-aspect-ratio:2/5)]:!mb-0 shrink-0">이름</div>
+            <div className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-0.5 [@media(max-aspect-ratio:2/5)]:!mb-0 shrink-0">이름</div>
             <div className="text-[12px] font-bold text-gray-800 truncate">{name || "-"}</div>
           </div>
           <div className="text-center bg-gray-50 rounded-xl py-2 px-1 min-w-0 [@media(max-aspect-ratio:2/5)]:!flex [@media(max-aspect-ratio:2/5)]:!items-center [@media(max-aspect-ratio:2/5)]:!justify-between [@media(max-aspect-ratio:2/5)]:!text-left [@media(max-aspect-ratio:2/5)]:!px-3">
-            <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-0.5 [@media(max-aspect-ratio:2/5)]:!mb-0 shrink-0">연락처</div>
+            <div className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-0.5 [@media(max-aspect-ratio:2/5)]:!mb-0 shrink-0">연락처</div>
             <div className="text-[12px] font-bold text-gray-800 truncate">{phone || "-"}</div>
           </div>
         </div>
@@ -12809,7 +12836,7 @@ const handleAssignClick = () => {
           )}
           <input autoComplete="off" className="w-full border rounded-xl px-3 py-2 text-sm focus:outline-none border-gray-200 focus:border-[#1B2B4B]" placeholder="차량번호" value={carNo} onChange={e => { setCarNo(e.target.value); setIsNewDriver(false); }} onBlur={checkManualDriverConflict} />
           <input autoComplete="off" className="w-full border rounded-xl px-3 py-2 text-sm focus:outline-none border-gray-200 focus:border-[#1B2B4B]" placeholder="기사 이름" value={name} onChange={e => setName(e.target.value)} onBlur={checkManualDriverConflict} />
-          <input autoComplete="off" className="w-full border rounded-xl px-3 py-2 text-sm focus:outline-none border-gray-200 focus:border-[#1B2B4B]" placeholder="기사 연락처" value={phone} onChange={e => setPhone(fmtPhone(e.target.value))} />
+          <input autoComplete="off" className="w-full border rounded-xl px-3 py-2 text-sm focus:outline-none border-gray-200 focus:border-[#1B2B4B]" placeholder="기사 연락처" inputMode="tel" value={phone} onChange={e => setPhone(formatPhoneLive(e.target.value))} />
         </div>
       )}
       {phone && (
@@ -13320,9 +13347,9 @@ const handleAssignClick = () => {
                             <button key={label}
                               onClick={() => applyFareDirectly(value, null)}
                               className="rounded-xl border border-gray-200 bg-gray-50 py-2.5 text-center active:scale-95 transition">
-                              <div className="text-[9px] font-bold text-gray-400 mb-1">{label}</div>
+                              <div className="text-[11px] font-bold text-gray-500 mb-1">{label}</div>
                               <div className="text-[15px] font-extrabold text-[#1B2B4B]">{value.toLocaleString()}</div>
-                              <div className="text-[9px] text-gray-400 mt-0.5">{sub}</div>
+                              <div className="text-[10.5px] text-gray-400 mt-0.5 leading-tight">{sub}</div>
                             </button>
                           ))}
                         </div>
@@ -13352,14 +13379,14 @@ const handleAssignClick = () => {
                       )}
 
                       {/* 필터 — 버튼 여러 개 대신 드롭다운 하나 */}
-                      <select value={detailFareFilter} onChange={e => setDetailFareFilter(e.target.value)}
+                      <MobileSelect compact title="필터" value={detailFareFilter} onChange={e => setDetailFareFilter(e.target.value)}
                         className="text-[12px] font-bold text-[#1B2B4B] border border-gray-200 rounded-lg px-2.5 py-1.5 outline-none bg-white">
                         {tabs.map(t => {
                           const cnt = t === "all" ? validDetailMatches.length : (counts[t] || 0);
                           if (t !== "all" && cnt === 0) return null;
                           return <option key={t} value={t}>{t === "all" ? `전체 ${cnt}건` : `${t} ${cnt}건`}</option>;
                         })}
-                      </select>
+                      </MobileSelect>
 
                       {visibleMatches.map((r, i) => {
                         const o = r.order;
@@ -15247,7 +15274,7 @@ const pickDrop = (c) => {
           onClearWorkDates={() => update("근무일자목록", [])}
           displayOverride={isMultiWorkForm && formWorkDates.length > 1 ? `${form.상차일 || ""} 외 ${formWorkDates.length - 1}일` : undefined}
         />
-        <select
+        <MobileSelect
           className="flex-1 min-w-[90px] border rounded px-1 py-1 text-sm"
           value={form.상차시간}
           onChange={(e) => update("상차시간", e.target.value)}
@@ -15256,7 +15283,7 @@ const pickDrop = (c) => {
           {HALF_HOUR_TIMES.map((t) => (
             <option key={t} value={t}>{t}</option>
           ))}
-        </select>
+        </MobileSelect>
       </div>
       {form.상차시간 && (
         <div className="flex gap-1.5">
@@ -15288,7 +15315,7 @@ const pickDrop = (c) => {
           value={form.하차일}
           onChange={(e) => update("하차일", e.target.value)}
         />
-        <select
+        <MobileSelect
           className="flex-1 min-w-[90px] border rounded px-1 py-1 text-sm"
           value={form.하차시간}
           onChange={(e) => update("하차시간", e.target.value)}
@@ -15297,7 +15324,7 @@ const pickDrop = (c) => {
           {HALF_HOUR_TIMES.map((t) => (
             <option key={t} value={t}>{t}</option>
           ))}
-        </select>
+        </MobileSelect>
       </div>
       {form.하차시간 && (
         <div className="flex gap-1.5">
@@ -15517,9 +15544,10 @@ const pickDrop = (c) => {
         <input autoComplete="off"
           className="w-full border-0 border-b-2 border-gray-300 rounded-none px-1 py-1.5 text-[13px] font-semibold text-gray-900 bg-transparent focus:outline-none focus:border-[var(--reg-accent)] transition"
           placeholder="상차지 담당자번호"
+          inputMode="tel"
           value={form.상차지담당자번호 || ""}
           onChange={(e) =>
-            update("상차지담당자번호", formatPhone(e.target.value))
+            update("상차지담당자번호", formatPhoneLive(e.target.value))
           }
         />
 
@@ -15686,9 +15714,10 @@ const pickDrop = (c) => {
         <input autoComplete="off"
           className="w-full border-0 border-b-2 border-gray-300 rounded-none px-1 py-1.5 text-[13px] font-semibold text-gray-900 bg-transparent focus:outline-none focus:border-[var(--reg-accent)] transition"
           placeholder="하차지 담당자번호"
+          inputMode="tel"
           value={form.하차지담당자번호 || ""}
           onChange={(e) =>
-            update("하차지담당자번호", formatPhone(e.target.value))
+            update("하차지담당자번호", formatPhoneLive(e.target.value))
           }
         />
 
@@ -15751,9 +15780,10 @@ const pickDrop = (c) => {
                 }}
               />
               <div className="relative shrink-0">
-                <select
+                <MobileSelect
                   className={`appearance-none w-[62px] border-0 border-l px-1 pr-4 py-1.5 text-[12px] font-bold text-white outline-none rounded-none ${cardVersionB ? "bg-[#1B2B4B]" : "bg-blue-600"}`}
                   value={톤수타입}
+                  noArrow
                   onChange={(e) => {
                     const t = e.target.value;
                     set톤수타입(t);
@@ -15763,7 +15793,7 @@ const pickDrop = (c) => {
                   <option value="">없음</option>
                   <option value="톤">톤</option>
                   <option value="kg">kg</option>
-                </select>
+                </MobileSelect>
                 <IconChevronDown className="w-3 h-3 absolute right-1 top-1/2 -translate-y-1/2 pointer-events-none text-white" />
               </div>
             </div>
@@ -15794,9 +15824,10 @@ const pickDrop = (c) => {
                   }}
                 />
                 <div className="relative shrink-0">
-                  <select
+                  <MobileSelect
                     className={`appearance-none w-[76px] border-0 border-l px-1 pr-4 py-1.5 text-[12px] font-bold text-white outline-none rounded-none ${cardVersionB ? "bg-[#1B2B4B]" : "bg-blue-600"}`}
                     value={화물타입}
+                  noArrow
                     onChange={(e) => {
                       const t = e.target.value;
                       set화물타입(t);
@@ -15808,7 +15839,7 @@ const pickDrop = (c) => {
                     <option value="박스">박스</option>
                     <option value="통">통</option>
                     <option value="롤">롤</option>
-                  </select>
+                  </MobileSelect>
                   <IconChevronDown className="w-3 h-3 absolute right-1 top-1/2 -translate-y-1/2 pointer-events-none text-white" />
                 </div>
               </div>
@@ -15832,14 +15863,14 @@ const pickDrop = (c) => {
                     onChange={e => setMCargoAddQty(mCargoAddType ? e.target.value.replace(/[^0-9.]/g, "") : e.target.value)}
                     ref={imeFocusRef} />
                   <div className="relative w-[76px] shrink-0">
-                    <select className={`appearance-none w-full border-0 rounded-lg px-2 pr-5 py-2 text-[12px] font-bold text-white outline-none ${cardVersionB ? "bg-[#1B2B4B]" : "bg-blue-600"}`}
-                      value={mCargoAddType} onChange={e => setMCargoAddType(e.target.value)}>
+                    <MobileSelect className={`appearance-none w-full border-0 rounded-lg px-2 pr-5 py-2 text-[12px] font-bold text-white outline-none ${cardVersionB ? "bg-[#1B2B4B]" : "bg-blue-600"}`}
+                      value={mCargoAddType} onChange={e => setMCargoAddType(e.target.value)} noArrow>
                       <option value="">없음</option>
                       <option value="파레트">파레트</option>
                       <option value="박스">박스</option>
                       <option value="통">통</option>
                       <option value="롤">롤</option>
-                    </select>
+                    </MobileSelect>
                     <IconChevronDown className="w-3 h-3 absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none text-white" />
                   </div>
                 </div>
@@ -15868,7 +15899,7 @@ const pickDrop = (c) => {
           label="상/하차방법"
           input={
             <div className="flex flex-wrap gap-1.5">
-              <select
+              <MobileSelect
                 className="flex-1 min-w-[90px] border-0 border-b-2 border-gray-300 rounded-none px-1 py-1.5 text-[13px] font-semibold text-gray-900 bg-transparent focus:outline-none focus:border-[var(--reg-accent)] transition"
                 value={form.상차방법}
                 onChange={(e) => update("상차방법", e.target.value)}
@@ -15879,8 +15910,8 @@ const pickDrop = (c) => {
                 <option value="수작업">수작업</option>
                 <option value="직접수작업">직접수작업</option>
                 <option value="수도움">수도움</option>
-              </select>
-              <select
+              </MobileSelect>
+              <MobileSelect
                 className="flex-1 min-w-[90px] border-0 border-b-2 border-gray-300 rounded-none px-1 py-1.5 text-[13px] font-semibold text-gray-900 bg-transparent focus:outline-none focus:border-[var(--reg-accent)] transition"
                 value={form.하차방법}
                 onChange={(e) => update("하차방법", e.target.value)}
@@ -15891,7 +15922,7 @@ const pickDrop = (c) => {
                 <option value="수작업">수작업</option>
                 <option value="직접수작업">직접수작업</option>
                 <option value="수도움">수도움</option>
-              </select>
+              </MobileSelect>
             </div>
           }
         />
@@ -15907,7 +15938,7 @@ const pickDrop = (c) => {
           input={
             <div className="flex flex-wrap gap-1.5">
               <fieldset disabled={isLockedShipperEdit} style={{ display: "contents" }}>
-                <select
+                <MobileSelect
                   ref={payTypeSelectRef}
                   className={`flex-1 min-w-[90px] border-0 border-b-2 rounded-none px-1 py-1.5 text-[13px] font-semibold text-gray-900 bg-transparent focus:outline-none transition ${
                     requiredErrors.has("지급방식") ? "border-red-500 ring-2 ring-red-300 animate-pulse" : "border-gray-300 focus:border-[var(--reg-accent)]"
@@ -15922,9 +15953,9 @@ const pickDrop = (c) => {
                   <option value="손실">손실</option>
                   <option value="개인">개인</option>
                   <option value="취소">취소</option>
-                </select>
+                </MobileSelect>
               </fieldset>
-              <select
+              <MobileSelect
                 className="flex-1 min-w-[90px] border-0 border-b-2 border-gray-300 rounded-none px-1 py-1.5 text-[13px] font-semibold text-gray-900 bg-transparent focus:outline-none focus:border-[var(--reg-accent)] transition"
                 value={form.배차방식}
                 onChange={(e) => update("배차방식", e.target.value)}
@@ -15932,7 +15963,7 @@ const pickDrop = (c) => {
                 <option value="">배차방식</option>
                 {/* ⭐ 2026-11-01 PC 편집모드에서 바꾼 회사별 배차방식 옵션을 모바일도 그대로 */}
                 {dropdownList("배차방식", ["24시", "직접배차", "인성", "고정기사"], form.배차방식).map((v) => <option key={v} value={v}>{v}</option>)}
-              </select>
+              </MobileSelect>
             </div>
           }
         />
@@ -16205,8 +16236,10 @@ const pickDrop = (c) => {
           input={
             <input autoComplete="off"
               className="w-full border-0 border-b-2 border-gray-300 rounded-none px-1 py-1.5 text-[13px] font-semibold text-gray-900 bg-transparent focus:outline-none focus:border-[var(--reg-accent)] transition"
+              inputMode="tel"
+              placeholder="010-0000-0000"
               value={form.전화번호 || ""}
-              onChange={(e) => update("전화번호", e.target.value)}
+              onChange={(e) => update("전화번호", formatPhoneLive(e.target.value))}
             />
           }
         />
@@ -16548,9 +16581,9 @@ const pickDrop = (c) => {
                                 showToast(`운임 적용: ${value.toLocaleString()}원`);
                               }}
                               className="rounded-xl border border-gray-200 bg-gray-50 py-2.5 text-center active:scale-95 transition">
-                              <div className="text-[9px] font-bold text-gray-400 mb-1">{label}</div>
+                              <div className="text-[11px] font-bold text-gray-500 mb-1">{label}</div>
                               <div className="text-[15px] font-extrabold text-[#1B2B4B]">{value.toLocaleString()}</div>
-                              <div className="text-[9px] text-gray-400 mt-0.5">{sub}</div>
+                              <div className="text-[10.5px] text-gray-400 mt-0.5 leading-tight">{sub}</div>
                             </button>
                           ))}
                         </div>
@@ -16586,14 +16619,14 @@ const pickDrop = (c) => {
                       )}
 
                       {/* 필터 — 버튼 여러 개 대신 드롭다운 하나 */}
-                      <select value={mobileFareFilter} onChange={e => setMobileFareFilter(e.target.value)}
+                      <MobileSelect compact title="필터" value={mobileFareFilter} onChange={e => setMobileFareFilter(e.target.value)}
                         className="text-[12px] font-bold text-[#1B2B4B] border border-gray-200 rounded-lg px-2.5 py-1.5 outline-none bg-white">
                         {tabs.map(t => {
                           const cnt = t === "all" ? validFareMatches.length : (counts[t] || 0);
                           if (t !== "all" && cnt === 0) return null;
                           return <option key={t} value={t}>{t === "all" ? `전체 ${cnt}건` : `${t} ${cnt}건`}</option>;
                         })}
-                      </select>
+                      </MobileSelect>
 
                       {visibleMatches.map((r, i) => {
                         const o = r.order;
@@ -17065,8 +17098,9 @@ const pickDrop = (c) => {
           <label className="block text-xs text-gray-500 mb-1">담당자 번호</label>
           <input autoComplete="off"
             className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+            inputMode="tel"
             value={newClientForm.담당자번호}
-            onChange={(e) => setNewClientForm((p) => ({ ...p, 담당자번호: formatPhone(e.target.value) }))}
+            onChange={(e) => setNewClientForm((p) => ({ ...p, 담당자번호: formatPhoneLive(e.target.value) }))}
             placeholder="연락처 (선택)"
           />
         </div>
@@ -17359,8 +17393,9 @@ const pickDrop = (c) => {
               <input autoComplete="off"
                 className="border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white focus:outline-none focus:border-[#1B2B4B]"
                 placeholder="연락처"
+                inputMode="tel"
                 value={stop.담당자번호 || ""}
-                onChange={e => { const v = formatPhone(e.target.value); setStopList(prev => prev.map((s, i) => i === idx ? { ...s, 담당자번호: v } : s)); }}
+                onChange={e => { const v = formatPhoneLive(e.target.value); setStopList(prev => prev.map((s, i) => i === idx ? { ...s, 담당자번호: v } : s)); }}
               />
             </div>
             {/* 화물내용 + 타입 */}
@@ -17376,8 +17411,8 @@ const pickDrop = (c) => {
                   setStopList(prev => prev.map((s, i) => i === idx ? { ...s, 화물내용: v } : s));
                 }}
               />
-              <select
-                className="px-2 py-1 text-[11px] font-bold bg-[#1B2B4B] text-white border-0 outline-none"
+              <MobileSelect
+                className="w-[76px] shrink-0 px-2 py-1 text-[12px] font-bold bg-[#1B2B4B] text-white border-0 outline-none"
                 value={stop.화물타입 || ""}
                 onChange={e => setStopList(prev => prev.map((s, i) => i === idx ? { ...s, 화물타입: e.target.value } : s))}
               >
@@ -17385,7 +17420,7 @@ const pickDrop = (c) => {
                 <option value="파레트">파레트</option>
                 <option value="박스">박스</option>
                 <option value="통">통</option>
-              </select>
+              </MobileSelect>
             </div>
             {/* 톤수 */}
             <div className="flex border border-gray-200 rounded-xl overflow-hidden bg-white">
@@ -17400,15 +17435,15 @@ const pickDrop = (c) => {
                   setStopList(prev => prev.map((s, i) => i === idx ? { ...s, 톤수값: v } : s));
                 }}
               />
-              <select
-                className="px-2 py-1 text-[11px] font-bold bg-[#1B2B4B] text-white border-0 outline-none"
+              <MobileSelect
+                className="w-[76px] shrink-0 px-2 py-1 text-[12px] font-bold bg-[#1B2B4B] text-white border-0 outline-none"
                 value={stop.톤수타입 || ""}
                 onChange={e => setStopList(prev => prev.map((s, i) => i === idx ? { ...s, 톤수타입: e.target.value } : s))}
               >
                 <option value="">없음</option>
                 <option value="톤">톤</option>
                 <option value="kg">kg</option>
-              </select>
+              </MobileSelect>
             </div>
             {/* 경유지 자체 날짜+시간 — 상차경유지는 상차일/상차시간만, 하차경유지는 하차일/하차시간만
                 (오더 본 상차일/하차일은 전체 구간 날짜라, A상차(당일)→C하차→C상차→B하차(다음날)처럼
@@ -17425,14 +17460,14 @@ const pickDrop = (c) => {
                 </div>
                 <div>
                   <div className="text-[10px] text-gray-500 font-semibold mb-1">상차시간</div>
-                  <select
+                  <MobileSelect
                     className="w-full border border-gray-200 rounded-xl px-2 py-2 text-sm bg-white focus:outline-none"
                     value={stop.상차시간 || ""}
                     onChange={e => setStopList(prev => prev.map((s, i) => i === idx ? { ...s, 상차시간: e.target.value } : s))}
                   >
                     <option value="">시간 선택</option>
                     {HALF_HOUR_TIMES.map(t => <option key={t} value={t}>{t}</option>)}
-                  </select>
+                  </MobileSelect>
                 </div>
               </div>
             ) : (
@@ -17447,21 +17482,21 @@ const pickDrop = (c) => {
                 </div>
                 <div>
                   <div className="text-[10px] text-gray-500 font-semibold mb-1">하차시간</div>
-                  <select
+                  <MobileSelect
                     className="w-full border border-gray-200 rounded-xl px-2 py-2 text-sm bg-white focus:outline-none"
                     value={stop.하차시간 || ""}
                     onChange={e => setStopList(prev => prev.map((s, i) => i === idx ? { ...s, 하차시간: e.target.value } : s))}
                   >
                     <option value="">시간 선택</option>
                     {HALF_HOUR_TIMES.map(t => <option key={t} value={t}>{t}</option>)}
-                  </select>
+                  </MobileSelect>
                 </div>
               </div>
             )}
             {/* 상/하차방법 */}
             <div>
               <div className="text-[10px] text-gray-500 font-semibold mb-1">{stopSheet === "pickup" ? "상차방법" : "하차방법"}</div>
-              <select
+              <MobileSelect
                 className="w-full border border-gray-200 rounded-xl px-2 py-2 text-sm bg-white focus:outline-none"
                 value={stop.방법 || ""}
                 onChange={e => setStopList(prev => prev.map((s, i) => i === idx ? { ...s, 방법: e.target.value } : s))}
@@ -17472,7 +17507,7 @@ const pickDrop = (c) => {
                 <option value="수작업">수작업</option>
                 <option value="직접수작업">직접수작업</option>
                 <option value="수도움">수도움</option>
-              </select>
+              </MobileSelect>
             </div>
             {/* 메모 */}
             <input autoComplete="off"
@@ -17702,7 +17737,7 @@ const pickDrop = (c) => {
             {/* 검색 */}
       <div className="px-4 py-2 border-b">
         <div className="flex gap-2">
-          <select
+          <MobileSelect
             className="w-[115px] border border-gray-200 rounded-xl px-2 py-2 text-[13px] bg-white focus:outline-none focus:border-[#1B2B4B]"
             value={orderCopySearchField}
             onChange={e => setOrderCopySearchField(e.target.value)}
@@ -17713,7 +17748,7 @@ const pickDrop = (c) => {
             <option value="하차지명">하차지명</option>
             <option value="기사명">기사명</option>
             <option value="차량번호">차량번호</option>
-          </select>
+          </MobileSelect>
 
           <input autoComplete="off"
             className="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-[13px] focus:outline-none focus:border-[#1B2B4B]"
@@ -19492,13 +19527,13 @@ function MobileFareInquiry({ cardVersionB = false }) {
       {freightMode==="독차"&&(
         <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-4">
           <p className="text-[12px] font-bold text-[#1B2B4B] mb-2">차량 선택</p>
-          <select value={vehicle} onChange={e=>setVehicle(e.target.value)}
+          <MobileSelect noArrow title="차량 선택" value={vehicle} onChange={e=>setVehicle(e.target.value)}
             className={`w-full py-2.5 px-3 rounded-lg text-[13px] font-bold border-2 outline-none appearance-none bg-no-repeat ${cardVersionB?"border-[#1B2B4B] text-[#1B2B4B]":"border-blue-600 text-blue-600"}`}
             style={{backgroundImage:"url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%231B2B4B' stroke-width='2.5'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E\")",backgroundPosition:"right 10px center",backgroundSize:"16px",paddingRight:"36px"}}>
             {MOBILE_VT.map(v=>(
               <option key={v.id} value={v.id}>{v.name}</option>
             ))}
-          </select>
+          </MobileSelect>
         </div>
       )}
 
@@ -19571,7 +19606,7 @@ function MobileFareInquiry({ cardVersionB = false }) {
                 ...(result.viaCount>0?[{l:"경유비",v:`${mFmt(result.viaFee)}(${result.viaCount}곳)`}]:[]),
               ].map(({l,v})=>(
                 <div key={l} className="bg-white/6 rounded-xl px-3 py-2">
-                  <div className="text-[9px] text-white/35 font-semibold">{l}</div>
+                  <div className="text-[11px] text-white/55 font-semibold">{l}</div>
                   <div className="text-[11px] font-bold text-white/85">{v}</div>
                 </div>
               ))}
@@ -19866,7 +19901,7 @@ function MobileNationalFareSearch() {
         {/* 차량 유형 */}
         <div>
           <div className="text-[12px] font-bold text-gray-500 mb-1.5">차량 유형</div>
-          <select
+          <MobileSelect
             className="w-full px-3 py-2.5 text-[14px] rounded-xl border border-gray-200 bg-white"
             value={nfVehicleCat}
             onChange={e => setNfVehicleCat(Number(e.target.value))}
@@ -19874,7 +19909,7 @@ function MobileNationalFareSearch() {
             {MOBILE_VEHICLE_CATEGORIES.map((c, i) => (
               <option key={i} value={i}>{c.label}</option>
             ))}
-          </select>
+          </MobileSelect>
         </div>
 
         <div className="flex gap-2 pt-1">
@@ -20490,7 +20525,7 @@ const runNationalFareInPopup = async () => {
           <div className="grid grid-cols-3 gap-3">
             <div>
               <div className="text-[12px] font-bold text-gray-900 mb-1">차종</div>
-              <select className="w-full px-1 py-2 text-[12px] font-medium border-0 border-b-2 border-gray-300 bg-transparent focus:border-[#1B2B4B] focus:outline-none transition"
+              <MobileSelect className="w-full px-1 py-2 text-[12px] font-medium border-0 border-b-2 border-gray-300 bg-transparent focus:border-[#1B2B4B] focus:outline-none transition"
                 value={vehicle} onChange={e=>setVehicle(e.target.value)}>
                 <option value="전체">전체</option>
                 <option value="다마스">다마스</option>
@@ -20503,7 +20538,7 @@ const runNationalFareInPopup = async () => {
                 <option value="리프트">리프트</option>
                 <option value="오토바이">오토바이</option>
                 {currentCustomVehicleTypes().map((v) => <option key={`vt_${v}`} value={v}>{v}</option>)}{/* 🚚 2026-11-02 회사 추가 차량종류 */}
-              </select>
+              </MobileSelect>
             </div>
             <div>
               <div className="text-[12px] font-bold text-gray-900 mb-1">톤수</div>
@@ -20532,7 +20567,7 @@ const runNationalFareInPopup = async () => {
             </div>
             <div>
               <div className="text-[12px] font-bold text-gray-900 mb-1">정렬방식</div>
-              <select className="w-full px-1 py-2 text-[12px] font-medium border-0 border-b-2 border-gray-300 bg-transparent focus:border-[#1B2B4B] focus:outline-none transition"
+              <MobileSelect className="w-full px-1 py-2 text-[12px] font-medium border-0 border-b-2 border-gray-300 bg-transparent focus:border-[#1B2B4B] focus:outline-none transition"
                 value={sortKey} onChange={e=>setSortKey(e.target.value)}>
                 <option value="date_desc">최신순</option>
                 <option value="date_asc">오래된순</option>
@@ -20544,7 +20579,7 @@ const runNationalFareInPopup = async () => {
                 <option value="level_spike">운임레벨 (프리미엄우선)</option>
                 <option value="driver_desc">기사운임 높은순</option>
                 <option value="fee_desc">수수료 높은순</option>
-              </select>
+              </MobileSelect>
             </div>
           </div>
           <div className="flex gap-2 pt-1">
@@ -20949,21 +20984,21 @@ function MobileRateCard({ dispatchData = [], onBack, cardVersionB = false, userC
           <div className="grid grid-cols-2 gap-2">
             <div>
               <div className="text-[11px] font-semibold text-gray-500 mb-1">상차지역 *</div>
-              <input autoComplete="off" className="w-full border border-gray-200 rounded-xl px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400 bg-gray-50" placeholder="예: 인천" value={pickup} onChange={e=>setPickup(e.target.value)} />
+              <input autoComplete="off" className="w-full border border-gray-200 rounded-xl px-3 py-2 text-[13px] focus:outline-none focus:border-[#1B2B4B] bg-gray-50" placeholder="예: 인천" value={pickup} onChange={e=>setPickup(e.target.value)} />
             </div>
             <div>
               <div className="text-[11px] font-semibold text-gray-500 mb-1">하차지역 *</div>
-              <input autoComplete="off" className="w-full border border-gray-200 rounded-xl px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400 bg-gray-50" placeholder="예: 부산" value={drop} onChange={e=>setDrop(e.target.value)} />
+              <input autoComplete="off" className="w-full border border-gray-200 rounded-xl px-3 py-2 text-[13px] focus:outline-none focus:border-[#1B2B4B] bg-gray-50" placeholder="예: 부산" value={drop} onChange={e=>setDrop(e.target.value)} />
             </div>
           </div>
 
           {/* 차량종류 */}
           <div>
             <div className="text-[11px] font-semibold text-gray-500 mb-1">차량종류 *</div>
-            <select className="w-full border border-gray-200 rounded-xl px-3 py-2 text-[13px] bg-gray-50 focus:outline-none focus:border-blue-400" value={vGroup} onChange={e=>setVGroup(e.target.value)}>
+            <MobileSelect title="차량종류" className="w-full border border-gray-200 rounded-xl px-3 py-2 text-[13px] bg-gray-50 focus:outline-none focus:border-[#1B2B4B]" value={vGroup} onChange={e=>setVGroup(e.target.value)}>
               <option value="">선택</option>
               {VEHICLE_GROUPS.map(g=><option key={g.value} value={g.value}>{g.label}</option>)}
-            </select>
+            </MobileSelect>
           </div>
 
           {/* 조회 방식 */}

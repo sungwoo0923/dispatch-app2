@@ -13,6 +13,7 @@ import { addDoc, collection, doc, increment, onSnapshot, query, serverTimestamp,
 import { suggestRole, isExecProfile, useHrOptions } from "./hrConstants";
 import { useRoleOptions } from "./customRoles";
 import { sendInternalMail, useCompanyStaff, compressImage } from "./InternalMail";
+import { CustomSelect } from "./CustomSelect";
 
 export const HR_ROLE_OPTIONS = [
   ["user", "실무자"], ["admin", "관리자"], ["hrManager", "인사관리자"], ["hrAcct", "통합인사관리자"], ["test", "경리/회계"], ["viewer", "조회전용"],
@@ -208,21 +209,21 @@ export default function PersonnelOrder({ company, target, myName, isSelf, revise
             <input type="date" value={date} onChange={(e) => { setDate(e.target.value); setDoc_((p) => { const n = { ...p }; delete n.effective; delete n.no; return n; }); }} className={sel} />
           </label>
           <label className="block"><span className="text-[12.5px] font-bold text-[#7A879C]">발령 부서</span>
-            <select value={next.team} onChange={(e) => { const team = e.target.value; setNext((p) => { const position = positionsForTeam(team).includes(p.position) ? p.position : ""; return { ...p, team, position, role: isSelf || p.role === "totalMaster" ? p.role : suggestR({ team, position }) }; }); }} className={sel}>
+            <CustomSelect value={next.team} onChange={(e) => { const team = e.target.value; setNext((p) => { const position = positionsForTeam(team).includes(p.position) ? p.position : ""; return { ...p, team, position, role: isSelf || p.role === "totalMaster" ? p.role : suggestR({ team, position }) }; }); }} className={sel}>
               <option value="">미배정</option>
               {[...new Set([...TEAM_OPTIONS, cur.team].filter(Boolean))].map((t) => <option key={t} value={t}>{t}</option>)}
-            </select>
+            </CustomSelect>
           </label>
           <label className="block"><span className="text-[12.5px] font-bold text-[#7A879C]">발령 직책</span>
-            <select value={next.position} onChange={(e) => { const position = e.target.value; setNext((p) => ({ ...p, position, role: isSelf || p.role === "totalMaster" ? p.role : suggestR({ team: p.team, position }) })); }} className={sel}>
+            <CustomSelect value={next.position} onChange={(e) => { const position = e.target.value; setNext((p) => ({ ...p, position, role: isSelf || p.role === "totalMaster" ? p.role : suggestR({ team: p.team, position }) })); }} className={sel}>
               <option value="">미설정</option>
               {[...new Set([...positionsForTeam(next.team), next.position].filter(Boolean))].map((t) => <option key={t} value={t}>{t}</option>)}
-            </select>
+            </CustomSelect>
           </label>
           <label className="block"><span className="text-[12.5px] font-bold text-[#7A879C]">권한</span>
-            <select value={next.role} disabled={isSelf || next.role === "totalMaster"} onChange={(e) => setNext((p) => ({ ...p, role: e.target.value }))} className={`${sel} disabled:bg-[#F5F7FA] disabled:text-[#9AA9C3]`}>
+            <CustomSelect value={next.role} disabled={isSelf || next.role === "totalMaster"} onChange={(e) => setNext((p) => ({ ...p, role: e.target.value }))} className={`${sel} disabled:bg-[#F5F7FA] disabled:text-[#9AA9C3]`}>
               {[...ro.options, ...(ro.options.some(([k]) => k === cur.role) ? [] : [[cur.role, roleName(cur.role)]])].map(([k, l]) => <option key={k} value={k}>{l}</option>)}
-            </select>
+            </CustomSelect>
             {isSelf && <span className="text-[11.5px] text-[#9AA9C3]">본인 권한은 최고관리자만 바꿀 수 있습니다</span>}
           </label>
           <div className="flex items-center justify-between px-3.5 py-2.5 rounded-xl bg-[#F5F8FD] border border-[#E3E8F0]">

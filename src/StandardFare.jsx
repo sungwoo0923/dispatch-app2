@@ -4,6 +4,7 @@ import { db } from "./firebase";
 import { collection, onSnapshot, query, where, getDocs } from "firebase/firestore";
 import { specialDemandInfo, KOREAN_HOLIDAYS } from "./CustomDatePicker";
 import { ensureWeatherLoaded, getWeatherSpecialInfo } from "./weatherUtil";
+import { CustomSelect } from "./CustomSelect";
 
 const VEHICLE_TYPES = [
   "전체","다마스","라보","라보/다마스","카고","윙/카고","윙바디",
@@ -385,7 +386,7 @@ function AddressSearch({ value, onChange, onSelect, placeholder }) {
   return (
     <div className="relative">
       <input autoComplete="off"
-        className="w-full px-2.5 py-1.5 text-[13px] font-medium rounded border border-gray-300 bg-white focus:border-[#1B2B4B] focus:outline-none focus:ring-1 focus:ring-[#1B2B4B]/20 placeholder:text-gray-400 transition"
+        className="w-full px-2.5 py-1.5 text-[13px] font-medium rounded border border-[#DCE3EE] bg-white focus:border-[#1B2B4B] focus:outline-none focus:ring-1 focus:ring-[#1B2B4B]/20 placeholder:text-gray-400 transition"
         placeholder={placeholder}
         value={query}
         onChange={handleChange}
@@ -1223,9 +1224,9 @@ export default function StandardFare({ embedded = false, defaultTab = "표준운
             <div className="space-y-4 mb-5">
               <div>
                 <label className={labelCls}>차량종류</label>
-                <select className={inputCls} value={vehicle} onChange={e=>setVehicle(e.target.value)}>
+                <CustomSelect className={inputCls} value={vehicle} onChange={e=>setVehicle(e.target.value)}>
                   {VEHICLE_TYPES.map(v=><option key={v} value={v}>{v}</option>)}
-                </select>
+                </CustomSelect>
               </div>
               <div>
                 <label className={labelCls}>차량톤수</label>
@@ -1237,7 +1238,7 @@ export default function StandardFare({ embedded = false, defaultTab = "표준운
               </div>
               <div>
                 <label className={labelCls}>정렬방식</label>
-                <select className={inputCls} value={sortKey} onChange={e=>setSortKey(e.target.value)}>
+                <CustomSelect className={inputCls} value={sortKey} onChange={e=>setSortKey(e.target.value)}>
                   <option value="date_desc">최신순</option>
                   <option value="date_asc">오래된순</option>
                   <option value="cargo_asc">화물내용 (숫자순)</option>
@@ -1248,7 +1249,7 @@ export default function StandardFare({ embedded = false, defaultTab = "표준운
                   <option value="level_spike">운임레벨 (프리미엄우선)</option>
                   <option value="driver_desc">기사운임 높은순</option>
                   <option value="fee_desc">수수료 높은순</option>
-                </select>
+                </CustomSelect>
               </div>
             </div>
 
@@ -1365,7 +1366,7 @@ export default function StandardFare({ embedded = false, defaultTab = "표준운
                     <div className="pb-4">
                       <button type="button"
                         onClick={() => setNfVias(prev => [...prev, {address: "", coord: null}])}
-                        className="px-3 py-1.5 text-[12px] font-semibold text-gray-500 border border-dashed border-gray-300 rounded-lg hover:border-[#1B2B4B] hover:text-[#1B2B4B] hover:bg-[#1B2B4B]/5 transition">
+                        className="px-3 py-1.5 text-[12px] font-semibold text-gray-500 border border-dashed border-[#DCE3EE] rounded-lg hover:border-[#1B2B4B] hover:text-[#1B2B4B] hover:bg-[#1B2B4B]/5 transition">
                         + 경유지 추가
                       </button>
                     </div>
@@ -1392,17 +1393,17 @@ export default function StandardFare({ embedded = false, defaultTab = "표준운
               {/* 차량 유형 */}
               <div className="mb-5">
                 <label className="block text-[13px] font-bold text-gray-600 mb-1.5">차량 유형</label>
-                <select
+                <CustomSelect
                   value={nfVehicleCategory}
                   onChange={e => setNfVehicleCategory(Number(e.target.value))}
-                  className="w-full px-3 py-2.5 text-[14px] font-semibold rounded-lg border border-gray-300 bg-white focus:border-[#1B2B4B] focus:outline-none focus:ring-1 focus:ring-[#1B2B4B]/20 transition"
+                  className="w-full px-3 py-2.5 text-[14px] font-semibold rounded-lg border border-[#DCE3EE] bg-white focus:border-[#1B2B4B] focus:outline-none focus:ring-1 focus:ring-[#1B2B4B]/20 transition"
                 >
                   {VEHICLE_CATEGORIES.map((c, i) => (
                     <option key={i} value={i}>
                       {c.label}{c.multiplier > 1 ? ` (+${Math.round((c.multiplier-1)*100)}% 할증)` : ""}
                     </option>
                   ))}
-                </select>
+                </CustomSelect>
               </div>
 
               {/* 조회하기 / 초기화 */}
@@ -1504,20 +1505,20 @@ export default function StandardFare({ embedded = false, defaultTab = "표준운
               <div className="grid grid-cols-2 gap-3 mb-3">
                 <div>
                   <div className="text-[11px] font-bold text-gray-500 mb-1">상차지</div>
-                  <input autoComplete="off" className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-[13px] outline-none focus:border-[#1B2B4B]"
+                  <input autoComplete="off" className="w-full border border-[#DCE3EE] rounded-xl px-3 py-2 text-[13.5px] font-semibold text-[#0F1A30] outline-none focus:border-[#1B2B4B]"
                     value={nfFrom} onChange={e => { setNfFrom(e.target.value); setNfFromCoord(null); }} placeholder="상차지 주소/지명" />
                 </div>
                 <div>
                   <div className="text-[11px] font-bold text-gray-500 mb-1">하차지</div>
-                  <input autoComplete="off" className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-[13px] outline-none focus:border-[#1B2B4B]"
+                  <input autoComplete="off" className="w-full border border-[#DCE3EE] rounded-xl px-3 py-2 text-[13.5px] font-semibold text-[#0F1A30] outline-none focus:border-[#1B2B4B]"
                     value={nfTo} onChange={e => { setNfTo(e.target.value); setNfToCoord(null); }} placeholder="하차지 주소/지명" />
                 </div>
               </div>
               <div className="flex items-center gap-2 mb-4">
-                <select className="border-2 border-gray-200 rounded-lg px-3 py-2 text-[13px] outline-none focus:border-[#1B2B4B]"
+                <CustomSelect className="border border-[#DCE3EE] rounded-xl px-3 py-2 text-[13.5px] font-semibold text-[#0F1A30] outline-none focus:border-[#1B2B4B]"
                   value={nfVehicleCategory} onChange={e => setNfVehicleCategory(Number(e.target.value))}>
                   {VEHICLE_CATEGORIES.map((c, i) => <option key={i} value={i}>{c.label}</option>)}
-                </select>
+                </CustomSelect>
                 <button onClick={lookupNationalFare} disabled={nfLoading}
                   className="flex-1 py-2.5 rounded-lg bg-[#1B2B4B] text-white text-[13px] font-bold disabled:opacity-50 flex items-center justify-center gap-2">
                   {nfLoading ? "조회 중..." : "조회"}
@@ -1560,7 +1561,7 @@ export default function StandardFare({ embedded = false, defaultTab = "표준운
                       </tbody>
                     </table>
                   </div>
-                  <div className="px-4 py-2 text-[10px] text-gray-500">T-Map 도로거리 기준 참고 시세이며, 실제 운임과 차이가 있을 수 있습니다.</div>
+                  <div className="px-4 py-2 text-[11px] text-gray-500">T-Map 도로거리 기준 참고 시세이며, 실제 운임과 차이가 있을 수 있습니다.</div>
                 </div>
               )}
             </div>

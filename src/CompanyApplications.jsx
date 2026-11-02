@@ -9,14 +9,11 @@ import {
   collection, onSnapshot, doc, updateDoc, getDoc, setDoc, serverTimestamp, query, where, deleteDoc, addDoc,
 } from "firebase/firestore";
 import { EditableText } from "./EditMode";
+import { fmtBizNo, fmtPhone } from "./formatInput";
 
 // 전화번호 하이픈 자동 포맷 (DispatchApp.jsx formatPhone과 동일 규칙)
-const formatPhone = (phone) => {
-  const p = String(phone ?? "").replace(/[^\d]/g, "");
-  if (p.length === 11) return `${p.slice(0, 3)}-${p.slice(3, 7)}-${p.slice(7)}`;
-  if (p.length === 10) return `${p.slice(0, 3)}-${p.slice(3, 6)}-${p.slice(6)}`;
-  return p;
-};
+// 전화번호 하이픈 — 공용 규칙(src/formatInput.js: 02·031·010·1588 등, 입력 중에도 적용)
+const formatPhone = (phone) => fmtPhone(phone);
 
 const generateCompanyCode = () => {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -790,7 +787,7 @@ export default function CompanyApplications() {
                       </span>
                     </td>
                     <td className="px-3 py-3 text-center font-black text-[#0F1A30] whitespace-nowrap">{app.companyName}</td>
-                    <td className="px-3 py-3 text-center text-gray-500 text-[12px]">{app.businessNumber || "-"}</td>
+                    <td className="px-3 py-3 text-center text-gray-500 text-[12px]">{(app.businessNumber && (fmtBizNo(app.businessNumber) || app.businessNumber)) || "-"}</td>
                     <td className="px-3 py-3 text-center text-gray-800">{app.name}</td>
                     <td className="px-3 py-3 text-center text-gray-500 text-[12px]">{app.phone ? formatPhone(app.phone) : app.phone}</td>
                     <td className="px-3 py-3 text-center text-gray-500 text-[12px]">{app.position || "-"}</td>
@@ -817,7 +814,7 @@ export default function CompanyApplications() {
                           </span>
                         )}
                         {app.status === "approved" && app.companyCode && (
-                          <div className="text-[10px] text-gray-400 font-mono">{app.companyCode}</div>
+                          <div className="text-[11px] text-gray-400 font-mono">{app.companyCode}</div>
                         )}
                         {app.status === "approved" && app.userStatus === "suspended" && (
                           <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-semibold bg-gray-100 text-gray-500 border border-gray-200">
@@ -968,7 +965,7 @@ export default function CompanyApplications() {
                     <InfoRow label="신청 유형" value={managingApp.type === "신규" ? "신규 가입신청" : "기존 회사 추가 가입"} />
                     <InfoRow label="신청 일시" value={fmtDate(managingApp.createdAt)} />
                     <InfoRow label="회사명" value={managingApp.companyName} />
-                    <InfoRow label="사업자번호" value={managingApp.businessNumber} />
+                    <InfoRow label="사업자번호" value={managingApp.businessNumber && (fmtBizNo(managingApp.businessNumber) || managingApp.businessNumber)} />
                     <InfoRow label="이메일" value={managingApp.email} />
                     <InfoRow label="이름" value={managingApp.name} />
                     <InfoRow label="연락처" value={managingApp.phone ? formatPhone(managingApp.phone) : managingApp.phone} />
@@ -1159,7 +1156,7 @@ export default function CompanyApplications() {
                         />
                         <div className="text-center">
                           <div className="text-[12px] font-semibold text-gray-800"><EditableText id={`companyApp.managingApp.perm.${key}.label`} defaultText={label} /></div>
-                          <div className="text-[10px] text-gray-400 leading-tight"><EditableText id={`companyApp.managingApp.perm.${key}.desc`} defaultText={desc} /></div>
+                          <div className="text-[11px] text-gray-400 leading-tight"><EditableText id={`companyApp.managingApp.perm.${key}.desc`} defaultText={desc} /></div>
                         </div>
                       </label>
                     ))}</div>

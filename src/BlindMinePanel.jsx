@@ -9,6 +9,7 @@ import React from "react";
 import { auth, db } from "./firebase";
 import { collection, doc, getDoc, getDocs, onSnapshot, query, setDoc, where, writeBatch } from "firebase/firestore";
 import { useCompanyStaff } from "./InternalMail";
+import { CustomSelect } from "./CustomSelect";
 
 const CARD = "bg-white rounded-[20px] border border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_10px_28px_rgba(16,24,40,0.06)]";
 const CFG = () => doc(db, "siteConfig", "blindMine");
@@ -185,13 +186,13 @@ export default function BlindMinePanel() {
           </div>
           <div className="flex flex-wrap items-center gap-3">
             <label className="text-[13px] font-bold text-[#7A879C]">등록한 계정</label>
-            <select value={fromEmail} onChange={(e) => { setFromEmail(e.target.value); setFound(null); }}
+            <CustomSelect value={fromEmail} onChange={(e) => { setFromEmail(e.target.value); setFound(null); }}
               className="h-10 px-3 rounded-xl border border-[#DCE3EE] text-[14px] font-semibold text-[#0F1A30] outline-none focus:border-[#4B6CB7] min-w-[220px]">
               <option value="">{staff === null ? "불러오는 중…" : "계정 선택"}</option>
               {(staff || []).filter((u) => u.email && u.email !== myEmail).map((u) => (
                 <option key={u.uid} value={u.email}>{u.name || u.email}{u.position ? ` ${u.position}` : ""} · {u.email}</option>
               ))}
-            </select>
+            </CustomSelect>
             <label className="text-[13px] font-bold text-[#7A879C]">등록일</label>
             <input type="date" value={regDay} onChange={(e) => { setRegDay(e.target.value); setFound(null); }}
               className="h-10 px-3 rounded-xl border border-[#DCE3EE] text-[14px] font-semibold text-[#0F1A30] outline-none focus:border-[#4B6CB7]" />

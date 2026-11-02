@@ -10,6 +10,8 @@ import { updateDoc } from "./orderWrite"; // ★ 오더 수정시각 자동 기�
 import { db } from "./firebase";
 import { toWon } from "./monthCompare";
 import { useLoadOrderRange, monthEnd } from "./orderHistory";
+import { CustomSelect } from "./CustomSelect";
+import { fmtMoney } from "./formatInput";
 
 const NAVY = "#1B2B4B";
 const kstMonth = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 7);
@@ -89,9 +91,9 @@ export default function MonthCloseCheck({ dispatchData = [], onClose, isViewer =
       <div onClick={(e) => e.stopPropagation()} style={{ background: "#f4f6f9", width: "min(1500px, 100%)", height: "min(95vh, 1200px)", borderRadius: 18, display: "flex", flexDirection: "column", overflow: "hidden", boxShadow: "0 20px 60px rgba(0,0,0,.3)" }}>
         <div style={{ background: NAVY, padding: "16px 22px", display: "flex", alignItems: "center", gap: 12 }}>
           <div style={{ color: "#fff", fontSize: 19, fontWeight: 900, flex: 1 }}>월 마감 점검</div>
-          <select value={month} onChange={(e) => setMonth(e.target.value)} style={{ height: 36, borderRadius: 8, border: "none", padding: "0 10px", fontSize: 15, fontWeight: 800 }}>
+          <CustomSelect value={month} onChange={(e) => setMonth(e.target.value)} style={{ height: 36, borderRadius: 8, border: "none", padding: "0 26px 0 10px", fontSize: 15, fontWeight: 800, background: "#fff", color: "#0F1A30" }}>
             {(months.length ? months : [month]).map((m) => <option key={m} value={m}>{m.slice(0, 4)}년 {Number(m.slice(5))}월</option>)}
-          </select>
+          </CustomSelect>
           <button onClick={onClose} style={{ border: "none", background: "transparent", color: "rgba(255,255,255,.85)", fontSize: 24, cursor: "pointer" }}>✕</button>
         </div>
         <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: 18, display: "flex", flexDirection: "column", gap: 14 }}>
@@ -138,15 +140,15 @@ export default function MonthCloseCheck({ dispatchData = [], onClose, isViewer =
                           <td style={{ padding: "8px", textAlign: "center", fontWeight: 600 }}>{r.상차지명 || "-"} → {r.하차지명 || "-"}</td>
                           <td style={{ padding: "8px", textAlign: "center", whiteSpace: "nowrap", fontWeight: 600 }}>{r.차량번호 || "-"} {r.이름 || ""}</td>
                           <td style={{ padding: "8px", textAlign: "center", whiteSpace: "nowrap", fontWeight: 700 }}>{r.배차상태 || "-"}</td>
-                          <td style={{ padding: "8px", textAlign: "center" }}>{editable && !fixed ? <input style={inp} value={val(r, "청구운임")} onChange={(e) => setVal(r, "청구운임", e.target.value.replace(/[^\d]/g, ""))} /> : toWon(r.청구운임).toLocaleString()}</td>
-                          <td style={{ padding: "8px", textAlign: "center" }}>{editable && !fixed ? <input style={inp} value={val(r, "기사운임")} onChange={(e) => setVal(r, "기사운임", e.target.value.replace(/[^\d]/g, ""))} /> : toWon(r.기사운임).toLocaleString()}</td>
+                          <td style={{ padding: "8px", textAlign: "center" }}>{editable && !fixed ? <input style={inp} inputMode="numeric" value={fmtMoney(val(r, "청구운임"))} onChange={(e) => setVal(r, "청구운임", e.target.value.replace(/[^\d]/g, ""))} /> : toWon(r.청구운임).toLocaleString()}</td>
+                          <td style={{ padding: "8px", textAlign: "center" }}>{editable && !fixed ? <input style={inp} inputMode="numeric" value={fmtMoney(val(r, "기사운임"))} onChange={(e) => setVal(r, "기사운임", e.target.value.replace(/[^\d]/g, ""))} /> : toWon(r.기사운임).toLocaleString()}</td>
                           <td style={{ padding: "8px", textAlign: "center", fontWeight: 900, color: s - d < 0 ? "#b91c1c" : s - d === 0 ? "#92400e" : "#047857", whiteSpace: "nowrap" }}>{(s - d).toLocaleString()}</td>
                           <td style={{ padding: "8px", textAlign: "center" }}>
                             {editable && !fixed ? (
-                              <select value={val(r, "지급방식")} onChange={(e) => setVal(r, "지급방식", e.target.value)} style={{ height: 34, borderRadius: 7, border: "1px solid #cbd5e1", fontSize: 14, fontWeight: 700 }}>
+                              <CustomSelect value={val(r, "지급방식")} onChange={(e) => setVal(r, "지급방식", e.target.value)} style={{ height: 34, borderRadius: 7, border: "1px solid #DCE3EE", padding: "0 24px 0 8px", fontSize: 14, fontWeight: 700, background: "#fff", color: "#0F1A30" }}>
                                 <option value="">미입력</option>
                                 {[...new Set([...PAY_OPTIONS, r.지급방식].filter(Boolean))].map((p) => <option key={p} value={p}>{p}</option>)}
-                              </select>
+                              </CustomSelect>
                             ) : (r.지급방식 || "-")}
                           </td>
                           <td style={{ padding: "8px", textAlign: "center", whiteSpace: "nowrap" }}>

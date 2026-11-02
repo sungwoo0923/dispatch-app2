@@ -5,6 +5,7 @@
 //  · AddressField: 주소 검색(다음 우편번호) → 도로명 주소 + 상세주소
 import React from "react";
 import { createPortal } from "react-dom";
+import { CustomSelect } from "./CustomSelect";
 
 const INP = "w-full h-11 border border-[#DCE3EE] rounded-xl px-3 text-[14.5px] font-semibold text-[#0F1A30] bg-white focus:outline-none focus:border-[#4B6CB7] focus:ring-4 focus:ring-[#4B6CB7]/10";
 
@@ -53,11 +54,11 @@ export function DateField({ value, onChange, className = "", placeholder = "" })
 export function SelectField({ value, onChange, options = [], placeholder = "선택", className = "" }) {
   const v = value || "";
   return (
-    <select value={v} onChange={(e) => onChange(e.target.value)} className={`${INP} ${className} ${v ? "" : "text-[#9AA9C3]"}`}>
+    <CustomSelect value={v} onChange={(e) => onChange(e.target.value)} className={`${INP} ${className} ${v ? "" : "text-[#9AA9C3]"}`}>
       <option value="">{placeholder}</option>
       {v && !options.includes(v) && <option value={v}>{v}</option>}
       {options.map((o) => <option key={o} value={o}>{o}</option>)}
-    </select>
+    </CustomSelect>
   );
 }
 
@@ -159,10 +160,10 @@ export function BirthSelect({ value, onChange, className = "", selectClass = "" 
   };
   const sel = selectClass || "w-full h-12 border border-[#DCE3EE] rounded-xl px-3 text-[15px] font-semibold text-[#0F1A30] bg-white focus:outline-none focus:border-[#2D4C82] focus:ring-2 focus:ring-[#2D4C82]/15";
   const S = ({ v, set, list, ph, unit }) => (
-    <select value={v} onChange={(e) => set(e.target.value)} className={`${sel} ${v ? "" : "text-[#8E9BB2]"}`}>
+    <CustomSelect value={v} onChange={(e) => set(e.target.value)} className={`${sel} ${v ? "" : "text-[#8E9BB2]"}`}>
       <option value="">{ph}</option>
       {list.map((o) => <option key={o} value={o}>{Number(o)}{unit}</option>)}
-    </select>
+    </CustomSelect>
   );
   return (
     <div className={`grid grid-cols-[1.3fr_1fr_1fr] gap-2 ${className}`}>

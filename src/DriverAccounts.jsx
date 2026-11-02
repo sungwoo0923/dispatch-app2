@@ -6,6 +6,7 @@ import { collection, deleteDoc, doc, onSnapshot, query, setDoc, updateDoc, where
 import { db, DEFAULT_COMPANY } from "./firebase";
 import { useCompanyDriverDocs, docProblems, DRIVER_REQUIRED_DOCS, docState } from "./driverRequiredDocs";
 import { BookHero, Chip, MONO } from "./OfficeBooks";
+import { fmtPhone } from "./formatInput";
 
 const REQ = DRIVER_REQUIRED_DOCS.filter((d) => d.required);
 const tsDay = (v) => { const ms = v?.toMillis ? v.toMillis() : v?.seconds ? v.seconds * 1000 : 0; return ms ? new Date(ms + 9 * 3600e3).toISOString().slice(0, 10) : ""; };
@@ -90,7 +91,7 @@ export default function DriverAccounts({ company, isViewer = false, tab = "pendi
                 </div>
                 <Plate no={u.carNo} big />
                 <div className="grid grid-cols-2 gap-2">
-                  {[["차종", [u.vehicleType || u.차량종류, u.tonnage || u.차량톤수].filter(Boolean).join(" ") || "-"], ["연락처", u.phone || "-"], ["거주지", u.거주지 || u.address || "-"], ["가입일", tsDay(u.createdAt) || "-"]].map(([k, v]) => (
+                  {[["차종", [u.vehicleType || u.차량종류, u.tonnage || u.차량톤수].filter(Boolean).join(" ") || "-"], ["연락처", (u.phone && (fmtPhone(u.phone) || u.phone)) || "-"], ["거주지", u.거주지 || u.address || "-"], ["가입일", tsDay(u.createdAt) || "-"]].map(([k, v]) => (
                     <div key={k} className="min-w-0 rounded-xl bg-white/[0.06] border border-white/10 px-3 py-2"><div className="text-[12px] font-bold text-white/50">{k}</div><div className="text-[15.5px] font-black truncate" style={k === "연락처" || k === "가입일" ? { fontFamily: MONO } : undefined}>{v}</div></div>
                   ))}
                 </div>

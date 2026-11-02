@@ -28,7 +28,9 @@ import NoticeBoard from "./NoticeBoard";
 import { toBoardNotice } from "./PlatformNoticeBanner";
 import { compressImage } from "./InternalMail";
 import { RemoteSupportAdminPanel } from "./RemoteSupport"; // ⭐ 2026-11-02 원격지원 —
+import { CustomSelect } from "./CustomSelect";
 import "./pcTheme.css";
+import { fmtPhone } from "./formatInput";
 
 const MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
 const pad = (n) => String(n).padStart(2, "0");
@@ -199,7 +201,7 @@ function InquiriesPanel({ toQuote }) {
                 <tr key={q.id} onClick={() => setSel(q.id)} className={`border-t border-[#EEF1F6] cursor-pointer ${sel === q.id ? "bg-[#EEF3FB]" : "hover:bg-[#F5F8FD]"}`}>
                   <td className="px-3 py-2.5 font-black text-[#0F1A30]">{q.companyName}{q.type === "무료체험" && <span className="ml-1.5 px-1.5 py-0.5 rounded-md border border-[#1B2B4B] text-[10.5px] font-black text-[#1B2B4B]">무료체험</span>}</td>
                   <td className="px-3 py-2.5 text-center">{q.name}</td>
-                  <td className="px-3 py-2.5 text-center" style={{ fontFamily: MONO }}>{q.phone}</td>
+                  <td className="px-3 py-2.5 text-center" style={{ fontFamily: MONO }}>{fmtPhone(q.phone) || q.phone}</td>
                   <td className="px-3 py-2.5 text-center text-[#5B6B85]">{q.vehicles || "-"}</td>
                   <td className="px-3 py-2.5 text-center text-[12.5px] text-[#5B6B85]" style={{ fontFamily: MONO }}>{msOf(q.createdAt) ? ymd(new Date(msOf(q.createdAt))) : "-"}</td>
                   <td className="px-3 py-2.5 text-center"><span className={`px-2 py-0.5 rounded-md text-[12px] font-black ${(!q.status || q.status === "신규") ? "bg-[#0F1A30] text-white" : "bg-[#EEF2F8] text-[#1B2B4B]"}`}>{q.status || "신규"}</span></td>
@@ -210,7 +212,7 @@ function InquiriesPanel({ toQuote }) {
         <Card code="DETAIL" title={cur ? cur.companyName : "문의를 선택하세요"}>
           {!cur ? <div className="py-10 text-center text-[#9AA9C3]">왼쪽 목록에서 문의를 누르면 상세가 보입니다.</div> : (
             <div className="space-y-3">
-              {[["담당자", cur.name], ["연락처", cur.phone], ["이메일", cur.email], ["차량·규모", cur.vehicles], ["문의 유형", cur.type], ["문의 내용", cur.message || cur.content]].filter(([, v]) => v).map(([k, v]) => (
+              {[["담당자", cur.name], ["연락처", fmtPhone(cur.phone) || cur.phone], ["이메일", cur.email], ["차량·규모", cur.vehicles], ["문의 유형", cur.type], ["문의 내용", cur.message || cur.content]].filter(([, v]) => v).map(([k, v]) => (
                 <div key={k} className="grid grid-cols-[80px_1fr] gap-2 text-[14px]"><span className="font-bold text-[#7A879C]">{k}</span><span className="font-semibold text-[#0F1A30] whitespace-pre-wrap">{v}</span></div>
               ))}
               <div><div className="text-[12px] font-bold text-[#7A879C] mb-1.5">상담 단계</div>
@@ -285,10 +287,10 @@ function PaymentsPanel() {
               <tr key={c.name} className="border-t border-[#EEF1F6]">
                 <td className="px-3 py-2 font-black text-[#0F1A30]">{c.name}{r.payNotice && <div className="mt-0.5 inline-block px-2 py-0.5 rounded-md bg-[#0F1A30] text-white text-[11px] font-black">입금 알림 · {r.payNotice.name || ""} {r.payNotice.date || ""}</div>}</td>
                 <td className="px-3 py-2 text-center">
-                  <select value={plans[c.name]?.planId || ""} onChange={(e) => setPlan(c.name, e.target.value)} className="h-9 px-2 rounded-lg border border-[#DCE3EE] font-bold text-[13px]">
+                  <CustomSelect value={plans[c.name]?.planId || ""} onChange={(e) => setPlan(c.name, e.target.value)} className="h-9 px-2 rounded-lg border border-[#DCE3EE] font-bold text-[13px]">
                     <option value="">미지정(전체 기능)</option>
                     {(sales?.plans || []).filter((p) => ["lite", "basic", "standard", "pro"].includes(p.id)).map((p) => <option key={p.id} value={p.id}>{p.name} · {Number(p.price || 0).toLocaleString()}</option>)}
-                  </select>
+                  </CustomSelect>
                 </td>
                 <td className="px-3 py-2 text-right"><input defaultValue={amountOf(c).toLocaleString()} key={`${key(c)}_${amountOf(c)}`} onBlur={(e) => save(c, { amount: Number(e.target.value.replace(/[^\d]/g, "")) || 0 })} className="w-36 h-9 px-2 rounded-lg border border-[#DCE3EE] text-right font-black" style={{ fontFamily: MONO }} /></td>
                 <td className="px-3 py-2 text-center"><div className="inline-flex gap-1">{PAY_STATUS.map((st) => (
@@ -626,7 +628,7 @@ function SessionLogsPanel() {
       <Hero en="SECURITY · AUDIT LOG" title="접속 이력" desc="최근 400건의 로그인·로그아웃 기록입니다. 회사·이름·기기로 찾을 수 있습니다." />
       <Card code="LOG" title={`${rows.length}건`} bodyClass="p-0" right={
         <div className="flex gap-2">
-          <select value={ev} onChange={(e) => setEv(e.target.value)} className="h-9 px-2 rounded-lg border border-[#DCE3EE] text-[13px] font-bold"><option value="all">전체</option>{events.map((e) => <option key={e} value={e}>{e}</option>)}</select>
+          <CustomSelect value={ev} onChange={(e) => setEv(e.target.value)} className="h-9 px-2 rounded-lg border border-[#DCE3EE] text-[13px] font-bold"><option value="all">전체</option>{events.map((e) => <option key={e} value={e}>{e}</option>)}</CustomSelect>
           <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="검색" className="h-9 w-28 sm:w-48 px-3 rounded-lg border border-[#DCE3EE] text-[13px]" />
         </div>}>
         <div className="overflow-x-auto"><table className="w-full text-[13.5px]" style={{ minWidth: 820 }}>

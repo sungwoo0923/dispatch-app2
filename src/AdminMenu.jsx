@@ -38,14 +38,11 @@ import TrashPanel from "./TrashPanel";
 import { useCustomRoles, roleScreen } from "./customRoles";
 import { EditableText } from "./EditMode";
 import { useLoadOrderRange, monthEnd, monthStart } from "./orderHistory";
+import { fmtBizNo, fmtPhone } from "./formatInput";
 
 // 전화번호 하이픈 자동 포맷 (DispatchApp.jsx formatPhone과 동일 규칙)
-const formatPhone = (phone) => {
-  const p = String(phone ?? "").replace(/[^\d]/g, "");
-  if (p.length === 11) return `${p.slice(0, 3)}-${p.slice(3, 7)}-${p.slice(7)}`;
-  if (p.length === 10) return `${p.slice(0, 3)}-${p.slice(3, 6)}-${p.slice(6)}`;
-  return p;
-};
+// 전화번호 하이픈 — 공용 규칙(src/formatInput.js: 02·031·010·1588 등, 입력 중에도 적용)
+const formatPhone = (phone) => fmtPhone(phone);
 
 const todayStr = () => {
   const d = new Date();
@@ -870,7 +867,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
                     <input value={search} onChange={e => setSearch(e.target.value)} placeholder="이름 · 이메일 · 회사명 검색"
                       className="flex-1 min-w-0 text-[13px] font-semibold text-[#0F1A30] outline-none bg-transparent placeholder:text-[#A7B3C6]" />
                   </div>
-                  <select
+                  <CustomSelect
                     value={roleFilter}
                     onChange={e => setRoleFilter(e.target.value)}
                     className="w-full h-10 px-3 pr-8 rounded-xl text-[13px] font-bold border border-[#DCE3EE] bg-white text-[#1F2A44] outline-none cursor-pointer appearance-none"
@@ -880,7 +877,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
                     {ROLES.map(r => (
                       <option key={r} value={r}>{roleLabels[r] || r}</option>
                     ))}
-                  </select>
+                  </CustomSelect>
                 </div>
                 <div className="overflow-y-auto flex-1 p-2">
                   {filtered.length === 0 ? (
@@ -1083,12 +1080,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
                             <div>
                               <label className="block text-[11.5px] font-bold text-[#7A879C] mb-1.5">핸드폰번호</label>
                               <input value={editPhone}
-                                onChange={e => {
-                                  let v = e.target.value.replace(/[^0-9]/g, "");
-                                  if (v.length > 7) v = v.replace(/(\d{3})(\d{4})(\d+)/, "$1-$2-$3");
-                                  else if (v.length > 3) v = v.replace(/(\d{3})(\d+)/, "$1-$2");
-                                  setEditPhone(v);
-                                }}
+                                inputMode="tel" onChange={e => setEditPhone(fmtPhone(e.target.value))}
                                 className="w-full h-10 border border-[#DCE3EE] rounded-xl px-3 text-[13.5px] font-semibold text-[#0F1A30] focus:outline-none focus:border-[#4B6CB7] focus:ring-4 focus:ring-[#4B6CB7]/10" />
                             </div>
                             <div>
@@ -1148,7 +1140,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
                     <div className="flex gap-1.5">
                       {[["pending", "승인 대기"], ["approved", "1차 승인"], ["rejected", "거절"], ["all", "전체"]].map(([v, l]) => (
                         <button key={v} onClick={() => setLinkedStatusFilter(v)}
-                          className={`h-8 px-3.5 rounded-full text-[12px] font-semibold border transition ${linkedStatusFilter === v ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"}`}>
+                          className={`h-8 px-3.5 rounded-full text-[12px] font-semibold border transition ${linkedStatusFilter === v ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-600 border-[#DCE3EE] hover:bg-gray-50"}`}>
                           {l}
                         </button>
                       ))}
@@ -1261,7 +1253,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
                       onChange={e => { setTransmitCompanyQuery(e.target.value); setTransmitSearched(false); setTransmitResult(null); }}
                       placeholder="예) 반찬단지"
                       list="admin-transmit-company-list"
-                      className="w-[200px] border border-gray-300 rounded-lg px-3 py-2 text-[13px] outline-none focus:border-[#1B2B4B]"
+                      className="w-[200px] border border-[#DCE3EE] rounded-lg px-3 py-2 text-[13px] outline-none focus:border-[#1B2B4B]"
                     />
                     <datalist id="admin-transmit-company-list">
                       {approvedLinkedShippers.map(a => <option key={a.id} value={a.companyName} />)}
@@ -1270,12 +1262,12 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
                   <div>
                     <div className="text-[11px] text-gray-500 mb-1">시작월</div>
                     <input type="month" value={transmitFromMonth} onChange={e => { setTransmitFromMonth(e.target.value); setTransmitSearched(false); setTransmitResult(null); }}
-                      className="border border-gray-300 rounded-lg px-3 py-2 text-[13px] outline-none focus:border-[#1B2B4B]" />
+                      className="border border-[#DCE3EE] rounded-lg px-3 py-2 text-[13px] outline-none focus:border-[#1B2B4B]" />
                   </div>
                   <div>
                     <div className="text-[11px] text-gray-500 mb-1">종료월</div>
                     <input type="month" value={transmitToMonth} onChange={e => { setTransmitToMonth(e.target.value); setTransmitSearched(false); setTransmitResult(null); }}
-                      className="border border-gray-300 rounded-lg px-3 py-2 text-[13px] outline-none focus:border-[#1B2B4B]" />
+                      className="border border-[#DCE3EE] rounded-lg px-3 py-2 text-[13px] outline-none focus:border-[#1B2B4B]" />
                   </div>
                   <button
                     onClick={() => { setTransmitSearched(true); setTransmitResult(null); }}
@@ -1411,15 +1403,15 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
             <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
               <div className="flex items-center gap-2 px-4 py-3 border-b border-gray-100">
                 <span className="text-[13px] font-semibold text-gray-600">최근 200건 중 {filteredLogs.length}건 · 20건씩 표시</span>
-                <select
+                <CustomSelect
                   value={sessionLogEventFilter}
                   onChange={e => { setSessionLogEventFilter(e.target.value); setSessionLogPage(1); }}
-                  className="ml-auto h-[32px] px-2.5 rounded-lg text-[12px] font-semibold border border-gray-300 bg-white text-gray-700 outline-none"
+                  className="ml-auto h-[32px] px-2.5 rounded-lg text-[12px] font-semibold border border-[#DCE3EE] bg-white text-gray-700 outline-none"
                 >
                   <option value="all">전체</option>
                   <option value="login">로그인만</option>
                   <option value="logout">로그아웃만</option>
-                </select>
+                </CustomSelect>
               </div>
               {filteredLogs.length === 0 ? (
                 <div className="text-[13px] text-gray-500 text-center py-16">접속 이력이 없습니다.</div>
@@ -1608,7 +1600,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
                 {[
                   ["신청 유형", managingLinkedApp.type === "신규" ? "신규 가입" : "기존 회사 추가"],
                   ["화주사명", managingLinkedApp.companyName],
-                  ["사업자번호", managingLinkedApp.businessNumber || "-"],
+                  ["사업자번호", (managingLinkedApp.businessNumber && (fmtBizNo(managingLinkedApp.businessNumber) || managingLinkedApp.businessNumber)) || "-"],
                   ["이름", managingLinkedApp.name],
                   ["연락처", managingLinkedApp.phone ? formatPhone(managingLinkedApp.phone) : managingLinkedApp.phone],
                   ["직책", managingLinkedApp.position || "-"],
@@ -1665,7 +1657,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
                         />
                         <div>
                           <div className="text-[13px] font-semibold text-gray-800"><EditableText id={`adminMenu.linkedPopup.perm.${key}.label`} defaultText={label} /></div>
-                          <div className="text-[10px] text-gray-500"><EditableText id={`adminMenu.linkedPopup.perm.${key}.desc`} defaultText={desc} /></div>
+                          <div className="text-[11px] text-gray-500"><EditableText id={`adminMenu.linkedPopup.perm.${key}.desc`} defaultText={desc} /></div>
                         </div>
                       </label>
                     ))}
@@ -1802,7 +1794,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
                   onChange={e => setInquiryReplyText(e.target.value)}
                   rows={5}
                   placeholder="답변 내용을 입력하세요"
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-[13px] outline-none focus:border-[#1B2B4B] resize-none"
+                  className="w-full border border-[#DCE3EE] rounded-lg px-3 py-2 text-[13px] outline-none focus:border-[#1B2B4B] resize-none"
                 />
               </div>
               <button
@@ -1866,7 +1858,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
                       className={`flex-1 py-2 rounded-lg text-[13px] font-bold border transition disabled:opacity-50 ${
                         (selectedLandingInquiry.status || "신규") === s
                           ? "bg-[#1B2B4B] text-white border-[#1B2B4B]"
-                          : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"
+                          : "bg-white text-gray-600 border-[#DCE3EE] hover:bg-gray-50"
                       }`}
                     >
                       {s}
@@ -1978,7 +1970,7 @@ export function NotifTemplatePanel() {
                         key={opt.key}
                         type="button"
                         onClick={() => toggleField(key, defaultFields, opt.key)}
-                        className={`px-3 py-1.5 rounded-full text-[12px] font-semibold border transition ${on ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-500 border-gray-300 hover:bg-gray-50"}`}
+                        className={`px-3 py-1.5 rounded-full text-[12px] font-semibold border transition ${on ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-500 border-[#DCE3EE] hover:bg-gray-50"}`}
                       >
                         {opt.label}
                       </button>
@@ -2046,7 +2038,7 @@ function MemberManageModal({ u, me, isTotalMaster, roles, roleLabels, f, onClose
           <div className="min-w-0">
             <div className="text-[10px] font-extrabold tracking-[0.26em] text-[#8FB0F0] whitespace-nowrap">{pending ? "MEMBER · 가입 승인" : "MEMBER · 정보 수정"}</div>
             <div className="text-[20px] font-black whitespace-nowrap overflow-hidden text-ellipsis">{u.name || u.email}</div>
-            <div className="text-[12.5px] text-white/70 whitespace-nowrap overflow-hidden text-ellipsis">{u.email}{u.phone ? ` · ${u.phone}` : ""}</div>
+            <div className="text-[12.5px] text-white/70 whitespace-nowrap overflow-hidden text-ellipsis">{u.email}{u.phone ? ` · ${fmtPhone(u.phone) || u.phone}` : ""}</div>
           </div>
           <span className={`shrink-0 h-8 px-3 inline-flex items-center rounded-full text-[12px] font-black ${pending ? "bg-[#8FB0F0] text-[#0B1428]" : resigned ? "bg-white/10 text-white border border-white/25" : "bg-white text-[#0B1428]"}`}>{resigned ? "퇴사" : pending ? "승인 대기" : "승인 완료"}</span>
         </div>
@@ -2057,11 +2049,7 @@ function MemberManageModal({ u, me, isTotalMaster, roles, roleLabels, f, onClose
             {hrLock && <div className="mb-3 rounded-xl bg-[#EEF3FC] border border-[#C9D6EE] px-3 py-2 text-[12px] font-bold text-[#1B2B4B]">인사 담당자가 있어 부서·직책·퇴사는 인사팀(인사관리부 › 인사관리 › 직원관리)에서 바꿉니다. 승인·권한 지정은 그대로 할 수 있습니다.</div>}
             <div className="grid grid-cols-2 gap-3">
               <div><label className={lab}>이름</label><input value={f.editName} onChange={(e) => f.setEditName(e.target.value)} className={inp} /></div>
-              <div><label className={lab}>핸드폰번호</label><input value={f.editPhone} onChange={(e) => {
-                let v = e.target.value.replace(/[^0-9]/g, "");
-                if (v.length > 7) v = v.replace(/(\d{3})(\d{4})(\d+)/, "$1-$2-$3"); else if (v.length > 3) v = v.replace(/(\d{3})(\d+)/, "$1-$2");
-                f.setEditPhone(v);
-              }} className={inp} /></div>
+              <div><label className={lab}>핸드폰번호</label><input value={f.editPhone} inputMode="tel" onChange={(e) => f.setEditPhone(fmtPhone(e.target.value))} className={inp} /></div>
               <div><label className={lab}>직책</label>
                 <CustomSelect value={f.editPosition} onChange={(e) => f.setEditPosition(e.target.value)} disabled={hrLock} className={inp}>
                   <option value="">선택 안 함</option>
@@ -2081,9 +2069,9 @@ function MemberManageModal({ u, me, isTotalMaster, roles, roleLabels, f, onClose
               <div><label className={lab}>회사명</label><input value={f.editCompany} onChange={(e) => f.setEditCompany(e.target.value)} disabled={!isTotalMaster} className={inp} /></div>
               {/* ⭐ 2026-11-02 출근·퇴근 시간 — 자동 출근 시간대·지각·반차 기준(직원마다 다르게) */}
               <div><label className={lab}>출근 시간</label>
-                <select value={f.editWorkStart} onChange={(e) => f.setEditWorkStart(e.target.value)} className={`${inp} tabular-nums`}>{WORK_TIME_OPTIONS.map((t) => <option key={t} value={t}>{t}</option>)}</select></div>
+                <CustomSelect value={f.editWorkStart} onChange={(e) => f.setEditWorkStart(e.target.value)} className={`${inp} tabular-nums`}>{WORK_TIME_OPTIONS.map((t) => <option key={t} value={t}>{t}</option>)}</CustomSelect></div>
               <div><label className={lab}>퇴근 시간</label>
-                <select value={f.editWorkEnd} onChange={(e) => f.setEditWorkEnd(e.target.value)} className={`${inp} tabular-nums`}>{WORK_TIME_OPTIONS.map((t) => <option key={t} value={t}>{t}</option>)}</select></div>
+                <CustomSelect value={f.editWorkEnd} onChange={(e) => f.setEditWorkEnd(e.target.value)} className={`${inp} tabular-nums`}>{WORK_TIME_OPTIONS.map((t) => <option key={t} value={t}>{t}</option>)}</CustomSelect></div>
             </div>
             {u.role !== "shipper" && canMaster && (
               <div className="mt-3 flex items-center justify-between gap-3 rounded-xl border border-[#E3E8F0] px-3.5 py-2.5">
@@ -2132,7 +2120,7 @@ function FieldRow({ label, value, onChange, placeholder }) {
         value={value || ""}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
-        className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-[13px]"
+        className="w-full border border-[#DCE3EE] rounded-lg px-3 py-1.5 text-[13px]"
       />
     </div>
   );
@@ -2275,7 +2263,7 @@ export function LandingPageEditPanel() {
           {form.backgroundImageUrl && (
             <button
               onClick={handleRemoveImage}
-              className="px-4 py-2 rounded-lg bg-white border border-gray-300 text-gray-500 text-[12px] font-semibold hover:bg-gray-50 transition"
+              className="px-4 py-2 rounded-lg bg-white border border-[#DCE3EE] text-gray-500 text-[12px] font-semibold hover:bg-gray-50 transition"
             >
               이미지 제거(영상으로 복귀)
             </button>
@@ -2299,7 +2287,7 @@ export function LandingPageEditPanel() {
           </label>
           {form.backgroundVideoUrl && (
             <button onClick={handleRemoveVideo}
-              className="px-4 py-2 rounded-lg bg-white border border-gray-300 text-gray-500 text-[12px] font-semibold hover:bg-gray-50 transition">
+              className="px-4 py-2 rounded-lg bg-white border border-[#DCE3EE] text-gray-500 text-[12px] font-semibold hover:bg-gray-50 transition">
               영상 제거
             </button>
           )}
@@ -2315,7 +2303,7 @@ export function LandingPageEditPanel() {
             type="color"
             value={form.overlayColor || "#0B2554"}
             onChange={(e) => set("overlayColor", e.target.value)}
-            className="w-full h-9 rounded border border-gray-300"
+            className="w-full h-9 rounded border border-[#DCE3EE]"
           />
         </div>
         <div>
@@ -2334,15 +2322,15 @@ export function LandingPageEditPanel() {
       {/* 글씨체 */}
       <div className="mb-6">
         <div className="text-[12px] font-bold text-gray-600 mb-1">글씨체</div>
-        <select
+        <CustomSelect
           value={form.fontFamily || "noto"}
           onChange={(e) => set("fontFamily", e.target.value)}
-          className="border border-gray-300 rounded-lg px-3 py-1.5 text-[13px]"
+          className="border border-[#DCE3EE] rounded-lg px-3 py-1.5 text-[13px]"
         >
           {LANDING_FONT_OPTIONS.map((o) => (
             <option key={o.key} value={o.key}>{o.label}</option>
           ))}
-        </select>
+        </CustomSelect>
       </div>
 
       {/* 문구 색상 */}
@@ -2353,7 +2341,7 @@ export function LandingPageEditPanel() {
             type="color"
             value={form.textColor || "#ffffff"}
             onChange={(e) => set("textColor", e.target.value)}
-            className="w-full h-9 rounded border border-gray-300"
+            className="w-full h-9 rounded border border-[#DCE3EE]"
           />
         </div>
         <div>
@@ -2362,7 +2350,7 @@ export function LandingPageEditPanel() {
             type="color"
             value={form.accentColor || "#93c5fd"}
             onChange={(e) => set("accentColor", e.target.value)}
-            className="w-full h-9 rounded border border-gray-300"
+            className="w-full h-9 rounded border border-[#DCE3EE]"
           />
         </div>
       </div>
@@ -2396,13 +2384,13 @@ export function LandingPageEditPanel() {
                 value={f.title || ""}
                 onChange={(e) => setFeature(i, "title", e.target.value)}
                 placeholder={DEFAULT_LANDING_FEATURES[i].title}
-                className="w-full border border-gray-300 rounded px-2 py-1 text-[12px] font-bold mb-1"
+                className="w-full border border-[#DCE3EE] rounded px-2 py-1 text-[12px] font-bold mb-1"
               />
               <input
                 value={f.desc || ""}
                 onChange={(e) => setFeature(i, "desc", e.target.value)}
                 placeholder={DEFAULT_LANDING_FEATURES[i].desc}
-                className="w-full border border-gray-300 rounded px-2 py-1 text-[11px]"
+                className="w-full border border-[#DCE3EE] rounded px-2 py-1 text-[11px]"
               />
             </div>
           ))}

@@ -32,6 +32,7 @@ import { useMyProfile, personName } from "./userNames";
 import ContractStudio from "./ContractStudio";
 import BoardPage, { BOARDS, canSeeBoard, useBoardLatest } from "./BoardPosts";
 import { NoticeWriter, HandoverWriter, NOTICE_WRITER_ROLES, handoverReceivers } from "./HomeWriters";
+import { CustomSelect } from "./CustomSelect";
 
 /* ===== 공통 Modal ===== */
 function Modal({ title, onClose, children }) {
@@ -1198,15 +1199,15 @@ export default function HomeDashboard({ role, user, userCompany = "", pending, d
             {role === "totalMaster" && (
               <div>
                 <div className="text-[11px] text-gray-500 mb-1">작성자</div>
-                <select className={formInput} value={scheduleForm.authorName} onChange={e => setScheduleForm({ ...scheduleForm, authorName: e.target.value })}>
+                <CustomSelect className={formInput} value={scheduleForm.authorName} onChange={e => setScheduleForm({ ...scheduleForm, authorName: e.target.value })}>
                   <option value="">선택</option>
                   {users.map(u => <option key={u.id} value={u.name}>{u.name}{u.email ? ` (${u.email.split("@")[0]})` : ""}</option>)}
-                </select>
+                </CustomSelect>
               </div>
             )}
-            <select className={formInput} value={scheduleForm.type} onChange={e => setScheduleForm({ ...scheduleForm, type: e.target.value })}>
+            <CustomSelect className={formInput} value={scheduleForm.type} onChange={e => setScheduleForm({ ...scheduleForm, type: e.target.value })}>
               <option>휴가</option><option>외근</option><option>오전반차</option><option>오후반차</option><option>병가</option><option>경조사</option><option>조퇴</option>
-            </select>
+            </CustomSelect>
             <div className="flex gap-2">
               <input type="date" className={formInput} value={scheduleForm.start} onChange={e => setScheduleForm({ ...scheduleForm, start: e.target.value })} />
               <input type="date" className={formInput} value={scheduleForm.end} onChange={e => setScheduleForm({ ...scheduleForm, end: e.target.value })} />
@@ -1216,7 +1217,7 @@ export default function HomeDashboard({ role, user, userCompany = "", pending, d
               <div className="text-[12px] text-gray-500 font-semibold">결재자 ({scheduleForm.approvers.length}/3)</div>
               {scheduleForm.approvers.map((a, i) => (
                 <div key={i} className="flex gap-2 items-center">
-                  <select
+                  <CustomSelect
                     className={formInput}
                     value={a.uid}
                     onChange={e => {
@@ -1228,7 +1229,7 @@ export default function HomeDashboard({ role, user, userCompany = "", pending, d
                   >
                     <option value="">결재자 선택</option>
                     {users.filter(u => (u.uid || u.id) !== user?.uid).map(u => <option key={u.id} value={u.uid || u.id}>{u.name}{u.email ? ` (${u.email.split("@")[0]})` : ""}</option>)}
-                  </select>
+                  </CustomSelect>
                   <button onClick={() => setScheduleForm({ ...scheduleForm, approvers: scheduleForm.approvers.filter((_, j) => j !== i) })}
                     className="text-red-400 text-lg font-bold px-1">×</button>
                 </div>
@@ -1437,10 +1438,10 @@ export default function HomeDashboard({ role, user, userCompany = "", pending, d
         <Modal title={handoverEditMode ? "인수인계 수정" : "인수인계 상세"} onClose={() => { setSelectedHandover(null); setHandoverEditMode(false); }}>
           {handoverEditMode ? (
             <div className="space-y-3">
-              <select className={formInput} value={handoverForm.receiver} onChange={e => { const s = users.find(u => u.name === e.target.value); setHandoverForm({ ...handoverForm, receiver: s?.name || "", receiverUid: s?.uid || s?.id }); }}>
+              <CustomSelect className={formInput} value={handoverForm.receiver} onChange={e => { const s = users.find(u => u.name === e.target.value); setHandoverForm({ ...handoverForm, receiver: s?.name || "", receiverUid: s?.uid || s?.id }); }}>
                 <option value="">받는 사람 선택</option>
                 {users.map(u => <option key={u.id} value={u.name}>{u.name}</option>)}
-              </select>
+              </CustomSelect>
               <input type="date" className={formInput} value={handoverForm.date} onChange={e => setHandoverForm({ ...handoverForm, date: e.target.value })} />
               <textarea rows={4} className={formInput} value={handoverForm.text} onChange={e => setHandoverForm({ ...handoverForm, text: e.target.value })} />
               <div className="flex gap-2">

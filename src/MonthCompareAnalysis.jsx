@@ -3,6 +3,7 @@ import React, { useMemo, useState, useEffect, useRef } from "react";
 import { html2canvas } from "./lazyLoad"; // ⭐ 2026-11-02 속도 — 캡처 라이브러리는 처음 캡처할 때 받는다
 import jsPDF from "jspdf";
 import { analyzeMonths, buildReport, COMPARE_DIMS, toWon, MARGIN_BANDS } from "./monthCompare";
+import { CustomSelect } from "./CustomSelect";
 
 const NAVY = "#1B2B4B";
 const won = (v) => `${Math.round(v).toLocaleString()}원`;
@@ -367,13 +368,13 @@ export default function MonthCompareAnalysis({ rows = [], isExcluded = () => fal
 
         {/* 조건 */}
         <div style={{ padding: compact ? "12px 16px" : "14px 22px", background: "#fff", borderBottom: "1px solid #e2e7ef", display: "flex", flexWrap: "wrap", alignItems: "center", gap: 10, flexShrink: 0 }}>
-          <select value={monthA} onChange={(e) => setMonthA(e.target.value)} style={sel}>
+          <CustomSelect value={monthA} onChange={(e) => setMonthA(e.target.value)} style={sel}>
             {monthOptions.map((m) => <option key={m} value={m}>{mLabel(m)}</option>)}
-          </select>
+          </CustomSelect>
           <span style={{ fontSize: 15, fontWeight: 900, color: "#4b5563" }}>vs</span>
-          <select value={monthB} onChange={(e) => setMonthB(e.target.value)} style={sel}>
+          <CustomSelect value={monthB} onChange={(e) => setMonthB(e.target.value)} style={sel}>
             {monthOptions.map((m) => <option key={m} value={m}>{mLabel(m)}</option>)}
-          </select>
+          </CustomSelect>
           <div style={{ display: "flex", gap: 4, background: "#eef1f6", borderRadius: 10, padding: 3, marginLeft: compact ? 0 : 8 }}>
             {[["pure", "순수 운송"], ["all", "전체"], ...(hasExcluded ? [["excluded", "제외 거래처"]] : [])].filter(([k]) => hasExcluded || k === "all").map(([k, l]) => (
               <button key={k} onClick={() => setScope(k)} style={{ height: 32, padding: "0 12px", borderRadius: 8, border: "none", background: scope === k ? NAVY : "transparent", color: scope === k ? "#fff" : "#374151", fontSize: 14, fontWeight: 800, cursor: "pointer", whiteSpace: "nowrap" }}>{l}</button>

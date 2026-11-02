@@ -470,10 +470,10 @@ function RecurringEditor({ company, rows, ledger = [], funds = [], onClose }) {
           <div><Label>이름</Label><input value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} className={inp} placeholder={f.type === "지출" ? "예: 사무실 임대료" : "예: 주차장 임대수입"} /></div>
           <div><Label>금액</Label><input inputMode="numeric" value={f.amount ? won(f.amount) : ""} onChange={(e) => setF({ ...f, amount: e.target.value.replace(/[^\d]/g, "") })} className={`${inp} text-right`} /></div>
           <div><Label>계정과목</Label>
-            <select value={custom ? "__custom" : f.account} onChange={(e) => { if (e.target.value === "__custom") { setCustom(true); setF({ ...f, account: "" }); } else { setCustom(false); setF({ ...f, account: e.target.value }); } }} className={inp}>
+            <CustomSelect value={custom ? "__custom" : f.account} onChange={(e) => { if (e.target.value === "__custom") { setCustom(true); setF({ ...f, account: "" }); } else { setCustom(false); setF({ ...f, account: e.target.value }); } }} className={inp}>
               {accs.map((a) => <option key={a} value={a}>{a}</option>)}
               <option value="__custom">✎ 직접입력</option>
-            </select>
+            </CustomSelect>
             {custom && <input autoFocus value={f.account} onChange={(e) => setF({ ...f, account: e.target.value })} className={`${inp} mt-2`} placeholder="계정과목 직접 입력" />}
           </div>
           <div><Label>매달 (일)</Label><input inputMode="numeric" value={f.day} onChange={(e) => setF({ ...f, day: e.target.value.replace(/[^\d]/g, "").slice(0, 2) })} className={inp} /></div>
@@ -488,7 +488,7 @@ function RecurringEditor({ company, rows, ledger = [], funds = [], onClose }) {
       {rows.map((r) => (
         <div key={r.id} className="rounded-2xl bg-white border border-[#E3E8F0] px-3 py-2.5 flex items-center gap-2">
           <div className="flex-1 min-w-0"><div className="text-[14px] font-black text-[#0F1A30] truncate">{r.name} <span className={`text-[11px] font-black ${r.type === "수입" ? "text-[#2D4C82]" : "text-[#7A879C]"}`}>{r.type || "지출"}</span></div><div className="text-[11.5px] text-[#7A879C]">{r.account} · 매달 {r.day}일 · {r.method}</div>
-            {funds.length > 0 && <select value={r.fundId || ""} onChange={(e) => updateDoc(doc(db, "acctRecurring", r.id), { fundId: e.target.value })} className="mt-1 h-8 px-2 rounded-lg border border-[#DCE3EE] bg-white text-[12px] font-bold text-[#1B2B4B] max-w-full"><option value="">통장·카드 지정 안 함</option>{funds.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}</select>}</div>
+            {funds.length > 0 && <CustomSelect value={r.fundId || ""} onChange={(e) => updateDoc(doc(db, "acctRecurring", r.id), { fundId: e.target.value })} className="mt-1 h-8 px-2 rounded-lg border border-[#DCE3EE] bg-white text-[12px] font-bold text-[#1B2B4B] max-w-full"><option value="">통장·카드 지정 안 함</option>{funds.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}</CustomSelect>}</div>
           <span className="text-[13.5px] font-black tabular-nums whitespace-nowrap" style={{ fontFamily: MONO }}>{won(r.amount)}</span>
           <button type="button" onClick={() => updateDoc(doc(db, "acctRecurring", r.id), { active: r.active === false })} className={`h-8 px-2.5 rounded-lg text-[12px] font-black whitespace-nowrap ${r.active === false ? "border border-[#DCE3EE] text-[#9AA9C3]" : "bg-[#EEF3FC] text-[#1B2B4B]"}`}>{r.active === false ? "꺼짐" : "켜짐"}</button>
           <button type="button" onClick={() => window.confirm("삭제할까요?") && deleteDoc(doc(db, "acctRecurring", r.id))} className="w-8 h-8 rounded-lg text-[#9AA9C3]">✕</button>

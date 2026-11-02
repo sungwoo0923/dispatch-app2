@@ -4,14 +4,12 @@ import { db } from "./firebase";
 import {
   collection, addDoc, getDocs, deleteDoc, doc, serverTimestamp, orderBy, query
 } from "firebase/firestore";
+import { fmtPhone } from "./formatInput";
+import { CustomSelect } from "./CustomSelect";
 
 // 전화번호 하이픈 자동 포맷 (DispatchApp.jsx formatPhone과 동일 규칙)
-function formatPhone(phone) {
-  const p = String(phone ?? "").replace(/[^\d]/g, "");
-  if (p.length === 11) return `${p.slice(0, 3)}-${p.slice(3, 7)}-${p.slice(7)}`;
-  if (p.length === 10) return `${p.slice(0, 3)}-${p.slice(3, 6)}-${p.slice(6)}`;
-  return p;
-}
+// 전화번호 하이픈 — 공용 규칙(src/formatInput.js: 02·031·010·1588 등, 입력 중에도 적용)
+const formatPhone = (phone) => fmtPhone(phone);
 
 // ── 주소 정규화 ───────────────────────────────────────────────────────────
 function normalizeAddr(addr = "") {
@@ -627,7 +625,7 @@ export default function DeliverySignaturePage() {
                           </div>
                           <div className="flex items-center gap-2">
                             {topScore && <ConfidenceBadge pct={topScore.confidence} />}
-                            <select
+                            <CustomSelect
                               value={currentDriver?.name || ""}
                               onChange={e => setOverrides(p => ({ ...p, [sheet.sheetNum]: e.target.value }))}
                               className="text-[12px] border border-gray-200 rounded-lg px-2 py-1 bg-white text-gray-700 focus:outline-none focus:ring-1 focus:ring-[#1B2B4B]/30"
@@ -636,7 +634,7 @@ export default function DeliverySignaturePage() {
                               {allDrivers.map(d => (
                                 <option key={d.name} value={d.name}>{d.name} ({d.plate})</option>
                               ))}
-                            </select>
+                            </CustomSelect>
                           </div>
                         </div>
 
@@ -752,7 +750,7 @@ export default function DeliverySignaturePage() {
                           {d ? (
                             <>
                               <div className="text-[12px] font-bold text-gray-800">{d.name}</div>
-                              <div className="text-[10px] text-gray-400">{d.plate} · {formatPhone(d.phone)}</div>
+                              <div className="text-[11px] text-gray-400">{d.plate} · {formatPhone(d.phone)}</div>
                             </>
                           ) : (
                             <div className="text-[12px] text-amber-600 font-semibold">미지정</div>
@@ -800,7 +798,7 @@ export default function DeliverySignaturePage() {
                       </div>
                       <div className="text-right">
                         <div className="text-white text-[22px] font-black leading-none">{s.deliveries}</div>
-                        <div className="text-white/50 text-[10px]">배송 횟수</div>
+                        <div className="text-white/50 text-[11px]">배송 횟수</div>
                       </div>
                     </div>
                     <div className="px-4 py-3 grid grid-cols-2 gap-3">

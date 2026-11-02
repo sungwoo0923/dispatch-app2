@@ -705,9 +705,9 @@ export default function PalletSimulator() {
                       s:totalKg===0?"미입력":displayRes.weightOk?`최대 ${(displayRes.truck.maxKg/1000).toFixed(0)}t`:`초과`, ok:displayRes.weightOk },
                   ].map(({ l, v, s, ok }) => (
                     <div key={l} className="bg-white/8 rounded-xl p-2.5">
-                      <div className="text-[10px] text-white/40 font-semibold mb-1">{l}</div>
+                      <div className="text-[11px] text-white/40 font-semibold mb-1">{l}</div>
                       <div className={`text-[16px] font-black leading-tight ${ok?"text-white":"text-red-300"}`}>{v}</div>
-                      <div className="text-[10px] text-white/30 mt-0.5">{s}</div>
+                      <div className="text-[11px] text-white/30 mt-0.5">{s}</div>
                     </div>
                   ))}
                 </div>
@@ -740,7 +740,7 @@ export default function PalletSimulator() {
                       {r.maxPal}
                       <span className={`text-[10px] font-semibold ml-0.5 ${isActive ? "text-white/50" : "text-gray-400"}`}>개</span>
                     </div>
-                    <div className={`text-[9px] font-medium leading-tight ${isActive ? "text-white/50" : "text-gray-400"}`}>
+                    <div className={`text-[11px] font-medium leading-tight ${isActive ? "text-white/50" : "text-gray-400"}`}>
                       {r.fit.cols}열×{r.fit.rows}행<br/>{r.truck.L}m
                     </div>
                     <div className={`w-full h-[3px] rounded-full overflow-hidden ${isActive ? "bg-white/20" : "bg-gray-100"}`}>
@@ -765,7 +765,7 @@ export default function PalletSimulator() {
         </div>
       </div>
 
-      <div className="mt-2 text-[10px] text-gray-400 text-center">
+      <div className="mt-2 text-[11px] text-gray-400 text-center">
         적재함 내부 치수 기준입니다. 실제 차량에 따라 달라질 수 있습니다.
       </div>
     </div>

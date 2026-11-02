@@ -8,6 +8,8 @@ import React from "react";
 import { addDoc, collection, deleteDoc, doc, onSnapshot, orderBy, query, serverTimestamp, setDoc, updateDoc } from "firebase/firestore";
 import { db } from "./firebase";
 import { PlanMatrix, PLAN_DEFAULTS, PLAN_IDS, PLAN_MATRIX_CSS, planFeatureLines, planMatrixHtml } from "./plans";
+import { fmtBizNo, fmtPhone } from "./formatInput";
+import { CustomSelect } from "./CustomSelect";
 
 const MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
 const NAVY = "#1B2B4B";
@@ -365,7 +367,7 @@ export function PricingEditor() {
           {[["name", "상호"], ["ceo", "대표"], ["bizNo", "사업자번호"], ["phone", "연락처"], ["email", "이메일"], ["address", "주소"], ["bank", "입금 계좌"]].map(([k, l]) => (
             <div key={k} className="grid grid-cols-[96px_1fr] items-center gap-3 py-1.5">
               <span className="text-[13.5px] font-bold text-[#5B6B85]">{l}</span>
-              <input value={cfg.supplier[k] || ""} onChange={(e) => set({ supplier: { ...cfg.supplier, [k]: e.target.value } })} className={`${inpCls} h-9`} />
+              <input value={cfg.supplier[k] || ""} inputMode={k === "phone" ? "tel" : k === "bizNo" ? "numeric" : undefined} placeholder={k === "phone" ? "02-000-0000" : k === "bizNo" ? "000-00-00000" : undefined} onChange={(e) => set({ supplier: { ...cfg.supplier, [k]: k === "phone" ? fmtPhone(e.target.value) : k === "bizNo" ? fmtBizNo(e.target.value) : e.target.value } })} className={`${inpCls} h-9`} />
             </div>
           ))}
         </Card>
@@ -436,7 +438,7 @@ export function QuoteBuilder({ initial, onSaved }) {
           <div className="space-y-2.5">
             <div><L>고객사명 *</L><input value={inp.customer} onChange={(e) => set({ customer: e.target.value })} className={inpCls} placeholder="(주)○○로지스" /></div>
             <div className="grid grid-cols-2 gap-2"><div><L>담당자</L><input value={inp.contact} onChange={(e) => set({ contact: e.target.value })} className={inpCls} /></div>
-              <div><L>연락처</L><input value={inp.phone} onChange={(e) => set({ phone: e.target.value })} className={inpCls} /></div></div>
+              <div><L>연락처</L><input value={inp.phone} inputMode="tel" placeholder="010-0000-0000" onChange={(e) => set({ phone: fmtPhone(e.target.value) })} className={inpCls} /></div></div>
           </div>
         </Card>
         <Card code="USAGE" title="사용 규모" right={(inp.staffTouched || inp.ordersTouched) && q.chosen ? <button type="button" onClick={() => setInp((p) => ({ ...p, staffTouched: false, ordersTouched: false, staff: num(q.chosen.plan.seats), orders: num(q.chosen.plan.orders) }))} className="h-8 px-3 rounded-lg border border-[#DCE3EE] bg-white text-[12.5px] font-black text-[#1B2B4B] whitespace-nowrap">↺ {q.chosen.plan.name} 포함량으로</button> : null}>
@@ -574,10 +576,10 @@ export function QuoteHistory({ onOpen, onContract }) {
                     <td className="px-3 py-2 text-right" style={{ fontFamily: MONO }}>{won2(x.oneTime)}</td>
                     <td className="px-3 py-2 text-right" style={{ fontFamily: MONO }}>{won2(x.firstYear)}</td>
                     <td className="px-3 py-2 text-center">
-                      <select value={x.status || "작성"} onChange={(e) => updateDoc(doc(db, "salesQuotes", x.id), { status: e.target.value }).catch((er) => window.alert(er.message))}
+                      <CustomSelect value={x.status || "작성"} onChange={(e) => updateDoc(doc(db, "salesQuotes", x.id), { status: e.target.value }).catch((er) => window.alert(er.message))}
                         className={`h-8 px-2 rounded-lg border text-[13px] font-black ${x.status === "계약" ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "border-[#DCE3EE] text-[#1B2B4B]"}`}>
                         {STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
-                      </select>
+                      </CustomSelect>
                     </td>
                     <td className="px-3 py-2 text-center text-[12.5px] text-[#7A879C]" style={{ fontFamily: MONO }}>{x.createdAt?.toDate ? ymd(x.createdAt.toDate()) : "-"}</td>
                     <td className="px-3 py-2 whitespace-nowrap text-right">

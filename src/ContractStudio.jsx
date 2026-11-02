@@ -11,6 +11,7 @@ import CustomDatePicker from "./CustomDatePicker";
 import { DRIVER_KINDS, LABOR_KINDS, FREE_TOPICS, contractSpec, fillVars } from "./contractTemplates";
 import { useFleetDrivers } from "./FleetPayDocs";
 import { savePng, savePdf, printA4 } from "./a4Export";
+import { fmtBizNo, fmtPhone } from "./formatInput";
 
 const MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
 const card = "rounded-[18px] bg-white border border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_8px_20px_rgba(16,24,40,0.05)]";
@@ -246,12 +247,11 @@ export default function ContractStudio({ company = "", me = {} }) {
         <label className="block">
           <span className="block text-[11px] font-extrabold tracking-[0.22em] text-[#4B6CB7] mb-1.5" style={{ fontFamily: MONO }}>CONTRACT TYPE · 계약서 종류</span>
           <span className="relative block">
-            <select value={tab} onChange={(e) => setTab(e.target.value)}
-              className="appearance-none w-full h-[52px] pl-12 pr-11 rounded-2xl border-2 border-[#1B2B4B] bg-white text-[16px] font-black text-[#0F1A30] outline-none shadow-[0_6px_18px_rgba(15,26,48,0.10)] focus:ring-4 focus:ring-[#2D4C82]/15 cursor-pointer">
+            <CustomSelect value={tab} onChange={(e) => setTab(e.target.value)}
+              className="appearance-none w-full h-[52px] pl-12 pr-8 rounded-2xl border-2 border-[#1B2B4B] bg-white text-[16px] font-black text-[#0F1A30] outline-none shadow-[0_6px_18px_rgba(15,26,48,0.10)] focus:ring-4 focus:ring-[#2D4C82]/15 cursor-pointer">
               {[["driver", "운송계약서 (지입·직영·임대)"], ["labor", "근로계약서"], ["client", "거래처 운송계약서"], ["free", "자율양식 계약서"], ["box", `계약서 보관함 · ${docs.length}건`]].map(([k, l]) => <option key={k} value={k}>{l}</option>)}
-            </select>
+            </CustomSelect>
             <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 w-8 h-8 rounded-xl bg-[#0F1A30] text-white grid place-items-center text-[14px]">{tab === "box" ? "▤" : "✎"}</span>
-            <svg className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-[#1B2B4B]" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9l6 6 6-6" /></svg>
           </span>
         </label>
       </div>
@@ -343,7 +343,7 @@ export default function ContractStudio({ company = "", me = {} }) {
                     {f.type === "date" ? <CustomDatePicker value={vals[f.k] || ""} onChange={(e) => set(f.k, e.target.value)} className={inp} showIcon placeholder="날짜 선택" />
                       : f.type === "money" ? <input inputMode="numeric" value={vals[f.k] ? toInt(vals[f.k]).toLocaleString() : ""} onChange={(e) => set(f.k, e.target.value.replace(/[^\d]/g, ""))} placeholder="0" className={`${inp} text-right tabular-nums`} />
                         : f.type === "textarea" ? <textarea value={vals[f.k] || ""} onChange={(e) => set(f.k, e.target.value)} rows={3} placeholder={f.ph || "없음"} className={`${inp} h-auto py-2.5 leading-relaxed`} />
-                          : <input value={vals[f.k] || ""} onChange={(e) => set(f.k, e.target.value)} placeholder={f.ph || ""} className={inp} />}
+                          : <input value={vals[f.k] || ""} inputMode={/연락처$/.test(f.k) ? "tel" : undefined} onChange={(e) => set(f.k, /연락처$/.test(f.k) ? fmtPhone(e.target.value) : /사업자번호$/.test(f.k) && !/생년월일/.test(f.label || "") ? fmtBizNo(e.target.value) : e.target.value)} placeholder={f.ph || ""} className={inp} />}
                   </label>
                 ))}
               </div>

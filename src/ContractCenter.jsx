@@ -9,6 +9,8 @@ import { kpConfirm } from "./kpDialog";
 import { collection, deleteDoc, doc, onSnapshot, orderBy, query, serverTimestamp, setDoc, updateDoc } from "firebase/firestore";
 import { db } from "./firebase";
 import { useSalesPricing } from "./SalesQuote";
+import { CustomSelect } from "./CustomSelect";
+import { fmtBizNo, fmtPhone } from "./formatInput";
 
 export const C_MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
 const won = (n) => `${Math.round(Number(n) || 0).toLocaleString()}원`;
@@ -303,7 +305,7 @@ export function ContractBuilder({ initial, fromQuoteDoc, onDone }) {
   };
   const F = ({ k, label, type = "text", ph }) => (
     <label className="block"><span className="text-[12px] font-bold text-[#7A879C]">{label}</span>
-      <input type={type} value={vars[k] || ""} placeholder={ph} onChange={(e) => set(k, e.target.value)} className={`${inp} mt-1`} /></label>
+      <input type={type} value={vars[k] || ""} placeholder={ph || (/사업자번호$/.test(k) ? "000-00-00000" : /연락처$/.test(k) ? "010-0000-0000" : undefined)} inputMode={/연락처$/.test(k) ? "tel" : /사업자번호$/.test(k) ? "numeric" : undefined} onChange={(e) => set(k, /연락처$/.test(k) ? fmtPhone(e.target.value) : /사업자번호$/.test(k) ? fmtBizNo(e.target.value) : e.target.value)} className={`${inp} mt-1`} /></label>
   );
   return (
     <div className="grid gap-4 xl:grid-cols-[minmax(0,400px)_minmax(0,1fr)] items-start">
@@ -311,12 +313,12 @@ export function ContractBuilder({ initial, fromQuoteDoc, onDone }) {
         <Card code="SOURCE" title="양식 · 견적 불러오기">
           <div className="space-y-3">
             <label className="block"><span className="text-[12px] font-bold text-[#7A879C]">계약서 양식</span>
-              <select value={tplId} onChange={(e) => setTplId(e.target.value)} className={`${inp} mt-1`}>{tpl.templates.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}</select></label>
+              <CustomSelect value={tplId} onChange={(e) => setTplId(e.target.value)} className={`${inp} mt-1`}>{tpl.templates.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}</CustomSelect></label>
             <label className="block"><span className="text-[12px] font-bold text-[#7A879C]">저장한 견적에서 채우기</span>
-              <select value="" onChange={(e) => applyQuote(quotes.find((q) => q.id === e.target.value))} className={`${inp} mt-1`}>
+              <CustomSelect value="" onChange={(e) => applyQuote(quotes.find((q) => q.id === e.target.value))} className={`${inp} mt-1`}>
                 <option value="">{quoteNo ? `불러옴: ${quoteNo}` : "견적 선택…"}</option>
                 {quotes.map((q) => <option key={q.id} value={q.id}>{q.customer} · {q.plan} · 월 {Number(q.monthly || 0).toLocaleString()}원 ({q.no})</option>)}
-              </select></label>
+              </CustomSelect></label>
           </div>
         </Card>
         <Card code="CUSTOMER" title="고객사 정보">
@@ -334,7 +336,7 @@ export function ContractBuilder({ initial, fromQuoteDoc, onDone }) {
             {F({ k: "초기비용", label: "초기 비용" })}{F({ k: "결제방식", label: "결제 방식" })}
             {F({ k: "시작일", label: "서비스 시작일", type: "date" })}
             <label className="block"><span className="text-[12px] font-bold text-[#7A879C]">계약 기간</span>
-              <select value={vars.계약기간 || "12"} onChange={(e) => set("계약기간", e.target.value)} className={`${inp} mt-1`}>{["6", "12", "24", "36"].map((m) => <option key={m} value={m}>{m}개월</option>)}</select></label>
+              <CustomSelect value={vars.계약기간 || "12"} onChange={(e) => set("계약기간", e.target.value)} className={`${inp} mt-1`}>{["6", "12", "24", "36"].map((m) => <option key={m} value={m}>{m}개월</option>)}</CustomSelect></label>
             {F({ k: "종료일", label: "종료일(자동)", type: "date" })}{F({ k: "결제일", label: "매월 결제일", ph: "말일 / 10일" })}
             <div className="col-span-2">{F({ k: "추가옵션", label: "추가 옵션" })}</div>
             <div className="col-span-2"><label className="block"><span className="text-[12px] font-bold text-[#7A879C]">특약 사항</span>

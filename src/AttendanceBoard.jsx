@@ -11,6 +11,7 @@ import {
   APPROVER_GROUP_LABEL, isHrStaffUser, isExecUser, canApproveAttendanceReq, canEditAttendanceOf, markNotifSeen,
   approveChangeReq, rejectChangeReq, approveCheckInReq, rejectCheckInReq, submitChangeReq, submitCheckInReq,
 } from "./attendanceApproval";
+import { CustomSelect } from "./CustomSelect";
 
 // ⭐ 2026-11-01 출근기록부 리디자인 — 네이비 히어로 + 오늘 KPI + 월간 그리드(이름 고정 · 오늘 강조 · 공휴일 빨간색+명칭)
 //  권한: 출·퇴근 기록 직접 수정은 인사팀만(최고관리자 포함), 본인 기록은 누구나 "수정 요청" → 인사팀 승인
@@ -1041,9 +1042,9 @@ export default function AttendanceBoard({ userCompany, role, user }) {
             })()}
             <div>
               <div className="text-[13px] font-bold text-[#3A4A66] mb-1.5">상태</div>
-              <select value={changeReqStatus} onChange={e => setChangeReqStatus(e.target.value)} className={`${inputCls} w-full`}>
+              <CustomSelect value={changeReqStatus} onChange={e => setChangeReqStatus(e.target.value)} className={`${inputCls} w-full`}>
                 {STATUS_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
-              </select>
+              </CustomSelect>
             </div>
             {changeReqStatus === "출근" && (
               <div className="grid grid-cols-2 gap-2">

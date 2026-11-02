@@ -25,6 +25,7 @@ import {
   roleScreen,
   ROLE_SCREENS,
 } from "./customRoles";
+import { CustomSelect } from "./CustomSelect";
 
 const genRoleKey = () => `role_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
 
@@ -204,7 +205,7 @@ export default function RolePermissionsPanel({ users: allUsers = [], roleLabels 
     const on = r.key === selectedKey;
     const customized = r.builtin && customRoles.some((c) => c.key === r.key);
     return (
-      <button onClick={() => pick(r.key)} className={`w-full text-left rounded-xl border px-3.5 py-3 transition ${on ? "border-[#1B2B4B] bg-[#EEF3FB] shadow-sm" : "border-gray-200 bg-white hover:border-gray-300"}`}>
+      <button onClick={() => pick(r.key)} className={`w-full text-left rounded-xl border px-3.5 py-3 transition ${on ? "border-[#1B2B4B] bg-[#EEF3FB] shadow-sm" : "border-gray-200 bg-white hover:border-[#DCE3EE]"}`}>
         <div className="flex items-center gap-2">
           <span className="text-[14px] font-bold text-gray-800 truncate">{r.label}</span>
           {customized && !ovRoles[r.key] && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-600 border border-emerald-200">수정됨</span>}
@@ -315,19 +316,19 @@ export default function RolePermissionsPanel({ users: allUsers = [], roleLabels 
               )}
               {creating && (
                 <div className="rounded-xl border border-[#1B2B4B]/30 bg-white p-3 space-y-2 mb-2">
-                  <input ref={imeFocusRef} autoComplete="off" value={newLabel} onChange={(e) => setNewLabel(e.target.value)} placeholder="역할 이름 (예: 부관리자)" className="w-full border border-gray-300 rounded-lg px-3 py-2 text-[13px] outline-none focus:border-[#1B2B4B]" />
-                  <select value={copyFrom} onChange={(e) => setCopyFrom(e.target.value)} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-[13px] outline-none bg-white">
+                  <input ref={imeFocusRef} autoComplete="off" value={newLabel} onChange={(e) => setNewLabel(e.target.value)} placeholder="역할 이름 (예: 부관리자)" className="w-full border border-[#DCE3EE] rounded-lg px-3 py-2 text-[13px] outline-none focus:border-[#1B2B4B]" />
+                  <CustomSelect value={copyFrom} onChange={(e) => setCopyFrom(e.target.value)} className="w-full border border-[#DCE3EE] rounded-lg px-3 py-2 text-[13px] outline-none bg-white">
                     <option value="">처음부터 (HOME만 보이게)</option>
                     {allEditable.map((r) => <option key={r.key} value={r.key}>{r.label} 권한 복사해서 시작</option>)}
-                  </select>
+                  </CustomSelect>
                   <div className="grid grid-cols-2 gap-2">
-                    <button onClick={() => { setCreating(false); setNewLabel(""); }} className="py-2 rounded-lg border border-gray-300 text-[12.5px] font-bold text-gray-600">취소</button>
+                    <button onClick={() => { setCreating(false); setNewLabel(""); }} className="py-2 rounded-lg border border-[#DCE3EE] text-[12.5px] font-bold text-gray-600">취소</button>
                     <button onClick={createRole} className="py-2 rounded-lg bg-[#1B2B4B] text-white text-[12.5px] font-bold">만들기</button>
                   </div>
                 </div>
               )}
               {allEditable.filter((r) => !r.builtin).length === 0 && !creating ? (
-                <div className="rounded-xl border border-dashed border-gray-300 px-4 py-5 text-center text-[12.5px] text-gray-500">아직 없습니다. 회사에 맞는 역할(예: 부관리자, 영업)을 만들어 보세요.</div>
+                <div className="rounded-xl border border-dashed border-[#DCE3EE] px-4 py-5 text-center text-[12.5px] text-gray-500">아직 없습니다. 회사에 맞는 역할(예: 부관리자, 영업)을 만들어 보세요.</div>
               ) : (
                 <div className="space-y-2">{allEditable.filter((r) => !r.builtin).map((r) => <RoleCard key={r.key} r={r} />)}</div>
               )}
@@ -361,7 +362,7 @@ export default function RolePermissionsPanel({ users: allUsers = [], roleLabels 
                 {(scope ? true : (saved || !isBuiltin)) && (
                   <button onClick={resetOrDelete} className="text-[12.5px] font-bold text-gray-500 hover:text-red-600">{scope ? (ovRoles[selectedKey] ? "이 운송사 설정 지우기" : "공통 설정 따르는 중") : isBuiltin ? "기본값으로" : "역할 삭제"}</button>
                 )}
-                <button onClick={() => setDraft(initDraft())} disabled={!dirty} className="px-4 py-2 rounded-xl border border-gray-300 text-[13px] font-bold text-gray-600 disabled:opacity-40">되돌리기</button>
+                <button onClick={() => setDraft(initDraft())} disabled={!dirty} className="px-4 py-2 rounded-xl border border-[#DCE3EE] text-[13px] font-bold text-gray-600 disabled:opacity-40">되돌리기</button>
                 <button onClick={save} disabled={!dirty || saving} className="px-5 py-2 rounded-xl bg-[#1B2B4B] text-white text-[13px] font-bold hover:bg-[#243a60] disabled:opacity-40">{saving ? "저장 중…" : "저장"}</button>
               </div>
 
@@ -386,11 +387,11 @@ export default function RolePermissionsPanel({ users: allUsers = [], roleLabels 
                   )}
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="text-[12px] font-bold text-gray-500 mr-1">빠른 설정</span>
-                    {PRESETS.map((p) => <button key={p.label} onClick={() => setDraft((d) => ({ ...d, menus: p.make() }))} className="px-3 py-1.5 rounded-lg border border-gray-300 text-[12.5px] font-semibold text-gray-700 hover:bg-gray-50">{p.label}</button>)}
-                    <select value="" onChange={(e) => e.target.value && setDraft((d) => ({ ...d, menus: effectiveMenus(e.target.value, customRoles) }))} className="px-3 py-1.5 rounded-lg border border-gray-300 text-[12.5px] font-semibold text-gray-700 bg-white">
+                    {PRESETS.map((p) => <button key={p.label} onClick={() => setDraft((d) => ({ ...d, menus: p.make() }))} className="px-3 py-1.5 rounded-lg border border-[#DCE3EE] text-[12.5px] font-semibold text-gray-700 hover:bg-gray-50">{p.label}</button>)}
+                    <CustomSelect value="" onChange={(e) => e.target.value && setDraft((d) => ({ ...d, menus: effectiveMenus(e.target.value, customRoles) }))} className="px-3 py-1.5 rounded-lg border border-[#DCE3EE] text-[12.5px] font-semibold text-gray-700 bg-white">
                       <option value="">다른 역할 권한 복사…</option>
                       {allEditable.filter((r) => r.key !== selectedKey).map((r) => <option key={r.key} value={r.key}>{r.label}</option>)}
-                    </select>
+                    </CustomSelect>
                   </div>
                   <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
                     {MENU_GROUPS.map((g) => (
@@ -435,9 +436,9 @@ export default function RolePermissionsPanel({ users: allUsers = [], roleLabels 
                             <td className="py-2.5 text-gray-600">{u.companyName || "-"}</td>
                             <td className="py-2.5 text-gray-600">{[u.team, u.position].filter(Boolean).join(" · ") || "-"}</td>
                             <td className="py-2.5">
-                              <select value={u.role || "user"} onChange={(e) => changeUserRole(u, e.target.value)} className="border border-gray-300 rounded-lg px-2 py-1 text-[12.5px] bg-white">
+                              <CustomSelect value={u.role || "user"} onChange={(e) => changeUserRole(u, e.target.value)} className="border border-[#DCE3EE] rounded-lg px-2 py-1 text-[12.5px] bg-white">
                                 {[...allEditable, { key: "hrAcct", label: "통합인사관리자" }].map((r) => <option key={r.key} value={r.key}>{r.label}</option>)}
-                              </select>
+                              </CustomSelect>
                             </td>
                           </tr>
                         ))}
