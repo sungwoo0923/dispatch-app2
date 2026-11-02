@@ -15050,7 +15050,7 @@ React.useEffect(() => {
       내일
     </button>
     <button type="button"
-    className="px-2.5 py-1 text-[12px] font-semibold rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 transition"
+    className="px-2.5 py-1 text-[12px] font-semibold rounded-lg bg-[#1B2B4B] text-white hover:bg-[#0F1A30] transition"
     onClick={() => {
       const d = new Date();
       const day = d.getDay(); // 0=일 1=월 ... 6=토
@@ -15153,7 +15153,7 @@ React.useEffect(() => {
     </button>
     {/* ✅ 추가 */}
   <button type="button"
-    className="px-2.5 py-1 text-[12px] font-semibold rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 transition"
+    className="px-2.5 py-1 text-[12px] font-semibold rounded-lg bg-[#1B2B4B] text-white hover:bg-[#0F1A30] transition"
     onClick={() => {
       const d = new Date();
       const day = d.getDay();
@@ -19881,7 +19881,7 @@ setConfirmChange(null);
       <div className="flex justify-end gap-2 mb-4">
         {/* 예 → 신규 등록 */}
         <button
-          className="px-4 py-2 bg-blue-600 text-white rounded"
+          className="px-4 py-2 bg-[#1B2B4B] text-white rounded"
           onClick={() => {
   const { name } = dupPopup.input;
 
@@ -20092,7 +20092,7 @@ setConfirmChange(null);
       </div>
 
       <button
-        className="w-full bg-blue-600 hover:bg-blue-700 text-white py-2 rounded-md text-sm mt-5"
+        className="w-full bg-[#1B2B4B] hover:bg-[#0F1A30] text-white py-2 rounded-md text-sm mt-5"
         onClick={() => setStatusPopup(null)}
       >
         닫기
@@ -20137,7 +20137,7 @@ setConfirmChange(null);
       </div>
 
       <button
-        className="w-full bg-blue-600 hover:bg-blue-700 text-white py-2 rounded-md text-sm mt-5"
+        className="w-full bg-[#1B2B4B] hover:bg-[#0F1A30] text-white py-2 rounded-md text-sm mt-5"
         onClick={() => setPopupType(null)}
       >
         닫기
@@ -32715,7 +32715,7 @@ value={copyTarget?.화물수량 || ""}
               </button>
 
               <button
-  className="px-5 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold"
+  className="px-5 py-2 rounded-lg bg-[#1B2B4B] hover:bg-[#0F1A30] text-white font-semibold"
   onClick={async () => {
     if (isViewer) return showAlert("조회전용 권한으로 저장할 수 없습니다.");
     // ✅ 저장 직전 경유지 + 화물내용 최종 동기화
@@ -34925,7 +34925,7 @@ function MemoMore({ text = "" }) {
 
             <div className="text-right mt-4">
               <button
-                className="px-3 py-1 bg-blue-600 text-white rounded"
+                className="px-3 py-1 bg-[#1B2B4B] text-white rounded"
                 onClick={() => setOpen(false)}
               >
                 닫기
@@ -41179,7 +41179,7 @@ return (
               </button>
 
              <button
-  className="px-5 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold"
+  className="px-5 py-2 rounded-lg bg-[#1B2B4B] hover:bg-[#0F1A30] text-white font-semibold"
   onClick={async () => {
     // 1) Firestore 저장
     const ALLOWED_FIELDS = [
@@ -44994,7 +44994,7 @@ function MemoCell({ text }) {
             <div className="text-right mt-3">
               <button
                 onClick={() => setShowFull(false)} // ✓ ▲ 이게 핵심
-                className="px-3 py-1 bg-blue-600 text-white rounded"
+                className="px-3 py-1 bg-[#1B2B4B] text-white rounded"
               >
                 닫기
               </button>
@@ -50032,7 +50032,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
             <input autoComplete="off" placeholder="지불운임" className="border p-2 rounded w-full mb-4" />
             <div className="flex justify-end gap-2">
               <button onClick={() => setQuickAssignOpen(false)} className="px-4 py-2 border rounded"><EditableText id="misc.btn.46835.취소" defaultText="취소" /></button>
-              <button onClick={() => setQuickAssignOpen(false)} className="px-4 py-2 bg-indigo-600 text-white rounded"><EditableText id="misc.btn.46836.배차완료" defaultText="배차완료" /></button>
+              <button onClick={() => setQuickAssignOpen(false)} className="px-4 py-2 bg-[#1B2B4B] text-white rounded"><EditableText id="misc.btn.46836.배차완료" defaultText="배차완료" /></button>
             </div>
           </div>
         </div>
@@ -50659,7 +50659,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                                     onChange={e => setEditingDriver7Data(p => ({ ...p, 전화번호: formatPhone(e.target.value) }))}
                                   />
                                   <div className="flex gap-2">
-                                    <button type="button" className="flex-1 py-1.5 rounded-lg bg-blue-600 text-white text-xs font-bold"
+                                    <button type="button" className="flex-1 py-1.5 rounded-lg bg-[#1B2B4B] text-white text-xs font-bold"
                                       onClick={async () => {
                                         if (isViewer) { alert("조회전용 권한으로는 수정할 수 없습니다."); return; }
                                         if (!editingDriver7Data.이름.trim()) return;
@@ -53459,7 +53459,7 @@ const handleBatchSettle = async (targetStatus) => {
               showAlert(`발송 완료 (실패 ${failed.length}건: ${failed.map(f => f.name).join(", ")})`);
             }
           }}
-          className="flex-1 py-2.5 rounded-xl bg-indigo-600 text-white font-bold text-[13px] hover:bg-indigo-700 disabled:opacity-50 transition"
+          className="flex-1 py-2.5 rounded-xl bg-[#1B2B4B] text-white font-bold text-[13px] hover:bg-[#0F1A30] disabled:opacity-50 transition"
         >{batchSending ? `발송 중 (${batchSendProgress.done}/${batchSendProgress.total})...` : `일괄 발송 (${batchSendList.length}건)`}</button>
         <button
           disabled={batchSending}
