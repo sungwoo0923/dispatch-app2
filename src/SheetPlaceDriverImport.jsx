@@ -7,7 +7,7 @@ import React from "react";
 import { auth, db, FUNCTIONS_BASE, DEFAULT_COMPANY } from "./firebase";
 import { collection, doc, getDoc, getDocs, query, where, writeBatch, setDoc, serverTimestamp } from "firebase/firestore";
 import { coDocKey } from "./coKey";
-import { parsePlacesFromGrid, dedupePlaces, parseDriversFromGrid, dedupeDrivers, normKey, normPlate, wordsToLines, parsePlacesFromOcrLines } from "./placeDriverParse";
+import { parsePlacesFromGrid, dedupePlaces, parseDriversFromGrid, dedupeDrivers, normKey, normPlate, wordsToLines, parsePlacesFromOcrLines, cleanPlaces, dedupeCleaned, placeKeyOf } from "./placeDriverParse";
 
 // ⭐ 2026-11-03 .xlsx 속 그림(캡처해서 붙인 표) 꺼내기 — 탭 이름까지(시트 → 그림판 → 그림 연결 파일을 따라감). 같은 그림은 1장만.
 async function extractXlsxImages(buf) {
@@ -82,6 +82,7 @@ export default function SheetPlaceDriverImport({ companies = [], url: initUrl = 
   const [allGrade, setAllGrade] = React.useState("일반");
   const [onlyFull, setOnlyFull] = React.useState(true);
   const [done, setDone] = React.useState(null);
+  const [warnOnly, setWarnOnly] = React.useState(false); // ⭐ 확인 필요만 보기
   const rawRef = React.useRef({ places: [], drivers: [], tabs: [], title: "", src: "" }); // ⭐ 그림 글자 읽기 후 다시 합칠 때 씀
   const [imgs, setImgs] = React.useState([]); // 엑셀 속 그림(같은 그림 제외)
   const [ocr, setOcr] = React.useState(null); // { done, total, found, error }
@@ -99,17 +100,18 @@ export default function SheetPlaceDriverImport({ companies = [], url: initUrl = 
   const analyze = async (raw, title, src, extraPlaces = []) => {
     rawRef.current = { ...raw, title, src };
     const [exP, exD] = await Promise.all([loadCompanyDocs("places", company), loadCompanyDocs("drivers", company)]);
-    const exPlaceKeys = new Set(exP.map((p) => `${normKey(p.업체명)}|${normKey(p.주소)}`));
+    const exPlaceKeys = new Set(exP.map((p) => placeKeyOf(p)));
     const exPlaceNames = new Set(exP.map((p) => normKey(p.업체명)));
     const exPlates = new Set(exD.map((d) => normPlate(d.차량번호)).filter(Boolean));
-    const places = dedupePlaces([...raw.places, ...extraPlaces]).map((p) => ({
-      ...p, __key: `${normKey(p.업체명)}|${normKey(p.주소)}`,
-      __exists: exPlaceKeys.has(`${normKey(p.업체명)}|${normKey(p.주소)}`),
+    // ⭐ 2026-11-03 정리(띄어쓰기·찌꺼기 글자·주소 띄어쓰기) → 정리 후 같은 곳 다시 합치기 → 이상한 줄은 "확인 필요"(처음엔 체크 해제)
+    const places = dedupeCleaned(cleanPlaces(dedupePlaces([...raw.places, ...extraPlaces]))).map((p) => ({
+      ...p, __key: placeKeyOf(p),
+      __exists: exPlaceKeys.has(placeKeyOf(p)),
       __sameName: exPlaceNames.has(normKey(p.업체명)),
     }));
     const drivers = dedupeDrivers(raw.drivers).map((d) => ({ ...d, __exists: exPlates.has(d.차량번호) }));
     setRes({ title, source: src, tabs: raw.tabs, places, drivers });
-    setSkip({}); setGrade({}); setDone(null);
+    setSkip(Object.fromEntries(places.filter((p) => p.__warn?.length).map((p) => [`p:${p.__key}`, true]))); setGrade({}); setDone(null); setWarnOnly(false);
   };
 
   const openSheet = async () => {
@@ -315,12 +317,14 @@ export default function SheetPlaceDriverImport({ companies = [], url: initUrl = 
             <>
               <div className="text-[13.5px] text-gray-700 mb-3">
                 신규 <b className="text-[#1B2B4B]">{placesToSave.length}</b> · 이미 있음 {placeRows.filter((p) => p.__exists).length} · 제외 {placeRows.filter((p) => !p.__exists && skip[`p:${p.__key}`]).length}
+                {" · "}<button type="button" onClick={() => setWarnOnly((v) => !v)} className={`px-2.5 py-0.5 rounded-full text-[12.5px] font-bold border ${warnOnly ? "bg-red-600 text-white border-red-600" : "bg-red-50 text-red-700 border-red-200"}`}>확인 필요 {placeRows.filter((p) => !p.__exists && p.__warn?.length).length}{warnOnly ? " · 전체 보기" : "만 보기"}</button>
+                <span className="ml-2 text-[12.5px] text-gray-500">띄어쓰기·앞뒤 찌꺼기 글자는 자동 정리됨 · 확인 필요 줄은 체크 해제(고친 뒤 체크하면 등록)</span>
               </div>
               <div className="overflow-auto max-h-[560px] border border-[#E3E8F0] rounded-xl">
                 <table className="w-full text-[13.5px]">
                   <thead className="sticky top-0 bg-[#F5F8FD] text-gray-600"><tr>{["등록", "업체명", "주소", "담당자", "전화번호", "찾은 곳", "상태"].map((h) => <th key={h} className={th}>{h}</th>)}</tr></thead>
                   <tbody className="divide-y divide-[#EEF1F6]">
-                    {placeRows.map((p) => (
+                    {placeRows.filter((p) => !warnOnly || (!p.__exists && p.__warn?.length)).map((p) => (
                       <tr key={p.__key} className={p.__exists ? "bg-gray-50 text-gray-400" : ""}>
                         <td className={`${td} text-center`}><input type="checkbox" disabled={p.__exists} checked={!p.__exists && !skip[`p:${p.__key}`]} onChange={(e) => setSkip((s) => ({ ...s, [`p:${p.__key}`]: !e.target.checked }))} className="w-[17px] h-[17px]" /></td>
                         {p.__exists ? (<>
@@ -336,7 +340,8 @@ export default function SheetPlaceDriverImport({ companies = [], url: initUrl = 
                           <td className={td}><input value={p.contacts[0]?.phone || ""} onChange={(e) => editPlace(p.__key, { phone: e.target.value })} className="w-full min-w-[80px] px-2 py-1 rounded-md border border-transparent hover:border-[#DCE3EE] focus:border-[#1B2B4B] outline-none bg-transparent text-[13.5px]" />{p.contacts.length > 1 && <div className="text-[12px] text-gray-500 px-2">+ {p.contacts.slice(1).map((c) => c.phone).filter(Boolean).join(", ")}</div>}</td>
                         </>)}
                         <td className={`${td} text-gray-500 whitespace-nowrap`}>{p.__tab}{p.__dupCount > 1 ? ` 외 ${p.__dupCount - 1}` : ""}</td>
-                        <td className={`${td} text-center whitespace-nowrap`}>{p.__exists ? <Badge c="bg-gray-100 text-gray-500">이미 있음</Badge> : p.__sameName ? <Badge c="bg-amber-100 text-amber-700">같은 이름·다른 주소</Badge> : <Badge c="bg-emerald-100 text-emerald-700">신규</Badge>}</td>
+                        <td className={`${td} text-center whitespace-nowrap`}>{p.__exists ? <Badge c="bg-gray-100 text-gray-500">이미 있음</Badge> : p.__sameName ? <Badge c="bg-amber-100 text-amber-700">같은 이름·다른 주소</Badge> : <Badge c="bg-emerald-100 text-emerald-700">신규</Badge>}
+                          {!p.__exists && p.__warn?.length > 0 && <div className="mt-1 text-[11.5px] font-bold text-red-600 whitespace-normal">⚠ {p.__warn.join(" · ")}</div>}</td>
                       </tr>
                     ))}
                   </tbody>

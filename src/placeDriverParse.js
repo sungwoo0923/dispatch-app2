@@ -235,3 +235,81 @@ export function parsePlacesFromOcrLines(lines, tab = "") {
   });
   return out;
 }
+
+// ---------------- 정리(2026-11-03) — 글자 인식으로 들어온 업체명·주소 다듬기 + 이상한 줄 표시 ----------------
+//  업체명: 띄어쓰기 없앰, 앞뒤 '|"·- 같은 찌꺼기·깨진 자모 제거, 괄호 안 공백 제거, 끝에 붙은 사람 이름은 담당자로
+//  주소:   괄호 안 공백, 한 글자로 떨어진 "로/길/동/구…" 붙이기, 여러 주소 끝에 반복해서 붙은 낱말(예: 목포) 빼기
+//  확인 필요: 차량번호·시간 같은 업체명, 시간이 들어간 주소, 시·도만 있는 주소 등 → 처음엔 체크 해제
+const JUNK_EDGE = /^[\s'"`‘’“”|ㅣl!.,·:;_\-~*#>]+|[\s'"`‘’“”|ㅣ!.,·:;_\-~*#<]+$/g;
+const JAMO = /[ᄀ-ᇿㄱ-ㆎ]/g;
+const SIDO = [["서울특별시", "서울"], ["부산광역시", "부산"], ["대구광역시", "대구"], ["인천광역시", "인천"], ["광주광역시", "광주"], ["대전광역시", "대전"], ["울산광역시", "울산"], ["세종특별자치시", "세종"], ["경기도", "경기"], ["강원특별자치도", "강원"], ["강원도", "강원"], ["충청북도", "충북"], ["충청남도", "충남"], ["전북특별자치도", "전북"], ["전라북도", "전북"], ["전라남도", "전남"], ["경상북도", "경북"], ["경상남도", "경남"], ["제주특별자치도", "제주"]];
+export const addrKey = (a) => {
+  let s = String(a || "").replace(/\([^)]*\)/g, "").trim();
+  for (const [l, sh] of SIDO) if (s.startsWith(l)) { s = sh + s.slice(l.length); break; }
+  return s.replace(/[\s,.\-]/g, "").toLowerCase();
+};
+export const placeKeyOf = (p) => `${normKey(p.업체명)}|${addrKey(p.주소)}`;
+const ADDR_SUFFIX = /^(로|길|동|구|시|군|읍|면|리|가|번길|대로)$/;
+function cleanName(s) {
+  let n = String(s || "").replace(JAMO, "").replace(JUNK_EDGE, "");
+  n = n.replace(/\s*\(\s*/g, "(").replace(/\s*\)\s*/g, ")").replace(/\s+/g, "");
+  n = n.replace(/^주삼다수/, "제주삼다수"); // "제"가 깨져 빠진 경우(가장 흔한 업체명)
+  n = n.replace(/^\)+/, "").replace(/\(+$/, "");
+  return n.replace(JUNK_EDGE, "");
+}
+function cleanAddrText(s) {
+  let a = String(a0(s)).replace(/\([^)]*(\d\s*시|분|오전|오후|이후|이전)[^)]*\)/g, " ") // "(오후 3시 이후)" 같은 메모는 주소에서 뺌.replace(/\s*\(\s*/g, " (").replace(/\s*\)\s*/g, ") ").replace(/\s+,/g, ",").replace(/\s+/g, " ").trim();
+  const t = a.split(" ");
+  const out = [];
+  t.forEach((w) => {
+    const prev = out[out.length - 1];
+    if (prev && ADDR_SUFFIX.test(w)) out[out.length - 1] = prev + w; // "대불주거 로" → "대불주거로"
+    else if (prev && /^[가-힣]$/.test(prev) && /^[가-힣]/.test(w) && out.length > 2) out[out.length - 1] = prev + w; // "천 송동" → "천송동"
+    else out.push(w);
+  });
+  return out.join(" ").replace(/\(\s+/g, "(").replace(/\s+\)/g, ")").trim();
+}
+const a0 = (s) => String(s || "").replace(JAMO, "").replace(JUNK_EDGE, "");
+const TIME_RE = /\d{1,2}\s*시(\s*\d{1,2}\s*분)?|\d{1,2}:\d{2}|오전|오후/;
+const PLATE_LIKE = /\d{2,3}[가-힣]\s*\d{4}|^(서울|부산|대구|인천|광주|대전|울산|세종|경기|강원|충북|충남|전북|전남|경북|경남|제주)\s*\d{2,}/;
+export function cleanPlaces(list) {
+  const rows = list.map((p) => {
+    const raw = String(p.업체명 || "").trim();
+    let contacts = (p.contacts || []).map((c) => ({ name: a0(c.name).replace(/\s+/g, " ").trim(), phone: c.phone || "" }));
+    // 업체명 끝에 사람 이름이 붙은 경우: "제주삼다수(영통)-7창 강순연" → 업체명 / 담당자
+    let nameSrc = raw;
+    const tail = raw.match(/^(.*[)\d창고센터점])\s+([가-힣]{2,4})$/);
+    if (tail) { nameSrc = tail[1]; if (!contacts.some((c) => c.name)) contacts = [{ name: tail[2], phone: contacts[0]?.phone || "" }, ...contacts.slice(1)]; }
+    contacts = contacts.filter((c) => !/^(내선|사무실|대표|담당|토상차)$/.test(c.name) || c.phone).map((c) => (/^(내선|사무실|대표|담당)$/.test(c.name) ? { ...c, name: "" } : c));
+    return { ...p, 업체명: cleanName(nameSrc), 주소: cleanAddrText(p.주소), contacts, __raw: raw };
+  });
+  // 여러 주소 끝에 반복해서 붙은 낱말(옆 칸 글자, 예: "목포") 빼기
+  const lastCnt = {};
+  rows.forEach((p) => { const w = p.주소.split(" ").pop(); if (w && /^[가-힣]{2,3}$/.test(w) && !/(로|길|동|리|가|읍|면|층|호|관)$/.test(w)) lastCnt[w] = (lastCnt[w] || 0) + 1; });
+  const junkLast = new Set(Object.entries(lastCnt).filter(([, n]) => n >= 3).map(([w]) => w));
+  rows.forEach((p) => { const t = p.주소.split(" "); if (t.length > 3 && junkLast.has(t[t.length - 1])) p.주소 = t.slice(0, -1).join(" ").replace(/[,\s]+$/, ""); });
+  // 확인 필요 표시
+  rows.forEach((p) => {
+    const why = [];
+    if (p.업체명.replace(/[^가-힣A-Za-z]/g, "").length < 2 || /^[가-힣]{1,3}$/.test(p.업체명)) why.push("업체명 짧음(지역명만?)");
+    if (PLATE_LIKE.test(p.__raw) || /^\d+\s/.test(p.__raw)) why.push("업체명이 차량번호 같음");
+    if (TIME_RE.test(p.주소)) why.push("주소에 시간");
+    if (p.주소.split(" ").length < 3 || !/\d/.test(p.주소)) why.push("주소 불완전");
+    p.__warn = why;
+  });
+  return rows;
+}
+// 정리 후 같은 업체명+주소(시·도 표기·괄호·띄어쓰기 무시)는 1건 — 더 긴 주소를 남기고 담당자는 합침
+export function dedupeCleaned(list) {
+  const map = new Map();
+  list.forEach((p) => {
+    const k = placeKeyOf(p);
+    const cur = map.get(k);
+    if (!cur) { map.set(k, { ...p, contacts: [...p.contacts], __dupCount: p.__dupCount || 1 }); return; }
+    cur.__dupCount += p.__dupCount || 1;
+    if (p.주소.length > cur.주소.length) cur.주소 = p.주소;
+    if (cur.__warn?.length && !p.__warn?.length) cur.__warn = [];
+    p.contacts.forEach((c) => { if (!cur.contacts.some((x) => (x.name && x.name === c.name) || (x.phone && x.phone === c.phone))) cur.contacts.push(c); });
+  });
+  return [...map.values()];
+}
