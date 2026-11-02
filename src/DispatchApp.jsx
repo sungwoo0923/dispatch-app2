@@ -9041,89 +9041,115 @@ return (
   </div>
 )}
 
-{/* ── 화물내용 +추가 팝업 ── */}
-{cargoAddPopup && (
-  <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999999]"
-    onClick={() => { setCargoAddPopup(null); _setCargoAddQty(""); _setCargoAddType(""); }}>
-    <div className="bg-white rounded-2xl shadow-2xl w-[400px] border" onClick={e => e.stopPropagation()}>
-      <div className="bg-[#1B2B4B] px-5 py-3 rounded-t-2xl flex items-center justify-between">
-        <div className="text-[14px] font-bold text-white">화물내용 관리</div>
-        <button onClick={() => { setCargoAddPopup(null); _setCargoAddQty(""); _setCargoAddType(""); }} className="text-white/60 hover:text-white text-lg font-bold">✕</button>
-      </div>
-      <div className="p-5">
-        {(() => {
-          const parts = _cargoEditValue.split("+").filter(Boolean);
-          const base = parts[0] || "";
-          const extras = parts.slice(1);
-          return extras.length > 0 ? (
-            <div className="mb-4">
-              <div className="text-[12px] font-semibold text-gray-500 mb-2">등록된 추가 항목 (× 누르면 삭제)</div>
+{/* ── 화물내용 +추가 팝업 ── ⭐ 2026-11-02 리디자인(프로그램 스타일 · 단위는 버튼 · 미리보기 · Enter 추가 / Esc 닫기) */}
+{cargoAddPopup && (() => {
+  const closeCargo = () => { setCargoAddPopup(null); _setCargoAddQty(""); _setCargoAddType(""); };
+  const parts = String(_cargoEditValue || "").split("+").filter(Boolean);
+  const base = parts[0] || "";
+  const extras = parts.slice(1);
+  const pending = (_cargoAddType ? `${_cargoAddQty}${_cargoAddType}` : _cargoAddQty).trim();
+  const addCargo = () => {
+    if (!pending) return;
+    const newVal = _cargoEditValue ? _cargoEditValue + "+" + pending : pending;
+    _setCargoEditValue(newVal);
+    cargoAddPopup.onCommit(newVal);
+    _setCargoAddQty(""); _setCargoAddType("");
+    setTimeout(() => document.querySelector("[data-cargo-add-input]")?.focus?.(), 0);
+  };
+  const removeExtra = (i) => {
+    const newEx = extras.filter((_, j) => j !== i);
+    const newVal = newEx.length ? base + "+" + newEx.join("+") : base;
+    _setCargoEditValue(newVal);
+    cargoAddPopup.onCommit(newVal);
+  };
+  const UNITS = ["", "파레트", "박스", "통", "롤"];
+  return createPortal(
+    <div className="fixed inset-0 z-[9999999] bg-[#0B1428]/55 backdrop-blur-[2px] flex items-center justify-center p-4"
+      onMouseDown={closeCargo}
+      onKeyDown={(e) => { if (e.key === "Escape") { e.stopPropagation(); closeCargo(); } }}>
+      <div className="w-[440px] max-w-full bg-white rounded-[22px] shadow-[0_30px_80px_rgba(8,14,30,0.45)] overflow-hidden" onMouseDown={(e) => e.stopPropagation()}>
+        {/* 머리 */}
+        <div className="relative px-6 pt-5 pb-4 text-white" style={{ background: "radial-gradient(120% 140% at 0% 0%, #2D4C82 0%, #1B2B4B 45%, #0F1A30 100%)" }}>
+          <div className="absolute inset-0 opacity-[0.07] pointer-events-none" style={{ backgroundImage: "linear-gradient(#fff 1px,transparent 1px),linear-gradient(90deg,#fff 1px,transparent 1px)", backgroundSize: "22px 22px" }} />
+          <div className="relative flex items-start justify-between gap-3">
+            <div>
+              <div className="flex items-baseline gap-2"><span className="text-[17px] font-black">화물내용 추가</span><span className="text-[10.5px] font-extrabold tracking-[0.14em] text-[#8FB0F0]">CARGO</span></div>
+              <div className="text-[12.5px] font-semibold text-[#C9D6EE] mt-1">기본 화물에 함께 싣는 항목을 더합니다</div>
+            </div>
+            <button type="button" onClick={closeCargo} className="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 text-white text-[14px] font-black" title="닫기 (Esc)">✕</button>
+          </div>
+          {/* 지금 화물내용 미리보기 */}
+          <div className="relative mt-3.5 rounded-xl bg-white/10 border border-white/15 px-3.5 py-2.5">
+            <div className="text-[11px] font-bold text-[#8FB0F0] mb-1">지금 화물내용</div>
+            <div className="text-[15px] font-black break-all leading-snug">{_cargoEditValue ? String(_cargoEditValue).split("+").filter(Boolean).join(" + ") : <span className="text-white/50 font-bold">아직 없음</span>}</div>
+          </div>
+        </div>
+
+        <div className="px-6 py-5 space-y-5">
+          {/* 등록된 추가 항목 */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-[13.5px] font-black text-[#0F1A30]">추가된 항목</span>
+              <span className="text-[12px] font-bold text-[#8E9BB2]">{extras.length}개 · ✕ 누르면 삭제</span>
+            </div>
+            {extras.length > 0 ? (
               <div className="flex flex-wrap gap-2">
                 {extras.map((item, i) => (
-                  <span key={i} className="inline-flex items-center gap-1 text-[13px] font-bold text-[#1B2B4B] bg-[#e8ecf5] px-3 py-1 rounded-full">
+                  <span key={i} className="inline-flex items-center gap-1.5 h-8 pl-3 pr-1.5 rounded-lg border border-[#C9D5EA] bg-[#F7F9FC] text-[13.5px] font-extrabold text-[#0F1A30]">
                     {item}
-                    <button type="button" onClick={() => {
-                      const newEx = extras.filter((_,j) => j !== i);
-                      const newVal = newEx.length ? base+"+"+newEx.join("+") : base;
-                      _setCargoEditValue(newVal);
-                      cargoAddPopup.onCommit(newVal);
-                    }} className="text-[#1B2B4B]/50 hover:text-red-500 font-bold text-[15px] leading-none cursor-pointer">×</button>
+                    <button type="button" onClick={() => removeExtra(i)} title="삭제"
+                      className="w-6 h-6 rounded-md grid place-items-center text-[#8E9BB2] hover:bg-[#FDECEC] hover:text-[#C0352B] text-[12px] font-black">✕</button>
                   </span>
                 ))}
               </div>
+            ) : (
+              <div className="h-10 rounded-xl border border-dashed border-[#D5DEEC] grid place-items-center text-[13px] font-bold text-[#9AA9C3]">추가된 항목이 없습니다</div>
+            )}
+          </div>
+
+          {/* 새 항목 */}
+          <div>
+            <div className="text-[13.5px] font-black text-[#0F1A30] mb-2">새 항목</div>
+            <input autoComplete="off"
+              className="w-full h-11 px-3.5 rounded-xl border border-[#C9D5EA] bg-[#F9FBFE] text-[15px] font-bold text-[#0F1A30] placeholder:text-[#A7B3C6] placeholder:font-semibold focus:outline-none focus:bg-white focus:border-[#2D4C82] focus:ring-4 focus:ring-[#2D4C82]/10"
+              data-cargo-add-input="1"
+              placeholder="수량 또는 내용 (예: 2 · 자동차 부품)"
+              value={_cargoAddQty}
+              onChange={e => _setCargoAddQty(e.target.value)}
+              ref={imeFocusRef}
+              onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); addCargo(); } }}
+            />
+            <div className="mt-2.5">
+              <div className="text-[12px] font-bold text-[#5B6B85] mb-1.5">단위</div>
+              <div className="grid grid-cols-5 gap-1.5">
+                {UNITS.map((u) => (
+                  <button key={u || "none"} type="button" onClick={() => _setCargoAddType(u)}
+                    className={`h-9 rounded-lg text-[13px] font-extrabold border transition ${_cargoAddType === u ? "bg-[#1B2B4B] border-[#1B2B4B] text-white" : "bg-white border-[#D5DEEC] text-[#3A4A66] hover:border-[#4B6CB7]"}`}>
+                    {u || "없음"}
+                  </button>
+                ))}
+              </div>
             </div>
-          ) : (
-            <div className="mb-4 text-[12px] text-gray-500">추가된 항목이 없습니다.</div>
-          );
-        })()}
-        <div className="text-[12px] font-semibold text-gray-500 mb-2">새 항목 추가</div>
-        <div className="flex gap-2 mb-2">
-          <input autoComplete="off"
-            className="flex-1 min-w-0 border border-gray-300 rounded-lg px-3 py-2 text-[13px] outline-none focus:border-[#1B2B4B]"
-            placeholder="수량 (예: 2)"
-            value={_cargoAddQty}
-            onChange={e => _setCargoAddQty(e.target.value)}
-            ref={imeFocusRef}
-            onKeyDown={e => {
-              if (e.key === "Enter") {
-                const item = _cargoAddType ? `${_cargoAddQty}${_cargoAddType}` : _cargoAddQty;
-                if (item.trim()) {
-                  const newVal = _cargoEditValue ? _cargoEditValue+"+"+item.trim() : item.trim();
-                  _setCargoEditValue(newVal);
-                  cargoAddPopup.onCommit(newVal);
-                  _setCargoAddQty(""); _setCargoAddType("");
-                }
-              }
-            }}
-          />
-          <select
-            className="w-[90px] shrink-0 border border-gray-300 rounded-lg px-2 py-2 text-[12px] font-bold bg-[#1B2B4B] text-white outline-none"
-            value={_cargoAddType}
-            onChange={e => _setCargoAddType(e.target.value)}
-          >
-            <option value="">없음</option>
-            <option value="파레트">파레트</option>
-            <option value="박스">박스</option>
-            <option value="통">통</option>
-            <option value="롤">롤</option>
-          </select>
+            <div className="mt-3 h-10 px-3.5 rounded-xl bg-[#EEF3FC] flex items-center justify-between">
+              <span className="text-[12.5px] font-bold text-[#5B6B85]">추가될 항목</span>
+              <span className={`text-[14px] font-black ${pending ? "text-[#1B2B4B]" : "text-[#A7B3C6]"}`}>{pending || "—"}</span>
+            </div>
+          </div>
         </div>
-        <button className="w-full py-2 rounded-lg bg-[#1B2B4B] text-white text-[13px] font-bold mb-4"
-          onClick={() => {
-            const item = _cargoAddType ? `${_cargoAddQty}${_cargoAddType}` : _cargoAddQty;
-            if (item.trim()) {
-              const newVal = _cargoEditValue ? _cargoEditValue+"+"+item.trim() : item.trim();
-              _setCargoEditValue(newVal);
-              cargoAddPopup.onCommit(newVal);
-              _setCargoAddQty(""); _setCargoAddType("");
-            }
-          }}><EditableText id="misc.btn.7404.추가" defaultText="추가" /></button>
-        <button className="w-full py-2 rounded-xl bg-gray-100 text-gray-700 text-[13px] font-semibold"
-          onClick={() => { setCargoAddPopup(null); _setCargoAddQty(""); _setCargoAddType(""); }}><EditableText id="misc.btn.7406.닫기" defaultText="닫기" /></button>
+
+        <div className="px-6 pb-5 flex gap-2">
+          <button type="button" onClick={closeCargo}
+            className="h-11 px-5 rounded-xl border border-[#DCE3EE] bg-white text-[14px] font-black text-[#3A4A66] hover:bg-[#F5F8FD]"><EditableText id="misc.btn.7406.닫기" defaultText="닫기" /></button>
+          <button type="button" onClick={addCargo} disabled={!pending}
+            className="flex-1 h-11 rounded-xl bg-[#1B2B4B] text-white text-[14.5px] font-black hover:bg-[#0F1A30] disabled:opacity-40 disabled:cursor-not-allowed shadow-[0_8px_18px_rgba(15,26,48,0.22)]">
+            <EditableText id="misc.btn.7404.추가" defaultText="추가" /> <span className="ml-1 text-[11px] font-bold text-white/55">ENTER</span>
+          </button>
+        </div>
       </div>
-    </div>
-  </div>
-)}
+    </div>,
+    document.body
+  );
+})()}
 
     </ToastProvider>
     </EditModeProvider>
