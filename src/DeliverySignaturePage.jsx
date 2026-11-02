@@ -750,7 +750,7 @@ export default function DeliverySignaturePage() {
                           {d ? (
                             <>
                               <div className="text-[12px] font-bold text-gray-800">{d.name}</div>
-                              <div className="text-[10px] text-gray-400">{d.plate} · {formatPhone(d.phone)}</div>
+                              <div className="text-[11px] text-gray-400">{d.plate} · {formatPhone(d.phone)}</div>
                             </>
                           ) : (
                             <div className="text-[12px] text-amber-600 font-semibold">미지정</div>
@@ -798,7 +798,7 @@ export default function DeliverySignaturePage() {
                       </div>
                       <div className="text-right">
                         <div className="text-white text-[22px] font-black leading-none">{s.deliveries}</div>
-                        <div className="text-white/50 text-[10px]">배송 횟수</div>
+                        <div className="text-white/50 text-[11px]">배송 횟수</div>
                       </div>
                     </div>
                     <div className="px-4 py-3 grid grid-cols-2 gap-3">

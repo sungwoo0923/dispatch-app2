@@ -2361,7 +2361,7 @@ function FleetAttachViewer({ orderId, col = "orders", onClose }) {
           ) : items.map(it => (
             <a key={it.id} href={it.url} target="_blank" rel="noreferrer" style={{ display: "block", border: "1px solid #e5e7eb", borderRadius: 10, overflow: "hidden", textDecoration: "none" }}>
               <img src={it.url} alt={it.name} style={{ width: "100%", height: 110, objectFit: "cover", display: "block" }} />
-              <div style={{ fontSize: 10, color: "#6b7280", padding: "5px 7px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{it.name}</div>
+              <div style={{ fontSize: 11, color: "#6b7280", padding: "5px 7px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{it.name}</div>
             </a>
           ))}
         </div>
@@ -3322,7 +3322,7 @@ function DriverDocumentsPanel({ driverId }) {
         <span style={{ fontSize: 16, fontWeight: 800, color: NAVY }}>서류함 ({docs.length})</span>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <div>
-            <div style={{ fontSize: 10, color: "#9ca3af", marginBottom: 2 }}>만료일(선택)</div>
+            <div style={{ fontSize: 11, color: "#9ca3af", marginBottom: 2 }}>만료일(선택)</div>
             <input type="date" value={pendingExpiry} onChange={e => setPendingExpiry(e.target.value)}
               style={{ padding: "5px 8px", border: "1px solid #d1d5db", borderRadius: 6, fontSize: 12 }} />
           </div>
@@ -3529,10 +3529,10 @@ function DriverRouteDetailModal({ driver, dispatchData, onClose, role = "" }) {
           <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 10, padding: 12, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
             <span style={{ fontSize: 13, fontWeight: 700, color: "#6b7280" }}>기간</span>
             <CustomDatePicker value={fromDate} onChange={e => setFromDate(clampDate(e.target.value))} placeholder="시작일"
-              className="h-[34px] px-3 rounded-lg text-[13px] font-bold border border-gray-300 bg-white cursor-pointer" />
+              className="h-[34px] px-3 rounded-lg text-[13px] font-bold border border-[#DCE3EE] bg-white cursor-pointer" />
             <span style={{ color: "#9ca3af" }}>~</span>
             <CustomDatePicker value={toDate} onChange={e => setToDate(clampDate(e.target.value))} placeholder="종료일"
-              className="h-[34px] px-3 rounded-lg text-[13px] font-bold border border-gray-300 bg-white cursor-pointer" />
+              className="h-[34px] px-3 rounded-lg text-[13px] font-bold border border-[#DCE3EE] bg-white cursor-pointer" />
             <button onClick={() => { setFromDate(todayForRange); setToDate(todayForRange); }}
               style={{ padding: "6px 10px", borderRadius: 6, border: "1px solid #d1d5db", background: "#fff", fontSize: 13, cursor: "pointer" }}>
               오늘로 초기화
@@ -4080,10 +4080,10 @@ function RouteManagementTab({ drivers, dispatchData, liveDrivers = [], staff = [
             바꾸고 아직 조회를 안 누른 상태면(draft !== applied) 버튼이 깜빡여 클릭을
             유도한다. */}
         <CustomDatePicker value={rangeStart} onChange={(e) => { setDayMode(""); setRangeStart(e.target.value); }}
-          placeholder="시작일" className="h-[34px] px-3 rounded-lg text-[13px] font-bold border border-gray-300 bg-white cursor-pointer" />
+          placeholder="시작일" className="h-[34px] px-3 rounded-lg text-[13px] font-bold border border-[#DCE3EE] bg-white cursor-pointer" />
         <span style={{ color: "#9ca3af", fontSize: 13 }}>~</span>
         <CustomDatePicker value={rangeEnd} onChange={(e) => { setDayMode(""); setRangeEnd(e.target.value); }}
-          placeholder="종료일" className="h-[34px] px-3 rounded-lg text-[13px] font-bold border border-gray-300 bg-white cursor-pointer" />
+          placeholder="종료일" className="h-[34px] px-3 rounded-lg text-[13px] font-bold border border-[#DCE3EE] bg-white cursor-pointer" />
         <button
           onClick={() => { if (!rangeStart || !rangeEnd) return; if (rangeStart > rangeEnd) { window.alert("시작일이 종료일보다 늦을 수 없습니다."); return; } setAppliedStart(rangeStart); setAppliedEnd(rangeEnd); }}
           className={rangeStart && rangeEnd && (rangeStart !== appliedStart || rangeEnd !== appliedEnd) ? "animate-pulse" : ""}
@@ -4882,10 +4882,10 @@ function FleetSettlementTab({ drivers = [], dispatchData = [], role = "", compan
             {drivers.map(d => <option key={d.id} value={d.id}>{d.이름} ({d.차량번호})</option>)}
           </CustomSelect>
           <CustomDatePicker value={rangeStart} onChange={e => setRangeStart(e.target.value)} placeholder="시작일"
-            className="h-[34px] px-3 rounded-lg text-[13px] font-bold border border-gray-300 bg-white cursor-pointer" />
+            className="h-[34px] px-3 rounded-lg text-[13px] font-bold border border-[#DCE3EE] bg-white cursor-pointer" />
           <span style={{ color: "#9ca3af", fontSize: 13 }}>~</span>
           <CustomDatePicker value={rangeEnd} onChange={e => setRangeEnd(e.target.value)} placeholder="종료일"
-            className="h-[34px] px-3 rounded-lg text-[13px] font-bold border border-gray-300 bg-white cursor-pointer" />
+            className="h-[34px] px-3 rounded-lg text-[13px] font-bold border border-[#DCE3EE] bg-white cursor-pointer" />
           <div style={{ display: "flex", gap: 4 }}>
             <button onClick={setThisMonth} style={{ padding: "7px 12px", borderRadius: 7, border: "none", background: "#f3f4f6", color: "#6b7280", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>이번달</button>
             <button onClick={setLastMonth} style={{ padding: "7px 12px", borderRadius: 7, border: "none", background: "#f3f4f6", color: "#6b7280", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>지난달</button>

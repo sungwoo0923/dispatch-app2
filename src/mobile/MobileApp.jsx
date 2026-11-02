@@ -7082,9 +7082,9 @@ function MobileSalesPage({ data = [], fixedData = [], onBack, cardVersionB = fal
             <div key={i} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-2.5 flex flex-col items-center text-center gap-1">
               <Dial pct={k.pct} color={k.color} size={52} />
               <div className="w-full min-w-0">
-                <div className="text-[9px] text-gray-400 font-semibold leading-tight">{k.label}</div>
-                <div className="text-[12px] font-extrabold leading-tight text-gray-900">{fmtWon(k.value)}<span className="text-[9px] font-normal text-gray-400 ml-0.5">원</span></div>
-                <div className="text-[9px] text-gray-400 mt-0.5">{k.sub}</div>
+                <div className="text-[11px] text-gray-500 font-semibold leading-tight">{k.label}</div>
+                <div className="text-[12px] font-extrabold leading-tight text-gray-900">{fmtWon(k.value)}<span className="text-[10px] font-normal text-gray-400 ml-0.5">원</span></div>
+                <div className="text-[10.5px] text-gray-400 mt-0.5">{k.sub}</div>
               </div>
             </div>
           ))}
@@ -12784,8 +12784,8 @@ const handleAssignClick = () => {
                     {editingDriverId === (d.id || i) ? (
                       <div className="px-4 py-3 bg-blue-50">
                         <div className="text-[11px] font-semibold text-gray-500 mb-1">{d.차량번호}</div>
-                        <input autoComplete="off" className="w-full border border-gray-300 rounded-lg px-2 py-1 text-sm mb-1.5 focus:outline-none focus:border-blue-400" placeholder="기사 이름" value={editingDriverData.이름} onChange={e => setEditingDriverData(p => ({ ...p, 이름: e.target.value }))} onPointerDown={e => e.stopPropagation()} />
-                        <input autoComplete="off" className="w-full border border-gray-300 rounded-lg px-2 py-1 text-sm mb-2 focus:outline-none focus:border-blue-400" placeholder="전화번호" inputMode="tel" value={editingDriverData.전화번호} onChange={e => setEditingDriverData(p => ({ ...p, 전화번호: formatPhoneLive(e.target.value) }))} onPointerDown={e => e.stopPropagation()} />
+                        <input autoComplete="off" className="w-full border border-gray-300 rounded-lg px-2 py-1 text-sm mb-1.5 focus:outline-none focus:border-[#1B2B4B]" placeholder="기사 이름" value={editingDriverData.이름} onChange={e => setEditingDriverData(p => ({ ...p, 이름: e.target.value }))} onPointerDown={e => e.stopPropagation()} />
+                        <input autoComplete="off" className="w-full border border-gray-300 rounded-lg px-2 py-1 text-sm mb-2 focus:outline-none focus:border-[#1B2B4B]" placeholder="전화번호" inputMode="tel" value={editingDriverData.전화번호} onChange={e => setEditingDriverData(p => ({ ...p, 전화번호: formatPhoneLive(e.target.value) }))} onPointerDown={e => e.stopPropagation()} />
                         <div className="flex gap-2">
                           <button type="button" className="flex-1 py-1.5 rounded-lg bg-blue-600 text-white text-xs font-bold"
                             onPointerDown={async (e) => { e.preventDefault(); if (!editingDriverData.이름.trim()) return; await updateDoc(doc(db, "drivers", d.id), { 이름: editingDriverData.이름, 전화번호: editingDriverData.전화번호 }); setSmartMatched(prev => prev.map(m => m.id === d.id ? { ...m, 이름: editingDriverData.이름, 전화번호: editingDriverData.전화번호 } : m)); setEditingDriverId(null); }}>저장</button>
@@ -12814,15 +12814,15 @@ const handleAssignClick = () => {
         // 가로로 나란히 정렬해서 잘리지 않고 다 보이게 한다.
         <div className="grid grid-cols-3 gap-2 mb-3 [@media(max-aspect-ratio:2/5)]:!grid-cols-1 [@media(max-aspect-ratio:2/5)]:!gap-1.5">
           <div className="text-center bg-gray-50 rounded-xl py-2 px-1 min-w-0 [@media(max-aspect-ratio:2/5)]:!flex [@media(max-aspect-ratio:2/5)]:!items-center [@media(max-aspect-ratio:2/5)]:!justify-between [@media(max-aspect-ratio:2/5)]:!text-left [@media(max-aspect-ratio:2/5)]:!px-3">
-            <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-0.5 [@media(max-aspect-ratio:2/5)]:!mb-0 shrink-0">차량번호</div>
+            <div className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-0.5 [@media(max-aspect-ratio:2/5)]:!mb-0 shrink-0">차량번호</div>
             <div className="text-[12px] font-bold text-gray-800 truncate">{carNo || "-"}</div>
           </div>
           <div className="text-center bg-gray-50 rounded-xl py-2 px-1 min-w-0 [@media(max-aspect-ratio:2/5)]:!flex [@media(max-aspect-ratio:2/5)]:!items-center [@media(max-aspect-ratio:2/5)]:!justify-between [@media(max-aspect-ratio:2/5)]:!text-left [@media(max-aspect-ratio:2/5)]:!px-3">
-            <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-0.5 [@media(max-aspect-ratio:2/5)]:!mb-0 shrink-0">이름</div>
+            <div className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-0.5 [@media(max-aspect-ratio:2/5)]:!mb-0 shrink-0">이름</div>
             <div className="text-[12px] font-bold text-gray-800 truncate">{name || "-"}</div>
           </div>
           <div className="text-center bg-gray-50 rounded-xl py-2 px-1 min-w-0 [@media(max-aspect-ratio:2/5)]:!flex [@media(max-aspect-ratio:2/5)]:!items-center [@media(max-aspect-ratio:2/5)]:!justify-between [@media(max-aspect-ratio:2/5)]:!text-left [@media(max-aspect-ratio:2/5)]:!px-3">
-            <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-0.5 [@media(max-aspect-ratio:2/5)]:!mb-0 shrink-0">연락처</div>
+            <div className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-0.5 [@media(max-aspect-ratio:2/5)]:!mb-0 shrink-0">연락처</div>
             <div className="text-[12px] font-bold text-gray-800 truncate">{phone || "-"}</div>
           </div>
         </div>
@@ -13347,9 +13347,9 @@ const handleAssignClick = () => {
                             <button key={label}
                               onClick={() => applyFareDirectly(value, null)}
                               className="rounded-xl border border-gray-200 bg-gray-50 py-2.5 text-center active:scale-95 transition">
-                              <div className="text-[9px] font-bold text-gray-400 mb-1">{label}</div>
+                              <div className="text-[11px] font-bold text-gray-500 mb-1">{label}</div>
                               <div className="text-[15px] font-extrabold text-[#1B2B4B]">{value.toLocaleString()}</div>
-                              <div className="text-[9px] text-gray-400 mt-0.5">{sub}</div>
+                              <div className="text-[10.5px] text-gray-400 mt-0.5 leading-tight">{sub}</div>
                             </button>
                           ))}
                         </div>
@@ -16581,9 +16581,9 @@ const pickDrop = (c) => {
                                 showToast(`운임 적용: ${value.toLocaleString()}원`);
                               }}
                               className="rounded-xl border border-gray-200 bg-gray-50 py-2.5 text-center active:scale-95 transition">
-                              <div className="text-[9px] font-bold text-gray-400 mb-1">{label}</div>
+                              <div className="text-[11px] font-bold text-gray-500 mb-1">{label}</div>
                               <div className="text-[15px] font-extrabold text-[#1B2B4B]">{value.toLocaleString()}</div>
-                              <div className="text-[9px] text-gray-400 mt-0.5">{sub}</div>
+                              <div className="text-[10.5px] text-gray-400 mt-0.5 leading-tight">{sub}</div>
                             </button>
                           ))}
                         </div>
@@ -19606,7 +19606,7 @@ function MobileFareInquiry({ cardVersionB = false }) {
                 ...(result.viaCount>0?[{l:"경유비",v:`${mFmt(result.viaFee)}(${result.viaCount}곳)`}]:[]),
               ].map(({l,v})=>(
                 <div key={l} className="bg-white/6 rounded-xl px-3 py-2">
-                  <div className="text-[9px] text-white/35 font-semibold">{l}</div>
+                  <div className="text-[11px] text-white/55 font-semibold">{l}</div>
                   <div className="text-[11px] font-bold text-white/85">{v}</div>
                 </div>
               ))}
@@ -20984,11 +20984,11 @@ function MobileRateCard({ dispatchData = [], onBack, cardVersionB = false, userC
           <div className="grid grid-cols-2 gap-2">
             <div>
               <div className="text-[11px] font-semibold text-gray-500 mb-1">상차지역 *</div>
-              <input autoComplete="off" className="w-full border border-gray-200 rounded-xl px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400 bg-gray-50" placeholder="예: 인천" value={pickup} onChange={e=>setPickup(e.target.value)} />
+              <input autoComplete="off" className="w-full border border-gray-200 rounded-xl px-3 py-2 text-[13px] focus:outline-none focus:border-[#1B2B4B] bg-gray-50" placeholder="예: 인천" value={pickup} onChange={e=>setPickup(e.target.value)} />
             </div>
             <div>
               <div className="text-[11px] font-semibold text-gray-500 mb-1">하차지역 *</div>
-              <input autoComplete="off" className="w-full border border-gray-200 rounded-xl px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400 bg-gray-50" placeholder="예: 부산" value={drop} onChange={e=>setDrop(e.target.value)} />
+              <input autoComplete="off" className="w-full border border-gray-200 rounded-xl px-3 py-2 text-[13px] focus:outline-none focus:border-[#1B2B4B] bg-gray-50" placeholder="예: 부산" value={drop} onChange={e=>setDrop(e.target.value)} />
             </div>
           </div>
 

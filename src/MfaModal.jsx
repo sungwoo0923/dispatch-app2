@@ -254,7 +254,7 @@ export function MfaEnrollSection({ user: userProp }) {
     } catch (e) { setMsg({ type: "err", text: mfaErrorText(e) }); } finally { setBusy(""); }
   };
 
-  const input = "w-full border border-gray-300 rounded-xl px-3.5 py-2.5 text-[14px] outline-none focus:border-[#1B2B4B] bg-white";
+  const input = "w-full border border-[#DCE3EE] rounded-xl px-3.5 py-2.5 text-[14px] outline-none focus:border-[#1B2B4B] bg-white";
   return (
     <div className="space-y-3">
       {mfaUi}
@@ -452,7 +452,7 @@ export function PcVerifySection({ user: userProp, phone }) {
       setMsg({ type: "ok", text: "예전 방식(모바일에도 걸리던 인증)을 해제했습니다." });
     } catch (e) { setMsg({ type: "err", text: mfaErrorText(e) }); } finally { setBusy(""); }
   };
-  const input = "w-full border border-gray-300 rounded-xl px-3.5 py-2.5 text-[14px] outline-none focus:border-[#1B2B4B] bg-white";
+  const input = "w-full border border-[#DCE3EE] rounded-xl px-3.5 py-2.5 text-[14px] outline-none focus:border-[#1B2B4B] bg-white";
 
   return (
     <div className="space-y-3">
@@ -503,7 +503,7 @@ export function PcVerifySection({ user: userProp, phone }) {
             <button onClick={startSend} disabled={busy === "send"} className="flex-1 py-3 rounded-xl bg-[#1B2B4B] text-white text-[14px] font-bold hover:bg-[#243a60] disabled:opacity-60">
               {busy === "send" ? "문자 보내는 중…" : "인증번호 받기"}
             </button>
-            {editing && <button onClick={() => setEditing(false)} className="px-4 py-3 rounded-xl border border-gray-300 text-[14px] font-bold text-gray-600">취소</button>}
+            {editing && <button onClick={() => setEditing(false)} className="px-4 py-3 rounded-xl border border-[#DCE3EE] text-[14px] font-bold text-gray-600">취소</button>}
           </div>
         </div>
       )}

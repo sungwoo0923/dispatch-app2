@@ -1584,7 +1584,7 @@ function ShipperOrderM({ user, userData, orders = [], showToast, onDone, onBack,
         </div>
       )}
 
-      <style>{`.input-m { width: 100%; border: 1px solid #e5e7eb; border-radius: 8px; padding: 8px 10px; font-size: 14px; background: white; outline: none; box-sizing: border-box; }`}</style>
+      <style>{`.input-m { width: 100%; border: 1px solid #DCE3EE; border-radius: 10px; padding: 8px 10px; font-size: 14px; color: #0F1A30; background: white; outline: none; box-sizing: border-box; } .input-m:focus { border-color: #1B2B4B; box-shadow: 0 0 0 3px rgba(27,43,75,0.12); } .input-m::placeholder { color: #A7B3C6; }`}</style>
     </div>
   );
 }
@@ -2132,7 +2132,7 @@ function ShipperMyPageM({ user, userData, onBack, showToast, orders }) {
               {pwSaving ? "변경 중..." : "비밀번호 변경"}
             </button>
           </div>
-          <style>{`.input-m { width: 100%; border: 1px solid #e5e7eb; border-radius: 8px; padding: 8px 10px; font-size: 14px; background: white; outline: none; box-sizing: border-box; }`}</style>
+          <style>{`.input-m { width: 100%; border: 1px solid #DCE3EE; border-radius: 10px; padding: 8px 10px; font-size: 14px; color: #0F1A30; background: white; outline: none; box-sizing: border-box; } .input-m:focus { border-color: #1B2B4B; box-shadow: 0 0 0 3px rgba(27,43,75,0.12); } .input-m::placeholder { color: #A7B3C6; }`}</style>
         </MCard>
       )}
     </div>
@@ -2357,7 +2357,7 @@ function ShipperInquiryM({ user, userData, onBack, showToast }) {
               {submitting ? "등록 중..." : "문의 등록"}
             </button>
           </div>
-          <style>{`.input-m { width: 100%; border: 1px solid #e5e7eb; border-radius: 8px; padding: 8px 10px; font-size: 14px; background: white; outline: none; box-sizing: border-box; }`}</style>
+          <style>{`.input-m { width: 100%; border: 1px solid #DCE3EE; border-radius: 10px; padding: 8px 10px; font-size: 14px; color: #0F1A30; background: white; outline: none; box-sizing: border-box; } .input-m:focus { border-color: #1B2B4B; box-shadow: 0 0 0 3px rgba(27,43,75,0.12); } .input-m::placeholder { color: #A7B3C6; }`}</style>
         </MCard>
       )}
     </div>

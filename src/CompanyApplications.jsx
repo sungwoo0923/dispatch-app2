@@ -814,7 +814,7 @@ export default function CompanyApplications() {
                           </span>
                         )}
                         {app.status === "approved" && app.companyCode && (
-                          <div className="text-[10px] text-gray-400 font-mono">{app.companyCode}</div>
+                          <div className="text-[11px] text-gray-400 font-mono">{app.companyCode}</div>
                         )}
                         {app.status === "approved" && app.userStatus === "suspended" && (
                           <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-semibold bg-gray-100 text-gray-500 border border-gray-200">
@@ -1156,7 +1156,7 @@ export default function CompanyApplications() {
                         />
                         <div className="text-center">
                           <div className="text-[12px] font-semibold text-gray-800"><EditableText id={`companyApp.managingApp.perm.${key}.label`} defaultText={label} /></div>
-                          <div className="text-[10px] text-gray-400 leading-tight"><EditableText id={`companyApp.managingApp.perm.${key}.desc`} defaultText={desc} /></div>
+                          <div className="text-[11px] text-gray-400 leading-tight"><EditableText id={`companyApp.managingApp.perm.${key}.desc`} defaultText={desc} /></div>
                         </div>
                       </label>
                     ))}</div>

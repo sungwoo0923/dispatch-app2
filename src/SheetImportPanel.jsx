@@ -367,7 +367,7 @@ export default function SheetImportPanel() {
     try { const r = await callApi("sheetImport", { action: "cancel", batchId: b.id }); alert(`${r.removed.toLocaleString()}건을 지웠습니다.`); } catch (e) { alert(e.message); } finally { setBusy(""); }
   };
 
-  const input = "w-full border border-gray-300 rounded-xl px-3.5 py-2.5 text-[14.5px] outline-none focus:border-[#1B2B4B] bg-white";
+  const input = "w-full border border-[#DCE3EE] rounded-xl px-3.5 py-2.5 text-[14.5px] outline-none focus:border-[#1B2B4B] bg-white";
   const problems = checked ? checked.rows.filter((r) => r.__problems.length && inRange(r)) : [];
   const dups = checked ? checked.rows.filter((r) => r.__dup && inRange(r)) : [];
   const outOfRange = checked ? checked.rows.filter((r) => !inRange(r)).length : 0;
@@ -401,7 +401,7 @@ export default function SheetImportPanel() {
                   먼저 그 시트의 <b>공유</b>에 아래 주소를 <b>뷰어</b>로 추가해 주세요(시트 내용은 바뀌지 않습니다).
                   <div className="mt-1.5 flex items-center gap-2">
                     <code className="px-2 py-1 rounded-md bg-white border border-[#E3E8F0] text-[12.5px] text-[#1B2B4B] break-all">{SERVICE_EMAIL}</code>
-                    <button onClick={() => navigator.clipboard?.writeText(SERVICE_EMAIL)} className="shrink-0 px-2.5 py-1 rounded-md border border-gray-300 text-[12px] font-bold text-gray-600 bg-white">복사</button>
+                    <button onClick={() => navigator.clipboard?.writeText(SERVICE_EMAIL)} className="shrink-0 px-2.5 py-1 rounded-md border border-[#DCE3EE] text-[12px] font-bold text-gray-600 bg-white">복사</button>
                   </div>
                 </div>
               </>
@@ -434,7 +434,7 @@ export default function SheetImportPanel() {
                     <span className="text-[12.5px] text-gray-500">약 {Math.max(0, t.rowCount - 1).toLocaleString()}줄</span>
                     {on && (
                       <label className="ml-auto flex items-center gap-1.5 text-[12.5px] text-gray-600">제목줄
-                        <CustomSelect value={hr} onChange={(e) => { setPicked((p) => ({ ...p, [t.title]: +e.target.value })); setChecked(null); }} className="border border-gray-300 rounded-md px-1.5 py-0.5 bg-white" disabled={book.source !== "excel" && false}>
+                        <CustomSelect value={hr} onChange={(e) => { setPicked((p) => ({ ...p, [t.title]: +e.target.value })); setChecked(null); }} className="border border-[#DCE3EE] rounded-md px-1.5 py-0.5 bg-white" disabled={book.source !== "excel" && false}>
                           {[0, 1, 2, 3, 4, 5].map((n) => <option key={n} value={n}>{n + 1}번째 줄</option>)}
                         </CustomSelect>
                       </label>
@@ -456,13 +456,13 @@ export default function SheetImportPanel() {
       {book && pickedTabs.length > 0 && (
         <section className={`${CARD} p-6`}>
           <Head eyebrow="STEP 3" title="칸 맞추기" desc="시트의 어떤 칸이 프로그램의 어떤 항목인지 연결합니다. 제목이 비슷하면 자동으로 연결되며, 다르면 직접 골라주세요."
-            right={<button onClick={() => setMapping(autoMap(allHeaders))} className="px-3.5 py-2 rounded-xl border border-gray-300 text-[13px] font-bold text-gray-600 hover:bg-gray-50">자동으로 다시 맞추기</button>} />
+            right={<button onClick={() => setMapping(autoMap(allHeaders))} className="px-3.5 py-2 rounded-xl border border-[#DCE3EE] text-[13px] font-bold text-gray-600 hover:bg-gray-50">자동으로 다시 맞추기</button>} />
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-x-5 gap-y-3">
             {FIELDS.map((f) => (
               <label key={f.key} className="flex items-center gap-3">
                 <span className="w-[86px] shrink-0 text-[14px] font-bold text-[#0F1A30]">{f.label || f.key}{f.req && <span className="text-red-500"> *</span>}</span>
                 <CustomSelect value={mapping[f.key] || ""} onChange={(e) => { setMapping((m) => ({ ...m, [f.key]: e.target.value })); setChecked(null); }}
-                  className={`flex-1 min-w-0 border rounded-xl px-3 py-2 text-[14px] bg-white outline-none ${mapping[f.key] ? "border-[#1B2B4B]/40 text-[#0F1A30] font-semibold" : f.req ? "border-red-300 text-gray-400" : "border-gray-300 text-gray-400"}`}>
+                  className={`flex-1 min-w-0 border rounded-xl px-3 py-2 text-[14px] bg-white outline-none ${mapping[f.key] ? "border-[#1B2B4B]/40 text-[#0F1A30] font-semibold" : f.req ? "border-red-300 text-gray-400" : "border-[#DCE3EE] text-gray-400"}`}>
                   <option value="">— 가져오지 않음 —</option>
                   {allHeaders.map((h) => <option key={h} value={h}>{h}</option>)}
                 </CustomSelect>

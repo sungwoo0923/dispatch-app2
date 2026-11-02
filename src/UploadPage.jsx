@@ -1238,7 +1238,7 @@ const UPLOAD_CSS = `
 function InfoBox({ label, value }) {
   return (
     <div style={{ borderBottom: "2px solid #e2e8f0", padding: "0 2px 8px" }}>
-      <div style={{ fontSize: 10, color: "#94a3b8", fontWeight: 600, marginBottom: 4 }}>{label}</div>
+      <div style={{ fontSize: 11, color: "#94a3b8", fontWeight: 600, marginBottom: 4 }}>{label}</div>
       {/* lineHeight를 명시하지 않으면 숫자만 있는 값(전화번호 등)이 한글이 섞인 값보다
           글꼴 세로 정렬 기준이 달라 밑줄에서 붕 뜬 것처럼 위로 치우쳐 보였다 — 모든
           필드가 동일한 기준선을 갖도록 고정 line-height를 준다. */}

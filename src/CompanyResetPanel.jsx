@@ -192,7 +192,7 @@ export default function CompanyResetPanel() {
     attempt(j);
   };
 
-  const input = "w-full border border-gray-300 rounded-xl px-3.5 py-2.5 text-[14px] outline-none focus:border-[#1B2B4B]";
+  const input = "w-full border border-[#DCE3EE] rounded-xl px-3.5 py-2.5 text-[14px] outline-none focus:border-[#1B2B4B]";
   const sel = companies.find((c) => c.name === company);
 
   return (
@@ -217,7 +217,7 @@ export default function CompanyResetPanel() {
             <input type="password" placeholder="새 비밀번호 확인" value={pwForm.pw2} onChange={(e) => setPwForm({ ...pwForm, pw2: e.target.value })} className={input} />
             <div className="flex gap-2">
               <button onClick={savePassword} disabled={busy === "pw"} className="flex-1 py-2.5 rounded-xl bg-[#1B2B4B] text-white text-[14px] font-bold disabled:opacity-60">{busy === "pw" ? "저장 중…" : "저장"}</button>
-              <button onClick={() => setPwForm(null)} className="px-4 py-2.5 rounded-xl border border-gray-300 text-[14px] font-bold text-gray-600">취소</button>
+              <button onClick={() => setPwForm(null)} className="px-4 py-2.5 rounded-xl border border-[#DCE3EE] text-[14px] font-bold text-gray-600">취소</button>
             </div>
           </div>
         ) : (
@@ -232,7 +232,7 @@ export default function CompanyResetPanel() {
           <div className="space-y-3">
             <label className="block">
               <span className="text-[13px] font-semibold text-gray-600">초기화할 운송사</span>
-              <CustomSelect value={company} onChange={(e) => setCompany(e.target.value)} className="mt-1.5 w-full h-[46px] px-3.5 rounded-xl border border-gray-300 text-[15px] font-semibold outline-none focus:border-[#1B2B4B] bg-white">
+              <CustomSelect value={company} onChange={(e) => setCompany(e.target.value)} className="mt-1.5 w-full h-[46px] px-3.5 rounded-xl border border-[#DCE3EE] text-[15px] font-semibold outline-none focus:border-[#1B2B4B] bg-white">
                 <option value="">운송사 선택</option>
                 {companies.map((c) => (
                   <option key={c.name} value={c.name}>{c.name}{c.code ? ` (${c.code})` : ""} · 계정 {c.users}명</option>
@@ -256,7 +256,7 @@ export default function CompanyResetPanel() {
       <section className={`${CARD} overflow-hidden`}>
         <div className="px-6 pt-6">
           <Head eyebrow="BACKUP" title="초기화 보관함" desc={`초기화한 데이터를 ${keepDays}일 동안 보관합니다. [복원]을 누르면 초기화 전 상태 그대로 돌아옵니다.`}
-            right={<button onClick={load} className="px-3.5 py-2 rounded-xl border border-gray-300 text-[13px] font-bold text-gray-600 hover:bg-gray-50">새로고침</button>} />
+            right={<button onClick={load} className="px-3.5 py-2 rounded-xl border border-[#DCE3EE] text-[13px] font-bold text-gray-600 hover:bg-gray-50">새로고침</button>} />
         </div>
         {backups === null ? (
           <div className="text-[14px] text-gray-500 text-center pb-10">불러오는 중…</div>
@@ -316,7 +316,7 @@ export default function CompanyResetPanel() {
                 placeholder="초기화 비밀번호" className="w-full border-2 border-gray-200 rounded-xl px-4 py-3.5 text-[17px] outline-none text-center tracking-[0.3em] focus:border-[#1B2B4B]" />
               {execErr && <div className="text-[13px] font-semibold text-red-600 text-center">{execErr}</div>}
               <div className="grid grid-cols-2 gap-2.5">
-                <button onClick={() => setAskPw(null)} className="py-3 rounded-xl border border-gray-300 text-[14.5px] font-bold text-gray-700">취소</button>
+                <button onClick={() => setAskPw(null)} className="py-3 rounded-xl border border-[#DCE3EE] text-[14.5px] font-bold text-gray-700">취소</button>
                 <button onClick={run} className={`py-3 rounded-xl text-white text-[14.5px] font-bold ${askPw.mode === "restore" ? "bg-[#1B2B4B]" : "bg-red-600"}`}>
                   {askPw.mode === "restore" ? "복원 시작" : "초기화 시작"}
                 </button>

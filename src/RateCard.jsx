@@ -166,7 +166,7 @@ const trimmedStats = (fares, rawRows) => {
 };
 
 const confidence = (c) => {
-  if (c>=10) return { label:"높음", color:"text-gray-700", bg:"bg-gray-100 border-gray-300" };
+  if (c>=10) return { label:"높음", color:"text-gray-700", bg:"bg-gray-100 border-[#DCE3EE]" };
   if (c>=4)  return { label:"보통", color:"text-gray-600",   bg:"bg-gray-100 border-gray-200" };
   return           { label:"낮음", color:"text-gray-500",    bg:"bg-gray-50 border-gray-200" };
 };
@@ -821,7 +821,7 @@ ${sheet.note ? `<div class="notice">${esc(sheet.note)}</div>` : ""}
 
 
   const today=new Date().toLocaleDateString("ko-KR");
-  const inputCls="w-full px-1 py-2 text-[13px] font-medium border-0 border-b-2 border-gray-300 bg-transparent focus:border-[#1B2B4B] focus:outline-none placeholder:text-gray-400 transition";
+  const inputCls="w-full px-1 py-2 text-[13px] font-medium border-0 border-b-2 border-[#DCE3EE] bg-transparent focus:border-[#1B2B4B] focus:outline-none placeholder:text-gray-400 transition";
   const labelCls="block text-[12px] font-bold text-gray-900 mb-1";
 
   // ⭐ 2026-10-29 리디자인 — 매출관리·배차현황과 같은 왼쪽 속메뉴(KpSubNav) + 네이비 디지털 카드
@@ -1579,7 +1579,7 @@ ${sheet.note ? `<div class="notice">${esc(sheet.note)}</div>` : ""}
                     localStorage.setItem("rateCardHistory", JSON.stringify(next));
                     setPrintHistory(next);
                     setHistorySelected(new Set());
-                  }} className="px-3 py-1.5 text-[12px] text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 transition">선택 삭제 ({historySelected.size})</button>
+                  }} className="px-3 py-1.5 text-[12px] text-gray-600 border border-[#DCE3EE] rounded-lg hover:bg-gray-50 transition">선택 삭제 ({historySelected.size})</button>
                 )}
                 {printHistory.length > 0 && (
                   <button onClick={() => { if(window.confirm("전체 이력을 삭제할까요?")) { localStorage.removeItem("rateCardHistory"); setPrintHistory([]); setHistorySelected(new Set()); }}} className="px-3 py-1.5 text-[12px] text-gray-500 border border-gray-200 rounded-lg hover:bg-gray-50 transition">전체 삭제</button>
@@ -1600,7 +1600,7 @@ ${sheet.note ? `<div class="notice">${esc(sheet.note)}</div>` : ""}
                       <div key={i} className={`flex items-start gap-3 p-3 rounded-xl border transition cursor-pointer ${historySelected.has(i) ? "border-[#1B2B4B] bg-gray-50" : "border-gray-100 bg-white hover:bg-gray-50"}`}
                         onClick={() => setHistorySelected(prev => { const n = new Set(prev); n.has(i) ? n.delete(i) : n.add(i); return n; })}
                         onDoubleClick={() => setHistoryDetailModal(h)}>
-                        <input autoComplete="off" type="checkbox" readOnly checked={historySelected.has(i)} className="mt-1 w-4 h-4 rounded border-gray-300 accent-[#1B2B4B] shrink-0" />
+                        <input autoComplete="off" type="checkbox" readOnly checked={historySelected.has(i)} className="mt-1 w-4 h-4 rounded border-[#DCE3EE] accent-[#1B2B4B] shrink-0" />
                         <div className="mt-0.5 w-6 h-6 rounded flex items-center justify-center text-[11px] font-bold flex-shrink-0 bg-gray-200 text-gray-600">
                           {h.source === "manual" ? "수" : "자"}
                         </div>

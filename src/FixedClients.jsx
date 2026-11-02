@@ -67,7 +67,7 @@ function FCAttachViewer({ row, onClose }) {
               <img src={selected.base64 || selected.url} alt={selected.name} className="max-w-full max-h-[60vh] rounded-lg object-contain"/>
               <div className="flex gap-2">
                 <button onClick={() => handleDownload(selected)} className="px-4 py-2 rounded-lg bg-[#1B2B4B] text-white text-[12px] font-semibold hover:bg-[#243a60]">다운로드</button>
-                <button onClick={() => setSelected(null)} className="px-4 py-2 rounded-lg border border-gray-300 text-gray-600 text-[12px] font-semibold hover:bg-gray-50">목록으로</button>
+                <button onClick={() => setSelected(null)} className="px-4 py-2 rounded-lg border border-[#DCE3EE] text-gray-600 text-[12px] font-semibold hover:bg-gray-50">목록으로</button>
               </div>
             </div>
           ) : (
@@ -81,7 +81,7 @@ function FCAttachViewer({ row, onClose }) {
                       <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
                     )}
                   </div>
-                  <div className="px-2 py-1.5 text-[10px] text-gray-500 truncate">{item.name || "파일"}</div>
+                  <div className="px-2 py-1.5 text-[11px] text-gray-500 truncate">{item.name || "파일"}</div>
                 </div>
               ))}
             </div>
@@ -166,7 +166,7 @@ function DriverSearchInput({ value, onChange, onSelect, drivers, placeholder = "
   return (
     <div ref={wrapperRef} className={`relative ${className}`}>
       <input
-        className="w-full border border-gray-200 rounded-lg px-2 py-1 text-[12px] text-center"
+        className="w-full border border-[#DCE3EE] rounded-xl px-2 py-1.5 text-[13px] font-semibold text-[#0F1A30] text-center outline-none focus:border-[#4B6CB7]"
         placeholder={placeholder}
         value={query}
         onChange={e => { setQuery(e.target.value); onChange(e.target.value); setOpen(true); }}
@@ -219,13 +219,13 @@ function TonnageInput({ value, onChange }) {
     <div className="flex gap-1">
       <input
         type="text"
-        className="flex-1 border border-gray-200 rounded-lg px-2 py-1.5 text-[13px] min-w-0"
+        className="flex-1 border border-[#DCE3EE] rounded-xl px-2.5 py-1.5 text-[13.5px] font-semibold text-[#0F1A30] bg-white outline-none focus:border-[#4B6CB7] min-w-0"
         value={num}
         placeholder="수치"
         onChange={e => { setNum(e.target.value); emit(e.target.value, unit); }}
       />
       <CustomSelect
-        className="border border-gray-200 rounded-lg px-1 py-1.5 text-[13px] shrink-0"
+        className="border border-[#DCE3EE] rounded-xl px-1.5 py-1.5 text-[13.5px] font-semibold text-[#0F1A30] bg-white outline-none shrink-0"
         value={unit}
         onChange={e => { setUnit(e.target.value); emit(num, e.target.value); }}
       >
@@ -271,7 +271,7 @@ function ClientNameInput({ value, onChange, onSelect, rows, getClientConfigs, pl
     <div ref={wrapperRef} className="relative">
       <input
         type="text"
-        className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-[13px] focus:outline-none focus:border-[#1B2B4B]"
+        className="w-full border border-[#DCE3EE] rounded-xl px-2.5 py-1.5 text-[13.5px] font-semibold text-[#0F1A30] bg-white outline-none focus:border-[#4B6CB7] focus:outline-none focus:border-[#1B2B4B]"
         value={query}
         placeholder={placeholder}
         onChange={e => { setQuery(e.target.value); onChange?.(e.target.value); setOpen(true); }}
@@ -370,11 +370,11 @@ function FastRowCard({ idx, row, drivers, rows, getClientConfigs, onUpdate, onSe
       </div>
       <div className="grid grid-cols-3 gap-3">
         <div>
-          <label className="block text-[11px] font-semibold text-gray-500 mb-1">날짜</label>
-          <input type="date" className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-[13px]" value={row.날짜} onChange={e => onUpdate("날짜", e.target.value)} />
+          <label className="block text-[12px] font-bold text-[#5B6B85] mb-1">날짜</label>
+          <input type="date" className="w-full border border-[#DCE3EE] rounded-xl px-2.5 py-1.5 text-[13.5px] font-semibold text-[#0F1A30] bg-white outline-none focus:border-[#4B6CB7]" value={row.날짜} onChange={e => onUpdate("날짜", e.target.value)} />
         </div>
         <div>
-          <label className="block text-[11px] font-semibold text-gray-500 mb-1">거래처명</label>
+          <label className="block text-[12px] font-bold text-[#5B6B85] mb-1">거래처명</label>
           <ClientNameInput
             value={row.거래처명 || ""}
             rows={rows}
@@ -384,43 +384,43 @@ function FastRowCard({ idx, row, drivers, rows, getClientConfigs, onUpdate, onSe
           />
         </div>
         <div>
-          <label className="block text-[11px] font-semibold text-gray-500 mb-1">톤수</label>
+          <label className="block text-[12px] font-bold text-[#5B6B85] mb-1">톤수</label>
           <TonnageInput value={row.톤수} onChange={v => onUpdate("톤수", v)} />
         </div>
         <div>
-          <label className="block text-[11px] font-semibold text-gray-500 mb-1">차량번호 / 기사명</label>
+          <label className="block text-[12px] font-bold text-[#5B6B85] mb-1">차량번호 / 기사명</label>
           <DriverSearchInput value={row.차량번호} drivers={drivers} placeholder="차량번호 또는 이름 입력" onChange={val => onUpdate("차량번호", val)} onSelect={onSelectDriver} />
         </div>
         <div>
-          <label className="block text-[11px] font-semibold text-gray-500 mb-1">기사명</label>
-          <input className="w-full border border-gray-100 rounded-lg px-2 py-1.5 text-[13px] bg-gray-100" value={row.이름} readOnly />
+          <label className="block text-[12px] font-bold text-[#5B6B85] mb-1">기사명</label>
+          <input className="w-full border border-[#E3E8F0] rounded-xl px-2.5 py-1.5 text-[13.5px] font-semibold text-[#5B6B85] bg-[#F3F6FA]" value={row.이름} readOnly />
         </div>
         <div>
-          <label className="block text-[11px] font-semibold text-gray-500 mb-1">수량</label>
-          <input type="number" className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-[13px]" value={row.수량} onChange={e => onUpdate("수량", e.target.value)} />
+          <label className="block text-[12px] font-bold text-[#5B6B85] mb-1">수량</label>
+          <input type="number" className="w-full border border-[#DCE3EE] rounded-xl px-2.5 py-1.5 text-[13.5px] font-semibold text-[#0F1A30] bg-white outline-none focus:border-[#4B6CB7]" value={row.수량} onChange={e => onUpdate("수량", e.target.value)} />
         </div>
         <div>
-          <label className="block text-[11px] font-semibold text-gray-500 mb-1">기사단가</label>
-          <input inputMode="numeric" className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-[13px] text-right tabular-nums" value={fmtMoney(row.기사단가)} onChange={e => onUpdate("기사단가", moneyDigits(e.target.value))} />
+          <label className="block text-[12px] font-bold text-[#5B6B85] mb-1">기사단가</label>
+          <input inputMode="numeric" className="w-full border border-[#DCE3EE] rounded-xl px-2.5 py-1.5 text-[13.5px] font-semibold text-[#0F1A30] bg-white outline-none focus:border-[#4B6CB7] text-right tabular-nums" value={fmtMoney(row.기사단가)} onChange={e => onUpdate("기사단가", moneyDigits(e.target.value))} />
         </div>
         <div>
-          <label className="block text-[11px] font-semibold text-gray-500 mb-1">수수료단가</label>
-          <input inputMode="numeric" className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-[13px] text-right tabular-nums" value={fmtMoney(row.수수료단가)} onChange={e => onUpdate("수수료단가", moneyDigits(e.target.value))} />
+          <label className="block text-[12px] font-bold text-[#5B6B85] mb-1">수수료단가</label>
+          <input inputMode="numeric" className="w-full border border-[#DCE3EE] rounded-xl px-2.5 py-1.5 text-[13.5px] font-semibold text-[#0F1A30] bg-white outline-none focus:border-[#4B6CB7] text-right tabular-nums" value={fmtMoney(row.수수료단가)} onChange={e => onUpdate("수수료단가", moneyDigits(e.target.value))} />
         </div>
         <div>
-          <label className="block text-[11px] font-semibold text-gray-500 mb-1">수수료기준</label>
-          <CustomSelect className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-[13px]" value={row.수수료기준 || "수량"} onChange={e => onUpdate("수수료기준", e.target.value)}>
+          <label className="block text-[12px] font-bold text-[#5B6B85] mb-1">수수료기준</label>
+          <CustomSelect className="w-full border border-[#DCE3EE] rounded-xl px-2.5 py-1.5 text-[13.5px] font-semibold text-[#0F1A30] bg-white outline-none focus:border-[#4B6CB7]" value={row.수수료기준 || "수량"} onChange={e => onUpdate("수수료기준", e.target.value)}>
             <option value="수량">수량 기준</option>
             <option value="톤수">톤수 기준</option>
           </CustomSelect>
         </div>
         <div>
-          <label className="block text-[11px] font-semibold text-gray-500 mb-1">선결제</label>
-          <input inputMode="numeric" className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-[13px] text-right tabular-nums" value={fmtMoney(row.선결제 || 0)} onChange={e => onUpdate("선결제", moneyDigits(e.target.value))} />
+          <label className="block text-[12px] font-bold text-[#5B6B85] mb-1">선결제</label>
+          <input inputMode="numeric" className="w-full border border-[#DCE3EE] rounded-xl px-2.5 py-1.5 text-[13.5px] font-semibold text-[#0F1A30] bg-white outline-none focus:border-[#4B6CB7] text-right tabular-nums" value={fmtMoney(row.선결제 || 0)} onChange={e => onUpdate("선결제", moneyDigits(e.target.value))} />
         </div>
         <div>
-          <label className="block text-[11px] font-semibold text-gray-500 mb-1">지급방식</label>
-          <CustomSelect className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-[13px]" value={row.지급방식 || ""} onChange={e => onUpdate("지급방식", e.target.value)}>
+          <label className="block text-[12px] font-bold text-[#5B6B85] mb-1">지급방식</label>
+          <CustomSelect className="w-full border border-[#DCE3EE] rounded-xl px-2.5 py-1.5 text-[13.5px] font-semibold text-[#0F1A30] bg-white outline-none focus:border-[#4B6CB7]" value={row.지급방식 || ""} onChange={e => onUpdate("지급방식", e.target.value)}>
             <option value="">선택</option>
             <option value="계산서">계산서</option>
             <option value="착불">착불</option>
@@ -434,13 +434,13 @@ function FastRowCard({ idx, row, drivers, rows, getClientConfigs, onUpdate, onSe
       <div className="grid grid-cols-4 gap-3 pt-2 border-t border-gray-200">
         {[["기사운임","text-emerald-600"],["수수료","text-orange-600"],["선결제","text-gray-500"],["실수수료","text-[#1B2B4B]"]].map(([f, cls]) => (
           <div key={f} className="bg-white rounded-lg border border-gray-200 px-3 py-2 text-center">
-            <div className="text-[10px] text-gray-400">{f}</div>
+            <div className="text-[11px] text-gray-400">{f}</div>
             <div className={`text-[13px] font-bold ${cls}`}>{fmt(row[f])}</div>
           </div>
         ))}
       </div>
       <div className="bg-white rounded-lg border border-gray-200 px-3 py-2 text-center">
-        <div className="text-[10px] text-gray-400">청구운임</div>
+        <div className="text-[11px] text-gray-400">청구운임</div>
         <div className="text-[15px] font-bold text-blue-600">{fmt(row.청구운임)}</div>
       </div>
     </div>
@@ -788,15 +788,15 @@ export default function FixedClients({ drivers = [], upsertDriver, userCompany =
             <input value={search} onChange={e => setSearch(e.target.value)} placeholder="거래처명 · 기사명 검색" className="flex-1 px-2 h-full text-[13px] outline-none w-48" />
           </div>
           <div className="flex items-center gap-1.5">
-            <input type="date" className="border border-gray-200 rounded-lg px-2 py-1.5 text-[13px] focus:outline-none focus:border-[#1B2B4B]" value={startDate} onChange={e => setStartDate(e.target.value)} />
+            <input type="date" className="border border-[#DCE3EE] rounded-xl px-2.5 py-1.5 text-[13.5px] font-semibold text-[#0F1A30] bg-white outline-none focus:border-[#4B6CB7] focus:outline-none focus:border-[#1B2B4B]" value={startDate} onChange={e => setStartDate(e.target.value)} />
             <span className="text-gray-400 text-[13px]">~</span>
-            <input type="date" className="border border-gray-200 rounded-lg px-2 py-1.5 text-[13px] focus:outline-none focus:border-[#1B2B4B]" value={endDate} onChange={e => setEndDate(e.target.value)} />
+            <input type="date" className="border border-[#DCE3EE] rounded-xl px-2.5 py-1.5 text-[13.5px] font-semibold text-[#0F1A30] bg-white outline-none focus:border-[#4B6CB7] focus:outline-none focus:border-[#1B2B4B]" value={endDate} onChange={e => setEndDate(e.target.value)} />
           </div>
           <button onClick={() => { setStartDate(thisMonthStart()); setEndDate(thisMonthEnd()); }} className="px-3 py-1.5 rounded-lg border border-gray-200 text-[13px] text-gray-500 hover:bg-gray-50 transition">이번 달</button>
           {(startDate || endDate) && (
             <button onClick={() => { setStartDate(""); setEndDate(""); }} className="px-3 py-1.5 rounded-lg border border-red-200 text-[13px] text-red-500 hover:bg-red-50 transition">날짜 초기화</button>
           )}
-          <button onClick={() => setShowDoneOnly(p => !p)} className={`px-3 py-1.5 rounded-lg border text-[13px] font-semibold transition ${showDoneOnly ? "bg-emerald-600 text-white border-emerald-600" : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"}`}>
+          <button onClick={() => setShowDoneOnly(p => !p)} className={`px-3 py-1.5 rounded-lg border text-[13px] font-semibold transition ${showDoneOnly ? "bg-emerald-600 text-white border-emerald-600" : "bg-white text-gray-600 border-[#DCE3EE] hover:bg-gray-50"}`}>
             정산완료만
           </button>
           <div className="ml-auto flex items-center gap-2">
@@ -807,9 +807,9 @@ export default function FixedClients({ drivers = [], upsertDriver, userCompany =
                 : withCo(`${window.location.origin}/driver-upload?source=fixed`);
               const msg = `[인수증 업로드 안내]\n운송 완료 후 아래 링크를 통해 인수증을 업로드해 주시기 바랍니다.\n\n${url}\n\n날짜·차량번호·이름을 확인 후 검색하여 오더를 선택해 업로드해 주세요.\n미업로드 시 운임 정산이 지연될 수 있습니다.`;
               navigator.clipboard.writeText(msg).then(() => alert("업로드 안내 메시지가 복사되었습니다.\n기사에게 붙여넣기로 전달하세요.")).catch(() => alert(`링크: ${url}`));
-            }} className="px-3 py-1.5 rounded-lg border border-gray-300 text-gray-700 text-[13px] font-semibold hover:bg-gray-50 transition whitespace-nowrap">업로드링크</button>
-            <button onClick={markSettlement} className="px-3 py-1.5 rounded-lg border border-gray-300 text-gray-700 text-[13px] font-semibold hover:bg-gray-50 transition">정산</button>
-            <button onClick={() => { const ws = XLSX.utils.json_to_sheet(filtered); const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "고정거래처"); XLSX.writeFile(wb, "고정거래처관리.xlsx"); }} className="px-3 py-1.5 rounded-lg border border-gray-300 text-gray-700 text-[13px] font-semibold hover:bg-gray-50 transition">엑셀다운</button>
+            }} className="px-3 py-1.5 rounded-lg border border-[#DCE3EE] text-gray-700 text-[13px] font-semibold hover:bg-gray-50 transition whitespace-nowrap">업로드링크</button>
+            <button onClick={markSettlement} className="px-3 py-1.5 rounded-lg border border-[#DCE3EE] text-gray-700 text-[13px] font-semibold hover:bg-gray-50 transition">정산</button>
+            <button onClick={() => { const ws = XLSX.utils.json_to_sheet(filtered); const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "고정거래처"); XLSX.writeFile(wb, "고정거래처관리.xlsx"); }} className="px-3 py-1.5 rounded-lg border border-[#DCE3EE] text-gray-700 text-[13px] font-semibold hover:bg-gray-50 transition">엑셀다운</button>
             <button onClick={() => isViewer ? _viewerAlert() : setBulkEditOpen(true)} disabled={filtered.length === 0} className="px-3 py-1.5 rounded-lg bg-[#1B2B4B] text-white text-[13px] font-semibold hover:opacity-90 transition disabled:opacity-40">일괄수정</button>
           </div>
         </div>
@@ -1032,11 +1032,11 @@ export default function FixedClients({ drivers = [], upsertDriver, userCompany =
                 <div className="border border-gray-200 rounded-xl p-4 bg-gray-50 space-y-3">
                   <div className="grid grid-cols-3 gap-3">
                     <div>
-                      <label className="block text-[11px] font-semibold text-gray-500 mb-1">날짜</label>
-                      <input type="date" className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-[13px]" value={editPopupRow.날짜 || ""} onChange={e => updateEditPopupField("날짜", e.target.value)} />
+                      <label className="block text-[12px] font-bold text-[#5B6B85] mb-1">날짜</label>
+                      <input type="date" className="w-full border border-[#DCE3EE] rounded-xl px-2.5 py-1.5 text-[13.5px] font-semibold text-[#0F1A30] bg-white outline-none focus:border-[#4B6CB7]" value={editPopupRow.날짜 || ""} onChange={e => updateEditPopupField("날짜", e.target.value)} />
                     </div>
                     <div>
-                      <label className="block text-[11px] font-semibold text-gray-500 mb-1">거래처명</label>
+                      <label className="block text-[12px] font-bold text-[#5B6B85] mb-1">거래처명</label>
                       <ClientNameInput
                         value={editPopupRow.거래처명 || ""}
                         rows={rows}
@@ -1052,43 +1052,43 @@ export default function FixedClients({ drivers = [], upsertDriver, userCompany =
                       />
                     </div>
                     <div>
-                      <label className="block text-[11px] font-semibold text-gray-500 mb-1">톤수</label>
+                      <label className="block text-[12px] font-bold text-[#5B6B85] mb-1">톤수</label>
                       <TonnageInput value={editPopupRow.톤수 || ""} onChange={v => updateEditPopupField("톤수", v)} />
                     </div>
                     <div>
-                      <label className="block text-[11px] font-semibold text-gray-500 mb-1">수량</label>
-                      <input type="number" className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-[13px]" value={editPopupRow.수량 || ""} onChange={e => updateEditPopupField("수량", e.target.value)} />
+                      <label className="block text-[12px] font-bold text-[#5B6B85] mb-1">수량</label>
+                      <input type="number" className="w-full border border-[#DCE3EE] rounded-xl px-2.5 py-1.5 text-[13.5px] font-semibold text-[#0F1A30] bg-white outline-none focus:border-[#4B6CB7]" value={editPopupRow.수량 || ""} onChange={e => updateEditPopupField("수량", e.target.value)} />
                     </div>
                     <div>
-                      <label className="block text-[11px] font-semibold text-gray-500 mb-1">차량번호 / 기사명</label>
+                      <label className="block text-[12px] font-bold text-[#5B6B85] mb-1">차량번호 / 기사명</label>
                       <DriverSearchInput value={editPopupRow.차량번호 || ""} drivers={drivers} placeholder="차량번호 또는 이름 입력" onChange={val => updateEditPopupField("차량번호", val)} onSelect={selectEditPopupDriver} />
                     </div>
                     <div>
-                      <label className="block text-[11px] font-semibold text-gray-500 mb-1">기사명</label>
-                      <input className="w-full border border-gray-100 rounded-lg px-2 py-1.5 text-[13px] bg-gray-100" value={editPopupRow.이름 || ""} readOnly />
+                      <label className="block text-[12px] font-bold text-[#5B6B85] mb-1">기사명</label>
+                      <input className="w-full border border-[#E3E8F0] rounded-xl px-2.5 py-1.5 text-[13.5px] font-semibold text-[#5B6B85] bg-[#F3F6FA]" value={editPopupRow.이름 || ""} readOnly />
                     </div>
                     <div>
-                      <label className="block text-[11px] font-semibold text-gray-500 mb-1">기사단가</label>
-                      <input inputMode="numeric" className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-[13px] text-right tabular-nums" value={fmtMoney(editPopupRow.기사단가)} onChange={e => updateEditPopupField("기사단가", moneyDigits(e.target.value))} />
+                      <label className="block text-[12px] font-bold text-[#5B6B85] mb-1">기사단가</label>
+                      <input inputMode="numeric" className="w-full border border-[#DCE3EE] rounded-xl px-2.5 py-1.5 text-[13.5px] font-semibold text-[#0F1A30] bg-white outline-none focus:border-[#4B6CB7] text-right tabular-nums" value={fmtMoney(editPopupRow.기사단가)} onChange={e => updateEditPopupField("기사단가", moneyDigits(e.target.value))} />
                     </div>
                     <div>
-                      <label className="block text-[11px] font-semibold text-gray-500 mb-1">수수료단가</label>
-                      <input inputMode="numeric" className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-[13px] text-right tabular-nums" value={fmtMoney(editPopupRow.수수료단가)} onChange={e => updateEditPopupField("수수료단가", moneyDigits(e.target.value))} />
+                      <label className="block text-[12px] font-bold text-[#5B6B85] mb-1">수수료단가</label>
+                      <input inputMode="numeric" className="w-full border border-[#DCE3EE] rounded-xl px-2.5 py-1.5 text-[13.5px] font-semibold text-[#0F1A30] bg-white outline-none focus:border-[#4B6CB7] text-right tabular-nums" value={fmtMoney(editPopupRow.수수료단가)} onChange={e => updateEditPopupField("수수료단가", moneyDigits(e.target.value))} />
                     </div>
                     <div>
-                      <label className="block text-[11px] font-semibold text-gray-500 mb-1">수수료기준</label>
-                      <CustomSelect className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-[13px]" value={editPopupRow.수수료기준 || "수량"} onChange={e => updateEditPopupField("수수료기준", e.target.value)}>
+                      <label className="block text-[12px] font-bold text-[#5B6B85] mb-1">수수료기준</label>
+                      <CustomSelect className="w-full border border-[#DCE3EE] rounded-xl px-2.5 py-1.5 text-[13.5px] font-semibold text-[#0F1A30] bg-white outline-none focus:border-[#4B6CB7]" value={editPopupRow.수수료기준 || "수량"} onChange={e => updateEditPopupField("수수료기준", e.target.value)}>
                         <option value="수량">수량 기준</option>
                         <option value="톤수">톤수 기준</option>
                       </CustomSelect>
                     </div>
                     <div>
-                      <label className="block text-[11px] font-semibold text-gray-500 mb-1">선결제</label>
-                      <input inputMode="numeric" className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-[13px] text-right tabular-nums" value={fmtMoney(editPopupRow.선결제 || 0)} onChange={e => updateEditPopupField("선결제", moneyDigits(e.target.value))} />
+                      <label className="block text-[12px] font-bold text-[#5B6B85] mb-1">선결제</label>
+                      <input inputMode="numeric" className="w-full border border-[#DCE3EE] rounded-xl px-2.5 py-1.5 text-[13.5px] font-semibold text-[#0F1A30] bg-white outline-none focus:border-[#4B6CB7] text-right tabular-nums" value={fmtMoney(editPopupRow.선결제 || 0)} onChange={e => updateEditPopupField("선결제", moneyDigits(e.target.value))} />
                     </div>
                     <div>
-                      <label className="block text-[11px] font-semibold text-gray-500 mb-1">지급방식</label>
-                      <CustomSelect className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-[13px]" value={editPopupRow.지급방식 || ""} onChange={e => updateEditPopupField("지급방식", e.target.value)}>
+                      <label className="block text-[12px] font-bold text-[#5B6B85] mb-1">지급방식</label>
+                      <CustomSelect className="w-full border border-[#DCE3EE] rounded-xl px-2.5 py-1.5 text-[13.5px] font-semibold text-[#0F1A30] bg-white outline-none focus:border-[#4B6CB7]" value={editPopupRow.지급방식 || ""} onChange={e => updateEditPopupField("지급방식", e.target.value)}>
                         <option value="">선택</option>
                         <option value="계산서">계산서</option>
                         <option value="착불">착불</option>
@@ -1102,13 +1102,13 @@ export default function FixedClients({ drivers = [], upsertDriver, userCompany =
                   <div className="grid grid-cols-4 gap-3 pt-2 border-t border-gray-200">
                     {[["기사운임","text-emerald-600"],["수수료","text-orange-600"],["선결제","text-gray-500"],["실수수료","text-[#1B2B4B]"]].map(([f, cls]) => (
                       <div key={f} className="bg-white rounded-lg border border-gray-200 px-3 py-2 text-center">
-                        <div className="text-[10px] text-gray-400">{f}</div>
+                        <div className="text-[11px] text-gray-400">{f}</div>
                         <div className={`text-[13px] font-bold ${cls}`}>{fmt(editPopupRow[f])}</div>
                       </div>
                     ))}
                   </div>
                   <div className="bg-white rounded-lg border border-gray-200 px-3 py-2 text-center">
-                    <div className="text-[10px] text-gray-400">청구운임</div>
+                    <div className="text-[11px] text-gray-400">청구운임</div>
                     <div className="text-[16px] font-bold text-blue-600">{fmt(editPopupRow.청구운임)}</div>
                   </div>
                 </div>
@@ -1184,7 +1184,7 @@ export default function FixedClients({ drivers = [], upsertDriver, userCompany =
                     { val: "filtered", label: `조회 전체 (${filtered.length}건)` },
                   ].map(({ val, label }) => (
                     <label key={val} className="flex items-center gap-2 cursor-pointer" onClick={() => setBulkScope(val)}>
-                      <span className={`w-4 h-4 rounded-full border-2 flex items-center justify-center transition-all ${bulkScope === val ? "border-[#1B2B4B] bg-[#1B2B4B]" : "border-gray-300 bg-white"}`}>
+                      <span className={`w-4 h-4 rounded-full border-2 flex items-center justify-center transition-all ${bulkScope === val ? "border-[#1B2B4B] bg-[#1B2B4B]" : "border-[#DCE3EE] bg-white"}`}>
                         {bulkScope === val && <span className="w-1.5 h-1.5 rounded-full bg-white block" />}
                       </span>
                       <span className={`text-[13px] font-semibold ${bulkScope === val ? "text-[#1B2B4B]" : "text-gray-500"}`}>{label}</span>
@@ -1211,7 +1211,7 @@ export default function FixedClients({ drivers = [], upsertDriver, userCompany =
                       <button
                         type="button"
                         onClick={() => setBulkFields(p => ({ ...p, [key]: { ...p[key], enabled: !enabled } }))}
-                        className={`w-5 h-5 rounded-[5px] border-2 flex items-center justify-center transition-all shrink-0 ${enabled ? "bg-[#1B2B4B] border-[#1B2B4B]" : "bg-white border-gray-300"}`}
+                        className={`w-5 h-5 rounded-[5px] border-2 flex items-center justify-center transition-all shrink-0 ${enabled ? "bg-[#1B2B4B] border-[#1B2B4B]" : "bg-white border-[#DCE3EE]"}`}
                       >
                         {enabled && (
                           <svg width="10" height="10" viewBox="0 0 12 12" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">

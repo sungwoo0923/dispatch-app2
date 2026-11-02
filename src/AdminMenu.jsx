@@ -1140,7 +1140,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
                     <div className="flex gap-1.5">
                       {[["pending", "승인 대기"], ["approved", "1차 승인"], ["rejected", "거절"], ["all", "전체"]].map(([v, l]) => (
                         <button key={v} onClick={() => setLinkedStatusFilter(v)}
-                          className={`h-8 px-3.5 rounded-full text-[12px] font-semibold border transition ${linkedStatusFilter === v ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"}`}>
+                          className={`h-8 px-3.5 rounded-full text-[12px] font-semibold border transition ${linkedStatusFilter === v ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-600 border-[#DCE3EE] hover:bg-gray-50"}`}>
                           {l}
                         </button>
                       ))}
@@ -1253,7 +1253,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
                       onChange={e => { setTransmitCompanyQuery(e.target.value); setTransmitSearched(false); setTransmitResult(null); }}
                       placeholder="예) 반찬단지"
                       list="admin-transmit-company-list"
-                      className="w-[200px] border border-gray-300 rounded-lg px-3 py-2 text-[13px] outline-none focus:border-[#1B2B4B]"
+                      className="w-[200px] border border-[#DCE3EE] rounded-lg px-3 py-2 text-[13px] outline-none focus:border-[#1B2B4B]"
                     />
                     <datalist id="admin-transmit-company-list">
                       {approvedLinkedShippers.map(a => <option key={a.id} value={a.companyName} />)}
@@ -1262,12 +1262,12 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
                   <div>
                     <div className="text-[11px] text-gray-500 mb-1">시작월</div>
                     <input type="month" value={transmitFromMonth} onChange={e => { setTransmitFromMonth(e.target.value); setTransmitSearched(false); setTransmitResult(null); }}
-                      className="border border-gray-300 rounded-lg px-3 py-2 text-[13px] outline-none focus:border-[#1B2B4B]" />
+                      className="border border-[#DCE3EE] rounded-lg px-3 py-2 text-[13px] outline-none focus:border-[#1B2B4B]" />
                   </div>
                   <div>
                     <div className="text-[11px] text-gray-500 mb-1">종료월</div>
                     <input type="month" value={transmitToMonth} onChange={e => { setTransmitToMonth(e.target.value); setTransmitSearched(false); setTransmitResult(null); }}
-                      className="border border-gray-300 rounded-lg px-3 py-2 text-[13px] outline-none focus:border-[#1B2B4B]" />
+                      className="border border-[#DCE3EE] rounded-lg px-3 py-2 text-[13px] outline-none focus:border-[#1B2B4B]" />
                   </div>
                   <button
                     onClick={() => { setTransmitSearched(true); setTransmitResult(null); }}
@@ -1406,7 +1406,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
                 <CustomSelect
                   value={sessionLogEventFilter}
                   onChange={e => { setSessionLogEventFilter(e.target.value); setSessionLogPage(1); }}
-                  className="ml-auto h-[32px] px-2.5 rounded-lg text-[12px] font-semibold border border-gray-300 bg-white text-gray-700 outline-none"
+                  className="ml-auto h-[32px] px-2.5 rounded-lg text-[12px] font-semibold border border-[#DCE3EE] bg-white text-gray-700 outline-none"
                 >
                   <option value="all">전체</option>
                   <option value="login">로그인만</option>
@@ -1657,7 +1657,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
                         />
                         <div>
                           <div className="text-[13px] font-semibold text-gray-800"><EditableText id={`adminMenu.linkedPopup.perm.${key}.label`} defaultText={label} /></div>
-                          <div className="text-[10px] text-gray-500"><EditableText id={`adminMenu.linkedPopup.perm.${key}.desc`} defaultText={desc} /></div>
+                          <div className="text-[11px] text-gray-500"><EditableText id={`adminMenu.linkedPopup.perm.${key}.desc`} defaultText={desc} /></div>
                         </div>
                       </label>
                     ))}
@@ -1794,7 +1794,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
                   onChange={e => setInquiryReplyText(e.target.value)}
                   rows={5}
                   placeholder="답변 내용을 입력하세요"
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-[13px] outline-none focus:border-[#1B2B4B] resize-none"
+                  className="w-full border border-[#DCE3EE] rounded-lg px-3 py-2 text-[13px] outline-none focus:border-[#1B2B4B] resize-none"
                 />
               </div>
               <button
@@ -1858,7 +1858,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
                       className={`flex-1 py-2 rounded-lg text-[13px] font-bold border transition disabled:opacity-50 ${
                         (selectedLandingInquiry.status || "신규") === s
                           ? "bg-[#1B2B4B] text-white border-[#1B2B4B]"
-                          : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"
+                          : "bg-white text-gray-600 border-[#DCE3EE] hover:bg-gray-50"
                       }`}
                     >
                       {s}
@@ -1970,7 +1970,7 @@ export function NotifTemplatePanel() {
                         key={opt.key}
                         type="button"
                         onClick={() => toggleField(key, defaultFields, opt.key)}
-                        className={`px-3 py-1.5 rounded-full text-[12px] font-semibold border transition ${on ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-500 border-gray-300 hover:bg-gray-50"}`}
+                        className={`px-3 py-1.5 rounded-full text-[12px] font-semibold border transition ${on ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-500 border-[#DCE3EE] hover:bg-gray-50"}`}
                       >
                         {opt.label}
                       </button>
@@ -2120,7 +2120,7 @@ function FieldRow({ label, value, onChange, placeholder }) {
         value={value || ""}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
-        className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-[13px]"
+        className="w-full border border-[#DCE3EE] rounded-lg px-3 py-1.5 text-[13px]"
       />
     </div>
   );
@@ -2263,7 +2263,7 @@ export function LandingPageEditPanel() {
           {form.backgroundImageUrl && (
             <button
               onClick={handleRemoveImage}
-              className="px-4 py-2 rounded-lg bg-white border border-gray-300 text-gray-500 text-[12px] font-semibold hover:bg-gray-50 transition"
+              className="px-4 py-2 rounded-lg bg-white border border-[#DCE3EE] text-gray-500 text-[12px] font-semibold hover:bg-gray-50 transition"
             >
               이미지 제거(영상으로 복귀)
             </button>
@@ -2287,7 +2287,7 @@ export function LandingPageEditPanel() {
           </label>
           {form.backgroundVideoUrl && (
             <button onClick={handleRemoveVideo}
-              className="px-4 py-2 rounded-lg bg-white border border-gray-300 text-gray-500 text-[12px] font-semibold hover:bg-gray-50 transition">
+              className="px-4 py-2 rounded-lg bg-white border border-[#DCE3EE] text-gray-500 text-[12px] font-semibold hover:bg-gray-50 transition">
               영상 제거
             </button>
           )}
@@ -2303,7 +2303,7 @@ export function LandingPageEditPanel() {
             type="color"
             value={form.overlayColor || "#0B2554"}
             onChange={(e) => set("overlayColor", e.target.value)}
-            className="w-full h-9 rounded border border-gray-300"
+            className="w-full h-9 rounded border border-[#DCE3EE]"
           />
         </div>
         <div>
@@ -2325,7 +2325,7 @@ export function LandingPageEditPanel() {
         <CustomSelect
           value={form.fontFamily || "noto"}
           onChange={(e) => set("fontFamily", e.target.value)}
-          className="border border-gray-300 rounded-lg px-3 py-1.5 text-[13px]"
+          className="border border-[#DCE3EE] rounded-lg px-3 py-1.5 text-[13px]"
         >
           {LANDING_FONT_OPTIONS.map((o) => (
             <option key={o.key} value={o.key}>{o.label}</option>
@@ -2341,7 +2341,7 @@ export function LandingPageEditPanel() {
             type="color"
             value={form.textColor || "#ffffff"}
             onChange={(e) => set("textColor", e.target.value)}
-            className="w-full h-9 rounded border border-gray-300"
+            className="w-full h-9 rounded border border-[#DCE3EE]"
           />
         </div>
         <div>
@@ -2350,7 +2350,7 @@ export function LandingPageEditPanel() {
             type="color"
             value={form.accentColor || "#93c5fd"}
             onChange={(e) => set("accentColor", e.target.value)}
-            className="w-full h-9 rounded border border-gray-300"
+            className="w-full h-9 rounded border border-[#DCE3EE]"
           />
         </div>
       </div>
@@ -2384,13 +2384,13 @@ export function LandingPageEditPanel() {
                 value={f.title || ""}
                 onChange={(e) => setFeature(i, "title", e.target.value)}
                 placeholder={DEFAULT_LANDING_FEATURES[i].title}
-                className="w-full border border-gray-300 rounded px-2 py-1 text-[12px] font-bold mb-1"
+                className="w-full border border-[#DCE3EE] rounded px-2 py-1 text-[12px] font-bold mb-1"
               />
               <input
                 value={f.desc || ""}
                 onChange={(e) => setFeature(i, "desc", e.target.value)}
                 placeholder={DEFAULT_LANDING_FEATURES[i].desc}
-                className="w-full border border-gray-300 rounded px-2 py-1 text-[11px]"
+                className="w-full border border-[#DCE3EE] rounded px-2 py-1 text-[11px]"
               />
             </div>
           ))}
