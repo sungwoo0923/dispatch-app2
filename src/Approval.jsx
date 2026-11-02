@@ -171,7 +171,7 @@ const captureAt1x = async (el, opts) => {
 // 🧾 2026-11-02 지출결의 지출 내역 표(문서·인쇄) — 종이 양식(NO·발생일·업체명·적요·지출금액(공급가액·세액)·합계·비고(입금 계좌번호))과 같은 배치.
 //    맨 위 「금 액」 줄에 한글 금액(金 ○○ 원整)과 숫자. 휴대폰(compact)에서는 행마다 카드로 쌓는다.
 const n0 = (v) => (Number(v) ? Number(v).toLocaleString("ko-KR") : "");
-const SPEND_COLS = "30px 86px minmax(0,1fr) minmax(0,1.15fr) 78px 64px 84px minmax(0,1.25fr)";
+const SPEND_COLS = "30px 96px minmax(0,1fr) minmax(0,1.15fr) 78px 64px 84px minmax(0,1.25fr)";
 function SpendLinesPaper({ label, rows, last, compact: c }) {
   const t = spendTotals(rows);
   const list = rows.length ? rows : [{}];
@@ -220,7 +220,7 @@ function SpendLinesPaper({ label, rows, last, compact: c }) {
             {list.map((r, i) => (
               <React.Fragment key={i}>
                 <div className={`${td} border-b border-r text-center font-bold`}>{rows.length ? i + 1 : ""}</div>
-                <div className={`${td} border-b border-r text-center tabular-nums !px-1 text-[12px]`}>{r.date || ""}</div>
+                <div className={`${td} border-b border-r text-center tabular-nums !px-1 text-[12px] !whitespace-nowrap ![overflow-wrap:normal]`}>{r.date || ""}</div>
                 <div className={`${td} border-b border-r font-bold`}>{r.vendor || ""}</div>
                 <div className={`${td} border-b border-r whitespace-pre-wrap`}>{r.memo || ""}</div>
                 <div className={`${td} border-b border-r text-right tabular-nums`}>{n0(r.supply)}</div>

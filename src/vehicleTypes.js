@@ -127,7 +127,7 @@ export function VehicleTypePicker({ value, onChange, base = VT_DEFAULTS, company
   const place = React.useCallback(() => {
     const el = btn.current; if (!el) return;
     const r = el.getBoundingClientRect();
-    const w = Math.max(r.width, 248);
+    const w = Math.max(r.width, 272);
     const below = window.innerHeight - r.bottom - 14;
     const above = r.top - 14;
     const up = below < 300 && above > below; // 아래 자리가 모자라면 위로 연다
@@ -208,9 +208,10 @@ export function VehicleTypePicker({ value, onChange, base = VT_DEFAULTS, company
       style: { display: "flex", alignItems: "center", gap: 10, height: 38, margin: "0 6px", padding: "0 10px", borderRadius: 10, cursor: "pointer", userSelect: "none", background: i === act ? "#EEF3FC" : "transparent" },
     },
     h("span", { style: { width: 15, height: 15, borderRadius: 999, flexShrink: 0, display: "grid", placeItems: "center", border: `2px solid ${sel ? "#1B2B4B" : "#C9D5EA"}`, background: sel ? "#1B2B4B" : "#fff" } }, sel ? h("span", { style: { width: 5, height: 5, borderRadius: 999, background: "#fff" } }) : null),
-    h("span", { style: { flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: 13.5, fontWeight: o.none ? 700 : 800, color: o.none ? "#8E9BB2" : "#0F1A30" } }, o.none ? (noneLabel || "선택 안 함") : o.v),
-    o.custom ? h("span", { style: { fontFamily: MONO, fontSize: 9.5, fontWeight: 800, letterSpacing: "0.08em", padding: "2px 6px", borderRadius: 6, background: "#1B2B4B", color: "#E9C46A" } }, "회사") : null,
-    o.legacy ? h("span", { style: { fontSize: 10.5, fontWeight: 800, color: "#B54708" } }, "직접 입력값") : null);
+    h("span", { style: { flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: 14.5, fontWeight: o.none ? 700 : 800, color: o.none ? "#8E9BB2" : "#0F1A30" } }, o.none ? (noneLabel || "선택 안 함") : o.v),
+    // ⭐ 2026-11-02 "회사"만 작게 써 있어 안 보인다는 의견 — 일반 글꼴·큰 글씨로 "회사 추가"
+    o.custom ? h("span", { title: "우리 회사에서 추가한 차량종류", style: { flexShrink: 0, fontSize: 12, fontWeight: 800, lineHeight: "20px", padding: "0 8px", borderRadius: 999, background: "#EEF3FC", border: "1px solid #C9D5EA", color: "#1B2B4B", whiteSpace: "nowrap" } }, "회사 추가") : null,
+    o.legacy ? h("span", { style: { fontSize: 12, fontWeight: 800, color: "#B54708" } }, "직접 입력값") : null);
   };
   const menuEl = h("div", {
     ref: menu, role: "listbox", "data-vt-menu": "1", tabIndex: -1, onKeyDownCapture: (e) => { if (e.target === menu.current) onSearchKey(e); },
@@ -219,18 +220,21 @@ export function VehicleTypePicker({ value, onChange, base = VT_DEFAULTS, company
   },
   h("div", { style: { padding: "10px 12px 8px", background: "#F7F9FC", borderBottom: "1px solid #EEF2F7" } },
     h("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 7 } },
-      h("span", { style: { fontFamily: MONO, fontSize: 10, fontWeight: 900, letterSpacing: "0.16em", color: "#4B6CB7" } }, "VEHICLE TYPE · 차량종류"),
-      h("span", { style: { fontSize: 10.5, fontWeight: 700, color: "#9AA9C3" } }, "↑↓ · Enter")),
+      // ⭐ 2026-11-02 글씨가 눌려 안 보인다는 의견 — 한글 제목은 일반 글꼴·큰 글씨, 영문 꼬리표만 작게
+      h("span", { style: { display: "inline-flex", alignItems: "baseline", gap: 6, whiteSpace: "nowrap" } },
+        h("span", { style: { fontSize: 14, fontWeight: 900, color: "#0F1A30" } }, "차량종류"),
+        h("span", { style: { fontFamily: MONO, fontSize: 10.5, fontWeight: 800, letterSpacing: "0.1em", color: "#4B6CB7" } }, "VEHICLE TYPE")),
+      h("span", { style: { fontSize: 12, fontWeight: 700, color: "#8E9BB2", whiteSpace: "nowrap" } }, "↑↓ · Enter")),
     h("input", {
       ref: searchRef, value: q, placeholder: "찾기 (예: 냉동)", autoComplete: "off",
       onChange: (e) => { setQ(e.target.value); setAct(0); }, onKeyDown: onSearchKey,
-      style: { width: "100%", height: 34, borderRadius: 10, border: "1px solid #DCE3EE", padding: "0 10px", fontSize: 13.5, fontWeight: 700, color: "#0F1A30", outline: "none", background: "#fff", boxSizing: "border-box" },
+      style: { width: "100%", height: 34, borderRadius: 10, border: "1px solid #DCE3EE", padding: "0 10px", fontSize: 14.5, fontWeight: 700, color: "#0F1A30", outline: "none", background: "#fff", boxSizing: "border-box" },
     })),
   h("div", { style: { overflowY: "auto", padding: "4px 0", flex: 1, minHeight: 0 } },
-    opts.length ? opts.map(row) : h("div", { style: { padding: "14px 16px", fontSize: 12.5, fontWeight: 700, color: "#9AA9C3" } }, "찾는 차량종류가 없습니다"),
+    opts.length ? opts.map(row) : h("div", { style: { padding: "14px 16px", fontSize: 13.5, fontWeight: 700, color: "#9AA9C3" } }, "찾는 차량종류가 없습니다"),
     nq && !exact && allowAdd ? h("div", {
       onMouseDown: (e) => e.preventDefault(), onClick: () => doAdd(q),
-      style: { margin: "4px 6px 2px", padding: "0 10px", height: 38, borderRadius: 10, display: "flex", alignItems: "center", gap: 8, cursor: "pointer", background: "#FFF8E6", color: "#7A5300", fontSize: 13, fontWeight: 900 },
+      style: { margin: "4px 6px 2px", padding: "0 10px", height: 38, borderRadius: 10, display: "flex", alignItems: "center", gap: 8, cursor: "pointer", background: "#FFF8E6", color: "#7A5300", fontSize: 14, fontWeight: 900 },
     }, "＋", h("span", null, `“${clean(q)}” 차량종류로 추가하고 선택`)) : null),
   allowAdd ? h("div", { style: { borderTop: "1px solid #EEF2F7", padding: 8, background: "#FBFCFE" } },
     adding
@@ -240,14 +244,14 @@ export function VehicleTypePicker({ value, onChange, base = VT_DEFAULTS, company
             ref: addRef, value: newName, autoFocus: true, placeholder: "새 차량종류 (예: 암롤)", maxLength: 30, autoComplete: "off",
             onChange: (e) => { setNewName(e.target.value); setErr(""); },
             onKeyDown: (e) => { e.stopPropagation(); if (e.key === "Enter") { e.preventDefault(); doAdd(newName); } if (e.key === "Escape") { e.preventDefault(); setAdding(false); setTimeout(() => searchRef.current?.focus(), 0); } },
-            style: { flex: 1, minWidth: 0, height: 36, borderRadius: 10, border: "1.5px solid #1B2B4B", padding: "0 10px", fontSize: 13.5, fontWeight: 800, color: "#0F1A30", outline: "none", boxSizing: "border-box" },
+            style: { flex: 1, minWidth: 0, height: 36, borderRadius: 10, border: "1.5px solid #1B2B4B", padding: "0 10px", fontSize: 14.5, fontWeight: 800, color: "#0F1A30", outline: "none", boxSizing: "border-box" },
           }),
-          h("button", { type: "button", disabled: busy, onClick: () => doAdd(newName), style: { height: 36, padding: "0 14px", borderRadius: 10, border: "none", background: "#1B2B4B", color: "#fff", fontSize: 13, fontWeight: 900, cursor: "pointer", opacity: busy ? 0.6 : 1 } }, busy ? "추가 중" : "추가")),
-        h("div", { style: { fontSize: 11, fontWeight: 700, color: err ? "#C0352B" : "#8E9BB2", marginTop: 5, paddingLeft: 2 } }, err || "추가하면 회사의 모든 화면(PC·모바일) 차량종류 목록에 나옵니다"))
+          h("button", { type: "button", disabled: busy, onClick: () => doAdd(newName), style: { height: 36, padding: "0 14px", borderRadius: 10, border: "none", background: "#1B2B4B", color: "#fff", fontSize: 14, fontWeight: 900, cursor: "pointer", opacity: busy ? 0.6 : 1 } }, busy ? "추가 중" : "추가")),
+        h("div", { style: { fontSize: 12, fontWeight: 700, color: err ? "#C0352B" : "#8E9BB2", marginTop: 5, paddingLeft: 2 } }, err || "추가하면 회사의 모든 화면(PC·모바일) 차량종류 목록에 나옵니다"))
       : h("button", {
         type: "button", "data-vt-add": "1",
         onClick: () => { setAdding(true); setNewName(clean(q)); setErr(""); },
-        style: { width: "100%", height: 36, borderRadius: 10, border: "1.5px dashed #9FB2D3", background: "#fff", color: "#1B2B4B", fontSize: 13, fontWeight: 900, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 },
+        style: { width: "100%", height: 36, borderRadius: 10, border: "1.5px dashed #9FB2D3", background: "#fff", color: "#1B2B4B", fontSize: 14, fontWeight: 900, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 },
       }, h("span", { style: { fontSize: 15, lineHeight: 1 } }, "＋"), "차량종류 추가")) : null);
   return h(React.Fragment, null, btnEl, createPortal(menuEl, document.body));
 }
@@ -275,9 +279,9 @@ function VehicleTypeDialog({ company, initial = "", onAdded, onClose }) {
   },
   h("div", { role: "dialog", "aria-modal": "true", onMouseDown: (e) => e.stopPropagation(), style: { width: "min(420px,100%)", borderRadius: 20, background: "#fff", overflow: "hidden", boxShadow: "0 30px 80px rgba(8,14,30,.45)" } },
     h("div", { style: { padding: "18px 20px 16px", color: "#fff", background: "radial-gradient(120% 120% at 0% 0%,#2D4C82 0%,#1B2B4B 50%,#0B1428 100%)" } },
-      h("div", { style: { fontFamily: MONO, fontSize: 10, fontWeight: 900, letterSpacing: "0.22em", color: "#8FB0F0" } }, "VEHICLE TYPE"),
+      h("div", { style: { fontFamily: MONO, fontSize: 11, fontWeight: 900, letterSpacing: "0.22em", color: "#8FB0F0" } }, "VEHICLE TYPE"),
       h("div", { style: { fontSize: 17, fontWeight: 900, marginTop: 3 } }, "차량종류 추가"),
-      h("div", { style: { fontSize: 12, fontWeight: 600, color: "#C9D6EE", marginTop: 3 } }, "추가하면 회사의 모든 화면(PC·모바일) 차량종류 목록에 나옵니다")),
+      h("div", { style: { fontSize: 13, fontWeight: 600, color: "#C9D6EE", marginTop: 3 } }, "추가하면 회사의 모든 화면(PC·모바일) 차량종류 목록에 나옵니다")),
     h("div", { style: { padding: "16px 20px 6px" } },
       h("div", { style: { display: "flex", gap: 8 } },
         h("input", {
@@ -287,14 +291,14 @@ function VehicleTypeDialog({ company, initial = "", onAdded, onClose }) {
           style: { flex: 1, minWidth: 0, height: 44, borderRadius: 12, border: "1.5px solid #1B2B4B", padding: "0 12px", fontSize: 15, fontWeight: 800, color: "#0F1A30", outline: "none", boxSizing: "border-box" },
         }),
         h("button", { type: "button", disabled: busy, onClick: submit, style: { height: 44, padding: "0 18px", borderRadius: 12, border: "none", background: "#1B2B4B", color: "#fff", fontSize: 14, fontWeight: 900, cursor: "pointer", opacity: busy ? 0.6 : 1 } }, busy ? "추가 중" : "추가")),
-      err ? h("div", { style: { fontSize: 12, fontWeight: 800, color: "#C0352B", marginTop: 6 } }, err) : null,
-      h("div", { style: { marginTop: 14, fontSize: 11.5, fontWeight: 900, color: "#5B6B85", letterSpacing: "0.04em" } }, `회사에서 추가한 차량종류 ${vt.custom.length}개`),
+      err ? h("div", { style: { fontSize: 13, fontWeight: 800, color: "#C0352B", marginTop: 6 } }, err) : null,
+      h("div", { style: { marginTop: 14, fontSize: 12.5, fontWeight: 900, color: "#5B6B85", letterSpacing: "0.04em" } }, `회사에서 추가한 차량종류 ${vt.custom.length}개`),
       h("div", { style: { display: "flex", flexWrap: "wrap", gap: 6, marginTop: 8, maxHeight: 150, overflowY: "auto" } },
-        vt.custom.length ? vt.custom.map((v) => h("span", { key: v, style: { display: "inline-flex", alignItems: "center", gap: 4, height: 28, padding: "0 4px 0 10px", borderRadius: 8, border: "1px solid #C9D5EA", background: "#F7F9FC", fontSize: 12.5, fontWeight: 800, color: "#0F1A30" } },
-          v, h("button", { type: "button", onClick: () => del(v), title: "목록에서 빼기", style: { width: 20, height: 20, borderRadius: 6, border: "none", background: "transparent", color: "#9AA9C3", cursor: "pointer", fontSize: 11, fontWeight: 900 } }, "✕")))
-          : h("span", { style: { fontSize: 12, fontWeight: 700, color: "#9AA9C3" } }, "아직 없습니다 — 위에서 추가해 보세요"))),
+        vt.custom.length ? vt.custom.map((v) => h("span", { key: v, style: { display: "inline-flex", alignItems: "center", gap: 4, height: 28, padding: "0 4px 0 10px", borderRadius: 8, border: "1px solid #C9D5EA", background: "#F7F9FC", fontSize: 13.5, fontWeight: 800, color: "#0F1A30" } },
+          v, h("button", { type: "button", onClick: () => del(v), title: "목록에서 빼기", style: { width: 20, height: 20, borderRadius: 6, border: "none", background: "transparent", color: "#9AA9C3", cursor: "pointer", fontSize: 12, fontWeight: 900 } }, "✕")))
+          : h("span", { style: { fontSize: 13, fontWeight: 700, color: "#9AA9C3" } }, "아직 없습니다 — 위에서 추가해 보세요"))),
     h("div", { style: { padding: "14px 20px 18px", display: "flex", justifyContent: "flex-end" } },
-      h("button", { type: "button", onClick: onClose, style: { height: 38, padding: "0 16px", borderRadius: 10, border: "1px solid #DCE3EE", background: "#fff", color: "#3A4A66", fontSize: 13, fontWeight: 900, cursor: "pointer" } }, "닫기"))));
+      h("button", { type: "button", onClick: onClose, style: { height: 38, padding: "0 16px", borderRadius: 10, border: "1px solid #DCE3EE", background: "#fff", color: "#3A4A66", fontSize: 14, fontWeight: 900, cursor: "pointer" } }, "닫기"))));
 }
 let dialogRoot = null;
 export function openVehicleTypeDialog({ company, initial = "", onAdded } = {}) {

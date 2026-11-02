@@ -3406,13 +3406,15 @@ function DriverVehicleTypeField({ value, onChange, className = "" }) {
 
 // ⭐ 2026-11-02 기사관리 표 — 차량종류(암롤·윙바디 등)를 한눈에 · 한 가지 색(네이비 톤)으로 깔끔하게 + 톤수(숫자 글꼴)
 function VehicleTypeBadge({ type, ton }) {
-  const t = String(type || "").trim();
+  // 예전에 "직접입력"이라는 글자 자체가 저장된 기사는 차종이 없는 것과 같다 → 미지정
+  const t0 = String(type || "").trim();
+  const t = t0 === "직접입력" ? "" : t0;
   const tn = String(ton || "").trim();
   if (!t && !tn) return <span className="text-gray-300">-</span>;
   return (
-    <span className="inline-flex items-stretch h-[22px] rounded-md overflow-hidden border border-[#C9D5EA] bg-white text-[12px] leading-none">
-      <span className={`inline-flex items-center px-2 font-extrabold ${t ? "text-[#0F1A30]" : "text-[#B4BFD0]"}`}>{t || "미지정"}</span>
-      {tn && <span className="inline-flex items-center px-1.5 bg-[#1B2B4B] text-white font-bold tabular-nums" style={{ fontFamily: "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace", fontSize: 11 }}>{tn}</span>}
+    <span className="inline-flex items-stretch h-[27px] rounded-md overflow-hidden border border-[#C9D5EA] bg-white text-[14px] leading-none">
+      <span className={`inline-flex items-center px-2.5 font-extrabold ${t ? "text-[#0F1A30]" : "text-[#B4BFD0]"}`}>{t || "미지정"}</span>
+      {tn && <span className="inline-flex items-center px-2 bg-[#1B2B4B] text-white font-bold tabular-nums" style={{ fontFamily: "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace", fontSize: 13 }}>{tn}</span>}
     </span>
   );
 }
@@ -56497,8 +56499,8 @@ function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, sho
             <div data-mgr-menu="1" style={{ position: "fixed", left: mgrMenu.left, top: mgrMenu.top, width: 240, zIndex: 99990 }}
               className="rounded-2xl bg-white border border-[#E3E8F0] shadow-[0_18px_44px_rgba(15,26,48,0.22)] overflow-hidden">
               <div className="px-3.5 pt-2.5 pb-2 border-b border-[#EEF2F7] bg-[#F7F9FC]">
-                <div className="text-[10.5px] font-black tracking-[0.16em] text-[#4B6CB7]">MANAGER · 담당자별 보기</div>
-                <div className="text-[11.5px] font-bold text-[#8E9BB2] mt-0.5">고른 담당자의 차량이 맨 위로 모입니다</div>
+                <div className="flex items-baseline gap-1.5"><span className="text-[14px] font-black text-[#0F1A30]">담당자별 보기</span><span className="text-[10.5px] font-extrabold tracking-[0.12em] text-[#4B6CB7]">MANAGER</span></div>
+                <div className="text-[12.5px] font-bold text-[#5B6B85] mt-0.5">고른 담당자의 차량이 맨 위로 모입니다</div>
               </div>
               <div className="max-h-[300px] overflow-y-auto py-1">
                 <button type="button" onClick={() => { setMgrFocus(""); setMgrMenu(null); }}
@@ -56527,7 +56529,7 @@ function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, sho
                         checked={filtered.length > 0 && selected.size === filtered.length}
                       />
                     </th>
-                    {[["순번",""],["차량번호","w-[92px]"],["차량종류",""],["이름",""],["전화번호",""],["등록일",""],["담당자",""],["거주지",""],["근무가능요일",""],["등급",""],["메모",""],["팝업",""],["삭제",""]].map(([h,w]) => (
+                    {[["순번",""],["담당자",""],["차량번호","w-[92px]"],["차량종류",""],["이름",""],["전화번호",""],["등록일",""],["거주지",""],["근무가능요일",""],["등급",""],["메모",""],["팝업",""],["삭제",""]].map(([h,w]) => (
                       h === "담당자" ? (
                         <th key={h} className={`px-2 py-2 text-white font-bold text-center whitespace-nowrap ${w}`}>
                           {/* ⭐ 2026-11-02 누르면 담당자 목록 — 고른 담당자의 차량이 맨 위로 */}
@@ -56567,12 +56569,12 @@ function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, sho
                           <input autoComplete="off" type="checkbox" checked={selected.has(docId)} onChange={(e) => { e.stopPropagation(); toggleOne(docId); }} onClick={e => e.stopPropagation()} />
                         </td>
                         <td className="px-3 py-2.5 text-center text-gray-500">{(page-1)*perPage+i+1}</td>
+                        <td className={`px-3 py-2.5 text-center whitespace-nowrap ${mgrHit ? "font-black text-[#0F1A30]" : "text-gray-500"}`}>{(grade==="지입"||grade==="직영"||grade==="임대") ? (r.담당자?.name || "-") : "-"}</td>
                         <td className="px-2 py-2.5 text-center font-semibold text-[#1B2B4B] whitespace-nowrap w-[92px] overflow-hidden text-ellipsis">{r.차량번호||"-"}</td>
                         <td className="px-2 py-2.5 text-center whitespace-nowrap"><VehicleTypeBadge type={r.차량종류} ton={r.차량톤수} /></td>
                         <td className="px-3 py-2.5 text-center whitespace-nowrap">{r.이름||"-"}</td>
                         <td className="px-3 py-2.5 text-center whitespace-nowrap">{formatPhone(r.전화번호)||"-"}</td>
                         <td className="px-3 py-2.5 text-center whitespace-nowrap text-gray-500 text-[12px]">{displayRegDate(r) || "-"}</td>
-                        <td className={`px-3 py-2.5 text-center whitespace-nowrap ${mgrHit ? "font-black text-[#0F1A30]" : "text-gray-500"}`}>{(grade==="지입"||grade==="직영"||grade==="임대") ? (r.담당자?.name || "-") : "-"}</td>
                         <td className="px-3 py-2.5 text-center whitespace-nowrap text-gray-500">{(grade==="지입"||grade==="직영"||grade==="임대") ? (r.거주지 || "-") : "-"}</td>
                         <td className="px-3 py-2.5 text-center whitespace-nowrap text-gray-500 text-[12px]">{(grade==="지입"||grade==="직영"||grade==="임대") ? ((r.근무요일 && r.근무요일.length) ? r.근무요일.join(",") : "-") : "-"}</td>
                         <td className="px-3 py-2.5 text-center">

@@ -177,7 +177,7 @@ export function FareTypeSelect({ value, onChange, rules = [], className = "", di
   const place = React.useCallback(() => {
     const el = btn.current; if (!el) return;
     const r = el.getBoundingClientRect();
-    const w = Math.max(r.width, 220);
+    const w = Math.max(r.width, 260);
     const mh = Math.min(320, opts.length * 44 + 46);
     const up = r.bottom + mh + 8 > window.innerHeight && r.top > mh + 8;
     let left = align === "right" ? r.right - w : r.left;
@@ -240,8 +240,10 @@ export function FareTypeSelect({ value, onChange, rules = [], className = "", di
       className: "rounded-2xl bg-white border border-[#E3E8F0] shadow-[0_18px_44px_rgba(15,26,48,0.22)] overflow-hidden",
     },
     h("div", { className: "px-3.5 pt-2.5 pb-2 flex items-center justify-between border-b border-[#EEF2F7] bg-[#F7F9FC]" },
-      h("span", { className: "text-[10.5px] font-black tracking-[0.16em] text-[#4B6CB7]" }, "FARE TYPE · 운임구분"),
-      h("span", { className: "text-[10.5px] font-bold text-[#9AA9C3]" }, "↑↓ · Enter")),
+      h("span", { className: "inline-flex items-baseline gap-1.5 whitespace-nowrap" },
+        h("span", { className: "text-[14px] font-black text-[#0F1A30]" }, "운임구분"),
+        h("span", { className: "text-[10.5px] font-extrabold tracking-[0.12em] text-[#4B6CB7]" }, "FARE TYPE")),
+      h("span", { className: "text-[12px] font-bold text-[#8E9BB2]" }, "↑↓ · Enter")),
     h("div", { className: "max-h-[272px] overflow-y-auto py-1" },
       ...opts.map((o, i) => {
         const sel = String(o.name) === String(value || "");
@@ -254,13 +256,13 @@ export function FareTypeSelect({ value, onChange, rules = [], className = "", di
         h("span", { className: `w-4 h-4 rounded-full border-2 grid place-items-center shrink-0 ${sel ? "border-[#1B2B4B] bg-[#1B2B4B]" : "border-[#C9D5EA]"}` },
           sel ? h("span", { className: "w-1.5 h-1.5 rounded-full bg-white" }) : null),
         o.none
-          ? h("span", { className: "flex-1 text-[13px] font-bold text-[#8E9BB2]" }, noneLabel)
+          ? h("span", { className: "flex-1 text-[14px] font-bold text-[#8E9BB2]" }, noneLabel)
           : o.extra ? h("span", { className: "flex-1 text-[13px] font-extrabold text-[#5B6B85]" }, o.label)
           : h(React.Fragment, null,
-            h("span", { className: "flex-1 min-w-0 truncate text-[13.5px] font-extrabold text-[#0F1A30]" }, o.name, o.active === false ? h("span", { className: "ml-1 text-[11px] font-bold text-[#B54708]" }, "(사용 안 함)") : null),
-            h("span", { className: "shrink-0 tabular-nums px-2 h-[22px] inline-flex items-center rounded-full bg-[#1B2B4B] text-[#E9C46A] text-[11.5px] font-black" }, o.type === "fixed" ? `고정 ${fmtRuleVal(o)}` : `수수료 ${fmtRuleVal(o)}`)));
+            h("span", { className: "flex-1 min-w-0 truncate text-[14.5px] font-extrabold text-[#0F1A30]" }, o.name, o.active === false ? h("span", { className: "ml-1 text-[11px] font-bold text-[#B54708]" }, "(사용 안 함)") : null),
+            h("span", { className: "shrink-0 tabular-nums px-2 h-[22px] inline-flex items-center rounded-full bg-[#1B2B4B] text-[#E9C46A] text-[12.5px] font-black" }, o.type === "fixed" ? `고정 ${fmtRuleVal(o)}` : `수수료 ${fmtRuleVal(o)}`)));
       })),
-    list.length === 0 ? h("div", { className: "px-4 py-3 text-[12px] font-bold text-[#9AA9C3] border-t border-[#EEF2F7]" }, "회사관리 › 운임 규칙에서 규칙을 먼저 만들어 주세요") : null),
+    list.length === 0 ? h("div", { className: "px-4 py-3 text-[13px] font-bold text-[#8E9BB2] border-t border-[#EEF2F7]" }, "회사관리 › 운임 규칙에서 규칙을 먼저 만들어 주세요") : null),
     document.body) : null);
 }
 
