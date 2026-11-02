@@ -8,7 +8,42 @@ import * as XLSX from "xlsx";
 import { auth, db, FUNCTIONS_BASE, DEFAULT_COMPANY } from "./firebase";
 import { collection, doc, getDoc, getDocs, query, where, writeBatch, setDoc, serverTimestamp } from "firebase/firestore";
 import { coDocKey } from "./coKey";
-import { parsePlacesFromGrid, dedupePlaces, parseDriversFromGrid, dedupeDrivers, normKey, normPlate } from "./placeDriverParse";
+import { parsePlacesFromGrid, dedupePlaces, parseDriversFromGrid, dedupeDrivers, normKey, normPlate, wordsToLines, parsePlacesFromOcrLines } from "./placeDriverParse";
+
+// ⭐ 2026-11-03 .xlsx 속 그림(캡처해서 붙인 표) 꺼내기 — 탭 이름까지(시트 → 그림판 → 그림 연결 파일을 따라감). 같은 그림은 1장만.
+async function extractXlsxImages(buf) {
+  const { default: JSZip } = await import("jszip");
+  const zip = await JSZip.loadAsync(buf);
+  const txt = async (p) => (zip.file(p) ? zip.file(p).async("string") : "");
+  const rels = async (p) => { const x = await txt(p); return [...x.matchAll(/<Relationship\b[^>]*>/g)].map((m) => ({ id: (m[0].match(/Id="([^"]+)"/) || [])[1], target: (m[0].match(/Target="([^"]+)"/) || [])[1] || "" })); };
+  const resolve = (base, t) => { if (t.startsWith("/")) return t.slice(1); const parts = base.split("/"); parts.pop(); t.split("/").forEach((x) => { if (x === "..") parts.pop(); else if (x !== ".") parts.push(x); }); return parts.join("/"); };
+  const wbXml = await txt("xl/workbook.xml");
+  const wbRels = await rels("xl/_rels/workbook.xml.rels");
+  const mediaTabs = {}; // 그림 파일 → [탭 이름]
+  for (const m of wbXml.matchAll(/<sheet\b[^>]*>/g)) {
+    const name = ((m[0].match(/name="([^"]+)"/) || [])[1] || "").replace(/&amp;/g, "&");
+    const rid = (m[0].match(/r:id="([^"]+)"/) || [])[1];
+    const sheetPath = resolve("xl/workbook.xml", wbRels.find((r) => r.id === rid)?.target || "");
+    if (!sheetPath) continue;
+    const sp = sheetPath.split("/"); const sRels = await rels(`${sp.slice(0, -1).join("/")}/_rels/${sp[sp.length - 1]}.rels`);
+    for (const d of sRels.filter((r) => /drawing/.test(r.target))) {
+      const dPath = resolve(sheetPath, d.target); const dp = dPath.split("/");
+      const dRels = await rels(`${dp.slice(0, -1).join("/")}/_rels/${dp[dp.length - 1]}.rels`);
+      dRels.filter((r) => /media\//.test(r.target)).forEach((r) => { const mp = resolve(dPath, r.target); (mediaTabs[mp] = mediaTabs[mp] || []).push(name); });
+    }
+  }
+  const out = new Map(); // 내용 지문 → 그림
+  const files = Object.keys(zip.files).filter((p) => /^xl\/media\/.+\.(png|jpe?g|gif|bmp|webp)$/i.test(p));
+  for (const p of files) {
+    const data = await zip.file(p).async("uint8array");
+    const h = Array.from(new Uint8Array(await crypto.subtle.digest("SHA-1", data))).map((b) => b.toString(16).padStart(2, "0")).join("");
+    const cur = out.get(h);
+    if (cur) cur.tabs.push(...(mediaTabs[p] || []));
+    else out.set(h, { path: p, tabs: [...(mediaTabs[p] || [])], data, type: /\.png$/i.test(p) ? "image/png" : "image/jpeg" });
+  }
+  return [...out.values()];
+}
+const toDataUrl = (img) => new Promise((ok, no) => { const r = new FileReader(); r.onload = () => ok(r.result); r.onerror = no; r.readAsDataURL(new Blob([img.data], { type: img.type })); });
 
 async function callApi(fn, body) {
   const token = await auth.currentUser?.getIdToken();
@@ -48,6 +83,9 @@ export default function SheetPlaceDriverImport({ companies = [], url: initUrl = 
   const [allGrade, setAllGrade] = React.useState("일반");
   const [onlyFull, setOnlyFull] = React.useState(true);
   const [done, setDone] = React.useState(null);
+  const gridsRef = React.useRef({ grids: [], title: "", src: "" }); // ⭐ 그림 글자 읽기 후 다시 합칠 때 씀
+  const [imgs, setImgs] = React.useState([]); // 엑셀 속 그림(같은 그림 제외)
+  const [ocr, setOcr] = React.useState(null); // { done, total, found, error }
   const excelRef = React.useRef(null);
   // ⭐ 최고관리자만 — 메뉴·서버에서도 막혀 있지만 화면에서도 한 번 더 확인
   const [isMaster, setIsMaster] = React.useState(null);
@@ -58,12 +96,13 @@ export default function SheetPlaceDriverImport({ companies = [], url: initUrl = 
     getDoc(doc(db, "users", uid)).then((s) => setIsMaster(s.data()?.role === "totalMaster")).catch(() => setIsMaster(false));
   }, []);
 
-  const analyze = async (grids, title, src) => {
+  const analyze = async (grids, title, src, extraPlaces = []) => {
+    gridsRef.current = { grids, title, src };
     const [exP, exD] = await Promise.all([loadCompanyDocs("places", company), loadCompanyDocs("drivers", company)]);
     const exPlaceKeys = new Set(exP.map((p) => `${normKey(p.업체명)}|${normKey(p.주소)}`));
     const exPlaceNames = new Set(exP.map((p) => normKey(p.업체명)));
     const exPlates = new Set(exD.map((d) => normPlate(d.차량번호)).filter(Boolean));
-    const places = dedupePlaces(grids.flatMap((g) => parsePlacesFromGrid(g.rows, g.title))).map((p) => ({
+    const places = dedupePlaces([...grids.flatMap((g) => parsePlacesFromGrid(g.rows, g.title)), ...extraPlaces]).map((p) => ({
       ...p, __key: `${normKey(p.업체명)}|${normKey(p.주소)}`,
       __exists: exPlaceKeys.has(`${normKey(p.업체명)}|${normKey(p.주소)}`),
       __sameName: exPlaceNames.has(normKey(p.업체명)),
@@ -92,13 +131,46 @@ export default function SheetPlaceDriverImport({ companies = [], url: initUrl = 
   const openExcel = async (file) => {
     if (!file) return;
     if (!company) return setErr("운송사를 먼저 선택하세요.");
-    setErr(""); setBusy("open"); setRes(null);
+    setErr(""); setBusy("open"); setRes(null); setImgs([]); setOcr(null);
     try {
-      const wb = XLSX.read(await file.arrayBuffer(), { type: "array" });
+      const buf = await file.arrayBuffer();
+      const wb = XLSX.read(buf, { type: "array" });
       const grids = wb.SheetNames.map((name) => ({ title: name, rows: XLSX.utils.sheet_to_json(wb.Sheets[name], { header: 1, raw: false, defval: "" }) }));
       await analyze(grids, file.name, "excel");
+      if (/\.xlsx$/i.test(file.name)) setImgs(await extractXlsxImages(buf).catch(() => []));
     } catch (e) { setErr(`엑셀 파일을 읽지 못했습니다: ${e?.message || e}`); } finally { setBusy(""); }
   };
+
+  // ⭐ 그림 글자 읽기 — 4장씩 동시에 서버(Google Vision)로 보내 업체명·주소·담당자·전화번호를 뽑아 미리보기에 합친다
+  const runOcr = async () => {
+    const found = [];
+    setOcr({ done: 0, total: imgs.length, found: 0 });
+    let next = 0; let fail = "";
+    const worker = async () => {
+      while (next < imgs.length && !fail) {
+        const img = imgs[next++];
+        try {
+          const d = await callApi("sheetOcr", { image: await toDataUrl(img) });
+          found.push(...parsePlacesFromOcrLines(wordsToLines(d.words), img.tabs[0] || img.path.split("/").pop()));
+        } catch (e) { if (/Vision|로그인|최고관리자/.test(e.message)) fail = e.message; }
+        setOcr((o) => ({ ...o, done: o.done + 1, found: found.length }));
+      }
+    };
+    await Promise.all([worker(), worker(), worker(), worker()]);
+    if (fail) { setOcr((o) => ({ ...o, error: fail })); return; }
+    const g = gridsRef.current;
+    await analyze(g.grids, g.title, g.src, found);
+    setWhat("places");
+    setOcr((o) => ({ ...o, finished: true }));
+  };
+  const editPlace = (key, patch) => setRes((r) => r && ({ ...r, places: r.places.map((p) => {
+    if (p.__key !== key) return p;
+    const n = { ...p };
+    if ("업체명" in patch) n.업체명 = patch.업체명;
+    if ("주소" in patch) n.주소 = patch.주소;
+    if ("name" in patch || "phone" in patch) { const c = [...(n.contacts.length ? n.contacts : [{ name: "", phone: "" }])]; c[0] = { ...c[0], ...patch }; n.contacts = c; }
+    return n;
+  }) }));
 
   const placeRows = res ? res.places : [];
   const driverRows = res ? res.drivers : [];
@@ -201,6 +273,22 @@ export default function SheetPlaceDriverImport({ companies = [], url: initUrl = 
         {err && <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-[13.5px] font-semibold text-red-700">{err}</div>}
       </section>
 
+      {imgs.length > 0 && (
+        <section className={`${CARD} p-6`}>
+          <div className="text-[11px] font-extrabold tracking-[0.22em] text-[#4B6CB7]">IMAGE</div>
+          <div className="mt-0.5 text-[17px] font-black text-[#0F1A30]">파일 속 그림 {imgs.length.toLocaleString()}장(같은 그림 제외)</div>
+          <div className="text-[13.5px] text-gray-500 mt-1 mb-4">시트에 캡처해서 붙인 표(오더표·발주서)는 칸이 아니라 그림이라 글자 인식으로 읽습니다. 읽은 결과는 아래 상하차지 미리보기에 합쳐지고, 칸마다 고칠 수 있습니다.</div>
+          {ocr && (
+            <div className="mb-3">
+              <div className="h-2.5 rounded-full bg-gray-100 overflow-hidden"><div className="h-full bg-[#1B2B4B] transition-all" style={{ width: `${Math.round((ocr.done / Math.max(1, ocr.total)) * 100)}%` }} /></div>
+              <div className="mt-1.5 text-[13px] text-gray-600">{ocr.done} / {ocr.total}장 · 찾은 줄 {ocr.found}{ocr.finished ? " — 완료" : ""}</div>
+              {ocr.error && <div className="mt-2 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-[13.5px] font-semibold text-red-700">{ocr.error}</div>}
+            </div>
+          )}
+          <button onClick={runOcr} disabled={!!(ocr && !ocr.finished && !ocr.error)} className="px-6 py-3 rounded-xl bg-[#1B2B4B] text-white text-[14.5px] font-bold disabled:opacity-60">{ocr && !ocr.finished && !ocr.error ? "읽는 중…" : `그림 ${imgs.length}장 글자 읽기`}</button>
+        </section>
+      )}
+
       {res && (
         <section className={`${CARD} p-6`}>
           <div className="flex flex-wrap items-center gap-3 mb-4">
@@ -224,10 +312,18 @@ export default function SheetPlaceDriverImport({ companies = [], url: initUrl = 
                     {placeRows.map((p) => (
                       <tr key={p.__key} className={p.__exists ? "bg-gray-50 text-gray-400" : ""}>
                         <td className={`${td} text-center`}><input type="checkbox" disabled={p.__exists} checked={!p.__exists && !skip[`p:${p.__key}`]} onChange={(e) => setSkip((s) => ({ ...s, [`p:${p.__key}`]: !e.target.checked }))} className="w-[17px] h-[17px]" /></td>
-                        <td className={`${td} font-semibold whitespace-nowrap`}>{p.업체명}</td>
-                        <td className={td}>{p.주소 || <span className="text-red-500">주소 없음</span>}</td>
-                        <td className={`${td} whitespace-nowrap`}>{p.contacts.map((c) => c.name).filter(Boolean).join(", ")}</td>
-                        <td className={`${td} whitespace-nowrap`}>{p.contacts.map((c) => c.phone).filter(Boolean).join(", ")}</td>
+                        {p.__exists ? (<>
+                          <td className={`${td} font-semibold whitespace-nowrap`}>{p.업체명}</td>
+                          <td className={td}>{p.주소}</td>
+                          <td className={`${td} whitespace-nowrap`}>{p.contacts.map((c) => c.name).filter(Boolean).join(", ")}</td>
+                          <td className={`${td} whitespace-nowrap`}>{p.contacts.map((c) => c.phone).filter(Boolean).join(", ")}</td>
+                        </>) : (<>
+                          {/* ⭐ 칸마다 바로 고치기(그림 글자 인식이 틀린 글자 수정) */}
+                          <td className={td}><input value={p.업체명} onChange={(e) => editPlace(p.__key, { 업체명: e.target.value })} className="w-full min-w-[80px] px-2 py-1 rounded-md border border-transparent hover:border-[#DCE3EE] focus:border-[#1B2B4B] outline-none bg-transparent text-[13.5px]" style={{ fontWeight: 600 }} /></td>
+                          <td className={td}><input value={p.주소} onChange={(e) => editPlace(p.__key, { 주소: e.target.value })} className="w-full min-w-[80px] px-2 py-1 rounded-md border border-transparent hover:border-[#DCE3EE] focus:border-[#1B2B4B] outline-none bg-transparent text-[13.5px]" style={{ minWidth: 260 }} placeholder="주소 없음" /></td>
+                          <td className={td}><input value={p.contacts[0]?.name || ""} onChange={(e) => editPlace(p.__key, { name: e.target.value })} className="w-full min-w-[80px] px-2 py-1 rounded-md border border-transparent hover:border-[#DCE3EE] focus:border-[#1B2B4B] outline-none bg-transparent text-[13.5px]" />{p.contacts.length > 1 && <div className="text-[12px] text-gray-500 px-2">+ {p.contacts.slice(1).map((c) => c.name).filter(Boolean).join(", ")}</div>}</td>
+                          <td className={td}><input value={p.contacts[0]?.phone || ""} onChange={(e) => editPlace(p.__key, { phone: e.target.value })} className="w-full min-w-[80px] px-2 py-1 rounded-md border border-transparent hover:border-[#DCE3EE] focus:border-[#1B2B4B] outline-none bg-transparent text-[13.5px]" />{p.contacts.length > 1 && <div className="text-[12px] text-gray-500 px-2">+ {p.contacts.slice(1).map((c) => c.phone).filter(Boolean).join(", ")}</div>}</td>
+                        </>)}
                         <td className={`${td} text-gray-500 whitespace-nowrap`}>{p.__tab}{p.__dupCount > 1 ? ` 외 ${p.__dupCount - 1}` : ""}</td>
                         <td className={`${td} text-center whitespace-nowrap`}>{p.__exists ? <Badge c="bg-gray-100 text-gray-500">이미 있음</Badge> : p.__sameName ? <Badge c="bg-amber-100 text-amber-700">같은 이름·다른 주소</Badge> : <Badge c="bg-emerald-100 text-emerald-700">신규</Badge>}</td>
                       </tr>

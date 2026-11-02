@@ -5229,6 +5229,57 @@ exports.gsheetMine = functions.runWith({ timeoutSeconds: 540, memory: "512MB" })
   }
 });
 
+// 🔎 그림 글자 읽기(최고관리자 전용, 2026-11-03) — 시트에 캡처 그림으로 붙여 둔 표(오더표·발주서)를 읽는다.
+//  화면(상하차지·기사 가져오기 › 엑셀 파일)이 .xlsx 속 그림을 꺼내 1장씩 보내면 Google Vision(DOCUMENT_TEXT_DETECTION)으로
+//  단어와 위치를 돌려준다. 줄·칸 맞추기와 업체명·주소·담당자·전화번호 나누기는 화면에서 한다.
+//  ⚠️ 구글 클라우드 콘솔에서 이 프로젝트의 "Cloud Vision API"를 사용 설정해야 한다(매달 1,000장 무료).
+let _visionClient = null;
+exports.sheetOcr = functions.runWith({ timeoutSeconds: 120, memory: "512MB" }).https.onRequest(async (req, res) => {
+  res.set("Access-Control-Allow-Origin", "*");
+  res.set("Access-Control-Allow-Methods", "POST, OPTIONS");
+  res.set("Access-Control-Allow-Headers", "Authorization, Content-Type");
+  if (req.method === "OPTIONS") { res.status(204).send(""); return; }
+  if (req.method !== "POST") { res.status(405).json({ error: "POST만 허용됩니다." }); return; }
+  let body = req.body;
+  if (typeof body === "string") { try { body = JSON.parse(body); } catch { body = {}; } }
+  body = body || {};
+  try {
+    await requireTotalMaster(req);
+    const content = String(body.image || "").replace(/^data:[^,]+,/, "");
+    if (!content || content.length > 9 * 1024 * 1024) { res.status(400).json({ error: "그림이 없거나 너무 큽니다." }); return; }
+    if (!_visionClient) _visionClient = await new GoogleAuth({ scopes: ["https://www.googleapis.com/auth/cloud-platform"] }).getClient();
+    let data;
+    try {
+      const r = await _visionClient.request({
+        url: "https://vision.googleapis.com/v1/images:annotate", method: "POST",
+        data: { requests: [{ image: { content }, features: [{ type: "DOCUMENT_TEXT_DETECTION" }], imageContext: { languageHints: ["ko", "en"] } }] },
+      });
+      data = r.data;
+    } catch (e) {
+      const msg = String(e?.response?.data?.error?.message || e?.message || e);
+      if (/has not been used|is disabled|SERVICE_DISABLED|PERMISSION_DENIED/i.test(msg)) {
+        res.status(400).json({ error: "구글 글자 인식(Cloud Vision API)이 꺼져 있습니다. 구글 클라우드 콘솔에서 이 프로젝트의 Cloud Vision API를 '사용'으로 켜 주세요.", detail: msg });
+        return;
+      }
+      throw e;
+    }
+    const a = data?.responses?.[0] || {};
+    if (a.error) { res.status(400).json({ error: a.error.message || "글자 인식 실패" }); return; }
+    // 단어 + 위치(왼쪽 위 x0,y0 / 오른쪽 아래 x1,y1)
+    const words = [];
+    (a.fullTextAnnotation?.pages || []).forEach((pg) => (pg.blocks || []).forEach((b) => (b.paragraphs || []).forEach((pa) => (pa.words || []).forEach((w) => {
+      const t = (w.symbols || []).map((x) => x.text).join("");
+      const v = w.boundingBox?.vertices || [];
+      const xs = v.map((p) => p.x || 0); const ys = v.map((p) => p.y || 0);
+      if (t && xs.length) words.push({ t, x0: Math.min(...xs), y0: Math.min(...ys), x1: Math.max(...xs), y1: Math.max(...ys) });
+    }))));
+    res.json({ words });
+  } catch (e) {
+    console.error("그림 글자 읽기 오류:", e?.response?.data || e);
+    res.status(e.status || 500).json({ error: e?.message || String(e) });
+  }
+});
+
 // 📋 배차표(고정노선 › 배차표) — 화주사 구글시트의 날짜 탭 읽기 (직원 누구나, 2026-11-02)
 //  시트를 dispatch-app-9b92f@appspot.gserviceaccount.com 에 '뷰어'로 공유해야 읽힌다.
 //  - tabs: 탭 이름 목록(최근 탭이 보통 뒤에 있음)
