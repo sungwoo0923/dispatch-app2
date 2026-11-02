@@ -54,7 +54,9 @@ function Suggest({ value, onChange, onPick, items, k, sub, placeholder, showAll 
   const [open, setOpen] = React.useState(false);
   const [hi, setHi] = React.useState(0);
   const q = norm(value);
-  const list = q || showAll ? items.filter((x) => !q || norm(x[k]).includes(q)).sort((a, b) => (norm(a[k]).startsWith(q) ? 0 : 1) - (norm(b[k]).startsWith(q) ? 0 : 1)).slice(0, 10) : [];
+  // ⭐ 2026-11-02 칸을 누르기만 해도(빈 칸) 목록이 뜨게 — 배차관리에서 등록한 거래처·상하차지를 바로 고를 수 있다
+  void showAll;
+  const list = items.filter((x) => !q || norm(x[k]).includes(q)).sort((a, b) => (norm(a[k]).startsWith(q) ? 0 : 1) - (norm(b[k]).startsWith(q) ? 0 : 1) || String(a[k] || "").localeCompare(String(b[k] || ""), "ko")).slice(0, q ? 10 : 30);
   const pick = (x) => { onPick(x); setOpen(false); };
   return (
     <div className="relative flex-1 min-w-0">
@@ -463,7 +465,8 @@ export default function FixedRoutes({ drivers = [], companyName = "", dispatchDa
   React.useEffect(() => { if (!form) setTried(false); }, [form]);
   React.useEffect(() => {
     if (!co) return undefined;
-    const u1 = onSnapshot(collection(db, "clients"), (s) => setClients(s.docs.map((d) => ({ id: d.id, ...d.data() })).filter((c) => !c.companyName || c.companyName === co).filter((c) => c.거래처명 || c.id)), () => setClients([]));
+    const u1 = onSnapshot(collection(db, "clients"), (s) => setClients(s.docs.map((d) => { // ⭐ 2026-11-02 거래처 이름이 업체명 칸에만 있는 문서도 목록에 나오게(배차관리 등록분)
+      const c = { id: d.id, ...d.data() }; return { ...c, 거래처명: String(c.거래처명 || c.업체명 || "").trim() }; }).filter((c) => !c.companyName || c.companyName === co).filter((c) => c.거래처명)), () => setClients([]));
     const u2 = onSnapshot(collection(db, "places"), (s) => setPlaces(s.docs.map((d) => ({ _id: d.id, ...d.data() })).filter((p) => (!p.companyName || p.companyName === co) && p.업체명)), () => setPlaces([]));
     return () => { u1(); u2(); };
   }, [co]);

@@ -4547,7 +4547,7 @@ const patchDispatch = async (_id, patch, knownPrev) => {
         // 필드만 고치는 저장에는 재알림하지 않는다) 기사확인상태를 "대기"로 걸어
         // 기사 앱에서 오더수락/거절 카드 + 상단 배너 알림이 뜨게 한다.
         if (
-          driver.등급 === "지입" &&
+          driver.등급 === "지입" && !!driver.uid && // ⭐ 2026-11-02 기사앱을 아직 안 쓰는(가입 안 한) 지입 기사는 승인대기 없이 바로 배차완료
           "차량번호" in patch &&
           normalizePlate(patch.차량번호) !== normalizePlate(prev?.차량번호)
         ) {
@@ -11938,7 +11938,7 @@ const submitMultiRegister = async () => {
       let 슬롯기사확인상태 = {};
       if (s.차량번호) {
         const assignedDriverMR = drivers.find(d => normalizePlate(d.차량번호) === normalizePlate(s.차량번호));
-        if (assignedDriverMR?.등급 === "지입") {
+        if (assignedDriverMR?.등급 === "지입" && !!assignedDriverMR.uid) { // ⭐ 2026-11-02 기사앱 가입한 지입 기사만 승인대기
           슬롯기사확인상태 = { 기사확인상태: "대기" };
           addDoc(collection(db, "driver_notifications"), {
             driverId: assignedDriverMR.id,
@@ -13362,7 +13362,7 @@ if (rec.차량번호) {
 // 기사확인상태를 "대기"로 걸어 기사 앱에서 오더수락/거절 알림이 뜨게 한다.
 if (rec.차량번호) {
   const assignedDriver = drivers.find(d => normalizePlate(d.차량번호) === normalizePlate(rec.차량번호));
-  if (assignedDriver?.등급 === "지입") {
+  if (assignedDriver?.등급 === "지입" && !!assignedDriver.uid) { // ⭐ 2026-11-02 기사앱 가입한 지입 기사만 승인대기(아니면 배차완료)
     rec.기사확인상태 = "대기";
     rec.배차상태 = "승인대기";
     addDoc(collection(db, "driver_notifications"), {
