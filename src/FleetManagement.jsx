@@ -6127,7 +6127,7 @@ export default function FleetManagement({ dispatchData = [], role = "", forceTab
   const [locChangeRequests, setLocChangeRequests] = useState([]);
   const [myCompanyName, setMyCompanyName] = useState(null);
   // ⭐ 2026-11-02 차량관리대장 — 꺼진 회사는 메뉴·화면 모두 예전 그대로
-  const coFeatures = useCompanyFeatures(myCompanyName || getTenant());
+  const coFeatures = useCompanyFeatures(getTenant() || myCompanyName);
   const vlOn = coFeatures.vehicleLedger === true;
   const [companyStaffRaw, setCompanyStaffRaw] = useState([]); // users(role: totalMaster/admin/user) — 담당자 위임 대상
   const myUid = auth.currentUser?.uid || null;
@@ -7255,7 +7255,7 @@ export default function FleetManagement({ dispatchData = [], role = "", forceTab
 
       {/* ═══ 기사 등록 관리 ═══ */}
       {/* ⭐ 2026-11-02 차량관리대장 — 맞춤 기능이 켜진 회사는 같은 "차량 관리" 메뉴가 확장판(전체 현황 + 관리대장 + 기존 점검·소모품)으로 */}
-      {mainTab === "vehicle" && vlOn && <VehicleLedger company={myCompanyName || getTenant()} drivers={driversRaw} canEdit={role !== "viewer"} myName={companyStaffRaw.find(u => u.id === myUid)?.name || ""} by={`${companyStaffRaw.find(u => u.id === myUid)?.name || auth.currentUser?.email || "직원"}(직원)`} />}
+      {mainTab === "vehicle" && vlOn && <VehicleLedger company={getTenant() || myCompanyName} drivers={driversRaw} canEdit={role !== "viewer"} myName={companyStaffRaw.find(u => u.id === myUid)?.name || ""} by={`${companyStaffRaw.find(u => u.id === myUid)?.name || auth.currentUser?.email || "직원"}(직원)`} />}
       {mainTab === "vehicle" && !vlOn && <VehicleCareTab drivers={routeDrivers} driversRaw={driversRaw} by={`${companyStaffRaw.find(u => u.id === myUid)?.name || auth.currentUser?.email || "직원"}(직원)`} />}
       {mainTab === "registration" && <RegistrationTab usersMap={usersMap} myCompanyName={myCompanyName} driversRaw={driversRaw} myUid={myUid} staff={companyStaff} canDelegate={canDelegate} onAssignManager={assignDriverManager} />}
 
