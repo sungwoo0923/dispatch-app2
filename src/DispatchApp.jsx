@@ -42187,7 +42187,7 @@ setCopyPlaceOptions(list);
     {/* 숫자 */}
     <input autoComplete="off"
     disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
-      className="flex-1 px-3 py-2 outline-none"
+      className="flex-1 min-w-0 w-0 px-3 py-2 text-[14.5px] font-bold outline-none"
       value={copyTarget?.톤수값 || ""}
       onChange={(e) => {
         const v = e.target.value;
@@ -42206,7 +42206,7 @@ setCopyPlaceOptions(list);
     {/* 단위 */}
     <CustomSelect
     disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
-      className="px-3 py-2 bg-[#1B2B4B] text-white font-bold cursor-pointer"
+      className="shrink-0 w-[78px] pl-3 pr-6 py-2 bg-[#1B2B4B] text-white text-[14px] font-bold outline-none cursor-pointer"
       value={copyTarget?.톤수타입 || ""}
       onChange={(e) => {
         const type = e.target.value;
@@ -42235,7 +42235,7 @@ setCopyPlaceOptions(list);
     {/* 수량 */}
     <input autoComplete="off"
     disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
-      className="flex-1 px-3 py-2 outline-none"
+      className="flex-1 min-w-0 w-0 px-3 py-2 text-[14.5px] font-bold outline-none"
       value={copyTarget?.화물수량 || ""}
       onChange={(e) => {
         const v = e.target.value;
@@ -42250,7 +42250,7 @@ setCopyPlaceOptions(list);
     {/* 타입 */}
     <CustomSelect
     disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
-      className="px-3 py-2 bg-[#1B2B4B] text-white font-bold cursor-pointer"
+      className="shrink-0 w-[96px] pl-3 pr-6 py-2 bg-[#1B2B4B] text-white text-[14px] font-bold outline-none cursor-pointer"
       value={copyTarget?.화물타입 || ""}
       onChange={(e) => {
         const type = e.target.value;
@@ -50691,18 +50691,18 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                       <VehicleTypePicker className={cpInputStyle} value={copyTarget?.차량종류 ?? ""} disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")} base={["라보/다마스", "카고", "윙/카고", "윙바디", "탑차", "냉장탑", "냉동탑", "냉장윙", "냉동윙", "냉장/냉동탑", "냉장/냉동윙", "리프트", "오토바이", "기타"]} placeholder="선택" noneLabel="선택" onChange={(__v) => ((e) => setCopyTarget(p => ({...p, 차량종류: e.target.value})))({ target: { value: __v } })} />
                     </CpField>
                     <CpField label="차량톤수">
-                      <div className="flex items-center h-9 border border-[#C9D5EA] rounded-lg overflow-hidden bg-white">
-                        <input autoComplete="off" className="flex-1 min-w-0 w-0 px-2.5 py-1.5 text-[14.5px] font-bold outline-none" value={copyTarget?.톤수값 || ""} onChange={(e) => { const v = e.target.value; setCopyTarget(p => ({...p, 톤수값: v, 차량톤수: p.톤수타입 ? `${v}${p.톤수타입}` : v})); }} placeholder="1" disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")} />
-                        <CustomSelect className="shrink-0 h-full w-[88px] pl-3 pr-6 bg-[#1B2B4B] text-white font-bold outline-none cursor-pointer text-[14px]" value={copyTarget?.톤수타입 || ""} onChange={(e) => { const type = e.target.value; setCopyTarget(p => ({...p, 톤수타입: type, 차량톤수: type ? `${p.톤수값 || ""}${type}` : (p.톤수값 || "")})); }} disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}>
+                      <div className="flex items-center border rounded-lg overflow-hidden bg-white">
+                        <input autoComplete="off" className="flex-1 min-w-0 w-0 px-3 py-2 text-[14.5px] font-bold outline-none" value={copyTarget?.톤수값 || ""} onChange={(e) => { const v = e.target.value; setCopyTarget(p => ({...p, 톤수값: v, 차량톤수: p.톤수타입 ? `${v}${p.톤수타입}` : v})); }} placeholder="1" disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")} />
+                        <CustomSelect className="shrink-0 w-[78px] pl-3 pr-6 py-2 bg-[#1B2B4B] text-white text-[14px] font-bold outline-none cursor-pointer" value={copyTarget?.톤수타입 || ""} onChange={(e) => { const type = e.target.value; setCopyTarget(p => ({...p, 톤수타입: type, 차량톤수: type ? `${p.톤수값 || ""}${type}` : (p.톤수값 || "")})); }} disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}>
                           <option value="">선택</option>
                           {tonTypeOptionsCustom.map(v => <option key={v} value={v}>{v}</option>)}
                         </CustomSelect>
                       </div>
                     </CpField>
                     <CpField label={<span className="flex items-center gap-1 flex-wrap">화물내용<button type="button" tabIndex={-1} className="ml-1 px-1.5 py-0.5 text-[10px] font-bold rounded bg-[#1B2B4B] text-white hover:bg-[#243d6a] cursor-pointer" onClick={() => setCargoAddPopup({ initialValue: copyTarget?.화물내용||"", onCommit: (v) => setCopyTarget(p=>({...p,화물내용:v})) })}>+ 추가</button><CargoExtraChips value={copyTarget?.화물내용} /></span>}>
-                      <div className="flex items-center h-9 border border-[#C9D5EA] rounded-lg overflow-hidden bg-white">
-                        <input autoComplete="off" className="flex-1 min-w-0 w-0 px-2.5 py-1.5 text-[14.5px] font-bold outline-none" value={copyTarget?.화물수량 || ""} onChange={(e) => { const v = e.target.value; setCopyTarget(p => ({...p, 화물수량: v, 화물내용: p.화물타입 ? `${v}${p.화물타입}` : v})); }} placeholder="1" disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")} />
-                        <CustomSelect className="shrink-0 h-full w-[88px] pl-3 pr-6 bg-[#1B2B4B] text-white font-bold outline-none cursor-pointer text-[14px]" value={copyTarget?.화물타입 || ""} onChange={(e) => { const type = e.target.value; setCopyTarget(p => ({...p, 화물타입: type, 화물내용: type ? `${p.화물수량 || ""}${type}` : (p.화물수량 || "")})); }} disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}>
+                      <div className="flex items-center border rounded-lg overflow-hidden bg-white">
+                        <input autoComplete="off" className="flex-1 min-w-0 w-0 px-3 py-2 text-[14.5px] font-bold outline-none" value={copyTarget?.화물수량 || ""} onChange={(e) => { const v = e.target.value; setCopyTarget(p => ({...p, 화물수량: v, 화물내용: p.화물타입 ? `${v}${p.화물타입}` : v})); }} placeholder="1" disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")} />
+                        <CustomSelect className="shrink-0 w-[96px] pl-3 pr-6 py-2 bg-[#1B2B4B] text-white text-[14px] font-bold outline-none cursor-pointer" value={copyTarget?.화물타입 || ""} onChange={(e) => { const type = e.target.value; setCopyTarget(p => ({...p, 화물타입: type, 화물내용: type ? `${p.화물수량 || ""}${type}` : (p.화물수량 || "")})); }} disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}>
                           <option value="">없음</option>
                           {cargoTypeOptionsCustom.map(v => <option key={v} value={v}>{v}</option>)}
                         </CustomSelect>
