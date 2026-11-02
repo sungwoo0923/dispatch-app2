@@ -1,4 +1,5 @@
 import NoticeBoard from "./NoticeBoard";
+import { useBoardNoticesWithPlatform } from "./PlatformNoticeBanner";
 import { subscribeUsersLive } from "./usersLive"; // ⭐ 2026-11-02 속도 — 직원 명부 구독 공유
 import DeptDashboard from "./DeptDashboard";
 import ObituaryWriter from "./ObituaryWriter";
@@ -700,6 +701,8 @@ export default function HomeDashboard({ role, user, userCompany = "", pending, d
     return () => unsub();
   }, [showTodayToast]);
 
+  // ⭐ 2026-11-02 관리자센터2 — 관리자 관리센터에서 올린 플랫폼 공지(우리 회사 대상)를 공지사항 목록에 함께(읽기 전용 · "플랫폼 공지" 표시)
+  const boardNotices = useBoardNoticesWithPlatform(notices, getViewCompany(), formatCreatedAt);
   const noticeTotalPages = Math.ceil(notices.length / NOTICE_PAGE_SIZE);
   const pagedNotices = useMemo(() => { const s = (noticePage - 1) * NOTICE_PAGE_SIZE; return notices.slice(s, s + NOTICE_PAGE_SIZE); }, [notices, noticePage]);
   const filteredSchedules = useMemo(() => {
@@ -1002,8 +1005,8 @@ export default function HomeDashboard({ role, user, userCompany = "", pending, d
           </div>
           <div className="flex items-center gap-3">
             {[
-              boardTab === "공지사항" ? ["전체", notices.length] : boardTab === "휴가/외근" ? ["전체", schedules.length] : ["전체", handovers.length],
-              boardTab === "휴가/외근" ? ["내 결재 대기", pendingApprovalCountNav] : boardTab === "인수인계" ? ["내 미확인", unreadHandoverCountNav] : ["이번 달", notices.filter((n) => String(n.date || "").slice(0, 7) === todayStr.slice(0, 7)).length],
+              boardTab === "공지사항" ? ["전체", boardNotices.length] : boardTab === "휴가/외근" ? ["전체", schedules.length] : ["전체", handovers.length],
+              boardTab === "휴가/외근" ? ["내 결재 대기", pendingApprovalCountNav] : boardTab === "인수인계" ? ["내 미확인", unreadHandoverCountNav] : ["이번 달", boardNotices.filter((n) => String(n.date || "").slice(0, 7) === todayStr.slice(0, 7)).length],
             ].map(([k, v]) => (
               <div key={k} className="rounded-2xl bg-white/[0.08] ring-1 ring-white/15 px-4 py-2 text-center min-w-[96px]">
                 <div className="text-[12px] font-bold text-blue-100/70">{k}</div>
@@ -1032,9 +1035,9 @@ export default function HomeDashboard({ role, user, userCompany = "", pending, d
         <div className="p-5">
           {/* 공지사항 탭 */}
           {boardTab === "공지사항" && (
-            <NoticeBoard notices={notices} me={meHome} canWrite={canWriteNotice} isViewer={isViewer}
+            <NoticeBoard notices={boardNotices} me={meHome} canWrite={canWriteNotice} isViewer={isViewer}
               openId={selectedNotice?.id || null}
-              setOpenId={(id) => setSelectedNotice(id ? (notices.find((x) => x.id === id) || null) : null)}
+              setOpenId={(id) => setSelectedNotice(id ? (boardNotices.find((x) => x.id === id) || null) : null)}
               onEdit={(n) => {
                 // ⭐ 2026-11-01 인사발령 공문은 인사관리부 › 인사발령에서 정정·취소(회원 정보까지 같이 되돌린다), 부고는 부고장 화면으로 다시 고친다
                 if (n.category === "인사발령" && n.hrOrder) { window.alert("인사발령 공문은 인사관리부 › 인사발령에서 대상 직원을 고른 뒤\n[올린 발령 공문] → [정정 발령] 또는 [발령 취소]로 고쳐 주세요.\n(직원 정보까지 함께 바로잡히고, 같은 공지가 [정정]/[취소]로 바뀝니다)"); return; }

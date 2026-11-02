@@ -64,6 +64,26 @@ export function monthlyOf(plan, cfg, inp) {
   const storage = Math.max(0, num(inp.storageGB) - num(cfg.storageGB)) * num(cfg.storagePerGB);
   return { base: num(plan.price), seats, orders, fleet, storage, total: num(plan.price) + seats + orders + fleet + storage };
 }
+// ⭐ 2026-11-02 관리자센터2 — 요금제별 초기 도입비(비우면 공통값)·기본 프로모션. 견적서·인쇄·요금 안내서가 모두 이 함수로 읽는다
+const hasVal = (v) => v !== "" && v != null && !Number.isNaN(Number(v));
+export const planSetupFee = (plan, cfg) => (hasVal(plan?.setupFee) ? num(plan.setupFee) : num(cfg.setupFee));
+// 요금제를 고르면 사용 규모(직원·오더)는 그 요금제 포함량, 프로모션은 요금제 기본값으로 — 사용자가 직접 바꾼 칸은 그대로 둔다
+export function planDefaultsFor(plan, inp = {}) {
+  if (!plan) return {};
+  return {
+    ...(inp.staffTouched ? {} : { staff: num(plan.seats) }),
+    ...(inp.ordersTouched ? {} : { orders: num(plan.orders) }),
+    ...(inp.promoTouched ? {} : { promoMonths: num(plan.promoMonths), promoRate: num(plan.promoRate) }),
+  };
+}
+// 수납·요금·청구 — 회사에 요금제(companyPlans)가 지정돼 있으면 요금제 관리 가격으로 계산(지정 없으면 기존 공통 청구 기준)
+export function applyPlanBill(base, c, planId, sales) {
+  const p = planId && sales?.plans?.find((x) => x.id === planId);
+  if (!p) return { ...base, planName: "" };
+  const seats = Math.max(0, (c.staff || 0) - num(p.seats)) * num(sales.extraSeat);
+  const orders = Math.max(0, (base.projected || 0) - num(p.orders)) * num(sales.extraOrder);
+  return { ...base, base: num(p.price), seats, orders, total: num(p.price) + seats + orders, planName: p.name };
+}
 export function quoteOf(cfg, inp) {
   const plans = cfg.plans || [];
   const byPlan = plans.map((p) => ({ plan: p, m: monthlyOf(p, cfg, inp) }));
@@ -74,9 +94,10 @@ export function quoteOf(cfg, inp) {
   const waived = !!inp.waiveSetup && months >= num(cfg.waiveSetupMonths);
   // 단기(최소 약정 이상 · 면제 기간 미만) 약정은 도입비 일부 할인
   const setupHalf = !waived && !!inp.waiveSetup && months >= num(cfg.minContractMonths ?? 6) && num(cfg.semiSetupRate) > 0;
-  const setupAmount = waived ? 0 : setupHalf ? Math.round(num(cfg.setupFee) * (1 - num(cfg.semiSetupRate) / 100)) : num(cfg.setupFee);
+  const setupList = planSetupFee(chosen.plan, cfg);
+  const setupAmount = waived ? 0 : setupHalf ? Math.round(setupList * (1 - num(cfg.semiSetupRate) / 100)) : setupList;
   const oneTime = [
-    { label: "초기 도입비", note: `계정 세팅 · 기본 데이터 이전 · 교육 1회${setupHalf ? ` (단기 약정 ${num(cfg.semiSetupRate)}% 할인)` : ""}`, amount: setupAmount, list: num(cfg.setupFee), waived },
+    { label: "초기 도입비", note: `계정 세팅 · 기본 데이터 이전 · 교육 1회${setupHalf ? ` (단기 약정 ${num(cfg.semiSetupRate)}% 할인)` : ""}`, amount: setupAmount, list: setupList, waived },
     ...(inp.migration ? [{ label: "대량 데이터 이전", note: "기존 프로그램·엑셀 이관", amount: num(cfg.migrationFee) }] : []),
     ...(num(inp.training) > 0 ? [{ label: `추가 현장 교육 ${num(inp.training)}회`, note: "", amount: num(inp.training) * num(cfg.trainingFee) }] : []),
     ...(num(inp.devDays) > 0 ? [{ label: `맞춤 개발 ${num(inp.devDays)}일`, note: inp.devDesc || "", amount: num(inp.devDays) * num(cfg.devDayRate) }] : []),
@@ -188,10 +209,11 @@ export function priceSheetHtml(cfg) {
       <div style="margin-top:2px"><b style="font-size:17px">${esc(p.name)}</b>${p.recommended ? '<span class="tag">추천</span>' : ""}</div>
       <div class="p" style="margin-top:2px">${won(p.price)}<span style="font-size:11px;color:#5B6B85"> /월</span></div>
       <div style="font-size:12px;color:#5B6B85;margin:2px 0 6px">${esc(p.target || "")} · 직원 ${p.seats}명 · 오더 월 ${num(p.orders).toLocaleString()}건 포함</div>
+      ${hasVal(p.setupFee) || num(p.promoMonths) ? `<div style="font-size:11.5px;color:#1B2B4B;font-weight:700;margin-bottom:6px">${hasVal(p.setupFee) ? `도입비 ${won(p.setupFee)}` : ""}${hasVal(p.setupFee) && num(p.promoMonths) ? " · " : ""}${num(p.promoMonths) ? `첫 ${num(p.promoMonths)}개월 ${num(p.promoRate)}% 할인` : ""}</div>` : ""}
       <ul>${(p.features || []).map((f) => `<li>${esc(f)}</li>`).join("")}</ul></div>`).join("");
   const opt = [["추가 직원 계정", `1명당 월 ${won(cfg.extraSeat)}`], ["초과 오더", `1건당 ${won(cfg.extraOrder)}`], ["지입차 관리(GPS·운행기록·사진)", `1대당 월 ${won(cfg.fleetPerVehicle)}`], ["일반 기사 기사앱 · 화주사 포털", "무료"],
     ["추가 저장 용량", `${cfg.storageGB}GB 기본 · 초과 1GB당 월 ${won(cfg.storagePerGB)}`], ["문자 · 알림톡", "발송 건수만큼 실비"]];
-  const once = [["초기 도입비", `${won(cfg.setupFee)} — ${cfg.waiveSetupMonths}개월 이상 약정 시 면제`], ["대량 데이터 이전", won(cfg.migrationFee)], ["추가 현장 교육", `1회 ${won(cfg.trainingFee)}`], ["맞춤 개발", `1일 ${won(cfg.devDayRate)}`], ["연간 선결제", `${cfg.annualFreeMonths}개월 무료`], ["단기 계약(최소 " + (cfg.minContractMonths ?? 6) + "개월)", `6개월 선결제 ${cfg.semiDiscountRate}% 할인 · 도입비 ${cfg.semiSetupRate}% 할인`]];
+  const once = [["초기 도입비", `${won(cfg.setupFee)}${cfg.plans.some((p) => hasVal(p.setupFee)) ? " (요금제별 금액은 위 요금제 칸)" : ""} — ${cfg.waiveSetupMonths}개월 이상 약정 시 면제`], ["대량 데이터 이전", won(cfg.migrationFee)], ["추가 현장 교육", `1회 ${won(cfg.trainingFee)}`], ["맞춤 개발", `1일 ${won(cfg.devDayRate)}`], ["연간 선결제", `${cfg.annualFreeMonths}개월 무료`], ["단기 계약(최소 " + (cfg.minContractMonths ?? 6) + "개월)", `6개월 선결제 ${cfg.semiDiscountRate}% 할인 · 도입비 ${cfg.semiSetupRate}% 할인`]];
   const t = (rows) => `<table><tbody>${rows.map(([a, b]) => `<tr><th style="width:42%">${a}</th><td>${b}</td></tr>`).join("")}</tbody></table>`;
   return `<div class="page">
     <div class="hero"><div><div class="eyebrow">KP-FLOW · PRICING</div><h1>요 금 안 내</h1></div><div style="font-size:12px;text-align:right">${ymd()} 기준 · 부가세 별도</div></div>
@@ -226,6 +248,17 @@ function NumIn({ value, onChange, unit, w = "w-32" }) {
     </span>
   );
 }
+// 비워 둘 수 있는 숫자 칸(비우면 null = 공통값 사용)
+function OptNumIn({ value, onChange, unit, placeholder, w = "w-32" }) {
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      <input inputMode="numeric" value={value === "" || value == null ? "" : Number(value).toLocaleString()} placeholder={placeholder}
+        onChange={(e) => { const raw = e.target.value.replace(/[^\d]/g, ""); onChange(raw === "" ? null : Number(raw)); }}
+        className={`h-9 ${w} px-2.5 rounded-lg border border-[#DCE3EE] text-right text-[14.5px] font-black text-[#1B2B4B] outline-none focus:border-[#4B6CB7] placeholder:text-[#C0CAD9]`} style={{ fontFamily: MONO }} />
+      {unit && <span className="text-[12.5px] font-bold text-[#7A879C] min-w-[24px] whitespace-nowrap">{unit}</span>}
+    </span>
+  );
+}
 const Btn = ({ dark, children, ...p }) => (
   <button type="button" {...p} className={`h-10 px-4 rounded-xl text-[13.5px] font-black inline-flex items-center gap-1.5 transition disabled:opacity-50 ${dark ? "bg-[#0F1A30] text-white hover:bg-[#1B2B4B]" : "bg-white border border-[#DCE3EE] text-[#1B2B4B] hover:border-[#4B6CB7]"} ${p.className || ""}`}>{children}</button>
 );
@@ -253,6 +286,7 @@ export function PricingEditor() {
       // 고객사 화면(구독·결제, 잠금 안내)에 보여줄 공개 요금 — 가격·포함량·입금 계좌만
       await setDoc(doc(db, "publicPricing", "current"), {
         plans: cfg.plans.map(({ id, name, en, price, seats, orders, target, recommended }) => ({ id, name, en, price: num(price), seats: num(seats), orders: num(orders), target: target || "", recommended: !!recommended })),
+        setupFee: num(cfg.setupFee),
         extraSeat: num(cfg.extraSeat), extraOrder: num(cfg.extraOrder), bank: cfg.supplier?.bank || "", supplier: cfg.supplier?.name || "KP-Flow", supplierBizNo: cfg.supplier?.bizNo || "", supplierEmail: cfg.supplier?.email || "", supplierPhone: cfg.supplier?.phone || "",
         updatedAt: serverTimestamp(),
       });
@@ -300,6 +334,9 @@ export function PricingEditor() {
                 ["월 기본료", (p, i) => <NumIn value={p.price} onChange={(v) => setPlan(i, { price: v })} unit="원" />],
                 ["포함 직원 계정", (p, i) => <NumIn value={p.seats} onChange={(v) => setPlan(i, { seats: v })} unit="명" w="w-20" />],
                 ["포함 오더 (월)", (p, i) => <NumIn value={p.orders} onChange={(v) => setPlan(i, { orders: v })} unit="건" w="w-24" />],
+                // ⭐ 2026-11-02 관리자센터2 — 요금제별 초기 도입비·기본 프로모션(견적서에서 요금제를 고르면 자동으로 채워짐)
+                ["초기 도입비", (p, i) => <span className="inline-flex flex-col gap-1"><OptNumIn value={p.setupFee} onChange={(v) => setPlan(i, { setupFee: v })} unit="원" placeholder={num(cfg.setupFee).toLocaleString()} /><span className="text-[12px] text-[#9AA9C3] font-semibold">비우면 공통 {won(cfg.setupFee)}</span></span>],
+                ["기본 프로모션", (p, i) => <span className="inline-flex items-center gap-1.5 flex-wrap">첫<NumIn value={p.promoMonths || 0} onChange={(v) => setPlan(i, { promoMonths: v })} unit="개월" w="w-14" /><NumIn value={p.promoRate || 0} onChange={(v) => setPlan(i, { promoRate: Math.min(100, v) })} unit="%" w="w-14" /></span>],
                 ["추천 대상", (p, i) => <input value={p.target || ""} onChange={(e) => setPlan(i, { target: e.target.value })} className={`${inpCls} h-9`} />],
                 ["추천 표시", (p, i) => <label className="inline-flex items-center gap-2 text-[13px] font-bold"><input type="radio" name="rec" checked={!!p.recommended} onChange={() => set({ plans: cfg.plans.map((x, k) => ({ ...x, recommended: k === i })) })} />이 요금제를 추천으로</label>],
                 ["포함 기능 (한 줄에 하나)", (p, i) => <textarea value={(p.features || []).join("\n")} onChange={(e) => setPlan(i, { features: e.target.value.split("\n") })} onBlur={(e) => setPlan(i, { features: e.target.value.split("\n").map((x) => x.trim()).filter(Boolean) })} rows={6} className={`${inpCls} h-auto py-2 leading-relaxed`} />],
@@ -344,21 +381,31 @@ export function PricingEditor() {
 }
 
 // ═══════════════════════════ ② 견적서 작성 ═══════════════════════════
-const BLANK_INPUT = { customer: "", contact: "", phone: "", staff: 8, orders: 2500, fleet: 0, storageGB: 0, planId: "auto", contractMonths: 12, billing: "monthly", waiveSetup: true, migration: false, training: 0, devDays: 0, devDesc: "", promoMonths: 0, promoRate: 0, extraDiscount: 0, memo: "" };
+// ⭐ 2026-11-02 관리자센터2 — 견적 금액이 요금제 관리와 다르게 보이던 원인: 사용 규모가 "직원 8명 · 오더 2,500건"으로 고정돼 있어
+//  라이트(2명·500건 포함)·베이직(5명·1,500건 포함)에 초과 요금이 자동으로 붙었다(라이트 99,000 → 289,000 등).
+//  이제 새 견적은 추천 요금제의 포함량으로 시작하고, 요금제를 바꾸면 사용 규모·프로모션도 그 요금제 기본값으로 바뀐다(직접 고친 칸은 유지).
+const BLANK_INPUT = { customer: "", contact: "", phone: "", staff: 0, orders: 0, seeded: false, staffTouched: false, ordersTouched: false, promoTouched: false, fleet: 0, storageGB: 0, planId: "auto", contractMonths: 12, billing: "monthly", waiveSetup: true, migration: false, training: 0, devDays: 0, devDesc: "", promoMonths: 0, promoRate: 0, extraDiscount: 0, memo: "" };
 export function QuoteBuilder({ initial, onSaved }) {
   const cfg = useSalesPricing();
   const [inp, setInp] = React.useState(() => {
     // 관리센터 > 도입 문의에서 "이 업체로 견적서 만들기"로 넘어온 경우 고객 정보를 미리 채움(한 번만)
     let seed = {};
     if (!initial) { try { seed = JSON.parse(sessionStorage.getItem("kpQuoteSeed") || "{}"); sessionStorage.removeItem("kpQuoteSeed"); } catch { seed = {}; } }
-    return { ...BLANK_INPUT, ...seed, ...(initial?.input || {}) };
+    return { ...BLANK_INPUT, ...seed, ...(initial?.input ? { seeded: true, staffTouched: true, ordersTouched: true, promoTouched: true, ...initial.input } : {}) };
   });
   const [savedId, setSavedId] = React.useState(initial?.id || null);
   const [savedNo, setSavedNo] = React.useState(initial?.no || "");
   const [busy, setBusy] = React.useState(false);
-  React.useEffect(() => { if (initial) { setInp({ ...BLANK_INPUT, ...(initial.input || {}) }); setSavedId(initial.id || null); setSavedNo(initial.no || ""); } }, [initial]);
+  React.useEffect(() => { if (initial) { setInp({ ...BLANK_INPUT, seeded: true, staffTouched: true, ordersTouched: true, promoTouched: true, ...(initial.input || {}) }); setSavedId(initial.id || null); setSavedNo(initial.no || ""); } }, [initial]);
+  // 새 견적 — 요금제 관리의 추천 요금제(없으면 첫 요금제)와 그 포함량으로 시작
+  React.useEffect(() => {
+    if (!cfg || inp.seeded) return;
+    const rec = cfg.plans.find((p) => p.recommended) || cfg.plans[0];
+    setInp((p) => ({ ...p, seeded: true, ...(rec ? { planId: rec.id, ...planDefaultsFor(rec, p) } : {}) }));
+  }, [cfg, inp.seeded]);
   if (!cfg) return <div className="py-20 text-center text-[#9AA9C3]">불러오는 중…</div>;
   const set = (patch) => setInp((p) => ({ ...p, ...patch }));
+  const selectPlan = (id) => setInp((p) => ({ ...p, planId: id, ...planDefaultsFor(cfg.plans.find((x) => x.id === id), p) }));
   const q = quoteOf(cfg, inp);
   if (!q) return <div className="py-20 text-center text-[#9AA9C3]">요금제가 없습니다 — 요금제 관리에서 먼저 추가해 주세요.</div>;
   const save = async () => {
@@ -379,7 +426,7 @@ export function QuoteBuilder({ initial, onSaved }) {
   const L = ({ children }) => <div className="text-[12.5px] font-bold text-[#7A879C] mb-1">{children}</div>;
   const Seg = ({ v, items, k, stack = false }) => (
     <div className={`flex gap-1 p-1 rounded-xl bg-[#EEF2F8] ${stack ? "flex-col sm:flex-row" : ""}`}>{items.map(([val, label]) => (
-      <button key={val} type="button" onClick={() => set({ [k]: val })} className={`flex-1 h-8 px-1 rounded-lg text-[12.5px] sm:text-[13px] font-black whitespace-nowrap ${String(v) === String(val) ? "bg-[#1B2B4B] text-white" : "text-[#3A4A66]"}`}>{label}</button>))}</div>
+      <button key={val} type="button" onClick={() => (k === "planId" ? selectPlan(val) : set({ [k]: val }))} className={`flex-1 h-8 px-1 rounded-lg text-[12.5px] sm:text-[13px] font-black whitespace-nowrap ${String(v) === String(val) ? "bg-[#1B2B4B] text-white" : "text-[#3A4A66]"}`}>{label}</button>))}</div>
   );
   return (
     <div className="grid gap-4 xl:grid-cols-[minmax(0,440px)_minmax(0,1fr)] items-start">
@@ -392,12 +439,12 @@ export function QuoteBuilder({ initial, onSaved }) {
               <div><L>연락처</L><input value={inp.phone} onChange={(e) => set({ phone: e.target.value })} className={inpCls} /></div></div>
           </div>
         </Card>
-        <Card code="USAGE" title="사용 규모">
+        <Card code="USAGE" title="사용 규모" right={(inp.staffTouched || inp.ordersTouched) && q.chosen ? <button type="button" onClick={() => setInp((p) => ({ ...p, staffTouched: false, ordersTouched: false, staff: num(q.chosen.plan.seats), orders: num(q.chosen.plan.orders) }))} className="h-8 px-3 rounded-lg border border-[#DCE3EE] bg-white text-[12.5px] font-black text-[#1B2B4B] whitespace-nowrap">↺ {q.chosen.plan.name} 포함량으로</button> : null}>
           <div className="space-y-2">
             {[["staff", "직원 계정 수", "명"], ["orders", "월 예상 오더", "건"], ["fleet", "지입차(GPS 관리) 대수", "대"], ["storageGB", "예상 사진·파일 용량", "GB"]].map(([k, l, u]) => (
-              <div key={k} className="flex items-center justify-between gap-3"><span className="text-[14px] font-bold text-[#3A4A66]">{l}</span><NumIn value={inp[k]} onChange={(v) => set({ [k]: v })} unit={u} w="w-28" /></div>
+              <div key={k} className="flex items-center justify-between gap-3"><span className="text-[14px] font-bold text-[#3A4A66]">{l}</span><NumIn value={inp[k]} onChange={(v) => set({ [k]: v, ...(k === "staff" ? { staffTouched: true } : k === "orders" ? { ordersTouched: true } : {}) })} unit={u} w="w-28" /></div>
             ))}
-            <div className="text-[12px] text-[#9AA9C3]">일반 기사의 기사앱 · 화주사 포털은 무료라 넣지 않아도 됩니다.</div>
+            <div className="text-[12px] text-[#9AA9C3]">요금제를 고르면 직원·오더는 그 요금제 포함량으로 채워집니다(직접 고친 칸은 유지). 포함량을 넘으면 초과 요금이 붙습니다. 일반 기사의 기사앱 · 화주사 포털은 무료.</div>
           </div>
         </Card>
         <Card code="PLAN" title="요금제 · 계약">
@@ -409,6 +456,7 @@ export function QuoteBuilder({ initial, onSaved }) {
         </Card>
         <Card code="ONE-TIME" title="초기 비용 · 할인">
           <div className="space-y-2.5">
+            <div className="flex items-center justify-between gap-2 rounded-xl bg-[#F5F8FD] border border-[#E3E8F0] px-3 py-2"><span className="text-[13px] font-bold text-[#5B6B85]">{q.chosen.plan.name} 초기 도입비 정가</span><b className="text-[14.5px] text-[#0F1A30]" style={{ fontFamily: MONO }}>{won(planSetupFee(q.chosen.plan, cfg))}</b></div>
             <label className="flex items-center gap-2 text-[14px] font-bold text-[#3A4A66]"><input type="checkbox" checked={inp.waiveSetup} onChange={(e) => set({ waiveSetup: e.target.checked })} />도입비 면제 ({cfg.waiveSetupMonths}개월 이상 약정 시)</label>
             {inp.waiveSetup && num(inp.contractMonths) < num(cfg.waiveSetupMonths) && <div className="text-[12px] font-bold text-[#1B2B4B]">※ {cfg.waiveSetupMonths}개월 미만 약정이라 면제 대신 도입비 {num(cfg.semiSetupRate)}% 할인이 적용됩니다.</div>}
             <label className="flex items-center gap-2 text-[14px] font-bold text-[#3A4A66]"><input type="checkbox" checked={inp.migration} onChange={(e) => set({ migration: e.target.checked })} />대량 데이터 이전 (+{won(cfg.migrationFee)})</label>
@@ -416,9 +464,9 @@ export function QuoteBuilder({ initial, onSaved }) {
             <div className="flex items-center justify-between"><span className="text-[14px] font-bold text-[#3A4A66]">맞춤 개발</span><NumIn value={inp.devDays} onChange={(v) => set({ devDays: v })} unit="일" w="w-20" /></div>
             {num(inp.devDays) > 0 && <input value={inp.devDesc} onChange={(e) => set({ devDesc: e.target.value })} className={inpCls} placeholder="개발 내용 (예: 기존 ERP 연동)" />}
             <div className="pt-2 border-t border-[#EEF1F6]"><L>도입 프로모션 (첫 N개월 할인)</L>
-              <div className="flex items-center gap-2"><NumIn value={inp.promoMonths} onChange={(v) => set({ promoMonths: v })} unit="개월" w="w-16" /><NumIn value={inp.promoRate} onChange={(v) => set({ promoRate: Math.min(100, v) })} unit="%" w="w-16" /></div>
+              <div className="flex items-center gap-2"><NumIn value={inp.promoMonths} onChange={(v) => set({ promoMonths: v, promoTouched: true })} unit="개월" w="w-16" /><NumIn value={inp.promoRate} onChange={(v) => set({ promoRate: Math.min(100, v), promoTouched: true })} unit="%" w="w-16" /></div>
               <div className="flex gap-1.5 mt-2">{[[0, 0, "없음"], [1, 100, "첫 달 무료"], [3, 50, "3개월 50%"]].map(([m, r, l]) => (
-                <button key={l} type="button" onClick={() => set({ promoMonths: m, promoRate: r })} className={`h-8 px-3 rounded-lg text-[12.5px] font-black border ${num(inp.promoMonths) === m && num(inp.promoRate) === r ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "border-[#DCE3EE] text-[#3A4A66]"}`}>{l}</button>))}</div>
+                <button key={l} type="button" onClick={() => set({ promoMonths: m, promoRate: r, promoTouched: true })} className={`h-8 px-3 rounded-lg text-[12.5px] font-black border ${num(inp.promoMonths) === m && num(inp.promoRate) === r ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "border-[#DCE3EE] text-[#3A4A66]"}`}>{l}</button>))}</div>
             </div>
             <div className="flex items-center justify-between"><span className="text-[14px] font-bold text-[#3A4A66]">특별 할인 (1년차 금액에서)</span><NumIn value={inp.extraDiscount} onChange={(v) => set({ extraDiscount: v })} unit="원" /></div>
             <div><L>견적서 특약 (선택)</L><input value={inp.memo} onChange={(e) => set({ memo: e.target.value })} className={inpCls} placeholder="예: 사용 후기·사례 공개 동의 조건" /></div>
@@ -445,7 +493,7 @@ export function QuoteBuilder({ initial, onSaved }) {
           <div className="mt-4 flex gap-2 flex-wrap">
             <button type="button" onClick={() => openPrint(`견적서_${inp.customer || "고객사"}`, quoteHtml(cfg, inp, q, savedNo))} className="h-10 px-5 rounded-xl bg-white text-[#0F1A30] text-[13.5px] font-black">견적서 보기 · 인쇄</button>
             <button type="button" onClick={save} disabled={busy} className="h-10 px-5 rounded-xl bg-white/10 ring-1 ring-white/25 text-white text-[13.5px] font-black disabled:opacity-50">{busy ? "저장 중…" : savedId ? "견적 수정 저장" : "견적 저장"}</button>
-            <button type="button" onClick={() => { setInp(BLANK_INPUT); setSavedId(null); setSavedNo(""); }} className="h-10 px-4 rounded-xl text-white/70 text-[13px] font-bold hover:text-white">새 견적</button>
+            <button type="button" onClick={() => { setInp({ ...BLANK_INPUT }); setSavedId(null); setSavedNo(""); }} className="h-10 px-4 rounded-xl text-white/70 text-[13px] font-bold hover:text-white">새 견적</button>
           </div>
         </div>
 
@@ -454,20 +502,21 @@ export function QuoteBuilder({ initial, onSaved }) {
             {q.byPlan.map(({ plan, m }) => {
               const on = plan.id === q.chosen.plan.id, best = plan.id === q.best.plan.id;
               return (
-                <button key={plan.id} type="button" onClick={() => set({ planId: plan.id })} className={`text-left rounded-xl p-3.5 border-2 transition ${on ? "border-[#1B2B4B] bg-[#F5F8FD]" : "border-[#E3E8F0] hover:border-[#8FB0F0]"}`}>
+                <button key={plan.id} type="button" onClick={() => selectPlan(plan.id)} className={`text-left rounded-xl p-3.5 border-2 transition ${on ? "border-[#1B2B4B] bg-[#F5F8FD]" : "border-[#E3E8F0] hover:border-[#8FB0F0]"}`}>
                   <div className="flex items-center justify-between gap-2"><b className="text-[15px] text-[#0F1A30] whitespace-nowrap">{plan.name}</b>{best && <span className="px-1.5 py-0.5 rounded-md bg-[#1B2B4B] text-white text-[10.5px] font-black whitespace-nowrap">이 고객 최저가</span>}</div>
-                  <div className="text-[12px] font-bold text-[#5B6B85] mt-1 truncate whitespace-nowrap">정가 월 {won(m.base)} · {num(plan.seats)}명 · {num(plan.orders).toLocaleString()}건 포함</div>
-                  <div className="text-[20px] font-black text-[#1B2B4B] mt-1 whitespace-nowrap" style={{ fontFamily: MONO }}>{won(m.total)}<span className="text-[11.5px] font-bold text-[#7A879C] ml-1">/ 월</span></div>
-                  <div className="text-[11.5px] text-[#7A879C] leading-relaxed mt-1">
-                    {m.seats || m.orders || m.fleet || m.storage
-                      ? <>초과분 추가: {[m.seats ? `계정 ${Math.max(0, num(inp.staff) - num(plan.seats))}명 ${won(m.seats)}` : "", m.orders ? `오더 ${Math.max(0, num(inp.orders) - num(plan.orders)).toLocaleString()}건 ${won(m.orders)}` : "", m.fleet ? `지입 ${won(m.fleet)}` : "", m.storage ? `저장 ${won(m.storage)}` : ""].filter(Boolean).join(" + ")}</>
-                      : "추가 요금 없음 (포함 범위 안)"}
+                  {/* ⭐ 2026-11-02 관리자센터2 — 큰 숫자 = 요금제 관리의 정가. 이 고객 규모로 초과 요금이 붙으면 아래 줄에 따로 */}
+                  <div className="text-[13px] font-bold text-[#5B6B85] mt-1 truncate whitespace-nowrap">{num(plan.seats)}명 · 오더 {num(plan.orders).toLocaleString()}건 포함</div>
+                  <div className="text-[22px] font-black text-[#1B2B4B] mt-1 whitespace-nowrap" style={{ fontFamily: MONO }}>{won(m.base)}<span className="text-[12.5px] font-bold text-[#7A879C] ml-1">/ 월 정가</span></div>
+                  <div className={`text-[12.5px] leading-relaxed mt-1.5 ${m.total !== m.base ? "text-[#1B2B4B] font-bold" : "text-[#7A879C]"}`}>
+                    {m.total !== m.base
+                      ? <>이 규모면 월 <b style={{ fontFamily: MONO }}>{won(m.total)}</b> · {[m.seats ? `계정 +${Math.max(0, num(inp.staff) - num(plan.seats))}명 ${won(m.seats)}` : "", m.orders ? `오더 +${Math.max(0, num(inp.orders) - num(plan.orders)).toLocaleString()}건 ${won(m.orders)}` : "", m.fleet ? `지입 ${won(m.fleet)}` : "", m.storage ? `저장 ${won(m.storage)}` : ""].filter(Boolean).join(" + ")}</>
+                      : "이 규모면 추가 요금 없음"}
                   </div>
                 </button>
               );
             })}
           </div>
-          <div className="mt-3 text-[12px] text-[#7A879C]">카드를 누르면 그 요금제로 견적이 바뀝니다. 정가는 베이직이 가장 싸지만, 포함된 계정·오더를 넘으면 초과 요금이 붙어 상위 요금제가 더 쌀 수 있습니다.</div>
+          <div className="mt-3 text-[12px] text-[#7A879C]">카드를 누르면 그 요금제로 견적이 바뀌고, 사용 규모·프로모션이 그 요금제 기본값으로 채워집니다. 큰 숫자는 요금제 관리의 정가이며, 포함된 계정·오더를 넘는 만큼만 초과 요금이 붙습니다.</div>
         </Card>
 
         <Card code="DETAIL" title={`${q.periodLabel} 계산 내역`}>

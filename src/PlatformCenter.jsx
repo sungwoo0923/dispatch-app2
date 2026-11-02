@@ -18,12 +18,15 @@ import PlatformMonitor, { estimateBill, usePhone } from "./PlatformMonitor";
 import { PlatformLiveProvider, usePlatformLive, mergeCompanies, LiveNowPanel, SignupTimeline, DupeWarning, HeaderLivePill, Panel as LivePanel, normCo } from "./PlatformLive";
 import { ShellIcon } from "./AdminShell";
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts";
-import { useSalesPricing } from "./SalesQuote";
+import { useSalesPricing, applyPlanBill } from "./SalesQuote";
 import { ContractBuilder, ContractList, ContractTemplates } from "./ContractCenter";
 import { NotifTemplatePanel, LandingPageEditPanel, ShipperForceUpdatePanel } from "./AdminMenu";
 import { AdminSessionsPanel } from "./LoginManager";
 import CompanyResetPanel from "./CompanyResetPanel";
 import SheetImportPanel from "./SheetImportPanel";
+import NoticeBoard from "./NoticeBoard";
+import { toBoardNotice } from "./PlatformNoticeBanner";
+import { compressImage } from "./InternalMail";
 import "./pcTheme.css";
 
 const MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
@@ -250,13 +253,7 @@ function PaymentsPanel() {
       await Promise.all(open.docs.map((d) => updateDoc(d.ref, { status: "처리", handledAt: serverTimestamp(), appliedPlan: planId || "" })));
     } catch (e) { window.alert(e.message); }
   };
-  const planBill = (c, base) => {
-    const pid = plans[c.name]?.planId; const p = pid && sales?.plans?.find((x) => x.id === pid);
-    if (!p) return base;
-    const seats = Math.max(0, (c.staff || 0) - Number(p.seats || 0)) * Number(sales.extraSeat || 0);
-    const orders = Math.max(0, (base.projected || 0) - Number(p.orders || 0)) * Number(sales.extraOrder || 0);
-    return { ...base, base: Number(p.price || 0), seats, orders, total: Number(p.price || 0) + seats + orders };
-  };
+  const planBill = (c, base) => applyPlanBill(base, c, plans[c.name]?.planId, sales); // ⭐ 2026-11-02 관리자센터2 — 요금·청구와 같은 계산(SalesQuote.applyPlanBill)
   if (!stats || !pricing) return <div className="py-20 text-center text-[#9AA9C3]">불러오는 중…</div>;
   const days = new Date(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 0).getDate();
   const companies = mergeCompanies(stats.companies, live).map((c) => ({ ...c, bill: planBill(c, estimateBill(c, pricing, days, days)) }));
@@ -303,57 +300,234 @@ function PaymentsPanel() {
 }
 
 // ═══════════════════════ 플랫폼 공지 ═══════════════════════
+// ⭐ 2026-11-02 관리자센터2 — 회사 공지사항 작성 화면(HomeWriters.NoticeWriter)과 같은 글쓰기 UX
+//  · 대상: 전체 / 전체 운송사 / 전체 화주사 / 선택한 운송사(회사 검색·다중 선택 → targetCompanies[])
+//  · 분류 · 상단 고정 · 띠 배너 · 푸시 · 게시 종료일 · 제목 · 본문 · 이미지 1장 · 미리보기(실제 공지사항 목록 컴포넌트로)
+//  · 게시하면 대상 회사 홈 › 공지사항(PC·모바일)에 "플랫폼 공지" 표시로 함께 뜬다(같은 문서를 읽으므로 수정·삭제도 바로 반영)
+const PN_AUD = [
+  ["all", "전체", "운송사 + 화주사"],
+  ["carrier", "전체 운송사", "모든 운송사 직원"],
+  ["shipper", "전체 화주사", "화주 화면 배너"],
+  ["selected", "선택한 운송사", "고른 회사만"],
+];
+const PN_LEVELS = ["안내", "업데이트", "점검", "중요", "긴급"];
+const pnAudLabel = (n) => (n.audience === "selected" ? `선택 ${(n.targetCompanies || []).length}곳` : (PN_AUD.find(([k]) => k === (n.audience || "all")) || PN_AUD[0])[1]);
+function CompanyPicker({ selected, setSelected }) {
+  const live = usePlatformLive();
+  const [q, setQ] = React.useState("");
+  const all = React.useMemo(() => {
+    const m = new Map();
+    Object.values(live?.companies || {}).forEach((c) => { if (c.staff || c.drivers || c.pending) m.set(c.name, { name: c.name, staff: c.staff, code: live.appInfo?.[c.name]?.code || "" }); });
+    Object.entries(live?.appInfo || {}).forEach(([name, a]) => { if (!m.has(name)) m.set(name, { name, staff: 0, code: a.code || "" }); });
+    return [...m.values()].sort((a, b) => b.staff - a.staff || a.name.localeCompare(b.name, "ko"));
+  }, [live]);
+  const kw = q.trim().toLowerCase();
+  const rows = all.filter((c) => !kw || c.name.toLowerCase().includes(kw) || String(c.code).toLowerCase().includes(kw));
+  const toggle = (name) => setSelected(selected.includes(name) ? selected.filter((x) => x !== name) : [...selected, name]);
+  const allOn = rows.length > 0 && rows.every((c) => selected.includes(c.name));
+  return (
+    <div className="rounded-2xl border border-[#DCE3EE] bg-[#F7F9FC] p-3 sm:p-4 space-y-3">
+      <div className="flex flex-wrap items-center gap-1.5 min-h-[36px]">
+        {selected.length ? selected.map((n) => (
+          <span key={n} className="h-8 pl-3 pr-1 rounded-lg bg-[#0F1A30] text-white text-[13.5px] font-bold inline-flex items-center gap-1 whitespace-nowrap">
+            {n}<button type="button" onClick={() => toggle(n)} aria-label={`${n} 빼기`} className="w-6 h-6 rounded-md text-white/70 hover:text-white hover:bg-white/10">✕</button>
+          </span>
+        )) : <span className="text-[14px] font-semibold text-[#7A879C]">아래에서 공지를 받을 운송사를 고르세요</span>}
+        {selected.length > 0 && <button type="button" onClick={() => setSelected([])} className="ml-auto h-8 px-3 rounded-lg text-[13px] font-bold text-[#5B6B85] hover:bg-white whitespace-nowrap">모두 빼기</button>}
+      </div>
+      <div className="flex gap-2">
+        <div className="relative flex-1 min-w-0">
+          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="회사명 · 회사 코드 검색" className="w-full h-11 pl-10 pr-3 rounded-xl border border-[#DCE3EE] bg-white text-[14.5px] font-semibold outline-none focus:border-[#4B6CB7]" />
+          <svg className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#9AA9C3]" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
+        </div>
+        <button type="button" disabled={!rows.length} onClick={() => setSelected(allOn ? selected.filter((n) => !rows.some((c) => c.name === n)) : [...new Set([...selected, ...rows.map((c) => c.name)])])} className="h-11 px-4 rounded-xl border border-[#DCE3EE] bg-white text-[13.5px] font-black text-[#1B2B4B] whitespace-nowrap disabled:opacity-40">{allOn ? "보이는 회사 해제" : `보이는 ${rows.length}곳 선택`}</button>
+      </div>
+      <div className="max-h-[280px] overflow-y-auto rounded-xl bg-white border border-[#E3E8F0] divide-y divide-[#EEF1F6]">
+        {!live?.ready ? <div className="py-8 text-center text-[14px] text-[#9AA9C3]">회사 목록 불러오는 중…</div>
+          : rows.length === 0 ? <div className="py-8 text-center text-[14px] text-[#9AA9C3]">검색 결과가 없습니다</div>
+          : rows.map((c) => { const on = selected.includes(c.name); return (
+            <button key={c.name} type="button" onClick={() => toggle(c.name)} className={`w-full flex items-center gap-3 px-3.5 h-12 text-left ${on ? "bg-[#EEF3FB]" : "hover:bg-[#F7F9FC]"}`}>
+              <span className={`w-5 h-5 rounded-md border-2 flex items-center justify-center text-[12px] font-black shrink-0 ${on ? "bg-[#1B2B4B] border-[#1B2B4B] text-white" : "border-[#C9D3E3] bg-white"}`}>{on ? "✓" : ""}</span>
+              <span className="flex-1 min-w-0 truncate text-[14.5px] font-black text-[#0F1A30]">{c.name}</span>
+              {c.code && <span className="text-[12.5px] font-bold text-[#7A879C] whitespace-nowrap" style={{ fontFamily: MONO }}>{c.code}</span>}
+              <span className="w-16 text-right text-[13px] font-semibold text-[#5B6B85] whitespace-nowrap">직원 {c.staff}명</span>
+            </button>); })}
+      </div>
+    </div>
+  );
+}
+function PlatformNoticePreview({ draft, onClose }) {
+  const [openId, setOpenId] = React.useState("plat:preview");
+  const n = toBoardNotice({ ...draft, id: "preview", createdAt: Date.now() });
+  return (
+    <div className="fixed inset-0 z-[99990] bg-[rgba(11,20,40,.55)] flex items-start justify-center p-3 sm:p-8 overflow-y-auto" onClick={onClose}>
+      <div className="w-full max-w-[980px] rounded-[22px] bg-[#EEF1F6] p-3 sm:p-5 space-y-3 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <div><div className="text-[11px] font-extrabold tracking-[0.26em] text-[#4B6CB7]" style={{ fontFamily: MONO }}>PREVIEW</div>
+            <div className="text-[17px] font-black text-[#0F1A30]">운송사 홈 › 공지사항에서 이렇게 보입니다</div></div>
+          <div className="flex gap-1.5">
+            <button type="button" onClick={() => setOpenId(null)} className={`h-10 px-4 rounded-xl text-[13.5px] font-black border ${!openId ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white border-[#DCE3EE] text-[#1B2B4B]"}`}>목록</button>
+            <button type="button" onClick={() => setOpenId("plat:preview")} className={`h-10 px-4 rounded-xl text-[13.5px] font-black border ${openId ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white border-[#DCE3EE] text-[#1B2B4B]"}`}>본문</button>
+            <button type="button" onClick={onClose} className="h-10 px-4 rounded-xl bg-[#0F1A30] text-white text-[13.5px] font-black">닫기</button>
+          </div>
+        </div>
+        {draft.banner !== false && (
+          <div className="rounded-xl overflow-hidden text-white" style={{ background: ["중요", "점검", "긴급"].includes(draft.level) ? "linear-gradient(90deg,#0B1428,#1B2B4B)" : "linear-gradient(90deg,#1B2B4B,#2D4C82)" }}>
+            <div className="flex items-center gap-3 px-4 py-2 text-[13.5px]"><span className="px-2 py-0.5 rounded-md bg-white/10 border border-white/20 text-[11px] font-black text-[#8FB0F0]">{draft.level}</span><b className="truncate">{draft.title || "(제목)"}</b><span className="ml-auto text-white/60 text-[12.5px] whitespace-nowrap">화면 맨 위 띠 배너</span></div>
+          </div>
+        )}
+        <NoticeBoard notices={[n]} me={{ uid: "preview", role: "user" }} canWrite={false} isViewer openId={openId} setOpenId={setOpenId} onEdit={() => {}} confirm={() => {}} />
+      </div>
+    </div>
+  );
+}
 function NoticesPanel() {
   const list = useCol("platformNotices");
-  const blank = { title: "", body: "", level: "안내", audience: "all", active: true, endDate: "" };
+  const blank = { title: "", body: "", level: "안내", audience: "all", targetCompanies: [], active: true, endDate: "", pinned: false, banner: true, push: true, image: "" };
   const [f, setF] = React.useState(blank);
   const [editId, setEditId] = React.useState(null);
+  const [writing, setWriting] = React.useState(false);
+  const [preview, setPreview] = React.useState(false);
+  const [busy, setBusy] = React.useState(false);
+  const [filter, setFilter] = React.useState("all");
+  const fileRef = React.useRef(null);
+  const set = (patch) => setF((p) => ({ ...p, ...patch }));
+  const close = () => { setF(blank); setEditId(null); setWriting(false); };
   const save = async () => {
     if (!f.title.trim()) { window.alert("제목을 입력해 주세요."); return; }
+    if (f.audience === "selected" && !f.targetCompanies.length) { window.alert("공지를 받을 운송사를 한 곳 이상 골라 주세요."); return; }
+    setBusy(true);
     try {
-      if (editId) await updateDoc(doc(db, "platformNotices", editId), { ...f, updatedAt: serverTimestamp() });
-      else await addDoc(collection(db, "platformNotices"), { ...f, createdAt: serverTimestamp() });
-      setF(blank); setEditId(null);
-    } catch (e) { window.alert(e.message); }
+      const data = { title: f.title.trim().slice(0, 200), body: f.body || "", level: f.level, category: f.level, audience: f.audience,
+        targetCompanies: f.audience === "selected" ? f.targetCompanies : [], active: f.active !== false, endDate: f.endDate || "",
+        pinned: !!f.pinned, banner: f.banner !== false, board: true, image: f.image || "", author: "KP-Flow 운영팀" };
+      if (editId) await updateDoc(doc(db, "platformNotices", editId), { ...data, updatedAt: serverTimestamp() });
+      else await addDoc(collection(db, "platformNotices"), { ...data, push: f.push !== false, createdAt: serverTimestamp(), authorEmail: auth.currentUser?.email || "" });
+      close();
+    } catch (e) { window.alert(`저장 실패: ${e.message}`); } finally { setBusy(false); }
   };
-  const inp = "h-10 w-full px-3 rounded-xl border border-[#DCE3EE] text-[14px] font-semibold outline-none focus:border-[#4B6CB7]";
-  return (
+  const Label = ({ children, hint }) => <div className="text-[14px] font-black text-[#0F1A30] mb-2">{children}{hint && <span className="ml-1.5 text-[13px] font-semibold text-[#9AA9C3]">{hint}</span>}</div>;
+  const inp = "w-full px-4 rounded-xl border border-[#DCE3EE] bg-white text-[15px] text-[#0F1A30] outline-none focus:border-[#4B6CB7]";
+  const today = ymd();
+  const rows = (list || []).filter((n) => filter === "all" || (filter === "live" ? n.active !== false && !(n.endDate && n.endDate < today) : !(n.active !== false && !(n.endDate && n.endDate < today))));
+  const liveN = (list || []).filter((n) => n.active !== false && !(n.endDate && n.endDate < today)).length;
+
+  if (writing) return (
     <div className="space-y-4">
-      <Hero en="OPERATIONS · BROADCAST" title="플랫폼 공지" desc="모든 운송사(또는 화주사) 화면 맨 위에 띠 배너로 뜹니다. 점검·업데이트·요금 안내에 쓰세요. 사용자가 닫으면 그 사람에겐 다시 안 뜹니다." />
-      <div className="grid gap-4 xl:grid-cols-[420px_minmax(0,1fr)] items-start">
-        <Card code={editId ? "EDIT" : "NEW"} title={editId ? "공지 수정" : "새 공지"}>
-          <div className="space-y-2.5">
-            <input value={f.title} onChange={(e) => setF({ ...f, title: e.target.value })} placeholder="제목 (예: 11/2(일) 02:00~04:00 정기 점검)" className={inp} />
-            <textarea value={f.body} onChange={(e) => setF({ ...f, body: e.target.value })} rows={4} placeholder="내용 (선택)" className={`${inp} h-auto py-2`} />
-            <div className="grid grid-cols-2 gap-2">
-              <label className="block"><span className="text-[12px] font-bold text-[#7A879C]">구분</span><select value={f.level} onChange={(e) => setF({ ...f, level: e.target.value })} className={`${inp} mt-1`}>{["안내", "업데이트", "점검", "중요"].map((x) => <option key={x}>{x}</option>)}</select></label>
-              <label className="block"><span className="text-[12px] font-bold text-[#7A879C]">대상</span><select value={f.audience} onChange={(e) => setF({ ...f, audience: e.target.value })} className={`${inp} mt-1`}><option value="all">전체</option><option value="carrier">운송사만</option><option value="shipper">화주사만</option></select></label>
-              <label className="block col-span-2"><span className="text-[12px] font-bold text-[#7A879C]">게시 종료일 (비우면 계속)</span><input type="date" value={f.endDate} onChange={(e) => setF({ ...f, endDate: e.target.value })} className={`${inp} mt-1`} /></label>
-            </div>
-            <div className="flex gap-2">
-              {editId && <button type="button" onClick={() => { setF(blank); setEditId(null); }} className="flex-1 h-11 rounded-xl border border-[#DCE3EE] text-[13.5px] font-black text-[#3A4A66]">취소</button>}
-              <button type="button" onClick={save} className="flex-[2] h-11 rounded-xl bg-[#0F1A30] text-white text-[14px] font-black">{editId ? "수정 저장" : "공지 게시"}</button>
+      <Hero en="OPERATIONS · BROADCAST · WRITE" title={editId ? "플랫폼 공지 수정" : "플랫폼 공지 작성"} desc="대상 회사의 홈 › 공지사항(PC·모바일)과 화면 맨 위 띠 배너에 '플랫폼 공지'로 뜹니다 · 회사 관리자는 고칠 수 없습니다"
+        right={<div className="flex items-center gap-2">
+          <button type="button" onClick={close} className="h-11 px-5 rounded-xl bg-white/10 border border-white/20 text-white text-[14px] font-bold whitespace-nowrap">취소</button>
+          <button type="button" onClick={() => setPreview(true)} className="h-11 px-5 rounded-xl bg-white/10 border border-white/20 text-white text-[14px] font-black whitespace-nowrap inline-flex items-center gap-2"><ShellIcon name="eye" size={15} />미리보기</button>
+          <button type="button" onClick={save} disabled={busy} className="h-11 px-6 rounded-xl bg-white text-[#0F1A30] text-[14.5px] font-black inline-flex items-center gap-2 disabled:opacity-50 whitespace-nowrap"><ShellIcon name="send" size={15} />{busy ? "저장 중…" : editId ? "수정 저장" : "공지 게시"}</button>
+        </div>} />
+      <div className="rounded-[18px] bg-white border border-[#E3E8F0] p-4 sm:p-6 space-y-5">
+        <div className="grid gap-4 min-[1700px]:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)_auto] min-[1700px]:items-end">
+          <div>
+            <Label>받는 대상</Label>
+            <div role="radiogroup" aria-label="받는 대상" className="grid grid-cols-2 sm:grid-cols-4 gap-1 p-1 rounded-xl bg-[#F1F4F9] border border-[#E3E8F0]">
+              {PN_AUD.map(([v, l, s2]) => (
+                <button key={v} type="button" role="radio" aria-checked={f.audience === v} onClick={() => set({ audience: v })}
+                  className={`rounded-lg px-3 py-2 text-left transition ${f.audience === v ? "bg-[#0F1A30] text-white shadow-[0_4px_12px_rgba(15,26,48,0.25)]" : "text-[#3A4A66] hover:bg-white"}`}>
+                  <div className="text-[14px] font-black leading-tight whitespace-nowrap">{l}</div><div className={`text-[12px] leading-tight mt-0.5 whitespace-nowrap ${f.audience === v ? "text-white/60" : "text-[#9AA9C3]"}`}>{s2}</div>
+                </button>
+              ))}
             </div>
           </div>
-        </Card>
-        <Card code="LIVE" title="게시된 공지" bodyClass="p-2">
-          {(list || []).length === 0 ? <div className="py-14 text-center text-[#9AA9C3]">게시된 공지가 없습니다.</div> : list.map((n) => {
-            const expired = n.endDate && n.endDate < ymd();
-            return (
-              <div key={n.id} className="flex items-center gap-2 sm:gap-3 px-2 sm:px-3 py-3 rounded-xl hover:bg-[#F5F8FD] flex-wrap sm:flex-nowrap [&_button]:whitespace-nowrap">
-                <span className={`w-14 text-center py-1 rounded-md text-[11px] font-black ${n.level === "중요" || n.level === "점검" ? "bg-[#0F1A30] text-white" : "bg-[#EEF2F8] text-[#1B2B4B]"}`}>{n.level}</span>
-                <div className="flex-1 min-w-0"><div className={`text-[14.5px] font-black truncate ${n.active && !expired ? "text-[#0F1A30]" : "text-[#9AA9C3] line-through"}`}>{n.title}</div>
-                  <div className="text-[12px] text-[#7A89A3]">{{ all: "전체", carrier: "운송사", shipper: "화주사" }[n.audience] || "전체"} · {msOf(n.createdAt) ? ymd(new Date(msOf(n.createdAt))) : ""}{n.endDate ? ` ~ ${n.endDate}` : ""}</div></div>
-                <div className="w-full sm:w-auto flex justify-end gap-1.5 shrink-0">
-                <button type="button" onClick={() => updateDoc(doc(db, "platformNotices", n.id), { active: !n.active })} className="h-8 px-3 rounded-lg border border-[#DCE3EE] text-[12.5px] font-black text-[#1B2B4B]">{n.active ? "내리기" : "다시 게시"}</button>
-                <button type="button" onClick={() => { setEditId(n.id); setF({ ...blank, ...n }); }} className="h-8 px-3 rounded-lg border border-[#DCE3EE] text-[12.5px] font-black text-[#1B2B4B]">수정</button>
-                <button type="button" onClick={() => window.confirm("공지를 삭제할까요?") && deleteDoc(doc(db, "platformNotices", n.id))} className="h-8 px-3 rounded-lg border border-[#DCE3EE] text-[12.5px] font-bold text-[#7A879C]">삭제</button>
-                </div>
+          <div>
+            <Label>분류</Label>
+            <div role="radiogroup" aria-label="분류" className="flex flex-wrap gap-1.5">
+              {PN_LEVELS.map((c) => (
+                <button key={c} type="button" role="radio" aria-checked={f.level === c} onClick={() => set({ level: c })} className={`h-[50px] px-4 rounded-xl text-[14px] font-black border ${f.level === c ? "bg-[#0F1A30] text-white border-[#0F1A30]" : "bg-white text-[#3A4A66] border-[#DCE3EE] hover:border-[#4B6CB7]"}`}>{c}</button>
+              ))}
+            </div>
+          </div>
+          <div className="justify-self-start flex items-center gap-2.5 h-[50px] px-3 rounded-xl bg-[#F5F8FD] border border-[#E3E8F0]">
+            <span className="w-9 h-9 rounded-lg flex items-center justify-center text-[12px] font-black" style={{ background: "linear-gradient(135deg,#0B1428,#1B2B4B)", color: "#E9C46A" }}>KP</span>
+            <div className="leading-tight"><div className="text-[14px] font-black text-[#0F1A30] whitespace-nowrap">KP-Flow 운영팀</div><div className="text-[12px] text-[#7A879C]">작성자 · 자동</div></div>
+          </div>
+        </div>
+        {f.audience === "selected" && (
+          <div><Label hint={f.targetCompanies.length ? `${f.targetCompanies.length}곳 선택` : "(회사명·코드로 찾아 여러 곳 고르기)"}>받을 운송사</Label>
+            <CompanyPicker selected={f.targetCompanies} setSelected={(v) => set({ targetCompanies: v })} /></div>
+        )}
+        <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
+          {[["pinned", "• 상단 고정", "공지사항 목록 맨 위"], ["banner", "띠 배너로도 표시", "화면 맨 위 · 닫으면 다시 안 뜸"], ...(editId ? [] : [["push", "푸시 알림 보내기", "대상 직원 휴대폰"]])].map(([k, l, h]) => (
+            <label key={k} className="inline-flex items-center gap-2 text-[14px] font-black text-[#0F1A30] cursor-pointer whitespace-nowrap">
+              <input type="checkbox" checked={k === "pinned" ? !!f[k] : f[k] !== false} onChange={(e) => set({ [k]: e.target.checked })} className="w-4 h-4 accent-[#1B2B4B]" />
+              {l} <span className="text-[13px] font-semibold text-[#9AA9C3]">({h})</span>
+            </label>
+          ))}
+          <label className="inline-flex items-center gap-2 text-[14px] font-black text-[#0F1A30] whitespace-nowrap">게시 종료일
+            <input type="date" value={f.endDate || ""} onChange={(e) => set({ endDate: e.target.value })} className="h-10 px-3 rounded-xl border border-[#DCE3EE] text-[14px] font-semibold" />
+            <span className="text-[13px] font-semibold text-[#9AA9C3]">(비우면 계속)</span>
+          </label>
+        </div>
+        <div><Label>제목</Label>
+          <input value={f.title} onChange={(e) => set({ title: e.target.value })} placeholder="예: 11/9(일) 02:00~04:00 정기 점검 안내" className={`${inp} h-12 text-[16px] font-bold`} /></div>
+        <div><Label>내용</Label>
+          <textarea value={f.body} onChange={(e) => set({ body: e.target.value })} rows={14} placeholder="공지할 내용을 입력하세요" className={`${inp} py-3.5 leading-[1.85] resize-y min-h-[300px]`} /></div>
+        <div className="flex items-end justify-between gap-4 flex-wrap">
+          <div><Label hint="(1장)">이미지</Label>
+            {f.image ? (
+              <div className="relative w-44 h-32 rounded-xl overflow-hidden border border-[#E3E8F0]">
+                <img src={f.image} alt="" className="w-full h-full object-cover" />
+                <button type="button" onClick={() => set({ image: "" })} className="absolute top-1.5 right-1.5 w-7 h-7 rounded-full bg-[#0F1A30]/80 text-white text-[13px]">✕</button>
               </div>
-            );
-          })}
-        </Card>
+            ) : <button type="button" onClick={() => fileRef.current?.click()} className="w-44 h-32 rounded-xl border-2 border-dashed border-[#C9D2E0] text-[#7A879C] text-[14px] font-bold hover:border-[#4B6CB7]">+ 이미지 첨부</button>}
+            <input ref={fileRef} type="file" accept="image/*" hidden onChange={async (e) => { const fl = e.target.files?.[0]; e.target.value = ""; if (fl) { const img = await compressImage(fl, 1400, 0.8).catch(() => ""); if (img && img.length > 900000) { window.alert("이미지가 너무 큽니다. 더 작은 이미지를 골라 주세요."); return; } set({ image: img }); } }} />
+          </div>
+          <div className="flex items-center gap-2 flex-wrap">
+            <button type="button" onClick={close} className="h-11 px-5 rounded-xl bg-white border border-[#DCE3EE] text-[#3A4A66] text-[14px] font-bold">취소</button>
+            <button type="button" onClick={() => setPreview(true)} className="h-11 px-5 rounded-xl bg-white border border-[#1B2B4B] text-[#1B2B4B] text-[14px] font-black inline-flex items-center gap-2"><ShellIcon name="eye" size={15} />미리보기</button>
+            <button type="button" onClick={save} disabled={busy} className="h-11 px-6 rounded-xl bg-[#0F1A30] text-white text-[14.5px] font-black inline-flex items-center gap-2 disabled:opacity-50"><ShellIcon name="send" size={15} />{busy ? "저장 중…" : editId ? "수정 저장" : "공지 게시"}</button>
+          </div>
+        </div>
       </div>
+      {preview && <PlatformNoticePreview draft={f} onClose={() => setPreview(false)} />}
+    </div>
+  );
+
+  return (
+    <div className="space-y-4">
+      <Hero en="OPERATIONS · BROADCAST" title="플랫폼 공지" desc="대상 회사의 홈 › 공지사항(PC·모바일)에 '플랫폼 공지'로 올라가고, 화면 맨 위 띠 배너·푸시 알림으로도 알립니다."
+        right={<button type="button" onClick={() => { setF(blank); setEditId(null); setWriting(true); }} className="h-11 px-5 rounded-xl bg-white text-[#0F1A30] text-[14.5px] font-black inline-flex items-center gap-2 whitespace-nowrap"><ShellIcon name="pen" size={15} />새 공지 작성</button>} />
+      <Card code="POSTED" title={`게시한 공지 ${(list || []).length}건`} bodyClass="p-0">
+        <div className="px-4 sm:px-5 py-3 border-b border-[#EEF1F6]"><div className="inline-flex items-center gap-1 p-1 rounded-xl bg-[#EEF2F8]">{[["all", "전체", (list || []).length], ["live", "게시 중", liveN], ["off", "내림·종료", (list || []).length - liveN]].map(([k, l, n]) => (
+          <button key={k} type="button" onClick={() => setFilter(k)} className={`h-9 px-3.5 rounded-lg text-[13.5px] font-black whitespace-nowrap ${filter === k ? "bg-[#1B2B4B] text-white" : "text-[#5B6B85]"}`}>{l} <span style={{ fontFamily: MONO }}>{n}</span></button>))}</div></div>
+        {!list ? <div className="py-14 text-center text-[#9AA9C3]">불러오는 중…</div> : rows.length === 0 ? <div className="py-16 text-center text-[15px] text-[#9AA9C3]">게시한 공지가 없습니다 — 오른쪽 위 '새 공지 작성'</div> : (
+          <div className="divide-y divide-[#EEF1F6]">
+            {rows.map((n) => {
+              const expired = n.endDate && n.endDate < today;
+              const on = n.active !== false && !expired;
+              const tc = n.targetCompanies || [];
+              return (
+                <div key={n.id} className="flex items-center gap-3 sm:gap-4 px-4 sm:px-5 py-4 hover:bg-[#F7F9FC] flex-wrap lg:flex-nowrap">
+                  <span className={`w-[60px] shrink-0 text-center py-1.5 rounded-lg text-[13px] font-black ${["중요", "점검", "긴급"].includes(n.level) ? "bg-[#0F1A30] text-white" : "bg-[#EEF2F8] text-[#1B2B4B]"}`}>{n.level || "안내"}</span>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 min-w-0">
+                      {n.pinned && <span className="shrink-0 px-1.5 py-0.5 rounded-md bg-[#0F1A30] text-[#8FB0F0] text-[11.5px] font-black">• 고정</span>}
+                      <span className={`text-[15.5px] font-black truncate ${on ? "text-[#0F1A30]" : "text-[#9AA9C3] line-through"}`}>{n.title}</span>
+                      {n.image && <span className="shrink-0 text-[12px] text-[#9AA9C3]">▣</span>}
+                    </div>
+                    <div className="mt-1 flex items-center gap-2 flex-wrap text-[13px] text-[#7A89A3]">
+                      <span className={`px-2 py-0.5 rounded-md font-black ${n.audience === "selected" ? "bg-[#1B2B4B] text-white" : "border border-[#D5E0F2] text-[#1B2B4B]"}`}>{pnAudLabel(n)}</span>
+                      {n.audience === "selected" && <span className="font-semibold text-[#3A4A66] truncate max-w-[360px]">{tc.slice(0, 3).join(", ")}{tc.length > 3 ? ` 외 ${tc.length - 3}곳` : ""}</span>}
+                      <span style={{ fontFamily: MONO }}>{msOf(n.createdAt) ? ymd(new Date(msOf(n.createdAt))) : ""}{n.endDate ? ` ~ ${n.endDate}` : ""}</span>
+                      {n.banner === false && <span>배너 없음</span>}
+                      <span className={`font-black ${on ? "text-[#1B2B4B]" : "text-[#9AA9C3]"}`}>{on ? "● 게시 중" : expired ? "기간 종료" : "내림"}</span>
+                    </div>
+                  </div>
+                  <div className="w-full lg:w-auto flex justify-end gap-1.5 shrink-0 [&_button]:whitespace-nowrap">
+                    <button type="button" onClick={() => updateDoc(doc(db, "platformNotices", n.id), { active: n.active === false })} className="h-9 px-3.5 rounded-lg border border-[#DCE3EE] text-[13.5px] font-black text-[#1B2B4B]">{n.active === false ? "다시 게시" : "내리기"}</button>
+                    <button type="button" onClick={() => { setEditId(n.id); setF({ ...blank, ...n, targetCompanies: tc }); setWriting(true); }} className="h-9 px-3.5 rounded-lg bg-[#0F1A30] text-white text-[13.5px] font-black">수정</button>
+                    <button type="button" onClick={() => window.confirm("공지를 삭제할까요?\n대상 회사 공지사항 목록에서도 함께 사라집니다.") && deleteDoc(doc(db, "platformNotices", n.id))} className="h-9 px-3.5 rounded-lg border border-[#DCE3EE] text-[13.5px] font-bold text-[#7A879C]">삭제</button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </Card>
     </div>
   );
 }
@@ -633,6 +807,21 @@ const PC_HEADER_CSS = `
 .kp-pcenter .kp-pc-head::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 1px; background: linear-gradient(90deg, transparent, rgba(143,176,240,.5), transparent); pointer-events: none; }
 .kp-pcenter .kp-pc-nav { scrollbar-width: none; mask-image: linear-gradient(90deg, #000 calc(100% - 24px), transparent); }
 .kp-pcenter .kp-pc-nav::-webkit-scrollbar { display: none; }
+/* ⭐ 2026-11-02 관리자센터2 — 관리센터 전체 글자 키움. index.css가 text-[11px]→13 · [12px]→14 · [13px]→15 로 올리므로
+   나머지(소수점·14px·KPI 숫자)만 여기서 한 단계씩 올린다 — 본문/표 ≥14.5px, 라벨 ≥13.5px, 작은 영문 코드 ≥11.5px */
+.kp-pcenter .text-\\[10px\\] { font-size: 11.5px !important; }
+.kp-pcenter .text-\\[10\\.5px\\] { font-size: 12px !important; }
+.kp-pcenter .text-\\[11\\.5px\\] { font-size: 13px !important; }
+.kp-pcenter .text-\\[12\\.5px\\] { font-size: 13.5px !important; }
+.kp-pcenter .text-\\[13\\.5px\\] { font-size: 14.5px !important; }
+.kp-pcenter main .text-\\[14px\\] { font-size: 15px !important; }
+.kp-pcenter .text-\\[14\\.5px\\] { font-size: 15px !important; }
+.kp-pcenter .text-xs { font-size: 13px !important; }
+.kp-pcenter .text-sm { font-size: 14.5px !important; }
+.kp-pcenter .text-\\[20px\\] { font-size: 22px !important; }
+.kp-pcenter .text-\\[22px\\] { font-size: 25px !important; }
+.kp-pcenter .text-\\[26px\\] { font-size: 30px !important; }
+.kp-pcenter .text-\\[28px\\] { font-size: 32px !important; }
 .kp-pcenter .kp-pc-navbtn.kp-on { background: linear-gradient(180deg,#FFFFFF 0%,#E9F0FC 100%); color: #0F1A30; box-shadow: 0 6px 16px rgba(0,0,0,.28), 0 0 0 1px rgba(255,255,255,.6) inset, 0 0 18px rgba(143,176,240,.3); }
 `;
 
@@ -651,7 +840,14 @@ const PM_MOBILE_CSS = `
 .kp-pm main input, .kp-pm main select, .kp-pm main textarea { font-size: 16px !important; max-width: 100%; }
 .kp-pm main .pm-tile, .kp-pm main .pm-tile-dark { padding: 12px 13px 11px !important; border-radius: 14px !important; }
 .kp-pm main .pm-tile > div:first-child > span:last-child, .kp-pm main .pm-tile-dark > div:first-child > span:last-child { display: none; }
-.kp-pm main .pm-tile span[style*="font-size: 28px"], .kp-pm main .pm-tile-dark span[style*="font-size: 28px"] { font-size: 21px !important; }
+.kp-pm main .pm-tile span[style*="font-size: 32px"], .kp-pm main .pm-tile-dark span[style*="font-size: 32px"] { font-size: 23px !important; }
+/* ⭐ 2026-11-02 관리자센터2 — 폰 글자 한 단계 키움(index.css가 11/12/13px은 이미 13/14/15px로 올림 → 나머지 소수점 크기만) */
+.kp-pm .text-\\[10px\\] { font-size: 11px !important; }
+.kp-pm .text-\\[10\\.5px\\] { font-size: 11.5px !important; }
+.kp-pm .text-\\[11\\.5px\\] { font-size: 12.5px !important; }
+.kp-pm .text-\\[12\\.5px\\] { font-size: 13.5px !important; }
+.kp-pm .text-\\[13\\.5px\\] { font-size: 14px !important; }
+.kp-pm main .text-xs { font-size: 13px !important; }
 .kp-pm main .pm-tile > div:last-child, .kp-pm main .pm-tile-dark > div:last-child { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .kp-pm main .pm-spark { display: none; } /* ⭐ 2026-11-02 관리자센터 — 폰 타일에선 스파크라인 숨김 */
 .kp-pm main [class*="max-w-[1180px]"] { padding: 20px 16px !important; }
