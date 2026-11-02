@@ -1892,10 +1892,10 @@ function BulkEditModal({ rows, patchDispatch, onClose, onDateShift }) {
                       {f.type === "fare" ? (
                         <FareTypeSelect compact className="flex-1" rules={fareRb.rules} value={bulkValues[f.key] ?? ""} onChange={(v) => setBulkValues(p => ({ ...p, [f.key]: v }))} />
                       ) : f.type === "select" ? (
-                        <select className="flex-1 border border-gray-300 rounded px-1 py-1 text-[11px]" value={bulkValues[f.key] ?? ""} onChange={(e) => setBulkValues(v => ({ ...v, [f.key]: e.target.value }))}>
+                        <CustomSelect className="flex-1 border border-gray-300 rounded px-1 py-1 text-[11px]" value={bulkValues[f.key] ?? ""} onChange={(e) => setBulkValues(v => ({ ...v, [f.key]: e.target.value }))}>
                           <option value="">-</option>
                           {(f.key === "배차방식" || f.key === "지급방식" ? dropdownList(f.key, f.options) : f.options).map(o => <option key={o} value={o}>{o}</option>)}
-                        </select>
+                        </CustomSelect>
                       ) : f.type === "money" ? (
                         <MoneyInput value={bulkValues[f.key]} onChange={(v) => setBulkValues(p => ({ ...p, [f.key]: v }))} />
                       ) : (
@@ -1925,10 +1925,10 @@ function BulkEditModal({ rows, patchDispatch, onClose, onDateShift }) {
                             <FareRuleHint form={{ ...r, ...(edited[id] || {}) }} rules={fareRb.rules} onReapply={() => { setEdited(prev => ({ ...prev, [id]: fareCell(r, prev[id] || {}, "__reapply", null) })); }} />
                           </div>
                         ) : f.type === "select" ? (
-                          <select className="w-full border border-gray-300 rounded px-1 py-1 text-[12px]" value={edited[id]?.[f.key] ?? ""} onChange={(e) => setCell(id, f.key, e.target.value)}>
+                          <CustomSelect className="w-full border border-gray-300 rounded px-1 py-1 text-[12px]" value={edited[id]?.[f.key] ?? ""} onChange={(e) => setCell(id, f.key, e.target.value)}>
                             <option value="">-</option>
                             {(f.key === "배차방식" || f.key === "지급방식" ? dropdownList(f.key, f.options) : f.options).map(o => <option key={o} value={o}>{o}</option>)}
-                          </select>
+                          </CustomSelect>
                         ) : f.type === "money" ? (
                           <MoneyInput value={edited[id]?.[f.key]} onChange={(v) => setCell(id, f.key, v)} />
                         ) : (
@@ -5668,13 +5668,13 @@ function sortFareHistory(list, mode) {
 }
 function FareSortDropdown({ value, onChange }) {
   return (
-    <select
+    <CustomSelect
       value={value}
       onChange={(e) => onChange(e.target.value)}
       className="text-[11px] font-bold text-[#1B2B4B] border border-gray-200 rounded-lg px-2 py-1 outline-none cursor-pointer bg-white"
     >
       {FARE_SORT_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-    </select>
+    </CustomSelect>
   );
 }
 
@@ -9330,7 +9330,7 @@ if (!prices.length || !items.length) {
 return (
     <div className="flex items-center gap-4 bg-[#1B2B4B] text-white px-4 py-1.5 rounded-lg shadow text-sm overflow-hidden border border-[#243a60]">
 
-      <select
+      <CustomSelect
         value={area}
         onChange={(e) => setArea(e.target.value)}
         className="bg-white text-black text-xs rounded px-2 py-1"
@@ -9338,7 +9338,7 @@ return (
         {AREA_OPTIONS.map(a => (
           <option key={a.code} value={a.code}>{a.name}</option>
         ))}
-      </select>
+      </CustomSelect>
 
       <div className="relative h-6 overflow-hidden flex-1">
         <div
@@ -20681,14 +20681,14 @@ setConfirmChange(null);
                 });
                 const tabs = ["all", "완전일치", "부분일치", "톤수일치", "경로일치"];
                 return (
-                  <select value={fare3Filter} onChange={e => setFare3Filter(e.target.value)}
+                  <CustomSelect value={fare3Filter} onChange={e => setFare3Filter(e.target.value)}
                     className="mb-3 text-[12px] font-bold text-[#1B2B4B] border border-gray-200 rounded-lg px-2.5 py-1.5 outline-none cursor-pointer bg-white">
                     {tabs.map(t => {
                       const cnt = t === "all" ? sortedHistory.length : (counts[t] || 0);
                       if (t !== "all" && cnt === 0) return null;
                       return <option key={t} value={t}>{t === "all" ? `전체 ${cnt}건` : `${t} ${cnt}건`}</option>;
                     })}
-                  </select>
+                  </CustomSelect>
                 );
               })()}
               <div className="space-y-2">
@@ -22244,13 +22244,12 @@ function StopEditModal({ open, onClose, onSave, list, type, placeRows = [], time
                     setEditList(prev=>{const c=[...prev];c[idx].화물내용=v;return c;});
                   }} />
                 <div className="absolute top-0 right-0 h-full flex items-center pr-[1px]">
-                  <select className="w-[58px] h-[calc(100%-2px)] px-1 text-[11px] font-bold rounded-r-lg bg-[#1B2B4B] text-white border-0 appearance-none cursor-pointer"
+                  <CustomSelect className="w-[58px] h-[calc(100%-2px)] px-1 text-[11px] font-bold rounded-r-lg bg-[#1B2B4B] text-white border-0 appearance-none cursor-pointer"
                     value={stop.화물타입||""}
                     onChange={e=>{const t=e.target.value;setEditList(prev=>{const c=[...prev];c[idx]={...c[idx],화물타입:t,화물내용:t?String(c[idx].화물내용||"").replace(/[^\d.]/g,""):c[idx].화물내용};return c;});}}>
                     <option value="">없음</option>
                     {cargoTypeOptionsCustom.map(v => <option key={v} value={v}>{v}</option>)}
-                  </select>
-                  <span className="absolute right-1.5 text-white/70 text-[10px] pointer-events-none">▾</span>
+                  </CustomSelect>
                 </div>
               </div>
                 );
@@ -22274,13 +22273,12 @@ function StopEditModal({ open, onClose, onSave, list, type, placeRows = [], time
                     setEditList(prev=>{const c=[...prev];if(tonIsUnit){c[idx].톤수값=v;c[idx].차량톤수=`${v}${c[idx].톤수타입}`;}else{c[idx].차량톤수=v;c[idx].톤수값=v;}return c;});
                   }} />
                 <div className="absolute top-0 right-0 h-full flex items-center pr-[1px]">
-                  <select className="w-[48px] h-[calc(100%-2px)] px-1 text-[11px] font-bold rounded-r-lg bg-[#1B2B4B] text-white border-0 appearance-none cursor-pointer"
+                  <CustomSelect className="w-[48px] h-[calc(100%-2px)] px-1 text-[11px] font-bold rounded-r-lg bg-[#1B2B4B] text-white border-0 appearance-none cursor-pointer"
                     value={stop.톤수타입||""}
                     onChange={e=>{const t=e.target.value;setEditList(prev=>{const c=[...prev];const tv=t?String(c[idx].톤수값||c[idx].차량톤수||"").replace(/[^\d.]/g,""):(c[idx].톤수값||c[idx].차량톤수||"");c[idx]={...c[idx],톤수타입:t,톤수값:tv,차량톤수:t?(tv?`${tv}${t}`:""):tv};return c;});}}>
                     <option value="">없음</option>
                     {tonTypeOptionsCustom.map(v => <option key={v} value={v}>{v}</option>)}
-                  </select>
-                  <span className="absolute right-1 text-white/70 text-[10px] pointer-events-none">▾</span>
+                  </CustomSelect>
                 </div>
               </div>
                 );
@@ -22334,13 +22332,13 @@ function StopEditModal({ open, onClose, onSave, list, type, placeRows = [], time
             {/* 방법 */}
             <div>
               <label className="text-[11px] font-semibold text-gray-500 mb-0.5 block">{label}방법</label>
-              <select className={inputCls} value={stop.방법||""}
+              <CustomSelect className={inputCls} value={stop.방법||""}
                 onChange={e=>{const v=e.target.value;setEditList(prev=>{const c=[...prev];c[idx]={...c[idx],방법:v};return c;});}}>
                 <option value="">선택</option>
                 {loadMethodOptions.map(v=>(
                   <option key={v} value={v}>{v}</option>
                 ))}
-              </select>
+              </CustomSelect>
             </div>
 
             {/* 삭제 */}
@@ -22908,15 +22906,15 @@ function NewDriverModal({ data, onClose, onConfirm }) {
             </div>
             <div>
               <label className="block text-[12px] font-semibold text-slate-500 mb-1">등급</label>
-              <select
+              <CustomSelect
                 className="w-full border border-slate-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-[#1B2B4B] bg-white"
-                value={form.등급}
+                value={form.등급 || "일반"}
                 onChange={e => setForm(p => ({ ...p, 등급: e.target.value }))}
               >
                 {["일반", "우수", "VIP", "블랙", "신규"].map(g => (
                   <option key={g} value={g}>{g}</option>
                 ))}
-              </select>
+              </CustomSelect>
             </div>
             <div>
               <label className="block text-[12px] font-semibold text-slate-500 mb-1">메모</label>
@@ -23369,25 +23367,25 @@ function AttachStatusPanel({ open, onClose, initialClient, dispatchData, db, com
               <label className="text-[13px] font-bold text-gray-700"><EditableText id="attachStatus.label.기간" defaultText="기간" /></label>
               <div className="flex items-center gap-2">
                 <div className="flex items-center gap-1 border border-gray-300 rounded-lg px-2 py-2 bg-white">
-                  <select value={dateFrom.slice(0,4)} onChange={e => setDateFrom(`${e.target.value}-${dateFrom.slice(5,7)}-${dateFrom.slice(8,10)}`)} className="text-[14px] outline-none bg-transparent">
+                  <CustomSelect value={dateFrom.slice(0,4)} onChange={e => setDateFrom(`${e.target.value}-${dateFrom.slice(5,7)}-${dateFrom.slice(8,10)}`)} className="text-[14px] outline-none bg-transparent">
                     {Array.from({length:5},(_,i)=>now.getFullYear()-2+i).map(y=><option key={y} value={y}>{y}년</option>)}
-                  </select>
-                  <select value={dateFrom.slice(5,7)} onChange={e => setDateFrom(`${dateFrom.slice(0,4)}-${e.target.value}-${dateFrom.slice(8,10)}`)} className="text-[14px] outline-none bg-transparent">
+                  </CustomSelect>
+                  <CustomSelect value={dateFrom.slice(5,7)} onChange={e => setDateFrom(`${dateFrom.slice(0,4)}-${e.target.value}-${dateFrom.slice(8,10)}`)} className="text-[14px] outline-none bg-transparent">
                     {Array.from({length:12},(_,i)=>String(i+1).padStart(2,"0")).map(m=><option key={m} value={m}>{Number(m)}월</option>)}
-                  </select>
+                  </CustomSelect>
                 </div>
                 <span className="text-gray-500 text-[13px] font-medium">부터</span>
                 <div className="flex items-center gap-1 border border-gray-300 rounded-lg px-2 py-2 bg-white">
-                  <select value={dateTo.slice(0,4)} onChange={e => setDateTo(`${e.target.value}-${dateTo.slice(5,7)}-${dateTo.slice(8,10)}`)} className="text-[14px] outline-none bg-transparent">
+                  <CustomSelect value={dateTo.slice(0,4)} onChange={e => setDateTo(`${e.target.value}-${dateTo.slice(5,7)}-${dateTo.slice(8,10)}`)} className="text-[14px] outline-none bg-transparent">
                     {Array.from({length:5},(_,i)=>now.getFullYear()-2+i).map(y=><option key={y} value={y}>{y}년</option>)}
-                  </select>
-                  <select value={dateTo.slice(5,7)} onChange={e => {
+                  </CustomSelect>
+                  <CustomSelect value={dateTo.slice(5,7)} onChange={e => {
                     const y = dateTo.slice(0,4); const m = e.target.value;
                     const lastD = new Date(Number(y), Number(m), 0).getDate();
                     setDateTo(`${y}-${m}-${String(lastD).padStart(2,"0")}`);
                   }} className="text-[14px] outline-none bg-transparent">
                     {Array.from({length:12},(_,i)=>String(i+1).padStart(2,"0")).map(m=><option key={m} value={m}>{Number(m)}월</option>)}
-                  </select>
+                  </CustomSelect>
                 </div>
                 <span className="text-gray-500 text-[13px] font-medium">까지</span>
               </div>
@@ -34424,12 +34422,12 @@ setConfirmChange(null);
                                 {paymentItems.length > 0 && (
                                   <div className="flex items-center gap-1.5 bg-gray-50 border border-gray-200 rounded-lg px-2.5 py-1.5">
                                     <span className="text-[11px] font-semibold text-gray-600">지급방식 불일치 {paymentItems.length}건 →</span>
-                                    <select className="border border-gray-300 rounded px-1.5 py-0.5 text-[11px] bg-white"
+                                    <CustomSelect className="border border-gray-300 rounded px-1.5 py-0.5 text-[11px] bg-white"
                                       value={closeFileBulkValue[payKey] || ""}
                                       onChange={e => setCloseFileBulkValue(p => ({ ...p, [payKey]: e.target.value }))}>
                                       <option value="">선택</option>
                                       {["계산서", "착불", "선불", "손실", "개인", "취소"].map(v => <option key={v} value={v}>{v}</option>)}
-                                    </select>
+                                    </CustomSelect>
                                     <button type="button"
                                       className="px-2 py-0.5 rounded bg-[#1B2B4B] text-white text-[11px] font-bold hover:bg-[#243a60] transition"
                                       onClick={() => bulkFixCloseFileIssues(paymentItems, "지급방식", closeFileBulkValue[payKey])}>
@@ -34440,12 +34438,12 @@ setConfirmChange(null);
                                 {dispatchItems.length > 0 && (
                                   <div className="flex items-center gap-1.5 bg-gray-50 border border-gray-200 rounded-lg px-2.5 py-1.5">
                                     <span className="text-[11px] font-semibold text-gray-600">배차방식 불일치 {dispatchItems.length}건 →</span>
-                                    <select className="border border-gray-300 rounded px-1.5 py-0.5 text-[11px] bg-white"
+                                    <CustomSelect className="border border-gray-300 rounded px-1.5 py-0.5 text-[11px] bg-white"
                                       value={closeFileBulkValue[dispKey] || ""}
                                       onChange={e => setCloseFileBulkValue(p => ({ ...p, [dispKey]: e.target.value }))}>
                                       <option value="">선택</option>
                                       {dropdownList("배차방식", ["24시", "직접배차", "인성", "고정기사"]).map(v => <option key={v} value={v}>{v}</option>)}
-                                    </select>
+                                    </CustomSelect>
                                     <button type="button"
                                       className="px-2 py-0.5 rounded bg-[#1B2B4B] text-white text-[11px] font-bold hover:bg-[#243a60] transition"
                                       onClick={() => bulkFixCloseFileIssues(dispatchItems, "배차방식", closeFileBulkValue[dispKey])}>
@@ -43942,12 +43940,12 @@ setCopyPlaceOptions(list);
                                 {paymentItems.length > 0 && (
                                   <div className="flex items-center gap-1.5 bg-gray-50 border border-gray-200 rounded-lg px-2.5 py-1.5">
                                     <span className="text-[11px] font-semibold text-gray-600">지급방식 불일치 {paymentItems.length}건 →</span>
-                                    <select className="border border-gray-300 rounded px-1.5 py-0.5 text-[11px] bg-white"
+                                    <CustomSelect className="border border-gray-300 rounded px-1.5 py-0.5 text-[11px] bg-white"
                                       value={closeFileBulkValue[payKey] || ""}
                                       onChange={e => setCloseFileBulkValue(p => ({ ...p, [payKey]: e.target.value }))}>
                                       <option value="">선택</option>
                                       {["계산서", "착불", "선불", "손실", "개인", "취소"].map(v => <option key={v} value={v}>{v}</option>)}
-                                    </select>
+                                    </CustomSelect>
                                     <button type="button"
                                       className="px-2 py-0.5 rounded bg-[#1B2B4B] text-white text-[11px] font-bold hover:bg-[#243a60] transition"
                                       onClick={() => bulkFixCloseFileIssues(paymentItems, "지급방식", closeFileBulkValue[payKey])}>
@@ -43958,12 +43956,12 @@ setCopyPlaceOptions(list);
                                 {dispatchItems.length > 0 && (
                                   <div className="flex items-center gap-1.5 bg-gray-50 border border-gray-200 rounded-lg px-2.5 py-1.5">
                                     <span className="text-[11px] font-semibold text-gray-600">배차방식 불일치 {dispatchItems.length}건 →</span>
-                                    <select className="border border-gray-300 rounded px-1.5 py-0.5 text-[11px] bg-white"
+                                    <CustomSelect className="border border-gray-300 rounded px-1.5 py-0.5 text-[11px] bg-white"
                                       value={closeFileBulkValue[dispKey] || ""}
                                       onChange={e => setCloseFileBulkValue(p => ({ ...p, [dispKey]: e.target.value }))}>
                                       <option value="">선택</option>
                                       {dropdownList("배차방식", ["24시", "직접배차", "인성", "고정기사"]).map(v => <option key={v} value={v}>{v}</option>)}
-                                    </select>
+                                    </CustomSelect>
                                     <button type="button"
                                       className="px-2 py-0.5 rounded bg-[#1B2B4B] text-white text-[11px] font-bold hover:bg-[#243a60] transition"
                                       onClick={() => bulkFixCloseFileIssues(dispatchItems, "배차방식", closeFileBulkValue[dispKey])}>
@@ -49836,10 +49834,10 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
             <CustomDatePicker className="border border-gray-200 rounded-lg px-2 py-1.5 text-[13px] focus:outline-none focus:border-blue-400 bg-white" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
           </div>
           <div className="flex items-center gap-1">
-            <select value={filterType} onChange={(e) => setFilterType(e.target.value)} className="border border-gray-200 rounded-lg px-2 py-1.5 text-[13px] focus:outline-none focus:border-blue-400">
+            <CustomSelect value={filterType} onChange={(e) => setFilterType(e.target.value)} className="border border-gray-200 rounded-lg px-2 py-1.5 text-[13px] focus:outline-none focus:border-blue-400">
               <option value="거래처명">거래처명</option>
               <option value="차량종류">차량종류</option>
-            </select>
+            </CustomSelect>
             <input autoComplete="off" value={filterValue} onChange={(e) => setFilterValue(e.target.value)} placeholder={`${filterType} 검색`} className="border border-gray-200 rounded-lg px-3 py-1.5 text-[13px] w-40 focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100" />
           </div>
           <button onClick={() => { setQ(""); setStartDate(""); setEndDate(""); setFilterValue(""); }} className="px-3 py-1.5 text-[13px] font-semibold rounded-lg bg-white border border-gray-200 text-gray-500 hover:bg-gray-50 transition">
@@ -52563,14 +52561,14 @@ const handleBatchSettle = async (targetStatus) => {
               {/* ★ 검색 타입 + 입력 + 드롭다운 */}
               <div className="relative" ref={dropdownRef}>
                 <div className="flex items-center border-2 border-[#1B2B4B] rounded-lg overflow-hidden h-[38px]">
-                  <select
+                  <CustomSelect
                     className="px-2 h-full text-[13px] bg-[#1B2B4B] text-white outline-none cursor-pointer"
                     value={searchType}
                     onChange={e => { setSearchType(e.target.value); setSearchInput(""); setClient(""); setSearched(false); setDropdownOpen(false); }}
                   >
                     <option value="거래처명">거래처명</option>
                     <option value="기사명">기사명</option>
-                  </select>
+                  </CustomSelect>
                   <input autoComplete="off"
                     ref={inputRef}
                     className="px-3 h-full text-[13px] w-52 outline-none"
@@ -53887,42 +53885,42 @@ const handleBatchSettle = async (targetStatus) => {
               <div className="flex flex-col">
                 <label className="text-[12px] font-semibold text-gray-500 mb-1">기간</label>
                 <div className="flex items-center gap-1.5">
-                  <select className="border-2 border-[#1B2B4B] rounded-lg px-3 py-2 text-[13px] font-semibold text-[#1B2B4B] outline-none"
+                  <CustomSelect className="border-2 border-[#1B2B4B] rounded-lg px-3 py-2 text-[13px] font-semibold text-[#1B2B4B] outline-none"
                     value={yearFrom} onChange={e=>{ setYearFrom(e.target.value); clearSel(); }}>
                     {Array.from({length:3},(_,i)=>String(THIS_YEAR - 1 + i)).map(y=>(
                       <option key={y} value={y}>{y}년</option>
                     ))}
-                  </select>
-                  <select className="border-2 border-[#1B2B4B] rounded-lg px-3 py-2 text-[13px] font-semibold text-[#1B2B4B] outline-none"
+                  </CustomSelect>
+                  <CustomSelect className="border-2 border-[#1B2B4B] rounded-lg px-3 py-2 text-[13px] font-semibold text-[#1B2B4B] outline-none"
                     value={monthFrom} onChange={e=>{ setMonthFrom(e.target.value); clearSel(); }}>
                     {Array.from({length:12},(_,i)=>String(i+1).padStart(2,"0")).map(mm=>(
                       <option key={mm} value={mm}>{parseInt(mm,10)}월</option>
                     ))}
-                  </select>
+                  </CustomSelect>
                   <span className="text-gray-500 font-semibold text-[13px]">부터</span>
-                  <select className="border-2 border-[#1B2B4B] rounded-lg px-3 py-2 text-[13px] font-semibold text-[#1B2B4B] outline-none"
+                  <CustomSelect className="border-2 border-[#1B2B4B] rounded-lg px-3 py-2 text-[13px] font-semibold text-[#1B2B4B] outline-none"
                     value={yearTo} onChange={e=>{ setYearTo(e.target.value); clearSel(); }}>
                     {Array.from({length:3},(_,i)=>String(THIS_YEAR - 1 + i)).map(y=>(
                       <option key={y} value={y}>{y}년</option>
                     ))}
-                  </select>
-                  <select className="border-2 border-[#1B2B4B] rounded-lg px-3 py-2 text-[13px] font-semibold text-[#1B2B4B] outline-none"
+                  </CustomSelect>
+                  <CustomSelect className="border-2 border-[#1B2B4B] rounded-lg px-3 py-2 text-[13px] font-semibold text-[#1B2B4B] outline-none"
                     value={monthTo} onChange={e=>{ setMonthTo(e.target.value); clearSel(); }}>
                     {Array.from({length:12},(_,i)=>String(i+1).padStart(2,"0")).map(mm=>(
                       <option key={mm} value={mm}>{parseInt(mm,10)}월</option>
                     ))}
-                  </select>
+                  </CustomSelect>
                   <span className="text-gray-500 font-semibold text-[13px]">까지</span>
                 </div>
               </div>
               <div className="flex flex-col">
                 <label className="text-[12px] font-semibold text-gray-500 mb-1">정산상태</label>
-                <select className="border-2 border-[#1B2B4B] rounded-lg px-3 py-2 text-[13px] font-semibold text-[#1B2B4B] outline-none"
+                <CustomSelect className="border-2 border-[#1B2B4B] rounded-lg px-3 py-2 text-[13px] font-semibold text-[#1B2B4B] outline-none"
                   value={statusFilter} onChange={e=>setStatusFilter(e.target.value)}>
                   <option value="전체">전체</option>
                   <option value="미정산">미정산</option>
                   <option value="정산완료">정산완료</option>
-                </select>
+                </CustomSelect>
               </div>
               <button className="px-3 py-2 rounded-lg bg-gray-200 text-gray-700 text-[13px] font-semibold hover:bg-gray-300 transition"
                 onClick={()=>{setSelClient("");setArInput("");setYearFrom(String(THIS_YEAR));setMonthFrom("01");setYearTo(String(THIS_YEAR));setMonthTo("12");setStatusFilter("전체");clearSel();setArDropOpen(false);}}>
@@ -54237,31 +54235,31 @@ const handleBatchSettle = async (targetStatus) => {
       <div className="px-6 pt-4 pb-3 border-b border-gray-100 shrink-0">
         <div className="text-[12px] font-bold text-gray-500 mb-2">조회 기간</div>
         <div className="flex items-center gap-2">
-          <select className="border-2 border-[#1B2B4B] rounded-lg px-2 py-2 text-[13px] font-bold text-[#1B2B4B] outline-none"
+          <CustomSelect className="border-2 border-[#1B2B4B] rounded-lg px-2 py-2 text-[13px] font-bold text-[#1B2B4B] outline-none"
             value={arFromYear} onChange={e => setArFromYear(e.target.value)}>
             {Array.from({length:3},(_,i)=>String(THIS_YEAR - 1 + i)).map(y=>(
               <option key={y} value={y}>{y}년</option>
             ))}
-          </select>
-          <select className="border-2 border-[#1B2B4B] rounded-lg px-2 py-2 text-[13px] font-bold text-[#1B2B4B] outline-none"
+          </CustomSelect>
+          <CustomSelect className="border-2 border-[#1B2B4B] rounded-lg px-2 py-2 text-[13px] font-bold text-[#1B2B4B] outline-none"
             value={arFromMM} onChange={e => setArFromMM(e.target.value)}>
             {Array.from({length:12},(_,i)=>String(i+1).padStart(2,"00")).map(mm=>(
               <option key={mm} value={mm}>{parseInt(mm,10)}월</option>
             ))}
-          </select>
+          </CustomSelect>
           <span className="text-gray-500 font-semibold">부터</span>
-          <select className="border-2 border-[#1B2B4B] rounded-lg px-2 py-2 text-[13px] font-bold text-[#1B2B4B] outline-none"
+          <CustomSelect className="border-2 border-[#1B2B4B] rounded-lg px-2 py-2 text-[13px] font-bold text-[#1B2B4B] outline-none"
             value={arToYear} onChange={e => setArToYear(e.target.value)}>
             {Array.from({length:3},(_,i)=>String(THIS_YEAR - 1 + i)).map(y=>(
               <option key={y} value={y}>{y}년</option>
             ))}
-          </select>
-          <select className="border-2 border-[#1B2B4B] rounded-lg px-2 py-2 text-[13px] font-bold text-[#1B2B4B] outline-none"
+          </CustomSelect>
+          <CustomSelect className="border-2 border-[#1B2B4B] rounded-lg px-2 py-2 text-[13px] font-bold text-[#1B2B4B] outline-none"
             value={arToMM} onChange={e => setArToMM(e.target.value)}>
             {Array.from({length:12},(_,i)=>String(i+1).padStart(2,"00")).map(mm=>(
               <option key={mm} value={mm}>{parseInt(mm,10)}월</option>
             ))}
-          </select>
+          </CustomSelect>
           <span className="text-gray-500 font-semibold">까지</span>
         </div>
       </div>
@@ -54432,31 +54430,31 @@ const handleBatchSettle = async (targetStatus) => {
                 <div className="px-6 py-4 border-b border-gray-100 shrink-0">
                   <div className="text-[12px] font-bold text-gray-500 mb-2">기간 선택</div>
                   <div className="flex items-center gap-2 flex-wrap">
-                    <select className="border-2 border-[#1B2B4B] rounded-lg px-2 py-2 text-[13px] font-bold text-[#1B2B4B] outline-none"
+                    <CustomSelect className="border-2 border-[#1B2B4B] rounded-lg px-2 py-2 text-[13px] font-bold text-[#1B2B4B] outline-none"
                       value={batchFromYear} onChange={e => setBatchFromYear(e.target.value)}>
                       {Array.from({length:3},(_,i)=>String(THIS_YEAR - 1 + i)).map(y=>(
                         <option key={y} value={y}>{y}년</option>
                       ))}
-                    </select>
-                    <select className="border-2 border-[#1B2B4B] rounded-lg px-2 py-2 text-[13px] font-bold text-[#1B2B4B] outline-none"
+                    </CustomSelect>
+                    <CustomSelect className="border-2 border-[#1B2B4B] rounded-lg px-2 py-2 text-[13px] font-bold text-[#1B2B4B] outline-none"
                       value={batchFromMM} onChange={e => setBatchFromMM(e.target.value)}>
                       {Array.from({length:12},(_,i)=>String(i+1).padStart(2,"0")).map(mm=>(
                         <option key={mm} value={mm}>{parseInt(mm,10)}월</option>
                       ))}
-                    </select>
+                    </CustomSelect>
                     <span className="text-gray-500 font-semibold">부터</span>
-                    <select className="border-2 border-[#1B2B4B] rounded-lg px-2 py-2 text-[13px] font-bold text-[#1B2B4B] outline-none"
+                    <CustomSelect className="border-2 border-[#1B2B4B] rounded-lg px-2 py-2 text-[13px] font-bold text-[#1B2B4B] outline-none"
                       value={batchToYear} onChange={e => setBatchToYear(e.target.value)}>
                       {Array.from({length:3},(_,i)=>String(THIS_YEAR - 1 + i)).map(y=>(
                         <option key={y} value={y}>{y}년</option>
                       ))}
-                    </select>
-                    <select className="border-2 border-[#1B2B4B] rounded-lg px-2 py-2 text-[13px] font-bold text-[#1B2B4B] outline-none"
+                    </CustomSelect>
+                    <CustomSelect className="border-2 border-[#1B2B4B] rounded-lg px-2 py-2 text-[13px] font-bold text-[#1B2B4B] outline-none"
                       value={batchToMM} onChange={e => setBatchToMM(e.target.value)}>
                       {Array.from({length:12},(_,i)=>String(i+1).padStart(2,"0")).map(mm=>(
                         <option key={mm} value={mm}>{parseInt(mm,10)}월</option>
                       ))}
-                    </select>
+                    </CustomSelect>
                     <span className="text-gray-500 font-semibold">까지</span>
                   </div>
                 </div>
@@ -54655,7 +54653,7 @@ const handleBatchSettle = async (targetStatus) => {
                   <div>
                     <label className="text-[13px] font-bold text-gray-700 mb-2 block">기간 선택 ({THIS_YEAR}년)</label>
                     <div className="flex items-center gap-2">
-                      <select
+                      <CustomSelect
                         className="border-2 border-[#1B2B4B] rounded-lg px-3 py-2 text-[13px] font-bold text-[#1B2B4B] outline-none"
                         value={arEmailFromMM}
                         onChange={e => {
@@ -54670,9 +54668,9 @@ const handleBatchSettle = async (targetStatus) => {
                         {Array.from({length:12},(_,i)=>String(i+1).padStart(2,"0")).map(mm=>(
                           <option key={mm} value={mm}>{parseInt(mm,10)}월</option>
                         ))}
-                      </select>
+                      </CustomSelect>
                       <span className="text-[13px] font-semibold text-gray-600">부터</span>
-                      <select
+                      <CustomSelect
                         className="border-2 border-[#1B2B4B] rounded-lg px-3 py-2 text-[13px] font-bold text-[#1B2B4B] outline-none"
                         value={arEmailToMM}
                         onChange={e => {
@@ -54687,7 +54685,7 @@ const handleBatchSettle = async (targetStatus) => {
                         {Array.from({length:12},(_,i)=>String(i+1).padStart(2,"0")).map(mm=>(
                           <option key={mm} value={mm}>{parseInt(mm,10)}월</option>
                         ))}
-                      </select>
+                      </CustomSelect>
                       <span className="text-[13px] font-semibold text-gray-600">까지</span>
                     </div>
                     <div className="mt-2 flex gap-2">
@@ -55003,16 +55001,16 @@ const handleBatchSettle = async (targetStatus) => {
                 <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-500" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
               </div>
               {/* 정렬 */}
-              <select
+              <CustomSelect
                 className="border-2 border-gray-200 rounded-lg px-3 py-2 text-[13px] outline-none focus:border-[#1B2B4B]"
                 value={mailSort}
                 onChange={e => setMailSort(e.target.value)}
               >
                 <option value="newest">최신순</option>
                 <option value="oldest">오래된순</option>
-              </select>
+              </CustomSelect>
               {/* 전체 유형 선택 */}
-              <select
+              <CustomSelect
                 className="border-2 border-[#1B2B4B] rounded-lg px-3 py-2 text-[13px] font-semibold text-[#1B2B4B] outline-none"
                 value={mailTypeFilter}
                 onChange={e => { setMailTypeFilter(e.target.value); setSelectedMails(new Set()); }}
@@ -55021,7 +55019,7 @@ const handleBatchSettle = async (targetStatus) => {
                 <option value="거래명세서">거래명세서</option>
                 <option value="미수금">미수금</option>
                 <option value="일반이메일">일반이메일</option>
-              </select>
+              </CustomSelect>
             </div>
             {/* 선택/삭제 액션 바 */}
             {selectedMails.size > 0 && (
@@ -55663,25 +55661,25 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
           </div>
           <div className="flex flex-col gap-1">
             <label className="text-[11px] font-bold text-gray-500">지급상태</label>
-            <select className="border border-gray-200 rounded-lg px-2 py-1.5 text-[12px] outline-none focus:border-[#1B2B4B]" value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
+            <CustomSelect className="border border-gray-200 rounded-lg px-2 py-1.5 text-[12px] outline-none focus:border-[#1B2B4B]" value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
               <option value="전체">전체</option>
               <option value="지급중">미지급</option>
               <option value="지급완료">지급완료</option>
-            </select>
+            </CustomSelect>
           </div>
           <div className="flex flex-col gap-1">
             <label className="text-[11px] font-bold text-gray-500">지급방식</label>
-            <select className="border border-gray-200 rounded-lg px-2 py-1.5 text-[12px] outline-none focus:border-[#1B2B4B]" value={payMethodFilter} onChange={e => setPayMethodFilter(e.target.value)}>
+            <CustomSelect className="border border-gray-200 rounded-lg px-2 py-1.5 text-[12px] outline-none focus:border-[#1B2B4B]" value={payMethodFilter} onChange={e => setPayMethodFilter(e.target.value)}>
               <option value="전체">전체</option>
               {PAY_METHODS.map(m => <option key={m} value={m}>{m}</option>)}
-            </select>
+            </CustomSelect>
           </div>
           <div className="flex flex-col gap-1">
             <label className="text-[11px] font-bold text-gray-500">배차방식</label>
-            <select className="border border-gray-200 rounded-lg px-2 py-1.5 text-[12px] outline-none focus:border-[#1B2B4B]" value={dispatchMethodFilter} onChange={e => setDispatchMethodFilter(e.target.value)}>
+            <CustomSelect className="border border-gray-200 rounded-lg px-2 py-1.5 text-[12px] outline-none focus:border-[#1B2B4B]" value={dispatchMethodFilter} onChange={e => setDispatchMethodFilter(e.target.value)}>
               <option value="전체">전체</option>
               {DISPATCH_METHODS.map(m => <option key={m} value={m}>{m}</option>)}
-            </select>
+            </CustomSelect>
           </div>
           <input autoComplete="off" placeholder="차량번호" className="border border-gray-200 rounded-lg px-3 py-1.5 text-[12px] w-28 outline-none focus:border-[#1B2B4B]" value={carNoQ} onChange={e => setCarNoQ(e.target.value)} />
           <input autoComplete="off" placeholder="기사명" className="border border-gray-200 rounded-lg px-3 py-1.5 text-[12px] w-24 outline-none focus:border-[#1B2B4B]" value={nameQ} onChange={e => setNameQ(e.target.value)} />
@@ -56361,10 +56359,10 @@ function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, sho
       {/* 검색바 + 작업 버튼 */}
       <div className="flex flex-wrap items-center gap-2.5 mb-4">
         <div className="flex items-center h-12 flex-1 min-w-[420px] max-w-[720px] rounded-[16px] bg-white border border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_8px_20px_rgba(16,24,40,0.05)] focus-within:border-[#4B6CB7] focus-within:ring-4 focus-within:ring-[#4B6CB7]/10 overflow-hidden">
-          <select className="h-full pl-4 pr-2 bg-transparent text-[13.5px] font-black text-[#0F1A30] outline-none border-r border-[#EEF1F6] cursor-pointer"
+          <CustomSelect className="h-full pl-4 pr-2 bg-transparent text-[13.5px] font-black text-[#0F1A30] outline-none border-r border-[#EEF1F6] cursor-pointer"
             value={qField} onChange={e => { setQField(e.target.value); setSearched(false); }}>
             {["전체","차량번호","기사명","연락처"].map(o => <option key={o} value={o}>{o}</option>)}
-          </select>
+          </CustomSelect>
           <svg className="ml-3 shrink-0 text-[#9AA9C3]" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="m21 21-5-5" /></svg>
           <input autoComplete="off"
             className="flex-1 min-w-0 h-full px-2.5 bg-transparent text-[14.5px] font-bold text-[#0F1A30] outline-none placeholder:text-[#A7B3C6] placeholder:font-medium"
@@ -56716,7 +56714,7 @@ function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, sho
               </div>
               <div>
                 <label className="block text-[12px] font-semibold text-gray-500 mb-1">등급</label>
-                <select className="border border-gray-200 rounded-lg px-3 py-2 text-[13px] w-full focus:border-[#1B2B4B] outline-none bg-white"
+                <CustomSelect className="border border-gray-200 rounded-lg px-3 py-2 text-[13px] w-full focus:border-[#1B2B4B] outline-none bg-white"
                   value={editDriverModal.등급||"일반"}
                   onChange={(e) => setEditDriverModal(p => ({ ...p, 등급: e.target.value }))}>
                   <option value="일반">일반</option>
@@ -56724,7 +56722,7 @@ function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, sho
                   <option value="직영">직영</option>
                   <option value="임대">임대</option>
                   <option value="블랙">블랙</option>
-                </select>
+                </CustomSelect>
               </div>
               {/* 지입/직영 기사 전용 — 거주지 / 근무가능요일 (노선관리 관제에 연동) */}
               {(editDriverModal.등급 === "지입" || editDriverModal.등급 === "직영" || editDriverModal.등급 === "임대") && (
@@ -56745,12 +56743,12 @@ function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, sho
                   </div>
                   <div>
                     <label className="block text-[12px] font-semibold text-gray-500 mb-1">톤수</label>
-                    <select className="border border-gray-200 rounded-lg px-3 py-2 text-[13px] w-full focus:border-[#1B2B4B] outline-none bg-white"
+                    <CustomSelect className="border border-gray-200 rounded-lg px-3 py-2 text-[13px] w-full focus:border-[#1B2B4B] outline-none bg-white"
                       value={editDriverModal.차량톤수||""}
                       onChange={(e) => setEditDriverModal(p => ({ ...p, 차량톤수: e.target.value }))}>
                       <option value="">선택</option>
                       {CARGO_VEHICLE_SPEC_TABLE.map(v => v.name).map(t => <option key={t} value={t}>{t}</option>)}
-                    </select>
+                    </CustomSelect>
                   </div>
                   <div>
                     <label className="block text-[12px] font-semibold text-gray-500 mb-1">요청사항</label>
@@ -56760,7 +56758,7 @@ function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, sho
                   </div>
                   <div>
                     <label className="block text-[12px] font-semibold text-gray-500 mb-1">담당자</label>
-                    <select className="border border-gray-200 rounded-lg px-3 py-2 text-[13px] w-full focus:border-[#1B2B4B] outline-none bg-white"
+                    <CustomSelect className="border border-gray-200 rounded-lg px-3 py-2 text-[13px] w-full focus:border-[#1B2B4B] outline-none bg-white"
                       value={editDriverModal.담당자?.uid || ""}
                       onChange={(e) => {
                         const s = companyStaff.find(x => x.id === e.target.value);
@@ -56768,7 +56766,7 @@ function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, sho
                       }}>
                       <option value="">미지정</option>
                       {companyStaff.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                    </select>
+                    </CustomSelect>
                   </div>
                   <div className="col-span-2">
                     <label className="block text-[12px] font-semibold text-gray-500 mb-1">근무가능요일</label>
@@ -56858,13 +56856,13 @@ function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, sho
             {/* 검색바 */}
             <div className="px-5 py-3 border-b border-gray-100 flex items-center gap-2 shrink-0">
               <div className="flex items-center border-2 border-[#1B2B4B] rounded-lg overflow-hidden h-[34px]">
-                <select className="px-2 h-full text-[13px] bg-[#1B2B4B]/5 border-r border-[#1B2B4B]/30 outline-none text-[#1B2B4B] font-semibold"
+                <CustomSelect className="px-2 h-full text-[13px] bg-[#1B2B4B]/5 border-r border-[#1B2B4B]/30 outline-none text-[#1B2B4B] font-semibold"
                   value={cleanupQField} onChange={e => setCleanupQField(e.target.value)}>
                   <option value="전체">전체</option>
                   <option value="차량번호">차량번호</option>
                   <option value="기사명">기사명</option>
                   <option value="연락처">연락처</option>
-                </select>
+                </CustomSelect>
                 <input autoComplete="off" className="px-3 h-full text-[13px] w-44 outline-none"
                   placeholder="검색어 입력..."
                   value={cleanupQ}
@@ -57212,9 +57210,9 @@ function KpSearchBar({ options, field, onField, value, onChange, onSearch, place
   return (
     <div className="flex items-center h-12 flex-1 min-w-[380px] max-w-[680px] rounded-[16px] bg-white border border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_8px_20px_rgba(16,24,40,0.05)] focus-within:border-[#4B6CB7] focus-within:ring-4 focus-within:ring-[#4B6CB7]/10 overflow-hidden">
       {options && (
-        <select className="h-full pl-4 pr-2 bg-transparent text-[13.5px] font-black text-[#0F1A30] outline-none border-r border-[#EEF1F6] cursor-pointer" value={field} onChange={(e) => onField(e.target.value)}>
+        <CustomSelect className="h-full pl-4 pr-2 bg-transparent text-[13.5px] font-black text-[#0F1A30] outline-none border-r border-[#EEF1F6] cursor-pointer" value={field} onChange={(e) => onField(e.target.value)}>
           {options.map((o) => <option key={o} value={o}>{o}</option>)}
-        </select>
+        </CustomSelect>
       )}
       <svg className="ml-3 shrink-0 text-[#9AA9C3]" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="m21 21-5-5" /></svg>
       <input autoComplete="off" className="flex-1 min-w-0 h-full px-2.5 bg-transparent text-[14.5px] font-bold text-[#0F1A30] outline-none placeholder:text-[#A7B3C6] placeholder:font-medium"
@@ -58287,7 +58285,7 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
                             onDoubleClick={e => { e.stopPropagation(); if (grade === "일반") return; showAlert(r.등급변경일 ? `${grade} 등급 지정일: ${r.등급변경일}` : `${grade} 등급으로 지정되어 있으나 지정일 기록이 없습니다.`); }}
                             title={grade !== "일반" ? "더블클릭하면 지정일을 볼 수 있습니다" : undefined}>
                             <div className="flex items-center justify-center">
-                              <select
+                              <CustomSelect
                                 className={`px-2 py-1 rounded text-xs font-bold cursor-pointer w-[68px] ${등급색상(grade)}`}
                                 value={grade}
                                 onChange={(e) => handlePlaceBlur(r,"등급",e.target.value)}>
@@ -58295,7 +58293,7 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
                                 <option value="블랙">블랙</option>
                                 <option value="주의">주의</option>
                                 <option value="이탈">이탈</option>
-                              </select>
+                              </CustomSelect>
                             </div>
                           </td>
                           <td className="px-2 py-2.5 text-[13px] text-gray-600 max-w-[160px] truncate text-center">{r.메모||""}</td>
@@ -58617,14 +58615,14 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
                   </div>
                   <div>
                     <label className="block text-[12px] font-semibold text-gray-500 mb-1">등급</label>
-                    <select className="border border-gray-200 rounded-lg px-3 py-2 text-[13px] w-full focus:border-[#1B2B4B] outline-none bg-white"
+                    <CustomSelect className="border border-gray-200 rounded-lg px-3 py-2 text-[13px] w-full focus:border-[#1B2B4B] outline-none bg-white"
                       value={newForm.등급||"일반"}
                       onChange={(e) => setNewForm(p => ({ ...p, 등급: e.target.value }))}>
                       <option value="일반">일반</option>
                       <option value="블랙">블랙</option>
                       <option value="주의">주의</option>
                       <option value="이탈">이탈</option>
-                    </select>
+                    </CustomSelect>
                   </div>
                   <div>
                     <label className="block text-[12px] font-semibold text-gray-500 mb-1"><EditableText id="clientEdit.label.일반메모" defaultText="일반메모" /></label>
@@ -58682,14 +58680,14 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
                   </div>
                   <div>
                     <label className="block text-[12px] font-semibold text-gray-500 mb-1"><EditableText id="clientEdit.label.등급" defaultText="등급" /></label>
-                    <select className="border border-gray-200 rounded-lg px-3 py-2 text-[13px] w-full focus:border-[#1B2B4B] outline-none bg-white"
+                    <CustomSelect className="border border-gray-200 rounded-lg px-3 py-2 text-[13px] w-full focus:border-[#1B2B4B] outline-none bg-white"
                       value={editClientModal.등급||"일반"}
                       onChange={(e) => setEditClientModal(p => ({ ...p, 등급: e.target.value }))}>
                       <option value="일반">일반</option>
                       <option value="블랙">블랙</option>
                       <option value="주의">주의</option>
                       <option value="이탈">이탈</option>
-                    </select>
+                    </CustomSelect>
                   </div>
                   <div>
                     <label className="block text-[12px] font-semibold text-gray-500 mb-1"><EditableText id="clientEdit.label.일반메모" defaultText="일반메모" /></label>
@@ -59009,14 +59007,14 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
               </div>
               <div>
                 <label className="block text-[12px] font-semibold text-gray-500 mb-1">등급</label>
-                <select className="border border-gray-200 rounded-lg px-3 py-2 text-[13px] w-full focus:border-[#1B2B4B] outline-none bg-white"
+                <CustomSelect className="border border-gray-200 rounded-lg px-3 py-2 text-[13px] w-full focus:border-[#1B2B4B] outline-none bg-white"
                   value={editPlaceModal.등급||"일반"}
                   onChange={(e) => setEditPlaceModal(p => ({ ...p, 등급: e.target.value }))}>
                   <option value="일반">일반</option>
                   <option value="블랙">블랙</option>
                   <option value="주의">주의</option>
                   <option value="이탈">이탈</option>
-                </select>
+                </CustomSelect>
               </div>
               <div className="col-span-2">
                 <label className="block text-[12px] font-semibold text-gray-500 mb-1">주소</label>
@@ -60477,11 +60475,11 @@ function HRManagementPage({ userCompany, role, userId, focusUid = null, selfOnly
                     <span>{selected.position || "직책 미설정"}</span>
                     <span className="text-white/30">·</span>
                     {canManage ? (
-                      <select value={selected.team || "미배정"} onChange={e => setTeam(selected.uid, e.target.value)}
+                      <CustomSelect value={selected.team || "미배정"} onChange={e => setTeam(selected.uid, e.target.value)}
                         className="h-7 px-2 rounded-lg bg-white/10 border border-white/20 text-white text-[13px] font-bold focus:outline-none [&>option]:text-[#0F1A30]">
                         {hrOpt.teams.map(t => <option key={t} value={t}>{t}</option>)}
                         <option value="미배정">미배정</option>
-                      </select>
+                      </CustomSelect>
                     ) : <span>{selected.team || "미배정"}</span>}
                   </div>
                   {/* ⭐ 2026-11-02 화면 점검 — 모바일 390px에서 4칸이면 글자가 세로로 깨져 2칸 → sm 이상 4칸 */}
@@ -61533,7 +61531,7 @@ function CompanyProfile({ userCompany = "", role = "", userId = "" }) {
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="block text-[12px] font-semibold text-gray-500 mb-1.5"><EditableText id="companyProfile.bankForm.label.은행" defaultText="은행" /></label>
-                    <select
+                    <CustomSelect
                       className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B] bg-white"
                       value={bankForm.bank}
                       onChange={e => setBankForm(p => ({ ...p, bank: e.target.value }))}
@@ -61542,7 +61540,7 @@ function CompanyProfile({ userCompany = "", role = "", userId = "" }) {
                       {["국민은행","신한은행","우리은행","하나은행","기업은행","농협은행","카카오뱅크","케이뱅크","토스뱅크","SC제일은행","씨티은행","대구은행","부산은행","경남은행","광주은행","전북은행","제주은행","우체국","새마을금고","신협"].map(b => (
                         <option key={b} value={b}>{b}</option>
                       ))}
-                    </select>
+                    </CustomSelect>
                   </div>
                   <div>
                     <label className="block text-[12px] font-semibold text-gray-500 mb-1.5"><EditableText id="companyProfile.bankForm.label.예금주" defaultText="예금주" /></label>
