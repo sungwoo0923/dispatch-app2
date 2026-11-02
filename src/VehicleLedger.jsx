@@ -67,7 +67,7 @@ function SelectOrType({ value, onChange, options, placeholder = "선택" }) {
 }
 function Modal({ title, onClose, children, footer, width = 640 }) {
   return (
-    <div style={{ position: "fixed", inset: 0, zIndex: 9600, background: "rgba(11,20,40,.55)", display: "flex", alignItems: "center", justifyContent: "center", padding: 12 }}>
+    <div className="vl-modal" style={{ position: "fixed", inset: 0, zIndex: 9600, background: "rgba(11,20,40,.55)", display: "flex", alignItems: "center", justifyContent: "center", padding: 12 }}>
       <div style={{ width: `min(${width}px, 100%)`, maxHeight: "calc(100vh - 24px)", background: "#fff", borderRadius: 18, display: "flex", flexDirection: "column", overflow: "hidden", boxShadow: "0 30px 60px rgba(11,20,40,.35)" }}>
         <div style={{ padding: "14px 18px", background: "linear-gradient(120deg,#0B1428,#1B2B4B)", color: "#fff", display: "flex", alignItems: "center", gap: 10 }}>
           <div style={{ flex: 1, fontSize: 17, fontWeight: 900 }}>{title}</div>

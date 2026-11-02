@@ -16071,6 +16071,20 @@ const pickDrop = (c) => {
 
       {/* 금액 */}
       <div className="border-t border-gray-100">
+        {/* ⭐ 2026-11-02 운임규칙 — 운임구분(규칙 사용 회사만) · 고르고 청구운임을 넣으면 기사운임·수수료 자동 */}
+        {fareRM.on && (
+          <div data-m-fare="1">
+            <RowLabelInput
+              label="운임구분"
+              input={
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <FareTypeSelect compact className="flex-1 min-w-0 !h-[32px] !text-[14px] !border-0 !border-b-2 !border-gray-300 !rounded-none !bg-transparent" rules={fareRM.rules} value={form.운임구분 || ""} onChange={(v) => updateMoney("운임구분", v)} />
+                  <FareRuleHint className="shrink-0" form={form} rules={fareRM.rules} onReapply={() => updateMoney("__reapply", null)} />
+                </div>
+              }
+            />
+          </div>
+        )}
         <RowLabelInput
           label="청구운임"
           input={
@@ -16107,14 +16121,6 @@ const pickDrop = (c) => {
             />
           }
         />
-        {/* ⭐ 2026-11-02 운임규칙 — 운임구분(규칙 사용 회사만) */}
-        {fareRM.on && (
-          <div className="px-3 py-2 flex items-center gap-2 flex-wrap" data-m-fare="1">
-            <span className="text-[13px] font-semibold text-gray-700 shrink-0 w-[64px]">운임구분</span>
-            <FareTypeSelect compact className="flex-1 min-w-[140px] !h-[34px] !text-[14px]" rules={fareRM.rules} value={form.운임구분 || ""} onChange={(v) => updateMoney("운임구분", v)} />
-            <FareRuleHint className="w-full justify-end" form={form} rules={fareRM.rules} onReapply={() => updateMoney("__reapply", null)} />
-          </div>
-        )}
       </div>
 
 {/* 기사 스마트검색 */}
