@@ -16623,13 +16623,9 @@ className={`
     </div>
 
     {/* 기사운임 */}
-    <div>
+    <div className={fareOn ? "relative pb-[34px]" : undefined}>
       <label className={`${labelCls} flex items-center gap-2`}>
         <EditableText id="orderForm.label.기사운임" defaultText="기사운임" />
-        {/* ⭐ 2026-11-02 운임규칙 — 운임구분(규칙 사용 회사만) — 칸 배치를 바꾸지 않도록 라벨 줄 안에 */}
-        {fareOn && (
-          <FareTypeSelect compact className="ml-auto normal-case" id="order-fare-type" rules={fareR.rules} value={form.운임구분 || ""} onChange={(v) => onChange("운임구분", v)} />
-        )}
 
         {fareCompare.driver === "high" && (
           <span className="text-[11px] font-semibold text-red-600">
@@ -16657,14 +16653,18 @@ className={`
           onChange("기사운임", raw);
         }}
       />
+      {/* ⭐ 2026-11-02 운임규칙 — 운임구분 + "일대 7% 적용"/[↺ 규칙대로] — 칸 수를 바꾸지 않도록 기사·수수료 칸 아래 한 줄 */}
+      {fareOn && (
+        <div className="absolute left-0 bottom-0 flex items-center gap-1.5 whitespace-nowrap z-[2]" style={{ width: "200%" }} data-fare-row="1">
+          <FareTypeSelect compact id="order-fare-type" rules={fareR.rules} value={form.운임구분 || ""} placeholder="운임구분" onChange={(v) => onChange("운임구분", v)} />
+          <FareRuleHint form={form} rules={fareR.rules} onReapply={() => onChange("__reapply")} />
+        </div>
+      )}
     </div>
 
     {/* 수수료 */}
     <div>
-      <label className={`${labelCls}${fareOn ? " flex items-center gap-2" : ""}`}><EditableText id="orderForm.label.수수료" defaultText="수수료" />
-        {/* ⭐ 2026-11-02 운임규칙 — "일대 7% 적용" · 직접 고쳤으면 [↺ 규칙대로] */}
-        {fareOn && <FareRuleHint className="ml-auto normal-case" form={form} rules={fareR.rules} onReapply={() => onChange("__reapply")} />}
-      </label>
+      <label className={labelCls}><EditableText id="orderForm.label.수수료" defaultText="수수료" /></label>
       <input autoComplete="off"
         className={`${inputCls} bg-gray-100`}
         value={form.수수료 ? Number(form.수수료).toLocaleString() : form.수수료}
