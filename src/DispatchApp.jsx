@@ -2784,6 +2784,7 @@ import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import FareRulesSettings from "./FareRulesSettings";
 import { useFareRules, FareTypeSelect, FareRuleHint, fareFormChange, farePatchOf, findFareRule, applyFareRule, FareTypeBreakdown } from "./fareRules";
 import { useTableSort, sortRows, SortTh } from "./tableSort";
+import { useCompanyFeatures } from "./companyFeatures";
 
 // 기사전달용 업로드 링크 단축 — /upload?id=...&t=... (길고 낯설어 기사들이 거부감을
 // 느낄 수 있는 형태)를 /u/{code} 형태로 줄인다. code는 토큰에서 파생시켜, 같은
@@ -3493,6 +3494,32 @@ const kpTabCls = (on) => `px-5 h-9 rounded-[10px] text-[13.5px] transition white
 // 머리글 이름 = 오더 필드 이름이 대부분이고, 다른 것만 여기서 맞춰준다.
 // (정렬은 src/tableSort.jsx — 이 브라우저에만 기억, Firestore 저장 안 함)
 const _sortInt = (v) => { const n = Number(String(v ?? "").replace(/[^\d.-]/g, "")); return Number.isFinite(n) ? n : 0; };
+// ⭐ 2026-11-02 배차표 "담당자" 칸(회사별 맞춤 기능 orderManagerCol) — 오더의 차량번호로 기사관리 기사를 찾아
+//   그 기사의 담당자(담당자.name)를 보여준다. 차량번호 → 담당자 표를 기사 목록이 바뀔 때만 한 번 만들고(useMemo),
+//   줄마다는 표에서 꺼내기만 한다. 기능이 꺼진 회사는 null(칸 자체가 없음).
+const _mgrPlateKey = (s) => String(s || "").toUpperCase().replace(/[^0-9A-Z가-힣]/g, "");
+function useOrderManagerMap(drivers, userCompany) {
+  const co = getTenant() || userCompany;
+  const on = useCompanyFeatures(co).orderManagerCol === true;
+  return React.useMemo(() => {
+    if (!on) return null;
+    const m = new Map();
+    const myCo = String(co || "").trim();
+    for (const d of drivers || []) {
+      if (!d) continue;
+      if (myCo && d.companyName && String(d.companyName).trim() !== myCo) continue; // 지금 회사 기사만
+      const k = _mgrPlateKey(d.차량번호);
+      const n = String(d.담당자?.name || "").trim();
+      if (k && n && !m.has(k)) m.set(k, n);
+    }
+    return m;
+  }, [on, drivers, co]);
+}
+const orderMgrName = (map, r) => (map && r && r.차량번호 ? map.get(_mgrPlateKey(r.차량번호)) || "" : "");
+const ORDER_MGR_EMPTY = "미지정";
+// 정렬용 값 꺼내기 — 담당자 칸은 위 표에서, 나머지는 orderSortValue
+const makeOrderSortValue = (mgrMap) => (r, key, i) => (key === "담당자" ? orderMgrName(mgrMap, r) : orderSortValue(r, key, i));
+
 // ⭐ 오더 검색창 "통합 ▾" 검색 항목 — 배차현황·실시간배차현황 공용(값 → 오더 필드). all = 통합
 const ORDER_SEARCH_FIELD = { client: "거래처명", pickup: "상차지명", drop: "하차지명", car: "차량번호", driver: "이름", pay: "지급방식", dispatch: "배차방식" };
 const orderSortValue = (r, key, i) => {
@@ -23743,7 +23770,7 @@ function StickyHScrollbar({ targetRef }) {
 // 그 값 자체가 outer state(예: r._id 자체, edited 등)에 의존하지 않는 "그 행 전용" 클로저라
 // 이 행이 실제로 다시 렌더링될 때 항상 최신 값으로 갱신되므로 안전하다.
 function RealtimeRowBase({
-  r, idx,
+  r, idx, mgrName = null,
   isSelected, isFading, isHighlighted, isDark, selectedEditMode,
   editedForRow,
   toInt, formatComma, formatPhone, getCreatedMs, getUpdatedMs, getDispatchConfirmedMs, formatKstDateTime, getCreatorLabel,
@@ -23850,6 +23877,9 @@ ${isHighlighted ? "animate-pulse bg-blue-100" : ""}
 
                   {/* ⚡ 순번은 CSS 카운터로(.kp-rt-body) — 정렬로 줄 순서가 바뀌어도 줄 전체를 다시 그리지 않게 */}
                   <td className={`${cell} kp-rt-no`} />
+                  {mgrName != null && (
+                    <td className={cell}>{mgrName ? mgrName : <span className="text-[12px] font-semibold text-[#9AA9C3]">{ORDER_MGR_EMPTY}</span>}</td>
+                  )}
   <td className={`${cell} overflow-visible`}>
   <HoverInfoTrigger
     className="underline decoration-dotted underline-offset-2 cursor-default"
@@ -24205,6 +24235,7 @@ function realtimeRowPropsEqual(prev, next) {
     prev.r === next.r &&
     // ⚡ idx(순번)는 비교하지 않는다 — 순번·줄무늬를 CSS로 그려서, 정렬해도 바뀐 줄만 다시 그린다
     prev.isSelected === next.isSelected &&
+    prev.mgrName === next.mgrName &&
     prev.isFading === next.isFading &&
     prev.isHighlighted === next.isHighlighted &&
     prev.isDark === next.isDark &&
@@ -27549,7 +27580,8 @@ const driverPanelCallbackRef = React.useRef(null);
     });
   }, [rows, q, rtSearchType, dayMode, statusFilter, filterErrorIds]);
   // ⚡ 머리글 정렬은 이미 걸러진 목록만 따로 정렬 — 정렬을 눌러도 위의 검색·필터·경유지 계산은 다시 돌지 않는다
-  const filtered = React.useMemo(() => sortRows(filteredBase, rtSort.sort, orderSortValue), [filteredBase, rtSort.sort]);
+  const rtMgrMap = useOrderManagerMap(drivers, userCompany); // ⭐ 담당자 칸(회사별 기능 꺼지면 null)
+  const filtered = React.useMemo(() => sortRows(filteredBase, rtSort.sort, makeOrderSortValue(rtMgrMap)), [filteredBase, rtSort.sort, rtMgrMap]);
 
   // ⭐ 행 순서가 바뀔 때(수정으로 배차상태가 바뀌어 위/아래로 옮겨가는 등) 그냥
   // React가 새 순서로 다시 그려서 "뚝뚝 끊기며 순간이동"하던 것을, FLIP 기법으로
@@ -29484,7 +29516,7 @@ const head = isDark
   const _via=(list)=>list.map(s=>s.업체명||s.주소||"").filter(Boolean).join(", ");
   const _hasVia=filtered.some(r=>_merge(r,"경유상차목록","경유지_상차").length>0||_merge(r,"경유하차목록","경유지_하차").length>0);
   const rowsExcel=filtered.map((r,idx)=>{
-    const row={순번:idx+1,등록일:r.등록일||"",상차일:r.상차일||"",상차시간:r.상차시간||"",하차일:r.하차일||"",하차시간:r.하차시간||"",거래처명:r.거래처명||"",상차지명:r.상차지명||""};
+    const row={순번:idx+1,...(rtMgrMap?{담당자:orderMgrName(rtMgrMap,r)||ORDER_MGR_EMPTY}:{}),등록일:r.등록일||"",상차일:r.상차일||"",상차시간:r.상차시간||"",하차일:r.하차일||"",하차시간:r.하차시간||"",거래처명:r.거래처명||"",상차지명:r.상차지명||""};
     if(_hasVia)row["경유 상차지"]=_via(_merge(r,"경유상차목록","경유지_상차"));
     row.하차지명=r.하차지명||"";
     if(_hasVia)row["경유 하차지"]=_via(_merge(r,"경유하차목록","경유지_하차"));
@@ -29508,6 +29540,7 @@ const head = isDark
               {[
                 "선택",
                 "순번",
+                ...(rtMgrMap ? ["담당자"] : []),
                 "등록일",
                 "상차일",
                 "상차시간",
@@ -29572,6 +29605,7 @@ const head = isDark
                 key={r._id || r.id || `idx-${idx}`}
                 r={r}
                 idx={idx}
+                mgrName={rtMgrMap ? orderMgrName(rtMgrMap, r) : null}
                 isSelected={selected.includes(r._id)}
                 isFading={fadingIds.has(r._id)}
                 isHighlighted={highlightIds.has(r._id)}
@@ -38352,6 +38386,7 @@ if (first) {
     const rows = filtered.map((r, i) => {
       const row = {
         순번: page * pageSize + i + 1,
+        ...(dsMgrMap ? { 담당자: orderMgrName(dsMgrMap, r) || ORDER_MGR_EMPTY } : {}),
         등록일: displayRegDate(r),
         상차일: r.상차일 || "",
         상차시간: r.상차시간 || "",
@@ -38580,7 +38615,8 @@ const filteredBase = React.useMemo(() => {
   fareTypeFilter,
 ]);
   // ⚡ 머리글 정렬은 이미 걸러진 목록만 따로 정렬 — 정렬을 눌러도 위의 날짜·검색 필터는 다시 돌지 않는다
-  const filtered = React.useMemo(() => sortRows(filteredBase, dsSort.sort, orderSortValue), [filteredBase, dsSort.sort]);
+  const dsMgrMap = useOrderManagerMap(drivers, userCompany); // ⭐ 담당자 칸(회사별 기능 꺼지면 null)
+  const filtered = React.useMemo(() => sortRows(filteredBase, dsSort.sort, makeOrderSortValue(dsMgrMap)), [filteredBase, dsSort.sort, dsMgrMap]);
 
   // ⭐⭐⭐ 페이지 데이터 (정렬된 filtered 기준)
   const pageRows = React.useMemo(() => {
@@ -39426,7 +39462,7 @@ return (
           <thead className="bg-[#1B2B4B]">
             <tr>
               {[
-                "선택", "순번", "등록일", "상차일", "상차시간", "하차일", "하차시간",
+                "선택", "순번", ...(dsMgrMap ? ["담당자"] : []), "등록일", "상차일", "상차시간", "하차일", "하차시간",
                 "거래처명", "상차지명", "상차지주소", "하차지명", "하차지주소",
                 "화물내용", "차량종류", "차량톤수", "혼적", "차량번호", "기사명", "전화번호",
                "배차상태", "청구운임", "기사운임", "수수료", ...(fareOn ? ["운임구분"] : []), "지급방식", "배차방식", "메모", "전달사항", "첨부", "전달상태",
@@ -39532,6 +39568,11 @@ return (
       <td className="px-3 py-3 text-[14px] font-medium text-gray-800 text-center border-b border-gray-200 border-r border-r-gray-100 whitespace-nowrap">
         {(page * pageSize) + i + 1}
       </td>
+      {dsMgrMap && (() => { const mn = orderMgrName(dsMgrMap, row); return (
+        <td className="px-3 py-3 text-[14px] font-medium text-gray-800 text-center border-b border-gray-200 border-r border-r-gray-100 whitespace-nowrap">
+          {mn || <span className="text-[12px] font-semibold text-[#9AA9C3]">{ORDER_MGR_EMPTY}</span>}
+        </td>
+      ); })()}
 
       <td className="px-3 py-3 text-[14px] font-medium text-gray-800 text-center border-b border-gray-200 border-r border-r-gray-100 whitespace-nowrap overflow-visible">
   <HoverInfoTrigger
@@ -49566,8 +49607,9 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
     });
   }, [dispatchData, q, startDate, endDate, filterType, filterValue]);
 
+  const unMgrMap = useOrderManagerMap(drivers, userCompany); // ⭐ 담당자 칸(회사별 기능 꺼지면 null)
   const headers = [
-    "순번","등록일","경과","상차일","상차시간","하차일","하차시간","거래처명",
+    "순번", ...(unMgrMap ? ["담당자"] : []), "등록일","경과","상차일","상차시간","하차일","하차시간","거래처명",
     "상차지명","상차지주소","하차지명","하차지주소",
     "차량종류","차량톤수","화물내용","경유","배차상태","메모",
   ];
@@ -49576,8 +49618,9 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
   const unSortValue = React.useCallback((r, key, i) => {
     if (key === "경과") return r.등록일 ? -new Date(r.등록일).getTime() : null; // 오래된 것 = 경과 큼
     if (key === "경유") return null;
+    if (key === "담당자") return orderMgrName(unMgrMap, r);
     return orderSortValue(r, key, i);
-  }, []);
+  }, [unMgrMap]);
   const sortedRows = React.useMemo(() => sortRows(filtered, unSort.sort, unSortValue), [filtered, unSort.sort, unSortValue]);
 
   const toggleAll = () => {
@@ -49748,6 +49791,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                         </td>
                       )}
                       <td className={cellBase}>{i + 1}</td>
+                      {unMgrMap && <td className={cellBase}>{orderMgrName(unMgrMap, r) || <span className="text-[12px] font-semibold text-[#9AA9C3]">{ORDER_MGR_EMPTY}</span>}</td>}
                       <td className={cellBase}>{displayRegDate(r)}</td>
                       <td className={cellBase}>
                         {r.등록일 ? (() => {
