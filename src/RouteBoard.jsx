@@ -12,7 +12,8 @@
 //   · 배차관리에서 고친 차량·기사·시간도 이 화면에 그대로 보인다(같은 오더를 읽으므로).
 import React from "react";
 import { collection, doc, onSnapshot, query, where, getDocs, setDoc, addDoc, updateDoc, deleteDoc, serverTimestamp } from "firebase/firestore";
-import { db, auth } from "./firebase";
+import { db, auth, FUNCTIONS_BASE } from "./firebase";
+import { parseBoardTab, sheetToForm, tabDate } from "./routeBoardSheet"; // ⭐ 2026-11-02 구글시트 날짜 탭 불러오기
 import { coDocKey } from "./coKey";
 import { deleteOrderWithLog } from "./orderHistory";
 import CustomDatePicker from "./CustomDatePicker";
@@ -121,10 +122,104 @@ function orderFromRow(form, g, r, i, date, co, isNew, prevStatus) {
   };
 }
 
+// ── 구글시트 읽기(서버 routeBoardSheet) ──────────────────────
+const SERVICE_EMAIL = "dispatch-app-9b92f@appspot.gserviceaccount.com";
+async function sheetApi(body) {
+  const token = await auth.currentUser?.getIdToken();
+  let res;
+  try {
+    res = await fetch(`${FUNCTIONS_BASE}/routeBoardSheet`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token || ""}` }, body: JSON.stringify(body) });
+  } catch { throw new Error("서버 응답을 받지 못했습니다. 서버 배포 여부를 확인하거나 잠시 후 다시 시도해 주세요."); }
+  let data = {};
+  try { data = await res.json(); } catch { /* 무시 */ }
+  if (!res.ok) throw new Error(data.error || `요청 실패 (${res.status})`);
+  return data;
+}
+const ShareNote = () => (
+  <div className="text-[12.5px] text-[#7A8AA6] mt-1.5">시트 <b>공유</b>에 <code className="px-1.5 py-0.5 rounded bg-[#F3F6FA] text-[#1B2B4B]">{SERVICE_EMAIL}</code> 을(를) <b>뷰어</b>로 추가해 주세요.
+    <button type="button" onClick={() => navigator.clipboard?.writeText(SERVICE_EMAIL)} className="ml-1.5 underline font-bold">복사</button></div>
+);
+// 날짜 탭 고르기 → 읽기 → 미리보기 → 배차표에 넣기
+function SheetLoad({ form, date, onApply, onClose }) {
+  const [tabs, setTabs] = React.useState(null);
+  const [tab, setTab] = React.useState("");
+  const [busy, setBusy] = React.useState("tabs");
+  const [err, setErr] = React.useState("");
+  const [res, setRes] = React.useState(null);
+  React.useEffect(() => {
+    sheetApi({ action: "tabs", url: form.sheetUrl }).then((d) => {
+      setTabs(d.tabs);
+      const y = +date.slice(0, 4);
+      const hit = d.tabs.find((t) => tabDate(t, y) === date) || d.tabs.find((t) => tabDate(t, y) === addDays(date, toInt(form.dropOffset)));
+      setTab(hit || d.tabs[d.tabs.length - 1] || "");
+    }).catch((e) => setErr(e.message)).finally(() => setBusy(""));
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const read = async () => {
+    setBusy("read"); setErr(""); setRes(null);
+    try {
+      const d = await sheetApi({ action: "read", url: form.sheetUrl, tab });
+      const p = parseBoardTab(form, d.rows);
+      if (!p.headers) throw new Error("이 탭에서 양식의 제목줄(칸 이름)을 찾지 못했습니다. 양식 칸 이름이 시트 제목과 같은지 확인해 주세요.");
+      setRes(p);
+    } catch (e) { setErr(e.message); } finally { setBusy(""); }
+  };
+  const total = res ? Object.values(res.groups).reduce((a, x) => a + x.length, 0) : 0;
+  return (
+    <div className="fixed inset-0 z-[90] bg-black/40 flex items-start justify-center overflow-auto p-4" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+      <div className={`${card} w-full max-w-[560px] my-10 p-6`}>
+        <div className="text-[18px] font-black text-[#0F1A30] mb-1">구글시트에서 불러오기</div>
+        <div className="text-[13px] text-[#7A8AA6] mb-4 break-all">{form.sheetUrl}</div>
+        {tabs && (
+          <div className="flex gap-2 mb-3">
+            <select value={tab} onChange={(e) => { setTab(e.target.value); setRes(null); }} className={inp}>
+              {[...tabs].reverse().map((t) => <option key={t} value={t}>{t}</option>)}
+            </select>
+            <button onClick={read} disabled={!!busy || !tab} className={`${btn} bg-[#0F1A30] text-white`}>{busy === "read" ? "읽는 중…" : "읽기"}</button>
+          </div>
+        )}
+        {busy === "tabs" && <div className="text-[13.5px] text-[#7A8AA6]">탭 목록을 읽는 중…</div>}
+        {err && <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-[13.5px] font-semibold text-red-700 mb-3">{err}{/공유|열 수 없/.test(err) && <ShareNote />}</div>}
+        {res && (
+          <div className="rounded-xl border border-[#E3E8F0] bg-[#F8FAFD] p-4 text-[13.5px] text-[#3A4A66] space-y-1.5">
+            <div>찾은 표 <b>{res.headers}</b>개 · 차량 <b>{total}</b>줄</div>
+            {form.groups.map((g) => <div key={g.name}>· {g.name}: {res.groups[g.name]?.length || 0}줄</div>)}
+            {res.date && <div>시트에 적힌 첫 날짜: <b>{dLabel(res.date)}</b></div>}
+            {res.missing.length > 0 && <div className="text-amber-700">시트에 없는 칸(비워 둠): {res.missing.join(", ")}</div>}
+            <div className="text-[12.5px] text-[#7A8AA6] pt-1">넣으면 그 날짜의 배차표 줄이 시트 내용으로 바뀝니다. 확인 후 [저장]을 눌러야 오더에 반영됩니다.</div>
+          </div>
+        )}
+        <div className="flex flex-wrap justify-end gap-2 mt-5">
+          <button onClick={onClose} className={`${btn} text-[#5B6B85]`}>닫기</button>
+          {res && total > 0 && res.date && res.date !== date && <button onClick={() => onApply(res, res.date)} className={`${btn} border border-[#DCE3EE] text-[#2D4C82]`}>상차 {dLabel(res.date)}(시트 날짜)에 넣기</button>}
+          {res && total > 0 && <button onClick={() => onApply(res, date)} className={`${btn} bg-[#0F1A30] text-white`}>상차 {dLabel(date)}에 넣기</button>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── 양식 편집 ──────────────────────────────────────────────
 function FormEditor({ init, onClose, onSaved, co }) {
   const [f, setF] = React.useState(() => JSON.parse(JSON.stringify(init)));
   const [busy, setBusy] = React.useState(false);
+  const [sheet, setSheet] = React.useState({ tabs: null, tab: "", busy: "", err: "" }); // ⭐ 시트 제목줄로 칸 만들기
+  const loadTabs = async () => {
+    if (!String(f.sheetUrl || "").trim()) return kpAlert("구글시트 주소를 붙여넣어 주세요.");
+    setSheet((s) => ({ ...s, busy: "tabs", err: "" }));
+    try { const d = await sheetApi({ action: "tabs", url: f.sheetUrl.trim() }); setSheet({ tabs: d.tabs, tab: d.tabs[d.tabs.length - 1] || "", busy: "", err: "" }); }
+    catch (e) { setSheet((s) => ({ ...s, busy: "", err: e.message })); }
+  };
+  const colsFromSheet = async () => {
+    if (f.columns.length && !(await kpConfirm("지금 칸 설정을 시트 제목줄로 바꿀까요?"))) return;
+    setSheet((s) => ({ ...s, busy: "read", err: "" }));
+    try {
+      const d = await sheetApi({ action: "read", url: f.sheetUrl.trim(), tab: sheet.tab });
+      const g = sheetToForm(d.rows, guessKind);
+      if (!g) throw new Error("이 탭에서 제목줄을 찾지 못했습니다.");
+      setF((p) => ({ ...p, columns: g.columns, groups: g.groups.map((x) => p.groups.find((y) => y.name === x.name) || x) }));
+      setSheet((s) => ({ ...s, busy: "" }));
+    } catch (e) { setSheet((s) => ({ ...s, busy: "", err: e.message })); }
+  };
   const setCol = (i, patch) => setF((p) => ({ ...p, columns: p.columns.map((c, j) => (j === i ? { ...c, ...patch } : c)) }));
   const moveCol = (i, d) => setF((p) => { const a = [...p.columns]; const j = i + d; if (j < 0 || j >= a.length) return p; [a[i], a[j]] = [a[j], a[i]]; return { ...p, columns: a }; });
   const setGroup = (i, patch) => setF((p) => ({ ...p, groups: p.groups.map((g, j) => (j === i ? { ...g, ...patch } : g)) }));
@@ -140,7 +235,7 @@ function FormEditor({ init, onClose, onSaved, co }) {
     if (!f.groups.length || f.groups.some((g) => !g.name.trim())) return kpAlert("묶음(상차지) 이름을 입력해 주세요.");
     setBusy(true);
     try {
-      const data = { ...f, companyName: co, columns: f.columns.map((c) => ({ ...c, label: c.label.trim() })), updatedAt: serverTimestamp(), updatedBy: auth.currentUser?.email || "" };
+      const data = { ...f, sheetUrl: String(f.sheetUrl || "").trim(), companyName: co, columns: f.columns.map((c) => ({ ...c, label: c.label.trim() })), updatedAt: serverTimestamp(), updatedBy: auth.currentUser?.email || "" };
       delete data.id;
       let id = f.id;
       if (id) await updateDoc(doc(db, "routeBoards", id), data);
@@ -165,6 +260,21 @@ function FormEditor({ init, onClose, onSaved, co }) {
               <option value={0}>상차일과 같은 날</option><option value={1}>상차 다음 날</option><option value={2}>상차 이틀 뒤</option>
             </select></label>
           <label className="block"><span className="text-[12.5px] font-black text-[#3A4A66]">지급방식(기본)</span><input value={f.payMethod} onChange={(e) => setF({ ...f, payMethod: e.target.value })} className={inp} placeholder="예: 계산서" /></label>
+        </div>
+
+        <div className="rounded-xl border border-[#E3E8F0] bg-[#F8FAFD] p-3 mb-6">
+          <div className="text-[13px] font-black text-[#3A4A66] mb-1.5">화주사 구글시트(선택) — 넣어 두면 배차표에서 [시트 불러오기]로 날짜 탭을 바로 가져옵니다</div>
+          <div className="flex flex-wrap gap-2">
+            <input value={f.sheetUrl || ""} onChange={(e) => { setF({ ...f, sheetUrl: e.target.value }); setSheet({ tabs: null, tab: "", busy: "", err: "" }); }} className={`${inp} flex-1 min-w-[240px]`} placeholder="https://docs.google.com/spreadsheets/d/…" />
+            {!sheet.tabs ? <button type="button" onClick={loadTabs} disabled={!!sheet.busy} className={`${btn} border border-[#DCE3EE] text-[#2D4C82]`}>{sheet.busy === "tabs" ? "여는 중…" : "시트 열기"}</button> : (
+              <>
+                <select value={sheet.tab} onChange={(e) => setSheet((s) => ({ ...s, tab: e.target.value }))} className={`${inp} w-[160px]`}>{[...sheet.tabs].reverse().map((t) => <option key={t}>{t}</option>)}</select>
+                <button type="button" onClick={colsFromSheet} disabled={!!sheet.busy} className={`${btn} bg-[#2D4C82] text-white`}>{sheet.busy === "read" ? "읽는 중…" : "이 탭 제목줄로 칸 만들기"}</button>
+              </>
+            )}
+          </div>
+          {sheet.err && <div className="mt-2 text-[13px] font-semibold text-red-600">{sheet.err}</div>}
+          <ShareNote />
         </div>
 
         <div className="text-[14px] font-black text-[#0F1A30] mb-2">칸(시트 제목줄 순서대로)</div>
@@ -233,6 +343,8 @@ export default function RouteBoard({ companyName = "" }) {
   const [drivers, setDrivers] = React.useState([]);
   const [places, setPlaces] = React.useState([]);
   const [msg, setMsg] = React.useState("");
+  const [sheetOpen, setSheetOpen] = React.useState(false);
+  const [pending, setPending] = React.useState(null); // { date, res } — 시트에서 읽은 줄(그 날짜 오더를 읽은 뒤 넣는다)
   const form = forms.find((f) => f.id === formId) || null;
 
   React.useEffect(() => {
@@ -272,9 +384,17 @@ export default function RouteBoard({ companyName = "" }) {
   }, [form, places]); // eslint-disable-line react-hooks/exhaustive-deps
 
   React.useEffect(() => {
-    if (!form || orders === null || dirty) return;
+    if (!form || orders === null) return;
+    if (pending && pending.date === date) { // ⭐ 시트에서 불러온 줄 넣기(그 날짜 기존 줄은 저장할 때 지움)
+      const built = {};
+      form.groups.forEach((g) => { built[g.name] = (pending.res.groups[g.name] || []).map(enrich); });
+      setRows(built); setRemoved(orders.map((o) => o._id)); setDirty(true); setPending(null);
+      setMsg(`시트에서 ${Object.values(built).flat().length}줄을 불러왔습니다. 확인 후 [저장]을 눌러 주세요.`);
+      return;
+    }
+    if (dirty) return;
     setRows(buildRows(orders, true));
-  }, [orders, form, dirty]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [orders, form, dirty, pending]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const findPlace = (name) => { const k = norm(name); return k ? places.find((p) => norm(p.업체명) === k) : null; };
   const placeContact = (p) => {
@@ -292,6 +412,22 @@ export default function RouteBoard({ companyName = "" }) {
   };
 
   const colOf = (field) => form?.columns.find((c) => c.kind === "field" && c.field === field);
+  // 시트에서 온 줄 — 등록된 하차지는 풀주소·담당자, 기사관리에 있는 차량은 이름·전화번호 채우기
+  const enrich = (v0) => {
+    const v = { ...v0 }; let extra = {};
+    const cN = colOf("하차지명"), cA = colOf("하차지주소"), cP = colOf("차량번호"), cNm = colOf("이름"), cPh = colOf("전화번호");
+    const p = cN ? findPlace(v[cN.id]) : null;
+    if (p) { if (cA && p.주소) v[cA.id] = p.주소; extra = placeContact(p); }
+    const d = cP ? findDriver(v[cP.id]) : null;
+    if (d) { v[cP.id] = d.차량번호; if (cNm && !v[cNm.id]) v[cNm.id] = d.이름 || ""; if (cPh && !v[cPh.id]) v[cPh.id] = d.전화번호 || ""; }
+    return { key: rid(), v, dirty: true, extra };
+  };
+  const applySheet = async (res, d0) => {
+    if (dirty && d0 === date && !(await kpConfirm("저장하지 않은 내용이 있습니다. 시트 내용으로 바꿀까요?"))) return;
+    setSheetOpen(false);
+    setPending({ date: d0, res });
+    if (d0 !== date) setDate(d0);
+  };
   const setCell = (g, i, c, val) => {
     setDirty(true);
     setRows((p) => ({ ...p, [g]: p[g].map((r, j) => (j === i ? { ...r, v: { ...r.v, [c.id]: val }, dirty: true } : r)) }));
@@ -414,6 +550,7 @@ export default function RouteBoard({ companyName = "" }) {
             <div className="w-[150px]"><CustomDatePicker value={date} onChange={(e) => e.target.value && setDate(e.target.value)} className={inp} /></div>
             <button onClick={() => setDate(addDays(date, 1))} className="h-10 w-10 rounded-xl border border-[#DCE3EE] font-black text-[#3A4A66]">›</button>
             <span className="text-[13px] font-bold text-[#3A4A66] whitespace-nowrap">상차 {dLabel(date)} → 하차 {dLabel(drop)}</span>
+            {form.sheetUrl && <button onClick={() => setSheetOpen(true)} disabled={!!busy} className={`${btn} border border-[#2D4C82] text-[#2D4C82]`}>시트 불러오기</button>}
             <button onClick={copyPrev} disabled={!!busy} className={`${btn} border border-[#DCE3EE] text-[#3A4A66]`}>{busy === "copy" ? "복사 중…" : "전날 복사"}</button>
             <button onClick={save} disabled={!!busy || !dirty} className={`${btn} bg-[#0F1A30] text-white px-6`}>{busy === "save" ? "저장 중…" : dirty ? "저장" : "저장됨"}</button>
           </>
@@ -502,6 +639,7 @@ export default function RouteBoard({ companyName = "" }) {
         </>
       )}
 
+      {sheetOpen && form && <SheetLoad form={form} date={date} onApply={applySheet} onClose={() => setSheetOpen(false)} />}
       {edit && <FormEditor init={edit} co={co} onClose={() => setEdit(null)} onSaved={(id) => { setEdit(null); setFormId(id); setMsg("양식을 저장했습니다."); }} />}
     </div>
   );

@@ -5229,6 +5229,40 @@ exports.gsheetMine = functions.runWith({ timeoutSeconds: 540, memory: "512MB" })
   }
 });
 
+// 📋 배차표(고정노선 › 배차표) — 화주사 구글시트의 날짜 탭 읽기 (직원 누구나, 2026-11-02)
+//  시트를 dispatch-app-9b92f@appspot.gserviceaccount.com 에 '뷰어'로 공유해야 읽힌다.
+//  - tabs: 탭 이름 목록(최근 탭이 보통 뒤에 있음)
+//  - read: 탭 하나의 값(2차원 배열, 최대 3000줄) — 칸 맞추기·묶음 나누기는 화면에서
+exports.routeBoardSheet = functions.runWith({ timeoutSeconds: 120, memory: "512MB" }).https.onRequest(async (req, res) => {
+  res.set("Access-Control-Allow-Origin", "*");
+  res.set("Access-Control-Allow-Methods", "POST, OPTIONS");
+  res.set("Access-Control-Allow-Headers", "Authorization, Content-Type");
+  if (req.method === "OPTIONS") { res.status(204).send(""); return; }
+  if (req.method !== "POST") { res.status(405).json({ error: "POST만 허용됩니다." }); return; }
+  let body = req.body;
+  if (typeof body === "string") { try { body = JSON.parse(body); } catch { body = {}; } }
+  body = body || {};
+  try {
+    const me = await requireStaff(req, body);
+    const id = parseSpreadsheetId(body.url);
+    if (!id) { res.status(400).json({ error: "구글시트 주소가 올바르지 않습니다." }); return; }
+    const meta = await sheetsApiFor(id, "GET", "?fields=properties.title,sheets.properties(title,index)");
+    const tabs = (meta.sheets || []).map((x) => x.properties).sort((a, b) => a.index - b.index).map((t) => t.title);
+    if (body.action === "tabs") { res.json({ title: meta.properties?.title || "", tabs }); return; }
+    if (body.action === "read") {
+      const tab = String(body.tab || "");
+      if (!tabs.includes(tab)) { res.status(400).json({ error: "탭을 찾을 수 없습니다." }); return; }
+      const got = await sheetsApiFor(id, "GET", `/values/${encodeURIComponent(`${quoteTab(tab)}!A1:AZ3000`)}?valueRenderOption=FORMATTED_VALUE&dateTimeRenderOption=FORMATTED_STRING`);
+      console.log(`[배차표 시트] ${me.company} ${me.email} ${id} ${tab}`);
+      res.json({ title: meta.properties?.title || "", tab, rows: got.values || [] });
+      return;
+    }
+    res.status(400).json({ error: "알 수 없는 요청입니다." });
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e?.message || String(e) });
+  }
+});
+
 exports.sheetImport = functions
   .runWith({ timeoutSeconds: 540, memory: "1GB" })
   .https.onRequest(async (req, res) => {
