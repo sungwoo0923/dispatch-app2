@@ -10,6 +10,7 @@
 // 항목별 "수익률 하락 기여" = 수익B_항목 − 매출B_항목 × 수익률A(전체)
 //   → 모든 항목을 더하면 수익률효과와 정확히 같다(어디서 마진이 깎였는지).
 
+import { subscribeUsersLive } from "./usersLive"; // ⭐ 2026-11-02 속도 — 직원 명부 구독 공유
 import { useEffect, useState } from "react";
 import { collection, onSnapshot } from "firebase/firestore";
 import { db } from "./firebase";
@@ -36,18 +37,18 @@ let nameStarted = false;
 export function ensureStaffNames() {
   if (nameStarted) return;
   nameStarted = true;
-  onSnapshot(collection(db, "users"), (snap) => {
+  // ⭐ 2026-11-02 속도 — 앱 공용 users 구독(usersLive)을 같이 쓴다(받는 데이터 동일)
+  subscribeUsersLive((_l, raw) => {
     STAFF_NAME.clear();
-    snap.docs.forEach((d) => {
-      const u = d.data() || {};
+    raw.forEach(({ id, data: u }) => {
       const n = String(u.name || u.이름 || u.담당자명 || u.displayName || "").trim();
       if (!n) return;
       const em = String(u.email || "").trim().toLowerCase();
       if (em) { STAFF_NAME.set(em, n); STAFF_NAME.set(em.split("@")[0], n); }
-      STAFF_NAME.set(d.id, n);
+      STAFF_NAME.set(id, n);
     });
     nameSubs.forEach((f) => f(Date.now()));
-  }, () => { nameStarted = false; });
+  });
 }
 // 화면에서 쓰기: const namesVer = useStaffNames(); → useMemo 의존성에 넣으면 이름이 오는 대로 다시 계산
 export function useStaffNames() {

@@ -7,7 +7,7 @@
 import React from "react";
 import { createPortal } from "react-dom";
 import { kpConfirm } from "./kpDialog";
-import html2canvas from "html2canvas";
+import { html2canvas } from "./lazyLoad"; // ⭐ 2026-11-02 속도 — 캡처 라이브러리는 처음 캡처할 때 받는다
 import { db, auth } from "./firebase";
 import { addDoc, collection, doc, increment, onSnapshot, query, serverTimestamp, setDoc, updateDoc, where } from "firebase/firestore";
 import { suggestRole, isExecProfile, useHrOptions } from "./hrConstants";

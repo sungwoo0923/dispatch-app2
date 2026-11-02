@@ -7,7 +7,7 @@
 //  - 엑셀: 요약 / 구분별 비교 / 거래처별 비교 / 일자별 상세(당월·전월) / 손실 건 / 수수료 0% 건 / 미배차 페널티 건 / 기타
 import React from "react";
 import * as XLSX from "xlsx";
-import html2canvas from "html2canvas";
+import { html2canvas } from "./lazyLoad"; // ⭐ 2026-11-02 속도 — 캡처 라이브러리는 처음 캡처할 때 받는다
 
 const toInt = (v) => parseInt(String(v ?? "0").replace(/[^\d-]/g, ""), 10) || 0;
 const pct = (profit, sale) => (sale ? Math.round((profit / sale) * 1000) / 10 : 0);

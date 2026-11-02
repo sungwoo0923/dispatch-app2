@@ -1,4 +1,5 @@
 import NoticeBoard from "./NoticeBoard";
+import { subscribeUsersLive } from "./usersLive"; // ⭐ 2026-11-02 속도 — 직원 명부 구독 공유
 import DeptDashboard from "./DeptDashboard";
 import ObituaryWriter from "./ObituaryWriter";
 import { ExecScheduleBoard, TeamSchedule, canWriteExecSchedule } from "./ExecSuite";
@@ -517,10 +518,8 @@ export default function HomeDashboard({ role, user, userCompany = "", pending, d
     : (userCompany || localStorage.getItem("userCompany") || DEFAULT_COMPANY);
 
   useEffect(() => {
-    const unsub = onSnapshot(collection(db, "users"), (snap) => {
-      setUsers(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-    });
-    return () => unsub();
+    // ⭐ 2026-11-02 속도 — 앱 공용 users 구독(usersLive)을 같이 쓴다(받는 데이터 동일, 중복 구독 제거)
+    return subscribeUsersLive((list) => setUsers(list));
   }, []);
 
   // 오늘(KST) 날짜 문자열

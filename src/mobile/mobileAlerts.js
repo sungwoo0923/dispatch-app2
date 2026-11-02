@@ -2,6 +2,7 @@
 //  전자결재(내 결재 차례) · 인수인계(내 미확인) · 가입 신청(관리자 이상) · 공지사항(안 읽은 글)
 //  숫자는 메뉴 옆에 보이고, 앱을 켜 둔 동안 새로 생기면 위쪽에 잠깐 알림 배너를 띄운다(onAlert).
 //  휴대폰 푸시는 서버(functions › notifyApproval·notifyNotice·notifySignup)가 보낸다.
+import { subscribeUsersLive } from "../usersLive"; // ⭐ 2026-11-02 속도 — 직원 명부 구독 공유
 import React from "react";
 import { collection, onSnapshot, query, where } from "firebase/firestore";
 import { db, DEFAULT_COMPANY } from "../firebase";
@@ -61,14 +62,15 @@ export function useMobileAlerts({ uid, role, team = "", company = "", onAlert })
   React.useEffect(() => {
     if (!uid || !isAdmin || !company) return undefined;
     const w = watch("signup");
-    return onSnapshot(collection(db, "users"), (s) => {
-      const p = s.docs.map((d) => ({ id: d.id, ...d.data() }))
+    // ⭐ 2026-11-02 속도 — 앱 공용 users 구독(usersLive)을 같이 쓴다(받는 데이터 동일)
+    return subscribeUsersLive((_l, raw) => {
+      const p = raw.map(({ id, data }) => ({ id, ...data }))
         .filter((u) => u.approved === false && u.employmentStatus !== "퇴사" && (u.companyName || DEFAULT_COMPANY) === company && !["shipper", "cafeUser", "totalMaster"].includes(u.role));
       set("signupDriver", p.filter((u) => u.role === "driver").length);
       set("signupStaff", p.filter((u) => u.role !== "driver").length);
       const byId = new Map(p.map((u) => [u.id, u]));
       w([...byId.keys()], (id) => { const u = byId.get(id); return u.role === "driver" ? `▸ 기사 가입 신청 · ${u.name || ""} ${u.carNo || ""}` : `◆ 직원 가입 신청 · ${u.name || u.email || ""}`; });
-    }, () => { set("signupDriver", 0); set("signupStaff", 0); });
+    });
   }, [uid, isAdmin, company]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // 📢 공지사항 — 볼 수 있는 글 중 안 읽은 것

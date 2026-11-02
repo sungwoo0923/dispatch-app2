@@ -1,7 +1,7 @@
 // DriverHome.jsx — 지입기사 전용 앱 (리뉴얼)
 import React, { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import { kpConfirm } from "../kpDialog";
-import html2canvas from "html2canvas";
+import { html2canvas } from "../lazyLoad"; // ⭐ 2026-11-02 속도 — 캡처 라이브러리는 처음 캡처할 때 받는다
 import { db, auth, DEFAULT_COMPANY } from "../firebase";
 import {
   doc,

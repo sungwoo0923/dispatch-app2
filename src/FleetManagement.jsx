@@ -1,4 +1,5 @@
 // ======================= FleetManagement.jsx =======================
+import { subscribeUsersLive } from "./usersLive"; // ⭐ 2026-11-02 속도 — 직원 명부 구독 공유
 import React, { useEffect, useState, useMemo, useCallback, useRef } from "react";
 import { kpConfirm } from "./kpDialog";
 import { createPortal } from "react-dom";
@@ -27,7 +28,7 @@ import { updateDoc, setDoc } from "./orderWrite"; // ★ 오더 수정시각 자
 import { MapContainer, TileLayer, Marker, Popup, Polyline, CircleMarker, useMap } from "react-leaflet";
 import L from "leaflet";
 import * as XLSX from "xlsx";
-import html2canvas from "html2canvas";
+import { html2canvas } from "./lazyLoad"; // ⭐ 2026-11-02 속도 — 캡처 라이브러리는 처음 캡처할 때 받는다
 import jsPDF from "jspdf";
 import { getDrivingRoute, geocodeAddress, getDrivingPathByCoords } from "./tmapFareCalc";
 import { ShortAddr, DropEtaText, RemainText, RemainEtaText, FleetStepper, fleetStepIndex, pickCurrentOrder, sortActiveOrders, prefetchGeo, computeFleetPhase, useFleetPhaseGeo, FLEET_PHASE_FILTERS, FLEET_PHASE_COLORS, isPickupVisited } from "./fleetGeo";
@@ -6289,16 +6290,10 @@ export default function FleetManagement({ dispatchData = [], role = "", forceTab
 
     // 2-1. 배차자(관리자/일반) 목록 — "담당자 위임" 선택지로 쓴다. 회사 필터는
     // myCompanyName 로드 전에도 일단 전체를 받아두고 화면에서 걸러 쓴다.
-    subs.push(onSnapshot(
-      collection(db, "users"),
-      (snap) => {
-        const arr = snap.docs
-          .map(d => ({ id: d.id, ...d.data() }))
-          .filter(u => ["totalMaster", "admin", "user"].includes(u.role));
-        setCompanyStaffRaw(arr);
-      },
-      (err) => console.error("users(staff):", err)
-    ));
+    // ⭐ 2026-11-02 속도 — 앱 공용 users 구독(usersLive)을 같이 쓴다(받는 데이터 동일)
+    subs.push(subscribeUsersLive((all) => {
+      setCompanyStaffRaw(all.filter(u => ["totalMaster", "admin", "user"].includes(u.role)));
+    }));
 
     // 3. Collision alerts (unresolved, last 24h)
     subs.push(onSnapshot(

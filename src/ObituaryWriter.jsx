@@ -2,7 +2,7 @@
 // 부고 알림(2026-10-31) — 공지사항 › [부고 알림]. 왼쪽 입력 · 오른쪽 부고장 미리보기(전자결재처럼).
 //  올리면 공지사항(분류 "부고")에 부고장 이미지와 함께 게시 → 공지 푸시가 나가고, 선택하면 전 직원 사내메일도.
 import React from "react";
-import html2canvas from "html2canvas";
+import { html2canvas } from "./lazyLoad"; // ⭐ 2026-11-02 속도 — 캡처 라이브러리는 처음 캡처할 때 받는다
 import { addDoc, collection, doc, increment, serverTimestamp, updateDoc } from "firebase/firestore";
 import { db } from "./firebase";
 import { compressImage, sendInternalMail, useCompanyStaff } from "./InternalMail";

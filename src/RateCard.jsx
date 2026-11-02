@@ -14,7 +14,9 @@ const STANDARD_TON_LABELS = ["다마스/라보","1톤","1.4톤","2.5톤","3.5톤
 // 로그인해도 단가표 출력물에 항상 그 정보가 찍혔다. 지금은 로그인한 회사의
 // transportApplications(가입 시 등록한 사업자정보) 문서를 실시간으로 읽어와
 // 회사마다 자기 정보로 찍히게 한다 — RateCard 컴포넌트 안 useCompanyInfo 훅 참고.
-const EMPTY_COMPANY = { name: "", manager: "", phone: "", email: "", address: "", tel: "" };
+// ⭐ 2026-11-02 속도 — 회사 정보 훅은 작은 파일(companyInfo.js)로 옮김(모바일 첫 로딩에서 이 화면·엑셀 라이브러리 제외). 기존 import 호환을 위해 다시 내보낸다
+import { useCompanyInfo } from "./companyInfo";
+export { useCompanyInfo };
 // 🧾 단가표 인쇄 양식(가로) — 1톤부터 톤수가 가로로 쭉, 위에 거래처·구간·독차/혼적·차량종류
 //  [편집] 누르면 칸을 바로 고쳐서 인쇄할 수 있다.
 function rateCardHtml({ company = {}, info = {}, rows = [], today = new Date().toLocaleDateString("ko-KR") }) {
@@ -94,41 +96,6 @@ tbody th{background:#F3F6FA;color:#3A4A66;font-size:12.5px;font-weight:900;text-
 </div></body></html>`;
 }
 
-
-// 전화번호 하이픈 자동 포맷 (DispatchApp.jsx formatPhone과 동일 규칙) — 단가표/견적서
-// 곳곳에서 COMPANY.phone/tel을 그대로 찍어쓰므로, 여기서 한 번만 포맷해두면 모든
-// 소비처(RateCard.jsx 전체, MobileApp.jsx 등)에 전부 적용된다.
-function formatPhone(phone) {
-  const p = String(phone ?? "").replace(/[^\d]/g, "");
-  if (p.length === 11) return `${p.slice(0, 3)}-${p.slice(3, 7)}-${p.slice(7)}`;
-  if (p.length === 10) return `${p.slice(0, 3)}-${p.slice(3, 6)}-${p.slice(6)}`;
-  return p;
-}
-
-export function useCompanyInfo(userCompany) {
-  const [info, setInfo] = useState(EMPTY_COMPANY);
-  useEffect(() => {
-    const co = (userCompany || "").trim();
-    if (!co) { setInfo(EMPTY_COMPANY); return; }
-    const unsub = onSnapshot(collection(db, "transportApplications"), (snap) => {
-      const docs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      let found = docs.find(d => (d.companyName || "").trim() === co && d.type === "신규" && d.status === "approved");
-      if (!found) found = docs.find(d => (d.companyName || "").trim() === co && d.type === "신규");
-      if (!found) found = docs.find(d => (d.companyName || "").trim() === co && d.status === "approved");
-      const d = found || {};
-      setInfo({
-        name: co,
-        manager: d.representative || d.대표자 || d.ceo || "",
-        phone: formatPhone(d.phone || d.연락처 || ""),
-        email: d.email || "",
-        address: d.address || d.주소 || "",
-        tel: formatPhone(d.fax || d.팩스 || d.팩스번호 || ""),
-      });
-    }, () => {});
-    return () => unsub();
-  }, [userCompany]);
-  return info;
-}
 
 // 단가표 하단 원형 도장 글씨 — 예전엔 "RUN 25"가 고정으로 찍혀 다른 회사 단가표에도 남의 회사 도장이 나왔다.
 // 로그인한 회사명을 2줄(최대 6글자)로 나눠 찍는다.

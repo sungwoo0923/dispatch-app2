@@ -14,7 +14,7 @@ import { isTMUser } from "./staffFilter";
 import { personName } from "./userNames";
 import { BookHero, BookCard, Chip, Sheet, MONO } from "./OfficeBooks";
 import { sendInternalMail, compressImage } from "./InternalMail";
-import html2canvas from "html2canvas";
+import { html2canvas } from "./lazyLoad"; // ⭐ 2026-11-02 속도 — 캡처 라이브러리는 처음 캡처할 때 받는다
 import { printA4 } from "./a4Export";
 
 const kstDay = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);

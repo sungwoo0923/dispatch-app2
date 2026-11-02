@@ -20,7 +20,7 @@ import {
 } from "firebase/firestore";
 import { updateDoc } from "../orderWrite"; // ★ 오더 수정시각 자동 기록(여러 사용자 실시간 일치)
 import InternalMessenger from "../InternalMessenger";
-import html2canvas from "html2canvas";
+import { html2canvas } from "../lazyLoad"; // ⭐ 2026-11-02 속도 — 캡처 라이브러리는 처음 캡처할 때 받는다
 import { deleteOrderWithLog } from "../orderHistory";
 import "../kpNavyTheme.css";
 
