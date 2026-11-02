@@ -4475,7 +4475,7 @@ const groupedByDate = useMemo(() => {
       const nextPlateM3 = normPlateM3(docData.차량번호 || "");
       if (nextPlateM3 && nextPlateM3 !== prevPlateM3) {
         const assignedDriverM3 = (drivers || []).find(d => normPlateM3(d.차량번호) === nextPlateM3);
-        if (assignedDriverM3?.등급 === "지입") {
+        if (assignedDriverM3?.등급 === "지입" && !!assignedDriverM3.uid) { // ⭐ 2026-11-02 기사앱 가입한 지입 기사만 승인대기
           docData.기사확인상태 = "대기";
           docData.기사거절사유 = null;
           docData.기사확인일시 = null;
@@ -10429,7 +10429,7 @@ function QuickEditModal({ order, drivers, cardVersionB, onClose, onSuccess, disp
         // 별도 경로라 직접 반영).
         if (nd(carNo) !== nd(order.차량번호 || "")) {
           const assignedDriverM2 = (drivers || []).find(d => nd(d.차량번호) === nd(carNo));
-          if (assignedDriverM2?.등급 === "지입") {
+          if (assignedDriverM2?.등급 === "지입" && !!assignedDriverM2.uid) { // ⭐ 2026-11-02 기사앱 가입한 지입 기사만 승인대기
             patch.기사확인상태 = "대기";
             patch.기사거절사유 = null;
             patch.기사확인일시 = null;
@@ -12334,7 +12334,7 @@ const handleAssignClick = () => {
       const nextPlateM = normPlateM(carNo);
       if (nextPlateM && nextPlateM !== prevPlateM) {
         const assignedDriverM = driversRef.current.find(d => normPlateM(d.차량번호) === nextPlateM);
-        if (assignedDriverM?.등급 === "지입") {
+        if (assignedDriverM?.등급 === "지입" && !!assignedDriverM.uid) { // ⭐ 2026-11-02 기사앱 가입한 지입 기사만 승인대기
           driverPatch.기사확인상태 = "대기";
           driverPatch.기사거절사유 = null;
           driverPatch.기사확인일시 = null;
