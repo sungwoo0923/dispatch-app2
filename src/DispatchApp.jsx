@@ -2782,6 +2782,7 @@ import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 // ⭐ 2026-11-02 운임규칙 — 회사별 운임 규칙(운임구분 → 기사운임·수수료 자동 계산)
 import FareRulesSettings from "./FareRulesSettings";
 import { useFareRules, FareTypeSelect, FareRuleHint, fareFormChange, farePatchOf, findFareRule, applyFareRule, FareTypeBreakdown } from "./fareRules";
+import { useTableSort, sortRows, SortTh } from "./tableSort";
 
 // 기사전달용 업로드 링크 단축 — /upload?id=...&t=... (길고 낯설어 기사들이 거부감을
 // 느낄 수 있는 형태)를 /u/{code} 형태로 줄인다. code는 토큰에서 파생시켜, 같은
@@ -3487,12 +3488,23 @@ const kpTabCls = (on) => `px-5 h-9 rounded-[10px] text-[13.5px] transition white
   on ? "bg-white text-[#0F1A30] font-extrabold shadow-[0_1px_2px_rgba(16,24,40,0.08),0_4px_10px_rgba(16,24,40,0.08)]"
      : "text-[#5B6B85] font-bold hover:text-[#0F1A30] hover:bg-white/60"}`;
 
-// ⭐ 실시간배차현황/배차현황의 "정렬/필터 설정" 팝업에 있는 "컬럼명 클릭 정렬"
-// 토글이 켜졌을 때, 테이블 헤더를 클릭해서 바로 정렬할 수 있는 컬럼 목록.
-const CLICK_SORTABLE_COLUMNS = [
-  "등록일", "상차일", "하차일", "거래처명", "상차지명", "하차지명",
-  "화물내용", "차량종류", "차량톤수", "배차상태", "지급방식", "배차방식",
-];
+// ⭐ 오더 표(실시간배차현황·배차현황·미배차현황) 머리글 클릭 정렬에 쓰는 "칸 값" 꺼내기.
+// 머리글 이름 = 오더 필드 이름이 대부분이고, 다른 것만 여기서 맞춰준다.
+// (정렬은 src/tableSort.jsx — 이 브라우저에만 기억, Firestore 저장 안 함)
+const _sortInt = (v) => { const n = Number(String(v ?? "").replace(/[^\d.-]/g, "")); return Number.isFinite(n) ? n : 0; };
+// ⭐ 오더 검색창 "통합 ▾" 검색 항목 — 배차현황·실시간배차현황 공용(값 → 오더 필드). all = 통합
+const ORDER_SEARCH_FIELD = { client: "거래처명", pickup: "상차지명", drop: "하차지명", car: "차량번호", driver: "이름", pay: "지급방식", dispatch: "배차방식" };
+const orderSortValue = (r, key, i) => {
+  switch (key) {
+    case "순번": return i; // 원래(기본) 순서
+    case "수수료": return _sortInt(r.청구운임) - _sortInt(r.기사운임);
+    case "기사명": return r.이름;
+    case "첨부": return r.attachCount || 0;
+    case "전달상태": return r.업체전달상태 || "미전달";
+    case "혼적": return r.혼적 ? "혼적" : "";
+    default: return r[key];
+  }
+};
 
 /* -------------------------------------------------
    Firestore 실시간 동기화 훅
@@ -27021,27 +27033,6 @@ const driverMap = React.useMemo(() => {
       .replace(/\(.*?\)/g, "")
       .replace(/[0-9]/g, "")
       .replace(/[^a-z0-9가-힣]/g, "");
-  // =====================
-  // 🔽 정렬 비교 함수 (필수)
-  // =====================
-  const compareBy = (key, dir = "asc") => (a, b) => {
-    // 🔥 edited 값이 있으면 그걸 기준으로
-    let av = edited[a._id]?.[key] ?? a[key];
-    let bv = edited[b._id]?.[key] ?? b[key];
-
-    if (av == null && bv == null) return 0;
-    if (av == null) return 1;
-    if (bv == null) return -1;
-
-    if (key === "거래처명") {
-      av = normalizeClient(av);
-      bv = normalizeClient(bv);
-    }
-
-    return dir === "asc"
-      ? String(av).localeCompare(String(bv), "ko")
-      : String(bv).localeCompare(String(av), "ko");
-  };
 // ===== 스마트 기사 검색 (PART 4) =====
 const [smartQ4, setSmartQ4] = React.useState("");
 const [smartList4, setSmartList4] = React.useState([]);
@@ -27368,20 +27359,11 @@ const driverPanelCallbackRef = React.useRef(null);
 };
 
 
-  // 🔽 정렬 상태
-  const [sortKey, setSortKey] = React.useState("");
-  const [sortDir, setSortDir] = React.useState("asc");
-  const [sortModalOpen, setSortModalOpen] = React.useState(false);
-  const [tempSortKey, setTempSortKey] = React.useState("");
-  const [tempSortDir, setTempSortDir] = React.useState("asc");
-  const [filterConditions, setFilterConditions] = React.useState([]);
-  const [tempFilterConditions, setTempFilterConditions] = React.useState([]);
-  // ⭐ "컬럼명 클릭 정렬" 토글 — 기본은 꺼짐. 켜면 표 헤더(거래처명/상차지명 등)를
-  // 클릭하는 것만으로 그 컬럼 기준 정렬이 된다. 이미 있는 sortKey/sortDir을 그대로
-  // 재사용하므로(정렬/필터 팝업의 드롭다운과 동일한 값), 새로운 정렬 계산 로직이
-  // 아니라 그 값을 세팅하는 입력 경로만 하나 늘어나는 것 — 기존 정렬(useMemo)의
-  // 성능 특성을 그대로 유지해 렉이 생기지 않는다.
-  const [columnClickSortEnabled, setColumnClickSortEnabled] = React.useState(false);
+  // 🔽 정렬 — ⭐ "정렬/필터" 팝업은 없앴고, 표 머리글(컬럼명)을 누르면 바로 정렬된다
+  // (▲오름 → ▼내림 → 해제). 이 브라우저에만 기억하고 Firestore에는 저장하지 않는다.
+  const rtSort = useTableSort("realtime");
+  // ⭐ 검색 항목 선택(통합/거래처명/상차지명…) — 배차현황 검색창과 똑같이
+  const [rtSearchType, setRtSearchType] = React.useState("all");
 
   // 경유지 가공(dedup) 결과 캐시 — 행 객체 참조가 이전과 동일하면(=그 오더는 안 바뀜)
   // 다시 계산하지 않고 재사용한다. rows의 행 참조가 안정적으로 유지되므로
@@ -27392,7 +27374,7 @@ const driverPanelCallbackRef = React.useRef(null);
   // ------------------------
   // 📌 필터 + 검색 + 정렬
   // ------------------------
-  const filtered = React.useMemo(() => {
+  const filteredBase = React.useMemo(() => {
     let data = [...rows];
 
     let targetDate = todayKST();
@@ -27429,29 +27411,19 @@ const driverPanelCallbackRef = React.useRef(null);
     if (q.trim()) {
       const key = q.toLowerCase();
       const get = (v) => String(v || "").toLowerCase();
-      data = data.filter((r) =>
-        get(r.거래처명).includes(key) ||
-        get(r.상차지명).includes(key) ||
-        get(r.하차지명).includes(key) ||
-        get(r.차량번호).includes(key) ||
-        get(r.이름).includes(key) ||
-        get(r.지급방식).includes(key) ||
-        get(r.배차방식).includes(key)
-      );
-    }
-
-    // 필터 조건 적용 (같은 필드=OR, 다른 필드=AND, 제외조건=AND NOT)
-    if (filterConditions.length > 0) {
-      const includes = filterConditions.filter(c => !c.exclude && c.field && c.value);
-      const excludes = filterConditions.filter(c => c.exclude && c.field && c.value);
-      const incGroups = {};
-      includes.forEach(({field, value}) => { if (!incGroups[field]) incGroups[field] = []; incGroups[field].push(value); });
-      Object.entries(incGroups).forEach(([field, vals]) => {
-        data = data.filter(r => vals.some(v => String(r[field] || "").includes(v)));
-      });
-      excludes.forEach(({field, value}) => {
-        data = data.filter(r => !String(r[field] || "").includes(value));
-      });
+      // ⭐ 검색 항목(통합 ▾) — 배차현황과 같은 동작
+      const field = ORDER_SEARCH_FIELD[rtSearchType];
+      data = field
+        ? data.filter((r) => get(r[field]).includes(key))
+        : data.filter((r) =>
+            get(r.거래처명).includes(key) ||
+            get(r.상차지명).includes(key) ||
+            get(r.하차지명).includes(key) ||
+            get(r.차량번호).includes(key) ||
+            get(r.이름).includes(key) ||
+            get(r.지급방식).includes(key) ||
+            get(r.배차방식).includes(key)
+          );
     }
 
  // 오류오더만 보기 필터
@@ -27459,10 +27431,7 @@ const driverPanelCallbackRef = React.useRef(null);
       data = data.filter(r => filterErrorIds.includes(r._id));
     }
 
-    // 정렬
-if (sortKey) {
-  data.sort(compareBy(sortKey, sortDir));
-} else {
+    // 기본 순서(머리글 정렬이 꺼져 있을 때) — 머리글 정렬은 아래 filtered 에서 따로
   data.sort((a, b) => {
     const statusOrder = { 배차중: 0, 배차완료: 1, 배차취소: 2 };
     const sa = statusOrder[a.배차상태] ?? 0;
@@ -27473,7 +27442,6 @@ if (sortKey) {
     const db = String(b.상차일 || "");
     return db.localeCompare(da);
   });
-}
 
   // 경유지 사전 계산 (렌더 시 IIFE 제거)
     const safeParse = (v) => {
@@ -27507,7 +27475,9 @@ if (sortKey) {
       waypointCacheRef.current.set(r, withStops);
       return withStops;
     });
-  }, [rows, q, sortKey, sortDir, dayMode, statusFilter, filterErrorIds, filterConditions]);
+  }, [rows, q, rtSearchType, dayMode, statusFilter, filterErrorIds]);
+  // ⚡ 머리글 정렬은 이미 걸러진 목록만 따로 정렬 — 정렬을 눌러도 위의 검색·필터·경유지 계산은 다시 돌지 않는다
+  const filtered = React.useMemo(() => sortRows(filteredBase, rtSort.sort, orderSortValue), [filteredBase, rtSort.sort]);
 
   // ⭐ 행 순서가 바뀔 때(수정으로 배차상태가 바뀌어 위/아래로 옮겨가는 등) 그냥
   // React가 새 순서로 다시 그려서 "뚝뚝 끊기며 순간이동"하던 것을, FLIP 기법으로
@@ -29369,6 +29339,18 @@ const head = isDark
 <div className="flex items-center gap-1 flex-wrap mb-2 pb-0.5">
   {/* 검색창 */}
   <div className="flex items-center border-2 border-[#1B2B4B] rounded-lg overflow-hidden bg-white h-[30px] flex-shrink-0">
+    {/* ⭐ 검색 항목 선택 — 배차현황 검색창과 같은 모양·같은 동작 */}
+    <CustomSelect className="px-1 h-full text-[11px] bg-[#1B2B4B] text-white outline-none cursor-pointer"
+      value={rtSearchType} onChange={(e)=>{setRtSearchType(e.target.value);setQ("");setQInput("");if(qInputRef.current)qInputRef.current.value="";}}>
+      <option value="all">통합</option>
+      <option value="client">거래처</option>
+      <option value="pickup">상차지</option>
+      <option value="drop">하차지</option>
+      <option value="car">차량번호</option>
+      <option value="driver">기사명</option>
+      <option value="pay">지급방식</option>
+      <option value="dispatch">배차방식</option>
+    </CustomSelect>
     <input autoComplete="off"
       type="text"
       ref={qInputRef}
@@ -29402,7 +29384,6 @@ const head = isDark
   </CustomSelect>
 
   <div className="ml-auto flex items-center gap-1 flex-shrink-0 flex-wrap justify-end">
-    <button onClick={()=>{setTempSortKey(sortKey||"");setTempSortDir(sortDir||"asc");setTempFilterConditions([...filterConditions]);setSortModalOpen(true);}} className={`px-2 py-1 rounded-lg text-white text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap ${(sortKey||filterConditions.length>0)?"bg-[#1B2B4B]":"bg-slate-500"}`}><EditableText id="realtime.toolbar.정렬필터" defaultText="정렬/필터" />{filterConditions.length>0?` (${filterConditions.length})`:""}</button>
     <button onClick={()=>{if(!selected.length)return showAlert("복사할 오더를 선택하세요.");if(selected.length>1)return showAlert("복사는 1개의 오더만 가능합니다.");setCopyModalOpen(true);}} className="px-2 py-1 rounded-lg bg-gray-800 text-white text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap"><EditableText id="realtime.toolbar.기사복사" defaultText="기사복사" /></button>
     <button onClick={()=>{
   const selRows = rows.filter(r => selected.includes(r._id));
@@ -29483,14 +29464,8 @@ const head = isDark
                "첨부",
                 "전달상태",
               ].map((h) => {
-                const clickSortable = columnClickSortEnabled && CLICK_SORTABLE_COLUMNS.includes(h);
                 return (
-                <th key={h} className={`${head} ${clickSortable ? "cursor-pointer select-none hover:opacity-75" : ""}`}
-                  onClick={clickSortable ? () => {
-                    if (sortKey === h) setSortDir(d => d === "asc" ? "desc" : "asc");
-                    else { setSortKey(h); setSortDir("asc"); }
-                  } : undefined}
-                >
+                <SortTh key={h} k={h === "선택" ? "" : h} sort={rtSort.sort} onSort={rtSort.toggle} className={head}>
                   {h === "선택" ? (
                     <input autoComplete="off" type="checkbox"
                       title="전체선택/전체해제"
@@ -29504,12 +29479,9 @@ const head = isDark
                       }}
                     />
                   ) : (
-                    <span className="inline-flex items-center gap-0.5">
-                      <EditableText id={`realtime.table.header.${h}`} defaultText={h} />
-                      {clickSortable && sortKey === h && <span className="text-[10px]">{sortDir === "asc" ? "▲" : "▼"}</span>}
-                    </span>
+                    <EditableText id={`realtime.table.header.${h}`} defaultText={h} />
                   )}
-                </th>
+                </SortTh>
                 );
               })}
             </tr>
@@ -34655,93 +34627,6 @@ setConfirmChange(null);
           if (rowId) openDailyCloseIssueDetail(rowId);
         }}
       />
-      {/* ===================== 정렬/필터 설정 팝업 ===================== */}
-      {sortModalOpen && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[99999]">
-          <div className="bg-white rounded-2xl w-[480px] max-h-[85vh] flex flex-col shadow-2xl overflow-hidden" onClick={e=>e.stopPropagation()}>
-            <div className="bg-[#1B2B4B] px-5 py-4 flex items-center justify-between shrink-0">
-              <h3 className="text-white font-bold text-[15px]"><EditableText id="popup.title.정렬 / 필터 설정" defaultText="정렬 / 필터 설정" /></h3>
-              <button className="text-white/60 hover:text-white text-xl leading-none" onClick={()=>setSortModalOpen(false)}>×</button>
-            </div>
-            <div className="overflow-y-auto flex-1 p-5 space-y-5">
-              <div>
-                <div className="text-[11px] font-bold text-[#1B2B4B] uppercase tracking-wider mb-2">정렬 기준</div>
-                <CustomSelect className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] mb-2 focus:outline-none focus:border-[#1B2B4B]" value={tempSortKey} onChange={e=>setTempSortKey(e.target.value)}>
-                  <option value="">선택 안함</option>
-                  {["등록일","상차일","하차일","거래처명","상차지명","하차지명","차량번호","배차상태","배차방식","청구운임","기사운임","수수료"].map(k=><option key={k} value={k}>{k}</option>)}
-                </CustomSelect>
-                <div className="flex gap-2">
-                  <button className={`flex-1 py-2 rounded-lg text-[12px] font-semibold transition ${tempSortDir==="asc"?"bg-[#1B2B4B] text-white":"bg-gray-100 text-gray-600 hover:bg-gray-200"}`} onClick={()=>setTempSortDir("asc")}><EditableText id="misc.btn.31782.오름차순" defaultText="오름차순" /></button>
-                  <button className={`flex-1 py-2 rounded-lg text-[12px] font-semibold transition ${tempSortDir==="desc"?"bg-[#1B2B4B] text-white":"bg-gray-100 text-gray-600 hover:bg-gray-200"}`} onClick={()=>setTempSortDir("desc")}><EditableText id="misc.btn.31783.내림차순" defaultText="내림차순" /></button>
-                </div>
-              </div>
-              <div className="border-t border-gray-100"/>
-              {/* ⭐ 컬럼명 클릭 정렬 — 켜두면 표 헤더(거래처명/상차지명 등)를 클릭하는
-                  것만으로 그 컬럼 기준 정렬. 기본은 꺼짐. */}
-              <div className="flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2.5">
-                <div>
-                  <div className="text-[13px] font-semibold text-gray-700">컬럼명 클릭 정렬</div>
-                  <div className="text-[11px] text-gray-500 mt-0.5">켜두면 표 헤더(거래처명·상차지명 등)를 클릭해서 바로 정렬할 수 있습니다</div>
-                </div>
-                <button type="button"
-                  onClick={() => setColumnClickSortEnabled(v => !v)}
-                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors shrink-0 ${columnClickSortEnabled ? "bg-[#1B2B4B]" : "bg-gray-300"}`}>
-                  <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${columnClickSortEnabled ? "translate-x-6" : "translate-x-1"}`} />
-                </button>
-              </div>
-              <div className="border-t border-gray-100"/>
-              <div>
-                <div className="text-[11px] font-bold text-[#1B2B4B] uppercase tracking-wider mb-1">필터 조건</div>
-                <div className="text-[11px] text-gray-500 mb-3">같은 항목 여러 조건 → OR, 다른 항목 → AND / 제외 조건으로 특정 값 제외 가능</div>
-                <div className="space-y-2 mb-3">
-                  {tempFilterConditions.map((cond,idx)=>(
-                    <div key={idx} className="flex gap-1.5 items-center">
-                      <button
-                        className={`shrink-0 px-2 py-1.5 rounded-lg text-[11px] font-bold border transition ${cond.exclude?"border-red-300 bg-red-50 text-red-600":"border-[#1B2B4B]/30 bg-[#1B2B4B]/5 text-[#1B2B4B]"}`}
-                        onClick={()=>{const n=[...tempFilterConditions];n[idx]={...n[idx],exclude:!n[idx].exclude};setTempFilterConditions(n);}}>
-                        {cond.exclude?"제외":"포함"}
-                      </button>
-                      <CustomSelect className="border border-gray-200 rounded-lg px-2 py-1.5 text-[12px] flex-1 focus:outline-none focus:border-[#1B2B4B]" value={cond.field} onChange={e=>{const n=[...tempFilterConditions];n[idx]={...n[idx],field:e.target.value,value:""};setTempFilterConditions(n);}}>
-                        <option value="">항목 선택</option>
-                        {["배차방식","지급방식","배차상태","거래처명","차량종류","차량번호"].map(f=><option key={f} value={f}>{f}</option>)}
-                      </CustomSelect>
-                      {["배차방식","지급방식","배차상태","차량종류"].includes(cond.field)?(
-                        <CustomSelect className="border border-gray-200 rounded-lg px-2 py-1.5 text-[12px] flex-1 focus:outline-none focus:border-[#1B2B4B]" value={cond.value} onChange={e=>{const n=[...tempFilterConditions];n[idx]={...n[idx],value:e.target.value};setTempFilterConditions(n);}}>
-                          <option value="">값 선택</option>
-                          {(cond.field==="배차방식"?dropdownList("배차방식", ["24시","직접배차","인성","고정기사"]):cond.field==="지급방식"?["계산서","착불","선불","손실","개인","취소"]:cond.field==="배차상태"?["배차중","배차완료","배차취소"]:withCustomVehicleTypes(["라보/다마스","카고","윙/카고","윙바디","리프트","탑차","냉장탑","냉동탑","냉장윙","냉동윙","냉장/냉동탑","냉장/냉동윙","오토바이","기타"])).map(v=><option key={v} value={v}>{v}</option>)}
-                        </CustomSelect>
-                      ):(
-                        <input autoComplete="off" type="text" className="border border-gray-200 rounded-lg px-2 py-1.5 text-[12px] flex-1 focus:outline-none focus:border-[#1B2B4B]" value={cond.value} onChange={e=>{const n=[...tempFilterConditions];n[idx]={...n[idx],value:e.target.value};setTempFilterConditions(n);}} placeholder="검색어 입력" />
-                      )}
-                      <button className="w-7 h-7 flex items-center justify-center text-gray-500 hover:text-red-500 rounded-lg hover:bg-red-50 text-lg leading-none" onClick={()=>setTempFilterConditions(prev=>prev.filter((_,i)=>i!==idx))}>×</button>
-                    </div>
-                  ))}
-                </div>
-                <button className="w-full py-2 border-2 border-dashed border-gray-200 rounded-lg text-[12px] text-gray-500 hover:border-[#1B2B4B] hover:text-[#1B2B4B] transition" onClick={()=>setTempFilterConditions(prev=>[...prev,{field:"",value:"",exclude:false}])}>+ 조건 추가</button>
-              </div>
-            </div>
-            <div className="px-5 py-4 border-t border-gray-100 flex justify-between items-center shrink-0">
-              <button className="px-4 py-2 rounded-lg bg-gray-100 text-gray-600 text-[12px] font-semibold hover:bg-gray-200 transition" onClick={()=>{setTempSortKey("");setTempSortDir("asc");setTempFilterConditions([]);}}><EditableText id="misc.btn.31818.초기화" defaultText="초기화" /></button>
-              <div className="flex gap-2">
-                <button className="px-4 py-2 rounded-lg bg-gray-100 text-gray-600 text-[12px] font-semibold hover:bg-gray-200 transition" onClick={()=>setSortModalOpen(false)}><EditableText id="misc.btn.31820.취소" defaultText="취소" /></button>
-                <button className="px-4 py-2 rounded-lg bg-[#1B2B4B] text-white text-[12px] font-semibold hover:bg-[#243a60] transition" onClick={()=>{setSortKey(tempSortKey);setSortDir(tempSortDir);setFilterConditions(tempFilterConditions.filter(c=>c.field&&c.value));setSortModalOpen(false);}}><EditableText id="misc.btn.31821.적용" defaultText="적용" /></button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-{filterConditions.length > 0 && (
-  <div className="flex flex-wrap items-center gap-2 px-4 py-2 mb-2 bg-[#1B2B4B]/5 border border-[#1B2B4B]/20 rounded-xl">
-    <span className="text-[11px] font-bold text-[#1B2B4B]">필터:</span>
-    {filterConditions.map((cond, i) => (
-      <span key={i} className={`flex items-center gap-1 px-2 py-0.5 text-[11px] rounded-full border ${cond.exclude?"bg-red-50 text-red-600 border-red-200":"bg-[#1B2B4B]/10 text-[#1B2B4B] border-[#1B2B4B]/20"}`}>
-        {cond.exclude && <span className="font-bold">제외</span>}{cond.field} : {cond.value}
-        <button className="ml-0.5 hover:text-red-500 font-bold leading-none" onClick={()=>setFilterConditions(prev=>prev.filter((_,j)=>j!==i))}>×</button>
-      </span>
-    ))}
-    <button className="ml-auto text-[11px] text-gray-500 hover:text-red-500" onClick={()=>setFilterConditions([])}><EditableText id="misc.btn.31836.전체 해제" defaultText="전체 해제" /></button>
-  </div>
-)}
 {/* 오류오더 필터 활성 배너 */}
 {filterErrorIds !== null && (
   <div className="flex items-center gap-3 px-4 py-2 mb-2 bg-[#1B2B4B]/8 border border-[#1B2B4B]/30 rounded-xl">
@@ -36375,19 +36260,10 @@ const [appliedEndDate, setAppliedEndDate] = React.useState("");
   const [extraHistoricalLoading, setExtraHistoricalLoading] = React.useState(false);
   // ⭐ 조회 기간이 실시간 범위(최근 7일~) 밖이면 그 기간만 공용 보관소로 불러온다(부모 dispatchData에 합쳐짐)
   useLoadOrderRange(appliedStartDate || appliedEndDate || null, appliedEndDate || appliedStartDate);
-  const [sortKey, setSortKey] = React.useState("");
-  const [sortDir, setSortDir] = React.useState("asc");
-  const [sortKey2, setSortKey2] = React.useState("");
-  const [sortDir2, setSortDir2] = React.useState("asc");
-  const [sortModalOpen, setSortModalOpen] = React.useState(false);
-  const [filterConditions, setFilterConditions] = React.useState([]);
+  // 🔽 정렬 — ⭐ "정렬/필터" 팝업은 없앴고, 표 머리글(컬럼명)을 누르면 바로 정렬된다
+  // (▲오름 → ▼내림 → 해제). 이 브라우저에만 기억하고 Firestore에는 저장하지 않는다.
+  const dsSort = useTableSort("dispatchStatus");
   const [fareTypeFilter, setFareTypeFilter] = React.useState(""); // ⭐ 2026-11-02 운임규칙 — 운임구분 필터("" 전체 · "__none" 미지정)
-  const [tempFilterConditions, setTempFilterConditions] = React.useState([]);
-  const [tempSortKey, setTempSortKey] = React.useState("");
-  const [tempSortDir, setTempSortDir] = React.useState("asc");
-  // ⭐ "컬럼명 클릭 정렬" 토글 — 기본은 꺼짐. 켜면 표 헤더를 클릭하는 것만으로
-  // 그 컬럼(1차 정렬 기준 sortKey/sortDir) 기준 정렬이 된다.
-  const [columnClickSortEnabled, setColumnClickSortEnabled] = React.useState(false);
   const [selected, setSelected] = React.useState(new Set());
   // 조회 날짜(기간)를 바꾸면 화면에 보이는 행이 바뀌므로, 이전 날짜에서 선택해둔
   // 체크박스가 남아있으면 안 보이는 행을 실수로 삭제/처리하는 사고로 이어질 수 있다.
@@ -36700,6 +36576,8 @@ setLoaded(true);
 };
   // ⭐ 페이지네이션 상태
   const [page, setPage] = React.useState(0);
+  // 머리글 정렬을 바꾸면 1페이지부터 다시
+  const dsOnSort = React.useCallback((k) => { dsSort.toggle(k); setPage(0); }, [dsSort.toggle]);
   const pageSize = 100;
   // 🔵 거래처 자동완성 상태
 const [clientOptions, setClientOptions] = React.useState([]);
@@ -38495,43 +38373,7 @@ const getStatusRank = (s) => {
   return 3; // 기타 상태
 };
 
-// =====================
-// 🔽 정렬 비교 함수 (최종 확정본)
-// =====================
-const compareBy = (key, dir = "asc") => (a, b) => {
-
-  // ✅ 기본 정렬 (정렬 해제 상태)
-  if (!key) {
-    // 0) 배차상태 우선순위: 배차중 → 배차완료 → 배차취소 → 기타
-    const ra = getStatusRank(a.배차상태);
-    const rb = getStatusRank(b.배차상태);
-    if (ra !== rb) return ra - rb;
-
-    // 1) (같은 상태끼리) 기존 로직 유지: 상차일 ↓, 상차시간 ↓
-    const d1 = a.상차일 || "";
-    const d2 = b.상차일 || "";
-    if (d1 !== d2) return d2.localeCompare(d1);
-
-    const t1 = a.상차시간 || "";
-    const t2 = b.상차시간 || "";
-    return t2.localeCompare(t1);
-  }
-
-  // ✅ 사용자 선택 정렬 (상태 우선순위 강제 X)
-  let av = a[key];
-  let bv = b[key];
-
-  if (key === "거래처명") {
-    av = normalizeClient(av);
-    bv = normalizeClient(bv);
-  }
-
-  return dir === "asc"
-    ? String(av ?? "").localeCompare(String(bv ?? ""), "ko")
-    : String(bv ?? "").localeCompare(String(av ?? ""), "ko");
-};
-
-const filtered = React.useMemo(() => {
+const filteredBase = React.useMemo(() => {
     // ★ focusOrderId가 있으면 해당 오더 1건만 표시
     if (focusOrderId) {
       const found = (dispatchData || []).find(d => getId(d) === focusOrderId);
@@ -38627,38 +38469,20 @@ const filtered = React.useMemo(() => {
   if (fareOn && fareTypeFilter) {
     data = data.filter(r => fareTypeFilter === "__none" ? !String(r.운임구분 || "").trim() : String(r.운임구분 || "") === fareTypeFilter);
   }
-  // 필터 조건 적용 (같은 필드=OR, 다른 필드=AND, 제외조건=AND NOT)
-  if (filterConditions.length > 0) {
-    const includes = filterConditions.filter(c => !c.exclude && c.field && c.value);
-    const excludes = filterConditions.filter(c => c.exclude && c.field && c.value);
-    const incGroups = {};
-    includes.forEach(({field, value}) => { if (!incGroups[field]) incGroups[field] = []; incGroups[field].push(value); });
-    Object.entries(incGroups).forEach(([field, vals]) => {
-      data = data.filter(r => vals.some(v => String(r[field] || "").includes(v)));
-    });
-    excludes.forEach(({field, value}) => {
-      data = data.filter(r => !String(r[field] || "").includes(value));
-    });
-  }
-
   // =========================
-  // 🔽 정렬
+  // 🔽 기본 순서(머리글 정렬이 꺼져 있을 때) — 머리글 정렬은 아래 filtered 에서 따로
   // =========================
-  if (sortKey) {
-    data.sort(compareBy(sortKey, sortDir));
-  } else {
-    data.sort((a, b) => {
-      const ra = getStatusRank(a.배차상태);
-      const rb = getStatusRank(b.배차상태);
-      if (ra !== rb) return ra - rb;
-      const da = String(a.상차일 || "");
-      const db = String(b.상차일 || "");
-      if (da !== db) return db.localeCompare(da);
-      const ta = Number(a.updatedAt || a.createdAt || 0);
-      const tb = Number(b.updatedAt || b.createdAt || 0);
-      return tb - ta;
-    });
-  }
+  data.sort((a, b) => {
+    const ra = getStatusRank(a.배차상태);
+    const rb = getStatusRank(b.배차상태);
+    if (ra !== rb) return ra - rb;
+    const da = String(a.상차일 || "");
+    const db = String(b.상차일 || "");
+    if (da !== db) return db.localeCompare(da);
+    const ta = Number(a.updatedAt || a.createdAt || 0);
+    const tb = Number(b.updatedAt || b.createdAt || 0);
+    return tb - ta;
+  });
 
   return data;
 }, [
@@ -38668,16 +38492,15 @@ const filtered = React.useMemo(() => {
   searchType,
   appliedStartDate,
   appliedEndDate,
-  sortKey,
-  sortDir,
   loaded,
   statusFilter,
   focusOrderId,
   filterErrorIds,
-  filterConditions,
   fareOn,
   fareTypeFilter,
 ]);
+  // ⚡ 머리글 정렬은 이미 걸러진 목록만 따로 정렬 — 정렬을 눌러도 위의 날짜·검색 필터는 다시 돌지 않는다
+  const filtered = React.useMemo(() => sortRows(filteredBase, dsSort.sort, orderSortValue), [filteredBase, dsSort.sort]);
 
   // ⭐⭐⭐ 페이지 데이터 (정렬된 filtered 기준)
   const pageRows = React.useMemo(() => {
@@ -39466,7 +39289,6 @@ return (
             <span data-fare-filter="1"><FareTypeSelect compact align="right" rules={fareR.rules} value={fareTypeFilter} placeholder="운임구분 전체" noneLabel="운임구분 전체"
               extraOpts={[{ name: "__none", label: "운임구분 미지정" }]} onChange={(v) => { setFareTypeFilter(v); setPage(0); }} /></span>
           )}
-          <button onClick={()=>{setTempSortKey(sortKey||"");setTempSortDir(sortDir||"asc");setTempFilterConditions([...filterConditions]);setSortModalOpen(true);}} className={`px-2 py-1 rounded-lg text-white text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap ${(sortKey||filterConditions.length>0)?"bg-[#1B2B4B]":"bg-slate-500"}`}><EditableText id="status.toolbar.정렬필터" defaultText="정렬/필터" />{filterConditions.length>0?` (${filterConditions.length})`:""}</button>
           <button onClick={()=>{if(selected.size===0)return showAlert("복사할 항목을 선택하세요.");if(selected.size>1)return showAlert("1개만 선택할 수 있습니다.");setCopyModalOpen(true);}} className="px-2 py-1 rounded-lg bg-gray-800 text-white text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap"><EditableText id="status.toolbar.기사복사" defaultText="기사복사" /></button>
           <button onClick={()=>{
   const selArr=[...selected];
@@ -39503,18 +39325,6 @@ return (
         </div>
       </div>
 
-      {filterConditions.length > 0 && (
-        <div className="flex flex-wrap items-center gap-2 px-4 py-2 mb-2 bg-[#1B2B4B]/5 border border-[#1B2B4B]/20 rounded-xl">
-          <span className="text-[11px] font-bold text-[#1B2B4B]">필터:</span>
-          {filterConditions.map((cond, i) => (
-            <span key={i} className={`flex items-center gap-1 px-2 py-0.5 text-[11px] rounded-full border ${cond.exclude?"bg-red-50 text-red-600 border-red-200":"bg-[#1B2B4B]/10 text-[#1B2B4B] border-[#1B2B4B]/20"}`}>
-              {cond.exclude && <span className="font-bold">제외</span>}{cond.field} : {cond.value}
-              <button className="ml-0.5 hover:text-red-500 font-bold leading-none" onClick={()=>setFilterConditions(prev=>prev.filter((_,j)=>j!==i))}>×</button>
-            </span>
-          ))}
-          <button className="ml-auto text-[11px] text-gray-500 hover:text-red-500" onClick={()=>setFilterConditions([])}><EditableText id="misc.btn.36132.전체 해제" defaultText="전체 해제" /></button>
-        </div>
-      )}
       {/* ★ 포커스 해제 버튼 */}
       {focusOrderId && (
         <div className="mb-3 flex items-center gap-2">
@@ -39542,14 +39352,9 @@ return (
                "배차상태", "청구운임", "기사운임", "수수료", ...(fareOn ? ["운임구분"] : []), "지급방식", "배차방식", "메모", "전달사항", "첨부", "전달상태",
 
               ].map((h) => {
-                const clickSortable = columnClickSortEnabled && CLICK_SORTABLE_COLUMNS.includes(h);
                 return (
-                <th key={h}
-                  className={`px-3 py-3 text-center text-[14px] font-bold text-white whitespace-nowrap border-b border-white/10 border-r border-r-white/10 last:border-r-0 ${clickSortable ? "cursor-pointer select-none hover:opacity-75" : ""}`}
-                  onClick={clickSortable ? () => {
-                    if (sortKey === h) setSortDir(d => d === "asc" ? "desc" : "asc");
-                    else { setSortKey(h); setSortDir("asc"); }
-                  } : undefined}
+                <SortTh key={h} k={h === "선택" ? "" : h} sort={dsSort.sort} onSort={dsOnSort}
+                  className="px-3 py-3 text-center text-[14px] font-bold text-white whitespace-nowrap border-b border-white/10 border-r border-r-white/10 last:border-r-0"
                 >
                   {h === "선택" ? (
                     <input autoComplete="off"
@@ -39558,12 +39363,9 @@ return (
                       checked={filtered.length && filtered.every((r) => selected.has(getId(r)))}
                     />
                   ) : (
-                    <span className="inline-flex items-center gap-0.5">
-                      <EditableText id={`status.table.header.${h}`} defaultText={h} />
-                      {clickSortable && sortKey === h && <span className="text-[10px]">{sortDir === "asc" ? "▲" : "▼"}</span>}
-                    </span>
+                    <EditableText id={`status.table.header.${h}`} defaultText={h} />
                   )}
-                </th>
+                </SortTh>
                 );
               })}
             </tr>
@@ -43644,80 +43446,6 @@ setCopyPlaceOptions(list);
         </div>
       )}
       
-      {sortModalOpen && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[100000]">
-          <div className="bg-white rounded-2xl w-[480px] max-h-[85vh] flex flex-col shadow-2xl overflow-hidden" onClick={e=>e.stopPropagation()}>
-            <div className="bg-[#1B2B4B] px-5 py-4 flex items-center justify-between shrink-0">
-              <h3 className="text-white font-bold text-[15px]"><EditableText id="popup.title.정렬 / 필터 설정" defaultText="정렬 / 필터 설정" /></h3>
-              <button className="text-white/60 hover:text-white text-xl leading-none" onClick={()=>setSortModalOpen(false)}>×</button>
-            </div>
-            <div className="overflow-y-auto flex-1 p-5 space-y-5">
-              <div>
-                <div className="text-[11px] font-bold text-[#1B2B4B] uppercase tracking-wider mb-2">정렬 기준</div>
-                <CustomSelect className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] mb-2 focus:outline-none focus:border-[#1B2B4B]" value={tempSortKey} onChange={e=>setTempSortKey(e.target.value)}>
-                  <option value="">선택 안함</option>
-                  {["등록일","상차일","하차일","거래처명","상차지명","하차지명","차량번호","배차상태","배차방식","청구운임","기사운임","수수료"].map(k=><option key={k} value={k}>{k}</option>)}
-                </CustomSelect>
-                <div className="flex gap-2">
-                  <button className={`flex-1 py-2 rounded-lg text-[12px] font-semibold transition ${tempSortDir==="asc"?"bg-[#1B2B4B] text-white":"bg-gray-100 text-gray-600 hover:bg-gray-200"}`} onClick={()=>setTempSortDir("asc")}><EditableText id="misc.btn.40234.오름차순" defaultText="오름차순" /></button>
-                  <button className={`flex-1 py-2 rounded-lg text-[12px] font-semibold transition ${tempSortDir==="desc"?"bg-[#1B2B4B] text-white":"bg-gray-100 text-gray-600 hover:bg-gray-200"}`} onClick={()=>setTempSortDir("desc")}><EditableText id="misc.btn.40235.내림차순" defaultText="내림차순" /></button>
-                </div>
-              </div>
-              <div className="border-t border-gray-100"/>
-              {/* ⭐ 컬럼명 클릭 정렬 — 켜두면 표 헤더(거래처명/상차지명 등)를 클릭하는
-                  것만으로 그 컬럼 기준 정렬. 기본은 꺼짐. */}
-              <div className="flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2.5">
-                <div>
-                  <div className="text-[13px] font-semibold text-gray-700">컬럼명 클릭 정렬</div>
-                  <div className="text-[11px] text-gray-500 mt-0.5">켜두면 표 헤더(거래처명·상차지명 등)를 클릭해서 바로 정렬할 수 있습니다</div>
-                </div>
-                <button type="button"
-                  onClick={() => setColumnClickSortEnabled(v => !v)}
-                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors shrink-0 ${columnClickSortEnabled ? "bg-[#1B2B4B]" : "bg-gray-300"}`}>
-                  <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${columnClickSortEnabled ? "translate-x-6" : "translate-x-1"}`} />
-                </button>
-              </div>
-              <div className="border-t border-gray-100"/>
-              <div>
-                <div className="text-[11px] font-bold text-[#1B2B4B] uppercase tracking-wider mb-1">필터 조건</div>
-                <div className="text-[11px] text-gray-500 mb-3">같은 항목 여러 조건 → OR, 다른 항목 → AND / 제외 조건으로 특정 값 제외 가능</div>
-                <div className="space-y-2 mb-3">
-                  {tempFilterConditions.map((cond,idx)=>(
-                    <div key={idx} className="flex gap-1.5 items-center">
-                      <button
-                        className={`shrink-0 px-2 py-1.5 rounded-lg text-[11px] font-bold border transition ${cond.exclude?"border-red-300 bg-red-50 text-red-600":"border-[#1B2B4B]/30 bg-[#1B2B4B]/5 text-[#1B2B4B]"}`}
-                        onClick={()=>{const n=[...tempFilterConditions];n[idx]={...n[idx],exclude:!n[idx].exclude};setTempFilterConditions(n);}}>
-                        {cond.exclude?"제외":"포함"}
-                      </button>
-                      <CustomSelect className="border border-gray-200 rounded-lg px-2 py-1.5 text-[12px] flex-1 focus:outline-none focus:border-[#1B2B4B]" value={cond.field} onChange={e=>{const n=[...tempFilterConditions];n[idx]={...n[idx],field:e.target.value,value:""};setTempFilterConditions(n);}}>
-                        <option value="">항목 선택</option>
-                        {["배차방식","지급방식","배차상태","거래처명","차량종류","차량번호"].map(f=><option key={f} value={f}>{f}</option>)}
-                      </CustomSelect>
-                      {["배차방식","지급방식","배차상태","차량종류"].includes(cond.field)?(
-                        <CustomSelect className="border border-gray-200 rounded-lg px-2 py-1.5 text-[12px] flex-1 focus:outline-none focus:border-[#1B2B4B]" value={cond.value} onChange={e=>{const n=[...tempFilterConditions];n[idx]={...n[idx],value:e.target.value};setTempFilterConditions(n);}}>
-                          <option value="">값 선택</option>
-                          {(cond.field==="배차방식"?dropdownList("배차방식", ["24시","직접배차","인성","고정기사"]):cond.field==="지급방식"?["계산서","착불","선불","손실","개인","취소"]:cond.field==="배차상태"?["배차중","배차완료","배차취소"]:withCustomVehicleTypes(["라보/다마스","카고","윙/카고","윙바디","리프트","탑차","냉장탑","냉동탑","냉장윙","냉동윙","냉장/냉동탑","냉장/냉동윙","오토바이","기타"])).map(v=><option key={v} value={v}>{v}</option>)}
-                        </CustomSelect>
-                      ):(
-                        <input autoComplete="off" type="text" className="border border-gray-200 rounded-lg px-2 py-1.5 text-[12px] flex-1 focus:outline-none focus:border-[#1B2B4B]" value={cond.value} onChange={e=>{const n=[...tempFilterConditions];n[idx]={...n[idx],value:e.target.value};setTempFilterConditions(n);}} placeholder="검색어 입력" />
-                      )}
-                      <button className="w-7 h-7 flex items-center justify-center text-gray-500 hover:text-red-500 rounded-lg hover:bg-red-50 text-lg leading-none" onClick={()=>setTempFilterConditions(prev=>prev.filter((_,i)=>i!==idx))}>×</button>
-                    </div>
-                  ))}
-                </div>
-                <button className="w-full py-2 border-2 border-dashed border-gray-200 rounded-lg text-[12px] text-gray-500 hover:border-[#1B2B4B] hover:text-[#1B2B4B] transition" onClick={()=>setTempFilterConditions(prev=>[...prev,{field:"",value:"",exclude:false}])}>+ 조건 추가</button>
-              </div>
-            </div>
-            <div className="px-5 py-4 border-t border-gray-100 flex justify-between items-center shrink-0">
-              <button className="px-4 py-2 rounded-lg bg-gray-100 text-gray-600 text-[12px] font-semibold hover:bg-gray-200 transition" onClick={()=>{setTempSortKey("");setTempSortDir("asc");setTempFilterConditions([]);}}><EditableText id="misc.btn.40270.초기화" defaultText="초기화" /></button>
-              <div className="flex gap-2">
-                <button className="px-4 py-2 rounded-lg bg-gray-100 text-gray-600 text-[12px] font-semibold hover:bg-gray-200 transition" onClick={()=>setSortModalOpen(false)}><EditableText id="misc.btn.40272.취소" defaultText="취소" /></button>
-                <button className="px-4 py-2 rounded-lg bg-[#1B2B4B] text-white text-[12px] font-semibold hover:bg-[#243a60] transition" onClick={()=>{setSortKey(tempSortKey);setSortDir(tempSortDir);setFilterConditions(tempFilterConditions.filter(c=>c.field&&c.value));setSortModalOpen(false);}}><EditableText id="misc.btn.40273.적용" defaultText="적용" /></button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
 {/* ===== 오더복사수정패널 기사정보: 동일 차량번호 기사 여러명 선택 팝업 (PART 5) ===== */}
       {copyDriverPick && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[999999]">
@@ -49748,6 +49476,14 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
     "상차지명","상차지주소","하차지명","하차지주소",
     "차량종류","차량톤수","화물내용","경유","배차상태","메모",
   ];
+  // ⭐ 머리글 클릭 정렬(▲→▼→해제) — 이 브라우저에만 기억. 걸러진 목록만 따로 정렬해 가볍다.
+  const unSort = useTableSort("unassigned");
+  const unSortValue = React.useCallback((r, key, i) => {
+    if (key === "경과") return r.등록일 ? -new Date(r.등록일).getTime() : null; // 오래된 것 = 경과 큼
+    if (key === "경유") return null;
+    return orderSortValue(r, key, i);
+  }, []);
+  const sortedRows = React.useMemo(() => sortRows(filtered, unSort.sort, unSortValue), [filtered, unSort.sort, unSortValue]);
 
   const toggleAll = () => {
     if (selectedIds.size === filtered.length) setSelectedIds(new Set());
@@ -49874,7 +49610,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                   </th>
                 )}
                 {headers.map((h) => (
-                  <th key={h} className={headBase}><EditableText id={`generic.table.header.${h}`} defaultText={h} /></th>
+                  <SortTh key={h} k={h === "경유" ? "" : h} sort={unSort.sort} onSort={unSort.toggle} className={headBase}><EditableText id={`generic.table.header.${h}`} defaultText={h} /></SortTh>
                 ))}
               </tr>
             </thead>
@@ -49886,7 +49622,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                   </td>
                 </tr>
               ) : (
-                filtered.map((r, i) => {
+                sortedRows.map((r, i) => {
                   const isEarly = r.상차시간 && r.상차시간 >= "05:00" && r.상차시간 <= "09:00";
                   return (
                     <tr
