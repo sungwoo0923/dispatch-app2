@@ -24,6 +24,7 @@ import { useFundsSummary, isCeoPosition } from "./FundsBoard";
 import { AttendanceQuickButton } from "./attendanceQuick";
 import { getNationalHolidayLabel } from "./attendanceUtils";
 import AttendanceApprovalInbox from "./AttendanceApprovalInbox";
+import { PersonalSchedule, PersonalModeSwitch, usePersonalMode, birthdaysOn, BirthChip } from "./PersonalSchedule"; // ⭐ 2026-11-03 개인일정·생일
 
 const MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
 const GOLD = "#D7BC82";
@@ -557,7 +558,14 @@ const KIND_STYLE = (label, status) => {
   const base = /연차|휴가|반차|반반차/.test(label) ? ["#1B2B4B", "#fff"] : /출장|외근/.test(label) ? ["#DCE6F8", "#1B2B4B"] : /병가|경조/.test(label) ? ["#F3E7CC", "#6B5320"] : ["#EEF2F8", "#3A4A66"];
   return pend ? { background: "transparent", color: "#5B6B85", border: "1px dashed #9AA9C3" } : { background: base[0], color: base[1], border: `1px solid ${base[0]}` };
 };
+// ⭐ 2026-11-03 [개인일정] 스위치 — 켜면 나만 보는 개인 일정 달력(계정별로 기억 · 다른 메뉴 다녀와도 그대로)
 export function TeamSchedule({ company }) {
+  const [personal, setPersonal] = usePersonalMode();
+  const { staff } = useStaff(company);
+  const sw = <PersonalModeSwitch on={personal} onChange={setPersonal} />;
+  return personal ? <PersonalSchedule company={company} modeSwitch={sw} staff={staff} /> : <TeamScheduleCompany company={company} modeSwitch={sw} />;
+}
+function TeamScheduleCompany({ company, modeSwitch }) {
   // ⭐ 2026-11-02 점검 — 회사 전체 approvals 조회 대신 연차(leave)만 조회(eventsOf도 leave만 사용)
   const approvals = useLeaveApprovalsOf(company);
   const { staff } = useStaff(company);
@@ -578,6 +586,7 @@ export function TeamSchedule({ company }) {
   const monthEv = evs.filter((e) => e.date.startsWith(ym));
   const leaveDays = monthEv.filter((e) => e.status === "approved" && /연차|휴가/.test(e.label)).length + monthEv.filter((e) => e.status === "approved" && /반차/.test(e.label)).length * 0.5;
   const pickList = (by[pick] || []).sort((a, b) => a.name.localeCompare(b.name));
+  const pickBirth = birthdaysOn(staff, pick); // ⭐ 2026-11-03 생일
   return (
     <div className="space-y-3">
       <div className="relative overflow-hidden rounded-[22px] px-4 md:px-6 py-4 text-white" style={{ background: SHELL_BG }}>
@@ -588,7 +597,8 @@ export function TeamSchedule({ company }) {
             <div className="text-[20px] md:text-[24px] font-black mt-0.5">직원 일정</div>
             <div className="text-[12.5px] text-white/55">전자결재 연차·반차·외근·출장·병가·경조사 — 결재 완료는 확정, 진행 중은 점선</div>
           </div>
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1.5 flex-wrap">
+            {modeSwitch}
             <button type="button" onClick={() => move(-1)} className="w-9 h-9 rounded-xl bg-white/10 font-black">‹</button>
             <span className="h-9 px-3.5 rounded-xl bg-white text-[#0B1530] font-black grid place-items-center tabular-nums" style={{ fontFamily: MONO }}>{ym.replace("-", ".")}</span>
             <button type="button" onClick={() => move(1)} className="w-9 h-9 rounded-xl bg-white/10 font-black">›</button>
@@ -611,6 +621,7 @@ export function TeamSchedule({ company }) {
           <div className="grid grid-cols-7">
             {cells.map((d, i) => {
               const list = d ? by[d] || [] : [];
+              const bd = d ? birthdaysOn(staff, d) : [];
               return (
                 <button key={i} type="button" disabled={!d} onClick={() => d && setPick(d)}
                   className={`text-left min-h-[64px] md:min-h-[104px] p-1 md:p-1.5 border-b border-r border-[#F1F4F9] align-top ${!d ? "bg-[#FAFBFD]" : pick === d ? "bg-[#F2F6FD] ring-2 ring-inset ring-[#2D4C82]" : "hover:bg-[#F8FAFD]"}`}>
@@ -621,10 +632,11 @@ export function TeamSchedule({ company }) {
                         {getNationalHolidayLabel(d) && <span className="hidden md:inline text-[10.5px] font-bold text-[#D92D20] truncate">{getNationalHolidayLabel(d)}</span>}
                       </div>
                       <div className="hidden md:block mt-1 space-y-0.5">
+                        {bd.map((u) => <BirthChip key={u.id} name={personName(u) || u.name} />)}
                         {list.slice(0, 3).map((e) => <div key={`${e.id}${e.date}`} className="rounded-md px-1.5 py-[1px] text-[11px] font-bold truncate" style={KIND_STYLE(e.label, e.status)}>{e.name} {e.label}</div>)}
                         {list.length > 3 && <div className="text-[10.5px] font-bold text-[#7A879C] px-1">+{list.length - 3}명</div>}
                       </div>
-                      {list.length > 0 && <div className="md:hidden mt-1 flex items-center gap-0.5 flex-wrap">{list.slice(0, 4).map((e) => <span key={`${e.id}${e.date}`} className="w-1.5 h-1.5 rounded-full" style={{ background: e.status === "approved" ? "#1B2B4B" : "#9AA9C3" }} />)}{list.length > 4 && <span className="text-[9px] font-black text-[#5B6B85]">+{list.length - 4}</span>}</div>}
+                      {(list.length > 0 || bd.length > 0) && <div className="md:hidden mt-1 flex items-center gap-0.5 flex-wrap">{bd.length > 0 && <span className="text-[9px] leading-none">🎂</span>}{list.slice(0, 4).map((e) => <span key={`${e.id}${e.date}`} className="w-1.5 h-1.5 rounded-full" style={{ background: e.status === "approved" ? "#1B2B4B" : "#9AA9C3" }} />)}{list.length > 4 && <span className="text-[9px] font-black text-[#5B6B85]">+{list.length - 4}</span>}</div>}
                     </>
                   )}
                 </button>
@@ -637,6 +649,7 @@ export function TeamSchedule({ company }) {
             <div className="text-[9.5px] font-extrabold tracking-[0.24em] text-[#4B6CB7]" style={{ fontFamily: MONO }}>DAY DETAIL</div>
             <div className="text-[15px] font-black text-[#0F1A30]">{pick.replace(/-/g, ".")} ({DOW[new Date(`${pick}T00:00:00Z`).getUTCDay()]}) · {pickList.length}명</div>
           </div>
+          {pickBirth.length > 0 && <div className="px-4 pt-3 flex flex-wrap gap-1.5">{pickBirth.map((u) => <BirthChip key={u.id} name={personName(u) || u.name} big />)}</div>}
           {!pickList.length ? <div className="py-10 text-center text-[13px] font-bold text-[#9AA9C3]">이 날은 부재 일정이 없습니다</div> : (
             <div className="divide-y divide-[#EEF2F8]">
               {pickList.map((e) => (
@@ -724,7 +737,14 @@ function TimePick({ value, onChange }) {
   );
 }
 
-export function ExecScheduleBoard({ company, me = {}, canWrite = false }) {
+// ⭐ 2026-11-03 [개인일정] 스위치(직원 일정과 같은 설정을 같이 씀)
+export function ExecScheduleBoard(props) {
+  const [personal, setPersonal] = usePersonalMode();
+  const { staff } = useStaff(props.company);
+  const sw = <PersonalModeSwitch on={personal} onChange={setPersonal} />;
+  return personal ? <PersonalSchedule company={props.company} modeSwitch={sw} staff={staff} /> : <ExecScheduleCompany {...props} modeSwitch={sw} />;
+}
+function ExecScheduleCompany({ company, me = {}, canWrite = false, modeSwitch }) {
   const list = useExecSchedules(company);
   const { staff: allStaff } = useStaff(company);
   // 임원(부서 임원·대표/전무/이사 등) — 인사팀이 대신 등록할 때 누구 일정인지 고른다
@@ -773,7 +793,8 @@ export function ExecScheduleBoard({ company, me = {}, canWrite = false }) {
             <div className="text-[24px] md:text-[30px] font-black mt-1">임원 스케줄</div>
             <div className="text-[13.5px] text-white/55 mt-0.5">{canWrite ? "등록한 일정은 모든 직원이 볼 수 있습니다" : "대표·임원의 회의·외근·출장 일정입니다"}</div>
           </div>
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1.5 flex-wrap">
+            {modeSwitch}
             <button type="button" onClick={() => move(-1)} className="w-10 h-10 rounded-xl bg-white/10 border border-white/10 font-black">‹</button>
             <span className="h-10 px-4 rounded-xl bg-white text-[#0B1530] font-black grid place-items-center tabular-nums text-[15px]" style={{ fontFamily: MONO }}>{ym.replace("-", ".")}</span>
             <button type="button" onClick={() => move(1)} className="w-10 h-10 rounded-xl bg-white/10 border border-white/10 font-black">›</button>
@@ -789,6 +810,7 @@ export function ExecScheduleBoard({ company, me = {}, canWrite = false }) {
             <div className="grid grid-cols-7">
               {cells.map((d, i) => {
                 const l = d ? by[d] || [] : [];
+                const bd = d ? birthdaysOn(allStaff, d) : [];
                 return (
                   <button key={i} type="button" disabled={!d} onClick={() => d && setPick(d)} onDoubleClick={() => d && canWrite && setEdit(blank(d))}
                     className={`text-left min-h-[70px] md:min-h-[112px] p-1 md:p-2 border-b border-r border-white/[0.06] ${!d ? "bg-black/10" : pick === d ? "bg-[#D7BC82]/[0.10] ring-1 ring-inset ring-[#D7BC82]/60" : "hover:bg-white/[0.04]"}`}>
@@ -799,10 +821,11 @@ export function ExecScheduleBoard({ company, me = {}, canWrite = false }) {
                         {getNationalHolidayLabel(d) && <span className="hidden md:inline text-[10.5px] font-bold text-[#FFB4A8] truncate">{getNationalHolidayLabel(d)}</span>}
                       </div>
                         <div className="hidden md:block mt-1 space-y-1">
+                          {bd.map((u) => <BirthChip key={u.id} name={personName(u) || u.name} dark />)}
                           {l.slice(0, 3).map((e) => <div key={`${e.id}${d}`} className="rounded-md px-1.5 py-[2px] text-[11.5px] font-bold truncate bg-white/[0.08] border-l-2" style={{ borderColor: KIND_DOT[e.kind] || GOLD }}>{e.start ? `${e.start} ` : ""}{e.name} · {e.title}</div>)}
                           {l.length > 3 && <div className="text-[11px] text-white/50 px-1">+{l.length - 3}</div>}
                         </div>
-                        {l.length > 0 && <div className="md:hidden mt-1 flex gap-0.5 flex-wrap">{l.slice(0, 4).map((e) => <span key={`${e.id}${d}`} className="w-1.5 h-1.5 rounded-full" style={{ background: KIND_DOT[e.kind] || GOLD }} />)}</div>}
+                        {(l.length > 0 || bd.length > 0) && <div className="md:hidden mt-1 flex gap-0.5 flex-wrap">{bd.length > 0 && <span className="text-[9px] leading-none">🎂</span>}{l.slice(0, 4).map((e) => <span key={`${e.id}${d}`} className="w-1.5 h-1.5 rounded-full" style={{ background: KIND_DOT[e.kind] || GOLD }} />)}</div>}
                       </>
                     )}
                   </button>
@@ -812,6 +835,7 @@ export function ExecScheduleBoard({ company, me = {}, canWrite = false }) {
           </div>
           <div className="space-y-4">
             <Panel en="DAY DETAIL" title={`${pick.replace(/-/g, ".")} (${DOW[new Date(`${pick}T00:00:00Z`).getUTCDay()]})`}>
+              {birthdaysOn(allStaff, pick).length > 0 && <div className="flex flex-wrap gap-1.5 mb-2">{birthdaysOn(allStaff, pick).map((u) => <BirthChip key={u.id} name={personName(u) || u.name} big dark />)}</div>}
               {!dayList.length ? <div className="py-6 text-center text-[14px] font-bold text-white/40">일정이 없습니다{canWrite ? " · 날짜를 두 번 누르면 등록" : ""}</div> : dayList.map((e) => (
                 <button key={e.id} type="button" disabled={!canWrite} onClick={() => setEdit({ ...blank(), ...e })} className="w-full text-left rounded-2xl bg-white/[0.05] border border-white/[0.08] px-3.5 py-3 mb-2 enabled:hover:bg-white/[0.09]">
                   <div className="flex items-center gap-2"><span className="w-2 h-2 rounded-full" style={{ background: KIND_DOT[e.kind] || GOLD }} /><span className="text-[12px] font-black text-white/60">{e.kind}</span><span className="ml-auto text-[13px] font-black tabular-nums text-white/80" style={{ fontFamily: MONO }}>{e.start}{e.end ? `–${e.end}` : ""}</span></div>

@@ -4861,6 +4861,25 @@ exports.pushDiag = functions.runWith({ timeoutSeconds: 60, memory: "256MB" }).ht
     res.status(e.status || 500).json({ error: e?.message || String(e) });
   }
 });
+// 🗓 2026-11-03 개인 일정 알림 — 직원이 개인 일정에 "휴대폰 푸시 알림 받기"를 체크하면 remindAt(ms)에 본인에게만 푸시
+//  personalSchedules: { uid, title, date, allDay, start, place, remind, push, remindAt, pushPending }
+exports.sendPersonalScheduleReminders = functions.pubsub.schedule("every 5 minutes").timeZone("Asia/Seoul").onRun(async () => {
+  const snap = await db.collection("personalSchedules").where("pushPending", "==", true).get();
+  const now = Date.now();
+  const hmKo = (hm) => { if (!hm) return ""; const [h, m] = String(hm).split(":").map(Number); return `${h < 12 ? "오전" : "오후"} ${h % 12 || 12}:${String(m || 0).padStart(2, "0")}`; };
+  for (const d of snap.docs) {
+    const e = d.data() || {};
+    if (!e.remindAt || e.remindAt > now) continue;
+    await d.ref.set({ pushPending: false, pushedAt: FieldValue.serverTimestamp() }, { merge: true }); // 두 번 보내지 않게 먼저 표시
+    if (!e.push || now - e.remindAt > 6 * 3600e3) continue; // 6시간 넘게 지난 알림은 보내지 않음(서버 멈춤 등)
+    const u = (await db.collection("users").doc(String(e.uid || "x")).get().catch(() => null))?.data();
+    const tokens = userTokens(u);
+    if (!tokens.length) continue;
+    const when = `${String(e.date || "").slice(5).replace("-", "/")} ${e.allDay || !e.start ? "종일" : hmKo(e.start)}`;
+    await sendPushAndCleanup(tokens, { notification: { title: `📅 개인 일정 · ${when}`, body: `${e.title || ""}${e.place ? ` · ${e.place}` : ""}` }, android: { priority: "high" } }, "개인일정").catch((err) => console.error("개인 일정 푸시 실패:", err));
+  }
+  return null;
+});
 exports.sendScheduledPlatformNotices = functions.pubsub.schedule("every 5 minutes").timeZone("Asia/Seoul").onRun(async () => {
   const snap = await db.collection("platformNotices").where("pushPending", "==", true).get();
   const now = Date.now();

@@ -6,6 +6,7 @@ import { useMyProfile } from "../userNames";
 import { useCompanyDropdownSync, dropdownList } from "../companyDropdownOptions";
 import { CompanyOptionPicker } from "../companyOptionPicker"; // 🧾 2026-11-02 지급방식·배차방식·상/하차방법 공용 선택기(＋ 추가)
 import { AttendanceQuickButton, officeRadii, CheckoutReminderHost } from "../attendanceQuick";
+import { PersonalTodayHost } from "../PersonalSchedule";
 import { useCustomRoles, findCustomRole, getMenuAccess, roleScreen } from "../customRoles";
 import { useReadOnlyGuard } from "../readOnlyGuard";
 import { confirmLeave } from "../leaveGuard";
@@ -2413,6 +2414,12 @@ const quickRange = (days) => {
     setTopOrderBanner({ text });
     setTimeout(() => setTopOrderBanner((p) => (p?.text === text ? null : p)), 6000);
   };
+  // ⭐ 2026-11-03 다른 화면이 띄우는 위쪽 알림줄(오늘 개인 일정 등) — window.dispatchEvent(new CustomEvent("kp-top-banner", { detail: { text } }))
+  useEffect(() => {
+    const h = (e) => { if (e.detail?.text) showTopOrderBanner(e.detail.text); };
+    window.addEventListener("kp-top-banner", h);
+    return () => window.removeEventListener("kp-top-banner", h);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const [quickAssignTarget, setQuickAssignTarget] = useState(null);
   const [successBanner, setSuccessBanner] = useState(null);
   // 🔔 메뉴 숫자(전자결재·인수인계·가입 신청·공지) + 앱 안 알림 배너 — 2026-10-31
@@ -5554,6 +5561,7 @@ const title =
 
       <BannerCenter bottom={86} />
       <CheckoutReminderHost uid={user?.uid} role={realRole} email={user?.email} />{/* ⭐ 2026-11-03 퇴근 10분 전 알림 */}
+      <PersonalTodayHost uid={user?.uid} mobile />{/* ⭐ 2026-11-03 오늘 개인 일정 — 위쪽 알림줄 */}
       {/* ⭐ 2026-11-02 원격지원 — 요청 상태 막대 · 승인 배너 · 포인터 */}
       <RemoteSupportHost user={user} profile={myProfM} company={userCompany || localStorage.getItem("userCompany") || ""} mobile />
       <OrderCongratsPopup uid={user?.uid} profile={myProfM} mobile />
