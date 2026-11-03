@@ -23,6 +23,22 @@ export function isNoticeUnread(n, uid, now = Date.now(), windowMs = NOTICE_UNREA
   return !at || now - at < windowMs;
 }
 
+// 🔒 2026-11-03 지정 공지 비공개 — 팀(teams)·직원(targetUids) 지정 공지는
+//  지정된 사람(팀원) · 작성자 · 플랫폼 최고관리자(totalMaster, 운영 지원용)에게만 보인다.
+//  회사 관리자·다른 직원에게는 목록·숫자·팝업·맨 위 알림줄 어디에도 나오지 않는다(PC·모바일·서버 푸시 같은 기준).
+export const noticeTargetUids = (n) => (Array.isArray(n?.targetUids) ? n.targetUids.filter(Boolean) : []);
+export const noticeTargetTeams = (n) => (Array.isArray(n?.teams) ? n.teams.map((t) => String(t || "").trim()).filter(Boolean) : []);
+export const isTargetedNotice = (n) => noticeTargetUids(n).length > 0 || noticeTargetTeams(n).length > 0;
+export function canSeeTargetedNotice(n, me) {
+  if (!n || !isTargetedNotice(n)) return true;
+  const uid = me?.uid || "";
+  if (n.authorUid && uid && n.authorUid === uid) return true;
+  if (me?.role === "totalMaster") return true;
+  if (uid && noticeTargetUids(n).includes(uid)) return true;
+  const team = String(me?.team || "").trim();
+  return !!team && noticeTargetTeams(n).includes(team);
+}
+
 // 1분마다 바뀌는 시각 — 예약 공지가 게시 시각을 넘기면 다시 그리게
 export function useMinuteTick(ms = 60000) {
   const [now, setNow] = React.useState(() => Date.now());

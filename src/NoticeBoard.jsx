@@ -2,14 +2,17 @@
 // 📢 공지사항 목록·본문(2026-10-30) — 메일함처럼 번호·작성자·날짜는 좁게, 제목은 넓게.
 //  · 글을 누르면 팝업이 아니라 본문 화면으로 들어가고 "← 목록"으로 돌아온다.
 //  · 상단 고정(최대 5개) — 맨 위에 고정 표시 + 굵은 글씨.
-//  · 세부 공개 대상(팀) — 내부용 공지를 특정 팀에만 보이게(작성자·관리자는 항상 보임).
-//  · ⭐ 2026-11-03 받는 사람(직원) 지정 — targetUids의 직원에게만 보이게(작성자·관리자는 항상 보임). "지정 N명" 표시.
+//  · 세부 공개 대상(팀) — 내부용 공지를 특정 팀에만 보이게.
+//  · ⭐ 2026-11-03 받는 사람(직원) 지정 — targetUids의 직원에게만 보이게. "지정 N명"은 본문 안에서만(목록에는 안 보임).
+//  · 🔒 2026-11-03 지정 공지 비공개 — 팀·직원 지정 공지는 지정된 사람 · 작성자 · 최고관리자만(회사 관리자도 지정 안 됐으면 안 보임)
 import React from "react";
 import { RichHtml } from "./richText";
 import { db } from "./firebase";
 import { doc, updateDoc, deleteDoc, arrayUnion } from "firebase/firestore";
 // ⭐ 2026-11-03 예약 게시(publishAt) · 공개 대상 여러 개(audiences: internal·shipper·driver) · 조회수(readBy / 플랫폼 공지는 viewedBy)
 import { PlatformBadge, platformReadIds, markPlatformNoticeRead } from "./PlatformNoticeBanner";
+import { noticeTargetUids, canSeeTargetedNotice } from "./notifyCore";
+import PostComments, { PostLikeButton, PostCounts } from "./PostComments"; // 💬 2026-11-03 댓글·대댓글·좋아요
 
 // ⭐ 2026-11-02 관리자센터2 — 플랫폼 공지(_platform)는 관리자 관리센터가 올린 글: 회사에서 고치거나 지울 수 없고,
 //  읽음 표시는 서버 문서 대신 이 브라우저에만 기록한다(다른 회사 직원 uid가 한 문서에 쌓이지 않게).
@@ -28,8 +31,8 @@ const shortDate = (ms) => {
 };
 const fullDate = (ms) => (ms ? new Date(ms).toLocaleString("ko-KR", { year: "numeric", month: "long", day: "numeric", weekday: "short", hour: "2-digit", minute: "2-digit" }) : "");
 
-// ⭐ 2026-11-03 받는 사람(직원) 지정 — targetUids가 있으면 그 직원들에게만(비어 있으면 지정 없음)
-export const noticeTargetUids = (n) => (Array.isArray(n?.targetUids) ? n.targetUids.filter(Boolean) : []);
+// ⭐ 2026-11-03 받는 사람(직원) 지정 — targetUids가 있으면 그 직원들에게만(비어 있으면 지정 없음) · 기준은 notifyCore 한 곳
+export { noticeTargetUids };
 // "지정 3명" 표시 말풍선(마우스를 올리면 받는 사람 이름 전부)
 export const noticeTargetTitle = (n) => { const names = Array.isArray(n?.targetNames) ? n.targetNames.filter(Boolean) : []; return names.length ? `받는 사람: ${names.join(", ")}` : `지정된 직원 ${noticeTargetUids(n).length}명`; };
 
@@ -45,14 +48,10 @@ export const noticeViews = (n) => (n?._platform ? (n.viewedBy || []).length : (n
 const pad2 = (x) => String(x).padStart(2, "0");
 export const scheduleLabel = (ms) => { const d = new Date(ms); return `예약 · ${pad2(d.getMonth() + 1)}.${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`; };
 export function canSeeNotice(n, me) {
+  // 🔒 2026-11-03 지정 공지 비공개 — 팀·직원 지정 공지는 지정된 사람·작성자·최고관리자만(관리자라도 지정 안 됐으면 안 보임)
+  if (!canSeeTargetedNotice(n, me)) return false;
   if (isNoticeScheduled(n) && !(n.authorUid && n.authorUid === me?.uid) && !NOTICE_SCHEDULE_ROLES.includes(me?.role) && !me?.isMaster) return false;
-  const teams = Array.isArray(n.teams) ? n.teams : [];
-  const uids = noticeTargetUids(n);
-  if (!teams.length && !uids.length) return true;
-  if (n.authorUid && n.authorUid === me?.uid) return true;
-  if (["admin", "totalMaster", "superadmin"].includes(me?.role)) return true;
-  if (uids.length) return !!me?.uid && uids.includes(me.uid);
-  return teams.includes(String(me?.team || "").trim());
+  return true;
 }
 
 const PAGE = 15;
@@ -77,7 +76,7 @@ export default function NoticeBoard({ notices = [], me, canWrite, isViewer, onEd
   }, [visible, pinned, q]);
   const pages = Math.max(1, Math.ceil(rest.length / PAGE));
   const shown = rest.slice((page - 1) * PAGE, page * PAGE);
-  const cur = openId ? notices.find((n) => n.id === openId) : null;
+  const cur = openId ? notices.find((n) => n.id === openId && canSeeNotice(n, me)) || null : null; // 🔒 지정 공지는 링크·알림으로 열어도 대상자만
   React.useEffect(() => {
     // ⭐ 2026-11-03 플랫폼 공지 조회수 — 본 사람 uid를 viewedBy에 한 번만(서버 규칙: viewedBy만 더할 수 있음)
     if (cur?._platform) { markPlatRead(cur.id); bumpRead((x) => x + 1); if (me?.uid && cur.platformId && !(cur.viewedBy || []).includes(me.uid)) updateDoc(doc(db, "platformNotices", cur.platformId), { viewedBy: arrayUnion(me.uid) }).catch(() => {}); return; }
@@ -90,6 +89,8 @@ export default function NoticeBoard({ notices = [], me, canWrite, isViewer, onEd
     if (!n.pinned && visible.filter((x) => x.pinned && !x._platform).length >= MAX_PINNED) { window.alert(`상단 고정은 ${MAX_PINNED}개까지입니다. 다른 고정을 먼저 해제해 주세요.`); return; }
     await updateDoc(doc(db, "notices", n.id), { pinned: !n.pinned, pinnedAt: n.pinned ? null : Date.now() }).catch((e) => window.alert(e.message));
   };
+  // 💬 댓글·좋아요 — 회사 공지만(플랫폼 공지는 다른 곳 글), 화주·기사 화면에는 직원 댓글을 보이지 않는다
+  const canTalk = (n) => !!n && !n._platform && !!me?.uid && !["shipper", "driver", "cafeUser"].includes(me?.role);
   const remove = (n) => confirm("공지사항을 삭제하시겠습니까?", async () => { await deleteDoc(doc(db, "notices", n.id)); setOpenId(null); });
 
   if (cur) {
@@ -144,7 +145,10 @@ export default function NoticeBoard({ notices = [], me, canWrite, isViewer, onEd
               </div>
             </div>
           )}
+          {/* 💬 2026-11-03 좋아요 — 회사 공지(플랫폼 공지 제외) · 직원만 */}
+          {canTalk(cur) && <div className="pt-1"><PostLikeButton col="notices" post={cur} me={me} disabled={isViewer} /></div>}
         </div>
+        {canTalk(cur) && <PostComments col="notices" post={cur} me={me} readOnly={isViewer} />}
       </div>
     );
   }
@@ -164,11 +168,11 @@ export default function NoticeBoard({ notices = [], me, canWrite, isViewer, onEd
           {n.category && n.category !== "공지사항" && <span className={`${n._platform ? "hidden md:inline-block" : ""} shrink-0 px-1.5 py-0.5 rounded text-[10.5px] font-black ${n.category === "부고" ? "bg-[#1A1A1A] text-white" : "bg-[#EEF3FC] text-[#1B2B4B]"}`}>{n.category}</span>}
           {isNoticeScheduled(n) && <SchedBadge n={n} />}
           {!n._platform && <AudBadges n={n} />}
-          {(n.teams || []).length > 0 && <span className="shrink-0 px-1.5 py-0.5 rounded border border-[#C9D6EE] text-[#2D4C82] text-[10.5px] font-black">{n.teams.length === 1 ? n.teams[0] : `${n.teams[0]} 외 ${n.teams.length - 1}`}</span>}
-          {noticeTargetUids(n).length > 0 && <span title={noticeTargetTitle(n)} className="shrink-0 px-1.5 py-0.5 rounded border border-[#C9D6EE] text-[#2D4C82] text-[10.5px] font-black">지정 {noticeTargetUids(n).length}명</span>}{/* ⭐ 2026-11-03 직원 지정 */}
+          {/* 🔒 2026-11-03 지정 공지 — 목록에는 대상(팀·지정 N명)을 드러내지 않는다(본문 안에서만 표시) */}
           <span className={`truncate ${pin ? "text-[15.5px] font-black text-[#0B1428]" : unread ? "text-[15px] font-black text-[#0F1A30]" : "text-[15px] font-semibold text-[#3A4A66]"}`}>{n.title || "공지사항"}</span>
           {n.revisedAt && <span className={`shrink-0 px-1.5 py-0.5 rounded text-[10.5px] font-black ${n.hrOrder?.status === "cancelled" ? "bg-[#FEF3F2] text-[#B42318]" : "bg-[#FFF4E5] text-[#B54708]"}`}>{n.hrOrder?.status === "cancelled" ? "취소" : "수정됨"}</span>}
           {n.image && <span className="shrink-0 text-[11px] text-[#9AA9C3]">▣</span>}
+          {!n._platform && <PostCounts p={n} />}
           {isNew(n) && unread && <span className="shrink-0 w-[18px] h-[18px] rounded-full bg-[#1B2B4B] text-white text-[10px] font-black flex items-center justify-center">N</span>}
         </span>
         {/* 휴대폰 — 작성자는 제목 아래 줄로 */}

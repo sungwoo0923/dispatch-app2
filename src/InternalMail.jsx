@@ -831,11 +831,15 @@ export function MailCenter({ company, myName, onClose, openId }) {
             <div className="text-[10.5px] font-extrabold tracking-[0.24em] text-white/50">MAIL · {company}</div>
             <div className="text-[19px] font-black">사내메일함</div>
           </div>
-          <button type="button" onClick={() => setComposeTick((n) => n + 1)} className="shrink-0 sm:w-full h-11 px-4 mb-1 rounded-xl bg-white text-[#0F1A30] text-[14px] font-black shadow-[0_8px_18px_rgba(0,0,0,0.25)] inline-flex items-center justify-center gap-2"><ShellIcon name="pen" size={15} />메일 쓰기</button>
+          <button type="button" onClick={() => setComposeTick((n) => n + 1)} className="hidden sm:inline-flex shrink-0 sm:w-full h-11 px-4 mb-1 rounded-xl bg-white text-[#0F1A30] text-[14px] font-black shadow-[0_8px_18px_rgba(0,0,0,0.25)] items-center justify-center gap-2"><ShellIcon name="pen" size={15} />메일 쓰기</button>
           {MAIL_FOLDERS.map(nav)}
           <button type="button" onClick={onClose} className="shrink-0 order-first sm:order-none sm:mt-auto h-11 sm:h-10 px-4 rounded-xl bg-white/10 sm:bg-transparent text-white/80 sm:text-white/60 text-[13px] font-bold hover:bg-white/10">닫기</button>
         </aside>
         <MailWorkspace company={company} myName={myName} box={box} setBox={setBox} openId={openId} composeTick={composeTick} />
+        {/* ⭐ 2026-11-03 휴대폰: 메일 쓰기는 오른쪽 아래 둥근 버튼(위쪽 닫기 옆에 붙어 있던 것을 옮김) */}
+        <button type="button" onClick={() => setComposeTick((n) => n + 1)} aria-label="메일 쓰기"
+          className="sm:hidden fixed right-4 z-[1000001] h-14 pl-4 pr-5 rounded-full bg-[#0F1A30] text-white text-[14.5px] font-black inline-flex items-center gap-2 shadow-[0_12px_28px_rgba(15,26,48,0.45)] ring-1 ring-white/15"
+          style={{ bottom: "calc(env(safe-area-inset-bottom, 0px) + 18px)" }}><ShellIcon name="pen" size={16} />메일 쓰기</button>
       </div>
     </div>, document.body);
 }

@@ -1,4 +1,4 @@
-import NoticeBoard, { canSeeNotice, noticeTargetUids } from "./NoticeBoard";
+import NoticeBoard, { canSeeNotice } from "./NoticeBoard";
 import { useBoardNoticesWithPlatform } from "./PlatformNoticeBanner";
 import { subscribeUsersLive } from "./usersLive"; // ⭐ 2026-11-02 속도 — 직원 명부 구독 공유
 import DeptDashboard from "./DeptDashboard";
@@ -498,8 +498,7 @@ export default function HomeDashboard({ role, user, userCompany = "", pending, d
   const noticeViewerRef = React.useRef({ uid: user?.uid, role, team: "" });
   const noticeToastOk = (n) => {
     const me = noticeViewerRef.current || {};
-    // 내 팀 정보가 아직 안 왔으면 팀 지정 공지는 예전처럼 띄운다(직원 지정은 uid만으로 바로 판단)
-    if (!me.team && !noticeTargetUids(n).length) return true;
+    // 🔒 2026-11-03 지정 공지 비공개 — 지정된 사람·작성자·최고관리자에게만(내 팀 정보가 아직 안 왔으면 팀 지정 공지는 띄우지 않는다)
     return canSeeNotice(n, me);
   };
   const [schedules, setSchedules] = React.useState([]);
