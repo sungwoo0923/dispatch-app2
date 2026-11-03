@@ -62,6 +62,37 @@ function Avatar({ name = "", photo = "", size = 36, bgColor = "#1B2B4B" }) {
   );
 }
 
+// ⭐ 2026-11-03 단체방 아바타 — 카톡처럼 멤버 사진/첫 글자를 최대 4개까지 모아서 보여준다
+// people: [{ name, photo }] (나를 뺀 멤버)
+function GroupAvatar({ people = [], size = 44 }) {
+  const list = people.slice(0, 4);
+  if (list.length <= 1) return <Avatar name={list[0]?.name || "그룹"} photo={list[0]?.photo || ""} size={size} bgColor="#374151" />;
+  const COLORS = ["#1B2B4B", "#374151", "#243a60", "#4b5563"];
+  // 2명: 대각선 두 칸 / 3~4명: 2x2 격자
+  const cell = list.length === 2 ? Math.round(size * 0.62) : Math.floor(size / 2) - 1;
+  const pos = list.length === 2
+    ? [{ left: 0, top: 0 }, { left: size - cell, top: size - cell }]
+    : list.length === 3
+      ? [{ left: (size - cell) / 2, top: 0 }, { left: 0, top: size - cell }, { left: size - cell, top: size - cell }]
+      : [{ left: 0, top: 0 }, { left: size - cell, top: 0 }, { left: 0, top: size - cell }, { left: size - cell, top: size - cell }];
+  return (
+    <div style={{ width: size, height: size, position: "relative", flexShrink: 0 }}>
+      {list.map((p, i) => (
+        <div key={i} style={{ position: "absolute", ...pos[i], borderRadius: "30%", boxShadow: "0 0 0 1.5px #fff" }}>
+          <Avatar name={p.name} photo={p.photo} size={cell} bgColor={COLORS[i % 4]} />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ⭐ 2026-11-03 단체방 이름이 비어 있으면 멤버 이름으로 자동 표시 ("홍길동, 김철수, 이영희 외 2명")
+function autoGroupName(names = []) {
+  if (!names.length) return "대화상대 없음";
+  if (names.length <= 3) return names.join(", ");
+  return `${names.slice(0, 3).join(", ")} 외 ${names.length - 3}명`;
+}
+
 export default function InternalMessenger({ user, userCompany = "", role = "", mobileMode = false, mobileVisible = false, onClose, onUnreadChange, controlledOpen, onOpenChange, linkedCompanyName = "", themeColor = "", excludeRoles = [] }) {
   const myUid = user?.uid || "";
   const myEmail = user?.email || "";
@@ -102,6 +133,14 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
   const [newGroupModal, setNewGroupModal] = useState(false);
   const [groupName, setGroupName] = useState("");
   const [groupMembers, setGroupMembers] = useState([]);
+  // ⭐ 2026-11-03 단체방(카톡식) — 멤버 검색 · 대화상대 보기 · 초대 · 이름 바꾸기 팝업
+  const [groupSearch, setGroupSearch] = useState("");
+  const [membersRoom, setMembersRoom] = useState(null); // 대화상대 목록 팝업 대상 방
+  const [inviteRoom, setInviteRoom] = useState(null);   // 초대 팝업 대상 방
+  const [inviteSel, setInviteSel] = useState([]);
+  const [inviteSearch, setInviteSearch] = useState("");
+  const [renameRoom, setRenameRoom] = useState(null);   // 이름 바꾸기 팝업 대상 방
+  const [renameText, setRenameText] = useState("");
   const [msgSearch, setMsgSearch] = useState("");
   const [photoUploading, setPhotoUploading] = useState(false);
 
@@ -122,6 +161,8 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
   const [replyTo, setReplyTo] = useState(null); // { id, text, senderName }
 
   const msgUnsub = useRef(null);
+  const serverMsgsRef = useRef({ roomId: null, list: [] }); // ⭐ 2026-11-03 읽음 처리용 — 지금 방에 받아둔 메시지
+  const roomsRef = useRef([]);
   const inputRef = useRef(null);
   const fileRef = useRef(null);
   const fileAllRef = useRef(null);
@@ -263,9 +304,17 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
           return tb - ta;
         });
       setRooms(list);
+      roomsRef.current = list;
     });
     return unsub;
   }, [myUid]);
+
+  // ⭐ 2026-11-03 열려 있는 방 정보(멤버·이름)를 실시간으로 맞춘다 — 누가 초대/나가기/이름변경하면 바로 반영
+  useEffect(() => {
+    if (!activeRoom?.id) return;
+    const live = rooms.find(r => r.id === activeRoom.id);
+    if (live && live !== activeRoom) setActiveRoom(live);
+  }, [rooms]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── 메시지 구독 ──
   useEffect(() => {
@@ -281,6 +330,7 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
       const serverMsgs = snap.docs
         .map(d => ({ id: d.id, ...d.data() }))
         .sort((a, b) => (a.createdAt?.toMillis?.() || 0) - (b.createdAt?.toMillis?.() || 0));
+      serverMsgsRef.current = { roomId: activeRoom.id, list: serverMsgs };
       setMessages(prev => {
         // 서버에 없는 optimistic 메시지만 유지 (중복 방지)
         const pendingOpt = prev.filter(m => m._optimistic && !serverMsgs.some(
@@ -416,19 +466,22 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
       [`unreadCount.${myUid}`]: 0,
     }).catch(() => {});
     setUnreadMap(prev => ({ ...prev, [roomId]: 0 }));
-    // 안읽은 메시지들에 readBy 추가 (복합 인덱스 없이)
+    // ⭐ 2026-11-03 안읽은 메시지들에 readBy 추가 — 화면에 받아둔 메시지 기준(예전엔 아무 50개만 골라 최신 글이 빠질 수 있었음)
+    //   · 안내 문구(system)는 읽음 숫자가 없으니 건너뜀
+    //   · 내가 초대되기 전 메시지는 건너뜀 → 나중에 들어온 사람 때문에 옛 메시지의 "1"이 잘못 사라지지 않게
+    const joinedMs = roomsRef.current.find(r => r.id === roomId)?.joinedAt?.[myUid]?.toMillis?.() || 0;
+    const apply = (docs) => docs.forEach(m => {
+      if (m.type === "system" || m._optimistic) return;
+      if ((m.readBy || []).includes(myUid)) return;
+      if (joinedMs && (m.createdAt?.toMillis?.() || 0) < joinedMs) return;
+      updateDoc(doc(db, MSGS_COLL, m.id), { readBy: arrayUnion(myUid) }).catch(() => {});
+    });
+    if (serverMsgsRef.current.roomId === roomId) { apply(serverMsgsRef.current.list); return; }
     getDocs(query(
       collection(db, MSGS_COLL),
       where("roomId", "==", roomId),
-      limit(50)
-    )).then(snap => {
-      snap.docs.forEach(d => {
-        const readBy = d.data().readBy || [];
-        if (!readBy.includes(myUid)) {
-          updateDoc(d.ref, { readBy: arrayUnion(myUid) }).catch(() => {});
-        }
-      });
-    }).catch(() => {});
+      limit(300)
+    )).then(snap => apply(snap.docs.map(d => ({ id: d.id, ...d.data() })))).catch(() => {});
   }, [myUid]);
 
   // ── 1:1 채팅 시작 (메시지 보내야 방 생성) ──
@@ -473,30 +526,97 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
   };
 
   // ── 단체 채팅방 만들기 ──
+  // ⭐ 2026-11-03 카톡식 — 방 이름은 선택(비우면 멤버 이름으로 자동 표시), 만들면 "○○님이 ○○님을 초대했습니다" 안내
   const createGroup = async () => {
-    if (!groupName.trim() || groupMembers.length === 0) return;
+    if (groupMembers.length === 0) return;
     const allMembers = [myUid, ...groupMembers];
     const profiles = { [myUid]: { name: myProfile?.name || myEmail.split("@")[0], photo: myProfile?.photo || "" } };
     groupMembers.forEach(uid => {
       const f = friends.find(x => x.uid === uid);
       if (f) profiles[uid] = { name: f.name, photo: f.photo || "" };
     });
-    const roomRef = await addDoc(collection(db, ROOMS_COLL), {
+    const name = groupName.trim();
+    const sysText = `${profiles[myUid].name}님이 ${groupMembers.map(u => profiles[u]?.name || "알 수 없음").join(", ")}님을 초대했습니다.`;
+    const joinedAt = {};
+    allMembers.forEach(u => { joinedAt[u] = serverTimestamp(); });
+    const roomData = {
       type: "group",
-      name: groupName.trim(),
+      name,
       members: allMembers,
       memberProfiles: profiles,
       company,
       createdBy: myUid,
-      lastMsg: "",
+      lastMsg: sysText,
       lastAt: serverTimestamp(),
-      lastSenderUid: "",
-    });
-    setActiveRoom({ id: roomRef.id, type: "group", name: groupName.trim(), members: allMembers });
+      lastSenderUid: "", // 안내 문구는 보낸 사람 없음 → 알림 배너 안 뜸
+      joinedAt,
+      lastRead: { [myUid]: serverTimestamp() },
+      unreadCount: { [myUid]: 0 },
+    };
+    const roomRef = await addDoc(collection(db, ROOMS_COLL), roomData);
+    addDoc(collection(db, MSGS_COLL), {
+      roomId: roomRef.id, type: "system", text: sysText,
+      senderUid: myUid, senderName: profiles[myUid].name,
+      createdAt: serverTimestamp(), readBy: [myUid], totalMembers: allMembers.length,
+    }).catch(() => {});
+    setActiveRoom({ id: roomRef.id, ...roomData });
+    setPendingRoom(null);
     setGroupName("");
     setGroupMembers([]);
+    setGroupSearch("");
     setNewGroupModal(false);
     setView("chat");
+  };
+
+  // ⭐ 2026-11-03 안내 문구(system) 남기기 — 가운데 회색 알약 모양, 푸시·알림배너·안읽음 숫자 없음
+  //   lastSenderUid를 비워 두면 목록 미리보기만 바뀌고 다른 사람 안읽음 숫자는 늘지 않는다
+  const postSystemMsg = async (room, text, extraRoomUpdate = {}) => {
+    if (!room?.id) return;
+    await addDoc(collection(db, MSGS_COLL), {
+      roomId: room.id, type: "system", text,
+      senderUid: myUid, senderName: myProfile?.name || myEmail.split("@")[0],
+      createdAt: serverTimestamp(), readBy: [myUid], totalMembers: room.members?.length || 1,
+    }).catch(() => {});
+    await updateDoc(doc(db, ROOMS_COLL, room.id), {
+      lastMsg: text, lastAt: serverTimestamp(), lastSenderUid: "",
+      [`lastRead.${myUid}`]: serverTimestamp(),
+      ...extraRoomUpdate,
+    }).catch(() => {});
+  };
+
+  // ⭐ 2026-11-03 대화상대 초대 (방에 없는 친구만)
+  const inviteMembers = async () => {
+    const room = inviteRoom;
+    if (!room?.id || inviteSel.length === 0) return;
+    const newUids = inviteSel.filter(u => !(room.members || []).includes(u));
+    if (!newUids.length) { setInviteRoom(null); return; }
+    const upd = { members: arrayUnion(...newUids) };
+    const names = [];
+    newUids.forEach(uid => {
+      const f = friends.find(x => x.uid === uid);
+      const nm = f?.name || "알 수 없음";
+      names.push(nm);
+      upd[`memberProfiles.${uid}`] = { name: nm, photo: f?.photo || "" };
+      upd[`joinedAt.${uid}`] = serverTimestamp();
+    });
+    const me = myProfile?.name || myEmail.split("@")[0];
+    await updateDoc(doc(db, ROOMS_COLL, room.id), upd).catch(() => {});
+    await postSystemMsg({ ...room, members: [...(room.members || []), ...newUids] }, `${me}님이 ${names.join(", ")}님을 초대했습니다.`);
+    setInviteRoom(null); setInviteSel([]); setInviteSearch("");
+  };
+
+  // ⭐ 2026-11-03 채팅방 이름 바꾸기 (비우면 멤버 이름 자동 표시로 돌아감)
+  const saveRename = async () => {
+    const room = renameRoom;
+    if (!room?.id) return;
+    const name = renameText.trim();
+    if (name === (room.name || "")) { setRenameRoom(null); return; }
+    const me = myProfile?.name || myEmail.split("@")[0];
+    const text = name
+      ? `${me}님이 채팅방 이름을 '${name}'(으)로 바꾸었습니다.`
+      : `${me}님이 채팅방 이름을 지웠습니다.`;
+    await postSystemMsg(room, text, { name });
+    setRenameRoom(null); setRenameText("");
   };
 
   // ── 메시지 전송 (pendingRoom이면 방 먼저 생성, optimistic update) ──
@@ -531,7 +651,7 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
       senderUid: myUid, senderName, senderPhoto: myProfile?.photo || "",
       createdAt: { toMillis: () => now.getTime(), toDate: () => now },
       edited: false, readBy: [myUid],
-      totalMembers: room.members?.length || 1,
+      totalMembers: room.members?.length || 1, memberUids: room.members || [],
       ...replyData,
     }]);
 
@@ -540,7 +660,7 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
       roomId: room.id, text, type: "text",
       senderUid: myUid, senderName, senderPhoto: myProfile?.photo || "",
       createdAt: serverTimestamp(), edited: false,
-      readBy: [myUid], totalMembers: room.members?.length || 1,
+      readBy: [myUid], totalMembers: room.members?.length || 1, memberUids: room.members || [],
       ...replyData,
     }).catch(() => {});
     const unreadUpdate = {};
@@ -571,7 +691,7 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
       roomId: room.id, text: "", type: "image", imageUrl: url,
       senderUid: myUid, senderName, senderPhoto: myProfile?.photo || "",
       createdAt: serverTimestamp(), readBy: [myUid],
-      totalMembers: room.members?.length || 1,
+      totalMembers: room.members?.length || 1, memberUids: room.members || [],
     });
     const others2 = room.members?.filter(uid => uid !== myUid) || [];
     const unreadUpdate2 = {};
@@ -605,7 +725,7 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
         roomId: room.id, text: file.name, type: "file",
         fileUrl: url, fileName: file.name, fileSize: file.size,
         senderUid: myUid, senderName, senderPhoto: myProfile?.photo || "",
-        createdAt: serverTimestamp(), readBy: [myUid], totalMembers: room.members?.length || 1,
+        createdAt: serverTimestamp(), readBy: [myUid], totalMembers: room.members?.length || 1, memberUids: room.members || [],
       });
       const upd = {};
       others.forEach(u => { upd[`unreadCount.${u}`] = increment(1); });
@@ -631,7 +751,7 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
         roomId: activeRoom.id, text: mapsUrl, type: "location", lat, lng,
         senderUid: myUid, senderName, senderPhoto: myProfile?.photo || "",
         createdAt: serverTimestamp(), readBy: [myUid],
-        totalMembers: activeRoom.members?.length || 1,
+        totalMembers: activeRoom.members?.length || 1, memberUids: activeRoom.members || [],
       });
       const upd = {};
       others.forEach(u => { upd[`unreadCount.${u}`] = increment(1); });
@@ -654,7 +774,7 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
       contactUid: friend.uid,
       senderUid: myUid, senderName, senderPhoto: myProfile?.photo || "",
       createdAt: serverTimestamp(), readBy: [myUid],
-      totalMembers: activeRoom.members?.length || 1,
+      totalMembers: activeRoom.members?.length || 1, memberUids: activeRoom.members || [],
     });
     const upd = {};
     others.forEach(u => { upd[`unreadCount.${u}`] = increment(1); });
@@ -676,7 +796,7 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
       roomId: activeRoom.id, text, type: "notice",
       senderUid: myUid, senderName, senderPhoto: myProfile?.photo || "",
       createdAt: serverTimestamp(), readBy: [myUid],
-      totalMembers: activeRoom.members?.length || 1,
+      totalMembers: activeRoom.members?.length || 1, memberUids: activeRoom.members || [],
     });
     const upd = {};
     others.forEach(u => { upd[`unreadCount.${u}`] = increment(1); });
@@ -726,13 +846,21 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
   };
 
   // ── 채팅방 나가기 ──
+  // ⭐ 2026-11-03 단체방은 "○○○님이 나갔습니다." 안내를 남기고 나감 — 남은 사람들 대화는 그대로(마지막 1명이 나가도 삭제 안 함)
   const leaveRoom = async (roomId) => {
     if (!window.confirm("채팅방에서 나가시겠습니까?\n나가면 대화 내용이 삭제됩니다.")) return;
+    const room = rooms.find(r => r.id === roomId) || (activeRoom?.id === roomId ? activeRoom : null);
+    if (room?.type === "group") {
+      const me = myProfile?.name || myEmail.split("@")[0];
+      const left = (room.members || []).filter(u => u !== myUid);
+      await postSystemMsg({ ...room, members: left }, `${me}님이 나갔습니다.`);
+    }
     await updateDoc(doc(db, ROOMS_COLL, roomId), {
       members: arrayRemove(myUid),
     }).catch(() => {});
     if (activeRoom?.id === roomId) {
       setActiveRoom(null);
+      setPendingRoom(null);
       setView("friends");
     }
   };
@@ -778,8 +906,17 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
       const otherUid = room.members?.find(uid => uid !== myUid);
       return room.memberProfiles?.[otherUid]?.name || "알 수 없음";
     }
-    return room.name || "그룹";
+    // ⭐ 2026-11-03 이름 없는 단체방은 나를 뺀 멤버 이름으로 자동 표시
+    return room.name || autoGroupName(getGroupPeople(room).map(p => p.name));
   };
+  // ⭐ 2026-11-03 단체방 멤버(나 제외) 이름·사진 — 방 목록 2x2 아바타, 자동 방 이름에 사용
+  const getGroupPeople = (room) => (room?.members || [])
+    .filter(uid => uid !== myUid)
+    .map(uid => {
+      const f = friends.find(x => x.uid === uid);
+      const p = room.memberProfiles?.[uid] || {};
+      return { uid, name: p.name || f?.name || "알 수 없음", photo: f?.photo || p.photo || "" };
+    });
   const getRoomPhoto = (room) => {
     if (!room) return "";
     if (room.type === "self") return myProfile?.photo || "";
@@ -850,6 +987,10 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
     memberProfiles: pendingRoom.roomData.memberProfiles,
   } : null);
 
+  // ⭐ 2026-11-03 단체방 팝업 열기
+  const openInvite = (room) => { setInviteRoom(room); setInviteSel([]); setInviteSearch(""); };
+  const openRename = (room) => { setRenameRoom(room); setRenameText(room?.name || ""); };
+
   // ── 공통 ChatView props ──
   const chatViewProps = displayRoom ? {
     room: displayRoom,
@@ -878,6 +1019,12 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
     onReply: (msg) => setReplyTo({ id: msg.id, text: msg.text, senderName: msg.senderName }),
     onAddReaction: addReaction,
     onSendToSelf: sendToSelf,
+    // ⭐ 2026-11-03 단체방 메뉴(≡)
+    groupPeople: displayRoom.type === "group" ? getGroupPeople(displayRoom) : [],
+    onShowMembers: () => activeRoom && setMembersRoom(activeRoom),
+    onInvite: () => activeRoom && openInvite(activeRoom),
+    onRename: () => activeRoom && openRename(activeRoom),
+    onLeave: () => activeRoom && leaveRoom(activeRoom.id),
   } : null;
 
   const friendsViewProps = {
@@ -891,6 +1038,10 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
     onNewGroup: () => setNewGroupModal(true),
     onClose: mobileMode ? onClose : () => setOpen(false), // FriendsView X closes panel
     onLeaveRoom: leaveRoom,
+    getGroupPeople,
+    onShowMembers: (room) => setMembersRoom(room),
+    onInviteRoom: openInvite,
+    onRenameRoom: openRename,
     myUid, mobileMode,
     themeHdr,
     activeRoomId: activeRoom?.id || (pendingRoom ? "_pending_" : null),
