@@ -45,7 +45,6 @@ import { BatchStatementsPanel, PenaltyCenter } from "./FleetPayDocs";
 import { AppStatusBadge } from "./FleetDriverExtra";
 import FixedRoutes from "./FixedRoutes";
 import FleetOrderPanel from "./FleetOrderPanel"; // ⭐ 2026-11-02 노선관리 오더 더블클릭 → 오더 복사/수정 패널
-import DeliverySignaturePage from "./DeliverySignaturePage";
 import { careSummary, vehicleDefaults } from "./vehicleCare";
 // ⭐ 2026-11-02 차량관리대장 — 회사별 맞춤 기능(companyFeatures.vehicleLedger)이 켜진 회사에만 모듈이 보인다
 import { useCompanyFeatures } from "./companyFeatures";
@@ -4992,11 +4991,11 @@ function FixedRoutesModes(props) {
   return (
     <div>
       <div className="inline-flex p-1 rounded-2xl bg-white border border-[#E3E8F0] mb-3 gap-1">
-        {[["routes", "고정노선"], ["board", "배차표"], ["excel", "엑셀 경로 정리"]].map(([k, l]) => (
+        {[["routes", "고정노선"], ["board", "배차표"]].map(([k, l]) => ( /* ⭐ 2026-11-03 엑셀 경로 정리 탭 제거 */
           <button key={k} type="button" onClick={() => setMode(k)} className={`h-9 px-4 rounded-xl text-[13px] font-black ${mode === k ? "bg-[#0F1A30] text-white" : "text-[#5B6B85] hover:bg-[#F3F6FA]"}`}>{l}</button>
         ))}
       </div>
-      {mode === "routes" ? <FixedRoutes {...props} /> : mode === "board" ? <RouteBoard companyName={props.companyName} /> : <DeliverySignaturePage />}
+      {mode === "board" ? <RouteBoard companyName={props.companyName} /> : <FixedRoutes {...props} />}
     </div>
   );
 }

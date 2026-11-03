@@ -63,12 +63,7 @@ export function guessKind(label) {
 }
 const col = (label, kind, field) => ({ id: rid(), label, kind, ...(field ? { field } : {}) });
 // 예시 양식(태진 삼다수 시트 모양)
-const SAMPLE = () => ({
-  name: "태진 삼다수", client: "", dropOffset: 1, payMethod: "",
-  groups: [{ name: "1센터", 상차지명: "", 상차지주소: "", defaults: [] }, { name: "2센터", 상차지명: "", 상차지주소: "", defaults: [] }, { name: "대양", 상차지명: "", 상차지주소: "", defaults: [] }],
-  columns: [col("구분", "no"), col("도착지", "field", "하차지명"), col("시군구", "field", "하차지주소"), col("차량번호", "field", "차량번호"), col("성명", "field", "이름"), col("휴대전화", "field", "전화번호"),
-    col("0.33L", "qty"), col("0.5L", "qty"), col("1.0L", "qty"), col("2.0L", "qty"), col("총계", "sum"), col("운송업체", "extra"), col("입차시간", "field", "상차시간"), col("비고", "field", "메모")],
-});
+
 const BLANK = () => ({ name: "", client: "", dropOffset: 1, payMethod: "", groups: [{ name: "기본", 상차지명: "", 상차지주소: "", defaults: [] }], columns: [col("도착지", "field", "하차지명"), col("시군구", "field", "하차지주소"), col("차량번호", "field", "차량번호"), col("성명", "field", "이름"), col("휴대전화", "field", "전화번호"), col("비고", "field", "메모")] });
 
 const card = "rounded-[18px] bg-white border border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_8px_20px_rgba(16,24,40,0.05)]";
@@ -456,7 +451,7 @@ function FormEditor({ init, onClose, onSaved, co, clients = [], places = [] }) {
       <div className={`${card} w-full max-w-[980px] my-6 p-6`}>
         <div className="flex items-center gap-3 mb-5">
           <div className="text-[18px] font-black text-[#0F1A30] flex-1">{f.id ? "양식 수정" : "새 배차표 양식"}</div>
-          {!f.id && <button onClick={() => setF((p) => ({ ...SAMPLE(), name: p.name || SAMPLE().name }))} className={`${btn} border border-[#DCE3EE] text-[#2D4C82]`}>태진 삼다수 예시로 채우기</button>}
+
           <button onClick={onClose} className={`${btn} text-[#5B6B85]`}>닫기</button>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mb-6">
@@ -969,7 +964,7 @@ export default function RouteBoard({ companyName = "" }) {
         <div className={`${card} p-10 text-center`}>
           <div className="text-[16px] font-black text-[#0F1A30]">배차표 양식이 없습니다</div>
           <div className="text-[13.5px] text-[#7A8AA6] mt-1.5 mb-4">화주사가 주는 시트 모양(칸 이름·순서)대로 양식을 한 번 만들면, 날짜마다 그 모양으로 입력합니다.</div>
-          <button onClick={() => setEdit(SAMPLE())} className={`${btn} bg-[#0F1A30] text-white px-6`}>양식 만들기</button>
+          <button onClick={() => setEdit(BLANK())} className={`${btn} bg-[#0F1A30] text-white px-6`}>양식 만들기</button>
         </div>
       ) : orders === null ? (
         <div className={`${card} p-10 text-center text-[14px] text-[#7A8AA6]`}>불러오는 중…</div>
