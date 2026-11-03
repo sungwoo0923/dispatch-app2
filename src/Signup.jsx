@@ -51,7 +51,6 @@ async function findCompanies(q, exact = false) {
     .filter((d) => { const n = (d.companyName || "").trim().toLowerCase(); return exact ? n === key : n.includes(key); });
 }
 
-const POSITIONS = ["대표", "전무", "이사", "팀장", "과장", "대리", "사원", "기타"];
 
 const SERVICE_TERMS = `제1조 (목적)
 본 약관은 S-Flow 물류 관리 플랫폼(이하 "서비스")의 운송사 회원 이용과 관련하여 권리, 의무 및 책임사항을 규정함을 목적으로 합니다.
@@ -76,7 +75,7 @@ const SERVICE_TERMS = `제1조 (목적)
 
 const PRIVACY_TERMS = `수집하는 개인정보 항목
 - 필수: 회사명, 사업자번호, 이름, 이메일, 핸드폰번호
-- 선택: 직책, 주소
+- 선택: 입사일, 주소 (직책은 승인하는 사람이 정함)
 
 수집 및 이용 목적
 - 운송사 회원 관리 및 서비스 제공
@@ -588,14 +587,7 @@ function SignupForm({ signupType, onBack }) {
             <p className="text-[12.5px] text-[#7A89A3] mt-1.5 pl-1">이력서에 자동으로 들어가고, 생일에 축하 알림이 갑니다.</p>
           </Field>
 
-          <Field label="직책">
-            <CustomSelect value={position} onChange={(e) => setPosition(e.target.value)}
-              className="w-full h-12 border border-[#DCE3EE] rounded-xl px-4 text-[15px] font-semibold text-[#0F1A30] bg-white">
-              <option value="">직책 선택 (선택사항)</option>
-              {POSITIONS.map((p) => <option key={p} value={p}>{p}</option>)}
-            </CustomSelect>
-          </Field>
-
+          {/* ⭐ 2026-11-03 직책은 가입자가 고르지 않음 — 승인하는 사람(마스터·인사)이 정한다. 그 자리에 입사일 */}
           <Field label="입사일">
             <CustomDatePicker value={hireDate} onChange={(e) => setHireDate(e.target.value)} placeholder="입사일 선택 (선택사항)" showIcon
               className="w-full h-12 border border-[#DCE3EE] rounded-xl px-4 text-[15px] font-semibold text-[#0F1A30] bg-white" />

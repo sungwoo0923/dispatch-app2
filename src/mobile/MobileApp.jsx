@@ -2074,7 +2074,7 @@ export default function MobileApp({ role: realRole, user, userCompany = "", forc
   const deptOkM = (m) => !!customRoleM && getMenuAccess(customRolesM, role, m) !== "hidden";
   const menuOkM = React.useCallback((m) => !customRoleM || getMenuAccess(customRolesM, role, m) !== "hidden", [customRoleM, customRolesM, role]);
   // 🔒 2026-11-01 조회만 허락된 화면에서 수정·저장·삭제를 누르면 바로 "권한 없음"
-  const PAGE_MENU_M = { list: "배차현황", detail: "배차현황", canceled: "배차현황", form: "배차관리", unassigned: "배차관리", fleet: "지입차관리", sales: "매출관리", ratecard: "단가표", fare: "운임조회", intel: "인사이트", "dept:settle": "정산관리", "dept:acct": "회계관리", "dept:cashbook": "자금관리", "dept:funds": "자금관리", "dept:assets": "비품관리", "dept:hr": "인사관리부", "dept:cert": "증명서발급", "dept:driverdocs": "기사관리", staff: "기사관리" };
+  const PAGE_MENU_M = { list: "배차현황", detail: "배차현황", canceled: "배차현황", form: "배차관리", unassigned: "배차관리", fleet: "지입차관리", sales: "매출관리", ratecard: "단가표", fare: "운임조회", intel: "인사이트", "dept:settle": "정산관리", "dept:acct": "회계관리", "dept:cashbook": "자금관리", "dept:funds": "자금관리", "dept:assets": "비품관리", "dept:hr": "인사관리부", "dept:cert": "증명서발급", "dept:driverdocs": "기사관리" }; // ⭐ 2026-11-03 가입 승인(staff)은 기사관리 조회권한과 별개 — PC처럼 관리자·경리·인사는 승인·거절 가능
   const [execFull, setExecFull] = useState(() => { try { return localStorage.getItem("kpExecFull") === "1"; } catch { return false; } });
   const deptMode = role === "test" ? "acct" : role === "hrManager" ? "hr" : isExecM && !execFull ? "exec" : null;
   const [page, setPage] = useState(deptMode ? "dept" : "list");
@@ -7735,7 +7735,6 @@ function MobileSideMenu({
             <MenuSection title="자금 · 총무" en="FINANCE · OFFICE" dark={dark} alwaysOpen>
               {ok("자금관리") && <MenuItem label="자금 관리" icon="wallet" onClick={() => onGo?.("dept:cashbook")} dark={dark} />}
               {ok("비품관리") && <MenuItem label="비품·자산" icon="list" onClick={() => onGo?.("dept:assets")} dark={dark} />}
-              {ok("배차현황") && <MenuItem label="배차현황(확인)" icon="truck" onClick={() => onGo?.("list")} dark={dark} />}
             </MenuSection>
           </>)}
           {deptMode === "hr" && (
