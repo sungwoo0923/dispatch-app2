@@ -2,7 +2,6 @@ import NoticeBoard, { canSeeNotice, noticeTargetUids } from "./NoticeBoard";
 import { useBoardNoticesWithPlatform } from "./PlatformNoticeBanner";
 import { subscribeUsersLive } from "./usersLive"; // ⭐ 2026-11-02 속도 — 직원 명부 구독 공유
 import DeptDashboard from "./DeptDashboard";
-import ObituaryWriter from "./ObituaryWriter";
 import { ExecScheduleBoard, TeamSchedule, canWriteExecSchedule } from "./ExecSuite";
 import { CompanyRules } from "./HrHub";
 import React, { useMemo, useState, useRef, useEffect } from "react";
@@ -919,8 +918,7 @@ export default function HomeDashboard({ role, user, userCompany = "", pending, d
   const canSetNoticePolicy = role === "totalMaster" || meHome.isMaster;
   // ✍ 공지·인수인계 글쓰기는 팝업 대신 넓은 작성 화면(HomeWriters.jsx)
   const { planId } = usePlan();
-  const [obitOpen, setObitOpen] = useState(false); // 부고 알림 작성
-  const writerActive = (boardTab === "공지사항" && (noticeOpen || obitOpen)) || (boardTab === "인수인계" && (handoverOpen || handoverEditMode));
+  const writerActive = (boardTab === "공지사항" && noticeOpen) || (boardTab === "인수인계" && (handoverOpen || handoverEditMode));
   return (
     <KpSubNav noBleed code="HOME" title="홈" icon="dashboard" active={boardTab}
       onSelect={(k) => { if (String(k).startsWith("lock:")) { openPlanLock(String(k).slice(5)); return; } setBoardTab(k); }} bodyClass="px-5 py-4"
@@ -1009,7 +1007,7 @@ export default function HomeDashboard({ role, user, userCompany = "", pending, d
       {boardTab === "rules" && <CompanyRules company={getViewCompany()} canEdit={role === "hrManager" || role === "totalMaster"} />}
 
       {/* ===== 사내 게시판(왼쪽 사이드바에서 고름) — 2026-10-28 디지털 리디자인 ===== */}
-      {boardTab === "공지사항" && obitOpen && <ObituaryWriter company={getViewCompany()} me={meHome} initial={selectedNotice?.category === "부고" && selectedNotice?.obit ? selectedNotice : null} onCancel={() => { setObitOpen(false); setSelectedNotice(null); }} onSaved={() => { setObitOpen(false); setSelectedNotice(null); }} />}
+      {/* ⭐ 2026-11-03 부고는 공지 작성 화면에서 분류 "부고"로(NoticeWriter가 부고장 화면으로 바꿔 준다) */}
       {boardTab === "공지사항" && noticeOpen && (
         <NoticeWriter me={meHome} company={getViewCompany()} initial={selectedNotice} onCancel={() => setNoticeOpen(false)} onSaved={() => { setNoticeOpen(false); setSelectedNotice(null); }} />
       )}
@@ -1053,10 +1051,6 @@ export default function HomeDashboard({ role, user, userCompany = "", pending, d
               </button>
             )}
             {boardTab === "공지사항" && canSetNoticePolicy && <NoticePolicyPicker company={getViewCompany()} policy={noticePolicy} dark />}
-            {!isViewer && boardTab === "공지사항" && canWriteNotice && (
-              <button type="button" onClick={() => { setNoticeOpen(false); setSelectedNotice(null); setObitOpen(true); }}
-                className="h-12 px-5 rounded-2xl bg-[#111] text-white text-[15px] font-black ring-1 ring-white/25 hover:bg-black transition whitespace-nowrap">부고 알림</button>
-            )}
           </div>
         </div>
       <div className={`${KP_HOME_CARD} overflow-hidden`}>
@@ -1070,7 +1064,7 @@ export default function HomeDashboard({ role, user, userCompany = "", pending, d
               onEdit={(n) => {
                 // ⭐ 2026-11-01 인사발령 공문은 인사관리부 › 인사발령에서 정정·취소(회원 정보까지 같이 되돌린다), 부고는 부고장 화면으로 다시 고친다
                 if (n.category === "인사발령" && n.hrOrder) { window.alert("인사발령 공문은 인사관리부 › 인사발령에서 대상 직원을 고른 뒤\n[올린 발령 공문] → [정정 발령] 또는 [발령 취소]로 고쳐 주세요.\n(직원 정보까지 함께 바로잡히고, 같은 공지가 [정정]/[취소]로 바뀝니다)"); return; }
-                if (n.category === "부고" && n.obit) { setSelectedNotice(n); setNoticeOpen(false); setObitOpen(true); return; }
+                // 부고(obit)도 같은 작성 화면 — NoticeWriter가 부고장 화면으로 연다
                 setSelectedNotice(n); setNoticeOpen(true);
               }}
               confirm={(message, onConfirm) => setConfirmDialog({ message, onConfirm })} />

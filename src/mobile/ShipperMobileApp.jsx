@@ -2158,7 +2158,7 @@ function ShipperNoticeM({ onBack }) {
         const snap = await getDocs(query(collection(db, "notices"), where("audience", "==", "shipper")));
         const list = snap.docs
           .map(d => ({ id: d.id, ...d.data() }))
-          .filter(n => n.companyName === linkedCompanyName)
+          .filter(n => n.companyName === linkedCompanyName && !((Number(n.publishAt) || 0) > Date.now())) // ⭐ 2026-11-03 예약 게시 전 글은 숨김
           .sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0))
           .slice(0, 50);
         setNotices(list);

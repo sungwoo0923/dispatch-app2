@@ -49,7 +49,7 @@ export const toBoardNotice = (n) => ({
   ...n, id: `plat:${n.id}`, platformId: n.id, _platform: true,
   content: n.body || "", contentHtml: n.bodyHtml || "", category: n.level || "안내", author: n.author || "KP-Flow 운영팀",
   ...(n.publishAt ? { createdAt: n.publishAt } : {}), // 예약 게시는 게시 시각을 작성일로
-  teams: [], targetUids: [], readBy: [], audience: "platform", // ⭐ 2026-11-03 직원 지정 없음(우리 회사 직원 전체)
+  teams: [], targetUids: [], readBy: [], viewedBy: Array.isArray(n.viewedBy) ? n.viewedBy : [], audience: "platform", // ⭐ 2026-11-03 조회수(viewedBy) // ⭐ 2026-11-03 직원 지정 없음(우리 회사 직원 전체)
 });
 // 회사 공지 + 플랫폼 공지를 합친 목록(최신순)
 export function useBoardNoticesWithPlatform(notices, company, dateOf) {

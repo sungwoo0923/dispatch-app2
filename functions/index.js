@@ -4958,12 +4958,15 @@ exports.notifyApproval = functions.firestore.document("approvals/{id}").onWrite(
 //  같은 회사 직원 · 팀 지정 공지는 그 팀 + 관리자만 · 화주사 대상 공지는 직원 + 연동 화주 계정은 화주 화면 공지라 제외
 //  ⭐ 2026-11-03 직원 지정 공지(targetUids)는 그 직원들에게만
 const NOTICE_ADMIN_ROLES = ["admin", "totalMaster", "superadmin"];
-exports.notifyNotice = functions.firestore.document("notices/{id}").onCreate(async (snap) => {
-  const n = snap.data() || {};
-  // ⭐ 2026-11-02 인사발령 공문은 전 직원 사내메일(kind "hr") 푸시가 "인사발령" 알림으로 따로 나간다 — 공지 푸시까지 가면 같은 알림이 2번
-  if (n.category === "인사발령") return null;
+// ⭐ 2026-11-03 공개 대상 여러 개(audiences: internal·shipper·driver) — 예전 공지(audience만)는 internal(직원)로 본다
+//  기사(driver)가 들어 있으면 같은 회사 기사(승인된 계정)에게도 보낸다. 직원(internal)이 빠져 있으면 직원에게는 보내지 않는다.
+//  (화주사 대상 공지라도 직원은 예전처럼 받는다 — audiences가 없을 때와 같게)
+async function sendNoticePush(n) {
   const company = n.companyName || "돌캐";
   const teams = Array.isArray(n.teams) ? n.teams : [];
+  const auds = Array.isArray(n.audiences) && n.audiences.length ? n.audiences : null;
+  const toStaff = !auds || auds.includes("internal") || auds.includes("shipper");
+  const toDriver = !!auds && auds.includes("driver");
   // ⭐ 2026-11-03 직원 지정 공지(targetUids) — 고른 직원에게만 푸시(관리자라도 지정 안 됐으면 보내지 않음 · 목록에서는 관리자도 볼 수 있음)
   const targetUids = new Set((Array.isArray(n.targetUids) ? n.targetUids : []).filter(Boolean));
   const users = await db.collection("users").where("companyName", "==", company).get();
@@ -4971,15 +4974,45 @@ exports.notifyNotice = functions.firestore.document("notices/{id}").onCreate(asy
   users.forEach((d) => {
     const u = d.data() || {};
     if (d.id === n.authorUid || !userTokens(u).length || u.approved === false || u.employmentStatus === "퇴사") return;
-    if (["driver", "shipper", "cafeUser"].includes(u.role)) return;
-    if (targetUids.size) { if (!targetUids.has(d.id)) return; }
-    else if (teams.length && !NOTICE_ADMIN_ROLES.includes(u.role) && !teams.includes(String(u.team || "").trim())) return;
+    if (["shipper", "cafeUser"].includes(u.role)) return;
+    if (u.role === "driver") {
+      if (!toDriver) return;
+    } else {
+      if (!toStaff) return;
+      if (targetUids.size) { if (!targetUids.has(d.id)) return; }
+      else if (teams.length && !NOTICE_ADMIN_ROLES.includes(u.role) && !teams.includes(String(u.team || "").trim())) return;
+    }
     if (!isPushTypeEnabled(u.pushPrefs, "공지사항")) return;
     tokens.push(...userTokens(u));
   });
   const title = `◆ ${n.category || "공지사항"} · ${n.author || ""}`;
   const body = `${n.title || ""}${n.content ? `\n${String(n.content).replace(/\s+/g, " ").slice(0, 80)}` : ""}`;
-  await sendPushAndCleanup([...new Set(tokens)], { notification: { title, body }, android: { priority: "high" } }, "공지사항").catch((e) => console.error("공지 푸시 실패:", e));
+  const list = [...new Set(tokens)];
+  await sendPushAndCleanup(list, { notification: { title, body }, android: { priority: "high" } }, "공지사항").catch((e) => console.error("공지 푸시 실패:", e));
+  return list.length;
+}
+exports.notifyNotice = functions.firestore.document("notices/{id}").onCreate(async (snap) => {
+  const n = snap.data() || {};
+  // ⭐ 2026-11-02 인사발령 공문은 전 직원 사내메일(kind "hr") 푸시가 "인사발령" 알림으로 따로 나간다 — 공지 푸시까지 가면 같은 알림이 2번
+  if (n.category === "인사발령") return null;
+  // ⭐ 2026-11-03 예약 게시 — publishAt(ms)이 미래면 지금은 보내지 않고 sendScheduledNotices가 그 시각에 보낸다
+  if ((Number(n.publishAt) || 0) > Date.now()) return null;
+  await sendNoticePush(n);
+  return null;
+});
+// ⭐ 2026-11-03 회사 공지 예약 게시 — 5분마다 pushPending인 공지 중 게시 시각이 지난 것에 푸시
+exports.sendScheduledNotices = functions.pubsub.schedule("every 5 minutes").timeZone("Asia/Seoul").onRun(async () => {
+  const snap = await db.collection("notices").where("pushPending", "==", true).get();
+  const now = Date.now();
+  for (const d of snap.docs) {
+    const n = d.data() || {};
+    if ((Number(n.publishAt) || 0) > now) continue;
+    // 먼저 표시를 바꿔 두 번 보내지 않게(다음 실행과 겹쳐도)
+    await d.ref.set({ pushPending: false, pushedAt: FieldValue.serverTimestamp() }, { merge: true });
+    if (n.category === "인사발령") continue;
+    const cnt = await sendNoticePush(n).catch((e) => { console.error("예약 회사 공지 푸시 실패:", e); return 0; });
+    console.log(`[예약 회사 공지] ${d.id} ${n.title} → ${cnt}대`);
+  }
   return null;
 });
 

@@ -103,7 +103,7 @@ export default function ObituaryWriter({ company, me = {}, onCancel, onSaved, in
         });
         noticeKey = `notice_${initial.id}_v${(initial.editVer || 0) + 1}`;
       } else {
-        const r = await addDoc(collection(db, "notices"), { title, category: "부고", content: text(), audience: "internal", image, obit: f, teams: [], pinned: false, author: me.name || "", authorUid: me.uid || "", createdAt: serverTimestamp(), companyName: company });
+        const r = await addDoc(collection(db, "notices"), { title, category: "부고", content: text(), audience: "internal", audiences: ["internal"], image, obit: f, teams: [], pinned: false, author: me.name || "", authorUid: me.uid || "", createdAt: serverTimestamp(), companyName: company });
         noticeKey = `notice_${r.id}`;
       }
       if (mail) {
