@@ -599,9 +599,11 @@ function TeamScheduleCompany({ company, modeSwitch }) {
           </div>
           <div className="flex items-center gap-1.5 flex-wrap">
             {modeSwitch}
+            <span className="inline-flex items-center gap-1.5">
             <button type="button" onClick={() => move(-1)} className="w-9 h-9 rounded-xl bg-white/10 font-black">‹</button>
             <span className="h-9 px-3.5 rounded-xl bg-white text-[#0B1530] font-black grid place-items-center tabular-nums" style={{ fontFamily: MONO }}>{ym.replace("-", ".")}</span>
             <button type="button" onClick={() => move(1)} className="w-9 h-9 rounded-xl bg-white/10 font-black">›</button>
+            </span>
           </div>
         </div>
         <div className="relative mt-3 grid grid-cols-2 md:grid-cols-4 gap-2">
@@ -795,10 +797,12 @@ function ExecScheduleCompany({ company, me = {}, canWrite = false, modeSwitch })
           </div>
           <div className="flex items-center gap-1.5 flex-wrap">
             {modeSwitch}
+            <span className="inline-flex items-center gap-1.5">
             <button type="button" onClick={() => move(-1)} className="w-10 h-10 rounded-xl bg-white/10 border border-white/10 font-black">‹</button>
             <span className="h-10 px-4 rounded-xl bg-white text-[#0B1530] font-black grid place-items-center tabular-nums text-[15px]" style={{ fontFamily: MONO }}>{ym.replace("-", ".")}</span>
             <button type="button" onClick={() => move(1)} className="w-10 h-10 rounded-xl bg-white/10 border border-white/10 font-black">›</button>
-            {canWrite && <button type="button" onClick={() => setEdit(blank())} className="h-10 px-4 rounded-xl text-[#1A1405] text-[14px] font-black ml-1" style={{ background: "linear-gradient(180deg,#F3E3BC,#D7BC82)" }}>+ 일정 등록</button>}
+            {canWrite && <button type="button" onClick={() => setEdit(blank())} className="h-10 px-4 rounded-xl text-[#1A1405] text-[14px] font-black ml-1 whitespace-nowrap" style={{ background: "linear-gradient(180deg,#F3E3BC,#D7BC82)" }}>+ 일정 등록</button>}
+            </span>
           </div>
         </div>
         <div className="flex gap-1.5 overflow-x-auto pb-1">

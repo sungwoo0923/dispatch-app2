@@ -53,6 +53,12 @@ export function usePersonalMode() {
   };
   return [on, set];
 }
+// 메뉴에서 바로 개인 일정으로 들어갈 때(모바일 사내 업무 › 개인 일정) — 스위치를 켜 두고 직원 일정 화면으로 이동
+export function turnOnPersonalMode() {
+  const uid = auth.currentUser?.uid || "";
+  try { localStorage.setItem(LS_KEY(uid), "1"); } catch { /* 무시 */ }
+  if (uid) setDoc(doc(db, "userPrefs", uid), { personalScheduleMode: true }, { merge: true }).catch(() => {});
+}
 // 켜기/끄기 스위치 — dark: 어두운 머리말 위(직원 일정·임원 일정 모두 어두운 머리말)
 export function PersonalModeSwitch({ on, onChange }) {
   return (
@@ -145,10 +151,12 @@ export function PersonalSchedule({ company, modeSwitch, staff = [] }) {
           </div>
           <div className="flex items-center gap-1.5 flex-wrap">
             {modeSwitch}
-            <button type="button" onClick={() => move(-1)} className="w-9 h-9 rounded-xl bg-white/10 font-black">‹</button>
-            <span className="h-9 px-3.5 rounded-xl bg-white text-[#0B1530] font-black grid place-items-center tabular-nums" style={{ fontFamily: MONO }}>{ym.replace("-", ".")}</span>
-            <button type="button" onClick={() => move(1)} className="w-9 h-9 rounded-xl bg-white/10 font-black">›</button>
-            <button type="button" onClick={() => setEdit(blank())} className="h-9 px-4 rounded-xl bg-white text-[#0F1A30] text-[13.5px] font-black">+ 일정 등록</button>
+            <div className="flex items-center gap-1.5">{/* 달 이동·등록은 한 묶음(휴대폰에서 줄이 갈라지지 않게) */}
+              <button type="button" onClick={() => move(-1)} className="w-9 h-9 rounded-xl bg-white/10 font-black">‹</button>
+              <span className="h-9 px-3.5 rounded-xl bg-white text-[#0B1530] font-black grid place-items-center tabular-nums" style={{ fontFamily: MONO }}>{ym.replace("-", ".")}</span>
+              <button type="button" onClick={() => move(1)} className="w-9 h-9 rounded-xl bg-white/10 font-black">›</button>
+              <button type="button" onClick={() => setEdit(blank())} className="h-9 px-4 rounded-xl bg-white text-[#0F1A30] text-[13.5px] font-black whitespace-nowrap">+ 일정 등록</button>
+            </div>
           </div>
         </div>
       </div>
@@ -263,7 +271,7 @@ export function PersonalSchedule({ company, modeSwitch, staff = [] }) {
                   <span className="text-[14px] font-black text-[#0F1A30]">휴대폰 푸시 알림 받기</span>
                 </label>
                 <div className="text-[12.5px] text-[#7A879C] leading-relaxed">
-                  {edit.remind !== "none" && remindAtOf(edit) > 0 && <>알림 시각: <b className="text-[#1B2B4B]">{new Date(remindAtOf({ ...edit, remind: edit.allDay && TIMED_ONLY.has(edit.remind) ? "morning" : edit.remind })).toLocaleString("ko-KR", { month: "numeric", day: "numeric", weekday: "short", hour: "2-digit", minute: "2-digit" })}</b><br /></>}
+                  {edit.remind !== "none" && remindAtOf(edit) > 0 && <>알림 시각: <b className="text-[#1B2B4B]">{new Date(remindAtOf({ ...edit, remind: edit.allDay && TIMED_ONLY.has(edit.remind) ? "morning" : edit.remind })).toLocaleString("ko-KR", { timeZone: "Asia/Seoul", month: "numeric", day: "numeric", weekday: "short", hour: "2-digit", minute: "2-digit" })}</b><br /></>}
                   일정 당일에는 PC에 접속하면 오른쪽 아래 알림, 휴대폰은 앱을 열면 위쪽 알림으로도 알려 드립니다.
                 </div>
               </div>

@@ -553,7 +553,7 @@ function NoticesPanel() {
             <div className="flex items-center gap-2 flex-wrap">
               <span className="w-[150px]"><CustomDatePicker value={f.pubDate || ""} onChange={(e) => set({ pubDate: e.target.value })} className="h-10 w-full px-3 rounded-xl border border-[#DCE3EE] text-[14px] font-semibold" /></span>
               <TimeSelect value={f.pubTime || ""} onChange={(v) => set({ pubTime: v })} emptyLabel="시각 선택" minuteStep={10} />
-              {pubMsOf(f.pubDate, f.pubTime) > 0 && <span className="text-[13px] font-bold text-[#2D4C82]">{new Date(pubMsOf(f.pubDate, f.pubTime)).toLocaleString("ko-KR", { month: "numeric", day: "numeric", weekday: "short", hour: "2-digit", minute: "2-digit" })}에 게시</span>}
+              {pubMsOf(f.pubDate, f.pubTime) > 0 && <span className="text-[13px] font-bold text-[#2D4C82]">{new Date(pubMsOf(f.pubDate, f.pubTime)).toLocaleString("ko-KR", { timeZone: "Asia/Seoul", month: "numeric", day: "numeric", weekday: "short", hour: "2-digit", minute: "2-digit" })}에 게시</span>}
             </div>
           )}
         </div>
@@ -610,7 +610,7 @@ function NoticesPanel() {
                       <span style={{ fontFamily: MONO }}>{msOf(n.createdAt) ? ymd(new Date(msOf(n.createdAt))) : ""}{n.endDate ? ` ~ ${n.endDate}` : ""}</span>
                       {n.banner === false && <span>배너 없음</span>}
                       {on && (n.publishAt || 0) > Date.now()
-                        ? <span className="px-2 py-0.5 rounded-md font-black bg-[#FFF3B0] text-[#7A5B00]">⏰ 예약 {new Date(n.publishAt).toLocaleString("ko-KR", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })}</span>
+                        ? <span className="px-2 py-0.5 rounded-md font-black bg-[#FFF3B0] text-[#7A5B00]">⏰ 예약 {new Date(n.publishAt).toLocaleString("ko-KR", { timeZone: "Asia/Seoul", month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })}</span>
                         : <span className={`font-black ${on ? "text-[#1B2B4B]" : "text-[#9AA9C3]"}`}>{on ? "● 게시 중" : expired ? "기간 종료" : "내림"}</span>}
                     </div>
                   </div>

@@ -6,7 +6,7 @@ import { useMyProfile } from "../userNames";
 import { useCompanyDropdownSync, dropdownList } from "../companyDropdownOptions";
 import { CompanyOptionPicker } from "../companyOptionPicker"; // 🧾 2026-11-02 지급방식·배차방식·상/하차방법 공용 선택기(＋ 추가)
 import { AttendanceQuickButton, officeRadii, CheckoutReminderHost } from "../attendanceQuick";
-import { PersonalTodayHost } from "../PersonalSchedule";
+import { PersonalTodayHost, turnOnPersonalMode } from "../PersonalSchedule";
 import { useCustomRoles, findCustomRole, getMenuAccess, roleScreen } from "../customRoles";
 import { useReadOnlyGuard } from "../readOnlyGuard";
 import { confirmLeave } from "../leaveGuard";
@@ -7788,6 +7788,7 @@ function MobileSideMenu({
             {deptMode !== "exec" && <MenuItem label="임원 일정" icon="pin" onClick={() => onGo?.("dept:execsched")} dark={dark} />}
             {/* ⭐ 2026-11-01 직원 일정(연차·외근 등 부재 달력)은 모든 직원이 본다 — PC 홈 › 사내 게시판과 같게 */}
             <MenuItem label="직원 일정" icon="clock" onClick={() => onGo?.("dept:schedule")} dark={dark} />
+            <MenuItem label="개인 일정" icon="pin" onClick={() => { turnOnPersonalMode(); onGo?.("dept:schedule"); }} dark={dark} />{/* ⭐ 2026-11-03 나만 보는 일정(직원 일정의 [개인일정] 스위치를 켜고 이동) */}
             <MenuItem label="사내 규정" icon="list" onClick={() => onGo?.("dept:rules")} dark={dark} />
             {fareMenu.feature && role !== "driver" && role !== "shipper" && <MenuItem label="운임 규칙" icon="money" onClick={() => onGo?.("dept:farerules")} dark={dark} />}{/* ⭐ 2026-11-02 운임규칙 */}
             {ok("전자결재") && <MenuItem label="전자결재" icon="stamp" onClick={() => onGo?.("approval")} badge={(alertCounts?.approval || 0) + (alertCounts?.handover || 0) || null} dark={dark} />}
