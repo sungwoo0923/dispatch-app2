@@ -1,17 +1,28 @@
 // ======================= src/ColumnStyle.jsx =======================
 // 🎨 2026-11-03 컬럼 색 변경 — 표 머리글(컬럼명)에서 오른쪽 마우스 → "색 변경"
 //  · 머리글과 그 아래 칸(내용)의 배경색 · 글씨색 · 글씨 크기 · 굵기를 따로 바꾼다
-//  · 모든 표에서 동작(표마다 · 컬럼명마다 기억) — 이 PC(브라우저)에 저장
+//  · 모든 표에서 동작(표마다 · 컬럼명마다 기억) — 회사 전체 공용(colStyles/{회사}) · 누가 바꿔도 모든 직원 화면에 바로 반영
 //  · 표는 머리글 이름들로 알아본다(같은 화면의 같은 표면 다시 들어와도 그대로)
 import React from "react";
 import { createPortal } from "react-dom";
+import { doc, onSnapshot, setDoc, serverTimestamp } from "firebase/firestore";
+import { db, auth } from "./firebase";
+import { getTenant } from "./fsTenant";
 
 const MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
 const LS = "kpColStyle:v1";
 const read = () => { try { return JSON.parse(localStorage.getItem(LS) || "{}") || {}; } catch { return {}; } };
 let STORE = read();
 const subs = new Set();
-const save = () => { try { localStorage.setItem(LS, JSON.stringify(STORE)); } catch { /* 무시 */ } subs.forEach((f) => f()); };
+let CO = ""; // 지금 회사 — 색은 회사 전체가 같이 쓴다
+const lsKey = () => `${LS}:${CO}`;
+const cache = () => { try { localStorage.setItem(lsKey(), JSON.stringify(STORE)); } catch { /* 무시 */ } };
+const save = () => {
+  cache(); subs.forEach((f) => f());
+  if (!CO) return;
+  setDoc(doc(db, "colStyles", CO), { companyName: CO, styles: STORE, updatedAt: serverTimestamp(), updatedBy: auth?.currentUser?.email || "" })
+    .catch((e) => { console.warn("[colStyles] 저장 실패", e?.code || e); try { window.dispatchEvent(new CustomEvent("kp-colstyle-error")); } catch { /* 무시 */ } });
+};
 
 const thText = (th) => String(th?.innerText || th?.textContent || "").replace(/[▲▼↕⇅]/g, "").replace(/\s+/g, " ").trim();
 const headCells = (table) => { const tr = table?.tHead?.rows?.[table.tHead.rows.length - 1]; return tr ? [...tr.cells] : []; };
@@ -153,7 +164,7 @@ function StyleModal({ target, onClose }) {
               </div>
             </div>
           </div>
-          <div className="text-[11.5px] font-semibold text-[#9AA9C3]">이 표의 “{col}” 칸에만 적용되고, 이 PC에 기억됩니다.</div>
+          <div className="text-[11.5px] font-semibold text-[#9AA9C3]">이 표의 “{col}” 칸에 적용되고, 회사 직원 모두의 화면에 바로 반영됩니다.</div>
         </div>
 
         <div className="px-5 py-3.5 border-t border-[#E3E8F0] bg-white flex items-center gap-2">
@@ -170,7 +181,26 @@ function StyleModal({ target, onClose }) {
 }
 
 // 앱에 한 번만 붙인다 — 머리글 오른쪽 클릭 메뉴 + 저장된 색을 표에 입히기
-export default function ColumnStyleHost() {
+export default function ColumnStyleHost({ company = "" }) {
+  const co = String(getTenant() || company || "").trim();
+  // 회사 공용 색 — 실시간으로 받아 온다(먼저 이 PC에 기억한 걸로 바로 그리고, 서버 값이 오면 바꾼다)
+  React.useEffect(() => {
+    CO = co;
+    try { STORE = JSON.parse(localStorage.getItem(lsKey()) || "null") || (co ? {} : read()); } catch { STORE = {}; }
+    subs.forEach((f) => f());
+    if (!co) return undefined;
+    let un = null;
+    try {
+      un = onSnapshot(doc(db, "colStyles", co), (snap) => {
+        const d = snap.exists() ? snap.data() || {} : {};
+        STORE = d.styles && typeof d.styles === "object" ? d.styles : {};
+        cache(); subs.forEach((f) => f());
+      }, (e) => console.warn("[colStyles] 읽기 실패", e?.code || e));
+    } catch { /* 무시 */ }
+    return () => { try { un?.(); } catch { /* 무시 */ } };
+  }, [co]);
+  const [err, setErr] = React.useState(false);
+  React.useEffect(() => { const h = () => { setErr(true); setTimeout(() => setErr(false), 4000); }; window.addEventListener("kp-colstyle-error", h); return () => window.removeEventListener("kp-colstyle-error", h); }, []);
   const [menu, setMenu] = React.useState(null);
   const [target, setTarget] = React.useState(null);
   const styleRef = React.useRef(null);
@@ -183,7 +213,7 @@ export default function ColumnStyleHost() {
     const mo = new MutationObserver((list) => { for (const m of list) { if (m.target?.closest?.("thead") || [...m.addedNodes].some((n) => n.nodeType === 1 && (n.tagName === "TABLE" || n.querySelector?.("table")))) { run(); return; } } });
     mo.observe(document.body, { childList: true, subtree: true });
     const sub = () => rebuild(el); subs.add(sub);
-    const onStore = (e) => { if (e.key === LS) { STORE = read(); rebuild(el); } };
+    const onStore = () => {};
     window.addEventListener("storage", onStore);
     return () => { mo.disconnect(); subs.delete(sub); window.removeEventListener("storage", onStore); clearTimeout(t); el.remove(); };
   }, []);
@@ -228,6 +258,7 @@ export default function ColumnStyleHost() {
         document.body
       )}
       {target && <StyleModal target={target} onClose={() => setTarget(null)} />}
+      {err && createPortal(<div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[2147483200] px-4 py-2.5 rounded-xl bg-[#0F1A30] text-white text-[12.5px] font-bold shadow-[0_12px_30px_rgba(6,12,26,.4)]">색 설정을 회사 전체에 저장하지 못했습니다 · 이 PC에만 적용됩니다</div>, document.body)}
     </>
   );
 }

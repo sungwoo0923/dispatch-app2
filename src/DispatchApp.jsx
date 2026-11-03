@@ -8666,7 +8666,7 @@ return (
       )}
 
       {/* ---------------- 화면 렌더링 ---------------- */}
-      <ColumnStyleHost />
+      <ColumnStyleHost company={userCompany || localStorage.getItem("userCompany") || ""} />
       <main className={`kp-main ${menu === "HOME" ? "kp-main-bare" : ""} rounded shadow p-4 w-full min-w-0 ${darkMode ? "bg-gray-900 text-gray-100" : "bg-white text-gray-900"}`}>
         {!darkMode && <KpPageHeader menu={menu} />}
         {menu === "HOME" && (
