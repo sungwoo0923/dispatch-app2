@@ -4,7 +4,7 @@
 //    배차현황(DispatchStatus)을 그대로 쓰고, 표의 열만 그 양식(시트 제목줄) 순서로 바꾼다(fixedForm).
 //  · 화면을 열어 두면 30초마다 서버가 시트와 맞춘다(새 날짜 탭·새 줄 → 오더, 시트에서 바뀐 칸 → 프로그램, 프로그램에서 바꾼 칸 → 시트)
 import React from "react";
-import { collection, onSnapshot, query, where, doc, setDoc, serverTimestamp } from "firebase/firestore";
+import { collection, onSnapshot, query, where, doc, setDoc, updateDoc, serverTimestamp } from "firebase/firestore";
 import { db, auth } from "./firebase";
 import { createPortal } from "react-dom";
 import CustomDatePicker from "./CustomDatePicker";
@@ -352,6 +352,11 @@ export default function FixedRouteStatusHost({ company, dispatchData = [], rende
           </div>
           <div className="flex-1" />
           <div className="flex items-center gap-2 flex-wrap">
+            {form && !disabled && (() => { const n = Object.values(form.삭제한줄 || {}).reduce((a, x) => a + (Number(x) || 0), 0); return n > 0 && (
+              <button type="button" title="프로그램에서 지운 시트 줄을 다시 오더로 가져옵니다(시트에 줄이 남아 있는 것만)"
+                onClick={async () => { if (!window.confirm(`지운 줄 ${n}건을 시트에서 다시 가져올까요?\n(시트에 그 줄이 남아 있는 것만 다시 생깁니다)`)) return; try { await updateDoc(doc(db, "routeBoards", form.id), { 삭제한줄: {} }); setTimeout(() => runSync({ ...form, 삭제한줄: {} }, false), 600); } catch (e) { window.alert(e?.message || e); } }}
+                className="h-10 px-3.5 rounded-xl inline-flex items-center gap-1.5 text-[13px] font-black bg-white/[0.06] border border-white/15 text-white/85 hover:bg-white/[0.12]">지운 줄 다시 가져오기 <span className="tabular-nums" style={{ fontFamily: MONO }}>{n}</span></button>
+            ); })()}
             {form && !disabled && (
               <button type="button" onClick={() => setAddOpen(true)} title="이 양식에 오더 추가 — 시트에도 새 줄로 들어갑니다"
                 className="h-10 px-3.5 rounded-xl inline-flex items-center gap-1.5 text-[13px] font-black bg-white text-[#0F1A30] hover:bg-[#EEF2F8]">＋ 오더 추가</button>
