@@ -405,6 +405,7 @@ function RateTableEditor({ table, name, onChange }) {
   );
 }
 
+const isAdminLike = () => { try { const r = localStorage.getItem("role"); return r === "admin" || r === "totalMaster" || auth.currentUser?.email === "tjddnqkf@naver.com"; } catch { return false; } };
 function FormEditor({ init, onClose, onSaved, co, clients = [], places = [] }) {
   const [f, setF] = React.useState(() => JSON.parse(JSON.stringify(init)));
   const [busy, setBusy] = React.useState(false);
@@ -483,7 +484,7 @@ function FormEditor({ init, onClose, onSaved, co, clients = [], places = [] }) {
           {sheet.err && <div className="mt-2 text-[13px] font-semibold text-red-600">{sheet.err}</div>}
           <ShareNote />
           {/* ⭐ 2026-11-03 연결할 탭 — 보통은 날짜 이름 탭(26-11-03)을 날짜별로 자동, 테스트할 땐 고른 탭 하나만 */}
-          {String(f.sheetUrl || "").trim() && (sheet.tabs || f.fixedTab) && (
+          {String(f.sheetUrl || "").trim() && (sheet.tabs || f.fixedTab) && (f.fixedTab || isAdminLike()) && ( /* ⭐ 테스트용 탭 고정은 관리자·최고관리자만(이미 켜져 있으면 끌 수 있게 보임) */
             <label className="mt-2.5 flex items-start gap-2 cursor-pointer">
               <input type="checkbox" checked={!!f.fixedTab} onChange={(e) => setF((p) => ({ ...p, fixedTab: e.target.checked ? (sheet.tab || p.fixedTab || "") : "" }))} className="mt-0.5 w-[18px] h-[18px] accent-[#1B2B4B]" />
               <span className="text-[13px] text-[#3A4A66] leading-relaxed"><b className="text-[#0F1A30]">이 탭만 연결(테스트용)</b>

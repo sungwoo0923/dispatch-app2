@@ -418,10 +418,17 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
       rooms.forEach(r => roomsSeenRef.current.set(r.id, r.lastAt?.toMillis?.() || 0));
       return;
     }
+    // ⭐ 2026-11-03 이미 읽은 톡은 다시 안 띄움 — 앱을 껐다 켜면 처음엔 기기에 저장된 예전 방 목록이 왔다가 서버 최신 목록이 와서
+    //   새 메시지로 착각해 읽은 톡 배너가 다시 떴다. 내가 그 방을 마지막으로 읽은 뒤의 메시지 + 이 기기에서 아직 안 띄운 것만.
+    let shown = {};
+    try { shown = JSON.parse(localStorage.getItem(`kpMsgToastSeen:${myUid}`) || "{}") || {}; } catch { shown = {}; }
+    let shownChanged = false;
     rooms.forEach(room => {
       const ms = room.lastAt?.toMillis?.() || 0;
-      const prevMs = roomsSeenRef.current.get(room.id) || 0;
-      if (ms > prevMs && room.lastSenderUid && room.lastSenderUid !== myUid) {
+      const prevMs = Math.max(roomsSeenRef.current.get(room.id) || 0, Number(shown[room.id] || 0));
+      const readMs = room.lastRead?.[myUid]?.toMillis?.() || 0;
+      if (ms > prevMs && ms > readMs && room.lastSenderUid && room.lastSenderUid !== myUid) {
+        shown[room.id] = ms; shownChanged = true;
         const alreadyViewing = isVisibleRef.current && activeRoom?.id === room.id;
         if (notifyEnabled && !alreadyViewing) {
           const senderName = room.memberProfiles?.[room.lastSenderUid]?.name
@@ -432,6 +439,7 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
       }
       roomsSeenRef.current.set(room.id, ms);
     });
+    if (shownChanged) { try { localStorage.setItem(`kpMsgToastSeen:${myUid}`, JSON.stringify(shown)); } catch { /* 무시 */ } }
   }, [rooms, myUid, notifyEnabled]);
 
   useEffect(() => {

@@ -281,7 +281,9 @@ function UsagePanel() {
   const today = ymd(); const dayNo = Number(today.slice(8)); const days = new Date(Number(today.slice(0, 4)), Number(today.slice(5, 7)), 0).getDate();
   const rows = mergeCompanies(stats.companies, live).filter((c) => c.kind !== "shipper").map((c) => {
     const planId = plans[c.name]?.planId || "";
-    const projected = dayNo ? Math.round(((c.m?.cnt || 0) / dayNo) * days) : 0;
+    // ⭐ 월말 예상 = 이번 달에 이미 잡힌 오더(미래 예약 포함)와, 오늘까지 건수를 한 달로 늘린 값 중 큰 쪽 — 단, 7일 전에는 늘리지 않음(초반 몇 건이 10배로 부풀던 문제)
+    const toDate = c.m?.toDate ?? (c.m?.cnt || 0);
+    const projected = Math.max(c.m?.cnt || 0, dayNo >= 7 ? Math.round((toDate / dayNo) * days) : toDate);
     const u = planUsageOf(c, planId, sales, projected);
     const p = u?.plan;
     return { c, planId, p, u, projected, storageGB: u ? u.storageGB : Math.round(((c.storageKB || 0) / 1048576) * 100) / 100, total: p ? Number(p.price || 0) + u.over : 0 };
@@ -320,7 +322,7 @@ function UsagePanel() {
                 <td className="px-3 py-2.5 font-black text-[#0F1A30] whitespace-nowrap">{c.name}</td>
                 <td className="px-3 py-2.5 text-center whitespace-nowrap">{p ? <span className="inline-block px-2.5 py-1 rounded-lg bg-[#0F1A30] text-white text-[12px] font-black">{p.name}</span> : <span className="text-[12px] font-bold text-[#9AA9C3]">미지정(한도 없음)</span>}</td>
                 <td className="px-3 py-2.5"><UsageBar used={c.staff || 0} limit={p ? Number(p.seats) : 0} unit="명" /></td>
-                <td className="px-3 py-2.5"><UsageBar used={projected} limit={p ? Number(p.orders) : 0} unit="건" /><div className="text-[10.5px] font-semibold text-[#9AA9C3] mt-0.5">오늘까지 {Number(c.m?.cnt || 0).toLocaleString()}건</div></td>
+                <td className="px-3 py-2.5"><UsageBar used={projected} limit={p ? Number(p.orders) : 0} unit="건" /><div className="text-[10.5px] font-semibold text-[#9AA9C3] mt-0.5">오늘까지 {Number(c.m?.toDate ?? c.m?.cnt ?? 0).toLocaleString()}건 · 이달 전체 {Number(c.m?.cnt || 0).toLocaleString()}건{c.m?.fixed ? ` (고정노선 ${Number(c.m.fixed).toLocaleString()})` : ""}</div></td>
                 <td className="px-3 py-2.5 text-center tabular-nums font-black" style={{ fontFamily: MONO }}>{Number(c.fleetJ || 0).toLocaleString()}대{p && !["standard", "pro"].includes(p.id) && c.fleetJ ? <div className="text-[10.5px] font-semibold text-[#9AA9C3]">요금제에 없음</div> : null}</td>
                 <td className="px-3 py-2.5"><UsageBar used={storageGB} limit={p ? (u?.limitGB || 0) : 0} unit="GB" fmt={(n) => Number(n || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })} /><div className="text-[10.5px] font-semibold text-[#9AA9C3] mt-0.5">파일 {Number(c.storageFiles || 0).toLocaleString()}개</div></td>
                 <td className="px-3 py-2.5 text-right whitespace-nowrap">

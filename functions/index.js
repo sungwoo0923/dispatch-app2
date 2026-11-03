@@ -5898,7 +5898,7 @@ async function computePlatformStats({ full = true } = {}) {
   const platformDaily = {};
   const dayNo = Number(today.slice(8));
   for (const col of ["orders", "dispatch"]) {
-    const snap = await db.collection(col).where("상차일", ">=", from).select("companyName", "상차일", "청구운임", "기사운임", "배차상태", "상태", "source").get();
+    const snap = await db.collection(col).where("상차일", ">=", from).select("companyName", "상차일", "청구운임", "기사운임", "배차상태", "상태", "source", "배차표Id").get();
     snap.docs.forEach((d) => {
       const r = d.data() || {};
       if (r.source === "transport_transmit" || isCanceledOrder(r)) return;
@@ -5907,7 +5907,12 @@ async function computePlatformStats({ full = true } = {}) {
       const c = co(r.companyName);
       const sale = Number(String(r.청구운임 || 0).replace(/[^\d-]/g, "")) || 0;
       const profit = sale - (Number(String(r.기사운임 || 0).replace(/[^\d-]/g, "")) || 0);
-      if (day.startsWith(month)) { c.m.cnt += 1; c.m.sale += sale; c.m.profit += profit; }
+      if (day.startsWith(month)) {
+        c.m.cnt += 1; c.m.sale += sale; c.m.profit += profit;
+        // ⭐ 2026-11-03 사용량·한도 — 오늘까지(미래 예약 제외) · 고정노선(구글시트 배차표) 건수 따로
+        if (day <= today) c.m.toDate = (c.m.toDate || 0) + 1;
+        if (r.배차표Id) c.m.fixed = (c.m.fixed || 0) + 1;
+      }
       else if (day.startsWith(prevMonth)) {
         c.pm.cnt += 1; c.pm.sale += sale; c.pm.profit += profit;
         if (Number(day.slice(8)) <= dayNo) { c.pmSame.cnt += 1; c.pmSame.sale += sale; }
