@@ -296,6 +296,7 @@ exports.notifyNewDispatch =
       // ⭐ 구글시트 가져오기로 한꺼번에 만든 예전 오더, 초기화 복원 중인 오더는 알림을 보내지 않는다
       if (data.importBatchId) return;
       if (data._recurring) return; // ★ 정기 오더 자동 생성분은 알림 없음(한꺼번에 만들어져 알림이 쏟아지지 않게)
+      if (data._autoSheet) return; // ⭐ 2026-11-03 배차표 구글시트 자동 연동으로 만든 오더도 알림 없음
       if (await isBulkModeFor(data.companyName)) return;
 
       // ⭐ 화주사 전송 사본(source==="transport_transmit")은 이미 있던 오더를
@@ -5376,6 +5377,28 @@ exports.sheetOcr = functions.runWith({ timeoutSeconds: 120, memory: "512MB" }).h
   }
 });
 
+// 📋 2026-11-03 배차표 ↔ 구글시트 자동 연동(10분마다) — 규칙은 functions/routeBoardSync.js 맨 위 설명
+const { syncBoard: _syncBoard } = require("./routeBoardSync");
+async function runRouteBoardSync(form, { force = false } = {}) {
+  const sid = parseSpreadsheetId(form.sheetUrl);
+  if (!sid) return { skipped: "no-sheet" };
+  return _syncBoard({
+    db, FieldValue, form: force ? { ...form, syncHash: {} } : form,
+    readTabs: async () => ((await sheetsApiFor(sid, "GET", "?fields=sheets.properties(title,index)")).sheets || []).map((x) => x.properties.title),
+    readTab: async (tab) => (await sheetsApiFor(sid, "GET", `/values/${encodeURIComponent(`${quoteTab(tab)}!A1:AZ3000`)}?valueRenderOption=FORMATTED_VALUE`)).values || [],
+  });
+}
+exports.syncRouteBoards = functions.runWith({ timeoutSeconds: 300, memory: "512MB" }).pubsub.schedule("every 10 minutes").timeZone("Asia/Seoul").onRun(async () => {
+  const snap = await db.collection("routeBoards").get();
+  for (const d of snap.docs) {
+    const form = { id: d.id, ...d.data() };
+    if (!form.sheetUrl || form.autoSync === false) continue;
+    try { const r = await runRouteBoardSync(form); if (r.created || r.updated || r.gone) console.log(`[배차표 연동] ${form.companyName} ${form.name}`, JSON.stringify(r)); }
+    catch (e) { console.error(`[배차표 연동 실패] ${form.companyName} ${form.name}:`, e?.message || e); }
+  }
+  return null;
+});
+
 // 📋 배차표(고정노선 › 배차표) — 화주사 구글시트의 날짜 탭 읽기 (직원 누구나, 2026-11-02)
 //  시트를 dispatch-app-9b92f@appspot.gserviceaccount.com 에 '뷰어'로 공유해야 읽힌다.
 //  - tabs: 탭 이름 목록(최근 탭이 보통 뒤에 있음)
@@ -5397,6 +5420,16 @@ exports.routeBoardSheet = functions.runWith({ timeoutSeconds: 120, memory: "512M
     const meta = await sheetsApiFor(id, "GET", "?fields=properties.title,sheets.properties(title,index)");
     const tabs = (meta.sheets || []).map((x) => x.properties).sort((a, b) => a.index - b.index).map((t) => t.title);
     if (body.action === "tabs") { res.json({ title: meta.properties?.title || "", tabs }); return; }
+    // ⭐ 2026-11-03 sync: 이 양식의 시트를 지금 바로 맞춤(새 줄·새 날짜 탭 → 오더 생성, 화주 칸 반영, 지워진 줄 표시)
+    if (body.action === "sync") {
+      const fs = await db.collection("routeBoards").doc(String(body.boardId || "x")).get();
+      if (!fs.exists) { res.status(404).json({ error: "양식을 찾을 수 없습니다." }); return; }
+      const form = { id: fs.id, ...fs.data() };
+      if (!me.isTM && form.companyName !== me.company) { res.status(403).json({ error: "다른 회사 양식입니다." }); return; }
+      if (parseSpreadsheetId(form.sheetUrl) !== id) { res.status(400).json({ error: "양식에 저장된 시트 주소와 다릅니다." }); return; }
+      res.json(await runRouteBoardSync(form, { force: true }));
+      return;
+    }
     if (body.action === "read") {
       const tab = String(body.tab || "");
       if (!tabs.includes(tab)) { res.status(400).json({ error: "탭을 찾을 수 없습니다." }); return; }

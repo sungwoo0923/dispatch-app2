@@ -103,7 +103,16 @@ export function sheetToForm(rawRows, guessKind) {
 //  시트의 같은 묶음 표에서 도착지가 같은 줄(같은 도착지가 여러 줄이면 순서대로)을 찾아 칸 값을 바꾼다.
 //  쓰는 칸: 차량번호·이름·전화번호·시간·메모·수량·참고(운송업체 등). 도착지·시군구·거래처·운임·합계·순번은 쓰지 않는다.
 //  배차표에서 빈 칸은 시트 값을 지우지 않는다(덮어쓰기만).
-const WRITE_FIELDS = new Set(["차량번호", "이름", "전화번호", "상차시간", "하차시간", "메모", "차량톤수", "차량종류"]);
+// ⭐ 2026-11-03 칸을 누가 입력하나 — "화주"(업체가 시트에 입력: 도착지·시군구·리터 수량·비고) / "운송사"(우리가 프로그램에 입력: 차량·기사·운송업체·단가·입차시간)
+//  양식에서 칸마다 바꿀 수 있다(c.owner). 서버 functions/routeBoardSync.js의 ownerOf와 같은 기준
+const CARRIER_FIELDS = new Set(["차량번호", "이름", "전화번호", "상차시간", "하차시간", "청구운임", "기사운임", "차량톤수", "차량종류"]);
+export function ownerOf(c) {
+  if (c.owner === "화주" || c.owner === "운송사") return c.owner;
+  if (c.kind === "qty") return "화주";
+  if (c.kind === "field") return CARRIER_FIELDS.has(c.field) ? "운송사" : "화주";
+  if (c.kind === "extra") return /운송업체|운송사|단가|운임|차량|기사/.test(String(c.label || "")) ? "운송사" : "화주";
+  return "";
+}
 const isTimeCol = (c) => c.field === "상차시간" || c.field === "하차시간";
 const cmp = (c, v) => { const s = cell(v); if (isTimeCol(c)) return s.replace(/^0(\d)/, "$1"); if (c.field === "전화번호") return s.replace(/\D/g, ""); return s.replace(/\s+/g, ""); };
 export const colLetter = (i) => { let s = ""; let n = i + 1; while (n > 0) { const m = (n - 1) % 26; s = String.fromCharCode(65 + m) + s; n = Math.floor((n - 1) / 26); } return s; };
@@ -111,7 +120,7 @@ export const colLetter = (i) => { let s = ""; let n = i + 1; while (n > 0) { con
 export function planSheetWrite(form, rawRows, boardGroups) {
   const rows = (rawRows || []).map((r) => (r || []).map(cell));
   const cols = form.columns.filter((c) => c.kind !== "no" && c.kind !== "sum");
-  const writeCols = cols.filter((c) => c.kind === "qty" || c.kind === "extra" || (c.kind === "field" && WRITE_FIELDS.has(c.field)));
+  const writeCols = cols.filter((c) => ownerOf(c) === "운송사"); // 시트에는 운송사 칸만 쓴다(화주가 입력한 칸은 건드리지 않음)
   const nameCol = cols.find((c) => c.field === "하차지명");
   const heads = headerRows(rows, cols.map((c) => c.label));
   const updates = []; const notFound = []; const usedGroups = new Set();

@@ -14,7 +14,7 @@ import React from "react";
 import { createPortal } from "react-dom";
 import { collection, doc, onSnapshot, query, where, getDocs, setDoc, addDoc, updateDoc, deleteDoc, serverTimestamp } from "firebase/firestore";
 import { db, auth, FUNCTIONS_BASE } from "./firebase";
-import { parseBoardTab, sheetToForm, tabDate, planSheetWrite, nm as sheetNm } from "./routeBoardSheet"; // ⭐ 2026-11-02 구글시트 날짜 탭 불러오기
+import { parseBoardTab, sheetToForm, tabDate, planSheetWrite, nm as sheetNm, ownerOf } from "./routeBoardSheet"; // ⭐ 2026-11-02 구글시트 날짜 탭 불러오기
 import { coDocKey } from "./coKey";
 import { deleteOrderWithLog } from "./orderHistory";
 import CustomDatePicker from "./CustomDatePicker";
@@ -85,7 +85,7 @@ function rowFromOrder(form, o) {
     else if (c.kind === "qty") v[c.id] = o.품목수량?.[c.label] ? String(o.품목수량[c.label]) : "";
     else if (c.kind === "extra") v[c.id] = String(o.추가정보?.[c.label] ?? "");
   });
-  return { key: o._id || o.id, _id: o._id || o.id, v, status: o.배차상태 || "", dirty: false, extra: { 하차지담당자: o.하차지담당자, 하차지담당자번호: o.하차지담당자번호 } };
+  return { key: o._id || o.id, _id: o._id || o.id, v, status: o.배차상태 || "", dirty: false, sheetGone: !!o.시트삭제됨, extra: { 하차지담당자: o.하차지담당자, 하차지담당자번호: o.하차지담당자번호 } };
 }
 const rowEmpty = (form, r) => !form.columns.some((c) => c.kind !== "no" && c.kind !== "sum" && String(r.v[c.id] || "").trim());
 const rowSum = (form, r) => form.columns.filter((c) => c.kind === "qty").reduce((a, c) => a + toInt(r.v[c.id]), 0);
@@ -418,10 +418,17 @@ function FormEditor({ init, onClose, onSaved, co, clients = [], places = [] }) {
           </div>
           {sheet.err && <div className="mt-2 text-[13px] font-semibold text-red-600">{sheet.err}</div>}
           <ShareNote />
+          {String(f.sheetUrl || "").trim() && (
+            <label className="mt-2.5 flex items-start gap-2 cursor-pointer">
+              <input type="checkbox" checked={f.autoSync !== false} onChange={(e) => setF((p) => ({ ...p, autoSync: e.target.checked }))} className="mt-0.5 w-[18px] h-[18px] accent-[#1B2B4B]" />
+              <span className="text-[13px] text-[#3A4A66] leading-relaxed"><b className="text-[#0F1A30]">시트 자동 연동</b> — 10분마다 시트를 확인해 <b>새 날짜 탭·새 줄은 오더로 자동 생성</b>, 화주 칸(도착지·시군구·리터 수량 등)은 시트 값으로 맞추고, 시트에서 지운 줄은 표시만 합니다. 저장하면 운송사 칸(차량·운송업체·단가·입차시간)이 시트에 자동으로 써집니다.</span>
+            </label>
+          )}
         </div>
 
         <div className="text-[14px] font-black text-[#0F1A30] mb-2">칸(시트 제목줄 순서대로)</div>
-        <div className="text-[12.5px] text-[#7A8AA6] mb-2">프로그램 칸 = 오더의 그 칸에 저장 · 수량 = 리터·박스 등 개수 · 합계 = 수량 합 자동 · 참고 = 오더에 그대로 보관(운송업체 등)</div>
+        <div className="text-[12.5px] text-[#7A8AA6] mb-2">프로그램 칸 = 오더의 그 칸에 저장 · 수량 = 리터·박스 등 개수 · 합계 = 수량 합 자동 · 참고 = 오더에 그대로 보관(운송업체 등)<br />
+          <b className="text-[#3A4A66]">입력</b> = 누가 채우는 칸인지 — <b>화주</b>: 업체가 시트에 입력(시트 값이 기준) · <b>운송사</b>: 우리가 프로그램에 입력(프로그램 값이 기준, 저장하면 시트에 써 줌)</div>
         <div className="space-y-1.5 mb-3">
           {f.columns.map((c, i) => (
             <div key={c.id} className="flex flex-wrap items-center gap-2">
@@ -433,6 +440,12 @@ function FormEditor({ init, onClose, onSaved, co, clients = [], places = [] }) {
               {c.kind === "field" && (
                 <CustomSelect value={c.field || ""} onChange={(e) => setCol(i, { field: e.target.value })} className={`${fieldInp} w-[130px]`}>
                   {FIELDS.map((x) => <option key={x}>{x}</option>)}
+                </CustomSelect>
+              )}
+              {["field", "qty", "extra"].includes(c.kind) && (
+                <CustomSelect value={ownerOf(c)} onChange={(e) => setCol(i, { owner: e.target.value })} className={`${fieldInp} w-[118px]`} title="이 칸은 누가 입력하나요">
+                  <option value="화주">입력: 화주</option>
+                  <option value="운송사">입력: 운송사</option>
                 </CustomSelect>
               )}
               <button onClick={() => moveCol(i, -1)} className="h-9 w-8 rounded-lg border border-[#DCE3EE] text-[#5B6B85]">↑</button>
@@ -591,7 +604,7 @@ export default function RouteBoard({ companyName = "" }) {
   };
   const setCell = (g, i, c, val) => {
     setDirty(true);
-    setRows((p) => ({ ...p, [g]: p[g].map((r, j) => (j === i ? { ...r, v: { ...r.v, [c.id]: val }, dirty: true } : r)) }));
+    setRows((p) => ({ ...p, [g]: p[g].map((r, j) => (j === i ? { ...r, v: { ...r.v, [c.id]: val }, dirty: true, touched: [...new Set([...(r.touched || []), c.id])] } : r)) })); // touched: 직접 고친 칸
   };
   // 칸에서 나갈 때 — 도착지는 등록된 하차지 풀주소, 차량번호는 기사관리의 이름·전화번호
   const onLeave = (g, i, c) => {
@@ -612,7 +625,7 @@ export default function RouteBoard({ companyName = "" }) {
   // 자동완성에서 고른 경우 — 고른 그 곳(주소까지)으로 바로 채움
   const pickPlace = (g, i, p) => {
     const cN = colOf("하차지명"); const cA = colOf("하차지주소"); setDirty(true);
-    setRows((s) => ({ ...s, [g]: s[g].map((x, j) => (j === i ? { ...x, dirty: true, extra: placeContact(p), v: { ...x.v, ...(cN ? { [cN.id]: p.업체명 } : {}), ...(cA && p.주소 ? { [cA.id]: p.주소 } : {}) } } : x)) }));
+    setRows((s) => ({ ...s, [g]: s[g].map((x, j) => (j === i ? { ...x, dirty: true, touched: [...new Set([...(x.touched || []), cN?.id, cA?.id].filter(Boolean))], extra: placeContact(p), v: { ...x.v, ...(cN ? { [cN.id]: p.업체명 } : {}), ...(cA && p.주소 ? { [cA.id]: p.주소 } : {}) } } : x)) }));
   };
   const pickDriver = (g, i, d) => {
     const cP = colOf("차량번호"); const cN = colOf("이름"); const cPh = colOf("전화번호"); setDirty(true);
@@ -718,14 +731,30 @@ export default function RouteBoard({ companyName = "" }) {
     const t = setInterval(() => checkRef.current(false), 60000);
     return () => { clearTimeout(t0); clearInterval(t); };
   }, [form?.id, form?.sheetUrl, date, orders === null]); // eslint-disable-line react-hooks/exhaustive-deps
-  const addFromSheet = () => {
-    const add = sheetDiff?.added || {}; let n = 0;
-    setRows((p) => { const o = { ...p }; Object.entries(add).forEach(([g, vs]) => { o[g] = [...(o[g] || []), ...vs.map(enrich)]; n += vs.length; }); return o; });
-    setDirty(true); setSheetDiff((x) => ({ ...x, added: {} }));
-    setMsg("시트에 새로 생긴 줄을 배차표에 넣었습니다. 확인 후 [저장]을 눌러 주세요.");
+  // ⭐ 2026-11-03 시트 맞추기(서버) — 새 줄·새 날짜 탭은 오더로 만들고, 화주 칸(도착지·시군구·리터 수량)은 시트 값으로, 지워진 줄은 표시만
+  //  서버가 10분마다 저절로 하고, 화면을 열 때·[지금 맞추기]를 누를 때 바로 한 번 더
+  const syncNow = async (quiet = false) => {
+    if (!form?.sheetUrl) return;
+    if (dirty && !quiet) { kpAlert("먼저 [저장]을 눌러 주세요. 저장한 뒤 시트와 맞춥니다."); return; }
+    setBusy((b) => b || "sync");
+    try {
+      const r = await sheetApi({ action: "sync", url: form.sheetUrl, boardId: form.id });
+      if (!quiet || r.created || r.updated || r.gone) setMsg(`시트와 맞췄습니다 — 새 오더 ${r.created || 0}건 · 화주 입력 반영 ${r.updated || 0}건${r.gone ? ` · 시트에서 지워진 줄 ${r.gone}건` : ""}`);
+      setTimeout(() => checkRef.current(true), 800);
+    } catch (e) { if (!quiet) kpAlert(`시트와 맞추지 못했습니다: ${e?.message || e}`); }
+    finally { setBusy((b) => (b === "sync" ? "" : b)); }
   };
+  const syncedRef = React.useRef("");
+  React.useEffect(() => { // 화면을 열면(양식·날짜마다 한 번) 바로 맞춤 — 시트에 새 탭이 생겼으면 오더가 자동으로 생긴다
+    if (!form?.sheetUrl || form.autoSync === false || orders === null) return;
+    const k = `${form.id}|${date}`; if (syncedRef.current === k) return;
+    syncedRef.current = k; syncNow(true);
+  }, [form?.id, form?.sheetUrl, date, orders === null]); // eslint-disable-line react-hooks/exhaustive-deps
+  const addFromSheet = () => syncNow(false);
+  const keepRow = (r) => { setKeepKeys((s0) => new Set([...s0, r.key])); if (r._id) setDoc(doc(db, "orders", r._id), { 시트삭제됨: false, 시트유지: true }, { merge: true }).catch(() => {}); };
+  const isGone = (r) => (sheetDiff?.gone?.has(r.key) || r.sheetGone) && !keepKeys.has(r.key);
   const addedCount = Object.values(sheetDiff?.added || {}).reduce((a, v) => a + v.length, 0);
-  const goneCount = [...(sheetDiff?.gone || [])].filter((k) => !keepKeys.has(k)).length;
+  const goneCount = Object.values(rows).flat().filter(isGone).length;
 
   const save = async () => {
     setBusy("save");
@@ -740,6 +769,19 @@ export default function RouteBoard({ companyName = "" }) {
           if (prev && !r.dirty && prev.배차표순번 === i + 1 && prev.배차표묶음 === g.name) return;
           const id = r._id || `rb_${form.id}_${date}_${rid()}`;
           const data = orderFromRow({ ...form }, g, r, i, date, co, !prev, prev?.배차상태);
+          // ⭐ 2026-11-03 이미 있는 오더는 "화주 칸"(도착지·시군구·리터 수량·비고)을 직접 고친 경우만 저장 —
+          //  시트에서 화주가 바꾼 값(서버가 10분마다 반영)을 화면에 남아 있던 예전 값으로 덮어쓰지 않게
+          if (prev) {
+            const t = new Set(r.touched || []); let qtyTouched = false;
+            form.columns.forEach((c) => {
+              if (ownerOf(c) !== "화주") return;
+              if (c.kind === "qty") { if (t.has(c.id)) qtyTouched = true; return; }
+              if (t.has(c.id)) return;
+              if (c.kind === "field" && c.field !== "하차지명") delete data[c.field];
+              else if (c.kind === "extra" && data.추가정보) delete data.추가정보[c.label];
+            });
+            if (!qtyTouched) { delete data.품목수량; delete data.화물내용; delete data.화물수량; }
+          }
           writes.push(setDoc(doc(db, "orders", id), { ...data, _id: id }, { merge: true }));
           saved += 1;
         });
@@ -824,10 +866,10 @@ export default function RouteBoard({ companyName = "" }) {
           {form.sheetUrl && sheetDiff && (
             <div className={`rounded-xl border px-4 py-2.5 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[13px] ${addedCount || goneCount ? "bg-[#FFF8E6] border-[#F7D58A]" : "bg-[#F5F8FD] border-[#E3E8F0]"}`}>
               <span className="font-black text-[#0F1A30]">구글시트 연동</span>
-              <span className="text-[#5B6B85]">{sheetDiff.error ? `확인 실패 — ${sheetDiff.error}` : !sheetDiff.tab ? "이 날짜 탭이 시트에 없습니다" : sheetDiff.bad ? `'${sheetDiff.tab}' 탭에서 제목줄을 못 찾았습니다` : `'${sheetDiff.tab}' 탭 · ${new Date(sheetDiff.at).toLocaleTimeString("ko-KR", { timeZone: "Asia/Seoul", hour: "2-digit", minute: "2-digit" })} 확인 · 1분마다 자동 확인 · 저장하면 차량·기사가 시트에 자동 입력`}</span>
+              <span className="text-[#5B6B85]">{sheetDiff.error ? `확인 실패 — ${sheetDiff.error}` : !sheetDiff.tab ? "이 날짜 탭이 시트에 없습니다" : sheetDiff.bad ? `'${sheetDiff.tab}' 탭에서 제목줄을 못 찾았습니다` : `'${sheetDiff.tab}' 탭 · ${new Date(sheetDiff.at).toLocaleTimeString("ko-KR", { timeZone: "Asia/Seoul", hour: "2-digit", minute: "2-digit" })} 확인 · ${form.autoSync === false ? "자동 연동 꺼짐" : "새 줄·새 날짜 탭은 자동으로 오더 생성"} · 저장하면 차량·운송업체·단가·입차시간이 시트에 입력`}</span>
               {goneCount > 0 && <span className="font-black text-red-600">시트에서 지워진 줄 {goneCount}개(표에 빨간 표시)</span>}
-              {addedCount > 0 && <button type="button" onClick={addFromSheet} className="h-8 px-3 rounded-lg bg-[#0F1A30] text-white text-[12.5px] font-black">시트에 새로 생긴 줄 {addedCount}개 배차표에 추가</button>}
-              <button type="button" onClick={() => checkSheet(true)} className="ml-auto h-8 px-3 rounded-lg border border-[#DCE3EE] text-[12.5px] font-bold text-[#3A4A66]">지금 확인</button>
+              {addedCount > 0 && <button type="button" onClick={addFromSheet} className="h-8 px-3 rounded-lg bg-[#0F1A30] text-white text-[12.5px] font-black">시트에 새로 생긴 줄 {addedCount}개 지금 가져오기</button>}
+              <button type="button" onClick={() => syncNow(false)} disabled={busy === "sync"} className="ml-auto h-8 px-3 rounded-lg border border-[#DCE3EE] text-[12.5px] font-bold text-[#3A4A66] disabled:opacity-50">{busy === "sync" ? "맞추는 중…" : "지금 맞추기"}</button>
             </div>
           )}
           {!orders.length && !dirty && <div className="text-[13px] text-[#7A8AA6] px-1">이 날짜는 아직 저장된 배차표가 없습니다{form.groups.some((g) => (g.defaults || []).length) ? " — 기본 도착지를 채워 두었습니다." : "."}</div>}
@@ -875,12 +917,12 @@ export default function RouteBoard({ companyName = "" }) {
                             </td>
                           ))}
                           <td className="border border-[#E3E8F0] text-center text-[12px] font-bold whitespace-nowrap px-1">
-                            {sheetDiff?.gone?.has(r.key) && !keepKeys.has(r.key) ? (
+                            {isGone(r) ? (
                               <div className="flex flex-col items-center gap-0.5 py-0.5">
                                 <span className="text-red-600 font-black">시트에서 삭제됨</span>
                                 <span className="flex gap-1">
                                   <button type="button" onClick={async () => { if (await kpConfirm("시트에서 지워진 줄입니다. 이 오더를 지울까요?\n(지운 뒤 [저장]을 눌러야 반영됩니다)")) delRow(g.name, i); }} className="px-1.5 rounded bg-red-600 text-white text-[11px] font-black">오더 삭제</button>
-                                  <button type="button" onClick={() => setKeepKeys((s0) => new Set([...s0, r.key]))} className="px-1.5 rounded border border-[#DCE3EE] text-[11px] font-bold text-[#5B6B85]">유지</button>
+                                  <button type="button" onClick={() => keepRow(r)} className="px-1.5 rounded border border-[#DCE3EE] text-[11px] font-bold text-[#5B6B85]">유지</button>
                                 </span>
                               </div>
                             ) : !r._id ? <span className="text-amber-600">새 줄</span> : r.status === "배차완료" ? <span className="text-emerald-600">배차완료</span> : r.status === "배차취소" ? <span className="text-red-500">배차취소</span> : <span className="text-[#7A8AA6]">{r.status || "배차중"}</span>}
