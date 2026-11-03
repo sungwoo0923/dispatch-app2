@@ -8,7 +8,7 @@ import { CompanyOptionPicker } from "../companyOptionPicker"; // 🧾 2026-11-02
 import { AttendanceQuickButton, officeRadii, CheckoutReminderHost } from "../attendanceQuick";
 import { PersonalTodayHost } from "../PersonalSchedule";
 import { makeClientMatcher } from "../clientMatch"; // ⭐ 2026-11-03 거래처 검색
-import { useCompanyBiz, BizPicker, BizChip, bizOf } from "../companyBiz"; // ⭐ 2026-11-03 여러 사업자
+import { useCompanyBiz, BizPicker, BizChip, bizOf, BizSelect, resolveBiz, rememberBizFor, normBizKey } from "../companyBiz"; // ⭐ 2026-11-03 여러 사업자
 import { useCustomRoles, findCustomRole, getMenuAccess, roleScreen } from "../customRoles";
 import { useReadOnlyGuard } from "../readOnlyGuard";
 import { confirmLeave } from "../leaveGuard";
@@ -4642,6 +4642,8 @@ const groupedByDate = useMemo(() => {
       const proceed = await confirmDuplicateOrder(dupOrders);
       if (!proceed) return;
     }
+    // ⭐ 2026-11-03 청구 사업자 기억 — 다음에 같은 거래처·상차지·하차지면 이 사업자로 자동
+    rememberBizFor(getTenant() || localStorage.getItem("userCompany") || "", docData, { clientDefault: ((clients || []).find((x) => normBizKey(x.거래처명 || "") === normBizKey(docData.거래처명 || "")) || {}).기본사업자 || "" });
 
     // 🔹 신규 등록 — PC 배차관리와 동일하게 수량(multiCount)만큼 등록하고,
     // "날짜 개별 설정"이 켜져 있으면 건별로 지정한 상/하차일을 사용한다.
@@ -14095,6 +14097,23 @@ function MobileOrderForm({
   setOrderDropDates,
 }) {
   const mBiz = useCompanyBiz(getTenant() || localStorage.getItem("userCompany") || ""); // ⭐ 2026-11-03 여러 사업자
+  // ⭐ 2026-11-03 청구 사업자 자동 맞춤 — 거래처·상차지·하차지가 채워지면 지난번에 같은 구간으로 쓴 사업자 → 그 거래처로 쓴 사업자 → 거래처 기본 사업자
+  //    · 직접 고르면 거래처가 바뀌기 전까지 그대로 · 수정 중인 오더는 건드리지 않는다
+  const mBizManualRef = useRef(null);
+  const [mBizAuto, setMBizAuto] = useState("");
+  useEffect(() => {
+    if (!mBiz.multi || form?._editId) return;
+    const c = form.거래처명 || "", p = form.상차지명 || "", d = form.하차지명 || "";
+    if (!c.trim() && !p.trim() && !d.trim()) { mBizManualRef.current = null; setMBizAuto(""); return; }
+    const man = mBizManualRef.current;
+    if (man && (man.client === "" || man.client === normBizKey(c))) return;
+    mBizManualRef.current = null;
+    const bc = (basicClients || []).find((x) => normBizKey(x.거래처명 || "") === normBizKey(c));
+    const r = resolveBiz(mBiz, { client: c, pickup: p, drop: d, clientDefault: bc?.기본사업자 || "" });
+    const v = r.name === mBiz.defaultName ? "" : r.name;
+    setForm((prev) => ((prev.청구사업자 || "") === v ? prev : { ...prev, 청구사업자: v }));
+    setMBizAuto(r.src === "default" ? "" : r.src);
+  }, [mBiz, form?._editId, form.거래처명, form.상차지명, form.하차지명, basicClients]);
   // 거래처명 자동완성은 기본거래처만 대상으로 한다 — clients prop은 상/하차지 주소
   // 자동완성을 위해 하차지거래처(places)까지 합쳐진 풀이라, 여기 그대로 쓰면 관련 없는
   // 하차지명이 거래처 드롭다운에 함께 뜬다.
@@ -14334,7 +14353,7 @@ const chooseClient = (c) => {
   setMatchedClients([]);
   update("거래처명", c.거래처명);
   // ⭐ 2026-11-03 여러 사업자 — 거래처의 기본 청구 사업자로
-  if (mBiz.multi) { const bc = (basicClients || []).find((x) => String(x.거래처명 || "").replace(/\s/g, "") === String(c.거래처명 || "").replace(/\s/g, "")); update("청구사업자", bc?.기본사업자 && mBiz.names.includes(bc.기본사업자) ? bc.기본사업자 : ""); }
+  // (청구 사업자는 위 자동 맞춤이 거래처·상차지·하차지를 보고 정한다)
   setSelectedClient(c);
   showAlertThen(findClientAlertTarget(c.거래처명), () => setShowClientApplyModal(true));
 };
@@ -15280,6 +15299,15 @@ const pickDrop = (c) => {
           두르지 않고, 카드 한 장 안에 얇은 구분선으로만 항목을 나눈다 */}
       <div className="kp-m-form-card bg-white rounded-[22px] overflow-hidden border border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_10px_24px_rgba(16,24,40,0.06)]">
       <fieldset disabled={isLockedShipperEdit} style={{ display: "contents" }}>
+      {/* ⭐ 2026-11-03 여러 사업자 — 청구 사업자(맨 첫 칸 · 검색되는 드롭다운) */}
+      {mBiz.multi && (
+        <div className="px-3 py-2">
+          <div className="text-[11px] text-gray-500 mb-1">청구 사업자</div>
+          <BizSelect biz={mBiz} value={form.청구사업자 || ""} auto={mBizAuto} size="sm"
+            onChange={(v) => { mBizManualRef.current = { client: normBizKey(form.거래처명 || "") }; setMBizAuto(""); update("청구사업자", v); }}
+            className="w-full h-10 px-3 rounded-xl border border-[#E3E8F0] bg-[#F7F9FC] text-[14px] font-bold text-[#0F1A30] focus:outline-none focus:bg-white focus:border-[#1B2B4B] focus:ring-2 focus:ring-[#1B2B4B]/15" />
+        </div>
+      )}
       {/* 상차/하차 일시 */}
       <div>
         <RowLabelInput
@@ -15373,8 +15401,6 @@ const pickDrop = (c) => {
 
       </div>
 
-      {/* ⭐ 2026-11-03 여러 사업자 — 청구 사업자 */}
-      {mBiz.multi && <div className="px-3 py-2 border-t border-gray-100 overflow-x-auto"><BizPicker biz={mBiz} value={form.청구사업자 || ""} onChange={(v) => update("청구사업자", v)} size="sm" /></div>}
       {/* 거래처명 */}
 <div className="px-3 py-2 border-t border-gray-100">
   <div className="text-[11px] text-gray-500 mb-1">거래처명 <span className="text-red-500">*</span></div>

@@ -198,6 +198,10 @@ table tbody tr.kp-row-hit:hover td {
 .kp-date-row, .kp-date-row * { white-space: nowrap; }
 .kp-order-form label { white-space: nowrap; }
 .kp-order-form > div { min-width: 0; }
+/* ⭐ 2026-11-03 등록폼 포커스 통일 — 링을 따로 안 준 버튼·체크도 남색 2px 테두리 + 은은한 빛(브라우저 기본 파란 테두리 대신) */
+.kp-order-form { caret-color: #1B2B4B; }
+.kp-order-form :is(button, [role="button"], input[type="checkbox"], input[type="radio"]):focus-visible:not([class*="focus-visible:ring"]) { outline: 2px solid #1B2B4B; outline-offset: 2px; box-shadow: 0 0 0 6px rgba(143,176,240,0.22); }
+.kp-order-form input[type="checkbox"], .kp-order-form input[type="radio"] { accent-color: #1B2B4B; }
 
 /* 📱 모바일 앱에서 PC 화면을 그대로 쓸 때(MobilePcViews) — 휴대폰 폭 보정 */
 @media (max-width: 767px) {
