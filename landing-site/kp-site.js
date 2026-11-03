@@ -30,8 +30,8 @@
   function cssProp(p) { return p.replace(/[A-Z]/g, function (m) { return "-" + m.toLowerCase(); }); }
 
   // 글 편집 내용 정리 — 허용한 태그·속성만 남긴다(스크립트·이벤트 속성 제거)
-  var OK_TAGS = { B: 1, STRONG: 1, I: 1, EM: 1, U: 1, BR: 1, SPAN: 1, SMALL: 1, A: 1, MARK: 1, SUP: 1, SUB: 1, EM: 1, P: 1, DIV: 1, SVG: 1, USE: 1, LI: 1, UL: 1, OL: 1, H1: 1, H2: 1, H3: 1, H4: 1, H5: 1, IMG: 1, BUTTON: 1, LABEL: 1, I: 1 };
-  var OK_ATTR = { "class": 1, "data-k": 1, href: 1, target: 1, rel: 1, style: 1, src: 1, alt: 1, width: 1, height: 1, "data-t": 1, "data-modal": 1 };
+  var OK_TAGS = { B: 1, STRONG: 1, I: 1, EM: 1, U: 1, BR: 1, SPAN: 1, SMALL: 1, A: 1, MARK: 1, SUP: 1, SUB: 1, EM: 1, P: 1, DIV: 1, SVG: 1, USE: 1, LI: 1, UL: 1, OL: 1, H1: 1, H2: 1, H3: 1, H4: 1, H5: 1, IMG: 1, BUTTON: 1, LABEL: 1, I: 1, VIDEO: 1, SOURCE: 1 };
+  var OK_ATTR = { "class": 1, "data-k": 1, href: 1, target: 1, rel: 1, style: 1, src: 1, alt: 1, width: 1, height: 1, "data-t": 1, "data-modal": 1, "data-clip": 1, autoplay: 1, muted: 1, loop: 1, playsinline: 1, preload: 1, poster: 1, "aria-label": 1, type: 1, role: 1 };
   function cleanStyle(v) {
     return String(v || "").split(";").map(function (s) { return s.trim(); }).filter(function (s) {
       return /^(color|background-color|font-weight|font-size|font-style|text-decoration|letter-spacing)\s*:/i.test(s) && !/url\(|expression|javascript/i.test(s);
