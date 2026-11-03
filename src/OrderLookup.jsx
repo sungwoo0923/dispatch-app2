@@ -124,8 +124,8 @@ export default function OrderLookupModal({ open, onClose, rows = [], nameOf = ()
   const ranges = quickRanges();
 
   return createPortal(
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-[#0F1A30]/45 p-4" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose?.(); }}>
-      <div className="w-full max-w-[1180px] max-h-[92vh] flex flex-col rounded-2xl bg-white shadow-[0_24px_60px_rgba(15,26,48,0.35)] overflow-hidden">
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-[#0F1A30]/45 p-2" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose?.(); }}>
+      <div className="w-[min(1640px,97vw)] h-[94vh] flex flex-col rounded-2xl bg-white shadow-[0_24px_60px_rgba(15,26,48,0.35)] overflow-hidden">
         {/* 머리 */}
         <div className="flex items-center gap-3 px-6 py-4 bg-[#1B2B4B] text-white">
           <div className="w-9 h-9 rounded-xl bg-white/10 flex items-center justify-center">
@@ -213,7 +213,7 @@ export default function OrderLookupModal({ open, onClose, rows = [], nameOf = ()
           </div>
         </div>
 
-        <div className="flex-1 min-h-0 overflow-auto">
+        <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden">
           {/* 담당자를 고르지 않았으면 담당자별 요약 — 누르면 그 담당자로 좁힌다 */}
           {!mgr && !car && mgrStats.length > 0 && (
             <div className="px-6 pt-4">
@@ -234,11 +234,12 @@ export default function OrderLookupModal({ open, onClose, rows = [], nameOf = ()
             {result.length === 0 ? (
               <div className="py-16 text-center text-[13.5px] font-semibold text-[#9AA9C3]">조건에 맞는 오더가 없어요.</div>
             ) : (
-              <table className="w-full border-separate border-spacing-0 text-[13px]">
+              <table className="w-full table-fixed border-separate border-spacing-0 text-[13px]">
+                <colgroup>{[46, 62, 92, 84, null, null, 112, 70, 82, 90, 90, 84].map((w, i) => <col key={i} style={w ? { width: w } : undefined} />)}</colgroup>
                 <thead>
                   <tr>
                     {["순번", "상차일", "상차시간", "배차담당자", "거래처명", "상차지 → 하차지", "차량번호", "기사명", "배차상태", "청구운임", "기사운임", "수수료"].map((h) => (
-                      <th key={h} className="sticky top-0 z-[1] bg-[#EEF2F8] text-[#3A4A66] text-[12px] font-black px-2.5 py-2 border-b border-[#D5DDEA] whitespace-nowrap text-center">{h}</th>
+                      <th key={h} className="sticky top-0 z-[1] bg-[#EEF2F8] text-[#3A4A66] text-[12px] font-black px-1.5 py-2 border-b border-[#D5DDEA] whitespace-nowrap overflow-hidden text-ellipsis text-center">{h}</th>
                     ))}
                   </tr>
                 </thead>
@@ -246,15 +247,15 @@ export default function OrderLookupModal({ open, onClose, rows = [], nameOf = ()
                   {result.slice(0, showN).map(({ r, mgr: n }, i) => {
                     const sale = toInt(r.청구운임), drv = toInt(r.기사운임);
                     const hasCar = !!String(r.차량번호 || "").trim();
-                    const td = "px-2.5 py-2 border-b border-[#EEF1F6] whitespace-nowrap";
+                    const td = "px-1.5 py-2 border-b border-[#EEF1F6] whitespace-nowrap overflow-hidden text-ellipsis";
                     return (
                       <tr key={r._id || i} className={i % 2 ? "bg-[#FAFBFD]" : "bg-white"}>
                         <td className={`${td} text-center text-[#7A8AA6] tabular-nums`}>{i + 1}</td>
                         <td className={`${td} text-center tabular-nums`}>{String(r.상차일 || "").slice(5)}</td>
                         <td className={`${td} text-center`}>{r.상차시간 || "-"}</td>
                         <td className={`${td} text-center font-bold ${n === EMPTY ? "text-[#9AA9C3]" : "text-[#0F1A30]"}`}>{n}</td>
-                        <td className={`${td} font-semibold max-w-[160px] truncate`} title={r.거래처명}>{r.거래처명 || "-"}</td>
-                        <td className={`${td} max-w-[280px] truncate`} title={`${r.상차지명 || ""} → ${r.하차지명 || ""}`}>{r.상차지명 || "-"} <span className="text-[#9AA9C3]">→</span> {r.하차지명 || "-"}</td>
+                        <td className={`${td} font-semibold truncate`} title={r.거래처명}>{r.거래처명 || "-"}</td>
+                        <td className={`${td} truncate`} title={`${r.상차지명 || ""} → ${r.하차지명 || ""}`}>{r.상차지명 || "-"} <span className="text-[#9AA9C3]">→</span> {r.하차지명 || "-"}</td>
                         <td className={`${td} text-center font-black tabular-nums`}>{r.차량번호 || <span className="text-[#C2410C] font-bold">미배차</span>}</td>
                         <td className={`${td} text-center font-semibold`}>{r.이름 || "-"}</td>
                         <td className={`${td} text-center`}><span className={`inline-block px-2 py-0.5 rounded-md text-[11.5px] font-black ${hasCar ? "bg-[#E7F5EC] text-[#1B7F4B]" : "bg-[#FFF1E6] text-[#C2410C]"}`}>{r.배차상태 || (hasCar ? "배차완료" : "배차중")}</span></td>
