@@ -26,6 +26,7 @@ import * as XLSX from "xlsx";
 import OrderLookupModal from "./OrderLookup"; // ⭐ 2026-11-03 담당자·차량 조회
 import MgrBadge, { setMgrNameMap } from "./MgrBadge";
 import { makeClientMatcher } from "./clientMatch"; // ⭐ 2026-11-03 거래처 검색: 정확히 같은 이름이 있으면 그것만
+import DetailFilterButton, { applyDetailFilter, DetailScope } from "./DetailFilter"; // 🔎 2026-11-03 세부검색(최대 3차)
 import { useCompanyBiz, bizOf, BizChip, BizPicker, BizFilter, bizMatch, printInfoForBiz, BizListEditor, BizScope, BizSelect, resolveBiz, rememberBiz, normBizKey, bankForBiz, bizInfoCardBlob } from "./companyBiz"; // ⭐ 2026-11-03 한 회사 · 여러 사업자 // ⭐ 2026-11-03 배차담당자 칸(등록자 + 차량 붙인 사람)
 import JSZip from "jszip";
 import { sendOrderTo24Proxy as sendOrderTo24 } from "../api/24CallProxy";
@@ -3616,6 +3617,14 @@ function useOrderStaffName(userNameMap, userCompany) {
   }, [on, userNameMap]);
 }
 const orderMgrName = (getName, r) => (getName ? getName(r) : "");
+// 🔎 2026-11-03 세부검색 — 배차담당자(등록한 직원 이름)·청구사업자 칸 값 꺼내기
+function useDetailGetters(userNameMap, company) {
+  const biz = useCompanyBiz(getTenant() || company);
+  return React.useMemo(() => ({
+    배차담당자: (r) => _orderStaffNameRaw(r, userNameMap) || ORDER_MGR_EMPTY,
+    청구사업자: biz.multi ? (r) => bizOf(r, biz.defaultName) : null,
+  }), [userNameMap, biz.multi, biz.defaultName]);
+}
 // 정렬용 값 꺼내기 — 배차담당자 칸은 위에서, 나머지는 orderSortValue
 
 // ⚡ 큰 표를 나눠 그리기 — 표 아래에 닿으면(또는 버튼을 누르면) 다음 묶음을 붙인다
@@ -7886,6 +7895,7 @@ useEffect(() => {
   // 한 번 방문하면 언마운트하지 않고 CSS로만 숨긴다.
   const [정산관리Visited, set정산관리Visited] = useState(false);
   useEffect(() => { if (menu === "정산관리") set정산관리Visited(true); }, [menu]);
+  const mainDetailGet = useDetailGetters(userNameMap, userCompany); // 🔎 세부검색(정산관리·매출관리)
   const [activeTool, setActiveTool] = useState("none"); // "none" | "calculator" | "ai" | "messenger"
   const notificationsEnabled = useNotificationsEnabled();
   const calcOpen = activeTool === "calculator";
@@ -8892,7 +8902,8 @@ return (
 
         {menu === "매출관리" && (role === "admin" || role === "totalMaster" || role === "test" || isViewer || !!customRole) && (
           revenueUnlocked ? (
-            <BizScope company={getTenant() || userCompany || localStorage.getItem("userCompany") || ""} data={dispatchDataFiltered}>{(bizRows, bizSel) => (
+            <DetailScope data={dispatchDataFiltered} getters={mainDetailGet} title="세부검색 · 매출관리">{(detRows, detBtn) => (
+            <BizScope company={getTenant() || userCompany || localStorage.getItem("userCompany") || ""} data={detRows} extra={detBtn}>{(bizRows, bizSel) => (
             <Settlement
               key={`settle-${bizSel || "all"}`}
               dispatchData={bizRows}
@@ -8902,7 +8913,7 @@ return (
               isViewer={isViewer}
               role={role}
               userCompany={userCompany}
-            />)}</BizScope>
+            />)}</BizScope>)}</DetailScope>
           ) : (
             <div className="flex items-center justify-center" style={{ minHeight: "60vh" }}>
               <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-8 w-[360px]">
@@ -8980,10 +8991,13 @@ return (
           <div style={{ display: menu === "정산관리" ? undefined : "none" }}>
           <KpSubNav code="SETTLEMENT" title="정산관리" icon="receipt" active={정산관리Tab} onSelect={set정산관리Tab}
             items={[{ key: "거래처정산", label: "거래처정산", en: "BILLING", icon: "receipt" }, { key: "지급관리", label: "용차지급관리", en: "PAYOUT", icon: "wallet" }, { key: "지입정산관리", label: "지입정산관리", en: "FLEET PAY", icon: "wallet" }]}>
+          <DetailScope data={dispatchDataFiltered} getters={mainDetailGet} title="세부검색 · 정산관리">{(settleRows, settleBtn) => (<>
+          {/* 🔎 2026-11-03 세부검색 — 거래처정산·용차지급·지입정산 모두 이 조건으로 */}
+          <div className="mb-3 flex items-center justify-end">{settleBtn}</div>
           {/* 거래명세서 검색/선택 상태 유지를 위해 지급관리 탭으로 전환해도 언마운트하지 않고 숨기기만 한다 */}
           <div style={{ display: 정산관리Tab === "거래처정산" ? undefined : "none" }}>
             <ClientSettlement
-              dispatchData={dispatchDataFiltered}
+              dispatchData={settleRows}
               setDispatchData={setDispatchData}
               userCompany={userCompany}
               clients={clients}
@@ -8999,12 +9013,12 @@ return (
             />
           </div>
           {정산관리Tab === "지입정산관리" && (
-            <FleetSettlementMenu dispatchData={dispatchDataFiltered} companyName={(localStorage.getItem("loginCompany") || userCompany || localStorage.getItem("userCompany") || DEFAULT_COMPANY || "").trim()} />
+            <FleetSettlementMenu dispatchData={settleRows} companyName={(localStorage.getItem("loginCompany") || userCompany || localStorage.getItem("userCompany") || DEFAULT_COMPANY || "").trim()} />
           )}
           {정산관리Tab === "지급관리" && (
             <div className="p-4">
               <PaymentManagement
-                dispatchData={dispatchDataFiltered}
+                dispatchData={settleRows}
                 drivers={drivers}
                 patchDispatch={patchDispatchSafe}
                 companyName={(localStorage.getItem("loginCompany") || userCompany || localStorage.getItem("userCompany") || DEFAULT_COMPANY || "").trim()}
@@ -9012,6 +9026,7 @@ return (
               />
             </div>
           )}
+          </>)}</DetailScope>
           </KpSubNav>
           </div>
         )}
@@ -27688,7 +27703,9 @@ const driverPanelCallbackRef = React.useRef(null);
   // ⭐ 검색 항목 선택(통합/거래처명/상차지명…) — 배차현황 검색창과 똑같이
   const [rtSearchType, setRtSearchType] = React.useState("all");
   const rtBiz = useCompanyBiz(getTenant() || userCompany); // ⭐ 2026-11-03 여러 사업자
-  const [rtBizFilter, setRtBizFilter] = React.useState("");
+  const [rtDetail, setRtDetail] = React.useState(null); // 🔎 세부검색(기간 없음 — 실시간)
+  const rtDetailGet = useDetailGetters(userNameMap, userCompany);
+  const rtDayRows = React.useMemo(() => { const t = dayMode === "yesterday" ? yesterdayKST() : dayMode === "tomorrow" ? tomorrowKST() : todayKST(); return rows.filter((r) => r.상차일 === t); }, [rows, dayMode]);
 
   // 경유지 가공(dedup) 결과 캐시 — 행 객체 참조가 이전과 동일하면(=그 오더는 안 바뀜)
   // 다시 계산하지 않고 재사용한다. rows의 행 참조가 안정적으로 유지되므로
@@ -27708,7 +27725,7 @@ const driverPanelCallbackRef = React.useRef(null);
 
     // 🔒 실시간배차현황은 하루만 조회
     data = data.filter((r) => r.상차일 === targetDate);
-    if (rtBizFilter) data = data.filter((r) => bizMatch(r, rtBiz.defaultName, rtBizFilter)); // ⭐ 청구 사업자 필터
+    if (rtDetail) data = applyDetailFilter(data, rtDetail, { getters: rtDetailGet, withDate: false }); // 🔎 세부검색
     // 🔎 상태 필터 적용
     if (statusFilter === "UNASSIGNED") {
       data = data.filter(r => r.배차상태 !== "배차완료");
@@ -27803,7 +27820,7 @@ const driverPanelCallbackRef = React.useRef(null);
       waypointCacheRef.current.set(r, withStops);
       return withStops;
     });
-  }, [rows, q, rtSearchType, dayMode, statusFilter, filterErrorIds, rtBizFilter, rtBiz.defaultName]);
+  }, [rows, q, rtSearchType, dayMode, statusFilter, filterErrorIds, rtDetail, rtDetailGet]);
   // ⚡ 머리글 정렬은 이미 걸러진 목록만 따로 정렬 — 정렬을 눌러도 위의 검색·필터·경유지 계산은 다시 돌지 않는다
   const rtMgrMap = useOrderStaffName(userNameMap, userCompany); // ⭐ 배차담당자 칸(회사별 기능 꺼지면 null)
   const [lookupOpen, setLookupOpen] = React.useState(false); // ⭐ 2026-11-03 담당자·차량 조회
@@ -29713,7 +29730,7 @@ const head = isDark
     />
     <button onClick={() => setQ(qInputRef.current?.value ?? "")} className="h-full px-2 bg-[#1B2B4B] text-white text-[11px] font-bold hover:bg-[#243a60] transition"><EditableText id="misc.btn.26528.조회" defaultText="조회" /></button>
   </div>
-  <BizFilter biz={rtBiz} value={rtBizFilter} onChange={setRtBizFilter} />
+  <DetailFilterButton rows={rtDayRows} value={rtDetail} onApply={setRtDetail} withDate={false} getters={rtDetailGet} title="세부검색 · 실시간" />
   <button onClick={() => setLookupOpen(true)} title="기간 + 배차담당자 + 차량번호·기사명으로 찾기" className="px-2 py-1 rounded-lg bg-white text-[#1B2B4B] border-2 border-[#1B2B4B] text-[11px] font-black whitespace-nowrap flex-shrink-0 hover:bg-[#EEF2F8]">담당자·차량 조회</button>
   <OrderLookupModal open={lookupOpen} onClose={() => setLookupOpen(false)} rows={historyDispatchData} nameOf={lookupNameOf} />
   {/* 날짜 버튼 */}
@@ -38250,7 +38267,16 @@ if (mode === "driver") {
       prev.size === rows.length ? new Set() : new Set(rows.map((r) => getId(r)))
     );
   const dsBiz = useCompanyBiz(getTenant() || userCompany); // ⭐ 2026-11-03 여러 사업자
-  const [dsBizFilter, setDsBizFilter] = React.useState("");
+  const [dsDetail, setDsDetail] = React.useState(null); // 🔎 세부검색(최대 3차 + 기간)
+  const dsDetailGet = useDetailGetters(userNameMap, userCompany);
+  const dsDateOf = React.useCallback((r) => String(fixedForm ? (r.입고일 || r.하차일 || r.상차일 || "") : (r.상차일 || r.상차일자 || "")).slice(0, 10), [fixedForm]);
+  const applyDsDetail = (v) => {
+    setDsDetail(v); setPage(0);
+    if (v?.from && v?.to) {
+      setStartDate(v.from); setEndDate(v.to); setAppliedStartDate(v.from); setAppliedEndDate(v.to); setLoaded(true);
+      if (!fixedForm) { try { localStorage.setItem("dispatchDateState", JSON.stringify({ startDate: v.from, endDate: v.to, appliedStartDate: v.from, appliedEndDate: v.to })); } catch { /* 무시 */ } }
+    }
+  };
   const dsLongPress = useKpLongPressSelect({ toggle: toggleOne, isSelected: (id) => selected.has(id) });
   // ⭐ 2026-11-03 고정노선현황 — 평소엔 글자만, 줄을 두 번 누르면 그 줄만 수정 모드(Esc·완료로 끝)
   const [fixedEditId, setFixedEditId] = React.useState(null);
@@ -38800,8 +38826,8 @@ const filteredBase = React.useMemo(() => {
   if (fareOn && fareTypeFilter) {
     data = data.filter(r => fareTypeFilter === "__none" ? !String(r.운임구분 || "").trim() : String(r.운임구분 || "") === fareTypeFilter);
   }
-  // ⭐ 2026-11-03 여러 사업자 — 청구 사업자 필터
-  if (dsBizFilter) data = data.filter((r) => bizMatch(r, dsBiz.defaultName, dsBizFilter));
+  // 🔎 2026-11-03 세부검색 — 기간은 위 날짜 조회로, 여기선 1~3차 조건만
+  if (dsDetail) data = applyDetailFilter(data, dsDetail, { getters: dsDetailGet, withDate: false });
   // =========================
   // 🔽 기본 순서(머리글 정렬이 꺼져 있을 때) — 머리글 정렬은 아래 filtered 에서 따로
   // =========================
@@ -38839,8 +38865,8 @@ const filteredBase = React.useMemo(() => {
   filterErrorIds,
   fareOn,
   fareTypeFilter,
-  dsBizFilter,
-  dsBiz.defaultName,
+  dsDetail,
+  dsDetailGet,
 ]);
   // ⚡ 머리글 정렬은 이미 걸러진 목록만 따로 정렬 — 정렬을 눌러도 위의 날짜·검색 필터는 다시 돌지 않는다
   const dsMgrMap = useOrderStaffName(userNameMap, userCompany); // ⭐ 배차담당자 칸(회사별 기능 꺼지면 null)
@@ -39633,7 +39659,7 @@ return (
         {/* 우측 버튼들 */}
         <div className="ml-auto flex items-center gap-1 flex-shrink-0 flex-wrap justify-end">
           {/* ⭐ 2026-11-02 운임규칙 — 운임구분 필터(규칙 사용 회사만) */}
-          <BizFilter biz={dsBiz} value={dsBizFilter} onChange={(v) => { setDsBizFilter(v); setPage(0); }} />
+          <DetailFilterButton rows={dispatchData} value={dsDetail} onApply={applyDsDetail} getters={dsDetailGet} dateOf={dsDateOf} dateLabel={fixedForm ? "입고일 기준" : "상차일 기준"} title={fixedForm ? "세부검색 · 고정노선현황" : "세부검색 · 배차현황"} />
           {fareOn && (
             <span data-fare-filter="1"><FareTypeSelect compact align="right" rules={fareR.rules} value={fareTypeFilter} placeholder="운임구분 전체" noneLabel="운임구분 전체"
               extraOpts={[{ name: "__none", label: "운임구분 미지정" }]} onChange={(v) => { setFareTypeFilter(v); setPage(0); }} /></span>
@@ -49380,6 +49406,10 @@ function UnassignedStatus({ dispatchData, setDispatchData = () => {}, drivers = 
   const [endDate, setEndDate] = React.useState("");
    // ⭐ 기간을 지정하면 그 기간만 불러온다(미지정 시 최근 범위의 배차중 오더)
    useLoadOrderRange(startDate && endDate ? startDate : null, endDate);
+  const [unDetail, setUnDetail] = React.useState(null); // 🔎 세부검색(최대 3차 + 기간)
+  const unDetailGet = useDetailGetters(userNameMap, userCompany);
+  const unPending = React.useMemo(() => pickUnassignedOrders(dispatchData), [dispatchData]);
+  const applyUnDetail = (v) => { setUnDetail(v); if (v?.from && v?.to) { setStartDate(v.from); setEndDate(v.to); } };
   const [deleteMode, setDeleteMode] = React.useState(false);
   const [selectedIds, setSelectedIds] = React.useState(new Set());
   // 조회 날짜(기간)를 바꾸면 화면에 보이는 행이 바뀌므로, 이전 날짜에서 선택해둔
@@ -49715,6 +49745,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
     if (startDate && endDate) {
       result = result.filter((r) => (r.상차일 || "") >= startDate && (r.상차일 || "") <= endDate);
     }
+    if (unDetail) result = applyDetailFilter(result, unDetail, { getters: unDetailGet, withDate: false }); // 🔎 세부검색
     if (filterValue.trim()) {
       // ⭐ 2026-11-03 거래처·상차지·하차지는 정확히 같은 이름이 있으면 그것만
       const unNameM = ["거래처명", "상차지명", "하차지명"].includes(filterType) ? makeClientMatcher(filterValue, result.map((r) => r[filterType])) : null;
@@ -49730,7 +49761,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
       if (d1 !== d2) return d1.localeCompare(d2);
       return (a.상차시간 || "").localeCompare(b.상차시간 || "");
     });
-  }, [dispatchData, q, startDate, endDate, filterType, filterValue]);
+  }, [dispatchData, q, startDate, endDate, filterType, filterValue, unDetail, unDetailGet]);
 
   const unMgrMap = useOrderStaffName(userNameMap, userCompany); // ⭐ 배차담당자 칸(회사별 기능 꺼지면 null)
   const headers = [
@@ -49834,6 +49865,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
             <span className="text-gray-500 text-[13px]">~</span>
             <CustomDatePicker className="border border-gray-200 rounded-lg px-2 py-1.5 text-[13px] focus:outline-none focus:border-[#1B2B4B] bg-white" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
           </div>
+          <DetailFilterButton rows={unPending} value={unDetail} onApply={applyUnDetail} getters={unDetailGet} title="세부검색 · 미배차현황" size="md" />
           <div className="flex items-center gap-1">
             <CustomSelect value={filterType} onChange={(e) => setFilterType(e.target.value)} className="border border-gray-200 rounded-lg px-2 py-1.5 text-[13px] focus:outline-none focus:border-[#1B2B4B]">
               <option value="거래처명">거래처명</option>
