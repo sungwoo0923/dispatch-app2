@@ -116,6 +116,11 @@ function isTabletDevice() {
 // 🔷 첫 화면(스플래시) — 네이비 배경, 디지털 로고 마크, 얇은 진행 막대
 function KpSplash() {
   const MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
+  // ⭐ 2026-11-03 새 버전 받는 중이면 안내(index.html 첫 화면과 같은 문구) · 아니면 2.5초 넘게 걸릴 때만 "불러오는 중"
+  const upd = typeof window !== "undefined" && window.__kpUpdating === true;
+  const [slow, setSlow] = React.useState(false);
+  React.useEffect(() => { const t = setTimeout(() => setSlow(true), 2500); return () => clearTimeout(t); }, []);
+  const msg = upd ? ["최신 버전으로 업데이트 중입니다", "처음 한 번은 다소 시간이 걸릴 수 있습니다"] : slow ? ["불러오는 중입니다", "잠시만 기다려 주세요"] : null;
   return (
     <div style={{ position: "fixed", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", background: "radial-gradient(90% 60% at 50% 0%, #22396A 0%, #0F1A30 55%, #060D1C 100%)", userSelect: "none", WebkitUserSelect: "none", overflow: "hidden" }}>
       <style>{KP_MARK_CSS + `
@@ -128,6 +133,9 @@ function KpSplash() {
       <div style={{ position: "relative", marginTop: 6, color: "rgba(207,224,255,0.45)", fontWeight: 700, fontSize: 10.5, letterSpacing: "0.3em", paddingLeft: "0.3em", animation: "kpSplashUp .45s ease .22s both" }}>LOGISTICS DISPATCH SYSTEM</div>
       <div style={{ position: "relative", marginTop: 28, width: 120, height: 2, borderRadius: 2, background: "rgba(255,255,255,0.08)", overflow: "hidden", animation: "kpSplashUp .45s ease .3s both" }}>
         <div style={{ width: "40%", height: "100%", borderRadius: 2, background: "linear-gradient(90deg, transparent, #CFE0FF, transparent)", animation: "kpSplashBar 1.1s ease-in-out infinite" }} />
+      </div>
+      <div style={{ position: "relative", marginTop: 18, minHeight: 34, textAlign: "center", color: "#CFE0FF", fontWeight: 800, fontSize: 13, letterSpacing: "-0.01em" }}>
+        {msg && <>{msg[0]}<div style={{ marginTop: 4, color: "rgba(207,224,255,0.45)", fontSize: 11, fontWeight: 700 }}>{msg[1]}</div></>}
       </div>
     </div>
   );

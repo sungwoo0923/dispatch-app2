@@ -79,6 +79,27 @@ export default defineConfig({
   plugins: [
     react({ jsxRuntime: "automatic" }),
     fuelApiDevMiddleware(),
+    // ⚡ 2026-11-03 첫 접속 빠르게 — (1) 빌드 번호를 index.html에 심어 "새 버전 받는 중" 안내를 띄우고
+    //  (2) 로그인해 둔 기기는 배차 프로그램(PC)·모바일 화면 파일을 처음부터 같이 받기 시작한다(줄줄이 기다리지 않게)
+    {
+      name: "kp-boot-preload",
+      transformIndexHtml: {
+        order: "post",
+        handler(html, ctx) {
+          const files = (re) => {
+            const b = ctx.bundle; if (!b) return [];
+            const start = Object.values(b).find((c) => c.type === "chunk" && re.test(String(c.facadeModuleId || "").replace(/\\/g, "/")));
+            if (!start) return [];
+            const out = new Set(); const walk = (c) => { if (!c || out.has(c.fileName)) return; out.add(c.fileName); (c.imports || []).forEach((f) => walk(b[f])); };
+            walk(start);
+            return [...out];
+          };
+          const D = files(/\/src\/DispatchApp\.jsx$/), M = files(/\/src\/mobile\/MobileApp\.jsx$/);
+          const js = `window.__KP_BUILD__=${JSON.stringify(BUILD_TIME)};(function(){try{var p=location.pathname;if(!(p==="/"||p.indexOf("/app")===0||p.indexOf("/login")===0))return;if(!localStorage.getItem("userCompany"))return;var ua=navigator.userAgent.toLowerCase();var pad=(navigator.platform==="MacIntel"&&navigator.maxTouchPoints>1)||ua.indexOf("ipad")>=0||ua.indexOf("tablet")>=0;var phone=!pad&&(/iphone|ipod|android(?!.*tablet)/.test(ua)||innerWidth<768);var L=phone?${JSON.stringify(M)}:${JSON.stringify(D)};L.forEach(function(f){var l=document.createElement("link");l.rel="modulepreload";l.crossOrigin="";l.href="/"+f;document.head.appendChild(l);});}catch(e){}})();`;
+          return [{ tag: "script", children: js, injectTo: "head-prepend" }];
+        },
+      },
+    },
     {
       name: "update-sw-version",
       closeBundle() {
