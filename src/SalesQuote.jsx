@@ -79,12 +79,30 @@ export function planDefaultsFor(plan, inp = {}) {
   };
 }
 // 수납·요금·청구 — 회사에 요금제(companyPlans)가 지정돼 있으면 요금제 관리 가격으로 계산(지정 없으면 기존 공통 청구 기준)
+// ⭐ 2026-11-03 사용량·한도 — 요금제 한도 대비 사용량과 초과 요금(계정·오더·지입차·저장 용량)
+export function planUsageOf(c, planId, sales, projected) {
+  const p = planId && sales?.plans?.find((x) => x.id === planId);
+  if (!p) return null;
+  const storageGB = Math.round(((c.storageKB || 0) / 1048576) * 100) / 100;
+  const hasFleet = ["standard", "pro"].includes(planId); // 지입차관리는 스탠다드부터(plans.jsx FEATURE_ROWS)
+  const extra = {
+    seats: Math.max(0, (c.staff || 0) - num(p.seats)),
+    orders: Math.max(0, (projected || 0) - num(p.orders)),
+    fleet: hasFleet ? (c.fleetJ || 0) : 0,
+    storageGB: Math.max(0, Math.ceil(storageGB - num(sales.storageGB))),
+  };
+  const fee = {
+    seats: extra.seats * num(sales.extraSeat), orders: extra.orders * num(sales.extraOrder),
+    fleet: extra.fleet * num(sales.fleetPerVehicle), storage: extra.storageGB * num(sales.storagePerGB),
+  };
+  return { plan: p, storageGB, limitGB: num(sales.storageGB), extra, fee, over: fee.seats + fee.orders + fee.fleet + fee.storage };
+}
 export function applyPlanBill(base, c, planId, sales) {
   const p = planId && sales?.plans?.find((x) => x.id === planId);
   if (!p) return { ...base, planName: "" };
-  const seats = Math.max(0, (c.staff || 0) - num(p.seats)) * num(sales.extraSeat);
-  const orders = Math.max(0, (base.projected || 0) - num(p.orders)) * num(sales.extraOrder);
-  return { ...base, base: num(p.price), seats, orders, total: num(p.price) + seats + orders, planName: p.name };
+  const u = planUsageOf(c, planId, sales, base.projected || 0);
+  const { seats, orders, fleet, storage } = u.fee;
+  return { ...base, base: num(p.price), seats, orders, fleet, storage, total: num(p.price) + seats + orders + fleet + storage, planName: p.name, usage: u };
 }
 export function quoteOf(cfg, inp) {
   const plans = cfg.plans || [];

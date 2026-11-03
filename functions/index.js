@@ -5884,6 +5884,7 @@ async function computePlatformStats({ full = true } = {}) {
       if (!p) return true;
       const c = companies[n];
       c.totalOrders = Number(p.totalOrders || 0); c.places = Number(p.places || 0); c.clients = Number(p.clients || 0); c.fleet = Number(p.fleet || 0);
+      c.fleetJ = Number(p.fleetJ || 0); c.storageKB = Number(p.storageKB || 0); c.storageFiles = Number(p.storageFiles || 0); c.storageAt = Number(p.storageAt || 0); // ⭐ 2026-11-03 사용량·한도
       return false;
     });
   }
@@ -5895,7 +5896,36 @@ async function computePlatformStats({ full = true } = {}) {
       const c = companies[n];
       const [o1, o2, pl, cl, fl] = await Promise.all([countOf("orders", n), countOf("dispatch", n), countOf("places", n), countOf("clients", n), countOf("drivers", n)]);
       c.totalOrders = o1 + o2; c.places = pl; c.clients = cl; c.fleet = fl;
+      // ⭐ 2026-11-03 사용량·한도 — 지입차(GPS 관리) 대수
+      try { const r = await db.collection("drivers").where("companyName", "==", n).where("등급", "==", "지입").count().get(); c.fleetJ = r.data().count || 0; } catch { c.fleetJ = 0; }
     }));
+  }
+  // ⭐ 2026-11-03 사용량·한도 — 회사별 저장 용량(오더·거래처에 올린 사진·파일). 사진은 문서 안에 저장되어 있어
+  //   첨부 문서의 크기 칸(sizeKB)만 골라 읽고(select), 그 첨부가 달린 오더의 회사로 더한다. 크기 칸이 없는 예전 첨부는 평균으로 계산.
+  if (full) {
+    try {
+      const owner = {};
+      for (const col of ["orders", "dispatch", "fixedClients"]) {
+        const snap = await db.collection(col).select("companyName").get();
+        snap.docs.forEach((d) => { owner[`${col}/${d.id}`] = String(d.data()?.companyName || "").trim() || "돌캐"; });
+      }
+      const att = await db.collectionGroup("attachments").select("sizeKB").get();
+      const per = {}; let knownKB = 0; let knownN = 0; const unknown = {};
+      att.docs.forEach((d) => {
+        const par = d.ref.parent.parent; if (!par) return;
+        const name = owner[par.path]; if (!name) return;
+        const kb = Number(d.data()?.sizeKB || 0);
+        const o = per[name] || (per[name] = { kb: 0, files: 0 });
+        o.files += 1;
+        if (kb > 0) { o.kb += kb; knownKB += kb; knownN += 1; } else unknown[name] = (unknown[name] || 0) + 1;
+      });
+      const avg = knownN ? knownKB / knownN : 200;
+      Object.keys(companies).forEach((n) => {
+        const o = per[n] || { kb: 0, files: 0 };
+        companies[n].storageKB = Math.round(o.kb + (unknown[n] || 0) * avg);
+        companies[n].storageFiles = o.files; companies[n].storageAt = Date.now();
+      });
+    } catch (e) { console.warn("[사용량] 저장 용량 집계 실패:", e?.message || e); }
   }
   // 오더도 계정도 없는 빈 이름은 뺀다
   Object.keys(companies).forEach((k) => { const c = companies[k]; if (!c.staff && !c.totalOrders && !c.appliedAt) delete companies[k]; });

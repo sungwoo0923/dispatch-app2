@@ -18,7 +18,7 @@ import PlatformMonitor, { estimateBill, usePhone } from "./PlatformMonitor";
 import { PlatformLiveProvider, usePlatformLive, mergeCompanies, LiveNowPanel, SignupTimeline, DupeWarning, HeaderLivePill, Panel as LivePanel, normCo } from "./PlatformLive";
 import { ShellIcon } from "./AdminShell";
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts";
-import { useSalesPricing, applyPlanBill } from "./SalesQuote";
+import { useSalesPricing, applyPlanBill, planUsageOf } from "./SalesQuote";
 import { ContractBuilder, ContractList, ContractTemplates } from "./ContractCenter";
 import { NotifTemplatePanel, LandingPageEditPanel, ShipperForceUpdatePanel } from "./AdminMenu";
 import { AdminSessionsPanel } from "./LoginManager";
@@ -66,6 +66,7 @@ const SECTIONS = [
   { key: "billing", label: "청구", en: "BILLING", icon: "money", items: [
     { key: "billing", label: "요금·청구", en: "BILLING", icon: "money" },
     { key: "payments", label: "수납 관리", en: "COLLECTION", icon: "wallet" },
+    { key: "usage", label: "사용량·한도", en: "USAGE", icon: "server" }, // ⭐ 2026-11-03 요금제 한도 대비 사용량·초과 요금
   ] },
   { key: "ops", label: "운영", en: "OPERATIONS", icon: "server", items: [
     { key: "notices", label: "플랫폼 공지", en: "BROADCAST", icon: "bell" },
@@ -237,6 +238,117 @@ function InquiriesPanel({ toQuote }) {
 
 // ═══════════════════════ 수납 관리 ═══════════════════════
 const PAY_STATUS = ["미청구", "청구", "입금완료", "연체"];
+// 📊 2026-11-03 사용량·한도 — 운송사마다 요금제 한도(직원·월 오더·지입차·저장 용량) 대비 사용량과 이달 초과 요금
+//  · 숫자는 서버 집계(siteConfig/platformStats · 매일 새벽 4시 전체 + 지금 갱신) — 모든 문서의 회사명(companyName) 기준으로 센다
+//  · 직원 수는 실시간(usePlatformLive), 이달 오더는 오늘까지 건수로 월말 예상
+function UsageBar({ used, limit, unit = "", fmt = (n) => Number(n || 0).toLocaleString() }) {
+  if (!limit) return <div className="text-[13.5px] font-black text-[#0F1A30] tabular-nums" style={{ fontFamily: MONO }}>{fmt(used)}{unit}<span className="ml-1 text-[11px] font-bold text-[#9AA9C3]">한도 없음</span></div>;
+  const r = used / limit; const pct = Math.min(100, Math.round(r * 100));
+  const tone = r > 1 ? "#B42318" : r >= 0.8 ? "#B54708" : "#1B2B4B";
+  return (
+    <div className="min-w-[120px]">
+      <div className="flex items-baseline justify-between gap-2 tabular-nums" style={{ fontFamily: MONO }}>
+        <span className="text-[13.5px] font-black" style={{ color: tone }}>{fmt(used)}{unit}</span>
+        <span className="text-[11px] font-bold text-[#9AA9C3]">/ {fmt(limit)}{unit}</span>
+      </div>
+      <div className="mt-1 h-1.5 rounded-full bg-[#EEF1F6] overflow-hidden"><div className="h-full rounded-full" style={{ width: `${pct}%`, background: tone }} /></div>
+      {r > 1 && <div className="mt-0.5 text-[10.5px] font-black text-[#B42318]">초과 +{fmt(Math.round((used - limit) * 100) / 100)}{unit}</div>}
+    </div>
+  );
+}
+function UsagePanel() {
+  const live = usePlatformLive();
+  const sales = useSalesPricing();
+  const [stats, setStats] = React.useState(null);
+  const [plans, setPlans] = React.useState({});
+  const [tenancy, setTenancy] = React.useState(null);
+  const [busy, setBusy] = React.useState(false);
+  const [msg, setMsg] = React.useState("");
+  React.useEffect(() => onSnapshot(doc(db, "siteConfig", "platformStats"), (x) => setStats(x.exists() ? x.data() : {}), () => setStats({})), []);
+  React.useEffect(() => onSnapshot(collection(db, "companyPlans"), (x) => { const m = {}; x.docs.forEach((d) => { m[d.id] = d.data(); }); setPlans(m); }, () => {}), []);
+  React.useEffect(() => onSnapshot(doc(db, "systemConfig", "tenancy"), (x) => setTenancy(x.exists() ? x.data() : {}), () => setTenancy({})), []);
+  const refresh = async () => {
+    setBusy(true); setMsg("");
+    try {
+      const token = await auth.currentUser?.getIdToken();
+      const r = await fetch(`${FUNCTIONS_BASE}/platformStats`, { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: "{}" });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(j.error || r.status);
+      setMsg(j.skipped ? `방금 갱신했습니다 — ${Math.ceil((j.nextInSec || 0) / 60)}분 뒤 다시 누를 수 있어요` : "새로 집계했습니다");
+    } catch (e) { setMsg(`갱신 실패: ${e.message || e}`); } finally { setBusy(false); }
+  };
+  if (!stats || !sales) return <div className="py-20 text-center text-[#9AA9C3]">불러오는 중…</div>;
+  const today = ymd(); const dayNo = Number(today.slice(8)); const days = new Date(Number(today.slice(0, 4)), Number(today.slice(5, 7)), 0).getDate();
+  const rows = mergeCompanies(stats.companies, live).filter((c) => c.kind !== "shipper").map((c) => {
+    const planId = plans[c.name]?.planId || "";
+    const projected = dayNo ? Math.round(((c.m?.cnt || 0) / dayNo) * days) : 0;
+    const u = planUsageOf(c, planId, sales, projected);
+    const p = u?.plan;
+    return { c, planId, p, u, projected, storageGB: u ? u.storageGB : Math.round(((c.storageKB || 0) / 1048576) * 100) / 100, total: p ? Number(p.price || 0) + u.over : 0 };
+  }).sort((a, b) => (b.u?.over || 0) - (a.u?.over || 0) || (b.c.m?.cnt || 0) - (a.c.m?.cnt || 0));
+  const won = (n) => `${Math.round(Number(n) || 0).toLocaleString()}원`;
+  const overCos = rows.filter((r) => r.u?.over > 0);
+  const sumOver = rows.reduce((a, r) => a + (r.u?.over || 0), 0);
+  const sumTotal = rows.reduce((a, r) => a + r.total, 0);
+  const locked = tenancy?.serverFilter === true;
+  const upd = stats.updatedAtMs ? new Date(stats.updatedAtMs).toLocaleString("ko-KR", { timeZone: "Asia/Seoul", month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "-";
+  const stAt = rows.map((r) => r.c.storageAt || 0).reduce((a, b) => Math.max(a, b), 0);
+  return (
+    <div className="space-y-4">
+      <Hero en="BILLING · USAGE" title="사용량 · 한도" desc="운송사마다 고른 요금제의 한도(직원 계정 · 월 오더 · 지입차 · 저장 용량) 대비 사용량과 이달 초과 요금입니다."
+        right={<button type="button" onClick={refresh} disabled={busy} className="h-10 px-4 rounded-xl bg-white/10 ring-1 ring-white/25 text-white text-[13px] font-black disabled:opacity-60">{busy ? "집계 중…" : "지금 갱신"}</button>} />
+      {!locked && (
+        <div className="rounded-2xl border border-[#F7C97A] bg-[#FFF8EC] px-5 py-3.5 text-[13px] text-[#8A4B08]">
+          <b>서버 분리가 아직 꺼져 있습니다.</b> 사용량은 모든 문서의 회사명 기준으로 세므로 회사명이 정확하면 지금도 맞습니다. 다만 회사명이 빈 예전 문서는 돌캐로 잡히니, <b>보안·데이터 › 운송사 분리</b>에서 1단계(회사명 채우기)를 먼저 해 두면 더 정확합니다.
+        </div>
+      )}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        {[["요금제 지정 운송사", `${rows.filter((r) => r.p).length}곳`, `전체 ${rows.length}곳`], ["한도 초과 운송사", `${overCos.length}곳`, overCos.slice(0, 3).map((r) => r.c.name).join(" · ") || "없음"], ["이달 초과 요금 합계", won(sumOver), "VAT 별도 · 월말 예상"], ["이달 예상 청구 합계", won(sumTotal), "기본료 + 초과 요금"]].map(([k, v, sub], i) => (
+          <div key={k} className={`rounded-[16px] px-4 py-3.5 border ${i === 2 ? "bg-[#0F1A30] text-white border-[#0F1A30]" : "bg-white border-[#E3E8F0]"}`}>
+            <div className={`text-[12.5px] font-bold ${i === 2 ? "text-white/60" : "text-[#7A879C]"}`}>{k}</div>
+            <div className="text-[22px] font-black mt-0.5 tabular-nums" style={{ fontFamily: MONO }}>{v}</div>
+            <div className={`text-[11.5px] font-semibold mt-0.5 truncate ${i === 2 ? "text-white/50" : "text-[#9AA9C3]"}`}>{sub}</div>
+          </div>
+        ))}
+      </div>
+      <Card code="USAGE" title={`${Number(today.slice(5, 7))}월 사용량 · 초과 요금`} right={<span className="text-[12px] font-bold text-[#7A879C]">집계 {upd}{stAt ? ` · 저장 용량 ${new Date(stAt).toLocaleDateString("ko-KR")} 기준` : ""}</span>} bodyClass="p-0">
+        {rows.length === 0 ? <div className="py-14 text-center text-[#9AA9C3]">집계된 운송사가 없습니다 — [지금 갱신]을 눌러 주세요.</div> : (
+          <div className="overflow-x-auto"><table className="w-full text-[13.5px]" style={{ minWidth: 1180 }}>
+            <thead><tr className="bg-[#1B2B4B] text-white">{["운송사", "요금제", "직원 계정", "이달 오더 (월말 예상)", "지입차", "저장 용량", "초과 요금", "이달 예상 청구"].map((h) => <th key={h} className="px-3 py-2.5 text-center font-extrabold whitespace-nowrap">{h}</th>)}</tr></thead>
+            <tbody>{rows.map(({ c, p, u, projected, storageGB, total }) => (
+              <tr key={c.name} className={`border-t border-[#EEF1F6] ${u?.over ? "bg-[#FFFBF5]" : ""}`}>
+                <td className="px-3 py-2.5 font-black text-[#0F1A30] whitespace-nowrap">{c.name}</td>
+                <td className="px-3 py-2.5 text-center whitespace-nowrap">{p ? <span className="inline-block px-2.5 py-1 rounded-lg bg-[#0F1A30] text-white text-[12px] font-black">{p.name}</span> : <span className="text-[12px] font-bold text-[#9AA9C3]">미지정(한도 없음)</span>}</td>
+                <td className="px-3 py-2.5"><UsageBar used={c.staff || 0} limit={p ? Number(p.seats) : 0} unit="명" /></td>
+                <td className="px-3 py-2.5"><UsageBar used={projected} limit={p ? Number(p.orders) : 0} unit="건" /><div className="text-[10.5px] font-semibold text-[#9AA9C3] mt-0.5">오늘까지 {Number(c.m?.cnt || 0).toLocaleString()}건</div></td>
+                <td className="px-3 py-2.5 text-center tabular-nums font-black" style={{ fontFamily: MONO }}>{Number(c.fleetJ || 0).toLocaleString()}대{p && !["standard", "pro"].includes(p.id) && c.fleetJ ? <div className="text-[10.5px] font-semibold text-[#9AA9C3]">요금제에 없음</div> : null}</td>
+                <td className="px-3 py-2.5"><UsageBar used={storageGB} limit={p ? (u?.limitGB || 0) : 0} unit="GB" fmt={(n) => Number(n || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })} /><div className="text-[10.5px] font-semibold text-[#9AA9C3] mt-0.5">파일 {Number(c.storageFiles || 0).toLocaleString()}개</div></td>
+                <td className="px-3 py-2.5 text-right whitespace-nowrap">
+                  {u?.over ? (
+                    <div className="space-y-0.5 text-[12px] font-bold text-[#5B6B85] tabular-nums" style={{ fontFamily: MONO }}>
+                      {u.fee.seats ? <div>계정 +{u.extra.seats}명 · {won(u.fee.seats)}</div> : null}
+                      {u.fee.orders ? <div>오더 +{u.extra.orders.toLocaleString()}건 · {won(u.fee.orders)}</div> : null}
+                      {u.fee.fleet ? <div>지입 {u.extra.fleet}대 · {won(u.fee.fleet)}</div> : null}
+                      {u.fee.storage ? <div>저장 +{u.extra.storageGB}GB · {won(u.fee.storage)}</div> : null}
+                      <div className="text-[13.5px] font-black text-[#B42318]">{won(u.over)}</div>
+                    </div>
+                  ) : <span className="text-[12px] font-bold text-[#9AA9C3]">{p ? "없음" : "-"}</span>}
+                </td>
+                <td className="px-3 py-2.5 text-right font-black text-[#0F1A30] tabular-nums whitespace-nowrap" style={{ fontFamily: MONO }}>{p ? won(total) : "-"}{p ? <div className="text-[10.5px] font-semibold text-[#9AA9C3]">기본 {won(p.price)}</div> : null}</td>
+              </tr>
+            ))}</tbody>
+          </table></div>
+        )}
+        {msg && <div className="px-5 py-3 border-t border-[#EEF1F6] text-[13px] font-bold text-[#1B2B4B]">{msg}</div>}
+      </Card>
+      <div className="text-[12px] text-[#7A879C] leading-relaxed px-1">
+        · 초과 단가는 <b>영업 › 요금제 관리</b>의 "월 추가 옵션"(추가 직원 계정 · 초과 오더 · 지입차 관리 · 초과 저장 용량) 값을 씁니다. 이 금액은 <b>수납 관리</b>의 청구액에도 그대로 들어갑니다(칸에서 직접 고칠 수 있음).<br />
+        · 지입차 요금은 지입차관리가 들어 있는 요금제(스탠다드·프로)에서만 붙습니다. 저장 용량은 오더·거래처에 올린 사진·파일 기준이며 매일 새벽 4시 · [지금 갱신] 때 다시 셉니다.
+      </div>
+    </div>
+  );
+}
+
 function PaymentsPanel() {
   const live = usePlatformLive(); // ⭐ 2026-11-02 관리자센터 — 직원 수(추가 계정 요금)는 실시간
   const [stats, setStats] = React.useState(null);
@@ -847,6 +959,7 @@ function PlatformCenterInner({ user }) {
   else if (tab === "contract:new") body = <><Hero en="CONTRACTS · NEW" title={contractCtx.initial ? "계약서 수정" : "계약서 작성"} desc="견적을 불러오면 요금·기간이 자동으로 채워집니다. 저장하고 서명 요청을 누르면 고객용 서명 링크가 복사됩니다." /><ContractBuilder key={contractCtx.key} initial={contractCtx.initial} fromQuoteDoc={contractCtx.fromQuote} onDone={() => setTab("contract:list")} /></>;
   else if (tab === "contract:templates") body = <><Hero en="CONTRACTS · TEMPLATES" title="계약서 양식" desc="기본 이용계약서를 바탕으로 조항을 자유롭게 고치고, 양식을 여러 개 둘 수 있습니다." /><ContractTemplates /></>;
   else if (tab === "payments") body = <PaymentsPanel />;
+  else if (tab === "usage") body = <UsagePanel />;
   else if (tab === "notices") body = <NoticesPanel />;
   else if (tab === "notifTemplate") body = <><Hero en="OPERATIONS · MESSAGES" title="알림 문구" desc="배차 알림 등 자동 발송 문구를 관리합니다." /><NotifTemplatePanel /></>;
   else if (tab === "forceUpdate") body = <><Hero en="OPERATIONS · UPDATE" title="화주사 강제 업데이트" desc="화주사 화면을 최신 버전으로 새로고침시킵니다." /><ShipperForceUpdatePanel currentVersion={typeof __APP_VERSION__ !== "undefined" ? __APP_VERSION__ : ""} /></>;
