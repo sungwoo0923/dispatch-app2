@@ -197,6 +197,11 @@ service cloud.firestore {
     match /companySettings/{co} {
       allow read: if isTotalMasterUser() || (isApproved() && myCo() == co);
       allow write: if isTotalMasterUser() || (isApproved() && myCo() == co && myUser().get('isMaster', false) == true);
+      // 사업자 목록(bizList)은 관리자·경리·인사도(공지 작성 권한은 못 바꿈)
+      allow create: if isApproved() && myCo() == co && myUser().get('role', '') in ['admin', 'hrAcct', 'hrManager', 'test']
+        && request.resource.data.keys().hasOnly(['companyName', 'bizList', 'bizListAt']);
+      allow update: if isApproved() && myCo() == co && myUser().get('role', '') in ['admin', 'hrAcct', 'hrManager', 'test']
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['companyName', 'bizList', 'bizListAt']);
     }
     match /companyFeatures/{co} {
       allow read: if isTotalMasterUser() || (isApproved() && myCo() == co);

@@ -8,6 +8,7 @@ import { CompanyOptionPicker } from "../companyOptionPicker"; // 🧾 2026-11-02
 import { AttendanceQuickButton, officeRadii, CheckoutReminderHost } from "../attendanceQuick";
 import { PersonalTodayHost } from "../PersonalSchedule";
 import { makeClientMatcher } from "../clientMatch"; // ⭐ 2026-11-03 거래처 검색
+import { useCompanyBiz, BizPicker, BizChip, bizOf } from "../companyBiz"; // ⭐ 2026-11-03 여러 사업자
 import { useCustomRoles, findCustomRole, getMenuAccess, roleScreen } from "../customRoles";
 import { useReadOnlyGuard } from "../readOnlyGuard";
 import { confirmLeave } from "../leaveGuard";
@@ -4443,6 +4444,7 @@ const groupedByDate = useMemo(() => {
     // 공통 데이터 (PC 호환 필드 포함)
     const docData = {
       거래처명: form.거래처명 || "",
+      청구사업자: form.청구사업자 || "", // ⭐ 2026-11-03 여러 사업자(비면 기본 = 회사)
       상차지명: form.상차지명,
       상차지주소: form.상차지주소 || "",
       상차지담당자: form.상차지담당자 || "",
@@ -10790,6 +10792,7 @@ const MobileOrderCard = React.memo(function MobileOrderCard({
   cardVersionB = false,
   dispatcherName = "",
 }) {
+  const cBiz = useCompanyBiz(getTenant() || localStorage.getItem("userCompany") || ""); // ⭐ 2026-11-03 여러 사업자
   const claim = getClaim(order);
   const fee = order.기사운임 ?? 0;
   const state = getStatus(order);
@@ -10956,7 +10959,7 @@ const dropTime = order.하차시간 ? fmtDispatchTimeM(order.하차시간, order
           <div className="flex flex-wrap items-center gap-1.5 min-w-0">
             <span className="text-[0.7em] font-extrabold text-white bg-[#1B2B4B] px-1.5 py-0.5 rounded-md tabular-nums shrink-0" style={{ fontFamily: MONO_B }}>{String(order.상차일 || "").slice(5) || "--"}</span>
             {order.거래처명 && (
-              <span className="text-[0.8em] font-extrabold text-[#1B2B4B] truncate max-w-[120px]">{order.거래처명}</span>
+              <span className="text-[0.8em] font-extrabold text-[#1B2B4B] truncate max-w-[150px] inline-flex items-center">{cBiz.multi && <BizChip name={bizOf(order, cBiz.defaultName)} main={bizOf(order, cBiz.defaultName) === cBiz.defaultName} />}{order.거래처명}</span>
             )}
             <button
               style={{ touchAction: "manipulation" }}
@@ -14091,6 +14094,7 @@ function MobileOrderForm({
   orderDropDates,
   setOrderDropDates,
 }) {
+  const mBiz = useCompanyBiz(getTenant() || localStorage.getItem("userCompany") || ""); // ⭐ 2026-11-03 여러 사업자
   // 거래처명 자동완성은 기본거래처만 대상으로 한다 — clients prop은 상/하차지 주소
   // 자동완성을 위해 하차지거래처(places)까지 합쳐진 풀이라, 여기 그대로 쓰면 관련 없는
   // 하차지명이 거래처 드롭다운에 함께 뜬다.
@@ -14329,6 +14333,8 @@ const searchClient = (q) => {
 const chooseClient = (c) => {
   setMatchedClients([]);
   update("거래처명", c.거래처명);
+  // ⭐ 2026-11-03 여러 사업자 — 거래처의 기본 청구 사업자로
+  if (mBiz.multi) { const bc = (basicClients || []).find((x) => String(x.거래처명 || "").replace(/\s/g, "") === String(c.거래처명 || "").replace(/\s/g, "")); update("청구사업자", bc?.기본사업자 && mBiz.names.includes(bc.기본사업자) ? bc.기본사업자 : ""); }
   setSelectedClient(c);
   showAlertThen(findClientAlertTarget(c.거래처명), () => setShowClientApplyModal(true));
 };
@@ -15367,6 +15373,8 @@ const pickDrop = (c) => {
 
       </div>
 
+      {/* ⭐ 2026-11-03 여러 사업자 — 청구 사업자 */}
+      {mBiz.multi && <div className="px-3 py-2 border-t border-gray-100 overflow-x-auto"><BizPicker biz={mBiz} value={form.청구사업자 || ""} onChange={(v) => update("청구사업자", v)} size="sm" /></div>}
       {/* 거래처명 */}
 <div className="px-3 py-2 border-t border-gray-100">
   <div className="text-[11px] text-gray-500 mb-1">거래처명 <span className="text-red-500">*</span></div>

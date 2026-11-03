@@ -25,7 +25,8 @@ import { CartesianGrid, Line, LineChart, BarChart, Bar, Cell, LabelList, PieChar
 import * as XLSX from "xlsx";
 import OrderLookupModal from "./OrderLookup"; // ⭐ 2026-11-03 담당자·차량 조회
 import MgrBadge, { setMgrNameMap } from "./MgrBadge";
-import { makeClientMatcher } from "./clientMatch"; // ⭐ 2026-11-03 거래처 검색: 정확히 같은 이름이 있으면 그것만 // ⭐ 2026-11-03 배차담당자 칸(등록자 + 차량 붙인 사람)
+import { makeClientMatcher } from "./clientMatch"; // ⭐ 2026-11-03 거래처 검색: 정확히 같은 이름이 있으면 그것만
+import { useCompanyBiz, bizOf, BizChip, BizPicker, BizFilter, bizMatch, printInfoForBiz, BizListEditor, BizScope } from "./companyBiz"; // ⭐ 2026-11-03 한 회사 · 여러 사업자 // ⭐ 2026-11-03 배차담당자 칸(등록자 + 차량 붙인 사람)
 import JSZip from "jszip";
 import { sendOrderTo24Proxy as sendOrderTo24 } from "../api/24CallProxy";
 import { useNewVersion, openUpdatePopup } from "./VersionCheck";
@@ -2258,6 +2259,8 @@ function normalizeClient(row) {
     // 빼고 싶은 거래처용 플래그(예: 월 단위 합산청구처럼 배차 매출과 성격이 달라
     // 순위표에 넣으면 왜곡되는 거래처). 저장 규칙은 순수매출제외와 동일.
     ...(typeof row.매출순위제외 === "boolean" ? { 매출순위제외: row.매출순위제외 } : {}),
+    // ⭐ 2026-11-03 여러 사업자 — 이 거래처를 고르면 자동으로 맞출 청구 사업자(비면 기본 = 회사)
+    ...(row.기본사업자 ? { 기본사업자: String(row.기본사업자) } : {}),
   };
 }
 function normalizeClients(arr) {
@@ -8862,15 +8865,17 @@ return (
 
         {menu === "매출관리" && (role === "admin" || role === "totalMaster" || role === "test" || isViewer || !!customRole) && (
           revenueUnlocked ? (
+            <BizScope company={getTenant() || userCompany || localStorage.getItem("userCompany") || ""} data={dispatchDataFiltered}>{(bizRows, bizSel) => (
             <Settlement
-              dispatchData={dispatchDataFiltered}
+              key={`settle-${bizSel || "all"}`}
+              dispatchData={bizRows}
               fixedRows={fixedRows}
               clients={clients}
               places={places}
               isViewer={isViewer}
               role={role}
               userCompany={userCompany}
-            />
+            />)}</BizScope>
           ) : (
             <div className="flex items-center justify-center" style={{ minHeight: "60vh" }}>
               <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-8 w-[360px]">
@@ -9782,6 +9787,7 @@ function MultiRegCombo({ id, value, onChange, onSelect, items, placeholder, clas
       // 한 번만 구독한다. 커스터마이즈 안 한 회사는 기존 하드코딩 값 그대로 보인다.
       // ⭐ 2026-11-02 운임규칙 — 회사가 "운임 규칙 사용"을 켠 경우에만 운임구분 칸을 보인다
       const fareR = useFareRules(getTenant() || userCompany);
+      const dmBiz = useCompanyBiz(getTenant() || userCompany); // ⭐ 2026-11-03 여러 사업자 — 오더 청구 사업자
       const fareOn = fareR.on;
       const cargoTypeOptionsCustom = useCompanyDropdownOptions("화물타입", role, userCompany);
       const tonTypeOptionsCustom = useCompanyDropdownOptions("톤수타입", role, userCompany);
@@ -11025,6 +11031,7 @@ const filterPlaces = (q) => {
 
     const emptyForm = {
       _id: crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`,
+      청구사업자: "", // ⭐ 2026-11-03 여러 사업자(비면 기본 = 회사)
       순번: "",
       등록일: _todayStr(),
       거래처명: "",
@@ -12326,6 +12333,7 @@ const submitMultiRegister = async () => {
       // undefined (reading 'map')" 에러가 난다.
       return addDispatch({
         ...emptyForm,
+        ...(dmBiz.multi ? (() => { const bc = (clients || []).find((c) => String(c.거래처명 || "").replace(/\s/g, "") === String(s.거래처명 || "").replace(/\s/g, "")); return bc?.기본사업자 && dmBiz.names.includes(bc.기본사업자) ? { 청구사업자: bc.기본사업자 } : {}; })() : {}), // ⭐ 거래처 기본 청구 사업자
         거래처명: s.거래처명, 상차지명: s.상차지명, 상차지주소: s.상차지주소,
         상차지담당자: s.상차지담당자, 상차지담당자번호: s.상차지담당자번호,
         경유상차목록: s.경유상차목록 || [], 경유지_상차: s.경유상차목록 || [],
@@ -12557,6 +12565,9 @@ function applyClientSelect(name) {
   const p = mergedClients.find(
     x => norm(x.업체명 || "") === norm(name)
   );
+  // ⭐ 2026-11-03 여러 사업자 — 거래처의 기본 청구 사업자로 자동 맞춤
+  const _bc = (clients || []).find((c) => norm(c.거래처명 || "") === norm(name));
+  if (dmBiz.multi) setForm(prev => ({ ...prev, 청구사업자: _bc?.기본사업자 && dmBiz.names.includes(_bc.기본사업자) ? _bc.기본사업자 : "" }));
   // ✅ 거래처 → 상차지 자동 적용
   if (p) {
     setForm(prev => ({
@@ -14516,6 +14527,7 @@ const applyCopy = (r) => {
 
     const keep = {
     거래처명: isDateLike(r.거래처명) ? "" : (r.거래처명 || ""),
+    청구사업자: r.청구사업자 || "", // ⭐ 2026-11-03 여러 사업자 — 복사해도 같은 사업자로
 
     // ✅ 상차지
     상차지명: r.상차지명 || "",
@@ -16140,7 +16152,11 @@ shadow-[0_1px_2px_rgba(16,24,40,0.04),0_12px_30px_rgba(16,24,40,0.07)]
 {/* 거래처 + 신규등록 */}
 <div className="col-span-2">
 
-    <label className={labelCls}><EditableText id="orderForm.label.거래처" defaultText="거래처" /> {reqStar}</label>
+    <div className="flex items-center justify-between gap-2 flex-wrap">
+      <label className={labelCls}><EditableText id="orderForm.label.거래처" defaultText="거래처" /> {reqStar}</label>
+      {/* ⭐ 2026-11-03 여러 사업자 — 이 오더를 어느 사업자로 청구할지 */}
+      <BizPicker biz={dmBiz} value={form.청구사업자 || ""} onChange={(v) => setForm((p) => ({ ...p, 청구사업자: v }))} size="sm" />
+    </div>
     <div className="flex gap-2">
       <div className="relative flex-1" ref={comboRef}>
         <input autoComplete="off"
@@ -23883,7 +23899,7 @@ function StickyHScrollbar({ targetRef }) {
 // 그 값 자체가 outer state(예: r._id 자체, edited 등)에 의존하지 않는 "그 행 전용" 클로저라
 // 이 행이 실제로 다시 렌더링될 때 항상 최신 값으로 갱신되므로 안전하다.
 function RealtimeRowBase({
-  r, idx, mgrName = null,
+  r, idx, mgrName = null, bizTag = null, bizMain = false,
   isSelected, isFading, isHighlighted, isDark, selectedEditMode,
   editedForRow,
   toInt, formatComma, formatPhone, getCreatedMs, getUpdatedMs, getDispatchConfirmedMs, formatKstDateTime, getCreatorLabel,
@@ -24048,7 +24064,7 @@ ${isHighlighted ? "animate-pulse bg-blue-100" : ""}
   </span>
 </td>
 
-                  <td className={cell}>{editableInput("거래처명", r.거래처명, r._id)}</td>
+                  <td className={cell}>{bizTag ? <span className="inline-flex items-center whitespace-nowrap"><BizChip name={bizTag} main={bizMain} />{editableInput("거래처명", r.거래처명, r._id)}</span> : editableInput("거래처명", r.거래처명, r._id)}</td>
                   <td className={cell}>
   <div className="inline-flex items-center gap-1 flex-nowrap whitespace-nowrap">
     <AddressCell text={r.상차지명} max={8} popupTitle="상차지명 전체보기" />
@@ -24349,6 +24365,7 @@ function realtimeRowPropsEqual(prev, next) {
     // ⚡ idx(순번)는 비교하지 않는다 — 순번·줄무늬를 CSS로 그려서, 정렬해도 바뀐 줄만 다시 그린다
     prev.isSelected === next.isSelected &&
     prev.mgrName === next.mgrName &&
+    prev.bizTag === next.bizTag &&
     prev.isFading === next.isFading &&
     prev.isHighlighted === next.isHighlighted &&
     prev.isDark === next.isDark &&
@@ -27562,6 +27579,8 @@ const driverPanelCallbackRef = React.useRef(null);
   const rtSort = useTableSort("realtime");
   // ⭐ 검색 항목 선택(통합/거래처명/상차지명…) — 배차현황 검색창과 똑같이
   const [rtSearchType, setRtSearchType] = React.useState("all");
+  const rtBiz = useCompanyBiz(getTenant() || userCompany); // ⭐ 2026-11-03 여러 사업자
+  const [rtBizFilter, setRtBizFilter] = React.useState("");
 
   // 경유지 가공(dedup) 결과 캐시 — 행 객체 참조가 이전과 동일하면(=그 오더는 안 바뀜)
   // 다시 계산하지 않고 재사용한다. rows의 행 참조가 안정적으로 유지되므로
@@ -27581,6 +27600,7 @@ const driverPanelCallbackRef = React.useRef(null);
 
     // 🔒 실시간배차현황은 하루만 조회
     data = data.filter((r) => r.상차일 === targetDate);
+    if (rtBizFilter) data = data.filter((r) => bizMatch(r, rtBiz.defaultName, rtBizFilter)); // ⭐ 청구 사업자 필터
     // 🔎 상태 필터 적용
     if (statusFilter === "UNASSIGNED") {
       data = data.filter(r => r.배차상태 !== "배차완료");
@@ -27675,7 +27695,7 @@ const driverPanelCallbackRef = React.useRef(null);
       waypointCacheRef.current.set(r, withStops);
       return withStops;
     });
-  }, [rows, q, rtSearchType, dayMode, statusFilter, filterErrorIds]);
+  }, [rows, q, rtSearchType, dayMode, statusFilter, filterErrorIds, rtBizFilter, rtBiz.defaultName]);
   // ⚡ 머리글 정렬은 이미 걸러진 목록만 따로 정렬 — 정렬을 눌러도 위의 검색·필터·경유지 계산은 다시 돌지 않는다
   const rtMgrMap = useOrderStaffName(userNameMap, userCompany); // ⭐ 배차담당자 칸(회사별 기능 꺼지면 null)
   const [lookupOpen, setLookupOpen] = React.useState(false); // ⭐ 2026-11-03 담당자·차량 조회
@@ -29585,6 +29605,7 @@ const head = isDark
     />
     <button onClick={() => setQ(qInputRef.current?.value ?? "")} className="h-full px-2 bg-[#1B2B4B] text-white text-[11px] font-bold hover:bg-[#243a60] transition"><EditableText id="misc.btn.26528.조회" defaultText="조회" /></button>
   </div>
+  <BizFilter biz={rtBiz} value={rtBizFilter} onChange={setRtBizFilter} />
   <button onClick={() => setLookupOpen(true)} title="기간 + 배차담당자 + 차량번호·기사명으로 찾기" className="px-2 py-1 rounded-lg bg-white text-[#1B2B4B] border-2 border-[#1B2B4B] text-[11px] font-black whitespace-nowrap flex-shrink-0 hover:bg-[#EEF2F8]">담당자·차량 조회</button>
   <OrderLookupModal open={lookupOpen} onClose={() => setLookupOpen(false)} rows={historyDispatchData} nameOf={lookupNameOf} />
   {/* 날짜 버튼 */}
@@ -29638,7 +29659,7 @@ const head = isDark
   const _via=(list)=>list.map(s=>s.업체명||s.주소||"").filter(Boolean).join(", ");
   const _hasVia=filtered.some(r=>_merge(r,"경유상차목록","경유지_상차").length>0||_merge(r,"경유하차목록","경유지_하차").length>0);
   const rowsExcel=filtered.map((r,idx)=>{
-    const row={순번:idx+1,...(rtMgrMap?{배차담당자:orderMgrName(rtMgrMap,r)||ORDER_MGR_EMPTY}:{}),등록일:r.등록일||"",상차일:r.상차일||"",상차시간:r.상차시간||"",하차일:r.하차일||"",하차시간:r.하차시간||"",거래처명:r.거래처명||"",상차지명:r.상차지명||""};
+    const row={순번:idx+1,...(rtMgrMap?{배차담당자:orderMgrName(rtMgrMap,r)||ORDER_MGR_EMPTY}:{}),등록일:r.등록일||"",상차일:r.상차일||"",상차시간:r.상차시간||"",하차일:r.하차일||"",하차시간:r.하차시간||"",...(rtBiz.multi?{청구사업자:bizOf(r,rtBiz.defaultName)}:{}),거래처명:r.거래처명||"",상차지명:r.상차지명||""};
     if(_hasVia)row["경유 상차지"]=_via(_merge(r,"경유상차목록","경유지_상차"));
     row.하차지명=r.하차지명||"";
     if(_hasVia)row["경유 하차지"]=_via(_merge(r,"경유하차목록","경유지_하차"));
@@ -29728,6 +29749,7 @@ const head = isDark
                 r={r}
                 idx={idx}
                 mgrName={rtMgrMap ? orderMgrName(rtMgrMap, r) : null}
+                bizTag={rtBiz.multi ? bizOf(r, rtBiz.defaultName) : null} bizMain={bizOf(r, rtBiz.defaultName) === rtBiz.defaultName}
                 isSelected={selected.includes(r._id)}
                 isFading={fadingIds.has(r._id)}
                 isHighlighted={highlightIds.has(r._id)}
@@ -33632,6 +33654,15 @@ if (editTarget.하차지명) savePlaceSmart(editTarget.하차지명, editTarget.
               <EditableText id="realtime.ctxMenu.일괄수정" defaultText="일괄수정" /> ({selected.length}건)
             </button>
           )}
+          {rtBiz.multi && (() => { const _id = contextMenu.row._id; const ids = selected.includes(_id) && selected.length > 1 ? [...selected] : [_id]; const cur = bizOf(contextMenu.row, rtBiz.defaultName); return (
+            <div className="px-4 py-2 border-t border-gray-100">
+              <div className="text-[11.5px] font-black text-gray-500 mb-1.5">청구 사업자 바꾸기{ids.length > 1 ? ` (${ids.length}건)` : ""}</div>
+              <div className="flex flex-wrap gap-1">{rtBiz.names.map((n) => (
+                <button key={n} type="button" onClick={() => { ids.forEach((x) => patchDispatch(x, { 청구사업자: n === rtBiz.defaultName ? "" : n })); setContextMenu(null); }}
+                  className={`h-7 px-2.5 rounded-lg text-[12px] font-black border ${ids.length === 1 && cur === n ? "bg-[#0F1A30] text-white border-[#0F1A30]" : "bg-white text-[#3A4A66] border-[#DCE3EE] hover:bg-[#F5F8FD]"}`}>{n}</button>
+              ))}</div>
+            </div>
+          ); })()}
           <div className="border-t border-gray-100 my-1"/>
           {/* 삭제 */}
           <button
@@ -38101,6 +38132,8 @@ if (mode === "driver") {
     setSelected((prev) =>
       prev.size === rows.length ? new Set() : new Set(rows.map((r) => getId(r)))
     );
+  const dsBiz = useCompanyBiz(getTenant() || userCompany); // ⭐ 2026-11-03 여러 사업자
+  const [dsBizFilter, setDsBizFilter] = React.useState("");
   const dsLongPress = useKpLongPressSelect({ toggle: toggleOne, isSelected: (id) => selected.has(id) });
   // ⭐ 2026-11-03 고정노선현황 — 평소엔 글자만, 줄을 두 번 누르면 그 줄만 수정 모드(Esc·완료로 끝)
   const [fixedEditId, setFixedEditId] = React.useState(null);
@@ -38448,6 +38481,7 @@ if (first) {
       const row = {
         순번: page * pageSize + i + 1,
         ...(dsMgrMap ? { 배차담당자: orderMgrName(dsMgrMap, r) || ORDER_MGR_EMPTY } : {}),
+        ...(dsBiz.multi ? { 청구사업자: bizOf(r, dsBiz.defaultName) } : {}), // ⭐ 2026-11-03 여러 사업자
         등록일: displayRegDate(r),
         상차일: r.상차일 || "",
         상차시간: r.상차시간 || "",
@@ -38648,6 +38682,8 @@ const filteredBase = React.useMemo(() => {
   if (fareOn && fareTypeFilter) {
     data = data.filter(r => fareTypeFilter === "__none" ? !String(r.운임구분 || "").trim() : String(r.운임구분 || "") === fareTypeFilter);
   }
+  // ⭐ 2026-11-03 여러 사업자 — 청구 사업자 필터
+  if (dsBizFilter) data = data.filter((r) => bizMatch(r, dsBiz.defaultName, dsBizFilter));
   // =========================
   // 🔽 기본 순서(머리글 정렬이 꺼져 있을 때) — 머리글 정렬은 아래 filtered 에서 따로
   // =========================
@@ -38684,6 +38720,8 @@ const filteredBase = React.useMemo(() => {
   filterErrorIds,
   fareOn,
   fareTypeFilter,
+  dsBizFilter,
+  dsBiz.defaultName,
 ]);
   // ⚡ 머리글 정렬은 이미 걸러진 목록만 따로 정렬 — 정렬을 눌러도 위의 날짜·검색 필터는 다시 돌지 않는다
   const dsMgrMap = useOrderStaffName(userNameMap, userCompany); // ⭐ 배차담당자 칸(회사별 기능 꺼지면 null)
@@ -39476,6 +39514,7 @@ return (
         {/* 우측 버튼들 */}
         <div className="ml-auto flex items-center gap-1 flex-shrink-0 flex-wrap justify-end">
           {/* ⭐ 2026-11-02 운임규칙 — 운임구분 필터(규칙 사용 회사만) */}
+          <BizFilter biz={dsBiz} value={dsBizFilter} onChange={(v) => { setDsBizFilter(v); setPage(0); }} />
           {fareOn && (
             <span data-fare-filter="1"><FareTypeSelect compact align="right" rules={fareR.rules} value={fareTypeFilter} placeholder="운임구분 전체" noneLabel="운임구분 전체"
               extraOpts={[{ name: "__none", label: "운임구분 미지정" }]} onChange={(v) => { setFareTypeFilter(v); setPage(0); }} /></span>
@@ -39717,6 +39756,8 @@ return (
         />
       </div>
 
+   ) : key === "거래처명" && dsBiz.multi ? (
+  <span className="inline-flex items-center whitespace-nowrap"><BizChip name={bizOf(row, dsBiz.defaultName)} main={bizOf(row, dsBiz.defaultName) === dsBiz.defaultName} />{row.거래처명}</span>
    ) : key === "상차지명" ? (
   <div className="inline-flex items-center gap-1">
     <AddressCell text={row.상차지명} max={8} popupTitle="상차지명 전체보기" />
@@ -44224,6 +44265,15 @@ setCopyPlaceOptions(list);
               <EditableText id="status.ctxMenu.일괄수정" defaultText="일괄수정" /> ({selected.size}건)
             </button>
           )}
+          {dsBiz.multi && (() => { const _id = getId(contextMenuDS.row); const ids = selected.has(_id) && selected.size > 1 ? [...selected] : [_id]; const cur = bizOf(contextMenuDS.row, dsBiz.defaultName); return (
+            <div className="px-4 py-2 border-t border-gray-100">
+              <div className="text-[11.5px] font-black text-gray-500 mb-1.5">청구 사업자 바꾸기{ids.length > 1 ? ` (${ids.length}건)` : ""}</div>
+              <div className="flex flex-wrap gap-1">{dsBiz.names.map((n) => (
+                <button key={n} type="button" onClick={() => { ids.forEach((x) => patchDispatch(x, { 청구사업자: n === dsBiz.defaultName ? "" : n })); setContextMenuDS(null); }}
+                  className={`h-7 px-2.5 rounded-lg text-[12px] font-black border ${ids.length === 1 && cur === n ? "bg-[#0F1A30] text-white border-[#0F1A30]" : "bg-white text-[#3A4A66] border-[#DCE3EE] hover:bg-[#F5F8FD]"}`}>{n}</button>
+              ))}</div>
+            </div>
+          ); })()}
           <div className="border-t border-gray-100 my-1"/>
           <button className="w-full text-left px-4 py-2 text-[13px] text-red-600 hover:bg-red-50 flex items-center gap-2.5 transition-colors"
             onClick={() => { const _id = getId(contextMenuDS.row); if (!selected.has(_id)) setSelected(new Set([_id])); setShowDeletePopup(true); setContextMenuDS(null); }}>
@@ -50696,6 +50746,11 @@ function ArClientInfo({ client, name, upsertClient, isViewer }) {
 }
 
 function ClientSettlement({ dispatchData, setDispatchData, userCompany = "", clients = [], setClients, upsertClient, showAlert = (m) => alert(m), patchDispatch, cardImage, setCardImage, cardImageUploading, setCardImageUploading, isViewer = false }) {
+  // ⭐ 2026-11-03 여러 사업자 — 거래명세서·미수금은 청구 사업자 하나씩(공급자 정보·직인·계좌가 사업자마다 다름)
+  const csBiz = useCompanyBiz(getTenant() || userCompany);
+  const [csBizSel, setCsBizSel] = React.useState("");
+  const csBizCur = csBizSel || csBiz.defaultName;
+  const csBizOk = (r) => !csBiz.multi || bizOf(r, csBiz.defaultName) === csBizCur;
   const fareRC = useFareRules(getTenant() || userCompany); // ⭐ 2026-11-02 운임규칙
   const [bankBulkOpen, setBankBulkOpen] = React.useState(false);
 
@@ -50917,8 +50972,9 @@ const patchMonthOnDoc = async (id, yyyymm, status, dateStr) => {
     if (searchType === "기사명" && client) list = list.filter(r => (r.이름 || "").includes(client));
     if (start) list = list.filter(r => (r.상차일 || "") >= start);
     if (end) list = list.filter(r => (r.상차일 || "") <= end);
+    list = list.filter(csBizOk); // ⭐ 청구 사업자
     return list.sort((a, b) => (a.상차일 || "").localeCompare(b.상차일 || ""));
-  }, [dispatchData, client, start, end, searched, searchType]);
+  }, [dispatchData, client, start, end, searched, searchType, csBizCur, csBiz.multi]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ★ 조회결과 중 명세서에 포함할 오더만 선택 (기본값: 전체 선택)
   const [selectedInvoiceIds, setSelectedInvoiceIds] = useState(new Set());
@@ -51039,7 +51095,7 @@ const patchMonthOnDoc = async (id, yyyymm, status, dateStr) => {
     }
   };
 
-  const COMPANY_PRINT = React.useMemo(() => {
+  const COMPANY_PRINT_BASE = React.useMemo(() => {
     const d = companyInfoDoc || {};
     const co = (userCompany || d.companyName || "").trim();
     const phone = d.phone || d.연락처 || "";
@@ -51062,6 +51118,8 @@ const patchMonthOnDoc = async (id, yyyymm, status, dateStr) => {
       seal: d.직인이미지 || "/seal.png",
     };
   }, [companyInfoDoc, userCompany]);
+  // ⭐ 2026-11-03 고른 청구 사업자가 추가 사업자면 공급자 정보(상호·사업자번호·대표·주소·계좌·직인)를 그 사업자로
+  const COMPANY_PRINT = React.useMemo(() => { const b = csBiz.multi && csBizSel ? csBiz.find(csBizSel) : null; return b ? printInfoForBiz(COMPANY_PRINT_BASE, b) : COMPANY_PRINT_BASE; }, [COMPANY_PRINT_BASE, csBizSel, csBiz]);
 
   const buildBatchInvoiceHtml = (item, cp) => {
     const rows = item.mapped || [];
@@ -51336,7 +51394,7 @@ const monthRowsRaw = useMemo(() => {
     if (!selClient) return [];
     const list = Array.isArray(dispatchData) ? dispatchData : [];
     const isAll = selClient === AR_ALL;
-    const base = list.filter(r => (r.배차상태||"") === "배차완료" && (isAll || (r.거래처명||"") === selClient));
+    const base = list.filter(r => (r.배차상태||"") === "배차완료" && (isAll || (r.거래처명||"") === selClient) && csBizOk(r)); // ⭐ 청구 사업자
     const nowMM = new Date().getMonth() + 1;
     const currentYYYYMM = `${THIS_YEAR}-${String(nowMM).padStart(2,"0")}`;
 
@@ -51373,7 +51431,7 @@ const monthRowsRaw = useMemo(() => {
       if (status !== "정산완료" && paid > 0) status = "일부입금";
       return { k, yyyymm, mm, year: yyyymm.slice(0,4), 거래처명: client, 건수: rows.length, 총청구금액: total, 정산상태: status, 정산일: dates.at(-1)||"", _rows: rows, 입금누계: paid, 잔액: Math.max(0, due - paid) };
     }).filter(Boolean));
-  }, [dispatchData, selClient, yearFrom, monthFrom, yearTo, monthTo, arPaidMap]);
+  }, [dispatchData, selClient, yearFrom, monthFrom, yearTo, monthTo, arPaidMap, csBizCur, csBiz.multi]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const monthRows = useMemo(() => {
     let rows = [...monthRowsRaw];
@@ -52395,6 +52453,18 @@ const handleBatchSettle = async (targetStatus) => {
   return (
     <>
     <div className="p-4 overflow-x-auto">
+      {/* ⭐ 2026-11-03 여러 사업자 — 이 화면의 거래명세서·미수금은 고른 사업자 것만, 공급자 정보도 그 사업자로 */}
+      {csBiz.multi && (
+        <div className="mb-4 flex items-center gap-3 flex-wrap rounded-2xl px-4 py-3 text-white" style={{ background: "linear-gradient(120deg,#0B1428 0%,#1B2B4B 60%,#2D4C82 100%)" }}>
+          <span className="text-[10.5px] font-extrabold tracking-[0.28em] text-[#8FB0F0]" style={{ fontFamily: "'JetBrains Mono',ui-monospace,monospace" }}>BILLING ENTITY</span>
+          <div className="inline-flex p-0.5 rounded-xl bg-white/10 border border-white/15">
+            {csBiz.names.map((n) => (
+              <button key={n} type="button" onClick={() => setCsBizSel(n === csBiz.defaultName ? "" : n)} className={`h-9 px-4 rounded-lg text-[13px] font-black transition ${csBizCur === n ? "bg-white text-[#0F1A30]" : "text-white/75 hover:text-white"}`}>{n}</button>
+            ))}
+          </div>
+          <span className="text-[12px] text-white/65">거래명세서·미수금·메일이 <b className="text-white">{csBizCur}</b> 이름·사업자번호·계좌·직인으로 나갑니다</span>
+        </div>
+      )}
       {/* 탭 */}
       <div className="flex gap-0 mb-5 border-b border-gray-200">
         {tabBtn("invoice", "거래명세서", 0)}
@@ -57295,6 +57365,7 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
   const [showNewClientModal, setShowNewClientModal] = React.useState(false);
   const [editingClientId, setEditingClientId] = React.useState(null);
   const [editClientModal, setEditClientModal] = React.useState(null); // row data for popup
+  const cmBiz = useCompanyBiz(userCompany || localStorage.getItem("userCompany") || ""); // ⭐ 2026-11-03 여러 사업자
   const [editPlaceModal, setEditPlaceModal] = React.useState(null); // 하차지거래처 수정 팝업
   const [memoPopup, setMemoPopup] = React.useState(null); // memo text for popup
   const [filePreview, setFilePreview] = React.useState(null); // 첨부파일 미리보기
@@ -58155,6 +58226,12 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
                       <option value="이탈">이탈</option>
                     </CustomSelect>
                   </div>
+                  {cmBiz.multi && (
+                    <div className="col-span-2">
+                      <BizPicker biz={cmBiz} value={editClientModal.기본사업자 || ""} onChange={(v) => setEditClientModal(p => ({ ...p, 기본사업자: v }))} label="기본 청구 사업자" />
+                      <div className="text-[11px] text-gray-500 mt-1">이 거래처로 오더를 등록하면 청구 사업자가 자동으로 이걸로 맞춰집니다(등록 화면에서 바꿀 수 있음).</div>
+                    </div>
+                  )}
                   <div className="col-span-2">
                     <div className="text-xs text-gray-500 font-semibold mb-1"><EditableText id="client.newPlaceForm.label.주소" defaultText="주소 *" /></div>
                     <input autoComplete="off" className="border border-gray-300 px-2 py-1.5 rounded-lg text-sm w-full focus:border-[#1B2B4B] outline-none"
@@ -61699,6 +61776,8 @@ function CompanyProfile({ userCompany = "", role = "", userId = "" }) {
           </div>
         </div>
       )}
+      {/* ⭐ 2026-11-03 한 회사 · 여러 사업자 — 오더마다 청구 사업자를 고른다 */}
+      <BizListEditor company={companyName} canEdit={isAcctTeam || isAdmin || role === "hrManager"} />
     </div>
   );
 }

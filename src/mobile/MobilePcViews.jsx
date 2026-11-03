@@ -29,6 +29,7 @@ import { useMyProfile, personName } from "../userNames";
 import MobileFleetView from "./MobileFleetView";
 import FareRulesSettings from "../FareRulesSettings"; // ⭐ 2026-11-02 운임규칙
 import BoardPage, { BOARDS, canSeeBoard } from "../BoardPosts"; // ⭐ 2026-11-03 모바일 게시판
+import { BizScope } from "../companyBiz"; // ⭐ 2026-11-03 여러 사업자
 
 // 매출관리는 PC 배차 프로그램 안에 있는 화면이라 그 묶음을 필요할 때만 받아온다
 const PcSettlement = React.lazy(() => import("../DispatchApp").then((m) => ({ default: m.PcSettlement })));
@@ -229,7 +230,7 @@ export default function MobilePcView({ kind, dispatchData = [], fixedRows = [], 
   }
   else if (kind === "revenue") body = (
     <React.Suspense fallback={<Loading />}>
-      <div className="kp-m-pc"><PcSettlement dispatchData={dispatchData} fixedRows={fixedRows} clients={clients} places={places} role={role} isViewer={role === "viewer"} userCompany={userCompany} /></div>
+      <div className="kp-m-pc px-2 pt-2"><BizScope company={userCompany} data={dispatchData}>{(bizRows, bizSel) => <PcSettlement key={`ms-${bizSel || "all"}`} dispatchData={bizRows} fixedRows={fixedRows} clients={clients} places={places} role={role} isViewer={role === "viewer"} userCompany={userCompany} />}</BizScope></div>
     </React.Suspense>
   );
   return <OrderHistoryContext.Provider value={history}>{body}</OrderHistoryContext.Provider>;
