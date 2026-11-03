@@ -10,6 +10,14 @@ HTML/CSS/JS라 어디에든 그대로 올릴 수 있습니다.
   새 탭에서 연결됩니다. 나중에 프로그램 자체에 별도 도메인을 연결하면 이 링크만
   바꿔주면 됩니다.
 
+## 2026-11-03 전면 개편
+
+- `index.html` + `home.css` — 새 홈페이지(로그인 화면 `login.html`은 기존 `style.css` 그대로 사용)
+- `img/` — 실제 프로그램에 가상 운송사 데이터를 넣고 찍은 화면(PC `real-*.jpg`, 모바일 `m-*.jpg`)
+  - 다시 찍는 방법: `docs/landing-capture/README.md`
+- 다운로드: PC는 설치형 웹앱(크롬·엣지 "앱 설치" 안내 창), 기사앱은 GitHub 릴리즈 APK 직접 링크 + QR(`img/qr-driver-apk.svg`)
+- 홈택스 연동은 "준비 중"으로 표시(연동되면 `index.html`의 ERP 카드·FAQ 문구만 바꾸면 됨)
+
 ## 현재 배포 (2026-10-29)
 
 - Vercel 프로젝트 `dispatch-app2-vskk` ← GitHub `sungwoo0923/dispatch-app2` 연결
