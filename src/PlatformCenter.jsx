@@ -27,6 +27,7 @@ import SheetImportPanel from "./SheetImportPanel";
 import NoticeBoard from "./NoticeBoard";
 import { toBoardNotice } from "./PlatformNoticeBanner";
 import { compressImage } from "./InternalMail";
+const HomepageEditor = React.lazy(() => import("./HomepageEditor")); // ⭐ 2026-11-03 소개 홈페이지 편집기
 import { RemoteSupportAdminPanel } from "./RemoteSupport"; // ⭐ 2026-11-02 원격지원 —
 import { CustomSelect } from "./CustomSelect";
 import { RichTextEditor, htmlToText, textToHtml, sanitizeHtml } from "./richText"; // ⭐ 2026-11-03 공지 글자 꾸미기
@@ -72,6 +73,7 @@ const SECTIONS = [
     { key: "notices", label: "플랫폼 공지", en: "BROADCAST", icon: "bell" },
     { key: "notifTemplate", label: "알림 문구", en: "MESSAGES", icon: "chat" },
     { key: "forceUpdate", label: "화주사 강제 업데이트", en: "UPDATE", icon: "refresh" },
+    { key: "homepage", label: "홈페이지", en: "HOMEPAGE", icon: "globe" }, // ⭐ 2026-11-03 소개 홈페이지 전체 편집기
     { key: "landingEdit", label: "랜딩페이지 편집", en: "LANDING", icon: "globe" },
   ] },
   { key: "data", label: "보안·데이터", en: "SECURITY", icon: "shield", items: [
@@ -1050,6 +1052,9 @@ function PlatformCenterInner({ user }) {
   else if (tab === "notices") body = <NoticesPanel />;
   else if (tab === "notifTemplate") body = <><Hero en="OPERATIONS · MESSAGES" title="알림 문구" desc="배차 알림 등 자동 발송 문구를 관리합니다." /><NotifTemplatePanel /></>;
   else if (tab === "forceUpdate") body = <><Hero en="OPERATIONS · UPDATE" title="화주사 강제 업데이트" desc="화주사 화면을 최신 버전으로 새로고침시킵니다." /><ShipperForceUpdatePanel currentVersion={typeof __APP_VERSION__ !== "undefined" ? __APP_VERSION__ : ""} /></>;
+  else if (tab === "homepage") body = phone
+    ? <><Hero en="OPERATIONS · HOMEPAGE" title="홈페이지" desc="" /><div className="rounded-2xl bg-white border border-[#E3E8F0] p-5 text-[14px] text-[#3A4A66] leading-relaxed">홈페이지 편집은 PC 화면에서 해 주세요. 사진·글자 위치를 끌어서 옮기는 편집이라 넓은 화면이 필요합니다.<br /><a className="font-black text-[#2D5BD8]" href="https://dispatch-app2-vskk.vercel.app/" target="_blank" rel="noopener noreferrer">지금 홈페이지 보기 ↗</a></div></>
+    : <React.Suspense fallback={<div className="p-6 text-[13px] text-[#7A879C]">편집기를 여는 중…</div>}><HomepageEditor /></React.Suspense>;
   else if (tab === "landingEdit") body = <><Hero en="OPERATIONS · LANDING" title="랜딩페이지 편집" desc="로그인 전 홈페이지 문구·이미지를 바꿉니다." /><LandingPageEditPanel /></>;
   else if (tab === "sessions") body = <><Hero en="SECURITY · SESSIONS" title="로그인 관리" desc="지금 로그인 중인 모든 기기를 보고, 필요하면 강제로 내보냅니다." /><AdminSessionsPanel isTotalMaster company="" /></>;
   else if (tab === "sessionLogs") body = <SessionLogsPanel />;

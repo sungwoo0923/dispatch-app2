@@ -2,7 +2,7 @@
    KP-Flow 소개 홈페이지 (index.html 전용) — 2026-11-03 전면 개편
    네이버 관제 톤 · 실제 화면 캡처 중심 · 반응형 */
 :root {
-  --ink: #0B1428; --navy: #0F1A30; --navy2: #1B2B4B; --blue: #2D4C82; --accent: #2D5BD8; --sky: #8FB0F0; --glow: #4F8BFF;
+  --ink: #0B1428; --navy: #0F1A30; --navy2: #1B2B4B; --blue: #2D4C82; --accent: #2D5BD8; --sky: #8FB0F0; --glow: #4F8BFF; --btn1: #2D5BD8; --btn2: #4F8BFF; --hero1: #08101F; --hero2: #0F1A30; --hero3: #13213D; --band: #13213D; --dark1: #08101F; --dark2: #0F1A30;
   --bg: #F3F6FB; --line: #E3E8F0; --muted: #6B7890; --text: #1F2A44; --ok: #12A150; --warn: #D9730D;
   --mono: "JetBrains Mono", "SF Mono", ui-monospace, Menlo, monospace;
   --r: 24px;
@@ -23,7 +23,7 @@ svg.i { width: 18px; height: 18px; stroke: currentColor; fill: none; stroke-widt
 /* 버튼 */
 .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 48px; padding: 0 22px; border-radius: 14px; font-size: 15px; font-weight: 800; border: 0; cursor: pointer; transition: transform .15s, filter .15s, background .15s; font-family: inherit; white-space: nowrap; }
 .btn:hover { transform: translateY(-1px); }
-.btn-primary { color: #fff; background: linear-gradient(120deg, #2D5BD8, #4F8BFF); box-shadow: 0 12px 28px -8px rgba(45,91,216,.6); }
+.btn-primary { color: #fff; background: linear-gradient(120deg, var(--btn1), var(--btn2)); box-shadow: 0 12px 28px -8px rgba(45,91,216,.6); }
 .btn-dark { color: #fff; background: var(--navy); }
 .btn-white { background: #fff; color: var(--ink); }
 .btn-ghost { color: #fff; box-shadow: inset 0 0 0 1px rgba(255,255,255,.28); background: rgba(255,255,255,.04); }
@@ -47,7 +47,7 @@ header.solid { background: rgba(11,20,40,.9); backdrop-filter: saturate(160%) bl
 .menu-btn { display: none; margin-left: auto; width: 42px; height: 42px; border-radius: 11px; border: 0; background: rgba(255,255,255,.08); color: #fff; cursor: pointer; }
 
 /* 히어로 */
-.hero { position: relative; color: #fff; background: radial-gradient(1200px 600px at 80% -10%, rgba(79,139,255,.35), transparent 60%), radial-gradient(800px 500px at -10% 40%, rgba(45,76,130,.5), transparent 60%), linear-gradient(180deg, #08101F 0%, #0F1A30 70%, #13213D 100%); overflow: hidden; padding: 150px 0 0; }
+.hero { position: relative; color: #fff; background: radial-gradient(1200px 600px at 80% -10%, rgba(79,139,255,.35), transparent 60%), radial-gradient(800px 500px at -10% 40%, rgba(45,76,130,.5), transparent 60%), linear-gradient(180deg, var(--hero1) 0%, var(--hero2) 70%, var(--hero3) 100%); overflow: hidden; padding: 150px 0 0; }
 .hero::before { content: ""; position: absolute; inset: 0; background: linear-gradient(rgba(143,176,240,.06) 1px, transparent 1px) 0 0/40px 40px, linear-gradient(90deg, rgba(143,176,240,.06) 1px, transparent 1px) 0 0/40px 40px; mask-image: linear-gradient(180deg, #000 30%, transparent 85%); pointer-events: none; }
 .hero-copy { position: relative; text-align: center; max-width: 880px; margin: 0 auto; }
 .badge { display: inline-flex; align-items: center; gap: 8px; padding: 7px 14px 7px 8px; border-radius: 99px; background: rgba(255,255,255,.06); box-shadow: inset 0 0 0 1px rgba(255,255,255,.12); font-size: 13px; font-weight: 700; color: #CFDCF5; }
@@ -75,7 +75,7 @@ header.solid { background: rgba(11,20,40,.9); backdrop-filter: saturate(160%) bl
 .phone img { border-radius: 12% / 5.6%; width: 100%; height: auto; }
 
 /* 숫자 띠 */
-.stats { background: #13213D; color: #fff; border-top: 1px solid rgba(255,255,255,.06); position: relative; z-index: 2; }
+.stats { background: var(--band); color: #fff; border-top: 1px solid rgba(255,255,255,.06); position: relative; z-index: 2; }
 .stats-inner { display: grid; grid-template-columns: repeat(4, 1fr); }
 .stat { padding: 34px 22px; border-left: 1px solid rgba(255,255,255,.07); }
 .stat:first-child { border-left: 0; }
@@ -87,7 +87,7 @@ header.solid { background: rgba(11,20,40,.9); backdrop-filter: saturate(160%) bl
 /* 섹션 공통 */
 section.block { padding: 120px 0; position: relative; }
 .alt { background: var(--bg); }
-.dark-sec { background: linear-gradient(180deg, #08101F, #0F1A30); color: #fff; }
+.dark-sec { background: linear-gradient(180deg, var(--dark1), var(--dark2)); color: #fff; }
 .head { max-width: 760px; margin-bottom: 56px; }
 .head.center { text-align: center; margin-left: auto; margin-right: auto; }
 .head h2 { font-size: clamp(28px, 4vw, 46px); line-height: 1.25; font-weight: 900; letter-spacing: -.03em; margin: 16px 0 16px; color: var(--ink); }
@@ -198,7 +198,7 @@ section.block { padding: 120px 0; position: relative; }
 /* 다운로드 */
 .dl { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
 .dl-card { border-radius: 26px; padding: 30px; background: rgba(255,255,255,.04); box-shadow: inset 0 0 0 1px rgba(255,255,255,.1); display: flex; flex-direction: column; gap: 14px; }
-.dl-card .di { width: 52px; height: 52px; border-radius: 16px; background: linear-gradient(135deg, #2D5BD8, #4F8BFF); display: grid; place-items: center; color: #fff; }
+.dl-card .di { width: 52px; height: 52px; border-radius: 16px; background: linear-gradient(135deg, var(--btn1), var(--btn2)); display: grid; place-items: center; color: #fff; }
 .dl-card .di svg.i { width: 26px; height: 26px; }
 .dl-card h3 { margin: 4px 0 0; font-size: 21px; font-weight: 900; }
 .dl-card p { margin: 0; color: rgba(255,255,255,.62); font-size: 14.5px; line-height: 1.65; flex: 1; }
@@ -239,7 +239,7 @@ section.block { padding: 120px 0; position: relative; }
 .form-card label { display: block; font-size: 13px; font-weight: 800; color: #3B4A63; margin-bottom: 7px; }
 .form-card input, .form-card select, .form-card textarea { width: 100%; border: 0; box-shadow: inset 0 0 0 1px #D5DDEA; border-radius: 12px; padding: 13px 14px; font-size: 15px; font-family: inherit; color: var(--text); background: #fff; outline: none; }
 .form-card input:focus, .form-card select:focus, .form-card textarea:focus { box-shadow: inset 0 0 0 2px var(--accent); }
-.submit-btn { grid-column: 1 / -1; height: 56px; border: 0; border-radius: 14px; background: linear-gradient(120deg, #2D5BD8, #4F8BFF); color: #fff; font-weight: 900; font-size: 16px; cursor: pointer; font-family: inherit; }
+.submit-btn { grid-column: 1 / -1; height: 56px; border: 0; border-radius: 14px; background: linear-gradient(120deg, var(--btn1), var(--btn2)); color: #fff; font-weight: 900; font-size: 16px; cursor: pointer; font-family: inherit; }
 .submit-btn:disabled { opacity: .6; }
 .error-text { grid-column: 1 / -1; color: #E5484D; font-weight: 700; font-size: 14px; }
 .success-box { text-align: center; padding: 60px 10px; }
@@ -263,7 +263,7 @@ footer { background: #08101F; color: rgba(255,255,255,.5); padding: 48px 0; font
 /* 플로팅 · 모달 */
 .dock { position: fixed; right: 20px; bottom: 20px; z-index: 55; display: flex; flex-direction: column; gap: 10px; }
 .dock a { width: 58px; height: 58px; border-radius: 18px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; color: #fff; background: rgba(15,26,48,.92); box-shadow: 0 16px 30px -10px rgba(0,0,0,.45), inset 0 0 0 1px rgba(255,255,255,.12); font-size: 10px; font-weight: 800; backdrop-filter: blur(8px); }
-.dock a.pri { background: linear-gradient(135deg, #2D5BD8, #4F8BFF); }
+.dock a.pri { background: linear-gradient(135deg, var(--btn1), var(--btn2)); }
 .dock svg.i { width: 20px; height: 20px; }
 .modal { position: fixed; inset: 0; z-index: 90; background: rgba(8,16,31,.6); backdrop-filter: blur(6px); display: none; align-items: center; justify-content: center; padding: 16px; }
 .modal.on { display: flex; }

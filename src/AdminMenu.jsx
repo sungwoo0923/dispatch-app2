@@ -2248,7 +2248,9 @@ export function LandingPageEditPanel() {
   const handleSave = async () => {
     setSaving(true);
     try {
-      await setDoc(doc(db, "siteConfig", "landing"), form || {}, { merge: true });
+      // ⭐ 2026-11-03 소개 홈페이지 편집 내용(homepage*)은 관리자센터 › 홈페이지에서만 저장 — 여기서 덮어쓰지 않게 뺀다
+      const { homepage: _hp, homepageAt: _hpAt, homepageBy: _hpBy, ...rest } = form || {};
+      await setDoc(doc(db, "siteConfig", "landing"), rest, { merge: true });
       alert("저장했습니다. 로그인 전 첫 화면에 바로 반영됩니다.");
     } catch (e) {
       alert("저장 실패: " + (e?.message || e));
