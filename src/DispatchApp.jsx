@@ -41,7 +41,7 @@ import { useMyProfile } from "./userNames";
 import { useCompanyStaff, masterHasHr, isHrStaffUser } from "./hrHandover";
 import { AttendanceQuickButton, CheckoutReminderHost } from "./attendanceQuick";
 import { PersonalTodayHost } from "./PersonalSchedule";
-import FixedRouteStatusHost, { FixedRouteCells, fixedHeaderOf } from "./FixedRouteStatus"; // ⭐ 2026-11-03 배차현황 › 고정노선현황
+import FixedRouteStatusHost, { FixedRouteCells, fixedHeaderOf, useRouteBoardIds } from "./FixedRouteStatus"; // ⭐ 2026-11-03 배차현황 › 고정노선현황
 import { usePendingSignups } from "./pendingSignups";
 import { NavHover } from "./navMenus";
 import { PeriodPicker as ResumePeriodPicker, DateField as ResumeDateField, SelectField as ResumeSelectField, AddressField as ResumeAddressField, BirthSelect as ResumeBirthSelect, EDU_STATUS as RESUME_EDU_STATUS, FAMILY_REL as RESUME_FAMILY_REL } from "./ResumeInputs";
@@ -5037,9 +5037,14 @@ const removeDispatch = async (arg, opts = {}) => {
   logOrderDeletion(ref.parent.id, ref.id);
   await deleteDoc(ref);
   // ⭐ 2026-11-03 배차표(구글시트)에서 자동으로 만든 오더 — 지운 줄을 양식에 기억해 두면 서버가 시트에 그 줄이 남아 있어도 다시 만들지 않는다
+  //   ⭐ 운송사 분리 — 양식이 이 오더와 같은 회사일 때만(다른 회사 양식에 "지운 줄"을 남기면 그 회사 시트 줄이 안 들어온다)
   if (data?.배차표Id && data?.상차일) {
     const _tk = rbTombKey(data.상차일, data.배차표묶음, data.하차지명);
-    updateDoc(doc(db, "routeBoards", String(data.배차표Id)), { [`삭제한줄.${_tk}`]: increment(1) }).catch(() => {});
+    const _fref = doc(db, "routeBoards", String(data.배차표Id));
+    getDoc(_fref).then((fs) => {
+      if (fs.exists() && String(fs.data()?.companyName || "") === String(data.companyName || "")) return updateDoc(_fref, { [`삭제한줄.${_tk}`]: increment(1) });
+      return null;
+    }).catch(() => {});
   }
 
   // 연동 화주사에게 전송된 사본이 있으면(운송사가 등록/전송한 오더), 원본을 취소할 때
@@ -7668,6 +7673,7 @@ useEffect(() => {
   );
   // ⭐ 2026-11-03 고정노선(배차표·구글시트) 오더는 배차현황 › 고정노선현황에서만 — 배차관리·실시간배차현황·배차현황·미배차현황 목록에서는 뺀다
   //   (매출·정산·홈 통계 등은 그대로 전체 오더 기준)
+  const myRouteBoardIds = useRouteBoardIds(userCompany || localStorage.getItem("userCompany") || ""); // ⭐ 2026-11-03 운송사 분리 — 이 회사 배차표 양식
   const listDispatchData = useMemo(() => dispatchDataFiltered.filter((r) => !r?.배차표Id), [dispatchDataFiltered]);
   const listRecentDispatchData = useMemo(() => recentDispatchDataFiltered.filter((r) => !r?.배차표Id), [recentDispatchDataFiltered]);
 
@@ -8703,7 +8709,7 @@ return (
 
         {menu === "배차현황" && (
           <KpSubNav code="DISPATCH" title="배차현황" icon="truck" active={배차현황Tab} onSelect={set배차현황Tab}
-            items={(() => { const n = pickUnassignedOrders(listDispatchData).length; return [{ key: "배차현황", label: "배차현황", en: "ALL ORDERS", icon: "list", badge: n, badgeTitle: `미배차 ${n}건` }, { key: "미배차현황", label: "미배차현황", en: "PENDING", icon: "hourglass", badge: n, badgeTitle: `미배차 ${n}건` }, (() => { const fx = pickUnassignedOrders(dispatchDataFiltered.filter((r) => r.배차표Id)).length; return { key: "고정노선현황", label: "고정노선현황", en: "FIXED ROUTE", icon: "route", badge: fx, badgeTitle: `고정노선 미배차 ${fx}건` }; })()]; })()}>
+            items={(() => { const n = pickUnassignedOrders(listDispatchData).length; return [{ key: "배차현황", label: "배차현황", en: "ALL ORDERS", icon: "list", badge: n, badgeTitle: `미배차 ${n}건` }, { key: "미배차현황", label: "미배차현황", en: "PENDING", icon: "hourglass", badge: n, badgeTitle: `미배차 ${n}건` }, (() => { const fx = pickUnassignedOrders(dispatchDataFiltered.filter((r) => r.배차표Id && myRouteBoardIds.has(r.배차표Id))).length; /* ⭐ 이 회사 양식의 오더만 */ return { key: "고정노선현황", label: "고정노선현황", en: "FIXED ROUTE", icon: "route", badge: fx, badgeTitle: `고정노선 미배차 ${fx}건` }; })()]; })()}>
             {배차현황Tab === "배차현황" && (
               <DispatchStatus
                 key={`ds-${viewResetKey}`}

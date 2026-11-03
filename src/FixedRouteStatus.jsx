@@ -4,7 +4,7 @@
 //    배차현황(DispatchStatus)을 그대로 쓰고, 표의 열만 그 양식(시트 제목줄) 순서로 바꾼다(fixedForm).
 //  · 화면을 열어 두면 30초마다 서버가 시트와 맞춘다(새 날짜 탭·새 줄 → 오더, 시트에서 바뀐 칸 → 프로그램, 프로그램에서 바꾼 칸 → 시트)
 import React from "react";
-import { collection, onSnapshot, query, where, doc, setDoc, updateDoc, serverTimestamp } from "firebase/firestore";
+import { collection, onSnapshot, query, where, doc, setDoc, updateDoc, serverTimestamp, writeBatch } from "firebase/firestore";
 import { db, auth } from "./firebase";
 import { createPortal } from "react-dom";
 import CustomDatePicker from "./CustomDatePicker";
@@ -358,6 +358,41 @@ function RangeImportModal({ form, onClose }) {
   );
 }
 
+// 🔒 2026-11-03 운송사 분리 — 이 회사의 배차표 양식 id 목록(배지·목록은 이 회사 양식의 오더만)
+export function useRouteBoardIds(company) {
+  const [ids, setIds] = React.useState(() => new Set());
+  React.useEffect(() => {
+    if (!company) { setIds(new Set()); return undefined; }
+    return onSnapshot(query(collection(db, "routeBoards"), where("companyName", "==", company)), (s) => setIds(new Set(s.docs.map((d) => d.id))), () => setIds(new Set()));
+  }, [company]);
+  return ids;
+}
+// 다른 회사 양식으로 만들어져 이 회사에 잘못 남은 오더 — 확인 후 이 회사에서만 지운다("지운 줄" 기록 없이 → 원래 회사 시트 연동에 영향 없음)
+function ForeignOrdersCard({ list, disabled }) {
+  const [busy, setBusy] = React.useState(false);
+  if (!list.length) return null;
+  const clean = async () => {
+    if (!window.confirm(`다른 운송사 배차표(구글시트)에서 잘못 들어온 오더 ${list.length}건을 이 회사에서 지울까요?\n원래 운송사의 오더·시트에는 아무 영향이 없습니다.`)) return;
+    setBusy(true);
+    try {
+      for (let i = 0; i < list.length; i += 400) {
+        const b = writeBatch(db);
+        list.slice(i, i + 400).forEach((r) => b.delete(doc(db, r.__col || "orders", r._id || r.id)));
+        await b.commit();
+      }
+    } catch (e) { window.alert(`정리하지 못했습니다: ${e?.message || e}`); } finally { setBusy(false); }
+  };
+  return (
+    <div className="rounded-2xl border border-[#F7C97A] bg-[#FFF8EC] px-5 py-4 flex items-center gap-4 flex-wrap">
+      <div className="min-w-0">
+        <div className="text-[14.5px] font-black text-[#8A4B08]">다른 운송사 배차표에서 잘못 들어온 오더 {list.length}건</div>
+        <div className="text-[12.5px] text-[#9A6B2E] mt-0.5">이 회사에 없는 배차표 양식으로 만들어진 오더라 화면에는 보이지 않습니다. 정리하면 이 회사에서만 지워지고, 원래 운송사의 오더·구글시트는 그대로입니다.</div>
+      </div>
+      {!disabled && <button type="button" disabled={busy} onClick={clean} className="ml-auto h-10 px-4 rounded-xl bg-[#8A4B08] text-white text-[13px] font-black disabled:opacity-60">{busy ? "정리 중…" : "이 회사에서 정리"}</button>}
+    </div>
+  );
+}
+
 export default function FixedRouteStatusHost({ company, dispatchData = [], render, places = [], drivers = [], disabled = false }) {
   const [addOpen, setAddOpen] = React.useState(false);
   const [rangeOpen, setRangeOpen] = React.useState(false);
@@ -387,11 +422,14 @@ export default function FixedRouteStatusHost({ company, dispatchData = [], rende
   }, [form?.id, form?.sheetUrl, form?.autoSync, runSync]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (forms === null) return <div className="py-16 text-center text-[14px] text-[#7A8AA6]">불러오는 중…</div>;
+  const formIdSet = new Set(forms.map((f) => f.id));
+  const foreign = (dispatchData || []).filter((r) => r.배차표Id && !formIdSet.has(r.배차표Id) && String(r.companyName || "") === String(company || ""));
   if (!forms.length) return (
+    <div className="space-y-3"><ForeignOrdersCard list={foreign} disabled={disabled} />
     <div className="rounded-[20px] bg-white border border-[#E3E8F0] p-10 text-center">
       <div className="text-[16px] font-black text-[#0F1A30]">고정노선 배차표 양식이 없습니다</div>
       <div className="text-[13.5px] text-[#7A8AA6] mt-1.5">지입차관리 › 고정노선 › [배차표]에서 화주사 구글시트로 양식을 먼저 만들어 주세요.</div>
-    </div>
+    </div></div>
   );
   const unassigned = rows.filter((r) => !normPlate(r.차량번호) && r.배차상태 !== "배차취소").length;
   return (
@@ -448,6 +486,7 @@ export default function FixedRouteStatusHost({ company, dispatchData = [], rende
           <span>줄을 두 번 누르면 그 줄만 수정 모드(Esc·완료로 끝) → 저장하면 30초 안에 시트에도 반영 · 시트에서 고친 내용도 30초마다 들어옵니다</span>
         </div>
       </div>
+      <ForeignOrdersCard list={foreign} disabled={disabled} />
       {form && render(form, rows)}
       {rangeOpen && form && <RangeImportModal form={form} onClose={() => setRangeOpen(false)} />}
       {addOpen && form && <AddFixedOrderModal form={form} rows={rows} places={places} drivers={drivers} onClose={(ok) => { setAddOpen(false); if (ok && form.sheetUrl) setTimeout(() => runSync(form), 800); }} />}

@@ -203,7 +203,8 @@ async function syncBoard({ db, FieldValue, form, readTabs, readTab, writeCells, 
     const chk = inDate || date;
     if (!date || (!form.fixedTab && (chk < from || chk > to))) continue;
     sum.tabs += 1;
-    const ex = await db.collection("orders").where("배차표Id", "==", form.id).where("상차일", "==", date).get();
+    // ⭐ 2026-11-03 운송사 분리 — 이 양식 회사의 오더만(다른 회사에 남은 같은 양식 오더는 절대 건드리지 않음)
+    const ex = await db.collection("orders").where("배차표Id", "==", form.id).where("상차일", "==", date).where("companyName", "==", co).get();
     const allOrders = ex.docs.map((d) => ({ ref: d.ref, ...d.data() }));
     const orders = allOrders.filter((o) => o.배차상태 !== "배차취소");
     const cancelled = allOrders.filter((o) => o.배차상태 === "배차취소"); // 취소한 줄은 시트에 남아 있어도 다시 만들지 않음
