@@ -73,8 +73,26 @@ function VehicleCell({ field, value, drivers, disabled, onPick, onCommit, placeh
   );
 }
 
+// 🏢 2026-11-03 운송업체 칸 — 기본거래처에 있으면 드롭다운(스마트 검색), 없으면 그냥 직접 입력
+const isCarrierCol = (c) => c.kind === "extra" && /운송업체|운송사/.test(String(c.label || ""));
+function CarrierCell({ value, clients, disabled, onCommit }) {
+  const [v, setV] = React.useState(value);
+  const picked = React.useRef(false);
+  React.useEffect(() => { setV(value); }, [value]);
+  if (disabled) return <span className="text-[13.5px] font-semibold">{value}</span>;
+  return (
+    <BoardSuggest value={v} onChange={setV} items={clients} k="거래처명" title="기본거래처" placeholder="직접 입력"
+      sub={(x) => [x.담당자, x.연락처 || x.담당자번호 || x.전화번호].filter(Boolean).join(" · ")}
+      onPick={(x) => { picked.current = true; const n = x.거래처명 || ""; setV(n); if (n !== String(value || "")) onCommit(n); }}
+      onBlur={() => { setTimeout(() => { if (!picked.current && String(v).trim() !== String(value || "")) onCommit(v); picked.current = false; }, 160); }}
+      onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); }}
+      className="kp-frs-cell min-w-[96px] text-center font-semibold" inputProps={{ onClick: (e) => e.stopPropagation(), onDoubleClick: (e) => e.stopPropagation() }} />
+  );
+}
+
 // 한 줄의 칸들(시트 열 순서) — 고치면 바로 오더에 저장(patchDispatch) → 서버가 30초 안에 시트에도 써 준다
-export function FixedRouteCells({ form, row, drivers = [], onPatch, disabled = false }) {
+export function FixedRouteCells({ form, row, drivers = [], clients = [], onPatch, disabled = false }) {
+  const carrierItems = React.useMemo(() => { const seen = new Set(); return (clients || []).map((x) => ({ ...x, 거래처명: String(x.거래처명 || x.업체명 || "").trim() })).filter((x) => x.거래처명 && !seen.has(x.거래처명) && seen.add(x.거래처명)); }, [clients]);
   const td = "px-1.5 py-1.5 border-b border-[#E9EDF4] border-r border-r-[#F1F4F9] text-center whitespace-nowrap";
   const cols = (form?.columns || []).filter((c) => c.kind !== "no");
   // ⭐ 2026-11-03 단가표 — 파레트 수·도착지가 바뀌면 청구운임 자동(직접 고친 운임이면 그대로)
@@ -124,6 +142,7 @@ export function FixedRouteCells({ form, row, drivers = [], onPatch, disabled = f
           const pick = (d) => onPatch({ 차량번호: d.차량번호 || "", 이름: d.이름 || "", 전화번호: d.전화번호 || "", ...(row.배차상태 === "배차중" || !row.배차상태 ? { 배차상태: "배차완료" } : {}) });
           return <td key={c.id} className={`${td} bg-[#F3F7FF]`} title="차량번호·이름·번호 일부만 쳐도 기사관리에서 찾아 채웁니다"><VehicleCell field={c.field} value={v} drivers={drivers} disabled={disabled} onPick={pick} onCommit={(x) => commit(c, x)} placeholder={c.field === "차량번호" && !v ? "미배차" : ""} /></td>;
         }
+        if (isCarrierCol(c)) return <td key={c.id} className={`${td} ${bg}`} title="기본거래처에 있으면 목록에서 고르고, 없으면 그냥 입력"><CarrierCell value={v} clients={carrierItems} disabled={disabled} onCommit={(x) => commit(c, x)} /></td>;
         return (
           <td key={c.id} className={`${td} ${bg}`} title={own === "화주" ? "업체(화주)가 시트에 입력하는 칸" : own === "운송사" ? "운송사가 입력하는 칸" : ""}>
             <Cell value={v} disabled={disabled} numeric={isQty || (c.kind === "field" && MONEY_FIELDS.has(c.field))} wide={c.kind === "field" && ["하차지명", "하차지주소", "메모"].includes(c.field)}

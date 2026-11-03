@@ -39511,7 +39511,7 @@ return (
       className={`transition-colors ${selected.has(id) ? "bg-blue-50" : !String(row.차량번호 || "").trim() && row.배차상태 !== "배차취소" ? "bg-[#FFFAF2] hover:bg-[#FFF3E0]" : i % 2 === 0 ? "bg-white hover:bg-[#F5F8FD]" : "bg-[#FAFBFD] hover:bg-[#F5F8FD]"}`}>
       <td className="px-3 py-2 text-center border-b border-[#E9EDF4] border-r border-r-[#F1F4F9]"><input autoComplete="off" type="checkbox" checked={selected.has(id)} onChange={() => toggleOne(id)} /></td>
       <td className="px-3 py-2 text-[13.5px] font-bold text-[#5B6B85] text-center border-b border-[#E9EDF4] border-r border-r-[#F1F4F9] tabular-nums">{(page * pageSize) + i + 1}</td>
-      <FixedRouteCells form={fixedForm} row={row} drivers={drivers} disabled={isViewer} onPatch={(patch) => patchDispatch(id, patch)} />
+      <FixedRouteCells form={fixedForm} row={row} drivers={drivers} clients={clients} disabled={isViewer} onPatch={(patch) => patchDispatch(id, patch)} />
     </tr>
   );
 
