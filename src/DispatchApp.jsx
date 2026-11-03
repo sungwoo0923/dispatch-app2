@@ -7666,6 +7666,10 @@ useEffect(() => {
     () => filterByCompanyAndRole(recentDispatchData),
     [recentDispatchData, filterByCompanyAndRole]
   );
+  // ⭐ 2026-11-03 고정노선(배차표·구글시트) 오더는 배차현황 › 고정노선현황에서만 — 배차관리·실시간배차현황·배차현황·미배차현황 목록에서는 뺀다
+  //   (매출·정산·홈 통계 등은 그대로 전체 오더 기준)
+  const listDispatchData = useMemo(() => dispatchDataFiltered.filter((r) => !r?.배차표Id), [dispatchDataFiltered]);
+  const listRecentDispatchData = useMemo(() => recentDispatchDataFiltered.filter((r) => !r?.배차표Id), [recentDispatchDataFiltered]);
 
 
   // ⭐ 내 정보 통계 계산
@@ -8636,7 +8640,7 @@ return (
           menu={menu}
             dispatchData={dispatchDataFiltered}
             liveDataReady={liveDataReady}
-            recentDispatchData={recentDispatchDataFiltered}
+            recentDispatchData={listRecentDispatchData}
             recentLiveDataReady={recentLiveDataReady}
             userNameMap={userNameMap}
             timeOptions={timeOptions}
@@ -8672,7 +8676,7 @@ return (
             role={role}
             userCompany={userCompany}
             menu={menu}
-            dispatchData={recentDispatchDataFiltered}
+            dispatchData={listRecentDispatchData}
             historyDispatchData={dispatchDataFiltered}
             liveDataReady={recentLiveDataReady}
             timeOptions={timeOptions}
@@ -8699,13 +8703,13 @@ return (
 
         {menu === "배차현황" && (
           <KpSubNav code="DISPATCH" title="배차현황" icon="truck" active={배차현황Tab} onSelect={set배차현황Tab}
-            items={(() => { const n = pickUnassignedOrders(dispatchDataFiltered).length; return [{ key: "배차현황", label: "배차현황", en: "ALL ORDERS", icon: "list", badge: n, badgeTitle: `미배차 ${n}건` }, { key: "미배차현황", label: "미배차현황", en: "PENDING", icon: "hourglass", badge: n, badgeTitle: `미배차 ${n}건` }, (() => { const fx = pickUnassignedOrders(dispatchDataFiltered.filter((r) => r.배차표Id)).length; return { key: "고정노선현황", label: "고정노선현황", en: "FIXED ROUTE", icon: "route", badge: fx, badgeTitle: `고정노선 미배차 ${fx}건` }; })()]; })()}>
+            items={(() => { const n = pickUnassignedOrders(listDispatchData).length; return [{ key: "배차현황", label: "배차현황", en: "ALL ORDERS", icon: "list", badge: n, badgeTitle: `미배차 ${n}건` }, { key: "미배차현황", label: "미배차현황", en: "PENDING", icon: "hourglass", badge: n, badgeTitle: `미배차 ${n}건` }, (() => { const fx = pickUnassignedOrders(dispatchDataFiltered.filter((r) => r.배차표Id)).length; return { key: "고정노선현황", label: "고정노선현황", en: "FIXED ROUTE", icon: "route", badge: fx, badgeTitle: `고정노선 미배차 ${fx}건` }; })()]; })()}>
             {배차현황Tab === "배차현황" && (
               <DispatchStatus
                 key={`ds-${viewResetKey}`}
                 role={role}
                 userCompany={userCompany}
-                dispatchData={dispatchDataFiltered}
+                dispatchData={listDispatchData}
                 timeOptions={timeOptions}
                 tonOptions={tonOptions}
                 drivers={drivers}
@@ -8733,7 +8737,7 @@ return (
                 role={role}
                 userCompany={userCompany}
                 userNameMap={userNameMap}
-                dispatchData={dispatchDataFiltered}
+                dispatchData={listDispatchData}
                 setDispatchData={setDispatchData}
                 patchDispatch={patchDispatchSafe}
                 removeDispatch={removeDispatchSafe}
