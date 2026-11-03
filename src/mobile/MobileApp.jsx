@@ -113,6 +113,7 @@ import { tryAutoCheckIn, tryAutoCheckOut, undoAutoCheckOut } from "../autoAttend
 import OrderScanModal, { scanDropDate } from "../OrderScanModal";
 // ⭐ 2026-11-02 운임규칙 — 회사별 운임 규칙(운임구분 → 기사운임·수수료 자동)
 import { useFareRules, FareTypeSelect, FareRuleHint, fareFormChange } from "../fareRules";
+import DetailFilterButton, { applyDetailFilter } from "../DetailFilter"; // 🔎 2026-11-03 세부검색(최대 3차)
 import { VehicleTypePicker, currentCustomVehicleTypes, useVehicleTypes } from "../vehicleTypes"; // 🚚 2026-11-02 회사 공용 차량종류
 
 
@@ -4108,6 +4109,7 @@ if (appliedSearchType === "메모")
   const filteredStatusOrders = filteredOrders;
 // ✅ 미배차 오더 (차량번호 없는 것)
 // ⭐ 2026-11-02 PC 미배차 기준과 통일 — 배차중(또는 상태 비어 있음) + 차량번호 없음 + 취소 아님 + 같은 오더는 한 번만
+const [mUnDetail, setMUnDetail] = useState(null); // 🔎 미배차 세부검색(기간 + 1~3차)
 const unassignedOrders = useMemo(() => {
   const seen = new Set();
   return allOrders.filter((o) => {
@@ -6547,6 +6549,7 @@ onGoAttendance={() => {
         {(page === "list" || page === "detail") && ordersLoaded && initLoadDone && bootDone && (
           <div style={page === "list" ? undefined : { display: "none" }}>
           <MobileOrderList
+            allOrders={allOrders}
             dispatcherName={dispatcherName}
             userCompany={userCompany}
             groupedByDate={groupedByDate}
@@ -6751,9 +6754,10 @@ setOpenMemo={setOpenMemo}
     dispatcherName={dispatcherName}
     title="미배차 / 정보미전달"
     orders={{
-      unassigned: unassignedOrders,
-      undelivered: undeliveredOrders,
+      unassigned: mUnDetail ? applyDetailFilter(unassignedOrders, mUnDetail) : unassignedOrders,
+      undelivered: mUnDetail ? applyDetailFilter(undeliveredOrders, mUnDetail) : undeliveredOrders,
     }}
+    detailBtn={<DetailFilterButton rows={unassignedTab === "정보미전달" ? undeliveredOrders : unassignedOrders} value={mUnDetail} onApply={setMUnDetail} title="세부검색 · 미배차" />}
     unassignedTypeFilter={unassignedTypeFilter}
     setUnassignedTypeFilter={setUnassignedTypeFilter}
     setTodayRange={setTodayRange}
@@ -8674,6 +8678,7 @@ function MobileEstimateModal({ orders = [], userCompany = "", onClose }) {
 // 등록내역 리스트
 // ======================================================================
 function MobileOrderList({
+  allOrders = [],
   groupedByDate,
   statusTab,
   setStatusTab,
@@ -8799,6 +8804,9 @@ function MobileOrderList({
   // 아래 dates/statusCount/summary/allVisibleOrders 등 이 함수 전체가 groupedByDate를
   // 그대로 참조하므로, 여기서 같은 이름으로 다시 선언해 필터링·정렬된 결과로 가려버린다
   // (한 곳만 고치면 전체에 일관되게 반영됨).
+  // 🔎 세부검색 — 기간은 위 날짜 조회로, 1~3차 조건은 여기서
+  const [mDetail, setMDetail] = useState(null);
+  const applyMDetail = (v) => { setMDetail(v); if (v?.from && v?.to) { setStartDate(v.from); setEndDate(v.to); setAppliedStartDate(v.from); setAppliedEndDate(v.to); } };
   const groupedByDateRaw = groupedByDate;
   groupedByDate = (() => {
     const next = new Map();
@@ -8809,6 +8817,7 @@ function MobileOrderList({
       if (payTypeFilter.size > 0) filtered = filtered.filter(o => payTypeFilter.has(classifyPayType(o)));
       if (chargeMissingOnly) filtered = filtered.filter(o => !(Number(o.청구운임) > 0));
       if (driverFeeMissingOnly) filtered = filtered.filter(o => !(Number(o.기사운임) > 0));
+      if (mDetail) filtered = applyDetailFilter(filtered, mDetail, { withDate: false });
       if (filtered.length) next.set(key, sortOrdersByMode(filtered));
     });
     return next;
@@ -9205,6 +9214,7 @@ const summary = useMemo(() => {
                     조회
                   </button>
                 </div>
+                <DetailFilterButton rows={allOrders} value={mDetail} onApply={applyMDetail} title="세부검색 · 배차현황" />
               </div>
             </>
           );
@@ -21609,6 +21619,7 @@ function CanceledOrderDetailModal({ order: o, cardVersionB = false, mobileUsers 
 // 📌 미배차현황 (카드형)
 // ======================================================================
 function MobileUnassignedList({
+  detailBtn = null,
   title,
   orders, // { unassigned: [], undelivered: [] }
   unassignedTypeFilter,
@@ -21872,7 +21883,7 @@ return (
     {/* ── 필터 + 요약 ── */}
     <div className={`px-4 py-3 ${cardVersionB ? "bg-white border-b border-gray-100" : ""}`}>
       {/* 필터 칩 */}
-      <div className="flex gap-1.5 mb-2.5">
+      <div className="flex gap-1.5 mb-2.5 items-center flex-wrap">
         {(tab === "정보미전달"
           ? ["전체", "배차중", "배차완료"]
           : ["전체", "냉장/냉동", "일반"]
@@ -21887,6 +21898,7 @@ return (
             }`}
           >{t}</button>
         ))}
+        {detailBtn && <span className="ml-auto">{detailBtn}</span>}
       </div>
 
       {/* 요약 행 */}

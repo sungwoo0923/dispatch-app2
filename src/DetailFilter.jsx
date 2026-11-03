@@ -117,9 +117,9 @@ function ValueInput({ field, q, onChange, options, onEnter, inputRef }) {
             if (open && list[hi] && nq && !exact) { onChange(list[hi].v); setOpen(false); } else onEnter?.();
           } else if (e.key === "Escape") { if (open) { e.stopPropagation(); setOpen(false); } }
         }}
-        className="w-full h-10 rounded-xl border border-[#D5DDEA] bg-white pl-3 pr-16 text-[14px] font-bold text-[#0F1A30] outline-none focus:border-[#1B2B4B] focus:ring-2 focus:ring-[#1B2B4B]/10 disabled:bg-[#F4F6FA] disabled:text-[#9AA9C3] placeholder:font-semibold placeholder:text-[#9AA9C3]" />
+        className="w-full h-10 rounded-xl border border-[#D5DDEA] bg-white pl-2.5 sm:pl-3 pr-12 sm:pr-16 text-[14px] font-bold text-[#0F1A30] outline-none focus:border-[#1B2B4B] focus:ring-2 focus:ring-[#1B2B4B]/10 disabled:bg-[#F4F6FA] disabled:text-[#9AA9C3] placeholder:font-semibold placeholder:text-[#9AA9C3]" />
       {nq && (
-        <span className={`absolute right-2 top-1/2 -translate-y-1/2 h-5 px-1.5 rounded-md text-[10px] font-black inline-flex items-center ${exact ? "bg-[#0F1A30] text-white" : "bg-[#EEF2F8] text-[#5B6B85]"}`} style={{ fontFamily: MONO }} title={exact ? "같은 이름만 찾습니다" : "이 글자가 들어간 것을 모두 찾습니다"}>
+        <span className={`absolute right-1.5 sm:right-2 top-1/2 -translate-y-1/2 h-5 px-1 sm:px-1.5 rounded-md text-[9px] sm:text-[10px] font-black inline-flex items-center ${exact ? "bg-[#0F1A30] text-white" : "bg-[#EEF2F8] text-[#5B6B85]"}`} style={{ fontFamily: MONO }} title={exact ? "같은 이름만 찾습니다" : "이 글자가 들어간 것을 모두 찾습니다"}>
           {exact ? "EXACT" : "LIKE"}
         </span>
       )}
@@ -199,14 +199,14 @@ function DetailFilterModal({ open, onClose, rows, value, onApply, withDate, gett
     <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-[#060C1A]/60 backdrop-blur-[3px] p-3" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose?.(); }}>
       <div className="w-[min(760px,96vw)] max-h-[94vh] flex flex-col rounded-[22px] bg-[#F4F6FA] shadow-[0_30px_80px_rgba(6,12,26,0.55)] overflow-hidden ring-1 ring-white/10">
         {/* 머리 */}
-        <div className="relative overflow-hidden px-6 pt-5 pb-4 text-white" style={{ background: "radial-gradient(700px 260px at 85% -30%, rgba(110,149,232,.32), transparent 60%), linear-gradient(120deg,#060C1A 0%,#0F1A30 45%,#1B2B4B 100%)" }}>
+        <div className="relative overflow-hidden px-4 sm:px-6 pt-5 pb-4 text-white" style={{ background: "radial-gradient(700px 260px at 85% -30%, rgba(110,149,232,.32), transparent 60%), linear-gradient(120deg,#060C1A 0%,#0F1A30 45%,#1B2B4B 100%)" }}>
           <div className="absolute inset-0 pointer-events-none" style={{ background: "linear-gradient(rgba(143,176,240,.07) 1px, transparent 1px) 0 0/22px 22px, linear-gradient(90deg, rgba(143,176,240,.07) 1px, transparent 1px) 0 0/22px 22px" }} />
           <div className="relative flex items-center gap-4">
             <div className="w-11 h-11 rounded-2xl flex items-center justify-center text-[#CFE0FF]" style={{ background: "linear-gradient(135deg,#2D4C82,#0B1428)", border: "1px solid rgba(207,224,255,.3)", boxShadow: "0 0 0 4px rgba(143,176,240,.08), 0 0 24px rgba(110,149,232,.25)" }}>
               <Icon s={20} />
             </div>
             <div className="min-w-0">
-              <div className="text-[10.5px] font-extrabold tracking-[0.32em] text-[#8FB0F0]" style={{ fontFamily: MONO }}>DETAIL FILTER · UP TO 3 STEPS</div>
+              <div className="text-[10.5px] font-extrabold tracking-[0.32em] text-[#8FB0F0]" style={{ fontFamily: MONO }}><span className="sm:hidden">DETAIL FILTER</span><span className="hidden sm:inline">DETAIL FILTER · UP TO 3 STEPS</span></div>
               <div className="text-[21px] font-black mt-0.5 tracking-tight">{title}</div>
             </div>
             <button onClick={onClose} className="ml-auto h-9 px-3.5 rounded-xl bg-white/[0.08] border border-white/15 hover:bg-white/[0.16] text-[12.5px] font-black">닫기 <span className="text-white/45 ml-0.5" style={{ fontFamily: MONO }}>ESC</span></button>
@@ -225,19 +225,19 @@ function DetailFilterModal({ open, onClose, rows, value, onApply, withDate, gett
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
+        <div className="flex-1 overflow-y-auto px-3 sm:px-6 py-4 sm:py-5 space-y-3 sm:space-y-4">
           {/* 기간 */}
           {withDate && (
             <section className="rounded-2xl bg-white border border-[#E3E8F0] px-4 py-3.5">
               <div className="flex items-center gap-2 mb-2.5">
                 <span className="text-[10px] font-extrabold tracking-[0.22em] text-[#2D4C82]" style={{ fontFamily: MONO }}>PERIOD</span>
-                <span className="text-[13px] font-black text-[#0F1A30]">기간</span>
+                <span className="text-[13px] font-black text-[#0F1A30] whitespace-nowrap">기간</span>
                 <span className="text-[11.5px] font-bold text-[#9AA9C3]">{dateLabel}</span>
               </div>
               <div className="flex flex-wrap items-center gap-2">
-                <CustomDatePicker className={`${inp} w-[150px] text-left`} value={from} onChange={(e) => setFrom(e.target.value)} />
+                <CustomDatePicker className={`${inp} w-[calc(50%-14px)] sm:w-[150px] text-left`} value={from} onChange={(e) => setFrom(e.target.value)} />
                 <span className="text-[#9AA9C3] font-black">~</span>
-                <CustomDatePicker className={`${inp} w-[150px] text-left`} value={to} onChange={(e) => setTo(e.target.value)} />
+                <CustomDatePicker className={`${inp} w-[calc(50%-14px)] sm:w-[150px] text-left`} value={to} onChange={(e) => setTo(e.target.value)} />
                 <div className="inline-flex p-1 rounded-xl bg-[#EEF2F8] border border-[#E3E8F0]">
                   {ranges.map((q) => {
                     const on = from === q.s && to === q.e;
@@ -252,29 +252,29 @@ function DetailFilterModal({ open, onClose, rows, value, onApply, withDate, gett
           <section className="rounded-2xl bg-white border border-[#E3E8F0] px-4 py-3.5">
             <div className="flex items-center gap-2 mb-3">
               <span className="text-[10px] font-extrabold tracking-[0.22em] text-[#2D4C82]" style={{ fontFamily: MONO }}>CONDITIONS</span>
-              <span className="text-[13px] font-black text-[#0F1A30]">조건</span>
-              <span className="text-[11.5px] font-bold text-[#9AA9C3]">위에서부터 차례로 좁혀집니다 · 같은 이름이 있으면 그 이름만</span>
+              <span className="text-[13px] font-black text-[#0F1A30] whitespace-nowrap">조건</span>
+              <span className="hidden sm:inline text-[11.5px] font-bold text-[#9AA9C3]">위에서부터 차례로 좁혀집니다 · 같은 이름이 있으면 그 이름만</span>
             </div>
             <div className="space-y-2">
               {conds.map((c, i) => {
                 const used = conds.filter((_, j) => j !== i).map((x) => x.f);
                 return (
                   <div key={i} className="flex items-center gap-2">
-                    <span className="w-11 h-10 shrink-0 rounded-xl bg-[#0F1A30] text-white flex flex-col items-center justify-center leading-none">
+                    <span className="w-9 sm:w-11 h-10 shrink-0 rounded-xl bg-[#0F1A30] text-white flex flex-col items-center justify-center leading-none">
                       <span className="text-[13px] font-black" style={{ fontFamily: MONO }}>{String(i + 1).padStart(2, "0")}</span>
                       <span className="text-[9px] font-bold text-white/55 mt-0.5">{i + 1}차</span>
                     </span>
                     <select value={c.f} onChange={(e) => { setC(i, { f: e.target.value, q: "" }); }}
-                      className={`${inp} w-[150px] shrink-0 cursor-pointer ${c.f ? "" : "text-[#9AA9C3]"}`}>
+                      className={`${inp} w-[96px] sm:w-[150px] px-1.5 sm:px-3 text-[13px] sm:text-[14px] shrink-0 cursor-pointer ${c.f ? "" : "text-[#9AA9C3]"}`}>
                       <option value="">칸 선택</option>
                       {fields.map((f) => <option key={f} value={f} disabled={used.includes(f)}>{f}</option>)}
                     </select>
                     <ValueInput field={c.f} q={c.q} onChange={(q) => setC(i, { q })} options={optionsFor(i, c.f)} onEnter={apply} inputRef={i === 0 ? firstInput : undefined} />
-                    <span className="w-16 shrink-0 text-right text-[12px] font-black tabular-nums text-[#5B6B85]" style={{ fontFamily: MONO }}>
+                    <span className="hidden sm:inline w-16 shrink-0 text-right text-[12px] font-black tabular-nums text-[#5B6B85]" style={{ fontFamily: MONO }}>
                       {c.f && normClient(c.q) ? `${(stages[i + 1] || []).length.toLocaleString()}건` : "—"}
                     </span>
                     <button type="button" title="이 조건 지우기" onClick={() => setConds((cs) => (cs.length === 1 ? [{ f: "", q: "" }] : cs.filter((_, j) => j !== i)))}
-                      className="w-8 h-8 shrink-0 rounded-lg text-[#9AA9C3] hover:text-[#0F1A30] hover:bg-[#EEF2F8] flex items-center justify-center">
+                      className="w-6 sm:w-8 h-8 shrink-0 rounded-lg text-[#9AA9C3] hover:text-[#0F1A30] hover:bg-[#EEF2F8] flex items-center justify-center">
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg>
                     </button>
                   </div>
@@ -291,15 +291,15 @@ function DetailFilterModal({ open, onClose, rows, value, onApply, withDate, gett
         </div>
 
         {/* 아래 */}
-        <div className="px-6 py-3.5 border-t border-[#E3E8F0] bg-white flex items-center gap-2">
+        <div className="px-4 sm:px-6 py-3.5 border-t border-[#E3E8F0] bg-white flex flex-wrap items-center gap-2 [&_button]:whitespace-nowrap">
           <button type="button" onClick={() => { const t = kst(); setFrom(t); setTo(t); setConds([{ f: "", q: "" }]); }}
             className="h-10 px-4 rounded-xl border border-[#D5DDEA] text-[13px] font-black text-[#5B6B85] hover:text-[#0F1A30] hover:border-[#1B2B4B]">초기화</button>
           {value && <button type="button" onClick={() => { onApply?.(null); onClose?.(); }}
             className="h-10 px-4 rounded-xl border border-[#D5DDEA] text-[13px] font-black text-[#5B6B85] hover:text-[#0F1A30] hover:border-[#1B2B4B]">세부검색 해제</button>}
-          <div className="ml-auto flex items-center gap-3">
-            <span className="text-[12px] font-bold text-[#5B6B85]">조회 결과 <b className="text-[16px] font-black text-[#0F1A30] tabular-nums" style={{ fontFamily: MONO }}>{result.toLocaleString()}</b> 건</span>
+          <div className="ml-auto flex items-center gap-2 sm:gap-3">
+            <span className="hidden sm:inline text-[12px] font-bold text-[#5B6B85] whitespace-nowrap">조회 결과 <b className="text-[16px] font-black text-[#0F1A30] tabular-nums" style={{ fontFamily: MONO }}>{result.toLocaleString()}</b> 건</span>
             <button type="button" onClick={onClose} className="h-10 px-4 rounded-xl border border-[#D5DDEA] text-[13px] font-black text-[#5B6B85] hover:text-[#0F1A30]">취소</button>
-            <button type="button" onClick={apply} className="h-10 px-6 rounded-xl bg-[#0F1A30] text-white text-[13.5px] font-black shadow-[0_6px_16px_rgba(15,26,48,.28)] hover:bg-[#1B2B4B] transition">조회</button>
+            <button type="button" onClick={apply} className="h-10 px-5 sm:px-6 rounded-xl bg-[#0F1A30] text-white text-[13.5px] font-black shadow-[0_6px_16px_rgba(15,26,48,.28)] hover:bg-[#1B2B4B] transition">조회<span className="sm:hidden ml-1 font-bold text-white/60 tabular-nums" style={{ fontFamily: MONO }}>{result.toLocaleString()}</span></button>
           </div>
         </div>
       </div>
