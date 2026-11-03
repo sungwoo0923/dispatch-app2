@@ -9755,6 +9755,8 @@ function MultiRegCombo({ id, value, onChange, onSelect, items, placeholder, clas
     markEditRequestSeen = () => {},
     approvedShippers = [],
   }) {
+  const [dmLookupOpen, setDmLookupOpen] = React.useState(false); // ⭐ 2026-11-03 담당자·차량 조회(배차관리 버튼)
+  const dmLookupNameOf = React.useCallback((r) => _orderStaffNameRaw(r, userNameMap), [userNameMap]);
 
       // ⭐ 회사별 커스텀 드롭다운 옵션(Part B) — 등록폼 전역에서 재사용하므로 최상위에서
       // 한 번만 구독한다. 커스터마이즈 안 한 회사는 기존 하드코딩 값 그대로 보인다.
@@ -15074,6 +15076,13 @@ React.useEffect(() => {
     >
       정기오더
     </button>
+
+    {/* ⭐ 2026-11-03 담당자·차량 조회 — 기간 + 배차담당자 + 차량번호·기사명 */}
+    <button type="button" onClick={() => setDmLookupOpen(true)} title="기간 + 배차담당자 + 차량번호·기사명으로 찾기"
+      className="px-3 py-1.5 text-sm font-bold rounded-lg bg-white text-[#1B2B4B] border border-[#1B2B4B] hover:bg-[#F5F8FD] transition">
+      담당자·차량 조회
+    </button>
+    <OrderLookupModal open={dmLookupOpen} onClose={() => setDmLookupOpen(false)} rows={dispatchData} nameOf={dmLookupNameOf} />
     {recurringOpen && createPortal(<RecurringManagerModal form={form} onClose={() => setRecurringOpen(false)} />, document.body)}
 
   </div>
@@ -26025,7 +26034,7 @@ const selectedSet = React.useMemo(() => new Set(selected), [selected]);
     const close = () => setContextMenu(null);
     const onKey = (e) => {
       if (e.key === "Delete" && contextMenu) {
-        setDeleteList([contextMenu.row]);
+        setDeleteList(selected.includes(contextMenu.row._id) && selected.length > 1 ? rows.filter((r) => selected.includes(r._id)) : [contextMenu.row]); // ⭐ 선택한 줄 위에서 지우면 선택한 줄 전부
         setDeleteConfirmOpen(true);
         setContextMenu(null);
       }
@@ -26034,7 +26043,7 @@ const selectedSet = React.useMemo(() => new Set(selected), [selected]);
     document.addEventListener("click", close);
     document.addEventListener("keydown", onKey);
     return () => { document.removeEventListener("click", close); document.removeEventListener("keydown", onKey); };
-  }, [contextMenu]);
+  }, [contextMenu, selected, rows]);
 
   // ===================== 첨부현황 =====================
   const [attachStatusOpen, setAttachStatusOpen] = React.useState(false);
@@ -29553,7 +29562,7 @@ const head = isDark
     />
     <button onClick={() => setQ(qInputRef.current?.value ?? "")} className="h-full px-2 bg-[#1B2B4B] text-white text-[11px] font-bold hover:bg-[#243a60] transition"><EditableText id="misc.btn.26528.조회" defaultText="조회" /></button>
   </div>
-  <button onClick={() => setLookupOpen(true)} title="기간 + 배차담당자 + 차량번호·기사명으로 찾기" className="px-2 py-1 rounded-lg bg-white text-[#1B2B4B] border-2 border-[#1B2B4B] text-[11px] font-black whitespace-nowrap flex-shrink-0 hover:bg-[#EEF2F8]">🔍 담당자·차량 조회</button>
+  <button onClick={() => setLookupOpen(true)} title="기간 + 배차담당자 + 차량번호·기사명으로 찾기" className="px-2 py-1 rounded-lg bg-white text-[#1B2B4B] border-2 border-[#1B2B4B] text-[11px] font-black whitespace-nowrap flex-shrink-0 hover:bg-[#EEF2F8]">담당자·차량 조회</button>
   <OrderLookupModal open={lookupOpen} onClose={() => setLookupOpen(false)} rows={historyDispatchData} nameOf={lookupNameOf} />
   {/* 날짜 버튼 */}
   {["yesterday","today","tomorrow"].map((mode,i)=>{
@@ -33605,7 +33614,7 @@ if (editTarget.하차지명) savePlaceSmart(editTarget.하차지명, editTarget.
           <button
             className="w-full text-left px-4 py-2 text-[13px] text-red-600 hover:bg-red-50 flex items-center gap-2.5 transition-colors"
             onClick={() => {
-              setDeleteList([contextMenu.row]);
+              setDeleteList(selected.includes(contextMenu.row._id) && selected.length > 1 ? rows.filter((r) => selected.includes(r._id)) : [contextMenu.row]); // ⭐ 선택한 줄 위에서 지우면 선택한 줄 전부
               setDeleteConfirmOpen(true);
               setContextMenu(null);
             }}
@@ -38735,7 +38744,7 @@ const save = {
     const close = () => setContextMenuDS(null);
     const onKey = (e) => {
       if (e.key === "Delete" && contextMenuDS) {
-        setSelected(new Set([getId(contextMenuDS.row)]));
+        { const _id = getId(contextMenuDS.row); if (!selected.has(_id)) setSelected(new Set([_id])); } // ⭐ 선택한 줄 위에서 지우면 선택한 줄 전부
         setShowDeletePopup(true);
         setContextMenuDS(null);
       }
@@ -38744,7 +38753,7 @@ const save = {
     document.addEventListener("click", close);
     document.addEventListener("keydown", onKey);
     return () => { document.removeEventListener("click", close); document.removeEventListener("keydown", onKey); };
-  }, [contextMenuDS]);
+  }, [contextMenuDS, selected]);
 
   // ===================== 상차 임박 경고 (Part 5) =====================
   const [dsWarningExpanded, setDsWarningExpanded] = React.useState(false);
@@ -39398,7 +39407,7 @@ return (
         <button onClick={()=>{const t=todayKST();setStartDate(t);setEndDate(t);setAppliedStartDate(t);setAppliedEndDate(t);localStorage.setItem("dispatchDateState",JSON.stringify({startDate:t,endDate:t,appliedStartDate:t,appliedEndDate:t}));setQ("");setQInput("");setPage(0);}} className="px-2 py-1 rounded-lg bg-[#1B2B4B] text-white text-[11px] font-semibold whitespace-nowrap flex-shrink-0"><EditableText id="status.toolbar.당일" defaultText="당일" /></button>
         <button onClick={()=>{const t=tomorrowKST();setStartDate(t);setEndDate(t);setAppliedStartDate(t);setAppliedEndDate(t);localStorage.setItem("dispatchDateState",JSON.stringify({startDate:t,endDate:t,appliedStartDate:t,appliedEndDate:t}));setQ("");setQInput("");setPage(0);}} className="px-2 py-1 rounded-lg bg-gray-500 text-white text-[11px] font-semibold whitespace-nowrap flex-shrink-0"><EditableText id="status.toolbar.내일" defaultText="내일" /></button>
         <button onClick={()=>{const{first,last}=getMonthRange();setStartDate(first);setEndDate(last);setAppliedStartDate(first);setAppliedEndDate(last);setQ("");setQInput("");setPage(0);setLoaded(true);localStorage.setItem("dispatchDateState",JSON.stringify({startDate:first,endDate:last,appliedStartDate:first,appliedEndDate:last}));}} className="px-2 py-1 rounded-lg bg-gray-500 text-white text-[11px] font-semibold whitespace-nowrap flex-shrink-0"><EditableText id="status.toolbar.전체" defaultText="전체" /></button>
-        <button onClick={() => setLookupOpen(true)} title="기간 + 배차담당자 + 차량번호·기사명으로 찾기" className="px-2 py-1 rounded-lg bg-white text-[#1B2B4B] border-2 border-[#1B2B4B] text-[11px] font-black whitespace-nowrap flex-shrink-0 hover:bg-[#EEF2F8]">🔍 담당자·차량 조회</button>
+        <button onClick={() => setLookupOpen(true)} title="기간 + 배차담당자 + 차량번호·기사명으로 찾기" className="px-2 py-1 rounded-lg bg-white text-[#1B2B4B] border-2 border-[#1B2B4B] text-[11px] font-black whitespace-nowrap flex-shrink-0 hover:bg-[#EEF2F8]">담당자·차량 조회</button>
   <OrderLookupModal open={lookupOpen} onClose={() => setLookupOpen(false)} rows={dispatchData} nameOf={lookupNameOf} />
 
         {/* 우측 버튼들 */}
@@ -44147,7 +44156,7 @@ setCopyPlaceOptions(list);
           )}
           <div className="border-t border-gray-100 my-1"/>
           <button className="w-full text-left px-4 py-2 text-[13px] text-red-600 hover:bg-red-50 flex items-center gap-2.5 transition-colors"
-            onClick={() => { setSelected(new Set([getId(contextMenuDS.row)])); setShowDeletePopup(true); setContextMenuDS(null); }}>
+            onClick={() => { const _id = getId(contextMenuDS.row); if (!selected.has(_id)) setSelected(new Set([_id])); setShowDeletePopup(true); setContextMenuDS(null); }}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
             <EditableText id="status.ctxMenu.삭제" defaultText="삭제" />
             <span className="ml-auto text-[11px] text-gray-500 font-mono">Del</span>
