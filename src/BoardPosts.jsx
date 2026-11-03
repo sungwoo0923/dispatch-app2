@@ -1,7 +1,8 @@
 // ======================= src/BoardPosts.jsx =======================
 // 🗂 사내 게시판(2026-10-28) — 자유게시판 · 관리자게시판 · 임원게시판
 //  boardPosts/{id}: { company, board(free|admin|exec), title, content, images, pinned, authorUid, authorName, authorPosition,
-//                     createdAt, updatedAt, readBy:[uid], comments:[{ id, uid, name, text, at }] }
+//                     createdAt, updatedAt, readBy:[uid], likes:[uid],
+//                     comments:[{ id, uid, name, position, text, at, parentId?, likes:[uid], editedAt?, deleted? }] }  <- 💬 2026-11-03 PostComments.jsx
 //  - 관리자게시판: 관리자·최고관리자·인사관리자 / 임원게시판: 권한 설정 전까지 최고관리자만 — 보안규칙도 같은 기준
 //  - 글쓴이·관리자는 수정·삭제, 관리자는 상단 고정. 댓글, 조회수(읽은 사람 수), 새 글 N 표시.
 import React from "react";
@@ -10,6 +11,7 @@ import { db } from "./firebase";
 import { collection, doc, onSnapshot, query, where, addDoc, updateDoc, deleteDoc, arrayUnion, serverTimestamp } from "firebase/firestore";
 import { ShellIcon } from "./AdminShell";
 import { compressImage } from "./InternalMail";
+import PostComments, { PostLikeButton, PostCounts } from "./PostComments"; // 💬 2026-11-03 댓글·대댓글·좋아요
 
 const MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
 const toMs = (v) => (v?.toMillis ? v.toMillis() : typeof v === "number" ? v : v?.seconds ? v.seconds * 1000 : 0);
@@ -62,7 +64,6 @@ export default function BoardPage({ company, me, board }) {
   const [openId, setOpenId] = React.useState(null);
   const [form, setForm] = React.useState(null); // { id?, title, content, images, pinned }
   const [busy, setBusy] = React.useState(false);
-  const [cmt, setCmt] = React.useState("");
   const fileRef = React.useRef(null);
   const admin = isAdminRole(me.role);
 
@@ -112,16 +113,6 @@ export default function BoardPage({ company, me, board }) {
     if (!await kpConfirm("이 글을 삭제할까요?")) return;
     await deleteDoc(doc(db, "boardPosts", p.id)).catch((e) => window.alert(e.message));
     setOpenId(null);
-  };
-  const addComment = async () => {
-    if (!cmt.trim() || !cur) return;
-    const c = { id: Math.random().toString(36).slice(2, 10), uid: me.uid, name: me.name, position: me.position || "", text: cmt.trim().slice(0, 2000), at: Date.now() };
-    await updateDoc(doc(db, "boardPosts", cur.id), { comments: arrayUnion(c) }).catch((e) => window.alert(e.message));
-    setCmt("");
-  };
-  const delComment = async (c) => {
-    if (!await kpConfirm("댓글을 지울까요?")) return;
-    await updateDoc(doc(db, "boardPosts", cur.id), { comments: (cur.comments || []).filter((x) => x.id !== c.id) }).catch((e) => window.alert(e.message));
   };
   const isNew = (p) => Date.now() - toMs(p.createdAt) < 24 * 3600e3;
 
@@ -190,27 +181,10 @@ export default function BoardPage({ company, me, board }) {
           <div className="px-7 py-6 space-y-4">
             <div className="text-[15px] text-[#1F2A44] leading-[1.9] whitespace-pre-wrap break-words">{cur.content}</div>
             {(cur.images || []).map((src, i) => <img key={i} src={src} alt="" className="max-w-full max-h-[560px] rounded-xl border border-[#E3E8F0]" />)}
+            <div className="pt-1"><PostLikeButton col="boardPosts" post={cur} me={me} disabled={me.role === "viewer"} /></div>
           </div>
-          <div className="px-7 py-5 bg-[#F8FAFD] border-t border-[#EEF1F6]">
-            <div className="text-[13.5px] font-black text-[#0F1A30] mb-3">댓글 {(cur.comments || []).length}</div>
-            <div className="space-y-2.5 mb-3">
-              {(cur.comments || []).map((c) => (
-                <div key={c.id} className="flex gap-2.5">
-                  <span className="w-8 h-8 rounded-lg bg-[#1B2B4B] text-white text-[12px] font-black flex items-center justify-center shrink-0">{String(c.name || "?").slice(0, 1)}</span>
-                  <div className="flex-1 min-w-0 bg-white rounded-xl border border-[#E3E8F0] px-3.5 py-2">
-                    <div className="text-[12.5px]"><b className="text-[#0F1A30]">{c.name}</b> <span className="text-[#7A879C]">{c.position}</span> <span className="text-[11.5px] text-[#9AA9C3] ml-1">{fmt(c.at)}</span>
-                      {(c.uid === me.uid || admin) && <button type="button" onClick={() => delComment(c)} className="ml-2 text-[11.5px] text-[#9AA9C3] hover:text-[#0F1A30]">삭제</button>}
-                    </div>
-                    <div className="text-[13.5px] text-[#1F2A44] whitespace-pre-wrap break-words mt-0.5">{c.text}</div>
-                  </div>
-                </div>
-              ))}
-            </div>
-            <div className="flex gap-2">
-              <textarea value={cmt} onChange={(e) => setCmt(e.target.value)} rows={2} placeholder="댓글을 남겨 주세요" className={`${inp} py-2 flex-1 resize-none`} onKeyDown={(e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) addComment(); }} />
-              <button type="button" onClick={addComment} disabled={!cmt.trim()} className="w-20 rounded-xl bg-[#0F1A30] text-white text-[13.5px] font-black disabled:opacity-40">등록</button>
-            </div>
-          </div>
+          {/* 💬 2026-11-03 댓글·대댓글·좋아요·이모지 — 공지사항과 같은 부품(PostComments) */}
+          <PostComments col="boardPosts" post={cur} me={me} readOnly={me.role === "viewer"} />
         </div>
       ) : (
         <div className="rounded-2xl bg-white border border-[#E3E8F0] overflow-hidden">
@@ -236,9 +210,9 @@ export default function BoardPage({ company, me, board }) {
                 <span className="w-14 text-center text-[14px] font-bold text-[#5B6B85] tabular-nums">{p.pinned ? <span className="text-[10.5px] font-black px-1.5 py-0.5 rounded bg-[#0F1A30] text-[#8FB0F0]">•</span> : sorted.length - ((page - 1) * PAGE + i)}</span>
                 <span className="flex-1 min-w-0 flex items-center gap-1.5 pl-2">
                   <span className={`truncate ${p.pinned ? "text-[15.5px] font-black text-[#0B1428]" : unread ? "text-[15px] font-black text-[#0F1A30]" : "text-[15px] font-semibold text-[#3A4A66]"}`}>{p.title}</span>
-                  {(p.comments || []).length > 0 && <span className="text-[12px] font-black text-[#4B6CB7]">[{p.comments.length}]</span>}
                   {(p.images || []).length > 0 && <span className="text-[11px] text-[#9AA9C3]">◎</span>}
                   {isNew(p) && unread && <span className="w-[18px] h-[18px] rounded-full bg-[#1B2B4B] text-white text-[10px] font-black flex items-center justify-center">N</span>}
+                  <PostCounts p={p} className="ml-1" />
                 </span>
                 <span className="w-28 truncate text-[14px] font-bold text-[#1B2B4B]">{p.authorName}</span>
                 <span className="w-[110px] text-right text-[14px] font-semibold text-[#3A4A66] tabular-nums whitespace-nowrap">{fmt(toMs(p.createdAt))}</span>

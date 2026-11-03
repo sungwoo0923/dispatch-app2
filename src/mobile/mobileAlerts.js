@@ -6,22 +6,14 @@ import { subscribeUsersLive } from "../usersLive"; // ⭐ 2026-11-02 속도 — 
 import React from "react";
 import { collection, onSnapshot, query, where } from "firebase/firestore";
 import { db, DEFAULT_COMPANY } from "../firebase";
-import { isNoticeUnread, noticePublished, useMinuteTick } from "../notifyCore";
+import { isNoticeUnread, noticePublished, useMinuteTick, canSeeTargetedNotice } from "../notifyCore";
 
 const ADMIN_ROLES = ["admin", "totalMaster", "superadmin"];
 const myTurn = (d, uid) => (d.status === "pending" && d.line?.[d.step]?.uid === uid)
   || (d.status === "approved" && d.cancel?.status === "pending" && d.cancel.line?.[d.cancel.step]?.uid === uid);
 const handoverTo = (h) => (Array.isArray(h?.receiverUids) && h.receiverUids.length ? h.receiverUids : h?.receiverUid ? [h.receiverUid] : []);
-// ⭐ 2026-11-03 직원 지정(targetUids) 공지도 — 지정된 직원 + 작성자 + 관리자만(NoticeBoard.canSeeNotice와 같은 규칙)
-const canSeeNotice = (n, me) => {
-  const teams = Array.isArray(n.teams) ? n.teams : [];
-  const uids = Array.isArray(n.targetUids) ? n.targetUids.filter(Boolean) : [];
-  if (!teams.length && !uids.length) return true;
-  if (n.authorUid && n.authorUid === me.uid) return true;
-  if (ADMIN_ROLES.includes(me.role)) return true;
-  if (uids.length) return !!me.uid && uids.includes(me.uid);
-  return teams.includes(String(me.team || "").trim());
-};
+// ⭐ 2026-11-03 지정 공지 비공개 — 지정된 사람(팀원)·작성자·최고관리자만(notifyCore.canSeeTargetedNotice — PC와 같은 기준)
+const canSeeNotice = (n, me) => canSeeTargetedNotice(n, me);
 
 export function useMobileAlerts({ uid, role, team = "", company = "", onAlert }) {
   const [counts, setCounts] = React.useState({ approval: 0, handover: 0, signupStaff: 0, signupDriver: 0, notice: 0 });

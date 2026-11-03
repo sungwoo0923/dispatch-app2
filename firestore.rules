@@ -651,7 +651,23 @@ service cloud.firestore {
       return isBoardAdmin() || (isApproved() && !(myUser().get('role', '') in ['viewer', 'driver', 'shipper', 'cafeUser']) && (
         myUser().get('isMaster', false) == true || noticePolicy() == 'all' || (noticePolicy() == 'exec' && myUser().get('team', '') == '임원')));
     }
+    // 💬 2026-11-03 댓글·좋아요(공지·게시판 공용, 문서 안 배열)
+    //  likes: 내 uid 하나만 넣거나 뺄 수 있다(남의 좋아요는 못 건드림) · comments: 500개까지
+    //  (댓글 하나하나의 "본인만 수정" 은 배열이라 규칙으로 가르기 어려워 화면에서 막는다 — 같은 회사 직원만 쓸 수 있음)
+    function likesOnlyMine() {
+      let before = resource.data.get('likes', []).toSet();
+      let after = request.resource.data.get('likes', []).toSet();
+      return after.difference(before).hasOnly([request.auth.uid]) && before.difference(after).hasOnly([request.auth.uid]);
+    }
+    function commentsOk() {
+      return request.resource.data.get('comments', []) is list && request.resource.data.get('comments', []).size() <= 500;
+    }
+    function canTalkUser() {
+      return isTotalMasterUser() || !(myUser().get('role', '') in ['viewer', 'driver', 'shipper', 'cafeUser']);
+    }
     // 📢 공지사항 — 누구나 읽고, 쓰기·수정·삭제는 관리자(관리자·인사관리자·최고관리자)만
+    //  🔒 2026-11-03 지정 공지(teams·targetUids) 비공개는 화면(notifyCore.canSeeTargetedNotice)과 서버 푸시에서 지킨다.
+    //   보안규칙은 "조회 결과를 걸러 주지 않는" 구조라, 여기서 막으면 공지 목록 조회 전체가 거부된다(지정 공지가 하나라도 섞이면).
     match /notices/{id} {
       // 🔒 같은 운송사 공지만 · 화주사는 화주 대상 공지만
       allow read: if coMatch(resource.data) || (isApproved() && isShipperUser() && resource.data.get('audience', '') in ['shipper', 'all'])
@@ -664,6 +680,10 @@ service cloud.firestore {
             || isSuperEmail() || myUser().get('role', '') == 'totalMaster');
       // 읽음 표시는 같은 회사 직원 누구나
       allow update: if coMatch(resource.data) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['readBy']);
+      // 💬 댓글·좋아요는 같은 회사 직원(조회전용·기사·화주 제외)
+      allow update: if coMatch(resource.data) && canTalkUser()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['comments', 'likes', 'readBy'])
+        && likesOnlyMine() && commentsOk();
     }
     // 📋 인수인계 — 받는 사람의 "확인"(readBy)은 누구나, 내용 수정·삭제는 작성자 본인만(최고관리자 예외)
     match /handovers/{id} {
@@ -681,7 +701,8 @@ service cloud.firestore {
       allow update: if coMatch(resource.data) && canSeeBoard(resource.data.board)
         && request.resource.data.get('board', '') == resource.data.board
         && (resource.data.get('authorUid', '') == request.auth.uid || isBoardAdmin()
-            || request.resource.data.diff(resource.data).affectedKeys().hasOnly(['readBy', 'comments']));
+            || (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['readBy', 'comments', 'likes'])
+                && likesOnlyMine() && commentsOk()));
       // 삭제는 작성자 본인만(최고관리자는 운영상 예외)
       allow delete: if coMatch(resource.data) && canSeeBoard(resource.data.board) && (resource.data.get('authorUid', '') == request.auth.uid || isSuperEmail() || myUser().get('role', '') == 'totalMaster');
     }

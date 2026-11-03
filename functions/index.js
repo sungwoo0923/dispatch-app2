@@ -4956,7 +4956,7 @@ exports.notifyApproval = functions.firestore.document("approvals/{id}").onWrite(
 });
 
 // 📢 공지사항 푸시(2026-10-31) — 새 공지가 올라오면 받는 대상 전원에게(작성자 제외)
-//  같은 회사 직원 · 팀 지정 공지는 그 팀 + 관리자만 · 화주사 대상 공지는 직원 + 연동 화주 계정은 화주 화면 공지라 제외
+//  같은 회사 직원 · 팀 지정 공지는 그 팀원에게만(⭐ 2026-11-03 관리자도 제외) · 화주사 대상 공지는 직원 + 연동 화주 계정은 화주 화면 공지라 제외
 //  ⭐ 2026-11-03 직원 지정 공지(targetUids)는 그 직원들에게만
 const NOTICE_ADMIN_ROLES = ["admin", "totalMaster", "superadmin"];
 // ⭐ 2026-11-03 공개 대상 여러 개(audiences: internal·shipper·driver) — 예전 공지(audience만)는 internal(직원)로 본다
@@ -4968,7 +4968,7 @@ async function sendNoticePush(n) {
   const auds = Array.isArray(n.audiences) && n.audiences.length ? n.audiences : null;
   const toStaff = !auds || auds.includes("internal") || auds.includes("shipper");
   const toDriver = !!auds && auds.includes("driver");
-  // ⭐ 2026-11-03 직원 지정 공지(targetUids) — 고른 직원에게만 푸시(관리자라도 지정 안 됐으면 보내지 않음 · 목록에서는 관리자도 볼 수 있음)
+  // ⭐ 2026-11-03 직원 지정 공지(targetUids) — 고른 직원에게만 푸시(관리자라도 지정 안 됐으면 보내지 않음 · 목록에서도 지정된 사람·작성자·최고관리자만 보임)
   const targetUids = new Set((Array.isArray(n.targetUids) ? n.targetUids : []).filter(Boolean));
   const users = await db.collection("users").where("companyName", "==", company).get();
   const tokens = [];
@@ -4980,8 +4980,8 @@ async function sendNoticePush(n) {
       if (!toDriver) return;
     } else {
       if (!toStaff) return;
-      if (targetUids.size) { if (!targetUids.has(d.id)) return; }
-      else if (teams.length && !NOTICE_ADMIN_ROLES.includes(u.role) && !teams.includes(String(u.team || "").trim())) return;
+      // ⭐ 2026-11-03 지정 공지 비공개 — 직원·팀 지정이면 지정된 사람(팀원)에게만. 관리자·다른 직원에게는 보내지 않는다(작성자는 위에서 제외)
+      if (targetUids.size || teams.length) { if (!targetUids.has(d.id) && !teams.includes(String(u.team || "").trim())) return; }
     }
     if (!isPushTypeEnabled(u.pushPrefs, "공지사항")) return;
     tokens.push(...userTokens(u));
