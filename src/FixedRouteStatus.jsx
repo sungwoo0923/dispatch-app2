@@ -330,7 +330,7 @@ function RangeImportModal({ form, onClose }) {
       <div className="w-full max-w-[520px] rounded-2xl bg-white shadow-[0_24px_60px_rgba(15,26,48,0.35)] overflow-hidden">
         <div className="px-6 py-4 bg-[#1B2B4B] text-white">
           <div className="text-[16px] font-black">기간 가져오기 · {form.name}</div>
-          <div className="text-[11.5px] text-white/60 font-semibold">입고일(시트 탭 이름 날짜) 기준 · 이미 가져온 줄은 다시 만들지 않고 시트와 맞추기만 합니다</div>
+          <div className="text-[11.5px] text-white/60 font-semibold">입고일(시트 탭 이름 날짜) 기준 · 이미 있는 줄은 시트와 맞추기만, 지운 줄은 다시 가져옵니다</div>
         </div>
         <div className="p-6 space-y-4">
           <div className="grid grid-cols-[1fr_auto_1fr] items-end gap-2">
@@ -358,7 +358,6 @@ function RangeImportModal({ form, onClose }) {
   );
 }
 
-const isAdminLike = () => { try { const r = localStorage.getItem("role"); return r === "admin" || r === "totalMaster" || auth.currentUser?.email === "tjddnqkf@naver.com"; } catch { return false; } };
 const isMasterOnly = () => { try { return localStorage.getItem("role") === "totalMaster" || auth.currentUser?.email === "tjddnqkf@naver.com"; } catch { return false; } };
 // 🔒 2026-11-03 운송사 분리 — 이 회사의 배차표 양식 id 목록(배지·목록은 이 회사 양식의 오더만)
 export function useRouteBoardIds(company) {
@@ -462,11 +461,7 @@ export default function FixedRouteStatusHost({ company, dispatchData = [], rende
           </div>
           <div className="flex-1" />
           <div className="flex items-center gap-2 flex-wrap">
-            {form && !disabled && isAdminLike() && (() => { const n = Object.values(form.삭제한줄 || {}).reduce((a, x) => a + (Number(x) || 0), 0); return n > 0 && (
-              <button type="button" title="프로그램에서 지운 시트 줄을 다시 오더로 가져옵니다(시트에 줄이 남아 있는 것만)"
-                onClick={async () => { if (!window.confirm(`지운 줄 ${n}건을 시트에서 다시 가져올까요?\n(시트에 그 줄이 남아 있는 것만 다시 생깁니다)`)) return; try { await updateDoc(doc(db, "routeBoards", form.id), { 삭제한줄: {} }); setTimeout(() => runSync({ ...form, 삭제한줄: {} }, false), 600); } catch (e) { window.alert(e?.message || e); } }}
-                className="h-10 px-3.5 rounded-xl inline-flex items-center gap-1.5 text-[13px] font-black bg-white/[0.06] border border-white/15 text-white/85 hover:bg-white/[0.12]">지운 줄 다시 가져오기 <span className="tabular-nums" style={{ fontFamily: MONO }}>{n}</span></button>
-            ); })()}
+            {/* ⭐ 2026-11-03 [지운 줄 다시 가져오기] 제거 — [기간 가져오기]를 누르면 지운 줄까지 다시 가져온다 */}
             {form && !disabled && form.sheetUrl && (
               <button type="button" onClick={() => setRangeOpen(true)} title="예전 날짜 탭(입고일 기준)을 한 번에 가져오기"
                 className="h-10 px-3.5 rounded-xl inline-flex items-center gap-1.5 text-[13px] font-black bg-white/[0.06] border border-white/15 text-white/85 hover:bg-white/[0.12]">기간 가져오기</button>
