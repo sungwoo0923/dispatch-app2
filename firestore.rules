@@ -374,12 +374,20 @@ service cloud.firestore {
       allow update: if isApproved() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['viewedBy']);
     }
     // 🧾 플랫폼 청구·입금 기록 — 최고관리자는 전부, 고객사는 자기 회사 청구서만 읽고 "입금 알림(payNotice)"만 남길 수 있다
+    // ⭐ 2026-11-03 구독·결제 권한(src/billingAccess.js와 같은 기준) — 보기: 경리팀·재무·임원·대표 / 입금 알림: 경리팀·재무만
+    function isBillingFinance() {
+      return myUser().get('role', '') in ['test', 'hrAcct'] || string(myUser().get('team', '')).matches('.*(경리|회계|재무).*');
+    }
+    function isBillingViewer() {
+      return isBillingFinance() || isExecProfileUser();
+    }
     match /platformInvoices/{id} {
       allow read: if isTotalMasterUser()
-        || (isApproved() && resource.data.company == myUser().get('companyName', ''));
+        || (isApproved() && resource.data.company == myUser().get('companyName', '') && isBillingViewer());
       allow write: if isTotalMasterUser();
       allow update: if isApproved()
         && resource.data.company == myUser().get('companyName', '')
+        && isBillingFinance()
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['payNotice']);
     }
     // 💳 회사별 요금제 — 로그인 사용자는 읽기(메뉴 잠금 판단), 지정은 최고관리자만
@@ -399,9 +407,8 @@ service cloud.firestore {
     }
     // 💳 요금제 변경 요청 — 고객사는 자기 회사 이름으로만 만들 수 있고, 처리는 최고관리자
     match /planRequests/{id} {
-      // ⭐ 2026-11-01 요금제 변경 요청은 경리팀(경리·경리+인사·경리/회계 부서)만
-      allow create: if isApproved() && request.resource.data.company == myUser().get('companyName', '') &&
-        (myUser().get('role', '') in ['test', 'hrAcct'] || myUser().get('team', '').matches('.*(경리|회계).*'));
+      // ⭐ 2026-11-01 요금제 변경 요청은 경리팀(경리·경리+인사·경리/회계 부서)만 · 2026-11-03 재무 부서 · 최고관리자 추가(임원·대표는 보기만)
+      allow create: if isTotalMasterUser() || (isApproved() && request.resource.data.company == myUser().get('companyName', '') && isBillingFinance());
       allow read, update, delete: if isTotalMasterUser();
     }
     match /siteConfig/{docId} {

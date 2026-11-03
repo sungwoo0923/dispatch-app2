@@ -1,5 +1,6 @@
 // src/AdminMenu.jsx
 import BillingCenter from "./BillingCenter";
+import { billingAccess } from "./billingAccess";
 import { kpConfirm } from "./kpDialog";
 import { CopyTemplateEditor } from "./CopyTemplateEditor";
 import { openSetupWizard, openTutorial } from "./Onboarding";
@@ -801,6 +802,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
   // REQUIRES_MASTER에 있는 하위 탭은 최고관리자에게만 보인다(기존 isTotalMaster
   // 게이팅과 동일한 기준을 그대로 옮긴 것 — 권한 자체는 안 바뀜).
   const DEPT_ADMIN_TABS = { acct: ["members", "billing", "setup"], hr: ["members", "loginSessions", "setup"] }; // ⭐ 2026-11-01 경리·인사도 초기 설정(그 팀 것만)
+  const billingAcc = billingAccess(meDoc, { totalMaster: isTotalMaster, role: myRoleEff, viewer: isViewer });
   const REQUIRES_MASTER_TABS = new Set([
     "landingInquiries", "sessionLogs", "forceUpdate", "permissions",
     "landingEdit", "notifTemplate", "companyReset", "sheetImport", "gsheetMine", "blindMine",
@@ -832,9 +834,9 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
     { key: "ops", label: "운영 관리", tabs: ["loginSessions", "sessionLogs", "forceUpdate", "permissions", "sheetImport", "gsheetMine", "blindMine", "trash", "companyReset"] },
     { key: "settings", label: "환경 설정", tabs: ["billing", "setup", "copyTemplate", "landingEdit", "notifTemplate"] },
   ]
-    .map((g) => ({ ...g, tabs: g.tabs.filter((t) => !REQUIRES_MASTER_TABS.has(t) || isTotalMaster) }))
+    .map((g) => ({ ...g, tabs: g.tabs.filter((t) => (!REQUIRES_MASTER_TABS.has(t) || isTotalMaster) && (t !== "billing" || billingAcc.view)) })) // 💳 구독·결제는 경리·재무·임원·대표만(billingAccess.js)
     // 🏢 부서 관리자메뉴 — 경리: 회원 승인 + 구독·결제 / 인사: 회원(인사권) + 로그인 관리. 배차용(기사복사 문구·화주사 등)은 뺀다
-    .map((g) => (deptMode ? { ...g, tabs: g.tabs.filter((t) => (DEPT_ADMIN_TABS[deptMode] || []).includes(t)) } : g))
+    .map((g) => (deptMode ? { ...g, tabs: g.tabs.filter((t) => (DEPT_ADMIN_TABS[deptMode] || []).includes(t) || (t === "billing" && billingAcc.view)) } : g))
     .filter((g) => g.tabs.length > 0);
   const activeGroup = tabGroups.find((g) => g.tabs.includes(adminTab)) || tabGroups[0];
   // ⭐ 2026-11-01 회원 관리 탭에도 가입 승인 대기 숫자
@@ -1559,7 +1561,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
 
           {/* ====== 알림 문구 설정 탭 (최고관리자 전용) ====== */}
           {adminTab === "notifTemplate" && isTotalMaster && <NotifTemplatePanel />}
-          {adminTab === "billing" && <BillingCenter userEmail={me?.email || ""} userName={myDisplayName} canEdit={!isViewer && (isTotalMaster || ["test", "hrAcct"].includes(myRoleEff) || /경리|회계/.test(String(meDoc?.team || "")))} />}
+          {adminTab === "billing" && <BillingCenter userEmail={me?.email || ""} userName={myDisplayName} canView={billingAcc.view} canEdit={billingAcc.edit} users={users.filter((x) => (x.companyName || DEFAULT_COMPANY) === effectiveCompany)} orders={dispatchData} />}
           {adminTab === "copyTemplate" && (
             <div className="bg-white rounded-[20px] border border-[#E3E8F0] shadow-[0_10px_28px_rgba(16,24,40,0.06)] p-6">
               <div className="text-[11px] font-extrabold tracking-[0.22em] text-[#4B6CB7]">COPY · TEMPLATE</div>

@@ -6,6 +6,7 @@ import React from "react";
 import { collection, doc, getDocs, limit, onSnapshot, query, setDoc, where } from "firebase/firestore";
 import { db } from "./firebase";
 import { usePlan, PLAN_DEFAULTS } from "./plans";
+import { billingAccess } from "./billingAccess";
 
 const MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
 const go = (menu) => { try { window.__setMainTab?.(menu); window.scrollTo(0, 0); } catch { /* 무시 */ } };
@@ -61,7 +62,7 @@ export default function MasterChecklist({ user, userCompany }) {
     { k: "setup", done: !!settings?.onboarding?.setupDone || !!settings?.copyTemplates, title: "기본 설정 (단위·결제일·기사 전달 문구)", desc: "관리자메뉴 › 환경 설정 › 초기 설정에서 우리 회사 방식에 맞춥니다", act: "환경 설정", to: () => go("관리자메뉴") },
     { k: "order", done: st.orders > 0, title: "첫 오더 등록", desc: "배차관리에서 첫 오더를 등록하고 기사복사로 기사에게 전달해 보세요", act: "배차관리", to: () => go("배차관리") },
     { k: "plan", done: !!planId, title: `요금제 확인${planName ? ` · 지금 ${planName}` : ""}`, desc: "관리자메뉴 › 구독·결제에서 요금제·청구서·입금 안내를 봅니다", act: "구독·결제", to: () => go("관리자메뉴") },
-  ];
+  ].filter((x) => x.k !== "plan" || billingAccess(me).view); // 💳 구독·결제는 경리·재무·임원·대표만 보이므로 그 외 마스터에게는 이 항목을 뺀다
   const doneN = items.filter((x) => x.done).length;
   const hide = () => setDoc(doc(db, "companySettings", co), { masterChecklistDone: true }, { merge: true }).catch(() => {});
 

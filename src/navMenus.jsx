@@ -24,7 +24,7 @@ export const MENU_SUBS = {
   회사관리: { code: "COMPANY", items: [["회사정보", "회사정보"], ["조직도", "조직도"], ["내정보", "내정보"], ["내 이력서", "내 이력서"]] }, // ⭐ 2026-11-02 점검 — 기본 목록에서 '출근기록부' 제거(인사관리자 등 그 탭이 없는 사람에게 눌러도 이동 안 되는 메뉴가 보였음). 탭이 있는 사람은 화면을 열면 registerSubnav로 다시 보인다
   운임조회: { code: "FARE LOOKUP", items: [["전국운임조회", "전국운임조회"], ["자사운임표", "자사운임표"]] },
   지입차관리: { code: "FLEET CONTROL", items: [["tracking", "관제현황"], ["route", "노선관리"], ["fixed", "고정노선"], ["history", "이력 조회"], ["attendance", "출근기록부"], ["temperature", "온도 관제"], ["cargo-camera", "적재함 카메라"], ["vehicle", "차량 관리"], ["registration", "기사 등록 관리"]] },
-  관리자메뉴: { code: "ADMIN", items: [["members", "회원 관리"], ["linked", "연동 화주사"], ["loginSessions", "로그인 관리"], ["billing", "구독 · 결제"], ["setup", "초기 설정 · 튜토리얼"]] },
+  관리자메뉴: { code: "ADMIN", items: [["members", "회원 관리"], ["linked", "연동 화주사"], ["loginSessions", "로그인 관리"], ["setup", "초기 설정 · 튜토리얼"]] }, // ⭐ 2026-11-03 구독·결제는 볼 수 있는 사람(경리·재무·임원·대표)만 — 화면을 열면 registerSubnav로 보인다
 };
 
 // ⭐ 실제 화면의 왼쪽 메뉴를 기억 — 팀·권한마다 보이는 항목이 달라서, 한 번이라도 연 화면은 그 사람이 실제로 보는 항목만 펼친다
