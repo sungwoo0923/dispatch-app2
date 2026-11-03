@@ -147,7 +147,10 @@ export function FixedRouteCells({ form, row, drivers = [], clients = [], onPatch
   return (
     <>
       <td className={`${td} tabular-nums text-[13px] font-bold text-[#3A4A66]`} style={{ fontFamily: MONO }} title="발주일(시트 왼쪽 날짜)">{String(row.발주일 || row.상차일 || "").slice(5).replace("-", ".")}</td>
-      <td className={`${td} tabular-nums text-[13px] font-black text-[#1B2B4B]`} style={{ fontFamily: MONO }} title="입고일(시트 오른쪽 날짜 · 탭 이름)">{String(row.입고일 || row.하차일 || "").slice(5).replace("-", ".")}</td>
+      <td className={td} title="입고일(시트 오른쪽 날짜 · 탭 이름)">
+        {/* ⭐ 2026-11-03 입고일 눈에 띄게 — 굵고 크게, 남색 칩 */}
+        <span className="inline-flex items-center h-7 px-2.5 rounded-lg bg-[#0F1A30] text-white text-[14.5px] font-black tabular-nums tracking-tight" style={{ fontFamily: MONO }}>{String(row.입고일 || row.하차일 || "").slice(5).replace("-", ".")}</span>
+      </td>
       <td className={`${td} text-[13px] font-black text-[#1B2B4B]`}>{row.배차표묶음 || row.상차지명 || "-"}</td>
       {cols.map((c) => {
         const own = ownerOf(c);
