@@ -61,11 +61,15 @@ function parseBoardTab(form, rawRows) {
   const heads = headerRows(rows, cols.map((c) => c.label));
   const out = {}; form.groups.forEach((g) => { out[g.name] = []; });
   const meta = {}; // ⭐ 2026-11-03 묶음별 표 위치(프로그램에서 추가한 오더를 시트 줄로 넣을 때)
-  let date = "";
+  let date = ""; let date2 = "";
   heads.forEach((hi, k) => {
     const end = k + 1 < heads.length ? heads[k + 1] : rows.length;
     const above = rows.slice(Math.max(0, hi - 4), hi).filter(sparse);
-    if (!date) for (const r of above) { const c = r.find((x) => DATE_RE.test(x)); if (c) { const m = c.match(DATE_RE); date = `${m[1]}-${pad(m[2])}-${pad(m[3])}`; break; } }
+    // ⭐ 2026-11-03 제목 위 날짜 두 개 — 왼쪽 = 발주일(상차일), 오른쪽 = 입고일(하차일 · 탭 이름 날짜)
+    if (!date) for (const r of above) {
+      const ds = r.filter((x) => DATE_RE.test(x)).map((x) => { const m = x.match(DATE_RE); return `${m[1]}-${pad(m[2])}-${pad(m[3])}`; });
+      if (ds.length) { date = ds[0]; if (ds[1]) date2 = ds[1]; break; }
+    }
     const title = above.flat().join(" ");
     const g = form.groups.find((x) => x.name && nm(title).includes(nm(x.name))) || form.groups[Math.min(k, form.groups.length - 1)];
     const data = rows.slice(hi + 1, end);
@@ -91,7 +95,7 @@ function parseBoardTab(form, rawRows) {
       if (meta[g.name] && meta[g.name].hi === hi) meta[g.name].lastRi = Math.max(meta[g.name].lastRi, rows.indexOf(r));
     });
   });
-  return { date, groups: out, headers: heads.length, meta, rows };
+  return { date, date2, groups: out, headers: heads.length, meta, rows };
 }
 
 // 시트 한 줄 값 → 오더 칸(only: "화주"|"운송사"|"" = 전부)
@@ -152,9 +156,10 @@ function rateFor(table, addr, pallets) {
   });
   if (!best) return null;
   const { t } = best;
-  const per = n >= 18 ? (t.r18 || t.r12) : (t.r12 || t.r18);
+  // ⭐ 2026-11-03 단가표는 12P·18P 딱 그 수량일 때만(나머지 파레트 수는 직접 입력)
+  const per = n === 18 ? t.r18 : n === 12 ? t.r12 : 0;
   if (!per) return null;
-  return { region: t.region, per, pallets: n, total: per * n, tier: n >= 18 && t.r18 ? 18 : t.r12 ? 12 : 18 };
+  return { region: t.region, per, pallets: n, total: per * n, tier: n };
 }
 // 오더에 단가표 청구운임 적용(직접 고친 운임 = 운임수동이면 그대로)
 function rateFieldsOf(form, o, qty, addr) {
@@ -168,15 +173,16 @@ function rateFieldsOf(form, o, qty, addr) {
 
 const cargoText = (qty) => { const total = Object.values(qty).reduce((a, n) => a + n, 0); return { 화물내용: Object.keys(qty).length ? `${Object.entries(qty).map(([k, n]) => `${k} ${n}`).join(" · ")} (총 ${total})` : "", 화물수량: total ? String(total) : "" }; };
 
-async function syncBoard({ db, FieldValue, form, readTabs, readTab, writeCells, insertRows, daysBack = 0, daysAhead = 14 }) { // ⭐ 2026-11-03 오늘 탭부터(어제 탭은 안 가져옴)
+async function syncBoard({ db, FieldValue, form, readTabs, readTab, writeCells, insertRows, daysBack = 0, daysAhead = 14, range = null }) { // ⭐ 2026-11-03 오늘 탭부터(어제 탭은 안 가져옴) · range={from,to}면 그 기간(입고일=탭 날짜)
   const nameCol = form.columns.find((c) => c.kind === "field" && c.field === "하차지명");
   if (!form.sheetUrl || !nameCol) return { skipped: "no-sheet" };
-  const today = kstToday(); const from = addDays(today, -daysBack); const to = addDays(today, daysAhead);
+  const today = kstToday();
+  const from = range?.from || addDays(today, -daysBack); const to = range?.to || addDays(today, daysAhead);
   const y = +today.slice(0, 4);
   // ⭐ 2026-11-03 양식에서 탭 하나를 고정했으면(테스트용) 그 탭만, 아니면 날짜 이름 탭(최근~2주 뒤)
   const allTabs = await readTabs();
   const tabs = form.fixedTab ? allTabs.filter((t) => t === form.fixedTab)
-    : allTabs.filter((t) => { const d = tabDate(t, y) || tabDate(t, y + 1); return d && d >= addDays(from, -2) && d <= addDays(to, 2); });
+    : allTabs.filter((t) => { const d = tabDate(t, y) || tabDate(t, y + 1); return d && d >= from && d <= to; }); // 탭 이름 날짜 = 입고일
   const co = form.companyName;
   let places = null; let drivers = null;
   const loadLookups = async () => {
@@ -191,8 +197,11 @@ async function syncBoard({ db, FieldValue, form, readTabs, readTab, writeCells, 
     const hash = require("crypto").createHash("md5").update(JSON.stringify(rows)).digest("hex");
     const p = parseBoardTab(form, rows);
     if (!p.headers) continue;
-    const date = p.date || tabDate(tab, y, !!form.fixedTab);
-    if (!date || (!form.fixedTab && (date < from || date > to))) continue;
+    const tabD = tabDate(tab, y, !!form.fixedTab) || tabDate(tab, y + 1, !!form.fixedTab);
+    const inDate = p.date2 || tabD || ""; // 입고일(하차일)
+    const date = p.date || (tabD ? addDays(tabD, -toInt(form.dropOffset)) : ""); // 발주일(상차일)
+    const chk = inDate || date;
+    if (!date || (!form.fixedTab && (chk < from || chk > to))) continue;
     sum.tabs += 1;
     const ex = await db.collection("orders").where("배차표Id", "==", form.id).where("상차일", "==", date).get();
     const allOrders = ex.docs.map((d) => ({ ref: d.ref, ...d.data() }));
@@ -252,6 +261,7 @@ async function syncBoard({ db, FieldValue, form, readTabs, readTab, writeCells, 
             const addr = patch.하차지주소 || o.하차지주소 || "";
             const rf = (qtyChanged || "하차지주소" in patch || !toInt(o.청구운임)) ? rateFieldsOf(form, o, qtyNow, addr) : null;
             if (rf && String(rf.청구운임) !== String(o.청구운임 || "")) Object.assign(patch, rf);
+            else if (!rf && qtyChanged && o.단가표지역 && !o.운임수동) Object.assign(patch, { 청구운임: "", 수수료: String(-toInt(o.기사운임)), 단가표지역: "", 파렛단가: 0 }); // 12·18P가 아니게 바뀌면 자동 운임 지움(직접 입력)
           }
           if (plateChanged) { // 차량이 바뀌면 배차상태·기사 정보도
             await loadLookups();
@@ -267,6 +277,8 @@ async function syncBoard({ db, FieldValue, form, readTabs, readTab, writeCells, 
           if (JSON.stringify(base0 || {}) !== JSON.stringify(nextBase)) patch.시트기준값 = nextBase;
           if (o.시트삭제됨) patch.시트삭제됨 = false;
           if (v.__pos && o.시트줄 !== v.__pos.ri) patch.시트줄 = v.__pos.ri; // ⭐ 시트 줄 위치(화면을 시트 순서대로)
+          if (o.발주일 !== date) patch.발주일 = date;
+          if (inDate && (o.입고일 !== inDate || o.하차일 !== inDate)) { patch.입고일 = inDate; patch.하차일 = inDate; }
           if (Object.keys(patch).length) { patch.시트동기화 = Date.now(); batch.update(o.ref, patch); ops += 1; sum.updated += 1; }
         } else {
           await loadLookups();
@@ -284,7 +296,7 @@ async function syncBoard({ db, FieldValue, form, readTabs, readTab, writeCells, 
             ...(pc ? { 하차지담당자: pc.name || "", 하차지담당자번호: pc.phone || "" } : {}),
             ...(drv ? { 차량번호: drv.차량번호, 이름: rec.이름 || drv.이름 || "", 전화번호: rec.전화번호 || drv.전화번호 || "" } : {}),
             ...(rfNew && !rec.청구운임 ? rfNew : {}),
-            거래처명: form.client || rec.거래처명 || "", 상차일: date, 하차일: addDays(date, toInt(form.dropOffset)),
+            거래처명: form.client || rec.거래처명 || "", 상차일: date, 하차일: inDate || addDays(date, toInt(form.dropOffset)), 발주일: date, 입고일: inDate || addDays(date, toInt(form.dropOffset)),
             상차지명: g.상차지명 || g.name || "", 상차지주소: g.상차지주소 || "", ...(form.payMethod ? { 지급방식: form.payMethod } : {}),
             배차상태: rec.차량번호 ? "배차완료" : "배차중", 배차표Id: form.id, 배차표명: form.name || "", 배차표묶음: g.name, 배차표순번: seq,
             companyName: co, _id: id, 등록일: kstToday(), 작성자: "배차표 자동", 등록기기: "배차표", _autoSheet: true, 시트동기화: Date.now(), 시트줄: v.__pos?.ri ?? null,

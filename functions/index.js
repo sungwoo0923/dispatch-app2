@@ -5545,12 +5545,12 @@ exports.sheetOcr = functions.runWith({ timeoutSeconds: 120, memory: "512MB" }).h
 
 // 📋 2026-11-03 배차표 ↔ 구글시트 자동 연동(10분마다) — 규칙은 functions/routeBoardSync.js 맨 위 설명
 const { syncBoard: _syncBoard } = require("./routeBoardSync");
-async function runRouteBoardSync(form, { force = false } = {}) {
+async function runRouteBoardSync(form, { force = false, range = null } = {}) {
   const sid = parseSpreadsheetId(form.sheetUrl);
   if (!sid) return { skipped: "no-sheet" };
   const tabIds = {};
   return _syncBoard({
-    db, FieldValue, form: force ? { ...form, syncHash: {} } : form,
+    db, FieldValue, form: force ? { ...form, syncHash: {} } : form, range,
     readTabs: async () => { const sh = ((await sheetsApiFor(sid, "GET", "?fields=sheets.properties(sheetId,title,index)")).sheets || []).map((x) => x.properties); sh.forEach((t) => { tabIds[t.title] = t.sheetId; }); return sh.map((t) => t.title); },
     // ⭐ 2026-11-03 프로그램에서 추가한 오더 → 그 묶음 표 아래에 새 줄 끼워 넣기(서식은 윗줄 따라감)
     insertRows: async (tab, at, n) => {
@@ -5582,7 +5582,7 @@ exports.syncRouteBoards = functions.runWith({ timeoutSeconds: 300, memory: "512M
 //  - tabs: 탭 이름 목록(최근 탭이 보통 뒤에 있음)
 //  - read: 탭 하나의 값(2차원 배열, 최대 3000줄) — 칸 맞추기·묶음 나누기는 화면에서
 //  - write: 배차표 값을 시트 칸에 쓰기(시트를 '편집자'로 공유해야 함)
-exports.routeBoardSheet = functions.runWith({ timeoutSeconds: 120, memory: "512MB" }).https.onRequest(async (req, res) => {
+exports.routeBoardSheet = functions.runWith({ timeoutSeconds: 540, memory: "512MB" }).https.onRequest(async (req, res) => {
   res.set("Access-Control-Allow-Origin", "*");
   res.set("Access-Control-Allow-Methods", "POST, OPTIONS");
   res.set("Access-Control-Allow-Headers", "Authorization, Content-Type");
@@ -5605,7 +5605,15 @@ exports.routeBoardSheet = functions.runWith({ timeoutSeconds: 120, memory: "512M
       const form = { id: fs.id, ...fs.data() };
       if (!me.isTM && form.companyName !== me.company) { res.status(403).json({ error: "다른 회사 양식입니다." }); return; }
       if (parseSpreadsheetId(form.sheetUrl) !== id) { res.status(400).json({ error: "양식에 저장된 시트 주소와 다릅니다." }); return; }
-      res.json(await runRouteBoardSync(form, { force: true }));
+      // ⭐ 2026-11-03 기간 가져오기(입고일=탭 날짜 기준, 최대 120일)
+      const okD = (x) => /^\d{4}-\d{2}-\d{2}$/.test(String(x || ""));
+      let range = null;
+      if (okD(body.from) && okD(body.to)) {
+        const [a, b] = body.from <= body.to ? [body.from, body.to] : [body.to, body.from];
+        if ((Date.parse(b) - Date.parse(a)) / 864e5 > 120) { res.status(400).json({ error: "기간은 120일까지 한 번에 가져올 수 있습니다." }); return; }
+        range = { from: a, to: b };
+      }
+      res.json(await runRouteBoardSync(form, { force: true, range }));
       return;
     }
     if (body.action === "read") {

@@ -38090,6 +38090,14 @@ if (mode === "driver") {
       prev.size === rows.length ? new Set() : new Set(rows.map((r) => getId(r)))
     );
   const dsLongPress = useKpLongPressSelect({ toggle: toggleOne, isSelected: (id) => selected.has(id) });
+  // ⭐ 2026-11-03 고정노선현황 — 평소엔 글자만, 줄을 두 번 누르면 그 줄만 수정 모드(Esc·완료로 끝)
+  const [fixedEditId, setFixedEditId] = React.useState(null);
+  React.useEffect(() => {
+    if (!fixedEditId) return undefined;
+    const onKey = (e) => { if (e.key === "Escape" && !document.querySelector("[role=listbox]")) setFixedEditId(null); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [fixedEditId]);
 
   const updateEdited = (row, key, value) =>
     setEdited((prev) => {
@@ -39541,11 +39549,16 @@ return (
   if (fixedForm) return (
     <tr key={id} id={`row-${id}`}
       onContextMenu={(e) => { e.preventDefault(); const _z = parseFloat(document.getElementById("root")?.style.zoom) || 1; setContextMenuDS({ x: e.clientX / _z, y: e.clientY / _z, row: r }); }}
-      onDoubleClick={() => { setCopyTarget({ ...row, 화물내용: String(row.화물내용 || ""), 화물수량: String(row.화물수량 || ""), 화물타입: "", 톤수값: "", 톤수타입: "" }); setCopyPanelOpen(true); }}
-      className={`transition-colors ${selected.has(id) ? "bg-blue-50" : !String(row.차량번호 || "").trim() && row.배차상태 !== "배차취소" ? "bg-[#FFFAF2] hover:bg-[#FFF3E0]" : i % 2 === 0 ? "bg-white hover:bg-[#F5F8FD]" : "bg-[#FAFBFD] hover:bg-[#F5F8FD]"}`}>
+      onDoubleClick={() => { if (!isViewer) setFixedEditId((cur) => (cur === id ? null : id)); }}
+      title={fixedEditId === id ? "수정 중 — Esc 또는 [완료]로 끝내기" : isViewer ? undefined : "두 번 누르면 이 줄을 수정할 수 있어요"}
+      className={`transition-colors ${fixedEditId === id ? "bg-[#EEF4FF] outline outline-2 -outline-offset-2 outline-[#2D4C82]" : selected.has(id) ? "bg-blue-50" : !String(row.차량번호 || "").trim() && row.배차상태 !== "배차취소" ? "bg-[#FFFAF2] hover:bg-[#FFF3E0]" : i % 2 === 0 ? "bg-white hover:bg-[#F5F8FD]" : "bg-[#FAFBFD] hover:bg-[#F5F8FD]"}`}>
       <td className="px-3 py-2 text-center border-b border-[#E9EDF4] border-r border-r-[#F1F4F9]"><input autoComplete="off" type="checkbox" checked={selected.has(id)} onChange={() => toggleOne(id)} /></td>
-      <td className="px-3 py-2 text-[13.5px] font-bold text-[#5B6B85] text-center border-b border-[#E9EDF4] border-r border-r-[#F1F4F9] tabular-nums">{(page * pageSize) + i + 1}</td>
-      <FixedRouteCells form={fixedForm} row={row} drivers={drivers} clients={clients} disabled={isViewer} onPatch={(patch) => patchDispatch(id, patch)} />
+      <td className="px-3 py-2 text-[13.5px] font-bold text-[#5B6B85] text-center border-b border-[#E9EDF4] border-r border-r-[#F1F4F9] tabular-nums">
+        {fixedEditId === id
+          ? <button type="button" onClick={(e) => { e.stopPropagation(); setFixedEditId(null); }} className="h-7 px-2 rounded-lg bg-[#1B2B4B] text-white text-[11.5px] font-black whitespace-nowrap">완료</button>
+          : (page * pageSize) + i + 1}
+      </td>
+      <FixedRouteCells form={fixedForm} row={row} drivers={drivers} clients={clients} disabled={isViewer} editing={fixedEditId === id} onPatch={(patch) => patchDispatch(id, patch)} />
     </tr>
   );
 

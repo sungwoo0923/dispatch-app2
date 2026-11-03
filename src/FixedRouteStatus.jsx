@@ -31,7 +31,7 @@ const MONEY_FIELDS = new Set(["청구운임", "기사운임"]);
 export function fixedHeaderOf(form) {
   const cols = (form?.columns || []).filter((c) => c.kind !== "no");
   const has = (f) => cols.some((c) => c.kind === "field" && c.field === f);
-  return ["선택", "순번", "상차일", "상차지", ...cols.map((c) => c.label), "배차상태", ...["청구운임", "기사운임"].filter((f) => !has(f)), "수수료"];
+  return ["선택", "순번", "발주일", "입고일", "상차지", ...cols.map((c) => c.label), "배차상태", ...["청구운임", "기사운임"].filter((f) => !has(f)), "수수료"];
 }
 const cargoText = (qty) => { const total = Object.values(qty).reduce((a, n) => a + n, 0); return { 화물내용: Object.keys(qty).length ? `${Object.entries(qty).map(([k, n]) => `${k} ${n}`).join(" · ")} (총 ${total})` : "", 화물수량: total ? String(total) : "" }; };
 const valueOf = (c, row) => {
@@ -44,19 +44,27 @@ const valueOf = (c, row) => {
   return TIME_FIELDS.has(c.field) ? (parseHM(v) || v) : v;
 };
 
+// 수정 모드가 아닐 때 칸 — 글자만(가운데 정렬) · 빈 차량번호는 빨간 "미배차"
+function ViewText({ value, strong, numeric, placeholder }) {
+  const v = String(value ?? "");
+  if (!v && placeholder) return <span className="text-[13px] font-black text-[#D92D20]/80">{placeholder}</span>;
+  return <span className={`inline-block px-1 text-[13.5px] text-[#0F1A30] ${strong ? "font-black" : "font-semibold"} ${numeric ? "tabular-nums" : ""}`}>{v}</span>;
+}
+
 // 칸 하나(바로 고치기) — 엔터·칸 밖 누르면 저장, Esc 되돌리기
 function Cell({ value, onCommit, numeric, wide, placeholder, disabled, title, strong }) {
   const [v, setV] = React.useState(value);
   const [edit, setEdit] = React.useState(false);
   React.useEffect(() => { if (!edit) setV(value); }, [value, edit]);
   const commit = () => { setEdit(false); if (String(v) !== String(value)) onCommit(v); };
+  if (disabled) return <ViewText value={value} strong={strong} numeric={numeric} placeholder={placeholder} />; // ⭐ 수정 모드가 아닐 땐 글자만
   return (
     <input value={v} disabled={disabled} title={title} placeholder={placeholder} inputMode={numeric ? "numeric" : undefined}
       size={Math.max(numeric ? 3 : 6, Math.min(wide ? 34 : 18, String(v || placeholder || "").length + 1))}
       onFocus={(e) => { setEdit(true); e.target.select(); }} onChange={(e) => setV(e.target.value)} onBlur={commit}
       onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); if (e.key === "Escape") { setV(value); setEdit(false); setTimeout(() => e.target.blur(), 0); } }}
       onClick={(e) => e.stopPropagation()} onDoubleClick={(e) => e.stopPropagation()}
-      className={`kp-frs-cell ${wide ? "min-w-[150px] text-left" : numeric ? "min-w-[54px] text-center tabular-nums" : "min-w-[84px] text-center"} ${strong ? "font-black" : "font-semibold"}`} />
+      className={`kp-frs-cell ${wide ? "min-w-[150px] text-center" : numeric ? "min-w-[54px] text-center tabular-nums" : "min-w-[84px] text-center"} ${strong ? "font-black" : "font-semibold"}`} />
   );
 }
 
@@ -66,7 +74,7 @@ function VehicleCell({ field, value, drivers, disabled, onPick, onCommit, placeh
   const [v, setV] = React.useState(value);
   const picked = React.useRef(false);
   React.useEffect(() => { setV(value); }, [value]);
-  if (disabled) return <span className="text-[13.5px] font-semibold">{value}</span>;
+  if (disabled) return <ViewText value={value} placeholder={placeholder} />;
   const sub = (d) => [field !== "차량번호" && d.차량번호, field !== "이름" && d.이름, field !== "전화번호" && d.전화번호, d.등급].filter(Boolean).join(" · ");
   return (
     <BoardSuggest value={v} onChange={setV} items={drivers} k={DRV_KEY[field]} sub={sub} title="기사관리" placeholder={placeholder}
@@ -83,7 +91,7 @@ function CarrierCell({ value, clients, disabled, onCommit }) {
   const [v, setV] = React.useState(value);
   const picked = React.useRef(false);
   React.useEffect(() => { setV(value); }, [value]);
-  if (disabled) return <span className="text-[13.5px] font-semibold">{value}</span>;
+  if (disabled) return <ViewText value={value} />;
   return (
     <BoardSuggest value={v} onChange={setV} items={clients} k="거래처명" title="기본거래처" placeholder="직접 입력"
       sub={(x) => [x.담당자, x.연락처 || x.담당자번호 || x.전화번호].filter(Boolean).join(" · ")}
@@ -95,7 +103,8 @@ function CarrierCell({ value, clients, disabled, onCommit }) {
 }
 
 // 한 줄의 칸들(시트 열 순서) — 고치면 바로 오더에 저장(patchDispatch) → 서버가 30초 안에 시트에도 써 준다
-export function FixedRouteCells({ form, row, drivers = [], clients = [], onPatch, disabled = false }) {
+export function FixedRouteCells({ form, row, drivers = [], clients = [], onPatch, disabled: viewer = false, editing = false }) {
+  const disabled = viewer || !editing; // ⭐ 2026-11-03 줄을 두 번 눌러 수정 모드일 때만 칸이 열린다(실수 방지)
   const carrierItems = React.useMemo(() => { const seen = new Set(); return (clients || []).map((x) => ({ ...x, 거래처명: String(x.거래처명 || x.업체명 || "").trim() })).filter((x) => x.거래처명 && !seen.has(x.거래처명) && seen.add(x.거래처명)); }, [clients]);
   const td = "px-1.5 py-1.5 border-b border-[#E9EDF4] border-r border-r-[#F1F4F9] text-center whitespace-nowrap";
   const cols = (form?.columns || []).filter((c) => c.kind !== "no");
@@ -104,7 +113,8 @@ export function FixedRouteCells({ form, row, drivers = [], clients = [], onPatch
     if (!form?.rateTable?.length || row.운임수동) return {};
     const n = Object.values(q || {}).reduce((a, x) => a + toInt(x), 0);
     const r = rateFor(form.rateTable, addr ?? row.하차지주소 ?? "", n);
-    return r ? { 청구운임: String(r.total), 수수료: String(r.total - toInt(row.기사운임)), 단가표지역: r.region, 파렛단가: r.per } : {};
+    if (r) return { 청구운임: String(r.total), 수수료: String(r.total - toInt(row.기사운임)), 단가표지역: r.region, 파렛단가: r.per };
+    return row.단가표지역 ? { 청구운임: "", 수수료: String(-toInt(row.기사운임)), 단가표지역: "", 파렛단가: 0 } : {}; // 12·18P가 아니면 자동 운임 지움 → 직접 입력
   };
   const commit = (c, raw) => {
     const val = String(raw ?? "").trim();
@@ -136,7 +146,8 @@ export function FixedRouteCells({ form, row, drivers = [], clients = [], onPatch
   const st = row.배차상태 || "배차중";
   return (
     <>
-      <td className={`${td} tabular-nums text-[13px] font-bold text-[#3A4A66]`} style={{ fontFamily: MONO }}>{String(row.상차일 || "").slice(5).replace("-", ".")}</td>
+      <td className={`${td} tabular-nums text-[13px] font-bold text-[#3A4A66]`} style={{ fontFamily: MONO }} title="발주일(시트 왼쪽 날짜)">{String(row.발주일 || row.상차일 || "").slice(5).replace("-", ".")}</td>
+      <td className={`${td} tabular-nums text-[13px] font-black text-[#1B2B4B]`} style={{ fontFamily: MONO }} title="입고일(시트 오른쪽 날짜 · 탭 이름)">{String(row.입고일 || row.하차일 || "").slice(5).replace("-", ".")}</td>
       <td className={`${td} text-[13px] font-black text-[#1B2B4B]`}>{row.배차표묶음 || row.상차지명 || "-"}</td>
       {cols.map((c) => {
         const own = ownerOf(c);
@@ -186,7 +197,7 @@ export function AddFixedOrderModal({ form, rows, places = [], drivers = [], onCl
   const addrCol = cols.find((c) => c.kind === "field" && c.field === "하차지주소");
   const qtyCols = cols.filter((c) => c.kind === "qty");
   const [g, setG] = React.useState(form.groups?.[0]?.name || "");
-  const [date, setDate] = React.useState(kstDay());
+  const [date, setDate] = React.useState(() => addDaysStr(kstDay(), 1)); // 보통 내일 입고
   const [name, setName] = React.useState("");
   const [addr, setAddr] = React.useState("");
   const [si, setSi] = React.useState("");
@@ -205,15 +216,16 @@ export function AddFixedOrderModal({ form, rows, places = [], drivers = [], onCl
     try {
       const grp = (form.groups || []).find((x) => x.name === g) || form.groups?.[0] || { name: g };
       const q = {}; Object.entries(qty).forEach(([k, n]) => { if (toInt(n)) q[k] = toInt(n); });
-      const seq = rows.filter((r) => r.상차일 === date && (r.배차표묶음 || form.groups?.[0]?.name) === grp.name).reduce((a, r) => Math.max(a, r.배차표순번 || 0), 0) + 1;
+      const inDate = date; const outDate = addDaysStr(date, -toInt(form.dropOffset)); // 고른 날짜 = 입고일(탭 날짜) → 발주일(상차일)
+      const seq = rows.filter((r) => r.상차일 === outDate && (r.배차표묶음 || form.groups?.[0]?.name) === grp.name).reduce((a, r) => Math.max(a, r.배차표순번 || 0), 0) + 1;
       const d = drv || (plate ? drivers.find((x) => normPlate(x.차량번호) === normPlate(plate)) : null);
-      const id = `rb_${form.id}_${date}_${Math.random().toString(36).slice(2, 10)}`;
+      const id = `rb_${form.id}_${outDate}_${Math.random().toString(36).slice(2, 10)}`;
       const me = auth.currentUser;
       await setDoc(doc(db, "orders", id), {
         _id: id, 하차지명: name.trim(), 하차지주소: addr.trim() || si.trim(), 품목수량: q, 추가정보: {}, ...cargoText(q),
         ...(plate.trim() ? { 차량번호: d?.차량번호 || plate.trim(), 이름: d?.이름 || "", 전화번호: d?.전화번호 || "" } : {}),
         ...(fare ? { 청구운임: String(fare.total), 수수료: String(fare.total), 단가표지역: fare.region, 파렛단가: fare.per } : {}),
-        거래처명: form.client || "", 상차일: date, 하차일: addDaysStr(date, toInt(form.dropOffset)),
+        거래처명: form.client || "", 상차일: outDate, 하차일: inDate, 발주일: outDate, 입고일: inDate,
         상차지명: grp.상차지명 || grp.name || "", 상차지주소: grp.상차지주소 || "", ...(form.payMethod ? { 지급방식: form.payMethod } : {}),
         배차상태: plate.trim() ? "배차완료" : "배차중", 배차표Id: form.id, 배차표명: form.name || "", 배차표묶음: grp.name, 배차표순번: seq,
         companyName: form.companyName, 등록일: kstDay(), 작성자: me?.email || "", createdByEmail: me?.email || "", createdByUid: me?.uid || "", 등록기기: "배차표",
@@ -247,7 +259,7 @@ export function AddFixedOrderModal({ form, rows, places = [], drivers = [], onCl
               </div>
             </div>
             <div>
-              <div className={lab}>상차일</div>
+              <div className={lab}>입고일 <span className="font-semibold text-[#9AA9C3]">(시트 탭 날짜)</span></div>
               <CustomDatePicker value={date} onChange={(e) => setDate(e.target.value)} className={`${inp} text-left`} />
             </div>
           </div>
@@ -299,8 +311,56 @@ export function AddFixedOrderModal({ form, rows, places = [], drivers = [], onCl
   );
 }
 
+// 📥 2026-11-03 기간 가져오기 — 입고일(탭 이름 날짜) 기준으로 예전 탭들을 한 번에 오더로(이미 있는 줄은 그대로 맞추기만)
+function RangeImportModal({ form, onClose }) {
+  const today = kstDay();
+  const [from, setFrom] = React.useState(`${today.slice(0, 7)}-01`);
+  const [to, setTo] = React.useState(today);
+  const [busy, setBusy] = React.useState(false);
+  const [res, setRes] = React.useState(null);
+  const [err, setErr] = React.useState("");
+  const run = async () => {
+    setBusy(true); setErr(""); setRes(null);
+    try { setRes(await sheetApi({ action: "sync", url: form.sheetUrl, boardId: form.id, from, to })); }
+    catch (e) { setErr(String(e?.message || e)); } finally { setBusy(false); }
+  };
+  const inp = "h-10 w-full px-3 rounded-xl border border-[#DCE3EE] bg-white text-[14px] font-semibold text-[#0F1A30] text-left";
+  return createPortal(
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-[#0F1A30]/45 p-4" onMouseDown={(e) => { if (e.target === e.currentTarget && !busy) onClose(); }}>
+      <div className="w-full max-w-[520px] rounded-2xl bg-white shadow-[0_24px_60px_rgba(15,26,48,0.35)] overflow-hidden">
+        <div className="px-6 py-4 bg-[#1B2B4B] text-white">
+          <div className="text-[16px] font-black">기간 가져오기 · {form.name}</div>
+          <div className="text-[11.5px] text-white/60 font-semibold">입고일(시트 탭 이름 날짜) 기준 · 이미 가져온 줄은 다시 만들지 않고 시트와 맞추기만 합니다</div>
+        </div>
+        <div className="p-6 space-y-4">
+          <div className="grid grid-cols-[1fr_auto_1fr] items-end gap-2">
+            <div><div className="text-[12px] font-black text-[#5B6B85] mb-1">시작 (입고일)</div><CustomDatePicker value={from} onChange={(e) => setFrom(e.target.value)} className={inp} /></div>
+            <span className="pb-2.5 text-[#9AA9C3] font-bold">~</span>
+            <div><div className="text-[12px] font-black text-[#5B6B85] mb-1">끝 (입고일)</div><CustomDatePicker value={to} onChange={(e) => setTo(e.target.value)} className={inp} /></div>
+          </div>
+          {busy && <div className="text-[13px] font-bold text-[#2D4C82] animate-pulse">시트 탭을 읽는 중… (탭이 많으면 1~2분 걸려요)</div>}
+          {res && (
+            <div className="rounded-xl bg-[#F3F7FF] border border-[#D5E0F5] px-4 py-3 text-[13.5px] font-bold text-[#0F1A30]">
+              탭 {res.tabs || 0}개 확인 · 새 오더 <b className="text-[#1B7F4B]">{res.created || 0}</b>건 · 맞춘 오더 {res.updated || 0}건
+              {res.skipped ? <> · 지운 줄 건너뜀 {res.skipped}건</> : null}
+              {res.dates?.length ? <div className="mt-1 text-[12px] font-semibold text-[#5B6B85]">발주일 {res.dates[0]} ~ {res.dates[res.dates.length - 1]}</div> : null}
+            </div>
+          )}
+          {err && <div className="text-[13px] font-bold text-[#D92D20]">{err}</div>}
+        </div>
+        <div className="px-6 pb-6 flex gap-2.5">
+          <button onClick={onClose} disabled={busy} className="flex-1 h-12 rounded-2xl border border-[#E3E8F0] bg-white text-[#3A4A66] text-[14.5px] font-extrabold disabled:opacity-50">{res ? "닫기" : "취소"}</button>
+          <button onClick={run} disabled={busy || !from || !to} className="flex-1 h-12 rounded-2xl bg-[#0F1A30] text-white text-[14.5px] font-black disabled:opacity-60">{busy ? "가져오는 중…" : "가져오기"}</button>
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+}
+
 export default function FixedRouteStatusHost({ company, dispatchData = [], render, places = [], drivers = [], disabled = false }) {
   const [addOpen, setAddOpen] = React.useState(false);
+  const [rangeOpen, setRangeOpen] = React.useState(false);
   const [forms, setForms] = React.useState(null);
   const [formId, setFormId] = React.useState(() => { try { return localStorage.getItem("kpFixedStatusForm") || ""; } catch { return ""; } });
   const [sync, setSync] = React.useState({ at: 0, busy: false, err: "", last: null });
@@ -361,6 +421,10 @@ export default function FixedRouteStatusHost({ company, dispatchData = [], rende
                 onClick={async () => { if (!window.confirm(`지운 줄 ${n}건을 시트에서 다시 가져올까요?\n(시트에 그 줄이 남아 있는 것만 다시 생깁니다)`)) return; try { await updateDoc(doc(db, "routeBoards", form.id), { 삭제한줄: {} }); setTimeout(() => runSync({ ...form, 삭제한줄: {} }, false), 600); } catch (e) { window.alert(e?.message || e); } }}
                 className="h-10 px-3.5 rounded-xl inline-flex items-center gap-1.5 text-[13px] font-black bg-white/[0.06] border border-white/15 text-white/85 hover:bg-white/[0.12]">지운 줄 다시 가져오기 <span className="tabular-nums" style={{ fontFamily: MONO }}>{n}</span></button>
             ); })()}
+            {form && !disabled && form.sheetUrl && (
+              <button type="button" onClick={() => setRangeOpen(true)} title="예전 날짜 탭(입고일 기준)을 한 번에 가져오기"
+                className="h-10 px-3.5 rounded-xl inline-flex items-center gap-1.5 text-[13px] font-black bg-white/[0.06] border border-white/15 text-white/85 hover:bg-white/[0.12]">기간 가져오기</button>
+            )}
             {form && !disabled && (
               <button type="button" onClick={() => setAddOpen(true)} title="이 양식에 오더 추가 — 시트에도 새 줄로 들어갑니다"
                 className="h-10 px-3.5 rounded-xl inline-flex items-center gap-1.5 text-[13px] font-black bg-white text-[#0F1A30] hover:bg-[#EEF2F8]">＋ 오더 추가</button>
@@ -381,10 +445,11 @@ export default function FixedRouteStatusHost({ company, dispatchData = [], rende
         <div className="relative mt-2 flex items-center gap-3 flex-wrap text-[11.5px] text-white/55">
           <span className="inline-flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-[#FFF8DB]" />리터·파레트 수량</span>
           <span className="inline-flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-[#F3F7FF]" />운송사 입력 칸</span>
-          <span>칸을 눌러 바로 고치면 저장 → 30초 안에 시트에도 반영 · 시트에서 고친 내용도 30초마다 들어옵니다</span>
+          <span>줄을 두 번 누르면 그 줄만 수정 모드(Esc·완료로 끝) → 저장하면 30초 안에 시트에도 반영 · 시트에서 고친 내용도 30초마다 들어옵니다</span>
         </div>
       </div>
       {form && render(form, rows)}
+      {rangeOpen && form && <RangeImportModal form={form} onClose={() => setRangeOpen(false)} />}
       {addOpen && form && <AddFixedOrderModal form={form} rows={rows} places={places} drivers={drivers} onClose={(ok) => { setAddOpen(false); if (ok && form.sheetUrl) setTimeout(() => runSync(form), 800); }} />}
     </div>
   );

@@ -225,7 +225,8 @@ export function rateFor(table, addr, pallets) {
   });
   if (!best) return null;
   const { t } = best;
-  const per = n >= 18 ? (t.r18 || t.r12) : (t.r12 || t.r18);
+  // ⭐ 2026-11-03 단가표는 12P·18P 딱 그 수량일 때만(나머지 파레트 수는 직접 입력)
+  const per = n === 18 ? t.r18 : n === 12 ? t.r12 : 0;
   if (!per) return null;
-  return { region: t.region, per, pallets: n, total: per * n, tier: n >= 18 && t.r18 ? 18 : t.r12 ? 12 : 18 };
+  return { region: t.region, per, pallets: n, total: per * n, tier: n };
 }
