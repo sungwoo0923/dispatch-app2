@@ -8278,11 +8278,14 @@ return (
                 <button onClick={() => setSideMenuOpen(true)} title="전체 메뉴" className="kp-icon-btn transition">
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.2" strokeLinecap="round"><path d="M4 7h16M4 12h16M4 17h16" /></svg>
                 </button>
-                <img src="/icons/sflow-icon.png" alt="KP-Flow" className="w-8 h-8 rounded-[10px] shrink-0 ring-1 ring-white/15 shadow-[0_4px_12px_rgba(0,0,0,0.25)]" />
-                <div className="flex flex-col leading-none shrink-0">
-                  <span className="text-white font-black text-[15px] tracking-tight">KP-Flow</span>
-                  <span className="text-[9.5px] font-extrabold tracking-[0.24em] text-[#8FB0F0] mt-1">DISPATCH</span>
-                </div>
+                {/* ⭐ 2026-11-03 로고·KP-Flow를 누르면 회사 홈페이지로 */}
+                <a href="https://dispatch-app2-vskk.vercel.app/" title="KP-Flow 홈페이지로" className="flex items-center gap-2.5 shrink-0 rounded-xl hover:opacity-90 transition">
+                  <img src="/icons/sflow-icon.png" alt="KP-Flow" className="w-8 h-8 rounded-[10px] shrink-0 ring-1 ring-white/15 shadow-[0_4px_12px_rgba(0,0,0,0.25)]" />
+                  <div className="flex flex-col leading-none shrink-0">
+                    <span className="text-white font-black text-[15px] tracking-tight">KP-Flow</span>
+                    <span className="text-[9.5px] font-extrabold tracking-[0.24em] text-[#8FB0F0] mt-1">DISPATCH</span>
+                  </div>
+                </a>
                 {co && (
                   <span className="ml-1 px-2.5 h-7 inline-flex items-center rounded-lg bg-white/[0.07] border border-white/10 text-[13px] font-bold text-white/90 truncate max-w-[120px]">
                     {co}
