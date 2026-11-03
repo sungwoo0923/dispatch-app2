@@ -26,7 +26,7 @@ import * as XLSX from "xlsx";
 import OrderLookupModal from "./OrderLookup"; // ⭐ 2026-11-03 담당자·차량 조회
 import MgrBadge, { setMgrNameMap } from "./MgrBadge";
 import { makeClientMatcher } from "./clientMatch"; // ⭐ 2026-11-03 거래처 검색: 정확히 같은 이름이 있으면 그것만
-import { useCompanyBiz, bizOf, BizChip, BizPicker, BizFilter, bizMatch, printInfoForBiz, BizListEditor, BizScope } from "./companyBiz"; // ⭐ 2026-11-03 한 회사 · 여러 사업자 // ⭐ 2026-11-03 배차담당자 칸(등록자 + 차량 붙인 사람)
+import { useCompanyBiz, bizOf, BizChip, BizPicker, BizFilter, bizMatch, printInfoForBiz, BizListEditor, BizScope, BizSelect, resolveBiz, rememberBiz, normBizKey, bankForBiz, bizInfoCardBlob } from "./companyBiz"; // ⭐ 2026-11-03 한 회사 · 여러 사업자 // ⭐ 2026-11-03 배차담당자 칸(등록자 + 차량 붙인 사람)
 import JSZip from "jszip";
 import { sendOrderTo24Proxy as sendOrderTo24 } from "../api/24CallProxy";
 import { useNewVersion, openUpdatePopup } from "./VersionCheck";
@@ -256,8 +256,12 @@ function fareCertPhone(raw = "") {
 function FareCertModal({ row, companyName, onClose }) {
   const [zoom, setZoom] = React.useState(1);
   const captureRef = React.useRef(null);
+  // ⭐ 2026-11-03 여러 사업자 — 오더의 청구 사업자가 추가 사업자면 그 사업자 이름·정보로 발급
+  const fcBiz = useCompanyBiz(getTenant() || companyName);
   if (!row) return null;
   const r = row;
+  const issuerBiz = fcBiz.multi ? fcBiz.find(bizOf(r, fcBiz.defaultName)) : null;
+  const issuerName = issuerBiz?.name || companyName;
 
   const 기사운임 = Number(String(r.기사운임 || "0").replace(/[^\d-]/g, "")) || 0;
   const issuedAt = new Date().toLocaleString("ko-KR", { timeZone: "Asia/Seoul", hour12: false });
@@ -347,6 +351,7 @@ function FareCertModal({ row, companyName, onClose }) {
                 <div>
                   <div style={{ fontFamily: MONO, fontSize: 10, fontWeight: 800, letterSpacing: "0.3em", color: "#8FB0F0" }}>FARE CERTIFICATE</div>
                   <div style={{ fontSize: 28, fontWeight: 900, letterSpacing: "0.32em", marginTop: 4 }}>운임확인서</div>
+                  {issuerBiz && <div style={{ fontSize: 13, fontWeight: 800, color: "rgba(255,255,255,0.78)", marginTop: 4, letterSpacing: "0.04em" }}>{issuerBiz.name}{issuerBiz.bizNo ? <span style={{ fontFamily: MONO, fontWeight: 700, color: "#8FB0F0", marginLeft: 8 }}>{issuerBiz.bizNo}</span> : null}</div>}
                 </div>
                 <div style={{ textAlign: "right", fontSize: 11.5, color: "rgba(255,255,255,0.7)", lineHeight: 1.7 }}>
                   <div>문서번호 <b style={{ fontFamily: MONO, color: "#fff" }}>{docNo}</b></div>
@@ -357,7 +362,7 @@ function FareCertModal({ row, companyName, onClose }) {
 
               <div style={{ padding: "22px 34px 30px" }}>
                 <div style={{ fontSize: 13.5, fontWeight: 600, color: "#3A4A66", lineHeight: 1.75, background: "#F5F7FB", border: "1px solid #E3E8F0", borderRadius: 10, padding: "12px 16px" }}>
-                  본 확인서는 <b style={{ color: "#0F1A30" }}>{companyName || "운송사"}</b>가 아래 운송 건을 기사 <b style={{ color: "#0F1A30" }}>{r.이름 || "-"}</b>({r.차량번호 || "-"})에게 배차하였고,
+                  본 확인서는 <b style={{ color: "#0F1A30" }}>{issuerName || "운송사"}</b>가 아래 운송 건을 기사 <b style={{ color: "#0F1A30" }}>{r.이름 || "-"}</b>({r.차량번호 || "-"})에게 배차하였고,
                   해당 기사님이 운송을 {done ? "완료하였음" : "수행함"}을 확인하며, 아래 기사운임을 지급함을 증명합니다.
                 </div>
 
@@ -406,7 +411,15 @@ function FareCertModal({ row, companyName, onClose }) {
                   </div>
                   <div style={{ textAlign: "right", minWidth: 220 }}>
                     <div style={{ fontSize: 11, fontWeight: 800, color: "#7A89A3", letterSpacing: "0.1em" }}>발급처</div>
-                    <div style={{ fontSize: 18, fontWeight: 900, color: "#0F1A30", marginTop: 2 }}>{companyName || "운송사"} <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 34, height: 34, border: "2px solid #2D4C82", borderRadius: "50%", color: "#2D4C82", fontSize: 12, fontWeight: 900, marginLeft: 6, verticalAlign: "middle" }}>(인)</span></div>
+                    <div style={{ fontSize: 18, fontWeight: 900, color: "#0F1A30", marginTop: 2, position: "relative" }}>{issuerName || "운송사"} <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 34, height: 34, border: "2px solid #2D4C82", borderRadius: "50%", color: "#2D4C82", fontSize: 12, fontWeight: 900, marginLeft: 6, verticalAlign: "middle" }}>(인)</span>
+                      {issuerBiz?.seal && <img src={issuerBiz.seal} alt="" style={{ position: "absolute", right: -10, top: -14, width: 58, height: 58, objectFit: "contain", opacity: 0.9 }} />}</div>
+                    {issuerBiz && (
+                      <div style={{ fontSize: 11, color: "#5B6B85", lineHeight: 1.65, marginTop: 6 }}>
+                        {[issuerBiz.bizNo && `사업자번호 ${issuerBiz.bizNo}`, issuerBiz.ceo && `대표 ${issuerBiz.ceo}`].filter(Boolean).join(" · ")}
+                        {issuerBiz.addr ? <div>{issuerBiz.addr}</div> : null}
+                        {(issuerBiz.phone || issuerBiz.fax) ? <div>{[issuerBiz.phone && `TEL ${issuerBiz.phone}`, issuerBiz.fax && `FAX ${issuerBiz.fax}`].filter(Boolean).join(" / ")}</div> : null}
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -2813,7 +2826,8 @@ function copyVarsOf(r, { 업로드링크 = "", cold = false, plate = "", name = 
     서류안내: cold ? "※ 거래명세서/타코메타 기록지 함께 촬영업로드" : "※ 거래명세서 서류 업로드",
     차량번호: plate, 기사명: name, 연락처: phone, 운임: Number(fare || 0).toLocaleString(), 지급구분: payLabel, 지급방식: r.지급방식 || "",
     상차지: r.상차지명 || "", 하차지: r.하차지명 || "", 상차일: r.상차일 || "",
-    회사명: (localStorage.getItem("loginCompany") || company || localStorage.getItem("userCompany") || "").trim(),
+    // ⭐ 2026-11-03 여러 사업자 — 오더의 청구 사업자가 있으면 그 사업자 이름
+    회사명: String(r.청구사업자 || "").trim() || (localStorage.getItem("loginCompany") || company || localStorage.getItem("userCompany") || "").trim(),
   };
 }
 // 📋 기사복사용 업로드 링크(오더별 토큰) 발급 — 업로드 완료로 잠긴 토큰이면 새로 발급
@@ -5971,7 +5985,7 @@ function OrderInfoModal({ row, onClose, lunchByName }) {
                 <h3 className="text-[21px] font-black truncate"><EditableText id="popup.title.오더정보" defaultText="오더정보" /> <span className="text-white/40 mx-1">|</span> {row.상차지명 || "-"} <span className="text-[#8FB0F0]">→</span> {row.하차지명 || "-"}</h3>
               </div>
               <div className="flex flex-wrap items-center gap-1.5 mt-2">
-                {[row.상차일, row.거래처명, status, row.배차방식, row.지급방식, row.운행유형 === "왕복" ? "왕복" : null].filter(Boolean).map((t, i) => (
+                {[row.상차일, row.거래처명, status, row.배차방식, row.지급방식, row.운행유형 === "왕복" ? "왕복" : null, row.청구사업자 ? `청구 · ${row.청구사업자}` : null].filter(Boolean).map((t, i) => (
                   <span key={i} className={`px-2.5 py-0.5 rounded-md text-[12px] font-bold ${i === 2 ? "bg-white text-[#0F1A30]" : "bg-white/10 border border-white/15 text-white/85"}`}>{t}</span>
                 ))}
               </div>
@@ -9773,6 +9787,36 @@ function MultiRegCombo({ id, value, onChange, onSelect, items, placeholder, clas
   );
 }
 
+// ⭐ 2026-11-03 배차관리 입력 카드 — 버튼·토글 안의 선 아이콘(이모지·기호 대신)
+const DM_ICON_PATHS = {
+  copy: <><rect x="9" y="9" width="11" height="11" rx="2" /><path d="M5 15V6a2 2 0 0 1 2-2h9" /></>,
+  reset: <><path d="M3 12a9 9 0 1 0 3-6.7" /><path d="M3 4v5h5" /></>,
+  scan: <><path d="M4 8V6a2 2 0 0 1 2-2h2M16 4h2a2 2 0 0 1 2 2v2M20 16v2a2 2 0 0 1-2 2h-2M8 20H6a2 2 0 0 1-2-2v-2" /><path d="M7 12h10" /></>,
+  fare: <><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /><path d="M8.5 9.5 10 13l1-2.5 1 2.5 1.5-3.5" /></>,
+  table: <><rect x="3" y="4" width="18" height="16" rx="2" /><path d="M3 10h18M9 10v10M15 10v10" /></>,
+  repeat: <><path d="m17 2 3 3-3 3" /><path d="M4 11V9a4 4 0 0 1 4-4h12" /><path d="m7 22-3-3 3-3" /><path d="M20 13v2a4 4 0 0 1-4 4H4" /></>,
+  lookup: <><circle cx="10" cy="8" r="4" /><path d="M2.5 20a7.5 7.5 0 0 1 11-6.6" /><circle cx="17.5" cy="17.5" r="3" /><path d="m22 22-2.3-2.3" /></>,
+  layers: <><path d="m12 3 9 5-9 5-9-5 9-5Z" /><path d="m3 13 9 5 9-5" /></>,
+  swap: <><path d="M7 4 3 8l4 4" /><path d="M3 8h14" /><path d="m17 20 4-4-4-4" /><path d="M21 16H7" /></>,
+  send: <><path d="M22 2 11 13" /><path d="M22 2 15 22l-4-9-9-4 20-7Z" /></>,
+  pin: <><path d="M12 17v5" /><path d="M9 3h6l-1 6 3 3v2H7v-2l3-3-1-6Z" /></>,
+  plus: <><path d="M12 5v14M5 12h14" /></>,
+  check: <><path d="M20 6 9 17l-5-5" /></>,
+};
+function DmIcon({ name, size = 15, className = "" }) {
+  return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={`shrink-0 ${className}`} aria-hidden="true">{DM_ICON_PATHS[name]}</svg>;
+}
+// 버튼 모양(같은 높이 · 아이콘+글자 · 주/보조) — 포커스 링은 남색 2px + 은은한 빛
+const DM_FOCUS = "focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1B2B4B] focus-visible:ring-offset-2 focus-visible:shadow-[0_0_0_6px_rgba(143,176,240,0.22)]";
+const DM_BTN = `inline-flex items-center justify-center gap-1.5 h-9 px-3.5 rounded-xl text-[13px] font-extrabold whitespace-nowrap select-none transition active:scale-[0.98] ${DM_FOCUS}`;
+const DM_BTN_PRIMARY = `${DM_BTN} bg-[#0F1A30] text-white shadow-[0_4px_12px_rgba(15,26,48,0.20)] hover:bg-[#1B2B4B]`;
+const DM_BTN_SECONDARY = `${DM_BTN} bg-white text-[#1B2B4B] border border-[#DCE3EE] hover:border-[#2D4C82] hover:bg-[#F5F8FD]`;
+// 켜고 끄는 칩(독차·혼적·왕복·긴급·블라인드·고정) — 켜지면 남색, 왼쪽 작은 점으로 상태 표시
+const dmToggleCls = (on) => `${DM_BTN} !px-3 border ${on ? "bg-[#1B2B4B] text-white border-[#1B2B4B] shadow-[0_4px_12px_rgba(27,43,75,0.22)]" : "bg-white text-[#5B6B85] border-[#DCE3EE] hover:border-[#2D4C82] hover:text-[#0F1A30]"}`;
+function DmDot({ on, alert = false }) {
+  return <span className={`w-1.5 h-1.5 rounded-full shrink-0 transition ${on ? (alert ? "bg-[#FF6B6B]" : "bg-[#8FB0F0]") : "bg-[#C9D3E3]"}`} />;
+}
+
  function DispatchManagement({
     dispatchData, liveDataReady = true, recentDispatchData = [], recentLiveDataReady = true, drivers, clients, menu, timeOptions, tonOptions,
     addDispatch, upsertDriver, upsertClient, upsertPlace,
@@ -12343,7 +12387,7 @@ const submitMultiRegister = async () => {
       // undefined (reading 'map')" 에러가 난다.
       return addDispatch({
         ...emptyForm,
-        ...(dmBiz.multi ? (() => { const bc = (clients || []).find((c) => String(c.거래처명 || "").replace(/\s/g, "") === String(s.거래처명 || "").replace(/\s/g, "")); return bc?.기본사업자 && dmBiz.names.includes(bc.기본사업자) ? { 청구사업자: bc.기본사업자 } : {}; })() : {}), // ⭐ 거래처 기본 청구 사업자
+        ...(dmBiz.multi ? (() => { const bc = (clients || []).find((c) => normBizKey(c.거래처명 || "") === normBizKey(s.거래처명 || "")); const r = resolveBiz(dmBiz, { client: s.거래처명, pickup: s.상차지명, drop: s.하차지명, clientDefault: bc?.기본사업자 || "" }); return r.name !== dmBiz.defaultName ? { 청구사업자: r.name } : {}; })() : {}), // ⭐ 2026-11-03 청구 사업자 — 같은 구간 기억 → 거래처 기억 → 거래처 기본 사업자
         거래처명: s.거래처명, 상차지명: s.상차지명, 상차지주소: s.상차지주소,
         상차지담당자: s.상차지담당자, 상차지담당자번호: s.상차지담당자번호,
         경유상차목록: s.경유상차목록 || [], 경유지_상차: s.경유상차목록 || [],
@@ -12568,6 +12612,34 @@ const focusById = (id) => {
   return true;
 };
 
+// ⭐ 2026-11-03 청구 사업자 자동 맞춤 — 거래처·상차지·하차지가 채워질 때마다(직접 입력·거래처 선택·오더스캔·오더복사 모두)
+//    1) 같은 구간으로 지난번에 저장한 사업자 2) 복사한 오더의 사업자 3) 그 거래처로 마지막에 쓴 사업자 4) 거래처 기본 사업자 5) 기본 사업자
+//    · 사용자가 직접 고르면 거래처가 바뀌기 전까지는 건드리지 않는다
+const bizManualRef = React.useRef(null); // { client: 고를 때의 거래처 키 } — 직접 고른 상태
+const bizSeedRef = React.useRef("");     // 오더복사로 가져온 오더의 청구 사업자
+const [bizAutoSrc, setBizAutoSrc] = React.useState("");
+const bizClientDefault = React.useCallback((name) => {
+  const k = normBizKey(name); if (!k) return "";
+  return (clients || []).find((c) => normBizKey(c.거래처명 || "") === k)?.기본사업자 || "";
+}, [clients]);
+React.useEffect(() => {
+  if (!dmBiz.multi) return;
+  const c = form.거래처명 || "", p = form.상차지명 || "", d = form.하차지명 || "";
+  if (!c.trim() && !p.trim() && !d.trim()) { bizManualRef.current = null; bizSeedRef.current = ""; setBizAutoSrc(""); return; }
+  const man = bizManualRef.current;
+  if (man && (man.client === "" || man.client === normBizKey(c))) return;
+  bizManualRef.current = null;
+  const r = resolveBiz(dmBiz, { client: c, pickup: p, drop: d, seed: bizSeedRef.current, clientDefault: bizClientDefault(c) });
+  const v = r.name === dmBiz.defaultName ? "" : r.name;
+  setForm((prev) => ((prev.청구사업자 || "") === v ? prev : { ...prev, 청구사업자: v }));
+  setBizAutoSrc(r.src === "default" ? "" : r.src);
+}, [dmBiz, form.거래처명, form.상차지명, form.하차지명, bizClientDefault]);
+const pickBizManual = (v) => {
+  bizManualRef.current = { client: normBizKey(form.거래처명 || "") };
+  setBizAutoSrc("");
+  setForm((p) => ({ ...p, 청구사업자: v }));
+};
+
 // ⭐ 거래처 선택 시 → 어디에 적용할지 팝업 오픈
 function applyClientSelect(name) {
   // 하차지거래처(placeList)뿐 아니라 기본거래처(clients)에만 있는 업체도
@@ -12575,9 +12647,7 @@ function applyClientSelect(name) {
   const p = mergedClients.find(
     x => norm(x.업체명 || "") === norm(name)
   );
-  // ⭐ 2026-11-03 여러 사업자 — 거래처의 기본 청구 사업자로 자동 맞춤
-  const _bc = (clients || []).find((c) => norm(c.거래처명 || "") === norm(name));
-  if (dmBiz.multi) setForm(prev => ({ ...prev, 청구사업자: _bc?.기본사업자 && dmBiz.names.includes(_bc.기본사업자) ? _bc.기본사업자 : "" }));
+  // ⭐ 2026-11-03 여러 사업자 — 청구 사업자는 아래 자동 맞춤(useEffect)이 거래처·상차지·하차지를 보고 정한다
   // ✅ 거래처 → 상차지 자동 적용
   if (p) {
     setForm(prev => ({
@@ -13810,6 +13880,8 @@ const savePromise = Promise.all(Array.from({ length: saveCount }, (_, i) => {
   // ⭐ 회전 운행 "나누기"면 회차별로 N건 저장(묶기/1회는 1건)
   return Promise.all(expandRotation({ ...rec, 상차일: dateForOrder, 하차일: dropDateForOrder, ...specialPatch }).map(r => addDispatch(r)));
 }));
+// ⭐ 2026-11-03 청구 사업자 기억 — 다음에 같은 거래처·상차지·하차지가 들어오면 이 사업자로 자동 맞춘다
+if (dmBiz.multi) rememberBiz(dmBiz, rec, { clientDefault: bizClientDefault(rec.거래처명) });
 
 // ★ 배차마당(카페사이트) 공유 — "저장 + 배차마당 등록" 버튼으로 저장하면 카페 게시판에도 같은 오더를 올린다.
 // (2026-10-27 — 회사정보의 공유 온/오프 스위치는 없앴다. 이 버튼을 누르는 것 자체가 공유한다는 뜻) 배차마당은 이 프로그램과
@@ -14522,6 +14594,7 @@ const [copySelected, setCopySelected] = React.useState([]);
 
 // 🔥 오더 복사 전용 (유일한 진입점)
 const applyCopy = (r) => {
+  bizSeedRef.current = String(r.청구사업자 || "").trim(); bizManualRef.current = null; // ⭐ 2026-11-03 청구 사업자 자동 맞춤에 복사한 오더의 사업자를 넘긴다
   const pickupPlace = findPlaceByName(r.상차지명);
   const dropPlace   = findPlaceByName(r.하차지명);
 
@@ -14649,7 +14722,7 @@ setCopyOpen(false);
       const plate = r.차량번호 || "-";
       const name = r.이름 || "-";
       const url = withCo(`${location.origin}/upload?id=${encodeURIComponent(r._id || "")}`);
-      return `[${userCompany || "운송사"} 운송장 업로드 안내]
+      return `[${bizOf(r, userCompany) || "운송사"} 운송장 업로드 안내]
 
 ✓ 상차일: ${dStr}
 ✓ 거래처: ${r.거래처명 || "-"}
@@ -14705,7 +14778,7 @@ const toggleOrderCardStyle = () => {
 // 입력창 (A: 밑줄형 — 원래 디자인 / B: 둥근 박스형 — 디지털)
 const inputCls = orderCardStyle === "A"
   ? "w-full border-0 border-b-2 border-gray-300 rounded-none px-1 py-2 text-[13px] font-bold text-gray-900 bg-transparent focus:outline-none focus:border-[#1B2B4B] transition"
-  : "w-full h-10 px-3 rounded-[11px] border border-[#E3E8F0] bg-[#F7F9FC] text-[13.5px] font-bold text-[#0F1A30] placeholder:text-[#A7B3C6] placeholder:font-medium focus:outline-none focus:bg-white focus:border-[#4B6CB7] focus:ring-4 focus:ring-[#4B6CB7]/10 transition";
+  : "w-full h-10 px-3 rounded-[11px] border border-[#E3E8F0] bg-[#F7F9FC] text-[13.5px] font-bold text-[#0F1A30] placeholder:text-[#A7B3C6] placeholder:font-medium focus:outline-none focus:bg-white focus:border-[#1B2B4B] focus:ring-2 focus:ring-[#1B2B4B]/15 focus:shadow-[0_0_0_6px_rgba(143,176,240,0.16)] transition"; // ⭐ 2026-11-03 포커스 링 통일(남색 2px + 은은한 빛)
 
 // 라벨 — min-h + flex로 아이콘 버튼이 붙은 라벨과 일반 텍스트 라벨의 높이를 통일
 const labelCls = orderCardStyle === "A"
@@ -14715,7 +14788,7 @@ const labelCls = orderCardStyle === "A"
 // 메모/전달사항 textarea (A: 밑줄형 / B: 박스형)
 const textareaCls = orderCardStyle === "A"
   ? "w-full border-0 border-b-2 border-gray-300 rounded-none px-1 py-2 text-[13px] font-bold text-gray-900 bg-transparent resize-none focus:outline-none focus:border-[#1B2B4B] transition"
-  : "w-full rounded-[12px] border border-[#E3E8F0] bg-[#F7F9FC] px-3.5 py-2.5 text-[13.5px] font-bold text-[#0F1A30] placeholder:text-[#A7B3C6] placeholder:font-medium resize-none focus:outline-none focus:bg-white focus:border-[#4B6CB7] focus:ring-4 focus:ring-[#4B6CB7]/10 transition";
+  : "w-full rounded-[12px] border border-[#E3E8F0] bg-[#F7F9FC] px-3.5 py-2.5 text-[13.5px] font-bold text-[#0F1A30] placeholder:text-[#A7B3C6] placeholder:font-medium resize-none focus:outline-none focus:bg-white focus:border-[#1B2B4B] focus:ring-2 focus:ring-[#1B2B4B]/15 focus:shadow-[0_0_0_6px_rgba(143,176,240,0.16)] transition";
     const reqStar = <span className="text-[#4B6CB7]">*</span>;
     const AutoBadge = ({ show }) => null;
 function FuelPriceWidget({ apiKey }) {
@@ -15059,70 +15132,70 @@ React.useEffect(() => {
 <div className="bg-white rounded-2xl shadow-md border border-gray-200 overflow-hidden">
 
 {/* 액션바 */}
-<div className="px-4 py-2.5 flex flex-wrap items-center gap-3 border-b border-gray-100 bg-gray-50/60" style={{ minHeight: "44px" }}>
+<div className="px-4 py-3 flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-[#EDF1F7] bg-[linear-gradient(180deg,#FBFCFE,#F5F7FB)]" style={{ minHeight: "56px" }}>
   {/* 좌측 버튼 그룹 */}
-  <div className="flex items-center gap-2">
+  <div className="flex items-center gap-2 flex-wrap">
 
      {/* 오더복사 */}
     <button
+      type="button"
       onClick={() => { setCopyOpen(true); setCopySelected([]); }}
-      className="px-3 py-1.5 text-sm font-bold rounded-lg bg-[#1B2B4B] text-white hover:bg-[#243a60] transition"
+      className={DM_BTN_PRIMARY}
     >
-      오더복사
+      <DmIcon name="copy" />오더복사
     </button>
 
     {/* 초기화 */}
     <button
+      type="button"
       onClick={resetForm}
-      className="px-3 py-1.5 text-sm font-bold rounded-lg bg-white text-gray-600 border border-gray-300 hover:bg-gray-50 transition"
+      className={DM_BTN_SECONDARY}
     >
-      초기화
+      <DmIcon name="reset" />초기화
     </button>
 
     {/* 오더 자동파싱 */}
     <button
       type="button"
       onClick={() => { setOrderScanInit(null); setShowOrderParser(true); }}
-      className="px-3 py-1.5 text-sm font-bold rounded-lg bg-[#1B2B4B] text-white hover:bg-[#243a60] transition"
+      className={DM_BTN_PRIMARY}
     >
-      <EditableText id="dm.btn.orderScan" defaultText="오더스캔" />
+      <DmIcon name="scan" /><EditableText id="dm.btn.orderScan" defaultText="오더스캔" />
     </button>
 
     {/* 운임조회 */}
     <button
+      type="button"
       onClick={handleFareSearch}
-      className="px-3 py-1.5 text-sm font-bold rounded-lg bg-white text-blue-600 border border-blue-300 hover:bg-blue-50 transition"
+      className={DM_BTN_SECONDARY}
     >
-      운임조회
+      <DmIcon name="fare" />운임조회
     </button>
 
     {/* 단가표 — 지금 입력한 하차지명/주소가 단가표 메뉴에 등록되어 있으면 천천히 깜빡인다 */}
     <button
       type="button"
       onClick={() => setRateSheetLookupOpen(true)}
-      className={`px-3 py-1.5 text-sm font-bold rounded-lg border transition ${
-        rateSheetMatches.length > 0
-          ? "bg-[#1B2B4B]/10 text-[#1B2B4B] border-[#1B2B4B] animate-pulse"
-          : "bg-white text-gray-500 border-gray-200 hover:bg-gray-50"
-      }`}
+      className={`${DM_BTN_SECONDARY} relative ${rateSheetMatches.length > 0 ? "!border-[#2D4C82] !bg-[#EEF3FC] animate-pulse" : ""}`}
       title={rateSheetMatches.length > 0 ? "등록된 단가표에 일치하는 하차지가 있습니다" : "단가표 확인"}
     >
-      단가표
+      <DmIcon name="table" />단가표
+      {rateSheetMatches.length > 0 && <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-[#4B6CB7] ring-2 ring-white" />}
     </button>
 
     {/* ⭐ 정기오더 — 지금 입력한 오더를 요일·시각마다 자동 등록 */}
     <button
       type="button"
       onClick={() => setRecurringOpen(true)}
-      className="px-3 py-1.5 text-sm font-bold rounded-lg bg-white text-[#1B2B4B] border border-[#1B2B4B] hover:bg-[#F5F8FD] transition"
+      className={DM_BTN_SECONDARY}
     >
-      정기오더
+      <DmIcon name="repeat" />정기오더
     </button>
 
     {/* ⭐ 2026-11-03 담당자·차량 조회 — 기간 + 배차담당자 + 차량번호·기사명 */}
     <button type="button" onClick={() => setDmLookupOpen(true)} title="기간 + 배차담당자 + 차량번호·기사명으로 찾기"
-      className="px-3 py-1.5 text-sm font-bold rounded-lg bg-white text-[#1B2B4B] border border-[#1B2B4B] hover:bg-[#F5F8FD] transition">
-      담당자·차량 조회
+      className={DM_BTN_SECONDARY}>
+      <DmIcon name="lookup" />담당자·차량 조회
     </button>
     <OrderLookupModal open={dmLookupOpen} onClose={() => setDmLookupOpen(false)} rows={dispatchData} nameOf={dmLookupNameOf} />
     {recurringOpen && createPortal(<RecurringManagerModal form={form} onClose={() => setRecurringOpen(false)} />, document.body)}
@@ -15130,26 +15203,27 @@ React.useEffect(() => {
   </div>
 
   {/* 구분선 */}
-  <div className="flex items-center gap-2">
+  <span className="hidden md:block w-px h-6 bg-[#DCE3EE]" />
+  <div className="flex items-center gap-2 flex-wrap">
 
   {/* 독차 */}
 <button type="button" onClick={() => onChange("독차", !form.독차)}
-  className={`px-3 py-1.5 text-sm font-bold rounded-lg border transition-all ${form.독차 ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"}`}>
-  독차
+  aria-pressed={!!form.독차} className={dmToggleCls(!!form.독차)}>
+  <DmDot on={!!form.독차} />독차
 </button>
 
 {/* 혼적 */}
 <button type="button" onClick={() => onChange("혼적", !form.혼적)}
-  className={`px-3 py-1.5 text-sm font-bold rounded-lg border transition-all ${form.혼적 ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"}`}>
-  혼적
+  aria-pressed={!!form.혼적} className={dmToggleCls(!!form.혼적)}>
+  <DmDot on={!!form.혼적} />혼적
 </button>
 
 {/* 왕복 */}
 <button type="button" onClick={() => setForm((p) => p.운행유형 === "왕복"
   ? { ...p, 운행유형: "편도", 회전수: 1, 회전방식: "묶기" }
   : { ...p, 운행유형: "왕복" })}
-  className={`px-3 py-1.5 text-sm font-bold rounded-lg border transition-all ${form.운행유형 === "왕복" ? "bg-indigo-600 text-white border-indigo-600" : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"}`}>
-  왕복
+  aria-pressed={form.운행유형 === "왕복"} className={dmToggleCls(form.운행유형 === "왕복")}>
+  <DmDot on={form.운행유형 === "왕복"} />왕복
 </button>
 
 {/* ⭐ 회전 운행 — 같은 상/하차지를 2회 이상 반복 (묶기: 1건+회전수 / 나누기: N건 분리) */}
@@ -15161,15 +15235,15 @@ React.useEffect(() => {
 
 {/* 긴급 */}
 <button type="button" onClick={() => onChange("긴급", !form.긴급)}
-  className={`px-3 py-1.5 text-sm font-bold rounded-lg border transition-all ${form.긴급 ? "bg-red-600 text-white border-red-600" : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"}`}>
-  긴급
+  aria-pressed={!!form.긴급} className={`${dmToggleCls(!!form.긴급)} ${form.긴급 ? "!bg-[#0F1A30] !border-[#0F1A30]" : ""}`}>
+  <DmDot on={!!form.긴급} alert />긴급
 </button>
 
 {/* ⭐ 블라인드 — 최고관리자에게만 보이는 버튼. 켜고 등록하면 최고관리자 외 누구의 배차목록에도 안 보인다 */}
 {canSeeBlind() && (
 <button type="button" onClick={() => onChange("블라인드", !form.블라인드)}
   title="켜고 등록하면 최고관리자 외에는 아무도 이 오더를 볼 수 없습니다"
-  className={`px-3 py-1.5 text-sm font-bold rounded-lg border transition-all inline-flex items-center gap-1 ${form.블라인드 ? "bg-gray-900 text-white border-gray-900" : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"}`}>
+  aria-pressed={!!form.블라인드} className={`${dmToggleCls(!!form.블라인드)} ${form.블라인드 ? "!bg-[#0F1A30] !border-[#0F1A30]" : ""}`}>
   <svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2.2" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
   블라인드
 </button>
@@ -15268,7 +15342,7 @@ React.useEffect(() => {
       <CustomDatePicker
         value={form.상차일 || ""}
         showIcon
-        className={`border-2 rounded-lg px-2 py-1.5 text-[13px] font-semibold outline-none focus:ring-2 focus:ring-blue-200 ${
+        className={`border-2 rounded-lg px-2 py-1.5 text-[13px] font-semibold outline-none focus:ring-2 focus:ring-[#1B2B4B]/25 focus:shadow-[0_0_0_5px_rgba(143,176,240,0.18)] ${
           isMultiWork ? "border-red-600 text-red-600" : "border-[#1B2B4B] text-[#1B2B4B]"
         }`}
         onChange={(e) => onChange("상차일", e.target.value)}
@@ -15287,7 +15361,7 @@ React.useEffect(() => {
     <TimeAmPmPicker
       value={form.상차시간 || ""}
       onChange={v => { onChange("상차시간", v); setShowAmPmError(false); }}
-      selectCls="border-2 border-[#1B2B4B] rounded-lg px-2 py-1 text-[13px] font-semibold text-[#1B2B4B] outline-none focus:ring-2 focus:ring-blue-200"
+      selectCls="border-2 border-[#1B2B4B] rounded-lg px-2 py-1 text-[13px] font-semibold text-[#1B2B4B] outline-none focus:ring-2 focus:ring-[#1B2B4B]/25 focus:shadow-[0_0_0_5px_rgba(143,176,240,0.18)]"
       showError={showAmPmError}
     />
 
@@ -15353,7 +15427,7 @@ React.useEffect(() => {
     <CustomDatePicker
       value={form.하차일 || ""}
       showIcon
-      className="border-2 border-[#1B2B4B] rounded-lg px-2 py-1.5 text-[13px] font-semibold text-[#1B2B4B] outline-none focus:ring-2 focus:ring-blue-200"
+      className="border-2 border-[#1B2B4B] rounded-lg px-2 py-1.5 text-[13px] font-semibold text-[#1B2B4B] outline-none focus:ring-2 focus:ring-[#1B2B4B]/25 focus:shadow-[0_0_0_5px_rgba(143,176,240,0.18)]"
       onChange={(e) => onChange("하차일", e.target.value)}
     />
     {copyDateHint && (
@@ -15389,7 +15463,7 @@ React.useEffect(() => {
     <TimeAmPmPicker
       value={form.하차시간 || ""}
       onChange={v => { onChange("하차시간", v); setShowAmPmError(false); }}
-      selectCls="border-2 border-[#1B2B4B] rounded-lg px-2 py-1 text-[13px] font-semibold text-[#1B2B4B] outline-none focus:ring-2 focus:ring-blue-200"
+      selectCls="border-2 border-[#1B2B4B] rounded-lg px-2 py-1 text-[13px] font-semibold text-[#1B2B4B] outline-none focus:ring-2 focus:ring-[#1B2B4B]/25 focus:shadow-[0_0_0_5px_rgba(143,176,240,0.18)]"
       showError={showAmPmError}
     />
 
@@ -15453,10 +15527,10 @@ React.useEffect(() => {
 <button
 type="button"
 onClick={swapPickupDrop}
-className="ml-2 inline-flex items-center gap-1 px-3 py-1.5 text-[12px] font-bold rounded-lg border-2 border-[#1B2B4B] bg-white text-[#1B2B4B] hover:bg-[#1B2B4B] hover:text-white active:scale-95 transition"
+className="ml-2 inline-flex items-center gap-1.5 h-8 px-3 text-[12px] font-extrabold rounded-xl border border-[#1B2B4B] bg-white text-[#1B2B4B] hover:bg-[#1B2B4B] hover:text-white active:scale-95 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1B2B4B] focus-visible:ring-offset-2"
 title="상차지 ↔ 하차지 교체"
 >
-⇄ 상·하차 교체
+<DmIcon name="swap" size={14} />상·하차 교체
 </button>
   </div>
 </div>
@@ -15527,12 +15601,12 @@ shadow-[0_1px_2px_rgba(16,24,40,0.04),0_12px_30px_rgba(16,24,40,0.07)]
     </span>
     <div className="flex items-center gap-1.5">
       <button type="button" onClick={openMultiRegister}
-        className="px-3 py-1 rounded-lg bg-white/15 hover:bg-white/25 text-white text-[13px] font-bold transition"
+        className="inline-flex items-center gap-1.5 h-8 px-3 rounded-xl bg-white text-[#0F1A30] text-[12.5px] font-extrabold shadow-[0_4px_12px_rgba(0,0,0,0.18)] hover:bg-[#EEF3FC] transition focus:outline-none focus-visible:ring-2 focus-visible:ring-[#8FB0F0] focus-visible:ring-offset-2 focus-visible:ring-offset-[#1B2B4B]"
         title="거래처(상차지)는 고정하고, 하차지·화물 등이 서로 다른 오더 여러 건을 한 번에 등록">
-        <EditableText id="orderForm.header.다중등록" defaultText="다중등록" />
+        <DmIcon name="layers" size={14} /><EditableText id="orderForm.header.다중등록" defaultText="다중등록" />
       </button>
       <button type="button" onClick={toggleOrderCardStyle}
-        className="px-3 py-1 rounded-lg bg-white/15 hover:bg-white/25 text-white text-[13px] font-bold transition"
+        className="inline-flex items-center justify-center h-8 min-w-[32px] px-2.5 rounded-xl bg-white/10 border border-white/20 hover:bg-white/20 text-white text-[12px] font-extrabold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-[#8FB0F0]" style={{ fontFamily: "'JetBrains Mono','SF Mono',ui-monospace,monospace" }}
         title="입력창 스타일 전환 (A: 밑줄형 / B: 박스형)">
         {orderCardStyle}
       </button>
@@ -16159,13 +16233,18 @@ shadow-[0_1px_2px_rgba(16,24,40,0.04),0_12px_30px_rgba(16,24,40,0.07)]
   </div>
 )}
 
-{/* 거래처 + 신규등록 */}
-<div className="col-span-2">
-
+{/* 청구 사업자(여러 사업자일 때만) + 거래처 + 신규등록
+    ⭐ 2026-11-03 청구 사업자를 맨 앞 칸으로 — 거래처 칸(2칸) 안을 나눠 쓰므로 뒤 칸들이 밀리지 않는다 */}
+<div className={`col-span-2 ${dmBiz.multi ? "grid grid-cols-[minmax(0,0.85fr)_minmax(0,1.65fr)] gap-x-3.5" : ""}`}>
+  {dmBiz.multi && (
+    <div className="min-w-0">
+      <label className={labelCls} htmlFor="dm-biz-select"><EditableText id="orderForm.label.청구사업자" defaultText="청구 사업자" /></label>
+      <BizSelect id="dm-biz-select" biz={dmBiz} value={form.청구사업자 || ""} onChange={pickBizManual} auto={bizAutoSrc} className={inputCls} />
+    </div>
+  )}
+  <div className="min-w-0">
     <div className="flex items-center justify-between gap-2 flex-wrap">
       <label className={labelCls}><EditableText id="orderForm.label.거래처" defaultText="거래처" /> {reqStar}</label>
-      {/* ⭐ 2026-11-03 여러 사업자 — 이 오더를 어느 사업자로 청구할지 */}
-      <BizPicker biz={dmBiz} value={form.청구사업자 || ""} onChange={(v) => setForm((p) => ({ ...p, 청구사업자: v }))} size="sm" />
     </div>
     <div className="flex gap-2">
       <div className="relative flex-1" ref={comboRef}>
@@ -16295,12 +16374,13 @@ const similar = placeList.filter(p => {
     // 🔥 2️⃣ 진짜 없을 때만 신규 입력 팝업
     openNewPlacePrompt(name);
   }}
-  className="px-3 py-2 border border-[#1B2B4B] rounded-lg text-sm bg-[#1B2B4B] text-white hover:bg-[#243a60] font-medium transition whitespace-nowrap"
+  className={`${DM_BTN_PRIMARY} !h-10 !px-3`}
 >
-  + 신규등록
+  <DmIcon name="plus" size={14} />신규등록
 </button>
 
     </div>
+  </div>
   </div>
 
   {/* 상차지명 + 자동완성 */}
@@ -17829,71 +17909,85 @@ className={`
     <CompanyOptionPicker optKey="배차방식" placeholder="선택" noneLabel="선택" className={inputCls} value={form.배차방식} onChange={(__v) => ((e) => onChange("배차방식", e.target.value))({ target: { value: __v } })} />
   </div>
 
-{/* =============================== 
-    ✎ 메모 / ◆ 전달사항 (네이비 통일 + 세로 textarea)
+{/* ===============================
+    메모 / 전달사항 — ⭐ 2026-11-03 카드형으로 정리(작은 영문 머리글 · 중요도 칩 · 고정 토글 · 글자 수)
+    값·동작(메모, 메모중요도, 전달사항, 전달사항고정)은 예전과 똑같다
    =============================== */}
-<div className="col-span-full grid grid-cols-2 gap-6 items-start">{/* ⭐ 2026-11-02 화면 점검 — col-span-full */}
+<div className="col-span-full grid grid-cols-1 lg:grid-cols-2 gap-4 items-stretch">{/* ⭐ 2026-11-02 화면 점검 — col-span-full */}
 
   {/* ── 메모 ── */}
-  <div>
-    <div className="flex items-center gap-2 mb-2">
-      <label className={labelCls}><EditableText id="orderForm.label.메모" defaultText="메모" /></label>
-
-      {[
-        { key: "NORMAL",   label: "일반",  activeCls: "bg-[#1B2B4B] text-white border-[#1B2B4B]" },
-        { key: "HIGH",     label: "중요",  activeCls: "bg-orange-500 text-white border-orange-500" },
-        { key: "CRITICAL", label: "긴급",  activeCls: "bg-red-600 text-white border-red-600" },
-      ].map(({ key, label, activeCls }) => (
-        <button
-          key={key}
-          type="button"
-          onClick={() => onChange("메모중요도", key)}
-          className={`
-            px-2.5 py-1 rounded-lg text-[11px] font-semibold border transition-all
-            ${form.메모중요도 === key
-              ? activeCls
-              : "bg-white text-gray-500 border-gray-300 hover:bg-gray-50"
-            }
-          `}
-        >
-          {label}
-        </button>
-      ))}
-    </div>
-
-        <textarea
-      className={textareaCls}
+  <section className={`group relative flex flex-col rounded-2xl border bg-white transition focus-within:border-[#1B2B4B] focus-within:ring-2 focus-within:ring-[#1B2B4B]/15 focus-within:shadow-[0_0_0_6px_rgba(143,176,240,0.16)] ${form.메모중요도 === "CRITICAL" ? "border-[#1B2B4B]" : "border-[#E3E8F0]"}`}>
+    {form.메모중요도 && form.메모중요도 !== "NORMAL" && <span className={`absolute left-4 right-4 top-0 h-[2px] rounded-b ${form.메모중요도 === "CRITICAL" ? "bg-[#0F1A30]" : "bg-[#4B6CB7]"}`} />}
+    <header className="flex items-center gap-2 px-4 h-12 border-b border-[#EDF1F7]">
+      <span className="text-[10px] font-extrabold tracking-[0.26em] text-[#4B6CB7]" style={{ fontFamily: "'JetBrains Mono','SF Mono',ui-monospace,monospace" }}>MEMO</span>
+      <label htmlFor="dm-memo" className="text-[13px] font-black text-[#0F1A30] whitespace-nowrap"><EditableText id="orderForm.label.메모" defaultText="메모" /></label>
+      <span className="text-[11.5px] font-semibold text-[#9AA9C3] whitespace-nowrap">내부용</span>
+      <div className="ml-auto inline-flex p-0.5 rounded-xl bg-[#F2F5FA] border border-[#E3E8F0]" role="radiogroup" aria-label="메모 중요도">
+        {[
+          { key: "NORMAL",   label: "일반", bars: 1 },
+          { key: "HIGH",     label: "중요", bars: 2 },
+          { key: "CRITICAL", label: "긴급", bars: 3 },
+        ].map(({ key, label, bars }) => {
+          const on = form.메모중요도 === key;
+          return (
+            <button
+              key={key}
+              type="button"
+              role="radio"
+              aria-checked={on}
+              onClick={() => onChange("메모중요도", key)}
+              className={`inline-flex items-center gap-1.5 h-7 px-2.5 rounded-[10px] text-[11.5px] font-extrabold transition ${DM_FOCUS} ${on ? (key === "NORMAL" ? "bg-white text-[#0F1A30] shadow-[0_1px_3px_rgba(15,26,48,0.14)]" : "bg-[#0F1A30] text-white shadow-[0_3px_8px_rgba(15,26,48,0.25)]") : "text-[#7A8AA6] hover:text-[#0F1A30]"}`}
+            >
+              <span className="inline-flex items-end gap-[2px] h-[10px]" aria-hidden="true">
+                {[1, 2, 3].map((b) => <span key={b} className={`w-[3px] rounded-[1px] ${b === 1 ? "h-[4px]" : b === 2 ? "h-[7px]" : "h-[10px]"} ${b <= bars ? (on ? (key === "CRITICAL" ? "bg-[#FF6B6B]" : key === "HIGH" ? "bg-[#8FB0F0]" : "bg-[#2D4C82]") : "bg-current") : (on && key !== "NORMAL" ? "bg-white/25" : "bg-[#C9D3E3]")}`} />)}
+              </span>
+              {label}
+            </button>
+          );
+        })}
+      </div>
+    </header>
+    <textarea
+      id="dm-memo"
+      className="flex-1 w-full min-h-[104px] px-4 pt-3 pb-7 bg-transparent resize-none text-[13.5px] leading-[1.6] font-semibold text-[#0F1A30] placeholder:text-[#A7B3C6] placeholder:font-medium focus:outline-none"
       rows={4}
       placeholder="내부 메모 입력"
       value={form.메모}
       onChange={(e) => onChange("메모", e.target.value)}
     />
-
-  </div>
+    <span className="pointer-events-none absolute right-4 bottom-2.5 text-[10.5px] font-bold text-[#A7B3C6] tabular-nums" style={{ fontFamily: "'JetBrains Mono','SF Mono',ui-monospace,monospace" }}>{String(form.메모 || "").length}자</span>
+  </section>
 
   {/* ── 전달사항 ── */}
-  <div>
-    <div className="flex items-center gap-2 mb-2">
-      <label className={labelCls}><EditableText id="orderForm.label.전달사항" defaultText="전달사항" /></label>
-
+  <section className="relative flex flex-col rounded-2xl border border-[#E3E8F0] bg-white transition focus-within:border-[#1B2B4B] focus-within:ring-2 focus-within:ring-[#1B2B4B]/15 focus-within:shadow-[0_0_0_6px_rgba(143,176,240,0.16)]">
+    <header className="flex items-center gap-2 px-4 h-12 border-b border-[#EDF1F7]">
+      <span className="text-[10px] font-extrabold tracking-[0.26em] text-[#4B6CB7]" style={{ fontFamily: "'JetBrains Mono','SF Mono',ui-monospace,monospace" }}>DRIVER NOTE</span>
+      <label htmlFor="dm-driver-note" className="text-[13px] font-black text-[#0F1A30] whitespace-nowrap"><EditableText id="orderForm.label.전달사항" defaultText="전달사항" /></label>
+      <span className="text-[11.5px] font-semibold text-[#9AA9C3] whitespace-nowrap">기사님께</span>
       <button
         type="button"
+        aria-pressed={!!form.전달사항고정}
         onClick={() => onChange("전달사항고정", !form.전달사항고정)}
-        className={`px-3 py-1.5 text-xs font-semibold rounded-lg border transition-all ${form.전달사항고정 ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"}`}
+        title="켜 두면 저장한 뒤에도 전달사항이 지워지지 않고 다음 오더에 그대로 남습니다"
+        className={`ml-auto inline-flex items-center gap-1.5 h-7 pl-2 pr-1 rounded-[10px] border text-[11.5px] font-extrabold transition ${DM_FOCUS} ${form.전달사항고정 ? "bg-[#1B2B4B] border-[#1B2B4B] text-white" : "bg-white border-[#DCE3EE] text-[#5B6B85] hover:border-[#2D4C82] hover:text-[#0F1A30]"}`}
       >
+        <DmIcon name="pin" size={13} />
         고정
+        <span className={`relative inline-flex w-7 h-4 rounded-full transition ${form.전달사항고정 ? "bg-[#8FB0F0]" : "bg-[#DCE3EE]"}`}>
+          <span className={`absolute top-0.5 w-3 h-3 rounded-full bg-white shadow transition-all ${form.전달사항고정 ? "left-[14px]" : "left-0.5"}`} />
+        </span>
       </button>
-    </div>
-
-       <textarea
-      className={textareaCls}
+    </header>
+    <textarea
+      id="dm-driver-note"
+      className="flex-1 w-full min-h-[104px] px-4 pt-3 pb-7 bg-transparent resize-none text-[13.5px] leading-[1.6] font-semibold text-[#0F1A30] placeholder:text-[#A7B3C6] placeholder:font-medium focus:outline-none"
       rows={4}
       placeholder="운송 기사님께 전달 내용을 입력하세요"
       value={form.전달사항}
       onChange={(e) => onChange("전달사항", e.target.value)}
     />
-
-  </div>
+    <span className="pointer-events-none absolute right-4 bottom-2.5 text-[10.5px] font-bold text-[#A7B3C6] tabular-nums" style={{ fontFamily: "'JetBrains Mono','SF Mono',ui-monospace,monospace" }}>{String(form.전달사항 || "").length}자</span>
+  </section>
 
 </div>
 
@@ -18133,17 +18227,12 @@ className={`
   );
 })()}
     {/* 버튼 */}
-  <div className="col-span-full flex justify-end gap-3 mt-4 pt-4 border-t border-gray-200">{/* ⭐ 2026-11-02 화면 점검 — col-span-full */}
+  <div className="col-span-full flex justify-end gap-2.5 mt-2 pt-4 border-t border-[#EDF1F7]">{/* ⭐ 2026-11-02 화면 점검 — col-span-full */}
     <button
       type="submit"
-      className="
-        px-7 py-2.5 rounded-xl text-[13px] font-bold
-        bg-[#1B2B4B] text-white
-        hover:bg-[#243a60] transition
-        shadow-sm
-      "
+      className={`${DM_BTN_PRIMARY} !h-11 !px-7 !text-[13.5px]`}
     >
-      저장
+      <DmIcon name="check" size={15} />저장
     </button>
     <button
       type="button"
@@ -18195,14 +18284,9 @@ className={`
         setSend24Sending(false);
         setSend24PreviewOpen(true);
       }}
-      className="
-        px-5 py-2.5 rounded-xl text-[13px] font-bold
-        bg-gradient-to-r from-[#1B2B4B] to-[#2d4a7a] text-white
-        hover:from-[#243a60] hover:to-[#355890] transition
-        shadow-sm flex items-center gap-1.5
-      "
+      className={`${DM_BTN_SECONDARY} !h-11 !px-5 !text-[13.5px]`}
     >
-      <span>◌</span> 24시전송
+      <DmIcon name="send" size={14} /> 24시전송
     </button>
   </div>
 </form>
@@ -22929,7 +23013,7 @@ function PalletSlipModal({ rows, clients = [], userCompany, userNameMap, patchDi
             <tr><td className={thStyle} rowSpan={3}>도착지</td><td className={thStyle}>회사명</td><td className={tdStyle}>{arriveName}</td></tr>
             <tr><td className={thStyle}>담당자</td><td className={tdStyle}>{arriveManager}</td></tr>
             <tr><td className={thStyle}>연락처</td><td className={tdStyle}>{arrivePhone}</td></tr>
-            <tr><td className={thStyle} rowSpan={3}>운송회사</td><td className={thStyle}>회사명</td><td className={tdStyle}>{userCompany || "-"}</td></tr>
+            <tr><td className={thStyle} rowSpan={3}>운송회사</td><td className={thStyle}>회사명</td><td className={tdStyle}>{bizOf(r, userCompany) || "-"}</td></tr>
             <tr><td className={thStyle}>차량번호</td><td className={tdStyle}>{carPlate}</td></tr>
             <tr><td className={thStyle}>담당자</td><td className={tdStyle}>{carManager && carManager !== "-" ? carManager : ""}</td></tr>
           </tbody>
@@ -25849,7 +25933,10 @@ ${coreBlockF}
 const copyAccountImage4 = async () => {
   if (!selected.length) { showAlert("오더를 선택하세요."); return; }
   const selRow = rows.find(r => r._id === selected[0]);
-  if (!companyBankData4?.계좌번호) { showAlert("회사관리에 계좌 정보를 먼저 등록해 주세요."); return; }
+  // ⭐ 2026-11-03 여러 사업자 — 오더의 청구 사업자가 추가 사업자면 그 사업자 계좌로
+  const _bz4 = rtBiz.multi && selRow ? rtBiz.find(bizOf(selRow, rtBiz.defaultName)) : null;
+  const bank4 = bankForBiz(companyBankData4, _bz4);
+  if (!bank4.계좌번호) { showAlert(_bz4 ? `'${_bz4.name}' 사업자에 계좌 정보가 없습니다. 회사정보 › 사업자 관리에서 등록해 주세요.` : "회사관리에 계좌 정보를 먼저 등록해 주세요."); return; }
   try {
     const 청구 = Number(String(selRow?.청구운임 || "0").replace(/[^\d]/g, ""));
     const 기사 = Number(String(selRow?.기사운임 || "0").replace(/[^\d]/g, ""));
@@ -25878,8 +25965,8 @@ const copyAccountImage4 = async () => {
     drawRow4("청구운임", 청구.toLocaleString() + "원", 0, false);
     drawRow4("기사운임", 기사.toLocaleString() + "원", 1, false);
     drawRow4("기사 입금액 (청구 - 기사)", 차액.toLocaleString() + "원", 2, true);
-    drawRow4("입금 계좌", `${companyBankData4.계좌은행 || ""} ${companyBankData4.계좌번호}`, 3, false);
-    drawRow4("예금주", companyBankData4.예금주 || "", 4, false);
+    drawRow4("입금 계좌", `${bank4.계좌은행 || ""} ${bank4.계좌번호}`, 3, false);
+    drawRow4("예금주", bank4.예금주 || "", 4, false);
     const blob = await new Promise(res => canvas.toBlob(res, "image/png"));
     await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
     setCopyModalOpen(false);
@@ -25903,6 +25990,14 @@ const srcToBlob = async (src) => {
 
 // 사업자등록증 이미지 복사 (Part 4)
 const copyBizImage4 = async () => {
+  // ⭐ 2026-11-03 여러 사업자 — 추가 사업자 오더면 그 사업자 정보 카드(상호·사업자번호·대표·주소·계좌·직인) 이미지
+  const _r4 = selected.length ? rows.find(r => r._id === selected[0]) : null;
+  const _bz = rtBiz.multi && _r4 ? rtBiz.find(bizOf(_r4, rtBiz.defaultName)) : null;
+  if (_bz) {
+    try { const blob = await bizInfoCardBlob(_bz); await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]); setCopyModalOpen(false); showAlert(`'${_bz.name}' 사업자 정보 이미지가 복사되었습니다. 카카오톡에 붙여넣기 하세요.`); }
+    catch { showAlert("사업자 정보 복사에 실패했습니다."); }
+    return;
+  }
   const src = companyBankData4?.사업자등록증Base64;
   if (!src) { showAlert("회사관리에 사업자등록증을 먼저 등록해 주세요."); return; }
   try {
@@ -33667,10 +33762,8 @@ if (editTarget.하차지명) savePlaceSmart(editTarget.하차지명, editTarget.
           {rtBiz.multi && (() => { const _id = contextMenu.row._id; const ids = selected.includes(_id) && selected.length > 1 ? [...selected] : [_id]; const cur = bizOf(contextMenu.row, rtBiz.defaultName); return (
             <div className="px-4 py-2 border-t border-gray-100">
               <div className="text-[11.5px] font-black text-gray-500 mb-1.5">청구 사업자 바꾸기{ids.length > 1 ? ` (${ids.length}건)` : ""}</div>
-              <div className="flex flex-wrap gap-1">{rtBiz.names.map((n) => (
-                <button key={n} type="button" onClick={() => { ids.forEach((x) => patchDispatch(x, { 청구사업자: n === rtBiz.defaultName ? "" : n })); setContextMenu(null); }}
-                  className={`h-7 px-2.5 rounded-lg text-[12px] font-black border ${ids.length === 1 && cur === n ? "bg-[#0F1A30] text-white border-[#0F1A30]" : "bg-white text-[#3A4A66] border-[#DCE3EE] hover:bg-[#F5F8FD]"}`}>{n}</button>
-              ))}</div>
+              <BizSelect inline biz={rtBiz} value={ids.length === 1 ? cur : null} size="sm" onClose={() => setContextMenu(null)}
+                onChange={(v) => { ids.forEach((x) => patchDispatch(x, { 청구사업자: v })); const _r = ids.length === 1 ? contextMenu.row : null; if (_r) rememberBiz(rtBiz, { ..._r, 청구사업자: v }); setContextMenu(null); }} />
             </div>
           ); })()}
           <div className="border-t border-gray-100 my-1"/>
@@ -37601,7 +37694,10 @@ if (mode === "driver") {
     if (!selected.size) { showAlert("오더를 선택하세요."); return; }
     const selId = [...selected][0];
     const selRow = dispatchData.find(d => getId(d) === selId);
-    if (!companyBankData?.계좌번호) { showAlert("회사관리에 계좌 정보를 먼저 등록해 주세요."); return; }
+    // ⭐ 2026-11-03 여러 사업자 — 오더의 청구 사업자가 추가 사업자면 그 사업자 계좌로
+    const _bz5 = dsBiz.multi && selRow ? dsBiz.find(bizOf(selRow, dsBiz.defaultName)) : null;
+    const bank5 = bankForBiz(companyBankData, _bz5);
+    if (!bank5.계좌번호) { showAlert(_bz5 ? `'${_bz5.name}' 사업자에 계좌 정보가 없습니다. 회사정보 › 사업자 관리에서 등록해 주세요.` : "회사관리에 계좌 정보를 먼저 등록해 주세요."); return; }
     try {
       const 청구 = Number(String(selRow?.청구운임 || "0").replace(/[^\d]/g, ""));
       const 기사 = Number(String(selRow?.기사운임 || "0").replace(/[^\d]/g, ""));
@@ -37630,8 +37726,8 @@ if (mode === "driver") {
       dr5("청구운임", 청구.toLocaleString() + "원", 0, false);
       dr5("기사운임", 기사.toLocaleString() + "원", 1, false);
       dr5("기사 입금액 (청구 - 기사)", 차액.toLocaleString() + "원", 2, true);
-      dr5("입금 계좌", `${companyBankData.계좌은행 || ""} ${companyBankData.계좌번호}`, 3, false);
-      dr5("예금주", companyBankData.예금주 || "", 4, false);
+      dr5("입금 계좌", `${bank5.계좌은행 || ""} ${bank5.계좌번호}`, 3, false);
+      dr5("예금주", bank5.예금주 || "", 4, false);
       const blob = await new Promise(res => canvas.toBlob(res, "image/png"));
       await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
       setCopyModalOpen(false);
@@ -37655,6 +37751,14 @@ if (mode === "driver") {
 
   // 사업자등록증 이미지 복사 (Part 5)
   const copyBizImage5 = async () => {
+    // ⭐ 2026-11-03 여러 사업자 — 추가 사업자 오더면 그 사업자 정보 카드 이미지
+    const _r5 = selected.size ? dispatchData.find(d => getId(d) === [...selected][0]) : null;
+    const _bz = dsBiz.multi && _r5 ? dsBiz.find(bizOf(_r5, dsBiz.defaultName)) : null;
+    if (_bz) {
+      try { const blob = await bizInfoCardBlob(_bz); await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]); setCopyModalOpen(false); showAlert(`'${_bz.name}' 사업자 정보 이미지가 복사되었습니다. 카카오톡에 붙여넣기 하세요.`); }
+      catch { showAlert("사업자 정보 복사에 실패했습니다."); }
+      return;
+    }
     const src = companyBankData?.사업자등록증Base64;
     if (!src) { showAlert("회사관리에 사업자등록증을 먼저 등록해 주세요."); return; }
     try {
@@ -44278,10 +44382,8 @@ setCopyPlaceOptions(list);
           {dsBiz.multi && (() => { const _id = getId(contextMenuDS.row); const ids = selected.has(_id) && selected.size > 1 ? [...selected] : [_id]; const cur = bizOf(contextMenuDS.row, dsBiz.defaultName); return (
             <div className="px-4 py-2 border-t border-gray-100">
               <div className="text-[11.5px] font-black text-gray-500 mb-1.5">청구 사업자 바꾸기{ids.length > 1 ? ` (${ids.length}건)` : ""}</div>
-              <div className="flex flex-wrap gap-1">{dsBiz.names.map((n) => (
-                <button key={n} type="button" onClick={() => { ids.forEach((x) => patchDispatch(x, { 청구사업자: n === dsBiz.defaultName ? "" : n })); setContextMenuDS(null); }}
-                  className={`h-7 px-2.5 rounded-lg text-[12px] font-black border ${ids.length === 1 && cur === n ? "bg-[#0F1A30] text-white border-[#0F1A30]" : "bg-white text-[#3A4A66] border-[#DCE3EE] hover:bg-[#F5F8FD]"}`}>{n}</button>
-              ))}</div>
+              <BizSelect inline biz={dsBiz} value={ids.length === 1 ? cur : null} size="sm" onClose={() => setContextMenuDS(null)}
+                onChange={(v) => { ids.forEach((x) => patchDispatch(x, { 청구사업자: v })); const _r = ids.length === 1 ? contextMenuDS.row : null; if (_r) rememberBiz(dsBiz, { ..._r, 청구사업자: v }); setContextMenuDS(null); }} />
             </div>
           ); })()}
           <div className="border-t border-gray-100 my-1"/>

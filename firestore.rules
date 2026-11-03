@@ -199,9 +199,12 @@ service cloud.firestore {
       allow write: if isTotalMasterUser() || (isApproved() && myCo() == co && myUser().get('isMaster', false) == true);
       // 사업자 목록(bizList)은 관리자·경리·인사도(공지 작성 권한은 못 바꿈)
       allow create: if isApproved() && myCo() == co && myUser().get('role', '') in ['admin', 'hrAcct', 'hrManager', 'test']
-        && request.resource.data.keys().hasOnly(['companyName', 'bizList', 'bizListAt']);
+        && request.resource.data.keys().hasOnly(['companyName', 'bizList', 'bizListAt', 'bizMemory']);
       allow update: if isApproved() && myCo() == co && myUser().get('role', '') in ['admin', 'hrAcct', 'hrManager', 'test']
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['companyName', 'bizList', 'bizListAt']);
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['companyName', 'bizList', 'bizListAt', 'bizMemory']);
+      // ⭐ 2026-11-03 청구 사업자 기억(bizMemory: 거래처+상차지+하차지 → 사업자 이름) — 실무자(user)도 오더를 저장할 때 함께 기록한다(이 칸만)
+      allow update: if isApproved() && myCo() == co && myUser().get('role', '') in ['admin', 'hrAcct', 'hrManager', 'test', 'user']
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['bizMemory']);
     }
     match /companyFeatures/{co} {
       allow read: if isTotalMasterUser() || (isApproved() && myCo() == co);
