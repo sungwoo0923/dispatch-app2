@@ -24,6 +24,7 @@ import { Navigate, useNavigate } from "react-router-dom";
 import { CartesianGrid, Line, LineChart, BarChart, Bar, Cell, LabelList, PieChart, Pie, ResponsiveContainer, Tooltip, XAxis, YAxis, Legend } from "recharts";
 import * as XLSX from "xlsx";
 import OrderLookupModal from "./OrderLookup"; // ⭐ 2026-11-03 담당자·차량 조회
+import MgrBadge, { setMgrNameMap } from "./MgrBadge"; // ⭐ 2026-11-03 배차담당자 칸(등록자 + 차량 붙인 사람)
 import JSZip from "jszip";
 import { sendOrderTo24Proxy as sendOrderTo24 } from "../api/24CallProxy";
 import { useNewVersion, openUpdatePopup } from "./VersionCheck";
@@ -7352,6 +7353,7 @@ useEffect(() => {
   // (탭을 오갈 때마다 매번 재구독 + 전체 재다운로드) 읽기가 중복 낭비됐다 — 최상위
   // (DispatchApp)에서 한 번만 구독해 두 화면에 동일한 userNameMap을 props로 내려준다.
   const [userNameMap, setUserNameMap] = React.useState(new Map());
+  React.useEffect(() => { setMgrNameMap(userNameMap); }, [userNameMap]); // ⭐ 배차담당자 이력 카드의 "마지막 수정" 이름
   React.useEffect(() => {
     // ⭐ 2026-11-02 속도 — users 전체를 따로 구독하던 것을 앱 공용 구독(usersLive)으로(받는 데이터 동일, 중복 구독 제거)
     return subscribeUsersLive((_list, raw) => {
@@ -23987,7 +23989,7 @@ ${isHighlighted ? "animate-pulse bg-blue-100" : ""}
                   {/* ⚡ 순번은 CSS 카운터로(.kp-rt-body) — 정렬로 줄 순서가 바뀌어도 줄 전체를 다시 그리지 않게 */}
                   <td className={`${cell} kp-rt-no`} />
                   {mgrName != null && (
-                    <td className={cell}>{mgrName ? mgrName : <span className="text-[12px] font-semibold text-[#9AA9C3]">{ORDER_MGR_EMPTY}</span>}</td>
+                    <td className={cell}><MgrBadge row={r} name={mgrName} empty={ORDER_MGR_EMPTY} /></td>
                   )}
   <td className={`${cell} overflow-visible`}>
   <HoverInfoTrigger
@@ -39655,7 +39657,7 @@ return (
       </td>
       {dsMgrMap && (() => { const mn = orderMgrName(dsMgrMap, row); return (
         <td className="px-3 py-3 text-[14px] font-medium text-gray-800 text-center border-b border-gray-200 border-r border-r-gray-100 whitespace-nowrap">
-          {mn || <span className="text-[12px] font-semibold text-[#9AA9C3]">{ORDER_MGR_EMPTY}</span>}
+          <MgrBadge row={row} name={mn} empty={ORDER_MGR_EMPTY} />
         </td>
       ); })()}
 
@@ -49738,7 +49740,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                         </td>
                       )}
                       <td className={cellBase}>{i + 1}</td>
-                      {unMgrMap && <td className={cellBase}>{orderMgrName(unMgrMap, r) || <span className="text-[12px] font-semibold text-[#9AA9C3]">{ORDER_MGR_EMPTY}</span>}</td>}
+                      {unMgrMap && <td className={cellBase}><MgrBadge row={r} name={orderMgrName(unMgrMap, r)} empty={ORDER_MGR_EMPTY} /></td>}
                       <td className={cellBase}>{displayRegDate(r)}</td>
                       <td className={cellBase}>
                         {r.등록일 ? (() => {

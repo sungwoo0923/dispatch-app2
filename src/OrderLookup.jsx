@@ -3,6 +3,7 @@
 import React from "react";
 import { createPortal } from "react-dom";
 import CustomDatePicker from "./CustomDatePicker"; // 프로그램 공용 달력
+import MgrBadge from "./MgrBadge";
 
 const kst = (d = new Date()) => new Date(d.getTime() + 9 * 3600e3).toISOString().slice(0, 10);
 const addDays = (s, n) => { const d = new Date(s + "T00:00:00Z"); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
@@ -257,7 +258,7 @@ export default function OrderLookupModal({ open, onClose, rows = [], nameOf = ()
               <div className="py-16 text-center text-[13.5px] font-semibold text-[#9AA9C3]">조건에 맞는 오더가 없어요.</div>
             ) : (
               <table className="w-full table-fixed border-separate border-spacing-0 text-[13px]">
-                <colgroup>{[46, 62, 92, 84, null, null, 112, 70, 82, 90, 90, 84].map((w, i) => <col key={i} style={w ? { width: w } : undefined} />)}</colgroup>
+                <colgroup>{[52, 72, 96, 140, 180, null, 128, 84, 92, 104, 104, 100].map((w, i) => <col key={i} style={w ? { width: w } : undefined} />)}</colgroup>
                 <thead>
                   <tr>
                     {["순번", "상차일", "상차시간", "배차담당자", "거래처명", "상차지 → 하차지", "차량번호", "기사명", "배차상태", "청구운임", "기사운임", "수수료"].map((h) => (
@@ -269,21 +270,21 @@ export default function OrderLookupModal({ open, onClose, rows = [], nameOf = ()
                   {result.slice(0, showN).map(({ r, mgr: n }, i) => {
                     const sale = toInt(r.청구운임), drv = toInt(r.기사운임);
                     const hasCar = !!String(r.차량번호 || "").trim();
-                    const td = "px-1.5 py-2 border-b border-[#E9EDF4] border-r border-r-[#F1F4F9] last:border-r-0 whitespace-nowrap overflow-hidden text-ellipsis";
+                    const td = "px-2 py-2 border-b border-[#E9EDF4] border-r border-r-[#F1F4F9] last:border-r-0 whitespace-nowrap overflow-hidden text-ellipsis text-center";
                     return (
                       <tr key={r._id || i} className={`${i % 2 ? "bg-[#FAFBFD]" : "bg-white"} hover:bg-[#F0F4FB] transition-colors`}>
                         <td className={`${td} text-center text-[#7A8AA6] tabular-nums`}>{i + 1}</td>
                         <td className={`${td} text-center tabular-nums`}>{String(r.상차일 || "").slice(5)}</td>
                         <td className={`${td} text-center`}>{r.상차시간 || "-"}</td>
-                        <td className={`${td} text-center font-bold ${n === EMPTY ? "text-[#9AA9C3]" : "text-[#0F1A30]"}`}>{n}</td>
-                        <td className={`${td} font-semibold truncate`} title={r.거래처명}>{r.거래처명 || "-"}</td>
-                        <td className={`${td} truncate`} title={`${r.상차지명 || ""} → ${r.하차지명 || ""}`}>{r.상차지명 || "-"} <span className="text-[#9AA9C3]">→</span> {r.하차지명 || "-"}</td>
+                        <td className={`${td} overflow-visible`}><MgrBadge row={r} name={n === EMPTY ? "" : n} empty={EMPTY} /></td>
+                        <td className={`${td} font-semibold`} title={r.거래처명}>{r.거래처명 || "-"}</td>
+                        <td className={td} title={`${r.상차지명 || ""} → ${r.하차지명 || ""}`}>{r.상차지명 || "-"} <span className="text-[#9AA9C3]">→</span> {r.하차지명 || "-"}</td>
                         <td className={`${td} text-center font-black tabular-nums`}>{r.차량번호 || <span className="text-[#C2410C] font-bold">미배차</span>}</td>
                         <td className={`${td} text-center font-semibold`}>{r.이름 || "-"}</td>
                         <td className={`${td} text-center`}><span className={`inline-block px-2 py-0.5 rounded-md text-[11.5px] font-black ${hasCar ? "bg-[#E7F5EC] text-[#1B7F4B]" : "bg-[#FFF1E6] text-[#C2410C]"}`}>{r.배차상태 || (hasCar ? "배차완료" : "배차중")}</span></td>
-                        <td className={`${td} text-right tabular-nums`}>{sale ? sale.toLocaleString() : "-"}</td>
-                        <td className={`${td} text-right tabular-nums`}>{drv ? drv.toLocaleString() : "-"}</td>
-                        <td className={`${td} text-right tabular-nums font-bold ${sale - drv < 0 ? "text-[#C2410C]" : "text-[#4B6CB7]"}`}>{sale || drv ? (sale - drv).toLocaleString() : "-"}</td>
+                        <td className={`${td} tabular-nums`} style={{ fontFamily: MONO }}>{sale ? sale.toLocaleString() : "-"}</td>
+                        <td className={`${td} tabular-nums`} style={{ fontFamily: MONO }}>{drv ? drv.toLocaleString() : "-"}</td>
+                        <td style={{ fontFamily: MONO }} className={`${td} tabular-nums font-bold ${sale - drv < 0 ? "text-[#C2410C]" : "text-[#4B6CB7]"}`}>{sale || drv ? (sale - drv).toLocaleString() : "-"}</td>
                       </tr>
                     );
                   })}
