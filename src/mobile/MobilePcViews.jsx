@@ -30,6 +30,7 @@ import MobileFleetView from "./MobileFleetView";
 import FareRulesSettings from "../FareRulesSettings"; // ⭐ 2026-11-02 운임규칙
 import BoardPage, { BOARDS, canSeeBoard } from "../BoardPosts"; // ⭐ 2026-11-03 모바일 게시판
 import { BizScope } from "../companyBiz"; // ⭐ 2026-11-03 여러 사업자
+import { MobileFixedRouteView } from "../FixedRouteStatus"; // ⭐ 2026-11-03 모바일 고정노선현황
 
 // 매출관리는 PC 배차 프로그램 안에 있는 화면이라 그 묶음을 필요할 때만 받아온다
 const PcSettlement = React.lazy(() => import("../DispatchApp").then((m) => ({ default: m.PcSettlement })));
@@ -187,7 +188,7 @@ function MobileBoard({ company, me }) {
   );
 }
 
-export default function MobilePcView({ kind, dispatchData = [], fixedRows = [], clients = [], places = [], role = "", userCompany = "", me: meIn, loadRange, loadFullHistory, onRegisterBack, initial, onGo, deptMode }) {
+export default function MobilePcView({ kind, dispatchData = [], fixedRows = [], clients = [], places = [], drivers = [], role = "", userCompany = "", me: meIn, loadRange, loadFullHistory, onRegisterBack, initial, onGo, deptMode }) {
   // ⭐ 이름은 본인 사용자 문서에서(계정 아이디로 적히던 문제)
   const prof = useMyProfile(meIn?.uid);
   const me = React.useMemo(() => (meIn ? { ...meIn, name: personName(prof) || meIn.name, team: prof?.team || meIn.team || "", position: prof?.position || meIn.position || "" } : meIn), [meIn, prof]);
@@ -195,6 +196,7 @@ export default function MobilePcView({ kind, dispatchData = [], fixedRows = [], 
   let body = null;
   if (kind === "fare") body = <FareView initialTab={initial || "전국운임조회"} />;
   else if (kind === "ratecard") body = <div className="kp-m-pc"><RateCard dispatchData={dispatchData} userCompany={userCompany} clients={clients} /></div>;
+  else if (kind === "fixedroute") body = <MobileFixedRouteView company={userCompany} dispatchData={dispatchData} drivers={drivers || []} clients={clients} places={places} disabled={role === "viewer"} />;
   else if (kind === "fleet") body = <FleetView dispatchData={dispatchData} userCompany={userCompany} role={role} onRegisterBack={onRegisterBack} />;
   else if (kind === "approval") body = <ApprovalView company={userCompany} me={me} initialPage={initial || "inbox"} />;
   else if (kind === "staff") body = <StaffManager company={userCompany} role={role} myUid={me?.uid} initialTab={initial || "pending"} compact={role === "test" || role === "hrManager"} />;

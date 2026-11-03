@@ -105,7 +105,7 @@ import { isWeekend, findApprovedLeaveForDate, isHoliday } from "../attendanceUti
 const MonthCompareAnalysis = lazyView(() => import("../MonthCompareAnalysis"));
 import { MailHeaderButton } from "../InternalMail";
 import BannerCenter from "../BannerCenter";
-import { RemoteSupportHost, openRemoteSupport } from "../RemoteSupport"; // ⭐ 2026-11-02 원격지원 —
+import { RemoteSupportHost } from "../RemoteSupport"; // ⭐ 2026-11-02 원격지원 —
 import OrderCongratsPopup from "../OrderCongratsPopup";
 import BirthdayPopup from "../BirthdayPopup";
 import { tryAutoCheckIn, tryAutoCheckOut, undoAutoCheckOut } from "../autoAttendance";
@@ -5224,6 +5224,7 @@ const title =
   : page === "sales" ? "매출관리"
   : page === "approval" ? "전자결재"
   : page === "staff" ? "직원 관리"
+  : page === "fixedroute" ? "고정노선현황"
   : page === "dept" ? (deptMode === "exec" ? "경영 브리핑" : deptMode === "hr" ? "인사관리" : "경리·회계")
   : String(page).startsWith("dept:") ? ({ "dept:settle": "정산관리", "dept:acct": "회계관리", "dept:assets": "비품·자산", "dept:hr": "인사관리부", "dept:leave": "연차 관리", "dept:onboarding": "입·퇴사 관리", "dept:cert": "증명서 발급", "dept:driverdocs": "기사 서류", "dept:approvals": "결재함", "dept:schedule": "직원 일정", "dept:funds": "자금 현황", "dept:execsched": "임원 일정", "dept:rules": "사내 규정", "dept:board": "사내 게시판", "dept:farerules": "운임 규칙", "dept:cashbook": "자금 관리", "dept:myresume": "내 이력서" }[page] || "")
   : page === "status" ? "배차현황"
@@ -5598,7 +5599,7 @@ const title =
         }
     : String(page).startsWith("dept:")
       ? () => setPage("dept")
-    : page === "notice" || page === "schedule" || page === "unassigned" || page === "canceled" || page === "handover" || page === "attendance" || page === "ratecard" || page === "myinfo" || page === "settings" || page === "fleet" || page === "intel" || page === "national-fare" || page === "gsheet" || page === "blind" || page === "company-fare" || page === "sales" || page === "approval" || page === "staff"
+    : page === "notice" || page === "schedule" || page === "unassigned" || page === "canceled" || page === "handover" || page === "attendance" || page === "ratecard" || page === "myinfo" || page === "settings" || page === "fleet" || page === "intel" || page === "national-fare" || page === "gsheet" || page === "blind" || page === "company-fare" || page === "sales" || page === "approval" || page === "staff" || page === "fixedroute"
       ? () => setPage("list")
       : page === "fare"
       ? () => setPage(prevPage || "list")
@@ -6674,10 +6675,10 @@ setOpenMemo={setOpenMemo}
             cardVersionB={cardVersionB}
           />
         )}
-        {(page === "national-fare" || page === "company-fare" || page === "ratecard" || page === "approval" || page === "staff") && (
+        {(page === "national-fare" || page === "company-fare" || page === "ratecard" || page === "approval" || page === "staff" || page === "fixedroute") && (
           <React.Suspense fallback={null}>
             <MobilePcView key={page}
-              kind={page === "ratecard" ? "ratecard" : page === "approval" ? "approval" : page === "staff" ? "staff" : "fare"}
+              kind={page === "ratecard" ? "ratecard" : page === "approval" ? "approval" : page === "staff" ? "staff" : page === "fixedroute" ? "fixedroute" : "fare"} drivers={drivers}
               initial={page === "company-fare" ? "자사운임표" : undefined}
               dispatchData={allOrders} clients={clients} places={places} role={role} userCompany={pcViewCompany} me={pcViewMe}
               loadRange={loadRange} loadFullHistory={loadFullHistory} />
@@ -7776,6 +7777,8 @@ function MobileSideMenu({
             {ok("배차현황") && <MenuItem label="등록내역" icon="list" onClick={onGoList} dark={dark} />}
             {role !== "test" && ok("배차관리") && <MenuItem label="화물등록" icon="truck" onClick={onGoCreate} dark={dark} />}
             {ok("배차관리") && <MenuItem label="미배차현황" icon="alert" onClick={onGoUnassigned} badge={unassignedCount > 0 ? unassignedCount : null} dark={dark} />}
+            {ok("배차현황") && <MenuItem label="고정노선현황" icon="route" onClick={() => onGo?.("fixedroute")} dark={dark} />}{/* ⭐ 2026-11-03 구글시트 배차표 */}
+            {ok("지입차관리") && <MenuItem label="지입차관리" icon="route" onClick={onGoFleet} dark={dark} />}{/* ⭐ 2026-11-03 배차관리 안으로 */}
           </MenuSection>
           )}
           {!deptMode && ["인사관리부", "회계관리", "자금관리", "비품관리", "증명서발급"].some(deptOk) && (
@@ -7805,7 +7808,6 @@ function MobileSideMenu({
             {role !== "test" && ok("단가표") && <MenuItem label="단가표" icon="money" onClick={onGoRateCard} dark={dark} />}
           </MenuSection>
           <MenuSection title="기사 · 매출" en="FLEET · REVENUE" dark={dark} alwaysOpen>
-            {ok("지입차관리") && <MenuItem label="지입차관리" icon="route" onClick={onGoFleet} dark={dark} />}
             {canRevenue && ok("매출관리") && <MenuItem label="매출관리" icon="chart" onClick={onGoSales} dark={dark} />}
           </MenuSection>
           </>)}
@@ -7828,7 +7830,7 @@ function MobileSideMenu({
             <MenuItem label="내 이력서" icon="file" onClick={() => onGo?.("dept:myresume")} dark={dark} />
             <MenuItem label="설정" icon="key" onClick={onGoSettings} dark={dark} />
             {/* ⭐ 2026-11-02 원격지원 — 사용이 어려울 때 관리자에게 요청 */}
-            {role !== "totalMaster" && <MenuItem label="원격 지원 요청" icon="phone" onClick={() => { onClose?.(); openRemoteSupport(); }} dark={dark} />}
+            {/* ⭐ 2026-11-03 원격 지원 요청은 PC 전용 */}
           </MenuSection>
 
           {dark ? (
@@ -22346,7 +22348,7 @@ function MobileSettingsPage({ onBack, cardVersionB, setCardVersionB, alarmEnable
           <KpmRow label="권한" value={ROLE_KO[role] || role || "-"} />
           <KpmRow label="로그인 관리" sub="로그인된 기기 확인·연결 끊기 · 비밀번호 변경" onClick={() => setLoginMgrOpen(true)} right={go("열기")} />
           {/* ⭐ 2026-11-02 원격지원 — */}
-          {role !== "totalMaster" && <KpmRow label="원격 지원 요청" sub="사용이 어려울 때 관리자에게 화면 공유·원격 지원 요청" onClick={openRemoteSupport} right={go("요청")} />}
+          {/* ⭐ 2026-11-03 원격 지원 요청은 PC 전용 */}
           {loginMgrOpen && <LoginManagerModal user={currentUser} onClose={() => setLoginMgrOpen(false)} />}
           <KpmRow label="로그아웃" danger onClick={() => setShowLogoutConfirm(true)} />
         </KpmCard>

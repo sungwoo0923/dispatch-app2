@@ -55171,7 +55171,7 @@ const handleBatchSettle = async (targetStatus) => {
 // ===================== DispatchApp.jsx (PART 8/8) — END =====================
 
 // ===================== DispatchApp.jsx (PART 9/9) — START =====================
-function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], drivers: driversProp = null, companyName = "", canEditPayDay = false }) {
+function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], drivers: driversProp = null, companyName = "", canEditPayDay = false, mobile = false }) {
   const fareRP = useFareRules(companyName); // ⭐ 2026-11-02 운임규칙 — 엑셀에 운임구분 열(규칙 사용 회사만)
 
   const todayStr9 = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
@@ -55573,10 +55573,10 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
               value={insuranceRate} onChange={e => setInsuranceRate(Number(e.target.value))} />
             <span className="text-white/70">%</span>
           </div>
-          <label className="h-10 px-4 rounded-xl bg-white/10 border border-white/20 text-white text-[13px] font-black hover:bg-white/15 transition cursor-pointer inline-flex items-center">
+          {!mobile && <label className="h-10 px-4 rounded-xl bg-white/10 border border-white/20 text-white text-[13px] font-black hover:bg-white/15 transition cursor-pointer inline-flex items-center">
             지급 매칭 업로드
             <input autoComplete="off" type="file" accept=".xlsx,.xls" className="hidden" onChange={handlePayExcelUpload} />
-          </label>
+          </label>} {/* ⭐ 2026-11-03 모바일에서는 지급 매칭 업로드 없음 */}
           <button onClick={downloadExcel} className="h-10 px-4 rounded-xl bg-white text-[#0F1A30] text-[13px] font-black hover:brightness-95 transition"><EditableText id="misc.btn.52296.엑셀 다운로드" defaultText="엑셀 다운로드" /></button>
         </div>
       </div>
@@ -61798,7 +61798,7 @@ export function PcSettleMobile({ dispatchData = [], companyName = "", role = "",
     <KpSubNav code="SETTLEMENT" title="정산관리" icon="receipt" active={tab} onSelect={setTab}
       items={[{ key: "지급관리", label: "용차지급관리", en: "PAYOUT", icon: "wallet" }, { key: "지입정산관리", label: "지입정산관리", en: "FLEET PAY", icon: "wallet" }]}>
       {tab === "지급관리"
-        ? <PaymentManagement dispatchData={dispatchData} patchDispatch={isViewer ? async () => {} : patchDispatch} companyName={companyName} canEditPayDay={role === "admin" || role === "totalMaster"} />
+        ? <PaymentManagement mobile dispatchData={dispatchData} patchDispatch={isViewer ? async () => {} : patchDispatch} companyName={companyName} canEditPayDay={role === "admin" || role === "totalMaster"} />
         : <FleetSettlementMenu dispatchData={dispatchData} companyName={companyName} />}
     </KpSubNav>
   );

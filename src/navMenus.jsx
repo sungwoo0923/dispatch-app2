@@ -11,7 +11,7 @@ const MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
 //   과태료·사고 서류는 지입차관리가 아니라 기사관리 › 서류관리로 옮겨졌으므로 지입차관리에는 넣지 않는다(FleetManagement.jsx 왼쪽 메뉴에 없음).
 export const MENU_SUBS = {
   HOME: { code: "HOME", items: [["대시보드", "대시보드"], ["공지사항", "공지사항"], ["execsched", "임원 일정"], ["teamsched", "직원 일정"], ["rules", "사내 규정"], ["ap:inbox", "결재함"]] },
-  배차현황: { code: "DISPATCH", items: [["배차현황", "배차현황"], ["미배차현황", "미배차현황"]] },
+  배차현황: { code: "DISPATCH", items: [["배차현황", "배차현황"], ["미배차현황", "미배차현황"], ["고정노선현황", "고정노선현황"]] }, // ⭐ 2026-11-03 고정노선현황(처음 마우스 올릴 때부터)
   단가표: { code: "RATE CARD", items: [["노선별", "노선별 단가표"], ["다목적지", "다목적지 단가표"], ["manual", "직접 작성"], ["history", "발행 이력"]] },
   기사관리: { code: "DRIVERS", items: [["drv", "기사관리"], ["acc:pending", "가입 승인"], ["acc:drivers", "승인된 기사"], ["docs:driver", "기사 제출 서류"], ["docs:penalty", "과태료 · 사고 서류"]] },
   거래처관리: { code: "CLIENTS", items: [["하차지거래처", "상하차지거래처"], ["기본거래처", "기본거래처"]] }, // ⭐ 2026-11-02 고정거래처관리 메뉴 제거 · 하차지거래처 → 상하차지거래처(key는 그대로)

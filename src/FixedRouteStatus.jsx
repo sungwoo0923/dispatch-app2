@@ -501,3 +501,55 @@ export default function FixedRouteStatusHost({ company, dispatchData = [], rende
     </div>
   );
 }
+
+// 📱 2026-11-03 모바일 고정노선현황 — PC와 같은 양식 고르기·시트 연동·오더 추가, 표는 가로로 밀어 보기 · 줄을 두 번 눌러 수정
+export function MobileFixedRouteView({ company, dispatchData = [], drivers = [], clients = [], places = [], disabled = false }) {
+  const kst = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
+  const [day, setDay] = React.useState(kst());
+  const [editId, setEditId] = React.useState(null);
+  const patch = (r) => (p) => updateDoc(doc(db, r.__col || "orders", r._id || r.id), { ...p, 최종수정자: auth.currentUser?.email || "", updatedAt: Date.now() }).catch((e) => window.alert(`저장하지 못했습니다: ${e?.message || e}`));
+  return (
+    <div className="px-2 py-2 kp-m-pc">
+      <FixedRouteStatusHost company={company} dispatchData={dispatchData} places={places} drivers={drivers} disabled={disabled}
+        render={(form, rows) => {
+          const gi = (r) => { const i = (form.groups || []).findIndex((g) => g.name === r.배차표묶음); return i < 0 ? 999 : i; };
+          const list = rows.filter((r) => !day || (r.입고일 || r.하차일) === day)
+            .sort((a, b) => gi(a) - gi(b) || (a.시트줄 ?? 1e9) - (b.시트줄 ?? 1e9) || (a.배차표순번 || 0) - (b.배차표순번 || 0));
+          const head = fixedHeaderOf(form).filter((h) => h !== "선택");
+          return (
+            <div className="space-y-2">
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className="text-[12px] font-black text-[#5B6B85]">입고일</span>
+                {[["오늘", kst()], ["내일", addDaysStr(kst(), 1)], ["전체", ""]].map(([l, v]) => (
+                  <button key={l} type="button" onClick={() => setDay(v)} className={`h-8 px-3 rounded-lg text-[12.5px] font-black border ${day === v ? "bg-[#0F1A30] text-white border-[#0F1A30]" : "bg-white text-[#3A4A66] border-[#DCE3EE]"}`}>{l}</button>
+                ))}
+                <span className="inline-block w-[130px]"><CustomDatePicker value={day} onChange={(e) => setDay(e.target.value)} className="h-8 w-full px-2 rounded-lg border border-[#DCE3EE] text-[12.5px] font-semibold bg-white" /></span>
+                <span className="ml-auto text-[12px] font-bold text-[#7A8AA6]">{list.length}건 · 두 번 눌러 수정</span>
+              </div>
+              <div className="overflow-x-auto rounded-2xl border border-[#E3E8F0] bg-white" style={{ WebkitOverflowScrolling: "touch" }}>
+                <table className="text-[12.5px] border-separate border-spacing-0" style={{ minWidth: "max-content" }}>
+                  <thead><tr>{head.map((h) => <th key={h} className="sticky top-0 bg-[#1B2B4B] text-white font-extrabold px-2 py-2 whitespace-nowrap border-r border-white/10">{h}</th>)}</tr></thead>
+                  <tbody>
+                    {list.length === 0 && <tr><td colSpan={head.length} className="py-10 text-center text-[#9AA9C3] font-semibold">이 날 오더가 없어요</td></tr>}
+                    {list.map((r, i) => {
+                      const id = r._id || r.id;
+                      return (
+                        <tr key={id} className={`kp-frs-row ${editId === id ? "bg-[#EEF4FF] outline outline-2 -outline-offset-2 outline-[#2D4C82]" : i % 2 ? "bg-[#FAFBFD]" : "bg-white"}`}
+                          onDoubleClick={() => { if (!disabled) setEditId((c) => (c === id ? null : id)); }}
+                          onKeyDown={(e) => { if (e.key === "Enter" && e.target.tagName === "INPUT" && !document.querySelector("[role=listbox]")) { e.target.blur(); setTimeout(() => setEditId(null), 220); } }}>
+                          <td className="px-2 py-1.5 text-center font-bold text-[#5B6B85] border-b border-[#E9EDF4] border-r border-r-[#E3E8F0]">
+                            {editId === id ? <button type="button" onClick={() => setEditId(null)} className="h-7 px-2 rounded-lg bg-[#1B2B4B] text-white text-[11px] font-black">완료</button> : i + 1}
+                          </td>
+                          <FixedRouteCells form={form} row={r} drivers={drivers} clients={clients} disabled={disabled} editing={editId === id} onPatch={patch(r)} />
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          );
+        }} />
+    </div>
+  );
+}
