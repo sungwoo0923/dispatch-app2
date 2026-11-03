@@ -9,6 +9,9 @@
 import React from "react";
 import { db } from "./firebase";
 import { doc, onSnapshot, setDoc, serverTimestamp } from "firebase/firestore";
+import { fmtBizNo, fmtPhone } from "./formatInput";
+import { BANK_NAMES, formatAccount } from "./bankUtil";
+import { CustomSelect } from "./CustomSelect";
 
 const MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
 const store = new Map(); // 회사 → { list, listeners:Set, unsub }
@@ -16,14 +19,26 @@ function sub(co, cb) {
   let s = store.get(co);
   if (!s) { s = { list: [], listeners: new Set(), unsub: null }; store.set(co, s); }
   s.listeners.add(cb);
-  if (!s.unsub) {
-    s.unsub = onSnapshot(doc(db, "companySettings", co), (x) => {
-      s.list = (x.exists() && Array.isArray(x.data()?.bizList) ? x.data().bizList : []).filter((b) => b && String(b.name || "").trim());
-      s.listeners.forEach((f) => f(s.list));
-    }, () => { s.list = []; s.listeners.forEach((f) => f(s.list)); });
-  }
+  start(co, s);
   cb(s.list);
   return () => { s.listeners.delete(cb); };
+}
+// ⭐ 2026-11-03 연결이 한 번 거부되면(규칙 배포 전 등) 예전엔 다시 듣지 않아 새로고침 전까지 목록이 안 바뀌었다 → 잠시 뒤 다시 연결
+function start(co, s) {
+  if (s.unsub) return;
+  s.unsub = onSnapshot(doc(db, "companySettings", co), (x) => {
+    s.list = (x.exists() && Array.isArray(x.data()?.bizList) ? x.data().bizList : []).filter((b) => b && String(b.name || "").trim());
+    s.listeners.forEach((f) => f(s.list));
+  }, () => {
+    s.unsub = null;
+    setTimeout(() => { if (s.listeners.size) start(co, s); }, 8000);
+  });
+}
+// 저장 직후 화면에 바로 반영(서버 응답을 기다리지 않음)
+function setLocal(co, list) {
+  const s = store.get(co); if (!s) return;
+  s.list = list.filter((b) => b && String(b.name || "").trim());
+  s.listeners.forEach((f) => f(s.list));
 }
 
 // { company, extra: 추가 사업자들, names: [기본, ...추가], multi, defaultName, find(name) }
@@ -99,8 +114,12 @@ export function BizListEditor({ company, canEdit }) {
   const [busy, setBusy] = React.useState(false);
   const save = async (list) => {
     setBusy(true);
-    try { await setDoc(doc(db, "companySettings", company), { companyName: company, bizList: list, bizListAt: serverTimestamp() }, { merge: true }); setEdit(null); }
-    catch (e) { window.alert(`저장하지 못했습니다: ${e?.message || e}`); } finally { setBusy(false); }
+    try {
+      await setDoc(doc(db, "companySettings", company), { companyName: company, bizList: list, bizListAt: serverTimestamp() }, { merge: true });
+      setLocal(company, list); setEdit(null);
+    } catch (e) {
+      window.alert(/permission|insufficient/i.test(String(e?.message || e)) ? "저장 권한이 없습니다. (관리자·경리·인사·마스터만 저장할 수 있어요 — PC에서 firebase deploy --only firestore:rules 를 했는지도 확인해 주세요)" : `저장하지 못했습니다: ${e?.message || e}`);
+    } finally { setBusy(false); }
   };
   const submit = () => {
     const v = { ...edit.v, name: String(edit.v.name || "").trim() };
@@ -120,9 +139,12 @@ export function BizListEditor({ company, canEdit }) {
     const r = new FileReader(); r.onload = () => setEdit((e) => ({ ...e, v: { ...e.v, seal: String(r.result || "") } })); r.readAsDataURL(file);
   };
   const inp = "h-10 w-full px-3 rounded-xl border border-[#DCE3EE] bg-white text-[13.5px] font-semibold text-[#0F1A30] outline-none focus:border-[#2D4C82]";
-  const F = (k, label, ph = "") => (
-    <label className="block"><div className="text-[11.5px] font-black text-[#5B6B85] mb-1">{label}</div>
-      <input className={inp} value={edit.v[k] || ""} placeholder={ph} onChange={(e) => setEdit((x) => ({ ...x, v: { ...x.v, [k]: e.target.value } }))} /></label>
+  // ⭐ 사업자번호·전화·팩스는 하이픈 자동, 계좌번호는 은행 형식에 맞춰
+  const fmtOf = { bizNo: fmtBizNo, phone: fmtPhone, fax: fmtPhone };
+  const F = (k, label, ph = "", extra = {}) => (
+    <label className="block"><div className="text-[12.5px] font-black text-[#3A4A66] mb-1">{label}</div>
+      <input className={inp} value={edit.v[k] || ""} placeholder={ph} inputMode={fmtOf[k] || k === "bankNo" ? "numeric" : undefined} {...extra}
+        onChange={(e) => { const raw = e.target.value; const v = fmtOf[k] ? fmtOf[k](raw) : k === "bankNo" ? formatAccount(edit.v.bankName, raw) : raw; setEdit((x) => ({ ...x, v: { ...x.v, [k]: v } })); }} /></label>
   );
   return (
     <div className="mt-6 rounded-[20px] border border-[#E3E8F0] bg-white overflow-hidden">
@@ -134,11 +156,11 @@ export function BizListEditor({ company, canEdit }) {
         {canEdit && <button type="button" onClick={() => setEdit({ idx: null, v: { ...EMPTY_BIZ } })} className="ml-auto h-9 px-4 rounded-xl bg-white text-[#0F1A30] text-[13px] font-black">＋ 사업자 추가</button>}
       </div>
       <div className="p-4 space-y-2">
-        <div className="text-[12.5px] text-[#5B6B85] leading-relaxed">사업자를 추가하면 오더 등록 화면에 <b>청구 사업자</b> 고르기가 생기고, 실시간·배차현황에 사업자 표시와 필터가, 거래명세서·미수금·매출에 사업자별 조회가 생깁니다. 거래처마다 기본 사업자를 정해 두면 거래처를 고를 때 자동으로 맞춰집니다.</div>
+        <div className="text-[15px] text-[#3A4A66] leading-relaxed font-semibold">사업자를 추가하면 오더 등록 화면에 <b>청구 사업자</b> 고르기가 생기고, 실시간·배차현황에 사업자 표시와 필터가, 거래명세서·미수금·매출에 사업자별 조회가 생깁니다. 거래처마다 기본 사업자를 정해 두면 거래처를 고를 때 자동으로 맞춰집니다.</div>
         <div className="flex items-center gap-3 rounded-xl border border-[#E3E8F0] bg-[#F7F9FC] px-4 py-3">
           <span className="px-2 h-6 rounded-md bg-[#EEF2F8] border border-[#DCE3EE] text-[11px] font-black text-[#5B6B85] inline-flex items-center">기본</span>
           <span className="text-[14px] font-black text-[#0F1A30]">{company}</span>
-          <span className="text-[12px] text-[#7A8AA6]">위 회사정보(사업자번호·계좌·직인)를 그대로 씁니다</span>
+          <span className="text-[13.5px] text-[#5B6B85]">위 회사정보(사업자번호·계좌·직인)를 그대로 씁니다</span>
         </div>
         {biz.extra.map((b, i) => (
           <div key={b.id || b.name} className="flex items-center gap-3 rounded-xl border border-[#E3E8F0] px-4 py-3 flex-wrap">
@@ -152,7 +174,7 @@ export function BizListEditor({ company, canEdit }) {
             </span>}
           </div>
         ))}
-        {!biz.extra.length && <div className="text-[12.5px] text-[#9AA9C3] px-1">추가 사업자가 없습니다 — 지금은 모든 오더가 {company}(으)로 청구됩니다.</div>}
+        {!biz.extra.length && <div className="text-[14px] text-[#7A8AA6] px-1">추가 사업자가 없습니다 — 지금은 모든 오더가 {company}(으)로 청구됩니다.</div>}
       </div>
       {edit && (
         <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-[#0F1A30]/45 p-4" onMouseDown={(e) => { if (e.target === e.currentTarget && !busy) setEdit(null); }}>
@@ -165,9 +187,14 @@ export function BizListEditor({ company, canEdit }) {
               {F("type", "업태")}{F("item", "종목")}
               {F("phone", "전화")}{F("fax", "팩스")}
               <div className="col-span-2">{F("email", "청구 메일 주소(보내는 사람 표시)")}</div>
-              {F("bankName", "입금 은행")}{F("bankNo", "계좌번호")}
+              <label className="block"><div className="text-[12.5px] font-black text-[#3A4A66] mb-1">입금 은행</div>
+                <CustomSelect value={edit.v.bankName || ""} onChange={(e) => setEdit((x) => ({ ...x, v: { ...x.v, bankName: e.target.value, bankNo: formatAccount(e.target.value, x.v.bankNo || "") } }))} className={`${inp} cursor-pointer`}>
+                  <option value="">은행 선택</option>
+                  {BANK_NAMES.map((b) => <option key={b} value={b}>{b}</option>)}
+                </CustomSelect></label>
+              {F("bankNo", "계좌번호", "숫자만 입력")}
               {F("bankHolder", "예금주")}
-              <label className="block"><div className="text-[11.5px] font-black text-[#5B6B85] mb-1">직인(거래명세서 도장)</div>
+              <label className="block"><div className="text-[12.5px] font-black text-[#3A4A66] mb-1">직인(거래명세서 도장)</div>
                 <div className="flex items-center gap-2">
                   {edit.v.seal ? <img src={edit.v.seal} alt="직인" className="w-10 h-10 object-contain rounded border border-[#E3E8F0]" /> : <span className="w-10 h-10 rounded border border-dashed border-[#C9D3E3]" />}
                   <input type="file" accept="image/png,image/jpeg,image/webp" onChange={(e) => onSeal(e.target.files?.[0])} className="text-[12px]" />
