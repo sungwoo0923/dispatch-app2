@@ -51239,92 +51239,99 @@ const patchMonthOnDoc = async (id, yyyymm, status, dateStr) => {
   const COMPANY_PRINT = React.useMemo(() => { const b = csBiz.multi && csBizSel ? csBiz.find(csBizSel) : null; return b ? printInfoForBiz(COMPANY_PRINT_BASE, b) : COMPANY_PRINT_BASE; }, [COMPANY_PRINT_BASE, csBizSel, csBiz]);
 
   const buildBatchInvoiceHtml = (item, cp) => {
+    // ⭐ 2026-11-03 리디자인 — 화면 미리보기와 같은 남색 단색 문서
     const rows = item.mapped || [];
     const cInfo = item.clientInfo || {};
     const sup = item.totals?.공급가 || 0;
     const tax = item.totals?.세액 || 0;
     const total = sup + tax;
     const n2k = numberToKorean;
+    const INK = "#0F1A30", SUB = "#5B6B85", MUTE = "#9AA9C3", LINE = "#E3E8F0", HAIR = "#EEF2F8", SOFT = "#F4F6FA";
+    const MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
     const receiveFields = [["상호",cInfo.거래처명],["대표자",cInfo.대표자],["사업자번호",cInfo.사업자번호],["주소",cInfo.주소],["업태",cInfo.업태],["종목",cInfo.종목]];
-    const supplyFields = [["상호",cp.name],["사업자번호",cp.bizNo],["주소",cp.addr],["업태",cp.type],["종목",cp.item]];
+    const supplyFields = [["사업자번호",cp.bizNo],["주소",cp.addr],["업태",cp.type],["종목",cp.item],["연락처",cp.contact]];
+    const td = `padding:6px 6px;font-size:11px;color:${INK};border-bottom:1px solid ${HAIR};text-align:center;vertical-align:middle`;
+    const tdNum = `${td};text-align:right;font-family:${MONO};white-space:nowrap`;
     const rowsHtml = rows.map((m, i) => `
-      <tr style="border-bottom:1px solid #f3f4f6;background:${i%2===0?"#fff":"#f9fafb"}">
-        <td style="padding:7px 10px;text-align:center;font-size:12px;color:#9ca3af">${i+1}</td>
-        <td style="padding:7px 10px;font-size:12px;color:#374151">${m.상차일||""}</td>
-        <td style="padding:7px 10px;font-size:12px;color:#374151">${m.상차지||""}</td>
-        <td style="padding:7px 10px;font-size:12px;color:#374151">${m.하차지||""}</td>
-        <td style="padding:7px 10px;font-size:12px;color:#374151">${m.경유지||""}</td>
-        <td style="padding:7px 10px;font-size:12px;color:#374151">${m.화물명||""}</td>
-        <td style="padding:7px 10px;font-size:12px;color:#374151">${m.기사명||""}</td>
-        <td style="padding:7px 10px;font-size:12px;color:#374151">${m.차량번호||""}</td>
-        <td style="padding:7px 10px;text-align:right;font-size:12px;color:#374151">${(m.공급가액||0).toLocaleString()}</td>
-        <td style="padding:7px 10px;text-align:right;font-size:12px;color:#374151">${(m.세액||0).toLocaleString()}</td>
-        <td style="padding:7px 10px;text-align:right;font-size:12px;font-weight:600;color:#1B2B4B">${((m.공급가액||0)+(m.세액||0)).toLocaleString()}</td>
+      <tr>
+        <td style="${td};color:${MUTE};font-family:${MONO}">${i+1}</td>
+        <td style="${td};font-family:${MONO};white-space:nowrap">${m.상차일||""}</td>
+        <td style="${td}">${m.상차지||""}</td>
+        <td style="${td}">${m.하차지||""}</td>
+        <td style="${td}">${m.경유지||""}</td>
+        <td style="${td}">${m.화물명||""}</td>
+        <td style="${td}">${m.기사명||""}</td>
+        <td style="${td};font-size:10.5px">${m.차량번호||""}</td>
+        <td style="${tdNum};font-weight:700">${(m.공급가액||0).toLocaleString()}</td>
+        <td style="${tdNum};color:${SUB}">${(m.세액||0).toLocaleString()}</td>
+        <td style="${tdNum};font-weight:900">${((m.공급가액||0)+(m.세액||0)).toLocaleString()}</td>
       </tr>`).join("");
-    const infoRow = (k, v, last=false) => `<tr style="border-bottom:${last?"none":"1px solid #f3f4f6"}"><td style="padding:6px 12px 6px 0;color:#6b7280;font-weight:600;font-size:13px;white-space:nowrap;width:90px">${k}</td><td style="padding:6px 0;color:#111827;font-weight:500;font-size:13px">${v||"-"}</td></tr>`;
-    return `<div style="font-family:'Malgun Gothic','Apple SD Gothic Neo',sans-serif;background:#fff;width:1100px;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden">
-      <div style="background:#1B2B4B;padding:20px 32px;display:flex;justify-content:space-between;align-items:center">
-        <div>
-          <div style="font-size:22px;font-weight:900;color:#fff;margin:0">거래명세서</div>
-          <div style="font-size:13px;color:rgba(255,255,255,0.6);margin-top:4px">거래기간 : ${item.start||""} ~ ${item.end||""}</div>
-        </div>
-        <div style="text-align:right;color:rgba(255,255,255,0.65);font-size:12px;line-height:1.9">
-          <div>${cp.name} · 대표 ${cp.ceo}</div><div>${cp.contact}</div><div>${cp.bank}</div>
-        </div>
-      </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;border-bottom:1px solid #e5e7eb">
-        <div style="padding:20px;border-right:1px solid #e5e7eb">
-          <div style="font-size:11px;font-weight:700;color:#9ca3af;margin-bottom:8px;letter-spacing:0.08em;text-transform:uppercase">공급받는자</div>
-          <table style="width:100%"><tbody>
-            ${receiveFields.map(([k,v],i)=>infoRow(k,v,i===receiveFields.length-1)).join("")}
-          </tbody></table>
-        </div>
-        <div style="padding:20px">
-          <div style="font-size:11px;font-weight:700;color:#9ca3af;margin-bottom:8px;letter-spacing:0.08em;text-transform:uppercase">공급자</div>
-          <table style="width:100%"><tbody>
-            <tr style="border-bottom:1px solid #f3f4f6">
-              <td style="padding:6px 12px 6px 0;color:#6b7280;font-weight:600;font-size:13px;width:90px">상호</td>
-              <td style="padding:6px 0;color:#111827;font-weight:500;font-size:13px">${cp.name}</td>
-            </tr>
-            <tr style="border-bottom:1px solid #f3f4f6">
-              <td style="padding:6px 12px 6px 0;color:#6b7280;font-weight:600;font-size:13px;width:90px">대표자</td>
-              <td style="padding:6px 0;color:#111827;font-weight:500;font-size:13px">
-                <div style="display:flex;align-items:center">
-                  <span style="flex:1">${cp.ceo}</span>
-                  <span style="position:relative;display:inline-flex;align-items:center;justify-content:center;width:52px;height:52px;margin-right:4px">
-                    <img src="${cp.seal}" alt="" onerror="this.style.display='none'" style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:46px;height:46px;opacity:0.9;pointer-events:none;mix-blend-mode:multiply" />
-                    <span style="position:relative;z-index:1;font-size:13px;color:#333">(인)</span>
-                  </span>
-                </div>
-              </td>
-            </tr>
-            ${supplyFields.map(([k,v],i)=>infoRow(k,v,i===supplyFields.length-1)).join("")}
-          </tbody></table>
-        </div>
-      </div>
-      <div style="padding:12px 24px;background:#f9fafb;border-bottom:1px solid #e5e7eb;display:flex;justify-content:space-between;align-items:center">
-        <div style="font-size:13px;font-weight:600;color:#6b7280">합계금액 (공급가액+부가세)</div>
-        <div style="font-size:15px;font-weight:800;color:#1B2B4B">일금 ${n2k(total)} 원정 &nbsp;<span style="font-size:13px;font-weight:400;color:#6b7280">(W ${total.toLocaleString()})</span></div>
-      </div>
-      <table style="width:100%;border-collapse:collapse">
+    const infoRow = (k, v, i) => `<tr><td style="padding:5px 10px;width:70px;color:${SUB};font-weight:700;font-size:11px;white-space:nowrap;border-top:${i?`1px solid ${HAIR}`:"none"}">${k}</td><td style="padding:5px 10px 5px 0;color:${INK};font-weight:600;font-size:11.5px;border-top:${i?`1px solid ${HAIR}`:"none"}">${v||"-"}</td></tr>`;
+    const partyHead = (ko, en) => `<div style="background:${SOFT};padding:7px 10px;border-bottom:1px solid ${LINE};display:flex;justify-content:space-between;align-items:center"><span style="font-size:11.5px;font-weight:900;color:${INK};letter-spacing:0.08em">${ko}</span><span style="font-family:${MONO};font-size:8.5px;font-weight:800;letter-spacing:0.22em;color:${MUTE}">${en}</span></div>`;
+    const foot = `background:${SOFT};border-top:2px solid ${INK};border-bottom:1px solid ${LINE};padding:8px 6px`;
+    return `<div style="font-family:'Pretendard','Malgun Gothic','Apple SD Gothic Neo',sans-serif;background:#fff;width:1100px;box-sizing:border-box;padding:28px;color:${INK}">
+      <table style="width:100%;border-collapse:collapse"><tbody><tr>
+        <td style="padding:0;vertical-align:bottom">
+          <div style="font-family:${MONO};font-size:9px;font-weight:800;letter-spacing:0.3em;color:${MUTE}">TRANSACTION STATEMENT</div>
+          <div style="font-size:24px;font-weight:900;letter-spacing:0.3em;margin-top:4px">거래명세서</div>
+        </td>
+        <td style="padding:0;vertical-align:bottom;text-align:right">
+          <div style="font-size:10px;font-weight:700;color:${SUB}">거래기간</div>
+          <div style="font-family:${MONO};font-size:13px;font-weight:800;margin-top:2px">${item.start||""} ~ ${item.end||""}</div>
+        </td>
+      </tr></tbody></table>
+      <div style="height:2px;background:${INK};margin:12px 0 14px"></div>
+      <table style="width:100%;border-collapse:collapse"><tbody><tr>
+        <td style="width:50%;padding:0 7px 0 0;vertical-align:top">
+          <div style="border:1px solid ${LINE};border-radius:8px;overflow:hidden">${partyHead("공급받는자","RECIPIENT")}
+            <table style="width:100%;border-collapse:collapse"><tbody>${receiveFields.map(([k,v],i)=>infoRow(k,v,i)).join("")}</tbody></table>
+          </div>
+        </td>
+        <td style="width:50%;padding:0 0 0 7px;vertical-align:top">
+          <div style="border:1px solid ${LINE};border-radius:8px;overflow:hidden">${partyHead("공급자","SUPPLIER")}
+            <table style="width:100%;border-collapse:collapse"><tbody>
+              ${infoRow("상호", cp.name, 0)}
+              <tr>
+                <td style="padding:1px 10px;width:70px;color:${SUB};font-weight:700;font-size:11px;white-space:nowrap;border-top:1px solid ${HAIR}">대표자</td>
+                <td style="padding:1px 6px 1px 0;color:${INK};font-weight:600;font-size:11.5px;border-top:1px solid ${HAIR}">
+                  <div style="display:flex;align-items:center">
+                    <span style="flex:1">${cp.ceo||"-"}</span>
+                    <span style="position:relative;display:inline-flex;align-items:center;justify-content:center;width:44px;height:44px">
+                      <img src="${cp.seal}" alt="" onerror="this.style.display='none'" style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:42px;height:42px;opacity:0.9;pointer-events:none;mix-blend-mode:multiply" />
+                      <span style="position:relative;z-index:1;font-size:11.5px;color:${SUB}">(인)</span>
+                    </span>
+                  </div>
+                </td>
+              </tr>
+              ${supplyFields.map(([k,v],i)=>infoRow(k,v,i+2)).join("")}
+            </tbody></table>
+          </div>
+        </td>
+      </tr></tbody></table>
+      <table style="width:100%;border-collapse:collapse;margin-top:12px;border:1.5px solid ${INK}"><tbody><tr>
+        <td style="padding:9px 14px;white-space:nowrap"><span style="font-size:12px;font-weight:900">합계금액</span><span style="font-size:10.5px;color:${SUB};margin-left:6px">(공급가액+부가세)</span></td>
+        <td style="padding:9px 14px;text-align:right"><span style="font-size:13px;font-weight:800">일금 ${n2k(total)} 원정</span><span style="font-family:${MONO};font-size:15px;font-weight:900;margin-left:12px;white-space:nowrap">(₩ ${total.toLocaleString()})</span></td>
+      </tr></tbody></table>
+      <table style="width:100%;border-collapse:collapse;margin-top:12px">
         <thead>
-          <tr style="background:#1B2B4B">
-            ${["No","날짜","상차지","하차지","경유지","화물명","기사명","차량번호","공급가액","세액(10%)","합계"].map(h=>`<th style="padding:9px 10px;font-size:12px;color:#fff;font-weight:700;text-align:center;white-space:nowrap">${h}</th>`).join("")}
+          <tr>
+            ${["No","날짜","상차지","하차지","경유지","화물명","기사명","차량번호","공급가액","세액(10%)","합계"].map(h=>`<th style="background:${INK};color:#fff;font-size:10.5px;font-weight:800;padding:7px 6px;text-align:center;white-space:nowrap">${h}</th>`).join("")}
           </tr>
         </thead>
         <tbody>${rowsHtml}</tbody>
         <tfoot>
-          <tr style="background:#1B2B4B">
-            <td colspan="8" style="padding:10px 16px;font-size:13px;font-weight:700;color:#fff;text-align:center">소 계</td>
-            <td style="padding:10px 10px;text-align:right;font-size:13px;font-weight:700;color:#fff">${sup.toLocaleString()}</td>
-            <td style="padding:10px 10px;text-align:right;font-size:13px;font-weight:700;color:#93c5fd">${tax.toLocaleString()}</td>
-            <td style="padding:10px 10px;text-align:right;font-size:13px;font-weight:700;color:#fde68a">${total.toLocaleString()}</td>
+          <tr>
+            <td colspan="8" style="${td};${foot};font-weight:900;letter-spacing:0.4em">소 계</td>
+            <td style="${tdNum};${foot};font-weight:800">${sup.toLocaleString()}</td>
+            <td style="${tdNum};${foot};font-weight:800;color:${SUB}">${tax.toLocaleString()}</td>
+            <td style="${tdNum};${foot};font-weight:900">${total.toLocaleString()}</td>
           </tr>
         </tfoot>
       </table>
-      <div style="padding:16px 24px;background:#f0f2f6;border-top:2px solid #1B2B4B;font-size:15px;font-weight:600;color:#1B2B4B;text-align:center;letter-spacing:0.01em">
-        입금계좌: ${cp.bank} &nbsp;&nbsp;|&nbsp;&nbsp; 문의: ${cp.email}
-      </div>
+      <table style="width:100%;border-collapse:collapse;margin-top:14px;background:${SOFT}"><tbody><tr>
+        <td style="padding:10px 14px;font-size:12px"><span style="font-family:${MONO};font-size:8.5px;font-weight:800;letter-spacing:0.22em;color:${MUTE};margin-right:8px">BANK</span><span style="color:${SUB};font-weight:700">입금계좌</span><span style="font-weight:900;margin-left:8px">${cp.bank||"-"}</span></td>
+        <td style="padding:10px 14px;font-size:12px;text-align:right"><span style="color:${SUB};font-weight:700">문의</span><span style="font-weight:800;margin-left:8px">${cp.email||"-"}</span></td>
+      </tr></tbody></table>
     </div>`;
   };
 
@@ -51388,10 +51395,10 @@ const patchMonthOnDoc = async (id, yyyymm, status, dateStr) => {
     const win = window.open("", "_blank");
     win.document.write(`
       <html><head><title>거래명세서 - ${client || ""}</title>
-      <style>body{margin:0;padding:20px;font-family:sans-serif;}table{border-collapse:collapse;width:100%;}
-      th,td{border:1px solid #ccc;padding:6px 8px;font-size:12px;text-align:center;}
-      th{background:#1B2B4B;color:#fff;}.text-right{text-align:right;}
-      @media print{@page{margin:10mm;}}</style></head><body>
+      <style>*{box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+      body{margin:0;padding:20px;font-family:'Pretendard','Malgun Gothic','Apple SD Gothic Neo',sans-serif;color:#0F1A30;background:#fff;}
+      table{border-collapse:collapse;}[data-html2canvas-ignore]{display:none!important;}
+      @media print{body{padding:0;}@page{size:A4;margin:10mm;}}</style></head><body>
       ${area.innerHTML}</body></html>
     `);
     win.document.close();
@@ -52526,25 +52533,6 @@ const handleBatchSettle = async (targetStatus) => {
     sflowToast(`${list.length}건 입금 반영 완료`, "success");
   };
 
-  const tabBtn = (key, label, badge) => (
-    <button
-      key={key}
-      onClick={() => setTab(key)}
-      className={`px-5 py-2.5 text-[13px] font-semibold border-b-2 -mb-px transition-colors relative ${
-        tab === key
-          ? "border-[#1B2B4B] text-[#1B2B4B]"
-          : "border-transparent text-gray-500 hover:text-gray-600"
-      }`}
-    >
-      {label}
-      {badge > 0 && (
-        <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 bg-rose-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center leading-none">
-          {badge > 9 ? "9+" : badge}
-        </span>
-      )}
-    </button>
-  );
-
   // ★ 미수금 미정산 월 수 (배지용)
   const unsettledBadge = useMemo(() => {
     if (!selClient) return 0;
@@ -52567,48 +52555,125 @@ const handleBatchSettle = async (targetStatus) => {
     return logs;
   }, [emailLogs, mailTypeFilter, mailSearch, mailSort]);
 
+  // ⭐ 2026-11-03 거래처정산 리디자인 — 공통 스타일(남색 단색·모노 라벨·정렬된 버튼)
+  const csInp = "h-9 w-full rounded-lg border border-[#D5DDEA] bg-white px-2.5 text-[13px] font-semibold text-[#0F1A30] outline-none focus:border-[#1B2B4B] focus:ring-2 focus:ring-[#1B2B4B]/10";
+  const csLab = "block text-[11px] font-black text-[#5B6B85] mb-1 tracking-tight";
+  const csBtn = "h-9 px-3 rounded-lg border border-[#D5DDEA] bg-white text-[12.5px] font-bold text-[#1B2B4B] hover:bg-[#F4F6FA] hover:border-[#B8C4D8] transition inline-flex items-center justify-center gap-1.5 whitespace-nowrap disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-white";
+  const csBtnPri = "h-9 px-4 rounded-lg bg-[#0F1A30] text-white text-[12.5px] font-black hover:bg-[#1B2B4B] transition inline-flex items-center justify-center gap-1.5 whitespace-nowrap disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-[#0F1A30]";
+  const csCard = "bg-white rounded-2xl border border-[#E3E8F0] shadow-[0_1px_2px_rgba(15,26,48,0.04)]";
+  const csSeg = "inline-flex p-1 rounded-xl bg-[#EEF2F8] border border-[#E3E8F0]";
+  const csSegBtn = (on) => `h-7 px-3 rounded-lg text-[12px] font-black transition whitespace-nowrap ${on ? "bg-[#0F1A30] text-white shadow-sm" : "text-[#5B6B85] hover:text-[#0F1A30]"}`;
+  const csGrid = "linear-gradient(rgba(143,176,240,.07) 1px, transparent 1px) 0 0/22px 22px, linear-gradient(90deg, rgba(143,176,240,.07) 1px, transparent 1px) 0 0/22px 22px";
+  const csHead = (en, title, right) => (
+    <div className="flex items-center gap-2 mb-3 min-h-[30px]">
+      <div className="min-w-0">
+        <div className="text-[9.5px] font-extrabold tracking-[0.24em] text-[#9AA9C3] leading-none" style={{ fontFamily: KP_MONO }}>{en}</div>
+        <div className="text-[13.5px] font-black text-[#0F1A30] mt-1 leading-none">{title}</div>
+      </div>
+      {right && <div className="ml-auto flex items-center gap-1.5">{right}</div>}
+    </div>
+  );
+  const csPendingScheduled = scheduledEmailList.filter(s => s.status === "pending").length;
+  // 오더 상세 팝업 열기(왼쪽 목록·오른쪽 미리보기 공용)
+  const openOrderPopup = (order) => {
+    if (!order) return;
+    setOrderPopup(order);
+    setOrderPopupEdit({
+      상차지명: order.상차지명 || "",
+      하차지명: order.하차지명 || "",
+      화물내용: order.화물내용 || "",
+      이름: order.이름 || "",
+      차량번호: order.차량번호 || "",
+      청구운임: String(order.청구운임 || ""),
+      기사운임: String(order.기사운임 || ""),
+      상차시간: order.상차시간 || "",
+      하차시간: order.하차시간 || "",
+      비고: order.비고 || "",
+    });
+  };
+  // 명세서 문서(미리보기 = 인쇄·PDF·엑셀·메일 첨부 원본) — 인쇄 창에서도 같게 보이도록 인라인 스타일만 쓴다
+  const DOC = { ink: "#0F1A30", sub: "#5B6B85", mute: "#9AA9C3", line: "#E3E8F0", hair: "#EEF2F8", soft: "#F4F6FA", font: "'Pretendard','Malgun Gothic','Apple SD Gothic Neo',sans-serif", mono: KP_MONO };
+  const docCellK = (i) => ({ padding: "5px 10px", width: 70, color: DOC.sub, fontSize: 11, fontWeight: 700, whiteSpace: "nowrap", verticalAlign: "middle", borderTop: i ? `1px solid ${DOC.hair}` : "none", textAlign: "left" });
+  const docCellV = (i) => ({ padding: "5px 10px 5px 0", color: DOC.ink, fontSize: 11.5, fontWeight: 600, verticalAlign: "middle", borderTop: i ? `1px solid ${DOC.hair}` : "none", wordBreak: "keep-all", textAlign: "left" });
+  const docPartyHead = (ko, en) => (
+    <div style={{ background: DOC.soft, padding: "7px 10px", borderBottom: `1px solid ${DOC.line}`, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+      <span style={{ fontSize: 11.5, fontWeight: 900, color: DOC.ink, letterSpacing: "0.08em" }}>{ko}</span>
+      <span style={{ fontFamily: DOC.mono, fontSize: 8.5, fontWeight: 800, letterSpacing: "0.22em", color: DOC.mute }}>{en}</span>
+    </div>
+  );
+  const docTh = { background: DOC.ink, color: "#fff", fontSize: 10.5, fontWeight: 800, padding: "7px 6px", textAlign: "center", whiteSpace: "nowrap", border: "none" };
+  const docTd = { padding: "6px 6px", fontSize: 11, color: DOC.ink, borderBottom: `1px solid ${DOC.hair}`, textAlign: "center", verticalAlign: "middle", wordBreak: "keep-all" };
+  const docNum = { ...docTd, textAlign: "right", fontFamily: DOC.mono, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" };
+
   return (
     <>
-    <div className="p-4 overflow-x-auto">
-      {/* ⭐ 2026-11-03 여러 사업자 — 이 화면의 거래명세서·미수금은 고른 사업자 것만, 공급자 정보도 그 사업자로 */}
-      {csBiz.multi && (
-        <div className="mb-4 flex items-center gap-3 flex-wrap rounded-2xl px-4 py-3 text-white" style={{ background: "linear-gradient(120deg,#0B1428 0%,#1B2B4B 60%,#2D4C82 100%)" }}>
-          <span className="text-[10.5px] font-extrabold tracking-[0.28em] text-[#8FB0F0]" style={{ fontFamily: "'JetBrains Mono',ui-monospace,monospace" }}>BILLING ENTITY</span>
-          <div className="inline-flex p-0.5 rounded-xl bg-white/10 border border-white/15">
-            {csBiz.names.map((n) => (
-              <button key={n} type="button" onClick={() => setCsBizSel(n === csBiz.defaultName ? "" : n)} className={`h-9 px-4 rounded-lg text-[13px] font-black transition ${csBizCur === n ? "bg-white text-[#0F1A30]" : "text-white/75 hover:text-white"}`}>{n}</button>
-            ))}
+    <div className="p-4 min-w-0">
+      {/* ⭐ 2026-11-03 리디자인 — 머리(다크·그리드): 화면 제목 + 탭 + 청구 사업자 */}
+      <div className="relative overflow-hidden rounded-2xl px-5 py-4 mb-4 text-white" style={{ background: "radial-gradient(900px 300px at 85% -30%, rgba(110,149,232,.28), transparent 60%), linear-gradient(120deg,#060C1A 0%,#0F1A30 45%,#1B2B4B 100%)" }}>
+        <div className="absolute inset-0 pointer-events-none" style={{ background: csGrid }} />
+        <div className="relative flex items-center gap-4 flex-wrap">
+          <div className="w-10 h-10 rounded-2xl flex items-center justify-center shrink-0" style={{ background: "linear-gradient(135deg,#2D4C82,#0B1428)", border: "1px solid rgba(207,224,255,.3)", boxShadow: "0 0 0 4px rgba(143,176,240,.08), 0 0 24px rgba(110,149,232,.25)" }}>
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#CFE0FF" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2z" /><path d="M9 8h6M9 12h6M9 16h3" /></svg>
           </div>
-          <span className="text-[12px] text-white/65">거래명세서·미수금·메일이 <b className="text-white">{csBizCur}</b> 이름·사업자번호·계좌·직인으로 나갑니다</span>
+          <div className="min-w-0">
+            <div className="text-[10.5px] font-extrabold tracking-[0.32em] text-[#8FB0F0]" style={{ fontFamily: KP_MONO }}>CLIENT SETTLEMENT · {tab === "invoice" ? "STATEMENT" : tab === "unsettledMonth" ? "RECEIVABLES" : "OUTBOX"}</div>
+            <div className="text-[19px] font-black mt-0.5 tracking-tight">{tab === "invoice" ? "거래명세서" : tab === "unsettledMonth" ? "미수금관리" : "보낸메일함"}</div>
+          </div>
+          <div className="ml-auto flex items-center gap-2 flex-wrap">
+            {/* ⭐ 2026-11-03 여러 사업자 — 이 화면의 거래명세서·미수금은 고른 사업자 것만, 공급자 정보도 그 사업자로 */}
+            {csBiz.multi && (
+              <div className="flex items-center gap-2" title={`거래명세서·미수금·메일이 ${csBizCur} 이름·사업자번호·계좌·직인으로 나갑니다`}>
+                <span className="text-[9.5px] font-extrabold tracking-[0.24em] text-white/45" style={{ fontFamily: KP_MONO }}>BILLING ENTITY</span>
+                <div className="inline-flex p-1 rounded-xl bg-white/[0.06] border border-white/15">
+                  {csBiz.names.map((n) => (
+                    <button key={n} type="button" onClick={() => setCsBizSel(n === csBiz.defaultName ? "" : n)} className={`h-8 px-3 rounded-lg text-[12.5px] font-black transition ${csBizCur === n ? "bg-[#CFE0FF] text-[#0F1A30]" : "text-white/70 hover:text-white"}`}>{n}</button>
+                  ))}
+                </div>
+              </div>
+            )}
+            <div className="inline-flex p-1 rounded-xl bg-white/[0.06] border border-white/15">
+              {[["invoice", "거래명세서", 0], ["unsettledMonth", "미수금관리", unsettledBadge], ["sentmails", "보낸메일함", emailLogs.length]].map(([key, label, badge]) => (
+                <button key={key} type="button" onClick={() => setTab(key)}
+                  className={`h-8 px-3.5 rounded-lg text-[12.5px] font-black transition inline-flex items-center gap-1.5 ${tab === key ? "bg-white text-[#0F1A30] shadow-sm" : "text-white/70 hover:text-white"}`}>
+                  {label}
+                  {badge > 0 && (
+                    <span className={`min-w-[18px] h-[18px] px-1 rounded-md text-[10px] font-black inline-flex items-center justify-center tabular-nums ${tab === key ? "bg-[#0F1A30] text-white" : "bg-white/15 text-white"}`} style={{ fontFamily: KP_MONO }}>
+                      {key === "unsettledMonth" ? (badge > 9 ? "9+" : badge) : (badge > 99 ? "99+" : badge)}
+                    </span>
+                  )}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
-      )}
-      {/* 탭 */}
-      <div className="flex gap-0 mb-5 border-b border-gray-200">
-        {tabBtn("invoice", "거래명세서", 0)}
-        {tabBtn("unsettledMonth", "미수금관리", unsettledBadge)}
-        {tabBtn("sentmails", "보낸메일함", emailLogs.length)}
+        {csBiz.multi && (
+          <div className="relative mt-2.5 text-[11.5px] text-white/55">거래명세서·미수금·메일이 <b className="text-white">{csBizCur}</b> 이름·사업자번호·계좌·직인으로 나갑니다</div>
+        )}
       </div>
 
       {/* ══════════════ 거래명세서 탭 ══════════════ */}
       {tab === "invoice" && (
         <>
-          {/* 검색 바 */}
-          <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 mb-4">
-            <div className="flex flex-wrap items-end gap-3">
-              {/* ★ 검색 타입 + 입력 + 드롭다운 */}
-              <div className="relative" ref={dropdownRef}>
-                <div className="flex items-center border-2 border-[#1B2B4B] rounded-lg overflow-hidden h-[38px]">
-                  <CustomSelect
-                    className="px-2 h-full text-[13px] bg-[#1B2B4B] text-white outline-none cursor-pointer"
-                    value={searchType}
-                    onChange={e => { setSearchType(e.target.value); setSearchInput(""); setClient(""); setSearched(false); setDropdownOpen(false); }}
-                  >
-                    <option value="거래처명">거래처명</option>
-                    <option value="기사명">기사명</option>
-                  </CustomSelect>
+          <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,43fr)_minmax(0,57fr)] gap-4 items-start">
+            {/* ── 왼쪽: 조회 · 합계 · 포함할 오더 · 발송 ── */}
+            <div className="space-y-3 min-w-0">
+              {/* 조회 조건 */}
+              <div className={`${csCard} p-4`}>
+                {csHead("QUERY", "조회 조건", (
+                  <div className={csSeg}>
+                    {["거래처명", "기사명"].map((t) => (
+                      <button key={t} type="button" className={csSegBtn(searchType === t)}
+                        onClick={() => { if (searchType === t) return; setSearchType(t); setSearchInput(""); setClient(""); setSearched(false); setDropdownOpen(false); }}>{t}</button>
+                    ))}
+                  </div>
+                ))}
+                {/* ★ 검색 입력 + 자동완성 드롭다운 */}
+                <label className={csLab}>{searchType}</label>
+                <div className="relative" ref={dropdownRef}>
+                  <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#9AA9C3] pointer-events-none" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="M20 20l-3.5-3.5" /></svg>
                   <input autoComplete="off"
                     ref={inputRef}
-                    className="px-3 h-full text-[13px] w-52 outline-none"
+                    className={`${csInp} pl-8`}
                     placeholder={`${searchType} 입력 (자동완성)`}
                     value={searchInput}
                     onChange={e => {
@@ -52621,109 +52686,207 @@ const handleBatchSettle = async (targetStatus) => {
                     }}
                     onKeyDown={handleInputKeyDown}
                   />
+                  {dropdownOpen && dropdownOptions.length > 0 && (
+                    <div className="absolute z-50 left-0 right-0 mt-1 bg-white border border-[#DCE3EE] rounded-xl shadow-[0_12px_32px_rgba(15,26,48,0.16)] max-h-[260px] overflow-y-auto py-1">
+                      {dropdownOptions.map((name, i) => (
+                        <div
+                          key={name + i}
+                          ref={el => dropdownItemRefs.current[i] = el}
+                          className={`px-3.5 py-2 text-[13px] cursor-pointer transition ${
+                            i === dropdownIdx ? "bg-[#EEF2F8] text-[#0F1A30] font-bold" : "text-[#3A4A66] hover:bg-[#F4F6FA]"
+                          }`}
+                          onMouseEnter={() => setDropdownIdx(i)}
+                          onMouseDown={e => { e.preventDefault(); selectDropdownItem(name); }}
+                        >
+                          {(() => {
+                            const q = searchInput.trim();
+                            if (!q) return name;
+                            const idx = name.toLowerCase().indexOf(q.toLowerCase());
+                            if (idx < 0) return name;
+                            return (
+                              <>
+                                {name.slice(0, idx)}
+                                <span className="text-[#0F1A30] font-black underline decoration-[#8FB0F0] decoration-2 underline-offset-2">{name.slice(idx, idx + q.length)}</span>
+                                {name.slice(idx + q.length)}
+                              </>
+                            );
+                          })()}
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
-                {/* ★ 드롭다운 목록 */}
-                {dropdownOpen && dropdownOptions.length > 0 && (
-                  <div className="absolute z-50 left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-xl max-h-[260px] overflow-y-auto">
-                    {dropdownOptions.map((name, i) => (
-                      <div
-                        key={name + i}
-                        ref={el => dropdownItemRefs.current[i] = el}
-                        className={`px-4 py-2.5 text-[13px] cursor-pointer transition ${
-                          i === dropdownIdx ? "bg-[#EEF3FC] text-[#1B2B4B] font-semibold" : "text-gray-700 hover:bg-gray-50"
-                        }`}
-                        onMouseEnter={() => setDropdownIdx(i)}
-                        onMouseDown={e => { e.preventDefault(); selectDropdownItem(name); }}
-                      >
-                        {/* ★ 검색어 하이라이트 */}
-                        {(() => {
-                          const q = searchInput.trim();
-                          if (!q) return name;
-                          const idx = name.toLowerCase().indexOf(q.toLowerCase());
-                          if (idx < 0) return name;
-                          return (
-                            <>
-                              {name.slice(0, idx)}
-                              <span className="text-[#1B2B4B] font-bold">{name.slice(idx, idx + q.length)}</span>
-                              {name.slice(idx + q.length)}
-                            </>
-                          );
-                        })()}
+
+                {/* ★ 기간 + 퀵셀렉트 */}
+                <div className="mt-3 flex items-center justify-between gap-2">
+                  <label className={`${csLab} mb-0`}>기간 (상차일)</label>
+                  <div className={csSeg}>
+                    <button type="button" onClick={setThisMonth} className={csSegBtn(false)}><EditableText id="misc.btn.49310.이번달" defaultText="이번달" /></button>
+                    <button type="button" onClick={setLastMonth} className={csSegBtn(false)}><EditableText id="misc.btn.49311.지난달" defaultText="지난달" /></button>
+                    <button type="button" onClick={setThisYear} className={csSegBtn(false)}><EditableText id="misc.btn.49312.올해전체" defaultText="올해전체" /></button>
+                  </div>
+                </div>
+                <div className="mt-1.5 grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-1.5">
+                  <CustomDatePicker className={`${csInp} text-left tabular-nums`} placeholder="시작일" value={start} onChange={e => setStart(e.target.value)} />
+                  <span className="text-[#9AA9C3] font-bold">~</span>
+                  <CustomDatePicker className={`${csInp} text-left tabular-nums`} placeholder="종료일" value={end} onChange={e => setEnd(e.target.value)} />
+                </div>
+
+                <div className="mt-3 grid grid-cols-[auto_minmax(0,1fr)] gap-2">
+                  <button type="button" className={csBtn}
+                    onClick={() => { setSearchInput(""); setClient(""); setStart(""); setEnd(""); setSearched(false); setDropdownOpen(false); }}>
+                    초기화
+                  </button>
+                  <button type="button" className={csBtnPri}
+                    onClick={() => {
+                      if (!searchInput.trim()) return showAlert("검색어를 입력하세요.");
+                      setClient(searchInput.trim());
+                      setSearched(true);
+                      setDropdownOpen(false);
+                    }}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="M20 20l-3.5-3.5" /></svg>
+                    조회
+                  </button>
+                </div>
+              </div>
+
+              {/* 미조회 상태 */}
+              {!searched && (
+                <div className={`${csCard} px-5 py-8 text-center`}>
+                  <div className="text-[9.5px] font-extrabold tracking-[0.28em] text-[#9AA9C3]" style={{ fontFamily: KP_MONO }}>READY</div>
+                  <div className="text-[14px] font-black text-[#0F1A30] mt-1.5">거래처명 또는 기사명을 입력 후 조회하세요.</div>
+                  <div className="text-[12px] mt-1 text-[#9AA9C3]">검색창에 입력하면 자동완성 목록이 표시됩니다</div>
+                </div>
+              )}
+
+              {/* 조회 결과 합계 — 디지털 계기판 */}
+              {searched && (
+                <div className="relative overflow-hidden rounded-2xl p-4 text-white" style={{ background: "linear-gradient(120deg,#0B1428 0%,#1B2B4B 100%)" }}>
+                  <div className="absolute inset-0 pointer-events-none" style={{ background: csGrid }} />
+                  <div className="relative flex items-center gap-2">
+                    <span className="text-[9.5px] font-extrabold tracking-[0.24em] text-[#8FB0F0]" style={{ fontFamily: KP_MONO }}>TOTAL · 청구 합계</span>
+                    <span className="ml-auto text-[11px] font-bold text-white/60 tabular-nums" style={{ fontFamily: KP_MONO }}>조회 {rowsInvoice.length}건 중 <b className="text-white">{mapped.length}건 선택</b></span>
+                  </div>
+                  <div className="relative mt-1 text-[26px] font-black tabular-nums leading-tight" style={{ fontFamily: KP_MONO }}>
+                    {won(합계공급가 + 합계세액)}<span className="ml-1 text-[13px] font-bold text-white/45">원</span>
+                  </div>
+                  <div className="relative mt-3 grid grid-cols-3 gap-2">
+                    {[["SUPPLY", "공급가액", won(합계공급가), "원"], ["VAT", "세액", won(합계세액), "원"], ["ORDERS", "명세 건수", mapped.length.toLocaleString(), "건"]].map(([en, k, v, u]) => (
+                      <div key={en} className="rounded-xl px-3 py-2 bg-white/[0.05] border border-white/[0.12] min-w-0">
+                        <div className="flex items-center gap-1.5"><span className="text-[9px] font-extrabold tracking-[0.2em] text-white/40" style={{ fontFamily: KP_MONO }}>{en}</span><span className="text-[10.5px] font-bold text-white/60 truncate">{k}</span></div>
+                        <div className="text-[14.5px] font-black tabular-nums text-[#CFE0FF] truncate" style={{ fontFamily: KP_MONO }}>{v}<span className="ml-0.5 text-[10px] font-bold text-white/40">{u}</span></div>
                       </div>
                     ))}
                   </div>
-                )}
-              </div>
+                </div>
+              )}
+              {/* ⭐ 2026-11-02 운임규칙 — 선택 기간·거래처의 운임구분별 합계(규칙 사용 회사만) */}
+              {searched && fareRC.on && selectedRowsInvoice.length > 0 && <FareTypeBreakdown rows={selectedRowsInvoice} title="운임구분별 합계 (선택한 오더)" />}
 
-              {/* ★ 기간 퀵셀렉트 */}
-              <div className="flex flex-col">
-                <label className="text-[12px] font-semibold text-gray-500 mb-1">시작일</label>
-                <CustomDatePicker className="border-2 border-[#1B2B4B] rounded-lg px-2 py-1.5 text-[13px] outline-none" value={start} onChange={e => setStart(e.target.value)} />
-              </div>
-              <div className="flex flex-col">
-                <label className="text-[12px] font-semibold text-gray-500 mb-1">종료일</label>
-                <CustomDatePicker className="border-2 border-[#1B2B4B] rounded-lg px-2 py-1.5 text-[13px] outline-none" value={end} onChange={e => setEnd(e.target.value)} />
-              </div>
-              <div className="flex gap-1">
-                <button onClick={setThisMonth} className="px-2.5 py-1.5 rounded-lg bg-gray-100 text-gray-600 text-[12px] font-semibold hover:bg-gray-200 transition"><EditableText id="misc.btn.49310.이번달" defaultText="이번달" /></button>
-                <button onClick={setLastMonth} className="px-2.5 py-1.5 rounded-lg bg-gray-100 text-gray-600 text-[12px] font-semibold hover:bg-gray-200 transition"><EditableText id="misc.btn.49311.지난달" defaultText="지난달" /></button>
-                <button onClick={setThisYear} className="px-2.5 py-1.5 rounded-lg bg-gray-100 text-gray-600 text-[12px] font-semibold hover:bg-gray-200 transition"><EditableText id="misc.btn.49312.올해전체" defaultText="올해전체" /></button>
-              </div>
-              <button
-                className="px-4 py-2 rounded-lg bg-[#1B2B4B] text-white text-[13px] font-bold hover:bg-[#243a60] transition"
-                onClick={() => {
-                  if (!searchInput.trim()) return showAlert("검색어를 입력하세요.");
-                  setClient(searchInput.trim());
-                  setSearched(true);
-                  setDropdownOpen(false);
-                }}
-              >
-                조회
-              </button>
-              <button
-                className="px-3 py-2 rounded-lg bg-gray-200 text-gray-700 text-[13px] font-semibold hover:bg-gray-300 transition"
-                onClick={() => { setSearchInput(""); setClient(""); setStart(""); setEnd(""); setSearched(false); setDropdownOpen(false); }}
-              >
-                초기화
-              </button>
-              <div className="ml-auto flex gap-2 flex-wrap items-center">
-                <button onClick={downloadInvoiceExcel} className="px-3 py-1.5 rounded border border-gray-300 text-gray-600 text-[13px] font-semibold hover:bg-gray-100 transition"><EditableText id="misc.btn.49332.엑셀다운로드" defaultText="엑셀 다운로드" /></button>
-                <button onClick={savePDF} className="px-3 py-1.5 rounded border border-gray-300 text-gray-600 text-[13px] font-semibold hover:bg-gray-100 transition">PDF</button>
-                <button onClick={handlePrint} className="px-3 py-1.5 rounded border border-gray-300 text-gray-600 text-[13px] font-semibold hover:bg-gray-100 transition"><EditableText id="misc.btn.49334.인쇄" defaultText="인쇄" /></button>
-                <div className="w-px h-5 bg-gray-200 mx-0.5" />
+              {/* ★ 월별 소계 */}
+              {searched && monthlySubtotals.size > 0 && (
+                <div className={`${csCard} p-4`}>
+                  {csHead("MONTHLY", "월별 소계")}
+                  <div className="rounded-xl border border-[#E3E8F0] overflow-hidden">
+                    <table className="w-full text-[12.5px]">
+                      <thead>
+                        <tr className="bg-[#F4F6FA] text-[#5B6B85]">
+                          <th className="px-3 py-1.5 text-left font-black">월</th>
+                          <th className="px-3 py-1.5 text-right font-black">건수</th>
+                          <th className="px-3 py-1.5 text-right font-black">공급가액</th>
+                          <th className="px-3 py-1.5 text-right font-black">세액</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {Array.from(monthlySubtotals.entries())
+                          .sort(([a], [b]) => a.localeCompare(b))
+                          .map(([ym, v]) => (
+                            <tr key={ym} className="border-t border-[#EEF2F8]">
+                              <td className="px-3 py-1.5 font-black text-[#0F1A30] tabular-nums" style={{ fontFamily: KP_MONO }}>{ym}</td>
+                              <td className="px-3 py-1.5 text-right text-[#5B6B85] tabular-nums">{v.건수}건</td>
+                              <td className="px-3 py-1.5 text-right font-bold text-[#0F1A30] tabular-nums" style={{ fontFamily: KP_MONO }}>{won(v.공급가액)}</td>
+                              <td className="px-3 py-1.5 text-right text-[#5B6B85] tabular-nums" style={{ fontFamily: KP_MONO }}>{won(v.세액)}</td>
+                            </tr>
+                          ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {/* ⭐ 명세서에 넣을 오더 — 체크를 끄면 명세서에서 빠진다(예전 미리보기 안 "편집" 모드를 이 목록으로 옮김) */}
+              {searched && (
+                <div className={`${csCard} p-4`}>
+                  {csHead("LINES", "명세서 포함 오더", (
+                    <>
+                      <span className="text-[11.5px] font-bold text-[#5B6B85] tabular-nums" style={{ fontFamily: KP_MONO }}>{mapped.length}/{rowsInvoice.length}</span>
+                      {excludedRowsInvoice.length > 0 && (
+                        <button type="button" onClick={() => setSelectedInvoiceIds(new Set(rowsInvoice.map(r => r._id)))}
+                          className="h-7 px-2.5 rounded-lg border border-[#D5DDEA] text-[#1B2B4B] text-[11.5px] font-bold hover:bg-[#F4F6FA]">모두 되돌리기 ({excludedRowsInvoice.length}건)</button>
+                      )}
+                    </>
+                  ))}
+                  {rowsInvoice.length === 0 ? (
+                    <div className="rounded-xl border border-dashed border-[#DCE3EE] py-8 text-center text-[12.5px] text-[#9AA9C3]">조회 결과가 없습니다. (청구운임 0원인 오더는 제외됩니다)</div>
+                  ) : (
+                    <div className="rounded-xl border border-[#E3E8F0] overflow-hidden">
+                      <div className="max-h-[420px] overflow-y-auto">
+                        <table className="w-full text-[12.5px]" style={{ tableLayout: "fixed" }}>
+                          <colgroup>
+                            <col style={{ width: 34 }} />
+                            <col style={{ width: 84 }} />
+                            <col />
+                            <col style={{ width: 64 }} />
+                            <col style={{ width: 92 }} />
+                          </colgroup>
+                          <thead>
+                            <tr className="text-[#5B6B85]">
+                              <th className="sticky top-0 z-10 bg-[#F4F6FA] px-2 py-1.5 text-center">
+                                <input type="checkbox" className="accent-[#0F1A30] cursor-pointer"
+                                  checked={rowsInvoice.length > 0 && excludedRowsInvoice.length === 0}
+                                  onChange={() => { if (excludedRowsInvoice.length) setSelectedInvoiceIds(new Set(rowsInvoice.map(r => r._id))); }}
+                                  title="모두 포함" />
+                              </th>
+                              <th className="sticky top-0 z-10 bg-[#F4F6FA] px-2 py-1.5 text-left font-black">날짜</th>
+                              <th className="sticky top-0 z-10 bg-[#F4F6FA] px-2 py-1.5 text-left font-black">상차지 → 하차지</th>
+                              <th className="sticky top-0 z-10 bg-[#F4F6FA] px-2 py-1.5 text-left font-black">기사</th>
+                              <th className="sticky top-0 z-10 bg-[#F4F6FA] px-2 py-1.5 text-right font-black">청구운임</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {rowsInvoice.map((r) => {
+                              const on = selectedInvoiceIds.has(r._id);
+                              return (
+                                <tr key={r._id} className={`border-t border-[#EEF2F8] cursor-pointer transition ${on ? "hover:bg-[#F4F6FA]" : "bg-[#FAFBFD] text-[#9AA9C3] hover:bg-[#F4F6FA]"}`}
+                                  onClick={() => openOrderPopup(r)} title="클릭하여 상세보기">
+                                  <td className="px-2 py-1.5 text-center" onClick={(e) => e.stopPropagation()}>
+                                    <input type="checkbox" className="accent-[#0F1A30] cursor-pointer" checked={on}
+                                      onChange={() => (on ? excludeInvoiceRow(r._id) : restoreInvoiceRow(r._id))}
+                                      title={on ? "이 명세서에서 빼기" : "되돌리기"} />
+                                  </td>
+                                  <td className={`px-2 py-1.5 tabular-nums whitespace-nowrap ${on ? "text-[#3A4A66]" : "line-through"}`} style={{ fontFamily: KP_MONO, fontSize: 11.5 }}>{(r.상차일 || "").slice(2)}</td>
+                                  <td className={`px-2 py-1.5 truncate ${on ? "text-[#0F1A30] font-semibold" : "line-through"}`} title={`${r.상차지명 || r.상차지 || ""} → ${r.하차지명 || r.하차지 || ""}`}>
+                                    {r.상차지명 || r.상차지 || "-"} <span className="text-[#9AA9C3]">→</span> {r.하차지명 || r.하차지 || "-"}
+                                  </td>
+                                  <td className="px-2 py-1.5 truncate">{r.이름 || r.기사명 || ""}</td>
+                                  <td className={`px-2 py-1.5 text-right tabular-nums font-bold ${on ? "text-[#0F1A30]" : "line-through"}`} style={{ fontFamily: KP_MONO, fontSize: 11.5 }}>{won(toInt(r.청구운임))}</td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+                  <div className="mt-2 text-[11px] text-[#9AA9C3]">체크를 끄면 명세서에서 빠집니다 · 줄을 누르면 오더 상세</div>
+                </div>
+              )}
+
+              {/* 발송 */}
+              <div className={`${csCard} p-4`}>
+                {csHead("DELIVERY", "메일 발송")}
                 <button
-                  onClick={() => {
-                    if (!client) return showAlert("거래처를 먼저 검색하세요.");
-                    const found = (clients||[]).find(c=>c.거래처명===client);
-                    const email = found?.연락처이메일 || found?.이메일 || "";
-                    if (!email) return showAlert(`${client}에 등록된 이메일이 없습니다. 거래처 정보에서 이메일을 등록해주세요.`);
-                    setBatchSendList(prev => {
-                      if (prev.find(x => x.name === client)) return showAlert(`${client}은 이미 발송 목록에 있습니다.`) || prev;
-                      showAlert(`${client} 발송 목록에 추가됨`);
-                      return [...prev, {
-                        name: client,
-                        email,
-                        start: start || "",
-                        end: end || "",
-                        mapped: [...mapped],
-                        totals: { 공급가: 합계공급가, 세액: 합계세액 },
-                        clientInfo: (clients||[]).find(c=>c.거래처명===client) || {},
-                      }];
-                    });
-                  }}
-                  className="px-3 py-1.5 rounded border border-[#1B2B4B] text-[#1B2B4B] text-[13px] font-semibold hover:bg-[#1B2B4B] hover:text-white transition"
-                >
-                  목록 추가
-                </button>
-                {batchSendList.length > 0 && (
-                  <button
-                    onClick={() => setBatchSendOpen(true)}
-                    className="px-3 py-1.5 rounded bg-[#1B2B4B] text-white text-[13px] font-semibold hover:bg-[#243a60] transition"
-                  >
-                    일괄 발송 ({batchSendList.length})
-                  </button>
-                )}
-                <button
+                  type="button"
                   onClick={() => {
                     if (!searched || !rowsInvoice.length) return showAlert("먼저 조회를 실행하세요.");
                     const found = (clients||[]).find(c=>c.거래처명===client);
@@ -52732,307 +52895,282 @@ const handleBatchSettle = async (targetStatus) => {
                     setEmailScheduleOn(false); setEmailScheduleAt("");
                     setEmailModalOpen(true);
                   }}
-                  className="px-3 py-1.5 rounded bg-[#1B2B4B] text-white text-[13px] font-semibold hover:bg-[#243a60] transition"
+                  className={`${csBtnPri} w-full`}
                 >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 2L11 13" /><path d="M22 2l-7 20-4-9-9-4z" /></svg>
                   명세서 발송
                 </button>
-                <button
-                  onClick={() => {
-                    const found = (clients||[]).find(c=>c.거래처명===client);
-                    setGeneralEmailTo(found?.연락처이메일 || found?.이메일 || "");
-                    setGeneralEmailSubject(client ? `${client} 관련 안내` : "");
-                    setGeneralEmailBody(`안녕하세요, ${client ? `${client} 담당자님.` : "담당자님."}\n\n${COMPANY_PRINT.name}입니다.\n\n\n\n감사합니다.\n${COMPANY_PRINT.name}\n${COMPANY_PRINT.contact}`);
-                    setGeneralEmailFiles([]);
-                    setGeneralEmailScheduleOn(false); setGeneralEmailScheduleAt("");
-                    setGeneralEmailOpen(true);
-                  }}
-                  className="px-3 py-1.5 rounded border border-gray-300 text-gray-600 text-[13px] font-semibold hover:bg-gray-100 transition"
-                >
-                  일반 이메일
-                </button>
-                <button onClick={() => setScheduledEmailListOpen(true)}
-                  className="px-3 py-1.5 rounded border border-gray-300 text-gray-600 text-[13px] font-semibold hover:bg-gray-100 transition relative">
-                  예약메일함
-                  {scheduledEmailList.filter(s => s.status === "pending").length > 0 && (
-                    <span className="ml-1.5 inline-flex items-center justify-center min-w-[16px] h-4 px-1 rounded-full bg-[#1B2B4B] text-white text-[10px] font-bold align-middle">
-                      {scheduledEmailList.filter(s => s.status === "pending").length}
-                    </span>
-                  )}
-                </button>
-                <button onClick={() => { setEditInfo({ ...cInfo }); setShowEdit(true); }} className="px-3 py-1.5 rounded border border-[#1B2B4B] text-[#1B2B4B] text-[13px] font-semibold hover:bg-[#1B2B4B] hover:text-white transition"><EditableText id="misc.btn.49404.거래처 정보" defaultText="거래처 정보" /></button>
-              </div>
-            </div>
-
-            {/* 조회 결과 요약 */}
-            {searched && (
-              <div className="flex gap-4 mt-3 text-[13px] font-semibold">
-                <span className="text-[#1B2B4B]">조회 {rowsInvoice.length}건 중 <b>{mapped.length}건 선택</b></span>
-                <span className="text-[#1B2B4B]">공급가액 합계 <b>{won(합계공급가)}원</b></span>
-                <span className="text-[#0F1A30]">세액 합계 <b>{won(합계세액)}원</b></span>
-                <span className="text-[#2D4C82]">청구 합계 <b>{won(합계공급가 + 합계세액)}원</b></span>
-              </div>
-            )}
-            {/* ⭐ 2026-11-02 운임규칙 — 선택 기간·거래처의 운임구분별 합계(규칙 사용 회사만) */}
-            {searched && fareRC.on && selectedRowsInvoice.length > 0 && <FareTypeBreakdown className="mt-3" rows={selectedRowsInvoice} title="운임구분별 합계 (선택한 오더)" />}
-          </div>
-
-          {/* 미조회 상태 */}
-          {!searched && (
-            <div className="flex flex-col items-center justify-center py-20 text-gray-500">
-              <div className="text-4xl mb-3"></div>
-              <div className="text-[15px] font-semibold">거래처명 또는 기사명을 입력 후 조회하세요.</div>
-              <div className="text-[13px] mt-1 text-gray-400">검색창에 입력하면 자동완성 목록이 표시됩니다</div>
-            </div>
-          )}
-
-          {/* ★ 월별 소계 카드 (조회 결과 위에) */}
-          {searched && monthlySubtotals.size > 0 && (
-            <div className="mb-4">
-              <div className="text-[12px] font-bold text-gray-500 mb-2 uppercase tracking-wider px-1">월별 소계</div>
-              <div className="flex gap-2 flex-wrap">
-                {Array.from(monthlySubtotals.entries())
-                  .sort(([a], [b]) => a.localeCompare(b))
-                  .map(([ym, v]) => (
-                    <div key={ym} className="bg-white rounded-xl border border-gray-200 px-4 py-3 shadow-sm min-w-[160px]">
-                      <div className="text-[13px] font-bold text-[#1B2B4B]">{ym}</div>
-                      <div className="text-[11px] text-gray-500 mt-0.5">{v.건수}건</div>
-                      <div className="text-[14px] font-extrabold text-[#1B2B4B] mt-1">{won(v.공급가액)}원</div>
-                      <div className="text-[11px] text-gray-500">세액 {won(v.세액)}원</div>
-                    </div>
-                  ))}
-              </div>
-            </div>
-          )}
-
-          {/* 거래명세서 본문 */}
-          {searched && (
-            <div id="invoiceArea" className="w-full max-w-[1100px] mx-auto bg-white border border-gray-200 rounded-2xl shadow overflow-hidden">
-              {/* 헤더 */}
-              <div className="bg-[#1B2B4B] px-8 py-5 flex items-center justify-between">
-                <div>
-                  <h2 className="text-[22px] font-extrabold text-white"><EditableText id="popup.title.거래명세서" defaultText="거래명세서" /></h2>
-                  {(start || end) && (
-                    <p className="text-white/60 text-[13px] mt-1">거래기간 : {start||"시작일"} ~ {end||"종료일"}</p>
-                  )}
-                </div>
-                <div className="text-right text-white/70 text-[12px] leading-6">
-                  <div>{COMPANY_PRINT.name} · 대표 {COMPANY_PRINT.ceo}</div>
-                  <div>{COMPANY_PRINT.contact}</div>
-                  <div>{COMPANY_PRINT.bank}</div>
-                </div>
-              </div>
-
-              {/* 공급자/받는자 */}
-              <div className="grid grid-cols-2 gap-0 border-b border-gray-200">
-                <div className="p-5 border-r border-gray-200">
-                  <div className="text-[11px] font-bold text-gray-500 mb-2 uppercase tracking-wider">공급받는자</div>
-                  <table className="w-full text-[13px]">
-                    <tbody>
-                      {[["상호",cInfo.거래처명],["대표자",cInfo.대표자],["사업자번호",cInfo.사업자번호],["주소",cInfo.주소],["업태",cInfo.업태],["종목",cInfo.종목]].map(([k,v])=>(
-                        <tr key={k} className="border-b border-gray-100 last:border-0">
-                          <td className="py-1.5 pr-3 font-semibold text-gray-500 w-24">{k}</td>
-                          <td className="py-1.5 font-medium text-gray-900">{v||"-"}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-                <div className="p-5">
-  <div className="text-[11px] font-bold text-gray-500 mb-2 uppercase tracking-wider">공급자</div>
-  <table className="w-full text-[13px]">
-    <tbody>
-      {/* 상호 */}
-      <tr className="border-b border-gray-100">
-        <td className="py-1.5 pr-3 font-semibold text-gray-500 w-24">상호</td>
-        <td className="py-1.5 font-medium text-gray-900">{COMPANY_PRINT.name}</td>
-      </tr>
-      {/* ★ 대표자 + (인) + 도장 — 두 번째 위치 */}
-      <tr className="border-b border-gray-100">
-        <td className="py-1.5 pr-3 font-semibold text-gray-500 w-24">대표자</td>
-        <td className="py-1.5 font-medium text-gray-900">
-          <div style={{ display: "flex", alignItems: "center" }}>
-            <span style={{ flex: 1 }}>{COMPANY_PRINT.ceo}</span>
-            <span
-              title={canQuickSeal ? "클릭하여 도장 이미지 바로 변경" : undefined}
-              onClick={canQuickSeal ? () => sealQuickUploadRef.current?.click() : undefined}
-              style={{
-                position: "relative",
-                display: "inline-flex",
-                alignItems: "center",
-                justifyContent: "center",
-                width: 52,
-                height: 52,
-                marginRight: 4,
-                cursor: canQuickSeal ? "pointer" : "default", /* ⭐ 2026-11-02 점검 — 경리·인사만 클릭 가능 */
-                opacity: sealQuickUploading ? 0.4 : 1,
-              }}
-            >
-              <img
-                src={COMPANY_PRINT.seal}
-                alt=""
-                onError={(e) => { e.currentTarget.style.visibility = "hidden"; }}
-                onLoad={(e) => { e.currentTarget.style.visibility = "visible"; }}
-                style={{
-                  position: "absolute",
-                  top: "50%",
-                  left: "50%",
-                  transform: "translate(-50%, -50%)",
-                  width: 46,
-                  height: 46,
-                  opacity: 0.9,
-                  pointerEvents: "none",
-                  mixBlendMode: "multiply",
-                }}
-              />
-              <span style={{ position: "relative", zIndex: 1, fontSize: 13, color: "#333", pointerEvents: "none" }}>(인)</span>
-              <input
-                autoComplete="off"
-                ref={sealQuickUploadRef}
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onClick={(e) => e.stopPropagation()}
-                onChange={(e) => handleSealQuickUpload(e.target.files?.[0])}
-              />
-            </span>
-          </div>
-        </td>
-      </tr>
-      {/* 나머지 순서대로 */}
-      {[["사업자번호",COMPANY_PRINT.bizNo],["주소",COMPANY_PRINT.addr],["업태",COMPANY_PRINT.type],["종목",COMPANY_PRINT.item]].map(([k,v])=>(
-        <tr key={k} className="border-b border-gray-100 last:border-0">
-          <td className="py-1.5 pr-3 font-semibold text-gray-500 w-24">{k}</td>
-          <td className="py-1.5 font-medium text-gray-900">{v||"-"}</td>
-        </tr>
-      ))}
-    </tbody>
-  </table>
-</div>
-
-              </div>
-
-                            {/* ★ 합계금액 한글 표시 (공급자 정보와 내역 테이블 사이) */}
-              <div className="px-6 py-3 border-b border-gray-200 flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <span className="text-[13px] font-bold text-gray-600">합계금액</span>
-                  <span className="text-[12px] text-gray-500">(공급가액+부가세)</span>
-                </div>
-                <div className="flex items-center gap-4">
-                  <span className="text-[14px] font-bold text-[#1B2B4B]">
-                    일금 {numberToKorean(합계공급가 + 합계세액)} 원정
-                  </span>
-                  <span className="text-[14px] font-extrabold text-[#1B2B4B]">
-                    (￦ {won(합계공급가 + 합계세액)})
-                  </span>
-                </div>
-              </div>
-
-              {/* ⭐ 편집 — 명세서에서 뺄 줄을 고른다(인쇄·이미지에는 이 버튼들이 나오지 않음) */}
-              {searched && rowsInvoice.length > 0 && (
-                <div data-html2canvas-ignore="true" className="print:hidden px-6 py-2.5 flex items-center justify-end gap-2 border-b border-gray-100 bg-[#F8FAFD]">
-                  {invoiceEdit && excludedRowsInvoice.length > 0 && (
-                    <button onClick={() => setSelectedInvoiceIds(new Set(rowsInvoice.map(r => r._id)))}
-                      className="h-8 px-3 rounded-lg border border-[#1B2B4B]/40 text-[#1B2B4B] text-[12.5px] font-bold hover:bg-white">모두 되돌리기 ({excludedRowsInvoice.length}건)</button>
-                  )}
-                  <button onClick={() => setInvoiceEdit(v => !v)}
-                    className={`h-8 px-4 rounded-lg text-[12.5px] font-black ${invoiceEdit ? "bg-[#1B2B4B] text-white" : "border border-[#1B2B4B] text-[#1B2B4B] hover:bg-white"}`}>
-                    {invoiceEdit ? "편집 완료" : `편집${excludedRowsInvoice.length ? ` · ${excludedRowsInvoice.length}건 빠짐` : ""}`}
+                <div className="mt-2 grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!client) return showAlert("거래처를 먼저 검색하세요.");
+                      const found = (clients||[]).find(c=>c.거래처명===client);
+                      const email = found?.연락처이메일 || found?.이메일 || "";
+                      if (!email) return showAlert(`${client}에 등록된 이메일이 없습니다. 거래처 정보에서 이메일을 등록해주세요.`);
+                      setBatchSendList(prev => {
+                        if (prev.find(x => x.name === client)) return showAlert(`${client}은 이미 발송 목록에 있습니다.`) || prev;
+                        showAlert(`${client} 발송 목록에 추가됨`);
+                        return [...prev, {
+                          name: client,
+                          email,
+                          start: start || "",
+                          end: end || "",
+                          mapped: [...mapped],
+                          totals: { 공급가: 합계공급가, 세액: 합계세액 },
+                          clientInfo: (clients||[]).find(c=>c.거래처명===client) || {},
+                        }];
+                      });
+                    }}
+                    className={csBtn}
+                  >
+                    목록 추가
+                  </button>
+                  <button type="button" disabled={!batchSendList.length} onClick={() => setBatchSendOpen(true)} className={csBtn}>
+                    일괄 발송
+                    <span className="min-w-[18px] h-[18px] px-1 rounded-md bg-[#EEF2F8] text-[#0F1A30] text-[10.5px] font-black inline-flex items-center justify-center tabular-nums" style={{ fontFamily: KP_MONO }}>{batchSendList.length}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const found = (clients||[]).find(c=>c.거래처명===client);
+                      setGeneralEmailTo(found?.연락처이메일 || found?.이메일 || "");
+                      setGeneralEmailSubject(client ? `${client} 관련 안내` : "");
+                      setGeneralEmailBody(`안녕하세요, ${client ? `${client} 담당자님.` : "담당자님."}\n\n${COMPANY_PRINT.name}입니다.\n\n\n\n감사합니다.\n${COMPANY_PRINT.name}\n${COMPANY_PRINT.contact}`);
+                      setGeneralEmailFiles([]);
+                      setGeneralEmailScheduleOn(false); setGeneralEmailScheduleAt("");
+                      setGeneralEmailOpen(true);
+                    }}
+                    className={csBtn}
+                  >
+                    일반 이메일
+                  </button>
+                  <button type="button" onClick={() => setScheduledEmailListOpen(true)} className={csBtn}>
+                    예약메일함
+                    {csPendingScheduled > 0 && (
+                      <span className="min-w-[18px] h-[18px] px-1 rounded-md bg-[#0F1A30] text-white text-[10.5px] font-black inline-flex items-center justify-center tabular-nums" style={{ fontFamily: KP_MONO }}>{csPendingScheduled}</span>
+                    )}
                   </button>
                 </div>
-              )}
-
-              {/* 내역 테이블 */}
-              <div className="overflow-x-auto">
-                <table className="w-full text-[13px]">
-                  <thead>
-                    <tr className="bg-[#1B2B4B]">
-                      {["No","날짜","상차지","하차지","경유지","화물명","기사명","차량번호","공급가액","세액(10%)","합계"].map(h=>(
-                        <th key={h} className="px-3 py-3 text-white font-bold text-center whitespace-nowrap"><EditableText id={`taxInvoice.table.header.${h}`} defaultText={h} /></th>
-                      ))}
-                      {invoiceEdit && <th data-html2canvas-ignore="true" className="print:hidden px-2 py-3 w-12" />}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {mapped.length === 0 ? (
-                      <tr><td colSpan={11} className="text-center text-gray-500 py-12 text-[14px]">조회 결과가 없습니다. (청구운임 0원인 오더는 제외됩니다)</td></tr>
-                    ) : (
-                                                                 mapped.map((m, i) => (
-                        <tr
-                          key={m.idx}
-                          className={`${i%2===0?"bg-white":"bg-gray-50/60"} hover:bg-[#EEF3FC] cursor-pointer transition`}
-                          onClick={() => {
-                            const order = selectedRowsInvoice[i];
-                            setOrderPopup(order);
-                            setOrderPopupEdit({
-                              상차지명: order.상차지명 || "",
-                              하차지명: order.하차지명 || "",
-                              화물내용: order.화물내용 || "",
-                              이름: order.이름 || "",
-                              차량번호: order.차량번호 || "",
-                              청구운임: String(order.청구운임 || ""),
-                              기사운임: String(order.기사운임 || ""),
-                              상차시간: order.상차시간 || "",
-                              하차시간: order.하차시간 || "",
-                              비고: order.비고 || "",
-                            });
-                          }}
-                          title="클릭하여 상세보기"
-                        >
-                          <td className="px-3 py-2.5 text-center text-gray-500">{m.idx}</td>
-                          <td className="px-3 py-2.5 text-center whitespace-nowrap">{m.상차일}</td>
-                          <td className="px-3 py-2.5 text-center">{m.상차지}</td>
-                          <td className="px-3 py-2.5 text-center">{m.하차지}</td>
-                          <td className="px-3 py-2.5 text-center">{m.경유지}</td>
-                          <td className="px-3 py-2.5 text-center">{m.화물명}</td>
-                          <td className="px-3 py-2.5 text-center">{m.기사명}</td>
-                          <td className="px-3 py-2.5 text-center text-[12px]">{m.차량번호}</td>
-                          <td className="px-3 py-2.5 text-right font-semibold">{won(m.공급가액)}</td>
-                          <td className="px-3 py-2.5 text-right text-[#1B2B4B]">{won(m.세액)}</td>
-                          <td className="px-3 py-2.5 text-right font-bold text-[#1B2B4B]">{won(m.공급가액+m.세액)}</td>
-                          {invoiceEdit && (
-                            <td data-html2canvas-ignore="true" className="print:hidden px-2 py-2.5 text-center" onClick={(e) => e.stopPropagation()}>
-                              <button onClick={() => excludeInvoiceRow(selectedRowsInvoice[i]._id)} title="이 명세서에서 빼기"
-                                className="w-8 h-8 rounded-lg border border-[#DCE3EE] text-[#1B2B4B] hover:bg-[#1B2B4B] hover:text-white inline-flex items-center justify-center">
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14" /></svg>
-                              </button>
-                            </td>
-                          )}
-                        </tr>
-                      ))
-
-                    )}
-                    {mapped.length > 0 && (
-                      <tr className="bg-[#1B2B4B]">
-                        <td colSpan={8} className="px-3 py-3 text-white font-bold text-center">소 계</td>
-                        <td className="px-3 py-3 text-right text-white font-bold">{won(합계공급가)}</td>
-                        <td className="px-3 py-3 text-right text-[#8FB0F0] font-bold">{won(합계세액)}</td>
-                        <td className="px-3 py-3 text-right text-[#8FB0F0] font-extrabold">{won(합계공급가+합계세액)}</td>
-                        {invoiceEdit && <td data-html2canvas-ignore="true" className="print:hidden" />}
-                      </tr>
-                    )}
-                    {/* 편집 중 — 뺀 줄(되돌리기) */}
-                    {invoiceEdit && excludedRowsInvoice.map((r) => (
-                      <tr key={`ex-${r._id}`} data-html2canvas-ignore="true" className="print:hidden bg-[#F5F8FD] text-[#9AA9C3]">
-                        <td className="px-3 py-2 text-center">–</td>
-                        <td className="px-3 py-2 text-center whitespace-nowrap line-through">{r.상차일}</td>
-                        <td className="px-3 py-2 text-center line-through">{r.상차지명}</td>
-                        <td className="px-3 py-2 text-center line-through">{r.하차지명}</td>
-                        <td colSpan={4} className="px-3 py-2 text-center text-[12px]">명세서에서 뺀 오더</td>
-                        <td colSpan={3} className="px-3 py-2 text-right line-through">{won(toInt(r.청구운임))}</td>
-                        <td className="px-2 py-2 text-center">
-                          <button onClick={() => restoreInvoiceRow(r._id)} className="h-8 px-2.5 rounded-lg bg-white border border-[#1B2B4B]/40 text-[#1B2B4B] text-[12px] font-bold whitespace-nowrap">되돌리기</button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-
-              <div className="px-6 py-4 bg-[#f0f2f6] text-[15px] font-semibold text-[#1B2B4B] border-t-2 border-[#1B2B4B] text-center">
-                입금계좌: {COMPANY_PRINT.bank} &nbsp;&nbsp;|&nbsp;&nbsp; 문의: {COMPANY_PRINT.email}
               </div>
             </div>
-          )}
+
+            {/* ── 오른쪽: 명세서 미리보기(인쇄·PDF·엑셀·메일 첨부와 같은 모양) ── */}
+            <div className="min-w-0 xl:sticky xl:top-3">
+              <div className={`${csCard} overflow-hidden flex flex-col xl:max-h-[calc(100vh-24px)]`}>
+                <div className="flex items-center gap-2 px-4 py-2.5 border-b border-[#E3E8F0] bg-white flex-wrap">
+                  <div className="min-w-0 mr-auto">
+                    <div className="text-[9.5px] font-extrabold tracking-[0.24em] text-[#9AA9C3] leading-none" style={{ fontFamily: KP_MONO }}>STATEMENT · PREVIEW</div>
+                    <div className="text-[13.5px] font-black text-[#0F1A30] mt-1 leading-none truncate">미리보기{searched && client ? <span className="ml-1.5 text-[#5B6B85] font-bold">· {client}</span> : null}</div>
+                  </div>
+                  <button type="button" onClick={() => { setEditInfo({ ...cInfo }); setShowEdit(true); }} className={csBtn}><EditableText id="misc.btn.49404.거래처 정보" defaultText="거래처 정보" /></button>
+                  <span className="w-px h-5 bg-[#E3E8F0]" />
+                  <button type="button" disabled={!searched} onClick={downloadInvoiceExcel} className={csBtn}><EditableText id="misc.btn.49332.엑셀다운로드" defaultText="엑셀 다운로드" /></button>
+                  <button type="button" disabled={!searched} onClick={savePDF} className={csBtn}>PDF</button>
+                  <button type="button" disabled={!searched} onClick={handlePrint} className={csBtnPri}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9V3h12v6" /><rect x="4" y="9" width="16" height="8" rx="2" /><path d="M7 14h10v7H7z" /></svg>
+                    <EditableText id="misc.btn.49334.인쇄" defaultText="인쇄" />
+                  </button>
+                </div>
+                <div className="flex-1 min-h-0 overflow-auto bg-[#E9EDF4] p-4" style={{ backgroundImage: "radial-gradient(rgba(27,43,75,.08) 1px, transparent 1px)", backgroundSize: "14px 14px" }}>
+                  {!searched ? (
+                    <div className="mx-auto max-w-[820px] bg-white rounded-md shadow-[0_8px_28px_rgba(15,26,48,0.12)] px-8 py-10">
+                      <div className="text-[9px] font-extrabold tracking-[0.3em] text-[#C9D3E3]" style={{ fontFamily: KP_MONO }}>TRANSACTION STATEMENT</div>
+                      <div className="text-[22px] font-black tracking-[0.32em] text-[#DCE3EE] mt-1">거래명세서</div>
+                      <div className="h-[2px] bg-[#EEF2F8] my-4" />
+                      <div className="grid grid-cols-2 gap-3">
+                        {[0, 1].map((k) => <div key={k} className="h-28 rounded-lg border border-[#EEF2F8] bg-[#FAFBFD]" />)}
+                      </div>
+                      <div className="mt-3 h-12 rounded-lg border border-[#EEF2F8]" />
+                      <div className="mt-3 space-y-1.5">{[0, 1, 2, 3, 4].map((k) => <div key={k} className="h-5 rounded bg-[#F4F6FA]" />)}</div>
+                      <div className="mt-6 text-center text-[12.5px] font-bold text-[#9AA9C3]">왼쪽에서 거래처를 조회하면 이곳에 명세서가 그려집니다</div>
+                    </div>
+                  ) : (
+                    <div className="mx-auto max-w-[820px] min-w-[560px] rounded-md shadow-[0_8px_28px_rgba(15,26,48,0.14)] overflow-hidden">
+                      <div id="invoiceArea" style={{ background: "#fff", padding: "26px 26px 22px" }}>
+                        <div style={{ fontFamily: DOC.font, color: DOC.ink, fontSize: 12 }}>
+                          {/* 문서 머리 */}
+                          <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                            <tbody>
+                              <tr>
+                                <td style={{ padding: 0, verticalAlign: "bottom", textAlign: "left", border: "none" }}>
+                                  <div style={{ fontFamily: DOC.mono, fontSize: 9, fontWeight: 800, letterSpacing: "0.3em", color: DOC.mute }}>TRANSACTION STATEMENT</div>
+                                  <div style={{ fontSize: 23, fontWeight: 900, letterSpacing: "0.3em", marginTop: 4, color: DOC.ink }}><EditableText id="popup.title.거래명세서" defaultText="거래명세서" /></div>
+                                </td>
+                                <td style={{ padding: 0, verticalAlign: "bottom", textAlign: "right", border: "none" }}>
+                                  <div style={{ fontSize: 10, fontWeight: 700, color: DOC.sub }}>거래기간</div>
+                                  <div style={{ fontFamily: DOC.mono, fontSize: 12.5, fontWeight: 800, color: DOC.ink, marginTop: 2, whiteSpace: "nowrap" }}>{(start || end) ? `${start || "시작일"} ~ ${end || "종료일"}` : "전체 기간"}</div>
+                                </td>
+                              </tr>
+                            </tbody>
+                          </table>
+                          <div style={{ height: 2, background: DOC.ink, margin: "12px 0 14px" }} />
+
+                          {/* 공급받는자 / 공급자 */}
+                          <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                            <tbody>
+                              <tr>
+                                <td style={{ width: "50%", padding: "0 7px 0 0", verticalAlign: "top", border: "none" }}>
+                                  <div style={{ border: `1px solid ${DOC.line}`, borderRadius: 8, overflow: "hidden" }}>
+                                    {docPartyHead("공급받는자", "RECIPIENT")}
+                                    <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                                      <tbody>
+                                        {[["상호", cInfo.거래처명], ["대표자", cInfo.대표자], ["사업자번호", cInfo.사업자번호], ["주소", cInfo.주소], ["업태", cInfo.업태], ["종목", cInfo.종목]].map(([k, v], i) => (
+                                          <tr key={k}><td style={docCellK(i)}>{k}</td><td style={docCellV(i)}>{v || "-"}</td></tr>
+                                        ))}
+                                      </tbody>
+                                    </table>
+                                  </div>
+                                </td>
+                                <td style={{ width: "50%", padding: "0 0 0 7px", verticalAlign: "top", border: "none" }}>
+                                  <div style={{ border: `1px solid ${DOC.line}`, borderRadius: 8, overflow: "hidden" }}>
+                                    {docPartyHead("공급자", "SUPPLIER")}
+                                    <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                                      <tbody>
+                                        <tr><td style={docCellK(0)}>상호</td><td style={docCellV(0)}>{COMPANY_PRINT.name || "-"}</td></tr>
+                                        {/* ★ 대표자 + (인) + 도장 */}
+                                        <tr>
+                                          <td style={docCellK(1)}>대표자</td>
+                                          <td style={{ ...docCellV(1), padding: "1px 6px 1px 0" }}>
+                                            <div style={{ display: "flex", alignItems: "center" }}>
+                                              <span style={{ flex: 1 }}>{COMPANY_PRINT.ceo || "-"}</span>
+                                              <span
+                                                title={canQuickSeal ? "클릭하여 도장 이미지 바로 변경" : undefined}
+                                                onClick={canQuickSeal ? () => sealQuickUploadRef.current?.click() : undefined}
+                                                style={{
+                                                  position: "relative",
+                                                  display: "inline-flex",
+                                                  alignItems: "center",
+                                                  justifyContent: "center",
+                                                  width: 44,
+                                                  height: 44,
+                                                  cursor: canQuickSeal ? "pointer" : "default", /* ⭐ 2026-11-02 점검 — 경리·인사만 클릭 가능 */
+                                                  opacity: sealQuickUploading ? 0.4 : 1,
+                                                }}
+                                              >
+                                                <img
+                                                  src={COMPANY_PRINT.seal}
+                                                  alt=""
+                                                  onError={(e) => { e.currentTarget.style.visibility = "hidden"; }}
+                                                  onLoad={(e) => { e.currentTarget.style.visibility = "visible"; }}
+                                                  style={{
+                                                    position: "absolute",
+                                                    top: "50%",
+                                                    left: "50%",
+                                                    transform: "translate(-50%, -50%)",
+                                                    width: 42,
+                                                    height: 42,
+                                                    opacity: 0.9,
+                                                    pointerEvents: "none",
+                                                    mixBlendMode: "multiply",
+                                                  }}
+                                                />
+                                                <span style={{ position: "relative", zIndex: 1, fontSize: 11.5, color: "#5B6B85", pointerEvents: "none" }}>(인)</span>
+                                                <input
+                                                  autoComplete="off"
+                                                  ref={sealQuickUploadRef}
+                                                  type="file"
+                                                  accept="image/*"
+                                                  data-html2canvas-ignore="true"
+                                                  style={{ display: "none" }}
+                                                  onClick={(e) => e.stopPropagation()}
+                                                  onChange={(e) => handleSealQuickUpload(e.target.files?.[0])}
+                                                />
+                                              </span>
+                                            </div>
+                                          </td>
+                                        </tr>
+                                        {[["사업자번호", COMPANY_PRINT.bizNo], ["주소", COMPANY_PRINT.addr], ["업태", COMPANY_PRINT.type], ["종목", COMPANY_PRINT.item], ["연락처", COMPANY_PRINT.contact]].map(([k, v], i) => (
+                                          <tr key={k}><td style={docCellK(i + 2)}>{k}</td><td style={docCellV(i + 2)}>{v || "-"}</td></tr>
+                                        ))}
+                                      </tbody>
+                                    </table>
+                                  </div>
+                                </td>
+                              </tr>
+                            </tbody>
+                          </table>
+
+                          {/* ★ 합계금액 (공급자 정보와 내역 표 사이) */}
+                          <table style={{ width: "100%", borderCollapse: "collapse", marginTop: 12, border: `1.5px solid ${DOC.ink}` }}>
+                            <tbody>
+                              <tr>
+                                <td style={{ padding: "9px 14px", verticalAlign: "middle", textAlign: "left", border: "none", whiteSpace: "nowrap" }}>
+                                  <span style={{ fontSize: 12, fontWeight: 900, color: DOC.ink }}>합계금액</span>
+                                  <span style={{ fontSize: 10.5, color: DOC.sub, marginLeft: 6 }}>(공급가액+부가세)</span>
+                                </td>
+                                <td style={{ padding: "9px 14px", verticalAlign: "middle", textAlign: "right", border: "none" }}>
+                                  <span style={{ fontSize: 12.5, fontWeight: 800, color: DOC.ink }}>일금 {numberToKorean(합계공급가 + 합계세액)} 원정</span>
+                                  <span style={{ fontFamily: DOC.mono, fontSize: 15, fontWeight: 900, color: DOC.ink, marginLeft: 12, whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }}>(₩ {won(합계공급가 + 합계세액)})</span>
+                                </td>
+                              </tr>
+                            </tbody>
+                          </table>
+
+                          {/* 내역 표 */}
+                          <table style={{ width: "100%", borderCollapse: "collapse", marginTop: 12 }}>
+                            <thead>
+                              <tr>
+                                {["No","날짜","상차지","하차지","경유지","화물명","기사명","차량번호","공급가액","세액(10%)","합계"].map(h => (
+                                  <th key={h} style={docTh}><EditableText id={`taxInvoice.table.header.${h}`} defaultText={h} /></th>
+                                ))}
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {mapped.length === 0 ? (
+                                <tr><td colSpan={11} style={{ ...docTd, padding: "28px 6px", color: DOC.mute, fontSize: 12 }}>조회 결과가 없습니다. (청구운임 0원인 오더는 제외됩니다)</td></tr>
+                              ) : (
+                                mapped.map((m, i) => (
+                                  <tr key={m.idx} className="cursor-pointer hover:bg-[#F4F6FA]" onClick={() => openOrderPopup(selectedRowsInvoice[i])} title="클릭하여 상세보기">
+                                    <td style={{ ...docTd, color: DOC.mute, fontFamily: DOC.mono }}>{m.idx}</td>
+                                    <td style={{ ...docTd, fontFamily: DOC.mono, whiteSpace: "nowrap" }}>{m.상차일}</td>
+                                    <td style={docTd}>{m.상차지}</td>
+                                    <td style={docTd}>{m.하차지}</td>
+                                    <td style={docTd}>{m.경유지}</td>
+                                    <td style={docTd}>{m.화물명}</td>
+                                    <td style={docTd}>{m.기사명}</td>
+                                    <td style={{ ...docTd, fontSize: 10.5 }}>{m.차량번호}</td>
+                                    <td style={{ ...docNum, fontWeight: 700 }}>{won(m.공급가액)}</td>
+                                    <td style={{ ...docNum, color: DOC.sub }}>{won(m.세액)}</td>
+                                    <td style={{ ...docNum, fontWeight: 900 }}>{won(m.공급가액 + m.세액)}</td>
+                                  </tr>
+                                ))
+                              )}
+                              {mapped.length > 0 && (
+                                <tr>
+                                  <td colSpan={8} style={{ ...docTd, background: DOC.soft, borderTop: `2px solid ${DOC.ink}`, borderBottom: `1px solid ${DOC.line}`, fontWeight: 900, letterSpacing: "0.4em", padding: "8px 6px" }}>소 계</td>
+                                  <td style={{ ...docNum, background: DOC.soft, borderTop: `2px solid ${DOC.ink}`, borderBottom: `1px solid ${DOC.line}`, fontWeight: 800, padding: "8px 6px" }}>{won(합계공급가)}</td>
+                                  <td style={{ ...docNum, background: DOC.soft, borderTop: `2px solid ${DOC.ink}`, borderBottom: `1px solid ${DOC.line}`, fontWeight: 800, color: DOC.sub, padding: "8px 6px" }}>{won(합계세액)}</td>
+                                  <td style={{ ...docNum, background: DOC.soft, borderTop: `2px solid ${DOC.ink}`, borderBottom: `1px solid ${DOC.line}`, fontWeight: 900, padding: "8px 6px" }}>{won(합계공급가 + 합계세액)}</td>
+                                </tr>
+                              )}
+                            </tbody>
+                          </table>
+
+                          {/* 입금계좌 · 문의 */}
+                          <table style={{ width: "100%", borderCollapse: "collapse", marginTop: 14, background: DOC.soft }}>
+                            <tbody>
+                              <tr>
+                                <td style={{ padding: "10px 14px", textAlign: "left", border: "none", fontSize: 12 }}>
+                                  <span style={{ fontFamily: DOC.mono, fontSize: 8.5, fontWeight: 800, letterSpacing: "0.22em", color: DOC.mute, marginRight: 8 }}>BANK</span>
+                                  <span style={{ color: DOC.sub, fontWeight: 700 }}>입금계좌</span>
+                                  <span style={{ color: DOC.ink, fontWeight: 900, marginLeft: 8 }}>{COMPANY_PRINT.bank || "-"}</span>
+                                </td>
+                                <td style={{ padding: "10px 14px", textAlign: "right", border: "none", fontSize: 12 }}>
+                                  <span style={{ color: DOC.sub, fontWeight: 700 }}>문의</span>
+                                  <span style={{ color: DOC.ink, fontWeight: 800, marginLeft: 8 }}>{COMPANY_PRINT.email || "-"}</span>
+                                </td>
+                              </tr>
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
           {/* ★ 오더 상세 팝업 */}
           {orderPopup && (
             <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]">
@@ -53883,17 +54021,23 @@ const handleBatchSettle = async (targetStatus) => {
       {/* ══════════════ 미수금관리 탭 ══════════════ */}
       {tab === "unsettledMonth" && (
         <div>
-          {/* 필터 바 */}
-          <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 mb-4">
-            {/* Row 1: 검색 조건 */}
-            <div className="flex flex-wrap items-end gap-2 mb-3">
-              {/* ★ 거래처 드롭다운 검색 */}
-              <div className="flex flex-col">
-                <label className="text-[12px] font-semibold text-gray-500 mb-1">거래처</label>
+          <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,38fr)_minmax(0,62fr)] gap-4 items-start">
+            {/* ── 왼쪽: 조회 · 요약 · 거래처 정보 · 입금/보고/발송 ── */}
+            <div className="space-y-3 min-w-0">
+              <div className={`${csCard} p-4`}>
+                {csHead("QUERY", "조회 조건", (
+                  <button type="button" className={`${csBtn} h-7 px-2.5 text-[11.5px]`}
+                    onClick={()=>{setSelClient("");setArInput("");setYearFrom(String(THIS_YEAR));setMonthFrom("01");setYearTo(String(THIS_YEAR));setMonthTo("12");setStatusFilter("전체");clearSel();setArDropOpen(false);}}>
+                    초기화
+                  </button>
+                ))}
+                {/* ★ 거래처 드롭다운 검색 */}
+                <label className={csLab}>거래처</label>
                 <div className="relative" ref={arDropRef}>
+                  <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#9AA9C3] pointer-events-none" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="M20 20l-3.5-3.5" /></svg>
                   <input autoComplete="off"
                     ref={arInputRef}
-                    className="border-2 border-[#1B2B4B] rounded-lg px-3 py-2 text-[13px] font-semibold text-[#1B2B4B] outline-none min-w-[200px]"
+                    className={`${csInp} pl-8`}
                     placeholder="거래처 검색"
                     value={arInput}
                     onChange={e => { setArInput(e.target.value); setArDropOpen(true); setArDropIdx(0); }}
@@ -53901,14 +54045,14 @@ const handleBatchSettle = async (targetStatus) => {
                     onKeyDown={handleArKeyDown}
                   />
                   {arDropOpen && arOptions.length > 0 && (
-                    <div className="absolute z-50 left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-xl max-h-[240px] overflow-y-auto">
+                    <div className="absolute z-50 left-0 right-0 mt-1 bg-white border border-[#DCE3EE] rounded-xl shadow-[0_12px_32px_rgba(15,26,48,0.16)] max-h-[240px] overflow-y-auto py-1">
                       {arOptions.map((name, i) => (
                         <div
                           key={name + i}
                           ref={el => arItemRefs.current[i] = el}
-                          className={`px-4 py-2.5 text-[13px] cursor-pointer transition ${
-                            i === arDropIdx ? "bg-[#EEF3FC] text-[#1B2B4B] font-semibold" : "text-gray-700 hover:bg-gray-50"
-                          }`}
+                          className={`px-3.5 py-2 text-[13px] cursor-pointer transition ${
+                            i === arDropIdx ? "bg-[#EEF2F8] text-[#0F1A30] font-bold" : "text-[#3A4A66] hover:bg-[#F4F6FA]"
+                          } ${name === AR_ALL ? "border-b border-[#EEF2F8] font-black" : ""}`}
                           onMouseEnter={() => setArDropIdx(i)}
                           onMouseDown={e => { e.preventDefault(); selectArClient(name); }}
                         >
@@ -53918,57 +54062,114 @@ const handleBatchSettle = async (targetStatus) => {
                     </div>
                   )}
                 </div>
-              </div>
-              <div className="flex flex-col">
-                <label className="text-[12px] font-semibold text-gray-500 mb-1">기간</label>
-                <div className="flex items-center gap-1.5">
-                  <CustomSelect className="border-2 border-[#1B2B4B] rounded-lg px-3 py-2 text-[13px] font-semibold text-[#1B2B4B] outline-none"
-                    value={yearFrom} onChange={e=>{ setYearFrom(e.target.value); clearSel(); }}>
+
+                <label className={`${csLab} mt-3`}>기간 (청구월)</label>
+                <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_34px] gap-1.5 items-center">
+                  <CustomSelect className={csInp} value={yearFrom} onChange={e=>{ setYearFrom(e.target.value); clearSel(); }}>
                     {Array.from({length:3},(_,i)=>String(THIS_YEAR - 1 + i)).map(y=>(
                       <option key={y} value={y}>{y}년</option>
                     ))}
                   </CustomSelect>
-                  <CustomSelect className="border-2 border-[#1B2B4B] rounded-lg px-3 py-2 text-[13px] font-semibold text-[#1B2B4B] outline-none"
-                    value={monthFrom} onChange={e=>{ setMonthFrom(e.target.value); clearSel(); }}>
+                  <CustomSelect className={csInp} value={monthFrom} onChange={e=>{ setMonthFrom(e.target.value); clearSel(); }}>
                     {Array.from({length:12},(_,i)=>String(i+1).padStart(2,"0")).map(mm=>(
                       <option key={mm} value={mm}>{parseInt(mm,10)}월</option>
                     ))}
                   </CustomSelect>
-                  <span className="text-gray-500 font-semibold text-[13px]">부터</span>
-                  <CustomSelect className="border-2 border-[#1B2B4B] rounded-lg px-3 py-2 text-[13px] font-semibold text-[#1B2B4B] outline-none"
-                    value={yearTo} onChange={e=>{ setYearTo(e.target.value); clearSel(); }}>
+                  <span className="text-[12px] font-bold text-[#5B6B85]">부터</span>
+                  <CustomSelect className={csInp} value={yearTo} onChange={e=>{ setYearTo(e.target.value); clearSel(); }}>
                     {Array.from({length:3},(_,i)=>String(THIS_YEAR - 1 + i)).map(y=>(
                       <option key={y} value={y}>{y}년</option>
                     ))}
                   </CustomSelect>
-                  <CustomSelect className="border-2 border-[#1B2B4B] rounded-lg px-3 py-2 text-[13px] font-semibold text-[#1B2B4B] outline-none"
-                    value={monthTo} onChange={e=>{ setMonthTo(e.target.value); clearSel(); }}>
+                  <CustomSelect className={csInp} value={monthTo} onChange={e=>{ setMonthTo(e.target.value); clearSel(); }}>
                     {Array.from({length:12},(_,i)=>String(i+1).padStart(2,"0")).map(mm=>(
                       <option key={mm} value={mm}>{parseInt(mm,10)}월</option>
                     ))}
                   </CustomSelect>
-                  <span className="text-gray-500 font-semibold text-[13px]">까지</span>
+                  <span className="text-[12px] font-bold text-[#5B6B85]">까지</span>
+                </div>
+
+                <div className="mt-3 flex items-center justify-between gap-2">
+                  <label className={`${csLab} mb-0`}>정산상태</label>
+                  <div className={csSeg}>
+                    {["전체", "미정산", "정산완료"].map((s) => (
+                      <button key={s} type="button" onClick={() => setStatusFilter(s)} className={csSegBtn(statusFilter === s)}>{s}</button>
+                    ))}
+                  </div>
                 </div>
               </div>
-              <div className="flex flex-col">
-                <label className="text-[12px] font-semibold text-gray-500 mb-1">정산상태</label>
-                <CustomSelect className="border-2 border-[#1B2B4B] rounded-lg px-3 py-2 text-[13px] font-semibold text-[#1B2B4B] outline-none"
-                  value={statusFilter} onChange={e=>setStatusFilter(e.target.value)}>
-                  <option value="전체">전체</option>
-                  <option value="미정산">미정산</option>
-                  <option value="정산완료">정산완료</option>
-                </CustomSelect>
-              </div>
-              <button className="px-3 py-2 rounded-lg bg-gray-200 text-gray-700 text-[13px] font-semibold hover:bg-gray-300 transition"
-                onClick={()=>{setSelClient("");setArInput("");setYearFrom(String(THIS_YEAR));setMonthFrom("01");setYearTo(String(THIS_YEAR));setMonthTo("12");setStatusFilter("전체");clearSel();setArDropOpen(false);}}>
-                초기화
-              </button>
-            </div>
-            {/* Row 2: 액션 버튼 (우측 정렬) */}
-            <div className="flex flex-wrap items-center justify-end gap-2 pt-2 border-t border-gray-100">
-                <button onClick={downloadMonthExcel} className="px-3 py-2 rounded-lg bg-white border border-[#1B2B4B] text-[#1B2B4B] text-[13px] font-semibold hover:bg-[#1B2B4B] hover:text-white transition"><EditableText id="misc.btn.50682.엑셀다운로드" defaultText="엑셀 다운로드" /></button>
-                <button onClick={() => setBankBulkOpen(true)} className="px-3 py-2 rounded-lg bg-[#0F1A30] text-white text-[13px] font-black hover:bg-[#1B2B4B] transition">대용량 업로드</button>
-                <button onClick={() => setDepositGuideOpen(true)} className="px-3 py-2 rounded-lg bg-white border border-[#1B2B4B]/40 text-[#1B2B4B] text-[13px] font-semibold hover:bg-[#F5F8FD] transition">양식 안내</button>
+
+              {/* KPI — 디지털 계기판 */}
+              {selClient && (
+                <div className="relative overflow-hidden rounded-2xl p-4 text-white" style={{ background: "linear-gradient(120deg,#0B1428 0%,#1B2B4B 100%)" }}>
+                  <div className="absolute inset-0 pointer-events-none" style={{ background: csGrid }} />
+                  <div className="relative flex items-center gap-2">
+                    <span className="text-[9.5px] font-extrabold tracking-[0.24em] text-[#8FB0F0]" style={{ fontFamily: KP_MONO }}>RECEIVABLE · 미정산 금액</span>
+                    <span className="ml-auto text-[11px] font-bold text-white/60 tabular-nums" style={{ fontFamily: KP_MONO }}>OPEN <b className="text-white">{kpi.미정산월}</b>개월</span>
+                  </div>
+                  <div className="relative mt-1 text-[26px] font-black tabular-nums leading-tight" style={{ fontFamily: KP_MONO }}>
+                    {won(kpi.미정산금)}<span className="ml-1 text-[13px] font-bold text-white/45">원</span>
+                  </div>
+                  {kpi.총청구 > 0 && (
+                    <div className="relative mt-2.5 h-1.5 rounded-full bg-white/10 overflow-hidden" title={`정산완료 ${Math.round((kpi.완료금 / kpi.총청구) * 100)}%`}>
+                      <div className="h-full rounded-full" style={{ width: `${Math.min(100, (kpi.완료금 / kpi.총청구) * 100)}%`, background: "linear-gradient(90deg,#4B6CB7,#8FB0F0)" }} />
+                    </div>
+                  )}
+                  <div className="relative mt-3 grid grid-cols-3 gap-2">
+                    {[["ORDERS", "총 오더건수", kpi.전체건수.toLocaleString(), "건"], ["BILLED", "총 청구금액", won(kpi.총청구), "원"], ["COLLECTED", "정산완료 금액", won(kpi.완료금), "원"]].map(([en, k, v, u]) => (
+                      <div key={en} className="rounded-xl px-3 py-2 bg-white/[0.05] border border-white/[0.12] min-w-0">
+                        <div className="text-[9px] font-extrabold tracking-[0.2em] text-white/40" style={{ fontFamily: KP_MONO }}>{en}</div>
+                        <div className="text-[10.5px] font-bold text-white/60 truncate">{k}</div>
+                        <div className="text-[14px] font-black tabular-nums text-[#CFE0FF] truncate" style={{ fontFamily: KP_MONO }}>{v}<span className="ml-0.5 text-[10px] font-bold text-white/40">{u}</span></div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* 🏢 거래처 정보 + 결제 조건 */}
+              {selClient && selClient !== AR_ALL && <ArClientInfo client={(clients || []).find((c) => c.거래처명 === selClient)} name={selClient} upsertClient={upsertClient} isViewer={isViewer} />}
+
+              {/* 입금 반영 · 보고 · 발송 */}
+              <div className={`${csCard} p-4`}>
+                {csHead("TOOLS", "입금 반영 · 보고 · 발송")}
+                <div className="text-[10.5px] font-black text-[#9AA9C3] mb-1.5">입금 반영</div>
+                <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
+                  <button type="button" onClick={() => setBankBulkOpen(true)} className={csBtnPri}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 16V4M6 10l6-6 6 6" /><path d="M4 20h16" /></svg>
+                    입금내역 대용량 업로드
+                  </button>
+                  <button type="button" onClick={() => setDepositGuideOpen(true)} className={csBtn}>양식 안내</button>
+                </div>
+                <div className="text-[10.5px] font-black text-[#9AA9C3] mt-3 mb-1.5">보고 · 발송</div>
+                <div className="grid grid-cols-3 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => { setArFromYear(yearFrom); setArFromMM(monthFrom); setArToYear(yearTo); setArToMM(monthTo); setArReportOpen(true); }}
+                    className={csBtn}
+                  >
+                    미수금보고서
+                  </button>
+                  <button
+                    type="button"
+                    disabled={!selClient}
+                    onClick={() => {
+                      const found = (clients||[]).find(c => c.거래처명 === selClient);
+                      setEmailTo(found?.이메일 || found?.연락처이메일 || "");
+                      setArEmailFromMM(monthFrom || "01");
+                      setArEmailToMM(monthTo || "12");
+                      const unpaid = monthRows.filter(r => r.정산상태 === "미정산");
+                      const unpaidAmt = unpaid.reduce((s,r) => s + r.총청구금액, 0);
+                      setEmailBody(`안녕하세요, ${selClient} 담당자님.\n\n${COMPANY_PRINT.name}입니다.\n\n${THIS_YEAR}년 미수금 현황을 안내드립니다.\n\n미정산 월수: ${unpaid.length}개월\n미정산 금액: ${unpaidAmt.toLocaleString()}원\n\n${unpaid.map(r => `  - ${r.yyyymm} : ${r.총청구금액.toLocaleString()}원`).join("\n")}\n\n입금계좌: ${COMPANY_PRINT.bank}\n\n정산 부탁드립니다.\n감사합니다.\n\n${COMPANY_PRINT.name}\n${COMPANY_PRINT.contact}`);
+                      setEmailScheduleOn(false); setEmailScheduleAt("");
+                      setArEmailOpen(true);
+                    }}
+                    className={csBtn}
+                  >
+                    이메일발송
+                  </button>
+                  <button type="button" onClick={downloadMonthExcel} className={csBtn}><EditableText id="misc.btn.50682.엑셀다운로드" defaultText="엑셀 다운로드" /></button>
+                </div>
                 {bankBulkOpen && createPortal(
                   <BulkUploadChooser
                     title="입금 내역 대용량 업로드"
@@ -54071,184 +54272,141 @@ const handleBatchSettle = async (targetStatus) => {
           </div>
                     </div>
                   </div>, document.body)}
-                <button
-                  onClick={() => { setArFromYear(yearFrom); setArFromMM(monthFrom); setArToYear(yearTo); setArToMM(monthTo); setArReportOpen(true); }}
-                  className="px-3 py-2 rounded-lg bg-white border border-[#1B2B4B] text-[#1B2B4B] text-[13px] font-semibold hover:bg-[#1B2B4B] hover:text-white transition"
-                >
-                  미수금보고서
-                </button>
-                <button
-  disabled={!selClient}
-  onClick={() => {
-    const found = (clients||[]).find(c => c.거래처명 === selClient);
-    setEmailTo(found?.이메일 || found?.연락처이메일 || "");
-    setArEmailFromMM(monthFrom || "01");
-    setArEmailToMM(monthTo || "12");
-    const unpaid = monthRows.filter(r => r.정산상태 === "미정산");
-    const unpaidAmt = unpaid.reduce((s,r) => s + r.총청구금액, 0);
-    setEmailBody(`안녕하세요, ${selClient} 담당자님.\n\n${COMPANY_PRINT.name}입니다.\n\n${THIS_YEAR}년 미수금 현황을 안내드립니다.\n\n미정산 월수: ${unpaid.length}개월\n미정산 금액: ${unpaidAmt.toLocaleString()}원\n\n${unpaid.map(r => `  - ${r.yyyymm} : ${r.총청구금액.toLocaleString()}원`).join("\n")}\n\n입금계좌: ${COMPANY_PRINT.bank}\n\n정산 부탁드립니다.\n감사합니다.\n\n${COMPANY_PRINT.name}\n${COMPANY_PRINT.contact}`);
-    setEmailScheduleOn(false); setEmailScheduleAt("");
-    setArEmailOpen(true);
-  }}
-  className={`px-3 py-2 rounded-lg text-[13px] font-semibold transition border ${selClient ? "bg-white text-[#1B2B4B] border-[#1B2B4B] hover:bg-[#1B2B4B] hover:text-white" : "bg-gray-100 text-gray-500 border-gray-200 cursor-not-allowed"}`}
->
-  이메일발송
-</button>
-            </div>
-          </div>
-          {/* KPI 카드 — 네이비 */}
-          {selClient && (
-            <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 mb-4">
-              {[
-                {label:"총 오더건수", en:"ORDERS", val:`${kpi.전체건수}건`},
-                {label:"총 청구금액", en:"BILLED", val:`${won(kpi.총청구)}원`},
-                {label:"미정산 월수", en:"OPEN MONTHS", val:`${kpi.미정산월}개월`},
-                {label:"미정산 금액", en:"RECEIVABLE", val:`${won(kpi.미정산금)}원`, hot:true},
-                {label:"정산완료 금액", en:"COLLECTED", val:`${won(kpi.완료금)}원`},
-              ].map(({label,en,val,hot})=>(
-                <div key={label} className={`rounded-2xl p-4 border ${hot ? "bg-[#0F1A30] border-[#0F1A30] text-white" : "bg-white border-[#E3E8F0]"}`}>
-                  <div className={`text-[9.5px] font-extrabold tracking-[0.22em] ${hot ? "text-[#8FB0F0]" : "text-[#9AA9C3]"}`} style={{ fontFamily: KP_MONO }}>{en}</div>
-                  <div className={`text-[11.5px] font-bold ${hot ? "text-white/70" : "text-[#5B6B85]"}`}>{label}</div>
-                  <div className={`text-[19px] font-black tabular-nums ${hot ? "text-white" : "text-[#0F1A30]"}`} style={{ fontFamily: KP_MONO }}>{val}</div>
-                </div>
-              ))}
-            </div>
-          )}
-          {/* 🏢 거래처 정보 + 결제 조건 */}
-          {selClient && selClient !== AR_ALL && <ArClientInfo client={(clients || []).find((c) => c.거래처명 === selClient)} name={selClient} upsertClient={upsertClient} isViewer={isViewer} />}
-
-          {/* 테이블 */}
-          <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-x-auto">
-            {/* ⭐ 2026-10-31 정산 처리 버튼은 목록 바로 위 왼쪽으로(상단 도구줄이 너무 몰려 있던 문제) */}
-            <div className="flex flex-wrap items-center gap-2 px-4 py-3 border-b border-gray-100 bg-[#F7F9FC]">
-              <span className="text-[11px] font-extrabold tracking-[0.2em] text-[#4B6CB7] mr-1" style={{ fontFamily: KP_MONO }}>SETTLE</span>
-              <button onClick={settleSelected} disabled={!selectedMonths.size}
-                className={`h-9 px-3.5 rounded-lg text-[13px] font-bold transition border ${selectedMonths.size?"bg-[#1B2B4B] text-white border-[#1B2B4B] hover:bg-[#243a60]":"bg-[#1B2B4B]/30 text-white border-transparent cursor-not-allowed"}`}>
-                선택 정산완료{selectedMonths.size ? ` (${selectedMonths.size})` : ""}
-              </button>
-              <button onClick={settleAll} disabled={!monthRows.length}
-                className={`h-9 px-3.5 rounded-lg text-[13px] font-bold transition border ${monthRows.length?"bg-white text-[#1B2B4B] border-[#1B2B4B] hover:bg-[#1B2B4B] hover:text-white":"bg-gray-100 text-gray-500 border-gray-200 cursor-not-allowed"}`}>
-                전체 정산완료
-              </button>
-              <button
-                onClick={() => { setBatchModalOpen(true); setBatchClients(new Set()); setBatchClientQ(""); }}
-                className="h-9 px-3.5 rounded-lg bg-white border border-[#1B2B4B]/40 text-[#1B2B4B] text-[13px] font-bold hover:bg-[#F2F6FD] transition"
-              >
-                일괄 정산처리
-              </button>
-            </div>
-            {selClient && (
-              <div className="flex items-center gap-3 px-4 py-3 border-b border-gray-100 bg-[#1B2B4B]/4">
-                <span className="text-[12px] font-bold text-gray-500">조회 거래처</span>
-                <span className="text-[14px] font-extrabold text-[#1B2B4B]">{selClient}</span>
-                {selClient === AR_ALL && <span className="text-[12px] text-gray-500">거래처별·월별로 한 줄씩</span>}
-                <span className="text-[12px] text-gray-500">— {THIS_YEAR}년 월별 정산 현황</span>
               </div>
-            )}
-            <table className="text-[13px] w-full min-w-[1080px]" style={{tableLayout:"fixed"}}>
-              <colgroup>
-                <col style={{width:"40px"}} />
-                {selClient === AR_ALL && <col style={{width:"160px"}} />}
-                <col style={{width:"48px"}} />
-                <col style={{width:"88px"}} />
-                <col style={{width:"56px"}} />
-                <col style={{width:"120px"}} />
-                <col style={{width:"110px"}} />
-                <col style={{width:"110px"}} />
-                <col style={{width:"104px"}} />
-                <col style={{width:"76px"}} />
-                <col style={{width:"110px"}} />
-                <col style={{width:"92px"}} />
-                <col />
-              </colgroup>
-              <thead>
-                <tr className="bg-[#0B1428]">
-                  <th
-                    className="px-2 py-3 text-white text-center cursor-pointer select-none"
-                    onClick={() => toggleAllMonths(monthRows)}
-                  >
-                    <input autoComplete="off"
-                      type="checkbox"
-                      onChange={() => toggleAllMonths(monthRows)}
-                      checked={selectedMonths.size > 0 && selectedMonths.size === monthRows.length}
-                      onClick={e => e.stopPropagation()}
-                    />
-                  </th>
-                  {[...(selClient === AR_ALL ? ["거래처"] : []), "순번","청구월","건수","총 청구금액","입금액","잔액","결제 예정일","경과","정산상태","정산일","메모"].map(label=>(
-                    <SortTh key={label} k={label} sort={arSort.sort} onSort={arSort.toggle} className="px-3 py-3 text-white font-bold text-center whitespace-nowrap"><EditableText id={`settlement.monthly.header.${label}`} defaultText={label} /></SortTh>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {!selClient ? (
-                  <tr><td colSpan={13} className="text-center text-gray-500 py-16 text-[14px]">거래처를 검색하세요.</td></tr>
-                ) : monthRows.length === 0 ? (
-                  <tr><td colSpan={13} className="text-center text-gray-500 py-16 text-[14px]">표시할 데이터가 없습니다.</td></tr>
-                ) : (
-                  monthRowsSorted.map((row, idx) => (
-                    <tr key={row.k} className={idx%2===0?"bg-white":"bg-gray-50/60"}>
-                      <td
-                        className="px-3 py-3 text-center border-b border-gray-100 cursor-pointer select-none"
-                        onClick={() => toggleMonthSelect(row.k)}
-                      >
-                        <input autoComplete="off"
-                          type="checkbox"
-                          checked={selectedMonths.has(row.k)}
-                          onChange={() => toggleMonthSelect(row.k)}
-                          onClick={e => e.stopPropagation()}
-                        />
-                      </td>
-                      {selClient === AR_ALL && <td className="px-3 py-3 font-bold text-[#0F1A30] border-b border-gray-100 truncate">{row.거래처명}</td>}
-                      <td className="px-3 py-3 text-center text-gray-500 border-b border-gray-100">{idx+1}</td>
-                      <td className="px-3 py-3 text-center font-bold text-[#1B2B4B] border-b border-gray-100">{row.yyyymm}</td>
-                      <td className="px-3 py-3 text-center border-b border-gray-100">{row.건수}건</td>
-                      <td className="px-3 py-3 text-right font-bold border-b border-gray-100">
-                        <span className={row.총청구금액>0?"text-[#1B2B4B]":"text-gray-500"}>
-                          {won(row.총청구금액)}원
-                        </span>
-                      </td>
-                      {(() => {
-                        const 공급청구 = row.총청구금액;
-                        const 청구VAT = Math.round(공급청구 * 1.1);
-                        const 입금 = row.정산상태 === "정산완료" ? 청구VAT : (row.입금누계 || 0);
-                        const 잔 = row.정산상태 === "정산완료" ? 0 : Math.max(0, 청구VAT - 입금);
-                        const rule = ((clients || []).find((c) => c.거래처명 === (row.거래처명 || selClient)) || {}).결제일;
-                        const due = arDueDate(row.yyyymm, rule);
-                        const over = due && 잔 > 0 ? Math.floor((Date.now() - new Date(`${due}T23:59:59+09:00`).getTime()) / 86400000) : null;
-                        return (<>
-                          <td className="px-3 py-3 text-right border-b border-gray-100 tabular-nums text-[#3A4A66]">{입금 ? `${won(입금)}` : "-"}</td>
-                          <td className={`px-3 py-3 text-right border-b border-gray-100 tabular-nums ${잔 ? "font-black text-[#0F1A30]" : "text-[#9AA9C3]"}`}>{잔 ? won(잔) : "0"}</td>
-                          <td className="px-3 py-3 text-center border-b border-gray-100 tabular-nums text-[#3A4A66]">{due || <span className="text-[#C9D3E3]">결제일 미설정</span>}</td>
-                          <td className="px-3 py-3 text-center border-b border-gray-100">{over == null ? "-" : over > 0 ? <span className="px-2 py-0.5 rounded-md bg-[#0F1A30] text-white text-[11.5px] font-black">D+{over}</span> : <span className="text-[12px] font-bold text-[#5B6B85]">D{over === 0 ? "-day" : over}</span>}</td>
-                        </>);
-                      })()}
-                      <td className="px-3 py-3 text-center border-b border-gray-100 cursor-pointer select-none"
-                        onClick={()=>toggleMonthStatus(row)} title="클릭하여 상태 전환">
-                        <span className={`px-3 py-1 rounded-lg text-[12.5px] font-black ${
-                          row.정산상태==="정산완료" ? "bg-[#0F1A30] text-white"
-                          : row.정산상태==="진행중" || row.정산상태==="일부입금" ? "bg-[#2D4C82] text-white"
-                          : "bg-[#EEF3FC] text-[#1B2B4B] border border-[#8FB0F0]"
-                        }`}>
-                          {row.정산상태}
-                        </span>
-                        {row.정산상태 === "일부입금" && <div className="mt-1 text-[11px] text-gray-500 whitespace-nowrap">입금 {won(row.입금누계)} · 잔액 {won(row.잔액)}</div>}
-                      </td>
-                      <td className="px-3 py-3 text-center text-gray-500 border-b border-gray-100">{row.정산일||"-"}</td>
-                      <td className="px-3 py-3 border-b border-gray-100">
-                        <input autoComplete="off"
-                          className="border rounded-lg px-2 py-1 text-[12px] w-full outline-none focus:border-[#1B2B4B]"
-                          placeholder="메모 입력"
-                          value={memoMap[row.k]||""}
-                          onChange={e=>setMemoMap(p=>({...p,[row.k]:e.target.value}))}
-                        />
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
+            </div>
+
+            {/* ── 오른쪽: 월별 정산 원장 ── */}
+            <div className="min-w-0 xl:sticky xl:top-3">
+              <div className={`${csCard} overflow-hidden flex flex-col xl:max-h-[calc(100vh-24px)]`}>
+                <div className="flex items-center gap-3 px-4 py-2.5 border-b border-[#E3E8F0] bg-white flex-wrap">
+                  <div className="min-w-0 mr-auto">
+                    <div className="text-[9.5px] font-extrabold tracking-[0.24em] text-[#9AA9C3] leading-none" style={{ fontFamily: KP_MONO }}>LEDGER · MONTHLY · {yearFrom}.{monthFrom} – {yearTo}.{monthTo}</div>
+                    <div className="text-[13.5px] font-black text-[#0F1A30] mt-1 leading-none truncate">
+                      {selClient || "거래처를 선택하세요"}
+                      {selClient === AR_ALL && <span className="ml-1.5 text-[12px] font-bold text-[#5B6B85]">· 거래처별·월별로 한 줄씩</span>}
+                      {selClient && selClient !== AR_ALL && <span className="ml-1.5 text-[12px] font-bold text-[#5B6B85]">· 월별 정산 현황</span>}
+                    </div>
+                  </div>
+                  {/* ⭐ 정산 처리 버튼은 원장 바로 위 */}
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[9.5px] font-extrabold tracking-[0.24em] text-[#9AA9C3] mr-0.5" style={{ fontFamily: KP_MONO }}>SETTLE</span>
+                    <button type="button" onClick={settleSelected} disabled={!selectedMonths.size} className={csBtnPri}>
+                      선택 정산완료{selectedMonths.size ? ` (${selectedMonths.size})` : ""}
+                    </button>
+                    <button type="button" onClick={settleAll} disabled={!monthRows.length} className={csBtn}>전체 정산완료</button>
+                    <button type="button" onClick={() => { setBatchModalOpen(true); setBatchClients(new Set()); setBatchClientQ(""); }} className={csBtn}>일괄 정산처리</button>
+                  </div>
+                </div>
+                <div className="flex-1 min-h-0 overflow-auto">
+                  <table className="text-[12.5px] w-full" style={{ tableLayout: "fixed", minWidth: selClient === AR_ALL ? 1060 : 920 }}>
+                    <colgroup>
+                      <col style={{width:"36px"}} />
+                      {selClient === AR_ALL && <col style={{width:"140px"}} />}
+                      <col style={{width:"44px"}} />
+                      <col style={{width:"76px"}} />
+                      <col style={{width:"50px"}} />
+                      <col style={{width:"108px"}} />
+                      <col style={{width:"96px"}} />
+                      <col style={{width:"96px"}} />
+                      <col style={{width:"92px"}} />
+                      <col style={{width:"62px"}} />
+                      <col style={{width:"92px"}} />
+                      <col style={{width:"84px"}} />
+                      <col />
+                    </colgroup>
+                    <thead>
+                      <tr>
+                        <th
+                          className="sticky top-0 z-10 bg-[#0F1A30] px-2 py-2.5 text-white text-center cursor-pointer select-none"
+                          onClick={() => toggleAllMonths(monthRows)}
+                        >
+                          <input autoComplete="off"
+                            type="checkbox"
+                            className="accent-[#8FB0F0] cursor-pointer"
+                            onChange={() => toggleAllMonths(monthRows)}
+                            checked={selectedMonths.size > 0 && selectedMonths.size === monthRows.length}
+                            onClick={e => e.stopPropagation()}
+                          />
+                        </th>
+                        {[...(selClient === AR_ALL ? ["거래처"] : []), "순번","청구월","건수","총 청구금액","입금액","잔액","결제 예정일","경과","정산상태","정산일","메모"].map(label=>(
+                          <SortTh key={label} k={label} sort={arSort.sort} onSort={arSort.toggle} className="sticky top-0 z-10 bg-[#0F1A30] px-2 py-2.5 text-white text-[12px] font-bold text-center whitespace-nowrap"><EditableText id={`settlement.monthly.header.${label}`} defaultText={label} /></SortTh>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {!selClient ? (
+                        <tr><td colSpan={13} className="text-center text-[#9AA9C3] py-16 text-[13px] font-bold">왼쪽에서 거래처를 검색하세요.</td></tr>
+                      ) : monthRows.length === 0 ? (
+                        <tr><td colSpan={13} className="text-center text-[#9AA9C3] py-16 text-[13px] font-bold">표시할 데이터가 없습니다.</td></tr>
+                      ) : (
+                        monthRowsSorted.map((row, idx) => (
+                          <tr key={row.k} className={`border-b border-[#EEF2F8] transition ${selectedMonths.has(row.k) ? "bg-[#EEF2F8]" : "hover:bg-[#F8FAFD]"}`}>
+                            <td
+                              className="px-2 py-2.5 text-center cursor-pointer select-none"
+                              onClick={() => toggleMonthSelect(row.k)}
+                            >
+                              <input autoComplete="off"
+                                type="checkbox"
+                                className="accent-[#0F1A30] cursor-pointer"
+                                checked={selectedMonths.has(row.k)}
+                                onChange={() => toggleMonthSelect(row.k)}
+                                onClick={e => e.stopPropagation()}
+                              />
+                            </td>
+                            {selClient === AR_ALL && <td className="px-2 py-2.5 font-bold text-[#0F1A30] truncate" title={row.거래처명}>{row.거래처명}</td>}
+                            <td className="px-2 py-2.5 text-center text-[#9AA9C3] tabular-nums">{idx+1}</td>
+                            <td className="px-2 py-2.5 text-center font-black text-[#0F1A30] tabular-nums" style={{ fontFamily: KP_MONO, fontSize: 12 }}>{row.yyyymm}</td>
+                            <td className="px-2 py-2.5 text-center text-[#5B6B85] tabular-nums">{row.건수}건</td>
+                            <td className="px-2 py-2.5 text-right font-bold tabular-nums" style={{ fontFamily: KP_MONO, fontSize: 12 }}>
+                              <span className={row.총청구금액>0?"text-[#0F1A30]":"text-[#9AA9C3]"}>
+                                {won(row.총청구금액)}
+                              </span>
+                            </td>
+                            {(() => {
+                              const 공급청구 = row.총청구금액;
+                              const 청구VAT = Math.round(공급청구 * 1.1);
+                              const 입금 = row.정산상태 === "정산완료" ? 청구VAT : (row.입금누계 || 0);
+                              const 잔 = row.정산상태 === "정산완료" ? 0 : Math.max(0, 청구VAT - 입금);
+                              const rule = ((clients || []).find((c) => c.거래처명 === (row.거래처명 || selClient)) || {}).결제일;
+                              const due = arDueDate(row.yyyymm, rule);
+                              const over = due && 잔 > 0 ? Math.floor((Date.now() - new Date(`${due}T23:59:59+09:00`).getTime()) / 86400000) : null;
+                              return (<>
+                                <td className="px-2 py-2.5 text-right tabular-nums text-[#3A4A66]" style={{ fontFamily: KP_MONO, fontSize: 12 }}>{입금 ? `${won(입금)}` : "-"}</td>
+                                <td className={`px-2 py-2.5 text-right tabular-nums ${잔 ? "font-black text-[#0F1A30]" : "text-[#9AA9C3]"}`} style={{ fontFamily: KP_MONO, fontSize: 12 }}>{잔 ? won(잔) : "0"}</td>
+                                <td className="px-2 py-2.5 text-center tabular-nums text-[#3A4A66]" style={{ fontSize: 12 }}>{due || <span className="text-[#C9D3E3] text-[11px]">결제일 미설정</span>}</td>
+                                <td className="px-2 py-2.5 text-center">{over == null ? <span className="text-[#C9D3E3]">-</span> : over > 0 ? <span className="px-1.5 py-0.5 rounded-md bg-[#FDECEC] text-[#B42318] text-[11px] font-black tabular-nums" style={{ fontFamily: KP_MONO }}>D+{over}</span> : <span className="text-[11.5px] font-bold text-[#5B6B85] tabular-nums" style={{ fontFamily: KP_MONO }}>D{over === 0 ? "-day" : over}</span>}</td>
+                              </>);
+                            })()}
+                            <td className="px-2 py-2.5 text-center cursor-pointer select-none"
+                              onClick={()=>toggleMonthStatus(row)} title="클릭하여 상태 전환">
+                              <span className={`inline-flex items-center h-6 px-2.5 rounded-md text-[11.5px] font-black whitespace-nowrap ${
+                                row.정산상태==="정산완료" ? "bg-[#0F1A30] text-white"
+                                : row.정산상태==="진행중" || row.정산상태==="일부입금" ? "bg-[#2D4C82] text-white"
+                                : "bg-white text-[#1B2B4B] border border-[#8FB0F0]"
+                              }`}>
+                                {row.정산상태}
+                              </span>
+                              {row.정산상태 === "일부입금" && <div className="mt-1 text-[10.5px] text-[#5B6B85] whitespace-nowrap tabular-nums">입금 {won(row.입금누계)} · 잔액 {won(row.잔액)}</div>}
+                            </td>
+                            <td className="px-2 py-2.5 text-center text-[#5B6B85] tabular-nums" style={{ fontSize: 12 }}>{row.정산일||"-"}</td>
+                            <td className="px-2 py-2">
+                              <input autoComplete="off"
+                                className="h-8 w-full rounded-lg border border-[#DCE3EE] bg-white px-2 text-[12px] outline-none focus:border-[#1B2B4B]"
+                                placeholder="메모 입력"
+                                value={memoMap[row.k]||""}
+                                onChange={e=>setMemoMap(p=>({...p,[row.k]:e.target.value}))}
+                              />
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+                <div className="px-4 py-2 border-t border-[#E3E8F0] bg-[#F8FAFD] text-[11px] text-[#9AA9C3]">· 정산상태 클릭 시 해당 월 전체 오더에 정산상태/정산일이 저장됩니다.</div>
+              </div>
+            </div>
           </div>
-                            <div className="mt-2 text-[12px] text-gray-500">· 정산상태 클릭 시 해당 월 전체 오더에 정산상태/정산일이 저장됩니다.</div>
 
 
           {/* 미수금 보고서 기간 + 거래처 선택 */}
