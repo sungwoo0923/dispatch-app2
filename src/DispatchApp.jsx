@@ -14623,7 +14623,7 @@ setCopyOpen(false);
       const dStr = r.상차일 || _todayStr(); // YYYY-MM-DD 유지
       const plate = r.차량번호 || "-";
       const name = r.이름 || "-";
-      const url = `${location.origin}/upload?id=${encodeURIComponent(r._id || "")}`;
+      const url = withCo(`${location.origin}/upload?id=${encodeURIComponent(r._id || "")}`);
       return `[${userCompany || "운송사"} 운송장 업로드 안내]
 
 ✓ 상차일: ${dStr}
@@ -14635,7 +14635,7 @@ setCopyOpen(false);
     };
     const shareDispatch = async (r) => {
       const text = shareTextForRow(r);
-      const url = `${location.origin}/upload?id=${encodeURIComponent(r._id || "")}`;
+      const url = withCo(`${location.origin}/upload?id=${encodeURIComponent(r._id || "")}`);
       if (isMobile && navigator.share) {
         try { await navigator.share({ title: `${userCompany || "운송사"} 업로드 안내`, text, url }); } catch { }
         return;
@@ -29121,7 +29121,7 @@ const openDailyCloseIssueDetail = (rowId) => {
   // 📌 공유 메시지 (기존 함수)
   // ------------------------
   const shareDispatch = (row) => {
-    const url = `${window.location.origin}/upload?id=${row._id}`;
+    const url = withCo(`${window.location.origin}/upload?id=${row._id}`);
 
     const msg = `
 ▣ [배차 정보]

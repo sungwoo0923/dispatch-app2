@@ -747,6 +747,86 @@ function NoticesPanel() {
 const TENANT_COLS = ["orders", "dispatch", "dispatch_test", "drivers", "clients", "places", "fixedClients", "recurringOrders",
   "deletedOrders", "driver_completed_archive", "notices", "schedules", "handovers", "boardPosts", "approvals", "approvalLines",
   "notifications", "scheduledEmails", "emailLogs", "hrResumes", "attendanceRequests", "attendanceChangeRequests", "acctPayments"];
+// 🔎 2026-11-03 회사명 없는 데이터 점검 — 어떤 데이터가(오더·기사 기록 등) 몇 건, 언제 것인지 보고 기준일 이전은 지운다
+const EMPTY_CO_LABEL = {
+  orders: "오더", dispatch: "오더(모바일 등록)", dispatch_test: "테스트 오더", drivers: "기사", clients: "기본거래처", places: "상하차지", fixedClients: "고정거래처",
+  recurringOrders: "정기오더", deletedOrders: "삭제한 오더 보관함", driver_completed_archive: "기사 완료 기록", notices: "공지", schedules: "일정", handovers: "인수인계",
+  boardPosts: "게시판", approvals: "전자결재", approvalLines: "결재선", notifications: "알림", scheduledEmails: "예약 메일", emailLogs: "메일 기록", hrResumes: "이력서",
+  attendanceRequests: "근태 신청", attendanceChangeRequests: "근태 변경", acctPayments: "지급 관리",
+  driver_logs: "기사 운행일지", gps_tracks: "GPS 이동 기록", liveLocations: "실시간 위치", driver_photo_logs: "기사 사진 기록", driver_documents: "기사 서류",
+  driver_notifications: "기사 알림", location_change_requests: "위치 변경 요청", emergency_alerts: "긴급 알림", collision_alerts: "충돌 알림", driver_uploads: "기사 업로드",
+  attendance: "출퇴근 기록", routeBoards: "배차표 양식", fixedRoutes: "고정노선",
+};
+const EMPTY_CO_COLS = Object.keys(EMPTY_CO_LABEL);
+function EmptyCompanyCheck() {
+  const [res, setRes] = React.useState({});
+  const [busy, setBusy] = React.useState("");
+  const [before, setBefore] = React.useState(() => { const d = new Date(); d.setMonth(d.getMonth() - 3); return ymd(d); });
+  const call = async (col, mode, extra = {}) => {
+    const token = await auth.currentUser?.getIdToken();
+    let cursor = null; const acc = { total: 0, empty: 0, removed: 0, oldest: "", newest: "", noDate: 0, sample: [] };
+    for (;;) {
+      const r = await fetch(`${FUNCTIONS_BASE}/tenantMigrate`, { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify({ col, mode, cursor, ...extra }) });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(`${EMPTY_CO_LABEL[col] || col}: ${j.error || r.status}${r.status === 404 ? " (서버 함수 배포가 필요합니다)" : ""}`);
+      acc.total += j.total || 0; acc.empty += j.empty || 0; acc.removed += j.removed || 0; acc.noDate += j.noDate || 0;
+      if (j.oldest && (!acc.oldest || j.oldest < acc.oldest)) acc.oldest = j.oldest;
+      if (j.newest && j.newest > acc.newest) acc.newest = j.newest;
+      if (acc.sample.length < 5) acc.sample.push(...(j.sample || []).slice(0, 5 - acc.sample.length));
+      cursor = j.cursor;
+      setRes((p) => ({ ...p, [col]: { ...acc, state: "진행 중" } }));
+      if (j.done) break;
+    }
+    setRes((p) => ({ ...p, [col]: { ...acc, state: mode === "purge" ? "삭제 완료" : "완료" } }));
+    return acc;
+  };
+  const scanAll = async () => {
+    setBusy("scan"); setRes({});
+    try { for (const col of EMPTY_CO_COLS) await call(col, "scan"); } catch (e) { window.alert(e.message || e); } finally { setBusy(""); }
+  };
+  const purge = async (col) => {
+    const r = res[col];
+    if (!window.confirm(`[${EMPTY_CO_LABEL[col]}] 회사명이 없는 데이터 중 ${before} 이전(날짜 없는 것 포함) 것을 지웁니다.\n오더면 달린 사진·파일도 같이 지워지고 되돌릴 수 없습니다.\n\n지금 회사명 없는 것: ${r?.empty?.toLocaleString() || 0}건\n진행할까요?`)) return;
+    if (window.prompt("확인을 위해 '삭제'라고 입력해 주세요") !== "삭제") return;
+    setBusy(col);
+    try { const pr = await call(col, "purge", { before }); await call(col, "scan"); setRes((p) => ({ ...p, [col]: { ...p[col], removed: pr.removed } })); } catch (e) { window.alert(e.message || e); } finally { setBusy(""); }
+  };
+  const rows = EMPTY_CO_COLS.filter((c) => res[c]);
+  const totalEmpty = rows.reduce((a, c) => a + (res[c].empty || 0), 0);
+  return (
+    <Card code="CHECK" title="회사명 없는 데이터 점검" right={<button type="button" onClick={scanAll} disabled={!!busy} className="h-9 px-4 rounded-xl bg-[#0F1A30] text-white text-[13px] font-black disabled:opacity-50">{busy === "scan" ? "점검 중…" : "전체 점검"}</button>}>
+      <div className="text-[13px] text-[#5B6B85] leading-relaxed">
+        회사명이 빈 데이터는 오더·기사·거래처 등은 <b>돌캐 것</b>으로, 기사앱 기록(GPS·운행일지·사진·서류·알림)은 <b>모든 운송사에 보이는 것</b>으로 처리되고 있습니다. 어떤 데이터가 몇 건이고 언제 것인지 확인한 뒤, <b>기준일 이전</b> 것은 지울 수 있습니다(최근 것은 남겨 두고 1단계로 회사명을 채우세요).
+      </div>
+      <div className="mt-3 flex items-center gap-2 flex-wrap">
+        <span className="text-[12.5px] font-black text-[#3A4A66]">삭제 기준일</span>
+        <span className="inline-block w-[150px]"><CustomDatePicker value={before} onChange={(e) => setBefore(e.target.value)} className="h-9 w-full px-2 rounded-lg border border-[#DCE3EE] text-[13px] font-semibold" /></span>
+        <span className="text-[12px] text-[#9AA9C3]">이 날짜 이전(날짜 없는 것 포함)만 지웁니다</span>
+        {rows.length > 0 && <span className="ml-auto text-[13px] font-black text-[#0F1A30]">회사명 없음 합계 <span style={{ fontFamily: MONO }}>{totalEmpty.toLocaleString()}</span>건</span>}
+      </div>
+      {rows.length > 0 && (
+        <div className="mt-3 overflow-x-auto"><table className="w-full text-[13px]" style={{ minWidth: 860 }}>
+          <thead><tr className="bg-[#1B2B4B] text-white">{["데이터", "전체", "회사명 없음", "날짜 범위", "예시", ""].map((h) => <th key={h} className="px-3 py-2 text-center font-extrabold whitespace-nowrap">{h}</th>)}</tr></thead>
+          <tbody>{rows.map((c) => { const r = res[c]; return (
+            <tr key={c} className={`border-t border-[#EEF1F6] ${r.empty ? "" : "opacity-60"}`}>
+              <td className="px-3 py-2 font-black text-[#0F1A30] whitespace-nowrap">{EMPTY_CO_LABEL[c]}<div className="text-[10.5px] font-semibold text-[#9AA9C3]" style={{ fontFamily: MONO }}>{c}</div></td>
+              <td className="px-3 py-2 text-right tabular-nums" style={{ fontFamily: MONO }}>{r.total.toLocaleString()}</td>
+              <td className={`px-3 py-2 text-right tabular-nums font-black ${r.empty ? "text-[#B42318]" : "text-[#9AA9C3]"}`} style={{ fontFamily: MONO }}>{r.empty.toLocaleString()}</td>
+              <td className="px-3 py-2 text-center whitespace-nowrap text-[12px] text-[#5B6B85] tabular-nums" style={{ fontFamily: MONO }}>{r.empty ? `${r.oldest || "?"} ~ ${r.newest || "?"}${r.noDate ? ` · 날짜없음 ${r.noDate}` : ""}` : "-"}</td>
+              <td className="px-3 py-2 text-[12px] text-[#7A879C] max-w-[260px] truncate" title={r.sample.map((x) => `${x.day} ${x.title}`).join("\n")}>{r.sample.map((x) => `${x.day || "날짜없음"} ${x.title}`).join(" · ") || "-"}</td>
+              <td className="px-3 py-2 text-center whitespace-nowrap">
+                {r.state === "진행 중" ? <span className="text-[12px] font-bold text-[#2D4C82] animate-pulse">진행 중…</span>
+                  : r.empty ? <button type="button" disabled={!!busy} onClick={() => purge(c)} className="h-8 px-3 rounded-lg border border-[#B42318] text-[#B42318] text-[12px] font-black hover:bg-[#FFF1F0] disabled:opacity-50">{busy === c ? "지우는 중…" : `${before} 이전 삭제`}</button>
+                  : <span className="text-[12px] font-bold text-[#1B7F4B]">깨끗함</span>}
+                {r.removed ? <div className="text-[10.5px] font-bold text-[#1B7F4B] mt-0.5">{r.removed.toLocaleString()}건 삭제됨</div> : null}
+              </td>
+            </tr>); })}</tbody>
+        </table></div>
+      )}
+    </Card>
+  );
+}
+
 function TenancyPanel() {
   const [cfg, setCfg] = React.useState(null);
   const [prog, setProg] = React.useState({});
@@ -814,6 +894,7 @@ function TenancyPanel() {
           </div>
         )}
       </Card>
+      <EmptyCompanyCheck />
     </div>
   );
 }

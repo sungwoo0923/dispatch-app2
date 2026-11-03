@@ -170,7 +170,7 @@ export default function DriverSearchPage() {
     // 만든 적이 있으면) 여기서 토큰 없이 넘어가면, /upload 쪽 잠금 로직이 "토큰이
     // 안 맞는 예전 링크"로 오인해 업로드한 적이 없어도 "이미 업로드 완료"로 막아버렸다.
     // 검색 결과에 이미 포함된 현재 토큰을 그대로 같이 넘겨 정상 접근되게 한다.
-    window.location.href = `/upload?id=${id}${token ? `&t=${token}` : ""}`;
+    window.location.href = `/upload?id=${id}${token ? `&t=${token}` : ""}${linkCo ? `&co=${encodeURIComponent(linkCo)}` : ""}`;
   };
 
   const statusLabel = (r) => {
@@ -200,6 +200,20 @@ export default function DriverSearchPage() {
           <div style={{ color: "rgba(255,255,255,0.5)", fontSize: 11 }}>서류 업로드 — 오더 검색</div>
         </div>
       </div>
+
+      {/* ⭐ 2026-11-03 링크를 보낸 운송사 — 맨 위 고정(고칠 수 없음), 그 운송사 오더만 찾는다 */}
+      {linkCo && (
+        <div style={{ background: "#0F1A30", borderTop: "1px solid rgba(255,255,255,0.08)", padding: "10px 24px" }}>
+          <div style={{ maxWidth: 480, margin: "0 auto", display: "flex", alignItems: "center", gap: 10 }}>
+            <span style={{ color: "rgba(255,255,255,0.55)", fontSize: 12, fontWeight: 700 }}>운송사</span>
+            <span style={{ color: "#fff", fontSize: 15, fontWeight: 900 }}>{linkCo}</span>
+            <span style={{ marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 4, color: "#8FB0F0", fontSize: 11, fontWeight: 800 }}>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round"><rect x="5" y="11" width="14" height="10" rx="2" /><path d="M8 11V7a4 4 0 0 1 8 0v4" /></svg>
+              링크로 지정됨
+            </span>
+          </div>
+        </div>
+      )}
 
       <div style={{ maxWidth: 480, margin: "0 auto", padding: "20px 16px 60px" }}>
 

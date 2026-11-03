@@ -505,6 +505,14 @@ export default function UploadPage() {
             <div style={{ flex: 1, minWidth: 0 }}>
               <div className="kpu-mono" style={{ fontSize: 10.5, fontWeight: 800, letterSpacing: "0.26em", color: "#8FB0F0" }}>KP-FLOW · DRIVER UPLOAD</div>
               <div style={{ color: "#fff", fontWeight: 900, fontSize: 19, letterSpacing: "-0.3px", marginTop: 2 }}>인수증 · 서류 업로드</div>
+              {/* ⭐ 2026-11-03 이 오더의 운송사 — 고정(고칠 수 없음) */}
+              {(() => { const co = String(order?.companyName || order?.company || new URLSearchParams(window.location.search).get("co") || "").trim(); return co ? (
+                <div style={{ display: "inline-flex", alignItems: "center", gap: 6, marginTop: 6, height: 24, padding: "0 10px", borderRadius: 8, background: "rgba(255,255,255,.1)", border: "1px solid rgba(207,224,255,.25)" }}>
+                  <span style={{ color: "rgba(207,224,255,.7)", fontSize: 11, fontWeight: 700 }}>운송사</span>
+                  <span style={{ color: "#fff", fontSize: 13, fontWeight: 900 }}>{co}</span>
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#8FB0F0" strokeWidth="2.6" strokeLinecap="round"><rect x="5" y="11" width="14" height="10" rx="2" /><path d="M8 11V7a4 4 0 0 1 8 0v4" /></svg>
+                </div>
+              ) : null; })()}
             </div>
             {!isManual && order && status === "ready" && (
               <span style={{ display: "inline-flex", alignItems: "center", gap: 6, height: 28, padding: "0 10px", borderRadius: 99, border: "1px solid rgba(143,176,240,.4)", background: "rgba(143,176,240,.12)", color: "#CFE0FF", fontSize: 11.5, fontWeight: 800 }}>

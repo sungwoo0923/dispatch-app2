@@ -3502,6 +3502,18 @@ exports.checkGsheetMonth = functions
 const TENANT_COLS = ["orders", "dispatch", "dispatch_test", "drivers", "clients", "places", "fixedClients", "recurringOrders",
   "deletedOrders", "driver_completed_archive", "notices", "schedules", "handovers", "boardPosts", "approvals", "approvalLines",
   "notifications", "scheduledEmails", "emailLogs", "hrResumes", "attendanceRequests", "attendanceChangeRequests", "acctPayments"];
+// ⭐ 2026-11-03 회사명 없는 데이터 점검·삭제 — 기사앱·서버 기록(회사명 없으면 모든 회사에 보이던 것)
+const TENANT_LOOSE_COLS = ["driver_logs", "gps_tracks", "liveLocations", "driver_photo_logs", "driver_documents", "driver_notifications",
+  "location_change_requests", "emergency_alerts", "collision_alerts", "driver_uploads", "attendance"];
+const TENANT_ALL_COLS = [...TENANT_COLS, ...TENANT_LOOSE_COLS, "routeBoards", "fixedRoutes"];
+const _tsMsAny = (t) => (t?.toMillis ? t.toMillis() : t?._seconds ? t._seconds * 1000 : t?.seconds ? t.seconds * 1000 : typeof t === "number" ? t : 0);
+// 문서 날짜(YYYY-MM-DD) — 오더는 상차일, 기록은 날짜 칸, 없으면 만든 시각
+function _docDay(x) {
+  for (const k of ["상차일", "날짜", "logDate", "date", "workDate"]) { const v = String(x?.[k] || ""); if (/^\d{4}-\d{2}-\d{2}/.test(v)) return v.slice(0, 10); }
+  for (const k of ["createdAt", "timestamp", "updatedAt", "uploadedAt", "at"]) { const ms = _tsMsAny(x?.[k]); if (ms > 0) return new Date(ms + 9 * 3600e3).toISOString().slice(0, 10); }
+  return "";
+}
+const _emptyCo = (x) => !(typeof x?.companyName === "string" && x.companyName.trim()) && !(typeof x?.company === "string" && x.company.trim()) && !(typeof x?.운송사명 === "string" && x.운송사명.trim());
 async function requireTotalMaster(req) {
   const authz = String(req.get("Authorization") || "");
   const token = authz.startsWith("Bearer ") ? authz.slice(7) : "";
@@ -3519,9 +3531,46 @@ exports.tenantMigrate = functions.runWith({ timeoutSeconds: 300, memory: "512MB"
   if (req.method === "OPTIONS") { res.status(204).send(""); return; }
   if (!(await requireTotalMaster(req))) { res.status(403).json({ error: "FORBIDDEN" }); return; }
   const col = String(req.body?.col || "");
-  if (!TENANT_COLS.includes(col)) { res.status(400).json({ error: "BAD_COL", cols: TENANT_COLS }); return; }
+  const mode = String(req.body?.mode || "fill"); // fill(돌캐로 채우기) | scan(점검만) | purge(기준일 이전 삭제)
+  if (!(mode === "fill" ? TENANT_COLS : TENANT_ALL_COLS).includes(col)) { res.status(400).json({ error: "BAD_COL", cols: TENANT_ALL_COLS }); return; }
   let cursor = req.body?.cursor || null;
   const started = Date.now();
+  if (mode === "scan" || mode === "purge") {
+    const { FieldPath: FP } = require("firebase-admin/firestore");
+    const before = String(req.body?.before || "");
+    if (mode === "purge" && !/^\d{4}-\d{2}-\d{2}$/.test(before)) { res.status(400).json({ error: "기준일(before)이 필요합니다." }); return; }
+    let total = 0, empty = 0, removed = 0, oldest = "", newest = "", noDate = 0, done = false;
+    const sample = [];
+    while (Date.now() - started < 200000) {
+      let q = db.collection(col).orderBy(FP.documentId()).limit(400);
+      if (cursor) q = q.startAfter(cursor);
+      const snap = await q.get();
+      if (snap.empty) { done = true; break; }
+      const dels = [];
+      snap.docs.forEach((d) => {
+        total += 1;
+        const x = d.data() || {};
+        if (!_emptyCo(x)) return;
+        empty += 1;
+        const day = _docDay(x);
+        if (!day) noDate += 1; else { if (!oldest || day < oldest) oldest = day; if (!newest || day > newest) newest = day; }
+        if (sample.length < 5) sample.push({ id: d.id, day, title: String(x.거래처명 || x.title || x.이름 || x.차량번호 || x.name || "").slice(0, 40) });
+        if (mode === "purge" && (!day || day < before)) dels.push(d.ref);
+      });
+      for (const ref of dels) {
+        if (col === "orders" || col === "dispatch") { // 오더에 달린 사진·파일(첨부)도 같이
+          const att = await ref.collection("attachments").get();
+          for (let i = 0; i < att.docs.length; i += 400) { const b = db.batch(); att.docs.slice(i, i + 400).forEach((a) => b.delete(a.ref)); await b.commit(); }
+        }
+      }
+      for (let i = 0; i < dels.length; i += 400) { const b = db.batch(); dels.slice(i, i + 400).forEach((r) => b.delete(r)); await b.commit(); }
+      removed += dels.length;
+      cursor = snap.docs[snap.docs.length - 1].id;
+      if (snap.size < 400) { done = true; break; }
+    }
+    res.status(200).json({ col, mode, cursor, total, empty, removed, oldest, newest, noDate, sample, done });
+    return;
+  }
   let scanned = 0, updated = 0, done = false;
   const { FieldPath } = require("firebase-admin/firestore");
   while (Date.now() - started < 200000) {
