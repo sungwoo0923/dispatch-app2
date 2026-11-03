@@ -23,6 +23,7 @@ import { createPortal } from "react-dom";
 import { Navigate, useNavigate } from "react-router-dom";
 import { CartesianGrid, Line, LineChart, BarChart, Bar, Cell, LabelList, PieChart, Pie, ResponsiveContainer, Tooltip, XAxis, YAxis, Legend } from "recharts";
 import * as XLSX from "xlsx";
+import OrderLookupModal from "./OrderLookup"; // ⭐ 2026-11-03 담당자·차량 조회
 import JSZip from "jszip";
 import { sendOrderTo24Proxy as sendOrderTo24 } from "../api/24CallProxy";
 import { useNewVersion, openUpdatePopup } from "./VersionCheck";
@@ -27638,6 +27639,8 @@ const driverPanelCallbackRef = React.useRef(null);
   }, [rows, q, rtSearchType, dayMode, statusFilter, filterErrorIds]);
   // ⚡ 머리글 정렬은 이미 걸러진 목록만 따로 정렬 — 정렬을 눌러도 위의 검색·필터·경유지 계산은 다시 돌지 않는다
   const rtMgrMap = useOrderStaffName(userNameMap, userCompany); // ⭐ 배차담당자 칸(회사별 기능 꺼지면 null)
+  const [lookupOpen, setLookupOpen] = React.useState(false); // ⭐ 2026-11-03 담당자·차량 조회
+  const lookupNameOf = React.useCallback((r) => _orderStaffNameRaw(r, userNameMap), [userNameMap]);
   const filtered = React.useMemo(() => sortRows(filteredBase, rtSort.sort, makeOrderSortValue(rtMgrMap)), [filteredBase, rtSort.sort, rtMgrMap]);
   // ⚡ 그리는 줄 수 제한 — 하루 오더가 수천 건이면 표 전체를 한꺼번에 그리고 배치하는 데만 수 초가 걸려
   //   정렬·검색 클릭이 멈춘 것처럼 보였다. 처음엔 150줄만 그리고, 아래로 내리면 150줄씩 자동으로 더 붙인다.
@@ -29543,6 +29546,8 @@ const head = isDark
     />
     <button onClick={() => setQ(qInputRef.current?.value ?? "")} className="h-full px-2 bg-[#1B2B4B] text-white text-[11px] font-bold hover:bg-[#243a60] transition"><EditableText id="misc.btn.26528.조회" defaultText="조회" /></button>
   </div>
+  <button onClick={() => setLookupOpen(true)} title="기간 + 배차담당자 + 차량번호·기사명으로 찾기" className="px-2 py-1 rounded-lg bg-white text-[#1B2B4B] border-2 border-[#1B2B4B] text-[11px] font-black whitespace-nowrap flex-shrink-0 hover:bg-[#EEF2F8]">🔍 담당자·차량 조회</button>
+  <OrderLookupModal open={lookupOpen} onClose={() => setLookupOpen(false)} rows={historyDispatchData} nameOf={lookupNameOf} />
   {/* 날짜 버튼 */}
   {["yesterday","today","tomorrow"].map((mode,i)=>{
     const labels=["어제","당일","내일"];
@@ -38603,6 +38608,8 @@ const filteredBase = React.useMemo(() => {
 ]);
   // ⚡ 머리글 정렬은 이미 걸러진 목록만 따로 정렬 — 정렬을 눌러도 위의 날짜·검색 필터는 다시 돌지 않는다
   const dsMgrMap = useOrderStaffName(userNameMap, userCompany); // ⭐ 배차담당자 칸(회사별 기능 꺼지면 null)
+  const [lookupOpen, setLookupOpen] = React.useState(false); // ⭐ 2026-11-03 담당자·차량 조회
+  const lookupNameOf = React.useCallback((r) => _orderStaffNameRaw(r, userNameMap), [userNameMap]);
   const filtered = React.useMemo(() => sortRows(filteredBase, dsSort.sort, makeOrderSortValue(dsMgrMap)), [filteredBase, dsSort.sort, dsMgrMap]);
 
   // ⭐⭐⭐ 페이지 데이터 (정렬된 filtered 기준)
@@ -39384,6 +39391,8 @@ return (
         <button onClick={()=>{const t=todayKST();setStartDate(t);setEndDate(t);setAppliedStartDate(t);setAppliedEndDate(t);localStorage.setItem("dispatchDateState",JSON.stringify({startDate:t,endDate:t,appliedStartDate:t,appliedEndDate:t}));setQ("");setQInput("");setPage(0);}} className="px-2 py-1 rounded-lg bg-[#1B2B4B] text-white text-[11px] font-semibold whitespace-nowrap flex-shrink-0"><EditableText id="status.toolbar.당일" defaultText="당일" /></button>
         <button onClick={()=>{const t=tomorrowKST();setStartDate(t);setEndDate(t);setAppliedStartDate(t);setAppliedEndDate(t);localStorage.setItem("dispatchDateState",JSON.stringify({startDate:t,endDate:t,appliedStartDate:t,appliedEndDate:t}));setQ("");setQInput("");setPage(0);}} className="px-2 py-1 rounded-lg bg-gray-500 text-white text-[11px] font-semibold whitespace-nowrap flex-shrink-0"><EditableText id="status.toolbar.내일" defaultText="내일" /></button>
         <button onClick={()=>{const{first,last}=getMonthRange();setStartDate(first);setEndDate(last);setAppliedStartDate(first);setAppliedEndDate(last);setQ("");setQInput("");setPage(0);setLoaded(true);localStorage.setItem("dispatchDateState",JSON.stringify({startDate:first,endDate:last,appliedStartDate:first,appliedEndDate:last}));}} className="px-2 py-1 rounded-lg bg-gray-500 text-white text-[11px] font-semibold whitespace-nowrap flex-shrink-0"><EditableText id="status.toolbar.전체" defaultText="전체" /></button>
+        <button onClick={() => setLookupOpen(true)} title="기간 + 배차담당자 + 차량번호·기사명으로 찾기" className="px-2 py-1 rounded-lg bg-white text-[#1B2B4B] border-2 border-[#1B2B4B] text-[11px] font-black whitespace-nowrap flex-shrink-0 hover:bg-[#EEF2F8]">🔍 담당자·차량 조회</button>
+  <OrderLookupModal open={lookupOpen} onClose={() => setLookupOpen(false)} rows={dispatchData} nameOf={lookupNameOf} />
 
         {/* 우측 버튼들 */}
         <div className="ml-auto flex items-center gap-1 flex-shrink-0 flex-wrap justify-end">
