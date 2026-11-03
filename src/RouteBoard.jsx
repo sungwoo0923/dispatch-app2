@@ -204,7 +204,7 @@ const placeSub = (p) => [p.주소, p.담당자 || (p.contacts || [])[0]?.name].f
 
 // ── 구글시트 읽기(서버 routeBoardSheet) ──────────────────────
 const SERVICE_EMAIL = "dispatch-app-9b92f@appspot.gserviceaccount.com";
-async function sheetApi(body) {
+export async function sheetApi(body) {
   const token = await auth.currentUser?.getIdToken();
   let res;
   try {

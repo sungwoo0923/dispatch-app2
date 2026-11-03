@@ -1,6 +1,7 @@
 // ======================= src/HomeWriters.jsx =======================
 // ✍ 공지사항·인수인계 글쓰기 화면(2026-10-28) — 작은 팝업 대신 자유게시판처럼 넓은 글쓰기 화면
 //  - 공지사항: 작성자는 올리는 사람으로 고정, 관리자(관리자·인사관리자·최고관리자)만 작성
+//    ⭐ 2026-11-03 받는 사람: 전체 / 팀 선택(teams) / 직원 선택(targetUids·targetNames) — 한 가지만 저장
 //  - 인수인계: 받는 사람 여러 명 / 부서 단위 선택(주소록), 기준 날짜는 공휴일 달력
 //    handovers: receivers[{uid,name}], receiverUids[] 추가 — 예전 화면(모바일)과 맞추려고 receiver(이름들)·receiverUid(첫 사람)도 함께 저장
 import React from "react";
@@ -10,6 +11,7 @@ import { ShellIcon } from "./AdminShell";
 import { RecipientPicker, useCompanyStaff, compressImage } from "./InternalMail";
 import CustomDatePicker from "./CustomDatePicker";
 import { useHrOptions } from "./hrConstants"; // ⭐ 2026-11-02 점검 — 고정 TEAM_OPTIONS 대신 회사별 부서 목록 사용
+import { isTMUser } from "./staffFilter";
 
 const MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
 const inp = "w-full px-4 rounded-xl border border-[#DCE3EE] bg-white text-[14.5px] text-[#0F1A30] outline-none focus:border-[#4B6CB7]";
@@ -40,6 +42,14 @@ export function NoticeWriter({ me, company, initial, onCancel, onSaved }) {
   const [content, setContent] = React.useState(initial?.content || "");
   const [image, setImage] = React.useState(initial?.image || "");
   const [teams, setTeams] = React.useState(Array.isArray(initial?.teams) ? initial.teams : []); // 비면 전체 직원
+  // ⭐ 2026-11-03 받는 사람 — 전체 / 팀 선택 / 직원 선택(targetUids). 팀과 직원은 섞지 않는다(한 가지만)
+  const initUids = Array.isArray(initial?.targetUids) ? initial.targetUids.filter(Boolean) : [];
+  const [mode, setMode] = React.useState(initUids.length ? "staff" : (Array.isArray(initial?.teams) && initial.teams.length ? "team" : "all"));
+  const [targets, setTargets] = React.useState(() => new Set(initUids));
+  const initNames = React.useMemo(() => { const m = {}; initUids.forEach((u, i) => { m[u] = (initial?.targetNames || [])[i] || ""; }); return m; }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const staffAll = useCompanyStaff(mode === "staff" ? company : "");
+  // 기사·화주·카페·최고관리자·퇴사·승인 대기는 빼고(작성자 본인은 항상 보이므로 목록에서 뺀다)
+  const staff = React.useMemo(() => (staffAll === null ? null : (staffAll || []).filter((u) => u.uid !== me.uid && !["driver", "shipper", "cafeUser", "totalMaster"].includes(u.role) && !isTMUser(u) && u.approved !== false && u.employmentStatus !== "퇴사")), [staffAll, me.uid]);
   const [pinned, setPinned] = React.useState(!!initial?.pinned);
   const [busy, setBusy] = React.useState(false);
   const fileRef = React.useRef(null);
@@ -51,8 +61,15 @@ export function NoticeWriter({ me, company, initial, onCancel, onSaved }) {
     if (!content.trim()) { window.alert("내용을 입력해 주세요."); return; }
     setBusy(true);
     try {
+      // ⭐ 2026-11-03 받는 사람 — 직원 선택이면 teams는 비우고 targetUids·targetNames만, 팀 선택이면 teams만, 전체면 둘 다 비움
+      const internal = audience === "internal";
+      const pickedUids = internal && mode === "staff" ? [...targets] : [];
+      if (internal && mode === "staff" && !pickedUids.length) { window.alert("받는 직원을 1명 이상 골라 주세요."); setBusy(false); return; }
+      if (internal && mode === "team" && !teams.length) { window.alert("받을 팀을 1개 이상 골라 주세요. (전체 직원에게는 [전체]를 고르세요)"); setBusy(false); return; }
+      const nameOf = (uid) => { const u = (staffAll || []).find((x) => x.uid === uid); return (u && (u.name || u.email)) || initNames[uid] || ""; };
       const data = { title: (title.trim() || autoTitle).slice(0, 200), category, content, audience, image: image || null,
-        teams: audience === "internal" ? teams : [], pinned, ...(pinned && !initial?.pinned ? { pinnedAt: Date.now() } : {}) };
+        teams: internal && mode === "team" ? teams : [], targetUids: pickedUids, targetNames: pickedUids.map(nameOf),
+        pinned, ...(pinned && !initial?.pinned ? { pinnedAt: Date.now() } : {}) };
       if (initial?.id) await updateDoc(doc(db, "notices", initial.id), { ...data, editedAt: serverTimestamp() });
       else await addDoc(collection(db, "notices"), { ...data, author: me.name, authorUid: me.uid, createdAt: serverTimestamp(), companyName: company });
       onSaved?.();
@@ -96,15 +113,24 @@ export function NoticeWriter({ me, company, initial, onCancel, onSaved }) {
         </div>
         {audience === "internal" && (
           <div>
-            <Label hint="(팀을 고르면 그 팀에만 보입니다 · 아무것도 안 고르면 전체 직원)">세부 공개 대상</Label>
+            {/* ⭐ 2026-11-03 받는 사람 — 전체 / 팀 선택 / 직원 선택(고른 직원·작성자·관리자만 보이고, 휴대폰 알림도 고른 직원에게만) */}
+            <Label hint={mode === "all" ? "(운송사 직원 전체에게 보입니다)" : mode === "team" ? "(고른 팀에만 보입니다 · 작성자·관리자는 항상 보임)" : `(고른 직원에게만 보입니다 · 작성자·관리자는 항상 보임${targets.size ? ` · ${targets.size}명` : ""})`}>받는 사람</Label>
+            <div role="radiogroup" aria-label="받는 사람" className="inline-grid grid-cols-3 gap-1 p-1 mb-3 rounded-xl bg-[#F1F4F9] border border-[#E3E8F0] w-full max-w-[420px]">
+              {[["all", "전체"], ["team", "팀 선택"], ["staff", "직원 선택"]].map(([v, l]) => (
+                <button key={v} type="button" role="radio" aria-checked={mode === v} onClick={() => setMode(v)}
+                  className={`h-9 rounded-lg text-[13px] font-black transition ${mode === v ? "bg-[#0F1A30] text-white shadow-[0_4px_12px_rgba(15,26,48,0.25)]" : "text-[#3A4A66] hover:bg-white"}`}>{l}</button>
+              ))}
+            </div>
+            {mode === "staff" && <NoticeStaffPicker staff={staff} selected={targets} setSelected={setTargets} nameHint={initNames} />}
+            {mode === "team" && (
             <div className="flex flex-wrap gap-1.5">
-              <button type="button" onClick={() => setTeams([])} className={`h-10 px-4 rounded-xl text-[13px] font-black border ${!teams.length ? "bg-[#0F1A30] text-white border-[#0F1A30]" : "bg-white text-[#3A4A66] border-[#DCE3EE]"}`}>전체 직원</button>
               {/* ⭐ 2026-11-02 점검 — 회사별 부서 목록 + (숨김 처리된 등) 이미 선택돼 있던 팀도 표시해 해제할 수 있게 */}
               {[...teamOptions, ...teams.filter((t) => !teamOptions.includes(t))].map((t) => {
                 const on = teams.includes(t);
                 return <button key={t} type="button" onClick={() => setTeams((p) => (on ? p.filter((x) => x !== t) : [...p, t]))} className={`h-10 px-4 rounded-xl text-[13px] font-black border ${on ? "bg-[#2D4C82] text-white border-[#2D4C82]" : "bg-white text-[#3A4A66] border-[#DCE3EE] hover:border-[#2D4C82]"}`}>{on ? "✓ " : ""}{t}</button>;
               })}
             </div>
+            )}
           </div>
         )}
         <label className="inline-flex items-center gap-2 text-[13.5px] font-black text-[#0F1A30] cursor-pointer">
@@ -139,6 +165,68 @@ export function NoticeWriter({ me, company, initial, onCancel, onSaved }) {
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+// ⭐ 2026-11-03 공지 받는 직원 고르기 — 검색 + 팀별 묶음(팀 이름을 누르면 팀 전체) + 고른 사람은 위에 칩으로(✕로 빼기)
+function NoticeStaffPicker({ staff, selected, setSelected, nameHint = {} }) {
+  const [q, setQ] = React.useState("");
+  const people = staff || [];
+  const kw = q.trim().toLowerCase();
+  const hit = (u) => !kw || [u.name, u.email, u.team, u.position].some((v) => String(v || "").toLowerCase().includes(kw));
+  const groups = React.useMemo(() => {
+    const g = new Map();
+    people.filter(hit).forEach((u) => { const t = String(u.team || "").trim() || "미배정"; if (!g.has(t)) g.set(t, []); g.get(t).push(u); });
+    return [...g.entries()].sort((a, b) => (a[0] === "미배정") - (b[0] === "미배정") || a[0].localeCompare(b[0], "ko"));
+  }, [people, kw]); // eslint-disable-line react-hooks/exhaustive-deps
+  const toggle = (uids, on) => setSelected((p) => { const n = new Set(p); uids.forEach((x) => (on ? n.add(x) : n.delete(x))); return n; });
+  const byUid = new Map(people.map((u) => [u.uid, u]));
+  // 목록에 없는 사람(퇴사 등)도 예전에 골라 둔 사람이면 칩으로 보여 줘서 뺄 수 있게
+  const chosen = [...selected].map((uid) => byUid.get(uid) || { uid, name: nameHint[uid] || "(목록에 없는 직원)", team: "", position: "", _gone: true });
+  const label = (u) => [u.name || u.email, u.team, u.position].filter(Boolean).join(" · ");
+  return (
+    <div className="rounded-xl border border-[#E3E8F0] bg-[#FAFBFD] p-3 sm:p-4 space-y-3">
+      <div className="min-h-[44px] px-2.5 py-2 rounded-xl border border-[#DCE3EE] bg-white flex flex-wrap gap-1.5 items-center">
+        {chosen.length ? chosen.map((u) => (
+          <span key={u.uid} className={`h-8 pl-3 pr-1 rounded-lg border text-[12.5px] font-bold inline-flex items-center gap-1 max-w-full ${u._gone ? "bg-[#F5F6F8] border-[#E3E8F0] text-[#9AA9C3]" : "bg-[#EEF3FB] border-[#D5E0F2] text-[#1B2B4B]"}`}>
+            <span className="truncate">{label(u)}</span>
+            <button type="button" aria-label={`${u.name || ""} 빼기`} onClick={() => toggle([u.uid], false)} className="w-6 h-6 shrink-0 text-[#7A879C] hover:text-[#0F1A30]">✕</button>
+          </span>
+        )) : <span className="text-[13px] text-[#9AA9C3] px-1">아래에서 받을 직원을 고르세요</span>}
+        {chosen.length > 0 && <button type="button" onClick={() => setSelected(new Set())} className="ml-auto h-8 px-2.5 rounded-lg text-[12px] font-black text-[#7A879C] hover:text-[#0F1A30]">모두 빼기</button>}
+      </div>
+      <div className="flex items-center gap-2 flex-wrap">
+        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="이름 · 팀 · 직책 검색" className={`${inp} h-10 text-[13.5px] flex-1 min-w-[180px]`} />
+        <span className="text-[12px] font-bold text-[#7A879C] whitespace-nowrap">{selected.size}명 선택 / 전체 {people.length}명</span>
+      </div>
+      {staff === null ? <div className="py-3 text-[13px] text-[#9AA9C3]">직원 목록 불러오는 중…</div>
+        : !groups.length ? <div className="py-3 text-[13px] text-[#9AA9C3]">{kw ? "검색 결과가 없습니다" : "고를 수 있는 직원이 없습니다"}</div>
+        : (
+        <div className="max-h-[320px] overflow-y-auto pr-1 space-y-3">
+          {groups.map(([t, list]) => {
+            const on = list.every((u) => selected.has(u.uid));
+            return (
+              <div key={t}>
+                <button type="button" onClick={() => toggle(list.map((u) => u.uid), !on)} className="text-[12px] font-black text-[#7A879C] mb-1.5 hover:text-[#0F1A30]">
+                  {t} <span className="font-semibold">({list.length})</span> {on ? "· 모두 선택됨 (누르면 해제)" : "· 팀 전체 선택"}
+                </button>
+                <div className="flex flex-wrap gap-1.5">
+                  {list.map((u) => {
+                    const sel = selected.has(u.uid);
+                    return (
+                      <button key={u.uid} type="button" onClick={() => toggle([u.uid], !sel)}
+                        className={`h-8 px-3 rounded-lg text-[12.5px] font-bold border transition ${sel ? "bg-[#0F1A30] text-white border-[#0F1A30]" : "bg-white text-[#3A4A66] border-[#DCE3EE] hover:border-[#4B6CB7]"}`}>
+                        {sel ? "✓ " : ""}{u.name || u.email}<span className={sel ? "text-white/60" : "text-[#9AA9C3]"}>{[u.team, u.position].filter(Boolean).map((v) => ` · ${v}`).join("")}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

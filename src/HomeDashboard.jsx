@@ -1,4 +1,4 @@
-import NoticeBoard from "./NoticeBoard";
+import NoticeBoard, { canSeeNotice, noticeTargetUids } from "./NoticeBoard";
 import { useBoardNoticesWithPlatform } from "./PlatformNoticeBanner";
 import { subscribeUsersLive } from "./usersLive"; // ⭐ 2026-11-02 속도 — 직원 명부 구독 공유
 import DeptDashboard from "./DeptDashboard";
@@ -494,6 +494,14 @@ export default function HomeDashboard({ role, user, userCompany = "", pending, d
   const [scheduleOpen, setScheduleOpen] = React.useState(false);
   const [scheduleForm, setScheduleForm] = React.useState({ type: "휴가", authorName: "", start: "", end: "", memo: "", approvers: [] });
   const [notices, setNotices] = React.useState([]);
+  // ⭐ 2026-11-03 공지 받는 사람 지정 — 알림 배너(토스트)도 볼 수 있는 사람에게만. 구독 안에서 쓰려고 ref로 둔다
+  const noticeViewerRef = React.useRef({ uid: user?.uid, role, team: "" });
+  const noticeToastOk = (n) => {
+    const me = noticeViewerRef.current || {};
+    // 내 팀 정보가 아직 안 왔으면 팀 지정 공지는 예전처럼 띄운다(직원 지정은 uid만으로 바로 판단)
+    if (!me.team && !noticeTargetUids(n).length) return true;
+    return canSeeNotice(n, me);
+  };
   const [schedules, setSchedules] = React.useState([]);
   const [handovers, setHandovers] = React.useState([]);
 
@@ -660,7 +668,7 @@ export default function HomeDashboard({ role, user, userCompany = "", pending, d
       setNotices(list);
       if (initialLoad) {
         initialLoad = false;
-        showTodayToast("notice", list); // 접속 시 오늘 항목 알림
+        showTodayToast("notice", list.filter(noticeToastOk)); // 접속 시 오늘 항목 알림(⭐ 2026-11-03 볼 수 있는 공지만)
         return;
       }
       // 실시간 신규 등록 알림
@@ -670,6 +678,7 @@ export default function HomeDashboard({ role, user, userCompany = "", pending, d
       if (data.category === "인사발령") return; // 인사발령은 사내메일 배너로 뜬다
       if (data.category === "부고") return; // 부고도 사내메일 배너로 뜬다
       if (data.authorUid && data.authorUid === user?.uid) return; // 내가 올린 글
+      if (!noticeToastOk(data)) return; // ⭐ 2026-11-03 팀·직원 지정 공지 — 대상이 아니면 알리지 않는다
       const seenKeyN = toastKeyOf("notice", data);
       if (getSeenToasts()[seenKeyN] || isAlreadySeen(seenKeyN)) return;
       markToastSeen(seenKeyN); addPermDismissed(seenKeyN); addFirestoreSeenKey(seenKeyN);
@@ -703,7 +712,11 @@ export default function HomeDashboard({ role, user, userCompany = "", pending, d
   }, [showTodayToast]);
 
   // ⭐ 2026-11-02 관리자센터2 — 관리자 관리센터에서 올린 플랫폼 공지(우리 회사 대상)를 공지사항 목록에 함께(읽기 전용 · "플랫폼 공지" 표시)
-  const boardNotices = useBoardNoticesWithPlatform(notices, getViewCompany(), formatCreatedAt);
+  // ⭐ 2026-11-03 팀·직원 지정 공지는 볼 수 있는 사람 것만 — 목록·"전체/이번 달" 숫자·N 표시 모두 같은 기준
+  const noticeViewer = (() => { const u = users.find((x) => x.id === user?.uid) || {}; return { uid: user?.uid, role: role || u.role || "", team: u.team || "" }; })();
+  noticeViewerRef.current = noticeViewer;
+  const visibleNotices = useMemo(() => notices.filter((n) => canSeeNotice(n, noticeViewer)), [notices, noticeViewer.uid, noticeViewer.role, noticeViewer.team]); // eslint-disable-line react-hooks/exhaustive-deps
+  const boardNotices = useBoardNoticesWithPlatform(visibleNotices, getViewCompany(), formatCreatedAt);
   // ⭐ 2026-11-03 맨 위 플랫폼 공지 배너를 누르면 → 공지사항 탭을 열고 그 글을 바로 펼친다(목록이 아직 안 왔으면 오면 연다)
   React.useEffect(() => {
     const tryOpen = () => {
@@ -716,8 +729,8 @@ export default function HomeDashboard({ role, user, userCompany = "", pending, d
     window.addEventListener("kp:openNotice", tryOpen);
     return () => window.removeEventListener("kp:openNotice", tryOpen);
   }, [boardNotices]); // eslint-disable-line react-hooks/exhaustive-deps
-  const noticeTotalPages = Math.ceil(notices.length / NOTICE_PAGE_SIZE);
-  const pagedNotices = useMemo(() => { const s = (noticePage - 1) * NOTICE_PAGE_SIZE; return notices.slice(s, s + NOTICE_PAGE_SIZE); }, [notices, noticePage]);
+  const noticeTotalPages = Math.ceil(visibleNotices.length / NOTICE_PAGE_SIZE);
+  const pagedNotices = useMemo(() => { const s = (noticePage - 1) * NOTICE_PAGE_SIZE; return visibleNotices.slice(s, s + NOTICE_PAGE_SIZE); }, [visibleNotices, noticePage]);
   const filteredSchedules = useMemo(() => {
     const kw = scheduleAuthorSearch.trim();
     if (!kw) return schedules;
@@ -884,7 +897,7 @@ export default function HomeDashboard({ role, user, userCompany = "", pending, d
     window.addEventListener("kp-open-approval", take);
     return () => window.removeEventListener("kp-open-approval", take);
   }, []);
-  const boardNewest = { 공지사항: newestOf(notices), 인수인계: newestOf(handovers), ...Object.fromEntries(Object.keys(BOARDS).map((b) => [`board:${b}`, boardLatest[b] || 0])) };
+  const boardNewest = { 공지사항: newestOf(visibleNotices), 인수인계: newestOf(handovers), ...Object.fromEntries(Object.keys(BOARDS).map((b) => [`board:${b}`, boardLatest[b] || 0])) };
   const isBoardNew = (k) => boardNewest[k] > (boardSeen[k] ?? seenFloor.current);
   const curNewest = boardNewest[boardTab] || 0;
   useEffect(() => {

@@ -3,6 +3,7 @@
 //  · 글을 누르면 팝업이 아니라 본문 화면으로 들어가고 "← 목록"으로 돌아온다.
 //  · 상단 고정(최대 5개) — 맨 위에 고정 표시 + 굵은 글씨.
 //  · 세부 공개 대상(팀) — 내부용 공지를 특정 팀에만 보이게(작성자·관리자는 항상 보임).
+//  · ⭐ 2026-11-03 받는 사람(직원) 지정 — targetUids의 직원에게만 보이게(작성자·관리자는 항상 보임). "지정 N명" 표시.
 import React from "react";
 import { RichHtml } from "./richText";
 import { db } from "./firebase";
@@ -27,12 +28,20 @@ const shortDate = (ms) => {
 };
 const fullDate = (ms) => (ms ? new Date(ms).toLocaleString("ko-KR", { year: "numeric", month: "long", day: "numeric", weekday: "short", hour: "2-digit", minute: "2-digit" }) : "");
 
-// 이 사람이 볼 수 있는 공지인지 — 팀 지정이 없으면 전체, 있으면 그 팀 + 작성자 + 관리자
+// ⭐ 2026-11-03 받는 사람(직원) 지정 — targetUids가 있으면 그 직원들에게만(비어 있으면 지정 없음)
+export const noticeTargetUids = (n) => (Array.isArray(n?.targetUids) ? n.targetUids.filter(Boolean) : []);
+// "지정 3명" 표시 말풍선(마우스를 올리면 받는 사람 이름 전부)
+export const noticeTargetTitle = (n) => { const names = Array.isArray(n?.targetNames) ? n.targetNames.filter(Boolean) : []; return names.length ? `받는 사람: ${names.join(", ")}` : `지정된 직원 ${noticeTargetUids(n).length}명`; };
+
+// 이 사람이 볼 수 있는 공지인지 — 지정이 없으면 전체, 팀 지정이면 그 팀 + 작성자 + 관리자
+// ⭐ 2026-11-03 직원 지정(targetUids)이면 지정된 직원 + 작성자 + 관리자(팀 지정과 같은 규칙)
 export function canSeeNotice(n, me) {
   const teams = Array.isArray(n.teams) ? n.teams : [];
-  if (!teams.length) return true;
+  const uids = noticeTargetUids(n);
+  if (!teams.length && !uids.length) return true;
   if (n.authorUid && n.authorUid === me?.uid) return true;
   if (["admin", "totalMaster", "superadmin"].includes(me?.role)) return true;
+  if (uids.length) return !!me?.uid && uids.includes(me.uid);
   return teams.includes(String(me?.team || "").trim());
 }
 
@@ -88,6 +97,8 @@ export default function NoticeBoard({ notices = [], me, canWrite, isViewer, onEd
             {cur.category && <span className={`px-2 py-0.5 rounded-md text-[11px] font-black ${cur.category === "부고" ? "bg-[#1A1A1A] text-white" : "bg-[#EEF3FC] text-[#1B2B4B]"}`}>{cur.category}</span>}
             {cur.audience === "shipper" && <span className="px-2 py-0.5 rounded-md border border-[#C9D6EE] text-[#2D4C82] text-[11px] font-black">화주사 공개</span>}
             {(cur.teams || []).length > 0 && <span className="px-2 py-0.5 rounded-md border border-[#C9D6EE] text-[#2D4C82] text-[11px] font-black">{cur.teams.join(" · ")} 대상</span>}
+            {/* ⭐ 2026-11-03 직원 지정 공지 — "지정 3명"(이름은 마우스를 올리면) */}
+            {noticeTargetUids(cur).length > 0 && <span title={noticeTargetTitle(cur)} className="px-2 py-0.5 rounded-md border border-[#C9D6EE] text-[#2D4C82] text-[11px] font-black cursor-help">지정 {noticeTargetUids(cur).length}명{(cur.targetNames || []).length ? ` · ${cur.targetNames.length === 1 ? cur.targetNames[0] : `${cur.targetNames[0]} 외 ${cur.targetNames.length - 1}명`}` : ""}</span>}
           </div>
           <h2 className="mt-2 text-[20px] sm:text-[24px] font-black text-[#0F1A30] leading-snug break-words">{cur.title || "공지사항"}</h2>
           <div className="mt-3 flex items-center gap-3">
@@ -136,6 +147,7 @@ export default function NoticeBoard({ notices = [], me, canWrite, isViewer, onEd
           {n.category && n.category !== "공지사항" && <span className={`${n._platform ? "hidden md:inline-block" : ""} shrink-0 px-1.5 py-0.5 rounded text-[10.5px] font-black ${n.category === "부고" ? "bg-[#1A1A1A] text-white" : "bg-[#EEF3FC] text-[#1B2B4B]"}`}>{n.category}</span>}
           {n.audience === "shipper" && <span className="shrink-0 px-1.5 py-0.5 rounded border border-[#C9D6EE] text-[#2D4C82] text-[10.5px] font-black">화주사</span>}
           {(n.teams || []).length > 0 && <span className="shrink-0 px-1.5 py-0.5 rounded border border-[#C9D6EE] text-[#2D4C82] text-[10.5px] font-black">{n.teams.length === 1 ? n.teams[0] : `${n.teams[0]} 외 ${n.teams.length - 1}`}</span>}
+          {noticeTargetUids(n).length > 0 && <span title={noticeTargetTitle(n)} className="shrink-0 px-1.5 py-0.5 rounded border border-[#C9D6EE] text-[#2D4C82] text-[10.5px] font-black">지정 {noticeTargetUids(n).length}명</span>}{/* ⭐ 2026-11-03 직원 지정 */}
           <span className={`truncate ${pin ? "text-[15.5px] font-black text-[#0B1428]" : unread ? "text-[15px] font-black text-[#0F1A30]" : "text-[15px] font-semibold text-[#3A4A66]"}`}>{n.title || "공지사항"}</span>
           {n.revisedAt && <span className={`shrink-0 px-1.5 py-0.5 rounded text-[10.5px] font-black ${n.hrOrder?.status === "cancelled" ? "bg-[#FEF3F2] text-[#B42318]" : "bg-[#FFF4E5] text-[#B54708]"}`}>{n.hrOrder?.status === "cancelled" ? "취소" : "수정됨"}</span>}
           {n.image && <span className="shrink-0 text-[11px] text-[#9AA9C3]">▣</span>}

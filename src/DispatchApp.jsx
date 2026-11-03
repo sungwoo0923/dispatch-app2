@@ -40,6 +40,7 @@ import { useMyProfile } from "./userNames";
 import { useCompanyStaff, masterHasHr, isHrStaffUser } from "./hrHandover";
 import { AttendanceQuickButton, CheckoutReminderHost } from "./attendanceQuick";
 import { PersonalTodayHost } from "./PersonalSchedule";
+import FixedRouteStatusHost, { FixedRouteCells, fixedHeaderOf } from "./FixedRouteStatus"; // ⭐ 2026-11-03 배차현황 › 고정노선현황
 import { usePendingSignups } from "./pendingSignups";
 import { NavHover } from "./navMenus";
 import { PeriodPicker as ResumePeriodPicker, DateField as ResumeDateField, SelectField as ResumeSelectField, AddressField as ResumeAddressField, BirthSelect as ResumeBirthSelect, EDU_STATUS as RESUME_EDU_STATUS, FAMILY_REL as RESUME_FAMILY_REL } from "./ResumeInputs";
@@ -8658,7 +8659,7 @@ return (
 
         {menu === "배차현황" && (
           <KpSubNav code="DISPATCH" title="배차현황" icon="truck" active={배차현황Tab} onSelect={set배차현황Tab}
-            items={(() => { const n = pickUnassignedOrders(dispatchDataFiltered).length; return [{ key: "배차현황", label: "배차현황", en: "ALL ORDERS", icon: "list", badge: n, badgeTitle: `미배차 ${n}건` }, { key: "미배차현황", label: "미배차현황", en: "PENDING", icon: "hourglass", badge: n, badgeTitle: `미배차 ${n}건` }]; })()}>
+            items={(() => { const n = pickUnassignedOrders(dispatchDataFiltered).length; return [{ key: "배차현황", label: "배차현황", en: "ALL ORDERS", icon: "list", badge: n, badgeTitle: `미배차 ${n}건` }, { key: "미배차현황", label: "미배차현황", en: "PENDING", icon: "hourglass", badge: n, badgeTitle: `미배차 ${n}건` }, (() => { const fx = pickUnassignedOrders(dispatchDataFiltered.filter((r) => r.배차표Id)).length; return { key: "고정노선현황", label: "고정노선현황", en: "FIXED ROUTE", icon: "route", badge: fx, badgeTitle: `고정노선 미배차 ${fx}건` }; })()]; })()}>
             {배차현황Tab === "배차현황" && (
               <DispatchStatus
                 key={`ds-${viewResetKey}`}
@@ -8705,6 +8706,39 @@ return (
                 setCargoAddPopup={setCargoAddPopup}
                 approvedShippers={approvedShippers}
               />
+            )}
+            {/* ⭐ 2026-11-03 고정노선현황 — 배차표 양식(화주사 구글시트) 오더를 배차현황과 같은 화면으로, 열은 시트 순서 · 시트 실시간 연동 */}
+            {배차현황Tab === "고정노선현황" && (
+              <FixedRouteStatusHost company={userCompany || localStorage.getItem("userCompany") || ""} dispatchData={dispatchDataFiltered}
+                render={(form, rows) => (
+                  <DispatchStatus
+                    key={`fr-${form.id}-${viewResetKey}`}
+                    fixedForm={form}
+                    role={role}
+                    userCompany={userCompany}
+                    dispatchData={rows}
+                    timeOptions={timeOptions}
+                    tonOptions={tonOptions}
+                    drivers={drivers}
+                    clients={clients}
+                    places={places}
+                    placeRows={places}
+                    userNameMap={userNameMap}
+                    addDispatch={addDispatchSafe}
+                    patchDispatch={patchDispatchSafe}
+                    removeDispatch={removeDispatchSafe}
+                    approveEditRequest={approveEditRequestSafe}
+                    rejectEditRequest={rejectEditRequestSafe}
+                    markEditRequestSeen={markEditRequestSeen}
+                    upsertDriver={upsertDriver}
+                    upsertClient={upsertClient}
+                    focusOrderId={null}
+                    clearFocusOrder={() => {}}
+                    isViewer={isViewer}
+                    setCargoAddPopup={setCargoAddPopup}
+                    approvedShippers={approvedShippers}
+                  />
+                )} />
             )}
           </KpSubNav>
         )}
@@ -35062,6 +35096,8 @@ function DispatchStatus({
   // 값이다(예전엔 이 컴포넌트가 users 컬렉션을 직접 통째로 구독해 RealtimeStatus와
   // 중복으로 읽어들였다).
   userNameMap = new Map(),
+  // ⭐ 2026-11-03 배차현황 › 고정노선현황 — 배차표 양식이 오면 표의 열만 그 양식(구글시트) 순서로(버튼·합계·필터는 그대로)
+  fixedForm = null,
 }) {
 // ⭐ 2026-11-02 운임규칙 — 오더 복사·수정 패널 / 수정 창 / 운임구분 열(규칙 사용 회사만)
 const fareR = useFareRules(getTenant() || userCompany);
@@ -39387,13 +39423,13 @@ return (
   <table className="w-full min-w-max table-auto">
           <thead className="bg-[#1B2B4B]">
             <tr>
-              {[
+              {(fixedForm ? fixedHeaderOf(fixedForm) : [
                 "선택", "순번", ...(dsMgrMap ? ["배차담당자"] : []), "등록일", "상차일", "상차시간", "하차일", "하차시간",
                 "거래처명", "상차지명", "상차지주소", "하차지명", "하차지주소",
                 "화물내용", "차량종류", "차량톤수", "혼적", "차량번호", "기사명", "전화번호",
                "배차상태", "청구운임", "기사운임", "수수료", ...(fareOn ? ["운임구분"] : []), "지급방식", "배차방식", "메모", "전달사항", "첨부", "전달상태",
 
-              ].map((h) => {
+              ]).map((h) => {
                 return (
                 <SortTh key={h} k={h === "선택" ? "" : h} sort={dsSort.sort} onSort={dsOnSort}
                   className="px-3 py-3 text-center text-[14px] font-bold text-white whitespace-nowrap border-b border-white/10 border-r border-r-white/10 last:border-r-0"
@@ -39432,6 +39468,18 @@ return (
     "하차지명", "하차지주소", "화물내용", "차량종류",
     "차량톤수", "지급방식", "배차방식", "메모", "청구운임", "기사운임",
   ];
+
+  // ⭐ 2026-11-03 고정노선현황 — 시트 열 순서의 칸(바로 고치기) · 오른쪽 클릭 메뉴(기사복사 등)·두 번 누르면 오더복사/수정 패널은 배차현황과 같다
+  if (fixedForm) return (
+    <tr key={id} id={`row-${id}`}
+      onContextMenu={(e) => { e.preventDefault(); const _z = parseFloat(document.getElementById("root")?.style.zoom) || 1; setContextMenuDS({ x: e.clientX / _z, y: e.clientY / _z, row: r }); }}
+      onDoubleClick={() => { setCopyTarget({ ...row, 화물내용: String(row.화물내용 || ""), 화물수량: String(row.화물수량 || ""), 화물타입: "", 톤수값: "", 톤수타입: "" }); setCopyPanelOpen(true); }}
+      className={`transition-colors ${selected.has(id) ? "bg-blue-50" : !String(row.차량번호 || "").trim() && row.배차상태 !== "배차취소" ? "bg-[#FFFAF2] hover:bg-[#FFF3E0]" : i % 2 === 0 ? "bg-white hover:bg-[#F5F8FD]" : "bg-[#FAFBFD] hover:bg-[#F5F8FD]"}`}>
+      <td className="px-3 py-2 text-center border-b border-[#E9EDF4] border-r border-r-[#F1F4F9]"><input autoComplete="off" type="checkbox" checked={selected.has(id)} onChange={() => toggleOne(id)} /></td>
+      <td className="px-3 py-2 text-[13.5px] font-bold text-[#5B6B85] text-center border-b border-[#E9EDF4] border-r border-r-[#F1F4F9] tabular-nums">{(page * pageSize) + i + 1}</td>
+      <FixedRouteCells form={fixedForm} row={row} drivers={drivers} disabled={isViewer} onPatch={(patch) => patchDispatch(id, patch)} />
+    </tr>
+  );
 
   return (
     <tr

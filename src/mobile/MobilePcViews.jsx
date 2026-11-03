@@ -11,7 +11,7 @@ import RateCard from "../RateCard";
 import FleetManagement from "../FleetManagement";
 import ApprovalCenter, { useApprovalCounts } from "../Approval";
 import HandoverCenter, { useHandoverUnread } from "../HandoverCenter";
-import NoticeBoard from "../NoticeBoard";
+import NoticeBoard, { canSeeNotice } from "../NoticeBoard";
 import { useBoardNoticesWithPlatform } from "../PlatformNoticeBanner";
 import { NoticeWriter, NOTICE_WRITER_ROLES } from "../HomeWriters";
 import { OrderHistoryContext } from "../orderHistory";
@@ -124,7 +124,8 @@ function NoticeView({ company, me }) {
   // ⭐ 2026-11-02 최신 글이 위로(PC 홈과 같게)
   React.useEffect(() => onSnapshot(collection(db, "notices"), (s) => setNotices(s.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => ((b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0)))), () => setNotices([])), []);
   // ⭐ 2026-11-02 관리자센터2 — 플랫폼 공지(우리 회사 대상)도 같은 목록에 "플랫폼 공지" 표시로
-  const notices = useBoardNoticesWithPlatform(ownNotices, company);
+  // ⭐ 2026-11-03 팀·직원 지정 공지는 볼 수 있는 사람 것만 — 위 "전체 · 이번 달" 숫자도 같게
+  const notices = useBoardNoticesWithPlatform(ownNotices, company).filter((n) => canSeeNotice(n, me));
   const isViewer = me?.role === "viewer";
   const canWrite = NOTICE_WRITER_ROLES.includes(me?.role) && !isViewer;
   const thisMonth = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 7);

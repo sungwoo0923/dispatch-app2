@@ -75,6 +75,7 @@ function parseBoardTab(form, rawRows) {
       const v = {};
       cols.forEach((c) => { if (idx[c.id] != null) v[c.id] = cell(r[idx[c.id]]); });
       if (!cols.some((c) => (c.kind === "qty" || ["하차지명", "차량번호"].includes(c.field)) && v[c.id])) return;
+      Object.defineProperty(v, "__pos", { value: { ri: rows.indexOf(r), idx }, enumerable: false }); // 시트에 다시 쓸 때 칸 위치
       const nameCol = cols.find((c) => c.field === "하차지명");
       if (nameCol && /^(합계|소계|총계|계)$/.test(String(v[nameCol.id] || "").replace(/\s/g, ""))) return;
       out[g.name].push(v);
@@ -97,9 +98,28 @@ function fieldsOf(form, v, only = "") {
   });
   return { rec, qty, extra, touchedQty };
 }
+// ── 양방향: 칸 하나의 "시트 모양" 값(비교·시트에 쓰기용) ──
+const colLetter = (i) => { let s = ""; let n = i + 1; while (n > 0) { const m = (n - 1) % 26; s = String.fromCharCode(65 + m) + s; n = Math.floor((n - 1) / 26); } return s; };
+const sheetForm = (c, o) => { // 오더 값 → 시트에 적는 모양
+  if (c.kind === "qty") { const n = o.품목수량?.[c.label]; return n ? String(n) : ""; }
+  if (c.kind === "extra") return cell(o.추가정보?.[c.label]);
+  const v = cell(o[c.field]);
+  if (TIME_FIELDS.has(c.field)) { const h = parseHM(v); return h ? h.replace(/^0(\d)/, "$1") : v; }
+  if (MONEY_FIELDS.has(c.field)) return v ? String(toInt(v)) : "";
+  return v;
+};
+const same = (c, a, b) => {
+  if (c.kind === "qty" || (c.kind === "field" && MONEY_FIELDS.has(c.field))) return toInt(a) === toInt(b);
+  if (c.kind === "field" && TIME_FIELDS.has(c.field)) return (parseHM(a) || cell(a)) === (parseHM(b) || cell(b));
+  if (c.kind === "field" && c.field === "차량번호") return normPlate(a) === normPlate(b);
+  if (c.kind === "field" && c.field === "전화번호") return String(a || "").replace(/\D/g, "") === String(b || "").replace(/\D/g, "");
+  return cell(a).replace(/\s+/g, "") === cell(b).replace(/\s+/g, "");
+};
+const NO_PUSH = new Set(["하차지명", "하차지주소"]); // 프로그램은 풀주소라 시트(시군구)로 되돌려 쓰지 않음
+
 const cargoText = (qty) => { const total = Object.values(qty).reduce((a, n) => a + n, 0); return { 화물내용: Object.keys(qty).length ? `${Object.entries(qty).map(([k, n]) => `${k} ${n}`).join(" · ")} (총 ${total})` : "", 화물수량: total ? String(total) : "" }; };
 
-async function syncBoard({ db, FieldValue, form, readTabs, readTab, daysBack = 1, daysAhead = 14 }) {
+async function syncBoard({ db, FieldValue, form, readTabs, readTab, writeCells, daysBack = 1, daysAhead = 14 }) {
   const nameCol = form.columns.find((c) => c.kind === "field" && c.field === "하차지명");
   if (!form.sheetUrl || !nameCol) return { skipped: "no-sheet" };
   const today = kstToday(); const from = addDays(today, -daysBack); const to = addDays(today, daysAhead);
@@ -124,10 +144,9 @@ async function syncBoard({ db, FieldValue, form, readTabs, readTab, daysBack = 1
     sum.tabs += 1;
     const ex = await db.collection("orders").where("배차표Id", "==", form.id).where("상차일", "==", date).get();
     const orders = ex.docs.map((d) => ({ ref: d.ref, ...d.data() })).filter((o) => o.배차상태 !== "배차취소");
-    if (hashes[tab] === hash && orders.length) continue; // 시트가 그대로면 건너뜀
-    hashes[tab] = hash;
+    hashes[tab] = hash; // (양방향이라 시트가 그대로여도 프로그램에서 바뀐 값을 시트에 써야 해서 건너뛰지 않음 — 바뀐 칸만 씀)
     sum.dates.push(date);
-    const batch = db.batch(); let ops = 0;
+    const batch = db.batch(); let ops = 0; const pushes = [];
     for (const g of form.groups) {
       const mine = orders.filter((o) => (o.배차표묶음 || form.groups[0].name) === g.name).sort((a, b) => (a.배차표순번 || 0) - (b.배차표순번 || 0));
       const pool = {}; mine.forEach((o) => { const k = nm(o.하차지명); (pool[k] = pool[k] || []).push(o); });
@@ -138,16 +157,46 @@ async function syncBoard({ db, FieldValue, form, readTabs, readTab, daysBack = 1
         const o = (pool[k] || []).shift();
         if (o) {
           matched.add(o.ref.path);
-          // 화주 칸만 시트 값으로
-          const { rec, qty, extra, touchedQty } = fieldsOf(form, v, "화주");
-          const patch = {};
-          Object.entries(rec).forEach(([f, val]) => {
-            if (f === "하차지명") return;
-            if (f === "하차지주소") { if (!val || nm(o.하차지주소 || "").includes(nm(val))) return; } // 풀주소로 바뀐 건 그대로
-            if (String(o[f] ?? "") !== val) patch[f] = val;
-          });
-          if (touchedQty && JSON.stringify(o.품목수량 || {}) !== JSON.stringify(qty)) Object.assign(patch, { 품목수량: qty, ...cargoText(qty) });
-          Object.entries(extra).forEach(([l, val]) => { if (String(o.추가정보?.[l] ?? "") !== val) patch[`추가정보.${l}`] = val; });
+          // ⭐ 양방향(칸마다): 지난번에 본 시트 값(시트기준값)과 비교
+          //  · 시트가 바뀌었으면 → 시트 값을 프로그램에(누가 입력하는 칸이든 — 업체가 차량번호를 바꿔도 반영)
+          //  · 시트는 그대로인데 프로그램 값이 다르면 → 프로그램 값을 시트에 써 준다(도착지·주소 칸 제외)
+          //  · 처음 맞출 때(기준값 없음): 화주 칸은 시트 우선, 운송사 칸은 프로그램 값이 있으면 프로그램 우선
+          const base0 = o.시트기준값 || null; const nextBase = {}; const patch = {};
+          const qtyNow = { ...(o.품목수량 || {}) }; let qtyChanged = false; let plateChanged = false;
+          for (const c of form.columns) {
+            if (c.kind === "no" || c.kind === "sum" || (c.kind === "field" && c.field === "하차지명")) continue;
+            const pos = v.__pos; const ci = pos?.idx?.[c.id]; if (ci == null) continue;
+            const sv = cell(v[c.id]); const pv = sheetForm(c, o);
+            const sheetChanged = base0 ? !same(c, sv, base0[c.id] ?? "") : null;
+            let pull = false; let push = false;
+            if (sheetChanged === true) pull = !same(c, sv, pv);
+            else if (sheetChanged === false) push = !same(c, sv, pv) && !(c.kind === "field" && NO_PUSH.has(c.field));
+            else if (ownerOf(c) === "화주" || !pv) pull = !same(c, sv, pv) && (ownerOf(c) === "화주" || !!sv);
+            else push = !same(c, sv, pv) && !(c.kind === "field" && NO_PUSH.has(c.field));
+            if (pull) {
+              if (c.kind === "qty") { if (toInt(sv)) qtyNow[c.label] = toInt(sv); else delete qtyNow[c.label]; qtyChanged = true; }
+              else if (c.kind === "extra") patch[`추가정보.${c.label}`] = sv;
+              else if (c.field === "하차지주소") { if (sv && !nm(o.하차지주소 || "").includes(nm(sv))) patch.하차지주소 = sv; }
+              else { const { rec } = fieldsOf({ columns: [c] }, v, ""); patch[c.field] = rec[c.field] ?? sv; if (c.field === "차량번호") plateChanged = true; }
+              nextBase[c.id] = sv;
+            } else if (push) {
+              pushes.push({ a1: `${colLetter(ci)}${pos.ri + 1}`, value: pv });
+              nextBase[c.id] = pv;
+            } else nextBase[c.id] = sv;
+          }
+          if (qtyChanged) Object.assign(patch, { 품목수량: qtyNow, ...cargoText(qtyNow) });
+          if (plateChanged) { // 차량이 바뀌면 배차상태·기사 정보도
+            await loadLookups();
+            const plate = patch.차량번호;
+            const drv = plate ? drivers.find((d) => normPlate(d.차량번호) === normPlate(plate)) : null;
+            if (drv && !("이름" in patch)) patch.이름 = drv.이름 || "";
+            if (drv && !("전화번호" in patch)) patch.전화번호 = drv.전화번호 || "";
+            if (!plate && !("이름" in patch)) patch.이름 = "";
+            if (!plate && !("전화번호" in patch)) patch.전화번호 = "";
+            if (plate && (o.배차상태 === "배차중" || !o.배차상태)) patch.배차상태 = "배차완료";
+            if (!plate && o.배차상태 === "배차완료") patch.배차상태 = "배차중";
+          }
+          if (JSON.stringify(base0 || {}) !== JSON.stringify(nextBase)) patch.시트기준값 = nextBase;
           if (o.시트삭제됨) patch.시트삭제됨 = false;
           if (Object.keys(patch).length) { patch.시트동기화 = Date.now(); batch.update(o.ref, patch); ops += 1; sum.updated += 1; }
         } else {
@@ -168,6 +217,7 @@ async function syncBoard({ db, FieldValue, form, readTabs, readTab, daysBack = 1
             상차지명: g.상차지명 || g.name || "", 상차지주소: g.상차지주소 || "", ...(form.payMethod ? { 지급방식: form.payMethod } : {}),
             배차상태: rec.차량번호 ? "배차완료" : "배차중", 배차표Id: form.id, 배차표명: form.name || "", 배차표묶음: g.name, 배차표순번: seq,
             companyName: co, _id: id, 등록일: kstToday(), 작성자: "배차표 자동", 등록기기: "배차표", _autoSheet: true, 시트동기화: Date.now(),
+            시트기준값: Object.fromEntries(form.columns.filter((x) => !["no", "sum"].includes(x.kind) && !(x.kind === "field" && x.field === "하차지명") && v.__pos?.idx?.[x.id] != null).map((x) => [x.id, cell(v[x.id])])),
             경유지_상차: [], 경유상차목록: [], 경유지_하차: [], 경유하차목록: [], 근무일자목록: [], 운행유형: "편도", 혼적여부: "독차",
             createdAt: FieldValue.serverTimestamp(), _lastModified: Date.now(),
           });
@@ -178,6 +228,7 @@ async function syncBoard({ db, FieldValue, form, readTabs, readTab, daysBack = 1
       mine.forEach((o) => { if (!matched.has(o.ref.path) && !o.시트삭제됨 && !o.시트유지) { batch.update(o.ref, { 시트삭제됨: true }); ops += 1; sum.gone += 1; } });
     }
     if (ops) await batch.commit();
+    if (pushes.length && writeCells) { await writeCells(tab, pushes); sum.pushed = (sum.pushed || 0) + pushes.length; hashes[tab] = ""; } // 시트를 고쳤으니 다음에 다시 읽기
   }
   await db.collection("routeBoards").doc(form.id).set({ syncHash: hashes, syncedAt: Date.now() }, { merge: true });
   return sum;

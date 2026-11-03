@@ -4745,6 +4745,7 @@ exports.notifyApproval = functions.firestore.document("approvals/{id}").onWrite(
 
 // 📢 공지사항 푸시(2026-10-31) — 새 공지가 올라오면 받는 대상 전원에게(작성자 제외)
 //  같은 회사 직원 · 팀 지정 공지는 그 팀 + 관리자만 · 화주사 대상 공지는 직원 + 연동 화주 계정은 화주 화면 공지라 제외
+//  ⭐ 2026-11-03 직원 지정 공지(targetUids)는 그 직원들에게만
 const NOTICE_ADMIN_ROLES = ["admin", "totalMaster", "superadmin"];
 exports.notifyNotice = functions.firestore.document("notices/{id}").onCreate(async (snap) => {
   const n = snap.data() || {};
@@ -4752,13 +4753,16 @@ exports.notifyNotice = functions.firestore.document("notices/{id}").onCreate(asy
   if (n.category === "인사발령") return null;
   const company = n.companyName || "돌캐";
   const teams = Array.isArray(n.teams) ? n.teams : [];
+  // ⭐ 2026-11-03 직원 지정 공지(targetUids) — 고른 직원에게만 푸시(관리자라도 지정 안 됐으면 보내지 않음 · 목록에서는 관리자도 볼 수 있음)
+  const targetUids = new Set((Array.isArray(n.targetUids) ? n.targetUids : []).filter(Boolean));
   const users = await db.collection("users").where("companyName", "==", company).get();
   const tokens = [];
   users.forEach((d) => {
     const u = d.data() || {};
     if (d.id === n.authorUid || !userTokens(u).length || u.approved === false || u.employmentStatus === "퇴사") return;
     if (["driver", "shipper", "cafeUser"].includes(u.role)) return;
-    if (teams.length && !NOTICE_ADMIN_ROLES.includes(u.role) && !teams.includes(String(u.team || "").trim())) return;
+    if (targetUids.size) { if (!targetUids.has(d.id)) return; }
+    else if (teams.length && !NOTICE_ADMIN_ROLES.includes(u.role) && !teams.includes(String(u.team || "").trim())) return;
     if (!isPushTypeEnabled(u.pushPrefs, "공지사항")) return;
     tokens.push(...userTokens(u));
   });
@@ -5386,9 +5390,15 @@ async function runRouteBoardSync(form, { force = false } = {}) {
     db, FieldValue, form: force ? { ...form, syncHash: {} } : form,
     readTabs: async () => ((await sheetsApiFor(sid, "GET", "?fields=sheets.properties(title,index)")).sheets || []).map((x) => x.properties.title),
     readTab: async (tab) => (await sheetsApiFor(sid, "GET", `/values/${encodeURIComponent(`${quoteTab(tab)}!A1:AZ3000`)}?valueRenderOption=FORMATTED_VALUE`)).values || [],
+    // ⭐ 양방향 — 프로그램에서 바뀐 칸을 시트에 써 준다(시트를 '편집자'로 공유해야 함 · 못 쓰면 기록만)
+    writeCells: async (tab, ups) => {
+      try {
+        await sheetsApiFor(sid, "POST", "/values:batchUpdate", { data: { valueInputOption: "USER_ENTERED", data: ups.slice(0, 2000).map((u) => ({ range: `${quoteTab(tab)}!${u.a1}`, values: [[String(u.value ?? "")]] })) } });
+      } catch (e) { console.warn(`[배차표 연동] 시트 쓰기 실패(편집자 공유 확인) ${form.name} ${tab}:`, e?.message || e); }
+    },
   });
 }
-exports.syncRouteBoards = functions.runWith({ timeoutSeconds: 300, memory: "512MB" }).pubsub.schedule("every 10 minutes").timeZone("Asia/Seoul").onRun(async () => {
+exports.syncRouteBoards = functions.runWith({ timeoutSeconds: 300, memory: "512MB" }).pubsub.schedule("every 5 minutes").timeZone("Asia/Seoul").onRun(async () => {
   const snap = await db.collection("routeBoards").get();
   for (const d of snap.docs) {
     const form = { id: d.id, ...d.data() };
