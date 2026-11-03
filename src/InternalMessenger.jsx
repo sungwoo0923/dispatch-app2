@@ -848,7 +848,7 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
   // ── 채팅방 나가기 ──
   // ⭐ 2026-11-03 단체방은 "○○○님이 나갔습니다." 안내를 남기고 나감 — 남은 사람들 대화는 그대로(마지막 1명이 나가도 삭제 안 함)
   const leaveRoom = async (roomId) => {
-    if (!window.confirm("채팅방에서 나가시겠습니까?\n나가면 대화 내용이 삭제됩니다.")) return;
+    if (!window.confirm("채팅방에서 나가시겠습니까?\n나가면 내 채팅 목록에서 이 방이 사라집니다.")) return;
     const room = rooms.find(r => r.id === roomId) || (activeRoom?.id === roomId ? activeRoom : null);
     if (room?.type === "group") {
       const me = myProfile?.name || myEmail.split("@")[0];
@@ -1157,6 +1157,186 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
     document.body
   );
 
+  // ════════ ⭐ 2026-11-03 단체방 팝업 (PC·모바일 공용) — 만들기 · 대화상대 · 초대 · 이름 바꾸기 ════════
+  const matchFriend = (f, q) => !q || [f.name, f.team, f.position, f.email].some(v => String(v || "").includes(q));
+  const pickRow = (f, checked, onToggle) => (
+    <label key={f.uid} style={{ display: "flex", alignItems: "center", gap: 10, padding: "6px 8px", borderRadius: 10, cursor: "pointer", background: checked ? "#eff6ff" : "transparent" }}>
+      <input type="checkbox" checked={checked} onChange={onToggle}
+        style={{ accentColor: "#1B2B4B", width: 15, height: 15 }} />
+      <Avatar name={f.name} photo={f.photo} size={30} />
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 13, fontWeight: checked ? 700 : 500, color: "#1B2B4B", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{f.name}</div>
+        {(f.team || f.position || f.crossCompany) && (
+          <div style={{ fontSize: 11, color: "#9ca3af", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            {[f.crossCompany ? `연동 · ${f.company}` : "", f.team, f.position].filter(Boolean).join(" · ")}
+          </div>
+        )}
+      </div>
+    </label>
+  );
+  const chipRow = (uids, onRemove) => uids.length > 0 && (
+    <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginBottom: 8 }}>
+      {uids.map(uid => {
+        const f = friends.find(x => x.uid === uid);
+        return (
+          <span key={uid} onClick={() => onRemove(uid)} style={{ fontSize: 11, fontWeight: 700, color: "#fff", background: "#1B2B4B", borderRadius: 12, padding: "3px 8px", cursor: "pointer" }}>
+            {f?.name || "알 수 없음"} ✕
+          </span>
+        );
+      })}
+    </div>
+  );
+  const dlgOverlay = { position: "fixed", inset: 0, zIndex: 100000, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center" };
+  const dlgBox = { background: "#fff", borderRadius: 20, width: "90%", maxWidth: 360, maxHeight: "85vh", overflow: "hidden", display: "flex", flexDirection: "column", boxShadow: "0 20px 60px rgba(0,0,0,0.3)" };
+  const dlgHead = (title, onX) => (
+    <div style={{ background: DOCK_BG, padding: "16px 20px", display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0 }}>
+      <span style={{ color: "#fff", fontWeight: 700, fontSize: 15 }}>{title}</span>
+      <button onClick={onX} style={{ background: "none", border: "none", color: "rgba(255,255,255,0.6)", fontSize: 20, cursor: "pointer", lineHeight: 1 }}>✕</button>
+    </div>
+  );
+  const searchBox = (value, onChange) => (
+    <input value={value} onChange={e => onChange(e.target.value)} placeholder="이름 · 팀 · 직급 검색"
+      style={{ width: "100%", border: "1px solid #e5e7eb", borderRadius: 20, padding: "6px 14px", fontSize: 12, outline: "none", boxSizing: "border-box", marginBottom: 8, background: "#f8fafc" }} />
+  );
+  const btnGray = { flex: 1, padding: "10px 0", background: "#f1f5f9", color: "#374151", border: "none", borderRadius: 10, fontSize: 13, fontWeight: 600, cursor: "pointer" };
+  const btnNavy = (off) => ({ flex: 1, padding: "10px 0", background: "#1B2B4B", color: "#fff", border: "none", borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: off ? "default" : "pointer", opacity: off ? 0.4 : 1 });
+
+  const liveMembersRoom = membersRoom ? (rooms.find(r => r.id === membersRoom.id) || membersRoom) : null;
+  const liveInviteRoom = inviteRoom ? (rooms.find(r => r.id === inviteRoom.id) || inviteRoom) : null;
+  const closeNewGroup = () => { setNewGroupModal(false); setGroupSearch(""); };
+
+  const groupModalsEl = (
+    <>
+      {/* 단체 채팅방 만들기 */}
+      {newGroupModal && (
+        <div data-kp-dialog="1" style={dlgOverlay} onClick={closeNewGroup}>
+          <div style={dlgBox} onClick={e => e.stopPropagation()}>
+            {dlgHead("단체 채팅방 만들기", closeNewGroup)}
+            <div style={{ padding: "16px 20px 12px", display: "flex", flexDirection: "column", minHeight: 0, flex: 1 }}>
+              <div style={{ marginBottom: 12 }}>
+                <label style={{ fontSize: 12, fontWeight: 600, color: "#6b7280", display: "block", marginBottom: 5 }}>채팅방 이름 <span style={{ fontWeight: 400, color: "#9ca3af" }}>(선택 · 비우면 멤버 이름으로 표시)</span></label>
+                <input value={groupName} onChange={e => setGroupName(e.target.value)}
+                  placeholder={groupMembers.length ? autoGroupName(groupMembers.map(u => friends.find(x => x.uid === u)?.name || "")) : "채팅방 이름 입력"}
+                  style={{ width: "100%", border: "1px solid #e5e7eb", borderRadius: 10, padding: "8px 12px", fontSize: 13, outline: "none", boxSizing: "border-box" }} />
+              </div>
+              <label style={{ fontSize: 12, fontWeight: 600, color: "#6b7280", display: "block", marginBottom: 6 }}>
+                대화상대 선택 ({groupMembers.length}명 선택됨)
+              </label>
+              {chipRow(groupMembers, (uid) => setGroupMembers(prev => prev.filter(u => u !== uid)))}
+              {searchBox(groupSearch, setGroupSearch)}
+              <div style={{ maxHeight: 240, overflowY: "auto", display: "flex", flexDirection: "column", gap: 2 }}>
+                {friends.filter(f => matchFriend(f, groupSearch.trim())).map(f => {
+                  const checked = groupMembers.includes(f.uid);
+                  return pickRow(f, checked, () => setGroupMembers(prev => checked ? prev.filter(u => u !== f.uid) : [...prev, f.uid]));
+                })}
+              </div>
+            </div>
+            <div style={{ padding: "0 20px 20px", display: "flex", gap: 10, flexShrink: 0 }}>
+              <button onClick={closeNewGroup} style={btnGray}>취소</button>
+              <button onClick={createGroup} disabled={groupMembers.length === 0} style={btnNavy(groupMembers.length === 0)}>만들기</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 대화상대 목록 */}
+      {liveMembersRoom && (
+        <div data-kp-dialog="1" style={dlgOverlay} onClick={() => setMembersRoom(null)}>
+          <div style={dlgBox} onClick={e => e.stopPropagation()}>
+            {dlgHead(`대화상대 ${liveMembersRoom.members?.length || 0}명`, () => setMembersRoom(null))}
+            <div style={{ overflowY: "auto", flex: 1 }}>
+              <div onClick={() => { const r = liveMembersRoom; setMembersRoom(null); openInvite(r); }}
+                style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 20px", cursor: "pointer", borderBottom: "1px solid #f3f4f6", color: "#1B2B4B", fontWeight: 700, fontSize: 13 }}
+                onMouseEnter={e => e.currentTarget.style.background = "#f8fafc"}
+                onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+                <div style={{ width: 36, height: 36, borderRadius: "30%", background: "#eef1f7", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, color: "#1B2B4B" }}>＋</div>
+                대화상대 초대
+              </div>
+              {(liveMembersRoom.members || []).slice().sort((a, b) => (a === myUid ? -1 : b === myUid ? 1 : 0)).map(uid => {
+                const isMe = uid === myUid;
+                const f = friends.find(x => x.uid === uid);
+                const p = liveMembersRoom.memberProfiles?.[uid] || {};
+                const nm = isMe ? myName : (p.name || f?.name || "알 수 없음");
+                const ph = isMe ? (myProfile?.photo || "") : (f?.photo || p.photo || "");
+                const sub = isMe ? [myHr?.team, myProfile?.position].filter(Boolean).join(" · ") : [f?.crossCompany ? `연동 · ${f.company}` : "", f?.team, f?.position].filter(Boolean).join(" · ");
+                return (
+                  <div key={uid} onClick={() => { if (!isMe && f) { setMembersRoom(null); setProfileView(f); } }}
+                    style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 20px", cursor: isMe ? "default" : "pointer", borderBottom: "1px solid #f3f4f6" }}
+                    onMouseEnter={e => e.currentTarget.style.background = "#f8fafc"}
+                    onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+                    <Avatar name={nm} photo={ph} size={36} />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: "#111827" }}>
+                        {nm}{isMe && <span style={{ fontSize: 10, fontWeight: 700, color: "#fff", background: "#1B2B4B", borderRadius: 8, padding: "1px 6px", marginLeft: 6 }}>나</span>}
+                        {liveMembersRoom.createdBy === uid && <span style={{ fontSize: 10, fontWeight: 700, color: "#6b7280", marginLeft: 6 }}>방장</span>}
+                      </div>
+                      {sub && <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 1 }}>{sub}</div>}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 대화상대 초대 */}
+      {liveInviteRoom && (() => {
+        const inRoom = liveInviteRoom.members || [];
+        const candidates = friends.filter(f => !inRoom.includes(f.uid));
+        const shown = candidates.filter(f => matchFriend(f, inviteSearch.trim()));
+        const close = () => { setInviteRoom(null); setInviteSel([]); setInviteSearch(""); };
+        return (
+          <div data-kp-dialog="1" style={dlgOverlay} onClick={close}>
+            <div style={dlgBox} onClick={e => e.stopPropagation()}>
+              {dlgHead("대화상대 초대", close)}
+              <div style={{ padding: "16px 20px 12px", display: "flex", flexDirection: "column", minHeight: 0, flex: 1 }}>
+                <div style={{ fontSize: 12, color: "#6b7280", marginBottom: 8 }}>{getRoomName(liveInviteRoom)} · 지금 {inRoom.length}명</div>
+                {chipRow(inviteSel, (uid) => setInviteSel(prev => prev.filter(u => u !== uid)))}
+                {searchBox(inviteSearch, setInviteSearch)}
+                <div style={{ maxHeight: 260, overflowY: "auto", display: "flex", flexDirection: "column", gap: 2 }}>
+                  {candidates.length === 0 ? (
+                    <div style={{ padding: 20, textAlign: "center", fontSize: 12, color: "#9ca3af" }}>초대할 수 있는 친구가 없습니다</div>
+                  ) : shown.map(f => {
+                    const checked = inviteSel.includes(f.uid);
+                    return pickRow(f, checked, () => setInviteSel(prev => checked ? prev.filter(u => u !== f.uid) : [...prev, f.uid]));
+                  })}
+                </div>
+              </div>
+              <div style={{ padding: "0 20px 20px", display: "flex", gap: 10, flexShrink: 0 }}>
+                <button onClick={close} style={btnGray}>취소</button>
+                <button onClick={inviteMembers} disabled={inviteSel.length === 0} style={btnNavy(inviteSel.length === 0)}>
+                  초대{inviteSel.length ? ` (${inviteSel.length})` : ""}
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* 채팅방 이름 바꾸기 */}
+      {renameRoom && (
+        <div data-kp-dialog="1" style={dlgOverlay} onClick={() => setRenameRoom(null)}>
+          <div style={{ ...dlgBox, maxWidth: 340 }} onClick={e => e.stopPropagation()}>
+            {dlgHead("채팅방 이름 바꾸기", () => setRenameRoom(null))}
+            <div style={{ padding: "16px 20px 12px" }}>
+              <input value={renameText} onChange={e => setRenameText(e.target.value.slice(0, 50))}
+                onKeyDown={e => { if (e.key === "Enter" && !e.nativeEvent.isComposing) saveRename(); }}
+                placeholder={autoGroupName(getGroupPeople(renameRoom).map(p => p.name))}
+                ref={imeFocusRef}
+                style={{ width: "100%", border: "1px solid #e5e7eb", borderRadius: 10, padding: "8px 12px", fontSize: 13, outline: "none", boxSizing: "border-box" }} />
+              <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 6 }}>비워 두면 멤버 이름으로 자동 표시됩니다. 모든 대화상대에게 같은 이름으로 보입니다.</div>
+            </div>
+            <div style={{ padding: "0 20px 20px", display: "flex", gap: 10 }}>
+              <button onClick={() => setRenameRoom(null)} style={btnGray}>취소</button>
+              <button onClick={saveRename} style={btnNavy(false)}>확인</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+
   if (mobileMode) {
     return (
       <>
@@ -1206,49 +1386,7 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
             </div>
           </div>
         )}
-        {newGroupModal && (
-          <div style={{ position: "fixed", inset: 0, zIndex: 99999, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center" }}
-            onClick={() => setNewGroupModal(false)}>
-            <div style={{ background: "#fff", borderRadius: 20, width: "90%", maxWidth: 360, overflow: "hidden", boxShadow: "0 20px 60px rgba(0,0,0,0.3)" }}
-              onClick={e => e.stopPropagation()}>
-              <div style={{ background: DOCK_BG, padding: "16px 20px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                <span style={{ color: "#fff", fontWeight: 700, fontSize: 15 }}>단체 채팅방 만들기</span>
-                <button onClick={() => setNewGroupModal(false)} style={{ background: "none", border: "none", color: "rgba(255,255,255,0.6)", fontSize: 20, cursor: "pointer", lineHeight: 1 }}>✕</button>
-              </div>
-              <div style={{ padding: "20px 20px 16px" }}>
-                <div style={{ marginBottom: 14 }}>
-                  <label style={{ fontSize: 12, fontWeight: 600, color: "#6b7280", display: "block", marginBottom: 5 }}>채팅방 이름 *</label>
-                  <input value={groupName} onChange={e => setGroupName(e.target.value)}
-                    placeholder="채팅방 이름 입력"
-                    style={{ width: "100%", border: "1px solid #e5e7eb", borderRadius: 10, padding: "8px 12px", fontSize: 13, outline: "none", boxSizing: "border-box" }} />
-                </div>
-                <label style={{ fontSize: 12, fontWeight: 600, color: "#6b7280", display: "block", marginBottom: 8 }}>
-                  멤버 선택 ({groupMembers.length}명 선택됨)
-                </label>
-                <div style={{ maxHeight: 180, overflowY: "auto", display: "flex", flexDirection: "column", gap: 4 }}>
-                  {friends.map(f => {
-                    const checked = groupMembers.includes(f.uid);
-                    return (
-                      <label key={f.uid} style={{ display: "flex", alignItems: "center", gap: 10, padding: "6px 8px", borderRadius: 10, cursor: "pointer", background: checked ? "#eff6ff" : "transparent" }}>
-                        <input type="checkbox" checked={checked}
-                          onChange={() => setGroupMembers(prev => checked ? prev.filter(u => u !== f.uid) : [...prev, f.uid])}
-                          style={{ accentColor: "#1B2B4B", width: 15, height: 15 }} />
-                        <Avatar name={f.name} photo={f.photo} size={30} />
-                        <span style={{ fontSize: 13, fontWeight: checked ? 700 : 400, color: "#1B2B4B" }}>{f.name}</span>
-                      </label>
-                    );
-                  })}
-                </div>
-              </div>
-              <div style={{ padding: "0 20px 20px", display: "flex", gap: 10 }}>
-                <button onClick={() => setNewGroupModal(false)}
-                  style={{ flex: 1, padding: "10px 0", background: "#f1f5f9", color: "#374151", border: "none", borderRadius: 10, fontSize: 13, fontWeight: 600, cursor: "pointer" }}>취소</button>
-                <button onClick={createGroup} disabled={!groupName.trim() || groupMembers.length === 0}
-                  style={{ flex: 1, padding: "10px 0", background: "#1B2B4B", color: "#fff", border: "none", borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: "pointer", opacity: (!groupName.trim() || groupMembers.length === 0) ? 0.4 : 1 }}>만들기</button>
-              </div>
-            </div>
-          </div>
-        )}
+        {groupModalsEl}
 
         {/* 연락처 카드 전송 모달 */}
         {contactPickModal && (
@@ -1390,50 +1528,8 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
         </div>
       )}
 
-      {/* ─── 단체 채팅방 만들기 팝업 ─── */}
-      {newGroupModal && (
-        <div style={{ position: "fixed", inset: 0, zIndex: 99999, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center" }}
-          onClick={() => setNewGroupModal(false)}>
-          <div style={{ background: "#fff", borderRadius: 20, width: 360, overflow: "hidden", boxShadow: "0 20px 60px rgba(0,0,0,0.3)" }}
-            onClick={e => e.stopPropagation()}>
-            <div style={{ background: DOCK_BG, padding: "16px 20px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-              <span style={{ color: "#fff", fontWeight: 700, fontSize: 15 }}>단체 채팅방 만들기</span>
-              <button onClick={() => setNewGroupModal(false)} style={{ background: "none", border: "none", color: "rgba(255,255,255,0.6)", fontSize: 20, cursor: "pointer", lineHeight: 1 }}>✕</button>
-            </div>
-            <div style={{ padding: "20px 20px 16px" }}>
-              <div style={{ marginBottom: 14 }}>
-                <label style={{ fontSize: 12, fontWeight: 600, color: "#6b7280", display: "block", marginBottom: 5 }}>채팅방 이름 *</label>
-                <input value={groupName} onChange={e => setGroupName(e.target.value)}
-                  placeholder="채팅방 이름 입력"
-                  style={{ width: "100%", border: "1px solid #e5e7eb", borderRadius: 10, padding: "8px 12px", fontSize: 13, outline: "none", boxSizing: "border-box" }} />
-              </div>
-              <label style={{ fontSize: 12, fontWeight: 600, color: "#6b7280", display: "block", marginBottom: 8 }}>
-                멤버 선택 ({groupMembers.length}명 선택됨)
-              </label>
-              <div style={{ maxHeight: 180, overflowY: "auto", display: "flex", flexDirection: "column", gap: 4 }}>
-                {friends.map(f => {
-                  const checked = groupMembers.includes(f.uid);
-                  return (
-                    <label key={f.uid} style={{ display: "flex", alignItems: "center", gap: 10, padding: "6px 8px", borderRadius: 10, cursor: "pointer", background: checked ? "#eff6ff" : "transparent" }}>
-                      <input type="checkbox" checked={checked}
-                        onChange={() => setGroupMembers(prev => checked ? prev.filter(u => u !== f.uid) : [...prev, f.uid])}
-                        style={{ accentColor: "#1B2B4B", width: 15, height: 15 }} />
-                      <Avatar name={f.name} photo={f.photo} size={30} />
-                      <span style={{ fontSize: 13, fontWeight: checked ? 700 : 400, color: "#1B2B4B" }}>{f.name}</span>
-                    </label>
-                  );
-                })}
-              </div>
-            </div>
-            <div style={{ padding: "0 20px 20px", display: "flex", gap: 10 }}>
-              <button onClick={() => setNewGroupModal(false)}
-                style={{ flex: 1, padding: "10px 0", background: "#f1f5f9", color: "#374151", border: "none", borderRadius: 10, fontSize: 13, fontWeight: 600, cursor: "pointer" }}>취소</button>
-              <button onClick={createGroup} disabled={!groupName.trim() || groupMembers.length === 0}
-                style={{ flex: 1, padding: "10px 0", background: "#1B2B4B", color: "#fff", border: "none", borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: "pointer", opacity: (!groupName.trim() || groupMembers.length === 0) ? 0.4 : 1 }}>만들기</button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* ─── 단체 채팅방 팝업(만들기·대화상대·초대·이름) ─── */}
+      {groupModalsEl}
 
       {/* 연락처 카드 전송 모달 */}
       {contactPickModal && (
@@ -1489,7 +1585,7 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
 }
 
 // ════════════════ 친구 목록 뷰 ════════════════
-function FriendsView({ myProfile, friends, rooms, unreadMap, totalUnread, getRoomName, getRoomPhoto, onOpenDM, onOpenSelf, onOpenRoom, onOpenProfile, onOpenPeerProfile, onNewGroup, onClose, onLeaveRoom, myUid, mobileMode, themeHdr, activeRoomId, notifyEnabled, onToggleNotify }) {
+function FriendsView({ myProfile, friends, rooms, unreadMap, totalUnread, getRoomName, getRoomPhoto, onOpenDM, onOpenSelf, onOpenRoom, onOpenProfile, onOpenPeerProfile, onNewGroup, onClose, onLeaveRoom, getGroupPeople, onShowMembers, onInviteRoom, onRenameRoom, myUid, mobileMode, themeHdr, activeRoomId, notifyEnabled, onToggleNotify }) {
   const [tab, setTab] = useState("friends"); // friends | chats
   const [search, setSearch] = useState("");
   const [contextMenu, setContextMenu] = useState(null); // { room, x, y }
@@ -1586,16 +1682,17 @@ function FriendsView({ myProfile, friends, rooms, unreadMap, totalUnread, getRoo
                 onMouseEnter={e => { if (room.id !== activeRoomId) e.currentTarget.style.background = "#f8fafc"; }}
                 onMouseLeave={e => { e.currentTarget.style.background = room.id === activeRoomId ? "#eff6ff" : "transparent"; }}>
                 <div style={{ position: "relative", flexShrink: 0 }}>
-                  <Avatar name={name} photo={photo} size={44} bgColor={room.type === "group" ? "#374151" : "#1B2B4B"} />
-                  {room.type === "group" && (
-                    <div style={{ position: "absolute", bottom: -2, right: -2, width: 16, height: 16, background: "#1B2B4B", borderRadius: "50%", border: "2px solid #fff", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                      <svg width="8" height="8" viewBox="0 0 24 24" fill="white"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-                    </div>
-                  )}
+                  {/* ⭐ 2026-11-03 단체방은 카톡처럼 멤버 얼굴 최대 4개(2x2) */}
+                  {room.type === "group"
+                    ? <GroupAvatar people={getGroupPeople(room)} size={44} />
+                    : <Avatar name={name} photo={photo} size={44} bgColor="#1B2B4B" />}
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 3 }}>
-                    <span style={{ fontSize: 13, fontWeight: 700, color: "#111827", truncate: true }}>{name}</span>
+                    <span style={{ fontSize: 13, fontWeight: 700, color: "#111827", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0 }}>
+                      {name}
+                      {room.type === "group" && <span style={{ fontSize: 12, fontWeight: 600, color: "#9ca3af", marginLeft: 5 }}>{room.members?.length || 0}</span>}
+                    </span>
                     <span style={{ fontSize: 11, color: "#9ca3af", flexShrink: 0, marginLeft: 4 }}>{fmtLastMsg(room.lastAt)}</span>
                   </div>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
@@ -1675,7 +1772,7 @@ function FriendsView({ myProfile, friends, rooms, unreadMap, totalUnread, getRoo
           <div style={{
             position: "fixed",
             left: Math.min(contextMenu.x, window.innerWidth - 200),
-            top: Math.min(contextMenu.y, window.innerHeight - 160),
+            top: Math.min(contextMenu.y, window.innerHeight - (contextMenu.room?.type === "group" ? 250 : 120)),
             zIndex: 100002,
             background: "#fff", borderRadius: 12,
             boxShadow: "0 8px 32px rgba(0,0,0,0.18)",
@@ -1689,6 +1786,27 @@ function FriendsView({ myProfile, friends, rooms, unreadMap, totalUnread, getRoo
                 action: () => { onOpenRoom(contextMenu.room); closeContext(); },
                 color: "#111827",
               },
+              // ⭐ 2026-11-03 단체방 전용 메뉴
+              ...(contextMenu.room?.type === "group" ? [
+                {
+                  label: `대화상대 ${contextMenu.room.members?.length || 0}명`,
+                  icon: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>,
+                  action: () => { onShowMembers(contextMenu.room); closeContext(); },
+                  color: "#111827",
+                },
+                {
+                  label: "대화상대 초대",
+                  icon: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="20" y1="8" x2="20" y2="14"/><line x1="23" y1="11" x2="17" y2="11"/></svg>,
+                  action: () => { onInviteRoom(contextMenu.room); closeContext(); },
+                  color: "#111827",
+                },
+                {
+                  label: "채팅방 이름 바꾸기",
+                  icon: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>,
+                  action: () => { onRenameRoom(contextMenu.room); closeContext(); },
+                  color: "#111827",
+                },
+              ] : []),
               {
                 label: "채팅방 나가기",
                 icon: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>,
@@ -1712,8 +1830,9 @@ function FriendsView({ myProfile, friends, rooms, unreadMap, totalUnread, getRoo
 }
 
 // ════════════════ 채팅 뷰 ════════════════
-function ChatView({ room, roomName, roomPhoto, messages, myUid, myProfile, input, setInput, onSend, onBack, onClose, editMsg, setEditMsg, editText, setEditText, onSaveEdit, onDeleteMsg, msgSearch, setMsgSearch, msgContainerRef, inputRef, onSendImage, onSendFile, onSendLocation, onSendContact, onSendNotice, fileUploading, friends, mobileMode, themeHdr, themeMyBubble, themeChatBg, replyTo, setReplyTo, onReply, onAddReaction, onSendToSelf }) {
+function ChatView({ room, roomName, roomPhoto, messages, myUid, myProfile, input, setInput, onSend, onBack, onClose, editMsg, setEditMsg, editText, setEditText, onSaveEdit, onDeleteMsg, msgSearch, setMsgSearch, msgContainerRef, inputRef, onSendImage, onSendFile, onSendLocation, onSendContact, onSendNotice, fileUploading, friends, mobileMode, themeHdr, themeMyBubble, themeChatBg, replyTo, setReplyTo, onReply, onAddReaction, onSendToSelf, groupPeople = [], onShowMembers, onInvite, onRename, onLeave }) {
   const [showSearch, setShowSearch] = useState(false);
+  const [showRoomMenu, setShowRoomMenu] = useState(false); // ⭐ 2026-11-03 단체방 ≡ 메뉴
   const [showAttachMenu, setShowAttachMenu] = useState(false);
   const [imgPreview, setImgPreview] = useState(null);
   const photoInputRef = useRef(null);
@@ -1768,16 +1887,46 @@ function ChatView({ room, roomName, roomPhoto, messages, myUid, myProfile, input
         <button onClick={onBack} style={{ background: "none", border: "none", color: "rgba(255,255,255,0.7)", cursor: "pointer", padding: 0, display: "flex", alignItems: "center" }}>
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polyline points="15 18 9 12 15 6"/></svg>
         </button>
-        <Avatar name={roomName} photo={roomPhoto} size={32} bgColor={room.type === "group" ? "#374151" : "#243a60"} />
+        {room.type === "group"
+          ? <GroupAvatar people={groupPeople} size={32} />
+          : <Avatar name={roomName} photo={roomPhoto} size={32} bgColor="#243a60" />}
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 14, fontWeight: 700, color: "#fff", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{roomName}</div>
           {room.type === "group" && room.members && (
-            <div style={{ fontSize: 11, color: "rgba(255,255,255,0.5)" }}>{room.members.length}명</div>
+            <div onClick={() => room.id && onShowMembers?.()} style={{ fontSize: 11, color: "rgba(255,255,255,0.5)", cursor: room.id ? "pointer" : "default" }}>{room.members.length}명</div>
           )}
         </div>
         <button onClick={() => setShowSearch(p => !p)} style={{ background: "none", border: "none", color: showSearch ? "#fff" : "rgba(255,255,255,0.5)", cursor: "pointer", padding: 4 }}>
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
         </button>
+        {/* ⭐ 2026-11-03 단체방 메뉴(≡) — 대화상대 · 초대 · 이름 바꾸기 · 나가기 */}
+        {room.type === "group" && room.id && (
+          <div style={{ position: "relative" }}>
+            <button onClick={() => setShowRoomMenu(p => !p)} title="채팅방 메뉴" style={{ background: "none", border: "none", color: showRoomMenu ? "#fff" : "rgba(255,255,255,0.6)", cursor: "pointer", padding: 4, display: "flex", alignItems: "center" }}>
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="20" y2="18"/></svg>
+            </button>
+            {showRoomMenu && (
+              <>
+                <div style={{ position: "fixed", inset: 0, zIndex: 100001 }} onClick={() => setShowRoomMenu(false)} />
+                <div style={{ position: "absolute", top: "calc(100% + 6px)", right: 0, zIndex: 100002, background: "#fff", borderRadius: 12, boxShadow: "0 8px 32px rgba(0,0,0,0.18)", border: "1px solid #e5e7eb", overflow: "hidden", minWidth: 190 }}>
+                  {[
+                    { label: `대화상대 ${room.members?.length || 0}명`, action: onShowMembers },
+                    { label: "＋ 대화상대 초대", action: onInvite },
+                    { label: "채팅방 이름 바꾸기", action: onRename },
+                    { label: "채팅방 나가기", action: onLeave, danger: true },
+                  ].map(item => (
+                    <button key={item.label} onClick={() => { setShowRoomMenu(false); item.action?.(); }}
+                      style={{ display: "block", width: "100%", textAlign: "left", padding: "11px 16px", background: "none", border: "none", borderBottom: "1px solid #f9fafb", cursor: "pointer", fontSize: 13, fontWeight: 600, color: item.danger ? "#ef4444" : "#111827" }}
+                      onMouseEnter={e => e.currentTarget.style.background = "#f8fafc"}
+                      onMouseLeave={e => e.currentTarget.style.background = "none"}>
+                      {item.label}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+        )}
         <button onClick={onClose} style={{ background: "none", border: "none", color: "rgba(255,255,255,0.5)", fontSize: 18, cursor: "pointer", lineHeight: 1 }}>✕</button>
       </div>
 
@@ -1804,15 +1953,42 @@ function ChatView({ room, roomName, roomPhoto, messages, myUid, myProfile, input
             const isMine = msg.senderUid === myUid;
             const prev = messages[i - 1];
             const next = messages[i + 1];
-            const isContinued = prev?.senderUid === msg.senderUid
+            // ⭐ 2026-11-03 안내 문구(system)를 사이에 두면 말풍선 묶음이 끊기도록
+            const isContinued = prev?.senderUid === msg.senderUid && prev?.type !== "system"
               && msg.createdAt && prev.createdAt
               && (msg.createdAt?.toMillis?.() || 0) - (prev.createdAt?.toMillis?.() || 0) < 120000;
-            const isLast = !next || next.senderUid !== msg.senderUid
+            const isLast = !next || next.senderUid !== msg.senderUid || next.type === "system"
               || (next.createdAt?.toMillis?.() || 0) - (msg.createdAt?.toMillis?.() || 0) >= 120000;
 
             const dateStr = msg.createdAt ? fmtDate(msg.createdAt) : "";
             const showDate = dateStr && dateStr !== prevDate;
             if (showDate) prevDate = dateStr;
+
+            // ⭐ 2026-11-03 안 읽은 사람 수(카톡의 노란 숫자) — 보낼 때 멤버(memberUids) 기준,
+            //   나중에 초대된 사람은 옛 메시지 숫자에 영향 없음, 나간 사람은 빼고 센다. (옛 메시지는 totalMembers - readBy)
+            const readBy = msg.readBy || [];
+            const unreadNum = msg.type === "system" || msg.type === "deleted" ? 0
+              : Array.isArray(msg.memberUids) && msg.memberUids.length
+                ? msg.memberUids.filter(u => !readBy.includes(u) && (!room.members || room.members.includes(u))).length
+                : Math.max(0, (msg.totalMembers || room.members?.length || 1) - readBy.length);
+
+            // ⭐ 2026-11-03 안내 문구 — 가운데 작은 회색 알약 (말풍선·아바타·읽음숫자 없음)
+            if (msg.type === "system") {
+              return (
+                <React.Fragment key={msg.id}>
+                  {showDate && (
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, margin: "10px 0 4px" }}>
+                      <div style={{ flex: 1, height: 1, background: "#d1d5db" }} />
+                      <span style={{ fontSize: 11, color: "#6b7280", fontWeight: 600, whiteSpace: "nowrap" }}>{dateStr}</span>
+                      <div style={{ flex: 1, height: 1, background: "#d1d5db" }} />
+                    </div>
+                  )}
+                  <div id={`msg-${msg.id}`} style={{ display: "flex", justifyContent: "center", margin: "8px 0 4px" }}>
+                    <span style={{ fontSize: 11, color: "#4b5563", background: "rgba(15,26,48,0.08)", borderRadius: 12, padding: "4px 12px", maxWidth: "85%", textAlign: "center", lineHeight: 1.5, wordBreak: "keep-all" }}>{msg.text}</span>
+                  </div>
+                </React.Fragment>
+              );
+            }
 
             return (
               <React.Fragment key={msg.id}>
@@ -1965,19 +2141,16 @@ function ChatView({ room, roomName, roomPhoto, messages, myUid, myProfile, input
                         </div>
                       )}
                       {/* 시간 + 액션 */}
-                      {isLast && msg.type !== "deleted" && (
+                      {/* ⭐ 2026-11-03 안읽음 숫자는 카톡처럼 모든 메시지에(내 것·남의 것), 시간은 묶음 마지막에만 */}
+                      {msg.type !== "deleted" && (isLast || unreadNum > 0) && (
                         <div style={{ display: "flex", flexDirection: "column", alignItems: isMine ? "flex-end" : "flex-start", gap: 2, flexShrink: 0 }}>
-                          <span style={{ fontSize: 11, color: "#9ca3af", whiteSpace: "nowrap" }}>{fmtTime(msg.createdAt)}</span>
-                          {/* 읽음 표시 */}
-                          {isMine && msg.type !== "deleted" && (() => {
-                            const total = msg.totalMembers || room.members?.length || 1;
-                            const readCount = (msg.readBy || []).length;
-                            const unreadCount = total - readCount;
-                            if (unreadCount > 0) {
-                              return <span style={{ fontSize: 10, color: "#f59e0b", fontWeight: 700, whiteSpace: "nowrap" }}>{unreadCount}</span>;
-                            }
-                            return <span style={{ fontSize: 11, color: "#6b7280", whiteSpace: "nowrap" }}>읽음</span>;
-                          })()}
+                          {unreadNum > 0 && (
+                            <span style={{ fontSize: 10, color: "#f59e0b", fontWeight: 700, whiteSpace: "nowrap" }}>{unreadNum}</span>
+                          )}
+                          {isLast && <span style={{ fontSize: 11, color: "#9ca3af", whiteSpace: "nowrap" }}>{fmtTime(msg.createdAt)}</span>}
+                          {isLast && isMine && unreadNum === 0 && room.type !== "group" && (
+                            <span style={{ fontSize: 11, color: "#6b7280", whiteSpace: "nowrap" }}>읽음</span>
+                          )}
                         </div>
                       )}
                     </div>
