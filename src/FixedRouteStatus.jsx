@@ -359,6 +359,7 @@ function RangeImportModal({ form, onClose }) {
 }
 
 const isAdminLike = () => { try { const r = localStorage.getItem("role"); return r === "admin" || r === "totalMaster" || auth.currentUser?.email === "tjddnqkf@naver.com"; } catch { return false; } };
+const isMasterOnly = () => { try { return localStorage.getItem("role") === "totalMaster" || auth.currentUser?.email === "tjddnqkf@naver.com"; } catch { return false; } };
 // 🔒 2026-11-03 운송사 분리 — 이 회사의 배차표 양식 id 목록(배지·목록은 이 회사 양식의 오더만)
 export function useRouteBoardIds(company) {
   const [ids, setIds] = React.useState(() => new Set());
@@ -371,7 +372,7 @@ export function useRouteBoardIds(company) {
 // 다른 회사 양식으로 만들어져 이 회사에 잘못 남은 오더 — 확인 후 이 회사에서만 지운다("지운 줄" 기록 없이 → 원래 회사 시트 연동에 영향 없음)
 function ForeignOrdersCard({ list, disabled }) {
   const [busy, setBusy] = React.useState(false);
-  if (!list.length || !isAdminLike()) return null; // 관리자·최고관리자만
+  if (!list.length || !isMasterOnly()) return null; // 최고관리자만
   const clean = async () => {
     if (!window.confirm(`다른 운송사 배차표(구글시트)에서 잘못 들어온 오더 ${list.length}건을 이 회사에서 지울까요?\n원래 운송사의 오더·시트에는 아무 영향이 없습니다.`)) return;
     setBusy(true);
