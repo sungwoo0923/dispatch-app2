@@ -6,7 +6,7 @@
 //    handovers: receivers[{uid,name}], receiverUids[] 추가 — 예전 화면(모바일)과 맞추려고 receiver(이름들)·receiverUid(첫 사람)도 함께 저장
 import React from "react";
 import { db } from "./firebase";
-import { addDoc, collection, doc, serverTimestamp, updateDoc } from "firebase/firestore";
+import { addDoc, collection, doc, serverTimestamp, updateDoc, onSnapshot, setDoc } from "firebase/firestore";
 import { ShellIcon } from "./AdminShell";
 import { RecipientPicker, useCompanyStaff, compressImage } from "./InternalMail";
 import CustomDatePicker from "./CustomDatePicker";
@@ -17,6 +17,42 @@ const MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
 const inp = "w-full px-4 rounded-xl border border-[#DCE3EE] bg-white text-[14.5px] text-[#0F1A30] outline-none focus:border-[#4B6CB7]";
 const today = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
 export const NOTICE_WRITER_ROLES = ["admin", "totalMaster", "hrManager", "superadmin"];
+// ⭐ 2026-11-03 공지 작성 권한 — 회사마다 마스터가 정한다(companySettings/{회사}.noticeWriters)
+//   admin(기본) = 관리자·인사관리자·마스터 · exec = + 임원(부서 "임원") · all = 직원 누구나(조회전용·기사·화주 제외)
+export const NOTICE_POLICIES = [["admin", "관리자만", "관리자 · 인사관리자 · 마스터"], ["exec", "임원까지", "관리자 + 임원 부서"], ["all", "누구나", "직원 누구나(조회전용 제외)"]];
+export function useNoticePolicy(company) {
+  const [p, setP] = React.useState("admin");
+  React.useEffect(() => {
+    if (!company) return undefined;
+    return onSnapshot(doc(db, "companySettings", company), (x) => setP((x.exists() && x.data()?.noticeWriters) || "admin"), () => setP("admin"));
+  }, [company]);
+  return p;
+}
+export async function setNoticePolicy(company, value) {
+  await setDoc(doc(db, "companySettings", company), { companyName: company, noticeWriters: value, noticeWritersAt: serverTimestamp() }, { merge: true });
+}
+export function canWriteNoticeFor(me, policy) {
+  const role = me?.role || "";
+  if (!role || ["viewer", "driver", "shipper", "cafeUser"].includes(role)) return false;
+  if (NOTICE_WRITER_ROLES.includes(role) || role === "hrAcct" || me?.isMaster) return true;
+  if (policy === "all") return true;
+  if (policy === "exec") return String(me?.team || "").trim() === "임원";
+  return false;
+}
+// 공지 작성 권한 고르기(마스터·최고관리자만 보임)
+export function NoticePolicyPicker({ company, policy, dark = false }) {
+  const [busy, setBusy] = React.useState(false);
+  const pick = async (v) => { if (v === policy) return; setBusy(true); try { await setNoticePolicy(company, v); } catch (e) { window.alert(`저장하지 못했습니다: ${e?.message || e}`); } finally { setBusy(false); } };
+  return (
+    <div className={`inline-flex items-center gap-1 p-1 rounded-xl ${dark ? "bg-white/[0.08] border border-white/15" : "bg-[#EEF2F8] border border-[#E3E8F0]"}`} title="공지사항을 쓸 수 있는 사람(마스터만 바꿀 수 있어요)">
+      <span className={`px-2 text-[11.5px] font-black ${dark ? "text-white/60" : "text-[#5B6B85]"}`}>공지 작성</span>
+      {NOTICE_POLICIES.map(([k, label, desc]) => (
+        <button key={k} type="button" disabled={busy} onClick={() => pick(k)} title={desc}
+          className={`h-7 px-2.5 rounded-lg text-[12px] font-black transition ${policy === k ? (dark ? "bg-white text-[#0F1A30]" : "bg-[#0F1A30] text-white") : dark ? "text-white/70 hover:text-white" : "text-[#5B6B85] hover:text-[#0F1A30]"}`}>{label}</button>
+      ))}
+    </div>
+  );
+}
 export const handoverReceivers = (h) => (Array.isArray(h?.receiverUids) && h.receiverUids.length ? h.receiverUids : h?.receiverUid ? [h.receiverUid] : []);
 
 function Hero({ en, title, desc, children }) {

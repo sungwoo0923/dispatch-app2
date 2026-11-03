@@ -193,6 +193,11 @@ service cloud.firestore {
     }
     // 회사별 맞춤 기능(companyFeatures/{회사} = { fareRules: true, … }) — 최고관리자(관리자센터)만 켜고 끈다.
     //  그 회사 승인 직원은 읽기만(켜진 회사에만 메뉴가 보이게)
+    // ⭐ 2026-11-03 회사 설정(공지 작성 권한 등) — 같은 회사는 읽고, 그 회사 마스터·최고관리자만 바꾼다
+    match /companySettings/{co} {
+      allow read: if isTotalMasterUser() || (isApproved() && myCo() == co);
+      allow write: if isTotalMasterUser() || (isApproved() && myCo() == co && myUser().get('isMaster', false) == true);
+    }
     match /companyFeatures/{co} {
       allow read: if isTotalMasterUser() || (isApproved() && myCo() == co);
       allow write: if isTotalMasterUser();
@@ -623,13 +628,22 @@ service cloud.firestore {
     function isBoardAdmin() {
       return isSuperEmail() || myUser().get('role', '') in ['admin', 'totalMaster', 'hrManager', 'hrAcct'];
     }
+    // ⭐ 2026-11-03 공지 작성 권한 — 회사 마스터가 정함(companySettings/{회사}.noticeWriters: admin | exec | all)
+    function noticePolicy() {
+      return exists(/databases/$(database)/documents/companySettings/$(myCo()))
+        ? get(/databases/$(database)/documents/companySettings/$(myCo())).data.get('noticeWriters', 'admin') : 'admin';
+    }
+    function canPostNotice() {
+      return isBoardAdmin() || (isApproved() && !(myUser().get('role', '') in ['viewer', 'driver', 'shipper', 'cafeUser']) && (
+        myUser().get('isMaster', false) == true || noticePolicy() == 'all' || (noticePolicy() == 'exec' && myUser().get('team', '') == '임원')));
+    }
     // 📢 공지사항 — 누구나 읽고, 쓰기·수정·삭제는 관리자(관리자·인사관리자·최고관리자)만
     match /notices/{id} {
       // 🔒 같은 운송사 공지만 · 화주사는 화주 대상 공지만
       allow read: if coMatch(resource.data) || (isApproved() && isShipperUser() && resource.data.get('audience', '') in ['shipper', 'all']);
-      allow create: if coCreate() && isBoardAdmin();
+      allow create: if coCreate() && canPostNotice();
       // 수정·삭제는 작성자 본인만(최고관리자 예외). 작성자 기록이 없는 옛 공지는 공지 작성 권한자가 관리
-      allow update, delete: if coMatch(resource.data) && isBoardAdmin()
+      allow update, delete: if coMatch(resource.data) && canPostNotice()
         && (resource.data.get('authorUid', '') == request.auth.uid || resource.data.get('authorUid', '') == ''
             || isSuperEmail() || myUser().get('role', '') == 'totalMaster');
       // 읽음 표시는 같은 회사 직원 누구나
@@ -721,7 +735,7 @@ service cloud.firestore {
         'driver_completed_archive', 'notifications', 'schedules', 'scheduledEmails', 'emailLogs', 'hrResumes', 'attendanceRequests',
         'attendanceChangeRequests', 'acctPayments', 'approvalLines', 'acctLedger', 'acctRecurring', 'officeAssets', 'execSchedules', 'companyRules', 'hrSettings', 'retireCases', 'approvalSettings', 'acctFunds',
         // ⭐ 2026-11-02 운임규칙 · 회사별 맞춤 기능(위에서 따로 정함)
-        'fareRules', 'companyFeatures', 'vehicleLedger', 'vehicleLedgerFiles', 'vehicleTypes']);
+        'fareRules', 'companyFeatures', 'companySettings', 'vehicleLedger', 'vehicleLedgerFiles', 'vehicleTypes']);
     }
   }
 }

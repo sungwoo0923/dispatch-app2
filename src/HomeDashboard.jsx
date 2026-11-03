@@ -31,7 +31,7 @@ import HandoverCenter from "./HandoverCenter";
 import { useMyProfile, personName } from "./userNames";
 import ContractStudio from "./ContractStudio";
 import BoardPage, { BOARDS, canSeeBoard, useBoardLatest } from "./BoardPosts";
-import { NoticeWriter, HandoverWriter, NOTICE_WRITER_ROLES, handoverReceivers } from "./HomeWriters";
+import { NoticeWriter, HandoverWriter, NOTICE_WRITER_ROLES, handoverReceivers, useNoticePolicy, canWriteNoticeFor, NoticePolicyPicker } from "./HomeWriters";
 import { CustomSelect } from "./CustomSelect";
 
 /* ===== 공통 Modal ===== */
@@ -881,7 +881,7 @@ export default function HomeDashboard({ role, user, userCompany = "", pending, d
   const newestOf = (list) => list.reduce((mx, it) => (it.authorUid && it.authorUid === user?.uid ? mx : Math.max(mx, (it.createdAt?.seconds || 0) * 1000)), 0);
   // ⭐ 2026-10-31 이름은 본인 사용자 문서에서 — 직원 목록(회사로 걸러짐)에 본인이 없으면 계정 아이디로 적혔다
   const myProfileHome = useMyProfile(user?.uid);
-  const meHome = (() => { const u = users.find((x) => x.id === user?.uid) || {}; const pf = myProfileHome || {}; return { uid: user?.uid, name: personName(pf) || personName(u) || user?.displayName || (user?.email || "").split("@")[0] || "", team: pf.team || u.team || "", position: pf.position || u.position || "", role: role || u.role || "" }; })();
+  const meHome = (() => { const u = users.find((x) => x.id === user?.uid) || {}; const pf = myProfileHome || {}; return { uid: user?.uid, name: personName(pf) || personName(u) || user?.displayName || (user?.email || "").split("@")[0] || "", team: pf.team || u.team || "", position: pf.position || u.position || "", role: role || u.role || "", isMaster: u.isMaster === true }; })();
   const boardLatest = useBoardLatest(getViewCompany(), meHome);
   const apCounts = useApprovalCounts();
   // 🔔 결재 배너를 누르면 홈 › 전자결재로 와서 그 문서를 연다(DispatchApp이 홈으로 옮겨 준 뒤 이 값을 남겨 둔다)
@@ -914,7 +914,9 @@ export default function HomeDashboard({ role, user, userCompany = "", pending, d
 
   const pendingApprovalCountNav = schedules.filter(s => (s.approvers || []).some(a => a.uid === user?.uid && (!a.status || a.status === "pending"))).length;
   const unreadHandoverCountNav = handovers.filter(h => handoverReceivers(h).includes(user?.uid) && !h.readBy?.includes(user?.uid)).length;
-  const canWriteNotice = NOTICE_WRITER_ROLES.includes(role);
+  const noticePolicy = useNoticePolicy(getViewCompany()); // ⭐ 2026-11-03 공지 작성 권한(마스터가 정함)
+  const canWriteNotice = canWriteNoticeFor(meHome, noticePolicy) || NOTICE_WRITER_ROLES.includes(role);
+  const canSetNoticePolicy = role === "totalMaster" || meHome.isMaster;
   // ✍ 공지·인수인계 글쓰기는 팝업 대신 넓은 작성 화면(HomeWriters.jsx)
   const { planId } = usePlan();
   const [obitOpen, setObitOpen] = useState(false); // 부고 알림 작성
@@ -1050,6 +1052,7 @@ export default function HomeDashboard({ role, user, userCompany = "", pending, d
                 + 새로 등록
               </button>
             )}
+            {boardTab === "공지사항" && canSetNoticePolicy && <NoticePolicyPicker company={getViewCompany()} policy={noticePolicy} dark />}
             {!isViewer && boardTab === "공지사항" && canWriteNotice && (
               <button type="button" onClick={() => { setNoticeOpen(false); setSelectedNotice(null); setObitOpen(true); }}
                 className="h-12 px-5 rounded-2xl bg-[#111] text-white text-[15px] font-black ring-1 ring-white/25 hover:bg-black transition whitespace-nowrap">부고 알림</button>

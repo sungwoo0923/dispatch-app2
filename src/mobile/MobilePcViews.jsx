@@ -13,7 +13,7 @@ import ApprovalCenter, { useApprovalCounts } from "../Approval";
 import HandoverCenter, { useHandoverUnread } from "../HandoverCenter";
 import NoticeBoard, { canSeeNotice } from "../NoticeBoard";
 import { useBoardNoticesWithPlatform } from "../PlatformNoticeBanner";
-import { NoticeWriter, NOTICE_WRITER_ROLES } from "../HomeWriters";
+import { NoticeWriter, NOTICE_WRITER_ROLES, useNoticePolicy, canWriteNoticeFor, NoticePolicyPicker } from "../HomeWriters";
 import { OrderHistoryContext } from "../orderHistory";
 import StaffManager from "../StaffManager";
 import ObituaryWriter from "../ObituaryWriter";
@@ -28,6 +28,7 @@ import AttendanceBoard from "../AttendanceBoard";
 import { useMyProfile, personName } from "../userNames";
 import MobileFleetView from "./MobileFleetView";
 import FareRulesSettings from "../FareRulesSettings"; // ⭐ 2026-11-02 운임규칙
+import BoardPage, { BOARDS, canSeeBoard } from "../BoardPosts"; // ⭐ 2026-11-03 모바일 게시판
 
 // 매출관리는 PC 배차 프로그램 안에 있는 화면이라 그 묶음을 필요할 때만 받아온다
 const PcSettlement = React.lazy(() => import("../DispatchApp").then((m) => ({ default: m.PcSettlement })));
@@ -127,7 +128,9 @@ function NoticeView({ company, me }) {
   // ⭐ 2026-11-03 팀·직원 지정 공지는 볼 수 있는 사람 것만 — 위 "전체 · 이번 달" 숫자도 같게
   const notices = useBoardNoticesWithPlatform(ownNotices, company).filter((n) => canSeeNotice(n, me));
   const isViewer = me?.role === "viewer";
-  const canWrite = NOTICE_WRITER_ROLES.includes(me?.role) && !isViewer;
+  const noticePolicy = useNoticePolicy(company); // ⭐ 2026-11-03 공지 작성 권한(마스터가 정함)
+  const canWrite = !isViewer && (canWriteNoticeFor(me, noticePolicy) || NOTICE_WRITER_ROLES.includes(me?.role));
+  const canSetPolicy = me?.role === "totalMaster" || me?.isMaster === true;
   const thisMonth = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 7);
   const monthN = notices.filter((n) => { const ms = n.createdAt?.toMillis ? n.createdAt.toMillis() : (n.createdAt?.seconds || 0) * 1000; return ms && new Date(ms).toISOString().slice(0, 7) === thisMonth; }).length;
   if (obit) return <div className="kp-m-pc px-2 py-2"><ObituaryWriter company={company} me={me} initial={obit && obit.id ? obit : null} onCancel={() => setObit(false)} onSaved={() => setObit(false)} /></div>;
@@ -149,6 +152,7 @@ function NoticeView({ company, me }) {
           {canWrite && <button type="button" onClick={() => setWriter({ initial: null })} className="h-12 px-4 rounded-2xl bg-white text-[#0F1A30] text-[14px] font-black shrink-0">+ 새로 등록</button>}
           {canWrite && <button type="button" onClick={() => setObit(true)} className="h-12 px-3.5 rounded-2xl bg-[#111] text-white text-[14px] font-black shrink-0 ring-1 ring-white/25">부고</button>}
         </div>
+        {canSetPolicy && <div className="mt-2.5 overflow-x-auto"><NoticePolicyPicker company={company} policy={noticePolicy} dark /></div>}
       </div>
       <div className="rounded-2xl bg-white border border-[#E3E8F0] p-3">
         <NoticeBoard notices={notices} me={me} canWrite={canWrite} isViewer={isViewer} openId={openId} setOpenId={setOpenId}
@@ -160,6 +164,24 @@ function NoticeView({ company, me }) {
           }}
           confirm={(message, onConfirm) => { if (window.confirm(message)) onConfirm(); }} />
       </div>
+    </div>
+  );
+}
+
+// 🗂 2026-11-03 모바일 사내 게시판 — PC 게시판(BoardPosts)을 그대로 쓰고, 볼 수 있는 게시판만 위쪽 탭으로
+function MobileBoard({ company, me }) {
+  const list = Object.keys(BOARDS).filter((b) => canSeeBoard(b, me));
+  const [b, setB] = React.useState(list[0] || "free");
+  return (
+    <div className="px-3 py-3 kp-m-pc">
+      {list.length > 1 && (
+        <div className="flex gap-1.5 mb-3 overflow-x-auto">
+          {list.map((k) => (
+            <button key={k} type="button" onClick={() => setB(k)} className={`h-9 px-3.5 rounded-xl text-[13px] font-black whitespace-nowrap border ${b === k ? "bg-[#0F1A30] text-white border-[#0F1A30]" : "bg-white text-[#3A4A66] border-[#DCE3EE]"}`}>{BOARDS[k].label}</button>
+          ))}
+        </div>
+      )}
+      <BoardPage company={company} me={me} board={b} />
     </div>
   );
 }
@@ -195,6 +217,7 @@ export default function MobilePcView({ kind, dispatchData = [], fixedRows = [], 
     else if (k === "cashbook") body = <div className="kp-m-pc"><FundsWorkspace company={userCompany} isViewer={isViewer} /></div>;
     else if (k === "myresume") body = <div className="kp-m-pc"><React.Suspense fallback={<Loading />}><PcHrPage userCompany={userCompany} role={role} userId={me?.uid || ""} selfOnly /></React.Suspense></div>;
     else if (k === "farerules") body = wrap(<FareRulesSettings company={userCompany} mobile canEdit={role !== "viewer"} myName={me?.name || ""} />); // ⭐ 2026-11-02 운임규칙
+    else if (k === "board") body = <MobileBoard company={userCompany} me={{ ...(me || {}), role }} />;
     else if (k === "rules") body = wrap(<CompanyRules company={userCompany} canEdit={role === "hrManager" || role === "totalMaster"} />);
     else if (k === "funds") body = wrap(<FundsBoard company={userCompany} canEdit={false} />);
     else if (k === "execsched") body = <div className="px-2 py-2"><ExecScheduleBoard company={userCompany} me={me} canWrite={canWriteExecSchedule({ dept: deptMode, role, team: me?.team })} /></div>;

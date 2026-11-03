@@ -6,7 +6,7 @@ import { useMyProfile } from "../userNames";
 import { useCompanyDropdownSync, dropdownList } from "../companyDropdownOptions";
 import { CompanyOptionPicker } from "../companyOptionPicker"; // 🧾 2026-11-02 지급방식·배차방식·상/하차방법 공용 선택기(＋ 추가)
 import { AttendanceQuickButton, officeRadii, CheckoutReminderHost } from "../attendanceQuick";
-import { PersonalTodayHost, turnOnPersonalMode } from "../PersonalSchedule";
+import { PersonalTodayHost } from "../PersonalSchedule";
 import { useCustomRoles, findCustomRole, getMenuAccess, roleScreen } from "../customRoles";
 import { useReadOnlyGuard } from "../readOnlyGuard";
 import { confirmLeave } from "../leaveGuard";
@@ -2083,7 +2083,7 @@ export default function MobileApp({ role: realRole, user, userCompany = "", forc
   useEffect(() => {
     if (!["list", "detail", "form"].includes(page)) deptListOkRef.current = false;
     if (deptMode && page === "list" && !(deptMode === "acct" && deptListOkRef.current)) setPage("dept");
-    if (!deptMode && (page === "dept" || (String(page).startsWith("dept:") && page !== "dept:execsched" && page !== "dept:schedule" && page !== "dept:rules" && page !== "dept:farerules" && page !== "dept:myresume" && !(DEPT_PAGE_MENU[page] && deptOkM(DEPT_PAGE_MENU[page]))))) setPage("list");
+    if (!deptMode && (page === "dept" || (String(page).startsWith("dept:") && page !== "dept:execsched" && page !== "dept:schedule" && page !== "dept:rules" && page !== "dept:board" && page !== "dept:farerules" && page !== "dept:myresume" && !(DEPT_PAGE_MENU[page] && deptOkM(DEPT_PAGE_MENU[page]))))) setPage("list");
   }, [deptMode, page]);
   const toggleExecFull = () => { const v = !execFull; setExecFull(v); try { localStorage.setItem("kpExecFull", v ? "1" : "0"); } catch { /* 무시 */ } setPage(v ? "list" : "dept"); };
   const listScrollYRef = useRef(0); // 리스트 스크롤 위치 저장
@@ -5207,7 +5207,7 @@ const deleteSingleOrder = async (order) => {
 // 📱 PC와 같은 화면에 넘길 회사·내 정보(최고관리자는 로그인한 운송사 기준)
 const pcViewCompany = (localStorage.getItem("loginCompany") || userCompany || localStorage.getItem("userCompany") || DEFAULT_COMPANY).trim();
 const pcViewMeDoc = mobileUsers.find((u) => u.id === currentUser?.uid) || {};
-const pcViewMe = { uid: currentUser?.uid || user?.uid, name: pcViewMeDoc.name || currentUser?.displayName || (currentUser?.email || "").split("@")[0] || "", team: pcViewMeDoc.team || "", position: pcViewMeDoc.position || "", role: role || pcViewMeDoc.role || "" };
+const pcViewMe = { uid: currentUser?.uid || user?.uid, name: pcViewMeDoc.name || currentUser?.displayName || (currentUser?.email || "").split("@")[0] || "", team: pcViewMeDoc.team || "", position: pcViewMeDoc.position || "", role: role || pcViewMeDoc.role || "", isMaster: pcViewMeDoc.isMaster === true };
 const title =
   page === "list" ? "등록내역"
   : page === "ratecard" ? "단가표"
@@ -5221,7 +5221,7 @@ const title =
   : page === "approval" ? "전자결재"
   : page === "staff" ? "직원 관리"
   : page === "dept" ? (deptMode === "exec" ? "경영 브리핑" : deptMode === "hr" ? "인사관리" : "경리·회계")
-  : String(page).startsWith("dept:") ? ({ "dept:settle": "정산관리", "dept:acct": "회계관리", "dept:assets": "비품·자산", "dept:hr": "인사관리부", "dept:leave": "연차 관리", "dept:onboarding": "입·퇴사 관리", "dept:cert": "증명서 발급", "dept:driverdocs": "기사 서류", "dept:approvals": "결재함", "dept:schedule": "직원 일정", "dept:funds": "자금 현황", "dept:execsched": "임원 일정", "dept:rules": "사내 규정", "dept:farerules": "운임 규칙", "dept:cashbook": "자금 관리", "dept:myresume": "내 이력서" }[page] || "")
+  : String(page).startsWith("dept:") ? ({ "dept:settle": "정산관리", "dept:acct": "회계관리", "dept:assets": "비품·자산", "dept:hr": "인사관리부", "dept:leave": "연차 관리", "dept:onboarding": "입·퇴사 관리", "dept:cert": "증명서 발급", "dept:driverdocs": "기사 서류", "dept:approvals": "결재함", "dept:schedule": "직원 일정", "dept:funds": "자금 현황", "dept:execsched": "임원 일정", "dept:rules": "사내 규정", "dept:board": "사내 게시판", "dept:farerules": "운임 규칙", "dept:cashbook": "자금 관리", "dept:myresume": "내 이력서" }[page] || "")
   : page === "status" ? "배차현황"
   : page === "unassigned" ? "미배차현황"
   : page === "canceled" ? "취소내역"
@@ -7785,15 +7785,16 @@ function MobileSideMenu({
             </MenuSection>
           )}
           <MenuSection title="사내 업무" en="WORKSPACE" dark={dark} alwaysOpen>
-            {deptMode !== "exec" && <MenuItem label="임원 일정" icon="pin" onClick={() => onGo?.("dept:execsched")} dark={dark} />}
+            {/* ⭐ 2026-11-03 순서: 공지사항 → 게시판 → 일정 → 나머지 · "개인 일정"은 직원 일정 안의 [개인일정] 스위치로(메뉴에서 뺌) */}
+            <MenuItem label="공지사항" icon="bell" onClick={onGoNotice} badge={alertCounts?.notice ? alertCounts.notice : hasNewNotice ? "NEW" : null} dark={dark} />
+            <MenuItem label="사내 게시판" icon="chat" onClick={() => onGo?.("dept:board")} dark={dark} />
             {/* ⭐ 2026-11-01 직원 일정(연차·외근 등 부재 달력)은 모든 직원이 본다 — PC 홈 › 사내 게시판과 같게 */}
             <MenuItem label="직원 일정" icon="clock" onClick={() => onGo?.("dept:schedule")} dark={dark} />
-            <MenuItem label="개인 일정" icon="pin" onClick={() => { turnOnPersonalMode(); onGo?.("dept:schedule"); }} dark={dark} />{/* ⭐ 2026-11-03 나만 보는 일정(직원 일정의 [개인일정] 스위치를 켜고 이동) */}
+            {deptMode !== "exec" && <MenuItem label="임원 일정" icon="pin" onClick={() => onGo?.("dept:execsched")} dark={dark} />}
+            {ok("전자결재") && <MenuItem label="전자결재" icon="stamp" onClick={() => onGo?.("approval")} badge={(alertCounts?.approval || 0) + (alertCounts?.handover || 0) || null} dark={dark} />}
+            <MenuItem label="출근기록부" icon="clock" onClick={onGoAttendance} dark={dark} />
             <MenuItem label="사내 규정" icon="list" onClick={() => onGo?.("dept:rules")} dark={dark} />
             {fareMenu.feature && role !== "driver" && role !== "shipper" && <MenuItem label="운임 규칙" icon="money" onClick={() => onGo?.("dept:farerules")} dark={dark} />}{/* ⭐ 2026-11-02 운임규칙 */}
-            {ok("전자결재") && <MenuItem label="전자결재" icon="stamp" onClick={() => onGo?.("approval")} badge={(alertCounts?.approval || 0) + (alertCounts?.handover || 0) || null} dark={dark} />}
-            <MenuItem label="공지사항" icon="bell" onClick={onGoNotice} badge={alertCounts?.notice ? alertCounts.notice : hasNewNotice ? "NEW" : null} dark={dark} />
-            <MenuItem label="출근기록부" icon="clock" onClick={onGoAttendance} dark={dark} />
           </MenuSection>
           {!deptMode && (<>
           <MenuSection title="운임" en="FARE" dark={dark} alwaysOpen>
