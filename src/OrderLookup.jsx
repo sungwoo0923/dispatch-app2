@@ -2,6 +2,7 @@
 //    배차관리(아래 실시간 표)·실시간배차현황·배차현황 버튼에서 같은 창을 연다.
 import React from "react";
 import { createPortal } from "react-dom";
+import CustomDatePicker from "./CustomDatePicker"; // 프로그램 공용 달력
 
 const kst = (d = new Date()) => new Date(d.getTime() + 9 * 3600e3).toISOString().slice(0, 10);
 const addDays = (s, n) => { const d = new Date(s + "T00:00:00Z"); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
@@ -144,9 +145,9 @@ export default function OrderLookupModal({ open, onClose, rows = [], nameOf = ()
             <div>
               <div className={lab}>기간 (상차일)</div>
               <div className="flex items-center gap-1.5">
-                <input type="date" className={inp} value={start} onChange={(e) => setStart(e.target.value)} />
+                <CustomDatePicker className={`${inp} w-[150px] text-left`} value={start} onChange={(e) => setStart(e.target.value)} />
                 <span className="text-[#9AA9C3] font-bold">~</span>
-                <input type="date" className={inp} value={end} onChange={(e) => setEnd(e.target.value)} />
+                <CustomDatePicker className={`${inp} w-[150px] text-left`} value={end} onChange={(e) => setEnd(e.target.value)} />
               </div>
             </div>
             <div className="flex gap-1 pb-0.5">

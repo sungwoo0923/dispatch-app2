@@ -298,7 +298,7 @@ function PaymentsPanel() {
                 <td className="px-3 py-2 text-right"><input defaultValue={amountOf(c).toLocaleString()} key={`${key(c)}_${amountOf(c)}`} onBlur={(e) => save(c, { amount: Number(e.target.value.replace(/[^\d]/g, "")) || 0 })} className="w-36 h-9 px-2 rounded-lg border border-[#DCE3EE] text-right font-black" style={{ fontFamily: MONO }} /></td>
                 <td className="px-3 py-2 text-center"><div className="inline-flex gap-1">{PAY_STATUS.map((st) => (
                   <button key={st} type="button" onClick={() => save(c, { status: st, ...(st === "입금완료" && !r.paidAt ? { paidAt: ymd() } : {}) })} className={`h-8 px-2.5 rounded-lg text-[12px] font-black border ${(r.status || "미청구") === st ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "border-[#DCE3EE] text-[#5B6B85]"}`}>{st}</button>))}</div></td>
-                <td className="px-3 py-2 text-center"><input type="date" defaultValue={r.paidAt || ""} key={`${key(c)}_p_${r.paidAt || ""}`} onBlur={(e) => save(c, { paidAt: e.target.value })} className="h-9 px-2 rounded-lg border border-[#DCE3EE]" /></td>
+                <td className="px-3 py-2 text-center"><span className="inline-block w-[140px]"><CustomDatePicker value={r.paidAt || ""} onChange={(e) => save(c, { paidAt: e.target.value })} className="h-9 w-full px-2 rounded-lg border border-[#DCE3EE] text-[13px] font-semibold" placeholder="입금일" /></span></td>
                 <td className="px-3 py-2"><input defaultValue={r.memo || ""} key={`${key(c)}_m`} onBlur={(e) => save(c, { memo: e.target.value })} className="w-full h-9 px-2 rounded-lg border border-[#DCE3EE]" placeholder="세금계산서 번호 등" /></td>
               </tr>); })}</tbody>
           </table></div>
