@@ -206,6 +206,12 @@ service cloud.firestore {
       allow update: if isApproved() && myCo() == co && myUser().get('role', '') in ['admin', 'hrAcct', 'hrManager', 'test', 'user']
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['bizMemory']);
     }
+    // 🎨 2026-11-03 표 컬럼 색(회사 공용) — 그 회사 직원은 읽고, 둘러보기(viewer) 말고는 바꿀 수 있다
+    match /colStyles/{co} {
+      allow read: if isTotalMasterUser() || (isApproved() && myCo() == co);
+      allow write: if isTotalMasterUser() || (isApproved() && myCo() == co && myUser().get('role', '') != 'viewer'
+        && request.resource.data.get('companyName', '') == co);
+    }
     match /companyFeatures/{co} {
       allow read: if isTotalMasterUser() || (isApproved() && myCo() == co);
       allow write: if isTotalMasterUser();

@@ -28,6 +28,7 @@ import { useMyProfile, personName } from "../userNames";
 import MobileFleetView from "./MobileFleetView";
 import FareRulesSettings from "../FareRulesSettings"; // ⭐ 2026-11-02 운임규칙
 import BoardPage, { BOARDS, canSeeBoard } from "../BoardPosts"; // ⭐ 2026-11-03 모바일 게시판
+import { DetailScope } from "../DetailFilter"; // 🔎 2026-11-03 세부검색
 import { BizScope } from "../companyBiz"; // ⭐ 2026-11-03 여러 사업자
 import { MobileFixedRouteView } from "../FixedRouteStatus"; // ⭐ 2026-11-03 모바일 고정노선현황
 
@@ -203,6 +204,7 @@ function MobileBoard({ company, me }) {
   );
 }
 
+const frDateOf = (r) => String(r?.입고일 || r?.하차일 || r?.상차일 || "").slice(0, 10); // 고정노선은 입고일 기준
 export default function MobilePcView({ kind, dispatchData = [], fixedRows = [], clients = [], places = [], drivers = [], role = "", userCompany = "", me: meIn, loadRange, loadFullHistory, onRegisterBack, initial, onGo, deptMode }) {
   // ⭐ 이름은 본인 사용자 문서에서(계정 아이디로 적히던 문제)
   const prof = useMyProfile(meIn?.uid);
@@ -211,7 +213,7 @@ export default function MobilePcView({ kind, dispatchData = [], fixedRows = [], 
   let body = null;
   if (kind === "fare") body = <FareView initialTab={initial || "전국운임조회"} />;
   else if (kind === "ratecard") body = <div className="kp-m-pc"><RateCard dispatchData={dispatchData} userCompany={userCompany} clients={clients} /></div>;
-  else if (kind === "fixedroute") body = <MobileFixedRouteView company={userCompany} dispatchData={dispatchData} drivers={drivers || []} clients={clients} places={places} disabled={role === "viewer"} />;
+  else if (kind === "fixedroute") body = <DetailScope data={dispatchData} dateOf={frDateOf} dateLabel="입고일 기준" title="세부검색 · 고정노선현황">{(detRows, detBtn) => <><div className="px-3 pt-3 flex justify-end">{detBtn}</div><MobileFixedRouteView company={userCompany} dispatchData={detRows} drivers={drivers || []} clients={clients} places={places} disabled={role === "viewer"} /></>}</DetailScope>;
   else if (kind === "fleet") body = <FleetView dispatchData={dispatchData} userCompany={userCompany} role={role} onRegisterBack={onRegisterBack} />;
   else if (kind === "approval") body = <ApprovalView company={userCompany} me={me} initialPage={initial || "inbox"} />;
   else if (kind === "staff") body = <StaffManager company={userCompany} role={role} myUid={me?.uid} initialTab={initial || "pending"} compact={role === "test" || role === "hrManager"} />;
@@ -226,7 +228,7 @@ export default function MobilePcView({ kind, dispatchData = [], fixedRows = [], 
       : wrap(<DeptDashboard mode={deptMode || (role === "hrManager" ? "hr" : "acct")} company={userCompany} dispatchData={dispatchData} onGo={onGo} />);
     else if (k === "approvals") body = <div className="kp-m-pc kp-m-approval"><ExecApprovals company={userCompany} me={me} /></div>;
     else if (k === "schedule") body = wrap(<TeamSchedule company={userCompany} />);
-    else if (k === "settle") body = lazy(<PcSettleMobile dispatchData={dispatchData} companyName={userCompany} role={role} isViewer={isViewer} />);
+    else if (k === "settle") body = lazy(<DetailScope data={dispatchData} title="세부검색 · 정산관리">{(detRows, detBtn) => <><div className="px-3 pt-3 flex justify-end">{detBtn}</div><PcSettleMobile dispatchData={detRows} companyName={userCompany} role={role} isViewer={isViewer} /></>}</DetailScope>);
     else if (k === "acct") body = lazy(<PcAccounting company={userCompany} fixedRows={fixedRows} clients={clients} isViewer={isViewer} />);
     // ⭐ 2026-11-02 점검 — 모바일 인사관리부에도 me 전달(부고 알림 작성자 이름·uid 누락으로 본인 푸시/메일·타인 수정 가능 문제 수정, PC 와 동일)
     else if (k === "hr") body = <div className="kp-m-pc"><HrHub company={userCompany} me={{ uid: me?.uid, name: me?.name || me?.displayName || "" }} canManage={role === "hrManager" || role === "totalMaster" || role === "hrAcct" || (/인사/.test(String(me?.team || "")) && role !== "viewer")}
@@ -247,7 +249,7 @@ export default function MobilePcView({ kind, dispatchData = [], fixedRows = [], 
   }
   else if (kind === "revenue") body = (
     <React.Suspense fallback={<Loading />}>
-      <div className="kp-m-pc px-2 pt-2"><BizScope company={userCompany} data={dispatchData}>{(bizRows, bizSel) => <PcSettlement key={`ms-${bizSel || "all"}`} dispatchData={bizRows} fixedRows={fixedRows} clients={clients} places={places} role={role} isViewer={role === "viewer"} userCompany={userCompany} />}</BizScope></div>
+      <div className="kp-m-pc px-2 pt-2"><DetailScope data={dispatchData} title="세부검색 · 매출관리">{(detRows, detBtn) => <BizScope company={userCompany} data={detRows} extra={detBtn}>{(bizRows, bizSel) => <PcSettlement key={`ms-${bizSel || "all"}`} dispatchData={bizRows} fixedRows={fixedRows} clients={clients} places={places} role={role} isViewer={role === "viewer"} userCompany={userCompany} />}</BizScope>}</DetailScope></div>
     </React.Suspense>
   );
   return <OrderHistoryContext.Provider value={history}>{body}</OrderHistoryContext.Provider>;

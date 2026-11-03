@@ -404,7 +404,7 @@ export function BizListEditor({ company, canEdit }) {
 }
 
 // 사업자별로 보기(매출관리 등) — 위쪽에 사업자 고르기 줄, 아래 화면에는 고른 사업자 오더만 넘긴다
-export function BizScope({ company, data, children, label = "매출 사업자" }) {
+export function BizScope({ company, data, children, label = "매출 사업자", extra = null }) {
   const biz = useCompanyBiz(company);
   const [sel, setSel] = React.useState("");
   const rows = React.useMemo(() => (!biz.multi || !sel ? data || [] : (data || []).filter((r) => bizOf(r, biz.defaultName) === sel)), [data, sel, biz]);
@@ -419,8 +419,10 @@ export function BizScope({ company, data, children, label = "매출 사업자" }
               <button key={n || "all"} type="button" onClick={() => setSel(n)} className={`h-8 px-3.5 rounded-lg text-[12.5px] font-black whitespace-nowrap transition ${sel === n ? "bg-white text-[#0F1A30]" : "text-white/75 hover:text-white"}`}>{n || "전체"}</button>
             ))}
           </div>
+          {extra && <div className="ml-auto">{extra}</div>}
         </div>
       )}
+      {!biz.multi && extra && <div className="mb-3 flex justify-end">{extra}</div>}
       {children(rows, sel)}
     </>
   );

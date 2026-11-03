@@ -95,6 +95,11 @@ ReactDOM.createRoot(document.getElementById("root")).render(
   </React.StrictMode>
 );
 
+// ⭐ 2026-11-03 이 버전 파일을 다 받았다고 기억 — 다음 접속부터는 "업데이트 중" 안내를 띄우지 않는다
+window.addEventListener("load", () => {
+  setTimeout(() => { try { localStorage.setItem("kpBootBuild", typeof __BUILD_TIME__ !== "undefined" ? __BUILD_TIME__ : ""); } catch { /* 무시 */ } }, 6000);
+});
+
 // --------------------------------------------------
 // PWA Service Worker
 // --------------------------------------------------
