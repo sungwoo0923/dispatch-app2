@@ -83,6 +83,7 @@ import { IdleFleetButton } from "./fleetRecommend";
 import { subscribeOrderSync, deleteOrderWithLog, logOrderDeletion, OrderHistoryContext, useOrderHistory, useLoadOrderRange, useLoadFullOrderHistory, pcLiveWindowStart, pcPrevDay, kstToday as histToday, monthStartAgo, monthEnd, monthStart, historyStartDate } from "./orderHistory";
 const MonthCloseCheck = lazyView(() => import("./MonthCloseCheck"));
 const StaffPerformance = lazyView(() => import("./StaffPerformance"));
+const SalesInquiry = lazyView(() => import("./SalesInquiry")); // ⭐ 2026-11-03 매출 질의 점검표(최고관리자 전용)
 import { RotationPicker, RotationBadge, expandRotation, rotationNotice, withRotationMemo } from "./rotation";
 import { generateMonthlyReportPPT, PPT_TEMPLATES } from "./pptReportUtil";
 
@@ -47321,6 +47322,7 @@ function Settlement({ dispatchData, fixedRows = [], clients = [], places = [], i
   const [marginReportOpen, setMarginReportOpen] = React.useState(false); // ★ 매익률 원인 보고서
   const [monthCloseOpen, setMonthCloseOpen] = React.useState(false); // ★ 월 마감 점검
   const [staffPerfOpen, setStaffPerfOpen] = React.useState(false); // ★ 배차담당자별 실적(관리자 전용)
+  const [salesInquiryOpen, setSalesInquiryOpen] = React.useState(false); // ★ 매출 질의 점검표(최고관리자 전용)
   // ⭐ 매출관리 — 선택한 연도 전체 + 고른 달 기준 3개월 전(전월 비교·마감 점검·담당자 실적)까지만 불러온다.
   // 월 비교 분석은 아무 달이나 고를 수 있어 열 때 전체를 불러온다.
   {
@@ -47722,6 +47724,7 @@ function Settlement({ dispatchData, fixedRows = [], clients = [], places = [], i
         { key: "a2", label: "월간 경영 보고서", icon: "file", onClick: () => setMarginReportOpen(true) },
         { key: "a3", label: "월 마감 점검", icon: "check", onClick: () => setMonthCloseOpen(true) },
         ...(canSeeStaffPerf ? [{ key: "a4", label: "담당자별 실적", icon: "users", onClick: () => setStaffPerfOpen(true) }] : []),
+        ...(role === "totalMaster" ? [{ key: "a5", label: "매출 질의 점검표", icon: "file", onClick: () => setSalesInquiryOpen(true) }] : []),
       ]}>
     {/* ⭐ 2026-10-29 — 최대폭(1560px) 제한을 없애 넓은 모니터에서도 좌우 여백 없이 꽉 채운다 */}
     <div id="settlement-capture" className="kp-rv-zoom w-full">
@@ -47793,6 +47796,9 @@ function Settlement({ dispatchData, fixedRows = [], clients = [], places = [], i
 
               {monthCloseOpen && createPortal(
                 <MonthCloseCheck dispatchData={dispatchData} isViewer={isViewer} onClose={() => setMonthCloseOpen(false)} />, document.body
+              )}
+              {salesInquiryOpen && role === "totalMaster" && createPortal(
+                <SalesInquiry rawOrders={dispatchData} fixedRows={fixedMapped} onClose={() => setSalesInquiryOpen(false)} />, document.body
               )}
               {staffPerfOpen && canSeeStaffPerf && createPortal(
                 <StaffPerformance
