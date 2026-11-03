@@ -56,7 +56,7 @@ export function FabButton({ bottom = 24, right = 16, active = false, title, onCl
         }}>
         <span style={{ color: active ? "#1B2B4B" : "#fff", display: "flex", transform: "scale(0.88)" }}>{children}</span>
         {badge > 0 && !active && (
-          <span style={{ position: "absolute", top: -5, right: -5, minWidth: 20, height: 20, padding: "0 5px", borderRadius: 10, background: "#E5484D", color: "#fff", fontSize: 10.5, fontWeight: 900, display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 0 0 2px #fff", fontFamily: MONO }}>{badge > 99 ? "99+" : badge}</span>
+          <span style={{ position: "absolute", top: -5, right: -5, minWidth: 20, height: 20, padding: "0 5px", borderRadius: 10, background: "#E5332A", color: "#fff", fontSize: 10.5, fontWeight: 900, display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 0 0 2px #fff", fontFamily: MONO }}>{badge > 99 ? "99+" : badge}</span>
         )}
       </button>
     </div>

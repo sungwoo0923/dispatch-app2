@@ -2783,6 +2783,7 @@ import { useMobileAlerts } from "./mobile/mobileAlerts";
 import { loadAcctPayments, saveAcctPayments, loadPlManual, savePlManual } from "./acctPayments";
 import { bumpDriverPayout, addClientCollection, removeClientCollections } from "./ledgerAuto";
 import BannerCenter from "./BannerCenter";
+import NotifyCenter from "./NotifyCenter"; // ⭐ 2026-11-03 알림 통합 — 공지·인사발령·전자결재·인수인계는 화면 가운데 팝업
 import { RemoteSupportHost, openRemoteSupport, SUPPORT_ICON } from "./RemoteSupport"; // ⭐ 2026-11-02 원격지원 —
 import OrderCongratsPopup from "./OrderCongratsPopup";
 import BirthdayPopup from "./BirthdayPopup";
@@ -8239,6 +8240,13 @@ return (
         groups={deptMode ? DEPT_SIDE_GROUPS[deptMode] : KP_SIDE_GROUPS}
       />
       <BannerCenter />
+      {/* ⭐ 2026-11-03 알림 통합 — 새 공지·인사발령·결재 요청/결과·인수인계는 가운데 팝업(하나씩 · 최신 것부터) · [바로 가기]는 그 메뉴로 */}
+      <NotifyCenter uid={user?.uid} role={realRole || role} team={myProfileDoc?.team || ""} company={deptCompany}
+        onGo={(it) => {
+          if (it.src === "approval") { window.__kpOpenApproval = { id: it.id, page: it.page || "inbox" }; window.dispatchEvent(new Event("kp-open-approval")); return; }
+          if (it.src === "handover") { window.__kpOpenHandover = it.id; setMenu("HOME"); setTimeout(() => window.dispatchEvent(new Event("kp-open-handover")), 0); return; }
+          window.__kpOpenNotice = it.openId || it.id; setMenu("HOME"); setTimeout(() => window.dispatchEvent(new CustomEvent("kp:openNotice")), 0);
+        }} />
       <CheckoutReminderHost uid={user?.uid} role={role} email={user?.email} />{/* ⭐ 2026-11-03 퇴근 10분 전 알림 */}
       <PersonalTodayHost uid={user?.uid} />{/* ⭐ 2026-11-03 오늘 개인 일정 — 오른쪽 아래 배너 */}
       {/* ⭐ 2026-11-02 원격지원 — 요청 상태 막대 · 승인 배너 · 화면 공유 · 포인터(앱 전체에 한 번) */}
@@ -8352,7 +8360,7 @@ return (
                 : m === "기사관리" ? (canApproveSignup ? alertsNav.signupDriver || 0 : 0)
                 : m === "관리자메뉴" ? pendingSignups.length : 0;
               const subBadges = {
-                HOME: { 공지사항: alertsNav.notice ? "N" : 0, "ap:inbox": apSep ? 0 : apCountsNav.todo, teamsched: 0 },
+                HOME: { 공지사항: alertsNav.notice || 0, "ap:inbox": apSep ? 0 : apCountsNav.todo, teamsched: 0 },
                 전자결재: { inbox: apCountsNav.todo, mine: apCountsNav.mineNew, handover: alertsNav.handover },
                 기사관리: { "acc:pending": canApproveSignup ? alertsNav.signupDriver : 0 },
                 관리자메뉴: { members: pendingSignups.length },

@@ -1723,3 +1723,11 @@ export default function ApprovalCenter({ company, me, page, setPage, openId, onO
 }
 
 export { APPROVAL_FORMS };
+
+// 🔔 2026-11-03 알림 팝업(NotifyCenter)용 문서 미리보기 — 결재함에서 여는 것과 같은 종이 양식(읽기 전용)
+export function ApprovalDocPreview({ d, company }) {
+  const staff = useCompanyStaff(company || d?.company || "");
+  if (!d) return null;
+  const form = formOf(d.form);
+  return <FitPaper><ApprovalPaper form={form} data={d.data || {}} title={d.title} line={d.line} cc={d.cc} drafter={d.drafter} docNo={d.docNo} createdMs={toMs(d.createdAt)} staff={staff || []} status={d.status} /></FitPaper>;
+}

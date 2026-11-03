@@ -1,5 +1,7 @@
 // ======================= src/BannerCenter.jsx =======================
 // 🔔 화면 오른쪽 아래 알림 배너(2026-10-27) — 카톡 알림처럼 쌓였다가 저절로 사라진다.
+//  ⭐ 2026-11-03 알림 통합 — 공지·인사발령·전자결재·인수인계는 여기서 빼고 가운데 팝업(NotifyCenter.jsx)으로 옮겼다.
+//   여기 남은 것: 일반 사내메일 · 마감보고 메일 · 다른 화면이 보내는 배너(개인 일정 · 퇴근 알림 등 "kp-banner")
 //  - BannerCard: 공지·일정·인수인계·메일·인사발령 공용 카드(네이비 한 가지 톤)
 //  - BannerCenter: 접속해 있는 동안 새로 온 사내메일(인사발령·마감보고 포함)을 배너로 띄운다.
 //    누르면 사내메일함에서 그 메일이 바로 열린다(MailHeaderButton이 "kp-open-mail"을 받는다).
@@ -19,29 +21,6 @@ const ICONS = {
   attendance: <><circle cx="12" cy="13" r="8" /><path d="M12 9v4l2.5 2.5M9 2h6" /></>, // ⭐ 2026-11-03 퇴근 알림
 };
 export const BANNER_LABEL = { mail: "사내메일", hr: "인사발령", closeReport: "마감보고", notice: "공지사항", schedule: "일정", handover: "인수인계", approval: "전자결재", attendance: "근태" };
-
-// 📝 전자결재 변화 중 "나"에게 알릴 것만 골라낸다(서버 푸시 notifyApproval과 같은 기준)
-//  - 내가 결재할 차례가 됨(결재 요청 / 결재 취소 요청) / 내가 올린 문서가 승인·반려·최종 승인·취소 결과를 받음
-function approvalEvents(b, a, uid) {
-  const out = [];
-  const t = a.title || a.formLabel || "결재 문서";
-  const turn = (d) => (d && d.status === "pending" ? d.line?.[d.step]?.uid : null);
-  const cTurn = (d) => (d && d.status === "approved" && d.cancel?.status === "pending" ? d.cancel.line?.[d.cancel.step]?.uid : null);
-  if (turn(a) === uid && turn(b) !== uid) out.push({ title: `결재 요청 · ${t}`, body: `${a.drafter?.name || ""} ${a.drafter?.position || ""} · ${a.summary || ""}`, page: "inbox" });
-  if (cTurn(a) === uid && cTurn(b) !== uid) out.push({ title: `결재 취소 요청 · ${t}`, body: `${a.drafter?.name || ""} · 사유: ${a.cancel?.reason || ""}`, page: "inbox" });
-  if (a.drafterUid === uid && b) {
-    const newly = (a.line || []).filter((x, i) => x.status === "approved" && b.line?.[i]?.status !== "approved");
-    if (a.status === "approved" && b.status !== "approved") out.push({ title: `최종 승인 · ${t}`, body: "결재가 모두 끝났습니다.", page: "mine" });
-    else if (a.status === "pending" && newly.length) out.push({ title: `${newly[0].name} ${newly[0].position || ""} 승인 · ${t}`, body: `${(a.line || []).filter((x) => x.status === "approved").length}/${(a.line || []).length} 승인${newly[0].comment ? ` · ${newly[0].comment}` : ""}`, page: "mine" });
-    if (a.status === "rejected" && b.status !== "rejected") { const r = (a.line || []).find((x) => x.status === "rejected"); out.push({ title: `반려 · ${t}`, body: `${r?.name || ""} · 사유: ${r?.comment || ""}`, page: "mine" }); }
-    if (a.status === "cancelled" && b.status !== "cancelled") out.push({ title: `결재 취소 승인 · ${t}`, body: "문서가 결재 취소되었습니다.", page: "mine" });
-    if (a.cancel?.status === "rejected" && b.cancel?.status !== "rejected") { const r = (a.cancel.line || []).find((x) => x.status === "rejected"); out.push({ title: `결재 취소 거부 · ${t}`, body: `${r?.name || ""} · ${r?.comment || ""}`, page: "mine" }); }
-  }
-  // ⭐ 2026-11-02 참조(cc) — 최종 승인되면 참조자에게도
-  if (b && (a.ccUids || []).includes(uid) && a.drafterUid !== uid && !(a.line || []).some((x) => x.uid === uid) && a.status === "approved" && b.status !== "approved")
-    out.push({ title: `참조 · ${t}`, body: `${a.drafter?.name || ""} · 최종 승인된 문서`, page: "inbox" });
-  return out;
-}
 
 export function BannerCard({ id, kind = "mail", label, title, body, from, image, duration = 10000, onClick, onClose }) {
   const [hover, setHover] = React.useState(false);
@@ -107,7 +86,9 @@ export default function BannerCenter({ bottom = 24 }) {
         if (c.type !== "added") return;
         const m = { id: c.doc.id, ...c.doc.data() };
         if (m.fromUid === uid) return;
-        if (m.kind === "approval") return; // 전자결재 결과 메일은 기록용 — 배너는 결재 변화 감지(아래)에서 한 번만
+        if (m.kind === "approval") return; // 전자결재 결과 메일은 기록용 — 알림은 가운데 팝업(NotifyCenter)
+        // ⭐ 2026-11-03 알림 통합 — 인사발령 공문·부고(공지 안내 메일)·인수인계 사본은 가운데 팝업(NotifyCenter)이 공지/인수인계로 띄운다(배너 중복 없앰)
+        if (m.kind === "handover" || m.kind === "notice" || (m.kind === "hr" && /^\[인사발령/.test(String(m.subject || "")))) return;
         const at = m.at?.toMillis ? m.at.toMillis() : Date.now();
         if (at < startedAt) return;
         // ⭐ 2026-11-01 같은 내용의 공지(인사발령·부고) 배너가 홈에서 또 뜨지 않게 "본 것"으로 남긴다(이 기기 + 내 계정)
@@ -119,25 +100,7 @@ export default function BannerCenter({ bottom = 24 }) {
       });
     }, () => {});
   }, [uid]);
-  // 전자결재 — 접속해 있는 동안 생긴 변화만(처음 불러온 상태와 비교)
-  React.useEffect(() => {
-    if (!uid) return undefined;
-    const prev = new Map();
-    let first = true;
-    return onSnapshot(query(collection(db, "approvals"), where("participants", "array-contains", uid)), (snap) => {
-      snap.docChanges().forEach((c) => {
-        const a = { id: c.doc.id, ...c.doc.data() };
-        if (!first && c.type !== "removed") {
-          approvalEvents(prev.get(a.id) || null, a, uid).forEach((ev, k) => {
-            const id = `ap-${a.id}-${Date.now()}-${k}`;
-            setItems((p) => [...p, { id, kind: "approval", fromName: "", subject: ev.title, body: ev.body, approvalId: a.id, page: ev.page }].slice(-4));
-          });
-        }
-        prev.set(a.id, a);
-      });
-      first = false;
-    }, () => {});
-  }, [uid]);
+  // ⭐ 2026-11-03 알림 통합 — 전자결재(결재 요청·승인·반려·참조) 배너는 없앴다. 화면 가운데 알림 팝업(NotifyCenter)이 띄운다
   // ⭐ 2026-11-03 다른 화면이 띄우는 배너(퇴근 10분 전 · 오늘 개인일정 등) — window.dispatchEvent(new CustomEvent("kp-banner", { detail }))
   //  detail = { id, kind: "schedule"|..., label, title, body, duration, open }  · open: 누르면 보낼 창 이벤트 이름(예: "kp-open-personal-schedule")
   React.useEffect(() => {

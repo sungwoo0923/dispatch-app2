@@ -6,6 +6,7 @@ import { subscribeUsersLive } from "../usersLive"; // ⭐ 2026-11-02 속도 — 
 import React from "react";
 import { collection, onSnapshot, query, where } from "firebase/firestore";
 import { db, DEFAULT_COMPANY } from "../firebase";
+import { isNoticeUnread, noticePublished, useMinuteTick } from "../notifyCore";
 
 const ADMIN_ROLES = ["admin", "totalMaster", "superadmin"];
 const myTurn = (d, uid) => (d.status === "pending" && d.line?.[d.step]?.uid === uid)
@@ -32,7 +33,7 @@ export function useMobileAlerts({ uid, role, team = "", company = "", onAlert })
     const seen = { ready: false, ids: new Set() };
     return (ids, make) => {
       if (!seen.ready) { ids.forEach((id) => seen.ids.add(id)); seen.ready = true; return; }
-      ids.forEach((id) => { if (!seen.ids.has(id)) { seen.ids.add(id); const msg = make(id); if (msg) alertRef.current?.(msg, key); } });
+      ids.forEach((id) => { if (!seen.ids.has(id)) { seen.ids.add(id); const msg = make(id); if (msg) { if (typeof msg === "object") alertRef.current?.(msg.text, key, msg.id); else alertRef.current?.(msg, key, id); } } });
     };
   };
 
@@ -77,18 +78,24 @@ export function useMobileAlerts({ uid, role, team = "", company = "", onAlert })
   }, [uid, isAdmin, company]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // 📢 공지사항 — 볼 수 있는 글 중 안 읽은 것
+  // ⭐ 2026-11-03 알림 통합 — PC·모바일 같은 기준(notifyCore.isNoticeUnread): 게시된(예약 시각이 지난) 최근 30일 글 중 readBy에 내가 없는 것
+  //  예약 공지가 게시 시각을 넘기면 1분 안에 숫자·위쪽 알림줄에 나타난다
+  const [noticeRaw, setNoticeRaw] = React.useState(null);
+  const noticeWatch = React.useRef(null);
+  const now = useMinuteTick();
   React.useEffect(() => {
     if (!uid) return undefined;
-    const w = watch("notice");
+    noticeWatch.current = watch("notice");
+    return onSnapshot(collection(db, "notices"), (s) => setNoticeRaw(s.docs.map((d) => ({ id: d.id, ...d.data() }))), () => setNoticeRaw([]));
+  }, [uid]); // eslint-disable-line react-hooks/exhaustive-deps
+  React.useEffect(() => {
+    if (!uid || !noticeRaw) { set("notice", 0); return; }
     const me = { uid, role, team };
-    return onSnapshot(collection(db, "notices"), (s) => {
-      const vis = s.docs.map((d) => ({ id: d.id, ...d.data() })).filter((n) => n.authorUid !== uid && canSeeNotice(n, me));
-      const un = vis.filter((n) => !(n.readBy || []).includes(uid));
-      set("notice", un.length);
-      const byId = new Map(vis.map((n) => [n.id, n]));
-      w([...byId.keys()], (id) => { const n = byId.get(id); return `◆ ${n.category || "공지사항"} · ${n.title || ""}`; });
-    }, () => set("notice", 0));
-  }, [uid, role, team]); // eslint-disable-line react-hooks/exhaustive-deps
+    const vis = noticeRaw.filter((n) => n.authorUid !== uid && canSeeNotice(n, me) && noticePublished(n, now));
+    set("notice", vis.filter((n) => isNoticeUnread(n, uid, now)).length);
+    const byId = new Map(vis.map((n) => [n.id, n]));
+    noticeWatch.current?.([...byId.keys()], (id) => { const n = byId.get(id); return (n.readBy || []).includes(uid) ? null : { text: `◆ ${n.category || "공지사항"} · ${n.title || ""}`, id }; });
+  }, [noticeRaw, now, uid, role, team]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return counts;
 }
