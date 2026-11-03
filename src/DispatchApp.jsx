@@ -3542,12 +3542,17 @@ const _ORDER_CREATOR_KEYS = ["작성자", "createdByEmail", "createdByUid", "cre
 const _orderStaffNameRaw = (r, nameMap) => {
   if (!r) return "";
   if (String(r.등록기기 || "").trim() === ORDER_MGR_FIXED || String(r.배차확정자 || "").trim() === ORDER_MGR_FIXED || r.source === "fixedRoute") return ORDER_MGR_FIXED;
-  if (_ORDER_CREATOR_KEYS.some((k) => isMasterKey(r[k]))) return "최고관리자"; // ⭐ 2026-11-03 계정명(tjddnqkf) 대신
+  // ⭐ 2026-11-03 등록자 이름 칸이 실제 직원 이름이면 그게 우선(매출관리 담당자와 같은 기준)
+  const nm0 = String(r.등록자명 || r.createdByName || "").trim();
+  if (nm0 && !nm0.includes("@") && nm0 !== "최고관리자" && !isMasterKey(nm0) && nameMap && [...nameMap.values()].includes(nm0)) return nm0;
+  // ⭐ 2026-11-03 칸 순서대로 처음 사람이 확인되는 칸이 이긴다(작성자 → …) — 예전엔 어느 칸이든 최고관리자 값이 하나라도 있으면
+  //  (최고관리자가 복사·수정하며 남긴 보조 칸 등) 실제 등록한 직원(손선일 등) 대신 "최고관리자"로 보였다
   for (const k of _ORDER_CREATOR_KEYS) {
     const s = String(r[k] || "").trim();
     if (!s) continue;
     const n = nameMap?.get(s) || nameMap?.get(s.toLowerCase());
     if (n) return n;
+    if (isMasterKey(s)) return "최고관리자"; // 계정명(tjddnqkf) 대신
   }
   // 직원 목록에 없어도 이름으로 적혀 있으면(이메일·아이디가 아니면) 그대로
   const nm = String(r.등록자명 || r.createdByName || "").trim();

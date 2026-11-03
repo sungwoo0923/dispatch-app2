@@ -1725,7 +1725,7 @@ function DispatchRequestModal({ order, onApprove, onReject, onClose }) {
 function resolveCreatorName(order, mobileUsers) {
   const raw = order?.등록자명 || order?.createdByName || order?.등록자 || order?.createdByEmail || order?.createdBy || order?.작성자 || "";
   if (!raw) return "";
-  if ([order?.작성자, order?.createdByEmail, order?.등록자, raw].some((v) => isMasterKey(v))) return "최고관리자"; // ⭐ 2026-11-03
+  if (isMasterKey(raw)) return "최고관리자"; // ⭐ 2026-11-03 맨 앞 칸(등록자명 → … → 작성자)이 최고관리자일 때만
   if (/[가-힣]/.test(raw) && !raw.includes("@")) return raw; // 이미 한글 실명
   const key = String(raw).trim().toLowerCase();
   const match = (mobileUsers || []).find((u) => u.id === raw || (u.email && u.email.trim().toLowerCase() === key));

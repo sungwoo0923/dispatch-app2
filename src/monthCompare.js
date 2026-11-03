@@ -73,8 +73,9 @@ export function useStaffNames() {
 export const creatorOf = (r) => {
   const named = String(r.등록자명 || r.createdByName || "").trim();
   const raw = String(r.등록자 || r.작성자 || r.createdByEmail || named || "").trim();
-  if (isMasterKey(raw) || isMasterKey(named) || named === "최고관리자") return "최고관리자"; // ⭐ 순위·매출에서 빠짐
-  if (named && !named.includes("@")) return STAFF_NAME.get(named.toLowerCase()) || named;
+  // ⭐ 2026-11-03 이름 칸(등록자명)이 실제 직원 이름이면 그게 우선 — 다른 칸에 최고관리자 값이 섞여 있어도 등록한 직원으로
+  if (named && !named.includes("@") && !isMasterKey(named) && named !== "최고관리자") return STAFF_NAME.get(named.toLowerCase()) || named;
+  if (isMasterKey(raw) || isMasterKey(named) || named === "최고관리자") return "최고관리자"; // 순위·매출에서 빠짐
   if (!raw) return "";
   const key = raw.toLowerCase();
   return STAFF_NAME.get(key) || STAFF_NAME.get(key.split("@")[0]) || (raw.includes("@") ? raw.split("@")[0] : raw);
