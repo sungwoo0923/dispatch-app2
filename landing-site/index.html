@@ -3,176 +3,574 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>KP-Flow | 화물 운송사 배차관리 프로그램 · 배차부터 정산까지</title>
-<meta name="description" content="KP-Flow는 화물 운송사를 위한 올인원 배차관리 프로그램입니다. 배차관리, 실시간 배차현황, 지입차 관제, 정산·매출, 기사 서류 업로드, 전자결재까지 PC와 모바일에서 한 번에 관리하세요." />
-<meta name="keywords" content="배차관리 프로그램, 화물 배차 프로그램, 운송사 프로그램, 배차 프로그램, 화물 정산, 지입차 관리, 운송관리 시스템, TMS, KP-Flow" />
+<title>KP-Flow | 운송사 배차관리 프로그램 · 배차부터 관제, 정산, 전자결재까지</title>
+<meta name="description" content="KP-Flow는 화물 운송사를 위한 배차관리 프로그램입니다. 카톡 오더 스캔, 실시간배차현황, 지입차 실시간 관제, 매출·정산 ERP, 전자결재까지 PC와 모바일, 기사앱에서 함께 씁니다." />
+<meta name="keywords" content="배차관리 프로그램, 화물 배차 프로그램, 운송사 프로그램, 지입차 관제, 화물 정산, 지입정산, 운송 ERP, 전자결재, TMS, KP-Flow" />
 <meta name="robots" content="index,follow" />
-<meta name="theme-color" content="#0F1A30" />
+<meta name="theme-color" content="#0B1428" />
 <link rel="canonical" href="https://dispatch-app2-vskk.vercel.app/" />
 <!-- 네이버 서치어드바이저 사이트 소유확인: 네이버에서 받은 값으로 바꿔 넣으세요 -->
 <!-- <meta name="naver-site-verification" content="여기에_네이버_확인코드" /> -->
 <meta property="og:type" content="website" />
 <meta property="og:site_name" content="KP-Flow" />
-<meta property="og:title" content="KP-Flow | 화물 운송사 배차관리 프로그램" />
-<meta property="og:description" content="배차부터 정산까지 — 배차관리, 실시간 현황, 지입차 관제, 정산, 전자결재를 하나로" />
+<meta property="og:title" content="KP-Flow | 운송사 배차관리 프로그램" />
+<meta property="og:description" content="오더 접수부터 배차, 실시간 관제, 정산, 전자결재까지 한 프로그램으로" />
 <meta property="og:url" content="https://dispatch-app2-vskk.vercel.app/" />
 <meta property="og:image" content="https://dispatch-app2-vskk.vercel.app/og-image.png" />
 <meta property="og:locale" content="ko_KR" />
 <link rel="icon" type="image/png" href="/icons/sflow-icon.png" />
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css" />
-<link rel="stylesheet" href="style.css" />
+<link rel="stylesheet" href="home.css" />
 <script type="application/ld+json">
-{"@context":"https://schema.org","@type":"SoftwareApplication","name":"KP-Flow","applicationCategory":"BusinessApplication","operatingSystem":"Web, Android, iOS","description":"화물 운송사를 위한 배차관리·정산·지입차 관제 프로그램","url":"https://dispatch-app2-vskk.vercel.app/","inLanguage":"ko-KR","offers":{"@type":"Offer","price":"0","priceCurrency":"KRW","description":"무료 체험"}}
+{"@context":"https://schema.org","@type":"SoftwareApplication","name":"KP-Flow","applicationCategory":"BusinessApplication","operatingSystem":"Web, Windows, macOS, Android, iOS","description":"화물 운송사를 위한 배차관리·실시간 관제·정산 ERP·전자결재 프로그램","url":"https://dispatch-app2-vskk.vercel.app/","inLanguage":"ko-KR","offers":{"@type":"Offer","price":"0","priceCurrency":"KRW","description":"무료 체험"}}
 </script>
 </head>
 <body>
 
-<header>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="i-check" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="m8 12 3 3 5-6"/></symbol>
+    <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></symbol>
+    <symbol id="i-clip" viewBox="0 0 24 24"><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M9 12h6M9 16h6"/></symbol>
+    <symbol id="i-scan" viewBox="0 0 24 24"><path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2"/><path d="M7 12h10"/></symbol>
+    <symbol id="i-pulse" viewBox="0 0 24 24"><path d="M3 12h4l3-7 4 14 3-7h4"/></symbol>
+    <symbol id="i-truck" viewBox="0 0 24 24"><rect x="1" y="6" width="13" height="10" rx="1.5"/><path d="M14 9h4l3 3v4h-7"/><circle cx="6" cy="18" r="2"/><circle cx="17" cy="18" r="2"/></symbol>
+    <symbol id="i-map" viewBox="0 0 24 24"><path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2z"/><path d="M9 4v14M15 6v14"/></symbol>
+    <symbol id="i-pin" viewBox="0 0 24 24"><path d="M12 21s-7-6.2-7-11a7 7 0 0 1 14 0c0 4.8-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></symbol>
+    <symbol id="i-cam" viewBox="0 0 24 24"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></symbol>
+    <symbol id="i-won" viewBox="0 0 24 24"><path d="M3 20h18"/><path d="M6 16v-5M11 16V7M16 16v-8M21 16V4"/></symbol>
+    <symbol id="i-pen" viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></symbol>
+    <symbol id="i-doc" viewBox="0 0 24 24"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6M8 13h8M8 17h5"/></symbol>
+    <symbol id="i-bank" viewBox="0 0 24 24"><path d="M3 10 12 4l9 6"/><path d="M5 10v8M9 10v8M15 10v8M19 10v8M3 20h18"/></symbol>
+    <symbol id="i-wallet" viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="14" rx="2"/><path d="M16 13h2M2 10h20"/></symbol>
+    <symbol id="i-book" viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20V3H6.5A2.5 2.5 0 0 0 4 5.5z"/><path d="M4 19.5A2.5 2.5 0 0 0 6.5 22H20v-5"/></symbol>
+    <symbol id="i-cal" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 11h18"/></symbol>
+    <symbol id="i-users" viewBox="0 0 24 24"><circle cx="9" cy="8" r="4"/><path d="M2 21a7 7 0 0 1 14 0"/><path d="M16 4a4 4 0 0 1 0 8M22 21a7 7 0 0 0-4-6.3"/></symbol>
+    <symbol id="i-mail" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></symbol>
+    <symbol id="i-chat" viewBox="0 0 24 24"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z"/></symbol>
+    <symbol id="i-org" viewBox="0 0 24 24"><rect x="9" y="2" width="6" height="5" rx="1"/><rect x="2" y="17" width="6" height="5" rx="1"/><rect x="16" y="17" width="6" height="5" rx="1"/><path d="M12 7v5M5 17v-5h14v5"/></symbol>
+    <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3 5 6v6c0 4.5 3 7.7 7 9 4-1.3 7-4.5 7-9V6z"/><path d="m9 12 2 2 4-4"/></symbol>
+    <symbol id="i-lock" viewBox="0 0 24 24"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></symbol>
+    <symbol id="i-device" viewBox="0 0 24 24"><rect x="2" y="4" width="14" height="11" rx="1.5"/><rect x="17" y="8" width="5" height="12" rx="1.2"/><path d="M6 19h6"/></symbol>
+    <symbol id="i-monitor" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></symbol>
+    <symbol id="i-android" viewBox="0 0 24 24"><rect x="5" y="9" width="14" height="10" rx="2"/><path d="M8 9a4 4 0 0 1 8 0M9 6 7.5 4M15 6l1.5-2M3 11v5M21 11v5M9 19v2M15 19v2"/><circle cx="10" cy="7" r=".4"/><circle cx="14" cy="7" r=".4"/></symbol>
+    <symbol id="i-phone" viewBox="0 0 24 24"><rect x="6" y="2" width="12" height="20" rx="2.5"/><path d="M11 18h2"/></symbol>
+    <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 4v11M7 10l5 5 5-5"/><path d="M4 19h16"/></symbol>
+    <symbol id="i-sheet" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18M9 3v18"/></symbol>
+    <symbol id="i-bell" viewBox="0 0 24 24"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.9 1.9 0 0 0 3.4 0"/></symbol>
+    <symbol id="i-route" viewBox="0 0 24 24"><circle cx="6" cy="19" r="3"/><circle cx="18" cy="5" r="3"/><path d="M9 19h8.5a3.5 3.5 0 0 0 0-7h-11a3.5 3.5 0 0 1 0-7H15"/></symbol>
+    <symbol id="i-receipt" viewBox="0 0 24 24"><path d="M5 3h14v18l-3-2-2 2-2-2-2 2-2-2-3 2z"/><path d="M9 8h6M9 12h6"/></symbol>
+    <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></symbol>
+    <symbol id="i-send" viewBox="0 0 24 24"><path d="M22 2 11 13M22 2l-7 20-4-9-9-4z"/></symbol>
+    <symbol id="i-spark" viewBox="0 0 24 24"><path d="M12 3v4M12 17v4M3 12h4M17 12h4M5.6 5.6l2.8 2.8M15.6 15.6l2.8 2.8M18.4 5.6l-2.8 2.8M8.4 15.6l-2.8 2.8"/></symbol>
+  </defs>
+</svg>
+
+<header id="hdr">
   <div class="wrap header-inner">
     <a class="brand" href="/"><img src="/icons/sflow-icon.png" alt="KP-Flow" /><span><b>KP-Flow</b><small>DISPATCH</small></span></a>
-    <nav class="nav">
-      <a href="#features">주요 기능</a>
-      <a href="#why">왜 KP-Flow</a>
-      <a href="#steps">도입 절차</a>
-      <a href="#inquiry-form">무료 체험</a>
+    <nav class="nav" id="nav">
+      <a href="#flow">업무 흐름</a>
+      <a href="#control">실시간 관제</a>
+      <a href="#dispatch">배차</a>
+      <a href="#erp">정산 · ERP</a>
+      <a href="#approval">전자결재</a>
+      <a href="#mobile">모바일 · 기사앱</a>
+      <a href="#download">다운로드</a>
     </nav>
     <div class="header-cta">
-      <a class="btn btn-white" href="#inquiry-form">무료 체험 신청</a>
       <a class="btn btn-ghost" href="login.html">로그인</a>
+      <a class="btn btn-white" href="#inquiry-form">무료 체험</a>
     </div>
+    <button class="menu-btn" id="menuBtn" aria-label="메뉴 열기"><svg class="i"><use href="#i-menu"/></svg></button>
   </div>
 </header>
 
-<section class="hero dark">
-  <div class="wrap hero-inner">
-    <div>
-      <div class="eyebrow">ALL-IN-ONE DISPATCH PLATFORM</div>
-      <h1>배차부터 정산까지,<br /><span>KP-Flow</span> 하나로 끝내세요</h1>
-      <p class="lead">엑셀로 하던 배차·정산 업무를 하나의 프로그램으로.<br />배차관리, 실시간 현황, 지입차 관제, 매출 분석, 전자결재까지 PC와 모바일에서 함께 씁니다.</p>
-      <div class="hero-actions">
-        <a class="btn btn-white btn-lg" href="#inquiry-form">무료 체험 신청하기 <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a>
-        <a class="btn btn-ghost btn-lg" href="login.html">로그인</a>
-      </div>
-      <div class="hero-meta">
-        <span><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m8 12 3 3 5-6"/></svg>엑셀 자료 이관 지원</span>
-        <span><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="2" width="10" height="20" rx="2.5"/><path d="M11 18h2"/></svg>PC · 모바일 앱</span>
-        <span><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11a8 8 0 0 0-14.9-3M4 13a8 8 0 0 0 14.9 3"/><path d="M4 4v4h4M20 20v-4h-4"/></svg>실시간 동기화</span>
-      </div>
+<!-- ───────────── 히어로 ───────────── -->
+<section class="hero">
+  <div class="wrap hero-copy">
+    <span class="badge"><b>NEW</b>지입차 실시간 관제 · 전자결재 · 기사앱까지 한 번에</span>
+    <h1>배차부터 정산까지,<br /><em>운송사 업무를 한 화면에서</em></h1>
+    <p class="lead">카톡으로 받은 오더는 붙여넣기만 하면 입력되고, 차량 위치는 지도에서 실시간으로 확인합니다. 월말 정산과 결재까지 엑셀 없이 끝납니다.</p>
+    <div class="hero-actions">
+      <a class="btn btn-primary btn-lg" href="#inquiry-form">무료 체험 신청 <svg class="i"><use href="#i-arrow"/></svg></a>
+      <a class="btn btn-ghost btn-lg" href="#download"><svg class="i"><use href="#i-download"/></svg>PC · 앱 다운로드</a>
     </div>
-    <div class="mock" aria-hidden="true">
-      <div class="mock-bar"><span class="dot"></span>LIVE DISPATCH · 화면 예시</div>
-      <div class="mock-kpi">
-        <div><small>오늘 오더</small><b>128</b></div>
-        <div><small>배차완료</small><b>119</b></div>
-        <div><small>매익률</small><b>14.2%</b></div>
-      </div>
-      <div class="mock-rows">
-        <div class="mock-row"><span class="t">09:00</span><span><b>인천 서구 → 평택 포승</b><em>11톤 윙 · 잡화 10파레트</em></span><span class="pill on">배차완료</span></div>
-        <div class="mock-row"><span class="t">13:00</span><span><b>화성 향남 → 부산 강서</b><em>5톤 냉장탑 · 의약품</em></span><span class="pill">배차중</span></div>
-        <div class="mock-row"><span class="t">15:30</span><span><b>김포 고촌 → 대전 유성</b><em>1톤 탑 · 전자부품</em></span><span class="pill on">배차완료</span></div>
-      </div>
+  </div>
+  <div class="hero-stage rv">
+    <div class="browser">
+      <div class="browser-bar"><i></i><i></i><i></i><span>kp-flow · 실시간배차현황</span></div>
+      <img src="img/real-board.jpg" width="1600" height="960" alt="KP-Flow 실시간배차현황 화면 — 오늘 오더, 청구·기사운임, 상하차지가 한 표에 정리된 모습" />
     </div>
+    <div class="hero-phone"><div class="phone"><img src="img/m-driver.jpg" width="390" height="664" alt="KP-Flow 기사앱 홈 화면" /></div></div>
+    <div class="float-chip chip-a"><span class="ic" style="background:#12A150"><svg class="i"><use href="#i-check"/></svg></span><span>카톡 오더 자동 입력<small>붙여넣으면 17개 항목 인식</small></span></div>
+    <div class="float-chip chip-b"><span class="ic" style="background:#2D5BD8"><svg class="i"><use href="#i-pin"/></svg></span><span>차량 위치 실시간<small>기사앱 GPS 자동 전송</small></span></div>
   </div>
 </section>
 
-<div class="strip">
-  <div class="wrap strip-inner">
-    <div><b>PC + APP</b><small>사무실과 현장에서 동시에</small></div>
-    <div><b>REAL-TIME</b><small>모든 화면 실시간 동기화</small></div>
-    <div><b>EXCEL → KP</b><small>기존 엑셀 자료 이관 지원</small></div>
-    <div><b>FREE TRIAL</b><small>먼저 써보고 결정하세요</small></div>
+<div class="stats">
+  <div class="wrap stats-inner">
+    <div class="stat"><b data-count="31">31<small>종</small></b><span>운송사 맞춤 전자결재 양식</span></div>
+    <div class="stat"><b class="sm">PC · 모바일 · 기사앱</b><span>같은 데이터를 실시간으로 공유</span></div>
+    <div class="stat"><b>0<small>번</small></b><span>같은 내용을 다시 입력할 일</span></div>
+    <div class="stat"><b class="sm">엑셀 자료 이관</b><span>거래처·기사·운임 자료를 그대로 옮겨 드립니다</span></div>
   </div>
 </div>
 
-<section class="block" id="features">
+<!-- ───────────── 업무 흐름 ───────────── -->
+<section class="block alt" id="flow">
   <div class="wrap">
-    <div class="section-head">
-      <div class="eyebrow">FEATURES</div>
-      <h2>운송 업무에 꼭 필요한 기능만,<br />현장 배차팀장이 직접 설계했습니다</h2>
-      <p>매일 쓰는 배차 화면부터 월말 정산까지 — 운송사 실무 흐름 그대로 만들었습니다.</p>
+    <div class="head center rv">
+      <span class="eyebrow">WORKFLOW</span>
+      <h2>오더 한 건이 들어와서<br />마감될 때까지 한 프로그램에서</h2>
+      <p>전화·카톡·엑셀·장부를 오가던 일을 순서대로 이어 붙였습니다. 앞 단계에서 입력한 내용이 다음 단계로 자동으로 넘어갑니다.</p>
     </div>
-    <div class="features">
-      <div class="feature"><div class="ficon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M9 12h6M9 16h6"/></svg></div><small>DISPATCH</small><h3>배차관리 · 오더 스캔</h3><p>오더를 한 화면에서 등록하고, 문자·카톡 오더는 사진·글 스캔으로 자동 입력합니다.</p></div>
-      <div class="feature"><div class="ficon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l3-7 4 14 3-7h4"/></svg></div><small>LIVE</small><h3>실시간 배차현황</h3><p>진행 중 오더와 미배차 건수를 실시간으로 보고, PC·모바일이 즉시 동기화됩니다.</p></div>
-      <div class="feature"><div class="ficon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="6" width="13" height="10" rx="1.5"/><path d="M14 9h4l3 3v4h-7"/><circle cx="6" cy="18" r="2"/><circle cx="17" cy="18" r="2"/></svg></div><small>FLEET</small><h3>지입차 관제</h3><p>지입·직영 차량의 노선과 위치, 운행 현황을 관제 화면에서 한눈에 확인합니다.</p></div>
-      <div class="feature"><div class="ficon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 20h18"/><path d="M6 16v-5M11 16V7M16 16v-8M21 16V4"/></svg></div><small>REVENUE</small><h3>정산 · 매출 대시보드</h3><p>기사운임·청구운임·매익률을 자동 집계하고 거래처 순위와 추이를 시각화합니다.</p></div>
-      <div class="feature"><div class="ficon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 21V5l8-2v18M12 7l8 2v12"/><path d="M8 9h.01M8 13h.01M8 17h.01M16 13h.01M16 17h.01"/></svg></div><small>CLIENTS</small><h3>거래처 · 운임표</h3><p>상·하차지 거래처와 자사 운임표를 관리하고 배차 등록 때 자동으로 불러옵니다.</p></div>
-      <div class="feature"><div class="ficon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 16v4h16v-4"/></svg></div><small>DRIVER LINK</small><h3>기사 서류 업로드</h3><p>기사에게 링크만 보내면 인수증·거래명세서 사진과 서명을 바로 받습니다.</p></div>
-      <div class="feature"><div class="ficon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3h6l-1 7h4l1 4H5l1-4h4z"/><path d="M5 18h14M7 21h10"/></svg></div><small>WORKFLOW</small><h3>전자결재 · 사내메일</h3><p>휴가·지출결의·운임변경 품의까지 결재선대로 처리하고 사내메일로 소통합니다.</p></div>
-      <div class="feature"><div class="ficon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 5 6v6c0 4.5 3 7.7 7 9 4-1.3 7-4.5 7-9V6z"/><path d="m9 12 2 2 4-4"/></svg></div><small>SECURITY</small><h3>권한 · 보안</h3><p>역할별 메뉴 권한, 접속 기기 관리, 로그인 기록으로 회사 데이터를 지킵니다.</p></div>
+    <div class="flow rv">
+      <div class="flow-step"><div class="flow-ic"><svg class="i"><use href="#i-scan"/></svg><em>1</em></div><h4>오더 접수</h4><p>카톡·문자·캡처를 붙여넣으면 상하차지·일시·차종 자동 입력</p></div>
+      <div class="flow-step"><div class="flow-ic"><svg class="i"><use href="#i-clip"/></svg><em>2</em></div><h4>배차</h4><p>자사운임표로 운임 확인 · 기사 지정 · 24시콜 전송</p></div>
+      <div class="flow-step"><div class="flow-ic"><svg class="i"><use href="#i-map"/></svg><em>3</em></div><h4>운송 · 관제</h4><p>기사앱 GPS로 상차·운송·하차 단계를 지도에서 확인</p></div>
+      <div class="flow-step"><div class="flow-ic"><svg class="i"><use href="#i-cam"/></svg><em>4</em></div><h4>인수증 회수</h4><p>기사가 링크·앱으로 사진을 올리면 오더에 자동 첨부</p></div>
+      <div class="flow-step"><div class="flow-ic"><svg class="i"><use href="#i-won"/></svg><em>5</em></div><h4>정산</h4><p>거래명세서·지급명세서가 배차 기록으로 자동 계산</p></div>
+      <div class="flow-step"><div class="flow-ic"><svg class="i"><use href="#i-pen"/></svg><em>6</em></div><h4>결재 · 마감</h4><p>운임 변경·지출 결의는 전자결재로 · 월 마감 점검</p></div>
     </div>
+    <div class="flow-hub rv"><div><i></i>배차팀 · 경리 · 임원 · 기사가 모두 같은 데이터를 실시간으로 봅니다</div></div>
   </div>
 </section>
 
-<section class="block alt" id="why">
+<!-- ───────────── 실시간 관제 ───────────── -->
+<section class="block dark-sec dark" id="control">
   <div class="wrap">
-    <div class="section-head">
-      <div class="eyebrow">WHY KP-FLOW</div>
-      <h2>엑셀에서 프로그램으로, 이렇게 달라집니다</h2>
-    </div>
-    <div class="why">
-      <div><div class="eyebrow">01</div><b>입력은 한 번만</b><p>오더 스캔과 거래처·운임표 자동 불러오기로 같은 내용을 여러 번 적지 않습니다.</p></div>
-      <div><div class="eyebrow">02</div><b>모두가 같은 화면</b><p>배차팀·영업·정산이 같은 데이터를 실시간으로 보니, 전화로 확인할 일이 줄어듭니다.</p></div>
-      <div><div class="eyebrow">03</div><b>숫자가 바로 보임</b><p>매출·매익률·담당자별 실적이 대시보드로 자동 집계되어 마감이 빨라집니다.</p></div>
-    </div>
-  </div>
-</section>
-
-<section class="block" id="steps">
-  <div class="wrap">
-    <div class="section-head">
-      <div class="eyebrow">ONBOARDING</div>
-      <h2>도입은 이렇게 진행됩니다</h2>
-    </div>
-    <div class="steps">
-      <div class="step"><span class="n">01</span><div class="ficon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M9 12h6M9 16h6"/></svg></div><h4>체험 신청</h4><p>아래 양식으로 회사 정보를 남겨 주세요.</p></div>
-      <div class="step"><span class="n">02</span><div class="ficon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 21V5l8-2v18M12 7l8 2v12"/><path d="M8 9h.01M8 13h.01M8 17h.01M16 13h.01M16 17h.01"/></svg></div><h4>상담 및 세팅</h4><p>담당자가 연락드려 거래처·기사 등 기초 자료 세팅과 엑셀 이관을 도와드립니다.</p></div>
-      <div class="step"><span class="n">03</span><div class="ficon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m8 12 3 3 5-6"/></svg></div><h4>무료 체험</h4><p>전용 계정으로 실제 업무에 써 보시고 결정하세요.</p></div>
-    </div>
-  </div>
-</section>
-
-<section class="block alt" id="inquiry-form">
-  <div class="wrap inquiry">
-    <div class="inq-info dark">
-      <div class="eyebrow">FREE TRIAL</div>
-      <h2>무료로 먼저<br />써 보세요</h2>
-      <p>신청하시면 담당자가 연락드려 체험 계정을 열어드립니다.</p>
-      <ul>
-        <li><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m8 12 3 3 5-6"/></svg>엑셀 거래처·기사 자료 이관 지원</li>
-        <li><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m8 12 3 3 5-6"/></svg>PC 프로그램 + 모바일 앱 함께 제공</li>
-        <li><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m8 12 3 3 5-6"/></svg>회사별 권한·메뉴 맞춤 설정</li>
-      </ul>
-    </div>
-    <div class="form-card">
-      <form id="inquiryForm">
-        <div><label>회사명 *</label><input id="f-company" autocomplete="organization" placeholder="회사명" /></div>
-        <div><label>담당자명 *</label><input id="f-name" autocomplete="name" placeholder="담당자 성함" /></div>
-        <div><label>연락처 *</label><input id="f-phone" autocomplete="tel" inputmode="numeric" placeholder="010-0000-0000" /></div>
-        <div><label>이메일</label><input id="f-email" autocomplete="email" placeholder="example@company.com" /></div>
-        <div><label>운영 차량 대수</label><select id="f-vehicles"><option value="">선택해 주세요</option><option>10대 미만</option><option>10~30대</option><option>30~100대</option><option>100대 이상</option></select></div>
-        <div><label>배차 담당 인원</label><select id="f-staff"><option value="">선택해 주세요</option><option>1~2명</option><option>3~5명</option><option>6~10명</option><option>10명 이상</option></select></div>
-        <div class="full"><label>현재 배차 관리 방식</label><select id="f-current"><option value="">선택해 주세요</option><option>엑셀</option><option>다른 배차 프로그램</option><option>수기·메모</option><option>기타</option></select></div>
-        <div class="full"><label>문의 내용</label><textarea id="f-message" rows="4" placeholder="필요한 기능, 궁금한 점을 자유롭게 남겨 주세요."></textarea></div>
-        <div id="form-error" class="error-text" style="display:none;"></div>
-        <button type="submit" id="submitBtn" class="submit-btn">무료 체험 신청</button>
-      </form>
-      <div id="successBox" class="success-box" style="display:none;">
-        <div class="check"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m8 12 3 3 5-6"/></svg></div>
-        <h3>체험 신청이 접수되었습니다</h3>
-        <p>담당자 확인 후 입력하신 연락처로 안내드리겠습니다.</p>
+    <div class="head rv">
+      <span class="eyebrow">LIVE CONTROL</span>
+      <h2>지금 우리 차가 어디쯤인지,<br />전화하지 않아도 보입니다</h2>
+      <p>기사님이 기사앱을 켜두면 위치가 자동으로 전송됩니다. 상차지 진입부터 하차지 도착까지 단계가 저절로 바뀌고, 사무실 화면에 바로 반영됩니다.</p>
+      <div class="status-row">
+        <span><i style="background:#8FB0F0"></i>배차대기</span><span><i style="background:#4F8BFF"></i>운송중</span><span><i style="background:#F5A524"></i>상차지 진입 · 도착</span><span><i style="background:#2BD17E"></i>하차지 진입 · 도착</span><span><i style="background:#9AA3B2"></i>휴차</span>
       </div>
     </div>
+    <div class="control-grid">
+      <div class="shot rv"><img src="img/real-livemap.jpg" width="1600" height="960" loading="lazy" alt="지입차 실시간 위치 지도 — 차량번호별 위치와 운행 상태" /></div>
+      <div class="control-split">
+        <div class="shot rv"><img src="img/real-control.jpg" width="1600" height="960" loading="lazy" alt="지입차량 관제 화면 — 차량별 배차상태, 실시간 위치, 이번 달 정산예정 금액" /></div>
+        <div class="phone rv"><img src="img/m-control.jpg" width="390" height="664" loading="lazy" alt="모바일 관제 화면" /></div>
+      </div>
+      <div class="points">
+        <div class="point rv"><div class="pi"><svg class="i"><use href="#i-pin"/></svg></div><h4>백그라운드 위치 전송</h4><p>기사앱이 화면을 꺼도 위치를 계속 보냅니다. 마지막 위치와 갱신 시각이 함께 보입니다.</p></div>
+        <div class="point rv"><div class="pi"><svg class="i"><use href="#i-route"/></svg></div><h4>상차 · 하차 단계 자동 판단</h4><p>상하차지 반경에 들어가면 진입·도착으로 바뀌어, 지금 어느 단계인지 한눈에 압니다.</p></div>
+        <div class="point rv"><div class="pi"><svg class="i"><use href="#i-bell"/></svg></div><h4>지연 · 긴급 알림</h4><p>도착 예정 시간을 넘기거나 급한 미배차 오더가 생기면 담당자에게 알림이 갑니다.</p></div>
+        <div class="point rv"><div class="pi"><svg class="i"><use href="#i-truck"/></svg></div><h4>차량 · 노선 · 이력 관리</h4><p>노선관리, 고정노선, 이동 경로 이력, 출근기록부, 차량 정비·검사 만기까지 함께 관리합니다.</p></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ───────────── 배차 ───────────── -->
+<section class="block" id="dispatch">
+  <div class="wrap">
+    <div class="head rv">
+      <span class="eyebrow">DISPATCH</span>
+      <h2>배차 담당자가 가장 많이 쓰는 화면을<br />가장 빠르게 만들었습니다</h2>
+      <p>현직 배차팀장이 매일 쓰면서 고친 화면입니다. 손이 가는 일은 줄이고, 놓치기 쉬운 건 먼저 알려줍니다.</p>
+    </div>
+    <div class="tabs rv" data-tabs="dsp">
+      <button class="on" data-t="scan">오더 스캔</button>
+      <button data-t="board">실시간배차현황</button>
+      <button data-t="entry">배차 등록</button>
+      <button data-t="fare">자사운임표</button>
+    </div>
+    <div class="panel on" data-p="dsp-scan">
+      <div class="shot"><img src="img/real-scan.jpg" width="1600" height="960" loading="lazy" alt="오더스캔 — 카톡 오더 문장을 붙여넣으면 상차·하차·시간·차량·운임으로 나눠 인식" /></div>
+      <div><span class="tag">ORDER SCAN</span><h3>카톡 오더, 붙여넣기 한 번이면 입력 끝</h3><p>화주가 보낸 문자·카톡·캡처 이미지를 그대로 붙여넣으세요. 문장을 읽어 칸마다 나눠 넣어 줍니다.</p>
+        <ul class="checks">
+          <li><svg class="i"><use href="#i-check"/></svg><span><b>상하차지·일시·차종·화물·운임</b>을 줄마다 구분해 인식</span></li>
+          <li><svg class="i"><use href="#i-check"/></svg><span>등록된 거래처·상하차지와 <b>자동으로 연결</b></span></li>
+          <li><svg class="i"><use href="#i-check"/></svg><span>여러 건이 한 번에 와도 <b>오더별로 나눠서</b> 처리</span></li>
+          <li><svg class="i"><use href="#i-check"/></svg><span><b>적용을 누르기 전까지 저장되지 않아</b> 확인 후 반영</span></li>
+        </ul></div>
+    </div>
+    <div class="panel" data-p="dsp-board">
+      <div class="shot"><img src="img/real-board.jpg" width="1600" height="960" loading="lazy" alt="실시간배차현황 — 오늘 128건, 청구·기사운임과 수수료 합계" /></div>
+      <div><span class="tag">LIVE BOARD</span><h3>어제 · 오늘 · 내일 오더를 한 표에서</h3><p>누가 어떤 오더를 바꿨는지 모든 화면에 즉시 반영됩니다. 같은 오더를 두 번 배차할 일이 없습니다.</p>
+        <ul class="checks">
+          <li><svg class="i"><use href="#i-check"/></svg><span>청구운임 · 기사운임 · <b>수수료 합계가 실시간 집계</b></span></li>
+          <li><svg class="i"><use href="#i-check"/></svg><span>미배차 · 긴급 오더는 <b>팝업으로 먼저 알림</b></span></li>
+          <li><svg class="i"><use href="#i-check"/></svg><span>기사 복사 · 업로드링크 · 일마감 · 엑셀 다운로드</span></li>
+          <li><svg class="i"><use href="#i-check"/></svg><span>고정노선현황은 <b>화주사 구글시트와 자동 동기화</b></span></li>
+        </ul></div>
+    </div>
+    <div class="panel" data-p="dsp-entry">
+      <div class="shot"><img src="img/real-dispatch.jpg" width="1600" height="960" loading="lazy" alt="배차관리 — 오더 정보 입력 화면과 상차일 달력" /></div>
+      <div><span class="tag">DISPATCH</span><h3>등록부터 배차까지 한 화면에서</h3><p>거래처를 고르면 상하차지·담당자·연락처가 따라오고, 기사를 고르면 차량번호·전화번호가 채워집니다.</p>
+        <ul class="checks">
+          <li><svg class="i"><use href="#i-check"/></svg><span>오더복사 · 정기오더 · 다중등록 · <b>독차/혼적/왕복/긴급</b> 표시</span></li>
+          <li><svg class="i"><use href="#i-check"/></svg><span>지급방식(계산서·착불·선불·계좌이체), 배차방식(24시·인성·직접)</span></li>
+          <li><svg class="i"><use href="#i-check"/></svg><span>적재 계산기로 <b>파레트 수에 맞는 차량</b> 바로 확인</span></li>
+          <li><svg class="i"><use href="#i-check"/></svg><span>오더 변경 이력이 남아 <b>누가 언제 바꿨는지</b> 추적</span></li>
+        </ul></div>
+    </div>
+    <div class="panel" data-p="dsp-fare">
+      <div class="shot"><img src="img/real-fare.jpg" width="1600" height="960" loading="lazy" alt="운임조회 자사운임표 — 같은 구간의 실거래 운임 이력" /></div>
+      <div><span class="tag">FARE LOOKUP</span><h3>이 구간, 지난번엔 얼마 받았지?</h3><p>우리 회사가 실제로 받은 운임 이력으로 최저·평균·최고 운임을 보여 줍니다. 견적 낼 때 감이 아니라 기록으로 답합니다.</p>
+        <ul class="checks">
+          <li><svg class="i"><use href="#i-check"/></svg><span>거래처 · 구간 · 차종 · 톤수 조건으로 <b>실거래 운임 조회</b></span></li>
+          <li><svg class="i"><use href="#i-check"/></svg><span>전국운임조회 — 거리·차량 기준 <b>예상 운임 계산</b></span></li>
+          <li><svg class="i"><use href="#i-check"/></svg><span>노선별 · 다목적지 <b>단가표 발행</b>과 발행 이력 관리</span></li>
+        </ul></div>
+    </div>
+  </div>
+</section>
+
+<!-- ───────────── 정산 · ERP ───────────── -->
+<section class="block alt" id="erp">
+  <div class="wrap">
+    <div class="head rv">
+      <span class="eyebrow">SETTLEMENT · ERP</span>
+      <h2>배차 기록이 그대로 정산이 되고,<br />정산이 그대로 장부가 됩니다</h2>
+      <p>월말마다 엑셀을 다시 맞출 필요가 없습니다. 배차할 때 입력한 운임이 거래처 청구, 기사 지급, 회계 장부까지 이어집니다.</p>
+    </div>
+    <div class="tabs rv" data-tabs="erp">
+      <button class="on" data-t="rev">매출 대시보드</button>
+      <button data-t="settle">지입정산 · 지급명세서</button>
+      <button data-t="rank">거래처 · 담당자 분석</button>
+      <button data-t="home">경영 현황</button>
+    </div>
+    <div class="panel on" data-p="erp-rev">
+      <div class="shot"><img src="img/real-revenue.jpg" width="1600" height="960" loading="lazy" alt="매출 대시보드 — 월 매출, 수익, 매익률, 오더 건수, 월말 예상 매출" /></div>
+      <div><span class="tag">REVENUE</span><h3>매출 · 수익 · 매익률이 자동으로</h3><p>따로 집계하지 않아도 오늘 매출과 이번 달 예상 매출까지 계산됩니다.</p>
+        <ul class="checks">
+          <li><svg class="i"><use href="#i-check"/></svg><span>일별 매출 · 전월 누적 비교 · <b>월말 예상 매출</b></span></li>
+          <li><svg class="i"><use href="#i-check"/></svg><span>거래처 순위 · 신규 거래처 · 거래처 동향 분석</span></li>
+          <li><svg class="i"><use href="#i-check"/></svg><span><b>담당자별 실적</b> · 월 비교 분석 · 월간 경영 보고서</span></li>
+          <li><svg class="i"><use href="#i-check"/></svg><span>PNG · PDF · CSV로 바로 내보내기</span></li>
+        </ul></div>
+    </div>
+    <div class="panel" data-p="erp-settle">
+      <div class="shot"><img src="img/real-settle.jpg" width="1600" height="960" loading="lazy" alt="지입정산관리 — 기사별 운임, 공제, 실지급액이 자동 계산된 일괄 지급명세서" /></div>
+      <div><span class="tag">FLEET PAY</span><h3>지입 기사님 지급명세서, 한 번에 발송</h3><p>월을 고르면 기사님별 운행 건수·운임·공제·실지급액이 자동으로 계산됩니다.</p>
+        <ul class="checks">
+          <li><svg class="i"><use href="#i-check"/></svg><span>지입료 · 부가세 · 과태료 등 <b>공제 자동 반영</b></span></li>
+          <li><svg class="i"><use href="#i-check"/></svg><span>정산 계좌 형식 검사 · <b>대량이체 엑셀</b> 생성</span></li>
+          <li><svg class="i"><use href="#i-check"/></svg><span>미리보기 후 <b>기사앱으로 일괄 발송</b></span></li>
+          <li><svg class="i"><use href="#i-check"/></svg><span>거래처정산 · 용차지급관리까지 같은 화면 구성</span></li>
+        </ul></div>
+    </div>
+    <div class="panel" data-p="erp-rank">
+      <div class="shot"><img src="img/real-revenue2.jpg" width="1600" height="960" loading="lazy" alt="월별 매출·매익률, 요일별 평균 매출, 거래처 매출 순위, 담당자별 매출" /></div>
+      <div><span class="tag">INSIGHT</span><h3>어느 거래처가 늘었고, 누가 잘하고 있는지</h3><p>월별 추이와 요일별 패턴, 거래처 순위와 증감, 담당자별 매출이 한 화면에 정리됩니다.</p>
+        <ul class="checks">
+          <li><svg class="i"><use href="#i-check"/></svg><span>1월~12월 <b>월별 매출 · 매익률</b> 추이</span></li>
+          <li><svg class="i"><use href="#i-check"/></svg><span>거래처 TOP 10과 <b>전월 대비 증감</b></span></li>
+          <li><svg class="i"><use href="#i-check"/></svg><span><b>담당자별 매출 · 건수 · 매익률</b></span></li>
+          <li><svg class="i"><use href="#i-check"/></svg><span>요일별 평균 매출로 <b>바쁜 요일</b> 파악</span></li>
+        </ul></div>
+    </div>
+    <div class="panel" data-p="erp-home">
+      <div class="shot"><img src="img/real-home.jpg" width="1600" height="960" loading="lazy" alt="HOME 대시보드 — 오늘 접수, 매출 추이, 이번 달 매익률, 담당자별 매출 순위" /></div>
+      <div><span class="tag">OPERATIONS DECK</span><h3>로그인하자마자 오늘 회사 상황이 보입니다</h3><p>오늘 접수·배차 진행률·매출 추이·이번 달 매익률·담당자 순위를 첫 화면에 모았습니다.</p>
+        <ul class="checks">
+          <li><svg class="i"><use href="#i-check"/></svg><span>배차팀 · 경리 · 인사 · 임원 <b>부서별 첫 화면</b></span></li>
+          <li><svg class="i"><use href="#i-check"/></svg><span>임원은 경영 브리핑과 결재함을 바로</span></li>
+          <li><svg class="i"><use href="#i-check"/></svg><span>공지사항 · 일정 · 사내 규정도 같은 곳에서</span></li>
+        </ul></div>
+    </div>
+    <div class="modules">
+      <div class="mod rv"><div class="mi"><svg class="i"><use href="#i-receipt"/></svg></div><h4>거래처정산</h4><p>거래명세서 PDF·엑셀 생성, 메일 발송, 미수금·입금 대조</p></div>
+      <div class="mod rv"><div class="mi"><svg class="i"><use href="#i-wallet"/></svg></div><h4>용차지급관리</h4><p>기사 운임 지급 현황과 일괄 지급 처리</p></div>
+      <div class="mod rv"><div class="mi"><svg class="i"><use href="#i-truck"/></svg></div><h4>지입정산관리</h4><p>기사별 운임·공제·실지급액과 지급명세서 일괄 발송</p></div>
+      <div class="mod rv"><div class="mi"><svg class="i"><use href="#i-book"/></svg></div><h4>회계 장부</h4><p>매출·매입, 예상 부가세, 미수·미지급과 기간별 현황</p></div>
+      <div class="mod rv"><div class="mi"><svg class="i"><use href="#i-bank"/></svg></div><h4>자금 현황</h4><p>통장·현금·예금·대출 잔액과 수입·지출 장부</p></div>
+      <div class="mod rv"><div class="mi"><svg class="i"><use href="#i-check"/></svg></div><h4>월 마감 점검</h4><p>빠진 운임·지급방식 불일치를 마감 전에 찾아냅니다</p></div>
+      <div class="mod rv"><div class="mi"><svg class="i"><use href="#i-doc"/></svg></div><h4>월간 경영 보고서</h4><p>매출·매익률 원인 분석과 보고서 파일 내보내기</p></div>
+      <div class="mod rv" style="box-shadow:inset 0 0 0 1.5px #9CB7EE;background:#F6F9FF"><div class="mi" style="background:#2D5BD8"><svg class="i"><use href="#i-spark"/></svg></div><h4>홈택스 연동 <span class="tag" style="margin-left:4px;font-size:10px;padding:3px 7px">준비 중</span></h4><p>세금계산서 발행·조회를 프로그램 안에서 처리하도록 연동을 준비하고 있습니다</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- ───────────── 전자결재 ───────────── -->
+<section class="block" id="approval">
+  <div class="wrap">
+    <div class="head rv">
+      <span class="eyebrow">E-APPROVAL</span>
+      <h2>운임 변경 품의부터 연차 신청까지,<br />종이 없이 결재선대로</h2>
+      <p>운송사에서 실제로 오가는 서류를 31종 양식으로 만들었습니다. 결재자가 열어보면 기안자에게 바로 보이고, 승인되면 연차·장부에 자동으로 반영됩니다.</p>
+    </div>
+    <div class="appr-wrap">
+      <div class="shot rv"><img src="img/real-approval.jpg" width="1600" height="960" loading="lazy" alt="전자결재 결재함 — 결재 대기 문서와 운임 변경 품의서 미리보기" /></div>
+      <div class="rv">
+        <span class="tag">HOW IT WORKS</span>
+        <div class="line-flow" aria-label="결재 진행 예시">
+          <div class="node ok"><i>기안</i><b>이서연</b><small>대리</small></div><div class="bar"></div>
+          <div class="node now"><i>결재</i><b>김도윤</b><small>팀장</small></div><div class="bar off"></div>
+          <div class="node"><i>합의</i><b>최영민</b><small>이사</small></div><div class="bar off"></div>
+          <div class="node"><i>결재</i><b>정대현</b><small>대표</small></div>
+        </div>
+        <ul class="checks" style="margin-bottom:24px">
+          <li><svg class="i"><use href="#i-check"/></svg><span><b>결재 · 합의 · 참조</b>로 결재선을 정하고 자주 쓰는 결재선은 저장</span></li>
+          <li><svg class="i"><use href="#i-check"/></svg><span>승인 · 반려(사유 필수) · 회수 · 재기안 · 인쇄, <b>결재 도장</b>이 문서에 찍힘</span></li>
+          <li><svg class="i"><use href="#i-check"/></svg><span>결재 요청은 <b>휴대폰 알림</b>으로, 모바일에서 바로 승인</span></li>
+          <li><svg class="i"><use href="#i-check"/></svg><span>승인된 연차는 <b>연차 관리에서 자동 차감</b></span></li>
+        </ul>
+        <div class="cats">
+          <div class="cat"><h5>근태 · 휴가 <span>11종</span></h5><p>연차 · 반차 · 외근 · 출장 · 경조사 · 병가 · 연장근무</p></div>
+          <div class="cat"><h5>비용 · 지출 <span>7종</span></h5><p>지출결의 · 법인카드 · 유류비·통행료 · 운송 사고·파손</p></div>
+          <div class="cat"><h5>기안 · 품의 <span>5종</span></h5><p>운임·단가 변경 · 신규 거래처 · 차량 정비 · 제증명</p></div>
+          <div class="cat"><h5>보고 · 인사 <span>8종</span></h5><p>일일 업무일지 · 회의록 · 시말서 · 인사발령 · 사직서</p></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ───────────── 모바일 · 기사앱 ───────────── -->
+<section class="block alt" id="mobile">
+  <div class="wrap">
+    <div class="head center rv">
+      <span class="eyebrow">MOBILE · DRIVER APP</span>
+      <h2>사무실 밖에서도, 운전석에서도<br />같은 화면을 봅니다</h2>
+      <p>직원은 휴대폰으로 배차현황과 결재를, 기사님은 기사앱으로 오늘 배차와 서류를 처리합니다. 누르는 순간 사무실 화면에 반영됩니다.</p>
+    </div>
+    <div class="mode-switch rv"><div class="tabs" data-tabs="mob" style="margin:0"><button class="on" data-t="staff">직원용 모바일</button><button data-t="driver">기사앱</button></div></div>
+    <div class="phones mob-set on" data-p="mob-staff">
+      <div class="phone-card rv"><div class="phone"><img src="img/m-home.jpg" width="390" height="664" loading="lazy" alt="직원용 모바일 전체 메뉴" /></div><h4>PC 메뉴를 그대로</h4><p>등록내역·화물등록·미배차현황부터 일정·결재까지 휴대폰에서 씁니다.</p></div>
+      <div class="phone-card rv"><div class="phone"><img src="img/m-board.jpg" width="390" height="664" loading="lazy" alt="모바일 등록내역" /></div><h4>등록내역 · 화물등록</h4><p>상·하차지, 청구·기사운임, 배정된 기사까지 카드 한 장으로 확인합니다.</p></div>
+      <div class="phone-card rv"><div class="phone"><img src="img/m-approval.jpg" width="390" height="664" loading="lazy" alt="모바일 전자결재" /></div><h4>모바일 결재</h4><p>결재 알림을 누르면 문서가 열리고, 의견을 남겨 바로 승인·반려합니다.</p></div>
+    </div>
+    <div class="phones mob-set" data-p="mob-driver">
+      <div class="phone-card"><div class="phone"><img src="img/m-driver.jpg" width="390" height="664" loading="lazy" alt="기사앱 홈" /></div><h4>운행 상태 · 오늘 운행 현황</h4><p>GPS가 켜져 있으면 운송 상태와 이동거리가 사무실 관제 화면에 그대로 보입니다.</p></div>
+      <div class="phone-card"><div class="phone"><img src="img/m-driver-order.jpg" width="390" height="664" loading="lazy" alt="기사앱 오늘 오더" /></div><h4>오더 확인 · 길안내 · 사진</h4><p>상·하차지 주소 복사와 길안내, 상차·하차 사진 업로드, 운송완료까지 한 화면에서.</p></div>
+      <div class="phone-card"><div class="phone"><img src="img/m-driver-log.jpg" width="390" height="664" loading="lazy" alt="기사앱 운행기록" /></div><h4>운행기록 · 서류함</h4><p>날짜별 근무·이동거리가 쌓이고, 지급명세서와 회사에 낼 서류도 앱에서 주고받습니다.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- ───────────── 그룹웨어 · 보안 ───────────── -->
+<section class="block" id="groupware">
+  <div class="wrap">
+    <div class="duo">
+      <div class="box rv">
+        <span class="eyebrow">GROUPWARE · HR</span>
+        <h3>메신저·메일·근태도 따로 쓸 필요 없습니다</h3>
+        <p>운송사에 필요한 사내 업무를 배차 프로그램 안에 넣었습니다. 프로그램을 여러 개 띄울 일이 없습니다.</p>
+        <div class="pills">
+          <span><svg class="i"><use href="#i-chat"/></svg>사내 메신저</span><span><svg class="i"><use href="#i-mail"/></svg>사내메일</span><span><svg class="i"><use href="#i-cal"/></svg>출근기록부 · 자동 출퇴근</span>
+          <span><svg class="i"><use href="#i-cal"/></svg>연차 관리</span><span><svg class="i"><use href="#i-org"/></svg>조직도</span><span><svg class="i"><use href="#i-doc"/></svg>인사발령 · 증명서 발급</span>
+          <span><svg class="i"><use href="#i-bell"/></svg>공지 · 게시판</span><span><svg class="i"><use href="#i-cal"/></svg>임원 · 직원 일정</span><span><svg class="i"><use href="#i-clip"/></svg>인수인계</span><span><svg class="i"><use href="#i-book"/></svg>사내 규정</span>
+        </div>
+      </div>
+      <div class="box rv">
+        <span class="eyebrow">SECURITY</span>
+        <h3>회사 데이터는 회사 안에서만</h3>
+        <p>운송사마다 데이터가 완전히 분리되어 저장되고, 직원별로 볼 수 있는 메뉴를 정할 수 있습니다.</p>
+        <div class="pills">
+          <span><svg class="i"><use href="#i-shield"/></svg>운송사별 데이터 분리</span><span><svg class="i"><use href="#i-lock"/></svg>메뉴별 숨김 · 조회 · 수정 권한</span>
+          <span><svg class="i"><use href="#i-device"/></svg>계정당 PC 1대 + 모바일 1대</span><span><svg class="i"><use href="#i-monitor"/></svg>접속 기기 · 로그인 이력</span>
+          <span><svg class="i"><use href="#i-lock"/></svg>매출관리 별도 비밀번호</span><span><svg class="i"><use href="#i-sheet"/></svg>엑셀 · 구글시트 가져오기</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ───────────── 비교 ───────────── -->
+<section class="block alt">
+  <div class="wrap">
+    <div class="head center rv"><span class="eyebrow">BEFORE · AFTER</span><h2>엑셀로 하던 하루가 이렇게 바뀝니다</h2></div>
+    <div class="compare">
+      <div class="cmp before rv"><h3>지금까지</h3><ul>
+        <li><svg class="i"><use href="#i-check"/></svg>카톡 오더를 보고 엑셀에 한 칸씩 옮겨 적기</li>
+        <li><svg class="i"><use href="#i-check"/></svg>"기사님 지금 어디세요?" 하루에도 수십 통 전화</li>
+        <li><svg class="i"><use href="#i-check"/></svg>인수증 사진을 카톡에서 찾아 폴더에 정리</li>
+        <li><svg class="i"><use href="#i-check"/></svg>월말마다 정산 엑셀을 다시 맞추고 지급명세서 따로 작성</li>
+        <li><svg class="i"><use href="#i-check"/></svg>운임 변경 · 휴가 신청은 종이 결재와 구두 보고</li>
+      </ul></div>
+      <div class="cmp after rv"><h3>KP-Flow를 쓰면</h3><ul>
+        <li><svg class="i"><use href="#i-check"/></svg>붙여넣기 한 번으로 오더 입력, 거래처·운임 자동 연결</li>
+        <li><svg class="i"><use href="#i-check"/></svg>관제 지도에서 위치와 운송 단계를 바로 확인</li>
+        <li><svg class="i"><use href="#i-check"/></svg>기사가 올린 인수증이 해당 오더에 자동 첨부</li>
+        <li><svg class="i"><use href="#i-check"/></svg>배차 기록으로 거래명세서·지급명세서 자동 계산</li>
+        <li><svg class="i"><use href="#i-check"/></svg>전자결재로 결재선대로 승인, 휴대폰 알림까지</li>
+      </ul></div>
+    </div>
+  </div>
+</section>
+
+<!-- ───────────── 다운로드 ───────────── -->
+<section class="block dark-sec dark" id="download">
+  <div class="wrap">
+    <div class="head center rv">
+      <span class="eyebrow">DOWNLOAD</span>
+      <h2>PC에서도, 휴대폰에서도<br />바로 시작하세요</h2>
+      <p>PC 프로그램은 설치 파일 없이 바탕화면 앱으로 설치되고, 업데이트는 자동으로 적용됩니다.</p>
+    </div>
+    <div class="dl">
+      <div class="dl-card rv">
+        <div class="di"><svg class="i"><use href="#i-monitor"/></svg></div>
+        <h3>PC 버전</h3>
+        <p>Windows · Mac에서 크롬이나 엣지로 설치합니다. 바탕화면 아이콘으로 실행되고, 따로 업데이트할 필요가 없습니다.</p>
+        <button class="btn btn-primary" data-modal="pcModal"><svg class="i"><use href="#i-download"/></svg>PC 버전 설치하기</button>
+        <span class="meta">Windows 10+ · macOS · Chrome / Edge</span>
+      </div>
+      <div class="dl-card rv">
+        <div class="di"><svg class="i"><use href="#i-android"/></svg></div>
+        <h3>기사앱 (안드로이드)</h3>
+        <p>기사님 휴대폰에 설치하면 위치 전송, 오늘 배차 확인, 인수증·서류 제출을 할 수 있습니다.</p>
+        <a class="btn btn-primary" href="https://github.com/sungwoo0923/dispatch-app2/releases/download/driver-apk-latest/app-debug.apk" rel="nofollow"><svg class="i"><use href="#i-download"/></svg>기사앱 APK 받기</a>
+        <div class="qr"><img src="img/qr-driver-apk.svg" alt="기사앱 다운로드 QR 코드" width="76" height="76" /><span><b>휴대폰으로 QR 촬영</b>카메라로 찍으면 바로 다운로드됩니다</span></div>
+      </div>
+      <div class="dl-card rv">
+        <div class="di"><svg class="i"><use href="#i-phone"/></svg></div>
+        <h3>직원용 모바일</h3>
+        <p>아이폰·안드로이드 모두 쓸 수 있습니다. 홈 화면에 추가하면 앱처럼 열리고 결재 알림도 받습니다.</p>
+        <button class="btn btn-primary" data-modal="mModal"><svg class="i"><use href="#i-phone"/></svg>홈 화면에 추가하는 방법</button>
+        <span class="meta">iPhone Safari · Android Chrome</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ───────────── 도입 절차 · FAQ ───────────── -->
+<section class="block" id="steps">
+  <div class="wrap">
+    <div class="head center rv"><span class="eyebrow">ONBOARDING</span><h2>도입은 이렇게 진행됩니다</h2></div>
+    <div class="steps">
+      <div class="step rv"><span class="n">STEP 01</span><h4>체험 신청</h4><p>아래 양식에 회사 정보를 남겨 주세요.</p></div>
+      <div class="step rv"><span class="n">STEP 02</span><h4>상담 · 자료 이관</h4><p>담당자가 연락드려 거래처·기사·운임 엑셀 자료를 옮겨 드립니다.</p></div>
+      <div class="step rv"><span class="n">STEP 03</span><h4>권한 · 메뉴 세팅</h4><p>부서와 직책에 맞게 메뉴·권한·결재선을 맞춰 드립니다.</p></div>
+      <div class="step rv"><span class="n">STEP 04</span><h4>무료 체험 후 결정</h4><p>실제 업무에 써 보시고 요금제를 고르시면 됩니다.</p></div>
+    </div>
+    <div class="faq" style="margin-top:72px">
+      <details class="rv"><summary>기존에 쓰던 엑셀 자료를 그대로 옮길 수 있나요?</summary><p>네. 거래처, 상하차지, 기사 목록을 엑셀이나 구글시트에서 가져올 수 있고, 도입 상담 때 이관을 도와드립니다.</p></details>
+      <details class="rv"><summary>기사님이 꼭 앱을 설치해야 하나요?</summary><p>아니요. 인수증·서류 제출은 문자로 보낸 링크로 로그인 없이 할 수 있습니다. 실시간 위치 관제를 쓰려면 기사앱을 설치하면 됩니다.</p></details>
+      <details class="rv"><summary>PC 프로그램은 어떻게 설치하나요?</summary><p>크롬이나 엣지로 프로그램에 접속해 주소창의 설치 버튼을 누르면 바탕화면 앱으로 설치됩니다. 업데이트는 자동으로 반영됩니다.</p></details>
+      <details class="rv"><summary>다른 운송사가 우리 데이터를 볼 수 있나요?</summary><p>볼 수 없습니다. 운송사마다 데이터가 분리되어 저장되고, 회사 안에서도 직원별로 메뉴 권한을 정할 수 있습니다.</p></details>
+      <details class="rv"><summary>세금계산서 발행도 되나요?</summary><p>현재는 거래명세서 발행과 메일 발송, 예상 부가세 집계까지 지원합니다. 홈택스 연동은 준비 중이며, 연동되면 프로그램 안에서 세금계산서를 처리할 수 있습니다.</p></details>
+    </div>
+  </div>
+</section>
+
+<!-- ───────────── 문의 폼 ───────────── -->
+<section class="block alt" id="inquiry-form">
+  <div class="wrap">
+    <div class="inquiry rv">
+      <div class="inq-info">
+        <span class="eyebrow">FREE TRIAL</span>
+        <h2>먼저 써 보고<br />결정하세요</h2>
+        <p>신청하시면 담당자가 연락드려 체험 계정을 열어 드립니다.</p>
+        <ul>
+          <li><svg class="i"><use href="#i-check"/></svg>엑셀 거래처·기사 자료 이관 지원</li>
+          <li><svg class="i"><use href="#i-check"/></svg>PC 프로그램 · 직원용 모바일 · 기사앱 모두 제공</li>
+          <li><svg class="i"><use href="#i-check"/></svg>회사별 권한 · 메뉴 · 결재선 맞춤 설정</li>
+        </ul>
+      </div>
+      <div class="form-card">
+        <form id="inquiryForm">
+          <div><label for="f-company">회사명 *</label><input id="f-company" autocomplete="organization" placeholder="회사명" /></div>
+          <div><label for="f-name">담당자명 *</label><input id="f-name" autocomplete="name" placeholder="담당자 성함" /></div>
+          <div><label for="f-phone">연락처 *</label><input id="f-phone" autocomplete="tel" inputmode="numeric" placeholder="010-0000-0000" /></div>
+          <div><label for="f-email">이메일</label><input id="f-email" autocomplete="email" placeholder="example@company.com" /></div>
+          <div><label for="f-vehicles">운영 차량 대수</label><select id="f-vehicles"><option value="">선택해 주세요</option><option>10대 미만</option><option>10~30대</option><option>30~100대</option><option>100대 이상</option></select></div>
+          <div><label for="f-staff">배차 담당 인원</label><select id="f-staff"><option value="">선택해 주세요</option><option>1~2명</option><option>3~5명</option><option>6~10명</option><option>10명 이상</option></select></div>
+          <div class="full"><label for="f-current">현재 배차 관리 방식</label><select id="f-current"><option value="">선택해 주세요</option><option>엑셀</option><option>다른 배차 프로그램</option><option>수기·메모</option><option>기타</option></select></div>
+          <div class="full"><label for="f-message">문의 내용</label><textarea id="f-message" rows="4" placeholder="필요한 기능이나 궁금한 점을 자유롭게 남겨 주세요."></textarea></div>
+          <div id="form-error" class="error-text" style="display:none;"></div>
+          <button type="submit" id="submitBtn" class="submit-btn">무료 체험 신청</button>
+        </form>
+        <div id="successBox" class="success-box" style="display:none;">
+          <div class="check"><svg class="i"><use href="#i-check"/></svg></div>
+          <h3>체험 신청이 접수되었습니다</h3>
+          <p>담당자 확인 후 입력하신 연락처로 안내드리겠습니다.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="cta-band">
+  <div class="wrap">
+    <h2>내일 아침 배차부터<br />엑셀 없이 시작해 보세요</h2>
+    <p>체험 신청 후 담당자가 세팅까지 도와드립니다.</p>
+    <a class="btn btn-primary btn-lg" href="#inquiry-form">무료 체험 신청 <svg class="i"><use href="#i-arrow"/></svg></a>
   </div>
 </section>
 
 <footer>
   <div class="wrap footer-inner">
     <a class="brand" href="/"><img src="/icons/sflow-icon.png" alt="KP-Flow" /><span><b>KP-Flow</b><small>DISPATCH</small></span></a>
-    <div class="footer-links"><a href="#features">주요 기능</a><a href="#inquiry-form">무료 체험</a><a href="login.html">로그인</a></div>
+    <div class="footer-links"><a href="#control">실시간 관제</a><a href="#erp">정산 · ERP</a><a href="#approval">전자결재</a><a href="#download">다운로드</a><a href="login.html">로그인</a></div>
     <div class="copy">© <span id="year"></span> KP-Flow. All rights reserved.</div>
+    <div class="footer-note">홈페이지의 화면 이미지는 실제 프로그램에 가상의 운송사 데이터를 넣어 촬영한 것입니다. 회사명·인물·차량번호·금액은 모두 예시입니다.</div>
   </div>
 </footer>
+
+<div class="lightbox" id="lightbox" aria-hidden="true"><button class="lb-x" aria-label="닫기">×</button><img alt="" /></div>
+
+<div class="dock">
+  <a class="pri" href="#inquiry-form"><svg class="i"><use href="#i-send"/></svg>체험신청</a>
+  <a href="#download"><svg class="i"><use href="#i-download"/></svg>다운로드</a>
+  <a href="login.html"><svg class="i"><use href="#i-lock"/></svg>로그인</a>
+</div>
+
+<div class="modal" id="pcModal" role="dialog" aria-modal="true" aria-labelledby="pcT">
+  <div class="modal-card">
+    <button class="modal-x" data-close aria-label="닫기">×</button>
+    <h3 id="pcT">PC 버전 설치하기</h3>
+    <p>설치 파일을 받을 필요 없이, 브라우저에서 바로 바탕화면 앱으로 설치됩니다.</p>
+    <ol>
+      <li><span>아래 버튼을 눌러 프로그램을 <b>크롬</b> 또는 <b>엣지</b>로 엽니다.</span></li>
+      <li><span>주소창 오른쪽의 <span class="kbd">설치</span> 아이콘(모니터 모양)을 누릅니다. 안 보이면 메뉴 <span class="kbd">⋮</span> → <b>앱 설치</b>(엣지: <b>앱 → 이 사이트를 앱으로 설치</b>)를 누르세요.</span></li>
+      <li><span>바탕화면과 시작 메뉴에 <b>KP-Flow</b> 아이콘이 생깁니다. 다음부터는 아이콘으로 실행하세요.</span></li>
+    </ol>
+    <a class="btn btn-dark btn-lg" style="width:100%" href="https://dispatch-app2.vercel.app/" target="_blank" rel="noopener">프로그램 열고 설치하기 <svg class="i"><use href="#i-arrow"/></svg></a>
+  </div>
+</div>
+<div class="modal" id="mModal" role="dialog" aria-modal="true" aria-labelledby="mT">
+  <div class="modal-card">
+    <button class="modal-x" data-close aria-label="닫기">×</button>
+    <h3 id="mT">휴대폰 홈 화면에 추가하기</h3>
+    <p>앱스토어 설치 없이 홈 화면 아이콘으로 바로 열립니다.</p>
+    <ol>
+      <li><span><b>아이폰</b> — 사파리로 프로그램을 열고 아래쪽 <span class="kbd">공유</span> 버튼 → <b>홈 화면에 추가</b>를 누릅니다.</span></li>
+      <li><span><b>안드로이드</b> — 크롬으로 프로그램을 열고 메뉴 <span class="kbd">⋮</span> → <b>홈 화면에 추가</b>(또는 <b>앱 설치</b>)를 누릅니다.</span></li>
+      <li><span>처음 열 때 <b>알림 허용</b>을 누르면 결재 요청·긴급 오더 알림을 받을 수 있습니다.</span></li>
+    </ol>
+    <a class="btn btn-dark btn-lg" style="width:100%" href="https://dispatch-app2.vercel.app/" target="_blank" rel="noopener">프로그램 열기 <svg class="i"><use href="#i-arrow"/></svg></a>
+  </div>
+</div>
+
+<script>
+  // 헤더 배경 · 모바일 메뉴
+  const hdr = document.getElementById("hdr");
+  const onScroll = () => hdr.classList.toggle("solid", window.scrollY > 20);
+  onScroll(); window.addEventListener("scroll", onScroll, { passive: true });
+  document.getElementById("menuBtn").addEventListener("click", () => hdr.classList.toggle("open"));
+  document.querySelectorAll("#nav a").forEach((a) => a.addEventListener("click", () => hdr.classList.remove("open")));
+
+  // 탭
+  document.querySelectorAll("[data-tabs]").forEach((tabs) => {
+    const g = tabs.dataset.tabs;
+    tabs.querySelectorAll("button").forEach((b) => b.addEventListener("click", () => {
+      tabs.querySelectorAll("button").forEach((x) => x.classList.toggle("on", x === b));
+      document.querySelectorAll(`[data-p^="${g}-"]`).forEach((p) => p.classList.toggle("on", p.dataset.p === `${g}-${b.dataset.t}`));
+    }));
+  });
+
+  // 모달
+  document.querySelectorAll("[data-modal]").forEach((b) => b.addEventListener("click", () => document.getElementById(b.dataset.modal).classList.add("on")));
+  document.querySelectorAll(".modal").forEach((m) => m.addEventListener("click", (e) => { if (e.target === m || e.target.hasAttribute("data-close")) m.classList.remove("on"); }));
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") document.querySelectorAll(".modal.on").forEach((m) => m.classList.remove("on")); });
+
+  // 화면 이미지 크게 보기
+  const lb = document.getElementById("lightbox"), lbImg = lb.querySelector("img");
+  document.querySelectorAll(".shot img, .phone img").forEach((im) => im.addEventListener("click", () => { lbImg.src = im.src; lbImg.alt = im.alt; lb.classList.add("on"); }));
+  lb.addEventListener("click", () => lb.classList.remove("on"));
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") lb.classList.remove("on"); });
+
+  // 스크롤 등장
+  const io = "IntersectionObserver" in window ? new IntersectionObserver((es) => es.forEach((en) => { if (en.isIntersecting) { en.target.classList.add("in"); io.unobserve(en.target); } }), { rootMargin: "0px 0px -8% 0px" }) : null;
+  document.querySelectorAll(".rv").forEach((el) => io ? io.observe(el) : el.classList.add("in"));
+
+  document.getElementById("year").textContent = new Date().getFullYear();
+</script>
 
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
@@ -190,8 +588,6 @@
   };
   const app = initializeApp(firebaseConfig);
   const db = getFirestore(app);
-
-  document.getElementById("year").textContent = new Date().getFullYear();
 
   const form = document.getElementById("inquiryForm");
   const errorBox = document.getElementById("form-error");
