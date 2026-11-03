@@ -24,7 +24,7 @@ const fmtAt = (ms, full) => {
   if (!full && d.toDateString() === today.toDateString()) return d.toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" });
   return d.toLocaleString("ko-KR", full ? { year: "numeric", month: "long", day: "numeric", weekday: "short", hour: "2-digit", minute: "2-digit" } : { month: "numeric", day: "numeric" });
 };
-const KIND_LABEL = { hr: "인사발령", closeReport: "마감보고", approval: "전자결재" };
+const KIND_LABEL = { hr: "인사발령", closeReport: "마감보고", approval: "전자결재", handover: "인수인계" };
 
 // 이미지를 JPEG로 줄인다(긴 변 1400px) — 메일 1통에 3장까지 담을 수 있게
 export function compressImage(src, max = 1400, quality = 0.82) {
@@ -174,7 +174,7 @@ export const MAIL_FOLDERS = [
   { key: "unread", label: "안읽은 메일", icon: "mail" },
   { key: "starred", label: "별표 메일", icon: "star" },
   { key: "important", label: "중요 메일", icon: "flag" },
-  { key: "official", label: "공문함", icon: "stamp", hint: "인사발령·마감보고·전자결재" },
+  { key: "official", label: "공문함", icon: "stamp", hint: "인사발령·마감보고·전자결재·인수인계" },
   { key: "sent", label: "보낸메일함", icon: "send" },
   { key: "self", label: "내게쓴메일함", icon: "user" },
   { key: "scheduled", label: "예약메일함", icon: "clock" },
@@ -216,7 +216,7 @@ export function splitFolders(inbox, mine, uid) {
     unread: sort(received.filter((m) => !has(m.readBy, uid))),
     starred: sort(all.filter((m) => alive(m) && has(m.starredBy, uid))),
     important: sort(received.filter((m) => m.important)),
-    official: sort(received.filter((m) => m.kind === "hr" || m.kind === "closeReport" || m.kind === "approval")),
+    official: sort(received.filter((m) => m.kind === "hr" || m.kind === "closeReport" || m.kind === "approval" || m.kind === "handover")), // ⭐ 2026-11-03 인수인계 사본(서버 notifyHandover)도 공문함
     sent: sort(sentAll.filter((m) => alive(m) && !isSelfMail(m, uid))),
     self: sort(sentAll.filter((m) => alive(m) && isSelfMail(m, uid))),
     scheduled: sort(my.filter((m) => statusOf(m) === "scheduled"), (m) => -toMs(m.scheduledAt)),
@@ -856,7 +856,8 @@ export function MailHeaderButton({ company, myName, className = "kp-icon-btn tra
     <>
       <button onClick={() => { setOpenId(null); setOpen(true); }} className={className} title="사내메일함">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="5" width="18" height="14" rx="2" /><path d="m3 7 9 6 9-6" /></svg>
-        {unread > 0 && <span className={`absolute -top-1 -right-1 min-w-[17px] h-[17px] px-1 rounded-full text-[10px] font-black flex items-center justify-center ring-2 ${badgeCls}`}>{unread > 99 ? "99+" : unread}</span>}
+        {/* ⭐ 2026-11-03 안 읽은 메일 — 카톡처럼 진한 빨강 + 흰 굵은 숫자(PC·모바일 같게) */}
+        {unread > 0 && <span style={{ background: "#E5332A", color: "#fff" }} className={`absolute -top-1 -right-1 min-w-[17px] h-[17px] px-1 rounded-full text-[10px] font-black flex items-center justify-center ring-2 tabular-nums ${badgeCls}`}>{unread > 99 ? "99+" : unread}</span>}
       </button>
       {open && <MailCenter company={company} myName={myName} openId={openId} onClose={() => setOpen(false)} />}
     </>

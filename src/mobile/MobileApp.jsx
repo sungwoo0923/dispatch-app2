@@ -105,6 +105,7 @@ import { isWeekend, findApprovedLeaveForDate, isHoliday } from "../attendanceUti
 const MonthCompareAnalysis = lazyView(() => import("../MonthCompareAnalysis"));
 import { MailHeaderButton } from "../InternalMail";
 import BannerCenter from "../BannerCenter";
+import NotifyCenter from "../NotifyCenter"; // ⭐ 2026-11-03 알림 통합 — 가운데 알림 팝업
 import { RemoteSupportHost, openRemoteSupport } from "../RemoteSupport"; // ⭐ 2026-11-02 원격지원 —
 import OrderCongratsPopup from "../OrderCongratsPopup";
 import BirthdayPopup from "../BirthdayPopup";
@@ -2411,9 +2412,9 @@ const quickRange = (days) => {
   useEffect(() => {
     toastMutedRef.current = toastMuted;
   }, [toastMuted]);
-  const [topOrderBanner, setTopOrderBanner] = useState(null); // { text }
-  const showTopOrderBanner = (text) => {
-    setTopOrderBanner({ text });
+  const [topOrderBanner, setTopOrderBanner] = useState(null); // { text, noticeId? }
+  const showTopOrderBanner = (text, noticeId = null) => {
+    setTopOrderBanner({ text, noticeId });
     setTimeout(() => setTopOrderBanner((p) => (p?.text === text ? null : p)), 6000);
   };
   // ⭐ 2026-11-03 다른 화면이 띄우는 위쪽 알림줄(오늘 개인 일정 등) — window.dispatchEvent(new CustomEvent("kp-top-banner", { detail: { text } }))
@@ -2431,8 +2432,14 @@ const quickRange = (days) => {
     team: (() => { try { return window.__kpMeTeam || ""; } catch { return ""; } })(),
     company: (localStorage.getItem("loginCompany") || userCompany || localStorage.getItem("userCompany") || DEFAULT_COMPANY).trim(),
     // ⭐ 2026-11-02 점검 — 결재 요청은 BannerCenter가 이미 띄우므로 위쪽 배너 중복 표시 안 함
-    onAlert: (msg, key) => { if (key === "approval") return; showTopOrderBanner(msg); },
+    onAlert: (msg, key, id) => { if (key === "approval") return; showTopOrderBanner(msg, key === "notice" ? id : null); },
   });
+  // ⭐ 2026-11-03 위쪽 공지 알림줄 — 그 공지를 어디서든(공지사항 · 가운데 팝업) 읽으면 바로 사라진다
+  useEffect(() => {
+    if (!topOrderBanner?.noticeId || !user?.uid) return undefined;
+    const id = topOrderBanner.noticeId;
+    return onSnapshot(doc(db, "notices", id), (d) => { if (!d.exists() || (d.data()?.readBy || []).includes(user.uid)) setTopOrderBanner((p) => (p?.noticeId === id ? null : p)); }, () => {});
+  }, [topOrderBanner?.noticeId, user?.uid]);
   // ⭐ 2026-11-02 점검 — BannerCenter 결재 배너 탭(kp-open-approval) → 모바일 결재 화면으로 이동
   useEffect(() => {
     const h = () => {
@@ -2440,7 +2447,9 @@ const quickRange = (days) => {
       if (!p) return;
       window.__kpOpenApproval = null;
       if (p.id) { try { sessionStorage.setItem("kpExecApOpen", p.id); } catch { /* 무시 */ } }
+      if (p.page) { try { sessionStorage.setItem("kpMApPage", p.page); } catch { /* 무시 */ } } // ⭐ 2026-11-03 결재함/내 기안함/인수인계
       setPage("approval");
+      setTimeout(() => window.dispatchEvent(new Event("kp-m-approval-open")), 0); // 이미 전자결재 화면이면 그 자리에서 연다
     };
     window.addEventListener("kp-open-approval", h);
     return () => window.removeEventListener("kp-open-approval", h);
@@ -5564,6 +5573,16 @@ const title =
 )}
 
       <BannerCenter bottom={86} />
+      {/* ⭐ 2026-11-03 알림 통합 — 새 공지·인사발령·결재 요청/결과·인수인계는 가운데 팝업(아래쪽 배너 없앰) */}
+      {!["driver", "shipper"].includes(role) && (
+        <NotifyCenter mobile uid={user?.uid} role={realRole || role} team={myProfM?.team || (() => { try { return window.__kpMeTeam || ""; } catch { return ""; } })()}
+          company={(localStorage.getItem("loginCompany") || userCompany || localStorage.getItem("userCompany") || DEFAULT_COMPANY).trim()}
+          onGo={(it) => {
+            if (it.src === "approval") { window.__kpOpenApproval = { id: it.id, page: it.page || "inbox" }; window.dispatchEvent(new Event("kp-open-approval")); return; }
+            if (it.src === "handover") { window.__kpOpenHandover = it.id; window.__kpOpenApproval = { page: "handover" }; window.dispatchEvent(new Event("kp-open-approval")); return; }
+            window.__kpOpenNotice = it.openId || it.id; setPage("notice"); setTimeout(() => window.dispatchEvent(new CustomEvent("kp:openNotice")), 0);
+          }} />
+      )}
       <CheckoutReminderHost uid={user?.uid} role={realRole} email={user?.email} />{/* ⭐ 2026-11-03 퇴근 10분 전 알림 */}
       <PersonalTodayHost uid={user?.uid} mobile />{/* ⭐ 2026-11-03 오늘 개인 일정 — 위쪽 알림줄 */}
       {/* ⭐ 2026-11-02 원격지원 — 요청 상태 막대 · 승인 배너 · 포인터 */}
@@ -7227,6 +7246,8 @@ function MobileVersionChip({ dark = false }) {
   );
 }
 
+// ⭐ 2026-11-03 카톡처럼 진한 빨강 숫자(모바일 테마가 bg-rose-500을 남색으로 바꾸므로 색은 style로 고정)
+const RED_PILL = { background: "#E5332A", color: "#fff", fontWeight: 900 };
 const MobileHeader = React.memo(function MobileHeader({ title, onBack, onRefresh, onValidateOrders, onMenu, menuBadge = 0, notifCount = 0, onNotifClick, cardVersionB = false, messengerUnread = 0, onMessengerClick, mailCompany = "", mailName = "", attUid = "", attRole = "", attEmail = "" }) {
   const newVer = useNewVersion(); // ★ 새 버전 배포 시 메뉴 버튼에 점 표시
   // ⭐ 2026-10-22 디자인 개선 — A형: 반투명 흰 머리줄 / B형: 남색 그라데이션 머리줄. 버튼은 둥근 네모 타일.
@@ -7252,7 +7273,7 @@ const MobileHeader = React.memo(function MobileHeader({ title, onBack, onRefresh
           <button onClick={onMenu} className="kp-m-hbtn relative" aria-label="메뉴">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={iconColor} strokeWidth="2.2" strokeLinecap="round"><path d="M4 7h16M4 12h11M4 17h16" /></svg>
             {menuBadge > 0
-              ? <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-rose-500 text-white text-[10px] font-black grid place-items-center ring-2 ring-white tabular-nums">{menuBadge > 99 ? "99+" : menuBadge}</span>
+              ? <span style={RED_PILL} className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-rose-500 text-white text-[10px] font-black grid place-items-center ring-2 ring-white tabular-nums">{menuBadge > 99 ? "99+" : menuBadge}</span>
               : newVer && <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-[#1B2B4B] ring-2 ring-white" />}
           </button>
         ) : (
@@ -7283,12 +7304,12 @@ const MobileHeader = React.memo(function MobileHeader({ title, onBack, onRefresh
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={iconColor} strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round">
               <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
             </svg>
-            {messengerUnread > 0 && <span className={countCls}>{messengerUnread > 99 ? "99+" : messengerUnread}</span>}
+            {messengerUnread > 0 && <span className={countCls} style={RED_PILL}>{messengerUnread > 99 ? "99+" : messengerUnread}</span>}
           </button>
         )}
         {mailCompany && (
           <MailHeaderButton company={mailCompany} myName={mailName} className="kp-m-hbtn relative" color={iconColor}
-            badgeCls={cardVersionB ? "bg-white text-[#1B2B4B] ring-[#1B2B4B]" : "bg-[#1B2B4B] text-white ring-white"} />
+            badgeCls={cardVersionB ? "ring-[#1B2B4B]" : "ring-white"} />
         )}
         <button className="kp-m-hbtn relative" onClick={onNotifClick} aria-label="알림">
           <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke={iconColor} strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round">
@@ -7790,7 +7811,7 @@ function MobileSideMenu({
           )}
           <MenuSection title="사내 업무" en="WORKSPACE" dark={dark} alwaysOpen>
             {/* ⭐ 2026-11-03 순서: 공지사항 → 게시판 → 일정 → 나머지 · "개인 일정"은 직원 일정 안의 [개인일정] 스위치로(메뉴에서 뺌) */}
-            <MenuItem label="공지사항" icon="bell" onClick={onGoNotice} badge={alertCounts?.notice ? alertCounts.notice : hasNewNotice ? "NEW" : null} dark={dark} />
+            <MenuItem label="공지사항" icon="bell" onClick={onGoNotice} badge={alertCounts?.notice || null} dark={dark} />{/* ⭐ 2026-11-03 숫자는 글마다 읽음(readBy) 기준 — 예전 "NEW"(공지 화면을 연 시각 기준)는 팝업으로 읽어도 남아 있어서 뺐다 */}
             <MenuItem label="사내 게시판" icon="chat" onClick={() => onGo?.("dept:board")} dark={dark} />
             {/* ⭐ 2026-11-01 직원 일정(연차·외근 등 부재 달력)은 모든 직원이 본다 — PC 홈 › 사내 게시판과 같게 */}
             <MenuItem label="직원 일정" icon="clock" onClick={() => onGo?.("dept:schedule")} dark={dark} />
@@ -8117,7 +8138,7 @@ function MenuItemBase({ label, onClick, badge, dark, icon }) {
         <span className="flex-1 min-w-0 truncate text-[14.5px] font-bold text-white/90">{label}</span>
         {badge ? (
           typeof badge === "number"
-            ? <span className="min-w-[22px] h-[22px] px-1.5 rounded-full bg-rose-500 text-white text-[11px] font-black grid place-items-center tabular-nums shadow-[0_0_0_3px_rgba(244,63,94,0.18)]">{badge > 99 ? "99+" : badge}</span>
+            ? <span style={RED_PILL} className="min-w-[22px] h-[22px] px-1.5 rounded-full bg-rose-500 text-white text-[11.5px] font-black grid place-items-center tabular-nums shadow-[0_0_0_3px_rgba(229,51,42,0.22)]">{badge > 99 ? "99+" : badge}</span>
             : <span className="h-[20px] px-2 rounded-full bg-[#8FB0F0]/20 text-[#CFE0FF] text-[10px] font-black grid place-items-center tracking-wider">{badge}</span>
         ) : <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="rgba(207,224,255,0.35)" strokeWidth="2.4" strokeLinecap="round"><path d="M9 6l6 6-6 6" /></svg>}
       </button>
@@ -8135,7 +8156,7 @@ function MenuItemBase({ label, onClick, badge, dark, icon }) {
         {badge ? (
           // 숫자(처리할 건수)는 눈에 띄게 빨간 원, "NEW" 같은 글자는 기존 표시
           typeof badge === "number"
-            ? <span className="min-w-[20px] h-5 px-1.5 rounded-full bg-rose-500 text-white text-[11px] font-black grid place-items-center tabular-nums">{badge > 99 ? "99+" : badge}</span>
+            ? <span style={RED_PILL} className="min-w-[20px] h-5 px-1.5 rounded-full bg-rose-500 text-white text-[11px] font-black grid place-items-center tabular-nums">{badge > 99 ? "99+" : badge}</span>
             : <span className={`px-2 py-0.5 text-[10px] font-extrabold rounded-full leading-none ${dark ? "bg-white text-[#1B2B4B]" : "bg-[#1B2B4B] text-white"}`}>{badge}</span>
         ) : null}
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={dark ? "rgba(255,255,255,0.35)" : "#9AA9C3"} strokeWidth="2.2" strokeLinecap="round">
@@ -22205,6 +22226,7 @@ function MobileSettingsPage({ onBack, cardVersionB, setCardVersionB, alarmEnable
     W("공지사항", "공지사항", "새 공지·공문이 올라오면"),
     W("사내메일", "사내메일", "새 메일이 오면"),
     W("메신저", "메신저", "대화방에 새 메시지가 오면"),
+    W("인수인계", "인수인계", "나에게 인수인계가 오면"), // ⭐ 2026-11-03 서버 notifyHandover
     W("인사발령", "인사발령", "회사에 인사발령(승진·부서 이동 등)이 나면 — 전 직원"),
     W("생일", "생일 알림", "동료 생일 3일 전 아침에 미리 알려 드려요"),
   ];
@@ -22215,7 +22237,7 @@ function MobileSettingsPage({ onBack, cardVersionB, setCardVersionB, alarmEnable
     { title: "공통 알림", items: COMMON_PUSH },
   ];
   const PUSH_PREF_TYPES = PUSH_GROUPS.flatMap((g) => g.items);
-  const PUSH_PREF_DEFAULT_ON = ["긴급배차", "미배차", "결재요청", "결재결과", "공지사항", "사내메일", "인사발령", "마감보고", "가입신청", "메신저", "생일"];
+  const PUSH_PREF_DEFAULT_ON = ["긴급배차", "미배차", "결재요청", "결재결과", "공지사항", "사내메일", "인사발령", "마감보고", "가입신청", "메신저", "생일", "인수인계"];
   const isPushPrefOn = (prefs, key) => {
     const v = prefs?.[key];
     if (v === true || v === false) return v;

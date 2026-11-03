@@ -44,7 +44,7 @@ async function getAllTokens() {
 // 나머지(배차등록/배차완료/재배차/배차취소)는 사용자가 모바일에서 직접 켜야 온다.
 const PUSH_TYPES = ["배차등록", "긴급배차", "배차완료", "재배차", "미배차", "배차취소"];
 // ⭐ 2026-11-01 팀별 알림 — 업무 알림(결재·공지·메일·메신저·가입신청·인사발령·마감보고)은 기본 켜짐, 끈 사람만 안 보낸다
-const PUSH_TYPES_DEFAULT_ON = ["긴급배차", "미배차", "결재요청", "결재결과", "공지사항", "사내메일", "인사발령", "마감보고", "가입신청", "메신저", "생일"];
+const PUSH_TYPES_DEFAULT_ON = ["긴급배차", "미배차", "결재요청", "결재결과", "공지사항", "사내메일", "인사발령", "마감보고", "가입신청", "메신저", "생일", "인수인계"]; // ⭐ 2026-11-03 인수인계(notifyHandover)
 function isPushTypeEnabled(prefs, type) {
   const v = prefs?.[type];
   if (v === true || v === false) return v;
@@ -4916,6 +4916,7 @@ exports.notifyInternalMail = functions.firestore.document("internalMails/{id}").
   const m = snap.data() || {};
   if (m.status === "draft" || m.status === "scheduled") return null; // 임시보관·예약 메일은 보낼 때 알린다
   if (m.kind === "approval") return null; // 전자결재 결과 기록 메일 — 푸시는 notifyApproval이 이미 보냈다
+  if (m.kind === "handover") return null; // ⭐ 2026-11-03 인수인계 메일함 사본 — 푸시는 notifyHandover가 이미 보냈다
   // ⭐ 2026-11-02 부고처럼 공지사항으로도 올린 글의 안내 메일 — 공지 푸시(notifyNotice)가 이미 나가므로 메일 푸시는 생략(2번 방지)
   if (m.kind === "notice" && m.noticeKey && !/_v\d+$/.test(m.noticeKey)) return null; // 수정(정정) 안내는 공지 푸시가 없으니 메일 푸시로
   await pushInternalMail(m);
@@ -4980,6 +4981,53 @@ exports.notifyNotice = functions.firestore.document("notices/{id}").onCreate(asy
   const title = `◆ ${n.category || "공지사항"} · ${n.author || ""}`;
   const body = `${n.title || ""}${n.content ? `\n${String(n.content).replace(/\s+/g, " ").slice(0, 80)}` : ""}`;
   await sendPushAndCleanup([...new Set(tokens)], { notification: { title, body }, android: { priority: "high" } }, "공지사항").catch((e) => console.error("공지 푸시 실패:", e));
+  return null;
+});
+
+// 🔁 2026-11-03 인수인계 푸시 + 메일함 사본 — 새 인수인계가 등록되면 받는 사람에게만(작성자 제외)
+//  handovers: { text, date, receivers[{uid,name}], receiverUids[], receiver(이름들), receiverUid(첫 사람), author, authorUid, companyName, readBy[] }
+//  · 휴대폰 푸시: 각자 "인수인계" 알림을 끈 사람 · 퇴사자 · 다른 회사 계정 제외(isPushTypeEnabled — 기본 켜짐)
+//  · 사내메일함 사본: internalMails/handover_{id} (kind "handover" → 공문함) — 받는 사람이 인수인계를 열면 화면이 이 메일도 읽음으로 바꾼다
+//    (이 메일로는 따로 푸시하지 않는다 — notifyInternalMail이 kind "handover"는 건너뜀)
+exports.notifyHandover = functions.firestore.document("handovers/{id}").onCreate(async (snap, ctx) => {
+  const h = snap.data() || {};
+  const company = String(h.companyName || PUSH_DEFAULT_COMPANY).trim();
+  const fromList = Array.isArray(h.receiverUids) && h.receiverUids.length ? h.receiverUids
+    : Array.isArray(h.receivers) && h.receivers.length ? h.receivers.map((r) => r && r.uid)
+    : h.receiverUid ? [h.receiverUid] : [];
+  const to = [...new Set(fromList.filter((u) => typeof u === "string" && u && u !== h.authorUid))].slice(0, 300);
+  if (!to.length) return null;
+  const nameOf = (uid) => ((Array.isArray(h.receivers) ? h.receivers : []).find((r) => r && r.uid === uid) || {}).name || "";
+  const text = String(h.text || "");
+  const author = String(h.author || "");
+  // ① 휴대폰 푸시
+  try {
+    const tokens = [];
+    for (let i = 0; i < to.length; i += 100) {
+      const docs = await db.getAll(...to.slice(i, i + 100).map((uid) => db.collection("users").doc(uid)));
+      docs.forEach((d) => {
+        if (!d.exists) return;
+        const u = d.data() || {};
+        if (u.approved === false || u.employmentStatus === "퇴사") return;
+        if (u.role !== "totalMaster" && String(u.companyName || PUSH_DEFAULT_COMPANY).trim() !== company) return;
+        if (!isPushTypeEnabled(u.pushPrefs, "인수인계")) return;
+        tokens.push(...userTokens(u));
+      });
+    }
+    const body = `${h.date ? `${h.date} · ` : ""}${text.replace(/\s+/g, " ").slice(0, 80)}`;
+    await sendPushAndCleanup([...new Set(tokens)], { notification: { title: `↻ 인수인계 · ${author || "동료"}`, body }, android: { priority: "high" } }, "인수인계");
+  } catch (e) { console.error("인수인계 푸시 실패:", e); }
+  // ② 사내메일함 사본(같은 인수인계로 두 번 만들지 않게 문서 id 고정)
+  try {
+    await db.collection("internalMails").doc(`handover_${ctx.params.id}`).create({
+      company, fromUid: h.authorUid || "", fromEmail: "", fromName: author,
+      subject: `[인수인계] ${h.date || ""} ${author ? `${author}님의 인수인계` : "인수인계"}`.replace(/\s+/g, " ").trim().slice(0, 200),
+      body: `${text}\n\n— 전자결재 › 인수인계에서도 볼 수 있습니다.`.slice(0, 20000), images: [],
+      kind: "handover", handoverId: ctx.params.id, important: false, status: "sent", at: FieldValue.serverTimestamp(),
+      readBy: [], deletedBy: [], starredBy: [],
+      to, toNames: to.map(nameOf), cc: [], ccNames: [],
+    });
+  } catch (e) { if (e && e.code !== 6) console.error("인수인계 메일 사본 실패:", e); } // 6 = 이미 있음
   return null;
 });
 

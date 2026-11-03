@@ -23,6 +23,7 @@ import { pcLiveWindowStart, pcPrevDay } from "./orderHistory";
 import { pcBootStore, markBootBase } from "./bootProgress";
 import { createPortal } from "react-dom";
 import { BannerCard, BannerStyles } from "./BannerCenter";
+import { isNoticeUnread, useMinuteTick } from "./notifyCore";
 import HomeDeck, { buildPastStats } from "./HomeDeck";
 import KpSubNav from "./KpSubNav";
 import { MailWorkspace, MAIL_FOLDERS, useMailCounts, folderBadge } from "./InternalMail";
@@ -668,21 +669,9 @@ export default function HomeDashboard({ role, user, userCompany = "", pending, d
       setNotices(list);
       if (initialLoad) {
         initialLoad = false;
-        showTodayToast("notice", list.filter(noticeToastOk)); // 접속 시 오늘 항목 알림(⭐ 2026-11-03 볼 수 있는 공지만)
+        // ⭐ 2026-11-03 알림 통합 — 오른쪽 아래 공지 배너는 없앴다. 새 공지는 화면 가운데 알림 팝업(NotifyCenter)이 띄운다
         return;
       }
-      // 실시간 신규 등록 알림
-      const added = snap.docChanges().find(c => c.type === "added" && !c.doc.metadata.hasPendingWrites);
-      if (!added) return;
-      const data = { id: added.doc.id, ...added.doc.data(), date: formatCreatedAt(added.doc.data().createdAt) };
-      if (data.category === "인사발령") return; // 인사발령은 사내메일 배너로 뜬다
-      if (data.category === "부고") return; // 부고도 사내메일 배너로 뜬다
-      if (data.authorUid && data.authorUid === user?.uid) return; // 내가 올린 글
-      if (!noticeToastOk(data)) return; // ⭐ 2026-11-03 팀·직원 지정 공지 — 대상이 아니면 알리지 않는다
-      const seenKeyN = toastKeyOf("notice", data);
-      if (getSeenToasts()[seenKeyN] || isAlreadySeen(seenKeyN)) return;
-      markToastSeen(seenKeyN); addPermDismissed(seenKeyN); addFirestoreSeenKey(seenKeyN);
-      setToast({ type: "notice", data });
     });
     return () => unsub();
   }, [showTodayToast]);
@@ -696,17 +685,9 @@ export default function HomeDashboard({ role, user, userCompany = "", pending, d
       setHandovers(list);
       if (initialLoad) {
         initialLoad = false;
-        showTodayToast("handover", list); // 접속 시 오늘 항목 알림
+        // ⭐ 2026-11-03 알림 통합 — 새 인수인계도 가운데 알림 팝업(NotifyCenter)이 띄운다(오른쪽 아래 배너 없앰)
         return;
       }
-      // 실시간 신규 등록 알림 (내가 직접 편집 중인 건 제외)
-      const added = snap.docChanges().find(c => c.type === "added" && !c.doc.metadata.hasPendingWrites && !isEditingHandoverRef.current);
-      if (!added) return;
-      const data = { id: added.doc.id, ...added.doc.data() };
-      const seenKeyH = `handover_${data.id}`;
-      if (getSeenToasts()[seenKeyH] || isAlreadySeen(seenKeyH)) return;
-      markToastSeen(seenKeyH); addPermDismissed(seenKeyH);
-      setToast({ type: "handover", data });
     });
     return () => unsub();
   }, [showTodayToast]);
@@ -897,6 +878,16 @@ export default function HomeDashboard({ role, user, userCompany = "", pending, d
     window.addEventListener("kp-open-approval", take);
     return () => window.removeEventListener("kp-open-approval", take);
   }, []);
+  // ⭐ 2026-11-03 알림 팝업 [인수인계 열기] → 전자결재 › 인수인계(그 글은 HandoverCenter가 window.__kpOpenHandover로 연다)
+  useEffect(() => {
+    const take = () => { if (window.__kpOpenHandover) setBoardTab("ap:handover"); };
+    take();
+    window.addEventListener("kp-open-handover", take);
+    return () => window.removeEventListener("kp-open-handover", take);
+  }, []);
+  // ⭐ 2026-11-03 공지사항 숫자 — "그 게시판을 마지막으로 본 시각" 대신 글마다 읽음(readBy) 기준: 팝업·목록 어디서 읽어도 바로 줄어든다(예약 공지는 게시 뒤부터)
+  const noticeNow = useMinuteTick();
+  const unreadNoticeN = visibleNotices.filter((n) => isNoticeUnread(n, user?.uid, noticeNow)).length;
   const boardNewest = { 공지사항: newestOf(visibleNotices), 인수인계: newestOf(handovers), ...Object.fromEntries(Object.keys(BOARDS).map((b) => [`board:${b}`, boardLatest[b] || 0])) };
   const isBoardNew = (k) => boardNewest[k] > (boardSeen[k] ?? seenFloor.current);
   const curNewest = boardNewest[boardTab] || 0;
@@ -927,7 +918,7 @@ export default function HomeDashboard({ role, user, userCompany = "", pending, d
       groups={lockHomeGroups(planId, [
         { label: dept === "exec" ? "경영" : dept ? "부서" : "관제", items: [{ key: "대시보드", label: dept === "exec" ? "경영 브리핑" : "대시보드", en: dept === "exec" ? "EXECUTIVE" : dept === "acct" ? "ACCOUNTING" : dept === "hr" ? "HUMAN RESOURCES" : "OPERATIONS", icon: dept === "acct" ? "money" : dept === "hr" ? "idcard" : dept === "exec" ? "star" : "pulse" }] },
         { label: "사내 게시판", items: [
-          { key: "공지사항", label: "공지사항", en: "NOTICE", icon: "bell", badge: isBoardNew("공지사항") ? "N" : 0, badgeTitle: "새 글" },
+          { key: "공지사항", label: "공지사항", en: "NOTICE", icon: "bell", badge: unreadNoticeN, badgeTitle: "안 읽은 공지" },
           ...Object.entries(BOARDS).filter(([b]) => canSeeBoard(b, meHome)).map(([b, B]) => ({ key: `board:${b}`, label: B.label, en: B.en, icon: B.icon, badge: isBoardNew(`board:${b}`) ? "N" : 0, badgeTitle: "새 글" })),
           // ⭐ 2026-10-31 임원 일정(모든 직원 열람) · 사내 규정(취업규칙 등)
           { key: "execsched", label: "임원 일정", en: "EXECUTIVE", icon: "pin" },
@@ -948,8 +939,8 @@ export default function HomeDashboard({ role, user, userCompany = "", pending, d
           { key: "ap:lines", label: "결재선 관리", en: "LINES", icon: "route" },
         ] },
         { label: "커뮤니케이션 센터", items: [
-          { key: "mail", label: "사내메일함", en: "MAILBOX", icon: "mail", badge: mailCounts.unread, badgeTitle: "안 읽은 메일",
-            sub: MAIL_FOLDERS.map((f) => ({ key: `mail:${f.key}`, label: f.label, icon: f.icon, badge: folderBadge(f.key, mailCounts), soft: !["inbox", "unread"].includes(f.key) })) },
+          { key: "mail", label: "사내메일함", en: "MAILBOX", icon: "mail", badge: mailCounts.unread, badgeTitle: "안 읽은 메일", red: true, // ⭐ 2026-11-03 카톡처럼 빨간 숫자
+            sub: MAIL_FOLDERS.map((f) => ({ key: `mail:${f.key}`, label: f.label, icon: f.icon, badge: folderBadge(f.key, mailCounts), soft: !["inbox", "unread"].includes(f.key), red: ["inbox", "unread"].includes(f.key) })) },
         ] },
       ])}>
     <div className="space-y-5">

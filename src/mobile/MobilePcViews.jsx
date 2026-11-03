@@ -91,9 +91,21 @@ function FleetView({ dispatchData, userCompany, role, onRegisterBack }) {
 
 // ── 전자결재 — PC 홈 › 전자결재와 같은 화면(신청·결재·내 기안함·결재선) ──
 function ApprovalView({ company, me, initialPage = "inbox" }) {
-  const [page, setPage] = React.useState(initialPage);
+  // ⭐ 2026-11-03 알림 팝업 [바로 가기] — 결재함/내 기안함/인수인계 중 그 화면으로(kpMApPage)
+  const takePage = () => { try { const v = sessionStorage.getItem("kpMApPage"); sessionStorage.removeItem("kpMApPage"); return v || null; } catch { return null; } };
+  const [page, setPage] = React.useState(() => takePage() || initialPage);
   // 임원 브리핑에서 누른 결재 문서를 바로 연다
   const [openId, setOpenId] = React.useState(() => { try { const v = sessionStorage.getItem("kpExecApOpen"); sessionStorage.removeItem("kpExecApOpen"); return v || null; } catch { return null; } });
+  // 이미 전자결재 화면이 열려 있을 때도 알림 팝업에서 온 문서·화면으로
+  React.useEffect(() => {
+    const h = () => {
+      const p = takePage(); if (p) setPage(p);
+      try { const v = sessionStorage.getItem("kpExecApOpen"); if (v) { sessionStorage.removeItem("kpExecApOpen"); setOpenId(v); } } catch { /* 무시 */ }
+      if (window.__kpOpenHandover) setTimeout(() => window.dispatchEvent(new Event("kp-open-handover")), 0);
+    };
+    window.addEventListener("kp-m-approval-open", h);
+    return () => window.removeEventListener("kp-m-approval-open", h);
+  }, []);
   const counts = useApprovalCounts();
   const hoUnread = useHandoverUnread(me?.uid);
   return (
@@ -123,6 +135,14 @@ function NoticeView({ company, me }) {
   const [writer, setWriter] = React.useState(null); // { initial }
   const [obit, setObit] = React.useState(false);
   const [openId, setOpenId] = React.useState(null);
+  // ⭐ 2026-11-03 알림 팝업 [공지사항에서 열기] — window.__kpOpenNotice의 글을 바로 연다(목록이 오면)
+  const pendingOpen = React.useRef(null);
+  React.useEffect(() => {
+    const h = () => { if (window.__kpOpenNotice) { pendingOpen.current = window.__kpOpenNotice; window.__kpOpenNotice = ""; setOpenId(pendingOpen.current); } };
+    h();
+    window.addEventListener("kp:openNotice", h);
+    return () => window.removeEventListener("kp:openNotice", h);
+  }, []);
   // ⭐ 2026-11-02 최신 글이 위로(PC 홈과 같게)
   React.useEffect(() => onSnapshot(collection(db, "notices"), (s) => setNotices(s.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => ((b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0)))), () => setNotices([])), []);
   // ⭐ 2026-11-02 관리자센터2 — 플랫폼 공지(우리 회사 대상)도 같은 목록에 "플랫폼 공지" 표시로

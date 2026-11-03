@@ -8,13 +8,12 @@ import React from "react";
 import { RichHtml } from "./richText";
 import { db } from "./firebase";
 import { doc, updateDoc, deleteDoc, arrayUnion } from "firebase/firestore";
-import { PlatformBadge } from "./PlatformNoticeBanner";
+import { PlatformBadge, platformReadIds, markPlatformNoticeRead } from "./PlatformNoticeBanner";
 
 // ⭐ 2026-11-02 관리자센터2 — 플랫폼 공지(_platform)는 관리자 관리센터가 올린 글: 회사에서 고치거나 지울 수 없고,
 //  읽음 표시는 서버 문서 대신 이 브라우저에만 기록한다(다른 회사 직원 uid가 한 문서에 쌓이지 않게).
-const PLAT_READ_KEY = "kpPlatNoticeRead";
-const platRead = () => { try { return JSON.parse(localStorage.getItem(PLAT_READ_KEY) || "[]"); } catch { return []; } };
-const markPlatRead = (id) => { try { const l = platRead(); if (!l.includes(id)) localStorage.setItem(PLAT_READ_KEY, JSON.stringify([...l, id].slice(-300))); } catch { /* 무시 */ } };
+//  ⭐ 2026-11-03 읽음 기록은 PlatformNoticeBanner와 한 곳(맨 위 띠·가운데 팝업과 같은 기록)
+const markPlatRead = (id) => markPlatformNoticeRead(String(id || "").replace(/^plat:/, ""));
 
 const MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
 export const MAX_PINNED = 5;
@@ -133,7 +132,7 @@ export default function NoticeBoard({ notices = [], me, canWrite, isViewer, onEd
   }
 
   const Row = ({ n, no, pin }) => {
-    const unread = n._platform ? !platRead().includes(n.id) : me?.uid && !(n.readBy || []).includes(me.uid);
+    const unread = n._platform ? !platformReadIds().has(n.platformId || String(n.id).replace(/^plat:/, "")) : me?.uid && !(n.readBy || []).includes(me.uid);
     return (
       <button type="button" onClick={() => setOpenId(n.id)}
         className={`w-full grid grid-cols-[52px_minmax(0,1fr)_auto] md:grid-cols-[64px_minmax(0,1fr)_120px_110px] items-center gap-2.5 md:gap-3 px-3 md:px-5 h-[60px] md:h-[56px] border-b border-[#F1F4F9] text-left transition hover:bg-[#F5F8FD] ${n._platform ? "bg-[linear-gradient(90deg,#FBF7EC,#F6F8FC_40%)]" : pin ? "bg-[#F3F6FB]" : ""}`}>

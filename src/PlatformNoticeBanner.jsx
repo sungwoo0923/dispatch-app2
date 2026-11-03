@@ -10,7 +10,27 @@ import { collection, onSnapshot, query, where } from "firebase/firestore";
 import { db } from "./firebase";
 
 const DISMISS_KEY = "kpPlatformNoticeDismissed";
-const readDismissed = () => { try { return JSON.parse(localStorage.getItem(DISMISS_KEY) || "[]"); } catch { return []; } };
+// ⭐ 2026-11-03 알림 통합 — "읽음"은 한 곳에서: 띠를 닫아도 · 공지사항에서 열어도 · 가운데 팝업을 닫거나 열어도 같은 기록(이 브라우저)
+//  플랫폼 공지는 다른 회사 직원 uid가 한 문서에 쌓이지 않게 서버 대신 이 브라우저에 남긴다(NoticeBoard와 같은 키)
+const PLAT_READ_KEY = "kpPlatNoticeRead";
+const readList = (k) => { try { const v = JSON.parse(localStorage.getItem(k) || "[]"); return Array.isArray(v) ? v : []; } catch { return []; } };
+export const platformReadIds = () => new Set([...readList(DISMISS_KEY), ...readList(PLAT_READ_KEY)].map((x) => String(x).replace(/^plat:/, ""))); // 예전 기록은 "plat:" 붙은 id
+export function markPlatformNoticeRead(id) {
+  if (!id) return;
+  try { const l = readList(PLAT_READ_KEY); if (!l.includes(id)) localStorage.setItem(PLAT_READ_KEY, JSON.stringify([...l, id].slice(-300))); } catch { /* 무시 */ }
+  try { window.dispatchEvent(new Event("kp-plat-read")); } catch { /* 무시 */ }
+}
+// 읽은 플랫폼 공지 목록(다른 화면에서 읽으면 바로 바뀐다 · 다른 창은 storage 이벤트로)
+export function usePlatformRead() {
+  const [ids, setIds] = React.useState(platformReadIds);
+  React.useEffect(() => {
+    const h = () => setIds(platformReadIds());
+    window.addEventListener("kp-plat-read", h);
+    window.addEventListener("storage", h);
+    return () => { window.removeEventListener("kp-plat-read", h); window.removeEventListener("storage", h); };
+  }, []);
+  return ids;
+}
 const todayYmd = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
 const toMs = (v) => (v?.toMillis ? v.toMillis() : v?.seconds ? v.seconds * 1000 : typeof v === "number" ? v : 0);
 
@@ -76,16 +96,12 @@ export function PlatformBadge({ size = "sm" }) {
 //  onOpen이 없는 화면(화주사)은 예전처럼 펼쳐 보기.
 export default function PlatformNoticeBanner({ audience = "carrier", company = "", onOpen }) {
   const all = usePlatformNotices({ audience, company });
-  const [dismissed, setDismissed] = React.useState(readDismissed);
+  const read = usePlatformRead(); // ⭐ 2026-11-03 어디서 읽었든(공지사항·팝업·띠 닫기) 읽은 공지는 띠에서 사라진다
   const [open, setOpen] = React.useState(null);
-  const items = all.filter((n) => n.banner !== false && !dismissed.includes(n.id));
+  const items = all.filter((n) => n.banner !== false && !read.has(n.id));
   if (!items.length) return null;
   const n = items[0];
-  const dismiss = () => {
-    const next = [...dismissed, n.id].slice(-100);
-    setDismissed(next);
-    try { localStorage.setItem(DISMISS_KEY, JSON.stringify(next)); } catch { /* 무시 */ }
-  };
+  const dismiss = () => markPlatformNoticeRead(n.id);
   const strong = n.level === "중요" || n.level === "점검" || n.level === "긴급";
   return (
     <div className="relative text-white" style={{ background: strong ? "linear-gradient(90deg,#0B1428,#1B2B4B)" : "linear-gradient(90deg,#1B2B4B,#2D4C82)" }}>

@@ -54,8 +54,25 @@ export default function HandoverCenter({ company, me, isViewer = false }) {
     setOpen(h.id);
     if (handoverReceivers(h).includes(uid) && !(h.readBy || []).includes(uid)) {
       await updateDoc(doc(db, "handovers", h.id), { readBy: arrayUnion(uid) }).catch(() => {});
+      // ⭐ 2026-11-03 메일함 사본(서버 notifyHandover가 만든 internalMails/handover_{id})도 같이 읽음
+      updateDoc(doc(db, "internalMails", `handover_${h.id}`), { readBy: arrayUnion(uid) }).catch(() => {});
     }
   };
+  // ⭐ 2026-11-03 알림 팝업 [인수인계 열기] — window.__kpOpenHandover의 글을 바로 연다(목록이 아직 안 왔으면 오면 연다)
+  React.useEffect(() => {
+    const take = () => {
+      const id = window.__kpOpenHandover;
+      if (!id || !list) return;
+      const h = list.find((x) => x.id === id);
+      if (!h) return;
+      window.__kpOpenHandover = null;
+      setTab(handoverReceivers(h).includes(uid) ? "in" : h.authorUid === uid ? "out" : "all");
+      openDoc(h);
+    };
+    take();
+    window.addEventListener("kp-open-handover", take);
+    return () => window.removeEventListener("kp-open-handover", take);
+  }, [list, uid]); // eslint-disable-line react-hooks/exhaustive-deps
   const remove = async (h) => {
     if (!window.confirm("인수인계를 삭제하시겠습니까?")) return;
     await deleteDoc(doc(db, "handovers", h.id)).catch((e) => window.alert(e.message));
