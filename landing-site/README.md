@@ -15,7 +15,7 @@ HTML/CSS/JS라 어디에든 그대로 올릴 수 있습니다.
 - 최고관리자가 관리센터에서 홈페이지의 모든 글자·사진·메뉴·신청서·섹션 순서·위치·크기·색을 바꾸고 [게시하기]를 누르면 바로 반영된다(다시 배포할 필요 없음).
 - 저장 위치: 임시본 `siteConfig/homepageDraft` · 게시본 `siteConfig/landing` 문서의 `homepage` 칸 · 이력 `siteConfig/homepageHistory`(최근 15개)
 - 홈페이지 쪽 엔진: `kp-site.js` — 방문자가 열면 게시본을 읽어 적용, `?kpedit=1`로 열면 편집 모드
-- 모든 요소에 `data-k="eN"` 번호가 있다. **index.html을 직접 고친 뒤에는 꼭** `python3 landing-site/tools/add-keys.py`를 실행(새 요소에만 번호를 붙이고 기존 번호는 그대로 둔다 — 기존 번호를 바꾸면 저장된 편집이 엉뚱한 곳에 붙는다).
+- 모든 요소에 `data-k="eN"` 번호가 있다. **index.html을 직접 고친 뒤에는 꼭** `node landing-site/tools/add-keys.mjs`를 실행(파이썬이 있으면 `python3 landing-site/tools/add-keys.py`도 같음)(새 요소에만 번호를 붙이고 기존 번호는 그대로 둔다 — 기존 번호를 바꾸면 저장된 편집이 엉뚱한 곳에 붙는다).
 - 사진 올리기는 Firebase Storage `siteConfig/homepage-*` 경로를 쓴다(기존 랜딩페이지 편집과 같은 위치).
 
 ## 2026-11-03 전면 개편
