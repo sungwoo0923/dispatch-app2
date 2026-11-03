@@ -7966,6 +7966,8 @@ const newVer = useNewVersion(); // ★ 새 버전이 배포되면 버전 표시 
   useCompanyDropdownSync(role, userCompany); // ⭐ 편집모드 옵션(배차방식 등)을 표·빠른수정에도 회사별로
   // ⭐ 2026-11-01 가입 승인 대기 — 승인할 수 있는 사람(관리자·경리·인사·마스터)에게 상단 [관리자메뉴] 숫자 + 새 신청 알림
   const canApproveSignup = ["admin", "totalMaster", "superadmin", "test", "hrManager", "hrAcct"].includes(realRole || role) || myProfileDoc?.isMaster === true;
+  // ⭐ 2026-11-03 매출관리 비밀번호는 회사 마스터만 정하고 바꾼다(대표·관리자도 설정된 비밀번호를 입력) — 서버 규칙(companySettings)도 같은 기준
+  const canSetRevenuePw = role === "totalMaster" || myProfileDoc?.isMaster === true;
   const pendingSignups = usePendingSignups(canApproveSignup ? (role === "totalMaster" ? (localStorage.getItem("loginCompany") || userCompany || "") : (userCompany || localStorage.getItem("userCompany") || "")) : "");
   // ⭐ 2026-11-01 마스터 인사권 — 인사 담당자가 없을 때만(생기면 자동 인계, hrHandover.js)
   const coStaffMain = useCompanyStaff(myProfileDoc?.isMaster === true ? (userCompany || localStorage.getItem("userCompany") || "") : "");
@@ -8908,14 +8910,14 @@ return (
                   ) : (
                     <div className="text-center py-4 text-gray-500 text-[13px]">로딩 중...</div>
                   )
-                ) : (revenuePwSetupOpen || (!revenuePassword && (role === "admin" || role === "totalMaster"))) ? (
+                ) : (revenuePwSetupOpen || (!revenuePassword && canSetRevenuePw)) ? (
                   // ⭐ 비밀번호 설정·변경은 이 창에서(관리자 이상) — 예전엔 회사관리 › 운영 설정에 있었다
                   <div>
                     <RevenuePasswordSection companyName={(localStorage.getItem("loginCompany") || userCompany || localStorage.getItem("userCompany") || DEFAULT_COMPANY || "").trim()} />
                     {revenuePassword && <button type="button" onClick={() => setRevenuePwSetupOpen(false)} className="w-full mt-3 py-2.5 border border-gray-200 text-gray-600 rounded-xl text-[13px] font-semibold hover:bg-gray-50 transition">비밀번호 입력으로 돌아가기</button>}
                   </div>
                 ) : !revenuePassword ? (
-                  <div className="text-[13px] text-gray-500 text-center">비밀번호가 설정되지 않았습니다.<br/>관리자에게 설정을 요청해 주세요.</div>
+                  <div className="text-[13px] text-gray-500 text-center">비밀번호가 설정되지 않았습니다.<br/>회사 마스터에게 설정을 요청해 주세요.</div>
                 ) : (
                   <form onSubmit={(e) => {
                     e.preventDefault();
@@ -8938,7 +8940,7 @@ return (
                     />
                     {revenuePassError && <div className="text-red-500 text-[12px] text-center mb-3 font-medium">비밀번호가 올바르지 않습니다</div>}
                     <button type="submit" className="w-full py-3 bg-[#1B2B4B] text-white rounded-xl text-[14px] font-bold hover:bg-[#243860] transition"><EditableText id="misc.btn.6942.확인" defaultText="확인" /></button>
-                    {(role === "admin" || role === "totalMaster") && (
+                    {canSetRevenuePw && (
                       <button type="button" onClick={() => setRevenuePwSetupOpen(true)} className="w-full mt-2 py-2.5 border border-[#1B2B4B]/30 text-[#1B2B4B] rounded-xl text-[13px] font-semibold hover:bg-[#F5F8FD] transition">비밀번호 변경</button>
                     )}
                     {role === "totalMaster" && (

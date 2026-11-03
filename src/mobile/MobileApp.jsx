@@ -6844,74 +6844,52 @@ setOpenMemo={setOpenMemo}
   </div>
 );
 }
-const SALES_PIN_KEY = "exec_intel_pin_v1";
 
-function SalesPinGate({ onVerified, cardVersionB = false }) {
-  const accent = cardVersionB ? "#1B2B4B" : "#2563eb";
-  const hasPin = !!localStorage.getItem(SALES_PIN_KEY);
-  const [mode, setMode] = useState(hasPin ? "verify" : "setup1");
-  const [entered, setEntered] = useState("");
-  const [firstPin, setFirstPin] = useState("");
-  const [error, setError] = useState("");
-  const [animKey, setAnimKey] = useState(0);
-
-  const bump = () => { setAnimKey(k => k + 1); setEntered(""); setError(""); };
-
-  const handleKey = (d) => {
-    if (d === "back") { setEntered(p => p.slice(0, -1)); return; }
-    if (entered.length >= 6) return;
-    const next = entered + d;
-    setEntered(next);
-    if (next.length < 6) return;
-    setTimeout(() => {
-      if (mode === "verify") {
-        if (next === localStorage.getItem(SALES_PIN_KEY)) { onVerified(); }
-        else { setError("비밀번호가 올바르지 않습니다"); bump(); }
-      } else if (mode === "setup1") {
-        setFirstPin(next); setEntered(""); setMode("setup2");
-      } else if (mode === "setup2") {
-        if (next === firstPin) { localStorage.setItem(SALES_PIN_KEY, next); onVerified(); }
-        else { setError("비밀번호가 일치하지 않습니다"); setFirstPin(""); setMode("setup1"); bump(); }
-      }
-    }, 200);
+// ⭐ 2026-11-03 매출관리 비밀번호 — PC와 같은 "회사 비밀번호"(companySettings/{회사}.revenuePassword)
+//   예전엔 휴대폰마다 따로 정하는 6자리 PIN이라 아무나 새로 정할 수 있었다. 이제 회사 마스터만 정하고, 대표·관리자 포함 모두 그 비밀번호를 입력한다.
+function SalesPinGate({ onVerified }) {
+  const co = (getTenant() || localStorage.getItem("loginCompany") || localStorage.getItem("userCompany") || DEFAULT_COMPANY || "").trim();
+  const me = useMyProfile(auth.currentUser?.uid);
+  const isMaster = localStorage.getItem("role") === "totalMaster" || me?.isMaster === true;
+  const [pw, setPw] = useState(undefined); // undefined = 불러오는 중, null = 없음
+  const [input, setInput] = useState("");
+  const [err, setErr] = useState("");
+  const [setup, setSetup] = useState(false);
+  const [n1, setN1] = useState(""); const [n2, setN2] = useState(""); const [busy, setBusy] = useState(false);
+  useEffect(() => onSnapshot(doc(db, "companySettings", co), (x) => setPw(x.exists() ? (x.data()?.revenuePassword ?? null) : null), () => setPw(null)), [co]);
+  const save = async () => {
+    if (n1.length < 4) { setErr("4자리 이상으로 정해 주세요."); return; }
+    if (n1 !== n2) { setErr("두 번 입력한 비밀번호가 다릅니다."); return; }
+    setBusy(true);
+    try { await setDoc(doc(db, "companySettings", co), { revenuePassword: n1 }, { merge: true }); setSetup(false); setN1(""); setN2(""); setErr(""); onVerified(); }
+    catch (e) { setErr(/permission/i.test(String(e?.message || e)) ? "회사 마스터만 비밀번호를 정할 수 있습니다." : `저장 실패: ${e?.message || e}`); }
+    finally { setBusy(false); }
   };
-
-  const heading = mode === "verify" ? "매출관리 인증" : mode === "setup1" ? "비밀번호 설정" : "비밀번호 확인";
-  const sub = mode === "verify" ? "6자리 비밀번호를 입력하세요" : mode === "setup1" ? "사용할 6자리 비밀번호를 입력하세요" : "비밀번호를 한 번 더 입력하세요";
-
+  const inp = "w-full h-12 rounded-xl border border-[#DCE3EE] px-4 text-center text-[16px] tracking-[0.3em] font-black text-[#0F1A30] outline-none focus:border-[#1B2B4B]";
+  const showSetup = setup || (pw === null && isMaster);
   return (
-    <div style={{ minHeight: "100vh", background: "#f4f6f9", display: "flex", flexDirection: "column" }}>
-      <div style={{ background: accent, padding: "16px 20px 14px", display: "flex", alignItems: "center", gap: 10 }}>
-        <div style={{ width: 34, height: 34, background: "rgba(255,255,255,0.12)", borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center" }}>
-          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
-          </svg>
+    <div className="min-h-[70vh] flex items-center justify-center px-5">
+      <div className="w-full max-w-[360px] rounded-3xl bg-white border border-[#E3E8F0] shadow-[0_12px_32px_rgba(15,26,48,.12)] p-6">
+        <div className="w-12 h-12 rounded-2xl bg-[#0F1A30] text-white flex items-center justify-center mx-auto">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><rect x="3" y="11" width="18" height="11" rx="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" /></svg>
         </div>
-        <div>
-          <div style={{ color: "white", fontWeight: 800, fontSize: 15, letterSpacing: "-0.3px" }}>매출관리</div>
-          <div style={{ color: "rgba(255,255,255,0.4)", fontSize: 11 }}>보안 인증이 필요합니다</div>
-        </div>
-      </div>
-      <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: "20px 24px" }}>
-        <div style={{ width: "100%", maxWidth: 340 }}>
-          <div style={{ textAlign: "center", marginBottom: 32 }}>
-            <h2 style={{ fontSize: 20, fontWeight: 800, color: accent, marginBottom: 6 }}>{heading}</h2>
-            <p style={{ fontSize: 13, color: "#9ca3af" }}>{sub}</p>
-          </div>
-          <div key={animKey} style={{ display: "flex", justifyContent: "center", gap: 12, marginBottom: 20 }}>
-            {Array.from({ length: 6 }).map((_, i) => (
-              <div key={i} style={{ width: 14, height: 14, borderRadius: "50%", border: "2px solid", transition: "all 0.15s", background: i < entered.length ? accent : "white", borderColor: i < entered.length ? accent : "#d1d5db" }} />
-            ))}
-          </div>
-          {error && <div style={{ textAlign: "center", fontSize: 12, color: "#ef4444", fontWeight: 600, marginBottom: 16, background: "#fef2f2", borderRadius: 10, padding: "9px 12px" }}>{error}</div>}
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10 }}>
-            {[1,2,3,4,5,6,7,8,9,null,0,"←"].map((d, i) => (
-              <button key={i} onClick={() => d !== null && handleKey(d === "←" ? "back" : String(d))} disabled={d === null}
-                style={{ height: 58, borderRadius: 14, fontSize: 20, fontWeight: 700, border: "none", cursor: d === null ? "default" : "pointer", opacity: d === null ? 0 : 1, background: d === "←" ? "#f1f5f9" : "white", color: accent, boxShadow: d === null ? "none" : "0 2px 8px rgba(0,0,0,0.07)", transition: "all 0.1s", WebkitTapHighlightColor: "transparent" }}>
-                {d}
-              </button>
-            ))}
-          </div>
+        <div className="mt-3 text-center text-[18px] font-black text-[#0F1A30]">{showSetup ? "매출관리 비밀번호 설정" : "매출관리"}</div>
+        <div className="mt-1 text-center text-[12.5px] text-[#7A8AA6]">{showSetup ? "회사 전체가 같은 비밀번호를 씁니다(마스터만 설정)" : "회사 비밀번호를 입력해 주세요"}</div>
+        <div className="mt-5 space-y-2.5">
+          {pw === undefined ? <div className="py-6 text-center text-[13px] text-[#9AA9C3]">불러오는 중…</div>
+            : showSetup ? (<>
+              <input type="password" className={inp} placeholder="새 비밀번호" value={n1} onChange={(e) => { setN1(e.target.value); setErr(""); }} />
+              <input type="password" className={inp} placeholder="한 번 더" value={n2} onChange={(e) => { setN2(e.target.value); setErr(""); }} />
+              <button type="button" disabled={busy} onClick={save} className="w-full h-12 rounded-xl bg-[#0F1A30] text-white text-[15px] font-black disabled:opacity-60">{busy ? "저장 중…" : "저장"}</button>
+              {pw && <button type="button" onClick={() => { setSetup(false); setErr(""); }} className="w-full h-11 rounded-xl border border-[#E3E8F0] text-[#3A4A66] text-[13.5px] font-bold">비밀번호 입력으로</button>}
+            </>) : pw === null ? (
+              <div className="py-4 text-center text-[13.5px] text-[#5B6B85] leading-relaxed">비밀번호가 아직 없습니다.<br />회사 마스터에게 설정을 요청해 주세요.</div>
+            ) : (<form onSubmit={(e) => { e.preventDefault(); if (input === pw) onVerified(); else { setErr("비밀번호가 올바르지 않습니다"); setInput(""); } }} className="space-y-2.5">
+              <input type="password" autoFocus className={inp} placeholder="비밀번호" value={input} onChange={(e) => { setInput(e.target.value); setErr(""); }} />
+              <button type="submit" className="w-full h-12 rounded-xl bg-[#0F1A30] text-white text-[15px] font-black">확인</button>
+              {isMaster && <button type="button" onClick={() => setSetup(true)} className="w-full h-11 rounded-xl border border-[#1B2B4B]/30 text-[#1B2B4B] text-[13.5px] font-bold">비밀번호 변경(마스터)</button>}
+            </form>)}
+          {err && <div className="text-center text-[12.5px] font-bold text-[#D92D20]">{err}</div>}
         </div>
       </div>
     </div>
