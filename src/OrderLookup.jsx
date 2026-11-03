@@ -10,6 +10,7 @@ const toInt = (v) => { const n = parseInt(String(v ?? "").replace(/[^\d-]/g, "")
 const norm = (s) => String(s || "").replace(/\s+/g, "").toLowerCase();
 const won = (n) => `${Number(n || 0).toLocaleString()}원`;
 const EMPTY = "미지정";
+const MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
 const timeKey = (t) => { const m = String(t || "").match(/(\d{1,2}):(\d{2})/); if (!m) return "99:99"; let h = +m[1]; if (/오후|PM/i.test(t) && h < 12) h += 12; if (/오전|AM/i.test(t) && h === 12) h = 0; return String(h).padStart(2, "0") + ":" + m[2]; };
 
 function quickRanges() {
@@ -125,22 +126,51 @@ export default function OrderLookupModal({ open, onClose, rows = [], nameOf = ()
   const ranges = quickRanges();
 
   return createPortal(
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-[#0F1A30]/45 p-2" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose?.(); }}>
-      <div className="w-[min(1640px,97vw)] h-[94vh] flex flex-col rounded-2xl bg-white shadow-[0_24px_60px_rgba(15,26,48,0.35)] overflow-hidden">
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-[#060C1A]/60 backdrop-blur-[3px] p-2" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose?.(); }}>
+      <div className="w-[min(1640px,97vw)] h-[94vh] flex flex-col rounded-[22px] bg-[#F4F6FA] shadow-[0_30px_80px_rgba(6,12,26,0.55)] overflow-hidden ring-1 ring-white/10">
         {/* 머리 */}
-        <div className="flex items-center gap-3 px-6 py-4 bg-[#1B2B4B] text-white">
-          <div className="w-9 h-9 rounded-xl bg-white/10 flex items-center justify-center">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="M20 20l-3.5-3.5" /></svg>
+        <div className="relative overflow-hidden px-6 pt-5 pb-4 text-white" style={{ background: "radial-gradient(900px 300px at 85% -30%, rgba(110,149,232,.32), transparent 60%), linear-gradient(120deg,#060C1A 0%,#0F1A30 45%,#1B2B4B 100%)" }}>
+          <div className="absolute inset-0 pointer-events-none" style={{ background: "linear-gradient(rgba(143,176,240,.07) 1px, transparent 1px) 0 0/22px 22px, linear-gradient(90deg, rgba(143,176,240,.07) 1px, transparent 1px) 0 0/22px 22px" }} />
+          <div className="relative flex items-center gap-4">
+            <div className="w-11 h-11 rounded-2xl flex items-center justify-center" style={{ background: "linear-gradient(135deg,#2D4C82,#0B1428)", border: "1px solid rgba(207,224,255,.3)", boxShadow: "0 0 0 4px rgba(143,176,240,.08), 0 0 24px rgba(110,149,232,.25)" }}>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#CFE0FF" strokeWidth="2.2" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="M20 20l-3.5-3.5" /></svg>
+            </div>
+            <div className="min-w-0">
+              <div className="text-[10.5px] font-extrabold tracking-[0.32em] text-[#8FB0F0]" style={{ fontFamily: MONO }}>ORDER LOOKUP · MANAGER × VEHICLE</div>
+              <div className="text-[21px] font-black mt-0.5 tracking-tight">{title}</div>
+            </div>
+            <div className="ml-auto flex items-center gap-2">
+              <span className="hidden md:inline-flex items-center gap-2 h-9 px-3 rounded-xl bg-white/[0.06] border border-white/15 text-[12px] font-bold text-white/80" style={{ fontFamily: MONO }}>
+                <span className="w-2 h-2 rounded-full bg-[#4ADE80] shadow-[0_0_8px_#4ADE80]" />{start.slice(5).replace("-", ".")} – {end.slice(5).replace("-", ".")} · {result.length.toLocaleString()} ROWS
+              </span>
+              <button onClick={onClose} className="h-9 px-3.5 rounded-xl bg-white/[0.08] border border-white/15 hover:bg-white/[0.16] text-[12.5px] font-black">닫기 <span className="text-white/45 ml-0.5" style={{ fontFamily: MONO }}>ESC</span></button>
+            </div>
           </div>
-          <div className="min-w-0">
-            <div className="text-[16px] font-black">{title}</div>
-            <div className="text-[11.5px] text-white/60 font-semibold">기간을 고르고 배차담당자·차량번호·기사명으로 찾아요 (상차일 기준)</div>
+          {/* 합계 — 디지털 계기판 */}
+          <div className="relative mt-4 grid grid-cols-3 lg:grid-cols-6 gap-2">
+            {[
+              ["COUNT", "조회 건수", kpi.cnt.toLocaleString(), "건", "#FFFFFF"],
+              ["DONE", "배차완료", kpi.done.toLocaleString(), "건", "#7EE2A8"],
+              ["PENDING", "미배차", kpi.wait.toLocaleString(), "건", kpi.wait ? "#FCD9A0" : "rgba(255,255,255,.4)"],
+              ["SALES", "청구운임", kpi.sale.toLocaleString(), "원", "#FFFFFF"],
+              ["DRIVER", "기사운임", kpi.drv.toLocaleString(), "원", "#CFE0FF"],
+              ["MARGIN", "수수료", kpi.fee.toLocaleString(), "원", kpi.fee < 0 ? "#FFB4A8" : "#8FB0F0"],
+            ].map(([en, k, v, u, c]) => (
+              <div key={k} className="rounded-2xl px-3.5 py-2.5 bg-white/[0.05] border border-white/[0.12] backdrop-blur-sm">
+                <div className="flex items-center gap-1.5"><span className="text-[9.5px] font-extrabold tracking-[0.2em] text-white/40" style={{ fontFamily: MONO }}>{en}</span><span className="text-[11px] font-bold text-white/60">{k}</span></div>
+                <div className="mt-0.5 text-[19px] font-black tabular-nums leading-tight" style={{ color: c, fontFamily: MONO }}>{v}<span className="ml-1 text-[11px] font-bold text-white/40">{u}</span></div>
+              </div>
+            ))}
           </div>
-          <button onClick={onClose} className="ml-auto h-8 px-3 rounded-lg bg-white/10 hover:bg-white/20 text-[12px] font-bold">닫기 <span className="text-white/50">ESC</span></button>
+          {kpi.cnt > 0 && (
+            <div className="relative mt-2.5 h-1.5 rounded-full bg-white/10 overflow-hidden" title={`배차율 ${Math.round((kpi.done / kpi.cnt) * 100)}%`}>
+              <div className="h-full rounded-full" style={{ width: `${(kpi.done / kpi.cnt) * 100}%`, background: "linear-gradient(90deg,#4B6CB7,#8FB0F0)" }} />
+            </div>
+          )}
         </div>
 
         {/* 조건 */}
-        <div className="px-6 pt-4 pb-3 border-b border-[#E9EDF4] bg-[#F7F9FC]">
+        <div className="px-6 pt-4 pb-4 border-b border-[#E3E8F0] bg-white">
           <div className="flex flex-wrap items-end gap-3">
             <div>
               <div className={lab}>기간 (상차일)</div>
@@ -150,10 +180,10 @@ export default function OrderLookupModal({ open, onClose, rows = [], nameOf = ()
                 <CustomDatePicker className={`${inp} w-[150px] text-left`} value={end} onChange={(e) => setEnd(e.target.value)} />
               </div>
             </div>
-            <div className="flex gap-1 pb-0.5">
+            <div className="inline-flex p-1 rounded-xl bg-[#EEF2F8] border border-[#E3E8F0] mb-0.5">
               {ranges.map((q) => {
                 const on = start === q.s && end === q.e;
-                return <button key={q.k} onClick={() => { setStart(q.s); setEnd(q.e); }} className={`h-8 px-2.5 rounded-lg text-[12px] font-bold border transition ${on ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-[#3A4A66] border-[#D5DDEA] hover:bg-[#EEF2F8]"}`}>{q.k}</button>;
+                return <button key={q.k} onClick={() => { setStart(q.s); setEnd(q.e); }} className={`h-8 px-3 rounded-lg text-[12.5px] font-black transition ${on ? "bg-[#0F1A30] text-white shadow-[0_4px_12px_rgba(15,26,48,.25)]" : "text-[#5B6B85] hover:text-[#0F1A30]"}`}>{q.k}</button>;
               })}
             </div>
             <div>
@@ -193,38 +223,29 @@ export default function OrderLookupModal({ open, onClose, rows = [], nameOf = ()
               )}
             </div>
             {(mgr || car) && <button onClick={() => { setMgr(""); setCar(""); }} className="h-9 px-3 rounded-lg text-[12px] font-bold text-[#5B6B85] hover:bg-[#EEF2F8]">조건 지우기</button>}
-            <button onClick={downloadExcel} disabled={!result.length} className="ml-auto h-9 px-3.5 rounded-lg bg-[#1B7F4B] text-white text-[12.5px] font-black disabled:opacity-40 hover:opacity-90">엑셀 다운로드</button>
+            <button onClick={downloadExcel} disabled={!result.length} className="ml-auto h-10 px-4 rounded-xl bg-[#0F1A30] text-white text-[12.5px] font-black disabled:opacity-40 hover:bg-[#1B2B4B] inline-flex items-center gap-2"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><path d="M12 4v11M7 10l5 5 5-5M5 20h14" /></svg>엑셀 다운로드</button>
           </div>
 
-          {/* 합계 */}
-          <div className="mt-3 grid grid-cols-3 sm:grid-cols-6 gap-2">
-            {[
-              ["조회 건수", `${kpi.cnt.toLocaleString()}건`, "#0F1A30"],
-              ["배차완료", `${kpi.done.toLocaleString()}건`, "#1B7F4B"],
-              ["미배차", `${kpi.wait.toLocaleString()}건`, kpi.wait ? "#C2410C" : "#9AA9C3"],
-              ["청구운임", won(kpi.sale), "#1B2B4B"],
-              ["기사운임", won(kpi.drv), "#1B2B4B"],
-              ["수수료", won(kpi.fee), kpi.fee < 0 ? "#C2410C" : "#4B6CB7"],
-            ].map(([k, v, c]) => (
-              <div key={k} className="rounded-xl bg-white border border-[#E3E8F0] px-3 py-2">
-                <div className="text-[11px] font-bold text-[#7A8AA6]">{k}</div>
-                <div className="text-[15px] font-black tabular-nums" style={{ color: c }}>{v}</div>
-              </div>
-            ))}
-          </div>
         </div>
 
         <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden">
           {/* 담당자를 고르지 않았으면 담당자별 요약 — 누르면 그 담당자로 좁힌다 */}
           {!mgr && !car && mgrStats.length > 0 && (
             <div className="px-6 pt-4">
-              <div className="text-[12px] font-black text-[#5B6B85] mb-2">담당자별 요약 <span className="font-semibold text-[#9AA9C3]">· 누르면 그 담당자만 봐요</span></div>
+              <div className="flex items-center gap-2 mb-2.5"><span className="text-[10px] font-extrabold tracking-[0.28em] text-[#8A99B4]" style={{ fontFamily: MONO }}>BY MANAGER</span><span className="text-[12.5px] font-black text-[#3A4A66]">담당자별 요약</span><span className="text-[11.5px] font-semibold text-[#9AA9C3]">· 누르면 그 담당자만</span></div>
               <div className="flex flex-wrap gap-2">
                 {mgrStats.map((m) => (
-                  <button key={m.name} onClick={() => setMgr(m.name)} className="text-left rounded-xl border border-[#E3E8F0] bg-white hover:border-[#1B2B4B] hover:shadow-sm px-3 py-2 min-w-[150px] transition">
-                    <div className="flex items-center gap-2"><span className="text-[13.5px] font-black text-[#0F1A30]">{m.name}</span><span className="ml-auto text-[12px] font-black text-[#4B6CB7] tabular-nums">{m.cnt}건</span></div>
-                    <div className="text-[11.5px] font-semibold text-[#7A8AA6] tabular-nums">청구 {m.sale.toLocaleString()} · 수수료 {(m.sale - m.drv).toLocaleString()}</div>
-                    {m.cnt - m.done > 0 && <div className="text-[11px] font-bold text-[#C2410C]">미배차 {m.cnt - m.done}건</div>}
+                  <button key={m.name} onClick={() => setMgr(m.name)} className="group text-left rounded-2xl border border-[#E3E8F0] bg-white hover:border-[#2D4C82] hover:shadow-[0_8px_22px_rgba(15,26,48,.10)] px-4 py-3 min-w-[190px] transition">
+                    <div className="flex items-center gap-2">
+                      <span className="w-7 h-7 rounded-lg bg-[#0F1A30] text-white text-[12px] font-black flex items-center justify-center">{String(m.name).slice(0, 1)}</span>
+                      <span className="text-[14px] font-black text-[#0F1A30]">{m.name}</span>
+                      <span className="ml-auto text-[15px] font-black text-[#2D4C82] tabular-nums" style={{ fontFamily: MONO }}>{m.cnt}</span>
+                    </div>
+                    <div className="mt-2 h-1 rounded-full bg-[#EEF1F6] overflow-hidden"><div className="h-full rounded-full bg-[#2D4C82]" style={{ width: `${m.cnt ? (m.done / m.cnt) * 100 : 0}%` }} /></div>
+                    <div className="mt-1.5 flex items-center gap-2 text-[11px] font-bold text-[#7A8AA6] tabular-nums" style={{ fontFamily: MONO }}>
+                      <span>₩{m.sale.toLocaleString()}</span><span className="text-[#C9D3E3]">|</span><span className="text-[#4B6CB7]">+{(m.sale - m.drv).toLocaleString()}</span>
+                      {m.cnt - m.done > 0 && <span className="ml-auto text-[#C2410C]">미배차 {m.cnt - m.done}</span>}
+                    </div>
                   </button>
                 ))}
               </div>
@@ -240,7 +261,7 @@ export default function OrderLookupModal({ open, onClose, rows = [], nameOf = ()
                 <thead>
                   <tr>
                     {["순번", "상차일", "상차시간", "배차담당자", "거래처명", "상차지 → 하차지", "차량번호", "기사명", "배차상태", "청구운임", "기사운임", "수수료"].map((h) => (
-                      <th key={h} className="sticky top-0 z-[1] bg-[#EEF2F8] text-[#3A4A66] text-[12px] font-black px-1.5 py-2 border-b border-[#D5DDEA] whitespace-nowrap overflow-hidden text-ellipsis text-center">{h}</th>
+                      <th key={h} className="sticky top-0 z-[1] bg-[#1B2B4B] text-white text-[12px] font-extrabold px-1.5 py-2.5 border-r border-white/10 last:border-r-0 whitespace-nowrap overflow-hidden text-ellipsis text-center first:rounded-tl-xl last:rounded-tr-xl">{h}</th>
                     ))}
                   </tr>
                 </thead>
@@ -248,9 +269,9 @@ export default function OrderLookupModal({ open, onClose, rows = [], nameOf = ()
                   {result.slice(0, showN).map(({ r, mgr: n }, i) => {
                     const sale = toInt(r.청구운임), drv = toInt(r.기사운임);
                     const hasCar = !!String(r.차량번호 || "").trim();
-                    const td = "px-1.5 py-2 border-b border-[#EEF1F6] whitespace-nowrap overflow-hidden text-ellipsis";
+                    const td = "px-1.5 py-2 border-b border-[#E9EDF4] border-r border-r-[#F1F4F9] last:border-r-0 whitespace-nowrap overflow-hidden text-ellipsis";
                     return (
-                      <tr key={r._id || i} className={i % 2 ? "bg-[#FAFBFD]" : "bg-white"}>
+                      <tr key={r._id || i} className={`${i % 2 ? "bg-[#FAFBFD]" : "bg-white"} hover:bg-[#F0F4FB] transition-colors`}>
                         <td className={`${td} text-center text-[#7A8AA6] tabular-nums`}>{i + 1}</td>
                         <td className={`${td} text-center tabular-nums`}>{String(r.상차일 || "").slice(5)}</td>
                         <td className={`${td} text-center`}>{r.상차시간 || "-"}</td>

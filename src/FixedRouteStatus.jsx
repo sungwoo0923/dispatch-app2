@@ -438,7 +438,13 @@ export default function FixedRouteStatusHost({ company, dispatchData = [], rende
     <div className="space-y-3 kp-frs">
       <style>{`.kp-frs-cell{height:34px;padding:0 8px;border-radius:8px;border:1px solid transparent;background:transparent;font-size:13.5px;color:#0F1A30;outline:none;transition:border-color .12s,background .12s}
         .kp-frs-cell:hover{border-color:#DCE3EE;background:#fff}.kp-frs-cell:focus{border-color:#2D4C82;background:#fff;box-shadow:0 0 0 3px rgba(45,76,130,.12)}
-        .kp-frs-cell::placeholder{color:#D92D20;font-weight:800;opacity:.75}.kp-frs-cell:disabled{opacity:.6}`}</style>
+        .kp-frs-cell::placeholder{color:#D92D20;font-weight:800;opacity:.75}.kp-frs-cell:disabled{opacity:.6}
+        .kp-frs table{border-collapse:separate;border-spacing:0}
+        .kp-frs thead th{border-right:1px solid rgba(255,255,255,.14)}
+        .kp-frs tbody tr.kp-frs-row>td{border-right:1px solid #E3E8F0 !important;border-bottom:1px solid #DCE3EE !important}
+        .kp-frs tbody tr.kp-frs-row>td:last-child{border-right:none !important}
+        .kp-frs tbody tr.kp-frs-row[data-gstart="1"]>td{border-top:2px solid #1B2B4B}
+        .kp-frs tbody tr.kp-frs-row:hover>td{box-shadow:inset 0 0 0 9999px rgba(45,76,130,.035)}`}</style>
       <div className="relative overflow-hidden rounded-[22px] px-4 md:px-6 py-4 text-white" style={{ background: "radial-gradient(900px 300px at 90% -20%, rgba(110,149,232,.28), transparent 60%), linear-gradient(120deg,#060C1A 0%,#0F1A30 45%,#1B2B4B 100%)" }}>
         <div className="absolute inset-0 pointer-events-none" style={{ background: "linear-gradient(rgba(143,176,240,.06) 1px, transparent 1px) 0 0/24px 24px, linear-gradient(90deg, rgba(143,176,240,.06) 1px, transparent 1px) 0 0/24px 24px" }} />
         <div className="relative flex items-center gap-4 flex-wrap">

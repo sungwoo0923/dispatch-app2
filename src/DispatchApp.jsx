@@ -38098,6 +38098,28 @@ if (mode === "driver") {
   const dsLongPress = useKpLongPressSelect({ toggle: toggleOne, isSelected: (id) => selected.has(id) });
   // ⭐ 2026-11-03 고정노선현황 — 평소엔 글자만, 줄을 두 번 누르면 그 줄만 수정 모드(Esc·완료로 끝)
   const [fixedEditId, setFixedEditId] = React.useState(null);
+  // ⭐ 2026-11-03 수정 모드 키보드 — ←→ 이 줄의 앞·뒤 칸 · ↑↓ 위·아래 줄의 같은 칸(그 줄이 수정 모드로) · Enter 저장하고 수정 모드 끝
+  const fixedRowKey = (e, id) => {
+    const t = e.target;
+    if (!t || t.tagName !== "INPUT" || t.type === "checkbox") return;
+    if (document.querySelector("[role=listbox]")) return; // 자동완성 목록이 열려 있으면 목록 이동·선택이 먼저
+    const tr = t.closest("tr");
+    const ins = [...tr.querySelectorAll("input:not([type=checkbox])")];
+    const k = ins.indexOf(t);
+    const len = String(t.value || "").length;
+    const all = t.selectionStart === 0 && t.selectionEnd === len;
+    if (e.key === "Enter") { e.preventDefault(); t.blur(); setTimeout(() => setFixedEditId((cur) => (cur === id ? null : cur)), 220); return; }
+    if (e.key === "ArrowRight" && (all || t.selectionStart === len) && k < ins.length - 1) { e.preventDefault(); ins[k + 1].focus(); return; }
+    if (e.key === "ArrowLeft" && (all || t.selectionEnd === 0) && k > 0) { e.preventDefault(); ins[k - 1].focus(); return; }
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      const at = pageRows.findIndex((x) => getId(x) === id);
+      const nx = pageRows[at + (e.key === "ArrowDown" ? 1 : -1)];
+      if (!nx) return;
+      e.preventDefault(); t.blur();
+      const nid = getId(nx);
+      setTimeout(() => { setFixedEditId(nid); setTimeout(() => { const el = document.getElementById(`row-${nid}`); const list = el ? [...el.querySelectorAll("input:not([type=checkbox])")] : []; (list[k] || list[0])?.focus(); }, 60); }, 200);
+    }
+  };
   React.useEffect(() => {
     if (!fixedEditId) return undefined;
     const onKey = (e) => { if (e.key === "Escape" && !document.querySelector("[role=listbox]")) setFixedEditId(null); };
@@ -39556,8 +39578,10 @@ return (
     <tr key={id} id={`row-${id}`}
       onContextMenu={(e) => { e.preventDefault(); const _z = parseFloat(document.getElementById("root")?.style.zoom) || 1; setContextMenuDS({ x: e.clientX / _z, y: e.clientY / _z, row: r }); }}
       onDoubleClick={() => { if (!isViewer) setFixedEditId((cur) => (cur === id ? null : id)); }}
-      title={fixedEditId === id ? "수정 중 — Esc 또는 [완료]로 끝내기" : isViewer ? undefined : "두 번 누르면 이 줄을 수정할 수 있어요"}
-      className={`transition-colors ${fixedEditId === id ? "bg-[#EEF4FF] outline outline-2 -outline-offset-2 outline-[#2D4C82]" : selected.has(id) ? "bg-blue-50" : !String(row.차량번호 || "").trim() && row.배차상태 !== "배차취소" ? "bg-[#FFFAF2] hover:bg-[#FFF3E0]" : i % 2 === 0 ? "bg-white hover:bg-[#F5F8FD]" : "bg-[#FAFBFD] hover:bg-[#F5F8FD]"}`}>
+      onKeyDownCapture={fixedEditId === id ? (e) => fixedRowKey(e, id) : undefined}
+      data-gstart={i > 0 && (String(pageRows[i - 1]?.배차표묶음 || "") !== String(r.배차표묶음 || "") || String(pageRows[i - 1]?.상차일 || "") !== String(r.상차일 || "")) ? "1" : undefined}
+      title={fixedEditId === id ? "수정 중 — ←→ 칸 이동 · ↑↓ 위아래 줄 · Enter 저장하고 끝내기 · Esc 끝내기" : isViewer ? undefined : "두 번 누르면 이 줄을 수정할 수 있어요"}
+      className={`kp-frs-row transition-colors ${fixedEditId === id ? "bg-[#EEF4FF] outline outline-2 -outline-offset-2 outline-[#2D4C82]" : selected.has(id) ? "bg-blue-50" : !String(row.차량번호 || "").trim() && row.배차상태 !== "배차취소" ? "bg-[#FFFAF2] hover:bg-[#FFF3E0]" : i % 2 === 0 ? "bg-white hover:bg-[#F5F8FD]" : "bg-[#FAFBFD] hover:bg-[#F5F8FD]"}`}>
       <td className="px-3 py-2 text-center border-b border-[#E9EDF4] border-r border-r-[#F1F4F9]"><input autoComplete="off" type="checkbox" checked={selected.has(id)} onChange={() => toggleOne(id)} /></td>
       <td className="px-3 py-2 text-[13.5px] font-bold text-[#5B6B85] text-center border-b border-[#E9EDF4] border-r border-r-[#F1F4F9] tabular-nums">
         {fixedEditId === id
