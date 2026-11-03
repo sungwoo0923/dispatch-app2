@@ -14,7 +14,7 @@ import React from "react";
 import { createPortal } from "react-dom";
 import { collection, doc, onSnapshot, query, where, getDocs, setDoc, addDoc, updateDoc, deleteDoc, serverTimestamp } from "firebase/firestore";
 import { db, auth, FUNCTIONS_BASE } from "./firebase";
-import { parseBoardTab, sheetToForm, tabDate, planSheetWrite } from "./routeBoardSheet"; // ⭐ 2026-11-02 구글시트 날짜 탭 불러오기
+import { parseBoardTab, sheetToForm, tabDate, planSheetWrite, nm as sheetNm } from "./routeBoardSheet"; // ⭐ 2026-11-02 구글시트 날짜 탭 불러오기
 import { coDocKey } from "./coKey";
 import { deleteOrderWithLog } from "./orderHistory";
 import CustomDatePicker from "./CustomDatePicker";
@@ -135,11 +135,15 @@ export function BoardSuggest({ value, onChange, onPick, items, k, sub = () => ""
   const list = React.useMemo(() => {
     if (!toks.length) return items.slice(0, 30);
     const [f, ...rest] = toks;
+    const whole = toks.join(""); // ⭐ 2026-11-03 "삼진 1"처럼 이름 자체에 띄어쓰기가 있는 경우도(붙여서 이름에서 찾기)
     return items.map((x) => {
       const n = norm(x[k]); const hay = n + norm(sub(x));
       let sc = n === f ? 3 : n.startsWith(f) ? 2 : n.includes(f) ? 1 : 0;
       if (!sc && rest.length && hay.includes(f)) sc = 0.5;
-      if (!sc || !rest.every((t) => hay.includes(t))) return null;
+      if (!sc || !rest.every((t) => hay.includes(t))) {
+        if (rest.length && n.includes(whole)) return { x, sc: n === whole ? 3 : n.startsWith(whole) ? 2 : 1 };
+        return null;
+      }
       return { x, sc };
     }).filter(Boolean).sort((a, b) => b.sc - a.sc || String(a.x[k] || "").localeCompare(String(b.x[k] || ""), "ko")).slice(0, 40).map((o) => o.x);
   }, [items, k, toks.join("|")]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -487,6 +491,10 @@ export default function RouteBoard({ companyName = "" }) {
   const [sheetOpen, setSheetOpen] = React.useState(false);
   const [sendOpen, setSendOpen] = React.useState(false); // ⭐ 배차표 → 시트 보내기
   const [pending, setPending] = React.useState(null); // { date, res } — 시트에서 읽은 줄(그 날짜 오더를 읽은 뒤 넣는다)
+  // ⭐ 2026-11-03 구글시트 연동 — 시트에서 지워진 줄(gone: 줄 key) · 시트에 새로 생긴 줄(added: 묶음 → [값]) · 확인 시각·탭
+  const [sheetDiff, setSheetDiff] = React.useState(null);
+  const [keepKeys, setKeepKeys] = React.useState(() => new Set()); // [유지]를 누른 줄(이번 화면 동안 다시 묻지 않음)
+  const tabsRef = React.useRef({ url: "", at: 0, tabs: [] });
   const form = forms.find((f) => f.id === formId) || null;
 
   React.useEffect(() => {
@@ -646,6 +654,79 @@ export default function RouteBoard({ companyName = "" }) {
     } finally { setBusy(""); }
   };
 
+  // ── 구글시트 연동 ─────────────────────────────────────
+  // 이 날짜의 탭(탭 이름이 상차일 또는 하차일) — 탭 목록은 5분 기억
+  const resolveTab = async () => {
+    const t = tabsRef.current;
+    if (t.url !== form.sheetUrl || Date.now() - t.at > 300000) {
+      const d = await sheetApi({ action: "tabs", url: form.sheetUrl });
+      tabsRef.current = { url: form.sheetUrl, at: Date.now(), tabs: d.tabs || [] };
+    }
+    const y = +date.slice(0, 4); const tabs = tabsRef.current.tabs;
+    return tabs.find((x) => tabDate(x, y) === date) || tabs.find((x) => tabDate(x, y) === addDays(date, toInt(form.dropOffset))) || "";
+  };
+  const boardValues = (rs) => { const b = {}; Object.entries(rs).forEach(([g, arr]) => { b[g] = arr.filter((r) => !rowEmpty(form, r)).map((r) => r.v); }); return b; };
+  const autoWriteSheet = async (rs) => {
+    const tab = await resolveTab();
+    if (!tab) return { noTab: true };
+    const d = await sheetApi({ action: "read", url: form.sheetUrl, tab });
+    const plan = planSheetWrite(form, d.rows, boardValues(rs));
+    if (!plan.updates.length) return { tab, updated: 0, notFound: plan.notFound.length };
+    const w = await sheetApi({ action: "write", url: form.sheetUrl, tab, updates: plan.updates.map(({ a1, value }) => ({ a1, value })) });
+    return { tab, updated: w.updated || 0, notFound: plan.notFound.length };
+  };
+  // 시트와 비교 — 저장된 줄 중 시트에 없는 줄(같은 묶음·같은 도착지 개수 기준) · 시트에만 있는 줄
+  const checkingRef = React.useRef(false);
+  const rowsRef = React.useRef(rows); rowsRef.current = rows; // 비교는 항상 지금 표 기준
+  const checkSheet = async (force = false) => {
+    if (!form?.sheetUrl || orders === null || checkingRef.current) return;
+    if (!force && (sheetOpen || sendOpen || busy)) return;
+    checkingRef.current = true;
+    try {
+      const tab = await resolveTab();
+      if (!tab) { setSheetDiff({ tab: "", at: Date.now(), gone: new Set(), added: {} }); return; }
+      const d = await sheetApi({ action: "read", url: form.sheetUrl, tab });
+      const p = parseBoardTab(form, d.rows);
+      const cN = colOf("하차지명");
+      if (!cN || !p.headers) { setSheetDiff({ tab, at: Date.now(), gone: new Set(), added: {}, bad: true }); return; }
+      const gone = new Set(); const added = {};
+      form.groups.forEach((g) => {
+        const sheetCnt = {}; (p.groups[g.name] || []).forEach((v) => { const k = sheetNm(v[cN.id]); if (k) sheetCnt[k] = (sheetCnt[k] || 0) + 1; });
+        const boardCnt = {};
+        (rowsRef.current[g.name] || []).forEach((r) => {
+          const k = sheetNm(r.v[cN.id]); if (!k) return;
+          boardCnt[k] = (boardCnt[k] || 0) + 1;
+          if (r._id && boardCnt[k] > (sheetCnt[k] || 0)) gone.add(r.key);
+        });
+        const used = {};
+        (p.groups[g.name] || []).forEach((v) => {
+          const k = sheetNm(v[cN.id]); if (!k) return;
+          used[k] = (used[k] || 0) + 1;
+          if (used[k] > (boardCnt[k] || 0)) (added[g.name] = added[g.name] || []).push(v);
+        });
+      });
+      setSheetDiff({ tab, at: Date.now(), gone, added });
+    } catch (e) { setSheetDiff((x) => ({ ...(x || { gone: new Set(), added: {} }), at: Date.now(), error: e?.message || String(e) })); }
+    finally { checkingRef.current = false; }
+  };
+  const checkRef = React.useRef(checkSheet); checkRef.current = checkSheet; // 1분 타이머가 항상 최신 표로 비교하게
+  // 배차표를 열어 두면 1분마다 시트를 확인(시트를 고친 내용을 놓치지 않게)
+  React.useEffect(() => {
+    setSheetDiff(null); setKeepKeys(new Set());
+    if (!form?.sheetUrl || orders === null) return undefined;
+    const t0 = setTimeout(() => checkRef.current(true), 400); // 표가 그려진 뒤 첫 확인
+    const t = setInterval(() => checkRef.current(false), 60000);
+    return () => { clearTimeout(t0); clearInterval(t); };
+  }, [form?.id, form?.sheetUrl, date, orders === null]); // eslint-disable-line react-hooks/exhaustive-deps
+  const addFromSheet = () => {
+    const add = sheetDiff?.added || {}; let n = 0;
+    setRows((p) => { const o = { ...p }; Object.entries(add).forEach(([g, vs]) => { o[g] = [...(o[g] || []), ...vs.map(enrich)]; n += vs.length; }); return o; });
+    setDirty(true); setSheetDiff((x) => ({ ...x, added: {} }));
+    setMsg("시트에 새로 생긴 줄을 배차표에 넣었습니다. 확인 후 [저장]을 눌러 주세요.");
+  };
+  const addedCount = Object.values(sheetDiff?.added || {}).reduce((a, v) => a + v.length, 0);
+  const goneCount = [...(sheetDiff?.gone || [])].filter((k) => !keepKeys.has(k)).length;
+
   const save = async () => {
     setBusy("save");
     try {
@@ -669,13 +750,22 @@ export default function RouteBoard({ companyName = "" }) {
       const seen = new Set();
       Object.values(rows).flat().forEach((r) => {
         const name = String(r.v[cN?.id] || "").trim(); const k = placeKey(name);
-        if (!k || seen.has(k) || findPlace(name)) return;
+        if (!k || seen.has(k) || places.some((p) => norm(p.업체명) === norm(name))) return; // ⭐ 2026-11-03 같은 이름이 이미 있으면(여러 곳 포함) 새로 만들지 않음 — 예전엔 같은 이름이 여러 곳이면 기존 문서를 덮어쓸 수 있었다
         seen.add(k);
         writes.push(setDoc(doc(db, "places", coDocKey(co, k)), { 업체명: name, 주소: String(r.v[cA?.id] || "").trim(), companyName: co, 등록경로: "배차표", createdAt: serverTimestamp() }, { merge: true }).catch(() => {}));
       });
       await Promise.all(writes);
       setDirty(false); setRemoved([]);
-      setMsg(`저장했습니다 — 오더 ${saved}건 반영${removed.length ? ` · ${removed.length}건 삭제` : ""}. 배차관리·정산에 바로 보입니다.`);
+      const base = `저장했습니다 — 오더 ${saved}건 반영${removed.length ? ` · ${removed.length}건 삭제` : ""}`;
+      setMsg(`${base}.`);
+      // ⭐ 2026-11-03 시트 주소가 있으면 차량·기사·수량·운송업체·시간·비고를 그 날짜 탭에 자동으로 써 준다(실패해도 저장은 그대로)
+      if (form.sheetUrl) {
+        const r = await autoWriteSheet(rows).catch((e) => ({ error: e?.message || String(e) }));
+        if (r?.error) setMsg(`${base} · 시트에는 못 썼습니다: ${r.error}`);
+        else if (r?.noTab) setMsg(`${base} · 시트에 이 날짜 탭이 없어 시트에는 쓰지 않았습니다.`);
+        else if (r) setMsg(`${base} · 시트 '${r.tab}' 탭에 ${r.updated}칸 반영${r.notFound ? ` (시트에 없는 도착지 ${r.notFound}건)` : ""}.`);
+        checkSheet(true);
+      }
     } catch (e) { kpAlert(`저장 실패: ${e?.message || e}`); } finally { setBusy(""); }
   };
   React.useEffect(() => { if (!msg) return undefined; const t = setTimeout(() => setMsg(""), 4000); return () => clearTimeout(t); }, [msg]);
@@ -731,6 +821,15 @@ export default function RouteBoard({ companyName = "" }) {
         <div className={`${card} p-10 text-center text-[14px] text-[#7A8AA6]`}>불러오는 중…</div>
       ) : (
         <>
+          {form.sheetUrl && sheetDiff && (
+            <div className={`rounded-xl border px-4 py-2.5 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[13px] ${addedCount || goneCount ? "bg-[#FFF8E6] border-[#F7D58A]" : "bg-[#F5F8FD] border-[#E3E8F0]"}`}>
+              <span className="font-black text-[#0F1A30]">구글시트 연동</span>
+              <span className="text-[#5B6B85]">{sheetDiff.error ? `확인 실패 — ${sheetDiff.error}` : !sheetDiff.tab ? "이 날짜 탭이 시트에 없습니다" : sheetDiff.bad ? `'${sheetDiff.tab}' 탭에서 제목줄을 못 찾았습니다` : `'${sheetDiff.tab}' 탭 · ${new Date(sheetDiff.at).toLocaleTimeString("ko-KR", { timeZone: "Asia/Seoul", hour: "2-digit", minute: "2-digit" })} 확인 · 1분마다 자동 확인 · 저장하면 차량·기사가 시트에 자동 입력`}</span>
+              {goneCount > 0 && <span className="font-black text-red-600">시트에서 지워진 줄 {goneCount}개(표에 빨간 표시)</span>}
+              {addedCount > 0 && <button type="button" onClick={addFromSheet} className="h-8 px-3 rounded-lg bg-[#0F1A30] text-white text-[12.5px] font-black">시트에 새로 생긴 줄 {addedCount}개 배차표에 추가</button>}
+              <button type="button" onClick={() => checkSheet(true)} className="ml-auto h-8 px-3 rounded-lg border border-[#DCE3EE] text-[12.5px] font-bold text-[#3A4A66]">지금 확인</button>
+            </div>
+          )}
           {!orders.length && !dirty && <div className="text-[13px] text-[#7A8AA6] px-1">이 날짜는 아직 저장된 배차표가 없습니다{form.groups.some((g) => (g.defaults || []).length) ? " — 기본 도착지를 채워 두었습니다." : "."}</div>}
           {form.groups.map((g) => {
             const arr = rows[g.name] || [];
@@ -776,7 +875,15 @@ export default function RouteBoard({ companyName = "" }) {
                             </td>
                           ))}
                           <td className="border border-[#E3E8F0] text-center text-[12px] font-bold whitespace-nowrap px-1">
-                            {!r._id ? <span className="text-amber-600">새 줄</span> : r.status === "배차완료" ? <span className="text-emerald-600">배차완료</span> : r.status === "배차취소" ? <span className="text-red-500">배차취소</span> : <span className="text-[#7A8AA6]">{r.status || "배차중"}</span>}
+                            {sheetDiff?.gone?.has(r.key) && !keepKeys.has(r.key) ? (
+                              <div className="flex flex-col items-center gap-0.5 py-0.5">
+                                <span className="text-red-600 font-black">시트에서 삭제됨</span>
+                                <span className="flex gap-1">
+                                  <button type="button" onClick={async () => { if (await kpConfirm("시트에서 지워진 줄입니다. 이 오더를 지울까요?\n(지운 뒤 [저장]을 눌러야 반영됩니다)")) delRow(g.name, i); }} className="px-1.5 rounded bg-red-600 text-white text-[11px] font-black">오더 삭제</button>
+                                  <button type="button" onClick={() => setKeepKeys((s0) => new Set([...s0, r.key]))} className="px-1.5 rounded border border-[#DCE3EE] text-[11px] font-bold text-[#5B6B85]">유지</button>
+                                </span>
+                              </div>
+                            ) : !r._id ? <span className="text-amber-600">새 줄</span> : r.status === "배차완료" ? <span className="text-emerald-600">배차완료</span> : r.status === "배차취소" ? <span className="text-red-500">배차취소</span> : <span className="text-[#7A8AA6]">{r.status || "배차중"}</span>}
                           </td>
                           <td className="border border-[#E3E8F0] text-center"><button onClick={() => delRow(g.name, i)} className="text-[#B0BCD0] hover:text-red-500 font-black px-1.5" title="줄 삭제">×</button></td>
                         </tr>

@@ -3524,7 +3524,12 @@ function placeSearch(list, q) {
     if (rest.length) {
       const hay = name + _pqN([p.주소, p.담당자, p.담당자번호, p.연락처, ...(Array.isArray(p.contacts) ? p.contacts.flatMap((c) => [c?.name, c?.phone]) : [])].join(" "));
       if (!sc && hay.includes(first)) sc = 30;
-      if (!sc || !rest.every((t) => hay.includes(t))) return;
+      if (!sc || !rest.every((t) => hay.includes(t))) {
+        // ⭐ 2026-11-03 이름 자체에 띄어쓰기가 있는 경우("삼진 1") — 붙여서 이름에서 찾기
+        const whole = first + rest.join("");
+        if (name.includes(whole)) out.push({ ...p, __score: name === whole ? 100 : name.startsWith(whole) ? 80 : 50 });
+        return;
+      }
     }
     if (sc) out.push({ ...p, __score: sc });
   });
