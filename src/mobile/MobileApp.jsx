@@ -18647,7 +18647,7 @@ function MobileMyInfo({ currentUser, mobileUsers, loginTime, orders = [], userCo
   const thisMonth = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 7);
 
   const myOrders = orders.filter(o => {
-    const author = o.작성자 || o.등록자 || "";
+    const author = o.createdByEmail || o.작성자 || o.등록자 || "";
     return author === myName || author === currentUser?.email;
   });
   const totalCount = myOrders.length;

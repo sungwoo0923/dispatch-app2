@@ -3559,7 +3559,10 @@ function placeSearch(list, q) {
 }
 const ORDER_MGR_EMPTY = "미지정";
 const ORDER_MGR_FIXED = "고정노선";
-const _ORDER_CREATOR_KEYS = ["작성자", "createdByEmail", "createdByUid", "createdBy", "등록자", "등록자명", "createdByName", "등록자이메일", "authorEmail", "author"];
+// ⭐ 2026-11-03 등록할 때만 쓰이는 칸(createdBy…)을 먼저 — 작성자 칸은 예전 수정 기능이 "고친 사람"으로 덮어쓴 오더가 있어서 뒤로
+const _ORDER_CREATOR_KEYS = ["createdByEmail", "createdByUid", "createdBy", "작성자", "등록자", "등록자명", "createdByName", "등록자이메일", "authorEmail", "author"];
+// 수정할 때 덮어쓰면 안 되는 등록자 칸(patchDispatch)
+const ORDER_CREATOR_FIELDS = ["작성자", "createdByEmail", "createdByUid", "createdBy", "createdByName", "등록자", "등록자명", "등록자이메일", "authorEmail", "author", "등록기기"];
 const _orderStaffNameRaw = (r, nameMap) => {
   if (!r) return "";
   if (String(r.등록기기 || "").trim() === ORDER_MGR_FIXED || String(r.배차확정자 || "").trim() === ORDER_MGR_FIXED || r.source === "fixedRoute") return ORDER_MGR_FIXED;
@@ -4864,9 +4867,13 @@ const patchDispatch = async (_id, patch, knownPrev) => {
   }
 
   // Firestore는 백그라운드에서 처리
+  // ⭐ 2026-11-03 배차담당자(최초 등록자)는 수정해도 절대 안 바뀜 — 예전엔 고칠 때마다 작성자 칸이 "고친 사람"으로 덮여서
+  //  경리 직원이 금액만 고쳐도 배차담당자가 그 직원으로 바뀌었다. 등록자 칸은 원래 값이 있으면 건드리지 않고, 고친 사람은 최종수정자에 따로 남긴다.
+  for (const k of ORDER_CREATOR_FIELDS) { if (k in cleanPatch && String(prev[k] ?? "").trim()) delete cleanPatch[k]; }
   const _updatePayload = {
     ...cleanPatch,
-    작성자: auth.currentUser?.email || "",
+    ...(String(prev.작성자 || "").trim() ? {} : { 작성자: prev.createdByEmail || auth.currentUser?.email || "" }),
+    최종수정자: auth.currentUser?.email || "",
     history: [...historyArr, ...histories],
   };
   if (!cleanPatch.__system) {
