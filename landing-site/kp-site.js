@@ -553,6 +553,7 @@
       case "setPage": state.page = Object.assign({}, state.page || {}, m.page || {}); Object.keys(state.page).forEach(function (p) { if (state.page[p] === "" || state.page[p] == null) delete state.page[p]; }); commit("페이지 설정"); return;
       case "load": render(m.state || emptyState()); if (m.keepKey && byKey(m.keepKey)) select(byKey(m.keepKey), true); else post("kp:select", { info: null }); post("kp:meta", { meta: metaOf() }); return;
       case "preview": previewOnly = !!m.on; document.documentElement.classList.toggle("kp-editing", !previewOnly); if (previewOnly) { select(null); finishText(true); } if (window.kpPageInit) window.kpPageInit(); return;
+      case "flush": if (editingText) finishText(true); post("kp:flushed", { state: clone(state) }); return;
       case "scrollTop": window.scrollTo({ top: 0, behavior: "smooth" }); return;
     }
   }
@@ -582,6 +583,9 @@
       parentOrigin = ev.origin && ev.origin !== "null" ? ev.origin : "*";
       cmd(m);
     });
+    // 글을 고치던 중에 바깥(관리자센터 쪽 버튼 등)을 누르면 그때까지 쓴 글을 바로 저장
+    window.addEventListener("blur", function () { if (editingText) finishText(true); });
+    document.addEventListener("focusout", function (ev) { if (editingText && ev.target === editingText) setTimeout(function () { if (editingText && document.activeElement !== editingText) finishText(true); }, 0); });
     if (window.kpPageInit) window.kpPageInit();
     post("kp:ready", { meta: metaOf() });
   }
