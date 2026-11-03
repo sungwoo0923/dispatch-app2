@@ -1171,6 +1171,8 @@ exports.notifyChatMessage = functions.firestore
   .onCreate(async (snap) => {
     const data = snap.data();
     if (!data?.roomId || !data?.senderUid) return;
+    // ⭐ 2026-11-03 단체방 안내 문구(초대·나감·이름변경 = type "system")는 푸시 안 보냄 — 알림 폭탄 방지
+    if (data.type === "system") return;
 
     const roomSnap = await db.collection("chat_rooms").doc(data.roomId).get();
     if (!roomSnap.exists) return;
@@ -3662,6 +3664,166 @@ exports.onUserDocDeleted = functions.firestore.document("users/{uid}").onDelete(
   await getAuth().deleteUser(uid).catch((e) => console.warn("로그인 계정 삭제 실패", uid, e?.message));
   console.log(`✕ 삭제된 직원 로그인 계정 정리: ${data.email || uid}`);
   return null;
+});
+
+// ⭐ 2026-11-03 기사 가입 자동 연결 — 기사가 기사앱에서 가입할 때, 그 운송사 기사관리(drivers)에
+//  같은 차량번호(공백 제거·대문자) 기사가 이미 있고 휴대폰번호(숫자만) 또는 이름이 같으면
+//  새 계정을 그 기사와 바로 연결하고 승인까지 끝낸다(관리자 승인 기다릴 필요 없음).
+//  · 기사앱은 drivers/{로그인 uid} 문서를 읽으므로 "연결" = 기존 기사 문서 내용을 drivers/{uid}로
+//    옮기고(uid 필드도 기록) 예전 문서는 지운다 — 예전 PC 선등록 이어받기와 같은 방식.
+//  · 기사가 입력한 값은 비어 있지 않은 칸만 기존 값을 덮어쓰고, 비운 칸은 프로그램 값을 그대로 둔다.
+//    users 문서에도 같은 결과(빈 칸은 프로그램 값으로 채움)를 쓴다.
+//  · 맞는 기사가 없으면 아무것도 쓰지 않고 { linked:false } — 화면이 예전처럼 "승인 대기"로 가입시킨다.
+//  · 가입 직전 계정(로그인 토큰)으로만 호출 가능. 토큰 이메일이 그 차량번호의 기사 계정이어야 하고,
+//    이미 승인된 계정이나 다른 역할 계정은 건드리지 않는다.
+const DRIVER_EMAIL_DOMAIN = "@driver.run25.kr";
+const drvPlate = (v) => String(v || "").replace(/\s+/g, "").toUpperCase();
+const drvDigits = (v) => String(v || "").replace(/\D/g, "");
+const drvName = (v) => String(v || "").replace(/\s+/g, "");
+const drvFilled = (v) => {
+  if (v === undefined || v === null) return false;
+  if (typeof v === "string") return v.trim() !== "";
+  if (Array.isArray(v)) return v.length > 0;
+  if (typeof v === "object") return Object.keys(v).length > 0;
+  return true;
+};
+exports.linkDriverSignup = functions.https.onRequest(async (req, res) => {
+  res.set("Access-Control-Allow-Origin", "*");
+  res.set("Access-Control-Allow-Methods", "POST, OPTIONS");
+  res.set("Access-Control-Allow-Headers", "Authorization, Content-Type");
+  if (req.method === "OPTIONS") { res.status(204).send(""); return; }
+  if (req.method !== "POST") { res.status(405).json({ error: "POST_ONLY" }); return; }
+  try {
+    const m = String(req.headers.authorization || "").match(/^Bearer (.+)$/);
+    if (!m) { res.status(401).json({ error: "NO_TOKEN" }); return; }
+    const tok = await getAuth().verifyIdToken(m[1]).catch(() => null);
+    if (!tok) { res.status(401).json({ error: "BAD_TOKEN" }); return; }
+    const uid = tok.uid;
+    const email = String(tok.email || "").toLowerCase();
+    const b = (req.body && typeof req.body === "object") ? req.body : {};
+    const s = (v, n = 200) => String(v ?? "").trim().slice(0, n);
+    const co = s(b.companyName, 100);
+    const carNo = s(b.carNo, 30);
+    const name = s(b.name, 40);
+    const phone = s(b.phone, 20);
+    if (!co || !carNo || !name) { res.status(400).json({ error: "BAD_PARAMS" }); return; }
+    // 토큰 계정이 이 차량번호의 기사 계정인지(차량번호@… 또는 차량번호.c회사@…)
+    const local = String(carNo).replace(/ /g, "").toLowerCase();
+    if (!email.endsWith(DRIVER_EMAIL_DOMAIN) || !(email.startsWith(`${local}@`) || email.startsWith(`${local}.c`))) {
+      res.status(403).json({ error: "NOT_DRIVER_ACCOUNT" }); return;
+    }
+    const userRef = db.collection("users").doc(uid);
+    const userSnap = await userRef.get();
+    if (userSnap.exists) {
+      const u = userSnap.data() || {};
+      if (u.role !== "driver" || u.approved !== false) { res.status(200).json({ linked: false, reason: "ALREADY" }); return; }
+    }
+
+    // 후보: 같은 회사 기사 + (기본 회사면) 회사명이 비어 있는 옛 문서
+    const plate = drvPlate(carNo);
+    const cands = new Map();
+    const coSnap = await db.collection("drivers").where("companyName", "==", co).get();
+    coSnap.docs.forEach((d) => cands.set(d.id, d));
+    if (co === PUSH_DEFAULT_COMPANY) {
+      const raws = [...new Set([carNo, plate, carNo.replace(/\s+/g, "")])].slice(0, 10);
+      const legacy = await db.collection("drivers").where("차량번호", "in", raws).get().catch(() => ({ docs: [] }));
+      legacy.docs.forEach((d) => { if (!String(d.data().companyName || "").trim()) cands.set(d.id, d); });
+    }
+    const myDigits = drvDigits(phone);
+    let best = null;
+    let bestScore = 0;
+    for (const d of cands.values()) {
+      if (d.id === uid) continue;
+      const x = d.data() || {};
+      if (drvPlate(x.차량번호 || x.carNo) !== plate) continue;
+      if (x.uid && x.uid !== uid) continue; // 이미 다른 기사 계정과 연결된 문서
+      const xd = drvDigits(x.전화번호 || x.phone);
+      const samePhone = myDigits.length >= 9 && xd.length >= 9 && xd === myDigits;
+      const sameName = drvName(x.이름 || x.name) !== "" && drvName(x.이름 || x.name) === drvName(name);
+      const score = (samePhone ? 2 : 0) + (sameName ? 1 : 0);
+      if (score > bestScore) { best = d; bestScore = score; }
+    }
+    if (!best) { res.status(200).json({ linked: false }); return; }
+
+    const base = { ...(best.data() || {}) };
+    // 기사 입력값 — 비어 있지 않은 칸만 덮어쓴다
+    const acct = b.정산계좌 && typeof b.정산계좌 === "object" && s(b.정산계좌.acct) ? { bank: s(b.정산계좌.bank, 40), acct: drvDigits(b.정산계좌.acct).slice(0, 20), holder: s(b.정산계좌.holder, 40) } : null;
+    const input = {
+      이름: name, name,
+      차량번호: carNo, carNo,
+      전화번호: phone, phone,
+      차량종류: s(b.차량종류, 40), 차량톤수: s(b.차량톤수, 40),
+      거주지: s(b.거주지, 40), 요청사항: s(b.요청사항, 500),
+      정산계좌: acct, 사업자번호: drvDigits(b.사업자번호).slice(0, 10), 사업자상호: s(b.사업자상호, 80),
+    };
+    const merged = { ...base };
+    Object.entries(input).forEach(([k, v]) => { if (drvFilled(v)) merged[k] = v; });
+    // 영문/한글 짝 필드는 서로 비어 있으면 채워 둔다(PC는 한글, 기사앱은 영문 필드를 읽음)
+    [["이름", "name"], ["차량번호", "carNo"], ["전화번호", "phone"]].forEach(([ko, en]) => {
+      if (!drvFilled(merged[ko]) && drvFilled(merged[en])) merged[ko] = merged[en];
+      if (!drvFilled(merged[en]) && drvFilled(merged[ko])) merged[en] = merged[ko];
+    });
+    if (drvFilled(merged.차량종류) && drvFilled(merged.차량톤수) && (drvFilled(input.차량종류) || drvFilled(input.차량톤수) || !drvFilled(merged.vehicleType))) {
+      merged.vehicleType = `${merged.차량종류} ${merged.차량톤수}`;
+    } else if (!drvFilled(merged.vehicleType) && (drvFilled(merged.차량종류) || drvFilled(merged.차량톤수))) {
+      merged.vehicleType = `${merged.차량종류 || ""} ${merged.차량톤수 || ""}`.trim();
+    }
+    const now = FieldValue.serverTimestamp();
+    const driverDoc = {
+      mainStatus: "대기", subStatus: "대기", status: "대기", state: "대기", goStatus: "대기",
+      active: false, totalDistance: 0, 등급: "일반",
+      ...merged,
+      uid,
+      companyName: co,
+      approved: true,
+      linkedFromDriverId: best.id !== uid ? best.id : (base.linkedFromDriverId || ""),
+      linkedAt: now,
+      linkedBy: "기사 가입 자동 연결",
+      createdAt: base.createdAt || now,
+      updatedAt: now,
+    };
+    if ("id" in base) driverDoc.id = uid; // {id: 문서이름, ...data} 로 읽는 화면이 예전 이름을 쓰지 않게
+
+    const pick = (k) => (drvFilled(merged[k]) ? merged[k] : "");
+    const hireDate = /^\d{4}-\d{2}-\d{2}$/.test(s(b.hireDate, 10)) ? s(b.hireDate, 10) : "";
+    const userDoc = {
+      uid, email, role: "driver",
+      name: pick("name") || name, carNo: pick("carNo") || carNo, phone: pick("phone"),
+      vehicleType: pick("vehicleType"), 차량종류: pick("차량종류"), 차량톤수: pick("차량톤수"),
+      거주지: pick("거주지"), 요청사항: pick("요청사항"),
+      companyName: co,
+      hireDate,
+      정산계좌: drvFilled(merged.정산계좌) ? merged.정산계좌 : null,
+      사업자번호: pick("사업자번호"), 사업자상호: pick("사업자상호"),
+      approved: true,
+      termsAgreed: b.termsAgreed === true, privacyAgreed: b.privacyAgreed === true, gpsAgreed: b.gpsAgreed === true,
+      linkedDriverAuto: true,
+      linkedFromDriverId: driverDoc.linkedFromDriverId,
+      createdAt: now,
+    };
+
+    await db.runTransaction(async (t) => {
+      const cur = await t.get(best.ref);
+      if (!cur.exists) throw Object.assign(new Error("gone"), { code: "GONE" });
+      const cu = cur.data().uid;
+      if (cu && cu !== uid) throw Object.assign(new Error("taken"), { code: "TAKEN" });
+      t.set(db.collection("drivers").doc(uid), driverDoc);
+      t.set(userRef, userDoc);
+      if (best.id !== uid) t.delete(best.ref);
+    });
+    if (hireDate) await db.collection("userProfiles").doc(uid).set({ hireDate }, { merge: true }).catch(() => {});
+    // PC에서 예전 문서 이름으로 올려 둔 기사 서류도 새 문서로 옮긴다
+    if (best.id !== uid) {
+      const docs = await db.collection("driver_documents").where("driverId", "==", best.id).get().catch(() => ({ docs: [] }));
+      for (const d of docs.docs) await d.ref.set({ driverId: uid }, { merge: true }).catch(() => {});
+    }
+    console.log(`🔗 기사 가입 자동 연결: ${co} ${plate} ${name} → ${best.id} ⇒ drivers/${uid} (점수 ${bestScore})`);
+    res.status(200).json({ linked: true, driverId: uid, from: best.id, name: userDoc.name });
+  } catch (e) {
+    if (e?.code === "GONE" || e?.code === "TAKEN") { res.status(200).json({ linked: false, reason: e.code }); return; }
+    console.error("기사 가입 자동 연결 실패:", e);
+    res.status(500).json({ error: "LINK_FAILED" });
+  }
 });
 
 // 🏢 가입 화면 "기존 회사" 검색 — 로그인 전에는 규칙상 transportApplications 를 읽을 수 없어

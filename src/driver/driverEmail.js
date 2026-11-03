@@ -19,13 +19,22 @@ export const scopedDriverEmail = (companyName, carNo) => `${plate(carNo)}.c${coH
 
 // 예전 계정 → 회사별 계정 순서로 로그인. 예전 계정이 다른 회사 기사면 로그아웃하고 회사별 계정 시도.
 // 성공: { uid, email } / 실패: 마지막 오류를 던짐
+// ⭐ 2026-11-03 가입 화면이 차량번호를 띄어쓰기 없이 저장(비밀번호도 띄어쓰기 없음) — 로그인 때 띄어 써도 되게 둘 다 시도
+const driverPasswords = (carNo) => [...new Set([String(carNo || "").trim(), plate(String(carNo || "").trim())])].filter(Boolean);
+async function signInAnyPassword(auth, email, carNo) {
+  let err = null;
+  for (const pw of driverPasswords(carNo)) {
+    try { return await signInWithEmailAndPassword(auth, email, pw); } catch (e) { err = e; if (e?.code === "auth/user-not-found" || e?.code === "auth/too-many-requests") break; }
+  }
+  throw err;
+}
+
 export async function signInDriver(auth, db, companyName, carNo) {
-  const password = String(carNo || "").trim();
   const co = String(companyName || "").trim();
   let lastErr = null;
   for (const email of [legacyDriverEmail(carNo), scopedDriverEmail(co, carNo)]) {
     try {
-      const res = await signInWithEmailAndPassword(auth, email, password);
+      const res = await signInAnyPassword(auth, email, carNo);
       const snap = await getDoc(doc(db, "users", res.user.uid)).catch(() => null);
       const owner = (snap?.exists() ? snap.data().companyName || "" : "").trim();
       if (owner && owner !== co) {
@@ -44,7 +53,7 @@ export async function signInDriver(auth, db, companyName, carNo) {
 // 예전 계정이 이미 있을 때 그 계정의 소속 회사 확인(같은 회사면 진짜 중복)
 export async function legacyOwnerCompany(auth, db, carNo) {
   try {
-    const res = await signInWithEmailAndPassword(auth, legacyDriverEmail(carNo), String(carNo || "").trim());
+    const res = await signInAnyPassword(auth, legacyDriverEmail(carNo), carNo);
     const snap = await getDoc(doc(db, "users", res.user.uid)).catch(() => null);
     const owner = (snap?.exists() ? snap.data().companyName || "" : "").trim();
     await signOut(auth).catch(() => {});
