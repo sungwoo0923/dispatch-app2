@@ -4965,6 +4965,8 @@ const patchDispatch = async (_id, patch, knownPrev) => {
 // opts.skipCompletedConfirm — 다건 선택삭제(deleteRowsWithUndo/executeDelete)는
 // 호출부에서 이미 "완료된 오더가 N건 포함" 확인을 한번에 받았으므로, 건별로
 // 또 묻지 않도록 이 플래그로 내부 confirm만 건너뛴다(기록은 그대로 남긴다).
+// 배차표 지운 줄 열쇠(서버 functions/routeBoardSync.js tombKey 와 같은 규칙)
+const rbTombKey = (date, group, name) => [date, group || "", name].map((x) => String(x || "").toLowerCase().replace(/[\s()（）[\]]/g, "").replace(/[^0-9a-z가-힣_-]/g, "_")).join("__");
 const removeDispatch = async (arg, opts = {}) => {
   const id = typeof arg === "string" ? arg : arg?._id;
   if (!id) return;
@@ -5027,6 +5029,11 @@ const removeDispatch = async (arg, opts = {}) => {
   // 삭제 기록을 남겨 다른 사용자 화면(예전 날짜 오더 포함)에서도 바로 사라지게 한다
   logOrderDeletion(ref.parent.id, ref.id);
   await deleteDoc(ref);
+  // ⭐ 2026-11-03 배차표(구글시트)에서 자동으로 만든 오더 — 지운 줄을 양식에 기억해 두면 서버가 시트에 그 줄이 남아 있어도 다시 만들지 않는다
+  if (data?.배차표Id && data?.상차일) {
+    const _tk = rbTombKey(data.상차일, data.배차표묶음, data.하차지명);
+    updateDoc(doc(db, "routeBoards", String(data.배차표Id)), { [`삭제한줄.${_tk}`]: increment(1) }).catch(() => {});
+  }
 
   // 연동 화주사에게 전송된 사본이 있으면(운송사가 등록/전송한 오더), 원본을 취소할 때
   // 화주사 화면의 사본도 함께 삭제되도록 한다.

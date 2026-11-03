@@ -9,6 +9,8 @@
 
 const cell = (v) => String(v ?? "").replace(/ /g, " ").trim();
 const nm = (s) => String(s || "").toLowerCase().replace(/[\s()（）[\]]/g, "");
+// ⭐ 2026-11-03 프로그램에서 지운 줄 열쇠(src/DispatchApp.jsx rbTombKey 와 같은 규칙) — 시트에 남아 있어도 다시 만들지 않는다
+const tombKey = (date, group, name) => [date, group || "", name].map((x) => nm(x).replace(/[^0-9a-z가-힣_-]/g, "_")).join("__");
 const DATE_RE = /(20\d{2})\s*년\s*(\d{1,2})\s*월\s*(\d{1,2})\s*일/;
 const pad = (n) => String(n).padStart(2, "0");
 const sparse = (row) => row.filter(Boolean).length <= 2;
@@ -186,7 +188,10 @@ async function syncBoard({ db, FieldValue, form, readTabs, readTab, writeCells, 
     if (!date || (!form.fixedTab && (date < from || date > to))) continue;
     sum.tabs += 1;
     const ex = await db.collection("orders").where("배차표Id", "==", form.id).where("상차일", "==", date).get();
-    const orders = ex.docs.map((d) => ({ ref: d.ref, ...d.data() })).filter((o) => o.배차상태 !== "배차취소");
+    const allOrders = ex.docs.map((d) => ({ ref: d.ref, ...d.data() }));
+    const orders = allOrders.filter((o) => o.배차상태 !== "배차취소");
+    const cancelled = allOrders.filter((o) => o.배차상태 === "배차취소"); // 취소한 줄은 시트에 남아 있어도 다시 만들지 않음
+    const tomb = form.삭제한줄 || {}; const tombUsed = {};
     hashes[tab] = hash; // (양방향이라 시트가 그대로여도 프로그램에서 바뀐 값을 시트에 써야 해서 건너뛰지 않음 — 바뀐 칸만 씀)
     sum.dates.push(date);
     const batch = db.batch(); let ops = 0; const pushes = [];
@@ -198,6 +203,14 @@ async function syncBoard({ db, FieldValue, form, readTabs, readTab, writeCells, 
       for (const v of p.groups[g.name] || []) {
         const k = nm(v[nameCol.id]); if (!k) continue;
         const o = (pool[k] || []).shift();
+        if (!o) {
+          const ci = cancelled.findIndex((x) => (x.배차표묶음 || form.groups[0].name) === g.name && nm(x.하차지명) === k);
+          if (ci >= 0) { cancelled.splice(ci, 1); continue; }
+          const tk = tombKey(date, g.name, v[nameCol.id]);
+          const tk2 = tombKey(date, "", v[nameCol.id]);
+          const useKey = (tomb[tk] || 0) > (tombUsed[tk] || 0) ? tk : (tomb[tk2] || 0) > (tombUsed[tk2] || 0) ? tk2 : null;
+          if (useKey) { tombUsed[useKey] = (tombUsed[useKey] || 0) + 1; sum.skipped = (sum.skipped || 0) + 1; continue; }
+        }
         if (o) {
           matched.add(o.ref.path);
           // ⭐ 양방향(칸마다): 지난번에 본 시트 값(시트기준값)과 비교
