@@ -370,6 +370,8 @@ service cloud.firestore {
         || (isSignedIn() && (resource.data.audience in ['all', 'carrier', 'shipper']
             || myCo() in resource.data.targetCompanies));
       allow write: if isTotalMasterUser();
+      // ⭐ 2026-11-03 조회수 — 승인된 사용자는 본 사람 목록(viewedBy)만 더할 수 있다(한 계정 1회)
+      allow update: if isApproved() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['viewedBy']);
     }
     // 🧾 플랫폼 청구·입금 기록 — 최고관리자는 전부, 고객사는 자기 회사 청구서만 읽고 "입금 알림(payNotice)"만 남길 수 있다
     match /platformInvoices/{id} {
@@ -645,7 +647,9 @@ service cloud.firestore {
     // 📢 공지사항 — 누구나 읽고, 쓰기·수정·삭제는 관리자(관리자·인사관리자·최고관리자)만
     match /notices/{id} {
       // 🔒 같은 운송사 공지만 · 화주사는 화주 대상 공지만
-      allow read: if coMatch(resource.data) || (isApproved() && isShipperUser() && resource.data.get('audience', '') in ['shipper', 'all']);
+      allow read: if coMatch(resource.data) || (isApproved() && isShipperUser() && resource.data.get('audience', '') in ['shipper', 'all'])
+        // ⭐ 2026-11-03 기사 대상 공지(audiences에 driver) — 같은 회사 기사(승인된 계정)도 읽는다
+        || (isApproved() && myUser().get('role', '') == 'driver' && 'driver' in resource.data.get('audiences', []) && resource.data.get('companyName', '') == myCo());
       allow create: if coCreate() && canPostNotice();
       // 수정·삭제는 작성자 본인만(최고관리자 예외). 작성자 기록이 없는 옛 공지는 공지 작성 권한자가 관리
       allow update, delete: if coMatch(resource.data) && canPostNotice()

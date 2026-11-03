@@ -30,6 +30,7 @@ import { haversineKm } from "../tmapFareCalc";
 import VehicleCarePanel, { VehicleSetupWizard, shouldShowSetup } from "../VehicleCarePanel";
 import { careSummary, vehicleDefaults } from "../vehicleCare";
 import DriverDocBox, { useDriverInbox, DriverPayInfoCard } from "./DriverDocBox";
+import DriverNotices from "./DriverNotices"; // ⭐ 2026-11-03 회사 공지(공개 대상 "기사")
 import { useDriverDocs, docProblems } from "../driverRequiredDocs";
 import { useVehicleTypes } from "../vehicleTypes"; // 🚚 2026-11-02 회사 공용 차량종류
 import MobileSelect from "../mobile/MobileSelect"; // ⭐ 2026-11-02 기본 select → 남색 바텀시트 선택기
@@ -2274,6 +2275,9 @@ export default function DriverHome() {
               <span style={{ fontWeight: 900, color: "#2D4C82" }}>›</span>
             </button>
           )}
+
+          {/* ⭐ 2026-11-03 회사 공지사항 — 공개 대상에 "기사"가 들어간 공지(최신순) */}
+          <DriverNotices companyName={driver?.companyName || ""} uid={uid} />
 
           {/* 🚚 차량 정비·만기 알림 — 누르면 차량 탭 */}
           {(() => {

@@ -723,6 +723,10 @@ function NoticesPanel() {
                       {n.audience === "selected" && <span className="font-semibold text-[#3A4A66] truncate max-w-[360px]">{tc.slice(0, 3).join(", ")}{tc.length > 3 ? ` 외 ${tc.length - 3}곳` : ""}</span>}
                       <span style={{ fontFamily: MONO }}>{msOf(n.createdAt) ? ymd(new Date(msOf(n.createdAt))) : ""}{n.endDate ? ` ~ ${n.endDate}` : ""}</span>
                       {n.banner === false && <span>배너 없음</span>}
+                      {/* ⭐ 2026-11-03 조회수 — 회사 공지사항에서 글을 연 계정 수(한 계정 1회, viewedBy) */}
+                      <span className="inline-flex items-center gap-1 font-bold text-[#3A4A66] tabular-nums" title="조회수 — 한 계정 1회" style={{ fontFamily: MONO }}>
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z" /><circle cx="12" cy="12" r="3" /></svg>조회 {(n.viewedBy || []).length}
+                      </span>
                       {on && (n.publishAt || 0) > Date.now()
                         ? <span className="px-2 py-0.5 rounded-md font-black bg-[#FFF3B0] text-[#7A5B00]">⏰ 예약 {new Date(n.publishAt).toLocaleString("ko-KR", { timeZone: "Asia/Seoul", month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })}</span>
                         : <span className={`font-black ${on ? "text-[#1B2B4B]" : "text-[#9AA9C3]"}`}>{on ? "● 게시 중" : expired ? "기간 종료" : "내림"}</span>}
