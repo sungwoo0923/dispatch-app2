@@ -36414,7 +36414,7 @@ const [appliedEndDate, setAppliedEndDate] = React.useState("");
   useLoadOrderRange(appliedStartDate || appliedEndDate || null, appliedEndDate || appliedStartDate);
   // 🔽 정렬 — ⭐ "정렬/필터" 팝업은 없앴고, 표 머리글(컬럼명)을 누르면 바로 정렬된다
   // (▲오름 → ▼내림 → 해제). 이 브라우저에만 기억하고 Firestore에는 저장하지 않는다.
-  const dsSort = useTableSort("dispatchStatus");
+  const dsSort = useTableSort(fixedForm ? "fixedRouteStatus" : "dispatchStatus"); // ⭐ 고정노선현황은 따로(배차현황 정렬이 시트 순서를 섞지 않게)
   const [fareTypeFilter, setFareTypeFilter] = React.useState(""); // ⭐ 2026-11-02 운임규칙 — 운임구분 필터("" 전체 · "__none" 미지정)
   const [selected, setSelected] = React.useState(new Set());
   // 조회 날짜(기간)를 바꾸면 화면에 보이는 행이 바뀌므로, 이전 날짜에서 선택해둔
@@ -38606,6 +38606,13 @@ const filteredBase = React.useMemo(() => {
   // =========================
   // 🔽 기본 순서(머리글 정렬이 꺼져 있을 때) — 머리글 정렬은 아래 filtered 에서 따로
   // =========================
+  // ⭐ 2026-11-03 고정노선현황 — 구글시트 순서 그대로(날짜 → 묶음(1센터·2센터…) → 시트 줄)
+  if (fixedForm) {
+    const gi = (r) => { const i = (fixedForm.groups || []).findIndex((g) => g.name === r.배차표묶음); return i < 0 ? 999 : i; };
+    data.sort((a, b) => String(a.상차일 || "").localeCompare(String(b.상차일 || "")) || gi(a) - gi(b)
+      || (a.시트줄 ?? 1e9) - (b.시트줄 ?? 1e9) || (a.배차표순번 || 0) - (b.배차표순번 || 0));
+    return data;
+  }
   data.sort((a, b) => {
     const ra = getStatusRank(a.배차상태);
     const rb = getStatusRank(b.배차상태);

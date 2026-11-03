@@ -168,7 +168,7 @@ function rateFieldsOf(form, o, qty, addr) {
 
 const cargoText = (qty) => { const total = Object.values(qty).reduce((a, n) => a + n, 0); return { 화물내용: Object.keys(qty).length ? `${Object.entries(qty).map(([k, n]) => `${k} ${n}`).join(" · ")} (총 ${total})` : "", 화물수량: total ? String(total) : "" }; };
 
-async function syncBoard({ db, FieldValue, form, readTabs, readTab, writeCells, insertRows, daysBack = 1, daysAhead = 14 }) {
+async function syncBoard({ db, FieldValue, form, readTabs, readTab, writeCells, insertRows, daysBack = 0, daysAhead = 14 }) { // ⭐ 2026-11-03 오늘 탭부터(어제 탭은 안 가져옴)
   const nameCol = form.columns.find((c) => c.kind === "field" && c.field === "하차지명");
   if (!form.sheetUrl || !nameCol) return { skipped: "no-sheet" };
   const today = kstToday(); const from = addDays(today, -daysBack); const to = addDays(today, daysAhead);
@@ -266,6 +266,7 @@ async function syncBoard({ db, FieldValue, form, readTabs, readTab, writeCells, 
           }
           if (JSON.stringify(base0 || {}) !== JSON.stringify(nextBase)) patch.시트기준값 = nextBase;
           if (o.시트삭제됨) patch.시트삭제됨 = false;
+          if (v.__pos && o.시트줄 !== v.__pos.ri) patch.시트줄 = v.__pos.ri; // ⭐ 시트 줄 위치(화면을 시트 순서대로)
           if (Object.keys(patch).length) { patch.시트동기화 = Date.now(); batch.update(o.ref, patch); ops += 1; sum.updated += 1; }
         } else {
           await loadLookups();
@@ -286,7 +287,7 @@ async function syncBoard({ db, FieldValue, form, readTabs, readTab, writeCells, 
             거래처명: form.client || rec.거래처명 || "", 상차일: date, 하차일: addDays(date, toInt(form.dropOffset)),
             상차지명: g.상차지명 || g.name || "", 상차지주소: g.상차지주소 || "", ...(form.payMethod ? { 지급방식: form.payMethod } : {}),
             배차상태: rec.차량번호 ? "배차완료" : "배차중", 배차표Id: form.id, 배차표명: form.name || "", 배차표묶음: g.name, 배차표순번: seq,
-            companyName: co, _id: id, 등록일: kstToday(), 작성자: "배차표 자동", 등록기기: "배차표", _autoSheet: true, 시트동기화: Date.now(),
+            companyName: co, _id: id, 등록일: kstToday(), 작성자: "배차표 자동", 등록기기: "배차표", _autoSheet: true, 시트동기화: Date.now(), 시트줄: v.__pos?.ri ?? null,
             시트기준값: Object.fromEntries(form.columns.filter((x) => !["no", "sum"].includes(x.kind) && !(x.kind === "field" && x.field === "하차지명") && v.__pos?.idx?.[x.id] != null).map((x) => [x.id, cell(v[x.id])])),
             경유지_상차: [], 경유상차목록: [], 경유지_하차: [], 경유하차목록: [], 근무일자목록: [], 운행유형: "편도", 혼적여부: "독차",
             createdAt: FieldValue.serverTimestamp(), _lastModified: Date.now(),
@@ -337,7 +338,7 @@ async function syncBoard({ db, FieldValue, form, readTabs, readTab, writeCells, 
       }
       if (done.length) {
         const b2 = db.batch();
-        done.forEach((a) => b2.update(a.ref, { 시트추가대기: false, 시트기준값: a.base, 시트동기화: Date.now() }));
+        done.forEach((a) => b2.update(a.ref, { 시트추가대기: false, 시트기준값: a.base, 시트동기화: Date.now(), 시트줄: a.afterRi + 1 }));
         await b2.commit();
         sum.appended = (sum.appended || 0) + done.length; hashes[tab] = "";
       }

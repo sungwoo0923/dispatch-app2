@@ -38,6 +38,8 @@ const valueOf = (c, row) => {
   if (c.kind === "qty") return row.품목수량?.[c.label] ? String(row.품목수량[c.label]) : "";
   if (c.kind === "extra") return String(row.추가정보?.[c.label] ?? "");
   if (c.kind === "sum") { const t = Object.values(row.품목수량 || {}).reduce((a, n) => a + toInt(n), 0); return t ? String(t) : ""; }
+  // ⭐ 2026-11-03 시군구 칸은 시트에 적힌 그대로(여주시) — 오더에는 기사 길안내용 풀주소를 그대로 둔다
+  if (c.field === "하차지주소") { const sv = row.시트기준값?.[c.id] ?? row.시트추가값?.[c.id]; if (sv != null && String(sv).trim()) return String(sv); const short = siGunGu(row.하차지주소); return short || String(row.하차지주소 ?? ""); }
   const v = String(row[c.field] ?? "");
   return TIME_FIELDS.has(c.field) ? (parseHM(v) || v) : v;
 };
@@ -110,7 +112,11 @@ export function FixedRouteCells({ form, row, drivers = [], clients = [], onPatch
       const q = { ...(row.품목수량 || {}) }; if (toInt(val)) q[c.label] = toInt(val); else delete q[c.label];
       return onPatch({ 품목수량: q, ...cargoText(q), ...fareOf(q) });
     }
-    if (c.kind === "field" && c.field === "하차지주소") return onPatch({ 하차지주소: val, ...fareOf(row.품목수량, val) });
+    if (c.kind === "field" && c.field === "하차지주소") { // 시군구만 고친 거면 풀주소는 그대로(표시만 바뀜)
+      const keepFull = val && String(row.하차지주소 || "").replace(/\s/g, "").includes(val.replace(/\s/g, ""));
+      const addr = keepFull ? row.하차지주소 : val;
+      return onPatch({ ...(keepFull ? {} : { 하차지주소: val }), 시트기준값: { ...(row.시트기준값 || {}), [c.id]: val }, ...fareOf(row.품목수량, addr) });
+    }
     if (c.kind === "extra") return onPatch({ 추가정보: { ...(row.추가정보 || {}), [c.label]: val } });
     if (c.field === "차량번호") {
       const d = val ? drivers.find((x) => normPlate(x.차량번호) === normPlate(val)) : null;
@@ -125,8 +131,6 @@ export function FixedRouteCells({ form, row, drivers = [], clients = [], onPatch
   const money = (f) => (
     <td key={f} className={td} title={f === "청구운임" && row.단가표지역 ? `단가표 ${row.단가표지역} · 파렛당 ${Number(row.파렛단가 || 0).toLocaleString()}원${row.운임수동 ? " (직접 입력 — 자동 계산 멈춤)" : ""}` : f === "청구운임" && row.운임수동 ? "직접 입력한 운임(단가표 자동 계산 멈춤) — 비우면 다시 자동" : undefined}>
       <Cell value={toInt(row[f]) ? toInt(row[f]).toLocaleString() : ""} numeric disabled={disabled} onCommit={(v) => commit({ kind: "field", field: f }, v)} />
-      {f === "청구운임" && row.단가표지역 && !row.운임수동 && <div className="text-[10px] font-bold text-[#4B6CB7] -mt-0.5">단가표</div>}
-      {f === "청구운임" && row.운임수동 && <div className="text-[10px] font-bold text-[#B54708] -mt-0.5">직접 입력</div>}
     </td>
   );
   const st = row.배차상태 || "배차중";
