@@ -114,7 +114,13 @@
     // html은 바깥 요소부터(안쪽 요소의 편집이 덮이지 않게)
     keys.map(function (k) { return [k, byKey(k)]; }).filter(function (x) { return x[1] && els[x[0]].html != null; })
       .sort(function (a, b) { return depth(a[1]) - depth(b[1]); })
-      .forEach(function (x) { var el = byKey(x[0]); if (el) el.innerHTML = sanitize(els[x[0]].html); });
+      .forEach(function (x) {
+        var el = byKey(x[0]); if (!el) return;
+        var h = els[x[0]].html;
+        // 원본에 영상이 있는데 저장된 내용에는 없으면(영상으로 바뀌기 전에 저장한 편집) 원본을 그대로 둔다
+        if (el.querySelector("video") && !/<video/i.test(h)) return;
+        el.innerHTML = sanitize(h);
+      });
     keys.forEach(function (k) {
       var e = els[k], el = byKey(k); if (!el || !e) return;
       if (e.attrs) Object.keys(e.attrs).forEach(function (a) {
