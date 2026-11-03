@@ -197,7 +197,10 @@ export function NotifyModal({ item, index = 1, total = 1, company = "", mobile =
         {/* 머리 — 종류를 크게 한 줄로(좁은 휴대폰에서도 줄바꿈·잘림 없이 글씨가 줄어든다) */}
         <div className="relative shrink-0 px-5 sm:px-7 pt-4 pb-4 text-white" style={{ background: "linear-gradient(rgba(143,176,240,.07) 1px, transparent 1px) 0 0/22px 22px, linear-gradient(90deg, rgba(143,176,240,.07) 1px, transparent 1px) 0 0/22px 22px, linear-gradient(120deg,#0B1428 0%,#1B2B4B 60%,#2D4C82 100%)" }}>
           <div className="flex items-center gap-2 min-w-0">
-            <span className="text-[10.5px] font-extrabold tracking-[0.24em] text-[#8FB0F0] whitespace-nowrap truncate" style={{ fontFamily: MONO }}>{K.en}{when ? ` · ${when}` : ""}</span>
+            <span className="min-w-0 inline-flex items-center gap-2 whitespace-nowrap truncate">
+              <span className="text-[11.5px] font-extrabold tracking-[0.22em] text-[#8FB0F0]" style={{ fontFamily: MONO }}>{K.en}</span>
+              {when && <span className="text-[13px] font-bold text-white/80 tracking-normal" style={{ fontFamily: "'Noto Sans KR','Pretendard',system-ui,sans-serif" }}>{when}</span>}
+            </span>
             {total > 1 && <span className="ml-auto shrink-0 h-6 px-2.5 rounded-full bg-white/10 ring-1 ring-white/20 text-[11.5px] font-black tabular-nums grid place-items-center" style={{ fontFamily: MONO }} data-testid="notify-count">{index} / {total}</span>}
           </div>
           <div className="mt-1.5 font-black whitespace-nowrap overflow-hidden leading-[1.15]" data-testid="notify-head"
@@ -205,11 +208,11 @@ export function NotifyModal({ item, index = 1, total = 1, company = "", mobile =
         </div>
         {/* 제목 */}
         <div className="shrink-0 px-5 sm:px-7 pt-4 pb-3 border-b border-[#EEF1F6]">
-          <div className="flex items-center gap-1.5 flex-wrap">
+          <div className="flex items-center justify-center gap-1.5 flex-wrap">
             {item.src === "platform" && <PlatformBadge />}
             {item.sub && <span className="text-[12.5px] font-bold text-[#5A6A85] break-words">{item.sub}</span>}
           </div>
-          <div className="mt-1 text-[17px] sm:text-[20px] font-black text-[#0F1A30] leading-snug break-words line-clamp-2">{item.title}</div>
+          <div className="mt-1 text-center text-[18px] sm:text-[22px] font-black text-[#0F1A30] leading-snug break-words line-clamp-2">{item.title}</div>
         </div>
         {/* 본문 — 높이 상한 안에서만 스크롤 */}
         <ScrollBody onMore={() => onGo?.(item)}>
@@ -225,21 +228,21 @@ export function NotifyModal({ item, index = 1, total = 1, company = "", mobile =
               <div className="mx-auto max-w-[640px] rounded-xl bg-white p-2 sm:p-3 shadow-[0_14px_36px_rgba(15,26,48,0.18)] ring-1 ring-[#E3E8F0]">
                 <img src={item.image} alt="인사발령 공문" className="w-full h-auto block rounded-md" />
               </div>
-              {(item.content || item.contentHtml) && <RichHtml html={item.contentHtml} text={item.content} className="text-[14.5px] text-[#1F2A44] leading-[1.85]" />}
+              {(item.content || item.contentHtml) && <RichHtml html={item.contentHtml} text={item.content} className="text-center text-[16px] sm:text-[17px] font-semibold text-[#0F1A30] leading-[1.8] antialiased" />}
             </div>
           ) : (
             <div className="space-y-4">
               {(item.content || item.contentHtml)
-                ? <RichHtml html={item.contentHtml} text={item.content} className="text-[14.5px] sm:text-[15px] text-[#1F2A44] leading-[1.85] break-words" />
-                : <div className="text-[13.5px] text-[#9AA9C3]">내용이 없습니다.</div>}
-              {item.image && <img src={item.image} alt="" className="w-full max-w-[640px] h-auto rounded-xl border border-[#E3E8F0]" />}
+                ? <RichHtml html={item.contentHtml} text={item.content} className="text-center text-[16.5px] sm:text-[18px] font-semibold text-[#0F1A30] leading-[1.8] break-words antialiased" />
+                : <div className="text-center text-[14px] text-[#9AA9C3]">내용이 없습니다.</div>}
+              {item.image && <img src={item.image} alt="" className="mx-auto w-full max-w-[640px] h-auto rounded-xl border border-[#E3E8F0]" />}
             </div>
           )}
         </ScrollBody>
         {/* 버튼 */}
-        <div className="shrink-0 flex gap-2 px-4 sm:px-7 py-3 border-t border-[#EEF1F6] bg-[#F8FAFD]" style={mobile ? { paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 12px)" } : undefined}>
-          <button type="button" onClick={onClose} className="flex-1 sm:flex-none sm:w-[140px] h-12 rounded-xl border border-[#DCE3EE] bg-white text-[14.5px] font-black text-[#1B2B4B] whitespace-nowrap" data-testid="notify-close">{total > 1 ? "닫고 다음" : "닫기"}</button>
-          <button type="button" onClick={() => onGo?.(item)} className="flex-[1.4] sm:flex-1 h-12 rounded-xl bg-[#0F1A30] text-white text-[14.5px] font-black whitespace-nowrap overflow-hidden text-ellipsis px-3" data-testid="notify-go">{K.go} →</button>
+        <div className="shrink-0 flex justify-center gap-2 px-4 sm:px-7 py-3 border-t border-[#EEF1F6] bg-[#F8FAFD]" style={mobile ? { paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 12px)" } : undefined}>
+          <button type="button" onClick={onClose} className="h-10 px-5 min-w-[96px] rounded-xl border border-[#DCE3EE] bg-white text-[13.5px] font-black text-[#1B2B4B] whitespace-nowrap" data-testid="notify-close">{total > 1 ? "닫고 다음" : "닫기"}</button>
+          <button type="button" onClick={() => onGo?.(item)} className="h-10 px-5 rounded-xl bg-[#0F1A30] text-white text-[13.5px] font-black whitespace-nowrap overflow-hidden text-ellipsis" data-testid="notify-go">{K.go} →</button>
         </div>
       </div>
       <style>{`@keyframes kpNotifyIn{from{opacity:0;transform:translateY(10px) scale(.98)}to{opacity:1;transform:none}}.kp-notify-in{animation:kpNotifyIn .26s cubic-bezier(.2,.9,.3,1.1) both}`}</style>
