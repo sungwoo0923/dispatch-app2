@@ -11,9 +11,10 @@ const sparse = (row) => row.filter(Boolean).length <= 2; // 제목·날짜 줄(�
 const isNoise = (row) => row.some((c) => DATE_RE.test(c) || /배차\s*내역/.test(c));
 
 // 탭 이름 → 날짜("26-11-03" "2026-11-03" "11-03" "11.3" "1103")
-export function tabDate(title, year = new Date().getFullYear()) {
+export function tabDate(title, year = new Date().getFullYear(), loose = false) {
   const t = cell(title);
-  let m = t.match(/^(\d{2,4})[-./](\d{1,2})[-./](\d{1,2})/);
+  let m = t.match(/^(\d{2,4})[-./](\d{1,2})[-./](\d{1,2})\s*(\(?[월화수목금토일](요일)?\)?)?$/); // ⭐ 2026-11-03 날짜만(요일까지) — "26-11-03(테스트)" 같은 탭은 날짜 탭이 아님
+  if (!m && loose) m = t.match(/^(\d{2,4})[-./](\d{1,2})[-./](\d{1,2})/); // 고정한 탭은 앞의 날짜만 읽음
   if (m) return `${m[1].length === 2 ? 2000 + +m[1] : m[1]}-${pad(m[2])}-${pad(m[3])}`;
   m = t.match(/^(\d{1,2})[-./월]\s*(\d{1,2})일?$/) || t.match(/^(\d{2})(\d{2})$/);
   if (m && +m[1] <= 12 && +m[2] <= 31) return `${year}-${pad(m[1])}-${pad(m[2])}`;

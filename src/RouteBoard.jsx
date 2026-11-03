@@ -235,7 +235,7 @@ function SheetLoad({ form, date, onApply, onClose }) {
     sheetApi({ action: "tabs", url: form.sheetUrl }).then((d) => {
       setTabs(d.tabs);
       const y = +date.slice(0, 4);
-      const hit = d.tabs.find((t) => tabDate(t, y) === date) || d.tabs.find((t) => tabDate(t, y) === addDays(date, toInt(form.dropOffset)));
+      const hit = (form.fixedTab && d.tabs.includes(form.fixedTab) ? form.fixedTab : "") || d.tabs.find((t) => tabDate(t, y) === date) || d.tabs.find((t) => tabDate(t, y) === addDays(date, toInt(form.dropOffset)));
       setTab(hit || d.tabs[d.tabs.length - 1] || "");
     }).catch((e) => setErr(e.message)).finally(() => setBusy(""));
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -294,7 +294,7 @@ function SheetSend({ form, date, rows, onClose, onDone }) {
     sheetApi({ action: "tabs", url: form.sheetUrl }).then((d) => {
       setTabs(d.tabs);
       const y = +date.slice(0, 4);
-      setTab(d.tabs.find((t) => tabDate(t, y) === date) || d.tabs.find((t) => tabDate(t, y) === addDays(date, toInt(form.dropOffset))) || d.tabs[d.tabs.length - 1] || "");
+      setTab((form.fixedTab && d.tabs.includes(form.fixedTab) ? form.fixedTab : "") || d.tabs.find((t) => tabDate(t, y) === date) || d.tabs.find((t) => tabDate(t, y) === addDays(date, toInt(form.dropOffset))) || d.tabs[d.tabs.length - 1] || "");
     }).catch((e) => setErr(e.message)).finally(() => setBusy(""));
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const preview = async () => {
@@ -477,6 +477,15 @@ function FormEditor({ init, onClose, onSaved, co, clients = [], places = [] }) {
           </div>
           {sheet.err && <div className="mt-2 text-[13px] font-semibold text-red-600">{sheet.err}</div>}
           <ShareNote />
+          {/* ⭐ 2026-11-03 연결할 탭 — 보통은 날짜 이름 탭(26-11-03)을 날짜별로 자동, 테스트할 땐 고른 탭 하나만 */}
+          {String(f.sheetUrl || "").trim() && (sheet.tabs || f.fixedTab) && (
+            <label className="mt-2.5 flex items-start gap-2 cursor-pointer">
+              <input type="checkbox" checked={!!f.fixedTab} onChange={(e) => setF((p) => ({ ...p, fixedTab: e.target.checked ? (sheet.tab || p.fixedTab || "") : "" }))} className="mt-0.5 w-[18px] h-[18px] accent-[#1B2B4B]" />
+              <span className="text-[13px] text-[#3A4A66] leading-relaxed"><b className="text-[#0F1A30]">이 탭만 연결(테스트용)</b>
+                {f.fixedTab ? <> — 지금 <b className="text-[#2D4C82]">'{f.fixedTab}'</b> 탭 하나만 읽고 씁니다.{sheet.tabs && sheet.tab && sheet.tab !== f.fixedTab && <button type="button" onClick={(e) => { e.preventDefault(); setF((p) => ({ ...p, fixedTab: sheet.tab })); }} className="ml-1.5 underline font-bold text-[#2D4C82]">'{sheet.tab}'(으)로 바꾸기</button>}</> : <> — 끄면 날짜 이름 탭(예: 26-11-03)을 날짜마다 자동으로 연결합니다. "26-11-03(테스트)"처럼 다른 글자가 붙은 탭은 날짜 탭으로 보지 않습니다.</>}
+              </span>
+            </label>
+          )}
           {String(f.sheetUrl || "").trim() && (
             <label className="mt-2.5 flex items-start gap-2 cursor-pointer">
               <input type="checkbox" checked={f.autoSync !== false} onChange={(e) => setF((p) => ({ ...p, autoSync: e.target.checked }))} className="mt-0.5 w-[18px] h-[18px] accent-[#1B2B4B]" />
@@ -738,6 +747,7 @@ export default function RouteBoard({ companyName = "" }) {
       tabsRef.current = { url: form.sheetUrl, at: Date.now(), tabs: d.tabs || [] };
     }
     const y = +date.slice(0, 4); const tabs = tabsRef.current.tabs;
+    if (form.fixedTab) return tabs.includes(form.fixedTab) ? form.fixedTab : ""; // ⭐ 양식에서 고정한 탭(테스트용)
     return tabs.find((x) => tabDate(x, y) === date) || tabs.find((x) => tabDate(x, y) === addDays(date, toInt(form.dropOffset))) || "";
   };
   const boardValues = (rs) => { const b = {}; Object.entries(rs).forEach(([g, arr]) => { b[g] = arr.filter((r) => !rowEmpty(form, r)).map((r) => r.v); }); return b; };

@@ -30,9 +30,10 @@ const korTime = (hm) => { if (!hm) return ""; const [h, m] = hm.split(":").map(N
 const TIME_FIELDS = new Set(["상차시간", "하차시간"]);
 const MONEY_FIELDS = new Set(["청구운임", "기사운임"]);
 
-function tabDate(title, year) {
+function tabDate(title, year, loose = false) {
   const t = cell(title);
-  let m = t.match(/^(\d{2,4})[-./](\d{1,2})[-./](\d{1,2})/);
+  let m = t.match(/^(\d{2,4})[-./](\d{1,2})[-./](\d{1,2})\s*(\(?[월화수목금토일](요일)?\)?)?$/); // ⭐ 2026-11-03 날짜만(요일까지) — "26-11-03(테스트)" 같은 탭은 날짜 탭이 아님
+  if (!m && loose) m = t.match(/^(\d{2,4})[-./](\d{1,2})[-./](\d{1,2})/);
   if (m) return `${m[1].length === 2 ? 2000 + +m[1] : m[1]}-${pad(m[2])}-${pad(m[3])}`;
   m = t.match(/^(\d{1,2})[-./월]\s*(\d{1,2})일?$/) || t.match(/^(\d{2})(\d{2})$/);
   if (m && +m[1] <= 12 && +m[2] <= 31) return `${year}-${pad(m[1])}-${pad(m[2])}`;
@@ -163,7 +164,10 @@ async function syncBoard({ db, FieldValue, form, readTabs, readTab, writeCells, 
   if (!form.sheetUrl || !nameCol) return { skipped: "no-sheet" };
   const today = kstToday(); const from = addDays(today, -daysBack); const to = addDays(today, daysAhead);
   const y = +today.slice(0, 4);
-  const tabs = (await readTabs()).filter((t) => { const d = tabDate(t, y) || tabDate(t, y + 1); return d && d >= addDays(from, -2) && d <= addDays(to, 2); });
+  // ⭐ 2026-11-03 양식에서 탭 하나를 고정했으면(테스트용) 그 탭만, 아니면 날짜 이름 탭(최근~2주 뒤)
+  const allTabs = await readTabs();
+  const tabs = form.fixedTab ? allTabs.filter((t) => t === form.fixedTab)
+    : allTabs.filter((t) => { const d = tabDate(t, y) || tabDate(t, y + 1); return d && d >= addDays(from, -2) && d <= addDays(to, 2); });
   const co = form.companyName;
   let places = null; let drivers = null;
   const loadLookups = async () => {
@@ -178,8 +182,8 @@ async function syncBoard({ db, FieldValue, form, readTabs, readTab, writeCells, 
     const hash = require("crypto").createHash("md5").update(JSON.stringify(rows)).digest("hex");
     const p = parseBoardTab(form, rows);
     if (!p.headers) continue;
-    const date = p.date || tabDate(tab, y);
-    if (!date || date < from || date > to) continue;
+    const date = p.date || tabDate(tab, y, !!form.fixedTab);
+    if (!date || (!form.fixedTab && (date < from || date > to))) continue;
     sum.tabs += 1;
     const ex = await db.collection("orders").where("배차표Id", "==", form.id).where("상차일", "==", date).get();
     const orders = ex.docs.map((d) => ({ ref: d.ref, ...d.data() })).filter((o) => o.배차상태 !== "배차취소");
