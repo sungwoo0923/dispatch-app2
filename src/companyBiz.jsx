@@ -255,14 +255,14 @@ export function BizSelect({ biz, value, onChange, className = "", auto = "", inl
       <div key={n} data-idx={i} role="option" aria-selected={on} onMouseEnter={() => setActive(i)} onMouseDown={(e) => { e.preventDefault(); pick(n); }}
         className={`flex items-center gap-2 px-2.5 ${size === "sm" ? "h-9" : "h-10"} cursor-pointer rounded-lg transition-colors ${act ? "bg-[#0F1A30] text-white" : "text-[#0F1A30] hover:bg-[#F2F5FA]"}`}>
         <span className={`w-4 shrink-0 ${on ? (act ? "text-[#8FB0F0]" : "text-[#2D4C82]") : "opacity-0"}`}>{Ico.check}</span>
-        <span className="text-[13px] font-black truncate">{n}</span>
+        <span className="text-[13px] font-black whitespace-nowrap">{n}</span>
         {n === biz.defaultName && <span className={`shrink-0 px-1.5 h-[17px] inline-flex items-center rounded text-[9.5px] font-extrabold tracking-[0.14em] ${act ? "bg-white/15 text-white/80" : "bg-[#EEF2F8] text-[#5B6B85]"}`} style={{ fontFamily: MONO }}>MAIN</span>}
         <span className={`ml-auto shrink-0 text-[11px] tabular-nums ${act ? "text-white/60" : "text-[#9AA9C3]"}`} style={{ fontFamily: MONO }}>{b?.bizNo || ""}</span>
       </div>
     );
   };
   const list = (
-    <div ref={listRef} role="listbox" className={inline ? "mt-1.5 max-h-48 overflow-auto space-y-0.5" : "absolute left-0 right-0 top-full mt-1.5 z-[60] min-w-[200px] max-h-60 overflow-auto rounded-xl border border-[#E3E8F0] bg-white p-1 shadow-[0_14px_34px_rgba(15,26,48,0.16)] space-y-0.5"}>
+    <div ref={listRef} role="listbox" className={inline ? "mt-1.5 max-h-48 overflow-auto space-y-0.5" : "absolute left-0 top-full mt-1.5 z-[60] min-w-full w-max max-w-[min(420px,92vw)] max-h-60 overflow-auto rounded-xl border border-[#E3E8F0] bg-white p-1 shadow-[0_14px_34px_rgba(15,26,48,0.16)] space-y-0.5"}>
       {items.length ? items.map(Row) : <div className="px-3 py-2.5 text-[12.5px] font-semibold text-[#9AA9C3]">일치하는 사업자가 없습니다</div>}
     </div>
   );

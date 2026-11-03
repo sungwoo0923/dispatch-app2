@@ -208,7 +208,7 @@ async function syncBoard({ db, FieldValue, form, readTabs, readTab, writeCells, 
     const allOrders = ex.docs.map((d) => ({ ref: d.ref, ...d.data() }));
     const orders = allOrders.filter((o) => o.배차상태 !== "배차취소");
     const cancelled = allOrders.filter((o) => o.배차상태 === "배차취소"); // 취소한 줄은 시트에 남아 있어도 다시 만들지 않음
-    const tomb = form.삭제한줄 || {}; const tombUsed = {};
+    const tomb = range ? {} : (form.삭제한줄 || {}); const tombUsed = {}; // ⭐ [기간 가져오기](range)는 지운 줄까지 다시 가져온다
     hashes[tab] = hash; // (양방향이라 시트가 그대로여도 프로그램에서 바뀐 값을 시트에 써야 해서 건너뛰지 않음 — 바뀐 칸만 씀)
     sum.dates.push(date);
     const batch = db.batch(); let ops = 0; const pushes = []; const appends = [];
@@ -358,6 +358,12 @@ async function syncBoard({ db, FieldValue, form, readTabs, readTab, writeCells, 
     }
   }
   await db.collection("routeBoards").doc(form.id).set({ syncHash: hashes, syncedAt: Date.now() }, { merge: true });
+  // ⭐ 2026-11-03 [기간 가져오기]로 다시 가져온 날짜의 "지운 줄" 기억은 지운다(이후 자동 연동도 정상)
+  if (range && form.삭제한줄 && sum.dates.length) {
+    const ds = new Set(sum.dates.map((d) => nm(d).replace(/[^0-9a-z가-힣_-]/g, "_")));
+    const next = Object.fromEntries(Object.entries(form.삭제한줄).filter(([k]) => !ds.has(k.split("__")[0])));
+    if (Object.keys(next).length !== Object.keys(form.삭제한줄).length) await db.collection("routeBoards").doc(form.id).update({ 삭제한줄: next });
+  }
   return sum;
 }
 
