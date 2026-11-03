@@ -4678,10 +4678,13 @@ function FleetSettlementTab({ drivers = [], dispatchData = [], role = "", compan
   );
   const rows = useMemo(() => {
     if (filterTerms.length === 0) return rowsRaw;
+    // ⭐ 2026-11-03 친 글자가 어떤 거래처 이름과 정확히 같으면 그 거래처만(하나 → 하나상운·하나물류 제외)
+    const nm = (v) => String(v || "").replace(/\s+/g, "").toLowerCase();
+    const names = new Set(rowsRaw.map((r) => nm(r.거래처명)));
     return rowsRaw.filter(r => {
       const via = fmMergeViaNames([r.경유상차목록, r.경유지_상차, r.경유하차목록, r.경유지_하차]);
       const hay = [r.거래처명, r.상차지명, r.하차지명, r.화물내용, via].join(" ").toLowerCase();
-      return filterTerms.some(t => hay.includes(t));
+      return filterTerms.some(t => (names.has(nm(t)) ? nm(r.거래처명) === nm(t) : hay.includes(t)));
     });
   }, [rowsRaw, filterTerms]);
 

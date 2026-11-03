@@ -400,7 +400,10 @@ export function SingleStatementPanel({ drivers = [], dispatchData = [], companyN
   const qq = q.replace(/\s/g, "");
   const list = sorted.filter((r) => !qq || `${r.d.이름}${r.d.차량번호}${r.d.전화번호}`.replace(/\s/g, "").includes(qq));
   const cur = rows.find((r) => r.key === selKey) || list[0] || null;
-  const trips = cur ? cur.trips.filter((t) => !tq.trim() || `${t.client}${t.from}${t.to}${t.via}${t.cargo}`.includes(tq.trim())) : [];
+  // ⭐ 2026-11-03 정확히 같은 거래처 이름이 있으면 그 거래처만
+  const tqn = tq.replace(/\s/g, "");
+  const tqExact = !!tqn && !!cur && cur.trips.some((t) => String(t.client || "").replace(/\s/g, "") === tqn);
+  const trips = cur ? cur.trips.filter((t) => !tq.trim() || (tqExact ? String(t.client || "").replace(/\s/g, "") === tqn : `${t.client}${t.from}${t.to}${t.via}${t.cargo}`.includes(tq.trim()))) : [];
 
   const saveImage = () => savePngA4(docRef.current, `정산서_${cur.d.이름}_${ym}`);
   const savePdf = () => savePdfA4(docRef.current, `정산서_${cur.d.이름}_${ym}`);

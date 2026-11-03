@@ -24,7 +24,8 @@ import { Navigate, useNavigate } from "react-router-dom";
 import { CartesianGrid, Line, LineChart, BarChart, Bar, Cell, LabelList, PieChart, Pie, ResponsiveContainer, Tooltip, XAxis, YAxis, Legend } from "recharts";
 import * as XLSX from "xlsx";
 import OrderLookupModal from "./OrderLookup"; // ⭐ 2026-11-03 담당자·차량 조회
-import MgrBadge, { setMgrNameMap } from "./MgrBadge"; // ⭐ 2026-11-03 배차담당자 칸(등록자 + 차량 붙인 사람)
+import MgrBadge, { setMgrNameMap } from "./MgrBadge";
+import { makeClientMatcher } from "./clientMatch"; // ⭐ 2026-11-03 거래처 검색: 정확히 같은 이름이 있으면 그것만 // ⭐ 2026-11-03 배차담당자 칸(등록자 + 차량 붙인 사람)
 import JSZip from "jszip";
 import { sendOrderTo24Proxy as sendOrderTo24 } from "../api/24CallProxy";
 import { useNewVersion, openUpdatePopup } from "./VersionCheck";
@@ -23388,13 +23389,14 @@ function AttachStatusPanel({ open, onClose, initialClient, dispatchData, db, com
         return snap.docs.map(d => ({ __col: colName, ...d.data(), _id: d.id }));
       };
       const [orders, dispatch] = await Promise.all([fetchOne("orders"), fetchOne("dispatch")]);
+      const atNameM = makeClientMatcher(q, [...orders, ...dispatch].map((r) => r.거래처명)); // ⭐ 정확히 같은 거래처가 있으면 그것만
       const merged = [...orders, ...dispatch].filter(r =>
         !isBlindHidden(r) &&
         r.source !== "transport_transmit" &&
         r.배차상태 !== "배차취소" &&
         !["취소", "배차취소", "오더취소", "취소됨"].includes(r.상태) &&
         (r.companyName || DEFAULT_COMPANY) === myCompany &&
-        (!q || (r.거래처명 || "").includes(q))
+        (!q || atNameM(r.거래처명))
       );
       setResults(merged);
       setSearched(true);
@@ -27609,8 +27611,10 @@ const driverPanelCallbackRef = React.useRef(null);
       const get = (v) => String(v || "").toLowerCase();
       // ⭐ 검색 항목(통합 ▾) — 배차현황과 같은 동작
       const field = ORDER_SEARCH_FIELD[rtSearchType];
+      // ⭐ 2026-11-03 거래처·상차지·하차지는 정확히 같은 이름이 있으면 그것만(하나 → 하나상운·하나물류 제외)
+      const nameM = ["거래처명", "상차지명", "하차지명"].includes(field) ? makeClientMatcher(q, data.map((r) => r[field])) : null;
       data = field
-        ? data.filter((r) => get(r[field]).includes(key))
+        ? data.filter((r) => (nameM ? nameM(r[field]) : get(r[field]).includes(key)))
         : data.filter((r) =>
             get(r.거래처명).includes(key) ||
             get(r.상차지명).includes(key) ||
@@ -38599,17 +38603,20 @@ const filteredBase = React.useMemo(() => {
   // =========================
   if (q.trim()) {
     const keyword = q.toLowerCase();
+    // ⭐ 2026-11-03 거래처·상차지·하차지 검색 — 정확히 같은 이름이 있으면 그것만
+    const dsField = { client: "거래처명", pickup: "상차지명", drop: "하차지명" }[searchType];
+    const dsNameM = dsField ? makeClientMatcher(q, data.map((r) => r[dsField])) : () => true;
 
     data = data.filter((r) => {
       const get = (v) => String(v || "").toLowerCase();
 
       switch (searchType) {
         case "client":
-          return get(r.거래처명).includes(keyword);
+          return dsNameM(r.거래처명);
         case "pickup":
-          return get(r.상차지명).includes(keyword);
+          return dsNameM(r.상차지명);
         case "drop":
-          return get(r.하차지명).includes(keyword);
+          return dsNameM(r.하차지명);
         case "pay":
           return get(r.지급방식).includes(keyword);
         case "dispatch":
@@ -49542,7 +49549,9 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
       result = result.filter((r) => (r.상차일 || "") >= startDate && (r.상차일 || "") <= endDate);
     }
     if (filterValue.trim()) {
-      result = result.filter((r) => String(r[filterType] || "").toLowerCase().includes(filterValue.toLowerCase()));
+      // ⭐ 2026-11-03 거래처·상차지·하차지는 정확히 같은 이름이 있으면 그것만
+      const unNameM = ["거래처명", "상차지명", "하차지명"].includes(filterType) ? makeClientMatcher(filterValue, result.map((r) => r[filterType])) : null;
+      result = result.filter((r) => (unNameM ? unNameM(r[filterType]) : String(r[filterType] || "").toLowerCase().includes(filterValue.toLowerCase())));
     }
     if (q.trim()) {
       const lower = q.toLowerCase();
@@ -55188,7 +55197,7 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
     const cl = clientQ.trim().toLowerCase();
     if (car) rows = rows.filter(r => String(r.차량번호 || "").toLowerCase().includes(car));
     if (name) rows = rows.filter(r => String(r.이름 || "").toLowerCase().includes(name));
-    if (cl) rows = rows.filter(r => String(r.거래처명 || "").toLowerCase().includes(cl));
+    if (cl) { const pmNameM = makeClientMatcher(cl, rows.map((r) => r.거래처명)); rows = rows.filter(r => pmNameM(r.거래처명)); } // ⭐ 정확히 같은 거래처가 있으면 그것만
     return rows.sort((a, b) => (a.상차일 || "").localeCompare(b.상차일 || ""));
   }, [searched, base, statusFilter, loadStart, loadEnd, payMethodFilter, dispatchMethodFilter, carNoQ, nameQ, clientQ]);
 

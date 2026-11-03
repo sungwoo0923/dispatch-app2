@@ -7,6 +7,7 @@ import { useCompanyDropdownSync, dropdownList } from "../companyDropdownOptions"
 import { CompanyOptionPicker } from "../companyOptionPicker"; // 🧾 2026-11-02 지급방식·배차방식·상/하차방법 공용 선택기(＋ 추가)
 import { AttendanceQuickButton, officeRadii, CheckoutReminderHost } from "../attendanceQuick";
 import { PersonalTodayHost } from "../PersonalSchedule";
+import { makeClientMatcher } from "../clientMatch"; // ⭐ 2026-11-03 거래처 검색
 import { useCustomRoles, findCustomRole, getMenuAccess, roleScreen } from "../customRoles";
 import { useReadOnlyGuard } from "../readOnlyGuard";
 import { confirmLeave } from "../leaveGuard";
@@ -4037,12 +4038,13 @@ if (onlyToday) {
     });
 
     // 6) 검색 — 마찬가지로 "조회"를 눌러야 반영되는 appliedSearchText/appliedSearchType 기준.
+const mClientM = appliedSearchType === "거래처명" ? makeClientMatcher(appliedSearchText, base.map((o) => o.거래처명)) : null; // ⭐ 2026-11-03 정확히 같은 거래처가 있으면 그것만
 base = base.filter((o) => {
   if (!appliedSearchText.trim()) return true;
   const q = normalize(appliedSearchText);
 
   if (appliedSearchType === "거래처명")
-    return normalize(o.거래처명).includes(q);
+    return mClientM(o.거래처명);
 
   if (appliedSearchType === "기사명")
     return normalize(o.기사명 || o.이름).includes(q);
