@@ -38729,7 +38729,8 @@ const filteredBase = React.useMemo(() => {
   // 📅 날짜 필터 (조회 버튼 기준)
   // =========================
   data = data.filter((r) => {
-    const date = r.상차일 || r.상차일자 || "";
+    // ⭐ 2026-11-03 고정노선현황은 입고일(시트 탭 날짜) 기준으로 조회 — 업체가 입고일로 탭을 만든다
+    const date = fixedForm ? (r.입고일 || r.하차일 || r.상차일 || "") : (r.상차일 || r.상차일자 || "");
     if (!date) return false;
 
     if (appliedStartDate <= appliedEndDate) {
@@ -38807,7 +38808,8 @@ const filteredBase = React.useMemo(() => {
   // ⭐ 2026-11-03 고정노선현황 — 구글시트 순서 그대로(날짜 → 묶음(1센터·2센터…) → 시트 줄)
   if (fixedForm) {
     const gi = (r) => { const i = (fixedForm.groups || []).findIndex((g) => g.name === r.배차표묶음); return i < 0 ? 999 : i; };
-    data.sort((a, b) => String(a.상차일 || "").localeCompare(String(b.상차일 || "")) || gi(a) - gi(b)
+    const inD = (r) => String(r.입고일 || r.하차일 || r.상차일 || "");
+    data.sort((a, b) => inD(a).localeCompare(inD(b)) || gi(a) - gi(b)
       || (a.시트줄 ?? 1e9) - (b.시트줄 ?? 1e9) || (a.배차표순번 || 0) - (b.배차표순번 || 0));
     return data;
   }
