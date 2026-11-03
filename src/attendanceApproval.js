@@ -23,30 +23,39 @@ export function isExecUser(u, customRoles) {
   return roleScreen(findCustomRole(customRoles, u.role)) === "exec";
 }
 
-export const APPROVER_GROUP_LABEL = { hr: "인사팀", exec: "임원", admin: "관리자" };
+export const APPROVER_GROUP_LABEL = { hr: "인사팀", exec: "임원", admin: "관리자", master: "마스터(인사팀 생기면 인사팀으로)" };
 
 // ⭐ 2026-11-02 점검 — 계정 없이 등록된 직원(noAccount)은 로그인할 수 없으므로 승인자 후보에서 제외(영원히 대기하는 요청 방지)
 const activeStaff = (list) => (list || []).filter((e) => e && e.uid && !e.noAccount && e.approved !== false && e.employmentStatus !== "퇴사" && !["driver", "shipper", "cafeUser"].includes(e.role));
 
 // 요청자에 맞는 승인자 — 인사팀 본인 요청은 임원에게, 그 밖의 직원은 인사팀에게
+// ⭐ 2026-11-03 인사팀이 없는 회사는 회사 마스터가 승인(임시) — 인사팀이 생기면 대기 중인 요청도 바로 인사팀으로 넘어간다
 export function resolveApprovers(requester, employees, customRoles) {
   const others = activeStaff(employees).filter((e) => e.uid !== requester?.uid);
   const admins = others.filter((e) => e.role === "admin");
+  const masters = others.filter((e) => e.isMaster === true);
+  const fallback = masters.length ? { group: "master", uids: masters.map((e) => e.uid) } : { group: "admin", uids: admins.map((e) => e.uid) };
   if (requester && isHrStaffUser(requester)) {
     const execs = others.filter((e) => isExecUser(e, customRoles));
     if (execs.length) return { group: "exec", uids: execs.map((e) => e.uid) };
-    // 임원이 한 명도 없는 회사 — 관리자에게(인사팀끼리 승인하지 않게)
-    return { group: "admin", uids: admins.map((e) => e.uid) };
+    // 임원이 한 명도 없는 회사 — 마스터(없으면 관리자)에게(인사팀끼리 승인하지 않게)
+    return fallback;
   }
   const hr = others.filter((e) => isHrStaffUser(e));
   if (hr.length) return { group: "hr", uids: hr.map((e) => e.uid) };
-  return { group: "admin", uids: admins.map((e) => e.uid) };
+  return fallback;
 }
 
 // 이 요청을 내가 승인할 수 있는가(본인 요청은 절대 불가)
 export function canApproveAttendanceReq(req, me, role, customRoles, employees) {
   if (!req || !me?.uid || req.uid === me.uid) return false;
   if (role === "totalMaster") return true;
+  // ⭐ 2026-11-03 마스터가 임시로 맡은 요청 — 그 사이 인사팀이 생겼으면 인사팀이(요청자 본인 제외), 아니면 마스터가
+  if (req.approverGroup === "master") {
+    const hrNow = activeStaff(employees).filter((e) => e.uid !== req.uid && isHrStaffUser(e));
+    if (hrNow.length) return isHrStaffUser({ ...me, role: role || me.role });
+    return me.isMaster === true || (Array.isArray(req.approverUids) && req.approverUids.includes(me.uid));
+  }
   if (Array.isArray(req.approverUids) && req.approverUids.length) return req.approverUids.includes(me.uid);
   // 예전 요청(승인자 지정 전) — 요청자가 인사팀이면 임원, 아니면 인사팀
   const requester = (employees || []).find((e) => e.uid === req.uid);
