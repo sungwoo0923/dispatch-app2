@@ -193,6 +193,7 @@ export default function HomepageEditor() {
       else if (m.t === "kp:change") applyNew(m.state, m.label);
       else if (m.t === "kp:select") { setInfo(m.info); if (m.info && !m.quiet) setTab("select"); }
       else if (m.t === "kp:meta") setMeta(m.meta);
+      else if (m.t === "kp:flushed") { if (flushRef.current) flushRef.current(m.state); }
       else if (m.t === "kp:undo") undo();
       else if (m.t === "kp:redo") redo();
       else if (m.t === "kp:save") saveDraft(stateRef.current);
@@ -245,15 +246,24 @@ export default function HomepageEditor() {
   }
 
   // ── 게시 ──
+  // 게시 직전에 편집 화면에서 쓰던 글까지 확정해서 받아 온다(고치는 중에 [게시하기]를 눌러도 빠지지 않게)
+  const flushRef = React.useRef(null);
+  const flushFrame = () => new Promise((resolve) => {
+    const t = setTimeout(() => { flushRef.current = null; resolve(stateRef.current); }, 1500);
+    flushRef.current = (s) => { clearTimeout(t); flushRef.current = null; resolve(s); };
+    send({ cmd: "flush" });
+  });
   const publish = async () => {
     if (!state) return;
     setBusy(true);
     try {
-      clearTimeout(saveTimer.current); await saveDraft(state);
-      const json = JSON.stringify(state);
+      const latest = (await flushFrame()) || stateRef.current;
+      setState(latest);
+      clearTimeout(saveTimer.current); await saveDraft(latest);
+      const json = JSON.stringify(latest);
       await setDoc(doc(db, "siteConfig", "landing"), { homepage: json, homepageAt: serverTimestamp(), homepageBy: me }, { merge: true });
       // 이력(최근 15개 · 문서 한도 넘지 않게)
-      const items = [{ at: Date.now(), by: me, data: json, note: `게시 · 편집 ${Object.keys(state.els || {}).length}곳` }, ...history];
+      const items = [{ at: Date.now(), by: me, data: json, note: `게시 · 편집 ${Object.keys(latest.els || {}).length}곳` }, ...history];
       let keep = items.slice(0, 15);
       while (keep.length > 1 && JSON.stringify(keep).length > 850000) keep = keep.slice(0, -1);
       await setDoc(doc(db, "siteConfig", "homepageHistory"), { items: keep, updatedAt: serverTimestamp() });
@@ -633,7 +643,7 @@ export default function HomepageEditor() {
         <span className={cls("text-[11.5px] font-black px-2 py-1 rounded-md", dirtyVsLive ? "bg-[#F5A524]/20 text-[#FFD48A]" : "bg-[#2BD17E]/15 text-[#7EF0B5]")}>{dirtyVsLive ? "게시 안 한 변경 있음" : "홈페이지와 같음"}</span>
         <a href={siteUrl} target="_blank" rel="noopener noreferrer" className="h-8 px-2.5 rounded-lg bg-white/10 text-[12px] font-black inline-flex items-center">홈페이지 열기 ↗</a>
         <button type="button" onClick={() => setFull((x) => !x)} className="h-8 px-2.5 rounded-lg bg-white/10 text-[12px] font-black">{full ? "창 작게" : "전체 화면"}</button>
-        <button type="button" onClick={publish} disabled={busy || !state || !dirtyVsLive} className="h-8 px-3.5 rounded-lg bg-[#2D5BD8] text-white text-[12.5px] font-black disabled:opacity-40 hover:bg-[#3A66E0]">게시하기</button>
+        <button type="button" onClick={publish} disabled={busy || !state} className="h-8 px-3.5 rounded-lg bg-[#2D5BD8] text-white text-[12.5px] font-black disabled:opacity-40 hover:bg-[#3A66E0]">게시하기</button>
       </div>
 
       <div className="flex-1 min-h-0 flex">
