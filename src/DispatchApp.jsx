@@ -3435,6 +3435,16 @@ function useKpLongPressSelect({ toggle, isSelected }) {
   const timer = React.useRef(null);
   const start = React.useRef(null);
   const swallowClick = React.useRef(false);
+  // ⭐ 2026-11-03 Shift 범위 선택(엑셀처럼) — 마지막으로 누른 줄 ~ Shift 누르고 누른 줄까지 전부 선택
+  const lastId = React.useRef(null);
+  const selectRange = (tbody, id) => {
+    const ids = [...(tbody?.querySelectorAll?.('tr[id^="row-"]') || [])].map((tr) => tr.id.slice(4));
+    const a = ids.indexOf(lastId.current), b = ids.indexOf(id);
+    if (a < 0 || b < 0) return false;
+    ids.slice(Math.min(a, b), Math.max(a, b) + 1).forEach((x) => { if (!isSelected(x)) toggle(x); });
+    lastId.current = id;
+    return true;
+  };
   const rowIdOf = (el) => { const tr = el?.closest?.('tr[id^="row-"]'); return tr ? tr.id.slice(4) : null; };
   const interactive = (el) => !!el?.closest?.('input,select,textarea,button,a,label,[contenteditable="true"]');
   const cancel = () => { if (timer.current) { clearTimeout(timer.current); timer.current = null; } };
@@ -3447,6 +3457,7 @@ function useKpLongPressSelect({ toggle, isSelected }) {
   React.useEffect(() => cancel, []);
   const tbodyProps = {
     onMouseDown: (e) => {
+      if (e.button === 0 && e.shiftKey && rowIdOf(e.target) && (mode || e.target?.closest?.('input[type="checkbox"]'))) e.preventDefault(); // Shift 클릭 때 글자가 파랗게 긁히지 않게
       if (e.button !== 0 || interactive(e.target)) return;
       const id = rowIdOf(e.target);
       if (!id) return;
@@ -3457,6 +3468,7 @@ function useKpLongPressSelect({ toggle, isSelected }) {
         swallowClick.current = true; // 손을 뗄 때 생기는 클릭 한 번은 무시(방금 고른 줄이 바로 풀리지 않게)
         setMode(true);
         if (!isSelected(id)) toggle(id);
+        lastId.current = id;
       }, 550);
     },
     onMouseMove: (e) => {
@@ -3466,11 +3478,19 @@ function useKpLongPressSelect({ toggle, isSelected }) {
     onMouseLeave: cancel,
     onClickCapture: (e) => {
       if (swallowClick.current) { swallowClick.current = false; e.stopPropagation(); e.preventDefault(); return; }
-      if (!mode || interactive(e.target)) return;
       const id = rowIdOf(e.target);
       if (!id) return;
+      // 체크박스: Shift 누르고 누르면 범위 선택, 그냥 누르면 시작점만 기억
+      if (e.target?.closest?.('input[type="checkbox"]')) {
+        if (e.shiftKey && lastId.current && lastId.current !== id) { e.stopPropagation(); e.preventDefault(); selectRange(e.currentTarget, id); return; }
+        lastId.current = id;
+        return;
+      }
+      if (!mode || interactive(e.target)) return;
       e.stopPropagation();
+      if (e.shiftKey && lastId.current && lastId.current !== id && selectRange(e.currentTarget, id)) return;
       toggle(id);
+      lastId.current = id;
     },
     onDoubleClickCapture: (e) => { if (mode) { e.stopPropagation(); e.preventDefault(); } },
   };
