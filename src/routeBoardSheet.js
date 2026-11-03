@@ -167,3 +167,64 @@ export function planSheetWrite(form, rawRows, boardGroups) {
   });
   return { updates, notFound, headers: heads.length };
 }
+
+// ── 💰 단가표(청구운임) — 2026-11-03 ─────────────────────────────────────
+//  양식(노선)마다 엑셀 단가표를 올리면 rateTable: [{ region:"광주 광산구", r12:13110, r18:10450 }]
+//  · 제목줄의 "12PLT"·"18PLT" 중 단가 쪽(두 칸짜리 → 오른쪽 칸 = 할인된 제안단가, 한 칸이면 그 칸)
+//  · 청구운임 = 파레트 합계 × 파렛당 단가 — 18 이상은 18PLT 단가, 그 미만은 12PLT 단가(한쪽이 없으면 있는 쪽)
+//  · 지역 맞추기: 도착지 주소에 지역 이름(시·군·구)이 들어 있으면 — 시·도까지 맞으면 우선
+//  서버(functions/routeBoardSync.js)에도 같은 계산이 있다
+const numOf = (v) => { const n = typeof v === "number" ? v : parseFloat(String(v ?? "").replace(/[^\d.-]/g, "")); return Number.isFinite(n) ? n : 0; };
+export function parseRateSheet(rawRows) {
+  const rows = (rawRows || []).map((r) => (r || []).map((c) => (typeof c === "number" ? c : cell(c))));
+  const isTier = (c, n) => new RegExp(`^${n}(plt|파렛|파레트|팔레트|p)$`, "i").test(String(c || "").replace(/\s/g, "")); // "12PLT"만(“12파렛 요금” 같은 합계 칸 제외)
+  const h = rows.findIndex((r) => r.some((c) => isTier(c, 12)) && r.some((c) => isTier(c, 18)));
+  if (h < 0) return { error: "제목줄에서 12PLT·18PLT 칸을 찾지 못했습니다." };
+  const hr = rows[h];
+  const pick = (n) => { // 마지막 "nPLT" — 오른쪽 칸이 비어 있으면(두 칸 합친 제목) 오른쪽 칸이 제안단가
+    const idx = hr.map((c, i) => (isTier(c, n) ? i : -1)).filter((i) => i >= 0).pop();
+    return { base: idx, rate: hr[idx + 1] === "" || hr[idx + 1] == null ? idx + 1 : idx };
+  };
+  const c12 = pick(12); const c18 = pick(18);
+  let rc = hr.findIndex((c) => /^구분$/.test(String(c || "").replace(/\s/g, "")));
+  if (rc < 0) rc = 1;
+  const out = []; const seen = new Set();
+  rows.slice(h + 1).forEach((r) => {
+    const region = String(r[rc] || "").trim();
+    if (!region || /합계|소계|^계$/.test(region) || /^[\d.,\s-]+$/.test(region)) return;
+    const v = (col) => Math.round(numOf(r[col.rate]) || 0);
+    const r12 = v(c12); const r18 = v(c18);
+    if (!r12 && !r18) return;
+    const key = region.replace(/\s+/g, "");
+    if (seen.has(key)) return; seen.add(key);
+    out.push({ region, r12, r18 });
+  });
+  return { table: out };
+}
+const SIDO_SHORT = [["서울특별시", "서울"], ["부산광역시", "부산"], ["대구광역시", "대구"], ["인천광역시", "인천"], ["광주광역시", "광주"], ["대전광역시", "대전"], ["울산광역시", "울산"], ["세종특별자치시", "세종"], ["경기도", "경기"], ["강원특별자치도", "강원"], ["강원도", "강원"], ["충청북도", "충북"], ["충청남도", "충남"], ["전북특별자치도", "전북"], ["전라북도", "전북"], ["전라남도", "전남"], ["경상북도", "경북"], ["경상남도", "경남"], ["제주특별자치도", "제주"]];
+const SIDO = new Set(SIDO_SHORT.map((x) => x[1]));
+const METRO_CITY = new Set(["서울시", "부산시", "대구시", "인천시", "대전시", "울산시"]); // "대구시" → 주소 "대구 …"도 같은 곳(광주시는 경기 광주라 제외)
+const normAddr = (a) => { let s = String(a || ""); SIDO_SHORT.forEach(([l, sh]) => { s = s.split(l).join(sh); }); return s.replace(/\s+/g, ""); };
+export function rateFor(table, addr, pallets) {
+  const n = Math.round(numOf(pallets));
+  if (!Array.isArray(table) || !table.length || n <= 0) return null;
+  const a = normAddr(addr); if (!a) return null;
+  const aSido = [...SIDO].find((sd) => a.startsWith(sd)) || "";
+  let best = null;
+  table.forEach((t) => {
+    const toks = String(t.region || "").trim().split(/\s+/).filter(Boolean);
+    const sido = toks.find((x) => SIDO.has(x)) || "";
+    const rest = toks.filter((x) => !SIDO.has(x));
+    if (!rest.length) return;
+    const ok = rest.every((x) => a.includes(x) || (METRO_CITY.has(x) && a.includes(x.slice(0, -1))));
+    if (!ok) return;
+    if (sido && aSido && sido !== aSido && !rest.some((x) => METRO_CITY.has(x))) return; // 시·도가 다르면 다른 곳(예: 대구 남구 ≠ 광주 남구)
+    const score = (sido && sido === aSido ? 10 : 0) + rest.join("").length;
+    if (!best || score > best.score) best = { t, score };
+  });
+  if (!best) return null;
+  const { t } = best;
+  const per = n >= 18 ? (t.r18 || t.r12) : (t.r12 || t.r18);
+  if (!per) return null;
+  return { region: t.region, per, pallets: n, total: per * n, tier: n >= 18 && t.r18 ? 18 : t.r12 ? 12 : 18 };
+}

@@ -7,7 +7,7 @@ import React from "react";
 import { collection, onSnapshot, query, where } from "firebase/firestore";
 import { db } from "./firebase";
 import { sheetApi } from "./RouteBoard";
-import { ownerOf } from "./routeBoardSheet";
+import { ownerOf, rateFor } from "./routeBoardSheet";
 
 const MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
 const toInt = (v) => parseInt(String(v ?? "").replace(/[^\d-]/g, ""), 10) || 0;
@@ -60,12 +60,20 @@ function Cell({ value, onCommit, numeric, wide, placeholder, disabled, title, st
 export function FixedRouteCells({ form, row, drivers = [], onPatch, disabled = false }) {
   const td = "px-1.5 py-1.5 border-b border-[#E9EDF4] border-r border-r-[#F1F4F9] text-center whitespace-nowrap";
   const cols = (form?.columns || []).filter((c) => c.kind !== "no");
+  // ⭐ 2026-11-03 단가표 — 파레트 수·도착지가 바뀌면 청구운임 자동(직접 고친 운임이면 그대로)
+  const fareOf = (q, addr) => {
+    if (!form?.rateTable?.length || row.운임수동) return {};
+    const n = Object.values(q || {}).reduce((a, x) => a + toInt(x), 0);
+    const r = rateFor(form.rateTable, addr ?? row.하차지주소 ?? "", n);
+    return r ? { 청구운임: String(r.total), 수수료: String(r.total - toInt(row.기사운임)), 단가표지역: r.region, 파렛단가: r.per } : {};
+  };
   const commit = (c, raw) => {
     const val = String(raw ?? "").trim();
     if (c.kind === "qty") {
       const q = { ...(row.품목수량 || {}) }; if (toInt(val)) q[c.label] = toInt(val); else delete q[c.label];
-      return onPatch({ 품목수량: q, ...cargoText(q) });
+      return onPatch({ 품목수량: q, ...cargoText(q), ...fareOf(q) });
     }
+    if (c.kind === "field" && c.field === "하차지주소") return onPatch({ 하차지주소: val, ...fareOf(row.품목수량, val) });
     if (c.kind === "extra") return onPatch({ 추가정보: { ...(row.추가정보 || {}), [c.label]: val } });
     if (c.field === "차량번호") {
       const d = val ? drivers.find((x) => normPlate(x.차량번호) === normPlate(val)) : null;
@@ -73,12 +81,16 @@ export function FixedRouteCells({ form, row, drivers = [], onPatch, disabled = f
         ...(val && (row.배차상태 === "배차중" || !row.배차상태) ? { 배차상태: "배차완료" } : !val && row.배차상태 === "배차완료" ? { 배차상태: "배차중" } : {}) });
     }
     if (TIME_FIELDS.has(c.field)) return onPatch({ [c.field]: parseHM(val) ? korTime(parseHM(val)) : val });
-    if (MONEY_FIELDS.has(c.field)) { const n = toInt(val); const p = { [c.field]: n ? String(n) : "" }; const sale = c.field === "청구운임" ? n : toInt(row.청구운임); const drv = c.field === "기사운임" ? n : toInt(row.기사운임); return onPatch({ ...p, 수수료: String(sale - drv) }); }
+    if (MONEY_FIELDS.has(c.field)) { const n = toInt(val); const p = { [c.field]: n ? String(n) : "" }; const sale = c.field === "청구운임" ? n : toInt(row.청구운임); const drv = c.field === "기사운임" ? n : toInt(row.기사운임); return onPatch({ ...p, 수수료: String(sale - drv), ...(c.field === "청구운임" ? { 운임수동: !!n } : {}) }); } // 청구운임을 직접 고치면 단가표 자동 계산 멈춤(비우면 다시 자동)
     return onPatch({ [c.field]: val });
   };
   const has = (f) => cols.some((c) => c.kind === "field" && c.field === f);
   const money = (f) => (
-    <td key={f} className={td}><Cell value={toInt(row[f]) ? toInt(row[f]).toLocaleString() : ""} numeric disabled={disabled} onCommit={(v) => commit({ kind: "field", field: f }, v)} /></td>
+    <td key={f} className={td} title={f === "청구운임" && row.단가표지역 ? `단가표 ${row.단가표지역} · 파렛당 ${Number(row.파렛단가 || 0).toLocaleString()}원${row.운임수동 ? " (직접 입력 — 자동 계산 멈춤)" : ""}` : f === "청구운임" && row.운임수동 ? "직접 입력한 운임(단가표 자동 계산 멈춤) — 비우면 다시 자동" : undefined}>
+      <Cell value={toInt(row[f]) ? toInt(row[f]).toLocaleString() : ""} numeric disabled={disabled} onCommit={(v) => commit({ kind: "field", field: f }, v)} />
+      {f === "청구운임" && row.단가표지역 && !row.운임수동 && <div className="text-[10px] font-bold text-[#4B6CB7] -mt-0.5">단가표</div>}
+      {f === "청구운임" && row.운임수동 && <div className="text-[10px] font-bold text-[#B54708] -mt-0.5">직접 입력</div>}
+    </td>
   );
   const st = row.배차상태 || "배차중";
   return (

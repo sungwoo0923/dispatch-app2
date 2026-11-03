@@ -117,6 +117,45 @@ const same = (c, a, b) => {
 };
 const NO_PUSH = new Set(["하차지명", "하차지주소"]); // 프로그램은 풀주소라 시트(시군구)로 되돌려 쓰지 않음
 
+// ── 💰 단가표(청구운임) — 화면(src/routeBoardSheet.js rateFor)과 같은 계산 ──
+const numOf = (v) => { const n = typeof v === "number" ? v : parseFloat(String(v ?? "").replace(/[^\d.-]/g, "")); return Number.isFinite(n) ? n : 0; };
+const SIDO_SHORT = [["서울특별시", "서울"], ["부산광역시", "부산"], ["대구광역시", "대구"], ["인천광역시", "인천"], ["광주광역시", "광주"], ["대전광역시", "대전"], ["울산광역시", "울산"], ["세종특별자치시", "세종"], ["경기도", "경기"], ["강원특별자치도", "강원"], ["강원도", "강원"], ["충청북도", "충북"], ["충청남도", "충남"], ["전북특별자치도", "전북"], ["전라북도", "전북"], ["전라남도", "전남"], ["경상북도", "경북"], ["경상남도", "경남"], ["제주특별자치도", "제주"]];
+const SIDO = new Set(SIDO_SHORT.map((x) => x[1]));
+const METRO_CITY = new Set(["서울시", "부산시", "대구시", "인천시", "대전시", "울산시"]); // "대구시" → 주소 "대구 …"도 같은 곳(광주시는 경기 광주라 제외)
+const normAddr = (a) => { let s = String(a || ""); SIDO_SHORT.forEach(([l, sh]) => { s = s.split(l).join(sh); }); return s.replace(/\s+/g, ""); };
+function rateFor(table, addr, pallets) {
+  const n = Math.round(numOf(pallets));
+  if (!Array.isArray(table) || !table.length || n <= 0) return null;
+  const a = normAddr(addr); if (!a) return null;
+  const aSido = [...SIDO].find((sd) => a.startsWith(sd)) || "";
+  let best = null;
+  table.forEach((t) => {
+    const toks = String(t.region || "").trim().split(/\s+/).filter(Boolean);
+    const sido = toks.find((x) => SIDO.has(x)) || "";
+    const rest = toks.filter((x) => !SIDO.has(x));
+    if (!rest.length) return;
+    const ok = rest.every((x) => a.includes(x) || (METRO_CITY.has(x) && a.includes(x.slice(0, -1))));
+    if (!ok) return;
+    if (sido && aSido && sido !== aSido && !rest.some((x) => METRO_CITY.has(x))) return; // 시·도가 다르면 다른 곳(예: 대구 남구 ≠ 광주 남구)
+    const score = (sido && sido === aSido ? 10 : 0) + rest.join("").length;
+    if (!best || score > best.score) best = { t, score };
+  });
+  if (!best) return null;
+  const { t } = best;
+  const per = n >= 18 ? (t.r18 || t.r12) : (t.r12 || t.r18);
+  if (!per) return null;
+  return { region: t.region, per, pallets: n, total: per * n, tier: n >= 18 && t.r18 ? 18 : t.r12 ? 12 : 18 };
+}
+// 오더에 단가표 청구운임 적용(직접 고친 운임 = 운임수동이면 그대로)
+function rateFieldsOf(form, o, qty, addr) {
+  if (!Array.isArray(form.rateTable) || !form.rateTable.length || o.운임수동) return null;
+  const n = Object.values(qty || {}).reduce((x, y) => x + toInt(y), 0);
+  const r = rateFor(form.rateTable, addr, n);
+  if (!r) return null;
+  const sale = r.total; const drv = toInt(o.기사운임);
+  return { 청구운임: String(sale), 수수료: String(sale - drv), 단가표지역: r.region, 파렛단가: r.per };
+}
+
 const cargoText = (qty) => { const total = Object.values(qty).reduce((a, n) => a + n, 0); return { 화물내용: Object.keys(qty).length ? `${Object.entries(qty).map(([k, n]) => `${k} ${n}`).join(" · ")} (총 ${total})` : "", 화물수량: total ? String(total) : "" }; };
 
 async function syncBoard({ db, FieldValue, form, readTabs, readTab, writeCells, daysBack = 1, daysAhead = 14 }) {
@@ -185,6 +224,11 @@ async function syncBoard({ db, FieldValue, form, readTabs, readTab, writeCells, 
             } else nextBase[c.id] = sv;
           }
           if (qtyChanged) Object.assign(patch, { 품목수량: qtyNow, ...cargoText(qtyNow) });
+          { // 수량·주소가 바뀌었거나 아직 단가표 운임이 없으면 단가표로 청구운임
+            const addr = patch.하차지주소 || o.하차지주소 || "";
+            const rf = (qtyChanged || "하차지주소" in patch || !toInt(o.청구운임)) ? rateFieldsOf(form, o, qtyNow, addr) : null;
+            if (rf && String(rf.청구운임) !== String(o.청구운임 || "")) Object.assign(patch, rf);
+          }
           if (plateChanged) { // 차량이 바뀌면 배차상태·기사 정보도
             await loadLookups();
             const plate = patch.차량번호;
@@ -208,11 +252,13 @@ async function syncBoard({ db, FieldValue, form, readTabs, readTab, writeCells, 
           const drv = rec.차량번호 ? drivers.find((d) => normPlate(d.차량번호) === normPlate(rec.차량번호)) : null;
           seq += 1;
           const id = `rb_${form.id}_${date}_${rid()}`;
+          const rfNew = rateFieldsOf(form, {}, qty, place?.주소 || rec.하차지주소 || "");
           batch.set(db.collection("orders").doc(id), {
             ...rec, 품목수량: qty, 추가정보: extra, ...cargoText(qty),
             ...(place?.주소 ? { 하차지주소: place.주소 } : {}),
             ...(pc ? { 하차지담당자: pc.name || "", 하차지담당자번호: pc.phone || "" } : {}),
             ...(drv ? { 차량번호: drv.차량번호, 이름: rec.이름 || drv.이름 || "", 전화번호: rec.전화번호 || drv.전화번호 || "" } : {}),
+            ...(rfNew && !rec.청구운임 ? rfNew : {}),
             거래처명: form.client || rec.거래처명 || "", 상차일: date, 하차일: addDays(date, toInt(form.dropOffset)),
             상차지명: g.상차지명 || g.name || "", 상차지주소: g.상차지주소 || "", ...(form.payMethod ? { 지급방식: form.payMethod } : {}),
             배차상태: rec.차량번호 ? "배차완료" : "배차중", 배차표Id: form.id, 배차표명: form.name || "", 배차표묶음: g.name, 배차표순번: seq,

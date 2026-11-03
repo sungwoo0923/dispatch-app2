@@ -14,7 +14,7 @@ import React from "react";
 import { createPortal } from "react-dom";
 import { collection, doc, onSnapshot, query, where, getDocs, setDoc, addDoc, updateDoc, deleteDoc, serverTimestamp } from "firebase/firestore";
 import { db, auth, FUNCTIONS_BASE } from "./firebase";
-import { parseBoardTab, sheetToForm, tabDate, planSheetWrite, nm as sheetNm, ownerOf } from "./routeBoardSheet"; // ⭐ 2026-11-02 구글시트 날짜 탭 불러오기
+import { parseBoardTab, sheetToForm, tabDate, planSheetWrite, nm as sheetNm, ownerOf, parseRateSheet, rateFor } from "./routeBoardSheet"; // ⭐ 2026-11-02 구글시트 날짜 탭 불러오기
 import { coDocKey } from "./coKey";
 import { deleteOrderWithLog } from "./orderHistory";
 import CustomDatePicker from "./CustomDatePicker";
@@ -104,6 +104,11 @@ function orderFromRow(form, g, r, i, date, co, isNew, prevStatus) {
   }
   rec.화물수량 = total ? String(total) : "";
   if (!form.columns.some((c) => c.field === "거래처명")) rec.거래처명 = form.client || "";
+  // ⭐ 2026-11-03 단가표 — 청구운임 칸이 따로 없으면 도착지 지역 × 파레트 합계로 자동(직접 고친 운임은 그대로 — 운임수동)
+  if (!form.columns.some((c) => c.field === "청구운임") && form.rateTable?.length) {
+    const rf = rateFor(form.rateTable, rec.하차지주소 || "", total);
+    if (rf) Object.assign(rec, { 청구운임: String(rf.total), 단가표지역: rf.region, 파렛단가: rf.per });
+  }
   if (rec.청구운임 || rec.기사운임) rec.수수료 = String(toInt(rec.청구운임) - toInt(rec.기사운임));
   rec.차량번호 = normPlate(rec.차량번호 || "") ? String(rec.차량번호).trim() : "";
   const keepStatus = prevStatus && !["배차중", "배차완료", ""].includes(prevStatus);
@@ -341,6 +346,60 @@ function SheetSend({ form, date, rows, onClose, onDone }) {
 }
 
 // ── 양식 편집 ──────────────────────────────────────────────
+// 💰 단가표 올리기·보기 — 엑셀(청구단가표)을 올리면 지역 · 12PLT · 18PLT 파렛당 단가를 읽어 양식에 저장
+function RateTableEditor({ table, name, onChange }) {
+  const ref = React.useRef(null);
+  const [open, setOpen] = React.useState(false);
+  const [q, setQ] = React.useState("");
+  const [err, setErr] = React.useState("");
+  const load = async (file) => {
+    if (!file) return; setErr("");
+    try {
+      const XLSX = await import("xlsx");
+      const wb = XLSX.read(await file.arrayBuffer(), { type: "array" });
+      let best = null;
+      wb.SheetNames.forEach((sn) => { const r = parseRateSheet(XLSX.utils.sheet_to_json(wb.Sheets[sn], { header: 1, raw: true, defval: "" })); if (r.table?.length && (!best || r.table.length > best.length)) best = r.table; });
+      if (!best) throw new Error("12PLT·18PLT 단가가 있는 표를 찾지 못했습니다.");
+      onChange(best, file.name); setOpen(true);
+    } catch (e) { setErr(e?.message || String(e)); }
+  };
+  const shown = table.filter((t) => !q.trim() || t.region.includes(q.trim()));
+  const won = (n) => (n ? Number(n).toLocaleString() : "-");
+  return (
+    <div className="rounded-xl border border-[#E3E8F0] bg-[#F8FAFD] p-3 mb-6">
+      <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex-1 min-w-[220px]">
+          <div className="text-[13px] font-black text-[#3A4A66]">단가표(청구운임) {table.length ? <span className="ml-1 px-2 py-0.5 rounded-md bg-[#1B2B4B] text-white text-[11.5px]">{table.length}개 지역</span> : null}</div>
+          <div className="text-[12px] text-[#7A8AA6] mt-0.5">파레트 합계 × 파렛당 단가 = 청구운임 · 18 이상은 18PLT 단가, 그 미만은 12PLT 단가 · 도착지 주소의 지역으로 찾음{name ? ` · ${name}` : ""}</div>
+        </div>
+        <button type="button" onClick={() => ref.current?.click()} className={`${btn} bg-[#2D4C82] text-white`}>{table.length ? "단가표 다시 올리기" : "단가표 엑셀 올리기"}</button>
+        {table.length > 0 && <button type="button" onClick={() => setOpen((v) => !v)} className={`${btn} border border-[#DCE3EE] text-[#3A4A66]`}>{open ? "접기" : "보기"}</button>}
+        {table.length > 0 && <button type="button" onClick={() => onChange([], "")} className={`${btn} text-red-500`}>지우기</button>}
+        <input ref={ref} type="file" accept=".xlsx,.xls" className="hidden" onChange={(e) => { load(e.target.files?.[0]); e.target.value = ""; }} />
+      </div>
+      {err && <div className="mt-2 text-[13px] font-semibold text-red-600">{err}</div>}
+      {open && table.length > 0 && (
+        <div className="mt-3">
+          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="지역 찾기" className="h-9 w-48 px-3 rounded-lg border border-[#DCE3EE] bg-white text-[13px] mb-2 outline-none focus:border-[#2D4C82]" />
+          <div className="max-h-[260px] overflow-auto rounded-lg border border-[#E3E8F0] bg-white">
+            <table className="w-full text-[13px]">
+              <thead className="sticky top-0 bg-[#1B2B4B] text-white"><tr><th className="px-3 py-2 text-left">지역</th><th className="px-3 py-2">12PLT 파렛당</th><th className="px-3 py-2">12파렛 요금</th><th className="px-3 py-2">18PLT 파렛당</th><th className="px-3 py-2">18파렛 요금</th></tr></thead>
+              <tbody className="divide-y divide-[#EEF1F6]">
+                {shown.map((t, i) => (
+                  <tr key={t.region + i}><td className="px-3 py-1.5 font-bold text-[#0F1A30]">{t.region}</td>
+                    <td className="px-3 py-1.5 text-center tabular-nums">{won(t.r12)}</td><td className="px-3 py-1.5 text-center tabular-nums text-[#7A8AA6]">{t.r12 ? won(t.r12 * 12) : "-"}</td>
+                    <td className="px-3 py-1.5 text-center tabular-nums">{won(t.r18)}</td><td className="px-3 py-1.5 text-center tabular-nums text-[#7A8AA6]">{t.r18 ? won(t.r18 * 18) : "-"}</td></tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="mt-1.5 text-[12px] text-[#7A8AA6]">요금 칸은 확인용입니다(파렛당 × 12 / × 18). 금액이 단가표와 다르면 알려 주세요.</div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function FormEditor({ init, onClose, onSaved, co, clients = [], places = [] }) {
   const [f, setF] = React.useState(() => JSON.parse(JSON.stringify(init)));
   const [busy, setBusy] = React.useState(false);
@@ -455,6 +514,9 @@ function FormEditor({ init, onClose, onSaved, co, clients = [], places = [] }) {
           ))}
         </div>
         <button onClick={() => setF((p) => ({ ...p, columns: [...p.columns, col("", "extra")] }))} className={`${btn} border border-dashed border-[#B9C6DA] text-[#2D4C82] mb-6`}>＋ 칸 추가</button>
+
+        {/* ⭐ 2026-11-03 단가표(청구운임) — 이 노선의 지역별 파렛당 단가(12PLT·18PLT) */}
+        <RateTableEditor table={f.rateTable || []} name={f.rateTableName || ""} onChange={(rateTable, rateTableName) => setF((p) => ({ ...p, rateTable, rateTableName }))} />
 
         <div className="text-[14px] font-black text-[#0F1A30] mb-2">묶음(상차지별 표)</div>
         <div className="text-[12.5px] text-[#7A8AA6] mb-2">시트에서 "배차 내역(1센터)"처럼 나뉜 표마다 하나씩. 기본 도착지는 새 날짜를 열면 미리 채워지는 줄입니다(한 줄에 "도착지 / 시군구").</div>
@@ -781,6 +843,8 @@ export default function RouteBoard({ companyName = "" }) {
               else if (c.kind === "extra" && data.추가정보) delete data.추가정보[c.label];
             });
             if (!qtyTouched) { delete data.품목수량; delete data.화물내용; delete data.화물수량; }
+            const addrTouched = form.columns.some((c) => c.kind === "field" && ["하차지명", "하차지주소"].includes(c.field) && t.has(c.id));
+            if (prev.운임수동 || (!qtyTouched && !addrTouched && toInt(prev.청구운임))) { delete data.청구운임; delete data.단가표지역; delete data.파렛단가; if (!("기사운임" in data)) delete data.수수료; }
           }
           writes.push(setDoc(doc(db, "orders", id), { ...data, _id: id }, { merge: true }));
           saved += 1;
