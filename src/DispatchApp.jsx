@@ -45,7 +45,8 @@ import { useMyProfile } from "./userNames";
 import { useCompanyStaff, masterHasHr, isHrStaffUser } from "./hrHandover";
 import { AttendanceQuickButton, CheckoutReminderHost } from "./attendanceQuick";
 import { PersonalTodayHost } from "./PersonalSchedule";
-import FixedRouteStatusHost, { FixedRouteCells, fixedHeaderOf, useRouteBoardIds } from "./FixedRouteStatus"; // ⭐ 2026-11-03 배차현황 › 고정노선현황
+import FixedRouteStatusHost, { FixedRouteCells, fixedHeaderOf, fixedLookOf, useRouteBoardIds } from "./FixedRouteStatus";
+import ColumnStyleHost from "./ColumnStyle"; // 🎨 2026-11-03 컬럼명 오른쪽 클릭 → 색 변경 // ⭐ 2026-11-03 배차현황 › 고정노선현황
 import { usePendingSignups } from "./pendingSignups";
 import { NavHover } from "./navMenus";
 import { PeriodPicker as ResumePeriodPicker, DateField as ResumeDateField, SelectField as ResumeSelectField, AddressField as ResumeAddressField, BirthSelect as ResumeBirthSelect, EDU_STATUS as RESUME_EDU_STATUS, FAMILY_REL as RESUME_FAMILY_REL } from "./ResumeInputs";
@@ -8665,6 +8666,7 @@ return (
       )}
 
       {/* ---------------- 화면 렌더링 ---------------- */}
+      <ColumnStyleHost />
       <main className={`kp-main ${menu === "HOME" ? "kp-main-bare" : ""} rounded shadow p-4 w-full min-w-0 ${darkMode ? "bg-gray-900 text-gray-100" : "bg-white text-gray-900"}`}>
         {!darkMode && <KpPageHeader menu={menu} />}
         {menu === "HOME" && (
@@ -38267,6 +38269,7 @@ if (mode === "driver") {
       prev.size === rows.length ? new Set() : new Set(rows.map((r) => getId(r)))
     );
   const dsBiz = useCompanyBiz(getTenant() || userCompany); // ⭐ 2026-11-03 여러 사업자
+  const dsFixedLook = React.useMemo(() => (fixedForm ? fixedLookOf(fixedForm) : null), [fixedForm]); // ⭐ 리터·총계 머리글 색
   const [dsDetail, setDsDetail] = React.useState(null); // 🔎 세부검색(최대 3차 + 기간)
   const dsDetailGet = useDetailGetters(userNameMap, userCompany);
   const dsDateOf = React.useCallback((r) => String(fixedForm ? (r.입고일 || r.하차일 || r.상차일 || "") : (r.상차일 || r.상차일자 || "")).slice(0, 10), [fixedForm]);
@@ -39728,7 +39731,7 @@ return (
 
               ]).map((h) => {
                 return (
-                <SortTh key={h} k={h === "선택" ? "" : h} sort={dsSort.sort} onSort={dsOnSort}
+                <SortTh key={h} k={h === "선택" ? "" : h} sort={dsSort.sort} onSort={dsOnSort} data-frs={dsFixedLook?.get(h) || undefined}
                   className="px-3 py-3 text-center text-[14px] font-bold text-white whitespace-nowrap border-b border-white/10 border-r border-r-white/10 last:border-r-0"
                 >
                   {h === "선택" ? (

@@ -33,6 +33,19 @@ export function fixedHeaderOf(form) {
   const has = (f) => cols.some((c) => c.kind === "field" && c.field === f);
   return ["선택", "순번", "발주일", "입고일", "상차지", ...cols.map((c) => c.label), "배차상태", ...["청구운임", "기사운임"].filter((f) => !has(f)), "수수료"];
 }
+// ⭐ 2026-11-03 리터(수량)·총계 칸은 색으로 구분 — 시트 열 이름이 "0.5L"·"총계"처럼 생겼으면 같은 모양으로
+export const frsLook = (c) => {
+  const l = String(c?.label || "").trim();
+  if (c?.kind === "sum" || /^(총계|합계|총\s*수량|총합)$/.test(l)) return "sum";
+  if (c?.kind === "qty" || /^\d+(\.\d+)?\s*(L|ℓ|리터)$/i.test(l)) return "qty";
+  return "";
+};
+// 머리글 이름 → "qty" | "sum" (배차현황 표 머리글 색)
+export function fixedLookOf(form) {
+  const m = new Map();
+  (form?.columns || []).forEach((c) => { const k = frsLook(c); if (k) m.set(c.label, k); });
+  return m;
+}
 const cargoText = (qty) => { const total = Object.values(qty).reduce((a, n) => a + n, 0); return { 화물내용: Object.keys(qty).length ? `${Object.entries(qty).map(([k, n]) => `${k} ${n}`).join(" · ")} (총 ${total})` : "", 화물수량: total ? String(total) : "" }; };
 const valueOf = (c, row) => {
   if (c.kind === "qty") return row.품목수량?.[c.label] ? String(row.품목수량[c.label]) : "";
@@ -156,15 +169,16 @@ export function FixedRouteCells({ form, row, drivers = [], clients = [], onPatch
         const own = ownerOf(c);
         const v = valueOf(c, row);
         const isQty = c.kind === "qty";
-        const bg = isQty ? (v ? "bg-[#FFF8DB]" : "bg-[#FFFCEF]") : own === "운송사" ? "bg-[#F3F7FF]" : "";
-        if (c.kind === "sum") return <td key={c.id} className={`${td} font-black text-[14px] text-[#0F1A30] tabular-nums bg-[#FFF3B0]`} style={{ fontFamily: MONO }}>{v}</td>;
+        const look = frsLook(c);
+        const bg = look ? "" : own === "운송사" ? "bg-[#F3F7FF]" : "";
+        if (c.kind === "sum") return <td key={c.id} data-frs="sum" className={`${td} tabular-nums`}>{v}</td>;
         if (c.kind === "field" && DRV_KEY[c.field]) {
           const pick = (d) => onPatch({ 차량번호: d.차량번호 || "", 이름: d.이름 || "", 전화번호: d.전화번호 || "", ...(row.배차상태 === "배차중" || !row.배차상태 ? { 배차상태: "배차완료" } : {}) });
           return <td key={c.id} className={`${td} bg-[#F3F7FF]`} title="차량번호·이름·번호 일부만 쳐도 기사관리에서 찾아 채웁니다"><VehicleCell field={c.field} value={v} drivers={drivers} disabled={disabled} onPick={pick} onCommit={(x) => commit(c, x)} placeholder={c.field === "차량번호" && !v ? "미배차" : ""} /></td>;
         }
         if (isCarrierCol(c)) return <td key={c.id} className={`${td} ${bg}`} title="기본거래처에 있으면 목록에서 고르고, 없으면 그냥 입력"><CarrierCell value={v} clients={carrierItems} disabled={disabled} onCommit={(x) => commit(c, x)} /></td>;
         return (
-          <td key={c.id} className={`${td} ${bg}`} title={own === "화주" ? "업체(화주)가 시트에 입력하는 칸" : own === "운송사" ? "운송사가 입력하는 칸" : ""}>
+          <td key={c.id} data-frs={look || undefined} data-empty={look && !v ? "1" : undefined} className={`${td} ${bg}`} title={own === "화주" ? "업체(화주)가 시트에 입력하는 칸" : own === "운송사" ? "운송사가 입력하는 칸" : ""}>
             <Cell value={v} disabled={disabled} numeric={isQty || (c.kind === "field" && MONEY_FIELDS.has(c.field))} wide={c.kind === "field" && ["하차지명", "하차지주소", "메모"].includes(c.field)}
               strong={c.kind === "field" && c.field === "하차지명"} onCommit={(x) => commit(c, x)} />
           </td>
@@ -446,7 +460,13 @@ export default function FixedRouteStatusHost({ company, dispatchData = [], rende
         .kp-frs tbody tr.kp-frs-row>td{border-right:1px solid #E3E8F0 !important;border-bottom:1px solid #DCE3EE !important}
         .kp-frs tbody tr.kp-frs-row>td:last-child{border-right:none !important}
         .kp-frs tbody tr.kp-frs-row[data-gstart="1"]>td{border-top:2px solid #1B2B4B}
-        .kp-frs tbody tr.kp-frs-row:hover>td{box-shadow:inset 0 0 0 9999px rgba(45,76,130,.035)}`}</style>
+        .kp-frs tbody tr.kp-frs-row:hover>td{box-shadow:inset 0 0 0 9999px rgba(45,76,130,.035)}
+        .kp-frs td[data-frs="qty"]{background:#EEF3FB}.kp-frs td[data-frs="qty"][data-empty="1"]{background:#F7F9FD}
+        .kp-frs td[data-frs="qty"],.kp-frs td[data-frs="qty"] *{color:#1B2B4B;font-size:15.5px;font-weight:900;font-family:${MONO};font-variant-numeric:tabular-nums}
+        .kp-frs td[data-frs="sum"]{background:#1B2B4B;border-right-color:#0F1A30 !important}
+        .kp-frs td[data-frs="sum"],.kp-frs td[data-frs="sum"] *{color:#fff;font-size:17px;font-weight:900;font-family:${MONO};font-variant-numeric:tabular-nums}
+        .kp-frs thead th[data-frs="qty"]{background:#2D4C82}
+        .kp-frs thead th[data-frs="sum"]{background:#0B1428;box-shadow:inset 0 -3px 0 #8FB0F0}`}</style>
       <div className="relative overflow-hidden rounded-[22px] px-4 md:px-6 py-4 text-white" style={{ background: "radial-gradient(900px 300px at 90% -20%, rgba(110,149,232,.28), transparent 60%), linear-gradient(120deg,#060C1A 0%,#0F1A30 45%,#1B2B4B 100%)" }}>
         <div className="absolute inset-0 pointer-events-none" style={{ background: "linear-gradient(rgba(143,176,240,.06) 1px, transparent 1px) 0 0/24px 24px, linear-gradient(90deg, rgba(143,176,240,.06) 1px, transparent 1px) 0 0/24px 24px" }} />
         <div className="relative flex items-center gap-4 flex-wrap">
