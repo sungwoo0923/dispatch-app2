@@ -6133,8 +6133,11 @@ export default function FleetManagement({ dispatchData = [], role = "", forceTab
     const uid = auth.currentUser?.uid;
     if (!uid) return;
     getDoc(doc(db, "users", uid)).then(snap => {
-      if (snap.exists()) setMyCompanyName(snap.data().companyName || null);
-    }).catch(() => {});
+      // ⭐ 2026-11-03 최고관리자는 "지금 보고 있는 회사"(getTenant) — 예전엔 본인 소속(돌캐)이라 태진 화면에서 만든 고정노선·배차표가 돌캐로 저장됐다
+      const d = snap.exists() ? snap.data() : {};
+      const isTM = d.role === "totalMaster" || auth.currentUser?.email === "tjddnqkf@naver.com";
+      setMyCompanyName((isTM ? getTenant() : "") || d.companyName || getTenant() || null);
+    }).catch(() => { if (getTenant()) setMyCompanyName(getTenant()); });
   }, []);
 
   // 오늘 기사 사진 로그 실시간 구독 + 신규 업로드 알림

@@ -6,7 +6,7 @@
 import React from "react";
 import { collection, onSnapshot, query, where } from "firebase/firestore";
 import { db } from "./firebase";
-import { sheetApi } from "./RouteBoard";
+import { sheetApi, BoardSuggest } from "./RouteBoard";
 import { ownerOf, rateFor } from "./routeBoardSheet";
 
 const MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
@@ -53,6 +53,23 @@ function Cell({ value, onCommit, numeric, wide, placeholder, disabled, title, st
       onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); if (e.key === "Escape") { setV(value); setEdit(false); setTimeout(() => e.target.blur(), 0); } }}
       onClick={(e) => e.stopPropagation()} onDoubleClick={(e) => e.stopPropagation()}
       className={`kp-frs-cell ${wide ? "min-w-[150px] text-left" : numeric ? "min-w-[54px] text-center tabular-nums" : "min-w-[84px] text-center"} ${strong ? "font-black" : "font-semibold"}`} />
+  );
+}
+
+// 🚚 차량 정보 칸(차량번호·성명·휴대전화) — 스마트 검색: 차량번호 일부나 이름·번호만 쳐도 기사관리 목록이 뜨고, 고르면 세 칸이 한 번에
+const DRV_KEY = { 차량번호: "차량번호", 이름: "이름", 전화번호: "전화번호" };
+function VehicleCell({ field, value, drivers, disabled, onPick, onCommit, placeholder }) {
+  const [v, setV] = React.useState(value);
+  const picked = React.useRef(false);
+  React.useEffect(() => { setV(value); }, [value]);
+  if (disabled) return <span className="text-[13.5px] font-semibold">{value}</span>;
+  const sub = (d) => [field !== "차량번호" && d.차량번호, field !== "이름" && d.이름, field !== "전화번호" && d.전화번호, d.등급].filter(Boolean).join(" · ");
+  return (
+    <BoardSuggest value={v} onChange={setV} items={drivers} k={DRV_KEY[field]} sub={sub} title="기사관리" placeholder={placeholder}
+      onPick={(d) => { picked.current = true; setV(d[DRV_KEY[field]] || ""); onPick(d); }}
+      onBlur={() => { setTimeout(() => { if (!picked.current && String(v) !== String(value)) onCommit(v); picked.current = false; }, 160); }}
+      onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); }}
+      className={`kp-frs-cell ${field === "차량번호" ? "min-w-[118px]" : "min-w-[90px]"} text-center font-semibold`} inputProps={{ onClick: (e) => e.stopPropagation(), onDoubleClick: (e) => e.stopPropagation() }} />
   );
 }
 
@@ -103,8 +120,9 @@ export function FixedRouteCells({ form, row, drivers = [], onPatch, disabled = f
         const isQty = c.kind === "qty";
         const bg = isQty ? (v ? "bg-[#FFF8DB]" : "bg-[#FFFCEF]") : own === "운송사" ? "bg-[#F3F7FF]" : "";
         if (c.kind === "sum") return <td key={c.id} className={`${td} font-black text-[14px] text-[#0F1A30] tabular-nums bg-[#FFF3B0]`} style={{ fontFamily: MONO }}>{v}</td>;
-        if (c.kind === "field" && c.field === "차량번호" && !v) {
-          return <td key={c.id} className={`${td} ${bg}`}><Cell value="" disabled={disabled} placeholder="미배차" onCommit={(x) => commit(c, x)} title="차량번호 입력" /></td>;
+        if (c.kind === "field" && DRV_KEY[c.field]) {
+          const pick = (d) => onPatch({ 차량번호: d.차량번호 || "", 이름: d.이름 || "", 전화번호: d.전화번호 || "", ...(row.배차상태 === "배차중" || !row.배차상태 ? { 배차상태: "배차완료" } : {}) });
+          return <td key={c.id} className={`${td} bg-[#F3F7FF]`} title="차량번호·이름·번호 일부만 쳐도 기사관리에서 찾아 채웁니다"><VehicleCell field={c.field} value={v} drivers={drivers} disabled={disabled} onPick={pick} onCommit={(x) => commit(c, x)} placeholder={c.field === "차량번호" && !v ? "미배차" : ""} /></td>;
         }
         return (
           <td key={c.id} className={`${td} ${bg}`} title={own === "화주" ? "업체(화주)가 시트에 입력하는 칸" : own === "운송사" ? "운송사가 입력하는 칸" : ""}>

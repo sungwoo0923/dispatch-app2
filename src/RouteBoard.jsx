@@ -12,7 +12,7 @@
 //   · 배차관리에서 고친 차량·기사·시간도 이 화면에 그대로 보인다(같은 오더를 읽으므로).
 import React from "react";
 import { createPortal } from "react-dom";
-import { collection, doc, onSnapshot, query, where, getDocs, setDoc, addDoc, updateDoc, deleteDoc, serverTimestamp } from "firebase/firestore";
+import { collection, doc, onSnapshot, query, where, getDocs, setDoc, addDoc, updateDoc, deleteDoc, serverTimestamp, writeBatch } from "firebase/firestore";
 import { db, auth, FUNCTIONS_BASE } from "./firebase";
 import { parseBoardTab, sheetToForm, tabDate, planSheetWrite, nm as sheetNm, ownerOf, parseRateSheet, rateFor } from "./routeBoardSheet"; // ⭐ 2026-11-02 구글시트 날짜 탭 불러오기
 import { coDocKey } from "./coKey";
@@ -85,7 +85,7 @@ function rowFromOrder(form, o) {
     else if (c.kind === "qty") v[c.id] = o.품목수량?.[c.label] ? String(o.품목수량[c.label]) : "";
     else if (c.kind === "extra") v[c.id] = String(o.추가정보?.[c.label] ?? "");
   });
-  return { key: o._id || o.id, _id: o._id || o.id, v, status: o.배차상태 || "", dirty: false, sheetGone: !!o.시트삭제됨, extra: { 하차지담당자: o.하차지담당자, 하차지담당자번호: o.하차지담당자번호 } };
+  return { key: o._id || o.id, _id: o._id || o.id, v, status: o.배차상태 || "", dirty: false, sheetGone: !!o.시트삭제됨, fare: o.청구운임 || "", fareManual: !!o.운임수동, extra: { 하차지담당자: o.하차지담당자, 하차지담당자번호: o.하차지담당자번호 } };
 }
 const rowEmpty = (form, r) => !form.columns.some((c) => c.kind !== "no" && c.kind !== "sum" && String(r.v[c.id] || "").trim());
 const rowSum = (form, r) => form.columns.filter((c) => c.kind === "qty").reduce((a, c) => a + toInt(r.v[c.id]), 0);
@@ -108,6 +108,11 @@ function orderFromRow(form, g, r, i, date, co, isNew, prevStatus) {
   if (!form.columns.some((c) => c.field === "청구운임") && form.rateTable?.length) {
     const rf = rateFor(form.rateTable, rec.하차지주소 || "", total);
     if (rf) Object.assign(rec, { 청구운임: String(rf.total), 단가표지역: rf.region, 파렛단가: rf.per });
+  }
+  // 배차표 청구운임 칸에 직접 넣은 값(비우면 다시 단가표 자동)
+  if (r.fareOverride != null) {
+    const n = toInt(r.fareOverride);
+    if (n) Object.assign(rec, { 청구운임: String(n), 운임수동: true }); else rec.운임수동 = false;
   }
   if (rec.청구운임 || rec.기사운임) rec.수수료 = String(toInt(rec.청구운임) - toInt(rec.기사운임));
   rec.차량번호 = normPlate(rec.차량번호 || "") ? String(rec.차량번호).trim() : "";
@@ -657,6 +662,17 @@ export default function RouteBoard({ companyName = "" }) {
   // ⭐ 2026-11-03 저장 안 한 줄이 있을 때 날짜·양식을 바꾸면 말없이 사라지던 문제 — 먼저 묻는다
   const guard = async (go) => { if (dirty && !(await kpConfirm("저장하지 않은 내용이 있습니다.\n저장하지 않고 이동할까요?"))) return; go(); };
   const colOf = (field) => form?.columns.find((c) => c.kind === "field" && c.field === field);
+  // ⭐ 2026-11-03 청구운임 칸(시트엔 없고 프로그램에만) — 리터·파레트 수를 넣는 즉시 단가표로 계산해 보여 준다
+  const showFare = !!form && !form.columns.some((c) => c.kind === "field" && c.field === "청구운임");
+  const fareInfo = (r) => {
+    if (r.fareOverride != null && r.fareOverride !== "") return { n: toInt(r.fareOverride), src: "직접" };
+    if (r.fareManual && toInt(r.fare)) return { n: toInt(r.fare), src: "직접" };
+    const cA = colOf("하차지주소");
+    const rf = form?.rateTable?.length ? rateFor(form.rateTable, cA ? r.v[cA.id] : "", rowSum(form, r)) : null;
+    if (rf) return { n: rf.total, src: "단가표", title: `${rf.region} · 파렛당 ${rf.per.toLocaleString()}원 × ${rf.pallets}` };
+    return { n: toInt(r.fare), src: toInt(r.fare) ? "" : "없음" };
+  };
+  const setFare = (g, i, val) => { setDirty(true); setRows((p) => ({ ...p, [g]: p[g].map((x, j) => (j === i ? { ...x, fareOverride: String(val).replace(/[^\d]/g, ""), dirty: true } : x)) })); };
   // 시트에서 온 줄 — 등록된 하차지는 풀주소·담당자, 기사관리에 있는 차량은 이름·전화번호 채우기
   const enrich = (v0) => {
     const v = { ...v0 }; let extra = {};
@@ -854,7 +870,7 @@ export default function RouteBoard({ companyName = "" }) {
             });
             if (!qtyTouched) { delete data.품목수량; delete data.화물내용; delete data.화물수량; }
             const addrTouched = form.columns.some((c) => c.kind === "field" && ["하차지명", "하차지주소"].includes(c.field) && t.has(c.id));
-            if (prev.운임수동 || (!qtyTouched && !addrTouched && toInt(prev.청구운임))) { delete data.청구운임; delete data.단가표지역; delete data.파렛단가; if (!("기사운임" in data)) delete data.수수료; }
+            if (r.fareOverride == null && (prev.운임수동 || (!qtyTouched && !addrTouched && toInt(prev.청구운임)))) { delete data.청구운임; delete data.단가표지역; delete data.파렛단가; if (!("기사운임" in data)) delete data.수수료; }
           }
           writes.push(setDoc(doc(db, "orders", id), { ...data, _id: id }, { merge: true }));
           saved += 1;
@@ -886,6 +902,26 @@ export default function RouteBoard({ companyName = "" }) {
   };
   React.useEffect(() => { if (!msg) return undefined; const t = setTimeout(() => setMsg(""), 4000); return () => clearTimeout(t); }, [msg]);
 
+  // ⭐ 2026-11-03 최고관리자 — 다른 회사로 저장된 양식(예: 태진 시트가 돌캐로)과 그 양식으로 만든 오더를 다른 회사로 옮긴다
+  const isMasterUser = () => { try { return localStorage.getItem("role") === "totalMaster" || auth.currentUser?.email === "tjddnqkf@naver.com"; } catch { return false; } };
+  const moveForm = async () => {
+    const target = String(window.prompt(`'${form.name}' 양식과 그 오더를 옮길 회사 이름을 정확히 입력하세요.\n(지금 회사: ${form.companyName || co})`, "") || "").trim();
+    if (!target || target === (form.companyName || co)) return;
+    setBusy("move");
+    try {
+      const snap = await getDocs(query(collection(db, "orders"), where("배차표Id", "==", form.id)));
+      const docs = snap.docs;
+      if (!(await kpConfirm(`'${form.name}' 양식과 오더 ${docs.length}건을 '${target}' 회사로 옮길까요?\n옮긴 뒤에는 '${target}' 회사 화면에서 보입니다.`))) return;
+      for (let i = 0; i < docs.length; i += 400) {
+        const b = writeBatch(db);
+        docs.slice(i, i + 400).forEach((d) => b.update(d.ref, { companyName: target, _lastModified: Date.now() }));
+        await b.commit();
+      }
+      await updateDoc(doc(db, "routeBoards", form.id), { companyName: target, syncHash: {}, movedFrom: form.companyName || co, movedAt: serverTimestamp() });
+      setFormId("");
+      kpAlert(`'${target}' 회사로 옮겼습니다 — 양식 1개 · 오더 ${docs.length}건.\n'${target}' 회사로 들어가서 확인해 주세요.`);
+    } catch (e) { kpAlert(`옮기지 못했습니다: ${e?.message || e}`); } finally { setBusy(""); }
+  };
   const delForm = async () => {
     if (!(await kpConfirm(`'${form.name}' 양식을 지울까요?\n(이미 만든 오더는 지워지지 않습니다)`))) return;
     await deleteDoc(doc(db, "routeBoards", form.id)).catch((e) => kpAlert(e.message));
@@ -911,6 +947,7 @@ export default function RouteBoard({ companyName = "" }) {
         <button onClick={() => setEdit(BLANK())} className={`${btn} border border-[#DCE3EE] text-[#2D4C82]`}>＋ 새 양식</button>
         {form && <button onClick={() => setEdit(form)} className={`${btn} border border-[#DCE3EE] text-[#3A4A66]`}>양식 수정</button>}
         {form && <button onClick={delForm} className={`${btn} text-red-500`}>양식 삭제</button>}
+        {form && isMasterUser() && <button onClick={moveForm} disabled={!!busy} className={`${btn} border border-[#F7C97A] text-[#B54708]`} title="최고관리자 — 다른 회사로 잘못 만들어진 양식과 그 오더를 옮깁니다">{busy === "move" ? "옮기는 중…" : "다른 회사로 옮기기"}</button>}
         <div className="flex-1" />
         {form && (
           <>
@@ -963,6 +1000,7 @@ export default function RouteBoard({ companyName = "" }) {
                     <thead>
                       <tr className="bg-[#EAF1FB] text-[#3A4A66]">
                         {form.columns.map((c) => <th key={c.id} style={{ width: colWidth(c), minWidth: colWidth(c) }} className={`px-1.5 py-2 border border-[#DCE3EE] font-black whitespace-nowrap ${c.kind === "qty" ? "bg-[#FFF3B0]" : ""}`}>{c.label}</th>)}
+                        {showFare && <th className="px-1.5 py-2 border border-[#DCE3EE] font-black whitespace-nowrap w-[110px] bg-[#E6F4EA]" title="시트에는 없는 프로그램 칸 — 리터·파레트 수를 넣으면 단가표로 자동 계산, 직접 고치면 그 값">청구운임</th>}
                         <th className="px-1.5 py-2 border border-[#DCE3EE] font-black whitespace-nowrap w-[90px]">상태</th>
                         <th className="border border-[#DCE3EE] w-[36px]" />
                       </tr>
@@ -974,11 +1012,11 @@ export default function RouteBoard({ companyName = "" }) {
                             <td key={c.id} className="border border-[#E3E8F0] p-0.5">
                               {c.kind === "no" ? <div className="text-center text-[#7A8AA6] font-bold">{i + 1}</div>
                                 : c.kind === "sum" ? <div className="text-center font-black text-[#0F1A30]">{rowSum(form, r) || ""}</div>
-                                  : c.field === "하차지명" || c.field === "차량번호" ? (
+                                  : ["하차지명", "차량번호", "이름", "전화번호"].includes(c.field) ? (
                                     <BoardSuggest value={r.v[c.id] ?? ""} onChange={(v) => setCell(g.name, i, c, v)} onBlur={() => onLeave(g.name, i, c)} onKeyDown={onKey}
                                       onPick={(x) => (c.field === "하차지명" ? pickPlace(g.name, i, x) : pickDriver(g.name, i, x))}
-                                      items={c.field === "하차지명" ? places : drivers} k={c.field === "하차지명" ? "업체명" : "차량번호"}
-                                      sub={c.field === "하차지명" ? placeSub : (d) => [d.이름, d.전화번호, d.등급].filter(Boolean).join(" · ")}
+                                      items={c.field === "하차지명" ? places : drivers} k={c.field === "하차지명" ? "업체명" : c.field}
+                                      sub={c.field === "하차지명" ? placeSub : (d) => [c.field !== "차량번호" && d.차량번호, c.field !== "이름" && d.이름, c.field !== "전화번호" && d.전화번호, d.등급].filter(Boolean).join(" · ")}
                                       title={c.field === "하차지명" ? "상하차지거래처" : "기사관리"} className={cellCls}
                                       inputProps={{ "data-g": g.name, "data-r": i, "data-c": ci }} />
                                   ) : (
@@ -990,6 +1028,13 @@ export default function RouteBoard({ companyName = "" }) {
                                   )}
                             </td>
                           ))}
+                          {showFare && (() => { const f = fareInfo(r); return (
+                            <td className="border border-[#E3E8F0] p-0.5 bg-[#F4FBF6]" title={f.title || (f.src === "직접" ? "직접 입력한 운임 — 비우면 단가표 자동" : f.src === "없음" ? (form.rateTable?.length ? "단가표에서 이 지역을 못 찾았습니다(직접 입력 가능)" : "양식에 단가표를 올리면 자동 계산") : "")}>
+                              <input value={r.fareOverride != null ? (r.fareOverride ? Number(r.fareOverride).toLocaleString() : "") : (f.n ? f.n.toLocaleString() : "")} onChange={(e) => setFare(g.name, i, e.target.value)} inputMode="numeric"
+                                placeholder={f.src === "없음" ? "-" : ""} className={`${cellCls} text-right tabular-nums font-black`} />
+                              {f.src && f.src !== "없음" && <div className={`text-[9.5px] font-bold text-right px-1.5 -mt-0.5 ${f.src === "직접" ? "text-[#B54708]" : "text-[#067647]"}`}>{f.src === "직접" ? "직접 입력" : "단가표"}</div>}
+                            </td>
+                          ); })()}
                           <td className="border border-[#E3E8F0] text-center text-[12px] font-bold whitespace-nowrap px-1">
                             {isGone(r) ? (
                               <div className="flex flex-col items-center gap-0.5 py-0.5">
@@ -1011,6 +1056,7 @@ export default function RouteBoard({ companyName = "" }) {
                               : c.kind === "qty" ? (t[c.id] || "") : c.kind === "sum" ? (t.sum || "") : ""}
                           </td>
                         ))}
+                        {showFare && <td className="border border-[#E3E8F0] px-1.5 py-1.5 text-right tabular-nums">{arr.reduce((a, r) => a + (rowEmpty(form, r) ? 0 : fareInfo(r).n), 0).toLocaleString() || ""}</td>}
                         <td className="border border-[#E3E8F0]" colSpan={2} />
                       </tr>
                     </tbody>
@@ -1024,6 +1070,7 @@ export default function RouteBoard({ companyName = "" }) {
               <span className="font-black text-[#0F1A30]">전체 {allRows.filter((r) => !rowEmpty(form, r)).length}대</span>
               {qtyCols.map((c) => <span key={c.id} className="text-[#3A4A66]">{c.label} <b className="text-[#0F1A30]">{grand[c.id] || 0}</b></span>)}
               <span className="text-[#3A4A66]">총계 <b className="text-[#0F1A30]">{grand.sum}</b></span>
+              {showFare && <span className="text-[#3A4A66]">청구운임 <b className="text-[#067647]">{allRows.reduce((a, r) => a + (rowEmpty(form, r) ? 0 : fareInfo(r).n), 0).toLocaleString()}원</b></span>}
             </div>
           )}
         </>
