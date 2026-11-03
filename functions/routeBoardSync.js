@@ -60,6 +60,7 @@ function parseBoardTab(form, rawRows) {
   const cols = form.columns.filter((c) => c.kind !== "no" && c.kind !== "sum");
   const heads = headerRows(rows, cols.map((c) => c.label));
   const out = {}; form.groups.forEach((g) => { out[g.name] = []; });
+  const meta = {}; // ⭐ 2026-11-03 묶음별 표 위치(프로그램에서 추가한 오더를 시트 줄로 넣을 때)
   let date = "";
   heads.forEach((hi, k) => {
     const end = k + 1 < heads.length ? heads[k + 1] : rows.length;
@@ -73,6 +74,11 @@ function parseBoardTab(form, rawRows) {
       const cand = rows[hi].map((h, i) => (nm(h) === nm(c.label) ? i : -1)).filter((i) => i >= 0);
       if (cand.length) idx[c.id] = cand.map((i) => ({ i, n: data.filter((r) => cell(r[i])).length })).sort((a, b) => b.n - a.n || b.i - a.i)[0].i;
     });
+    if (!meta[g.name]) {
+      const allIdx = { ...idx };
+      form.columns.filter((c) => c.kind === "no" || c.kind === "sum").forEach((c) => { const i = rows[hi].findIndex((h) => nm(h) === nm(c.label)); if (i >= 0) allIdx[c.id] = i; });
+      meta[g.name] = { hi, end, idx: allIdx, lastRi: hi };
+    }
     data.forEach((r) => {
       if (!r.some(Boolean) || isNoise(r)) return;
       const v = {};
@@ -82,9 +88,10 @@ function parseBoardTab(form, rawRows) {
       const nameCol = cols.find((c) => c.field === "하차지명");
       if (nameCol && /^(합계|소계|총계|계)$/.test(String(v[nameCol.id] || "").replace(/\s/g, ""))) return;
       out[g.name].push(v);
+      if (meta[g.name] && meta[g.name].hi === hi) meta[g.name].lastRi = Math.max(meta[g.name].lastRi, rows.indexOf(r));
     });
   });
-  return { date, groups: out, headers: heads.length };
+  return { date, groups: out, headers: heads.length, meta, rows };
 }
 
 // 시트 한 줄 값 → 오더 칸(only: "화주"|"운송사"|"" = 전부)
@@ -161,7 +168,7 @@ function rateFieldsOf(form, o, qty, addr) {
 
 const cargoText = (qty) => { const total = Object.values(qty).reduce((a, n) => a + n, 0); return { 화물내용: Object.keys(qty).length ? `${Object.entries(qty).map(([k, n]) => `${k} ${n}`).join(" · ")} (총 ${total})` : "", 화물수량: total ? String(total) : "" }; };
 
-async function syncBoard({ db, FieldValue, form, readTabs, readTab, writeCells, daysBack = 1, daysAhead = 14 }) {
+async function syncBoard({ db, FieldValue, form, readTabs, readTab, writeCells, insertRows, daysBack = 1, daysAhead = 14 }) {
   const nameCol = form.columns.find((c) => c.kind === "field" && c.field === "하차지명");
   if (!form.sheetUrl || !nameCol) return { skipped: "no-sheet" };
   const today = kstToday(); const from = addDays(today, -daysBack); const to = addDays(today, daysAhead);
@@ -194,7 +201,7 @@ async function syncBoard({ db, FieldValue, form, readTabs, readTab, writeCells, 
     const tomb = form.삭제한줄 || {}; const tombUsed = {};
     hashes[tab] = hash; // (양방향이라 시트가 그대로여도 프로그램에서 바뀐 값을 시트에 써야 해서 건너뛰지 않음 — 바뀐 칸만 씀)
     sum.dates.push(date);
-    const batch = db.batch(); let ops = 0; const pushes = [];
+    const batch = db.batch(); let ops = 0; const pushes = []; const appends = [];
     for (const g of form.groups) {
       const mine = orders.filter((o) => (o.배차표묶음 || form.groups[0].name) === g.name).sort((a, b) => (a.배차표순번 || 0) - (b.배차표순번 || 0));
       const pool = {}; mine.forEach((o) => { const k = nm(o.하차지명); (pool[k] = pool[k] || []).push(o); });
@@ -287,11 +294,54 @@ async function syncBoard({ db, FieldValue, form, readTabs, readTab, writeCells, 
           ops += 1; sum.created += 1;
         }
       }
-      // 시트에서 지워진 줄 — 표시만
-      mine.forEach((o) => { if (!matched.has(o.ref.path) && !o.시트삭제됨 && !o.시트유지) { batch.update(o.ref, { 시트삭제됨: true }); ops += 1; sum.gone += 1; } });
+      // ⭐ 2026-11-03 프로그램(고정노선현황)에서 추가한 오더 — 아직 시트에 없으면 그 묶음 표 맨 아래에 새 줄로 넣는다
+      const mt = p.meta?.[g.name];
+      const pend = mine.filter((o) => !matched.has(o.ref.path) && o.시트추가대기 && !o.시트삭제됨);
+      if (pend.length && mt && insertRows) {
+        const noCol = form.columns.find((c) => c.kind === "no"); const sumCol = form.columns.find((c) => c.kind === "sum");
+        let no = 0;
+        if (noCol && mt.idx[noCol.id] != null) for (let ri = mt.hi + 1; ri < mt.end; ri++) no = Math.max(no, toInt((p.rows[ri] || [])[mt.idx[noCol.id]]));
+        pend.forEach((o) => {
+          const vals = []; const base = {};
+          const total = Object.values(o.품목수량 || {}).reduce((a, n) => a + toInt(n), 0);
+          form.columns.forEach((c) => {
+            const ci = mt.idx[c.id]; if (ci == null) return;
+            let v = "";
+            if (c.kind === "no") { if (no) { no += 1; v = String(no); } }
+            else if (c.kind === "sum") v = total ? String(total) : "";
+            else if (c.kind === "field" && c.field === "하차지명") v = cell(o.하차지명);
+            else v = o.시트추가값?.[c.id] != null ? cell(o.시트추가값[c.id]) : sheetForm(c, o);
+            if (v) vals.push({ ci, value: v });
+            if (c.kind !== "no" && c.kind !== "sum" && !(c.kind === "field" && c.field === "하차지명")) base[c.id] = v;
+          });
+          appends.push({ g: g.name, afterRi: mt.lastRi, vals, base, ref: o.ref });
+        });
+      }
+      // 시트에서 지워진 줄 — 표시만(프로그램에서 추가해 시트에 넣을 줄은 제외)
+      mine.forEach((o) => { if (!matched.has(o.ref.path) && !o.시트삭제됨 && !o.시트유지 && !o.시트추가대기) { batch.update(o.ref, { 시트삭제됨: true }); ops += 1; sum.gone += 1; } });
     }
     if (ops) await batch.commit();
     if (pushes.length && writeCells) { await writeCells(tab, pushes); sum.pushed = (sum.pushed || 0) + pushes.length; hashes[tab] = ""; } // 시트를 고쳤으니 다음에 다시 읽기
+    if (appends.length && writeCells && insertRows) {
+      // 아래쪽 묶음부터 줄을 끼워 넣어야 위쪽 줄 번호가 안 밀린다
+      const byPos = {}; appends.forEach((a) => { (byPos[a.afterRi] = byPos[a.afterRi] || []).push(a); });
+      const done = [];
+      for (const ri of Object.keys(byPos).map(Number).sort((a, b) => b - a)) {
+        const list = byPos[ri];
+        try {
+          await insertRows(tab, ri + 1, list.length);
+          const ups = []; list.forEach((a, k) => a.vals.forEach((x) => ups.push({ a1: `${colLetter(x.ci)}${ri + 2 + k}`, value: x.value })));
+          if (ups.length) await writeCells(tab, ups);
+          done.push(...list);
+        } catch (e) { sum.appendFail = String(e?.message || e); }
+      }
+      if (done.length) {
+        const b2 = db.batch();
+        done.forEach((a) => b2.update(a.ref, { 시트추가대기: false, 시트기준값: a.base, 시트동기화: Date.now() }));
+        await b2.commit();
+        sum.appended = (sum.appended || 0) + done.length; hashes[tab] = "";
+      }
+    }
   }
   await db.collection("routeBoards").doc(form.id).set({ syncHash: hashes, syncedAt: Date.now() }, { merge: true });
   return sum;

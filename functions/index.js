@@ -5548,9 +5548,15 @@ const { syncBoard: _syncBoard } = require("./routeBoardSync");
 async function runRouteBoardSync(form, { force = false } = {}) {
   const sid = parseSpreadsheetId(form.sheetUrl);
   if (!sid) return { skipped: "no-sheet" };
+  const tabIds = {};
   return _syncBoard({
     db, FieldValue, form: force ? { ...form, syncHash: {} } : form,
-    readTabs: async () => ((await sheetsApiFor(sid, "GET", "?fields=sheets.properties(title,index)")).sheets || []).map((x) => x.properties.title),
+    readTabs: async () => { const sh = ((await sheetsApiFor(sid, "GET", "?fields=sheets.properties(sheetId,title,index)")).sheets || []).map((x) => x.properties); sh.forEach((t) => { tabIds[t.title] = t.sheetId; }); return sh.map((t) => t.title); },
+    // ⭐ 2026-11-03 프로그램에서 추가한 오더 → 그 묶음 표 아래에 새 줄 끼워 넣기(서식은 윗줄 따라감)
+    insertRows: async (tab, at, n) => {
+      if (tabIds[tab] == null) throw new Error("탭 번호를 찾지 못했습니다.");
+      await sheetsApiFor(sid, "POST", ":batchUpdate", { data: { requests: [{ insertDimension: { range: { sheetId: tabIds[tab], dimension: "ROWS", startIndex: at, endIndex: at + n }, inheritFromBefore: true } }] } });
+    },
     readTab: async (tab) => (await sheetsApiFor(sid, "GET", `/values/${encodeURIComponent(`${quoteTab(tab)}!A1:AZ3000`)}?valueRenderOption=FORMATTED_VALUE`)).values || [],
     // ⭐ 양방향 — 프로그램에서 바뀐 칸을 시트에 써 준다(시트를 '편집자'로 공유해야 함 · 못 쓰면 기록만)
     writeCells: async (tab, ups) => {

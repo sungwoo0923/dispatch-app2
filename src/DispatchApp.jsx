@@ -8749,7 +8749,7 @@ return (
             )}
             {/* ⭐ 2026-11-03 고정노선현황 — 배차표 양식(화주사 구글시트) 오더를 배차현황과 같은 화면으로, 열은 시트 순서 · 시트 실시간 연동 */}
             {배차현황Tab === "고정노선현황" && (
-              <FixedRouteStatusHost company={userCompany || localStorage.getItem("userCompany") || ""} dispatchData={dispatchDataFiltered}
+              <FixedRouteStatusHost company={userCompany || localStorage.getItem("userCompany") || ""} dispatchData={dispatchDataFiltered} places={places} drivers={drivers} disabled={isViewer}
                 render={(form, rows) => (
                   <DispatchStatus
                     key={`fr-${form.id}-${viewResetKey}`}
