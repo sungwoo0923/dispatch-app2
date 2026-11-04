@@ -52,7 +52,9 @@ function Loading() {
 }
 
 // ── 운임조회 — PC "운임조회"(전국운임조회 · 자사운임표)와 같은 화면 ──
-function FareView({ initialTab = "전국운임조회" }) {
+// ⭐ 2026-11-04 입력 끊김 — 바깥(모바일 앱)은 오더가 바뀔 때마다 다시 그려지는데, 이 화면은 그 값들을 쓰지 않는다.
+//   memo로 감싸 상/하차지를 치는 동안 운임조회 화면 전체가 덩달아 다시 그려지지 않게 한다.
+const FareView = React.memo(function FareView({ initialTab = "전국운임조회" }) {
   const [tab, setTab] = React.useState(initialTab);
   return (
     <KpSubNav code="FARE LOOKUP" title="통합운임조회" icon="globe" active={tab} onSelect={setTab}
@@ -63,7 +65,7 @@ function FareView({ initialTab = "전국운임조회" }) {
       <div className="kp-m-pc"><FreightRateInquiry forceTab={tab} hideHeader /></div>
     </KpSubNav>
   );
-}
+});
 
 // ── 지입차관리 — PC와 같은 10개 모듈. 관제현황은 지도 중심의 모바일 관제 화면을 쓴다 ──
 const FLEET_MODULES = [

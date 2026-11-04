@@ -615,7 +615,13 @@ function NationalFareTab() {
   // ⭐ Firestore 읽기 절감 — where() 없이 orders/dispatch 전체를 무제한 실시간 구독하면
   // 오더 이력이 쌓일수록(그리고 누가 오더 하나만 수정해도 접속 중인 모두의 화면에서
   // 다시) 전체를 읽어들인다 — 운임 매칭에 충분한 최근 13개월치만 구독하도록 좁힌다.
+  // ⭐ 2026-11-04 입력 끊김 — 화면을 열자마자 13개월치 오더 수천 건을 받아 정리하느라, 그 사이 상/하차지를
+  // 치면 글자가 늦게·끊겨 들어갔다(특히 느린 폰). 이 자료는 상·하차지가 정해져 "결과"를 볼 때(refData)만
+  // 쓰므로, 처음 결과 단계가 됐을 때 구독을 시작한다(한 번 시작하면 화면을 나갈 때까지 유지).
+  const [wantHistory,setWantHistory]=useState(false);
+  useEffect(()=>{if(step==="result")setWantHistory(true);},[step]);
   useEffect(()=>{
+    if(!wantHistory)return undefined;
     const d=new Date(); d.setMinutes(d.getMinutes()-d.getTimezoneOffset()); d.setMonth(d.getMonth()-13);
     const liveWindowStart=d.toISOString().slice(0,10);
     // ⭐ 렉 개선 — 오더 하나만 바뀌어도 전체(수천 건)를 다시 만들던 것을 "바뀐 것만" 반영하고,
@@ -627,7 +633,7 @@ function NationalFareTab() {
     const u1=onSnapshot(query(collection(db,"dispatch"),where("상차일",">=",liveWindowStart)),apply(c1),()=>{});
     const u2=onSnapshot(query(collection(db,"orders"),where("상차일",">=",liveWindowStart)),apply(c2),()=>{});
     return()=>{u1();u2();if(t)clearTimeout(t);};
-  },[]);
+  },[wantHistory]);
   useEffect(()=>{
     if(fromSelectedRef.current){fromSelectedRef.current=false;return;}
     if(!fromSearch.trim()||fromSearch.length<2){setFromResults([]);return;}

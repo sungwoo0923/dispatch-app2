@@ -35,9 +35,15 @@ function fakeDoc(col, id, data0) {
   return { id, ref, exists: () => true, data: () => ({ ...data }), get: (k) => data[k], metadata: { fromCache: false, hasPendingWrites: false } };
 }
 
+// 성능 점검용: URL에 demoN=300 처럼 주면 오더 개수를 늘린다(기본 30, 최대 2000)
+function demoCount() {
+  try { const n = parseInt(new URLSearchParams(window.location.search).get("demoN") || "", 10); return n > 0 ? Math.min(n, 2000) : 30; } catch { return 30; }
+}
+
 function orders(col) {
   const out = [];
-  for (let i = 0; i < 30; i++) {
+  const N = demoCount();
+  for (let i = 0; i < N; i++) {
     const [pn, pa] = PLACES[i % PLACES.length];
     const [dn, da] = PLACES[(i * 3 + 2) % PLACES.length];
     const [ct, ton] = CARS[i % CARS.length];

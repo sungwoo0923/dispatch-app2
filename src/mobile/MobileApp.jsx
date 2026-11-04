@@ -163,6 +163,35 @@ function useDelayedFlag(on, ms) {
   }, [on, ms]);
   return v;
 }
+// ⭐ 2026-11-04 끊김 개선 — 화면 밖 카드의 깜빡임(배차중 점·뱃지·메모) 애니메이션을 멈춘다.
+//  카드 수십 장의 무한 애니메이션이 화면에 안 보여도 매 프레임 다시 계산돼 스크롤이 버벅였다.
+//  관찰자 하나를 모든 카드가 같이 쓰고, React 상태 대신 data-kp-off 표시만 바꿔 다시 그리기(리렌더)는 없다.
+let _kpOffIO = null;
+function useOffscreenPause(dep) {
+  const ref = React.useRef(null);
+  React.useEffect(() => {
+    const el = ref.current;
+    if (!el || typeof IntersectionObserver === "undefined") return undefined;
+    if (!_kpOffIO) {
+      _kpOffIO = new IntersectionObserver((entries) => {
+        for (const e of entries) { if (e.isIntersecting) delete e.target.dataset.kpOff; else e.target.dataset.kpOff = "1"; }
+      }, { rootMargin: "150px 0px" });
+    }
+    _kpOffIO.observe(el);
+    return () => { _kpOffIO?.unobserve(el); delete el.dataset.kpOff; };
+  }, [dep]);
+  return ref;
+}
+// 등록내역 목록에서 지금 화면 맨 위에 보이는 카드(키·화면 위치) — 상세 다녀온 뒤 같은 자리로 돌아오기용
+function readListAnchor() {
+  try {
+    for (const el of document.querySelectorAll(".kp-m-cv")) {
+      const r = el.getBoundingClientRect();
+      if (r.bottom > 80) return { key: el.dataset.kpKey, top: r.top };
+    }
+  } catch { /* 무시 */ }
+  return null;
+}
 const bgWrite = (p, what = "저장") => {
   Promise.resolve(p).catch((e) => {
     console.error(`${what} 실패:`, e);
@@ -1092,8 +1121,12 @@ function BackIconButton({ onClick }) {
 const toNumber = (v) =>
   Number(String(v ?? "").replace(/[^\d]/g, "")) || 0;
 
+// ⭐ 2026-11-04 속도 — toLocaleString("ko-KR")은 부를 때마다 숫자 형식기를 새로 만들어 느리다(카드마다 2번씩).
+//  같은 결과를 내는 형식기 하나를 만들어 두고 계속 쓴다.
+const _nfKo = (() => { try { return new Intl.NumberFormat("ko-KR"); } catch { return null; } })();
+const _nfDefault = (() => { try { return new Intl.NumberFormat(); } catch { return null; } })();
 const fmtMoney = (v) =>
-  `${Number(v || 0).toLocaleString("ko-KR")}원`;
+  `${_nfKo ? _nfKo.format(Number(v || 0)) : Number(v || 0).toLocaleString("ko-KR")}원`;
 // 🔥 검색용 정규화 (여기에 추가)
 const normalize = (s = "") =>
   String(s)
@@ -1198,8 +1231,8 @@ function fmtDispatchTimeM(v, gubun) {
 const fmtM = (v) => {
   const n = Number(v) || 0;
   if (n >= 100000000) return `${(n / 100000000).toFixed(1)}억원`;
-  if (n >= 10000) return `${Math.round(n / 10000).toLocaleString()}만원`;
-  return `${n.toLocaleString()}원`;
+  if (n >= 10000) return `${_nfDefault ? _nfDefault.format(Math.round(n / 10000)) : Math.round(n / 10000).toLocaleString()}만원`;
+  return `${_nfDefault ? _nfDefault.format(n) : n.toLocaleString()}원`;
 };
 
 // 디지털 다이얼 스타일 카운트업 숫자
@@ -2113,6 +2146,7 @@ export default function MobileApp({ role: realRole, user, userCompany = "", forc
   }, [deptMode, page]);
   const toggleExecFull = () => { const v = !execFull; setExecFull(v); try { localStorage.setItem("kpExecFull", v ? "1" : "0"); } catch { /* 무시 */ } setPage(v ? "list" : "dept"); };
   const listScrollYRef = useRef(0); // 리스트 스크롤 위치 저장
+  const listAnchorRef = useRef(null); // ⭐ 2026-11-04 복귀 기준 카드(화면 맨 위 카드와 그 위치)
   const unassignedScrollYRef = useRef(0); // 미배차/정보미전달 스크롤 위치 저장
   const [unassignedTab, setUnassignedTab] = useState("미배차"); // 탭 상태 (부모에서 관리)
 
@@ -2120,7 +2154,22 @@ export default function MobileApp({ role: realRole, user, userCompany = "", forc
   useEffect(() => {
     if (page === "list" && listScrollYRef.current > 0) {
       const y = listScrollYRef.current;
-      requestAnimationFrame(() => { window.scrollTo(0, y); });
+      // ⭐ 2026-11-04 화면 밖 카드는 그리기를 건너뛰므로(.kp-m-cv) 높이가 어림값이다 — 복원하는 순간만
+      //   전부 실제 높이로 한 번 재서 카드마다 적어 두고, 정확히 같은 자리로 돌아간다.
+      const root = document.documentElement;
+      root.classList.add("kp-cv-off");
+      const anchor = listAnchorRef.current;
+      requestAnimationFrame(() => {
+        let ty = y;
+        try {
+          document.querySelectorAll(".kp-m-cv").forEach((el) => { el.style.containIntrinsicSize = `auto ${el.offsetHeight}px`; });
+          // 떠날 때 맨 위에 보이던 카드가 같은 높이에 오도록(건너뛴 카드의 어림 높이 때문에 y값이 어긋날 수 있다)
+          const el = anchor && [...document.querySelectorAll(".kp-m-cv")].find((e) => e.dataset.kpKey === anchor.key);
+          if (el) ty = Math.max(0, Math.round(el.getBoundingClientRect().top + window.scrollY - anchor.top));
+        } catch { /* 무시 */ }
+        root.classList.remove("kp-cv-off");
+        window.scrollTo(0, ty);
+      });
     }
     if (page === "unassigned" && unassignedScrollYRef.current > 0) {
       const y = unassignedScrollYRef.current;
@@ -2797,7 +2846,7 @@ const handleCancelDuplicateOrder = async (o) => {
 // 직접 값을 고칠 수 있게 한다(카드 탭했을 때와 동일한 이동 로직).
 const handleOpenIssueOrder = (o) => {
   setOrderIssues(null);
-  listScrollYRef.current = window.scrollY;
+  listScrollYRef.current = window.scrollY; listAnchorRef.current = readListAnchor();
   setSelectedOrder(o);
   setDetailFrom("list");
   setPage("detail");
@@ -6575,6 +6624,7 @@ onGoAttendance={() => {
         {(page === "list" || page === "detail") && ordersLoaded && initLoadDone && bootDone && (
           <div style={page === "list" ? undefined : { display: "none" }}>
           <MobileOrderList
+            renderAllFirst={listScrollYRef.current > 0}
             allOrders={listOrders}
             dispatcherName={dispatcherName}
             userCompany={userCompany}
@@ -6595,7 +6645,7 @@ onGoAttendance={() => {
             onlyToday={onlyToday}
 setOnlyToday={setOnlyToday}
 onSelect={(o) => {
-  listScrollYRef.current = window.scrollY;
+  listScrollYRef.current = window.scrollY; listAnchorRef.current = readListAnchor();
   setSelectedOrder(o);
   setDetailFrom("list");
   setPage("detail");
@@ -8753,6 +8803,7 @@ function MobileOrderList({
   showToast,
   showSuccess,
   upsertDriver,
+  renderAllFirst = false,
 }) {
   const [attachViewOrder, setAttachViewOrder] = useState(null);
   const handleOpenAttach = (order) => {
@@ -8838,7 +8889,10 @@ function MobileOrderList({
   const [mDetail, setMDetail] = useState(null);
   const applyMDetail = (v) => { setMDetail(v); if (v?.from && v?.to) { setStartDate(v.from); setEndDate(v.to); setAppliedStartDate(v.from); setAppliedEndDate(v.to); } };
   const groupedByDateRaw = groupedByDate;
-  groupedByDate = (() => {
+  // ⭐ 2026-11-04 속도 — 예전엔 목록이 다시 그려질 때마다(입력·팝업 열고 닫기 등) 전체 오더를 다시 거르고 정렬했다.
+  //   조건이 같으면 지난 결과를 그대로 쓴다(결과는 동일).
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  groupedByDate = useMemo(() => {
     const next = new Map();
     groupedByDateRaw.forEach((list, key) => {
       let filtered = list;
@@ -8851,7 +8905,7 @@ function MobileOrderList({
       if (filtered.length) next.set(key, sortOrdersByMode(filtered));
     });
     return next;
-  })();
+  }, [groupedByDateRaw, orderTypeFilter, assignMethodFilter, payTypeFilter, chargeMissingOnly, driverFeeMissingOnly, mDetail, orderSortMode]);
   const [uploadLinkModal, setUploadLinkModal] = useState(false);
   const [estimateModal, setEstimateModal] = useState(false);
   const [deleteConfirmOrder, setDeleteConfirmOrder] = useState(null);
@@ -8877,6 +8931,17 @@ function MobileOrderList({
     groupedByDate.forEach(list => list.forEach(o => result.push(o)));
     return result;
   }, [groupedByDate]);
+
+  // ⭐ 2026-11-04 앱 켤 때 버벅임 — 카드 수백 장을 한 번에 만들면 폰이 몇 초 멈췄다. 처음엔 위쪽 카드만 바로 그리고
+  //   나머지는 조금씩(낮은 우선순위로) 이어 붙인다. 결국 전부 그려지고, 한 번 늘어난 개수는 줄지 않는다.
+  //   상세 → 목록 스크롤 복원이 필요할 때는 처음부터 전부 그린다.
+  const totalCards = allVisibleOrders.length;
+  const [renderLimit, setRenderLimit] = useState(() => (renderAllFirst ? Number.MAX_SAFE_INTEGER : 24));
+  useEffect(() => {
+    if (renderLimit >= totalCards) return undefined;
+    const t = setTimeout(() => startTransition(() => setRenderLimit((l) => l + 30)), 16);
+    return () => clearTimeout(t);
+  }, [renderLimit, totalCards]);
 
   const selectedOrders = useMemo(
     () => allVisibleOrders.filter(o => selectedIds.has(o.id || o._id)),
@@ -9309,8 +9374,11 @@ const summary = useMemo(() => {
           </div>
         )}
 
-        {dates.map((dateKey) => {
-          const list = groupedByDate.get(dateKey) || [];
+        {(() => { let budget = renderLimit; return dates.map((dateKey) => {
+          if (budget <= 0) return null;
+          const fullList = groupedByDate.get(dateKey) || [];
+          const list = fullList.length > budget ? fullList.slice(0, budget) : fullList;
+          budget -= list.length;
           return (
             <div key={dateKey}>
             <div className={`flex items-center justify-between gap-2 mb-3 px-1 ${cardVersionB ? "py-0.5" : ""}`}>
@@ -9374,7 +9442,7 @@ const summary = useMemo(() => {
                   const isChecked = selectedIds.has(oid);
                   return (
                     // ⭐ 2026-10-29: 화면 키는 컬렉션+실제 문서번호 — 키가 겹치면 조회 결과와 상관없는 카드가 남아 보였다
-                    <div key={`${o.__col || ""}/${o._id || o.id}`} className={`relative rounded-xl ${multiSelectMode ? "pl-10 transition-all" : ""}`}
+                    <div key={`${o.__col || ""}/${o._id || o.id}`} data-kp-key={`${o.__col || ""}/${o._id || o.id}`} className={`kp-m-cv relative rounded-xl ${multiSelectMode ? "pl-10 transition-all" : ""}`}
                       style={{ WebkitTouchCallout: "none", userSelect: "none", WebkitUserSelect: "none" }}
                       onContextMenu={(e) => e.preventDefault()}
                       onTouchStart={multiSelectMode ? undefined : (e) => {
@@ -9441,7 +9509,7 @@ const summary = useMemo(() => {
               </div>
             </div>
           );
-        })}
+        }); })()}
       </div>
     </div>
 
@@ -10836,6 +10904,7 @@ const MobileOrderCard = React.memo(function MobileOrderCard({
   dispatcherName = "",
 }) {
   const cBiz = useCompanyBiz(getTenant() || localStorage.getItem("userCompany") || ""); // ⭐ 2026-11-03 여러 사업자
+  const offRef = useOffscreenPause(cardVersionB); // ⭐ 2026-11-04 화면 밖이면 깜빡임 멈춤(스크롤 끊김 개선)
   const claim = getClaim(order);
   const fee = order.기사운임 ?? 0;
   const state = getStatus(order);
@@ -10991,6 +11060,7 @@ const dropTime = order.하차시간 ? fmtDispatchTimeM(order.하차시간, order
               : "border-[#E3E8F0]") +
           (statusBlink && !selected ? " card-status-blink" : "")
         }
+        ref={offRef}
         style={{ "--glow-c": statusRing }}
         onClick={onSelect}
       >
@@ -11169,6 +11239,7 @@ const dropTime = order.하차시간 ? fmtDispatchTimeM(order.하차시간, order
     (flash && !selected ? "order-flash-blue " : "") +
     (statusBlink && !selected ? " card-status-blink" : "")
   }
+  ref={offRef}
   style={{ "--glow-c": statusRing }}
   onClick={onSelect}
 >
@@ -18664,8 +18735,10 @@ function MobilePlaceSuggest({ value, onChange, names = [], placeholder, onKeyDow
 
   useEffect(() => { setQuery(value || ""); }, [value]);
 
+  // ⭐ 2026-11-04 입력 끊김 — 지명 수천 개를 거르는 일은 글자 입력보다 뒤로 미룬다(PC와 동일, 결과 같음)
+  const dq = React.useDeferredValue(query);
   const filtered = useMemo(() => {
-    const q = (query || "").replace(/\s+/g, "").toLowerCase();
+    const q = (dq || "").replace(/\s+/g, "").toLowerCase();
     if (!q || q.length < 1) return [];
     return names
       .map(n => {
@@ -18680,7 +18753,7 @@ function MobilePlaceSuggest({ value, onChange, names = [], placeholder, onKeyDow
       .sort((a, b) => b.score - a.score)
       .slice(0, 10)
       .map(x => x.name);
-  }, [query, names]);
+  }, [dq, names]);
 
   return (
     <div className="relative">
@@ -20067,21 +20140,31 @@ const [showAddressConfirmPopup, setShowAddressConfirmPopup] = useState(false);
   useEffect(() => {
     const d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); d.setMonth(d.getMonth() - 13);
     const liveWindowStart = d.toISOString().slice(0, 10);
-    let dispatchCache = [];
-    let ordersCache = [];
+    // ⭐ 2026-11-04 입력 끊김 — 예전엔 누가 오더 하나만 고쳐도 13개월치(수천 건)를 전부 다시 변환·합쳐서
+    //   상/하차지를 치는 도중 글자가 멈칫했다. 바뀐 문서만 반영하고, 0.3초씩 모아 낮은 우선순위로 갱신한다(PC와 동일).
+    const dispatchCache = new Map();
+    const ordersCache = new Map();
+    let timer = null;
     const merge = () => {
-      const map = new Map();
-      dispatchCache.forEach(r => map.set(r.id, r));
-      ordersCache.forEach(r => map.set(r.id, r));
-      setDispatchData(cleanMgrRows(hideBlind(Array.from(map.values()))));
+      timer = null;
+      startTransition(() => {
+        const map = new Map();
+        dispatchCache.forEach(r => map.set(r.id, r));
+        ordersCache.forEach(r => map.set(r.id, r));
+        setDispatchData(cleanMgrRows(hideBlind(Array.from(map.values()))));
+      });
     };
     const mapDoc = (d) => {
       const data = d.data();
       return { id: d.id, ...data, 등록일: toYMD(data.등록일), 상차일: toYMD(data.상차일), 하차일: toYMD(data.하차일) };
     };
-    const unsub1 = onSnapshot(query(collection(db, "dispatch"), where("상차일", ">=", liveWindowStart)), (snap) => { dispatchCache = snap.docs.map(mapDoc); merge(); });
-    const unsub2 = onSnapshot(query(collection(db, "orders"), where("상차일", ">=", liveWindowStart)), (snap) => { ordersCache = snap.docs.map(mapDoc); merge(); });
-    return () => { unsub1(); unsub2(); };
+    const apply = (cache) => (snap) => {
+      snap.docChanges().forEach((ch) => { if (ch.type === "removed") cache.delete(ch.doc.id); else cache.set(ch.doc.id, mapDoc(ch.doc)); });
+      if (!timer) timer = setTimeout(merge, 300);
+    };
+    const unsub1 = onSnapshot(query(collection(db, "dispatch"), where("상차일", ">=", liveWindowStart)), apply(dispatchCache));
+    const unsub2 = onSnapshot(query(collection(db, "orders"), where("상차일", ">=", liveWindowStart)), apply(ordersCache));
+    return () => { unsub1(); unsub2(); if (timer) clearTimeout(timer); };
   }, []);
 
   const pickupNames = useMemo(() =>
