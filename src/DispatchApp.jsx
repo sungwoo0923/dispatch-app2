@@ -408,7 +408,7 @@ function FareCertModal({ row, companyName, onClose }) {
                 {/* 발급처 · 확인 */}
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginTop: 26, paddingTop: 18, borderTop: "1px dashed #CBD5E3" }}>
                   <div style={{ fontSize: 11.5, color: "#8A97AD", lineHeight: 1.7 }}>
-                    본 문서는 KP-Flow 배차관리 프로그램에 등록된 배차 정보를 근거로 자동 발급되었습니다.<br />
+                    본 문서는 LogisWeb 배차관리 프로그램에 등록된 배차 정보를 근거로 자동 발급되었습니다.<br />
                     문서번호로 원본 오더를 확인할 수 있습니다.
                   </div>
                   <div style={{ textAlign: "right", minWidth: 220 }}>
@@ -2802,6 +2802,7 @@ import FareRulesSettings from "./FareRulesSettings";
 import { useFareRules, FareTypeSelect, FareRuleHint, fareFormChange, farePatchOf, findFareRule, applyFareRule, FareTypeBreakdown } from "./fareRules";
 import { useTableSort, sortRows, SortTh } from "./tableSort";
 import { useCompanyFeatures } from "./companyFeatures";
+import { BRAND, LogisMark, LogisWordmark, LogisTag } from "./brand";
 
 // 기사전달용 업로드 링크 단축 — /upload?id=...&t=... (길고 낯설어 기사들이 거부감을
 // 느낄 수 있는 형태)를 /u/{code} 형태로 줄인다. code는 토큰에서 파생시켜, 같은
@@ -3308,10 +3309,10 @@ function KpSideMenu({ open, onOpen, onClose, menuState, active, onSelect, compan
         style={{ background: "linear-gradient(180deg, #16264A 0%, #1B2B4B 55%, #14213D 100%)" }}
       >
         <div className="px-5 pt-6 pb-5 border-b border-white/10 flex items-center gap-3">
-          <img src="/icons/sflow-icon.png" alt="KP-Flow" className="w-10 h-10 rounded-xl ring-1 ring-white/15 shrink-0" />
+          <LogisMark size={40} />
           <div className="min-w-0 flex-1">
-            <div className="text-[10.5px] font-extrabold tracking-[0.18em] text-blue-200/70">KP-FLOW MENU</div>
-            <div className="text-[15px] font-bold truncate">{company || "KP-Flow"}</div>
+            <div className="text-[10.5px] font-extrabold tracking-[0.18em] text-blue-200/70"><LogisTag height={8} text="MENU" /></div>
+            <div className="text-[15px] font-bold truncate mt-0.5">{company || BRAND}</div>
           </div>
           <button onClick={onClose} title="메뉴 접기" className="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center shrink-0" style={{ opacity: 1 }}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="m15 6-6 6 6 6" /></svg>
@@ -8292,13 +8293,10 @@ return (
                 <button onClick={() => setSideMenuOpen(true)} title="전체 메뉴" className="kp-icon-btn transition">
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.2" strokeLinecap="round"><path d="M4 7h16M4 12h16M4 17h16" /></svg>
                 </button>
-                {/* ⭐ 2026-11-03 로고·KP-Flow를 누르면 회사 홈페이지로 */}
-                <a href="https://dispatch-app2-vskk.vercel.app/" title="KP-Flow 홈페이지로" className="flex items-center gap-2.5 shrink-0 rounded-xl hover:opacity-90 transition">
-                  <img src="/icons/sflow-icon.png" alt="KP-Flow" className="w-8 h-8 rounded-[10px] shrink-0 ring-1 ring-white/15 shadow-[0_4px_12px_rgba(0,0,0,0.25)]" />
-                  <div className="flex flex-col leading-none shrink-0">
-                    <span className="text-white font-black text-[15px] tracking-tight">KP-Flow</span>
-                    <span className="text-[9.5px] font-extrabold tracking-[0.24em] text-[#8FB0F0] mt-1">DISPATCH</span>
-                  </div>
+                {/* ⭐ 2026-11-03 로고·LogisWeb을 누르면 회사 홈페이지로 (2026-11-04 LogisWeb 마크 + 글자 로고) */}
+                <a href="https://dispatch-app2-vskk.vercel.app/" title="LogisWeb 홈페이지로" className="flex items-center gap-2.5 shrink-0 rounded-xl hover:opacity-90 transition">
+                  <LogisMark size={32} style={{ filter: "drop-shadow(0 4px 12px rgba(0,0,0,0.25))" }} />
+                  <LogisWordmark height={12} sub="dispatch" />
                 </a>
                 {co && (
                   <span className="ml-1 px-2.5 h-7 inline-flex items-center rounded-lg bg-white/[0.07] border border-white/10 text-[13px] font-bold text-white/90 truncate max-w-[120px]">
@@ -28417,7 +28415,7 @@ const handleDailyReport = async () => {
   </table>
 
   <div class="report-footer">
-    <div class="footer-note">본 보고서는 KP-Flow 배차관리 시스템에서 자동 생성된 문서입니다.</div>
+    <div class="footer-note">본 보고서는 LogisWeb 배차관리 시스템에서 자동 생성된 문서입니다.</div>
     <div class="footer-right">출력일시: ${printDate} &nbsp;|&nbsp; 담당자: ${printerLabel}</div>
   </div>
 </div>
@@ -35988,7 +35986,7 @@ const handleDailyReport = async () => {
     </tbody>
   </table>
   <div class="report-footer">
-    <div class="footer-note">본 보고서는 KP-Flow 배차관리 시스템에서 자동 생성된 문서입니다.</div>
+    <div class="footer-note">본 보고서는 LogisWeb 배차관리 시스템에서 자동 생성된 문서입니다.</div>
     <div class="footer-right">출력일시: ${printDate} &nbsp;|&nbsp; 담당자: ${printerLabel}</div>
   </div>
 </div>
@@ -52165,7 +52163,7 @@ if (total === 0) return `<td class="zero">-</td>`;
   </table>
 
   <div class="report-footer">
-    <div class="footer-note">본 보고서는 KP-Flow 배차관리 시스템에서 자동 생성된 문서입니다.</div>
+    <div class="footer-note">본 보고서는 LogisWeb 배차관리 시스템에서 자동 생성된 문서입니다.</div>
     <div class="footer-right">출력일시: ${printDate} &nbsp;|&nbsp; 담당자: ${printerLabel}</div>
   </div>
 </div>

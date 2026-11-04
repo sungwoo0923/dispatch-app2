@@ -164,12 +164,33 @@
     if (!tag) { tag = document.createElement("style"); tag.id = "kp-site-style"; document.head.appendChild(tag); }
     tag.textContent = styleText(st);
   }
+  // 🔷 2026-11-04 이름·로고 교체(KP-Flow → LogisWeb) — 예전에 게시해 둔 편집 내용에 옛 이름·옛 로고가 남아 있어도
+  //  화면에는 항상 새 이름과 새 로고(마크 + 흰색·하늘색 글자 로고)가 보이게 한다.
+  var OLD_NAME = /KP[- ]?Flow/gi;
+  function fixBrand() {
+    try {
+      if (OLD_NAME.test(document.title)) document.title = document.title.replace(OLD_NAME, "LogisWeb");
+      $$("a.brand").forEach(function (a) {
+        if ($(".lw-word", a)) return;
+        var k = a.getAttribute("data-k") || "b";
+        a.innerHTML = '<img data-k="' + k + '.m" class="lw-mark" src="brand/logisweb-mark.svg" width="38" height="38" alt="" />'
+          + '<span data-k="' + k + '.t" class="lw-txt"><img data-k="' + k + '.w" class="lw-word" src="brand/logisweb-wordmark.svg" width="125" height="14" alt="LogisWeb" /><small data-k="' + k + '.s">DISPATCH</small></span>';
+      });
+      var tw = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null), n, list = [];
+      while ((n = tw.nextNode())) { OLD_NAME.lastIndex = 0; if (OLD_NAME.test(n.nodeValue)) list.push(n); }
+      list.forEach(function (t) { t.nodeValue = t.nodeValue.replace(OLD_NAME, "LogisWeb"); });
+      $$("[alt],[aria-label]").forEach(function (e) {
+        ["alt", "aria-label"].forEach(function (a) { var v = e.getAttribute(a); if (v && /KP[- ]?Flow/i.test(v)) e.setAttribute(a, v.replace(OLD_NAME, "LogisWeb")); });
+      });
+    } catch (e) { /* 실패해도 화면은 그대로 */ }
+  }
   function render(st) {
     state = st || emptyState();
     if (pristine != null) document.body.innerHTML = pristine;
     applyOps(state.ops);
     applyEls(state.els);
     applyPage(state);
+    if (!ED) fixBrand();
     if (window.kpPageInit) window.kpPageInit();
     if (ED) afterRenderEdit();
   }

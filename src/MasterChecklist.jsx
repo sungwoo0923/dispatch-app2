@@ -55,7 +55,7 @@ export default function MasterChecklist({ user, userCompany }) {
   const planName = (PLAN_DEFAULTS.find((p) => p.id === planId) || {}).name;
   const items = [
     { k: "company", done: st.seal, title: "회사 정보 · 직인 등록", desc: "운임확인서·견적서·거래명세서에 찍힐 회사 정보와 직인", act: "회사관리", to: () => go("회사관리") },
-    { k: "invite", done: st.staff >= 2, title: "직원 초대", desc: `직원이 가입 화면에서 '기존 회사' → "${co}" 선택 후 가입 → 마스터가 승인`, act: copied ? "복사됨 ✓" : "가입 링크 복사", to: async () => { try { await navigator.clipboard.writeText(`[${co}] KP-Flow 가입 안내\n${signupUrl}\n가입 화면에서 '기존 회사'를 고르고 "${co}"를 선택해 주세요.`); setCopied(true); setTimeout(() => setCopied(false), 2000); } catch { window.prompt("아래 주소를 복사해 직원에게 보내주세요", signupUrl); } } },
+    { k: "invite", done: st.staff >= 2, title: "직원 초대", desc: `직원이 가입 화면에서 '기존 회사' → "${co}" 선택 후 가입 → 마스터가 승인`, act: copied ? "복사됨 ✓" : "가입 링크 복사", to: async () => { try { await navigator.clipboard.writeText(`[${co}] LogisWeb 가입 안내\n${signupUrl}\n가입 화면에서 '기존 회사'를 고르고 "${co}"를 선택해 주세요.`); setCopied(true); setTimeout(() => setCopied(false), 2000); } catch { window.prompt("아래 주소를 복사해 직원에게 보내주세요", signupUrl); } } },
     { k: "perm", done: st.staff >= 2 && !!settings?.masterPermDone, title: "직원 권한 · 부서 · 직책 지정", desc: "관리자메뉴 › 회원 관리에서 직원을 눌러 승인하고 권한·부서·직책을 정합니다", act: "회원 관리", to: async () => { go("관리자메뉴"); await setDoc(doc(db, "companySettings", co), { masterPermDone: true }, { merge: true }).catch(() => {}); } },
     { k: "drivers", done: st.drivers > 0, title: "기사 · 차량 등록", desc: "기사관리에서 직접 또는 엑셀 대용량 업로드(양식 제공) · 지입차는 등급을 '지입'으로", act: "기사관리", to: () => go("기사관리") },
     { k: "clients", done: st.clients > 0 || st.places > 0, title: "거래처 · 하차지 등록", desc: "거래처관리에서 기본거래처·하차지를 엑셀로 한 번에 올릴 수 있습니다", act: "거래처관리", to: () => go("거래처관리") },

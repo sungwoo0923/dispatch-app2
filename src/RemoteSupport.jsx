@@ -325,7 +325,7 @@ function RequesterModal({ uid, user, profile, company, mobile, active, latest, h
         <div className="relative px-5 sm:px-6 pt-5 pb-4 text-white" style={{ background: "linear-gradient(rgba(143,176,240,.06) 1px, transparent 1px) 0 0/22px 22px, linear-gradient(90deg, rgba(143,176,240,.06) 1px, transparent 1px) 0 0/22px 22px, linear-gradient(120deg,#0B1428 0%,#1B2B4B 60%,#2D4C82 100%)" }}>
           <div className="text-[11.5px] font-extrabold tracking-[0.28em] text-[#8FB0F0]" style={{ fontFamily: MONO }}>REMOTE SUPPORT</div>
           <div className="text-[22px] font-black mt-0.5">원격 지원</div>
-          <div className="text-[14px] text-white/65 mt-1">어려운 화면을 KP-Flow 관리자가 직접 보고 도와드립니다.</div>
+          <div className="text-[14px] text-white/65 mt-1">어려운 화면을 LogisWeb 관리자가 직접 보고 도와드립니다.</div>
           <button type="button" onClick={onClose} className="absolute right-4 top-4 w-9 h-9 rounded-xl bg-white/10 hover:bg-white/20 text-white text-[16px]" aria-label="닫기">✕</button>
         </div>
 
@@ -390,7 +390,7 @@ function RequesterModal({ uid, user, profile, company, mobile, active, latest, h
               {["approved", "in_session"].includes(active.status) && mode === "screen" && (
                 <div className="rounded-2xl p-4 text-white space-y-3" style={{ background: "linear-gradient(120deg,#0B1428,#1B2B4B 65%,#2D4C82)" }}>
                   <div className="text-[16px] font-black">{sharing ? (shareState === "connected" ? "화면 공유 중 — 관리자가 보고 있습니다" : "관리자 연결을 기다리는 중…") : "승인되었습니다 — 화면을 공유해 주세요"}</div>
-                  <div className="text-[13.5px] text-white/70 leading-relaxed">보기 전용입니다 — 관리자는 화면을 보기만 하고 조작할 수 없습니다. 공유 창에서 <b className="text-white">이 탭</b>(KP-Flow)을 고르면 관리자가 가리키는 위치가 가장 정확하게 표시됩니다.</div>
+                  <div className="text-[13.5px] text-white/70 leading-relaxed">보기 전용입니다 — 관리자는 화면을 보기만 하고 조작할 수 없습니다. 공유 창에서 <b className="text-white">이 탭</b>(LogisWeb)을 고르면 관리자가 가리키는 위치가 가장 정확하게 표시됩니다.</div>
                   {!sharing ? (
                     <button type="button" onClick={() => startShare(active)} disabled={shareState === "starting"} data-testid="support-share-start"
                       className="w-full h-12 rounded-xl bg-white text-[#0F1A30] text-[16px] font-black disabled:opacity-60">{shareState === "starting" ? "공유 창 여는 중…" : "화면 공유 시작"}</button>

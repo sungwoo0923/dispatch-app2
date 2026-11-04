@@ -137,7 +137,7 @@ export function useNotifyQueue({ uid, role, team = "", company = "" }) {
       if (platRead.has(n.id) || n.authorUid === uid) return;
       const at = n.publishAt || toMs(n.createdAt);
       if (at && now - at > NOTICE_POP_WINDOW) return;
-      out.push({ key: `p:${n.id}`, src: "platform", id: n.id, openId: `plat:${n.id}`, kind: "platform", at, title: n.title || "플랫폼 공지", sub: `${n.author || "KP-Flow 운영팀"} · ${n.level || "안내"}`, content: n.body, contentHtml: n.bodyHtml });
+      out.push({ key: `p:${n.id}`, src: "platform", id: n.id, openId: `plat:${n.id}`, kind: "platform", at, title: n.title || "플랫폼 공지", sub: `${n.author || "LogisWeb 운영팀"} · ${n.level || "안내"}`, content: n.body, contentHtml: n.bodyHtml });
     });
     (hos || []).forEach((h) => {
       if (co && coOf(h) !== co) return;

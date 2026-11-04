@@ -6,6 +6,7 @@ import { createUserWithEmailAndPassword, signOut } from "firebase/auth";
 import { doc, getDoc, setDoc, deleteDoc, serverTimestamp } from "firebase/firestore";
 import { useNavigate } from "react-router-dom";
 import BigCheck from "../components/BigCheck";
+import { LogisMark, LogisWordmark, LogisTag } from "../brand"; // 🔷 2026-11-04 LogisWeb 로고
 import { legacyDriverEmail, scopedDriverEmail, signInDriver } from "./driverEmail";
 
 // ⭐ 사용자 요청 — 한 번 로그인한 폰에서는 소속회사명/차량번호/이름을 기억하고(정보 저장),
@@ -232,9 +233,9 @@ export default function DriverLogin() {
         <div className="absolute inset-0 opacity-[0.07]" style={{ backgroundImage: "linear-gradient(#fff 1px, transparent 1px), linear-gradient(90deg, #fff 1px, transparent 1px)", backgroundSize: "44px 44px" }} />
         <div className="absolute -right-40 -top-40 w-[520px] h-[520px] rounded-full" style={{ background: "radial-gradient(circle, rgba(110,149,232,0.22), transparent 65%)" }} />
         <div className="relative flex items-center gap-3">
-          <img src="/icons/sflow-icon.png" alt="" className="w-11 h-11 rounded-[13px] ring-1 ring-white/20" />
+          <LogisMark size={46} />
           <div>
-            <div className="text-[18px] font-black tracking-[0.18em]">KP-FLOW</div>
+            <div className="mb-2"><LogisWordmark height={16} /></div>
             <div className="text-[10.5px] font-bold tracking-[0.3em] text-white/45">DRIVER APP</div>
           </div>
         </div>
@@ -253,7 +254,7 @@ export default function DriverLogin() {
           <div className="mt-3 text-[14px] text-white/50 leading-relaxed">출근 · 상차 · 하차 · 인수증까지<br />기사님 업무를 한 화면에서 처리합니다.</div>
         </div>
         <div className="relative flex items-center gap-6 text-[11px] font-bold tracking-[0.2em] text-white/35">
-          <span>SECURE · TLS</span><span>GPS LIVE</span><span>© KP-FLOW</span>
+          <span>SECURE · TLS</span><span>GPS LIVE</span><span>© LogisWeb</span>
         </div>
       </div>
 
@@ -262,8 +263,8 @@ export default function DriverLogin() {
         <div className="kp-login-in w-full max-w-[420px]">
           {/* 모바일 머리 */}
           <div className="lg:hidden flex flex-col items-center mb-4">
-            <img src="/icons/sflow-icon.png" alt="" className="w-12 h-12 rounded-[14px] shadow-[0_10px_24px_rgba(15,26,48,0.25)]" />
-            <div className="mt-2 text-[17px] font-black tracking-[0.18em] text-[#0F1A30]">KP-FLOW</div>
+            <LogisMark size={52} style={{ filter: "drop-shadow(0 10px 24px rgba(15,26,48,0.25))" }} />
+            <div className="mt-2.5 mb-1"><LogisTag height={13} chip /></div>
             <div className="text-[10.5px] font-bold tracking-[0.3em] text-[#9AA9C3]">DRIVER APP</div>
             <div className="mt-2 flex items-center gap-2 h-7 px-3 rounded-full bg-white border border-[#E3E8F0] text-[12px] font-bold text-[#0F1A30] tabular-nums" style={{ fontFamily: MONO }}>
               <span className="w-1.5 h-1.5 rounded-full bg-[#4B6CB7] kp-pulse" />{pad(now.getHours())}:{pad(now.getMinutes())}<span className="text-[#9AA9C3]">:{pad(now.getSeconds())}</span>
@@ -312,7 +313,7 @@ export default function DriverLogin() {
               {!window.Capacitor?.isNativePlatform?.() && <button onClick={() => navigate("/login")} className="h-11 rounded-xl border border-[#E3E8F0] text-[#5B6B85] text-[13.5px] font-bold flex items-center justify-center hover:bg-[#F5F7FB] transition">다른 유형 로그인</button>}
             </div>
           </div>
-          <div className="text-center mt-4 text-[11px] font-bold tracking-[0.2em] text-[#B4BFD0]">KP-FLOW · DRIVER</div>
+          <div className="flex justify-center mt-4 text-[11px] font-bold tracking-[0.2em] text-[#B4BFD0]"><LogisTag height={7.5} chip text="DRIVER" /></div>
         </div>
       </div>
     </div>

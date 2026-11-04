@@ -17,6 +17,7 @@ import { pcLiveWindowStart, pcPrevDay } from "./orderHistory";
 import { useFundsSummary } from "./FundsBoard";
 import { HD_MONO as MONO, HD_C as C, HD_CSS } from "./HomeDeck";
 import { AttendanceQuickButton } from "./attendanceQuick";
+import { LogisTag } from "./brand"; // 🔷 2026-11-04 LogisWeb 로고
 
 const toInt = (v) => parseInt(String(v ?? "0").replace(/[^\d-]/g, ""), 10) || 0;
 const kst = (off = 0) => { const d = new Date(Date.now() + 9 * 3600e3); d.setUTCDate(d.getUTCDate() + off); return d.toISOString().slice(0, 10); };
@@ -445,7 +446,7 @@ function AcctDashboard({ company, dispatchData = [], onGo, me, att }) {
   const myName = me?.name || "";
   return (
     <Deck>
-      <DeckHead code="KP-FLOW · FINANCE DECK" att={att}
+      <DeckHead code={<LogisTag height={9} text="FINANCE DECK" />} att={att}
         title={myName ? `${myName}님, 오늘의 자금 흐름입니다` : "오늘의 자금 흐름입니다"}
         sub={/* ⭐ 2026-11-02 화면 점검 — 항목(라벨+금액) 단위로 묶어 "지급 대기 / 0원"처럼 중간에서 줄바뀜 방지 */ <><span className="whitespace-nowrap">이번 달 매출 <b style={{ color: "#fff", fontFamily: MONO }}>{won(cur[0])}</b>원</span> · <span className="whitespace-nowrap">수익 <b style={{ color: "#fff", fontFamily: MONO }}>{won(cur[0] - cur[1])}</b>원</span> · <span className="whitespace-nowrap">미수 <b style={{ color: "#fff", fontFamily: MONO }}>{short(arSum)}</b>원</span> · <span className="whitespace-nowrap">지급 대기 <b style={{ color: "#fff", fontFamily: MONO }}>{short(apSum)}</b>원</span></>} />
 
@@ -697,7 +698,7 @@ function HrDashboard({ company, onGo, me, att }) {
   const inRate = pctOf(inN + lateN, working.length);
   return (
     <Deck>
-      <DeckHead code="KP-FLOW · PEOPLE DECK" att={att}
+      <DeckHead code={<LogisTag height={9} text="PEOPLE DECK" />} att={att}
         title={myName ? `${myName}님, 오늘의 인사 현황입니다` : "오늘의 인사 현황입니다"}
         sub={<>재직 <b style={{ color: "#fff", fontFamily: MONO }}>{active.length}</b>명 · 출근 <b style={{ color: "#fff", fontFamily: MONO }}>{inN + lateN}</b>명 · 휴가·부재 <b style={{ color: "#fff", fontFamily: MONO }}>{awayN}</b>명 · 이번 달 연차 <b style={{ color: "#fff", fontFamily: MONO }}>{usedDays}</b>일 사용</>} />
 

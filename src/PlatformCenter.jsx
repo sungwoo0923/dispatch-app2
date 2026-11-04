@@ -35,6 +35,7 @@ import CustomDatePicker from "./CustomDatePicker";
 import { TimeSelect } from "./kpInputs";
 import "./pcTheme.css";
 import { fmtPhone } from "./formatInput";
+import { LogisMark, LogisWordmark, LogisTag } from "./brand"; // 🔷 2026-11-04 LogisWeb 로고
 
 const MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
 const pad = (n) => String(n).padStart(2, "0");
@@ -597,7 +598,7 @@ function NoticesPanel() {
       const pushPending = !!publishAt && (editId ? (prev?.push !== false && !prev?.pushedAt) : f.push !== false);
       const data = { title: f.title.trim().slice(0, 200), body: htmlToText(bodyHtml) || f.body || "", bodyHtml, publishAt, pushPending, level: f.level, category: f.level, audience: f.audience,
         targetCompanies: f.audience === "selected" ? f.targetCompanies : [], active: f.active !== false, endDate: f.endDate || "",
-        pinned: !!f.pinned, banner: f.banner !== false, board: true, image: f.image || "", author: "KP-Flow 운영팀" };
+        pinned: !!f.pinned, banner: f.banner !== false, board: true, image: f.image || "", author: "LogisWeb 운영팀" };
       if (editId) await updateDoc(doc(db, "platformNotices", editId), { ...data, updatedAt: serverTimestamp() });
       else await addDoc(collection(db, "platformNotices"), { ...data, push: f.push !== false, createdAt: serverTimestamp(), authorEmail: auth.currentUser?.email || "" });
       close();
@@ -639,8 +640,8 @@ function NoticesPanel() {
             </div>
           </div>
           <div className="justify-self-start flex items-center gap-2.5 h-[50px] px-3 rounded-xl bg-[#F5F8FD] border border-[#E3E8F0]">
-            <span className="w-9 h-9 rounded-lg flex items-center justify-center text-[12px] font-black" style={{ background: "linear-gradient(135deg,#0B1428,#1B2B4B)", color: "#E9C46A" }}>KP</span>
-            <div className="leading-tight"><div className="text-[14px] font-black text-[#0F1A30] whitespace-nowrap">KP-Flow 운영팀</div><div className="text-[12px] text-[#7A879C]">작성자 · 자동</div></div>
+            <LogisMark size={36} />
+            <div className="leading-tight"><div className="text-[14px] font-black text-[#0F1A30] whitespace-nowrap">LogisWeb 운영팀</div><div className="text-[12px] text-[#7A879C]">작성자 · 자동</div></div>
           </div>
         </div>
         {f.audience === "selected" && (
@@ -1013,7 +1014,7 @@ function PlatformCenterInner({ user }) {
   const [focusCompany, setFocusCompany] = React.useState(null);
   const section = sectionOf(tab);
   const phone = usePhone();
-  React.useEffect(() => { document.title = "KP-Flow 관리자 관리센터"; }, []);
+  React.useEffect(() => { document.title = "LogisWeb 관리자 관리센터"; }, []);
   const toApp = () => { try { sessionStorage.setItem("kpEntry", "app"); } catch { /* 무시 */ } navigate("/app"); };
   const logout = async () => { if (!window.confirm("로그아웃할까요?")) return; try { sessionStorage.removeItem("kpEntry"); } catch { /* 무시 */ } await signOut(auth).catch(() => {}); navigate("/login"); };
   const openContract = (patch) => { setContractCtx((c) => ({ initial: null, fromQuote: null, ...patch, key: c.key + 1 })); setTab("contract:new"); };
@@ -1070,10 +1071,10 @@ function PlatformCenterInner({ user }) {
       {/* ── 상단 바 ── ⭐ 2026-11-02 관리자센터: 메뉴 버튼 h-10 · 14px · 아이콘 · 처리 대기 배지 · 좁으면 가로 스크롤 */}
       <header className="kp-pc-head sticky top-0 z-40 h-16 flex items-center gap-3 px-4 2xl:px-6 text-white">
         <div className="flex items-center gap-2.5 shrink-0">
-          <img src="/logo.png" alt="" className="w-9 h-9 rounded-[10px] bg-white object-contain p-0.5" onError={(e) => { e.currentTarget.style.display = "none"; }} />
+          <LogisMark size={36} />
           <div className="leading-none">
-            <div className="text-[16px] font-black tracking-[0.02em] whitespace-nowrap">KP-Flow</div>
-            <div className="text-[9.5px] font-extrabold tracking-[0.3em] text-[#8FB0F0] mt-1 whitespace-nowrap" style={{ fontFamily: MONO }}>PLATFORM ADMIN</div>
+            <LogisWordmark height={12} />
+            <div className="text-[9.5px] font-extrabold tracking-[0.3em] text-[#8FB0F0] mt-1.5 whitespace-nowrap" style={{ fontFamily: MONO }}>PLATFORM ADMIN</div>
           </div>
         </div>
         <span className="hidden 2xl:block w-px h-7 bg-white/15 shrink-0" />
@@ -1177,7 +1178,7 @@ function PlatformMobileShell({ user, sections = SECTIONS, section, tab, setTab, 
       <style>{PM_MOBILE_CSS}</style>
       <header className="sticky top-0 z-40 text-white shadow-[0_6px_18px_rgba(11,20,40,0.28)]" style={{ background: "linear-gradient(90deg,#0B1428 0%,#13213F 55%,#1B2B4B 100%)", paddingTop: "env(safe-area-inset-top, 0px)" }}>
         <div className="h-[56px] flex items-center gap-2 px-3">
-          <img src="/logo.png" alt="" className="w-7 h-7 rounded-lg bg-white object-contain p-0.5 shrink-0" onError={(e) => { e.currentTarget.style.display = "none"; }} />
+          <LogisMark size={30} />
           <div className="min-w-0 flex-1 leading-none">
             <div className="text-[14px] font-black whitespace-nowrap">관리자 관리센터</div>
             <div className="text-[9px] font-extrabold tracking-[0.26em] text-[#8FB0F0] mt-1 truncate whitespace-nowrap" style={{ fontFamily: MONO }}>{user?.email || "PLATFORM"}</div>
@@ -1242,7 +1243,7 @@ export function EntryChooser({ user }) {
       <div className="w-full max-w-[980px]">
         <div className="flex items-end justify-between gap-3 mb-5 sm:mb-8">
           <div className="min-w-0">
-            <div className="text-[10px] sm:text-[11.5px] font-extrabold tracking-[0.3em] text-[#8FB0F0] whitespace-nowrap" style={{ fontFamily: MONO }}>KP-FLOW · SELECT WORKSPACE</div>
+            <div className="text-[10px] sm:text-[11.5px] font-extrabold tracking-[0.3em] text-[#8FB0F0] whitespace-nowrap" style={{ fontFamily: MONO }}><LogisTag height={8.5} text="SELECT WORKSPACE" /></div>
             <div className="text-[24px] sm:text-[32px] font-black tracking-tight mt-1 whitespace-nowrap">어디로 들어갈까요?</div>
             <div className="text-[12px] sm:text-[14.5px] text-white/55 mt-1 truncate whitespace-nowrap">{user?.email}<span className="hidden sm:inline"> · 최고관리자 계정은 매번 들어갈 곳을 고릅니다.</span></div>
           </div>

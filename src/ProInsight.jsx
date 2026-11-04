@@ -123,7 +123,7 @@ export default function ProInsight({ data = [], companyName = "", onOpenOrder })
       <h3>주요 노선</h3><table><thead><tr><th>노선</th><th>건수</th><th>금액</th></tr></thead><tbody>${byRoute.map((o) => `<tr><td>${esc(o.key)}</td><td style="text-align:center">${o.cnt}</td><td style="text-align:right">${won(o.rev)}원</td></tr>`).join("")}</tbody></table>
       <h3>차량별</h3><table><thead><tr><th>차량</th><th>건수</th><th>금액</th></tr></thead><tbody>${vehicles.map((o) => `<tr><td>${esc(o.key)}</td><td style="text-align:center">${o.cnt}</td><td style="text-align:right">${won(o.rev)}원</td></tr>`).join("")}</tbody></table>
       <h3>운송 내역</h3><table><thead><tr><th>상차일</th><th>상차지</th><th>하차지</th><th>차량</th><th>화물</th><th>금액</th></tr></thead><tbody>${rows.map((r) => `<tr><td style="text-align:center">${esc(r.상차일)}</td><td>${esc(r.상차지명)}</td><td>${esc(r.하차지명)}</td><td>${esc(`${r.차량톤수 || ""} ${r.차량종류 || ""}`)}</td><td>${esc(r.화물내용)}</td><td style="text-align:right">${won(n(r.청구운임))}</td></tr>`).join("")}</tbody></table>
-      <div class="foot"><span>본 리포트는 ${esc(companyName)}의 배차 기록을 바탕으로 자동 작성되었습니다.</span><span>KP-Flow</span></div>
+      <div class="foot"><span>본 리포트는 ${esc(companyName)}의 배차 기록을 바탕으로 자동 작성되었습니다.</span><span>LogisWeb</span></div>
       <script>window.onload=()=>window.print()</script></body></html>`);
     w.document.close();
   };

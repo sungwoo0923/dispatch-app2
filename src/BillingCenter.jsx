@@ -382,7 +382,7 @@ export default function BillingCenter({ userEmail = "", userName = "", canEdit =
             <div className="rounded-2xl p-4 text-white" style={{ background: "linear-gradient(135deg,#1B2B4B,#2D4C82)" }}>
               <div className="flex items-center justify-between"><div className="text-[14.5px] font-black">무통장 입금 (계좌이체)</div><span className="px-2 py-0.5 rounded-md bg-white text-[#0F1A30] text-[11px] font-black">사용 가능</span></div>
               <div className="mt-3 text-[15px] font-black tabular-nums tracking-wide" style={{ fontFamily: MONO }}>{pricing.bank || "입금 계좌는 청구서와 함께 안내드립니다"}</div>
-              <div className="text-[11.5px] text-white/60 mt-1">예금주 {pricing.supplier || "KP-Flow"} · 입금자명은 회사명으로 해 주세요. 입금 후 청구서의 "입금했어요"를 누르면 더 빨리 확인됩니다.</div>
+              <div className="text-[11.5px] text-white/60 mt-1">예금주 {pricing.supplier || "LogisWeb"} · 입금자명은 회사명으로 해 주세요. 입금 후 청구서의 "입금했어요"를 누르면 더 빨리 확인됩니다.</div>
             </div>
             <div className="rounded-2xl border border-[#DCE3EE] p-4">
               <div className="flex items-center justify-between"><div className="text-[14.5px] font-black text-[#0F1A30]">카드 자동결제</div><span className={`px-2 py-0.5 rounded-md text-[11px] font-black ${PG_READY ? "bg-[#0F1A30] text-white" : "bg-[#EEF2F8] text-[#5B6B85]"}`}>{PG_READY ? "사용 가능" : "준비 중"}</span></div>

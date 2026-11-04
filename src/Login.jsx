@@ -1,6 +1,6 @@
 // ======================= src/Login.jsx (로그인 선택 화면) =======================
 // ⭐ 리디자인 — 예전엔 상단 로그인 링크 3개와 가운데 "○○ 시작하기" 버튼 3개가 같은 곳으로 가는 중복이 있었고,
-// 홍보용 카드 4개(배차 관리 등)까지 있어 복잡했다. 로딩 화면과 같은 KP-Flow 디자인으로 통일하고,
+// 홍보용 카드 4개(배차 관리 등)까지 있어 복잡했다. 로딩 화면과 같은 LogisWeb 디자인으로 통일하고,
 // "누가 어떤 걸 누르면 되는지" 바로 보이게 큰 선택 카드 3개로 정리했다.
 //  - 마지막에 쓴 계정 종류를 기억해 맨 위 카드처럼 강조(흰색 + "최근 로그인")
 //  - 회원가입은 맨 아래 한 줄로(계정 종류별)
@@ -9,8 +9,9 @@ import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { db, doc, onSnapshot } from "./firebase";
 import KpTruck3D from "./KpTruck3D";
+import { LogisMark, LogisWordmark } from "./brand"; // 🔷 2026-11-04 LogisWeb 로고
 
-const DEFAULT_FOOTER = "© 2025 KP-Flow Logistics. All rights reserved.";
+const DEFAULT_FOOTER = "© 2025 LogisWeb. All rights reserved.";
 const FONT_FAMILY_MAP = {
   noto: "'Noto Sans KR', sans-serif",
   nanum: "'Nanum Gothic', sans-serif",
@@ -130,10 +131,10 @@ export default function Login() {
         {/* 맨 위 — 브랜드 + 상태 */}
         <div className="w-full max-w-[1120px] mx-auto flex items-center justify-between gap-3" style={{ animation: "kpLoginIn .5s ease both" }}>
           <div className="flex items-center gap-2.5 min-w-0">
-            <img src="/icons/sflow-icon.png" alt="KP-Flow" className="w-9 h-9 rounded-[11px] ring-1 ring-white/20 shrink-0" />
+            <LogisMark size={38} />
             <div className="min-w-0 leading-tight">
-              <div className="text-[15px] font-black tracking-[0.2em] whitespace-nowrap" style={{ fontFamily: MONO }}>KP-FLOW</div>
-              <div className="hidden sm:block text-[9.5px] font-bold tracking-[0.28em] text-white/40 whitespace-nowrap">LOGISTICS DISPATCH SYSTEM</div>
+              <LogisWordmark height={15} />
+              <div className="hidden sm:block mt-1.5 text-[9.5px] font-bold tracking-[0.28em] text-white/40 whitespace-nowrap">LOGISTICS DISPATCH NETWORK</div>
             </div>
           </div>
           <div className="flex items-center gap-2 h-8 px-3 rounded-full bg-white/[0.06] ring-1 ring-white/10 text-[11px] font-bold tabular-nums whitespace-nowrap shrink-0" style={{ fontFamily: MONO }}>
@@ -164,8 +165,8 @@ export default function Login() {
               </div>
             </div>
             <div className="lg:hidden mt-1 text-center">
-              <div className="text-[22px] font-black tracking-tight">KP-Flow</div>
-              <div className="text-[11px] font-bold tracking-[0.28em] text-white/45 mt-0.5">배차관리 시스템</div>
+              <div className="flex justify-center"><LogisWordmark height={20} /></div>
+              <div className="text-[11px] font-bold tracking-[0.28em] text-white/45 mt-2">배차관리 시스템</div>
             </div>
           </div>
 
@@ -216,7 +217,7 @@ export default function Login() {
           </div>
         </div>
 
-        <p className="text-center text-[10.5px] font-bold tracking-[0.12em] text-white/25">{c.footerText || DEFAULT_FOOTER}</p>
+        <p className="text-center text-[10.5px] font-bold tracking-[0.12em] text-white/25">{(c.footerText || DEFAULT_FOOTER).replace(/KP-Flow( Logistics)?/gi, "LogisWeb")}</p>
       </div>
     </div>
   );

@@ -673,7 +673,7 @@ function FindReplace({ onRun }) {
   const [a, setA] = React.useState(""); const [b, setB] = React.useState("");
   return (
     <div className="space-y-1.5">
-      <input className={inp} value={a} onChange={(e) => setA(e.target.value)} placeholder="찾을 글자 (예: KP-Flow)" />
+      <input className={inp} value={a} onChange={(e) => setA(e.target.value)} placeholder="찾을 글자 (예: LogisWeb)" />
       <input className={inp} value={b} onChange={(e) => setB(e.target.value)} placeholder="바꿀 글자" />
       <button type="button" className={cls(btnDark, "w-full")} disabled={!a} onClick={() => onRun(a, b)}>모두 바꾸기</button>
     </div>

@@ -22,6 +22,7 @@ import { getAuth, signInWithPhoneNumber, signOut } from "firebase/auth";
 import { doc, setDoc, deleteField } from "firebase/firestore";
 import { auth as mainAuth, db } from "./firebase";
 import { fmtPhone } from "./formatInput";
+import { LogisMark } from "./brand"; // 🔷 2026-11-04 LogisWeb 로고
 
 export const MASTER_EMAIL = "tjddnqkf@naver.com";
 
@@ -385,7 +386,7 @@ export function PcVerifyGate({ uid, phone, onCancel }) {
   return createPortal(
     <div className="fixed inset-0 z-[100002] flex items-center justify-center p-5" style={{ background: "linear-gradient(135deg, #061832 0%, #0B2554 50%, #0D2B66 100%)" }}>
       <div className="flex flex-col items-center w-full max-w-[380px]">
-        <img src="/icons/sflow-icon.png" alt="" className="w-14 h-14 rounded-[16px] shadow-[0_10px_28px_rgba(0,0,0,0.35)] ring-1 ring-white/15 mb-4" />
+        <LogisMark size={56} className="mb-4" style={{ filter: "drop-shadow(0 10px 28px rgba(0,0,0,0.35))" }} />
         <div className="text-white/70 text-[12.5px] font-semibold tracking-[0.18em] mb-5">최고관리자 보안 확인</div>
         <MfaCodeBox
           title="PC 로그인 2차 인증"

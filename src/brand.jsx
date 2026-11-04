@@ -57,3 +57,25 @@ export function LogisLockup({ mark = 32, word = 14, sub = null, gap = 10, chip =
     </span>
   );
 }
+
+// 인쇄 문서(새 창에 HTML 글자로 쓰는 견적서·보고서)용 — 글자 로고 SVG 문자열. 어두운 바탕 위에 넣는다.
+export function logisWordmarkSvg(height = 10) {
+  const w = WORD.lw + WORD.gap + WORD.ww;
+  const p = (arr) => arr.map((d) => `<path d="${d}"/>`).join("");
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${w.toFixed(0)} ${WORD.cap}" width="${((height * w) / WORD.cap).toFixed(1)}" height="${height}" style="display:inline-block;vertical-align:middle" role="img" aria-label="${BRAND}"><g transform="translate(0 ${-WORD.top})"><g fill="${BRAND_WHITE}">${p(WORD.logis)}</g><g fill="${BRAND_SKY}" transform="translate(${WORD.lw + WORD.gap} 0)">${p(WORD.web)}</g></g></svg>`;
+}
+
+// 영문 머리말 태그 —예전 "KP-FLOW · OPERATIONS DECK"처럼 이름 + 구역명을 쓰던 곳.
+//  이름 자리는 글자 로고(흰색·하늘색)로 그리고, 뒤의 " · 구역명"은 부모 글씨 모양(색·글꼴)을 그대로 따른다.
+//  chip이면 글자 로고만 작은 남색 칩 위에 올린다(밝은 바탕용).
+export function LogisTag({ height = 8, text = "", chip = false, gap = 6, className = "", style }) {
+  const word = <LogisWordmark height={height} />;
+  return (
+    <span className={`inline-flex items-center align-middle ${className}`} style={{ gap, whiteSpace: "nowrap", ...style }}>
+      {chip
+        ? <span style={{ display: "inline-flex", alignItems: "center", background: "linear-gradient(120deg,#0B1428,#1B2B4B)", padding: `${Math.round(height * 0.5)}px ${Math.round(height * 0.85)}px`, borderRadius: Math.round(height * 0.7) }}>{word}</span>
+        : word}
+      {text ? <span>· {text}</span> : null}
+    </span>
+  );
+}

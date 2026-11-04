@@ -8,6 +8,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Line, ComposedChart, Bar, BarChart, Cell, PieChart, Pie } from "recharts";
 import { creatorOf } from "./monthCompare";
 import { AttendanceQuickButton } from "./attendanceQuick";
+import { LogisTag } from "./brand"; // 🔷 2026-11-04 LogisWeb 로고
 
 const MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
 const C = { ink: "#E8EEF9", sub: "rgba(207,224,255,.62)", dim: "rgba(207,224,255,.38)", line: "rgba(143,176,240,.14)", glow: "#8FB0F0", hi: "#CFE0FF", accent: "#6E95E8" };
@@ -333,7 +334,7 @@ export default function HomeDeck({ dispatchData = [], pastCache, liveStart, user
       <div style={{ position: "relative", display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 20, flexWrap: "wrap", marginBottom: 18 }}>
         <div>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <span style={{ fontFamily: MONO, fontSize: 11.5, fontWeight: 800, letterSpacing: "0.28em", color: C.glow }}>KP-FLOW · OPERATIONS DECK</span>
+            <span style={{ fontFamily: MONO, fontSize: 11.5, fontWeight: 800, letterSpacing: "0.28em", color: C.glow }}><LogisTag height={8.5} text="OPERATIONS DECK" /></span>
             <span style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "2px 9px", borderRadius: 99, border: `1px solid rgba(143,176,240,.35)`, fontFamily: MONO, fontSize: 10.5, fontWeight: 800, letterSpacing: "0.14em", color: C.hi }}>
               <span className="hd-pulse" style={{ width: 6, height: 6, borderRadius: "50%", background: C.hi, boxShadow: `0 0 8px ${C.glow}` }} />LIVE
             </span>

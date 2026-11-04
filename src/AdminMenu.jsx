@@ -2050,11 +2050,11 @@ const DEFAULT_BADGE = "물류 관리 플랫폼";
 const DEFAULT_HEADLINE_1 = "더 스마트한";
 const DEFAULT_HEADLINE_2 = "물류 관리";
 const DEFAULT_SUBTITLE_1 = "배차 관리부터 차주 관리, 운임 정산까지";
-const DEFAULT_SUBTITLE_2 = "KP-Flow 하나로 물류 업무를 최적화하세요.";
+const DEFAULT_SUBTITLE_2 = "LogisWeb 하나로 물류 업무를 최적화하세요.";
 const DEFAULT_CTA_TRANSPORT = "운송사 시작하기";
 const DEFAULT_CTA_DRIVER = "차주 시작하기";
 const DEFAULT_CTA_SHIPPER = "화주사 시작하기";
-const DEFAULT_FOOTER = "© 2025 KP-Flow Logistics. All rights reserved.";
+const DEFAULT_FOOTER = "© 2025 LogisWeb. All rights reserved.";
 const DEFAULT_LANDING_FEATURES = [
   { title: "배차 관리", desc: "실시간 배차 등록 및 현황 관리" },
   { title: "차주 관리", desc: "차주 정보 및 운행 현황 통합 관리" },

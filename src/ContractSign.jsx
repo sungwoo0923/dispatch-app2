@@ -8,6 +8,7 @@ import { doc, getDoc, serverTimestamp, updateDoc } from "firebase/firestore";
 import { db } from "./firebase";
 import { CONTRACT_CSS, C_MONO, printContract, signBlockHtml } from "./ContractCenter";
 import { fmtPhone } from "./formatInput";
+import { LogisTag } from "./brand"; // 🔷 2026-11-04 LogisWeb 로고
 
 async function sha256(text) {
   try {
@@ -53,7 +54,7 @@ function Shell({ c, children }) {
       <header className="relative overflow-hidden text-white" style={{ background: "linear-gradient(120deg,#0B1428 0%,#1B2B4B 60%,#2D4C82 100%)" }}>
         <span className="absolute inset-0 opacity-[0.07]" style={{ backgroundImage: "linear-gradient(#fff 1px,transparent 1px),linear-gradient(90deg,#fff 1px,transparent 1px)", backgroundSize: "22px 22px" }} />
         <div className="relative max-w-[920px] mx-auto px-5 py-6">
-          <div className="text-[10.5px] font-extrabold tracking-[0.3em] text-[#8FB0F0]" style={{ fontFamily: C_MONO }}>KP-FLOW · E-CONTRACT</div>
+          <div className="text-[10.5px] font-extrabold tracking-[0.3em] text-[#8FB0F0]" style={{ fontFamily: C_MONO }}><LogisTag height={8} text="E-CONTRACT" /></div>
           <div className="text-[22px] font-black mt-1">전자계약 서명</div>
           {c && <div className="text-[13px] text-white/60 mt-0.5" style={{ fontFamily: C_MONO }}>No. {c.no}</div>}
         </div>

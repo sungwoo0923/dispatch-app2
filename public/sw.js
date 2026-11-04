@@ -73,7 +73,7 @@ self.addEventListener("push", (event) => {
       body,
       icon: `/icons/${iconFile}?v=${VERSION}`,
       // ⭐ 2026-10-19 — 안드로이드 상단바·알림 머리의 작은 아이콘(배지). 안드로이드는 이 자리를 무조건 "단색 실루엣"으로만
-      // 그린다(색 있는 로고는 시스템이 허용 안 함). 예전엔 트럭 실루엣이라 흰 트럭으로 보였다 → 로고의 "KP" 글자 실루엣으로 교체.
+      // 그린다(색 있는 로고는 시스템이 허용 안 함). 예전엔 트럭 실루엣이라 흰 트럭으로 보였다 → 로고 실루엣으로 교체(2026-11-04 LogisWeb 마크).
       badge: `/icons/badge-kp-96.png?v=${VERSION}`,
       vibrate: [200, 100, 200],
       tag: data.tag || `kpflow-${Date.now()}`,

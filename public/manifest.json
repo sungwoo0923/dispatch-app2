@@ -1,6 +1,6 @@
 {
-  "name": "KP-Flow Logistics",
-  "short_name": "KP-Flow",
+  "name": "LogisWeb",
+  "short_name": "LogisWeb",
   "start_url": "/app",
   "scope": "/app",
   "display": "standalone",
