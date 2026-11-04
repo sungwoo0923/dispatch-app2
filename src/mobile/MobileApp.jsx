@@ -10394,7 +10394,7 @@ function QuickEditModal({ order, drivers, cardVersionB, onClose, onSuccess, disp
   const fareK = (key, value) => {
     const num = (x) => (String(x).trim() === "" ? "" : Number(String(x).replace(/[^\d]/g, "")) || 0);
     const cur = { 청구운임: num(claim), 기사운임: num(fee), ...fareT };
-    const n = fareFormChange(cur, key, key === "청구운임" || key === "기사운임" ? num(value) : value, fareRK.rules, { asString: false, withFee: false });
+    const n = fareFormChange(cur, key, key === "청구운임" || key === "기사운임" ? num(value) : value, fareRK.rules, { asString: false, withFee: false, emptyDriver: "" });
     const fmt = (x) => (x === "" || x == null ? "" : Number(x).toLocaleString());
     setClaim(fmt(n.청구운임)); setFee(fmt(n.기사운임)); setFareT({ 운임구분: n.운임구분 || "", 운임수동: !!n.운임수동 });
   };
@@ -11552,7 +11552,7 @@ function QuickEditSheet({ order, onClose, onSaved, cardVersionB, clients = [], b
   const fareQ = (key, value) => setF((p) => {
     const num = { ...p, 청구운임: p.청구운임 === "" ? "" : toNum(p.청구운임), 기사운임: p.기사운임 === "" ? "" : toNum(p.기사운임) };
     const v = key === "청구운임" || key === "기사운임" ? (String(value).trim() === "" ? "" : toNum(value)) : value;
-    const n = fareFormChange(num, key, v, fareRQ.rules, { asString: false, withFee: false });
+    const n = fareFormChange(num, key, v, fareRQ.rules, { asString: false, withFee: false, emptyDriver: "" });
     const fmt = (x) => (x === "" || x == null ? "" : toNum(x).toLocaleString());
     return { ...p, 운임구분: n.운임구분 || "", 운임수동: !!n.운임수동, 청구운임: fmt(n.청구운임), 기사운임: fmt(n.기사운임) };
   });

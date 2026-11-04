@@ -220,6 +220,8 @@ service cloud.firestore {
       return exists(/databases/$(database)/documents/companyFeatures/$(co))
         && get(/databases/$(database)/documents/companyFeatures/$(co)).data.get('fareRules', false) == true;
     }
+    // ⭐ 2026-11-04 운임구분 바로 추가 — 오더 화면 운임구분 드롭다운에서 새 규칙을 바로 추가(rules·history arrayUnion, merge)해도
+    //  아래 update 조건(조회전용 아닌 그 회사 직원 + 기능 켜짐 + companyName 유지) 그대로 통과 → 규칙 변경 없음
     match /fareRules/{co} {
       allow read: if fareRulesStaff(co);
       allow create: if fareRulesStaff(co) && myUser().get('role', '') != 'viewer' && (isTotalMasterUser() || fareFeatureOn(co))

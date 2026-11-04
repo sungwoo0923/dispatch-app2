@@ -31,8 +31,7 @@ import { useCompanyBiz, bizOf, BizChip, BizPicker, BizFilter, bizMatch, printInf
 import JSZip from "jszip";
 import { sendOrderTo24Proxy as sendOrderTo24 } from "../api/24CallProxy";
 import { useNewVersion, openUpdatePopup } from "./VersionCheck";
-import CustomDatePicker, { specialDemandInfo, KOREAN_HOLIDAYS, shortHolidayLabel } from "./CustomDatePicker";
-import { ensureWeatherLoaded, getWeatherSpecialInfo } from "./weatherUtil";
+import CustomDatePicker, { KOREAN_HOLIDAYS, shortHolidayLabel } from "./CustomDatePicker"; // ⭐ 2026-11-04 특수운임 제거 — specialDemandInfo·weatherUtil 사용 안 함
 // ⭐ 2026-11-02 속도 — 관리자메뉴(엑셀 가져오기 등 포함)는 열 때 받는다. 직원 명부 구독은 usersLive 하나를 공유
 import { subscribeUsersLive } from "./usersLive";
 const AdminMenu = lazyView(() => import("./AdminMenu"));
@@ -869,19 +868,6 @@ function WorkDatesEditModal({ row, companyName, onClose, onSave }) {
       </div>
     </div>
   );
-}
-
-// 오더에 저장된 특수운임(연휴·성수기·기상) 여부를 판단한다. 이 기능이 추가되기
-// 전에 이미 등록돼있던 오더는 이 필드 자체가 없는데, 그런 오더도 상차일을
-// 공휴일 캘린더 + 그 날 실제 강수/적설 여부(weatherUtil)에 다시 대조해서
-// 특수일이면 특수운임으로 취급한다(StandardFare.jsx의 isSpecialDemandRow와
-// 동일한 판단 기준). 비/눈으로 배차가 어려워 운임이 평소보다 높게 형성된
-// 날도 연휴와 동일하게 자사운임표·AI추천 평균 계산에서 자동으로 제외된다.
-function isSpecialDemandOrder(r) {
-  if (r?.특수운임 === true) return true;
-  if (r?.특수운임 === false) return false;
-  if (specialDemandInfo(r?.상차일)?.special) return true;
-  return !!getWeatherSpecialInfo(r?.상차일)?.special;
 }
 
 // ⭐ 복수근무일(묶음 오더)의 근무일자목록을 안전하게 배열로 복원한다.
@@ -7350,10 +7336,6 @@ export default function DispatchApp({ role: realRole, user, userCompany = "", fo
   const role = realRole === "hrAcct" ? (hrAcctView === "hr" ? "hrManager" : "test") : realRole;
   const isTest = role === "test";
   const navigate = useNavigate();
-  // ⭐ 오늘 비/눈이 왔는지 자동 인식 — 자사운임표·AI추천 등 운임조회 전반이
-  // 참고하는 특수운임 판정에 쓰인다(weatherUtil.js). 앱 진입 시 한 번만
-  // 받아오면 되므로 최상위 컴포넌트에서 호출한다.
-  useEffect(() => { ensureWeatherLoaded(); }, []);
   useCopyTemplates(); // ▤ 기사복사 문구(회사별 설정) 실시간 반영
   useVehicleTypes(getTenant() || userCompany); // 🚚 2026-11-02 회사 공용 차량종류(추가한 이름이 모든 화면 목록에 바로 보이게 구독 유지)
   // 💳 회사 요금제(미지정이면 전체 기능) — 메뉴 잠금·프로 기능 판단에 쓴다
@@ -11154,9 +11136,6 @@ const filterPlaces = (q) => {
       혼적: false,
       긴급: false,
       운임보정: null,
-      특수운임: false,       // ★ 연휴/성수기 등 특수 수요일 배차 여부(자동감지 + 수동토글)
-      특수운임사유: "",
-      특수운임수동: false,   // 사용자가 자동감지 결과를 직접 덮어썼는지
       복수근무일: false,     // ★ 묶음 오더 — 연속 기간이 아니라 특정 날짜들만 골라 하나의
       근무일자목록: [],      // 오더로 등록(예: 9/2,4,5,7~11,14~18). 상차일=최소값, 하차일=최대값으로 자동 연동.
     };
@@ -11808,16 +11787,6 @@ return {
   dropLabel: normalizeAreaForSearch(dropAddr),
 };
 }
-// ⭐ 연휴·성수기(특수일) 오더를 AI추천/기존운임비교 평균 계산에 포함할지 여부.
-// 기본값은 꺼짐(기존 동작 유지 — 특수일은 평균 계산에서 제외). AI추천 팝업에서
-// 사용자가 직접 켜서 특수일 포함 기준으로도 확인해볼 수 있다.
-// ⚠️ 아래 useEffect들의 deps 배열에서 바로 참조하므로(배열 리터럴은 useEffect
-// 호출 시점에 즉시 평가됨 — effect 콜백 본문과 달리 지연 실행되지 않는다),
-// 반드시 그 effect들보다 앞서 선언해야 한다. 원래 fareCompare 근처(더 아래)에
-// 있었는데, 그러면 첫 번째 effect의 deps가 아직 선언되지 않은 이 변수를 참조하게
-// 되어 "Cannot access 'includeSpecialFare' before initialization" 런타임
-// 에러로 배차관리 화면 전체가 크래시하는 버그가 있었다.
-const [includeSpecialFare, setIncludeSpecialFare] = React.useState(false);
 // ===============================
 // 🤖 AI 배차/운임 추천 (HERE)
 // ===============================
@@ -11832,10 +11801,7 @@ React.useEffect(() => {
     return;
   }
 
-// ⭐ 특수운임(연휴·성수기)으로 표시된 오더는 평소 시세보다 높게 형성된 경우가
-// 많아, 그대로 평균에 섞으면 다음 조회 때 그 특수 운임이 "평소 시세"처럼
-// 추천되는 문제가 있다 — 기본적으로 평균 계산에서 제외한다.
-const similarAll = (dispatchData || []).filter(r =>
+const similar = (dispatchData || []).filter(r =>
   (r.운행유형 || "편도") === form.운행유형 &&   // ★ 추가
   normalizeKey(r.상차지명) === normalizeKey(pickup) &&
   normalizeKey(r.하차지명) === normalizeKey(drop) &&
@@ -11843,11 +11809,6 @@ const similarAll = (dispatchData || []).filter(r =>
   r.청구운임 &&
   r.기사운임
 );
-const similarNormal = similarAll.filter(r => !isSpecialDemandOrder(r));
-const specialInAllCount = similarAll.length - similarNormal.length;
-// includeSpecialFare 토글이 켜져 있으면 특수일도 그대로 포함해서 계산한다.
-const similar = (includeSpecialFare || similarNormal.length === 0) ? similarAll : similarNormal;
-const excludedSpecialCount = includeSpecialFare ? 0 : specialInAllCount;
 
   if (similar.length < 1) {
     setAiRecommend(null);
@@ -11872,7 +11833,6 @@ setAiRecommend({
   driverAvg,
   marginPercent: Math.round(((fareAvg - driverAvg) / fareAvg) * 100),
   sampleCount: similar.length,
-  excludedSpecialCount,   // ★ 특수운임(연휴·성수기)으로 평균에서 제외된 건수
 
   hasInputFare: inputFare > 0,   // ★ 핵심
   inputFare,
@@ -11891,7 +11851,6 @@ setAiRecommend({
   form.차량톤수,
   form.차량종류,
   dispatchData,
-  includeSpecialFare,
 ]);
 // =====================================================
 // 💰 기존 운임 대비 비교 표시 (🔥 여기 추가)
@@ -12447,26 +12406,6 @@ const mrLabelCls = "flex items-center h-[20px] overflow-visible text-[13px] font
 const mrInputCls = "w-full border-0 border-b-2 border-gray-300 rounded-none px-1 py-2 text-[13px] font-bold text-gray-900 bg-transparent focus:outline-none focus:border-[#1B2B4B] transition";
 const mrTextareaCls = "w-full border-0 border-b-2 border-gray-300 rounded-none px-1 py-2 text-[13px] font-bold text-gray-900 bg-transparent resize-none focus:outline-none focus:border-[#1B2B4B] transition";
 
-// ⭐ 연휴/성수기 + 그 날 실제 비/눈이 왔는지(weatherUtil)를 합쳐서 판단한다 —
-// 공휴일이 아니어도 우천/폭설로 배차가 어려워 운임이 오른 날이면 동일하게
-// "특수일"로 자동 제안한다.
-const getAutoSpecialInfo = (dateStr) => {
-  const holiday = specialDemandInfo(dateStr);
-  if (holiday.special) return holiday;
-  const weather = getWeatherSpecialInfo(dateStr);
-  if (weather.special) return weather;
-  return { special: false, reason: "" };
-};
-
-// ⭐ 연휴/성수기·기상 자동감지 — 상차일이 바뀔 때마다 다시 판단해서 제안한다.
-// 사용자가 직접 토글을 눌러 수동으로 정한 값은 존중하고 덮어쓰지 않는다
-// (다음 상차일 변경 시에는 다시 자동감지로 리셋 — 새 날짜엔 새 판단이 맞음).
-React.useEffect(() => {
-  if (form.특수운임수동) return;
-  const info = getAutoSpecialInfo(form.상차일);
-  setForm((p) => (p.특수운임수동 ? p : { ...p, 특수운임: info.special, 특수운임사유: info.reason }));
-}, [form.상차일]); // eslint-disable-line react-hooks/exhaustive-deps
-
 React.useEffect(() => {
   const pickup = normalizeKey(form.상차지명);
   const drop   = normalizeKey(form.하차지명);
@@ -12477,18 +12416,13 @@ React.useEffect(() => {
     return;
   }
 
-  const similarAll = (dispatchData || []).filter(r =>
+  const similar = (dispatchData || []).filter(r =>
     normalizeKey(r.상차지명) === pickup &&
     normalizeKey(r.하차지명) === drop &&
     getTotalTonFromOrder(r) === ton &&
     r.청구운임 &&
     r.기사운임
   );
-  // ⭐ 연휴·성수기 특수운임 건은 "기존보다 높음/낮음" 비교 기준에서도 제외한다
-  // (해당 건들만 있는 경우엔 어쩔 수 없이 그대로 사용). includeSpecialFare
-  // 토글이 켜져 있으면 특수일도 포함해서 비교한다.
-  const similarNormal = similarAll.filter(r => !isSpecialDemandOrder(r));
-  const similar = (includeSpecialFare || similarNormal.length === 0) ? similarAll : similarNormal;
 
   if (similar.length === 0) {
     setFareCompare({ sale: null, driver: null });
@@ -12530,7 +12464,6 @@ React.useEffect(() => {
   form.청구운임,
   form.기사운임,
   dispatchData,
-  includeSpecialFare,
 ]);
 // ===============================
 // 🤖 AI 설명 문장 생성
@@ -12538,16 +12471,10 @@ React.useEffect(() => {
 function makeAiExplain(ai) {
   if (!ai) return "";
 
-  // ⭐ 연휴·성수기로 표시된 오더는 평균에서 제외했다는 사실을 짧게 덧붙인다 —
-  // 왜 표시된 건수가 실제 이력보다 적어 보이는지 헷갈리지 않게.
-  const excludeNote = ai.excludedSpecialCount > 0
-    ? ` (연휴·성수기 ${ai.excludedSpecialCount}건 제외)`
-    : "";
-
   // ① 운임 미입력
   if (!ai.hasInputFare) {
     return (
-      `동일한 상/하차지·톤수로 최근 ${ai.sampleCount}건이 배차됐어요${excludeNote}. ` +
+      `동일한 상/하차지·톤수로 최근 ${ai.sampleCount}건이 배차됐어요. ` +
       `평균 ${ai.fareAvg.toLocaleString()}원, 적정 범위는 ` +
       `${ai.fareMin.toLocaleString()}~${ai.fareMax.toLocaleString()}원이에요.`
     );
@@ -12557,14 +12484,14 @@ function makeAiExplain(ai) {
   if (ai.isOutlier) {
     const dir = ai.fareDiffPercent > 0 ? "높아요" : "낮아요";
     return (
-      `입력하신 청구운임이 최근 평균(${ai.fareAvg.toLocaleString()}원)${excludeNote}보다 ` +
+      `입력하신 청구운임이 최근 평균(${ai.fareAvg.toLocaleString()}원)보다 ` +
       `${Math.abs(ai.fareDiffPercent)}% ${dir}. 거래처 협의 내용을 한 번 더 확인해보세요.`
     );
   }
 
   // ③ 정상
   return (
-    `입력하신 청구운임이 최근 평균(${ai.fareAvg.toLocaleString()}원)${excludeNote}과 ` +
+    `입력하신 청구운임이 최근 평균(${ai.fareAvg.toLocaleString()}원)과 ` +
     `비슷한 적정 범위예요. 이대로 진행하셔도 좋습니다.`
   );
 }
@@ -12770,12 +12697,6 @@ function swapPickupDrop() {
     const [autoDropMatched, setAutoDropMatched] = React.useState(false);
 
     const onChange = (key, value) => {
-      if (key === "특수운임") {
-        // 사용자가 직접 토글을 건드리면, 이후 상차일이 바뀌어 자동감지 결과가 새로
-        // 계산되기 전까지는 그 판단을 그대로 존중한다(자동감지가 수동 선택을 덮어쓰지 않음).
-        setForm((p) => ({ ...p, 특수운임: value, 특수운임수동: true, 특수운임사유: value ? (p.특수운임사유 || "수동 지정") : "" }));
-        return;
-      }
       // ⭐ 2026-11-02 운임규칙 — 운임구분·청구운임·기사운임 → 규칙대로 기사운임·수수료 자동 계산(기사운임을 직접 고치면 유지)
       if (fareOn && canMoney && (key === "운임구분" || key === "청구운임" || key === "기사운임" || key === "__reapply")) {
         setForm((p) => fareFormChange(p, key, value, fareR.rules));
@@ -13890,17 +13811,8 @@ for (let i = 0; i < saveCount; i++) {
 const savePromise = Promise.all(Array.from({ length: saveCount }, (_, i) => {
   const dateForOrder = (useSeparateDates && orderDates[i]) ? lockYear(orderDates[i]) : rec.상차일;
   const dropDateForOrder = (useSeparateDates && orderDropDates[i]) ? lockYear(orderDropDates[i]) : (rec.하차일 || dateForOrder);
-  // ⭐ 다중등록으로 오더별 상차일이 서로 다를 수 있어(useSeparateDates), 사용자가
-  // 특수운임을 직접 지정하지 않은 경우엔 각 오더의 실제 상차일 기준으로 특수운임
-  // 여부를 다시 계산한다(수동 지정 시엔 전체 오더에 그 값을 그대로 적용).
-  const specialPatch = rec.특수운임수동
-    ? {}
-    : (() => {
-        const info = getAutoSpecialInfo(dateForOrder);
-        return { 특수운임: info.special, 특수운임사유: info.reason };
-      })();
   // ⭐ 회전 운행 "나누기"면 회차별로 N건 저장(묶기/1회는 1건)
-  return Promise.all(expandRotation({ ...rec, 상차일: dateForOrder, 하차일: dropDateForOrder, ...specialPatch }).map(r => addDispatch(r)));
+  return Promise.all(expandRotation({ ...rec, 상차일: dateForOrder, 하차일: dropDateForOrder }).map(r => addDispatch(r)));
 }));
 // ⭐ 2026-11-03 청구 사업자 기억 — 다음에 같은 거래처·상차지·하차지가 들어오면 이 사업자로 자동 맞춘다
 if (dmBiz.multi) rememberBiz(dmBiz, rec, { clientDefault: bizClientDefault(rec.거래처명) });
@@ -17027,10 +16939,6 @@ className={`
   <>
     {/* 청구운임 */}
     <div>
-      {/* ⚠️ 아래 특수운임 칩이 진짜 <label>(체크박스용)이라, 바깥까지 <label>로
-          이중 중첩하면 클릭 시 체크박스가 두 번 토글되는 등 이상 동작이 생길 수 있다.
-          이 바깥쪽은 htmlFor로 입력과 연결된 적이 없어 순수 스타일용이었으므로
-          div로 바꿔도 기능은 그대로다. */}
       <div className={`${labelCls} flex items-center gap-2 flex-wrap`}>
         <EditableText id="orderForm.label.청구운임" defaultText="청구운임" />
 
@@ -17050,34 +16958,6 @@ className={`
           </span>
         )}
 
-        {/* ⭐ 연휴·성수기 특수운임 표시 — 공휴일 캘린더 기준 자동감지 + 수동 조정 가능.
-            체크해두면 이 오더의 운임은 이후 자사운임표/AI추천 평균 계산에서 제외되어,
-            연휴 직전 등 일시적으로 오른 운임이 "평소 시세"처럼 참조되지 않는다.
-            ⚠ 별도 grid 칸을 새로 차지하면 뒤 필드들이 한 줄씩 밀려버려서, 기존
-            칸 배치를 안 건드리고 청구운임 라벨 줄 안에 작은 칩으로 끼워 넣는다. */}
-        {/* ⚠️ 이전엔 체크 시 "· 사유" 텍스트가 붙어서 칩 너비 자체가 늘어나며
-            자리가 옮겨 보이는 문제가 있었다 — 너비를 고정하고, 상태에 따라
-            색만(회색↔네이비) 바뀌게 해서 체크해도 위치가 절대 안 움직인다.
-            사유는 title 툴팁으로만 보여준다. */}
-        {/* ⚠️ 특수일 관련 배지는 프로그램 전체에서 검은 바탕 + 굵은 흰 글씨로
-            통일한다(예전엔 주황/네이비 등 제각각이었음). */}
-        <label
-          onClick={(e) => e.stopPropagation()}
-          className={`ml-auto inline-flex items-center justify-center gap-1 w-[84px] shrink-0 px-1.5 py-1 rounded border cursor-pointer select-none text-[10.5px] font-extrabold normal-case transition-colors ${
-            form.특수운임
-              ? "bg-black border-black text-white"
-              : "bg-white border-gray-300 text-gray-400"
-          }`}
-          title={`연휴·성수기·우천/폭설 등 특수 상황으로 운임이 평소보다 높게(또는 낮게) 형성된 오더면 체크하세요. 우천/폭설은 자동 감지됩니다. 자사운임표·AI추천 평균에서 제외됩니다.${form.특수운임 && form.특수운임사유 ? `\n(${form.특수운임사유})` : ""}`}
-        >
-          <input
-            type="checkbox"
-            className="accent-black w-3 h-3 shrink-0"
-            checked={!!form.특수운임}
-            onChange={(e) => onChange("특수운임", e.target.checked)}
-          />
-          특수운임
-        </label>
       </div>
 
       <input autoComplete="off"
@@ -17126,7 +17006,7 @@ className={`
 
     {/* 수수료 */}
     <div>
-      {/* ⭐ 2026-11-02 운임규칙 — 운임구분은 수수료 라벨 줄 오른쪽 알약 버튼(특수운임 칩과 같은 자리 방식 · 칸 배치 그대로) */}
+      {/* ⭐ 2026-11-02 운임규칙 — 운임구분은 수수료 라벨 줄 오른쪽 알약 버튼(칸 배치 그대로) */}
       <div className={`${labelCls} flex items-center gap-1.5 whitespace-nowrap`}>
         <span className="shrink-0"><EditableText id="orderForm.label.수수료" defaultText="수수료" /></span>
         {fareOn && (
@@ -39666,7 +39546,7 @@ return (
           {/* ⭐ 2026-11-02 운임규칙 — 운임구분 필터(규칙 사용 회사만) */}
           <DetailFilterButton rows={dispatchData} value={dsDetail} onApply={applyDsDetail} getters={dsDetailGet} dateOf={dsDateOf} dateLabel={fixedForm ? "입고일 기준" : "상차일 기준"} title={fixedForm ? "세부검색 · 고정노선현황" : "세부검색 · 배차현황"} />
           {fareOn && (
-            <span data-fare-filter="1"><FareTypeSelect compact align="right" rules={fareR.rules} value={fareTypeFilter} placeholder="운임구분 전체" noneLabel="운임구분 전체"
+            <span data-fare-filter="1"><FareTypeSelect compact align="right" allowAdd={false} rules={fareR.rules} value={fareTypeFilter} placeholder="운임구분 전체" noneLabel="운임구분 전체"
               extraOpts={[{ name: "__none", label: "운임구분 미지정" }]} onChange={(v) => { setFareTypeFilter(v); setPage(0); }} /></span>
           )}
           <button onClick={()=>{if(selected.size===0)return showAlert("복사할 항목을 선택하세요.");if(selected.size>1)return showAlert("1개만 선택할 수 있습니다.");setCopyModalOpen(true);}} className="px-2 py-1 rounded-lg bg-gray-800 text-white text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap"><EditableText id="status.toolbar.기사복사" defaultText="기사복사" /></button>
@@ -46694,7 +46574,7 @@ function AccountingDashboard({ dispatchData = [], fixedRows = [], clients = [], 
 
 // ⭐ 경영인텔리전스 — AI 월간비교분석(최고관리자 전용).
 // 실제 LLM을 호출하지 않고(비용/키 불필요), 두 달의 매출·건수·평균단가·거래처·
-// 차종/톤수 구성·특수일(연휴·성수기) 비중·요일 분포를 규칙 기반으로 비교해
+// 차종/톤수 구성·요일 분포를 규칙 기반으로 비교해
 // "건수는 늘었는데 매출은 왜 줄었나" 같은 질문에 구체적인 원인을 짚어주는
 // 통계 분석 엔진. rowsA/rowsB는 이미 배차완료로 필터링된 오더 배열(Settlement의
 // `rows`에서 월별로 잘라서 넘긴다).
@@ -46868,12 +46748,6 @@ function buildMonthCompareInsight(rowsA, rowsB, labelA, labelB) {
       };
     });
 
-  // 특수운임(연휴·성수기) 비중 — 특수일 오더가 많았던 달은 평균단가가 자연히 높게 나온다
-  const specialA = rowsA.filter(isSpecialDemandOrder);
-  const specialB = rowsB.filter(isSpecialDemandOrder);
-  const specialStatA = summarize(specialA);
-  const specialStatB = summarize(specialB);
-
   // 요일별 분포 — 평일/주말 오더 비중 변화
   const weekdayOf = (r) => {
     const d = r.상차일 ? new Date(r.상차일 + "T00:00:00") : null;
@@ -46944,7 +46818,7 @@ function buildMonthCompareInsight(rowsA, rowsB, labelA, labelB) {
     const s = [];
     s.push(`${labelB} 매출은 ${won(B.sale)}로 ${labelA}(${won(A.sale)}) 대비 ${pctStr(A.sale, B.sale)} 변동했습니다.`);
     if (cntDelta > 0 && saleDelta < 0) {
-      s.push(`오더 건수는 ${cntDelta.toLocaleString()}건(${pctStr(A.cnt, B.cnt)}) 늘었음에도 매출이 줄어든 것은, 건당 평균 운임이 ${won(A.avgSale)}에서 ${won(B.avgSale)}로 ${pctStr(A.avgSale, B.avgSale)} 하락했기 때문입니다. 저단가·근거리 오더 비중이 늘었거나, 평소보다 단가가 높게 형성되는 특수일(연휴·성수기) 오더가 상대적으로 줄었을 가능성이 있습니다.`);
+      s.push(`오더 건수는 ${cntDelta.toLocaleString()}건(${pctStr(A.cnt, B.cnt)}) 늘었음에도 매출이 줄어든 것은, 건당 평균 운임이 ${won(A.avgSale)}에서 ${won(B.avgSale)}로 ${pctStr(A.avgSale, B.avgSale)} 하락했기 때문입니다. 저단가·근거리 오더 비중이 늘었을 가능성이 있습니다.`);
     } else if (cntDelta < 0 && saleDelta > 0) {
       s.push(`오더 건수는 ${Math.abs(cntDelta).toLocaleString()}건 줄었지만, 건당 평균 운임이 ${won(A.avgSale)}에서 ${won(B.avgSale)}로 ${pctStr(A.avgSale, B.avgSale)} 상승하며 매출이 오히려 증가했습니다. 고단가 오더 중심으로 효율이 개선된 결과로 보입니다.`);
     } else if (Math.abs(pctStrToNum(pctStr(A.avgSale, B.avgSale))) >= 5) {
@@ -47090,20 +46964,13 @@ function buildMonthCompareInsight(rowsA, rowsB, labelA, labelB) {
     }
   }
 
-  // 6) 특수일 및 요일 분포
+  // 6) 요일 분포
   {
     const s = [];
-    if (specialStatA.cnt > 0 || specialStatB.cnt > 0) {
-      const shareA = A.cnt ? (specialStatA.cnt / A.cnt) * 100 : 0;
-      const shareB = B.cnt ? (specialStatB.cnt / B.cnt) * 100 : 0;
-      if (Math.abs(shareA - shareB) >= 2) {
-        s.push(`특수일(연휴·성수기) 오더는 ${labelA} ${specialStatA.cnt}건(비중 ${shareA.toFixed(1)}%, 평균 ${won(specialStatA.avgSale)})에서 ${labelB} ${specialStatB.cnt}건(비중 ${shareB.toFixed(1)}%, 평균 ${won(specialStatB.avgSale)})으로 변화했습니다. 특수일 오더는 평소보다 단가가 높게 형성되는 경향이 있어, 이 비중 변화가 월 평균단가 차이의 일부를 설명합니다.`);
-      }
-    }
     if (Math.abs(weekendShareA - weekendShareB) >= 3) {
       s.push(`주말(토·일) 오더 비중은 ${weekendShareA.toFixed(1)}%에서 ${weekendShareB.toFixed(1)}%로 변화했습니다.`);
     }
-    if (s.length) report.push({ title: "특수일 및 요일 분포", body: s.join(" ") });
+    if (s.length) report.push({ title: "요일 분포", body: s.join(" ") });
   }
 
   // 7) 거래처 유지율 및 집중도 — 매출 변화가 "기존 거래처의 단가·물량 변화" 때문인지
@@ -47136,7 +47003,7 @@ function buildMonthCompareInsight(rowsA, rowsB, labelA, labelB) {
     report.push({ title: "거래처 유지율 및 집중도", body: s.join(" ") });
   }
 
-  return { A, B, clientDeltas, topDecline, topGrowth, tonMix, specialStatA, specialStatB, report };
+  return { A, B, clientDeltas, topDecline, topGrowth, tonMix, report };
 }
 // pctStr()이 반환하는 "+12.3%" 형태 문자열에서 다시 숫자만 뽑아 비교용으로 쓴다.
 function pctStrToNum(s) {
@@ -47172,7 +47039,7 @@ const REPORT_TAB_SHORT_LABEL = {
   "차종·톤수별 매출 기여 분석": "차종·톤수 기여",
   "손실(무수익) 오더 분석": "손실 오더",
   "거래처별 수익률 변화 (마진 스퀴즈 경고)": "마진 스퀴즈",
-  "특수일 및 요일 분포": "특수일·요일",
+  "요일 분포": "요일",
   "거래처 유지율 및 집중도": "유지율·집중도",
 };
 function reportTabLabel(title) {
@@ -47302,7 +47169,7 @@ function MonthCompareInsight({ rows = [], monthA: monthAProp, setMonthA: setMont
             AI 월간비교분석
             <span className="text-[10px] font-bold bg-white/10 text-white/80 border border-white/20 px-1.5 py-0.5 rounded">최고관리자 전용</span>
           </h3>
-          <p className="text-[11px] text-white/50 mt-0.5">두 달의 매출·건수·거래처·차종·특수일 데이터를 비교해 변화 원인을 자동으로 짚어드립니다</p>
+          <p className="text-[11px] text-white/50 mt-0.5">두 달의 매출·건수·거래처·차종·요일 데이터를 비교해 변화 원인을 자동으로 짚어드립니다</p>
         </div>
         <div className="flex items-center gap-2">
           <CustomSelect
