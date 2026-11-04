@@ -48,7 +48,7 @@ const korDate = (ms) => { const d = new Date(ms || Date.now()); return `${d.getF
 const mmdd = (ms) => { const d = new Date(ms); return `${pad2(d.getMonth() + 1)}/${pad2(d.getDate())}`; };
 const STATUS = { pending: "진행 중", approved: "결재 완료", rejected: "반려", withdrawn: "회수", cancelled: "결재 취소" };
 const catOf = (k) => APPROVAL_CATS.find((c) => c.key === k) || APPROVAL_CATS[0];
-const isAdminRole = (r) => ["admin", "totalMaster", "hrManager", "hrAcct"].includes(r);
+const isAdminRole = (r) => ["admin", "totalMaster", "hrManager", "hrAcct", "allMgr"].includes(r);
 
 // 🗂 2026-11-04 인사발령 품의 — 인사 담당자만 쓰고(보이고), 결재가 끝나면 그 사람이 인사발령 공문을 게시한다.
 //  인사 담당자 = 역할 hrManager(인사관리자)·hrAcct(통합인사관리자)·allMgr(통합관리자) 또는 부서 이름에 "인사"가 들어간 직원(hrHandover.isHrStaffUser와 같은 기준 + 통합관리자).
@@ -74,7 +74,7 @@ const goPersonnelOrder = (targetUid) => {
 //  (firestore.rules › approvals 의 "⭐ 2026-11-04 전자결재 서명" 규칙과 같은 조건)
 const PAY_SKIP_FORMS = ["card"];
 export const isPayDoc = (d) => d?.cat === "expense" && !PAY_SKIP_FORMS.includes(d?.form) && Number(d?.amount) > 0;
-const FIN_ROLES = ["test", "hrAcct", "admin", "totalMaster"];
+const FIN_ROLES = ["test", "hrAcct", "allMgr", "admin", "totalMaster"];
 const FIN_TEAM = /재무|경리|회계/;
 const isFinUser = (me) => FIN_ROLES.includes(me?.role) || FIN_TEAM.test(String(me?.team || ""));
 // null(지급 대상 아님) | "wait"(지급 대기) | "paid"(지급완료)
@@ -2226,7 +2226,7 @@ export default function ApprovalCenter({ company, me, page, setPage, openId, onO
       (s) => setCompanyAll(s.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => toMs(b.createdAt) - toMs(a.createdAt))), () => setCompanyAll([]));
   }, [admin, tab, company]);
   // 💸 2026-11-04 지급 대기 — 경리(test)·관리자 역할은 참여하지 않은 지출 문서도 볼 수 있어(규칙상 읽기 허용) 회사 지출 결의를 따로 구독
-  const payReader = ["test", "hrAcct", "admin", "totalMaster"].includes(me.role);
+  const payReader = ["test", "hrAcct", "allMgr", "admin", "totalMaster"].includes(me.role);
   const [payPool, setPayPool] = React.useState([]);
   React.useEffect(() => {
     if (!payReader || !company) return undefined;
