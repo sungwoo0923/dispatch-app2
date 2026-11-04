@@ -71,7 +71,7 @@ function Clock() {
 function Panel({ code, title, right, children, style }) {
   return (
     <div className="hd-panel" style={{ borderRadius: 18, padding: "16px 18px", display: "flex", flexDirection: "column", minWidth: 0, ...style }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 12 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, rowGap: 8, flexWrap: "wrap", marginBottom: 12 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 9, minWidth: 0 }}>
           <span style={{ width: 7, height: 7, borderRadius: 2, background: C.glow, transform: "rotate(45deg)", boxShadow: `0 0 8px ${C.glow}` }} />
           <span style={{ fontFamily: MONO, fontSize: 11, fontWeight: 800, letterSpacing: "0.2em", color: C.dim }}>{code}</span>
@@ -114,8 +114,8 @@ function Tile({ code, label, value, unit, foot, spark, sparkId, primary }) {
   return (
     <div className={primary ? "hd-tile hd-tile-on" : "hd-tile"} style={{ borderRadius: 16, padding: "14px 16px 10px", position: "relative", overflow: "hidden", minWidth: 0 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <span style={{ fontSize: 14, fontWeight: 800, color: C.sub }}>{label}</span>
-        <span style={{ fontFamily: MONO, fontSize: 10.5, fontWeight: 800, letterSpacing: "0.18em", color: C.dim }}>{code}</span>
+        <span style={{ fontSize: 14, fontWeight: 800, color: C.sub, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", minWidth: 0 }}>{label}</span>
+        <span style={{ fontFamily: MONO, fontSize: 10.5, fontWeight: 800, letterSpacing: "0.18em", color: C.dim, whiteSpace: "nowrap", overflow: "hidden", flexShrink: 1, minWidth: 0, marginLeft: 6 }}>{code}</span>
       </div>
       <div style={{ marginTop: 8, display: "flex", alignItems: "baseline", gap: 5, minWidth: 0 }}>
         <span style={{ fontFamily: MONO, fontSize: 27, fontWeight: 800, color: "#fff", letterSpacing: "-0.02em", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{value}</span>
@@ -167,9 +167,9 @@ function Gauge({ value, max = 30, label, sub }) {
 
 function Seg({ value, onChange, items }) {
   return (
-    <div style={{ display: "flex", gap: 2, padding: 3, borderRadius: 10, background: "rgba(255,255,255,.05)", border: `1px solid ${C.line}` }}>
+    <div style={{ display: "flex", gap: 2, padding: 3, borderRadius: 10, background: "rgba(255,255,255,.05)", border: `1px solid ${C.line}`, flexShrink: 0 }}>
       {items.map(([k, l]) => (
-        <button key={k} type="button" onClick={() => onChange(k)} style={{ height: 28, padding: "0 12px", borderRadius: 7, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 800, background: value === k ? "linear-gradient(135deg,#2D4C82,#4B6CB7)" : "transparent", color: value === k ? "#fff" : C.sub, boxShadow: value === k ? `0 0 12px rgba(110,149,232,.35)` : "none" }}>{l}</button>
+        <button key={k} type="button" onClick={() => onChange(k)} style={{ height: 28, padding: "0 12px", whiteSpace: "nowrap", borderRadius: 7, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 800, background: value === k ? "linear-gradient(135deg,#2D4C82,#4B6CB7)" : "transparent", color: value === k ? "#fff" : C.sub, boxShadow: value === k ? `0 0 12px rgba(110,149,232,.35)` : "none" }}>{l}</button>
       ))}
     </div>
   );
@@ -354,7 +354,8 @@ export default function HomeDeck({ dispatchData = [], pastCache, liveStart, user
       </div>
 
       {/* ── KPI 타일 ── */}
-      <div style={{ position: "relative", display: "grid", gridTemplateColumns: "repeat(5, minmax(0,1fr))", gap: 12, marginBottom: 14 }}>
+      {/* ⭐ 2026-11-04 폴더블(펼친 화면 884px)·태블릿 — 본문이 좁으면 5칸을 억지로 한 줄에 넣지 않고 줄을 나눈다(글자가 한 자씩 세로로 쪼개졌다) */}
+      <div style={{ position: "relative", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 12, marginBottom: 14 }}>
         <Tile primary code="ORDERS" label="오늘 접수" value={t0[2].toLocaleString()} unit="건" spark={sparkC} sparkId="hdS1"
           foot={<><Delta cur={t0[2]} prev={t1[2]} /><span>어제 대비</span></>} />
         <Tile code="REVENUE" label="오늘 매출" value={won(t0[0])} unit="원" spark={sparkS} sparkId="hdS2"
@@ -368,7 +369,7 @@ export default function HomeDeck({ dispatchData = [], pastCache, liveStart, user
       </div>
 
       {/* ── 매출 추이 + 게이지 ── */}
-      <div style={{ position: "relative", display: "grid", gridTemplateColumns: "minmax(0,2.25fr) minmax(0,1fr)", gap: 14, marginBottom: 14 }}>
+      <div style={{ position: "relative", display: "grid", gridTemplateColumns: "minmax(0,2.25fr) minmax(250px,1fr)", gap: 14, marginBottom: 14 }}>
         <Panel code="TREND" title="매출 추이" right={<Seg value={range} onChange={setRange} items={[["7d", "7일"], ["30d", "30일"], ["year", "올해"]]} />}>
           <div style={{ display: "flex", gap: 22, marginBottom: 6, flexWrap: "wrap" }}>
             {[["기간 매출", won(trendSum[0]) + "원"], ["기간 수익", won(trendSum[1]) + "원"], ["매익률", trendSum[0] ? `${((trendSum[1] / trendSum[0]) * 100).toFixed(1)}%` : "-"], ["최고", `${peak.label} · ${short(peak.s)}`], ["건수", `${trendSum[2].toLocaleString()}건`]].map(([k, v]) => (
@@ -411,8 +412,8 @@ export default function HomeDeck({ dispatchData = [], pastCache, liveStart, user
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 10 }}>
             {[["월 수익", short(mNow[1])], ["일평균 매출", short(dayOfMonth ? mNow[0] / dayOfMonth : 0)], ["월 건수", `${mNow[2].toLocaleString()}건`], ["건당 매출", short(mNow[2] ? mNow[0] / mNow[2] : 0)]].map(([k, v]) => (
               <div key={k} style={{ borderRadius: 11, padding: "9px 11px", background: "rgba(255,255,255,.035)", border: `1px solid ${C.line}` }}>
-                <div style={{ fontSize: 12, fontWeight: 700, color: C.dim }}>{k}</div>
-                <div style={{ fontFamily: MONO, fontSize: 16, fontWeight: 800, color: "#fff", marginTop: 2 }}>{ready ? v : "…"}</div>
+                <div style={{ fontSize: 12, fontWeight: 700, color: C.dim, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{k}</div>
+                <div style={{ fontFamily: MONO, fontSize: 16, fontWeight: 800, color: "#fff", marginTop: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{ready ? v : "…"}</div>
               </div>
             ))}
           </div>

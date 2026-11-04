@@ -163,10 +163,10 @@ function NoticeView({ company, me }) {
         <div className="text-[11px] font-extrabold tracking-[0.26em] text-[#8FB0F0]" style={{ fontFamily: MONO }}>BOARD · NOTICE</div>
         <div className="text-[20px] font-black mt-0.5">공지사항</div>
         <div className="text-[12.5px] text-white/60 mt-0.5">회사 공지 및 주요 안내 사항을 확인합니다.</div>
-        <div className="mt-3 flex items-center gap-2">
+        <div className="mt-3 flex flex-wrap items-center gap-2">
           {[["전체", notices.length], ["이번 달", monthN]].map(([l, v]) => (
-            <div key={l} className="flex-1 rounded-2xl bg-white/[0.08] ring-1 ring-white/15 px-3 py-1.5">
-              <div className="text-[11.5px] font-bold text-white/60">{l}</div>
+            <div key={l} className="flex-1 min-w-[72px] rounded-2xl bg-white/[0.08] ring-1 ring-white/15 px-3 py-1.5">
+              <div className="text-[11.5px] font-bold text-white/60 whitespace-nowrap truncate">{l}</div>
               <div className="text-[19px] font-black tabular-nums" style={{ fontFamily: MONO }}>{v}</div>
             </div>
           ))}

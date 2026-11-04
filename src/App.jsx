@@ -307,11 +307,21 @@ export default function App() {
   // ★ 태블릿 감지 상태
   const [isTablet, setIsTablet] = useState(false);
 
+  // ⭐ 2026-11-04 폴더블·분할화면 — 휴대폰 화면(MobileApp)을 그리는 중이면 "태블릿 viewport(폭 1200 축소 보기)"를 걸지 않는다.
+  //  안드로이드 태블릿 UA(…Android… "Mobile" 없음)는 isSmartPhone()이 참이라 MobileApp이 뜨는데, 동시에 태블릿 판정도 참이어서
+  //  아래 이펙트가 viewport를 width=1200으로 바꿔(분할화면에서는 0.3배 축소) 모바일 화면이 깨알같이/겹쳐 보일 수 있었다.
+  //  또 분할화면에 들어가거나 나와서 화면 폭이 768px을 넘나들면(태블릿·PC UA) 모바일↔PC 화면을 다시 고른다(유튜브처럼).
+  const [, setPhoneLayout] = useState(() => isSmartPhone());
   useEffect(() => {
-    const checkTablet = () => setIsTablet(isTabletDevice());
+    let t = null;
+    const checkTablet = () => setIsTablet(isTabletDevice() && !isSmartPhone());
+    const onResize = () => {
+      clearTimeout(t);
+      t = setTimeout(() => { checkTablet(); setPhoneLayout(isSmartPhone()); }, 300);
+    };
     checkTablet();
-    window.addEventListener("resize", checkTablet);
-    return () => window.removeEventListener("resize", checkTablet);
+    window.addEventListener("resize", onResize);
+    return () => { clearTimeout(t); window.removeEventListener("resize", onResize); };
   }, []);
 
   // ★ 스플래시 후 데스크톱 viewport 복원 (index.html 기본값: user-scalable=no)

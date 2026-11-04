@@ -2009,7 +2009,21 @@ export default function MobileApp({ role: realRole, user, userCompany = "", forc
   const [fontScale, setFontScale] = useState(() => Number(localStorage.getItem("fontScale") || "1"));
   // 쉬운모드는 2026-11-01 없앰 — 예전에 켜 둔 기기도 일반 화면으로
   React.useEffect(() => { try { localStorage.removeItem("easyMode"); } catch { /* 무시 */ } }, []);
-  const effectiveScale = fontScale;
+  // ⭐ 2026-11-04 폴더블 분할화면 — 글자 크기 배율(zoom)은 화면 폭을 그만큼 좁게 만든다(412px × 1.2배 = 343px 화면).
+  //  분할화면(340~460px)에서 "크게/아주 크게"를 쓰면 버튼·검색칸이 겹치고 글자가 한 자씩 줄바꿈됐다.
+  //  배율을 적용한 뒤에도 화면 폭이 최소 MIN_LAYOUT_W(px)는 남도록 배율을 자동으로 줄인다(유튜브·카톡처럼).
+  const [vwForScale, setVwForScale] = useState(() => (typeof window !== "undefined" ? window.innerWidth : 400));
+  useEffect(() => {
+    let t = null;
+    const on = () => { clearTimeout(t); t = setTimeout(() => setVwForScale(window.innerWidth), 120); };
+    window.addEventListener("resize", on);
+    window.addEventListener("orientationchange", on);
+    return () => { clearTimeout(t); window.removeEventListener("resize", on); window.removeEventListener("orientationchange", on); };
+  }, []);
+  const MIN_LAYOUT_W = 340;
+  const effectiveScale = fontScale > 1
+    ? Math.max(1, Math.min(fontScale, Math.floor((vwForScale / MIN_LAYOUT_W) * 100) / 100))
+    : fontScale;
 
   // ★ 배차확정자(=이 계정으로 배차완료 처리한 사람) 표시용 실명 — PC(DispatchApp)의
   // myRealName과 동일하게 users/{uid}.name을 우선 사용한다. 이메일 앞부분(계정 아이디)이
@@ -2027,8 +2041,16 @@ export default function MobileApp({ role: realRole, user, userCompany = "", forc
   const dispatcherName = myRealName || user?.displayName || user?.email?.split("@")[0] || "";
 
   useEffect(() => {
+    // ⭐ 2026-11-04 버그수정 — 예전엔 #root · body · html 세 곳에 같은 배율을 동시에 걸어서 배율이 세제곱으로 겹쳤다
+    //  ("크게" 1.1 → 실제 1.33배, "아주 크게" 1.2 → 1.73배). 412px 폰도 238px 화면처럼 그려져 버튼이 화면 밖으로
+    //  밀려나고 겹쳤다(분할화면에서 특히 심함). 배율은 #root 한 곳에만 건다(다른 화면들이 #root의 zoom 값을 읽어 좌표를 보정한다).
+    //  배율 1이면 아예 선언하지 않는다(index.css 주석 — iOS에서 zoom 선언만으로 fixed 하단바 위치가 틀어지는 문제).
     const root = document.getElementById("root");
-    if (root) root.style.zoom = String(effectiveScale);
+    if (root) {
+      root.style.zoom = effectiveScale === 1 ? "" : String(effectiveScale);
+      // mobileTheme.css가 vh·vw 크기(팝업 최대 높이·메뉴 폭)를 이 배율만큼 되돌리는 데 쓴다
+      if (effectiveScale === 1) root.style.removeProperty("--kp-zoom"); else root.style.setProperty("--kp-zoom", String(effectiveScale));
+    }
     // viewport 강제 리셋 — 브라우저에서 확대/축소 후 앱 접속해도 항상 1:1 비율 유지
     const meta = document.querySelector('meta[name="viewport"]');
     const resetContent = "width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no, viewport-fit=cover";
@@ -2040,13 +2062,12 @@ export default function MobileApp({ role: realRole, user, userCompany = "", forc
       m.content = resetContent;
       document.head.appendChild(m);
     }
-    // document.body zoom/transform 리셋 (일부 브라우저 잔여 줌 제거) — 글자크기 설정 배율 적용
-    document.body.style.zoom = String(effectiveScale);
-    document.documentElement.style.zoom = String(effectiveScale);
+    // document.body/html의 잔여 zoom 제거(배율은 위 #root에만)
+    document.body.style.zoom = "";
+    document.documentElement.style.zoom = "";
     return () => {
       if (meta) meta.content = "width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes, viewport-fit=cover";
-      document.body.style.zoom = "";
-      document.documentElement.style.zoom = "";
+      if (root) { root.style.zoom = ""; root.style.removeProperty("--kp-zoom"); }
     };
   }, [effectiveScale]);
   // ===================== 연동 승인된 화주사 목록(자동 전송용) =====================
@@ -5377,7 +5398,7 @@ const title =
   // ⚠️ z-50이던 시절엔 다른 화면 요소(하단 액션바 등)가 같은 z-50으로 뒤에 그려지는
   // 순서상 토스트를 덮어버려 안 보이는 경우가 있었다. 다른 팝업들처럼 확실히
   // 최상단(z-[999999])에 뜨도록 올리고, 하단 네비/버튼 위로 자리도 더 띄운다.
-  <div className="fixed bottom-20 left-1/2 -translate-x-1/2 z-[999999]
+  <div className="kp-m-toast fixed bottom-20 left-1/2 -translate-x-1/2 z-[999999]
                   bg-black text-white px-4 py-3 rounded-xl shadow-lg
                   flex items-center gap-3 max-w-[95vw]">
     {/* 분할화면 등 화면 폭이 좁아져도 메시지가 3줄로 꺾여 보이지 않도록
@@ -9063,9 +9084,9 @@ const summary = useMemo(() => {
                 ].map(({ label, en, value }, i) => (
                   <div key={label} className={`flex-1 text-center px-1 ${i > 0 ? `border-l ${dt.divider}` : ""}`}>
                     {cardVersionB ? (
-                      <div className="mb-1 leading-none"><span className="kp-b-mono text-[8.5px] font-extrabold tracking-[0.2em] text-[#6E8BC4]">{en}</span> <span className="text-[11px] font-bold text-[#CFE0FF]">{label}</span></div>
+                      <div className="mb-1 leading-none whitespace-nowrap overflow-hidden"><span className="kp-b-mono text-[8.5px] font-extrabold tracking-[0.2em] text-[#6E8BC4] max-[379px]:hidden">{en} </span><span className="text-[11px] font-bold text-[#CFE0FF]">{label}</span></div>
                     ) : (
-                      <div className={`text-[9px] font-bold tracking-[0.15em] uppercase mb-1 ${dt.label}`}>{label}</div>
+                      <div className={`text-[9px] font-bold tracking-[0.15em] uppercase mb-1 whitespace-nowrap ${dt.label}`}>{label}</div>
                     )}
                     <div
                       className={`${cardVersionB ? "kp-b-mono text-[15.5px]" : "text-[14px]"} font-extrabold tabular-nums whitespace-nowrap ${dt.value}`}
@@ -9161,9 +9182,10 @@ const summary = useMemo(() => {
                 </div>
               </div>
 
-              {/* 검색줄 */}
-              <div className="flex gap-2 text-sm">
-                <div className="relative w-28 shrink-0">
+              {/* 검색줄 — ⭐ 2026-11-04 폴더블 분할화면처럼 좁으면(칸 폭 320px 미만) 검색칸을 아랫줄 전체 폭으로 내린다
+                  (예전엔 검색칸이 0px로 눌려 "조회" 버튼이 검색칸을 덮었다 — mobileTheme.css .kp-m-searchrow) */}
+              <div className="kp-m-searchrow"><div className="kp-m-searchrow-in flex gap-2 text-sm">
+                <div className="kp-m-searchrow-sel relative w-28 shrink-0">
                   <MobileSelect
                     className={`w-full appearance-none rounded-xl pl-3 pr-7 py-1.5 text-[13px] focus:outline-none focus:ring-2 transition ${field}`}
                     value={searchType}
@@ -9181,7 +9203,7 @@ const summary = useMemo(() => {
                   </MobileSelect>
                   <IconChevronDown className={`w-3 h-3 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none ${icon}`} />
                 </div>
-                <div className="relative flex-1 min-w-0">
+                <div className="kp-m-searchrow-q relative flex-1 min-w-0">
                   <IconSearch className={`w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none ${icon}`} />
                   <input autoComplete="off"
                     className={`w-full rounded-xl pl-8 pr-14 py-1.5 text-[13px] focus:outline-none focus:ring-2 transition ${field}`}
@@ -9213,15 +9235,15 @@ const summary = useMemo(() => {
                       setAppliedSearchType(searchType);
                       setAppliedSearchText(searchText);
                     }}
-                    className={`absolute right-1 top-1/2 -translate-y-1/2 px-2.5 py-1 rounded-lg text-[11px] font-bold transition active:scale-95 ${
+                    className={`absolute right-1 top-1/2 -translate-y-1/2 px-2.5 py-1 rounded-lg text-[11px] font-bold whitespace-nowrap transition active:scale-95 ${
                       cardVersionB ? "bg-[#1B2B4B] text-white active:bg-[#243a60]" : "bg-[#0F1A30] text-white"
                     }`}
                   >
                     조회
                   </button>
                 </div>
-                <DetailFilterButton rows={allOrders} value={mDetail} onApply={applyMDetail} title="세부검색 · 배차현황" />
-              </div>
+                <DetailFilterButton rows={allOrders} value={mDetail} onApply={applyMDetail} title="세부검색 · 배차현황" className="kp-m-searchrow-btn" />
+              </div></div>
             </>
           );
         })()}
@@ -11082,11 +11104,11 @@ const dropTime = order.하차시간 ? fmtDispatchTimeM(order.하차시간, order
             </div>
             <div className="flex min-[380px]:flex-col justify-between min-[380px]:justify-center gap-x-4 gap-y-0.5 shrink-0 px-3 py-1.5 rounded-xl text-white" style={{ background: "linear-gradient(135deg,#0F1A30,#1B2B4B 60%,#2D4C82)" }}>
               <span className="flex items-baseline justify-between gap-2">
-                <span className="text-[0.6em] text-[#8FB0F0] font-black tracking-[0.12em]">청구</span>
+                <span className="text-[0.6em] text-[#8FB0F0] font-black tracking-[0.12em] whitespace-nowrap shrink-0">청구</span>
                 <span className="text-[0.86em] font-extrabold tabular-nums" style={{ fontFamily: MONO_B }}>{fmtMoney(claim)}</span>
               </span>
               <span className="flex items-baseline justify-between gap-2">
-                <span className="text-[0.6em] text-[#8FB0F0] font-black tracking-[0.12em]">기사</span>
+                <span className="text-[0.6em] text-[#8FB0F0] font-black tracking-[0.12em] whitespace-nowrap shrink-0">기사</span>
                 <span className="text-[0.86em] font-bold tabular-nums text-[#CFE0FF]" style={{ fontFamily: MONO_B }}>{fmtMoney(fee)}</span>
               </span>
             </div>
@@ -18621,7 +18643,7 @@ ${coreBlockMd}${order.전달사항?.trim() ? `\n\n◆ 전달사항\n${order.전�
 function RowLabelInput({ label, input, right, labelClassName = "" }) {
   return (
     <div className="flex border-b border-[#EEF1F6] last:border-b-0 overflow-hidden">
-      <div className={`${right ? "w-[104px]" : "w-[88px]"} shrink-0 px-2.5 py-2.5 text-[11.5px] font-bold text-[#5B6B85] bg-[#F7F9FC] border-r border-[#EEF1F6] flex items-center justify-between gap-1 ${labelClassName}`}>
+      <div className={`${right ? "w-[104px] max-[359px]:w-[92px]" : "w-[88px] max-[359px]:w-[72px]"} shrink-0 px-2.5 max-[359px]:px-2 py-2.5 text-[11.5px] font-bold text-[#5B6B85] bg-[#F7F9FC] border-r border-[#EEF1F6] flex items-center justify-between gap-1 ${labelClassName}`}>
         <span className="leading-tight break-keep">{label}</span>
         {right && <span className="ml-1 shrink-0 whitespace-nowrap [&_button]:whitespace-nowrap [&_span]:whitespace-nowrap">{right}</span>}
       </div>
@@ -18792,9 +18814,9 @@ function MobileMyInfo({ currentUser, mobileUsers, loginTime, orders = [], userCo
       <KpmCard en="ACTIVITY" title="내 활동 통계">
         <div className="grid grid-cols-4 gap-1.5">
           {[["오늘", todayCount], ["이번 달", thisMonthCount], ["배차완료", completedCount], ["전체", totalCount]].map(([l, v], idx) => (
-            <div key={l} className={`rounded-xl px-2 py-2.5 text-center ${idx === 0 ? "bg-[#1B2B4B] text-white" : "bg-[#F5F8FD] border border-[#E3E8F0]"}`}>
+            <div key={l} className={`min-w-0 rounded-xl px-1.5 py-2.5 text-center ${idx === 0 ? "bg-[#1B2B4B] text-white" : "bg-[#F5F8FD] border border-[#E3E8F0]"}`}>
               <div className={`text-[20px] font-black tabular-nums leading-none ${idx === 0 ? "" : "text-[#0F1A30]"}`} style={{ fontFamily: KPM_MONO }}>{v}</div>
-              <div className={`text-[11px] font-bold mt-1 ${idx === 0 ? "text-white/60" : "text-[#7A879C]"}`}>{l}</div>
+              <div className={`text-[11px] font-bold mt-1 whitespace-nowrap truncate ${idx === 0 ? "text-white/60" : "text-[#7A879C]"}`}>{l}</div>
             </div>
           ))}
         </div>
@@ -18881,13 +18903,13 @@ function KpmRow({ label, sub, value, right, onClick, mono = false, danger = fals
   const Tag = onClick ? "button" : "div";
   return (
     <Tag type={onClick ? "button" : undefined} onClick={onClick}
-      className={`w-full flex items-center justify-between gap-3 px-4 py-3 text-left border-b border-[#EEF1F6] last:border-b-0 ${onClick ? "active:bg-[#F5F8FD]" : ""}`}>
-      <div className="min-w-0">
+      className={`w-full flex flex-wrap items-center justify-between gap-x-3 gap-y-2 px-4 py-3 text-left border-b border-[#EEF1F6] last:border-b-0 ${onClick ? "active:bg-[#F5F8FD]" : ""}`}>
+      <div className="min-w-[6.5rem] flex-1">
         <div className={`text-[13.5px] font-bold ${danger ? "text-[#B42318]" : "text-[#0F1A30]"}`}>{label}</div>
         {sub && <div className="text-[11.5px] text-[#7A879C] mt-0.5 leading-snug">{sub}</div>}
       </div>
       {value !== undefined && <span className={`shrink-0 max-w-[60%] text-right text-[13px] font-black text-[#0F1A30] truncate ${mono ? "tabular-nums" : ""}`} style={mono ? { fontFamily: KPM_MONO } : undefined}>{value}</span>}
-      {right && <div className="shrink-0">{right}</div>}
+      {right && <div className="shrink-0 ml-auto">{right}</div>}
     </Tag>
   );
 }

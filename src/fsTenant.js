@@ -10,6 +10,7 @@
 //  ⚠️ 회사명이 없는 예전 문서는 기본 회사(DEFAULT_COMPANY)의 것으로 본다(엄격 컬렉션).
 //     기사앱 위치·로그처럼 서버/네이티브가 회사명 없이 쓰는 기록은 "회사명이 다를 때만" 뺀다(느슨한 컬렉션).
 import * as base from "kp-firestore-base";
+import { isDemoOn, demoQuerySnap } from "./devDemoData"; // 🧪 개발 전용(import.meta.env.DEV에서만 사용) — 배포 빌드에서는 빠진다
 
 export * from "kp-firestore-base";
 
@@ -178,7 +179,9 @@ function previewSnapshot(ref, args) {
   const fi = args.findIndex((a) => typeof a === "function");
   const obs = fi === -1 ? args.find((a) => a && typeof a.next === "function") : null;
   const cb = fi !== -1 ? args[fi] : obs?.next?.bind(obs);
-  const t = setTimeout(() => { try { cb?.(isDocRef(ref) ? emptyDocSnap(ref) : emptyQuerySnap(ref)); } catch (e) { console.warn(e); } }, 0);
+  // 🧪 개발 전용 — /preview?demo=1 이면 오더·기사·거래처·공지 목록에 가짜 데이터를 넣어 화면 점검(배포 빌드에는 없음)
+  const demo = import.meta.env.DEV && !isDocRef(ref) && isDemoOn() ? demoQuerySnap(ref, topCollectionId(ref), tenant) : null;
+  const t = setTimeout(() => { try { cb?.(demo || (isDocRef(ref) ? emptyDocSnap(ref) : emptyQuerySnap(ref))); } catch (e) { console.warn(e); } }, 0);
   return () => clearTimeout(t);
 }
 export function getDoc(ref, ...rest) { return preview ? Promise.resolve(emptyDocSnap(ref)) : base.getDoc(ref, ...rest); }
