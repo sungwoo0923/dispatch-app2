@@ -3258,8 +3258,8 @@ function DriverDocumentsPanel({ driverId }) {
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <div>
             <div style={{ fontSize: 11, color: "#9ca3af", marginBottom: 2 }}>만료일(선택)</div>
-            <input type="date" value={pendingExpiry} onChange={e => setPendingExpiry(e.target.value)}
-              style={{ padding: "5px 8px", border: "1px solid #d1d5db", borderRadius: 6, fontSize: 12 }} />
+            <CustomDatePicker value={pendingExpiry} onChange={e => setPendingExpiry(e.target.value)} placeholder="만료일 선택"
+              className="h-[30px] min-w-[124px] px-2 border border-[#d1d5db] rounded-md text-[12px] bg-white" showIcon />
           </div>
           <label style={{ padding: "6px 14px", borderRadius: 6, border: `1px solid ${NAVY}`, background: NAVY, color: "#fff", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
             {uploading ? "업로드중..." : "+ 서류 업로드"}
@@ -7035,12 +7035,11 @@ export default function FleetManagement({ dispatchData = [], role = "", forceTab
             <div style={{ display: "flex", alignItems: "center", gap: 6, paddingLeft: 10, borderLeft: "1px solid #E3E8F0" }}>
               <span style={{ fontFamily: FC_MONO, fontSize: 11, fontWeight: 800, letterSpacing: "0.14em", color: "#94A3B8", whiteSpace: "nowrap" }}>TRACK</span>
               <span style={{ fontSize: 14, fontWeight: 700, color: "#4b5563", whiteSpace: "nowrap" }}>동선 날짜</span>
-              <input
-                type="date"
+              <CustomDatePicker
                 value={selectedTrackDate}
-                max={todayDate}
-                onChange={e => setSelectedTrackDate(e.target.value)}
-                style={{ height: 34, padding: "0 8px", border: "1px solid #DCE3EF", borderRadius: 8, fontSize: 14, color: NAVY, fontWeight: 700, outline: "none", width: "auto", background: "#fff" }}
+                onChange={e => { const v = e.target.value; if (v && v <= todayDate) setSelectedTrackDate(v); }}
+                className="h-[34px] min-w-[132px] px-2 border border-[#DCE3EF] rounded-lg text-[14px] font-bold text-[#1B2B4B] bg-white tabular-nums whitespace-nowrap"
+                showIcon
               />
               {selectedTrackDate !== yesterdayDate && (
                 <button

@@ -10,6 +10,7 @@ import { collection, deleteDoc, doc, onSnapshot, orderBy, query, serverTimestamp
 import { db } from "./firebase";
 import { useSalesPricing } from "./SalesQuote";
 import { CustomSelect } from "./CustomSelect";
+import CustomDatePicker from "./CustomDatePicker";
 import { fmtBizNo, fmtPhone } from "./formatInput";
 
 export const C_MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
@@ -257,6 +258,11 @@ const fromQuote = (q, cfg) => {
     결제방식: inp2.billing === "annual" ? "연간 선결제" : inp2.billing === "semi" ? "6개월 선결제" : "월 결제(계좌이체)", 추가옵션: opts.join(", ") || "없음", 특약: inp2.memo || "없음",
   };
 };
+// 계약서에 찍히는 공급자 — 화면에서 고친 값(vars) 우선, 비어 있으면 등록된 공급자 정보
+const supplierOf = (cfg, vars) => {
+  const s = cfg?.supplier || {};
+  return { ...s, name: vars.공급자상호 || s.name || "", ceo: vars.공급자대표 || s.ceo || "", bizNo: vars.공급자사업자번호 || s.bizNo || "", address: vars.공급자주소 || s.address || "", phone: vars.공급자연락처 || s.phone || "" };
+};
 export function ContractBuilder({ initial, fromQuoteDoc, onDone }) {
   const tpl = useContractTemplates();
   const cfg = useSalesPricing();
@@ -292,7 +298,7 @@ export function ContractBuilder({ initial, fromQuoteDoc, onDone }) {
       const no = initial?.no || `C-${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}-${String(d.getHours() * 60 + d.getMinutes()).padStart(4, "0")}`;
       const data = {
         no, title: `${template.name} — ${vars.고객사}`, templateId: template.id, templateName: template.name, vars, monthly: Number(monthly) || 0, quoteNo,
-        bodyHtml: renderContractHtml(template.body, vars), supplier: { ...(cfg.supplier || {}) }, supplierSeal: tpl.supplierSeal || "",
+        bodyHtml: renderContractHtml(template.body, vars), supplier: supplierOf(cfg, vars), supplierSeal: tpl.supplierSeal || "",
         status: send ? "발송" : "작성", updatedAt: serverTimestamp(), ...(initial?.id ? {} : { createdAt: serverTimestamp() }), ...(send ? { sentAt: serverTimestamp() } : {}),
       };
       await setDoc(doc(db, "contracts", id), data, { merge: true });
@@ -303,7 +309,11 @@ export function ContractBuilder({ initial, fromQuoteDoc, onDone }) {
       onDone?.();
     } catch (e) { window.alert(`저장 실패: ${e.message}`); } finally { setBusy(false); }
   };
-  const F = ({ k, label, type = "text", ph }) => (
+  const F = ({ k, label, type = "text", ph }) => type === "date" ? (
+    // 📅 2026-11-04 날짜는 프로그램 달력으로(저장 형식 YYYY-MM-DD 그대로)
+    <label className="block"><span className="text-[12px] font-bold text-[#7A879C]">{label}</span>
+      <CustomDatePicker value={vars[k] || ""} onChange={(e) => set(k, e.target.value)} className={`${inp} mt-1 w-full tabular-nums whitespace-nowrap`} showIcon /></label>
+  ) : (
     <label className="block"><span className="text-[12px] font-bold text-[#7A879C]">{label}</span>
       <input type={type} value={vars[k] || ""} placeholder={ph || (/사업자번호$/.test(k) ? "000-00-00000" : /연락처$/.test(k) ? "010-0000-0000" : undefined)} inputMode={/연락처$/.test(k) ? "tel" : /사업자번호$/.test(k) ? "numeric" : undefined} onChange={(e) => set(k, /연락처$/.test(k) ? fmtPhone(e.target.value) : /사업자번호$/.test(k) ? fmtBizNo(e.target.value) : e.target.value)} className={`${inp} mt-1`} /></label>
   );
@@ -327,6 +337,15 @@ export function ContractBuilder({ initial, fromQuoteDoc, onDone }) {
             {F({ k: "고객대표", label: "대표자" })}{F({ k: "고객사업자번호", label: "사업자번호" })}
             <div className="col-span-2">{F({ k: "고객주소", label: "주소" })}</div>
             <div className="col-span-2">{F({ k: "고객연락처", label: "연락처" })}</div>
+          </div>
+        </Card>
+        {/* ⭐ 2026-11-04 공급자(우리) 정보 — 요금제 관리 › 공급자 정보에 등록된 값이 자동으로 채워진다(빈 칸만 채움 · 고쳐 쓸 수 있음) */}
+        <Card code="SUPPLIER" title="공급자 정보" right={<span className="text-[11.5px] font-bold text-[#7A879C] whitespace-nowrap">등록 정보 자동 입력</span>}>
+          <div className="grid grid-cols-2 gap-2.5">
+            <div className="col-span-2">{F({ k: "공급자상호", label: "공급자 상호" })}</div>
+            {F({ k: "공급자대표", label: "대표자" })}{F({ k: "공급자사업자번호", label: "사업자번호" })}
+            <div className="col-span-2">{F({ k: "공급자주소", label: "주소" })}</div>
+            <div className="col-span-2">{F({ k: "공급자연락처", label: "연락처" })}</div>
           </div>
         </Card>
         <Card code="TERMS" title="계약 조건">
@@ -359,7 +378,7 @@ export function ContractBuilder({ initial, fromQuoteDoc, onDone }) {
         <style>{CONTRACT_CSS}</style>
         <div className="bg-white mx-auto w-full max-w-[1180px] px-12 py-12 shadow-[0_10px_30px_rgba(15,26,48,0.12)]">
           <div className="kp-contract big" dangerouslySetInnerHTML={{ __html: renderContractHtml(template.body, vars, { highlight: true }) }} />
-          <div dangerouslySetInnerHTML={{ __html: signBlockHtml({ supplier: cfg.supplier, supplierSeal: tpl.supplierSeal, vars, status: "작성" }) }} />
+          <div dangerouslySetInnerHTML={{ __html: signBlockHtml({ supplier: supplierOf(cfg, vars), supplierSeal: tpl.supplierSeal, vars, status: "작성" }) }} />
         </div>
       </div>
     </div>

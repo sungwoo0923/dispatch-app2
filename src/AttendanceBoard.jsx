@@ -12,6 +12,8 @@ import {
   approveChangeReq, rejectChangeReq, approveCheckInReq, rejectCheckInReq, submitChangeReq, submitCheckInReq,
 } from "./attendanceApproval";
 import { CustomSelect } from "./CustomSelect";
+import CustomDatePicker from "./CustomDatePicker"; // 📅 2026-11-04 날짜·시간 입력은 프로그램 달력/드롭다운으로
+import { HourMinuteSelect } from "./kpTimePick";
 
 // ⭐ 2026-11-01 출근기록부 리디자인 — 네이비 히어로 + 오늘 KPI + 월간 그리드(이름 고정 · 오늘 강조 · 공휴일 빨간색+명칭)
 //  권한: 출·퇴근 기록 직접 수정은 인사팀만(최고관리자 포함), 본인 기록은 누구나 "수정 요청" → 인사팀 승인
@@ -721,7 +723,7 @@ export default function AttendanceBoard({ userCompany, role, user }) {
           </div>
           <div className="text-[15px] font-black text-[#0F1A30] mb-2">회사 지정 휴일 추가</div>
           <div className="flex flex-wrap items-center gap-2 mb-3">
-            <input type="date" value={newHolidayDate} onChange={e => setNewHolidayDate(e.target.value)} className={inputCls} />
+            <CustomDatePicker value={newHolidayDate} onChange={e => setNewHolidayDate(e.target.value)} className={`${inputCls} min-w-[150px] tabular-nums whitespace-nowrap`} showIcon />
             <input type="text" placeholder="명칭 (예: 창립기념일)" value={newHolidayLabel} onChange={e => setNewHolidayLabel(e.target.value)} className={`${inputCls} flex-1 max-w-xs`} />
             <button onClick={addHoliday} className="h-10 px-5 rounded-xl bg-[#1B2B4B] text-white text-[13.5px] font-bold">추가</button>
           </div>
@@ -1050,11 +1052,11 @@ export default function AttendanceBoard({ userCompany, role, user }) {
               <div className="grid grid-cols-2 gap-2">
                 <label className="block">
                   <div className="text-[13px] font-bold text-[#3A4A66] mb-1">출근 시간</div>
-                  <input type="time" value={changeReqTime} onChange={e => setChangeReqTime(e.target.value)} className={`${inputCls} w-full`} />
+                  <HourMinuteSelect value={changeReqTime} onChange={e => setChangeReqTime(e.target.value)} className={`${inputCls} w-full text-left`} />
                 </label>
                 <label className="block">
                   <div className="text-[13px] font-bold text-[#3A4A66] mb-1">퇴근 시간 (선택)</div>
-                  <input type="time" value={changeReqCheckOut} onChange={e => setChangeReqCheckOut(e.target.value)} className={`${inputCls} w-full`} />
+                  <HourMinuteSelect value={changeReqCheckOut} onChange={e => setChangeReqCheckOut(e.target.value)} className={`${inputCls} w-full text-left`} />
                 </label>
               </div>
             )}
@@ -1078,7 +1080,7 @@ export default function AttendanceBoard({ userCompany, role, user }) {
           <div className="text-[13px] text-[#5B6B85] mb-4">실제 출근한 시간을 입력하세요. <b className="text-[#1B2B4B]">{myApproverLabel}</b> 승인 후 출근 처리됩니다.</div>
           <label className="block mb-4">
             <div className="text-[13px] font-bold text-[#3A4A66] mb-1">출근 시간</div>
-            <input type="time" value={requestCheckInTime} onChange={e => setRequestCheckInTime(e.target.value)} className={`${inputCls} w-full h-11 text-[16px]`} />
+            <HourMinuteSelect value={requestCheckInTime} onChange={e => setRequestCheckInTime(e.target.value)} className={`${inputCls} w-full h-11 text-[16px] text-left`} />
           </label>
           <div className="flex gap-2">
             <button onClick={() => setShowCheckInRequestModal(false)} className="flex-1 h-11 rounded-xl border border-[#DCE3EE] text-[14px] font-bold text-[#5B6B85]">취소</button>
@@ -1114,11 +1116,11 @@ export default function AttendanceBoard({ userCompany, role, user }) {
             <div className="space-y-3">
               <label className="block">
                 <div className="text-[13px] font-bold text-[#3A4A66] mb-1.5">출근 시간</div>
-                <input type="time" value={editWorkStart} onChange={e => setEditWorkStart(e.target.value)} className={`${inputCls} w-full`} />
+                <HourMinuteSelect value={editWorkStart} onChange={e => setEditWorkStart(e.target.value)} className={`${inputCls} w-full text-left`} />
               </label>
               <label className="block">
                 <div className="text-[13px] font-bold text-[#3A4A66] mb-1.5">퇴근 시간</div>
-                <input type="time" value={editWorkEnd} onChange={e => setEditWorkEnd(e.target.value)} className={`${inputCls} w-full`} />
+                <HourMinuteSelect value={editWorkEnd} onChange={e => setEditWorkEnd(e.target.value)} className={`${inputCls} w-full text-left`} />
               </label>
               <div className="flex gap-2 pt-1">
                 <button onClick={() => setEditScheduleEmp(null)} className="flex-1 h-10 rounded-xl border border-[#DCE3EE] text-[#5B6B85] text-[13.5px] font-bold">취소</button>
@@ -1262,11 +1264,11 @@ function EditForm({ editCell, onSave, onCancel }) {
           <div className="grid grid-cols-2 gap-2">
             <label className="block">
               <div className="text-[13px] font-bold text-[#3A4A66] mb-1.5">출근 시간</div>
-              <input type="time" value={time} onChange={e => setTime(e.target.value)} className={`${inputCls} w-full`} />
+              <HourMinuteSelect value={time} onChange={e => setTime(e.target.value)} className={`${inputCls} w-full text-left`} />
             </label>
             <label className="block">
               <div className="text-[13px] font-bold text-[#3A4A66] mb-1.5">퇴근 시간 (선택)</div>
-              <input type="time" value={checkOutTime} onChange={e => setCheckOutTime(e.target.value)} className={`${inputCls} w-full`} />
+              <HourMinuteSelect value={checkOutTime} onChange={e => setCheckOutTime(e.target.value)} className={`${inputCls} w-full text-left`} />
             </label>
           </div>
           {(() => {

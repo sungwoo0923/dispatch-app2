@@ -7,6 +7,7 @@
 //  · 증명서 발급: 재직증명서·경력증명서 — 회사 정보·직인(회사정보에 등록된 것)으로 바로 인쇄, 발급 대장 남김
 import { useLeaveGuard, draftStore } from "./leaveGuard";
 import React from "react";
+import CustomDatePicker from "./CustomDatePicker"; // 📅 2026-11-04 날짜 입력은 프로그램 달력으로
 import { collection, doc, onSnapshot, query, setDoc, where, arrayUnion, getDocs, getDoc } from "firebase/firestore";
 import { db, auth, DEFAULT_COMPANY } from "./firebase";
 import { leaveEntitlement, leaveUseOf } from "./approvalForms";
@@ -236,7 +237,7 @@ export function LeaveLedger({ company, isViewer = false, canManage = false }) {
       {editHire && (
         <Sheet en="HIRE DATE" title={`${nm(editHire.u)} 입사일`} onClose={() => setEditHire(null)}
           footer={<><button type="button" onClick={() => setEditHire(null)} className="flex-1 h-12 rounded-xl border border-[#DCE3EE] bg-white text-[14px] font-black text-[#3A4A66]">취소</button><button type="button" onClick={saveHire} className="flex-1 h-12 rounded-xl bg-[#0F1A30] text-white text-[14px] font-black">저장</button></>}>
-          <input type="date" value={editHire.v} onChange={(e) => setEditHire({ ...editHire, v: e.target.value })} className={inp} />
+          <CustomDatePicker value={editHire.v} onChange={(e) => setEditHire({ ...editHire, v: e.target.value })} className={inp} showIcon />
         </Sheet>
       )}
       {adj && cur && (

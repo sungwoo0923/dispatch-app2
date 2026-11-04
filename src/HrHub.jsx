@@ -18,6 +18,7 @@ import { useRoleOptions } from "./customRoles";
 import { RULE_CATS, RULE_TEMPLATES, fillCompany } from "./companyRuleTemplates";
 import { fmtPhone } from "./formatInput";
 import { CustomSelect } from "./CustomSelect";
+import CustomDatePicker from "./CustomDatePicker"; // 📅 2026-11-04 날짜 입력은 프로그램 달력으로
 
 const kstDay = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
 const inp = "h-11 w-full px-3 rounded-xl border border-[#DCE3EE] bg-white text-[14px] font-semibold text-[#0F1A30] outline-none focus:border-[#2D4C82]";
@@ -91,7 +92,7 @@ export function StaffRegister({ company, onDone }) {
             <div><Label>부서</Label><CustomSelect value={f.team} onChange={(e) => { const team = e.target.value; setF({ ...f, team, position: hr.positionsFor(team).includes(f.position) ? f.position : "" }); }} className={inp}><option value="">미배정</option>{hr.teams.map((t) => <option key={t}>{t}</option>)}</CustomSelect></div>
             <div><Label>직책</Label><CustomSelect value={f.position} onChange={(e) => setF({ ...f, position: e.target.value })} className={inp}><option value="">미설정</option>{hr.positionsFor(f.team).map((p) => <option key={p}>{p}</option>)}</CustomSelect></div>
             <div><Label>고용 형태</Label><div className="flex flex-wrap gap-1.5">{["정규직", "계약직", "수습", "파트타임", "일용직"].map((k) => <Chip key={k} on={f.employType === k} onClick={() => setF({ ...f, employType: k })}>{k}</Chip>)}</div></div>
-            <div><Label>입사일</Label><input type="date" value={f.hireDate} onChange={(e) => setF({ ...f, hireDate: e.target.value })} className={inp} /></div>
+            <div><Label>입사일</Label><CustomDatePicker value={f.hireDate} onChange={(e) => setF({ ...f, hireDate: e.target.value })} className={inp} showIcon /></div>
             <div className="rounded-xl bg-[#F5F8FD] border border-[#E3E8F0] px-3 py-2 text-[12px] text-[#5B6B85]">권한: <b className="text-[#0F1A30]">{ro.label(suggestFor({ team: f.team, position: f.position }, ro.execKeys))}</b> (부서·직책 기준) · 계정이 없으므로 로그인은 안 됩니다</div>
             <button type="button" disabled={busy} onClick={save} className="w-full h-12 rounded-xl bg-[#0F1A30] text-white text-[15px] font-black disabled:opacity-50">{busy ? "등록 중…" : "직원 등록"}</button>
           </div>
@@ -411,7 +412,7 @@ export function StaffInfoBoard({ company, canManage }) {
                 </Section>
                 <Section no="04" en="Tenure" title="입사 · 근속" right={<span className={`inline-flex items-center gap-1 h-6 px-2 rounded-md text-[11.5px] font-bold ${canHire ? "bg-[#EEF3FC] text-[#2D4C82]" : "bg-[#F2F4F8] text-[#7A879C]"}`}><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><rect x="5" y="11" width="14" height="10" rx="2" />{canHire ? <path d="M8 11V7a4 4 0 017.5-2" /> : <path d="M8 11V7a4 4 0 018 0v4" />}</svg>{canHire ? "인사팀 수정 가능" : "인사팀 전용"}</span>}>
                   <div className="grid grid-cols-2 gap-4">
-                    <Field label="입사일" hint={f.hireDate ? "연차 · 퇴직금 계산 기준일" : "연차·퇴직금 계산 기준일 — 아직 등록되지 않았습니다"}><input type="date" value={f.hireDate} max={kstDay()} disabled={!canHire} onChange={(e) => setF({ ...f, hireDate: e.target.value })} className={`${fi} tabular-nums`} /></Field>
+                    <Field label="입사일" hint={f.hireDate ? "연차 · 퇴직금 계산 기준일" : "연차·퇴직금 계산 기준일 — 아직 등록되지 않았습니다"}><CustomDatePicker value={f.hireDate} disabled={!canHire} onChange={(e) => { const v = e.target.value; if (v && v > kstDay()) return; setF({ ...f, hireDate: v }); }} className={`${fi} tabular-nums`} showIcon /></Field>
                     <Field label="근속" hint={canHire ? "입사일은 이 화면에서만 바꿀 수 있습니다" : "입사일은 인사팀만 바꿀 수 있습니다"}>
                       <div className="h-12 px-3.5 rounded-xl bg-[#F5F8FD] border border-[#E3E8F0] flex items-baseline gap-2 pt-3"><span className="text-[17px] font-black text-[#0F1A30] tabular-nums" style={{ fontFamily: MONO }}>{f.hireDate ? tenureOf(f.hireDate) || "1개월 미만" : "—"}</span>{f.hireDate && f.hireDate !== origHire && <span className="text-[11.5px] font-bold text-[#2D4C82]">변경됨</span>}</div>
                     </Field>
@@ -428,8 +429,8 @@ export function StaffInfoBoard({ company, canManage }) {
                     <div className="mt-4 rounded-xl bg-[#F7F9FC] border border-[#E3E8F0] p-4 space-y-3">
                       <div className="flex items-center gap-2"><Eyebrow className="text-[#4B6CB7]">{f.employmentStatus === "육아휴직" ? "Parental Leave" : f.employmentStatus === "출산휴가" ? "Maternity Leave" : "Leave of Absence"}</Eyebrow><span className="text-[13px] font-black text-[#1B2B4B]">{f.employmentStatus} 기간</span></div>
                       <div className="grid grid-cols-2 gap-3">
-                        <Field label="시작일"><input type="date" value={f.leaveFrom} onChange={(e) => setF({ ...f, leaveFrom: e.target.value })} className={`${fi} tabular-nums`} /></Field>
-                        <Field label="복직 예정일"><input type="date" value={f.leaveTo} onChange={(e) => setF({ ...f, leaveTo: e.target.value })} className={`${fi} tabular-nums`} /></Field>
+                        <Field label="시작일"><CustomDatePicker value={f.leaveFrom} onChange={(e) => setF({ ...f, leaveFrom: e.target.value })} className={`${fi} tabular-nums`} showIcon /></Field>
+                        <Field label="복직 예정일"><CustomDatePicker value={f.leaveTo} onChange={(e) => setF({ ...f, leaveTo: e.target.value })} className={`${fi} tabular-nums`} showIcon /></Field>
                       </div>
                       {f.leaveFrom && f.leaveTo && <div className="flex items-baseline gap-2 text-[#1B2B4B]"><span className="text-[20px] font-black tabular-nums" style={{ fontFamily: MONO }}>{Math.max(0, Math.round((new Date(f.leaveTo) - new Date(f.leaveFrom)) / 864e5) + 1)}</span><span className="text-[13px] font-bold">일</span><span className="text-[13px] text-[#7A879C]">· 약 {(Math.max(0, (new Date(f.leaveTo) - new Date(f.leaveFrom)) / 864e5 + 1) / 30.44).toFixed(1)}개월</span></div>}
                       <input value={f.leaveMemo} onChange={(e) => setF({ ...f, leaveMemo: e.target.value })} className={fi} placeholder={f.employmentStatus === "육아휴직" ? "자녀 이름·생년월일, 전자결재 문서번호 등" : "사유·메모"} />
@@ -449,8 +450,8 @@ export function StaffInfoBoard({ company, canManage }) {
                 </Section>
                 <Section no="02" en="Schedule" title="일정">
                   <div className="grid grid-cols-2 gap-4">
-                    <Field label="퇴직일(마지막 근무일)" hint={r.date > kstDay() ? "미래 날짜 — [예정 등록] 후 그날 확정" : "오늘 이전 — 바로 퇴사 확정"}><input type="date" value={r.date} onChange={(e) => setR({ ...r, date: e.target.value })} className={`${fi} tabular-nums`} /></Field>
-                    <Field label="통보일"><input type="date" value={r.noticeDate} onChange={(e) => setR({ ...r, noticeDate: e.target.value })} className={`${fi} tabular-nums`} /></Field>
+                    <Field label="퇴직일(마지막 근무일)" hint={r.date > kstDay() ? "미래 날짜 — [예정 등록] 후 그날 확정" : "오늘 이전 — 바로 퇴사 확정"}><CustomDatePicker value={r.date} onChange={(e) => setR({ ...r, date: e.target.value })} className={`${fi} tabular-nums`} showIcon /></Field>
+                    <Field label="통보일"><CustomDatePicker value={r.noticeDate} onChange={(e) => setR({ ...r, noticeDate: e.target.value })} className={`${fi} tabular-nums`} showIcon /></Field>
                   </div>
                 </Section>
                 <Section no="03" en="Reason" title="사유" right={<button type="button" onClick={() => printResign(company, sel, r)} className="h-8 px-3 rounded-lg border border-[#DCE3EE] bg-white text-[12.5px] font-black text-[#1B2B4B] hover:border-[#2D4C82] flex items-center gap-1.5"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9V3h12v6M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2" /><rect x="6" y="14" width="12" height="7" rx="1" /></svg>{r.type === "권고사직" ? "권고사직 합의서 인쇄" : "퇴직 확인서 인쇄"}</button>}>
@@ -586,7 +587,7 @@ export function CompanyRules({ company, canEdit = false }) {
         <Sheet side en="RULES · EDIT" title={edit.id ? "규정 수정" : "규정 등록"} onClose={() => setEdit(null)}
           footer={<>{edit.id && <button type="button" onClick={async () => { if (window.confirm("이 규정을 삭제할까요?")) { await deleteDoc(doc(db, "companyRules", edit.id)); setEdit(null); setOpen(null); } }} className="h-12 px-4 rounded-xl border border-[#DCE3EE] bg-white text-[14px] font-bold text-[#B42318]">삭제</button>}<button type="button" onClick={() => setEdit(null)} className="h-12 px-5 rounded-xl border border-[#DCE3EE] bg-white text-[14px] font-bold text-[#3A4A66]">취소</button><button type="button" onClick={save} className="flex-1 h-12 rounded-xl bg-[#0F1A30] text-white text-[15px] font-black">저장</button></>}>
           <div><Label>분류</Label><div className="flex flex-wrap gap-1.5">{RULE_CATS.map((c) => <Chip key={c} on={edit.category === c} onClick={() => setEdit((p) => ({ ...p, category: c, title: p.title || c, body: p.body || fillCompany(RULE_TEMPLATES[c], company) || "" }))}>{c}</Chip>)}</div></div>
-          <div className="grid grid-cols-[1fr_170px] gap-2"><div><Label>제목</Label><input value={edit.title} onChange={(e) => setEdit((p) => ({ ...p, title: e.target.value }))} className={inp} /></div><div><Label>시행일</Label><input type="date" value={edit.effectiveDate} onChange={(e) => setEdit((p) => ({ ...p, effectiveDate: e.target.value }))} className={inp} /></div></div>
+          <div className="grid grid-cols-[1fr_170px] gap-2"><div><Label>제목</Label><input value={edit.title} onChange={(e) => setEdit((p) => ({ ...p, title: e.target.value }))} className={inp} /></div><div><Label>시행일</Label><CustomDatePicker value={edit.effectiveDate} onChange={(e) => setEdit((p) => ({ ...p, effectiveDate: e.target.value }))} className={inp} showIcon /></div></div>
           <div><Label>내용 {RULE_TEMPLATES[edit.category] && !edit.body && <button type="button" onClick={() => setEdit((p) => ({ ...p, body: fillCompany(RULE_TEMPLATES[p.category], company) }))} className="ml-2 text-[12px] font-black text-[#2D4C82]">표준 양식 불러오기</button>}</Label><textarea value={edit.body} onChange={(e) => setEdit((p) => ({ ...p, body: e.target.value }))} rows={22} className="w-full rounded-xl border border-[#DCE3EE] bg-white px-4 py-3 text-[14.5px] leading-[1.85] outline-none focus:border-[#2D4C82]" /></div>
         </Sheet>
       )}

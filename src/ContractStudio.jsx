@@ -12,6 +12,8 @@ import { DRIVER_KINDS, LABOR_KINDS, FREE_TOPICS, contractSpec, fillVars } from "
 import { useFleetDrivers } from "./FleetPayDocs";
 import { savePng, savePdf, printA4 } from "./a4Export";
 import { fmtBizNo, fmtPhone } from "./formatInput";
+import { useCompanyRegInfo } from "./companyRegInfo";
+import { useCompanyBiz, printInfoForBiz, BizPicker } from "./companyBiz";
 
 const MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
 const card = "rounded-[18px] bg-white border border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_8px_20px_rgba(16,24,40,0.05)]";
@@ -20,6 +22,8 @@ const lab = "block text-[13px] font-black text-[#3A4A66] mb-1.5";
 const toInt = (v) => parseInt(String(v ?? "0").replace(/[^\d-]/g, ""), 10) || 0;
 const kstToday = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
 const korDate = (d) => (d ? `${d.slice(0, 4)}년 ${Number(d.slice(5, 7))}월 ${Number(d.slice(8, 10))}일` : "");
+// 우리 회사 칸(갑 키) ← 등록 정보 필드
+const A_KEYS = [["갑상호", "name"], ["갑대표", "ceo"], ["갑사업자번호", "bizNo"], ["갑주소", "addr"], ["갑연락처", "phone"]];
 const KIND_LABEL = { driver: "운송계약서", labor: "근로계약서", client: "거래처 운송계약서", free: "자율양식 계약서" };
 
 // 입력값 → 문서에 넣을 글자(금액은 콤마+원, 날짜는 한글)
@@ -45,7 +49,7 @@ export function ContractPaper({ title, spec, vals, clauses, paperRef }) {
     var rightL = { role: "근로자 (을)", name: vals.을상호, ceo: "", biz: vals.을사업자번호, addr: vals.을주소, tel: vals.을연락처, birth: true }; // eslint-disable-line no-var
   }
   const left0 = isClient ? { role: "갑 (화주)", name: vals.을상호, ceo: vals.을대표, biz: vals.을사업자번호, addr: vals.을주소 } : { role: "갑", name: vals.갑상호, ceo: vals.갑대표, biz: vals.갑사업자번호, addr: vals.갑주소, tel: vals.갑연락처 };
-  const right0 = isClient ? { role: "을 (운송사)", name: vals.갑상호, ceo: vals.갑대표, biz: vals.갑사업자번호, addr: vals.갑주소 } : { role: "을", name: vals.을상호, ceo: vals.을대표, biz: vals.을사업자번호, addr: vals.을주소, tel: vals.을연락처 };
+  const right0 = isClient ? { role: "을 (운송사)", name: vals.갑상호, ceo: vals.갑대표, biz: vals.갑사업자번호, addr: vals.갑주소, tel: vals.갑연락처 } : { role: "을", name: vals.을상호, ceo: vals.을대표, biz: vals.을사업자번호, addr: vals.을주소, tel: vals.을연락처 };
   const left = isLabor ? leftL : left0; const right = isLabor ? rightL : right0;
   const blocks = [
     <div key="h" style={{ textAlign: "center", borderBottom: "3px double #0F1A30", paddingBottom: 18, marginBottom: 24 }}>
@@ -161,25 +165,62 @@ export default function ContractStudio({ company = "", me = {} }) {
   const subKey = kind === "driver" ? sub : kind === "labor" ? laborSub : kind === "free" ? freeKey : "";
   const spec = kind ? contractSpec(kind, subKey) : null;
 
-  // 갑(우리 회사) 정보는 한 번 넣으면 기억
+  // ⭐ 2026-11-04 갑(우리 회사) 정보 — 회사관리 › 회사정보(transportApplications)에 등록된 대표자·상호·사업자번호·주소·연락처를
+  //    계약서를 새로 만들 때 / 보관함 문서를 열었는데 칸이 비어 있을 때 자동으로 채운다(사용자가 직접 입력한 값은 절대 덮지 않음).
+  //    추가 사업자가 있으면 [계약 사업자]로 고른 사업자의 정보(companySettings.bizList)로 채운다.
+  //    등록 정보가 없는 칸만 예전처럼 마지막으로 쓴 값(브라우저 기억)으로 채운다.
+  const info = useCompanyRegInfo(co);
+  const biz = useCompanyBiz(co);
+  const bizName = String(vals.계약사업자 || "").trim();
+  const companyA = React.useMemo(() => {
+    const base = { name: co, ceo: "", bizNo: "", addr: "", phone: "", fax: "", email: "", ...(info || {}) };
+    if (!base.name) base.name = co;
+    const b = bizName && bizName !== co ? biz.find(bizName) : null;
+    return b ? printInfoForBiz(base, b) : base;
+  }, [info, biz, bizName, co]);
+  const aRef = React.useRef(companyA); aRef.current = companyA;
+  const autoKeys = React.useRef(new Set()); // 자동으로 채운 칸(사용자가 고치면 빠진다) — 등록 정보가 늦게 오면 이 칸만 갱신
+  const forceA = React.useRef(false); // 계약 사업자를 바꿨을 때는 갑 칸 전체를 그 사업자 정보로
   const aKey = `kpContractA_${co}`;
   const loadA = () => { try { return JSON.parse(localStorage.getItem(aKey) || "{}"); } catch { return {}; } };
+  const fillA = (p, force = false) => {
+    const A = aRef.current; const mem = loadA(); const out = { ...p };
+    A_KEYS.forEach(([k, f]) => {
+      const raw = String(A[f] || "").trim();
+      const reg = raw && k === "갑사업자번호" ? fmtBizNo(raw) : raw && k === "갑연락처" ? fmtPhone(raw) : raw;
+      const empty = !String(out[k] || "").trim();
+      if (force) { out[k] = reg; autoKeys.current.add(k); return; }
+      if (!empty && !autoKeys.current.has(k)) return; // 사용자가 입력한 값 — 그대로
+      const next = reg || (empty ? String(mem[k] || "").trim() : out[k]) || (k === "갑상호" ? co : "");
+      if (next) { out[k] = next; autoKeys.current.add(k); }
+    });
+    return out;
+  };
   const resetDoc = React.useCallback(() => {
     if (!spec) return;
-    const a = loadA();
     const base = { 계약일: kstToday(), 시작일: kstToday() };
     // 거래처 계약서는 우리 회사가 "을(운송사)" 칸 → 갑상호 키를 그대로 운송사로 쓴다
-    setVals({ ...base, 갑상호: a.갑상호 || co, 갑대표: a.갑대표 || "", 갑사업자번호: a.갑사업자번호 || "", 갑주소: a.갑주소 || "", 갑연락처: a.갑연락처 || "" });
+    autoKeys.current = new Set();
+    setVals(fillA(base));
     setClauses(spec.clauses.map((x) => ({ ...x })));
     setEditId(null);
   }, [tab, subKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  // 등록 정보가 늦게 도착하거나 계약 사업자를 바꾸면 → 자동으로 채운 칸·빈 칸만 다시 채움
+  React.useEffect(() => {
+    const force = forceA.current; forceA.current = false;
+    setVals((p) => fillA(p, force));
+  }, [companyA]); // eslint-disable-line react-hooks/exhaustive-deps
   React.useEffect(() => { resetDoc(); }, [resetDoc]);
   React.useEffect(() => {
     if (!co) return undefined;
     return onSnapshot(query(collection(db, "companyContracts"), where("companyName", "==", co)), (s) => setSaved(s.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => (b.updatedAt?.seconds || 0) - (a.updatedAt?.seconds || 0))), () => setSaved([]));
   }, [co]);
 
-  const set = (k, v) => setVals((p) => ({ ...p, [k]: v }));
+  const set = (k, v) => { autoKeys.current.delete(k); setVals((p) => ({ ...p, [k]: v })); };
+  const pickBiz = (n) => {
+    if (String(n || "").trim() === bizName) return;
+    forceA.current = true; setVals((p) => ({ ...p, 계약사업자: n }));
+  };
   const setCl = (i, patch) => setClauses((p) => p.map((x, j) => (j === i ? { ...x, ...patch } : x)));
   const moveCl = (i, d) => setClauses((p) => { const a = [...p]; const j = i + d; if (j < 0 || j >= a.length) return p; [a[i], a[j]] = [a[j], a[i]]; return a; });
   const pickDriver = (id) => {
@@ -206,7 +247,7 @@ export default function ContractStudio({ company = "", me = {} }) {
   };
   const openSaved = (d) => {
     setTab(d.kind); if (d.kind === "driver") setSub(d.sub); if (d.kind === "labor") setLaborSub(d.sub); if (d.kind === "free") setFreeKey(d.sub);
-    setTimeout(() => { setVals(d.vals || {}); setClauses(d.clauses || []); setEditId(d.id); }, 0);
+    setTimeout(() => { autoKeys.current = new Set(); setVals(fillA(d.vals || {})); setClauses(d.clauses || []); setEditId(d.id); }, 0);
   };
   const removeSaved = async (d) => { if (await kpConfirm(`「${d.title}」(${d.party || "-"})을 보관함에서 지울까요?`, { title: "계약서 삭제", okText: "삭제", danger: true })) await deleteDoc(doc(db, "companyContracts", d.id)); };
 
@@ -336,6 +377,13 @@ export default function ContractStudio({ company = "", me = {} }) {
                 </div>
               )}
               <div className="text-[16px] font-black text-[#0F1A30] pt-1">{title}</div>
+              {biz.multi && (
+                <div className="rounded-xl border border-[#DCE3EE] bg-[#F8FAFD] p-3">
+                  <BizPicker biz={biz} value={vals.계약사업자 || ""} onChange={pickBiz} label="계약 사업자" />
+                  <div className="text-[12px] text-[#5B6B85] mt-1.5">고른 사업자의 등록 정보(상호·대표자·사업자번호·주소·연락처)로 우리 회사 칸이 채워집니다</div>
+                </div>
+              )}
+              {info && <div className="text-[12px] font-bold text-[#5B6B85] -mt-1">우리 회사 칸은 회사정보에 등록된 값으로 자동 입력됩니다 · 고쳐 쓸 수 있어요</div>}
               <div className="grid grid-cols-2 gap-x-2.5 gap-y-3">
                 {spec.fields.map((f) => (
                   <label key={f.k} className={`block min-w-0 ${f.half ? "" : "col-span-2"}`}>
