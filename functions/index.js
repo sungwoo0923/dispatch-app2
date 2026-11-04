@@ -5087,7 +5087,7 @@ async function sendPlatformNoticePush(n) {
     if (!isPushTypeEnabled(u.pushPrefs, "공지사항")) return;
     tokens.push(...userTokens(u));
   });
-  const title = `◆ KP-Flow 플랫폼 공지 · ${n.level || "안내"}`;
+  const title = `◆ LogisWeb 플랫폼 공지 · ${n.level || "안내"}`;
   const body = `${n.title || ""}${n.body ? `\n${String(n.body).replace(/\s+/g, " ").slice(0, 80)}` : ""}`;
   const all = [...new Set(tokens)];
   // 한 번에 최대 500개(FCM 멀티캐스트 한도) — 전체 공지는 나눠 보낸다
@@ -5150,7 +5150,7 @@ exports.pushDiag = functions.runWith({ timeoutSeconds: 60, memory: "256MB" }).ht
       const u = (await db.collection("users").doc(String(body.uid || "x")).get()).data();
       const tokens = userTokens(u);
       if (!tokens.length) { res.json({ sent: 0, results: [], note: "등록된 기기가 없습니다." }); return; }
-      const r = await sendPushAndCleanup(tokens, { notification: { title: "◆ KP-Flow 테스트 알림", body: "이 알림이 보이면 푸시가 정상입니다." }, android: { priority: "high" } }, "푸시 점검");
+      const r = await sendPushAndCleanup(tokens, { notification: { title: "◆ LogisWeb 테스트 알림", body: "이 알림이 보이면 푸시가 정상입니다." }, android: { priority: "high" } }, "푸시 점검");
       const results = (r?.responses || []).map((x, i) => ({ device: i + 1, tail: String(tokens[i]).slice(-8), ok: x.success, code: x.error?.code || "", msg: x.error?.message || "" }));
       res.json({ sent: r?.successCount || 0, failed: r?.failureCount || 0, results });
       return;

@@ -13,6 +13,7 @@ import { doc, updateDoc, deleteDoc, arrayUnion } from "firebase/firestore";
 import { PlatformBadge, platformReadIds, markPlatformNoticeRead } from "./PlatformNoticeBanner";
 import { noticeTargetUids, canSeeTargetedNotice } from "./notifyCore";
 import PostComments, { PostLikeButton, PostCounts } from "./PostComments"; // 💬 2026-11-03 댓글·대댓글·좋아요
+import { LogisMark } from "./brand"; // 🔷 2026-11-04 LogisWeb 마크
 
 // ⭐ 2026-11-02 관리자센터2 — 플랫폼 공지(_platform)는 관리자 관리센터가 올린 글: 회사에서 고치거나 지울 수 없고,
 //  읽음 표시는 서버 문서 대신 이 브라우저에만 기록한다(다른 회사 직원 uid가 한 문서에 쌓이지 않게).
@@ -127,11 +128,11 @@ export default function NoticeBoard({ notices = [], me, canWrite, isViewer, onEd
           <h2 className="mt-2 text-[20px] sm:text-[24px] font-black text-[#0F1A30] leading-snug break-words">{cur.title || "공지사항"}</h2>
           <div className="mt-3 flex items-center gap-3">
             {cur._platform
-              ? <span className="w-10 h-10 rounded-xl flex items-center justify-center text-[13px] font-black" style={{ background: "linear-gradient(135deg,#0B1428,#1B2B4B)", color: "#E9C46A", boxShadow: "inset 0 0 0 1px rgba(233,196,106,.45)" }}>KP</span>
+              ? <LogisMark size={40} />
               : <span className="w-10 h-10 rounded-xl flex items-center justify-center text-white font-black" style={{ background: "linear-gradient(135deg,#1B2B4B,#2D4C82)" }}>{String(cur.author || "?").slice(0, 1)}</span>}
             <div className="leading-tight">
               <div className="text-[14px] font-black text-[#0F1A30]">{cur.author || "-"}</div>
-              <div className="text-[12px] text-[#7A879C] tabular-nums flex items-center flex-wrap gap-x-1">{fullDate(ms)}{isNoticeScheduled(cur) ? " 게시 예정" : ""}{cur._platform ? (cur.updatedAt ? ` · 수정 ${fullDate(toMs(cur.updatedAt))}` : "") + " · KP-Flow 운영팀이 보낸 공지입니다" : ""}<span className="inline-flex items-center gap-1 font-bold text-[#5B6B85]" title="조회수 — 한 계정 1회">· <Eye size={12} /> 조회 {noticeViews(cur)}</span></div>
+              <div className="text-[12px] text-[#7A879C] tabular-nums flex items-center flex-wrap gap-x-1">{fullDate(ms)}{isNoticeScheduled(cur) ? " 게시 예정" : ""}{cur._platform ? (cur.updatedAt ? ` · 수정 ${fullDate(toMs(cur.updatedAt))}` : "") + " · LogisWeb 운영팀이 보낸 공지입니다" : ""}<span className="inline-flex items-center gap-1 font-bold text-[#5B6B85]" title="조회수 — 한 계정 1회">· <Eye size={12} /> 조회 {noticeViews(cur)}</span></div>
               {cur.revisedAt && <div className="text-[12px] font-bold text-[#B54708] tabular-nums">{cur.hrOrder?.status === "cancelled" ? "취소" : "수정"} {fullDate(toMs(cur.revisedAt))}{cur.revisedBy ? ` · ${cur.revisedBy}` : ""}</div>}
             </div>
           </div>

@@ -10,6 +10,7 @@ import { db } from "./firebase";
 import { PlanMatrix, PLAN_DEFAULTS, PLAN_IDS, PLAN_MATRIX_CSS, planFeatureLines, planMatrixHtml } from "./plans";
 import { fmtBizNo, fmtPhone } from "./formatInput";
 import { CustomSelect } from "./CustomSelect";
+import { logisWordmarkSvg } from "./brand"; // 🔷 2026-11-04 LogisWeb 글자 로고(인쇄 문서 머리)
 
 const MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
 const NAVY = "#1B2B4B";
@@ -41,7 +42,7 @@ export const SALES_DEFAULT = {
   devDayRate: 400000,        // 맞춤 개발 1일 단가
   validDays: 30,             // 견적 유효기간
   messaging: "문자 · 알림톡은 발송 건수만큼 실비 청구",
-  supplier: { name: "KP-Flow", ceo: "", bizNo: "", phone: "", email: "", address: "", bank: "" },
+  supplier: { name: "LogisWeb", ceo: "", bizNo: "", phone: "", email: "", address: "", bank: "" },
   terms: [
     "모든 금액은 부가세 별도입니다.",
     "일반 기사의 기사앱 사용과 화주사 포털 사용은 무료입니다.",
@@ -186,7 +187,7 @@ export function quoteHtml(cfg, inp, q, no) {
   const trs = (list) => list.map(([a, b, c, d]) => `<tr><td>${esc(a)}</td><td>${esc(b)}</td><td class="c">${c === "" ? "-" : c}</td><td class="r mono">${won(d)}</td></tr>`).join("");
   const once = q.oneTime.map((x) => `<tr><td>${esc(x.label)}</td><td>${esc(x.note)}${x.waived ? ` <b>— ${cfg.waiveSetupMonths}개월 이상 약정으로 면제 (정가 ${won(x.list)})</b>` : ""}</td><td class="c">1</td><td class="r mono">${won(x.amount)}</td></tr>`).join("");
   return `<div class="page">
-    <div class="hero"><div><div class="eyebrow">KP-FLOW · QUOTATION</div><h1>견 적 서</h1></div>
+    <div class="hero"><div><div class="eyebrow">${logisWordmarkSvg(9)} · QUOTATION</div><h1>견 적 서</h1></div>
       <div style="text-align:right;font-size:12px;line-height:1.7"><div class="mono">No. ${esc(no || "미저장")}</div><div>견적일 ${today}</div><div>유효기간 ${addDays(today, num(cfg.validDays))}까지</div></div></div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:14px">
       <table><tr><th style="width:84px">수신</th><td><b style="font-size:15px">${esc(inp.customer || "-")}</b> 귀중</td></tr>
@@ -221,7 +222,7 @@ export function quoteHtml(cfg, inp, q, no) {
     <h3>요금제별 사용 범위 (선택: ${esc(p.name)})</h3>${planMatrixHtml(cfg.plans, PLAN_IDS.includes(p.id) ? p.id : null)}
     <h3>${esc(p.name)} 요금제 포함 기능</h3><ul>${(p.features || []).map((f) => `<li>${esc(f)}</li>`).join("")}<li>${esc(cfg.messaging)}</li><li>사진 · 파일 저장 ${num(cfg.storageGB)}GB 기본 제공</li></ul>
     <h3>계약 조건</h3><ul>${(cfg.terms || []).map((t) => `<li>${esc(t)}</li>`).join("")}${inp.memo ? `<li><b>${esc(inp.memo)}</b></li>` : ""}</ul>
-    <div class="foot"><span>KP-FLOW · LOGISTICS DISPATCH SYSTEM</span><span>${esc(cfg.supplier.name)}</span></div>
+    <div class="foot"><span>LogisWeb · LOGISTICS DISPATCH NETWORK</span><span>${esc(cfg.supplier.name)}</span></div>
   </div>`;
 }
 export function priceSheetHtml(cfg) {
@@ -236,12 +237,12 @@ export function priceSheetHtml(cfg) {
   const once = [["초기 도입비", `${won(cfg.setupFee)}${cfg.plans.some((p) => hasVal(p.setupFee)) ? " (요금제별 금액은 위 요금제 칸)" : ""} — ${cfg.waiveSetupMonths}개월 이상 약정 시 면제`], ["대량 데이터 이전", won(cfg.migrationFee)], ["추가 현장 교육", `1회 ${won(cfg.trainingFee)}`], ["맞춤 개발", `1일 ${won(cfg.devDayRate)}`], ["연간 선결제", `${cfg.annualFreeMonths}개월 무료`], ["단기 계약(최소 " + (cfg.minContractMonths ?? 6) + "개월)", `6개월 선결제 ${cfg.semiDiscountRate}% 할인 · 도입비 ${cfg.semiSetupRate}% 할인`]];
   const t = (rows) => `<table><tbody>${rows.map(([a, b]) => `<tr><th style="width:42%">${a}</th><td>${b}</td></tr>`).join("")}</tbody></table>`;
   return `<div class="page">
-    <div class="hero"><div><div class="eyebrow">KP-FLOW · PRICING</div><h1>요 금 안 내</h1></div><div style="font-size:12px;text-align:right">${ymd()} 기준 · 부가세 별도</div></div>
+    <div class="hero"><div><div class="eyebrow">${logisWordmarkSvg(9)} · PRICING</div><h1>요 금 안 내</h1></div><div style="font-size:12px;text-align:right">${ymd()} 기준 · 부가세 별도</div></div>
     <h3>요금제</h3><div class="plans" style="grid-template-columns:repeat(${Math.min(4, cfg.plans.length)},1fr)">${plans}</div>
     <h3>요금제별 사용 범위</h3>${planMatrixHtml(cfg.plans)}
     <h3>추가 옵션 (월)</h3>${t(opt)}<h3>1회 비용 · 결제 혜택</h3>${t(once)}
     <h3>안내</h3><ul>${(cfg.terms || []).map((x) => `<li>${esc(x)}</li>`).join("")}</ul>
-    <div class="foot"><span>KP-FLOW · LOGISTICS DISPATCH SYSTEM</span><span>${esc(cfg.supplier.name)}</span></div></div>`;
+    <div class="foot"><span>LogisWeb · LOGISTICS DISPATCH NETWORK</span><span>${esc(cfg.supplier.name)}</span></div></div>`;
 }
 
 // ─── 공용 부품 ───
@@ -307,7 +308,7 @@ export function PricingEditor() {
       await setDoc(doc(db, "publicPricing", "current"), {
         plans: cfg.plans.map(({ id, name, en, price, seats, orders, target, recommended }) => ({ id, name, en, price: num(price), seats: num(seats), orders: num(orders), target: target || "", recommended: !!recommended })),
         setupFee: num(cfg.setupFee),
-        extraSeat: num(cfg.extraSeat), extraOrder: num(cfg.extraOrder), bank: cfg.supplier?.bank || "", supplier: cfg.supplier?.name || "KP-Flow", supplierBizNo: cfg.supplier?.bizNo || "", supplierEmail: cfg.supplier?.email || "", supplierPhone: cfg.supplier?.phone || "",
+        extraSeat: num(cfg.extraSeat), extraOrder: num(cfg.extraOrder), bank: cfg.supplier?.bank || "", supplier: cfg.supplier?.name || "LogisWeb", supplierBizNo: cfg.supplier?.bizNo || "", supplierEmail: cfg.supplier?.email || "", supplierPhone: cfg.supplier?.phone || "",
         updatedAt: serverTimestamp(),
       });
       setDirty(false); setMsg("저장했습니다. 새로 만드는 견적서부터 바로 적용됩니다."); }
@@ -322,7 +323,7 @@ export function PricingEditor() {
       <div className="flex items-center justify-between gap-3 flex-wrap rounded-[18px] px-5 py-3.5 bg-[#0F1A30] text-white">
         <div className="text-[13.5px]"><b>요금제는 여기서만 고치면 됩니다.</b> <span className="text-white/60">견적서·요금 안내서가 이 값을 그대로 씁니다. (기존 고객 청구액은 '요금·청구'에서 따로 관리)</span></div>
         <div className="flex gap-2">
-          <Btn onClick={() => openPrint("KP-Flow 요금 안내", priceSheetHtml(cfg))}>요금 안내서 인쇄</Btn>
+          <Btn onClick={() => openPrint("LogisWeb 요금 안내", priceSheetHtml(cfg))}>요금 안내서 인쇄</Btn>
           <Btn onClick={() => { if (window.confirm("저장하지 않은 수정을 버리고 마지막 저장값으로 돌릴까요?")) { setDirty(false); setCfg(live); } }} disabled={!dirty}>되돌리기</Btn>
           <button type="button" onClick={save} disabled={!dirty} className="h-10 px-5 rounded-xl bg-white text-[#0F1A30] text-[13.5px] font-black disabled:opacity-40">{dirty ? "저장" : "저장됨"}</button>
         </div>

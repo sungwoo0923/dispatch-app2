@@ -8,6 +8,7 @@ import { freeDeletedEmail } from "../freeEmail";
 import { readPublicCompanies } from "../publicCompanies";
 import CustomSelect from "../CustomSelect";
 import CustomDatePicker from "../CustomDatePicker";
+import { LogisMark } from "../brand"; // 🔷 2026-11-04 LogisWeb 로고
 import {
   doc, setDoc, serverTimestamp, collection, query, where, getDocs, addDoc, updateDoc,
 } from "firebase/firestore";
@@ -105,7 +106,7 @@ function TypeSelect({ onSelect }) {
     <div className="min-h-screen flex items-center justify-center px-4 py-10" style={{ background: GRID_BG }}>
       <div className="w-full max-w-[880px]">
         <div className="text-center mb-8">
-          <img src="/icons/sflow-icon.png" alt="" className="w-14 h-14 rounded-2xl shadow-lg mx-auto mb-4" />
+          <LogisMark size={56} style={{ margin: "0 auto 16px", filter: "drop-shadow(0 10px 20px rgba(0,0,0,0.3))" }} />
           <div className="text-[11px] font-extrabold tracking-[0.3em] text-[#8FB0F0]" style={{ fontFamily: MONO }}>SHIPPER · SIGN UP</div>
           <h1 className="text-[30px] font-black text-white tracking-tight mt-1">화주 회원가입</h1>
           <p className="text-[14.5px] text-white/60 mt-1.5">가입 유형을 골라 주세요</p>

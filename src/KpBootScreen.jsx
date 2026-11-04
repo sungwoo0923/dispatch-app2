@@ -1,9 +1,10 @@
 // ======================= src/KpBootScreen.jsx =======================
-// ⭐ KP-Flow 첫 진입 로딩 화면(모바일·PC 공용) — 네이비 화면 위로 트럭이 전체 진행률만큼 길을 달리고,
+// ⭐ LogisWeb 첫 진입 로딩 화면(모바일·PC 공용) — 네이비 화면 위로 트럭이 전체 진행률만큼 길을 달리고,
 // 4단계가 차례대로 0 → 100% 채워진다. 전부 100%가 되면 부드럽게 사라지며 최신 상태로 열린다.
 // targets: 단계별 목표 %(0~100) 4개 / subs: 단계 옆에 보일 보조 문구 / variant: "mobile" | "pc"
 import React, { useState, useEffect, useRef } from "react";
 import KpTruck3D from "./KpTruck3D";
+import { LogisMark, LogisWordmark } from "./brand";
 
 export const BOOT_STEPS = ["저장된 오더 불러오기", "서버 확인", "최신 오더 반영", "화면 준비"];
 // ⭐ 2026-11-01 팀별 로딩 문구 — 배차팀 외(경리·인사·임원)는 그 팀 업무에 맞는 말로
@@ -142,11 +143,11 @@ export default function KpBootScreen({ targets, subs = [], onAllDone, variant = 
 
       <div className={`relative w-full ${Z.box} flex flex-col min-w-0`}>
         {/* 로고 */}
-        <div className={`flex items-center justify-center gap-2.5 ${pc ? "mb-10" : "mb-7"}`}>
-          <img src="/icons/sflow-icon.png" alt="KP-Flow" className={`${pc ? "w-12 h-12 rounded-[14px]" : "w-10 h-10 rounded-[12px]"} ring-1 ring-white/20 shadow-[0_8px_24px_rgba(0,0,0,0.35)]`} />
+        <div className={`flex items-center justify-center gap-3 ${pc ? "mb-10" : "mb-7"}`}>
+          <LogisMark size={pc ? 52 : 44} style={{ filter: "drop-shadow(0 8px 24px rgba(0,0,0,0.35))" }} />
           <div className="leading-tight text-left">
-            <div className={`text-white font-black tracking-[0.2em] whitespace-nowrap ${pc ? "text-[20px]" : "text-[16px]"}`} style={{ fontFamily: MONO }}>KP-FLOW</div>
-            <div className={`font-bold tracking-[0.26em] text-white/40 whitespace-nowrap ${pc ? "text-[11px]" : "text-[9.5px]"}`}>배차관리 시스템</div>
+            <LogisWordmark height={pc ? 19 : 16} />
+            <div className={`mt-1.5 font-bold tracking-[0.26em] text-white/40 whitespace-nowrap ${pc ? "text-[10.5px]" : "text-[9px]"}`}>LOGISTICS DISPATCH NETWORK</div>
           </div>
         </div>
 

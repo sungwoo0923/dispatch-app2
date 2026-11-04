@@ -73,7 +73,7 @@ export const openPlanLock = (feature) => window.dispatchEvent(new CustomEvent("k
 
 // 공개 요금(가격 등) — 없으면 기본값
 export function usePublicPricing() {
-  const [p, setP] = React.useState({ plans: PLAN_DEFAULTS, bank: "", supplier: "KP-Flow" });
+  const [p, setP] = React.useState({ plans: PLAN_DEFAULTS, bank: "", supplier: "LogisWeb" });
   React.useEffect(() => onSnapshot(doc(db, "publicPricing", "current"), (s) => {
     if (!s.exists()) return;
     const d = s.data();

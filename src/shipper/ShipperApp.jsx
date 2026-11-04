@@ -26,6 +26,7 @@ import ShipperInquiry from "./pages/ShipperInquiry";
 import InternalMessenger from "../InternalMessenger";
 import "../pcTheme.css";
 import "../kpNavyTheme.css";
+import { LogisMark, LogisWordmark } from "../brand"; // 🔷 2026-11-04 LogisWeb 로고
 
 const SHIP_MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
 
@@ -399,15 +400,15 @@ const isSubMaster = isTotalMasterUser || userData?.permissions?.subMaster;
 
       <PlatformNoticeBanner audience="shipper" />
       {/* ================= HEADER ================= */}
-      {/* ⭐ 2026-10-29 리디자인 — 운송사 PC(KP-Flow)와 같은 네이비 디지털 상단바 */}
+      {/* ⭐ 2026-10-29 리디자인 — 운송사 PC(LogisWeb)와 같은 네이비 디지털 상단바 */}
       <header className="kp-topnav sticky top-0 z-40 text-white">
         <div className="h-[60px] px-6 flex items-center gap-4">
           {/* 로고 */}
           <button onClick={() => navigate("/shipper")} className="flex items-center gap-2.5 shrink-0">
-            <img src="/icons/sflow-icon.png" alt="KP-Flow" className="w-8 h-8 rounded-[10px] ring-1 ring-white/15 shadow-[0_4px_12px_rgba(0,0,0,0.25)]" />
+            <LogisMark size={32} style={{ filter: "drop-shadow(0 4px 12px rgba(0,0,0,0.25))" }} />
             <span className="flex flex-col leading-none text-left">
-              <span className="font-black text-[15px] tracking-tight">KP-Flow</span>
-              <span className="text-[9.5px] font-extrabold tracking-[0.24em] text-[#8FB0F0] mt-1">SHIPPER</span>
+              <LogisWordmark height={12} />
+              <span className="text-[9.5px] font-extrabold tracking-[0.24em] text-[#8FB0F0] mt-1.5">SHIPPER</span>
             </span>
           </button>
           {companyName && (

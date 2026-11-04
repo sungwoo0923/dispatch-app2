@@ -5,6 +5,7 @@
 import React, { useState, useEffect } from "react";
 import { db, FUNCTIONS_BASE } from "./firebase";
 import { collection, query, where, getDocs } from "firebase/firestore";
+import { LogisWordmark } from "./brand"; // 🔷 2026-11-04 LogisWeb 로고
 
 const cardStyle = {
   background: "white",
@@ -196,7 +197,7 @@ export default function DriverSearchPage() {
           </svg>
         </div>
         <div>
-          <div style={{ color: "white", fontWeight: 900, fontSize: 16, letterSpacing: "-0.3px" }}>KP-Flow</div>
+          <div style={{ marginBottom: 5 }}><LogisWordmark height={13} /></div>
           <div style={{ color: "rgba(255,255,255,0.5)", fontSize: 11 }}>서류 업로드 — 오더 검색</div>
         </div>
       </div>

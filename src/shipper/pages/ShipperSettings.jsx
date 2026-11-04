@@ -4,6 +4,7 @@ import SettingsProfile from "./SettingsProfile";
 import SettingsUsers from "./SettingsUsers";
 import SettingsTransport from "./SettingsTransport";
 import SettingsAddress from "./SettingsAddress";
+import { LogisTag } from "../../brand"; // 🔷 2026-11-04 LogisWeb 로고
 
 const MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
 // ⭐ 2026-10-29 리디자인 — 왼쪽 메뉴를 운송사 프로그램과 같은 어두운 네이비 패널로
@@ -46,7 +47,7 @@ export default function ShipperSettings() {
             );
           })}
         </nav>
-        <div className="px-5 py-3 border-t border-white/10 text-[10px] tracking-[0.2em] text-white/35" style={{ fontFamily: MONO }}>KP-FLOW · SHIPPER</div>
+        <div className="px-5 py-3 border-t border-white/10 text-[10px] tracking-[0.2em] text-white/35" style={{ fontFamily: MONO }}><LogisTag height={7} text="SHIPPER" /></div>
       </aside>
 
       {/* ===== 우측 ===== */}

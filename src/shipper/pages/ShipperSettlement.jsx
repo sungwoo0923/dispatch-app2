@@ -579,7 +579,7 @@ export default function ShipperSettlement() {
                   </tfoot>
                 </table>
                 <div style={{ padding: "14px 24px", background: "#f0f2f6", borderTop: "2px solid #1B2B4B", fontSize: 12, color: "#6b7280", textAlign: "center" }}>
-                  본 내역서는 KP-Flow 화주사 프로그램에서 자동 생성되었습니다.
+                  본 내역서는 LogisWeb 화주사 프로그램에서 자동 생성되었습니다.
                 </div>
                 {invoiceRows.length === 0 && (
                   <div style={{ padding: 40, textAlign: "center", color: "#9ca3af", fontSize: 13 }}>선택한 조건에 해당하는 오더가 없습니다.</div>

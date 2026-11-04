@@ -24,6 +24,7 @@ import { html2canvas } from "../lazyLoad"; // ⭐ 2026-11-02 속도 — 캡처 �
 import { deleteOrderWithLog } from "../orderHistory";
 import "../kpNavyTheme.css";
 import MobileSelect from "./MobileSelect"; // ⭐ 2026-11-02 기본 select → 남색 바텀시트 선택기
+import { LogisWordmark, LogisTag } from "../brand"; // 🔷 2026-11-04 LogisWeb 로고
 
 // ======================================================================
 // 유틸
@@ -773,7 +774,7 @@ export default function ShipperMobileApp() {
           <div className="absolute left-0 top-0 bottom-0 w-64 bg-white shadow-xl flex flex-col">
             <div className="relative overflow-hidden px-5 py-5" style={{ background: "radial-gradient(120% 90% at 20% 0%, #22396A 0%, #0F1A30 60%, #0B1428 100%)" }}>
               <span className="absolute inset-0 opacity-[0.07]" style={{ backgroundImage: "linear-gradient(#fff 1px,transparent 1px),linear-gradient(90deg,#fff 1px,transparent 1px)", backgroundSize: "16px 16px" }} />
-              <div className="relative text-[9.5px] font-extrabold tracking-[0.3em] text-[#8FB0F0]" style={{ fontFamily: "'JetBrains Mono',ui-monospace,monospace" }}>KP-FLOW · SHIPPER</div>
+              <div className="relative text-[9.5px] font-extrabold tracking-[0.3em] text-[#8FB0F0]" style={{ fontFamily: "'JetBrains Mono',ui-monospace,monospace" }}><LogisTag height={7.5} text="SHIPPER" /></div>
               <div className="relative text-white font-black text-[17px] mt-1">{userData.companyName || "화주사"}</div>
               <div className="relative text-white/55 text-[12px] mt-0.5" style={{ fontFamily: "'JetBrains Mono',ui-monospace,monospace" }}>{menuTime}</div>
             </div>
@@ -809,7 +810,7 @@ export default function ShipperMobileApp() {
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M4 7h16M4 12h16M4 17h10" /></svg>
         </button>
         <div className="relative text-center leading-none">
-          <div className="text-white font-black text-[16px] tracking-[0.06em]">KP-FLOW</div>
+          <div className="flex justify-center"><LogisWordmark height={13} /></div>
           <div className="text-[9px] font-extrabold tracking-[0.3em] text-[#8FB0F0] mt-1" style={{ fontFamily: "'JetBrains Mono',ui-monospace,monospace" }}>SHIPPER</div>
         </div>
         <div className="relative flex items-center gap-3">
@@ -2721,7 +2722,7 @@ function ShipperSettingsM({ onBack, showToast, uiScale, setUiScale }) {
             </button>
           </MRow>
           <MRow label="앱 버전">
-            <span className="text-xs text-gray-400">KP-Flow 화주 모바일</span>
+            <span className="text-xs text-gray-400">LogisWeb 화주 모바일</span>
           </MRow>
         </SettingsGroup>
       </div>

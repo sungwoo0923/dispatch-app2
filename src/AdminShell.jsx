@@ -1,6 +1,6 @@
 // ======================= src/AdminShell.jsx =======================
 // ⭐ 관리 화면 공용 레이아웃(회사관리·관리자메뉴) — 왼쪽 메뉴바 + 상단 인사 카드 + 숫자 카드 + 본문.
-// KP-Flow 네이비 색으로 통일. 각 화면은 메뉴 목록·숫자 카드·버튼만 넘겨주면 된다.
+// LogisWeb 네이비 색으로 통일. 각 화면은 메뉴 목록·숫자 카드·버튼만 넘겨주면 된다.
 import React from "react";
 import { useSubnavTarget } from "./navMenus";
 

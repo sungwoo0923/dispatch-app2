@@ -16,6 +16,7 @@ import { PricingEditor, QuoteBuilder, QuoteHistory, useSalesPricing, applyPlanBi
 import { usePlatformLive, mergeCompanies, mergeShippers, StatsStamp, LiveNowPanel, SignupTimeline, PendingPanel, DupeWarning, HealthCard, StaffList, Spark, PLAN_NAMES } from "./PlatformLive";
 import { CustomSelect } from "./CustomSelect";
 import { fmtMoney, parseMoney } from "./formatInput";
+import { LogisTag } from "./brand"; // 🔷 2026-11-04 LogisWeb 로고
 
 // 📱 폰(관리자 관리센터 모바일) — 가로 칸 수를 줄인다
 export function usePhone() {
@@ -275,7 +276,7 @@ export default function PlatformMonitor({ demoStats = null, tab: tabProp, onTab,
   const headBar = (
     <div className="pm-hero" style={{ borderRadius: phone ? 18 : 22, padding: phone ? "14px 16px" : "20px 24px", marginBottom: phone ? 12 : 16, display: "flex", alignItems: "center", justifyContent: "space-between", gap: phone ? 10 : 16, flexWrap: "wrap", color: "#fff", position: "relative", overflow: "hidden" }}>
       <div style={{ minWidth: 0 }}>
-        <div style={{ fontFamily: MONO, fontSize: 13, fontWeight: 800, letterSpacing: "0.28em", color: "#8FB0F0" }}>{/* ⭐ 2026-11-02 관리자센터2 — 다른 화면처럼 "구역 · 메뉴" 표기 */}{{ companies: "CLIENTS · CARRIERS", shippers: "CLIENTS · SHIPPERS", billing: "BILLING · INVOICE", overview: "DASHBOARD · OVERVIEW" }[tab] || "KP-FLOW · PLATFORM CONTROL"}</div>
+        <div style={{ fontFamily: MONO, fontSize: 13, fontWeight: 800, letterSpacing: "0.28em", color: "#8FB0F0" }}>{/* ⭐ 2026-11-02 관리자센터2 — 다른 화면처럼 "구역 · 메뉴" 표기 */}{{ companies: "CLIENTS · CARRIERS", shippers: "CLIENTS · SHIPPERS", billing: "BILLING · INVOICE", overview: "DASHBOARD · OVERVIEW" }[tab] || <LogisTag height={9.5} text="PLATFORM CONTROL" />}</div>
         <h1 style={{ margin: "6px 0 0", fontSize: phone ? 19 : 25, fontWeight: 900, letterSpacing: "-0.02em", whiteSpace: "nowrap" }}>{{ companies: "운송사 관제", shippers: "화주사 관제", billing: "요금·청구" }[tab] || "플랫폼 관제센터"}</h1>
         <p style={{ margin: "5px 0 0", fontSize: phone ? 12 : 14, color: "rgba(207,224,255,.72)", fontWeight: 600, whiteSpace: phone ? "normal" : undefined }}>
           <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><span style={{ width: 7, height: 7, borderRadius: 9, background: live?.ready ? "#CFE0FF" : "#64748b", boxShadow: live?.ready ? "0 0 8px #8FB0F0" : "none" }} />계정·접속은 실시간</span>

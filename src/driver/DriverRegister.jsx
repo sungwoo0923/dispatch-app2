@@ -12,6 +12,7 @@ import { useNavigate, Link } from "react-router-dom";
 import { addDoc, collection } from "firebase/firestore";
 import { BANK_NAMES, accountLengths, formatAccount, validateAccount, onlyDigits } from "../bankUtil";
 import { compressImage } from "../InternalMail";
+import { LogisMark } from "../brand"; // 🔷 2026-11-04 LogisWeb 로고
 
 // ⭐ 사용자 요청 — 차량종류/톤수/거주지를 가입할 때 드롭다운으로 선택하게 한다
 // (이전엔 "1톤"/"카고"가 뒤섞인 한 줄짜리 목록 하나만 있었음). 차종은 "직접입력"을
@@ -644,7 +645,7 @@ export default function DriverRegister() {
               <span className="text-[13px] font-bold text-white/70 tabular-nums" style={{ fontFamily: MONO }}>
                 <span className="text-white">{step + 1}</span> / {STEPS.length}
               </span>
-              <img src="/icons/sflow-icon.png" alt="" className="w-7 h-7 rounded-lg" />
+              <LogisMark size={28} />
             </div>
           </div>
           <div className="mt-2 text-[10px] font-extrabold tracking-[0.22em] text-white/45" style={{ fontFamily: MONO }}>{S.en}</div>

@@ -6,6 +6,7 @@
 
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { db, DEFAULT_COMPANY } from "./firebase";
+import { LogisMark, LogisTag } from "./brand"; // 🔷 2026-11-04 LogisWeb 로고
 import {
   doc,
   getDoc,
@@ -499,11 +500,9 @@ export default function UploadPage() {
       <div className="kpu-hero">
         <div style={{ maxWidth: 520, margin: "0 auto", padding: "18px 18px 20px", position: "relative" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            <div style={{ width: 42, height: 42, borderRadius: 13, background: "linear-gradient(135deg,#2D4C82,#0B1428)", border: "1px solid rgba(207,224,255,.35)", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 0 0 4px rgba(143,176,240,.08)" }}>
-              <span style={{ color: "#fff", fontSize: 16, fontWeight: 900, letterSpacing: "-0.5px" }}>KP</span>
-            </div>
+            <LogisMark size={44} />
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div className="kpu-mono" style={{ fontSize: 10.5, fontWeight: 800, letterSpacing: "0.26em", color: "#8FB0F0" }}>KP-FLOW · DRIVER UPLOAD</div>
+              <div className="kpu-mono" style={{ fontSize: 10.5, fontWeight: 800, letterSpacing: "0.26em", color: "#8FB0F0" }}><LogisTag height={8} text="DRIVER UPLOAD" /></div>
               <div style={{ color: "#fff", fontWeight: 900, fontSize: 19, letterSpacing: "-0.3px", marginTop: 2 }}>인수증 · 서류 업로드</div>
               {/* ⭐ 2026-11-03 이 오더의 운송사 — 고정(고칠 수 없음) */}
               {(() => { const co = String(order?.companyName || order?.company || new URLSearchParams(window.location.search).get("co") || "").trim(); return co ? (

@@ -10,6 +10,7 @@ import { doc, getDoc, getFirestore, collection, getDocs, query, where } from "fi
 import { useNavigate, Link } from "react-router-dom";
 import { Loader2 } from "lucide-react";
 import { useMfaPrompt, mfaErrorText } from "./MfaModal";
+import { LogisMark, LogisWordmark, LogisTag } from "./brand"; // 🔷 2026-11-04 LogisWeb 로고
 
 const TOTAL_MASTER_EMAIL = "tjddnqkf@naver.com";
 
@@ -366,10 +367,10 @@ export default function TransportLogin() {
         <div className="absolute -left-24 bottom-[-180px] w-[460px] h-[460px] rounded-full" style={{ background: "radial-gradient(circle, rgba(75,108,183,0.18), transparent 65%)" }} />
 
         <div className="relative flex items-center gap-3">
-          <img src="/icons/sflow-icon.png" alt="" className="w-11 h-11 rounded-[13px] ring-1 ring-white/20" />
+          <LogisMark size={46} />
           <div>
-            <div className="text-[18px] font-black tracking-[0.18em]">KP-FLOW</div>
-            <div className="text-[10.5px] font-bold tracking-[0.3em] text-white/45">LOGISTICS DISPATCH SYSTEM</div>
+            <div className="mb-2"><LogisWordmark height={16} /></div>
+            <div className="text-[10.5px] font-bold tracking-[0.3em] text-white/45">LOGISTICS DISPATCH NETWORK</div>
           </div>
         </div>
 
@@ -389,7 +390,7 @@ export default function TransportLogin() {
         </div>
 
         <div className="relative flex items-center gap-6 text-[11px] font-bold tracking-[0.2em] text-white/35">
-          <span>SECURE · TLS</span><span>REAL-TIME SYNC</span><span>© KP-FLOW</span>
+          <span>SECURE · TLS</span><span>REAL-TIME SYNC</span><span>© LogisWeb</span>
         </div>
       </div>
 
@@ -398,9 +399,9 @@ export default function TransportLogin() {
         <div className="kp-login-in w-full max-w-[420px]">
           {/* 모바일 머리 */}
           <div className="lg:hidden flex flex-col items-center mb-4">
-            <img src="/icons/sflow-icon.png" alt="" className="w-12 h-12 rounded-[14px] shadow-[0_10px_24px_rgba(15,26,48,0.25)]" />
-            <div className="mt-2 text-[17px] font-black tracking-[0.18em] text-[#0F1A30]">KP-FLOW</div>
-            <div className="text-[10.5px] font-bold tracking-[0.3em] text-[#9AA9C3]">LOGISTICS DISPATCH SYSTEM</div>
+            <LogisMark size={52} style={{ filter: "drop-shadow(0 10px 24px rgba(15,26,48,0.25))" }} />
+            <div className="mt-2.5"><LogisTag height={13} chip /></div>
+            <div className="mt-1.5 text-[10.5px] font-bold tracking-[0.3em] text-[#9AA9C3]">LOGISTICS DISPATCH NETWORK</div>
           </div>
 
           <div className="bg-white rounded-[26px] border border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_24px_60px_rgba(15,26,48,0.10)] px-5 sm:px-10 pt-6 sm:pt-9 pb-6 sm:pb-8">
@@ -465,7 +466,7 @@ export default function TransportLogin() {
               <Link to="/login" className="h-11 rounded-xl border border-[#E3E8F0] text-[#5B6B85] text-[13.5px] font-bold flex items-center justify-center hover:bg-[#F5F7FB] transition">다른 유형 로그인</Link>
             </div>
           </div>
-          <div className="text-center mt-5 text-[11px] font-bold tracking-[0.2em] text-[#B4BFD0]">KP-FLOW · LOGISTICS</div>
+          <div className="flex justify-center mt-5 text-[11px] font-bold tracking-[0.2em] text-[#B4BFD0]"><LogisTag height={7.5} chip text="LOGISTICS" /></div>
         </div>
       </div>
 
@@ -483,7 +484,7 @@ export default function TransportLogin() {
                 <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#8FB0F0" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" /><path d="m9 12 2 2 4-4" /></svg>
               </div>
               <div className="mt-3 text-[24px] font-black tracking-tight">로그인 완료</div>
-              <div className="text-[13px] text-white/55 mt-0.5">{companyName || "KP-FLOW"}</div>
+              <div className="text-[13px] text-white/55 mt-0.5">{companyName || "LogisWeb"}</div>
 
               {/* 큰 디지털 카운트 */}
               <div className="mt-7 flex flex-col items-center">

@@ -34,6 +34,7 @@ import DriverNotices from "./DriverNotices"; // ⭐ 2026-11-03 회사 공지(공
 import { useDriverDocs, docProblems } from "../driverRequiredDocs";
 import { useVehicleTypes } from "../vehicleTypes"; // 🚚 2026-11-02 회사 공용 차량종류
 import MobileSelect from "../mobile/MobileSelect"; // ⭐ 2026-11-02 기본 select → 남색 바텀시트 선택기
+import { LogisTag } from "../brand"; // 🔷 2026-11-04 LogisWeb 로고
 
 // ⭐ 오더 타임라인 — 기사 행동(수락/거절/수정확인/상차지도착/상차완료/운송완료 등)을
 // 오더 문서의 기사타임라인 배열에 "덮어쓰지 않고" 계속 쌓는다(관리자 지입차관리 타임라인).
@@ -2183,7 +2184,7 @@ export default function DriverHome() {
               <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 7h13l5 5v5h-2M3 7v10h2m0 0a2 2 0 1 0 4 0m-4 0a2 2 0 1 1 4 0m0 0h6m0 0a2 2 0 1 0 4 0m-4 0a2 2 0 1 1 4 0" /></svg>
             </div>
             <div style={{ minWidth: 0 }}>
-              <div style={{ fontSize: 9.5, color: "#8FB0F0", fontWeight: 800, letterSpacing: "0.26em", fontFamily: DRV_MONO, marginBottom: 3 }}>KP-FLOW · DRIVER</div>
+              <div style={{ fontSize: 9.5, color: "#8FB0F0", fontWeight: 800, letterSpacing: "0.26em", fontFamily: DRV_MONO, marginBottom: 4 }}><LogisTag height={7.5} text="DRIVER" /></div>
               <div style={{ fontSize: 19, fontWeight: 900, color: "white", letterSpacing: "-0.3px" }}>{driver.name || "-"}</div>
               <div style={{ fontSize: 12, color: "rgba(255,255,255,0.6)", marginTop: 1, fontFamily: DRV_MONO }}>{driver.carNo || "-"} {driver.vehicleType ? `· ${driver.vehicleType}` : ""}</div>
             </div>
@@ -3142,7 +3143,7 @@ export default function DriverHome() {
           <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 8, paddingLeft: 4 }}><span style={{ width: 6, height: 6, background: "#2D4C82", transform: "rotate(45deg)" }} /><span style={{ fontSize: 9.5, fontWeight: 800, color: "#9AA9C3", letterSpacing: "0.22em", fontFamily: DRV_MONO }}>APP</span><span style={{ fontSize: 13.5, fontWeight: 900, color: "#0F1A30" }}>앱 정보</span></div>
           <div style={{ background: "white", borderRadius: 16, boxShadow: "0 1px 6px rgba(0,0,0,0.06)", border: "1px solid #E3E8F0", overflow: "hidden", marginBottom: 20 }}>
             {[
-              ["앱 이름", "KP-Flow 기사 앱"],
+              ["앱 이름", "LogisWeb 기사 앱"],
               ["회사", driver.companyName || "-"],
             ].map(([label, value], i, arr) => (
               <div key={label} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "13px 16px", borderBottom: i < arr.length - 1 ? "1px solid #EEF2F8" : "none" }}>

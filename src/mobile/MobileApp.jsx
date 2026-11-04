@@ -116,6 +116,7 @@ import OrderScanModal, { scanDropDate } from "../OrderScanModal";
 import { useFareRules, FareTypeSelect, FareRuleHint, fareFormChange } from "../fareRules";
 import DetailFilterButton, { applyDetailFilter } from "../DetailFilter"; // 🔎 2026-11-03 세부검색(최대 3차)
 import { VehicleTypePicker, currentCustomVehicleTypes, useVehicleTypes } from "../vehicleTypes"; // 🚚 2026-11-02 회사 공용 차량종류
+import { LogisMark, LogisWordmark, LogisTag, LogisLockup } from "../brand"; // 🔷 2026-11-04 LogisWeb 로고
 
 
 
@@ -7351,7 +7352,7 @@ const MobileHeader = React.memo(function MobileHeader({ title, onBack, onRefresh
 
       {/* ⭐ 제목 — 양쪽 버튼 칸을 같은 폭으로 잡아 가운데, 화면이 좁으면(분할화면) 버튼과 겹치지 않고 제목이 줄어든다 */}
       <div className="min-w-0 text-center leading-none pointer-events-none overflow-hidden">
-        <div className={`text-[9.5px] font-extrabold tracking-[0.24em] whitespace-nowrap ${cardVersionB ? "text-[#8FB0F0]" : "text-[#4B6CB7]"}`}>KP-FLOW</div>
+        <div className="flex justify-center"><LogisTag height={7.5} chip={!cardVersionB} /></div>
         <div className={`mt-1 font-black text-[16px] tracking-tight truncate whitespace-nowrap ${cardVersionB ? "text-white" : "text-[#0F1A30]"}`}>{title}</div>
       </div>
 
@@ -7628,7 +7629,7 @@ function TopStatusPill({ historyLoading, hidden }) {
   );
 }
 
-// ⭐ 첫 진입 로딩 화면(KP-Flow) — 네이비 화면 위로 트럭이 전체 진행률만큼 길을 달리고,
+// ⭐ 첫 진입 로딩 화면(LogisWeb) — 네이비 화면 위로 트럭이 전체 진행률만큼 길을 달리고,
 // 아래 4단계가 차례대로 0 → 100% 채워진다. 전부 100%가 되면 부드럽게 사라지며 최신 상태로 열린다.
 function MobileLoadingScreen({ loaded = 0, total = null, cacheDone = false, onAllDone, onSkip }) {
   const bs = useMiniStore(bootStageStore);
@@ -7778,11 +7779,7 @@ function MobileSideMenu({
         }`}>
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2.5">
-              <img src="/icons/sflow-icon.png" alt="KP-Flow" className={`w-9 h-9 rounded-[11px] shrink-0 ${dark ? "ring-1 ring-white/15" : "ring-1 ring-[#E3E8F0]"}`} />
-              <div className="min-w-0">
-                <div className={`text-[10px] font-extrabold tracking-[0.22em] ${dark ? "text-[#8FB0F0]" : "text-[#4B6CB7]"}`}>DISPATCH</div>
-                <div className={`text-[15px] font-black tracking-tight truncate whitespace-nowrap ${dark ? "text-white" : "text-[#0F1A30]"}`}>KP-Flow</div>
-              </div>
+              <LogisLockup mark={34} word={12} sub="dispatch" chip={!dark} />
             </div>
             {/* 이름·접속시각 — 좁은 화면에서도 글자가 쪼개지지 않게 이름 한 줄, 시각 한 줄로 */}
             <div className={`mt-3 flex items-center gap-2 px-3 py-2 rounded-xl max-w-full ${dark ? "bg-white/[0.08] border border-white/10" : "bg-[#F5F8FD] border border-[#E3E8F0]"}`}>
@@ -7969,7 +7966,7 @@ function MobileSideMenu({
             >{dark && <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9" /></svg>}로그아웃</button>
           </div>
           <div className={`${dark ? "px-5 pb-4" : "px-5 py-2"} flex items-center justify-between`}>
-            <span className={`text-[11px] ${dark ? "text-white/35 font-bold tracking-[0.2em]" : "text-gray-400"}`} style={dark ? { fontFamily: KPM_MONO } : undefined}>{dark ? "KP-FLOW · BUILD" : "버전"}</span>
+            <span className={`text-[11px] ${dark ? "text-white/35 font-bold tracking-[0.2em]" : "text-gray-400"}`} style={dark ? { fontFamily: KPM_MONO } : undefined}>{dark ? <LogisTag height={7} text="BUILD" /> : "버전"}</span>
             <MobileVersionChip dark={dark} />
           </div>
         </div>
@@ -8073,10 +8070,10 @@ function KpmDrawerHead({ myName, role, loginTime, onClose, fmtLoginTime }) {
   return (
     <div className="px-4 pt-4 pb-3">
       <div className="flex items-center gap-2.5">
-        <img src="/icons/sflow-icon.png" alt="KP-Flow" className="w-9 h-9 rounded-[11px] shrink-0 ring-1 ring-white/20" />
+        <LogisMark size={36} />
         <div className="min-w-0 flex-1">
           <div className="text-[9.5px] font-extrabold tracking-[0.3em] text-[#8FB0F0]" style={{ fontFamily: KPM_MONO }}>DISPATCH · CONSOLE</div>
-          <div className="text-[15px] font-black tracking-tight">KP-Flow</div>
+          <div className="mt-1.5"><LogisWordmark height={12} /></div>
         </div>
         <button type="button" onClick={onClose} aria-label="닫기" className="w-9 h-9 rounded-[11px] bg-white/[0.07] ring-1 ring-white/10 grid place-items-center text-white/80">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12" /></svg>
@@ -18940,7 +18937,7 @@ function MobileMyInfo({ currentUser, mobileUsers, loginTime, orders = [], userCo
           <img src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(window.location.origin)}`} alt="앱 QR코드"
             className="w-[104px] h-[104px] rounded-xl border border-[#E3E8F0] shrink-0 bg-white" />
           <div className="min-w-0 flex-1 space-y-1.5">
-            <div className="flex items-center justify-between gap-2"><span className="text-[11.5px] font-bold text-[#7A879C]">앱</span><span className="text-[12.5px] font-black text-[#0F1A30] truncate">KP-Flow 모바일</span></div>
+            <div className="flex items-center justify-between gap-2"><span className="text-[11.5px] font-bold text-[#7A879C]">앱</span><span className="text-[12.5px] font-black text-[#0F1A30] truncate">LogisWeb 모바일</span></div>
             <div className="flex items-center justify-between gap-2"><span className="text-[11.5px] font-bold text-[#7A879C]">버전</span><MobileVersionChip /></div>
             <div className="flex items-center justify-between gap-2"><span className="text-[11.5px] font-bold text-[#7A879C]">플랫폼</span><span className="text-[12.5px] font-black text-[#0F1A30]">{platform}</span></div>
             <div className="text-[10.5px] text-[#9AA9C3] break-all">QR을 스캔하면 바로 접속 · {window.location.host}</div>
@@ -22510,8 +22507,8 @@ function MobileSettingsPage({ onBack, cardVersionB, setCardVersionB, alarmEnable
         </KpmCard>
 
         <KpmCard en="ABOUT" title="앱 정보" flush>
-          <KpmRow label="버전" sub="KP-FLOW 배차관리" right={<div className="flex items-center gap-1.5"><span className="text-[12px] text-[#5B6B85] font-bold" style={{ fontFamily: KPM_MONO }}>v{appVersion}</span><span className="text-[10px] font-black px-1.5 py-0.5 rounded-full bg-[#EEF3FC] text-[#1B2B4B]">최신</span></div>} />
-          <KpmRow label="제작" value="KP-FLOW Logistics" />
+          <KpmRow label="버전" sub="LogisWeb 배차관리" right={<div className="flex items-center gap-1.5"><span className="text-[12px] text-[#5B6B85] font-bold" style={{ fontFamily: KPM_MONO }}>v{appVersion}</span><span className="text-[10px] font-black px-1.5 py-0.5 rounded-full bg-[#EEF3FC] text-[#1B2B4B]">최신</span></div>} />
+          <KpmRow label="제작" value="LogisWeb" />
         </KpmCard>
 
       </div>

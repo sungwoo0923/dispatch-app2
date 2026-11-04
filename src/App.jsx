@@ -60,6 +60,7 @@ const DriverRegister = React.lazy(() => import("./driver/DriverRegister"));
 
 import Login from "./Login";
 import KpLogoMark, { KP_MARK_CSS } from "./KpLogoMark";
+import { LogisWordmark } from "./brand";
 import TransportLogin from "./TransportLogin";
 const Signup = React.lazy(() => import("./Signup"));
 import ShipperLogin from "./shipper/ShipperLogin";
@@ -113,9 +114,8 @@ function isTabletDevice() {
   return isIpad || isAndroidTablet || (isMidScreen && hasTouch);
 }
 
-// 🔷 첫 화면(스플래시) — 네이비 배경, 디지털 로고 마크, 얇은 진행 막대
+// 🔷 첫 화면(스플래시) — 네이비 배경, LogisWeb 마크 + 글자 로고(흰색·하늘색), 얇은 진행 막대
 function KpSplash() {
-  const MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
   // ⭐ 2026-11-03 새 버전 받는 중이면 안내(index.html 첫 화면과 같은 문구) · 아니면 2.5초 넘게 걸릴 때만 "불러오는 중"
   const upd = typeof window !== "undefined" && window.__kpUpdating === true;
   const [slow, setSlow] = React.useState(false);
@@ -129,8 +129,7 @@ function KpSplash() {
       `}</style>
       <div style={{ position: "absolute", left: "50%", top: "50%", width: 360, height: 360, transform: "translate(-50%,-58%)", borderRadius: "50%", background: "radial-gradient(circle, rgba(110,149,232,0.22), transparent 65%)" }} />
       <div style={{ position: "relative", filter: "drop-shadow(0 14px 30px rgba(0,0,0,0.45))" }}><KpLogoMark size={92} /></div>
-      <div style={{ position: "relative", marginTop: 22, color: "#fff", fontFamily: MONO, fontWeight: 900, fontSize: 22, letterSpacing: "0.32em", paddingLeft: "0.32em", animation: "kpSplashUp .45s ease .15s both" }}>KP-FLOW</div>
-      <div style={{ position: "relative", marginTop: 6, color: "rgba(207,224,255,0.45)", fontWeight: 700, fontSize: 10.5, letterSpacing: "0.3em", paddingLeft: "0.3em", animation: "kpSplashUp .45s ease .22s both" }}>LOGISTICS DISPATCH SYSTEM</div>
+      <div style={{ position: "relative", marginTop: 24, animation: "kpSplashUp .45s ease .15s both" }}><LogisWordmark height={20} tag /></div>
       <div style={{ position: "relative", marginTop: 28, width: 120, height: 2, borderRadius: 2, background: "rgba(255,255,255,0.08)", overflow: "hidden", animation: "kpSplashUp .45s ease .3s both" }}>
         <div style={{ width: "40%", height: "100%", borderRadius: 2, background: "linear-gradient(90deg, transparent, #CFE0FF, transparent)", animation: "kpSplashBar 1.1s ease-in-out infinite" }} />
       </div>

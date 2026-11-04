@@ -4,6 +4,7 @@ import React, { useState, useEffect } from "react";
 import { signOut, onAuthStateChanged } from "firebase/auth";
 import { auth, db } from "../firebase";
 import { doc, getDoc, collection, query, where, onSnapshot } from "firebase/firestore";
+import { LogisTag } from "../brand"; // 🔷 2026-11-04 LogisWeb 로고
 
 // 방사형(GPS 레이더) 펄스 — 여러 겹의 링이 시차를 두고 퍼져나가는 효과
 function RadarPulse({ active, color = "#1B2B4B" }) {
@@ -94,7 +95,7 @@ export default function ShipperPending() {
       <div className="bg-white rounded-3xl shadow-2xl w-full max-w-[440px] overflow-hidden">
         {/* 헤더 */}
         <div className="px-8 pt-8 pb-6 text-center" style={{ background: rejected ? "linear-gradient(135deg,#7f1d1d,#991b1b)" : "linear-gradient(135deg,#1B2B4B,#243a60)" }}>
-          <div className="text-white/60 text-[12px] font-semibold tracking-wide mb-1">KP-FLOW 화주 계정</div>
+          <div className="text-white/60 text-[12px] font-semibold tracking-wide mb-2 flex justify-center"><LogisTag height={9} text="화주 계정" /></div>
           <h1 className="text-white text-[20px] font-bold">
             {rejected ? "승인이 거절되었습니다" : "승인 진행 중입니다"}
           </h1>

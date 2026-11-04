@@ -8,6 +8,7 @@
 import React from "react";
 import { collection, onSnapshot, query, where } from "firebase/firestore";
 import { db } from "./firebase";
+import { LogisMark } from "./brand"; // 🔷 2026-11-04 LogisWeb 마크
 
 const DISMISS_KEY = "kpPlatformNoticeDismissed";
 // ⭐ 2026-11-03 알림 통합 — "읽음"은 한 곳에서: 띠를 닫아도 · 공지사항에서 열어도 · 가운데 팝업을 닫거나 열어도 같은 기록(이 브라우저)
@@ -67,7 +68,7 @@ export function usePlatformNotices({ audience = "carrier", company = "" } = {}) 
 // 회사 공지사항 목록(NoticeBoard)에 섞을 모양으로 — id 앞에 plat: 를 붙여 회사 공지와 섞이지 않게
 export const toBoardNotice = (n) => ({
   ...n, id: `plat:${n.id}`, platformId: n.id, _platform: true,
-  content: n.body || "", contentHtml: n.bodyHtml || "", category: n.level || "안내", author: n.author || "KP-Flow 운영팀",
+  content: n.body || "", contentHtml: n.bodyHtml || "", category: n.level || "안내", author: n.author || "LogisWeb 운영팀",
   ...(n.publishAt ? { createdAt: n.publishAt } : {}), // 예약 게시는 게시 시각을 작성일로
   teams: [], targetUids: [], readBy: [], viewedBy: Array.isArray(n.viewedBy) ? n.viewedBy : [], audience: "platform", // ⭐ 2026-11-03 조회수(viewedBy) // ⭐ 2026-11-03 직원 지정 없음(우리 회사 직원 전체)
 });
@@ -80,13 +81,13 @@ export function useBoardNoticesWithPlatform(notices, company, dateOf) {
   }, [plat, notices, dateOf]);
 }
 
-// "플랫폼 공지" 표시 — 네이비 바탕 + 금색 글씨 + KP 마크(회사 공지와 한눈에 구분)
+// "플랫폼 공지" 표시 — 네이비 바탕 + 금색 글씨 + LogisWeb 마크(회사 공지와 한눈에 구분)
 export function PlatformBadge({ size = "sm" }) {
   const big = size === "lg";
   return (
     <span className={`shrink-0 inline-flex items-center gap-1 rounded-full whitespace-nowrap font-black ${big ? "h-7 pl-1 pr-2.5 text-[12.5px]" : "h-[22px] pl-0.5 pr-2 text-[11.5px]"}`}
       style={{ background: "linear-gradient(90deg,#0B1428,#1B2B4B)", color: "#E9C46A", boxShadow: "inset 0 0 0 1px rgba(233,196,106,.45)" }}>
-      <span className={`inline-flex items-center justify-center rounded-full font-black ${big ? "w-5 h-5 text-[9.5px]" : "w-[18px] h-[18px] text-[8.5px]"}`} style={{ background: "#E9C46A", color: "#0B1428", letterSpacing: "-0.04em" }}>KP</span>
+      <LogisMark size={big ? 20 : 18} />
       플랫폼 공지
     </span>
   );
