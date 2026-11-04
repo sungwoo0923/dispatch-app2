@@ -708,7 +708,7 @@ export function useExecSchedules(company) {
 }
 const daysOf = (e) => { const out = []; for (let x = e.date, i = 0; x && x <= (e.endDate || e.date) && i < 40; x = addDay(x, 1), i += 1) out.push(x); return out; };
 // ⭐ 2026-11-01 임원 일정은 임원 + 인사 쪽(인사관리자·통합인사·인사팀 직원) 모두 등록
-export const canWriteExecSchedule = ({ dept, role, team } = {}) => dept === "exec" || dept === "hr" || ["hrManager", "hrAcct", "totalMaster"].includes(role) || team === "인사팀";
+export const canWriteExecSchedule = ({ dept, role, team } = {}) => dept === "exec" || dept === "hr" || ["hrManager", "hrAcct", "allMgr", "totalMaster"].includes(role) || team === "인사팀";
 // 🕘 2026-11-01 시간 고르기(임원 일정) — 오전/오후 · 시 · 10분 단위, 어두운 금색 테마
 const addMin = (hm, m) => { const [h, mm] = String(hm || "00:00").split(":").map(Number); const t = Math.min(23 * 60 + 50, h * 60 + mm + m); return `${String(Math.floor(t / 60)).padStart(2, "0")}:${String(t % 60).padStart(2, "0")}`; };
 const hmLabel = (hm) => { if (!hm) return "시간 선택"; const [h, m] = hm.split(":").map(Number); return `${h < 12 ? "오전" : "오후"} ${h % 12 || 12}:${String(m).padStart(2, "0")}`; };

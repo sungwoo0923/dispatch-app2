@@ -24,6 +24,8 @@ import {
   deleteCustomRole,
   roleScreen,
   ROLE_SCREENS,
+  ROLE_LABELS,
+  rolesForTeam,
 } from "./customRoles";
 import { CustomSelect } from "./CustomSelect";
 
@@ -48,12 +50,16 @@ const MENU_DESC = {
   비품관리: "비품 · 자산 · 입출고", 인사관리부: "인사 기록 · 직원 정보 · 연차 · 규정", 증명서발급: "재직 · 경력증명서", 직원일정: "연차 · 외근 · 출장 달력",
 };
 const ROLE_DESC = {
-  admin: "회사 업무 전체(배차·정산·관리자메뉴) — 임원 화면 아님", hrManager: "인사 화면 — 인사관리부·증명서·직원 승인", user: "배차 실무 담당",
+  admin: "운송 업무 전체(배차·정산·관리자메뉴) — 임원 화면 아님", hrManager: "인사 화면 — 인사관리부·증명서·직원 승인", user: "배차 실무 담당",
   test: "경리 화면 — 정산·회계·자금·비품", viewer: "보기만 가능",
+  // ⭐ 2026-11-04 통합 역할·부서 사무원·법무·개발
+  allMgr: "운송 ↔ 경리 ↔ 인사 화면 전환 — 각 화면 메뉴 중 여기서 켠 것만", hrAcct: "경리 ↔ 인사 화면 전환 — 각 화면 메뉴 중 여기서 켠 것만",
+  acctStaff: "경리 화면 — 경리관리자 메뉴 중 여기서 켠 것만", hrStaff: "인사 화면 — 인사관리자 메뉴 중 여기서 켠 것만",
+  legalMgr: "법무팀 — 일반 화면, 여기서 켠 메뉴만", legalStaff: "법무팀 — 일반 화면, 여기서 켠 메뉴만",
+  devMgr: "개발팀 — 일반 화면, 여기서 켠 메뉴만", devStaff: "개발팀 — 일반 화면, 여기서 켠 메뉴만",
 };
 const FIXED_ROLES = [
   { key: "totalMaster", label: "최고관리자", desc: "모든 메뉴 · 모든 회사 (변경 불가)" },
-  { key: "hrAcct", label: "통합인사관리자", desc: "경리 + 인사 — 각 화면은 위 경리/회계 · 인사관리자 설정을 따름" },
   { key: "driver", label: "기사", desc: "기사앱 전용" },
   { key: "shipper", label: "화주", desc: "화주 프로그램 전용" },
 ];
@@ -200,7 +206,8 @@ export default function RolePermissionsPanel({ users: allUsers = [], roleLabels 
     flash("새 역할을 만들었습니다");
   };
   const changeUserRole = async (u, role) => {
-    if (!await kpConfirm(`${u.name || u.email}님의 역할을 "${roleLabels[role] || role}"(으)로 바꿀까요?`)) return;
+    const lb = allEditable.find((r) => r.key === role)?.label || roleLabels[role] || ROLE_LABELS[role] || role;
+    if (!await kpConfirm(`${u.name || u.email}님의 역할을 "${lb}"(으)로 바꿀까요?`)) return;
     try { await updateDoc(doc(db, "users", u.id), { role }); flash("역할을 바꿨습니다"); } catch (e) { alert(`변경 실패: ${e?.message || e}`); }
   };
 
@@ -440,7 +447,8 @@ export default function RolePermissionsPanel({ users: allUsers = [], roleLabels 
                             <td className="py-2.5 text-gray-600">{[u.team, u.position].filter(Boolean).join(" · ") || "-"}</td>
                             <td className="py-2.5">
                               <CustomSelect value={u.role || "user"} onChange={(e) => changeUserRole(u, e.target.value)} className="border border-[#DCE3EE] rounded-lg px-2 py-1 text-[12.5px] bg-white">
-                                {[...allEditable, { key: "hrAcct", label: "통합인사관리자" }].map((r) => <option key={r.key} value={r.key}>{r.label}</option>)}
+                                {/* 🏢 2026-11-04 부서에 맞는 역할만(지금 역할은 늘 남김) */}
+                                {(() => { const l = rolesForTeam(u.team, allEditable.map((r) => [r.key, r.label]), customRoles); return l.some(([k]) => k === (u.role || "user")) ? l : [[u.role || "user", current?.label || u.role], ...l]; })().map(([k, l]) => <option key={k} value={k}>{l}</option>)}
                               </CustomSelect>
                             </td>
                           </tr>

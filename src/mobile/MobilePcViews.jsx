@@ -16,6 +16,7 @@ import { useBoardNoticesWithPlatform } from "../PlatformNoticeBanner";
 import { NoticeWriter, NOTICE_WRITER_ROLES, useNoticePolicy, canWriteNoticeFor, NoticePolicyPicker } from "../HomeWriters";
 import { OrderHistoryContext } from "../orderHistory";
 import StaffManager from "../StaffManager";
+import { ROLE_LABELS } from "../customRoles";
 import DeptDashboard from "../DeptDashboard";
 import DriverDocsReview from "../DriverDocsReview";
 import { AssetManager } from "../OfficeBooks";
@@ -217,7 +218,7 @@ export default function MobilePcView({ kind, users = [], dispatchData = [], fixe
   else if (kind === "fixedroute") body = <DetailScope data={dispatchData} dateOf={frDateOf} dateLabel="입고일 기준" title="세부검색 · 고정노선현황">{(detRows, detBtn) => <><div className="px-3 pt-3 flex justify-end">{detBtn}</div><MobileFixedRouteView company={userCompany} dispatchData={detRows} drivers={drivers || []} clients={clients} places={places} disabled={role === "viewer"} /></>}</DetailScope>;
   else if (kind === "perms") body = (
     <React.Suspense fallback={<Loading />}>
-      <div className="kp-m-pc px-2 py-2 overflow-x-auto"><RolePermissionsPanel users={(users || []).filter((u) => String(u.companyName || "").trim() === String(userCompany || "").trim())} roleLabels={{ admin: "관리자", user: "실무자", viewer: "조회전용", test: "경리", hrManager: "인사관리자", hrAcct: "인사·경리" }} lockScope={String(userCompany || "").trim()} /></div>
+      <div className="kp-m-pc px-2 py-2 overflow-x-auto"><RolePermissionsPanel users={(users || []).filter((u) => String(u.companyName || "").trim() === String(userCompany || "").trim())} roleLabels={ROLE_LABELS} lockScope={String(userCompany || "").trim()} /></div>
     </React.Suspense>
   );
   else if (kind === "fleet") body = <FleetView dispatchData={dispatchData} userCompany={userCompany} role={role} onRegisterBack={onRegisterBack} />;

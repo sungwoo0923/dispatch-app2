@@ -313,10 +313,10 @@ export default function OnboardingHost({ role, realRole, userCompany, dept = nul
   const rr = realRole || role;
   const isTM = rr === "totalMaster";
   const team = dept === "acct" ? "acct" : dept === "hr" ? "hr" : dept === "exec" ? "exec" : "dispatch";
-  const isDispatchAdmin = rr === "admin" || isTM;
+  const isDispatchAdmin = rr === "admin" || rr === "allMgr" || isTM;
   const wizardTeam = team === "dispatch" ? (isDispatchAdmin ? "dispatch" : null)
-    : team === "acct" ? (["test", "hrAcct"].includes(rr) || isTM ? "acct" : null)
-      : team === "hr" ? (["hrManager", "hrAcct"].includes(rr) || isTM ? "hr" : null) : null;
+    : team === "acct" ? (["test", "hrAcct", "allMgr"].includes(rr) || isTM ? "acct" : null)
+      : team === "hr" ? (["hrManager", "hrAcct", "allMgr"].includes(rr) || isTM ? "hr" : null) : null;
   const isAdminUser = isDispatchAdmin || myDoc?.isMaster === true;
   const [settings, setSettings] = React.useState(null);
   const [view, setView] = React.useState(null); // "tour" | "wizard" | "done" | null

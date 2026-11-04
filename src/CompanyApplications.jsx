@@ -1121,7 +1121,7 @@ export default function CompanyApplications() {
                   <div className="px-4 py-4 space-y-3">
                     <div className="text-[12.5px] text-gray-500">지금: <b className="text-[#1B2B4B]">{ro.label(tUser.role)}</b>{tUser.isMaster ? " · 마스터" : ""}</div>
                     <div className="grid grid-cols-4 gap-1.5">
-                      {ro.options.map(([k, l]) => (
+                      {ro.forTeam(tUser.team, tRole).map(([k, l]) => (
                         <button key={k} type="button" onClick={() => setTRole(k)} className={`h-9 rounded-lg text-[12px] font-bold whitespace-nowrap ${tRole === k ? "bg-[#1B2B4B] text-white" : "border border-gray-200 text-[#1B2B4B]"}`}>{l}</button>
                       ))}
                     </div>

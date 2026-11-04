@@ -39,7 +39,7 @@ export const noticeTargetTitle = (n) => { const names = Array.isArray(n?.targetN
 // 이 사람이 볼 수 있는 공지인지 — 지정이 없으면 전체, 팀 지정이면 그 팀 + 작성자 + 관리자
 // ⭐ 2026-11-03 직원 지정(targetUids)이면 지정된 직원 + 작성자 + 관리자(팀 지정과 같은 규칙)
 // ⭐ 2026-11-03 예약 게시 — 게시 시각(publishAt ms)이 아직 안 됐으면 작성자·관리자만 본다(예약 표시와 함께)
-export const NOTICE_SCHEDULE_ROLES = ["admin", "totalMaster", "superadmin", "hrManager", "hrAcct"];
+export const NOTICE_SCHEDULE_ROLES = ["admin", "totalMaster", "superadmin", "hrManager", "hrAcct", "allMgr"];
 export const noticePublishAt = (n) => Number(n?.publishAt) || 0;
 export const isNoticeScheduled = (n, now = Date.now()) => !n?._platform && noticePublishAt(n) > now;
 export const noticeAudiences = (n) => (Array.isArray(n?.audiences) && n.audiences.length ? n.audiences : n?.audience === "shipper" || n?.audience === "all" ? ["internal", "shipper"] : ["internal"]);
@@ -86,7 +86,7 @@ export default function NoticeBoard({ notices = [], me, canWrite, isViewer, onEd
   const isSA = ["superadmin", "totalMaster"].includes(me?.role);
   const canManage = (n) => !n._platform && !isViewer && (isSA || (canWrite && (n.authorUid ? n.authorUid === me?.uid : true)));
   // ⭐ 2026-11-04 관리자(·마스터)는 임원 등 다른 사람이 올린 회사 공지도 삭제할 수 있다(수정은 작성자만)
-  const canRemove = (n) => !!n && !n._platform && !isViewer && (canManage(n) || me?.role === "admin" || me?.isMaster === true);
+  const canRemove = (n) => !!n && !n._platform && !isViewer && (canManage(n) || ["admin", "allMgr"].includes(me?.role) || me?.isMaster === true);
   const togglePin = async (n) => {
     if (!n.pinned && visible.filter((x) => x.pinned && !x._platform).length >= MAX_PINNED) { window.alert(`상단 고정은 ${MAX_PINNED}개까지입니다. 다른 고정을 먼저 해제해 주세요.`); return; }
     await updateDoc(doc(db, "notices", n.id), { pinned: !n.pinned, pinnedAt: n.pinned ? null : Date.now() }).catch((e) => window.alert(e.message));

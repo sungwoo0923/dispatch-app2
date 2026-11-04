@@ -22,17 +22,27 @@ import { CustomSelect } from "./CustomSelect";
 const kstDay = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
 const inp = "h-11 w-full px-3 rounded-xl border border-[#DCE3EE] bg-white text-[14px] font-semibold text-[#0F1A30] outline-none focus:border-[#2D4C82]";
 const Label = ({ children }) => <div className="text-[12.5px] font-black text-[#3A4A66] mb-1.5">{children}</div>;
-const ROLE_KEYS = ["admin", "hrManager", "hrAcct", "test", "user", "viewer"];
 // 재직 상태 — 휴직 계열은 재직자로 센다(퇴사·권고사직은 [퇴사] 탭에서 처리)
 export const LEAVE_STATUSES = ["휴직", "육아휴직", "출산휴가"];
 const STATUS_OPTIONS = ["재직", ...LEAVE_STATUSES];
 // 부서·직책으로 권한 추천 — 임원이면 권한 관리의 "임원 화면" 역할(없으면 관리자)
-const suggestFor = (x, execKeys = []) => (isExecProfile(x) && execKeys[0] ? execKeys[0] : suggestRole(x));
+//  ⭐ 2026-11-04 추천이 그 부서에 맞지 않으면 그 부서의 첫 역할(ro 넘기면 — customRoles.js rolesForTeam)
+const suggestFor = (x, execKeys = [], ro = null) => {
+  const s0 = isExecProfile(x) && execKeys[0] ? execKeys[0] : suggestRole(x);
+  return !ro || ro.fits(s0, x?.team) ? s0 : ro.firstFor(x?.team);
+};
 const ROLE_DESC = {
   admin: "운송 업무 전체 — 배차·운임·정산·매출·기사·거래처 관리 + 관리자메뉴(직원 승인 등). 임원 화면은 「임원 화면」 역할에서",
   hrManager: "인사관리부 화면 — 인사 기록·발령·근태·입퇴사·직원 승인",
   test: "경리 화면 — 정산·회계·자금·비품·퇴직 정산",
   hrAcct: "경리 + 인사 — 상단 버튼으로 경리 화면 ↔ 인사 화면 전환",
+  allMgr: "운송 + 경리 + 인사 — 상단 버튼으로 운송 · 경리 · 인사 화면 전환",
+  acctStaff: "경리사무원 — 경리 화면(자금·매출 제외, 권한 관리에서 조정)",
+  hrStaff: "인사사무원 — 인사 화면(기사 승인 제외, 권한 관리에서 조정)",
+  legalMgr: "법무관리자 — 전자결재·계약서·회사관리 + 거래처 조회(권한 관리에서 조정)",
+  legalStaff: "법무사무원 — 전자결재·계약서·회사관리(권한 관리에서 조정)",
+  devMgr: "개발관리자 — 전자결재·회사관리 + 운송 업무 조회(권한 관리에서 조정)",
+  devStaff: "개발사무원 — 전자결재·회사관리 + 배차현황 조회(권한 관리에서 조정)",
   user: "실무자 — 배차·기사·거래처 업무(매출·정산 제외)",
   viewer: "조회전용 — 보기만, 수정 불가",
 };
@@ -58,7 +68,7 @@ export function StaffRegister({ company, onDone }) {
     if (!f.name.trim()) return alert("이름을 입력해 주세요.");
     setBusy(true);
     try {
-      const role = suggestFor({ team: f.team, position: f.position }, ro.execKeys);
+      const role = suggestFor({ team: f.team, position: f.position }, ro.execKeys, ro);
       const ref = await addDoc(collection(db, "users"), {
         companyName: company, name: f.name.trim(), phone: f.phone.trim(), email: f.email.trim(), team: f.team, position: f.position, role, approved: true,
         // ⭐ 2026-11-02 점검 — 생년월일을 users에도 저장(앱 안 생일 3일 전 안내가 users.birthDate만 봄)
@@ -92,7 +102,7 @@ export function StaffRegister({ company, onDone }) {
             <div><Label>직책</Label><CustomSelect value={f.position} onChange={(e) => setF({ ...f, position: e.target.value })} className={inp}><option value="">미설정</option>{hr.positionsFor(f.team).map((p) => <option key={p}>{p}</option>)}</CustomSelect></div>
             <div><Label>고용 형태</Label><div className="flex flex-wrap gap-1.5">{["정규직", "계약직", "수습", "파트타임", "일용직"].map((k) => <Chip key={k} on={f.employType === k} onClick={() => setF({ ...f, employType: k })}>{k}</Chip>)}</div></div>
             <div><Label>입사일</Label><input type="date" value={f.hireDate} onChange={(e) => setF({ ...f, hireDate: e.target.value })} className={inp} /></div>
-            <div className="rounded-xl bg-[#F5F8FD] border border-[#E3E8F0] px-3 py-2 text-[12px] text-[#5B6B85]">권한: <b className="text-[#0F1A30]">{ro.label(suggestFor({ team: f.team, position: f.position }, ro.execKeys))}</b> (부서·직책 기준) · 계정이 없으므로 로그인은 안 됩니다</div>
+            <div className="rounded-xl bg-[#F5F8FD] border border-[#E3E8F0] px-3 py-2 text-[12px] text-[#5B6B85]">권한: <b className="text-[#0F1A30]">{ro.label(suggestFor({ team: f.team, position: f.position }, ro.execKeys, ro))}</b> (부서·직책 기준) · 계정이 없으므로 로그인은 안 됩니다</div>
             <button type="button" disabled={busy} onClick={save} className="w-full h-12 rounded-xl bg-[#0F1A30] text-white text-[15px] font-black disabled:opacity-50">{busy ? "등록 중…" : "직원 등록"}</button>
           </div>
         </BookCard>
@@ -183,7 +193,7 @@ export function StaffInfoBoard({ company, canManage }) {
   // 입사일은 인사팀(인사관리자·경리+인사·인사 부서·최고관리자)만 — 보안 규칙(isHrStaff)과 같은 기준
   const meUid = auth.currentUser?.uid;
   const meDoc = all.find((u) => u.id === meUid) || {};
-  const canHire = auth.currentUser?.email === "tjddnqkf@naver.com" || ["hrManager", "hrAcct", "totalMaster"].includes(meDoc.role || (typeof localStorage !== "undefined" ? localStorage.getItem("role") : "")) || /인사/.test(meDoc.team || "");
+  const canHire = auth.currentUser?.email === "tjddnqkf@naver.com" || ["hrManager", "hrAcct", "allMgr", "totalMaster"].includes(meDoc.role || (typeof localStorage !== "undefined" ? localStorage.getItem("role") : "")) || /인사/.test(meDoc.team || "");
   const saveInfo = async () => {
     const onLeave = LEAVE_STATUSES.includes(f.employmentStatus);
     if (onLeave && !f.leaveFrom) return alert("휴직 시작일을 입력해 주세요.");
@@ -395,9 +405,9 @@ export function StaffInfoBoard({ company, canManage }) {
                 </Section>
                 <Section no="02" en="Organization" title="소속 · 권한">
                   <div className="grid grid-cols-2 gap-4">
-                    <Field label="부서"><CustomSelect value={f.team} onChange={(e) => { const team = e.target.value; const position = hr.positionsFor(team).includes(f.position) ? f.position : ""; setF({ ...f, team, position, role: suggestFor({ team, position }, ro.execKeys) }); }} className={fi}><option value="">미배정</option>{hr.teams.map((t) => <option key={t}>{t}</option>)}</CustomSelect></Field>
-                    <Field label="직책"><CustomSelect value={f.position} onChange={(e) => setF({ ...f, position: e.target.value, role: suggestFor({ team: f.team, position: e.target.value }, ro.execKeys) })} className={fi}><option value="">미설정</option>{[...new Set([...hr.positionsFor(f.team), f.position].filter(Boolean))].map((p) => <option key={p}>{p}</option>)}</CustomSelect></Field>
-                    <Field label="권한" hint={sel.isMaster ? "마스터 계정은 권한을 바꿀 수 없습니다" : ROLE_DESC[f.role] || (ro.execKeys.includes(f.role) ? "임원 화면(경영 브리핑) — 권한 관리에서 만든 역할" : "권한 관리에서 만든 역할 — 메뉴는 그 설정을 따릅니다")}><CustomSelect value={f.role} disabled={sel.isMaster} onChange={(e) => setF({ ...f, role: e.target.value })} className={fi}>{[...ro.options, ...(ro.options.some(([k]) => k === f.role) ? [] : [[f.role, ro.label(f.role)]])].map(([k, l]) => <option key={k} value={k}>{l}</option>)}</CustomSelect></Field>
+                    <Field label="부서"><CustomSelect value={f.team} onChange={(e) => { const team = e.target.value; const position = hr.positionsFor(team).includes(f.position) ? f.position : ""; setF({ ...f, team, position, role: sel.isMaster ? f.role : suggestFor({ team, position }, ro.execKeys, ro) }); }} className={fi}><option value="">미배정</option>{hr.teams.map((t) => <option key={t}>{t}</option>)}</CustomSelect></Field>
+                    <Field label="직책"><CustomSelect value={f.position} onChange={(e) => setF({ ...f, position: e.target.value, role: sel.isMaster ? f.role : suggestFor({ team: f.team, position: e.target.value }, ro.execKeys, ro) })} className={fi}><option value="">미설정</option>{[...new Set([...hr.positionsFor(f.team), f.position].filter(Boolean))].map((p) => <option key={p}>{p}</option>)}</CustomSelect></Field>
+                    <Field label="권한" hint={sel.isMaster ? "마스터 계정은 권한을 바꿀 수 없습니다" : ROLE_DESC[f.role] || (ro.execKeys.includes(f.role) ? "임원 화면(경영 브리핑) — 권한 관리에서 만든 역할" : "권한 관리에서 만든 역할 — 메뉴는 그 설정을 따릅니다")}><CustomSelect value={f.role} disabled={sel.isMaster} onChange={(e) => setF({ ...f, role: e.target.value })} className={fi}>{ro.forTeam(f.team, f.role).map(([k, l]) => <option key={k} value={k}>{l}</option>)}</CustomSelect></Field>
                     <Field label="고용 형태"><CustomSelect value={f.employType} onChange={(e) => setF({ ...f, employType: e.target.value })} className={fi}>{["정규직", "계약직", "수습", "파트타임", "일용직"].map((k) => <option key={k}>{k}</option>)}</CustomSelect></Field>
                   </div>
                 </Section>

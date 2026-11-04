@@ -80,7 +80,7 @@ const FreightRateInquiry = lazyView(() => import("./FreightRateInquiry"));
 import { isNotificationsEnabled, setNotificationsEnabled, useNotificationsEnabled } from "./notificationSettings";
 import { CustomSelect } from "./CustomSelect";
 import { estimateDistanceFare, geocodeAddress, haversineKm, specialSurcharge } from "./tmapFareCalc";
-import { useCustomRoles, findCustomRole, getMenuAccess, roleScreen } from "./customRoles";
+import { useCustomRoles, findCustomRole, getMenuAccess, roleScreen, useRoleView, applyRoleMenus, ROLE_LABELS } from "./customRoles";
 import { useReadOnlyGuard } from "./readOnlyGuard";
 import { confirmLeave } from "./leaveGuard";
 import RouteMapModal from "./RouteMapModal";
@@ -7137,14 +7137,7 @@ function FloatingCalculator({ onClose }) {
 }
 
 // ===================== DispatchApp.jsx (PART 2/8) — START =====================
-const ROLE_LABELS = {
-  totalMaster: "최고관리자",
-  admin: "관리자",
-  user: "실무자",
-  driver: "기사",
-  shipper: "화주",
-  test: "경리/회계",
-};
+// 역할 이름(ROLE_LABELS)은 customRoles.js에서 가져온다(PC·모바일 공용)
 
 // ================================
 // ⭐ 운임조회 매칭 헬퍼 (모듈 스코프 — DispatchStatus에서도 접근 가능)
@@ -7345,9 +7338,10 @@ function PcBootOverlay({ onDone, dept = null }) {
 }
 
 export default function DispatchApp({ role: realRole, user, userCompany = "", forceExec = false }) {
-  // 🔀 통합인사관리자(hrAcct) — 경리·인사를 함께 하는 운송사. 상단 버튼으로 경리 화면 ↔ 인사 화면을 바꾼다
-  const [hrAcctView, setHrAcctView] = useState(() => { try { return localStorage.getItem("kpHrAcctView") || "acct"; } catch { return "acct"; } });
-  const role = realRole === "hrAcct" ? (hrAcctView === "hr" ? "hrManager" : "test") : realRole;
+  // 🔀 화면 전환 역할 — 통합인사관리자(hrAcct): 경리 ↔ 인사 / 통합관리자(allMgr): 운송 ↔ 경리 ↔ 인사. 상단 버튼으로 바꾼다
+  //  경리사무원·인사사무원은 경리/인사 화면 역할로 동작(메뉴는 그 역할 설정) — customRoles.js SWITCH_ROLES·BASED_ROLES
+  const roleView = useRoleView(realRole);
+  const role = roleView.role;
   const isTest = role === "test";
   const navigate = useNavigate();
   // ⭐ 오늘 비/눈이 왔는지 자동 인식 — 자사운임표·AI추천 등 운임조회 전반이
@@ -7650,7 +7644,9 @@ useEffect(() => {
   // 여부를 판단하는 데 필요해서, 원래 더 아래(구 "역할별 차단 메뉴" 구역)에 있던
   // useCustomRoles() 훅을 여기로 끌어올렸다. 아래쪽의 customRole 선언은 이 값을
   // 그대로 재사용한다(중복 구독 방지).
-  const customRoles = useCustomRoles();
+  const customRolesRaw = useCustomRoles();
+  // 🔀 통합관리자·통합인사관리자·사무원·법무·개발 — 실제 역할의 메뉴 설정을 지금 화면 역할 자리에(customRoles.js applyRoleMenus)
+  const customRoles = React.useMemo(() => applyRoleMenus(customRolesRaw, realRole, role), [customRolesRaw, realRole, role]);
 
   // 🔍 admin = 전체 데이터, 일반 user = 본인 작성 데이터만
   // ⭐ 회사/권한 기준 필터 로직 — dispatchData(최근 13개월)와 recentDispatchData(어제~내일)
@@ -7990,7 +7986,7 @@ const newVer = useNewVersion(); // ★ 새 버전이 배포되면 버전 표시 
   const myProfileDoc = useMyProfile(user?.uid);
   useCompanyDropdownSync(role, userCompany); // ⭐ 편집모드 옵션(배차방식 등)을 표·빠른수정에도 회사별로
   // ⭐ 2026-11-01 가입 승인 대기 — 승인할 수 있는 사람(관리자·경리·인사·마스터)에게 상단 [관리자메뉴] 숫자 + 새 신청 알림
-  const canApproveSignup = ["admin", "totalMaster", "superadmin", "test", "hrManager", "hrAcct"].includes(realRole || role) || myProfileDoc?.isMaster === true;
+  const canApproveSignup = ["admin", "totalMaster", "superadmin", "test", "hrManager", "hrAcct", "allMgr"].includes(realRole || role) || myProfileDoc?.isMaster === true;
   // ⭐ 2026-11-03 매출관리 비밀번호는 회사 마스터만 정하고 바꾼다(대표·관리자도 설정된 비밀번호를 입력) — 서버 규칙(companySettings)도 같은 기준
   const canSetRevenuePw = role === "totalMaster" || myProfileDoc?.isMaster === true;
   const pendingSignups = usePendingSignups(canApproveSignup ? (role === "totalMaster" ? (localStorage.getItem("loginCompany") || userCompany || "") : (userCompany || localStorage.getItem("userCompany") || "")) : "");
@@ -8287,7 +8283,7 @@ return (
       <PlatformNoticeBanner audience="carrier" onOpen={(id) => { window.__kpOpenNotice = `plat:${id}`; setMenu("HOME"); setTimeout(() => window.dispatchEvent(new CustomEvent("kp:openNotice")), 0); }} company={role === "totalMaster" ? (localStorage.getItem("loginCompany") || userCompany || "") : (userCompany || localStorage.getItem("userCompany") || "")} />
       <CopyTemplateHost canEdit={role === "admin" || role === "totalMaster"} />
       <PlanValueSync planId={planId} />
-      <PlanLockHost userEmail={user?.email || ""} userName={myRealName || ""} canRequest={role === "totalMaster" || ["test", "hrAcct"].includes(realRole) || /경리|회계/.test(String(myProfileDoc?.team || ""))} />
+      <PlanLockHost userEmail={user?.email || ""} userName={myRealName || ""} canRequest={role === "totalMaster" || ["test", "hrAcct", "allMgr"].includes(realRole) || /경리|회계/.test(String(myProfileDoc?.team || ""))} />
       <OnboardingHost role={role} realRole={realRole} userCompany={userCompany} dept={deptMode} uid={user?.uid} myDoc={myProfileDoc} />
       {/* ===== 통합 헤더 네비 ===== */}
       <header className={`kp-topnav ${deptMode === "exec" ? "kp-topnav-exec" : ""} sticky top-0 z-50 mb-6 w-full`}>
@@ -8484,12 +8480,14 @@ return (
                 className="kp-chip-btn text-[12px] transition" title="관리자 관리센터로 전환">관리센터 ↗</button>
             )}
 
-            {realRole === "hrAcct" && (
-              <button type="button" onClick={() => { const v = hrAcctView === "hr" ? "acct" : "hr"; setHrAcctView(v); try { localStorage.setItem("kpHrAcctView", v); } catch { /* 무시 */ } setMenu("HOME"); }}
-                className="kp-chip-btn text-[12px] transition inline-flex items-center gap-1.5" title="통합인사관리자 — 경리 화면과 인사 화면을 바꿉니다">
-                <span className={`px-1.5 rounded ${hrAcctView === "acct" ? "bg-white text-[#0F1A30]" : "text-white/60"}`}>경리</span>
-                <span className={`px-1.5 rounded ${hrAcctView === "hr" ? "bg-white text-[#0F1A30]" : "text-white/60"}`}>인사</span>
-              </button>
+            {/* 🔀 화면 전환(통합인사관리자: 경리·인사 / 통합관리자: 운송·경리·인사) — 누르면 다음 화면, 글자를 누르면 그 화면으로 */}
+            {roleView.views && (
+              <div className="kp-chip-btn text-[12px] transition inline-flex items-center gap-1" title={`${ROLE_LABELS[realRole] || ""} — 화면을 바꿉니다`}>
+                {roleView.views.map(([k, , lb]) => (
+                  <button key={k} type="button" onClick={() => { if (k === roleView.view) return; roleView.setView(k); setMenu("HOME"); }}
+                    className={`px-1.5 rounded ${roleView.view === k ? "bg-white text-[#0F1A30]" : "text-white/60 hover:text-white"}`}>{lb}</button>
+                ))}
+              </div>
             )}
             {/* 👔 임원 — 임원 화면 ↔ 전체 메뉴(관리자 권한일 때만) */}
             {isExec && (
@@ -9048,7 +9046,7 @@ return (
         {menu === "자금관리" && menuState("자금관리") === "ok" && <FundsWorkspace company={deptCompany} isViewer={isViewer} />}
         {menu === "비품관리" && menuState("비품관리") === "ok" && <AssetManager company={deptCompany} isViewer={isViewer} />}
         {menu === "인사관리부" && menuState("인사관리부") === "ok" && (
-          <HrHub company={deptCompany} canManage={role === "hrManager" || role === "totalMaster" || realRole === "hrAcct" || (/인사/.test(String(myProfileDoc?.team || "")) && role !== "viewer") || masterHrMain || (!!customRole && getMenuAccess(customRoles, role, "인사관리부") === "write")} me={{ uid: user?.uid, name: myProfileDoc?.name || user?.displayName || "" }}
+          <HrHub company={deptCompany} canManage={role === "hrManager" || role === "totalMaster" || ["hrAcct", "allMgr"].includes(realRole) || (/인사/.test(String(myProfileDoc?.team || "")) && role !== "viewer") || masterHrMain || (!!customRole && getMenuAccess(customRoles, role, "인사관리부") === "write")} me={{ uid: user?.uid, name: myProfileDoc?.name || user?.displayName || "" }}
             renderRecord={(focusUid) => <HRManagementPage userCompany={deptCompany} role={role} userId={auth?.currentUser?.uid || ""} focusUid={focusUid} />}
             renderAttendance={() => <AttendanceBoard userCompany={deptCompany} role={role} user={user} />} />
         )}
@@ -10458,7 +10456,7 @@ const primary =
     // 관리자 여부 체크
 const isAdmin = role === "admin" || role === "totalMaster" || isViewer;
 // ⭐ 2026-11-01 운임(청구·기사·수수료)은 배차 실무자(실무자·직접 만든 역할)도 입력 — 경리·인사 화면만 제외
-const canMoney = isAdmin || !["test", "hrManager", "hrAcct", "driver", "shipper", "cafeUser"].includes(role);
+const canMoney = isAdmin || !["test", "hrManager", "hrAcct", "acctStaff", "hrStaff", "driver", "shipper", "cafeUser"].includes(role);
 const _viewerBlockDM = () => showAlert("조회전용 권한으로는 수정/등록/삭제를 할 수 없습니다.");
 const addDispatchSafe = isViewer ? _viewerBlockDM : addDispatch;
 const patchDispatchSafe = isViewer ? _viewerBlockDM : patchDispatch;
@@ -51226,7 +51224,7 @@ const patchMonthOnDoc = async (id, yyyymm, status, dateStr) => {
     try {
       const r = localStorage.getItem("role") || "";
       const t = String(window.__kpMeTeam || "");
-      return ["test", "hrAcct", "hrManager", "totalMaster"].includes(r) || /경리|회계|인사/.test(t);
+      return ["test", "hrAcct", "allMgr", "hrManager", "acctStaff", "hrStaff", "totalMaster"].includes(r) || /경리|회계|인사/.test(t);
     } catch { return false; }
   })();
   const handleSealQuickUpload = async (file) => {
@@ -59920,7 +59918,7 @@ function MyProfilePage({ user, todayStats, myStats, cardImage, setCardImage, car
   }, [hireDate]);
 
   // ⭐ 2026-10-22 개편 — 디지털 명함 + 정보 카드 그리드(세로로 길던 화면을 가로 배치로)
-  const ROLE_NAME = { totalMaster: "최고관리자", admin: "관리자", hrManager: "인사관리자", user: "실무자", test: "경리/회계", viewer: "조회전용", hrAcct: "통합인사관리자" };
+  const ROLE_NAME = ROLE_LABELS;
   // ⭐ 2026-11-02 점검 — 권한 배지에 내부 키(hrAcct·r_xxx) 대신 한글 이름 표시(사용자 정의 역할 이름 포함)
   const customRolesMP = useCustomRoles();
   const roleLabel = (customRolesMP || []).find((r) => r.key === role)?.label || ROLE_NAME[role] || "-";
@@ -60022,7 +60020,7 @@ function MyProfilePage({ user, todayStats, myStats, cardImage, setCardImage, car
   const won = (n) => `${Math.round(Number(n) || 0).toLocaleString()}원`;
   // ⭐ 2026-11-02 인사·경리팀은 오더·매출 실적 대신 결재·업무 현황을 보여 준다
   const teamTxt = String(myInfo.team || "");
-  const officeKind = ["hrManager", "hrAcct"].includes(role) || /인사/.test(teamTxt) ? "hr" : role === "test" || /경리|회계/.test(teamTxt) ? "acct" : null;
+  const officeKind = ["hrManager", "hrAcct", "hrStaff"].includes(role) || /인사/.test(teamTxt) ? "hr" : role === "test" || /경리|회계/.test(teamTxt) ? "acct" : null;
   const apc = useApprovalCounts();
   const coStaffMy = useCompanyStaff(officeKind === "hr" ? co : "");
   const workTiles = officeKind ? [
@@ -61164,16 +61162,7 @@ function HRManagementPage({ userCompany, role, userId, focusUid = null, selfOnly
   );
 }
 
-const ROLE_LABELS_HR = {
-  totalMaster: "최고관리자",
-  admin: "관리자",
-  hrManager: "인사관리자",
-  user: "실무자",
-  viewer: "조회전용",
-  driver: "기사",
-  shipper: "화주",
-  test: "경리/회계",
-};
+const ROLE_LABELS_HR = ROLE_LABELS; // customRoles.js 공용 이름
 
 // ─────────── PC ERP 관리 ───────────
 function PCERPPage({ userCompany = "", drivers = [], clients = [], places = [], dispatchData = [], user }) {
@@ -61430,7 +61419,7 @@ function CompanyProfile({ userCompany = "", role = "", userId = "" }) {
   const isAdmin = role === "admin" || role === "totalMaster";
   // ⭐ 2026-11-01 사업자등록증·직인 등록은 경리·인사만, 정산계좌 입력·수정은 경리만(다운로드·복사는 누구나)
   const myTeamCP = (() => { try { return String(window.__kpMeTeam || ""); } catch { return ""; } })();
-  const isAcctTeam = ["test", "hrAcct", "totalMaster"].includes(role) || /경리|회계/.test(myTeamCP);
+  const isAcctTeam = ["test", "hrAcct", "allMgr", "acctStaff", "totalMaster"].includes(role) || /경리|회계/.test(myTeamCP);
   const canEditDocs = isAcctTeam || role === "hrManager" || /인사/.test(myTeamCP);
   const canEditBank = isAcctTeam;
 

@@ -10,16 +10,14 @@
 import React from "react";
 import { collection, limit, onSnapshot, orderBy, query, where } from "firebase/firestore";
 import { db } from "./firebase";
+import { ROLE_LABELS as BASE_ROLE_LABELS } from "./customRoles";
 
 export const MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
 const TM_EMAIL = "tjddnqkf@naver.com";
 export const NOW_MS = 10 * 60 * 1000;
 const DAY_MS = 86400000;
 export const PLAN_NAMES = { lite: "라이트", basic: "베이직", standard: "스탠다드", pro: "프로" };
-export const ROLE_LABELS = {
-  admin: "관리자", hrManager: "인사관리자", hrAcct: "통합인사", user: "실무자", viewer: "조회전용",
-  test: "경리/회계", superadmin: "슈퍼관리자", driver: "기사", shipper: "화주",
-};
+export const ROLE_LABELS = { ...BASE_ROLE_LABELS, superadmin: "슈퍼관리자" }; // 역할 이름은 customRoles.js와 같게
 const pad = (n) => String(n).padStart(2, "0");
 export const tsMs = (v) => (v?.toMillis ? v.toMillis() : v?.seconds ? v.seconds * 1000 : v?._seconds ? v._seconds * 1000 : typeof v === "number" ? v : 0);
 export const normCo = (s) => String(s || "").trim();

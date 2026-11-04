@@ -16,7 +16,7 @@ import { CustomSelect } from "./CustomSelect";
 // ⭐ 2026-11-01 출근기록부 리디자인 — 네이비 히어로 + 오늘 KPI + 월간 그리드(이름 고정 · 오늘 강조 · 공휴일 빨간색+명칭)
 //  권한: 출·퇴근 기록 직접 수정은 인사팀만(최고관리자 포함), 본인 기록은 누구나 "수정 요청" → 인사팀 승인
 //        인사팀 본인 요청은 임원에게(임원 1명 승인으로 종결) — 로직은 attendanceApproval.js
-const ADMIN_ROLES = ["totalMaster", "admin"];
+const ADMIN_ROLES = ["totalMaster", "admin", "allMgr"];
 const MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
 const WD = ["일", "월", "화", "수", "목", "금", "토"];
 const LEAVE_SET = new Set(["연차", "오전반차", "오후반차", "병가", "경조사", "휴직", "육아휴직", "출산휴가"]);

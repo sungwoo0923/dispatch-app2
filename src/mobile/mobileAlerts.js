@@ -8,7 +8,7 @@ import { collection, onSnapshot, query, where } from "firebase/firestore";
 import { db, DEFAULT_COMPANY } from "../firebase";
 import { isNoticeUnread, noticePublished, useMinuteTick, canSeeTargetedNotice } from "../notifyCore";
 
-const ADMIN_ROLES = ["admin", "totalMaster", "superadmin"];
+const ADMIN_ROLES = ["admin", "totalMaster", "superadmin", "allMgr"];
 const myTurn = (d, uid) => (d.status === "pending" && d.line?.[d.step]?.uid === uid)
   || (d.status === "approved" && d.cancel?.status === "pending" && d.cancel.line?.[d.cancel.step]?.uid === uid);
 const handoverTo = (h) => (Array.isArray(h?.receiverUids) && h.receiverUids.length ? h.receiverUids : h?.receiverUid ? [h.receiverUid] : []);
@@ -54,7 +54,7 @@ export function useMobileAlerts({ uid, role, team = "", company = "", onAlert })
   }, [uid]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // 🙋 가입 신청 — 관리자 이상(조회전용 포함 관리자 메뉴를 보는 사람)
-  const isAdmin = ADMIN_ROLES.includes(role) || role === "viewer" || role === "test" || role === "hrManager" || role === "hrAcct"; // 경리·인사도 직원·기사 승인
+  const isAdmin = ADMIN_ROLES.includes(role) || role === "viewer" || role === "test" || role === "hrManager" || role === "hrAcct" || role === "allMgr"; // 경리·인사도 직원·기사 승인
   React.useEffect(() => {
     if (!uid || !isAdmin || !company) return undefined;
     const w = watch("signup");

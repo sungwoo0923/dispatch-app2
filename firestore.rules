@@ -198,12 +198,13 @@ service cloud.firestore {
       allow read: if isTotalMasterUser() || (isApproved() && myCo() == co);
       allow write: if isTotalMasterUser() || (isApproved() && myCo() == co && myUser().get('isMaster', false) == true);
       // 사업자 목록(bizList)은 관리자·경리·인사도(공지 작성 권한은 못 바꿈)
-      allow create: if isApproved() && myCo() == co && myUser().get('role', '') in ['admin', 'hrAcct', 'hrManager', 'test']
+      // ⭐ 2026-11-04 통합관리자(allMgr = 운송+경리+인사)·경리사무원(acctStaff)도
+      allow create: if isApproved() && myCo() == co && myUser().get('role', '') in ['admin', 'allMgr', 'hrAcct', 'hrManager', 'test', 'acctStaff']
         && request.resource.data.keys().hasOnly(['companyName', 'bizList', 'bizListAt', 'bizMemory']);
-      allow update: if isApproved() && myCo() == co && myUser().get('role', '') in ['admin', 'hrAcct', 'hrManager', 'test']
+      allow update: if isApproved() && myCo() == co && myUser().get('role', '') in ['admin', 'allMgr', 'hrAcct', 'hrManager', 'test', 'acctStaff']
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['companyName', 'bizList', 'bizListAt', 'bizMemory']);
       // ⭐ 2026-11-03 청구 사업자 기억(bizMemory: 거래처+상차지+하차지 → 사업자 이름) — 실무자(user)도 오더를 저장할 때 함께 기록한다(이 칸만)
-      allow update: if isApproved() && myCo() == co && myUser().get('role', '') in ['admin', 'hrAcct', 'hrManager', 'test', 'user']
+      allow update: if isApproved() && myCo() == co && myUser().get('role', '') in ['admin', 'allMgr', 'hrAcct', 'hrManager', 'test', 'acctStaff', 'hrStaff', 'user']
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['bizMemory']);
     }
     // 🎨 2026-11-03 표 컬럼 색(회사 공용) — 그 회사 직원은 읽고, 둘러보기(viewer) 말고는 바꿀 수 있다
@@ -256,14 +257,15 @@ service cloud.firestore {
       let g = exists(p) ? get(p).data : {};
       let o = exists(ov) ? get(ov).data.get('roles', {}).get(r, {}) : {};
       let menus = ('menus' in o) ? o.get('menus', {}) : g.get('menus', {});
-      return (r != '' && !(r in ['admin', 'hrManager', 'hrAcct', 'user', 'test', 'viewer', 'totalMaster', 'driver', 'shipper'])
+      // (사무원·법무·개발 역할은 직접 만든 역할처럼 메뉴 설정을 따른다 — 통합관리자는 아래 역할 목록으로)
+      return (r != '' && !(r in ['admin', 'allMgr', 'hrManager', 'hrAcct', 'user', 'test', 'viewer', 'totalMaster', 'driver', 'shipper'])
         && (exists(p) || o.size() > 0)) ? menus.get('자금관리', 'hidden') : 'hidden';
     }
     match /acctFunds/{id} {
-      allow read: if coMatch(resource.data) && (isTotalMasterUser() || myUser().get('role', '') in ['test', 'admin', 'hrAcct'] || isExecRoleUser() || fundsMenuLevel() in ['read', 'write']);
-      allow create: if coCreate() && (isTotalMasterUser() || myUser().get('role', '') in ['test', 'admin', 'hrAcct'] || fundsMenuLevel() == 'write');
-      allow update: if coMatch(resource.data) && coKeep() && (isTotalMasterUser() || myUser().get('role', '') in ['test', 'admin', 'hrAcct'] || fundsMenuLevel() == 'write');
-      allow delete: if coMatch(resource.data) && (isTotalMasterUser() || myUser().get('role', '') in ['test', 'admin', 'hrAcct'] || fundsMenuLevel() == 'write');
+      allow read: if coMatch(resource.data) && (isTotalMasterUser() || myUser().get('role', '') in ['test', 'admin', 'hrAcct', 'allMgr'] || isExecRoleUser() || fundsMenuLevel() in ['read', 'write']);
+      allow create: if coCreate() && (isTotalMasterUser() || myUser().get('role', '') in ['test', 'admin', 'hrAcct', 'allMgr'] || fundsMenuLevel() == 'write');
+      allow update: if coMatch(resource.data) && coKeep() && (isTotalMasterUser() || myUser().get('role', '') in ['test', 'admin', 'hrAcct', 'allMgr'] || fundsMenuLevel() == 'write');
+      allow delete: if coMatch(resource.data) && (isTotalMasterUser() || myUser().get('role', '') in ['test', 'admin', 'hrAcct', 'allMgr'] || fundsMenuLevel() == 'write');
     }
     // 화주사 주소록(places) — 화주 본인이 등록한 주소만
     match /places/{id} {
@@ -385,7 +387,7 @@ service cloud.firestore {
     // 🧾 플랫폼 청구·입금 기록 — 최고관리자는 전부, 고객사는 자기 회사 청구서만 읽고 "입금 알림(payNotice)"만 남길 수 있다
     // ⭐ 2026-11-03 구독·결제 권한(src/billingAccess.js와 같은 기준) — 보기: 경리팀·재무·임원·대표 / 입금 알림: 경리팀·재무만
     function isBillingFinance() {
-      return myUser().get('role', '') in ['test', 'hrAcct'] || string(myUser().get('team', '')).matches('.*(경리|회계|재무).*');
+      return myUser().get('role', '') in ['test', 'hrAcct', 'allMgr', 'acctStaff'] || string(myUser().get('team', '')).matches('.*(경리|회계|재무).*');
     }
     function isBillingViewer() {
       return isBillingFinance() || isExecProfileUser();
@@ -432,7 +434,7 @@ service cloud.firestore {
     function isHrStaff() {
       return isSignedIn() && (
         request.auth.token.get('email', '') == "tjddnqkf@naver.com" ||
-        myUser().get('role', '') in ['hrManager', 'hrAcct', 'totalMaster'] ||
+        myUser().get('role', '') in ['hrManager', 'hrAcct', 'allMgr', 'hrStaff', 'totalMaster'] ||
         myUser().get('team', '').matches('.*인사.*'));
     }
     function hireDateSame() {
@@ -541,7 +543,7 @@ service cloud.firestore {
     }
     function isCompanyAdmin(company) {
       return isSuperEmail() || myUser().get('role', '') == 'totalMaster' ||
-        ((myUser().get('role', '') in ['admin', 'hrManager', 'hrAcct'] || isExecRoleUser()) && myUser().get('companyName', '') == company);
+        ((myUser().get('role', '') in ['admin', 'allMgr', 'hrManager', 'hrAcct'] || isExecRoleUser()) && myUser().get('companyName', '') == company);
     }
     // 👔 2026-10-31 권한 관리에서 "임원 화면"으로 정한 역할(직접 만든 역할) — 이름에 '임원'이 들어가고 화면 설정이 없으면 임원으로 본다
     // ⭐ 2026-11-02 점검 — 운송사별 권한(companyRoleOverrides/{회사}.roles)에서 만든 역할·"임원 화면" 지정도 임원으로 본다
@@ -554,13 +556,14 @@ service cloud.firestore {
       let o = exists(ov) ? get(ov).data.get('roles', {}).get(r, {}) : {};
       let scr = ('screen' in o) ? o.get('screen', null) : g.get('screen', null);
       let lbl = o.get('label', '') != '' ? o.get('label', '') : (g.get('label', '') != '' ? g.get('label', '') : r);
-      return r != '' && !(r in ['admin', 'hrManager', 'hrAcct', 'user', 'test', 'viewer', 'totalMaster', 'driver', 'shipper'])
+      // ⭐ 2026-11-04 새 기본 역할(통합관리자·사무원·법무·개발)은 임원 역할이 아니다
+      return r != '' && !(r in ['admin', 'allMgr', 'hrManager', 'hrAcct', 'hrStaff', 'user', 'test', 'acctStaff', 'legalMgr', 'legalStaff', 'devMgr', 'devStaff', 'viewer', 'totalMaster', 'driver', 'shipper'])
         && (exists(p) || o.size() > 0)
         && (scr is string ? scr == 'exec' : string(lbl).matches('.*임원.*'));
     }
     // 💼 2026-11-01 경리(test)는 회사 결재 중 지출결의·근태(연차)·보고(사직서)만 읽는다 — 장부 가져오기·퇴직 정산·연차 계산
     function isAcctApprovalReader(d) {
-      return myUser().get('role', '') == 'test' && myUser().get('companyName', '') == d.get('company', '')
+      return myUser().get('role', '') in ['test', 'acctStaff'] && myUser().get('companyName', '') == d.get('company', '')
         && d.get('cat', '') in ['expense', 'leave', 'report'];
     }
     function isExecUser() {
@@ -648,7 +651,7 @@ service cloud.firestore {
         && resource.data.get('cat', '') == 'expense'
         && resource.data.get('cancel', {}).get('status', '') != 'pending'
         && apAff().hasOnly(['paid', 'history', 'updatedAt', 'drafterUnread'])
-        && (((myUser().get('role', '') in ['test', 'hrAcct', 'admin', 'totalMaster'] || myUser().get('team', '').matches('.*(재무|경리|회계).*'))
+        && (((myUser().get('role', '') in ['test', 'hrAcct', 'allMgr', 'admin', 'totalMaster'] || myUser().get('team', '').matches('.*(재무|경리|회계).*'))
               && (myUser().get('companyName', '') == resource.data.get('company', '') || isTotalMasterUser()))
           || resource.data.line[resource.data.line.size() - 1].uid == request.auth.uid);
       allow delete: if false;
@@ -658,10 +661,10 @@ service cloud.firestore {
     // 임원게시판은 권한(임원 기준)을 정하기 전까지 최고관리자만
     function canSeeBoard(b) {
       return b == 'free' || isSuperEmail() || myUser().get('role', '') == 'totalMaster'
-        || (b == 'admin' && (myUser().get('role', '') in ['admin', 'hrManager', 'hrAcct'] || isExecRoleUser()));
+        || (b == 'admin' && (myUser().get('role', '') in ['admin', 'allMgr', 'hrManager', 'hrAcct'] || isExecRoleUser()));
     }
     function isBoardAdmin() {
-      return isSuperEmail() || myUser().get('role', '') in ['admin', 'totalMaster', 'hrManager', 'hrAcct'];
+      return isSuperEmail() || myUser().get('role', '') in ['admin', 'allMgr', 'totalMaster', 'hrManager', 'hrAcct'];
     }
     // ⭐ 2026-11-03 공지 작성 권한 — 회사 마스터가 정함(companySettings/{회사}.noticeWriters: admin | exec | all)
     function noticePolicy() {
@@ -701,7 +704,7 @@ service cloud.firestore {
             || isSuperEmail() || myUser().get('role', '') == 'totalMaster');
       // ⭐ 2026-11-04 관리자·마스터는 같은 회사 공지(임원이 올린 것 포함)를 삭제할 수 있다(수정은 작성자만)
       allow delete: if coMatch(resource.data) && isApproved()
-        && (myUser().get('role', '') == 'admin' || myUser().get('isMaster', false) == true);
+        && (myUser().get('role', '') in ['admin', 'allMgr'] || myUser().get('isMaster', false) == true);
       // 읽음 표시는 같은 회사 직원 누구나
       allow update: if coMatch(resource.data) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['readBy']);
       // 💬 댓글·좋아요는 같은 회사 직원(조회전용·기사·화주 제외)

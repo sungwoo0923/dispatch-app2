@@ -9,7 +9,7 @@ import { db } from "./firebase";
 import { isExecProfile } from "./hrConstants";
 import { findCustomRole, roleScreen } from "./customRoles";
 
-export const HR_ROLES = ["hrManager", "hrAcct"];
+export const HR_ROLES = ["hrManager", "hrAcct", "allMgr", "hrStaff"];
 
 // 인사 담당자 — 인사관리자·통합인사관리자 권한 또는 부서명에 "인사"
 export function isHrStaffUser(u, roleOverride) {
@@ -32,7 +32,7 @@ const activeStaff = (list) => (list || []).filter((e) => e && e.uid && !e.noAcco
 // ⭐ 2026-11-03 인사팀이 없는 회사는 회사 마스터가 승인(임시) — 인사팀이 생기면 대기 중인 요청도 바로 인사팀으로 넘어간다
 export function resolveApprovers(requester, employees, customRoles) {
   const others = activeStaff(employees).filter((e) => e.uid !== requester?.uid);
-  const admins = others.filter((e) => e.role === "admin");
+  const admins = others.filter((e) => ["admin", "allMgr"].includes(e.role));
   const masters = others.filter((e) => e.isMaster === true);
   const fallback = masters.length ? { group: "master", uids: masters.map((e) => e.uid) } : { group: "admin", uids: admins.map((e) => e.uid) };
   if (requester && isHrStaffUser(requester)) {

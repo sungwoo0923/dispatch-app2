@@ -4598,7 +4598,7 @@ async function requireAdminRole(req, body) {
   const u = await db.collection("users").doc(decoded.uid).get();
   const ud = u.exists ? u.data() : {};
   const isTM = decoded.email === "tjddnqkf@naver.com" || ud.role === "totalMaster";
-  if (!isTM && ud.role !== "admin") throw Object.assign(new Error("관리자만 사용할 수 있습니다."), { status: 403 });
+  if (!isTM && !["admin", "allMgr"].includes(ud.role)) throw Object.assign(new Error("관리자만 사용할 수 있습니다."), { status: 403 });
   const company = isTM ? String(body?.company || ud.companyName || "돌캐") : String(ud.companyName || "돌캐");
   return { decoded, isTM, company, email: decoded.email || "" };
 }
@@ -5272,7 +5272,7 @@ exports.notifySignup = functions.firestore.document("users/{uid}").onWrite(async
     const a = d.data() || {};
     if (d.id === snap.id || !userTokens(a).length || a.approved === false || a.employmentStatus === "퇴사") return;
     // ⭐ 2026-10-31 관리자·경리·인사관리자도 가입 승인 가능 → 알림도 같이
-    if (([...NOTICE_ADMIN_ROLES, "test", "hrManager", "hrAcct"].includes(a.role) || a.isMaster === true) && isPushTypeEnabled(a.pushPrefs, "가입신청")) tokens.push(...userTokens(a));
+    if (([...NOTICE_ADMIN_ROLES, "test", "hrManager", "hrAcct", "allMgr"].includes(a.role) || a.isMaster === true) && isPushTypeEnabled(a.pushPrefs, "가입신청")) tokens.push(...userTokens(a));
   });
   const isDriver = u.role === "driver";
   const title = isDriver ? "▸ 기사 가입 신청" : "◆ 직원 가입 신청";
