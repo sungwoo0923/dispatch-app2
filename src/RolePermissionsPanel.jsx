@@ -211,23 +211,37 @@ export default function RolePermissionsPanel({ users: allUsers = [], roleLabels 
     try { await updateDoc(doc(db, "users", u.id), { role }); flash("역할을 바꿨습니다"); } catch (e) { alert(`변경 실패: ${e?.message || e}`); }
   };
 
+  // ⭐ 2026-11-04 역할 카드 — 작게(두 줄 배치), 선택하면 남색
   const RoleCard = ({ r }) => {
     const on = r.key === selectedKey;
     const customized = r.builtin && customRoles.some((c) => c.key === r.key);
+    const m = effectiveMenus(r.key, customRoles);
+    const c = { write: 0, read: 0, hidden: 0 }; CUSTOMIZABLE_MENUS.forEach((k) => { c[m[k] || "hidden"] += 1; });
+    const n = CUSTOMIZABLE_MENUS.length;
     return (
-      <button onClick={() => pick(r.key)} className={`w-full text-left rounded-xl border px-3.5 py-3 transition ${on ? "border-[#1B2B4B] bg-[#EEF3FB] shadow-sm" : "border-gray-200 bg-white hover:border-[#DCE3EE]"}`}>
-        <div className="flex items-center gap-2">
-          <span className="text-[14px] font-bold text-gray-800 truncate">{r.label}</span>
-          {customized && !ovRoles[r.key] && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-600 border border-emerald-200">수정됨</span>}
-          {ovRoles[r.key] && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-[#FFF4E5] text-[#B54708] border border-[#FEDF89]">{scope} 전용</span>}
-          {!r.builtin && roleScreen(customRoles.find((c) => c.key === r.key)) === "exec" && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full text-white" style={{ background: "linear-gradient(135deg,#B88A2E,#D7BC82)" }}>임원 화면</span>}
-          <span className="ml-auto text-[11.5px] font-bold text-gray-500 shrink-0">{memberCount(r.key)}명</span>
+      <button onClick={() => pick(r.key)} title={ROLE_DESC[r.key] || "직접 만든 역할"}
+        className={`w-full text-left rounded-xl border px-3 py-2.5 transition ${on ? "border-[#0F1A30] bg-[#0F1A30] text-white shadow-[0_8px_20px_rgba(15,26,48,.25)]" : "border-[#E3E8F0] bg-white hover:border-[#1B2B4B]/40"}`}>
+        <div className="flex items-center gap-1.5 min-w-0">
+          <span className={`text-[13.5px] font-black truncate ${on ? "text-white" : "text-[#0F1A30]"}`}>{r.label}</span>
+          {customized && !ovRoles[r.key] && <span className={`text-[9.5px] font-black px-1.5 py-0.5 rounded-full shrink-0 ${on ? "bg-white/15 text-white" : "bg-[#EEF3FB] text-[#2D4C82]"}`}>수정됨</span>}
+          {ovRoles[r.key] && <span className="text-[9.5px] font-black px-1.5 py-0.5 rounded-full shrink-0 bg-[#FFF4E5] text-[#B54708]">전용</span>}
+          {!r.builtin && roleScreen(customRoles.find((x) => x.key === r.key)) === "exec" && <span className="text-[9.5px] font-black px-1.5 py-0.5 rounded-full text-white shrink-0" style={{ background: "linear-gradient(135deg,#B88A2E,#D7BC82)" }}>임원</span>}
+          <span className={`ml-auto text-[11px] font-black shrink-0 tabular-nums ${on ? "text-[#8FB0F0]" : "text-[#9AA9C3]"}`} style={{ fontFamily: "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace" }}>{memberCount(r.key)}명</span>
         </div>
-        <div className="text-[11.5px] text-gray-500 mt-0.5 mb-2 truncate">{ROLE_DESC[r.key] || "직접 만든 역할"}</div>
-        <SummaryBar menus={effectiveMenus(r.key, customRoles)} />
+        <div className={`flex h-1 rounded-full overflow-hidden mt-2 ${on ? "bg-white/15" : "bg-[#EEF2F8]"}`}>
+          <div className={on ? "bg-white" : "bg-[#1B2B4B]"} style={{ width: `${(c.write / n) * 100}%` }} />
+          <div className={on ? "bg-[#8FB0F0]" : "bg-[#8FB0F0]"} style={{ width: `${(c.read / n) * 100}%` }} />
+        </div>
+        <div className={`mt-1 text-[10.5px] font-bold tabular-nums ${on ? "text-white/60" : "text-[#9AA9C3]"}`} style={{ fontFamily: "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace" }}>W {c.write} · R {c.read} · H {c.hidden}</div>
       </button>
     );
   };
+  const builtinList = allEditable.filter((r) => r.builtin);
+  const customList = allEditable.filter((r) => !r.builtin);
+  const [leftTab, setLeftTab] = React.useState("builtin");
+  React.useEffect(() => { if (customList.some((r) => r.key === selectedKey)) setLeftTab("custom"); }, [selectedKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  const [roleQ, setRoleQ] = React.useState("");
+  const qMatch = (r) => !roleQ.trim() || String(r.label).includes(roleQ.trim());
 
   return (
     <div className="space-y-4">
@@ -309,52 +323,73 @@ export default function RolePermissionsPanel({ users: allUsers = [], roleLabels 
           <div className="px-4 py-2.5 text-[12px] text-gray-500 border-t">※ 칸을 누르면 그 역할 설정 화면으로 이동합니다. 관리자메뉴·관리센터는 권한관리 자체라 역할로 열 수 없습니다.</div>
         </div>
       ) : (
-        <div className="grid grid-cols-[300px_minmax(0,1fr)] gap-4 items-start">
-          {/* 왼쪽: 역할 목록 */}
-          <div className="space-y-4">
-            <div>
-              <div className="px-1 mb-2 text-[12px] font-black text-gray-500 tracking-wide">기본 역할</div>
-              <div className="space-y-2">{allEditable.filter((r) => r.builtin).map((r) => <RoleCard key={r.key} r={r} />)}</div>
-            </div>
-            <div>
-              <div className="px-1 mb-2 flex items-center">
-                <span className="text-[12px] font-black text-gray-500 tracking-wide">직접 만든 역할</span>
-
-              </div>
-              {!creating && (
-                <button onClick={() => setCreating(true)} className="w-full mb-2 h-12 rounded-xl text-white text-[14px] font-black shadow-[0_8px_20px_rgba(15,26,48,0.22)] hover:brightness-110 transition" style={{ background: "linear-gradient(120deg,#0F1A30,#1B2B4B 60%,#2D4C82)" }}>+ 새 역할 만들기</button>
-              )}
-              {creating && (
-                <div className="rounded-xl border border-[#1B2B4B]/30 bg-white p-3 space-y-2 mb-2">
-                  <input ref={imeFocusRef} autoComplete="off" value={newLabel} onChange={(e) => setNewLabel(e.target.value)} placeholder="역할 이름 (예: 부관리자)" className="w-full border border-[#DCE3EE] rounded-lg px-3 py-2 text-[13px] outline-none focus:border-[#1B2B4B]" />
-                  <CustomSelect value={copyFrom} onChange={(e) => setCopyFrom(e.target.value)} className="w-full border border-[#DCE3EE] rounded-lg px-3 py-2 text-[13px] outline-none bg-white">
-                    <option value="">처음부터 (HOME만 보이게)</option>
-                    {allEditable.map((r) => <option key={r.key} value={r.key}>{r.label} 권한 복사해서 시작</option>)}
-                  </CustomSelect>
-                  <div className="grid grid-cols-2 gap-2">
-                    <button onClick={() => { setCreating(false); setNewLabel(""); }} className="py-2 rounded-lg border border-[#DCE3EE] text-[12.5px] font-bold text-gray-600">취소</button>
-                    <button onClick={createRole} className="py-2 rounded-lg bg-[#1B2B4B] text-white text-[12.5px] font-bold">만들기</button>
-                  </div>
+        <div className="grid grid-cols-1 lg:grid-cols-[minmax(340px,38%)_minmax(0,1fr)] gap-4 items-start">
+          {/* ⭐ 2026-11-04 왼쪽: 역할 목록 — 길게 늘어지지 않게 탭(기본·직접 만든·고정) + 두 줄 카드 + 안에서 스크롤 */}
+          <div className="lg:sticky lg:top-3 rounded-2xl bg-white border border-[#E3E8F0] overflow-hidden flex flex-col lg:max-h-[calc(100vh-140px)]">
+            <div className="relative px-4 pt-3.5 pb-3 text-white" style={{ background: "radial-gradient(500px 180px at 90% -40%, rgba(110,149,232,.3), transparent 60%), linear-gradient(120deg,#060C1A 0%,#0F1A30 50%,#1B2B4B 100%)" }}>
+              <div className="flex items-center gap-2">
+                <div>
+                  <div className="text-[9.5px] font-extrabold tracking-[0.28em] text-[#8FB0F0]" style={{ fontFamily: "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace" }}>ROLES</div>
+                  <div className="text-[15px] font-black leading-tight">역할 {allEditable.length + FIXED_ROLES.length}개</div>
                 </div>
-              )}
-              {allEditable.filter((r) => !r.builtin).length === 0 && !creating ? (
-                <div className="rounded-xl border border-dashed border-[#DCE3EE] px-4 py-5 text-center text-[12.5px] text-gray-500">아직 없습니다. 회사에 맞는 역할(예: 부관리자, 영업)을 만들어 보세요.</div>
-              ) : (
-                <div className="space-y-2">{allEditable.filter((r) => !r.builtin).map((r) => <RoleCard key={r.key} r={r} />)}</div>
-              )}
-            </div>
-            <div>
-              <div className="px-1 mb-2 text-[12px] font-black text-gray-500 tracking-wide">고정 역할</div>
-              <div className="rounded-xl border border-gray-200 bg-gray-50 divide-y divide-gray-200">
-                {FIXED_ROLES.map((r) => (
-                  <div key={r.key} className="flex items-center gap-2 px-3.5 py-2.5">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" className="text-gray-400 shrink-0"><rect x="5" y="11" width="14" height="10" rx="2" /><path d="M8 11V7a4 4 0 0 1 8 0v4" /></svg>
-                    <span className="text-[13px] font-bold text-gray-600 whitespace-nowrap">{r.label}</span>
-                    <span className="text-[11.5px] text-gray-400 truncate">{r.desc}</span>
-                    <span className="ml-auto text-[11.5px] font-bold text-gray-400 shrink-0">{memberCount(r.key)}명</span>
-                  </div>
+                <input value={roleQ} onChange={(e) => setRoleQ(e.target.value)} placeholder="역할 찾기" autoComplete="off"
+                  className="ml-auto w-[130px] h-8 px-3 rounded-lg bg-white/10 border border-white/15 text-[12.5px] font-bold text-white placeholder:text-white/40 outline-none focus:bg-white/15" />
+              </div>
+              <div className="mt-2.5 grid grid-cols-3 p-1 rounded-xl bg-white/[0.06] border border-white/10">
+                {[["builtin", "기본", builtinList.length], ["custom", "직접 만든", customList.length], ["fixed", "고정", FIXED_ROLES.length]].map(([k, l, nn]) => (
+                  <button key={k} type="button" onClick={() => setLeftTab(k)} className={`h-8 rounded-lg text-[12.5px] font-black transition ${leftTab === k ? "bg-white text-[#0F1A30]" : "text-white/70 hover:text-white"}`}>
+                    {l} <span className={`ml-0.5 text-[11px] ${leftTab === k ? "text-[#5B6B85]" : "text-white/40"}`} style={{ fontFamily: "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace" }}>{nn}</span>
+                  </button>
                 ))}
               </div>
+            </div>
+            <div className="flex-1 min-h-0 overflow-y-auto p-3 bg-[#F7F9FC]">
+              {leftTab === "builtin" && (
+                <div className="grid grid-cols-2 gap-2">{builtinList.filter(qMatch).map((r) => <RoleCard key={r.key} r={r} />)}</div>
+              )}
+              {leftTab === "custom" && (
+                <>
+                  {!creating && (
+                    <button onClick={() => setCreating(true)} className="w-full mb-2 h-10 rounded-xl text-white text-[13px] font-black shadow-[0_8px_20px_rgba(15,26,48,0.22)] hover:brightness-110 transition" style={{ background: "linear-gradient(120deg,#0F1A30,#1B2B4B 60%,#2D4C82)" }}>+ 새 역할 만들기</button>
+                  )}
+                  {creating && (
+                    <div className="rounded-xl border border-[#1B2B4B]/30 bg-white p-3 space-y-2 mb-2">
+                      <input ref={imeFocusRef} autoComplete="off" value={newLabel} onChange={(e) => setNewLabel(e.target.value)} placeholder="역할 이름 (예: 부관리자)" className="w-full border border-[#DCE3EE] rounded-lg px-3 py-2 text-[13px] outline-none focus:border-[#1B2B4B]" />
+                      <CustomSelect value={copyFrom} onChange={(e) => setCopyFrom(e.target.value)} className="w-full border border-[#DCE3EE] rounded-lg px-3 py-2 text-[13px] outline-none bg-white">
+                        <option value="">처음부터 (HOME만 보이게)</option>
+                        {allEditable.map((r) => <option key={r.key} value={r.key}>{r.label} 권한 복사해서 시작</option>)}
+                      </CustomSelect>
+                      <div className="grid grid-cols-2 gap-2">
+                        <button onClick={() => { setCreating(false); setNewLabel(""); }} className="py-2 rounded-lg border border-[#DCE3EE] text-[12.5px] font-bold text-gray-600">취소</button>
+                        <button onClick={createRole} className="py-2 rounded-lg bg-[#1B2B4B] text-white text-[12.5px] font-bold">만들기</button>
+                      </div>
+                    </div>
+                  )}
+                  {customList.length === 0 && !creating ? (
+                    <div className="rounded-xl border border-dashed border-[#DCE3EE] bg-white px-4 py-5 text-center text-[12.5px] text-gray-500">아직 없습니다. 회사에 맞는 역할(예: 부관리자, 영업)을 만들어 보세요.</div>
+                  ) : (
+                    <div className="grid grid-cols-2 gap-2">{customList.filter(qMatch).map((r) => <RoleCard key={r.key} r={r} />)}</div>
+                  )}
+                </>
+              )}
+              {leftTab === "fixed" && (
+                <div className="rounded-xl border border-[#E3E8F0] bg-white divide-y divide-[#EEF2F8]">
+                  {FIXED_ROLES.filter(qMatch).map((r) => (
+                    <div key={r.key} className="flex items-center gap-2 px-3.5 py-2.5">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" className="text-[#9AA9C3] shrink-0"><rect x="5" y="11" width="14" height="10" rx="2" /><path d="M8 11V7a4 4 0 0 1 8 0v4" /></svg>
+                      <span className="text-[13px] font-black text-[#3A4A66] whitespace-nowrap">{r.label}</span>
+                      <span className="text-[11.5px] text-[#9AA9C3] truncate">{r.desc}</span>
+                      <span className="ml-auto text-[11.5px] font-bold text-[#9AA9C3] shrink-0">{memberCount(r.key)}명</span>
+                    </div>
+                  ))}
+                  <div className="px-3.5 py-2.5 text-[11.5px] text-[#9AA9C3]">고정 역할은 메뉴 권한을 바꿀 수 없습니다.</div>
+                </div>
+              )}
+            </div>
+            <div className="px-4 py-2 border-t border-[#EEF2F8] bg-white flex items-center gap-3 text-[10.5px] font-bold text-[#9AA9C3]" style={{ fontFamily: "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace" }}>
+              <span className="inline-flex items-center gap-1"><i className="w-2 h-2 rounded-full bg-[#1B2B4B] inline-block" />W 수정</span>
+              <span className="inline-flex items-center gap-1"><i className="w-2 h-2 rounded-full bg-[#8FB0F0] inline-block" />R 조회</span>
+              <span className="inline-flex items-center gap-1"><i className="w-2 h-2 rounded-full bg-[#EEF2F8] inline-block border border-[#DCE3EE]" />H 숨김</span>
             </div>
           </div>
 

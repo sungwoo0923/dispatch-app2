@@ -7,7 +7,7 @@
 import React from "react";
 import { collection, onSnapshot, query, where, getDocs } from "firebase/firestore";
 import { ResponsiveContainer, ComposedChart, Bar, Line, XAxis, YAxis, Tooltip, CartesianGrid, BarChart, Cell } from "recharts";
-import { db, DEFAULT_COMPANY } from "./firebase";
+import { db, auth, DEFAULT_COMPANY } from "./firebase";
 import { useFleetDrivers } from "./FleetPayDocs";
 import { useCompanyDriverDocs, docProblems } from "./driverRequiredDocs";
 import { isTMUser } from "./staffFilter";
@@ -396,6 +396,7 @@ function AcctDashboard({ company, dispatchData = [], onGo, me, att }) {
   const notImported = expApproved.filter((a) => !imported.has(a.id));
   const expPending = approvals.filter((a) => a.cat === "expense" && a.status === "pending").sort((a, b) => tsMs(a.createdAt) - tsMs(b.createdAt));
   const expPendingSum = expPending.reduce((s, a) => s + (Number(a.amount) || 0), 0);
+  const expMine = expPending.filter((a) => { const u = auth?.currentUser?.uid || ""; return !!u && a.line?.[a.step]?.uid === u; });
   const recurDone = new Set(monthL.map((r) => r.recurId).filter(Boolean));
   const recurTodo = recurring.filter((r) => r.active !== false && !recurDone.has(r.id));
   const lowStock = assets.filter((a) => a.category === "소모품" && toInt(a.minQty) > 0 && toInt(a.qty) <= toInt(a.minQty));
@@ -432,7 +433,7 @@ function AcctDashboard({ company, dispatchData = [], onGo, me, att }) {
   const banks = [...(F.list || [])].filter((f) => f.kind !== "대출").sort((a, b) => (b.balance || 0) - (a.balance || 0)).slice(0, 5);
   const bankMax = Math.max(1, ...banks.map((f) => Math.abs(f.balance || 0)));
   const todos = [
-    ["지출결의 결재 대기", "전자결재 › 비용·지출 결의", `${expPending.length}건`, expPending.length, "전자결재"],
+    ["지출결의 결재 대기", "전자결재 › 비용·지출 결의", `${expMine.length}건`, expMine.length, "전자결재"], // ⭐ 2026-11-04 내 차례인 것만(아래 패널은 회사 전체 진행 현황)
     ["장부에 안 올린 승인 지출", "수입·지출 › 결재 지출 가져오기", `${notImported.length}건`, notImported.length, "자금관리:book"],
     ["이번 달 고정비 미반영", "임대료·통신비 등", `${recurTodo.length}건`, recurTodo.length, "자금관리:book"],
     ["증빙 없는 지출", "영수증·세금계산서 첨부", `${noEvidence}건`, noEvidence, "자금관리:book"],
@@ -643,8 +644,11 @@ function HrDashboard({ company, onGo, me, att }) {
   const board = active.map((u) => ({ u, ...stateOf(u) }));
   const cnt = (k) => board.filter((b) => b.k === k).length;
   const inN = cnt("in"), lateN = cnt("late"), awayN = cnt("away"), noneN = cnt("none");
-  const leavePending = approvals.filter((a) => a.cat === "leave" && a.status === "pending");
-  const reportPending = approvals.filter((a) => a.cat === "report" && a.status === "pending");
+  // ⭐ 2026-11-04 결재 대기는 "지금 내 차례"인 문서만 — 예전엔 회사 전체 대기 건수라 눌러 들어가면 결재함이 비어 있었다
+  const myUid = me?.uid || auth?.currentUser?.uid || "";
+  const myTurnDoc = (a) => a.status === "pending" && !!myUid && a.line?.[a.step]?.uid === myUid;
+  const leavePending = approvals.filter((a) => a.cat === "leave" && myTurnDoc(a));
+  const reportPending = approvals.filter((a) => a.cat === "report" && myTurnDoc(a));
   const noHire = active.filter((u) => !hireOf(u));
   const docIssueDrivers = drivers.filter((d) => { const p = docProblems(docsBy?.[d.id]); return p.missing || p.bad; }).length;
   // 이번 달 연차 사용 — 승인된 휴가(시작일 기준) · 일별 부재 인원
