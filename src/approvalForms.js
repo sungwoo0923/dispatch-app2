@@ -3,6 +3,9 @@ import { bankText } from "./bankUtil";
 // 📝 전자결재 양식 정의(2026-10-28) — 3개 묶음(근태·휴가 / 비용·지출 / 업무 기안·품의)과 양식별 입력칸.
 //  필드 type: text | textarea | date | time | daterange | select | number | money | staff | items
 //  - items: 품목 표(name, qty, price → 금액 자동) / costs: 항목별 금액 표(label, amount)
+//  ⭐ 2026-11-04 고르기 입력 — text 필드에 pick(목록 출처)을 붙이면 작성 화면에서 검색 드롭다운(+ 직접 입력)으로 바뀐다(값은 그대로 글자).
+//     pick: teams(부서) · positions(직책, pickTeam=같은 문서의 부서 칸) · staffNames(직원 여러 명, 쉼표) · clients(거래처) · cars(차량번호) · carDriver("차량번호 / 기사")
+//     select 필드의 direct: true → 목록에 "✎ 직접 입력" 추가. legacy: true → 작성 화면에서는 숨기고, 예전 문서에 값이 있을 때만 문서에 보인다.
 //  - 양식의 summary(d) → 목록에 보일 한 줄 요약, amount(d) → 금액(비용 양식), days(d) → 휴가 일수
 
 export const APPROVAL_CATS = [
@@ -66,12 +69,14 @@ export function leaveUseOf(d) {
 
 const ACCOUNTS = ["복리후생비", "여비교통비", "차량유지비", "운반비", "접대비", "소모품비", "통신비", "지급수수료", "교육훈련비", "도서인쇄비", "기타"];
 const PAY = ["법인카드", "개인카드(정산 요청)", "계좌이체", "현금"];
+// 인사발령 구분(예전 문서의 "전보(부서 이동)"·"직책 변경"·"신규 임용"도 그대로 고를 수 있게 남김)
+export const PERSONNEL_KINDS = ["승진", "전보(부서 이동)", "직책 변경", "직무 변경", "신규 임용", "채용", "겸직", "파견", "휴직", "복직", "강등", "퇴직", "기타"];
 
 export const APPROVAL_FORMS = [
   // ───────── 근태·휴가 ─────────
   { key: "annual", cat: "leave", label: "연차휴가", title: "휴 가 신 청 서", code: "HL",
     fields: [
-      { k: "kind", label: "휴가 구분", type: "select", options: ["연차", "하계휴가", "포상휴가", "무급휴가", "기타"], def: "연차" },
+      { k: "kind", label: "휴가 구분", type: "select", options: ["연차", "하계휴가", "포상휴가", "무급휴가", "기타"], def: "연차", direct: true },
       { k: "period", label: "기간", type: "daterange", required: true },
       { k: "reason", label: "사유", templates: ["개인 사유", "가족 행사", "병원 진료", "경조사", "자녀 학교 행사"], type: "textarea", ph: "개인 사유", required: true },
       { k: "proxy", label: "업무 대행자", type: "staff" },
@@ -99,7 +104,7 @@ export const APPROVAL_FORMS = [
       { k: "date", label: "날짜", type: "date", required: true },
       { k: "from", label: "출발 시간", type: "time", half: true },
       { k: "to", label: "복귀 시간", type: "time", half: true },
-      { k: "place", label: "방문처", type: "text", ph: "거래처·현장명", required: true },
+      { k: "place", label: "방문처", type: "text", ph: "거래처·현장명", required: true, pick: "clients" },
       { k: "purpose", label: "목적", type: "textarea", required: true },
       { k: "direct", label: "직출·직퇴", type: "select", options: ["해당 없음", "직출", "직퇴", "직출·직퇴"], def: "해당 없음" },
     ],
@@ -109,14 +114,14 @@ export const APPROVAL_FORMS = [
       { k: "period", label: "기간", type: "daterange", required: true },
       { k: "place", label: "출장지", type: "text", required: true },
       { k: "purpose", label: "출장 목적", type: "textarea", required: true },
-      { k: "with", label: "동행자", type: "text", ph: "없으면 비워 두세요" },
-      { k: "transport", label: "교통수단", type: "select", options: ["자차", "법인차량", "대중교통", "항공", "기타"], def: "자차" },
+      { k: "with", label: "동행자", type: "text", ph: "없으면 비워 두세요", pick: "staffNames" },
+      { k: "transport", label: "교통수단", type: "select", options: ["자차", "법인차량", "대중교통", "KTX·기차", "항공", "기타"], def: "자차", direct: true },
       { k: "budget", label: "예상 경비", type: "money" },
     ],
     days: (d) => dayDiff(d.period), amount: (d) => Number(d.budget) || 0, summary: (d) => `${d.place || ""} ${rangeText(d.period)}` },
   { key: "family", cat: "leave", label: "경조사", title: "경 조 사 신 청 서", code: "HF",
     fields: [
-      { k: "kind", label: "경조 구분", type: "select", options: ["본인 결혼", "자녀 결혼", "형제자매 결혼", "배우자 출산", "부모 회갑·칠순", "부모 상", "배우자 부모 상", "조부모 상", "형제자매 상", "기타"], def: "본인 결혼" },
+      { k: "kind", label: "경조 구분", type: "select", options: ["본인 결혼", "자녀 결혼", "형제자매 결혼", "배우자 출산", "부모 회갑·칠순", "부모 상", "배우자 부모 상", "조부모 상", "형제자매 상", "기타"], def: "본인 결혼", direct: true },
       { k: "target", label: "대상자(관계)", type: "text", ph: "예) 부친 홍길동" },
       { k: "eventDate", label: "경조일", type: "date", required: true },
       { k: "period", label: "휴가 기간", type: "daterange" },
@@ -199,8 +204,8 @@ export const APPROVAL_FORMS = [
   //    저장할 때 prepare()가 예전 칸(date·vendor·bank·items)도 첫 행/합계로 채워 장부 자동 기록·목록이 그대로 동작.
   { key: "spend", cat: "expense", label: "지출결의서", title: "지 출 결 의 서", code: "EX",
     fields: [
-      { k: "account", label: "계정과목", type: "select", options: ACCOUNTS, def: "소모품비", half: true },
-      { k: "pay", label: "결제 수단", type: "select", options: PAY, def: "법인카드", half: true },
+      { k: "account", label: "계정과목", type: "select", options: ACCOUNTS, def: "소모품비", half: true, direct: true },
+      { k: "pay", label: "결제 수단", type: "select", options: PAY, def: "법인카드", half: true, direct: true },
       { k: "lines", label: "지출 내역", type: "spendLines", required: true },
       { k: "reason", label: "지출 사유", templates: ["사무용품 구매", "차량 정비·수리", "유류비 정산", "거래처 접대", "직원 복리후생(식대·간식)", "택배·운송비", "통신비", "교육·세미나", "긴급 부품 구매"], type: "textarea", required: true },
     ],
@@ -213,14 +218,14 @@ export const APPROVAL_FORMS = [
       { k: "cardNo", label: "카드(뒤 4자리)", type: "text", ph: "1234", half: true },
       { k: "amountV", label: "사용 금액", type: "money", required: true, half: true },
       { k: "shop", label: "가맹점", type: "text", required: true },
-      { k: "account", label: "계정과목", type: "select", options: ACCOUNTS, def: "복리후생비" },
-      { k: "people", label: "사용 인원·참석자", type: "text" },
+      { k: "account", label: "계정과목", type: "select", options: ACCOUNTS, def: "복리후생비", direct: true },
+      { k: "people", label: "사용 인원·참석자", type: "text", pick: "staffNames", ph: "직원을 고르거나 직접 입력(거래처 참석자 등)" },
       { k: "reason", label: "사용 목적", templates: ["거래처 미팅 식대", "직원 회식", "출장 경비", "사무용품 구매", "차량 유지비", "고객 접대", "업무용 소모품"], type: "textarea", required: true },
     ],
     amount: (d) => Number(d.amountV) || 0, summary: (d) => `${d.shop || ""} · ${won(d.amountV)}` },
   { key: "fuel", cat: "expense", label: "유류비·통행료 정산", title: "유 류 비 · 통 행 료 정 산 서", code: "EF",
     fields: [
-      { k: "carNo", label: "차량번호", type: "text", ph: "12가3456", required: true },
+      { k: "carNo", label: "차량번호", type: "text", ph: "12가3456", required: true, pick: "cars" },
       { k: "period", label: "정산 기간", type: "daterange", required: true },
       { k: "route", label: "주요 운행 구간", type: "text", ph: "예) 인천 남동공단 → 평택항" },
       { k: "costs", label: "정산 항목", type: "costs", preset: ["유류비", "통행료", "주차비", "세차비"] },
@@ -259,13 +264,13 @@ export const APPROVAL_FORMS = [
   { key: "accident", cat: "expense", label: "운송 사고·파손 처리", title: "운 송 사 고 처 리 품 의 서", code: "ED",
     fields: [
       { k: "date", label: "사고일", type: "date", required: true },
-      { k: "client", label: "거래처(화주)", type: "text", required: true },
-      { k: "carNo", label: "차량번호·기사", type: "text", ph: "12가3456 / 홍길동" },
+      { k: "client", label: "거래처(화주)", type: "text", required: true, pick: "clients" },
+      { k: "carNo", label: "차량번호·기사", type: "text", ph: "12가3456 / 홍길동", pick: "carDriver" },
       { k: "route", label: "운송 구간", type: "text", ph: "상차지 → 하차지" },
-      { k: "kind", label: "사고 유형", type: "select", options: ["화물 파손", "화물 분실", "오배송", "지연 배송", "차량 사고", "기타"], def: "화물 파손" },
+      { k: "kind", label: "사고 유형", type: "select", options: ["화물 파손", "화물 분실", "오배송", "지연 배송", "차량 사고", "기타"], def: "화물 파손", direct: true },
       { k: "detail", label: "사고 내용", type: "textarea", required: true },
       { k: "loss", label: "손해액", type: "money", required: true },
-      { k: "burden", label: "부담 구분", type: "select", options: ["회사 부담", "기사 부담", "보험 처리", "거래처 협의", "분담"], def: "보험 처리" },
+      { k: "burden", label: "부담 구분", type: "select", options: ["회사 부담", "기사 부담", "보험 처리", "거래처 협의", "분담"], def: "보험 처리", direct: true },
       { k: "plan", label: "처리 방안", type: "textarea" },
     ],
     amount: (d) => Number(d.loss) || 0, summary: (d) => `${d.client || ""} ${d.kind || ""} · ${won(d.loss)} · ${d.burden || ""}` },
@@ -281,9 +286,9 @@ export const APPROVAL_FORMS = [
     amount: (d) => Number(d.budget) || 0, titleOf: (d) => d.subject, summary: (d) => d.subject || "" },
   { key: "rate", cat: "draft", label: "운임·단가 변경 품의", title: "운 임 변 경 품 의 서", code: "DR",
     fields: [
-      { k: "client", label: "거래처", type: "text", required: true },
+      { k: "client", label: "거래처", type: "text", required: true, pick: "clients" },
       { k: "route", label: "구간", type: "text", ph: "상차지 → 하차지", required: true },
-      { k: "car", label: "차종·톤수", type: "select", options: ["1톤", "1.4톤", "2.5톤", "3.5톤", "5톤", "5톤축", "8톤", "11톤", "18톤", "25톤", "트레일러", "기타"], def: "5톤" },
+      { k: "car", label: "차종·톤수", type: "select", options: ["1톤", "1.4톤", "2.5톤", "3.5톤", "5톤", "5톤축", "8톤", "11톤", "18톤", "25톤", "트레일러", "기타"], def: "5톤", direct: true },
       { k: "oldFare", label: "기존 청구운임", type: "money", half: true },
       { k: "newFare", label: "변경 청구운임", type: "money", half: true, required: true },
       { k: "oldPay", label: "기존 기사운임", type: "money", half: true },
@@ -298,7 +303,7 @@ export const APPROVAL_FORMS = [
       { k: "bizNo", label: "사업자등록번호", type: "text", ph: "000-00-00000", half: true },
       { k: "ceo", label: "대표자", type: "text", half: true },
       { k: "manager", label: "담당자·연락처", type: "text" },
-      { k: "terms", label: "결제 조건", type: "select", options: ["당월 말 마감 익월 말 결제", "당월 말 마감 익월 15일 결제", "건별 결제", "선결제", "기타"], def: "당월 말 마감 익월 말 결제" },
+      { k: "terms", label: "결제 조건", type: "select", options: ["당월 말 마감 익월 말 결제", "당월 말 마감 익월 15일 결제", "건별 결제", "선결제", "기타"], def: "당월 말 마감 익월 말 결제", direct: true },
       { k: "volume", label: "예상 월 물량·매출", type: "text", ph: "예) 월 40건 / 2,000만원" },
       { k: "credit", label: "신용 확인", type: "select", options: ["확인 완료", "확인 필요", "해당 없음"], def: "확인 필요" },
       { k: "reason", label: "등록 사유·영업 내용", type: "textarea", required: true },
@@ -306,7 +311,7 @@ export const APPROVAL_FORMS = [
     titleOf: (d) => `신규 거래처 등록 · ${d.name || ""}`, summary: (d) => `${d.name || ""} · ${d.terms || ""}` },
   { key: "vehicle", cat: "draft", label: "차량 정비·수리 요청", title: "차 량 정 비 요 청 서", code: "DV",
     fields: [
-      { k: "carNo", label: "차량번호", type: "text", required: true },
+      { k: "carNo", label: "차량번호", type: "text", required: true, pick: "cars" },
       { k: "km", label: "주행거리(km)", type: "number", half: true },
       { k: "urgent", label: "긴급도", type: "select", options: ["일반", "긴급", "운행 불가"], def: "일반", half: true },
       { k: "symptom", label: "증상·정비 내용", type: "textarea", required: true },
@@ -316,7 +321,7 @@ export const APPROVAL_FORMS = [
     amount: (d) => Number(d.cost) || 0, summary: (d) => `${d.carNo || ""} · ${d.urgent || ""} · ${won(d.cost)}` },
   { key: "cert", cat: "draft", label: "제증명 발급 신청", title: "제 증 명 발 급 신 청 서", code: "DZ",
     fields: [
-      { k: "kind", label: "증명서 종류", type: "select", options: ["재직증명서", "경력증명서", "급여(원천징수)증명서", "퇴직증명서", "기타"], def: "재직증명서" },
+      { k: "kind", label: "증명서 종류", type: "select", options: ["재직증명서", "경력증명서", "급여(원천징수)증명서", "퇴직증명서", "기타"], def: "재직증명서", direct: true },
       { k: "count", label: "매수", type: "number", def: "1", half: true },
       { k: "need", label: "필요일", type: "date", half: true },
       { k: "purpose", label: "용도·제출처", type: "text", required: true },
@@ -335,7 +340,7 @@ export const APPROVAL_FORMS = [
     summary: (d) => `${d.date || ""} 업무일지` },
   { key: "workreport", cat: "report", label: "업무 보고서", title: "업 무 보 고 서", code: "RW",
     fields: [
-      { k: "period", label: "보고 기간", type: "select", options: ["주간", "월간", "분기", "수시"], def: "주간", half: true },
+      { k: "period", label: "보고 기간", type: "select", options: ["주간", "월간", "분기", "수시"], def: "주간", half: true, direct: true },
       { k: "range", label: "기간", type: "daterange", required: true },
       { k: "subject", label: "보고 제목", type: "text", required: true },
       { k: "result", label: "주요 실적", type: "textarea", rows: 6, required: true, ph: "· 배차 건수·매출·매익\n· 신규 거래처\n· 개선한 업무" },
@@ -346,7 +351,7 @@ export const APPROVAL_FORMS = [
   { key: "tripreport", cat: "report", label: "출장 보고서", title: "출 장 보 고 서", code: "RT",
     fields: [
       { k: "range", label: "출장 기간", type: "daterange", required: true },
-      { k: "place", label: "출장지·방문처", type: "text", required: true },
+      { k: "place", label: "출장지·방문처", type: "text", required: true, pick: "clients" },
       { k: "purpose", label: "출장 목적", templates: ["거래처 미팅·영업", "현장 점검", "사고 처리", "교육·세미나 참석", "차량 인수·반납"], type: "textarea", required: true },
       { k: "result", label: "출장 결과", type: "textarea", rows: 6, required: true },
       { k: "followup", label: "후속 조치", type: "textarea", rows: 3 },
@@ -358,8 +363,8 @@ export const APPROVAL_FORMS = [
       { k: "date", label: "회의일", type: "date", required: true, half: true },
       { k: "time", label: "회의 시간", type: "timerange", half: true },
       { k: "place", label: "장소", type: "text", half: true },
-      { k: "kind", label: "회의 종류", type: "select", options: ["정기 회의", "부서 회의", "거래처 미팅", "안전 회의", "기타"], def: "정기 회의", half: true },
-      { k: "attendees", label: "참석자", type: "text", required: true, ph: "홍길동 팀장, 김철수 대리 …" },
+      { k: "kind", label: "회의 종류", type: "select", options: ["정기 회의", "부서 회의", "거래처 미팅", "안전 회의", "기타"], def: "정기 회의", half: true, direct: true },
+      { k: "attendees", label: "참석자", type: "text", required: true, ph: "홍길동 팀장, 김철수 대리 …", pick: "staffNames" },
       { k: "agenda", label: "안건", type: "textarea", rows: 3, required: true },
       { k: "content", label: "논의 내용", type: "textarea", rows: 6, required: true },
       { k: "decision", label: "결정 사항·담당·기한", type: "textarea", rows: 3, ph: "· ○○ 운임 5% 인상 — 영업팀 · 11/15까지" },
@@ -388,14 +393,24 @@ export const APPROVAL_FORMS = [
   { key: "personnel", cat: "report", label: "인사발령 품의", title: "인 사 발 령 품 의 서", code: "RP",
     fields: [
       { k: "target", label: "발령 대상자", type: "staff", required: true },
-      { k: "kind", label: "발령 구분", type: "select", options: ["승진", "전보(부서 이동)", "직책 변경", "신규 임용", "겸직", "휴직", "복직", "강등", "기타"], def: "승진" },
-      { k: "fromText", label: "현 소속·직책", type: "text", ph: "예) 운송팀 대리" },
-      { k: "toTeam", label: "발령 부서", type: "text", required: true, half: true, ph: "예) 운송팀" },
-      { k: "toPosition", label: "발령 직책", type: "text", required: true, half: true, ph: "예) 과장" },
+      { k: "kind", label: "발령 구분", type: "select", options: PERSONNEL_KINDS, def: "승진", direct: true },
+      { k: "fromTeam", label: "현 부서", type: "text", half: true, pick: "teams", ph: "자동 입력", legacyOf: "fromText" },
+      { k: "fromPosition", label: "현 직책", type: "text", half: true, pick: "positions", pickTeam: "fromTeam", ph: "자동 입력", legacyOf: "fromText" },
+      { k: "fromText", label: "현 소속·직책", type: "text", legacy: true },
+      { k: "toTeam", label: "발령 부서", type: "text", required: true, half: true, ph: "예) 운송팀", pick: "teams" },
+      { k: "toPosition", label: "발령 직책", type: "text", required: true, half: true, ph: "예) 과장", pick: "positions", pickTeam: "toTeam" },
       { k: "date", label: "발령일", type: "date", required: true },
       { k: "reason", label: "발령 사유", templates: ["정기 승진(근무 평가 우수)", "조직 개편에 따른 전보", "결원 충원", "본인 희망 전보", "직무 역량 강화"], type: "textarea", required: true },
       { k: "note", label: "처우 변경(선택)", type: "text", ph: "예) 직책수당 월 10만원 신설" },
     ],
+    // 대상자를 고르면 현 부서·현 직책을 그 사람 인사 정보로 채운다(발령 부서·직책이 비어 있으면 현재 값으로 시작)
+    autofill: (k, v, d, { staff } = {}) => {
+      if (k !== "target") return null;
+      const u = (staff || []).find((x) => x.uid === v);
+      if (!u) return { fromTeam: "", fromPosition: "" };
+      const team = u.team && u.team !== "미배정" ? u.team : "";
+      return { fromTeam: team, fromPosition: u.position || "", ...(!d.toTeam ? { toTeam: team } : {}) };
+    },
     summary: (d) => `${d.kind || "인사발령"} → ${[d.toTeam, d.toPosition].filter(Boolean).join(" ")} · ${d.date || ""}` },
   { key: "resign", cat: "report", label: "사직서", title: "사 직 서", code: "RR",
     fields: [
@@ -520,6 +535,7 @@ export function fieldText(f, v, staff) {
   if (f.type === "money") return Number(v) ? won(v) : "";
   if (f.type === "checks") return (v || []).map((x) => `☑ ${x}`).join("\n");
   if (f.type === "timerange") { const t = (hm) => { if (!hm) return ""; const [h, m] = hm.split(":").map(Number); return `${h < 12 ? "오전" : "오후"} ${h % 12 || 12}:${String(m).padStart(2, "0")}`; }; return v?.start ? `${t(v.start)}${v.end ? ` ~ ${t(v.end)}` : ""}` : ""; }
+  if (f.type === "time") { const m = /^(\d{1,2}):(\d{2})$/.exec(String(v)); if (!m) return String(v); const h = Number(m[1]); return `${h < 12 ? "오전" : "오후"} ${h % 12 || 12}:${m[2]}`; }
   if (f.type === "number") return String(v);
   if (f.type === "staff") { const u = (staff || []).find((x) => x.uid === v); return u ? `${u.name}${u.position ? ` ${u.position}` : ""}` : ""; }
   return String(v);

@@ -23,13 +23,14 @@ import { html2canvas } from "./lazyLoad"; // ⭐ 2026-11-02 속도 — 캡처 �
 import { printA4, savePdf } from "./a4Export";
 import { TimeSelect } from "./kpInputs";
 import { useMyProfile, useUserNames, personName } from "./userNames";
-import { db, auth } from "./firebase";
+import { db, auth, DEFAULT_COMPANY } from "./firebase";
 import { collection, doc, onSnapshot, query, where, addDoc, updateDoc, deleteDoc, arrayUnion, arrayRemove, serverTimestamp, setDoc } from "firebase/firestore";
 import { ShellIcon } from "./AdminShell";
 import { useCompanyStaff, compressImage, sendInternalMail } from "./InternalMail";
 import CustomDatePicker from "./CustomDatePicker";
 import CustomSelect from "./CustomSelect";
-import { isExecProfile, isExecPosition } from "./hrConstants";
+import { isExecProfile, isExecPosition, useHrOptions } from "./hrConstants";
+import { isHrStaffUser } from "./hrHandover";
 import { useLeaveGuard, draftStore, confirmLeave } from "./leaveGuard";
 import {
   APPROVAL_CATS, APPROVAL_FORMS, formOf, formsOfCat, initialData, missingFields, fieldText, suggestLine,
@@ -48,6 +49,24 @@ const mmdd = (ms) => { const d = new Date(ms); return `${pad2(d.getMonth() + 1)}
 const STATUS = { pending: "진행 중", approved: "결재 완료", rejected: "반려", withdrawn: "회수", cancelled: "결재 취소" };
 const catOf = (k) => APPROVAL_CATS.find((c) => c.key === k) || APPROVAL_CATS[0];
 const isAdminRole = (r) => ["admin", "totalMaster", "hrManager", "hrAcct"].includes(r);
+
+// 🗂 2026-11-04 인사발령 품의 — 인사 담당자만 쓰고(보이고), 결재가 끝나면 그 사람이 인사발령 공문을 게시한다.
+//  인사 담당자 = 역할 hrManager(인사관리자)·hrAcct(통합인사관리자)·allMgr(통합관리자) 또는 부서 이름에 "인사"가 들어간 직원(hrHandover.isHrStaffUser와 같은 기준 + 통합관리자).
+//  회사에 인사 담당자가 한 명도 없으면 회사 마스터(users.isMaster)만. 최고관리자(totalMaster)는 늘 가능.
+const HR_DRAFT_ROLES = ["allMgr"];
+const isHrPerson = (u) => !!u && u.role !== "viewer" && (isHrStaffUser(u) || (HR_DRAFT_ROLES.includes(u.role) && !u.noAccount && u.approved !== false && u.employmentStatus !== "퇴사"));
+export function canHrDraft(meDoc, staff, uid) {
+  if (!meDoc) return false;
+  if (meDoc.role === "totalMaster") return true;
+  if (isHrPerson(meDoc)) return true;
+  if (meDoc.isMaster === true) return !!staff && !staff.some((u) => (u.uid || u.id) !== uid && isHrPerson(u));
+  return false;
+}
+// 인사관리부 › 인사관리 › 인사발령 화면으로 이동(DispatchApp이 kp-go-menu를 받아 메뉴를 바꾼다) — 대상자를 골라 둔다
+const goPersonnelOrder = (targetUid) => {
+  try { sessionStorage.setItem("kpHrTab", "rec:인사발령"); if (targetUid) sessionStorage.setItem("kpHrFocus", targetUid); } catch { /* 무시 */ }
+  window.dispatchEvent(new CustomEvent("kp-go-menu", { detail: "인사관리부" }));
+};
 
 // 💸 2026-11-04 지급완료 — 최종 승인된 비용·지출 결의(금액 있는 문서)를 재무·경리가 "지급 완료"로 표시한다.
 //  대상: cat=="expense" && 금액>0 (법인카드 사용보고는 이미 카드로 결제된 건이라 제외)
@@ -541,7 +560,9 @@ function PaidSeal({ paid, compact: c }) {
 
 export function ApprovalPaper({ form, data, title, line, cc, drafter, docNo, createdMs, staff, status, paperRef, paid }) {
   const cols = [{ uid: drafter?.uid, name: drafter?.name, position: drafter?.position || "기안", kind: "기안", status: "approved", at: createdMs }, ...(line || [])];
-  const fields = form.fields || [];
+  // legacy 칸(예전 양식의 칸)은 값이 있는 예전 문서에서만, legacyOf 칸은 예전 칸에 값이 있고 자기 값이 비었으면 숨김
+  const has = (k) => { const x = data?.[k]; return x !== undefined && x !== null && String(x).trim() !== ""; };
+  const fields = (form.fields || []).filter((f) => (f.legacy ? has(f.k) : !(f.legacyOf && has(f.legacyOf) && !has(f.k))));
   const c = React.useContext(PaperCompact);
   const lw = c ? "w-[84px] px-2.5 text-[13px]" : "w-[118px] px-3 text-[14px]";
   const lw2 = c ? "w-[84px] px-2.5 text-[13px]" : "w-[96px] px-3 text-[14px]";
@@ -724,6 +745,177 @@ function ReasonSelect({ f, value, onChange }) {
     </div>
   );
 }
+// ⭐ 2026-11-04 고르기 입력 — 정해진 목록(select)에 "✎ 직접 입력"을 붙인 드롭다운. 값은 늘 글자 그대로 저장(예전 문서 호환)
+const DIRECT = "__direct";
+function SelectDirect({ f, value, onChange }) {
+  const v = String(value ?? "");
+  const opts = f.options || [];
+  const known = opts.includes(v);
+  const [direct, setDirect] = React.useState(() => !!v && !known);
+  React.useEffect(() => { if (v && known) setDirect(false); else if (v) setDirect(true); }, [v, known]);
+  const sel = known ? v : direct ? DIRECT : "";
+  return (
+    <div className="space-y-1.5">
+      <CustomSelect openOnFocus value={sel} onChange={(e) => { const t = e.target.value; if (t === DIRECT) { setDirect(true); onChange(known ? "" : v); } else { setDirect(false); onChange(t); } }} className={inp}>
+        {!f.def && <option value="">{f.label} 선택</option>}
+        {opts.map((o) => <option key={o} value={o}>{o}</option>)}
+        <option value={DIRECT}>✎ 직접 입력</option>
+      </CustomSelect>
+      {sel === DIRECT && <input autoFocus={!v} value={v} onChange={(e) => onChange(e.target.value)} placeholder={`${f.label} 직접 입력`} className={inp} />}
+    </div>
+  );
+}
+
+// 🔎 검색 드롭다운(직원·부서·직책·거래처·차량) — 목록이 길어도 찾기 쉽게 검색칸 + 맨 아래 "✎ 직접 입력".
+//  화면 위에 띄우는 창(포털)이라 카드(overflow-hidden) 안에서도 잘리지 않고, 아래 공간이 모자라면 위로 연다(휴대폰 375px 폭에 맞춤).
+//  options: [{ value, label, sub?, group? }]
+function PickPopover({ anchorRef, options, selected = [], multi, onPick, onDirect, onClose, allowClear }) {
+  const [q, setQ] = React.useState("");
+  const [pos, setPos] = React.useState(null);
+  const boxRef = React.useRef(null);
+  React.useLayoutEffect(() => {
+    const place = () => {
+      const el = anchorRef.current; if (!el) return;
+      const r = el.getBoundingClientRect();
+      const vw = window.innerWidth; const vh = window.visualViewport?.height || window.innerHeight;
+      const w = Math.min(Math.max(r.width, 260), vw - 16);
+      const left = Math.max(8, Math.min(r.left, vw - w - 8));
+      const below = vh - r.bottom - 10; const above = r.top - 10;
+      const up = below < 240 && above > below;
+      setPos({ left, width: w, top: up ? undefined : r.bottom + 4, bottom: up ? window.innerHeight - r.top + 4 : undefined, maxH: Math.max(160, Math.min(360, up ? above : below)) });
+    };
+    place();
+    window.addEventListener("resize", place); window.addEventListener("scroll", place, true);
+    return () => { window.removeEventListener("resize", place); window.removeEventListener("scroll", place, true); };
+  }, [anchorRef]);
+  React.useEffect(() => {
+    const out = (e) => { if (boxRef.current?.contains(e.target) || anchorRef.current?.contains(e.target)) return; onClose(); };
+    const key = (e) => { if (e.key === "Escape") { e.stopPropagation(); onClose(); } };
+    document.addEventListener("pointerdown", out, true); window.addEventListener("keydown", key, true);
+    return () => { document.removeEventListener("pointerdown", out, true); window.removeEventListener("keydown", key, true); };
+  }, [anchorRef, onClose]);
+  const qq = q.trim().toLowerCase();
+  const list = React.useMemo(() => (qq ? options.filter((o) => `${o.label} ${o.sub || ""} ${o.group || ""}`.toLowerCase().includes(qq)) : options).slice(0, 300), [options, qq]);
+  const showSearch = options.length > 7;
+  if (!pos) return null;
+  let lastGroup = null;
+  return createPortal(
+    <div ref={boxRef} data-ap-pick className="fixed z-[100000] rounded-2xl border border-[#D3DBE8] bg-white shadow-[0_18px_44px_rgba(15,26,48,0.22)] flex flex-col overflow-hidden"
+      style={{ left: pos.left, width: pos.width, top: pos.top, bottom: pos.bottom, maxHeight: pos.maxH }}>
+      {showSearch && (
+        <div className="p-2 border-b border-[#EEF1F6] shrink-0">
+          <input autoFocus={!isTouchDevice()} value={q} onChange={(e) => setQ(e.target.value)} placeholder="검색"
+            onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); if (list.length === 1) onPick(list[0].value); else if (q.trim()) onDirect(q.trim()); } }}
+            className="h-10 w-full px-3 rounded-xl border border-[#DCE3EE] bg-[#F8FAFD] text-[14px] font-semibold text-[#0F1A30] outline-none focus:border-[#2D4C82]" />
+        </div>
+      )}
+      <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain py-1">
+        {allowClear && !multi && <button type="button" onClick={() => onPick("")} className="w-full px-3.5 py-2 text-left text-[13.5px] font-bold text-[#8E9BB2] hover:bg-[#F5F8FD]">선택 안 함</button>}
+        {list.map((o) => {
+          const on = selected.includes(o.value);
+          const head = o.group && o.group !== lastGroup ? o.group : null;
+          if (o.group) lastGroup = o.group;
+          return (
+            <React.Fragment key={`${o.group || ""}|${o.value}`}>
+              {head && <div className="px-3.5 pt-2 pb-1 text-[11.5px] font-extrabold tracking-[0.08em] text-[#4B6CB7]">{head}</div>}
+              <button type="button" onClick={() => onPick(o.value)} className={`w-full min-h-[40px] px-3.5 py-1.5 text-left flex items-center gap-2 ${on ? "bg-[#EEF3FC]" : "hover:bg-[#F5F8FD]"}`}>
+                {multi && <span className={`w-5 h-5 shrink-0 rounded-md border-2 grid place-items-center text-[11px] font-black ${on ? "bg-[#0F1A30] border-[#0F1A30] text-white" : "border-[#9AB0D6] text-transparent"}`}>✓</span>}
+                <span className="flex-1 min-w-0"><span className={`block truncate text-[14px] text-[#0F1A30] ${on ? "font-black" : "font-bold"}`}>{o.label}</span>{o.sub && <span className="block truncate text-[12px] font-semibold text-[#5B6B85]">{o.sub}</span>}</span>
+                {!multi && on && <span className="text-[13px] font-black text-[#2D4C82]">✓</span>}
+              </button>
+            </React.Fragment>
+          );
+        })}
+        {!list.length && <div className="px-3.5 py-4 text-center text-[13px] font-bold text-[#8E9BB2]">{options.length ? "검색 결과가 없습니다" : "목록이 비어 있습니다"}</div>}
+      </div>
+      <button type="button" onClick={() => onDirect(q.trim())} className="shrink-0 h-11 px-3.5 border-t border-[#EEF1F6] text-left text-[14px] font-black text-[#1B2B4B] hover:bg-[#F5F8FD] truncate">✎ 직접 입력{q.trim() ? ` · "${q.trim()}"` : ""}</button>
+    </div>,
+    document.body,
+  );
+}
+const splitNames = (v) => String(v || "").split(/\s*,\s*/).map((x) => x.trim()).filter(Boolean);
+function PickInput({ value, onChange, options, placeholder = "선택", multi = false, addLabel = "＋ 고르기" }) {
+  const v = String(value ?? "");
+  const known = options.some((o) => o.value === v);
+  const [direct, setDirect] = React.useState(() => !multi && !!v && !known);
+  React.useEffect(() => { if (!multi && v && known) setDirect(false); else if (!multi && v && !known) setDirect(true); }, [multi, v, known]);
+  const [open, setOpen] = React.useState(false);
+  const anchorRef = React.useRef(null);
+  const inputRef = React.useRef(null);
+  const close = React.useCallback(() => setOpen(false), []);
+  if (multi) {
+    const names = splitNames(v);
+    return (
+      <div ref={anchorRef} className="flex items-center gap-1.5">
+        <input ref={inputRef} value={v} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} className={`${inp} flex-1 min-w-0`} />
+        <button type="button" onClick={() => setOpen((o) => !o)} className="h-11 px-3 shrink-0 rounded-xl border border-[#9AB0D6] bg-[#F5F8FD] text-[13.5px] font-black text-[#1B2B4B] whitespace-nowrap hover:bg-[#EEF3FC]">{addLabel}</button>
+        {open && <PickPopover anchorRef={anchorRef} options={options} selected={names} multi onClose={close}
+          onPick={(x) => onChange((names.includes(x) ? names.filter((n) => n !== x) : [...names, x]).join(", "))}
+          onDirect={(t) => { setOpen(false); if (t && !names.includes(t)) onChange([...names, t].join(", ")); else setTimeout(() => inputRef.current?.focus(), 0); }} />}
+      </div>
+    );
+  }
+  // 목록이 비어 있으면(거래처·차량 미등록 등) 바로 글자 입력
+  if (!options.length && !open) return <input value={v} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} className={inp} />;
+  if (direct) {
+    return (
+      <div ref={anchorRef} className="flex items-center gap-1.5">
+        <input ref={inputRef} autoFocus={!v} value={v} onChange={(e) => onChange(e.target.value)} placeholder={`${placeholder} · 직접 입력`} className={`${inp} flex-1 min-w-0`} />
+        <button type="button" onClick={() => setOpen((o) => !o)} title="목록에서 고르기" className="h-11 px-2.5 shrink-0 rounded-xl border border-[#DCE3EE] bg-white text-[13px] font-black text-[#3A4A66] whitespace-nowrap hover:border-[#4B6CB7]">목록 ▾</button>
+        {open && <PickPopover anchorRef={anchorRef} options={options} selected={[v]} allowClear onClose={close} onPick={(x) => { setOpen(false); setDirect(false); onChange(x); }} onDirect={(t) => { setOpen(false); if (t) onChange(t); setTimeout(() => inputRef.current?.focus(), 0); }} />}
+      </div>
+    );
+  }
+  const cur = options.find((o) => o.value === v);
+  return (
+    <div ref={anchorRef}>
+      <button type="button" onClick={() => setOpen((o) => !o)} aria-haspopup="listbox" aria-expanded={open} className={`${inp} flex items-center gap-2 text-left`}>
+        <span className={`flex-1 min-w-0 truncate ${cur ? "" : "text-[#8E9BB2] font-semibold"}`}>{cur ? cur.label : placeholder}{cur?.sub ? <span className="ml-1.5 text-[12.5px] font-bold text-[#5B6B85]">{cur.sub}</span> : null}</span>
+        <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4" className={`shrink-0 opacity-80 transition ${open ? "rotate-180" : ""}`}><path d="M6 9l6 6 6-6" /></svg>
+      </button>
+      {open && <PickPopover anchorRef={anchorRef} options={options} selected={[v]} allowClear={!!v} onClose={close} onPick={(x) => { setOpen(false); onChange(x); }} onDirect={(t) => { setOpen(false); setDirect(true); onChange(t || ""); }} />}
+    </div>
+  );
+}
+// 고르기 목록 데이터 — 거래처(clients), 차량·기사(drivers). 그 목록을 쓰는 양식을 열었을 때만 구독
+function useApprovalRefs(company, need) {
+  const [clients, setClients] = React.useState([]);
+  const [cars, setCars] = React.useState([]);
+  React.useEffect(() => {
+    if (!company || !need.clients) return undefined;
+    const mine = (x) => (String(x.companyName || "").trim() || DEFAULT_COMPANY) === company;
+    return onSnapshot(collection(db, "clients"), (s) => {
+      const names = s.docs.map((d) => d.data()).filter(mine).map((c) => String(c.거래처명 || c.업체명 || c.name || c.상호 || c.회사명 || "").trim()).filter(Boolean);
+      setClients([...new Set(names)].sort((a, b) => a.localeCompare(b, "ko")));
+    }, () => setClients([]));
+  }, [company, need.clients]);
+  React.useEffect(() => {
+    if (!company || !need.cars) return undefined;
+    const mine = (x) => (String(x.companyName || "").trim() || DEFAULT_COMPANY) === company;
+    return onSnapshot(collection(db, "drivers"), (s) => {
+      const seen = new Set();
+      setCars(s.docs.map((d) => d.data()).filter((d) => mine(d) && String(d.차량번호 || "").trim())
+        .map((d) => ({ carNo: String(d.차량번호).trim(), name: String(d.이름 || "").trim(), kind: String(d.차량종류 || d.톤수 || "").trim(), grade: String(d.등급 || "").trim() }))
+        .filter((d) => { const k = `${d.carNo}|${d.name}`; if (seen.has(k)) return false; seen.add(k); return true; })
+        .sort((a, b) => a.carNo.localeCompare(b.carNo, "ko")));
+    }, () => setCars([]));
+  }, [company, need.cars]);
+  return { clients, cars };
+}
+// 필드의 pick → 목록 항목
+function pickOptions(f, { staff, hr, refs, data } = {}) {
+  const carSub = (c) => [c.name, c.kind, c.grade].filter(Boolean).join(" · ");
+  switch (f.pick) {
+    case "teams": return (hr?.teams || []).map((t) => ({ value: t, label: t }));
+    case "positions": return (hr?.positionsFor ? hr.positionsFor(f.pickTeam ? data?.[f.pickTeam] || "" : "") : []).map((p) => ({ value: p, label: p }));
+    case "staffNames": return (staff || []).map((u) => ({ value: `${u.name || u.email || ""}${u.position ? ` ${u.position}` : ""}`.trim(), label: u.name || u.email || "", sub: u.position || "", group: u.team || "미배정" }))
+      .filter((o) => o.label).sort((a, b) => String(a.group).localeCompare(String(b.group), "ko"));
+    case "clients": return (refs?.clients || []).map((n) => ({ value: n, label: n }));
+    case "cars": return [...new Map((refs?.cars || []).map((c) => [c.carNo, { value: c.carNo, label: c.carNo, sub: carSub(c) }])).values()];
+    case "carDriver": return (refs?.cars || []).map((c) => ({ value: c.name ? `${c.carNo} / ${c.name}` : c.carNo, label: c.carNo, sub: carSub(c) }));
+    default: return [];
+  }
+}
 // 🧾 2026-11-02 지출결의 지출 내역 입력 — 행마다 카드(발생일·지출처·적요·공급가액·세액·합계·입금계좌·비고), [+ 행 추가]/[복사]/[삭제]
 //    합계는 공급가액+세액으로 자동(합계만 알면 합계 칸에 바로 입력 가능). [부가세 10%]·[합계에서 나누기] 빠른 계산.
 const moneyIn = (v) => String(v || "").replace(/[^\d]/g, "");
@@ -794,11 +986,13 @@ function SpendLinesInput({ value, onChange }) {
     </div>
   );
 }
-function FieldInput({ f, value, onChange, staff, meUid }) {
+function FieldInput({ f, value, onChange, staff, meUid, ctx }) {
+  if (f.pick) return <PickInput value={value} onChange={onChange} options={pickOptions(f, { ...ctx, staff })} placeholder={f.ph || `${f.label} 선택`} multi={f.pick === "staffNames"} addLabel="＋ 직원" />;
   if (f.type === "spendLines") return <SpendLinesInput value={value} onChange={onChange} />;
   if (f.type === "bank") return <BankAccountInput value={value} onChange={onChange} stacked />;
   if (f.type === "textarea" && f.templates) return <ReasonSelect f={f} value={value} onChange={onChange} />;
   if (f.type === "textarea") return <textarea value={value || ""} onChange={(e) => onChange(e.target.value)} rows={f.rows || 3} placeholder={f.ph || ""} className={`${inp} h-auto py-2 leading-relaxed resize-y`} />;
+  if (f.type === "select" && f.direct) return <SelectDirect f={f} value={value} onChange={onChange} />;
   if (f.type === "select") return <CustomSelect openOnFocus value={value || ""} onChange={(e) => onChange(e.target.value)} className={inp}>{f.options.map((o) => <option key={o} value={o}>{o}</option>)}</CustomSelect>;
   if (f.type === "staff") return <StaffSelect value={value} onChange={onChange} staff={staff} exclude={[meUid]} placeholder="선택 안 함" />;
   if (f.type === "date") return <CustomDatePicker value={value || ""} onChange={(e) => onChange(e.target.value)} className={inp} showIcon placeholder="날짜 선택" />;
@@ -829,7 +1023,8 @@ function FieldInput({ f, value, onChange, staff, meUid }) {
       </div>
     );
   }
-  if (f.type === "time") return <input type="time" value={value || ""} onChange={(e) => onChange(e.target.value)} className={inp} />;
+  // ⭐ 2026-11-04 시간은 프로그램 공용 시간 고르기(오전/오후 · 시 · 분) — 값은 예전처럼 "HH:MM"
+  if (f.type === "time") return <TimeSelect value={value || ""} onChange={onChange} emptyLabel="선택" minuteStep={10} className="!h-11" />;
   if (f.type === "number") return <input type="number" inputMode="numeric" value={value ?? ""} onChange={(e) => onChange(e.target.value)} className={inp} />;
   if (f.type === "money") {
     return (
@@ -1150,15 +1345,17 @@ async function fitApprovalImages(images, limit = 700000) {
   if (imgs.join("").length > limit) throw new Error("첨부 이미지가 너무 큽니다. 장수를 줄여 주세요.");
   return imgs;
 }
-function Composer({ company, me, staff, cat, preset, onDone, leave, getLive, myDocs = [] }) {
+function Composer({ company, me, staff, cat, preset, onDone, leave, getLive, myDocs = [], canHr = false }) {
   const apSettings = useApprovalSettings(company);
   const editId = preset?.editId || null;
-  const forms = formsOfCat(cat);
+  // 🗂 2026-11-04 인사발령 품의는 인사 담당자(인사 담당이 없으면 회사 마스터)만 — canHrDraft()
+  const forms = formsOfCat(cat).filter((f) => f.key !== "personnel" || canHr || (editId && preset?.form === "personnel"));
+  const inForms = (k) => !!k && forms.some((f) => f.key === k);
   // ✋ 2026-11-01 임시저장(이 기기) — 새 문서 작성일 때만, 다시 오면 이어서
   const draftKey = `ap:${me.uid}:${cat}`;
   const [draft] = React.useState(() => (!preset ? draftStore.get(draftKey) : null));
   const init = draft && formOf(draft.formKey)?.cat === cat ? draft : preset;
-  const [formKey, setFormKey] = React.useState(init?.form && formOf(init.form).cat === cat ? init.form : init?.formKey && formOf(init.formKey).cat === cat ? init.formKey : forms[0].key);
+  const [formKey, setFormKey] = React.useState(inForms(init?.form) ? init.form : inForms(init?.formKey) ? init.formKey : forms[0].key);
   const form = formOf(formKey);
   const [data, setData] = React.useState(() => { const d0 = init?.data && (init.form === formKey || init.formKey === formKey) ? init.data : initialData(form); return form.normalize ? form.normalize(d0) : d0; }); // ⭐ 2026-11-02 예전 지출결의(지출처 1곳)도 지출 내역 행으로
   const [title, setTitle] = React.useState(init?.title || "");
@@ -1188,6 +1385,11 @@ function Composer({ company, me, staff, cat, preset, onDone, leave, getLive, myD
     setLine(staff && staff.length ? suggestLine(staff, me) : []);
   };
   const [missing, setMissing] = React.useState([]);
+  // ⭐ 2026-11-04 고르기 목록 — 부서·직책(인사 설정 hrSettings), 거래처·차량(이 양식이 쓸 때만 구독)
+  const hrOpt = useHrOptions(company);
+  const refs = useApprovalRefs(company, { clients: form.fields.some((f) => f.pick === "clients"), cars: form.fields.some((f) => f.pick === "cars" || f.pick === "carDriver") });
+  const fieldCtx = { hr: hrOpt, refs, data };
+  const setField = (f, v) => setData((p) => { const n = { ...p, [f.k]: v }; const extra = form.autofill ? form.autofill(f.k, v, p, { staff }) : null; return extra ? { ...n, ...extra } : n; });
   const docName = String(form.title || form.label).replace(/\s+/g, "").replace(/·/g, "·");
   const autoTitle = `${todayDots()} ${docName}_${me.name || ""}${me.position ? ` ${me.position}` : ""}`; // ⭐ 2026-11-02 이름·직책 사이 띄어쓰기
   const finalTitle = (title || autoTitle || form.label).trim();
@@ -1297,12 +1499,12 @@ function Composer({ company, me, staff, cat, preset, onDone, leave, getLive, myD
             <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder={autoTitle} className={inp} />
           </label>
           <div className="grid grid-cols-2 gap-x-2.5 gap-y-3">
-            {form.fields.map((f) => {
+            {form.fields.filter((f) => !f.legacy).map((f) => {
               const bad = missing.includes(f.k);
               return (
-                <div key={f.k} id={`apf-${f.k}`} className={`block rounded-xl ${half(f) && f.type !== "bank" ? "" : "col-span-2"} ${bad ? "ring-2 ring-[#2D4C82] ring-offset-4 bg-[#EEF3FC]" : ""}`}>
+                <div key={f.k} id={`apf-${f.k}`} className={`block rounded-xl min-w-0 ${half(f) && f.type !== "bank" && f.type !== "time" ? "" : "col-span-2"} ${bad ? "ring-2 ring-[#2D4C82] ring-offset-4 bg-[#EEF3FC]" : ""}`}>
                   <span className={`flex items-center gap-1.5 text-[14.5px] font-black ${bad ? "text-[#0B1428]" : "text-[#3A4A66]"}`}>{f.label}{f.required && <span className="text-[#2D4C82]">*</span>}{bad && <span className="ml-auto h-5 px-2 rounded-md bg-[#0F1A30] text-white text-[12px] font-black inline-flex items-center">입력 필요</span>}</span>
-                  <div className="mt-1.5"><FieldInput f={f} value={data[f.k]} onChange={(v) => { setData((p) => ({ ...p, [f.k]: v })); if (bad) setMissing((m) => m.filter((x) => x !== f.k)); }} staff={staff} meUid={me.uid} /></div>
+                  <div className="mt-1.5"><FieldInput f={f} value={data[f.k]} onChange={(v) => { setField(f, v); if (bad) setMissing((m) => m.filter((x) => x !== f.k)); }} staff={staff} meUid={me.uid} ctx={fieldCtx} /></div>
                 </div>
               );
             })}
@@ -1375,7 +1577,7 @@ function Progress({ d }) {
   );
 }
 
-function Viewer({ d, me, staff, company, onClose, onRedraft, onEdit, inline = false }) {
+function Viewer({ d, me, staff, company, onClose, onRedraft, onEdit, inline = false, canHr = false }) {
   const apCfg = useApprovalSettings(company);
   const form = formOf(d.form);
   const [comment, setComment] = React.useState("");
@@ -1581,6 +1783,24 @@ function Viewer({ d, me, staff, company, onClose, onRedraft, onEdit, inline = fa
               </div>}
               <div className="mt-3"><Progress d={d} /></div>
             </div>
+            {/* 🗂 2026-11-04 인사발령 품의 최종 승인 → 기안한 인사 담당자(인사 담당이 없으면 마스터)가 인사발령 공문 게시 */}
+            {d.form === "personnel" && d.status === "approved" && d.cancel?.status !== "pending" && (mine || canHr) && (() => {
+              const tu = (staff || []).find((u) => u.uid === d.data?.target);
+              const waiting = tu?.pendingOrder?.approvalId === d.id;
+              return (
+                <div className="rounded-2xl p-4 space-y-2.5 border-2 border-[#1B2B4B] bg-white" data-ap-hrorder>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[11px] font-extrabold tracking-[0.22em] text-[#4B6CB7]" style={{ fontFamily: MONO }}>ANNOUNCE</span>
+                    <span className="text-[14px] font-black text-[#0F1A30] whitespace-nowrap">인사발령 공문 게시</span>
+                    {tu && <span className={`ml-auto h-6 px-2 rounded-md text-[12px] font-black inline-flex items-center whitespace-nowrap ${waiting ? "bg-[#0F1A30] text-white" : "border border-[#DCE3EE] text-[#5B6B85]"}`}>{waiting ? "게시 대기" : "게시 완료·처리됨"}</span>}
+                  </div>
+                  <div className="text-[13px] text-[#3A4A66] leading-relaxed break-keep">
+                    결재가 끝났습니다. {canHr ? <>인사관리부 › 인사관리 › <b className="text-[#0F1A30]">인사발령</b>에서 {tu?.name || "대상자"}님을 고르고 [결재 내용 불러오기] → [발령 공문 발송]을 누르면 공지사항·전 직원 메일로 발령이 나가고 인사 정보가 바뀝니다.</> : <>인사발령 공문은 인사 담당자가 인사관리부 › 인사발령에서 게시합니다.</>}
+                  </div>
+                  {canHr && <button type="button" onClick={() => { goPersonnelOrder(d.data?.target); onClose?.(); }} className="w-full h-11 rounded-xl bg-[#0F1A30] text-white text-[14px] font-black">인사발령 화면 열기</button>}
+                </div>
+              );
+            })()}
             {/* 💸 2026-11-04 지급완료 — 최종 승인된 지출 문서 */}
             {pstate && (
               <div className={`rounded-2xl p-4 space-y-2.5 ${pstate === "paid" ? "border border-[#E8C9C5] bg-[#FDF6F5]" : payable ? "border-2 border-[#1B2B4B] bg-white" : "border border-[#DCE3EE] bg-[#F8FAFD]"}`} data-ap-pay>
@@ -2020,6 +2240,12 @@ export default function ApprovalCenter({ company, me, page, setPage, openId, onO
     return { ...me, name: personName(pf) || personName(st) || me.name, team: pf.team || st?.team || me.team || "", position: pf.position || st?.position || me.position || "",
       sign: pf.approvalSignature || "", markMode: pf.approvalMarkMode === "sign" ? "sign" : "stamp" }; // ✍ 2026-11-04 내 서명·결재 표시
   }, [me, staff, myProfile]);
+  // 🗂 인사발령 품의 작성·공문 게시 가능 여부(역할은 실제 계정 역할 — 통합인사관리자가 경리 화면이어도 인사 담당)
+  const canHr = React.useMemo(() => {
+    if (!myProfile) return me.role === "totalMaster";
+    const meDoc = { ...myProfile, role: me.role === "totalMaster" ? "totalMaster" : (myProfile.role || me.role), team: myProfile.team || me.team || "" };
+    return canHrDraft(meDoc, staff, me.uid);
+  }, [myProfile, staff, me.role, me.team, me.uid]);
   const cur = open ? ([...(list || []), ...(companyAll || []), ...payPool].find((x) => x.id === open) || null) : null;
   // ⭐ 2026-11-01 다른 메뉴(결재함↔근태 신청 등)로 옮기면 열려 있던 문서를 닫는다 — 예전엔 마지막으로 본 문서가 다른 메뉴에서 팝업으로 떴다
   React.useEffect(() => { setOpen(null); }, [page]);
@@ -2135,7 +2361,7 @@ export default function ApprovalCenter({ company, me, page, setPage, openId, onO
 
       {isCat && (
         <>
-          <Composer key={`${page}-${preset?.editId || preset?.id || "new"}`} myDocs={mineL} company={company} me={meFull} staff={staff} cat={page} preset={preset?.cat === page ? preset : null}
+          <Composer key={`${page}-${preset?.editId || preset?.id || "new"}${page === "report" && canHr ? "-hr" : ""}`} canHr={canHr} myDocs={mineL} company={company} me={meFull} staff={staff} cat={page} preset={preset?.cat === page ? preset : null}
             leave={leave} getLive={(id) => (list || []).find((x) => x.id === id)}
             onDone={() => { setPreset(null); setPage("mine"); }} />
         </>
@@ -2145,7 +2371,7 @@ export default function ApprovalCenter({ company, me, page, setPage, openId, onO
         <div className="grid gap-4 items-start" style={{ gridTemplateColumns: "minmax(400px, 0.85fr) minmax(0, 1.5fr)" }}>
           <div className="min-w-0">{page === "inbox" ? inboxList : mineList}</div>
           <div className="min-w-0 sticky top-[76px]">
-            {cur ? <Viewer key={cur.id} inline d={cur} me={meFull} staff={staff} company={company} onClose={() => setOpen(null)} onRedraft={redraft} onEdit={edit} />
+            {cur ? <Viewer key={cur.id} inline canHr={canHr} d={cur} me={meFull} staff={staff} company={company} onClose={() => setOpen(null)} onRedraft={redraft} onEdit={edit} />
               : <div className="h-[calc(100vh-190px)] min-h-[640px] rounded-[20px] border-2 border-dashed border-[#DCE3EE] bg-white grid place-items-center text-center"><div><div className="text-[12px] font-extrabold tracking-[0.24em] text-[#9AA9C3]" style={{ fontFamily: MONO }}>PREVIEW</div><div className="text-[15px] font-black text-[#5B6B85] mt-1">왼쪽 목록에서 문서를 누르면<br />여기에 결재 문서가 바로 보입니다</div></div></div>}
           </div>
         </div>
@@ -2153,7 +2379,7 @@ export default function ApprovalCenter({ company, me, page, setPage, openId, onO
       {page === "lines" && <LinesPage company={company} me={meFull} staff={staff} />}
       {signOpen && <SignatureModal me={meFull} onClose={() => setSignOpen(false)} />}
 
-      {cur && !(wide && (page === "inbox" || page === "mine")) && <Viewer d={cur} me={meFull} staff={staff} company={company} onClose={() => setOpen(null)} onRedraft={redraft} onEdit={edit} />}
+      {cur && !(wide && (page === "inbox" || page === "mine")) && <Viewer canHr={canHr} d={cur} me={meFull} staff={staff} company={company} onClose={() => setOpen(null)} onRedraft={redraft} onEdit={edit} />}
     </div>
   );
 }
