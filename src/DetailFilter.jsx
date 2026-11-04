@@ -96,6 +96,7 @@ const Icon = ({ s = 14 }) => (
 function ValueInput({ field, q, onChange, options, onEnter, inputRef }) {
   const [open, setOpen] = React.useState(false);
   const [hi, setHi] = React.useState(0);
+  const pickedAt = React.useRef(0);
   const nq = normClient(q);
   const list = React.useMemo(() => {
     const arr = nq ? options.filter((o) => normClient(o.v).includes(nq)) : options;
@@ -113,8 +114,12 @@ function ValueInput({ field, q, onChange, options, onEnter, inputRef }) {
           if (e.key === "ArrowDown") { e.preventDefault(); setOpen(true); setHi((h) => Math.min(h + 1, list.length - 1)); }
           else if (e.key === "ArrowUp") { e.preventDefault(); setHi((h) => Math.max(h - 1, 0)); }
           else if (e.key === "Enter") {
-            e.preventDefault();
-            if (open && list[hi] && nq && !exact) { onChange(list[hi].v); setOpen(false); } else onEnter?.();
+            // ⭐ 2026-11-04 한글 입력 중 Enter(조합 끝내기)는 무시 — 예전엔 이 Enter로 고르고, 바로 뒤 Enter로 조회+창 닫힘이 같이 일어났다
+            e.preventDefault(); e.stopPropagation();
+            if (e.nativeEvent?.isComposing || e.keyCode === 229) return;
+            if (Date.now() - (pickedAt.current || 0) < 400) return;
+            if (open && list[hi] && !exact) { onChange(list[hi].v); setOpen(false); pickedAt.current = Date.now(); return; } // 목록이 떠 있으면 Enter = 고르기
+            // 목록이 없으면 Enter는 아무것도 안 함(창이 닫히지 않게) — 조회는 [조회] 버튼으로
           } else if (e.key === "Escape") { if (open) { e.stopPropagation(); setOpen(false); } }
         }}
         className="w-full h-10 rounded-xl border border-[#D5DDEA] bg-white pl-2.5 sm:pl-3 pr-12 sm:pr-16 text-[14px] font-bold text-[#0F1A30] outline-none focus:border-[#1B2B4B] focus:ring-2 focus:ring-[#1B2B4B]/10 disabled:bg-[#F4F6FA] disabled:text-[#9AA9C3] placeholder:font-semibold placeholder:text-[#9AA9C3]" />
@@ -196,7 +201,7 @@ function DetailFilterModal({ open, onClose, rows, value, onApply, withDate, gett
   const inp = "h-10 rounded-xl border border-[#D5DDEA] bg-white px-3 text-[14px] font-bold text-[#0F1A30] outline-none focus:border-[#1B2B4B] focus:ring-2 focus:ring-[#1B2B4B]/10";
 
   return createPortal(
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-[#060C1A]/60 backdrop-blur-[3px] p-3" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose?.(); }}>
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-[#060C1A]/60 backdrop-blur-[3px] p-3">{/* ⭐ 2026-11-04 바깥을 눌러도 닫히지 않음 — [닫기]·[취소]·Esc로만 */}
       <div className="w-[min(760px,96vw)] max-h-[94vh] flex flex-col rounded-[22px] bg-[#F4F6FA] shadow-[0_30px_80px_rgba(6,12,26,0.55)] overflow-hidden ring-1 ring-white/10">
         {/* 머리 */}
         <div className="relative overflow-hidden px-4 sm:px-6 pt-5 pb-4 text-white" style={{ background: "radial-gradient(700px 260px at 85% -30%, rgba(110,149,232,.32), transparent 60%), linear-gradient(120deg,#060C1A 0%,#0F1A30 45%,#1B2B4B 100%)" }}>

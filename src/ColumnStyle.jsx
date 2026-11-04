@@ -114,7 +114,7 @@ function StyleModal({ target, onClose }) {
   const lab = "text-[11.5px] font-black text-[#5B6B85] mb-1.5";
 
   return createPortal(
-    <div className="fixed inset-0 z-[2147483100] flex items-center justify-center bg-[#060C1A]/55 backdrop-blur-[3px] p-3" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+    <div className="fixed inset-0 z-[2147483100] flex items-center justify-center bg-[#060C1A]/55 backdrop-blur-[3px] p-3">
       <div className="w-[min(520px,96vw)] max-h-[94vh] flex flex-col rounded-[22px] bg-[#F4F6FA] shadow-[0_30px_80px_rgba(6,12,26,0.55)] overflow-hidden ring-1 ring-white/10">
         <div className="relative overflow-hidden px-5 pt-4 pb-4 text-white" style={{ background: "radial-gradient(600px 220px at 85% -30%, rgba(110,149,232,.32), transparent 60%), linear-gradient(120deg,#060C1A 0%,#0F1A30 45%,#1B2B4B 100%)" }}>
           <div className="absolute inset-0 pointer-events-none" style={{ background: "linear-gradient(rgba(143,176,240,.07) 1px, transparent 1px) 0 0/22px 22px, linear-gradient(90deg, rgba(143,176,240,.07) 1px, transparent 1px) 0 0/22px 22px" }} />
