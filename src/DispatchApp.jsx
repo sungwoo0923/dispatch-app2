@@ -53023,7 +53023,7 @@ const handleBatchSettle = async (targetStatus) => {
                       <div className="mt-6 text-center text-[12.5px] font-bold text-[#9AA9C3]">왼쪽에서 거래처를 조회하면 이곳에 명세서가 그려집니다</div>
                     </div>
                   ) : (
-                    <div className="mx-auto max-w-[820px] min-w-[560px] rounded-md shadow-[0_8px_28px_rgba(15,26,48,0.14)] overflow-hidden">
+                    <div className="mx-auto w-max min-w-full rounded-md shadow-[0_8px_28px_rgba(15,26,48,0.14)]">{/* ⭐ 2026-11-04 오른쪽이 잘리던 문제 — 문서 폭만큼 늘리고 넓으면 미리보기 안에서 좌우 스크롤 */}
                       <div id="invoiceArea" style={{ background: "#fff", padding: "26px 26px 22px" }}>
                         <div style={{ fontFamily: DOC.font, color: DOC.ink, fontSize: 12 }}>
                           {/* 문서 머리 */}
