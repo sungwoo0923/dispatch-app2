@@ -10,7 +10,8 @@
 //  ⚠️ 회사명이 없는 예전 문서는 기본 회사(DEFAULT_COMPANY)의 것으로 본다(엄격 컬렉션).
 //     기사앱 위치·로그처럼 서버/네이티브가 회사명 없이 쓰는 기록은 "회사명이 다를 때만" 뺀다(느슨한 컬렉션).
 import * as base from "kp-firestore-base";
-import { isDemoOn, demoQuerySnap } from "./devDemoData"; // 🧪 개발 전용(import.meta.env.DEV에서만 사용) — 배포 빌드에서는 빠진다
+import { isDemoOn, demoQuerySnap } from "./devDemoData";
+import { meterRead, meterWrite } from "./usageMeter"; // 💰 2026-11-04 회사별 사용량 표본(숫자만 더함 · 10분마다 1번 저장) // 🧪 개발 전용(import.meta.env.DEV에서만 사용) — 배포 빌드에서는 빠진다
 
 export * from "kp-firestore-base";
 
@@ -184,17 +185,34 @@ function previewSnapshot(ref, args) {
   const t = setTimeout(() => { try { cb?.(demo || (isDocRef(ref) ? emptyDocSnap(ref) : emptyQuerySnap(ref))); } catch (e) { console.warn(e); } }, 0);
   return () => clearTimeout(t);
 }
-export function getDoc(ref, ...rest) { return preview ? Promise.resolve(emptyDocSnap(ref)) : base.getDoc(ref, ...rest); }
+// 💰 사용량 표본 — 서버에서 받은 문서 수만 센다(캐시에서 온 스냅샷은 요금이 없으므로 제외). 실패해도 화면엔 영향 없음
+const countSnap = (snap) => {
+  try {
+    if (bypass > 0 || !snap || snap.metadata?.fromCache) return;
+    if (typeof snap.docChanges === "function") meterRead(Math.max(1, snap.docChanges().length));
+    else meterRead(1);
+  } catch { /* 무시 */ }
+};
+const meterArgs = (args) => {
+  const fi = args.findIndex((a) => typeof a === "function");
+  if (fi !== -1) return args.map((a, i) => (i === fi ? (snap) => { countSnap(snap); return a(snap); } : a));
+  return args.map((a) => (a && typeof a === "object" && typeof a.next === "function" ? { ...a, next: (snap) => { countSnap(snap); return a.next(snap); } } : a));
+};
+const baseOnSnapshot = (ref, ...args) => base.onSnapshot(ref, ...meterArgs(args));
+const countGet = (snap) => { try { if (bypass === 0 && snap && !snap.metadata?.fromCache) meterRead(Math.max(1, typeof snap.size === "number" ? snap.size : 1)); } catch { /* 무시 */ } return snap; };
+const countW = (k = 1) => { try { if (bypass === 0) meterWrite(k); } catch { /* 무시 */ } };
+
+export function getDoc(ref, ...rest) { return preview ? Promise.resolve(emptyDocSnap(ref)) : base.getDoc(ref, ...rest).then(countGet); }
 export function getDocFromCache(ref, ...rest) { return preview ? Promise.resolve(emptyDocSnap(ref)) : base.getDocFromCache(ref, ...rest); }
-export function getDocFromServer(ref, ...rest) { return preview ? Promise.resolve(emptyDocSnap(ref)) : base.getDocFromServer(ref, ...rest); }
-export function updateDoc(...a) { return preview ? previewBlocked() : base.updateDoc(...a); }
-export function deleteDoc(...a) { return preview ? previewBlocked() : base.deleteDoc(...a); }
+export function getDocFromServer(ref, ...rest) { return preview ? Promise.resolve(emptyDocSnap(ref)) : base.getDocFromServer(ref, ...rest).then(countGet); }
+export function updateDoc(...a) { if (preview) return previewBlocked(); countW(); return base.updateDoc(...a); }
+export function deleteDoc(...a) { if (preview) return previewBlocked(); countW(); return base.deleteDoc(...a); }
 export function runTransaction(...a) { return preview ? previewBlocked() : base.runTransaction(...a); }
 
 export function onSnapshot(ref, ...args) {
   if (preview) return previewSnapshot(ref, args);
   const col = topCollectionId(ref);
-  if (!col || !(STRICT.has(col) || LOOSE.has(col))) return base.onSnapshot(ref, ...args);
+  if (!col || !(STRICT.has(col) || LOOSE.has(col))) return baseOnSnapshot(ref, ...args);
   const wrapFn = (fn) => (typeof fn === "function" ? (snap) => fn(wrapSnap(snap, keeper(col))) : fn);
   // onSnapshot(ref, cb, err) / (ref, options, cb, err) / (ref, { next, error }) / (ref, options, { next })
   const fi = args.findIndex((a) => typeof a === "function");
@@ -209,7 +227,7 @@ export function onSnapshot(ref, ...args) {
   let q = injected(ref);
   if (!q) {
     // 스위치가 켜졌는데 이 화면이 아직 모르는 경우 — 서버가 거부(permission-denied)하면 켜고 회사 조건으로 다시 구독
-    if (!(getTenant() && INJECT.has(col))) return base.onSnapshot(ref, ...build(null));
+    if (!(getTenant() && INJECT.has(col))) return baseOnSnapshot(ref, ...build(null));
     let u2 = null; let stop2 = false;
     const heal = (e) => {
       if (stop2 || !e || e.code !== "permission-denied") return false;
@@ -217,7 +235,7 @@ export function onSnapshot(ref, ...args) {
       const q2 = injected(ref);
       if (!q2) return false;
       try { u2?.(); } catch { /* 무시 */ }
-      u2 = base.onSnapshot(q2, ...build(null));
+      u2 = baseOnSnapshot(q2, ...build(null));
       return true;
     };
     let a3 = args.map((a, i) => {
@@ -227,19 +245,19 @@ export function onSnapshot(ref, ...args) {
       return a;
     });
     if (fi !== -1 && typeof args[fi + 1] !== "function") { a3 = [...a3]; a3.splice(fi + 1, 0, (e) => { if (!heal(e)) console.warn(e); }); }
-    u2 = base.onSnapshot(ref, ...a3);
+    u2 = baseOnSnapshot(ref, ...a3);
     return () => { stop2 = true; try { u2?.(); } catch { /* 무시 */ } };
   }
   let unsub = null; let stopped = false;
-  const fallback = (e) => { warnIndex(e, ref); if (stopped) return; try { unsub?.(); } catch { /* 무시 */ } unsub = base.onSnapshot(ref, ...build(null)); };
+  const fallback = (e) => { warnIndex(e, ref); if (stopped) return; try { unsub?.(); } catch { /* 무시 */ } unsub = baseOnSnapshot(ref, ...build(null)); };
   // 오류 콜백이 없던 구독도 색인 오류는 받아서 되살린다
   let a2 = build(fallback);
   if (fi !== -1 && typeof args[fi + 1] !== "function") { a2 = [...a2]; a2.splice(fi + 1, 0, (e) => (needsIndex(e) ? fallback(e) : console.warn(e))); }
-  unsub = base.onSnapshot(q, ...a2);
+  unsub = baseOnSnapshot(q, ...a2);
   return () => { stopped = true; try { unsub?.(); } catch { /* 무시 */ } };
 }
 
-const wrapGet = (fn) => async (ref, ...rest) => {
+const wrapGet = (fn, billed = true) => async (ref, ...rest) => {
   if (preview) return emptyQuerySnap(ref);
   const q = injected(ref);
   let snap;
@@ -256,11 +274,12 @@ const wrapGet = (fn) => async (ref, ...rest) => {
       snap = await fn(q2, ...rest);
     }
   }
+  if (billed) countGet(snap);
   const col = topCollectionId(ref);
   return col ? wrapSnap(snap, keeper(col)) : snap;
 };
 export const getDocs = wrapGet(base.getDocs);
-export const getDocsFromCache = base.getDocsFromCache ? wrapGet(base.getDocsFromCache) : undefined;
+export const getDocsFromCache = base.getDocsFromCache ? wrapGet(base.getDocsFromCache, false) : undefined;
 export const getDocsFromServer = base.getDocsFromServer ? wrapGet(base.getDocsFromServer) : undefined;
 export async function getCountFromServer(ref, ...rest) {
   if (preview) return { data: () => ({ count: 0 }) };
@@ -308,13 +327,20 @@ export function doc(first, ...rest) {
   return base.doc(first, ...rest);
 }
 
-export function addDoc(ref, data) { if (preview) return previewBlocked({ id: `preview-${Date.now()}`, path: "" }); return base.addDoc(ref, stampData(topCollectionId(ref), data)); }
-export function setDoc(ref, data, ...rest) { if (preview) return previewBlocked(); return base.setDoc(ref, stampData(docCollectionId(ref), data), ...rest); }
+export function addDoc(ref, data) { if (preview) return previewBlocked({ id: `preview-${Date.now()}`, path: "" }); countW(); return base.addDoc(ref, stampData(topCollectionId(ref), data)); }
+export function setDoc(ref, data, ...rest) { if (preview) return previewBlocked(); countW(); return base.setDoc(ref, stampData(docCollectionId(ref), data), ...rest); }
 export function writeBatch(db) {
   const b = base.writeBatch(db);
   const set = b.set.bind(b);
-  b.set = (ref, data, ...rest) => set(ref, stampData(docCollectionId(ref), data), ...rest);
+  let ops = 0;
+  b.set = (ref, data, ...rest) => { ops += 1; return set(ref, stampData(docCollectionId(ref), data), ...rest); };
+  try {
+    const upd = b.update.bind(b); const del = b.delete.bind(b);
+    b.update = (...a) => { ops += 1; return upd(...a); };
+    b.delete = (...a) => { ops += 1; return del(...a); };
+  } catch { /* 점검용 가짜 SDK */ }
   if (preview) b.commit = () => previewBlocked();
+  else { const commit = b.commit.bind(b); b.commit = (...a) => { countW(ops); ops = 0; return commit(...a); }; }
   return b;
 }
 

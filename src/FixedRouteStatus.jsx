@@ -426,16 +426,18 @@ export default function FixedRouteStatusHost({ company, dispatchData = [], rende
   const rowsOf = React.useCallback((f) => (dispatchData || []).filter((r) => r.배차표Id === f.id), [dispatchData]);
   const rows = form ? rowsOf(form) : [];
   // 30초마다 시트와 맞춤(화면을 연 동안) — 서버가 새 탭·새 줄·바뀐 칸을 처리
-  const runSync = React.useCallback(async (f, quiet = true) => {
+  // 💰 2026-11-04 서버 비용 — 30초 자동 맞춤은 auto 표시를 붙여 보낸다: 같은 양식을 다른 직원 화면이 25초 안에 이미 맞췄으면 서버가 건너뛴다
+  //  (직원 여러 명이 같은 화면을 열어 두면 30초마다 사람 수만큼 시트·오더를 다시 읽던 것을 양식당 1번으로)
+  const runSync = React.useCallback(async (f, quiet = true, auto = false) => {
     if (!f?.sheetUrl || f.autoSync === false) return;
     setSync((s) => ({ ...s, busy: true }));
-    try { const r = await sheetApi({ action: "sync", url: f.sheetUrl, boardId: f.id }); setSync({ at: Date.now(), busy: false, err: "", last: r }); }
+    try { const r = await sheetApi({ action: "sync", url: f.sheetUrl, boardId: f.id, ...(auto ? { auto: true } : {}) }); setSync((s) => ({ at: Date.now(), busy: false, err: "", last: r?.skipped === "recent" ? s.last : r })); }
     catch (e) { setSync((s) => ({ ...s, busy: false, at: Date.now(), err: quiet ? String(e?.message || e) : (window.alert?.(`시트와 맞추지 못했습니다: ${e?.message || e}`), String(e?.message || e)) })); }
   }, []);
   React.useEffect(() => {
     if (!form?.sheetUrl || form.autoSync === false) return undefined;
     runSync(form);
-    const t = setInterval(() => { if (document.visibilityState === "visible") runSync(form); }, 30000);
+    const t = setInterval(() => { if (document.visibilityState === "visible") runSync(form, true, true); }, 30000);
     return () => clearInterval(t);
   }, [form?.id, form?.sheetUrl, form?.autoSync, runSync]); // eslint-disable-line react-hooks/exhaustive-deps
 

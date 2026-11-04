@@ -428,6 +428,34 @@ service cloud.firestore {
       allow get, list: if isTotalMasterUser();
       allow write: if isTotalMasterUser();
     }
+    // 💰 2026-11-04 플랫폼 비용·손익 — 비용 기준(단가·무료량·고정비)은 최고관리자만. 고객사에는 절대 보이지 않게.
+    match /platformConfig/{docId} {
+      allow read, write: if isTotalMasterUser();
+    }
+    // 서버 사용량(Cloud Monitoring 수집 결과) — 쓰기는 서버(Cloud Functions)만, 읽기는 최고관리자만
+    match /platformUsage/{docId} {
+      allow read: if isTotalMasterUser();
+      allow write: if false;
+    }
+    // 회사별 사용량 표본(앱이 10분마다 increment) — 승인된 같은 회사 직원·기사는 자기 회사 문서의 숫자 칸만 늘릴 수 있다. 읽기는 최고관리자만
+    match /usageCounters/{docId} {
+      allow read, delete: if isTotalMasterUser();
+      allow create: if isApproved() && !isShipperUser()
+        && request.resource.data.get('company', '') == myCo()
+        && request.resource.data.get('month', '') is string
+        && request.resource.data.month.matches('^[0-9]{4}-[0-9]{2}$')
+        && request.resource.data.keys().hasOnly(['company', 'month', 'reads', 'writes', 'sessions', 'updatedAt'])
+        && request.resource.data.get('reads', 0) is number && request.resource.data.get('reads', 0) < 5000000
+        && request.resource.data.get('writes', 0) is number && request.resource.data.get('writes', 0) < 1000000;
+      allow update: if isApproved() && !isShipperUser()
+        && resource.data.get('company', '') == myCo()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['reads', 'writes', 'sessions', 'updatedAt'])
+        && request.resource.data.get('reads', 0) >= resource.data.get('reads', 0)
+        && request.resource.data.get('writes', 0) >= resource.data.get('writes', 0)
+        && request.resource.data.get('sessions', 0) >= resource.data.get('sessions', 0)
+        && request.resource.data.get('reads', 0) - resource.data.get('reads', 0) < 5000000
+        && request.resource.data.get('writes', 0) - resource.data.get('writes', 0) < 1000000;
+    }
 
     // ────────────────────────────────────────────────────────────
     // 가입 진행 중(승인 전) 계정에 필요한 최소 권한 — 승인된 계정은 기존과 동일
@@ -806,7 +834,9 @@ service cloud.firestore {
         'driver_completed_archive', 'notifications', 'schedules', 'scheduledEmails', 'emailLogs', 'hrResumes', 'attendanceRequests',
         'attendanceChangeRequests', 'acctPayments', 'approvalLines', 'acctLedger', 'acctRecurring', 'officeAssets', 'execSchedules', 'companyRules', 'hrSettings', 'retireCases', 'approvalSettings', 'acctFunds',
         // ⭐ 2026-11-02 운임규칙 · 회사별 맞춤 기능(위에서 따로 정함)
-        'fareRules', 'companyFeatures', 'companySettings', 'vehicleLedger', 'vehicleLedgerFiles', 'vehicleTypes']);
+        'fareRules', 'companyFeatures', 'companySettings', 'vehicleLedger', 'vehicleLedgerFiles', 'vehicleTypes',
+        // 💰 2026-11-04 플랫폼 운영 문서 — 위에서 따로 정함(예전엔 siteConfig가 이 목록에 없어 승인된 고객사 직원도 요금·관제 집계를 읽을 수 있었다)
+        'siteConfig', 'platformConfig', 'platformUsage', 'usageCounters']);
     }
   }
 }

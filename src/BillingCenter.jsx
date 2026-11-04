@@ -147,10 +147,16 @@ export default function BillingCenter({ userEmail = "", userName = "", canEdit =
       { k: "기본료", v: num(plan.price) },
       { k: `직원 계정 추가 ${exSeats}명`, v: exSeats * num(pricing.extraSeat || 15000), hide: !exSeats },
       { k: `오더 초과 ${exOrders.toLocaleString()}건(월말 예상)`, v: exOrders * num(pricing.extraOrder || 50), hide: !exOrders },
-      { k: `지입차 관리 ${fleet || 0}대`, v: hasFleet && fleetRate != null ? (fleet || 0) * fleetRate : null, hide: !hasFleet || !fleet },
+      // ⭐ 2026-11-04 요금제 포함 대수(plan.fleet)를 넘는 지입차만
+      { k: `지입차 관리 ${Math.max(0, (fleet || 0) - num(plan.fleet))}대${num(plan.fleet) ? `(포함 ${num(plan.fleet)}대 초과)` : ""}`, v: hasFleet && fleetRate != null ? Math.max(0, (fleet || 0) - num(plan.fleet)) * fleetRate : null, hide: !hasFleet || Math.max(0, (fleet || 0) - num(plan.fleet)) === 0 },
     ].filter((x) => !x.hide);
     return { rows, total: rows.reduce((a, x) => a + (x.v || 0), 0), unknown: rows.some((x) => x.v == null) };
   }, [plan, planId, staff, usage, fleet, pricing]);
+  // ⭐ 2026-11-04 이달 청구서(관리센터 수납 관리에서 만든 것) — 기본료·초과 + 추가 항목(세금계산서·문자·개발 등) 줄을 그대로 보여준다
+  const thisInv = (invoices || []).find((v) => v.month === ym) || null;
+  const invRows = thisInv && (Array.isArray(thisInv.lines) || Array.isArray(thisInv.items))
+    ? [...(thisInv.lines || []).map((x) => ({ k: x.label, v: num(x.amount) })), ...(thisInv.items || []).map((x) => ({ k: `${x.label}${num(x.qty) && x.unit ? ` ${num(x.qty).toLocaleString()} × ${won(x.unit)}원` : ""}`, v: num(x.amount), add: true }))]
+    : null;
 
   const unpaid = (invoices || []).filter((v) => v.status === "청구" || v.status === "연체");
   const unpaidSum = unpaid.reduce((a, v) => a + num(v.amount), 0);
@@ -278,26 +284,33 @@ export default function BillingCenter({ userEmail = "", userName = "", canEdit =
           )}
         </Card>
 
-        <Card code="BILL BREAKDOWN" title="이번 달 예상 청구 내역">
-          {!bill ? <div className="py-10 text-center text-[#9AA9C3] text-[13px]">요금제가 지정되면 예상 청구 금액이 계산됩니다.</div> : (
+        <Card code="BILL BREAKDOWN" title={invRows ? `${Number(ym.slice(5))}월 청구서 내역` : "이번 달 예상 청구 내역"} right={invRows ? <span className="px-2 py-0.5 rounded-md bg-[#0F1A30] text-white text-[10.5px] font-black">{thisInv.status || "미청구"}</span> : null}>
+          {!bill && !invRows ? <div className="py-10 text-center text-[#9AA9C3] text-[13px]">요금제가 지정되면 예상 청구 금액이 계산됩니다.</div> : (
             <div className="flex flex-col h-full">
               <div className="space-y-2.5">
-                {bill.rows.map((x) => (
-                  <div key={x.k} className="flex items-center justify-between gap-3">
-                    <span className="text-[13px] font-bold text-[#1B2B4B] min-w-0 truncate">{x.k}</span>
+                {(invRows || bill.rows).map((x, i) => (
+                  <div key={`${x.k}_${i}`} className="flex items-center justify-between gap-3">
+                    <span className="text-[13px] font-bold text-[#1B2B4B] min-w-0 truncate">{x.add && <span className="mr-1 px-1.5 py-0.5 rounded bg-[#EEF2F8] text-[#5B6B85] text-[10px] font-black">추가</span>}{x.k}</span>
                     <span className="text-[14px] font-black tabular-nums text-[#0F1A30] whitespace-nowrap" style={{ fontFamily: MONO }}>{x.v == null ? "별도 안내" : `${won(x.v)}원`}</span>
                   </div>
                 ))}
               </div>
+              {(() => { const tot = invRows ? num(thisInv.amount) : bill.total; return (
               <div className="mt-4 pt-3 border-t border-dashed border-[#DCE3EE] flex items-end justify-between gap-3">
                 <div><div className="text-[10px] font-extrabold tracking-[0.22em] text-[#4B6CB7]" style={{ fontFamily: MONO }}>TOTAL</div><div className="text-[12px] font-bold text-[#7A89A3]">VAT 별도</div></div>
-                <div className="text-right"><div className="text-[24px] font-black tabular-nums text-[#0F1A30]" style={{ fontFamily: MONO }}>{won(bill.total)}<span className="text-[12px] text-[#7A89A3] ml-0.5">원</span></div><div className="text-[11.5px] font-bold text-[#7A89A3] tabular-nums" style={{ fontFamily: MONO }}>VAT 포함 {won(bill.total * 1.1)}원</div></div>
-              </div>
+                <div className="text-right"><div className="text-[24px] font-black tabular-nums text-[#0F1A30]" style={{ fontFamily: MONO }}>{won(tot)}<span className="text-[12px] text-[#7A89A3] ml-0.5">원</span></div><div className="text-[11.5px] font-bold text-[#7A89A3] tabular-nums" style={{ fontFamily: MONO }}>VAT 포함 {won(tot * 1.1)}원</div></div>
+              </div>); })()}
               <div className="mt-4 space-y-3">
                 <div><div className="flex justify-between text-[11.5px] font-bold text-[#5B6B85] mb-1"><span>직원 계정</span><span className="tabular-nums" style={{ fontFamily: MONO }}>{staff ?? "-"} / {seatsLim}</span></div><Meter used={staff || 0} limit={seatsLim} /></div>
                 <div><div className="flex justify-between text-[11.5px] font-bold text-[#5B6B85] mb-1"><span>월 오더(월말 예상)</span><span className="tabular-nums" style={{ fontFamily: MONO }}>{usage ? usage.projected.toLocaleString() : "-"} / {ordersLim.toLocaleString()}</span></div><Meter used={usage?.toDate || 0} limit={ordersLim} projected={usage?.projected} /></div>
               </div>
-              <div className="mt-auto pt-4 text-[11.5px] text-[#9AA9C3]">실제 청구 금액은 월말에 관리센터에서 확정한 청구서 기준입니다.</div>
+              {[["taxInvoiceFee", "전자세금계산서", "건"], ["alimtalkFee", "알림톡", "건"], ["smsFee", "문자", "건"], ["extraBizFee", "추가 사업자", "곳·월"]].some(([k]) => num(pricing[k]) > 0) && (
+                <div className="mt-4 rounded-xl bg-[#F7F9FC] border border-[#EEF1F6] px-3 py-2.5 text-[11.5px] font-bold text-[#5B6B85] leading-relaxed">
+                  <div className="text-[9.5px] font-extrabold tracking-[0.2em] text-[#4B6CB7] mb-0.5" style={{ fontFamily: MONO }}>ADD-ONS · 사용한 만큼</div>
+                  {[["taxInvoiceFee", "전자세금계산서", "건"], ["alimtalkFee", "알림톡", "건"], ["smsFee", "문자(SMS)", "건"], ["lmsFee", "장문 문자", "건"], ["extraBizFee", "추가 사업자", "곳·월"], ["storagePerGB", "저장 용량 초과", "GB·월"]].filter(([k]) => num(pricing[k]) > 0).map(([k, l, u]) => `${l} ${won(pricing[k])}원/${u}`).join(" · ")}
+                </div>
+              )}
+              <div className="mt-auto pt-4 text-[11.5px] text-[#9AA9C3]">{invRows ? "관리센터에서 만든 이달 청구서 기준입니다(VAT 별도)." : "실제 청구 금액은 월말에 관리센터에서 확정한 청구서 기준입니다."}</div>
             </div>
           )}
         </Card>

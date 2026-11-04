@@ -18,7 +18,7 @@ import PlatformMonitor, { estimateBill, usePhone } from "./PlatformMonitor";
 import { PlatformLiveProvider, usePlatformLive, mergeCompanies, LiveNowPanel, SignupTimeline, DupeWarning, HeaderLivePill, Panel as LivePanel, normCo } from "./PlatformLive";
 import { ShellIcon } from "./AdminShell";
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts";
-import { useSalesPricing, applyPlanBill, planUsageOf } from "./SalesQuote";
+import { useSalesPricing, applyPlanBill, planUsageOf, ADDON_CATALOG, ADDON_KIND_LABEL, addonRate, itemsTotal, billLines } from "./SalesQuote";
 import { ContractBuilder, ContractList, ContractTemplates } from "./ContractCenter";
 import { NotifTemplatePanel, LandingPageEditPanel, ShipperForceUpdatePanel } from "./AdminMenu";
 import { AdminSessionsPanel } from "./LoginManager";
@@ -28,6 +28,7 @@ import NoticeBoard from "./NoticeBoard";
 import { toBoardNotice } from "./PlatformNoticeBanner";
 import { compressImage } from "./InternalMail";
 const HomepageEditor = React.lazy(() => import("./HomepageEditor")); // ⭐ 2026-11-03 소개 홈페이지 편집기
+const CostPanel = React.lazy(() => import("./CostPanel")); // 💰 2026-11-04 비용 · 손익(최고관리자 전용)
 import { RemoteSupportAdminPanel } from "./RemoteSupport"; // ⭐ 2026-11-02 원격지원 —
 import { CustomSelect } from "./CustomSelect";
 import { RichTextEditor, htmlToText, textToHtml, sanitizeHtml } from "./richText"; // ⭐ 2026-11-03 공지 글자 꾸미기
@@ -69,6 +70,7 @@ const SECTIONS = [
     { key: "billing", label: "요금·청구", en: "BILLING", icon: "money" },
     { key: "payments", label: "수납 관리", en: "COLLECTION", icon: "wallet" },
     { key: "usage", label: "사용량·한도", en: "USAGE", icon: "server" }, // ⭐ 2026-11-03 요금제 한도 대비 사용량·초과 요금
+    { key: "cost", label: "비용·손익", en: "COST · P&L", icon: "trend" }, // 💰 2026-11-04 매출 vs 서버·운영 지출 · 운송사별 원가 · 손익분기
   ] },
   { key: "ops", label: "운영", en: "OPERATIONS", icon: "server", items: [
     { key: "notices", label: "플랫폼 공지", en: "BROADCAST", icon: "bell" },
@@ -380,13 +382,21 @@ function PaymentsPanel() {
     } catch (e) { window.alert(e.message); }
   };
   const planBill = (c, base) => applyPlanBill(base, c, plans[c.name]?.planId, sales); // ⭐ 2026-11-02 관리자센터2 — 요금·청구와 같은 계산(SalesQuote.applyPlanBill)
+  const [addon, setAddon] = React.useState(null); // ⭐ 2026-11-04 추가 항목 편집 중인 회사
   if (!stats || !pricing) return <div className="py-20 text-center text-[#9AA9C3]">불러오는 중…</div>;
   const days = new Date(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 0).getDate();
   const companies = mergeCompanies(stats.companies, live).map((c) => ({ ...c, bill: planBill(c, estimateBill(c, pricing, days, days)) }));
   const key = (c) => `${month}_${c.name}`.replace(/\//g, "_");
-  const amountOf = (c) => rows[key(c)]?.amount ?? c.bill.total;
+  // ⭐ 2026-11-04 추가 청구 — 청구액 = 자동 계산(기본료+초과) + 추가 항목(세금계산서·문자·개발 등). 칸에서 직접 고친 금액이 있으면 그 값
+  const autoOf = (c) => c.bill.total + itemsTotal(rows[key(c)]?.items);
+  const amountOf = (c) => rows[key(c)]?.amount ?? autoOf(c);
   const sum = (st) => companies.filter((c) => (rows[key(c)]?.status || "미청구") === st).reduce((a, c) => a + amountOf(c), 0);
-  const save = (c, patch) => setDoc(doc(db, "platformInvoices", key(c)), { month, company: c.name, amount: amountOf(c), ...patch, updatedAt: serverTimestamp() }, { merge: true }).catch((e) => window.alert(e.message));
+  const save = (c, patch) => setDoc(doc(db, "platformInvoices", key(c)), { month, company: c.name, amount: amountOf(c), lines: billLines(c.bill), ...patch, updatedAt: serverTimestamp() }, { merge: true }).catch((e) => window.alert(e.message));
+  const saveItems = (c, items) => {
+    const r = rows[key(c)] || {};
+    const amount = r.amountManual ? Math.max(0, Number(r.amount || 0) + itemsTotal(items) - itemsTotal(r.items)) : c.bill.total + itemsTotal(items);
+    return save(c, { items, amount });
+  };
   return (
     <div className="space-y-4">
       <Hero en="BILLING · COLLECTION" title="수납 관리" desc="가입사별 이달 청구액을 확정하고 청구·입금 상태를 기록합니다. (금액은 요금·청구 기준 예상액 — 칸에서 바로 고칠 수 있습니다)"
@@ -412,7 +422,14 @@ function PaymentsPanel() {
                     {(sales?.plans || []).filter((p) => ["lite", "basic", "standard", "pro"].includes(p.id)).map((p) => <option key={p.id} value={p.id}>{p.name} · {Number(p.price || 0).toLocaleString()}</option>)}
                   </CustomSelect>
                 </td>
-                <td className="px-3 py-2 text-right"><input defaultValue={amountOf(c).toLocaleString()} key={`${key(c)}_${amountOf(c)}`} onBlur={(e) => save(c, { amount: Number(e.target.value.replace(/[^\d]/g, "")) || 0 })} className="w-36 h-9 px-2 rounded-lg border border-[#DCE3EE] text-right font-black" style={{ fontFamily: MONO }} /></td>
+                <td className="px-3 py-2 text-right">
+                  <input defaultValue={amountOf(c).toLocaleString()} key={`${key(c)}_${amountOf(c)}`} onBlur={(e) => { const v = Number(e.target.value.replace(/[^\d]/g, "")) || 0; if (v === amountOf(c) && rows[key(c)]) return; save(c, { amount: v, amountManual: v !== autoOf(c) }); }} className="w-36 h-9 px-2 rounded-lg border border-[#DCE3EE] text-right font-black" style={{ fontFamily: MONO }} />
+                  <div className="mt-1 flex items-center justify-end gap-1.5">
+                    {(r.items || []).length > 0 && <span className="text-[11px] font-bold text-[#5B6B85] tabular-nums" style={{ fontFamily: MONO }}>추가 {(r.items || []).length}건 · {itemsTotal(r.items).toLocaleString()}</span>}
+                    <button type="button" onClick={() => setAddon(c)} className="h-7 px-2 rounded-md border border-[#DCE3EE] text-[11.5px] font-black text-[#1B2B4B] hover:border-[#4B6CB7]">+ 추가 항목</button>
+                  </div>
+                  {r.amountManual && <div className="text-[10.5px] font-bold text-[#9AA9C3]">직접 정한 금액 · 자동 {autoOf(c).toLocaleString()}</div>}
+                </td>
                 <td className="px-3 py-2 text-center"><div className="inline-flex gap-1">{PAY_STATUS.map((st) => (
                   <button key={st} type="button" onClick={() => save(c, { status: st, ...(st === "입금완료" && !r.paidAt ? { paidAt: ymd() } : {}) })} className={`h-8 px-2.5 rounded-lg text-[12px] font-black border ${(r.status || "미청구") === st ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "border-[#DCE3EE] text-[#5B6B85]"}`}>{st}</button>))}</div></td>
                 <td className="px-3 py-2 text-center"><span className="inline-block w-[140px]"><CustomDatePicker value={r.paidAt || ""} onChange={(e) => save(c, { paidAt: e.target.value })} className="h-9 w-full px-2 rounded-lg border border-[#DCE3EE] text-[13px] font-semibold" placeholder="입금일" /></span></td>
@@ -421,6 +438,58 @@ function PaymentsPanel() {
           </table></div>
         )}
       </Card>
+      {addon && <AddonModal company={addon} month={month} sales={sales} planId={plans[addon.name]?.planId || ""} items={rows[key(addon)]?.items || []} bill={addon.bill} onClose={() => setAddon(null)} onSave={async (items) => { await saveItems(addon, items); setAddon(null); }} />}
+    </div>
+  );
+}
+
+// 🧾 2026-11-04 추가 청구 항목(이달 청구서에 붙는 줄) — 단가는 요금제 관리 값, 수량만 넣으면 금액 자동
+function AddonModal({ company, month, sales, planId, items: initial, bill, onClose, onSave }) {
+  const [items, setItems] = React.useState(() => initial.map((x) => ({ ...x })));
+  const [busy, setBusy] = React.useState(false);
+  const add = (a) => setItems((l) => [...l, { key: a.key, label: a.label, qty: 1, unit: addonRate(a.key, sales, planId), kind: a.kind, amount: addonRate(a.key, sales, planId) }]);
+  const upd = (i, patch) => setItems((l) => l.map((x, k) => { if (k !== i) return x; const y = { ...x, ...patch }; y.amount = Math.round(Number(y.qty || 0) * Number(y.unit || 0)); return y; }));
+  const lines = billLines(bill);
+  const total = lines.reduce((a, x) => a + x.amount, 0) + itemsTotal(items);
+  return (
+    <div className="fixed inset-0 z-[100060] bg-[#0B1428]/70 backdrop-blur-[3px] flex items-center justify-center p-3" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="w-full max-w-[860px] max-h-[92vh] flex flex-col rounded-[22px] bg-[#F4F6FA] overflow-hidden shadow-[0_40px_100px_rgba(0,0,0,0.5)]">
+        <div className="px-6 py-4 text-white flex justify-between items-start gap-3" style={{ background: "linear-gradient(120deg,#0B1428 0%,#1B2B4B 60%,#2D4C82 100%)" }}>
+          <div><div className="text-[10.5px] font-extrabold tracking-[0.3em] text-[#8FB0F0]" style={{ fontFamily: MONO }}>INVOICE · ADD-ONS · {month}</div>
+            <div className="text-[19px] font-black mt-0.5">{company.name} — 이달 청구서 추가 항목</div>
+            <div className="text-[12.5px] text-white/60">단가는 영업 › 요금제 관리 값(VAT 별도). 수량·단가를 고치면 금액이 바뀝니다.</div></div>
+          <button type="button" onClick={onClose} className="h-9 px-3.5 rounded-xl bg-white/10 border border-white/20 text-[13px] font-bold">닫기 ✕</button>
+        </div>
+        <div className="flex-1 overflow-y-auto p-5 space-y-4">
+          <div className="flex flex-wrap gap-1.5">{ADDON_CATALOG.map((a) => (
+            <button key={a.key} type="button" onClick={() => add(a)} className="h-9 px-3 rounded-xl bg-white border border-[#DCE3EE] text-[12.5px] font-black text-[#1B2B4B] hover:border-[#4B6CB7]">
+              + {a.label}<span className="ml-1.5 text-[10.5px] text-[#9AA9C3]">{ADDON_KIND_LABEL[a.kind]}{a.rateKey ? ` · ${addonRate(a.key, sales, planId).toLocaleString()}원/${a.unit}` : ""}</span>
+            </button>))}</div>
+          <div className="bg-white rounded-2xl border border-[#E3E8F0] overflow-x-auto">
+            <table className="w-full text-[13.5px]" style={{ minWidth: 560 }}>
+              <thead><tr className="bg-[#1B2B4B] text-white">{["항목", "수량", "단가", "금액", ""].map((h, i) => <th key={i} className="px-3 py-2 text-center font-extrabold">{h}</th>)}</tr></thead>
+              <tbody>
+                {lines.map((x) => <tr key={x.key} className="border-t border-[#EEF1F6] text-[#5B6B85]"><td className="px-3 py-2 font-bold">{x.label} <span className="text-[11px] text-[#9AA9C3]">자동</span></td><td /><td /><td className="px-3 py-2 text-right font-black tabular-nums" style={{ fontFamily: MONO }}>{x.amount.toLocaleString()}</td><td /></tr>)}
+                {items.map((x, i) => (
+                  <tr key={i} className="border-t border-[#EEF1F6]">
+                    <td className="px-3 py-2"><input value={x.label} onChange={(e) => upd(i, { label: e.target.value })} className="h-9 w-full px-2 rounded-lg border border-[#DCE3EE] font-bold" /></td>
+                    <td className="px-3 py-2"><input inputMode="decimal" value={x.qty} onChange={(e) => upd(i, { qty: Number(e.target.value.replace(/[^\d.]/g, "")) || 0 })} className="h-9 w-20 px-2 rounded-lg border border-[#DCE3EE] text-right font-black" style={{ fontFamily: MONO }} /></td>
+                    <td className="px-3 py-2"><input inputMode="numeric" value={x.unit} onChange={(e) => upd(i, { unit: Number(e.target.value.replace(/[^\d]/g, "")) || 0 })} className="h-9 w-28 px-2 rounded-lg border border-[#DCE3EE] text-right font-black" style={{ fontFamily: MONO }} /></td>
+                    <td className="px-3 py-2 text-right font-black tabular-nums" style={{ fontFamily: MONO }}>{Number(x.amount || 0).toLocaleString()}</td>
+                    <td className="px-2 py-2 text-center"><button type="button" onClick={() => setItems((l) => l.filter((_, k) => k !== i))} className="text-[#9AA9C3] px-1.5">✕</button></td>
+                  </tr>
+                ))}
+                {!items.length && <tr className="border-t border-[#EEF1F6]"><td colSpan={5} className="px-3 py-5 text-center text-[#9AA9C3] text-[13px]">위 버튼으로 이번 달에 청구할 항목을 넣으세요(예: 세금계산서 120건, 맞춤 개발 6시간).</td></tr>}
+              </tbody>
+            </table>
+          </div>
+          <div className="rounded-2xl bg-[#0F1A30] text-white px-5 py-3 flex justify-between items-center"><span className="text-[13px] font-bold text-white/70">이달 청구 예상 (VAT 별도)</span><span className="text-[20px] font-black tabular-nums" style={{ fontFamily: MONO }}>{total.toLocaleString()}원</span></div>
+        </div>
+        <div className="px-5 py-3 bg-white border-t border-[#E3E8F0] flex justify-end gap-2">
+          <button type="button" onClick={onClose} className="h-10 px-4 rounded-xl border border-[#DCE3EE] text-[13px] font-black">취소</button>
+          <button type="button" disabled={busy} onClick={async () => { setBusy(true); try { await onSave(items.filter((x) => x.label)); } finally { setBusy(false); } }} className="h-10 px-5 rounded-xl bg-[#0F1A30] text-white text-[13px] font-black disabled:opacity-50">저장</button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -1050,6 +1119,7 @@ function PlatformCenterInner({ user }) {
   else if (tab === "contract:templates") body = <><Hero en="CONTRACTS · TEMPLATES" title="계약서 양식" desc="기본 이용계약서를 바탕으로 조항을 자유롭게 고치고, 양식을 여러 개 둘 수 있습니다." /><ContractTemplates /></>;
   else if (tab === "payments") body = <PaymentsPanel />;
   else if (tab === "usage") body = <UsagePanel />;
+  else if (tab === "cost") body = <React.Suspense fallback={<div className="py-20 text-center text-[#9AA9C3]">불러오는 중…</div>}><CostPanel openUsage={() => setTab("usage")} /></React.Suspense>;
   else if (tab === "notices") body = <NoticesPanel />;
   else if (tab === "notifTemplate") body = <><Hero en="OPERATIONS · MESSAGES" title="알림 문구" desc="배차 알림 등 자동 발송 문구를 관리합니다." /><NotifTemplatePanel /></>;
   else if (tab === "forceUpdate") body = <><Hero en="OPERATIONS · UPDATE" title="화주사 강제 업데이트" desc="화주사 화면을 최신 버전으로 새로고침시킵니다." /><ShipperForceUpdatePanel currentVersion={typeof __APP_VERSION__ !== "undefined" ? __APP_VERSION__ : ""} /></>;

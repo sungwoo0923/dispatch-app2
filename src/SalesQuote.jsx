@@ -7,7 +7,7 @@
 import React from "react";
 import { addDoc, collection, deleteDoc, doc, onSnapshot, orderBy, query, serverTimestamp, setDoc, updateDoc } from "firebase/firestore";
 import { db } from "./firebase";
-import { PlanMatrix, PLAN_DEFAULTS, PLAN_IDS, PLAN_MATRIX_CSS, planFeatureLines, planMatrixHtml } from "./plans";
+import { PlanMatrix, PLAN_DEFAULTS, PLAN_IDS, PLAN_MATRIX_CSS, RECOMMENDED_PLAN_VERSION, planFeatureLines, planMatrixHtml } from "./plans";
 import { fmtBizNo, fmtPhone } from "./formatInput";
 import { CustomSelect } from "./CustomSelect";
 import { logisWordmarkSvg } from "./brand"; // 🔷 2026-11-04 LogisWeb 글자 로고(인쇄 문서 머리)
@@ -27,11 +27,19 @@ export const SALES_DEFAULT = {
   planVersion: 2,
   plans: PLAN_DEFAULTS.map((p) => ({ ...p, features: planFeatureLines(p.id) })),
   extraSeat: 15000,          // 추가 직원 계정 1명/월
-  extraOrder: 50,            // 포함량 초과 오더 1건
-  fleetPerVehicle: 7000,     // 지입차 관리(GPS·운행기록·사진) 1대/월
-  setupFee: 500000,          // 초기 도입비(세팅·기본 데이터 이전·교육 1회)
+  extraOrder: 40,            // 포함량 초과 오더 1건 (⭐ 2026-11-04 추천 요금표: 50 → 40원, 대신 요금제 포함량을 늘림)
+  fleetPerVehicle: 5000,     // 지입차 관리(GPS·운행기록·사진) — 요금제 포함 대수(plan.fleet)를 넘는 1대/월
+  setupFee: 300000,          // 초기 도입비(세팅·기본 데이터 이전·교육 1회) — 요금제별 금액(plan.setupFee)이 있으면 그 값
   migrationFee: 300000,      // 대량 데이터 이전(기존 프로그램 이관)
   trainingFee: 200000,       // 추가 현장 교육 1회
+  // ⭐ 2026-11-04 추가 청구(애드온) — 관리센터 › 청구 › 수납 관리에서 회사별 "추가 항목"으로 청구서에 붙인다
+  taxInvoiceFee: 300,        // 전자세금계산서 발행 1건(ASP 원가 + 마진)
+  alimtalkFee: 15,           // 카카오 알림톡 1건
+  smsFee: 30,                // 문자(SMS) 1건
+  lmsFee: 80,                // 장문 문자(LMS) 1건
+  extraBizFee: 30000,        // 추가 사업자(법인·지점) 1곳/월 — 다중 사업자 운영
+  routeBoardSetupFee: 100000, // 고정노선 구글시트 배차표 연동 세팅 1양식(1회)
+  devHourRate: 70000,        // 맞춤 기능 개발 1시간
   waiveSetupMonths: 12,      // 이 기간 이상 약정 시 도입비 면제
   annualFreeMonths: 2,       // 연간 선결제 시 무료 개월
   semiDiscountRate: 5,       // 6개월 선결제 할인율(%) — 단기(6개월) 고객용
@@ -39,7 +47,7 @@ export const SALES_DEFAULT = {
   minContractMonths: 6,      // 최소 약정 기간
   storageGB: 10,             // 사진·파일 기본 제공 용량
   storagePerGB: 3000,        // 초과 1GB/월
-  devDayRate: 400000,        // 맞춤 개발 1일 단가
+  devDayRate: 500000,        // 맞춤 개발 1일 단가(8시간 묶음 할인)
   validDays: 30,             // 견적 유효기간
   messaging: "문자 · 알림톡은 발송 건수만큼 실비 청구",
   supplier: { name: "LogisWeb", ceo: "", bizNo: "", phone: "", email: "", address: "", bank: "" },
@@ -63,12 +71,14 @@ const mergeDefaults = (v) => ({ ...SALES_DEFAULT, ...(v || {}), planVersion: 2, 
 export function monthlyOf(plan, cfg, inp) {
   const seats = Math.max(0, num(inp.staff) - num(plan.seats)) * num(cfg.extraSeat);
   const orders = Math.max(0, num(inp.orders) - num(plan.orders)) * num(cfg.extraOrder);
-  const fleet = num(inp.fleet) * num(cfg.fleetPerVehicle);
-  const storage = Math.max(0, num(inp.storageGB) - num(cfg.storageGB)) * num(cfg.storagePerGB);
+  const fleet = Math.max(0, num(inp.fleet) - num(plan.fleet)) * num(cfg.fleetPerVehicle); // ⭐ 2026-11-04 요금제 포함 대수 차감(예전 저장값은 0대 포함 = 예전과 같음)
+  const storage = Math.max(0, num(inp.storageGB) - planStorageGB(plan, cfg)) * num(cfg.storagePerGB);
   return { base: num(plan.price), seats, orders, fleet, storage, total: num(plan.price) + seats + orders + fleet + storage };
 }
 // ⭐ 2026-11-02 관리자센터2 — 요금제별 초기 도입비(비우면 공통값)·기본 프로모션. 견적서·인쇄·요금 안내서가 모두 이 함수로 읽는다
 const hasVal = (v) => v !== "" && v != null && !Number.isNaN(Number(v));
+// ⭐ 2026-11-04 요금제별 포함 저장 용량(비우면 공통 기본 용량)
+export const planStorageGB = (plan, cfg) => (hasVal(plan?.storageGB) ? num(plan.storageGB) : num(cfg?.storageGB));
 export const planSetupFee = (plan, cfg) => (hasVal(plan?.setupFee) ? num(plan.setupFee) : num(cfg.setupFee));
 // 요금제를 고르면 사용 규모(직원·오더)는 그 요금제 포함량, 프로모션은 요금제 기본값으로 — 사용자가 직접 바꾼 칸은 그대로 둔다
 export function planDefaultsFor(plan, inp = {}) {
@@ -86,17 +96,18 @@ export function planUsageOf(c, planId, sales, projected) {
   if (!p) return null;
   const storageGB = Math.round(((c.storageKB || 0) / 1048576) * 100) / 100;
   const hasFleet = ["standard", "pro"].includes(planId); // 지입차관리는 스탠다드부터(plans.jsx FEATURE_ROWS)
+  const limitGB = planStorageGB(p, sales);
   const extra = {
     seats: Math.max(0, (c.staff || 0) - num(p.seats)),
     orders: Math.max(0, (projected || 0) - num(p.orders)),
-    fleet: hasFleet ? (c.fleetJ || 0) : 0,
-    storageGB: Math.max(0, Math.ceil(storageGB - num(sales.storageGB))),
+    fleet: hasFleet ? Math.max(0, (c.fleetJ || 0) - num(p.fleet)) : 0, // ⭐ 2026-11-04 요금제 포함 대수 차감
+    storageGB: Math.max(0, Math.ceil(storageGB - limitGB)),
   };
   const fee = {
     seats: extra.seats * num(sales.extraSeat), orders: extra.orders * num(sales.extraOrder),
     fleet: extra.fleet * num(sales.fleetPerVehicle), storage: extra.storageGB * num(sales.storagePerGB),
   };
-  return { plan: p, storageGB, limitGB: num(sales.storageGB), extra, fee, over: fee.seats + fee.orders + fee.fleet + fee.storage };
+  return { plan: p, storageGB, limitGB, fleetIncluded: num(p.fleet), extra, fee, over: fee.seats + fee.orders + fee.fleet + fee.storage };
 }
 export function applyPlanBill(base, c, planId, sales) {
   const p = planId && sales?.plans?.find((x) => x.id === planId);
@@ -104,6 +115,42 @@ export function applyPlanBill(base, c, planId, sales) {
   const u = planUsageOf(c, planId, sales, base.projected || 0);
   const { seats, orders, fleet, storage } = u.fee;
   return { ...base, base: num(p.price), seats, orders, fleet, storage, total: num(p.price) + seats + orders + fleet + storage, planName: p.name, usage: u };
+}
+// ⭐ 2026-11-04 추가 청구(애드온) — 요금제 기본료 + 사용량 초과 외에 회사별로 붙이는 항목.
+//  수납 관리 › 운송사 줄 › [추가 항목]에서 고르면 platformInvoices/{월_회사}.items[]에 저장되고, 청구액 = 자동 계산 + 추가 항목 합계.
+//  단가는 요금제 관리(siteConfig/salesPricing)의 값 — 바꾸면 새로 넣는 항목부터 적용(이미 넣은 항목은 그때 금액 유지).
+export const ADDON_CATALOG = [
+  { key: "taxInvoice", label: "전자세금계산서 발행", unit: "건", rateKey: "taxInvoiceFee", kind: "usage" },
+  { key: "alimtalk", label: "카카오 알림톡 발송", unit: "건", rateKey: "alimtalkFee", kind: "usage" },
+  { key: "sms", label: "문자(SMS) 발송", unit: "건", rateKey: "smsFee", kind: "usage" },
+  { key: "lms", label: "장문 문자(LMS) 발송", unit: "건", rateKey: "lmsFee", kind: "usage" },
+  { key: "extraBiz", label: "추가 사업자(법인·지점)", unit: "곳", rateKey: "extraBizFee", kind: "monthly" },
+  { key: "devHour", label: "맞춤 기능 개발", unit: "시간", rateKey: "devHourRate", kind: "once" },
+  { key: "setup", label: "초기 도입비", unit: "회", rateKey: "setupFee", kind: "once" },
+  { key: "migration", label: "데이터 이관(기존 프로그램·엑셀)", unit: "회", rateKey: "migrationFee", kind: "once" },
+  { key: "training", label: "추가 현장 교육", unit: "회", rateKey: "trainingFee", kind: "once" },
+  { key: "routeBoard", label: "구글시트 배차표 연동 세팅", unit: "양식", rateKey: "routeBoardSetupFee", kind: "once" },
+  { key: "custom", label: "기타(직접 입력)", unit: "", rateKey: null, kind: "once" },
+];
+export const ADDON_KIND_LABEL = { usage: "사용량", monthly: "월정액", once: "1회" };
+export const addonRate = (key, sales, planId) => {
+  const a = ADDON_CATALOG.find((x) => x.key === key);
+  if (!a?.rateKey || !sales) return 0;
+  if (key === "setup") return planSetupFee(sales.plans?.find((p) => p.id === planId), sales);
+  return num(sales[a.rateKey]);
+};
+export const itemsTotal = (items) => (Array.isArray(items) ? items : []).reduce((a, x) => a + num(x.amount), 0);
+// 청구서 줄(자동 계산분) — 수납 관리가 저장하고, 고객사 구독·결제 화면이 그대로 보여준다
+export function billLines(bill) {
+  if (!bill) return [];
+  const u = bill.usage;
+  return [
+    { key: "base", label: bill.planName ? `${bill.planName} 요금제 기본료` : "기본 이용료", amount: num(bill.base) },
+    { key: "seats", label: `추가 직원 계정${u ? ` ${u.extra.seats}명` : ""}`, amount: num(bill.seats) },
+    { key: "orders", label: `초과 오더${u ? ` ${u.extra.orders.toLocaleString()}건` : ""}`, amount: num(bill.orders) },
+    { key: "fleet", label: `지입차 관리${u ? ` ${u.extra.fleet}대${u.fleetIncluded ? `(포함 ${u.fleetIncluded}대 초과분)` : ""}` : ""}`, amount: num(bill.fleet) },
+    { key: "storage", label: `추가 저장 용량${u ? ` ${u.extra.storageGB}GB` : ""}`, amount: num(bill.storage) },
+  ].filter((x) => x.key === "base" || x.amount > 0);
 }
 export function quoteOf(cfg, inp) {
   const plans = cfg.plans || [];
@@ -181,8 +228,8 @@ export function quoteHtml(cfg, inp, q, no) {
     [`${p.name} 요금제`, `직원 ${p.seats}명 · 오더 월 ${num(p.orders).toLocaleString()}건 포함`, 1, m.base],
     ...(m.seats ? [["추가 직원 계정", `${num(inp.staff) - num(p.seats)}명 × ${won(cfg.extraSeat)}`, num(inp.staff) - num(p.seats), m.seats]] : []),
     ...(m.orders ? [["초과 오더", `${(num(inp.orders) - num(p.orders)).toLocaleString()}건 × ${won(cfg.extraOrder)}`, "", m.orders]] : []),
-    ...(m.fleet ? [["지입차 관리", `${num(inp.fleet)}대 × ${won(cfg.fleetPerVehicle)} (GPS · 운행기록 · 사진)`, num(inp.fleet), m.fleet]] : []),
-    ...(m.storage ? [["추가 저장 용량", `${num(inp.storageGB) - num(cfg.storageGB)}GB × ${won(cfg.storagePerGB)}`, "", m.storage]] : []),
+    ...(m.fleet ? [["지입차 관리", `${Math.max(0, num(inp.fleet) - num(p.fleet))}대 × ${won(cfg.fleetPerVehicle)} (GPS · 운행기록 · 사진${num(p.fleet) ? ` · ${num(p.fleet)}대 포함 초과분` : ""})`, Math.max(0, num(inp.fleet) - num(p.fleet)), m.fleet]] : []),
+    ...(m.storage ? [["추가 저장 용량", `${num(inp.storageGB) - planStorageGB(p, cfg)}GB × ${won(cfg.storagePerGB)}`, "", m.storage]] : []),
   ];
   const trs = (list) => list.map(([a, b, c, d]) => `<tr><td>${esc(a)}</td><td>${esc(b)}</td><td class="c">${c === "" ? "-" : c}</td><td class="r mono">${won(d)}</td></tr>`).join("");
   const once = q.oneTime.map((x) => `<tr><td>${esc(x.label)}</td><td>${esc(x.note)}${x.waived ? ` <b>— ${cfg.waiveSetupMonths}개월 이상 약정으로 면제 (정가 ${won(x.list)})</b>` : ""}</td><td class="c">1</td><td class="r mono">${won(x.amount)}</td></tr>`).join("");
@@ -220,7 +267,7 @@ export function quoteHtml(cfg, inp, q, no) {
       <tr><td colspan="2" style="color:#5B6B85">→ ${q.periodLabel === "1년차" ? "1년" : q.periodLabel} 평균 월 ${won(q.avgMonthly)} (VAT 별도)</td></tr>
     </tbody></table>
     <h3>요금제별 사용 범위 (선택: ${esc(p.name)})</h3>${planMatrixHtml(cfg.plans, PLAN_IDS.includes(p.id) ? p.id : null)}
-    <h3>${esc(p.name)} 요금제 포함 기능</h3><ul>${(p.features || []).map((f) => `<li>${esc(f)}</li>`).join("")}<li>${esc(cfg.messaging)}</li><li>사진 · 파일 저장 ${num(cfg.storageGB)}GB 기본 제공</li></ul>
+    <h3>${esc(p.name)} 요금제 포함 기능</h3><ul>${(p.features || []).map((f) => `<li>${esc(f)}</li>`).join("")}<li>${esc(cfg.messaging)}</li>${num(p.fleet) ? `<li>지입차(GPS·운행기록·사진) ${num(p.fleet)}대 포함</li>` : ""}<li>사진 · 파일 저장 ${planStorageGB(p, cfg)}GB 기본 제공</li></ul>
     <h3>계약 조건</h3><ul>${(cfg.terms || []).map((t) => `<li>${esc(t)}</li>`).join("")}${inp.memo ? `<li><b>${esc(inp.memo)}</b></li>` : ""}</ul>
     <div class="foot"><span>LogisWeb · LOGISTICS DISPATCH NETWORK</span><span>${esc(cfg.supplier.name)}</span></div>
   </div>`;
@@ -229,12 +276,13 @@ export function priceSheetHtml(cfg) {
   const plans = cfg.plans.map((p) => `<div class="plan ${p.recommended ? "rec" : ""}"><div class="eyebrow">${esc(p.en || "")}</div>
       <div style="margin-top:2px"><b style="font-size:17px">${esc(p.name)}</b>${p.recommended ? '<span class="tag">추천</span>' : ""}</div>
       <div class="p" style="margin-top:2px">${won(p.price)}<span style="font-size:11px;color:#5B6B85"> /월</span></div>
-      <div style="font-size:12px;color:#5B6B85;margin:2px 0 6px">${esc(p.target || "")} · 직원 ${p.seats}명 · 오더 월 ${num(p.orders).toLocaleString()}건 포함</div>
+      <div style="font-size:12px;color:#5B6B85;margin:2px 0 6px">${esc(p.target || "")} · 직원 ${p.seats}명 · 오더 월 ${num(p.orders).toLocaleString()}건${num(p.fleet) ? ` · 지입차 ${num(p.fleet)}대` : ""} · 저장 ${planStorageGB(p, cfg)}GB 포함</div>
       ${hasVal(p.setupFee) || num(p.promoMonths) ? `<div style="font-size:11.5px;color:#1B2B4B;font-weight:700;margin-bottom:6px">${hasVal(p.setupFee) ? `도입비 ${won(p.setupFee)}` : ""}${hasVal(p.setupFee) && num(p.promoMonths) ? " · " : ""}${num(p.promoMonths) ? `첫 ${num(p.promoMonths)}개월 ${num(p.promoRate)}% 할인` : ""}</div>` : ""}
       <ul>${(p.features || []).map((f) => `<li>${esc(f)}</li>`).join("")}</ul></div>`).join("");
-  const opt = [["추가 직원 계정", `1명당 월 ${won(cfg.extraSeat)}`], ["초과 오더", `1건당 ${won(cfg.extraOrder)}`], ["지입차 관리(GPS·운행기록·사진)", `1대당 월 ${won(cfg.fleetPerVehicle)}`], ["일반 기사 기사앱 · 화주사 포털", "무료"],
-    ["추가 저장 용량", `${cfg.storageGB}GB 기본 · 초과 1GB당 월 ${won(cfg.storagePerGB)}`], ["문자 · 알림톡", "발송 건수만큼 실비"]];
-  const once = [["초기 도입비", `${won(cfg.setupFee)}${cfg.plans.some((p) => hasVal(p.setupFee)) ? " (요금제별 금액은 위 요금제 칸)" : ""} — ${cfg.waiveSetupMonths}개월 이상 약정 시 면제`], ["대량 데이터 이전", won(cfg.migrationFee)], ["추가 현장 교육", `1회 ${won(cfg.trainingFee)}`], ["맞춤 개발", `1일 ${won(cfg.devDayRate)}`], ["연간 선결제", `${cfg.annualFreeMonths}개월 무료`], ["단기 계약(최소 " + (cfg.minContractMonths ?? 6) + "개월)", `6개월 선결제 ${cfg.semiDiscountRate}% 할인 · 도입비 ${cfg.semiSetupRate}% 할인`]];
+  const opt = [["추가 직원 계정", `1명당 월 ${won(cfg.extraSeat)}`], ["초과 오더", `1건당 ${won(cfg.extraOrder)}`], ["지입차 관리(GPS·운행기록·사진)", `요금제 포함 대수 초과 1대당 월 ${won(cfg.fleetPerVehicle)}`], ["일반 기사 기사앱 · 화주사 포털", "무료"],
+    ["추가 저장 용량", `요금제 포함 용량 초과 1GB당 월 ${won(cfg.storagePerGB)}`], ["추가 사업자(법인·지점)", `1곳당 월 ${won(cfg.extraBizFee)}`],
+    ["전자세금계산서 발행", `1건당 ${won(cfg.taxInvoiceFee)}`], ["카카오 알림톡 · 문자", `알림톡 ${won(cfg.alimtalkFee)} · SMS ${won(cfg.smsFee)} · LMS ${won(cfg.lmsFee)} (1건)`]];
+  const once = [["초기 도입비", `${won(cfg.setupFee)}${cfg.plans.some((p) => hasVal(p.setupFee)) ? " (요금제별 금액은 위 요금제 칸)" : ""} — ${cfg.waiveSetupMonths}개월 이상 약정 시 면제`], ["대량 데이터 이전", won(cfg.migrationFee)], ["추가 현장 교육", `1회 ${won(cfg.trainingFee)}`], ["구글시트 배차표 연동 세팅", `1양식 ${won(cfg.routeBoardSetupFee)}`], ["맞춤 개발", `1시간 ${won(cfg.devHourRate)} · 1일 ${won(cfg.devDayRate)}`], ["연간 선결제", `${cfg.annualFreeMonths}개월 무료`], ["단기 계약(최소 " + (cfg.minContractMonths ?? 6) + "개월)", `6개월 선결제 ${cfg.semiDiscountRate}% 할인 · 도입비 ${cfg.semiSetupRate}% 할인`]];
   const t = (rows) => `<table><tbody>${rows.map(([a, b]) => `<tr><th style="width:42%">${a}</th><td>${b}</td></tr>`).join("")}</tbody></table>`;
   return `<div class="page">
     <div class="hero"><div><div class="eyebrow">${logisWordmarkSvg(9)} · PRICING</div><h1>요 금 안 내</h1></div><div style="font-size:12px;text-align:right">${ymd()} 기준 · 부가세 별도</div></div>
@@ -306,23 +354,40 @@ export function PricingEditor() {
       await setDoc(doc(db, "siteConfig", "salesPricing"), { ...cfg, updatedAt: serverTimestamp() });
       // 고객사 화면(구독·결제, 잠금 안내)에 보여줄 공개 요금 — 가격·포함량·입금 계좌만
       await setDoc(doc(db, "publicPricing", "current"), {
-        plans: cfg.plans.map(({ id, name, en, price, seats, orders, target, recommended }) => ({ id, name, en, price: num(price), seats: num(seats), orders: num(orders), target: target || "", recommended: !!recommended })),
+        plans: cfg.plans.map(({ id, name, en, price, seats, orders, fleet, storageGB, target, recommended }) => ({ id, name, en, price: num(price), seats: num(seats), orders: num(orders), fleet: num(fleet), ...(hasVal(storageGB) ? { storageGB: num(storageGB) } : {}), target: target || "", recommended: !!recommended })),
         setupFee: num(cfg.setupFee),
-        extraSeat: num(cfg.extraSeat), extraOrder: num(cfg.extraOrder), bank: cfg.supplier?.bank || "", supplier: cfg.supplier?.name || "LogisWeb", supplierBizNo: cfg.supplier?.bizNo || "", supplierEmail: cfg.supplier?.email || "", supplierPhone: cfg.supplier?.phone || "",
+        extraSeat: num(cfg.extraSeat), extraOrder: num(cfg.extraOrder),
+        // ⭐ 2026-11-04 고객사 구독·결제 화면의 예상 청구·추가 요금 안내용(단가만 — 원가·마진은 절대 공개하지 않음)
+        fleetPerVehicle: num(cfg.fleetPerVehicle), storageGB: num(cfg.storageGB), storagePerGB: num(cfg.storagePerGB),
+        taxInvoiceFee: num(cfg.taxInvoiceFee), alimtalkFee: num(cfg.alimtalkFee), smsFee: num(cfg.smsFee), lmsFee: num(cfg.lmsFee), extraBizFee: num(cfg.extraBizFee), bank: cfg.supplier?.bank || "", supplier: cfg.supplier?.name || "LogisWeb", supplierBizNo: cfg.supplier?.bizNo || "", supplierEmail: cfg.supplier?.email || "", supplierPhone: cfg.supplier?.phone || "",
         updatedAt: serverTimestamp(),
       });
       setDirty(false); setMsg("저장했습니다. 새로 만드는 견적서부터 바로 적용됩니다."); }
     catch (e) { setMsg(`저장 실패: ${e.message}`); }
   };
+  // ⭐ 2026-11-04 추천 요금표(docs/pricing-2026-11.md) — 화면에만 채우고, [저장]을 눌러야 실제로 바뀐다(저장한 가격을 몰래 덮어쓰지 않음)
+  const applyRecommended = () => {
+    const cur = cfg.plans.filter((p) => PLAN_IDS.includes(p.id)).map((p) => `${p.name} ${num(p.price).toLocaleString()}원`).join(" · ");
+    const nxt = PLAN_DEFAULTS.map((p) => `${p.name} ${p.price.toLocaleString()}원`).join(" · ");
+    if (!window.confirm(`추천 요금표(${RECOMMENDED_PLAN_VERSION})를 화면에 채울까요?\n\n지금: ${cur}\n추천: ${nxt}\n\n· 포함 직원·오더·지입차·저장 용량, 요금제별 도입비, 추가 청구 단가도 함께 채웁니다.\n· 화면에만 채워지고 [저장]을 눌러야 적용됩니다. 기존 고객의 지정 요금제(회사별)는 그대로입니다.\n· 직접 만든 요금제·포함 기능 문구·공급자 정보·계약 문구는 그대로 둡니다.`)) return;
+    const keepExtra = cfg.plans.filter((p) => !PLAN_IDS.includes(p.id));
+    const plans = PLAN_DEFAULTS.map((d) => { const old = cfg.plans.find((p) => p.id === d.id) || {}; return { ...old, ...d, promoMonths: old.promoMonths || 0, promoRate: old.promoRate || 0, features: old.features?.length ? old.features : planFeatureLines(d.id) }; });
+    const pick = ["extraSeat", "extraOrder", "fleetPerVehicle", "setupFee", "migrationFee", "trainingFee", "storageGB", "storagePerGB", "devDayRate", "devHourRate", "taxInvoiceFee", "alimtalkFee", "smsFee", "lmsFee", "extraBizFee", "routeBoardSetupFee", "annualFreeMonths", "semiDiscountRate", "waiveSetupMonths"];
+    set({ plans: [...plans, ...keepExtra], ...Object.fromEntries(pick.map((k) => [k, SALES_DEFAULT[k]])), recommendedVersion: RECOMMENDED_PLAN_VERSION });
+    setMsg(`추천 요금표를 화면에 채웠습니다 — 확인 후 오른쪽 위 [저장]을 눌러야 적용됩니다.`);
+  };
   const OPTS = [
-    ["월 추가 옵션", [["extraSeat", "추가 직원 계정 (1명/월)", "원"], ["extraOrder", "포함량 초과 오더 (1건)", "원"], ["fleetPerVehicle", "지입차 관리 (1대/월)", "원"], ["storageGB", "기본 저장 용량", "GB"], ["storagePerGB", "초과 저장 (1GB/월)", "원"]]],
-    ["1회 비용 · 혜택", [["setupFee", "초기 도입비", "원"], ["waiveSetupMonths", "도입비 면제 약정 기간", "개월"], ["migrationFee", "대량 데이터 이전", "원"], ["trainingFee", "추가 현장 교육 (1회)", "원"], ["devDayRate", "맞춤 개발 (1일)", "원"], ["annualFreeMonths", "연간 선결제 무료", "개월"], ["minContractMonths", "최소 약정 기간", "개월"], ["semiDiscountRate", "6개월 선결제 할인", "%"], ["semiSetupRate", "단기 약정 도입비 할인", "%"], ["validDays", "견적 유효기간", "일"]]],
+    ["월 추가 옵션", [["extraSeat", "추가 직원 계정 (1명/월)", "원"], ["extraOrder", "포함량 초과 오더 (1건)", "원"], ["fleetPerVehicle", "지입차 관리 — 포함 대수 초과 (1대/월)", "원"], ["storageGB", "기본 저장 용량(요금제 칸이 비었을 때)", "GB"], ["storagePerGB", "초과 저장 (1GB/월)", "원"], ["extraBizFee", "추가 사업자·지점 (1곳/월)", "원"]]],
+    // ⭐ 2026-11-04 추가 청구 — 사용한 만큼(수납 관리 › 추가 항목으로 청구서에 붙임)
+    ["사용량 추가 청구", [["taxInvoiceFee", "전자세금계산서 발행 (1건)", "원"], ["alimtalkFee", "카카오 알림톡 (1건)", "원"], ["smsFee", "문자 SMS (1건)", "원"], ["lmsFee", "장문 문자 LMS (1건)", "원"]]],
+    ["1회 비용 · 혜택", [["setupFee", "초기 도입비(요금제 칸이 비었을 때)", "원"], ["waiveSetupMonths", "도입비 면제 약정 기간", "개월"], ["migrationFee", "대량 데이터 이전", "원"], ["trainingFee", "추가 현장 교육 (1회)", "원"], ["routeBoardSetupFee", "구글시트 배차표 연동 세팅 (1양식)", "원"], ["devHourRate", "맞춤 개발 (1시간)", "원"], ["devDayRate", "맞춤 개발 (1일)", "원"], ["annualFreeMonths", "연간 선결제 무료", "개월"], ["minContractMonths", "최소 약정 기간", "개월"], ["semiDiscountRate", "6개월 선결제 할인", "%"], ["semiSetupRate", "단기 약정 도입비 할인", "%"], ["validDays", "견적 유효기간", "일"]]],
   ];
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-3 flex-wrap rounded-[18px] px-5 py-3.5 bg-[#0F1A30] text-white">
         <div className="text-[13.5px]"><b>요금제는 여기서만 고치면 됩니다.</b> <span className="text-white/60">견적서·요금 안내서가 이 값을 그대로 씁니다. (기존 고객 청구액은 '요금·청구'에서 따로 관리)</span></div>
         <div className="flex gap-2">
+          <Btn onClick={applyRecommended}>추천 요금표 적용</Btn>
           <Btn onClick={() => openPrint("LogisWeb 요금 안내", priceSheetHtml(cfg))}>요금 안내서 인쇄</Btn>
           <Btn onClick={() => { if (window.confirm("저장하지 않은 수정을 버리고 마지막 저장값으로 돌릴까요?")) { setDirty(false); setCfg(live); } }} disabled={!dirty}>되돌리기</Btn>
           <button type="button" onClick={save} disabled={!dirty} className="h-10 px-5 rounded-xl bg-white text-[#0F1A30] text-[13.5px] font-black disabled:opacity-40">{dirty ? "저장" : "저장됨"}</button>
@@ -355,6 +420,9 @@ export function PricingEditor() {
                 ["월 기본료", (p, i) => <NumIn value={p.price} onChange={(v) => setPlan(i, { price: v })} unit="원" />],
                 ["포함 직원 계정", (p, i) => <NumIn value={p.seats} onChange={(v) => setPlan(i, { seats: v })} unit="명" w="w-20" />],
                 ["포함 오더 (월)", (p, i) => <NumIn value={p.orders} onChange={(v) => setPlan(i, { orders: v })} unit="건" w="w-24" />],
+                // ⭐ 2026-11-04 요금제별 포함 지입차(GPS 관리) 대수 · 포함 저장 용량(비우면 공통 기본 용량)
+                ["포함 지입차 (GPS)", (p, i) => <NumIn value={p.fleet || 0} onChange={(v) => setPlan(i, { fleet: v })} unit="대" w="w-20" />],
+                ["포함 저장 용량", (p, i) => <span className="inline-flex flex-col gap-1"><OptNumIn value={p.storageGB} onChange={(v) => setPlan(i, { storageGB: v })} unit="GB" w="w-20" placeholder={String(num(cfg.storageGB))} /><span className="text-[12px] text-[#9AA9C3] font-semibold">비우면 공통 {num(cfg.storageGB)}GB</span></span>],
                 // ⭐ 2026-11-02 관리자센터2 — 요금제별 초기 도입비·기본 프로모션(견적서에서 요금제를 고르면 자동으로 채워짐)
                 ["초기 도입비", (p, i) => <span className="inline-flex flex-col gap-1"><OptNumIn value={p.setupFee} onChange={(v) => setPlan(i, { setupFee: v })} unit="원" placeholder={num(cfg.setupFee).toLocaleString()} /><span className="text-[12px] text-[#9AA9C3] font-semibold">비우면 공통 {won(cfg.setupFee)}</span></span>],
                 ["기본 프로모션", (p, i) => <span className="inline-flex items-center gap-1.5 flex-wrap">첫<NumIn value={p.promoMonths || 0} onChange={(v) => setPlan(i, { promoMonths: v })} unit="개월" w="w-14" /><NumIn value={p.promoRate || 0} onChange={(v) => setPlan(i, { promoRate: Math.min(100, v) })} unit="%" w="w-14" /></span>],
@@ -374,7 +442,7 @@ export function PricingEditor() {
 
       <div className="grid gap-4 lg:grid-cols-2">
         {OPTS.map(([title, rows]) => (
-          <Card key={title} code={title.startsWith("월") ? "OPTIONS" : "ONE-TIME"} title={title}>
+          <Card key={title} code={title.startsWith("월") ? "OPTIONS" : title.startsWith("사용량") ? "USAGE ADD-ONS" : "ONE-TIME"} title={title}>
             {rows.map(([k, l, u]) => (
               <div key={k} className="flex items-center justify-between gap-3 py-2 border-t first:border-t-0 border-[#EEF1F6]">
                 <span className="text-[14px] font-bold text-[#3A4A66]">{l}</span><NumIn value={cfg[k]} onChange={(v) => set({ [k]: v })} unit={u} />

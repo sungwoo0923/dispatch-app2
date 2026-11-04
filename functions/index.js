@@ -5650,6 +5650,7 @@ exports.sheetOcr = functions.runWith({ timeoutSeconds: 120, memory: "512MB" }).h
         data: { requests: [{ image: { content }, features: [{ type: "DOCUMENT_TEXT_DETECTION" }], imageContext: { languageHints: ["ko", "en"] } }] },
       });
       data = r.data;
+      bumpVisionCount(); // 💰 2026-11-04 비용·손익 — 글자 인식 호출 수(월 1,000건 무료 넘으면 과금)
     } catch (e) {
       const msg = String(e?.response?.data?.error?.message || e?.message || e);
       if (/has not been used|is disabled|SERVICE_DISABLED|PERMISSION_DENIED/i.test(msg)) {
@@ -5703,6 +5704,8 @@ exports.syncRouteBoards = functions.runWith({ timeoutSeconds: 300, memory: "512M
   for (const d of snap.docs) {
     const form = { id: d.id, ...d.data() };
     if (!form.sheetUrl || form.autoSync === false) continue;
+    // 💰 2026-11-04 서버 비용 — 열려 있는 화면이 4분 안에 이미 맞췄으면 이번 5분 차례는 건너뜀(같은 시트·오더를 또 읽지 않게)
+    if (Date.now() - Number(form.syncedAt || 0) < 4 * 60 * 1000) continue;
     try { const r = await runRouteBoardSync(form); if (r.created || r.updated || r.gone || r.deleted) console.log(`[배차표 연동] ${form.companyName} ${form.name}`, JSON.stringify(r)); }
     catch (e) { console.error(`[배차표 연동 실패] ${form.companyName} ${form.name}:`, e?.message || e); }
   }
@@ -5737,6 +5740,8 @@ exports.routeBoardSheet = functions.runWith({ timeoutSeconds: 540, memory: "512M
       const form = { id: fs.id, ...fs.data() };
       if (!me.isTM && form.companyName !== me.company) { res.status(403).json({ error: "다른 회사 양식입니다." }); return; }
       if (parseSpreadsheetId(form.sheetUrl) !== id) { res.status(400).json({ error: "양식에 저장된 시트 주소와 다릅니다." }); return; }
+      // 💰 2026-11-04 서버 비용 — 화면의 30초 자동 맞춤(auto)은 다른 화면·서버가 25초 안에 이미 맞췄으면 건너뜀(직원 수만큼 겹치던 읽기 제거)
+      if (body.auto === true && !body.from && Date.now() - Number(form.syncedAt || 0) < 25 * 1000) { res.json({ skipped: "recent", syncedAt: Number(form.syncedAt || 0) }); return; }
       // ⭐ 2026-11-03 기간 가져오기(입고일=탭 날짜 기준, 최대 120일)
       const okD = (x) => /^\d{4}-\d{2}-\d{2}$/.test(String(x || ""));
       let range = null;
@@ -5978,35 +5983,68 @@ async function computePlatformStats({ full = true } = {}) {
   });
 
   // 4) 오더(이번 달·전월·최근 30일) — 필요한 칸만 읽는다
+  // 💰 2026-11-04 서버 비용 절감 — 회사·날짜별 묶음(건수·매출·이익·고정노선)으로 모은 뒤 더한다(숫자 기준은 예전과 같음).
+  //   새벽 4시 전체 집계(full)가 "그제 이전" 묶음을 siteConfig/platformStatsBase에 저장해 두고,
+  //   낮 시간 매시간 집계는 그 묶음을 다시 쓰고 최근 3일(그제~오늘)+미래 예약 오더만 새로 읽는다.
+  //   예전: 매시간 전월 1일부터 모든 오더를 다시 읽음(하루 19번) → 오더 읽기 약 85~90% 감소.
+  //   (그제 이전 날짜의 오더를 낮에 고치면 다음 날 새벽 4시 집계부터 반영 — [지금 갱신]은 항상 전체 집계)
   const platformDaily = {};
   const dayNo = Number(today.slice(8));
+  const cut = addDaysStr(today, -2);
+  const buckets = {};
+  const addB = (name, day, cnt, sale, profit, fixed) => {
+    const k = String(name || "돌캐").trim() || "돌캐";
+    const b = buckets[k] || (buckets[k] = {});
+    const x = b[day] || (b[day] = [0, 0, 0, 0]);
+    x[0] += cnt; x[1] += sale; x[2] += profit; x[3] += fixed;
+  };
+  const baseRef = db.collection("siteConfig").doc("platformStatsBase");
+  let readFrom = from; let reused = false;
+  if (!full) {
+    const bs = await baseRef.get().catch(() => null);
+    const b = bs && bs.exists ? bs.data() : null;
+    if (b && b.today === today && b.from === from && b.cut === cut && Array.isArray(b.cos)) {
+      b.cos.forEach((c) => Object.entries(c.d || {}).forEach(([day, v]) => addB(c.n, day, Number(v[0]) || 0, Number(v[1]) || 0, Number(v[2]) || 0, Number(v[3]) || 0)));
+      readFrom = cut; reused = true;
+    }
+  }
   for (const col of ["orders", "dispatch"]) {
-    const snap = await db.collection(col).where("상차일", ">=", from).select("companyName", "상차일", "청구운임", "기사운임", "배차상태", "상태", "source", "배차표Id").get();
+    const snap = await db.collection(col).where("상차일", ">=", readFrom).select("companyName", "상차일", "청구운임", "기사운임", "배차상태", "상태", "source", "배차표Id").get();
     snap.docs.forEach((d) => {
       const r = d.data() || {};
       if (r.source === "transport_transmit" || isCanceledOrder(r)) return;
       const day = String(r.상차일 || "").slice(0, 10);
-      if (!day || day > addDaysStr(today, 60)) return;
-      const c = co(r.companyName);
+      if (!day || day > addDaysStr(today, 60) || day < readFrom) return;
       const sale = Number(String(r.청구운임 || 0).replace(/[^\d-]/g, "")) || 0;
       const profit = sale - (Number(String(r.기사운임 || 0).replace(/[^\d-]/g, "")) || 0);
+      addB(r.companyName, day, 1, sale, profit, r.배차표Id ? 1 : 0);
+    });
+  }
+  Object.entries(buckets).forEach(([name, days]) => {
+    const c = co(name);
+    Object.entries(days).forEach(([day, v]) => {
+      const [cnt, sale, profit, fixed] = v;
       if (day.startsWith(month)) {
-        c.m.cnt += 1; c.m.sale += sale; c.m.profit += profit;
+        c.m.cnt += cnt; c.m.sale += sale; c.m.profit += profit;
         // ⭐ 2026-11-03 사용량·한도 — 오늘까지(미래 예약 제외) · 고정노선(구글시트 배차표) 건수 따로
-        if (day <= today) c.m.toDate = (c.m.toDate || 0) + 1;
-        if (r.배차표Id) c.m.fixed = (c.m.fixed || 0) + 1;
+        if (day <= today) c.m.toDate = (c.m.toDate || 0) + cnt;
+        if (fixed) c.m.fixed = (c.m.fixed || 0) + fixed;
       }
       else if (day.startsWith(prevMonth)) {
-        c.pm.cnt += 1; c.pm.sale += sale; c.pm.profit += profit;
-        if (Number(day.slice(8)) <= dayNo) { c.pmSame.cnt += 1; c.pmSame.sale += sale; }
+        c.pm.cnt += cnt; c.pm.sale += sale; c.pm.profit += profit;
+        if (Number(day.slice(8)) <= dayNo) { c.pmSame.cnt += cnt; c.pmSame.sale += sale; }
       }
       if (day >= d30 && day <= today) {
-        c.daily[day] = (c.daily[day] || 0) + 1;
+        c.daily[day] = (c.daily[day] || 0) + cnt;
         const p = platformDaily[day] || (platformDaily[day] = { cnt: 0, sale: 0 });
-        p.cnt += 1; p.sale += sale;
+        p.cnt += cnt; p.sale += sale;
       }
       if (day <= today && day > c.lastOrder) c.lastOrder = day;
     });
+  });
+  if (!reused) {
+    const cos = Object.entries(buckets).map(([n, days]) => ({ n, d: Object.fromEntries(Object.entries(days).filter(([day]) => day < cut)) })).filter((x) => Object.keys(x.d).length);
+    if (JSON.stringify(cos).length < 900000) await baseRef.set({ today, from, cut, cos, at: Date.now() }).catch((e) => console.warn("[플랫폼 관제] 묶음 저장 실패:", e?.message || e));
   }
 
   // 5) 데이터량(문서 수) — 회사별 count 집계(문서 1천 개당 읽기 1회)
@@ -6041,12 +6079,18 @@ async function computePlatformStats({ full = true } = {}) {
   //   첨부 문서의 크기 칸(sizeKB)만 골라 읽고(select), 그 첨부가 달린 오더의 회사로 더한다. 크기 칸이 없는 예전 첨부는 평균으로 계산.
   if (full) {
     try {
-      const owner = {};
-      for (const col of ["orders", "dispatch", "fixedClients"]) {
-        const snap = await db.collection(col).select("companyName").get();
-        snap.docs.forEach((d) => { owner[`${col}/${d.id}`] = String(d.data()?.companyName || "").trim() || "돌캐"; });
-      }
+      // 💰 2026-11-04 서버 비용 절감 — 예전엔 회사를 알려고 오더·배차·고정거래처 "전체"(지금까지 쌓인 모든 문서)를 매일 읽었다.
+      //   이제 첨부가 달린 문서만 골라 회사명 칸만 읽는다(getAll + fieldMask) — 결과는 같고 읽기는 첨부 달린 문서 수만큼.
       const att = await db.collectionGroup("attachments").select("sizeKB").get();
+      const OWN = new Set(["orders", "dispatch", "fixedClients"]);
+      const parents = new Map();
+      att.docs.forEach((d) => { const par = d.ref.parent.parent; if (par && !par.parent.parent && OWN.has(par.parent.id)) parents.set(par.path, par); });
+      const owner = {};
+      const prefs = [...parents.values()];
+      for (let i = 0; i < prefs.length; i += 300) {
+        const got = await db.getAll(...prefs.slice(i, i + 300), { fieldMask: ["companyName"] });
+        got.forEach((x) => { if (x.exists) owner[x.ref.path] = String(x.get("companyName") || "").trim() || "돌캐"; });
+      }
       const per = {}; let knownKB = 0; let knownN = 0; const unknown = {};
       att.docs.forEach((d) => {
         const par = d.ref.parent.parent; if (!par) return;
@@ -6091,6 +6135,139 @@ exports.platformStats = functions.runWith({ timeoutSeconds: 300, memory: "1GB" }
     res.json({ ok: true, ...(await computePlatformStats()) });
   } catch (e) {
     console.error("플랫폼 관제 집계 실패:", e);
+    res.status(e.status || 500).json({ error: e?.message || String(e) });
+  }
+});
+
+// ===================== 💰 플랫폼 서버 사용량(최고관리자 전용, 2026-11-04) =====================
+// 관리센터 › 청구 › 비용·손익 — 구글 클라우드 모니터링(Cloud Monitoring)에서 이 프로젝트의
+// Firestore 읽기·쓰기·삭제, 함수 실행 수, 파일 저장 용량을 1시간마다 가져와 하루 합계로 저장한다.
+//  · platformUsage/{YYYY-MM-DD} { date, month, reads, writes, deletes, fnCalls, ... }  (한국 날짜 기준)
+//  · platformUsage/m_{YYYY-MM}  이달 합계(+ visionCalls: 글자 인식 호출 수)
+//  · platformUsage/_status      { ok, at, error, hint } — 권한이 없으면 화면이 안내문을 띄운다
+//  권한: 함수 서비스 계정(dispatch-app-9b92f@appspot.gserviceaccount.com)에 "모니터링 뷰어(roles/monitoring.viewer)"가 있어야 한다
+//        (보통 '편집자' 역할이 있어 그대로 된다). 모니터링 API 읽기는 월 100만 회까지 무료 — 이 작업은 하루 약 200회.
+let _monClient = null;
+async function monitoringClient() {
+  if (!_monClient) _monClient = await new GoogleAuth({ scopes: ["https://www.googleapis.com/auth/monitoring.read"] }).getClient();
+  return _monClient;
+}
+const projectIdOf = () => process.env.GCLOUD_PROJECT || process.env.GCP_PROJECT || (() => { try { return JSON.parse(process.env.FIREBASE_CONFIG || "{}").projectId; } catch { return ""; } })() || "dispatch-app-9b92f";
+// 지표 하나를 시간 단위로 더해서 { "YYYY-MM-DD"(한국): 값 } 으로
+async function monSeries(metric, { startMs, endMs, aligner = "ALIGN_SUM", reducer = "REDUCE_SUM", period = 3600, pick = "sum" }) {
+  const client = await monitoringClient();
+  const qs = new URLSearchParams({
+    filter: `metric.type="${metric}"`,
+    "interval.startTime": new Date(startMs).toISOString(), "interval.endTime": new Date(endMs).toISOString(),
+    "aggregation.alignmentPeriod": `${period}s`, "aggregation.perSeriesAligner": aligner, "aggregation.crossSeriesReducer": reducer,
+  });
+  const byDay = {}; let token = ""; let pages = 0; let found = false;
+  do {
+    const r = await client.request({ url: `https://monitoring.googleapis.com/v3/projects/${projectIdOf()}/timeSeries?${qs.toString()}${token ? `&pageToken=${encodeURIComponent(token)}` : ""}` });
+    (r.data.timeSeries || []).forEach((ts) => (ts.points || []).forEach((p) => {
+      found = true;
+      const end = Date.parse(p.interval?.endTime || p.interval?.startTime || "");
+      const day = kstDateStr(end - 1000);
+      const v = Number(p.value?.int64Value ?? p.value?.doubleValue ?? 0) || 0;
+      if (pick === "max") byDay[day] = Math.max(byDay[day] || 0, v); else byDay[day] = (byDay[day] || 0) + v;
+    }));
+    token = r.data.nextPageToken || ""; pages += 1;
+  } while (token && pages < 10);
+  return { byDay, found };
+}
+async function collectPlatformUsage({ days = 2 } = {}) {
+  const today = kstDateStr();
+  const firstDay = addDaysStr(today, -(Math.max(1, Math.min(42, days)) - 1));
+  const startMs = Date.parse(`${firstDay}T00:00:00+09:00`);
+  const endMs = Math.floor(Date.now() / 3600e3) * 3600e3 + 3600e3; // 한 시간 단위로 맞춰 한국 자정 경계가 정확히 나뉘게
+  const status = { ok: true, at: Date.now(), atMs: Date.now(), days, errors: {}, metrics: {} };
+  const tryM = async (key, metrics, opt) => {
+    for (const mt of metrics) {
+      try {
+        const r = await monSeries(mt, { startMs, endMs, ...opt });
+        if (r.found) { status.metrics[key] = mt; return r.byDay; }
+      } catch (e) {
+        const code = e?.response?.status || e?.code;
+        const msg = String(e?.response?.data?.error?.message || e?.message || e);
+        status.errors[key] = `${code || ""} ${msg}`.trim().slice(0, 300);
+        if (code === 403 || /PERMISSION_DENIED|has not been used|disabled/i.test(msg)) { status.ok = false; status.permission = true; return null; }
+      }
+    }
+    return {};
+  };
+  const reads = await tryM("reads", ["firestore.googleapis.com/document/read_ops_count", "firestore.googleapis.com/document/read_count"], {});
+  if (status.permission) {
+    status.hint = "함수 서비스 계정에 '모니터링 뷰어' 역할이 없거나 Cloud Monitoring API가 꺼져 있습니다.";
+    await db.collection("platformUsage").doc("_status").set(status);
+    return status;
+  }
+  const writes = await tryM("writes", ["firestore.googleapis.com/document/write_ops_count", "firestore.googleapis.com/document/write_count"], {});
+  const deletes = await tryM("deletes", ["firestore.googleapis.com/document/delete_ops_count", "firestore.googleapis.com/document/delete_count"], {});
+  const fnCalls = await tryM("fnCalls", ["cloudfunctions.googleapis.com/function/execution_count"], {});
+  const runReq = await tryM("runRequests", ["run.googleapis.com/request_count"], {}); // 2세대 함수(Cloud Run)
+  const egress = await tryM("egressBytes", ["storage.googleapis.com/network/sent_bytes_count"], {});
+  const gcsBytes = await tryM("gcsBytes", ["storage.googleapis.com/storage/total_bytes"], { aligner: "ALIGN_MEAN", pick: "max" });
+  const fsBytes = await tryM("fsBytes", ["firestore.googleapis.com/storage/data_and_index_storage_bytes"], { aligner: "ALIGN_MEAN", pick: "max" });
+  const wb = db.batch();
+  for (let d = firstDay; d <= today; d = addDaysStr(d, 1)) {
+    const row = {
+      date: d, month: d.slice(0, 7), source: "monitoring",
+      reads: Math.round(reads?.[d] || 0), writes: Math.round(writes?.[d] || 0), deletes: Math.round(deletes?.[d] || 0),
+      fnCalls: Math.round((fnCalls?.[d] || 0) + (runReq?.[d] || 0)), egressBytes: Math.round(egress?.[d] || 0),
+      updatedAt: FieldValue.serverTimestamp(), updatedAtMs: Date.now(), partial: d === today,
+    };
+    if (gcsBytes?.[d]) row.gcsBytes = Math.round(gcsBytes[d]);
+    if (fsBytes?.[d]) row.fsBytes = Math.round(fsBytes[d]);
+    wb.set(db.collection("platformUsage").doc(d), row, { merge: true });
+  }
+  await wb.commit();
+  // 이달 합계(이달 날짜 문서만 · 31개 이하)
+  const months = [...new Set([today.slice(0, 7), firstDay.slice(0, 7)])];
+  for (const ym of months) {
+    const snap = await db.collection("platformUsage").where("month", "==", ym).get();
+    const sum = { reads: 0, writes: 0, deletes: 0, fnCalls: 0, egressBytes: 0, days: 0, gcsBytes: 0, fsBytes: 0 };
+    snap.docs.forEach((x) => {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(x.id)) return;
+      const v = x.data() || {};
+      ["reads", "writes", "deletes", "fnCalls", "egressBytes"].forEach((k) => { sum[k] += Number(v[k] || 0); });
+      sum.days += 1; sum.gcsBytes = Math.max(sum.gcsBytes, Number(v.gcsBytes || 0)); sum.fsBytes = Math.max(sum.fsBytes, Number(v.fsBytes || 0));
+    });
+    await db.collection("platformUsage").doc(`m_${ym}`).set({ ...sum, backfilled: true, updatedAt: FieldValue.serverTimestamp(), updatedAtMs: Date.now() }, { merge: true });
+  }
+  await db.collection("platformUsage").doc("_status").set(status);
+  return status;
+}
+// 글자 인식(Vision) 호출 수 — 이달 합계 문서에 더한다(비용·손익의 "글자 인식" 항목)
+function bumpVisionCount() {
+  const ym = kstDateStr().slice(0, 7);
+  return db.collection("platformUsage").doc(`m_${ym}`).set({ visionCalls: FieldValue.increment(1) }, { merge: true }).catch(() => {});
+}
+// ⏰ 매시 20분(한국시간) — 오늘·어제(어제 마지막 몇 시간 확정). 이달 합계가 처음이면 이달 1일부터 한 번 채운다
+exports.platformUsageHourly = functions.runWith({ timeoutSeconds: 120, memory: "256MB" }).pubsub.schedule("20 * * * *").timeZone("Asia/Seoul").onRun(async () => {
+  const today = kstDateStr();
+  const m = await db.collection("platformUsage").doc(`m_${today.slice(0, 7)}`).get().catch(() => null);
+  const days = m && m.exists && m.data().backfilled ? 2 : Number(today.slice(8)) + 1;
+  await collectPlatformUsage({ days }).catch((e) => console.error("[서버 사용량] 수집 실패:", e?.message || e));
+  return null;
+});
+//  POST (최고관리자만) { days? } → 지금 다시 가져오기(3분에 1번까지)
+exports.platformUsageNow = functions.runWith({ timeoutSeconds: 120, memory: "256MB" }).https.onRequest(async (req, res) => {
+  res.set("Access-Control-Allow-Origin", "*");
+  res.set("Access-Control-Allow-Methods", "POST, OPTIONS");
+  res.set("Access-Control-Allow-Headers", "Authorization, Content-Type");
+  if (req.method === "OPTIONS") { res.status(204).send(""); return; }
+  if (req.method !== "POST") { res.status(405).json({ error: "POST만 허용됩니다." }); return; }
+  try {
+    const me = await requireAdminRole(req, {});
+    if (!me.isTM) { res.status(403).json({ error: "최고관리자만 사용할 수 있습니다." }); return; }
+    const st = await db.collection("platformUsage").doc("_status").get();
+    const last = st.exists ? Number(st.data().atMs || 0) : 0;
+    if (Date.now() - last < 3 * 60 * 1000) { res.json({ ok: true, skipped: true, nextInSec: Math.ceil((3 * 60 * 1000 - (Date.now() - last)) / 1000) }); return; }
+    let body = req.body; if (typeof body === "string") { try { body = JSON.parse(body); } catch { body = {}; } }
+    const days = Math.max(2, Math.min(42, Number(body?.days) || Number(kstDateStr().slice(8)) + 1));
+    res.json(await collectPlatformUsage({ days }));
+  } catch (e) {
+    console.error("[서버 사용량] 수집 실패:", e);
     res.status(e.status || 500).json({ error: e?.message || String(e) });
   }
 });

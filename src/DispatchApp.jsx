@@ -7399,6 +7399,8 @@ useEffect(() => {
     if (!company) return;
     let cancelled = false;
     const runScheduledEmailCheck = async () => {
+      // 💰 2026-11-04 서버 비용 — 같은 PC에서 탭을 여러 개 열어 두면 탭마다 1분에 한 번씩 조회했다 → 한 PC에서는 1분에 한 탭만
+      try { const k = `kpSchedMailAt_${company}`; const last = Number(localStorage.getItem(k) || 0); if (Date.now() - last < 50000) return; localStorage.setItem(k, String(Date.now())); } catch { /* 저장소를 못 쓰면 그대로 조회 */ }
       try {
         const q = query(
           collection(db, "scheduledEmails"),
