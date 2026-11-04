@@ -31,6 +31,16 @@
   border-color: var(--m-line) !important;
   box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04), 0 8px 22px rgba(16, 24, 40, 0.06) !important;
 }
+/* ⭐ 2026-11-04 끊김 개선 — 배차중 카드의 "빛나는 테두리"(cardStatusGlow, box-shadow 무한 애니메이션)는
+   위의 box-shadow !important에 덮여 화면에는 전혀 보이지 않으면서, 카드 수십 장을 매 프레임 다시 계산·그리게 해
+   스크롤·화면 전체를 버벅이게 했다. 보이는 모양은 그대로 두고 애니메이션만 끈다. */
+.kp-m .kp-m-card.card-status-blink { animation: none !important; }
+/* 화면 밖(위아래 150px 바깥) 카드 안의 깜빡임(배차중 점·뱃지·메모)은 멈춘다 — 화면에 들어오면 다시 깜빡인다 */
+.kp-m .kp-m-card[data-kp-off] * { animation: none !important; }
+/* 등록내역 카드 한 줄 — 화면 밖 카드는 그리기를 건너뛴다(스크롤 끊김 개선). 카드 그림자는 원래도
+   SwipeableRow(overflow-x:hidden) 안에서 잘리므로 모양 변화 없음. 높이는 한 번 그려진 값을 기억(auto). */
+.kp-m .kp-m-cv { content-visibility: auto; contain-intrinsic-size: auto 230px; }
+.kp-cv-off .kp-m .kp-m-cv { content-visibility: visible; } /* 목록 스크롤 위치 복원하는 순간만 */
 .kp-m .kp-m-card.kp-m-card-on {
   border-color: #1B2B4B !important;
   box-shadow: 0 0 0 2px rgba(27, 43, 75, 0.18), 0 8px 22px rgba(16, 24, 40, 0.08) !important;
