@@ -988,7 +988,8 @@ export default function App() {
           <Route path="/upload" element={<UploadPage />} />
           <Route path="/driver-upload" element={<DriverSearchPage />} />
           <Route path="/no-access" element={<NoAccess />} />
-          <Route path="/preview" element={<PreviewApp />} />
+          {/* ⭐ 2026-11-04 승인 전 둘러보기 없앰 — 배포 화면에서는 로그인으로 보낸다(개발 서버 점검용으로만 남김) */}
+          <Route path="/preview" element={import.meta.env.DEV ? <PreviewApp /> : <Navigate to="/login" replace />} />
 
           <Route
             path="*"

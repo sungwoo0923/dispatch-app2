@@ -436,10 +436,7 @@ export default function TransportLogin() {
                 <span className="text-[#C2453D] font-black">!</span><span>{error}</span>
               </div>
             )}
-            {error && previewInfo && (
-              <button type="button" onClick={() => navigate(`/preview?co=${encodeURIComponent(previewInfo.co)}&plan=${previewInfo.plan}`)}
-                className="w-full h-11 mb-4 rounded-xl bg-[#1B2B4B] text-white text-[13.5px] font-black">승인 전 둘러보기</button>
-            )}
+            {/* ⭐ 2026-11-04 승인 전 둘러보기 없앰 */}
             {msg && (
               <div className="text-[13px] font-semibold text-[#0F1A30] mb-4 bg-[#F2F6FC] border border-[#D9E3F3] rounded-xl px-3.5 py-2.5">{msg}</div>
             )}

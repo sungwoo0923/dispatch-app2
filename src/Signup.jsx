@@ -147,7 +147,7 @@ function TypeSelect({ onSelect }) {
           <p className="text-[14.5px] text-white/60 mt-1.5">가입 유형을 골라 주세요</p>
         </div>
         <div className="grid gap-4 md:grid-cols-2">
-          <Card type="신규" dark en="NEW COMPANY" title="신규 가입신청" desc="처음 쓰는 운송사 등록" points={["회사 정보 · 사업자번호", "요금제 선택", "승인 후 바로 사용(승인 전 둘러보기)"]} />
+          <Card type="신규" dark en="NEW COMPANY" title="신규 가입신청" desc="처음 쓰는 운송사 등록" points={["회사 정보 · 사업자번호", "요금제 선택", "승인 후 바로 사용"]} />
           <Card type="기존" en="JOIN EXISTING" title="기존 회사 추가 가입" desc="이미 쓰는 회사의 직원 계정" points={["회사명 검색 → 선택", "담당자 정보 입력", "회사 관리자가 승인하면 사용"]} />
         </div>
         <p className="text-center text-[14px] text-white/60 mt-7">
@@ -653,9 +653,7 @@ function SignupForm({ signupType, onBack }) {
           {success && (
             <div className="md:col-span-2 bg-[#EEF3FC] border border-[#C9D6EE] text-[#0F1A30] text-[14px] px-4 py-3.5 rounded-xl font-bold">
               운송사 가입신청이 완료되었습니다. 관리자 승인 후 로그인이 가능합니다.
-              <div className="grid grid-cols-2 gap-2 mt-2.5">
-                <button type="button" onClick={() => navigate(`/preview?co=${encodeURIComponent(companyName.trim())}&plan=${signupType === "신규" ? planId : ""}`)}
-                  className="h-10 rounded-xl bg-[#1B2B4B] text-white text-[13px] font-black">승인 전 둘러보기</button>
+              <div className="grid grid-cols-1 gap-2 mt-2.5">{/* ⭐ 2026-11-04 승인 전 둘러보기 없앰 */}
                 <button type="button" onClick={() => navigate("/login")}
                   className="h-10 rounded-xl border border-[#1B2B4B]/30 bg-white text-[#1B2B4B] text-[13px] font-black">로그인 화면으로</button>
               </div>
