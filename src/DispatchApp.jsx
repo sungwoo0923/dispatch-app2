@@ -8089,6 +8089,14 @@ const newVer = useNewVersion(); // ★ 새 버전이 배포되면 버전 표시 
     if (m !== "매출관리") setRevenueUnlocked(false);
     React.startTransition(() => setMenu(m));
   };
+  // 🗂 2026-11-04 다른 화면(전자결재 › 인사발령 품의 [인사발령 화면 열기])에서 메뉴 이동 요청 — kp-go-menu(detail: 메뉴 이름)
+  const menuClickRef = React.useRef(handleMenuClick);
+  menuClickRef.current = handleMenuClick;
+  React.useEffect(() => {
+    const h = (e) => { if (e?.detail) menuClickRef.current(e.detail); };
+    window.addEventListener("kp-go-menu", h);
+    return () => window.removeEventListener("kp-go-menu", h);
+  }, []);
   const [sideMenuOpen, setSideMenuOpen] = React.useState(false);
   const closeSideMenu = React.useCallback(() => setSideMenuOpen(false), []);
 
@@ -60293,7 +60301,8 @@ function HRManagementPage({ userCompany, role, userId, focusUid = null, selfOnly
   const now = new Date();
   const [members, setMembers] = React.useState([]);
   // ⭐ 인사발령·직책·권한 변경은 마스터(회사 첫 가입자)·인사관리자만
-  const canManage = !selfOnly && (role === "totalMaster" || role === "hrManager" || masterHasHr(members.find((m) => m.uid === userId), members, userId));
+  // ⭐ 2026-11-04 인사 부서 직원·통합관리자(allMgr)도 — 전자결재 인사발령 품의를 기안한 인사 담당자가 결재 후 공문을 게시할 수 있게(인사관리부 메뉴 기준과 맞춤)
+  const canManage = !selfOnly && (role === "totalMaster" || role === "hrManager" || role === "allMgr" || (role !== "viewer" && isHrStaffUser(members.find((m) => m.uid === userId))) || masterHasHr(members.find((m) => m.uid === userId), members, userId));
   const hrOpt = useHrOptions(company);
   const [profiles, setProfiles] = React.useState({}); // uid -> { hireDate }
   const [schedules, setSchedules] = React.useState([]);

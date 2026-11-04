@@ -618,7 +618,8 @@ export default function HrHub({ company, canManage, renderRecord, renderAttendan
   const [tab, setTabRaw] = React.useState(() => { try { const v = sessionStorage.getItem("kpHrTab"); sessionStorage.removeItem("kpHrTab"); return !v || v === "record" ? REC_FIRST : v; } catch { return REC_FIRST; } });
   const setTab = (k) => setTabRaw(k === "record" ? REC_FIRST : k);
   const recView = tab.startsWith("rec:") ? tab.slice(4) : null;
-  const [focusUid, setFocusUid] = React.useState(null);
+  // 🗂 2026-11-04 전자결재(인사발령 품의)에서 넘어오면 그 대상자를 골라 둔다
+  const [focusUid, setFocusUid] = React.useState(() => { try { const v = sessionStorage.getItem("kpHrFocus"); sessionStorage.removeItem("kpHrFocus"); return v || null; } catch { return null; } });
   // ⭐ 2026-11-01 직원이 직접 작성·제출한 이력서 중 인사팀이 아직 안 본 수 → [인사 기록] 숫자
   const [newResumes, setNewResumes] = React.useState(0);
   React.useEffect(() => {
