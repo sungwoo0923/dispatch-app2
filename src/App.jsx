@@ -317,7 +317,8 @@ export default function App() {
     const checkTablet = () => setIsTablet(isTabletDevice() && !isSmartPhone());
     const onResize = () => {
       clearTimeout(t);
-      t = setTimeout(() => { checkTablet(); setPhoneLayout(isSmartPhone()); }, 300);
+      // 화면 다시 고르기는 터치 기기(폴더블·태블릿)만 — PC에서 창 크기를 줄여도 작성 중인 화면이 바뀌지 않게
+      t = setTimeout(() => { checkTablet(); if ((navigator.maxTouchPoints || 0) > 1) setPhoneLayout(isSmartPhone()); }, 300);
     };
     checkTablet();
     window.addEventListener("resize", onResize);
