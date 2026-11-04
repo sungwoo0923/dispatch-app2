@@ -3,6 +3,7 @@ import { subscribeUsersLive } from "../usersLive"; // ⭐ 2026-11-02 속도 — 
 import { RichHtml } from "../richText"; // ⭐ 2026-11-03 공지 꾸민 글 보여주기
 import { isMasterKey } from "../monthCompare"; // ⭐ 2026-11-03 최고관리자 계정은 "최고관리자"로
 import { useMyProfile } from "../userNames";
+import { useCompanyFeatures } from "../companyFeatures"; // ⭐ 2026-11-04 마스터 권한 관리(회사별)
 import { useCompanyDropdownSync, dropdownList } from "../companyDropdownOptions";
 import { CompanyOptionPicker } from "../companyOptionPicker"; // 🧾 2026-11-02 지급방식·배차방식·상/하차방법 공용 선택기(＋ 추가)
 import { AttendanceQuickButton, officeRadii, CheckoutReminderHost } from "../attendanceQuick";
@@ -5238,6 +5239,7 @@ const title =
   : page === "approval" ? "전자결재"
   : page === "staff" ? "직원 관리"
   : page === "fixedroute" ? "고정노선현황"
+  : page === "perms" ? "권한 관리"
   : page === "dept" ? (deptMode === "exec" ? "경영 브리핑" : deptMode === "hr" ? "인사관리" : "경리·회계")
   : String(page).startsWith("dept:") ? ({ "dept:settle": "정산관리", "dept:acct": "회계관리", "dept:assets": "비품·자산", "dept:hr": "인사관리부", "dept:leave": "연차 관리", "dept:onboarding": "입·퇴사 관리", "dept:cert": "증명서 발급", "dept:driverdocs": "기사 서류", "dept:approvals": "결재함", "dept:schedule": "직원 일정", "dept:funds": "자금 현황", "dept:execsched": "임원 일정", "dept:rules": "사내 규정", "dept:board": "사내 게시판", "dept:farerules": "운임 규칙", "dept:cashbook": "자금 관리", "dept:myresume": "내 이력서" }[page] || "")
   : page === "status" ? "배차현황"
@@ -5622,7 +5624,7 @@ const title =
         }
     : String(page).startsWith("dept:")
       ? () => setPage("dept")
-    : page === "notice" || page === "schedule" || page === "unassigned" || page === "canceled" || page === "handover" || page === "attendance" || page === "ratecard" || page === "myinfo" || page === "settings" || page === "fleet" || page === "intel" || page === "national-fare" || page === "gsheet" || page === "blind" || page === "company-fare" || page === "sales" || page === "approval" || page === "staff" || page === "fixedroute"
+    : page === "notice" || page === "schedule" || page === "unassigned" || page === "canceled" || page === "handover" || page === "attendance" || page === "ratecard" || page === "myinfo" || page === "settings" || page === "fleet" || page === "intel" || page === "national-fare" || page === "gsheet" || page === "blind" || page === "company-fare" || page === "sales" || page === "approval" || page === "staff" || page === "fixedroute" || page === "perms"
       ? () => setPage("list")
       : page === "fare"
       ? () => setPage(prevPage || "list")
@@ -6699,10 +6701,10 @@ setOpenMemo={setOpenMemo}
             cardVersionB={cardVersionB}
           />
         )}
-        {(page === "national-fare" || page === "company-fare" || page === "ratecard" || page === "approval" || page === "staff" || page === "fixedroute") && (
+        {(page === "national-fare" || page === "company-fare" || page === "ratecard" || page === "approval" || page === "staff" || page === "fixedroute" || page === "perms") && (
           <React.Suspense fallback={null}>
             <MobilePcView key={page}
-              kind={page === "ratecard" ? "ratecard" : page === "approval" ? "approval" : page === "staff" ? "staff" : page === "fixedroute" ? "fixedroute" : "fare"} drivers={drivers}
+              kind={page === "ratecard" ? "ratecard" : page === "approval" ? "approval" : page === "staff" ? "staff" : page === "fixedroute" ? "fixedroute" : page === "perms" ? "perms" : "fare"} drivers={drivers} users={mobileUsers}
               initial={page === "company-fare" ? "자사운임표" : undefined}
               dispatchData={allOrders} clients={clients} places={places} role={role} userCompany={pcViewCompany} me={pcViewMe}
               loadRange={loadRange} loadFullHistory={loadFullHistory} />
@@ -7619,6 +7621,9 @@ function MobileSideMenu({
   const ok = menuOk;
   const canRevenue = ["admin", "totalMaster", "superadmin", "test", "viewer"].includes(role);
   const canAdminMenu = isAdminRole || role === "viewer";
+  // ⭐ 2026-11-04 권한 관리 — 최고관리자가 켠 회사의 마스터만(자기 회사 것만)
+  const coFeatM = useCompanyFeatures();
+  const canPermsM = role !== "totalMaster" && mobileUsers?.find((u) => u.id === currentUser?.uid)?.isMaster === true && coFeatM.masterRolePerms === true;
   const myName =
     mobileUsers?.find(u => u.id === currentUser?.uid)?.name ||
     currentUser?.email ||
@@ -7819,6 +7824,7 @@ function MobileSideMenu({
           {canAdminMenu && !deptMode && (
             <MenuSection title="관리자 전용 메뉴" en="ADMIN" dark={dark} alwaysOpen>
               <MenuItem label="직원 관리" icon="users" onClick={() => onGo?.("staff")} badge={(alertCounts?.signupStaff || 0) + (alertCounts?.signupDriver || 0) || null} dark={dark} />
+              {canPermsM && <MenuItem label="권한 관리" icon="key" onClick={() => onGo?.("perms")} dark={dark} />}
             </MenuSection>
           )}
           {role === "totalMaster" && (

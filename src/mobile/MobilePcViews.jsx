@@ -33,6 +33,7 @@ import { BizScope } from "../companyBiz"; // ⭐ 2026-11-03 여러 사업자
 import { MobileFixedRouteView } from "../FixedRouteStatus"; // ⭐ 2026-11-03 모바일 고정노선현황
 
 // 매출관리는 PC 배차 프로그램 안에 있는 화면이라 그 묶음을 필요할 때만 받아온다
+const RolePermissionsPanel = React.lazy(() => import("../RolePermissionsPanel")); // ⭐ 2026-11-04 마스터 권한 관리(모바일)
 const PcSettlement = React.lazy(() => import("../DispatchApp").then((m) => ({ default: m.PcSettlement })));
 // 🏢 경리·인사 모드 — PC 정산관리·회계관리·인사관리 화면
 const PcSettleMobile = React.lazy(() => import("../DispatchApp").then((m) => ({ default: m.PcSettleMobile })));
@@ -205,7 +206,7 @@ function MobileBoard({ company, me }) {
 }
 
 const frDateOf = (r) => String(r?.입고일 || r?.하차일 || r?.상차일 || "").slice(0, 10); // 고정노선은 입고일 기준
-export default function MobilePcView({ kind, dispatchData = [], fixedRows = [], clients = [], places = [], drivers = [], role = "", userCompany = "", me: meIn, loadRange, loadFullHistory, onRegisterBack, initial, onGo, deptMode }) {
+export default function MobilePcView({ kind, users = [], dispatchData = [], fixedRows = [], clients = [], places = [], drivers = [], role = "", userCompany = "", me: meIn, loadRange, loadFullHistory, onRegisterBack, initial, onGo, deptMode }) {
   // ⭐ 이름은 본인 사용자 문서에서(계정 아이디로 적히던 문제)
   const prof = useMyProfile(meIn?.uid);
   const me = React.useMemo(() => (meIn ? { ...meIn, name: personName(prof) || meIn.name, team: prof?.team || meIn.team || "", position: prof?.position || meIn.position || "" } : meIn), [meIn, prof]);
@@ -214,6 +215,11 @@ export default function MobilePcView({ kind, dispatchData = [], fixedRows = [], 
   if (kind === "fare") body = <FareView initialTab={initial || "전국운임조회"} />;
   else if (kind === "ratecard") body = <div className="kp-m-pc"><RateCard dispatchData={dispatchData} userCompany={userCompany} clients={clients} /></div>;
   else if (kind === "fixedroute") body = <DetailScope data={dispatchData} dateOf={frDateOf} dateLabel="입고일 기준" title="세부검색 · 고정노선현황">{(detRows, detBtn) => <><div className="px-3 pt-3 flex justify-end">{detBtn}</div><MobileFixedRouteView company={userCompany} dispatchData={detRows} drivers={drivers || []} clients={clients} places={places} disabled={role === "viewer"} /></>}</DetailScope>;
+  else if (kind === "perms") body = (
+    <React.Suspense fallback={<Loading />}>
+      <div className="kp-m-pc px-2 py-2 overflow-x-auto"><RolePermissionsPanel users={(users || []).filter((u) => String(u.companyName || "").trim() === String(userCompany || "").trim())} roleLabels={{ admin: "관리자", user: "실무자", viewer: "조회전용", test: "경리", hrManager: "인사관리자", hrAcct: "인사·경리" }} lockScope={String(userCompany || "").trim()} /></div>
+    </React.Suspense>
+  );
   else if (kind === "fleet") body = <FleetView dispatchData={dispatchData} userCompany={userCompany} role={role} onRegisterBack={onRegisterBack} />;
   else if (kind === "approval") body = <ApprovalView company={userCompany} me={me} initialPage={initial || "inbox"} />;
   else if (kind === "staff") body = <StaffManager company={userCompany} role={role} myUid={me?.uid} initialTab={initial || "pending"} compact={role === "test" || role === "hrManager"} />;
