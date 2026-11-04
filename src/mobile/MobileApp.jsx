@@ -10,7 +10,7 @@ import { AttendanceQuickButton, officeRadii, CheckoutReminderHost } from "../att
 import { PersonalTodayHost } from "../PersonalSchedule";
 import { makeClientMatcher } from "../clientMatch"; // ⭐ 2026-11-03 거래처 검색
 import { useCompanyBiz, BizPicker, BizChip, bizOf, BizSelect, resolveBiz, rememberBizFor, normBizKey } from "../companyBiz"; // ⭐ 2026-11-03 여러 사업자
-import { useCustomRoles, findCustomRole, getMenuAccess, roleScreen } from "../customRoles";
+import { useCustomRoles, findCustomRole, getMenuAccess, roleScreen, useRoleView, applyRoleMenus } from "../customRoles";
 import { useReadOnlyGuard } from "../readOnlyGuard";
 import { confirmLeave } from "../leaveGuard";
 import { hideBlind, isBlindHidden, canSeeBlind, autoBlindNew } from "../blind";
@@ -1991,9 +1991,10 @@ const prevDayStr = (ymd) => { const d = new Date(`${ymd}T00:00:00Z`); d.setUTCDa
 
 export default function MobileApp({ role: realRole, user, userCompany = "", forceExec = false }) {
   useVehicleTypes(getTenant() || userCompany); // 🚚 2026-11-02 회사 공용 차량종류(추가한 이름이 모든 목록에 바로 보이게 구독 유지)
-  // 🔀 통합인사관리자(hrAcct) — 메뉴에서 경리 화면 ↔ 인사 화면 전환
-  const [hrAcctView, setHrAcctView] = useState(() => { try { return localStorage.getItem("kpHrAcctView") || "acct"; } catch { return "acct"; } });
-  const role = realRole === "hrAcct" ? (hrAcctView === "hr" ? "hrManager" : "test") : realRole;
+  // 🔀 화면 전환 역할 — 통합인사관리자(hrAcct): 경리 ↔ 인사 / 통합관리자(allMgr): 운송 ↔ 경리 ↔ 인사(메뉴 › 화면 전환)
+  //  경리사무원·인사사무원은 경리/인사 화면 역할로 동작 — PC(DispatchApp)와 같은 customRoles.js useRoleView
+  const roleView = useRoleView(realRole);
+  const role = roleView.role;
   useCompanyDropdownSync(realRole, userCompany); // ⭐ PC 편집모드에서 바꾼 회사별 배차방식 옵션을 모바일에도
   // ⭐ LTE 속도 — 앱을 켜면 오더·기사·거래처·공지·일정 등 10여 개 구독이 한꺼번에 전파를 나눠 써서,
   // 약한 LTE에선 정작 오더가 늦게 들어왔다. 오더가 서버와 맞춰진 뒤에 나머지(기사·거래처·공지 등)를 시작한다.
@@ -2090,7 +2091,8 @@ export default function MobileApp({ role: realRole, user, userCompany = "", forc
   // 👔 임원(부서 임원 · 대표/전무/이사) — 경영 브리핑으로 시작. 관리자 권한 임원은 메뉴에서 [전체 메뉴]로 전환
   const myProfM = useMyProfile(user?.uid);
   // ⭐ 2026-10-31 권한 관리 설정을 모바일에도 — 메뉴 숨김 · 임원 화면은 "임원 화면" 역할만
-  const customRolesM = useCustomRoles();
+  const customRolesRawM = useCustomRoles();
+  const customRolesM = React.useMemo(() => applyRoleMenus(customRolesRawM, realRole, role), [customRolesRawM, realRole, role]);
   const customRoleM = findCustomRole(customRolesM, role);
   const isExecM = forceExec || roleScreen(customRoleM) === "exec";
   // 운송사별 권한 설정으로 켠 부서 메뉴(예: A운송사 관리자 → 인사관리부)
@@ -5834,8 +5836,9 @@ onGoAttendance={() => {
           isExec={isExecM}
           menuOk={menuOkM}
           deptOk={deptOkM}
-          hrAcct={realRole === "hrAcct" ? hrAcctView : null}
-          onToggleHrAcct={() => { const v = hrAcctView === "hr" ? "acct" : "hr"; setHrAcctView(v); try { localStorage.setItem("kpHrAcctView", v); } catch { /* 무시 */ } setPage("dept"); setShowMenu(false); }}
+          roleViews={roleView.views}
+          roleViewCur={roleView.view}
+          onRoleView={(v) => { roleView.setView(v); setPage(v === "dispatch" ? "list" : "dept"); setShowMenu(false); }}
           isCeo={forceExec || ["대표", "대표이사", "사장"].includes(String(myProfM?.position || "").trim())}
           execFull={execFull}
           onToggleExec={() => { toggleExecFull(); setShowMenu(false); }}
@@ -6324,7 +6327,7 @@ onGoAttendance={() => {
         </div>
         {(() => {
           // ⭐ 2026-11-02 점검 — 규칙(isBoardAdmin)과 맞춤: 공지 관리 권한자만 수정·삭제 버튼 표시
-          const isNAuthor = ["admin", "hrManager", "hrAcct", "totalMaster"].includes(role) && (!selectedNotice.authorUid || selectedNotice.authorUid === currentUser?.uid);
+          const isNAuthor = ["admin", "hrManager", "hrAcct", "allMgr", "totalMaster"].includes(role) && (!selectedNotice.authorUid || selectedNotice.authorUid === currentUser?.uid);
           const isSA = role === "superadmin" || role === "totalMaster";
           if (!isNAuthor && !isSA) return null;
           return (
@@ -7632,8 +7635,9 @@ function MobileSideMenu({
   unassignedCount = 0,
   deptMode = null,
   isExec = false,
-  hrAcct = null,
-  onToggleHrAcct,
+  roleViews = null,
+  roleViewCur = "",
+  onRoleView,
   isCeo = false,
   execFull = false,
   onToggleExec,
@@ -7790,9 +7794,9 @@ function MobileSideMenu({
               {isAdminRole && <MenuItem label="직원 관리" icon="users" onClick={() => onGo?.("staff")} badge={(alertCounts?.signupStaff || 0) + (alertCounts?.signupDriver || 0) || null} dark={dark} />}
             </MenuSection>
           )}
-          {hrAcct && (
-            <MenuSection title="화면 전환" en="HR · ACCOUNTING" dark={dark} alwaysOpen>
-              <MenuItem label={hrAcct === "hr" ? "경리 화면으로 전환" : "인사 화면으로 전환"} icon="refresh" onClick={onToggleHrAcct} dark={dark} />
+          {roleViews && (
+            <MenuSection title="화면 전환" en={roleViews.length > 2 ? "DISPATCH · ACCOUNTING · HR" : "HR · ACCOUNTING"} dark={dark} alwaysOpen>
+              {roleViews.filter(([k]) => k !== roleViewCur).map(([k, , lb]) => <MenuItem key={k} label={`${lb} 화면으로 전환`} icon="refresh" onClick={() => onRoleView?.(k)} dark={dark} />)}
             </MenuSection>
           )}
           {isExec && (
@@ -22246,7 +22250,7 @@ function MobileSettingsPage({ onBack, cardVersionB, setCardVersionB, alarmEnable
     { key: "미배차", label: "미배차 임박 알림", sub: "상차 1시간 전인데 아직 미배차면" },
     { key: "배차취소", label: "배차취소 알림", sub: "오더가 취소되거나 삭제되면" },
   ];
-  const isAdminLike = ["admin", "totalMaster", "superadmin", "test", "hrManager", "hrAcct"].includes(role);
+  const isAdminLike = ["admin", "totalMaster", "superadmin", "test", "hrManager", "hrAcct", "allMgr"].includes(role);
   const W = (key, label, sub) => ({ key, label, sub });
   const TEAM_PUSH = {
     acct: [

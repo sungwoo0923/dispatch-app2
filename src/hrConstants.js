@@ -27,16 +27,22 @@ export const isExecProfile = (u) => !!u && (u.team === EXEC_TEAM || isExecPositi
 //   임원(대표·전무·이사) → 관리자(임원 화면) / 경리·회계팀 → 경리 / 인사팀 → 인사관리자
 //   운영·운송팀 과장 이상(과장·차장·부장·팀장·파트장) → 관리자 / 그 외 → 실무자
 //  ※ 관리자는 매출·정산·직원 권한까지 열리므로 대리 이하는 실무자로 시작한다.
+//  ⭐ 2026-11-04 부서 낱말 기준(customRoles.js DEPT_ROLE_RULES와 같은 낱말) — 경리·인사는 대리 이하면 사무원, 법무·개발팀 역할 추가
 const MANAGER_RANKS = ["과장", "차장", "부장", "팀장", "파트장"];
+const STAFF_RANKS = ["인턴", "사원", "주임", "대리"];
 export function suggestRole({ team = "", position = "" } = {}) {
   const p = String(position || "").trim();
-  if (team === EXEC_TEAM || isExecPosition(p)) return "admin";
-  if (team === "경리/회계팀") return "test";
-  if (team === "인사팀") return "hrManager";
+  const t = String(team || "").trim();
+  const junior = STAFF_RANKS.includes(p);
+  if (t === EXEC_TEAM || isExecPosition(p)) return "admin";
+  if (/경리|회계|재무/.test(t)) return junior ? "acctStaff" : "test";
+  if (/인사/.test(t)) return junior ? "hrStaff" : "hrManager";
+  if (/법무/.test(t)) return MANAGER_RANKS.includes(p) ? "legalMgr" : "legalStaff";
+  if (/개발/.test(t)) return MANAGER_RANKS.includes(p) ? "devMgr" : "devStaff";
   if (MANAGER_RANKS.includes(p)) return "admin";
   return "user";
 }
-export const ROLE_NAME = { admin: "관리자", user: "실무자", test: "경리/회계", hrManager: "인사관리자", hrAcct: "통합인사관리자", viewer: "조회전용", totalMaster: "최고관리자" };
+export { ROLE_LABELS as ROLE_NAME } from "./customRoles";
 
 // 팀 배지는 알록달록한 색 대신 프로그램 톤(네이비/그레이)에 맞춘 단일 톤으로 통일
 export const TEAM_BADGE_CLASS = "bg-[#1B2B4B]/5 text-[#1B2B4B] border-[#1B2B4B]/15";

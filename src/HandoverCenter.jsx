@@ -13,7 +13,7 @@ import { useUserNames } from "./userNames";
 const MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
 const HERO_BG = "linear-gradient(rgba(143,176,240,.07) 1px, transparent 1px) 0 0/22px 22px, linear-gradient(90deg, rgba(143,176,240,.07) 1px, transparent 1px) 0 0/22px 22px, linear-gradient(120deg,#0B1428 0%,#1B2B4B 60%,#2D4C82 100%)";
 const toMs = (t) => (t?.toMillis ? t.toMillis() : t?.seconds ? t.seconds * 1000 : typeof t === "number" ? t : 0);
-const ADMIN_ROLES = ["admin", "totalMaster", "superadmin", "hrManager"];
+const ADMIN_ROLES = ["admin", "totalMaster", "superadmin", "hrManager", "allMgr"];
 
 // 내가 받은 인수인계 중 아직 안 본 개수(메뉴 숫자)
 export function useHandoverUnread(uid) {

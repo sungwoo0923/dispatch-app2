@@ -38,7 +38,7 @@ export async function setNoticePolicy(company, value) {
 export function canWriteNoticeFor(me, policy) {
   const role = me?.role || "";
   if (!role || ["viewer", "driver", "shipper", "cafeUser"].includes(role)) return false;
-  if (NOTICE_WRITER_ROLES.includes(role) || role === "hrAcct" || me?.isMaster) return true;
+  if (NOTICE_WRITER_ROLES.includes(role) || ["hrAcct", "allMgr"].includes(role) || me?.isMaster) return true;
   if (policy === "all") return true;
   if (policy === "exec") return String(me?.team || "").trim() === "임원";
   return false;

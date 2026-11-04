@@ -11,14 +11,12 @@ import { html2canvas } from "./lazyLoad"; // ⭐ 2026-11-02 속도 — 캡처 �
 import { db, auth } from "./firebase";
 import { addDoc, collection, doc, increment, onSnapshot, query, serverTimestamp, setDoc, updateDoc, where } from "firebase/firestore";
 import { suggestRole, isExecProfile, useHrOptions } from "./hrConstants";
-import { useRoleOptions } from "./customRoles";
+import { useRoleOptions, BASE_ROLE_OPTIONS, ROLE_LABELS } from "./customRoles";
 import { sendInternalMail, useCompanyStaff, compressImage } from "./InternalMail";
 import { CustomSelect } from "./CustomSelect";
 import CustomDatePicker from "./CustomDatePicker";
 
-export const HR_ROLE_OPTIONS = [
-  ["user", "실무자"], ["admin", "관리자"], ["hrManager", "인사관리자"], ["hrAcct", "통합인사관리자"], ["test", "경리/회계"], ["viewer", "조회전용"],
-];
+export const HR_ROLE_OPTIONS = BASE_ROLE_OPTIONS.map(([k]) => [k, ROLE_LABELS[k]]);
 const roleName = (r) => (HR_ROLE_OPTIONS.find(([k]) => k === r) || [r, r || "-"])[1];
 const today = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
 const korDate = (s) => { const [y, m, d] = String(s || "").split("-").map(Number); return y ? `${y}년 ${m}월 ${d}일` : ""; };
@@ -63,8 +61,13 @@ export default function PersonnelOrder({ company, target, myName, isSelf, revise
   const roleName = ro.label;
   // ⭐ 2026-11-01 대리까지(인턴·사원·주임·대리)는 일반 사무원 — 직책을 고르면 권한이 자동으로 일반 사무원(실무자)으로 바뀐다
   //   (회사에서 "일반사무원" 이름의 권한을 만들어 두었으면 그 권한). 권한 칸에서 다시 고르면 고른 대로 발령된다
-  const staffRole = (ro.options.find(([, l]) => /사무원/.test(String(l || ""))) || ["user"])[0];
-  const suggestR = (x) => (isExecProfile(x) && ro.execKeys[0] ? ro.execKeys[0] : JUNIOR_RANKS.includes(String(x?.position || "").trim()) ? staffRole : suggestRole(x));
+  //   ⭐ 2026-11-04 경리·인사·법무·개발은 그 부서 사무원 기본 역할(suggestRole), 추천이 그 부서에 맞지 않으면 그 부서의 첫 역할
+  const staffRole = (ro.options.find(([k, l]) => !BASE_ROLE_OPTIONS.some(([b]) => b === k) && /사무원/.test(String(l || ""))) || ["user"])[0];
+  const suggestR = (x) => {
+    const s0 = isExecProfile(x) && ro.execKeys[0] ? ro.execKeys[0] : suggestRole(x);
+    const s1 = s0 === "user" && JUNIOR_RANKS.includes(String(x?.position || "").trim()) ? staffRole : s0;
+    return ro.fits(s1, x?.team) ? s1 : ro.fits(s0, x?.team) ? s0 : ro.firstFor(x?.team);
+  };
   const hrOpt = useHrOptions(company);
   const positionsForTeam = hrOpt.positionsFor; const TEAM_OPTIONS = hrOpt.teams;
   const staff = useCompanyStaff(company);
@@ -271,7 +274,7 @@ export default function PersonnelOrder({ company, target, myName, isSelf, revise
               </div>
               <label className="block"><span className="text-[12px] font-bold text-[#7A879C]">권한</span>
                 <CustomSelect value={r.next.role} disabled={self || r.next.role === "totalMaster"} onChange={(e) => setNextOf(r.uid, (p) => ({ ...p, role: e.target.value }))} className={`${selS} disabled:bg-[#F5F7FA] disabled:text-[#9AA9C3]`}>
-                  {[...ro.options, ...(ro.options.some(([k]) => k === c.role) ? [] : [[c.role, roleName(c.role)]])].map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+                  {ro.forTeam(r.next.team, r.next.role).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
                 </CustomSelect>
                 {self && <span className="text-[11.5px] text-[#9AA9C3]">본인 권한은 최고관리자만 바꿀 수 있습니다</span>}
               </label>

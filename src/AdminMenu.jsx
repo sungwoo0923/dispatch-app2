@@ -37,7 +37,7 @@ import SheetImportPanel from "./SheetImportPanel";
 import GsheetMinePanel from "./GsheetMinePanel";
 import BlindMinePanel from "./BlindMinePanel";
 import TrashPanel from "./TrashPanel";
-import { useCustomRoles, roleScreen } from "./customRoles";
+import { useCustomRoles, roleScreen, ROLE_LABELS, roleOptionsFrom, rolesForTeam } from "./customRoles";
 import { useCompanyFeatures } from "./companyFeatures"; // ⭐ 2026-11-04 마스터 권한 관리(회사별로 켬)
 import { EditableText } from "./EditMode";
 import { useLoadOrderRange, monthEnd, monthStart } from "./orderHistory";
@@ -69,17 +69,7 @@ const fmtDate = (ts) => {
   });
 };
 
-const ROLE_LABELS = {
-  totalMaster: "최고관리자",
-  admin: "관리자",
-  hrManager: "인사관리자",
-  hrAcct: "통합인사관리자",
-  user: "실무자",
-  viewer: "조회전용",
-  driver: "기사",
-  shipper: "화주",
-  test: "경리/회계",
-};
+// 역할 이름은 customRoles.js ROLE_LABELS(PC·모바일 공용)
 
 const DotBadge = ({ active, label, activeLabel, inactiveLabel }) => (
   <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-semibold border ${active ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-gray-100 text-gray-500 border-gray-200"}`}>
@@ -151,12 +141,22 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
   const me = auth.currentUser;
   const isTotalMaster = parentRole === "totalMaster" || me?.email === TOTAL_MASTER_EMAIL || myRole === "totalMaster";
   const customRoles = useCustomRoles();
-  const roleLabels = { ...ROLE_LABELS, ...Object.fromEntries(customRoles.map(r => [r.key, r.label])) };
+  const roleOpts = React.useMemo(() => roleOptionsFrom(customRoles), [customRoles]);
+  const roleLabels = { ...ROLE_LABELS, ...Object.fromEntries(roleOpts) };
   const execRoleKeys = customRoles.filter((r) => roleScreen(r) === "exec").map((r) => r.key);
-  const suggestR = (x) => (isExecProfile(x) && execRoleKeys[0] ? execRoleKeys[0] : suggestRole(x));
+  // ⭐ 2026-11-04 기본 역할(통합관리자·통합인사관리자·사무원·법무·개발 포함) + 권한 관리에서 만든 역할
   const ROLES = isTotalMaster
-    ? ["totalMaster", "admin", "hrManager", "hrAcct", "user", "viewer", "driver", "shipper", "test", ...customRoles.map(r => r.key).filter((k) => !["admin", "hrManager", "hrAcct", "user", "viewer", "test"].includes(k))]
-    : ["admin", "hrManager", "hrAcct", "user", "viewer", "test", ...customRoles.map(r => r.key).filter((k) => !["admin", "hrManager", "hrAcct", "user", "viewer", "test"].includes(k))];
+    ? ["totalMaster", ...roleOpts.map(([k]) => k), "driver", "shipper"]
+    : roleOpts.map(([k]) => k);
+  // 🏢 2026-11-04 부서 → 권한 거르기(customRoles.js rolesForTeam) — 맞는 역할이 하나도 없으면 그대로
+  const fitKeys = (team) => rolesForTeam(team, roleOpts, customRoles).map(([k]) => k);
+  const byTeam = (list, team) => { if (!team) return list; const f = fitKeys(team); const l = list.filter((k) => f.includes(k)); return l.length ? l : list; };
+  // 추천 권한이 그 부서에 맞지 않으면(또는 지정할 수 없으면) 그 부서의 첫 역할로
+  const suggestR = (x) => {
+    const s0 = isExecProfile(x) && execRoleKeys[0] ? execRoleKeys[0] : suggestRole(x);
+    const list = byTeam(assignableRoles(), x?.team);
+    return list.includes(s0) ? s0 : (list[0] || s0);
+  };
   // ⭐ 2026-11-02 회사 분리 — 최고관리자는 본인 문서의 회사(예: 돌캐)가 아니라 "지금 들어가 있는 회사"(로그인 회사)를 기준으로.
   //  예전엔 최고관리자가 태진에 들어가도 연동 화주사·화주사 전송·인사 설정이 본인 문서 회사로 잡혔다.
   const effectiveCompany = isTotalMaster
@@ -253,8 +253,8 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
   const TEAM_OPTIONS = hrOpt.teams;
   // ⭐ 2026-10-31 가입 승인은 관리자·경리·인사관리자부터 — 인사관리자는 인사권(승인 후 정보·권한 변경·퇴사)까지
   const myRoleEff = meDoc?.role || myRole || parentRole;
-  const isHrMgr = !canAdmin && (myRoleEff === "hrManager" || myRoleEff === "hrAcct");
-  const canApprove = canAdmin || ["admin", "hrManager", "hrAcct", "test"].includes(myRoleEff);
+  const isHrMgr = !canAdmin && ["hrManager", "hrAcct", "allMgr"].includes(myRoleEff);
+  const canApprove = canAdmin || ["admin", "hrManager", "hrAcct", "allMgr", "test"].includes(myRoleEff);
   // ⭐ 2026-11-01 마스터 인사권 자동 인계 — 인사 담당자가 생기면 마스터는 재직 직원의 부서·직책·퇴사를 바꾸지 않는다
   //  (승인·권한 지정·마스터 지정은 그대로 — 인사관리자를 지정해야 하므로). 가입 승인 대기자는 마스터도 부서·직책 지정 가능
   const hrHanded = isCompanyMaster && !isTotalMaster && !masterHasHr(meDoc, users.filter((x) => (x.companyName || DEFAULT_COMPANY) === effectiveCompany), me?.uid);
@@ -267,10 +267,12 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
   const isPending = (u) => !!u && u.approved === false && u.employmentStatus !== "퇴사" && !["deleted", "withdrawn"].includes(u.status) && (isTotalMaster || u.role !== "shipper");
   // ⭐ 2026-11-02 점검 — !u.approved 대신 isPending — 예전 승인 계정에 승인·거절 창이 열려 거절로 잠기던 문제
   const canEditMember = (u) => !!u && (isTotalMaster || (canApprove && isPending(u)));
-  const assignableRoles = (cur) => {
-    const base = canAdmin ? ROLES : isHrMgr ? ROLES.filter((r) => r !== "totalMaster") : myRoleEff === "admin" ? ["admin", "user", "test", "hrManager", "viewer"] : ["user", "test", "viewer"];
+  // team — 고른 부서에 맞는 역할만(지금 역할 cur는 늘 남김)
+  function assignableRoles(cur, team) {
+    const base0 = canAdmin ? ROLES : isHrMgr ? ROLES.filter((r) => r !== "totalMaster") : myRoleEff === "admin" ? ["admin", "user", "test", "acctStaff", "hrManager", "hrStaff", "legalMgr", "legalStaff", "devMgr", "devStaff", "viewer"] : ["user", "test", "acctStaff", "hrStaff", "viewer"];
+    const base = byTeam(base0.filter((k) => k === "totalMaster" || k === "driver" || k === "shipper" || ROLES.includes(k)), team);
     return cur && !base.includes(cur) ? [cur, ...base] : base;
-  };
+  }
   // ⭐ 2026-10-31 부서·직책을 바꾸면 직책 드롭다운을 부서에 맞추고(임원 → 대표·전무·이사) 권한을 추천값으로 맞춘다
   const applySuggest = (team, position) => setEditRole((r) => (r === "totalMaster" ? r : suggestR({ team, position })));
   const onTeamChange = (t) => {
@@ -341,7 +343,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
     );
   }, [users, isTotalMaster, effectiveCompany, shipperLinkCompanies, tenantNow]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const ROLE_ORDER = ["totalMaster","admin","user","test","viewer","driver","shipper"];
+  const ROLE_ORDER = ["totalMaster", "allMgr", "hrAcct", "admin", "user", "test", "acctStaff", "hrManager", "hrStaff", "legalMgr", "legalStaff", "devMgr", "devStaff", "viewer", "driver", "shipper"];
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     return visibleUsers
@@ -1127,7 +1129,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
                               <label className="block text-[11.5px] font-bold text-[#7A879C] mb-1.5">권한</label>
                               <CustomSelect value={editRole} onChange={e => setEditRole(e.target.value)} disabled={!canEditMember(u)}
                                 className="w-full h-10 border border-[#DCE3EE] rounded-xl px-3 text-[13.5px] font-semibold text-[#0F1A30] focus:outline-none focus:border-[#4B6CB7] focus:ring-4 focus:ring-[#4B6CB7]/10 bg-white">
-                                {assignableRoles(u.role).map(r => <option key={r} value={r}>{roleLabels[r] || r}</option>)}
+                                {assignableRoles(editRole, editTeam).map(r => <option key={r} value={r}>{roleLabels[r] || r}</option>)}
                               </CustomSelect>
                               <p className="mt-1 text-[11px] font-bold text-[#7A879C]">{`추천: ${roleLabels[suggestR({ team: editTeam, position: editPosition })] || ROLE_NAME[suggestR({ team: editTeam, position: editPosition })]} (부서·직책 기준)`}</p>
                             </div>
@@ -1147,7 +1149,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
                       </div>
                       {memberModal && canEditMember(u) && canManage && (
                         <MemberManageModal
-                          u={u} me={me} isTotalMaster={isTotalMaster} roles={assignableRoles(u.role)} roleLabels={roleLabels}
+                          u={u} me={me} isTotalMaster={isTotalMaster} roles={assignableRoles(editRole, editTeam)} roleLabels={roleLabels}
                           canMaster={isTotalMaster} canAccount={isTotalMaster} canDelete={isTotalMaster} hrOpt={hrOpt} hrLock={hrLocked(u)}
                           f={{ editName, setEditName, editPhone, setEditPhone, editRole, setEditRole, editCompany, setEditCompany, editWorkStart, setEditWorkStart, editWorkEnd, setEditWorkEnd, editPosition, setEditPosition: onPositionChange, editTeam, setEditTeam: onTeamChange, suggestR }}
                           onClose={() => { setMemberModal(false); setEditMode(false); }}

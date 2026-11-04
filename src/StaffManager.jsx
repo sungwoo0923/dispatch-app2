@@ -164,8 +164,9 @@ export default function StaffManager({ company, role, myUid, initialTab = "pendi
                   </div>
                   {!isDriverTab && canRole && !u.isMaster && (
                     <>
-                      <div className="px-2 pt-1 pb-1 text-[11.5px] font-black text-[#9AA9C3]">권한 변경</div>
-                      {ro.options.map(([rk, rl]) => (
+                      <div className="px-2 pt-1 pb-1 text-[11.5px] font-black text-[#9AA9C3]">권한 변경{u.team ? ` · ${u.team}에 맞는 권한` : ""}</div>
+                      {/* 🏢 2026-11-04 그 직원 부서에 맞는 권한만(customRoles.js rolesForTeam) */}
+                      {ro.forTeam(u.team, u.role).map(([rk, rl]) => (
                         <button key={rk} type="button" onClick={() => { setMenuOpen(null); changeRole(u, rk); }} className={`w-full text-left px-3 h-11 rounded-xl text-[14.5px] font-bold ${u.role === rk ? "bg-[#EEF3FC] text-[#1B2B4B]" : "text-[#3A4A66] hover:bg-[#F5F8FD]"}`}>{u.role === rk ? "✓ " : ""}{rl}</button>
                       ))}
                       <div className="h-px bg-[#EEF2F8] my-1.5" />

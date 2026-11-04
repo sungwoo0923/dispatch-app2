@@ -4,6 +4,7 @@
 //  · 세부 메뉴를 누르면 그 메뉴 화면을 열고, 화면의 왼쪽 메뉴가 해당 항목으로 바로 이동한다(useSubnavTarget)
 import React from "react";
 import { createPortal } from "react-dom";
+import { SWITCH_ROLES, readSwitchView } from "./customRoles";
 
 const MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
 
@@ -28,7 +29,7 @@ export const MENU_SUBS = {
 };
 
 // ⭐ 실제 화면의 왼쪽 메뉴를 기억 — 팀·권한마다 보이는 항목이 달라서, 한 번이라도 연 화면은 그 사람이 실제로 보는 항목만 펼친다
-const REG_KEY = (code) => { let r = ""; try { r = (localStorage.getItem("role") || "") + (localStorage.getItem("role") === "hrAcct" ? `-${localStorage.getItem("kpHrAcctView") || "acct"}` : ""); } catch { /* 무시 */ } return `kpSubnavReg:${r}:${code}`; };
+const REG_KEY = (code) => { let r = ""; try { const rr = localStorage.getItem("role") || ""; r = rr + (SWITCH_ROLES[rr] ? `-${readSwitchView(rr)}` : ""); } catch { /* 무시 */ } return `kpSubnavReg:${r}:${code}`; }; // 화면 전환 역할(통합관리자·통합인사관리자)은 화면별로
 const _reg = {};
 export function registerSubnav(code, items) {
   if (!code || !Array.isArray(items) || !items.length) return;

@@ -15,7 +15,7 @@ import { kpConfirm } from "./kpDialog";
 const MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
 export const COMMENT_CAP = 500;
 const COMMENT_WARN = 450;
-const ADMIN_ROLES = ["admin", "totalMaster", "superadmin", "hrManager"];
+const ADMIN_ROLES = ["admin", "totalMaster", "superadmin", "hrManager", "allMgr"];
 const newId = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
 
 export const EMOJIS = [
