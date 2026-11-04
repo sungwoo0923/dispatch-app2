@@ -1134,7 +1134,7 @@ export default function StandardFare({ embedded = false, defaultTab = "표준운
                 </div>
                 <div>
                   <label className={labelCls}>상차지명 <span className="text-[#4B6CB7]">*</span></label>
-                  <PlaceSuggest value={pickup} onChange={setPickup} names={pickupNames} placeholder="예: 송원" onKeyDown={e=>e.key==="Enter"&&search()} />
+                  <PlaceSuggest value={pickup} onChange={setPickup} names={pickupNames} placeholder="예: ○○상사" onKeyDown={e=>e.key==="Enter"&&search()} />
                 </div>
                 <div>
                   <label className={labelCls}>하차지명 <span className="text-[#4B6CB7]">*</span></label>

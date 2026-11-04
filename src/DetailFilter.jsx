@@ -107,7 +107,7 @@ function ValueInput({ field, q, onChange, options, onEnter, inputRef }) {
   return (
     <div className="relative flex-1 min-w-0">
       <input ref={inputRef} autoComplete="off" disabled={!field} value={q}
-        placeholder={field ? `${field} 입력 (예: ${options[0]?.v || "검색어"})` : "← 먼저 칸을 고르세요"}
+        placeholder={field ? `${field} 입력 · 목록에서 고르기` : "← 먼저 칸을 고르세요"}
         onFocus={() => setOpen(true)} onBlur={() => setTimeout(() => setOpen(false), 150)}
         onChange={(e) => { onChange(e.target.value); setOpen(true); }}
         onKeyDown={(e) => {

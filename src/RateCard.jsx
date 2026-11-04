@@ -431,7 +431,7 @@ const [detailModal, setDetailModal] = useState(null);
   const downloadMultiTemplate = (sheet) => {
     if (!sheet) return;
     const header = ["하차지", "주소", ...(sheet.columns || []).map(c => c.label)];
-    const example = ["예: 쿠팡(인천13센터)", "인천 서구 북항로 28-23", ...(sheet.columns || []).map(() => "")];
+    const example = ["예: ○○센터(인천)", "인천 서구 ○○로 123", ...(sheet.columns || []).map(() => "")];
     const ws = XLSX.utils.aoa_to_sheet([header, example]);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "단가표양식");

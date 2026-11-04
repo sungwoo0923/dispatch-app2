@@ -373,7 +373,7 @@ export function BizListEditor({ company, canEdit }) {
           <div className="w-full max-w-[620px] max-h-[92vh] overflow-auto rounded-2xl bg-white shadow-[0_24px_60px_rgba(15,26,48,0.35)]">
             <div className="px-6 py-4 bg-[#1B2B4B] text-white text-[16px] font-black">{edit.idx == null ? "사업자 추가" : "사업자 수정"}</div>
             <div className="p-6 grid grid-cols-2 gap-3">
-              <div className="col-span-2">{F("name", "상호(사업자 이름) *", "예) 가나물류")}</div>
+              <div className="col-span-2">{F("name", "상호(사업자 이름) *", "예) ○○물류")}</div>
               {F("bizNo", "사업자등록번호", "000-00-00000")}{F("ceo", "대표자")}
               <div className="col-span-2">{F("addr", "사업장 주소")}</div>
               {F("type", "업태")}{F("item", "종목")}

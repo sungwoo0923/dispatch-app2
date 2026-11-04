@@ -959,7 +959,7 @@ function SpendLinesInput({ value, onChange }) {
             <div className="p-3 grid grid-cols-2 gap-x-2 gap-y-2.5">
               <div className="col-span-2 sm:col-span-1"><span className={lab}>발생일(납입일)</span><CustomDatePicker value={r.date || ""} onChange={(e) => set(i, { date: e.target.value })} className={inp} showIcon placeholder="날짜 선택" /></div>
               <div className="col-span-2 sm:col-span-1"><span className={lab}>지출처(업체명) *</span><input value={r.vendor || ""} onChange={(e) => set(i, { vendor: e.target.value })} placeholder="예) ○○특장 김제공장" className={inp} /></div>
-              <div className="col-span-2"><span className={lab}>적요</span><input value={r.memo || ""} onChange={(e) => set(i, { memo: e.target.value })} placeholder="예) 5956 김태균 박스 고리 작업" className={inp} /></div>
+              <div className="col-span-2"><span className={lab}>적요</span><input value={r.memo || ""} onChange={(e) => set(i, { memo: e.target.value })} placeholder="예) 1234 홍길동 박스 고리 작업" className={inp} /></div>
               <div><span className={lab}>공급가액</span>{won("supply", r, i)}</div>
               <div><span className={lab}>세액(부가세)</span>{won("vat", r, i, "없으면 비움")}</div>
               <div className="col-span-2"><span className={lab}>합계 *</span>{won("total", r, i)}

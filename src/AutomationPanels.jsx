@@ -151,7 +151,7 @@ export function RecurringManagerModal({ form, onClose }) {
             <div className="px-3.5 py-2.5 rounded-xl bg-[#F5F8FD] text-[13px] text-[#3A4A66] leading-relaxed">
               <b className="text-[#0F1A30]">{form.거래처명}</b> · {form.상차지명} → {form.하차지명}{form.상차시간 ? ` · ${form.상차시간}` : ""}{dropOffset ? ` · 하차 ${dropOffset}일 뒤` : ""} · 청구 {won(form.청구운임)}{form.기사운임 ? ` / 기사 ${won(form.기사운임)}` : ""}
             </div>
-            <input value={name} onChange={(e) => setName(e.target.value)} placeholder="이름(예: 펠프렌 매일 김포)"
+            <input value={name} onChange={(e) => setName(e.target.value)} placeholder="이름(예: ○○ 매일 김포)"
               className="w-full h-11 px-3.5 rounded-xl border border-[#DCE3EE] text-[14px] font-semibold text-[#0F1A30] outline-none focus:border-[#4B6CB7]" />
             <ScheduleFields days={days} setDays={setDays} hour={hour} setHour={setHour} when={when} setWhen={setWhen} />
             <div className="flex flex-wrap items-center justify-between gap-3">

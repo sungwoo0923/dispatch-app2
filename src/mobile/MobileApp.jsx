@@ -5707,7 +5707,7 @@ const title =
       : undefined
   }
   onRefresh={page === "list" ? handleRefresh : undefined}
-  onValidateOrders={page === "list" ? () => handleValidateOrders(false) : undefined}
+  onValidateOrders={undefined /* ⭐ 2026-11-04 오더검증 버튼 없앰 */}
   onMenu={page === "list" || page === "dept" ? () => setShowMenu(true) : undefined}
   menuBadge={(alertCounts.approval || 0) + (alertCounts.handover || 0) + (alertCounts.notice || 0) + ((["admin", "totalMaster", "superadmin", "viewer"].includes(role) || deptMode) ? (alertCounts.signupStaff || 0) + (alertCounts.signupDriver || 0) : 0)}
   notifCount={unreadCount}
@@ -7648,6 +7648,7 @@ function MobileLoadingScreen({ loaded = 0, total = null, cacheDone = false, onAl
   return <KpBootScreen targets={targets} subs={subs} onAllDone={onAllDone} onSkip={onSkip} variant="mobile" />;
 }
 
+let SIDE_MENU_SCROLL = 0; // 사이드 메뉴 스크롤 위치(앱이 켜져 있는 동안 기억)
 function MobileSideMenu({
   onClose,
   onGoList,
@@ -7696,6 +7697,14 @@ function MobileSideMenu({
   deptOk = () => false,
 }) {
   const fareMenu = useFareRules(); // ⭐ 2026-11-02 운임규칙 — 최고관리자가 켜 준 회사만 메뉴 표시
+  // ⭐ 2026-11-04 메뉴를 닫았다 다시 열어도(내정보 등 들어갔다 와도) 보던 위치 그대로 — 맨 위로 튀지 않게
+  const menuScrollRef = useRef(null);
+  React.useLayoutEffect(() => {
+    const el = menuScrollRef.current; if (!el) return undefined;
+    el.scrollTop = SIDE_MENU_SCROLL;
+    const r = requestAnimationFrame(() => { if (el) el.scrollTop = SIDE_MENU_SCROLL; }); // 펼쳐지는 섹션이 그려진 뒤 한 번 더
+    return () => cancelAnimationFrame(r);
+  }, []);
   const isAdminRole = ["admin", "totalMaster", "superadmin"].includes(role);
   const ok = menuOk;
   const canRevenue = ["admin", "totalMaster", "superadmin", "test", "viewer"].includes(role);
@@ -7805,7 +7814,7 @@ function MobileSideMenu({
         {/* 메뉴 본문 + 하단 컨트롤 — 사용자 요청: 메뉴 목록만 따로 작은 칸 안에서
             스크롤되던 걸 없애고, 드로어 전체(메뉴~로그아웃~버전)가 하나로 이어져
             일반 스크롤바로 오르내리게 통합했다. */}
-        <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain py-1" style={{ WebkitOverflowScrolling: "touch", paddingBottom: "max(env(safe-area-inset-bottom, 0px), 16px)" }}>
+        <div ref={menuScrollRef} onScroll={(e) => { SIDE_MENU_SCROLL = e.currentTarget.scrollTop; }} className="flex-1 min-h-0 overflow-y-auto overscroll-contain py-1" style={{ WebkitOverflowScrolling: "touch", paddingBottom: "max(env(safe-area-inset-bottom, 0px), 16px)" }}>
           {/* ⭐ 2026-10-31 — PC 메뉴와 같은 구성·권한 규칙(DispatchApp menuState)으로 정리.
               실무자: 매출관리 숨김 / 경리·회계: 화물등록·단가표 숨김 / 관리자 전용 메뉴: 관리자·마스터·조회전용 /
               최고관리자 전용(관리센터·구글시트·블라인드·회사코드조회)은 최고관리자만.
@@ -8146,8 +8155,10 @@ function KpmDrawerControls({ alarmEnabled, toggleAlarm, uiScale, setUiScale, car
   );
 }
 
+const MENU_SECTION_OPEN = {}; // ⭐ 2026-11-04 펼친 메뉴 묶음 기억(메뉴를 다시 열어도 그대로)
 function MenuSection({ title, en, children, dark, alwaysOpen = false }) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen0] = useState(() => !!MENU_SECTION_OPEN[title]);
+  const setOpen = (v) => setOpen0((p) => { const n = typeof v === "function" ? v(p) : v; MENU_SECTION_OPEN[title] = n; return n; });
   if (dark) {
     // B형 — 영문 코드 + 한글 제목 + 가는 선, 항목은 카드처럼 묶어서
     return (
@@ -14136,7 +14147,7 @@ function SmartOrderParser({ clients, drivers = [], onApply, onClose, cardVersion
           <textarea
             className="w-full border border-gray-200 rounded-2xl px-4 py-3 text-[13px] text-gray-800 resize-none focus:outline-none focus:border-[var(--smart-accent)] bg-gray-50"
             rows={7}
-            placeholder={"오더 내용을 그대로 붙여넣으세요\n\n예:\n1.상차지\n반찬단지 물류센터\n인천 서구 북항로 28-29\n상차시간: 16시\n\n하차지: 순수본\n전라북도 익산시 왕궁면 무왕로 2182\n중량: 400KG / 1파렛트\n냉장차량"}
+            placeholder={"오더 내용을 그대로 붙여넣으세요\n\n예:\n1.상차지\n○○물류센터\n인천 서구 ○○로 123\n상차시간: 16시\n\n하차지: △△식품\n전라북도 익산시 ○○면 ○○로 456\n중량: 400KG / 1파렛트\n냉장차량"}
             value={text}
             onChange={e => { setText(e.target.value); setResult(null); setAutoFilledFromClipboard(false); }}
           />
@@ -17326,7 +17337,7 @@ const pickDrop = (c) => {
           <div className="bg-blue-50 rounded-xl p-3 text-[12px] text-blue-700 space-y-1">
             <div className="font-bold mb-1">음성 예시 (항목별로 끊어 말하면 더 정확해요)</div>
             <div>"거래처는 테스트업체 상차지는 테스트업체 하차지는 주주물류 화물내용은 박스 5개 내일 오전 10시"</div>
-            <div>"거래처는 후레쉬2공장 하차지는 수원종합운동장 3톤 냉장 오늘 즉시"</div>
+            <div>"거래처는 ○○식품 하차지는 △△물류센터 3톤 냉장 오늘 즉시"</div>
           </div>
         )}
 
@@ -20612,11 +20623,11 @@ const runNationalFareInPopup = async () => {
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <div className="text-[12px] font-bold text-gray-900 mb-1">상차지명</div>
-                <MobilePlaceSuggest value={pickup} onChange={setPickup} names={pickupNames} placeholder="예: 인천 후레쉬2공장" onKeyDown={e=>e.key==="Enter"&&calcFareMobile()} />
+                <MobilePlaceSuggest value={pickup} onChange={setPickup} names={pickupNames} placeholder="예: ○○식품 2공장" onKeyDown={e=>e.key==="Enter"&&calcFareMobile()} />
               </div>
               <div>
                 <div className="text-[12px] font-bold text-gray-900 mb-1">하차지명</div>
-                <MobilePlaceSuggest value={drop} onChange={setDrop} names={dropNames} placeholder="예: 반찬단지" onKeyDown={e=>e.key==="Enter"&&calcFareMobile()} />
+                <MobilePlaceSuggest value={drop} onChange={setDrop} names={dropNames} placeholder="예: ○○물류단지" onKeyDown={e=>e.key==="Enter"&&calcFareMobile()} />
               </div>
             </div>
           ) : (

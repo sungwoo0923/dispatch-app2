@@ -455,7 +455,7 @@ function FormEditor({ init, onClose, onSaved, co, clients = [], places = [] }) {
           <button onClick={onClose} className={`${btn} text-[#5B6B85]`}>닫기</button>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mb-6">
-          <label className="block"><span className="text-[12.5px] font-black text-[#3A4A66]">양식 이름</span><input value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} className={inp} placeholder="예: 태진 삼다수" /></label>
+          <label className="block"><span className="text-[12.5px] font-black text-[#3A4A66]">양식 이름</span><input value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} className={inp} placeholder="예: ○○ 생수 배차표" /></label>
           <label className="block"><span className="text-[12.5px] font-black text-[#3A4A66]">거래처명(청구처)</span><BoardSuggest value={f.client} onChange={(v) => setF((p) => ({ ...p, client: v }))} onPick={(c) => setF((p) => ({ ...p, client: c.거래처명 }))}
             items={clients} k="거래처명" sub={(c) => [c.주소, c.담당자].filter(Boolean).join(" · ")} className={inp} placeholder="모든 줄에 같은 거래처" title="기본거래처" /></label>
           <label className="block"><span className="text-[12.5px] font-black text-[#3A4A66]">하차일</span>

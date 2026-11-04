@@ -31041,7 +31041,7 @@ value={copyTarget?.화물수량 || ""}
           <label className="block text-[11px] font-bold text-gray-500 mb-1 uppercase tracking-wider">거래처명 (비우면 전체 거래처 대상)</label>
           <input autoComplete="off"
             className="w-full border border-gray-200 rounded-xl px-3 py-2 text-[13px] focus:outline-none focus:ring-2 focus:ring-[#1B2B4B]/30"
-            placeholder="예: 반찬단지 (비워두면 전체)"
+            placeholder="예: ○○물류단지 (비워두면 전체)"
             value={copyAddrClient}
             onChange={e => setCopyAddrClient(e.target.value)}
             onKeyDown={e => { if (e.key === "Enter") handleCopyAddrSearch(); }}
@@ -37265,7 +37265,7 @@ const BANCHAN_NOTICE = `
 (안전 상 이유로 회송 
 조치 할 수 있습니다.)
 
-2. 반찬단지 입차 시 지게차 기사님께
+2. 상차지 입차 시 지게차 기사님께
 하차지명으로 꼭 말씀하셔야합니다.
 주소가 많아 주소로는 모릅니다.
 (부재 시 도크 쪽 사무실 방문)
@@ -42483,7 +42483,7 @@ setCopyPlaceOptions(list);
           <label className="block text-[11px] font-bold text-gray-500 mb-1 uppercase tracking-wider">거래처명 (비우면 전체 거래처 대상)</label>
           <input autoComplete="off"
             className="w-full border border-gray-200 rounded-xl px-3 py-2 text-[13px] focus:outline-none focus:ring-2 focus:ring-[#1B2B4B]/30"
-            placeholder="예: 반찬단지 (비워두면 전체)"
+            placeholder="예: ○○물류단지 (비워두면 전체)"
             value={copyAddrClient}
             onChange={e => setCopyAddrClient(e.target.value)}
             onKeyDown={e => { if (e.key === "Enter") handleCopyAddrSearch(); }}
@@ -47467,7 +47467,7 @@ function MonthlyPPTReportPanel({ rows = [], monthA: monthAProp, setMonthA: setMo
               value={pptComments}
               onChange={(e) => setPptComments(e.target.value)}
               rows={4}
-              placeholder={"예) 반찬단지 3PL 이전 이슈로 감소했던 오더가 성수기 진입과 함께 일부 회복 중\n웰프렌 9월 냉창 이사 계획 확정 — 9일간 828파레트, 총 46대 배차 예정"}
+              placeholder={"예) ○○물류 3PL 이전 이슈로 감소했던 오더가 성수기 진입과 함께 일부 회복 중\n△△식품 9월 냉장창고 이사 계획 확정 — 9일간 800파레트, 총 45대 배차 예정"}
               className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-[#1B2B4B] resize-none"
             />
           </div>

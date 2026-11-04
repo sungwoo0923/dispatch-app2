@@ -197,7 +197,7 @@ export default function OrderLookupModal({ open, onClose, rows = [], nameOf = ()
             <div className="relative">
               <div className={lab}>차량번호 · 기사명</div>
               <div className="relative">
-                <input className={`${inp} w-[220px] pr-7`} value={car} placeholder="예) 8600, 장연민"
+                <input className={`${inp} w-[220px] pr-7`} value={car} placeholder="예) 1234, 홍길동"
                   role="combobox" aria-expanded={sugOpen && suggestions.length > 0}
                   onChange={(e) => { setCar(e.target.value); setSugOpen(true); setHi(0); }}
                   onFocus={() => setSugOpen(true)}

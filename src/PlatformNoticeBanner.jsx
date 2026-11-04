@@ -6,8 +6,8 @@
 //   ① where("audience","in",["all","carrier"|"shipper"])  ② where("targetCompanies","array-contains", 우리 회사)
 //  같은 글이 운송사 홈 › 공지사항 목록에도 "플랫폼 공지" 표시로 섞여 나온다(usePlatformNotices + toBoardNotice).
 import React from "react";
-import { collection, onSnapshot, query, where } from "firebase/firestore";
-import { db } from "./firebase";
+import { collection, onSnapshot, query, where, doc, updateDoc, arrayUnion } from "firebase/firestore";
+import { db, auth } from "./firebase";
 import { LogisMark } from "./brand"; // 🔷 2026-11-04 LogisWeb 마크
 
 const DISMISS_KEY = "kpPlatformNoticeDismissed";
@@ -15,20 +15,55 @@ const DISMISS_KEY = "kpPlatformNoticeDismissed";
 //  플랫폼 공지는 다른 회사 직원 uid가 한 문서에 쌓이지 않게 서버 대신 이 브라우저에 남긴다(NoticeBoard와 같은 키)
 const PLAT_READ_KEY = "kpPlatNoticeRead";
 const readList = (k) => { try { const v = JSON.parse(localStorage.getItem(k) || "[]"); return Array.isArray(v) ? v : []; } catch { return []; } };
-export const platformReadIds = () => new Set([...readList(DISMISS_KEY), ...readList(PLAT_READ_KEY)].map((x) => String(x).replace(/^plat:/, ""))); // 예전 기록은 "plat:" 붙은 id
+// ⭐ 2026-11-04 "다시 보지 않기"는 계정에 저장(users/{uid}.platformNoticeHidden) — PC에서 누르면 모바일에서도, 앱을 껐다 켜도 다시 안 뜬다
+//  "닫기"는 이번 접속(세션)에서만 닫는다 → 앱을 다시 켜면 또 뜬다
+const SESSION_KEY = "kpPlatNoticeSessionClosed";
+let SERVER_HIDDEN = new Set();
+const readSession = () => { try { const v = JSON.parse(sessionStorage.getItem(SESSION_KEY) || "[]"); return Array.isArray(v) ? v : []; } catch { return []; } };
+export const platformReadIds = () => new Set([...readList(DISMISS_KEY), ...readList(PLAT_READ_KEY), ...SERVER_HIDDEN].map((x) => String(x).replace(/^plat:/, ""))); // 예전 기록은 "plat:" 붙은 id
+const ping = () => { try { window.dispatchEvent(new Event("kp-plat-read")); } catch { /* 무시 */ } };
 export function markPlatformNoticeRead(id) {
   if (!id) return;
   try { const l = readList(PLAT_READ_KEY); if (!l.includes(id)) localStorage.setItem(PLAT_READ_KEY, JSON.stringify([...l, id].slice(-300))); } catch { /* 무시 */ }
-  try { window.dispatchEvent(new Event("kp-plat-read")); } catch { /* 무시 */ }
+  ping();
 }
-// 읽은 플랫폼 공지 목록(다른 화면에서 읽으면 바로 바뀐다 · 다른 창은 storage 이벤트로)
+// 다시 보지 않기 — 이 브라우저 + 계정(다른 기기까지)
+export function hidePlatformNoticeForever(id) {
+  if (!id) return;
+  markPlatformNoticeRead(id);
+  SERVER_HIDDEN = new Set([...SERVER_HIDDEN, id]); ping();
+  const uid = auth?.currentUser?.uid;
+  if (uid) updateDoc(doc(db, "users", uid), { platformNoticeHidden: arrayUnion(id) }).catch(() => {});
+}
+// 닫기 — 이번 접속에서만
+export function closePlatformNoticeForSession(id) {
+  if (!id) return;
+  try { const l = readSession(); if (!l.includes(id)) sessionStorage.setItem(SESSION_KEY, JSON.stringify([...l, id].slice(-200))); } catch { /* 무시 */ }
+  ping();
+}
+export const platformSessionClosed = () => new Set(readSession());
+// 계정에 저장된 "다시 보지 않기" 목록을 실시간으로(다른 기기에서 눌러도 바로 반영)
+let serverSub = null, serverUid = "";
+function watchServer() {
+  const uid = auth?.currentUser?.uid || "";
+  if (!uid || uid === serverUid) return;
+  try { serverSub?.(); } catch { /* 무시 */ }
+  serverUid = uid;
+  serverSub = onSnapshot(doc(db, "users", uid), (s) => {
+    const arr = s.exists() ? s.data()?.platformNoticeHidden : null;
+    SERVER_HIDDEN = new Set(Array.isArray(arr) ? arr.map(String) : []); ping();
+  }, () => {});
+}
+// 읽은 플랫폼 공지 목록(다른 화면에서 읽으면 바로 바뀐다 · 다른 창은 storage 이벤트로 · 다른 기기는 계정 기록으로)
 export function usePlatformRead() {
   const [ids, setIds] = React.useState(platformReadIds);
   React.useEffect(() => {
     const h = () => setIds(platformReadIds());
+    watchServer();
+    const unAuth = auth?.onAuthStateChanged ? auth.onAuthStateChanged(() => watchServer()) : null;
     window.addEventListener("kp-plat-read", h);
     window.addEventListener("storage", h);
-    return () => { window.removeEventListener("kp-plat-read", h); window.removeEventListener("storage", h); };
+    return () => { window.removeEventListener("kp-plat-read", h); window.removeEventListener("storage", h); try { unAuth?.(); } catch { /* 무시 */ } };
   }, []);
   return ids;
 }

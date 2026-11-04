@@ -1293,7 +1293,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
                     <input
                       value={transmitCompanyQuery}
                       onChange={e => { setTransmitCompanyQuery(e.target.value); setTransmitSearched(false); setTransmitResult(null); }}
-                      placeholder="예) 반찬단지"
+                      placeholder="예) ○○물류단지"
                       list="admin-transmit-company-list"
                       className="w-[200px] border border-[#DCE3EE] rounded-lg px-3 py-2 text-[13px] outline-none focus:border-[#1B2B4B]"
                     />

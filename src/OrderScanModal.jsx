@@ -324,7 +324,7 @@ export default function OrderScanModal({ onClose, onApply, places: placesRaw = [
             <div className="flex flex-col min-h-[260px] md:min-h-0 rounded-[22px] bg-white border border-[#E3E8F0] p-4 md:p-5">
               <div className="text-[10.5px] font-extrabold tracking-[0.26em] text-[#4B6CB7]" style={{ fontFamily: MONO }}>TEXT</div>
               <div className="text-[15px] font-black text-[#0F1A30]">직접 입력 · 붙여넣기</div>
-              <textarea data-os-input="1" value={typed} onChange={(e) => setTyped(e.target.value)} placeholder={"예)\n상차: 크레팜 인천 서구 원창동 381-12\n하차: 케이씨로지스 14시까지\n5톤 냉동윙 6파레트 / 운임 32만"}
+              <textarea data-os-input="1" value={typed} onChange={(e) => setTyped(e.target.value)} placeholder={"예)\n상차: ○○식품 인천 서구 ○○동 123-4\n하차: △△물류센터 14시까지\n5톤 냉동윙 6파레트 / 운임 32만"}
                 className="mt-3 flex-1 min-h-0 w-full rounded-[14px] border border-[#E3E8F0] bg-[#F7F9FC] px-4 py-3 text-[13.5px] font-semibold text-[#0F1A30] leading-relaxed resize-none outline-none focus:bg-white focus:border-[#4B6CB7] focus:ring-4 focus:ring-[#4B6CB7]/10 placeholder:text-[#A7B3C6]" />
               <button onClick={() => startText(typed)} disabled={!typed.trim()} className="mt-3 h-12 rounded-[14px] text-white text-[14.5px] font-black disabled:opacity-40 shadow-[0_12px_24px_rgba(15,26,48,0.25)]" style={{ background: "linear-gradient(120deg,#0F1A30,#2D4C82)" }}>스캔하기</button>
             </div>

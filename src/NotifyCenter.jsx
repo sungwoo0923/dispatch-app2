@@ -14,7 +14,7 @@ import { createPortal } from "react-dom";
 import { db, DEFAULT_COMPANY } from "./firebase";
 import { arrayUnion, collection, doc, onSnapshot, query, updateDoc, where } from "firebase/firestore";
 import { canSeeNotice } from "./NoticeBoard";
-import { usePlatformNotices, usePlatformRead, markPlatformNoticeRead, PlatformBadge } from "./PlatformNoticeBanner";
+import { usePlatformNotices, usePlatformRead, markPlatformNoticeRead, PlatformBadge, hidePlatformNoticeForever, closePlatformNoticeForSession, platformSessionClosed } from "./PlatformNoticeBanner";
 import { RichHtml } from "./richText";
 import { DAY_MS, isNoticeUnread, noticeAtMs, toMs, useMinuteTick } from "./notifyCore";
 
@@ -134,7 +134,7 @@ export function useNotifyQueue({ uid, role, team = "", company = "" }) {
       out.push({ key: `n:${n.id}`, src: "notice", id: n.id, openId: n.id, kind, at: noticeAtMs(n), title: n.title || n.category || "공지사항", sub: `${n.author || ""}${n.category && kind === "notice" && n.category !== "공지사항" ? ` · ${n.category}` : ""}`, content: n.content, contentHtml: n.contentHtml, image: n.image });
     });
     plat.forEach((n) => {
-      if (platRead.has(n.id) || n.authorUid === uid) return;
+      if (platRead.has(n.id) || platformSessionClosed().has(n.id) || n.authorUid === uid) return; // ⭐ 2026-11-04 닫기(이번 접속)·다시 보지 않기(계정)
       const at = n.publishAt || toMs(n.createdAt);
       if (at && now - at > NOTICE_POP_WINDOW) return;
       out.push({ key: `p:${n.id}`, src: "platform", id: n.id, openId: `plat:${n.id}`, kind: "platform", at, title: n.title || "플랫폼 공지", sub: `${n.author || "LogisWeb 운영팀"} · ${n.level || "안내"}`, content: n.body, contentHtml: n.bodyHtml });
@@ -180,7 +180,7 @@ function ScrollBody({ children, onMore, moreLabel = "전체 보기 →" }) {
 }
 
 // 팝업 한 장(화면 그리기만 — 테스트에서도 바로 쓴다)
-export function NotifyModal({ item, index = 1, total = 1, company = "", mobile = false, onClose, onGo }) {
+export function NotifyModal({ item, index = 1, total = 1, company = "", mobile = false, onClose, onGo, onNever }) {
   React.useEffect(() => {
     const h = (e) => { if (e.key === "Escape") onClose?.(); };
     window.addEventListener("keydown", h);
@@ -244,7 +244,10 @@ export function NotifyModal({ item, index = 1, total = 1, company = "", mobile =
         {/* 버튼 */}
         <div className="shrink-0 flex justify-center gap-2 px-4 sm:px-7 py-3 border-t border-[#EEF1F6] bg-[#F8FAFD]" style={mobile ? { paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 12px)" } : undefined}>
           <button type="button" onClick={onClose} className="h-10 px-5 min-w-[96px] rounded-xl border border-[#DCE3EE] bg-white text-[13.5px] font-black text-[#1B2B4B] whitespace-nowrap" data-testid="notify-close">{total > 1 ? "닫고 다음" : "닫기"}</button>
-          <button type="button" onClick={() => onGo?.(item)} className="h-10 px-5 rounded-xl bg-[#0F1A30] text-white text-[13.5px] font-black whitespace-nowrap overflow-hidden text-ellipsis" data-testid="notify-go">{K.go} →</button>
+          {item.src === "platform"
+            /* ⭐ 2026-11-04 플랫폼 공지 — "공지사항에서 열기" 대신 "다시 보지 않기"(PC·모바일 어디서 눌러도 계정 전체에서 다시 안 뜸) */
+            ? <button type="button" onClick={() => onNever?.(item)} className="h-10 px-5 rounded-xl bg-[#0F1A30] text-white text-[13.5px] font-black whitespace-nowrap" data-testid="notify-never">다시 보지 않기</button>
+            : <button type="button" onClick={() => onGo?.(item)} className="h-10 px-5 rounded-xl bg-[#0F1A30] text-white text-[13.5px] font-black whitespace-nowrap overflow-hidden text-ellipsis" data-testid="notify-go">{K.go} →</button>}
         </div>
       </div>
       <style>{`@keyframes kpNotifyIn{from{opacity:0;transform:translateY(10px) scale(.98)}to{opacity:1;transform:none}}.kp-notify-in{animation:kpNotifyIn .26s cubic-bezier(.2,.9,.3,1.1) both}`}</style>
@@ -266,10 +269,12 @@ export default function NotifyCenter({ uid, role, team = "", company = "", mobil
   const finish = (it) => {
     setDone((p) => new Set(p).add(it.key));
     setCurKey(null);
+    if (it.src === "platform") { closePlatformNoticeForSession(it.id); return; } // 닫기 = 이번 접속에서만(다음에 켜면 또 뜸)
     markRead(it, uid).then(() => { if (it.mark?.t === "local") bumpLocal(); });
   };
   return (
     <NotifyModal item={cur} index={1} total={live.length} company={company} mobile={mobile}
+      onNever={(it) => { setDone((p) => new Set(p).add(it.key)); setCurKey(null); hidePlatformNoticeForever(it.id); }}
       onClose={() => finish(cur)}
       onGo={(it) => { finish(it); onGo?.(it); }} />
   );
