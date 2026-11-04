@@ -204,8 +204,11 @@ table tbody tr.kp-row-hit:hover td {
 .kp-order-form input[type="checkbox"], .kp-order-form input[type="radio"] { accent-color: #1B2B4B; }
 
 /* 📱 모바일 앱에서 PC 화면을 그대로 쓸 때(MobilePcViews) — 휴대폰 폭 보정 */
+/* ⭐ 2026-11-04 폴더블(펼친 화면 884px)·태블릿 — 운임조회는 1024px 미만이면 지도를 아래로(폼이 250px로 눌려 옵션 글자가 사라졌다) */
+@media (max-width: 1023px) {
+  .kp-fare-map { position: relative !important; top: auto !important; height: min(520px, 70vh) !important; min-height: 360px !important; }
+}
 @media (max-width: 767px) {
-  .kp-fare-map { position: relative !important; top: auto !important; height: 520px !important; min-height: 0 !important; }
   .kp-m-pc { min-width: 0; }
   /* 넓은 표는 화면 안에서 옆으로 밀어 보게 */
   .kp-m-pc table { font-size: 12.5px; }

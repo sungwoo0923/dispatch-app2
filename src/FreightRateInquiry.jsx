@@ -916,7 +916,7 @@ function NationalFareTab() {
     // 잘려 보이는 문제가 있었다. 내부 스크롤을 없애고 페이지 자체 스크롤 하나로
     // 통일해 이런 종류의 "잘려서 안 보임" 문제 자체가 생기지 않게 한다. 오른쪽
     // 지도만 sticky로 고정해 왼쪽 폼이 길어져도 화면에서 눈에 계속 보이게 한다.
-    <div className="flex flex-col md:flex-row gap-4 md:gap-5 md:items-start">
+    <div className="flex flex-col lg:flex-row gap-4 lg:gap-5 lg:items-start">
 
       {/* 화물 유형 변경 시 운임 차액을 화면 중앙에 잠깐 보여주는 토스트 */}
       {cargoToast&&(
@@ -929,7 +929,7 @@ function NationalFareTab() {
 
       {/* ── 왼쪽 패널 ── */}
       {/* ⭐ 2026-10-29 리디자인 — 흩어져 있던 입력들을 한 장의 "운임 계산 콘솔" 카드로 묶고 01~04 단계로 정리 */}
-      <div className="w-full md:w-auto md:flex-[4] min-w-0 bg-white rounded-[22px] border border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_10px_28px_rgba(16,24,40,0.06)]">
+      <div className="w-full lg:w-auto lg:flex-[4] min-w-0 bg-white rounded-[22px] border border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_10px_28px_rgba(16,24,40,0.06)]">
 
         {/* 콘솔 머리 + 독차/혼적 토글 */}
         <div className="relative px-5 pt-4 pb-4 rounded-t-[22px] overflow-hidden text-white" style={{background:"linear-gradient(120deg,#0F1A30 0%,#1B2B4B 55%,#2D4C82 100%)"}}>
@@ -1294,7 +1294,7 @@ function NationalFareTab() {
       </div>
 
       {/* ── 오른쪽 지도 (디지털) ── */}
-      <div className="kp-fare-map w-full md:w-auto md:flex-[6] min-w-0 rounded-[24px] flex flex-col overflow-hidden sticky ring-1 ring-[#0F1A30]/10 shadow-[0_24px_60px_rgba(15,26,48,0.28)]"
+      <div className="kp-fare-map w-full lg:w-auto lg:flex-[6] min-w-0 rounded-[24px] flex flex-col overflow-hidden sticky ring-1 ring-[#0F1A30]/10 shadow-[0_24px_60px_rgba(15,26,48,0.28)]"
         style={{top:16,height:"calc(100vh - 250px)",minHeight:560,background:"radial-gradient(90% 70% at 50% 15%, #1C3160 0%, #0F1A30 55%, #070E1E 100%)"}}>
         <div className="px-5 py-3.5 flex items-center gap-3 shrink-0 border-b border-white/[0.08]">
           <span className="text-[10.5px] font-extrabold tracking-[0.28em] text-[#8FB0F0]" style={{fontFamily:"'JetBrains Mono','SF Mono',ui-monospace,monospace"}}>ROUTE MAP</span>

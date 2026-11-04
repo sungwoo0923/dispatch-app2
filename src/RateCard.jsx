@@ -878,7 +878,7 @@ ${sheet.note ? `<div class="notice">${esc(sheet.note)}</div>` : ""}
             {pageMode === "노선별" ? "과거 배차 실적으로 노선·톤수별 권장 단가를 자동 계산합니다" : "기준지 1곳 → 하차지 여러 곳의 톤수·구간별 단가를 한 표로 관리합니다"}
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           {pageMode === "노선별" ? (
             <>
               <button onClick={() => setHistoryModal(true)} className="h-10 px-4 inline-flex items-center gap-2 rounded-xl bg-white border border-[#DCE3EF] text-[#1B2B4B] text-[13px] font-bold hover:bg-[#F5F8FD] transition">

@@ -2111,8 +2111,8 @@ export default function ApprovalCenter({ company, me, page, setPage, openId, onO
         </div>
         <div className="flex items-center gap-2.5 flex-wrap md:flex-nowrap w-full md:w-auto">
           {kpis.map(([l, v]) => (
-            <div key={l} className="flex-1 md:flex-none min-w-0 md:min-w-[110px] px-3 md:px-4 py-2 md:py-2.5 rounded-2xl bg-white/[0.07] border border-white/10">
-              <div className="text-[12.5px] font-bold text-white/55">{l}</div>
+            <div key={l} className="flex-1 md:flex-none min-w-[84px] md:min-w-[110px] px-3 md:px-4 py-2 md:py-2.5 rounded-2xl bg-white/[0.07] border border-white/10">
+              <div className="text-[12.5px] font-bold text-white/55 whitespace-nowrap truncate">{l}</div>
               <div className="text-[20px] font-black tabular-nums" style={{ fontFamily: MONO }}>{v}</div>
             </div>
           ))}
