@@ -2638,6 +2638,8 @@ const quickRange = (days) => {
     };
   }, [orders, canceledOrders, extraSplit, extraMap.size]);
   const allOrders = allOrdersCombined.orders;
+  // ⭐ 2026-11-04 고정노선(구글시트 배차표) 오더는 고정노선현황에서만 — 일반 배차현황·미배차·정보미전달에는 넣지 않는다(PC와 같음)
+  const listOrders = useMemo(() => allOrders.filter((o) => !o?.배차표Id), [allOrders]);
   const allCanceledOrders = allOrdersCombined.canceled;
   // 화면에서 바로 고친 값을 실시간 목록·예전 오더 보관소 양쪽에 반영
   const patchLocalOrder = React.useCallback((id, patchIn) => {
@@ -3995,7 +3997,7 @@ const thisMonth = thisMonthKST();
   }, [page, loadRange, loadFullHistory, loadCanceledHistory]);
 
   const filteredOrders = useMemo(() => {
-    let base = [...allOrders];
+    let base = [...listOrders];
 
     // 🔹 오늘 / 날짜 선택 여부
     const today = todayStr();
@@ -4093,7 +4095,7 @@ if (appliedSearchType === "메모")
 
     return base;
   }, [
-    allOrders,
+    listOrders,
     statusTab,
     assignFilter,
     vehicleFilter,
@@ -4113,7 +4115,7 @@ if (appliedSearchType === "메모")
 const [mUnDetail, setMUnDetail] = useState(null); // 🔎 미배차 세부검색(기간 + 1~3차)
 const unassignedOrders = useMemo(() => {
   const seen = new Set();
-  return allOrders.filter((o) => {
+  return listOrders.filter((o) => {
     const st = String(o.배차상태 || "").trim();
     if (st && st !== "배차중") return false;          // 승인대기·배차완료·배차취소 등은 미배차가 아님
     if (String(o.차량번호 || "").trim()) return false;
@@ -4126,7 +4128,7 @@ const unassignedOrders = useMemo(() => {
     seen.add(k);
     return true;
   });
-}, [allOrders]);
+}, [listOrders]);
 
 // 📤 정보미전달 오더 (오늘 이후 + 전달미완료)
 const undeliveredOrders = useMemo(() => {
@@ -4138,6 +4140,7 @@ const undeliveredOrders = useMemo(() => {
 
       if (!pickupDate) return false;
       if (pickupDate < today) return false;
+      if (o?.배차표Id) return false; // ⭐ 2026-11-04 고정노선 오더는 고정노선현황에서만
       if (o.업체전달상태 === "전달완료") return false;
       // 배차 전(차량번호 없음)인 오더는 미배차현황에만 있어야 하고, 정보미전달은
       // 배차는 됐지만 아직 업체에 정보 전달이 안 된 것만 대상이어야 한다.
@@ -6551,7 +6554,7 @@ onGoAttendance={() => {
         {(page === "list" || page === "detail") && ordersLoaded && initLoadDone && bootDone && (
           <div style={page === "list" ? undefined : { display: "none" }}>
           <MobileOrderList
-            allOrders={allOrders}
+            allOrders={listOrders}
             dispatcherName={dispatcherName}
             userCompany={userCompany}
             groupedByDate={groupedByDate}
