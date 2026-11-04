@@ -5701,7 +5701,7 @@ exports.syncRouteBoards = functions.runWith({ timeoutSeconds: 300, memory: "512M
   for (const d of snap.docs) {
     const form = { id: d.id, ...d.data() };
     if (!form.sheetUrl || form.autoSync === false) continue;
-    try { const r = await runRouteBoardSync(form); if (r.created || r.updated || r.gone) console.log(`[배차표 연동] ${form.companyName} ${form.name}`, JSON.stringify(r)); }
+    try { const r = await runRouteBoardSync(form); if (r.created || r.updated || r.gone || r.deleted) console.log(`[배차표 연동] ${form.companyName} ${form.name}`, JSON.stringify(r)); }
     catch (e) { console.error(`[배차표 연동 실패] ${form.companyName} ${form.name}:`, e?.message || e); }
   }
   return null;
