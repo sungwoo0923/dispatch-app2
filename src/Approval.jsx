@@ -1506,6 +1506,14 @@ function Viewer({ d, me, staff, company, onClose, onRedraft, onEdit, inline = fa
         history: arrayUnion({ at: Date.now(), uid: me.uid, name: me.name || "", action: "지급 취소", comment: d.paid?.date ? `지급일 ${d.paid.date} 처리 취소` : "" }),
         updatedAt: serverTimestamp(),
       });
+      // ⭐ 2026-11-04 지급 취소도 기안자에게 사내메일
+      if (d.drafterUid && d.drafterUid !== me.uid) {
+        sendInternalMail({
+          company, to: [{ uid: d.drafterUid, name: d.drafter?.name || "" }], kind: "approval", fromName: me.name,
+          subject: `[지급 취소] ${d.title} — 지급 완료가 취소되었습니다`,
+          body: `[지급 취소] ${d.title} — ${fmtWon(d.amount)} 지급 완료 처리가 취소되었습니다.\n\n· 문서번호: ${d.docNo}${d.paid?.date ? `\n· 취소된 지급일: ${d.paid.date}` : ""}\n· 처리: ${me.name || ""}\n\n문서는 다시 「지급 대기」 상태입니다. 홈 › 전자결재 › 내 기안함에서 확인하세요.`,
+        }).catch(() => {});
+      }
     } catch (e) { window.alert(`지급 취소 실패: ${e.message}`); } finally { setBusy(false); }
   };
   // 🖨 A4 기준으로 나눠서 인쇄(긴 회의록·보고서도 글줄 중간이 잘리지 않게)
