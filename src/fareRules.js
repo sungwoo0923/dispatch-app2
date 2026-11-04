@@ -10,8 +10,8 @@
 //  · 규칙을 바꿔도 이미 저장된 오더는 다시 계산하지 않는다(새로 수정하거나 [↺ 규칙대로]를 누를 때만)
 import React from "react";
 import { createPortal } from "react-dom";
-import { doc, onSnapshot } from "firebase/firestore";
-import { db } from "./firebase";
+import { doc, onSnapshot, setDoc, serverTimestamp, arrayUnion } from "firebase/firestore";
+import { db, auth } from "./firebase";
 import { getTenant } from "./fsTenant";
 import { useCompanyFeatures } from "./companyFeatures";
 
@@ -115,12 +115,18 @@ export const fareRuleHint = (rule) => {
 // ── 입력 폼 공용 처리 ──
 //  form: 오더(또는 입력 중인 폼) · key: 바뀐 칸("운임구분"|"청구운임"|"기사운임"|"__reapply")
 //  반환: 새 객체(수수료가 있는 폼이면 수수료도 맞춤). asString=true면 금액을 문자열로 넣는다(입력 폼 대부분이 문자열).
-export function fareFormChange(form, key, value, rules, { asString = true, withFee = true } = {}) {
+export function fareFormChange(form, key, value, rules, { asString = true, withFee = true, emptyDriver } = {}) {
   const next = { ...form };
   if (key !== "__reapply") next[key] = value;
   const out = (n) => (asString ? String(n) : n);
   const rule = findFareRule(rules, next.운임구분);
-  if (key === "기사운임") {
+  // ⭐ 2026-11-04 운임구분 해제 리셋 — 규칙이 있던 오더에서 운임구분을 "선택 안 함"으로 바꾸면
+  //  예전엔 운임수동만 끄고 규칙이 계산해 둔 기사운임을 그대로 남겨서 수수료도 옛 계산값으로 남았다.
+  //  → 기사운임을 비우고 운임수동도 끈다(수수료는 아래 공통 계산: 청구운임 − 0 = 청구운임).
+  if (key === "운임구분" && !rule && String(form?.운임구분 || "").trim() !== "") {
+    next.운임수동 = false;
+    next.기사운임 = emptyDriver !== undefined ? emptyDriver : (asString ? "" : 0);
+  } else if (key === "기사운임") {
     // 사람이 기사운임을 고침 → 규칙 계산값과 다르면 수동으로 표시
     if (rule && String(next.청구운임 ?? "") !== "") {
       const calc = applyFareRule(rule, next.청구운임);
@@ -157,14 +163,46 @@ export const fareIsManual = (form, rules) => {
   return toNum(form?.기사운임) !== applyFareRule(rule, form.청구운임).기사운임;
 };
 
+// ⭐ 2026-11-04 운임구분 바로 추가 — 드롭다운에서 새 구분명 + %를 넣으면 회사 운임 규칙(fareRules/{회사}.rules)에 바로 추가
+//  · 회사관리 › 운임 규칙(FareRulesSettings.jsx)의 저장과 같은 모양: rules 항목 { id, name, type:"percent", value, active:true, memo:"" }
+//    + history 한 줄({ at, by, change: "규칙 추가 이름(퍼센트 n%)" }) · updatedAt/updatedBy
+//  · rules는 arrayUnion으로 덧붙여, 다른 사람이 동시에 고친 규칙을 덮어쓰지 않는다
+//  · firestore.rules: match /fareRules/{co} update = fareRulesStaff(co) && role != viewer && 기능 켜짐 → 규칙 변경 필요 없음
+export const canQuickAddFareRule = () => {
+  try { const r = String(localStorage.getItem("role") || ""); return !!r && !["viewer", "driver", "shipper"].includes(r); } catch { return false; }
+};
+export async function addFareRuleQuick(company, { name, value }) {
+  const co = resolveCompany(company);
+  const nm = String(name || "").trim();
+  const v = Number(String(value ?? "").replace(/[^\d.]/g, ""));
+  if (!co) throw new Error("회사 정보를 찾지 못했습니다");
+  if (!nm) throw new Error("구분명을 입력하세요");
+  if (!(v >= 0) || String(value ?? "").trim() === "") throw new Error("%를 입력하세요");
+  if (v > 100) throw new Error("100% 이하로 입력하세요");
+  const cur = getStore(co).state?.data?.rules;
+  if ((Array.isArray(cur) ? cur : []).some((r) => String(r?.name || "").trim() === nm)) throw new Error("같은 이름이 이미 있습니다");
+  const u = auth?.currentUser;
+  const by = u?.displayName || (u?.email || "").split("@")[0] || "";
+  const rule = { id: `fr_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`, name: nm, type: "percent", value: v, active: true, memo: "" };
+  await setDoc(doc(db, "fareRules", co), {
+    companyName: co,
+    rules: arrayUnion(rule),
+    history: arrayUnion({ at: Date.now(), by, change: `규칙 추가 ${nm}(퍼센트 ${v}%) · 운임구분에서 바로 추가` }),
+    updatedAt: serverTimestamp(),
+    updatedBy: by,
+  }, { merge: true });
+  return rule;
+}
+
 // ── 작은 UI 조각 ──
 const h = React.createElement;
 
 // 운임구분 선택 — rules: 회사 규칙 전체(비활성 규칙은 현재 값일 때만 보여 준다)
 // ⭐ 2026-11-02 운임구분 선택 — 프로그램 스타일 드롭다운(버튼 + 떠 있는 목록). 옛 <select> 대신
 //  compact: 작은 알약 버튼(라벨 줄·표 칸) / 기본: 입력칸 높이(40px)
+const MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
 const fmtRuleVal = (r) => (r.type === "fixed" ? `${Math.round(toNum(r.value)).toLocaleString()}원` : `${toNum(r.value)}%`);
-export function FareTypeSelect({ value, onChange, rules = [], className = "", disabled = false, compact = false, placeholder = "운임구분", id, align = "left", noneLabel = "선택 안 함 · 직접 계산", extraOpts = [] }) {
+export function FareTypeSelect({ value, onChange, rules = [], className = "", disabled = false, compact = false, placeholder = "운임구분", id, align = "left", noneLabel = "선택 안 함 · 직접 계산", extraOpts = [], allowAdd = true, company }) {
   const list = (rules || []).filter((r) => r && String(r.name || "").trim() && (r.active !== false || String(r.name) === String(value || "")));
   const cur = list.find((r) => String(r.name) === String(value || "")) || null;
   const curExtra = extraOpts.find((o) => String(o.name) === String(value || "")) || null;
@@ -174,32 +212,68 @@ export function FareTypeSelect({ value, onChange, rules = [], className = "", di
   const btn = React.useRef(null);
   const menu = React.useRef(null);
   const opts = [{ name: "", none: true }, ...list, ...extraOpts.map((o) => ({ ...o, extra: true }))];
+  // ⭐ 2026-11-04 운임구분 바로 추가 — 목록 맨 아래 "+ 새 운임구분" 줄(조회전용 제외)
+  const canAdd = allowAdd && !disabled && canQuickAddFareRule();
+  const [adding, setAdding] = React.useState(false);
+  const [nf, setNf] = React.useState({ name: "", value: "" });
+  const [addErr, setAddErr] = React.useState("");
+  const [addBusy, setAddBusy] = React.useState(false);
+  const pendingRef = React.useRef(""); // 추가한 이름 — 규칙 목록(rules)에 들어온 뒤 고른다(그 전에 고르면 계산이 안 됨)
+  const onChangeRef = React.useRef(onChange);
+  onChangeRef.current = onChange;
+  React.useEffect(() => {
+    const nm = pendingRef.current;
+    if (!nm) return;
+    if ((rules || []).some((r) => String(r?.name || "").trim() === nm)) {
+      pendingRef.current = "";
+      onChangeRef.current?.(nm);
+    }
+  }, [rules]);
+  const submitAdd = async () => {
+    if (addBusy) return;
+    setAddErr("");
+    const nm = String(nf.name || "").trim();
+    if (!nm) { setAddErr("구분명을 입력하세요"); return; }
+    if ((rules || []).some((r) => String(r?.name || "").trim() === nm)) { setAddErr("같은 이름이 이미 있습니다"); return; }
+    setAddBusy(true);
+    try {
+      pendingRef.current = nm;
+      await addFareRuleQuick(company, nf);
+      setAdding(false); setNf({ name: "", value: "" }); setOpen(false);
+      setTimeout(() => btn.current?.focus(), 0);
+    } catch (e) {
+      pendingRef.current = "";
+      setAddErr(e?.code === "permission-denied" ? "추가 권한이 없습니다" : (e?.message || "추가하지 못했습니다"));
+    } finally { setAddBusy(false); }
+  };
   const place = React.useCallback(() => {
     const el = btn.current; if (!el) return;
     const r = el.getBoundingClientRect();
     const w = Math.max(r.width, 260);
-    const mh = Math.min(320, opts.length * 44 + 46);
+    const mh = Math.min(320, opts.length * 44 + 46) + (canAdd ? (adding ? 96 : 46) : 0);
     const up = r.bottom + mh + 8 > window.innerHeight && r.top > mh + 8;
     let left = align === "right" ? r.right - w : r.left;
     left = Math.max(8, Math.min(left, window.innerWidth - w - 8));
     setPos({ left, top: up ? r.top - mh - 6 : r.bottom + 6, width: w, up });
-  }, [opts.length, align]);
+  }, [opts.length, align, canAdd, adding]);
   const openIt = () => {
     if (disabled) return;
     place();
     setAct(Math.max(0, opts.findIndex((o) => String(o.name) === String(value || ""))));
+    setAdding(false); setAddErr("");
     setOpen(true);
   };
   const pick = (o) => { setOpen(false); onChange?.(o.none ? "" : o.name); setTimeout(() => btn.current?.focus(), 0); };
   React.useEffect(() => {
     if (!open) return undefined;
     const down = (e) => { if (btn.current?.contains(e.target) || menu.current?.contains(e.target)) return; setOpen(false); };
-    const re = (e) => { if (menu.current?.contains(e.target)) return; setOpen(false); };
+    // 새 운임구분 입력 중(모바일 키보드가 올라오며 화면이 줄거나 스크롤됨)엔 닫지 않고 자리만 다시 잡는다
+    const re = (e) => { if (menu.current?.contains(e.target)) return; if (menu.current?.contains(document.activeElement)) { place(); return; } setOpen(false); };
     document.addEventListener("mousedown", down, true);
     window.addEventListener("scroll", re, true);
     window.addEventListener("resize", re);
     return () => { document.removeEventListener("mousedown", down, true); window.removeEventListener("scroll", re, true); window.removeEventListener("resize", re); };
-  }, [open]);
+  }, [open, place]);
   const onKey = (e) => {
     if (!open) { if (e.key === "ArrowDown" || e.key === "Enter" || e.key === " ") { e.preventDefault(); e.stopPropagation(); openIt(); } return; }
     if (e.key === "Escape" || e.key === "Tab") { if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); } setOpen(false); return; }
@@ -262,7 +336,42 @@ export function FareTypeSelect({ value, onChange, rules = [], className = "", di
             h("span", { className: "flex-1 min-w-0 truncate text-[14.5px] font-extrabold text-[#0F1A30]" }, o.name, o.active === false ? h("span", { className: "ml-1 text-[11px] font-bold text-[#B54708]" }, "(사용 안 함)") : null),
             h("span", { className: "shrink-0 tabular-nums px-2 h-[22px] inline-flex items-center rounded-full bg-[#1B2B4B] text-[#E9C46A] text-[12.5px] font-black" }, o.type === "fixed" ? `고정 ${fmtRuleVal(o)}` : `수수료 ${fmtRuleVal(o)}`)));
       })),
-    list.length === 0 ? h("div", { className: "px-4 py-3 text-[13px] font-bold text-[#8E9BB2] border-t border-[#EEF2F7]" }, "회사관리 › 운임 규칙에서 규칙을 먼저 만들어 주세요") : null),
+    list.length === 0 && !canAdd ? h("div", { className: "px-4 py-3 text-[13px] font-bold text-[#8E9BB2] border-t border-[#EEF2F7]" }, "회사관리 › 운임 규칙에서 규칙을 먼저 만들어 주세요") : null,
+    canAdd ? h("div", { className: "border-t border-[#EEF2F7] bg-[#F7F9FC] px-2 py-2", "data-fare-add": "1" },
+      !adding
+        ? h("button", {
+          type: "button", "data-fare-add-open": "1",
+          onClick: () => { setAdding(true); setAddErr(""); },
+          className: "w-full h-[36px] px-2.5 rounded-xl flex items-center gap-2 text-left text-[13.5px] font-extrabold text-[#2D4C82] hover:bg-[#EEF3FC] transition",
+        },
+        h("span", { className: "w-4 h-4 rounded-full bg-[#1B2B4B] text-white grid place-items-center text-[12px] leading-none shrink-0" }, "+"),
+        h("span", { className: "flex-1" }, "새 운임구분 바로 추가"),
+        h("span", { className: "text-[10px] font-extrabold tracking-[0.14em] text-[#8E9BB2]", style: { fontFamily: MONO } }, "NEW"))
+        : h("div", { className: "flex flex-col gap-1.5" },
+          h("div", { className: "flex items-center justify-between px-1" },
+            h("span", { className: "text-[10px] font-extrabold tracking-[0.14em] text-[#4B6CB7]", style: { fontFamily: MONO } }, "NEW FARE TYPE · %"),
+            h("button", { type: "button", onClick: () => { setAdding(false); setAddErr(""); }, className: "text-[11.5px] font-bold text-[#8E9BB2] hover:text-[#1B2B4B]" }, "취소")),
+          h("div", { className: "flex items-center gap-1.5" },
+            h("input", {
+              autoFocus: true, autoComplete: "off", maxLength: 20, placeholder: "구분명 (예: 일대)", "data-fare-add-name": "1",
+              value: nf.name, onChange: (e) => setNf((p) => ({ ...p, name: e.target.value })),
+              onKeyDown: (e) => { e.stopPropagation(); if (e.key === "Enter") { e.preventDefault(); submitAdd(); } if (e.key === "Escape") { e.preventDefault(); setAdding(false); } },
+              className: "flex-1 min-w-0 h-[34px] px-2.5 rounded-xl border border-[#C9D5EA] bg-white text-[13.5px] font-bold text-[#0F1A30] focus:outline-none focus:border-[#4B6CB7] focus:ring-2 focus:ring-[#4B6CB7]/15",
+            }),
+            h("span", { className: "relative shrink-0" },
+              h("input", {
+                autoComplete: "off", inputMode: "decimal", placeholder: "7", "data-fare-add-value": "1",
+                value: nf.value, onChange: (e) => setNf((p) => ({ ...p, value: e.target.value.replace(/[^\d.]/g, "") })),
+                onKeyDown: (e) => { e.stopPropagation(); if (e.key === "Enter") { e.preventDefault(); submitAdd(); } if (e.key === "Escape") { e.preventDefault(); setAdding(false); } },
+                className: "w-[62px] h-[34px] pl-2 pr-6 rounded-xl border border-[#C9D5EA] bg-white text-[13.5px] font-bold text-right tabular-nums text-[#0F1A30] focus:outline-none focus:border-[#4B6CB7] focus:ring-2 focus:ring-[#4B6CB7]/15",
+                style: { fontFamily: MONO },
+              }),
+              h("span", { className: "absolute right-2 top-1/2 -translate-y-1/2 text-[12px] font-extrabold text-[#6B7A99] pointer-events-none" }, "%")),
+            h("button", {
+              type: "button", disabled: addBusy, onClick: submitAdd, "data-fare-add-save": "1",
+              className: "shrink-0 h-[34px] px-3 rounded-xl bg-[#1B2B4B] text-white text-[13px] font-extrabold hover:bg-[#0F1A30] disabled:opacity-50 transition",
+            }, addBusy ? "추가 중" : "추가")),
+          addErr ? h("div", { className: "px-1 text-[12px] font-bold text-red-600" }, addErr) : null)) : null),
     document.body) : null);
 }
 
