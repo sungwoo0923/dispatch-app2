@@ -3,6 +3,7 @@
 //  목표·전망 / 거래처 순위·신규 / 거래처 동향 / 연간 요약 / 거래처 기간 조회
 //  ⭐ 알록달록 금지 — 네이비 계열만. rows = 매출관리의 배차완료 오더 + 고정거래처.
 import React, { useMemo, useState } from "react";
+import CustomDatePicker from "./CustomDatePicker"; // 📅 2026-11-04 날짜 입력은 프로그램 달력으로
 import {
   ResponsiveContainer, ComposedChart, BarChart, Bar, Line, Area, AreaChart, XAxis, YAxis, Tooltip, CartesianGrid, Cell, PieChart, Pie, ReferenceLine,
 } from "recharts";
@@ -483,9 +484,9 @@ export function QueryPage({ rows = [], clients = [] }) {
     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
       <RvCard code="QUERY" title="조회 조건">
         <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 10 }}>
-          <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} style={inp} />
+          <CustomDatePicker value={from} onChange={(e) => setFrom(e.target.value)} className="h-10 min-w-[140px] rounded-[10px] border border-[#DCE3EF] px-3 text-[14.5px] font-bold text-[#0F1A30] bg-white tabular-nums whitespace-nowrap" showIcon />
           <span style={{ color: "#94A3B8", fontWeight: 800 }}>~</span>
-          <input type="date" value={to} onChange={(e) => setTo(e.target.value)} style={inp} />
+          <CustomDatePicker value={to} onChange={(e) => setTo(e.target.value)} className="h-10 min-w-[140px] rounded-[10px] border border-[#DCE3EF] px-3 text-[14.5px] font-bold text-[#0F1A30] bg-white tabular-nums whitespace-nowrap" showIcon />
           <div style={{ position: "relative", flex: "1 1 260px", minWidth: 220 }}>
             <input value={client || q} onChange={(e) => { setClient(""); setQ(e.target.value); }} placeholder="거래처 검색 (비우면 전체)" style={{ ...inp, width: "100%", boxSizing: "border-box" }} />
             {sugg.length > 0 && !client && (

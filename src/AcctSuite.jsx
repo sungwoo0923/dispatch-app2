@@ -13,6 +13,7 @@ import { BookHero, BookCard, Chip, Sheet, MONO } from "./OfficeBooks";
 import { isTMUser } from "./staffFilter";
 import { leaveEntitlement, leaveUseOf } from "./approvalForms";
 import { CustomSelect } from "./CustomSelect";
+import CustomDatePicker from "./CustomDatePicker"; // 📅 2026-11-04 날짜 입력은 프로그램 달력으로
 
 const toInt = (v) => parseInt(String(v ?? "0").replace(/[^\d-]/g, ""), 10) || 0;
 const won = (n) => Math.round(Number(n) || 0).toLocaleString("ko-KR");
@@ -266,7 +267,7 @@ function RetireCaseSheet({ company, u, c, profile, resign, approvals, isViewer, 
         <div><div className="text-[12.5px] font-black text-[#3A4A66] mb-1.5">퇴직 사유</div><div className="flex flex-wrap gap-1.5">{RETIRE_REASONS.map((r) => <Chip key={r} on={f.reason === r} onClick={() => setF((p) => ({ ...p, reason: r }))}>{r}</Chip>)}</div></div>
         <div className="grid grid-cols-2 gap-2">
           <div><div className="text-[12.5px] font-black text-[#3A4A66] mb-1.5">입사일</div><div className={`${inp} flex items-center bg-[#F5F8FD] tabular-nums`} title="입사일 변경은 인사관리부 › 인사관리 › 직원관리에서">{f.hireDate || "미등록 (인사팀 등록 필요)"}</div></div>
-          <div><div className="text-[12.5px] font-black text-[#3A4A66] mb-1.5">퇴직일(마지막 근무일)</div><input type="date" value={f.lastDay} onChange={(e) => setF((p) => ({ ...p, lastDay: e.target.value }))} className={inp} /></div>
+          <div><div className="text-[12.5px] font-black text-[#3A4A66] mb-1.5">퇴직일(마지막 근무일)</div><CustomDatePicker value={f.lastDay} onChange={(e) => setF((p) => ({ ...p, lastDay: e.target.value }))} className={inp} showIcon /></div>
           <div><div className="text-[12.5px] font-black text-[#3A4A66] mb-1.5">최근 3개월 월평균 임금</div><input inputMode="numeric" value={f.avgMonthly ? won(f.avgMonthly) : ""} onChange={(e) => setF((p) => ({ ...p, avgMonthly: e.target.value.replace(/[^\d]/g, "") }))} className={`${inp} text-right tabular-nums`} style={{ fontFamily: MONO }} placeholder="세전 · 상여 포함" /></div>
           <div><div className="text-[12.5px] font-black text-[#3A4A66] mb-1.5">미사용 연차(일)</div><input inputMode="decimal" value={f.unusedLeave} onChange={(e) => setF((p) => ({ ...p, unusedLeave: e.target.value.replace(/[^\d.]/g, "") }))} className={`${inp} text-right`} /></div>
           <div><div className="text-[12.5px] font-black text-[#3A4A66] mb-1.5">1일 통상임금(선택)</div><input inputMode="numeric" value={f.dailyOrdinary ? won(f.dailyOrdinary) : ""} onChange={(e) => setF((p) => ({ ...p, dailyOrdinary: e.target.value.replace(/[^\d]/g, "") }))} className={`${inp} text-right`} placeholder="비우면 월급÷209×8" /></div>

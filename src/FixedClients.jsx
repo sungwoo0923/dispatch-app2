@@ -8,6 +8,7 @@ import { Dialog } from "@headlessui/react";
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip } from "recharts";
 import { fmtMoney, fmtPhone, moneyDigits } from "./formatInput";
 import { CustomSelect } from "./CustomSelect";
+import CustomDatePicker from "./CustomDatePicker"; // 📅 2026-11-04 날짜 입력은 프로그램 달력으로
 import { CompanyOptionPicker } from "./companyOptionPicker"; // 🧾 2026-11-02 지급방식·배차방식·상/하차방법 공용 선택기(＋ 추가)
 
 const fmt = (n) => (n ? Number(n).toLocaleString() : "0");
@@ -372,7 +373,7 @@ function FastRowCard({ idx, row, drivers, rows, getClientConfigs, onUpdate, onSe
       <div className="grid grid-cols-3 gap-3">
         <div>
           <label className="block text-[12px] font-bold text-[#5B6B85] mb-1">날짜</label>
-          <input type="date" className="w-full border border-[#DCE3EE] rounded-xl px-2.5 py-1.5 text-[13.5px] font-semibold text-[#0F1A30] bg-white outline-none focus:border-[#4B6CB7]" value={row.날짜} onChange={e => onUpdate("날짜", e.target.value)} />
+          <CustomDatePicker className="w-full border border-[#DCE3EE] rounded-xl px-2.5 py-1.5 text-[13.5px] font-semibold text-[#0F1A30] bg-white outline-none focus:border-[#4B6CB7]" value={row.날짜} onChange={e => onUpdate("날짜", e.target.value)} showIcon />
         </div>
         <div>
           <label className="block text-[12px] font-bold text-[#5B6B85] mb-1">거래처명</label>
@@ -781,9 +782,9 @@ export default function FixedClients({ drivers = [], upsertDriver, userCompany =
             <input value={search} onChange={e => setSearch(e.target.value)} placeholder="거래처명 · 기사명 검색" className="flex-1 px-2 h-full text-[13px] outline-none w-48" />
           </div>
           <div className="flex items-center gap-1.5">
-            <input type="date" className="border border-[#DCE3EE] rounded-xl px-2.5 py-1.5 text-[13.5px] font-semibold text-[#0F1A30] bg-white outline-none focus:border-[#4B6CB7] focus:outline-none focus:border-[#1B2B4B]" value={startDate} onChange={e => setStartDate(e.target.value)} />
+            <CustomDatePicker className="min-w-[132px] whitespace-nowrap tabular-nums border border-[#DCE3EE] rounded-xl px-2.5 py-1.5 text-[13.5px] font-semibold text-[#0F1A30] bg-white outline-none focus:border-[#4B6CB7] focus:outline-none focus:border-[#1B2B4B]" value={startDate} onChange={e => setStartDate(e.target.value)} showIcon />
             <span className="text-gray-400 text-[13px]">~</span>
-            <input type="date" className="border border-[#DCE3EE] rounded-xl px-2.5 py-1.5 text-[13.5px] font-semibold text-[#0F1A30] bg-white outline-none focus:border-[#4B6CB7] focus:outline-none focus:border-[#1B2B4B]" value={endDate} onChange={e => setEndDate(e.target.value)} />
+            <CustomDatePicker className="min-w-[132px] whitespace-nowrap tabular-nums border border-[#DCE3EE] rounded-xl px-2.5 py-1.5 text-[13.5px] font-semibold text-[#0F1A30] bg-white outline-none focus:border-[#4B6CB7] focus:outline-none focus:border-[#1B2B4B]" value={endDate} onChange={e => setEndDate(e.target.value)} showIcon />
           </div>
           <button onClick={() => { setStartDate(thisMonthStart()); setEndDate(thisMonthEnd()); }} className="px-3 py-1.5 rounded-lg border border-gray-200 text-[13px] text-gray-500 hover:bg-gray-50 transition">이번 달</button>
           {(startDate || endDate) && (
@@ -1026,7 +1027,7 @@ export default function FixedClients({ drivers = [], upsertDriver, userCompany =
                   <div className="grid grid-cols-3 gap-3">
                     <div>
                       <label className="block text-[12px] font-bold text-[#5B6B85] mb-1">날짜</label>
-                      <input type="date" className="w-full border border-[#DCE3EE] rounded-xl px-2.5 py-1.5 text-[13.5px] font-semibold text-[#0F1A30] bg-white outline-none focus:border-[#4B6CB7]" value={editPopupRow.날짜 || ""} onChange={e => updateEditPopupField("날짜", e.target.value)} />
+                      <CustomDatePicker className="w-full border border-[#DCE3EE] rounded-xl px-2.5 py-1.5 text-[13.5px] font-semibold text-[#0F1A30] bg-white outline-none focus:border-[#4B6CB7]" value={editPopupRow.날짜 || ""} onChange={e => updateEditPopupField("날짜", e.target.value)} showIcon />
                     </div>
                     <div>
                       <label className="block text-[12px] font-bold text-[#5B6B85] mb-1">거래처명</label>

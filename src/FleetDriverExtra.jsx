@@ -5,6 +5,7 @@
 //  · 지입 계약(시작일·월 지입료·명의) — 월 지입료는 지급명세서 기사별 공제에 자동 반영
 //  · 차량 기본정보(차명·연식·정비 주기·검사/보험 만기)는 기사앱 첫 설정과 같은 마법사로 직접 입력
 import React from "react";
+import CustomDatePicker from "./CustomDatePicker"; // 📅 2026-11-04 날짜 입력은 프로그램 달력으로
 import BankAccountInput from "./BankAccountInput";
 import { onlyDigits } from "./bankUtil";
 import { VehicleSetupWizard } from "./VehicleCarePanel";
@@ -68,7 +69,7 @@ export default function FleetExtraFields({ value: v, onChange, company }) {
           <div className="col-span-2"><BankAccountInput value={v.정산계좌 || { bank: "", acct: "", holder: "" }} onChange={(b) => set({ 정산계좌: b })} noFav /></div>
           <div><label className={lab}>사업자등록번호</label><input inputMode="numeric" className={inp} value={fmtBiz(v.사업자번호 || "")} onChange={(e) => set({ 사업자번호: onlyDigits(e.target.value).slice(0, 10) })} placeholder="000-00-00000" /></div>
           <div><label className={lab}>상호</label><input className={inp} value={v.사업자상호 || ""} onChange={(e) => set({ 사업자상호: e.target.value })} placeholder="사업자등록증 상호" /></div>
-          <div><label className={lab}>지입 계약 시작일</label><input type="date" className={inp} value={v.지입계약일 || ""} onChange={(e) => set({ 지입계약일: e.target.value })} /></div>
+          <div><label className={lab}>지입 계약 시작일</label><CustomDatePicker className={inp} value={v.지입계약일 || ""} onChange={(e) => set({ 지입계약일: e.target.value })} showIcon /></div>
           <div><label className={lab}>월 지입료 <span className="font-normal text-[#9AA9C3]">(명세서 자동 공제)</span></label><input inputMode="numeric" className={`${inp} text-right`} value={fee ? Number(fee).toLocaleString() : ""} onChange={(e) => setFee(e.target.value)} placeholder="0" /></div>
           <div className="col-span-2 flex items-center justify-between gap-3 rounded-xl bg-white border border-[#E3E8F0] px-3.5 py-2.5">
             <div className="min-w-0">

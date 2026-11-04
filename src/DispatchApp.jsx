@@ -32,6 +32,7 @@ import JSZip from "jszip";
 import { sendOrderTo24Proxy as sendOrderTo24 } from "../api/24CallProxy";
 import { useNewVersion, openUpdatePopup } from "./VersionCheck";
 import CustomDatePicker, { KOREAN_HOLIDAYS, shortHolidayLabel } from "./CustomDatePicker"; // ⭐ 2026-11-04 특수운임 제거 — specialDemandInfo·weatherUtil 사용 안 함
+import { DateTimeSelect } from "./kpTimePick"; // ⏱ 2026-11-04 예약발송 날짜·시간 — 프로그램 달력 + 시간 드롭다운
 // ⭐ 2026-11-02 속도 — 관리자메뉴(엑셀 가져오기 등 포함)는 열 때 받는다. 직원 명부 구독은 usersLive 하나를 공유
 import { subscribeUsersLive } from "./usersLive";
 const AdminMenu = lazyView(() => import("./AdminMenu"));
@@ -53325,8 +53326,7 @@ const handleBatchSettle = async (targetStatus) => {
                       <span className="text-[13px] font-bold text-gray-700">예약발송</span>
                     </label>
                     {generalEmailScheduleOn && (
-                      <input type="datetime-local"
-                        className="mt-2 w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-[#1B2B4B]"
+                      <DateTimeSelect className="mt-2" dateClassName="w-full h-10 border border-gray-200 rounded-lg px-3 text-[13px] bg-white focus:outline-none focus:border-[#1B2B4B]" timeClassName="w-full h-10 border border-gray-200 rounded-lg px-3 text-[13px] bg-white"
                         value={generalEmailScheduleAt}
                         onChange={(e) => setGeneralEmailScheduleAt(e.target.value)} />
                     )}
@@ -53678,8 +53678,7 @@ const handleBatchSettle = async (targetStatus) => {
                       <span className="text-[13px] font-bold text-gray-700">예약발송</span>
                     </label>
                     {emailScheduleOn && (
-                      <input type="datetime-local"
-                        className="mt-2 w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-[#1B2B4B]"
+                      <DateTimeSelect className="mt-2" dateClassName="w-full h-10 border border-gray-200 rounded-lg px-3 text-[13px] bg-white focus:outline-none focus:border-[#1B2B4B]" timeClassName="w-full h-10 border border-gray-200 rounded-lg px-3 text-[13px] bg-white"
                         value={emailScheduleAt}
                         onChange={(e) => setEmailScheduleAt(e.target.value)} />
                     )}
@@ -54877,8 +54876,7 @@ const handleBatchSettle = async (targetStatus) => {
                       <span className="text-[13px] font-bold text-gray-700">예약발송</span>
                     </label>
                     {emailScheduleOn && (
-                      <input type="datetime-local"
-                        className="mt-2 w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-[#1B2B4B]"
+                      <DateTimeSelect className="mt-2" dateClassName="w-full h-10 border border-gray-200 rounded-lg px-3 text-[13px] bg-white focus:outline-none focus:border-[#1B2B4B]" timeClassName="w-full h-10 border border-gray-200 rounded-lg px-3 text-[13px] bg-white"
                         value={emailScheduleAt}
                         onChange={(e) => setEmailScheduleAt(e.target.value)} />
                     )}
