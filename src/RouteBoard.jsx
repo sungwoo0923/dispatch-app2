@@ -838,6 +838,14 @@ export default function RouteBoard({ companyName = "" }) {
   const isGone = (r) => (sheetDiff?.gone?.has(r.key) || r.sheetGone) && !keepKeys.has(r.key);
   const addedCount = Object.values(sheetDiff?.added || {}).reduce((a, v) => a + v.length, 0);
   const goneCount = Object.values(rows).flat().filter(isGone).length;
+  // ⭐ 2026-11-04 시트에서 줄을 지운 게 보이면 바로 서버와 맞춰 프로그램 오더도 지운다(같은 상태로는 한 번만 — 서버가 안전장치로 남기면 표시만)
+  const goneSig = Object.values(rows).flat().filter(isGone).map((r) => r.key).sort().join(",");
+  const goneSyncRef = React.useRef("");
+  React.useEffect(() => {
+    if (!goneSig || dirty || !form?.sheetUrl || form.autoSync === false || busy) return;
+    const k = `${form.id}|${date}|${goneSig}`; if (goneSyncRef.current === k) return;
+    goneSyncRef.current = k; syncNow(true);
+  }, [goneSig, dirty, busy]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const save = async () => {
     setBusy("save");
@@ -973,7 +981,7 @@ export default function RouteBoard({ companyName = "" }) {
             <div className={`rounded-xl border px-4 py-2.5 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[13px] ${goneCount ? "bg-[#FFF8E6] border-[#F7D58A]" : "bg-[#F5F8FD] border-[#E3E8F0]"}`}>
               <span className="font-black text-[#0F1A30]">구글시트 연동</span>
               <span className="text-[#5B6B85]">{sheetDiff.error ? `확인 실패 — ${sheetDiff.error}` : !sheetDiff.tab ? "이 날짜 탭이 시트에 없습니다" : sheetDiff.bad ? `'${sheetDiff.tab}' 탭에서 제목줄을 못 찾았습니다` : `'${sheetDiff.tab}' 탭 · ${new Date(sheetDiff.at).toLocaleTimeString("ko-KR", { timeZone: "Asia/Seoul", hour: "2-digit", minute: "2-digit" })} 확인 · ${form.autoSync === false ? "자동 연동 꺼짐" : "새 줄·새 날짜 탭은 자동으로 오더 생성"} · 저장하면 차량·운송업체·단가·입차시간이 시트에 입력`}</span>
-              {goneCount > 0 && <span className="font-black text-red-600">시트에서 지워진 줄 {goneCount}개(표에 빨간 표시)</span>}
+              {goneCount > 0 && <span className="font-black text-red-600">시트에서 지운 줄 {goneCount}개 — 프로그램에서도 자동으로 삭제합니다{form.autoSync === false ? "(자동 연동이 꺼져 있어 [지금 맞추기]를 눌러 주세요)" : ""}</span>}
               {/* ⭐ 2026-11-03 "새로 생긴 줄 지금 가져오기" 제거 — 자동 연동·[지금 맞추기]·고정노선현황 [기간 가져오기]로 들어온다 */}
               <button type="button" onClick={() => syncNow(false)} disabled={busy === "sync"} className="ml-auto h-8 px-3 rounded-lg border border-[#DCE3EE] text-[12.5px] font-bold text-[#3A4A66] disabled:opacity-50">{busy === "sync" ? "맞추는 중…" : "지금 맞추기"}</button>
             </div>
