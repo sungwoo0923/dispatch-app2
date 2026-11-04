@@ -4941,6 +4941,8 @@ exports.notifyApproval = functions.firestore.document("approvals/{id}").onWrite(
     if (a.status === "rejected" && b.status !== "rejected") { const r = (a.line || []).find((x) => x.status === "rejected"); msgs.push([a.drafterUid, `↩ 반려 · ${r?.name || ""}`, `${t}\n사유: ${r?.comment || ""}`]); }
     if (a.status === "cancelled" && b.status !== "cancelled") msgs.push([a.drafterUid, "결재 취소 승인", `${t} 문서가 결재 취소되었습니다.`]);
     if (a.cancel?.status === "rejected" && b.cancel?.status !== "rejected") { const r = (a.cancel.line || []).find((x) => x.status === "rejected"); msgs.push([a.drafterUid, `결재 취소 거부 · ${r?.name || ""}`, `${t}\n${r?.comment || ""}`]); }
+    // ⭐ 2026-11-04 지출결의 지급완료 — 재무·경리가 [지급 완료 처리]를 누르면 기안자에게
+    if (a.status === "approved" && a.paid?.at && !b.paid?.at && a.paid.by !== a.drafterUid) msgs.push([a.drafterUid, "₩ 지급 완료", `[지급 완료] ${t} — ${Math.round(Number(a.amount) || 0).toLocaleString("ko-KR")}원 지급되었습니다${a.paid.date ? ` (${a.paid.date})` : ""}`]);
   }
   // ⭐ 2026-11-02 참조(cc) — 최종 승인되면 기안자가 고른 참조자에게도 알린다(화면 안내대로)
   if (b && a.status === "approved" && b.status !== "approved") {

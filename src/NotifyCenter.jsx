@@ -45,6 +45,7 @@ const KIND = {
   apCancel: { head: "결재 취소", en: "CANCELLED", go: "전자결재에서 열기" },
   apCancelNo: { head: "취소 거부", en: "CANCEL REJECTED", go: "전자결재에서 열기" },
   apCc: { head: "결재 참조", en: "CC · APPROVED", go: "전자결재에서 열기" },
+  apPaid: { head: "지급 완료", en: "PAID", go: "전자결재에서 열기" }, // ⭐ 2026-11-04 지출결의 지급완료
   handover: { head: "인수인계", en: "HANDOVER", go: "인수인계 열기" },
 };
 
@@ -71,9 +72,10 @@ function approvalItem(d, uid, now, localSeen) {
     if (d.status === "rejected") { const r = line.find((x) => x.status === "rejected"); kind = "apNo"; sub = `${r?.name || ""} ${r?.position || ""} · 사유: ${r?.comment || "-"}`; }
     else if (d.status === "cancelled") { kind = "apCancel"; sub = "문서가 결재 취소되었습니다."; }
     else if (d.status === "approved" && d.cancel?.status === "rejected") { const r = (d.cancel.line || []).find((x) => x.status === "rejected"); kind = "apCancelNo"; sub = `${r?.name || ""} · ${r?.comment || ""}`; }
+    else if (d.status === "approved" && d.paid?.at) { kind = "apPaid"; sub = `[지급 완료] ${d.title || ""} — ${Math.round(Number(d.amount) || 0).toLocaleString("ko-KR")}원 지급되었습니다${d.paid.date ? ` · 지급일 ${d.paid.date}` : ""}`; }
     else if (d.status === "approved") sub = "결재가 모두 끝났습니다(최종 승인).";
     else { const last = [...line].reverse().find((x) => x.status === "approved"); sub = `${last ? `${last.name || ""} ${last.position || ""} 승인 · ` : ""}${okN}/${line.length} 진행 중`; }
-    return { ...base, key: `apm:${d.id}:${d.status}:${okN}`, kind, sub, page: "mine", mark: { t: "apMine" } };
+    return { ...base, key: `apm:${d.id}:${d.status}:${okN}${d.status === "approved" && d.paid?.at ? `:paid${d.paid.at}` : ""}`, kind, sub, page: "mine", mark: { t: "apMine" } };
   }
   // 참조 — 최종 승인된 문서
   if ((d.ccUids || []).includes(uid) && d.drafterUid !== uid && d.status === "approved" && !(d.ccReadBy || []).includes(uid) && now - at < CC_POP_WINDOW)

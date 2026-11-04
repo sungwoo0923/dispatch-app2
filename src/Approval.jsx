@@ -49,6 +49,280 @@ const STATUS = { pending: "진행 중", approved: "결재 완료", rejected: "�
 const catOf = (k) => APPROVAL_CATS.find((c) => c.key === k) || APPROVAL_CATS[0];
 const isAdminRole = (r) => ["admin", "totalMaster", "hrManager", "hrAcct"].includes(r);
 
+// 💸 2026-11-04 지급완료 — 최종 승인된 비용·지출 결의(금액 있는 문서)를 재무·경리가 "지급 완료"로 표시한다.
+//  대상: cat=="expense" && 금액>0 (법인카드 사용보고는 이미 카드로 결제된 건이라 제외)
+//  누를 수 있는 사람: 역할 test(경리)·hrAcct·admin·totalMaster, 소속 부서 이름에 재무·경리·회계가 들어간 직원, 그 문서의 최종 결재자
+//  (firestore.rules › approvals 의 "⭐ 2026-11-04 전자결재 서명" 규칙과 같은 조건)
+const PAY_SKIP_FORMS = ["card"];
+export const isPayDoc = (d) => d?.cat === "expense" && !PAY_SKIP_FORMS.includes(d?.form) && Number(d?.amount) > 0;
+const FIN_ROLES = ["test", "hrAcct", "admin", "totalMaster"];
+const FIN_TEAM = /재무|경리|회계/;
+const isFinUser = (me) => FIN_ROLES.includes(me?.role) || FIN_TEAM.test(String(me?.team || ""));
+// null(지급 대상 아님) | "wait"(지급 대기) | "paid"(지급완료)
+export const payState = (d) => (!isPayDoc(d) || d.status !== "approved" ? null : d.paid?.at ? "paid" : "wait");
+const canPay = (d, me) => !!payState(d) && d.cancel?.status !== "pending" && (isFinUser(me) || (d.line || [])[(d.line || []).length - 1]?.uid === me?.uid);
+
+// 🖼 2026-11-04 첨부 보기·저장 — 첨부는 base64 data URL이라 <a target="_blank">로는 크롬이 새 탭을 막아 아무 일도 안 일어났다.
+//  화면 안 보기(라이트박스)로 열고, 저장은 blob으로 바꿔 내려받는다(휴대폰은 공유 시트 → 사진 저장).
+const extOf = (src) => { const m = /^data:image\/([a-z0-9+.-]+)/i.exec(String(src || "")); const e = (m?.[1] || "jpeg").toLowerCase(); return e === "jpeg" ? "jpg" : e === "svg+xml" ? "svg" : e; };
+const safeName = (s) => String(s || "").replace(/[\\/:*?"<>|\s]+/g, "_").slice(0, 80);
+const attName = (docNo, i, src) => `${safeName(docNo || "전자결재")}_첨부${i + 1}.${extOf(src)}`;
+async function srcToBlob(src) {
+  const s = String(src || "");
+  if (!s.startsWith("data:")) return (await fetch(s)).blob();
+  const [head, body] = s.split(",");
+  const mime = /data:([^;,]+)/.exec(head)?.[1] || "image/jpeg";
+  const bin = /;base64/.test(head) ? atob(body) : decodeURIComponent(body);
+  const u8 = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i += 1) u8[i] = bin.charCodeAt(i);
+  return new Blob([u8], { type: mime });
+}
+const saveBlob = (blob, name) => {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = name; a.rel = "noopener";
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 5000);
+};
+const isTouchDevice = () => typeof window !== "undefined" && !!window.matchMedia?.("(pointer: coarse)").matches;
+async function downloadAttachment(src, docNo, i) {
+  const name = attName(docNo, i, src);
+  const blob = await srcToBlob(src);
+  // 휴대폰 — 공유 시트(사진에 저장)가 되면 그쪽으로, 아니면 파일 내려받기
+  if (isTouchDevice()) {
+    let file = null;
+    try { file = new File([blob], name, { type: blob.type }); } catch { file = null; }
+    if (file && navigator.canShare?.({ files: [file] })) {
+      try { await navigator.share({ files: [file] }); return; } catch (e) { if (e?.name === "AbortError") return; }
+    }
+  }
+  saveBlob(blob, name);
+}
+async function downloadAllAttachments(images, docNo) {
+  const list = (images || []).filter(Boolean);
+  if (!list.length) return;
+  if (list.length === 1) { await downloadAttachment(list[0], docNo, 0); return; }
+  try {
+    const { default: JSZip } = await import("jszip");
+    const zip = new JSZip();
+    for (let i = 0; i < list.length; i += 1) zip.file(attName(docNo, i, list[i]), await srcToBlob(list[i]));
+    saveBlob(await zip.generateAsync({ type: "blob" }), `${safeName(docNo || "전자결재")}_첨부${list.length}장.zip`);
+  } catch {
+    // 압축이 안 되면 한 장씩 차례로
+    for (let i = 0; i < list.length; i += 1) { saveBlob(await srcToBlob(list[i]), attName(docNo, i, list[i])); await new Promise((r) => setTimeout(r, 350)); }
+  }
+}
+function ImageLightbox({ images, start = 0, docNo, onClose }) {
+  const n = (images || []).length;
+  const [i, setI] = React.useState(Math.min(Math.max(0, start), Math.max(0, n - 1)));
+  const [busy, setBusy] = React.useState("");
+  const go = React.useCallback((dlt) => setI((p) => (n ? (p + dlt + n) % n : 0)), [n]);
+  React.useEffect(() => {
+    const h = (e) => {
+      if (e.key === "Escape") { e.stopPropagation(); onClose(); }
+      else if (e.key === "ArrowRight") go(1);
+      else if (e.key === "ArrowLeft") go(-1);
+    };
+    window.addEventListener("keydown", h, true);
+    return () => window.removeEventListener("keydown", h, true);
+  }, [go, onClose]);
+  const touch = React.useRef(null);
+  if (!n) return null;
+  const src = images[i];
+  const run = async (k, fn) => { setBusy(k); try { await fn(); } catch (e) { window.alert(`저장 실패: ${e.message || e}`); } finally { setBusy(""); } };
+  const btn = "h-10 px-3.5 rounded-xl text-[13px] font-black inline-flex items-center gap-1.5 whitespace-nowrap disabled:opacity-50";
+  return createPortal(
+    <div className="fixed inset-0 z-[1000010] flex flex-col" style={{ background: "rgba(6,12,26,0.92)", backdropFilter: "blur(3px)" }} onClick={onClose} data-ap-lightbox>
+      <div className="shrink-0 px-3 sm:px-5 py-3 flex items-center gap-2 text-white" style={{ paddingTop: "max(12px, env(safe-area-inset-top))" }} onClick={(e) => e.stopPropagation()}>
+        <div className="min-w-0 flex-1">
+          <div className="text-[10.5px] font-extrabold tracking-[0.26em] text-[#8FB0F0]" style={{ fontFamily: MONO }}>ATTACHMENT · {i + 1} / {n}</div>
+          <div className="text-[13.5px] font-bold text-white/80 truncate">{attName(docNo, i, src)}</div>
+        </div>
+        <button type="button" disabled={!!busy} onClick={() => run("one", () => downloadAttachment(src, docNo, i))} className={`${btn} bg-white text-[#0F1A30]`}>{busy === "one" ? "저장 중…" : "이미지 저장"}</button>
+        {n > 1 && <button type="button" disabled={!!busy} onClick={() => run("all", () => downloadAllAttachments(images, docNo))} className={`${btn} hidden sm:inline-flex bg-white/10 border border-white/20 text-white`}>{busy === "all" ? "받는 중…" : "전체 다운로드"}</button>}
+        <button type="button" onClick={onClose} aria-label="닫기" className="w-10 h-10 rounded-xl bg-white/10 border border-white/20 text-white font-black shrink-0">✕</button>
+      </div>
+      <div className="relative flex-1 min-h-0 flex items-center justify-center px-2 sm:px-16"
+        onTouchStart={(e) => { touch.current = e.touches[0]?.clientX ?? null; }}
+        onTouchEnd={(e) => { const x0 = touch.current; touch.current = null; const x1 = e.changedTouches[0]?.clientX; if (x0 == null || x1 == null || Math.abs(x1 - x0) < 50) return; go(x1 < x0 ? 1 : -1); }}>
+        <img src={src} alt={`첨부 ${i + 1}`} onClick={(e) => e.stopPropagation()} draggable={false} className="max-w-full max-h-full object-contain rounded-lg shadow-[0_20px_60px_rgba(0,0,0,0.5)] bg-white select-none" />
+        {n > 1 && (
+          <>
+            <button type="button" aria-label="이전" onClick={(e) => { e.stopPropagation(); go(-1); }} className="absolute left-2 sm:left-4 top-1/2 -translate-y-1/2 w-11 h-11 rounded-full bg-[#0F1A30]/80 border border-white/20 text-white text-[20px] font-black grid place-items-center hover:bg-[#1B2B4B]">‹</button>
+            <button type="button" aria-label="다음" onClick={(e) => { e.stopPropagation(); go(1); }} className="absolute right-2 sm:right-4 top-1/2 -translate-y-1/2 w-11 h-11 rounded-full bg-[#0F1A30]/80 border border-white/20 text-white text-[20px] font-black grid place-items-center hover:bg-[#1B2B4B]">›</button>
+          </>
+        )}
+      </div>
+      {n > 1 && (
+        <div className="shrink-0 py-3 flex items-center justify-center gap-2" style={{ paddingBottom: "max(12px, env(safe-area-inset-bottom))" }} onClick={(e) => e.stopPropagation()}>
+          {images.map((s, k) => (
+            <button key={k} type="button" onClick={() => setI(k)} className={`w-12 h-12 rounded-lg overflow-hidden border-2 ${k === i ? "border-[#CFE0FF]" : "border-transparent opacity-55 hover:opacity-90"}`}><img src={s} alt="" className="w-full h-full object-cover" /></button>
+          ))}
+        </div>
+      )}
+    </div>,
+    document.body,
+  );
+}
+
+// ✍ 2026-11-04 개인 서명 — users/{uid}.approvalSignature(작은 PNG data URL · 40KB 미만) · approvalMarkMode("stamp"|"sign")
+//  "서명"으로 해 두면 이후 내가 승인하는 결재마다 결재란에 도장 대신 내 서명이 들어간다(승인할 때 line[i].mark/sign으로 복사 — 서명을 나중에 바꿔도 예전 문서는 그대로)
+const SIGN_MAX = 40000;
+function exportSignature(strokes, lw) {
+  const pts = strokes.flat();
+  if (!pts.length) return "";
+  const pad = lw * 1.5;
+  const x0 = Math.min(...pts.map((p) => p.x)) - pad; const y0 = Math.min(...pts.map((p) => p.y)) - pad;
+  const x1 = Math.max(...pts.map((p) => p.x)) + pad; const y1 = Math.max(...pts.map((p) => p.y)) + pad;
+  const bw = Math.max(1, x1 - x0); const bh = Math.max(1, y1 - y0);
+  for (const [mw, mh] of [[320, 128], [240, 96], [180, 72]]) {
+    const s = Math.min(mw / bw, mh / bh, 1);
+    const c = document.createElement("canvas");
+    c.width = Math.max(1, Math.ceil(bw * s)); c.height = Math.max(1, Math.ceil(bh * s));
+    const g = c.getContext("2d");
+    g.lineCap = "round"; g.lineJoin = "round"; g.strokeStyle = "#0F1A30"; g.fillStyle = "#0F1A30"; g.lineWidth = Math.max(1.6, lw * s);
+    strokes.forEach((st) => drawStroke(g, st.map((p) => ({ x: (p.x - x0) * s, y: (p.y - y0) * s }))));
+    const url = c.toDataURL("image/png");
+    if (url.length < SIGN_MAX) return url;
+  }
+  return "";
+}
+function drawStroke(g, st) {
+  if (!st.length) return;
+  if (st.length === 1) { g.beginPath(); g.arc(st[0].x, st[0].y, g.lineWidth / 2, 0, Math.PI * 2); g.fill(); return; }
+  g.beginPath(); g.moveTo(st[0].x, st[0].y);
+  for (let k = 1; k < st.length - 1; k += 1) { const mx = (st[k].x + st[k + 1].x) / 2; const my = (st[k].y + st[k + 1].y) / 2; g.quadraticCurveTo(st[k].x, st[k].y, mx, my); }
+  const l = st[st.length - 1]; g.lineTo(l.x, l.y); g.stroke();
+}
+function MiniStamp({ name, kind = "결재" }) {
+  return (
+    <div className="w-[46px] h-[46px] rounded-full border-[2.5px] border-[#1B2B4B] flex flex-col items-center justify-center text-[#1B2B4B] rotate-[-8deg] leading-none shrink-0">
+      <span className="text-[11px] font-black whitespace-nowrap tracking-tight">{String(name || "").slice(0, 4)}</span>
+      <span className="text-[8.5px] font-black mt-0.5 tracking-wider">{kind === "합의" ? "합의" : "승인"}</span>
+    </div>
+  );
+}
+function SignatureModal({ me, onClose }) {
+  const W = 640; const H = 260; const LW = 5;
+  const [mode, setMode] = React.useState(me.markMode === "sign" ? "sign" : "stamp");
+  const [strokes, setStrokes] = React.useState([]);
+  const [redo, setRedo] = React.useState([]);
+  const [drawing, setDrawing] = React.useState(!me.sign);
+  const [busy, setBusy] = React.useState(false);
+  const cv = React.useRef(null);
+  const curr = React.useRef(null);
+  const repaint = React.useCallback((list) => {
+    const c = cv.current; if (!c) return;
+    const g = c.getContext("2d");
+    g.clearRect(0, 0, W, H);
+    g.lineCap = "round"; g.lineJoin = "round"; g.strokeStyle = "#0F1A30"; g.fillStyle = "#0F1A30"; g.lineWidth = LW;
+    list.forEach((st) => drawStroke(g, st));
+  }, []);
+  React.useEffect(() => { if (drawing) repaint(strokes); }, [strokes, drawing, repaint]);
+  React.useEffect(() => {
+    const h = (e) => { if (e.key === "Escape") { e.stopPropagation(); onClose(); } };
+    window.addEventListener("keydown", h, true);
+    return () => window.removeEventListener("keydown", h, true);
+  }, [onClose]);
+  const at = (e) => { const r = cv.current.getBoundingClientRect(); return { x: ((e.clientX - r.left) / r.width) * W, y: ((e.clientY - r.top) / r.height) * H }; };
+  const down = (e) => { e.preventDefault(); cv.current.setPointerCapture?.(e.pointerId); curr.current = [at(e)]; };
+  const move = (e) => {
+    if (!curr.current) return;
+    e.preventDefault();
+    const p = at(e); const st = curr.current; const last = st[st.length - 1];
+    if (Math.hypot(p.x - last.x, p.y - last.y) < 1.2) return;
+    st.push(p);
+    const g = cv.current.getContext("2d");
+    g.lineCap = "round"; g.lineJoin = "round"; g.strokeStyle = "#0F1A30"; g.lineWidth = LW;
+    g.beginPath(); g.moveTo(last.x, last.y); g.lineTo(p.x, p.y); g.stroke();
+  };
+  const up = () => { const st = curr.current; curr.current = null; if (st && st.length) { setStrokes((p) => [...p, st]); setRedo([]); } };
+  const undo = () => setStrokes((p) => { if (!p.length) return p; setRedo((r) => [...r, p[p.length - 1]]); return p.slice(0, -1); });
+  const redoOne = () => setRedo((r) => { if (!r.length) return r; setStrokes((p) => [...p, r[r.length - 1]]); return r.slice(0, -1); });
+  const live = React.useMemo(() => (drawing && strokes.length ? exportSignature(strokes, LW) : ""), [drawing, strokes]);
+  const save = async () => {
+    let sig = me.sign || "";
+    if (drawing && strokes.length) {
+      sig = live;
+      if (!sig) { window.alert("서명이 너무 복잡합니다. 조금 더 간단히 다시 그려 주세요."); return; }
+    }
+    if (mode === "sign" && !sig) { window.alert("서명을 먼저 그려 주세요."); return; }
+    setBusy(true);
+    try {
+      await updateDoc(doc(db, "users", me.uid), { approvalSignature: sig, approvalMarkMode: mode });
+      onClose();
+    } catch (e) { window.alert(`저장 실패: ${e.message}`); } finally { setBusy(false); }
+  };
+  const tab = (k, l, sub) => (
+    <button type="button" onClick={() => setMode(k)} className={`flex-1 rounded-2xl border px-3 py-3 text-left transition ${mode === k ? "border-[#0F1A30] bg-[#0F1A30] text-white shadow-[0_8px_20px_rgba(15,26,48,0.22)]" : "border-[#DCE3EE] bg-white text-[#0F1A30] hover:bg-[#F5F8FD]"}`}>
+      <span className="block text-[14.5px] font-black">{mode === k ? "● " : "○ "}{l}</span>
+      <span className={`block text-[12px] font-bold ${mode === k ? "text-white/65" : "text-[#5B6B85]"}`}>{sub}</span>
+    </button>
+  );
+  const sbtn = "h-9 px-3 rounded-lg border border-[#DCE3EE] bg-white text-[12.5px] font-black text-[#3A4A66] hover:border-[#4B6CB7] disabled:opacity-40";
+  return createPortal(
+    <div className="fixed inset-0 z-[1000005] bg-[#0B1428]/55 flex items-center justify-center p-3" onClick={onClose}>
+      <div className="w-full max-w-[620px] max-h-[94vh] overflow-y-auto rounded-[22px] bg-[#F4F6FA] shadow-2xl" onClick={(e) => e.stopPropagation()} data-ap-sign-modal>
+        <div className="px-6 py-5 text-white flex items-start gap-3" style={{ background: "linear-gradient(120deg,#0B1428 0%,#1B2B4B 65%,#2D4C82 100%)" }}>
+          <div className="flex-1 min-w-0">
+            <div className="text-[10.5px] font-extrabold tracking-[0.26em] text-[#8FB0F0]" style={{ fontFamily: MONO }}>MY SIGNATURE · APPROVAL MARK</div>
+            <div className="text-[20px] font-black">내 서명 · 결재 표시</div>
+            <div className="text-[12.5px] text-white/65 mt-0.5">내가 승인한 결재 문서의 결재란에 도장 또는 내 서명이 들어갑니다. 언제든 바꿀 수 있습니다.</div>
+          </div>
+          <button type="button" onClick={onClose} className="w-8 h-8 rounded-lg text-white/60 hover:text-white hover:bg-white/10 font-black">✕</button>
+        </div>
+        <div className="p-5 space-y-4">
+          <div className="flex gap-2">{tab("stamp", "도장", "이름이 들어간 원형 승인 도장")}{tab("sign", "서명", "직접 그린 내 서명")}</div>
+          <div className="rounded-2xl bg-white border border-[#E3E8F0] p-4">
+            <div className="flex items-center gap-2 mb-2.5">
+              <span className="text-[11px] font-extrabold tracking-[0.22em] text-[#4B6CB7]" style={{ fontFamily: MONO }}>SIGNATURE</span>
+              <span className="text-[13px] font-black text-[#0F1A30]">{drawing ? "아래 칸에 서명해 주세요(마우스·손가락)" : "저장된 내 서명"}</span>
+            </div>
+            {drawing ? (
+              <>
+                <div className="relative rounded-xl border-2 border-dashed border-[#C9D6EE] bg-[#FAFBFD] overflow-hidden">
+                  <canvas ref={cv} width={W} height={H} className="block w-full h-auto cursor-crosshair" style={{ touchAction: "none", aspectRatio: `${W} / ${H}` }}
+                    onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up} onPointerLeave={(e) => { if (curr.current && e.pointerType === "mouse" && !e.buttons) up(); }} />
+                  {!strokes.length && <div className="pointer-events-none absolute inset-0 grid place-items-center text-[14px] font-bold text-[#9AA9C3]">여기에 서명</div>}
+                  <div className="pointer-events-none absolute left-6 right-6 bottom-[22%] border-b border-[#DCE3EE]" />
+                </div>
+                <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                  <button type="button" onClick={undo} disabled={!strokes.length} className={sbtn}>↶ 되돌리기</button>
+                  <button type="button" onClick={redoOne} disabled={!redo.length} className={sbtn}>↷ 다시</button>
+                  <button type="button" onClick={() => { setStrokes([]); setRedo([]); }} disabled={!strokes.length} className={sbtn}>지우기</button>
+                  {me.sign && <button type="button" onClick={() => { setDrawing(false); setStrokes([]); setRedo([]); }} className={`${sbtn} ml-auto`}>저장된 서명 쓰기</button>}
+                </div>
+              </>
+            ) : (
+              <div className="flex items-center gap-3">
+                <div className="flex-1 h-[110px] rounded-xl border border-[#E3E8F0] bg-[#FAFBFD] grid place-items-center"><img src={me.sign} alt="내 서명" className="max-h-[90px] max-w-[90%] object-contain" /></div>
+                <button type="button" onClick={() => setDrawing(true)} className="h-10 px-4 rounded-xl border border-[#0F1A30] text-[13px] font-black text-[#0F1A30] shrink-0">다시 그리기</button>
+              </div>
+            )}
+          </div>
+          <div className="rounded-2xl bg-white border border-[#E3E8F0] px-4 py-3 flex items-center gap-4">
+            <span className="text-[11px] font-extrabold tracking-[0.22em] text-[#9AA9C3]" style={{ fontFamily: MONO }}>PREVIEW</span>
+            <div className="w-[74px] border border-[#0F1A30] flex flex-col">
+              <div className="h-6 bg-[#EEF1F6] border-b border-[#0F1A30] text-[11.5px] font-black text-[#0F1A30] grid place-items-center truncate px-1">{me.position || "결재"}</div>
+              <div className="h-[58px] grid place-items-center">
+                {mode === "sign" && (drawing ? live : me.sign)
+                  ? <img src={drawing ? live : me.sign} alt="" className="max-w-[64px] max-h-[44px] object-contain" />
+                  : <MiniStamp name={me.name} />}
+              </div>
+            </div>
+            <div className="text-[12.5px] text-[#5B6B85] leading-relaxed">결재란에는 이렇게 표시됩니다. 이미 승인한 문서는 그때의 표시가 그대로 남습니다.</div>
+          </div>
+        </div>
+        <div className="sticky bottom-0 px-5 py-4 bg-white border-t border-[#E3E8F0] flex gap-2">
+          <button type="button" onClick={onClose} className="h-11 px-5 rounded-xl border border-[#DCE3EE] text-[13.5px] font-bold text-[#5B6B85]">취소</button>
+          <button type="button" disabled={busy} onClick={save} className="flex-1 h-11 rounded-xl bg-[#0F1A30] text-white text-[14px] font-black disabled:opacity-50">{busy ? "저장 중…" : `저장 · ${mode === "sign" ? "서명" : "도장"}으로 결재`}</button>
+        </div>
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
 // ─────────────────────────── 데이터 ───────────────────────────
 export function useApprovals(uid) {
   const [list, setList] = React.useState(null);
@@ -84,6 +358,15 @@ export function useApprovalCounts() {
 
 // ─────────────────────────── 결재 문서(미리보기·보기 공용) ───────────────────────────
 function Stamp({ step }) {
+  // ✍ 2026-11-04 서명으로 승인한 칸 — 승인할 때 복사해 둔 서명 이미지(예전 문서·자동 승인은 도장)
+  if (step.status === "approved" && step.mark === "sign" && step.sign) {
+    return (
+      <div className="flex flex-col items-center justify-center leading-none max-w-full px-0.5" data-ap-sign>
+        <img src={step.sign} alt={`${step.name || ""} 서명`} draggable={false} className="max-w-[66px] w-auto max-h-[46px] object-contain" />
+        <span className="text-[9px] font-black mt-0.5 tracking-wider text-[#1B2B4B]">{step.kind === "합의" ? "합의" : "승인"}</span>
+      </div>
+    );
+  }
   if (step.status === "approved") {
     return (
       <div className="w-[54px] h-[54px] rounded-full border-[2.5px] border-[#1B2B4B] flex flex-col items-center justify-center text-[#1B2B4B] rotate-[-8deg] leading-none">
@@ -241,7 +524,22 @@ function SpendLinesPaper({ label, rows, last, compact: c }) {
   );
 }
 
-export function ApprovalPaper({ form, data, title, line, cc, drafter, docNo, createdMs, staff, status, paperRef }) {
+// 💸 2026-11-04 지급완료 도장 — 문서 위에 비스듬히 찍힌 붉은 인장(인쇄·PDF에도 그대로)
+function PaidSeal({ paid, compact: c }) {
+  if (!paid?.at) return null;
+  const date = String(paid.date || ymd(paid.at)).replace(/-/g, ".");
+  return (
+    <div className="pointer-events-none select-none absolute z-[2]" style={{ top: c ? 236 : 176, right: c ? 12 : 44, transform: "rotate(-13deg)", opacity: 0.9 }} data-paid-seal aria-label={`지급완료 ${date}`}>
+      <div className={`rounded-[16px] border-[3.5px] border-[#B42318] text-[#B42318] text-center ${c ? "px-3 py-1.5" : "px-5 py-2.5"}`} style={{ boxShadow: "inset 0 0 0 2.5px #fff, inset 0 0 0 4px #B42318" }}>
+        <div className={`${c ? "text-[8.5px]" : "text-[10px]"} font-extrabold tracking-[0.42em] pl-[0.42em]`} style={{ fontFamily: MONO }}>PAID · 지급</div>
+        <div className={`${c ? "text-[21px]" : "text-[32px]"} font-black tracking-[0.16em] pl-[0.16em] leading-[1.05]`}>지급완료</div>
+        <div className={`${c ? "text-[10px]" : "text-[12.5px]"} font-black tabular-nums tracking-[0.08em] border-t-2 border-[#B42318] mt-1 pt-0.5`} style={{ fontFamily: MONO }}>{date}{paid.byName ? ` · ${String(paid.byName).slice(0, 6)}` : ""}</div>
+      </div>
+    </div>
+  );
+}
+
+export function ApprovalPaper({ form, data, title, line, cc, drafter, docNo, createdMs, staff, status, paperRef, paid }) {
   const cols = [{ uid: drafter?.uid, name: drafter?.name, position: drafter?.position || "기안", kind: "기안", status: "approved", at: createdMs }, ...(line || [])];
   const fields = form.fields || [];
   const c = React.useContext(PaperCompact);
@@ -250,6 +548,7 @@ export function ApprovalPaper({ form, data, title, line, cc, drafter, docNo, cre
   const iw = c ? "w-[50px] !px-1.5" : "w-[90px]";
   return (
     <div ref={paperRef} className={`mx-auto bg-white w-full max-w-[780px] ${c ? "px-4 py-5" : "px-10 py-10"} shadow-[0_10px_30px_rgba(15,26,48,0.12)] relative`} style={{ fontFamily: "'Pretendard','Noto Sans KR',sans-serif", minHeight: c ? 0 : 1000 }}>
+      {status === "approved" && <PaidSeal paid={paid} compact={c} />}
       <div className={c ? "flex flex-col gap-4" : "flex items-start justify-between gap-6"}>
         <div className={`${c ? "" : "pt-4"} min-w-0`}>
           <div className="text-[12.5px] font-extrabold tracking-[0.3em] text-[#4B6CB7]" style={{ fontFamily: MONO }}>{catOf(form.cat).en} · {form.code}</div>
@@ -876,6 +1175,7 @@ function Composer({ company, me, staff, cat, preset, onDone, leave, getLive, myD
   const [busy, setBusy] = React.useState(false);
   const [msg, setMsg] = React.useState("");
   const fileRef = React.useRef(null);
+  const [lightbox, setLightbox] = React.useState(null); // ⭐ 2026-11-04 첨부 크게 보기
   const autoLined = React.useRef(!!init?.line?.length);
 
   // 결재선이 비어 있으면 직원 목록이 오는 대로 자동 추천
@@ -1012,11 +1312,12 @@ function Composer({ company, me, staff, cat, preset, onDone, leave, getLive, myD
             <div className="mt-1.5 flex flex-wrap gap-2">
               {images.map((src, i) => (
                 <div key={i} className="relative w-16 h-16 rounded-xl overflow-hidden border border-[#E3E8F0]">
-                  <img src={src} alt="" className="w-full h-full object-cover" />
+                  <button type="button" onClick={() => setLightbox(i)} title="크게 보기" className="block w-full h-full"><img src={src} alt={`첨부 ${i + 1}`} className="w-full h-full object-cover" /></button>
                   <button type="button" onClick={() => setImages((p) => p.filter((_, k) => k !== i))} className="absolute top-0.5 right-0.5 w-5 h-5 rounded-full bg-[#0F1A30]/80 text-white text-[12px]">✕</button>
                 </div>
               ))}
               {images.length < 3 && <button type="button" onClick={() => fileRef.current?.click()} className="w-16 h-16 rounded-xl border-2 border-dashed border-[#C9D2E0] text-[#5B6B85] text-[12.5px] font-bold">+ 첨부</button>}
+              {lightbox !== null && <ImageLightbox images={images} start={lightbox} docNo={preset?.docNo || "새문서"} onClose={() => setLightbox(null)} />}
               <input ref={fileRef} type="file" accept="image/*" multiple hidden onChange={async (e) => { const fs = [...(e.target.files || [])].slice(0, 3 - images.length); e.target.value = ""; try { const out = await Promise.all(fs.map((f) => compressImage(f, 1200, 0.72))); setImages((p) => [...p, ...out].slice(0, 3)); } catch { setMsg("이미지를 읽지 못했습니다."); } }} />
             </div>
           </div>
@@ -1080,6 +1381,10 @@ function Viewer({ d, me, staff, company, onClose, onRedraft, onEdit, inline = fa
   const [comment, setComment] = React.useState("");
   const [busy, setBusy] = React.useState(false);
   const [cancelAsk, setCancelAsk] = React.useState(false);
+  const [lightbox, setLightbox] = React.useState(null); // ⭐ 2026-11-04 첨부 크게 보기(번호)
+  const [allBusy, setAllBusy] = React.useState(false);
+  const [signOpen, setSignOpen] = React.useState(false); // ✍ 내 서명·결재 표시 설정
+  const [payAsk, setPayAsk] = React.useState(null); // 💸 { date, memo }
   const paperRef = React.useRef(null);
   const turn = myTurn(d, me.uid);
   const cTurn = cancelTurn(d, me.uid);
@@ -1098,7 +1403,8 @@ function Viewer({ d, me, staff, company, onClose, onRedraft, onEdit, inline = fa
     const isCancelFlow = kind.startsWith("c-");
     if ((kind === "reject" || kind === "c-reject") && !comment.trim()) { window.alert("반려 사유를 적어 주세요."); return; }
     if (kind === "cancel-req" && !comment.trim()) { window.alert("취소 사유를 적어 주세요."); return; }
-    const ask = { approve: "승인할까요?", reject: "반려할까요?", withdraw: "결재를 회수할까요?", comment: "의견을 남길까요?", "cancel-req": "승인된 문서의 결재 취소를 요청할까요? 결재자들이 다시 승인하면 취소됩니다.", "c-approve": "결재 취소를 승인할까요?", "c-reject": "결재 취소 요청을 반려할까요?" }[kind];
+    const signMark = me.markMode === "sign" && !!me.sign;
+    const ask = { approve: `승인할까요?\n결재란 표시: ${signMark ? "내 서명" : "도장"} (내 서명 설정에서 바꿀 수 있습니다)`, reject: "반려할까요?", withdraw: "결재를 회수할까요?", comment: "의견을 남길까요?", "cancel-req": "승인된 문서의 결재 취소를 요청할까요? 결재자들이 다시 승인하면 취소됩니다.", "c-approve": "결재 취소를 승인할까요?", "c-reject": "결재 취소 요청을 반려할까요?" }[kind];
     if (!await kpConfirm(ask)) return;
     setBusy(true);
     try {
@@ -1109,7 +1415,10 @@ function Viewer({ d, me, staff, company, onClose, onRedraft, onEdit, inline = fa
         const line = (d.line || []).map((x) => ({ ...x }));
         const i = d.step || 0;
         if (kind === "approve") {
-          line[i] = { ...line[i], status: "approved", at: now, comment: comment.trim() };
+          // ✍ 2026-11-04 결재 표시 — "서명"이면 지금 서명을 이 칸에 복사(문서 1MB 한도에 가까우면 도장으로)
+          const room = (() => { try { return JSON.stringify(d).length + String(me.sign || "").length < 960000; } catch { return true; } })();
+          const useSign = me.markMode === "sign" && !!me.sign && String(me.sign).length < SIGN_MAX + 5000 && room;
+          line[i] = { ...line[i], status: "approved", at: now, comment: comment.trim(), mark: useSign ? "sign" : "stamp", ...(useSign ? { sign: me.sign } : {}) };
           const next = i + 1 < line.length ? i + 1 : -1;
           if (next >= 0) line[next] = { ...line[next], status: "pending" };
           Object.assign(patch, { line, step: next >= 0 ? next : i, status: next >= 0 ? "pending" : "approved", drafterUnread: true });
@@ -1162,6 +1471,43 @@ function Viewer({ d, me, staff, company, onClose, onRedraft, onEdit, inline = fa
       setComment(""); setCancelAsk(false);
     } catch (e) { window.alert(`처리 실패: ${e.message}`); } finally { setBusy(false); }
   };
+  // 💸 2026-11-04 지급완료 처리·취소 — 기안자에게 알림(가운데 팝업 drafterUnread + 서버 notifyApproval 푸시 + 공문함 기록)
+  const payable = canPay(d, me);
+  const pstate = payState(d);
+  const doPay = async () => {
+    const date = payAsk?.date || kstToday();
+    const memo = String(payAsk?.memo || "").trim();
+    if (!await kpConfirm(`「${d.title}」\n${fmtWon(d.amount)}을 ${date} 지급 완료로 처리할까요?\n기안자(${d.drafter?.name || ""})에게 알림이 갑니다.`)) return;
+    setBusy(true);
+    try {
+      const now = Date.now();
+      await updateDoc(doc(db, "approvals", d.id), {
+        paid: { at: now, by: me.uid, byName: me.name || "", date, memo },
+        ...(d.drafterUid !== me.uid ? { drafterUnread: true } : {}),
+        history: arrayUnion({ at: now, uid: me.uid, name: me.name || "", action: "지급 완료", comment: `지급일 ${date}${memo ? ` · ${memo}` : ""}` }),
+        updatedAt: serverTimestamp(),
+      });
+      if (d.drafterUid && d.drafterUid !== me.uid) {
+        sendInternalMail({
+          company, to: [{ uid: d.drafterUid, name: d.drafter?.name || "" }], kind: "approval", fromName: me.name,
+          subject: `[지급 완료] ${d.title} — ${fmtWon(d.amount)} 지급되었습니다`,
+          body: `[지급 완료] ${d.title} — ${fmtWon(d.amount)} 지급되었습니다.\n\n· 문서번호: ${d.docNo}\n· 지급일: ${date}\n· 처리: ${me.name || ""}${memo ? `\n· 메모: ${memo}` : ""}\n\n홈 › 전자결재 › 내 기안함에서 확인하세요.`,
+        }).catch(() => {});
+      }
+      setPayAsk(null);
+    } catch (e) { window.alert(`지급 완료 처리 실패: ${e.message}`); } finally { setBusy(false); }
+  };
+  const undoPay = async () => {
+    if (!await kpConfirm(`「${d.title}」의 지급 완료를 취소할까요?\n문서가 다시 「지급 대기」로 바뀝니다.`)) return;
+    setBusy(true);
+    try {
+      await updateDoc(doc(db, "approvals", d.id), {
+        paid: null,
+        history: arrayUnion({ at: Date.now(), uid: me.uid, name: me.name || "", action: "지급 취소", comment: d.paid?.date ? `지급일 ${d.paid.date} 처리 취소` : "" }),
+        updatedAt: serverTimestamp(),
+      });
+    } catch (e) { window.alert(`지급 취소 실패: ${e.message}`); } finally { setBusy(false); }
+  };
   // 🖨 A4 기준으로 나눠서 인쇄(긴 회의록·보고서도 글줄 중간이 잘리지 않게)
   const print = async () => {
     const box = paperRef.current?.closest?.("[data-fitpaper]"); const prev = box?.style.zoom;
@@ -1185,13 +1531,29 @@ function Viewer({ d, me, staff, company, onClose, onRedraft, onEdit, inline = fa
   return wrap(
       <div className={inline ? "w-full h-[calc(100vh-190px)] min-h-[640px] bg-[#F4F6FA] rounded-[20px] border border-[#E3E8F0] overflow-hidden flex flex-row" : "w-full max-w-[1280px] h-full md:h-[92vh] bg-[#F4F6FA] md:rounded-[24px] overflow-y-auto md:overflow-hidden flex flex-col md:flex-row shadow-[0_24px_60px_rgba(15,26,48,0.4)]"} onClick={(e) => e.stopPropagation()}>
         <div className="md:flex-1 md:overflow-auto p-3 md:p-6 bg-[#E9EDF3] order-2 md:order-1">
-          <FitPaper><ApprovalPaper paperRef={paperRef} form={form} data={d.data} title={d.title} line={d.line} cc={d.cc} drafter={d.drafter} docNo={d.docNo} createdMs={toMs(d.createdAt)} staff={staff} status={d.status} /></FitPaper>
+          <FitPaper><ApprovalPaper paperRef={paperRef} form={form} data={d.data} title={d.title} line={d.line} cc={d.cc} drafter={d.drafter} docNo={d.docNo} createdMs={toMs(d.createdAt)} staff={staff} status={d.status} paid={pstate === "paid" ? d.paid : null} /></FitPaper>
           {(d.images || []).length > 0 && (
-            <div className="max-w-[780px] mx-auto mt-4 bg-white rounded-2xl p-4">
-              <div className="text-[13.5px] font-black text-[#5B6B85] mb-2">첨부 {d.images.length}장</div>
-              <div className="grid grid-cols-3 gap-2">{d.images.map((src, i) => <a key={i} href={src} target="_blank" rel="noreferrer"><img src={src} alt="" className="w-full h-40 object-cover rounded-xl border border-[#E3E8F0]" /></a>)}</div>
+            <div className="max-w-[780px] mx-auto mt-4 bg-white rounded-2xl p-4" data-ap-attachments>
+              <div className="flex items-center gap-2 mb-2.5">
+                <span className="text-[11px] font-extrabold tracking-[0.22em] text-[#4B6CB7]" style={{ fontFamily: MONO }}>FILES</span>
+                <span className="text-[13.5px] font-black text-[#0F1A30] whitespace-nowrap">첨부 {d.images.length}장</span>
+                <span className="hidden sm:inline text-[12px] font-bold text-[#9AA9C3]">누르면 크게 보기</span>
+                <button type="button" disabled={allBusy} onClick={async () => { setAllBusy(true); try { await downloadAllAttachments(d.images, d.docNo); } catch (e) { window.alert(`다운로드 실패: ${e.message || e}`); } finally { setAllBusy(false); } }}
+                  className="ml-auto h-9 px-3.5 rounded-lg border border-[#DCE3EE] text-[13px] font-black text-[#1B2B4B] hover:border-[#4B6CB7] disabled:opacity-50 inline-flex items-center gap-1.5 whitespace-nowrap">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M12 4v11m0 0-4.5-4.5M12 15l4.5-4.5M5 20h14" /></svg>
+                  {allBusy ? "받는 중…" : "전체 다운로드"}
+                </button>
+              </div>
+              <div className="grid grid-cols-3 gap-2">{d.images.map((src, i) => (
+                <button key={i} type="button" onClick={() => setLightbox(i)} title={`첨부 ${i + 1} 크게 보기`} className="group relative block rounded-xl overflow-hidden border border-[#E3E8F0] focus:outline-none focus:ring-2 focus:ring-[#2D4C82]/40">
+                  <img src={src} alt={`첨부 ${i + 1}`} className="w-full h-28 sm:h-40 object-cover transition group-hover:scale-[1.02]" />
+                  <span className="absolute left-1.5 bottom-1.5 h-5 px-1.5 rounded-md bg-[#0F1A30]/80 text-white text-[10.5px] font-black grid place-items-center" style={{ fontFamily: MONO }}>{i + 1}/{d.images.length}</span>
+                </button>
+              ))}</div>
             </div>
           )}
+          {lightbox !== null && <ImageLightbox images={d.images || []} start={lightbox} docNo={d.docNo} onClose={() => setLightbox(null)} />}
+          {signOpen && <SignatureModal me={me} onClose={() => setSignOpen(false)} />}
         </div>
         <aside className="w-full md:w-[360px] shrink-0 bg-white md:border-l border-[#E3E8F0] flex flex-col order-1 md:order-2">
           <div className="px-5 py-4 border-b border-[#EEF1F6] flex items-center gap-2">
@@ -1205,9 +1567,43 @@ function Viewer({ d, me, staff, company, onClose, onRedraft, onEdit, inline = fa
             <div className="rounded-2xl p-4 text-white" style={{ background: "linear-gradient(120deg,#0F1A30,#2D4C82)" }}>
               <div className="text-[13px] font-bold text-white/60">{d.formLabel} · {d.drafter?.name} {d.drafter?.position}</div>
               <div className="text-[20px] font-black mt-0.5">{d.cancel?.status === "pending" && d.status === "approved" ? `결재 취소 검토 중 · ${d.cancel.line?.[d.cancel.step]?.name || ""} 차례` : `${STATUS[d.status]}${d.status === "pending" && d.line?.[d.step] ? ` · ${d.line[d.step].name} 차례${d.line[d.step].viewedAt ? "(열람함)" : ""}` : ""}`}</div>
-              {(d.amount > 0 || d.days > 0) && <div className="text-[14px] font-bold text-white/80 mt-1">{d.days > 0 ? `${d.days}일` : ""}{d.days > 0 && d.amount > 0 ? " · " : ""}{d.amount > 0 ? fmtWon(d.amount) : ""}</div>}
+              {(d.amount > 0 || d.days > 0) && <div className="text-[14px] font-bold text-white/80 mt-1 flex items-center gap-2 flex-wrap">{d.days > 0 ? `${d.days}일` : ""}{d.days > 0 && d.amount > 0 ? " · " : ""}{d.amount > 0 ? fmtWon(d.amount) : ""}
+                {pstate === "paid" && <span className="h-6 px-2 rounded-md bg-white text-[#9A1F15] text-[12px] font-black inline-flex items-center">지급완료 {String(d.paid.date || "").slice(5).replace("-", "/")}</span>}
+                {pstate === "wait" && <span className="h-6 px-2 rounded-md border border-white/35 text-white text-[12px] font-black inline-flex items-center">지급 대기</span>}
+              </div>}
               <div className="mt-3"><Progress d={d} /></div>
             </div>
+            {/* 💸 2026-11-04 지급완료 — 최종 승인된 지출 문서 */}
+            {pstate && (
+              <div className={`rounded-2xl p-4 space-y-2.5 ${pstate === "paid" ? "border border-[#E8C9C5] bg-[#FDF6F5]" : payable ? "border-2 border-[#1B2B4B] bg-white" : "border border-[#DCE3EE] bg-[#F8FAFD]"}`} data-ap-pay>
+                <div className="flex items-center gap-2">
+                  <span className={`text-[11px] font-extrabold tracking-[0.22em] ${pstate === "paid" ? "text-[#B42318]" : "text-[#4B6CB7]"}`} style={{ fontFamily: MONO }}>{pstate === "paid" ? "PAID" : "PAYMENT"}</span>
+                  <span className="text-[14px] font-black text-[#0F1A30] whitespace-nowrap">{pstate === "paid" ? "지급 완료" : "지급 대기"}</span>
+                  <span className="ml-auto text-[14px] font-black text-[#0F1A30] tabular-nums whitespace-nowrap">{fmtWon(d.amount)}</span>
+                </div>
+                {pstate === "paid" ? (
+                  <>
+                    <div className="text-[13px] text-[#3A4A66] leading-relaxed break-words">지급일 <b className="text-[#0F1A30] tabular-nums">{d.paid.date || ymd(d.paid.at)}</b> · 처리 {d.paid.byName || "-"}{d.paid.memo ? <><br />메모 {d.paid.memo}</> : null}</div>
+                    {payable && <button type="button" disabled={busy} onClick={undoPay} className="h-9 px-3.5 rounded-lg border border-[#DCE3EE] bg-white text-[13px] font-black text-[#5B6B85] disabled:opacity-50">지급 취소</button>}
+                  </>
+                ) : payable ? (
+                  payAsk ? (
+                    <div className="space-y-2">
+                      <div><div className="text-[12px] font-bold text-[#5B6B85] mb-1">지급일</div><CustomDatePicker value={payAsk.date} onChange={(e) => setPayAsk((p) => ({ ...p, date: e.target.value || kstToday() }))} className={inp} showIcon /></div>
+                      <div><div className="text-[12px] font-bold text-[#5B6B85] mb-1">메모 (선택)</div><input value={payAsk.memo} onChange={(e) => setPayAsk((p) => ({ ...p, memo: e.target.value }))} placeholder="예) 국민은행 계좌이체" className={inp} /></div>
+                      <div className="flex gap-2">
+                        <button type="button" onClick={() => setPayAsk(null)} className="flex-1 h-11 rounded-xl border border-[#DCE3EE] text-[14px] font-bold text-[#5B6B85]">닫기</button>
+                        <button type="button" disabled={busy} onClick={doPay} className="flex-[1.6] h-11 rounded-xl bg-[#0F1A30] text-white text-[14px] font-black disabled:opacity-50">지급 완료 확정</button>
+                      </div>
+                    </div>
+                  ) : (
+                    <button type="button" disabled={busy} onClick={() => setPayAsk({ date: kstToday(), memo: "" })} className="w-full h-12 rounded-xl text-white text-[15px] font-black shadow-[0_10px_22px_rgba(15,26,48,0.25)] disabled:opacity-50" style={{ background: "linear-gradient(120deg,#0F1A30,#2D4C82)" }}>₩ 지급 완료 처리</button>
+                  )
+                ) : (
+                  <div className="text-[12.5px] text-[#5B6B85] leading-relaxed">결재가 끝나 재무·경리 담당자의 지급을 기다리고 있습니다. 지급되면 알림이 갑니다.</div>
+                )}
+              </div>
+            )}
             {d.cancel && (
               <div className="rounded-2xl border border-[#DCE3EE] bg-[#F8FAFD] p-4">
                 <div className="text-[14px] font-black text-[#0F1A30]">결재 취소 요청 · {d.cancel.status === "pending" ? "진행 중" : d.cancel.status === "approved" ? "취소 완료" : "취소 반려"}</div>
@@ -1218,6 +1614,14 @@ function Viewer({ d, me, staff, company, onClose, onRedraft, onEdit, inline = fa
             {turn && (
               <div className="rounded-2xl border-2 border-[#1B2B4B] p-4 space-y-2.5">
                 <div className="text-[14px] font-black text-[#0F1A30]">{cTurn ? "결재 취소 요청 — 내 검토 차례" : "내 결재 차례입니다"}</div>
+                {!cTurn && (
+                  <div className="flex items-center gap-2.5 rounded-xl bg-[#F4F6FA] border border-[#E3E8F0] px-3 py-2" data-ap-mark-row>
+                    <span className="text-[10.5px] font-extrabold tracking-[0.2em] text-[#9AA9C3]" style={{ fontFamily: MONO }}>MARK</span>
+                    {me.markMode === "sign" && me.sign ? <img src={me.sign} alt="내 서명" className="h-9 max-w-[90px] object-contain" /> : <MiniStamp name={me.name} kind={d.line?.[d.step]?.kind} />}
+                    <span className="text-[13px] font-black text-[#0F1A30] min-w-0 truncate">{me.markMode === "sign" && me.sign ? "내 서명으로 결재" : "도장으로 결재"}</span>
+                    <button type="button" onClick={() => setSignOpen(true)} className="ml-auto h-8 px-3 rounded-lg border border-[#DCE3EE] bg-white text-[12.5px] font-black text-[#1B2B4B] hover:border-[#4B6CB7] shrink-0">{me.sign ? "변경" : "서명 등록"}</button>
+                  </div>
+                )}
                 <textarea value={comment} onChange={(e) => setComment(e.target.value)} rows={3} placeholder={cTurn ? "의견 (거부할 때는 사유 필수)" : "결재 의견 (반려할 때는 꼭 적어 주세요)"} className={`${inp} h-auto py-2`} />
                 <div className="flex gap-2">
                   <button type="button" disabled={busy} onClick={() => act(cTurn ? "c-reject" : "reject")} className="flex-1 h-11 rounded-xl border border-[#0F1A30] text-[#0F1A30] text-[14px] font-black disabled:opacity-50">{cTurn ? "취소 거부" : "반려"}</button>
@@ -1253,7 +1657,7 @@ function Viewer({ d, me, staff, company, onClose, onRedraft, onEdit, inline = fa
                 const hidden = (d.hiddenBy || []).includes(me.uid);
                 const finished = d.status !== "pending" && !(d.status === "approved" && d.cancel?.status === "pending");
                 if (hidden) return <button type="button" onClick={() => updateDoc(doc(db, "approvals", d.id), { hiddenBy: arrayRemove(me.uid) }).catch((e) => window.alert(e.message))} className="h-9 px-3.5 rounded-lg border border-[#0F1A30] text-[13.5px] font-black text-[#0F1A30]">보관함으로 되돌리기</button>;
-                if (!finished) return null;
+                if (!finished || !((d.participants || []).includes(me.uid) || isAdminRole(me.role))) return null;
                 return <button type="button" onClick={async () => { if (!await kpConfirm("내 보관함에서 이 문서를 삭제할까요?\n(회사 기록 원본은 남고, 결재함 › 삭제한 문서에서 되돌릴 수 있습니다)")) return; await updateDoc(doc(db, "approvals", d.id), { hiddenBy: arrayUnion(me.uid) }).catch((e) => window.alert(e.message)); onClose(); }} className="h-9 px-3.5 rounded-lg border border-[#DCE3EE] text-[13.5px] font-black text-[#5B6B85]">삭제</button>;
               })()}
               <button type="button" onClick={print} className="h-9 px-3.5 rounded-lg border border-[#DCE3EE] text-[13.5px] font-black text-[#3A4A66]">인쇄</button>
@@ -1312,6 +1716,8 @@ function DocList({ docs, onOpen, empty, uid, compact = false }) {
             <div className="flex items-center gap-x-2 gap-y-1 flex-wrap">
               <span className="text-[12px] font-black px-1.5 py-0.5 rounded border border-[#0F1A30] text-[#0F1A30] shrink-0">{d.formLabel}</span>
               {myTurn(d, uid) && !cancelTurn(d, uid) && <span className="text-[12px] font-black px-1.5 py-0.5 rounded bg-[#0F1A30] text-white shrink-0">내 차례</span>}
+              {payState(d) === "paid" && <span className="text-[12px] font-black px-1.5 py-0.5 rounded border border-[#E8C4C0] bg-[#FDF3F2] text-[#9A1F15] shrink-0" title={`지급일 ${d.paid?.date || ""}`}>지급완료</span>}
+              {payState(d) === "wait" && <span className="text-[12px] font-black px-1.5 py-0.5 rounded border border-dashed border-[#9AB0D6] bg-[#F5F8FD] text-[#2D4C82] shrink-0">지급 대기</span>}
               {(mineUnread(d, uid) || ccUnread(d, uid)) && <span className="w-[18px] h-[18px] rounded-full bg-rose-500 text-white text-[11px] font-black flex items-center justify-center shrink-0">N</span>}
               <span className="text-[14.5px] font-black text-[#0F1A30] truncate min-w-0 max-w-full">{d.title}</span>
             </div>
@@ -1591,12 +1997,22 @@ export default function ApprovalCenter({ company, me, page, setPage, openId, onO
     return onSnapshot(query(collection(db, "approvals"), where("company", "==", company)),
       (s) => setCompanyAll(s.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => toMs(b.createdAt) - toMs(a.createdAt))), () => setCompanyAll([]));
   }, [admin, tab, company]);
+  // 💸 2026-11-04 지급 대기 — 경리(test)·관리자 역할은 참여하지 않은 지출 문서도 볼 수 있어(규칙상 읽기 허용) 회사 지출 결의를 따로 구독
+  const payReader = ["test", "hrAcct", "admin", "totalMaster"].includes(me.role);
+  const [payPool, setPayPool] = React.useState([]);
+  React.useEffect(() => {
+    if (!payReader || !company) return undefined;
+    return onSnapshot(query(collection(db, "approvals"), where("company", "==", company), where("cat", "==", "expense")),
+      (s) => setPayPool(s.docs.map((d) => ({ id: d.id, ...d.data() }))), () => setPayPool([]));
+  }, [payReader, company]);
+  const [signOpen, setSignOpen] = React.useState(false); // ✍ 내 서명 설정
   const meFull = React.useMemo(() => {
     const st = (staff || []).find((u) => u.uid === me.uid);
     const pf = myProfile || {};
-    return { ...me, name: personName(pf) || personName(st) || me.name, team: pf.team || st?.team || me.team || "", position: pf.position || st?.position || me.position || "" };
+    return { ...me, name: personName(pf) || personName(st) || me.name, team: pf.team || st?.team || me.team || "", position: pf.position || st?.position || me.position || "",
+      sign: pf.approvalSignature || "", markMode: pf.approvalMarkMode === "sign" ? "sign" : "stamp" }; // ✍ 2026-11-04 내 서명·결재 표시
   }, [me, staff, myProfile]);
-  const cur = open ? ([...(list || []), ...(companyAll || [])].find((x) => x.id === open) || null) : null;
+  const cur = open ? ([...(list || []), ...(companyAll || []), ...payPool].find((x) => x.id === open) || null) : null;
   // ⭐ 2026-11-01 다른 메뉴(결재함↔근태 신청 등)로 옮기면 열려 있던 문서를 닫는다 — 예전엔 마지막으로 본 문서가 다른 메뉴에서 팝업으로 떴다
   React.useEffect(() => { setOpen(null); }, [page]);
   // 배너를 눌러 들어오면 그 문서를 바로 연다
@@ -1617,9 +2033,13 @@ export default function ApprovalCenter({ company, me, page, setPage, openId, onO
     cc: L.filter((d) => (d.ccUids || []).includes(uid)),
     company: companyAll,
     hidden: hiddenL,
+    // 💸 내가 지급 처리할 수 있는 지급 대기 문서(오래된 것부터)
+    paywait: [...new Map([...L, ...payPool.filter((d) => !isHidden(d))].map((d) => [d.id, d])).values()]
+      .filter((d) => payState(d) === "wait" && canPay(d, meFull)).sort((a, b) => toMs(a.updatedAt || a.createdAt) - toMs(b.updatedAt || b.createdAt)),
   };
   const mineL = L.filter((d) => d.drafterUid === uid);
-  const mineSets = { all: mineL, pending: mineL.filter((d) => d.status === "pending"), approved: mineL.filter((d) => d.status === "approved"), rejected: mineL.filter((d) => d.status === "rejected"), cancelled: mineL.filter((d) => d.status === "cancelled"), withdrawn: mineL.filter((d) => d.status === "withdrawn") };
+  const mineSets = { all: mineL, pending: mineL.filter((d) => d.status === "pending"), approved: mineL.filter((d) => d.status === "approved"),
+    paywait: mineL.filter((d) => payState(d) === "wait"), paid: mineL.filter((d) => payState(d) === "paid"), rejected: mineL.filter((d) => d.status === "rejected"), cancelled: mineL.filter((d) => d.status === "cancelled"), withdrawn: mineL.filter((d) => d.status === "withdrawn") };
   const redraft = (d) => { setOpen(null); setPreset({ ...d, editId: null }); setPage(d.cat); };
   const edit = (d) => { setOpen(null); setPreset({ ...d, editId: d.id }); setPage(d.cat); };
   const unreadIn = (arr) => (arr || []).filter((d) => mineUnread(d, uid)).length;
@@ -1645,14 +2065,15 @@ export default function ApprovalCenter({ company, me, page, setPage, openId, onO
           {(() => {
             // ⭐ 2026-10-31 탭 숫자는 그 탭의 문서 수(검색·기간 적용), 새 결과는 빨간 점으로 따로
             const F = (k) => applyListTools(k === "company" ? (companyAll || []) : (sets[k] || []), lf) || [];
-            const keys = ["todo", "progress", "done", "rejected", "cancelled", "cc", ...(admin ? ["company"] : []), "hidden"];
-            const label = { todo: "결재 대기", progress: "진행 중", done: "결재 완료", rejected: "반려", cancelled: "결재 취소", cc: "참조 문서", company: "회사 전체", hidden: "삭제한 문서" };
+            const showPay = isFinUser(meFull) || sets.paywait.length > 0;
+            const keys = ["todo", ...(showPay ? ["paywait"] : []), "progress", "done", "rejected", "cancelled", "cc", ...(admin ? ["company"] : []), "hidden"];
+            const label = { todo: "결재 대기", paywait: "지급 대기", progress: "진행 중", done: "결재 완료", rejected: "반려", cancelled: "결재 취소", cc: "참조 문서", company: "회사 전체", hidden: "삭제한 문서" };
             const pool = [...(list || []), ...(companyAll || [])];
             const drafters = [...new Map(pool.filter((d) => d.drafterUid).map((d) => [d.drafterUid, d.drafter?.name || "-"])).entries()].sort((a, b) => String(a[1]).localeCompare(String(b[1]), "ko"));
             return (<>
               <Tabs tab={tab} setTab={setTab} tabs={keys.map((k) => [k, label[k], F(k).length, k === "cc" ? F(k).filter((d) => ccUnread(d, uid)).length : 0])} />
               <ListTools f={lf} setF={setLf} drafters={drafters} />
-              <DocList compact={wide} uid={uid} docs={tab === "company" ? (companyAll === null ? null : F("company")) : (list === null ? null : F(tab))} onOpen={(d) => setOpen(d.id)} empty={lf.q || lf.from || lf.who ? "조건에 맞는 문서가 없습니다" : tab === "todo" ? "결재할 문서가 없습니다" : "문서가 없습니다"} />
+              <DocList compact={wide} uid={uid} docs={tab === "company" ? (companyAll === null ? null : F("company")) : (list === null ? null : F(tab))} onOpen={(d) => setOpen(d.id)} empty={lf.q || lf.from || lf.who ? "조건에 맞는 문서가 없습니다" : tab === "todo" ? "결재할 문서가 없습니다" : tab === "paywait" ? "지급을 기다리는 문서가 없습니다" : "문서가 없습니다"} />
             </>);
           })()}
         </div>
@@ -1662,7 +2083,7 @@ export default function ApprovalCenter({ company, me, page, setPage, openId, onO
           {(() => {
             // ⭐ 2026-10-31 숫자는 문서 수(예전엔 "새 결과" 수라 목록 2건인데 1로 보이고, 열어 보면 숫자가 사라졌다) — 새 결과는 빨간 점
             const M = (k) => applyListTools(mineSets[k] || [], lf) || [];
-            const keys = [["all", "전체"], ["pending", "진행 중"], ["approved", "완료"], ["rejected", "반려"], ["cancelled", "결재 취소"], ["withdrawn", "회수"]];
+            const keys = [["all", "전체"], ["pending", "진행 중"], ["approved", "완료"], ...(mineSets.paywait.length || mineSets.paid.length ? [["paywait", "지급 대기"], ["paid", "지급완료"]] : []), ["rejected", "반려"], ["cancelled", "결재 취소"], ["withdrawn", "회수"]];
             return (<>
               <Tabs tab={tab} setTab={setTab} tabs={keys.map(([k, l]) => [k, l, M(k).length, unreadIn(M(k))])} />
               <ListTools f={lf} setF={setLf} />
@@ -1687,6 +2108,12 @@ export default function ApprovalCenter({ company, me, page, setPage, openId, onO
               <div className="text-[20px] font-black tabular-nums" style={{ fontFamily: MONO }}>{v}</div>
             </div>
           ))}
+          {/* ✍ 2026-11-04 내 서명 — 결재란에 도장 대신 내 서명 */}
+          <button type="button" onClick={() => setSignOpen(true)} title="결재할 때 결재란에 넣을 표시(도장·서명)를 정합니다" data-ap-mysign
+            className="w-full md:w-auto h-11 md:h-auto md:self-stretch pl-2 pr-3.5 rounded-2xl bg-white/[0.07] border border-white/15 hover:bg-white/[0.12] inline-flex items-center gap-2 text-left shrink-0">
+            <span className="w-9 h-7 md:h-9 rounded-lg bg-white grid place-items-center overflow-hidden">{meFull.markMode === "sign" && meFull.sign ? <img src={meFull.sign} alt="" className="max-w-[32px] max-h-[24px] object-contain" /> : <span className="w-6 h-6 rounded-full border-2 border-[#1B2B4B] text-[#1B2B4B] text-[8px] font-black grid place-items-center">승인</span>}</span>
+            <span className="leading-tight"><span className="block text-[13px] font-black">내 서명</span><span className="block text-[11px] font-bold text-white/55">{meFull.markMode === "sign" && meFull.sign ? "서명으로 결재" : "도장으로 결재"}</span></span>
+          </button>
           {!isCat && page !== "lines" && (
             <div className="grid grid-cols-2 md:flex md:flex-col gap-1.5 w-full md:w-auto">
               {APPROVAL_CATS.map((c) => <button key={c.key} type="button" onClick={() => { confirmLeave().then((ok) => { if (ok) { setPreset(null); setPage(c.key); } }); }} className="h-8 px-3 rounded-lg bg-white text-[#0F1A30] text-[13px] font-black inline-flex items-center gap-1.5"><ShellIcon name={c.icon} size={13} />{c.label}</button>)}
@@ -1716,6 +2143,7 @@ export default function ApprovalCenter({ company, me, page, setPage, openId, onO
         </div>
       ) : <>{page === "inbox" && inboxList}{page === "mine" && mineList}</>}
       {page === "lines" && <LinesPage company={company} me={meFull} staff={staff} />}
+      {signOpen && <SignatureModal me={meFull} onClose={() => setSignOpen(false)} />}
 
       {cur && !(wide && (page === "inbox" || page === "mine")) && <Viewer d={cur} me={meFull} staff={staff} company={company} onClose={() => setOpen(null)} onRedraft={redraft} onEdit={edit} />}
     </div>
@@ -1729,5 +2157,5 @@ export function ApprovalDocPreview({ d, company }) {
   const staff = useCompanyStaff(company || d?.company || "");
   if (!d) return null;
   const form = formOf(d.form);
-  return <FitPaper><ApprovalPaper form={form} data={d.data || {}} title={d.title} line={d.line} cc={d.cc} drafter={d.drafter} docNo={d.docNo} createdMs={toMs(d.createdAt)} staff={staff || []} status={d.status} /></FitPaper>;
+  return <FitPaper><ApprovalPaper form={form} data={d.data || {}} title={d.title} line={d.line} cc={d.cc} drafter={d.drafter} docNo={d.docNo} createdMs={toMs(d.createdAt)} staff={staff || []} status={d.status} paid={isPayDoc(d) ? d.paid : null} /></FitPaper>;
 }
