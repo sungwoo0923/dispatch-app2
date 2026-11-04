@@ -103,9 +103,11 @@ const LevelSwitch = ({ value, onChange, size = "md" }) => (
   </div>
 );
 
-export default function RolePermissionsPanel({ users: allUsers = [], roleLabels = {} }) {
+export default function RolePermissionsPanel({ users: allUsers = [], roleLabels = {}, lockScope = "" }) {
   // 🏢 2026-11-01 적용 범위 — "" = 전체 운송사(공통), 운송사명 = 그 운송사만(운송사 설정이 공통 설정보다 먼저)
-  const [scope, setScope] = React.useState("");
+  // ⭐ 2026-11-04 lockScope — 회사 마스터용: 자기 회사 전용 설정만(범위 바꾸기·공통 설정 수정 불가)
+  const [scopeState, setScope] = React.useState(lockScope || "");
+  const scope = lockScope || scopeState;
   const [scopeQ, setScopeQ] = React.useState("");
   const [scopeOpen, setScopeOpen] = React.useState(false);
   const globalRoles = useGlobalCustomRoles();
@@ -115,8 +117,9 @@ export default function RolePermissionsPanel({ users: allUsers = [], roleLabels 
   // 운송사 목록 — 가입 승인된 운송사(transportApplications) + 직원 목록의 회사명
   const [appCos, setAppCos] = React.useState([]);
   React.useEffect(() => {
+    if (lockScope) return;
     getDocs(collection(db, "transportApplications")).then((sn) => setAppCos(sn.docs.map((d) => d.data()).filter((a) => a.status !== "rejected").map((a) => String(a.companyName || "").trim()).filter(Boolean))).catch(() => setAppCos([]));
-  }, []);
+  }, [lockScope]);
   const companies = React.useMemo(() => [...new Set([...appCos, ...allUsers.map((u) => String(u.companyName || "").trim())].filter(Boolean))].sort((a, b) => a.localeCompare(b, "ko")), [allUsers, appCos]);
   const users = scope ? allUsers.filter((u) => String(u.companyName || "").trim() === scope) : allUsers;
   const [view, setView] = React.useState("edit"); // edit | matrix
@@ -230,7 +233,7 @@ export default function RolePermissionsPanel({ users: allUsers = [], roleLabels 
           <div className="text-[17px] font-black">{scope ? `${scope} 전용 권한` : "전체 운송사 공통 권한"}</div>
           <div className="text-[12px] text-white/60">{scope ? "여기서 바꾼 내용은 이 운송사에만 적용되고, 바꾸지 않은 역할은 공통 설정을 그대로 따릅니다" : "운송사를 고르면 그 운송사만 따로 권한을 바꿀 수 있습니다(예: A운송사만 관리자에게 인사관리부 열기)"}</div>
         </div>
-        <div className="ml-auto flex items-center gap-2 relative">
+        {!lockScope && <div className="ml-auto flex items-center gap-2 relative">
           {scope && <button onClick={() => { setScope(""); setSelectedKey("admin"); }} className="h-10 px-4 rounded-xl bg-white/10 border border-white/20 text-[13px] font-bold">전체 운송사로</button>}
           <div className="relative">
             <input value={scopeQ} onChange={(e) => { setScopeQ(e.target.value); setScopeOpen(true); }} onFocus={() => setScopeOpen(true)} placeholder="운송사 검색해서 고르기" className="h-10 w-[240px] px-3.5 rounded-xl bg-white text-[#0F1A30] text-[13.5px] font-semibold outline-none" />
@@ -245,7 +248,7 @@ export default function RolePermissionsPanel({ users: allUsers = [], roleLabels 
               </div>
             )}
           </div>
-        </div>
+        </div>}
       </div>
 
       {/* 상단: 보기 전환 + 범례 */}

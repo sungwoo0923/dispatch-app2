@@ -85,6 +85,8 @@ export default function NoticeBoard({ notices = [], me, canWrite, isViewer, onEd
   const isNew = (n) => !isNoticeScheduled(n) && Date.now() - whenOf(n) < 24 * 3600e3;
   const isSA = ["superadmin", "totalMaster"].includes(me?.role);
   const canManage = (n) => !n._platform && !isViewer && (isSA || (canWrite && (n.authorUid ? n.authorUid === me?.uid : true)));
+  // ⭐ 2026-11-04 관리자(·마스터)는 임원 등 다른 사람이 올린 회사 공지도 삭제할 수 있다(수정은 작성자만)
+  const canRemove = (n) => !!n && !n._platform && !isViewer && (canManage(n) || me?.role === "admin" || me?.isMaster === true);
   const togglePin = async (n) => {
     if (!n.pinned && visible.filter((x) => x.pinned && !x._platform).length >= MAX_PINNED) { window.alert(`상단 고정은 ${MAX_PINNED}개까지입니다. 다른 고정을 먼저 해제해 주세요.`); return; }
     await updateDoc(doc(db, "notices", n.id), { pinned: !n.pinned, pinnedAt: n.pinned ? null : Date.now() }).catch((e) => window.alert(e.message));
@@ -100,11 +102,15 @@ export default function NoticeBoard({ notices = [], me, canWrite, isViewer, onEd
         <div className="px-4 sm:px-8 py-5 border-b border-[#EEF1F6]">
           <div className="flex items-center gap-2">
             <button type="button" onClick={() => setOpenId(null)} className="h-9 px-3.5 rounded-xl border border-[#DCE3EE] text-[13px] font-black text-[#1B2B4B] hover:bg-[#F5F8FD]">← 목록</button>
-            {canManage(cur) && (
+            {canManage(cur) ? (
               <div className="ml-auto flex gap-1.5">
                 <button type="button" onClick={() => togglePin(cur)} className="h-9 px-3.5 rounded-xl border border-[#DCE3EE] text-[12.5px] font-black text-[#1B2B4B] hover:bg-[#F5F8FD]">{cur.pinned ? "고정 해제" : "상단 고정"}</button>
                 <button type="button" onClick={() => onEdit(cur)} className="h-9 px-3.5 rounded-xl bg-[#0F1A30] text-white text-[12.5px] font-black">수정</button>
                 <button type="button" onClick={() => remove(cur)} className="h-9 px-3.5 rounded-xl border border-[#DCE3EE] text-[12.5px] font-black text-[#7A879C] hover:bg-[#F5F8FD]">삭제</button>
+              </div>
+            ) : canRemove(cur) && (
+              <div className="ml-auto flex gap-1.5">
+                <button type="button" onClick={() => remove(cur)} title="관리자 권한으로 삭제" className="h-9 px-3.5 rounded-xl border border-[#DCE3EE] text-[12.5px] font-black text-[#7A879C] hover:bg-[#F5F8FD]">삭제</button>
               </div>
             )}
           </div>

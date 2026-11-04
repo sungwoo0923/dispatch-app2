@@ -8213,6 +8213,8 @@ const newVer = useNewVersion(); // ★ 새 버전이 배포되면 버전 표시 
     if (m === "전자결재") return ownOk(m) ? "ok" : "hidden"; // 일반 화면은 홈 › 전자결재
     // ⭐ 2026-10-31 경리·인사 부서 메뉴는 그 부서 권한(또는 그 메뉴를 켠 직접 만든 권한)에서만
     if (["회계관리", "인사관리부", "출근기록부", "직원관리", "기사서류", "자금관리", "비품관리", "연차관리", "입퇴사관리", "증명서발급"].includes(m)) return ["회계관리", "자금관리", "비품관리", "인사관리부", "증명서발급"].includes(m) && ownOk(m) ? "ok" : "hidden";
+    // ⭐ 2026-11-04 회사 마스터가 권한 관리에서 관리자 메뉴를 숨겨도 본인은 잠기지 않게(다시 고칠 수 있도록)
+    if (m === "관리자메뉴" && role === "admin" && myProfileDoc?.isMaster === true) return "ok";
     if (customRole && getMenuAccess(customRoles, role, m) === "hidden") return "hidden";
     const isBlocked = !customRole && (role === "user" || role === "test" || isViewer) && blockedMenus.includes(m);
     if (m === "관리자메뉴" && role !== "admin" && role !== "totalMaster" && !isViewer) return "hidden";

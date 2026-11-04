@@ -687,6 +687,9 @@ service cloud.firestore {
       allow update, delete: if coMatch(resource.data) && canPostNotice()
         && (resource.data.get('authorUid', '') == request.auth.uid || resource.data.get('authorUid', '') == ''
             || isSuperEmail() || myUser().get('role', '') == 'totalMaster');
+      // ⭐ 2026-11-04 관리자·마스터는 같은 회사 공지(임원이 올린 것 포함)를 삭제할 수 있다(수정은 작성자만)
+      allow delete: if coMatch(resource.data) && isApproved()
+        && (myUser().get('role', '') == 'admin' || myUser().get('isMaster', false) == true);
       // 읽음 표시는 같은 회사 직원 누구나
       allow update: if coMatch(resource.data) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['readBy']);
       // 💬 댓글·좋아요는 같은 회사 직원(조회전용·기사·화주 제외)
@@ -732,6 +735,11 @@ service cloud.firestore {
     match /companyRoleOverrides/{co} {
       allow read: if isApproved();
       allow write: if isTotalMasterUser();
+      // ⭐ 2026-11-04 최고관리자가 "마스터 권한 관리"를 켠 회사(companyFeatures/{회사}.masterRolePerms)는 그 회사 마스터도 자기 회사 것만
+      allow write: if isApproved() && myCo() == co && myUser().get('isMaster', false) == true
+        && exists(/databases/$(database)/documents/companyFeatures/$(co))
+        && get(/databases/$(database)/documents/companyFeatures/$(co)).data.get('masterRolePerms', false) == true
+        && request.resource.data.get('companyName', co) == co;
     }
     // 공통 권한(역할별 메뉴) — 최고관리자만 바꾼다(예전엔 승인된 누구나 쓸 수 있었음)
     match /customRoles/{key} {

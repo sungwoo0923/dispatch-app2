@@ -38,6 +38,7 @@ import GsheetMinePanel from "./GsheetMinePanel";
 import BlindMinePanel from "./BlindMinePanel";
 import TrashPanel from "./TrashPanel";
 import { useCustomRoles, roleScreen } from "./customRoles";
+import { useCompanyFeatures } from "./companyFeatures"; // ⭐ 2026-11-04 마스터 권한 관리(회사별로 켬)
 import { EditableText } from "./EditMode";
 import { useLoadOrderRange, monthEnd, monthStart } from "./orderHistory";
 import { fmtBizNo, fmtPhone } from "./formatInput";
@@ -244,6 +245,9 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
   const meDoc = users.find((u) => u.id === me?.uid);
   const isCompanyMaster = !isTotalMaster && meDoc?.isMaster === true && meDoc?.role !== "shipper" && meDoc?.role !== "driver";
   const canAdmin = isTotalMaster || isCompanyMaster;
+  // ⭐ 2026-11-04 권한 관리 — 최고관리자가 "마스터 권한 관리"를 켠 회사(예: 태진)만 마스터에게도 보인다(자기 회사 전용으로만)
+  const coFeat = useCompanyFeatures(effectiveCompany);
+  const masterPerms = isCompanyMaster && coFeat.masterRolePerms === true;
   const hrOpt = useHrOptions(effectiveCompany);
   const positionsForTeam = hrOpt.positionsFor;
   const TEAM_OPTIONS = hrOpt.teams;
@@ -834,7 +838,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
     { key: "ops", label: "운영 관리", tabs: ["loginSessions", "sessionLogs", "forceUpdate", "permissions", "sheetImport", "gsheetMine", "blindMine", "trash", "companyReset"] },
     { key: "settings", label: "환경 설정", tabs: ["billing", "setup", "copyTemplate", "landingEdit", "notifTemplate"] },
   ]
-    .map((g) => ({ ...g, tabs: g.tabs.filter((t) => (!REQUIRES_MASTER_TABS.has(t) || isTotalMaster) && (t !== "billing" || billingAcc.view)) })) // 💳 구독·결제는 경리·재무·임원·대표만(billingAccess.js)
+    .map((g) => ({ ...g, tabs: g.tabs.filter((t) => (!REQUIRES_MASTER_TABS.has(t) || isTotalMaster || (t === "permissions" && masterPerms)) && (t !== "billing" || billingAcc.view)) })) // 💳 구독·결제는 경리·재무·임원·대표만(billingAccess.js)
     // 🏢 부서 관리자메뉴 — 경리: 회원 승인 + 구독·결제 / 인사: 회원(인사권) + 로그인 관리. 배차용(기사복사 문구·화주사 등)은 뺀다
     .map((g) => (deptMode ? { ...g, tabs: g.tabs.filter((t) => (DEPT_ADMIN_TABS[deptMode] || []).includes(t) || (t === "billing" && billingAcc.view)) } : g))
     .filter((g) => g.tabs.length > 0);
@@ -1554,6 +1558,10 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
           {/* ====== 권한 관리 탭 (최고관리자 전용) ====== */}
           {adminTab === "permissions" && isTotalMaster && (
             <RolePermissionsPanel users={users} roleLabels={roleLabels} />
+          )}
+          {/* ⭐ 2026-11-04 회사 마스터 — 자기 회사 전용 권한만(공통 권한·다른 운송사는 못 바꿈) */}
+          {adminTab === "permissions" && !isTotalMaster && masterPerms && (
+            <RolePermissionsPanel users={users.filter((u) => String(u.companyName || "").trim() === String(effectiveCompany || "").trim())} roleLabels={roleLabels} lockScope={String(effectiveCompany || "").trim()} />
           )}
 
           {/* ====== 랜딩페이지 편집 탭 (최고관리자 전용) ====== */}
