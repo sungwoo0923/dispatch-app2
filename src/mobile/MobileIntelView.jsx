@@ -1,5 +1,6 @@
 // src/mobile/MobileIntelView.jsx — 경영인텔리전스 (모바일 totalMaster 전용)
 import React, { useState, useMemo, useEffect, useRef } from "react";
+import { useRouteCarrierFilter } from "../routeCarriers"; // ⭐ 2026-11-05 고정노선 운송업체 설정
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from "recharts";
@@ -261,7 +262,10 @@ function getY(dateStr) { return dateStr?.slice(0, 4) ?? ""; }
 // ────────────────────────────────────────────────
 //  MAIN COMPONENT
 // ────────────────────────────────────────────────
-export default function MobileIntelView({ dispatchData = [], cardVersionB = false }) {
+export default function MobileIntelView({ dispatchData: allDispatchData = [], cardVersionB = false }) {
+  // ⭐ 2026-11-05 고정노선 운송업체 설정 — 끈 업체 오더는 경영인텔리전스 매출에서 뺀다
+  const carrierF = useRouteCarrierFilter();
+  const dispatchData = React.useMemo(() => carrierF.filter(allDispatchData) || [], [allDispatchData, carrierF]);
   const [verified, setVerified] = useState(() => {
     return sessionStorage.getItem("exec_intel_ok") === "1";
   });

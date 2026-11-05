@@ -24,6 +24,7 @@ import { createPortal } from "react-dom";
 import { BannerCard, BannerStyles } from "./BannerCenter";
 import { isNoticeUnread, useMinuteTick } from "./notifyCore";
 import HomeDeck, { buildPastStats } from "./HomeDeck";
+import { useRouteCarrierFilter } from "./routeCarriers"; // ⭐ 2026-11-05 고정노선 운송업체 설정
 import KpSubNav from "./KpSubNav";
 import { MailWorkspace, MAIL_FOLDERS, useMailCounts, folderBadge } from "./InternalMail";
 import ApprovalCenter, { useApprovalCounts } from "./Approval";
@@ -415,7 +416,7 @@ function lockHomeGroups(planId, groups) {
   return out;
 }
 
-export default function HomeDashboard({ role, user, userCompany = "", pending, delayed, dispatchData = [], onOrderDoubleClick, dept = null, onDeptGo }) {
+export default function HomeDashboard({ role, user, userCompany = "", pending, delayed, dispatchData: allDispatchData = [], onOrderDoubleClick, dept = null, onDeptGo }) {
   // ⭐ 년 매출·당월 매출·누적 오더 — 예전엔 새로고침할 때마다 올해 오더 전체(수천~만 건)를 서버에서 다시 받아
   // 새로고침이 느리고 버벅였다. "실시간 범위(최근 7일) 이전" 기간의 합계는 하루 동안 거의 안 바뀌므로
   // 하루 1번만 받아 계산해 PC에 저장해 두고(homePastStats), 최근 7일~은 실시간 데이터로 더한다.
@@ -430,14 +431,18 @@ export default function HomeDashboard({ role, user, userCompany = "", pending, d
         : (userCompany || localStorage.getItem("userCompany") || DEFAULT_COMPANY);
     } catch { return userCompany || DEFAULT_COMPANY; }
   })();
+  // ⭐ 2026-11-05 고정노선 운송업체 설정 — 끈 업체 오더는 홈 매출·실적·대시보드 합계에서 뺀다(미배차 목록은 그대로 전체)
+  const carrierF = useRouteCarrierFilter(homeCompany);
+  const dispatchData = useMemo(() => carrierF.filter(allDispatchData) || [], [allDispatchData, carrierF]);
   const [pastCache, setPastCache] = useState(() => {
     try {
       const c = JSON.parse(localStorage.getItem("homePastStats") || "null");
-      return c && c.v === 4 && c.company === homeCompany && c.liveStart === liveStartStr && c.calYear === new Date().getFullYear() ? c : null;
+      return c && c.v === 4 && c.company === homeCompany && c.liveStart === liveStartStr && c.calYear === new Date().getFullYear() && (!carrierF.ready || (c.cs || "") === carrierF.sig) ? c : null;
     } catch { return null; }
   });
   useEffect(() => {
     markBootBase(pcBootStore, "homeMounted");
+    if (!carrierF.ready) return undefined; // ⭐ 2026-11-05 운송업체 설정을 받은 뒤 계산
     // 오늘 이미 계산해 둔 지난 기간 합계가 있으면 다시 받지 않는다(첫 진입 로딩 화면에 "준비 완료" 알림)
     let alive = true;
     // 합계만 계산하고 화면 데이터에는 합치지 않는다 — 수천 건을 화면 데이터에 합치면 그 순간 전체 화면이 다시 그려져 버벅인다
@@ -448,14 +453,15 @@ export default function HomeDashboard({ role, user, userCompany = "", pending, d
         .then((snaps) => {
           const rows = snaps.flatMap((sn) => sn.docs.map((d) => d.data() || {})).filter((row) =>
             (row.companyName || DEFAULT_COMPANY) === homeCompany &&
-            row.source !== "transport_transmit" && row.배차상태 !== "배차취소" && !["취소", "배차취소", "오더취소", "취소됨"].includes(row.상태));
-          const c = { ...sumStats(rows), ...buildPastStats(rows, new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 7)), v: 4, company: homeCompany, liveStart: liveStartStr, calYear: y, savedAt: Date.now() };
+            row.source !== "transport_transmit" && row.배차상태 !== "배차취소" && !["취소", "배차취소", "오더취소", "취소됨"].includes(row.상태) &&
+            carrierF.isCountable(row)); // ⭐ 2026-11-05 운송업체 설정
+          const c = { ...sumStats(rows), ...buildPastStats(rows, new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 7)), v: 4, company: homeCompany, liveStart: liveStartStr, calYear: y, savedAt: Date.now(), cs: carrierF.sig };
           try { localStorage.setItem("homePastStats", JSON.stringify(c)); } catch { /* 용량 초과 등은 무시 */ }
           if (alive) setPastCache(c);
         })
         .catch((e) => console.warn("홈 통계(지난 기간) 불러오기 실패:", e));
     };
-    if (pastCache) {
+    if (pastCache && (pastCache.cs || "") === carrierF.sig) {
       markBootBase(pcBootStore, "home");
       // 저장값이 있어도 그 뒤에 초기화·가져오기가 있었으면 뒤에서 조용히 다시 계산한다
       getDoc(doc(db, "systemConfig", "dataVersion")).then((snap) => {
@@ -468,7 +474,7 @@ export default function HomeDashboard({ role, user, userCompany = "", pending, d
     }
     return () => { alive = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [carrierF.ready, carrierF.sig]);
   const isEditingHandoverRef = useRef(false);
   const [toast, setToast] = useState(null);
   const [firestoreSeenReady, setFirestoreSeenReady] = useState(false);
@@ -792,7 +798,7 @@ export default function HomeDashboard({ role, user, userCompany = "", pending, d
   }, [topClients]);
 
   const allPendingOrders = useMemo(() => {
-    return dispatchData
+    return allDispatchData // ⭐ 2026-11-05 미배차 목록은 운송업체 설정과 상관없이 전체
       .filter(d => {
         if (d?.배차상태 === "배차완료") return false;
         const 상차일 = d?.상차일자 || d?.상차일 || d?.상차 || "";
@@ -804,7 +810,7 @@ export default function HomeDashboard({ role, user, userCompany = "", pending, d
         const db2 = b?.상차일자 || b?.상차일 || b?.상차 || "";
         return da < db2 ? -1 : da > db2 ? 1 : 0;
       });
-  }, [dispatchData]);
+  }, [allDispatchData]);
 
   // ⭐ 미배차 롤링 목록은 PendingTicker(아래)가 따로 넘긴다 — 3초마다 홈 화면 전체를 다시 그리던 원인
 

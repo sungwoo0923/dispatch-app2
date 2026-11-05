@@ -16,6 +16,7 @@ import CustomDatePicker from "./CustomDatePicker";
 import ApprovalCenter, { myTurn, useApprovalCounts, useApprovalSettings, setAutoApproveDaily } from "./Approval";
 import HandoverCenter, { useHandoverUnread } from "./HandoverCenter";
 import { buildPastStats } from "./HomeDeck";
+import { useRouteCarrierFilter } from "./routeCarriers"; // ⭐ 2026-11-05 고정노선 운송업체 설정(끈 업체 오더는 매출에서 뺌)
 import { pcLiveWindowStart, pcPrevDay } from "./orderHistory";
 import { isTMUser } from "./staffFilter";
 import { personName } from "./userNames";
@@ -55,26 +56,28 @@ function readPastCache(company, liveStart) {
 // 올해 일별 매출·이익·건수 = 지난 기간(하루 1번 계산해 둔 값) + 실시간 오더
 export function useYearDays({ company, dispatchData = [], pastCache, liveStart }) {
   const ls = liveStart || pcLiveWindowStart();
+  const carrierF = useRouteCarrierFilter(company); // ⭐ 2026-11-05
   const [past, setPast] = React.useState(() => pastCache || readPastCache(company, ls));
   React.useEffect(() => { if (pastCache) setPast(pastCache); }, [pastCache]);
   React.useEffect(() => {
-    if (pastCache || past || !company) return undefined;
+    if (pastCache || !company || !carrierF.ready) return undefined;
+    if (past && (past.cs || "") === carrierF.sig) return undefined; // ⭐ 2026-11-05 운송업체 설정이 바뀌면 다시 계산
     let alive = true;
     const y = new Date().getFullYear();
     Promise.all(["orders", "dispatch"].map((col) => getDocs(query(collection(db, col), where("상차일", ">=", `${y}-01-01`), where("상차일", "<=", pcPrevDay(ls))))))
       .then((snaps) => {
-        const rows = snaps.flatMap((sn) => sn.docs.map((d) => d.data() || {})).filter((r) => (r.companyName || DEFAULT_COMPANY) === company && r.source !== "transport_transmit" && !isCancelled(r));
+        const rows = snaps.flatMap((sn) => sn.docs.map((d) => d.data() || {})).filter((r) => (r.companyName || DEFAULT_COMPANY) === company && r.source !== "transport_transmit" && !isCancelled(r) && carrierF.isCountable(r));
         const thisMonth = kstToday().slice(0, 7);
         const sum = rows.reduce((a, r) => ({ year: a.year + toWon(r.청구운임) }), { year: 0 });
-        const c = { ...sum, ...buildPastStats(rows, thisMonth), v: 4, company, liveStart: ls, calYear: y, savedAt: Date.now() };
+        const c = { ...sum, ...buildPastStats(rows, thisMonth), v: 4, company, liveStart: ls, calYear: y, savedAt: Date.now(), cs: carrierF.sig };
         if (alive) setPast(c);
       })
-      .catch(() => { if (alive) setPast({ days: {}, clients: {}, month: "" }); });
+      .catch(() => { if (alive) setPast({ days: {}, clients: {}, month: "", cs: carrierF.sig }); });
     return () => { alive = false; };
-  }, [company, ls]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [company, ls, carrierF.ready, carrierF.sig]); // eslint-disable-line react-hooks/exhaustive-deps
   return React.useMemo(() => {
     const thisMonth = kstToday().slice(0, 7);
-    const liveRows = (dispatchData || []).filter((r) => !isCancelled(r) && r.source !== "transport_transmit" && dateOf(r) >= ls);
+    const liveRows = (dispatchData || []).filter((r) => !isCancelled(r) && r.source !== "transport_transmit" && dateOf(r) >= ls && carrierF.isCountable(r)); // ⭐ 2026-11-05
     const live = buildPastStats(liveRows, thisMonth);
     const days = {};
     Object.entries(past?.days || {}).forEach(([d, v]) => { if (d < ls) days[d] = [...v]; });
@@ -83,7 +86,7 @@ export function useYearDays({ company, dispatchData = [], pastCache, liveStart }
     if (past?.month === thisMonth) Object.entries(past.clients || {}).forEach(([k, v]) => { clients[k] = (clients[k] || 0) + v; });
     Object.entries(live.clients).forEach(([k, v]) => { clients[k] = (clients[k] || 0) + v; });
     return { days, clients, ready: !!past };
-  }, [past, dispatchData, ls]);
+  }, [past, dispatchData, ls, carrierF]);
 }
 function useCompanyQuery(name, company, field = "companyName", extra = null) {
   const [rows, setRows] = React.useState(null);

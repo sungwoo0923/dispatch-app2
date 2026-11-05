@@ -4825,9 +4825,31 @@ async function generateRecurringOrders(date, { company = null, ids = null, check
   return { created, names };
 }
 
+// ⭐ 2026-11-05 고정노선 운송업체 설정(routeCarrierSettings/{회사}, 화면 src/routeCarriers.js 와 같은 규칙)
+//  끄거나 삭제한 운송업체의 고정노선 오더(배차표Id)는 매출·수익 합계에서 뺀다 — 설정이 없으면 전부 포함
+async function routeCarrierCountable(company) {
+  const key = (s) => String(s ?? "").replace(/\s+/g, "").toLowerCase();
+  let st = null;
+  try { const snap = await db.collection("routeCarrierSettings").doc(String(company)).get(); st = snap.exists ? snap.data() : null; } catch (e) { st = null; }
+  if (!st) return () => true;
+  const off = new Set();
+  (Array.isArray(st.removed) ? st.removed : []).forEach((n) => { const k = key(n); if (k) off.add(k); });
+  (Array.isArray(st.carriers) ? st.carriers : []).forEach((c) => { const k = key(c && c.name); if (!k) return; if (c.on === false) off.add(k); else off.delete(k); });
+  if (!off.size) return () => true;
+  const carrierOf = (o) => {
+    const ex = o && o.추가정보;
+    if (ex && typeof ex === "object") {
+      if (String(ex.운송업체 ?? "").trim()) return String(ex.운송업체).trim();
+      for (const k of Object.keys(ex)) if (/운송업체|운송사/.test(k) && String(ex[k] ?? "").trim()) return String(ex[k]).trim();
+    }
+    return String((o && o.운송업체) ?? "").trim();
+  };
+  return (o) => { if (!o || !o.배차표Id) return true; const c = carrierOf(o); return !c || !off.has(key(c)); };
+}
 // 📊 마감 요약 — 그날(상차일) 오더 건수·배차완료·미배차·매출·수익 + 내일 오더/미배차
 async function buildDailySummary(company, date) {
   const tomorrow = addDaysStr(date, 1);
+  const countable = await routeCarrierCountable(company); // ⭐ 2026-11-05 운송업체 설정
   const rows = { [date]: [], [tomorrow]: [] };
   for (const col of ["orders", "dispatch"]) {
     const snap = await db.collection(col).where("상차일", "in", [date, tomorrow]).get();
@@ -4839,8 +4861,8 @@ async function buildDailySummary(company, date) {
   }
   const num = (v) => Number(String(v ?? "").replace(/[^\d.-]/g, "")) || 0;
   const t = rows[date];
-  const revenue = t.reduce((a, x) => a + num(x.청구운임), 0);
-  const pay = t.reduce((a, x) => a + num(x.기사운임), 0);
+  const revenue = t.filter(countable).reduce((a, x) => a + num(x.청구운임), 0); // ⭐ 2026-11-05 끈 운송업체 오더는 매출·수익에서 뺀다
+  const pay = t.filter(countable).reduce((a, x) => a + num(x.기사운임), 0);
   return {
     company, date, count: t.length,
     done: t.filter((x) => x.배차상태 === "배차완료").length,

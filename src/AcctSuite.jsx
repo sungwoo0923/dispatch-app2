@@ -9,6 +9,7 @@ import React from "react";
 import { collection, doc, getDoc, getDocs, onSnapshot, query, setDoc, where, serverTimestamp } from "firebase/firestore";
 import { ResponsiveContainer, ComposedChart, Bar, Line, XAxis, YAxis, Tooltip, CartesianGrid, PieChart, Pie, Cell } from "recharts";
 import { db, auth, DEFAULT_COMPANY } from "./firebase";
+import { useRouteCarrierFilter } from "./routeCarriers"; // ⭐ 2026-11-05
 import { BookHero, BookCard, Chip, Sheet, MONO } from "./OfficeBooks";
 import { isTMUser } from "./staffFilter";
 import { leaveEntitlement, leaveUseOf } from "./approvalForms";
@@ -30,6 +31,7 @@ const NAVY = ["#0F1A30", "#1B2B4B", "#2D4C82", "#4B6CB7", "#8FB0F0", "#CFE0FF", 
 const yearCache = new Map();
 export function useYearOrders(company, fixedRows = []) {
   const y = new Date().getFullYear();
+  const carrierF = useRouteCarrierFilter(company); // ⭐ 2026-11-05 고정노선 운송업체 설정 — 끈 업체 오더는 회계에서 뺀다
   const key = `${company}|${y}`;
   const [rows, setRows] = React.useState(() => yearCache.get(key) || null);
   React.useEffect(() => {
@@ -45,7 +47,7 @@ export function useYearOrders(company, fixedRows = []) {
       .catch(() => { if (alive) setRows([]); });
     return () => { alive = false; };
   }, [key, company, y]);
-  return React.useMemo(() => (rows ? [...rows, ...(fixedRows || []).map((r) => ({ ...r, 상차일: r.날짜, 배차상태: "배차완료" }))] : null), [rows, fixedRows]);
+  return React.useMemo(() => (rows ? [...carrierF.filter(rows), ...(fixedRows || []).map((r) => ({ ...r, 상차일: r.날짜, 배차상태: "배차완료" }))] : null), [rows, fixedRows, carrierF]);
 }
 
 const Tip = ({ active, payload, label }) => (active && payload?.length ? (
