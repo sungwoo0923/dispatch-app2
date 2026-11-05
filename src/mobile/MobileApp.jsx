@@ -115,6 +115,7 @@ import OrderScanModal, { scanDropDate } from "../OrderScanModal";
 // ⭐ 2026-11-02 운임규칙 — 회사별 운임 규칙(운임구분 → 기사운임·수수료 자동)
 import { useFareRules, FareTypeSelect, FareRuleHint, fareFormChange } from "../fareRules";
 import DetailFilterButton, { applyDetailFilter } from "../DetailFilter"; // 🔎 2026-11-03 세부검색(최대 3차)
+import { useFixedRouteAutoDispatch } from "../FixedRoutes"; // ⭐ 2026-11-05 고정노선 배차 이어서 만들기
 import { VehicleTypePicker, currentCustomVehicleTypes, useVehicleTypes } from "../vehicleTypes"; // 🚚 2026-11-02 회사 공용 차량종류
 import { LogisMark, LogisWordmark, LogisTag, LogisLockup } from "../brand"; // 🔷 2026-11-04 LogisWeb 로고
 
@@ -2039,6 +2040,8 @@ export default function MobileApp({ role: realRole, user, userCompany = "", forc
   const readyStage3 = useDelayedFlag(secondaryReady, 2400);
   const readyStage4 = useDelayedFlag(secondaryReady, 3600);
   const readyStage5 = useDelayedFlag(secondaryReady, 4800);
+  // ⭐ 2026-11-05 고정노선 배차 이어서 만들기 — 휴대폰으로만 접속하는 날(새 달 첫날 등)에도 이번 달 말일까지 채운다(PC와 같은 함수 · 같은 문서 번호라 중복 없음)
+  useFixedRouteAutoDispatch(readyStage5 && role !== "viewer" ? (getTenant() || userCompany || localStorage.getItem("userCompany") || "") : "");
   // ⭐ 글자 크기 설정(기본/크게/더 크게) — 아래 zoom 리셋 로직에서 함께 적용되어야
   // 화면 전체(글자+버튼+아이콘)가 실제로 커진다.
   const [fontScale, setFontScale] = useState(() => Number(localStorage.getItem("fontScale") || "1"));
