@@ -1,6 +1,6 @@
 // src/driver/DriverLogin.jsx
 import { coDocKey } from "../coKey";
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { auth, db } from "../firebase";
 import { createUserWithEmailAndPassword, signOut } from "firebase/auth";
 import { doc, getDoc, setDoc, deleteDoc, serverTimestamp } from "firebase/firestore";
@@ -8,6 +8,7 @@ import { useNavigate } from "react-router-dom";
 import BigCheck from "../components/BigCheck";
 import { LogisMark, LogisWordmark, LogisTag } from "../brand"; // 🔷 2026-11-04 LogisWeb 로고
 import { legacyDriverEmail, scopedDriverEmail, signInDriver } from "./driverEmail";
+import { checkDriverUserDoc, describeDriverLoginError, driverLoginError, keepDriverLoginError, takeDriverLoginError, setDriverBusy, sameText } from "./driverLoginErrors"; // ⭐ 2026-11-05 실패 사유 안내
 
 // ⭐ 사용자 요청 — 한 번 로그인한 폰에서는 소속회사명/차량번호/이름을 기억하고(정보 저장),
 // "자동 로그인"을 켜두면 로그인 화면에 들어오는 순간 저장된 정보로 바로 로그인한다.
@@ -15,6 +16,15 @@ import { legacyDriverEmail, scopedDriverEmail, signInDriver } from "./driverEmai
 const SAVED_KEY = "driverLoginSaved";
 function loadSaved() {
   try { return JSON.parse(localStorage.getItem(SAVED_KEY) || "null"); } catch { return null; }
+}
+
+// ⭐ 2026-11-05 실패 종류 표시(네이비 원 + 기호) — 승인 대기는 모래시계, 연결 문제는 신호, 나머지는 느낌표
+function ErrBadge({ tone, size = 34, dark = false }) {
+  const sym = tone === "wait" ? "⌛" : tone === "net" ? "⟳" : tone === "stop" ? "■" : "!";
+  return (
+    <span className={`shrink-0 rounded-full grid place-items-center font-black ${dark ? "bg-white/12 text-[#8FB0F0] border border-white/20" : "bg-[#1B2B4B] text-white"}`}
+      style={{ width: size, height: size, fontSize: Math.round(size * (sym === "■" ? 0.34 : 0.5)) }}>{sym}</span>
+  );
 }
 
 export default function DriverLogin() {
@@ -25,41 +35,61 @@ export default function DriverLogin() {
   const [nameState, setName] = useState(keep ? saved.name || "" : "");
   const [rememberInfo, setRememberInfo] = useState(saved ? saved.remember !== false : true);
   const [autoLogin, setAutoLogin] = useState(saved ? saved.autoLogin === true : false);
-  const [error, setError] = useState("");
+  // ⭐ 2026-11-05 실패 안내 — { title, message, hint, tone }. 화면이 다시 그려져도 남도록 sessionStorage에도 둔다
+  const [error, setErrorState] = useState(() => takeDriverLoginError());
+  const [errorPopup, setErrorPopup] = useState(() => !!error);
+  const setError = (info) => { setErrorState(info || null); setErrorPopup(!!info); keepDriverLoginError(info || null); };
   const [loggingIn, setLoggingIn] = useState(false);
+  const busyRef = useRef(false);
+  const restoredErrRef = useRef(!!error); // 재마운트 전에 떠 있던 실패 안내가 있었는지
   const navigate = useNavigate();
 
   // 페이지 진입 시 무조건 초기화 → 자동 로그인 설정이면 저장된 정보로 바로 로그인
   useEffect(() => {
     (async () => {
+      // ⭐ 2026-11-05 다른 화면이 로그인 확인 중 표시를 남겨둔 채 끝났으면 지운다
+      setDriverBusy(false);
       await signOut(auth).catch(() => {});
       localStorage.removeItem("role");
       localStorage.removeItem("uid");
       const justLoggedOut = sessionStorage.getItem("driverJustLoggedOut") === "1";
       sessionStorage.removeItem("driverJustLoggedOut");
       const sv = loadSaved();
-      if (!justLoggedOut && sv?.autoLogin && sv.companyName && sv.carNo && sv.name) login(sv);
+      // 방금 실패 안내가 떠 있으면 자동 로그인으로 다시 시도하지 않는다(같은 실패가 반복되며 안내가 사라짐)
+      if (!justLoggedOut && !restoredErrRef.current && sv?.autoLogin && sv.companyName && sv.carNo && sv.name) login(sv);
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // ⭐ 2026-11-05 로그인 확인 — 실패 이유를 코드로 나눠 던지고, 마지막 catch에서 한 번에 안내한다.
+  //  [원인] 예전엔 signInDriver가 로그인에 성공하는 순간 App.jsx가 users 문서(role:"driver", approved)를 받아
+  //  /driver-login → /driver-home 으로 먼저 이동시켰다. 그 뒤 이 화면이 이름·회사가 다르다며 로그아웃하면
+  //  /driver-home이 다시 /driver-login으로 돌려보내 이 화면이 새로 그려졌고(error 상태 초기화 + 진입 시 로그아웃),
+  //  기사님 눈에는 "새로고침되고 아무 안내 없이 로그인 화면"으로 보였다. 확인 중에는 App이 이동하지 않도록
+  //  setDriverBusy(true)로 알리고, 안내는 sessionStorage에도 남겨 재마운트돼도 보이게 한다.
   const login = async (override) => {
     // override: 자동 로그인 시 저장된 값(아직 state 반영 전일 수 있어 직접 받는다)
-    const companyName = override?.companyName ?? companyNameState;
-    const carNo = override?.carNo ?? carNoState;
-    const name = override?.name ?? nameState;
-    if (loggingIn) return;
-    setError("");
-    if (!companyName.trim() || !carNo.trim() || !name.trim()) {
-      setError("회사명, 차량번호, 이름을 모두 입력해주세요.");
+    const companyName = String(override?.companyName ?? companyNameState).trim();
+    const carNo = String(override?.carNo ?? carNoState).trim();
+    const name = String(override?.name ?? nameState).trim();
+    if (busyRef.current) return;
+    const ctx = { companyName, carNo, name };
+    setError(null);
+    const empty = [!companyName && "소속 운송사명", !carNo && "차량번호", !name && "이름"].filter(Boolean);
+    if (empty.length) {
+      setError(describeDriverLoginError(driverLoginError("driver/empty", { field: empty.join(" · ") }), ctx));
       return;
     }
 
-    let email = legacyDriverEmail(carNo.trim());
-    const password = carNo.trim();
+    let email = legacyDriverEmail(carNo);
+    const password = carNo;
 
+    busyRef.current = true;
     setLoggingIn(true);
+    setDriverBusy(true);
+    let ok = false;
     try {
+      if (typeof navigator !== "undefined" && navigator.onLine === false) throw driverLoginError("driver/network");
       let uid;
       try {
         // ⭐ 2026-11-01 예전 계정 → 회사별 계정 순서로 로그인(다른 운송사 같은 차량번호 대응)
@@ -67,6 +97,10 @@ export default function DriverLogin() {
         uid = r.uid;
         email = r.email;
       } catch (signInErr) {
+        // ⭐ 2026-11-05 인터넷 끊김·시도 과다·정지 계정은 계정 만들기를 시도하지 않고 바로 안내
+        if (["auth/network-request-failed", "auth/too-many-requests", "auth/user-disabled"].includes(signInErr?.code)) throw signInErr;
+        // 다른 운송사 계정만 있었으면 "운송사가 다름", 그 외에는 "등록된 차량번호 없음"으로 안내
+        const failErr = signInErr?.code === "driver/other-company" ? signInErr : driverLoginError("driver/not-registered", { cause: signInErr });
         // ⭐ 사용자 요청 — 관리자가 PC 기사관리에서 지입차를 미리 등록해두면(차량번호로
         // 문서만 만들어짐, 인증 계정은 아직 없음) 그 기사님이 여기서 바로 로그인하려 해도
         // 로그인용 계정 자체가 없어 매번 실패했다(기사 등록 화면을 따로 거쳐야만 했음).
@@ -75,105 +109,94 @@ export default function DriverLogin() {
         // 만들어 이어받는다 — 기사 입장에서는 그냥 "로그인"만 하면 되는 경험이 된다.
         // ⭐ 버그수정 — drivers 컬렉션은 보안규칙상 로그인한 사용자만 읽을 수 있는데,
         // 이 조회를 계정 생성보다 먼저 하면 아직 비로그인 상태라 매번 permission-denied가
-        // 나서(바깥 catch에 먹혀 "차량번호 또는 이름이 올바르지 않습니다"로만 보임)
-        // 선등록 문서가 실제로 있어도 절대 못 찾았다. 계정을 먼저 만들어 로그인 상태를
+        // 나서 선등록 문서가 실제로 있어도 절대 못 찾았다. 계정을 먼저 만들어 로그인 상태를
         // 확보한 뒤 조회하고, 선등록 문서가 없거나 이름·회사명이 다르면 방금 만든
         // 계정을 그 자리에서 삭제해 원상복구한다.
-        const normPlate = carNo.trim().replace(/\s+/g, "").toUpperCase();
+        const normPlate = carNo.replace(/\s+/g, "").toUpperCase();
         let res;
         try {
           res = await createUserWithEmailAndPassword(auth, email, password);
         } catch (createErr) {
+          if (createErr?.code === "auth/network-request-failed") throw createErr;
           // 예전 계정 이름을 다른 운송사 기사가 쓰고 있으면 회사별 계정으로 만든다
-          if (createErr?.code !== "auth/email-already-in-use") throw signInErr;
+          if (createErr?.code !== "auth/email-already-in-use") throw failErr;
           try {
-            email = scopedDriverEmail(companyName.trim(), carNo.trim());
+            email = scopedDriverEmail(companyName, carNo);
             res = await createUserWithEmailAndPassword(auth, email, password);
-          } catch { throw signInErr; }
+          } catch (e2) { throw e2?.code === "auth/network-request-failed" ? e2 : failErr; }
         }
         uid = res.user.uid;
 
         // ⭐ 2026-11-01 PC 선등록 문서 — 회사별 이름(회사__차량번호) 먼저, 없으면 예전 이름(차량번호)
-        const preKey = coDocKey(companyName.trim(), normPlate);
-        let preSnap = await getDoc(doc(db, "drivers", preKey));
-        if (!preSnap.exists() && preKey !== normPlate) {
-          const legacySnap = await getDoc(doc(db, "drivers", normPlate));
-          if (legacySnap.exists() && (legacySnap.data().companyName || "").trim() === companyName.trim()) preSnap = legacySnap;
+        // ⭐ 2026-11-05 두 문서를 동시에 읽는다(예전엔 차례로 읽어 왕복이 두 번)
+        const preKey = coDocKey(companyName, normPlate);
+        let preSnap, legacySnap;
+        try {
+          [preSnap, legacySnap] = await Promise.all([
+            getDoc(doc(db, "drivers", preKey)),
+            preKey !== normPlate ? getDoc(doc(db, "drivers", normPlate)) : Promise.resolve(null),
+          ]);
+        } catch (readErr) {
+          await res.user.delete().catch(() => {});
+          throw readErr;
         }
+        if (!preSnap.exists() && legacySnap?.exists() && sameText(legacySnap.data().companyName, companyName)) preSnap = legacySnap;
         const preId = preSnap.exists() ? preSnap.id : normPlate;
         if (!preSnap.exists()) {
           await res.user.delete().catch(() => {});
-          throw signInErr;
+          // 예전 이름 문서가 다른 운송사 것이면 "운송사가 다름"
+          if (legacySnap?.exists() && (legacySnap.data().companyName || "").trim()) throw driverLoginError("driver/company-mismatch");
+          throw failErr;
         }
         const d = preSnap.data();
-        const sameName = (d.이름 || d.name || "").trim() === name.trim();
-        const sameCompany = (d.companyName || "").trim() === companyName.trim();
-        if (!sameName || !sameCompany) {
+        if (!sameText(d.이름 || d.name, name)) {
           await res.user.delete().catch(() => {});
-          throw signInErr;
+          throw driverLoginError("driver/name-mismatch");
+        }
+        if (!sameText(d.companyName, companyName)) {
+          await res.user.delete().catch(() => {});
+          throw driverLoginError("driver/company-mismatch");
         }
 
         const phone = d.전화번호 || d.phone || "";
         const common = {
-          uid, name: name.trim(), carNo: carNo.trim(), phone,
+          uid, name, carNo, phone,
           vehicleType: d.vehicleType || "",
           차량종류: d.차량종류 || "", 차량톤수: d.차량톤수 || "",
           거주지: d.거주지 || "", 요청사항: d.요청사항 || "",
-          companyName: companyName.trim(),
+          companyName: (d.companyName || companyName).trim(),
           // 관리자가 PC에서 직접 등록한 차량이므로 승인 절차 없이 바로 사용 가능하게 한다.
           approved: true,
         };
-        await setDoc(doc(db, "users", uid), {
-          ...common, email, role: "driver",
-          termsAgreed: true, privacyAgreed: true, gpsAgreed: true,
-          createdAt: serverTimestamp(),
-        });
         // ⭐ 버그수정 — PC 기사관리 화면은 drivers/{id} 문서를 이름/차량번호/전화번호(한글
         // 필드)로 읽는데, 여기서 영문 필드(name/carNo/phone)만 썼더니 로그인 직후 PC
         // 기사관리 목록에서 해당 기사 줄이 전부 "-"로 보였다(모바일 DriverHome은 반대로
         // 영문 필드를 읽으므로 영문도 그대로 유지) — 양쪽 다 쓴다.
-        await setDoc(doc(db, "drivers", uid), {
-          ...common,
-          이름: name.trim(), 차량번호: carNo.trim(), 전화번호: phone,
-          mainStatus: "대기", subStatus: "대기", status: "대기", state: "대기", goStatus: "대기",
-          active: false, totalDistance: 0,
-          등급: d.등급 || "일반", 담당자: d.담당자 || null, 근무요일: d.근무요일 || [], 메모: d.메모 || "",
-          등록자: d.등록자 || "",
-          createdAt: d.createdAt || serverTimestamp(),
-          updatedAt: serverTimestamp(),
-        });
+        // ⭐ 2026-11-05 users·drivers 두 문서는 서로 기다릴 필요가 없어 동시에 쓴다(선등록 문서 정리는 users가 생긴 뒤)
+        await Promise.all([
+          setDoc(doc(db, "users", uid), {
+            ...common, email, role: "driver",
+            termsAgreed: true, privacyAgreed: true, gpsAgreed: true,
+            createdAt: serverTimestamp(),
+          }),
+          setDoc(doc(db, "drivers", uid), {
+            ...common,
+            이름: name, 차량번호: carNo, 전화번호: phone,
+            mainStatus: "대기", subStatus: "대기", status: "대기", state: "대기", goStatus: "대기",
+            active: false, totalDistance: 0,
+            등급: d.등급 || "일반", 담당자: d.담당자 || null, 근무요일: d.근무요일 || [], 메모: d.메모 || "",
+            등록자: d.등록자 || "",
+            createdAt: d.createdAt || serverTimestamp(),
+            updatedAt: serverTimestamp(),
+          }),
+        ]);
         await deleteDoc(doc(db, "drivers", preId)).catch(() => {});
       }
 
       const snap = await getDoc(doc(db, "users", uid));
-      if (!snap.exists()) {
-        setError("등록된 기사 정보가 없습니다.");
-        await signOut(auth);
-        return;
-      }
-
-      const u = snap.data();
-      // ⭐ 기사앱은 기사 계정만 로그인
-      if (u.role !== "driver") {
-        setError("기사 계정이 아닙니다. 가입하신 로그인 화면(운송사/화주사)에서 로그인해주세요.");
-        await signOut(auth);
-        return;
-      }
-      if (!u.approved) {
-        setError("관리자 승인 대기중입니다.");
-        await signOut(auth);
-        return;
-      }
-      if (u.name && u.name !== name.trim()) {
-        setError("차량번호 또는 이름이 올바르지 않습니다.");
-        await signOut(auth);
-        return;
-      }
-      if (u.companyName && u.companyName !== companyName.trim()) {
-        setError("소속 회사명이 올바르지 않습니다.");
-        await signOut(auth);
-        return;
-      }
+      const u = snap.exists() ? snap.data() : null;
+      const bad = checkDriverUserDoc(u, { name, companyName });
+      if (bad) throw driverLoginError(bad, { reason: u?.rejectReason || u?.rejectedReason || u?.거절사유 || "" });
 
       localStorage.setItem("role", "driver");
       localStorage.setItem("uid", uid);
@@ -181,18 +204,20 @@ export default function DriverLogin() {
         const remember = override ? true : rememberInfo;
         const auto = override ? true : autoLogin;
         localStorage.setItem(SAVED_KEY, JSON.stringify(remember
-          ? { remember: true, autoLogin: auto, companyName: companyName.trim(), carNo: carNo.trim(), name: name.trim() }
+          ? { remember: true, autoLogin: auto, companyName, carNo, name }
           : { remember: false, autoLogin: false }));
       } catch { /* 저장 실패 무시 */ }
-
-      setTimeout(() => {
-        navigate("/driver-home", { replace: true });
-      }, 300);
+      ok = true;
+      // ⭐ 2026-11-05 확인 끝 — App이 /driver-home을 그리도록 표시를 내리고 바로 이동(App이 역할을 받기 전이면 잠깐 로딩 화면)
+      setDriverBusy(false);
+      navigate("/driver-home", { replace: true });
     } catch (err) {
-      console.error(err);
-      setError("차량번호 또는 이름이 올바르지 않습니다.");
-      await signOut(auth);
+      console.error("[기사 로그인 실패]", err?.code || "", err);
+      setError(describeDriverLoginError(err, ctx));
+      await signOut(auth).catch(() => {});
     } finally {
+      if (!ok) setDriverBusy(false);
+      busyRef.current = false;
       setLoggingIn(false);
     }
   };
@@ -209,14 +234,14 @@ export default function DriverLogin() {
   };
   const field = (key, label, input) => (
     <div className="mb-3">
-      <label className="block mb-1 text-[11px] font-extrabold tracking-[0.12em] text-[#7A879C]">{label}</label>
-      <div className="group flex items-center gap-2.5 h-[46px] px-3.5 rounded-[13px] bg-[#F5F7FB] border border-[#E3E8F0] transition focus-within:bg-white focus-within:border-[#2D4C82] focus-within:shadow-[0_0_0_4px_rgba(45,76,130,0.10)]">
+      <label className="block mb-1.5 text-[13.5px] font-black text-[#3A4A66]">{label}</label>
+      <div className="group flex items-center gap-2.5 h-[54px] px-3.5 rounded-2xl bg-[#F5F7FB] border border-[#E3E8F0] transition focus-within:bg-white focus-within:border-[#2D4C82] focus-within:shadow-[0_0_0_4px_rgba(45,76,130,0.10)]">
         <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" className="text-[#9AA9C3] group-focus-within:text-[#1B2B4B] shrink-0">{fieldIcon[key]}</svg>
         {input}
       </div>
     </div>
   );
-  const inputCls = "flex-1 min-w-0 bg-transparent outline-none text-[15px] font-semibold text-[#0F1A30] placeholder:text-[#B4BFD0] placeholder:font-medium";
+  const inputCls = "flex-1 min-w-0 bg-transparent outline-none text-[17px] font-bold text-[#0F1A30] placeholder:text-[#B4BFD0] placeholder:font-medium";
 
   return (
     <>
@@ -276,8 +301,8 @@ export default function DriverLogin() {
             <h1 className="mt-1 text-[22px] sm:text-[26px] font-black text-[#0F1A30] tracking-tight">기사 로그인</h1>
             <p className="text-[12.5px] sm:text-[13.5px] text-[#7A879C] mt-1 mb-5 sm:mb-7">소속 회사 · 차량번호 · 이름으로 로그인하세요</p>
 
-            {field("company", "소속 회사명", (
-              <input value={companyNameState} onChange={(e) => setCompanyName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && login()} placeholder="가입한 운송사명" className={inputCls} />
+            {field("company", "소속 운송사명", (
+              <input value={companyNameState} onChange={(e) => setCompanyName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && login()} placeholder="소속된 운송사명 입력" className={inputCls} />
             ))}
             {field("car", "차량번호", (
               <input value={carNoState} onChange={(e) => setCarNo(e.target.value)} onKeyDown={(e) => e.key === "Enter" && login()} placeholder="예: 경기97가1234" className={inputCls} />
@@ -292,14 +317,22 @@ export default function DriverLogin() {
               <BigCheck checked={autoLogin} onChange={(v) => { setAutoLogin(v); if (v) setRememberInfo(true); }} label="자동 로그인" />
             </div>
 
+            {/* ⭐ 2026-11-05 실패 안내 카드 — 팝업을 닫아도 다시 로그인할 때까지 남는다(큰 글씨) */}
             {error && (
-              <div className="flex gap-2 text-[13px] font-semibold text-[#0F1A30] mb-4 bg-[#F2F6FC] border border-[#D9E3F3] rounded-xl px-3.5 py-2.5">
-                <span className="text-[#1B2B4B] font-black">!</span><span>{error}</span>
+              <div role="alert" data-testid="driver-login-error" className="mb-4 rounded-2xl border-2 border-[#2D4C82]/30 bg-[#F2F6FC] px-4 py-3.5">
+                <div className="flex items-start gap-3">
+                  <ErrBadge tone={error.tone} size={34} />
+                  <div className="min-w-0">
+                    <div className="text-[17px] font-black text-[#0F1A30] leading-snug">{error.title}</div>
+                    <div className="mt-1 text-[14.5px] font-bold text-[#1B2B4B] leading-relaxed break-keep">{error.message}</div>
+                    {error.hint && <div className="mt-1 text-[13.5px] font-semibold text-[#5B6B85] leading-relaxed break-keep">{error.hint}</div>}
+                  </div>
+                </div>
               </div>
             )}
 
             <button onClick={() => login()} disabled={loggingIn}
-              className="w-full h-[50px] rounded-[14px] text-white text-[15px] font-black tracking-[0.04em] flex items-center justify-center gap-2 shadow-[0_14px_28px_rgba(15,26,48,0.28)] hover:brightness-110 active:scale-[0.99] transition disabled:opacity-60"
+              className="w-full h-14 rounded-2xl text-white text-[17px] font-black tracking-[0.04em] flex items-center justify-center gap-2 shadow-[0_14px_28px_rgba(15,26,48,0.28)] hover:brightness-110 active:scale-[0.99] transition disabled:opacity-60"
               style={{ background: "linear-gradient(120deg, #0F1A30 0%, #1B2B4B 55%, #2D4C82 100%)" }}>
               {loggingIn ? "확인 중…" : "로그인"}
               {!loggingIn && <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M13 6l6 6-6 6" /></svg>}
@@ -317,6 +350,44 @@ export default function DriverLogin() {
         </div>
       </div>
     </div>
+
+    {/* ⭐ 2026-11-05 로그인 확인 중 — 가운데 창(여러 번 누르지 않도록) */}
+    {loggingIn && (
+      <div className="fixed inset-0 z-[100050] bg-[#060E1F]/55 flex items-center justify-center p-6" data-testid="driver-login-busy">
+        <div className="w-full max-w-[320px] rounded-2xl bg-white shadow-2xl px-6 py-6 text-center">
+          <div className="mx-auto w-12 h-12 rounded-full border-4 border-[#DCE3EE] border-t-[#2D4C82] animate-spin" />
+          <div className="mt-4 text-[18px] font-black text-[#0F1A30]">로그인 확인 중…</div>
+          <div className="mt-1 text-[14px] font-semibold text-[#5B6B85]">잠시만 기다려 주세요</div>
+        </div>
+      </div>
+    )}
+
+    {/* ⭐ 2026-11-05 실패 이유 팝업(네이비) — 확인을 누르면 닫히고, 아래 카드에는 그대로 남는다 */}
+    {error && errorPopup && !loggingIn && (
+      <div className="fixed inset-0 z-[100060] bg-[#060E1F]/60 flex items-center justify-center p-5" onClick={() => setErrorPopup(false)} data-testid="driver-login-error-popup">
+        <div className="w-full max-w-[400px] rounded-2xl overflow-hidden bg-white shadow-[0_30px_80px_rgba(6,14,31,.45)] kp-login-in" onClick={(e) => e.stopPropagation()} role="alertdialog" aria-labelledby="dlErrTitle">
+          <div className="px-6 pt-6 pb-5 text-white" style={{ background: "linear-gradient(120deg, #0F1A30 0%, #1B2B4B 55%, #2D4C82 100%)" }}>
+            <div className="flex items-center gap-3">
+              <ErrBadge tone={error.tone} size={44} dark />
+              <div className="min-w-0">
+                <div className="text-[11px] font-extrabold tracking-[0.24em] text-[#8FB0F0]">{error.tone === "wait" ? "PENDING" : error.tone === "net" ? "NETWORK" : "LOGIN FAILED"}</div>
+                <div id="dlErrTitle" className="text-[21px] font-black leading-tight">{error.title}</div>
+              </div>
+            </div>
+          </div>
+          <div className="px-6 py-5">
+            <p className="text-[16.5px] font-bold text-[#0F1A30] leading-relaxed break-keep">{error.message}</p>
+            {error.hint && <p className="mt-2.5 text-[15px] font-semibold text-[#5B6B85] leading-relaxed break-keep">{error.hint}</p>}
+          </div>
+          <div className={`px-6 pb-6 grid gap-2 ${error.code === "driver/not-registered" ? "grid-cols-2" : "grid-cols-1"}`}>
+            {error.code === "driver/not-registered" && (
+              <button onClick={() => { setError(null); navigate("/driver-register"); }} className="h-14 rounded-2xl border-2 border-[#0F1A30] text-[#0F1A30] text-[16px] font-black">기사 등록하기</button>
+            )}
+            <button autoFocus onClick={() => setErrorPopup(false)} className="h-14 rounded-2xl text-white text-[17px] font-black" style={{ background: "linear-gradient(120deg, #0F1A30 0%, #1B2B4B 55%, #2D4C82 100%)" }}>확인</button>
+          </div>
+        </div>
+      </div>
+    )}
     </>
   );
 }

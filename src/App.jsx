@@ -25,6 +25,7 @@ import {
 } from "./loginSessions";
 import { LoginManagerModal } from "./LoginManager";
 import { PcVerifyGate, isPcMfaPassed } from "./MfaModal";
+import { DRIVER_BUSY_EVENT, isDriverBusy } from "./driver/driverLoginErrors"; // ⭐ 2026-11-05 기사 로그인 확인 중 표시
 import { doc, onSnapshot, addDoc, collection, serverTimestamp, query, orderBy, limit, getDocs, getDoc, deleteDoc } from "firebase/firestore";
 
 // 역할별 대형 화면은 지연 로딩(code-splitting)한다 — 이전에는 전부 하나의 번들로
@@ -189,6 +190,17 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [approved, setApproved] = useState(false);
   const [userCompany, setUserCompany] = useState("");
+  // ⭐ 2026-11-05 기사 로그인/가입 화면이 계정을 확인하는 동안(잠깐 로그인했다가 이름·회사가 다르면 다시 로그아웃) —
+  //  예전엔 그 사이 users 문서가 먼저 도착해 /driver-home으로 넘겼다가 로그아웃되며 /driver-login이 새로 그려져
+  //  실패 안내가 사라졌다("새로고침되고 아무 말 없이 로그인 화면"). 확인이 끝날 때까지 기사 화면 이동을 멈춘다.
+  const [driverBusy, setDriverBusyState] = useState(() => isDriverBusy());
+  useEffect(() => {
+    const h = (e) => setDriverBusyState(!!e.detail);
+    window.addEventListener(DRIVER_BUSY_EVENT, h);
+    return () => window.removeEventListener(DRIVER_BUSY_EVENT, h);
+  }, []);
+  // ⭐ 2026-11-05 이 계정(uid)의 users 문서를 한 번이라도 받았는지 — 받기 전엔 /driver-home에서 로그인 화면으로 돌려보내지 않는다
+  const [roleFor, setRoleFor] = useState(null);
   // ⭐ 블라인드 오더 노출 판정용 — 렌더 중 바로 반영(하위 화면 첫 렌더 전에 알아야 함)
   setBlindViewerRole(role, user?.email);
   // ⭐ 자동 블라인드 설정 — 최고관리자만 구독(다른 사용자는 읽을 권한도 없음)
@@ -240,7 +252,7 @@ export default function App() {
     const run = async () => {
       // 로그인 화면이 회사코드 등을 확인하는 중(잠깐 로그인했다가 다시 로그아웃할 수 있음)이면 끝날 때까지 기다린다
       for (let i = 0; i < 60; i++) {
-        if (sessionStorage.getItem("transportValidating") !== "true" && sessionStorage.getItem("shipperValidating") !== "true") break;
+        if (sessionStorage.getItem("transportValidating") !== "true" && sessionStorage.getItem("shipperValidating") !== "true" && !isDriverBusy()) break;
         await new Promise((r) => setTimeout(r, 500));
       }
       if (cancelled || auth.currentUser?.uid !== user.uid) return;
@@ -671,6 +683,8 @@ export default function App() {
         if (snap.exists()) {
           const data = snap.data();
           if (data.employmentStatus === "퇴사" && !isMasterEmail) {
+            // ⭐ 2026-11-05 기사 로그인 화면이 확인 중이면 그 화면이 "퇴사 처리된 계정" 안내를 직접 띄운다(여기서 alert·로그아웃하면 안내가 사라짐)
+            if (isDriverBusy() && data.role === "driver") { setRole(null); setApproved(false); setRoleFor(u.uid); setLoading(false); return; }
             alert("퇴사 처리된 계정입니다. 관리자에게 문의해주세요.");
             signOut(auth);
             setUser(null);
@@ -752,8 +766,9 @@ export default function App() {
           setApproved(false);
           setUserCompany("");
         }
+        setRoleFor(u.uid);
         setLoading(false);
-      }, () => { if (auth.currentUser?.uid === u.uid) setLoading(false); });
+      }, () => { if (auth.currentUser?.uid === u.uid) { setRoleFor(u.uid); setLoading(false); } });
       unsubUserRef.current = unsubUser;
     });
     return () => { unsub(); try { unsubUserRef.current?.(); } catch { /* 무시 */ } };
@@ -955,15 +970,15 @@ export default function App() {
 
           <Route
             path="/driver-login"
-            element={user && role === "driver" && approved ? <Navigate to="/driver-home" replace /> : <DriverLogin />}
+            element={user && role === "driver" && approved && !driverBusy ? <Navigate to="/driver-home" replace /> : <DriverLogin />}
           />
           <Route
             path="/driver-register"
-            element={user && role === "driver" && approved ? <Navigate to="/driver-home" replace /> : <DriverRegister />}
+            element={user && role === "driver" && approved && !driverBusy ? <Navigate to="/driver-home" replace /> : <DriverRegister />}
           />
           <Route
             path="/driver-home"
-            element={user && role === "driver" && approved ? <DriverHome /> : <Navigate to="/driver-login" replace />}
+            element={user && role === "driver" && approved ? <DriverHome /> : (user && roleFor !== user.uid ? routeFallback : <Navigate to="/driver-login" replace />)}
           />
 
           <Route
