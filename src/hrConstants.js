@@ -4,12 +4,12 @@ import { db } from "./firebase";
 // 인사관리부 / 회원관리 공용 상수 — 직책, 팀 구분
 // ⭐ 2026-10-31 임원 부서 — 부서를 "임원"으로 고르면 직책은 대표·전무·이사만. 임원은 로그인하면 임원 화면(경영 브리핑)으로.
 export const EXEC_TEAM = "임원";
-export const EXEC_POSITION_OPTIONS = ["대표", "전무", "이사"];
+export const EXEC_POSITION_OPTIONS = ["대표", "전무", "이사", "실장"]; // ⭐ 2026-11-05 실장 추가
 // 일반 부서 직책(직급 낮은 순)
 export const POSITION_OPTIONS = [
-  "인턴", "사원", "주임", "대리", "과장", "차장", "부장", "팀장", "파트장",
+  "인턴", "사원", "주임", "대리", "과장", "차장", "부장", "팀장", "파트장", "실장", "전무", // ⭐ 2026-11-05 실장·전무 추가(일반 부서에서도 고르기)
 ];
-export const ALL_POSITION_OPTIONS = [...EXEC_POSITION_OPTIONS, ...POSITION_OPTIONS];
+export const ALL_POSITION_OPTIONS = [...new Set([...EXEC_POSITION_OPTIONS, ...POSITION_OPTIONS])];
 // 부서에 맞는 직책 드롭다운 — 임원이면 대표·전무·이사만, 미배정이면 전체
 export const positionsForTeam = (team) => (team === EXEC_TEAM ? EXEC_POSITION_OPTIONS : team ? POSITION_OPTIONS : ALL_POSITION_OPTIONS);
 
@@ -28,7 +28,7 @@ export const isExecProfile = (u) => !!u && (u.team === EXEC_TEAM || isExecPositi
 //   운영·운송팀 과장 이상(과장·차장·부장·팀장·파트장) → 관리자 / 그 외 → 실무자
 //  ※ 관리자는 매출·정산·직원 권한까지 열리므로 대리 이하는 실무자로 시작한다.
 //  ⭐ 2026-11-04 부서 낱말 기준(customRoles.js DEPT_ROLE_RULES와 같은 낱말) — 경리·인사는 대리 이하면 사무원, 법무·개발팀 역할 추가
-const MANAGER_RANKS = ["과장", "차장", "부장", "팀장", "파트장"];
+const MANAGER_RANKS = ["과장", "차장", "부장", "팀장", "파트장", "실장"];
 const STAFF_RANKS = ["인턴", "사원", "주임", "대리"];
 export function suggestRole({ team = "", position = "" } = {}) {
   const p = String(position || "").trim();
@@ -63,7 +63,7 @@ export function useHrOptions(company) {
     const teams = [...TEAM_OPTIONS, ...(cfg.teams || [])].filter((t, i, a) => a.indexOf(t) === i && (TEAM_OPTIONS.includes(t) || !hideT.has(t)));
     const exec = [...EXEC_POSITION_OPTIONS, ...(cfg.execPositions || [])].filter((t, i, a) => a.indexOf(t) === i && (EXEC_POSITION_OPTIONS.includes(t) || !hideP.has(t)));
     const normal = [...POSITION_OPTIONS, ...(cfg.positions || [])].filter((t, i, a) => a.indexOf(t) === i && (POSITION_OPTIONS.includes(t) || !hideP.has(t)));
-    const positionsFor = (team) => (team === EXEC_TEAM ? exec : team ? normal : [...exec, ...normal]);
+    const positionsFor = (team) => (team === EXEC_TEAM ? exec : team ? normal : [...new Set([...exec, ...normal])]);
     return { teams, exec, normal, positionsFor, cfg };
   }, [cfg]);
 }

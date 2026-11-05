@@ -542,7 +542,7 @@ export function fieldText(f, v, staff) {
 }
 
 // 직급 순서(결재선 자동 추천에 사용)
-export const RANK = ["인턴", "사원", "주임", "대리", "과장", "차장", "부장", "팀장", "파트장", "본부장", "이사", "상무", "전무", "부사장", "사장", "대표", "대표이사"];
+export const RANK = ["인턴", "사원", "주임", "대리", "과장", "차장", "부장", "팀장", "파트장", "실장", "본부장", "이사", "상무", "전무", "부사장", "사장", "대표", "대표이사"];
 export const rankOf = (p) => RANK.indexOf(String(p || "").trim());
 export const EXEC_POSITIONS = ["이사", "상무", "전무", "부사장", "사장", "대표", "대표이사", "본부장", "임원"];
 export const isExecPosition = (p) => EXEC_POSITIONS.includes(String(p || "").trim());

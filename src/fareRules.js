@@ -289,7 +289,7 @@ export function FareTypeSelect({ value, onChange, rules = [], className = "", di
       : "bg-white border-[#C9D5EA] text-[#5B6B85] hover:border-[#4B6CB7] hover:text-[#1B2B4B]"}`
     : `flex items-center justify-between gap-2 w-full h-[40px] px-3 rounded-[11px] border text-[13.5px] font-bold transition ${on
       ? "bg-white border-[#4B6CB7] text-[#0F1A30]"
-      : "bg-[#F7F9FC] border-[#E3E8F0] text-[#8E9BB2] hover:border-[#4B6CB7]"}`;
+      : "bg-white border-[#C9D5EA] text-[#5B6B85] hover:border-[#4B6CB7] hover:text-[#1B2B4B]"}`; // ⭐ 2026-11-05 회색이라 꺼진 칸처럼 보이던 것 → 흰 바탕
   const label = cur
     ? h("span", { className: "inline-flex items-center gap-1.5 min-w-0" },
       h("span", { className: "truncate" }, cur.name),

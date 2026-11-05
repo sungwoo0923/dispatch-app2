@@ -21,7 +21,7 @@ const roleName = (r) => (HR_ROLE_OPTIONS.find(([k]) => k === r) || [r, r || "-"]
 const today = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
 const korDate = (s) => { const [y, m, d] = String(s || "").split("-").map(Number); return y ? `${y}년 ${m}월 ${d}일` : ""; };
 export const JUNIOR_RANKS = ["인턴", "사원", "주임", "대리"];
-const RANK = ["인턴", "사원", "주임", "대리", "과장", "차장", "부장", "팀장", "파트장", "이사", "전무", "대표", "대표이사"];
+const RANK = ["인턴", "사원", "주임", "대리", "과장", "차장", "부장", "팀장", "파트장", "실장", "이사", "전무", "대표", "대표이사"];
 
 function autoType(cur, next) {
   const t = [];

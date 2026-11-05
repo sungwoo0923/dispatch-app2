@@ -8752,6 +8752,7 @@ return (
                 role={role}
                 userCompany={userCompany}
                 dispatchData={listDispatchData}
+                searchPoolData={dispatchDataFiltered}
                 timeOptions={timeOptions}
                 tonOptions={tonOptions}
                 drivers={drivers}
@@ -30935,7 +30936,7 @@ value={copyTarget?.화물수량 || ""}
 {/* ⭐ 2026-11-02 운임규칙 — 오더 복사·수정 패널 운임구분 */}
 {fareOn && (
   <CpField label={<>운임구분<FareRuleHint className="ml-1" form={copyTarget} rules={fareR.rules} onReapply={() => setCopyTarget(p => fareFormChange(p, "__reapply", null, fareR.rules))} /></>}>
-    <FareTypeSelect className="!h-9 !rounded-lg" rules={fareR.rules} value={copyTarget?.운임구분 || ""} onChange={(v) => setCopyTarget(p => fareFormChange(p, "운임구분", v, fareR.rules))} />
+    <FareTypeSelect className="!h-9 !rounded-lg" placeholder="운임구분 선택(수수료 자동)" rules={fareR.rules} value={copyTarget?.운임구분 || ""} onChange={(v) => setCopyTarget(p => fareFormChange(p, "운임구분", v, fareR.rules))} />
   </CpField>
 )}
 
@@ -35187,6 +35188,7 @@ function DispatchStatus({
   role,
   userCompany = "",
   dispatchData = [],
+  searchPoolData = null, // ⭐ 2026-11-05 검색할 때는 고정노선(구글시트 배차표) 오더도 같이 찾기
   focusOrderId,
   clearFocusOrder,
   setDispatchData,
@@ -38631,9 +38633,11 @@ const filteredBase = React.useMemo(() => {
     const hasOverrides = Object.keys(localOverrides).length > 0;
     // ⭐ dispatchData(최근 13개월 실시간)에 없는, 그보다 오래된 구간을 조회할 때만
     // 별도로 getDocs 조회해둔 extraHistoricalRows를 여기서 합친다(평소엔 빈 배열).
+    // ⭐ 2026-11-05 검색어·세부검색이 있으면 고정노선 오더까지 포함(화주사 이름으로 찾았는데 0건 나오던 문제)
+    const pool = (searchPoolData && (q.trim() || dsDetail)) ? searchPoolData : (dispatchData || []);
     const baseData = extraHistoricalRows.length > 0
-      ? [...(dispatchData || []), ...extraHistoricalRows]
-      : (dispatchData || []);
+      ? [...pool, ...extraHistoricalRows]
+      : pool;
     let data = hasOverrides
       ? baseData.map(d => {
           const id = getId(d);
@@ -38746,6 +38750,7 @@ const filteredBase = React.useMemo(() => {
   return data;
 }, [
   dispatchData,
+  searchPoolData,
   localOverrides,
   q,
   searchType,
@@ -42377,7 +42382,7 @@ setCopyPlaceOptions(list);
 {/* ⭐ 2026-11-02 운임규칙 — 오더 복사·수정 패널 운임구분 */}
 {fareOn && (
   <CpField label={<>운임구분<FareRuleHint className="ml-1" form={copyTarget} rules={fareR.rules} onReapply={() => setCopyTarget(p => fareFormChange(p, "__reapply", null, fareR.rules))} /></>}>
-    <FareTypeSelect className="!h-9 !rounded-lg" rules={fareR.rules} value={copyTarget?.운임구분 || ""} onChange={(v) => setCopyTarget(p => fareFormChange(p, "운임구분", v, fareR.rules))} />
+    <FareTypeSelect className="!h-9 !rounded-lg" placeholder="운임구분 선택(수수료 자동)" rules={fareR.rules} value={copyTarget?.운임구분 || ""} onChange={(v) => setCopyTarget(p => fareFormChange(p, "운임구분", v, fareR.rules))} />
   </CpField>
 )}
 

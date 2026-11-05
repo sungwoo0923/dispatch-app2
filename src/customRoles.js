@@ -145,7 +145,7 @@ export function useRoleView(realRole) {
 //  부서 이름의 낱말로 고른다(인사관리부 › 직책·부서 설정의 부서 목록 그대로). 조회전용은 늘 포함.
 //  맞는 규칙이 없는 부서(미배정 포함)는 전체 권한. 직접 만든 역할은 이름에 그 부서 낱말이 들어가면 함께(임원은 "임원 화면" 역할).
 export const DEPT_ROLE_RULES = [
-  { re: /임원/, keys: [], exec: true },
+  { re: /임원/, keys: ["allMgr"], exec: true }, // ⭐ 2026-11-05 임원도 통합관리자 고를 수 있게(임원 화면 역할 다음)
   { re: /경리|회계|재무/, keys: ["test", "acctStaff", "hrAcct", "allMgr"], label: /경리|회계|재무/ },
   { re: /인사/, keys: ["hrManager", "hrStaff", "hrAcct", "allMgr"], label: /인사/ },
   { re: /운송|배차/, keys: ["admin", "user", "allMgr"], label: /운송|배차/ },
@@ -167,10 +167,11 @@ export function rolesForTeam(team, options = [], customRoles = []) {
     if (rule.exec) return roleScreen(r) === "exec";
     return roleScreen(r) !== "exec" && rule.label.test(String(r.label || l || ""));
   }).sort((a, b) => {
-    const ia = rule.keys.indexOf(a[0]); const ib = rule.keys.indexOf(b[0]);
-    return (ia < 0 ? 50 : ia) - (ib < 0 ? 50 : ib);
+    const rk = (k) => { const i = rule.keys.indexOf(k); return rule.exec ? (i < 0 ? 0 : 60 + i) : (i < 0 ? 50 : i); };
+    return rk(a[0]) - rk(b[0]);
   });
-  if (!picked.length) return options; // 그 부서용 역할이 아직 없으면(예: 임원 화면 역할을 안 만든 회사) 전체
+  if (!picked.length) return options;
+  if (rule.exec && !picked.some(([k]) => !rule.keys.includes(k))) return options; // 임원 화면 역할이 없는 회사는 예전처럼 전체 // 그 부서용 역할이 아직 없으면(예: 임원 화면 역할을 안 만든 회사) 전체
   const viewer = options.find(([k]) => k === "viewer");
   return viewer ? [...picked, viewer] : picked;
 }

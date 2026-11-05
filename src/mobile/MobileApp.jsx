@@ -4070,7 +4070,8 @@ const thisMonth = thisMonthKST();
   }, [page, loadRange, loadFullHistory, loadCanceledHistory]);
 
   const filteredOrders = useMemo(() => {
-    let base = [...listOrders];
+    // ⭐ 2026-11-05 검색어가 있으면 고정노선(구글시트 배차표) 오더도 같이 찾기
+    let base = appliedSearchText.trim() ? [...allOrders] : [...listOrders];
 
     // 🔹 오늘 / 날짜 선택 여부
     const today = todayStr();
@@ -4169,6 +4170,7 @@ if (appliedSearchType === "메모")
     return base;
   }, [
     listOrders,
+    allOrders,
     statusTab,
     assignFilter,
     vehicleFilter,
