@@ -429,8 +429,8 @@ function Stamp({ step }) {
   if (step.status === "approved" && step.mark === "sign" && step.sign) {
     return (
       <div className="flex flex-col items-center justify-center leading-none max-w-full px-0.5" data-ap-sign>
-        <img src={step.sign} alt={`${step.name || ""} 서명`} draggable={false} className="max-w-[66px] w-auto max-h-[46px] object-contain" />
-        <span className="text-[9px] font-black mt-0.5 tracking-wider text-[#1B2B4B]">{step.kind === "합의" ? "합의" : "승인"}</span>
+        {/* ⭐ 2026-11-05 올린 도장·서명 이미지만(아래 "승인" 글자 없앰) */}
+        <img src={step.sign} alt={`${step.name || ""} 서명`} draggable={false} className="max-w-[70px] w-auto max-h-[56px] object-contain" />
       </div>
     );
   }
