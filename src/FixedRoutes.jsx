@@ -204,7 +204,8 @@ function NewClientModal({ data, setData, busy, onClose, onSave }) {
 const blankStop = (type = "하차") => ({ type, name: "", addr: "", time: "", contact: "", memo: "", method: "", cargo: "", cargoType: "", tonVal: "", tonType: "", fareClient: "", fareDriver: "", payMethod: "", client: "", manager: "" });
 export const VEHICLE_TYPES_FR = ["라보", "다마스", "오토바이", "윙바디", "탑", "카고", "윙/카고", "냉장윙", "냉동윙", "냉장탑", "냉동탑", "냉장/냉동탑", "냉장/냉동윙", "리프트"];
 const cargoText = (s) => (s.cargo ? `${s.cargo}${s.cargoType || ""}` : "");
-const tonText = (s) => (s.tonVal ? `${s.tonVal}${s.tonType || "톤"}` : "");
+// ⭐ 2026-11-05 3파트처럼 — 단위 "없음"이면 적은 글자 그대로(예: 5톤·소형), 단위가 있으면 숫자+단위
+const tonText = (s) => (s.tonVal ? `${s.tonVal}${s.tonType || ""}` : "");
 // ⭐ 2026-11-01 정류지별 운임·지급방식 — 운임 모델을 하나로 정리
 //  · "정류지별 운임" : 첫 정류지(상차)를 뺀 곳 중 한 곳이라도 청구·기사운임이 있으면. 노선 1회 운임 = 정류지 운임의 합계
 //    (기본 청구·기사운임 칸은 잠기고 합계를 보여준다 · 저장할 때 fareMode:"stop", fareClient/fareDriver = 합계)
@@ -929,16 +930,16 @@ export default function FixedRoutes({ drivers = [], companyName = "", dispatchDa
           <div className="flex min-w-0">
             <input value={v.cargo || ""} onChange={(e) => on({ cargo: v.cargoType ? e.target.value.replace(/[^\d.]/g, "") : e.target.value })} placeholder={v.cargoType ? "수량" : "예: 2 또는 변압기"} className={`${inp} !rounded-r-none min-w-0`} />
             <CustomSelect value={v.cargoType || ""} onChange={(e) => on({ cargoType: e.target.value, cargo: e.target.value ? String(v.cargo || "").replace(/[^\d.]/g, "") : v.cargo })} className="h-11 w-[84px] shrink-0 px-2 rounded-r-xl bg-[#1B2B4B] text-white text-[13px] font-black">
-              <option value="">단위</option>{cargoTypes.map((x) => <option key={x} value={x}>{x}</option>)}
+              <option value="">없음</option>{cargoTypes.map((x) => <option key={x} value={x}>{x}</option>)}
             </CustomSelect>
           </div>
         </div>
         <div className="min-w-0">
           <label className={lab}>톤수 · 중량</label>
           <div className="flex min-w-0">
-            <input value={v.tonVal || ""} onChange={(e) => on({ tonVal: e.target.value.replace(/[^\d.]/g, "") })} placeholder="예: 1" inputMode="decimal" className={`${inp} !rounded-r-none min-w-0`} />
-            <CustomSelect value={v.tonType || ""} onChange={(e) => on({ tonType: e.target.value })} className="h-11 w-[84px] shrink-0 px-2 rounded-r-xl bg-[#1B2B4B] text-white text-[13px] font-black">
-              <option value="">단위</option>{tonTypes.map((x) => <option key={x} value={x}>{x}</option>)}
+            <input value={v.tonVal || ""} onChange={(e) => on({ tonVal: v.tonType ? e.target.value.replace(/[^\d.]/g, "") : e.target.value })} placeholder={v.tonType ? "예: 1" : "예: 5톤 또는 소형"} inputMode={v.tonType ? "decimal" : "text"} className={`${inp} !rounded-r-none min-w-0`} />
+            <CustomSelect value={v.tonType || ""} onChange={(e) => on({ tonType: e.target.value, tonVal: e.target.value ? String(v.tonVal || "").replace(/[^\d.]/g, "") : v.tonVal })} className="h-11 w-[84px] shrink-0 px-2 rounded-r-xl bg-[#1B2B4B] text-white text-[13px] font-black">
+              <option value="">없음</option>{tonTypes.map((x) => <option key={x} value={x}>{x}</option>)}
             </CustomSelect>
           </div>
         </div>
@@ -988,7 +989,37 @@ export default function FixedRoutes({ drivers = [], companyName = "", dispatchDa
         </div>
 
         <div className="grid gap-4 lg:grid-cols-[minmax(0,0.82fr)_minmax(0,1fr)] items-start">
-          {/* ── 왼쪽: ROUTE 경로 ── */}
+          {/* ── 왼쪽: 운행 일정 → ROUTE 경로 ── */}
+          <div className="space-y-4 min-w-0">
+            {/* ⭐ 2026-11-05 SCHEDULE · 운행 일정 — 왼쪽 경로 위로 */}
+            <div className={`${card} p-4 md:p-5`} data-fr-days="1">
+              <Sec en="SCHEDULE" ko="운행 일정" />
+              <div className="grid grid-cols-7 gap-1.5 mb-2.5">
+                {DAYS.map((d) => { const on = (form.days || []).includes(d); return <button tabIndex={-1} key={d} type="button" onClick={() => set("days", on ? form.days.filter((x) => x !== d) : DAYS.filter((x) => x === d || (form.days || []).includes(x)))} className={`h-11 md:h-12 rounded-xl text-[15px] font-black transition ${on ? "bg-[#0F1A30] text-white shadow" : "bg-white border border-[#DCE3EE] text-[#5B6B85]"} ${d === "토" || d === "일" ? (on ? "" : "!text-[#C4262C]/70") : ""}`}>{d}</button>; })}
+              </div>
+              <div className="flex flex-wrap gap-1.5 mb-4">
+                {[["평일", ["월", "화", "수", "목", "금"]], ["월~토", ["월", "화", "수", "목", "금", "토"]], ["매일", DAYS], ["월수금", ["월", "수", "금"]], ["화목", ["화", "목"]]].map(([l, ds]) => <button tabIndex={-1} key={l} type="button" onClick={() => set("days", ds)} className="h-9 px-3.5 rounded-lg bg-[#F3F6FA] text-[13px] font-bold text-[#3A4A66] hover:bg-[#EAF0F8]">{l}</button>)}
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)] gap-2.5">
+                <div className="col-span-2 sm:col-span-1 min-w-0"><label className={lab}>출발(상차) 시간</label><TimeSelect value={form.startTime} onChange={(v) => set("startTime", v)} /></div>
+                <div className="min-w-0"><label className={lab}>시작일</label><CustomDatePicker value={form.startDate} onChange={(e) => set("startDate", e.target.value)} className={inp} showIcon /></div>
+                <div className="min-w-0"><label className={lab}>종료일(선택)</label><CustomDatePicker value={form.endDate} onChange={(e) => set("endDate", e.target.value)} className={inp} showIcon placeholder="계속" /></div>
+              </div>
+              <div className="mt-3 rounded-xl bg-[#F5F8FD] border border-[#E3E8F0] px-3.5 py-2.5 text-[13px] text-[#3A4A66] leading-relaxed" data-fr-horizon="1">
+                {form.active === false
+                  ? <><b className="text-[#0F1A30]">운행 OFF</b> — 저장해도 새 배차를 만들지 않습니다(이미 만든 배차는 그대로)</>
+                  : <>저장하면 <b className="text-[#0F1A30] tabular-nums">{md(hFrom)} ~ {md(hTo)} 운행일 {hN}건</b>을 먼저 만들고, {form.endDate && form.endDate <= hTo ? "종료일까지면 끝납니다" : "그 뒤는 매달(새 달에 앱을 열 때) 이어서 만듭니다"}</>}
+              </div>
+              <div className="mt-3">
+                <label className={lab}>쉬는 날 <span className="font-semibold text-[12px] text-[#9AA9C3]">달력에서 여러 날을 눌러 고르세요</span></label>
+                <MultiDateSelect value={form.skipDates || []} onChange={(v) => set("skipDates", v)} className={inp} placeholder="쉬는 날 고르기" />
+                {(form.skipDates || []).length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 mt-2">
+                    {form.skipDates.map((d) => <button tabIndex={-1} key={d} type="button" onClick={() => set("skipDates", form.skipDates.filter((x) => x !== d))} className="h-8 px-2.5 rounded-lg bg-[#EEF3FC] border border-[#C9D6EE] text-[12.5px] font-bold text-[#1B2B4B] tabular-nums" style={{ fontFamily: MONO }}>{d.slice(5).replace("-", ".")}({dayOf(d)}) ✕</button>)}
+                  </div>
+                )}
+              </div>
+            </div>
           <div className={`${card} p-4 md:p-5 min-w-0`} data-fr-left="1">
             <Sec en="ROUTE" ko="경로" sub="상차지 → 경유·거점 → 하차지" />
             <div className="relative">
@@ -1048,8 +1079,9 @@ export default function FixedRoutes({ drivers = [], companyName = "", dispatchDa
             </div>
             <div className="text-[12.5px] text-[#7A89A3] mt-3 leading-relaxed">시간을 비우면 <b className="text-[#1B2B4B]">즉시</b> · 경유·거점은 하차지 바로 앞에 들어갑니다(↑↓로 순서 변경) · <NewTag /> 표시된 곳은 저장할 때 거래처관리에 함께 등록됩니다</div>
           </div>
+          </div>
 
-          {/* ── 오른쪽: 화물 → 운임 → 기사·차량 → 운행 일정 ── */}
+          {/* ── 오른쪽: 화물 → 운임 → 기사·차량 ── */}
           <div className="space-y-4 min-w-0">
             {/* CARGO · 화물 — 기본 1장(노선 전체) + 경유·거점마다 1장 */}
             <div className={`${card} p-4 md:p-5`} data-fr-right="cargo">
@@ -1199,35 +1231,6 @@ export default function FixedRoutes({ drivers = [], companyName = "", dispatchDa
               <textarea value={form.memo} onChange={(e) => set("memo", e.target.value)} rows={2} placeholder="예: 정문 출입 시 사전 연락" className={`${inp} !h-auto py-2.5`} />
             </div>
 
-            {/* SCHEDULE · 운행 일정 */}
-            <div className={`${card} p-4 md:p-5`} data-fr-right="days">
-              <Sec en="SCHEDULE" ko="운행 일정" />
-              <div className="grid grid-cols-7 gap-1.5 mb-2.5">
-                {DAYS.map((d) => { const on = (form.days || []).includes(d); return <button tabIndex={-1} key={d} type="button" onClick={() => set("days", on ? form.days.filter((x) => x !== d) : DAYS.filter((x) => x === d || (form.days || []).includes(x)))} className={`h-11 md:h-12 rounded-xl text-[15px] font-black transition ${on ? "bg-[#0F1A30] text-white shadow" : "bg-white border border-[#DCE3EE] text-[#5B6B85]"} ${d === "토" || d === "일" ? (on ? "" : "!text-[#C4262C]/70") : ""}`}>{d}</button>; })}
-              </div>
-              <div className="flex flex-wrap gap-1.5 mb-4">
-                {[["평일", ["월", "화", "수", "목", "금"]], ["월~토", ["월", "화", "수", "목", "금", "토"]], ["매일", DAYS], ["월수금", ["월", "수", "금"]], ["화목", ["화", "목"]]].map(([l, ds]) => <button tabIndex={-1} key={l} type="button" onClick={() => set("days", ds)} className="h-9 px-3.5 rounded-lg bg-[#F3F6FA] text-[13px] font-bold text-[#3A4A66] hover:bg-[#EAF0F8]">{l}</button>)}
-              </div>
-              <div className="grid grid-cols-2 sm:grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)] gap-2.5">
-                <div className="col-span-2 sm:col-span-1 min-w-0"><label className={lab}>출발(상차) 시간</label><TimeSelect value={form.startTime} onChange={(v) => set("startTime", v)} /></div>
-                <div className="min-w-0"><label className={lab}>시작일</label><CustomDatePicker value={form.startDate} onChange={(e) => set("startDate", e.target.value)} className={inp} showIcon /></div>
-                <div className="min-w-0"><label className={lab}>종료일(선택)</label><CustomDatePicker value={form.endDate} onChange={(e) => set("endDate", e.target.value)} className={inp} showIcon placeholder="계속" /></div>
-              </div>
-              <div className="mt-3 rounded-xl bg-[#F5F8FD] border border-[#E3E8F0] px-3.5 py-2.5 text-[13px] text-[#3A4A66] leading-relaxed" data-fr-horizon="1">
-                {form.active === false
-                  ? <><b className="text-[#0F1A30]">운행 OFF</b> — 저장해도 새 배차를 만들지 않습니다(이미 만든 배차는 그대로)</>
-                  : <>저장하면 <b className="text-[#0F1A30] tabular-nums">{md(hFrom)} ~ {md(hTo)} 운행일 {hN}건</b>을 먼저 만들고, {form.endDate && form.endDate <= hTo ? "종료일까지면 끝납니다" : "그 뒤는 매달(새 달에 앱을 열 때) 이어서 만듭니다"}</>}
-              </div>
-              <div className="mt-3">
-                <label className={lab}>쉬는 날 <span className="font-semibold text-[12px] text-[#9AA9C3]">달력에서 여러 날을 눌러 고르세요</span></label>
-                <MultiDateSelect value={form.skipDates || []} onChange={(v) => set("skipDates", v)} className={inp} placeholder="쉬는 날 고르기" />
-                {(form.skipDates || []).length > 0 && (
-                  <div className="flex flex-wrap gap-1.5 mt-2">
-                    {form.skipDates.map((d) => <button tabIndex={-1} key={d} type="button" onClick={() => set("skipDates", form.skipDates.filter((x) => x !== d))} className="h-8 px-2.5 rounded-lg bg-[#EEF3FC] border border-[#C9D6EE] text-[12.5px] font-bold text-[#1B2B4B] tabular-nums" style={{ fontFamily: MONO }}>{d.slice(5).replace("-", ".")}({dayOf(d)}) ✕</button>)}
-                  </div>
-                )}
-              </div>
-            </div>
           </div>
         </div>
         {/* ⭐ 2026-11-05 아래 고정 저장줄 — 요일 · 기간 · 청구 합계 한 줄 + [고정노선 저장] */}
