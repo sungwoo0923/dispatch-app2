@@ -90,6 +90,7 @@ import RouteMapModal from "./RouteMapModal";
 const MonthCompareAnalysis = lazyView(() => import("./MonthCompareAnalysis"));
 const MonthlyReport = lazyView(() => import("./MonthlyReport"));
 import { IdleFleetButton } from "./fleetRecommend";
+import { LiveDriverChip, FleetLiveButton, useFleetLivePublish } from "./liveFleet"; // ⭐ 2026-11-05 배차완료 지입·직영·임대 기사 실시간 관제
 import { subscribeOrderSync, deleteOrderWithLog, logOrderDeletion, OrderHistoryContext, useOrderHistory, useLoadOrderRange, useLoadFullOrderHistory, pcLiveWindowStart, pcPrevDay, kstToday as histToday, monthStartAgo, monthEnd, monthStart, historyStartDate } from "./orderHistory";
 const MonthCloseCheck = lazyView(() => import("./MonthCloseCheck"));
 const StaffPerformance = lazyView(() => import("./StaffPerformance"));
@@ -3899,6 +3900,7 @@ function useRealtimeCollections(user, userCompany, role) {
     });
   }, [user?.uid]); // eslint-disable-line react-hooks/exhaustive-deps
   const [drivers, setDrivers] = useState(() => safeLoad("drivers", []));
+  useFleetLivePublish(drivers); // ⭐ 2026-11-05 이미 받는 drivers로 실시간 관제 색인(차량번호별) 갱신 — 추가 읽기 없음
   const [clients, setClients] = useState(() => safeLoad("clients", []));
   // 🔔 위 캐시(dispatchData)는 이전 세션의 오래된 스냅샷이라, orders/dispatch 두
   // 컬렉션 모두에서 "진짜" 첫 응답을 받기 전까지는 attachCount 등을 비교해 알림을
@@ -24342,6 +24344,8 @@ ${isHighlighted ? "animate-pulse bg-blue-100" : ""}
                         handleCarInput(r._id, e.currentTarget.value);
                       }}
                     />
+                    {/* ⭐ 2026-11-05 배차완료 지입·직영·임대 기사 — 기사앱 실시간 위치(LIVE) */}
+                    {r.배차상태 === "배차완료" && <LiveDriverChip order={r} className="ml-1" />}
 
 
                   </td>
@@ -24894,6 +24898,7 @@ function RealtimeStatus({
   markEditRequestSeen = () => {},
   approvedShippers = [],
 }) {
+useFleetLivePublish(drivers); // ⭐ 2026-11-05 실시간 관제 색인(같은 배열이면 아무것도 안 함)
 // ⭐ 2026-11-02 운임규칙 — 오더 복사·수정 패널 / 수정 창 / 운임구분 열(규칙 사용 회사만)
 const fareR = useFareRules(getTenant() || userCompany);
 const fareOn = fareR.on;
@@ -29816,6 +29821,8 @@ const head = isDark
   <DetailFilterButton rows={rtDayRows} value={rtDetail} onApply={setRtDetail} withDate={false} getters={rtDetailGet} title="세부검색 · 실시간" />
   <button onClick={() => setLookupOpen(true)} title="기간 + 배차담당자 + 차량번호·기사명으로 찾기" className="px-2 py-1 rounded-lg bg-white text-[#1B2B4B] border-2 border-[#1B2B4B] text-[11px] font-black whitespace-nowrap flex-shrink-0 hover:bg-[#EEF2F8]">담당자·차량 조회</button>
   <OrderLookupModal open={lookupOpen} onClose={() => setLookupOpen(false)} rows={historyDispatchData} nameOf={lookupNameOf} />
+  {/* ⭐ 2026-11-05 실시간 관제 — 지금 목록의 배차완료 지입·직영·임대 기사 전체 지도 */}
+  <FleetLiveButton rows={filtered} size="md" />
   {/* 날짜 버튼 */}
   {["yesterday","today","tomorrow"].map((mode,i)=>{
     const labels=["어제","당일","내일"];
@@ -35380,6 +35387,7 @@ function DispatchStatus({
   // ⭐ 2026-11-03 배차현황 › 고정노선현황 — 배차표 양식이 오면 표의 열만 그 양식(구글시트) 순서로(버튼·합계·필터는 그대로)
   fixedForm = null,
 }) {
+useFleetLivePublish(drivers); // ⭐ 2026-11-05 실시간 관제 색인(같은 배열이면 아무것도 안 함)
 // ⭐ 2026-11-02 운임규칙 — 오더 복사·수정 패널 / 수정 창 / 운임구분 열(규칙 사용 회사만)
 const fareR = useFareRules(getTenant() || userCompany);
 const fareOn = fareR.on;
@@ -39723,6 +39731,8 @@ return (
         <button onClick={()=>{const{first,last}=getMonthRange();setStartDate(first);setEndDate(last);setAppliedStartDate(first);setAppliedEndDate(last);setQ("");setQInput("");setPage(0);setLoaded(true);localStorage.setItem("dispatchDateState",JSON.stringify({startDate:first,endDate:last,appliedStartDate:first,appliedEndDate:last}));}} className="px-2 py-1 rounded-lg bg-gray-500 text-white text-[11px] font-semibold whitespace-nowrap flex-shrink-0"><EditableText id="status.toolbar.전체" defaultText="전체" /></button>
         <button onClick={() => setLookupOpen(true)} title="기간 + 배차담당자 + 차량번호·기사명으로 찾기" className="px-2 py-1 rounded-lg bg-white text-[#1B2B4B] border-2 border-[#1B2B4B] text-[11px] font-black whitespace-nowrap flex-shrink-0 hover:bg-[#EEF2F8]">담당자·차량 조회</button>
   <OrderLookupModal open={lookupOpen} onClose={() => setLookupOpen(false)} rows={dispatchData} nameOf={lookupNameOf} />
+        {/* ⭐ 2026-11-05 실시간 관제 — 고정노선현황은 위 고정노선 머리띠에 같은 버튼이 있다 */}
+        {!fixedForm && <FleetLiveButton rows={filtered} size="md" />}
 
         {/* 우측 버튼들 */}
         <div className="ml-auto flex items-center gap-1 flex-shrink-0 flex-wrap justify-end">
@@ -40073,8 +40083,8 @@ return (
                     {row.혼적 ? "Y" : ""}
                   </td>
 
-                  {/* 차량번호(항상 활성화) */}
-                  <td className="border text-center whitespace-nowrap w-[120px] max-w-[120px]">
+                  {/* 차량번호(항상 활성화) · ⭐ 2026-11-05 지입·직영·임대 기사앱 LIVE 표시가 붙으면 그만큼 칸이 넓어진다 */}
+                  <td className={`border text-center whitespace-nowrap w-[120px] ${row.배차상태 === "배차완료" ? "" : "max-w-[120px]"}`}>
                     <input autoComplete="off"
                       className="border rounded px-1 py-0.5 text-center w-[118px]"
                       value={row.차량번호 || ""}
@@ -40100,6 +40110,7 @@ return (
                         handleCarInput(id, e.target.value);
                       }}
                     />
+                    {row.배차상태 === "배차완료" && <LiveDriverChip order={row} className="ml-1 mr-0.5" />}
                   </td>
                   <td className="border text-center whitespace-nowrap max-w-[80px] w-[80px] overflow-hidden text-ellipsis" title={row.이름 || ""}>{row.이름}</td>
                   <td className="border text-center">

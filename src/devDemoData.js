@@ -85,17 +85,50 @@ function routeOrders() {
     out.push(fakeDoc("dispatch", `demo-rb-o-${i}`, {
       상차일: ymd(-1), 하차일: day, 입고일: day, 발주일: ymd(-1), 배차표Id: "demo-rb-1", 배차표명: "삼다수 배차표", 배차표묶음: i % 2 ? "2센터" : "1센터", 배차표순번: i + 1, 시트줄: i + 5,
       거래처명: "(주)태진", 상차지명: i % 2 ? "2센터" : "1센터", 하차지명: `도착지 ${i + 1}`, 하차지주소: ["경기 오산시", "경기 평택시", "충남 천안시"][i % 3],
-      품목수량: { "0.5L": 6 + i, "2L": 4 }, 추가정보: { 운송업체: ROUTE_CARRIERS[i % 4] }, 차량번호: i % 4 === 3 ? "" : `경기9${i}바${2000 + i}`,
+      품목수량: { "0.5L": 6 + i, "2L": 4 }, 추가정보: { 운송업체: ROUTE_CARRIERS[i % 4] }, 차량번호: i % 4 === 3 ? "" : i === 1 ? "경기81바1037" : `경기9${i}바${2000 + i}`,
       배차상태: i % 4 === 3 ? "배차중" : "배차완료", 청구운임: 200000 + i * 10000, 기사운임: 170000 + i * 9000, 지급방식: "계산서", 배차방식: "고정",
     }));
   }
   return out;
 }
 
+// ⭐ 2026-11-05 실시간 관제 점검 — 지입·직영·임대 기사 5명에 기사앱 위치(가짜)·속도·상태 · 최근 이동경로
+//  [등급, 위도, 경도, 속도, 상태, 몇 분 전 수신, 진행 방향(이동경로를 그릴 때 거꾸로 따라감)]
+const DEMO_LIVE = [
+  ["지입", 37.214, 127.088, 0, "대기", 1, [0, 0]],
+  ["지입", 36.812, 127.147, 72, "운송중", 0.3, [0.004, 0.0012]],
+  ["직영", 35.081, 128.832, 0, "상차중", 1.2, [-0.0006, 0.0018]],
+  ["일반", 37.5, 127.0, 0, "대기", 2, [0, 0]],
+  ["임대", 37.458, 126.452, 38, "운송중", 8, [-0.001, -0.003]],
+  ["지입", 36.502, 127.262, 0, "휴식", 41, [0.002, 0.0005]],
+];
+function demoLive(i) {
+  const [등급, lat, lng, speed, status, minAgo] = DEMO_LIVE[i] || [];
+  if (!등급) return {};
+  const ms = Date.now() - minAgo * 60000;
+  return { 등급, uid: `demo-drv-${i}`, location: { lat, lng }, speed, status, mainStatus: status, updatedAt: ms, heartbeatAt: ms };
+}
+function demoTracks() {
+  const out = [];
+  const today = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
+  DEMO_LIVE.forEach(([g, lat, lng, , , minAgo, [dLat, dLng]], i) => {
+    if (g === "일반" || (!dLat && !dLng)) return;
+    for (let k = 40; k >= 1; k--) {
+      const wob = Math.sin(k / 3) * 0.0015;
+      out.push(fakeDoc("gps_tracks", `demo-trk-${i}-${k}`, {
+        driverId: `demo-drv-${i}`, lat: lat - dLat * k + wob * (dLng ? 1 : 0), lng: lng - dLng * k + wob * (dLat ? 1 : 0),
+        speed: 60, accuracy: 12, date: today, timestamp: Date.now() - (minAgo + k * 2) * 60000,
+      }));
+    }
+  });
+  return out;
+}
+
 export function demoDocsFor(col) {
   if (col === "dispatch") return demoRouteOn() ? [...orders("dispatch"), ...routeOrders()] : orders("dispatch");
   if (col === "routeBoards" && demoRouteOn()) return [routeBoard()];
-  if (col === "drivers") return NAMES.map((n, i) => fakeDoc(col, `demo-drv-${i}`, { companyName: "", 이름: n, 차량번호: `경기${80 + i}바${1000 + i * 37}`, 전화번호: `010-${2000 + i * 11}-${3000 + i * 7}`, 차량종류: CARS[i][0], 차량톤수: CARS[i][1] }));
+  if (col === "drivers") return NAMES.map((n, i) => fakeDoc(col, `demo-drv-${i}`, { companyName: "", 이름: n, 차량번호: `경기${80 + i}바${1000 + i * 37}`, 전화번호: `010-${2000 + i * 11}-${3000 + i * 7}`, 차량종류: CARS[i][0], 차량톤수: CARS[i][1], ...demoLive(i) }));
+  if (col === "gps_tracks") return demoTracks();
   if (col === "clients") return CLIENTS.map((n, i) => fakeDoc(col, `demo-cl-${i}`, { companyName: "", 거래처명: n, 주소: PLACES[i % PLACES.length][1], 담당자: NAMES[i % NAMES.length], 연락처: `02-${300 + i}-${4000 + i}` }));
   // ⭐ 2026-11-05 고정노선 화면 점검용(운행 ON/OFF·목록) — 1개는 ON, 1개는 OFF
   if (col === "fixedRoutes") return [

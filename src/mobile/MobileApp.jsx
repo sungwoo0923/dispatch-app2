@@ -120,6 +120,7 @@ import DetailFilterButton, { applyDetailFilter } from "../DetailFilter"; // 🔎
 import { useFixedRouteAutoDispatch } from "../FixedRoutes"; // ⭐ 2026-11-05 고정노선 배차 이어서 만들기
 import { VehicleTypePicker, currentCustomVehicleTypes, useVehicleTypes } from "../vehicleTypes"; // 🚚 2026-11-02 회사 공용 차량종류
 import { LogisMark, LogisWordmark, LogisTag, LogisLockup } from "../brand"; // 🔷 2026-11-04 LogisWeb 로고
+import { LiveDriverChip, FleetLiveButton, useFleetLivePublish } from "../liveFleet"; // ⭐ 2026-11-05 배차완료 지입·직영·임대 기사 실시간 관제
 
 
 
@@ -2748,6 +2749,7 @@ const [isRefreshing, setIsRefreshing] = useState(false);
   const [orderIssues, setOrderIssues] = useState(null); // null=닫힘, {duplicates,reversedDate,feeReversed,badPhone}=결과
   const [orderIssuesScope, setOrderIssuesScope] = useState("thisMonth"); // "thisMonth" | "twoMonths"
   const [drivers, setDrivers] = useState([]);
+  useFleetLivePublish(drivers); // ⭐ 2026-11-05 이미 받는 drivers로 실시간 관제 색인 갱신(추가 읽기 없음)
   const [clients, setClients] = useState([]);
   const [places, setPlaces] = useState([]);
   const [fixedClientRows, setFixedClientRows] = useState([]);
@@ -8848,6 +8850,7 @@ function MobileOrderList({
   renderAllFirst = false,
 }) {
   const [attachViewOrder, setAttachViewOrder] = useState(null);
+  useFleetLivePublish(drivers); // ⭐ 2026-11-05 실시간 관제 색인(같은 배열이면 아무것도 안 함)
   const handleOpenAttach = (order) => {
     // ⭐ 열기만 해서는 확인 처리하지 않는다 — 실제로 파일을 1장 이상 저장했을 때만
     // attachViewed를 true로 바꾼다(CardAttachViewer의 markAttachViewedSaved 참고).
@@ -9369,6 +9372,8 @@ const summary = useMemo(() => {
           )}
         </span>
         <div className="flex items-center gap-1.5 min-w-0 overflow-x-auto no-scrollbar">
+          {/* ⭐ 2026-11-05 실시간 관제 — 지금 목록의 배차완료 지입·직영·임대 기사 전체 지도(전체 화면) */}
+          <FleetLiveButton rows={allVisibleOrders} mobile className={cardVersionB ? "!h-[30px] !rounded-[10px] !text-[12px] px-2.5" : "!h-[30px] !rounded-full !text-[12px] px-3"} />
           <button
             onClick={() => setOrderTypeFilterOpen(true)}
             className={`text-[12px] font-semibold border transition-colors ${
@@ -11238,6 +11243,8 @@ const dropTime = order.하차시간 ? fmtDispatchTimeM(order.하차시간, order
               <span className="text-[0.8em] font-bold text-[#334155] truncate flex-1">
                 {[order.이름, order.전화번호 ? formatPhone(order.전화번호) : ""].filter(Boolean).join(" · ")}
               </span>
+              {/* ⭐ 2026-11-05 지입·직영·임대 기사앱 실시간 위치 */}
+              <LiveDriverChip order={order} mobile className="shrink-0" />
               {order.전화번호 && (
                 <div className="flex gap-1.5">
                   <a href={`tel:${order.전화번호}`} onClick={e => e.stopPropagation()} style={{ touchAction: "manipulation", background: "linear-gradient(135deg,#2D4C82,#1B2B4B)" }}
@@ -11409,6 +11416,8 @@ const dropTime = order.하차시간 ? fmtDispatchTimeM(order.하차시간, order
       <span className="text-[11.5px] font-semibold text-[#3A4A66] truncate flex-1">
         {[order.차량번호, order.이름, order.전화번호 ? formatPhone(order.전화번호) : ""].filter(Boolean).join(" · ")}
       </span>
+      {/* ⭐ 2026-11-05 지입·직영·임대 기사앱 실시간 위치 */}
+      <LiveDriverChip order={order} mobile className="shrink-0" />
       {order.전화번호 && (
         <div className="flex gap-1">
           <a href={`tel:${order.전화번호}`} onClick={e => e.stopPropagation()} style={{ touchAction: "manipulation" }}

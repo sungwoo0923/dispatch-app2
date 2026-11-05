@@ -14,6 +14,7 @@ import { ownerOf, rateFor } from "./routeBoardSheet";
 import { useRouteCarrierSetting, useRouteCarrierFilter, saveRouteCarrierSetting, carriersInOrders, carrierKey, carrierOf } from "./routeCarriers"; // ⭐ 2026-11-05 운송업체 설정(정산·매출 포함 여부)
 
 const MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
+import { LiveDriverChip, FleetLiveButton, useFleetLivePublish } from "./liveFleet"; // ⭐ 2026-11-05 배차완료 지입·직영·임대 기사 실시간 관제
 const toInt = (v) => parseInt(String(v ?? "").replace(/[^\d-]/g, ""), 10) || 0;
 const normPlate = (s = "") => String(s).replace(/\s+/g, "").toUpperCase();
 const pad = (n) => String(n).padStart(2, "0");
@@ -177,7 +178,9 @@ export function FixedRouteCells({ form, row, drivers = [], clients = [], onPatch
         if (c.kind === "sum") return <td key={c.id} data-frs="sum" className={`${td} tabular-nums`}>{v}</td>;
         if (c.kind === "field" && DRV_KEY[c.field]) {
           const pick = (d) => onPatch({ 차량번호: d.차량번호 || "", 이름: d.이름 || "", 전화번호: d.전화번호 || "", ...(row.배차상태 === "배차중" || !row.배차상태 ? { 배차상태: "배차완료" } : {}) });
-          return <td key={c.id} className={`${td} bg-[#F3F7FF]`} title="차량번호·이름·번호 일부만 쳐도 기사관리에서 찾아 채웁니다"><VehicleCell field={c.field} value={v} drivers={drivers} disabled={disabled} onPick={pick} onCommit={(x) => commit(c, x)} placeholder={c.field === "차량번호" && !v ? "미배차" : ""} /></td>;
+          return <td key={c.id} className={`${td} bg-[#F3F7FF]`} title="차량번호·이름·번호 일부만 쳐도 기사관리에서 찾아 채웁니다"><VehicleCell field={c.field} value={v} drivers={drivers} disabled={disabled} onPick={pick} onCommit={(x) => commit(c, x)} placeholder={c.field === "차량번호" && !v ? "미배차" : ""} />
+            {/* ⭐ 2026-11-05 배차완료 지입·직영·임대 기사 — 기사앱 실시간 위치(LIVE) */}
+            {c.field === "차량번호" && st === "배차완료" && <LiveDriverChip order={row} className="ml-1" />}</td>;
         }
         if (isCarrierCol(c)) {
           const off = carrierF.active && !carrierF.isCountable(row);
@@ -541,6 +544,7 @@ function ForeignOrdersCard({ list, disabled }) {
 }
 
 export default function FixedRouteStatusHost({ company, dispatchData = [], render, places = [], drivers = [], disabled = false }) {
+  useFleetLivePublish(drivers); // ⭐ 2026-11-05 실시간 관제 색인(이미 받은 drivers · 추가 읽기 없음)
   const [addOpen, setAddOpen] = React.useState(false);
   const [rangeOpen, setRangeOpen] = React.useState(false);
   const [carrierOpen, setCarrierOpen] = React.useState(false); // ⭐ 2026-11-05 운송업체 설정
@@ -638,6 +642,7 @@ export default function FixedRouteStatusHost({ company, dispatchData = [], rende
               <button type="button" onClick={() => setAddOpen(true)} title="이 양식에 오더 추가 — 시트에도 새 줄로 들어갑니다"
                 className="h-10 px-3.5 rounded-xl inline-flex items-center gap-1.5 text-[13px] font-black bg-white text-[#0F1A30] hover:bg-[#EEF2F8]">＋ 오더 추가</button>
             )}
+            <FleetLiveButton rows={rows} dark size="lg" />{/* ⭐ 2026-11-05 실시간 관제 */}
             <span className={`h-10 px-3.5 rounded-xl inline-flex items-center gap-2 text-[13px] font-black border ${unassigned ? "bg-[#F7B955]/15 border-[#F7B955]/50 text-[#FCD9A0]" : "bg-white/[0.06] border-white/15 text-white/70"}`}>
               미배차 <span className="text-[17px] tabular-nums" style={{ fontFamily: MONO }}>{unassigned}</span>
             </span>
