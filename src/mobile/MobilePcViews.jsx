@@ -77,14 +77,13 @@ const FLEET_MODULES = [
   { key: "fixed", label: "고정노선", en: "FIXED", icon: "pin" },
   { key: "history", label: "이력 조회", en: "LOG", icon: "history" },
   { key: "attendance", label: "출근기록부", en: "ATT", icon: "clock" },
-  { key: "temperature", label: "온도 관제", en: "TEMP", icon: "alert" },
-  { key: "cargo-camera", label: "적재함 카메라", en: "CAM", icon: "eye" },
+  // ⭐ 2026-11-05 온도 관제·적재함 카메라 메뉴 삭제
   { key: "vehicle", label: "차량 관리", en: "CARE", icon: "truck" },
   { key: "penalty", label: "과태료·사고 서류", en: "DOC", icon: "file" },
   { key: "registration", label: "기사 등록 관리", en: "REG", icon: "user" },
 ];
 function FleetView({ dispatchData, userCompany, role, onRegisterBack }) {
-  const [tab, setTab] = React.useState(() => { try { return sessionStorage.getItem("mFleetTab") || "tracking"; } catch { return "tracking"; } });
+  const [tab, setTab] = React.useState(() => { try { const v = sessionStorage.getItem("mFleetTab") || "tracking"; return FLEET_MODULES.some((m) => m.key === v) ? v : "tracking"; } catch { return "tracking"; } }); // ⭐ 2026-11-05 없어진 메뉴(온도 관제 등)로 기억돼 있으면 관제현황
   const pick = (k) => { setTab(k); try { sessionStorage.setItem("mFleetTab", k); } catch { /* 무시 */ } };
   return (
     <KpSubNav code="FLEET CONTROL" title="지입차관리" icon="truck" active={tab} onSelect={pick}
