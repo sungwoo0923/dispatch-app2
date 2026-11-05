@@ -6,6 +6,7 @@
 //  - 관리자게시판: 관리자·최고관리자·인사관리자 / 임원게시판: 권한 설정 전까지 최고관리자만 — 보안규칙도 같은 기준
 //  - 글쓴이·관리자는 수정·삭제, 관리자는 상단 고정. 댓글, 조회수(읽은 사람 수), 새 글 N 표시.
 import React from "react";
+import { runDelete } from "./DeleteProgress"; // ⭐ 2026-11-05 삭제 진행 창 + 한 번에 삭제
 import { kpConfirm } from "./kpDialog";
 import { db } from "./firebase";
 import { collection, doc, onSnapshot, query, where, addDoc, updateDoc, deleteDoc, arrayUnion, serverTimestamp } from "firebase/firestore";
@@ -111,7 +112,7 @@ export default function BoardPage({ company, me, board }) {
   };
   const remove = async (p) => {
     if (!await kpConfirm("이 글을 삭제할까요?")) return;
-    await deleteDoc(doc(db, "boardPosts", p.id)).catch((e) => window.alert(e.message));
+    await runDelete({ label: "게시글", task: () => deleteDoc(doc(db, "boardPosts", p.id)) }).catch((e) => window.alert(e.message)); // ⭐ 2026-11-05 삭제 진행 창
     setOpenId(null);
   };
   const isNew = (p) => Date.now() - toMs(p.createdAt) < 24 * 3600e3;

@@ -8,6 +8,7 @@ import { Dialog } from "@headlessui/react";
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip } from "recharts";
 import { fmtMoney, fmtPhone, moneyDigits } from "./formatInput";
 import { CustomSelect } from "./CustomSelect";
+import { deleteDocsAtomic } from "./DeleteProgress"; // ⭐ 2026-11-05 삭제 진행 창 + 한 번에 삭제
 import CustomDatePicker from "./CustomDatePicker"; // 📅 2026-11-04 날짜 입력은 프로그램 달력으로
 import { CompanyOptionPicker } from "./companyOptionPicker"; // 🧾 2026-11-02 지급방식·배차방식·상/하차방법 공용 선택기(＋ 추가)
 
@@ -599,9 +600,11 @@ export default function FixedClients({ drivers = [], upsertDriver, userCompany =
 
   const removeSelected = async () => {
     if (isViewer) { _viewerAlert(); return; }
-    for (const id of selected) await removeRow(id);
-    setSelected([]);
+    // ⭐ 2026-11-05 한 줄씩 지우던 것을 한 번에(writeBatch) + 삭제 진행 창
+    const ids = [...selected];
     setDeleteConfirm(false);
+    await deleteDocsAtomic(db, ids.map((id) => doc(coll, id)), { label: "고정거래처" }).catch((e) => alert("삭제 실패: " + (e?.message || e)));
+    setSelected([]);
   };
 
   const openEditPopup = (row) => { setEditPopupRow({ ...row }); setEditPopupOpen(true); };

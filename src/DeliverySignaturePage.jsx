@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
+import { runDelete } from "./DeleteProgress"; // ⭐ 2026-11-05 삭제 진행 창 + 한 번에 삭제
 import * as XLSX from "xlsx";
 import { db } from "./firebase";
 import {
@@ -404,7 +405,7 @@ export default function DeliverySignaturePage() {
 
   async function handleDeleteHistory(id) {
     if (!confirm("이 데이터를 삭제하시겠습니까?")) return;
-    await deleteDoc(doc(db, "deliverySignatureHistory", id));
+    await runDelete({ label: "데이터", task: () => deleteDoc(doc(db, "deliverySignatureHistory", id)) }); // ⭐ 2026-11-05 삭제 진행 창
     await loadHistory();
   }
 

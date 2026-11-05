@@ -1,5 +1,6 @@
 // ===================== src/RateCard.jsx =====================
 import React, { useState, useMemo, useRef, useEffect } from "react";
+import { runDelete } from "./DeleteProgress"; // ⭐ 2026-11-05 삭제 진행 창 + 한 번에 삭제
 import { kpConfirm } from "./kpDialog";
 import * as XLSX from "xlsx";
 import { useLoadFullOrderHistory } from "./orderHistory";
@@ -368,7 +369,7 @@ const [detailModal, setDetailModal] = useState(null);
   const removeMultiSheet = async (id) => {
     if (!await kpConfirm("이 단가표를 삭제할까요?")) return;
     try {
-      await deleteDoc(doc(db, "multiRateSheets", id));
+      await runDelete({ label: "단가표", task: () => deleteDoc(doc(db, "multiRateSheets", id)) }); // ⭐ 2026-11-05 삭제 진행 창
       if (multiSelectedId === id) setMultiSelectedId(null);
     } catch (e) { console.error(e); alert("삭제에 실패했습니다."); }
   };

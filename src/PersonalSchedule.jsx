@@ -7,6 +7,7 @@
 //          당일에는 PC 접속 시 오른쪽 아래 배너 · 모바일은 위쪽 알림줄(잠깐 떴다 사라짐) — PersonalTodayHost
 //  · 생일: 직원 일정·임원 일정 달력에 "○○○ 생일" 표시(birthdaysOn)
 import React from "react";
+import { runDelete } from "./DeleteProgress"; // ⭐ 2026-11-05 삭제 진행 창 + 한 번에 삭제
 import { addDoc, collection, deleteDoc, doc, onSnapshot, query, serverTimestamp, setDoc, updateDoc, where } from "firebase/firestore";
 import { db, auth } from "./firebase";
 import CustomDatePicker from "./CustomDatePicker";
@@ -134,7 +135,7 @@ export function PersonalSchedule({ company, modeSwitch, staff = [] }) {
       setEdit(null);
     } catch (err) { alert(`저장하지 못했습니다: ${err?.message || err}`); } finally { setBusy(false); }
   };
-  const remove = async (e) => { if (!window.confirm("이 일정을 지울까요?")) return; await deleteDoc(doc(db, "personalSchedules", e.id)).catch((err) => alert(err.message)); setEdit(null); };
+  const remove = async (e) => { if (!window.confirm("이 일정을 지울까요?")) return; await runDelete({ label: "일정", task: () => deleteDoc(doc(db, "personalSchedules", e.id)) }).catch((err) => alert(err.message)); setEdit(null); }; // ⭐ 2026-11-05 삭제 진행 창
   const dayList = by[pick] || [];
   const dayBirth = birthdaysOn(staff, pick);
   const inp = "h-11 w-full px-3.5 rounded-xl border border-[#DCE3EE] bg-white text-[14.5px] font-semibold text-[#0F1A30] outline-none focus:border-[#2D4C82]";

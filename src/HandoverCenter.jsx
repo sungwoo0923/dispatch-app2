@@ -3,6 +3,7 @@
 //  받은/보낸/회사 전체(관리자) 목록 · 받는 사람별 확인 여부 · 열면 자동 확인 · 작성자는 수정/삭제.
 //  작성은 기존 인수인계 작성 화면(HomeWriters › HandoverWriter)을 그대로 쓴다.
 import React from "react";
+import { runDelete } from "./DeleteProgress"; // ⭐ 2026-11-05 삭제 진행 창 + 한 번에 삭제
 import { collection, deleteDoc, doc, onSnapshot, updateDoc, arrayUnion } from "firebase/firestore";
 import { db } from "./firebase";
 import { savePdf } from "./a4Export";
@@ -75,7 +76,7 @@ export default function HandoverCenter({ company, me, isViewer = false }) {
   }, [list, uid]); // eslint-disable-line react-hooks/exhaustive-deps
   const remove = async (h) => {
     if (!window.confirm("인수인계를 삭제하시겠습니까?")) return;
-    await deleteDoc(doc(db, "handovers", h.id)).catch((e) => window.alert(e.message));
+    await runDelete({ label: "인수인계", task: () => deleteDoc(doc(db, "handovers", h.id)) }).catch((e) => window.alert(e.message)); // ⭐ 2026-11-05 삭제 진행 창
     setOpen(null);
   };
 

@@ -1,5 +1,6 @@
 // ======================= src/mobile/MobileApp.jsx (PART 1/3) =======================
 import { subscribeUsersLive } from "../usersLive"; // ⭐ 2026-11-02 속도 — 직원 명부 구독 공유
+import { runDelete, deleteOrdersWithLogAtomic } from "../DeleteProgress"; // ⭐ 2026-11-05 삭제 진행 창 + 한 번에 삭제
 import { RichHtml } from "../richText"; // ⭐ 2026-11-03 공지 꾸민 글 보여주기
 import { isMasterKey } from "../monthCompare"; // ⭐ 2026-11-03 최고관리자 계정은 "최고관리자"로
 import { useMyProfile } from "../userNames";
@@ -201,6 +202,9 @@ const bgWrite = (p, what = "저장") => {
     alert(`${what} 중 오류가 발생했습니다. 네트워크 확인 후 다시 시도해주세요.\n${e?.message || ""}`);
   });
 };
+// ⭐ 2026-11-05 오더 삭제(한 건·여러 건) — 삭제 기록(deletedOrders) + 삭제를 묶음(writeBatch)으로 한 번에, 삭제 진행 창.
+//   예전엔 건마다 deleteOrderWithLog를 따로 보내 목록이 한 줄씩 줄어들었다. items: [{ col, id }]
+const deleteOrdersAtomicMobile = (items) => deleteOrdersWithLogAtomic(items, { label: "오더" });
 
 // 🔥 role 기반 컬렉션 분기
 const role = localStorage.getItem("role") || "user";
@@ -5034,8 +5038,8 @@ const deleteSingleOrder = async (order) => {
   const id = order.id || order._id;
   if (!col || !id) return;
   notifyFleetCancelMobile(order, id);
-  // ⭐ 사용자 요청 — 취소내역 없이 완전삭제(모든 화면에서 사라짐)
-  await deleteOrderWithLog(col, id);
+  // ⭐ 사용자 요청 — 취소내역 없이 완전삭제(모든 화면에서 사라짐) · ⭐ 2026-11-05 삭제 진행 창
+  await deleteOrdersAtomicMobile([{ col, id }]);
   deleteShipperMirrorMobile(order).catch(() => {});
   setOrders(prev => prev.filter(o => (o.id || o._id) !== id));
 };
@@ -5271,7 +5275,7 @@ const deleteSingleOrder = async (order) => {
       archiveCompletedOrderMobile(deleteConfirmMobile, deleteConfirmMobile.id, "오더삭제");
     }
     // ⭐ 사용자 요청 — 취소내역 없이 완전삭제(모든 화면에서 사라짐)
-    bgWrite(deleteOrderWithLog(deleteConfirmMobile.__col, deleteConfirmMobile.id), "오더 삭제"); // 화면 먼저(삭제는 뒤에서)
+    bgWrite(deleteOrdersAtomicMobile([{ col: deleteConfirmMobile.__col, id: deleteConfirmMobile.id }]), "오더 삭제"); // 화면 먼저(삭제는 뒤에서) · ⭐ 2026-11-05 삭제 진행 창
     deleteShipperMirrorMobile(deleteConfirmMobile).catch(() => {});
     setDeleteConfirmMobile(null);
     setSelectedOrder(null);
@@ -5302,17 +5306,19 @@ const deleteSingleOrder = async (order) => {
     const fleetCount = selectedOrders.filter(o => o.기사확인상태 === "대기" || o.기사확인상태 === "수락").length;
     if (fleetCount > 0 && !window.confirm(`지입 기사에게 배차된 오더가 ${fleetCount}건 포함되어 있습니다.\n삭제하면 기사앱에서도 오더가 사라집니다. 삭제하시겠습니까?`)) return;
     try {
+      // ⭐ 2026-11-05 한 건씩 보내던 삭제를 한 번에(writeBatch) + 삭제 진행 창 — 목록이 한 줄씩 사라지지 않게
+      const _targets = [];
       for (const order of selectedOrders) {
         const col = order.__col || collName;
         const id = order.id || order._id;
         if (col && id) {
           notifyFleetCancelMobile(order, id);
           if (["수락", "완료"].includes(order.기사확인상태) && order.차량번호) archiveCompletedOrderMobile(order, id, "오더삭제");
-          // ⭐ 사용자 요청 — 취소내역 없이 완전삭제(모든 화면에서 사라짐)
-          bgWrite(deleteOrderWithLog(col, id), "오더 삭제");
-          deleteShipperMirrorMobile(order).catch(() => {});
+          _targets.push({ col, id, order });
         }
       }
+      // ⭐ 사용자 요청 — 취소내역 없이 완전삭제(모든 화면에서 사라짐)
+      bgWrite(deleteOrdersAtomicMobile(_targets).then(() => { _targets.forEach(({ order }) => deleteShipperMirrorMobile(order).catch(() => {})); }), "오더 삭제");
       const deletedIds = new Set(selectedOrders.map(o => o.id || o._id));
       setOrders(prev => prev.filter(o => !deletedIds.has(o.id) && !deletedIds.has(o._id)));
       showSuccess(`${selectedOrders.length}개 오더 삭제 완료`);
@@ -6145,7 +6151,7 @@ onGoAttendance={() => {
         {(canEdit || canDelete) && (
           <div className="flex gap-2 pt-3 border-t border-gray-100">
             {canDelete && (
-              <button onClick={() => setConfirmDialog({ message: "일정을 삭제하시겠습니까?", onConfirm: async () => { await deleteDoc(doc(db, "schedules", selectedSchedule.id)); setSelectedSchedule(null); } })} className="flex-1 py-2.5 rounded-xl border border-red-200 text-red-500 text-sm font-semibold">삭제</button>
+              <button onClick={() => setConfirmDialog({ message: "일정을 삭제하시겠습니까?", onConfirm: async () => { const _id = selectedSchedule.id; await runDelete({ label: "일정", task: () => deleteDoc(doc(db, "schedules", _id)) }); setSelectedSchedule(null); } }) /* ⭐ 2026-11-05 삭제 진행 창 */} className="flex-1 py-2.5 rounded-xl border border-red-200 text-red-500 text-sm font-semibold">삭제</button>
             )}
             {canEdit && (
               <button onClick={() => {
@@ -6406,7 +6412,7 @@ onGoAttendance={() => {
           if (!isNAuthor && !isSA) return null;
           return (
           <div className="flex gap-2 pt-2 border-t border-gray-100">
-            <button onClick={() => setConfirmDialog({ message: "공지사항을 삭제하시겠습니까?", onConfirm: async () => { /* ⭐ 2026-11-02 점검 — 삭제 실패 시 알림 */ try { await deleteDoc(doc(db, "notices", selectedNotice.id)); setSelectedNotice(null); } catch (e) { alert(e?.message || "삭제 실패"); } } })}
+            <button onClick={() => setConfirmDialog({ message: "공지사항을 삭제하시겠습니까?", onConfirm: async () => { /* ⭐ 2026-11-02 점검 — 삭제 실패 시 알림 */ try { const _id = selectedNotice.id; await runDelete({ label: "공지", task: () => deleteDoc(doc(db, "notices", _id)) }); setSelectedNotice(null); } /* ⭐ 2026-11-05 삭제 진행 창 */ catch (e) { alert(e?.message || "삭제 실패"); } } })}
               className="flex-1 py-2.5 rounded-xl border border-red-200 text-red-500 text-sm font-semibold">삭제</button>
             <button onClick={() => { setNoticeForm({ category: selectedNotice.category || "공지사항", author: selectedNotice.author, content: selectedNotice.content, audience: selectedNotice.audience || "internal" }); setNoticeOpen(true); }}
               className={`flex-1 py-2.5 rounded-xl text-white text-sm font-semibold ${cardVersionB ? "bg-[#1B2B4B]" : "bg-blue-600"}`}>수정</button>
@@ -6604,7 +6610,7 @@ onGoAttendance={() => {
           {(currentUser?.uid === selectedHandover.authorUid || role === "superadmin" || role === "totalMaster") && (
             <div className="flex gap-2 pt-2 border-t">
               <button
-                onClick={() => setConfirmDialog({ message: "인수인계를 삭제하시겠습니까?", onConfirm: async () => { await deleteDoc(doc(db, "handovers", selectedHandover.id)); setSelectedHandover(null); } })}
+                onClick={() => setConfirmDialog({ message: "인수인계를 삭제하시겠습니까?", onConfirm: async () => { const _id = selectedHandover.id; await runDelete({ label: "인수인계", task: () => deleteDoc(doc(db, "handovers", _id)) }); setSelectedHandover(null); } }) /* ⭐ 2026-11-05 삭제 진행 창 */}
                 className="flex-1 py-2.5 rounded-xl border border-red-200 text-red-600 text-sm font-semibold"
               >
                 삭제
@@ -21534,7 +21540,7 @@ function MobileCanceledList({ orders = [], onBack, cardVersionB = false, mobileU
     if (!purgeTarget || busy) return;
     setBusy(true);
     try {
-      await deleteOrderWithLog(purgeTarget.__col, purgeTarget.id);
+      await deleteOrdersAtomicMobile([{ col: purgeTarget.__col, id: purgeTarget.id }]); // ⭐ 2026-11-05 삭제 진행 창
       setPurgeTarget(null);
       flash("완전 삭제 완료");
     } catch (e) {
@@ -21548,8 +21554,9 @@ function MobileCanceledList({ orders = [], onBack, cardVersionB = false, mobileU
     if (!sorted.length || busy) return;
     setBusy(true);
     try {
-      await Promise.all(sorted.map((o) => deleteOrderWithLog(o.__col, o.id)));
       setPurgeAll(false);
+      // ⭐ 2026-11-05 건별 병렬 삭제 → 한 번에(writeBatch) + 삭제 진행 창(한 줄씩 사라지지 않게)
+      await deleteOrdersAtomicMobile(sorted.map((o) => ({ col: o.__col, id: o.id })));
       flash("전체 삭제 완료");
     } catch (e) {
       alert("전체 삭제 중 오류가 발생했습니다: " + e.message);

@@ -1,5 +1,6 @@
 // src/AdminMenu.jsx
 import BillingCenter from "./BillingCenter";
+import { runDelete, commitDeletes } from "./DeleteProgress"; // ⭐ 2026-11-05 삭제 진행 창 + 한 번에 삭제
 import { billingAccess } from "./billingAccess";
 import { kpConfirm } from "./kpDialog";
 import { CopyTemplateEditor } from "./CopyTemplateEditor";
@@ -649,15 +650,18 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
     if (me?.uid === u.id) return alert("본인 계정은 삭제할 수 없습니다.");
     if (!isTotalMaster && (u.companyName || DEFAULT_COMPANY) !== effectiveCompany) return;
     if (!await kpConfirm(`"${u.name || u.email}" 계정을 삭제할까요?\n가입신청 내역도 함께 삭제됩니다.`, { title: "계정 삭제", okText: "삭제", danger: true })) return false;
-    await deleteDoc(doc(db, "users", u.id));
-    try {
-      const tSnap = await getDocs(query(collection(db, "transportApplications"), where("userId", "==", u.id)));
-      for (const d of tSnap.docs) await deleteDoc(doc(db, "transportApplications", d.id));
-    } catch (_) {}
-    try {
-      const cSnap = await getDocs(query(collection(db, "companyApplications"), where("userId", "==", u.id)));
-      for (const d of cSnap.docs) await deleteDoc(doc(db, "companyApplications", d.id));
-    } catch (_) {}
+    // ⭐ 2026-11-05 삭제 진행 창 + 가입신청 내역은 한 번에(writeBatch)
+    await runDelete({ label: "계정", task: async () => {
+      await deleteDoc(doc(db, "users", u.id));
+      try {
+        const tSnap = await getDocs(query(collection(db, "transportApplications"), where("userId", "==", u.id)));
+        await commitDeletes(db, tSnap.docs.map((d) => doc(db, "transportApplications", d.id)));
+      } catch (_) {}
+      try {
+        const cSnap = await getDocs(query(collection(db, "companyApplications"), where("userId", "==", u.id)));
+        await commitDeletes(db, cSnap.docs.map((d) => doc(db, "companyApplications", d.id)));
+      } catch (_) {}
+    } });
     setManageUser(null);
     return true;
   };

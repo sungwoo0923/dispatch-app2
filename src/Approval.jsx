@@ -15,6 +15,7 @@
 //  - 승인 후 취소: 기안자가 「결재 취소 요청」(사유) → 같은 결재선이 다시 승인하면 "결재 취소"로 바뀐다.
 //    문서는 지우지 않고 모두의 보관함에 "결재 취소" 도장으로 남는다(감사 기록). 연차 사용일수도 자동 복구.
 import { defaultFundId } from "./ledgerAuto";
+import { runDelete } from "./DeleteProgress"; // ⭐ 2026-11-05 삭제 진행 창 + 한 번에 삭제
 import React from "react";
 import { kpConfirm } from "./kpDialog";
 import BankAccountInput, { ReasonTemplates } from "./BankAccountInput";
@@ -2124,7 +2125,7 @@ function LinesPage({ company, me, staff }) {
                 {(t.ownerUid === me.uid || admin) && (
                   <>
                     <button type="button" onClick={() => setEdit({ ...t, cats: t.cats || [], cc: t.cc || [] })} className="h-8 px-3 rounded-lg border border-[#DCE3EE] text-[13px] font-bold text-[#3A4A66]">수정</button>
-                    <button type="button" onClick={() => window.confirm("이 결재선을 지울까요?") && deleteDoc(doc(db, "approvalLines", t.id))} className="h-8 px-3 rounded-lg border border-[#DCE3EE] text-[13px] font-bold text-[#5B6B85]">삭제</button>
+                    <button type="button" onClick={() => window.confirm("이 결재선을 지울까요?") && runDelete({ label: "결재선", task: () => deleteDoc(doc(db, "approvalLines", t.id)) }).catch(() => {})} /* ⭐ 2026-11-05 삭제 진행 창 */ className="h-8 px-3 rounded-lg border border-[#DCE3EE] text-[13px] font-bold text-[#5B6B85]">삭제</button>
                   </>
                 )}
               </div>

@@ -5,6 +5,7 @@
 //  - 고객은 로그인 없이 링크로 열고, 서명 칸만 채울 수 있다(firestore.rules). 서명 후엔 문서 지문(SHA-256)을 함께 남긴다.
 //  ⭐ 알록달록 금지 — 네이비 계열만.
 import React from "react";
+import { runDelete } from "./DeleteProgress"; // ⭐ 2026-11-05 삭제 진행 창 + 한 번에 삭제
 import { kpConfirm } from "./kpDialog";
 import { collection, deleteDoc, doc, onSnapshot, orderBy, query, serverTimestamp, setDoc, updateDoc } from "firebase/firestore";
 import { db } from "./firebase";
@@ -232,7 +233,7 @@ export function ContractList({ onNew, onEdit }) {
                     {c.status === "발송" && <button type="button" onClick={() => copy(c)} className="h-8 px-3 rounded-lg border border-[#1B2B4B] text-[12.5px] font-black text-[#1B2B4B] mr-1">{copied === c.id ? "복사됨 ✓" : "서명 링크 복사"}</button>}
                     <button type="button" onClick={() => printContract(c)} className="h-8 px-3 rounded-lg border border-[#DCE3EE] text-[12.5px] font-black text-[#1B2B4B] mr-1">보기·인쇄</button>
                     {c.status !== "서명완료" && c.status !== "취소" && <button type="button" onClick={() => window.confirm("이 계약서를 취소할까요? 서명 링크도 더 이상 쓸 수 없습니다.") && updateDoc(doc(db, "contracts", c.id), { status: "취소" })} className="h-8 px-3 rounded-lg border border-[#DCE3EE] text-[12.5px] font-bold text-[#7A879C] mr-1">취소</button>}
-                    {c.status !== "서명완료" && <button type="button" onClick={() => window.confirm("계약서를 완전히 삭제할까요?") && deleteDoc(doc(db, "contracts", c.id))} className="h-8 px-3 rounded-lg border border-[#DCE3EE] text-[12.5px] font-bold text-[#7A879C]">삭제</button>}
+                    {c.status !== "서명완료" && <button type="button" onClick={() => window.confirm("계약서를 완전히 삭제할까요?") && runDelete({ label: "계약서", task: () => deleteDoc(doc(db, "contracts", c.id)) }).catch(() => {})} /* ⭐ 2026-11-05 삭제 진행 창 */ className="h-8 px-3 rounded-lg border border-[#DCE3EE] text-[12.5px] font-bold text-[#7A879C]">삭제</button>}
                   </td>
                 </tr>))}
               </tbody>

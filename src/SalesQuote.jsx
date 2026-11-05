@@ -5,6 +5,7 @@
 //  - "요금·청구"(가입사 월 청구 계산, siteConfig/platformPricing)와는 별개 — 그쪽은 이미 쓰는 고객 청구용, 이쪽은 영업 제안용.
 //  ⭐ 알록달록 금지 — 네이비 계열만.
 import React from "react";
+import { runDelete } from "./DeleteProgress"; // ⭐ 2026-11-05 삭제 진행 창 + 한 번에 삭제
 import { addDoc, collection, deleteDoc, doc, onSnapshot, orderBy, query, serverTimestamp, setDoc, updateDoc } from "firebase/firestore";
 import { db } from "./firebase";
 import { PlanMatrix, PLAN_DEFAULTS, PLAN_IDS, PLAN_MATRIX_CSS, RECOMMENDED_PLAN_VERSION, planFeatureLines, planMatrixHtml } from "./plans";
@@ -673,7 +674,7 @@ export function QuoteHistory({ onOpen, onContract }) {
                       <button type="button" onClick={() => onOpen?.(x)} className="h-8 px-3 rounded-lg bg-[#0F1A30] text-white text-[12.5px] font-black mr-1">열기</button>
                       {onContract && <button type="button" onClick={() => onContract(x)} className="h-8 px-3 rounded-lg border border-[#1B2B4B] text-[12.5px] font-black text-[#1B2B4B] mr-1">계약서 만들기</button>}
                       <button type="button" onClick={() => { const c = x.pricing ? mergeDefaults(x.pricing) : cfg; if (!c) return; const inp = { ...BLANK_INPUT, ...x.input }; const q = quoteOf(c, inp); q && openPrint(`견적서_${x.customer}`, quoteHtml(c, inp, q, x.no)); }} className="h-8 px-3 rounded-lg border border-[#DCE3EE] text-[12.5px] font-black text-[#1B2B4B] mr-1">인쇄</button>
-                      <button type="button" onClick={() => window.confirm(`${x.customer} 견적(${x.no})을 삭제할까요?`) && deleteDoc(doc(db, "salesQuotes", x.id))} className="h-8 px-3 rounded-lg border border-[#DCE3EE] text-[12.5px] font-bold text-[#7A879C]">삭제</button>
+                      <button type="button" onClick={() => window.confirm(`${x.customer} 견적(${x.no})을 삭제할까요?`) && runDelete({ label: "견적", task: () => deleteDoc(doc(db, "salesQuotes", x.id)) }).catch(() => {})} /* ⭐ 2026-11-05 삭제 진행 창 */ className="h-8 px-3 rounded-lg border border-[#DCE3EE] text-[12.5px] font-bold text-[#7A879C]">삭제</button>
                     </td>
                   </tr>
                 ))}

@@ -6,6 +6,7 @@
 //     기본정보 변경·기타 이력 — 한 페이지에서 한눈에, A4 인쇄·엑셀 저장
 //  휴대폰(좁은 화면)에서는 표 대신 카드로 그린다.
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { runDelete } from "./DeleteProgress"; // ⭐ 2026-11-05 삭제 진행 창 + 한 번에 삭제
 import { createPortal } from "react-dom";
 import { collection, doc, onSnapshot, query, where, setDoc, deleteDoc, runTransaction, serverTimestamp } from "firebase/firestore";
 import * as XLSX from "xlsx";
@@ -564,7 +565,7 @@ function Ledger({ v, co, appDriver, linkRaw, drivers, canEdit, by, narrow, purpo
   const removeVehicle = async () => {
     if (!(await kpConfirm(`${v.차량번호} 차량과 모든 이력·증빙을 삭제할까요? 되돌릴 수 없습니다.`, { title: "차량 삭제", okText: "삭제", danger: true }))) return;
     const files = [...(v.repairs || []), ...(v.structures || [])].flatMap((r) => r.files || []);
-    await deleteDoc(ref);
+    await runDelete({ label: "차량", task: () => deleteDoc(ref) }); // ⭐ 2026-11-05 삭제 진행 창
     deleteEvidence(files).catch(() => {});
     onBack(); toast("삭제했습니다");
   };

@@ -7,6 +7,7 @@
 //  · 직원 일정(TeamSchedule): 연차·반차·외근·출장·병가·경조사를 달력으로(결재 완료 = 확정, 진행 중 = 점선)
 //  매출 통계는 홈과 같은 방식 — 올해 지난 기간 합계(하루 1번 계산·저장, homePastStats v4) + 최근 실시간 오더.
 import React from "react";
+import { runDelete } from "./DeleteProgress"; // ⭐ 2026-11-05 삭제 진행 창 + 한 번에 삭제
 import { collection, onSnapshot, query, where, getDocs } from "firebase/firestore";
 import { ResponsiveContainer, ComposedChart, Bar, Line, XAxis, YAxis, Tooltip, CartesianGrid, AreaChart, Area } from "recharts";
 import { db, DEFAULT_COMPANY } from "./firebase";
@@ -785,7 +786,7 @@ function ExecScheduleCompany({ company, me = {}, canWrite = false, modeSwitch })
       setEdit(null);
     } finally { setBusy(false); }
   };
-  const remove = async (e) => { if (!window.confirm("이 일정을 지울까요?")) return; const { doc: fdoc, deleteDoc } = await import("firebase/firestore"); await deleteDoc(fdoc(db, "execSchedules", e.id)); setEdit(null); };
+  const remove = async (e) => { if (!window.confirm("이 일정을 지울까요?")) return; const { doc: fdoc, deleteDoc } = await import("firebase/firestore"); await runDelete({ label: "일정", task: () => deleteDoc(fdoc(db, "execSchedules", e.id)) }); setEdit(null); }; // ⭐ 2026-11-05 삭제 진행 창
   const dayList = by[pick] || [];
   const inpD = "h-12 w-full px-3.5 rounded-xl bg-white/[0.06] border border-white/15 text-white text-[15px] font-bold outline-none focus:border-[#D7BC82] placeholder:text-white/30 [color-scheme:dark]";
   return (

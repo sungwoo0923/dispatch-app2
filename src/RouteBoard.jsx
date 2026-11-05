@@ -11,6 +11,7 @@
 //   · 오더에 남기는 것: 배차표Id·배차표명·배차표묶음·배차표순번, 품목수량{칸이름:수량}, 추가정보{칸이름:값}
 //   · 배차관리에서 고친 차량·기사·시간도 이 화면에 그대로 보인다(같은 오더를 읽으므로).
 import React from "react";
+import { runDelete } from "./DeleteProgress"; // ⭐ 2026-11-05 삭제 진행 창 + 한 번에 삭제
 import { createPortal } from "react-dom";
 import { collection, doc, onSnapshot, query, where, getDocs, setDoc, addDoc, updateDoc, deleteDoc, serverTimestamp, writeBatch } from "firebase/firestore";
 import { db, auth, FUNCTIONS_BASE } from "./firebase";
@@ -927,7 +928,7 @@ export default function RouteBoard({ companyName = "" }) {
   };
   const delForm = async () => {
     if (!(await kpConfirm(`'${form.name}' 양식을 지울까요?\n(이미 만든 오더는 지워지지 않습니다)`))) return;
-    await deleteDoc(doc(db, "routeBoards", form.id)).catch((e) => kpAlert(e.message));
+    await runDelete({ label: "양식", task: () => deleteDoc(doc(db, "routeBoards", form.id)) }).catch((e) => kpAlert(e.message)); // ⭐ 2026-11-05 삭제 진행 창
     setFormId("");
   };
 

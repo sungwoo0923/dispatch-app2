@@ -20,6 +20,7 @@ import { getTenant } from "./fsTenant";
 import { createPortal } from "react-dom";
 import React from "react";
 import { kpConfirm, kpAlert } from "./kpDialog";
+import { runDelete } from "./DeleteProgress"; // ⭐ 2026-11-05 삭제 진행 창
 import { collection, doc, onSnapshot, query, where, addDoc, updateDoc, deleteDoc, setDoc, getDoc, serverTimestamp, arrayUnion } from "firebase/firestore";
 import { db, auth, DEFAULT_COMPANY } from "./firebase";
 import CustomDatePicker from "./CustomDatePicker";
@@ -861,7 +862,7 @@ export default function FixedRoutes({ drivers = [], companyName = "", dispatchDa
       }
     } catch (e) { kpAlert(`바꾸지 못했습니다: ${e?.message || e}`); }
   };
-  const remove = async (r) => { if (await kpConfirm(`"${r.name}" 노선을 삭제할까요?\n이미 만들어진 배차는 그대로 남습니다.`)) { await deleteDoc(doc(db, "fixedRoutes", r.id)); setSelId(null); } };
+  const remove = async (r) => { if (await kpConfirm(`"${r.name}" 노선을 삭제할까요?\n이미 만들어진 배차는 그대로 남습니다.`)) { await runDelete({ label: "노선", task: () => deleteDoc(doc(db, "fixedRoutes", r.id)) }); setSelId(null); } }; // ⭐ 2026-11-05 삭제 진행 창
   const genNow = async () => { const n = await runGen(routes, { full: true }); flash(n ? `배차 ${n}건을 만들었습니다(~${genHorizon().slice(5).replace("-", "/")})` : "새로 만들 배차가 없습니다(이미 모두 있음)"); };
   const ordersOf = (r) => (dispatchData || []).filter((o) => o.고정노선Id === r.id).sort((a, b) => String(b.상차일).localeCompare(String(a.상차일))).slice(0, 8);
 

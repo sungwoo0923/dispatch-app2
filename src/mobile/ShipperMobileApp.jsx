@@ -22,6 +22,7 @@ import { updateDoc } from "../orderWrite"; // ★ 오더 수정시각 자동 기
 import InternalMessenger from "../InternalMessenger";
 import { html2canvas } from "../lazyLoad"; // ⭐ 2026-11-02 속도 — 캡처 라이브러리는 처음 캡처할 때 받는다
 import { deleteOrderWithLog } from "../orderHistory";
+import { runDelete } from "../DeleteProgress"; // ⭐ 2026-11-05 삭제 진행 창
 import "../kpNavyTheme.css";
 import MobileSelect from "./MobileSelect"; // ⭐ 2026-11-02 기본 select → 남색 바텀시트 선택기
 import { LogisWordmark, LogisTag } from "../brand"; // 🔷 2026-11-04 LogisWeb 로고
@@ -319,7 +320,7 @@ async function shipperDeleteOrRequestCancel(order, user) {
     return true;
   }
   if (!window.confirm("이 오더를 삭제하시겠습니까?\n삭제 후 복구가 불가능합니다.")) return false;
-  await deleteOrderWithLog("orders", order.id);
+  await runDelete({ label: "오더", task: () => deleteOrderWithLog("orders", order.id) }); // ⭐ 2026-11-05 삭제 진행 창
   await propagateDeleteToOrigin(order);
   return true;
 }
@@ -389,7 +390,7 @@ function RequestHoldActions({ order, onDeleted }) {
     if (!window.confirm("이 오더를 삭제하시겠습니까?\n삭제 후 복구가 불가능합니다.")) return;
     setBusy(true);
     try {
-      await deleteOrderWithLog("orders", order.id);
+      await runDelete({ label: "오더", task: () => deleteOrderWithLog("orders", order.id) }); // ⭐ 2026-11-05 삭제 진행 창
       onDeleted?.();
     } catch {}
     setBusy(false);

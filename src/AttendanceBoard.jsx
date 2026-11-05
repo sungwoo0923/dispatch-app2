@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
+import { runDelete } from "./DeleteProgress"; // ⭐ 2026-11-05 삭제 진행 창 + 한 번에 삭제
 import { workWindow } from "./autoAttendance";
 import { collection, deleteDoc, doc, onSnapshot, query, setDoc, where, addDoc, arrayUnion, getDocs } from "firebase/firestore";
 import { geocodeAddress } from "./tmapFareCalc";
@@ -496,7 +497,7 @@ export default function AttendanceBoard({ userCompany, role, user }) {
     setNewHolidayDate("");
     setNewHolidayLabel("");
   };
-  const removeHoliday = async (id) => { await deleteDoc(doc(db, "holidays", id)); };
+  const removeHoliday = async (id) => { await runDelete({ label: "휴일", task: () => deleteDoc(doc(db, "holidays", id)) }); }; // ⭐ 2026-11-05 삭제 진행 창
 
   // ─── 월간 집계(직원별) ─────────────────────────────────────────
   const monthAgg = useMemo(() => {

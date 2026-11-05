@@ -4,6 +4,7 @@
 //    (입력 권한이 있는 누구나 쓴다 · 자동 생성분은 알림을 보내지 않는다 · 같은 날짜로는 한 번만)
 //  - 마감보고: 일마감 검증 창 [마감보고 전송] — 그날 실적·검증 결과를 고른 사람들에게 푸시로 보낸다.
 import React from "react";
+import { runDelete } from "./DeleteProgress"; // ⭐ 2026-11-05 삭제 진행 창 + 한 번에 삭제
 import { db, auth } from "./firebase";
 import { collection, doc, onSnapshot, query, where, addDoc, updateDoc, deleteDoc, serverTimestamp } from "firebase/firestore";
 import { callFn, kstToday, addDays, won } from "./kpApi";
@@ -194,7 +195,7 @@ export function RecurringManagerModal({ form, onClose }) {
                 <div className="flex items-center gap-1.5 shrink-0">
                   <span className="text-[12px] font-bold text-[#7A879C] mr-1">{t.active ? (next ? `다음 ${next.slice(5).replace("-", "/")}(${DAYS[dowOf(next)]})` : "") : "멈춤"}</span>
                   <button onClick={() => patch(t.id, { active: !t.active })} className={`h-8 px-3 rounded-lg text-[12px] font-black border ${t.active ? "border-[#E3E8F0] text-[#0F1A30]" : "bg-[#0F1A30] text-white border-[#0F1A30]"}`}>{t.active ? "멈추기" : "다시 켜기"}</button>
-                  <button onClick={() => { if (window.confirm(`"${t.name}" 정기오더를 지울까요?\n(이미 만들어진 오더는 그대로 남습니다)`)) deleteDoc(doc(db, "recurringOrders", t.id)); }} className="h-8 px-3 rounded-lg text-[12px] font-black border border-[#E3E8F0] text-[#7A879C]">삭제</button>
+                  <button onClick={() => { if (window.confirm(`"${t.name}" 정기오더를 지울까요?\n(이미 만들어진 오더는 그대로 남습니다)`)) runDelete({ label: "정기오더", task: () => deleteDoc(doc(db, "recurringOrders", t.id)) }).catch(() => {}); /* ⭐ 2026-11-05 삭제 진행 창 */ }} className="h-8 px-3 rounded-lg text-[12px] font-black border border-[#E3E8F0] text-[#7A879C]">삭제</button>
                 </div>
               </div>
               <ScheduleFields sm days={t.days || []} setDays={(d) => d.length && patch(t.id, { days: d })}

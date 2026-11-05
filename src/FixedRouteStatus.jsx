@@ -7,6 +7,7 @@ import React from "react";
 import { collection, onSnapshot, query, where, doc, setDoc, updateDoc, serverTimestamp, writeBatch } from "firebase/firestore";
 import { db, auth } from "./firebase";
 import { createPortal } from "react-dom";
+import { deleteDocsAtomic } from "./DeleteProgress"; // ⭐ 2026-11-05 삭제 진행 창 + 한 번에 삭제
 import CustomDatePicker from "./CustomDatePicker";
 import { sheetApi, BoardSuggest } from "./RouteBoard";
 import { ownerOf, rateFor } from "./routeBoardSheet";
@@ -524,11 +525,8 @@ function ForeignOrdersCard({ list, disabled }) {
     if (!window.confirm(`다른 운송사 배차표(구글시트)에서 잘못 들어온 오더 ${list.length}건을 이 회사에서 지울까요?\n원래 운송사의 오더·시트에는 아무 영향이 없습니다.`)) return;
     setBusy(true);
     try {
-      for (let i = 0; i < list.length; i += 400) {
-        const b = writeBatch(db);
-        list.slice(i, i + 400).forEach((r) => b.delete(doc(db, r.__col || "orders", r._id || r.id)));
-        await b.commit();
-      }
+      // ⭐ 2026-11-05 묶음을 차례로 기다리면 400줄씩 끊겨 사라졌다 — 모두 동시에 커밋 + 삭제 진행 창
+      await deleteDocsAtomic(db, list.map((r) => doc(db, r.__col || "orders", r._id || r.id)), { label: "오더" });
     } catch (e) { window.alert(`정리하지 못했습니다: ${e?.message || e}`); } finally { setBusy(false); }
   };
   return (
