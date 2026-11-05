@@ -20,7 +20,7 @@ export function appStatusOf(d = {}) {
   const ms = (v) => (v?.toMillis ? v.toMillis() : v?.seconds ? v.seconds * 1000 : typeof v === "number" ? v : 0);
   const seen = Math.max(ms(d.heartbeatAt), ms(d.updatedAt && d.uid ? d.updatedAt : 0));
   if (!d.uid) return { key: "none", label: "앱 미가입", desc: "기사앱 설치·가입 전" };
-  if (d.approved === false) return { key: "pending", label: "가입 승인 대기", desc: "지입차관리 › 기사 등록 관리에서 승인" };
+  if (d.approved === false) return { key: "pending", label: "가입 승인 대기", desc: "기사관리 › 기사 앱 계정 › 가입 승인에서 승인" }; // ⭐ 2026-11-05
   if (seen && Date.now() - seen < 3 * 86400000) return { key: "active", label: "앱 사용 중", desc: `최근 접속 ${new Date(seen).toLocaleDateString("ko-KR")}` };
   return { key: "idle", label: "가입·승인됨", desc: seen ? `마지막 접속 ${new Date(seen).toLocaleDateString("ko-KR")}` : "아직 접속 기록 없음" };
 }

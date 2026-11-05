@@ -8,7 +8,6 @@ import { db, DEFAULT_COMPANY } from "./firebase";
 import KpSubNav from "./KpSubNav";
 import { Sheet } from "./OfficeBooks";
 import { useRoleOptions } from "./customRoles";
-import DriverAccounts from "./DriverAccounts";
 
 const MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
 function Loading() {
@@ -42,7 +41,7 @@ function Avatar({ name }) {
 export default function StaffManager({ company, role, myUid, initialTab = "pending", compact = false }) {
   const ro = useRoleOptions();
   const [users, setUsers] = React.useState(null);
-  const [tab, setTab] = React.useState(initialTab);
+  const [tab, setTab] = React.useState(initialTab === "dpending" || initialTab === "drivers" ? "pending" : initialTab);
   const [busy, setBusy] = React.useState("");
   const [q, setQ] = React.useState("");
   const [menuOpen, setMenuOpen] = React.useState(null);
@@ -102,7 +101,7 @@ export default function StaffManager({ company, role, myUid, initialTab = "pendi
   const kw = q.trim();
   const match = (u) => !kw || [u.name, u.email, u.phone, u.team, u.position, u.carNo].some((v) => String(v || "").includes(kw));
   const L = (lists[tab] || []).filter(match);
-  const isDriverTab = tab === "dpending" || tab === "drivers";
+  const isDriverTab = false; // ⭐ 2026-11-05 기사 탭 없음(기사 앱 계정 화면으로 옮김)
   const canRole = (isMaster || role === "hrManager") && !isViewer;
   const empty = { pending: "승인 대기 중인 직원이 없습니다", staff: "직원이 없습니다", left: "퇴사자가 없습니다", dpending: "가입 신청한 기사님이 없습니다", drivers: "승인된 기사님이 없습니다" }[tab];
   // 재직 직원 — 팀별로
@@ -193,13 +192,10 @@ export default function StaffManager({ company, role, myUid, initialTab = "pendi
           { key: "pending", label: "직원 승인 대기", en: "PENDING", icon: "hourglass", badge: lists.pending.length },
           ...(compact ? [] : [{ key: "staff", label: "재직 직원", en: "STAFF", icon: "users" }, { key: "left", label: "퇴사자", en: "LEFT", icon: "user" }]),
         ] },
-        { label: "기사관리", items: [
-          { key: "dpending", label: "기사 가입 승인", en: "DRIVER SIGNUP", icon: "truck", badge: lists.dpending.length },
-          { key: "drivers", label: "승인된 기사", en: "DRIVERS", icon: "idcard" },
-        ] },
+        // ⭐ 2026-11-05 기사 가입 승인 탭은 뺐다 — 기사관리 › 기사 앱 계정 › 가입 승인(모바일: 메뉴 「기사 앱 계정」)에서만
       ]}>
       {/* ⭐ 2026-10-31 기사 탭은 기사관리와 같은 디지털 카드(번호판·서류 완비율)로 */}
-      {isDriverTab ? <DriverAccounts company={company} isViewer={isViewer} tab={tab === "dpending" ? "pending" : "drivers"} onTab={(k) => setTab(k === "pending" ? "dpending" : "drivers")} /> : (<>
+      {(<>
       <div className="flex flex-col md:flex-row md:items-center gap-2 mb-3">
         <div className="grid grid-cols-3 gap-2 md:w-[420px]">
           {(isDriverTab

@@ -5344,6 +5344,7 @@ const title =
   : page === "sales" ? "매출관리"
   : page === "approval" ? "전자결재"
   : page === "staff" ? "직원 관리"
+  : page === "drvacc" ? "기사 앱 계정"
   : page === "fixedroute" ? "고정노선현황"
   : page === "perms" ? "권한 관리"
   : page === "dept" ? (deptMode === "exec" ? "경영 브리핑" : deptMode === "hr" ? "인사관리" : "경리·회계")
@@ -5730,7 +5731,7 @@ const title =
         }
     : String(page).startsWith("dept:")
       ? () => setPage("dept")
-    : page === "notice" || page === "schedule" || page === "unassigned" || page === "canceled" || page === "handover" || page === "attendance" || page === "ratecard" || page === "myinfo" || page === "settings" || page === "fleet" || page === "intel" || page === "national-fare" || page === "gsheet" || page === "blind" || page === "company-fare" || page === "sales" || page === "approval" || page === "staff" || page === "fixedroute" || page === "perms"
+    : page === "notice" || page === "schedule" || page === "unassigned" || page === "canceled" || page === "handover" || page === "attendance" || page === "ratecard" || page === "myinfo" || page === "settings" || page === "fleet" || page === "intel" || page === "national-fare" || page === "gsheet" || page === "blind" || page === "company-fare" || page === "sales" || page === "approval" || page === "staff" || page === "drvacc" || page === "fixedroute" || page === "perms"
       ? () => setPage("list")
       : page === "fare"
       ? () => setPage(prevPage || "list")
@@ -6718,7 +6719,7 @@ setOpenMemo={setOpenMemo}
 {(page === "dept" || String(page).startsWith("dept:")) && (
   <React.Suspense fallback={null}>
     <MobilePcView key={page} kind={page} deptMode={deptMode} dispatchData={allOrders} fixedRows={fixedClientRows} clients={clients} places={places} role={role} userCompany={pcViewCompany} me={pcViewMe} loadRange={loadRange} loadFullHistory={loadFullHistory}
-      onGo={(k) => { const [m0, id] = String(k).split(":"); if (k === "배차현황") deptListOkRef.current = true; if (m0 === "결재함" && id) { try { sessionStorage.setItem("kpExecApOpen", id); } catch { /* 무시 */ } } setPage({ 결재함: "approval", 직원일정: "dept:schedule", 자금현황: "dept:funds", 스케줄: "dept:execsched", 실시간배차현황: "unassigned", 인사이트: "intel", 정산관리: "dept:settle", "정산관리:지급관리": "dept:settle", 회계관리: "dept:acct", 매출관리: "sales", 인사관리부: "dept:hr", 출근기록부: "attendance", 연차관리: "dept:leave", 입퇴사관리: "dept:onboarding", 증명서발급: "dept:cert", 수입지출: "dept:cashbook", 비품관리: "dept:assets", 전자결재: "approval", 배차현황: "list", 관리자메뉴: "staff", 직원관리: "staff", 기사서류: "dept:driverdocs", 기사관리: "dept:driverdocs", 자금관리: "dept:cashbook", "자금관리:book": "dept:cashbook", "인사관리부:leave": "dept:leave", 기사승인: "staff" }[m0 === "결재함" ? "결재함" : k] || "dept"); /* ⭐ 2026-11-02 점검 — 경리·인사 홈 바로가기 키(자금관리·연차·기사승인) 추가 */ }} />
+      onGo={(k) => { const [m0, id] = String(k).split(":"); if (k === "배차현황") deptListOkRef.current = true; if (m0 === "결재함" && id) { try { sessionStorage.setItem("kpExecApOpen", id); } catch { /* 무시 */ } } setPage({ 결재함: "approval", 직원일정: "dept:schedule", 자금현황: "dept:funds", 스케줄: "dept:execsched", 실시간배차현황: "unassigned", 인사이트: "intel", 정산관리: "dept:settle", "정산관리:지급관리": "dept:settle", 회계관리: "dept:acct", 매출관리: "sales", 인사관리부: "dept:hr", 출근기록부: "attendance", 연차관리: "dept:leave", 입퇴사관리: "dept:onboarding", 증명서발급: "dept:cert", 수입지출: "dept:cashbook", 비품관리: "dept:assets", 전자결재: "approval", 배차현황: "list", 관리자메뉴: "staff", 직원관리: "staff", 기사서류: "dept:driverdocs", 기사관리: "dept:driverdocs", 자금관리: "dept:cashbook", "자금관리:book": "dept:cashbook", "인사관리부:leave": "dept:leave", 기사승인: "drvacc" /* ⭐ 2026-11-05 기사 가입 승인 → 기사 앱 계정 */ }[m0 === "결재함" ? "결재함" : k] || "dept"); /* ⭐ 2026-11-02 점검 — 경리·인사 홈 바로가기 키(자금관리·연차·기사승인) 추가 */ }} />
   </React.Suspense>
 )}
 {page === "sales" && (
@@ -6809,10 +6810,10 @@ setOpenMemo={setOpenMemo}
             cardVersionB={cardVersionB}
           />
         )}
-        {(page === "national-fare" || page === "company-fare" || page === "ratecard" || page === "approval" || page === "staff" || page === "fixedroute" || page === "perms") && (
+        {(page === "national-fare" || page === "company-fare" || page === "ratecard" || page === "approval" || page === "staff" || page === "drvacc" || page === "fixedroute" || page === "perms") && (
           <React.Suspense fallback={null}>
             <MobilePcView key={page}
-              kind={page === "ratecard" ? "ratecard" : page === "approval" ? "approval" : page === "staff" ? "staff" : page === "fixedroute" ? "fixedroute" : page === "perms" ? "perms" : "fare"} drivers={drivers} users={mobileUsers}
+              kind={page === "ratecard" ? "ratecard" : page === "approval" ? "approval" : page === "staff" ? "staff" : page === "drvacc" ? "drvacc" : page === "fixedroute" ? "fixedroute" : page === "perms" ? "perms" : "fare"} drivers={drivers} users={mobileUsers}
               initial={page === "company-fare" ? "자사운임표" : undefined}
               dispatchData={allOrders} clients={clients} places={places} role={role} userCompany={pcViewCompany} me={pcViewMe}
               loadRange={loadRange} loadFullHistory={loadFullHistory} />
@@ -7877,7 +7878,8 @@ function MobileSideMenu({
               <MenuItem label="임원 스케줄" icon="pin" onClick={() => onGo?.("dept:execsched")} dark={dark} />
               {(canRevenue || isExec) && ok("매출관리") && <MenuItem label="매출관리" icon="chart" onClick={onGoSales} dark={dark} />}
               {(isAdminRole || isExec) && ok("인사이트") && <MenuItem label="경영인텔리전스" icon="trend" onClick={onGoIntel} dark={dark} />}
-              {isAdminRole && <MenuItem label="직원 관리" icon="users" onClick={() => onGo?.("staff")} badge={(alertCounts?.signupStaff || 0) + (alertCounts?.signupDriver || 0) || null} dark={dark} />}
+              {isAdminRole && <MenuItem label="직원 관리" icon="users" onClick={() => onGo?.("staff")} badge={alertCounts?.signupStaff || null} dark={dark} />}
+              {isAdminRole && <MenuItem label="기사 앱 계정 · 가입 승인" icon="truck" onClick={() => onGo?.("drvacc")} badge={alertCounts?.signupDriver || null} dark={dark} />}
             </MenuSection>
           )}
           {roleViews && (
@@ -7892,7 +7894,9 @@ function MobileSideMenu({
           )}
           {(deptMode === "acct" || deptMode === "hr") && (
             <MenuSection title="직원 · 기사" en="PEOPLE" dark={dark} alwaysOpen>
-              <MenuItem label="가입 승인(직원·기사)" icon="users" onClick={() => onGo?.("staff")} badge={(alertCounts?.signupStaff || 0) + (alertCounts?.signupDriver || 0) || null} dark={dark} />
+              {/* ⭐ 2026-11-05 직원 가입 승인과 기사 가입 승인(기사 앱 계정)을 나눔 — 숫자도 각각 */}
+              <MenuItem label="직원 가입 승인" icon="users" onClick={() => onGo?.("staff")} badge={alertCounts?.signupStaff || null} dark={dark} />
+              <MenuItem label="기사 앱 계정 · 가입 승인" icon="truck" onClick={() => onGo?.("drvacc")} badge={alertCounts?.signupDriver || null} dark={dark} />
               <MenuItem label="기사 서류" icon="file" onClick={() => onGo?.("dept:driverdocs")} dark={dark} />
             </MenuSection>
           )}
@@ -7937,7 +7941,8 @@ function MobileSideMenu({
           </>)}
           {canAdminMenu && !deptMode && (
             <MenuSection title="관리자 전용 메뉴" en="ADMIN" dark={dark} alwaysOpen>
-              <MenuItem label="직원 관리" icon="users" onClick={() => onGo?.("staff")} badge={(alertCounts?.signupStaff || 0) + (alertCounts?.signupDriver || 0) || null} dark={dark} />
+              <MenuItem label="직원 관리" icon="users" onClick={() => onGo?.("staff")} badge={alertCounts?.signupStaff || null} dark={dark} />
+              <MenuItem label="기사 앱 계정 · 가입 승인" icon="truck" onClick={() => onGo?.("drvacc")} badge={alertCounts?.signupDriver || null} dark={dark} />
               {canPermsM && <MenuItem label="권한 관리" icon="key" onClick={() => onGo?.("perms")} dark={dark} />}
             </MenuSection>
           )}

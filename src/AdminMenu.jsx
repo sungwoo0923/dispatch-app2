@@ -355,12 +355,15 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
   };
   // 최고관리자가 회사 거르기 없이(관리센터 등) 볼 때만 화주 계정 전체
   const tenantNow = getTenant();
+  // ⭐ 2026-11-05 기사앱 가입 기사(role driver)는 회원관리에 보이지 않는다(목록·승인 대기 숫자 모두) —
+  //  기사 가입 승인은 기사관리 › 기사 앱 계정 › 가입 승인에서만(지입·직영·임대 지정 + 기존 기사 연동)
   const visibleUsers = useMemo(() => {
     if (isTotalMaster) {
-      if (!tenantNow) return users;
-      return users.filter((u) => u.role !== "shipper" || shipperLinkedTo(u, effectiveCompany));
+      if (!tenantNow) return users.filter((u) => u.role !== "driver");
+      return users.filter((u) => u.role !== "driver" && (u.role !== "shipper" || shipperLinkedTo(u, effectiveCompany)));
     }
     return users.filter(u =>
+      u.role !== "driver" &&
       u.email !== TOTAL_MASTER_EMAIL &&
       u.role !== "totalMaster" &&
       (u.role === "shipper" ? shipperLinkedTo(u, effectiveCompany) : (u.companyName || DEFAULT_COMPANY) === effectiveCompany)
@@ -944,7 +947,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
                     style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%237A879C' d='M6 8L1 3h10z'/%3E%3C/svg%3E")`, backgroundRepeat: "no-repeat", backgroundPosition: "right 12px center" }}
                   >
                     <option value="all">전체 권한</option>
-                    {ROLES.map(r => (
+                    {ROLES.filter((r) => r !== "driver").map(r => ( /* ⭐ 2026-11-05 기사는 회원관리에서 뺌 */
                       <option key={r} value={r}>{roleLabels[r] || r}</option>
                     ))}
                   </CustomSelect>

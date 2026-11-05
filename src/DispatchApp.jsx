@@ -50,7 +50,7 @@ import { PersonalTodayHost } from "./PersonalSchedule";
 import FixedRouteStatusHost, { FixedRouteCells, fixedHeaderOf, fixedLookOf, useRouteBoardIds } from "./FixedRouteStatus";
 import { useRouteCarrierFilter } from "./routeCarriers"; // ⭐ 2026-11-05 고정노선 운송업체 설정 — 끈 업체 오더는 정산·매출에서 뺀다
 import ColumnStyleHost from "./ColumnStyle"; // 🎨 2026-11-03 컬럼명 오른쪽 클릭 → 색 변경 // ⭐ 2026-11-03 배차현황 › 고정노선현황
-import { usePendingSignups } from "./pendingSignups";
+import { usePendingSignups, isPendingSignupDriver } from "./pendingSignups";
 import { NavHover } from "./navMenus";
 import { PeriodPicker as ResumePeriodPicker, DateField as ResumeDateField, SelectField as ResumeSelectField, AddressField as ResumeAddressField, BirthSelect as ResumeBirthSelect, EDU_STATUS as RESUME_EDU_STATUS, FAMILY_REL as RESUME_FAMILY_REL } from "./ResumeInputs";
 import { useHrOptions } from "./hrConstants";
@@ -8104,6 +8104,8 @@ const newVer = useNewVersion(); // ★ 새 버전이 배포되면 버전 표시 
   // ⭐ 2026-11-03 매출관리 비밀번호는 회사 마스터만 정하고 바꾼다(대표·관리자도 설정된 비밀번호를 입력) — 서버 규칙(companySettings)도 같은 기준
   const canSetRevenuePw = role === "totalMaster" || myProfileDoc?.isMaster === true;
   const pendingSignups = usePendingSignups(canApproveSignup ? (role === "totalMaster" ? (localStorage.getItem("loginCompany") || userCompany || "") : (userCompany || localStorage.getItem("userCompany") || "")) : "");
+  // ⭐ 2026-11-05 관리자메뉴 숫자는 직원 가입만 — 기사 가입은 기사관리 › 기사 앱 계정 › 가입 승인 숫자(alertsNav.signupDriver)로만
+  const pendingStaffSignups = pendingSignups.filter((u) => u.role !== "driver").length;
   // ⭐ 2026-11-01 마스터 인사권 — 인사 담당자가 없을 때만(생기면 자동 인계, hrHandover.js)
   const coStaffMain = useCompanyStaff(myProfileDoc?.isMaster === true ? (userCompany || localStorage.getItem("userCompany") || "") : "");
   const masterHrMain = !!coStaffMain && masterHasHr(myProfileDoc, coStaffMain, user?.uid);
@@ -8505,12 +8507,12 @@ return (
               const navN = m === "HOME" ? (mailCountsNav.unread || 0) + (alertsNav.handover || 0) + (apSep ? 0 : apN)
                 : m === "전자결재" ? apN + (alertsNav.handover || 0)
                 : m === "기사관리" ? (canApproveSignup ? alertsNav.signupDriver || 0 : 0)
-                : m === "관리자메뉴" ? pendingSignups.length : 0;
+                : m === "관리자메뉴" ? pendingStaffSignups : 0;
               const subBadges = {
                 HOME: { 공지사항: alertsNav.notice || 0, "ap:inbox": apSep ? 0 : apCountsNav.todo, teamsched: 0 },
                 전자결재: { inbox: apCountsNav.todo, mine: apCountsNav.mineNew, handover: alertsNav.handover },
                 기사관리: { "acc:pending": canApproveSignup ? alertsNav.signupDriver : 0 },
-                관리자메뉴: { members: pendingSignups.length },
+                관리자메뉴: { members: pendingStaffSignups },
               }[m];
               return (
                 <NavHover key={m} menu={m} badges={subBadges} disabled={isBlocked || st === "locked"} onOpenMenu={() => handleMenuClick(m)}>
@@ -8964,7 +8966,7 @@ return (
         {menu === "기사관리" && (role === "admin" || role === "totalMaster" || role === "user" || role === "test" || role === "hrManager" || isViewer || !!customRole) && (
           <KpSubNav code="DRIVERS" title="기사관리" icon="user" active={기사관리Tab} onSelect={set기사관리Tab}
             groups={[
-              { label: "기사", items: [{ key: "drv", label: "기사관리", en: "DRIVERS", icon: "user", sub: ["전체", "일반", "직영", "지입", "임대", "블랙"].map((g) => ({ key: `d:${g}`, label: g === "전체" ? "전체 기사" : g, icon: g === "블랙" ? "alert" : g === "지입" ? "link" : g === "임대" ? "key" : "user", badge: g === "전체" ? 0 : (drivers || []).filter((d) => (d.등급 || "일반") === g && (String(d.이름 || "").trim() || String(d.차량번호 || "").trim())).length, soft: true })) }] },
+              { label: "기사", items: [{ key: "drv", label: "기사관리", en: "DRIVERS", icon: "user", sub: ["전체", "일반", "직영", "지입", "임대", "블랙"].map((g) => ({ key: `d:${g}`, label: g === "전체" ? "전체 기사" : g, icon: g === "블랙" ? "alert" : g === "지입" ? "link" : g === "임대" ? "key" : "user", badge: g === "전체" ? 0 : (drivers || []).filter((d) => !isPendingSignupDriver(d) && (d.등급 || "일반") === g && (String(d.이름 || "").trim() || String(d.차량번호 || "").trim())).length, soft: true })) }] },
               { label: "기사 앱 계정", items: [{ key: "acc", label: "기사 앱 계정", en: "APP ACCOUNTS", icon: "phone", sub: [{ key: "acc:pending", label: "가입 승인", icon: "hourglass", badge: alertsNav.signupDriver || 0, badgeTitle: "기사 가입 승인 대기" }, { key: "acc:drivers", label: "승인된 기사", icon: "idcard" }] }] },
               { label: "서류관리", items: [{ key: "docs", label: "서류관리", en: "DOCUMENTS", icon: "file", sub: [{ key: "docs:driver", label: "기사 제출 서류", icon: "file" }, { key: "docs:penalty", label: "과태료 · 사고 서류", icon: "alert" }] }] },
             ]}>
@@ -56344,7 +56346,8 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
 // ===================== DispatchApp.jsx (PART 10/10) — START =====================
 function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, showAlert = (m) => alert(m), userCompany = "", grade = "", onGrade }) {
   // 이름·차량번호·연락처가 모두 빈 문서(예전 직원 승인 때 잘못 생긴 빈 기사)는 목록에서 뺀다
-  const drivers = React.useMemo(() => (driversRaw || []).filter((r) => String(r.이름 || r.name || "").trim() || String(r.차량번호 || "").trim() || String(r.전화번호 || r.phone || "").trim()), [driversRaw]);
+  // ⭐ 2026-11-05 가입 승인 전 기사(기사앱 가입 문서)는 기사관리 목록에서 뺀다 — 기사 앱 계정 › 가입 승인에서 승인하면 들어온다
+  const drivers = React.useMemo(() => (driversRaw || []).filter((r) => !isPendingSignupDriver(r) && (String(r.이름 || r.name || "").trim() || String(r.차량번호 || "").trim() || String(r.전화번호 || r.phone || "").trim())), [driversRaw]);
   // ⭐ 사용자 요청 — PC 기사 수정 모달에서도 담당자(위임 대상)를 바로 지정할 수
   // 있어야 한다. 지입차관리(FleetManagement)와 동일한 기준(같은 회사의
   // totalMaster/admin/user)으로 배차자 목록을 가져온다.
