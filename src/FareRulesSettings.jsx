@@ -9,7 +9,7 @@ import { db, auth } from "./firebase";
 import { useFareRules, applyFareRule, fareRuleCalcLabel } from "./fareRules";
 import { kpConfirm } from "./kpDialog";
 
-const MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
+const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
 const won = (n) => Math.round(Number(n) || 0).toLocaleString();
 const newId = () => `fr_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
 const fmtAt = (v) => {
@@ -48,7 +48,7 @@ function RuleEditor({ initial, onCancel, onSave, existingNames }) {
     <div className="fixed inset-0 z-[100000] bg-[#0B1428]/60 grid place-items-center p-4" onMouseDown={(e) => { if (e.target === e.currentTarget) onCancel(); }}>
       <div className="w-full max-w-[460px] rounded-[20px] bg-white shadow-2xl overflow-hidden" data-fare-editor="1">
         <div className="px-5 py-4 bg-[#0F1A30] text-white">
-          <div className="text-[11px] font-extrabold tracking-[0.3em] text-[#8FB0F0]" style={{ fontFamily: MONO }}>FARE RULE</div>
+          <div className="text-[11px] font-extrabold tracking-[0.3em] text-[#8FB0F0]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>FARE RULE</div>
           <div className="text-[18px] font-extrabold mt-0.5">{initial?.id ? "규칙 수정" : "규칙 추가"}</div>
         </div>
         <div className="p-5 flex flex-col gap-4">
@@ -83,7 +83,7 @@ function RuleEditor({ initial, onCancel, onSave, existingNames }) {
           </label>
           <div className="rounded-xl bg-[#F3F6FB] border border-[#E3E8F0] px-3.5 py-3 text-[14px] text-[#1B2B4B]">
             <div className="text-[12.5px] font-bold text-[#6B7A99] mb-0.5">계산 예시</div>
-            청구 {won(EXAMPLE_SALE)}원 → 수수료 <b style={{ fontFamily: MONO }}>{won(ex.수수료)}</b> · 기사운임 <b style={{ fontFamily: MONO }}>{won(ex.기사운임)}</b>
+            청구 {won(EXAMPLE_SALE)}원 → 수수료 <b style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{won(ex.수수료)}</b> · 기사운임 <b style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{won(ex.기사운임)}</b>
           </div>
           {err && <div className="text-[14px] font-bold text-red-600">{err}</div>}
         </div>
@@ -146,7 +146,7 @@ export default function FareRulesSettings({ company, canEdit = true, myName = ""
         <div className="absolute -right-10 -top-10 w-48 h-48 rounded-full bg-[#2D4C82]/40 blur-2xl pointer-events-none" />
         <div className="relative flex items-start gap-4 flex-wrap">
           <div className="flex-1 min-w-[220px]">
-            <div className="text-[11px] font-extrabold tracking-[0.3em] text-[#8FB0F0]" style={{ fontFamily: MONO }}>FARE RULES</div>
+            <div className="text-[11px] font-extrabold tracking-[0.3em] text-[#8FB0F0]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>FARE RULES</div>
             <div className="text-[20px] md:text-[22px] font-extrabold mt-1">운임 규칙</div>
             <div className="text-[14px] text-[#B9C7E3] mt-1.5 leading-relaxed">
               운임구분(일대·월대 등)별 수수료 계산을 정해 두면, 오더에 운임구분과 청구운임을 넣을 때
@@ -175,7 +175,7 @@ export default function FareRulesSettings({ company, canEdit = true, myName = ""
       <div className="rounded-[20px] bg-white border border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_10px_28px_rgba(16,24,40,0.06)] p-4 md:p-5">
         <div className="flex items-center gap-2 mb-3">
           <div>
-            <div className="text-[10.5px] font-extrabold tracking-[0.24em] text-[#2D4C82]" style={{ fontFamily: MONO }}>RULES</div>
+            <div className="text-[10.5px] font-extrabold tracking-[0.24em] text-[#2D4C82]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>RULES</div>
             <div className="text-[16px] font-extrabold text-[#0F1A30] leading-tight">규칙 목록 <span className="text-[13px] font-bold text-[#6B7A99] tabular-nums">{fr.rules.length}개</span></div>
           </div>
           {canEdit && (
@@ -211,7 +211,7 @@ export default function FareRulesSettings({ company, canEdit = true, myName = ""
                       <Toggle on={on} onChange={(v) => onToggleRule(r, v)} disabled={!canEdit || busy} label={`${r.name} 사용`} />
                     </div>
                   </div>
-                  <div className="text-[24px] font-black text-[#1B2B4B] leading-none tabular-nums" style={{ fontFamily: MONO }}>
+                  <div className="text-[24px] font-black text-[#1B2B4B] leading-none tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>
                     {r.type === "fixed" ? `${won(r.value)}원` : `${Number(r.value) || 0}%`}
                   </div>
                   <div className="rounded-xl bg-white border border-[#E3E8F0] px-3 py-2 text-[14px] text-[#1B2B4B] leading-snug tabular-nums flex flex-wrap gap-x-1.5">
@@ -240,7 +240,7 @@ export default function FareRulesSettings({ company, canEdit = true, myName = ""
       {/* 변경 이력 */}
       <div className="rounded-[20px] bg-white border border-[#E3E8F0] p-4 md:p-5">
         <div className="mb-2">
-          <div className="text-[10.5px] font-extrabold tracking-[0.24em] text-[#2D4C82]" style={{ fontFamily: MONO }}>HISTORY</div>
+          <div className="text-[10.5px] font-extrabold tracking-[0.24em] text-[#2D4C82]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>HISTORY</div>
           <div className="text-[16px] font-extrabold text-[#0F1A30] leading-tight">변경 이력</div>
         </div>
         {history.length === 0 ? (
@@ -250,7 +250,7 @@ export default function FareRulesSettings({ company, canEdit = true, myName = ""
             {history.map((h, i) => (
               <li key={`${h.at}-${i}`} className={`py-2.5 ${mobile ? "flex flex-col gap-0.5" : "grid grid-cols-[150px_110px_minmax(0,1fr)] items-baseline gap-3"}`}>
                 <span className={mobile ? "flex items-baseline gap-2" : "contents"}>
-                  <span className="text-[13px] font-bold text-[#6B7A99] tabular-nums" style={{ fontFamily: MONO }}>{fmtAt(h.at)}</span>
+                  <span className="text-[13px] font-bold text-[#6B7A99] tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{fmtAt(h.at)}</span>
                   <span className="text-[14px] font-bold text-[#2D4C82] truncate">{h.by || "-"}</span>
                 </span>
                 <span className="text-[14px] text-[#1B2B4B] min-w-0 break-keep">{h.change}</span>

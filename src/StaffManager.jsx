@@ -9,7 +9,7 @@ import KpSubNav from "./KpSubNav";
 import { Sheet } from "./OfficeBooks";
 import { useRoleOptions } from "./customRoles";
 
-const MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
+const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
 function Loading() {
   return <div className="py-24 flex flex-col items-center gap-3 text-[#7A879C]"><span className="w-6 h-6 border-[3px] border-[#DCE3EE] border-t-[#1B2B4B] rounded-full animate-spin" /><span className="text-[12.5px] font-bold">불러오는 중…</span></div>;
 }
@@ -126,7 +126,7 @@ export default function StaffManager({ company, role, myUid, initialTab = "pendi
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5 flex-wrap">
             <span className="text-[14.5px] font-black text-[#0F1A30] truncate">{u.name || "-"}</span>
-            {isDriverTab ? u.carNo && <span className="px-1.5 h-[20px] rounded-md border border-[#0F1A30] text-[#0F1A30] text-[11.5px] font-black grid place-items-center" style={{ fontFamily: MONO }}>{u.carNo}</span>
+            {isDriverTab ? u.carNo && <span className="px-1.5 h-[20px] rounded-md border border-[#0F1A30] text-[#0F1A30] text-[11.5px] font-black grid place-items-center" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{u.carNo}</span>
               : u.position && <span className="text-[12.5px] font-bold text-[#5B6B85]">{u.position}</span>}
             {u.isMaster && <span className="px-1.5 h-[18px] rounded-md bg-[#0F1A30] text-white text-[10px] font-black grid place-items-center">마스터</span>}
             {!isDriverTab && tab !== "left" && <span className="px-1.5 h-[18px] rounded-md bg-[#EEF3FC] text-[#1B2B4B] text-[10.5px] font-black grid place-items-center">{ro.label(u.role)}</span>}
@@ -203,7 +203,7 @@ export default function StaffManager({ company, role, myUid, initialTab = "pendi
             : [["승인 대기", lists.pending.length], ["재직", lists.staff.length], ["퇴사", lists.left.length]]).map(([l, v]) => (
             <div key={l} className="rounded-2xl bg-white border border-[#E3E8F0] px-3 py-2">
               <div className="text-[11.5px] font-bold text-[#7A879C]">{l}</div>
-              <div className="text-[19px] font-black text-[#0F1A30] tabular-nums" style={{ fontFamily: MONO }}>{v}</div>
+              <div className="text-[19px] font-black text-[#0F1A30] tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{v}</div>
             </div>
           ))}
         </div>
@@ -218,7 +218,7 @@ export default function StaffManager({ company, role, myUid, initialTab = "pendi
               <div className="px-4 py-2.5 border-b border-[#EEF1F6] flex items-center gap-2 bg-[#F7F9FC] rounded-t-2xl">
                 <span className="w-1.5 h-4 rounded-full bg-[#1B2B4B]" />
                 <span className="text-[14px] font-black text-[#0F1A30]">{t}</span>
-                <span className="text-[12px] font-black text-[#7A879C] tabular-nums" style={{ fontFamily: MONO }}>{us.length}명</span>
+                <span className="text-[12px] font-black text-[#7A879C] tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{us.length}명</span>
               </div>
               <div className="divide-y divide-[#F1F4F9]">{us.map((u) => <Row key={u.id} u={u} />)}</div>
             </div>
@@ -229,7 +229,7 @@ export default function StaffManager({ company, role, myUid, initialTab = "pendi
           {leftGroups.map(([m, us]) => (
             <div key={m} className="rounded-2xl bg-white border border-[#E3E8F0] overflow-hidden">
               <div className="px-4 py-2.5 border-b border-[#EEF1F6] flex items-center gap-2 bg-[#F7F9FC]">
-                <span className="text-[13.5px] font-black text-[#0F1A30]" style={{ fontFamily: MONO }}>{m.replace("-", ".")}</span>
+                <span className="text-[13.5px] font-black text-[#0F1A30]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{m.replace("-", ".")}</span>
                 <span className="text-[12px] font-bold text-[#7A879C]">퇴사 {us.length}명</span>
               </div>
               <div className="divide-y divide-[#F1F4F9]">{us.map((u) => <Row key={u.id} u={u} />)}</div>

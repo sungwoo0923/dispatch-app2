@@ -1186,7 +1186,7 @@ export default function UploadPage() {
 // ────────────────────────────────────────
 const UPLOAD_CSS = `
   .kpu * { box-sizing: border-box; }
-  .kpu-mono { font-family: 'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace; }
+  .kpu-mono { font-family: 'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif;font-variant-numeric:tabular-nums; }
   .kpu-hero {
     background:
       linear-gradient(rgba(143,176,240,.07) 1px, transparent 1px) 0 0/22px 22px,

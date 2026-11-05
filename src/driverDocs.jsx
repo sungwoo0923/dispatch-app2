@@ -11,7 +11,7 @@ import { createPortal } from "react-dom";
 import { bankText, formatAccount } from "./bankUtil";
 import { fmtPhone } from "./formatInput";
 
-export const MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
+export const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
 export const won = (n) => `${Math.round(Number(n) || 0).toLocaleString("ko-KR")}`;
 const NAVY = "#0F1A30";
 
@@ -23,7 +23,7 @@ export function StatementDoc({ st, supplier = {} }) {
     <div style={{ background: "#fff", color: "#0F1A30", fontFamily: "'Noto Sans KR',sans-serif", width: "100%", maxWidth: 760, margin: "0 auto", borderRadius: 14, overflow: "hidden", border: "1px solid #E3E8F0" }}>
       <div style={{ background: "linear-gradient(120deg,#0B1428 0%,#1B2B4B 65%,#2D4C82 100%)", color: "#fff", padding: "20px 24px", display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: 12, flexWrap: "wrap" }}>
         <div>
-          <div style={{ fontFamily: MONO, fontSize: 10.5, fontWeight: 800, letterSpacing: "0.26em", color: "#8FB0F0" }}>PAYMENT STATEMENT</div>
+          <div style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 10.5, fontWeight: 800, letterSpacing: "0.26em", color: "#8FB0F0" }}>PAYMENT STATEMENT</div>
           <div style={{ fontSize: 24, fontWeight: 900, letterSpacing: "0.12em" }}>지 급 명 세 서</div>
         </div>
         <div style={{ textAlign: "right", fontSize: 12, color: "rgba(255,255,255,.75)", lineHeight: 1.6 }}>
@@ -43,7 +43,7 @@ export function StatementDoc({ st, supplier = {} }) {
         </div>
         <div style={{ borderRadius: 14, background: NAVY, color: "#fff", padding: "14px 18px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 16 }}>
           <span style={{ fontSize: 14, fontWeight: 800, color: "#8FB0F0" }}>실 지급액</span>
-          <span style={{ fontSize: 28, fontWeight: 900, fontFamily: MONO }}>{won(st.net)}<span style={{ fontSize: 14, marginLeft: 3 }}>원</span></span>
+          <span style={{ fontSize: 28, fontWeight: 900, fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{won(st.net)}<span style={{ fontSize: 14, marginLeft: 3 }}>원</span></span>
         </div>
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14, color: "#0B1428" }}>
           <thead>
@@ -54,11 +54,11 @@ export function StatementDoc({ st, supplier = {} }) {
           <tbody>
             {trips.map((t, i) => (
               <tr key={i} style={{ borderBottom: "1px solid #E3E8F0" }}>
-                <td style={{ padding: "8px 10px", whiteSpace: "nowrap", fontFamily: MONO, fontWeight: 700 }}>{String(t.date || "").slice(5)}</td>
+                <td style={{ padding: "8px 10px", whiteSpace: "nowrap", fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontWeight: 700 }}>{String(t.date || "").slice(5)}</td>
                 <td style={{ padding: "8px 10px", fontWeight: 700 }}>{t.client}</td>
                 <td style={{ padding: "8px 10px", fontWeight: 600 }}>{t.from}</td>
                 <td style={{ padding: "8px 10px", fontWeight: 600 }}>{t.to}{t.via ? <div style={{ fontSize: 12, color: "#3A4A66", marginTop: 2 }}>경유 {t.via}</div> : null}</td>
-                <td style={{ padding: "8px 10px", textAlign: "right", fontWeight: 900, fontFamily: MONO, whiteSpace: "nowrap" }}>{won(t.fare)}</td>
+                <td style={{ padding: "8px 10px", textAlign: "right", fontWeight: 900, fontFamily: MONO, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>{won(t.fare)}</td>
               </tr>
             ))}
             {!trips.length && <tr><td colSpan={5} style={{ padding: 14, textAlign: "center", color: "#5B6B85", fontWeight: 700 }}>운행 내역 없음</td></tr>}
@@ -68,11 +68,11 @@ export function StatementDoc({ st, supplier = {} }) {
           {[["운행 건수", `${trips.length}건`], ["운임 합계(공급가액)", `${won(st.gross)}원`], ...(st.vat ? [["부가세(10%)", `${won(st.vat)}원`]] : []),
             ...ded.map((d) => [`공제 · ${d.label}`, `- ${won(d.amount)}원`]), ["공제 합계", `- ${won(st.deductTotal)}원`]].map(([k, v]) => (
             <div key={k} style={{ display: "flex", justifyContent: "space-between", gap: 12, padding: "8px 2px", borderBottom: "1px solid #E3E8F0" }}>
-              <span style={{ color: "#1B2B4B", fontWeight: 800 }}>{k}</span><b style={{ fontFamily: MONO, color: "#0B1428", whiteSpace: "nowrap" }}>{v}</b>
+              <span style={{ color: "#1B2B4B", fontWeight: 800 }}>{k}</span><b style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", color: "#0B1428", whiteSpace: "nowrap" }}>{v}</b>
             </div>
           ))}
           <div style={{ display: "flex", justifyContent: "space-between", padding: "10px 2px 2px" }}>
-            <span style={{ color: "#0B1428", fontWeight: 900, fontSize: 16 }}>실 지급액</span><b style={{ fontFamily: MONO, color: "#0B1428", fontSize: 17 }}>{won(st.net)}원</b>
+            <span style={{ color: "#0B1428", fontWeight: 900, fontSize: 16 }}>실 지급액</span><b style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", color: "#0B1428", fontSize: 17 }}>{won(st.net)}원</b>
           </div>
         </div>
         {st.memo && <div style={{ marginTop: 12, padding: "10px 12px", background: "#F5F8FD", borderRadius: 10, fontSize: 12.5, color: "#3A4A66", whiteSpace: "pre-wrap" }}>{st.memo}</div>}
@@ -99,7 +99,7 @@ export function PenaltyDoc({ p, supplier = {}, onPhoto, wide }) {
     <div style={{ background: "#fff", color: NAVY, fontFamily: "'Noto Sans KR',sans-serif", width: "100%", maxWidth: wide ? "none" : 760, margin: "0 auto", borderRadius: 14, overflow: "hidden", border: "1px solid #E3E8F0" }}>
       <div style={{ background: "linear-gradient(120deg,#0B1428 0%,#1B2B4B 65%,#2D4C82 100%)", color: "#fff", padding: "18px 22px", display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: 10, flexWrap: "wrap" }}>
         <div>
-          <div style={{ fontFamily: MONO, fontSize: 10.5, fontWeight: 800, letterSpacing: "0.26em", color: "#8FB0F0" }}>VEHICLE NOTICE · {p.docId || ""}</div>
+          <div style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 10.5, fontWeight: 800, letterSpacing: "0.26em", color: "#8FB0F0" }}>VEHICLE NOTICE · {p.docId || ""}</div>
           <div style={{ fontSize: 22, fontWeight: 900, letterSpacing: "0.08em" }}>{p.kind || "과태료"} 처리 안내서</div>
         </div>
         <div style={{ textAlign: "right", fontSize: 12, color: "rgba(255,255,255,.75)" }}>{supplier.name || p.companyName}<br />작성 {p.by || ""}</div>

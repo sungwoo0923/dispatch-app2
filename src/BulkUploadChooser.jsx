@@ -2,7 +2,7 @@
 // 📥 배차현황 › 대용량 업로드 — "양식 다운로드 / 엑셀 업로드" 중 고르는 창
 import React from "react";
 
-const MONO = "'JetBrains Mono','IBM Plex Mono',ui-monospace,monospace";
+const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
 
 const DEFAULT_TEXT = {
   title: "대용량 업로드",
@@ -29,7 +29,7 @@ export default function BulkUploadChooser({ onClose, onTemplate, onFile, ...text
         <div className="relative px-8 pt-7 pb-8">
           <div className="flex items-start justify-between">
             <div>
-              <div className="text-[10.5px] font-extrabold tracking-[0.3em] text-[#8FB0F0]" style={{ fontFamily: MONO }}>BULK · IMPORT</div>
+              <div className="text-[10.5px] font-extrabold tracking-[0.3em] text-[#8FB0F0]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>BULK · IMPORT</div>
               <div className="text-[24px] font-black mt-1">{T.title}</div>
               <div className="text-[13px] text-white/60 mt-1">{T.subtitle}</div>
             </div>
@@ -37,7 +37,7 @@ export default function BulkUploadChooser({ onClose, onTemplate, onFile, ...text
           </div>
           <div className="grid sm:grid-cols-2 gap-4 mt-6">
             <button type="button" onClick={onTemplate} className={`${card} bg-white/[0.04] border-white/15 hover:bg-white/[0.08] hover:border-[#8FB0F0]/60`}>
-              <div className="text-[10.5px] font-extrabold tracking-[0.26em] text-[#8FB0F0]" style={{ fontFamily: MONO }}>STEP 01 · TEMPLATE</div>
+              <div className="text-[10.5px] font-extrabold tracking-[0.26em] text-[#8FB0F0]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>STEP 01 · TEMPLATE</div>
               <div className="text-[19px] font-black mt-1.5">양식 다운로드</div>
               <div className="text-[12.5px] text-white/60 mt-1 leading-relaxed">{T.templateDesc}</div>
               <ul className="mt-4 space-y-1.5 text-[12.5px] font-semibold text-white/85">
@@ -46,7 +46,7 @@ export default function BulkUploadChooser({ onClose, onTemplate, onFile, ...text
               <div className="mt-5 inline-flex h-10 items-center px-4 rounded-xl border border-white/25 text-[13px] font-black group-hover:bg-white group-hover:text-[#0F1A30] transition">⤓ 양식 받기</div>
             </button>
             <button type="button" onClick={() => fileRef.current?.click()} className={`${card} bg-white text-[#0F1A30] border-white hover:-translate-y-0.5 shadow-[0_18px_40px_rgba(0,0,0,0.3)]`}>
-              <div className="text-[10.5px] font-extrabold tracking-[0.26em] text-[#2D4C82]" style={{ fontFamily: MONO }}>STEP 02 · UPLOAD</div>
+              <div className="text-[10.5px] font-extrabold tracking-[0.26em] text-[#2D4C82]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>STEP 02 · UPLOAD</div>
               <div className="text-[19px] font-black mt-1.5">엑셀 업로드</div>
               <div className="text-[12.5px] text-[#5B6B85] mt-1 leading-relaxed">{T.uploadDesc}</div>
               <ul className="mt-4 space-y-1.5 text-[12.5px] font-semibold text-[#1B2B4B]">

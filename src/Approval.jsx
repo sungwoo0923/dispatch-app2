@@ -40,7 +40,7 @@ import {
 } from "./approvalForms";
 import { bankText } from "./bankUtil";
 
-const MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
+const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
 const toMs = (v) => (v?.toMillis ? v.toMillis() : typeof v === "number" ? v : v?.seconds ? v.seconds * 1000 : 0);
 const todayDots = () => { const d = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10); return d.replace(/-/g, "."); };
 const pad2 = (n) => String(n).padStart(2, "0");
@@ -155,7 +155,7 @@ function ImageLightbox({ images, start = 0, docNo, onClose }) {
     <div className="fixed inset-0 z-[1000010] flex flex-col" style={{ background: "rgba(6,12,26,0.92)", backdropFilter: "blur(3px)" }} onClick={onClose} data-ap-lightbox>
       <div className="shrink-0 px-3 sm:px-5 py-3 flex items-center gap-2 text-white" style={{ paddingTop: "max(12px, env(safe-area-inset-top))" }} onClick={(e) => e.stopPropagation()}>
         <div className="min-w-0 flex-1">
-          <div className="text-[10.5px] font-extrabold tracking-[0.26em] text-[#8FB0F0]" style={{ fontFamily: MONO }}>ATTACHMENT · {i + 1} / {n}</div>
+          <div className="text-[10.5px] font-extrabold tracking-[0.26em] text-[#8FB0F0]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>ATTACHMENT · {i + 1} / {n}</div>
           <div className="text-[13.5px] font-bold text-white/80 truncate">{attName(docNo, i, src)}</div>
         </div>
         <button type="button" disabled={!!busy} onClick={() => run("one", () => downloadAttachment(src, docNo, i))} className={`${btn} bg-white text-[#0F1A30]`}>{busy === "one" ? "저장 중…" : "이미지 저장"}</button>
@@ -315,7 +315,7 @@ function SignatureModal({ me, onClose }) {
       <div className="w-full max-w-[620px] max-h-[94vh] overflow-y-auto rounded-[22px] bg-[#F4F6FA] shadow-2xl" onClick={(e) => e.stopPropagation()} data-ap-sign-modal>
         <div className="px-6 py-5 text-white flex items-start gap-3" style={{ background: "linear-gradient(120deg,#0B1428 0%,#1B2B4B 65%,#2D4C82 100%)" }}>
           <div className="flex-1 min-w-0">
-            <div className="text-[10.5px] font-extrabold tracking-[0.26em] text-[#8FB0F0]" style={{ fontFamily: MONO }}>MY SIGNATURE · APPROVAL MARK</div>
+            <div className="text-[10.5px] font-extrabold tracking-[0.26em] text-[#8FB0F0]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>MY SIGNATURE · APPROVAL MARK</div>
             <div className="text-[20px] font-black">내 서명 · 결재 표시</div>
             <div className="text-[12.5px] text-white/65 mt-0.5">내가 승인한 결재 문서의 결재란에 도장 또는 내 서명이 들어갑니다. 언제든 바꿀 수 있습니다.</div>
           </div>
@@ -326,7 +326,7 @@ function SignatureModal({ me, onClose }) {
           {mode === "image" && (
             <div className="rounded-2xl bg-white border border-[#E3E8F0] p-4" data-ap-stamp-upload>
               <div className="flex items-center gap-2 mb-2.5">
-                <span className="text-[11px] font-extrabold tracking-[0.22em] text-[#4B6CB7]" style={{ fontFamily: MONO }}>STAMP</span>
+                <span className="text-[11px] font-extrabold tracking-[0.22em] text-[#4B6CB7]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>STAMP</span>
                 <span className="text-[13px] font-black text-[#0F1A30]">내 도장 이미지</span>
               </div>
               <label className="block rounded-xl border-2 border-dashed border-[#C9D6EE] bg-[#FAFBFD] p-4 text-center cursor-pointer hover:border-[#4B6CB7]"
@@ -342,7 +342,7 @@ function SignatureModal({ me, onClose }) {
           )}
           <div className={`rounded-2xl bg-white border border-[#E3E8F0] p-4 ${mode === "image" ? "hidden" : ""}`}>
             <div className="flex items-center gap-2 mb-2.5">
-              <span className="text-[11px] font-extrabold tracking-[0.22em] text-[#4B6CB7]" style={{ fontFamily: MONO }}>SIGNATURE</span>
+              <span className="text-[11px] font-extrabold tracking-[0.22em] text-[#4B6CB7]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>SIGNATURE</span>
               <span className="text-[13px] font-black text-[#0F1A30]">{drawing ? "아래 칸에 서명해 주세요(마우스·손가락)" : "저장된 내 서명"}</span>
             </div>
             {drawing ? (
@@ -368,7 +368,7 @@ function SignatureModal({ me, onClose }) {
             )}
           </div>
           <div className="rounded-2xl bg-white border border-[#E3E8F0] px-4 py-3 flex items-center gap-4">
-            <span className="text-[11px] font-extrabold tracking-[0.22em] text-[#9AA9C3]" style={{ fontFamily: MONO }}>PREVIEW</span>
+            <span className="text-[11px] font-extrabold tracking-[0.22em] text-[#9AA9C3]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>PREVIEW</span>
             <div className="w-[74px] border border-[#0F1A30] flex flex-col">
               <div className="h-6 bg-[#EEF1F6] border-b border-[#0F1A30] text-[11.5px] font-black text-[#0F1A30] grid place-items-center truncate px-1">{me.position || "결재"}</div>
               <div className="h-[58px] grid place-items-center">
@@ -599,9 +599,9 @@ function PaidSeal({ paid, compact: c }) {
   return (
     <div className="pointer-events-none select-none absolute z-[2]" style={{ top: c ? 236 : 176, right: c ? 12 : 44, transform: "rotate(-13deg)", opacity: 0.9 }} data-paid-seal aria-label={`지급완료 ${date}`}>
       <div className={`rounded-[16px] border-[3.5px] border-[#B42318] text-[#B42318] text-center ${c ? "px-3 py-1.5" : "px-5 py-2.5"}`} style={{ boxShadow: "inset 0 0 0 2.5px #fff, inset 0 0 0 4px #B42318" }}>
-        <div className={`${c ? "text-[8.5px]" : "text-[10px]"} font-extrabold tracking-[0.42em] pl-[0.42em]`} style={{ fontFamily: MONO }}>PAID · 지급</div>
+        <div className={`${c ? "text-[8.5px]" : "text-[10px]"} font-extrabold tracking-[0.42em] pl-[0.42em]`} style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>PAID · 지급</div>
         <div className={`${c ? "text-[21px]" : "text-[32px]"} font-black tracking-[0.16em] pl-[0.16em] leading-[1.05]`}>지급완료</div>
-        <div className={`${c ? "text-[10px]" : "text-[12.5px]"} font-black tabular-nums tracking-[0.08em] border-t-2 border-[#B42318] mt-1 pt-0.5`} style={{ fontFamily: MONO }}>{date}{paid.byName ? ` · ${String(paid.byName).slice(0, 6)}` : ""}</div>
+        <div className={`${c ? "text-[10px]" : "text-[12.5px]"} font-black tabular-nums tracking-[0.08em] border-t-2 border-[#B42318] mt-1 pt-0.5`} style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{date}{paid.byName ? ` · ${String(paid.byName).slice(0, 6)}` : ""}</div>
       </div>
     </div>
   );
@@ -621,10 +621,10 @@ export function ApprovalPaper({ form, data, title, line, cc, drafter, docNo, cre
       {status === "approved" && <PaidSeal paid={paid} compact={c} />}
       <div className={c ? "flex flex-col gap-4" : "flex items-start justify-between gap-6"}>
         <div className={`${c ? "" : "pt-4"} min-w-0`}>
-          <div className="text-[12.5px] font-extrabold tracking-[0.3em] text-[#4B6CB7]" style={{ fontFamily: MONO }}>{catOf(form.cat).en} · {form.code}</div>
+          <div className="text-[12.5px] font-extrabold tracking-[0.3em] text-[#4B6CB7]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{catOf(form.cat).en} · {form.code}</div>
           {/* ⭐ 2026-11-02 점검 — 휴대폰(compact)에서는 제목을 줄이고 줄바꿈 허용(긴 양식 제목이 용지 밖으로 넘치던 문제) */}
           <div className={`${c ? "text-[19px] tracking-[0.04em] break-keep" : "text-[30px] tracking-[0.12em] whitespace-nowrap"} font-black text-[#0F1A30] mt-1`}>{form.title}</div>
-          <div className="text-[13.5px] text-[#5A6A85] mt-1 flex items-center gap-2" style={{ fontFamily: MONO }}>{docNo || "문서번호는 상신할 때 자동 부여"}
+          <div className="text-[13.5px] text-[#5A6A85] mt-1 flex items-center gap-2" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{docNo || "문서번호는 상신할 때 자동 부여"}
             {status && status !== "pending" && <span className="px-2 py-0.5 rounded border-2 border-[#0F1A30] text-[13px] font-black text-[#0F1A30] tracking-widest" style={{ fontFamily: "inherit" }}>{STATUS[status]}</span>}
           </div>
         </div>
@@ -738,7 +738,7 @@ function StaffMultiPick({ staff, exclude = [], label = "여러 명 한 번에", 
         <div className="fixed inset-0 z-[99995] bg-[#0B1428]/55 flex items-center justify-center p-4">
           <div className="w-full max-w-[560px] max-h-[80vh] rounded-[22px] bg-white overflow-hidden shadow-2xl flex flex-col">
             <div className="px-6 py-4 text-white flex items-center gap-2" style={{ background: "linear-gradient(120deg,#0B1428,#1B2B4B 70%,#2D4C82)" }}>
-              <div className="flex-1"><div className="text-[11px] font-extrabold tracking-[0.24em] text-[#8FB0F0]" style={{ fontFamily: MONO }}>MULTI SELECT</div><div className="text-[18px] font-black">{label}</div></div>
+              <div className="flex-1"><div className="text-[11px] font-extrabold tracking-[0.24em] text-[#8FB0F0]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>MULTI SELECT</div><div className="text-[18px] font-black">{label}</div></div>
               <button type="button" onClick={() => setOpen(false)} className="h-10 px-4 rounded-xl bg-white/10 border border-white/20 text-[13.5px] font-black">닫기</button>
             </div>
             <div className="p-4 border-b border-[#EEF1F6]"><input autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="이름·부서·직책 검색" className={inp} /></div>
@@ -1027,7 +1027,7 @@ function SpendLinesInput({ value, onChange }) {
       <button type="button" onClick={add} className="w-full h-11 rounded-2xl border-2 border-dashed border-[#9AB0D6] bg-white text-[14px] font-black text-[#1B2B4B] hover:bg-[#F5F8FD] hover:border-[#2D4C82]">+ 행 추가</button>
       <div className="rounded-2xl text-white px-4 py-3" style={{ background: "linear-gradient(120deg,#0F1A30,#1B2B4B)" }}>
         <div className="flex items-center justify-between gap-3">
-          <span className="text-[11.5px] font-extrabold tracking-[0.2em] text-[#9AB0D6]" style={{ fontFamily: MONO }}>TOTAL · {rows.filter((r) => spendRowTotal(r) > 0).length}건</span>
+          <span className="text-[11.5px] font-extrabold tracking-[0.2em] text-[#9AB0D6]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>TOTAL · {rows.filter((r) => spendRowTotal(r) > 0).length}건</span>
           <span className="text-[18px] font-black tabular-nums">{fmtWon(t.total)}</span>
         </div>
         <div className="mt-0.5 text-[12.5px] font-bold text-[#C9D6EE] break-keep">金 {wonKorean(t.total)} 원整{t.vat ? ` · 공급가액 ${n0(t.supply) || 0} / 세액 ${n0(t.vat)}` : ""}</div>
@@ -1275,7 +1275,7 @@ function LeaveCard({ leave, thisDays }) {
   return (
     <div className="rounded-2xl p-5 text-white shadow-[0_12px_28px_rgba(15,26,48,0.22)]" style={{ background: "linear-gradient(120deg,#0F1A30,#1B2B4B 60%,#2D4C82)" }}>
       <div className="flex items-center gap-2">
-        <span className="text-[12px] font-extrabold tracking-[0.22em] text-[#8FB0F0]" style={{ fontFamily: MONO }}>MY LEAVE</span>
+        <span className="text-[12px] font-extrabold tracking-[0.22em] text-[#8FB0F0]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>MY LEAVE</span>
         <span className="ml-auto text-[12.5px] font-bold text-white/55">입사 {leave.hireDate} · 근속 {y ? `${y}년 ` : ""}{m}개월</span>
       </div>
       <div className="mt-1 text-[16px] font-black">내 {ent.label} 현황 <span className="text-[13px] font-bold text-white/55">{ent.from} ~ {ent.to}</span></div>
@@ -1284,7 +1284,7 @@ function LeaveCard({ leave, thisDays }) {
         {[["발생", ent.total], ["사용", used], ["결재 대기", pending], ["잔여", remain]].map(([l, v]) => (
           <div key={l} className={`rounded-xl px-2.5 py-2 ${l === "잔여" ? "bg-white text-[#0F1A30]" : "bg-white/[0.08]"}`}>
             <div className={`text-[12px] font-bold ${l === "잔여" ? "text-[#5B6B85]" : "text-white/55"}`}>{l}</div>
-            <div className="text-[19px] font-black tabular-nums" style={{ fontFamily: MONO }}>{v}<span className="text-[12px] font-bold ml-0.5">일</span></div>
+            <div className="text-[19px] font-black tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{v}<span className="text-[12px] font-bold ml-0.5">일</span></div>
           </div>
         ))}
       </div>
@@ -1521,7 +1521,7 @@ function Composer({ company, me, staff, cat, preset, onDone, leave, getLive, myD
     <>
     {restored && !editId && (
       <div className="mb-3 rounded-xl bg-[#EEF3FC] border border-[#C9D6EE] px-4 py-2.5 flex items-center gap-3 text-[13.5px] font-bold text-[#1B2B4B]">
-        <span className="text-[11px] font-extrabold tracking-[0.2em] text-[#4B6CB7]" style={{ fontFamily: MONO }}>DRAFT</span>
+        <span className="text-[11px] font-extrabold tracking-[0.2em] text-[#4B6CB7]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>DRAFT</span>
         <span className="flex-1 min-w-0 truncate">임시저장한 내용을 불러왔습니다{draft?.savedAt ? ` · ${new Date(draft.savedAt).toLocaleString("ko-KR", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })}` : ""}</span>
         <button type="button" onClick={() => { draftStore.del(draftKey); setRestored(false); setData(initialData(form)); setTitle(""); setImages([]); setCc([]); }} className="h-8 px-3 rounded-lg border border-[#C9D6EE] bg-white text-[12.5px] font-black text-[#B42318] shrink-0">지우고 새로 쓰기</button>
       </div>
@@ -1538,7 +1538,7 @@ function Composer({ company, me, staff, cat, preset, onDone, leave, getLive, myD
         {(formKey === "annual" || formKey === "half") && <LeaveCard leave={leave} thisDays={editId ? 0 : (leaveUseOf({ cat, form: formKey, data })?.days || 0)} />}
         <div className="rounded-2xl border border-[#E3E8F0] bg-white p-5 space-y-3.5">
           <div>
-            <div className="text-[12px] font-extrabold tracking-[0.22em] text-[#4B6CB7]" style={{ fontFamily: MONO }}>FORM</div>
+            <div className="text-[12px] font-extrabold tracking-[0.22em] text-[#4B6CB7]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>FORM</div>
             <div className="text-[16px] font-black text-[#0F1A30]">양식 · 내용</div>
           </div>
           <label className="block"><span className="text-[14.5px] font-black text-[#3A4A66]">양식</span>
@@ -1575,7 +1575,7 @@ function Composer({ company, me, staff, cat, preset, onDone, leave, getLive, myD
         </div>
         <div className="rounded-2xl border border-[#E3E8F0] bg-white p-5">
           <div className="mb-3">
-            <div className="text-[12px] font-extrabold tracking-[0.22em] text-[#4B6CB7]" style={{ fontFamily: MONO }}>APPROVAL LINE</div>
+            <div className="text-[12px] font-extrabold tracking-[0.22em] text-[#4B6CB7]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>APPROVAL LINE</div>
             <div className="text-[16px] font-black text-[#0F1A30]">결재선</div>
           </div>
           {editId ? (
@@ -1598,7 +1598,7 @@ function Composer({ company, me, staff, cat, preset, onDone, leave, getLive, myD
       <div className="rounded-2xl bg-[#E9EDF3] p-5 overflow-auto">
         <div className="sticky top-0">
           <div className="flex items-center justify-between mb-3 px-1">
-            <span className="text-[13px] font-extrabold tracking-[0.2em] text-[#5A6A85] whitespace-nowrap" style={{ fontFamily: MONO }}>LIVE PREVIEW</span>
+            <span className="text-[13px] font-extrabold tracking-[0.2em] text-[#5A6A85] whitespace-nowrap" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>LIVE PREVIEW</span>
             <span className="text-[13px] font-bold text-[#5B6B85]">입력하는 대로 문서가 바로 만들어집니다</span>
           </div>
           <FitPaper><ApprovalPaper form={form} data={data} title={finalTitle} line={line.map((s, i) => ({ ...s, status: i === 0 ? "pending" : "wait" }))} cc={cc} drafter={me} createdMs={Date.now()} staff={staff} /></FitPaper>
@@ -1794,7 +1794,7 @@ function Viewer({ d, me, staff, company, onClose, onRedraft, onEdit, inline = fa
           {(d.images || []).length > 0 && (
             <div className="max-w-[780px] mx-auto mt-4 bg-white rounded-2xl p-4" data-ap-attachments>
               <div className="flex items-center gap-2 mb-2.5">
-                <span className="text-[11px] font-extrabold tracking-[0.22em] text-[#4B6CB7]" style={{ fontFamily: MONO }}>FILES</span>
+                <span className="text-[11px] font-extrabold tracking-[0.22em] text-[#4B6CB7]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>FILES</span>
                 <span className="text-[13.5px] font-black text-[#0F1A30] whitespace-nowrap">첨부 {d.images.length}장</span>
                 <span className="hidden sm:inline text-[12px] font-bold text-[#9AA9C3]">누르면 크게 보기</span>
                 <button type="button" disabled={allBusy} onClick={async () => { setAllBusy(true); try { await downloadAllAttachments(d.images, d.docNo); } catch (e) { window.alert(`다운로드 실패: ${e.message || e}`); } finally { setAllBusy(false); } }}
@@ -1806,7 +1806,7 @@ function Viewer({ d, me, staff, company, onClose, onRedraft, onEdit, inline = fa
               <div className="grid grid-cols-3 gap-2">{d.images.map((src, i) => (
                 <button key={i} type="button" onClick={() => setLightbox(i)} title={`첨부 ${i + 1} 크게 보기`} className="group relative block rounded-xl overflow-hidden border border-[#E3E8F0] focus:outline-none focus:ring-2 focus:ring-[#2D4C82]/40">
                   <img src={src} alt={`첨부 ${i + 1}`} className="w-full h-28 sm:h-40 object-cover transition group-hover:scale-[1.02]" />
-                  <span className="absolute left-1.5 bottom-1.5 h-5 px-1.5 rounded-md bg-[#0F1A30]/80 text-white text-[10.5px] font-black grid place-items-center" style={{ fontFamily: MONO }}>{i + 1}/{d.images.length}</span>
+                  <span className="absolute left-1.5 bottom-1.5 h-5 px-1.5 rounded-md bg-[#0F1A30]/80 text-white text-[10.5px] font-black grid place-items-center" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{i + 1}/{d.images.length}</span>
                 </button>
               ))}</div>
             </div>
@@ -1817,7 +1817,7 @@ function Viewer({ d, me, staff, company, onClose, onRedraft, onEdit, inline = fa
         <aside className="w-full md:w-[360px] shrink-0 bg-white md:border-l border-[#E3E8F0] flex flex-col order-1 md:order-2">
           <div className="px-5 py-4 border-b border-[#EEF1F6] flex items-center gap-2">
             <div className="min-w-0">
-              <div className="text-[12px] font-extrabold tracking-[0.2em] text-[#4B6CB7]" style={{ fontFamily: MONO }}>{d.docNo}</div>
+              <div className="text-[12px] font-extrabold tracking-[0.2em] text-[#4B6CB7]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{d.docNo}</div>
               <div className="text-[16px] font-black text-[#0F1A30] truncate">{d.title}</div>
             </div>
             <button type="button" onClick={onClose} className="ml-auto w-9 h-9 rounded-xl hover:bg-[#F5F8FD] text-[#5B6B85] shrink-0">✕</button>
@@ -1839,7 +1839,7 @@ function Viewer({ d, me, staff, company, onClose, onRedraft, onEdit, inline = fa
               return (
                 <div className="rounded-2xl p-4 space-y-2.5 border-2 border-[#1B2B4B] bg-white" data-ap-hrorder>
                   <div className="flex items-center gap-2">
-                    <span className="text-[11px] font-extrabold tracking-[0.22em] text-[#4B6CB7]" style={{ fontFamily: MONO }}>ANNOUNCE</span>
+                    <span className="text-[11px] font-extrabold tracking-[0.22em] text-[#4B6CB7]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>ANNOUNCE</span>
                     <span className="text-[14px] font-black text-[#0F1A30] whitespace-nowrap">인사발령 공문 게시</span>
                     {tu && <span className={`ml-auto h-6 px-2 rounded-md text-[12px] font-black inline-flex items-center whitespace-nowrap ${waiting ? "bg-[#0F1A30] text-white" : "border border-[#DCE3EE] text-[#5B6B85]"}`}>{waiting ? "게시 대기" : "게시 완료·처리됨"}</span>}
                   </div>
@@ -1854,7 +1854,7 @@ function Viewer({ d, me, staff, company, onClose, onRedraft, onEdit, inline = fa
             {pstate && (
               <div className={`rounded-2xl p-4 space-y-2.5 ${pstate === "paid" ? "border border-[#E8C9C5] bg-[#FDF6F5]" : payable ? "border-2 border-[#1B2B4B] bg-white" : "border border-[#DCE3EE] bg-[#F8FAFD]"}`} data-ap-pay>
                 <div className="flex items-center gap-2">
-                  <span className={`text-[11px] font-extrabold tracking-[0.22em] ${pstate === "paid" ? "text-[#B42318]" : "text-[#4B6CB7]"}`} style={{ fontFamily: MONO }}>{pstate === "paid" ? "PAID" : "PAYMENT"}</span>
+                  <span className={`text-[11px] font-extrabold tracking-[0.22em] ${pstate === "paid" ? "text-[#B42318]" : "text-[#4B6CB7]"}`} style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{pstate === "paid" ? "PAID" : "PAYMENT"}</span>
                   <span className="text-[14px] font-black text-[#0F1A30] whitespace-nowrap">{pstate === "paid" ? "지급 완료" : "지급 대기"}</span>
                   <span className="ml-auto text-[14px] font-black text-[#0F1A30] tabular-nums whitespace-nowrap">{fmtWon(d.amount)}</span>
                 </div>
@@ -1893,7 +1893,7 @@ function Viewer({ d, me, staff, company, onClose, onRedraft, onEdit, inline = fa
                 <div className="text-[14px] font-black text-[#0F1A30]">{cTurn ? "결재 취소 요청 — 내 검토 차례" : "내 결재 차례입니다"}</div>
                 {!cTurn && (
                   <div className="flex items-center gap-2.5 rounded-xl bg-[#F4F6FA] border border-[#E3E8F0] px-3 py-2" data-ap-mark-row>
-                    <span className="text-[10.5px] font-extrabold tracking-[0.2em] text-[#9AA9C3]" style={{ fontFamily: MONO }}>MARK</span>
+                    <span className="text-[10.5px] font-extrabold tracking-[0.2em] text-[#9AA9C3]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>MARK</span>
                     {me.markMode === "sign" && me.sign ? <img src={me.sign} alt="내 서명" className="h-9 max-w-[90px] object-contain" /> : <MiniStamp name={me.name} kind={d.line?.[d.step]?.kind} />}
                     <span className="text-[13px] font-black text-[#0F1A30] min-w-0 truncate">{me.markMode === "sign" && me.sign ? (me.rawMode === "image" ? "내 도장 이미지로 결재" : "내 서명으로 결재") : "도장으로 결재"}</span>
                     <button type="button" onClick={() => setSignOpen(true)} className="ml-auto h-8 px-3 rounded-lg border border-[#DCE3EE] bg-white text-[12.5px] font-black text-[#1B2B4B] hover:border-[#4B6CB7] shrink-0">{me.sign ? "변경" : "서명 등록"}</button>
@@ -1981,7 +1981,7 @@ function DocList({ docs, onOpen, empty, uid, compact = false }) {
       {groups.map((g) => (
       <div key={g.k}>
       <div className="sticky top-0 z-[1] px-3.5 md:px-5 py-1.5 bg-[#F5F8FD] border-y border-[#EEF1F6] flex items-center gap-2">
-        <span className="text-[12.5px] font-black text-[#1B2B4B] tabular-nums" style={{ fontFamily: MONO }}>{g.k.replaceAll("-", ".")}</span>
+        <span className="text-[12.5px] font-black text-[#1B2B4B] tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{g.k.replaceAll("-", ".")}</span>
         <span className="text-[12px] font-bold text-[#7A879C]">{WD[new Date(g.k + "T00:00:00").getDay()]}요일</span>
         <span className="ml-auto text-[11.5px] font-bold text-[#9AA9C3]">{g.list.length}건</span>
       </div>
@@ -2002,7 +2002,7 @@ function DocList({ docs, onOpen, empty, uid, compact = false }) {
           </div>
           <div className={`${compact ? "hidden" : "hidden xl:block"} text-right shrink-0 w-[120px]`}>
             <div className="text-[14px] font-bold text-[#3A4A66]">{d.drafter?.name} {d.drafter?.position}</div>
-            <div className="text-[12.5px] text-[#5B6B85]" style={{ fontFamily: MONO }}>{ymd(toMs(d.createdAt))}</div>
+            <div className="text-[12.5px] text-[#5B6B85]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{ymd(toMs(d.createdAt))}</div>
           </div>
           <div className={`shrink-0 w-[150px] ${compact ? "hidden" : "hidden md:flex"} justify-end`}><Progress d={d} /></div>
           {/* ⭐ 2026-11-01 결재 완료 후 취소 요청이 들어오면 상태 칸 자체가 "취소 요청"(내가 검토할 차례면 "취소 검토")으로 바뀐다 */}
@@ -2105,7 +2105,7 @@ function LinesPage({ company, me, staff }) {
       <div className="rounded-2xl bg-white border border-[#E3E8F0] overflow-hidden">
         <div className="px-5 py-4 border-b border-[#EEF1F6] flex items-center">
           <div>
-            <div className="text-[12px] font-extrabold tracking-[0.22em] text-[#4B6CB7]" style={{ fontFamily: MONO }}>TEMPLATES</div>
+            <div className="text-[12px] font-extrabold tracking-[0.22em] text-[#4B6CB7]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>TEMPLATES</div>
             <div className="text-[16px] font-black text-[#0F1A30]">저장된 결재선 <span className="text-[#5B6B85] text-[14px]">{tpls.length}</span></div>
           </div>
           <button type="button" onClick={() => setEdit({ name: "", cats: [], steps: suggestLine(staff, me), cc: [], shared: admin })} className="ml-auto h-10 px-4 rounded-xl bg-[#0F1A30] text-white text-[14px] font-black">+ 새 결재선</button>
@@ -2382,7 +2382,7 @@ export default function ApprovalCenter({ company, me, page, setPage, openId, onO
       <div className="relative overflow-hidden rounded-[22px] px-4 py-4 md:px-7 md:py-5 text-white flex items-center justify-between gap-4 flex-wrap shadow-[0_14px_32px_rgba(15,26,48,0.25)]"
         style={{ background: "linear-gradient(rgba(143,176,240,.07) 1px, transparent 1px) 0 0/22px 22px, linear-gradient(90deg, rgba(143,176,240,.07) 1px, transparent 1px) 0 0/22px 22px, linear-gradient(120deg,#0B1428 0%,#1B2B4B 60%,#2D4C82 100%)" }}>
         <div>
-          <div className="text-[12px] font-extrabold tracking-[0.26em] text-[#8FB0F0]" style={{ fontFamily: MONO }}>E-APPROVAL · {heroEn}</div>
+          <div className="text-[12px] font-extrabold tracking-[0.26em] text-[#8FB0F0]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>E-APPROVAL · {heroEn}</div>
           <div className="text-[20px] md:text-[24px] font-black mt-0.5">{heroTitle}</div>
           <div className="text-[12.5px] md:text-[14px] text-white/60 mt-0.5">{heroDesc}</div>
         </div>
@@ -2390,7 +2390,7 @@ export default function ApprovalCenter({ company, me, page, setPage, openId, onO
           {kpis.map(([l, v]) => (
             <div key={l} className="flex-1 md:flex-none min-w-[84px] md:min-w-[110px] px-3 md:px-4 py-2 md:py-2.5 rounded-2xl bg-white/[0.07] border border-white/10">
               <div className="text-[12.5px] font-bold text-white/55 whitespace-nowrap truncate">{l}</div>
-              <div className="text-[20px] font-black tabular-nums" style={{ fontFamily: MONO }}>{v}</div>
+              <div className="text-[20px] font-black tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{v}</div>
             </div>
           ))}
           {/* ✍ 2026-11-04 내 서명 — 결재란에 도장 대신 내 서명 */}
@@ -2423,7 +2423,7 @@ export default function ApprovalCenter({ company, me, page, setPage, openId, onO
           <div className="min-w-0">{page === "inbox" ? inboxList : mineList}</div>
           <div className="min-w-0 sticky top-[76px]">
             {cur ? <Viewer key={cur.id} inline canHr={canHr} d={cur} me={meFull} staff={staff} company={company} onClose={() => setOpen(null)} onRedraft={redraft} onEdit={edit} />
-              : <div className="h-[calc(100vh-190px)] min-h-[640px] rounded-[20px] border-2 border-dashed border-[#DCE3EE] bg-white grid place-items-center text-center"><div><div className="text-[12px] font-extrabold tracking-[0.24em] text-[#9AA9C3]" style={{ fontFamily: MONO }}>PREVIEW</div><div className="text-[15px] font-black text-[#5B6B85] mt-1">왼쪽 목록에서 문서를 누르면<br />여기에 결재 문서가 바로 보입니다</div></div></div>}
+              : <div className="h-[calc(100vh-190px)] min-h-[640px] rounded-[20px] border-2 border-dashed border-[#DCE3EE] bg-white grid place-items-center text-center"><div><div className="text-[12px] font-extrabold tracking-[0.24em] text-[#9AA9C3]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>PREVIEW</div><div className="text-[15px] font-black text-[#5B6B85] mt-1">왼쪽 목록에서 문서를 누르면<br />여기에 결재 문서가 바로 보입니다</div></div></div>}
           </div>
         </div>
       ) : <>{page === "inbox" && inboxList}{page === "mine" && mineList}</>}

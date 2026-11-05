@@ -12,7 +12,7 @@ import { addDoc, collection, doc, getDocs, query, serverTimestamp, setDoc, where
 import { db, auth } from "./firebase";
 import { fmtPhone } from "./formatInput";
 
-const MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
+const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
 export const DRIVER_JOIN_TYPES = ["지입", "직영", "임대"]; // 기사관리 등급(일반·직영·지입·임대·블랙) 중 기사앱 가입 기사 구분
 const nPlate = (v) => String(v || "").replace(/\s+/g, "").toUpperCase();
 const nDigits = (v) => String(v || "").replace(/\D/g, "");
@@ -179,7 +179,7 @@ function Info({ k, v, mono, wide }) {
   return (
     <div className={`min-w-0 rounded-xl bg-[#F6F8FC] border border-[#E6EBF3] px-3 py-2 ${wide ? "col-span-2" : ""}`}>
       <div className="text-[11.5px] font-bold text-[#7A879C]">{k}</div>
-      <div className={`text-[14.5px] font-black text-[#0F1A30] ${wide ? "whitespace-pre-wrap break-words" : "truncate"}`} style={mono ? { fontFamily: MONO } : undefined}>{filled(v) ? v : <span className="text-[#B4BFD0] font-bold">미입력</span>}</div>
+      <div className={`text-[14.5px] font-black text-[#0F1A30] ${wide ? "whitespace-pre-wrap break-words" : "truncate"}`} style={mono ? { fontFamily: MONO, fontVariantNumeric: "tabular-nums" } : undefined}>{filled(v) ? v : <span className="text-[#B4BFD0] font-bold">미입력</span>}</div>
     </div>
   );
 }
@@ -236,10 +236,10 @@ export default function DriverApproveModal({ u, signup, candidates = [], bizDoc,
         <div className="shrink-0 px-5 md:px-6 pt-[calc(14px+env(safe-area-inset-top))] md:pt-5 pb-4 text-white" style={{ background: "linear-gradient(135deg,#0F1A30 0%,#1B2B4B 60%,#2D4C82 100%)" }}>
           <div className="flex items-start gap-3">
             <div className="flex-1 min-w-0">
-              <div className="text-[11px] font-extrabold tracking-[0.26em] text-[#8FB0F0]" style={{ fontFamily: MONO }}>DRIVER SIGNUP · 가입 승인</div>
+              <div className="text-[11px] font-extrabold tracking-[0.26em] text-[#8FB0F0]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>DRIVER SIGNUP · 가입 승인</div>
               <div className="mt-1 flex items-center gap-2 flex-wrap">
                 <span className="text-[22px] font-black truncate">{me.이름 || "-"}</span>
-                <span className="px-2.5 h-8 inline-flex items-center rounded-lg text-[16px] font-black tracking-[0.1em] text-[#E8F0FF]" style={{ fontFamily: MONO, background: "rgba(10,18,34,.6)", boxShadow: "inset 0 0 0 1.5px rgba(143,176,240,.55)" }}>{me.차량번호 || "번호 없음"}</span>
+                <span className="px-2.5 h-8 inline-flex items-center rounded-lg text-[16px] font-black tracking-[0.1em] text-[#E8F0FF]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", background: "rgba(10,18,34,.6)", boxShadow: "inset 0 0 0 1.5px rgba(143,176,240,.55)" }}>{me.차량번호 || "번호 없음"}</span>
               </div>
               <div className="mt-1 text-[12.5px] font-bold text-white/60">신청일 {tsText(u.createdAt) || "-"}</div>
             </div>
@@ -301,7 +301,7 @@ export default function DriverApproveModal({ u, signup, candidates = [], bizDoc,
                             <div className="flex items-center gap-2">
                               <input type="radio" name="drv-link" checked={on} onChange={() => setPick(c.id)} className="accent-[#2D4C82] w-4 h-4" />
                               <span className="text-[15px] font-black text-[#0F1A30] truncate">{x.이름 || x.name || "-"}</span>
-                              <span className="text-[13px] font-black text-[#1B2B4B]" style={{ fontFamily: MONO }}>{x.차량번호 || x.carNo || "-"}</span>
+                              <span className="text-[13px] font-black text-[#1B2B4B]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{x.차량번호 || x.carNo || "-"}</span>
                               {x.등급 && <span className={`ml-auto px-2 h-[22px] inline-flex items-center rounded-md text-[11.5px] font-black ${x.등급 === "블랙" ? "bg-[#FEE4E2] text-[#B42318]" : "bg-[#0F1A30] text-white"}`}>{x.등급}</span>}
                             </div>
                             <div className="mt-1 pl-6 text-[12.5px] font-bold text-[#5B6B85] truncate">{[phoneText(x.전화번호 || x.phone), [x.차량종류, x.차량톤수].filter(Boolean).join(" "), x.담당자?.name && `담당 ${x.담당자.name}`, x.등록자 && `등록 ${x.등록자}`, tsText(x.createdAt).slice(0, 10)].filter(Boolean).join(" · ") || "-"}</div>
@@ -324,7 +324,7 @@ export default function DriverApproveModal({ u, signup, candidates = [], bizDoc,
                   <div className="rounded-2xl border border-[#E3E8F0] bg-[#F6F8FC] px-3.5 py-3 text-[13px] font-bold text-[#5B6B85]">기사관리에 같은 차량번호·연락처 기사가 없습니다 — 새 기사로 등록됩니다</div>
                 )}
                 {target && tGrade === "블랙" && <div className="mt-2 rounded-xl bg-[#FEF3F2] border border-[#FDA29B] px-3 py-2 text-[12.5px] font-black text-[#B42318]">⚠ 이 기사는 기사관리에서 「블랙」 등급입니다. 승인하면 아래 가입유형으로 바뀝니다.</div>}
-                {target && !target.samePlate && <div className="mt-2 rounded-xl bg-[#FFF8EC] border border-[#F5C98B] px-3 py-2 text-[12.5px] font-bold text-[#8A4B0A]">차량번호가 달라 기사관리 차량번호가 <b style={{ fontFamily: MONO }}>{me.차량번호}</b>(로그인 차량번호)로 바뀝니다.</div>}
+                {target && !target.samePlate && <div className="mt-2 rounded-xl bg-[#FFF8EC] border border-[#F5C98B] px-3 py-2 text-[12.5px] font-bold text-[#8A4B0A]">차량번호가 달라 기사관리 차량번호가 <b style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{me.차량번호}</b>(로그인 차량번호)로 바뀝니다.</div>}
                 {conflicts.length > 0 && (
                   <div className="mt-3 rounded-2xl border border-[#F5C98B] bg-[#FFFBF3] p-3" data-testid="drv-conflicts">
                     <div className="text-[12.5px] font-black text-[#8A4B0A] mb-1.5">기존 정보와 다른 입력값 {conflicts.length}개 — 체크한 칸만 입력값으로 바꿉니다</div>

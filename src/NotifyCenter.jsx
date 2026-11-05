@@ -20,7 +20,7 @@ import { DAY_MS, isNoticeUnread, noticeAtMs, toMs, useMinuteTick } from "./notif
 
 const ApprovalDocPreview = React.lazy(() => import("./Approval").then((m) => ({ default: m.ApprovalDocPreview })));
 
-const MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
+const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
 const NOTICE_POP_WINDOW = 3 * DAY_MS;    // 공지·인사발령: 최근 3일 안의 안 읽은 글만 팝업(오래된 글은 메뉴 숫자로)
 const HANDOVER_POP_WINDOW = 7 * DAY_MS;
 const APPROVAL_POP_WINDOW = 30 * DAY_MS;
@@ -200,10 +200,10 @@ export function NotifyModal({ item, index = 1, total = 1, company = "", mobile =
         <div className="relative shrink-0 px-5 sm:px-7 pt-4 pb-4 text-white" style={{ background: "linear-gradient(rgba(143,176,240,.07) 1px, transparent 1px) 0 0/22px 22px, linear-gradient(90deg, rgba(143,176,240,.07) 1px, transparent 1px) 0 0/22px 22px, linear-gradient(120deg,#0B1428 0%,#1B2B4B 60%,#2D4C82 100%)" }}>
           <div className="flex items-center gap-2 min-w-0">
             <span className="min-w-0 inline-flex items-center gap-2 whitespace-nowrap truncate">
-              <span className="text-[11.5px] font-extrabold tracking-[0.22em] text-[#8FB0F0]" style={{ fontFamily: MONO }}>{K.en}</span>
+              <span className="text-[11.5px] font-extrabold tracking-[0.22em] text-[#8FB0F0]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{K.en}</span>
               {when && <span className="text-[13px] font-bold text-white/80 tracking-normal" style={{ fontFamily: "'Noto Sans KR','Pretendard',system-ui,sans-serif" }}>{when}</span>}
             </span>
-            {total > 1 && <span className="ml-auto shrink-0 h-6 px-2.5 rounded-full bg-white/10 ring-1 ring-white/20 text-[11.5px] font-black tabular-nums grid place-items-center" style={{ fontFamily: MONO }} data-testid="notify-count">{index} / {total}</span>}
+            {total > 1 && <span className="ml-auto shrink-0 h-6 px-2.5 rounded-full bg-white/10 ring-1 ring-white/20 text-[11.5px] font-black tabular-nums grid place-items-center" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }} data-testid="notify-count">{index} / {total}</span>}
           </div>
           <div className="mt-1.5 font-black whitespace-nowrap overflow-hidden leading-[1.15]" data-testid="notify-head"
             style={{ fontSize: mobile ? "clamp(19px, 6.4vw, 30px)" : "clamp(24px, 2.6vw, 34px)", letterSpacing: mobile ? "0.3em" : "0.34em", color: warn ? "#FFD6D3" : "#fff" }}>{K.head}</div>

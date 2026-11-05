@@ -18,8 +18,8 @@ const tsDay = (v) => { const ms = v?.toMillis ? v.toMillis() : v?.seconds ? v.se
 export function Plate({ no, big = false }) {
   return (
     <span className={`inline-flex items-stretch rounded-lg overflow-hidden whitespace-nowrap ${big ? "h-11" : "h-9"}`} style={{ background: "linear-gradient(180deg,#0A1222,#121F3A)", boxShadow: "inset 0 0 0 1.5px rgba(143,176,240,0.55), 0 0 18px rgba(110,149,232,0.28)" }}>
-      <span className="px-1.5 grid place-items-center text-[9px] font-black tracking-wider text-white" style={{ background: "linear-gradient(180deg,#2D4C82,#1B2B4B)", fontFamily: MONO }}>KR</span>
-      <span className={`px-3 grid place-items-center font-black tracking-[0.12em] ${big ? "text-[22px]" : "text-[18px]"}`} style={{ fontFamily: MONO, color: no ? "#E8F0FF" : "#5B6B85", textShadow: no ? "0 0 8px rgba(143,176,240,0.85), 0 0 2px #fff" : "none" }}>{no || "번호 없음"}</span>
+      <span className="px-1.5 grid place-items-center text-[9px] font-black tracking-wider text-white" style={{ background: "linear-gradient(180deg,#2D4C82,#1B2B4B)", fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>KR</span>
+      <span className={`px-3 grid place-items-center font-black tracking-[0.12em] ${big ? "text-[22px]" : "text-[18px]"}`} style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", color: no ? "#E8F0FF" : "#5B6B85", textShadow: no ? "0 0 8px rgba(143,176,240,0.85), 0 0 2px #fff" : "none" }}>{no || "번호 없음"}</span>
     </span>
   );
 }
@@ -104,7 +104,7 @@ export default function DriverAccounts({ company, isViewer = false, tab = "pendi
               <div key={u.id} className={`relative rounded-[22px] p-5 flex flex-col gap-4 text-white overflow-hidden ${tab === "pending" ? "ring-2 ring-[#8FB0F0]/60" : ""}`} style={{ background: CARD_BG, boxShadow: "0 16px 36px rgba(15,26,48,0.28), inset 0 1px 0 rgba(255,255,255,0.08)" }}>
                 <div className="flex items-start gap-3">
                   <div className="flex-1 min-w-0">
-                    <div className="text-[11px] font-extrabold tracking-[0.26em] text-[#8FB0F0]" style={{ fontFamily: MONO }}>{tab === "pending" ? "PENDING · 가입 대기" : "DRIVER · ACTIVE"}</div>
+                    <div className="text-[11px] font-extrabold tracking-[0.26em] text-[#8FB0F0]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{tab === "pending" ? "PENDING · 가입 대기" : "DRIVER · ACTIVE"}</div>
                     <div className="text-[21px] font-black truncate mt-0.5">{u.name || "-"}</div>
                   </div>
                   <Ring v={rate} />
@@ -112,7 +112,7 @@ export default function DriverAccounts({ company, isViewer = false, tab = "pendi
                 <Plate no={u.carNo} big />
                 <div className="grid grid-cols-2 gap-2">
                   {[["차종", [u.차량종류, u.차량톤수].filter(Boolean).join(" ") || u.vehicleType || "-"] /* ⭐ 2026-11-05 "카고 5톤 5톤" 겹침 수정 */, ["연락처", (u.phone && (fmtPhone(u.phone) || u.phone)) || "-"], ["거주지", u.거주지 || u.address || "-"], ["가입일", tsDay(u.createdAt) || "-"]].map(([k, v]) => (
-                    <div key={k} className="min-w-0 rounded-xl bg-white/[0.06] border border-white/10 px-3 py-2"><div className="text-[12px] font-bold text-white/50">{k}</div><div className="text-[15.5px] font-black truncate" style={k === "연락처" || k === "가입일" ? { fontFamily: MONO } : undefined}>{v}</div></div>
+                    <div key={k} className="min-w-0 rounded-xl bg-white/[0.06] border border-white/10 px-3 py-2"><div className="text-[12px] font-bold text-white/50">{k}</div><div className="text-[15.5px] font-black truncate" style={k === "연락처" || k === "가입일" ? { fontFamily: MONO, fontVariantNumeric: "tabular-nums" } : undefined}>{v}</div></div>
                   ))}
                 </div>
                 {cands.some((c) => c.samePlate) && <div className="rounded-xl bg-[#8FB0F0]/15 border border-[#8FB0F0]/40 px-3 py-2 text-[13px] font-black text-[#CFE0FF]">🔗 기사관리에 같은 기사 정보가 있어요 — 승인하면 연동됩니다</div>}
@@ -146,7 +146,7 @@ export default function DriverAccounts({ company, isViewer = false, tab = "pendi
               <div key={l.id} className="py-2 flex items-center gap-2 text-[13px] flex-wrap">
                 <span className={`px-2 h-[22px] inline-flex items-center rounded-md text-[11.5px] font-black ${l.kind === "reject" ? "bg-[#FEE4E2] text-[#B42318]" : "bg-[#E7F0FF] text-[#2D4C82]"}`}>{l.kind === "reject" ? "거절" : l.kind === "link" ? `연동 승인 · ${l.type || ""}` : `승인 · ${l.type || ""}`}</span>
                 <span className="font-black text-[#0F1A30]">{l.name || "-"}</span>
-                <span className="font-bold text-[#5B6B85]" style={{ fontFamily: MONO }}>{l.carNo || ""}</span>
+                <span className="font-bold text-[#5B6B85]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{l.carNo || ""}</span>
                 {l.reason && <span className="font-bold text-[#7A879C] truncate max-w-full">사유: {l.reason}</span>}
                 <span className="ml-auto text-[12px] font-bold text-[#9AA9C3]">{tsDay(l.at)} · {l.by || ""}</span>
               </div>

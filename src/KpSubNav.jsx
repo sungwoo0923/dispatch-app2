@@ -10,13 +10,13 @@ import { ShellIcon } from "./AdminShell";
 import { confirmLeave } from "./leaveGuard";
 import { useSubnavTarget } from "./navMenus";
 // ⭐ 2026-11-03 red: true인 항목(사내메일 등)은 카톡처럼 진한 빨강 바탕 + 흰 숫자(테마가 rose를 남색으로 바꿔도 그대로)
-const redStyle = (it) => (it?.red && typeof it.badge === "number" ? { background: "#E5332A", color: "#fff", fontWeight: 900 } : undefined);
+const redStyle = (it) => (it?.red && typeof it.badge === "number" ? { background: "#FF3B30", color: "#fff", fontWeight: 900 } : undefined);
 // ✋ 작성 중인 문서가 있으면 메뉴를 옮기기 전에 저장할지 묻는다(전자결재·증명서 등)
 // ⭐ 2026-11-01 하위메뉴는 sub 또는 children 어느 쪽으로 줘도 된다
 const kidsOf = (it) => (Array.isArray(it.children) && it.children.length ? it.children : Array.isArray(it.sub) && it.sub.length ? it.sub : null);
 const goSel = (fn, k, act) => { if (k === act) { fn?.(k); return; } confirmLeave().then((ok) => { if (ok) fn?.(k); }); };
 
-const MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
+const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
 
 // 📱 휴대폰 폭(모바일 앱에서 PC 화면을 그대로 쓸 때) — 왼쪽 메뉴 대신 위쪽 가로 탭으로 보여준다
 export function useIsPhone() {
@@ -46,7 +46,7 @@ function PhoneSubNav({ code, title, icon, groups, actions, active, onSelect, chi
         <div className="px-3.5 pt-3 pb-2 flex items-center gap-2.5">
           <span className="w-9 h-9 rounded-xl bg-white/10 ring-1 ring-white/15 flex items-center justify-center shrink-0"><ShellIcon name={icon} size={17} /></span>
           <div className="min-w-0 flex-1">
-            <div style={{ fontFamily: MONO, fontSize: 9.5, fontWeight: 800, letterSpacing: "0.22em" }} className="text-[#8FB0F0] truncate">{code}{cur?.en ? ` · ${cur.en}` : ""}</div>
+            <div style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 9.5, fontWeight: 800, letterSpacing: "0.22em" }} className="text-[#8FB0F0] truncate">{code}{cur?.en ? ` · ${cur.en}` : ""}</div>
             <div className="text-[16px] font-black truncate leading-tight">{cur?.label || title}</div>
           </div>
         </div>
@@ -58,7 +58,7 @@ function PhoneSubNav({ code, title, icon, groups, actions, active, onSelect, chi
                 className={`relative shrink-0 h-8 px-3 rounded-full text-[12.5px] font-black whitespace-nowrap flex items-center gap-1.5 transition ${on ? "bg-white text-[#0F1A30] shadow-[0_4px_12px_rgba(0,0,0,0.25)]" : "bg-white/[0.08] text-white/75 ring-1 ring-white/10"}`}>
                 <ShellIcon name={it.icon} size={13} className={on ? "text-[#2D4C82]" : "text-[#8FB0F0]"} />
                 {it.label}
-                {hasBadge(it.badge) && <span style={redStyle(it)} className={`min-w-[16px] h-4 px-1 rounded-full text-[10px] font-extrabold flex items-center justify-center ${on ? "bg-[#1B2B4B] text-white" : it.soft ? "bg-white/20 text-white" : "bg-rose-500 text-white"}`}>{typeof it.badge === "number" && it.badge > 99 ? "99+" : it.badge}</span>}
+                {hasBadge(it.badge) && <span style={redStyle(it)} className={`min-w-[16px] h-4 px-1 rounded-full text-[10px] font-extrabold flex items-center justify-center ${on ? "bg-[#1B2B4B] text-white" : it.soft ? "bg-white/20 text-white" : "bg-[#FF3B30] text-white"}`}>{typeof it.badge === "number" && it.badge > 99 ? "99+" : it.badge}</span>}
               </button>
             );
           })}
@@ -110,16 +110,16 @@ export default function KpSubNav({ code = "MENU", title, icon = "dashboard", ite
     >
       <span className={`relative rounded-lg flex items-center justify-center shrink-0 ${sub ? "w-6 h-6" : "w-8 h-8"} ${on ? "bg-[#EEF3FB]" : "bg-white/[0.06]"}`}>
         <ShellIcon name={it.icon} size={sub ? 14 : 17} className={on ? "text-[#1B2B4B]" : "text-blue-200/85"} />
-        {collapsed && hasBadge(it.badge) && <span style={redStyle(it)} className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-rose-500" />}
+        {collapsed && hasBadge(it.badge) && <span style={redStyle(it)} className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-[#FF3B30]" />}
       </span>
       {!collapsed && (
         <>
           <span className="flex-1 min-w-0 text-left">
             <span className="block truncate">{it.label}</span>
-            {it.en && <span className="block truncate" style={{ fontFamily: MONO, fontSize: 9.5, fontWeight: 800, letterSpacing: "0.18em", opacity: on ? 0.55 : 0.45 }}>{it.en}</span>}
+            {it.en && <span className="block truncate" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 9.5, fontWeight: 800, letterSpacing: "0.18em", opacity: on ? 0.55 : 0.45 }}>{it.en}</span>}
           </span>
           {hasBadge(it.badge) && (
-            <span title={it.badgeTitle} style={redStyle(it)} className={`min-w-[20px] h-5 px-1.5 rounded-full text-[11px] font-extrabold flex items-center justify-center tabular-nums ${typeof it.badge === "string" ? "tracking-wider " : ""}${on ? "bg-[#1B2B4B] text-white" : it.soft ? "bg-white/15 text-white" : "bg-rose-500 text-white"}`}>{badgeTxt(it.badge)}</span>
+            <span title={it.badgeTitle} style={redStyle(it)} className={`min-w-[20px] h-5 px-1.5 rounded-full text-[11px] font-extrabold flex items-center justify-center tabular-nums ${typeof it.badge === "string" ? "tracking-wider " : ""}${on ? "bg-[#1B2B4B] text-white" : it.soft ? "bg-white/15 text-white" : "bg-[#FF3B30] text-white"}`}>{badgeTxt(it.badge)}</span>
           )}
           {caret && <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 opacity-60" style={{ transform: caret === "up" ? "rotate(180deg)" : "none", transition: "transform .28s cubic-bezier(.2,.8,.2,1)" }}><path d="M6 9l6 6 6-6" /></svg>}
         </>
@@ -140,7 +140,7 @@ export default function KpSubNav({ code = "MENU", title, icon = "dashboard", ite
           </button>
           {!collapsed && (
             <div className="min-w-0">
-              <div style={{ fontFamily: MONO, fontSize: 10, fontWeight: 800, letterSpacing: "0.22em" }} className="text-blue-200/70">{code}</div>
+              <div style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 10, fontWeight: 800, letterSpacing: "0.22em" }} className="text-blue-200/70">{code}</div>
               <div className="text-[15.5px] font-bold truncate">{title}</div>
             </div>
           )}

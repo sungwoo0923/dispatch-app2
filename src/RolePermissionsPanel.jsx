@@ -226,13 +226,13 @@ export default function RolePermissionsPanel({ users: allUsers = [], roleLabels 
           {customized && !ovRoles[r.key] && <span className={`text-[9.5px] font-black px-1.5 py-0.5 rounded-full shrink-0 ${on ? "bg-white/15 text-white" : "bg-[#EEF3FB] text-[#2D4C82]"}`}>수정됨</span>}
           {ovRoles[r.key] && <span className="text-[9.5px] font-black px-1.5 py-0.5 rounded-full shrink-0 bg-[#FFF4E5] text-[#B54708]">전용</span>}
           {!r.builtin && roleScreen(customRoles.find((x) => x.key === r.key)) === "exec" && <span className="text-[9.5px] font-black px-1.5 py-0.5 rounded-full text-white shrink-0" style={{ background: "linear-gradient(135deg,#B88A2E,#D7BC82)" }}>임원</span>}
-          <span className={`ml-auto text-[11px] font-black shrink-0 tabular-nums ${on ? "text-[#8FB0F0]" : "text-[#9AA9C3]"}`} style={{ fontFamily: "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace" }}>{memberCount(r.key)}명</span>
+          <span className={`ml-auto text-[11px] font-black shrink-0 tabular-nums ${on ? "text-[#8FB0F0]" : "text-[#9AA9C3]"}`} style={{ fontFamily: "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif", fontVariantNumeric: "tabular-nums" }}>{memberCount(r.key)}명</span>
         </div>
         <div className={`flex h-1 rounded-full overflow-hidden mt-2 ${on ? "bg-white/15" : "bg-[#EEF2F8]"}`}>
           <div className={on ? "bg-white" : "bg-[#1B2B4B]"} style={{ width: `${(c.write / n) * 100}%` }} />
           <div className={on ? "bg-[#8FB0F0]" : "bg-[#8FB0F0]"} style={{ width: `${(c.read / n) * 100}%` }} />
         </div>
-        <div className={`mt-1 text-[10.5px] font-bold tabular-nums ${on ? "text-white/60" : "text-[#9AA9C3]"}`} style={{ fontFamily: "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace" }}>W {c.write} · R {c.read} · H {c.hidden}</div>
+        <div className={`mt-1 text-[10.5px] font-bold tabular-nums ${on ? "text-white/60" : "text-[#9AA9C3]"}`} style={{ fontFamily: "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif", fontVariantNumeric: "tabular-nums" }}>W {c.write} · R {c.read} · H {c.hidden}</div>
       </button>
     );
   };
@@ -329,7 +329,7 @@ export default function RolePermissionsPanel({ users: allUsers = [], roleLabels 
             <div className="relative px-4 pt-3.5 pb-3 text-white" style={{ background: "radial-gradient(500px 180px at 90% -40%, rgba(110,149,232,.3), transparent 60%), linear-gradient(120deg,#060C1A 0%,#0F1A30 50%,#1B2B4B 100%)" }}>
               <div className="flex items-center gap-2">
                 <div>
-                  <div className="text-[9.5px] font-extrabold tracking-[0.28em] text-[#8FB0F0]" style={{ fontFamily: "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace" }}>ROLES</div>
+                  <div className="text-[9.5px] font-extrabold tracking-[0.28em] text-[#8FB0F0]" style={{ fontFamily: "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif", fontVariantNumeric: "tabular-nums" }}>ROLES</div>
                   <div className="text-[15px] font-black leading-tight">역할 {allEditable.length + FIXED_ROLES.length}개</div>
                 </div>
                 <input value={roleQ} onChange={(e) => setRoleQ(e.target.value)} placeholder="역할 찾기" autoComplete="off"
@@ -338,7 +338,7 @@ export default function RolePermissionsPanel({ users: allUsers = [], roleLabels 
               <div className="mt-2.5 grid grid-cols-3 p-1 rounded-xl bg-white/[0.06] border border-white/10">
                 {[["builtin", "기본", builtinList.length], ["custom", "직접 만든", customList.length], ["fixed", "고정", FIXED_ROLES.length]].map(([k, l, nn]) => (
                   <button key={k} type="button" onClick={() => setLeftTab(k)} className={`h-8 rounded-lg text-[12.5px] font-black transition ${leftTab === k ? "bg-white text-[#0F1A30]" : "text-white/70 hover:text-white"}`}>
-                    {l} <span className={`ml-0.5 text-[11px] ${leftTab === k ? "text-[#5B6B85]" : "text-white/40"}`} style={{ fontFamily: "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace" }}>{nn}</span>
+                    {l} <span className={`ml-0.5 text-[11px] ${leftTab === k ? "text-[#5B6B85]" : "text-white/40"}`} style={{ fontFamily: "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif", fontVariantNumeric: "tabular-nums" }}>{nn}</span>
                   </button>
                 ))}
               </div>
@@ -386,7 +386,7 @@ export default function RolePermissionsPanel({ users: allUsers = [], roleLabels 
                 </div>
               )}
             </div>
-            <div className="px-4 py-2 border-t border-[#EEF2F8] bg-white flex items-center gap-3 text-[10.5px] font-bold text-[#9AA9C3]" style={{ fontFamily: "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace" }}>
+            <div className="px-4 py-2 border-t border-[#EEF2F8] bg-white flex items-center gap-3 text-[10.5px] font-bold text-[#9AA9C3]" style={{ fontFamily: "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif", fontVariantNumeric: "tabular-nums" }}>
               <span className="inline-flex items-center gap-1"><i className="w-2 h-2 rounded-full bg-[#1B2B4B] inline-block" />W 수정</span>
               <span className="inline-flex items-center gap-1"><i className="w-2 h-2 rounded-full bg-[#8FB0F0] inline-block" />R 조회</span>
               <span className="inline-flex items-center gap-1"><i className="w-2 h-2 rounded-full bg-[#EEF2F8] inline-block border border-[#DCE3EE]" />H 숨김</span>

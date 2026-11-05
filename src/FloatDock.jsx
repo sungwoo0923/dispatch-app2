@@ -5,7 +5,7 @@
 //  · WinHeader: 창 머리말(영문 코드 · 제목 · 크기 버튼 · 닫기)
 import React from "react";
 
-const MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
+const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
 export const DOCK_BG = "linear-gradient(145deg, #0B1428 0%, #1B2B4B 55%, #2D4C82 100%)";
 
 // ⭐ 2026-11-02 화면 점검 — 떠 있는 버튼이 내정보 "나의 통계"·회계 개요 미수금 금액을 가리던 문제
@@ -56,7 +56,7 @@ export function FabButton({ bottom = 24, right = 16, active = false, title, onCl
         }}>
         <span style={{ color: active ? "#1B2B4B" : "#fff", display: "flex", transform: "scale(0.88)" }}>{children}</span>
         {badge > 0 && !active && (
-          <span style={{ position: "absolute", top: -5, right: -5, minWidth: 20, height: 20, padding: "0 5px", borderRadius: 10, background: "#E5332A", color: "#fff", fontSize: 10.5, fontWeight: 900, display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 0 0 2px #fff", fontFamily: MONO }}>{badge > 99 ? "99+" : badge}</span>
+          <span style={{ position: "absolute", top: -5, right: -5, minWidth: 20, height: 20, padding: "0 5px", borderRadius: 10, background: "#E5332A", color: "#fff", fontSize: 10.5, fontWeight: 900, display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 0 0 2px #fff", fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{badge > 99 ? "99+" : badge}</span>
         )}
       </button>
     </div>
@@ -95,7 +95,7 @@ export function SizeButtons({ preset, onPick, dark = true }) {
     <div style={{ display: "inline-flex", padding: 2, borderRadius: 9, background: dark ? "rgba(255,255,255,0.10)" : "#EEF2F8", gap: 2 }}>
       {[["S", "작게"], ["M", "보통"], ["L", "크게"]].map(([k, l]) => (
         <button key={k} type="button" onClick={() => onPick(k)} title={`${l}`}
-          style={{ height: 24, minWidth: 28, padding: "0 6px", borderRadius: 7, border: "none", cursor: "pointer", fontSize: 11, fontWeight: 900, fontFamily: MONO, background: preset === k ? (dark ? "#fff" : "#0F1A30") : "transparent", color: preset === k ? (dark ? "#0F1A30" : "#fff") : (dark ? "rgba(255,255,255,0.7)" : "#5B6B85") }}>{k}</button>
+          style={{ height: 24, minWidth: 28, padding: "0 6px", borderRadius: 7, border: "none", cursor: "pointer", fontSize: 11, fontWeight: 900, fontFamily: MONO, fontVariantNumeric: "tabular-nums", background: preset === k ? (dark ? "#fff" : "#0F1A30") : "transparent", color: preset === k ? (dark ? "#0F1A30" : "#fff") : (dark ? "rgba(255,255,255,0.7)" : "#5B6B85") }}>{k}</button>
       ))}
     </div>
   );
@@ -106,7 +106,7 @@ export function WinHeader({ code, title, sub, preset, onPreset, onClose, right }
     <div style={{ background: DOCK_BG, color: "#fff", padding: "12px 14px 12px 28px", display: "flex", alignItems: "center", gap: 10, flexShrink: 0, position: "relative" }}>
       <div style={{ position: "absolute", inset: 0, opacity: 0.08, backgroundImage: "linear-gradient(#fff 1px,transparent 1px),linear-gradient(90deg,#fff 1px,transparent 1px)", backgroundSize: "18px 18px", pointerEvents: "none" }} />
       <div style={{ minWidth: 0, flex: 1, position: "relative" }}>
-        <div style={{ fontFamily: MONO, fontSize: 9.5, fontWeight: 800, letterSpacing: "0.26em", color: "#8FB0F0" }}>{code}</div>
+        <div style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 9.5, fontWeight: 800, letterSpacing: "0.26em", color: "#8FB0F0" }}>{code}</div>
         <div style={{ fontSize: 15.5, fontWeight: 900, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{title}{sub && <span style={{ fontSize: 12, fontWeight: 700, color: "rgba(255,255,255,0.55)", marginLeft: 8 }}>{sub}</span>}</div>
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: 6, position: "relative" }}>

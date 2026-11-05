@@ -207,7 +207,7 @@ export default function ShipperLogin() {
   const [now, setNow] = useState(() => new Date());
   useEffect(() => { const t = setInterval(() => setNow(new Date()), 1000); return () => clearInterval(t); }, []);
   const pad = (n) => String(n).padStart(2, "0");
-  const MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
+  const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
   const fieldIcon = {
     code: <><rect x="3" y="11" width="18" height="10" rx="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" /></>,
     company: <><path d="M3 21h18" /><path d="M5 21V7l7-4 7 4v14" /><path d="M9 9h1M14 9h1M9 13h1M14 13h1M9 17h1M14 17h1" /></>,
@@ -257,7 +257,7 @@ export default function ShipperLogin() {
           <div className="flex items-center gap-2 text-[11.5px] font-extrabold tracking-[0.28em] text-[#8FB0F0]">
             <span className="w-1.5 h-1.5 rounded-full bg-[#6E95E8] kp-pulse" /> SYSTEM ONLINE
           </div>
-          <div className="mt-4 font-black leading-none tabular-nums" style={{ fontSize: 88, letterSpacing: "-0.02em", fontFamily: MONO }}>
+          <div className="mt-4 font-black leading-none tabular-nums" style={{ fontSize: 88, letterSpacing: "-0.02em", fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>
             {pad(now.getHours())}<span className="kp-pulse text-white/40">:</span>{pad(now.getMinutes())}
             <span className="text-[30px] text-white/35 ml-2">{pad(now.getSeconds())}</span>
           </div>
@@ -287,7 +287,7 @@ export default function ShipperLogin() {
             <p className="text-[13.5px] text-[#7A879C] mt-1 mb-7">승인 후 발급된 회사코드로 로그인하세요</p>
 
             {!isTotalMasterInput && field("code", "회사코드", (
-              <input type="text" name="shipper-code" autoComplete="off" placeholder="승인 후 발급된 코드" value={companyCode} onChange={(e) => setCompanyCode(e.target.value)} onKeyDown={handleKeyDown} className={`${inputCls} ${companyCode ? "tracking-[0.12em] font-mono" : ""}`} />
+              <input type="text" name="shipper-code" autoComplete="off" placeholder="승인 후 발급된 코드" value={companyCode} onChange={(e) => setCompanyCode(e.target.value)} onKeyDown={handleKeyDown} className={`${inputCls} ${companyCode ? "tracking-[0.12em] tabular-nums" : ""}`} />
             ))}
             {!isTotalMasterInput && field("company", "회사명", (
               <input type="text" name="shipper-company" autoComplete="off" placeholder="가입한 회사명" value={companyName} onChange={(e) => setCompanyName(e.target.value)} onKeyDown={handleKeyDown} className={inputCls} />
@@ -360,7 +360,7 @@ export default function ShipperLogin() {
                     <defs><linearGradient id="kpShipRing" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stopColor="#8FB0F0" /><stop offset="100%" stopColor="#ffffff" /></linearGradient></defs>
                   </svg>
                   <div className="absolute inset-0 flex flex-col items-center justify-center">
-                    <div key={countdown} className="kp-login-in font-black tabular-nums leading-none" style={{ fontSize: 60, fontFamily: MONO }}>{pad(countdown)}</div>
+                    <div key={countdown} className="kp-login-in font-black tabular-nums leading-none" style={{ fontSize: 60, fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{pad(countdown)}</div>
                     <div className="text-[10px] font-extrabold tracking-[0.3em] text-white/40 mt-1">SEC</div>
                   </div>
                 </div>

@@ -119,7 +119,7 @@ const getDate = (offset = 0) => {
   return d.toISOString().slice(0, 10);
 };
 
-const ORDER_MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
+const ORDER_MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
 const SEARCH_TYPES = ["통합", "상차지명", "하차지명", "상차지주소", "하차지주소", "운송사명"];
 
 const inputCls = "w-full border border-[#D5DEEC] rounded-[11px] px-3 h-11 text-sm text-[#0F1A30] font-semibold bg-white focus:ring-4 focus:ring-[#8FB0F0]/30 focus:border-[#2D4C82] outline-none transition";
@@ -788,7 +788,7 @@ export default function ShipperOrder({ editData, onClose }) {
         <div className="relative overflow-hidden flex justify-between items-center px-6 h-[68px] text-white" style={{ background: "linear-gradient(135deg,#0F1A30 0%,#1B2B4B 55%,#2D4C82 100%)" }}>
           <span className="absolute inset-0 opacity-[0.08]" style={{ backgroundImage: "linear-gradient(#fff 1px,transparent 1px),linear-gradient(90deg,#fff 1px,transparent 1px)", backgroundSize: "18px 18px" }} />
           <div className="relative">
-            <div className="text-[10px] font-extrabold tracking-[0.26em] text-[#8FB0F0]" style={{ fontFamily: ORDER_MONO }}>ORDER CONSOLE</div>
+            <div className="text-[10px] font-extrabold tracking-[0.26em] text-[#8FB0F0]" style={{ fontFamily: ORDER_MONO, fontVariantNumeric: "tabular-nums" }}>ORDER CONSOLE</div>
             <h2 className="text-[18px] font-black tracking-tight">{editId || editData ? "오더 수정" : "일반배차 등록"}</h2>
           </div>
           <button onClick={() => { if (window.confirm("입력값을 초기화하시겠습니까?")) resetForm(); }}
@@ -800,7 +800,7 @@ export default function ShipperOrder({ editData, onClose }) {
 
         {/* 운송의뢰사 */}
         <div>
-          <div className="mb-3 flex items-center gap-2.5"><span className="inline-flex items-center justify-center w-7 h-7 rounded-[9px] text-[11px] font-black text-white" style={{ background: "linear-gradient(135deg,#1B2B4B,#2D4C82)", fontFamily: ORDER_MONO }}>01</span><span className="text-[15px] font-black text-[#0F1A30]">운송의뢰사</span></div>
+          <div className="mb-3 flex items-center gap-2.5"><span className="inline-flex items-center justify-center w-7 h-7 rounded-[9px] text-[11px] font-black text-white" style={{ background: "linear-gradient(135deg,#1B2B4B,#2D4C82)", fontFamily: ORDER_MONO, fontVariantNumeric: "tabular-nums" }}>01</span><span className="text-[15px] font-black text-[#0F1A30]">운송의뢰사</span></div>
           <div className="bg-[#F7F9FC] border border-[#E9EEF5] rounded-[16px] p-4 space-y-3">
             <div className="relative">
               <label className={labelCls}>운송사명</label>
@@ -848,7 +848,7 @@ export default function ShipperOrder({ editData, onClose }) {
 
         {/* 거래처 정보 */}
         <div>
-          <div className="mb-3 flex items-center gap-2.5"><span className="inline-flex items-center justify-center w-7 h-7 rounded-[9px] text-[11px] font-black text-white" style={{ background: "linear-gradient(135deg,#1B2B4B,#2D4C82)", fontFamily: ORDER_MONO }}>02</span><span className="text-[15px] font-black text-[#0F1A30]">거래처 정보</span></div>
+          <div className="mb-3 flex items-center gap-2.5"><span className="inline-flex items-center justify-center w-7 h-7 rounded-[9px] text-[11px] font-black text-white" style={{ background: "linear-gradient(135deg,#1B2B4B,#2D4C82)", fontFamily: ORDER_MONO, fontVariantNumeric: "tabular-nums" }}>02</span><span className="text-[15px] font-black text-[#0F1A30]">거래처 정보</span></div>
           <div className="bg-[#F7F9FC] border border-[#E9EEF5] rounded-[16px] p-4">
             <label className={labelCls}>거래처명</label>
             <div className="flex gap-2">
@@ -884,7 +884,7 @@ export default function ShipperOrder({ editData, onClose }) {
 
         {/* 운송 일정 */}
         <div>
-          <div className="mb-3 flex items-center gap-2.5"><span className="inline-flex items-center justify-center w-7 h-7 rounded-[9px] text-[11px] font-black text-white" style={{ background: "linear-gradient(135deg,#1B2B4B,#2D4C82)", fontFamily: ORDER_MONO }}>03</span><span className="text-[15px] font-black text-[#0F1A30]">운송 일정</span></div>
+          <div className="mb-3 flex items-center gap-2.5"><span className="inline-flex items-center justify-center w-7 h-7 rounded-[9px] text-[11px] font-black text-white" style={{ background: "linear-gradient(135deg,#1B2B4B,#2D4C82)", fontFamily: ORDER_MONO, fontVariantNumeric: "tabular-nums" }}>03</span><span className="text-[15px] font-black text-[#0F1A30]">운송 일정</span></div>
           <div className="bg-[#F7F9FC] border border-[#E9EEF5] rounded-[16px] p-4 space-y-4">
 
             {/* 상차 */}
@@ -949,7 +949,7 @@ export default function ShipperOrder({ editData, onClose }) {
 
         {/* 상·하차 정보 */}
         <div>
-          <div className="mb-3 flex items-center gap-2.5"><span className="inline-flex items-center justify-center w-7 h-7 rounded-[9px] text-[11px] font-black text-white" style={{ background: "linear-gradient(135deg,#1B2B4B,#2D4C82)", fontFamily: ORDER_MONO }}>04</span><span className="text-[15px] font-black text-[#0F1A30]">상·하차 정보</span></div>
+          <div className="mb-3 flex items-center gap-2.5"><span className="inline-flex items-center justify-center w-7 h-7 rounded-[9px] text-[11px] font-black text-white" style={{ background: "linear-gradient(135deg,#1B2B4B,#2D4C82)", fontFamily: ORDER_MONO, fontVariantNumeric: "tabular-nums" }}>04</span><span className="text-[15px] font-black text-[#0F1A30]">상·하차 정보</span></div>
           <div className="bg-[#F7F9FC] border border-[#E9EEF5] rounded-[16px] p-4 grid grid-cols-2 gap-4">
             {/* 상차지 */}
             <div className="space-y-2">
@@ -1039,7 +1039,7 @@ export default function ShipperOrder({ editData, onClose }) {
 
         {/* 화물 정보 */}
         <div>
-          <div className="mb-3 flex items-center gap-2.5"><span className="inline-flex items-center justify-center w-7 h-7 rounded-[9px] text-[11px] font-black text-white" style={{ background: "linear-gradient(135deg,#1B2B4B,#2D4C82)", fontFamily: ORDER_MONO }}>05</span><span className="text-[15px] font-black text-[#0F1A30]">화물 정보</span></div>
+          <div className="mb-3 flex items-center gap-2.5"><span className="inline-flex items-center justify-center w-7 h-7 rounded-[9px] text-[11px] font-black text-white" style={{ background: "linear-gradient(135deg,#1B2B4B,#2D4C82)", fontFamily: ORDER_MONO, fontVariantNumeric: "tabular-nums" }}>05</span><span className="text-[15px] font-black text-[#0F1A30]">화물 정보</span></div>
           <div className="bg-[#F7F9FC] border border-[#E9EEF5] rounded-[16px] p-4 space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <div>
@@ -1102,7 +1102,7 @@ export default function ShipperOrder({ editData, onClose }) {
 
         {/* 배차옵션 */}
         <div>
-          <div className="mb-3 flex items-center gap-2.5"><span className="inline-flex items-center justify-center w-7 h-7 rounded-[9px] text-[11px] font-black text-white" style={{ background: "linear-gradient(135deg,#1B2B4B,#2D4C82)", fontFamily: ORDER_MONO }}>06</span><span className="text-[15px] font-black text-[#0F1A30]">배차옵션</span></div>
+          <div className="mb-3 flex items-center gap-2.5"><span className="inline-flex items-center justify-center w-7 h-7 rounded-[9px] text-[11px] font-black text-white" style={{ background: "linear-gradient(135deg,#1B2B4B,#2D4C82)", fontFamily: ORDER_MONO, fontVariantNumeric: "tabular-nums" }}>06</span><span className="text-[15px] font-black text-[#0F1A30]">배차옵션</span></div>
           <div className="bg-[#F7F9FC] border border-[#E9EEF5] rounded-[16px] p-4 flex gap-2">
             <button type="button"
               onClick={() => setForm(p => ({ ...p, 독차: true, 혼적: false }))}
@@ -1124,7 +1124,7 @@ export default function ShipperOrder({ editData, onClose }) {
 
         {/* 상하차방법 / 결제방식 */}
         <div>
-          <div className="mb-3 flex items-center gap-2.5"><span className="inline-flex items-center justify-center w-7 h-7 rounded-[9px] text-[11px] font-black text-white" style={{ background: "linear-gradient(135deg,#1B2B4B,#2D4C82)", fontFamily: ORDER_MONO }}>07</span><span className="text-[15px] font-black text-[#0F1A30]">상하차방법 / 결제방식</span></div>
+          <div className="mb-3 flex items-center gap-2.5"><span className="inline-flex items-center justify-center w-7 h-7 rounded-[9px] text-[11px] font-black text-white" style={{ background: "linear-gradient(135deg,#1B2B4B,#2D4C82)", fontFamily: ORDER_MONO, fontVariantNumeric: "tabular-nums" }}>07</span><span className="text-[15px] font-black text-[#0F1A30]">상하차방법 / 결제방식</span></div>
           <div className="bg-[#F7F9FC] border border-[#E9EEF5] rounded-[16px] p-4 grid grid-cols-3 gap-4">
             <div>
               <label className={labelCls}>상차방법</label>
@@ -1190,7 +1190,7 @@ export default function ShipperOrder({ editData, onClose }) {
       <div className={`${onClose ? "w-[420px] shrink-0 self-start sticky top-[84px]" : "w-full"} bg-white rounded-[22px] border border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_10px_28px_rgba(16,24,40,0.06)] p-5 flex flex-col`}>
         <div className="flex items-center gap-2 mb-4 pb-3 border-b border-[#EEF1F6]">
           <span className="w-1.5 h-1.5 rotate-45 bg-[#2D4C82]" />
-          <span className="text-[10px] font-extrabold tracking-[0.22em] text-[#9AA9C3]" style={{ fontFamily: ORDER_MONO }}>HISTORY</span>
+          <span className="text-[10px] font-extrabold tracking-[0.22em] text-[#9AA9C3]" style={{ fontFamily: ORDER_MONO, fontVariantNumeric: "tabular-nums" }}>HISTORY</span>
           <span className="text-[15.5px] font-black text-[#0F1A30]">오더 불러오기</span>
         </div>
 
@@ -1515,7 +1515,7 @@ function SideHead({ code, title, right }) {
   return (
     <div className="flex items-center gap-2 px-5 h-[50px] border-b border-[#EEF1F6]">
       <span className="w-1.5 h-1.5 rotate-45 bg-[#2D4C82]" />
-      <span className="text-[10px] font-extrabold tracking-[0.22em] text-[#9AA9C3]" style={{ fontFamily: ORDER_MONO }}>{code}</span>
+      <span className="text-[10px] font-extrabold tracking-[0.22em] text-[#9AA9C3]" style={{ fontFamily: ORDER_MONO, fontVariantNumeric: "tabular-nums" }}>{code}</span>
       <span className="text-[15px] font-black text-[#0F1A30]">{title}</span>
       <span className="ml-auto">{right}</span>
     </div>
@@ -1560,7 +1560,7 @@ function OrderSidePanel({ form, cargoRows, company, history, historyLoading, onA
   return (
     <>
       <div className={SIDE_CARD}>
-        <SideHead code="CHECK" title="등록 체크리스트" right={<span className="text-[12px] font-extrabold text-[#5B6B85]" style={{ fontFamily: ORDER_MONO }}>{done}/{checks.length}</span>} />
+        <SideHead code="CHECK" title="등록 체크리스트" right={<span className="text-[12px] font-extrabold text-[#5B6B85]" style={{ fontFamily: ORDER_MONO, fontVariantNumeric: "tabular-nums" }}>{done}/{checks.length}</span>} />
         <div className="p-5">
           <div className="h-2 rounded-full bg-[#EEF2F8] overflow-hidden mb-3.5">
             <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, background: "linear-gradient(90deg,#2D4C82,#1B2B4B)" }} />
@@ -1575,10 +1575,10 @@ function OrderSidePanel({ form, cargoRows, company, history, historyLoading, onA
           <div className="mt-4 grid grid-cols-4 gap-1.5 text-center">
             {[["요청", "운송사 확인 대기"], ["배차중", "차량 배정 중"], ["배차완료", "차량 배정됨"], ["운송", "상차~하차"]].map(([l, d], i) => (
               <div key={l} className="relative">
-                <div className={`mx-auto w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-black ${i === 0 ? "bg-[#1B2B4B] text-white" : "bg-[#EEF2F8] text-[#1B2B4B]"}`} style={{ fontFamily: ORDER_MONO }}>{i + 1}</div>
+                <div className={`mx-auto w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-black ${i === 0 ? "bg-[#1B2B4B] text-white" : "bg-[#EEF2F8] text-[#1B2B4B]"}`} style={{ fontFamily: ORDER_MONO, fontVariantNumeric: "tabular-nums" }}>{i + 1}</div>
                 <div className="text-[12.5px] font-black text-[#0F1A30] mt-1">{l}</div>
                 <div className="text-[10.5px] text-[#9AA9C3] leading-tight">{d}</div>
-                {stat[l] != null && <div className="mt-1 text-[12px] font-extrabold text-[#2D4C82]" style={{ fontFamily: ORDER_MONO }}>{stat[l]}건</div>}
+                {stat[l] != null && <div className="mt-1 text-[12px] font-extrabold text-[#2D4C82]" style={{ fontFamily: ORDER_MONO, fontVariantNumeric: "tabular-nums" }}>{stat[l]}건</div>}
               </div>
             ))}
           </div>
@@ -1604,7 +1604,7 @@ function OrderSidePanel({ form, cargoRows, company, history, historyLoading, onA
                     className="text-left px-3 py-2.5 rounded-[12px] border border-[#E3E8F0] hover:border-[#4B6CB7] hover:bg-[#F5F8FD] transition">
                     <div className="flex items-center justify-between gap-2">
                       <span className="text-[13.5px] font-black text-[#0F1A30] truncate">{p.name}</span>
-                      <span className="shrink-0 text-[11px] font-extrabold text-[#5B6B85]" style={{ fontFamily: ORDER_MONO }}>{p.cnt}회</span>
+                      <span className="shrink-0 text-[11px] font-extrabold text-[#5B6B85]" style={{ fontFamily: ORDER_MONO, fontVariantNumeric: "tabular-nums" }}>{p.cnt}회</span>
                     </div>
                     <div className="text-[11.5px] text-[#7A89A3] truncate">{p.addr || "주소 없음"}</div>
                   </button>
@@ -1626,7 +1626,7 @@ function OrderSidePanel({ form, cargoRows, company, history, historyLoading, onA
                   const ok = (o.차량번호 || "").trim();
                   return (
                     <button key={o.id} type="button" onClick={() => onApply(o)} className="w-full flex items-center gap-3 px-2 py-2.5 text-left hover:bg-[#F5F8FD] rounded-[10px]">
-                      <span className="shrink-0 w-[74px] text-[12px] font-bold text-[#5B6B85]" style={{ fontFamily: ORDER_MONO }}>{String(o.상차일 || "").slice(5, 10).replace("-", "/") || "-"}</span>
+                      <span className="shrink-0 w-[74px] text-[12px] font-bold text-[#5B6B85]" style={{ fontFamily: ORDER_MONO, fontVariantNumeric: "tabular-nums" }}>{String(o.상차일 || "").slice(5, 10).replace("-", "/") || "-"}</span>
                       <span className="flex-1 min-w-0">
                         <span className="block text-[13.5px] font-black text-[#0F1A30] truncate">{o.상차지명 || "-"} → {o.하차지명 || "-"}</span>
                         <span className="block text-[11.5px] text-[#7A89A3] truncate">{[o.차량톤수, o.차량종류, o.운송사명].filter(Boolean).join(" · ")}</span>

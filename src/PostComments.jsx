@@ -12,7 +12,7 @@ import { db } from "./firebase";
 import { doc, updateDoc, arrayUnion, arrayRemove, runTransaction } from "firebase/firestore";
 import { kpConfirm } from "./kpDialog";
 
-const MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
+const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
 export const COMMENT_CAP = 500;
 const COMMENT_WARN = 450;
 const ADMIN_ROLES = ["admin", "totalMaster", "superadmin", "hrManager", "allMgr"];
@@ -54,7 +54,7 @@ export function PostCounts({ p, className = "" }) {
   const c = commentCount(p); const l = likeCount(p);
   if (!c && !l) return null;
   return (
-    <span className={`shrink-0 inline-flex items-center gap-2 text-[11.5px] font-bold text-[#7A879C] tabular-nums ${className}`} style={{ fontFamily: MONO }}>
+    <span className={`shrink-0 inline-flex items-center gap-2 text-[11.5px] font-bold text-[#7A879C] tabular-nums ${className}`} style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>
       {c > 0 && <span className="inline-flex items-center gap-0.5 text-[#4B6CB7]" title={`댓글 ${c}개`}><BubbleIcon size={12} />{c}</span>}
       {l > 0 && <span className="inline-flex items-center gap-0.5" title={`좋아요 ${l}개`}><HeartIcon size={11} filled />{l}</span>}
     </span>
@@ -87,7 +87,7 @@ function EmojiPicker({ onPick }) {
         className={`w-9 h-9 rounded-xl flex items-center justify-center transition ${open ? "bg-[#EEF3FC] text-[#2D4C82]" : "text-[#7A879C] hover:bg-[#F3F6FB] hover:text-[#2D4C82]"}`}><SmileIcon /></button>
       {open && (
         <div className="fixed left-4 right-4 bottom-24 sm:absolute sm:left-0 sm:right-auto sm:bottom-11 z-50 sm:z-30 sm:w-[284px] p-2.5 rounded-2xl bg-white border border-[#E3E8F0] shadow-[0_18px_40px_rgba(15,26,48,0.18)]" data-emoji-picker>
-          <div className="px-1 pb-1.5 text-[10px] font-extrabold tracking-[0.22em] text-[#9AA9C3]" style={{ fontFamily: MONO }}>EMOJI</div>
+          <div className="px-1 pb-1.5 text-[10px] font-extrabold tracking-[0.22em] text-[#9AA9C3]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>EMOJI</div>
           <div className="grid grid-cols-8 gap-0.5">
             {EMOJIS.map((e) => (
               <button key={e} type="button" onClick={() => onPick(e)} className="h-8 rounded-lg text-[19px] leading-none hover:bg-[#F3F6FB] active:scale-90 transition">{e}</button>
@@ -130,8 +130,8 @@ function Composer({ me, initial = "", placeholder = "댓글을 남겨 주세요"
       </div>
       <div className="flex items-center gap-1 px-2 pb-2 pt-1">
         <EmojiPicker onPick={insert} />
-        <span className="ml-1 hidden sm:inline text-[11px] text-[#A6B2C6]" style={{ fontFamily: MONO }}>CTRL+ENTER</span>
-        <span className="ml-auto text-[11px] text-[#A6B2C6] tabular-nums mr-1" style={{ fontFamily: MONO }}>{text.length ? `${text.length}/2000` : ""}</span>
+        <span className="ml-1 hidden sm:inline text-[11px] text-[#A6B2C6]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>CTRL+ENTER</span>
+        <span className="ml-auto text-[11px] text-[#A6B2C6] tabular-nums mr-1" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{text.length ? `${text.length}/2000` : ""}</span>
         {onCancel && <button type="button" onClick={onCancel} className="h-8 px-3 rounded-lg text-[12.5px] font-bold text-[#7A879C] hover:bg-[#F3F6FB]">취소</button>}
         <button type="button" onClick={send} disabled={!text.trim() || busy || disabled} className="h-8 px-4 rounded-lg bg-[#0F1A30] text-white text-[12.5px] font-black disabled:opacity-35 transition">{busy ? "…" : submitLabel}</button>
       </div>
@@ -157,7 +157,7 @@ export function PostLikeButton({ col, post, me, disabled }) {
     <button type="button" onClick={toggle} disabled={disabled} aria-pressed={shownOn} data-post-like
       className={`h-10 pl-3.5 pr-4 rounded-2xl border inline-flex items-center gap-2 text-[13px] font-black transition active:scale-95 disabled:opacity-50 ${shownOn ? "bg-[#0F1A30] border-[#0F1A30] text-white shadow-[0_8px_18px_rgba(15,26,48,0.22)]" : "bg-white border-[#DCE3EE] text-[#1B2B4B] hover:border-[#8FB0F0] hover:bg-[#F5F8FD]"}`}>
       <span className={shownOn ? "text-[#8FB0F0]" : "text-[#4B6CB7]"}><HeartIcon size={16} filled={shownOn} /></span>
-      좋아요<span className="tabular-nums" style={{ fontFamily: MONO }}>{n}</span>
+      좋아요<span className="tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{n}</span>
     </button>
   );
 }
@@ -224,7 +224,7 @@ export default function PostComments({ col, post, me, readOnly = false }) {
           <div className="flex items-baseline flex-wrap gap-x-1.5 gap-y-0.5">
             <b className="text-[13.5px] font-black text-[#0F1A30]">{c.name || "-"}</b>
             {c.position && <span className="text-[12px] font-semibold text-[#7A879C]">{c.position}</span>}
-            {post.authorUid && c.uid === post.authorUid && <span className="px-1.5 py-px rounded-md bg-[#EEF3FC] text-[#2D4C82] text-[10px] font-black" style={{ fontFamily: MONO }}>작성자</span>}
+            {post.authorUid && c.uid === post.authorUid && <span className="px-1.5 py-px rounded-md bg-[#EEF3FC] text-[#2D4C82] text-[10px] font-black" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>작성자</span>}
             <span className="text-[11.5px] text-[#9AA9C3] tabular-nums">{ago(c.at)}</span>
             {c.editedAt && <span className="text-[11px] text-[#A6B2C6]">(수정됨)</span>}
           </div>
@@ -237,7 +237,7 @@ export default function PostComments({ col, post, me, readOnly = false }) {
             <div className="mt-1 flex items-center gap-0.5 -ml-1.5">
               <button type="button" disabled={readOnly} onClick={() => toggleLike(c)} aria-pressed={liked} data-comment-like
                 className={`h-7 px-1.5 rounded-lg inline-flex items-center gap-1 text-[12px] font-bold transition disabled:opacity-50 ${liked ? "text-[#2D4C82]" : "text-[#7A879C] hover:bg-[#F3F6FB]"}`}>
-                <HeartIcon size={13} filled={liked} />{lk.length > 0 && <span className="tabular-nums" style={{ fontFamily: MONO }}>{lk.length}</span>}
+                <HeartIcon size={13} filled={liked} />{lk.length > 0 && <span className="tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{lk.length}</span>}
               </button>
               {!readOnly && <button type="button" onClick={() => { setReplyTo(c.parentId && ids.has(c.parentId) ? c.parentId : c.id); setEditing(null); }} className="h-7 px-2 rounded-lg inline-flex items-center gap-1 text-[12px] font-bold text-[#7A879C] hover:bg-[#F3F6FB]"><ReplyIcon />답글</button>}
               {mine && !readOnly && <button type="button" onClick={() => { setEditing(c.id); setReplyTo(null); }} className="h-7 px-2 rounded-lg text-[12px] font-bold text-[#7A879C] hover:bg-[#F3F6FB]">수정</button>}
@@ -252,8 +252,8 @@ export default function PostComments({ col, post, me, readOnly = false }) {
   return (
     <div className="px-4 sm:px-8 py-5 sm:py-6 bg-[#F8FAFD] border-t border-[#EEF1F6]" data-post-comments>
       <div className="flex items-center gap-2 mb-4">
-        <span className="text-[10.5px] font-extrabold tracking-[0.24em] text-[#8FB0F0] px-2 py-1 rounded-lg bg-[#0F1A30]" style={{ fontFamily: MONO }}>COMMENTS</span>
-        <span className="text-[15px] font-black text-[#0F1A30]">댓글 <span className="tabular-nums" style={{ fontFamily: MONO }}>{total}</span></span>
+        <span className="text-[10.5px] font-extrabold tracking-[0.24em] text-[#8FB0F0] px-2 py-1 rounded-lg bg-[#0F1A30]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>COMMENTS</span>
+        <span className="text-[15px] font-black text-[#0F1A30]">댓글 <span className="tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{total}</span></span>
         {all.length >= COMMENT_WARN && <span className="ml-auto text-[11.5px] font-bold text-[#B54708]">댓글 {all.length}/{COMMENT_CAP} — {full ? "가득 찼습니다" : "곧 가득 찹니다"}</span>}
       </div>
       {roots.length > 0 && (

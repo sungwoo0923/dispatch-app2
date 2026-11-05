@@ -7,7 +7,7 @@ import React from "react";
 import { doc, updateDoc } from "firebase/firestore";
 import { db } from "./firebase";
 
-const MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
+const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
 const GOLD = "#E9C46A";
 
 function pick(kind) {
@@ -116,7 +116,7 @@ export default function OrderCongratsPopup({ uid, profile, mobile = false }) {
                 <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke={GOLD} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14" /><path d="M13 6l6 6-6 6" /></svg>
               )}
             </div>
-            <div style={{ fontFamily: MONO, fontSize: 10.5, fontWeight: 800, letterSpacing: "0.32em", color: GOLD }}>{m.en}</div>
+            <div style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 10.5, fontWeight: 800, letterSpacing: "0.32em", color: GOLD }}>{m.en}</div>
             <div style={{ fontSize: mobile ? 21 : 23, fontWeight: 900, marginTop: 6, lineHeight: 1.35, wordBreak: "keep-all" }}>{m.head}</div>
             <div style={{ marginTop: 8, fontSize: 13.5, fontWeight: 700, color: "#C9D6EE" }}>
               {profile?.name || ""}{n.toPos && n.toPos !== "-" ? ` ${n.toPos}` : ""}{n.toTeam && n.toTeam !== "미배정" ? ` · ${n.toTeam}` : ""}

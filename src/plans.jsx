@@ -89,7 +89,7 @@ export function usePublicPricing() {
   return p;
 }
 
-const MONO = "'JetBrains Mono','IBM Plex Mono',ui-monospace,monospace";
+const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
 const won = (n) => `${Math.round(Number(n) || 0).toLocaleString()}`;
 
 // ─── 넷플릭스식 요금제 비교표 ───
@@ -101,7 +101,7 @@ export function PlanMatrix({ plans = PLAN_DEFAULTS, current = null, highlight = 
         <thead>
           <tr>
             <th className="text-left align-bottom pb-3 pr-3" style={{ width: "34%" }}>
-              <div className="text-[10.5px] font-extrabold tracking-[0.26em] text-[#4B6CB7]" style={{ fontFamily: MONO }}>COMPARE PLANS</div>
+              <div className="text-[10.5px] font-extrabold tracking-[0.26em] text-[#4B6CB7]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>COMPARE PLANS</div>
               <div className="text-[17px] font-black text-[#0F1A30]">요금제별 사용 범위</div>
             </th>
             {cols.map((p) => {
@@ -109,9 +109,9 @@ export function PlanMatrix({ plans = PLAN_DEFAULTS, current = null, highlight = 
               return (
                 <th key={p.id} className="px-1.5 pb-3 align-bottom">
                   <div className={`rounded-2xl px-3 py-3 text-center border ${on ? "bg-[#0F1A30] text-white border-[#0F1A30] shadow-[0_12px_26px_rgba(15,26,48,0.3)]" : hi ? "bg-[#F2F5FA] border-[#2D4C82] text-[#0F1A30]" : "bg-white border-[#E3E8F0] text-[#0F1A30]"}`}>
-                    <div className={`text-[10px] font-extrabold tracking-[0.24em] ${on ? "text-[#8FB0F0]" : "text-[#4B6CB7]"}`} style={{ fontFamily: MONO }}>{p.en}</div>
+                    <div className={`text-[10px] font-extrabold tracking-[0.24em] ${on ? "text-[#8FB0F0]" : "text-[#4B6CB7]"}`} style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{p.en}</div>
                     <div className="text-[16px] font-black mt-0.5 whitespace-nowrap">{p.name}</div>
-                    <div className="text-[18px] font-black mt-1 tabular-nums whitespace-nowrap" style={{ fontFamily: MONO }}>{won(p.price)}<span className={`text-[10.5px] font-bold ml-0.5 ${on ? "text-white/60" : "text-[#7A89A3]"}`}>원/월</span></div>
+                    <div className="text-[18px] font-black mt-1 tabular-nums whitespace-nowrap" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{won(p.price)}<span className={`text-[10.5px] font-bold ml-0.5 ${on ? "text-white/60" : "text-[#7A89A3]"}`}>원/월</span></div>
                     <div className={`text-[11px] font-bold mt-0.5 whitespace-nowrap ${on ? "text-white/60" : "text-[#7A89A3]"}`}>{p.seats}명 · 월 {Number(p.orders || 0).toLocaleString()}건</div>
                     {(on || (hi && p.recommended)) && <div className={`mt-1.5 inline-block px-2 py-0.5 rounded-md text-[10.5px] font-black ${on ? "bg-white text-[#0F1A30]" : "bg-[#0F1A30] text-white"}`}>{on ? "사용 중" : "추천"}</div>}
                   </div>
@@ -166,9 +166,9 @@ export const PLAN_MATRIX_CSS = `
   .pm-t{text-align:left;font-size:12px;color:#0F1A30;vertical-align:bottom;padding:0 6px 8px 0;width:36%}
   .pm-h{padding:0 3px 8px;vertical-align:bottom}
   .pm-h>div{text-align:center}
-  .pm-h .pm-en{font-family:monospace;font-size:8.5px;letter-spacing:.2em;color:#4B6CB7;font-weight:800}
+  .pm-h .pm-en{font-family:'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif;font-variant-numeric:tabular-nums;font-size:8.5px;letter-spacing:.2em;color:#4B6CB7;font-weight:800}
   .pm-h .pm-n{font-size:13px;font-weight:900;color:#0F1A30;margin-top:2px}
-  .pm-h .pm-p{font-size:14px;font-weight:900;color:#0F1A30;font-family:monospace}
+  .pm-h .pm-p{font-size:14px;font-weight:900;color:#0F1A30;font-family:'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif;font-variant-numeric:tabular-nums}
   .pm-h .pm-p span{font-size:9px;color:#7A89A3;margin-left:1px}
   .pm-h .pm-s{font-size:9.5px;color:#7A89A3}
   .pm-h.on>div,.pm-h.rec>div{}
@@ -213,7 +213,7 @@ export function PlanLockHost({ userEmail = "", userName = "", canRequest = true 
           <span className="absolute inset-0 opacity-[0.06] pointer-events-none" style={{ backgroundImage: "linear-gradient(#fff 1px,transparent 1px),linear-gradient(90deg,#fff 1px,transparent 1px)", backgroundSize: "22px 22px" }} />
           <div className="relative flex items-start justify-between gap-4">
             <div>
-              <div className="text-[10.5px] font-extrabold tracking-[0.3em] text-[#8FB0F0]" style={{ fontFamily: MONO }}>UPGRADE · {need?.en}</div>
+              <div className="text-[10.5px] font-extrabold tracking-[0.3em] text-[#8FB0F0]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>UPGRADE · {need?.en}</div>
               <div className="text-[22px] font-black mt-1">■ {need?.name} 요금제부터 쓸 수 있는 기능입니다</div>
               <div className="text-[13.5px] text-white/70 mt-1">{f?.label}</div>
             </div>

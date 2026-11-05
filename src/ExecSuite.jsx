@@ -28,7 +28,7 @@ import { getNationalHolidayLabel } from "./attendanceUtils";
 import AttendanceApprovalInbox from "./AttendanceApprovalInbox";
 import { PersonalSchedule, PersonalModeSwitch, usePersonalMode, birthdaysOn, BirthChip } from "./PersonalSchedule"; // ⭐ 2026-11-03 개인일정·생일
 
-const MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
+const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
 const GOLD = "#D7BC82";
 const ICE = "#8FB0F0";
 const toWon = (v) => parseInt(String(v ?? "0").replace(/[^\d-]/g, ""), 10) || 0;
@@ -145,7 +145,7 @@ function Panel({ en, title, right, children, className = "", pad = true }) {
       {(en || title) && (
         <div className="px-4 md:px-5 pt-4 pb-2 flex items-start justify-between gap-2">
           <div className="min-w-0">
-            {en && <div className="text-[11px] font-extrabold tracking-[0.28em] whitespace-nowrap" style={{ fontFamily: MONO, color: ICE }}>{en}</div>}
+            {en && <div className="text-[11px] font-extrabold tracking-[0.28em] whitespace-nowrap" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", color: ICE }}>{en}</div>}
             {title && <div className="text-[18px] font-black text-white tracking-tight truncate mt-0.5">{title}</div>}
           </div>
           {right}
@@ -156,10 +156,10 @@ function Panel({ en, title, right, children, className = "", pad = true }) {
   );
 }
 function Delta({ v, suffix = "%", invert = false }) {
-  if (v == null || !isFinite(v)) return <span className="text-white/35 text-[13px] font-bold" style={{ fontFamily: MONO }}>—</span>;
+  if (v == null || !isFinite(v)) return <span className="text-white/35 text-[13px] font-bold" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>—</span>;
   const up = v >= 0; const good = invert ? !up : up;
   return (
-    <span className={`inline-flex items-center gap-0.5 text-[13px] font-black tabular-nums whitespace-nowrap ${good ? "text-[#9FE3C4]" : "text-[#FFB4A8]"}`} style={{ fontFamily: MONO }}>
+    <span className={`inline-flex items-center gap-0.5 text-[13px] font-black tabular-nums whitespace-nowrap ${good ? "text-[#9FE3C4]" : "text-[#FFB4A8]"}`} style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>
       {up ? "▲" : "▼"}{Math.abs(v).toFixed(1)}{suffix}
     </span>
   );
@@ -169,7 +169,7 @@ function Clock() {
   React.useEffect(() => { const i = setInterval(() => setT(kstNow()), 1000); return () => clearInterval(i); }, []);
   const p = (n) => String(n).padStart(2, "0");
   return (
-    <div className="tabular-nums leading-none text-white" style={{ fontFamily: MONO }}>
+    <div className="tabular-nums leading-none text-white" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>
       <span className="text-[34px] md:text-[40px] font-black">{p(t.getUTCHours())}<span className="animate-pulse" style={{ color: GOLD }}>:</span>{p(t.getUTCMinutes())}</span>
       <span className="text-[15.5px] md:text-[17px] font-bold text-white/40 ml-1">{p(t.getUTCSeconds())}</span>
     </div>
@@ -179,8 +179,8 @@ const ChartTip = ({ active, payload, label }) => {
   if (!active || !payload?.length) return null;
   return (
     <div className="rounded-xl border border-white/15 bg-[#0B1530]/95 px-3 py-2 text-[13.5px] text-white shadow-xl">
-      <div className="font-black mb-1" style={{ fontFamily: MONO }}>{label}</div>
-      {payload.map((p) => <div key={p.dataKey} className="flex items-center gap-2 tabular-nums"><span className="w-2 h-2 rounded-full" style={{ background: p.color }} />{p.name} <b style={{ fontFamily: MONO }}>{p.dataKey === "margin" ? `${Number(p.value).toFixed(1)}%` : `${Math.round(p.value).toLocaleString()}원`}</b></div>)}
+      <div className="font-black mb-1" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{label}</div>
+      {payload.map((p) => <div key={p.dataKey} className="flex items-center gap-2 tabular-nums"><span className="w-2 h-2 rounded-full" style={{ background: p.color }} />{p.name} <b style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{p.dataKey === "margin" ? `${Number(p.value).toFixed(1)}%` : `${Math.round(p.value).toLocaleString()}원`}</b></div>)}
     </div>
   );
 };
@@ -285,7 +285,7 @@ export function ExecDashboard({ company, dispatchData = [], onGo, pastCache, liv
         <div className="flex flex-col lg:flex-row lg:items-end gap-4 lg:gap-8">
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-[12px] font-extrabold tracking-[0.34em]" style={{ fontFamily: MONO, color: GOLD }}>EXECUTIVE · BRIEFING</span>
+              <span className="text-[12px] font-extrabold tracking-[0.34em]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", color: GOLD }}>EXECUTIVE · BRIEFING</span>
               <span className="h-px flex-1 min-w-[40px] max-w-[160px]" style={{ background: `linear-gradient(90deg, ${GOLD}, transparent)` }} />
             </div>
             <div className="mt-2 text-[26px] md:text-[34px] font-black tracking-tight leading-tight">
@@ -298,7 +298,7 @@ export function ExecDashboard({ company, dispatchData = [], onGo, pastCache, liv
             {att && <AttendanceQuickButton {...att} variant="deck" />}
             <div className="text-left lg:text-right">
               <Clock />
-              <div className="mt-1.5 text-[13px] font-bold text-white/45 tracking-[0.12em]" style={{ fontFamily: MONO }}>{dstr} · KST</div>
+              <div className="mt-1.5 text-[13px] font-bold text-white/45 tracking-[0.12em]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{dstr} · KST</div>
             </div>
           </div>
         </div>
@@ -307,17 +307,17 @@ export function ExecDashboard({ company, dispatchData = [], onGo, pastCache, liv
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 md:gap-3">
           {[
             { l: "이번 달 매출", v: `${short(mSale)}원`, sub: <><Delta v={prevAvail ? md : null} /><span className="text-white/40"> 전월 동기</span></>, en: "REVENUE · MTD" },
-            { l: "매출총이익", v: `${short(mProfit)}원`, sub: <><span className="text-white/70 font-black" style={{ fontFamily: MONO }}>{mMargin.toFixed(1)}%</span><span className="text-white/40"> 이익률 </span><Delta v={prevAvail && pSale ? mMargin - pMargin : null} suffix="%p" /></>, en: "GROSS PROFIT" },
-            { l: "월말 예상 매출", v: `${short(forecast)}원`, sub: <><span className="text-white/40">전월 실적 </span><span className="text-white/70 font-black" style={{ fontFamily: MONO }}>{prevAvail ? `${short(pFullSale)}원` : "—"}</span></>, en: "FORECAST", ring: forecast ? Math.min(1, mSale / forecast) : 0, ringLabel: `${dayNo}/${dim}` },
-            { l: "올해 누적 매출", v: `${short(ySale)}원`, sub: <><span className="text-white/40">이익 </span><span className="text-white/70 font-black" style={{ fontFamily: MONO }}>{short(yProfit)}원</span><span className="text-white/40"> · {yCnt.toLocaleString()}건</span></>, en: "YEAR TO DATE" },
+            { l: "매출총이익", v: `${short(mProfit)}원`, sub: <><span className="text-white/70 font-black" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{mMargin.toFixed(1)}%</span><span className="text-white/40"> 이익률 </span><Delta v={prevAvail && pSale ? mMargin - pMargin : null} suffix="%p" /></>, en: "GROSS PROFIT" },
+            { l: "월말 예상 매출", v: `${short(forecast)}원`, sub: <><span className="text-white/40">전월 실적 </span><span className="text-white/70 font-black" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{prevAvail ? `${short(pFullSale)}원` : "—"}</span></>, en: "FORECAST", ring: forecast ? Math.min(1, mSale / forecast) : 0, ringLabel: `${dayNo}/${dim}` },
+            { l: "올해 누적 매출", v: `${short(ySale)}원`, sub: <><span className="text-white/40">이익 </span><span className="text-white/70 font-black" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{short(yProfit)}원</span><span className="text-white/40"> · {yCnt.toLocaleString()}건</span></>, en: "YEAR TO DATE" },
           ].map((k) => (
             <div key={k.l} className="relative rounded-[20px] border border-white/[0.09] px-3.5 md:px-5 py-3 md:py-4 overflow-hidden min-w-0" style={{ background: "linear-gradient(150deg, rgba(255,255,255,.07), rgba(255,255,255,.02))" }}>
               <div className="absolute top-0 left-4 right-4 h-px" style={{ background: `linear-gradient(90deg, transparent, ${GOLD}66, transparent)` }} />
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
-                  <div className="text-[10.5px] md:text-[11px] font-extrabold tracking-[0.24em] text-white/40 whitespace-nowrap" style={{ fontFamily: MONO }}>{k.en}</div>
+                  <div className="text-[10.5px] md:text-[11px] font-extrabold tracking-[0.24em] text-white/40 whitespace-nowrap" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{k.en}</div>
                   <div className="text-[13.5px] md:text-[14.5px] font-bold text-white/70 mt-0.5 whitespace-nowrap">{k.l}</div>
-                  <div className="text-[24px] md:text-[34px] font-black tabular-nums leading-tight mt-1 whitespace-nowrap" style={{ fontFamily: MONO }}>{k.v}</div>
+                  <div className="text-[24px] md:text-[34px] font-black tabular-nums leading-tight mt-1 whitespace-nowrap" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{k.v}</div>
                 </div>
                 {k.ring != null && <span className="hidden md:block"><Ring value={k.ring} label={k.ringLabel} /></span>}
               </div>
@@ -329,9 +329,9 @@ export function ExecDashboard({ company, dispatchData = [], onGo, pastCache, liv
         {/* ── 💰 자금(대표만) ── */}
         {isCeo && (
           <button type="button" onClick={() => onGo?.("자금현황")} className="w-full text-left rounded-[22px] border border-[#D7BC82]/30 px-4 md:px-6 py-4 flex flex-wrap items-center gap-x-8 gap-y-3" style={{ background: "linear-gradient(120deg, rgba(215,188,130,.12), rgba(255,255,255,.03))" }}>
-            <span className="min-w-[140px]"><span className="block text-[11px] font-extrabold tracking-[0.28em]" style={{ fontFamily: MONO, color: GOLD }}>TREASURY · 자금</span><span className="block text-[13px] text-white/55 mt-0.5">{F.has ? "통장·현금 잔액(경리 입력 기준)" : "경리가 자금 상태를 입력하면 보입니다"}</span></span>
+            <span className="min-w-[140px]"><span className="block text-[11px] font-extrabold tracking-[0.28em]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", color: GOLD }}>TREASURY · 자금</span><span className="block text-[13px] text-white/55 mt-0.5">{F.has ? "통장·현금 잔액(경리 입력 기준)" : "경리가 자금 상태를 입력하면 보입니다"}</span></span>
             {[["보유 자금", F.has ? `${short(F.cash)}원` : "—"], ["이번 달 순현금흐름", F.has ? `${F.thisMonth.in - F.thisMonth.out >= 0 ? "+" : ""}${short(F.thisMonth.in - F.thisMonth.out)}원` : "—"], ["운영 가능 기간", F.runway != null && F.has ? `${F.runway.toFixed(1)}개월` : "—"], ["대출 잔액", F.has ? `${short(F.loan)}원` : "—"]].map(([l, v]) => (
-              <span key={l}><span className="block text-[12.5px] font-bold text-white/55">{l}</span><span className="block text-[24px] md:text-[28px] font-black tabular-nums leading-tight" style={{ fontFamily: MONO }}>{v}</span></span>
+              <span key={l}><span className="block text-[12.5px] font-bold text-white/55">{l}</span><span className="block text-[24px] md:text-[28px] font-black tabular-nums leading-tight" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{v}</span></span>
             ))}
             <span className="ml-auto text-[14px] font-black text-white/60">자세히 ›</span>
           </button>
@@ -349,9 +349,9 @@ export function ExecDashboard({ company, dispatchData = [], onGo, pastCache, liv
                       <linearGradient id="exSale" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#CFE0FF" stopOpacity={0.95} /><stop offset="100%" stopColor="#6E95E8" stopOpacity={0.55} /></linearGradient>
                     </defs>
                     <CartesianGrid stroke="rgba(143,176,240,.10)" vertical={false} />
-                    <XAxis dataKey="k" tick={{ fill: "rgba(207,224,255,.55)", fontSize: 12.5, fontFamily: MONO }} axisLine={false} tickLine={false} />
-                    <YAxis yAxisId="w" tickFormatter={short} tick={{ fill: "rgba(207,224,255,.4)", fontSize: 12, fontFamily: MONO }} axisLine={false} tickLine={false} width={46} />
-                    <YAxis yAxisId="m" orientation="right" tickFormatter={(v) => `${v}%`} tick={{ fill: "rgba(215,188,130,.6)", fontSize: 12, fontFamily: MONO }} axisLine={false} tickLine={false} width={36} />
+                    <XAxis dataKey="k" tick={{ fill: "rgba(207,224,255,.55)", fontSize: 12.5, fontFamily: MONO, fontVariantNumeric: "tabular-nums" }} axisLine={false} tickLine={false} />
+                    <YAxis yAxisId="w" tickFormatter={short} tick={{ fill: "rgba(207,224,255,.4)", fontSize: 12, fontFamily: MONO, fontVariantNumeric: "tabular-nums" }} axisLine={false} tickLine={false} width={46} />
+                    <YAxis yAxisId="m" orientation="right" tickFormatter={(v) => `${v}%`} tick={{ fill: "rgba(215,188,130,.6)", fontSize: 12, fontFamily: MONO, fontVariantNumeric: "tabular-nums" }} axisLine={false} tickLine={false} width={36} />
                     <Tooltip content={<ChartTip />} cursor={{ fill: "rgba(143,176,240,.06)" }} />
                     <Bar yAxisId="w" dataKey="sale" name="매출" fill="url(#exSale)" radius={[6, 6, 0, 0]} maxBarSize={30} />
                     <Bar yAxisId="w" dataKey="profit" name="이익" fill="rgba(143,176,240,.35)" radius={[6, 6, 0, 0]} maxBarSize={30} />
@@ -363,8 +363,8 @@ export function ExecDashboard({ company, dispatchData = [], onGo, pastCache, liv
                       <linearGradient id="exArea" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#8FB0F0" stopOpacity={0.55} /><stop offset="100%" stopColor="#8FB0F0" stopOpacity={0} /></linearGradient>
                     </defs>
                     <CartesianGrid stroke="rgba(143,176,240,.10)" vertical={false} />
-                    <XAxis dataKey="k" interval={4} tick={{ fill: "rgba(207,224,255,.55)", fontSize: 12, fontFamily: MONO }} axisLine={false} tickLine={false} />
-                    <YAxis tickFormatter={short} tick={{ fill: "rgba(207,224,255,.4)", fontSize: 12, fontFamily: MONO }} axisLine={false} tickLine={false} width={46} />
+                    <XAxis dataKey="k" interval={4} tick={{ fill: "rgba(207,224,255,.55)", fontSize: 12, fontFamily: MONO, fontVariantNumeric: "tabular-nums" }} axisLine={false} tickLine={false} />
+                    <YAxis tickFormatter={short} tick={{ fill: "rgba(207,224,255,.4)", fontSize: 12, fontFamily: MONO, fontVariantNumeric: "tabular-nums" }} axisLine={false} tickLine={false} width={46} />
                     <Tooltip content={<ChartTip />} />
                     <Area dataKey="sale" name="매출" stroke="#CFE0FF" strokeWidth={2} fill="url(#exArea)" />
                     <Area dataKey="profit" name="이익" stroke={GOLD} strokeWidth={1.6} fill="transparent" />
@@ -385,7 +385,7 @@ export function ExecDashboard({ company, dispatchData = [], onGo, pastCache, liv
               </span>
             </button>
             <div className="flex items-end gap-3 mb-2">
-              <span className="text-[44px] font-black leading-none tabular-nums" style={{ fontFamily: MONO, color: mine.length ? "#fff" : "rgba(255,255,255,.35)" }}>{mine.length}</span>
+              <span className="text-[44px] font-black leading-none tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", color: mine.length ? "#fff" : "rgba(255,255,255,.35)" }}>{mine.length}</span>
               <span className="text-[13.5px] font-bold text-white/50 pb-1">건 · 회사 진행 중 {pendingAll.length}건{late.length ? ` · 지연 ${late.length}` : ""}</span>
             </div>
             {!mine.length ? (
@@ -401,7 +401,7 @@ export function ExecDashboard({ company, dispatchData = [], onGo, pastCache, liv
                         <span className="block text-[15px] font-black truncate">{a.title || a.formLabel || "결재 문서"}</span>
                         <span className="block text-[13px] text-white/50 truncate">{a.drafter?.name || ""}{a.drafter?.team ? ` · ${a.drafter.team}` : ""}{a.amount ? ` · ${Number(a.amount).toLocaleString()}원` : ""}</span>
                       </span>
-                      <span className={`shrink-0 text-[12.5px] font-black tabular-nums ${h >= 48 ? "text-[#FFB4A8]" : "text-white/45"}`} style={{ fontFamily: MONO }}>{h >= 24 ? `${Math.floor(h / 24)}일` : `${h}시간`}</span>
+                      <span className={`shrink-0 text-[12.5px] font-black tabular-nums ${h >= 48 ? "text-[#FFB4A8]" : "text-white/45"}`} style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{h >= 24 ? `${Math.floor(h / 24)}일` : `${h}시간`}</span>
                     </button>
                   );
                 })}
@@ -417,12 +417,12 @@ export function ExecDashboard({ company, dispatchData = [], onGo, pastCache, liv
               {[["오늘 오더", `${todayRows.length}`, "건"], ["배차 완료", `${todayRows.length - unassigned.length}`, "건"], ["미배차", `${unassigned.length}`, "건", unassigned.length > 0], ["오늘 매출", short(todaySale), "원"]].map(([l, v, u, bad]) => (
                 <div key={l} className="rounded-2xl bg-white/[0.05] border border-white/[0.06] px-3 py-2.5">
                   <div className="text-[12.5px] font-bold text-white/50 whitespace-nowrap">{l}</div>
-                  <div className={`text-[26px] font-black tabular-nums leading-tight ${bad ? "text-[#FFB4A8]" : ""}`} style={{ fontFamily: MONO }}>{v}<span className="text-[13.5px] text-white/40 ml-0.5">{u}</span></div>
+                  <div className={`text-[26px] font-black tabular-nums leading-tight ${bad ? "text-[#FFB4A8]" : ""}`} style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{v}<span className="text-[13.5px] text-white/40 ml-0.5">{u}</span></div>
                 </div>
               ))}
             </div>
             <div className="mt-2.5">
-              <div className="flex justify-between text-[12.5px] font-bold text-white/50 mb-1"><span>배차율</span><span style={{ fontFamily: MONO }}>{todayRows.length ? Math.round(((todayRows.length - unassigned.length) / todayRows.length) * 100) : 0}%</span></div>
+              <div className="flex justify-between text-[12.5px] font-bold text-white/50 mb-1"><span>배차율</span><span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{todayRows.length ? Math.round(((todayRows.length - unassigned.length) / todayRows.length) * 100) : 0}%</span></div>
               <div className="h-1.5 rounded-full bg-white/[0.08] overflow-hidden"><div className="h-full rounded-full" style={{ width: `${todayRows.length ? ((todayRows.length - unassigned.length) / todayRows.length) * 100 : 0}%`, background: `linear-gradient(90deg, ${ICE}, #CFE0FF)` }} /></div>
             </div>
           </Panel>
@@ -432,7 +432,7 @@ export function ExecDashboard({ company, dispatchData = [], onGo, pastCache, liv
               {[["재직", staff.length], ["출근", inNow], ["부재", awayUniq.length]].map(([l, v]) => (
                 <div key={l} className="rounded-2xl bg-white/[0.05] border border-white/[0.06] px-2.5 py-2 text-center">
                   <div className="text-[12.5px] font-bold text-white/50">{l}</div>
-                  <div className="text-[26px] font-black tabular-nums" style={{ fontFamily: MONO }}>{v}</div>
+                  <div className="text-[26px] font-black tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{v}</div>
                 </div>
               ))}
             </div>
@@ -473,10 +473,10 @@ export function ExecDashboard({ company, dispatchData = [], onGo, pastCache, liv
                 {topClients.map(([n, v], i) => (
                   <div key={n}>
                     <div className="flex items-center gap-2 text-[14.5px]">
-                      <span className="w-5 text-[12.5px] font-black text-white/40" style={{ fontFamily: MONO }}>{String(i + 1).padStart(2, "0")}</span>
+                      <span className="w-5 text-[12.5px] font-black text-white/40" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{String(i + 1).padStart(2, "0")}</span>
                       <span className="font-black truncate flex-1">{n}</span>
-                      <span className="font-black tabular-nums whitespace-nowrap" style={{ fontFamily: MONO }}>{short(v)}원</span>
-                      <span className="w-12 text-right text-[12.5px] text-white/45 tabular-nums" style={{ fontFamily: MONO }}>{clientTotal ? ((v / clientTotal) * 100).toFixed(1) : 0}%</span>
+                      <span className="font-black tabular-nums whitespace-nowrap" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{short(v)}원</span>
+                      <span className="w-12 text-right text-[12.5px] text-white/45 tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{clientTotal ? ((v / clientTotal) * 100).toFixed(1) : 0}%</span>
                     </div>
                     <div className="ml-7 mt-1 h-1.5 rounded-full bg-white/[0.06] overflow-hidden"><div className="h-full rounded-full" style={{ width: `${clientTotal ? (v / topClients[0][1]) * 100 : 0}%`, background: i === 0 ? `linear-gradient(90deg, ${GOLD}, #F1DFB4)` : `linear-gradient(90deg, #6E95E8, #CFE0FF)` }} /></div>
                   </div>
@@ -493,7 +493,7 @@ export function ExecDashboard({ company, dispatchData = [], onGo, pastCache, liv
                 return (
                   <div key={d} className={`rounded-xl md:rounded-2xl border px-1 md:px-2 py-2 min-h-[92px] min-w-0 ${d === today ? "border-[#D7BC82]/60 bg-[#D7BC82]/[0.07]" : "border-white/[0.07] bg-white/[0.03]"}`}>
                     <div className={`text-center text-[12px] font-black ${dow === 0 ? "text-[#FFB4A8]" : dow === 6 ? "text-[#AFC6F5]" : "text-white/55"}`}>{DOW[dow]}</div>
-                    <div className="text-center text-[16.5px] font-black tabular-nums" style={{ fontFamily: MONO }}>{Number(d.slice(8))}</div>
+                    <div className="text-center text-[16.5px] font-black tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{Number(d.slice(8))}</div>
                     <div className="mt-1 space-y-0.5">
                       {list.slice(0, 3).map((e) => <div key={`${e.id}${e.date}`} title={`${e.name} ${e.label}`} className={`rounded-md px-1 py-[1px] text-[11.5px] md:text-[12px] font-bold truncate ${e.status === "approved" ? "bg-white/[0.10] text-white/90" : "border border-dashed border-white/25 text-white/60"}`}>{e.name}</div>)}
                       {list.length > 3 && <div className="text-[11.5px] text-white/45 text-center">+{list.length - 3}</div>}
@@ -535,12 +535,12 @@ export function ExecApprovals({ company, me }) {
         <div className="relative overflow-hidden rounded-[22px] px-4 md:px-6 py-4 text-white" style={{ background: SHELL_BG }}>
           <div className="absolute inset-0 pointer-events-none" style={{ background: GRID }} />
           <div className="relative">
-            <div className="text-[10.5px] font-extrabold tracking-[0.3em]" style={{ fontFamily: MONO, color: GOLD }}>FINAL APPROVER · OVERVIEW</div>
+            <div className="text-[10.5px] font-extrabold tracking-[0.3em]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", color: GOLD }}>FINAL APPROVER · OVERVIEW</div>
             <div className="mt-2 grid grid-cols-2 md:grid-cols-4 gap-2">
               {[["나의 결재 대기", `${mine}건`], ["회사 진행 중", `${pending.length}건`], ["48시간 지연", `${late}건`], ["이번 달 승인 지출", `${short(expMonth)}원`]].map(([l, v], i) => (
                 <div key={l} className="rounded-2xl bg-white/[0.06] border border-white/10 px-3 py-2.5 min-w-0">
                   <div className="text-[11.5px] font-bold text-white/55 whitespace-nowrap">{l}</div>
-                  <div className={`text-[20px] md:text-[22px] font-black tabular-nums whitespace-nowrap ${i === 2 && late ? "text-[#FFB4A8]" : ""}`} style={{ fontFamily: MONO }}>{v}</div>
+                  <div className={`text-[20px] md:text-[22px] font-black tabular-nums whitespace-nowrap ${i === 2 && late ? "text-[#FFB4A8]" : ""}`} style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{v}</div>
                 </div>
               ))}
             </div>
@@ -597,7 +597,7 @@ function TeamScheduleCompany({ company, modeSwitch }) {
         <div className="absolute inset-0 pointer-events-none" style={{ background: GRID }} />
         <div className="relative flex items-start justify-between gap-3 flex-wrap">
           <div>
-            <div className="text-[10.5px] font-extrabold tracking-[0.3em]" style={{ fontFamily: MONO, color: GOLD }}>TEAM · SCHEDULE</div>
+            <div className="text-[10.5px] font-extrabold tracking-[0.3em]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", color: GOLD }}>TEAM · SCHEDULE</div>
             <div className="text-[20px] md:text-[24px] font-black mt-0.5">직원 일정</div>
             <div className="text-[12.5px] text-white/55">전자결재 연차·반차·외근·출장·병가·경조사 — 결재 완료는 확정, 진행 중은 점선</div>
           </div>
@@ -605,14 +605,14 @@ function TeamScheduleCompany({ company, modeSwitch }) {
             {modeSwitch}
             <span className="inline-flex items-center gap-1.5">
             <button type="button" onClick={() => move(-1)} className="w-9 h-9 rounded-xl bg-white/10 font-black">‹</button>
-            <span className="h-9 px-3.5 rounded-xl bg-white text-[#0B1530] font-black grid place-items-center tabular-nums" style={{ fontFamily: MONO }}>{ym.replace("-", ".")}</span>
+            <span className="h-9 px-3.5 rounded-xl bg-white text-[#0B1530] font-black grid place-items-center tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{ym.replace("-", ".")}</span>
             <button type="button" onClick={() => move(1)} className="w-9 h-9 rounded-xl bg-white/10 font-black">›</button>
             </span>
           </div>
         </div>
         <div className="relative mt-3 grid grid-cols-2 md:grid-cols-4 gap-2">
           {[["오늘 부재", `${new Set((by[today] || []).map((e) => e.uid)).size}명`], ["이번 주 부재", `${new Set(evs.filter((e) => week.includes(e.date)).map((e) => e.uid)).size}명`], ["이달 연차 사용", `${leaveDays}일`], ["결재 진행 중", `${new Set(monthEv.filter((e) => e.status !== "approved").map((e) => e.id)).size}건`]].map(([l, v]) => (
-            <div key={l} className="rounded-2xl bg-white/[0.06] border border-white/10 px-3 py-2.5"><div className="text-[11.5px] font-bold text-white/55 whitespace-nowrap">{l}</div><div className="text-[20px] font-black tabular-nums" style={{ fontFamily: MONO }}>{v}</div></div>
+            <div key={l} className="rounded-2xl bg-white/[0.06] border border-white/10 px-3 py-2.5"><div className="text-[11.5px] font-bold text-white/55 whitespace-nowrap">{l}</div><div className="text-[20px] font-black tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{v}</div></div>
           ))}
         </div>
       </div>
@@ -634,7 +634,7 @@ function TeamScheduleCompany({ company, modeSwitch }) {
                   {d && (
                     <>
                       <div className="flex items-center gap-1 min-w-0">
-                        <div className={`text-[12px] md:text-[13px] font-black tabular-nums shrink-0 ${d === today ? "w-6 h-6 rounded-full bg-[#0F1A30] text-white grid place-items-center" : (i % 7 === 0 || getNationalHolidayLabel(d)) ? "text-[#D92D20]" : i % 7 === 6 ? "text-[#2D4C82]" : "text-[#0F1A30]"}`} style={{ fontFamily: MONO }}>{Number(d.slice(8))}</div>
+                        <div className={`text-[12px] md:text-[13px] font-black tabular-nums shrink-0 ${d === today ? "w-6 h-6 rounded-full bg-[#0F1A30] text-white grid place-items-center" : (i % 7 === 0 || getNationalHolidayLabel(d)) ? "text-[#D92D20]" : i % 7 === 6 ? "text-[#2D4C82]" : "text-[#0F1A30]"}`} style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{Number(d.slice(8))}</div>
                         {getNationalHolidayLabel(d) && <span className="hidden md:inline text-[10.5px] font-bold text-[#D92D20] truncate">{getNationalHolidayLabel(d)}</span>}
                       </div>
                       <div className="hidden md:block mt-1 space-y-0.5">
@@ -652,7 +652,7 @@ function TeamScheduleCompany({ company, modeSwitch }) {
         </div>
         <div className="rounded-[20px] bg-white border border-[#E3E8F0] overflow-hidden self-start">
           <div className="px-4 pt-3.5 pb-2.5 border-b border-[#EEF1F6]">
-            <div className="text-[9.5px] font-extrabold tracking-[0.24em] text-[#4B6CB7]" style={{ fontFamily: MONO }}>DAY DETAIL</div>
+            <div className="text-[9.5px] font-extrabold tracking-[0.24em] text-[#4B6CB7]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>DAY DETAIL</div>
             <div className="text-[15px] font-black text-[#0F1A30]">{pick.replace(/-/g, ".")} ({DOW[new Date(`${pick}T00:00:00Z`).getUTCDay()]}) · {pickList.length}명</div>
           </div>
           {pickBirth.length > 0 && <div className="px-4 pt-3 flex flex-wrap gap-1.5">{pickBirth.map((u) => <BirthChip key={u.id} name={personName(u) || u.name} big />)}</div>}
@@ -728,14 +728,14 @@ function TimePick({ value, onChange }) {
     <div ref={ref} className="relative">
       <button type="button" onClick={() => setOpen((o) => !o)} className="h-12 w-full px-3.5 rounded-xl bg-white/[0.06] border border-white/15 text-left flex items-center gap-2 hover:border-[#D7BC82]">
         <span className="text-[15px]" style={{ color: GOLD }}>◷</span>
-        <span className="text-[15px] font-black tabular-nums" style={{ fontFamily: MONO }}>{hmLabel(value)}</span>
+        <span className="text-[15px] font-black tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{hmLabel(value)}</span>
       </button>
       {open && (
         <div className="absolute z-[100001] left-0 right-0 mt-1.5 rounded-2xl p-3 shadow-[0_20px_44px_rgba(0,0,0,0.5)] border border-white/15" style={{ background: SHELL_BG, minWidth: 260 }}>
           <div className="grid grid-cols-2 gap-1 mb-2">{[["오전", 0], ["오후", 12]].map(([l, base]) => <button key={l} type="button" onClick={() => set((h % 12) + base, m)} className={chip((h < 12) === (base === 0))} style={(h < 12) === (base === 0) ? gold : undefined}>{l}</button>)}</div>
-          <div className="text-[11px] font-extrabold tracking-[0.2em] text-white/45 mb-1" style={{ fontFamily: MONO }}>HOUR</div>
+          <div className="text-[11px] font-extrabold tracking-[0.2em] text-white/45 mb-1" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>HOUR</div>
           <div className="grid grid-cols-6 gap-1 mb-2">{Array.from({ length: 12 }, (_, i) => i).map((i) => { const hh = (h < 12 ? 0 : 12) + i; return <button key={i} type="button" onClick={() => set(hh, m)} className={chip(hh === h)} style={hh === h ? gold : undefined}>{i === 0 ? 12 : i}</button>; })}</div>
-          <div className="text-[11px] font-extrabold tracking-[0.2em] text-white/45 mb-1" style={{ fontFamily: MONO }}>MINUTE</div>
+          <div className="text-[11px] font-extrabold tracking-[0.2em] text-white/45 mb-1" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>MINUTE</div>
           <div className="grid grid-cols-6 gap-1">{[0, 10, 20, 30, 40, 50].map((mm) => <button key={mm} type="button" onClick={() => { set(h, mm); setOpen(false); }} className={chip(mm === m)} style={mm === m ? gold : undefined}>{String(mm).padStart(2, "0")}</button>)}</div>
         </div>
       )}
@@ -795,7 +795,7 @@ function ExecScheduleCompany({ company, me = {}, canWrite = false, modeSwitch })
       <div className="relative p-3 md:p-6 space-y-4">
         <div className="flex items-end justify-between gap-3 flex-wrap">
           <div>
-            <div className="text-[11px] font-extrabold tracking-[0.32em]" style={{ fontFamily: MONO, color: GOLD }}>EXECUTIVE · SCHEDULE</div>
+            <div className="text-[11px] font-extrabold tracking-[0.32em]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", color: GOLD }}>EXECUTIVE · SCHEDULE</div>
             <div className="text-[24px] md:text-[30px] font-black mt-1">임원 스케줄</div>
             <div className="text-[13.5px] text-white/55 mt-0.5">{canWrite ? "등록한 일정은 모든 직원이 볼 수 있습니다" : "대표·임원의 회의·외근·출장 일정입니다"}</div>
           </div>
@@ -803,7 +803,7 @@ function ExecScheduleCompany({ company, me = {}, canWrite = false, modeSwitch })
             {modeSwitch}
             <span className="inline-flex items-center gap-1.5">
             <button type="button" onClick={() => move(-1)} className="w-10 h-10 rounded-xl bg-white/10 border border-white/10 font-black">‹</button>
-            <span className="h-10 px-4 rounded-xl bg-white text-[#0B1530] font-black grid place-items-center tabular-nums text-[15px]" style={{ fontFamily: MONO }}>{ym.replace("-", ".")}</span>
+            <span className="h-10 px-4 rounded-xl bg-white text-[#0B1530] font-black grid place-items-center tabular-nums text-[15px]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{ym.replace("-", ".")}</span>
             <button type="button" onClick={() => move(1)} className="w-10 h-10 rounded-xl bg-white/10 border border-white/10 font-black">›</button>
             {canWrite && <button type="button" onClick={() => setEdit(blank())} className="h-10 px-4 rounded-xl text-[#1A1405] text-[14px] font-black ml-1 whitespace-nowrap" style={{ background: "linear-gradient(180deg,#F3E3BC,#D7BC82)" }}>+ 일정 등록</button>}
             </span>
@@ -825,7 +825,7 @@ function ExecScheduleCompany({ company, me = {}, canWrite = false, modeSwitch })
                     {d && (
                       <>
                         <div className="flex items-center gap-1 min-w-0">
-                        <div className={`text-[13px] md:text-[14px] font-black tabular-nums shrink-0 ${d === today ? "w-7 h-7 rounded-full grid place-items-center text-[#1A1405]" : (i % 7 === 0 || getNationalHolidayLabel(d)) ? "text-[#FFB4A8]" : i % 7 === 6 ? "text-[#AFC6F5]" : "text-white/85"}`} style={{ fontFamily: MONO, ...(d === today ? { background: GOLD } : {}) }}>{Number(d.slice(8))}</div>
+                        <div className={`text-[13px] md:text-[14px] font-black tabular-nums shrink-0 ${d === today ? "w-7 h-7 rounded-full grid place-items-center text-[#1A1405]" : (i % 7 === 0 || getNationalHolidayLabel(d)) ? "text-[#FFB4A8]" : i % 7 === 6 ? "text-[#AFC6F5]" : "text-white/85"}`} style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", ...(d === today ? { background: GOLD } : {}) }}>{Number(d.slice(8))}</div>
                         {getNationalHolidayLabel(d) && <span className="hidden md:inline text-[10.5px] font-bold text-[#FFB4A8] truncate">{getNationalHolidayLabel(d)}</span>}
                       </div>
                         <div className="hidden md:block mt-1 space-y-1">
@@ -846,7 +846,7 @@ function ExecScheduleCompany({ company, me = {}, canWrite = false, modeSwitch })
               {birthdaysOn(allStaff, pick).length > 0 && <div className="flex flex-wrap gap-1.5 mb-2">{birthdaysOn(allStaff, pick).map((u) => <BirthChip key={u.id} name={personName(u) || u.name} big dark />)}</div>}
               {!dayList.length ? <div className="py-6 text-center text-[14px] font-bold text-white/40">일정이 없습니다{canWrite ? " · 날짜를 두 번 누르면 등록" : ""}</div> : dayList.map((e) => (
                 <button key={e.id} type="button" disabled={!canWrite} onClick={() => setEdit({ ...blank(), ...e })} className="w-full text-left rounded-2xl bg-white/[0.05] border border-white/[0.08] px-3.5 py-3 mb-2 enabled:hover:bg-white/[0.09]">
-                  <div className="flex items-center gap-2"><span className="w-2 h-2 rounded-full" style={{ background: KIND_DOT[e.kind] || GOLD }} /><span className="text-[12px] font-black text-white/60">{e.kind}</span><span className="ml-auto text-[13px] font-black tabular-nums text-white/80" style={{ fontFamily: MONO }}>{e.start}{e.end ? `–${e.end}` : ""}</span></div>
+                  <div className="flex items-center gap-2"><span className="w-2 h-2 rounded-full" style={{ background: KIND_DOT[e.kind] || GOLD }} /><span className="text-[12px] font-black text-white/60">{e.kind}</span><span className="ml-auto text-[13px] font-black tabular-nums text-white/80" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{e.start}{e.end ? `–${e.end}` : ""}</span></div>
                   <div className="text-[16px] font-black mt-1">{e.title}</div>
                   <div className="text-[13px] text-white/55 mt-0.5">{[`${e.name} ${e.position || ""}`.trim(), e.place].filter(Boolean).join(" · ")}</div>
                   {e.memo && <div className="text-[12.5px] text-white/45 mt-1">{e.memo}</div>}
@@ -856,7 +856,7 @@ function ExecScheduleCompany({ company, me = {}, canWrite = false, modeSwitch })
             <Panel en="UPCOMING" title="다가오는 일정">
               {!upcoming.length ? <div className="py-4 text-[14px] font-bold text-white/40">예정된 일정이 없습니다</div> : upcoming.map((e) => (
                 <div key={e.id} className="flex items-center gap-3 py-2 border-b border-white/[0.06] last:border-b-0">
-                  <span className="w-12 shrink-0 text-center"><span className="block text-[11px] font-black text-white/45">{DOW[new Date(`${e.date}T00:00:00Z`).getUTCDay()]}</span><span className="block text-[17px] font-black tabular-nums" style={{ fontFamily: MONO }}>{e.date.slice(5).replace("-", ".")}</span></span>
+                  <span className="w-12 shrink-0 text-center"><span className="block text-[11px] font-black text-white/45">{DOW[new Date(`${e.date}T00:00:00Z`).getUTCDay()]}</span><span className="block text-[17px] font-black tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{e.date.slice(5).replace("-", ".")}</span></span>
                   <span className="min-w-0 flex-1"><span className="block text-[14.5px] font-black truncate">{e.title}</span><span className="block text-[12.5px] text-white/50 truncate">{e.name} · {e.kind}{e.start ? ` · ${e.start}` : ""}</span></span>
                 </div>
               ))}
@@ -868,7 +868,7 @@ function ExecScheduleCompany({ company, me = {}, canWrite = false, modeSwitch })
         <div className="fixed inset-0 z-[100000] bg-black/55 flex justify-end" onClick={() => setEdit(null)}>
           <div className="h-full w-full md:w-[560px] flex flex-col text-white shadow-[-24px_0_60px_rgba(0,0,0,0.5)]" style={{ background: SHELL_BG }} onClick={(ev) => ev.stopPropagation()}>
             <div className="px-6 py-5 border-b border-white/10 flex items-center gap-3">
-              <div className="flex-1"><div className="text-[11px] font-extrabold tracking-[0.3em]" style={{ fontFamily: MONO, color: GOLD }}>{edit.id ? "EDIT SCHEDULE" : "NEW SCHEDULE"}</div><div className="text-[22px] font-black">{edit.id ? "일정 수정" : "일정 등록"}</div></div>
+              <div className="flex-1"><div className="text-[11px] font-extrabold tracking-[0.3em]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", color: GOLD }}>{edit.id ? "EDIT SCHEDULE" : "NEW SCHEDULE"}</div><div className="text-[22px] font-black">{edit.id ? "일정 수정" : "일정 등록"}</div></div>
               <button type="button" onClick={() => setEdit(null)} className="w-10 h-10 rounded-xl bg-white/10">✕</button>
             </div>
             <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">

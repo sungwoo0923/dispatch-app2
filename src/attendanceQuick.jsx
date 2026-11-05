@@ -125,7 +125,7 @@ export function AttendanceQuickButton({ company, uid, name, role, email, variant
 
   if (variant === "deck") {
     // 홈 관제 데크(남색 디지털) — 시계 왼쪽의 근태 카드
-    const MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
+    const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
     const state = done ? "OFF DUTY" : working ? "ON DUTY" : "CHECK-IN";
     const color = done ? "#9AA9C3" : working ? "#4ADE80" : "#F7B955";
     const label = done ? `퇴근 ${hm(rec.checkOutTime)}` : working ? `출근 ${hm(rec.checkInTime)} · 근무 중` : (rec?.status && rec.status !== "출근" ? `오늘 ${rec.status}` : "아직 출근 전입니다");
@@ -133,7 +133,7 @@ export function AttendanceQuickButton({ company, uid, name, role, email, variant
     return (
       <div style={{ display: "flex", alignItems: "center", gap: 14, padding: "10px 12px 10px 16px", borderRadius: 16, background: "rgba(143,176,240,0.08)", border: "1px solid rgba(143,176,240,0.28)", boxShadow: working && !done ? "0 0 24px rgba(74,222,128,0.12)" : "none" }}>
         <div style={{ minWidth: 0 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 7, fontFamily: MONO, fontSize: 10.5, fontWeight: 800, letterSpacing: "0.22em", color }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 7, fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 10.5, fontWeight: 800, letterSpacing: "0.22em", color }}>
             <span style={{ width: 7, height: 7, borderRadius: "50%", background: color, boxShadow: `0 0 8px ${color}` }} />{state}
           </div>
           <div style={{ marginTop: 4, fontSize: 14, fontWeight: 800, color: "#fff", whiteSpace: "nowrap" }}>{label}</div>

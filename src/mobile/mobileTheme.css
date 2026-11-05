@@ -414,7 +414,7 @@ body:has(.kp-m input:focus, .kp-m textarea:focus) .kp-m-toast { display: none; }
     linear-gradient(rgba(27,43,75,.035) 1px, transparent 1px) 0 0/22px 22px,
     linear-gradient(90deg, rgba(27,43,75,.035) 1px, transparent 1px) 0 0/22px 22px,
     #EEF2F8 !important; }
-.kp-m-b .kp-b-mono { font-family: 'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace; letter-spacing: -0.01em; }
+.kp-m-b .kp-b-mono { font-family: 'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif;font-variant-numeric:tabular-nums; letter-spacing: -0.01em; }
 .kp-m-b .kp-m-header { box-shadow: none !important; }
 .kp-m-b .kp-b-tabs {
   background: linear-gradient(120deg, #0F1A30 0%, #1B2B4B 55%, #2D4C82 100%);

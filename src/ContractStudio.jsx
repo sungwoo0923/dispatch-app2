@@ -16,7 +16,7 @@ import { fmtBizNo, fmtPhone } from "./formatInput";
 import { useCompanyRegInfo } from "./companyRegInfo";
 import { useCompanyBiz, printInfoForBiz, BizPicker } from "./companyBiz";
 
-const MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
+const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
 const card = "rounded-[18px] bg-white border border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_8px_20px_rgba(16,24,40,0.05)]";
 const inp = "h-11 w-full px-3 rounded-xl border border-[#D3DBE8] bg-white text-[14.5px] font-semibold text-[#0F1A30] placeholder:text-[#8E9BB2] outline-none focus:border-[#2D4C82] focus:ring-2 focus:ring-[#2D4C82]/15";
 const lab = "block text-[13px] font-black text-[#3A4A66] mb-1.5";
@@ -54,7 +54,7 @@ export function ContractPaper({ title, spec, vals, clauses, paperRef }) {
   const left = isLabor ? leftL : left0; const right = isLabor ? rightL : right0;
   const blocks = [
     <div key="h" style={{ textAlign: "center", borderBottom: "3px double #0F1A30", paddingBottom: 18, marginBottom: 24 }}>
-      <div style={{ fontFamily: MONO, fontSize: 10.5, letterSpacing: "0.3em", color: "#2D4C82", fontWeight: 800 }}>CONTRACT</div>
+      <div style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 10.5, letterSpacing: "0.3em", color: "#2D4C82", fontWeight: 800 }}>CONTRACT</div>
       <div style={{ fontSize: 27, fontWeight: 900, letterSpacing: "0.06em", marginTop: 6 }}>{title}</div>
     </div>,
     ...clauses.map((cl, i) => (
@@ -106,7 +106,7 @@ export function ContractPaper({ title, spec, vals, clauses, paperRef }) {
         {pages.map((idxs, pi) => (
           <div key={pi} className="kp-a4page" style={pageStyle}>
             {idxs.map((i) => blocks[i])}
-            <div style={{ position: "absolute", left: 0, right: 0, bottom: 26, textAlign: "center", fontSize: 12, color: "#5B6B85", fontFamily: MONO }}>- {pi + 1} / {pages.length} -</div>
+            <div style={{ position: "absolute", left: 0, right: 0, bottom: 26, textAlign: "center", fontSize: 12, color: "#5B6B85", fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>- {pi + 1} / {pages.length} -</div>
           </div>
         ))}
       </div>
@@ -278,7 +278,7 @@ export default function ContractStudio({ company = "", me = {} }) {
       <div className="relative overflow-hidden rounded-[22px] px-7 py-5 text-white flex items-center justify-between gap-4 flex-wrap shadow-[0_14px_32px_rgba(15,26,48,0.25)]"
         style={{ background: "linear-gradient(rgba(143,176,240,.07) 1px, transparent 1px) 0 0/22px 22px, linear-gradient(90deg, rgba(143,176,240,.07) 1px, transparent 1px) 0 0/22px 22px, linear-gradient(120deg,#0B1428 0%,#1B2B4B 60%,#2D4C82 100%)" }}>
         <div>
-          <div className="text-[12px] font-extrabold tracking-[0.26em] text-[#8FB0F0]" style={{ fontFamily: MONO }}>E-APPROVAL · CONTRACT</div>
+          <div className="text-[12px] font-extrabold tracking-[0.26em] text-[#8FB0F0]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>E-APPROVAL · CONTRACT</div>
           <div className="text-[24px] font-black mt-0.5">계약서</div>
           <div className="text-[14px] text-white/60 mt-0.5">유형을 고르면 조항이 자동으로 셋팅됩니다 · 모든 조항은 자유롭게 고칠 수 있어요 · 이미지·PDF 저장</div>
         </div>
@@ -287,7 +287,7 @@ export default function ContractStudio({ company = "", me = {} }) {
       {/* ⭐ 2026-10-31 계약서 종류 — 오른쪽 끝 버튼 대신 왼쪽 입력칸 맨 위에 드롭다운으로(시야에 바로 들어오게) */}
       <div className="w-full max-w-[560px]">
         <label className="block">
-          <span className="block text-[11px] font-extrabold tracking-[0.22em] text-[#4B6CB7] mb-1.5" style={{ fontFamily: MONO }}>CONTRACT TYPE · 계약서 종류</span>
+          <span className="block text-[11px] font-extrabold tracking-[0.22em] text-[#4B6CB7] mb-1.5" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>CONTRACT TYPE · 계약서 종류</span>
           <span className="relative block">
             <CustomSelect value={tab} onChange={(e) => setTab(e.target.value)}
               className="appearance-none w-full h-[52px] pl-12 pr-8 rounded-2xl border-2 border-[#1B2B4B] bg-white text-[16px] font-black text-[#0F1A30] outline-none shadow-[0_6px_18px_rgba(15,26,48,0.10)] focus:ring-4 focus:ring-[#2D4C82]/15 cursor-pointer">
@@ -305,11 +305,11 @@ export default function ContractStudio({ company = "", me = {} }) {
           </div>
           {docs.map((d, i) => (
             <div key={d.id} className="grid grid-cols-[60px_minmax(0,1.4fr)_minmax(0,1fr)_120px_130px_160px] gap-3 px-5 h-[56px] items-center border-b border-[#F1F4F9] hover:bg-[#F8FAFD]">
-              <span className="text-[14px] font-bold text-[#5B6B85] tabular-nums" style={{ fontFamily: MONO }}>{docs.length - i}</span>
+              <span className="text-[14px] font-bold text-[#5B6B85] tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{docs.length - i}</span>
               <button type="button" onClick={() => openSaved(d)} className="text-left text-[15px] font-black text-[#0F1A30] truncate hover:underline">{d.title}</button>
               <span className="text-[14px] font-bold text-[#1B2B4B] truncate">{d.party || "-"}</span>
               <span className="text-[13px] font-black text-[#2D4C82]">{KIND_LABEL[d.kind]}{d.kind === "driver" || d.kind === "labor" ? `·${d.sub}` : ""}</span>
-              <span className="text-[14px] text-[#3A4A66] tabular-nums" style={{ fontFamily: MONO }}>{d.contractDate || "-"}</span>
+              <span className="text-[14px] text-[#3A4A66] tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{d.contractDate || "-"}</span>
               <span className="flex gap-1.5 justify-end">
                 <button type="button" onClick={() => openSaved(d)} className="h-9 px-3.5 rounded-lg bg-[#0F1A30] text-white text-[13px] font-black">열기</button>
                 <button type="button" onClick={() => removeSaved(d)} className="h-9 px-3.5 rounded-lg border border-[#DCE3EE] text-[13px] font-bold text-[#5B6B85]">삭제</button>
@@ -422,7 +422,7 @@ export default function ContractStudio({ company = "", me = {} }) {
           <div className="min-w-0">
             <div className="sticky top-3 space-y-3">
               <div className={`${card} p-3 flex items-center gap-2 flex-wrap`}>
-                <span className="text-[12px] font-extrabold tracking-[0.2em] text-[#2D4C82] px-1" style={{ fontFamily: MONO }}>LIVE PREVIEW</span>
+                <span className="text-[12px] font-extrabold tracking-[0.2em] text-[#2D4C82] px-1" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>LIVE PREVIEW</span>
                 {editId && <span className="text-[12.5px] font-black px-2 py-1 rounded-md bg-[#EEF3FC] text-[#1B2B4B]">보관함 문서 수정 중</span>}
                 <div className="ml-auto flex gap-1.5 flex-wrap">
                   <button type="button" onClick={resetDoc} className="h-10 px-3.5 rounded-xl border border-[#DCE3EE] text-[13.5px] font-bold text-[#3A4A66]">새로 쓰기</button>

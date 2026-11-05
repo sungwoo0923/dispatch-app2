@@ -11,7 +11,7 @@ const toInt = (v) => { const n = parseInt(String(v ?? "").replace(/[^\d-]/g, "")
 const norm = (s) => String(s || "").replace(/\s+/g, "").toLowerCase();
 const won = (n) => `${Number(n || 0).toLocaleString()}원`;
 const EMPTY = "미지정";
-const MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
+const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
 const timeKey = (t) => { const m = String(t || "").match(/(\d{1,2}):(\d{2})/); if (!m) return "99:99"; let h = +m[1]; if (/오후|PM/i.test(t) && h < 12) h += 12; if (/오전|AM/i.test(t) && h === 12) h = 0; return String(h).padStart(2, "0") + ":" + m[2]; };
 
 function quickRanges() {
@@ -137,14 +137,14 @@ export default function OrderLookupModal({ open, onClose, rows = [], nameOf = ()
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#CFE0FF" strokeWidth="2.2" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="M20 20l-3.5-3.5" /></svg>
             </div>
             <div className="min-w-0">
-              <div className="text-[10.5px] font-extrabold tracking-[0.32em] text-[#8FB0F0]" style={{ fontFamily: MONO }}>ORDER LOOKUP · MANAGER × VEHICLE</div>
+              <div className="text-[10.5px] font-extrabold tracking-[0.32em] text-[#8FB0F0]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>ORDER LOOKUP · MANAGER × VEHICLE</div>
               <div className="text-[21px] font-black mt-0.5 tracking-tight">{title}</div>
             </div>
             <div className="ml-auto flex items-center gap-2">
-              <span className="hidden md:inline-flex items-center gap-2 h-9 px-3 rounded-xl bg-white/[0.06] border border-white/15 text-[12px] font-bold text-white/80" style={{ fontFamily: MONO }}>
+              <span className="hidden md:inline-flex items-center gap-2 h-9 px-3 rounded-xl bg-white/[0.06] border border-white/15 text-[12px] font-bold text-white/80" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>
                 <span className="w-2 h-2 rounded-full bg-[#4ADE80] shadow-[0_0_8px_#4ADE80]" />{start.slice(5).replace("-", ".")} – {end.slice(5).replace("-", ".")} · {result.length.toLocaleString()} ROWS
               </span>
-              <button onClick={onClose} className="h-9 px-3.5 rounded-xl bg-white/[0.08] border border-white/15 hover:bg-white/[0.16] text-[12.5px] font-black">닫기 <span className="text-white/45 ml-0.5" style={{ fontFamily: MONO }}>ESC</span></button>
+              <button onClick={onClose} className="h-9 px-3.5 rounded-xl bg-white/[0.08] border border-white/15 hover:bg-white/[0.16] text-[12.5px] font-black">닫기 <span className="text-white/45 ml-0.5" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>ESC</span></button>
             </div>
           </div>
           {/* 합계 — 디지털 계기판 */}
@@ -158,8 +158,8 @@ export default function OrderLookupModal({ open, onClose, rows = [], nameOf = ()
               ["MARGIN", "수수료", kpi.fee.toLocaleString(), "원", kpi.fee < 0 ? "#FFB4A8" : "#8FB0F0"],
             ].map(([en, k, v, u, c]) => (
               <div key={k} className="rounded-2xl px-3.5 py-2.5 bg-white/[0.05] border border-white/[0.12] backdrop-blur-sm">
-                <div className="flex items-center gap-1.5"><span className="text-[9.5px] font-extrabold tracking-[0.2em] text-white/40" style={{ fontFamily: MONO }}>{en}</span><span className="text-[11px] font-bold text-white/60">{k}</span></div>
-                <div className="mt-0.5 text-[19px] font-black tabular-nums leading-tight" style={{ color: c, fontFamily: MONO }}>{v}<span className="ml-1 text-[11px] font-bold text-white/40">{u}</span></div>
+                <div className="flex items-center gap-1.5"><span className="text-[9.5px] font-extrabold tracking-[0.2em] text-white/40" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{en}</span><span className="text-[11px] font-bold text-white/60">{k}</span></div>
+                <div className="mt-0.5 text-[19px] font-black tabular-nums leading-tight" style={{ color: c, fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{v}<span className="ml-1 text-[11px] font-bold text-white/40">{u}</span></div>
               </div>
             ))}
           </div>
@@ -233,17 +233,17 @@ export default function OrderLookupModal({ open, onClose, rows = [], nameOf = ()
           {/* 담당자를 고르지 않았으면 담당자별 요약 — 누르면 그 담당자로 좁힌다 */}
           {!mgr && !car && mgrStats.length > 0 && (
             <div className="px-6 pt-4">
-              <div className="flex items-center gap-2 mb-2.5"><span className="text-[10px] font-extrabold tracking-[0.28em] text-[#8A99B4]" style={{ fontFamily: MONO }}>BY MANAGER</span><span className="text-[12.5px] font-black text-[#3A4A66]">담당자별 요약</span><span className="text-[11.5px] font-semibold text-[#9AA9C3]">· 누르면 그 담당자만</span></div>
+              <div className="flex items-center gap-2 mb-2.5"><span className="text-[10px] font-extrabold tracking-[0.28em] text-[#8A99B4]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>BY MANAGER</span><span className="text-[12.5px] font-black text-[#3A4A66]">담당자별 요약</span><span className="text-[11.5px] font-semibold text-[#9AA9C3]">· 누르면 그 담당자만</span></div>
               <div className="flex flex-wrap gap-2">
                 {mgrStats.map((m) => (
                   <button key={m.name} onClick={() => setMgr(m.name)} className="group text-left rounded-2xl border border-[#E3E8F0] bg-white hover:border-[#2D4C82] hover:shadow-[0_8px_22px_rgba(15,26,48,.10)] px-4 py-3 min-w-[190px] transition">
                     <div className="flex items-center gap-2">
                       <span className="w-7 h-7 rounded-lg bg-[#0F1A30] text-white text-[12px] font-black flex items-center justify-center">{String(m.name).slice(0, 1)}</span>
                       <span className="text-[14px] font-black text-[#0F1A30]">{m.name}</span>
-                      <span className="ml-auto text-[15px] font-black text-[#2D4C82] tabular-nums" style={{ fontFamily: MONO }}>{m.cnt}</span>
+                      <span className="ml-auto text-[15px] font-black text-[#2D4C82] tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{m.cnt}</span>
                     </div>
                     <div className="mt-2 h-1 rounded-full bg-[#EEF1F6] overflow-hidden"><div className="h-full rounded-full bg-[#2D4C82]" style={{ width: `${m.cnt ? (m.done / m.cnt) * 100 : 0}%` }} /></div>
-                    <div className="mt-1.5 flex items-center gap-2 text-[11px] font-bold text-[#7A8AA6] tabular-nums" style={{ fontFamily: MONO }}>
+                    <div className="mt-1.5 flex items-center gap-2 text-[11px] font-bold text-[#7A8AA6] tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>
                       <span>₩{m.sale.toLocaleString()}</span><span className="text-[#C9D3E3]">|</span><span className="text-[#4B6CB7]">+{(m.sale - m.drv).toLocaleString()}</span>
                       {m.cnt - m.done > 0 && <span className="ml-auto text-[#C2410C]">미배차 {m.cnt - m.done}</span>}
                     </div>
@@ -282,9 +282,9 @@ export default function OrderLookupModal({ open, onClose, rows = [], nameOf = ()
                         <td className={`${td} text-center font-black tabular-nums`}>{r.차량번호 || <span className="text-[#C2410C] font-bold">미배차</span>}</td>
                         <td className={`${td} text-center font-semibold`}>{r.이름 || "-"}</td>
                         <td className={`${td} text-center`}><span className={`inline-block px-2 py-0.5 rounded-md text-[11.5px] font-black ${hasCar ? "bg-[#E7F5EC] text-[#1B7F4B]" : "bg-[#FFF1E6] text-[#C2410C]"}`}>{r.배차상태 || (hasCar ? "배차완료" : "배차중")}</span></td>
-                        <td className={`${td} tabular-nums`} style={{ fontFamily: MONO }}>{sale ? sale.toLocaleString() : "-"}</td>
-                        <td className={`${td} tabular-nums`} style={{ fontFamily: MONO }}>{drv ? drv.toLocaleString() : "-"}</td>
-                        <td style={{ fontFamily: MONO }} className={`${td} tabular-nums font-bold ${sale - drv < 0 ? "text-[#C2410C]" : "text-[#4B6CB7]"}`}>{sale || drv ? (sale - drv).toLocaleString() : "-"}</td>
+                        <td className={`${td} tabular-nums`} style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{sale ? sale.toLocaleString() : "-"}</td>
+                        <td className={`${td} tabular-nums`} style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{drv ? drv.toLocaleString() : "-"}</td>
+                        <td style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }} className={`${td} tabular-nums font-bold ${sale - drv < 0 ? "text-[#C2410C]" : "text-[#4B6CB7]"}`}>{sale || drv ? (sale - drv).toLocaleString() : "-"}</td>
                       </tr>
                     );
                   })}

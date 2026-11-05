@@ -12,7 +12,7 @@ import { collection, limit, onSnapshot, orderBy, query, where } from "firebase/f
 import { db } from "./firebase";
 import { ROLE_LABELS as BASE_ROLE_LABELS } from "./customRoles";
 
-export const MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
+export const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
 const TM_EMAIL = "tjddnqkf@naver.com";
 export const NOW_MS = 10 * 60 * 1000;
 const DAY_MS = 86400000;
@@ -244,7 +244,7 @@ export function Panel({ code, title, right, children, bodyClass = "p-4 sm:p-5", 
       <div className="flex items-center justify-between gap-3 px-4 sm:px-5 min-h-[50px] py-2 bg-[#F7F9FC] border-b border-[#E8EDF4] flex-wrap">
         <div className="flex items-center gap-2 min-w-0">
           <span className="w-1.5 h-1.5 rotate-45 bg-[#1B2B4B] shrink-0" />
-          {code && <span className="text-[10.5px] font-extrabold tracking-[0.2em] text-[#94A3B8] whitespace-nowrap" style={{ fontFamily: MONO }}>{code}</span>}
+          {code && <span className="text-[10.5px] font-extrabold tracking-[0.2em] text-[#94A3B8] whitespace-nowrap" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{code}</span>}
           <span className="text-[15px] sm:text-[16px] font-black text-[#0F1A30] truncate whitespace-nowrap">{title}</span>
         </div>
         {right}
@@ -296,8 +296,8 @@ const Avatar = ({ name, on }) => (
 );
 const KindChips = ({ p, now }) => (
   <span className="inline-flex gap-1">
-    {now - p.pc < DAY_MS && <span className={`h-6 px-2 rounded-md text-[10.5px] font-extrabold inline-flex items-center ${now - p.pc < NOW_MS ? "bg-[#1B2B4B] text-white" : "bg-[#EEF2F8] text-[#5B6B85]"}`} style={{ fontFamily: MONO }}>PC</span>}
-    {now - p.mobile < DAY_MS && <span className={`h-6 px-2 rounded-md text-[10.5px] font-extrabold inline-flex items-center ${now - p.mobile < NOW_MS ? "bg-[#1B2B4B] text-white" : "bg-[#EEF2F8] text-[#5B6B85]"}`} style={{ fontFamily: MONO }}>MOBILE</span>}
+    {now - p.pc < DAY_MS && <span className={`h-6 px-2 rounded-md text-[10.5px] font-extrabold inline-flex items-center ${now - p.pc < NOW_MS ? "bg-[#1B2B4B] text-white" : "bg-[#EEF2F8] text-[#5B6B85]"}`} style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>PC</span>}
+    {now - p.mobile < DAY_MS && <span className={`h-6 px-2 rounded-md text-[10.5px] font-extrabold inline-flex items-center ${now - p.mobile < NOW_MS ? "bg-[#1B2B4B] text-white" : "bg-[#EEF2F8] text-[#5B6B85]"}`} style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>MOBILE</span>}
   </span>
 );
 
@@ -307,7 +307,7 @@ export function StatsStamp({ updatedAtMs, busy, onRefresh, dark = true }) {
   return (
     <span className={`inline-flex items-center gap-2 h-10 pl-3 pr-1 rounded-xl text-[13px] font-bold whitespace-nowrap ${dark ? "bg-white/10 ring-1 ring-white/20 text-white" : "bg-[#F4F7FC] ring-1 ring-[#DCE3EE] text-[#1B2B4B]"}`}>
       <span className={dark ? "text-white/60" : "text-[#7A879C]"}>오더 집계</span>
-      <b style={{ fontFamily: MONO }}>{updatedAtMs ? `${ymdOf(updatedAtMs) === ymdOf(Date.now()) ? "" : `${ymdOf(updatedAtMs).slice(5)} `}${hhmm(updatedAtMs)}` : "집계 전"}</b>
+      <b style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{updatedAtMs ? `${ymdOf(updatedAtMs) === ymdOf(Date.now()) ? "" : `${ymdOf(updatedAtMs).slice(5)} `}${hhmm(updatedAtMs)}` : "집계 전"}</b>
       {stale && <span className={`text-[11px] font-black px-1.5 rounded ${dark ? "bg-white text-[#0F1A30]" : "bg-[#0F1A30] text-white"}`}>오래됨</span>}
       <button type="button" onClick={onRefresh} disabled={busy} className={`h-8 px-3 rounded-lg text-[13px] font-black inline-flex items-center gap-1.5 ${dark ? "bg-white text-[#0F1A30]" : "bg-[#1B2B4B] text-white"} disabled:opacity-60`}>
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" className={busy ? "pm-spin" : ""}><path d="M20 11a8 8 0 0 0-14.9-3M4 13a8 8 0 0 0 14.9 3" /><path d="M5 3v5h5M19 21v-5h-5" /></svg>
@@ -329,7 +329,7 @@ export function LiveNowPanel({ compact = false, onMore, onCompany }) {
     && (!q.trim() || [p.name, p.company, p.email].some((v) => String(v || "").includes(q.trim()))));
   const shown = compact ? rows.slice(0, 8) : rows;
   const seg = (k, l, n) => (
-    <button key={k} type="button" onClick={() => setMode(k)} className={`h-8 px-3 rounded-lg text-[13px] font-black whitespace-nowrap ${mode === k ? "bg-[#1B2B4B] text-white" : "text-[#5B6B85] hover:bg-white"}`}>{l} <span style={{ fontFamily: MONO }}>{n}</span></button>
+    <button key={k} type="button" onClick={() => setMode(k)} className={`h-8 px-3 rounded-lg text-[13px] font-black whitespace-nowrap ${mode === k ? "bg-[#1B2B4B] text-white" : "text-[#5B6B85] hover:bg-white"}`}>{l} <span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{n}</span></button>
   );
   return (
     <Panel code="LIVE" title="지금 접속 중" bodyClass="p-0"
@@ -393,7 +393,7 @@ export function SignupTimeline({ max = 12, onCompany }) {
             const company = s.kind === "carrier" || s.kind === "shipper";
             return (
               <React.Fragment key={s.id}>
-                {head && <li className="pt-2 pb-1 text-[11px] font-extrabold tracking-[0.14em] text-[#94A3B8]" style={{ fontFamily: MONO }}>{day.slice(5).replace("-", ".")} {["일", "월", "화", "수", "목", "금", "토"][new Date(`${day}T00:00:00`).getDay()]}</li>}
+                {head && <li className="pt-2 pb-1 text-[11px] font-extrabold tracking-[0.14em] text-[#94A3B8]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{day.slice(5).replace("-", ".")} {["일", "월", "화", "수", "목", "금", "토"][new Date(`${day}T00:00:00`).getDay()]}</li>}
                 <li className="relative pl-6 py-1.5">
                   <span className={`absolute left-[5px] top-[13px] w-2.5 h-2.5 ${company ? "rotate-45 bg-[#1B2B4B]" : "rounded-full border-2 border-[#6E8BC4] bg-white"}`} />
                   <span className="absolute left-[9.5px] top-[26px] bottom-[-8px] w-px bg-[#E3E8F0]" />
@@ -401,7 +401,7 @@ export function SignupTimeline({ max = 12, onCompany }) {
                     <span className={`text-[11px] font-extrabold px-1.5 h-5 inline-flex items-center rounded ${company ? "bg-[#0F1A30] text-white" : "bg-[#EEF2F8] text-[#1B2B4B]"}`}>{SIGN_LABEL[s.kind]}</span>
                     <button type="button" onClick={() => onCompany?.(company ? s.title : s.company)} className={`truncate text-left text-[14px] ${company ? "font-black" : "font-bold"} text-[#0F1A30] hover:underline`}>{s.title}</button>
                     {s.status === "pending" && <Pill tone="line">승인 대기</Pill>}
-                    <span className="ml-auto text-[11.5px] text-[#94A3B8] font-bold whitespace-nowrap" style={{ fontFamily: MONO }}>{hhmm(s.at)}</span>
+                    <span className="ml-auto text-[11.5px] text-[#94A3B8] font-bold whitespace-nowrap" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{hhmm(s.at)}</span>
                   </div>
                   <div className="text-[12.5px] text-[#7A879C] font-semibold truncate">{s.sub}</div>
                 </li>
@@ -427,10 +427,10 @@ export function PendingPanel({ go }) {
     { k: "LEAD", label: "미답변 도입 문의", n: P.inquiries.length, sub: P.inquiries.slice(0, 3).map((q) => q.companyName || q.name || "").join(" · "), to: "inquiries" },
   ];
   return (
-    <Panel code="QUEUE" title="처리 대기" right={<span className="text-[13px] font-black text-[#1B2B4B]" style={{ fontFamily: MONO }}>{P.total}건</span>} bodyClass="p-2">
+    <Panel code="QUEUE" title="처리 대기" right={<span className="text-[13px] font-black text-[#1B2B4B]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{P.total}건</span>} bodyClass="p-2">
       {rows.map((r) => (
         <button key={r.k} type="button" onClick={() => go?.(r.to)} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-[#F5F8FD] text-left">
-          <span className={`w-11 h-11 shrink-0 rounded-xl flex items-center justify-center text-[18px] font-black ${r.n ? "bg-[#0F1A30] text-white" : "bg-[#F1F4F9] text-[#B6C2D6]"}`} style={{ fontFamily: MONO }}>{r.n}</span>
+          <span className={`w-11 h-11 shrink-0 rounded-xl flex items-center justify-center text-[18px] font-black ${r.n ? "bg-[#0F1A30] text-white" : "bg-[#F1F4F9] text-[#B6C2D6]"}`} style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{r.n}</span>
           <span className="flex-1 min-w-0">
             <span className={`block text-[14px] font-black ${r.n ? "text-[#0F1A30]" : "text-[#94A3B8]"}`}>{r.label}</span>
             <span className="block text-[12px] text-[#7A89A3] truncate">{r.n ? r.sub : "없음"}</span>
@@ -441,7 +441,7 @@ export function PendingPanel({ go }) {
       {P.staffByCo.length > 0 && (
         <div className="mx-2 mt-1 mb-1 px-3 py-2.5 rounded-xl bg-[#F7F9FC] border border-[#E8EDF4]">
           <div className="text-[12px] font-extrabold text-[#5B6B85] mb-1.5">직원 승인 대기 (각 운송사 관리자가 승인)</div>
-          <div className="flex flex-wrap gap-1.5">{P.staffByCo.slice(0, 10).map((c) => <Pill key={c.name} tone="soft">{c.name} <b style={{ fontFamily: MONO }}>{c.n}</b></Pill>)}</div>
+          <div className="flex flex-wrap gap-1.5">{P.staffByCo.slice(0, 10).map((c) => <Pill key={c.name} tone="soft">{c.name} <b style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{c.n}</b></Pill>)}</div>
         </div>
       )}
     </Panel>
@@ -467,7 +467,7 @@ export function DupeWarning({ compact = false }) {
             <div key={d.key} className="rounded-xl bg-white border border-[#DCE3EE] px-3 py-2">
               {d.names.map((x) => (
                 <div key={x.raw} className="flex items-center justify-between gap-2 text-[13px]">
-                  <span className="font-bold text-[#0F1A30] truncate" style={{ fontFamily: MONO }}>{showRaw(x.raw)}</span>
+                  <span className="font-bold text-[#0F1A30] truncate" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{showRaw(x.raw)}</span>
                   <span className="text-[#7A879C] font-bold whitespace-nowrap">{x.n}건</span>
                 </div>
               ))}
@@ -497,29 +497,29 @@ export function HealthCard({ c, today, onOpen }) {
       <div className="flex items-start gap-2 min-w-0">
         <div className="flex-1 min-w-0">
           <div className="text-[16px] font-black text-[#0F1A30] truncate">{c.name}</div>
-          <div className="text-[12.5px] text-[#7A879C] font-bold truncate mt-0.5"><span style={{ fontFamily: MONO }}>{c.code || "-"}</span> · 마지막 접속 {agoText(c.lastSeen, now)}</div>
+          <div className="text-[12.5px] text-[#7A879C] font-bold truncate mt-0.5"><span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{c.code || "-"}</span> · 마지막 접속 {agoText(c.lastSeen, now)}</div>
         </div>
         {c.status && <Pill tone={{ active: "solid", new: "soft", drop: "line", dormant: "dash" }[c.status.key]}>{c.status.label}</Pill>}
       </div>
       <div className="grid grid-cols-3 gap-2">
         <div className="rounded-xl bg-[#F4F7FC] px-2.5 py-2 min-w-0">
           <div className="text-[11px] font-bold text-[#7A879C] whitespace-nowrap">지금 접속</div>
-          <div className="flex items-center gap-1.5 text-[18px] font-black text-[#0F1A30]" style={{ fontFamily: MONO }}><LiveDot on={c.onlineNow > 0} />{c.onlineNow || 0}<span className="text-[11px] text-[#94A3B8]">/{c.online || 0}</span></div>
+          <div className="flex items-center gap-1.5 text-[18px] font-black text-[#0F1A30]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}><LiveDot on={c.onlineNow > 0} />{c.onlineNow || 0}<span className="text-[11px] text-[#94A3B8]">/{c.online || 0}</span></div>
         </div>
         <div className="rounded-xl bg-[#F4F7FC] px-2.5 py-2 min-w-0">
           <div className="text-[11px] font-bold text-[#7A879C] whitespace-nowrap">직원 · 기사</div>
-          <div className="text-[18px] font-black text-[#0F1A30] whitespace-nowrap" style={{ fontFamily: MONO }}>{c.staff}<span className="text-[11px] text-[#94A3B8]"> · {c.drivers}</span></div>
+          <div className="text-[18px] font-black text-[#0F1A30] whitespace-nowrap" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{c.staff}<span className="text-[11px] text-[#94A3B8]"> · {c.drivers}</span></div>
         </div>
         <div className="rounded-xl bg-[#F4F7FC] px-2.5 py-2 min-w-0">
           <div className="text-[11px] font-bold text-[#7A879C] whitespace-nowrap">이번 달 오더</div>
-          <div className="text-[18px] font-black text-[#1B2B4B] whitespace-nowrap" style={{ fontFamily: MONO }}>{c.m.cnt.toLocaleString()}</div>
+          <div className="text-[18px] font-black text-[#1B2B4B] whitespace-nowrap" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{c.m.cnt.toLocaleString()}</div>
         </div>
       </div>
       <div className="flex items-end gap-3">
         <div className="flex-1 min-w-0"><Spark values={series} width={200} height={34} /></div>
         <div className="text-right shrink-0">
           <div className="text-[10.5px] font-bold text-[#94A3B8] whitespace-nowrap">전월 같은 기간</div>
-          <div className={`text-[13px] font-black whitespace-nowrap ${delta == null ? "text-[#94A3B8]" : delta >= 0 ? "text-[#1B2B4B]" : "text-[#64748B]"}`} style={{ fontFamily: MONO }}>{delta == null ? "—" : `${delta >= 0 ? "▲" : "▼"} ${Math.abs(delta)}%`}</div>
+          <div className={`text-[13px] font-black whitespace-nowrap ${delta == null ? "text-[#94A3B8]" : delta >= 0 ? "text-[#1B2B4B]" : "text-[#64748B]"}`} style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{delta == null ? "—" : `${delta >= 0 ? "▲" : "▼"} ${Math.abs(delta)}%`}</div>
         </div>
       </div>
       <div className="flex flex-wrap gap-1.5">
@@ -571,7 +571,7 @@ export function HeaderLivePill({ onClick, phone = false }) {
       className={`shrink-0 inline-flex items-center gap-2 rounded-xl bg-white/[0.08] ring-1 ring-white/15 hover:bg-white/15 font-black whitespace-nowrap ${phone ? "h-9 px-2.5 text-[13px]" : "h-10 px-3.5 text-[14px]"}`}>
       <span className="relative inline-flex w-2 h-2"><span className="absolute inset-0 rounded-full bg-[#8FB0F0] opacity-70 animate-ping" /><span className="relative w-2 h-2 rounded-full bg-[#CFE0FF]" /></span>
       {phone ? "" : <span className="text-white/70 font-bold">지금 접속</span>}
-      <span className="inline-flex items-baseline gap-0.5"><span style={{ fontFamily: MONO }}>{live.ready ? live.totals.onlineNow : "-"}</span><span className="text-white/60 font-bold text-[12px]">명</span></span>
+      <span className="inline-flex items-baseline gap-0.5"><span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{live.ready ? live.totals.onlineNow : "-"}</span><span className="text-white/60 font-bold text-[12px]">명</span></span>
     </button>
   );
 }

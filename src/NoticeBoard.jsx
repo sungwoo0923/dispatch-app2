@@ -21,7 +21,7 @@ import { LogisMark } from "./brand"; // 🔷 2026-11-04 LogisWeb 마크
 //  ⭐ 2026-11-03 읽음 기록은 PlatformNoticeBanner와 한 곳(맨 위 띠·가운데 팝업과 같은 기록)
 const markPlatRead = (id) => markPlatformNoticeRead(String(id || "").replace(/^plat:/, ""));
 
-const MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
+const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
 export const MAX_PINNED = 5;
 const toMs = (v) => (v?.toMillis ? v.toMillis() : v?.seconds ? v.seconds * 1000 : typeof v === "number" ? v : 0);
 const shortDate = (ms) => {
@@ -60,7 +60,7 @@ const PAGE = 15;
 // 목록 날짜·순서 — 예약 게시 글은 게시 시각 기준
 const whenOf = (n) => Math.max(toMs(n.createdAt), noticePublishAt(n));
 const Eye = ({ size = 13 }) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z" /><circle cx="12" cy="12" r="3" /></svg>;
-const SchedBadge = ({ n, big }) => <span title="예약 게시 — 이 시각에 직원들에게 보이고 알림이 갑니다(지금은 작성자·관리자만 보임)" className={`shrink-0 inline-flex items-center gap-1 rounded-md bg-[#0F1A30] text-[#8FB0F0] font-black whitespace-nowrap ${big ? "px-2 py-0.5 text-[11px]" : "px-1.5 py-0.5 text-[10.5px]"}`} style={{ fontFamily: MONO }}>{scheduleLabel(noticePublishAt(n))}</span>;
+const SchedBadge = ({ n, big }) => <span title="예약 게시 — 이 시각에 직원들에게 보이고 알림이 갑니다(지금은 작성자·관리자만 보임)" className={`shrink-0 inline-flex items-center gap-1 rounded-md bg-[#0F1A30] text-[#8FB0F0] font-black whitespace-nowrap ${big ? "px-2 py-0.5 text-[11px]" : "px-1.5 py-0.5 text-[10.5px]"}`} style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{scheduleLabel(noticePublishAt(n))}</span>;
 const AudBadges = ({ n, big }) => { const a = noticeAudiences(n); const cls = `shrink-0 rounded border border-[#C9D6EE] text-[#2D4C82] font-black ${big ? "px-2 py-0.5 rounded-md text-[11px]" : "px-1.5 py-0.5 text-[10.5px]"}`; return <>{a.includes("shipper") && <span className={cls}>{big ? "화주사 공개" : "화주사"}</span>}{a.includes("driver") && <span className={cls}>{big ? "기사 공개" : "기사"}</span>}{!a.includes("internal") && <span className={cls}>직원 제외</span>}</>; };
 export default function NoticeBoard({ notices = [], me, canWrite, isViewer, onEdit, confirm, openId, setOpenId }) {
   const [q, setQ] = React.useState("");
@@ -168,7 +168,7 @@ export default function NoticeBoard({ notices = [], me, canWrite, isViewer, onEd
         className={`w-full grid grid-cols-[52px_minmax(0,1fr)_auto] md:grid-cols-[64px_minmax(0,1fr)_120px_110px_64px] items-center gap-2.5 md:gap-3 px-3 md:px-5 h-[60px] md:h-[56px] border-b border-[#F1F4F9] text-left transition hover:bg-[#F5F8FD] ${n._platform ? "bg-[linear-gradient(90deg,#FBF7EC,#F6F8FC_40%)]" : pin ? "bg-[#F3F6FB]" : ""}`}>
         <span className="text-center">
           {pin ? <span className="inline-flex items-center justify-center whitespace-nowrap h-6 px-1.5 rounded-md bg-[#0F1A30] text-[#8FB0F0] text-[10.5px] font-black">• 고정</span>
-            : <span className="text-[14px] font-bold text-[#5B6B85] tabular-nums" style={{ fontFamily: MONO }}>{no}</span>}
+            : <span className="text-[14px] font-bold text-[#5B6B85] tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{no}</span>}
         </span>
         <span className="min-w-0 flex flex-col md:flex-row md:items-center gap-0.5 md:gap-1.5">
         <span className="min-w-0 flex items-center gap-1.5 whitespace-nowrap">
@@ -189,8 +189,8 @@ export default function NoticeBoard({ notices = [], me, canWrite, isViewer, onEd
           : <span className="md:hidden truncate text-[12px] font-bold text-[#7A879C] inline-flex items-center gap-1.5">{n.author || "-"}<span className="inline-flex items-center gap-0.5 font-semibold text-[#9AA9C3] tabular-nums"><Eye size={11} />{noticeViews(n)}</span></span>}
         </span>
         <span className={`hidden md:block truncate text-[14px] font-bold ${n._platform ? "text-[#8A6A16]" : "text-[#1B2B4B]"}`}>{n.author || "-"}</span>
-        <span className="text-right text-[14px] font-semibold text-[#3A4A66] tabular-nums whitespace-nowrap" style={{ fontFamily: MONO }}>{shortDate(whenOf(n))}</span>
-        <span className="hidden md:inline-flex items-center justify-center gap-1 text-[13px] font-semibold text-[#5B6B85] tabular-nums" style={{ fontFamily: MONO }} title="조회수 — 한 계정 1회"><Eye size={12} />{noticeViews(n)}</span>
+        <span className="text-right text-[14px] font-semibold text-[#3A4A66] tabular-nums whitespace-nowrap" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{shortDate(whenOf(n))}</span>
+        <span className="hidden md:inline-flex items-center justify-center gap-1 text-[13px] font-semibold text-[#5B6B85] tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }} title="조회수 — 한 계정 1회"><Eye size={12} />{noticeViews(n)}</span>
       </button>
     );
   };

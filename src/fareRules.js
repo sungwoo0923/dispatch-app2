@@ -200,7 +200,7 @@ const h = React.createElement;
 // 운임구분 선택 — rules: 회사 규칙 전체(비활성 규칙은 현재 값일 때만 보여 준다)
 // ⭐ 2026-11-02 운임구분 선택 — 프로그램 스타일 드롭다운(버튼 + 떠 있는 목록). 옛 <select> 대신
 //  compact: 작은 알약 버튼(라벨 줄·표 칸) / 기본: 입력칸 높이(40px)
-const MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
+const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
 const fmtRuleVal = (r) => (r.type === "fixed" ? `${Math.round(toNum(r.value)).toLocaleString()}원` : `${toNum(r.value)}%`);
 export function FareTypeSelect({ value, onChange, rules = [], className = "", disabled = false, compact = false, placeholder = "운임구분", id, align = "left", noneLabel = "선택 안 함 · 직접 계산", extraOpts = [], allowAdd = true, company }) {
   const list = (rules || []).filter((r) => r && String(r.name || "").trim() && (r.active !== false || String(r.name) === String(value || "")));
@@ -346,10 +346,10 @@ export function FareTypeSelect({ value, onChange, rules = [], className = "", di
         },
         h("span", { className: "w-4 h-4 rounded-full bg-[#1B2B4B] text-white grid place-items-center text-[12px] leading-none shrink-0" }, "+"),
         h("span", { className: "flex-1" }, "새 운임구분 바로 추가"),
-        h("span", { className: "text-[10px] font-extrabold tracking-[0.14em] text-[#8E9BB2]", style: { fontFamily: MONO } }, "NEW"))
+        h("span", { className: "text-[10px] font-extrabold tracking-[0.14em] text-[#8E9BB2]", style: { fontFamily: MONO, fontVariantNumeric: "tabular-nums" } }, "NEW"))
         : h("div", { className: "flex flex-col gap-1.5" },
           h("div", { className: "flex items-center justify-between px-1" },
-            h("span", { className: "text-[10px] font-extrabold tracking-[0.14em] text-[#4B6CB7]", style: { fontFamily: MONO } }, "NEW FARE TYPE · %"),
+            h("span", { className: "text-[10px] font-extrabold tracking-[0.14em] text-[#4B6CB7]", style: { fontFamily: MONO, fontVariantNumeric: "tabular-nums" } }, "NEW FARE TYPE · %"),
             h("button", { type: "button", onClick: () => { setAdding(false); setAddErr(""); }, className: "text-[11.5px] font-bold text-[#8E9BB2] hover:text-[#1B2B4B]" }, "취소")),
           h("div", { className: "flex items-center gap-1.5" },
             h("input", {
@@ -364,7 +364,7 @@ export function FareTypeSelect({ value, onChange, rules = [], className = "", di
                 value: nf.value, onChange: (e) => setNf((p) => ({ ...p, value: e.target.value.replace(/[^\d.]/g, "") })),
                 onKeyDown: (e) => { e.stopPropagation(); if (e.key === "Enter") { e.preventDefault(); submitAdd(); } if (e.key === "Escape") { e.preventDefault(); setAdding(false); } },
                 className: "w-[62px] h-[34px] pl-2 pr-6 rounded-xl border border-[#C9D5EA] bg-white text-[13.5px] font-bold text-right tabular-nums text-[#0F1A30] focus:outline-none focus:border-[#4B6CB7] focus:ring-2 focus:ring-[#4B6CB7]/15",
-                style: { fontFamily: MONO },
+                style: { fontFamily: MONO, fontVariantNumeric: "tabular-nums" },
               }),
               h("span", { className: "absolute right-2 top-1/2 -translate-y-1/2 text-[12px] font-extrabold text-[#6B7A99] pointer-events-none" }, "%")),
             h("button", {

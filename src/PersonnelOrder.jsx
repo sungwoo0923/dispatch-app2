@@ -216,7 +216,7 @@ export default function PersonnelOrder({ company, target, myName, isSelf, revise
   const selS = "h-10 w-full px-3 rounded-xl border border-[#DCE3EE] bg-white text-[13.5px] font-bold text-[#0F1A30] outline-none focus:border-[#4B6CB7]";
   const addable = (staff || []).filter((u) => !rows.some((r) => r.uid === u.uid) && u.role !== "totalMaster");
   const multi = rows.length > 1;
-  const MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
+  const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
   const cell = "border-r border-[#0F1A30]/70 px-1.5 py-2 min-w-0";
 
   return (
@@ -239,7 +239,7 @@ export default function PersonnelOrder({ company, target, myName, isSelf, revise
         )}
         <div className="rounded-2xl border border-[#E3E8F0] bg-white p-5 space-y-3">
           <div>
-            <div className="text-[11px] font-extrabold tracking-[0.22em] text-[#4B6CB7]" style={{ fontFamily: MONO }}>APPOINTMENT</div>
+            <div className="text-[11px] font-extrabold tracking-[0.22em] text-[#4B6CB7]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>APPOINTMENT</div>
             <div className="text-[17px] font-black text-[#0F1A30]">발령 공문 <span className="text-[13px] font-bold text-[#7A879C]">대상자 {rows.length}명</span></div>
           </div>
           <label className="block"><span className="text-[12.5px] font-bold text-[#7A879C]">시행일(공문 날짜)</span>
@@ -251,7 +251,7 @@ export default function PersonnelOrder({ company, target, myName, isSelf, revise
           return (
             <div key={r.uid} className="rounded-2xl border border-[#E3E8F0] bg-white p-4 space-y-3">
               <div className="flex items-start gap-2">
-                <span className="w-7 h-7 shrink-0 rounded-lg bg-[#0F1A30] text-[#8FB0F0] text-[12px] font-black grid place-items-center" style={{ fontFamily: MONO }}>{String(i + 1).padStart(2, "0")}</span>
+                <span className="w-7 h-7 shrink-0 rounded-lg bg-[#0F1A30] text-[#8FB0F0] text-[12px] font-black grid place-items-center" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{String(i + 1).padStart(2, "0")}</span>
                 <div className="flex-1 min-w-0">
                   <div className="text-[15.5px] font-black text-[#0F1A30] truncate">{u?.name || rv(r, "name") || "(불러오는 중)"}</div>
                   <div className="text-[12px] font-bold text-[#7A879C] truncate">{revFrom[r.uid] ? "발령 전" : "현재"} {c.team || "미배정"} · {c.position || "-"} · {roleName(c.role)}</div>

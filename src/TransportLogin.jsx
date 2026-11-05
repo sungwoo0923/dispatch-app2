@@ -380,7 +380,7 @@ export default function TransportLogin() {
           <div className="flex items-center gap-2 text-[11.5px] font-extrabold tracking-[0.28em] text-[#8FB0F0]">
             <span className="w-1.5 h-1.5 rounded-full bg-[#6E95E8] kp-pulse" /> SYSTEM ONLINE
           </div>
-          <div className="mt-4 font-black leading-none tabular-nums" style={{ fontSize: 88, letterSpacing: "-0.02em", fontFamily: "'JetBrains Mono','SF Mono',ui-monospace,monospace" }}>
+          <div className="mt-4 font-black leading-none tabular-nums" style={{ fontSize: 88, letterSpacing: "-0.02em", fontFamily: "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif", fontVariantNumeric: "tabular-nums" }}>
             {pad(now.getHours())}<span className="kp-pulse text-white/40">:</span>{pad(now.getMinutes())}
             <span className="text-[30px] text-white/35 ml-2">{pad(now.getSeconds())}</span>
           </div>
@@ -413,7 +413,7 @@ export default function TransportLogin() {
 
             {field("code", "회사코드", (
               <input type="text" placeholder="승인 후 발급된 코드" value={companyCode} onChange={(e) => setCompanyCode(e.target.value.toUpperCase())} onKeyDown={handleKeyDown}
-                className={`${inputCls} ${companyCode ? "tracking-[0.12em] font-mono" : ""}`} />
+                className={`${inputCls} ${companyCode ? "tracking-[0.12em] tabular-nums" : ""}`} />
             ))}
             {field("company", "회사명", (
               <input type="text" placeholder="가입한 회사명" value={companyName} onChange={(e) => setCompanyName(e.target.value)} onKeyDown={handleKeyDown} className={inputCls} />
@@ -496,7 +496,7 @@ export default function TransportLogin() {
                     <defs><linearGradient id="kpRing" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stopColor="#8FB0F0" /><stop offset="100%" stopColor="#ffffff" /></linearGradient></defs>
                   </svg>
                   <div className="absolute inset-0 flex flex-col items-center justify-center">
-                    <div key={countdown} className="kp-login-in font-black tabular-nums leading-none" style={{ fontSize: 60, fontFamily: "'JetBrains Mono','SF Mono',ui-monospace,monospace" }}>{pad(countdown)}</div>
+                    <div key={countdown} className="kp-login-in font-black tabular-nums leading-none" style={{ fontSize: 60, fontFamily: "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif", fontVariantNumeric: "tabular-nums" }}>{pad(countdown)}</div>
                     <div className="text-[10px] font-extrabold tracking-[0.3em] text-white/40 mt-1">SEC</div>
                   </div>
                 </div>
@@ -565,7 +565,7 @@ export default function TransportLogin() {
                     <div key={`${r.companyName}|${r.companyCode}`} className="flex items-center justify-between px-4 py-3 border-b border-gray-50 last:border-b-0 hover:bg-blue-50/30">
                       <div>
                         <div className="text-[13px] font-semibold text-gray-800">{r.companyName}</div>
-                        <div className="text-[12px] font-mono text-[#1B2B4B] font-bold">{r.companyCode}</div>
+                        <div className="text-[12px] tabular-nums text-[#1B2B4B] font-bold">{r.companyCode}</div>
                       </div>
                       <button
                         onClick={() => {

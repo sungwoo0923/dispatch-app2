@@ -114,7 +114,7 @@ export default function KpBootScreen({ targets, subs = [], onAllDone, variant = 
   const activeIdx = completed.findIndex((c) => !c);
   const bar = (v) => ({ transform: `scaleX(${v / 100})`, transformOrigin: "0 50%", transition: `transform ${STEP_MS}ms ease-out`, willChange: "transform" });
   const truckW = 30 * Z.truck * 3.2;
-  const MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
+  const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
   const pc = variant === "pc";
   return (
     <div
@@ -154,13 +154,13 @@ export default function KpBootScreen({ targets, subs = [], onAllDone, variant = 
         {/* 큰 숫자 % */}
         <div className="flex items-end justify-between gap-3 whitespace-nowrap">
           <div className="min-w-0">
-            <div className={`flex items-center gap-1.5 font-extrabold tracking-[0.24em] text-[#8FB0F0] ${pc ? "text-[11.5px]" : "text-[10px]"}`} style={{ fontFamily: MONO }}>
+            <div className={`flex items-center gap-1.5 font-extrabold tracking-[0.24em] text-[#8FB0F0] ${pc ? "text-[11.5px]" : "text-[10px]"}`} style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>
               <span className="w-1.5 h-1.5 rounded-full bg-[#8FB0F0]" style={{ animation: "kpBootBlink 1.2s ease-in-out infinite" }} />
               {activeIdx === -1 ? "READY" : "SYNCING"}
             </div>
             <div className={`mt-1 ${Z.status} font-bold text-white/70 truncate`}>{activeIdx === -1 ? "준비 완료" : `${steps[activeIdx]} 중…`}</div>
           </div>
-          <div className="font-black text-white tabular-nums leading-none shrink-0" style={{ fontFamily: MONO, fontSize: pc ? 64 : 48, letterSpacing: "-0.04em" }}>
+          <div className="font-black text-white tabular-nums leading-none shrink-0" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: pc ? 64 : 48, letterSpacing: "-0.04em" }}>
             <span ref={pctRef}>0</span><span className="text-white/35" style={{ fontSize: pc ? 26 : 20, marginLeft: 2 }}>%</span>
           </div>
         </div>
@@ -172,7 +172,7 @@ export default function KpBootScreen({ targets, subs = [], onAllDone, variant = 
           </div>
           <div className="absolute left-0 right-0 bottom-[18px] h-[3px] rounded-full" style={{ ...bar(overall), background: "linear-gradient(90deg, #4B6CB7, #CFE0FF)", boxShadow: "0 0 12px rgba(143,176,240,0.8)" }} />
           {/* 눈금 */}
-          <div className="absolute left-0 right-0 bottom-0 flex justify-between text-[9px] font-bold text-white/25 tabular-nums" style={{ fontFamily: MONO }}>
+          <div className="absolute left-0 right-0 bottom-0 flex justify-between text-[9px] font-bold text-white/25 tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>
             {["0", "25", "50", "75", "100"].map((t) => <span key={t}>{t}</span>)}
           </div>
           <div className="absolute left-0 bottom-[16px]" style={{ width: `calc(100% - ${truckW}px)`, transform: `translateX(${overall}%)`, transition: `transform ${STEP_MS}ms ease-out`, willChange: "transform" }}>
@@ -188,7 +188,7 @@ export default function KpBootScreen({ targets, subs = [], onAllDone, variant = 
             const active = i === activeIdx;
             return (
               <div key={label} className="flex items-center gap-3" style={{ opacity: done || active ? 1 : 0.35, transition: "opacity 0.2s" }}>
-                <div className={`${Z.dot} relative shrink-0 rounded-[8px] flex items-center justify-center font-black tabular-nums ${done ? "bg-[#CFE0FF] text-[#0F1A30]" : active ? "bg-white/10 text-white ring-1 ring-[#8FB0F0]" : "bg-white/[0.06] text-white/50"}`} style={{ fontFamily: MONO }}>
+                <div className={`${Z.dot} relative shrink-0 rounded-[8px] flex items-center justify-center font-black tabular-nums ${done ? "bg-[#CFE0FF] text-[#0F1A30]" : active ? "bg-white/10 text-white ring-1 ring-[#8FB0F0]" : "bg-white/[0.06] text-white/50"}`} style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>
                   {active && <span className="absolute inset-0 rounded-[8px] ring-1 ring-[#8FB0F0]" style={{ animation: "kpBootRing 1.2s ease-out infinite", willChange: "transform, opacity" }} />}
                   {done ? (
                     <svg width="11" height="11" viewBox="0 0 12 12"><path d="M2.5 6.3l2.4 2.4 4.6-5" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" /></svg>
@@ -197,7 +197,7 @@ export default function KpBootScreen({ targets, subs = [], onAllDone, variant = 
                 <div className="flex-1 min-w-0">
                   <div className="flex justify-between items-baseline gap-2 whitespace-nowrap">
                     <span className={`${Z.label} font-bold truncate min-w-0 ${done ? "text-white" : "text-white/85"}`}>{label}</span>
-                    <span className={`${Z.sub} font-bold tabular-nums text-[#CFE0FF]/80 shrink-0`} style={{ fontFamily: MONO }}>{subs[i] && (done || active) ? subs[i] : `${String(v).padStart(3, " ")}%`}</span>
+                    <span className={`${Z.sub} font-bold tabular-nums text-[#CFE0FF]/80 shrink-0`} style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{subs[i] && (done || active) ? subs[i] : `${String(v).padStart(3, " ")}%`}</span>
                   </div>
                   <div className={`mt-1.5 ${Z.bar} rounded-full bg-white/[0.08] overflow-hidden relative`}>
                     <div className="h-full w-full rounded-full" style={{ ...bar(v), background: "linear-gradient(90deg, #4B6CB7, #CFE0FF)" }} />

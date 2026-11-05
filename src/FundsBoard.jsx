@@ -56,7 +56,7 @@ function FundFields({ f, set, funds = [], selfId }) {
             </CustomSelect>
           </div>
           <div><Lbl>{card ? "카드번호" : "계좌번호"}</Lbl>
-            <input inputMode="numeric" value={card ? formatCardNo(f.number) : formatAccount(f.bank, f.number)} onChange={(e) => set({ number: onlyDigits(e.target.value) })} className={`${inp} tabular-nums tracking-wide`} style={{ fontFamily: MONO }} placeholder={card ? "0000-0000-0000-0000" : f.bank ? "숫자만 — 하이픈 자동" : "은행을 먼저 고르세요"} />
+            <input inputMode="numeric" value={card ? formatCardNo(f.number) : formatAccount(f.bank, f.number)} onChange={(e) => set({ number: onlyDigits(e.target.value) })} className={`${inp} tabular-nums tracking-wide`} style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }} placeholder={card ? "0000-0000-0000-0000" : f.bank ? "숫자만 — 하이픈 자동" : "은행을 먼저 고르세요"} />
           </div>
           <div className="col-span-2"><Lbl>{card ? "사용자(명의)" : "예금주"}</Lbl><input value={f.holder || ""} onChange={(e) => set({ holder: e.target.value })} className={inp} placeholder={card ? "예: 홍길동 / (주)회사명" : "예: (주)회사명"} /></div>
         </>
@@ -110,10 +110,10 @@ function SetupPanel({ company, onClose }) {
       <div><div className="text-[12.5px] font-black text-[#3A4A66] mb-1.5">기준일</div><CustomDatePicker value={date} onChange={(e) => setDate(e.target.value)} className={inp} showIcon /></div>
       {rows.map((r, i) => (
         <div key={i} className="rounded-2xl bg-white border border-[#E3E8F0] p-4 space-y-2.5">
-          <div className="flex items-center justify-between"><span className="text-[11px] font-extrabold tracking-[0.2em] text-[#4B6CB7]" style={{ fontFamily: MONO }}>ACCOUNT {String(i + 1).padStart(2, "0")}</span>{rows.length > 1 && <button type="button" onClick={() => setRows((p) => p.filter((_, j) => j !== i))} className="text-[12px] font-bold text-[#9AA9C3]">빼기</button>}</div>
+          <div className="flex items-center justify-between"><span className="text-[11px] font-extrabold tracking-[0.2em] text-[#4B6CB7]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>ACCOUNT {String(i + 1).padStart(2, "0")}</span>{rows.length > 1 && <button type="button" onClick={() => setRows((p) => p.filter((_, j) => j !== i))} className="text-[12px] font-bold text-[#9AA9C3]">빼기</button>}</div>
           <div className="flex flex-wrap gap-1.5">{FUND_KINDS.map((k) => <Chip key={k} on={r.kind === k} onClick={() => setRows((p) => p.map((x, j) => (j === i ? { ...x, kind: k, ...(isCard({ kind: k }) !== isCard(x) ? { bank: "", number: "" } : {}) } : x)))}>{k}</Chip>)}</div>
           <FundFields f={r} set={(patch) => setRows((p) => p.map((x, j) => (j === i ? { ...x, ...patch } : x)))} funds={[]} />
-          <div><Lbl>{amountLabel(r)}</Lbl><input inputMode="numeric" value={r.balance ? won(r.balance) : ""} onChange={(e) => set(i, "balance", e.target.value.replace(/[^\d]/g, ""))} className={`${inp} text-right tabular-nums`} style={{ fontFamily: MONO }} placeholder="0" /></div>
+          <div><Lbl>{amountLabel(r)}</Lbl><input inputMode="numeric" value={r.balance ? won(r.balance) : ""} onChange={(e) => set(i, "balance", e.target.value.replace(/[^\d]/g, ""))} className={`${inp} text-right tabular-nums`} style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }} placeholder="0" /></div>
         </div>
       ))}
       <button type="button" onClick={() => setRows((p) => [...p, blankFund("보통예금")])} className="w-full h-12 rounded-2xl border-2 border-dashed border-[#C9D2E0] bg-white text-[14px] font-black text-[#1B2B4B]">+ 통장·카드·현금·대출 추가</button>
@@ -147,14 +147,14 @@ function AccountPanel({ company, acc, funds = [], onClose }) {
       footer={<>{acc && <button type="button" onClick={async () => { if (window.confirm("이 계좌를 목록에서 뺄까요? (기록은 남습니다)")) { await updateDoc(doc(db, "acctFunds", acc.id), { active: false }); onClose(); } }} className="h-12 px-4 rounded-xl border border-[#DCE3EE] bg-white text-[14px] font-bold text-[#B42318]">목록에서 빼기</button>}<button type="button" onClick={onClose} className="h-12 px-5 rounded-xl border border-[#DCE3EE] bg-white text-[14px] font-bold text-[#3A4A66]">닫기</button><button type="button" onClick={save} className="flex-1 h-12 rounded-xl bg-[#0F1A30] text-white text-[15px] font-black">저장</button></>}>
       {acc && !isCredit(acc) && !(isCard(acc) && acc.linkFundId) && (
         <div className="rounded-2xl p-4 text-white" style={{ background: "linear-gradient(120deg,#0B1428,#1B2B4B 60%,#2D4C82)" }}>
-          <div className="text-[11px] font-extrabold tracking-[0.22em] text-[#8FB0F0]" style={{ fontFamily: MONO }}>RECONCILE · 잔액 맞추기</div>
+          <div className="text-[11px] font-extrabold tracking-[0.22em] text-[#8FB0F0]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>RECONCILE · 잔액 맞추기</div>
           <div className="text-[13px] text-white/70 mt-1">은행 앱의 실제 잔액과 다르면 오늘 실제 잔액을 적어 주세요. 이후 계산은 이 값부터 시작합니다.</div>
           <div className="grid grid-cols-[1fr_1fr_auto] gap-2 mt-3">
             <CustomDatePicker value={check.date} onChange={(e) => setCheck((p) => ({ ...p, date: e.target.value }))} className="h-11 w-full px-3 rounded-xl text-[#0F1A30] text-[14px] font-bold" showIcon />
-            <input inputMode="numeric" value={check.balance ? won(check.balance) : ""} onChange={(e) => setCheck((p) => ({ ...p, balance: e.target.value.replace(/[^\d-]/g, "") }))} className="h-11 w-full px-3 rounded-xl text-right text-[#0F1A30] text-[14px] font-black tabular-nums" style={{ fontFamily: MONO }} placeholder="실제 잔액" />
+            <input inputMode="numeric" value={check.balance ? won(check.balance) : ""} onChange={(e) => setCheck((p) => ({ ...p, balance: e.target.value.replace(/[^\d-]/g, "") }))} className="h-11 w-full px-3 rounded-xl text-right text-[#0F1A30] text-[14px] font-black tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }} placeholder="실제 잔액" />
             <button type="button" onClick={addCheck} className="h-11 px-4 rounded-xl bg-white text-[#0F1A30] text-[13.5px] font-black">맞추기</button>
           </div>
-          {(acc.checks || []).length > 0 && <div className="mt-3 space-y-1">{[...acc.checks].reverse().slice(0, 5).map((c, i) => <div key={i} className="flex justify-between text-[12px] text-white/70"><span style={{ fontFamily: MONO }}>{c.date}</span><span className="font-black tabular-nums" style={{ fontFamily: MONO }}>{won(c.balance)}원</span></div>)}</div>}
+          {(acc.checks || []).length > 0 && <div className="mt-3 space-y-1">{[...acc.checks].reverse().slice(0, 5).map((c, i) => <div key={i} className="flex justify-between text-[12px] text-white/70"><span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{c.date}</span><span className="font-black tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{won(c.balance)}원</span></div>)}</div>}
         </div>
       )}
       <div className="flex flex-wrap gap-1.5">{FUND_KINDS.map((k) => <Chip key={k} on={f.kind === k} onClick={() => setF((p) => ({ ...p, kind: k, ...(isCard({ kind: k }) !== isCard(p) ? { bank: "", number: "" } : {}) }))}>{k}</Chip>)}</div>
@@ -174,7 +174,7 @@ function AccountPanel({ company, acc, funds = [], onClose }) {
       {!(isCard(f) && f.payType === "체크" && f.linkFundId) && (
         <div className="grid grid-cols-2 gap-2">
           {!(isCard(f) && f.payType !== "체크") && <div><Lbl>기준일</Lbl><CustomDatePicker value={f.openingDate} onChange={(e) => setF((p) => ({ ...p, openingDate: e.target.value }))} className={inp} showIcon /></div>}
-          <div className={isCard(f) && f.payType !== "체크" ? "col-span-2" : ""}><Lbl>{amountLabel(f)}</Lbl><input inputMode="numeric" value={f.openingBalance ? won(f.openingBalance) : ""} onChange={(e) => setF((p) => ({ ...p, openingBalance: e.target.value.replace(/[^\d-]/g, "") }))} className={`${inp} text-right tabular-nums`} style={{ fontFamily: MONO }} /></div>
+          <div className={isCard(f) && f.payType !== "체크" ? "col-span-2" : ""}><Lbl>{amountLabel(f)}</Lbl><input inputMode="numeric" value={f.openingBalance ? won(f.openingBalance) : ""} onChange={(e) => setF((p) => ({ ...p, openingBalance: e.target.value.replace(/[^\d-]/g, "") }))} className={`${inp} text-right tabular-nums`} style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }} /></div>
         </div>
       )}
       <div><Lbl>메모</Lbl><input value={f.memo || ""} onChange={(e) => setF((p) => ({ ...p, memo: e.target.value }))} className={inp} placeholder="예: 급여 이체 전용 · 결제일 매달 15일" /></div>
@@ -207,7 +207,7 @@ export function FundsBoard({ company, canEdit = true }) {
         ]} />
       {!funds.length ? (
         <div className="rounded-[22px] border-2 border-dashed border-[#C9D2E0] bg-white px-6 py-12 text-center">
-          <div className="text-[11px] font-extrabold tracking-[0.26em] text-[#4B6CB7]" style={{ fontFamily: MONO }}>GET STARTED</div>
+          <div className="text-[11px] font-extrabold tracking-[0.26em] text-[#4B6CB7]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>GET STARTED</div>
           <div className="text-[20px] font-black text-[#0F1A30] mt-1">자금 상태를 입력해 주세요</div>
           <div className="text-[13.5px] text-[#7A879C] mt-1">통장·카드·현금·예금·대출을 등록하고 지금 잔액만 적으면, 이후엔 장부 입출금으로 자동 계산됩니다</div>
           {canEdit ? <button type="button" onClick={() => setSetup(true)} className="mt-5 h-12 px-6 rounded-2xl bg-[#0F1A30] text-white text-[15px] font-black">자금 상태 입력</button> : <div className="mt-4 text-[13px] font-bold text-[#9AA9C3]">경리 담당자가 입력하면 여기에 보입니다</div>}
@@ -235,8 +235,8 @@ export function FundsBoard({ company, canEdit = true }) {
                     <span className="text-right shrink-0">
                       {credit && <span className="block text-[10.5px] font-black text-[#9AA9C3]">남은 한도</span>}
                       {isCard(f) && f.linkName && <span className="block text-[10.5px] font-black text-[#9AA9C3]">통장 잔액</span>}
-                      <span className={`block text-[17px] font-black tabular-nums ${f.kind === "대출" || f.balance < 0 ? "text-[#B42318]" : "text-[#0F1A30]"}`} style={{ fontFamily: MONO }}>{f.kind === "대출" ? "−" : f.balance < 0 ? "−" : ""}{won(Math.abs(f.balance))}</span>
-                      {share > 0 && <span className="block text-[11px] font-bold text-[#9AA9C3] tabular-nums" style={{ fontFamily: MONO }}>{share.toFixed(1)}%</span>}
+                      <span className={`block text-[17px] font-black tabular-nums ${f.kind === "대출" || f.balance < 0 ? "text-[#B42318]" : "text-[#0F1A30]"}`} style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{f.kind === "대출" ? "−" : f.balance < 0 ? "−" : ""}{won(Math.abs(f.balance))}</span>
+                      {share > 0 && <span className="block text-[11px] font-bold text-[#9AA9C3] tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{share.toFixed(1)}%</span>}
                     </span>
                   </button>
                 );
@@ -251,7 +251,7 @@ export function FundsBoard({ company, canEdit = true }) {
                     <span title={`수입 ${won(x.in)}원`} className="w-[38%] rounded-t-md bg-[#4B6CB7]" style={{ height: `${(x.in / max) * 100}%` }} />
                     <span title={`지출 ${won(x.out)}원`} className="w-[38%] rounded-t-md bg-[#0F1A30]" style={{ height: `${(x.out / max) * 100}%` }} />
                   </div>
-                  <span className="text-[11.5px] font-black text-[#5B6B85] tabular-nums" style={{ fontFamily: MONO }}>{x.m.slice(5)}월</span>
+                  <span className="text-[11.5px] font-black text-[#5B6B85] tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{x.m.slice(5)}월</span>
                 </div>
               ))}
             </div>

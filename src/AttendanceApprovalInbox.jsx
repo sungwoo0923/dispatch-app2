@@ -9,7 +9,7 @@ import {
   APPROVER_GROUP_LABEL, approveChangeReq, approveCheckInReq, canApproveAttendanceReq, rejectChangeReq, rejectCheckInReq,
 } from "./attendanceApproval";
 
-const MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
+const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
 const hm = (iso) => {
   if (!iso) return "";
   const s = String(iso);
@@ -57,7 +57,7 @@ export default function AttendanceApprovalInbox({ company, me, role }) {
     <div className="rounded-[20px] border border-[#DCE3EE] bg-white overflow-hidden shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
       <div className="flex items-center justify-between px-4 py-3 bg-[#0F1A30] text-white">
         <div>
-          <div className="text-[10.5px] font-extrabold tracking-[0.28em] text-[#9FB4DA]" style={{ fontFamily: MONO }}>ATTENDANCE · REQUESTS</div>
+          <div className="text-[10.5px] font-extrabold tracking-[0.28em] text-[#9FB4DA]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>ATTENDANCE · REQUESTS</div>
           <div className="text-[15px] font-black mt-0.5">근태 요청 결재 <span className="ml-1 px-2 py-0.5 rounded-full bg-white/15 text-[12px]">{total}건</span></div>
         </div>
         <div className="text-[12px] text-white/60 text-right">먼저 승인한 1명의 결정으로 반영·종결됩니다</div>

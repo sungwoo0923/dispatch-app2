@@ -51,7 +51,8 @@ import FixedRouteStatusHost, { FixedRouteCells, fixedHeaderOf, fixedLookOf, useR
 import { useRouteCarrierFilter } from "./routeCarriers"; // ⭐ 2026-11-05 고정노선 운송업체 설정 — 끈 업체 오더는 정산·매출에서 뺀다
 import ColumnStyleHost from "./ColumnStyle"; // 🎨 2026-11-03 컬럼명 오른쪽 클릭 → 색 변경 // ⭐ 2026-11-03 배차현황 › 고정노선현황
 import { usePendingSignups, isPendingSignupDriver } from "./pendingSignups";
-import { NavHover } from "./navMenus";
+import { NavHover, emitSubnav } from "./navMenus";
+import { publishDriverOrderRows, useDriverEventFeeds, useDriverEventCounts, setDriverSeenServer, setDriverToastsMuted, markDriverSeen, focusOrderRow, DriverEventToasts, DriverEventBell, DriverAckChip, KakaoBadge } from "./driverEvents"; // ⭐ 2026-11-05 기사앱 수락/거절·서류·긴급 알림(토스트·빨간 숫자·종)
 import { PeriodPicker as ResumePeriodPicker, DateField as ResumeDateField, SelectField as ResumeSelectField, AddressField as ResumeAddressField, BirthSelect as ResumeBirthSelect, EDU_STATUS as RESUME_EDU_STATUS, FAMILY_REL as RESUME_FAMILY_REL } from "./ResumeInputs";
 import { useHrOptions } from "./hrConstants";
 import { AssetManager } from "./OfficeBooks";
@@ -309,7 +310,7 @@ function FareCertModal({ row, companyName, onClose }) {
     w.document.close();
   };
 
-  const MONO = "'JetBrains Mono','IBM Plex Mono',ui-monospace,monospace";
+  const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
   const vat = Math.round(기사운임 * 0.1);
   const pTime = r.상차시간 ? fmtDispatchTime(r.상차시간, r.상차시간기준 || r.상차시간구분) : "즉시";
   const dTime = r.하차시간 ? fmtDispatchTime(r.하차시간, r.하차시간기준 || r.하차시간구분) : "즉시";
@@ -323,7 +324,7 @@ function FareCertModal({ row, companyName, onClose }) {
   );
   const sec = (en, title) => (
     <div style={{ display: "flex", alignItems: "baseline", gap: 8, margin: "18px 0 8px" }}>
-      <span style={{ fontFamily: MONO, fontSize: 9.5, fontWeight: 800, letterSpacing: "0.22em", color: "#4B6CB7" }}>{en}</span>
+      <span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 9.5, fontWeight: 800, letterSpacing: "0.22em", color: "#4B6CB7" }}>{en}</span>
       <span style={{ fontSize: 14, fontWeight: 900, color: "#0F1A30" }}>{title}</span>
     </div>
   );
@@ -335,13 +336,13 @@ function FareCertModal({ row, companyName, onClose }) {
         <div className="relative flex items-center justify-between px-6 py-4 shrink-0 text-white overflow-hidden" style={{ background: "linear-gradient(120deg,#0B1428 0%,#1B2B4B 60%,#2D4C82 100%)" }}>
           <span className="absolute inset-0 opacity-[0.06] pointer-events-none" style={{ backgroundImage: "linear-gradient(#fff 1px,transparent 1px),linear-gradient(90deg,#fff 1px,transparent 1px)", backgroundSize: "22px 22px" }} />
           <div className="relative">
-            <div className="text-[10.5px] font-extrabold tracking-[0.3em] text-[#8FB0F0]" style={{ fontFamily: MONO }}>FARE · CERTIFICATE</div>
+            <div className="text-[10.5px] font-extrabold tracking-[0.3em] text-[#8FB0F0]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>FARE · CERTIFICATE</div>
             <h3 className="text-[19px] font-black leading-tight"><EditableText id="popup.title.운임정보 미리보기" defaultText="운임확인서" /></h3>
           </div>
           <div className="relative flex items-center gap-1.5">
             <div className="flex items-center rounded-xl bg-white/10 border border-white/15 h-9">
               <button type="button" onClick={() => setZoom((z) => Math.max(0.6, +(z - 0.1).toFixed(2)))} className="w-9 h-9 text-[16px] font-bold hover:bg-white/10 rounded-l-xl">−</button>
-              <span className="text-[12px] w-12 text-center tabular-nums" style={{ fontFamily: MONO }}>{Math.round(zoom * 100)}%</span>
+              <span className="text-[12px] w-12 text-center tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{Math.round(zoom * 100)}%</span>
               <button type="button" onClick={() => setZoom((z) => Math.min(2, +(z + 0.1).toFixed(2)))} className="w-9 h-9 text-[16px] font-bold hover:bg-white/10 rounded-r-xl">+</button>
             </div>
             <button type="button" onClick={onClose} className="h-9 px-3.5 rounded-xl bg-white/10 border border-white/20 hover:bg-white/20 text-[13px] font-bold">닫기 ✕</button>
@@ -355,13 +356,13 @@ function FareCertModal({ row, companyName, onClose }) {
               {/* 문서 머리 */}
               <div style={{ background: "#0F1A30", color: "#fff", padding: "22px 34px 18px", display: "flex", justifyContent: "space-between", alignItems: "flex-end" }}>
                 <div>
-                  <div style={{ fontFamily: MONO, fontSize: 10, fontWeight: 800, letterSpacing: "0.3em", color: "#8FB0F0" }}>FARE CERTIFICATE</div>
+                  <div style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 10, fontWeight: 800, letterSpacing: "0.3em", color: "#8FB0F0" }}>FARE CERTIFICATE</div>
                   <div style={{ fontSize: 28, fontWeight: 900, letterSpacing: "0.32em", marginTop: 4 }}>운임확인서</div>
-                  {issuerBiz && <div style={{ fontSize: 13, fontWeight: 800, color: "rgba(255,255,255,0.78)", marginTop: 4, letterSpacing: "0.04em" }}>{issuerBiz.name}{issuerBiz.bizNo ? <span style={{ fontFamily: MONO, fontWeight: 700, color: "#8FB0F0", marginLeft: 8 }}>{issuerBiz.bizNo}</span> : null}</div>}
+                  {issuerBiz && <div style={{ fontSize: 13, fontWeight: 800, color: "rgba(255,255,255,0.78)", marginTop: 4, letterSpacing: "0.04em" }}>{issuerBiz.name}{issuerBiz.bizNo ? <span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontWeight: 700, color: "#8FB0F0", marginLeft: 8 }}>{issuerBiz.bizNo}</span> : null}</div>}
                 </div>
                 <div style={{ textAlign: "right", fontSize: 11.5, color: "rgba(255,255,255,0.7)", lineHeight: 1.7 }}>
-                  <div>문서번호 <b style={{ fontFamily: MONO, color: "#fff" }}>{docNo}</b></div>
-                  <div>발급일시 <b style={{ fontFamily: MONO, color: "#fff" }}>{issuedAt}</b></div>
+                  <div>문서번호 <b style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", color: "#fff" }}>{docNo}</b></div>
+                  <div>발급일시 <b style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", color: "#fff" }}>{issuedAt}</b></div>
                 </div>
               </div>
               <div style={{ height: 4, background: "linear-gradient(90deg,#2D4C82,#8FB0F0)" }} />
@@ -396,12 +397,12 @@ function FareCertModal({ row, companyName, onClose }) {
                   {[["기사운임 (공급가)", `${기사운임.toLocaleString()}원`], ["부가세 (10%)", `${vat.toLocaleString()}원`]].map(([l, v]) => (
                     <div key={l} style={{ border: "1px solid #E3E8F0", borderRadius: 10, padding: "12px 14px" }}>
                       <div style={{ fontSize: 11.5, fontWeight: 800, color: "#7A89A3" }}>{l}</div>
-                      <div style={{ fontFamily: MONO, fontSize: 18, fontWeight: 900, color: "#0F1A30", marginTop: 3 }}>{v}</div>
+                      <div style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 18, fontWeight: 900, color: "#0F1A30", marginTop: 3 }}>{v}</div>
                     </div>
                   ))}
                   <div style={{ background: "#0F1A30", color: "#fff", borderRadius: 10, padding: "12px 16px" }}>
                     <div style={{ fontSize: 11.5, fontWeight: 800, color: "#8FB0F0" }}>합계 (VAT 포함)</div>
-                    <div style={{ fontFamily: MONO, fontSize: 22, fontWeight: 900, marginTop: 2 }}>{(기사운임 + vat).toLocaleString()}원</div>
+                    <div style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 22, fontWeight: 900, marginTop: 2 }}>{(기사운임 + vat).toLocaleString()}원</div>
                   </div>
                 </div>
                 <div style={{ border: "1px solid #E3E8F0", borderBottom: "none", display: "grid", gridTemplateColumns: "1fr 1fr", marginTop: 10 }}>
@@ -572,12 +573,12 @@ function OrderCalendarPanel({ pickupDate, dropDate, onPickupChange, onDropChange
       {/* 헤더 — 오늘 날짜 + 디지털 시계 */}
       <div className="px-5 py-3.5 flex items-center justify-between shrink-0" style={{ background: "linear-gradient(120deg,#0B1428,#0F1A30 50%,#1B2B4B)" }}>
         <div>
-          <div className="text-[10px] text-[#8FB0F0] font-extrabold tracking-[0.28em]" style={{ fontFamily: "'JetBrains Mono','SF Mono',ui-monospace,monospace" }}>TODAY</div>
+          <div className="text-[10px] text-[#8FB0F0] font-extrabold tracking-[0.28em]" style={{ fontFamily: "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif", fontVariantNumeric: "tabular-nums" }}>TODAY</div>
           <div className="text-[13px] text-white font-bold">{todayStr}</div>
         </div>
         <div className="text-right">
           <div className="text-[10px] text-white/50 font-semibold tracking-widest">TIME</div>
-          <div className="text-[20px] font-black text-white leading-none tabular-nums" style={{ fontFamily: "'DM Mono','Consolas',monospace" }}>
+          <div className="text-[20px] font-black text-white leading-none tabular-nums" style={{ fontFamily: "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif", fontVariantNumeric: "tabular-nums" }}>
             <OrderPanelClock />
           </div>
         </div>
@@ -1489,7 +1490,7 @@ function ScheduleChartModal({ rows, companyName, authorName, onClose }) {
       <div className="bg-[#F4F6FA] rounded-[26px] shadow-[0_40px_100px_rgba(0,0,0,0.45)] w-fit max-w-[95vw] min-w-[820px] max-h-[94vh] flex flex-col overflow-hidden" onClick={(e) => e.stopPropagation()}>
         {/* 헤더 툴바 */}
         <div className="relative flex items-center justify-between px-6 py-4 shrink-0 overflow-hidden" style={{ background: "linear-gradient(120deg,#0B1428 0%,#1B2B4B 60%,#2D4C82 100%)" }}><span className="absolute inset-0 opacity-[0.06] pointer-events-none" style={{ backgroundImage: "linear-gradient(#fff 1px,transparent 1px),linear-gradient(90deg,#fff 1px,transparent 1px)", backgroundSize: "22px 22px" }} />
-          <h3 className="relative text-white"><span className="block text-[10.5px] font-extrabold tracking-[0.3em] text-[#8FB0F0]" style={{ fontFamily: "'JetBrains Mono',ui-monospace,monospace" }}>DISPATCH · SCHEDULE</span><span className="text-[19px] font-black">스케줄표</span> <span className="text-white/60 font-bold text-[12.5px] ml-1">({filteredRows.length}건{isDateFiltered ? ` / 전체 ${rows.length}건` : ""})</span></h3>
+          <h3 className="relative text-white"><span className="block text-[10.5px] font-extrabold tracking-[0.3em] text-[#8FB0F0]" style={{ fontFamily: "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif", fontVariantNumeric: "tabular-nums" }}>DISPATCH · SCHEDULE</span><span className="text-[19px] font-black">스케줄표</span> <span className="text-white/60 font-bold text-[12.5px] ml-1">({filteredRows.length}건{isDateFiltered ? ` / 전체 ${rows.length}건` : ""})</span></h3>
           <div className="relative flex items-center gap-1.5">
             <button type="button" onClick={() => setZoom((z) => Math.max(0.5, +(z - 0.1).toFixed(2)))}
               className="w-9 h-9 rounded-xl bg-white/10 border border-white/15 text-white hover:bg-white/20 text-[15px] font-bold transition">−</button>
@@ -1557,7 +1558,7 @@ function ScheduleChartModal({ rows, companyName, authorName, onClose }) {
                   <div className="absolute top-0 right-0 text-[11px] font-bold text-gray-500">작성자 {authorName}</div>
                 )}
                 <div className="text-center">
-                  <div className="text-[10px] font-extrabold tracking-[0.34em] text-[#4B6CB7]" style={{ fontFamily: "'JetBrains Mono',ui-monospace,monospace" }}>DISPATCH SCHEDULE</div><div className="text-[26px] font-black text-[#0F1A30] tracking-[8px] mt-1">배차 스케줄표</div>
+                  <div className="text-[10px] font-extrabold tracking-[0.34em] text-[#4B6CB7]" style={{ fontFamily: "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif", fontVariantNumeric: "tabular-nums" }}>DISPATCH SCHEDULE</div><div className="text-[26px] font-black text-[#0F1A30] tracking-[8px] mt-1">배차 스케줄표</div>
                   <div className="text-[12px] font-semibold text-gray-500 mt-1.5">
                     {companyName ? `${companyName} · ` : ""}{dateRangeLabel} · 총 {filteredRows.length}건
                   </div>
@@ -3269,7 +3270,7 @@ function KpPageClock() {
   const dow = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"][k.getUTCDay()];
   const hm = k.toISOString().slice(11, 16);
   return (
-    <div className="ml-auto hidden lg:flex items-center gap-2.5 h-10 pl-3 pr-1 rounded-[14px] bg-[#F5F8FD] border border-[#E3E8F0] shrink-0 tabular-nums" style={{ fontFamily: KP_MONO }}>
+    <div className="ml-auto hidden lg:flex items-center gap-2.5 h-10 pl-3 pr-1 rounded-[14px] bg-[#F5F8FD] border border-[#E3E8F0] shrink-0 tabular-nums" style={{ fontFamily: KP_MONO, fontVariantNumeric: "tabular-nums" }}>
       <span className="w-1.5 h-1.5 rounded-full bg-[#4B6CB7] animate-pulse" />
       <span className="text-[12.5px] font-bold text-[#3A4A66]">{ymd}</span>
       <span className="text-[10.5px] font-extrabold tracking-[0.18em] text-[#9AA9C3]">{dow}</span>
@@ -3277,7 +3278,7 @@ function KpPageClock() {
     </div>
   );
 }
-const KP_MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
+const KP_MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
 function KpPageHeader({ menu }) {
   const meta = KP_PAGE_META[menu];
   if (!meta) return null;
@@ -3289,7 +3290,7 @@ function KpPageHeader({ menu }) {
         <svg className="relative" width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d={meta.icon} /></svg>
       </div>
       <div className="min-w-0">
-        <div className="text-[10.5px] font-extrabold tracking-[0.28em] text-[#4B6CB7]" style={{ fontFamily: KP_MONO }}>{meta.en}</div>
+        <div className="text-[10.5px] font-extrabold tracking-[0.28em] text-[#4B6CB7]" style={{ fontFamily: KP_MONO, fontVariantNumeric: "tabular-nums" }}>{meta.en}</div>
         <div className="flex items-baseline gap-3 min-w-0">
           <h2 className="text-[21px] font-black text-[#0F1A30] tracking-tight leading-tight whitespace-nowrap">{menu}</h2>
           <span className="text-[13.5px] text-[#5B6B85] font-medium truncate">{meta.desc}</span>
@@ -3504,7 +3505,7 @@ function VehicleTypeBadge({ type, ton }) {
   return (
     <span className="inline-flex items-stretch h-[27px] rounded-md overflow-hidden border border-[#C9D5EA] bg-white text-[14px] leading-none">
       <span className={`inline-flex items-center px-2.5 font-extrabold ${t ? "text-[#0F1A30]" : "text-[#B4BFD0]"}`}>{t || "미지정"}</span>
-      {tn && <span className="inline-flex items-center px-2 bg-[#1B2B4B] text-white font-bold tabular-nums" style={{ fontFamily: "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace", fontSize: 13 }}>{tn}</span>}
+      {tn && <span className="inline-flex items-center px-2 bg-[#1B2B4B] text-white font-bold tabular-nums" style={{ fontFamily: "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif", fontVariantNumeric: "tabular-nums", fontSize: 13 }}>{tn}</span>}
     </span>
   );
 }
@@ -6042,7 +6043,7 @@ function OrderInfoModal({ row, onClose, lunchByName }) {
   const fee = (Number(row.청구운임) || 0) - (Number(row.기사운임) || 0);
   const fmtPhone = (p) => formatPhone(p) || p || "-"; // 공용 formatPhone 사용
   const fmtMoney = (v) => v ? Number(v).toLocaleString() + "원" : "-";
-  const MONO = "'JetBrains Mono','IBM Plex Mono',ui-monospace,monospace";
+  const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
   // ⭐ 상/하차지에 등록된 휴게(점심)시간 — 그 거래처가 실제로 설정해둔 경우에만 표시
   const pickupLunch = lunchByName?.get(_lunchNameKey(row.상차지명));
   const dropLunch = lunchByName?.get(_lunchNameKey(row.하차지명));
@@ -6061,7 +6062,7 @@ function OrderInfoModal({ row, onClose, lunchByName }) {
   const card = (code, title, body, right) => (
     <div className="bg-white rounded-2xl border border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_8px_22px_rgba(16,24,40,0.05)]">
       <div className="flex items-center justify-between px-4 h-10 border-b border-[#EEF1F6]">
-        <div className="flex items-center gap-2"><span className="text-[9.5px] font-extrabold tracking-[0.22em] text-[#4B6CB7]" style={{ fontFamily: MONO }}>{code}</span><span className="text-[13.5px] font-black text-[#0F1A30]">{title}</span></div>
+        <div className="flex items-center gap-2"><span className="text-[9.5px] font-extrabold tracking-[0.22em] text-[#4B6CB7]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{code}</span><span className="text-[13.5px] font-black text-[#0F1A30]">{title}</span></div>
         {right}
       </div>
       <div className="px-4 py-3">{body}</div>
@@ -6102,7 +6103,7 @@ function OrderInfoModal({ row, onClose, lunchByName }) {
           <span className="absolute inset-0 opacity-[0.06] pointer-events-none" style={{ backgroundImage: "linear-gradient(#fff 1px,transparent 1px),linear-gradient(90deg,#fff 1px,transparent 1px)", backgroundSize: "22px 22px" }} />
           <div className="relative flex items-start justify-between gap-4">
             <div className="min-w-0">
-              <div className="text-[10.5px] font-extrabold tracking-[0.3em] text-[#8FB0F0]" style={{ fontFamily: MONO }}>ORDER · DETAIL</div>
+              <div className="text-[10.5px] font-extrabold tracking-[0.3em] text-[#8FB0F0]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>ORDER · DETAIL</div>
               <div className="flex items-center gap-2.5 mt-1 min-w-0">
                 <h3 className="text-[21px] font-black truncate"><EditableText id="popup.title.오더정보" defaultText="오더정보" /> <span className="text-white/40 mx-1">|</span> {row.상차지명 || "-"} <span className="text-[#8FB0F0]">→</span> {row.하차지명 || "-"}</h3>
               </div>
@@ -6118,7 +6119,7 @@ function OrderInfoModal({ row, onClose, lunchByName }) {
             {kpis.map(([l, v]) => (
               <div key={l} className="rounded-xl bg-white/[0.06] border border-white/10 px-3.5 py-2">
                 <div className="text-[11px] font-bold text-white/50">{l}</div>
-                <div className="text-[16px] font-black tabular-nums truncate" style={{ fontFamily: MONO }}>{v}</div>
+                <div className="text-[16px] font-black tabular-nums truncate" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{v}</div>
               </div>
             ))}
           </div>
@@ -6162,7 +6163,7 @@ function OrderInfoModal({ row, onClose, lunchByName }) {
           </div>
           <div className="min-h-0 rounded-2xl overflow-hidden border border-[#E3E8F0] bg-white flex flex-col shadow-[0_8px_22px_rgba(16,24,40,0.06)]">
             <div className="flex items-center justify-between px-4 h-10 border-b border-[#EEF1F6] shrink-0">
-              <div className="flex items-center gap-2"><span className="text-[9.5px] font-extrabold tracking-[0.22em] text-[#4B6CB7]" style={{ fontFamily: MONO }}>MAP</span><span className="text-[13.5px] font-black text-[#0F1A30]">경로 지도</span></div>
+              <div className="flex items-center gap-2"><span className="text-[9.5px] font-extrabold tracking-[0.22em] text-[#4B6CB7]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>MAP</span><span className="text-[13.5px] font-black text-[#0F1A30]">경로 지도</span></div>
               <span className="text-[11.5px] font-bold text-[#8A97AD]">실시간 교통 반영</span>
             </div>
             {hasMap ? (
@@ -8121,6 +8122,31 @@ const newVer = useNewVersion(); // ★ 새 버전이 배포되면 버전 표시 
   const apCountsNav = useApprovalCounts();
   const mailCountsNav = useMailCounts();
   const alertsNav = useMobileAlerts({ uid: user?.uid, role: realRole || role, team: myProfileDoc?.team || "", company: deptCompany });
+  // ⭐ 2026-11-05 기사앱 이벤트 — 수락/거절은 이미 구독 중인 어제~내일 오더(recentDispatchDataFiltered)에서 꺼낸다(추가 구독 없음).
+  //  내가 등록/배차확정한 오더만(관리자는 종 패널에서 "모든 담당자" 켜기). 서류(검토 대기)·긴급(미처리)은 작은 구독 1개씩.
+  const drvMe = React.useMemo(() => ({ uid: user?.uid || "", email: user?.email || "", name: myRealName || "", isAdmin: ["admin", "totalMaster", "superadmin", "allMgr"].includes(realRole || role) }), [user?.uid, user?.email, myRealName, realRole, role]);
+  React.useEffect(() => { publishDriverOrderRows(recentDispatchDataFiltered, drvMe); }, [recentDispatchDataFiltered, drvMe]);
+  useDriverEventFeeds({ uid: user?.uid, company: deptCompany, canDocs: canApproveSignup, canSos: role !== "viewer" });
+  const drvCounts = useDriverEventCounts();
+  React.useEffect(() => { setDriverSeenServer(myProfileDoc?.driverEventsSeen); }, [myProfileDoc?.driverEventsSeen]);
+  React.useEffect(() => { setDriverToastsMuted(!notificationsEnabled); }, [notificationsEnabled]);
+  // 그 화면을 보고 있으면 "봤음"으로(토스트·줄 칩 맥박은 그대로 보이고 4초 뒤 숫자만 사라짐)
+  React.useEffect(() => {
+    if (!["실시간배차현황", "배차현황", "배차관리"].includes(menu) || !drvCounts.orders) return undefined;
+    const t = setTimeout(() => markDriverSeen("orders"), 4000);
+    return () => clearTimeout(t);
+  }, [menu, drvCounts.orders]);
+  React.useEffect(() => { if (menu === "기사관리" && 기사관리Tab === "docs:driver" && drvCounts.docs) markDriverSeen("docs"); }, [menu, 기사관리Tab, drvCounts.docs]);
+  React.useEffect(() => { if (menu === "지입차관리" && drvCounts.sosUnseen) markDriverSeen("sos"); }, [menu, drvCounts.sosUnseen]);
+  const onDriverEventView = (e) => {
+    if (!e) return;
+    if (e.kind === "doc") { set기사관리Tab("docs:driver"); handleMenuClick("기사관리"); markDriverSeen("docs"); return; }
+    if (e.kind === "sos") { handleMenuClick("지입차관리"); markDriverSeen("sos"); setTimeout(() => emitSubnav("FLEET CONTROL", "tracking"), 0); return; }
+    markDriverSeen("orders");
+    if (e.row?.배차표Id) { handleMenuClick("배차현황"); setTimeout(() => emitSubnav("DISPATCH", "고정노선현황"), 0); return; }
+    if (!["실시간배차현황", "배차관리"].includes(menu)) handleMenuClick("실시간배차현황");
+    setTimeout(() => focusOrderRow(e.id), 250);
+  };
   // 부서 모드에서 볼 수 없는 메뉴에 머물러 있으면 홈으로
   React.useEffect(() => { if (deptMode && !DEPT_MENUS[deptMode].includes(menu)) setMenu("HOME"); }, [deptMode, menu]);
   // viewer(조회전용): 관리센터 제외 모든 메뉴 조회 가능, 수정/등록 불가
@@ -8398,6 +8424,7 @@ return (
           if (it.src === "handover") { window.__kpOpenHandover = it.id; setMenu("HOME"); setTimeout(() => window.dispatchEvent(new Event("kp-open-handover")), 0); return; }
           window.__kpOpenNotice = it.openId || it.id; setMenu("HOME"); setTimeout(() => window.dispatchEvent(new CustomEvent("kp:openNotice")), 0);
         }} />
+      <DriverEventToasts onView={onDriverEventView} />{/* ⭐ 2026-11-05 기사 수락/거절·서류·긴급 — 오른쪽 아래 토스트(포커스 안 뺏음 · 8초) */}
       <CheckoutReminderHost uid={user?.uid} role={role} email={user?.email} />{/* ⭐ 2026-11-03 퇴근 10분 전 알림 */}
       <PersonalTodayHost uid={user?.uid} />{/* ⭐ 2026-11-03 오늘 개인 일정 — 오른쪽 아래 배너 */}
       {/* ⭐ 2026-11-02 원격지원 — 요청 상태 막대 · 승인 배너 · 화면 공유 · 포인터(앱 전체에 한 번) */}
@@ -8441,14 +8468,14 @@ return (
                   <button
                     onClick={openUpdatePopup}
                     title={`새 버전 v${newVer.version || ""}이 배포되었습니다 — 눌러서 업데이트`}
-                    className="kp-newver shrink-0 inline-flex items-center gap-1.5 h-6 pl-1.5 pr-2 rounded-full bg-white/[0.08] border border-[#8FB0F0]/60 text-[11px] font-mono font-bold text-white/85 hover:bg-white/[0.16] cursor-pointer"
+                    className="kp-newver shrink-0 inline-flex items-center gap-1.5 h-6 pl-1.5 pr-2 rounded-full bg-white/[0.08] border border-[#8FB0F0]/60 text-[11px] tabular-nums font-bold text-white/85 hover:bg-white/[0.16] cursor-pointer"
                   >
                     <span className="px-1.5 h-4 inline-flex items-center rounded-full bg-white text-[#0F1A30] text-[9.5px] font-black tracking-wider">NEW</span>
                     v{__APP_VERSION__}
                     <span className="kp-newver-dot w-1.5 h-1.5 rounded-full bg-[#CFE0FF]" />
                   </button>
                 ) : (
-                  <span className="hidden min-[2050px]:inline text-[11px] font-mono text-white/45 shrink-0">v{__APP_VERSION__}</span>
+                  <span className="hidden min-[2050px]:inline text-[11px] tabular-nums text-white/45 shrink-0">v{__APP_VERSION__}</span>
                 )}
                 <EditModeToggleButton className="ml-1" />
               </div>
@@ -8506,14 +8533,19 @@ return (
               // 🔢 메뉴 숫자 — 전자결재가 상단에 따로 없으면(일반 배차 화면) 결재 숫자는 HOME에 더한다
               const apSep = (deptMode ? DEPT_MENUS[deptMode].includes("전자결재") : true) && menuState("전자결재") !== "hidden";
               const apN = (apCountsNav.todo || 0) + (apCountsNav.mineNew || 0);
+              // ⭐ 2026-11-05 기사앱 이벤트 숫자 — 수락/거절(실시간배차현황·배차현황) · 서류 제출(기사관리) · 긴급(지입차관리)
               const navN = m === "HOME" ? (mailCountsNav.unread || 0) + (alertsNav.handover || 0) + (apSep ? 0 : apN)
                 : m === "전자결재" ? apN + (alertsNav.handover || 0)
-                : m === "기사관리" ? (canApproveSignup ? alertsNav.signupDriver || 0 : 0)
+                : m === "기사관리" ? (canApproveSignup ? alertsNav.signupDriver || 0 : 0) + drvCounts.docs
+                : m === "실시간배차현황" || m === "배차현황" ? drvCounts.orders
+                : m === "지입차관리" ? drvCounts.sos
                 : m === "관리자메뉴" ? pendingStaffSignups : 0;
               const subBadges = {
                 HOME: { 공지사항: alertsNav.notice || 0, "ap:inbox": apSep ? 0 : apCountsNav.todo, teamsched: 0 },
                 전자결재: { inbox: apCountsNav.todo, mine: apCountsNav.mineNew, handover: alertsNav.handover },
-                기사관리: { "acc:pending": canApproveSignup ? alertsNav.signupDriver : 0 },
+                기사관리: { "acc:pending": canApproveSignup ? alertsNav.signupDriver : 0, "docs:driver": drvCounts.docs },
+                배차현황: { 배차현황: drvCounts.orders },
+                지입차관리: { tracking: drvCounts.sos },
                 관리자메뉴: { members: pendingStaffSignups },
               }[m];
               return (
@@ -8532,7 +8564,7 @@ return (
                 >
                   <ShellIcon name={KP_SIDE_ICONS[m] || "dashboard"} size={14} className={`kp-nav-ico shrink-0 ${isActive ? "" : "opacity-70"} ${deptMode && DEPT_MENUS[deptMode].length <= 8 ? "" : "hidden min-[2050px]:inline-block"}`} />
                   <EditableText id={`nav.${m}`} defaultText={m} />
-                  {navN > 0 && st !== "locked" && <span className="ml-1 min-w-[17px] h-[17px] px-1 inline-grid place-items-center rounded-full bg-rose-500 text-white text-[10px] font-black tabular-nums align-middle" title={m === "관리자메뉴" ? `가입 승인 대기 ${navN}명` : `새 소식 ${navN}건`}>{navN > 99 ? "99+" : navN}</span>}
+                  {navN > 0 && st !== "locked" && <KakaoBadge n={navN} size="sm" className="ml-1 align-middle" title={m === "관리자메뉴" ? `가입 승인 대기 ${navN}명` : m === "실시간배차현황" || m === "배차현황" ? `기사 수락/거절 ${navN}건` : m === "지입차관리" ? `긴급 상황 ${navN}건` : `새 소식 ${navN}건`} />}
                   {st === "locked" && <span className="ml-1 opacity-60"><LockIcon /></span>}
                   {m === "인사이트" && st !== "locked" && <span className="ml-1 px-1 py-px rounded bg-[#8FB0F0]/20 text-[#8FB0F0] text-[9px] font-black tracking-wider align-middle">PRO</span>}
                 </button>
@@ -8577,25 +8609,8 @@ return (
                 <path d="M4 21c0-4 4-6 8-6s8 2 8 6" />
               </svg>
             </button>
-            <button
-              onClick={() => setNotificationsEnabled(!notificationsEnabled)}
-              className="kp-icon-btn transition relative"
-              title={notificationsEnabled ? "알림 켜짐 (클릭 시 끄기)" : "알림 꺼짐 (클릭 시 켜기)"}
-            >
-              {notificationsEnabled ? (
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" />
-                  <path d="M13.73 21a2 2 0 0 1-3.46 0" />
-                </svg>
-              ) : (
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M13.73 21a2 2 0 0 1-3.46 0" />
-                  <path d="M18.63 13A17.89 17.89 0 0 1 18 8a6 6 0 0 0-9.33-5" />
-                  <path d="M6.26 6.26A6 6 0 0 0 6 8c0 7-3 9-3 9h14" />
-                  <line x1="1" y1="1" x2="23" y2="23" />
-                </svg>
-              )}
-            </button>
+            {/* ⭐ 2026-11-05 종 — 기사 알림함(수락/거절·서류·긴급 숫자) · 알림 켜기/끄기·알림음은 패널 안으로 */}
+            <DriverEventBell enabled={notificationsEnabled} onToggleEnabled={setNotificationsEnabled} onView={onDriverEventView} isAdmin={drvMe.isAdmin} />
 
             {/* ⭐ 최고관리자 — 관리자 관리센터(플랫폼 운영 화면)로 바로 전환 */}
             {role === "totalMaster" && (
@@ -8970,7 +8985,7 @@ return (
             groups={[
               { label: "기사", items: [{ key: "drv", label: "기사관리", en: "DRIVERS", icon: "user", sub: ["전체", "일반", "직영", "지입", "임대", "블랙"].map((g) => ({ key: `d:${g}`, label: g === "전체" ? "전체 기사" : g, icon: g === "블랙" ? "alert" : g === "지입" ? "link" : g === "임대" ? "key" : "user", badge: g === "전체" ? 0 : (drivers || []).filter((d) => !isPendingSignupDriver(d) && (d.등급 || "일반") === g && (String(d.이름 || "").trim() || String(d.차량번호 || "").trim())).length, soft: true })) }] },
               { label: "기사 앱 계정", items: [{ key: "acc", label: "기사 앱 계정", en: "APP ACCOUNTS", icon: "phone", sub: [{ key: "acc:pending", label: "가입 승인", icon: "hourglass", badge: alertsNav.signupDriver || 0, badgeTitle: "기사 가입 승인 대기" }, { key: "acc:drivers", label: "승인된 기사", icon: "idcard" }] }] },
-              { label: "서류관리", items: [{ key: "docs", label: "서류관리", en: "DOCUMENTS", icon: "file", sub: [{ key: "docs:driver", label: "기사 제출 서류", icon: "file" }, { key: "docs:penalty", label: "과태료 · 사고 서류", icon: "alert" }] }] },
+              { label: "서류관리", items: [{ key: "docs", label: "서류관리", en: "DOCUMENTS", icon: "file", badge: drvCounts.docs || 0, red: true, sub: [{ key: "docs:driver", label: "기사 제출 서류", icon: "file", badge: drvCounts.docs || 0, red: true, badgeTitle: "새로 올라온 기사 서류" }, { key: "docs:penalty", label: "과태료 · 사고 서류", icon: "alert" }] }] },
             ]}>
             {기사관리Tab.startsWith("d:") && (
               <DriverManagement
@@ -15687,7 +15702,7 @@ shadow-[0_1px_2px_rgba(16,24,40,0.04),0_12px_30px_rgba(16,24,40,0.07)]
   <div className="relative px-6 py-3.5 flex items-center justify-between overflow-hidden" style={{ background: "linear-gradient(120deg,#0B1428 0%,#0F1A30 40%,#1B2B4B 75%,#2D4C82 100%)" }}>
     <span className="absolute inset-0 opacity-[0.08] pointer-events-none" style={{ backgroundImage: "linear-gradient(#fff 1px,transparent 1px),linear-gradient(90deg,#fff 1px,transparent 1px)", backgroundSize: "22px 22px" }} />
     <span className="relative flex items-baseline gap-2.5">
-      <span className="text-[10px] font-extrabold tracking-[0.3em] text-[#8FB0F0]" style={{ fontFamily: "'JetBrains Mono','SF Mono',ui-monospace,monospace" }}>ORDER ENTRY</span>
+      <span className="text-[10px] font-extrabold tracking-[0.3em] text-[#8FB0F0]" style={{ fontFamily: "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif", fontVariantNumeric: "tabular-nums" }}>ORDER ENTRY</span>
       <span className="text-[15px] font-black text-white"><EditableText id="orderForm.header.오더정보" defaultText="오더 정보" /></span>
     </span>
     <div className="flex items-center gap-1.5">
@@ -15697,7 +15712,7 @@ shadow-[0_1px_2px_rgba(16,24,40,0.04),0_12px_30px_rgba(16,24,40,0.07)]
         <DmIcon name="layers" size={14} /><EditableText id="orderForm.header.다중등록" defaultText="다중등록" />
       </button>
       <button type="button" onClick={toggleOrderCardStyle}
-        className="inline-flex items-center justify-center h-8 min-w-[32px] px-2.5 rounded-xl bg-white/10 border border-white/20 hover:bg-white/20 text-white text-[12px] font-extrabold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-[#8FB0F0]" style={{ fontFamily: "'JetBrains Mono','SF Mono',ui-monospace,monospace" }}
+        className="inline-flex items-center justify-center h-8 min-w-[32px] px-2.5 rounded-xl bg-white/10 border border-white/20 hover:bg-white/20 text-white text-[12px] font-extrabold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-[#8FB0F0]" style={{ fontFamily: "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif", fontVariantNumeric: "tabular-nums" }}
         title="입력창 스타일 전환 (A: 밑줄형 / B: 박스형)">
         {orderCardStyle}
       </button>
@@ -18005,7 +18020,7 @@ className={`
   <section className={`group relative flex flex-col rounded-2xl border bg-white transition focus-within:border-[#1B2B4B] focus-within:ring-2 focus-within:ring-[#1B2B4B]/15 focus-within:shadow-[0_0_0_6px_rgba(143,176,240,0.16)] ${form.메모중요도 === "CRITICAL" ? "border-[#1B2B4B]" : "border-[#E3E8F0]"}`}>
     {form.메모중요도 && form.메모중요도 !== "NORMAL" && <span className={`absolute left-4 right-4 top-0 h-[2px] rounded-b ${form.메모중요도 === "CRITICAL" ? "bg-[#0F1A30]" : "bg-[#4B6CB7]"}`} />}
     <header className="flex items-center gap-2 px-4 h-12 border-b border-[#EDF1F7]">
-      <span className="text-[10px] font-extrabold tracking-[0.26em] text-[#4B6CB7]" style={{ fontFamily: "'JetBrains Mono','SF Mono',ui-monospace,monospace" }}>MEMO</span>
+      <span className="text-[10px] font-extrabold tracking-[0.26em] text-[#4B6CB7]" style={{ fontFamily: "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif", fontVariantNumeric: "tabular-nums" }}>MEMO</span>
       <label htmlFor="dm-memo" className="text-[13px] font-black text-[#0F1A30] whitespace-nowrap"><EditableText id="orderForm.label.메모" defaultText="메모" /></label>
       <span className="text-[11.5px] font-semibold text-[#9AA9C3] whitespace-nowrap">내부용</span>
       <div className="ml-auto inline-flex p-0.5 rounded-xl bg-[#F2F5FA] border border-[#E3E8F0]" role="radiogroup" aria-label="메모 중요도">
@@ -18041,13 +18056,13 @@ className={`
       value={form.메모}
       onChange={(e) => onChange("메모", e.target.value)}
     />
-    <span className="pointer-events-none absolute right-4 bottom-2.5 text-[10.5px] font-bold text-[#A7B3C6] tabular-nums" style={{ fontFamily: "'JetBrains Mono','SF Mono',ui-monospace,monospace" }}>{String(form.메모 || "").length}자</span>
+    <span className="pointer-events-none absolute right-4 bottom-2.5 text-[10.5px] font-bold text-[#A7B3C6] tabular-nums" style={{ fontFamily: "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif", fontVariantNumeric: "tabular-nums" }}>{String(form.메모 || "").length}자</span>
   </section>
 
   {/* ── 전달사항 ── */}
   <section className="relative flex flex-col rounded-2xl border border-[#E3E8F0] bg-white transition focus-within:border-[#1B2B4B] focus-within:ring-2 focus-within:ring-[#1B2B4B]/15 focus-within:shadow-[0_0_0_6px_rgba(143,176,240,0.16)]">
     <header className="flex items-center gap-2 px-4 h-12 border-b border-[#EDF1F7]">
-      <span className="text-[10px] font-extrabold tracking-[0.26em] text-[#4B6CB7]" style={{ fontFamily: "'JetBrains Mono','SF Mono',ui-monospace,monospace" }}>DRIVER NOTE</span>
+      <span className="text-[10px] font-extrabold tracking-[0.26em] text-[#4B6CB7]" style={{ fontFamily: "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif", fontVariantNumeric: "tabular-nums" }}>DRIVER NOTE</span>
       <label htmlFor="dm-driver-note" className="text-[13px] font-black text-[#0F1A30] whitespace-nowrap"><EditableText id="orderForm.label.전달사항" defaultText="전달사항" /></label>
       <span className="text-[11.5px] font-semibold text-[#9AA9C3] whitespace-nowrap">기사님께</span>
       <button
@@ -18072,7 +18087,7 @@ className={`
       value={form.전달사항}
       onChange={(e) => onChange("전달사항", e.target.value)}
     />
-    <span className="pointer-events-none absolute right-4 bottom-2.5 text-[10.5px] font-bold text-[#A7B3C6] tabular-nums" style={{ fontFamily: "'JetBrains Mono','SF Mono',ui-monospace,monospace" }}>{String(form.전달사항 || "").length}자</span>
+    <span className="pointer-events-none absolute right-4 bottom-2.5 text-[10.5px] font-bold text-[#A7B3C6] tabular-nums" style={{ fontFamily: "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif", fontVariantNumeric: "tabular-nums" }}>{String(form.전달사항 || "").length}자</span>
   </section>
 
 </div>
@@ -19999,10 +20014,10 @@ setConfirmChange(null);
     style={{ background: "linear-gradient(rgba(143,176,240,.07) 1px, transparent 1px) 0 0/22px 22px, linear-gradient(90deg, rgba(143,176,240,.07) 1px, transparent 1px) 0 0/22px 22px, linear-gradient(120deg,#0B1428 0%,#1B2B4B 60%,#2D4C82 100%)" }}>
     <div className="flex items-start justify-between gap-3">
       <div className="min-w-0">
-        <div className="text-[11px] font-extrabold tracking-[0.26em] text-[#8FB0F0]" style={{ fontFamily: "'JetBrains Mono','SF Mono',ui-monospace,monospace" }}>DISPATCH REQUEST</div>
+        <div className="text-[11px] font-extrabold tracking-[0.26em] text-[#8FB0F0]" style={{ fontFamily: "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif", fontVariantNumeric: "tabular-nums" }}>DISPATCH REQUEST</div>
         <div className="text-[21px] font-black tracking-tight mt-1">배차요청장</div>
         <div className="text-[14px] text-blue-100/80 mt-1 font-semibold truncate">
-          <span style={{ fontFamily: "'JetBrains Mono','SF Mono',ui-monospace,monospace" }}>{form.상차일 || "-"}</span> · {form.거래처명 || "-"}
+          <span style={{ fontFamily: "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif", fontVariantNumeric: "tabular-nums" }}>{form.상차일 || "-"}</span> · {form.거래처명 || "-"}
         </div>
       </div>
       <div className="flex flex-col items-end gap-2 shrink-0">
@@ -20010,7 +20025,7 @@ setConfirmChange(null);
           <span className="text-blue-100/75 text-[12px] font-bold mr-1">수량</span>
           <button type="button" className="w-7 h-7 rounded-lg bg-white/15 text-white text-[16px] font-bold flex items-center justify-center hover:bg-white/25"
             onClick={() => setMultiCount(v => Math.max(1, v - 1))}>-</button>
-          <span className="text-white font-black text-[17px] min-w-[24px] text-center" style={{ fontFamily: "'JetBrains Mono','SF Mono',ui-monospace,monospace" }}>{multiCount}</span>
+          <span className="text-white font-black text-[17px] min-w-[24px] text-center" style={{ fontFamily: "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif", fontVariantNumeric: "tabular-nums" }}>{multiCount}</span>
           <button type="button" className="w-7 h-7 rounded-lg bg-white/15 text-white text-[16px] font-bold flex items-center justify-center hover:bg-white/25"
             onClick={() => setMultiCount(v => Math.min(10, v + 1))}>+</button>
         </div>
@@ -20029,10 +20044,10 @@ setConfirmChange(null);
     <div className="bg-white rounded-2xl border border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.04)] px-5 py-4">
       <div className="flex items-center justify-between">
         <span className="text-[14px] font-bold text-gray-600">결제예정금액 <span className="text-gray-400 font-semibold">(VAT 별도)</span></span>
-        <span className="text-[10.5px] font-extrabold tracking-[0.18em] text-[#94A3B8]" style={{ fontFamily: "'JetBrains Mono','SF Mono',ui-monospace,monospace" }}>FARE</span>
+        <span className="text-[10.5px] font-extrabold tracking-[0.18em] text-[#94A3B8]" style={{ fontFamily: "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif", fontVariantNumeric: "tabular-nums" }}>FARE</span>
       </div>
       <div className="flex items-baseline gap-1.5 mt-1.5">
-        <span className="text-[34px] font-black text-[#0F1A30] leading-none tracking-tight" style={{ fontFamily: "'JetBrains Mono','SF Mono',ui-monospace,monospace" }}>
+        <span className="text-[34px] font-black text-[#0F1A30] leading-none tracking-tight" style={{ fontFamily: "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif", fontVariantNumeric: "tabular-nums" }}>
           <CountUp value={Number(form.청구운임 || 0)} />
         </span>
         <span className="text-[15px] font-bold text-gray-500">원~</span>
@@ -20042,7 +20057,7 @@ setConfirmChange(null);
           {form.기사운임 && (
             <div className="rounded-xl bg-[#F4F7FC] border border-[#E3E8F0] px-3 py-2">
               <div className="text-[12px] font-bold text-gray-500">기사운임</div>
-              <div className="text-[15px] font-black text-[#1B2B4B]" style={{ fontFamily: "'JetBrains Mono','SF Mono',ui-monospace,monospace" }}>{Number(form.기사운임).toLocaleString()}원</div>
+              <div className="text-[15px] font-black text-[#1B2B4B]" style={{ fontFamily: "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif", fontVariantNumeric: "tabular-nums" }}>{Number(form.기사운임).toLocaleString()}원</div>
             </div>
           )}
           {form.지급방식 && (
@@ -20080,7 +20095,7 @@ setConfirmChange(null);
     <div className="bg-white rounded-2xl border border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.04)] px-5 py-4">
       <div className="flex items-center justify-between mb-2.5">
         <span className="text-[14px] font-bold text-gray-600">화물 정보</span>
-        <span className="text-[10.5px] font-extrabold tracking-[0.18em] text-[#94A3B8]" style={{ fontFamily: "'JetBrains Mono','SF Mono',ui-monospace,monospace" }}>CARGO</span>
+        <span className="text-[10.5px] font-extrabold tracking-[0.18em] text-[#94A3B8]" style={{ fontFamily: "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif", fontVariantNumeric: "tabular-nums" }}>CARGO</span>
       </div>
       <div className="grid grid-cols-3 gap-2 text-center">
         {[
@@ -20106,7 +20121,7 @@ setConfirmChange(null);
     <div className="bg-white rounded-2xl border border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.04)] px-5 py-4">
       <div className="flex items-center justify-between mb-3">
         <span className="text-[14px] font-bold text-gray-600">운송 경로</span>
-        <span className="text-[10.5px] font-extrabold tracking-[0.18em] text-[#94A3B8]" style={{ fontFamily: "'JetBrains Mono','SF Mono',ui-monospace,monospace" }}>ROUTE</span>
+        <span className="text-[10.5px] font-extrabold tracking-[0.18em] text-[#94A3B8]" style={{ fontFamily: "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif", fontVariantNumeric: "tabular-nums" }}>ROUTE</span>
       </div>
       {[
         { key: "pickup", tag: "상", label: "상차지", name: form.상차지명, addr: form.상차지주소, mgr: form.상차지담당자, tel: form.상차지담당자번호, time: form.상차시간, basis: form.상차시간기준, via: form.경유상차목록, viaLabel: "경유상차지", dateKey: "상차일", filled: true },
@@ -20136,7 +20151,7 @@ setConfirmChange(null);
             <div className="text-[14px] text-gray-600 mt-0.5 leading-snug">{P.addr || "-"}</div>
             {(P.mgr || P.tel) && (
               <div className="text-[14px] text-gray-700 mt-1 font-semibold">
-                {P.mgr || ""}{P.tel ? <span style={{ fontFamily: "'JetBrains Mono','SF Mono',ui-monospace,monospace" }}>{P.mgr ? " · " : ""}{P.tel}</span> : null}
+                {P.mgr || ""}{P.tel ? <span style={{ fontFamily: "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif", fontVariantNumeric: "tabular-nums" }}>{P.mgr ? " · " : ""}{P.tel}</span> : null}
               </div>
             )}
             {vias.map((s, i) => (
@@ -20159,7 +20174,7 @@ setConfirmChange(null);
       <div className="rounded-2xl px-5 py-4 text-white" style={{ background: "linear-gradient(135deg,#0F1A30 0%,#1B2B4B 60%,#2D4C82 100%)" }}>
         <div className="flex items-center justify-between mb-2.5">
           <span className="text-[14px] font-bold text-blue-100/85">경로 정보</span>
-          <span className="text-[10.5px] font-extrabold tracking-[0.18em] text-[#8FB0F0]" style={{ fontFamily: "'JetBrains Mono','SF Mono',ui-monospace,monospace" }}>DISTANCE</span>
+          <span className="text-[10.5px] font-extrabold tracking-[0.18em] text-[#8FB0F0]" style={{ fontFamily: "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif", fontVariantNumeric: "tabular-nums" }}>DISTANCE</span>
         </div>
         <div className="grid grid-cols-3 gap-2">
           {[
@@ -20169,7 +20184,7 @@ setConfirmChange(null);
           ].map(([k, v, u]) => (
             <div key={k} className="rounded-xl bg-white/[0.07] ring-1 ring-white/15 px-2 py-2 text-center">
               <div className="text-[12px] font-bold text-blue-100/70">{k}</div>
-              <div className="text-[17px] font-black mt-0.5" style={{ fontFamily: "'JetBrains Mono','SF Mono',ui-monospace,monospace" }}>{v}<span className="text-[11.5px] font-bold text-blue-100/70 ml-0.5">{u}</span></div>
+              <div className="text-[17px] font-black mt-0.5" style={{ fontFamily: "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif", fontVariantNumeric: "tabular-nums" }}>{v}<span className="text-[11.5px] font-bold text-blue-100/70 ml-0.5">{u}</span></div>
             </div>
           ))}
         </div>
@@ -22292,7 +22307,7 @@ function StopInlineBadge({ count = 0, list = [], type = "pickup", onEdit, editab
 //  정류지마다 순번·업체·시간·주소·담당·화물·톤수, 고정노선에서 따로 넣은 경유지 운임(청구·기사)까지
 function WaypointViewModal({ list = [], type = "drop", orderDate = "", onClose, onCopy, copied, onEdit }) {
   const isPickup = type === "pickup";
-  const MONO_W = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
+  const MONO_W = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
   const cargoOf = (s) => { const raw = stripNoneVal(s.화물내용); if (/파레트|파렛트|박스|통/.test(raw)) return raw; const qty = raw || s.화물수량 || ""; const tp = s.화물타입 || ""; if (!qty) return ""; return tp && tp !== "없음" ? `${qty}${tp}` : qty; };
   const tonOf = (s) => { const raw = stripNoneVal(s.차량톤수); if (/톤|kg/.test(raw)) return toTonUnit(raw); const val = s.톤수값 || raw || ""; const tp = s.톤수타입 || ""; if (!val) return ""; return toTonUnit(tp && tp !== "없음" ? `${val}${tp}` : val); };
   const money = (v) => (Number(v) ? `${Number(v).toLocaleString()}원` : "");
@@ -22305,7 +22320,7 @@ function WaypointViewModal({ list = [], type = "drop", orderDate = "", onClose, 
           <span className="absolute inset-0 opacity-[0.07] pointer-events-none" style={{ backgroundImage: "linear-gradient(#fff 1px,transparent 1px),linear-gradient(90deg,#fff 1px,transparent 1px)", backgroundSize: "22px 22px" }} />
           <div className="relative flex items-start gap-3">
             <div className="min-w-0 flex-1">
-              <div className="text-[10.5px] font-extrabold tracking-[0.28em] text-[#8FB0F0]" style={{ fontFamily: MONO_W }}>WAYPOINTS · {isPickup ? "PICKUP" : "DROP"}</div>
+              <div className="text-[10.5px] font-extrabold tracking-[0.28em] text-[#8FB0F0]" style={{ fontFamily: MONO_W, fontVariantNumeric: "tabular-nums" }}>WAYPOINTS · {isPickup ? "PICKUP" : "DROP"}</div>
               <div className="text-[20px] font-black mt-0.5">경유 {isPickup ? "상차지" : "하차지"} {list.length}곳</div>
             </div>
             <button type="button" onClick={onCopy} className="h-10 px-4 rounded-xl bg-white/10 border border-white/20 text-[13.5px] font-black">{copied ? "✓ 복사됨" : "복사"}</button>
@@ -22314,7 +22329,7 @@ function WaypointViewModal({ list = [], type = "drop", orderDate = "", onClose, 
           {(sumC > 0 || sumD > 0) && (
             <div className="relative grid grid-cols-2 gap-2 mt-4">
               {[["경유지 청구운임 합계", money(sumC) || "-"], ["경유지 기사운임 합계", money(sumD) || "-"]].map(([k, v]) => (
-                <div key={k} className="rounded-xl bg-white/[0.07] border border-white/10 px-4 py-2"><div className="text-[11.5px] font-bold text-white/55">{k}</div><div className="text-[17px] font-black tabular-nums" style={{ fontFamily: MONO_W }}>{v}</div></div>
+                <div key={k} className="rounded-xl bg-white/[0.07] border border-white/10 px-4 py-2"><div className="text-[11.5px] font-bold text-white/55">{k}</div><div className="text-[17px] font-black tabular-nums" style={{ fontFamily: MONO_W, fontVariantNumeric: "tabular-nums" }}>{v}</div></div>
               ))}
             </div>
           )}
@@ -22328,7 +22343,7 @@ function WaypointViewModal({ list = [], type = "drop", orderDate = "", onClose, 
               const hasFare = Number(s.청구운임) || Number(s.기사운임);
               return (
                 <div key={i} className="relative flex gap-3 mb-3 last:mb-0">
-                  <span className="relative z-[1] w-9 h-9 shrink-0 rounded-xl bg-[#0F1A30] text-white flex items-center justify-center text-[13px] font-black" style={{ fontFamily: MONO_W }}>{String(i + 1).padStart(2, "0")}</span>
+                  <span className="relative z-[1] w-9 h-9 shrink-0 rounded-xl bg-[#0F1A30] text-white flex items-center justify-center text-[13px] font-black" style={{ fontFamily: MONO_W, fontVariantNumeric: "tabular-nums" }}>{String(i + 1).padStart(2, "0")}</span>
                   <div className="flex-1 min-w-0 rounded-2xl bg-white border border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.04)] p-4">
                     <div className="flex items-baseline gap-2 flex-wrap">
                       {s.구분 && <span className="text-[11px] font-extrabold tracking-[0.12em] text-[#2D4C82]">{s.구분}</span>}
@@ -22348,8 +22363,8 @@ function WaypointViewModal({ list = [], type = "drop", orderDate = "", onClose, 
                     )}
                     {hasFare ? (
                       <div className="grid grid-cols-2 gap-2 mt-3 pt-3 border-t border-[#EEF1F6]">
-                        <div><div className="text-[11.5px] font-bold text-[#7A89A3]">이 곳 청구운임</div><div className="text-[15px] font-black text-[#0B1428] tabular-nums" style={{ fontFamily: MONO_W }}>{money(s.청구운임) || "-"}</div></div>
-                        <div><div className="text-[11.5px] font-bold text-[#7A89A3]">이 곳 기사운임</div><div className="text-[15px] font-black text-[#0B1428] tabular-nums" style={{ fontFamily: MONO_W }}>{money(s.기사운임) || "-"}</div></div>
+                        <div><div className="text-[11.5px] font-bold text-[#7A89A3]">이 곳 청구운임</div><div className="text-[15px] font-black text-[#0B1428] tabular-nums" style={{ fontFamily: MONO_W, fontVariantNumeric: "tabular-nums" }}>{money(s.청구운임) || "-"}</div></div>
+                        <div><div className="text-[11.5px] font-bold text-[#7A89A3]">이 곳 기사운임</div><div className="text-[15px] font-black text-[#0B1428] tabular-nums" style={{ fontFamily: MONO_W, fontVariantNumeric: "tabular-nums" }}>{money(s.기사운임) || "-"}</div></div>
                       </div>
                     ) : null}
                   </div>
@@ -24310,7 +24325,9 @@ ${isHighlighted ? "animate-pulse bg-blue-100" : ""}
 
 
                   {/* 차량번호 */}
-                  <td className={cell}>
+                  <td className={`${cell} relative`}>
+                    {/* ⭐ 2026-11-05 LIVE — 칩 대신 차량번호 입력칸 왼쪽 위 모서리의 6px 점(폭 0 · 칸 너비 그대로) */}
+                    {r.배차상태 === "배차완료" && <LiveDriverChip order={r} variant="pin" />}
                     <input autoComplete="off"
                       name="차량번호"
                       data-id={r._id}
@@ -24347,7 +24364,6 @@ ${isHighlighted ? "animate-pulse bg-blue-100" : ""}
                       }}
                     />
                     {/* ⭐ 2026-11-05 배차완료 지입·직영·임대 기사 — 기사앱 실시간 위치(LIVE) */}
-                    {r.배차상태 === "배차완료" && <LiveDriverChip order={r} className="ml-1" />}
 
 
                   </td>
@@ -24432,6 +24448,8 @@ ${isHighlighted ? "animate-pulse bg-blue-100" : ""}
                         {r.배차상태}
                       </button>
                     )}
+                    {/* ⭐ 2026-11-05 기사앱 수락(초록)/거절(빨강 · 사유는 마우스 올리면) — 안 본 것은 잠깐 맥박 */}
+                    <DriverAckChip row={r} className="ml-1" />
                   </div>
                   </td>
                   {/* 청구운임 */}
@@ -24822,7 +24840,7 @@ function OptimalMatchModal({ row, dispatchData, onClose, companyName }) {
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2 flex-nowrap whitespace-nowrap">
                         <span className="font-bold text-[14px] text-gray-900">{c.이름 || "-"}</span>
-                        <span className="text-[12px] font-semibold text-gray-500 font-mono">{c.차량번호 || "-"}</span>
+                        <span className="text-[12px] font-semibold text-gray-500 tabular-nums">{c.차량번호 || "-"}</span>
                         <span className="text-[11px] font-semibold text-gray-500">{formatPhone(c.전화번호) || "-"}</span>
                       </div>
                       <div className="text-[12px] text-gray-500 mt-0.5 whitespace-nowrap">
@@ -29745,7 +29763,7 @@ const head = isDark
       onClick={() => setWarningExpanded(v => !v)}
       className="flex items-center gap-3 bg-[#1B2B4B] text-white rounded-xl px-4 py-2 hover:bg-[#243a60] transition-colors"
     >
-      <span className="font-mono font-extrabold text-red-300 text-[15px] min-w-[2ch] text-right">{warningList.length}</span>
+      <span className="tabular-nums font-extrabold text-red-300 text-[15px] min-w-[2ch] text-right">{warningList.length}</span>
       <span className="text-[13px] font-semibold tracking-wide">상차 2시간 이내 미배차</span>
       <svg
         className={`w-4 h-4 ml-1 transition-transform ${warningExpanded ? "rotate-180" : ""}`}
@@ -29763,7 +29781,7 @@ const head = isDark
             key={r.id}
             className={`flex items-center gap-3 px-4 py-2 text-[13px] ${i % 2 === 0 ? "bg-white" : "bg-[#f7f9fc]"}`}
           >
-            <span className="font-mono font-semibold text-[#1B2B4B] whitespace-nowrap">{r.상차일} {r.상차시간}</span>
+            <span className="tabular-nums font-semibold text-[#1B2B4B] whitespace-nowrap">{r.상차일} {r.상차시간}</span>
             <span className="text-[#1B2B4B]/30 text-[11px]">|</span>
             <span className="text-[#1B2B4B] font-medium">{r.상차지명}</span>
             {r.거래처명 && <span className="text-[#1B2B4B]/50 text-[12px] ml-auto whitespace-nowrap">{r.거래처명}</span>}
@@ -30153,7 +30171,7 @@ const head = isDark
   style={{ background: "linear-gradient(120deg,#0B1428 0%,#1B2B4B 60%,#2D4C82 100%)", ...(copyPanelStyle === "B" ? { cursor: "grab" } : {}) }}
 >
   <div className="min-w-0">
-    <div className="text-[9.5px] font-extrabold tracking-[0.24em] text-[#8FB0F0]" style={{ fontFamily: "'JetBrains Mono',ui-monospace,monospace" }}>ORDER · COPY / EDIT</div>
+    <div className="text-[9.5px] font-extrabold tracking-[0.24em] text-[#8FB0F0]" style={{ fontFamily: "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif", fontVariantNumeric: "tabular-nums" }}>ORDER · COPY / EDIT</div>
     <h2 className="text-[18px] font-black leading-tight"><EditableText id="copyPanel.title" defaultText="오더 복사 / 수정 패널" /> <span className="ml-1 text-[13.5px] font-semibold text-white/60">{copyTarget?.거래처명} · {copyTarget?.상차지명} → {copyTarget?.하차지명}</span></h2>
   </div>
   <div className="flex gap-2 items-center">
@@ -33864,7 +33882,7 @@ if (editTarget.하차지명) savePlaceSmart(editTarget.하차지명, editTarget.
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
             <EditableText id="realtime.ctxMenu.삭제" defaultText="삭제" />
-            <span className="ml-auto text-[11px] text-gray-500 font-mono">Del</span>
+            <span className="ml-auto text-[11px] text-gray-500 tabular-nums">Del</span>
           </button>
         </div>
       )}
@@ -34035,7 +34053,7 @@ if (editTarget.하차지명) savePlaceSmart(editTarget.하차지명, editTarget.
       <div className="bg-[#F4F6FA] rounded-[26px] w-[760px] max-w-[96vw] max-h-[90vh] flex flex-col shadow-[0_40px_100px_rgba(0,0,0,0.45)] overflow-hidden">
         <div className="relative px-6 py-5 flex items-start justify-between shrink-0 overflow-hidden" style={{ background: "linear-gradient(120deg,#0B1428 0%,#1B2B4B 60%,#2D4C82 100%)" }}><span className="absolute inset-0 opacity-[0.06] pointer-events-none" style={{ backgroundImage: "linear-gradient(#fff 1px,transparent 1px),linear-gradient(90deg,#fff 1px,transparent 1px)", backgroundSize: "22px 22px" }} />
           <div>
-            <div className="relative text-[10.5px] font-extrabold tracking-[0.3em] text-[#8FB0F0]" style={{ fontFamily: "'JetBrains Mono',ui-monospace,monospace" }}>FARE · HISTORY</div><div className="relative text-white font-black text-[20px] tracking-tight leading-tight">운임 조회 결과</div>
+            <div className="relative text-[10.5px] font-extrabold tracking-[0.3em] text-[#8FB0F0]" style={{ fontFamily: "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif", fontVariantNumeric: "tabular-nums" }}>FARE · HISTORY</div><div className="relative text-white font-black text-[20px] tracking-tight leading-tight">운임 조회 결과</div>
             <div className="relative text-white/65 text-[13px] mt-1 font-bold">
               {ctxFare4Target?.상차지명 || "-"} → {ctxFare4Target?.하차지명 || "-"}
             </div>
@@ -34058,9 +34076,9 @@ if (editTarget.하차지명) savePlaceSmart(editTarget.하차지명, editTarget.
               </span>
             </div>
             <div className="flex items-baseline gap-2 mt-1 mb-4">
-              <span className="text-[32px] font-black text-[#0F1A30] leading-none tabular-nums" style={{ fontFamily: "'JetBrains Mono',ui-monospace,monospace" }}>{fareMin.toLocaleString()}</span>
+              <span className="text-[32px] font-black text-[#0F1A30] leading-none tabular-nums" style={{ fontFamily: "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif", fontVariantNumeric: "tabular-nums" }}>{fareMin.toLocaleString()}</span>
               <span className="text-[18px] font-bold text-gray-400">~</span>
-              <span className="text-[32px] font-black text-[#0F1A30] leading-none tabular-nums" style={{ fontFamily: "'JetBrains Mono',ui-monospace,monospace" }}>{fareMax.toLocaleString()}</span>
+              <span className="text-[32px] font-black text-[#0F1A30] leading-none tabular-nums" style={{ fontFamily: "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif", fontVariantNumeric: "tabular-nums" }}>{fareMax.toLocaleString()}</span>
               <span className="text-[14px] font-semibold text-gray-500 mb-0.5">원</span>
             </div>
             <div className="relative h-2 bg-gray-100 rounded-full mb-2">
@@ -34082,7 +34100,7 @@ if (editTarget.하차지명) savePlaceSmart(editTarget.하차지명, editTarget.
                 <div key={label}
                   className="rounded-xl border border-[#E3E8F0] bg-[#F7F9FC] px-3 py-3 text-center">
                   <div className="text-[10px] font-bold text-gray-500 mb-1">{label}</div>
-                  <div className="text-[19px] font-black text-[#0F1A30] leading-none tabular-nums" style={{ fontFamily: "'JetBrains Mono',ui-monospace,monospace" }}>{value.toLocaleString()}</div>
+                  <div className="text-[19px] font-black text-[#0F1A30] leading-none tabular-nums" style={{ fontFamily: "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif", fontVariantNumeric: "tabular-nums" }}>{value.toLocaleString()}</div>
                   <div className="text-[10px] text-gray-500 mt-1">{sub}</div>
                 </div>
               ))}
@@ -34597,7 +34615,7 @@ setConfirmChange(null);
       {/* 헤더 */}
       <div className="relative px-7 py-5 flex items-center justify-between shrink-0 text-white overflow-hidden" style={{ background: "linear-gradient(120deg,#0B1428 0%,#1B2B4B 60%,#2D4C82 100%)" }}><span className="absolute inset-0 opacity-[0.06] pointer-events-none" style={{ backgroundImage: "linear-gradient(#fff 1px,transparent 1px),linear-gradient(90deg,#fff 1px,transparent 1px)", backgroundSize: "22px 22px" }} />
         <div>
-          <div className="relative text-[10.5px] font-extrabold tracking-[0.3em] text-[#8FB0F0]" style={{ fontFamily: "'JetBrains Mono',ui-monospace,monospace" }}>DAILY CLOSE · VERIFY</div><div className="relative text-white font-black text-[22px] leading-tight mt-0.5">일마감 검증</div>
+          <div className="relative text-[10.5px] font-extrabold tracking-[0.3em] text-[#8FB0F0]" style={{ fontFamily: "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif", fontVariantNumeric: "tabular-nums" }}>DAILY CLOSE · VERIFY</div><div className="relative text-white font-black text-[22px] leading-tight mt-0.5">일마감 검증</div>
           <div className="relative text-white/60 text-[12.5px] mt-0.5 font-semibold">
             {dailyCloseResult?.date || ""} 기준 ({dailyCloseResult?.total || 0}건)
           </div>
@@ -34626,7 +34644,7 @@ setConfirmChange(null);
                   className={`relative rounded-2xl px-5 py-4 text-left transition border ${item.key ? "cursor-pointer hover:-translate-y-0.5" : ""} ${item.active ? "bg-[#0F1A30] border-[#0F1A30] text-white shadow-[0_12px_28px_rgba(15,26,48,0.28)]" : "bg-[#F7F9FC] border-[#E3E8F0] text-[#0F1A30] hover:border-[#2D4C82]"}`}
                 >
                   <div className={`text-[12px] font-black ${item.active ? "text-[#8FB0F0]" : "text-[#5B6B85]"}`}>{item.label}</div>
-                  <div className="text-[30px] font-black leading-tight tabular-nums" style={{ fontFamily: "'JetBrains Mono',ui-monospace,monospace" }}>{item.value}<span className="text-[13px] font-bold opacity-50 ml-1">건</span></div>
+                  <div className="text-[30px] font-black leading-tight tabular-nums" style={{ fontFamily: "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif", fontVariantNumeric: "tabular-nums" }}>{item.value}<span className="text-[13px] font-bold opacity-50 ml-1">건</span></div>
                 </div>
               ))}
             </div>
@@ -39614,7 +39632,7 @@ return (
             onClick={() => setDsWarningExpanded(v => !v)}
             className="flex items-center gap-3 bg-[#1B2B4B] text-white rounded-xl px-4 py-2 hover:bg-[#243a60] transition-colors"
           >
-            <span className="font-mono font-extrabold text-red-300 text-[15px] min-w-[2ch] text-right">{dsWarningList.length}</span>
+            <span className="tabular-nums font-extrabold text-red-300 text-[15px] min-w-[2ch] text-right">{dsWarningList.length}</span>
             <span className="text-[13px] font-semibold tracking-wide">상차 2시간 이내 미배차</span>
             <svg
               className={`w-4 h-4 ml-1 transition-transform ${dsWarningExpanded ? "rotate-180" : ""}`}
@@ -39631,7 +39649,7 @@ return (
                   key={r._id || r.id}
                   className={`flex items-center gap-3 px-4 py-2 text-[13px] ${i % 2 === 0 ? "bg-white" : "bg-[#f7f9fc]"}`}
                 >
-                  <span className="font-mono font-semibold text-[#1B2B4B] whitespace-nowrap">{r.상차일} {r.상차시간}</span>
+                  <span className="tabular-nums font-semibold text-[#1B2B4B] whitespace-nowrap">{r.상차일} {r.상차시간}</span>
                   <span className="text-[#1B2B4B]/30 text-[11px]">|</span>
                   <span className="text-[#1B2B4B] font-medium">{r.상차지명}</span>
                   {r.거래처명 && <span className="text-[#1B2B4B]/50 text-[12px] ml-auto whitespace-nowrap">{r.거래처명}</span>}
@@ -39673,6 +39691,8 @@ return (
           <option value="COMPLETE">완료 {statusSummary.완료}</option>
           <option value="UNDELIVERED">미전달 {statusSummary.미전달}</option>
         </CustomSelect>
+        {/* ⭐ 2026-11-05 세부검색 — 오른쪽 끝에서 상태 필터(전체/미배차/미전달) 바로 옆으로 옮김 */}
+        <DetailFilterButton rows={dispatchData} value={dsDetail} onApply={applyDsDetail} getters={dsDetailGet} dateOf={dsDateOf} dateLabel={fixedForm ? "입고일 기준" : "상차일 기준"} title={fixedForm ? "세부검색 · 고정노선현황" : "세부검색 · 배차현황"} />
       </div>
 
       {/* ===== 페이지+검색+날짜+버튼 한 줄 ===== */}
@@ -39733,13 +39753,12 @@ return (
         <button onClick={()=>{const{first,last}=getMonthRange();setStartDate(first);setEndDate(last);setAppliedStartDate(first);setAppliedEndDate(last);setQ("");setQInput("");setPage(0);setLoaded(true);localStorage.setItem("dispatchDateState",JSON.stringify({startDate:first,endDate:last,appliedStartDate:first,appliedEndDate:last}));}} className="px-2 py-1 rounded-lg bg-gray-500 text-white text-[11px] font-semibold whitespace-nowrap flex-shrink-0"><EditableText id="status.toolbar.전체" defaultText="전체" /></button>
         <button onClick={() => setLookupOpen(true)} title="기간 + 배차담당자 + 차량번호·기사명으로 찾기" className="px-2 py-1 rounded-lg bg-white text-[#1B2B4B] border-2 border-[#1B2B4B] text-[11px] font-black whitespace-nowrap flex-shrink-0 hover:bg-[#EEF2F8]">담당자·차량 조회</button>
   <OrderLookupModal open={lookupOpen} onClose={() => setLookupOpen(false)} rows={dispatchData} nameOf={lookupNameOf} />
-        {/* ⭐ 2026-11-05 실시간 관제 — 고정노선현황은 위 고정노선 머리띠에 같은 버튼이 있다 */}
-        {!fixedForm && <FleetLiveButton rows={filtered} size="md" />}
 
         {/* 우측 버튼들 */}
         <div className="ml-auto flex items-center gap-1 flex-shrink-0 flex-wrap justify-end">
+          {/* ⭐ 2026-11-05 실시간 관제 — 예전 세부검색 자리(오른쪽)로 옮김 · 고정노선현황은 위 고정노선 머리띠에 같은 버튼이 있다 */}
+          {!fixedForm && <FleetLiveButton rows={filtered} size="md" />}
           {/* ⭐ 2026-11-02 운임규칙 — 운임구분 필터(규칙 사용 회사만) */}
-          <DetailFilterButton rows={dispatchData} value={dsDetail} onApply={applyDsDetail} getters={dsDetailGet} dateOf={dsDateOf} dateLabel={fixedForm ? "입고일 기준" : "상차일 기준"} title={fixedForm ? "세부검색 · 고정노선현황" : "세부검색 · 배차현황"} />
           {fareOn && (
             <span data-fare-filter="1"><FareTypeSelect compact align="right" allowAdd={false} rules={fareR.rules} value={fareTypeFilter} placeholder="운임구분 전체" noneLabel="운임구분 전체"
               extraOpts={[{ name: "__none", label: "운임구분 미지정" }]} onChange={(v) => { setFareTypeFilter(v); setPage(0); }} /></span>
@@ -40086,7 +40105,9 @@ return (
                   </td>
 
                   {/* 차량번호(항상 활성화) · ⭐ 2026-11-05 지입·직영·임대 기사앱 LIVE 표시가 붙으면 그만큼 칸이 넓어진다 */}
-                  <td className={`border text-center whitespace-nowrap w-[120px] ${row.배차상태 === "배차완료" ? "" : "max-w-[120px]"}`}>
+                  <td className="border text-center whitespace-nowrap w-[120px] max-w-[120px] relative">
+                    {/* ⭐ 2026-11-05 LIVE — 칩 대신 차량번호 입력칸 왼쪽 위 모서리의 6px 점(폭 0 · 칸 너비 그대로) */}
+                    {row.배차상태 === "배차완료" && <LiveDriverChip order={row} variant="pin" />}
                     <input autoComplete="off"
                       className="border rounded px-1 py-0.5 text-center w-[118px]"
                       value={row.차량번호 || ""}
@@ -40112,7 +40133,6 @@ return (
                         handleCarInput(id, e.target.value);
                       }}
                     />
-                    {row.배차상태 === "배차완료" && <LiveDriverChip order={row} className="ml-1 mr-0.5" />}
                   </td>
                   <td className="border text-center whitespace-nowrap max-w-[80px] w-[80px] overflow-hidden text-ellipsis" title={row.이름 || ""}>{row.이름}</td>
                   <td className="border text-center">
@@ -40146,6 +40166,7 @@ return (
                         onEditClick={(e) => { e.stopPropagation(); if (row.수정요청) markEditRequestSeen(row); setEditReqPopup(row); }}
                       />
                     )}
+                    <DriverAckChip row={row} className="ml-1" />{/* ⭐ 2026-11-05 기사앱 수락/거절 */}
                   </div>
                   </td>
 
@@ -41590,7 +41611,7 @@ return (
   style={{ background: "linear-gradient(120deg,#0B1428 0%,#1B2B4B 60%,#2D4C82 100%)", ...(copyPanelStyle === "B" ? { cursor: "grab" } : {}) }}
 >
   <div className="min-w-0">
-    <div className="text-[9.5px] font-extrabold tracking-[0.24em] text-[#8FB0F0]" style={{ fontFamily: "'JetBrains Mono',ui-monospace,monospace" }}>ORDER · COPY / EDIT</div>
+    <div className="text-[9.5px] font-extrabold tracking-[0.24em] text-[#8FB0F0]" style={{ fontFamily: "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif", fontVariantNumeric: "tabular-nums" }}>ORDER · COPY / EDIT</div>
     <h2 className="text-[18px] font-black leading-tight"><EditableText id="copyPanel.title" defaultText="오더 복사 / 수정 패널" /> <span className="ml-1 text-[13.5px] font-semibold text-white/60">{copyTarget?.거래처명} · {copyTarget?.상차지명} → {copyTarget?.하차지명}</span></h2>
   </div>
   <div className="flex gap-2 items-center">
@@ -43878,7 +43899,7 @@ setCopyPlaceOptions(list);
       {/* 헤더 */}
       <div className="relative px-7 py-5 flex items-center justify-between shrink-0 text-white overflow-hidden" style={{ background: "linear-gradient(120deg,#0B1428 0%,#1B2B4B 60%,#2D4C82 100%)" }}><span className="absolute inset-0 opacity-[0.06] pointer-events-none" style={{ backgroundImage: "linear-gradient(#fff 1px,transparent 1px),linear-gradient(90deg,#fff 1px,transparent 1px)", backgroundSize: "22px 22px" }} />
         <div>
-          <div className="relative text-[10.5px] font-extrabold tracking-[0.3em] text-[#8FB0F0]" style={{ fontFamily: "'JetBrains Mono',ui-monospace,monospace" }}>DAILY CLOSE · VERIFY</div><div className="relative text-white font-black text-[22px] leading-tight mt-0.5">일마감 검증</div>
+          <div className="relative text-[10.5px] font-extrabold tracking-[0.3em] text-[#8FB0F0]" style={{ fontFamily: "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif", fontVariantNumeric: "tabular-nums" }}>DAILY CLOSE · VERIFY</div><div className="relative text-white font-black text-[22px] leading-tight mt-0.5">일마감 검증</div>
           <div className="relative text-white/60 text-[12.5px] mt-0.5 font-semibold">{dailyCloseResult?.date || ""} 기준 ({dailyCloseResult?.total || 0}건)</div>
         </div>
         <button className="relative h-9 px-3.5 rounded-xl bg-white/10 border border-white/20 hover:bg-white/20 text-white text-[13px] font-bold flex items-center justify-center transition" onClick={() => setDailyCloseOpen(false)}>닫기 ✕</button>
@@ -43900,7 +43921,7 @@ setCopyPlaceOptions(list);
                   onClick={() => { if (item.key) setDailyCloseFilter(item.key); }}
                   className={`relative rounded-2xl px-5 py-4 text-left transition border ${item.key ? "cursor-pointer hover:-translate-y-0.5" : ""} ${item.active ? "bg-[#0F1A30] border-[#0F1A30] text-white shadow-[0_12px_28px_rgba(15,26,48,0.28)]" : "bg-[#F7F9FC] border-[#E3E8F0] text-[#0F1A30] hover:border-[#2D4C82]"}`}>
                   <div className={`text-[12px] font-black ${item.active ? "text-[#8FB0F0]" : "text-[#5B6B85]"}`}>{item.label}</div>
-                  <div className="text-[30px] font-black leading-tight tabular-nums" style={{ fontFamily: "'JetBrains Mono',ui-monospace,monospace" }}>{item.value}<span className="text-[13px] font-bold opacity-50 ml-1">건</span></div>
+                  <div className="text-[30px] font-black leading-tight tabular-nums" style={{ fontFamily: "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif", fontVariantNumeric: "tabular-nums" }}>{item.value}<span className="text-[13px] font-bold opacity-50 ml-1">건</span></div>
                 </div>
               ))}
             </div>
@@ -44477,7 +44498,7 @@ setCopyPlaceOptions(list);
             onClick={() => { const _id = getId(contextMenuDS.row); if (!selected.has(_id)) setSelected(new Set([_id])); setShowDeletePopup(true); setContextMenuDS(null); }}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
             <EditableText id="status.ctxMenu.삭제" defaultText="삭제" />
-            <span className="ml-auto text-[11px] text-gray-500 font-mono">Del</span>
+            <span className="ml-auto text-[11px] text-gray-500 tabular-nums">Del</span>
           </button>
         </div>
       )}
@@ -44648,7 +44669,7 @@ setCopyPlaceOptions(list);
       <div className="bg-[#F4F6FA] rounded-[26px] w-[760px] max-w-[96vw] max-h-[90vh] flex flex-col shadow-[0_40px_100px_rgba(0,0,0,0.45)] overflow-hidden">
         <div className="relative px-6 py-5 flex items-start justify-between shrink-0 overflow-hidden" style={{ background: "linear-gradient(120deg,#0B1428 0%,#1B2B4B 60%,#2D4C82 100%)" }}><span className="absolute inset-0 opacity-[0.06] pointer-events-none" style={{ backgroundImage: "linear-gradient(#fff 1px,transparent 1px),linear-gradient(90deg,#fff 1px,transparent 1px)", backgroundSize: "22px 22px" }} />
           <div>
-            <div className="relative text-[10.5px] font-extrabold tracking-[0.3em] text-[#8FB0F0]" style={{ fontFamily: "'JetBrains Mono',ui-monospace,monospace" }}>FARE · HISTORY</div><div className="relative text-white font-black text-[20px] tracking-tight leading-tight">운임 조회 결과</div>
+            <div className="relative text-[10.5px] font-extrabold tracking-[0.3em] text-[#8FB0F0]" style={{ fontFamily: "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif", fontVariantNumeric: "tabular-nums" }}>FARE · HISTORY</div><div className="relative text-white font-black text-[20px] tracking-tight leading-tight">운임 조회 결과</div>
             <div className="relative text-white/65 text-[13px] mt-1 font-bold">
               {ctxFare5Target?.상차지명 || "-"} → {ctxFare5Target?.하차지명 || "-"}
             </div>
@@ -44671,9 +44692,9 @@ setCopyPlaceOptions(list);
               </span>
             </div>
             <div className="flex items-baseline gap-2 mt-1 mb-4">
-              <span className="text-[32px] font-black text-[#0F1A30] leading-none tabular-nums" style={{ fontFamily: "'JetBrains Mono',ui-monospace,monospace" }}>{fareMin.toLocaleString()}</span>
+              <span className="text-[32px] font-black text-[#0F1A30] leading-none tabular-nums" style={{ fontFamily: "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif", fontVariantNumeric: "tabular-nums" }}>{fareMin.toLocaleString()}</span>
               <span className="text-[18px] font-bold text-gray-400">~</span>
-              <span className="text-[32px] font-black text-[#0F1A30] leading-none tabular-nums" style={{ fontFamily: "'JetBrains Mono',ui-monospace,monospace" }}>{fareMax.toLocaleString()}</span>
+              <span className="text-[32px] font-black text-[#0F1A30] leading-none tabular-nums" style={{ fontFamily: "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif", fontVariantNumeric: "tabular-nums" }}>{fareMax.toLocaleString()}</span>
               <span className="text-[14px] font-semibold text-gray-500 mb-0.5">원</span>
             </div>
             <div className="relative h-2 bg-gray-100 rounded-full mb-2">
@@ -44695,7 +44716,7 @@ setCopyPlaceOptions(list);
                 <div key={label}
                   className="rounded-xl border border-[#E3E8F0] bg-[#F7F9FC] px-3 py-3 text-center">
                   <div className="text-[10px] font-bold text-gray-500 mb-1">{label}</div>
-                  <div className="text-[19px] font-black text-[#0F1A30] leading-none tabular-nums" style={{ fontFamily: "'JetBrains Mono',ui-monospace,monospace" }}>{value.toLocaleString()}</div>
+                  <div className="text-[19px] font-black text-[#0F1A30] leading-none tabular-nums" style={{ fontFamily: "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif", fontVariantNumeric: "tabular-nums" }}>{value.toLocaleString()}</div>
                   <div className="text-[10px] text-gray-500 mt-1">{sub}</div>
                 </div>
               ))}
@@ -48132,7 +48153,7 @@ function Settlement({ dispatchData, fixedRows = [], clients = [], places = [], i
       {/* ── 머리줄: 화면 제목 + 기준 월 + 내보내기 ── */}
       <div className="flex items-center justify-between gap-3 flex-wrap mb-4">
         <div>
-          <div style={{ fontFamily: "'JetBrains Mono','SF Mono',ui-monospace,monospace" }} className="text-[11px] font-extrabold tracking-[0.24em] text-[#4B6CB7]">REVENUE · {RV_PAGES[rvPage].en}</div>
+          <div style={{ fontFamily: "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif", fontVariantNumeric: "tabular-nums" }} className="text-[11px] font-extrabold tracking-[0.24em] text-[#4B6CB7]">REVENUE · {RV_PAGES[rvPage].en}</div>
           <h1 className="text-[22px] font-black text-[#0F1A30] tracking-tight mt-0.5">{RV_PAGES[rvPage].label}</h1>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
@@ -50360,7 +50381,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
               {/* 패널 헤더 */}
               <div className="sticky top-0 z-20 -mx-5 mb-1 flex justify-between items-center gap-3 px-5 py-2.5 text-white shadow-[0_6px_18px_rgba(11,20,40,0.25)]" style={{ background: "linear-gradient(120deg,#0B1428 0%,#1B2B4B 60%,#2D4C82 100%)" }}>
                 <div className="min-w-0">
-                  <div className="text-[9.5px] font-extrabold tracking-[0.24em] text-[#8FB0F0]" style={{ fontFamily: "'JetBrains Mono',ui-monospace,monospace" }}>ORDER · COPY / EDIT</div>
+                  <div className="text-[9.5px] font-extrabold tracking-[0.24em] text-[#8FB0F0]" style={{ fontFamily: "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif", fontVariantNumeric: "tabular-nums" }}>ORDER · COPY / EDIT</div>
                   <h2 className="text-[18px] font-black leading-tight"><EditableText id="copyPanel.title" defaultText="오더 복사 / 수정 패널" /> <span className="ml-1 text-[13.5px] font-semibold text-white/60">{copyTarget.거래처명} · {copyTarget.상차지명} → {copyTarget.하차지명}</span></h2>
                 </div>
                 <div className="flex gap-2 items-center">
@@ -50914,7 +50935,7 @@ function ArClientInfo({ client, name, upsertClient, isViewer }) {
     <div className="mb-4 rounded-2xl border border-[#E3E8F0] bg-white overflow-hidden">
       <div className="px-5 py-3 flex items-center justify-between gap-3 flex-wrap text-white" style={{ background: "linear-gradient(120deg,#0B1428,#1B2B4B 70%,#2D4C82)" }}>
         <div className="min-w-0">
-          <div className="text-[9.5px] font-extrabold tracking-[0.24em] text-[#8FB0F0]" style={{ fontFamily: KP_MONO }}>CLIENT</div>
+          <div className="text-[9.5px] font-extrabold tracking-[0.24em] text-[#8FB0F0]" style={{ fontFamily: KP_MONO, fontVariantNumeric: "tabular-nums" }}>CLIENT</div>
           <div className="text-[17px] font-black truncate">{name}</div>
         </div>
         <div className="flex items-center gap-1.5 flex-wrap">
@@ -51324,7 +51345,7 @@ const patchMonthOnDoc = async (id, yyyymm, status, dateStr) => {
     const total = sup + tax;
     const n2k = numberToKorean;
     const INK = "#0F1A30", SUB = "#5B6B85", MUTE = "#9AA9C3", LINE = "#E3E8F0", HAIR = "#EEF2F8", SOFT = "#F4F6FA";
-    const MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
+    const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
     const receiveFields = [["상호",cInfo.거래처명],["대표자",cInfo.대표자],["사업자번호",cInfo.사업자번호],["주소",cInfo.주소],["업태",cInfo.업태],["종목",cInfo.종목]];
     const supplyFields = [["사업자번호",cp.bizNo],["주소",cp.addr],["업태",cp.type],["종목",cp.item],["연락처",cp.contact]];
     const td = `padding:6px 6px;font-size:11px;color:${INK};border-bottom:1px solid ${HAIR};text-align:center;vertical-align:middle`;
@@ -52633,18 +52654,19 @@ const handleBatchSettle = async (targetStatus) => {
   }, [emailLogs, mailTypeFilter, mailSearch, mailSort]);
 
   // ⭐ 2026-11-03 거래처정산 리디자인 — 공통 스타일(남색 단색·모노 라벨·정렬된 버튼)
-  const csInp = "h-9 w-full rounded-lg border border-[#D5DDEA] bg-white px-2.5 text-[13px] font-semibold text-[#0F1A30] outline-none focus:border-[#1B2B4B] focus:ring-2 focus:ring-[#1B2B4B]/10";
-  const csLab = "block text-[11px] font-black text-[#5B6B85] mb-1 tracking-tight";
-  const csBtn = "h-9 px-3 rounded-lg border border-[#D5DDEA] bg-white text-[12.5px] font-bold text-[#1B2B4B] hover:bg-[#F4F6FA] hover:border-[#B8C4D8] transition inline-flex items-center justify-center gap-1.5 whitespace-nowrap disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-white";
-  const csBtnPri = "h-9 px-4 rounded-lg bg-[#0F1A30] text-white text-[12.5px] font-black hover:bg-[#1B2B4B] transition inline-flex items-center justify-center gap-1.5 whitespace-nowrap disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-[#0F1A30]";
+  // ⭐ 2026-11-05 거래처정산 가독성 — 입력·라벨·버튼 글씨를 키우고(입력 15px·라벨 13px·버튼 14px), 조회 버튼은 다른 도구 버튼과 같은 h-10 크기로
+  const csInp = "h-10 w-full rounded-lg border border-[#D5DDEA] bg-white px-3 text-[13px] font-semibold text-[#0F1A30] outline-none focus:border-[#1B2B4B] focus:ring-2 focus:ring-[#1B2B4B]/10";
+  const csLab = "block text-[11px] font-black text-[#3A4A66] mb-1.5 tracking-tight";
+  const csBtn = "h-10 px-3.5 rounded-lg border border-[#D5DDEA] bg-white text-[12.5px] font-bold text-[#1B2B4B] hover:bg-[#F4F6FA] hover:border-[#B8C4D8] transition inline-flex items-center justify-center gap-1.5 whitespace-nowrap disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-white";
+  const csBtnPri = "h-10 px-5 rounded-lg bg-[#0F1A30] text-white text-[12.5px] font-black hover:bg-[#1B2B4B] transition inline-flex items-center justify-center gap-1.5 whitespace-nowrap disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-[#0F1A30]";
   const csCard = "bg-white rounded-2xl border border-[#E3E8F0] shadow-[0_1px_2px_rgba(15,26,48,0.04)]";
   const csSeg = "inline-flex p-1 rounded-xl bg-[#EEF2F8] border border-[#E3E8F0]";
-  const csSegBtn = (on) => `h-7 px-3 rounded-lg text-[12px] font-black transition whitespace-nowrap ${on ? "bg-[#0F1A30] text-white shadow-sm" : "text-[#5B6B85] hover:text-[#0F1A30]"}`;
+  const csSegBtn = (on) => `h-8 px-3 rounded-lg text-[12.5px] font-black transition whitespace-nowrap ${on ? "bg-[#0F1A30] text-white shadow-sm" : "text-[#5B6B85] hover:text-[#0F1A30]"}`;
   const csGrid = "linear-gradient(rgba(143,176,240,.07) 1px, transparent 1px) 0 0/22px 22px, linear-gradient(90deg, rgba(143,176,240,.07) 1px, transparent 1px) 0 0/22px 22px";
   const csHead = (en, title, right) => (
     <div className="flex items-center gap-2 mb-3 min-h-[30px]">
       <div className="min-w-0">
-        <div className="text-[9.5px] font-extrabold tracking-[0.24em] text-[#9AA9C3] leading-none" style={{ fontFamily: KP_MONO }}>{en}</div>
+        <div className="text-[9.5px] font-extrabold tracking-[0.24em] text-[#9AA9C3] leading-none" style={{ fontFamily: KP_MONO, fontVariantNumeric: "tabular-nums" }}>{en}</div>
         <div className="text-[13.5px] font-black text-[#0F1A30] mt-1 leading-none">{title}</div>
       </div>
       {right && <div className="ml-auto flex items-center gap-1.5">{right}</div>}
@@ -52684,7 +52706,8 @@ const handleBatchSettle = async (targetStatus) => {
 
   return (
     <>
-    <div className="p-4 min-w-0">
+    {/* ⭐ 2026-11-05 kp-settle — 정산 화면 글씨 크게(index.css: 표 14.5px · 금액 15.5px 굵게 · 작은 글씨 한 단계씩) */}
+    <div className="kp-settle p-4 min-w-0">
       {/* ⭐ 2026-11-03 리디자인 — 머리(다크·그리드): 화면 제목 + 탭 + 청구 사업자 */}
       <div className="relative overflow-hidden rounded-2xl px-5 py-4 mb-4 text-white" style={{ background: "radial-gradient(900px 300px at 85% -30%, rgba(110,149,232,.28), transparent 60%), linear-gradient(120deg,#060C1A 0%,#0F1A30 45%,#1B2B4B 100%)" }}>
         <div className="absolute inset-0 pointer-events-none" style={{ background: csGrid }} />
@@ -52693,14 +52716,14 @@ const handleBatchSettle = async (targetStatus) => {
             <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#CFE0FF" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2z" /><path d="M9 8h6M9 12h6M9 16h3" /></svg>
           </div>
           <div className="min-w-0">
-            <div className="text-[10.5px] font-extrabold tracking-[0.32em] text-[#8FB0F0]" style={{ fontFamily: KP_MONO }}>CLIENT SETTLEMENT · {tab === "invoice" ? "STATEMENT" : tab === "unsettledMonth" ? "RECEIVABLES" : "OUTBOX"}</div>
+            <div className="text-[10.5px] font-extrabold tracking-[0.32em] text-[#8FB0F0]" style={{ fontFamily: KP_MONO, fontVariantNumeric: "tabular-nums" }}>CLIENT SETTLEMENT · {tab === "invoice" ? "STATEMENT" : tab === "unsettledMonth" ? "RECEIVABLES" : "OUTBOX"}</div>
             <div className="text-[19px] font-black mt-0.5 tracking-tight">{tab === "invoice" ? "거래명세서" : tab === "unsettledMonth" ? "미수금관리" : "보낸메일함"}</div>
           </div>
           <div className="ml-auto flex items-center gap-2 flex-wrap">
             {/* ⭐ 2026-11-03 여러 사업자 — 이 화면의 거래명세서·미수금은 고른 사업자 것만, 공급자 정보도 그 사업자로 */}
             {csBiz.multi && (
               <div className="flex items-center gap-2" title={`거래명세서·미수금·메일이 ${csBizCur} 이름·사업자번호·계좌·직인으로 나갑니다`}>
-                <span className="text-[9.5px] font-extrabold tracking-[0.24em] text-white/45" style={{ fontFamily: KP_MONO }}>BILLING ENTITY</span>
+                <span className="text-[9.5px] font-extrabold tracking-[0.24em] text-white/45" style={{ fontFamily: KP_MONO, fontVariantNumeric: "tabular-nums" }}>BILLING ENTITY</span>
                 <div className="inline-flex p-1 rounded-xl bg-white/[0.06] border border-white/15">
                   {csBiz.names.map((n) => (
                     <button key={n} type="button" onClick={() => setCsBizSel(n === csBiz.defaultName ? "" : n)} className={`h-8 px-3 rounded-lg text-[12.5px] font-black transition ${csBizCur === n ? "bg-[#CFE0FF] text-[#0F1A30]" : "text-white/70 hover:text-white"}`}>{n}</button>
@@ -52714,7 +52737,7 @@ const handleBatchSettle = async (targetStatus) => {
                   className={`h-8 px-3.5 rounded-lg text-[12.5px] font-black transition inline-flex items-center gap-1.5 ${tab === key ? "bg-white text-[#0F1A30] shadow-sm" : "text-white/70 hover:text-white"}`}>
                   {label}
                   {badge > 0 && (
-                    <span className={`min-w-[18px] h-[18px] px-1 rounded-md text-[10px] font-black inline-flex items-center justify-center tabular-nums ${tab === key ? "bg-[#0F1A30] text-white" : "bg-white/15 text-white"}`} style={{ fontFamily: KP_MONO }}>
+                    <span className={`min-w-[18px] h-[18px] px-1 rounded-md text-[10px] font-black inline-flex items-center justify-center tabular-nums ${tab === key ? "bg-[#0F1A30] text-white" : "bg-white/15 text-white"}`} style={{ fontFamily: KP_MONO, fontVariantNumeric: "tabular-nums" }}>
                       {key === "unsettledMonth" ? (badge > 9 ? "9+" : badge) : (badge > 99 ? "99+" : badge)}
                     </span>
                   )}
@@ -52809,7 +52832,8 @@ const handleBatchSettle = async (targetStatus) => {
                   <CustomDatePicker className={`${csInp} text-left tabular-nums`} placeholder="종료일" value={end} onChange={e => setEnd(e.target.value)} />
                 </div>
 
-                <div className="mt-3 grid grid-cols-[auto_minmax(0,1fr)] gap-2">
+                {/* ⭐ 2026-11-05 조회 버튼이 줄 전체를 차지해 너무 컸다 → 오른쪽 정렬 · 다른 도구 버튼과 같은 h-10 크기 */}
+                <div className="mt-3 flex items-center justify-end gap-2">
                   <button type="button" className={csBtn}
                     onClick={() => { setSearchInput(""); setClient(""); setStart(""); setEnd(""); setSearched(false); setDropdownOpen(false); }}>
                     초기화
@@ -52830,7 +52854,7 @@ const handleBatchSettle = async (targetStatus) => {
               {/* 미조회 상태 */}
               {!searched && (
                 <div className={`${csCard} px-5 py-8 text-center`}>
-                  <div className="text-[9.5px] font-extrabold tracking-[0.28em] text-[#9AA9C3]" style={{ fontFamily: KP_MONO }}>READY</div>
+                  <div className="text-[9.5px] font-extrabold tracking-[0.28em] text-[#9AA9C3]" style={{ fontFamily: KP_MONO, fontVariantNumeric: "tabular-nums" }}>READY</div>
                   <div className="text-[14px] font-black text-[#0F1A30] mt-1.5">거래처명 또는 기사명을 입력 후 조회하세요.</div>
                   <div className="text-[12px] mt-1 text-[#9AA9C3]">검색창에 입력하면 자동완성 목록이 표시됩니다</div>
                 </div>
@@ -52841,17 +52865,17 @@ const handleBatchSettle = async (targetStatus) => {
                 <div className="relative overflow-hidden rounded-2xl p-4 text-white" style={{ background: "linear-gradient(120deg,#0B1428 0%,#1B2B4B 100%)" }}>
                   <div className="absolute inset-0 pointer-events-none" style={{ background: csGrid }} />
                   <div className="relative flex items-center gap-2">
-                    <span className="text-[9.5px] font-extrabold tracking-[0.24em] text-[#8FB0F0]" style={{ fontFamily: KP_MONO }}>TOTAL · 청구 합계</span>
-                    <span className="ml-auto text-[11px] font-bold text-white/60 tabular-nums" style={{ fontFamily: KP_MONO }}>조회 {rowsInvoice.length}건 중 <b className="text-white">{mapped.length}건 선택</b></span>
+                    <span className="text-[9.5px] font-extrabold tracking-[0.24em] text-[#8FB0F0]" style={{ fontFamily: KP_MONO, fontVariantNumeric: "tabular-nums" }}>TOTAL · 청구 합계</span>
+                    <span className="ml-auto text-[11px] font-bold text-white/60 tabular-nums" style={{ fontFamily: KP_MONO, fontVariantNumeric: "tabular-nums" }}>조회 {rowsInvoice.length}건 중 <b className="text-white">{mapped.length}건 선택</b></span>
                   </div>
-                  <div className="relative mt-1 text-[26px] font-black tabular-nums leading-tight" style={{ fontFamily: KP_MONO }}>
+                  <div className="relative mt-1 text-[26px] font-black tabular-nums leading-tight" style={{ fontFamily: KP_MONO, fontVariantNumeric: "tabular-nums" }}>
                     {won(합계공급가 + 합계세액)}<span className="ml-1 text-[13px] font-bold text-white/45">원</span>
                   </div>
                   <div className="relative mt-3 grid grid-cols-3 gap-2">
                     {[["SUPPLY", "공급가액", won(합계공급가), "원"], ["VAT", "세액", won(합계세액), "원"], ["ORDERS", "명세 건수", mapped.length.toLocaleString(), "건"]].map(([en, k, v, u]) => (
                       <div key={en} className="rounded-xl px-3 py-2 bg-white/[0.05] border border-white/[0.12] min-w-0">
-                        <div className="flex items-center gap-1.5"><span className="text-[9px] font-extrabold tracking-[0.2em] text-white/40" style={{ fontFamily: KP_MONO }}>{en}</span><span className="text-[10.5px] font-bold text-white/60 truncate">{k}</span></div>
-                        <div className="text-[14.5px] font-black tabular-nums text-[#CFE0FF] truncate" style={{ fontFamily: KP_MONO }}>{v}<span className="ml-0.5 text-[10px] font-bold text-white/40">{u}</span></div>
+                        <div className="flex items-center gap-1.5"><span className="text-[9px] font-extrabold tracking-[0.2em] text-white/40" style={{ fontFamily: KP_MONO, fontVariantNumeric: "tabular-nums" }}>{en}</span><span className="text-[10.5px] font-bold text-white/60 truncate">{k}</span></div>
+                        <div className="text-[14.5px] font-black tabular-nums text-[#CFE0FF] truncate" style={{ fontFamily: KP_MONO, fontVariantNumeric: "tabular-nums" }}>{v}<span className="ml-0.5 text-[10px] font-bold text-white/40">{u}</span></div>
                       </div>
                     ))}
                   </div>
@@ -52879,10 +52903,10 @@ const handleBatchSettle = async (targetStatus) => {
                           .sort(([a], [b]) => a.localeCompare(b))
                           .map(([ym, v]) => (
                             <tr key={ym} className="border-t border-[#EEF2F8]">
-                              <td className="px-3 py-1.5 font-black text-[#0F1A30] tabular-nums" style={{ fontFamily: KP_MONO }}>{ym}</td>
+                              <td className="px-3 py-1.5 font-black text-[#0F1A30] tabular-nums" style={{ fontFamily: KP_MONO, fontVariantNumeric: "tabular-nums" }}>{ym}</td>
                               <td className="px-3 py-1.5 text-right text-[#5B6B85] tabular-nums">{v.건수}건</td>
-                              <td className="px-3 py-1.5 text-right font-bold text-[#0F1A30] tabular-nums" style={{ fontFamily: KP_MONO }}>{won(v.공급가액)}</td>
-                              <td className="px-3 py-1.5 text-right text-[#5B6B85] tabular-nums" style={{ fontFamily: KP_MONO }}>{won(v.세액)}</td>
+                              <td className="px-3 py-1.5 text-right font-bold text-[#0F1A30] tabular-nums" style={{ fontFamily: KP_MONO, fontVariantNumeric: "tabular-nums" }}>{won(v.공급가액)}</td>
+                              <td className="px-3 py-1.5 text-right text-[#5B6B85] tabular-nums" style={{ fontFamily: KP_MONO, fontVariantNumeric: "tabular-nums" }}>{won(v.세액)}</td>
                             </tr>
                           ))}
                       </tbody>
@@ -52896,7 +52920,7 @@ const handleBatchSettle = async (targetStatus) => {
                 <div className={`${csCard} p-4`}>
                   {csHead("LINES", "명세서 포함 오더", (
                     <>
-                      <span className="text-[11.5px] font-bold text-[#5B6B85] tabular-nums" style={{ fontFamily: KP_MONO }}>{mapped.length}/{rowsInvoice.length}</span>
+                      <span className="text-[11.5px] font-bold text-[#5B6B85] tabular-nums" style={{ fontFamily: KP_MONO, fontVariantNumeric: "tabular-nums" }}>{mapped.length}/{rowsInvoice.length}</span>
                       {excludedRowsInvoice.length > 0 && (
                         <button type="button" onClick={() => setSelectedInvoiceIds(new Set(rowsInvoice.map(r => r._id)))}
                           className="h-7 px-2.5 rounded-lg border border-[#D5DDEA] text-[#1B2B4B] text-[11.5px] font-bold hover:bg-[#F4F6FA]">모두 되돌리기 ({excludedRowsInvoice.length}건)</button>
@@ -52941,12 +52965,12 @@ const handleBatchSettle = async (targetStatus) => {
                                       onChange={() => (on ? excludeInvoiceRow(r._id) : restoreInvoiceRow(r._id))}
                                       title={on ? "이 명세서에서 빼기" : "되돌리기"} />
                                   </td>
-                                  <td className={`px-2 py-1.5 tabular-nums whitespace-nowrap ${on ? "text-[#3A4A66]" : "line-through"}`} style={{ fontFamily: KP_MONO, fontSize: 11.5 }}>{(r.상차일 || "").slice(2)}</td>
+                                  <td className={`px-2 py-1.5 tabular-nums whitespace-nowrap ${on ? "text-[#3A4A66]" : "line-through"}`} style={{ fontFamily: KP_MONO, fontVariantNumeric: "tabular-nums", fontSize: 11.5 }}>{(r.상차일 || "").slice(2)}</td>
                                   <td className={`px-2 py-1.5 truncate ${on ? "text-[#0F1A30] font-semibold" : "line-through"}`} title={`${r.상차지명 || r.상차지 || ""} → ${r.하차지명 || r.하차지 || ""}`}>
                                     {r.상차지명 || r.상차지 || "-"} <span className="text-[#9AA9C3]">→</span> {r.하차지명 || r.하차지 || "-"}
                                   </td>
                                   <td className="px-2 py-1.5 truncate">{r.이름 || r.기사명 || ""}</td>
-                                  <td className={`px-2 py-1.5 text-right tabular-nums font-bold ${on ? "text-[#0F1A30]" : "line-through"}`} style={{ fontFamily: KP_MONO, fontSize: 11.5 }}>{won(toInt(r.청구운임))}</td>
+                                  <td className={`px-2 py-1.5 text-right tabular-nums font-bold ${on ? "text-[#0F1A30]" : "line-through"}`} style={{ fontFamily: KP_MONO, fontVariantNumeric: "tabular-nums", fontSize: 11.5 }}>{won(toInt(r.청구운임))}</td>
                                 </tr>
                               );
                             })}
@@ -53005,7 +53029,7 @@ const handleBatchSettle = async (targetStatus) => {
                   </button>
                   <button type="button" disabled={!batchSendList.length} onClick={() => setBatchSendOpen(true)} className={csBtn}>
                     일괄 발송
-                    <span className="min-w-[18px] h-[18px] px-1 rounded-md bg-[#EEF2F8] text-[#0F1A30] text-[10.5px] font-black inline-flex items-center justify-center tabular-nums" style={{ fontFamily: KP_MONO }}>{batchSendList.length}</span>
+                    <span className="min-w-[18px] h-[18px] px-1 rounded-md bg-[#EEF2F8] text-[#0F1A30] text-[10.5px] font-black inline-flex items-center justify-center tabular-nums" style={{ fontFamily: KP_MONO, fontVariantNumeric: "tabular-nums" }}>{batchSendList.length}</span>
                   </button>
                   <button
                     type="button"
@@ -53025,7 +53049,7 @@ const handleBatchSettle = async (targetStatus) => {
                   <button type="button" onClick={() => setScheduledEmailListOpen(true)} className={csBtn}>
                     예약메일함
                     {csPendingScheduled > 0 && (
-                      <span className="min-w-[18px] h-[18px] px-1 rounded-md bg-[#0F1A30] text-white text-[10.5px] font-black inline-flex items-center justify-center tabular-nums" style={{ fontFamily: KP_MONO }}>{csPendingScheduled}</span>
+                      <span className="min-w-[18px] h-[18px] px-1 rounded-md bg-[#0F1A30] text-white text-[10.5px] font-black inline-flex items-center justify-center tabular-nums" style={{ fontFamily: KP_MONO, fontVariantNumeric: "tabular-nums" }}>{csPendingScheduled}</span>
                     )}
                   </button>
                 </div>
@@ -53037,7 +53061,7 @@ const handleBatchSettle = async (targetStatus) => {
               <div className={`${csCard} overflow-hidden flex flex-col xl:max-h-[calc(100vh-24px)]`}>
                 <div className="flex items-center gap-2 px-4 py-2.5 border-b border-[#E3E8F0] bg-white flex-wrap">
                   <div className="min-w-0 mr-auto">
-                    <div className="text-[9.5px] font-extrabold tracking-[0.24em] text-[#9AA9C3] leading-none" style={{ fontFamily: KP_MONO }}>STATEMENT · PREVIEW</div>
+                    <div className="text-[9.5px] font-extrabold tracking-[0.24em] text-[#9AA9C3] leading-none" style={{ fontFamily: KP_MONO, fontVariantNumeric: "tabular-nums" }}>STATEMENT · PREVIEW</div>
                     <div className="text-[13.5px] font-black text-[#0F1A30] mt-1 leading-none truncate">미리보기{searched && client ? <span className="ml-1.5 text-[#5B6B85] font-bold">· {client}</span> : null}</div>
                   </div>
                   <button type="button" onClick={() => { setEditInfo({ ...cInfo }); setShowEdit(true); }} className={csBtn}><EditableText id="misc.btn.49404.거래처 정보" defaultText="거래처 정보" /></button>
@@ -53052,7 +53076,7 @@ const handleBatchSettle = async (targetStatus) => {
                 <div className="flex-1 min-h-0 overflow-auto bg-[#E9EDF4] p-4" style={{ backgroundImage: "radial-gradient(rgba(27,43,75,.08) 1px, transparent 1px)", backgroundSize: "14px 14px" }}>
                   {!searched ? (
                     <div className="mx-auto max-w-[820px] bg-white rounded-md shadow-[0_8px_28px_rgba(15,26,48,0.12)] px-8 py-10">
-                      <div className="text-[9px] font-extrabold tracking-[0.3em] text-[#C9D3E3]" style={{ fontFamily: KP_MONO }}>TRANSACTION STATEMENT</div>
+                      <div className="text-[9px] font-extrabold tracking-[0.3em] text-[#C9D3E3]" style={{ fontFamily: KP_MONO, fontVariantNumeric: "tabular-nums" }}>TRANSACTION STATEMENT</div>
                       <div className="text-[22px] font-black tracking-[0.32em] text-[#DCE3EE] mt-1">거래명세서</div>
                       <div className="h-[2px] bg-[#EEF2F8] my-4" />
                       <div className="grid grid-cols-2 gap-3">
@@ -54179,10 +54203,10 @@ const handleBatchSettle = async (targetStatus) => {
                 <div className="relative overflow-hidden rounded-2xl p-4 text-white" style={{ background: "linear-gradient(120deg,#0B1428 0%,#1B2B4B 100%)" }}>
                   <div className="absolute inset-0 pointer-events-none" style={{ background: csGrid }} />
                   <div className="relative flex items-center gap-2">
-                    <span className="text-[9.5px] font-extrabold tracking-[0.24em] text-[#8FB0F0]" style={{ fontFamily: KP_MONO }}>RECEIVABLE · 미정산 금액</span>
-                    <span className="ml-auto text-[11px] font-bold text-white/60 tabular-nums" style={{ fontFamily: KP_MONO }}>OPEN <b className="text-white">{kpi.미정산월}</b>개월</span>
+                    <span className="text-[9.5px] font-extrabold tracking-[0.24em] text-[#8FB0F0]" style={{ fontFamily: KP_MONO, fontVariantNumeric: "tabular-nums" }}>RECEIVABLE · 미정산 금액</span>
+                    <span className="ml-auto text-[11px] font-bold text-white/60 tabular-nums" style={{ fontFamily: KP_MONO, fontVariantNumeric: "tabular-nums" }}>OPEN <b className="text-white">{kpi.미정산월}</b>개월</span>
                   </div>
-                  <div className="relative mt-1 text-[26px] font-black tabular-nums leading-tight" style={{ fontFamily: KP_MONO }}>
+                  <div className="relative mt-1 text-[26px] font-black tabular-nums leading-tight" style={{ fontFamily: KP_MONO, fontVariantNumeric: "tabular-nums" }}>
                     {won(kpi.미정산금)}<span className="ml-1 text-[13px] font-bold text-white/45">원</span>
                   </div>
                   {kpi.총청구 > 0 && (
@@ -54193,9 +54217,9 @@ const handleBatchSettle = async (targetStatus) => {
                   <div className="relative mt-3 grid grid-cols-3 gap-2">
                     {[["ORDERS", "총 오더건수", kpi.전체건수.toLocaleString(), "건"], ["BILLED", "총 청구금액", won(kpi.총청구), "원"], ["COLLECTED", "정산완료 금액", won(kpi.완료금), "원"]].map(([en, k, v, u]) => (
                       <div key={en} className="rounded-xl px-3 py-2 bg-white/[0.05] border border-white/[0.12] min-w-0">
-                        <div className="text-[9px] font-extrabold tracking-[0.2em] text-white/40" style={{ fontFamily: KP_MONO }}>{en}</div>
+                        <div className="text-[9px] font-extrabold tracking-[0.2em] text-white/40" style={{ fontFamily: KP_MONO, fontVariantNumeric: "tabular-nums" }}>{en}</div>
                         <div className="text-[10.5px] font-bold text-white/60 truncate">{k}</div>
-                        <div className="text-[14px] font-black tabular-nums text-[#CFE0FF] truncate" style={{ fontFamily: KP_MONO }}>{v}<span className="ml-0.5 text-[10px] font-bold text-white/40">{u}</span></div>
+                        <div className="text-[14px] font-black tabular-nums text-[#CFE0FF] truncate" style={{ fontFamily: KP_MONO, fontVariantNumeric: "tabular-nums" }}>{v}<span className="ml-0.5 text-[10px] font-bold text-white/40">{u}</span></div>
                       </div>
                     ))}
                   </div>
@@ -54355,7 +54379,7 @@ const handleBatchSettle = async (targetStatus) => {
               <div className={`${csCard} overflow-hidden flex flex-col xl:max-h-[calc(100vh-24px)]`}>
                 <div className="flex items-center gap-3 px-4 py-2.5 border-b border-[#E3E8F0] bg-white flex-wrap">
                   <div className="min-w-0 mr-auto">
-                    <div className="text-[9.5px] font-extrabold tracking-[0.24em] text-[#9AA9C3] leading-none" style={{ fontFamily: KP_MONO }}>LEDGER · MONTHLY · {yearFrom}.{monthFrom} – {yearTo}.{monthTo}</div>
+                    <div className="text-[9.5px] font-extrabold tracking-[0.24em] text-[#9AA9C3] leading-none" style={{ fontFamily: KP_MONO, fontVariantNumeric: "tabular-nums" }}>LEDGER · MONTHLY · {yearFrom}.{monthFrom} – {yearTo}.{monthTo}</div>
                     <div className="text-[13.5px] font-black text-[#0F1A30] mt-1 leading-none truncate">
                       {selClient || "거래처를 선택하세요"}
                       {selClient === AR_ALL && <span className="ml-1.5 text-[12px] font-bold text-[#5B6B85]">· 거래처별·월별로 한 줄씩</span>}
@@ -54364,7 +54388,7 @@ const handleBatchSettle = async (targetStatus) => {
                   </div>
                   {/* ⭐ 정산 처리 버튼은 원장 바로 위 */}
                   <div className="flex items-center gap-1.5">
-                    <span className="text-[9.5px] font-extrabold tracking-[0.24em] text-[#9AA9C3] mr-0.5" style={{ fontFamily: KP_MONO }}>SETTLE</span>
+                    <span className="text-[9.5px] font-extrabold tracking-[0.24em] text-[#9AA9C3] mr-0.5" style={{ fontFamily: KP_MONO, fontVariantNumeric: "tabular-nums" }}>SETTLE</span>
                     <button type="button" onClick={settleSelected} disabled={!selectedMonths.size} className={csBtnPri}>
                       선택 정산완료{selectedMonths.size ? ` (${selectedMonths.size})` : ""}
                     </button>
@@ -54430,9 +54454,9 @@ const handleBatchSettle = async (targetStatus) => {
                             </td>
                             {selClient === AR_ALL && <td className="px-2 py-2.5 font-bold text-[#0F1A30] truncate" title={row.거래처명}>{row.거래처명}</td>}
                             <td className="px-2 py-2.5 text-center text-[#9AA9C3] tabular-nums">{idx+1}</td>
-                            <td className="px-2 py-2.5 text-center font-black text-[#0F1A30] tabular-nums" style={{ fontFamily: KP_MONO, fontSize: 12 }}>{row.yyyymm}</td>
+                            <td className="px-2 py-2.5 text-center font-black text-[#0F1A30] tabular-nums" style={{ fontFamily: KP_MONO, fontVariantNumeric: "tabular-nums", fontSize: 12 }}>{row.yyyymm}</td>
                             <td className="px-2 py-2.5 text-center text-[#5B6B85] tabular-nums">{row.건수}건</td>
-                            <td className="px-2 py-2.5 text-right font-bold tabular-nums" style={{ fontFamily: KP_MONO, fontSize: 12 }}>
+                            <td className="px-2 py-2.5 text-right font-bold tabular-nums" style={{ fontFamily: KP_MONO, fontVariantNumeric: "tabular-nums", fontSize: 12 }}>
                               <span className={row.총청구금액>0?"text-[#0F1A30]":"text-[#9AA9C3]"}>
                                 {won(row.총청구금액)}
                               </span>
@@ -54446,10 +54470,10 @@ const handleBatchSettle = async (targetStatus) => {
                               const due = arDueDate(row.yyyymm, rule);
                               const over = due && 잔 > 0 ? Math.floor((Date.now() - new Date(`${due}T23:59:59+09:00`).getTime()) / 86400000) : null;
                               return (<>
-                                <td className="px-2 py-2.5 text-right tabular-nums text-[#3A4A66]" style={{ fontFamily: KP_MONO, fontSize: 12 }}>{입금 ? `${won(입금)}` : "-"}</td>
-                                <td className={`px-2 py-2.5 text-right tabular-nums ${잔 ? "font-black text-[#0F1A30]" : "text-[#9AA9C3]"}`} style={{ fontFamily: KP_MONO, fontSize: 12 }}>{잔 ? won(잔) : "0"}</td>
+                                <td className="px-2 py-2.5 text-right tabular-nums text-[#3A4A66]" style={{ fontFamily: KP_MONO, fontVariantNumeric: "tabular-nums", fontSize: 12 }}>{입금 ? `${won(입금)}` : "-"}</td>
+                                <td className={`px-2 py-2.5 text-right tabular-nums ${잔 ? "font-black text-[#0F1A30]" : "text-[#9AA9C3]"}`} style={{ fontFamily: KP_MONO, fontVariantNumeric: "tabular-nums", fontSize: 12 }}>{잔 ? won(잔) : "0"}</td>
                                 <td className="px-2 py-2.5 text-center tabular-nums text-[#3A4A66]" style={{ fontSize: 12 }}>{due || <span className="text-[#C9D3E3] text-[11px]">결제일 미설정</span>}</td>
-                                <td className="px-2 py-2.5 text-center">{over == null ? <span className="text-[#C9D3E3]">-</span> : over > 0 ? <span className="px-1.5 py-0.5 rounded-md bg-[#FDECEC] text-[#B42318] text-[11px] font-black tabular-nums" style={{ fontFamily: KP_MONO }}>D+{over}</span> : <span className="text-[11.5px] font-bold text-[#5B6B85] tabular-nums" style={{ fontFamily: KP_MONO }}>D{over === 0 ? "-day" : over}</span>}</td>
+                                <td className="px-2 py-2.5 text-center">{over == null ? <span className="text-[#C9D3E3]">-</span> : over > 0 ? <span className="px-1.5 py-0.5 rounded-md bg-[#FDECEC] text-[#B42318] text-[11px] font-black tabular-nums" style={{ fontFamily: KP_MONO, fontVariantNumeric: "tabular-nums" }}>D+{over}</span> : <span className="text-[11.5px] font-bold text-[#5B6B85] tabular-nums" style={{ fontFamily: KP_MONO, fontVariantNumeric: "tabular-nums" }}>D{over === 0 ? "-day" : over}</span>}</td>
                               </>);
                             })()}
                             <td className="px-2 py-2.5 text-center cursor-pointer select-none"
@@ -55906,13 +55930,13 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
 
 
   return (
-    <div className="space-y-4">
+    <div className="kp-settle space-y-4">{/* ⭐ 2026-11-05 용차지급 — 정산 화면 글씨 크게(index.css kp-settle) */}
 
       {/* ── 헤더(네이비 히어로) ── */}
       <div className="relative overflow-hidden rounded-[22px] px-6 py-5 text-white flex items-center justify-between gap-4 flex-wrap"
         style={{ background: "linear-gradient(rgba(143,176,240,.07) 1px, transparent 1px) 0 0/22px 22px, linear-gradient(90deg, rgba(143,176,240,.07) 1px, transparent 1px) 0 0/22px 22px, linear-gradient(120deg,#0B1428 0%,#1B2B4B 60%,#2D4C82 100%)" }}>
         <div>
-          <div className="text-[10.5px] font-extrabold tracking-[0.26em] text-[#8FB0F0]" style={{ fontFamily: KP_MONO }}>SETTLEMENT · PAYOUT</div>
+          <div className="text-[10.5px] font-extrabold tracking-[0.26em] text-[#8FB0F0]" style={{ fontFamily: KP_MONO, fontVariantNumeric: "tabular-nums" }}>SETTLEMENT · PAYOUT</div>
           <h2 className="text-[22px] font-black"><EditableText id="payment.title2" defaultText="용차지급관리" /></h2>
           <p className="text-[12.5px] text-white/60"><EditableText id="payment.subtitle" defaultText="배차완료 오더의 기사운임 지급 현황 관리" /></p>
         </div>
@@ -55945,9 +55969,9 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
           { label: "미지급 금액", en: "UNPAID", val: `${won(kpi.undoneAmt)}원`, hot: true },
         ].map(({ label, en, val, hot }) => (
           <div key={label} className={`rounded-2xl p-4 border ${hot ? "bg-[#0F1A30] border-[#0F1A30]" : "bg-white border-[#E3E8F0]"}`}>
-            <div className={`text-[9.5px] font-extrabold tracking-[0.22em] ${hot ? "text-[#8FB0F0]" : "text-[#9AA9C3]"}`} style={{ fontFamily: KP_MONO }}>{en}</div>
+            <div className={`text-[9.5px] font-extrabold tracking-[0.22em] ${hot ? "text-[#8FB0F0]" : "text-[#9AA9C3]"}`} style={{ fontFamily: KP_MONO, fontVariantNumeric: "tabular-nums" }}>{en}</div>
             <div className={`text-[11.5px] font-bold ${hot ? "text-white/70" : "text-[#5B6B85]"}`}>{label}</div>
-            <div className={`text-[16px] font-black tabular-nums ${hot ? "text-white" : "text-[#0F1A30]"}`} style={{ fontFamily: KP_MONO }}>{val}</div>
+            <div className={`text-[16px] font-black tabular-nums ${hot ? "text-white" : "text-[#0F1A30]"}`} style={{ fontFamily: KP_MONO, fontVariantNumeric: "tabular-nums" }}>{val}</div>
           </div>
         ))}
       </div>
@@ -56679,10 +56703,10 @@ function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, sho
               className={`relative overflow-hidden rounded-[20px] px-5 py-4 text-left transition ${on ? "text-white shadow-[0_14px_30px_rgba(15,26,48,0.28)]" : "bg-white border border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_8px_20px_rgba(16,24,40,0.05)] hover:border-[#4B6CB7]"}`}
               style={on ? { background: "linear-gradient(125deg,#0B1428,#0F1A30 45%,#1B2B4B 80%,#2D4C82)" } : undefined}>
               {on && <span className="absolute inset-0 opacity-[0.08]" style={{ backgroundImage: "linear-gradient(#fff 1px,transparent 1px),linear-gradient(90deg,#fff 1px,transparent 1px)", backgroundSize: "18px 18px" }} />}
-              <div className={`relative text-[10px] font-extrabold tracking-[0.24em] ${on ? "text-[#8FB0F0]" : "text-[#9AA9C3]"}`} style={{ fontFamily: KP_MONO }}>{en}</div>
+              <div className={`relative text-[10px] font-extrabold tracking-[0.24em] ${on ? "text-[#8FB0F0]" : "text-[#9AA9C3]"}`} style={{ fontFamily: KP_MONO, fontVariantNumeric: "tabular-nums" }}>{en}</div>
               <div className="relative flex items-end justify-between mt-1">
                 <span className={`text-[14px] font-black ${on ? "text-white" : "text-[#0F1A30]"}`}><EditableText id={`driver.kpi.${label}`} defaultText={label} /></span>
-                <span className={`text-[28px] font-black leading-none tabular-nums ${on ? "text-white" : "text-[#0F1A30]"}`} style={{ fontFamily: KP_MONO }}>{val}</span>
+                <span className={`text-[28px] font-black leading-none tabular-nums ${on ? "text-white" : "text-[#0F1A30]"}`} style={{ fontFamily: KP_MONO, fontVariantNumeric: "tabular-nums" }}>{val}</span>
               </div>
             </button>
           );
@@ -56877,7 +56901,7 @@ function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, sho
           {!showAll && !searched && (
             <div className="relative overflow-hidden rounded-[22px] flex flex-col items-center justify-center py-20 text-white" style={{ background: "radial-gradient(90% 80% at 50% 0%, #22396A 0%, #0F1A30 60%, #0B1428 100%)" }}>
               <div className="absolute inset-0 opacity-[0.08]" style={{ backgroundImage: "linear-gradient(#fff 1px,transparent 1px),linear-gradient(90deg,#fff 1px,transparent 1px)", backgroundSize: "28px 28px" }} />
-              <div className="relative text-[10.5px] font-extrabold tracking-[0.3em] text-[#8FB0F0] mb-2" style={{ fontFamily: KP_MONO }}>DRIVER SEARCH</div>
+              <div className="relative text-[10.5px] font-extrabold tracking-[0.3em] text-[#8FB0F0] mb-2" style={{ fontFamily: KP_MONO, fontVariantNumeric: "tabular-nums" }}>DRIVER SEARCH</div>
               <div className="relative text-[16px] font-black">위 검색바에 차량번호·기사명·연락처를 입력하세요</div>
               <div className="relative text-[13px] text-white/55 mt-1">숫자 타일을 누르면 등급별 기사님이 바로 보입니다</div>
             </div>
@@ -57541,10 +57565,10 @@ function KpStatTile({ on, en, label, value, onClick }) {
       className={`relative overflow-hidden rounded-[20px] px-5 py-4 text-left transition ${on ? "text-white shadow-[0_14px_30px_rgba(15,26,48,0.28)]" : "bg-white border border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_8px_20px_rgba(16,24,40,0.05)] hover:border-[#4B6CB7]"}`}
       style={on ? { background: "linear-gradient(125deg,#0B1428,#0F1A30 45%,#1B2B4B 80%,#2D4C82)" } : undefined}>
       {on && <span className="absolute inset-0 opacity-[0.08]" style={{ backgroundImage: "linear-gradient(#fff 1px,transparent 1px),linear-gradient(90deg,#fff 1px,transparent 1px)", backgroundSize: "18px 18px" }} />}
-      <div className={`relative text-[10px] font-extrabold tracking-[0.24em] ${on ? "text-[#8FB0F0]" : "text-[#9AA9C3]"}`} style={{ fontFamily: KP_MONO }}>{en || ""}</div>
+      <div className={`relative text-[10px] font-extrabold tracking-[0.24em] ${on ? "text-[#8FB0F0]" : "text-[#9AA9C3]"}`} style={{ fontFamily: KP_MONO, fontVariantNumeric: "tabular-nums" }}>{en || ""}</div>
       <div className="relative flex items-end justify-between mt-1">
         <span className={`text-[14px] font-black ${on ? "text-white" : "text-[#0F1A30]"}`}>{label}</span>
-        <span className={`text-[28px] font-black leading-none tabular-nums ${on ? "text-white" : "text-[#0F1A30]"}`} style={{ fontFamily: KP_MONO }}>{value}</span>
+        <span className={`text-[28px] font-black leading-none tabular-nums ${on ? "text-white" : "text-[#0F1A30]"}`} style={{ fontFamily: KP_MONO, fontVariantNumeric: "tabular-nums" }}>{value}</span>
       </div>
     </button>
   );
@@ -57568,7 +57592,7 @@ function KpEmptySearch({ en, title, sub }) {
   return (
     <div className="relative overflow-hidden rounded-[22px] flex flex-col items-center justify-center py-16 text-white" style={{ background: "radial-gradient(90% 80% at 50% 0%, #22396A 0%, #0F1A30 60%, #0B1428 100%)" }}>
       <div className="absolute inset-0 opacity-[0.08]" style={{ backgroundImage: "linear-gradient(#fff 1px,transparent 1px),linear-gradient(90deg,#fff 1px,transparent 1px)", backgroundSize: "28px 28px" }} />
-      <div className="relative text-[10.5px] font-extrabold tracking-[0.3em] text-[#8FB0F0] mb-2" style={{ fontFamily: KP_MONO }}>{en}</div>
+      <div className="relative text-[10.5px] font-extrabold tracking-[0.3em] text-[#8FB0F0] mb-2" style={{ fontFamily: KP_MONO, fontVariantNumeric: "tabular-nums" }}>{en}</div>
       <div className="relative text-[16px] font-black">{title}</div>
       {sub && <div className="relative text-[13px] text-white/55 mt-1">{sub}</div>}
     </div>
@@ -61074,7 +61098,7 @@ function HRManagementPage({ userCompany, role, userId, focusUid = null, selfOnly
                   <div ref={attendanceRef} className="w-full rounded-[24px] overflow-hidden text-white" style={{ background: "linear-gradient(rgba(143,176,240,.06) 1px, transparent 1px) 0 0/22px 22px, linear-gradient(90deg, rgba(143,176,240,.06) 1px, transparent 1px) 0 0/22px 22px, linear-gradient(150deg,#060C1A 0%,#0F1A30 45%,#1B2B4B 100%)" }}>
                     <div className="px-6 md:px-9 pt-7 pb-5 flex items-end justify-between gap-4 flex-wrap border-b border-white/10">
                       <div>
-                        <div className="text-[12px] font-extrabold tracking-[0.3em] text-[#8FB0F0]" style={{ fontFamily: "'JetBrains Mono',ui-monospace,monospace" }}>ATTENDANCE · TENURE · {monthStr.replace("-", ".")}</div>
+                        <div className="text-[12px] font-extrabold tracking-[0.3em] text-[#8FB0F0]" style={{ fontFamily: "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif", fontVariantNumeric: "tabular-nums" }}>ATTENDANCE · TENURE · {monthStr.replace("-", ".")}</div>
                         <div className="text-[28px] font-black tracking-[0.06em] leading-tight">근태 / 근속 현황</div>
                       </div>
                       <div className="text-right">
@@ -61094,7 +61118,7 @@ function HRManagementPage({ userCompany, role, userId, focusUid = null, selfOnly
                         ].map(([k, v, tone]) => (
                           <div key={k} className="rounded-2xl px-4 py-3.5 min-w-0" style={{ background: tone === "gold" ? "linear-gradient(135deg,rgba(215,188,130,0.25),rgba(215,188,130,0.08))" : tone === "warn" ? "rgba(247,144,9,0.14)" : "rgba(255,255,255,0.06)", boxShadow: `inset 0 0 0 1px ${tone === "gold" ? "rgba(215,188,130,0.5)" : tone === "warn" ? "rgba(247,144,9,0.5)" : "rgba(255,255,255,0.1)"}` }}>
                             <div className="text-[12.5px] font-bold text-white/55">{k}</div>
-                            <div className={`text-[22px] font-black tabular-nums truncate ${tone === "warn" ? "text-[#FEC84B]" : tone === "gold" ? "text-[#F1DFB4]" : ""}`} style={{ fontFamily: "'JetBrains Mono',ui-monospace,monospace" }}>{v}</div>
+                            <div className={`text-[22px] font-black tabular-nums truncate ${tone === "warn" ? "text-[#FEC84B]" : tone === "gold" ? "text-[#F1DFB4]" : ""}`} style={{ fontFamily: "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif", fontVariantNumeric: "tabular-nums" }}>{v}</div>
                           </div>
                         ))}
                       </div>
@@ -61113,7 +61137,7 @@ function HRManagementPage({ userCompany, role, userId, focusUid = null, selfOnly
                             return (
                               <div key={x.d} title={[x.ds, x.status, x.inHm && `출근 ${x.inHm}`, x.outHm && `퇴근 ${x.outHm}`, x.late && "지각"].filter(Boolean).join(" · ")}
                                 className="h-[52px] rounded-lg flex flex-col items-center justify-center" style={{ background: x.future ? "transparent" : c, boxShadow: x.future || !x.status ? "inset 0 0 0 1px rgba(255,255,255,0.12)" : x.late ? "0 0 10px rgba(247,144,9,0.55)" : "none", opacity: x.future ? 0.5 : 1 }}>
-                                <span className="text-[13px] font-black tabular-nums" style={{ fontFamily: "'JetBrains Mono',ui-monospace,monospace" }}>{x.d}</span>
+                                <span className="text-[13px] font-black tabular-nums" style={{ fontFamily: "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif", fontVariantNumeric: "tabular-nums" }}>{x.d}</span>
                                 <span className="text-[10px] font-bold text-white/80 tabular-nums">{x.late ? x.inHm : x.status === "휴일" ? "" : (x.status || "").slice(0, 2)}</span>
                               </div>
                             );
@@ -61128,7 +61152,7 @@ function HRManagementPage({ userCompany, role, userId, focusUid = null, selfOnly
                             <div className="divide-y divide-white/10">
                               {selected.lates.map((l) => (
                                 <div key={l.ds} className="py-2.5 flex items-center gap-3">
-                                  <span className="text-[15px] font-black tabular-nums" style={{ fontFamily: "'JetBrains Mono',ui-monospace,monospace" }}>{l.ds.slice(5).replace("-", ".")}</span>
+                                  <span className="text-[15px] font-black tabular-nums" style={{ fontFamily: "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif", fontVariantNumeric: "tabular-nums" }}>{l.ds.slice(5).replace("-", ".")}</span>
                                   <span className="text-[14px] font-black text-[#FEC84B] tabular-nums">{l.inHm} 출근</span>
                                   <span className="text-[13px] font-bold text-white/60">+{l.by}분</span>
                                   {l.reason && <span className="text-[13px] text-white/55 truncate">· {l.reason}</span>}
@@ -61143,7 +61167,7 @@ function HRManagementPage({ userCompany, role, userId, focusUid = null, selfOnly
                             <>
                               <div className="h-4 rounded-full bg-white/10 overflow-hidden"><div className="h-full rounded-full" style={{ width: `${Math.min(100, Math.round((Number(selected.leave.used) || 0) / Math.max(1, Number(selected.leave.entitlement) || 0) * 100))}%`, background: "linear-gradient(90deg,#4B6CB7,#8FB0F0)", boxShadow: "0 0 10px rgba(143,176,240,0.6)" }} /></div>
                               <div className="mt-3 grid grid-cols-3 gap-2 text-center">
-                                {[["발생", selected.leave.entitlement], ["사용", selected.leave.used], ["잔여", selected.leave.remaining]].map(([k, v]) => <div key={k} className="rounded-xl bg-white/[0.06] py-2"><div className="text-[12px] text-white/50 font-bold">{k}</div><div className="text-[20px] font-black tabular-nums" style={{ fontFamily: "'JetBrains Mono',ui-monospace,monospace" }}>{v}</div></div>)}
+                                {[["발생", selected.leave.entitlement], ["사용", selected.leave.used], ["잔여", selected.leave.remaining]].map(([k, v]) => <div key={k} className="rounded-xl bg-white/[0.06] py-2"><div className="text-[12px] text-white/50 font-bold">{k}</div><div className="text-[20px] font-black tabular-nums" style={{ fontFamily: "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif", fontVariantNumeric: "tabular-nums" }}>{v}</div></div>)}
                               </div>
                               <div className="mt-2 text-[12.5px] text-white/50">병가 {selected.leave.sickDays}일 · 외근 {selected.leave.fieldDays}일(회기 누적) · 결재 대기 {selected.pendingApprovals || 0}건</div>
                             </>
@@ -61835,7 +61859,7 @@ function CompanyProfile({ userCompany = "", role = "", userId = "" }) {
                   {appData?.companyCode && (
                     <button onClick={() => copy(appData.companyCode, "회사코드")} className="flex-1 md:flex-none text-left rounded-xl bg-white/10 ring-1 ring-white/20 px-4 py-2.5 hover:bg-white/15 transition" title="눌러서 복사">
                       <div className="text-[11px] font-bold tracking-[0.12em] text-blue-200/80">회사코드 · 눌러서 복사</div>
-                      <div className="text-[19px] font-black font-mono tracking-wider">{appData.companyCode}</div>
+                      <div className="text-[19px] font-black tabular-nums tracking-wider">{appData.companyCode}</div>
                     </button>
                   )}
                   {isAdmin && appData && (
@@ -61906,7 +61930,7 @@ function CompanyProfile({ userCompany = "", role = "", userId = "" }) {
                     <div className="absolute -right-10 -bottom-12 w-40 h-40 rounded-full bg-white/[0.07]" />
                     <div className="relative h-full flex flex-col">
                       <div className="flex items-center"><div className="text-[16px] font-black">{appData.계좌은행}</div><div className="ml-auto w-9 h-6 rounded-md bg-gradient-to-br from-amber-200 to-amber-400 opacity-90" /></div>
-                      <div className="mt-auto text-[22px] font-black font-mono tracking-wider">{appData.계좌번호}</div>
+                      <div className="mt-auto text-[22px] font-black tabular-nums tracking-wider">{appData.계좌번호}</div>
                       <div className="mt-1.5 flex flex-wrap items-center gap-2">
                         <div className="text-[14px] font-semibold text-blue-50/90">예금주 {appData.예금주 || "-"}</div>
                         <button onClick={() => { const t = `${appData.계좌은행} ${appData.계좌번호} ${appData.예금주 || ""}`.trim(); navigator.clipboard?.writeText(t).then(() => showMsg("계좌번호를 복사했습니다.")).catch(() => showMsg("복사에 실패했습니다.")); }}
@@ -62052,7 +62076,7 @@ function CompanyProfile({ userCompany = "", role = "", userId = "" }) {
                 </div>
                 <div className="flex items-center justify-between border-t border-gray-100 pt-3">
                   <span className="text-[13px] font-semibold text-gray-500 w-20"><EditableText id="companyProfile.bankConfirm.계좌번호" defaultText="계좌번호" /></span>
-                  <span className="text-[14px] font-bold text-[#1B2B4B] font-mono">{bankForm.accountNumber}</span>
+                  <span className="text-[14px] font-bold text-[#1B2B4B] tabular-nums">{bankForm.accountNumber}</span>
                 </div>
                 <div className="flex items-center justify-between border-t border-gray-100 pt-3">
                   <span className="text-[13px] font-semibold text-gray-500 w-20"><EditableText id="companyProfile.bankConfirm.예금주" defaultText="예금주" /></span>

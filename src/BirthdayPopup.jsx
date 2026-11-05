@@ -9,7 +9,7 @@ import { doc, setDoc } from "firebase/firestore";
 import { db } from "./firebase";
 import { useCompanyStaff } from "./InternalMail";
 
-const MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
+const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
 const GOLD = "#E9C46A";
 const kstNow = () => new Date(Date.now() + 9 * 3600e3);
 const md = (d) => `${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`;
@@ -71,7 +71,7 @@ export default function BirthdayPopup({ uid, profile, company, mobile = false })
               <div style={{ width: 68, height: 68, margin: "0 auto 14px", borderRadius: 999, display: "grid", placeItems: "center", background: "rgba(233,196,106,.14)", border: `1.5px solid ${GOLD}` }}>
                 <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke={GOLD} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M4 21h16" /><path d="M5 21v-7a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v7" /><path d="M5 16c1.5 1 3 1 4.5 0s3-1 4.5 0 3 1 4.5 0" /><path d="M12 12V8" /><path d="M12 5.5c.8-.9.8-1.8 0-2.5-.8.7-.8 1.6 0 2.5z" /></svg>
               </div>
-              <div style={{ fontFamily: MONO, fontSize: 10.5, fontWeight: 800, letterSpacing: "0.32em", color: GOLD }}>HAPPY BIRTHDAY</div>
+              <div style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 10.5, fontWeight: 800, letterSpacing: "0.32em", color: GOLD }}>HAPPY BIRTHDAY</div>
               <div style={{ fontSize: mobile ? 22 : 24, fontWeight: 900, marginTop: 6, lineHeight: 1.35, wordBreak: "keep-all" }}>생일을 진심으로 축하드립니다</div>
               <div style={{ marginTop: 8, fontSize: 13.5, fontWeight: 700, color: "#C9D6EE" }}>{name}{profile?.team ? ` · ${profile.team}` : ""}</div>
             </div>

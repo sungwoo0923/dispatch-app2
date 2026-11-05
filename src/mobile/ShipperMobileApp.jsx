@@ -421,12 +421,12 @@ const 차량종류목록 = ["라보/다마스", "카고", "윙/카고", "윙바�
 const 화물단위목록 = ["파레트", "박스", "없음", "개"];
 const 톤수단위목록 = ["톤", "kg", "없음"];
 const NAVY = "#1B2B4B";
-const M_MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
+const M_MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
 function MClock() {
   const [now, setNow] = useState(() => new Date());
   useEffect(() => { const t = setInterval(() => setNow(new Date()), 1000); return () => clearInterval(t); }, []);
   const p = (n) => String(n).padStart(2, "0");
-  return <span className="text-[15px] font-black text-white tabular-nums" style={{ fontFamily: M_MONO }}>{p(now.getHours())}:{p(now.getMinutes())}<span className="text-[11px] text-white/40 ml-0.5">{p(now.getSeconds())}</span></span>;
+  return <span className="text-[15px] font-black text-white tabular-nums" style={{ fontFamily: M_MONO, fontVariantNumeric: "tabular-nums" }}>{p(now.getHours())}:{p(now.getMinutes())}<span className="text-[11px] text-white/40 ml-0.5">{p(now.getSeconds())}</span></span>;
 }
 const EMPTY_FORM = () => ({
   운송사명: "", 운송사코드: "",
@@ -775,9 +775,9 @@ export default function ShipperMobileApp() {
           <div className="absolute left-0 top-0 bottom-0 w-64 bg-white shadow-xl flex flex-col">
             <div className="relative overflow-hidden px-5 py-5" style={{ background: "radial-gradient(120% 90% at 20% 0%, #22396A 0%, #0F1A30 60%, #0B1428 100%)" }}>
               <span className="absolute inset-0 opacity-[0.07]" style={{ backgroundImage: "linear-gradient(#fff 1px,transparent 1px),linear-gradient(90deg,#fff 1px,transparent 1px)", backgroundSize: "16px 16px" }} />
-              <div className="relative text-[9.5px] font-extrabold tracking-[0.3em] text-[#8FB0F0]" style={{ fontFamily: "'JetBrains Mono',ui-monospace,monospace" }}><LogisTag height={7.5} text="SHIPPER" /></div>
+              <div className="relative text-[9.5px] font-extrabold tracking-[0.3em] text-[#8FB0F0]" style={{ fontFamily: "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif", fontVariantNumeric: "tabular-nums" }}><LogisTag height={7.5} text="SHIPPER" /></div>
               <div className="relative text-white font-black text-[17px] mt-1">{userData.companyName || "화주사"}</div>
-              <div className="relative text-white/55 text-[12px] mt-0.5" style={{ fontFamily: "'JetBrains Mono',ui-monospace,monospace" }}>{menuTime}</div>
+              <div className="relative text-white/55 text-[12px] mt-0.5" style={{ fontFamily: "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif", fontVariantNumeric: "tabular-nums" }}>{menuTime}</div>
             </div>
             <div className="flex-1 px-4 py-3 space-y-1 overflow-y-auto">
               <div className="text-xs text-gray-400 font-semibold px-2 py-1 mt-1">메뉴</div>
@@ -812,7 +812,7 @@ export default function ShipperMobileApp() {
         </button>
         <div className="relative text-center leading-none">
           <div className="flex justify-center"><LogisWordmark height={13} /></div>
-          <div className="text-[9px] font-extrabold tracking-[0.3em] text-[#8FB0F0] mt-1" style={{ fontFamily: "'JetBrains Mono',ui-monospace,monospace" }}>SHIPPER</div>
+          <div className="text-[9px] font-extrabold tracking-[0.3em] text-[#8FB0F0] mt-1" style={{ fontFamily: "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif", fontVariantNumeric: "tabular-nums" }}>SHIPPER</div>
         </div>
         <div className="relative flex items-center gap-3">
           <button onClick={() => setShowMessenger(true)} className="relative text-white/90">
@@ -945,22 +945,22 @@ function ShipperHomeM({ kpi, orders, onSelect, onGoOrder, onEdit, user }) {
         style={{ background: "linear-gradient(rgba(143,176,240,.05) 1px, transparent 1px) 0 0/22px 22px, linear-gradient(90deg, rgba(143,176,240,.05) 1px, transparent 1px) 0 0/22px 22px, radial-gradient(400px 200px at 90% -10%, rgba(75,108,183,.45), transparent 60%), linear-gradient(160deg,#0B1428 0%,#111F3B 55%,#0E1830 100%)" }}>
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <span className="text-[9.5px] font-extrabold tracking-[0.28em] text-[#8FB0F0]" style={{ fontFamily: M_MONO }}>SHIPPER DECK</span>
-            <span className="inline-flex items-center gap-1 px-1.5 py-[1px] rounded-full border border-[#8FB0F0]/40 text-[9px] font-extrabold tracking-[0.14em] text-[#CFE0FF]" style={{ fontFamily: M_MONO }}>
+            <span className="text-[9.5px] font-extrabold tracking-[0.28em] text-[#8FB0F0]" style={{ fontFamily: M_MONO, fontVariantNumeric: "tabular-nums" }}>SHIPPER DECK</span>
+            <span className="inline-flex items-center gap-1 px-1.5 py-[1px] rounded-full border border-[#8FB0F0]/40 text-[9px] font-extrabold tracking-[0.14em] text-[#CFE0FF]" style={{ fontFamily: M_MONO, fontVariantNumeric: "tabular-nums" }}>
               <span className="w-1.5 h-1.5 rounded-full bg-[#CFE0FF] animate-pulse" />LIVE
             </span>
           </div>
           <MClock />
         </div>
         <div className="mt-3 text-[11.5px] font-bold text-white/55">이번달 예상 정산액</div>
-        <div className="text-[30px] font-black tabular-nums leading-tight" style={{ fontFamily: M_MONO }}>
+        <div className="text-[30px] font-black tabular-nums leading-tight" style={{ fontFamily: M_MONO, fontVariantNumeric: "tabular-nums" }}>
           <OdometerNumber value={monthAmount} suffix="원" />
         </div>
         <div className="mt-3 flex items-end gap-[5px] h-12">
           {week.map((d) => (
             <div key={d.k} className="flex-1 flex flex-col items-center gap-1">
               <div className="w-full rounded-t-[4px]" style={{ height: `${Math.max(3, (d.v / weekMax) * 34)}px`, background: d.on ? "linear-gradient(180deg,#CFE0FF,#6E95E8)" : "rgba(110,149,232,.35)" }} />
-              <span className={`text-[9px] ${d.on ? "text-[#CFE0FF] font-extrabold" : "text-white/35"}`} style={{ fontFamily: M_MONO }}>{d.l}</span>
+              <span className={`text-[9px] ${d.on ? "text-[#CFE0FF] font-extrabold" : "text-white/35"}`} style={{ fontFamily: M_MONO, fontVariantNumeric: "tabular-nums" }}>{d.l}</span>
             </div>
           ))}
         </div>
@@ -968,8 +968,8 @@ function ShipperHomeM({ kpi, orders, onSelect, onGoOrder, onEdit, user }) {
           {[["전체", kpi.total, "TOTAL"], ["오늘", kpi.today, "TODAY"], ["배차중", kpi.배차중, "RUN"], ["완료", kpi.완료, "DONE"]].map(([l, v, en], i) => (
             <div key={en} className={`rounded-[12px] px-2 py-2 border ${i === 1 ? "border-[#8FB0F0]/45" : "border-[#8FB0F0]/15"}`}
               style={{ background: i === 1 ? "linear-gradient(140deg, rgba(75,108,183,.55), rgba(45,76,130,.25))" : "rgba(255,255,255,.04)" }}>
-              <div className="text-[8.5px] font-extrabold tracking-[0.16em] text-white/40" style={{ fontFamily: M_MONO }}>{en}</div>
-              <div className="text-[19px] font-black leading-tight tabular-nums" style={{ fontFamily: M_MONO }}><OdometerNumber value={v} /></div>
+              <div className="text-[8.5px] font-extrabold tracking-[0.16em] text-white/40" style={{ fontFamily: M_MONO, fontVariantNumeric: "tabular-nums" }}>{en}</div>
+              <div className="text-[19px] font-black leading-tight tabular-nums" style={{ fontFamily: M_MONO, fontVariantNumeric: "tabular-nums" }}><OdometerNumber value={v} /></div>
               <div className="text-[10.5px] font-bold text-white/55">{l}</div>
             </div>
           ))}
@@ -977,7 +977,7 @@ function ShipperHomeM({ kpi, orders, onSelect, onGoOrder, onEdit, user }) {
         <div className="mt-3">
           <div className="flex justify-between text-[11px] font-bold text-white/60 mb-1.5">
             <span>오늘 배차 진행</span>
-            <span className="text-white" style={{ fontFamily: M_MONO }}>{todayDone}/{todayAll} · {todayAll ? Math.round((todayDone / todayAll) * 100) : 0}%</span>
+            <span className="text-white" style={{ fontFamily: M_MONO, fontVariantNumeric: "tabular-nums" }}>{todayDone}/{todayAll} · {todayAll ? Math.round((todayDone / todayAll) * 100) : 0}%</span>
           </div>
           <div className="h-[7px] rounded-full bg-[#8FB0F0]/15 overflow-hidden">
             <div className="h-full rounded-full" style={{ width: `${todayAll ? (todayDone / todayAll) * 100 : 0}%`, background: "linear-gradient(90deg,#2D4C82,#CFE0FF)", boxShadow: "0 0 10px #8FB0F0" }} />
@@ -1011,9 +1011,9 @@ function ShipperHomeM({ kpi, orders, onSelect, onGoOrder, onEdit, user }) {
         </div>
         <div className="flex items-center gap-2 mb-2 mt-1">
           <span className="w-1.5 h-1.5 rotate-45 bg-[#2D4C82]" />
-          <span className="text-[9.5px] font-extrabold tracking-[0.22em] text-[#9AA9C3]" style={{ fontFamily: M_MONO }}>BOARD</span>
+          <span className="text-[9.5px] font-extrabold tracking-[0.22em] text-[#9AA9C3]" style={{ fontFamily: M_MONO, fontVariantNumeric: "tabular-nums" }}>BOARD</span>
           <span className="text-[15px] font-black text-[#0F1A30]">{queriedDate === todayStr() ? "오늘" : queriedDate} 운송</span>
-          <span className="ml-auto text-[12px] font-extrabold text-[#5B6B85]" style={{ fontFamily: M_MONO }}>{viewOrders.length}건</span>
+          <span className="ml-auto text-[12px] font-extrabold text-[#5B6B85]" style={{ fontFamily: M_MONO, fontVariantNumeric: "tabular-nums" }}>{viewOrders.length}건</span>
         </div>
         {viewOrders.length === 0 ? (
           <div className="text-center text-gray-400 text-sm py-6 bg-white rounded-xl border">
@@ -1761,13 +1761,13 @@ function ShipperHistoryM({ orders, onSelect, onBack, onEdit, user, minAllowedDat
         style={{ background: "linear-gradient(135deg, #0f1f33, #1e3a5f)" }}>
         <div>
           <div className="text-[11px] font-semibold tracking-wide mb-1" style={{ color: "rgba(191,219,254,0.7)" }}>조회 건수</div>
-          <div className="text-2xl font-bold text-white tabular-nums" style={{ fontFamily: "monospace", textShadow: "0 0 10px rgba(96,165,250,0.45)" }}>
+          <div className="text-2xl font-bold text-white tabular-nums" style={{ fontFamily: "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif", fontVariantNumeric: "tabular-nums", textShadow: "0 0 10px rgba(96,165,250,0.45)" }}>
             <OdometerNumber value={filtered.length} suffix="건" />
           </div>
         </div>
         <div>
           <div className="text-[11px] font-semibold tracking-wide mb-1" style={{ color: "rgba(191,219,254,0.7)" }}>총 청구운임</div>
-          <div className="text-2xl font-bold text-white tabular-nums" style={{ fontFamily: "monospace", textShadow: "0 0 10px rgba(96,165,250,0.45)" }}>
+          <div className="text-2xl font-bold text-white tabular-nums" style={{ fontFamily: "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif", fontVariantNumeric: "tabular-nums", textShadow: "0 0 10px rgba(96,165,250,0.45)" }}>
             <OdometerNumber value={totalAmount} suffix="원" />
           </div>
         </div>
@@ -2957,7 +2957,7 @@ function KpiCard({ title, value }) {
     <div className="relative overflow-hidden rounded-[16px] px-3.5 py-3 text-white border border-[#8FB0F0]/15 shadow-[0_8px_20px_rgba(11,20,40,0.18)]"
       style={{ background: "linear-gradient(160deg,#0B1428 0%,#16264A 100%)" }}>
       <div className="text-[11px] font-bold text-white/55 mb-1">{title}</div>
-      <div className="text-[21px] font-black tabular-nums leading-tight truncate" style={{ fontFamily: M_MONO }}>
+      <div className="text-[21px] font-black tabular-nums leading-tight truncate" style={{ fontFamily: M_MONO, fontVariantNumeric: "tabular-nums" }}>
         {typeof value === "number" ? <OdometerNumber value={value} /> : value}
       </div>
     </div>
