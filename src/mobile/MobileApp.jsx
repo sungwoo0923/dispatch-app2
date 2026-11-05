@@ -12,6 +12,7 @@ import { makeClientMatcher } from "../clientMatch"; // ⭐ 2026-11-03 거래처 
 import { useCompanyBiz, BizPicker, BizChip, bizOf, BizSelect, resolveBiz, rememberBizFor, normBizKey } from "../companyBiz"; // ⭐ 2026-11-03 여러 사업자
 import { useCustomRoles, findCustomRole, getMenuAccess, roleScreen, useRoleView, applyRoleMenus } from "../customRoles";
 import { useReadOnlyGuard } from "../readOnlyGuard";
+import { useDriverEditChoice, DriverEditButton, SamePlateChips, pickDriverFor, isRegisteredCombo, saveDriverChoice } from "../DriverEditChoice"; // ⭐ 2026-11-05 매칭된 기사 이름·전화 [수정]
 import { confirmLeave } from "../leaveGuard";
 import { hideBlind, isBlindHidden, canSeeBlind, autoBlindNew } from "../blind";
 import { cleanMgrRows, mgrName } from "../mgrPlaceholder";
@@ -5042,21 +5043,38 @@ const deleteSingleOrder = async (order) => {
   // --------------------------------------------------
   // 🔵 모바일 전용 upsertDriver
   // --------------------------------------------------
-  const upsertDriver = async ({ id, 차량번호, 이름, 전화번호 }) => {
+  const upsertDriver = async ({ id, 차량번호, 이름, 전화번호, 별도추가 }) => {
     if (!차량번호) return;
 
     const norm = (s = "") => String(s).replace(/\s+/g, "").toLowerCase();
+    // ⭐ 2026-11-05 새 기사 문서엔 회사 이름을 꼭 넣는다 — 빠져 있으면 PC/모바일 목록(회사 필터)에서
+    //  기본 회사 기사로 취급돼 안 보이고, 회사 잠금 규칙(coCreate)에서도 저장이 거부된다.
+    const myCo = (localStorage.getItem("loginCompany") || userCompany || localStorage.getItem("userCompany") || DEFAULT_COMPANY).trim();
 
     // ⭐ id가 명시적으로 넘어오면(예: "신규 기사로 별도 등록") 차량번호로 기존 문서를
     // 찾지 않고 항상 새 문서를 만든다 — PC(DispatchApp.jsx)와 동일하게, 같은
     // 차량번호라도 "별도 등록"을 눌렀는데 기존 기사(예: 이봉우)를 그대로 덮어써버리는
     // 버그를 막는다.
+    // ⭐ 2026-11-05 단, 이미 있는 기사 문서 id(이름·전화 [수정] → "기존 정보 변경")면 그 문서의
+    //  이름·전화번호만 바꾼다(등급·메모·회사 등 나머지 정보는 그대로).
     if (id) {
+      const existingById = drivers.find((d) => d.id === id);
+      if (existingById) {
+        await updateDoc(doc(db, "drivers", id), {
+          차량번호: 차량번호 || existingById.차량번호 || "",
+          이름: 이름 || "",
+          전화번호: 전화번호 || "",
+          updatedAt: serverTimestamp(),
+        });
+        return id;
+      }
       await setDoc(doc(db, "drivers", id), {
         차량번호: 차량번호 || "",
         이름: 이름 || "",
         전화번호: 전화번호 || "",
         메모: "",
+        companyName: myCo,
+        ...(별도추가 ? { 별도추가: true } : {}),
         createdAt: serverTimestamp(),
       });
       return id;
@@ -5082,6 +5100,7 @@ const deleteSingleOrder = async (order) => {
       이름: 이름 || "",
       전화번호: 전화번호 || "",
       메모: "",
+      companyName: myCo, // ⭐ 2026-11-05
       createdAt: serverTimestamp(),
     });
 
@@ -10552,7 +10571,8 @@ function QuickEditModal({ order, drivers, cardVersionB, onClose, onSuccess, disp
       if (name || phone) { setCarNo(""); setDriverName(name || ""); setDriverPhone(phone || ""); setIsNewDriver(false); }
       return;
     }
-    const existing = (drivers || []).find(d => nd(d.차량번호) === nd(plate));
+    // ⭐ 2026-11-05 같은 차량번호 기사가 여러 명이면 이름·전화가 가장 가까운 기사와 비교
+    const existing = pickDriverFor(drivers, plate, name, phone);
     if (!existing) {
       setCarNo(plate); setDriverName(name || ""); setDriverPhone(formatPhone(phone || "")); setIsNewDriver(true);
       clearSmartInput();
@@ -10590,7 +10610,7 @@ function QuickEditModal({ order, drivers, cardVersionB, onClose, onSuccess, disp
     const nm = driverName.trim();
     const ph = driverPhone.trim();
     if (!pl) { setIsNewDriver(false); return; }
-    const existing = (drivers || []).find(d => nd(d.차량번호) === nd(pl));
+    const existing = pickDriverFor(drivers, pl, nm, ph); // ⭐ 2026-11-05 같은 차량번호 기사 여러 명 대비
     if (!existing) {
       // 등록되지 않은 차량번호 → 이름을 입력했을 때만 "신규 기사" 뱃지를 표시한다.
       setIsNewDriver(!!nm);
@@ -10868,7 +10888,8 @@ function QuickEditModal({ order, drivers, cardVersionB, onClose, onSuccess, disp
                   className="py-3 rounded-xl bg-[#1B2B4B] text-white text-sm font-bold"
                   onClick={async () => {
                     const { plate, name: nm, phone: ph } = driverConflictPopup.input;
-                    if (typeof upsertDriver === "function") await upsertDriver({ 차량번호: plate, 이름: nm, 전화번호: ph });
+                    // ⭐ 2026-11-05 비교한 그 기사 문서(id)를 정확히 바꾼다
+                    await saveDriverChoice("update", { existing: driverConflictPopup.existing, plate, name: nm, phone: ph, upsertDriver, company: (localStorage.getItem("loginCompany") || localStorage.getItem("userCompany") || "") });
                     setCarNo(plate); setDriverName(nm); setDriverPhone(formatPhone(ph));
                     setIsNewDriver(false);
                     setDriverConflictPopup(null);
@@ -10881,7 +10902,7 @@ function QuickEditModal({ order, drivers, cardVersionB, onClose, onSuccess, disp
                 className="w-full py-3 rounded-xl bg-white border border-[#1B2B4B] text-[#1B2B4B] text-sm font-bold"
                 onClick={async () => {
                   const { plate, name: nm, phone: ph } = driverConflictPopup.input;
-                  if (typeof upsertDriver === "function") await upsertDriver({ id: crypto.randomUUID(), 차량번호: plate, 이름: nm, 전화번호: ph });
+                  await saveDriverChoice("add", { plate, name: nm, phone: ph, upsertDriver, company: (localStorage.getItem("loginCompany") || localStorage.getItem("userCompany") || "") }); // ⭐ 2026-11-05 별도 문서 이름 = 회사__차량번호__x…
                   setCarNo(plate); setDriverName(nm); setDriverPhone(formatPhone(ph));
                   setIsNewDriver(false);
                   setDriverConflictPopup(null);
@@ -12476,7 +12497,7 @@ const pickupTimeText = order.상차시간
     const byPlate = drivers.filter(d => normD(d.차량번호) === normD(pl));
 
     if (byPlate.length > 0) {
-      const existing = byPlate[0];
+      const existing = pickDriverFor(drivers, pl, nm, ph) || byPlate[0]; // ⭐ 2026-11-05 같은 차량번호 기사 여러 명 대비
       const sameName = normD(existing.이름) === normD(nm);
 
       if (sameName) {
@@ -12509,7 +12530,7 @@ const pickupTimeText = order.상차시간
     const pl = carNo.trim();
     const nm = name.trim();
     if (!pl) return;
-    const existing = drivers.find(d => normD(d.차량번호) === normD(pl));
+    const existing = pickDriverFor(drivers, pl, nm, phone); // ⭐ 2026-11-05 같은 차량번호 기사 여러 명 대비
     if (!existing) return; // 등록되지 않은 차량번호는 그대로 신규로 둔다
     if (!nm || normD(existing.이름) === normD(nm)) {
       // 이름을 아직 안 썼거나 동일하면 최신 등록 정보로 자동완성만 해준다
@@ -13320,7 +13341,8 @@ const handleAssignClick = () => {
                       className="py-3 rounded-xl bg-[#1B2B4B] text-white text-sm font-bold"
                       onClick={async () => {
                         const { plate, name: nm, phone: ph } = driverConflictPopup.input;
-                        await upsertDriver({ 차량번호: plate, 이름: nm, 전화번호: ph });
+                        // ⭐ 2026-11-05 비교한 그 기사 문서(id)를 정확히 바꾼다
+                        await saveDriverChoice("update", { existing: driverConflictPopup.existing, plate, name: nm, phone: ph, upsertDriver, company: (localStorage.getItem("loginCompany") || localStorage.getItem("userCompany") || "") });
                         setCarNo(plate); setName(nm); setPhone(fmtPhone(ph));
                         setDriverConflictPopup(null);
                         showToast("기사 정보를 덮어썼습니다");
@@ -13332,8 +13354,10 @@ const handleAssignClick = () => {
                     className="w-full py-3 rounded-xl bg-white border border-[#1B2B4B] text-[#1B2B4B] text-sm font-bold"
                     onClick={async () => {
                       const { plate, name: nm, phone: ph } = driverConflictPopup.input;
-                      await upsertDriver({ 차량번호: plate, 이름: nm, 전화번호: ph });
+                      // ⚠️ 2026-11-05 예전엔 id 없이 불러 기존 기사를 덮어썼다 → 별도 문서(회사__차량번호__x…)로 추가
+                      await saveDriverChoice("add", { plate, name: nm, phone: ph, upsertDriver, company: (localStorage.getItem("loginCompany") || localStorage.getItem("userCompany") || "") });
                       setCarNo(plate); setName(nm); setPhone(fmtPhone(ph));
+                      setIsNewDriver(false);
                       setDriverConflictPopup(null);
                       showToast(`신규 기사 등록: ${nm || plate}`);
                     }}
@@ -14488,6 +14512,12 @@ const chooseClient = (c) => {
 };
 
 const [showNewDriver, setShowNewDriver] = useState(false);
+// ⭐ 2026-11-05 등록 기사와 매칭되면 기사명·연락처 잠금 + [수정] → 기존 정보 변경 / 별도 추가 선택
+const mfDrvEdit = useDriverEditChoice({ drivers, upsertDriver, company: (localStorage.getItem("loginCompany") || localStorage.getItem("userCompany") || ""), notify: (m) => showToast?.(m) });
+useEffect(() => { mfDrvEdit.reset(); }, [form?._editId]); // eslint-disable-line react-hooks/exhaustive-deps
+useEffect(() => { if (!form?.차량번호) mfDrvEdit.reset(); }, [form?.차량번호]); // eslint-disable-line react-hooks/exhaustive-deps
+const mfDrvCur = { 차량번호: form?.차량번호 || "", 이름: form?.기사명 || "", 전화번호: form?.전화번호 || "" };
+const mfDrvLocked = !mfDrvEdit.editing && isRegisteredCombo(drivers, mfDrvCur.차량번호, mfDrvCur.이름, mfDrvCur.전화번호);
 // ⭐ 기사 스마트검색에서 차량번호는 같은데 이름이 다른 기사를 입력했을 때 확인받는
 // 충돌 팝업 — 상세보기(MobileOrderDetail)와 동일한 개념이지만 이 폼 전용 state다.
 const [formConflictPopup, setFormConflictPopup] = useState(null);
@@ -14813,7 +14843,7 @@ const handleFormSmartCommit = (val) => {
     return;
   }
 
-  const existing = (drivers || []).find(d => nd(d.차량번호) === nd(plate));
+  const existing = pickDriverFor(drivers, plate, name, phone); // ⭐ 2026-11-05 같은 차량번호 기사 여러 명 대비
   if (existing) {
     const sameName = !name || nd(existing.이름) === nd(name);
     if (sameName) {
@@ -16324,6 +16354,7 @@ const pickDrop = (c) => {
               value={form.차량번호}
               onChange={(e) => {
                 const v = e.target.value;
+                mfDrvEdit.reset(); // ⭐ 2026-11-05 차량번호가 바뀌면 [수정] 상태 해제
                 update("차량번호", v);
                 setShowNewDriver(false);
 
@@ -16361,8 +16392,10 @@ const pickDrop = (c) => {
           label="기사명"
           input={
             <input autoComplete="off"
-              className="w-full border-0 border-b-2 border-gray-300 rounded-none px-1 py-1.5 text-[13px] font-semibold text-gray-900 bg-transparent focus:outline-none focus:border-[var(--reg-accent)] transition"
+              data-driver-field="name"
+              className={`w-full border-0 border-b-2 rounded-none px-1 py-1.5 text-[13px] font-semibold text-gray-900 focus:outline-none focus:border-[var(--reg-accent)] transition ${mfDrvLocked ? "border-gray-200 bg-[#F1F4F9] text-[#1B2B4B]" : mfDrvEdit.editing ? "border-[#2D4C82] bg-[#EEF3FC]" : "border-gray-300 bg-transparent"}`}
               value={form.기사명 || ""}
+              readOnly={mfDrvLocked}
               onChange={(e) => update("기사명", e.target.value)}
             />
           }
@@ -16373,16 +16406,32 @@ const pickDrop = (c) => {
         <RowLabelInput
           label="연락처"
           input={
+            <div className="flex items-center gap-1.5">
             <input autoComplete="off"
-              className="w-full border-0 border-b-2 border-gray-300 rounded-none px-1 py-1.5 text-[13px] font-semibold text-gray-900 bg-transparent focus:outline-none focus:border-[var(--reg-accent)] transition"
+              data-driver-field="phone"
+              className={`min-w-0 flex-1 border-0 border-b-2 rounded-none px-1 py-1.5 text-[13px] font-semibold text-gray-900 focus:outline-none focus:border-[var(--reg-accent)] transition ${mfDrvLocked ? "border-gray-200 bg-[#F1F4F9] text-[#1B2B4B]" : mfDrvEdit.editing ? "border-[#2D4C82] bg-[#EEF3FC]" : "border-gray-300 bg-transparent"}`}
               inputMode="tel"
               placeholder="010-0000-0000"
               value={form.전화번호 || ""}
+              readOnly={mfDrvLocked}
               onChange={(e) => update("전화번호", formatPhoneLive(e.target.value))}
             />
+            {(mfDrvLocked || mfDrvEdit.editing) && (
+              <DriverEditButton compact editing={mfDrvEdit.editing}
+                onEdit={() => mfDrvEdit.begin(mfDrvCur)}
+                onDone={() => mfDrvEdit.finish(mfDrvCur)}
+                onRevert={() => { const o = mfDrvEdit.revert(); if (o) setForm((p) => ({ ...p, 기사명: o.이름, 전화번호: o.전화번호 })); }} />
+            )}
+            </div>
           }
         />
       </div>
+      {/* ⭐ 2026-11-05 같은 차량번호 기사가 여러 명(별도 추가 등)이면 골라 바꾼다 */}
+      {!mfDrvEdit.editing && (
+        <SamePlateChips className="px-2.5 py-2 border-t border-gray-100" drivers={drivers} plate={form.차량번호} name={form.기사명} phone={form.전화번호}
+          onPick={(d) => setForm((p) => ({ ...p, 기사명: d.이름 || "", 전화번호: formatPhoneLive(d.전화번호 || "") }))} />
+      )}
+      {mfDrvEdit.modal}
 
       {/* ⭐ 등록되지 않은 차량번호면 "신규 기사"만 표시하고, 클릭 없이 오더 저장 시
           자동으로 기사관리에 등록한다(아래 onSave 버튼 참고) — 예전엔 이 버튼을
@@ -16508,7 +16557,8 @@ const pickDrop = (c) => {
 
       <div className="mt-4 mb-8 space-y-2">
         <button
-          onClick={() => {
+          onClick={async () => {
+            if (!(await mfDrvEdit.finish(mfDrvCur))) return; // ⭐ 2026-11-05 [수정] 중이면 먼저 변경/별도추가 선택
             if (!validateRequiredMobile()) return;
             // ⭐ 신규 기사면 여기서 자동 등록 — 아래 저장/등록과 별도 버튼을 누를 필요 없다.
             if (showNewDriver && (form.차량번호 || "").trim()) {
@@ -17787,7 +17837,8 @@ const pickDrop = (c) => {
             className="py-3 rounded-xl bg-[#1B2B4B] text-white text-sm font-bold"
             onClick={async () => {
               const { plate, name: nm, phone: ph } = formConflictPopup.input;
-              await upsertDriver({ 차량번호: plate, 이름: nm, 전화번호: ph });
+              // ⭐ 2026-11-05 비교한 그 기사 문서(id)를 정확히 바꾼다
+              await saveDriverChoice("update", { existing: formConflictPopup.existing, plate, name: nm, phone: ph, upsertDriver, company: (localStorage.getItem("loginCompany") || localStorage.getItem("userCompany") || "") });
               update("차량번호", plate); update("기사명", nm || ""); update("전화번호", ph || "");
               setShowNewDriver(false);
               setFormConflictPopup(null);
@@ -17798,11 +17849,15 @@ const pickDrop = (c) => {
         <button
           style={{ touchAction: "manipulation" }}
           className="w-full py-3 rounded-xl bg-white border border-[#1B2B4B] text-[#1B2B4B] text-sm font-bold"
-          onClick={() => {
+          onClick={async () => {
             const { plate, name: nm, phone: ph } = formConflictPopup.input;
             update("차량번호", plate); update("기사명", nm || ""); update("전화번호", ph || "");
-            setShowNewDriver(true);
+            // ⚠️ 2026-11-05 예전엔 "신규 기사" 표시만 하고 저장 때 차량번호로 upsert → 기존 기사를 덮어썼다.
+            //  바로 별도 문서(회사__차량번호__x…)로 추가한다.
+            await saveDriverChoice("add", { plate, name: nm, phone: ph, upsertDriver, company: (localStorage.getItem("loginCompany") || localStorage.getItem("userCompany") || "") });
+            setShowNewDriver(false);
             setFormConflictPopup(null);
+            showToast?.(`신규 기사로 별도 등록: ${nm || plate}`);
           }}
         >신규 기사로 별도 등록</button>
       </div>

@@ -20,6 +20,7 @@ import { VehicleTypePicker, VehicleTypeAddButton, useVehicleTypes, withCustomVeh
 import { withCo, getTenant } from "./fsTenant";
 import { coDocKey } from "./coKey";
 import { createPortal } from "react-dom";
+import { useDriverEditChoice, DriverEditButton, SamePlateChips, driversOfPlate, pickDriverFor, isRegisteredCombo, saveDriverChoice } from "./DriverEditChoice"; // ⭐ 2026-11-05 매칭된 기사 이름·전화 [수정]
 import { Navigate, useNavigate } from "react-router-dom";
 import { CartesianGrid, Line, LineChart, BarChart, Bar, Cell, LabelList, PieChart, Pie, ResponsiveContainer, Tooltip, XAxis, YAxis, Legend } from "recharts";
 import * as XLSX from "xlsx";
@@ -2166,6 +2167,70 @@ const CpField = ({ label, children }) => (
 // ⭐ 2026-11-02 칸 구분이 흐리다는 의견 — 밑줄(연한 1px) → 테두리 박스형(칸마다 또렷하게). 입력 중이면 네이비 테두리 + 링
 const cpInputStyle =
   "w-full h-9 border border-[#C9D5EA] rounded-lg px-2.5 py-1.5 text-[14.5px] font-bold text-gray-900 bg-[#F9FBFE] hover:border-[#9FB2D3] focus:outline-none focus:bg-white focus:border-[#2D4C82] focus:ring-4 focus:ring-[#2D4C82]/10 focus:text-[#0B1428] disabled:bg-[#F1F4F9] disabled:text-gray-500 transition";
+
+// ⭐ 2026-11-05 기사명·전화번호 — 등록 기사와 매칭돼 잠긴 칸 옆에 [수정] 버튼(src/DriverEditChoice.jsx)
+//  variant "cp": 오더 복사/수정 패널(CpField 가로형) · "modal": 수정 창(라벨 위 세로형)
+//  target/setTarget: 그 화면의 오더 상태(copyTarget/editTarget) · de: useDriverEditChoice()
+function DriverNamePhoneEdit({ variant = "cp", target, setTarget, de, drivers }) {
+  const plate = target?.차량번호 || "";
+  const sameList = driversOfPlate(drivers, plate);
+  const registered = sameList.length > 0;
+  const editing = de.editing;
+  // ⭐ 2026-11-05 같은 차량번호 기사가 여러 명(별도 추가 등)이면 칩으로 바로 바꿔 고른다
+  const chips = (!editing && sameList.length > 1) ? (
+    <SamePlateChips drivers={drivers} plate={plate} name={target?.이름} phone={target?.전화번호}
+      onPick={(d) => setTarget((p) => ({ ...p, 이름: d.이름 || "", 전화번호: formatPhone(d.전화번호 || ""), 배차상태: !p?.배차상태 || p.배차상태 === "배차중" ? "배차완료" : p.배차상태 }))} />
+  ) : null;
+  const cur = { 차량번호: plate, 이름: target?.이름 || "", 전화번호: target?.전화번호 || "" };
+  const onKey = (e) => { if (editing && e.key === "Enter") { e.preventDefault(); e.stopPropagation(); de.finish(cur); } };
+  const btn = (registered || editing) ? (
+    <DriverEditButton compact={variant === "cp"} editing={editing}
+      onEdit={() => de.begin(cur)}
+      onDone={() => de.finish(cur)}
+      onRevert={() => { const o = de.revert(); if (o) setTarget((p) => ({ ...p, 이름: o.이름, 전화번호: o.전화번호 })); }} />
+  ) : null;
+  const nameInput = (cls) => (
+    <input autoComplete="off" data-driver-field="name" className={cls} value={target?.이름 ?? ""} readOnly={!editing}
+      placeholder={editing ? "기사명" : ""}
+      onKeyDown={onKey}
+      onChange={(e) => { const v = e.target.value; setTarget((p) => ({ ...p, 이름: v })); }} />
+  );
+  const phoneInput = (cls) => (
+    <input autoComplete="off" data-driver-field="phone" className={cls} value={formatPhone(target?.전화번호 ?? "")} readOnly={!editing}
+      placeholder={editing ? "010-0000-0000" : ""} inputMode="tel"
+      onKeyDown={onKey}
+      onChange={(e) => { const v = formatPhone(e.target.value); setTarget((p) => ({ ...p, 전화번호: v })); }} />
+  );
+  if (variant === "modal") {
+    const cls = `border p-2 rounded w-full ${editing ? "bg-white border-[#2D4C82] ring-2 ring-[#8FB0F0]/40" : "bg-gray-100"}`;
+    return (
+      <div className="mb-3">
+        <div className="grid grid-cols-2 gap-3">
+          <div><label>기사명</label>{nameInput(cls)}</div>
+          <div>
+            <label>전화번호</label>
+            <div className="flex items-center gap-1.5">{phoneInput(cls)}{btn}</div>
+          </div>
+        </div>
+        {editing && <p className="mt-1 text-[12px] text-[#2D4C82] font-semibold">이름·전화번호를 고친 뒤 [완료]를 누르면 기사관리에 반영할 방법을 고를 수 있습니다.</p>}
+        {chips && <div className="mt-1.5">{chips}</div>}
+        {de.modal}
+      </div>
+    );
+  }
+  const cls = `${cpInputStyle} ${editing ? "!bg-white !border-[#2D4C82] ring-2 ring-[#8FB0F0]/40" : "!bg-[#F1F4F9]"}`;
+  return (
+    <>
+      <CpField label="기사명">{nameInput(cls)}</CpField>
+      <CpField label="전화번호">
+        <div className="flex items-center gap-1.5">{phoneInput(cls)}{btn}</div>
+      </CpField>
+      {chips && <div className="col-span-3 pl-[126px]">{chips}</div>}
+      {de.modal}
+      {editing && <div className="col-span-3 pl-[126px] text-[12px] text-[#2D4C82] font-semibold">이름·전화번호를 고친 뒤 [완료](또는 저장)를 누르면 기사관리에 반영할 방법을 고를 수 있습니다.</div>}
+    </>
+  );
+}
 
 const todayStr = () => {
   const d = new Date();
@@ -12013,6 +12078,7 @@ const applyMultiSlotDriver = (patch) => {
 
 // 📌 차량번호 입력(타이핑) — 기존 기사와 자동매칭, 여러 명이면 드롭다운
 const handleMultiRegCarNoChange = (value) => {
+  mrDrvEdit.reset(); // ⭐ 2026-11-05 차량번호가 바뀌면 [수정] 상태 해제
   const clean = (value || "").trim().replace(/\s+/g, "");
   if (!clean) {
     applyMultiSlotDriver({ 차량번호: "", 이름: "", 전화번호: "", 배차상태: "배차중" });
@@ -12181,7 +12247,9 @@ const checkMultiRegDriverConflict = () => {
     }
     return;
   }
-  const existing = list[0];
+  // ⭐ 2026-11-05 같은 차량번호 기사 여러 명 — 누구와든 같으면 정상, 다르면 가장 가까운 실제 문서와 비교
+  if (isRegisteredCombo(drivers, plate, name, phone)) return;
+  const existing = pickDriverFor(drivers, plate, name, phone) || list[0];
   const existName = (existing.이름 || "").trim();
   const existPhone = (existing.전화번호 || "").replace(/[^\d]/g, "");
   const sameName = existName === name;
@@ -12326,15 +12394,17 @@ const applyMultiSlotDrop = (place) => {
 
 const currentMultiSlot = multiRegSlots[multiRegIdx] || null;
 
-const goMultiRegNext = () => {
+const goMultiRegNext = async () => {
+  if (!(await mrDrvEdit.finish(currentMultiSlot || {}))) return; // ⭐ 2026-11-05 [수정] 중이면 먼저 변경/별도추가 선택
   const slot = multiRegSlots[multiRegIdx];
   if (!slot?.하차지명?.trim()) { showAlert("하차지를 입력하세요."); return; }
   if (isReversedDateOrder(slot.상차일, slot.하차일 || slot.상차일)) { showAlert(REVERSED_DATE_ORDER_MSG); return; }
   if (multiRegIdx < multiRegSlots.length - 1) setMultiRegIdx(i => i + 1);
 };
-const goMultiRegPrev = () => { if (multiRegIdx > 0) setMultiRegIdx(i => i - 1); };
+const goMultiRegPrev = async () => { if (!(await mrDrvEdit.finish(currentMultiSlot || {}))) return; if (multiRegIdx > 0) setMultiRegIdx(i => i - 1); }; // ⭐ 2026-11-05
 
 const submitMultiRegister = async () => {
+  if (!(await mrDrvEdit.finish(currentMultiSlot || {}))) return; // ⭐ 2026-11-05 [수정] 중이면 먼저 변경/별도추가 선택
   const slot = multiRegSlots[multiRegIdx];
   if (!slot?.하차지명?.trim()) { showAlert("하차지를 입력하세요."); return; }
   for (const s of multiRegSlots) {
@@ -13156,6 +13226,7 @@ React.useEffect(() => {
   if (itemTop < viewTop) list.scrollTop = itemTop;
 }, [driverActive]);
     const handleCarNoChange = (value) => {
+  formDrvEdit.reset(); // ⭐ 2026-11-05 차량번호가 바뀌면 [수정] 상태 해제
   const clean = (value || "").trim().replace(/\s+/g, "");
 
   setForm((p) => ({
@@ -13275,7 +13346,10 @@ const checkDriverConflict = () => {
   }
 
   // 🔹 기존 기사님이 있으면 → 이름/전화번호 비교
-  const existing = list[0];
+  // ⭐ 2026-11-05 같은 차량번호 기사가 여러 명이면 그중 누구와든 똑같으면 정상(별도 추가된 기사 선택),
+  //  다르면 가장 가까운 기사(실제 문서 — id 포함)와 비교해 "덮어쓰기"가 그 문서를 정확히 바꾸게 한다
+  if (isRegisteredCombo(drivers, plate, name, phone)) return;
+  const existing = pickDriverFor(drivers, plate, name, phone) || list[0];
   const existName = (existing.이름 || "").trim();
   const existPhone = (existing.전화번호 || "").replace(/[^\d]/g, "");
 
@@ -13637,6 +13711,7 @@ const palletFareRules = {
     const handleSubmit = async (e) => {
   e.preventDefault();
   if (isViewer) return showAlert("조회전용 권한으로 저장할 수 없습니다.");
+  if (!(await formDrvEdit.finish(form))) return; // ⭐ 2026-11-05 기사 이름·전화 [수정] 중이면 먼저 변경/별도추가 선택
   if (!validateRequired(form)) return;
   if (!validateDateTime(form)) return;
 
@@ -14815,6 +14890,13 @@ const [smartDriverQuery, setSmartDriverQuery] = React.useState("");
 const [smartDriverMatched, setSmartDriverMatched] = React.useState([]);
 const [smartDriverActiveIdx, setSmartDriverActiveIdx] = React.useState(-1);
 const [driverConflictPopup, setDriverConflictPopup] = React.useState(null);
+// ⭐ 2026-11-05 매칭된 기사 이름·전화 [수정] — 단일 등록폼(formDrvEdit) · 다중등록(mrDrvEdit)
+const formDrvEdit = useDriverEditChoice({ drivers, upsertDriver, company: userCompany, notify: (m) => sflowToast(m, "success") });
+const mrDrvEdit = useDriverEditChoice({ drivers, upsertDriver, company: userCompany, notify: (m) => sflowToast(m, "success") });
+React.useEffect(() => { if (!form.차량번호) formDrvEdit.reset(); }, [form.차량번호]); // eslint-disable-line react-hooks/exhaustive-deps
+React.useEffect(() => { mrDrvEdit.reset(); }, [multiRegIdx, multiRegOpen]); // eslint-disable-line react-hooks/exhaustive-deps
+const formDrvLocked = !formDrvEdit.editing && isRegisteredCombo(drivers, form.차량번호, form.이름, form.전화번호);
+const mrDrvLocked = !!currentMultiSlot && !mrDrvEdit.editing && isRegisteredCombo(drivers, currentMultiSlot.차량번호, currentMultiSlot.이름, currentMultiSlot.전화번호);
 // cargoAddPopup is passed in via props from DispatchApp
 // { mode: "overwrite"|"new", existing: driver, input: {plate,name,phone} }
 
@@ -15923,14 +16005,26 @@ shadow-[0_1px_2px_rgba(16,24,40,0.04),0_12px_30px_rgba(16,24,40,0.07)]
               </div>
               <div>
                 <label className={mrLabelCls}><EditableText id="orderForm.multi.label.기사명" defaultText="기사명" /></label>
-                <input autoComplete="off" className={mrInputCls} placeholder="기사명 입력" value={currentMultiSlot.이름 || ""} onChange={e => updateMultiSlot("이름", e.target.value)} onBlur={checkMultiRegDriverConflict} />
+                {/* ⭐ 2026-11-05 등록 기사와 매칭되면 잠금 + 오른쪽 [수정] */}
+                <input autoComplete="off" data-driver-field="name" className={`${mrInputCls}${mrDrvLocked ? " !bg-[#F1F4F9]" : mrDrvEdit.editing ? " !border-[#2D4C82] ring-2 ring-[#8FB0F0]/40" : ""}`} readOnly={mrDrvLocked} placeholder="기사명 입력" value={currentMultiSlot.이름 || ""} onChange={e => updateMultiSlot("이름", e.target.value)}
+                  onKeyDown={e => { if (mrDrvEdit.editing && e.key === "Enter") { e.preventDefault(); e.stopPropagation(); mrDrvEdit.finish(currentMultiSlot); } }}
+                  onBlur={() => { if (!mrDrvEdit.editing) checkMultiRegDriverConflict(); }} />
               </div>
 
               <div>
                 <label className={mrLabelCls}><EditableText id="orderForm.multi.label.전화번호" defaultText="전화번호" /></label>
-                <input autoComplete="off" className={mrInputCls} placeholder="전화번호 입력" value={currentMultiSlot.전화번호 || ""} onChange={e => updateMultiSlot("전화번호", formatPhone(e.target.value))} onBlur={checkMultiRegDriverConflict} />
+                <input autoComplete="off" data-driver-field="phone" className={`${mrInputCls}${mrDrvLocked ? " !bg-[#F1F4F9]" : mrDrvEdit.editing ? " !border-[#2D4C82] ring-2 ring-[#8FB0F0]/40" : ""}`} readOnly={mrDrvLocked} placeholder="전화번호 입력" value={currentMultiSlot.전화번호 || ""} onChange={e => updateMultiSlot("전화번호", formatPhone(e.target.value))}
+                  onKeyDown={e => { if (mrDrvEdit.editing && e.key === "Enter") { e.preventDefault(); e.stopPropagation(); mrDrvEdit.finish(currentMultiSlot); } }}
+                  onBlur={() => { if (!mrDrvEdit.editing) checkMultiRegDriverConflict(); }} />
               </div>
-              <div />
+              <div className="flex items-end pb-0.5">
+                {(mrDrvLocked || mrDrvEdit.editing) && (
+                  <DriverEditButton editing={mrDrvEdit.editing}
+                    onEdit={() => mrDrvEdit.begin(currentMultiSlot)}
+                    onDone={() => mrDrvEdit.finish(currentMultiSlot)}
+                    onRevert={() => { const o = mrDrvEdit.revert(); if (o) applyMultiSlotDriver({ 이름: o.이름, 전화번호: o.전화번호 }); }} />
+                )}
+              </div>
 
               <div>
                 <label className={mrLabelCls}><EditableText id="orderForm.multi.label.청구운임" defaultText="청구운임" /></label>
@@ -15972,7 +16066,7 @@ shadow-[0_1px_2px_rgba(16,24,40,0.04),0_12px_30px_rgba(16,24,40,0.07)]
             {/* 슬롯 진행상황 미리보기 */}
             <div className="flex flex-wrap gap-1.5 pt-3 border-t border-gray-100">
               {multiRegSlots.map((s, i) => (
-                <button type="button" key={i} onClick={() => setMultiRegIdx(i)}
+                <button type="button" key={i} onClick={async () => { if (i !== multiRegIdx && !(await mrDrvEdit.finish(currentMultiSlot || {}))) return; setMultiRegIdx(i); }}
                   className={`px-2.5 py-1 rounded-full text-[11px] font-bold border transition ${
                     i === multiRegIdx ? "bg-[#1B2B4B] text-white border-[#1B2B4B]"
                     : s.하차지명 ? "bg-emerald-50 text-emerald-700 border-emerald-200"
@@ -16078,7 +16172,8 @@ shadow-[0_1px_2px_rgba(16,24,40,0.04),0_12px_30px_rgba(16,24,40,0.07)]
                 className="py-2.5 rounded-xl bg-[#1B2B4B] text-white text-[13px] font-bold hover:bg-[#243a60] transition"
                 onClick={async () => {
                   const { plate, name, phone } = mrDriverConflictPopup.input;
-                  await upsertDriver({ 차량번호: plate, 이름: name, 전화번호: phone });
+                  // ⭐ 2026-11-05 비교한 그 기사 문서(id)를 정확히 바꾼다(같은 차량번호 기사 여러 명 대비)
+                  await saveDriverChoice("update", { existing: mrDriverConflictPopup.existing, plate, name, phone, upsertDriver, company: userCompany });
                   applyMultiSlotDriver({ 차량번호: plate, 이름: name, 전화번호: formatPhone(phone), 배차상태: "배차완료" });
                   setMrSmartDriverQuery(""); setMrSmartDriverMatched([]);
                   setMrDriverConflictPopup(null);
@@ -16091,7 +16186,7 @@ shadow-[0_1px_2px_rgba(16,24,40,0.04),0_12px_30px_rgba(16,24,40,0.07)]
               className="w-full py-2.5 rounded-xl bg-emerald-600 text-white text-[13px] font-bold hover:bg-emerald-700 transition"
               onClick={async () => {
                 const { plate, name, phone } = mrDriverConflictPopup.input;
-                await upsertDriver({ id: crypto.randomUUID(), 차량번호: plate, 이름: name, 전화번호: phone });
+                await saveDriverChoice("add", { plate, name, phone, upsertDriver, company: userCompany }); // ⭐ 2026-11-05 별도 문서 이름 = 회사__차량번호__x…
                 applyMultiSlotDriver({ 차량번호: plate, 이름: name, 전화번호: formatPhone(phone), 배차상태: "배차완료" });
                 setMrSmartDriverQuery(""); setMrSmartDriverMatched([]);
                 setMrDriverConflictPopup(null);
@@ -17770,29 +17865,43 @@ className={`
     )}
 </div>
 
-{/* ===== 기사명 (수정 가능) ===== */}
+{/* ===== 기사명 — ⭐ 2026-11-05 등록 기사와 매칭되면 잠금, 옆 [수정]으로 고침(미등록이면 예전처럼 바로 입력) ===== */}
 <div>
   <label className={labelCls}><EditableText id="orderForm.label.기사명" defaultText="기사명" /></label>
   <input autoComplete="off"
     data-arrownav
-    className={inputCls}
+    data-driver-field="name"
+    className={`${inputCls}${formDrvLocked ? " !bg-[#F1F4F9] !text-[#1B2B4B]" : formDrvEdit.editing ? " !border-[#2D4C82] ring-2 ring-[#8FB0F0]/40" : ""}`}
     value={form.이름}
+    readOnly={formDrvLocked}
+    title={formDrvLocked ? "등록된 기사 정보입니다 — 옆 [수정]을 눌러 고칠 수 있습니다" : undefined}
     placeholder="기사명 입력"
     onChange={(e) => onChange("이름", e.target.value)}
-    onBlur={() => checkDriverConflict()}
+    onKeyDown={(e) => { if (formDrvEdit.editing && e.key === "Enter") { e.preventDefault(); e.stopPropagation(); formDrvEdit.finish(form); } }}
+    onBlur={() => { if (!formDrvEdit.editing) checkDriverConflict(); }}
   />
 </div>
 
-{/* ===== 전화번호 (수정 가능) ===== */}
+{/* ===== 전화번호 ===== */}
 <div>
-  <label className={labelCls}><EditableText id="orderForm.label.전화번호" defaultText="전화번호" /></label>
+  <label className={labelCls}><EditableText id="orderForm.label.전화번호" defaultText="전화번호" />
+    {(formDrvLocked || formDrvEdit.editing) && (
+      <DriverEditButton tiny className="ml-auto" editing={formDrvEdit.editing}
+        onEdit={() => formDrvEdit.begin(form)}
+        onDone={() => formDrvEdit.finish(form)}
+        onRevert={() => { const o = formDrvEdit.revert(); if (o) setForm((p) => ({ ...p, 이름: o.이름, 전화번호: o.전화번호 })); }} />
+    )}
+  </label>
   <input autoComplete="off"
     data-arrownav
-    className={inputCls}
+    data-driver-field="phone"
+    className={`${inputCls}${formDrvLocked ? " !bg-[#F1F4F9] !text-[#1B2B4B]" : formDrvEdit.editing ? " !border-[#2D4C82] ring-2 ring-[#8FB0F0]/40" : ""}`}
     value={form.전화번호}
+    readOnly={formDrvLocked}
     placeholder="전화번호 입력"
     onChange={(e) => onChange("전화번호", formatPhone(e.target.value))}
-    onBlur={() => checkDriverConflict()}
+    onKeyDown={(e) => { if (formDrvEdit.editing && e.key === "Enter") { e.preventDefault(); e.stopPropagation(); formDrvEdit.finish(form); } }}
+    onBlur={() => { if (!formDrvEdit.editing) checkDriverConflict(); }}
   />
 </div>
 
@@ -19383,6 +19492,9 @@ className={`
     </div>
   );
 })()}
+{/* ⭐ 2026-11-05 기사 이름·전화 [수정] → 기존 정보 변경 / 별도 추가 선택 팝업 */}
+{formDrvEdit.modal}
+{mrDrvEdit.modal}
 {/* ===== 기사 정보 충돌 팝업 ===== */}
 
 {driverConflictPopup && (
@@ -19448,7 +19560,8 @@ className={`
                 className="py-2.5 rounded-xl bg-[#1B2B4B] text-white text-[13px] font-bold hover:bg-[#243a60] transition"
                 onClick={async () => {
                   const { plate, name, phone } = driverConflictPopup.input;
-                  await upsertDriver({ 차량번호: plate, 이름: name, 전화번호: phone });
+                  // ⭐ 2026-11-05 같은 차량번호 기사가 여러 명일 수 있으니 비교한 그 기사 문서(id)를 정확히 바꾼다
+                  await saveDriverChoice("update", { existing: driverConflictPopup.existing, plate, name, phone, upsertDriver, company: userCompany });
                   setForm(p=>({...p, 차량번호: plate, 이름: name, 전화번호: formatPhone(phone), 배차상태:"배차완료"}));
                   setSmartDriverQuery(""); setSmartDriverMatched([]);
                   setDriverConflictPopup(null);
@@ -19467,7 +19580,8 @@ className={`
                 // 되어버리는 버그가 있었다 — 새 기사님이 목록에 추가로 뜨지 않고, 방금 입력한
                 // 이름도 사라지는 것처럼 보였던 원인. id를 직접 새로 발급해서 넘기면
                 // upsertDriver가 차량번호로 기존 문서를 찾지 않고 진짜 별도 문서를 만든다.
-                await upsertDriver({ id: crypto.randomUUID(), 차량번호: plate, 이름: name, 전화번호: phone });
+                // ⭐ 2026-11-05 별도 문서 이름 = 회사__차량번호__x… (src/DriverEditChoice.jsx extraDriverDocId)
+                await saveDriverChoice("add", { plate, name, phone, upsertDriver, company: userCompany });
                 setForm(p=>({...p, 차량번호: plate, 이름: name, 전화번호: formatPhone(phone), 배차상태:"배차완료"}));
                 setSmartDriverQuery(""); setSmartDriverMatched([]);
                 setDriverConflictPopup(null);
@@ -26444,6 +26558,11 @@ React.useEffect(() => {
   if (itemTop < viewTop) list.scrollTop = itemTop;
 }, [copyActiveIndex]);
   const [editTarget, setEditTarget] = React.useState(null);
+  // ⭐ 2026-11-05 매칭된 기사 이름·전화 [수정] — 오더 복사/수정 패널(cpDrvEdit) · 수정 창(editDrvEdit)
+  const cpDrvEdit = useDriverEditChoice({ drivers, upsertDriver, company: userCompany, notify: (m) => sflowToast(m, "success") });
+  const editDrvEdit = useDriverEditChoice({ drivers, upsertDriver, company: userCompany, notify: (m) => sflowToast(m, "success") });
+  React.useEffect(() => { cpDrvEdit.reset(); }, [copyPanelOpen, copyTarget?._id]); // eslint-disable-line react-hooks/exhaustive-deps
+  React.useEffect(() => { editDrvEdit.reset(); }, [editPopupOpen, editTarget?._id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ⭐ 다목적지 단가표 매칭 (3파트와 동일) — 선택수정 중인 오더(editTarget)의
   // 하차지명/주소가 단가표 메뉴에 등록된 하차지와 겹치면 "단가표" 버튼이
@@ -29990,6 +30109,7 @@ const head = isDark
       showAlert(REVERSED_DATE_ORDER_MSG);
       return;
     }
+    if (!(await cpDrvEdit.finish(copyTarget))) return; // ⭐ 2026-11-05 기사 이름·전화 [수정] 중이면 먼저 변경/별도추가 선택
 
     // ✅ 화물내용: 이미 onChange에서 동기화되어 있으므로 그대로 사용
     const finalCargo = copyTarget.화물내용 || "";
@@ -30052,6 +30172,7 @@ flashRow(savedId);
       showAlert("복사할 데이터가 없습니다.");
       return;
     }
+    if (!(await cpDrvEdit.finish(copyTarget))) return; // ⭐ 2026-11-05 기사 이름·전화 [수정] 중이면 먼저 변경/별도추가 선택
     const ok = await submitCopyOrderPC(copyTarget, approvedShippers);
     if (ok === false) return;
     sflowToast("복사 등록 완료", "success");
@@ -30731,6 +30852,7 @@ checkWarningStatus(c.거래처명, "거래처");
         onChange={(e) => {
           const v = e.target.value;
           const plate = normalizePlate(v);
+          cpDrvEdit.reset(); // ⭐ 2026-11-05 차량번호가 바뀌면 [수정] 상태 해제
           // ⚠️ 동일 차량번호로 기사님이 여러 명 등록돼 있으면(drivers.find가 임의로 1명만
           // 골라 조용히 매칭해버리던 버그) 스마트검색과 동일하게 선택 팝업을 띄운다.
           const matches = driverMap.get(plate) || [];
@@ -30764,21 +30886,8 @@ checkWarningStatus(c.거래처명, "거래처");
       />
     </CpField>
 
-    <CpField label="기사명">
-      <input autoComplete="off"
-        className={cpInputStyle}
-        value={copyTarget?.이름 ?? ""}
-        readOnly
-      />
-    </CpField>
-
-    <CpField label="전화번호">
-      <input autoComplete="off"
-        className={cpInputStyle}
-        value={formatPhone(copyTarget?.전화번호 ?? "")}
-        readOnly
-      />
-    </CpField>
+    {/* ⭐ 2026-11-05 매칭 기사 이름·전화 잠금 + [수정] */}
+    <DriverNamePhoneEdit variant="cp" target={copyTarget} setTarget={setCopyTarget} de={cpDrvEdit} drivers={drivers} />
 
   </div>
 </div>
@@ -32568,6 +32677,7 @@ value={copyTarget?.화물수량 || ""}
                 placeholder="예: 93가1234"
                 onChange={(e) => {
                   const raw = e.target.value;
+                  editDrvEdit.reset(); // ⭐ 2026-11-05 차량번호가 바뀌면 [수정] 상태 해제
                   const clean = raw.replace(/\s+/g, "");
                   if (clean) {
                     const match = (drivers || []).find(d => String(d.차량번호 || "").replace(/\s+/g, "") === clean);
@@ -32683,26 +32793,8 @@ value={copyTarget?.화물수량 || ""}
 )}
             </div>
 
-            {/* 🔵 이름/전화번호 (자동입력) */}
-            <div className="grid grid-cols-2 gap-3 mb-3">
-              <div>
-                <label>기사명</label>
-                <input autoComplete="off"
-                  className="border p-2 rounded w-full bg-gray-100"
-                  value={editTarget.이름 || ""}
-                  readOnly
-                />
-              </div>
-
-              <div>
-                <label>전화번호</label>
-                <input autoComplete="off"
-                  className="border p-2 rounded w-full bg-gray-100"
-                  value={formatPhone(editTarget.전화번호) || ""}
-                  readOnly
-                />
-              </div>
-            </div>
+            {/* 🔵 이름/전화번호 (자동입력) — ⭐ 2026-11-05 매칭 기사면 잠금 + [수정] */}
+            <DriverNamePhoneEdit variant="modal" target={editTarget} setTarget={setEditTarget} de={editDrvEdit} drivers={drivers} />
 
             {/* ------------------------------------------------ */}
             {/* 🔵 운임 (수수료 자동계산) */}
@@ -32902,6 +32994,7 @@ value={copyTarget?.화물수량 || ""}
   className="px-5 py-2 rounded-lg bg-[#1B2B4B] hover:bg-[#0F1A30] text-white font-semibold"
   onClick={async () => {
     if (isViewer) return showAlert("조회전용 권한으로 저장할 수 없습니다.");
+    if (!(await editDrvEdit.finish(editTarget))) return; // ⭐ 2026-11-05 기사 이름·전화 [수정] 중이면 먼저 변경/별도추가 선택
     // ✅ 저장 직전 경유지 + 화물내용 최종 동기화
 const syncedEditTarget = {
   ...editTarget,
@@ -33481,8 +33574,8 @@ if (editTarget.하차지명) savePlaceSmart(editTarget.하차지명, editTarget.
             </div>
             <div className="px-6 pb-6 grid grid-cols-2 gap-3">
               <button className="py-2.5 rounded-xl bg-white border-2 border-gray-300 text-gray-700 text-[13px] font-semibold" onClick={()=>{ const ex=smart4ConflictPopup.existing; smart4ConflictPopup.setTarget(p=>({...p,차량번호:ex.차량번호,이름:ex.이름,전화번호:formatPhone(ex.전화번호),배차상태:"배차완료"})); setSmartQ4(""); setSmartList4([]); setSmart4ConflictPopup(null); }}><EditableText id="misc.btn.30395.기존 정보 사용" defaultText="기존 정보 사용" /></button>
-              <button className="py-2.5 rounded-xl bg-[#1B2B4B] text-white text-[13px] font-bold" onClick={async()=>{ if(isViewer){alert("조회전용 권한으로는 수정할 수 없습니다.");return;} const {plate,name,phone}=smart4ConflictPopup.input; await upsertDriver({차량번호:plate,이름:name,전화번호:phone}); smart4ConflictPopup.setTarget(p=>({...p,차량번호:plate,이름:name,전화번호:formatPhone(phone),배차상태:"배차완료"})); setSmartQ4(""); setSmartList4([]); setSmart4ConflictPopup(null); }}>새 정보로 업데이트</button>
-              <button className="col-span-2 py-2.5 rounded-xl bg-emerald-600 text-white text-[13px] font-bold" onClick={async()=>{ if(isViewer){alert("조회전용 권한으로는 등록할 수 없습니다.");return;} const {plate,name,phone}=smart4ConflictPopup.input; await upsertDriver({id: crypto.randomUUID(), 차량번호:plate,이름:name,전화번호:phone}); smart4ConflictPopup.setTarget(p=>({...p,차량번호:plate,이름:name,전화번호:formatPhone(phone),배차상태:"배차완료"})); setSmartQ4(""); setSmartList4([]); setSmart4ConflictPopup(null); }}>신규 기사로 별도 등록</button>
+              <button className="py-2.5 rounded-xl bg-[#1B2B4B] text-white text-[13px] font-bold" onClick={async()=>{ if(isViewer){alert("조회전용 권한으로는 수정할 수 없습니다.");return;} const {plate,name,phone}=smart4ConflictPopup.input; await saveDriverChoice("update", { existing: smart4ConflictPopup.existing, plate, name, phone, upsertDriver, company: userCompany }); /* ⭐ 2026-11-05 그 기사 문서(id)를 정확히 */ smart4ConflictPopup.setTarget(p=>({...p,차량번호:plate,이름:name,전화번호:formatPhone(phone),배차상태:"배차완료"})); setSmartQ4(""); setSmartList4([]); setSmart4ConflictPopup(null); }}>새 정보로 업데이트</button>
+              <button className="col-span-2 py-2.5 rounded-xl bg-emerald-600 text-white text-[13px] font-bold" onClick={async()=>{ if(isViewer){alert("조회전용 권한으로는 등록할 수 없습니다.");return;} const {plate,name,phone}=smart4ConflictPopup.input; await saveDriverChoice("add", { plate, name, phone, upsertDriver, company: userCompany }); /* ⭐ 2026-11-05 별도 문서 이름 = 회사__차량번호__x… */ smart4ConflictPopup.setTarget(p=>({...p,차량번호:plate,이름:name,전화번호:formatPhone(phone),배차상태:"배차완료"})); setSmartQ4(""); setSmartList4([]); setSmart4ConflictPopup(null); }}>신규 기사로 별도 등록</button>
             </div>
           </div>
         </div>
@@ -36707,11 +36800,16 @@ const flashRow = React.useCallback((id) => {
 }, []);
 
   const [editTarget, setEditTarget] = React.useState(null);
+  // ⭐ 2026-11-05 매칭된 기사 이름·전화 [수정] — 오더 복사/수정 패널(cpDrvEdit) · 수정 창(editDrvEdit)
+  const cpDrvEdit = useDriverEditChoice({ drivers, upsertDriver, company: userCompany, notify: (m) => sflowToast(m, "success") });
+  const editDrvEdit = useDriverEditChoice({ drivers, upsertDriver, company: userCompany, notify: (m) => sflowToast(m, "success") });
+  React.useEffect(() => { cpDrvEdit.reset(); }, [copyPanelOpen, copyTarget?._id]); // eslint-disable-line react-hooks/exhaustive-deps
   // ⭐ 운임조회·최적매칭·복사창은 예전 오더 전체가 필요 — 그 창을 열 때 1회 불러온다
   useLoadFullOrderHistory(!!(editTarget || copyTarget || optimalMatchRow5));
   const [edited, setEdited] = React.useState({});
   const [justSaved, setJustSaved] = React.useState([]);
   const [editPopupOpen, setEditPopupOpen] = React.useState(false);
+  React.useEffect(() => { editDrvEdit.reset(); }, [editPopupOpen, editTarget?._id]); // eslint-disable-line react-hooks/exhaustive-deps
   // ⭐ 일마감 검증 팝업의 오류/경고/24시콜 목록에서 오더를 클릭해 이 선택수정
   // 팝업을 열었을 때만 채워지는, 해당 오더의 검증 문제점 목록.
   const [dailyCloseIssueCtx, setDailyCloseIssueCtx] = React.useState(null);
@@ -40882,6 +40980,7 @@ return (
                 placeholder="예: 93가1234"
                 onChange={(e) => {
                   const v = e.target.value;
+                  editDrvEdit.reset(); // ⭐ 2026-11-05 차량번호가 바뀌면 [수정] 상태 해제
                   const clean5 = v.replace(/\s+/g, "");
                   if (clean5) {
                     const match5 = (drivers || []).find(d => String(d.차량번호 || "").replace(/\s+/g, "") === clean5);
@@ -40996,26 +41095,8 @@ return (
 )}
             </div>
 
-            {/* 🔵 이름/전화번호 (자동입력) */}
-            <div className="grid grid-cols-2 gap-3 mb-3">
-              <div>
-                <label>기사명</label>
-                <input autoComplete="off"
-                  className="border p-2 rounded w-full bg-gray-100"
-                  value={editTarget.이름 || ""}
-                  readOnly
-                />
-              </div>
-
-              <div>
-                <label>전화번호</label>
-                <input autoComplete="off"
-                  className="border p-2 rounded w-full bg-gray-100"
-                  value={formatPhone(editTarget.전화번호 || "")}
-                  readOnly
-                />
-              </div>
-            </div>
+            {/* 🔵 이름/전화번호 (자동입력) — ⭐ 2026-11-05 매칭 기사면 잠금 + [수정] */}
+            <DriverNamePhoneEdit variant="modal" target={editTarget} setTarget={setEditTarget} de={editDrvEdit} drivers={drivers} />
 
             {/* ------------------------------------------------ */}
             {/* 🔵 운임 (수수료 자동계산) */}
@@ -41230,6 +41311,7 @@ return (
              <button
   className="px-5 py-2 rounded-lg bg-[#1B2B4B] hover:bg-[#0F1A30] text-white font-semibold"
   onClick={async () => {
+    if (!(await editDrvEdit.finish(editTarget))) return; // ⭐ 2026-11-05 기사 이름·전화 [수정] 중이면 먼저 변경/별도추가 선택
     // 1) Firestore 저장
     const ALLOWED_FIELDS = [
       "등록일",
@@ -41460,6 +41542,7 @@ return (
       showAlert(REVERSED_DATE_ORDER_MSG);
       return;
     }
+    if (!(await cpDrvEdit.finish(copyTarget))) return; // ⭐ 2026-11-05 기사 이름·전화 [수정] 중이면 먼저 변경/별도추가 선택
 
     // ✅ 화물내용: 이미 onChange에서 동기화되어 있음
     const finalCargo = copyTarget.화물내용 || "";
@@ -41525,6 +41608,7 @@ return (
       showAlert("복사할 데이터가 없습니다.");
       return;
     }
+    if (!(await cpDrvEdit.finish(copyTarget))) return; // ⭐ 2026-11-05 기사 이름·전화 [수정] 중이면 먼저 변경/별도추가 선택
 
     const ok = await submitCopyOrderPC(copyTarget, approvedShippers);
     if (ok === false) return;
@@ -42168,6 +42252,7 @@ setCopyPlaceOptions(list);
 
       const v = e.target.value;
       const plate = normalizePlate(v);
+      cpDrvEdit.reset(); // ⭐ 2026-11-05 차량번호가 바뀌면 [수정] 상태 해제
       // ⚠️ 동일 차량번호로 기사님이 여러 명 등록돼 있으면(drivers.find가 임의로 1명만
       // 골라 조용히 매칭해버리던 버그) 스마트검색과 동일하게 선택 팝업을 띄운다.
       const matches = driverMap.get(plate) || [];
@@ -42224,21 +42309,8 @@ setCopyPlaceOptions(list);
   />
 </CpField>
 
-    <CpField label="기사명">
-      <input autoComplete="off"
-        className={cpInputStyle}
-        value={copyTarget?.이름 || ""}
-        readOnly
-      />
-    </CpField>
-
-    <CpField label="전화번호">
-      <input autoComplete="off"
-        className={cpInputStyle}
-       value={formatPhone(copyTarget?.전화번호 || "")}
-        readOnly
-      />
-    </CpField>
+    {/* ⭐ 2026-11-05 매칭 기사 이름·전화 잠금 + [수정] */}
+    <DriverNamePhoneEdit variant="cp" target={copyTarget} setTarget={setCopyTarget} de={cpDrvEdit} drivers={drivers} />
 
   </div>
 </div>
@@ -43709,8 +43781,8 @@ setCopyPlaceOptions(list);
             </div>
             <div className="px-6 pb-6 grid grid-cols-2 gap-3">
               <button className="py-2.5 rounded-xl bg-white border-2 border-gray-300 text-gray-700 text-[13px] font-semibold" onClick={()=>{ const ex=smart5ConflictPopup.existing; smart5ConflictPopup.setTarget(p=>({...p,차량번호:ex.차량번호,이름:ex.이름,전화번호:formatPhone(ex.전화번호),배차상태:"배차완료"})); setSmartQ5(""); setSmartList5([]); setSmart5ConflictPopup(null); }}><EditableText id="misc.btn.40332.기존 정보 사용" defaultText="기존 정보 사용" /></button>
-              <button className="py-2.5 rounded-xl bg-[#1B2B4B] text-white text-[13px] font-bold" onClick={async()=>{ if(isViewer){alert("조회전용 권한으로는 수정할 수 없습니다.");return;} const {plate,name,phone}=smart5ConflictPopup.input; await upsertDriver({차량번호:plate,이름:name,전화번호:phone}); smart5ConflictPopup.setTarget(p=>({...p,차량번호:plate,이름:name,전화번호:formatPhone(phone),배차상태:"배차완료"})); setSmartQ5(""); setSmartList5([]); setSmart5ConflictPopup(null); }}>새 정보로 업데이트</button>
-              <button className="col-span-2 py-2.5 rounded-xl bg-emerald-600 text-white text-[13px] font-bold" onClick={async()=>{ if(isViewer){alert("조회전용 권한으로는 등록할 수 없습니다.");return;} const {plate,name,phone}=smart5ConflictPopup.input; await upsertDriver({id: crypto.randomUUID(), 차량번호:plate,이름:name,전화번호:phone}); smart5ConflictPopup.setTarget(p=>({...p,차량번호:plate,이름:name,전화번호:formatPhone(phone),배차상태:"배차완료"})); setSmartQ5(""); setSmartList5([]); setSmart5ConflictPopup(null); }}>신규 기사로 별도 등록</button>
+              <button className="py-2.5 rounded-xl bg-[#1B2B4B] text-white text-[13px] font-bold" onClick={async()=>{ if(isViewer){alert("조회전용 권한으로는 수정할 수 없습니다.");return;} const {plate,name,phone}=smart5ConflictPopup.input; await saveDriverChoice("update", { existing: smart5ConflictPopup.existing, plate, name, phone, upsertDriver, company: userCompany }); /* ⭐ 2026-11-05 그 기사 문서(id)를 정확히 */ smart5ConflictPopup.setTarget(p=>({...p,차량번호:plate,이름:name,전화번호:formatPhone(phone),배차상태:"배차완료"})); setSmartQ5(""); setSmartList5([]); setSmart5ConflictPopup(null); }}>새 정보로 업데이트</button>
+              <button className="col-span-2 py-2.5 rounded-xl bg-emerald-600 text-white text-[13px] font-bold" onClick={async()=>{ if(isViewer){alert("조회전용 권한으로는 등록할 수 없습니다.");return;} const {plate,name,phone}=smart5ConflictPopup.input; await saveDriverChoice("add", { plate, name, phone, upsertDriver, company: userCompany }); /* ⭐ 2026-11-05 별도 문서 이름 = 회사__차량번호__x… */ smart5ConflictPopup.setTarget(p=>({...p,차량번호:plate,이름:name,전화번호:formatPhone(phone),배차상태:"배차완료"})); setSmartQ5(""); setSmartList5([]); setSmart5ConflictPopup(null); }}>신규 기사로 별도 등록</button>
             </div>
           </div>
         </div>
@@ -49426,6 +49498,9 @@ function UnassignedStatus({ dispatchData, setDispatchData = () => {}, drivers = 
     setToast({ msg, type });
     setTimeout(() => setToast(null), 3000);
   };
+  // ⭐ 2026-11-05 매칭된 기사 이름·전화 [수정] — 미배차현황 오더 복사/수정 패널
+  const cpDrvEdit = useDriverEditChoice({ drivers, upsertDriver, company: userCompany, notify: (m) => showToast(m) });
+  React.useEffect(() => { cpDrvEdit.reset(); }, [copyPanelOpen, copyTarget?._id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   React.useEffect(() => {
     if (warningPopup) setTimeout(() => warningPopupRef.current?.focus(), 0);
@@ -50214,6 +50289,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                     onClick={async () => {
                       if (isViewer) { showToast("조회전용 권한으로는 수정할 수 없습니다.", "err"); return; }
                       if (!copyTarget?._id) { showToast("수정할 오더 ID가 없습니다.", "err"); return; }
+                      if (!(await cpDrvEdit.finish(copyTarget))) return; // ⭐ 2026-11-05 기사 이름·전화 [수정] 중이면 먼저 변경/별도추가 선택
                       if (isReversedDateOrder(copyTarget?.상차일, copyTarget?.하차일)) { showToast(REVERSED_DATE_ORDER_MSG, "err"); return; }
                       const finalCargo = copyTarget.화물타입 ? `${copyTarget.화물수량 || ""}${copyTarget.화물타입}` : (copyTarget.화물수량 || "");
                       const payload = { ...copyTarget, 화물내용: finalCargo, updatedAt: Date.now() };
@@ -50232,6 +50308,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                     onClick={async () => {
                       if (isViewer) { showToast("조회전용 권한으로는 등록할 수 없습니다.", "err"); return; }
                       if (!copyTarget) { showToast("복사할 데이터가 없습니다.", "err"); return; }
+                      if (!(await cpDrvEdit.finish(copyTarget))) return; // ⭐ 2026-11-05 기사 이름·전화 [수정] 중이면 먼저 변경/별도추가 선택
                       const finalCargo = copyTarget.화물타입 ? `${copyTarget.화물수량 || ""}${copyTarget.화물타입}` : (copyTarget.화물수량 || "");
                       const ok = await submitCopyOrderPC(copyTarget, approvedShippers, finalCargo);
                       if (ok === false) return;
@@ -50617,6 +50694,8 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                           onChange={(e) => {
                             const v = e.target.value;
                             const plate = normalizePlate(v);
+                            cpDrvEdit.reset(); // ⭐ 2026-11-05 차량번호가 바뀌면 [수정] 상태 해제
+                            // ⭐ 2026-11-05 같은 차량번호 기사가 여러 명이면 첫 번째로 채우고, 아래 "같은 차량번호 기사" 칩에서 바꿔 고른다
                             const match = (drivers || []).find(d => normalizePlate(d.차량번호) === plate);
                             if (match) {
                               const grade = match?.등급 || match?.grade || "";
@@ -50634,12 +50713,8 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                         <div className="text-xs text-amber-600 mt-1">⚠ 등록되지 않은 차량입니다</div>
                       )}
                     </CpField>
-                    <CpField label="기사명">
-                      <input autoComplete="off" className={`${cpInputStyle} !bg-[#F1F4F9]`} value={copyTarget?.이름 ?? ""} readOnly />
-                    </CpField>
-                    <CpField label="전화번호">
-                      <input autoComplete="off" className={`${cpInputStyle} !bg-[#F1F4F9]`} value={formatPhone(copyTarget?.전화번호 ?? "")} readOnly />
-                    </CpField>
+                    {/* ⭐ 2026-11-05 매칭 기사 이름·전화 잠금 + [수정] */}
+                    <DriverNamePhoneEdit variant="cp" target={copyTarget} setTarget={setCopyTarget} de={cpDrvEdit} drivers={drivers} />
                   </div>
                 </div>
               </div>
