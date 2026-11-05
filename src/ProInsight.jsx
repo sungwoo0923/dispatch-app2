@@ -16,12 +16,16 @@ const pad = (x) => String(x).padStart(2, "0");
 const ymKey = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}`;
 const esc = (s) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 const isCanceled = (r) => /취소/.test(String(r.배차상태 || "")) || /취소/.test(String(r.지급방식 || ""));
+// ⭐ 2026-11-05 PC·모바일 일치 — 인사이트 매출에 넣는 오더 기준(모바일 경영인텔리전스도 이 함수를 쓴다)
+export const isInsightRow = (r) => !!r && !!r.상차일 && !isCanceled(r) && n(r.청구운임) > 0;
 
 const PERIODS = [
   { key: "this", label: "이번 달" },
   { key: "last", label: "지난 달" },
   { key: "q", label: "최근 3개월" },
 ];
+// ⭐ 2026-11-05 PC·모바일 일치 — 모바일 경영인텔리전스의 "이번 달·전월 대비"도 같은 기간(이번 달 1일~오늘 · 지난달 같은 날까지)
+export function insightRange(key) { return rangeOf(key); }
 function rangeOf(key) {
   const now = new Date();
   const first = (y, m) => new Date(y, m, 1);
@@ -52,7 +56,7 @@ export default function ProInsight({ data = [], companyName = "", onOpenOrder })
   const [reportClient, setReportClient] = React.useState("");
   const [reportMonth, setReportMonth] = React.useState(() => { const d = new Date(); d.setMonth(d.getMonth() - 1); return ymKey(d); });
   const { s, e, ps, pe } = rangeOf(period);
-  const valid = React.useMemo(() => data.filter((r) => r.상차일 && !isCanceled(r) && n(r.청구운임) > 0), [data]);
+  const valid = React.useMemo(() => data.filter(isInsightRow), [data]);
   const cur = valid.filter((r) => r.상차일 >= s && r.상차일 <= e);
   const prev = valid.filter((r) => r.상차일 >= ps && r.상차일 <= pe);
 

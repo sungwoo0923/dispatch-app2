@@ -9,6 +9,8 @@ import { db, auth } from "./firebase";
 import { createPortal } from "react-dom";
 import { deleteDocsAtomic } from "./DeleteProgress"; // ⭐ 2026-11-05 삭제 진행 창 + 한 번에 삭제
 import CustomDatePicker from "./CustomDatePicker";
+import { pickUnassignedOrders } from "./unassignedRule"; // ⭐ 2026-11-05 PC·모바일 일치 — 미배차 기준 공용
+import { useOrderHistory } from "./orderHistory";
 import { sheetApi, BoardSuggest } from "./RouteBoard";
 import { ownerOf, rateFor } from "./routeBoardSheet";
 import { useRouteCarrierSetting, useRouteCarrierFilter, saveRouteCarrierSetting, carriersInOrders, carrierKey, carrierOf } from "./routeCarriers"; // ⭐ 2026-11-05 운송업체 설정(정산·매출 포함 여부)
@@ -509,15 +511,8 @@ export function RouteCarrierModal({ company, rows = [], disabled = false, onClos
 }
 
 const isMasterOnly = () => { try { return localStorage.getItem("role") === "totalMaster" || auth.currentUser?.email === "tjddnqkf@naver.com"; } catch { return false; } };
-// 🔒 2026-11-03 운송사 분리 — 이 회사의 배차표 양식 id 목록(배지·목록은 이 회사 양식의 오더만)
-export function useRouteBoardIds(company) {
-  const [ids, setIds] = React.useState(() => new Set());
-  React.useEffect(() => {
-    if (!company) { setIds(new Set()); return undefined; }
-    return onSnapshot(query(collection(db, "routeBoards"), where("companyName", "==", company)), (s) => setIds(new Set(s.docs.map((d) => d.id))), () => setIds(new Set()));
-  }, [company]);
-  return ids;
-}
+// 🔒 2026-11-03 운송사 분리 — 이 회사의 배차표 양식 id 목록(⭐ 2026-11-05 routeBoardIds.js로 옮김 · 여기서 그대로 내보냄)
+export { useRouteBoardIds } from "./routeBoardIds";
 // 다른 회사 양식으로 만들어져 이 회사에 잘못 남은 오더 — 확인 후 이 회사에서만 지운다("지운 줄" 기록 없이 → 원래 회사 시트 연동에 영향 없음)
 function ForeignOrdersCard({ list, disabled }) {
   const [busy, setBusy] = React.useState(false);
@@ -584,7 +579,7 @@ export default function FixedRouteStatusHost({ company, dispatchData = [], rende
       <div className="text-[13.5px] text-[#7A8AA6] mt-1.5">지입차관리 › 고정노선 › [배차표]에서 화주사 구글시트로 양식을 먼저 만들어 주세요.</div>
     </div></div>
   );
-  const unassigned = rows.filter((r) => !normPlate(r.차량번호) && r.배차상태 !== "배차취소").length;
+  const unassigned = pickUnassignedOrders(rows).length; // ⭐ 2026-11-05 PC·모바일 일치 — 메뉴 숫자와 같은 미배차 기준
   // ⭐ 2026-11-05 운송업체 설정 — 이 회사 양식 오더 전체(모든 양식)에서 업체 모으기 · 정산·매출 제외 건수
   const companyRouteRows = (dispatchData || []).filter((r) => r.배차표Id && formIdSet.has(r.배차표Id));
   const hasCarrierCol = forms.some((f) => (f.columns || []).some(isCarrierCol)) || companyRouteRows.some((r) => carrierOf(r));
@@ -670,53 +665,113 @@ export default function FixedRouteStatusHost({ company, dispatchData = [], rende
 }
 
 // 📱 2026-11-03 모바일 고정노선현황 — PC와 같은 양식 고르기·시트 연동·오더 추가, 표는 가로로 밀어 보기 · 줄을 두 번 눌러 수정
-export function MobileFixedRouteView({ company, dispatchData = [], drivers = [], clients = [], places = [], disabled = false }) {
-  const kst = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
-  const [day, setDay] = React.useState(kst());
+// ⭐ 2026-11-05 PC·모바일 일치 — PC 배차현황(fixedForm)과 같은 조회 기준: 입고일 기간 · 상태(전체/미배차/배차완료/미전달) ·
+//   검색(거래처·상차지·하차지·차량번호·기사·지급방식·배차방식) · 합계(건수·청구·기사·수수료) · 정렬(입고일 → 묶음 → 시트 줄)
+const FR_STATUS = [["ALL", "전체"], ["UNASSIGNED", "미배차"], ["COMPLETE", "배차완료"], ["UNDELIVERED", "미전달"]];
+const frIn = (r) => String(r.입고일 || r.하차일 || r.상차일 || "").slice(0, 10);
+const frStatusOk = (r, st) => (st === "UNASSIGNED" ? r.배차상태 === "배차중" : st === "COMPLETE" ? r.배차상태 === "배차완료" : st === "UNDELIVERED" ? (r.업체전달상태 || "미전달") !== "전달완료" : true);
+const frSearchOk = (r, q) => {
+  const k = String(q || "").trim().toLowerCase();
+  if (!k) return true;
+  const g = (v) => String(v || "").toLowerCase();
+  return g(r.거래처명).includes(k) || g(r.상차지명).includes(k) || g(r.하차지명).includes(k) || g(r.차량번호).includes(k) || g(r.이름).includes(k) || g(r.지급방식).includes(k) || g(r.배차방식).includes(k);
+};
+function MobileFixedRouteBody({ form, rows, range, setRange, status, setStatus, q, setQ, drivers, clients, disabled }) {
   const [editId, setEditId] = React.useState(null);
+  const [qInput, setQInput] = React.useState(q);
+  const [from, setFrom] = React.useState(range.from);
+  const [to, setTo] = React.useState(range.to);
+  React.useEffect(() => { setFrom(range.from); setTo(range.to); }, [range.from, range.to]);
+  // 입고일 = 상차일 + 하차일수 → 고른 기간의 오더를 다 보려면 상차일 기준으로 하차일수만큼 앞에서부터 불러온다
+  const { loadRange } = useOrderHistory();
+  const off = Math.max(0, toInt(form.dropOffset));
+  React.useEffect(() => { if (range.from) loadRange(addDaysStr(range.from, -off), range.to || range.from); }, [range.from, range.to, off, loadRange]);
   const patch = (r) => (p) => updateDoc(doc(db, r.__col || "orders", r._id || r.id), { ...p, 최종수정자: auth.currentUser?.email || "", updatedAt: Date.now() }).catch((e) => window.alert(`저장하지 못했습니다: ${e?.message || e}`));
+  const gi = (r) => { const i = (form.groups || []).findIndex((g) => g.name === r.배차표묶음); return i < 0 ? 999 : i; };
+  const inRange = React.useMemo(() => rows.filter((r) => { const d = frIn(r); if (!d) return false; return range.from <= range.to ? d >= range.from && d <= range.to : d >= range.from || d <= range.to; }), [rows, range.from, range.to]);
+  const counts = React.useMemo(() => {
+    const base = inRange.filter((r) => frSearchOk(r, q));
+    return { ALL: base.length, UNASSIGNED: base.filter((r) => frStatusOk(r, "UNASSIGNED")).length, COMPLETE: base.filter((r) => frStatusOk(r, "COMPLETE")).length, UNDELIVERED: base.filter((r) => frStatusOk(r, "UNDELIVERED")).length };
+  }, [inRange, q]);
+  const list = React.useMemo(() => inRange.filter((r) => frStatusOk(r, status) && frSearchOk(r, q))
+    .sort((a, b) => frIn(a).localeCompare(frIn(b)) || gi(a) - gi(b) || (a.시트줄 ?? 1e9) - (b.시트줄 ?? 1e9) || (a.배차표순번 || 0) - (b.배차표순번 || 0)), [inRange, status, q]); // eslint-disable-line react-hooks/exhaustive-deps
+  const sum = React.useMemo(() => { const sale = list.reduce((s, r) => s + toInt(r.청구운임), 0); const drv = list.reduce((s, r) => s + toInt(r.기사운임), 0); return { sale, drv, fee: sale - drv }; }, [list]);
+  const head = fixedHeaderOf(form).filter((h) => h !== "선택");
+  const apply = (f = from, t = to) => { if (!f || !t) { window.alert("조회 기간을 입력해주세요."); return; } if (f > t) { window.alert("조회 시작일이 종료일보다 늦을 수 없습니다."); return; } setRange({ from: f, to: t }); setQ(qInput); };
+  const quick = (f, t) => { setFrom(f); setTo(t); setRange({ from: f, to: t }); };
+  const td = kstDay();
+  const monthFirst = `${td.slice(0, 7)}-01`;
+  const monthLast = (() => { const d = new Date(`${monthFirst}T00:00:00Z`); d.setUTCMonth(d.getUTCMonth() + 1); d.setUTCDate(0); return d.toISOString().slice(0, 10); })();
+  const won = (n) => Number(n || 0).toLocaleString("ko-KR");
+  const chip = (on) => `h-8 px-3 rounded-lg text-[12.5px] font-black border whitespace-nowrap ${on ? "bg-[#0F1A30] text-white border-[#0F1A30]" : "bg-white text-[#3A4A66] border-[#DCE3EE]"}`;
+  return (
+    <div className="space-y-2" data-kp="m-fixedroute">
+      <div className="rounded-2xl border border-[#E3E8F0] bg-white p-2.5 space-y-2">
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <span className="text-[12px] font-black text-[#5B6B85]">입고일</span>
+          {[["어제", addDaysStr(td, -1), addDaysStr(td, -1)], ["오늘", td, td], ["내일", addDaysStr(td, 1), addDaysStr(td, 1)], ["이번 달", monthFirst, monthLast]].map(([l, f, t]) => (
+            <button key={l} type="button" onClick={() => quick(f, t)} className={chip(range.from === f && range.to === t)}>{l}</button>
+          ))}
+        </div>
+        <div className="flex items-center gap-1.5">
+          <span className="flex-1 min-w-0"><CustomDatePicker value={from} onChange={(e) => setFrom(e.target.value)} className="h-9 w-full px-2 rounded-lg border border-[#DCE3EE] text-[12.5px] font-semibold bg-white" /></span>
+          <span className="text-[#9AA9C3] font-bold">~</span>
+          <span className="flex-1 min-w-0"><CustomDatePicker value={to} onChange={(e) => setTo(e.target.value)} className="h-9 w-full px-2 rounded-lg border border-[#DCE3EE] text-[12.5px] font-semibold bg-white" /></span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <input value={qInput} onChange={(e) => setQInput(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") apply(); }} placeholder="거래처·상하차지·차량번호·기사 검색"
+            className="flex-1 min-w-0 h-9 px-3 rounded-lg border border-[#DCE3EE] text-[13px] font-semibold text-[#0F1A30] bg-white outline-none focus:border-[#2D4C82]" />
+          <button type="button" onClick={() => apply()} className="h-9 px-4 rounded-lg bg-[#1B2B4B] text-white text-[13px] font-black shrink-0">조회</button>
+        </div>
+        <div className="flex items-center gap-1.5 overflow-x-auto" style={{ WebkitOverflowScrolling: "touch" }}>
+          {FR_STATUS.map(([k, l]) => (
+            <button key={k} type="button" onClick={() => setStatus(k)} className={chip(status === k)} data-kp={`frs-${k}`}>
+              {l} <span className="tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{counts[k]}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+      <div className="grid grid-cols-4 gap-1.5" data-kp="frs-summary">
+        {[["건수", `${list.length}`], ["청구", won(sum.sale)], ["기사", won(sum.drv)], ["수수료", won(sum.fee)]].map(([l, v], i) => (
+          <div key={l} className={`rounded-xl px-2 py-1.5 ${i === 3 ? "bg-[#1B2B4B] text-white" : "bg-white border border-[#E3E8F0] text-[#0F1A30]"}`}>
+            <div className={`text-[11px] font-bold ${i === 3 ? "text-white/70" : "text-[#7A8AA6]"}`}>{l}</div>
+            <div className="text-[13.5px] font-black tabular-nums truncate" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{v}</div>
+          </div>
+        ))}
+      </div>
+      <div className="text-right text-[11.5px] font-bold text-[#7A8AA6]">{range.from === range.to ? range.from : `${range.from} ~ ${range.to}`} · {list.length}건 · 두 번 눌러 수정</div>
+      <div className="overflow-x-auto rounded-2xl border border-[#E3E8F0] bg-white" style={{ WebkitOverflowScrolling: "touch" }}>
+        <table className="text-[12.5px] border-separate border-spacing-0" style={{ minWidth: "max-content" }}>
+          <thead><tr>{head.map((h) => <th key={h} className="sticky top-0 bg-[#1B2B4B] text-white font-extrabold px-2 py-2 whitespace-nowrap border-r border-white/10">{h}</th>)}</tr></thead>
+          <tbody>
+            {list.length === 0 && <tr><td colSpan={head.length} className="py-10 text-center text-[#9AA9C3] font-semibold">조건에 맞는 오더가 없어요</td></tr>}
+            {list.map((r, i) => {
+              const id = r._id || r.id;
+              return (
+                <tr key={id} className={`kp-frs-row ${editId === id ? "bg-[#EEF4FF] outline outline-2 -outline-offset-2 outline-[#2D4C82]" : i % 2 ? "bg-[#FAFBFD]" : "bg-white"}`}
+                  onDoubleClick={() => { if (!disabled) setEditId((c) => (c === id ? null : id)); }}
+                  onKeyDown={(e) => { if (e.key === "Enter" && e.target.tagName === "INPUT" && !document.querySelector("[role=listbox]")) { e.target.blur(); setTimeout(() => setEditId(null), 220); } }}>
+                  <td className="px-2 py-1.5 text-center font-bold text-[#5B6B85] border-b border-[#E9EDF4] border-r border-r-[#E3E8F0]">
+                    {editId === id ? <button type="button" onClick={() => setEditId(null)} className="h-7 px-2 rounded-lg bg-[#1B2B4B] text-white text-[11px] font-black">완료</button> : i + 1}
+                  </td>
+                  <FixedRouteCells form={form} row={r} drivers={drivers} clients={clients} disabled={disabled} editing={editId === id} onPatch={patch(r)} />
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+export function MobileFixedRouteView({ company, dispatchData = [], drivers = [], clients = [], places = [], disabled = false }) {
+  const [range, setRange] = React.useState(() => ({ from: kstDay(), to: kstDay() })); // PC처럼 처음엔 오늘
+  const [status, setStatus] = React.useState("ALL");
+  const [q, setQ] = React.useState("");
   return (
     <div className="px-2 py-2 kp-m-pc">
       <FixedRouteStatusHost company={company} dispatchData={dispatchData} places={places} drivers={drivers} disabled={disabled}
-        render={(form, rows) => {
-          const gi = (r) => { const i = (form.groups || []).findIndex((g) => g.name === r.배차표묶음); return i < 0 ? 999 : i; };
-          const list = rows.filter((r) => !day || (r.입고일 || r.하차일) === day)
-            .sort((a, b) => gi(a) - gi(b) || (a.시트줄 ?? 1e9) - (b.시트줄 ?? 1e9) || (a.배차표순번 || 0) - (b.배차표순번 || 0));
-          const head = fixedHeaderOf(form).filter((h) => h !== "선택");
-          return (
-            <div className="space-y-2">
-              <div className="flex items-center gap-1.5 flex-wrap">
-                <span className="text-[12px] font-black text-[#5B6B85]">입고일</span>
-                {[["오늘", kst()], ["내일", addDaysStr(kst(), 1)], ["전체", ""]].map(([l, v]) => (
-                  <button key={l} type="button" onClick={() => setDay(v)} className={`h-8 px-3 rounded-lg text-[12.5px] font-black border ${day === v ? "bg-[#0F1A30] text-white border-[#0F1A30]" : "bg-white text-[#3A4A66] border-[#DCE3EE]"}`}>{l}</button>
-                ))}
-                <span className="inline-block w-[130px]"><CustomDatePicker value={day} onChange={(e) => setDay(e.target.value)} className="h-8 w-full px-2 rounded-lg border border-[#DCE3EE] text-[12.5px] font-semibold bg-white" /></span>
-                <span className="ml-auto text-[12px] font-bold text-[#7A8AA6]">{list.length}건 · 두 번 눌러 수정</span>
-              </div>
-              <div className="overflow-x-auto rounded-2xl border border-[#E3E8F0] bg-white" style={{ WebkitOverflowScrolling: "touch" }}>
-                <table className="text-[12.5px] border-separate border-spacing-0" style={{ minWidth: "max-content" }}>
-                  <thead><tr>{head.map((h) => <th key={h} className="sticky top-0 bg-[#1B2B4B] text-white font-extrabold px-2 py-2 whitespace-nowrap border-r border-white/10">{h}</th>)}</tr></thead>
-                  <tbody>
-                    {list.length === 0 && <tr><td colSpan={head.length} className="py-10 text-center text-[#9AA9C3] font-semibold">이 날 오더가 없어요</td></tr>}
-                    {list.map((r, i) => {
-                      const id = r._id || r.id;
-                      return (
-                        <tr key={id} className={`kp-frs-row ${editId === id ? "bg-[#EEF4FF] outline outline-2 -outline-offset-2 outline-[#2D4C82]" : i % 2 ? "bg-[#FAFBFD]" : "bg-white"}`}
-                          onDoubleClick={() => { if (!disabled) setEditId((c) => (c === id ? null : id)); }}
-                          onKeyDown={(e) => { if (e.key === "Enter" && e.target.tagName === "INPUT" && !document.querySelector("[role=listbox]")) { e.target.blur(); setTimeout(() => setEditId(null), 220); } }}>
-                          <td className="px-2 py-1.5 text-center font-bold text-[#5B6B85] border-b border-[#E9EDF4] border-r border-r-[#E3E8F0]">
-                            {editId === id ? <button type="button" onClick={() => setEditId(null)} className="h-7 px-2 rounded-lg bg-[#1B2B4B] text-white text-[11px] font-black">완료</button> : i + 1}
-                          </td>
-                          <FixedRouteCells form={form} row={r} drivers={drivers} clients={clients} disabled={disabled} editing={editId === id} onPatch={patch(r)} />
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          );
-        }} />
+        render={(form, rows) => <MobileFixedRouteBody key={form.id} form={form} rows={rows} range={range} setRange={setRange} status={status} setStatus={setStatus} q={q} setQ={setQ} drivers={drivers} clients={clients} disabled={disabled} />} />
     </div>
   );
 }

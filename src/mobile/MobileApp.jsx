@@ -27,7 +27,7 @@ import { lazyView } from "../lazyLoad";
 const MobileAttendanceBoard = lazyView(() => import("./MobileAttendanceBoard"));
 const MobileIntelView = lazyView(() => import("./MobileIntelView"));
 import InternalMessenger from "../InternalMessenger";
-import { subscribeOrderSync, deleteOrderWithLog, historyStartDate } from "../orderHistory";
+import { subscribeOrderSync, deleteOrderWithLog, historyStartDate, pcLiveWindowStart } from "../orderHistory";
 import CustomDatePicker from "../CustomDatePicker";
 import MobileSelect from "./MobileSelect"; // ⭐ 2026-11-02 기본 select → 남색 바텀시트 선택기
 import RouteMapModal from "../RouteMapModal";
@@ -38,6 +38,10 @@ import { withCo, getTenant } from "../fsTenant";
 // 📱 PC와 같은 화면(매출관리·운임조회·단가표·지입차관리·전자결재·직원관리) — 메뉴를 열 때만 불러온다
 const MobilePcView = React.lazy(() => import("./MobilePcViews"));
 import { useMobileAlerts } from "./mobileAlerts";
+import { useRouteBoardIds } from "../routeBoardIds"; // ⭐ 2026-11-05 고정노선 미배차 메뉴 숫자
+import { useMobileDetailGetters } from "../detailGetters"; // ⭐ 2026-11-05 PC·모바일 일치 — 세부검색 배차담당자·청구사업자 값
+import { pickUnassignedOrders } from "../unassignedRule"; // ⭐ 2026-11-05 PC·모바일 일치 — 미배차 기준 공용
+import { planIncludes, useCompanyPlanId } from "../plans"; // ⭐ 2026-11-05 인사이트 메뉴 요금제(PC와 같게)
 import { ShellIcon } from "../AdminShell";
 // ⭐ 작은 표시 전용 저장소 — "최신 정보 확인 중"·첫 진입 진행률이 바뀔 때 화면 전체(오더 목록)를
 // 다시 그리지 않고 그 표시만 바꾼다(저사양 폰에서 스크롤 끊김 방지)
@@ -129,6 +133,12 @@ import { LiveDriverChip, FleetLiveButton, useFleetLivePublish } from "../liveFle
 // ⭐ 오더 취소(소프트) 상태로 취급하는 값들 — 이 값이면 등록내역/미배차 등 정상 목록에서는
 // 제외되고, 대신 "취소내역" 화면에서만 보인다(완전삭제 전까지 복구 가능).
 const CANCELED_STATUS_LIST = ["취소", "배차취소", "오더취소", "취소됨"];
+// ⭐ 2026-11-05 PC·모바일 일치 — PC에서 기사관리·거래처관리 메뉴를 보는 기본 역할(맞춤 역할은 메뉴 권한 ok()로)
+const PC_DRIVER_MENU_ROLES = { has: (r) => ["admin", "totalMaster", "user", "test", "hrManager", "viewer"].includes(r) || /^role_/.test(String(r || "")) };
+const PC_CLIENT_MENU_ROLES = { has: (r) => ["admin", "totalMaster", "user", "test", "viewer"].includes(r) || /^role_/.test(String(r || "")) };
+// ⭐ 2026-11-05 PC·모바일 일치 — PC는 상태가 취소 목록이거나 배차상태가 "배차취소"(화주사가 취소 승인)인 오더를
+//   배차현황·실시간·이력·동기화 어디서든 뺀다. 모바일도 같은 한 가지 기준으로 정상 목록에서 뺀다.
+const isCancelledOrder = (o) => !!o && (CANCELED_STATUS_LIST.includes(o.상태) || String(o.배차상태 || "").trim() === "배차취소");
 // ⭐ 2026-10-30 모바일 딜레이 — 저장(updateDoc)은 서버가 "받았다"고 답할 때까지 기다린다. LTE에서는 이게 수 초~수십 초라
 //   "기사취소를 눌러도 한참 뒤에 취소된다"의 원인이었다. 화면은 먼저 바꾸고 저장은 뒤에서 마저 하게 한다.
 //   (Firestore는 같은 폰의 실시간 목록에 쓴 내용을 즉시 반영하고, 끊겨도 다시 연결되면 자동으로 보낸다)
@@ -152,7 +162,7 @@ const localizeSentinels = (patch = {}, prev = {}) => {
 //   예전엔 이런 오더도 후보로 잡혀, 내일 날짜로 등록한 직후 운임조회를 누르면 방금 등록한 오더(또는 같이 등록한 여러 건)만 보였다.
 const isFareHistoryCandidate = (o, cur, today) => {
   if (!o || (cur && (o.id === cur.id || (o._id && o._id === cur._id)))) return false;
-  if (CANCELED_STATUS_LIST.includes(o.상태)) return false;
+  if (isCancelledOrder(o)) return false;
   const d = String(o.상차일 || "").slice(0, 10);
   const confirmed = !!String(o.차량번호 || "").trim() && String(o.배차상태 || o.상태 || "") !== "배차중";
   if (d >= today && !confirmed) return false;
@@ -1605,6 +1615,8 @@ const getStatus = (o = {}) => {
   const car = String(o.차량번호 || "").trim();
   return car ? "배차완료" : "배차중";
 };
+// ⭐ 2026-11-05 PC·모바일 일치 — 배차현황 상태 탭·숫자는 PC처럼 배차상태 값 기준(승인대기 등은 "전체"에만) · 값이 비어 있으면 차량번호로
+const getStatusPc = (o = {}) => String(o.배차상태 || "").trim() || getStatus(o);
 
 // 수정이력 추적 대상 필드 (PC DispatchApp.jsx의 history 배열과 동일 포맷을 공유한다)
 const HISTORY_TRACKED_FIELDS = [
@@ -2145,7 +2157,7 @@ export default function MobileApp({ role: realRole, user, userCompany = "", forc
   const deptOkM = (m) => !!customRoleM && getMenuAccess(customRolesM, role, m) !== "hidden";
   const menuOkM = React.useCallback((m) => !customRoleM || getMenuAccess(customRolesM, role, m) !== "hidden", [customRoleM, customRolesM, role]);
   // 🔒 2026-11-01 조회만 허락된 화면에서 수정·저장·삭제를 누르면 바로 "권한 없음"
-  const PAGE_MENU_M = { list: "배차현황", detail: "배차현황", canceled: "배차현황", form: "배차관리", unassigned: "배차관리", fleet: "지입차관리", sales: "매출관리", ratecard: "단가표", fare: "운임조회", intel: "인사이트", "dept:settle": "정산관리", "dept:acct": "회계관리", "dept:cashbook": "자금관리", "dept:funds": "자금관리", "dept:assets": "비품관리", "dept:hr": "인사관리부", "dept:cert": "증명서발급", "dept:driverdocs": "기사관리" }; // ⭐ 2026-11-03 가입 승인(staff)은 기사관리 조회권한과 별개 — PC처럼 관리자·경리·인사는 승인·거절 가능
+  const PAGE_MENU_M = { drivers: "기사관리", clients: "거래처관리", list: "배차현황", detail: "배차현황", canceled: "배차현황", form: "배차관리", unassigned: "배차관리", fleet: "지입차관리", sales: "매출관리", ratecard: "단가표", fare: "운임조회", intel: "인사이트", "dept:settle": "정산관리", "dept:acct": "회계관리", "dept:cashbook": "자금관리", "dept:funds": "자금관리", "dept:assets": "비품관리", "dept:hr": "인사관리부", "dept:cert": "증명서발급", "dept:driverdocs": "기사관리" }; // ⭐ 2026-11-03 가입 승인(staff)은 기사관리 조회권한과 별개 — PC처럼 관리자·경리·인사는 승인·거절 가능
   const [execFull, setExecFull] = useState(() => { try { return localStorage.getItem("kpExecFull") === "1"; } catch { return false; } });
   const deptMode = role === "test" ? "acct" : role === "hrManager" ? "hr" : isExecM && !execFull ? "exec" : null;
   const [page, setPage] = useState(deptMode ? "dept" : "list");
@@ -2156,7 +2168,7 @@ export default function MobileApp({ role: realRole, user, userCompany = "", forc
   useEffect(() => {
     if (!["list", "detail", "form"].includes(page)) deptListOkRef.current = false;
     if (deptMode && page === "list" && !(deptMode === "acct" && deptListOkRef.current)) setPage("dept");
-    if (!deptMode && (page === "dept" || (String(page).startsWith("dept:") && page !== "dept:execsched" && page !== "dept:driverdocs" && page !== "dept:schedule" && page !== "dept:rules" && page !== "dept:board" && page !== "dept:farerules" && page !== "dept:myresume" && !(DEPT_PAGE_MENU[page] && deptOkM(DEPT_PAGE_MENU[page]))))) setPage("list");
+    if (!deptMode && (page === "dept" || (String(page).startsWith("dept:") && page !== "dept:execsched" && page !== "dept:settle" && page !== "dept:driverdocs" && page !== "dept:schedule" && page !== "dept:rules" && page !== "dept:board" && page !== "dept:farerules" && page !== "dept:myresume" && !(DEPT_PAGE_MENU[page] && deptOkM(DEPT_PAGE_MENU[page]))))) setPage("list");
   }, [deptMode, page]);
   const toggleExecFull = () => { const v = !execFull; setExecFull(v); try { localStorage.setItem("kpExecFull", v ? "1" : "0"); } catch { /* 무시 */ } setPage(v ? "list" : "dept"); };
   const listScrollYRef = useRef(0); // 리스트 스크롤 위치 저장
@@ -2723,8 +2735,8 @@ const quickRange = (days) => {
   const extraSplit = useMemo(() => {
     const all = cleanMgrRows(hideBlind([...extraMap.values()]));
     return {
-      active: all.filter((o) => !CANCELED_STATUS_LIST.includes(o.상태)),
-      canceled: all.filter((o) => CANCELED_STATUS_LIST.includes(o.상태)),
+      active: all.filter((o) => !isCancelledOrder(o)),
+      canceled: all.filter((o) => isCancelledOrder(o)),
     };
   }, [extraMap]);
   const allOrdersCombined = useMemo(() => {
@@ -2848,7 +2860,7 @@ const handleValidateOrders = async (includeLastMonth = false) => {
   const months = includeLastMonth ? [prevMonthOf(thisMonth), thisMonth] : [thisMonth];
   // 검사 기간 중 실시간 범위 밖(예전 날짜) 오더를 먼저 불러온다
   const fetched = await loadRange(`${months[0]}-01`, todayKST());
-  const fetchedNew = hideBlind(fetched.filter((o) => !CANCELED_STATUS_LIST.includes(o.상태)));
+  const fetchedNew = hideBlind(fetched.filter((o) => !isCancelledOrder(o)));
   const seen = new Set(allOrders.map((o) => `${o.__col}/${o._id}`));
   const pool = [...allOrders, ...fetchedNew.filter((o) => !seen.has(`${o.__col}/${o._id}`))];
   const scoped = pool.filter((o) => months.includes(String(o.상차일 || "").slice(0, 7)));
@@ -2992,9 +3004,9 @@ collections.forEach((name) => {
       });
       const allMapped = snap.docs.map((d) => objCache.get(d.id) || { __col: name, ...d.data(), _id: d.id, id: d.id })
         .filter((o) => o.source !== "transport_transmit");
-      const list = allMapped.filter((o) => !CANCELED_STATUS_LIST.includes(o.상태));
+      const list = allMapped.filter((o) => !isCancelledOrder(o));
       // ⭐ 취소내역 화면용 — 같은 스냅샷에서 취소 상태인 것만 따로 모은다(리스너 중복 없이).
-      const canceledList = allMapped.filter((o) => CANCELED_STATUS_LIST.includes(o.상태));
+      const canceledList = allMapped.filter((o) => isCancelledOrder(o));
       setOrdersLoaded(true);
       // ⭐ 첫 화면 로딩 진행률용 — 컬렉션별로 받은 오더 수(서버 응답 기준)
       setInitLoadCounts((p) => (p[name] === snap.size ? p : { ...p, [name]: snap.size }));
@@ -3240,8 +3252,8 @@ const refreshFromServer = React.useCallback(async ({ force = false, since, manua
     const upKeys = new Set(upserts.map(keyOf));
     const drop = (o) => upKeys.has(keyOf(o)) || removedKeys.has(keyOf(o));
     startTransition(() => {
-      setOrders((prev) => [...prev.filter((o) => !drop(o)), ...upserts.filter((o) => !CANCELED_STATUS_LIST.includes(o.상태))]);
-      setCanceledOrders((prev) => [...prev.filter((o) => !drop(o)), ...upserts.filter((o) => CANCELED_STATUS_LIST.includes(o.상태))]);
+      setOrders((prev) => [...prev.filter((o) => !drop(o)), ...upserts.filter((o) => !isCancelledOrder(o))]);
+      setCanceledOrders((prev) => [...prev.filter((o) => !drop(o)), ...upserts.filter((o) => isCancelledOrder(o))]);
     });
     if (extraUpserts.length) mergeExtra(extraUpserts);
     markSynced(startedAt);
@@ -4089,6 +4101,10 @@ const thisMonth = thisMonthKST();
   }, [page, appliedStartDate, appliedEndDate, onlyToday, thisMonth, loadRange]);
   useEffect(() => {
     if (page === "canceled") loadCanceledHistory();
+    // ⭐ 2026-11-05 PC·모바일 일치 — PC 실시간 범위는 최근 7일~, 모바일은 어제~. 고정노선현황(입고일 = 상차일 + 하차일수)과
+    //   경리·임원 대시보드(최근 7일~을 전제로 집계)는 PC와 같은 7일~을 먼저 받아 둔다(실시간 범위 안쪽은 loadRange가 건너뜀)
+    else if (page === "fixedroute") loadRange(pcLiveWindowStart(), todayKST());
+    else if (page === "dept") loadRange(pcLiveWindowStart(), prevDayStr(mobileLiveStart()));
     else if (page === "fleet" || page === "ratecard" || page === "myinfo" || page === "company-fare") loadFullHistory(); // 누적 매출·운임표·내 전체 실적
     else if (page === "intel") {
       const y = todayKST().slice(0, 4);
@@ -4098,9 +4114,12 @@ const thisMonth = thisMonthKST();
     }
   }, [page, loadRange, loadFullHistory, loadCanceledHistory]);
 
+  // 🔎 세부검색(배차현황) — ⭐ 2026-11-05 PC·모바일 일치: 목록 화면에서 메인으로 올림(세부검색만 걸어도 PC처럼 고정노선 오더까지 찾기)
+  const [mDetail, setMDetail] = useState(null);
+  const mDetailGet = useMobileDetailGetters((localStorage.getItem("loginCompany") || userCompany || localStorage.getItem("userCompany") || DEFAULT_COMPANY).trim());
   const filteredOrders = useMemo(() => {
-    // ⭐ 2026-11-05 검색어가 있으면 고정노선(구글시트 배차표) 오더도 같이 찾기
-    let base = appliedSearchText.trim() ? [...allOrders] : [...listOrders];
+    // ⭐ 2026-11-05 검색어·세부검색이 있으면 고정노선(구글시트 배차표) 오더도 같이 찾기(PC 배차현황과 같은 기준)
+    let base = (appliedSearchText.trim() || mDetail) ? [...allOrders] : [...listOrders];
 
     // 🔹 오늘 / 날짜 선택 여부
     const today = todayStr();
@@ -4126,14 +4145,14 @@ if (onlyToday) {
     // 2) 상단 탭: 전체 / 배차중 / 배차완료
     base = base.filter((o) => {
       if (statusTab === "전체") return true;
-      const state = getStatus(o); // ▲ 차량번호 기준 상태
+      const state = getStatusPc(o); // ⭐ 2026-11-05 PC와 같은 배차상태 기준
       return state === statusTab;
     });
 
     // 3) 드롭다운 배차상태 (배차 전체 / 배차중 / 배차완료)
     base = base.filter((o) => {
       if (!assignFilter) return true;
-      const state = getStatus(o);
+      const state = getStatusPc(o);
       return state === assignFilter;
     });
 
@@ -4209,6 +4228,7 @@ if (appliedSearchType === "메모")
     appliedSearchText,
     thisMonth,
     onlyToday,
+    mDetail,
   ]);
 
 
@@ -4217,22 +4237,11 @@ if (appliedSearchType === "메모")
 // ✅ 미배차 오더 (차량번호 없는 것)
 // ⭐ 2026-11-02 PC 미배차 기준과 통일 — 배차중(또는 상태 비어 있음) + 차량번호 없음 + 취소 아님 + 같은 오더는 한 번만
 const [mUnDetail, setMUnDetail] = useState(null); // 🔎 미배차 세부검색(기간 + 1~3차)
-const unassignedOrders = useMemo(() => {
-  const seen = new Set();
-  return listOrders.filter((o) => {
-    const st = String(o.배차상태 || "").trim();
-    if (st && st !== "배차중") return false;          // 승인대기·배차완료·배차취소 등은 미배차가 아님
-    if (String(o.차량번호 || "").trim()) return false;
-    if (CANCELED_STATUS_LIST.includes(String(o.상태 || "").trim()) || o.지급방식 === "취소") return false;
-    if (o.source === "transport_transmit") return false;
-    if (!(String(o.상차지명 || "").trim() || String(o.하차지명 || "").trim())) return false; // ★ 상/하차지 없는 빈 오더 제외
-    if (!getPickupDate(o)) return false;              // ★ 날짜 없는 오더 제외
-    const k = `${o.__col || ""}/${o._id || ""}`;
-    if (o._id && seen.has(k)) return false;
-    seen.add(k);
-    return true;
-  });
-}, [listOrders]);
+// ⭐ 2026-11-05 PC·모바일 일치 — PC와 같은 파일(unassignedRule.js)의 기준 하나만 쓴다
+const unassignedOrders = useMemo(() => pickUnassignedOrders(listOrders), [listOrders]);
+// ⭐ 2026-11-05 PC·모바일 일치 — PC 배차현황 › 고정노선현황 탭 숫자와 같게: 이 회사 배차표 양식의 오더 중 미배차
+const routeBoardIdsM = useRouteBoardIds((localStorage.getItem("loginCompany") || userCompany || localStorage.getItem("userCompany") || DEFAULT_COMPANY).trim());
+const fixedUnassignedCount = useMemo(() => pickUnassignedOrders(allOrders.filter((r) => r.배차표Id && routeBoardIdsM.has(r.배차표Id))).length, [allOrders, routeBoardIdsM]);
 
 // 📤 정보미전달 오더 (오늘 이후 + 전달미완료)
 const undeliveredOrders = useMemo(() => {
@@ -5359,6 +5368,8 @@ const title =
   : page === "approval" ? "전자결재"
   : page === "staff" ? "직원 관리"
   : page === "drvacc" ? "기사 앱 계정"
+  : page === "drivers" ? "기사관리"
+  : page === "clients" ? "거래처관리"
   : page === "fixedroute" ? "고정노선현황"
   : page === "perms" ? "권한 관리"
   : page === "dept" ? (deptMode === "exec" ? "경영 브리핑" : deptMode === "hr" ? "인사관리" : "경리·회계")
@@ -5755,7 +5766,7 @@ const title =
         }
     : String(page).startsWith("dept:")
       ? () => setPage("dept")
-    : page === "notice" || page === "schedule" || page === "unassigned" || page === "canceled" || page === "handover" || page === "attendance" || page === "ratecard" || page === "myinfo" || page === "settings" || page === "fleet" || page === "intel" || page === "national-fare" || page === "gsheet" || page === "blind" || page === "company-fare" || page === "sales" || page === "approval" || page === "staff" || page === "drvacc" || page === "fixedroute" || page === "perms"
+    : page === "notice" || page === "schedule" || page === "unassigned" || page === "canceled" || page === "handover" || page === "attendance" || page === "ratecard" || page === "myinfo" || page === "settings" || page === "fleet" || page === "intel" || page === "national-fare" || page === "gsheet" || page === "blind" || page === "company-fare" || page === "sales" || page === "approval" || page === "staff" || page === "drvacc" || page === "drivers" || page === "clients" || page === "fixedroute" || page === "perms"
       ? () => setPage("list")
       : page === "fare"
       ? () => setPage(prevPage || "list")
@@ -5764,7 +5775,7 @@ const title =
   onRefresh={page === "list" ? handleRefresh : undefined}
   onValidateOrders={undefined /* ⭐ 2026-11-04 오더검증 버튼 없앰 */}
   onMenu={page === "list" || page === "dept" ? () => setShowMenu(true) : undefined}
-  menuBadge={(alertCounts.approval || 0) + (alertCounts.handover || 0) + (alertCounts.notice || 0) + ((["admin", "totalMaster", "superadmin", "viewer"].includes(role) || deptMode) ? (alertCounts.signupStaff || 0) + (alertCounts.signupDriver || 0) : 0) + drvCounts.orders + drvCounts.docs + drvCounts.sos /* ⭐ 2026-11-05 기사앱 이벤트 */}
+  menuBadge={(alertCounts.approval || 0) + (alertCounts.mineNew || 0) + (alertCounts.handover || 0) + (alertCounts.notice || 0) + ((["admin", "totalMaster", "superadmin", "viewer"].includes(role) || deptMode) ? (alertCounts.signupStaff || 0) + (alertCounts.signupDriver || 0) : 0) + drvCounts.orders + drvCounts.docs + drvCounts.sos /* ⭐ 2026-11-05 기사앱 이벤트 */}
   notifCount={unreadCount}
   onNotifClick={() => { setShowNotifPanel(true); markAllRead(); }}
   messengerUnread={messengerUnread}
@@ -5949,6 +5960,7 @@ onGoAttendance={() => {
           onToggleExec={() => { toggleExecFull(); setShowMenu(false); }}
           alertCounts={{ ...alertCounts, drvOrders: drvCounts.orders, drvDocs: drvCounts.docs, drvSos: drvCounts.sos }}
           unassignedCount={unassignedOrders.length}
+          fixedUnassignedCount={fixedUnassignedCount}
           onDeleteAll={deleteAllOrders}
           setUiScale={setUiScale}
           uiScale={uiScale}
@@ -6684,7 +6696,10 @@ onGoAttendance={() => {
           <div style={page === "list" ? undefined : { display: "none" }}>
           <MobileOrderList
             renderAllFirst={listScrollYRef.current > 0}
-            allOrders={listOrders}
+            allOrders={allOrders}
+            mDetail={mDetail}
+            setMDetail={setMDetail}
+            detailGetters={mDetailGet}
             dispatcherName={dispatcherName}
             userCompany={userCompany}
             groupedByDate={groupedByDate}
@@ -6834,10 +6849,10 @@ setOpenMemo={setOpenMemo}
             cardVersionB={cardVersionB}
           />
         )}
-        {(page === "national-fare" || page === "company-fare" || page === "ratecard" || page === "approval" || page === "staff" || page === "drvacc" || page === "fixedroute" || page === "perms") && (
+        {(page === "national-fare" || page === "company-fare" || page === "ratecard" || page === "approval" || page === "staff" || page === "drvacc" || page === "drivers" || page === "clients" || page === "fixedroute" || page === "perms") && (
           <React.Suspense fallback={null}>
             <MobilePcView key={page}
-              kind={page === "ratecard" ? "ratecard" : page === "approval" ? "approval" : page === "staff" ? "staff" : page === "drvacc" ? "drvacc" : page === "fixedroute" ? "fixedroute" : page === "perms" ? "perms" : "fare"} drivers={drivers} users={mobileUsers}
+              kind={page === "ratecard" ? "ratecard" : page === "approval" ? "approval" : page === "staff" ? "staff" : page === "drvacc" ? "drvacc" : page === "drivers" ? "drivers" : page === "clients" ? "clients" : page === "fixedroute" ? "fixedroute" : page === "perms" ? "perms" : "fare"} drivers={drivers} users={mobileUsers}
               initial={page === "company-fare" ? "자사운임표" : undefined}
               dispatchData={allOrders} clients={clients} places={places} role={role} userCompany={pcViewCompany} me={pcViewMe}
               loadRange={loadRange} loadFullHistory={loadFullHistory} />
@@ -6889,10 +6904,10 @@ setOpenMemo={setOpenMemo}
     dispatcherName={dispatcherName}
     title="미배차 / 정보미전달"
     orders={{
-      unassigned: mUnDetail ? applyDetailFilter(unassignedOrders, mUnDetail) : unassignedOrders,
-      undelivered: mUnDetail ? applyDetailFilter(undeliveredOrders, mUnDetail) : undeliveredOrders,
+      unassigned: mUnDetail ? applyDetailFilter(unassignedOrders, mUnDetail, { getters: mDetailGet }) : unassignedOrders,
+      undelivered: mUnDetail ? applyDetailFilter(undeliveredOrders, mUnDetail, { getters: mDetailGet }) : undeliveredOrders,
     }}
-    detailBtn={<DetailFilterButton rows={unassignedTab === "정보미전달" ? undeliveredOrders : unassignedOrders} value={mUnDetail} onApply={setMUnDetail} title="세부검색 · 미배차" />}
+    detailBtn={<DetailFilterButton rows={unassignedTab === "정보미전달" ? undeliveredOrders : unassignedOrders} value={mUnDetail} onApply={setMUnDetail} getters={mDetailGet} title="세부검색 · 미배차" />}
     unassignedTypeFilter={unassignedTypeFilter}
     setUnassignedTypeFilter={setUnassignedTypeFilter}
     setTodayRange={setTodayRange}
@@ -7740,6 +7755,7 @@ function MobileSideMenu({
   onGo,
   alertCounts,
   unassignedCount = 0,
+  fixedUnassignedCount = 0,
   deptMode = null,
   isExec = false,
   roleViews = null,
@@ -7762,6 +7778,7 @@ function MobileSideMenu({
   }, []);
   const isAdminRole = ["admin", "totalMaster", "superadmin"].includes(role);
   const ok = menuOk;
+  const planIdM = useCompanyPlanId((role === "totalMaster" ? (localStorage.getItem("loginCompany") || "") : (localStorage.getItem("userCompany") || localStorage.getItem("loginCompany") || "")).trim()); // ⭐ 2026-11-05 PC와 같은 요금제 잠금
   const canRevenue = ["admin", "totalMaster", "superadmin", "test", "viewer"].includes(role);
   const canAdminMenu = isAdminRole || role === "viewer";
   // ⭐ 2026-11-04 권한 관리 — 최고관리자가 켠 회사의 마스터만(자기 회사 것만)
@@ -7881,6 +7898,7 @@ function MobileSideMenu({
               {ok("정산관리") && <MenuItem label="정산관리" icon="receipt" onClick={() => onGo?.("dept:settle")} dark={dark} />}
               {ok("매출관리") && <MenuItem label="매출관리" icon="chart" onClick={onGoSales} dark={dark} />}
               {ok("회계관리") && <MenuItem label="회계관리" icon="money" onClick={() => onGo?.("dept:acct")} dark={dark} />}
+              {ok("거래처관리") && <MenuItem label="거래처관리" icon="building" onClick={() => onGo?.("clients")} dark={dark} />}{/* ⭐ 2026-11-05 PC 경리(test)도 거래처관리를 본다 */}
             </MenuSection>
             <MenuSection title="자금 · 총무" en="FINANCE · OFFICE" dark={dark} alwaysOpen>
               {ok("자금관리") && <MenuItem label="자금 관리" icon="wallet" onClick={() => onGo?.("dept:cashbook")} dark={dark} />}
@@ -7922,14 +7940,18 @@ function MobileSideMenu({
               <MenuItem label="직원 가입 승인" icon="users" onClick={() => onGo?.("staff")} badge={alertCounts?.signupStaff || null} dark={dark} />
               <MenuItem label="기사 앱 계정 · 가입 승인" icon="truck" onClick={() => onGo?.("drvacc")} badge={alertCounts?.signupDriver || null} dark={dark} />
               <MenuItem label="기사 서류" icon="file" onClick={() => onGo?.("dept:driverdocs")} badge={alertCounts?.drvDocs || null} dark={dark} />
+              {ok("기사관리") && <MenuItem label="기사관리" icon="user" onClick={() => onGo?.("drivers")} dark={dark} />}{/* ⭐ 2026-11-05 PC 경리·인사도 기사관리를 본다 */}
             </MenuSection>
           )}
           {!deptMode && (
           <MenuSection title="배차관리" en="DISPATCH" dark={dark} alwaysOpen>
-            {ok("배차현황") && <MenuItem label="등록내역" icon="list" onClick={onGoList} badge={alertCounts?.drvOrders || null} dark={dark} />}{/* ⭐ 2026-11-05 기사 수락/거절 */}
+            {ok("배차현황") && <MenuItem label="등록내역" icon="list" onClick={onGoList} badge={alertCounts?.drvOrders || (unassignedCount > 0 ? unassignedCount : null)} dark={dark} />}{/* ⭐ 2026-11-05 PC·모바일 일치 — 기사 수락/거절이 없으면 PC 배차현황 탭처럼 미배차 숫자 */}{/* ⭐ 2026-11-05 기사 수락/거절 */}
             {role !== "test" && ok("배차관리") && <MenuItem label="화물등록" icon="truck" onClick={onGoCreate} dark={dark} />}
             {ok("배차관리") && <MenuItem label="미배차현황" icon="alert" onClick={onGoUnassigned} badge={unassignedCount > 0 ? unassignedCount : null} dark={dark} />}
-            {ok("배차현황") && <MenuItem label="고정노선현황" icon="route" onClick={() => onGo?.("fixedroute")} dark={dark} />}{/* ⭐ 2026-11-03 구글시트 배차표 */}
+            {ok("배차현황") && <MenuItem label="고정노선현황" icon="route" onClick={() => onGo?.("fixedroute")} badge={fixedUnassignedCount > 0 ? fixedUnassignedCount : null} dark={dark} />}
+            {/* ⭐ 2026-11-05 PC·모바일 일치 — PC 기사관리·거래처관리와 같은 화면(PC에서 그 메뉴를 보는 권한만) */}
+            {PC_DRIVER_MENU_ROLES.has(role) && ok("기사관리") && <MenuItem label="기사관리" icon="user" onClick={() => onGo?.("drivers")} dark={dark} />}
+            {PC_CLIENT_MENU_ROLES.has(role) && ok("거래처관리") && <MenuItem label="거래처관리" icon="building" onClick={() => onGo?.("clients")} dark={dark} />}{/* ⭐ 2026-11-03 구글시트 배차표 */}
             {ok("지입차관리") && <MenuItem label="지입차관리" icon="route" onClick={onGoFleet} badge={alertCounts?.drvSos || null} dark={dark} />}{/* ⭐ 2026-11-03 배차관리 안으로 */}
           </MenuSection>
           )}
@@ -7949,7 +7971,7 @@ function MobileSideMenu({
             {/* ⭐ 2026-11-01 직원 일정(연차·외근 등 부재 달력)은 모든 직원이 본다 — PC 홈 › 사내 게시판과 같게 */}
             <MenuItem label="직원 일정" icon="clock" onClick={() => onGo?.("dept:schedule")} dark={dark} />
             {deptMode !== "exec" && <MenuItem label="임원 일정" icon="pin" onClick={() => onGo?.("dept:execsched")} dark={dark} />}
-            {ok("전자결재") && <MenuItem label="전자결재" icon="stamp" onClick={() => onGo?.("approval")} badge={(alertCounts?.approval || 0) + (alertCounts?.handover || 0) || null} dark={dark} />}
+            {ok("전자결재") && <MenuItem label="전자결재" icon="stamp" onClick={() => onGo?.("approval")} badge={(alertCounts?.approval || 0) + (alertCounts?.mineNew || 0) + (alertCounts?.handover || 0) || null} dark={dark} />}
             <MenuItem label="출근기록부" icon="clock" onClick={onGoAttendance} dark={dark} />
             <MenuItem label="사내 규정" icon="list" onClick={() => onGo?.("dept:rules")} dark={dark} />
             {fareMenu.feature && role !== "driver" && role !== "shipper" && <MenuItem label="운임 규칙" icon="money" onClick={() => onGo?.("dept:farerules")} dark={dark} />}{/* ⭐ 2026-11-02 운임규칙 */}
@@ -7961,6 +7983,9 @@ function MobileSideMenu({
           </MenuSection>
           <MenuSection title="기사 · 매출" en="FLEET · REVENUE" dark={dark} alwaysOpen>
             {canRevenue && ok("매출관리") && <MenuItem label="매출관리" icon="chart" onClick={onGoSales} dark={dark} />}
+            {/* ⭐ 2026-11-05 PC·모바일 일치 — PC 매출·정산 묶음의 정산관리·인사이트(PC와 같은 권한·요금제) */}
+            {(canRevenue || /^role_/.test(String(role || ""))) && ok("정산관리") && <MenuItem label="정산관리" icon="receipt" onClick={() => onGo?.("dept:settle")} dark={dark} />}
+            {(role === "admin" || role === "totalMaster") && ok("인사이트") && planIncludes(planIdM, "insight") && <MenuItem label="인사이트" icon="trend" onClick={onGoIntel} dark={dark} />}
           </MenuSection>
           </>)}
           {canAdminMenu && !deptMode && (
@@ -8831,6 +8856,9 @@ function MobileEstimateModal({ orders = [], userCompany = "", onClose }) {
 // ======================================================================
 function MobileOrderList({
   allOrders = [],
+  mDetail = null,
+  setMDetail = () => {},
+  detailGetters,
   groupedByDate,
   statusTab,
   setStatusTab,
@@ -8959,7 +8987,6 @@ function MobileOrderList({
   // 그대로 참조하므로, 여기서 같은 이름으로 다시 선언해 필터링·정렬된 결과로 가려버린다
   // (한 곳만 고치면 전체에 일관되게 반영됨).
   // 🔎 세부검색 — 기간은 위 날짜 조회로, 1~3차 조건은 여기서
-  const [mDetail, setMDetail] = useState(null);
   const applyMDetail = (v) => { setMDetail(v); if (v?.from && v?.to) { setStartDate(v.from); setEndDate(v.to); setAppliedStartDate(v.from); setAppliedEndDate(v.to); } };
   const groupedByDateRaw = groupedByDate;
   // ⭐ 2026-11-04 속도 — 예전엔 목록이 다시 그려질 때마다(입력·팝업 열고 닫기 등) 전체 오더를 다시 거르고 정렬했다.
@@ -8974,11 +9001,11 @@ function MobileOrderList({
       if (payTypeFilter.size > 0) filtered = filtered.filter(o => payTypeFilter.has(classifyPayType(o)));
       if (chargeMissingOnly) filtered = filtered.filter(o => !(Number(o.청구운임) > 0));
       if (driverFeeMissingOnly) filtered = filtered.filter(o => !(Number(o.기사운임) > 0));
-      if (mDetail) filtered = applyDetailFilter(filtered, mDetail, { withDate: false });
+      if (mDetail) filtered = applyDetailFilter(filtered, mDetail, { withDate: false, getters: detailGetters });
       if (filtered.length) next.set(key, sortOrdersByMode(filtered));
     });
     return next;
-  }, [groupedByDateRaw, orderTypeFilter, assignMethodFilter, payTypeFilter, chargeMissingOnly, driverFeeMissingOnly, mDetail, orderSortMode]);
+  }, [groupedByDateRaw, orderTypeFilter, assignMethodFilter, payTypeFilter, chargeMissingOnly, driverFeeMissingOnly, mDetail, orderSortMode, detailGetters]);
   const [uploadLinkModal, setUploadLinkModal] = useState(false);
   const [estimateModal, setEstimateModal] = useState(false);
   const [deleteConfirmOrder, setDeleteConfirmOrder] = useState(null);
@@ -9112,10 +9139,10 @@ function MobileOrderList({
 
   groupedByDate.forEach(list => {
     list.forEach(o => {
-      const status = o.차량번호 ? "배차완료" : "배차중";
+      const status = getStatusPc(o); // ⭐ 2026-11-05 PC와 같은 배차상태 기준
 
       if (status === "배차완료") done++;
-      else ing++;
+      else if (status === "배차중") ing++;
     });
   });
 
@@ -9383,7 +9410,7 @@ const summary = useMemo(() => {
                     조회
                   </button>
                 </div>
-                <DetailFilterButton rows={allOrders} value={mDetail} onApply={applyMDetail} title="세부검색 · 배차현황" className="kp-m-searchrow-btn" />
+                <DetailFilterButton rows={allOrders} value={mDetail} onApply={applyMDetail} getters={detailGetters} title="세부검색 · 배차현황" className="kp-m-searchrow-btn" />
               </div></div>
             </>
           );

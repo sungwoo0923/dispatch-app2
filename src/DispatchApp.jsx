@@ -2851,6 +2851,8 @@ import { isTMUser } from "./staffFilter";
 import OrgChart from "./OrgChart";
 import { MailHeaderButton, sendInternalMail, useMailCounts } from "./InternalMail";
 import { useApprovalCounts } from "./Approval";
+import { ORDER_MGR_EMPTY, orderStaffNameRaw as _orderStaffNameRaw, useDetailGetters } from "./detailGetters"; // ⭐ 2026-11-05 PC·모바일 일치 — 세부검색 값 공용
+import { pickUnassignedOrders } from "./unassignedRule"; // ⭐ 2026-11-05 PC·모바일 일치 — 미배차 기준 공용
 import { useMobileAlerts } from "./mobile/mobileAlerts";
 import { loadAcctPayments, saveAcctPayments, loadPlManual, savePlManual } from "./acctPayments";
 import { bumpDriverPayout, addClientCollection, removeClientCollections } from "./ledgerAuto";
@@ -3637,31 +3639,9 @@ function placeSearch(list, q) {
   });
   return out.sort((a, b) => b.__score - a.__score || String(a.업체명 || "").localeCompare(String(b.업체명 || ""), "ko") || String(a.주소 || "").localeCompare(String(b.주소 || ""), "ko"));
 }
-const ORDER_MGR_EMPTY = "미지정";
-const ORDER_MGR_FIXED = "고정노선";
-// ⭐ 2026-11-03 등록할 때만 쓰이는 칸(createdBy…)을 먼저 — 작성자 칸은 예전 수정 기능이 "고친 사람"으로 덮어쓴 오더가 있어서 뒤로
-const _ORDER_CREATOR_KEYS = ["createdByEmail", "createdByUid", "createdBy", "작성자", "등록자", "등록자명", "createdByName", "등록자이메일", "authorEmail", "author"];
+// ⭐ 2026-11-05 PC·모바일 일치 — 등록 직원 이름·세부검색 값 꺼내기는 src/detailGetters.js(모바일도 같은 파일)
 // 수정할 때 덮어쓰면 안 되는 등록자 칸(patchDispatch)
 const ORDER_CREATOR_FIELDS = ["작성자", "createdByEmail", "createdByUid", "createdBy", "createdByName", "등록자", "등록자명", "등록자이메일", "authorEmail", "author", "등록기기"];
-const _orderStaffNameRaw = (r, nameMap) => {
-  if (!r) return "";
-  if (String(r.등록기기 || "").trim() === ORDER_MGR_FIXED || String(r.배차확정자 || "").trim() === ORDER_MGR_FIXED || r.source === "fixedRoute") return ORDER_MGR_FIXED;
-  // ⭐ 2026-11-03 등록자 이름 칸이 실제 직원 이름이면 그게 우선(매출관리 담당자와 같은 기준)
-  const nm0 = String(r.등록자명 || r.createdByName || "").trim();
-  if (nm0 && !nm0.includes("@") && nm0 !== "최고관리자" && !isMasterKey(nm0) && nameMap && [...nameMap.values()].includes(nm0)) return nm0;
-  // ⭐ 2026-11-03 칸 순서대로 처음 사람이 확인되는 칸이 이긴다(작성자 → …) — 예전엔 어느 칸이든 최고관리자 값이 하나라도 있으면
-  //  (최고관리자가 복사·수정하며 남긴 보조 칸 등) 실제 등록한 직원(손선일 등) 대신 "최고관리자"로 보였다
-  for (const k of _ORDER_CREATOR_KEYS) {
-    const s = String(r[k] || "").trim();
-    if (!s) continue;
-    const n = nameMap?.get(s) || nameMap?.get(s.toLowerCase());
-    if (n) return n;
-    if (isMasterKey(s)) return "최고관리자"; // 계정명(tjddnqkf) 대신
-  }
-  // 직원 목록에 없어도 이름으로 적혀 있으면(이메일·아이디가 아니면) 그대로
-  const nm = String(r.등록자명 || r.createdByName || "").trim();
-  return nm && !nm.includes("@") && !/^[A-Za-z0-9]{20,}$/.test(nm) ? nm : "";
-};
 function useOrderStaffName(userNameMap, userCompany) {
   const on = useCompanyFeatures(getTenant() || userCompany).orderManagerCol === true;
   return React.useMemo(() => {
@@ -3676,14 +3656,6 @@ function useOrderStaffName(userNameMap, userCompany) {
   }, [on, userNameMap]);
 }
 const orderMgrName = (getName, r) => (getName ? getName(r) : "");
-// 🔎 2026-11-03 세부검색 — 배차담당자(등록한 직원 이름)·청구사업자 칸 값 꺼내기
-function useDetailGetters(userNameMap, company) {
-  const biz = useCompanyBiz(getTenant() || company);
-  return React.useMemo(() => ({
-    배차담당자: (r) => _orderStaffNameRaw(r, userNameMap) || ORDER_MGR_EMPTY,
-    청구사업자: biz.multi ? (r) => bizOf(r, biz.defaultName) : null,
-  }), [userNameMap, biz.multi, biz.defaultName]);
-}
 // 정렬용 값 꺼내기 — 배차담당자 칸은 위에서, 나머지는 orderSortValue
 
 // ⚡ 큰 표를 나눠 그리기 — 표 아래에 닿으면(또는 버튼을 누르면) 다음 묶음을 붙인다
@@ -3746,6 +3718,110 @@ const parseWaypointsShared = (v) => {
   }
   return null;
 };
+
+// ⭐ 2026-11-05 PC·모바일 일치 — 기사·거래처 저장(PC 화면과 모바일 기사관리·거래처관리가 같은 함수를 쓴다)
+async function pcUpsertDriver({ drivers = [], role, userCompany, myRealName, user }, driver) {
+  const viewCompany = role === "totalMaster"
+    ? (localStorage.getItem("loginCompany") || userCompany || DEFAULT_COMPANY)
+    : (userCompany || localStorage.getItem("userCompany") || DEFAULT_COMPANY);
+
+  // ★ id가 없을 때: 차량번호 기준으로 기존 기사 찾기 (중복 생성 방지)
+  let id = driver.id;
+  if (!id && driver.차량번호) {
+    const normPlate = (s="") => String(s).replace(/\s+/g, "").toUpperCase();
+    const existing = drivers.find(d => normPlate(d.차량번호) === normPlate(driver.차량번호));
+    if (existing?.id) id = existing.id;
+    // 로컬 drivers state에 아직 없는 차량번호라면(신규 기사이거나, 방금 다른 곳에서
+    // upsertDriver를 호출했는데 realtime 리스너가 아직 그 결과를 반영하지 못한 경우)
+    // crypto.randomUUID()로 매번 새 문서를 만들면, 짧은 시간에 같은 차량번호로 여러 번
+    // 호출될 때(연속 오더 등록 등) 서로의 존재를 모른 채 완전히 동일한 내용의 문서가
+    // 여러 개 생긴다 — 차량번호 자체를 문서 id로 써서 항상 같은 문서로 수렴하게 한다.
+    else id = coDocKey(viewCompany, normPlate(driver.차량번호)); // 회사별 문서 이름(다른 운송사 같은 차량번호와 충돌 방지)
+  }
+  if (!id) id = crypto.randomUUID();
+
+  // ★ 담당자(등록자) — 이 기사 문서를 최초로 만든 스태프 이름을 기록해둔다(기사관리
+  // 목록의 "담당자" 컬럼용, 지입/직영 기사 전용). 이미 등록자가 있으면 이후 수정으로
+  // 덮어쓰지 않고 최초 등록자를 그대로 유지한다.
+  const existingDriverDoc = drivers.find(d => d.id === id);
+  const registeredBy = existingDriverDoc?.등록자 || driver.등록자 ||
+    (!existingDriverDoc ? (myRealName || user?.displayName || user?.email?.split("@")[0] || "") : undefined);
+
+  const data = {
+    ...driver,
+    id,
+    companyName: driver.companyName || viewCompany,
+    updatedAt: serverTimestamp(),
+    createdAt: driver.createdAt || serverTimestamp(),
+    ...(registeredBy !== undefined ? { 등록자: registeredBy } : {}),
+  };
+
+  // ⭐ 사용자 보고: 신규 기사 등록 시 "등록완료" 팝업이 뜨기까지 딜레이가 너무 길다 —
+  // Firestore 최신 SDK는 setDoc()이 반환하는 Promise를 "서버가 이 쓰기를 확인했을
+  // 때"에야 resolve한다(로컬 캐시엔 이미 즉시 반영되지만, await 하는 쪽은 서버
+  // 왕복이 끝날 때까지 계속 기다리게 됨). 이 화면들이 하나같이 upsertDriver를
+  // await한 다음에야 팝업을 닫고 "등록완료" 알림을 띄우는 구조라, 네트워크가 느리면
+  // 그 왕복 시간만큼 그대로 체감 딜레이가 된다. 이 앱 다른 곳(handleCarInput 등)의
+  // "낙관적 업데이트 후 백그라운드 저장" 방식과 동일하게, 여기서도 쓰기를 기다리지
+  // 않고 즉시 반환한다 — 로컬 캐시(persistentLocalCache)가 이미 즉시 반영해주므로
+  // 화면(onSnapshot 기반 drivers 목록)엔 어차피 곧바로 나타나고, 실제 서버 반영은
+  // 백그라운드에서 계속 진행된다.
+  setDoc(
+    doc(db, COLL.drivers, id),
+    data,
+    { merge: true }
+  ).catch((e) => console.error("기사 정보 저장 실패:", e));
+
+  return id;
+}
+
+async function pcUpsertClient({ role, userCompany, places = [] }, client) {
+    // ⚠️ 거래처명을 id보다 먼저 쓰면, 이미 존재하는 문서를 수정(특히 거래처명 자체를
+    // 바꾸는 경우)할 때마다 원래 문서 대신 "새 거래처명" 이름의 새 문서를 만들게 된다
+    // (하차지거래처 upsertPlace는 _id를 그대로 존중하는데 여기만 예외였다) — 전달된
+    // id가 있으면 그것을 최우선으로 쓴다.
+    const viewCompany = role === "totalMaster"
+      ? (localStorage.getItem("loginCompany") || userCompany || DEFAULT_COMPANY)
+      : (userCompany || localStorage.getItem("userCompany") || DEFAULT_COMPANY);
+    // ⭐ 2026-11-01 새 거래처 문서 이름은 회사별로(다른 운송사의 같은 거래처명 문서를 덮어쓰던 문제)
+    const id = client.id || (client.거래처명 ? coDocKey(viewCompany, client.거래처명) : crypto.randomUUID());
+    await setDoc(
+      doc(db, COLL.clients, id),
+      { ...client, id, companyName: client.companyName || viewCompany },
+      { merge: true }
+    );
+
+    // ═══════════════════════════════════════════════════
+    // 기본거래처 ↔ 하차지거래처 동기화 — 같은 이름의 하차지거래처가 있으면 주소/담당자/
+    // 메모/오더메모를 그대로 반영한다. upsertPlace를 다시 부르지 않고 직접 write해서
+    // 서로 재귀 호출되지 않게 한다. 이번 호출에서 실제로 넘어온 필드만 반영한다
+    // (예: 오더메모만 고친 호출이 주소/담당자를 비워버리면 안 되므로).
+    // ═══════════════════════════════════════════════════
+    try {
+      const nameKey = normalizeCompanyKey(client.거래처명 || "");
+      if (nameKey) {
+        const matches = (places || []).filter(p => normalizeCompanyKey(p.업체명 || "") === nameKey);
+        for (const m of matches) {
+          const syncFields = {};
+          if (client.주소 !== undefined) syncFields.주소 = client.주소;
+          if (client.contacts !== undefined) syncFields.contacts = client.contacts;
+          if (client.담당자 !== undefined) syncFields.담당자 = client.담당자;
+          if (client.연락처 !== undefined) syncFields.담당자번호 = client.연락처;
+          if (client.메모 !== undefined) syncFields.메모 = client.메모;
+          if (client.오더메모 !== undefined) syncFields.오더메모 = client.오더메모;
+          if (client.팝업표시 !== undefined) syncFields.팝업표시 = client.팝업표시;
+          if (client.기사전달주의사항 !== undefined) syncFields.기사전달주의사항 = client.기사전달주의사항;
+          if (client.점심시작시간 !== undefined) syncFields.점심시작시간 = client.점심시작시간;
+          if (client.점심종료시간 !== undefined) syncFields.점심종료시간 = client.점심종료시간;
+          if (client.순수매출제외 !== undefined) syncFields.순수매출제외 = client.순수매출제외;
+          if (client.매출순위제외 !== undefined) syncFields.매출순위제외 = client.매출순위제외;
+          if (Object.keys(syncFields).length) {
+            await setDoc(doc(db, "places", m._id || m.id), syncFields, { merge: true }).catch(() => {});
+          }
+        }
+      }
+    } catch {}
+  }
 
 function useRealtimeCollections(user, userCompany, role) {
   // ⚡ T165 — 매번 빈 배열로 시작해 Firestore 최초 응답을 기다리는 동안 화면이 비어 보이던 문제.
@@ -5249,60 +5325,8 @@ const markEditRequestSeen = async (order) => {
   const ref = doc(db, order.__col || "orders", order._id || order.id);
   await updateDoc(ref, { 수정확인: true }).catch(() => {});
 };
-  const upsertDriver = async (driver) => {
-  const viewCompany = role === "totalMaster"
-    ? (localStorage.getItem("loginCompany") || userCompany || DEFAULT_COMPANY)
-    : (userCompany || localStorage.getItem("userCompany") || DEFAULT_COMPANY);
-
-  // ★ id가 없을 때: 차량번호 기준으로 기존 기사 찾기 (중복 생성 방지)
-  let id = driver.id;
-  if (!id && driver.차량번호) {
-    const normPlate = (s="") => String(s).replace(/\s+/g, "").toUpperCase();
-    const existing = drivers.find(d => normPlate(d.차량번호) === normPlate(driver.차량번호));
-    if (existing?.id) id = existing.id;
-    // 로컬 drivers state에 아직 없는 차량번호라면(신규 기사이거나, 방금 다른 곳에서
-    // upsertDriver를 호출했는데 realtime 리스너가 아직 그 결과를 반영하지 못한 경우)
-    // crypto.randomUUID()로 매번 새 문서를 만들면, 짧은 시간에 같은 차량번호로 여러 번
-    // 호출될 때(연속 오더 등록 등) 서로의 존재를 모른 채 완전히 동일한 내용의 문서가
-    // 여러 개 생긴다 — 차량번호 자체를 문서 id로 써서 항상 같은 문서로 수렴하게 한다.
-    else id = coDocKey(viewCompany, normPlate(driver.차량번호)); // 회사별 문서 이름(다른 운송사 같은 차량번호와 충돌 방지)
-  }
-  if (!id) id = crypto.randomUUID();
-
-  // ★ 담당자(등록자) — 이 기사 문서를 최초로 만든 스태프 이름을 기록해둔다(기사관리
-  // 목록의 "담당자" 컬럼용, 지입/직영 기사 전용). 이미 등록자가 있으면 이후 수정으로
-  // 덮어쓰지 않고 최초 등록자를 그대로 유지한다.
-  const existingDriverDoc = drivers.find(d => d.id === id);
-  const registeredBy = existingDriverDoc?.등록자 || driver.등록자 ||
-    (!existingDriverDoc ? (myRealName || user?.displayName || user?.email?.split("@")[0] || "") : undefined);
-
-  const data = {
-    ...driver,
-    id,
-    companyName: driver.companyName || viewCompany,
-    updatedAt: serverTimestamp(),
-    createdAt: driver.createdAt || serverTimestamp(),
-    ...(registeredBy !== undefined ? { 등록자: registeredBy } : {}),
-  };
-
-  // ⭐ 사용자 보고: 신규 기사 등록 시 "등록완료" 팝업이 뜨기까지 딜레이가 너무 길다 —
-  // Firestore 최신 SDK는 setDoc()이 반환하는 Promise를 "서버가 이 쓰기를 확인했을
-  // 때"에야 resolve한다(로컬 캐시엔 이미 즉시 반영되지만, await 하는 쪽은 서버
-  // 왕복이 끝날 때까지 계속 기다리게 됨). 이 화면들이 하나같이 upsertDriver를
-  // await한 다음에야 팝업을 닫고 "등록완료" 알림을 띄우는 구조라, 네트워크가 느리면
-  // 그 왕복 시간만큼 그대로 체감 딜레이가 된다. 이 앱 다른 곳(handleCarInput 등)의
-  // "낙관적 업데이트 후 백그라운드 저장" 방식과 동일하게, 여기서도 쓰기를 기다리지
-  // 않고 즉시 반환한다 — 로컬 캐시(persistentLocalCache)가 이미 즉시 반영해주므로
-  // 화면(onSnapshot 기반 drivers 목록)엔 어차피 곧바로 나타나고, 실제 서버 반영은
-  // 백그라운드에서 계속 진행된다.
-  setDoc(
-    doc(db, COLL.drivers, id),
-    data,
-    { merge: true }
-  ).catch((e) => console.error("기사 정보 저장 실패:", e));
-
-  return id;
-};
+  // ⭐ 2026-11-05 PC·모바일 일치 — 저장 내용은 모듈 함수 pcUpsertDriver 하나(모바일 기사관리도 같은 함수)
+  const upsertDriver = (driver) => pcUpsertDriver({ drivers, role, userCompany, myRealName, user }, driver);
 
 
   // ⭐ 2026-11-05 기사 삭제 — 배열이면 한 번에(writeBatch) 지우고, 한 건이든 여러 건이든 삭제 진행 창을 띄운다
@@ -5312,53 +5336,8 @@ const markEditRequestSeen = async (order) => {
     return deleteDocsAtomic(db, ids.map((id) => doc(db, COLL.drivers, id)), { label: "기사" });
   };
 
-  const upsertClient = async (client) => {
-    // ⚠️ 거래처명을 id보다 먼저 쓰면, 이미 존재하는 문서를 수정(특히 거래처명 자체를
-    // 바꾸는 경우)할 때마다 원래 문서 대신 "새 거래처명" 이름의 새 문서를 만들게 된다
-    // (하차지거래처 upsertPlace는 _id를 그대로 존중하는데 여기만 예외였다) — 전달된
-    // id가 있으면 그것을 최우선으로 쓴다.
-    const viewCompany = role === "totalMaster"
-      ? (localStorage.getItem("loginCompany") || userCompany || DEFAULT_COMPANY)
-      : (userCompany || localStorage.getItem("userCompany") || DEFAULT_COMPANY);
-    // ⭐ 2026-11-01 새 거래처 문서 이름은 회사별로(다른 운송사의 같은 거래처명 문서를 덮어쓰던 문제)
-    const id = client.id || (client.거래처명 ? coDocKey(viewCompany, client.거래처명) : crypto.randomUUID());
-    await setDoc(
-      doc(db, COLL.clients, id),
-      { ...client, id, companyName: client.companyName || viewCompany },
-      { merge: true }
-    );
-
-    // ═══════════════════════════════════════════════════
-    // 기본거래처 ↔ 하차지거래처 동기화 — 같은 이름의 하차지거래처가 있으면 주소/담당자/
-    // 메모/오더메모를 그대로 반영한다. upsertPlace를 다시 부르지 않고 직접 write해서
-    // 서로 재귀 호출되지 않게 한다. 이번 호출에서 실제로 넘어온 필드만 반영한다
-    // (예: 오더메모만 고친 호출이 주소/담당자를 비워버리면 안 되므로).
-    // ═══════════════════════════════════════════════════
-    try {
-      const nameKey = normalizeCompanyKey(client.거래처명 || "");
-      if (nameKey) {
-        const matches = (places || []).filter(p => normalizeCompanyKey(p.업체명 || "") === nameKey);
-        for (const m of matches) {
-          const syncFields = {};
-          if (client.주소 !== undefined) syncFields.주소 = client.주소;
-          if (client.contacts !== undefined) syncFields.contacts = client.contacts;
-          if (client.담당자 !== undefined) syncFields.담당자 = client.담당자;
-          if (client.연락처 !== undefined) syncFields.담당자번호 = client.연락처;
-          if (client.메모 !== undefined) syncFields.메모 = client.메모;
-          if (client.오더메모 !== undefined) syncFields.오더메모 = client.오더메모;
-          if (client.팝업표시 !== undefined) syncFields.팝업표시 = client.팝업표시;
-          if (client.기사전달주의사항 !== undefined) syncFields.기사전달주의사항 = client.기사전달주의사항;
-          if (client.점심시작시간 !== undefined) syncFields.점심시작시간 = client.점심시작시간;
-          if (client.점심종료시간 !== undefined) syncFields.점심종료시간 = client.점심종료시간;
-          if (client.순수매출제외 !== undefined) syncFields.순수매출제외 = client.순수매출제외;
-          if (client.매출순위제외 !== undefined) syncFields.매출순위제외 = client.매출순위제외;
-          if (Object.keys(syncFields).length) {
-            await setDoc(doc(db, "places", m._id || m.id), syncFields, { merge: true }).catch(() => {});
-          }
-        }
-      }
-    } catch {}
-  };
+  // ⭐ 2026-11-05 PC·모바일 일치 — 저장 내용은 모듈 함수 pcUpsertClient 하나(모바일 거래처관리도 같은 함수)
+  const upsertClient = (client) => pcUpsertClient({ role, userCompany, places }, client);
 
   // ⭐ 2026-11-05 거래처 삭제 — 배열 가능 · 한 번에 삭제 + 삭제 진행 창
   const removeClient = async (idOrIds) => {
@@ -5607,29 +5586,7 @@ const upsertPlace = async (place) => {
 //   예전엔 숫자는 "배차상태가 배차중"만 셌는데, 그 중엔 차량번호가 이미 들어간(상태값만 안 바뀐) 오더·
 //   거래처/상·하차지가 모두 빈 빈 줄·취소 표시 오더·같은 오더가 두 번 들어온 경우가 섞여
 //   실제 미배차는 1건인데 2로 보였다(모바일은 이미 "차량번호 없음 + 상/하차지 있음" 기준).
-const UNASSIGNED_CANCELED = ["취소", "배차취소", "오더취소", "취소됨"];
-const isUnassignedOrder = (r) => {
-  if (!r) return false;
-  const st = String(r.배차상태 || "").trim();
-  if (st && st !== "배차중") return false; // 승인대기·배차완료·배차취소 등은 미배차가 아님(모바일과 같은 기준)
-  if (String(r.차량번호 || "").trim()) return false; // 차량이 이미 붙은 오더는 배차된 것
-  if (UNASSIGNED_CANCELED.includes(String(r.상태 || "").trim()) || r.지급방식 === "취소") return false;
-  if (r.source === "transport_transmit") return false;
-  if (!String(r.상차지명 || "").trim() && !String(r.하차지명 || "").trim()) return false; // 빈 줄(상·하차지 없음)
-  if (!String(r.상차일 || "").trim()) return false; // 날짜 없는 오더
-  return true;
-};
-// 같은 오더(같은 문서)가 실시간·예전 오더 양쪽에서 들어와도 한 번만
-const pickUnassignedOrders = (rows) => {
-  const seen = new Set();
-  return (rows || []).filter((r) => {
-    if (!isUnassignedOrder(r)) return false;
-    const k = `${r.__col || ""}/${r._id || ""}`;
-    if (r._id && seen.has(k)) return false;
-    seen.add(k);
-    return true;
-  });
-};
+// ⭐ 2026-11-05 PC·모바일 일치 — 미배차 기준은 src/unassignedRule.js 하나(모바일·고정노선현황도 같은 파일)
 
 const StatusBadge = ({ s }) => (
   <span className={`px-2 py-1 rounded text-xs ${s === "배차완료" ? "bg-green-100 text-green-700"
@@ -62156,22 +62113,65 @@ function CompanyProfile({ userCompany = "", role = "", userId = "" }) {
 export { Settlement as PcSettlement };
 
 // 📱 2026-10-31 모바일 경리 모드 — PC 정산관리(용차지급·지입정산)·회계관리·인사관리 화면을 휴대폰에서 그대로
-export function PcSettleMobile({ dispatchData = [], companyName = "", role = "", isViewer = false }) {
-  const [tab, setTab] = React.useState("지급관리");
+export function PcSettleMobile({ dispatchData = [], companyName = "", role = "", isViewer = false, clients = [] }) {
+  // ⭐ 2026-11-05 PC·모바일 일치 — PC 정산관리와 같은 3개 탭(거래처정산·용차지급관리·지입정산관리) · 첫 화면도 PC처럼 거래처정산
+  const [tab, setTab] = React.useState("거래처정산");
   // 지급 상태·지급일 같은 정산 칸만 고치는 간단 저장(배차 검사 없이) — 오더가 있는 컬렉션 그대로
   const patchDispatch = React.useCallback(async (_id, patch, knownPrev) => {
     if (!_id) return;
     const row = knownPrev || dispatchData.find((d) => d._id === _id || d.id === _id);
     await updateDoc(doc(db, row?.__col || "dispatch", _id), { ...patch, updatedAt: serverTimestamp() });
   }, [dispatchData]);
+  // 거래처정산 › 거래처 정보(계좌·담당자 등) 저장 — PC upsertClient와 같은 문서(회사별 문서 이름)
+  const upsertClient = React.useCallback(async (client) => {
+    if (isViewer || !client) return;
+    const co = companyName || DEFAULT_COMPANY;
+    const id = client.id || (client.거래처명 ? coDocKey(co, client.거래처명) : crypto.randomUUID());
+    await setDoc(doc(db, COLL.clients, id), { ...client, id, companyName: client.companyName || co }, { merge: true });
+  }, [companyName, isViewer]);
+  // 명함 이미지(거래명세서에 붙는 것) — PC와 같은 본인 프로필 값
+  const [cardImage, setCardImage] = React.useState(null);
+  const [cardImageUploading, setCardImageUploading] = React.useState(false);
+  React.useEffect(() => {
+    const uid = auth.currentUser?.uid; if (!uid) return;
+    getDoc(doc(db, "userProfiles", uid)).then((snap) => { if (snap.exists() && snap.data().cardImageUrl) setCardImage(snap.data().cardImageUrl); }).catch(() => {});
+  }, []);
   return (
     <KpSubNav code="SETTLEMENT" title="정산관리" icon="receipt" active={tab} onSelect={setTab}
-      items={[{ key: "지급관리", label: "용차지급관리", en: "PAYOUT", icon: "wallet" }, { key: "지입정산관리", label: "지입정산관리", en: "FLEET PAY", icon: "wallet" }]}>
-      {tab === "지급관리"
+      items={[{ key: "거래처정산", label: "거래처정산", en: "BILLING", icon: "receipt" }, { key: "지급관리", label: "용차지급관리", en: "PAYOUT", icon: "wallet" }, { key: "지입정산관리", label: "지입정산관리", en: "FLEET PAY", icon: "wallet" }]}>
+      {tab === "거래처정산"
+        ? <ClientSettlement dispatchData={dispatchData} setDispatchData={() => {}} userCompany={companyName} clients={clients}
+            setClients={(next) => (next || []).forEach(upsertClient)} upsertClient={upsertClient} showAlert={(m) => window.alert(m)}
+            patchDispatch={isViewer ? async () => {} : patchDispatch} cardImage={cardImage} setCardImage={setCardImage}
+            cardImageUploading={cardImageUploading} setCardImageUploading={setCardImageUploading} isViewer={isViewer} />
+        : tab === "지급관리"
         ? <PaymentManagement mobile dispatchData={dispatchData} patchDispatch={isViewer ? async () => {} : patchDispatch} companyName={companyName} canEditPayDay={role === "admin" || role === "totalMaster"} />
         : <FleetSettlementMenu dispatchData={dispatchData} companyName={companyName} />}
     </KpSubNav>
   );
+}
+// 📱 2026-11-05 PC·모바일 일치 — 모바일 기사관리·거래처관리: PC 화면(DriverManagement·ClientManagement)을 그대로,
+//   저장도 PC와 같은 함수(pcUpsertDriver·pcUpsertClient·upsertPlace) · 조회전용이면 PC처럼 막는다
+const _mViewerBlock = async () => { window.alert("조회전용 권한으로는 수정/등록/삭제를 할 수 없습니다."); };
+export function PcDriverMobile({ drivers = [], userCompany = "", role = "", isViewer = false, myName = "" }) {
+  const [grade, setGrade] = React.useState("전체");
+  const upsert = React.useCallback((d) => pcUpsertDriver({ drivers, role, userCompany, myRealName: myName, user: auth.currentUser }, d), [drivers, role, userCompany, myName]);
+  const remove = React.useCallback(async (idOrIds) => {
+    const ids = (Array.isArray(idOrIds) ? idOrIds : [idOrIds]).filter(Boolean);
+    if (!ids.length) return;
+    return deleteDocsAtomic(db, ids.map((id) => doc(db, COLL.drivers, id)), { label: "기사" });
+  }, []);
+  return <DriverManagement drivers={drivers} upsertDriver={isViewer ? _mViewerBlock : upsert} removeDriver={isViewer ? _mViewerBlock : remove} showAlert={(m) => window.alert(m)} userCompany={userCompany} grade={grade} onGrade={setGrade} />;
+}
+export function PcClientMobile({ clients = [], places = [], userCompany = "", role = "", isViewer = false, initialTab = "하차지" }) {
+  const upsert = React.useCallback((c) => pcUpsertClient({ role, userCompany, places }, c), [role, userCompany, places]);
+  const remove = React.useCallback(async (idOrIds) => {
+    const ids = (Array.isArray(idOrIds) ? idOrIds : [idOrIds]).filter(Boolean);
+    if (!ids.length) return;
+    return deleteDocsAtomic(db, ids.map((id) => doc(db, COLL.clients, id)), { label: "거래처" });
+  }, []);
+  return <ClientManagement key={initialTab} clients={clients} upsertClient={isViewer ? _mViewerBlock : upsert} removeClient={isViewer ? _mViewerBlock : remove} upsertPlace={isViewer ? _mViewerBlock : upsertPlace}
+    places={places} showAlert={(m) => window.alert(m)} initialTab={initialTab} hideTabs userCompany={userCompany} />;
 }
 // 📊 경리 › 회계관리 — 회계 개요(시각화) · 회계 장부(미수·지급·부가세·원가) · 퇴직 정산
 function AccountingWorkspace({ company, fixedRows = [], clients = [], isViewer = false }) {
