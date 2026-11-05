@@ -74,8 +74,8 @@ const goPersonnelOrder = (targetUid) => {
 //  (firestore.rules › approvals 의 "⭐ 2026-11-04 전자결재 서명" 규칙과 같은 조건)
 const PAY_SKIP_FORMS = ["card"];
 export const isPayDoc = (d) => d?.cat === "expense" && !PAY_SKIP_FORMS.includes(d?.form) && Number(d?.amount) > 0;
-const FIN_ROLES = ["test", "hrAcct", "allMgr", "admin", "totalMaster"];
-const FIN_TEAM = /재무|경리|회계/;
+const FIN_ROLES = ["test", "acctStaff", "hrAcct", "allMgr", "admin", "totalMaster"]; // ⭐ 2026-11-05 경리 사무원(acctStaff)도 지급 처리
+const FIN_TEAM = /재무|경리|회계|총무/;
 const isFinUser = (me) => FIN_ROLES.includes(me?.role) || FIN_TEAM.test(String(me?.team || ""));
 // null(지급 대상 아님) | "wait"(지급 대기) | "paid"(지급완료)
 export const payState = (d) => (!isPayDoc(d) || d.status !== "approved" ? null : d.paid?.at ? "paid" : "wait");
@@ -2226,7 +2226,7 @@ export default function ApprovalCenter({ company, me, page, setPage, openId, onO
       (s) => setCompanyAll(s.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => toMs(b.createdAt) - toMs(a.createdAt))), () => setCompanyAll([]));
   }, [admin, tab, company]);
   // 💸 2026-11-04 지급 대기 — 경리(test)·관리자 역할은 참여하지 않은 지출 문서도 볼 수 있어(규칙상 읽기 허용) 회사 지출 결의를 따로 구독
-  const payReader = ["test", "hrAcct", "allMgr", "admin", "totalMaster"].includes(me.role);
+  const payReader = ["test", "acctStaff", "hrAcct", "allMgr", "admin", "totalMaster"].includes(me.role);
   const [payPool, setPayPool] = React.useState([]);
   React.useEffect(() => {
     if (!payReader || !company) return undefined;

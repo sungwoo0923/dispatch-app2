@@ -681,7 +681,7 @@ service cloud.firestore {
         && resource.data.get('cat', '') == 'expense'
         && resource.data.get('cancel', {}).get('status', '') != 'pending'
         && apAff().hasOnly(['paid', 'history', 'updatedAt', 'drafterUnread'])
-        && (((myUser().get('role', '') in ['test', 'hrAcct', 'allMgr', 'admin', 'totalMaster'] || myUser().get('team', '').matches('.*(재무|경리|회계).*'))
+        && (((myUser().get('role', '') in ['test', 'acctStaff', 'hrAcct', 'allMgr', 'admin', 'totalMaster'] || myUser().get('team', '').matches('.*(재무|경리|회계|총무).*'))
               && (myUser().get('companyName', '') == resource.data.get('company', '') || isTotalMasterUser()))
           || resource.data.line[resource.data.line.size() - 1].uid == request.auth.uid);
       allow delete: if false;
