@@ -97,6 +97,7 @@ import {
   disableNetwork,
   enableNetwork,
 } from "firebase/firestore";
+import { writeOrderDeletedNotice } from "../driverDeleteNotice"; // ⭐ 2026-11-05 기사앱 삭제 오더 팝업
 import { updateDoc, setDoc } from "../orderWrite"; // ★ 오더 수정시각 자동 기록(여러 사용자 실시간 일치)
 import { db, auth, FUNCTIONS_BASE, DEFAULT_COMPANY, clearFcmToken } from "../firebase";
 import { signOut } from "firebase/auth";
@@ -5014,15 +5015,8 @@ const notifyFleetCancelMobile = (order, orderId) => {
   const norm = (v = "") => String(v).replace(/\s+/g, "").toLowerCase().replace(/-/g, "");
   const drv = (drivers || []).find(d => norm(d.차량번호) === norm(order.차량번호));
   if (drv?.등급 !== "지입") return;
-  addDoc(collection(db, "driver_notifications"), {
-    driverId: drv.id,
-    type: "canceled",
-    orderId,
-    title: "배차가 취소되었습니다",
-    body: `담당자가 ${order.거래처명 || ""} ${order.상차지명 || "-"} → ${order.하차지명 || "-"} 오더를 취소했습니다.`,
-    createdAt: serverTimestamp(),
-    read: false,
-  }).catch(() => {});
+  // ⭐ 2026-11-05 기사앱 "삭제된 오더" 팝업용 안내 문서(오더 요약 포함) — 따로 저장, 삭제는 기다리지 않는다
+  writeOrderDeletedNotice(db, { driverId: drv.id, orderId, data: order });
 };
 
 const deleteSingleOrder = async (order) => {

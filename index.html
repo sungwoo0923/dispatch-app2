@@ -97,6 +97,9 @@
     <link rel="icon" type="image/png" href="/icons/sflow-icon.png" />
     <link rel="shortcut icon" href="/icons/sflow-icon.png" />
     <link rel="manifest" href="/manifest.json" />
+    <!-- ⭐ 2026-11-05 아이폰 기사 푸시 — 기사 화면(/driver-*)에서 "홈 화면에 추가"하면 기사용 앱 정보(시작 /driver-login, 범위 /)로 설치되게 한다.
+         예전엔 운송사용(start_url·scope /app)만 있어 기사 화면이 앱 범위 밖이었다(아이폰 웹 푸시는 홈 화면 앱으로 실행할 때만 동작). -->
+    <script>try{if(location.pathname.indexOf("/driver")===0){var m=document.querySelector('link[rel="manifest"]');if(m)m.setAttribute("href","/manifest-driver.json");var t=document.querySelector('meta[name="apple-mobile-web-app-title"]');if(t)t.setAttribute("content","LogisWeb 기사");}}catch(e){}</script>
 
     <!-- ⭐ Tmap SDK — 예전엔 여기서 "동기"로 불러와 첫 화면이 지도 SDK 다운로드를 다 기다렸다.
          이제 src/tmapLoader.js가 화면이 뜬 뒤(또는 지도가 필요할 때) 불러온다. -->

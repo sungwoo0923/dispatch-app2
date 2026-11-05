@@ -85,12 +85,19 @@ self.addEventListener("push", (event) => {
 
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
+  // ⭐ 2026-11-05 기사앱 알림(신규 오더·취소·출근 알림)은 눌렀을 때 기사 화면으로 연다(예전엔 항상 /app → 운송사 화면으로 감)
+  const t = String(event.notification?.data?.type || "");
+  const target = /^(fleet_|driver_)/.test(t) ? "/driver-home" : "/app";
   event.waitUntil(
     clients.matchAll({ type: "window", includeUncontrolled: true }).then((list) => {
+      const isDrv = target === "/driver-home";
       for (const client of list) {
+        // 기사 알림은 이미 열린 기사 화면을 앞으로(없으면 아무 창이나)
+        if (isDrv && !String(client.url || "").includes("/driver")) continue;
         if ("focus" in client) return client.focus();
       }
-      if (clients.openWindow) return clients.openWindow("/app");
+      if (!isDrv) for (const client of list) { if ("focus" in client) return client.focus(); }
+      if (clients.openWindow) return clients.openWindow(target);
     })
   );
 });

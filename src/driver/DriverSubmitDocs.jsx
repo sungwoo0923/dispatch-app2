@@ -9,6 +9,11 @@ import { DRIVER_REQUIRED_DOCS, useDriverDocs, docState, TONE, docProblems } from
 import { ImageViewer, MONO } from "../driverDocs";
 import { kpAlert } from "../kpDialog";
 
+// ⭐ 2026-11-05 사장님 요청 — 기사앱 서류함에서 운전면허증 만료일 고르기는 뺀다(사진만 올리면 된다).
+//  (관리자 서류 확인 화면의 만료일 입력은 그대로 — 필요하면 회사에서 넣는다)
+const NO_DRIVER_EXPIRY = new Set(["license"]);
+const askExpiry = (def) => !!def.expiry && !NO_DRIVER_EXPIRY.has(def.key);
+
 const card = { background: "#fff", borderRadius: 16, border: "1px solid #E3E8F0", boxShadow: "0 1px 6px rgba(0,0,0,0.05)" };
 
 export default function DriverSubmitDocs({ uid, companyName = "" }) {
@@ -23,7 +28,7 @@ export default function DriverSubmitDocs({ uid, companyName = "" }) {
   const reqDone = DRIVER_REQUIRED_DOCS.filter((d) => d.required && byType[d.key] && docState(byType[d.key]).tone !== "bad").length;
 
   const pick = (def) => {
-    if (def.expiry && !expiry[def.key] && !byType[def.key]?.만료일) {
+    if (askExpiry(def) && !expiry[def.key] && !byType[def.key]?.만료일) {
       kpAlert(`${def.label}의 만료일(유효기간)을 먼저 골라 주세요.`);
       return;
     }
@@ -90,7 +95,7 @@ export default function DriverSubmitDocs({ uid, companyName = "" }) {
                 {busy === def.key ? "올리는 중…" : d ? "다시 제출" : "찍어서 제출"}
               </button>
             </div>
-            {def.expiry && (
+            {askExpiry(def) && (
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8, paddingTop: 8, borderTop: "1px dashed #E3E8F0" }}>
                 <span style={{ fontSize: 12, fontWeight: 800, color: "#3A4A66", whiteSpace: "nowrap" }}>만료일</span>
                 <input type="date" value={expiry[def.key] ?? d?.만료일 ?? ""} onChange={(e) => setExpiry((p) => ({ ...p, [def.key]: e.target.value }))}

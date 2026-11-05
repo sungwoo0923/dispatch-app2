@@ -67,6 +67,21 @@ jobs:
       - name: 웹 앱 빌드
         run: npm run build
 
+      # ⭐ 2026-11-05 기사 푸시(네이티브 FCM) — Firebase 콘솔에서 받은 google-services.json을 저장소 비밀값
+      #  GOOGLE_SERVICES_JSON(파일 내용 그대로)에 넣어 두면 APK에 들어간다.
+      #  비밀값이 없으면 푸시 플러그인을 빼고 빌드한다(google-services.json 없이 푸시 등록을 부르면 앱이 꺼질 수 있음).
+      - name: google-services.json 준비(푸시)
+        env:
+          GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
+        run: |
+          if [ -n "$GOOGLE_SERVICES_JSON" ]; then
+            printf '%s' "$GOOGLE_SERVICES_JSON" > android/app/google-services.json
+            echo "google-services.json 저장 — 네이티브 푸시 포함"
+          else
+            echo "::warning::GOOGLE_SERVICES_JSON 비밀값이 없어 푸시 플러그인을 빼고 빌드합니다(기사 APK 푸시 미동작)."
+            rm -rf node_modules/@capacitor/push-notifications
+          fi
+
       - name: Capacitor Android 동기화
         run: npx cap sync android
 
@@ -105,11 +120,25 @@ jobs:
       # "릴리즈"에 APK를 직접 첨부하면, 아무 브라우저에서나 되는 평범한 파일
       # 다운로드 링크가 생긴다. 태그를 고정해서(driver-apk-latest) 매번 같은
       # 링크를 북마크해두고 쓸 수 있게 한다.
+      # ⭐ 2026-11-05 앱 안 "앱 업데이트가 있어요" 안내용 — 이번 APK의 versionCode(build.gradle과 같은 규칙: 실행번호+1)
+      - name: APK 버전 정보(version.json)
+        run: |
+          VC=$(( GITHUB_RUN_NUMBER + 1 ))
+          mkdir -p android/app/build/outputs
+          echo "{\"versionCode\":$VC,\"versionName\":\"1.1.$GITHUB_RUN_NUMBER\",\"sha\":\"$GITHUB_SHA\",\"builtAt\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\",\"apk\":\"https://github.com/$GITHUB_REPOSITORY/releases/download/driver-apk-latest/app-debug.apk\"}" > android/app/build/outputs/version.json
+          echo "APK_VERSION_CODE=$VC" >> "$GITHUB_ENV"
+          cat android/app/build/outputs/version.json
+
       - name: 릴리즈로 APK 게시(모바일에서도 바로 다운로드되는 링크)
         uses: softprops/action-gh-release@v2
         with:
           tag_name: driver-apk-latest
           name: "KP-Flow 기사앱 (최신 빌드)"
-          body: "커밋 ${{ github.sha }} 기준 자동 빌드. 안드로이드 폰에서 이 APK 파일을 눌러 다운로드한 뒤 설치하세요."
-          files: android/app/build/outputs/apk/**/*.apk
+          # ⭐ versionCode 줄은 기사앱이 GitHub API로 읽어 새 APK가 있는지 비교한다(지우지 말 것)
+          body: |
+            커밋 ${{ github.sha }} 기준 자동 빌드. 안드로이드 폰에서 이 APK 파일을 눌러 다운로드한 뒤 설치하세요.
+            versionCode: ${{ env.APK_VERSION_CODE }}
+          files: |
+            android/app/build/outputs/apk/**/*.apk
+            android/app/build/outputs/version.json
           prerelease: true
