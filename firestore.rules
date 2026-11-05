@@ -186,6 +186,15 @@ service cloud.firestore {
       allow read, update, delete: if isOfficeStaff() && coMatch(resource.data);
       allow create: if isOfficeStaff() && coCreate();
     }
+    // ⭐ 2026-11-05 고정노선현황 › 운송업체 설정(routeCarrierSettings/{회사} = { companyName, carriers:[{name,on}], removed:[이름] })
+    //  끈·삭제한 운송업체의 고정노선 오더는 정산·매출에서 빠진다 — 그 회사 직원(기사·화주 제외)은 읽고, 관리자급(isCompanyAdmin·test)만 바꾼다.
+    //  문서 이름 = 회사명이라 잠금 스위치와 상관없이 다른 회사는 못 본다.
+    match /routeCarrierSettings/{co} {
+      allow read: if fareRulesStaff(co);
+      allow create, update: if (isTotalMasterUser() || (isOfficeStaff() && myCo() == co && (isCompanyAdmin(co) || myUser().get('role', '') == 'test')))
+        && request.resource.data.get('companyName', '') == co;
+      allow delete: if isTotalMasterUser() || isCompanyAdmin(co);
+    }
     // ⭐ 2026-11-02 운임규칙 — 회사별 운임 규칙(fareRules/{회사}) — 그 회사 직원(기사·화주 제외)만 읽고,
     //  조회전용(viewer)이 아닌 직원은 누구나 수정. 문서 이름 = 회사명이라 잠금 스위치와 상관없이 다른 회사는 못 본다.
     function fareRulesStaff(co) {

@@ -46,6 +46,7 @@ import { useCompanyStaff, masterHasHr, isHrStaffUser } from "./hrHandover";
 import { AttendanceQuickButton, CheckoutReminderHost } from "./attendanceQuick";
 import { PersonalTodayHost } from "./PersonalSchedule";
 import FixedRouteStatusHost, { FixedRouteCells, fixedHeaderOf, fixedLookOf, useRouteBoardIds } from "./FixedRouteStatus";
+import { useRouteCarrierFilter } from "./routeCarriers"; // ⭐ 2026-11-05 고정노선 운송업체 설정 — 끈 업체 오더는 정산·매출에서 뺀다
 import ColumnStyleHost from "./ColumnStyle"; // 🎨 2026-11-03 컬럼명 오른쪽 클릭 → 색 변경 // ⭐ 2026-11-03 배차현황 › 고정노선현황
 import { usePendingSignups } from "./pendingSignups";
 import { NavHover } from "./navMenus";
@@ -7688,17 +7689,23 @@ useEffect(() => {
   //   (매출·정산·홈 통계 등은 그대로 전체 오더 기준)
   const myRouteBoardIds = useRouteBoardIds(userCompany || localStorage.getItem("userCompany") || ""); // ⭐ 2026-11-03 운송사 분리 — 이 회사 배차표 양식
   const listDispatchData = useMemo(() => dispatchDataFiltered.filter((r) => !r?.배차표Id), [dispatchDataFiltered]);
+  // ⭐ 2026-11-05 고정노선현황 › 운송업체 설정 — 끄거나 삭제한 운송업체의 고정노선 오더는 정산·매출 계산에서 뺀다(설정 전이면 전부 그대로)
+  //   매출관리·정산관리(거래처정산·거래명세서·미수금·용차지급·지입정산)·인사이트·홈 통계·AI 비서 합계가 이 값을 쓴다
+  const routeCarrierF = useRouteCarrierFilter(getTenant() || userCompany || localStorage.getItem("userCompany") || "");
+  const salesDispatchData = useMemo(() => routeCarrierF.filter(dispatchDataFiltered), [dispatchDataFiltered, routeCarrierF]);
+  const salesRawDispatchData = useMemo(() => routeCarrierF.filter(dispatchData) || [], [dispatchData, routeCarrierF]);
   const listRecentDispatchData = useMemo(() => recentDispatchDataFiltered.filter((r) => !r?.배차표Id), [recentDispatchDataFiltered]);
 
 
   // ⭐ 내 정보 통계 계산
   const myStats = useMemo(() => {
     if (!dispatchData) return { totalOrders: 0, totalRevenue: 0, totalProfit: 0 };
+    const salesRows = salesRawDispatchData; // ⭐ 2026-11-05 운송업체 설정 반영
 
     const myOrders =
       role === "admin"
-        ? dispatchData               // ▲ 관리자 → 전체 데이터
-        : dispatchData.filter(d =>   // 일반 계정 → 본인 데이터만
+        ? salesRows               // ▲ 관리자 → 전체 데이터
+        : salesRows.filter(d =>   // 일반 계정 → 본인 데이터만
           !d?.작성자 || d?.작성자 === user?.email
         );
 
@@ -7718,7 +7725,7 @@ useEffect(() => {
       totalRevenue,
       totalProfit,
     };
-  }, [dispatchData, user]);
+  }, [dispatchData, salesRawDispatchData, user]);
   // ⭐ 오늘 날짜
   const today = todayStr();
 
@@ -7769,7 +7776,7 @@ useEffect(() => {
 
     const todayStrKST = today; // 기존 todayStr 사용
 
-    const list = dispatchData.filter((d) => {
+    const list = salesRawDispatchData.filter((d) => { // ⭐ 2026-11-05 운송업체 설정 반영
       // 날짜 파싱
       const dt = parseDate(d?.상차일자 || d?.상차일 || d?.상차);
       if (!dt) return false;
@@ -7797,7 +7804,7 @@ useEffect(() => {
       },
       { count: 0, revenue: 0, profit: 0 }
     );
-  }, [dispatchData, user, today]);
+  }, [dispatchData, salesRawDispatchData, user, today]);
   // ⭐ 오늘 미배차 = 처리 필요 건수
   const pendingToday = useMemo(() => {
     if (!dispatchData || !user) return 0;
@@ -8710,7 +8717,7 @@ return (
         )}
 
         {menu === "인사이트" && (role === "admin" || role === "totalMaster") && planIncludes(planId, "insight") && (
-          <ProInsight data={dispatchDataFiltered} companyName={planCompany} />
+          <ProInsight data={salesDispatchData} companyName={planCompany} />
         )}
 
         {menu === "실시간배차현황" && (
@@ -8896,7 +8903,7 @@ return (
 
         {menu === "매출관리" && (role === "admin" || role === "totalMaster" || role === "test" || isViewer || !!customRole) && (
           revenueUnlocked ? (
-            <DetailScope data={dispatchDataFiltered} getters={mainDetailGet} title="세부검색 · 매출관리">{(detRows, detBtn) => (
+            <DetailScope data={salesDispatchData} getters={mainDetailGet} title="세부검색 · 매출관리">{(detRows, detBtn) => (
             <BizScope company={getTenant() || userCompany || localStorage.getItem("userCompany") || ""} data={detRows} extra={detBtn}>{(bizRows, bizSel) => (
             <Settlement
               key={`settle-${bizSel || "all"}`}
@@ -8985,7 +8992,7 @@ return (
           <div style={{ display: menu === "정산관리" ? undefined : "none" }}>
           <KpSubNav code="SETTLEMENT" title="정산관리" icon="receipt" active={정산관리Tab} onSelect={set정산관리Tab}
             items={[{ key: "거래처정산", label: "거래처정산", en: "BILLING", icon: "receipt" }, { key: "지급관리", label: "용차지급관리", en: "PAYOUT", icon: "wallet" }, { key: "지입정산관리", label: "지입정산관리", en: "FLEET PAY", icon: "wallet" }]}>
-          <DetailScope data={dispatchDataFiltered} getters={mainDetailGet} title="세부검색 · 정산관리">{(settleRows, settleBtn) => (<>
+          <DetailScope data={salesDispatchData} getters={mainDetailGet} title="세부검색 · 정산관리">{(settleRows, settleBtn) => (<>
           {/* 🔎 2026-11-03 세부검색 — 거래처정산·용차지급·지입정산 모두 이 조건으로 */}
           <div className="mb-3 flex items-center justify-end">{settleBtn}</div>
           {/* 거래명세서 검색/선택 상태 유지를 위해 지급관리 탭으로 전환해도 언마운트하지 않고 숨기기만 한다 */}
@@ -9298,7 +9305,7 @@ return (
       </div>
     {/* AI 비서 */}
 <AiAssistant
-  dispatches={dispatchData}
+  dispatches={salesRawDispatchData}
   clients={clients}
   mode={deptMode}
   company={deptCompany}

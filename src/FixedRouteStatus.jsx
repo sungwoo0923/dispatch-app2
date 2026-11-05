@@ -10,6 +10,7 @@ import { createPortal } from "react-dom";
 import CustomDatePicker from "./CustomDatePicker";
 import { sheetApi, BoardSuggest } from "./RouteBoard";
 import { ownerOf, rateFor } from "./routeBoardSheet";
+import { useRouteCarrierSetting, useRouteCarrierFilter, saveRouteCarrierSetting, carriersInOrders, carrierKey, carrierOf } from "./routeCarriers"; // ⭐ 2026-11-05 운송업체 설정(정산·매출 포함 여부)
 
 const MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
 const toInt = (v) => parseInt(String(v ?? "").replace(/[^\d-]/g, ""), 10) || 0;
@@ -118,6 +119,7 @@ function CarrierCell({ value, clients, disabled, onCommit }) {
 // 한 줄의 칸들(시트 열 순서) — 고치면 바로 오더에 저장(patchDispatch) → 서버가 30초 안에 시트에도 써 준다
 export function FixedRouteCells({ form, row, drivers = [], clients = [], onPatch, disabled: viewer = false, editing = false }) {
   const disabled = viewer || !editing; // ⭐ 2026-11-03 줄을 두 번 눌러 수정 모드일 때만 칸이 열린다(실수 방지)
+  const carrierF = useRouteCarrierFilter(); // ⭐ 2026-11-05 정산·매출에서 빠지는 운송업체면 칸에 "제외" 표시
   const carrierItems = React.useMemo(() => { const seen = new Set(); return (clients || []).map((x) => ({ ...x, 거래처명: String(x.거래처명 || x.업체명 || "").trim() })).filter((x) => x.거래처명 && !seen.has(x.거래처명) && seen.add(x.거래처명)); }, [clients]);
   const td = "px-1.5 py-1.5 border-b border-[#E9EDF4] border-r border-r-[#F1F4F9] text-center whitespace-nowrap";
   const cols = (form?.columns || []).filter((c) => c.kind !== "no");
@@ -176,7 +178,10 @@ export function FixedRouteCells({ form, row, drivers = [], clients = [], onPatch
           const pick = (d) => onPatch({ 차량번호: d.차량번호 || "", 이름: d.이름 || "", 전화번호: d.전화번호 || "", ...(row.배차상태 === "배차중" || !row.배차상태 ? { 배차상태: "배차완료" } : {}) });
           return <td key={c.id} className={`${td} bg-[#F3F7FF]`} title="차량번호·이름·번호 일부만 쳐도 기사관리에서 찾아 채웁니다"><VehicleCell field={c.field} value={v} drivers={drivers} disabled={disabled} onPick={pick} onCommit={(x) => commit(c, x)} placeholder={c.field === "차량번호" && !v ? "미배차" : ""} /></td>;
         }
-        if (isCarrierCol(c)) return <td key={c.id} className={`${td} ${bg}`} title="기본거래처에 있으면 목록에서 고르고, 없으면 그냥 입력"><CarrierCell value={v} clients={carrierItems} disabled={disabled} onCommit={(x) => commit(c, x)} /></td>;
+        if (isCarrierCol(c)) {
+          const off = carrierF.active && !carrierF.isCountable(row);
+          return <td key={c.id} className={`${td} ${bg}`} title={off ? "운송업체 설정에서 뺀 업체 — 정산·매출에 들어가지 않습니다" : "기본거래처에 있으면 목록에서 고르고, 없으면 그냥 입력"}><CarrierCell value={v} clients={carrierItems} disabled={disabled} onCommit={(x) => commit(c, x)} />{off && disabled && <span className="ml-1 inline-flex items-center h-[18px] px-1.5 rounded-md bg-[#FFF1EE] text-[#B42318] text-[10.5px] font-black align-middle">정산제외</span>}</td>;
+        }
         return (
           <td key={c.id} data-frs={look || undefined} data-empty={look && !v ? "1" : undefined} className={`${td} ${bg}`} title={own === "화주" ? "업체(화주)가 시트에 입력하는 칸" : own === "운송사" ? "운송사가 입력하는 칸" : ""}>
             <Cell value={v} disabled={disabled} numeric={isQty || (c.kind === "field" && MONEY_FIELDS.has(c.field))} wide={c.kind === "field" && ["하차지명", "하차지주소", "메모"].includes(c.field)}
@@ -375,6 +380,132 @@ function RangeImportModal({ form, onClose }) {
   );
 }
 
+// ⭐ 2026-11-05 운송업체 설정 — 시트 "운송업체" 칸에 나오는 업체 중 체크한 곳만 정산·매출에 넣는다(src/routeCarriers.js)
+//  · 목록 = 저장한 업체 + 지금 오더(고정노선)에 나오는 업체 · 켜기/끄기·삭제·추가는 누르는 즉시 저장
+//  · 끄거나 삭제한 업체의 고정노선 오더는 정산관리·매출관리·거래명세서·미수금·인사이트·대시보드 합계에서 빠진다(PC·모바일)
+const CARRIER_ADMIN_ROLES = new Set(["admin", "totalMaster", "test", "allMgr", "hrAcct", "hrManager"]);
+export function RouteCarrierModal({ company, rows = [], disabled = false, onClose }) {
+  const { setting, ready } = useRouteCarrierSetting(company);
+  const [q, setQ] = React.useState("");
+  const [addName, setAddName] = React.useState("");
+  const [busy, setBusy] = React.useState(false);
+  const [msg, setMsg] = React.useState({ t: "", err: false });
+  const role = (() => { try { return localStorage.getItem("role") || ""; } catch { return ""; } })();
+  const canEdit = !disabled && (CARRIER_ADMIN_ROLES.has(role) || isMasterOnly()); // 서버 규칙: isCompanyAdmin · test · 최고관리자
+  React.useEffect(() => { const k = (e) => { if (e.key === "Escape" && !document.querySelector("[role=listbox]")) onClose(); }; window.addEventListener("keydown", k, true); return () => window.removeEventListener("keydown", k, true); }, [onClose]); // 검색 목록이 떠 있으면 Esc는 목록만 닫기
+  const found = React.useMemo(() => carriersInOrders(rows), [rows]);
+  const countOf = React.useMemo(() => { const m = new Map(); found.forEach((f) => m.set(carrierKey(f.name), f.count)); return m; }, [found]);
+  // 화면 목록 — 저장된 업체(순서 유지) + 오더에만 있는 새 업체(삭제한 업체는 빼고)
+  const list = React.useMemo(() => {
+    const saved = Array.isArray(setting?.carriers) ? setting.carriers : [];
+    const removed = new Set((setting?.removed || []).map(carrierKey));
+    const out = saved.map((c) => ({ name: c.name, on: c.on !== false, isNew: false }));
+    const have = new Set(out.map((c) => carrierKey(c.name)));
+    found.forEach((f) => { const k = carrierKey(f.name); if (!have.has(k) && !removed.has(k)) { have.add(k); out.push({ name: f.name, on: true, isNew: !!setting }); } });
+    return out.map((c) => ({ ...c, count: countOf.get(carrierKey(c.name)) || 0 }));
+  }, [setting, found, countOf]);
+  const removedHidden = React.useMemo(() => (setting?.removed || []).filter((n) => countOf.get(carrierKey(n))), [setting, countOf]);
+  const shown = React.useMemo(() => { const k = carrierKey(q); return k ? list.filter((c) => carrierKey(c.name).includes(k)) : list; }, [list, q]);
+  const onCnt = list.filter((c) => c.on).length;
+  const offRows = list.filter((c) => !c.on).reduce((a, c) => a + c.count, 0) + removedHidden.reduce((a, n) => a + (countOf.get(carrierKey(n)) || 0), 0);
+  const persist = async (carriers, removed, okText) => {
+    if (!canEdit) { setMsg({ t: "관리자만 바꿀 수 있습니다.", err: true }); return false; }
+    setBusy(true); setMsg({ t: "", err: false });
+    try { await saveRouteCarrierSetting(company, { carriers, removed }); setMsg({ t: okText || "저장했습니다", err: false }); return true; }
+    catch (e) { setMsg({ t: /permission/i.test(String(e?.code || e?.message || "")) ? "저장 권한이 없습니다(관리자만 가능). 최고관리자에게 보안 규칙 배포를 확인해 주세요." : `저장하지 못했습니다: ${e?.message || e}`, err: true }); return false; }
+    finally { setBusy(false); }
+  };
+  const base = () => list.map((c) => ({ name: c.name, on: c.on }));
+  const removedOf = () => [...(setting?.removed || [])];
+  const toggle = (name) => persist(base().map((c) => (c.name === name ? { ...c, on: !c.on } : c)), removedOf(), `'${name}' ${list.find((c) => c.name === name)?.on ? "정산·매출에서 뺐습니다" : "정산·매출에 넣었습니다"}`);
+  const setAll = (on) => persist(base().map((c) => ({ ...c, on })), removedOf(), on ? "모두 포함했습니다" : "모두 뺐습니다");
+  const remove = async (name) => {
+    const n = countOf.get(carrierKey(name)) || 0;
+    if (!window.confirm(`'${name}'을(를) 목록에서 삭제할까요?${n ? `\n이 업체 고정노선 오더 ${n}건은 정산·매출에서 빠집니다.` : ""}\n같은 이름으로 다시 추가하면 되살아납니다.`)) return;
+    persist(base().filter((c) => c.name !== name), [...removedOf(), name], `'${name}' 삭제했습니다`);
+  };
+  const add = async () => {
+    const name = addName.trim().replace(/\s+/g, " ");
+    if (!name) { setMsg({ t: "운송업체 이름을 입력해 주세요.", err: true }); return; }
+    const k = carrierKey(name);
+    const cur = base();
+    const exist = cur.find((c) => carrierKey(c.name) === k);
+    const next = exist ? cur.map((c) => (carrierKey(c.name) === k ? { ...c, on: true } : c)) : [...cur, { name, on: true }];
+    const ok = await persist(next, removedOf().filter((n) => carrierKey(n) !== k), exist ? `'${exist.name}'은(는) 이미 있어 포함으로 켰습니다` : `'${name}' 추가했습니다`);
+    if (ok) { setAddName(""); setQ(""); }
+  };
+  const suggest = React.useMemo(() => list.map((c) => ({ ...c, 이름: c.name })), [list]);
+  const inp = "h-11 w-full px-3.5 rounded-xl border border-[#DCE3EE] bg-white text-[14.5px] font-semibold text-[#0F1A30] outline-none focus:border-[#2D4C82] focus:ring-2 focus:ring-[#2D4C82]/10";
+  return createPortal(
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-[#0F1A30]/45 p-3 md:p-4" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="w-full max-w-[560px] max-h-[92vh] flex flex-col overflow-hidden rounded-2xl bg-white shadow-[0_24px_60px_rgba(15,26,48,0.35)]" data-kp="route-carrier-modal">
+        <div className="relative px-5 md:px-6 py-4 text-white flex items-start gap-3" style={{ background: "linear-gradient(120deg,#0F1A30 0%,#1B2B4B 60%,#2D4C82 100%)" }}>
+          <div className="min-w-0">
+            <div className="text-[10.5px] font-extrabold tracking-[0.28em] text-[#8FB0F0]" style={{ fontFamily: MONO }}>CARRIER · SETTLEMENT</div>
+            <div className="text-[17px] font-black mt-0.5">운송업체 설정</div>
+            <div className="text-[12.5px] text-white/65 font-semibold mt-0.5 leading-relaxed">체크한 운송업체의 고정노선 오더만 <b className="text-white">정산·매출</b>에 들어갑니다. 끄거나 삭제한 업체는 정산관리·매출관리·거래명세서·미수금·대시보드 합계에서 빠집니다.</div>
+          </div>
+          <button type="button" onClick={onClose} className="ml-auto shrink-0 h-8 px-3 rounded-lg bg-white/10 hover:bg-white/20 text-[12px] font-bold">닫기 <span className="text-white/50 hidden md:inline">ESC</span></button>
+        </div>
+        <div className="px-5 md:px-6 pt-4 pb-3 space-y-3 border-b border-[#E9EDF4]">
+          <div className="flex items-center gap-2 text-[13px] font-bold text-[#3A4A66] flex-wrap">
+            <span className="inline-flex items-center h-8 px-3 rounded-lg bg-[#EEF3FB] text-[#1B2B4B]">포함 <b className="ml-1.5 tabular-nums" style={{ fontFamily: MONO }}>{onCnt}</b></span>
+            <span className={`inline-flex items-center h-8 px-3 rounded-lg ${list.length - onCnt + removedHidden.length ? "bg-[#FFF1EE] text-[#B42318]" : "bg-[#F5F7FA] text-[#7A8AA6]"}`}>제외 <b className="ml-1.5 tabular-nums" style={{ fontFamily: MONO }}>{list.length - onCnt + removedHidden.length}</b>{offRows ? <span className="ml-1.5 font-semibold">· 오더 {offRows.toLocaleString()}건</span> : null}</span>
+            {canEdit && list.length > 1 && <span className="ml-auto flex gap-1.5">
+              <button type="button" disabled={busy} onClick={() => setAll(true)} className="h-8 px-3 rounded-lg border border-[#DCE3EE] bg-white text-[12.5px] font-black text-[#1B2B4B] hover:bg-[#F5F8FD] disabled:opacity-50">모두 포함</button>
+              <button type="button" disabled={busy} onClick={() => setAll(false)} className="h-8 px-3 rounded-lg border border-[#DCE3EE] bg-white text-[12.5px] font-black text-[#5B6B85] hover:bg-[#F5F8FD] disabled:opacity-50">모두 제외</button>
+            </span>}
+          </div>
+          <div className="relative">
+            <BoardSuggest value={q} onChange={setQ} items={suggest} k="이름" title="운송업체" placeholder="운송업체 검색 — 일부만 쳐도 목록이 떠요"
+              sub={(x) => [x.count ? `오더 ${x.count}건` : "", x.on ? "포함" : "제외"].filter(Boolean).join(" · ")}
+              onPick={(x) => setQ(x.name)} className={`${inp} pl-10`} inputProps={{ "data-kp": "carrier-search" }} />
+            <svg className="absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#7A8AA6" strokeWidth="2.4" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="M20 20l-3.5-3.5" /></svg>
+          </div>
+        </div>
+        <div className="flex-1 min-h-[200px] overflow-auto px-3 md:px-4 py-2">
+          {!ready && <div className="py-10 text-center text-[14px] text-[#7A8AA6]">불러오는 중…</div>}
+          {ready && shown.length === 0 && (
+            <div className="py-10 text-center text-[14px] text-[#7A8AA6]">{q ? <>'{q}' 업체가 없습니다. 아래에서 새로 추가할 수 있어요.</> : <>시트 오더에 운송업체가 아직 없습니다.<br />아래에서 직접 추가할 수 있어요.</>}</div>
+          )}
+          {ready && shown.map((c) => (
+            <div key={c.name} data-kp="carrier-row" data-on={c.on ? "1" : "0"} className={`flex items-center gap-3 px-3 py-2.5 rounded-xl transition ${c.on ? "hover:bg-[#F5F8FD]" : "bg-[#FAFBFD]"}`}>
+              <button type="button" role="switch" aria-checked={c.on} disabled={busy || !canEdit} onClick={() => toggle(c.name)} title={c.on ? "누르면 정산·매출에서 뺍니다" : "누르면 정산·매출에 넣습니다"}
+                className={`relative shrink-0 w-[46px] h-[26px] rounded-full transition disabled:opacity-60 ${c.on ? "bg-[#1B2B4B]" : "bg-[#D5DCE7]"}`}>
+                <span className={`absolute top-[3px] w-5 h-5 rounded-full bg-white shadow transition-all ${c.on ? "left-[23px]" : "left-[3px]"}`} />
+              </button>
+              <div className="min-w-0 flex-1">
+                <div className={`text-[15px] font-black truncate ${c.on ? "text-[#0F1A30]" : "text-[#9AA9C3] line-through decoration-[#C9D2E0]"}`}>{c.name}</div>
+                <div className="text-[12px] font-semibold text-[#7A8AA6] flex items-center gap-1.5">
+                  {c.count ? <span>오더 {c.count.toLocaleString()}건</span> : <span>지금 오더 없음</span>}
+                  {c.isNew && <span className="inline-flex items-center h-[18px] px-1.5 rounded-md bg-[#8FB0F0]/25 text-[#2D4C82] text-[10.5px] font-black">새 업체</span>}
+                  {!c.on && <span className="inline-flex items-center h-[18px] px-1.5 rounded-md bg-[#FFF1EE] text-[#B42318] text-[10.5px] font-black">정산·매출 제외</span>}
+                </div>
+              </div>
+              {canEdit && <button type="button" disabled={busy} onClick={() => remove(c.name)} title="목록에서 삭제(정산·매출에서도 빠짐)"
+                className="shrink-0 w-9 h-9 rounded-lg inline-flex items-center justify-center text-[#9AA9C3] hover:text-[#B42318] hover:bg-[#FFF1EE] disabled:opacity-50">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3" /></svg>
+              </button>}
+            </div>
+          ))}
+          {ready && !q && removedHidden.length > 0 && (
+            <div className="mx-3 mt-2 mb-1 text-[12px] font-semibold text-[#9AA9C3]">삭제한 업체(오더는 계속 제외): {removedHidden.join(", ")}</div>
+          )}
+        </div>
+        <div className="px-5 md:px-6 py-4 border-t border-[#E9EDF4] bg-[#F7F9FC] space-y-2">
+          {canEdit ? (
+            <div className="flex items-center gap-2">
+              <input value={addName} onChange={(e) => setAddName(e.target.value)} onKeyUp={(e) => { if (e.key === "Enter" && !e.nativeEvent.isComposing) add(); }}
+                placeholder="새 운송업체 이름" className={inp} data-kp="carrier-add" maxLength={60} />
+              <button type="button" disabled={busy} onClick={add} className="shrink-0 h-11 px-5 rounded-xl bg-[#1B2B4B] hover:bg-[#2D4C82] text-white text-[14px] font-black disabled:opacity-60">{busy ? "저장 중…" : "저장"}</button>
+            </div>
+          ) : <div className="text-[13px] font-semibold text-[#7A8AA6]">보기 전용입니다 — 관리자만 바꿀 수 있어요.</div>}
+          <div className={`text-[12.5px] font-bold min-h-[18px] ${msg.err ? "text-[#B42318]" : "text-[#2D4C82]"}`}>{msg.t || (setting ? `시트에 새로 생긴 업체는 자동으로 포함됩니다 · 일반 오더는 영향 없음` : "아직 설정 전 — 지금은 모든 운송업체가 정산·매출에 들어갑니다")}</div>
+        </div>
+      </div>
+    </div>, document.body);
+}
+
 const isMasterOnly = () => { try { return localStorage.getItem("role") === "totalMaster" || auth.currentUser?.email === "tjddnqkf@naver.com"; } catch { return false; } };
 // 🔒 2026-11-03 운송사 분리 — 이 회사의 배차표 양식 id 목록(배지·목록은 이 회사 양식의 오더만)
 export function useRouteBoardIds(company) {
@@ -414,6 +545,8 @@ function ForeignOrdersCard({ list, disabled }) {
 export default function FixedRouteStatusHost({ company, dispatchData = [], render, places = [], drivers = [], disabled = false }) {
   const [addOpen, setAddOpen] = React.useState(false);
   const [rangeOpen, setRangeOpen] = React.useState(false);
+  const [carrierOpen, setCarrierOpen] = React.useState(false); // ⭐ 2026-11-05 운송업체 설정
+  const carrierF = useRouteCarrierFilter(company);
   const [forms, setForms] = React.useState(null);
   const [formId, setFormId] = React.useState(() => { try { return localStorage.getItem("kpFixedStatusForm") || ""; } catch { return ""; } });
   const [sync, setSync] = React.useState({ at: 0, busy: false, err: "", last: null });
@@ -452,6 +585,10 @@ export default function FixedRouteStatusHost({ company, dispatchData = [], rende
     </div></div>
   );
   const unassigned = rows.filter((r) => !normPlate(r.차량번호) && r.배차상태 !== "배차취소").length;
+  // ⭐ 2026-11-05 운송업체 설정 — 이 회사 양식 오더 전체(모든 양식)에서 업체 모으기 · 정산·매출 제외 건수
+  const companyRouteRows = (dispatchData || []).filter((r) => r.배차표Id && formIdSet.has(r.배차표Id));
+  const hasCarrierCol = forms.some((f) => (f.columns || []).some(isCarrierCol)) || companyRouteRows.some((r) => carrierOf(r));
+  const carrierOff = carrierF.active ? companyRouteRows.filter((r) => !carrierF.isCountable(r)).length : 0;
   return (
     <div className="space-y-3 kp-frs">
       <style>{`.kp-frs-cell{height:34px;padding:0 8px;border-radius:8px;border:1px solid transparent;background:transparent;font-size:13.5px;color:#0F1A30;outline:none;transition:border-color .12s,background .12s}
@@ -491,6 +628,14 @@ export default function FixedRouteStatusHost({ company, dispatchData = [], rende
               <button type="button" onClick={() => setRangeOpen(true)} title="예전 날짜 탭(입고일 기준)을 한 번에 가져오기"
                 className="h-10 px-3.5 rounded-xl inline-flex items-center gap-1.5 text-[13px] font-black bg-white/[0.06] border border-white/15 text-white/85 hover:bg-white/[0.12]">기간 가져오기</button>
             )}
+            {(hasCarrierCol || carrierF.active) && (
+              <button type="button" onClick={() => setCarrierOpen(true)} data-kp="carrier-open" title="시트 운송업체 중 정산·매출에 넣을 업체 고르기"
+                className="h-10 px-3.5 rounded-xl inline-flex items-center gap-1.5 text-[13px] font-black bg-white/[0.06] border border-white/15 text-white/90 hover:bg-white/[0.12]">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 7h11v9H3zM14 10h4l3 3v3h-7" /><circle cx="7" cy="18" r="1.6" /><circle cx="17" cy="18" r="1.6" /></svg>
+                운송업체 설정
+                {carrierOff > 0 && <span className="ml-0.5 inline-flex items-center h-[20px] px-1.5 rounded-md bg-[#FF8A7A]/20 text-[#FFC2B8] text-[11px] font-black" title="정산·매출에서 빠지는 고정노선 오더">제외 {carrierOff}</span>}
+              </button>
+            )}
             {form && !disabled && (
               <button type="button" onClick={() => setAddOpen(true)} title="이 양식에 오더 추가 — 시트에도 새 줄로 들어갑니다"
                 className="h-10 px-3.5 rounded-xl inline-flex items-center gap-1.5 text-[13px] font-black bg-white text-[#0F1A30] hover:bg-[#EEF2F8]">＋ 오더 추가</button>
@@ -516,6 +661,7 @@ export default function FixedRouteStatusHost({ company, dispatchData = [], rende
       </div>
       <ForeignOrdersCard list={foreign} disabled={disabled} />
       {form && render(form, rows)}
+      {carrierOpen && <RouteCarrierModal company={company} rows={companyRouteRows} disabled={disabled} onClose={() => setCarrierOpen(false)} />}
       {rangeOpen && form && <RangeImportModal form={form} onClose={() => setRangeOpen(false)} />}
       {addOpen && form && <AddFixedOrderModal form={form} rows={rows} places={places} drivers={drivers} onClose={(ok) => { setAddOpen(false); if (ok && form.sheetUrl) setTimeout(() => runSync(form), 800); }} />}
     </div>

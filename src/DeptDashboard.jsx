@@ -12,6 +12,7 @@ import { useFleetDrivers } from "./FleetPayDocs";
 import { useCompanyDriverDocs, docProblems } from "./driverRequiredDocs";
 import { isTMUser } from "./staffFilter";
 import { ExecDashboard, eventsOf } from "./ExecSuite";
+import { useRouteCarrierFilter } from "./routeCarriers"; // ⭐ 2026-11-05 고정노선 운송업체 설정(끈 업체 오더는 매출·매입에서 뺌)
 import { leaveEntitlement, leaveUseOf } from "./approvalForms";
 import { pcLiveWindowStart, pcPrevDay } from "./orderHistory";
 import { useFundsSummary } from "./FundsBoard";
@@ -311,6 +312,7 @@ const dateOf = (r) => String(r?.상차일 || "").slice(0, 10);
 function useAcctHistory(company, dispatchData) {
   const ls = pcLiveWindowStart();
   const key = `kpAcctHist:${company}`;
+  const carrierF = useRouteCarrierFilter(company); // ⭐ 2026-11-05
   const read = () => { try { const c = JSON.parse(localStorage.getItem(key) || "null"); return c && c.v === ACCT_V && c.day === kst(0) && c.ls === ls ? c : null; } catch { return null; } };
   const [hist, setHist] = React.useState(read);
   const [loading, setLoading] = React.useState(false);
@@ -321,28 +323,29 @@ function useAcctHistory(company, dispatchData) {
       const snaps = await Promise.all(["orders", "dispatch"].map((col) => getDocs(query(collection(db, col), where("상차일", ">=", `${ymAgo(5)}-01`), where("상차일", "<=", pcPrevDay(ls))))));
       const months = {}; const recent = []; const cut = `${ymAgo(2)}-01`;
       snaps.flatMap((sn) => sn.docs.map((d) => d.data() || {}))
-        .filter((r) => (r.companyName || DEFAULT_COMPANY) === company && r.source !== "transport_transmit" && (r.배차상태 || "") === "배차완료")
+        .filter((r) => (r.companyName || DEFAULT_COMPANY) === company && r.source !== "transport_transmit" && (r.배차상태 || "") === "배차완료" && carrierF.isCountable(r))
         .forEach((r) => {
           const d = dateOf(r); const e = months[d.slice(0, 7)] || (months[d.slice(0, 7)] = [0, 0, 0]);
           e[0] += toInt(r.청구운임); e[1] += toInt(r.기사운임); e[2] += 1;
           if (d >= cut) recent.push([d, String(r.거래처명 || "").trim(), toInt(r.청구운임), toInt(r.기사운임), String(r.차량번호 || "").trim(), r.지급상태 || ""]);
         });
-      const c = { v: ACCT_V, day: kst(0), ls, months, recent, at: Date.now() };
+      const c = { v: ACCT_V, day: kst(0), ls, months, recent, at: Date.now(), cs: carrierF.sig };
       try { localStorage.setItem(key, JSON.stringify(c)); } catch { /* 용량 초과는 무시 */ }
       setHist(c);
     } catch { setHist((h) => h || { months: {}, recent: [], at: 0 }); } finally { setLoading(false); }
-  }, [company, ls, key]);
-  React.useEffect(() => { if (company && !hist) load(); }, [company]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [company, ls, key, carrierF]);
+  // ⭐ 2026-11-05 운송업체 설정을 받은 뒤 · 설정이 바뀌면 다시 계산
+  React.useEffect(() => { if (company && carrierF.ready && (!hist || (hist.cs || "") !== carrierF.sig)) load(); }, [company, carrierF.ready, carrierF.sig]); // eslint-disable-line react-hooks/exhaustive-deps
   return React.useMemo(() => {
     const months = {}; Object.entries(hist?.months || {}).forEach(([m, v]) => { months[m] = [...v]; });
     const recent = [...(hist?.recent || [])];
-    (dispatchData || []).filter((r) => dateOf(r) >= ls && (r.배차상태 || "") === "배차완료" && r.source !== "transport_transmit").forEach((r) => {
+    (dispatchData || []).filter((r) => dateOf(r) >= ls && (r.배차상태 || "") === "배차완료" && r.source !== "transport_transmit" && carrierF.isCountable(r)).forEach((r) => {
       const d = dateOf(r); const e = months[d.slice(0, 7)] || (months[d.slice(0, 7)] = [0, 0, 0]);
       e[0] += toInt(r.청구운임); e[1] += toInt(r.기사운임); e[2] += 1;
       recent.push([d, String(r.거래처명 || "").trim(), toInt(r.청구운임), toInt(r.기사운임), String(r.차량번호 || "").trim(), r.지급상태 || ""]);
     });
     return { months, recent, ready: !!hist, at: hist?.at || 0, loading, reload: load };
-  }, [hist, dispatchData, ls, loading, load]);
+  }, [hist, dispatchData, ls, loading, load, carrierF]);
 }
 function useCompanyRows(name, company) {
   const [rows, setRows] = React.useState(null);
