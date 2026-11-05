@@ -815,11 +815,18 @@ service cloud.firestore {
         && request.resource.data.get('uid', '') == request.auth.uid
         && request.resource.data.get('companyName', '') == myCo()
         && request.resource.data.get('status', '') == 'pending';
+      // ⭐ 2026-11-05 원격 지원 걸기 — 최고관리자만 다른 직원에게 "invited"(직원 응답 대기)로 만든다
+      allow create: if isTotalMasterUser()
+        && request.resource.data.get('status', '') == 'invited'
+        && request.resource.data.get('initiatedBy', '') == 'master'
+        && request.resource.data.get('uid', '') is string && request.resource.data.get('uid', '') != '';
       allow read: if isTotalMasterUser() || (isSignedIn() && resource.data.get('uid', '') == request.auth.uid);
       allow update: if isTotalMasterUser();
+      //  직원 본인: invited → approved(수락) / declined(거절) 도 할 수 있다(respondedAt 기록)
       allow update: if isSignedIn() && resource.data.get('uid', '') == request.auth.uid
-        && supAff().hasOnly(['status', 'anydeskId', 'sessionId', 'updatedAt', 'cancelledAt', 'endedAt'])
+        && supAff().hasOnly(['status', 'anydeskId', 'sessionId', 'updatedAt', 'cancelledAt', 'endedAt', 'respondedAt'])
         && (request.resource.data.get('status', '') == resource.data.get('status', '')
+          || (request.resource.data.get('status', '') in ['approved', 'declined'] && resource.data.get('status', '') == 'invited')
           || (request.resource.data.get('status', '') == 'cancelled' && resource.data.get('status', '') in ['pending', 'approved'])
           || (request.resource.data.get('status', '') == 'in_session' && resource.data.get('status', '') == 'approved')
           || (request.resource.data.get('status', '') == 'done' && resource.data.get('status', '') == 'in_session'));
