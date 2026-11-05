@@ -120,6 +120,25 @@ async function sendPushAndCleanup(tokens, message, label) {
   // 알림 채널의 "중요도"를 최초 생성 시 자체적으로 정하고, 이후엔 사용자가
   // 기기 설정(설정 > 앱 > 알림 > 이 사이트/앱 > 중요도/팝업 표시)에서 직접
   // 올려야 바뀌는 구조라, 코드만으로는 이미 만들어진 채널의 등급을 못 바꾼다.
+  // ⭐ 2026-11-05 기사 APK(안드로이드 네이티브 앱) 푸시 — 네이티브 FCM은 data만 오면 앱이 꺼져 있을 때
+  //  알림창에 아무것도 안 띄운다(Capacitor PushNotifications는 notification 메시지만 시스템이 표시).
+  //  android.notification은 "안드로이드 앱" 토큰에만 적용되고 웹푸시(크롬·아이폰 PWA) 토큰은 계속 webpush(data)로 간다
+  //  → 웹 쪽 중복 알림 문제(위 설명)는 다시 생기지 않는다. 채널 "orders"는 기사앱이 만들고(중요도 높음=화면 위 배너),
+  //  채널이 없는 예전 APK는 FCM 기본 채널로 뜬다.
+  if (notification?.title) {
+    restMessage.android = {
+      priority: "high",
+      ...(restMessage.android || {}),
+      notification: {
+        title: String(notification.title),
+        ...(notification.body ? { body: String(notification.body) } : {}),
+        channelId: "orders",
+        sound: "default",
+        defaultVibrateTimings: true,
+        ...((restMessage.android && restMessage.android.notification) || {}),
+      },
+    };
+  }
   if (!restMessage.webpush) restMessage.webpush = {};
   if (!restMessage.webpush.headers) restMessage.webpush.headers = {};
   if (!restMessage.webpush.headers.Urgency) restMessage.webpush.headers.Urgency = "high";
@@ -510,12 +529,21 @@ exports.notifyDispatchDeleted =
         const driverDoc = plate ? await findDriverByPlate(data["차량번호"], data.companyName) : null;
         if (driverDoc) {
           const body = `담당자가 ${data["거래처명"] || ""} ${data["상차지명"] || "-"} → ${data["하차지명"] || "-"} 오더를 삭제했습니다.`;
-          await db.collection("driver_notifications").add({
+          // ⭐ 2026-11-05 기사앱 "삭제된 오더" 팝업 — PC/모바일 삭제 화면이 같은 id(orderDeleted_{오더id})로 먼저 남긴다.
+          //  예전엔 화면(addDoc)과 서버(add)가 각각 써서 알림함에 같은 취소가 두 줄 쌓였다 → 같은 id로 create(이미 있으면 그대로 둔다:
+          //  기사가 이미 [확인]한 팝업이 다시 뜨지 않게 덮어쓰지 않는다).
+          const pick = (k) => (data[k] == null ? "" : String(data[k]));
+          await db.collection("driver_notifications").doc(`orderDeleted_${context.params.dispatchId}`).create({
             driverId: driverDoc.id,
             type: "canceled",
+            deleted: true,
+            popup: data["기사확인상태"] === "대기" || data["기사확인상태"] === "수락",
+            popupAck: false,
             orderId: context.params.dispatchId,
             title: "배차가 취소되었습니다",
             body,
+            order: Object.fromEntries(["거래처명", "상차지명", "하차지명", "상차일", "상차시간", "하차일", "하차시간", "화물내용", "차량톤수", "기사운임"].map((k) => [k, pick(k)])),
+            ...(data.companyName ? { companyName: data.companyName } : {}),
             createdAt: FieldValue.serverTimestamp(),
             read: false,
           }).catch(() => {});
@@ -732,6 +760,79 @@ exports.notifyDispatcherOrderRejected =
         apns: { payload: { aps: { sound: "default" } } },
       }, "지입기사 오더거절(담당자 알림)");
     });
+
+/* ==============================
+   ⏰ 2026-11-05 기사 출근 알림 — 출근을 자주 잊는(특히 연세 있는) 기사님께 OS 푸시로 알려준다.
+   - 기사앱 설정 › "출근 알림"에서 정한 drivers/{uid}.출근시간("HH:MM", 한국시간) 기준
+     · 10분 전쯤: "출근 10분 전입니다"  · 출근 시간(~30분): "출근 시간입니다"
+   - 보내지 않는 경우: 출근알림:false · 근무요일(관리자 기사관리)이 정해져 있는데 오늘이 아님 · 이미 출근/운행중 ·
+     휴차 · 오늘 최종퇴근 · 기사앱 알림 끔(users.driverPushEnabled:false) · 앱 미가입(uid 없음)
+   - 같은 날 같은 단계는 한 번만: driver_notifications/checkin_{uid}_{날짜}_{단계} 를 create(이미 있으면 건너뜀) —
+     기사앱 알림함(종)에도 그대로 남는다.
+   - 5분마다 실행. 회사가 모두 국내라 한국시간(Asia/Seoul) 하나로 계산한다.
+============================== */
+const CHECKIN_DOW = ["일", "월", "화", "수", "목", "금", "토"];
+function parseHM(v) {
+  const m = /^(\d{1,2}):(\d{2})$/.exec(String(v || "").trim());
+  if (!m) return null;
+  const h = Number(m[1]), mi = Number(m[2]);
+  return h < 24 && mi < 60 ? h * 60 + mi : null;
+}
+// 순수 판정(테스트하기 쉽게 분리) — 보낼 단계("before" | "start") 또는 null
+function checkinReminderStage(d, nowMin, ymd, dow) {
+  if (!d || d.출근알림 === false) return null;
+  const start = parseHM(d.출근시간);
+  if (start == null) return null;
+  if (Array.isArray(d.근무요일) && d.근무요일.length && !d.근무요일.includes(CHECKIN_DOW[dow])) return null;
+  const st = String(d.status || "").trim();
+  if (st && st !== "퇴근" && st !== "대기") return null; // 출근·운행중·휴차는 보내지 않는다
+  if (d.isFinalCheckout && d.workDate === ymd) return null;
+  const diff = nowMin - start;
+  if (diff >= -11 && diff < -3) return "before";
+  if (diff >= 0 && diff < 30) return "start";
+  return null;
+}
+exports.remindDriverCheckin = functions.runWith({ timeoutSeconds: 120, memory: "256MB" }).pubsub
+  .schedule("every 5 minutes").timeZone("Asia/Seoul").onRun(async () => {
+    const k = new Date(Date.now() + 9 * 3600e3);
+    const ymd = k.toISOString().slice(0, 10);
+    const nowMin = k.getUTCHours() * 60 + k.getUTCMinutes();
+    const dow = k.getUTCDay();
+    // 출근시간을 정한 기사만(단일 필드 조건이라 색인 추가 불필요)
+    const snap = await db.collection("drivers").where("출근시간", ">", "").get().catch((e) => { console.warn("출근 알림 조회 실패:", e?.message || e); return null; });
+    if (!snap || snap.empty) return null;
+    let sent = 0;
+    for (const dd of snap.docs) {
+      const d = dd.data();
+      const uid = d.uid || "";
+      if (!uid || uid !== dd.id) continue; // 기사앱에 가입·연결된 문서(drivers/{uid})만
+      const stage = checkinReminderStage(d, nowMin, ymd, dow);
+      if (!stage) continue;
+      const title = stage === "before" ? "출근 10분 전입니다" : "출근 시간입니다";
+      const body = stage === "before"
+        ? `${d.출근시간} 출근 — 도착하시면 기사앱의 [출근] 버튼을 꼭 눌러 주세요.`
+        : "아직 출근 처리가 안 되어 있어요. 기사앱을 열고 [출근] 버튼을 눌러 주세요.";
+      try {
+        await db.collection("driver_notifications").doc(`checkin_${uid}_${ymd}_${stage}`).create({
+          driverId: uid, type: "checkin", title, body, createdAt: FieldValue.serverTimestamp(), read: false,
+          ...(d.companyName ? { companyName: d.companyName } : {}),
+        });
+      } catch (e) { continue; } // 이미 보냄(ALREADY_EXISTS) 또는 저장 실패 — 다시 보내지 않는다
+      const u = await db.collection("users").doc(uid).get().then((x) => (x.exists ? x.data() : null)).catch(() => null);
+      if (!u || u.driverPushEnabled === false) continue;
+      const tokens = userTokens(u);
+      if (!tokens.length) continue;
+      await sendPushAndCleanup(tokens, {
+        notification: { title, body },
+        data: { type: "driver_checkin", tag: `checkin-${ymd}` },
+        android: { priority: "high" },
+        apns: { payload: { aps: { sound: "default" } } },
+      }, `기사 출근알림(${stage})`);
+      sent++;
+    }
+    if (sent) console.log(`⏰ 출근 알림 ${sent}건 발송 (${ymd} ${Math.floor(nowMin / 60)}:${String(nowMin % 60).padStart(2, "0")})`);
+    return null;
+  });
 
 /* ==============================
    ◆ 유가 API Proxy

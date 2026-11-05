@@ -1,0 +1,15 @@
+{
+  "id": "/driver-login",
+  "name": "LogisWeb 기사",
+  "short_name": "LogisWeb 기사",
+  "start_url": "/driver-login",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#0F1A30",
+  "theme_color": "#1B2B4B",
+  "orientation": "portrait",
+  "icons": [
+    { "src": "/icons/pwa-192.png?v=3", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "/icons/pwa-512.png?v=3", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}
