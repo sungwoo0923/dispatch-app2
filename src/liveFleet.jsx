@@ -17,7 +17,7 @@ import { createPortal } from "react-dom";
 const LiveFleetMaps = React.lazy(() => import("./LiveFleetMaps"));
 
 export const FLEET_GRADES = new Set(["지입", "직영", "임대"]);
-export const LIVE_MONO = "'JetBrains Mono','IBM Plex Mono','SF Mono',ui-monospace,Menlo,monospace";
+export const LIVE_MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
 export const normLivePlate = (v) => String(v || "").replace(/[\s-]/g, "").toUpperCase();
 
 export function liveTsMs(t) {
@@ -204,6 +204,14 @@ function ensureLiveStyles() {
 .kp-live-chip .a{font-family:${LIVE_MONO};font-size:10px;font-weight:700;color:#8FB0F0;line-height:1;font-variant-numeric:tabular-nums}
 .kp-live-chip.m{height:26px;padding:0 9px 0 8px;border-radius:10px}
 .kp-live-chip.m .t{font-size:10px}.kp-live-chip.m .a{font-size:10.5px}
+.kp-live-chip.c{height:20px;padding:0 6px 0 5px;gap:4px;border-radius:999px}
+.kp-live-chip.c .a{font-size:10.5px;color:#CFE0FF}
+.kp-live-anchor{position:relative;display:inline-block;width:0;height:0;vertical-align:middle;overflow:visible}
+.kp-live-pin{position:absolute;top:-21px;left:-6px;width:14px;height:14px;padding:0;margin:0;border:0;background:transparent;display:grid;place-items:center;border-radius:999px;cursor:pointer;z-index:2;line-height:0}
+.kp-live-pin .kp-live-dot{width:6px;height:6px;box-shadow:0 0 0 1.5px #fff,0 0 0 2.5px rgba(11,20,40,.18)}
+.kp-live-pin:hover{background:rgba(52,211,153,.16)}
+.kp-live-pin:hover .kp-live-dot{transform:scale(1.25)}
+.kp-live-pin:focus-visible{outline:2px solid #8FB0F0;outline-offset:1px}
 .kp-live-btn{display:inline-flex;align-items:center;gap:6px;white-space:nowrap;flex-shrink:0;cursor:pointer;font-weight:800;color:#fff;
   background:linear-gradient(135deg,#1B2B4B 0%,#0B1428 100%);border:1px solid #2D4C82;box-shadow:0 2px 6px rgba(11,20,40,.25),inset 0 1px 0 rgba(255,255,255,.08);transition:box-shadow .15s,border-color .15s}
 .kp-live-btn:hover{border-color:#8FB0F0;box-shadow:0 0 0 3px rgba(143,176,240,.16),0 4px 12px rgba(11,20,40,.3)}
@@ -218,12 +226,36 @@ export const LIVE_COLORS = { live: "#34D399", recent: "#67E8F9", stale: "#64748B
 // order 하나만 넘기면 된다. 지입·직영·임대 + 기사앱 위치 + 배차완료(오늘 운행)일 때만 보인다.
 const autoMobile = (m) => (m ?? (typeof window !== "undefined" && window.innerWidth < 768));
 
-export function LiveDriverChip({ order, mobile, className = "" }) {
+// ⭐ 2026-11-05 variant — "chip"(예전 LIVE 칩) · "pin"(PC 표: 칸 왼쪽 위 모서리의 6px 점 — 칸 너비를 전혀 안 늘린다.
+//  입력칸 바로 앞에 폭 0 기준점을 두고 그 왼쪽 위 모서리에 겹쳐 그린다) · "compact"(모바일 카드: 점 + "3분" 만 보이는 작은 칩)
+export function LiveDriverChip({ order, mobile, className = "", variant = "chip" }) {
   const entry = useFleetLiveEntry(isLiveEligibleOrder(order) ? order.차량번호 : "");
   if (!entry) return null; // 대부분의 줄은 여기서 끝(시계 구독도 안 함)
-  return <LiveChipInner order={order} entry={entry} mobile={mobile} className={className} />;
+  if (variant === "pin") return <LivePinInner order={order} entry={entry} className={className} />;
+  return <LiveChipInner order={order} entry={entry} mobile={mobile} className={className} compact={variant === "compact"} />;
 }
-function LiveChipInner({ order, entry, mobile, className }) {
+// ⭐ 2026-11-05 표 안 LIVE — 칩이 차량번호 칸을 넓히던 문제: 칸 모서리에 겹쳐 그리는 작은 점(absolute)으로 바꿨다.
+//  점에 마우스를 올리면 기사·마지막 수신 시각, 누르면 실시간 지도(예전 칩과 같은 창).
+function LivePinInner({ order, entry, className }) {
+  const now = useLiveNow();
+  const [open, setOpen] = React.useState(false);
+  ensureLiveStyles();
+  const st = liveState(entry, now);
+  if (st === "none" && !open) return null;
+  const stop = (e) => { e.stopPropagation(); };
+  return (
+    <>
+      <span className="kp-live-anchor"><button type="button" className={`kp-live-pin ${className}`} data-kp-live={st}
+        title={`${st === "live" ? "LIVE" : st === "recent" ? "GPS" : "LAST"} · ${entry.grade} · ${entry.name || entry.plate} — 눌러서 실시간 위치 보기 (마지막 수신 ${liveAgeText(entry.updatedMs, now)}${entry.speed ? ` · ${entry.speed}km/h` : ""})`}
+        aria-label="실시간 위치 보기"
+        onClick={(e) => { stop(e); setOpen(true); }} onDoubleClick={stop} onMouseDown={stop} onPointerDown={stop} onTouchStart={stop} onContextMenu={stop}>
+        <span className={`kp-live-dot ${st === "live" ? "on" : ""}`} style={{ background: LIVE_COLORS[st] }} />
+      </button></span>
+      {open && <LiveMapPortal kind="one" order={order} plate={order.차량번호} mobile={autoMobile(false)} onClose={() => setOpen(false)} />}
+    </>
+  );
+}
+function LiveChipInner({ order, entry, mobile, className, compact = false }) {
   const now = useLiveNow();
   const [open, setOpen] = React.useState(false);
   ensureLiveStyles();
@@ -233,12 +265,12 @@ function LiveChipInner({ order, entry, mobile, className }) {
   const label = st === "live" ? "LIVE" : st === "recent" ? "GPS" : "LAST";
   return (
     <>
-      <button type="button" className={`kp-live-chip ${mobile ? "m" : ""} ${className}`}
+      <button type="button" className={`kp-live-chip ${compact ? "c" : mobile ? "m" : ""} ${className}`}
         title={`${entry.grade} · ${entry.name || entry.plate} — 실시간 위치 보기 (마지막 수신 ${liveAgeText(entry.updatedMs, now)}${entry.speed ? ` · ${entry.speed}km/h` : ""})`}
         onClick={(e) => { stop(e); setOpen(true); }} onDoubleClick={stop} onMouseDown={stop} onPointerDown={stop} onTouchStart={stop} onContextMenu={stop}
         data-kp-live={st}>
         <span className={`kp-live-dot ${st === "live" ? "on" : ""}`} style={{ background: LIVE_COLORS[st] }} />
-        <span className="t" style={{ color: st === "live" ? "#A7F3D0" : st === "recent" ? "#CFFAFE" : "#CBD5E1" }}>{label}</span>
+        {!compact && <span className="t" style={{ color: st === "live" ? "#A7F3D0" : st === "recent" ? "#CFFAFE" : "#CBD5E1" }}>{label}</span>}
         <span className="a">{shortAge(entry.updatedMs, now)}</span>
       </button>
       {open && <LiveMapPortal kind="one" order={order} plate={order.차량번호} mobile={autoMobile(mobile)} onClose={() => setOpen(false)} />}
@@ -266,7 +298,7 @@ const STOP_EVENTS = Object.fromEntries(["onClick", "onDoubleClick", "onMouseDown
 function LiveLoadingVeil() {
   return (
     <div style={{ position: "fixed", inset: 0, zIndex: 10000050, background: "rgba(6,12,26,.55)", backdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center", animation: "kpLiveFade .15s ease-out" }}>
-      <div style={{ fontFamily: LIVE_MONO, fontSize: 11, fontWeight: 800, letterSpacing: ".3em", color: "#8FB0F0" }}>LIVE · LOADING</div>
+      <div style={{ fontFamily: LIVE_MONO, fontVariantNumeric: "tabular-nums", fontSize: 11, fontWeight: 800, letterSpacing: ".3em", color: "#8FB0F0" }}>LIVE · LOADING</div>
     </div>
   );
 }

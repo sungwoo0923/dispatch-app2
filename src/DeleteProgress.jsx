@@ -16,7 +16,7 @@ import { createRoot } from "react-dom/client";
 import { writeBatch, doc, serverTimestamp } from "firebase/firestore";
 import { db as appDb, auth } from "./firebase";
 
-const MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
+const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
 export const DELETE_BATCH_SIZE = 450;
 
 // ── 창 상태(모듈 전역) ─────────────────────────────────────────────
@@ -41,7 +41,7 @@ function DeleteProgressModal() {
       <style>{"@keyframes kpdelin{from{transform:translateY(8px) scale(.98);opacity:0}to{transform:none;opacity:1}}@keyframes kpdelspin{to{transform:rotate(360deg)}}@keyframes kpdelbar{0%{background-position:0 0}100%{background-position:40px 0}}"}</style>
       <div style={{ width: "min(360px,100%)", borderRadius: 18, overflow: "hidden", background: "#fff", boxShadow: "0 30px 80px rgba(11,20,40,.45)", animation: "kpdelin .16s ease-out" }}>
         <div style={{ padding: "16px 20px 14px", color: "#fff", background: "linear-gradient(120deg,#0F1A30 0%,#1B2B4B 62%,#2D4C82 100%)" }}>
-          <div style={{ fontFamily: MONO, fontSize: 10, fontWeight: 800, letterSpacing: "0.26em", color: "#8FB0F0" }}>
+          <div style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 10, fontWeight: 800, letterSpacing: "0.26em", color: "#8FB0F0" }}>
             {phase === "done" ? "DELETE · 삭제 완료" : phase === "error" ? "DELETE · 오류" : "DELETE · 삭제 중"}
           </div>
           <div style={{ fontSize: 18, fontWeight: 900, marginTop: 2 }}>{title}</div>

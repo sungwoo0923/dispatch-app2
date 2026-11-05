@@ -14,7 +14,7 @@ import { db } from "./firebase";
 import { PlanMatrix, PLAN_DEFAULTS, PLAN_IDS, planFeatureLines, planIncludes, usePlan, usePublicPricing } from "./plans";
 import { kstToday, monthEnd, monthStart, useLoadOrderRange } from "./orderHistory";
 
-const MONO = "'JetBrains Mono','IBM Plex Mono',ui-monospace,monospace";
+const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
 const num = (v) => Number(String(v ?? 0).replace(/[^\d.-]/g, "")) || 0;
 const won = (v) => `${Math.round(Number(v) || 0).toLocaleString()}`;
 const STATUS_TONE = { 미청구: "bg-[#EEF2F8] text-[#5B6B85]", 청구: "bg-[#2D4C82] text-white", 입금완료: "bg-[#0F1A30] text-white", 연체: "bg-[#0F1A30] text-[#8FB0F0] ring-1 ring-[#8FB0F0]" };
@@ -26,7 +26,7 @@ function Card({ code, title, right, children, className = "", bodyClass = "p-5" 
   return (
     <div className={`bg-white rounded-2xl border border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_10px_26px_rgba(16,24,40,0.05)] overflow-hidden ${className}`}>
       <div className="flex items-center justify-between gap-3 px-5 h-[50px] border-b border-[#EEF1F6] bg-[#F7F9FC]">
-        <div className="flex items-center gap-2 min-w-0"><span className="text-[10px] font-extrabold tracking-[0.22em] text-[#4B6CB7] shrink-0" style={{ fontFamily: MONO }}>{code}</span><span className="text-[15.5px] font-black text-[#0F1A30] truncate">{title}</span></div>
+        <div className="flex items-center gap-2 min-w-0"><span className="text-[10px] font-extrabold tracking-[0.22em] text-[#4B6CB7] shrink-0" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{code}</span><span className="text-[15.5px] font-black text-[#0F1A30] truncate">{title}</span></div>
         {right}
       </div>
       <div className={bodyClass}>{children}</div>
@@ -52,10 +52,10 @@ function Kpi({ code, label, value, unit, foot, meter, accent = false }) {
   return (
     <div className={`rounded-2xl border px-4 py-4 min-w-0 flex flex-col ${accent ? "bg-[#0F1A30] border-[#0F1A30] text-white shadow-[0_14px_30px_rgba(15,26,48,0.28)]" : "bg-white border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_8px_20px_rgba(16,24,40,0.04)]"}`}>
       <div className="flex items-center justify-between gap-2">
-        <span className={`text-[10px] font-extrabold tracking-[0.22em] ${accent ? "text-[#8FB0F0]" : "text-[#4B6CB7]"}`} style={{ fontFamily: MONO }}>{code}</span>
+        <span className={`text-[10px] font-extrabold tracking-[0.22em] ${accent ? "text-[#8FB0F0]" : "text-[#4B6CB7]"}`} style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{code}</span>
       </div>
       <div className={`text-[12.5px] font-bold mt-1 ${accent ? "text-white/65" : "text-[#5B6B85]"}`}>{label}</div>
-      <div className="mt-1 text-[24px] leading-none font-black tabular-nums whitespace-nowrap" style={{ fontFamily: MONO }}>{value}{unit && <span className={`text-[12px] font-bold ml-1 ${accent ? "text-white/50" : "text-[#7A89A3]"}`}>{unit}</span>}</div>
+      <div className="mt-1 text-[24px] leading-none font-black tabular-nums whitespace-nowrap" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{value}{unit && <span className={`text-[12px] font-bold ml-1 ${accent ? "text-white/50" : "text-[#7A89A3]"}`}>{unit}</span>}</div>
       {meter && <div className="mt-3">{meter}</div>}
       {foot && <div className={`mt-auto pt-2 text-[11.5px] font-bold leading-snug ${accent ? "text-white/55" : "text-[#7A89A3]"}`}>{foot}</div>}
     </div>
@@ -187,7 +187,7 @@ export default function BillingCenter({ userEmail = "", userName = "", canEdit =
   if (!canView) {
     return (
       <div className="rounded-2xl border border-[#E3E8F0] bg-white px-6 py-14 text-center">
-        <div className="text-[10.5px] font-extrabold tracking-[0.3em] text-[#4B6CB7]" style={{ fontFamily: MONO }}>BILLING · RESTRICTED</div>
+        <div className="text-[10.5px] font-extrabold tracking-[0.3em] text-[#4B6CB7]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>BILLING · RESTRICTED</div>
         <div className="mt-2 text-[18px] font-black text-[#0F1A30]">구독 · 결제는 경리팀 · 재무 · 임원만 볼 수 있습니다</div>
         <div className="mt-1 text-[13px] text-[#7A89A3]">요금제나 청구서 확인이 필요하면 경리팀에 말씀해 주세요.</div>
       </div>
@@ -204,12 +204,12 @@ export default function BillingCenter({ userEmail = "", userName = "", canEdit =
         <div className="relative grid gap-5 lg:grid-cols-[minmax(0,1fr)_auto] items-end">
           <div className="min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-[10.5px] font-extrabold tracking-[0.3em] text-[#8FB0F0]" style={{ fontFamily: MONO }}>SUBSCRIPTION · {company || "-"}</span>
-              {!canEdit && <span className="px-2 py-0.5 rounded-md bg-white/10 border border-white/15 text-[10.5px] font-black tracking-wider" style={{ fontFamily: MONO }}>VIEW ONLY</span>}
+              <span className="text-[10.5px] font-extrabold tracking-[0.3em] text-[#8FB0F0]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>SUBSCRIPTION · {company || "-"}</span>
+              {!canEdit && <span className="px-2 py-0.5 rounded-md bg-white/10 border border-white/15 text-[10.5px] font-black tracking-wider" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>VIEW ONLY</span>}
             </div>
             <div className="mt-2 flex items-end gap-3 flex-wrap">
               <div className="text-[30px] sm:text-[36px] leading-none font-black tracking-[-0.02em]">{plan ? plan.name : "기본 이용"}</div>
-              {plan?.en && <div className="text-[13px] font-black tracking-[0.24em] text-white/45 pb-1" style={{ fontFamily: MONO }}>{plan.en} PLAN</div>}
+              {plan?.en && <div className="text-[13px] font-black tracking-[0.24em] text-white/45 pb-1" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{plan.en} PLAN</div>}
             </div>
             <div className="mt-3 inline-flex items-center gap-2 rounded-full bg-white/[0.07] border border-white/10 pl-2 pr-3 py-1">
               <span className={`w-2 h-2 rounded-full ${status.t === "정상 이용 중" || status.t === "요금제 미지정" ? "bg-[#8FB0F0] shadow-[0_0_10px_#8FB0F0]" : "bg-white"}`} />
@@ -221,9 +221,9 @@ export default function BillingCenter({ userEmail = "", userName = "", canEdit =
           <div className="grid grid-cols-3 gap-2 sm:gap-2.5">
             {[["MONTHLY", "월 이용료", plan ? won(plan.price) : "-"], ["ESTIMATE", "이번 달 예상", bill ? won(bill.total) : "-"], ["UNPAID", "미납 청구", won(unpaidSum)]].map(([c, l, v]) => (
               <div key={c} className="rounded-2xl bg-white/[0.06] border border-white/10 px-3 sm:px-4 py-3 min-w-0 sm:min-w-[150px]">
-                <div className="text-[9.5px] font-extrabold tracking-[0.22em] text-[#8FB0F0]" style={{ fontFamily: MONO }}>{c}</div>
+                <div className="text-[9.5px] font-extrabold tracking-[0.22em] text-[#8FB0F0]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{c}</div>
                 <div className="text-[11.5px] font-bold text-white/55">{l}</div>
-                <div className="text-[17px] sm:text-[22px] font-black tabular-nums whitespace-nowrap" style={{ fontFamily: MONO }}>{v}<span className="text-[11px] text-white/45 ml-0.5">원</span></div>
+                <div className="text-[17px] sm:text-[22px] font-black tabular-nums whitespace-nowrap" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{v}<span className="text-[11px] text-white/45 ml-0.5">원</span></div>
               </div>
             ))}
           </div>
@@ -257,8 +257,8 @@ export default function BillingCenter({ userEmail = "", userName = "", canEdit =
                       <linearGradient id="bcCum" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#2D4C82" stopOpacity={0.28} /><stop offset="100%" stopColor="#2D4C82" stopOpacity={0.02} /></linearGradient>
                     </defs>
                     <CartesianGrid stroke="#EEF1F6" vertical={false} />
-                    <XAxis dataKey="d" axisLine={false} tickLine={false} interval={days > 20 ? 4 : 1} tick={{ fontSize: 11, fill: "#9AA9C3", fontFamily: MONO }} />
-                    <YAxis yAxisId="c" axisLine={false} tickLine={false} width={44} allowDecimals={false} tick={{ fontSize: 11, fill: "#9AA9C3", fontFamily: MONO }} />
+                    <XAxis dataKey="d" axisLine={false} tickLine={false} interval={days > 20 ? 4 : 1} tick={{ fontSize: 11, fill: "#9AA9C3", fontFamily: MONO, fontVariantNumeric: "tabular-nums" }} />
+                    <YAxis yAxisId="c" axisLine={false} tickLine={false} width={44} allowDecimals={false} tick={{ fontSize: 11, fill: "#9AA9C3", fontFamily: MONO, fontVariantNumeric: "tabular-nums" }} />
                     <YAxis yAxisId="d" orientation="right" hide allowDecimals={false} domain={[0, (m) => Math.max(4, m * 3)]} />
                     <Tooltip contentStyle={TT} labelFormatter={(d) => `${Number(ym.slice(5))}월 ${d}일`} formatter={(v, n) => [`${Number(v).toLocaleString()}건`, { daily: "그날 오더", cum: "누적", proj: "월말 예상", pace: "한도 속도" }[n] || n]} />
                     <Bar yAxisId="d" dataKey="daily" fill="#B9C8E4" radius={[3, 3, 0, 0]} barSize={8} />
@@ -273,9 +273,9 @@ export default function BillingCenter({ userEmail = "", userName = "", canEdit =
               <div className="mt-3 grid grid-cols-3 gap-2">
                 {[["TODAY", "오늘까지", usage.toDate], ["BOOKED", "예약 포함", usage.cnt], ["PROJECTED", "월말 예상", usage.projected]].map(([c, l, v]) => (
                   <div key={c} className="rounded-xl bg-[#F7F9FC] border border-[#EEF1F6] px-3 py-2.5 min-w-0">
-                    <div className="text-[9.5px] font-extrabold tracking-[0.2em] text-[#4B6CB7]" style={{ fontFamily: MONO }}>{c}</div>
+                    <div className="text-[9.5px] font-extrabold tracking-[0.2em] text-[#4B6CB7]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{c}</div>
                     <div className="text-[11.5px] font-bold text-[#7A89A3]">{l}</div>
-                    <div className="text-[18px] font-black tabular-nums text-[#0F1A30]" style={{ fontFamily: MONO }}>{v.toLocaleString()}<span className="text-[11px] text-[#9AA9C3] ml-0.5">건</span></div>
+                    <div className="text-[18px] font-black tabular-nums text-[#0F1A30]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{v.toLocaleString()}<span className="text-[11px] text-[#9AA9C3] ml-0.5">건</span></div>
                   </div>
                 ))}
               </div>
@@ -291,22 +291,22 @@ export default function BillingCenter({ userEmail = "", userName = "", canEdit =
                 {(invRows || bill.rows).map((x, i) => (
                   <div key={`${x.k}_${i}`} className="flex items-center justify-between gap-3">
                     <span className="text-[13px] font-bold text-[#1B2B4B] min-w-0 truncate">{x.add && <span className="mr-1 px-1.5 py-0.5 rounded bg-[#EEF2F8] text-[#5B6B85] text-[10px] font-black">추가</span>}{x.k}</span>
-                    <span className="text-[14px] font-black tabular-nums text-[#0F1A30] whitespace-nowrap" style={{ fontFamily: MONO }}>{x.v == null ? "별도 안내" : `${won(x.v)}원`}</span>
+                    <span className="text-[14px] font-black tabular-nums text-[#0F1A30] whitespace-nowrap" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{x.v == null ? "별도 안내" : `${won(x.v)}원`}</span>
                   </div>
                 ))}
               </div>
               {(() => { const tot = invRows ? num(thisInv.amount) : bill.total; return (
               <div className="mt-4 pt-3 border-t border-dashed border-[#DCE3EE] flex items-end justify-between gap-3">
-                <div><div className="text-[10px] font-extrabold tracking-[0.22em] text-[#4B6CB7]" style={{ fontFamily: MONO }}>TOTAL</div><div className="text-[12px] font-bold text-[#7A89A3]">VAT 별도</div></div>
-                <div className="text-right"><div className="text-[24px] font-black tabular-nums text-[#0F1A30]" style={{ fontFamily: MONO }}>{won(tot)}<span className="text-[12px] text-[#7A89A3] ml-0.5">원</span></div><div className="text-[11.5px] font-bold text-[#7A89A3] tabular-nums" style={{ fontFamily: MONO }}>VAT 포함 {won(tot * 1.1)}원</div></div>
+                <div><div className="text-[10px] font-extrabold tracking-[0.22em] text-[#4B6CB7]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>TOTAL</div><div className="text-[12px] font-bold text-[#7A89A3]">VAT 별도</div></div>
+                <div className="text-right"><div className="text-[24px] font-black tabular-nums text-[#0F1A30]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{won(tot)}<span className="text-[12px] text-[#7A89A3] ml-0.5">원</span></div><div className="text-[11.5px] font-bold text-[#7A89A3] tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>VAT 포함 {won(tot * 1.1)}원</div></div>
               </div>); })()}
               <div className="mt-4 space-y-3">
-                <div><div className="flex justify-between text-[11.5px] font-bold text-[#5B6B85] mb-1"><span>직원 계정</span><span className="tabular-nums" style={{ fontFamily: MONO }}>{staff ?? "-"} / {seatsLim}</span></div><Meter used={staff || 0} limit={seatsLim} /></div>
-                <div><div className="flex justify-between text-[11.5px] font-bold text-[#5B6B85] mb-1"><span>월 오더(월말 예상)</span><span className="tabular-nums" style={{ fontFamily: MONO }}>{usage ? usage.projected.toLocaleString() : "-"} / {ordersLim.toLocaleString()}</span></div><Meter used={usage?.toDate || 0} limit={ordersLim} projected={usage?.projected} /></div>
+                <div><div className="flex justify-between text-[11.5px] font-bold text-[#5B6B85] mb-1"><span>직원 계정</span><span className="tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{staff ?? "-"} / {seatsLim}</span></div><Meter used={staff || 0} limit={seatsLim} /></div>
+                <div><div className="flex justify-between text-[11.5px] font-bold text-[#5B6B85] mb-1"><span>월 오더(월말 예상)</span><span className="tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{usage ? usage.projected.toLocaleString() : "-"} / {ordersLim.toLocaleString()}</span></div><Meter used={usage?.toDate || 0} limit={ordersLim} projected={usage?.projected} /></div>
               </div>
               {[["taxInvoiceFee", "전자세금계산서", "건"], ["alimtalkFee", "알림톡", "건"], ["smsFee", "문자", "건"], ["extraBizFee", "추가 사업자", "곳·월"]].some(([k]) => num(pricing[k]) > 0) && (
                 <div className="mt-4 rounded-xl bg-[#F7F9FC] border border-[#EEF1F6] px-3 py-2.5 text-[11.5px] font-bold text-[#5B6B85] leading-relaxed">
-                  <div className="text-[9.5px] font-extrabold tracking-[0.2em] text-[#4B6CB7] mb-0.5" style={{ fontFamily: MONO }}>ADD-ONS · 사용한 만큼</div>
+                  <div className="text-[9.5px] font-extrabold tracking-[0.2em] text-[#4B6CB7] mb-0.5" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>ADD-ONS · 사용한 만큼</div>
                   {[["taxInvoiceFee", "전자세금계산서", "건"], ["alimtalkFee", "알림톡", "건"], ["smsFee", "문자(SMS)", "건"], ["lmsFee", "장문 문자", "건"], ["extraBizFee", "추가 사업자", "곳·월"], ["storagePerGB", "저장 용량 초과", "GB·월"]].filter(([k]) => num(pricing[k]) > 0).map(([k, l, u]) => `${l} ${won(pricing[k])}원/${u}`).join(" · ")}
                 </div>
               )}
@@ -327,16 +327,16 @@ export default function BillingCenter({ userEmail = "", userName = "", canEdit =
             return (
               <div key={p.id} className={`relative rounded-2xl p-4 flex flex-col border ${on ? "bg-[#0F1A30] border-[#0F1A30] text-white shadow-[0_16px_34px_rgba(15,26,48,0.32)]" : "bg-white border-[#E3E8F0] text-[#0F1A30]"}`}>
                 <div className="flex items-center justify-between gap-2">
-                  <span className={`text-[10px] font-extrabold tracking-[0.24em] ${on ? "text-[#8FB0F0]" : "text-[#4B6CB7]"}`} style={{ fontFamily: MONO }}>{p.en}</span>
+                  <span className={`text-[10px] font-extrabold tracking-[0.24em] ${on ? "text-[#8FB0F0]" : "text-[#4B6CB7]"}`} style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{p.en}</span>
                   {on ? <span className="px-2 py-0.5 rounded-md bg-white text-[#0F1A30] text-[10.5px] font-black">사용 중</span>
                     : p.recommended ? <span className="px-2 py-0.5 rounded-md bg-[#EEF2F8] text-[#1B2B4B] text-[10.5px] font-black">추천</span> : null}
                 </div>
                 <div className="text-[19px] font-black mt-1">{p.name}</div>
                 <div className={`text-[11.5px] font-bold ${on ? "text-white/55" : "text-[#7A89A3]"}`}>{p.target}</div>
-                <div className="mt-3 text-[24px] font-black tabular-nums" style={{ fontFamily: MONO }}>{won(p.price)}<span className={`text-[11px] font-bold ml-1 ${on ? "text-white/50" : "text-[#7A89A3]"}`}>원/월</span></div>
+                <div className="mt-3 text-[24px] font-black tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{won(p.price)}<span className={`text-[11px] font-bold ml-1 ${on ? "text-white/50" : "text-[#7A89A3]"}`}>원/월</span></div>
                 <div className={`mt-3 grid grid-cols-2 gap-2 text-[11.5px] font-bold ${on ? "text-white/75" : "text-[#1B2B4B]"}`}>
-                  <div className={`rounded-xl px-2.5 py-2 ${on ? "bg-white/[0.07]" : "bg-[#F7F9FC]"}`}><div className={`text-[9.5px] tracking-[0.18em] ${on ? "text-[#8FB0F0]" : "text-[#4B6CB7]"}`} style={{ fontFamily: MONO }}>SEATS</div><span className="tabular-nums" style={{ fontFamily: MONO }}>{p.seats}</span>명</div>
-                  <div className={`rounded-xl px-2.5 py-2 ${on ? "bg-white/[0.07]" : "bg-[#F7F9FC]"}`}><div className={`text-[9.5px] tracking-[0.18em] ${on ? "text-[#8FB0F0]" : "text-[#4B6CB7]"}`} style={{ fontFamily: MONO }}>ORDERS</div><span className="tabular-nums" style={{ fontFamily: MONO }}>{num(p.orders).toLocaleString()}</span>건</div>
+                  <div className={`rounded-xl px-2.5 py-2 ${on ? "bg-white/[0.07]" : "bg-[#F7F9FC]"}`}><div className={`text-[9.5px] tracking-[0.18em] ${on ? "text-[#8FB0F0]" : "text-[#4B6CB7]"}`} style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>SEATS</div><span className="tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{p.seats}</span>명</div>
+                  <div className={`rounded-xl px-2.5 py-2 ${on ? "bg-white/[0.07]" : "bg-[#F7F9FC]"}`}><div className={`text-[9.5px] tracking-[0.18em] ${on ? "text-[#8FB0F0]" : "text-[#4B6CB7]"}`} style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>ORDERS</div><span className="tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{num(p.orders).toLocaleString()}</span>건</div>
                 </div>
                 <ul className={`mt-3 space-y-1 text-[12px] font-bold ${on ? "text-white/70" : "text-[#5B6B85]"}`}>
                   {planFeatureLines(p.id).slice(0, 4).map((t) => <li key={t} className="flex gap-1.5"><span className={on ? "text-[#8FB0F0]" : "text-[#2D4C82]"}>✓</span><span className="min-w-0">{t}</span></li>)}
@@ -357,14 +357,14 @@ export default function BillingCenter({ userEmail = "", userName = "", canEdit =
 
       {/* ── 청구 이력 + 결제 수단 ── */}
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)] items-start">
-        <Card code="INVOICES" title="청구 · 입금 이력" right={invoices?.length ? <span className="text-[11.5px] font-bold text-[#7A89A3] tabular-nums" style={{ fontFamily: MONO }}>{invoices.length}건</span> : null} bodyClass="">
+        <Card code="INVOICES" title="청구 · 입금 이력" right={invoices?.length ? <span className="text-[11.5px] font-bold text-[#7A89A3] tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{invoices.length}건</span> : null} bodyClass="">
           {invoices === null ? <div className="py-10 text-center text-[#9AA9C3]">불러오는 중…</div> : invoices.length === 0 ? <div className="py-10 text-center text-[#9AA9C3]">아직 발행된 청구서가 없습니다.</div> : (
             <>
               {paidList.length >= 2 && (
                 <div className="h-[130px] px-3 pt-4 border-b border-[#EEF1F6]">
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={paidList.map((v) => ({ m: String(v.month || "").slice(2), amount: num(v.amount), st: v.status }))} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
-                      <XAxis dataKey="m" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: "#9AA9C3", fontFamily: MONO }} />
+                      <XAxis dataKey="m" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: "#9AA9C3", fontFamily: MONO, fontVariantNumeric: "tabular-nums" }} />
                       <YAxis hide />
                       <Tooltip cursor={{ fill: "rgba(27,43,75,.05)" }} contentStyle={TT} formatter={(v) => [`${won(v)}원`, "청구액"]} />
                       <Bar dataKey="amount" fill="#2D4C82" radius={[5, 5, 0, 0]} barSize={22} />
@@ -375,9 +375,9 @@ export default function BillingCenter({ userEmail = "", userName = "", canEdit =
               <div className="divide-y divide-[#EEF1F6]">
                 {invoices.map((v) => (
                   <div key={v.id} className="flex items-center gap-3 sm:gap-4 px-4 sm:px-5 py-3.5 flex-wrap sm:flex-nowrap">
-                    <div className="w-[76px] text-[14.5px] font-black tabular-nums text-[#0F1A30]" style={{ fontFamily: MONO }}>{v.month}</div>
+                    <div className="w-[76px] text-[14.5px] font-black tabular-nums text-[#0F1A30]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{v.month}</div>
                     <div className="flex-1 min-w-[160px]">
-                      <div className="text-[15.5px] font-black tabular-nums text-[#0F1A30]" style={{ fontFamily: MONO }}>{won(v.amount)}원 <span className="text-[11px] font-bold text-[#7A89A3]">VAT 별도 · 합계 {won(num(v.amount) * 1.1)}원</span></div>
+                      <div className="text-[15.5px] font-black tabular-nums text-[#0F1A30]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{won(v.amount)}원 <span className="text-[11px] font-bold text-[#7A89A3]">VAT 별도 · 합계 {won(num(v.amount) * 1.1)}원</span></div>
                       {v.payNotice && v.status !== "입금완료" && <div className="text-[12px] font-bold text-[#2D4C82]">입금 알림 보냄 · {v.payNotice.name} {v.payNotice.date}</div>}
                       {v.paidAt && <div className="text-[12px] font-bold text-[#7A89A3]">입금일 {v.paidAt}</div>}
                     </div>
@@ -394,7 +394,7 @@ export default function BillingCenter({ userEmail = "", userName = "", canEdit =
           <div className="space-y-3">
             <div className="rounded-2xl p-4 text-white" style={{ background: "linear-gradient(135deg,#1B2B4B,#2D4C82)" }}>
               <div className="flex items-center justify-between"><div className="text-[14.5px] font-black">무통장 입금 (계좌이체)</div><span className="px-2 py-0.5 rounded-md bg-white text-[#0F1A30] text-[11px] font-black">사용 가능</span></div>
-              <div className="mt-3 text-[15px] font-black tabular-nums tracking-wide" style={{ fontFamily: MONO }}>{pricing.bank || "입금 계좌는 청구서와 함께 안내드립니다"}</div>
+              <div className="mt-3 text-[15px] font-black tabular-nums tracking-wide" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{pricing.bank || "입금 계좌는 청구서와 함께 안내드립니다"}</div>
               <div className="text-[11.5px] text-white/60 mt-1">예금주 {pricing.supplier || "LogisWeb"} · 입금자명은 회사명으로 해 주세요. 입금 후 청구서의 "입금했어요"를 누르면 더 빨리 확인됩니다.</div>
             </div>
             <div className="rounded-2xl border border-[#DCE3EE] p-4">
@@ -405,7 +405,7 @@ export default function BillingCenter({ userEmail = "", userName = "", canEdit =
             <div className="rounded-2xl border border-[#DCE3EE] p-4">
               <div className="text-[14.5px] font-black text-[#0F1A30]">전자세금계산서</div>
               <div className="text-[12px] text-[#7A89A3] mt-1">매월 청구 확정 시 회사관리에 등록된 사업자 정보로 발행됩니다. 담당 이메일이 바뀌면 회사관리에서 수정해 주세요.</div>
-              {pricing.supplierEmail && <div className="mt-2 text-[12px] font-bold text-[#1B2B4B]">문의 <span style={{ fontFamily: MONO }}>{pricing.supplierEmail}</span>{pricing.supplierPhone ? <> · <span style={{ fontFamily: MONO }}>{pricing.supplierPhone}</span></> : null}</div>}
+              {pricing.supplierEmail && <div className="mt-2 text-[12px] font-bold text-[#1B2B4B]">문의 <span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{pricing.supplierEmail}</span>{pricing.supplierPhone ? <> · <span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{pricing.supplierPhone}</span></> : null}</div>}
             </div>
           </div>
         </Card>

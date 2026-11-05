@@ -97,7 +97,7 @@ function Clock() {
   React.useEffect(() => { const t = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(t); }, []);
   const k = new Date(now + 9 * 3600e3); const p = (n) => String(n).padStart(2, "0");
   return (
-    <div style={{ fontFamily: MONO, fontSize: 36, fontWeight: 800, color: "#fff", letterSpacing: "0.04em", lineHeight: 1 }}>
+    <div style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 36, fontWeight: 800, color: "#fff", letterSpacing: "0.04em", lineHeight: 1 }}>
       {p(k.getUTCHours())}<span className="hd-colon">:</span>{p(k.getUTCMinutes())}
       <span style={{ fontSize: 18, color: C.dim, marginLeft: 4 }}>{p(k.getUTCSeconds())}</span>
     </div>
@@ -112,8 +112,8 @@ function DeckHead({ code, title, sub, att }) {
     <div className="dd-head">
       <div style={{ minWidth: 0 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-          <span style={{ fontFamily: MONO, fontSize: 12.5, fontWeight: 800, letterSpacing: "0.28em", color: C.glow }}>{code}</span>
-          <span style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "2px 9px", borderRadius: 99, border: "1px solid rgba(143,176,240,.35)", fontFamily: MONO, fontSize: 11, fontWeight: 800, letterSpacing: "0.14em", color: C.hi }}>
+          <span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 12.5, fontWeight: 800, letterSpacing: "0.28em", color: C.glow }}>{code}</span>
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "2px 9px", borderRadius: 99, border: "1px solid rgba(143,176,240,.35)", fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 11, fontWeight: 800, letterSpacing: "0.14em", color: C.hi }}>
             <span className="hd-pulse" style={{ width: 6, height: 6, borderRadius: "50%", background: C.hi, boxShadow: `0 0 8px ${C.glow}` }} />LIVE
           </span>
         </div>
@@ -125,7 +125,7 @@ function DeckHead({ code, title, sub, att }) {
         {att && <AttendanceQuickButton {...att} variant="deck" />}
         <div style={{ textAlign: "right" }}>
           <Clock />
-          <div style={{ marginTop: 6, fontFamily: MONO, fontSize: 12.5, fontWeight: 700, letterSpacing: "0.16em", color: C.dim }}>{dateText} · KST</div>
+          <div style={{ marginTop: 6, fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 12.5, fontWeight: 700, letterSpacing: "0.16em", color: C.dim }}>{dateText} · KST</div>
         </div>
       </div>
     </div>
@@ -155,10 +155,10 @@ function KTile({ code, label, value, unit, foot, spark, bar, primary, warn }) {
       {/* ⭐ 2026-11-02 화면 점검 — 모바일(좁은 폭)에서 영문 코드가 한글 라벨을 잘라먹던 문제: 영문 코드는 sm 이상에서만 표시, 한글 라벨은 말줄임 대신 단어 단위 줄바꿈 */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, minWidth: 0 }}>
         <span className="break-keep" style={{ fontSize: 15, fontWeight: 800, color: C.sub, minWidth: 0, lineHeight: 1.3 }}>{label}</span>
-        <span className="hidden sm:inline" style={{ fontFamily: MONO, fontSize: 10.5, fontWeight: 800, letterSpacing: "0.18em", color: warn ? WARN : C.dim, whiteSpace: "nowrap", flexShrink: 0 }}>{code}</span>
+        <span className="hidden sm:inline" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 10.5, fontWeight: 800, letterSpacing: "0.18em", color: warn ? WARN : C.dim, whiteSpace: "nowrap", flexShrink: 0 }}>{code}</span>
       </div>
       <div style={{ marginTop: 10, display: "flex", alignItems: "baseline", gap: 5, minWidth: 0 }}>
-        <span style={{ fontFamily: MONO, fontSize: "clamp(24px, 2.2cqi, 34px)", fontWeight: 800, color: "#fff", letterSpacing: "-0.02em", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", textShadow: primary ? `0 0 18px rgba(143,176,240,.45)` : "none" }}>{value}</span>
+        <span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: "clamp(24px, 2.2cqi, 34px)", fontWeight: 800, color: "#fff", letterSpacing: "-0.02em", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", textShadow: primary ? `0 0 18px rgba(143,176,240,.45)` : "none" }}>{value}</span>
         {unit && <span style={{ fontSize: 14, fontWeight: 700, color: C.dim }}>{unit}</span>}
       </div>
       <div style={{ marginTop: 5, minHeight: 20, fontSize: 13.5, fontWeight: 600, color: C.dim, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{foot}</div>
@@ -180,7 +180,7 @@ function DPanel({ code, title, right, children, style }) {
         <div style={{ minWidth: 0 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <span style={{ width: 6, height: 6, borderRadius: 2, background: C.glow, transform: "rotate(45deg)", boxShadow: `0 0 8px ${C.glow}`, flexShrink: 0 }} />
-            <span style={{ fontFamily: MONO, fontSize: 11, fontWeight: 800, letterSpacing: "0.22em", color: C.dim, whiteSpace: "nowrap" }}>{code}</span>
+            <span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 11, fontWeight: 800, letterSpacing: "0.22em", color: C.dim, whiteSpace: "nowrap" }}>{code}</span>
           </div>
           <div style={{ marginTop: 4, fontSize: 18.5, fontWeight: 800, color: C.ink, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{title}</div>
         </div>
@@ -192,7 +192,7 @@ function DPanel({ code, title, right, children, style }) {
 }
 
 const Muted = ({ t, h = 120 }) => <div style={{ minHeight: h, display: "grid", placeItems: "center", textAlign: "center", fontSize: 15, fontWeight: 700, color: C.dim }}>{t}</div>;
-const SubHead = ({ children }) => <div style={{ fontFamily: MONO, fontSize: 11.5, fontWeight: 800, letterSpacing: "0.18em", color: C.glow, margin: "14px 0 6px" }}>{children}</div>;
+const SubHead = ({ children }) => <div style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 11.5, fontWeight: 800, letterSpacing: "0.18em", color: C.glow, margin: "14px 0 6px" }}>{children}</div>;
 
 // 한 줄(이름 · 보조 · 값)
 function Line2({ l, sub, v, tone, lead }) {
@@ -203,7 +203,7 @@ function Line2({ l, sub, v, tone, lead }) {
         <div style={{ fontSize: 15.5, fontWeight: 800, color: C.ink, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{l}</div>
         {sub && <div style={{ fontSize: 13, fontWeight: 600, color: C.dim, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", marginTop: 2 }}>{sub}</div>}
       </div>
-      <div style={{ flexShrink: 0, fontFamily: MONO, fontSize: 15.5, fontWeight: 800, color: tone === "warn" ? WARN : tone === "hi" ? C.hi : "#fff", whiteSpace: "nowrap" }}>{v}</div>
+      <div style={{ flexShrink: 0, fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 15.5, fontWeight: 800, color: tone === "warn" ? WARN : tone === "hi" ? C.hi : "#fff", whiteSpace: "nowrap" }}>{v}</div>
     </div>
   );
 }
@@ -213,7 +213,7 @@ function Line2({ l, sub, v, tone, lead }) {
 function TodoPanel({ code, items, onGo }) {
   const live = items.filter((x) => x[3] > 0);
   return (
-    <DPanel code={code} title="오늘 처리할 일" right={live.length ? <span style={{ fontFamily: MONO, fontSize: 13, fontWeight: 800, color: WARN }}>{live.length}건</span> : null}>
+    <DPanel code={code} title="오늘 처리할 일" right={live.length ? <span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 13, fontWeight: 800, color: WARN }}>{live.length}건</span> : null}>
       {!live.length ? (
         <div style={{ flex: 1, minHeight: 200, display: "grid", placeItems: "center", textAlign: "center" }}>
           <div>
@@ -234,7 +234,7 @@ function TodoPanel({ code, items, onGo }) {
                   <div style={{ fontSize: 15.5, fontWeight: 800, color: "#fff", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{l}</div>
                   <div style={{ fontSize: 13, fontWeight: 600, color: C.dim, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", marginTop: 2 }}>{sub}</div>
                 </div>
-                <span style={{ fontFamily: MONO, fontSize: 17, fontWeight: 800, color: "#fff", whiteSpace: "nowrap" }}>{v}</span>
+                <span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 17, fontWeight: 800, color: "#fff", whiteSpace: "nowrap" }}>{v}</span>
                 <span style={{ color: C.dim, fontSize: 16 }}>›</span>
               </div>
             </button>
@@ -266,7 +266,7 @@ const Legend = ({ c, l, v }) => (
   <div style={{ display: "flex", alignItems: "center", gap: 9, padding: "6px 0" }}>
     <span style={{ width: 10, height: 10, borderRadius: 3, background: c, flexShrink: 0 }} />
     <span style={{ fontSize: 14.5, fontWeight: 700, color: C.sub, flex: 1, whiteSpace: "nowrap" }}>{l}</span>
-    <span style={{ fontFamily: MONO, fontSize: 15.5, fontWeight: 800, color: "#fff", whiteSpace: "nowrap" }}>{v}</span>
+    <span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 15.5, fontWeight: 800, color: "#fff", whiteSpace: "nowrap" }}>{v}</span>
   </div>
 );
 
@@ -276,7 +276,7 @@ function HBar({ l, v, max, right, sub }) {
     <div style={{ padding: "7px 0" }}>
       <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 10 }}>
         <span style={{ fontSize: 15, fontWeight: 800, color: C.ink, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", minWidth: 0 }}>{l}{sub && <span style={{ fontSize: 12.5, fontWeight: 600, color: C.dim, marginLeft: 6 }}>{sub}</span>}</span>
-        <span style={{ fontFamily: MONO, fontSize: 15, fontWeight: 800, color: "#fff", whiteSpace: "nowrap" }}>{right}</span>
+        <span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 15, fontWeight: 800, color: "#fff", whiteSpace: "nowrap" }}>{right}</span>
       </div>
       <div style={{ marginTop: 6, height: 7, borderRadius: 9, background: "rgba(143,176,240,.1)", overflow: "hidden" }}>
         <div style={{ width: `${Math.max(2, (v / Math.max(1, max)) * 100)}%`, height: "100%", borderRadius: 9, background: "linear-gradient(90deg,#2D4C82,#8FB0F0)", boxShadow: "0 0 8px rgba(143,176,240,.45)" }} />
@@ -289,10 +289,10 @@ function DarkTip({ active, payload, label, unit = "원" }) {
   if (!active || !payload?.length) return null;
   return (
     <div style={{ background: "rgba(11,20,40,.96)", border: `1px solid ${C.line}`, borderRadius: 10, padding: "10px 13px", boxShadow: "0 10px 26px rgba(0,0,0,.35)" }}>
-      <div style={{ fontFamily: MONO, fontSize: 12.5, color: C.dim, marginBottom: 5 }}>{label}</div>
+      <div style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 12.5, color: C.dim, marginBottom: 5 }}>{label}</div>
       {payload.map((p) => (
         <div key={p.dataKey} style={{ display: "flex", justifyContent: "space-between", gap: 18, fontSize: 14, fontWeight: 700, color: C.ink }}>
-          <span style={{ color: C.sub }}>{p.name}</span><span style={{ fontFamily: MONO }}>{won(p.value)}{unit}</span>
+          <span style={{ color: C.sub }}>{p.name}</span><span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{won(p.value)}{unit}</span>
         </div>
       ))}
     </div>
@@ -301,7 +301,7 @@ function DarkTip({ active, payload, label, unit = "원" }) {
 const dDay = (d, today) => { const n = Math.round((new Date(`${d}T00:00:00Z`) - new Date(`${today}T00:00:00Z`)) / 864e5); return n === 0 ? "D-DAY" : n > 0 ? `D-${n}` : `D+${-n}`; };
 const DBadge = ({ d, today, big }) => {
   const on = d === today;
-  return <span style={{ width: 64, height: 34, flexShrink: 0, borderRadius: 9, display: "grid", placeItems: "center", fontFamily: MONO, fontSize: 13, fontWeight: 800, color: on ? "#0B1428" : big ? "#fff" : C.hi, background: on ? WARN : big ? "linear-gradient(135deg,#2D4C82,#4B6CB7)" : "rgba(143,176,240,.08)", border: `1px solid ${on ? WARN : "rgba(143,176,240,.22)"}`, boxShadow: big ? "0 0 12px rgba(110,149,232,.3)" : "none" }}>{dDay(d, today)}</span>;
+  return <span style={{ width: 64, height: 34, flexShrink: 0, borderRadius: 9, display: "grid", placeItems: "center", fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 13, fontWeight: 800, color: on ? "#0B1428" : big ? "#fff" : C.hi, background: on ? WARN : big ? "linear-gradient(135deg,#2D4C82,#4B6CB7)" : "rgba(143,176,240,.08)", border: `1px solid ${on ? WARN : "rgba(143,176,240,.22)"}`, boxShadow: big ? "0 0 12px rgba(110,149,232,.3)" : "none" }}>{dDay(d, today)}</span>;
 };
 
 // ─────────────────────────── 경리·회계 ───────────────────────────
@@ -454,15 +454,15 @@ function AcctDashboard({ company, dispatchData = [], onGo, me, att }) {
     <Deck>
       <DeckHead code={<LogisTag height={9} text="FINANCE DECK" />} att={att}
         title={myName ? `${myName}님, 오늘의 자금 흐름입니다` : "오늘의 자금 흐름입니다"}
-        sub={/* ⭐ 2026-11-02 화면 점검 — 항목(라벨+금액) 단위로 묶어 "지급 대기 / 0원"처럼 중간에서 줄바뀜 방지 */ <><span className="whitespace-nowrap">이번 달 매출 <b style={{ color: "#fff", fontFamily: MONO }}>{won(cur[0])}</b>원</span> · <span className="whitespace-nowrap">수익 <b style={{ color: "#fff", fontFamily: MONO }}>{won(cur[0] - cur[1])}</b>원</span> · <span className="whitespace-nowrap">미수 <b style={{ color: "#fff", fontFamily: MONO }}>{short(arSum)}</b>원</span> · <span className="whitespace-nowrap">지급 대기 <b style={{ color: "#fff", fontFamily: MONO }}>{short(apSum)}</b>원</span></>} />
+        sub={/* ⭐ 2026-11-02 화면 점검 — 항목(라벨+금액) 단위로 묶어 "지급 대기 / 0원"처럼 중간에서 줄바뀜 방지 */ <><span className="whitespace-nowrap">이번 달 매출 <b style={{ color: "#fff", fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{won(cur[0])}</b>원</span> · <span className="whitespace-nowrap">수익 <b style={{ color: "#fff", fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{won(cur[0] - cur[1])}</b>원</span> · <span className="whitespace-nowrap">미수 <b style={{ color: "#fff", fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{short(arSum)}</b>원</span> · <span className="whitespace-nowrap">지급 대기 <b style={{ color: "#fff", fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{short(apSum)}</b>원</span></>} />
 
       <div className="dd-kpi">
         <KTile primary code="CASH" label="보유 자금" value={F.has ? short(F.cash) : "미입력"} unit={F.has ? "원" : ""}
-          foot={F.has ? <>이번 달 수입 <b style={{ color: C.hi, fontFamily: MONO }}>{short(inSum)}</b> · 지출 <b style={{ color: C.hi, fontFamily: MONO }}>{short(outSum)}</b></> : "자금관리에서 통장 잔액 입력"}
+          foot={F.has ? <>이번 달 수입 <b style={{ color: C.hi, fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{short(inSum)}</b> · 지출 <b style={{ color: C.hi, fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{short(outSum)}</b></> : "자금관리에서 통장 잔액 입력"}
           spark={(F.monthly || []).map((x) => x.in - x.out)} />
         <KTile code="REVENUE" label="이번 달 매출" value={short(cur[0])} unit="원" foot={`${cur[2].toLocaleString()}건 · 전월 ${short(prev[0])}원`} spark={six.map((x) => x.sale)} />
         <KTile code="PAYOUT" label="매입(기사운임)" value={short(cur[1])} unit="원" foot={`전월 ${short(prev[1])}원`} spark={six.map((x) => x.buy)} />
-        <KTile code="PROFIT" label="이번 달 수익" value={short(cur[0] - cur[1])} unit="원" foot={<>매익률 <b style={{ fontFamily: MONO, color: C.hi }}>{rate.toFixed(1)}%</b></>} spark={six.map((x) => x.profit)} />
+        <KTile code="PROFIT" label="이번 달 수익" value={short(cur[0] - cur[1])} unit="원" foot={<>매익률 <b style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", color: C.hi }}>{rate.toFixed(1)}%</b></>} spark={six.map((x) => x.profit)} />
         <KTile code="RECEIVABLE" label="미수금" value={short(arSum)} unit="원" warn={arSum > 0} foot={`${arByClient.length}곳 · 지난 2개월 매출의 ${pctOf(arSum, six[3].sale + six[4].sale)}%`} bar={pctOf(arSum, six[3].sale + six[4].sale)} />
         <KTile code="PAYABLE" label="미지급(용차)" value={short(apSum)} unit="원" warn={apSum > 0} foot={`${ap.length}건 · 지급률 ${pctOf(paidSum, paidSum + apSum)}%`} bar={pctOf(paidSum, paidSum + apSum)} />
       </div>
@@ -471,7 +471,7 @@ function AcctDashboard({ company, dispatchData = [], onGo, me, att }) {
         <DPanel code="TREND · 6M" title="월별 매출 · 매입 · 수익" right={<button type="button" className="dd-link" disabled={H.loading} onClick={H.reload}>{H.loading ? "불러오는 중…" : "새로 고침"}</button>}>
           <div style={{ display: "flex", gap: 22, flexWrap: "wrap", marginBottom: 10 }}>
             {[["6개월 매출", sixSum[0]], ["6개월 매입", sixSum[1]], ["6개월 수익", sixSum[2]]].map(([l, v]) => (
-              <div key={l}><div style={{ fontSize: 13.5, fontWeight: 700, color: C.dim }}>{l}</div><div style={{ fontFamily: MONO, fontSize: 22, fontWeight: 800, color: "#fff" }}>{short(v)}<span style={{ fontSize: 13, color: C.dim, marginLeft: 3 }}>원</span></div></div>
+              <div key={l}><div style={{ fontSize: 13.5, fontWeight: 700, color: C.dim }}>{l}</div><div style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 22, fontWeight: 800, color: "#fff" }}>{short(v)}<span style={{ fontSize: 13, color: C.dim, marginLeft: 3 }}>원</span></div></div>
             ))}
             <div style={{ marginLeft: "auto", display: "flex", alignItems: "flex-end", gap: 14, fontSize: 13.5, fontWeight: 700, color: C.sub }}>
               <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><span style={{ width: 10, height: 10, borderRadius: 3, background: "#4B6CB7" }} />매출</span>
@@ -485,7 +485,7 @@ function AcctDashboard({ company, dispatchData = [], onGo, me, att }) {
                 <ComposedChart data={six} margin={{ top: 8, right: 6, left: 0, bottom: 0 }} barGap={4}>
                   <CartesianGrid stroke="rgba(143,176,240,.08)" vertical={false} />
                   <XAxis dataKey="k" tick={{ fill: C.sub, fontSize: 13, fontWeight: 700 }} axisLine={false} tickLine={false} />
-                  <YAxis tickFormatter={short} tick={{ fill: C.dim, fontSize: 12, fontFamily: MONO }} axisLine={false} tickLine={false} width={58} />
+                  <YAxis tickFormatter={short} tick={{ fill: C.dim, fontSize: 12, fontFamily: MONO, fontVariantNumeric: "tabular-nums" }} axisLine={false} tickLine={false} width={58} />
                   <Tooltip content={<DarkTip />} cursor={{ fill: "rgba(143,176,240,.06)" }} />
                   <Bar dataKey="sale" name="매출" radius={[6, 6, 0, 0]} maxBarSize={34} isAnimationActive={false}>
                     {six.map((x) => <Cell key={x.m} fill={x.m === ym ? "#6E95E8" : "#3A5A9A"} />)}
@@ -506,7 +506,7 @@ function AcctDashboard({ company, dispatchData = [], onGo, me, att }) {
           {!H.ready ? <Muted t="불러오는 중…" /> : !arByClient.length ? <Muted t="정산 전 거래처가 없습니다" /> : (
             <>
               <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 6 }}>
-                <span style={{ fontFamily: MONO, fontSize: 26, fontWeight: 800, color: "#fff" }}>{won(arSum)}</span><span style={{ fontSize: 14, color: C.dim, fontWeight: 700 }}>원 · {arByClient.length}곳</span>
+                <span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 26, fontWeight: 800, color: "#fff" }}>{won(arSum)}</span><span style={{ fontSize: 14, color: C.dim, fontWeight: 700 }}>원 · {arByClient.length}곳</span>
               </div>
               {arByClient.slice(0, 6).map((x) => <HBar key={x.c} l={x.c} sub={`${x.ms.sort((a, b) => a - b).join("·")}월 · ${x.n}건`} v={x.amt} max={arByClient[0].amt} right={`${short(x.amt)}원`} />)}
             </>
@@ -529,7 +529,7 @@ function AcctDashboard({ company, dispatchData = [], onGo, me, att }) {
                 <div key={x.m} style={{ padding: "6px 0" }}>
                   <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14.5, fontWeight: 800 }}>
                     <span style={{ color: C.ink }}>{Number(x.m.slice(5))}월 <span style={{ fontSize: 12.5, color: C.dim, fontWeight: 600 }}>{x.n}건</span></span>
-                    <span style={{ fontFamily: MONO, color: "#fff" }}>{short(x.done)} <span style={{ color: C.dim }}>/ {short(x.done + x.wait)}</span></span>
+                    <span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", color: "#fff" }}>{short(x.done)} <span style={{ color: C.dim }}>/ {short(x.done + x.wait)}</span></span>
                   </div>
                   <div style={{ marginTop: 6, height: 7, borderRadius: 9, background: "rgba(247,185,85,.28)", overflow: "hidden" }}>
                     <div style={{ width: `${pctOf(x.done, x.done + x.wait)}%`, height: "100%", background: `linear-gradient(90deg,#4B6CB7,${C.hi})` }} />
@@ -543,8 +543,8 @@ function AcctDashboard({ company, dispatchData = [], onGo, me, att }) {
           {!F.has ? <Muted t="자금관리에서 통장·현금 잔액을 입력하면 여기에 보입니다" /> : (
             <>
               <div style={{ display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap" }}>
-                <span style={{ fontFamily: MONO, fontSize: 26, fontWeight: 800, color: "#fff" }}>{won(F.cash)}</span><span style={{ fontSize: 14, color: C.dim, fontWeight: 700 }}>원 보유</span>
-                {F.runway != null && <span style={{ marginLeft: "auto", fontFamily: MONO, fontSize: 13, fontWeight: 800, color: C.hi }}>RUNWAY {F.runway.toFixed(1)}M</span>}
+                <span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 26, fontWeight: 800, color: "#fff" }}>{won(F.cash)}</span><span style={{ fontSize: 14, color: C.dim, fontWeight: 700 }}>원 보유</span>
+                {F.runway != null && <span style={{ marginLeft: "auto", fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 13, fontWeight: 800, color: C.hi }}>RUNWAY {F.runway.toFixed(1)}M</span>}
               </div>
               {banks.map((f) => <HBar key={f.id} l={f.name || f.bank || "계좌"} sub={f.bank && f.name !== f.bank ? f.bank : ""} v={Math.abs(f.balance || 0)} max={bankMax} right={`${short(f.balance || 0)}원`} />)}
               <SubHead>CASH FLOW · 3M</SubHead>
@@ -555,8 +555,8 @@ function AcctDashboard({ company, dispatchData = [], onGo, me, att }) {
                       <span title={`수입 ${won(x.in)}원`} style={{ width: 14, height: `${Math.max(3, (x.in / mx) * 100)}%`, borderRadius: "4px 4px 0 0", background: C.hi, boxShadow: `0 0 8px ${C.glow}` }} />
                       <span title={`지출 ${won(x.out)}원`} style={{ width: 14, height: `${Math.max(3, (x.out / mx) * 100)}%`, borderRadius: "4px 4px 0 0", background: "rgba(143,176,240,.3)" }} />
                     </div>
-                    <div style={{ fontFamily: MONO, fontSize: 12.5, fontWeight: 800, color: C.sub, marginTop: 4 }}>{Number(x.m.slice(5))}월</div>
-                    <div style={{ fontFamily: MONO, fontSize: 12, color: x.in - x.out >= 0 ? C.hi : WARN }}>{x.in - x.out >= 0 ? "+" : ""}{short(x.in - x.out)}</div>
+                    <div style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 12.5, fontWeight: 800, color: C.sub, marginTop: 4 }}>{Number(x.m.slice(5))}월</div>
+                    <div style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 12, color: x.in - x.out >= 0 ? C.hi : WARN }}>{x.in - x.out >= 0 ? "+" : ""}{short(x.in - x.out)}</div>
                   </div>
                 ); })}
               </div>
@@ -570,7 +570,7 @@ function AcctDashboard({ company, dispatchData = [], onGo, me, att }) {
           {!expPending.length ? <Muted t="기다리는 지출결의가 없습니다" /> : (
             <>
               <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 4 }}>
-                <span style={{ fontFamily: MONO, fontSize: 26, fontWeight: 800, color: "#fff" }}>{expPending.length}</span><span style={{ fontSize: 14, color: C.dim, fontWeight: 700 }}>건 · 합계 {short(expPendingSum)}원</span>
+                <span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 26, fontWeight: 800, color: "#fff" }}>{expPending.length}</span><span style={{ fontSize: 14, color: C.dim, fontWeight: 700 }}>건 · 합계 {short(expPendingSum)}원</span>
               </div>
               {expPending.slice(0, 5).map((a) => {
                 const days = Math.floor((Date.now() - tsMs(a.createdAt)) / 864e5);
@@ -583,7 +583,7 @@ function AcctDashboard({ company, dispatchData = [], onGo, me, att }) {
           {!accTop.length ? <Muted t="이번 달 지출 기록이 없습니다" /> : (
             <>
               <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 4 }}>
-                <span style={{ fontFamily: MONO, fontSize: 26, fontWeight: 800, color: "#fff" }}>{won(outSum)}</span><span style={{ fontSize: 14, color: C.dim, fontWeight: 700 }}>원 지출</span>
+                <span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 26, fontWeight: 800, color: "#fff" }}>{won(outSum)}</span><span style={{ fontSize: 14, color: C.dim, fontWeight: 700 }}>원 지출</span>
               </div>
               {accTop.map(([a, v]) => <HBar key={a} l={a} v={v} max={accTop[0][1]} right={`${short(v)}원`} sub={`${pctOf(v, outSum)}%`} />)}
             </>
@@ -595,7 +595,7 @@ function AcctDashboard({ company, dispatchData = [], onGo, me, att }) {
               <DBadge d={e.d} today={today} big={e.big} />
               <div style={{ minWidth: 0, flex: 1 }}>
                 <div style={{ fontSize: 15.5, fontWeight: 800, color: C.ink, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{e.t}</div>
-                <div style={{ fontSize: 13, fontWeight: 600, color: C.dim, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", marginTop: 2 }}><span style={{ fontFamily: MONO }}>{e.d.slice(5).replace("-", ".")}</span> · {e.s}</div>
+                <div style={{ fontSize: 13, fontWeight: 600, color: C.dim, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", marginTop: 2 }}><span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{e.d.slice(5).replace("-", ".")}</span> · {e.s}</div>
               </div>
             </div>
           ))}
@@ -706,11 +706,11 @@ function HrDashboard({ company, onGo, me, att }) {
     <Deck>
       <DeckHead code={<LogisTag height={9} text="PEOPLE DECK" />} att={att}
         title={myName ? `${myName}님, 오늘의 인사 현황입니다` : "오늘의 인사 현황입니다"}
-        sub={<>재직 <b style={{ color: "#fff", fontFamily: MONO }}>{active.length}</b>명 · 출근 <b style={{ color: "#fff", fontFamily: MONO }}>{inN + lateN}</b>명 · 휴가·부재 <b style={{ color: "#fff", fontFamily: MONO }}>{awayN}</b>명 · 이번 달 연차 <b style={{ color: "#fff", fontFamily: MONO }}>{usedDays}</b>일 사용</>} />
+        sub={<>재직 <b style={{ color: "#fff", fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{active.length}</b>명 · 출근 <b style={{ color: "#fff", fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{inN + lateN}</b>명 · 휴가·부재 <b style={{ color: "#fff", fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{awayN}</b>명 · 이번 달 연차 <b style={{ color: "#fff", fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{usedDays}</b>일 사용</>} />
 
       <div className="dd-kpi">
         <KTile primary code="HEADCOUNT" label="재직 인원" value={active.length} unit="명" foot={`이번 달 입사 ${joined.length} · 퇴사 ${left.length}`} bar={pctOf(working.length, active.length)} />
-        <KTile code="CHECK-IN" label="오늘 출근" value={`${inN + lateN}`} unit={`/ ${working.length}명`} foot={<>출근률 <b style={{ fontFamily: MONO, color: C.hi }}>{inRate}%</b>{lateN ? ` · 지각 ${lateN}` : ""}</>} bar={inRate} />
+        <KTile code="CHECK-IN" label="오늘 출근" value={`${inN + lateN}`} unit={`/ ${working.length}명`} foot={<>출근률 <b style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", color: C.hi }}>{inRate}%</b>{lateN ? ` · 지각 ${lateN}` : ""}</>} bar={inRate} />
         <KTile code="AWAY" label="휴가·부재" value={awayN} unit="명" foot="휴가·반차·외근·출장" bar={pctOf(awayN, working.length)} />
         <KTile code="ON LEAVE" label="휴직" value={onLeave.length} unit="명" foot={onLeave.length ? onLeave.slice(0, 2).map((u) => `${nm(u)}(${u.employmentStatus})`).join(" · ") : "휴직·육아휴직·출산휴가"} bar={pctOf(onLeave.length, active.length)} />
         <KTile code="LEAVING" label="퇴사 예정" value={resignPlanned.length} unit="명" warn={resignPlanned.length > 0} foot={resignPlanned[0] ? `${nm(resignPlanned[0])} · ${resignPlanned[0].resignPlan.date}` : "예정 없음"} bar={pctOf(resignPlanned.length, active.length)} />
@@ -739,7 +739,7 @@ function HrDashboard({ company, onGo, me, att }) {
                       <span style={{ display: "block", fontSize: 15, fontWeight: 800, color: C.ink, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{nm(u)}</span>
                       <span style={{ display: "block", fontSize: 12.5, fontWeight: 600, color: C.dim, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{[u.team, u.position].filter(Boolean).join(" · ") || "-"}</span>
                     </span>
-                    <span style={{ flexShrink: 0, padding: "4px 9px", borderRadius: 8, fontSize: 12.5, fontWeight: 800, whiteSpace: "nowrap", background: TONE[tone].bg, color: TONE[tone].c, border: `1px solid ${TONE[tone].b}` }}>{s}{t ? <span style={{ fontFamily: MONO, marginLeft: 4 }}>{t}</span> : null}</span>
+                    <span style={{ flexShrink: 0, padding: "4px 9px", borderRadius: 8, fontSize: 12.5, fontWeight: 800, whiteSpace: "nowrap", background: TONE[tone].bg, color: TONE[tone].c, border: `1px solid ${TONE[tone].b}` }}>{s}{t ? <span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", marginLeft: 4 }}>{t}</span> : null}</span>
                   </div>
                 ))}
               </div>
@@ -752,14 +752,14 @@ function HrDashboard({ company, onGo, me, att }) {
       <div className="dd-row r3">
         <DPanel code="LEAVE · MTD" title="이번 달 연차 사용" right={<button type="button" className="dd-link" onClick={() => onGo?.("인사관리부:leave")}>연차 관리 ›</button>}>
           <div style={{ display: "flex", gap: 22, flexWrap: "wrap", marginBottom: 8 }}>
-            <div><div style={{ fontSize: 13.5, fontWeight: 700, color: C.dim }}>사용 일수</div><div style={{ fontFamily: MONO, fontSize: 26, fontWeight: 800, color: "#fff" }}>{usedDays}<span style={{ fontSize: 13.5, color: C.dim, marginLeft: 3 }}>일</span></div></div>
-            <div><div style={{ fontSize: 13.5, fontWeight: 700, color: C.dim }}>사용 인원</div><div style={{ fontFamily: MONO, fontSize: 26, fontWeight: 800, color: "#fff" }}>{usedBy.length}<span style={{ fontSize: 13.5, color: C.dim, marginLeft: 3 }}>명</span></div></div>
-            <div><div style={{ fontSize: 13.5, fontWeight: 700, color: C.dim }}>결재 대기</div><div style={{ fontFamily: MONO, fontSize: 26, fontWeight: 800, color: leavePending.length ? WARN : "#fff" }}>{leavePending.length}<span style={{ fontSize: 13.5, color: C.dim, marginLeft: 3 }}>건</span></div></div>
+            <div><div style={{ fontSize: 13.5, fontWeight: 700, color: C.dim }}>사용 일수</div><div style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 26, fontWeight: 800, color: "#fff" }}>{usedDays}<span style={{ fontSize: 13.5, color: C.dim, marginLeft: 3 }}>일</span></div></div>
+            <div><div style={{ fontSize: 13.5, fontWeight: 700, color: C.dim }}>사용 인원</div><div style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 26, fontWeight: 800, color: "#fff" }}>{usedBy.length}<span style={{ fontSize: 13.5, color: C.dim, marginLeft: 3 }}>명</span></div></div>
+            <div><div style={{ fontSize: 13.5, fontWeight: 700, color: C.dim }}>결재 대기</div><div style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 26, fontWeight: 800, color: leavePending.length ? WARN : "#fff" }}>{leavePending.length}<span style={{ fontSize: 13.5, color: C.dim, marginLeft: 3 }}>건</span></div></div>
           </div>
           <div style={{ height: 110, margin: "0 -4px" }}>
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={monthDaily} margin={{ top: 6, right: 4, left: 4, bottom: 0 }}>
-                <XAxis dataKey="k" tick={{ fill: C.dim, fontSize: 11, fontFamily: MONO }} axisLine={false} tickLine={false} interval={4} />
+                <XAxis dataKey="k" tick={{ fill: C.dim, fontSize: 11, fontFamily: MONO, fontVariantNumeric: "tabular-nums" }} axisLine={false} tickLine={false} interval={4} />
                 <Tooltip content={<DarkTip unit="명" />} cursor={{ fill: "rgba(143,176,240,.06)" }} />
                 <Bar dataKey="n" name="부재 인원" radius={[3, 3, 0, 0]} isAnimationActive={false}>
                   {monthDaily.map((x) => <Cell key={x.d} fill={x.d === today ? C.hi : x.d < today ? "#4B6CB7" : "rgba(143,176,240,.3)"} />)}
@@ -778,7 +778,7 @@ function HrDashboard({ company, onGo, me, att }) {
                 <div key={d} style={{ display: "flex", alignItems: "center", gap: 12, padding: "8px 10px", borderRadius: 12, border: `1px solid ${d === today ? "rgba(143,176,240,.45)" : C.line}`, background: d === today ? "rgba(143,176,240,.08)" : "transparent" }}>
                   <div style={{ width: 46, flexShrink: 0, textAlign: "center" }}>
                     <div style={{ fontSize: 12, fontWeight: 800, color: dow === 0 ? "#F29C9C" : dow === 6 ? C.glow : C.dim }}>{"일월화수목금토"[dow]}</div>
-                    <div style={{ fontFamily: MONO, fontSize: 19, fontWeight: 800, color: "#fff", lineHeight: 1.1 }}>{Number(d.slice(8))}</div>
+                    <div style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 19, fontWeight: 800, color: "#fff", lineHeight: 1.1 }}>{Number(d.slice(8))}</div>
                   </div>
                   <div style={{ flex: 1, minWidth: 0, display: "flex", flexWrap: "wrap", gap: 5 }}>
                     {!list.length ? <span style={{ fontSize: 13.5, color: C.dim, fontWeight: 600 }}>전원 근무</span> : list.slice(0, 4).map((e) => (
@@ -799,14 +799,14 @@ function HrDashboard({ company, onGo, me, att }) {
                   <DBadge d={e.d} today={today} big={e.hot} />
                   <div style={{ minWidth: 0, flex: 1 }}>
                     <div style={{ fontSize: 15.5, fontWeight: 800, color: C.ink, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{e.l}</div>
-                    <div style={{ fontSize: 13, fontWeight: 600, color: C.dim, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", marginTop: 2 }}><span style={{ fontFamily: MONO }}>{e.d.slice(5).replace("-", ".")}</span>{e.sub ? ` · ${e.sub}` : ""}</div>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: C.dim, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", marginTop: 2 }}><span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{e.d.slice(5).replace("-", ".")}</span>{e.sub ? ` · ${e.sub}` : ""}</div>
                   </div>
-                  <span style={{ flexShrink: 0, fontFamily: MONO, fontSize: 11, fontWeight: 800, letterSpacing: "0.1em", color: e.warn ? WARN : C.glow, padding: "3px 7px", borderRadius: 6, border: `1px solid ${e.warn ? "rgba(247,185,85,.4)" : "rgba(143,176,240,.3)"}` }}>{e.tag}</span>
+                  <span style={{ flexShrink: 0, fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 11, fontWeight: 800, letterSpacing: "0.1em", color: e.warn ? WARN : C.glow, padding: "3px 7px", borderRadius: 6, border: `1px solid ${e.warn ? "rgba(247,185,85,.4)" : "rgba(143,176,240,.3)"}` }}>{e.tag}</span>
                 </div>
               ))}
             </div>
           )}
-          {promote.length > 0 && <div style={{ marginTop: 10, fontSize: 13.5, fontWeight: 700, color: C.sub }}>연차 사용 촉진 대상 <b style={{ fontFamily: MONO, color: WARN }}>{promote.length}</b>명 · {promote.slice(0, 3).map((p) => `${nm(p.u)}(${p.remain}일)`).join(", ")}</div>}
+          {promote.length > 0 && <div style={{ marginTop: 10, fontSize: 13.5, fontWeight: 700, color: C.sub }}>연차 사용 촉진 대상 <b style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", color: WARN }}>{promote.length}</b>명 · {promote.slice(0, 3).map((p) => `${nm(p.u)}(${p.remain}일)`).join(", ")}</div>}
         </DPanel>
       </div>
 
@@ -818,7 +818,7 @@ function HrDashboard({ company, onGo, me, att }) {
           <div style={{ display: "grid", gridTemplateColumns: "repeat(5, minmax(0,1fr))", gap: 10, alignItems: "end", height: 190 }}>
             {tenure.map(([l, n], i) => (
               <div key={l} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6, height: "100%", justifyContent: "flex-end" }}>
-                <span style={{ fontFamily: MONO, fontSize: 18, fontWeight: 800, color: "#fff" }}>{n}</span>
+                <span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 18, fontWeight: 800, color: "#fff" }}>{n}</span>
                 <div style={{ width: "62%", height: `${Math.max(4, (n / tenureMax) * 120)}px`, borderRadius: "8px 8px 0 0", background: i === 4 ? "rgba(247,185,85,.35)" : "linear-gradient(180deg,#8FB0F0,#2D4C82)", boxShadow: i === 4 ? "none" : "0 0 12px rgba(143,176,240,.3)" }} />
                 <span style={{ fontSize: 13, fontWeight: 700, color: C.sub, whiteSpace: "nowrap" }}>{l}</span>
               </div>

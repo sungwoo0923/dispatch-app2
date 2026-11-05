@@ -1100,7 +1100,7 @@ export default function StandardFare({ embedded = false, defaultTab = "표준운
           {/* ───────── 왼쪽: 검색 패널 ───────── */}
           <div className="bg-white rounded-[22px] border border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_12px_30px_rgba(16,24,40,0.07)] p-5 md:sticky md:top-4 min-w-0">
             <div className="mb-4">
-              <div className="text-[10.5px] font-extrabold tracking-[0.28em] text-[#4B6CB7]" style={{ fontFamily: "'JetBrains Mono','SF Mono',ui-monospace,monospace" }}>SEARCH</div>
+              <div className="text-[10.5px] font-extrabold tracking-[0.28em] text-[#4B6CB7]" style={{ fontFamily: "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif", fontVariantNumeric: "tabular-nums" }}>SEARCH</div>
               <div className="text-[17px] font-black text-[#0F1A30]">조회 조건</div>
             </div>
 

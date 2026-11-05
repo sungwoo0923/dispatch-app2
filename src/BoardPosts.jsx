@@ -14,7 +14,7 @@ import { ShellIcon } from "./AdminShell";
 import { compressImage } from "./InternalMail";
 import PostComments, { PostLikeButton, PostCounts } from "./PostComments"; // 💬 2026-11-03 댓글·대댓글·좋아요
 
-const MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
+const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
 const toMs = (v) => (v?.toMillis ? v.toMillis() : typeof v === "number" ? v : v?.seconds ? v.seconds * 1000 : 0);
 const fmt = (ms, full) => {
   if (!ms) return "";
@@ -122,7 +122,7 @@ export default function BoardPage({ company, me, board }) {
       <div className="relative overflow-hidden rounded-[22px] px-7 py-5 text-white flex items-center justify-between gap-4 flex-wrap shadow-[0_14px_32px_rgba(15,26,48,0.25)]"
         style={{ background: "linear-gradient(rgba(143,176,240,.07) 1px, transparent 1px) 0 0/22px 22px, linear-gradient(90deg, rgba(143,176,240,.07) 1px, transparent 1px) 0 0/22px 22px, linear-gradient(120deg,#0B1428 0%,#1B2B4B 60%,#2D4C82 100%)" }}>
         <div>
-          <div className="text-[11px] font-extrabold tracking-[0.26em] text-[#8FB0F0]" style={{ fontFamily: MONO }}>BOARD · {B.en}</div>
+          <div className="text-[11px] font-extrabold tracking-[0.26em] text-[#8FB0F0]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>BOARD · {B.en}</div>
           <div className="text-[24px] font-black mt-0.5">{B.label}</div>
           <div className="text-[13px] text-white/60 mt-0.5">{B.desc}</div>
         </div>
@@ -130,7 +130,7 @@ export default function BoardPage({ company, me, board }) {
           {[["전체 글", (posts || []).length], ["오늘 새 글", (posts || []).filter(isNew).length]].map(([l, v]) => (
             <div key={l} className="min-w-[84px] max-sm:flex-1 px-4 py-2.5 rounded-2xl bg-white/[0.07] border border-white/10">
               <div className="text-[11.5px] font-bold text-white/55 whitespace-nowrap truncate">{l}</div>
-              <div className="text-[20px] font-black tabular-nums" style={{ fontFamily: MONO }}>{v}</div>
+              <div className="text-[20px] font-black tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{v}</div>
             </div>
           ))}
           <button type="button" onClick={() => { setForm({ title: "", content: "", images: [], pinned: false }); setOpenId(null); }} className="h-11 px-5 rounded-xl bg-white text-[#0F1A30] text-[13.5px] font-black inline-flex items-center justify-center gap-2 whitespace-nowrap shrink-0 max-sm:flex-1 shadow-[0_8px_18px_rgba(0,0,0,0.25)]"><ShellIcon name="pen" size={15} />글쓰기</button>

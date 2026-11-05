@@ -29,6 +29,15 @@ const CARS = [["카고", "5톤"], ["윙바디", "11톤"], ["냉동탑", "2.5톤"
 const NAMES = ["김철수", "이영희", "박민준", "최서연", "정우성", "한지민"];
 
 let demoCo = "";
+// ⭐ 2026-11-05 기사앱 수락/거절 알림 점검 — 둘러보기 사용자(uid "preview")가 등록한 오더 3건에 기사 수락/거절 기록
+//  i=1 수락(2분 전 → 토스트) · i=3 거절(1분 전 · 사유 → 토스트, 차량 비움) · i=7 수락(40분 전 → 숫자만)
+function demoAck(i) {
+  const at = (min) => Date.now() - min * 60000;
+  if (i === 1) return { createdByUid: "preview", 기사확인상태: "수락", 기사확인일시: { seconds: Math.floor(at(2) / 1000), nanoseconds: 0 }, 기사타임라인: [{ type: "수락", at: at(2), by: NAMES[1] }] };
+  if (i === 3) return { createdByUid: "preview", 기사확인상태: "거절", 기사거절사유: "차량 정비 중이라 오늘 상차 불가합니다", 기사확인일시: { seconds: Math.floor(at(1) / 1000), nanoseconds: 0 }, 기사타임라인: [{ type: "거절", at: at(1), by: NAMES[3], detail: "차량 정비 중이라 오늘 상차 불가합니다" }] };
+  if (i === 7) return { createdByUid: "preview", 기사확인상태: "수락", 기사확인일시: { seconds: Math.floor(at(40) / 1000), nanoseconds: 0 }, 기사타임라인: [{ type: "수락", at: at(40), by: NAMES[1] }] };
+  return {};
+}
 function fakeDoc(col, id, data0) {
   const data = { ...data0, companyName: demoCo };
   const ref = { id, type: "document", path: `${col}/${id}`, parent: { id: col, type: "collection" } };
@@ -59,6 +68,7 @@ function orders(col) {
       메모: i % 4 === 0 ? "상차지 도착 전 담당자에게 꼭 전화 부탁드립니다. 지게차 상차, 하차는 수작업" : "",
       지급방식: ["계산서", "착불", "선불", "손실"][i % 4], 배차방식: ["24시", "직접배차", "인성", "고정"][i % 4],
       등록자명: NAMES[(i + 2) % NAMES.length], 혼적여부: i % 5 === 0 ? "혼적" : "독차",
+      ...(col === "dispatch" ? demoAck(i) : {}),
     }));
   }
   return out;
@@ -139,7 +149,12 @@ function demoTracks() {
 
 export function demoDocsFor(col) {
   if (col === "users") return DEMO_SIGNUPS.map((u) => fakeDoc(col, u.id, { uid: u.id, role: "driver", email: `${u.carNo}@driver.run25.kr`, vehicleType: `${u.차량종류} ${u.차량톤수}`, termsAgreed: true, privacyAgreed: true, gpsAgreed: true, createdAt: demoTs(u.at), ...u, at: undefined }));
-  if (col === "driver_documents") return [fakeDoc(col, "demo-dd-0", { driverId: "demo-u-0", docType: "bizReg", docLabel: "사업자등록증", status: "제출", fileName: "사업자등록증.jpg", fileType: "image/svg+xml", dataUrl: BIZ_SVG, uploadedAt: demoTs(2) })];
+  if (col === "driver_documents") return [fakeDoc(col, "demo-dd-0", { driverId: "demo-u-0", docType: "bizReg", docLabel: "사업자등록증", status: "제출", fileName: "사업자등록증.jpg", fileType: "image/svg+xml", dataUrl: BIZ_SVG, uploadedAt: demoTs(2) }),
+    // ⭐ 2026-11-05 기사앱 서류 업로드 알림 점검 — 방금(3분 전) · 25분 전에 올라온 검토 대기 서류
+    fakeDoc(col, "demo-dd-1", { driverId: "demo-u-3", docType: "license", docLabel: "운전면허증", status: "제출", fileName: "운전면허증.jpg", fileType: "image/svg+xml", dataUrl: BIZ_SVG, uploadedAt: demoTs(3 / 1440), by: "기사앱" }),
+    fakeDoc(col, "demo-dd-2", { driverId: "demo-u-3", docType: "carInsurance", docLabel: "자동차보험 증권", status: "제출", fileName: "보험.jpg", fileType: "image/svg+xml", dataUrl: BIZ_SVG, uploadedAt: demoTs(25 / 1440), by: "기사앱" })];
+  // ⭐ 2026-11-05 긴급상황 알림 점검 — 미처리 1건
+  if (col === "emergency_alerts") return [fakeDoc(col, "demo-sos-0", { uid: "demo-drv-1", driverName: NAMES[1], carNo: "경기81바1037", location: { lat: 36.812, lng: 127.147 }, timestamp: demoTs(6 / 1440), resolved: false })];
   if (col === "dispatch") return demoRouteOn() ? [...orders("dispatch"), ...routeOrders()] : orders("dispatch");
   if (col === "routeBoards" && demoRouteOn()) return [routeBoard()];
   if (col === "drivers") return [

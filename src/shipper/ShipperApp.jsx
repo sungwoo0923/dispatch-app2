@@ -28,7 +28,7 @@ import "../pcTheme.css";
 import "../kpNavyTheme.css";
 import { LogisMark, LogisWordmark } from "../brand"; // 🔷 2026-11-04 LogisWeb 로고
 
-const SHIP_MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
+const SHIP_MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
 
 const myInfoLabelCls = "block text-xs font-bold text-gray-600 mb-1";
 const myInfoInputCls = "w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm text-gray-900 bg-white focus:ring-2 focus:ring-[#1B2B4B]/40 focus:border-[#1B2B4B] outline-none";
@@ -414,7 +414,7 @@ const isSubMaster = isTotalMasterUser || userData?.permissions?.subMaster;
           {companyName && (
             <span className="px-2.5 h-7 inline-flex items-center rounded-lg bg-white/[0.07] border border-white/10 text-[13px] font-bold text-white/90 truncate max-w-[140px] shrink-0">{companyName}</span>
           )}
-          <span className="hidden 2xl:inline text-[11px] font-mono text-white/40 shrink-0">v{__APP_VERSION__}</span>
+          <span className="hidden 2xl:inline text-[11px] tabular-nums text-white/40 shrink-0">v{__APP_VERSION__}</span>
 
           {/* 메뉴 */}
           <nav className="flex-1 min-w-0 flex items-center gap-1 overflow-x-auto no-scrollbar [&>*:first-child]:ml-auto [&>*:last-child]:mr-auto">
@@ -429,7 +429,7 @@ const isSubMaster = isTotalMasterUser || userData?.permissions?.subMaster;
                         <button key={to} onClick={() => { navigate(to); setTransportMenuOpen(false); }}
                           className={`w-full text-left px-3 py-2.5 rounded-xl transition ${location.pathname.includes(to) ? "bg-[#EEF3FB]" : "hover:bg-[#F5F8FD]"}`}>
                           <span className="block text-[13.5px] font-bold text-[#0F1A30]">{l}</span>
-                          <span className="block text-[9.5px] font-extrabold tracking-[0.2em] text-[#9AA9C3]" style={{ fontFamily: SHIP_MONO }}>{en}</span>
+                          <span className="block text-[9.5px] font-extrabold tracking-[0.2em] text-[#9AA9C3]" style={{ fontFamily: SHIP_MONO, fontVariantNumeric: "tabular-nums" }}>{en}</span>
                         </button>
                       ))}
                       <div className="px-3 py-2.5 rounded-xl text-[13.5px] font-bold text-[#C9D2E0] cursor-not-allowed" title="준비 중인 기능입니다">대량배차등록 <span className="text-[10.5px]">(준비중)</span></div>
@@ -645,7 +645,7 @@ function ShipperLiveTicker({ events, onOpenBig }) {
         }
         .shipper-ticker-slide { animation: shipperTickerSlideIn 0.4s ease; }
       `}</style>
-      <span className="text-[9.5px] font-extrabold tracking-[0.2em] text-[#4B6CB7] shrink-0" style={{ fontFamily: SHIP_MONO }}>LIVE</span>
+      <span className="text-[9.5px] font-extrabold tracking-[0.2em] text-[#4B6CB7] shrink-0" style={{ fontFamily: SHIP_MONO, fontVariantNumeric: "tabular-nums" }}>LIVE</span>
       <span className="w-1.5 h-1.5 rounded-full bg-[#4B6CB7] shrink-0 animate-pulse" />
       <div className="flex-1 min-w-0 h-[18px] overflow-hidden relative">
         <div key={current ? current.id : "empty"} className="shipper-ticker-slide absolute inset-0 flex items-center gap-1.5">
@@ -746,7 +746,7 @@ function ShipperPageHeader({ pathname, right }) {
         <svg className="relative" width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d={icon} /></svg>
       </div>
       <div className="min-w-0">
-        <div className="text-[10.5px] font-extrabold tracking-[0.28em] text-[#4B6CB7]" style={{ fontFamily: SHIP_MONO }}>{en}</div>
+        <div className="text-[10.5px] font-extrabold tracking-[0.28em] text-[#4B6CB7]" style={{ fontFamily: SHIP_MONO, fontVariantNumeric: "tabular-nums" }}>{en}</div>
         <div className="flex items-baseline gap-3 min-w-0">
           <h2 className="text-[21px] font-black text-[#0F1A30] tracking-tight leading-tight whitespace-nowrap">{title}</h2>
           <span className="text-[13.5px] text-[#5B6B85] font-medium truncate">{desc}</span>

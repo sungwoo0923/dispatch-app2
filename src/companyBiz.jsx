@@ -13,7 +13,7 @@ import { fmtBizNo, fmtPhone } from "./formatInput";
 import { BANK_NAMES, formatAccount } from "./bankUtil";
 import { CustomSelect } from "./CustomSelect";
 
-const MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
+const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
 const store = new Map(); // 회사 → { list, memory, listeners:Set, unsub }
 function sub(co, cb) {
   let s = store.get(co);
@@ -192,7 +192,7 @@ export async function bizInfoCardBlob(b) {
   const x = c.getContext("2d");
   x.fillStyle = "#F7F9FC"; x.fillRect(0, 0, W, H);
   x.fillStyle = "#0F1A30"; x.fillRect(0, 0, W, headerH);
-  x.fillStyle = "#8FB0F0"; x.font = "bold 11px 'JetBrains Mono', monospace"; x.textAlign = "left"; x.fillText("BUSINESS  INFO", 28, 26);
+  x.fillStyle = "#8FB0F0"; x.font = "bold 11px 'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif"; x.textAlign = "left"; x.fillText("BUSINESS  INFO", 28, 26);
   x.fillStyle = "#fff"; x.font = "bold 21px 'Malgun Gothic', sans-serif"; x.fillText(`${b.name} 사업자 정보`, 28, 54);
   rows.forEach(([l, v], i) => {
     const y = headerH + i * rowH;
@@ -256,8 +256,8 @@ export function BizSelect({ biz, value, onChange, className = "", auto = "", inl
         className={`flex items-center gap-2 px-2.5 ${size === "sm" ? "h-9" : "h-10"} cursor-pointer rounded-lg transition-colors ${act ? "bg-[#0F1A30] text-white" : "text-[#0F1A30] hover:bg-[#F2F5FA]"}`}>
         <span className={`w-4 shrink-0 ${on ? (act ? "text-[#8FB0F0]" : "text-[#2D4C82]") : "opacity-0"}`}>{Ico.check}</span>
         <span className="text-[13px] font-black whitespace-nowrap">{n}</span>
-        {n === biz.defaultName && <span className={`shrink-0 px-1.5 h-[17px] inline-flex items-center rounded text-[9.5px] font-extrabold tracking-[0.14em] ${act ? "bg-white/15 text-white/80" : "bg-[#EEF2F8] text-[#5B6B85]"}`} style={{ fontFamily: MONO }}>MAIN</span>}
-        <span className={`ml-auto shrink-0 text-[11px] tabular-nums ${act ? "text-white/60" : "text-[#9AA9C3]"}`} style={{ fontFamily: MONO }}>{b?.bizNo || ""}</span>
+        {n === biz.defaultName && <span className={`shrink-0 px-1.5 h-[17px] inline-flex items-center rounded text-[9.5px] font-extrabold tracking-[0.14em] ${act ? "bg-white/15 text-white/80" : "bg-[#EEF2F8] text-[#5B6B85]"}`} style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>MAIN</span>}
+        <span className={`ml-auto shrink-0 text-[11px] tabular-nums ${act ? "text-white/60" : "text-[#9AA9C3]"}`} style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{b?.bizNo || ""}</span>
       </div>
     );
   };
@@ -342,7 +342,7 @@ export function BizListEditor({ company, canEdit }) {
     <div className="mt-6 rounded-[20px] border border-[#E3E8F0] bg-white overflow-hidden">
       <div className="px-5 py-4 flex items-center gap-3 flex-wrap text-white" style={{ background: "linear-gradient(120deg,#0B1428 0%,#1B2B4B 60%,#2D4C82 100%)" }}>
         <div>
-          <div className="text-[10.5px] font-extrabold tracking-[0.28em] text-[#8FB0F0]" style={{ fontFamily: MONO }}>BUSINESS ENTITIES</div>
+          <div className="text-[10.5px] font-extrabold tracking-[0.28em] text-[#8FB0F0]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>BUSINESS ENTITIES</div>
           <div className="text-[17px] font-black">사업자 관리 <span className="text-[12px] font-bold text-white/55 ml-1">한 회사 · 여러 사업자로 청구</span></div>
         </div>
         {canEdit && <button type="button" onClick={() => setEdit({ idx: null, v: { ...EMPTY_BIZ } })} className="ml-auto h-9 px-4 rounded-xl bg-white text-[#0F1A30] text-[13px] font-black">＋ 사업자 추가</button>}
@@ -358,7 +358,7 @@ export function BizListEditor({ company, canEdit }) {
           <div key={b.id || b.name} className="flex items-center gap-3 rounded-xl border border-[#E3E8F0] px-4 py-3 flex-wrap">
             <span className="px-2 h-6 rounded-md bg-[#1B2B4B] text-white text-[11px] font-black inline-flex items-center">추가</span>
             <span className="text-[14px] font-black text-[#0F1A30]">{b.name}</span>
-            <span className="text-[12px] text-[#5B6B85] tabular-nums" style={{ fontFamily: MONO }}>{b.bizNo || "사업자번호 없음"}</span>
+            <span className="text-[12px] text-[#5B6B85] tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{b.bizNo || "사업자번호 없음"}</span>
             <span className="text-[12px] text-[#7A8AA6]">{[b.ceo && `대표 ${b.ceo}`, b.bankName && `${b.bankName} ${b.bankNo || ""}`].filter(Boolean).join(" · ")}</span>
             {canEdit && <span className="ml-auto flex gap-1.5">
               <button type="button" onClick={() => setEdit({ idx: i, v: { ...EMPTY_BIZ, ...b } })} className="h-8 px-3 rounded-lg border border-[#DCE3EE] text-[12px] font-black text-[#1B2B4B]">수정</button>
@@ -412,7 +412,7 @@ export function BizScope({ company, data, children, label = "매출 사업자", 
     <>
       {biz.multi && (
         <div className="mb-3 flex items-center gap-3 flex-wrap rounded-2xl px-4 py-2.5 text-white" style={{ background: "linear-gradient(120deg,#0B1428 0%,#1B2B4B 60%,#2D4C82 100%)" }}>
-          <span className="text-[10.5px] font-extrabold tracking-[0.28em] text-[#8FB0F0]" style={{ fontFamily: MONO }}>BUSINESS</span>
+          <span className="text-[10.5px] font-extrabold tracking-[0.28em] text-[#8FB0F0]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>BUSINESS</span>
           <span className="text-[12.5px] font-black text-white/80">{label}</span>
           <div className="inline-flex p-0.5 rounded-xl bg-white/10 border border-white/15 overflow-x-auto">
             {["", ...biz.names].map((n) => (

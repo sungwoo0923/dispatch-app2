@@ -14,7 +14,7 @@ import { CustomSelect } from "./CustomSelect";
 import CustomDatePicker from "./CustomDatePicker";
 import { fmtBizNo, fmtPhone } from "./formatInput";
 
-export const C_MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
+export const C_MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
 const won = (n) => `${Math.round(Number(n) || 0).toLocaleString()}원`;
 const pad = (n) => String(n).padStart(2, "0");
 const ymd = (d = new Date()) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
@@ -171,7 +171,7 @@ function Card({ code, title, right, children, className = "", bodyClass = "p-5" 
     <div className={`bg-white rounded-[18px] border border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_10px_26px_rgba(16,24,40,0.05)] overflow-hidden ${className}`}>
       <div className="flex items-center justify-between gap-x-3 gap-y-1.5 flex-wrap px-4 sm:px-5 py-2 min-h-[46px] sm:min-h-[50px] bg-[#F7F9FC] border-b border-[#E8EDF4]">
         <div className="flex items-center gap-2 min-w-0"><span className="w-1.5 h-1.5 rotate-45 bg-[#1B2B4B]" />
-          <span className="text-[10.5px] font-extrabold tracking-[0.2em] text-[#94A3B8]" style={{ fontFamily: C_MONO }}>{code}</span>
+          <span className="text-[10.5px] font-extrabold tracking-[0.2em] text-[#94A3B8]" style={{ fontFamily: C_MONO, fontVariantNumeric: "tabular-nums" }}>{code}</span>
           <span className="text-[15px] sm:text-[16px] font-black text-[#0F1A30] truncate whitespace-nowrap">{title}</span></div>
         {right}
       </div>
@@ -204,7 +204,7 @@ export function ContractList({ onNew, onEdit }) {
         {[["작성 중", list.filter((c) => c.status === "작성").length, "건"], ["서명 대기", list.filter((c) => c.status === "발송").length, "건"], ["서명 완료", list.filter((c) => c.status === "서명완료").length, "건"], ["만료 임박(2개월)", soon.length, "건"], ["계약 월 매출", signedMRR.toLocaleString(), "원"]].map(([l, v, u], i) => (
           <div key={l} className={`rounded-[16px] px-4 py-3.5 border ${i === 4 ? "bg-[#0F1A30] text-white border-[#0F1A30]" : "bg-white border-[#E3E8F0]"}`}>
             <div className={`text-[12.5px] font-bold ${i === 4 ? "text-white/60" : "text-[#7A879C]"}`}>{l}</div>
-            <div className="text-[24px] font-black mt-0.5" style={{ fontFamily: C_MONO }}>{v}<span className={`text-[13px] ml-1 ${i === 4 ? "text-white/50" : "text-[#9AA9C3]"}`}>{u}</span></div>
+            <div className="text-[24px] font-black mt-0.5" style={{ fontFamily: C_MONO, fontVariantNumeric: "tabular-nums" }}>{v}<span className={`text-[13px] ml-1 ${i === 4 ? "text-white/50" : "text-[#9AA9C3]"}`}>{u}</span></div>
           </div>
         ))}
       </div>
@@ -220,11 +220,11 @@ export function ContractList({ onNew, onEdit }) {
               <thead><tr className="bg-[#1B2B4B] text-white">{["계약번호", "고객사", "요금제", "월 이용료", "기간", "상태", "서명", ""].map((h) => <th key={h} className="px-3 py-2.5 text-center font-extrabold whitespace-nowrap">{h}</th>)}</tr></thead>
               <tbody>{shown.map((c) => (
                 <tr key={c.id} className="border-t border-[#EEF1F6] hover:bg-[#F5F8FD]">
-                  <td className="px-3 py-2.5 text-center text-[12.5px] text-[#5B6B85]" style={{ fontFamily: C_MONO }}>{c.no}</td>
+                  <td className="px-3 py-2.5 text-center text-[12.5px] text-[#5B6B85]" style={{ fontFamily: C_MONO, fontVariantNumeric: "tabular-nums" }}>{c.no}</td>
                   <td className="px-3 py-2.5 font-black text-[#0F1A30]">{c.vars?.고객사 || "-"}{soon.includes(c) && <span className="ml-2 px-1.5 py-0.5 rounded-md border border-[#1B2B4B] text-[10.5px] font-black text-[#1B2B4B]">만료 임박</span>}</td>
                   <td className="px-3 py-2.5 text-center">{c.vars?.요금제 || "-"}</td>
-                  <td className="px-3 py-2.5 text-right font-black" style={{ fontFamily: C_MONO }}>{Number(c.monthly || 0).toLocaleString()}</td>
-                  <td className="px-3 py-2.5 text-center text-[12.5px] text-[#5B6B85]" style={{ fontFamily: C_MONO }}>{c.vars?.시작일 || "-"} ~ {c.vars?.종료일 || "-"}</td>
+                  <td className="px-3 py-2.5 text-right font-black" style={{ fontFamily: C_MONO, fontVariantNumeric: "tabular-nums" }}>{Number(c.monthly || 0).toLocaleString()}</td>
+                  <td className="px-3 py-2.5 text-center text-[12.5px] text-[#5B6B85]" style={{ fontFamily: C_MONO, fontVariantNumeric: "tabular-nums" }}>{c.vars?.시작일 || "-"} ~ {c.vars?.종료일 || "-"}</td>
                   <td className="px-3 py-2.5 text-center"><Status s={c.status} /></td>
                   <td className="px-3 py-2.5 text-center text-[12.5px] text-[#5B6B85]">{c.status === "서명완료" ? `${c.signer?.name || ""} · ${c.signedAt?.toDate ? ymd(c.signedAt.toDate()) : ""}` : c.status === "발송" ? (c.viewedAt ? "열람함" : "미열람") : "-"}</td>
                   <td className="px-3 py-2.5 whitespace-nowrap text-right">
@@ -363,7 +363,7 @@ export function ContractBuilder({ initial, fromQuoteDoc, onDone }) {
               <textarea value={vars.특약 || ""} onChange={(e) => set("특약", e.target.value)} rows={3} className={`${inp} h-auto py-2 mt-1 leading-relaxed`} /></label></div>
             {F({ k: "계약일", label: "계약일", type: "date" })}
             <label className="block"><span className="text-[12px] font-bold text-[#7A879C]">월 금액(집계용, 숫자)</span>
-              <input inputMode="numeric" value={monthly ? Number(monthly).toLocaleString() : ""} onChange={(e) => setMonthly(Number(e.target.value.replace(/[^\d]/g, "")) || 0)} className={`${inp} mt-1 text-right`} style={{ fontFamily: C_MONO }} /></label>
+              <input inputMode="numeric" value={monthly ? Number(monthly).toLocaleString() : ""} onChange={(e) => setMonthly(Number(e.target.value.replace(/[^\d]/g, "")) || 0)} className={`${inp} mt-1 text-right`} style={{ fontFamily: C_MONO, fontVariantNumeric: "tabular-nums" }} /></label>
           </div>
         </Card>
         <div className="flex gap-2">
@@ -373,7 +373,7 @@ export function ContractBuilder({ initial, fromQuoteDoc, onDone }) {
       </div>
       <div className="rounded-[20px] bg-[#E9EDF3] p-5 xl:sticky xl:top-4 max-h-[calc(100vh-140px)] overflow-auto">
         <div className="flex items-center justify-between gap-3 mb-3 px-1 min-w-0">
-          <span className="text-[12px] font-extrabold tracking-[0.2em] text-[#5A6A85] whitespace-nowrap" style={{ fontFamily: C_MONO }}>LIVE PREVIEW</span>
+          <span className="text-[12px] font-extrabold tracking-[0.2em] text-[#5A6A85] whitespace-nowrap" style={{ fontFamily: C_MONO, fontVariantNumeric: "tabular-nums" }}>LIVE PREVIEW</span>
           <span className="text-[12px] font-bold text-[#7A879C] whitespace-nowrap truncate">밝게 표시된 곳이 채워진 값입니다</span>
         </div>
         <style>{CONTRACT_CSS}</style>
@@ -438,7 +438,7 @@ export function ContractTemplates() {
         <Card code="EDIT" title="양식 편집">
           <label className="block mb-2"><span className="text-[12px] font-bold text-[#7A879C]">양식 이름</span><input value={t.name} onChange={(e) => upd({ name: e.target.value })} className={`${inp} mt-1`} /></label>
           <div className="text-[12px] font-bold text-[#7A879C] mb-1.5">자리표시 넣기 <span className="font-semibold">(누르면 커서 위치에 들어갑니다)</span></div>
-          <div className="flex flex-wrap gap-1 mb-2">{CONTRACT_VARS.map(([k, d]) => <button key={k} type="button" title={d} onClick={() => insertVar(k)} className="h-7 px-2 rounded-md border border-[#DCE3EE] text-[11.5px] font-bold text-[#1B2B4B] hover:border-[#4B6CB7]" style={{ fontFamily: C_MONO }}>{`{{${k}}}`}</button>)}</div>
+          <div className="flex flex-wrap gap-1 mb-2">{CONTRACT_VARS.map(([k, d]) => <button key={k} type="button" title={d} onClick={() => insertVar(k)} className="h-7 px-2 rounded-md border border-[#DCE3EE] text-[11.5px] font-bold text-[#1B2B4B] hover:border-[#4B6CB7]" style={{ fontFamily: C_MONO, fontVariantNumeric: "tabular-nums" }}>{`{{${k}}}`}</button>)}</div>
           <textarea ref={taRef} value={t.body} onChange={(e) => upd({ body: e.target.value })} rows={28} className={`${inp} h-auto py-3 leading-[1.75] text-[13px] font-medium`} style={{ fontFamily: "inherit" }} />
           <div className="mt-2 text-[11.5px] text-[#9AA9C3] leading-relaxed">작성 규칙: 맨 앞에 <b>#</b> 을 붙이면 제목, <b>제N조</b>로 시작하는 줄은 굵은 조항 제목이 됩니다.</div>
         </Card>

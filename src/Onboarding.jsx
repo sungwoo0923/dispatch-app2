@@ -13,7 +13,7 @@ import { CopyTemplateEditor } from "./CopyTemplateEditor";
 import { RadiusEditor, officeRadii } from "./attendanceQuick";
 import { HrSettingsPanel } from "./HrHub";
 
-const MONO = "'JetBrains Mono','IBM Plex Mono',ui-monospace,monospace";
+const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
 const companyKey = (userCompany) => {
   try { return (localStorage.getItem("loginCompany") || userCompany || localStorage.getItem("userCompany") || DEFAULT_COMPANY).trim(); } catch { return userCompany || DEFAULT_COMPANY; }
 };
@@ -77,7 +77,7 @@ function Tutorial({ slides, onSkip, onDone, doneLabel = "초기 설정 시작 �
       <div className="relative px-9 pt-8 pb-7">
         <span className="absolute inset-0 opacity-[0.06] pointer-events-none" style={{ backgroundImage: "linear-gradient(#fff 1px,transparent 1px),linear-gradient(90deg,#fff 1px,transparent 1px)", backgroundSize: "26px 26px" }} />
         <div className="relative flex items-center justify-between">
-          <span className="text-[11px] font-extrabold tracking-[0.3em] text-[#8FB0F0]" style={{ fontFamily: MONO }}>TUTORIAL · {s.code}</span>
+          <span className="text-[11px] font-extrabold tracking-[0.3em] text-[#8FB0F0]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>TUTORIAL · {s.code}</span>
           <button type="button" onClick={onSkip} className="h-8 px-3 rounded-lg text-[12.5px] font-bold text-white/60 hover:text-white hover:bg-white/10">건너뛰기 ›</button>
         </div>
         <div className="relative mt-6 grid md:grid-cols-[1fr_220px] gap-7 items-center min-h-[250px]">
@@ -92,8 +92,8 @@ function Tutorial({ slides, onSkip, onDone, doneLabel = "초기 설정 시작 �
             <div className="relative w-[200px] h-[200px] rounded-[32px] border border-white/15 bg-white/[0.04] flex items-center justify-center">
               <span className="absolute inset-3 rounded-[24px] border border-dashed border-[#8FB0F0]/30" />
               <div className="text-center">
-                <div className="text-[64px] font-black leading-none text-[#8FB0F0] tabular-nums" style={{ fontFamily: MONO }}>{String(i + 1).padStart(2, "0")}</div>
-                <div className="mt-2 text-[10.5px] font-extrabold tracking-[0.28em] text-white/50" style={{ fontFamily: MONO }}>{s.code.split(" · ")[1]}</div>
+                <div className="text-[64px] font-black leading-none text-[#8FB0F0] tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{String(i + 1).padStart(2, "0")}</div>
+                <div className="mt-2 text-[10.5px] font-extrabold tracking-[0.28em] text-white/50" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{s.code.split(" · ")[1]}</div>
               </div>
             </div>
           </div>
@@ -120,7 +120,7 @@ function ChipList({ value, onChange, placeholder }) {
       <div className="flex flex-wrap gap-1.5">
         {value.map((v, i) => (
           <span key={v} className="group inline-flex items-center gap-1 h-8 pl-3 pr-1 rounded-lg bg-[#F2F5FA] border border-[#E1E7F0] text-[13px] font-bold text-[#0F1A30]">
-            {i === 0 && <span className="text-[9.5px] font-black text-[#4B6CB7] tracking-wider mr-0.5" style={{ fontFamily: MONO }}>기본</span>}{v}
+            {i === 0 && <span className="text-[9.5px] font-black text-[#4B6CB7] tracking-wider mr-0.5" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>기본</span>}{v}
             <button type="button" onClick={() => move(i, -1)} className="w-5 h-6 text-[10px] text-[#9AA9C3] hover:text-[#1B2B4B]" title="앞으로">◀</button>
             <button type="button" onClick={() => onChange(value.filter((x) => x !== v))} className="w-6 h-6 rounded-md text-[#9AA9C3] hover:bg-white hover:text-[#0F1A30]" title="빼기">✕</button>
           </span>
@@ -196,7 +196,7 @@ function Wizard({ company, settings, onClose, onFinish, team = "dispatch" }) {
         <span className="absolute inset-0 opacity-[0.06] pointer-events-none" style={{ backgroundImage: "linear-gradient(#fff 1px,transparent 1px),linear-gradient(90deg,#fff 1px,transparent 1px)", backgroundSize: "24px 24px" }} />
         <div className="relative flex items-center justify-between gap-4">
           <div>
-            <div className="text-[10.5px] font-extrabold tracking-[0.3em] text-[#8FB0F0]" style={{ fontFamily: MONO }}>SETUP WIZARD · {company}</div>
+            <div className="text-[10.5px] font-extrabold tracking-[0.3em] text-[#8FB0F0]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>SETUP WIZARD · {company}</div>
             <div className="text-[21px] font-black mt-0.5">초기 설정</div>
           </div>
           <button type="button" onClick={onClose} className="h-9 px-3.5 rounded-xl bg-white/10 border border-white/20 text-[12.5px] font-bold hover:bg-white/20">나중에 하기</button>
@@ -206,7 +206,7 @@ function Wizard({ company, settings, onClose, onFinish, team = "dispatch" }) {
           {STEPS.map((x, k) => (
             <button key={x.en} type="button" onClick={() => setStep(k)} className="text-left group">
               <div className={`h-1 rounded-full transition ${k <= step ? "bg-[#8FB0F0]" : "bg-white/15"}`} />
-              <div className={`mt-1.5 text-[10px] font-extrabold tracking-[0.2em] ${k === step ? "text-[#8FB0F0]" : "text-white/40"}`} style={{ fontFamily: MONO }}>{String(k + 1).padStart(2, "0")} · {x.en}</div>
+              <div className={`mt-1.5 text-[10px] font-extrabold tracking-[0.2em] ${k === step ? "text-[#8FB0F0]" : "text-white/40"}`} style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{String(k + 1).padStart(2, "0")} · {x.en}</div>
               <div className={`text-[12.5px] font-bold truncate ${k === step ? "text-white" : "text-white/50"}`}>{x.title}</div>
             </button>
           ))}
@@ -243,7 +243,7 @@ function Wizard({ company, settings, onClose, onFinish, team = "dispatch" }) {
             <div className="rounded-2xl border border-[#DCE3EE] bg-white p-6 flex items-center gap-4">
               <span className="text-[15px] font-black text-[#1B2B4B] shrink-0">계산서 발행 후</span>
               <input value={payDays} onChange={(e) => setPayDays(e.target.value.replace(/[^\d]/g, ""))} inputMode="numeric"
-                className="w-[110px] h-14 px-3 rounded-xl border border-[#DCE3EE] text-center font-black text-[#0F1A30] outline-none focus:border-[#2D4C82] tabular-nums" style={{ fontFamily: MONO, fontSize: 28 }} />
+                className="w-[110px] h-14 px-3 rounded-xl border border-[#DCE3EE] text-center font-black text-[#0F1A30] outline-none focus:border-[#2D4C82] tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 28 }} />
               <span className="text-[15px] font-black text-[#1B2B4B]">일 뒤 지급</span>
             </div>
             <div className="flex gap-1.5 mt-3">
@@ -261,7 +261,7 @@ function Wizard({ company, settings, onClose, onFinish, team = "dispatch" }) {
               <div className="text-[12px] font-bold text-[#7A879C]">연간 순수 매출목표</div>
               <div className="flex items-baseline gap-2 mt-1">
                 <input value={target ? Number(target).toLocaleString() : ""} onChange={(e) => setTarget(e.target.value.replace(/[^\d]/g, ""))} placeholder="0" inputMode="numeric"
-                  className="flex-1 h-14 px-3 rounded-xl border border-[#DCE3EE] text-right font-black text-[#0F1A30] outline-none focus:border-[#2D4C82] tabular-nums" style={{ fontFamily: MONO, fontSize: 26 }} />
+                  className="flex-1 h-14 px-3 rounded-xl border border-[#DCE3EE] text-right font-black text-[#0F1A30] outline-none focus:border-[#2D4C82] tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 26 }} />
                 <span className="text-[16px] font-black text-[#1B2B4B]">원</span>
               </div>
               <div className="flex gap-1.5 mt-3">
@@ -269,7 +269,7 @@ function Wizard({ company, settings, onClose, onFinish, team = "dispatch" }) {
               </div>
             </div>
             <div className="mt-4 rounded-2xl p-5 text-white" style={{ background: "linear-gradient(135deg,#0F1A30,#1B2B4B 60%,#2D4C82)" }}>
-              <div className="text-[10.5px] font-extrabold tracking-[0.24em] text-[#8FB0F0]" style={{ fontFamily: MONO }}>READY</div>
+              <div className="text-[10.5px] font-extrabold tracking-[0.24em] text-[#8FB0F0]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>READY</div>
               <div className="text-[16px] font-black mt-1">설정 완료를 누르면 바로 적용됩니다</div>
               <div className="text-[12.5px] text-white/60 mt-1">모든 값은 각 메뉴에서 언제든 다시 바꿀 수 있고, 이 마법사는 관리자 메뉴 › 환경 설정 › 초기 설정에서 다시 열 수 있습니다.</div>
             </div>
@@ -279,7 +279,7 @@ function Wizard({ company, settings, onClose, onFinish, team = "dispatch" }) {
       </div>
 
       <div className="shrink-0 flex items-center justify-between px-8 py-4 bg-white border-t border-[#E3E8F0]">
-        <span className="text-[12px] font-bold text-[#8A97AD] tabular-nums" style={{ fontFamily: MONO }}>STEP {step + 1} / {STEPS.length}</span>
+        <span className="text-[12px] font-bold text-[#8A97AD] tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>STEP {step + 1} / {STEPS.length}</span>
         <div className="flex gap-2">
           {step > 0 && <button type="button" onClick={() => setStep(step - 1)} className="h-11 px-5 rounded-xl border border-[#DCE3EE] text-[13.5px] font-black text-[#3A4A66] hover:bg-[#F5F7FB]">이전</button>}
           {last
@@ -295,7 +295,7 @@ function DoneCard({ onClose, msg = "" }) {
   return (
     <div className="w-full max-w-[460px] rounded-[28px] overflow-hidden text-white text-center px-8 py-10 shadow-[0_40px_100px_rgba(0,0,0,0.5)]" style={{ background: "linear-gradient(135deg,#0B1428,#1B2B4B 60%,#2D4C82)" }}>
       <div className="mx-auto w-16 h-16 rounded-2xl border border-[#8FB0F0]/40 bg-white/5 flex items-center justify-center text-[28px] text-[#8FB0F0]">✓</div>
-      <div className="text-[10.5px] font-extrabold tracking-[0.3em] text-[#8FB0F0] mt-5" style={{ fontFamily: MONO }}>ALL SET</div>
+      <div className="text-[10.5px] font-extrabold tracking-[0.3em] text-[#8FB0F0] mt-5" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>ALL SET</div>
       <div className="text-[22px] font-black mt-1">설정이 완료되었습니다</div>
       <div className="text-[13.5px] text-white/60 mt-2">{msg || "이제 배차관리에서 첫 오더를 등록해 보세요."}</div>
       <button type="button" onClick={onClose} className="mt-6 h-11 px-7 rounded-xl bg-white text-[#0F1A30] text-[14px] font-black">시작하기</button>

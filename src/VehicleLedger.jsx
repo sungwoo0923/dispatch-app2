@@ -234,7 +234,7 @@ function BasicForm({ v, set, purposeOpts, companyOpts, isNew, company }) {
         <Field label="톤수">{sel("톤수", TON_OPTS, { customPlaceholder: "예) 6.5톤" })}</Field>
         <Field label="모델 (제조사·모델)"><LedgerSelect value={v.모델 || ""} onChange={(x) => set({ ...v, 모델: x, 제조사: makerOf(x) || (x ? v.제조사 || "" : "") })} options={MODEL_OPTS} placeholder="모델 선택" customPlaceholder="예) 엑시언트 25.5톤" /></Field>
         <Field label="연식"><LedgerSelect value={v.연식 || ""} onChange={(x) => set({ ...v, 연식: String(x || "").replace(/[^\d]/g, "").slice(0, 4) })} options={YEAR_OPTS} placeholder="연식 선택" customPlaceholder="예) 2019" /></Field>
-        <Field label="차대번호"><input {...f("차대번호")} placeholder="17자리 영문·숫자" style={{ ...inp, fontFamily: MONO, textTransform: "uppercase" }} /></Field>
+        <Field label="차대번호"><input {...f("차대번호")} placeholder="17자리 영문·숫자" style={{ ...inp, fontFamily: MONO, fontVariantNumeric: "tabular-nums", textTransform: "uppercase" }} /></Field>
       </FormGroup>
       <FormGroup title="소속·보험" code="OWNER">
         <Field label="회사(소속)">{sel("회사", companyOpts, { customPlaceholder: "소속·차주 회사" })}</Field>
@@ -243,7 +243,7 @@ function BasicForm({ v, set, purposeOpts, companyOpts, isNew, company }) {
       </FormGroup>
       <FormGroup title="장비" code="EQUIPMENT">
         <Field label="유류카드 카드사">{sel("유류카드사", FUEL_CARD_OPTS, { customPlaceholder: "카드사 이름" })}</Field>
-        <Field label="유류카드 번호"><input {...f("유류카드번호")} inputMode="numeric" placeholder="카드 번호" style={{ ...inp, fontFamily: MONO }} /></Field>
+        <Field label="유류카드 번호"><input {...f("유류카드번호")} inputMode="numeric" placeholder="카드 번호" style={{ ...inp, fontFamily: MONO, fontVariantNumeric: "tabular-nums" }} /></Field>
         <Field label="하이패스">{sel("하이패스", HIPASS_OPTS, { customPlaceholder: "카드·단말 번호" })}</Field>
         <Field label="GPS">{sel("GPS", GPS_OPTS, { customPlaceholder: "단말·업체 이름" })}</Field>
         <Field label="덮개">{sel("덮개", COVER_OPTS, { customPlaceholder: "덮개 종류" })}</Field>
@@ -337,10 +337,10 @@ function RowEditor({ kind, row, onSave, onClose, kindOpts, onDelete }) {
           if (t === "textarea") return <Field key={k} label={L} wide><textarea value={r[k] || ""} onChange={(e) => setR({ ...r, [k]: e.target.value })} rows={3} style={{ ...inp, height: "auto", padding: 10, resize: "vertical", fontFamily: "inherit" }} /></Field>;
           if (t === "kind") return <Field key={k} label={L}><SelectOrType value={r[k]} onChange={(x) => setR({ ...r, [k]: x })} options={kindOpts} /></Field>;
           if (t === "logkind") return <Field key={k} label={L}><LedgerSelect allowCustom={false} value={r[k] || "이력"} onChange={(x) => setR({ ...r, [k]: x || "이력" })} options={["변경", "이력"]} noneLabel="이력" /></Field>;
-          if (t === "money") return <Field key={k} label={L}><input inputMode="numeric" value={r[k] === "" || r[k] == null ? "" : won(num(r[k]))} onChange={(e) => setR({ ...r, [k]: e.target.value.replace(/[^\d]/g, "") })} style={{ ...inp, textAlign: "right", fontFamily: MONO }} placeholder="0" /></Field>;
+          if (t === "money") return <Field key={k} label={L}><input inputMode="numeric" value={r[k] === "" || r[k] == null ? "" : won(num(r[k]))} onChange={(e) => setR({ ...r, [k]: e.target.value.replace(/[^\d]/g, "") })} style={{ ...inp, textAlign: "right", fontFamily: MONO, fontVariantNumeric: "tabular-nums" }} placeholder="0" /></Field>;
           if (t === "vat") return (
             <Field key={k} label={L}>
-              <input inputMode="numeric" value={r.부가세 === "" || r.부가세 == null ? "" : won(num(r.부가세))} onChange={(e) => setR({ ...r, 부가세: e.target.value.replace(/[^\d]/g, "") })} style={{ ...inp, textAlign: "right", fontFamily: MONO }} placeholder={`${won(autoVat)} (자동)`} />
+              <input inputMode="numeric" value={r.부가세 === "" || r.부가세 == null ? "" : won(num(r.부가세))} onChange={(e) => setR({ ...r, 부가세: e.target.value.replace(/[^\d]/g, "") })} style={{ ...inp, textAlign: "right", fontFamily: MONO, fontVariantNumeric: "tabular-nums" }} placeholder={`${won(autoVat)} (자동)`} />
             </Field>
           );
           if (t === "date") return <Field key={k} label={L}><DateField value={r[k] || ""} onChange={(x) => setR({ ...r, [k]: x })} /></Field>;
@@ -350,9 +350,9 @@ function RowEditor({ kind, row, onSave, onClose, kindOpts, onDelete }) {
       </div>
       {kind === "repairs" && (
         <div style={{ marginTop: 14, padding: "12px 14px", borderRadius: 12, background: C.soft, display: "flex", gap: 18, flexWrap: "wrap", fontSize: 14.5, fontWeight: 700, color: C.sub }}>
-          <span>공가 <b style={{ color: C.navy, fontFamily: MONO }}>{won(num(r.공가))}</b></span>
-          <span>부가세 <b style={{ color: C.navy, fontFamily: MONO }}>{won(repairVat(r))}</b></span>
-          <span>합금액 <b style={{ color: C.navy, fontFamily: MONO, fontSize: 16 }}>{won(num(r.공가) + repairVat(r))}</b>원</span>
+          <span>공가 <b style={{ color: C.navy, fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{won(num(r.공가))}</b></span>
+          <span>부가세 <b style={{ color: C.navy, fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{won(repairVat(r))}</b></span>
+          <span>합금액 <b style={{ color: C.navy, fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 16 }}>{won(num(r.공가) + repairVat(r))}</b>원</span>
         </div>
       )}
       {err && <div style={{ marginTop: 12, padding: "10px 12px", borderRadius: 10, background: "#FEF3F2", color: "#B42318", fontSize: 14, fontWeight: 800 }}>{err}</div>}
@@ -724,7 +724,7 @@ function Ledger({ v, co, appDriver, linkRaw, drivers, canEdit, by, narrow, purpo
                 <React.Fragment key={i}>
                   {yr !== prevYr && <div style={{ fontFamily: MONO, fontSize: 13, fontWeight: 800, letterSpacing: "0.12em", color: C.mute, margin: i ? "10px 0 6px" : "0 0 6px" }}>{yr || "날짜 없음"}</div>}
                   <div style={{ display: "grid", gridTemplateColumns: narrow ? "52px 18px 1fr" : "96px 22px 1fr auto", alignItems: "start", columnGap: 8 }}>
-                    <span style={{ fontFamily: MONO, fontSize: 14, fontWeight: 800, color: C.sub, paddingTop: 2, ...TAB }}>{narrow ? String(e.d || "").slice(5) : e.d}</span>
+                    <span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 14, fontWeight: 800, color: C.sub, paddingTop: 2, ...TAB }}>{narrow ? String(e.d || "").slice(5) : e.d}</span>
                     <span style={{ position: "relative", display: "flex", justifyContent: "center", alignSelf: "stretch" }}>
                       <span style={{ position: "absolute", top: 0, bottom: 0, width: 2, background: "#E3E8F0" }} />
                       <span style={{ position: "relative", marginTop: 5, width: 11, height: 11, borderRadius: 99, background: col, boxShadow: "0 0 0 3px #fff" }} />
@@ -733,7 +733,7 @@ function Ledger({ v, co, appDriver, linkRaw, drivers, canEdit, by, narrow, purpo
                       <div style={{ fontSize: 15, fontWeight: 800, color: C.navy, wordBreak: "keep-all" }}><span style={{ fontSize: 14, fontWeight: 900, color: col, marginRight: 6 }}>{l}</span>{e.t}</div>
                       {(e.s || e.files > 0 || (narrow && e.amt)) ? <div style={{ fontSize: 14, color: C.sub, marginTop: 1 }}>{[e.s, e.files ? `증빙 ${e.files}` : "", narrow && e.amt ? `${won(e.amt)}원` : ""].filter(Boolean).join(" · ")}</div> : null}
                     </div>
-                    {!narrow && <span style={{ fontFamily: MONO, fontSize: 15, fontWeight: 800, color: C.navy, paddingTop: 1, ...TAB }}>{e.amt ? `${won(e.amt)}원` : ""}</span>}
+                    {!narrow && <span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 15, fontWeight: 800, color: C.navy, paddingTop: 1, ...TAB }}>{e.amt ? `${won(e.amt)}원` : ""}</span>}
                   </div>
                 </React.Fragment>
               );
@@ -793,14 +793,14 @@ function Ledger({ v, co, appDriver, linkRaw, drivers, canEdit, by, narrow, purpo
               <tbody>
                 {repShown.map((r) => (
                   <tr key={r.id} className="vl-row" title={canEdit ? "눌러서 수정·삭제" : ""} onClick={() => canEdit && setEditor({ kind: "repairs", row: r })} style={{ cursor: canEdit ? "pointer" : "default" }}>
-                    <td style={{ ...td, whiteSpace: "nowrap", fontFamily: MONO, fontSize: 14 }}>{r.일자}</td>
+                    <td style={{ ...td, whiteSpace: "nowrap", fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 14 }}>{r.일자}</td>
                     <td style={{ ...td, whiteSpace: "nowrap" }}>{r.구분}</td>
                     <td style={{ ...td, minWidth: 170, whiteSpace: "pre-wrap" }}>{r.내용}</td>
                     <td style={{ ...td, whiteSpace: "nowrap" }}>{r.업체}</td>
                     <td style={{ ...td, whiteSpace: "nowrap" }}>{r.업체번호}</td>
-                    <td style={{ ...td, textAlign: "right", fontFamily: MONO }}>{won(num(r.공가))}</td>
-                    <td style={{ ...td, textAlign: "right", fontFamily: MONO, color: C.sub }}>{won(repairVat(r))}</td>
-                    <td style={{ ...td, textAlign: "right", fontFamily: MONO, fontWeight: 800 }}>{won(num(r.공가) + repairVat(r))}</td>
+                    <td style={{ ...td, textAlign: "right", fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{won(num(r.공가))}</td>
+                    <td style={{ ...td, textAlign: "right", fontFamily: MONO, fontVariantNumeric: "tabular-nums", color: C.sub }}>{won(repairVat(r))}</td>
+                    <td style={{ ...td, textAlign: "right", fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontWeight: 800 }}>{won(num(r.공가) + repairVat(r))}</td>
                     <td style={{ ...td, minWidth: 150 }}>{r.비고 && <div style={{ marginBottom: 4 }}>{r.비고}</div>}<Evidence files={r.files} canEdit={canEdit} compact onAdd={(fs) => addFiles("repairs", r, fs)} onRemove={(m) => rmFile("repairs", r, m)} /></td>
                   </tr>
                 ))}
@@ -819,7 +819,7 @@ function Ledger({ v, co, appDriver, linkRaw, drivers, canEdit, by, narrow, purpo
 
       {/* 구조변경 */}
       <Section id="vl-structures" title="구조변경 이력" code="STRUCTURE" right={canEdit && <Btn kind="primary" onClick={() => setEditor({ kind: "structures", row: null })}>+ 구조변경 추가</Btn>}>
-        {HistTable({ kind: "structures", rows: v.structures || [], cols: [["일자", "일자", { whiteSpace: "nowrap", fontFamily: MONO, fontSize: 14 }], ["내용", "내용", { minWidth: 260, whiteSpace: "pre-wrap" }], ["업체", "업체", { whiteSpace: "nowrap" }], ["금액", "금액", { textAlign: "right", fontFamily: MONO }], ["비고", "비고"]] })}
+        {HistTable({ kind: "structures", rows: v.structures || [], cols: [["일자", "일자", { whiteSpace: "nowrap", fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 14 }], ["내용", "내용", { minWidth: 260, whiteSpace: "pre-wrap" }], ["업체", "업체", { whiteSpace: "nowrap" }], ["금액", "금액", { textAlign: "right", fontFamily: MONO, fontVariantNumeric: "tabular-nums" }], ["비고", "비고"]] })}
       </Section>
 
       {/* 기사 탑승 */}
@@ -839,7 +839,7 @@ function Ledger({ v, co, appDriver, linkRaw, drivers, canEdit, by, narrow, purpo
 
       {/* 변경·기타 이력 */}
       <Section id="vl-logs" title="기본정보 변경·기타 이력" code="LOG" right={canEdit && <Btn kind="primary" onClick={() => setEditor({ kind: "logs", row: null })}>+ 이력 추가</Btn>}>
-        {HistTable({ kind: "logs", rows: v.logs || [], cols: [["일자", "일자", { whiteSpace: "nowrap", fontFamily: MONO, fontSize: 14 }], ["내용", "내용", { whiteSpace: "nowrap", fontWeight: 800 }], ["구분", "변경/이력", { whiteSpace: "nowrap", textAlign: "center" }], ["날짜", "날짜", { whiteSpace: "nowrap", fontFamily: MONO, fontSize: 14 }], ["세부내용", "세부내용", { minWidth: 240, whiteSpace: "pre-wrap" }], ["비고", "비고", { color: C.sub }]] })}
+        {HistTable({ kind: "logs", rows: v.logs || [], cols: [["일자", "일자", { whiteSpace: "nowrap", fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 14 }], ["내용", "내용", { whiteSpace: "nowrap", fontWeight: 800 }], ["구분", "변경/이력", { whiteSpace: "nowrap", textAlign: "center" }], ["날짜", "날짜", { whiteSpace: "nowrap", fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 14 }], ["세부내용", "세부내용", { minWidth: 240, whiteSpace: "pre-wrap" }], ["비고", "비고", { color: C.sub }]] })}
       </Section>
 
       <style>{VL_CSS}</style>

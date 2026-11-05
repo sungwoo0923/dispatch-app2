@@ -43,7 +43,7 @@ const PcSettleMobile = React.lazy(() => import("../DispatchApp").then((m) => ({ 
 const PcAccounting = React.lazy(() => import("../DispatchApp").then((m) => ({ default: m.PcAccounting })));
 const PcHrPage = React.lazy(() => import("../DispatchApp").then((m) => ({ default: m.PcHrPage })));
 
-const MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
+const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
 
 function Loading() {
   return (
@@ -164,14 +164,14 @@ function NoticeView({ company, me }) {
     <div className="px-3 py-3 space-y-3 kp-m-pc">
       <div className="relative overflow-hidden rounded-[22px] px-4 py-4 text-white shadow-[0_14px_32px_rgba(15,26,48,0.25)]"
         style={{ background: "linear-gradient(rgba(143,176,240,.07) 1px, transparent 1px) 0 0/22px 22px, linear-gradient(90deg, rgba(143,176,240,.07) 1px, transparent 1px) 0 0/22px 22px, linear-gradient(120deg,#0B1428 0%,#1B2B4B 60%,#2D4C82 100%)" }}>
-        <div className="text-[11px] font-extrabold tracking-[0.26em] text-[#8FB0F0]" style={{ fontFamily: MONO }}>BOARD · NOTICE</div>
+        <div className="text-[11px] font-extrabold tracking-[0.26em] text-[#8FB0F0]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>BOARD · NOTICE</div>
         <div className="text-[20px] font-black mt-0.5">공지사항</div>
         <div className="text-[12.5px] text-white/60 mt-0.5">회사 공지 및 주요 안내 사항을 확인합니다.</div>
         <div className="mt-3 flex flex-wrap items-center gap-2">
           {[["전체", notices.length], ["이번 달", monthN]].map(([l, v]) => (
             <div key={l} className="flex-1 min-w-[72px] rounded-2xl bg-white/[0.08] ring-1 ring-white/15 px-3 py-1.5">
               <div className="text-[11.5px] font-bold text-white/60 whitespace-nowrap truncate">{l}</div>
-              <div className="text-[19px] font-black tabular-nums" style={{ fontFamily: MONO }}>{v}</div>
+              <div className="text-[19px] font-black tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{v}</div>
             </div>
           ))}
           {canWrite && <button type="button" onClick={() => setWriter({ initial: null })} className="h-12 px-4 rounded-2xl bg-white text-[#0F1A30] text-[14px] font-black shrink-0">+ 새로 등록</button>}

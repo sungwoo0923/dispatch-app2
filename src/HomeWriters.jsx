@@ -17,7 +17,7 @@ import ObituaryWriter from "./ObituaryWriter"; // ⭐ 2026-11-03 분류 "부고"
 import { RichTextEditor, htmlToText, textToHtml, sanitizeHtml } from "./richText"; // ⭐ 2026-11-03 글자 꾸미기
 import { TimeSelect } from "./kpInputs"; // ⭐ 2026-11-03 예약 게시 시각
 
-const MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
+const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
 const inp = "w-full px-4 rounded-xl border border-[#DCE3EE] bg-white text-[14.5px] text-[#0F1A30] outline-none focus:border-[#4B6CB7]";
 const today = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
 export const NOTICE_WRITER_ROLES = ["admin", "totalMaster", "hrManager", "superadmin"];
@@ -64,7 +64,7 @@ function Hero({ en, title, desc, children }) {
     <div className="relative overflow-hidden rounded-[22px] px-4 py-4 md:px-7 md:py-5 text-white flex items-center justify-between gap-4 flex-wrap shadow-[0_14px_32px_rgba(15,26,48,0.25)]"
       style={{ background: "linear-gradient(rgba(143,176,240,.07) 1px, transparent 1px) 0 0/22px 22px, linear-gradient(90deg, rgba(143,176,240,.07) 1px, transparent 1px) 0 0/22px 22px, linear-gradient(120deg,#0B1428 0%,#1B2B4B 60%,#2D4C82 100%)" }}>
       <div>
-        <div className="text-[11px] font-extrabold tracking-[0.26em] text-[#8FB0F0]" style={{ fontFamily: MONO }}>{en}</div>
+        <div className="text-[11px] font-extrabold tracking-[0.26em] text-[#8FB0F0]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{en}</div>
         <div className="text-[20px] md:text-[24px] font-black mt-0.5">{title}</div>
         <div className="text-[13px] text-white/60 mt-0.5">{desc}</div>
       </div>
@@ -211,7 +211,7 @@ export function KpMultiSelect({ values, options, onChange, ariaLabel, min = 1 })
       {open && rect && createPortal(
         <div ref={menuRef} role="listbox" aria-multiselectable="true" data-kp-popup="1" onMouseDown={(e) => e.preventDefault()} className={menuCls}
           style={{ position: "fixed", left: rect.left, top: rect.top, bottom: rect.bottom, minWidth: Math.max(rect.width, 260), maxHeight: rect.maxHeight }}>
-          <div className="px-3 pt-1.5 pb-1 text-[10.5px] font-extrabold tracking-[0.22em] text-[#9AA9C3]" style={{ fontFamily: MONO }}>AUDIENCE · 여러 개 선택</div>
+          <div className="px-3 pt-1.5 pb-1 text-[10.5px] font-extrabold tracking-[0.22em] text-[#9AA9C3]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>AUDIENCE · 여러 개 선택</div>
           {options.map(([k, l, d], i) => {
             const on = values.includes(k); const hi = i === act;
             return (
@@ -457,10 +457,10 @@ export function StaffPickerModal({ staff, selected, onDone, onClose, nameHint = 
       <div role="dialog" aria-modal="true" aria-label="받는 직원 선택" className="w-full max-w-[640px] max-h-[88vh] flex flex-col rounded-[22px] bg-white shadow-[0_30px_80px_rgba(11,20,40,0.45)] overflow-hidden" onMouseDown={(e) => e.stopPropagation()}>
         <div className="px-5 py-4 text-white flex items-center gap-3" style={{ background: "linear-gradient(120deg,#0B1428 0%,#1B2B4B 65%,#2D4C82 100%)" }}>
           <div className="flex-1 min-w-0">
-            <div className="text-[10.5px] font-extrabold tracking-[0.26em] text-[#8FB0F0]" style={{ fontFamily: MONO }}>RECIPIENTS · SELECT</div>
+            <div className="text-[10.5px] font-extrabold tracking-[0.26em] text-[#8FB0F0]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>RECIPIENTS · SELECT</div>
             <div className="text-[18px] font-black">받는 직원 선택</div>
           </div>
-          <div className="text-right leading-tight"><div className="text-[22px] font-black tabular-nums" style={{ fontFamily: MONO }}>{sel.size}</div><div className="text-[11px] text-white/60 font-bold">명 선택</div></div>
+          <div className="text-right leading-tight"><div className="text-[22px] font-black tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{sel.size}</div><div className="text-[11px] text-white/60 font-bold">명 선택</div></div>
           <button type="button" aria-label="닫기" onClick={onClose} className="w-9 h-9 rounded-lg text-white/60 hover:text-white hover:bg-white/10 font-black">✕</button>
         </div>
         <div className="px-5 pt-4 pb-3 space-y-3 border-b border-[#EEF1F6]">
@@ -471,7 +471,7 @@ export function StaffPickerModal({ staff, selected, onDone, onClose, nameHint = 
           <div className="flex gap-1.5 overflow-x-auto pb-0.5" role="tablist" aria-label="부서">
             {[["__all", "전체"], ...teams.map((t) => [t, t])].map(([k, l]) => {
               const on = tab === k; const c = tabCount(k);
-              return <button key={k} type="button" role="tab" aria-selected={on} onClick={() => setTab(k)} className={`h-9 px-3.5 rounded-xl text-[13px] font-black whitespace-nowrap border transition ${on ? "bg-[#0F1A30] text-white border-[#0F1A30]" : "bg-white text-[#3A4A66] border-[#DCE3EE] hover:border-[#4B6CB7]"}`}>{l}{c ? <span className={`ml-1.5 ${on ? "text-[#8FB0F0]" : "text-[#2D4C82]"}`} style={{ fontFamily: MONO }}>{c}</span> : null}</button>;
+              return <button key={k} type="button" role="tab" aria-selected={on} onClick={() => setTab(k)} className={`h-9 px-3.5 rounded-xl text-[13px] font-black whitespace-nowrap border transition ${on ? "bg-[#0F1A30] text-white border-[#0F1A30]" : "bg-white text-[#3A4A66] border-[#DCE3EE] hover:border-[#4B6CB7]"}`}>{l}{c ? <span className={`ml-1.5 ${on ? "text-[#8FB0F0]" : "text-[#2D4C82]"}`} style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{c}</span> : null}</button>;
             })}
           </div>
         </div>
@@ -486,7 +486,7 @@ export function StaffPickerModal({ staff, selected, onDone, onClose, nameHint = 
                   <div data-ln={tIdx} onMouseEnter={() => setAct(tIdx)} onClick={() => hitLine(lines[tIdx])}
                     className={`sticky top-0 z-[1] flex items-center gap-3 px-3 h-10 rounded-xl cursor-pointer select-none ${act === tIdx ? "bg-[#E8EEF9]" : "bg-[#F5F8FD]"}`}>
                     <Box on={all} part={some} />
-                    <span className="flex-1 text-[13px] font-black text-[#1B2B4B]">{t} <span className="text-[#9AA9C3] font-bold" style={{ fontFamily: MONO }}>{list.length}</span></span>
+                    <span className="flex-1 text-[13px] font-black text-[#1B2B4B]">{t} <span className="text-[#9AA9C3] font-bold" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{list.length}</span></span>
                     <span className="text-[11.5px] font-bold text-[#7A879C]">{all ? "부서 전체 해제" : "부서 전체 선택"}</span>
                   </div>
                   {list.map((u) => {
@@ -506,7 +506,7 @@ export function StaffPickerModal({ staff, selected, onDone, onClose, nameHint = 
           {gone.length > 0 && <div className="px-3 py-2 text-[12px] text-[#9AA9C3]">목록에 없는 직원 {gone.length}명(퇴사 등)이 선택되어 있습니다 — {gone.map((u) => nameHint[u] || "이름 없음").join(", ")} <button type="button" onClick={() => toggle(gone, false)} className="ml-1 font-black text-[#2D4C82] underline">빼기</button></div>}
         </div>
         <div className="px-5 py-3.5 border-t border-[#EEF1F6] flex items-center gap-2 bg-[#FAFBFD]">
-          <span className="text-[13px] font-black text-[#0F1A30] tabular-nums"><span style={{ fontFamily: MONO }}>{sel.size}</span>명 선택 <span className="text-[#9AA9C3] font-bold">/ 전체 {people.length}명</span></span>
+          <span className="text-[13px] font-black text-[#0F1A30] tabular-nums"><span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{sel.size}</span>명 선택 <span className="text-[#9AA9C3] font-bold">/ 전체 {people.length}명</span></span>
           {sel.size > 0 && <button type="button" onClick={() => setSel(new Set())} className="h-9 px-3 rounded-lg text-[12.5px] font-black text-[#7A879C] hover:text-[#0F1A30]">모두 해제</button>}
           <span className="flex-1" />
           <button type="button" onClick={onClose} className="h-10 px-4 rounded-xl border border-[#DCE3EE] bg-white text-[13.5px] font-bold text-[#3A4A66]">취소</button>

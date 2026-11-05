@@ -169,7 +169,7 @@ function Eyebrow({ children, color = C.accent }) {
   const [en, ko] = String(children).split(" · ");
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 8, color, whiteSpace: "nowrap" }}>
-      <span style={{ fontFamily: MONO, fontSize: 10, fontWeight: 800, letterSpacing: ".3em" }}>{en}</span>
+      <span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 10, fontWeight: 800, letterSpacing: ".3em" }}>{en}</span>
       {ko && <><span style={{ width: 3, height: 3, borderRadius: 3, background: color, opacity: 0.6 }} /><span style={{ fontSize: 11, fontWeight: 800, letterSpacing: ".04em" }}>{ko}</span></>}
     </div>
   );
@@ -179,7 +179,7 @@ function LiveBadge({ state, now, ms }) {
   return (
     <span style={{ display: "inline-flex", alignItems: "center", gap: 7, height: 26, padding: "0 10px", borderRadius: 999, background: "rgba(11,20,40,.7)", border: `1px solid ${state === "live" ? "rgba(52,211,153,.45)" : "rgba(143,176,240,.25)"}`, backdropFilter: "blur(8px)" }}>
       <span className={`kp-live-dot ${state === "live" ? "on" : ""}`} style={{ background: LIVE_COLORS[state] || LIVE_COLORS.stale }} />
-      <span style={{ fontFamily: MONO, fontSize: 10.5, fontWeight: 800, letterSpacing: ".18em", color: state === "live" ? "#A7F3D0" : "#CBD5E1" }}>{label}</span>
+      <span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 10.5, fontWeight: 800, letterSpacing: ".18em", color: state === "live" ? "#A7F3D0" : "#CBD5E1" }}>{label}</span>
       <span style={{ fontFamily: MONO, fontSize: 11, fontWeight: 700, color: "#CFE0FF", fontVariantNumeric: "tabular-nums" }}>{hms(ms)}</span>
       <span style={{ fontSize: 11, fontWeight: 700, color: "rgba(207,224,255,.6)" }}>{liveAgeText(ms, now)}</span>
     </span>
@@ -194,7 +194,7 @@ function Stat({ label, en, value, unit, sub, accent }) {
     <div className="kp-lv-tile" style={{ padding: "11px 13px", minWidth: 0 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 6 }}>
         <span style={{ fontSize: 11.5, fontWeight: 700, color: "rgba(207,224,255,.7)" }}>{label}</span>
-        <span style={{ fontFamily: MONO, fontSize: 8.5, fontWeight: 800, letterSpacing: ".22em", color: "rgba(143,176,240,.55)" }}>{en}</span>
+        <span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 8.5, fontWeight: 800, letterSpacing: ".22em", color: "rgba(143,176,240,.55)" }}>{en}</span>
       </div>
       <div style={{ marginTop: 4, display: "flex", alignItems: "baseline", gap: 4, whiteSpace: "nowrap", overflow: "hidden" }}>
         <span style={{ fontFamily: MONO, fontSize: 22, fontWeight: 800, color: accent || "#fff", letterSpacing: "-.02em", fontVariantNumeric: "tabular-nums" }}>{value}</span>
@@ -228,7 +228,7 @@ function RouteLine({ order }) {
       <div style={{ minWidth: 0, flex: 1 }}>
         <div style={{ display: "flex", alignItems: "baseline", gap: 8, minWidth: 0 }}>
           <span style={{ fontSize: 13.5, fontWeight: 800, color: "#fff", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{name || "-"}</span>
-          <span style={{ marginLeft: "auto", flexShrink: 0, fontFamily: MONO, fontSize: 11, fontWeight: 700, color: C.accent }}>{[String(date || "").slice(5).replace("-", "."), time].filter(Boolean).join(" ")}</span>
+          <span style={{ marginLeft: "auto", flexShrink: 0, fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 11, fontWeight: 700, color: C.accent }}>{[String(date || "").slice(5).replace("-", "."), time].filter(Boolean).join(" ")}</span>
         </div>
         <div style={{ fontSize: 11.5, fontWeight: 600, color: "rgba(207,224,255,.55)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{addr || ""}</div>
       </div>
@@ -249,7 +249,7 @@ function CallButtons({ tel, compact }) {
     <div style={{ display: "flex", gap: 8 }}>
       <a href={`tel:${tel}`} onClick={(e) => e.stopPropagation()} style={{ flex: 1, height: h, borderRadius: 14, background: "linear-gradient(180deg,#FFFFFF,#E6EEFF)", color: C.ink, fontSize: 14, fontWeight: 900, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 8, textDecoration: "none", boxShadow: "0 6px 18px rgba(143,176,240,.25)" }}>
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.61 3.38 2 2 0 0 1 3.6 1h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.59a16 16 0 0 0 6 6l.96-.96a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 21.7 16z" /></svg>
-        전화하기 <span style={{ fontFamily: MONO, fontSize: 12, fontWeight: 700, color: C.steel }}>{fmtPhone(tel)}</span>
+        전화하기 <span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 12, fontWeight: 700, color: C.steel }}>{fmtPhone(tel)}</span>
       </a>
       <a href={`sms:${tel}`} onClick={(e) => e.stopPropagation()} className="kp-lv-ghost" title="문자" style={{ width: h, height: h, borderRadius: 14, display: "inline-flex", alignItems: "center", justifyContent: "center", textDecoration: "none" }}>
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /></svg>
@@ -376,7 +376,7 @@ function LiveTrackModal({ order, plate, mobile, onClose }) {
       </div>
       <div style={{ position: "absolute", left: 14, bottom: 14, zIndex: 1001, display: "flex", gap: 10, alignItems: "center", padding: "6px 10px", borderRadius: 10, background: "rgba(11,20,40,.72)", border: "1px solid rgba(143,176,240,.2)", fontSize: 11, fontWeight: 700, color: "#CFE0FF" }}>
         <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}><span style={{ width: 16, height: 4, borderRadius: 3, background: "#7c3aed" }} />최근 3시간 이동</span>
-        <span style={{ fontFamily: MONO, color: C.accent }}>{entry.lat.toFixed(5)}, {entry.lng.toFixed(5)}</span>
+        <span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", color: C.accent }}>{entry.lat.toFixed(5)}, {entry.lng.toFixed(5)}</span>
       </div>
     </div>
   );
@@ -387,7 +387,7 @@ function LiveTrackModal({ order, plate, mobile, onClose }) {
       <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
         <div style={{ minWidth: 0, flex: 1 }}>
           <Eyebrow>LIVE · 실시간 관제</Eyebrow>
-          <div style={{ marginTop: 6, fontFamily: MONO, fontSize: 24, fontWeight: 800, letterSpacing: "-.01em", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{entry.plate || order?.차량번호}</div>
+          <div style={{ marginTop: 6, fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 24, fontWeight: 800, letterSpacing: "-.01em", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{entry.plate || order?.차량번호}</div>
           <div style={{ marginTop: 4, display: "flex", alignItems: "center", gap: 7, flexWrap: "wrap" }}>
             <span style={{ fontSize: 14, fontWeight: 800 }}>{entry.name || order?.이름 || "-"}</span>
             <GradeTag grade={entry.grade} />
@@ -426,8 +426,8 @@ function LiveTrackModal({ order, plate, mobile, onClose }) {
       </div>
 
       <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11.5, fontWeight: 700, color: "rgba(207,224,255,.55)" }}>
-        <span>최근 3시간 이동 <b style={{ fontFamily: MONO, color: "#CFE0FF" }}>{kmTrack.toFixed(1)}</b> km · <b style={{ fontFamily: MONO, color: "#CFE0FF" }}>{track.length}</b>개 지점</span>
-        <span style={{ fontFamily: MONO }}>{hms(now).slice(0, 5)} KST</span>
+        <span>최근 3시간 이동 <b style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", color: "#CFE0FF" }}>{kmTrack.toFixed(1)}</b> km · <b style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", color: "#CFE0FF" }}>{track.length}</b>개 지점</span>
+        <span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{hms(now).slice(0, 5)} KST</span>
       </div>
 
       <CallButtons tel={tel} compact={mobile} />
@@ -491,7 +491,7 @@ function FleetMapModal({ rows, mobile, onClose }) {
     <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 8 }}>
       {[["관제 대상", "UNITS", counts.all, "#fff"], ["LIVE", "ONLINE", counts.live, "#A7F3D0"], ["운행중", "MOVING", counts.moving, C.accent]].map(([l, en, v, c]) => (
         <div key={en} className="kp-lv-tile" style={{ padding: "9px 11px" }}>
-          <div style={{ fontFamily: MONO, fontSize: 8.5, fontWeight: 800, letterSpacing: ".22em", color: "rgba(143,176,240,.6)" }}>{en}</div>
+          <div style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 8.5, fontWeight: 800, letterSpacing: ".22em", color: "rgba(143,176,240,.6)" }}>{en}</div>
           <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginTop: 2 }}>
             <span style={{ fontSize: 11.5, fontWeight: 700, color: "rgba(207,224,255,.7)" }}>{l}</span>
             <span style={{ fontFamily: MONO, fontSize: 22, fontWeight: 800, color: c, fontVariantNumeric: "tabular-nums" }}>{v}</span>
@@ -505,7 +505,7 @@ function FleetMapModal({ rows, mobile, onClose }) {
       <div style={{ display: "flex", gap: 4, padding: 3, borderRadius: 12, background: "rgba(255,255,255,.04)", border: `1px solid ${C.line}` }}>
         {TABS.map(([k, l]) => (
           <button key={k} type="button" onClick={() => setTab(k)} style={{ flex: 1, height: 30, borderRadius: 9, fontSize: 12, fontWeight: 800, cursor: "pointer", border: "none", background: tab === k ? "rgba(143,176,240,.95)" : "transparent", color: tab === k ? C.ink : "rgba(207,224,255,.7)" }}>
-            {l} <span style={{ fontFamily: MONO, fontSize: 10.5, opacity: 0.75 }}>{counts[k]}</span>
+            {l} <span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 10.5, opacity: 0.75 }}>{counts[k]}</span>
           </button>
         ))}
       </div>
@@ -531,13 +531,13 @@ function FleetMapModal({ rows, mobile, onClose }) {
             style={{ textAlign: "left", padding: "10px 12px", borderRadius: 14, cursor: "pointer", color: "#fff", background: on ? "linear-gradient(135deg,rgba(45,76,130,.85),rgba(27,43,75,.85))" : "rgba(255,255,255,.035)", border: `1px solid ${on ? C.accent : C.line}`, boxShadow: on ? "0 0 0 3px rgba(143,176,240,.15)" : "none" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <span className={`kp-live-dot ${x.s === "live" ? "on" : ""}`} style={{ background: LIVE_COLORS[x.s] }} />
-              <span style={{ fontFamily: MONO, fontSize: 14, fontWeight: 800 }}>{x.e.plate}</span>
+              <span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 14, fontWeight: 800 }}>{x.e.plate}</span>
               <span style={{ fontSize: 12.5, fontWeight: 700, color: "rgba(207,224,255,.8)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{x.e.name}</span>
-              <span style={{ marginLeft: "auto", flexShrink: 0, fontFamily: MONO, fontSize: 11, fontWeight: 700, color: x.moving ? "#A7F3D0" : "rgba(207,224,255,.55)" }}>{x.s === "stale" ? "—" : `${x.e.speed}km/h`}</span>
+              <span style={{ marginLeft: "auto", flexShrink: 0, fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 11, fontWeight: 700, color: x.moving ? "#A7F3D0" : "rgba(207,224,255,.55)" }}>{x.s === "stale" ? "—" : `${x.e.speed}km/h`}</span>
             </div>
             <div style={{ marginTop: 5, display: "flex", alignItems: "center", gap: 6, fontSize: 11.5, fontWeight: 600, color: "rgba(207,224,255,.6)" }}>
               <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", minWidth: 0 }}>{o ? `${o.상차지명 || "-"} → ${o.하차지명 || "-"}` : ""}</span>
-              {x.orders.length > 1 && <span style={{ flexShrink: 0, fontFamily: MONO, fontSize: 10, color: C.accent }}>+{x.orders.length - 1}</span>}
+              {x.orders.length > 1 && <span style={{ flexShrink: 0, fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 10, color: C.accent }}>+{x.orders.length - 1}</span>}
               <span style={{ marginLeft: "auto", flexShrink: 0, fontSize: 11 }}>{liveAgeText(x.e.updatedMs, now)}</span>
             </div>
           </button>
@@ -550,14 +550,14 @@ function FleetMapModal({ rows, mobile, onClose }) {
       style={{ ...(mobile ? { position: "relative", flexShrink: 0 } : { position: "absolute", left: 16, bottom: 16, width: 390, zIndex: 1002 }), padding: mobile ? 12 : 14, borderRadius: 18, background: C.glass, backdropFilter: "blur(14px)", WebkitBackdropFilter: "blur(14px)", border: "1px solid rgba(143,176,240,.3)", boxShadow: "0 18px 40px rgba(0,0,0,.45)", animation: "kpLiveIn .18s ease-out", display: "flex", flexDirection: "column", gap: 10 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
         <span className={`kp-live-dot ${selItem.s === "live" ? "on" : ""}`} style={{ background: LIVE_COLORS[selItem.s] }} />
-        <span style={{ fontFamily: MONO, fontSize: 17, fontWeight: 800 }}>{selItem.e.plate}</span>
+        <span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 17, fontWeight: 800 }}>{selItem.e.plate}</span>
         <span style={{ fontSize: 13, fontWeight: 800 }}>{selItem.e.name}</span>
         <GradeTag grade={selItem.e.grade} />
         <button type="button" onClick={() => setSel(null)} aria-label="닫기" style={{ marginLeft: "auto", width: 26, height: 26, borderRadius: 8, border: "none", background: "rgba(255,255,255,.08)", color: "#CFE0FF", cursor: "pointer" }}>×</button>
       </div>
       <div style={{ display: "flex", gap: 14, fontSize: 11.5, fontWeight: 700, color: "rgba(207,224,255,.7)" }}>
-        <span>속도 <b style={{ fontFamily: MONO, color: "#fff" }}>{selItem.s === "stale" ? "—" : `${selItem.e.speed}km/h`}</b></span>
-        <span>수신 <b style={{ fontFamily: MONO, color: "#fff" }}>{hms(selItem.e.updatedMs)}</b> · {liveAgeText(selItem.e.updatedMs, now)}</span>
+        <span>속도 <b style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", color: "#fff" }}>{selItem.s === "stale" ? "—" : `${selItem.e.speed}km/h`}</b></span>
+        <span>수신 <b style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", color: "#fff" }}>{hms(selItem.e.updatedMs)}</b> · {liveAgeText(selItem.e.updatedMs, now)}</span>
         {selItem.e.status && <span>기사앱 <b style={{ color: "#A7F3D0" }}>{selItem.e.status}</b></span>}
       </div>
       <div className="kp-lv-scroll" style={{ display: "flex", flexDirection: "column", gap: 8, maxHeight: mobile ? 132 : 210, overflowY: "auto" }}>
@@ -594,8 +594,8 @@ function FleetMapModal({ rows, mobile, onClose }) {
       <div style={{ position: "absolute", left: 14, top: 14, zIndex: 1001 }}>
         <span style={{ display: "inline-flex", alignItems: "center", gap: 7, height: 26, padding: "0 10px", borderRadius: 999, background: "rgba(11,20,40,.72)", border: "1px solid rgba(143,176,240,.25)" }}>
           <span className={`kp-live-dot ${counts.live ? "on" : ""}`} style={{ background: counts.live ? LIVE_COLORS.live : LIVE_COLORS.stale }} />
-          <span style={{ fontFamily: MONO, fontSize: 10.5, fontWeight: 800, letterSpacing: ".18em", color: "#A7F3D0" }}>LIVE</span>
-          <span style={{ fontFamily: MONO, fontSize: 11, fontWeight: 700, color: "#CFE0FF" }}>{hms(now).slice(0, 5)} KST</span>
+          <span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 10.5, fontWeight: 800, letterSpacing: ".18em", color: "#A7F3D0" }}>LIVE</span>
+          <span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 11, fontWeight: 700, color: "#CFE0FF" }}>{hms(now).slice(0, 5)} KST</span>
         </span>
       </div>
       {!mobile && selCard}
@@ -609,13 +609,13 @@ function FleetMapModal({ rows, mobile, onClose }) {
           <>
             <div style={{ padding: "12px 14px 10px", display: "flex", flexDirection: "column", gap: 10, borderBottom: `1px solid ${C.line}` }}>
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                <div style={{ flex: 1, minWidth: 0 }}><Eyebrow>LIVE · 실시간 관제</Eyebrow><div style={{ marginTop: 3, fontSize: 16, fontWeight: 900 }}>배차완료 차량 관제 <span style={{ fontFamily: MONO, color: C.accent, fontSize: 14 }}>{counts.all}</span></div></div>
+                <div style={{ flex: 1, minWidth: 0 }}><Eyebrow>LIVE · 실시간 관제</Eyebrow><div style={{ marginTop: 3, fontSize: 16, fontWeight: 900 }}>배차완료 차량 관제 <span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", color: C.accent, fontSize: 14 }}>{counts.all}</span></div></div>
                 <CloseBtn onClose={onClose} />
               </div>
               <div style={{ display: "flex", gap: 4, padding: 3, borderRadius: 12, background: "rgba(255,255,255,.04)", border: `1px solid ${C.line}` }}>
                 {TABS.map(([k, l]) => (
                   <button key={k} type="button" onClick={() => setTab(k)} style={{ flex: 1, height: 30, borderRadius: 9, fontSize: 12, fontWeight: 800, border: "none", background: tab === k ? "rgba(143,176,240,.95)" : "transparent", color: tab === k ? C.ink : "rgba(207,224,255,.7)" }}>
-                    {l} <span style={{ fontFamily: MONO, fontSize: 10.5, opacity: 0.75 }}>{counts[k]}</span>
+                    {l} <span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 10.5, opacity: 0.75 }}>{counts[k]}</span>
                   </button>
                 ))}
               </div>

@@ -109,6 +109,7 @@ import { isWeekend, findApprovedLeaveForDate, isHoliday } from "../attendanceUti
 const MonthCompareAnalysis = lazyView(() => import("../MonthCompareAnalysis"));
 import { MailHeaderButton } from "../InternalMail";
 import BannerCenter from "../BannerCenter";
+import { publishDriverOrderRows, useDriverEventFeeds, useDriverEventCounts, setDriverSeenServer, setDriverToastsMuted, markDriverSeen, focusOrderRow, DriverEventToasts, DriverAckChip } from "../driverEvents"; // ⭐ 2026-11-05 기사앱 수락/거절·서류·긴급 알림(위쪽 배너·빨간 숫자)
 import NotifyCenter from "../NotifyCenter"; // ⭐ 2026-11-03 알림 통합 — 가운데 알림 팝업
 import { RemoteSupportHost } from "../RemoteSupport"; // ⭐ 2026-11-02 원격지원 —
 import OrderCongratsPopup from "../OrderCongratsPopup";
@@ -2155,7 +2156,7 @@ export default function MobileApp({ role: realRole, user, userCompany = "", forc
   useEffect(() => {
     if (!["list", "detail", "form"].includes(page)) deptListOkRef.current = false;
     if (deptMode && page === "list" && !(deptMode === "acct" && deptListOkRef.current)) setPage("dept");
-    if (!deptMode && (page === "dept" || (String(page).startsWith("dept:") && page !== "dept:execsched" && page !== "dept:schedule" && page !== "dept:rules" && page !== "dept:board" && page !== "dept:farerules" && page !== "dept:myresume" && !(DEPT_PAGE_MENU[page] && deptOkM(DEPT_PAGE_MENU[page]))))) setPage("list");
+    if (!deptMode && (page === "dept" || (String(page).startsWith("dept:") && page !== "dept:execsched" && page !== "dept:driverdocs" && page !== "dept:schedule" && page !== "dept:rules" && page !== "dept:board" && page !== "dept:farerules" && page !== "dept:myresume" && !(DEPT_PAGE_MENU[page] && deptOkM(DEPT_PAGE_MENU[page]))))) setPage("list");
   }, [deptMode, page]);
   const toggleExecFull = () => { const v = !execFull; setExecFull(v); try { localStorage.setItem("kpExecFull", v ? "1" : "0"); } catch { /* 무시 */ } setPage(v ? "list" : "dept"); };
   const listScrollYRef = useRef(0); // 리스트 스크롤 위치 저장
@@ -2519,6 +2520,18 @@ const quickRange = (days) => {
     // ⭐ 2026-11-02 점검 — 결재 요청은 BannerCenter가 이미 띄우므로 위쪽 배너 중복 표시 안 함
     onAlert: (msg, key, id) => { if (key === "approval") return; showTopOrderBanner(msg, key === "notice" ? id : null); },
   });
+  // ⭐ 2026-11-05 기사앱 이벤트(PC와 같은 기준) — 수락/거절은 이미 받은 오더(orders)에서, 서류(검토 대기)·긴급(미처리)은 작은 구독 1개씩
+  const drvCompanyM = (localStorage.getItem("loginCompany") || userCompany || localStorage.getItem("userCompany") || DEFAULT_COMPANY).trim();
+  const drvCounts = useDriverEventCounts();
+  React.useEffect(() => { setDriverSeenServer(myProfM?.driverEventsSeen); }, [myProfM?.driverEventsSeen]);
+  React.useEffect(() => {
+    if (page !== "list" || !drvCounts.orders) return undefined;
+    const t = setTimeout(() => markDriverSeen("orders"), 4000);
+    return () => clearTimeout(t);
+  }, [page, drvCounts.orders]);
+  React.useEffect(() => { if (page === "dept:driverdocs" && drvCounts.docs) markDriverSeen("docs"); }, [page, drvCounts.docs]);
+  React.useEffect(() => { if (page === "fleet" && drvCounts.sosUnseen) markDriverSeen("sos"); }, [page, drvCounts.sosUnseen]);
+  useDriverEventFeeds({ uid: ["driver", "shipper"].includes(role) ? "" : user?.uid, company: drvCompanyM, canDocs: ["admin", "totalMaster", "superadmin", "test", "hrManager", "hrAcct", "allMgr"].includes(realRole || role) || myProfM?.isMaster === true, canSos: role !== "viewer" });
   // ⭐ 2026-11-03 위쪽 공지 알림줄 — 그 공지를 어디서든(공지사항 · 가운데 팝업) 읽으면 바로 사라진다
   useEffect(() => {
     if (!topOrderBanner?.noticeId || !user?.uid) return undefined;
@@ -2557,6 +2570,11 @@ const quickRange = (days) => {
   // ⭐ 블라인드 오더(최고관리자 전용)는 어떤 경로로 들어오든 여기서 걸러진다.
   const [orders, setOrdersRaw] = useState([]);
   const setOrders = React.useCallback((v) => setOrdersRaw(prev => cleanMgrRows(hideBlind(typeof v === "function" ? v(prev) : v))), []); // 고정노선 자리 채움 "담당자" → 빈 값
+  // ⭐ 2026-11-05 기사 수락/거절 — 이미 받은 오더 배열로만(줄마다 구독 없음) · 내가 등록/배차확정한 오더만
+  const drvMeNameM = mobileUsers.find((u) => (u.uid || u.id) === user?.uid)?.name || myProfM?.name || "";
+  const drvMeM = React.useMemo(() => ({ uid: ["driver", "shipper"].includes(role) ? "" : (user?.uid || ""), email: user?.email || "", name: drvMeNameM, isAdmin: ["admin", "totalMaster", "superadmin", "allMgr"].includes(realRole || role) }), [user?.uid, user?.email, drvMeNameM, realRole, role]);
+  React.useEffect(() => { publishDriverOrderRows(orders, drvMeM); }, [orders, drvMeM]);
+  React.useEffect(() => { setDriverToastsMuted(!alarmEnabled); }, [alarmEnabled]);
   const [canceledOrders, setCanceledOrdersRaw] = useState([]);
   const setCanceledOrders = React.useCallback((v) => setCanceledOrdersRaw(prev => hideBlind(typeof v === "function" ? v(prev) : v)), []); // ★ 취소내역 화면용
   // ⭐ 앱을 백그라운드에 뒀다가 다시 열었을 때, 서버 재조회가 오래 걸리는 동안(기기가
@@ -5683,6 +5701,16 @@ const title =
 )}
 
       <BannerCenter bottom={86} />
+      {/* ⭐ 2026-11-05 기사 수락/거절·서류·긴급 — 위쪽 배너(포커스 안 뺏음 · 8초 뒤 사라짐) · [보기]는 그 카드로 */}
+      {!["driver", "shipper"].includes(role) && (
+        <DriverEventToasts mobile onView={(e) => {
+          if (e.kind === "doc") { markDriverSeen("docs"); setPage("dept:driverdocs"); return; }
+          if (e.kind === "sos") { markDriverSeen("sos"); setPage("fleet"); return; }
+          markDriverSeen("orders");
+          if (e.row?.배차표Id) { setPage("fixedroute"); return; }
+          setShowMenu(false); setPage("list"); setTimeout(() => focusOrderRow(e.id), 300);
+        }} />
+      )}
       {/* ⭐ 2026-11-03 알림 통합 — 새 공지·인사발령·결재 요청/결과·인수인계는 가운데 팝업(아래쪽 배너 없앰) */}
       {!["driver", "shipper"].includes(role) && (
         <NotifyCenter mobile uid={user?.uid} role={realRole || role} team={myProfM?.team || (() => { try { return window.__kpMeTeam || ""; } catch { return ""; } })()}
@@ -5736,7 +5764,7 @@ const title =
   onRefresh={page === "list" ? handleRefresh : undefined}
   onValidateOrders={undefined /* ⭐ 2026-11-04 오더검증 버튼 없앰 */}
   onMenu={page === "list" || page === "dept" ? () => setShowMenu(true) : undefined}
-  menuBadge={(alertCounts.approval || 0) + (alertCounts.handover || 0) + (alertCounts.notice || 0) + ((["admin", "totalMaster", "superadmin", "viewer"].includes(role) || deptMode) ? (alertCounts.signupStaff || 0) + (alertCounts.signupDriver || 0) : 0)}
+  menuBadge={(alertCounts.approval || 0) + (alertCounts.handover || 0) + (alertCounts.notice || 0) + ((["admin", "totalMaster", "superadmin", "viewer"].includes(role) || deptMode) ? (alertCounts.signupStaff || 0) + (alertCounts.signupDriver || 0) : 0) + drvCounts.orders + drvCounts.docs + drvCounts.sos /* ⭐ 2026-11-05 기사앱 이벤트 */}
   notifCount={unreadCount}
   onNotifClick={() => { setShowNotifPanel(true); markAllRead(); }}
   messengerUnread={messengerUnread}
@@ -5919,7 +5947,7 @@ onGoAttendance={() => {
           isCeo={forceExec || ["대표", "대표이사", "사장"].includes(String(myProfM?.position || "").trim())}
           execFull={execFull}
           onToggleExec={() => { toggleExecFull(); setShowMenu(false); }}
-          alertCounts={alertCounts}
+          alertCounts={{ ...alertCounts, drvOrders: drvCounts.orders, drvDocs: drvCounts.docs, drvSos: drvCounts.sos }}
           unassignedCount={unassignedOrders.length}
           onDeleteAll={deleteAllOrders}
           setUiScale={setUiScale}
@@ -7339,7 +7367,7 @@ function MobileVersionChip({ dark = false }) {
 }
 
 // ⭐ 2026-11-03 카톡처럼 진한 빨강 숫자(모바일 테마가 bg-rose-500을 남색으로 바꾸므로 색은 style로 고정)
-const RED_PILL = { background: "#E5332A", color: "#fff", fontWeight: 900 };
+const RED_PILL = { background: "#FF3B30", color: "#fff", fontWeight: 800 }; // ⭐ 2026-11-05 카카오톡 빨강
 const MobileHeader = React.memo(function MobileHeader({ title, onBack, onRefresh, onValidateOrders, onMenu, menuBadge = 0, notifCount = 0, onNotifClick, cardVersionB = false, messengerUnread = 0, onMessengerClick, mailCompany = "", mailName = "", attUid = "", attRole = "", attEmail = "" }) {
   const newVer = useNewVersion(); // ★ 새 버전 배포 시 메뉴 버튼에 점 표시
   // ⭐ 2026-10-22 디자인 개선 — A형: 반투명 흰 머리줄 / B형: 남색 그라데이션 머리줄. 버튼은 둥근 네모 타일.
@@ -7893,16 +7921,16 @@ function MobileSideMenu({
               {/* ⭐ 2026-11-05 직원 가입 승인과 기사 가입 승인(기사 앱 계정)을 나눔 — 숫자도 각각 */}
               <MenuItem label="직원 가입 승인" icon="users" onClick={() => onGo?.("staff")} badge={alertCounts?.signupStaff || null} dark={dark} />
               <MenuItem label="기사 앱 계정 · 가입 승인" icon="truck" onClick={() => onGo?.("drvacc")} badge={alertCounts?.signupDriver || null} dark={dark} />
-              <MenuItem label="기사 서류" icon="file" onClick={() => onGo?.("dept:driverdocs")} dark={dark} />
+              <MenuItem label="기사 서류" icon="file" onClick={() => onGo?.("dept:driverdocs")} badge={alertCounts?.drvDocs || null} dark={dark} />
             </MenuSection>
           )}
           {!deptMode && (
           <MenuSection title="배차관리" en="DISPATCH" dark={dark} alwaysOpen>
-            {ok("배차현황") && <MenuItem label="등록내역" icon="list" onClick={onGoList} dark={dark} />}
+            {ok("배차현황") && <MenuItem label="등록내역" icon="list" onClick={onGoList} badge={alertCounts?.drvOrders || null} dark={dark} />}{/* ⭐ 2026-11-05 기사 수락/거절 */}
             {role !== "test" && ok("배차관리") && <MenuItem label="화물등록" icon="truck" onClick={onGoCreate} dark={dark} />}
             {ok("배차관리") && <MenuItem label="미배차현황" icon="alert" onClick={onGoUnassigned} badge={unassignedCount > 0 ? unassignedCount : null} dark={dark} />}
             {ok("배차현황") && <MenuItem label="고정노선현황" icon="route" onClick={() => onGo?.("fixedroute")} dark={dark} />}{/* ⭐ 2026-11-03 구글시트 배차표 */}
-            {ok("지입차관리") && <MenuItem label="지입차관리" icon="route" onClick={onGoFleet} dark={dark} />}{/* ⭐ 2026-11-03 배차관리 안으로 */}
+            {ok("지입차관리") && <MenuItem label="지입차관리" icon="route" onClick={onGoFleet} badge={alertCounts?.drvSos || null} dark={dark} />}{/* ⭐ 2026-11-03 배차관리 안으로 */}
           </MenuSection>
           )}
           {!deptMode && ["인사관리부", "회계관리", "자금관리", "비품관리", "증명서발급"].some(deptOk) && (
@@ -7939,6 +7967,7 @@ function MobileSideMenu({
             <MenuSection title="관리자 전용 메뉴" en="ADMIN" dark={dark} alwaysOpen>
               <MenuItem label="직원 관리" icon="users" onClick={() => onGo?.("staff")} badge={alertCounts?.signupStaff || null} dark={dark} />
               <MenuItem label="기사 앱 계정 · 가입 승인" icon="truck" onClick={() => onGo?.("drvacc")} badge={alertCounts?.signupDriver || null} dark={dark} />
+              <MenuItem label="기사 서류" icon="file" onClick={() => onGo?.("dept:driverdocs")} badge={alertCounts?.drvDocs || null} dark={dark} />{/* ⭐ 2026-11-05 기사앱 서류 업로드 숫자 */}
               {canPermsM && <MenuItem label="권한 관리" icon="key" onClick={() => onGo?.("perms")} dark={dark} />}
             </MenuSection>
           )}
@@ -8006,7 +8035,7 @@ function MobileSideMenu({
             >{dark && <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9" /></svg>}로그아웃</button>
           </div>
           <div className={`${dark ? "px-5 pb-4" : "px-5 py-2"} flex items-center justify-between`}>
-            <span className={`text-[11px] ${dark ? "text-white/35 font-bold tracking-[0.2em]" : "text-gray-400"}`} style={dark ? { fontFamily: KPM_MONO } : undefined}>{dark ? <LogisTag height={7} text="BUILD" /> : "버전"}</span>
+            <span className={`text-[11px] ${dark ? "text-white/35 font-bold tracking-[0.2em]" : "text-gray-400"}`} style={dark ? { fontFamily: KPM_MONO, fontVariantNumeric: "tabular-nums" } : undefined}>{dark ? <LogisTag height={7} text="BUILD" /> : "버전"}</span>
             <MobileVersionChip dark={dark} />
           </div>
         </div>
@@ -8070,7 +8099,7 @@ function MobileSideMenu({
                         </div>
                       </div>
                       <div className="flex items-center gap-2 shrink-0">
-                        <span className="font-mono text-[13px] font-bold text-[#1B2B4B]">{g.code}</span>
+                        <span className="tabular-nums text-[13px] font-bold text-[#1B2B4B]">{g.code}</span>
                         <button
                           onClick={() => navigator.clipboard?.writeText(g.code)}
                           className="px-2.5 py-1 rounded-lg text-[11px] font-semibold text-[#1B2B4B] border border-[#1B2B4B]/30"
@@ -8112,7 +8141,7 @@ function KpmDrawerHead({ myName, role, loginTime, onClose, fmtLoginTime }) {
       <div className="flex items-center gap-2.5">
         <LogisMark size={36} />
         <div className="min-w-0 flex-1">
-          <div className="text-[9.5px] font-extrabold tracking-[0.3em] text-[#8FB0F0]" style={{ fontFamily: KPM_MONO }}>DISPATCH · CONSOLE</div>
+          <div className="text-[9.5px] font-extrabold tracking-[0.3em] text-[#8FB0F0]" style={{ fontFamily: KPM_MONO, fontVariantNumeric: "tabular-nums" }}>DISPATCH · CONSOLE</div>
           <div className="mt-1.5"><LogisWordmark height={12} /></div>
         </div>
         <button type="button" onClick={onClose} aria-label="닫기" className="w-9 h-9 rounded-[11px] bg-white/[0.07] ring-1 ring-white/10 grid place-items-center text-white/80">
@@ -8120,10 +8149,10 @@ function KpmDrawerHead({ myName, role, loginTime, onClose, fmtLoginTime }) {
         </button>
       </div>
       <div className="mt-3.5 flex items-end justify-between">
-        <div className="flex items-center gap-1.5 text-[9.5px] font-extrabold tracking-[0.24em] text-[#8FB0F0]" style={{ fontFamily: KPM_MONO }}>
+        <div className="flex items-center gap-1.5 text-[9.5px] font-extrabold tracking-[0.24em] text-[#8FB0F0]" style={{ fontFamily: KPM_MONO, fontVariantNumeric: "tabular-nums" }}>
           <span className="w-1.5 h-1.5 rounded-full bg-[#6E95E8] animate-pulse" />SYSTEM ONLINE
         </div>
-        <div className="font-black tabular-nums leading-none" style={{ fontFamily: KPM_MONO, fontSize: 30, letterSpacing: "-0.02em" }}>
+        <div className="font-black tabular-nums leading-none" style={{ fontFamily: KPM_MONO, fontVariantNumeric: "tabular-nums", fontSize: 30, letterSpacing: "-0.02em" }}>
           {p2(now.getHours())}<span className="text-white/35">:</span>{p2(now.getMinutes())}<span className="text-[14px] text-white/35 ml-1">{p2(now.getSeconds())}</span>
         </div>
       </div>
@@ -8158,7 +8187,7 @@ function KpmDrawerControls({ alarmEnabled, toggleAlarm, uiScale, setUiScale, car
   return (
     <div className="px-3 pt-3.5 pb-2">
       <div className="px-2 pb-2 flex items-center gap-2">
-        <span className="text-[9.5px] font-extrabold tracking-[0.26em] text-[#8FB0F0]" style={{ fontFamily: KPM_MONO }}>CONTROL</span>
+        <span className="text-[9.5px] font-extrabold tracking-[0.26em] text-[#8FB0F0]" style={{ fontFamily: KPM_MONO, fontVariantNumeric: "tabular-nums" }}>CONTROL</span>
         <span className="text-[11px] font-bold text-white/40">빠른 설정</span>
         <span className="flex-1 h-px bg-gradient-to-r from-white/15 to-transparent" />
       </div>
@@ -8195,7 +8224,7 @@ function MenuSection({ title, en, children, dark, alwaysOpen = false }) {
     return (
       <div className="px-3 pt-3.5">
         <div className="px-2 pb-2 flex items-center gap-2">
-          <span className="text-[9.5px] font-extrabold tracking-[0.26em] text-[#8FB0F0]" style={{ fontFamily: KPM_MONO }}>{en || title}</span>
+          <span className="text-[9.5px] font-extrabold tracking-[0.26em] text-[#8FB0F0]" style={{ fontFamily: KPM_MONO, fontVariantNumeric: "tabular-nums" }}>{en || title}</span>
           <span className="text-[11px] font-bold text-white/40">{title}</span>
           <span className="flex-1 h-px bg-gradient-to-r from-white/15 to-transparent" />
         </div>
@@ -11073,7 +11102,7 @@ const dropTime = order.하차시간 ? fmtDispatchTimeM(order.하차시간, order
 
   if (cardVersionB) {
     // ── B VERSION(2026-10-28 디지털 리디자인): 관제 패널형 카드 — 상/하 마커 · 고정폭 숫자 · 네이비 단색 ──
-    const MONO_B = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
+    const MONO_B = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
     const pStopsB = validStops(order.경유상차목록 || order.경유지_상차);
     const dStopsB = validStops(order.경유하차목록 || order.경유지_하차);
     const viaStopsB = [...pStopsB, ...dStopsB];
@@ -11087,7 +11116,7 @@ const dropTime = order.하차시간 ? fmtDispatchTimeM(order.하차시간, order
           <div className="flex items-center justify-between gap-2">
             <span className="text-[1.02em] font-extrabold text-[#0F1A30] truncate leading-tight">{name}</span>
             <span className="flex items-center gap-1 shrink-0">
-              <span className="text-[0.74em] font-bold text-[#1B2B4B] bg-[#EEF3FB] px-1.5 py-0.5 rounded-md tabular-nums" style={{ fontFamily: MONO_B }}>{time}</span>
+              <span className="text-[0.74em] font-bold text-[#1B2B4B] bg-[#EEF3FB] px-1.5 py-0.5 rounded-md tabular-nums" style={{ fontFamily: MONO_B, fontVariantNumeric: "tabular-nums" }}>{time}</span>
               {day && <span className={`text-[0.68em] px-1 py-0.5 rounded border tabular-nums font-semibold ${dayBadgeClass(day)}`}>{day}</span>}
             </span>
           </div>
@@ -11097,7 +11126,7 @@ const dropTime = order.하차시간 ? fmtDispatchTimeM(order.하차시간, order
     );
     return (
       <>
-      <div
+      <div data-order-id={order._id || order.id}
         className={
           "kp-m-card kp-b-card relative bg-white rounded-[18px] border transition-colors overflow-hidden " +
           (selected ? "kp-m-card-on " : "") +
@@ -11118,7 +11147,7 @@ const dropTime = order.하차시간 ? fmtDispatchTimeM(order.하차시간, order
         {/* 머리줄 — 날짜·거래처·첨부·뱃지 | 메모·냉장·상태 */}
         <div className="pl-4 pr-3 pt-2.5 pb-2 flex flex-wrap items-center justify-between gap-x-2 gap-y-1 border-b border-[#EEF1F6]" style={{ background: `linear-gradient(90deg, ${statusWash}, rgba(255,255,255,0) 70%)` }}>
           <div className="flex flex-wrap items-center gap-1.5 min-w-0">
-            <span className="text-[0.7em] font-extrabold text-white bg-[#1B2B4B] px-1.5 py-0.5 rounded-md tabular-nums shrink-0" style={{ fontFamily: MONO_B }}>{String(order.상차일 || "").slice(5) || "--"}</span>
+            <span className="text-[0.7em] font-extrabold text-white bg-[#1B2B4B] px-1.5 py-0.5 rounded-md tabular-nums shrink-0" style={{ fontFamily: MONO_B, fontVariantNumeric: "tabular-nums" }}>{String(order.상차일 || "").slice(5) || "--"}</span>
             {order.거래처명 && (
               <span className="text-[0.8em] font-extrabold text-[#1B2B4B] truncate max-w-[150px] inline-flex items-center">{cBiz.multi && <BizChip name={bizOf(order, cBiz.defaultName)} main={bizOf(order, cBiz.defaultName) === cBiz.defaultName} />}{order.거래처명}</span>
             )}
@@ -11180,6 +11209,7 @@ const dropTime = order.하차시간 ? fmtDispatchTimeM(order.하차시간, order
             )}
             <div className="relative inline-block shrink-0">
               <TransportStatusBadge order={order} compact onClick={openReqModal} />
+              <DriverAckChip row={order} className="ml-1" />{/* ⭐ 2026-11-05 기사앱 수락/거절 */}
               {isRecentlyEditedByShipper && !isEditRequested && (
                 <span title="화주사가 오더 정보를 수정했습니다"
                   className="absolute -bottom-1 -left-1 w-2.5 h-2.5 rounded-full bg-[#6E95E8] border-2 border-white" />
@@ -11226,11 +11256,11 @@ const dropTime = order.하차시간 ? fmtDispatchTimeM(order.하차시간, order
             <div className="flex min-[380px]:flex-col justify-between min-[380px]:justify-center gap-x-4 gap-y-0.5 shrink-0 px-3 py-1.5 rounded-xl text-white" style={{ background: "linear-gradient(135deg,#0F1A30,#1B2B4B 60%,#2D4C82)" }}>
               <span className="flex items-baseline justify-between gap-2">
                 <span className="text-[0.6em] text-[#8FB0F0] font-black tracking-[0.12em] whitespace-nowrap shrink-0">청구</span>
-                <span className="text-[0.86em] font-extrabold tabular-nums" style={{ fontFamily: MONO_B }}>{fmtMoney(claim)}</span>
+                <span className="text-[0.86em] font-extrabold tabular-nums" style={{ fontFamily: MONO_B, fontVariantNumeric: "tabular-nums" }}>{fmtMoney(claim)}</span>
               </span>
               <span className="flex items-baseline justify-between gap-2">
                 <span className="text-[0.6em] text-[#8FB0F0] font-black tracking-[0.12em] whitespace-nowrap shrink-0">기사</span>
-                <span className="text-[0.86em] font-bold tabular-nums text-[#CFE0FF]" style={{ fontFamily: MONO_B }}>{fmtMoney(fee)}</span>
+                <span className="text-[0.86em] font-bold tabular-nums text-[#CFE0FF]" style={{ fontFamily: MONO_B, fontVariantNumeric: "tabular-nums" }}>{fmtMoney(fee)}</span>
               </span>
             </div>
           </div>
@@ -11238,12 +11268,12 @@ const dropTime = order.하차시간 ? fmtDispatchTimeM(order.하차시간, order
           {/* 배차완료 시 기사 연락 */}
           {state === "배차완료" && (order.이름 || order.차량번호) && (
             <div className="flex items-center gap-2 mt-2.5 pt-2.5 border-t border-dashed border-[#E3E8F0]">
-              {order.차량번호 && <span className="text-[0.74em] font-extrabold text-[#0F1A30] px-1.5 py-0.5 rounded-md border-[1.5px] border-[#0F1A30] shrink-0" style={{ fontFamily: MONO_B }}>{order.차량번호}</span>}
+              {order.차량번호 && <span className="text-[0.74em] font-extrabold text-[#0F1A30] px-1.5 py-0.5 rounded-md border-[1.5px] border-[#0F1A30] shrink-0" style={{ fontFamily: MONO_B, fontVariantNumeric: "tabular-nums" }}>{order.차량번호}</span>}
               <span className="text-[0.8em] font-bold text-[#334155] truncate flex-1">
                 {[order.이름, order.전화번호 ? formatPhone(order.전화번호) : ""].filter(Boolean).join(" · ")}
               </span>
               {/* ⭐ 2026-11-05 지입·직영·임대 기사앱 실시간 위치 */}
-              <LiveDriverChip order={order} mobile className="shrink-0" />
+              <LiveDriverChip order={order} mobile variant="compact" className="shrink-0" />{/* ⭐ 2026-11-05 작은 칩(점 + N분) */}
               {order.전화번호 && (
                 <div className="flex gap-1.5">
                   <a href={`tel:${order.전화번호}`} onClick={e => e.stopPropagation()} style={{ touchAction: "manipulation", background: "linear-gradient(135deg,#2D4C82,#1B2B4B)" }}
@@ -11282,7 +11312,7 @@ const dropTime = order.하차시간 ? fmtDispatchTimeM(order.하차시간, order
   return (
    <>
    {/* ⭐ A형(2026-10-22 새 디자인) — 탑승권(티켓) 스타일: 큰 출발→도착, 절취선, 아래 운임 스텁. 남색 계열만 사용 */}
-   <div
+   <div data-order-id={order._id || order.id}
   className={
     "kp-m-card kp-ticket relative bg-white rounded-2xl shadow border transition-colors " +
     (selected ? "kp-m-card-on " : "") +
@@ -11341,6 +11371,7 @@ const dropTime = order.하차시간 ? fmtDispatchTimeM(order.하차시간, order
       </button>
       <div className="relative inline-flex items-center shrink-0">
         <TransportStatusBadge order={order} className="inline-flex items-center leading-none" onClick={openReqModal} flat compact />
+        <DriverAckChip row={order} className="ml-1" />{/* ⭐ 2026-11-05 기사앱 수락/거절 */}
         {isRecentlyEditedByShipper && !isEditRequested && (
           <span title="화주사가 오더 정보를 수정했습니다" className="absolute -bottom-1 -left-1 w-2.5 h-2.5 rounded-full bg-[#4B6CB7] border-2 border-white" />
         )}
@@ -11416,7 +11447,7 @@ const dropTime = order.하차시간 ? fmtDispatchTimeM(order.하차시간, order
         {[order.차량번호, order.이름, order.전화번호 ? formatPhone(order.전화번호) : ""].filter(Boolean).join(" · ")}
       </span>
       {/* ⭐ 2026-11-05 지입·직영·임대 기사앱 실시간 위치 */}
-      <LiveDriverChip order={order} mobile className="shrink-0" />
+      <LiveDriverChip order={order} mobile variant="compact" className="shrink-0" />{/* ⭐ 2026-11-05 작은 칩(점 + N분) */}
       {order.전화번호 && (
         <div className="flex gap-1">
           <a href={`tel:${order.전화번호}`} onClick={e => e.stopPropagation()} style={{ touchAction: "manipulation" }}
@@ -18949,7 +18980,7 @@ function MobileMyInfo({ currentUser, mobileUsers, loginTime, orders = [], userCo
       {/* 프로필 히어로 */}
       <div className="relative overflow-hidden rounded-[22px] text-white px-5 pt-5 pb-4 shadow-[0_14px_32px_rgba(15,26,48,0.28)]" style={{ background: KPM_HERO_BG }}>
         <div className="flex items-center justify-between">
-          <span className="text-[10px] font-extrabold tracking-[0.26em] text-[#8FB0F0]" style={{ fontFamily: KPM_MONO }}>MY PROFILE</span>
+          <span className="text-[10px] font-extrabold tracking-[0.26em] text-[#8FB0F0]" style={{ fontFamily: KPM_MONO, fontVariantNumeric: "tabular-nums" }}>MY PROFILE</span>
           <span className="h-6 px-2.5 rounded-full bg-white/10 ring-1 ring-white/15 text-[11px] font-black grid place-items-center">{roleKo}{me?.isMaster ? " · 마스터" : ""}</span>
         </div>
         <div className="mt-3 flex items-center gap-3.5">
@@ -18957,7 +18988,7 @@ function MobileMyInfo({ currentUser, mobileUsers, loginTime, orders = [], userCo
           <div className="min-w-0">
             <div className="text-[21px] font-black tracking-tight truncate">{myName}</div>
             <div className="text-[12.5px] text-white/60 truncate">{[myCompany, team, position].filter(Boolean).join(" · ") || "-"}</div>
-            <div className="text-[11.5px] text-white/45 truncate" style={{ fontFamily: KPM_MONO }}>{myEmail}</div>
+            <div className="text-[11.5px] text-white/45 truncate" style={{ fontFamily: KPM_MONO, fontVariantNumeric: "tabular-nums" }}>{myEmail}</div>
           </div>
         </div>
         <div className="mt-4 grid grid-cols-2 gap-2">
@@ -18967,7 +18998,7 @@ function MobileMyInfo({ currentUser, mobileUsers, loginTime, orders = [], userCo
           </div>
           <div className="rounded-xl bg-white/[0.07] ring-1 ring-white/10 px-3 py-2">
             <div className="text-[10px] font-bold text-white/50">로그인</div>
-            <div className="text-[13px] font-black tabular-nums whitespace-normal break-keep leading-snug" style={{ fontFamily: KPM_MONO }}>{fmtTime(loginTime)}</div>
+            <div className="text-[13px] font-black tabular-nums whitespace-normal break-keep leading-snug" style={{ fontFamily: KPM_MONO, fontVariantNumeric: "tabular-nums" }}>{fmtTime(loginTime)}</div>
           </div>
         </div>
       </div>
@@ -18977,7 +19008,7 @@ function MobileMyInfo({ currentUser, mobileUsers, loginTime, orders = [], userCo
         <div className="grid grid-cols-4 gap-1.5">
           {[["오늘", todayCount], ["이번 달", thisMonthCount], ["배차완료", completedCount], ["전체", totalCount]].map(([l, v], idx) => (
             <div key={l} className={`min-w-0 rounded-xl px-1.5 py-2.5 text-center ${idx === 0 ? "bg-[#1B2B4B] text-white" : "bg-[#F5F8FD] border border-[#E3E8F0]"}`}>
-              <div className={`text-[20px] font-black tabular-nums leading-none ${idx === 0 ? "" : "text-[#0F1A30]"}`} style={{ fontFamily: KPM_MONO }}>{v}</div>
+              <div className={`text-[20px] font-black tabular-nums leading-none ${idx === 0 ? "" : "text-[#0F1A30]"}`} style={{ fontFamily: KPM_MONO, fontVariantNumeric: "tabular-nums" }}>{v}</div>
               <div className={`text-[11px] font-bold mt-1 whitespace-nowrap truncate ${idx === 0 ? "text-white/60" : "text-[#7A879C]"}`}>{l}</div>
             </div>
           ))}
@@ -18989,7 +19020,7 @@ function MobileMyInfo({ currentUser, mobileUsers, loginTime, orders = [], userCo
         {/* ⭐ 2026-11-01 입사일은 인사팀(인사관리부 › 인사관리 › 직원관리)에서만 바꿀 수 있다 — 여기서는 보기만 */}
         <div className="flex items-center gap-2 rounded-xl bg-[#F5F8FD] border border-[#E3E8F0] px-3 h-11">
           <span className="text-[12px] font-bold text-[#7A879C]">입사일</span>
-          <span className="text-[14.5px] font-black text-[#0F1A30] tabular-nums" style={{ fontFamily: KPM_MONO }}>{hireDate || "미등록"}</span>
+          <span className="text-[14.5px] font-black text-[#0F1A30] tabular-nums" style={{ fontFamily: KPM_MONO, fontVariantNumeric: "tabular-nums" }}>{hireDate || "미등록"}</span>
           <span className="ml-auto text-[10.5px] font-bold text-[#9AA9C3]">변경은 인사팀</span>
         </div>
         {leave ? (
@@ -19045,14 +19076,14 @@ function MobileFixedRouteNotice({ order }) {
 }
 
 // ── 모바일 공통 디자인 조각(내정보·설정) — PC 화면과 같은 네이비 디지털 톤 ──
-const KPM_MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
+const KPM_MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
 const KPM_HERO_BG = "linear-gradient(rgba(143,176,240,.07) 1px, transparent 1px) 0 0/22px 22px, linear-gradient(90deg, rgba(143,176,240,.07) 1px, transparent 1px) 0 0/22px 22px, linear-gradient(125deg,#0B1428 0%,#1B2B4B 60%,#2D4C82 100%)";
 function KpmCard({ en, title, right, children, flush = false }) {
   return (
     <div className="rounded-[20px] bg-white border border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_10px_24px_rgba(16,24,40,0.05)] overflow-hidden">
       <div className="px-4 pt-3.5 pb-2.5 flex items-center justify-between gap-2">
         <div className="min-w-0">
-          <div className="text-[9.5px] font-extrabold tracking-[0.24em] text-[#4B6CB7]" style={{ fontFamily: KPM_MONO }}>{en}</div>
+          <div className="text-[9.5px] font-extrabold tracking-[0.24em] text-[#4B6CB7]" style={{ fontFamily: KPM_MONO, fontVariantNumeric: "tabular-nums" }}>{en}</div>
           <div className="text-[15px] font-black text-[#0F1A30] tracking-tight truncate">{title}</div>
         </div>
         {right}
@@ -19070,7 +19101,7 @@ function KpmRow({ label, sub, value, right, onClick, mono = false, danger = fals
         <div className={`text-[13.5px] font-bold ${danger ? "text-[#B42318]" : "text-[#0F1A30]"}`}>{label}</div>
         {sub && <div className="text-[11.5px] text-[#7A879C] mt-0.5 leading-snug">{sub}</div>}
       </div>
-      {value !== undefined && <span className={`shrink-0 max-w-[60%] text-right text-[13px] font-black text-[#0F1A30] truncate ${mono ? "tabular-nums" : ""}`} style={mono ? { fontFamily: KPM_MONO } : undefined}>{value}</span>}
+      {value !== undefined && <span className={`shrink-0 max-w-[60%] text-right text-[13px] font-black text-[#0F1A30] truncate ${mono ? "tabular-nums" : ""}`} style={mono ? { fontFamily: KPM_MONO, fontVariantNumeric: "tabular-nums" } : undefined}>{value}</span>}
       {right && <div className="shrink-0 ml-auto">{right}</div>}
     </Tag>
   );
@@ -22520,7 +22551,7 @@ function MobileSettingsPage({ onBack, cardVersionB, setCardVersionB, alarmEnable
 
         {/* 히어로 */}
         <div className="relative overflow-hidden rounded-[22px] text-white px-5 py-4 shadow-[0_14px_32px_rgba(15,26,48,0.28)]" style={{ background: KPM_HERO_BG }}>
-          <div className="text-[10px] font-extrabold tracking-[0.26em] text-[#8FB0F0]" style={{ fontFamily: KPM_MONO }}>SETTINGS · PREFERENCES</div>
+          <div className="text-[10px] font-extrabold tracking-[0.26em] text-[#8FB0F0]" style={{ fontFamily: KPM_MONO, fontVariantNumeric: "tabular-nums" }}>SETTINGS · PREFERENCES</div>
           <div className="text-[21px] font-black tracking-tight mt-0.5">설정</div>
           <div className="text-[12px] text-white/55 truncate">{[userCompany, ROLE_KO[role] || role, currentUser?.email].filter(Boolean).join(" · ")}</div>
           <div className="mt-3 grid grid-cols-3 gap-1.5">
@@ -22593,7 +22624,7 @@ function MobileSettingsPage({ onBack, cardVersionB, setCardVersionB, alarmEnable
         </KpmCard>
 
         <KpmCard en="ABOUT" title="앱 정보" flush>
-          <KpmRow label="버전" sub="LogisWeb 배차관리" right={<div className="flex items-center gap-1.5"><span className="text-[12px] text-[#5B6B85] font-bold" style={{ fontFamily: KPM_MONO }}>v{appVersion}</span><span className="text-[10px] font-black px-1.5 py-0.5 rounded-full bg-[#EEF3FC] text-[#1B2B4B]">최신</span></div>} />
+          <KpmRow label="버전" sub="LogisWeb 배차관리" right={<div className="flex items-center gap-1.5"><span className="text-[12px] text-[#5B6B85] font-bold" style={{ fontFamily: KPM_MONO, fontVariantNumeric: "tabular-nums" }}>v{appVersion}</span><span className="text-[10px] font-black px-1.5 py-0.5 rounded-full bg-[#EEF3FC] text-[#1B2B4B]">최신</span></div>} />
           <KpmRow label="제작" value="LogisWeb" />
         </KpmCard>
 

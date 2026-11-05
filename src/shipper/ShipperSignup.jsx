@@ -86,14 +86,14 @@ function TermsBox({ title, text }) {
 }
 
 // ── Step 1: 가입 유형 선택 ────────────────────────────────────────────────────
-const MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
+const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
 const GRID_BG = "linear-gradient(rgba(143,176,240,.07) 1px, transparent 1px) 0 0/26px 26px, linear-gradient(90deg, rgba(143,176,240,.07) 1px, transparent 1px) 0 0/26px 26px, linear-gradient(135deg,#0B1428 0%,#1B2B4B 60%,#2D4C82 100%)";
 function TypeSelect({ onSelect }) {
   const navigate = useNavigate();
   const Card = ({ type, en, title, desc, points, dark }) => (
     <button type="button" onClick={() => onSelect(type)}
       className={`group text-left rounded-[22px] p-7 border transition-all duration-200 hover:-translate-y-0.5 ${dark ? "bg-[#0F1A30] border-[#0F1A30] text-white shadow-[0_18px_40px_rgba(11,20,40,.35)]" : "bg-white border-[#DCE3EE] text-[#0F1A30] hover:border-[#2D4C82] shadow-[0_8px_24px_rgba(15,26,48,.08)]"}`}>
-      <div className={`text-[11px] font-extrabold tracking-[0.26em] ${dark ? "text-[#8FB0F0]" : "text-[#2D4C82]"}`} style={{ fontFamily: MONO }}>{en}</div>
+      <div className={`text-[11px] font-extrabold tracking-[0.26em] ${dark ? "text-[#8FB0F0]" : "text-[#2D4C82]"}`} style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{en}</div>
       <div className="text-[22px] font-black mt-1.5">{title}</div>
       <div className={`text-[14px] mt-1 ${dark ? "text-white/65" : "text-[#5B6B85]"}`}>{desc}</div>
       <div className="mt-5 space-y-2">
@@ -107,7 +107,7 @@ function TypeSelect({ onSelect }) {
       <div className="w-full max-w-[880px]">
         <div className="text-center mb-8">
           <LogisMark size={56} style={{ margin: "0 auto 16px", filter: "drop-shadow(0 10px 20px rgba(0,0,0,0.3))" }} />
-          <div className="text-[11px] font-extrabold tracking-[0.3em] text-[#8FB0F0]" style={{ fontFamily: MONO }}>SHIPPER · SIGN UP</div>
+          <div className="text-[11px] font-extrabold tracking-[0.3em] text-[#8FB0F0]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>SHIPPER · SIGN UP</div>
           <h1 className="text-[30px] font-black text-white tracking-tight mt-1">화주 회원가입</h1>
           <p className="text-[14.5px] text-white/60 mt-1.5">가입 유형을 골라 주세요</p>
         </div>
@@ -427,13 +427,13 @@ function SignupForm({ signupType, onBack }) {
       <div className="w-full max-w-[1120px] bg-white sm:rounded-[26px] shadow-[0_24px_60px_rgba(11,20,40,.14)] overflow-hidden lg:grid lg:grid-cols-[340px_minmax(0,1fr)]">
         <div className="relative text-white px-7 py-7 lg:py-10 flex flex-col" style={{ background: GRID_BG }}>
           <button type="button" onClick={onBack} className="self-start h-9 px-3.5 rounded-xl bg-white/10 border border-white/20 text-[13px] font-bold hover:bg-white/15">← 가입 유형</button>
-          <div className="mt-6 text-[11px] font-extrabold tracking-[0.26em] text-[#8FB0F0]" style={{ fontFamily: MONO }}>SHIPPER · {signupType === "신규" ? "NEW COMPANY" : "JOIN EXISTING"}</div>
+          <div className="mt-6 text-[11px] font-extrabold tracking-[0.26em] text-[#8FB0F0]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>SHIPPER · {signupType === "신규" ? "NEW COMPANY" : "JOIN EXISTING"}</div>
           <h1 className="text-[26px] font-black mt-1">{signupType === "신규" ? "신규 가입신청" : "기존 회사 추가 가입"}</h1>
           <p className="text-white/65 text-[14px] mt-1.5 leading-relaxed">{signupType === "신규" ? "회사 정보와 담당자 정보를 입력해 주세요. 거래하는 운송사를 연결하면 오더 요청이 바로 전달돼요." : "소속 회사를 검색해서 고르고 담당자 정보를 입력해 주세요."}</p>
           <div className="hidden lg:block mt-8 space-y-3">
             {["회사 정보", "담당자 정보", "계정 정보", "약관 동의"].map((t, i) => (
               <div key={t} className="flex items-center gap-3">
-                <span className="w-8 h-8 rounded-lg bg-white/10 border border-white/20 flex items-center justify-center text-[12px] font-black" style={{ fontFamily: MONO }}>{String(i + 1).padStart(2, "0")}</span>
+                <span className="w-8 h-8 rounded-lg bg-white/10 border border-white/20 flex items-center justify-center text-[12px] font-black" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{String(i + 1).padStart(2, "0")}</span>
                 <span className="text-[14.5px] font-bold text-white/85">{t}</span>
               </div>
             ))}

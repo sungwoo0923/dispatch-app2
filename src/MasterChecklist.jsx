@@ -8,7 +8,7 @@ import { db } from "./firebase";
 import { usePlan, PLAN_DEFAULTS } from "./plans";
 import { billingAccess } from "./billingAccess";
 
-const MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
+const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
 const go = (menu) => { try { window.__setMainTab?.(menu); window.scrollTo(0, 0); } catch { /* 무시 */ } };
 
 async function hasAny(col, co, extra = []) {
@@ -70,13 +70,13 @@ export default function MasterChecklist({ user, userCompany }) {
     <div className="mb-4 rounded-[20px] overflow-hidden border border-[#0F1A30] bg-white shadow-[0_10px_26px_rgba(15,26,48,0.10)]">
       <div className="px-5 py-4 text-white flex items-center justify-between gap-4 flex-wrap" style={{ background: "linear-gradient(120deg,#0B1428 0%,#1B2B4B 60%,#2D4C82 100%)" }}>
         <div className="min-w-0">
-          <div className="text-[10.5px] font-extrabold tracking-[0.28em] text-[#8FB0F0] whitespace-nowrap" style={{ fontFamily: MONO }}>MASTER · GETTING STARTED</div>
+          <div className="text-[10.5px] font-extrabold tracking-[0.28em] text-[#8FB0F0] whitespace-nowrap" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>MASTER · GETTING STARTED</div>
           <div className="text-[19px] font-black whitespace-nowrap">{co} 시작 체크리스트</div>
           <div className="text-[12.5px] text-white/65 whitespace-nowrap">처음 시작하는 관리자에게 보입니다 · 끝난 항목은 자동으로 체크됩니다</div>
         </div>
         <div className="flex items-center gap-3">
           <div className="text-right">
-            <div className="text-[24px] font-black tabular-nums" style={{ fontFamily: MONO }}>{doneN}<span className="text-[14px] text-white/50"> / {items.length}</span></div>
+            <div className="text-[24px] font-black tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{doneN}<span className="text-[14px] text-white/50"> / {items.length}</span></div>
             <div className="w-28 h-1.5 rounded-full bg-white/15 overflow-hidden"><div className="h-full bg-[#8FB0F0]" style={{ width: `${(doneN / items.length) * 100}%` }} /></div>
           </div>
           <button type="button" onClick={hide} className="h-9 px-3 rounded-xl bg-white/10 ring-1 ring-white/20 text-[12.5px] font-black whitespace-nowrap">숨기기</button>

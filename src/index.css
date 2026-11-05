@@ -257,3 +257,21 @@ table tbody tr.kp-row-hit:hover td {
 /* ⏰ 2026-11-03 퇴근 1분 전부터 퇴근 버튼 깜빡임(attendanceQuick.jsx) */
 @keyframes kpBlink { 0%, 100% { box-shadow: 0 0 0 0 rgba(247,185,85,0.9); filter: none; } 50% { box-shadow: 0 0 0 6px rgba(247,185,85,0); filter: brightness(1.15); } }
 .kp-blink { animation: kpBlink 1.1s ease-in-out infinite; outline: 2px solid #F7B955; outline-offset: 1px; }
+
+/* ⭐ 2026-11-05 정산 화면(거래처정산·거래명세서·미수금관리·보낸메일함·용차지급) 가독성 —
+   작은 글씨를 한 단계씩 키우고, 표는 14.5px · 금액(오른쪽 정렬·숫자 칸)은 15.5px 굵게.
+   인쇄·PDF 원본(명세서 미리보기)은 인라인 스타일이라 영향 없음 */
+.kp-settle .text-\[9px\], .kp-settle .text-\[9\.5px\] { font-size: 11px !important; }
+.kp-settle .text-\[10px\], .kp-settle .text-\[10\.5px\] { font-size: 12px !important; }
+.kp-settle .text-\[11px\], .kp-settle .text-\[11\.5px\] { font-size: 13.5px !important; }
+.kp-settle .text-\[12px\], .kp-settle .text-\[12\.5px\] { font-size: 14.5px !important; }
+.kp-settle .text-\[13px\], .kp-settle .text-\[13\.5px\] { font-size: 15px !important; }
+.kp-settle .text-xs { font-size: 13.5px !important; }
+.kp-settle .text-sm { font-size: 14.5px !important; }
+.kp-settle table td { font-size: 14.5px; }
+.kp-settle table th { font-size: 14px; }
+.kp-settle table td.text-right, .kp-settle table td.tabular-nums { font-size: 15.5px !important; font-weight: 800 !important; font-variant-numeric: tabular-nums; }
+
+/* ⭐ 2026-11-05 글꼴 통일 — 예전 디지털(고정폭) 글꼴(JetBrains Mono 등)이 흐릿해 보여 머리말 메뉴와 같은 기본 글꼴로 바꿨다.
+   남은 font-mono(다른 작업 파일)도 같은 글꼴 · 숫자는 칸 맞춤(tabular-nums) 유지 */
+.font-mono { font-family: "Noto Sans KR", "Apple SD Gothic Neo", "맑은 고딕", Malgun Gothic, sans-serif !important; font-variant-numeric: tabular-nums; }

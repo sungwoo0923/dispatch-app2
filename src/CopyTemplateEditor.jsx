@@ -5,7 +5,7 @@
 import React from "react";
 import { COPY_DEFAULTS, COPY_VARS, SAMPLE_BODY, SAMPLE_VARS, saveCopyTemplates, useCopyTemplates } from "./copyTemplates";
 
-const MONO = "'JetBrains Mono','IBM Plex Mono',ui-monospace,monospace";
+const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
 const MODES = [["driver", "기사 전달용", "DRIVER"], ["full", "전체 상세", "FULL"]];
 const draftOf = (cfg) => Object.fromEntries(MODES.map(([m]) => [m, { ...COPY_DEFAULTS[m], ...(cfg?.[m] || {}) }]));
 
@@ -60,7 +60,7 @@ export function CopyTemplateEditor({ canEdit = true, onSaved, compact = false })
         <div className="flex items-center gap-1.5 p-1 rounded-xl bg-[#EEF2F8] w-fit">
           {MODES.map(([m, l, en]) => (
             <button key={m} type="button" onClick={() => setMode(m)} className={`h-9 px-4 rounded-lg text-[13px] font-black transition ${mode === m ? "bg-[#0F1A30] text-white shadow" : "text-[#3A4A66] hover:bg-white"}`}>
-              {l}<span className="ml-1.5 text-[9.5px] tracking-[0.18em] opacity-60" style={{ fontFamily: MONO }}>{en}</span>
+              {l}<span className="ml-1.5 text-[9.5px] tracking-[0.18em] opacity-60" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{en}</span>
             </button>
           ))}
         </div>
@@ -81,11 +81,11 @@ export function CopyTemplateEditor({ canEdit = true, onSaved, compact = false })
         {area("bottom", d.includeUpload ? "③ 본문 아래 문구" : "② 본문 아래 문구", "마지막에 붙음", 5)}
 
         <div>
-          <div className="text-[11px] font-extrabold tracking-[0.2em] text-[#4B6CB7]" style={{ fontFamily: MONO }}>VARIABLES · 눌러서 커서 위치에 넣기</div>
+          <div className="text-[11px] font-extrabold tracking-[0.2em] text-[#4B6CB7]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>VARIABLES · 눌러서 커서 위치에 넣기</div>
           <div className="flex flex-wrap gap-1.5 mt-1.5">
             {COPY_VARS.map(([k, desc]) => (
               <button key={k} type="button" disabled={!canEdit} title={desc} onClick={() => insertVar(k)}
-                className="h-7 px-2.5 rounded-lg border border-[#DCE3EE] bg-white text-[12px] font-bold text-[#1B2B4B] hover:border-[#2D4C82] hover:bg-[#F2F6FC]" style={{ fontFamily: MONO }}>{`{${k}}`}</button>
+                className="h-7 px-2.5 rounded-lg border border-[#DCE3EE] bg-white text-[12px] font-bold text-[#1B2B4B] hover:border-[#2D4C82] hover:bg-[#F2F6FC]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{`{${k}}`}</button>
             ))}
           </div>
         </div>
@@ -101,7 +101,7 @@ export function CopyTemplateEditor({ canEdit = true, onSaved, compact = false })
       {/* 카톡 미리보기 */}
       <div className="rounded-2xl p-3 lg:sticky lg:top-2" style={{ background: "linear-gradient(160deg,#0B1428,#1B2B4B)" }}>
         <div className="flex items-center justify-between px-1 pb-2">
-          <span className="text-[10.5px] font-extrabold tracking-[0.24em] text-[#8FB0F0]" style={{ fontFamily: MONO }}>PREVIEW</span>
+          <span className="text-[10.5px] font-extrabold tracking-[0.24em] text-[#8FB0F0]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>PREVIEW</span>
           <span className="text-[11px] text-white/45">예시 오더로 본 결과</span>
         </div>
         <div className="rounded-xl bg-[#EEF2F8] p-3 max-h-[520px] overflow-y-auto">
@@ -126,7 +126,7 @@ export function CopyTemplateHost({ canEdit = true }) {
       <div className="w-full max-w-[1080px] max-h-[92vh] overflow-y-auto rounded-3xl bg-[#F4F6FA] shadow-[0_30px_80px_rgba(11,20,40,0.45)]">
         <div className="sticky top-0 z-10 flex items-center justify-between px-6 py-4 text-white" style={{ background: "linear-gradient(120deg,#0B1428,#1B2B4B 60%,#2D4C82)" }}>
           <div>
-            <div className="text-[10.5px] font-extrabold tracking-[0.3em] text-[#8FB0F0]" style={{ fontFamily: MONO }}>COPY · TEMPLATE</div>
+            <div className="text-[10.5px] font-extrabold tracking-[0.3em] text-[#8FB0F0]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>COPY · TEMPLATE</div>
             <div className="text-[19px] font-black">기사복사 문구 설정</div>
           </div>
           <button type="button" onClick={() => setOpen(false)} className="h-9 px-3.5 rounded-xl bg-white/10 border border-white/20 text-[13px] font-bold hover:bg-white/20">닫기 ✕</button>

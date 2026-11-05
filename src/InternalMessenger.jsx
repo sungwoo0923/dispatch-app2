@@ -1493,7 +1493,7 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
         }}>
           {/* 크기 버튼(작게·보통·크게) — 창 위쪽 오른편 */}
           <div style={{ position: "absolute", top: -34, right: 0, display: "flex", alignItems: "center", gap: 6, padding: "3px 4px 3px 10px", borderRadius: 12, background: "#0F1A30", boxShadow: "0 8px 20px rgba(15,26,48,0.3)" }}>
-            <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: "0.22em", color: "#8FB0F0", fontFamily: "'JetBrains Mono',monospace" }}>SIZE</span>
+            <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: "0.22em", color: "#8FB0F0", fontFamily: "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif", fontVariantNumeric: "tabular-nums" }}>SIZE</span>
             <SizeButtons preset={winPreset} onPick={pickWin} />
           </div>
           {/* 리사이즈 핸들 (패널 왼쪽 상단 모서리) */}

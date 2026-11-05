@@ -130,7 +130,7 @@ const tenureOf = (h) => { if (!h) return ""; const m = Math.max(0, Math.floor((n
 // ⭐ 2026-11-01 직원 정보·퇴사 화면 공용 조각 — 컴포넌트 밖에 둬야 입력 중 포커스가 안 풀린다
 const avBg = (u) => (isExecProfile(u) ? "linear-gradient(135deg,#9A7425,#D7BC82)" : "linear-gradient(135deg,#1B2B4B,#2D4C82)");
 const fi = "h-12 w-full px-3.5 rounded-xl border border-[#DCE3EE] bg-white text-[15px] font-semibold text-[#0F1A30] outline-none transition focus:border-[#2D4C82] focus:ring-4 focus:ring-[#2D4C82]/10 disabled:bg-[#F5F7FB] disabled:text-[#8A97AD] disabled:cursor-not-allowed";
-const Eyebrow = ({ children, className = "" }) => <div className={`text-[10.5px] font-extrabold tracking-[0.24em] uppercase ${className}`} style={{ fontFamily: MONO }}>{children}</div>;
+const Eyebrow = ({ children, className = "" }) => <div className={`text-[10.5px] font-extrabold tracking-[0.24em] uppercase ${className}`} style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{children}</div>;
 const Field = ({ label, hint, children, wide = false }) => (
   <label className={`block min-w-0 ${wide ? "col-span-2" : ""}`}>
     <span className="block text-[13px] font-bold text-[#3A4A66] mb-1.5">{label}</span>
@@ -141,7 +141,7 @@ const Field = ({ label, hint, children, wide = false }) => (
 const Section = ({ no, en, title, right, children }) => (
   <section className="rounded-2xl bg-white border border-[#E6EBF2] p-5">
     <div className="flex items-center gap-3 mb-4">
-      <span className="text-[11px] font-extrabold text-[#2D4C82] tabular-nums" style={{ fontFamily: MONO }}>{no}</span>
+      <span className="text-[11px] font-extrabold text-[#2D4C82] tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{no}</span>
       <div className="min-w-0">
         <Eyebrow className="text-[#7A8BAA] !text-[9.5px]">{en}</Eyebrow>
         <div className="text-[15.5px] font-black text-[#0F1A30] tracking-tight leading-tight">{title}</div>
@@ -159,7 +159,7 @@ const Pill = ({ tone = "navy", children }) => {
 const Fact = ({ en, k, v, mono = false }) => (
   <div className="min-w-0 px-4 py-2.5 rounded-xl bg-white/[0.06] ring-1 ring-white/10">
     <div className="flex items-center gap-1.5"><Eyebrow className="text-[#8FB0F0] !text-[9.5px]">{en}</Eyebrow><span className="text-[11.5px] font-bold text-white/45">{k}</span></div>
-    <div className={`mt-1 text-[15px] font-black text-white truncate ${mono ? "tabular-nums" : ""}`} style={mono ? { fontFamily: MONO } : undefined}>{v}</div>
+    <div className={`mt-1 text-[15px] font-black text-white truncate ${mono ? "tabular-nums" : ""}`} style={mono ? { fontFamily: MONO, fontVariantNumeric: "tabular-nums" } : undefined}>{v}</div>
   </div>
 );
 export function StaffInfoBoard({ company, canManage }) {
@@ -264,8 +264,8 @@ export function StaffInfoBoard({ company, canManage }) {
           </span>
         </span>
         <span className="shrink-0 text-right">
-          <span className="block text-[12.5px] font-bold text-[#3A4A66] tabular-nums" style={{ fontFamily: MONO }}>{tenureOf(u.hireDate) || "—"}</span>
-          <span className="block text-[10px] font-bold tracking-[0.16em] text-[#A3AFC2]" style={{ fontFamily: MONO }}>{u.hireDate ? u.hireDate.replace(/-/g, ".") : "NO DATE"}</span>
+          <span className="block text-[12.5px] font-bold text-[#3A4A66] tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{tenureOf(u.hireDate) || "—"}</span>
+          <span className="block text-[10px] font-bold tracking-[0.16em] text-[#A3AFC2]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{u.hireDate ? u.hireDate.replace(/-/g, ".") : "NO DATE"}</span>
         </span>
       </button>
     );
@@ -289,7 +289,7 @@ export function StaffInfoBoard({ company, canManage }) {
           {[["Active", "재직", active.length, `${groups.length}개 부서`], ["On Leave", "휴직 · 육아휴직", leaveCnt, `육아휴직 ${active.filter((u) => u.employmentStatus === "육아휴직").length}명`], ["Planned", "퇴사 예정", planned.length, planned[0] ? `가장 빠른 날 ${planned.map((u) => u.resignPlan.date).sort()[0]}` : "예정 없음"], ["This Month", "이번 달 퇴사", monthLeft, `누적 퇴사 ${left.length}명`]].map(([en, k, n, sub], i) => (
             <div key={en} className={`px-7 py-3 ${i ? "md:border-l border-white/10" : ""} ${i % 2 ? "border-l border-white/10 md:border-l" : ""} ${i > 1 ? "border-t md:border-t-0 border-white/10" : ""}`}>
               <Eyebrow className="text-[#8FB0F0] !text-[9.5px]">{en}</Eyebrow>
-              <div className="mt-1 flex items-baseline gap-1.5"><span className="text-[26px] leading-none font-black tabular-nums" style={{ fontFamily: MONO }}>{n}</span><span className="text-[13px] font-bold text-white/55">명</span><span className="ml-1 text-[13px] font-bold text-white/80">{k}</span></div>
+              <div className="mt-1 flex items-baseline gap-1.5"><span className="text-[26px] leading-none font-black tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{n}</span><span className="text-[13px] font-bold text-white/55">명</span><span className="ml-1 text-[13px] font-bold text-white/80">{k}</span></div>
               <div className="mt-0.5 text-[12.5px] text-white/50 truncate">{sub}</div>
             </div>
           ))}
@@ -306,7 +306,7 @@ export function StaffInfoBoard({ company, canManage }) {
               <div key={u.id} className="flex items-center gap-3 rounded-xl bg-white border border-[#F5DDB0] pl-3.5 pr-1.5 py-1.5 shadow-[0_2px_6px_rgba(181,71,8,0.06)]">
                 <span className="text-[14px] font-black text-[#0F1A30]">{u.name}</span>
                 <span className="text-[12.5px] text-[#7A879C]">{u.resignPlan.type}</span>
-                <span className="text-[12.5px] font-bold text-[#B54708] tabular-nums" style={{ fontFamily: MONO }}>{u.resignPlan.date}</span>
+                <span className="text-[12.5px] font-bold text-[#B54708] tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{u.resignPlan.date}</span>
                 {canManage && <><button type="button" onClick={() => cancelPlan(u)} className="h-8 px-2.5 rounded-lg text-[12.5px] font-bold text-[#5B6B85] hover:bg-[#F5F7FB]">취소</button><button type="button" onClick={() => open(u, "resign")} className="h-8 px-3 rounded-lg bg-[#0F1A30] text-white text-[12.5px] font-black">퇴사 확정</button></>}
               </div>
             ))}
@@ -320,11 +320,11 @@ export function StaffInfoBoard({ company, canManage }) {
         <div className="lg:sticky lg:top-0 min-w-0 rounded-[22px] bg-white border border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_12px_28px_rgba(16,24,40,0.06)] overflow-hidden flex flex-col lg:max-h-[calc(100vh-250px)]">
           <div className="px-5 pt-4 pb-3 border-b border-[#EEF1F6] shrink-0">
             <div className="flex items-center justify-between">
-              <div><Eyebrow className="text-[#4B6CB7]">Directory</Eyebrow><div className="text-[16px] font-black text-[#0F1A30]">직원 목록 <span className="text-[13px] font-bold text-[#7A879C] tabular-nums" style={{ fontFamily: MONO }}>{shownGroups.reduce((n, [, us]) => n + us.length, 0)}</span></div></div>
+              <div><Eyebrow className="text-[#4B6CB7]">Directory</Eyebrow><div className="text-[16px] font-black text-[#0F1A30]">직원 목록 <span className="text-[13px] font-bold text-[#7A879C] tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{shownGroups.reduce((n, [, us]) => n + us.length, 0)}</span></div></div>
             </div>
             <div className="mt-3 grid grid-cols-3 gap-1 p-1 rounded-xl bg-[#F2F5FA]">
               {[["all", "전체", active.length], ["leave", "휴직", leaveCnt], ["planned", "퇴사 예정", planned.length]].map(([k, l, n]) => (
-                <button key={k} type="button" onClick={() => setFlt(k)} className={`h-9 rounded-lg text-[13px] font-bold transition flex items-center justify-center gap-1.5 ${flt === k ? "bg-white text-[#0F1A30] shadow-[0_1px_2px_rgba(16,24,40,0.08),0_4px_10px_rgba(16,24,40,0.06)]" : "text-[#5B6B85] hover:text-[#0F1A30]"}`}>{l}<span className={`text-[11px] tabular-nums ${flt === k ? "text-[#2D4C82]" : "text-[#9AA9C3]"}`} style={{ fontFamily: MONO }}>{n}</span></button>
+                <button key={k} type="button" onClick={() => setFlt(k)} className={`h-9 rounded-lg text-[13px] font-bold transition flex items-center justify-center gap-1.5 ${flt === k ? "bg-white text-[#0F1A30] shadow-[0_1px_2px_rgba(16,24,40,0.08),0_4px_10px_rgba(16,24,40,0.06)]" : "text-[#5B6B85] hover:text-[#0F1A30]"}`}>{l}<span className={`text-[11px] tabular-nums ${flt === k ? "text-[#2D4C82]" : "text-[#9AA9C3]"}`} style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{n}</span></button>
               ))}
             </div>
           </div>
@@ -334,7 +334,7 @@ export function StaffInfoBoard({ company, canManage }) {
               <div key={t}>
                 <div className="sticky top-0 z-[1] px-5 py-2 bg-[#F8FAFC]/95 backdrop-blur border-y border-[#EEF1F6] flex items-center gap-2">
                   <span className="text-[12.5px] font-black text-[#1B2B4B]">{t}</span>
-                  <span className="text-[11px] font-bold text-[#9AA9C3] tabular-nums" style={{ fontFamily: MONO }}>{String(us.length).padStart(2, "0")}</span>
+                  <span className="text-[11px] font-bold text-[#9AA9C3] tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{String(us.length).padStart(2, "0")}</span>
                 </div>
                 <div className="divide-y divide-[#F1F4F8]">{us.map((u) => <Row key={u.id} u={u} />)}</div>
               </div>
@@ -344,7 +344,7 @@ export function StaffInfoBoard({ company, canManage }) {
               <button type="button" onClick={() => setShowLeft(!showLeft)} className="w-full px-5 py-3.5 flex items-center gap-2 text-left hover:bg-[#F8FAFD]">
                 <Eyebrow className="text-[#7A879C]">Former</Eyebrow>
                 <span className="text-[14px] font-black text-[#0F1A30]">퇴사자</span>
-                <span className="text-[12px] font-bold text-[#9AA9C3] tabular-nums" style={{ fontFamily: MONO }}>{left.length}</span>
+                <span className="text-[12px] font-bold text-[#9AA9C3] tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{left.length}</span>
                 <span className="text-[12px] text-[#9AA9C3]">· 로그인 차단됨</span>
                 <svg className="ml-auto text-[#9AA9C3]" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" style={{ transform: showLeft ? "rotate(180deg)" : "none", transition: "transform .25s" }}><path d="M6 9l6 6 6-6" /></svg>
               </button>
@@ -354,7 +354,7 @@ export function StaffInfoBoard({ company, canManage }) {
                     <span className="w-10 h-10 rounded-[12px] bg-[#E9EDF4] text-[#5B6B85] grid place-items-center text-[14px] font-black shrink-0">{String(u.name || "?").slice(0, 1)}</span>
                     <span className="flex-1 min-w-0">
                       <span className="flex items-center gap-1.5"><span className="text-[14.5px] font-black text-[#3A4A66] truncate">{u.name}</span>{u.resignType && <Pill tone="gray">{u.resignType}</Pill>}</span>
-                      <span className="block text-[12px] text-[#7A879C] truncate"><span style={{ fontFamily: MONO }}>{u.resignedAt || "-"}</span>{u.team ? ` · ${u.team}` : ""}{u.resignReason ? ` · ${u.resignReason}` : ""}</span>
+                      <span className="block text-[12px] text-[#7A879C] truncate"><span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{u.resignedAt || "-"}</span>{u.team ? ` · ${u.team}` : ""}{u.resignReason ? ` · ${u.resignReason}` : ""}</span>
                     </span>
                     <button type="button" onClick={() => printResign(company, u, { type: u.resignType || "자진 퇴사", date: u.resignedAt || "", reason: u.resignReason || "" })} className="h-8 px-2.5 rounded-lg border border-[#DCE3EE] bg-white text-[12px] font-bold text-[#1B2B4B] hover:border-[#2D4C82]">인쇄</button>
                     {canManage && <button type="button" onClick={() => reinstate(u)} className="h-8 px-2.5 rounded-lg border border-[#DCE3EE] bg-white text-[12px] font-bold text-[#5B6B85] hover:border-[#2D4C82]">복직</button>}
@@ -393,7 +393,7 @@ export function StaffInfoBoard({ company, canManage }) {
             </div>
             <div className="px-6 pt-4 shrink-0">
               <div className="grid grid-cols-2 gap-1 p-1 rounded-xl bg-white border border-[#E3E8F0]">
-                {[["info", "정보 수정", "EDIT"], ["resign", "퇴사 · 권고사직", "RESIGN"]].map(([k, l, en]) => <button key={k} type="button" onClick={() => setMode(k)} disabled={sel.isMaster && k === "resign"} className={`h-11 rounded-lg text-[14.5px] font-black transition flex items-center justify-center gap-2 disabled:opacity-30 ${mode === k ? (k === "resign" ? "bg-[#B42318] text-white shadow-[0_6px_14px_rgba(180,35,24,0.25)]" : "bg-[#0F1A30] text-white shadow-[0_6px_14px_rgba(15,26,48,0.25)]") : "text-[#5B6B85] hover:text-[#0F1A30]"}`}><span className={`text-[9.5px] tracking-[0.2em] ${mode === k ? "text-white/55" : "text-[#A3AFC2]"}`} style={{ fontFamily: MONO }}>{en}</span>{l}</button>)}
+                {[["info", "정보 수정", "EDIT"], ["resign", "퇴사 · 권고사직", "RESIGN"]].map(([k, l, en]) => <button key={k} type="button" onClick={() => setMode(k)} disabled={sel.isMaster && k === "resign"} className={`h-11 rounded-lg text-[14.5px] font-black transition flex items-center justify-center gap-2 disabled:opacity-30 ${mode === k ? (k === "resign" ? "bg-[#B42318] text-white shadow-[0_6px_14px_rgba(180,35,24,0.25)]" : "bg-[#0F1A30] text-white shadow-[0_6px_14px_rgba(15,26,48,0.25)]") : "text-[#5B6B85] hover:text-[#0F1A30]"}`}><span className={`text-[9.5px] tracking-[0.2em] ${mode === k ? "text-white/55" : "text-[#A3AFC2]"}`} style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{en}</span>{l}</button>)}
               </div>
             </div>
             <fieldset disabled={!canManage} className="px-6 py-4 space-y-3.5 min-w-0">
@@ -425,7 +425,7 @@ export function StaffInfoBoard({ company, canManage }) {
                   <div className="grid grid-cols-2 gap-4">
                     <Field label="입사일" hint={f.hireDate ? "연차 · 퇴직금 계산 기준일" : "연차·퇴직금 계산 기준일 — 아직 등록되지 않았습니다"}><CustomDatePicker value={f.hireDate} disabled={!canHire} onChange={(e) => { const v = e.target.value; if (v && v > kstDay()) return; setF({ ...f, hireDate: v }); }} className={`${fi} tabular-nums`} showIcon /></Field>
                     <Field label="근속" hint={canHire ? "입사일은 이 화면에서만 바꿀 수 있습니다" : "입사일은 인사팀만 바꿀 수 있습니다"}>
-                      <div className="h-12 px-3.5 rounded-xl bg-[#F5F8FD] border border-[#E3E8F0] flex items-baseline gap-2 pt-3"><span className="text-[17px] font-black text-[#0F1A30] tabular-nums" style={{ fontFamily: MONO }}>{f.hireDate ? tenureOf(f.hireDate) || "1개월 미만" : "—"}</span>{f.hireDate && f.hireDate !== origHire && <span className="text-[11.5px] font-bold text-[#2D4C82]">변경됨</span>}</div>
+                      <div className="h-12 px-3.5 rounded-xl bg-[#F5F8FD] border border-[#E3E8F0] flex items-baseline gap-2 pt-3"><span className="text-[17px] font-black text-[#0F1A30] tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{f.hireDate ? tenureOf(f.hireDate) || "1개월 미만" : "—"}</span>{f.hireDate && f.hireDate !== origHire && <span className="text-[11.5px] font-bold text-[#2D4C82]">변경됨</span>}</div>
                     </Field>
                   </div>
                 </Section>
@@ -443,7 +443,7 @@ export function StaffInfoBoard({ company, canManage }) {
                         <Field label="시작일"><CustomDatePicker value={f.leaveFrom} onChange={(e) => setF({ ...f, leaveFrom: e.target.value })} className={`${fi} tabular-nums`} showIcon /></Field>
                         <Field label="복직 예정일"><CustomDatePicker value={f.leaveTo} onChange={(e) => setF({ ...f, leaveTo: e.target.value })} className={`${fi} tabular-nums`} showIcon /></Field>
                       </div>
-                      {f.leaveFrom && f.leaveTo && <div className="flex items-baseline gap-2 text-[#1B2B4B]"><span className="text-[20px] font-black tabular-nums" style={{ fontFamily: MONO }}>{Math.max(0, Math.round((new Date(f.leaveTo) - new Date(f.leaveFrom)) / 864e5) + 1)}</span><span className="text-[13px] font-bold">일</span><span className="text-[13px] text-[#7A879C]">· 약 {(Math.max(0, (new Date(f.leaveTo) - new Date(f.leaveFrom)) / 864e5 + 1) / 30.44).toFixed(1)}개월</span></div>}
+                      {f.leaveFrom && f.leaveTo && <div className="flex items-baseline gap-2 text-[#1B2B4B]"><span className="text-[20px] font-black tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{Math.max(0, Math.round((new Date(f.leaveTo) - new Date(f.leaveFrom)) / 864e5) + 1)}</span><span className="text-[13px] font-bold">일</span><span className="text-[13px] text-[#7A879C]">· 약 {(Math.max(0, (new Date(f.leaveTo) - new Date(f.leaveFrom)) / 864e5 + 1) / 30.44).toFixed(1)}개월</span></div>}
                       <input value={f.leaveMemo} onChange={(e) => setF({ ...f, leaveMemo: e.target.value })} className={fi} placeholder={f.employmentStatus === "육아휴직" ? "자녀 이름·생년월일, 전자결재 문서번호 등" : "사유·메모"} />
                       {f.employmentStatus === "육아휴직" && <div className="rounded-lg bg-white border border-[#E3E8F0] px-3.5 py-3 text-[12.5px] text-[#5B6B85] leading-relaxed">만 8세 이하(초2 이하) 자녀 · 최대 1년(부모 모두 3개월 이상 쓰면 1년 6개월) · 휴직 30일 전 신청 · 휴직 기간도 근속·연차 산정에 포함 · 복귀 시 같은 업무(같은 수준 임금) — 급여는 고용센터에서 지급(회사는 확인서 제출)</div>}
                       {f.employmentStatus === "출산휴가" && <div className="rounded-lg bg-white border border-[#E3E8F0] px-3.5 py-3 text-[12.5px] text-[#5B6B85] leading-relaxed">출산 전후 90일(다태아 120일) · 출산 후 45일(다태아 60일) 이상 · 최초 60일(다태아 75일) 유급</div>}
@@ -576,7 +576,7 @@ export function CompanyRules({ company, canEdit = false }) {
       {cur ? (
         <BookCard en={cur.category} title={cur.title} right={<div className="flex gap-1.5"><button type="button" onClick={() => setOpen(null)} className="h-9 px-3 rounded-lg border border-[#DCE3EE] text-[12.5px] font-black text-[#1B2B4B]">← 목록</button>{canEdit && <button type="button" onClick={() => setEdit(cur.tpl ? { title: cur.title, category: cur.category, body: cur.body, effectiveDate: kstDay() } : { ...cur })} className="h-9 px-3 rounded-lg bg-[#0F1A30] text-white text-[12.5px] font-black">{cur.tpl ? "고쳐서 우리 회사 규정으로 등록" : "수정"}</button>}</div>}>
           {cur.tpl ? <div className="mb-3 rounded-xl bg-[#FFFBF2] border border-[#FEDF89] px-3.5 py-2.5 text-[12.5px] text-[#93370D] font-bold">표준안입니다 — 회사가 아직 등록하지 않아 법령 기반 기본안을 보여 드립니다. 시행 전 회사 사정(금액·기간 등)에 맞게 고쳐 주세요.</div>
-            : <div className="text-[12px] text-[#7A879C] mb-3" style={{ fontFamily: MONO }}>v{cur.version || 1} · 시행 {cur.effectiveDate || "-"}</div>}
+            : <div className="text-[12px] text-[#7A879C] mb-3" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>v{cur.version || 1} · 시행 {cur.effectiveDate || "-"}</div>}
           <div className="rounded-2xl bg-[#FBFCFE] border border-[#E3E8F0] px-5 md:px-8 py-6 text-[15px] leading-[1.95] text-[#1F2A44] whitespace-pre-wrap">{cur.body}</div>
         </BookCard>
       ) : (

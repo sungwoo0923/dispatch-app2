@@ -97,7 +97,7 @@ export async function removeVehicleType(company, name) {
 
 // ───────────────────────── 화면 부품 ─────────────────────────
 const h = React.createElement;
-const MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
+const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
 const chev = (open) => h("svg", { width: 10, height: 10, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 3.2, strokeLinecap: "round", strokeLinejoin: "round", style: { flexShrink: 0, transition: "transform .15s", transform: open ? "rotate(180deg)" : "none", opacity: 0.8 }, "aria-hidden": true }, h("path", { d: "M6 9l6 6 6-6" }));
 
 // 🚚 차량종류 선택 — 버튼(원래 칸 모양 그대로 className/style) + 떠 있는 목록(검색 · ↑↓ Enter · ＋ 차량종류 추가)
@@ -223,7 +223,7 @@ export function VehicleTypePicker({ value, onChange, base = VT_DEFAULTS, company
       // ⭐ 2026-11-02 글씨가 눌려 안 보인다는 의견 — 한글 제목은 일반 글꼴·큰 글씨, 영문 꼬리표만 작게
       h("span", { style: { display: "inline-flex", alignItems: "baseline", gap: 6, whiteSpace: "nowrap" } },
         h("span", { style: { fontSize: 14, fontWeight: 900, color: "#0F1A30" } }, "차량종류"),
-        h("span", { style: { fontFamily: MONO, fontSize: 10.5, fontWeight: 800, letterSpacing: "0.1em", color: "#4B6CB7" } }, "VEHICLE TYPE")),
+        h("span", { style: { fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 10.5, fontWeight: 800, letterSpacing: "0.1em", color: "#4B6CB7" } }, "VEHICLE TYPE")),
       h("span", { style: { fontSize: 12, fontWeight: 700, color: "#8E9BB2", whiteSpace: "nowrap" } }, "↑↓ · Enter")),
     h("input", {
       ref: searchRef, value: q, placeholder: "찾기 (예: 냉동)", autoComplete: "off",
@@ -279,7 +279,7 @@ function VehicleTypeDialog({ company, initial = "", onAdded, onClose }) {
   },
   h("div", { role: "dialog", "aria-modal": "true", onMouseDown: (e) => e.stopPropagation(), style: { width: "min(420px,100%)", borderRadius: 20, background: "#fff", overflow: "hidden", boxShadow: "0 30px 80px rgba(8,14,30,.45)" } },
     h("div", { style: { padding: "18px 20px 16px", color: "#fff", background: "radial-gradient(120% 120% at 0% 0%,#2D4C82 0%,#1B2B4B 50%,#0B1428 100%)" } },
-      h("div", { style: { fontFamily: MONO, fontSize: 11, fontWeight: 900, letterSpacing: "0.22em", color: "#8FB0F0" } }, "VEHICLE TYPE"),
+      h("div", { style: { fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 11, fontWeight: 900, letterSpacing: "0.22em", color: "#8FB0F0" } }, "VEHICLE TYPE"),
       h("div", { style: { fontSize: 17, fontWeight: 900, marginTop: 3 } }, "차량종류 추가"),
       h("div", { style: { fontSize: 13, fontWeight: 600, color: "#C9D6EE", marginTop: 3 } }, "추가하면 회사의 모든 화면(PC·모바일) 차량종류 목록에 나옵니다")),
     h("div", { style: { padding: "16px 20px 6px" } },

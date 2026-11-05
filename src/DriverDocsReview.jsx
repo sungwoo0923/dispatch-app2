@@ -9,7 +9,7 @@ import { DRIVER_REQUIRED_DOCS, useCompanyDriverDocs, docState, TONE, docProblems
 import { ImageViewer } from "./driverDocs";
 import { compressImage } from "./InternalMail";
 
-const MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
+const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
 const HERO = "linear-gradient(rgba(143,176,240,.07) 1px, transparent 1px) 0 0/22px 22px, linear-gradient(90deg, rgba(143,176,240,.07) 1px, transparent 1px) 0 0/22px 22px, linear-gradient(120deg,#0B1428 0%,#1B2B4B 60%,#2D4C82 100%)";
 const REQ = DRIVER_REQUIRED_DOCS.filter((d) => d.required);
 
@@ -114,7 +114,7 @@ export default function DriverDocsReview({ company, isViewer = false }) {
         <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="기사명·차량번호·전화 검색" className="h-10 w-full px-3 rounded-xl border border-[#DCE3EE] bg-[#F8FAFD] text-[13.5px] outline-none focus:border-[#2D4C82]" />
         <div className="flex gap-1.5 overflow-x-auto no-scrollbar">
           {[["all", "전체", kpi.all], ["wait", "검토 대기", kpi.wait], ["missing", "미제출", kpi.missing], ["bad", "반려·만료", kpi.bad], ["done", "완비", kpi.complete]].map(([k, l, n]) => (
-            <button key={k} type="button" onClick={() => setFilter(k)} className={`h-8 px-3 rounded-full text-[12.5px] font-black border whitespace-nowrap shrink-0 ${filter === k ? "bg-[#0F1A30] text-white border-[#0F1A30]" : "bg-white text-[#5B6B85] border-[#DCE3EE]"}`}>{l} <span className="tabular-nums opacity-70" style={{ fontFamily: MONO }}>{n}</span></button>
+            <button key={k} type="button" onClick={() => setFilter(k)} className={`h-8 px-3 rounded-full text-[12.5px] font-black border whitespace-nowrap shrink-0 ${filter === k ? "bg-[#0F1A30] text-white border-[#0F1A30]" : "bg-white text-[#5B6B85] border-[#DCE3EE]"}`}>{l} <span className="tabular-nums opacity-70" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{n}</span></button>
           ))}
         </div>
       </div>
@@ -128,7 +128,7 @@ export default function DriverDocsReview({ company, isViewer = false }) {
                 <Ring v={r.done / REQ.length} />
                 <span className="flex-1 min-w-0">
                   <span className="flex items-center gap-1.5"><span className="text-[14.5px] font-black text-[#0F1A30] truncate">{r.d.name || "-"}</span>{r.d.approved === false && <span className="text-[10px] font-black text-[#2D4C82]">가입 대기</span>}</span>
-                  <span className="block text-[12px] text-[#7A879C] truncate" style={{ fontFamily: MONO }}>{[r.d.carNo, r.d.vehicleType].filter(Boolean).join(" · ") || "-"}</span>
+                  <span className="block text-[12px] text-[#7A879C] truncate" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{[r.d.carNo, r.d.vehicleType].filter(Boolean).join(" · ") || "-"}</span>
                 </span>
                 <span className="shrink-0 h-6 px-2 rounded-md text-[11px] font-black grid place-items-center whitespace-nowrap" style={{ color: sc, background: sb }}>{sl}</span>
               </button>
@@ -145,8 +145,8 @@ export default function DriverDocsReview({ company, isViewer = false }) {
         <button type="button" onClick={() => setSel(null)} className="lg:hidden h-9 px-3 rounded-xl border border-[#DCE3EE] text-[13px] font-black text-[#1B2B4B]">← 목록</button>
         <Ring v={cur.done / REQ.length} size={52} />
         <div className="min-w-0 flex-1">
-          <div className="text-[11px] font-extrabold tracking-[0.22em] text-[#4B6CB7]" style={{ fontFamily: MONO }}>DRIVER FILE</div>
-          <div className="text-[19px] font-black text-[#0F1A30] truncate">{cur.d.name} {cur.d.carNo && <span className="text-[14px] font-black text-[#5B6B85]" style={{ fontFamily: MONO }}>· {cur.d.carNo}</span>}</div>
+          <div className="text-[11px] font-extrabold tracking-[0.22em] text-[#4B6CB7]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>DRIVER FILE</div>
+          <div className="text-[19px] font-black text-[#0F1A30] truncate">{cur.d.name} {cur.d.carNo && <span className="text-[14px] font-black text-[#5B6B85]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>· {cur.d.carNo}</span>}</div>
           <div className="text-[12.5px] text-[#7A879C] truncate">필수 {cur.done}/{REQ.length} · {[cur.d.vehicleType, cur.d.phone].filter(Boolean).join(" · ")}</div>
         </div>
         <button type="button" onClick={() => saveAll(cur)} className="h-10 px-4 rounded-xl bg-[#0F1A30] text-white text-[13px] font-black whitespace-nowrap">⬇ 전체 저장</button>
@@ -160,7 +160,7 @@ export default function DriverDocsReview({ company, isViewer = false }) {
             const isImg = x && String(x.fileType || "").startsWith("image");
             return (
               <div key={def.key} className={`flex items-center gap-3 px-3 md:px-4 py-2.5 ${idx % 2 ? "bg-[#FBFCFE]" : "bg-white"}`}>
-                <span className="w-6 text-[11px] font-black text-[#9AA9C3] tabular-nums shrink-0" style={{ fontFamily: MONO }}>{String(idx + 1).padStart(2, "0")}</span>
+                <span className="w-6 text-[11px] font-black text-[#9AA9C3] tabular-nums shrink-0" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{String(idx + 1).padStart(2, "0")}</span>
                 {/* ⭐ 2026-11-02 점검 — PDF 크게 보기는 openPdf(Blob URL)로 열기 */}
                 <button type="button" disabled={!x && isViewer} title={x ? "크게 보기" : "직접 올리기"} onClick={() => (!x ? (upTarget.current = { uid: cur.d.uid, def }, fileRef.current?.click()) : isImg ? setViewer({ images: [x.dataUrl], name: def.label }) : openPdf(x.dataUrl))}
                   className="w-12 h-12 rounded-xl shrink-0 border border-[#E3E8F0] bg-[#F3F6FA] bg-cover bg-center grid place-items-center text-[10px] font-black text-[#9AA9C3]"
@@ -172,7 +172,7 @@ export default function DriverDocsReview({ company, isViewer = false }) {
                   </div>
                   <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
                     <span className="h-5 px-1.5 rounded-md text-[10.5px] font-black grid place-items-center whitespace-nowrap" style={{ background: t.bg, color: t.fg, border: `1px solid ${t.bd}` }}>{st.label}</span>
-                    {x?.만료일 && <span className="text-[11px] font-bold text-[#5B6B85] tabular-nums" style={{ fontFamily: MONO }}>~{x.만료일}</span>}
+                    {x?.만료일 && <span className="text-[11px] font-bold text-[#5B6B85] tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>~{x.만료일}</span>}
                     {x?.rejectReason && x.status === "반려" && <span className="text-[11px] text-[#B42318] truncate">사유: {x.rejectReason}</span>}
                   </div>
                 </div>
@@ -194,15 +194,15 @@ export default function DriverDocsReview({ company, isViewer = false }) {
     <div className="space-y-4">
       <div className="relative overflow-hidden rounded-[22px] px-4 py-4 md:px-7 md:py-5 text-white shadow-[0_14px_32px_rgba(15,26,48,0.25)] flex flex-wrap items-center gap-5" style={{ background: HERO }}>
         <div className="flex-1 min-w-[220px]">
-          <div className="text-[11px] md:text-[12px] font-extrabold tracking-[0.26em] text-[#8FB0F0]" style={{ fontFamily: MONO }}>DRIVER · DOCUMENTS</div>
+          <div className="text-[11px] md:text-[12px] font-extrabold tracking-[0.26em] text-[#8FB0F0]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>DRIVER · DOCUMENTS</div>
           <div className="text-[20px] md:text-[24px] font-black mt-0.5">기사 제출 서류</div>
           <div className="text-[12.5px] md:text-[14px] text-white/60 mt-0.5">기사앱에서 올라온 면허증·자격증·통장 사본 등 — 확인·반려·저장</div>
         </div>
         <div className="flex items-center gap-4">
-          <div className="text-right"><div className="text-[11px] font-bold text-white/55">필수 서류 완비율</div><div className="text-[30px] font-black tabular-nums leading-none" style={{ fontFamily: MONO }}>{Math.round(rate * 100)}<span className="text-[15px] text-white/50">%</span></div></div>
+          <div className="text-right"><div className="text-[11px] font-bold text-white/55">필수 서류 완비율</div><div className="text-[30px] font-black tabular-nums leading-none" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{Math.round(rate * 100)}<span className="text-[15px] text-white/50">%</span></div></div>
           <div className="grid grid-cols-2 gap-1.5">
             {[["완비", kpi.complete], ["검토 대기", kpi.wait], ["미제출", kpi.missing], ["반려·만료", kpi.bad]].map(([l, v]) => (
-              <div key={l} className="rounded-xl bg-white/[0.07] border border-white/10 px-3 py-1.5 min-w-[92px]"><div className="text-[10.5px] font-bold text-white/55 whitespace-nowrap">{l}</div><div className="text-[17px] font-black tabular-nums" style={{ fontFamily: MONO }}>{v}</div></div>
+              <div key={l} className="rounded-xl bg-white/[0.07] border border-white/10 px-3 py-1.5 min-w-[92px]"><div className="text-[10.5px] font-bold text-white/55 whitespace-nowrap">{l}</div><div className="text-[17px] font-black tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{v}</div></div>
             ))}
           </div>
         </div>

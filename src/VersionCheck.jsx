@@ -10,7 +10,7 @@ import { hardReloadForUpdate } from "./UpdateBanner";
 /* global __APP_VERSION__, __BUILD_TIME__ */
 const CUR_VER = typeof __APP_VERSION__ !== "undefined" ? __APP_VERSION__ : "dev";
 const CUR_BUILD = typeof __BUILD_TIME__ !== "undefined" ? __BUILD_TIME__ : "";
-const MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
+const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
 const stamp = (iso) => {
   if (!iso) return "-";
   const d = new Date(iso);
@@ -71,21 +71,21 @@ export default function VersionCheck() {
           <div style={{ padding: "16px 18px 12px" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <span className="kp-ver-dot" style={{ width: 8, height: 8, borderRadius: "50%", background: "#CFE0FF", boxShadow: "0 0 10px #8FB0F0" }} />
-              <span style={{ fontFamily: MONO, fontSize: 10.5, fontWeight: 800, letterSpacing: "0.24em", color: "#8FB0F0" }}>UPDATE AVAILABLE</span>
+              <span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 10.5, fontWeight: 800, letterSpacing: "0.24em", color: "#8FB0F0" }}>UPDATE AVAILABLE</span>
             </div>
             <div style={{ fontSize: 18, fontWeight: 900, marginTop: 6 }}>새 버전이 나왔습니다</div>
             <div style={{ fontSize: 13.5, color: "rgba(207,224,255,.75)", marginTop: 3 }}>지금 쓰는 화면은 이전 버전입니다. 업데이트하면 최신 기능으로 바뀝니다.</div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr auto 1fr", alignItems: "center", gap: 8, marginTop: 12 }}>
               <div style={{ borderRadius: 12, padding: "8px 10px", background: "rgba(255,255,255,.06)", border: "1px solid rgba(143,176,240,.18)" }}>
                 <div style={{ fontSize: 11.5, fontWeight: 700, color: "rgba(207,224,255,.6)" }}>현재</div>
-                <div style={{ fontFamily: MONO, fontSize: 15, fontWeight: 800 }}>v{CUR_VER}</div>
-                <div style={{ fontFamily: MONO, fontSize: 11, color: "rgba(207,224,255,.55)" }}>{stamp(CUR_BUILD)}</div>
+                <div style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 15, fontWeight: 800 }}>v{CUR_VER}</div>
+                <div style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 11, color: "rgba(207,224,255,.55)" }}>{stamp(CUR_BUILD)}</div>
               </div>
-              <span style={{ fontFamily: MONO, color: "#8FB0F0", fontWeight: 800 }}>→</span>
+              <span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", color: "#8FB0F0", fontWeight: 800 }}>→</span>
               <div style={{ borderRadius: 12, padding: "8px 10px", background: "rgba(207,224,255,.14)", border: "1px solid rgba(207,224,255,.45)" }}>
                 <div style={{ fontSize: 11.5, fontWeight: 700, color: "#CFE0FF" }}>최신</div>
-                <div style={{ fontFamily: MONO, fontSize: 15, fontWeight: 800 }}>v{state.latest.version || "-"}</div>
-                <div style={{ fontFamily: MONO, fontSize: 11, color: "rgba(207,224,255,.75)" }}>{stamp(state.latest.build)}</div>
+                <div style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 15, fontWeight: 800 }}>v{state.latest.version || "-"}</div>
+                <div style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 11, color: "rgba(207,224,255,.75)" }}>{stamp(state.latest.build)}</div>
               </div>
             </div>
           </div>
@@ -98,7 +98,7 @@ export default function VersionCheck() {
         <div style={{ display: "inline-flex", alignItems: "center", gap: 9, height: 38, padding: "0 16px", borderRadius: 99, color: "#fff", background: "linear-gradient(120deg,#0B1428,#1B2B4B 60%,#2D4C82)", border: "1px solid rgba(143,176,240,.35)", boxShadow: "0 12px 28px rgba(11,20,40,.35)", whiteSpace: "nowrap" }}>
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#CFE0FF" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5" /></svg>
           <span style={{ fontSize: 13.5, fontWeight: 800 }}>최신 버전입니다</span>
-          <span style={{ fontFamily: MONO, fontSize: 12.5, fontWeight: 800, color: "#8FB0F0" }}>v{CUR_VER} · {stamp(CUR_BUILD)}</span>
+          <span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 12.5, fontWeight: 800, color: "#8FB0F0" }}>v{CUR_VER} · {stamp(CUR_BUILD)}</span>
         </div>
       )}
     </div></>

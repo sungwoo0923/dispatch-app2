@@ -21,7 +21,7 @@ import { BannerCard, BannerStyles } from "./BannerCenter";
 import { fmtPhone } from "./formatInput";
 import { usePlatformLive } from "./PlatformLive"; // ⭐ 2026-11-05 원격 지원 걸기 — 운송사·직원 목록(실시간)
 
-const MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
+const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
 const ICE = { iceServers: [{ urls: ["stun:stun.l.google.com:19302", "stun:stun1.l.google.com:19302"] }] };
 export const SUPPORT_ACTIVE = ["invited", "pending", "approved", "in_session"]; // ⭐ 2026-11-05 invited(관리자가 건 요청) 추가
 export const SUPPORT_STATUS = {
@@ -86,7 +86,7 @@ export function SupportChat({ sessionId, me, myName, dark = false, height = 220 
   return (
     <div className={`rounded-2xl overflow-hidden ${dark ? "bg-white/[0.04] ring-1 ring-white/10" : "bg-white ring-1 ring-[#E3E8F0]"}`}>
       <div className={`px-3.5 h-10 flex items-center justify-between text-[13px] font-black ${dark ? "text-white/80 border-b border-white/10" : "text-[#0F1A30] bg-[#F7F9FC] border-b border-[#E8EDF4]"}`}>
-        <span>메시지</span><span className={`text-[11.5px] tracking-[0.18em] ${dark ? "text-[#8FB0F0]" : "text-[#94A3B8]"}`} style={{ fontFamily: MONO }}>CHAT</span>
+        <span>메시지</span><span className={`text-[11.5px] tracking-[0.18em] ${dark ? "text-[#8FB0F0]" : "text-[#94A3B8]"}`} style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>CHAT</span>
       </div>
       <div ref={boxRef} className="overflow-y-auto px-3 py-2.5 space-y-2" style={{ height }} data-testid="support-chat-list">
         {msgs.length === 0 && <div className={`text-center text-[13.5px] py-6 ${dark ? "text-white/40" : "text-[#9AA9C3]"}`}>궁금한 점을 적어 보내세요</div>}
@@ -292,7 +292,7 @@ export function RemoteSupportHost({ user, profile, company = "", mobile = false 
             <div className="flex items-center gap-3 px-4 py-3">
               <span className={`w-10 h-10 rounded-[13px] grid place-items-center shrink-0 ${sharingNow ? "bg-[#8FB0F0] text-[#0B1428] kp-sup-live" : "bg-white/10 text-[#CFE0FF]"}`}><Icon d={SUPPORT_ICON} /></span>
               <button type="button" onClick={() => setOpen(true)} className="flex-1 min-w-0 text-left">
-                <div className="text-[11.5px] font-extrabold tracking-[0.2em] text-[#8FB0F0]" style={{ fontFamily: MONO }}>REMOTE SUPPORT</div>
+                <div className="text-[11.5px] font-extrabold tracking-[0.2em] text-[#8FB0F0]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>REMOTE SUPPORT</div>
                 <div className="text-[15px] font-black truncate">
                   {sharingNow ? (shareState === "connected" ? "화면 공유 중 · 관리자가 보고 있습니다" : "화면 공유 대기 · 관리자 연결 중") : dockReq.status === "pending" ? "원격 지원 요청 · 승인 대기 중" : dockReq.status === "approved" ? "승인됨 — 눌러서 시작하기" : dockReq.status === "in_session" ? "원격 지원 진행 중" : "요청이 거절되었습니다"}
                 </div>
@@ -331,7 +331,7 @@ function InviteConsent({ req, busy, err, mobile, onAccept, onDecline }) {
           <div className="flex items-center gap-3">
             <span className="w-11 h-11 rounded-[14px] grid place-items-center bg-[#8FB0F0] text-[#0B1428] kp-sup-live shrink-0"><Icon d={SUPPORT_ICON} size={20} /></span>
             <div className="min-w-0">
-              <div className="text-[11.5px] font-extrabold tracking-[0.28em] text-[#8FB0F0]" style={{ fontFamily: MONO }}>REMOTE SUPPORT</div>
+              <div className="text-[11.5px] font-extrabold tracking-[0.28em] text-[#8FB0F0]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>REMOTE SUPPORT</div>
               <div className="text-[20px] font-black leading-tight">LogisWeb 관리자의 원격 지원 요청</div>
             </div>
           </div>
@@ -406,7 +406,7 @@ function RequesterModal({ uid, user, profile, company, mobile, active, latest, h
       <div onClick={(e) => e.stopPropagation()} data-testid="support-modal"
         className="w-full sm:max-w-[560px] max-h-[92dvh] overflow-y-auto bg-[#F4F6FA] rounded-t-[24px] sm:rounded-[24px] shadow-[0_30px_80px_rgba(11,20,40,0.45)]">
         <div className="relative px-5 sm:px-6 pt-5 pb-4 text-white" style={{ background: "linear-gradient(rgba(143,176,240,.06) 1px, transparent 1px) 0 0/22px 22px, linear-gradient(90deg, rgba(143,176,240,.06) 1px, transparent 1px) 0 0/22px 22px, linear-gradient(120deg,#0B1428 0%,#1B2B4B 60%,#2D4C82 100%)" }}>
-          <div className="text-[11.5px] font-extrabold tracking-[0.28em] text-[#8FB0F0]" style={{ fontFamily: MONO }}>REMOTE SUPPORT</div>
+          <div className="text-[11.5px] font-extrabold tracking-[0.28em] text-[#8FB0F0]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>REMOTE SUPPORT</div>
           <div className="text-[22px] font-black mt-0.5">원격 지원</div>
           <div className="text-[14px] text-white/65 mt-1">어려운 화면을 LogisWeb 관리자가 직접 보고 도와드립니다.</div>
           <button type="button" onClick={onClose} className="absolute right-4 top-4 w-9 h-9 rounded-xl bg-white/10 hover:bg-white/20 text-white text-[16px]" aria-label="닫기">✕</button>
@@ -434,7 +434,7 @@ function RequesterModal({ uid, user, profile, company, mobile, active, latest, h
                 <label className="block">
                   <span className="block text-[14px] font-black text-[#0F1A30] mb-1.5">연락처</span>
                   <input value={phone} onChange={(e) => setPhone(fmtPhone(e.target.value))} inputMode="tel" placeholder="010-0000-0000" data-testid="support-phone"
-                    className="w-full h-12 px-3.5 rounded-xl border border-[#DCE3EE] bg-[#FAFBFD] text-[15px] outline-none focus:border-[#2D4C82]" style={{ fontFamily: MONO }} />
+                    className="w-full h-12 px-3.5 rounded-xl border border-[#DCE3EE] bg-[#FAFBFD] text-[15px] outline-none focus:border-[#2D4C82]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }} />
                 </label>
                 <div>
                   <span className="block text-[14px] font-black text-[#0F1A30] mb-1.5">희망 방식</span>
@@ -489,13 +489,13 @@ function RequesterModal({ uid, user, profile, company, mobile, active, latest, h
                   <div className="text-[16px] font-black text-[#0F1A30]">원격 프로그램으로 진행합니다</div>
                   {LINKS.map((l, i) => (
                     <a key={l.name} href={l.url} target="_blank" rel="noreferrer" className="flex items-start gap-3 px-3.5 py-3 rounded-xl bg-white ring-1 ring-[#E3E8F0] hover:ring-[#2D4C82]">
-                      <span className="w-8 h-8 rounded-lg bg-[#1B2B4B] text-white grid place-items-center text-[14px] font-black shrink-0" style={{ fontFamily: MONO }}>{i + 1}</span>
+                      <span className="w-8 h-8 rounded-lg bg-[#1B2B4B] text-white grid place-items-center text-[14px] font-black shrink-0" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{i + 1}</span>
                       <span className="min-w-0"><span className="block text-[15px] font-black text-[#0F1A30]">{l.name} 다운로드 ↗</span><span className="block text-[13px] text-[#5B6B85] leading-snug mt-0.5">{l.desc}</span></span>
                     </a>
                   ))}
                   <div className="flex gap-2">
                     <input value={remoteNo} onChange={(e) => setRemoteNo(e.target.value)} placeholder="원격 번호 (예: 123 456 789)" data-testid="support-remote-no"
-                      className="flex-1 min-w-0 h-12 px-3.5 rounded-xl border border-[#DCE3EE] bg-white text-[15.5px] outline-none focus:border-[#2D4C82]" style={{ fontFamily: MONO }} />
+                      className="flex-1 min-w-0 h-12 px-3.5 rounded-xl border border-[#DCE3EE] bg-white text-[15.5px] outline-none focus:border-[#2D4C82]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }} />
                     <button type="button" onClick={sendNo} disabled={!remoteNo.trim() || remoteNo.trim() === (active.anydeskId || "")} data-testid="support-remote-send"
                       className="shrink-0 h-12 px-4 rounded-xl bg-[#1B2B4B] text-white text-[15px] font-black whitespace-nowrap disabled:opacity-50">{active.anydeskId && remoteNo.trim() === active.anydeskId ? "보냄 ✓" : "번호 보내기"}</button>
                   </div>
@@ -517,7 +517,7 @@ function RequesterModal({ uid, user, profile, company, mobile, active, latest, h
                 <div key={r.id} className="flex items-center gap-2.5 px-2.5 py-2 rounded-xl">
                   <Chip status={r.status} />
                   <span className="flex-1 min-w-0 text-[14px] text-[#0F1A30] truncate">{r.message}</span>
-                  <span className="text-[12.5px] text-[#94A3B8] shrink-0" style={{ fontFamily: MONO }}>{fmt(r.createdAt)}</span>
+                  <span className="text-[12.5px] text-[#94A3B8] shrink-0" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{fmt(r.createdAt)}</span>
                 </div>
               ))}
             </div>
@@ -599,8 +599,8 @@ function MasterViewer({ sessionId, onEnd }) {
         )}
         {click && <span className="kp-sup-click absolute pointer-events-none" style={{ left: click.x, top: click.y }} />}
         <div className="absolute left-3 top-3 flex items-center gap-2 pointer-events-none">
-          <span className={`h-7 px-2.5 rounded-full text-[12px] font-black inline-flex items-center gap-1.5 ${state === "live" ? "bg-[#8FB0F0] text-[#0B1428]" : "bg-white/15 text-white"}`} style={{ fontFamily: MONO }}>{state === "live" && <i className="w-2 h-2 rounded-full bg-[#0B1428] kp-sup-wait inline-block" />}{stLabel}</span>
-          {size && <span className="h-7 px-2.5 rounded-full text-[12px] font-bold bg-black/40 text-white/80 inline-flex items-center" style={{ fontFamily: MONO }} data-testid="support-video-size">{size}</span>}
+          <span className={`h-7 px-2.5 rounded-full text-[12px] font-black inline-flex items-center gap-1.5 ${state === "live" ? "bg-[#8FB0F0] text-[#0B1428]" : "bg-white/15 text-white"}`} style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{state === "live" && <i className="w-2 h-2 rounded-full bg-[#0B1428] kp-sup-wait inline-block" />}{stLabel}</span>
+          {size && <span className="h-7 px-2.5 rounded-full text-[12px] font-bold bg-black/40 text-white/80 inline-flex items-center" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }} data-testid="support-video-size">{size}</span>}
         </div>
         <button type="button" onClick={full} className="absolute right-3 top-3 h-8 px-3 rounded-lg bg-black/45 text-white text-[12.5px] font-black hover:bg-black/60">전체 화면</button>
       </div>
@@ -664,7 +664,7 @@ function InviteBox({ me, busyUids, onSent }) {
       <div className="px-4 py-3 flex items-center gap-2 text-white" style={{ background: "linear-gradient(120deg,#0B1428,#1B2B4B 65%,#2D4C82)" }}>
         <Icon d={SUPPORT_ICON} size={18} className="text-[#8FB0F0]" />
         <span className="text-[15.5px] font-black">원격 지원 걸기</span>
-        <span className="ml-auto text-[11px] tracking-[0.18em] text-[#8FB0F0]" style={{ fontFamily: MONO }}>INVITE</span>
+        <span className="ml-auto text-[11px] tracking-[0.18em] text-[#8FB0F0]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>INVITE</span>
       </div>
       <div className="p-3.5 space-y-2.5">
         <div className="text-[13px] text-[#5B6B85] leading-snug">직원을 고르면 그 직원 화면에 <b className="text-[#0F1A30]">동의 창</b>이 뜹니다. 직원이 [수락]해야 화면 공유·원격이 시작됩니다.</div>
@@ -755,7 +755,7 @@ export function RemoteSupportAdminPanel({ me }) {
           {[["open", `진행 중 ${counts.open}`], ["all", `전체 기록 ${counts.all}`]].map(([k, l]) => (
             <button key={k} type="button" onClick={() => setView(k)} className={`h-9 px-3.5 rounded-xl text-[14px] font-black ${view === k ? "bg-[#1B2B4B] text-white" : "text-[#5B6B85] hover:bg-white"}`}>{l}</button>
           ))}
-          {counts.pending > 0 && <span className="ml-auto h-7 px-2.5 rounded-full bg-[#0F1A30] text-white text-[12.5px] font-black inline-flex items-center" style={{ fontFamily: MONO }}>대기 {counts.pending}</span>}
+          {counts.pending > 0 && <span className="ml-auto h-7 px-2.5 rounded-full bg-[#0F1A30] text-white text-[12.5px] font-black inline-flex items-center" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>대기 {counts.pending}</span>}
         </div>
         <div className="p-2 max-h-[640px] overflow-y-auto">
           {list === null ? <div className="py-12 text-center text-[#9AA9C3] text-[14.5px]">불러오는 중…</div>
@@ -780,9 +780,9 @@ export function RemoteSupportAdminPanel({ me }) {
           <div>
             <div className="px-4 sm:px-5 py-4 border-b border-[#E8EDF4] bg-[#F7F9FC] flex items-start gap-3 flex-wrap">
               <div className="flex-1 min-w-[220px]">
-                <div className="flex items-center gap-2 flex-wrap"><Chip status={sel.status} /><span className="text-[12px] font-extrabold tracking-[0.18em] text-[#94A3B8]" style={{ fontFamily: MONO }}>{sel.device === "mobile" ? "MOBILE" : "PC"} · {fmt(sel.createdAt)}</span></div>
+                <div className="flex items-center gap-2 flex-wrap"><Chip status={sel.status} /><span className="text-[12px] font-extrabold tracking-[0.18em] text-[#94A3B8]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{sel.device === "mobile" ? "MOBILE" : "PC"} · {fmt(sel.createdAt)}</span></div>
                 <div className="text-[20px] font-black text-[#0F1A30] mt-1.5">{sel.companyName} · {sel.name}</div>
-                <div className="text-[14px] text-[#5B6B85] mt-0.5">{[sel.team, sel.position].filter(Boolean).join(" · ") || "-"}{sel.phone ? <> · <a href={`tel:${sel.phone}`} className="font-bold text-[#2D4C82]" style={{ fontFamily: MONO }}>{sel.phone}</a></> : sel.email ? ` · ${sel.email}` : ""}</div>
+                <div className="text-[14px] text-[#5B6B85] mt-0.5">{[sel.team, sel.position].filter(Boolean).join(" · ") || "-"}{sel.phone ? <> · <a href={`tel:${sel.phone}`} className="font-bold text-[#2D4C82]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{sel.phone}</a></> : sel.email ? ` · ${sel.email}` : ""}</div>
               </div>
               <div className="text-right">
                 <div className="text-[12.5px] font-bold text-[#7A879C]">{sel.initiatedBy === "master" ? "관리자가 건 방식" : "희망 방식"}</div>
@@ -837,7 +837,7 @@ export function RemoteSupportAdminPanel({ me }) {
                       <div className="text-[13px] font-bold text-[#5B6B85]">직원이 보낸 원격 번호 (AnyDesk / 크롬 원격 데스크톱)</div>
                       {sel.anydeskId ? (
                         <div className="flex items-center gap-2.5 mt-1.5 flex-wrap">
-                          <span className="text-[26px] font-black text-[#0F1A30] tracking-wider" style={{ fontFamily: MONO }} data-testid="support-anydesk">{sel.anydeskId}</span>
+                          <span className="text-[26px] font-black text-[#0F1A30] tracking-wider" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }} data-testid="support-anydesk">{sel.anydeskId}</span>
                           <button type="button" onClick={() => copy(sel.anydeskId)} className="h-9 px-3.5 rounded-lg bg-[#1B2B4B] text-white text-[13.5px] font-black">{copied ? "복사됨 ✓" : "복사"}</button>
                         </div>
                       ) : <div className="text-[14.5px] text-[#7A879C] mt-1">아직 번호를 보내지 않았습니다 — 직원 화면에 설치 안내가 떠 있습니다.</div>}
@@ -858,7 +858,7 @@ export function RemoteSupportAdminPanel({ me }) {
                     <div key={k} className="px-3.5 py-2.5 rounded-xl bg-[#F7F9FC] ring-1 ring-[#E8EDF4]"><div className="text-[12.5px] font-bold text-[#7A879C]">{k}</div><div className="font-black text-[#0F1A30] truncate">{v}</div></div>
                   ))}
                   {sel.status === "rejected" && <div className="sm:col-span-3 px-3.5 py-2.5 rounded-xl bg-[#F7F9FC] ring-1 ring-[#E8EDF4]"><span className="text-[12.5px] font-bold text-[#7A879C]">거절 사유</span><div className="font-bold text-[#0F1A30]">{sel.rejectReason || "-"}</div></div>}
-                  {sel.anydeskId && <div className="sm:col-span-3 text-[13.5px] text-[#5B6B85]">원격 번호: <b style={{ fontFamily: MONO }}>{sel.anydeskId}</b></div>}
+                  {sel.anydeskId && <div className="sm:col-span-3 text-[13.5px] text-[#5B6B85]">원격 번호: <b style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{sel.anydeskId}</b></div>}
                 </div>
               )}
             </div>

@@ -168,7 +168,7 @@ function Pagination({ page, total, onChange }) {
     <div className="flex justify-center gap-1.5 pt-4">
       {Array.from({ length: total }).map((_, i) => (
         <button key={i} onClick={() => onChange(i + 1)}
-          style={{ fontFamily: "'JetBrains Mono','SF Mono',ui-monospace,monospace" }}
+          style={{ fontFamily: "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif", fontVariantNumeric: "tabular-nums" }}
           className={`w-9 h-9 rounded-xl text-[13px] font-extrabold transition ${i + 1 === page ? "bg-[#1B2B4B] text-white shadow-[0_4px_10px_rgba(27,43,75,0.25)]" : "bg-white border border-[#E3E8F0] text-[#4b5563] hover:bg-[#F4F7FC]"}`}>
           {i + 1}
         </button>
@@ -1018,7 +1018,7 @@ export default function HomeDashboard({ role, user, userCompany = "", pending, d
         <div className="relative overflow-hidden rounded-[22px] px-7 py-5 text-white flex items-center justify-between gap-4 flex-wrap shadow-[0_14px_32px_rgba(15,26,48,0.25)]"
           style={{ background: "linear-gradient(rgba(143,176,240,.07) 1px, transparent 1px) 0 0/22px 22px, linear-gradient(90deg, rgba(143,176,240,.07) 1px, transparent 1px) 0 0/22px 22px, linear-gradient(120deg,#0B1428 0%,#1B2B4B 60%,#2D4C82 100%)" }}>
           <div>
-            <div className="text-[11px] font-extrabold tracking-[0.26em] text-[#8FB0F0]" style={{ fontFamily: "'JetBrains Mono','SF Mono',ui-monospace,monospace" }}>
+            <div className="text-[11px] font-extrabold tracking-[0.26em] text-[#8FB0F0]" style={{ fontFamily: "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif", fontVariantNumeric: "tabular-nums" }}>
               BOARD · {boardTab === "공지사항" ? "NOTICE" : boardTab === "휴가/외근" ? "SCHEDULE" : "HANDOVER"}
             </div>
             <h2 className="text-[24px] font-black tracking-tight mt-0.5">{boardTab}</h2>
@@ -1033,7 +1033,7 @@ export default function HomeDashboard({ role, user, userCompany = "", pending, d
             ].map(([k, v]) => (
               <div key={k} className="rounded-2xl bg-white/[0.08] ring-1 ring-white/15 px-4 py-2 text-center min-w-[96px]">
                 <div className="text-[12px] font-bold text-blue-100/70">{k}</div>
-                <div className="text-[22px] font-black leading-tight" style={{ fontFamily: "'JetBrains Mono','SF Mono',ui-monospace,monospace" }}>{v}</div>
+                <div className="text-[22px] font-black leading-tight" style={{ fontFamily: "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif", fontVariantNumeric: "tabular-nums" }}>{v}</div>
               </div>
             ))}
             {!isViewer && (boardTab !== "공지사항" || canWriteNotice) && (

@@ -120,7 +120,7 @@ setRejectedList(rejectedList);
 
       {/* ================= 상단 헤더 ================= */}
       <div className="flex justify-between items-center mb-6">
-        <div className=""><div className="text-[10px] font-extrabold tracking-[0.24em] text-[#4B6CB7]" style={{ fontFamily: "'JetBrains Mono',ui-monospace,monospace" }}>USERS</div><h2 className="text-[19px] font-black text-[#0F1A30] tracking-tight">이용자관리</h2></div>
+        <div className=""><div className="text-[10px] font-extrabold tracking-[0.24em] text-[#4B6CB7]" style={{ fontFamily: "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif", fontVariantNumeric: "tabular-nums" }}>USERS</div><h2 className="text-[19px] font-black text-[#0F1A30] tracking-tight">이용자관리</h2></div>
 
         <div className="flex gap-2">
           <button
@@ -371,7 +371,7 @@ setRejectedList(rejectedList);
                 이미 가입된 이용자의 정보를 이메일 기준으로 일괄 업데이트합니다. 신규 계정은
                 생성되지 않으니, 새 이용자는 가입 링크로 직접 가입해야 합니다.
               </p>
-              <div className="bg-gray-50 rounded-lg p-3 text-xs text-gray-600 font-mono mb-4">
+              <div className="bg-gray-50 rounded-lg p-3 text-xs text-gray-600 tabular-nums mb-4">
                 이메일 | 이름 | 부서 | 직책 | 연락처
               </div>
               <label className={`block w-full text-center py-3 bg-[#1B2B4B] text-white rounded-lg cursor-pointer hover:opacity-90 font-semibold ${bulkLoading ? "opacity-50" : ""}`}>

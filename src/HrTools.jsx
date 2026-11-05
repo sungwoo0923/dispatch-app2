@@ -152,7 +152,7 @@ export function LeaveLedger({ company, isViewer = false, canManage = false }) {
                   <span className="block text-[13px] text-[#5B6B85] truncate">{[r.u.team, r.u.position].filter(Boolean).join(" · ")}</span>
                   {r.ent && <span className="mt-1 block"><Bar pct={r.total ? (r.used / r.total) * 100 : 0} tone={r.remain <= 2 ? "#D92D20" : "#2D4C82"} /></span>}
                 </span>
-                <span className="text-right shrink-0"><span className="block text-[22px] font-black tabular-nums text-[#0F1A30] leading-none" style={{ fontFamily: MONO }}>{r.ent ? r.remain : "-"}</span><span className="block text-[12px] font-bold text-[#7A879C]">/{r.total} 잔여</span></span>
+                <span className="text-right shrink-0"><span className="block text-[22px] font-black tabular-nums text-[#0F1A30] leading-none" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{r.ent ? r.remain : "-"}</span><span className="block text-[12px] font-bold text-[#7A879C]">/{r.total} 잔여</span></span>
               </button>
             ))}
           </div>
@@ -162,13 +162,13 @@ export function LeaveLedger({ company, isViewer = false, canManage = false }) {
           <div className="space-y-3 min-w-0">
             <div className="rounded-[20px] p-5 text-white flex flex-wrap items-center gap-5" style={{ background: "linear-gradient(120deg,#0B1428,#1B2B4B 60%,#2D4C82)" }}>
               <div className="flex-1 min-w-[220px]">
-                <div className="text-[11px] font-extrabold tracking-[0.24em] text-[#8FB0F0]" style={{ fontFamily: MONO }}>{cur.ent ? `${cur.ent.label} · ${cur.ent.from} ~ ${cur.ent.to}` : "NO HIRE DATE"}</div>
+                <div className="text-[11px] font-extrabold tracking-[0.24em] text-[#8FB0F0]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{cur.ent ? `${cur.ent.label} · ${cur.ent.from} ~ ${cur.ent.to}` : "NO HIRE DATE"}</div>
                 <div className="text-[22px] font-black mt-0.5">{nm(cur.u)} <span className="text-[14px] font-bold text-white/60">{[cur.u.team, cur.u.position].filter(Boolean).join(" · ")}</span></div>
                 <div className="text-[13px] text-white/60 mt-0.5">입사 {cur.hire || "미등록"}{cur.ent ? ` · 근속 ${Math.floor(cur.ent.months / 12) ? `${Math.floor(cur.ent.months / 12)}년 ` : ""}${cur.ent.months % 12}개월 · 회기 종료 D-${Math.max(0, cur.left)}` : ""}</div>
               </div>
               <div className="grid grid-cols-5 gap-1.5">
                 {[["발생", cur.base], ["조정", `${cur.adjSum > 0 ? "+" : ""}${cur.adjSum}`], ["사용", cur.used], ["결재 중", cur.wait], ["잔여", cur.remain]].map(([l, v], i) => (
-                  <div key={l} className={`rounded-xl px-3 py-2 text-center min-w-[64px] ${i === 4 ? "bg-white text-[#0F1A30]" : "bg-white/[0.08] border border-white/10"}`}><div className={`text-[13px] font-bold ${i === 4 ? "text-[#5B6B85]" : "text-white/60"}`}>{l}</div><div className="text-[24px] font-black tabular-nums" style={{ fontFamily: MONO }}>{cur.ent ? v : "-"}</div></div>
+                  <div key={l} className={`rounded-xl px-3 py-2 text-center min-w-[64px] ${i === 4 ? "bg-white text-[#0F1A30]" : "bg-white/[0.08] border border-white/10"}`}><div className={`text-[13px] font-bold ${i === 4 ? "text-[#5B6B85]" : "text-white/60"}`}>{l}</div><div className="text-[24px] font-black tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{cur.ent ? v : "-"}</div></div>
                 ))}
               </div>
             </div>
@@ -180,7 +180,7 @@ export function LeaveLedger({ company, isViewer = false, canManage = false }) {
                   <div className="flex items-end gap-2 h-[240px] pt-3">
                     {monthly.map((x) => (
                       <div key={x.m} className="flex-1 min-w-0 flex flex-col items-center gap-1.5">
-                        <span className="text-[14px] font-black text-[#0F1A30] tabular-nums" style={{ fontFamily: MONO }}>{x.v || ""}</span>
+                        <span className="text-[14px] font-black text-[#0F1A30] tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{x.v || ""}</span>
                         <div className="w-full flex-1 flex items-end rounded-t-lg bg-[#F3F6FA]"><span className={`w-full rounded-t-lg ${x.m === today.slice(0, 7) ? "bg-[#B88A2E]" : "bg-gradient-to-t from-[#1B2B4B] to-[#2D4C82]"}`} style={{ height: `${(x.v / maxM) * 100}%`, minHeight: x.v ? 6 : 0 }} /></div>
                         <span className={`text-[13px] font-black tabular-nums ${x.m === today.slice(0, 7) ? "text-[#B88A2E]" : "text-[#3A4A66]"}`}>{Number(x.m.slice(5))}월</span>
                       </div>
@@ -197,7 +197,7 @@ export function LeaveLedger({ company, isViewer = false, canManage = false }) {
                           {cur.hist.slice((pg - 1) * PER, pg * PER).map((a) => { const x = leaveUseOf(a); const st = { approved: ["승인", "#067647", "#ECFDF3"], pending: ["결재 중", "#B54708", "#FFF4E5"], rejected: ["반려", "#B42318", "#FEF3F2"] }[a.status] || ["취소", "#7A879C", "#F2F4F7"]; return (
                             <div key={a.id} className="flex items-center gap-3 py-3">
                               <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${x.date >= today ? "bg-[#B88A2E]" : "bg-[#1B2B4B]"}`} />
-                              <span className="text-[16px] font-black tabular-nums text-[#0F1A30]" style={{ fontFamily: MONO }}>{x.date}</span>
+                              <span className="text-[16px] font-black tabular-nums text-[#0F1A30]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{x.date}</span>
                               <span className="text-[15px] font-bold text-[#3A4A66] truncate">{a.form === "half" ? (a.data?.ampm || "반차") : (a.data?.kind || "연차")} · <b className="text-[#0F1A30]">{x.days}일</b></span>
                               <span className="ml-auto text-[13px] font-black px-2.5 py-1 rounded-lg shrink-0" style={{ color: st[1], background: st[2] }}>{st[0]}</span>
                             </div>
@@ -206,7 +206,7 @@ export function LeaveLedger({ company, isViewer = false, canManage = false }) {
                         {pages > 1 && (
                           <div className="mt-3 flex items-center justify-center gap-1.5 flex-wrap">
                             <button type="button" disabled={pg <= 1} onClick={() => setHPage(pg - 1)} className="h-10 px-3 rounded-xl border border-[#DCE3EE] bg-white text-[14px] font-black text-[#1B2B4B] disabled:opacity-30">‹</button>
-                            {Array.from({ length: pages }, (_, i) => i + 1).map((n) => <button key={n} type="button" onClick={() => setHPage(n)} className={`h-10 min-w-[40px] px-2 rounded-xl text-[15px] font-black tabular-nums ${n === pg ? "bg-[#0F1A30] text-white" : "border border-[#DCE3EE] bg-white text-[#3A4A66]"}`} style={{ fontFamily: MONO }}>{n}</button>)}
+                            {Array.from({ length: pages }, (_, i) => i + 1).map((n) => <button key={n} type="button" onClick={() => setHPage(n)} className={`h-10 min-w-[40px] px-2 rounded-xl text-[15px] font-black tabular-nums ${n === pg ? "bg-[#0F1A30] text-white" : "border border-[#DCE3EE] bg-white text-[#3A4A66]"}`} style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{n}</button>)}
                             <button type="button" disabled={pg >= pages} onClick={() => setHPage(pg + 1)} className="h-10 px-3 rounded-xl border border-[#DCE3EE] bg-white text-[14px] font-black text-[#1B2B4B] disabled:opacity-30">›</button>
                           </div>
                         )}
@@ -220,7 +220,7 @@ export function LeaveLedger({ company, isViewer = false, canManage = false }) {
               <BookCard en="ADJUSTMENTS · AUDIT" title="연차 조정 이력" right={canManage && !isViewer && <button type="button" onClick={() => setAdj({ days: "", reason: "" })} className="h-9 px-3.5 rounded-lg bg-[#0F1A30] text-white text-[12.5px] font-black">연차 조정</button>}>
                 {!cur.adjList.length ? <div className="py-3 text-[13px] font-bold text-[#9AA9C3]">조정 기록이 없습니다</div> : cur.adjList.slice().reverse().map((x, i) => (
                   <div key={i} className="flex items-center gap-3 py-2 border-b border-[#F1F4F9] last:border-b-0">
-                    <span className={`w-16 h-10 rounded-lg grid place-items-center text-[15px] font-black tabular-nums ${x.days > 0 ? "bg-[#EEF3FC] text-[#2D4C82]" : "bg-[#FEF3F2] text-[#B42318]"}`} style={{ fontFamily: MONO }}>{x.days > 0 ? "+" : ""}{x.days}</span>
+                    <span className={`w-16 h-10 rounded-lg grid place-items-center text-[15px] font-black tabular-nums ${x.days > 0 ? "bg-[#EEF3FC] text-[#2D4C82]" : "bg-[#FEF3F2] text-[#B42318]"}`} style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{x.days > 0 ? "+" : ""}{x.days}</span>
                     <span className="flex-1 min-w-0"><span className="block text-[15px] font-black text-[#0F1A30] truncate">{x.reason}</span><span className="block text-[13px] text-[#7A879C]">{x.date} · {x.byName || x.by} · 본인 통보됨</span></span>
                   </div>
                 ))}
@@ -246,7 +246,7 @@ export function LeaveLedger({ company, isViewer = false, canManage = false }) {
           <div className="rounded-2xl bg-white border border-[#E3E8F0] p-4">
             <div className="text-[12.5px] font-black text-[#3A4A66] mb-1.5">조정 일수 (+ 추가 / − 차감)</div>
             <div className="flex gap-1.5 flex-wrap mb-2">{[-1, -0.5, 0.5, 1, 2].map((d) => <Chip key={d} on={Number(adj.days) === d} onClick={() => setAdj((p) => ({ ...p, days: String(d) }))}>{d > 0 ? "+" : ""}{d}일</Chip>)}</div>
-            <input inputMode="decimal" value={adj.days} onChange={(e) => setAdj((p) => ({ ...p, days: e.target.value.replace(/[^\d.-]/g, "") }))} className={`${inp} text-right tabular-nums`} style={{ fontFamily: MONO }} placeholder="예: 1, -0.5" />
+            <input inputMode="decimal" value={adj.days} onChange={(e) => setAdj((p) => ({ ...p, days: e.target.value.replace(/[^\d.-]/g, "") }))} className={`${inp} text-right tabular-nums`} style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }} placeholder="예: 1, -0.5" />
             <div className="mt-2 text-[12.5px] text-[#5B6B85]">조정 후 잔여: <b className="text-[#0F1A30]">{cur.remain + (Number(adj.days) || 0)}일</b></div>
           </div>
           <div><div className="text-[12.5px] font-black text-[#3A4A66] mb-1.5">사유 (필수 · 본인에게 그대로 전달)</div>
@@ -334,10 +334,10 @@ export function OnboardingBoard({ company, isViewer = false }) {
                       <span className="text-[12px] font-bold text-[#7A879C] whitespace-nowrap">{[u.team, u.position].filter(Boolean).join(" · ")}</span>
                       {od > 0 && <span className="text-[10.5px] font-black px-1.5 py-0.5 rounded-md bg-[#FEF3F2] text-[#B42318] border border-[#FECDCA] whitespace-nowrap">기한 지남 {od}</span>}
                     </div>
-                    <div className="text-[11.5px] text-[#7A879C] mt-0.5 whitespace-nowrap" style={{ fontFamily: MONO }}>{mode === "in" ? "입사일" : "퇴사일"} {base || "미등록"}</div>
+                    <div className="text-[11.5px] text-[#7A879C] mt-0.5 whitespace-nowrap" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{mode === "in" ? "입사일" : "퇴사일"} {base || "미등록"}</div>
                     <div className="mt-1.5 max-w-[360px]"><Bar pct={(n / items.length) * 100} tone={n === items.length ? "#12B76A" : "#2D4C82"} /></div>
                   </div>
-                  <div className="text-[18px] font-black text-[#0F1A30] tabular-nums shrink-0" style={{ fontFamily: MONO }}>{n}<span className="text-[11px] text-[#9AA9C3]">/{items.length}</span></div>
+                  <div className="text-[18px] font-black text-[#0F1A30] tabular-nums shrink-0" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{n}<span className="text-[11px] text-[#9AA9C3]">/{items.length}</span></div>
                 </button>
                 {open === u.id && (
                   <div className="px-3 md:px-4 pb-4 bg-[#F7F9FC] grid md:grid-cols-2 gap-2">
@@ -353,7 +353,7 @@ export function OnboardingBoard({ company, isViewer = false }) {
                           <span className="min-w-0">
                             <span className="block text-[13.5px] font-black text-[#0F1A30]">{it.label}</span>
                             <span className="block text-[11.5px] text-[#7A879C]">{it.desc}</span>
-                            {(due || rec?.at) && <span className={`block text-[11px] font-bold mt-0.5 ${late ? "text-[#B42318]" : "text-[#5B6B85]"}`} style={{ fontFamily: MONO }}>{rec?.at ? `완료 ${rec.at}` : `기한 ${due}`}</span>}
+                            {(due || rec?.at) && <span className={`block text-[11px] font-bold mt-0.5 ${late ? "text-[#B42318]" : "text-[#5B6B85]"}`} style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{rec?.at ? `완료 ${rec.at}` : `기한 ${due}`}</span>}
                           </span>
                         </button>
                       );
@@ -515,13 +515,13 @@ export function CertIssuer({ company, isViewer = false }) {
           <BookCard en="ISSUE LOG" title={`발급 대장 ${log.length}건`} flush>
             {!log.length ? <div className="py-6 text-center text-[13px] font-bold text-[#9AA9C3]">발급한 증명서가 없습니다</div> : (
               <div className="divide-y divide-[#EEF2F8] max-h-[220px] overflow-y-auto">
-                {log.slice(0, 50).map((c) => <div key={c.no} className="px-4 py-2 flex items-center gap-2 text-[12.5px]"><span className="text-[11px] font-bold text-[#4B6CB7]" style={{ fontFamily: MONO }}>{c.no}</span><span className="font-black text-[#0F1A30]">{nm(staff.find((x) => x.id === c.uid))}</span><span className="text-[#5B6B85] truncate">{c.kind === "career" ? "경력" : "재직"} · {c.purpose}</span>{c.mailed && <span className="ml-auto text-[10.5px] font-black text-[#2D4C82]">메일</span>}</div>)}
+                {log.slice(0, 50).map((c) => <div key={c.no} className="px-4 py-2 flex items-center gap-2 text-[12.5px]"><span className="text-[11px] font-bold text-[#4B6CB7]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{c.no}</span><span className="font-black text-[#0F1A30]">{nm(staff.find((x) => x.id === c.uid))}</span><span className="text-[#5B6B85] truncate">{c.kind === "career" ? "경력" : "재직"} · {c.purpose}</span>{c.mailed && <span className="ml-auto text-[10.5px] font-black text-[#2D4C82]">메일</span>}</div>)}
               </div>
             )}
           </BookCard>
         </div>
         <div className="rounded-[20px] bg-[#E9EDF4] border border-[#DCE3EE] p-4 overflow-x-auto">
-          <div className="flex items-center justify-between mb-3"><span className="text-[11px] font-extrabold tracking-[0.24em] text-[#4B6CB7]" style={{ fontFamily: MONO }}>LIVE PREVIEW · A4</span><span className="text-[12px] font-bold text-[#7A879C]">입력하는 대로 바로 바뀝니다</span></div>
+          <div className="flex items-center justify-between mb-3"><span className="text-[11px] font-extrabold tracking-[0.24em] text-[#4B6CB7]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>LIVE PREVIEW · A4</span><span className="text-[12px] font-bold text-[#7A879C]">입력하는 대로 바로 바뀝니다</span></div>
           {!u ? <div className="py-40 text-center text-[14px] font-bold text-[#9AA9C3]">왼쪽에서 직원을 고르면 양식이 보입니다</div> : (
             <div className="shadow-[0_18px_40px_rgba(15,26,48,0.18)] w-fit mx-auto" ref={paperRef}>
               <CertPaper kind={kind} no={no} u={u} pf={profiles[u.id]} co={co} purpose={purpose} duty={duty} issueDate={today} birth={rs.birthDate || u.birthDate || profiles[u.id]?.birth || ""} address={rs.address || u.address || ""} />

@@ -13,7 +13,7 @@ import { sheetApi, BoardSuggest } from "./RouteBoard";
 import { ownerOf, rateFor } from "./routeBoardSheet";
 import { useRouteCarrierSetting, useRouteCarrierFilter, saveRouteCarrierSetting, carriersInOrders, carrierKey, carrierOf } from "./routeCarriers"; // ⭐ 2026-11-05 운송업체 설정(정산·매출 포함 여부)
 
-const MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
+const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
 import { LiveDriverChip, FleetLiveButton, useFleetLivePublish } from "./liveFleet"; // ⭐ 2026-11-05 배차완료 지입·직영·임대 기사 실시간 관제
 const toInt = (v) => parseInt(String(v ?? "").replace(/[^\d-]/g, ""), 10) || 0;
 const normPlate = (s = "") => String(s).replace(/\s+/g, "").toUpperCase();
@@ -163,10 +163,10 @@ export function FixedRouteCells({ form, row, drivers = [], clients = [], onPatch
   const st = row.배차상태 || "배차중";
   return (
     <>
-      <td className={`${td} tabular-nums text-[13px] font-bold text-[#3A4A66]`} style={{ fontFamily: MONO }} title="발주일(시트 왼쪽 날짜)">{String(row.발주일 || row.상차일 || "").slice(5).replace("-", ".")}</td>
+      <td className={`${td} tabular-nums text-[13px] font-bold text-[#3A4A66]`} style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }} title="발주일(시트 왼쪽 날짜)">{String(row.발주일 || row.상차일 || "").slice(5).replace("-", ".")}</td>
       <td className={td} title="입고일(시트 오른쪽 날짜 · 탭 이름)">
         {/* ⭐ 2026-11-03 입고일 눈에 띄게 — 굵고 크게, 남색 칩 */}
-        <span className="inline-flex items-center h-7 px-2.5 rounded-lg bg-[#0F1A30] text-white text-[14.5px] font-black tabular-nums tracking-tight" style={{ fontFamily: MONO }}>{String(row.입고일 || row.하차일 || "").slice(5).replace("-", ".")}</span>
+        <span className="inline-flex items-center h-7 px-2.5 rounded-lg bg-[#0F1A30] text-white text-[14.5px] font-black tabular-nums tracking-tight" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{String(row.입고일 || row.하차일 || "").slice(5).replace("-", ".")}</span>
       </td>
       <td className={`${td} text-[13px] font-black text-[#1B2B4B]`}>{row.배차표묶음 || row.상차지명 || "-"}</td>
       {cols.map((c) => {
@@ -178,9 +178,7 @@ export function FixedRouteCells({ form, row, drivers = [], clients = [], onPatch
         if (c.kind === "sum") return <td key={c.id} data-frs="sum" className={`${td} tabular-nums`}>{v}</td>;
         if (c.kind === "field" && DRV_KEY[c.field]) {
           const pick = (d) => onPatch({ 차량번호: d.차량번호 || "", 이름: d.이름 || "", 전화번호: d.전화번호 || "", ...(row.배차상태 === "배차중" || !row.배차상태 ? { 배차상태: "배차완료" } : {}) });
-          return <td key={c.id} className={`${td} bg-[#F3F7FF]`} title="차량번호·이름·번호 일부만 쳐도 기사관리에서 찾아 채웁니다"><VehicleCell field={c.field} value={v} drivers={drivers} disabled={disabled} onPick={pick} onCommit={(x) => commit(c, x)} placeholder={c.field === "차량번호" && !v ? "미배차" : ""} />
-            {/* ⭐ 2026-11-05 배차완료 지입·직영·임대 기사 — 기사앱 실시간 위치(LIVE) */}
-            {c.field === "차량번호" && st === "배차완료" && <LiveDriverChip order={row} className="ml-1" />}</td>;
+          return <td key={c.id} className={`${td} bg-[#F3F7FF] relative`} title="차량번호·이름·번호 일부만 쳐도 기사관리에서 찾아 채웁니다">{c.field === "차량번호" && st === "배차완료" && <LiveDriverChip order={row} variant="pin" />}<VehicleCell field={c.field} value={v} drivers={drivers} disabled={disabled} onPick={pick} onCommit={(x) => commit(c, x)} placeholder={c.field === "차량번호" && !v ? "미배차" : ""} />{/* ⭐ 2026-11-05 LIVE — 칩 대신 칸 왼쪽 위 6px 점(폭 0 · 칸 너비 그대로) */}</td>;
         }
         if (isCarrierCol(c)) {
           const off = carrierF.active && !carrierF.isCountable(row);
@@ -199,7 +197,7 @@ export function FixedRouteCells({ form, row, drivers = [], clients = [], onPatch
       </td>
       {!has("청구운임") && money("청구운임")}
       {!has("기사운임") && money("기사운임")}
-      <td className={`${td} text-[13.5px] font-black tabular-nums ${toInt(row.청구운임) - toInt(row.기사운임) < 0 ? "text-red-600" : "text-[#0F1A30]"}`} style={{ fontFamily: MONO }}>{(toInt(row.청구운임) - toInt(row.기사운임)).toLocaleString()}</td>
+      <td className={`${td} text-[13.5px] font-black tabular-nums ${toInt(row.청구운임) - toInt(row.기사운임) < 0 ? "text-red-600" : "text-[#0F1A30]"}`} style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{(toInt(row.청구운임) - toInt(row.기사운임)).toLocaleString()}</td>
     </>
   );
 }
@@ -445,7 +443,7 @@ export function RouteCarrierModal({ company, rows = [], disabled = false, onClos
       <div className="w-full max-w-[560px] max-h-[92vh] flex flex-col overflow-hidden rounded-2xl bg-white shadow-[0_24px_60px_rgba(15,26,48,0.35)]" data-kp="route-carrier-modal">
         <div className="relative px-5 md:px-6 py-4 text-white flex items-start gap-3" style={{ background: "linear-gradient(120deg,#0F1A30 0%,#1B2B4B 60%,#2D4C82 100%)" }}>
           <div className="min-w-0">
-            <div className="text-[10.5px] font-extrabold tracking-[0.28em] text-[#8FB0F0]" style={{ fontFamily: MONO }}>CARRIER · SETTLEMENT</div>
+            <div className="text-[10.5px] font-extrabold tracking-[0.28em] text-[#8FB0F0]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>CARRIER · SETTLEMENT</div>
             <div className="text-[17px] font-black mt-0.5">운송업체 설정</div>
             <div className="text-[12.5px] text-white/65 font-semibold mt-0.5 leading-relaxed">체크한 운송업체의 고정노선 오더만 <b className="text-white">정산·매출</b>에 들어갑니다. 끄거나 삭제한 업체는 정산관리·매출관리·거래명세서·미수금·대시보드 합계에서 빠집니다.</div>
           </div>
@@ -453,8 +451,8 @@ export function RouteCarrierModal({ company, rows = [], disabled = false, onClos
         </div>
         <div className="px-5 md:px-6 pt-4 pb-3 space-y-3 border-b border-[#E9EDF4]">
           <div className="flex items-center gap-2 text-[13px] font-bold text-[#3A4A66] flex-wrap">
-            <span className="inline-flex items-center h-8 px-3 rounded-lg bg-[#EEF3FB] text-[#1B2B4B]">포함 <b className="ml-1.5 tabular-nums" style={{ fontFamily: MONO }}>{onCnt}</b></span>
-            <span className={`inline-flex items-center h-8 px-3 rounded-lg ${list.length - onCnt + removedHidden.length ? "bg-[#FFF1EE] text-[#B42318]" : "bg-[#F5F7FA] text-[#7A8AA6]"}`}>제외 <b className="ml-1.5 tabular-nums" style={{ fontFamily: MONO }}>{list.length - onCnt + removedHidden.length}</b>{offRows ? <span className="ml-1.5 font-semibold">· 오더 {offRows.toLocaleString()}건</span> : null}</span>
+            <span className="inline-flex items-center h-8 px-3 rounded-lg bg-[#EEF3FB] text-[#1B2B4B]">포함 <b className="ml-1.5 tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{onCnt}</b></span>
+            <span className={`inline-flex items-center h-8 px-3 rounded-lg ${list.length - onCnt + removedHidden.length ? "bg-[#FFF1EE] text-[#B42318]" : "bg-[#F5F7FA] text-[#7A8AA6]"}`}>제외 <b className="ml-1.5 tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{list.length - onCnt + removedHidden.length}</b>{offRows ? <span className="ml-1.5 font-semibold">· 오더 {offRows.toLocaleString()}건</span> : null}</span>
             {canEdit && list.length > 1 && <span className="ml-auto flex gap-1.5">
               <button type="button" disabled={busy} onClick={() => setAll(true)} className="h-8 px-3 rounded-lg border border-[#DCE3EE] bg-white text-[12.5px] font-black text-[#1B2B4B] hover:bg-[#F5F8FD] disabled:opacity-50">모두 포함</button>
               <button type="button" disabled={busy} onClick={() => setAll(false)} className="h-8 px-3 rounded-lg border border-[#DCE3EE] bg-white text-[12.5px] font-black text-[#5B6B85] hover:bg-[#F5F8FD] disabled:opacity-50">모두 제외</button>
@@ -612,14 +610,14 @@ export default function FixedRouteStatusHost({ company, dispatchData = [], rende
         <div className="absolute inset-0 pointer-events-none" style={{ background: "linear-gradient(rgba(143,176,240,.06) 1px, transparent 1px) 0 0/24px 24px, linear-gradient(90deg, rgba(143,176,240,.06) 1px, transparent 1px) 0 0/24px 24px" }} />
         <div className="relative flex items-center gap-4 flex-wrap">
           <div className="min-w-0">
-            <div className="text-[10.5px] font-extrabold tracking-[0.32em] text-[#8FB0F0]" style={{ fontFamily: MONO }}>FIXED ROUTE · LIVE BOARD</div>
+            <div className="text-[10.5px] font-extrabold tracking-[0.32em] text-[#8FB0F0]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>FIXED ROUTE · LIVE BOARD</div>
             <div className="text-[22px] font-black mt-0.5">고정노선현황</div>
           </div>
           <div className="flex items-center gap-1.5 flex-wrap">
             {forms.map((f) => (
               <button key={f.id} type="button" onClick={() => setFormId(f.id)}
                 className={`h-10 px-4 rounded-xl text-[14px] font-black whitespace-nowrap border transition ${form?.id === f.id ? "bg-white text-[#0F1A30] border-white" : "bg-white/[0.06] text-white/80 border-white/15 hover:bg-white/[0.12]"}`}>
-                {f.name}<span className={`ml-2 text-[11.5px] tabular-nums ${form?.id === f.id ? "text-[#7A8AA6]" : "text-white/45"}`} style={{ fontFamily: MONO }}>{rowsOf(f).length}</span>
+                {f.name}<span className={`ml-2 text-[11.5px] tabular-nums ${form?.id === f.id ? "text-[#7A8AA6]" : "text-white/45"}`} style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{rowsOf(f).length}</span>
               </button>
             ))}
           </div>
@@ -644,7 +642,7 @@ export default function FixedRouteStatusHost({ company, dispatchData = [], rende
             )}
             <FleetLiveButton rows={rows} dark size="lg" />{/* ⭐ 2026-11-05 실시간 관제 */}
             <span className={`h-10 px-3.5 rounded-xl inline-flex items-center gap-2 text-[13px] font-black border ${unassigned ? "bg-[#F7B955]/15 border-[#F7B955]/50 text-[#FCD9A0]" : "bg-white/[0.06] border-white/15 text-white/70"}`}>
-              미배차 <span className="text-[17px] tabular-nums" style={{ fontFamily: MONO }}>{unassigned}</span>
+              미배차 <span className="text-[17px] tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{unassigned}</span>
             </span>
             {form?.sheetUrl ? (
               <button type="button" onClick={() => runSync(form, false)} disabled={sync.busy} title="지금 시트와 맞추기"

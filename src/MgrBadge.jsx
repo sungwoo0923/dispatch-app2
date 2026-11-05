@@ -5,7 +5,7 @@
 import React from "react";
 import { createPortal } from "react-dom";
 
-const MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
+const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
 let NAME_MAP = null; // 이메일·uid → 직원 이름(DispatchApp이 넣어 줌)
 export function setMgrNameMap(m) { NAME_MAP = m || null; }
 const nameOf = (v) => {
@@ -60,13 +60,13 @@ export default function MgrBadge({ row, name, empty = "미지정" }) {
       <span className="text-[13.5px] font-bold text-[#0F1A30]">{reg || car}</span>
       {pos && ev.length > 0 && createPortal(
         <div className="fixed z-[2147483000] w-[290px] rounded-2xl px-4 py-3 text-white pointer-events-none" style={{ left: pos.left, top: pos.top, bottom: pos.bottom, background: "#0F1A30", boxShadow: "0 18px 40px rgba(6,12,26,.38)", border: "1px solid rgba(143,176,240,.18)" }}>
-          <div className="text-[10px] font-extrabold tracking-[0.24em] text-[#8FB0F0] mb-1.5" style={{ fontFamily: MONO }}>ORDER TRAIL</div>
+          <div className="text-[10px] font-extrabold tracking-[0.24em] text-[#8FB0F0] mb-1.5" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>ORDER TRAIL</div>
           {ev.map((e, i) => (
             <div key={i} className="flex items-start gap-2.5 py-1">
               <span className="w-2 h-2 rounded-full mt-[6px] flex-none" style={{ background: e.c }} />
               <div className="min-w-0">
                 <div className="text-[12.5px] font-black">{e.t}</div>
-                {e.s && <div className="text-[11px] text-white/55" style={{ fontFamily: MONO }}>{e.s}</div>}
+                {e.s && <div className="text-[11px] text-white/55" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{e.s}</div>}
               </div>
             </div>
           ))}

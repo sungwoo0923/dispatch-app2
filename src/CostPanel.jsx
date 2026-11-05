@@ -17,7 +17,7 @@ import { useSalesPricing, applyPlanBill, itemsTotal, monthlyOf } from "./SalesQu
 import { PLAN_IDS, planIncludes } from "./plans";
 import { COST_DEFAULT, CLAUDE_TIERS, VERCEL_PLANS, mergeCost, fixedCosts, variableCosts, estimateDaily, estimateMonth, breakEvenCurve, daysInMonth } from "./costModel";
 
-const MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
+const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
 const NAVY = "#1B2B4B", INK = "#0F1A30", MID = "#4B6CB7", SOFT = "#8FB0F0", RED = "#B42318";
 const pad = (x) => String(x).padStart(2, "0");
 const kstToday = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
@@ -34,7 +34,7 @@ function Card({ code, title, right, children, bodyClass = "p-5" }) {
     <div className="bg-white rounded-[18px] border border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_10px_26px_rgba(16,24,40,0.05)] overflow-hidden min-w-0">
       <div className="flex items-center justify-between gap-3 px-4 sm:px-5 min-h-[46px] sm:min-h-[50px] py-1.5 bg-[#F7F9FC] border-b border-[#E8EDF4] flex-wrap">
         <div className="flex items-center gap-2 min-w-0"><span className="w-1.5 h-1.5 rotate-45 bg-[#1B2B4B]" />
-          <span className="text-[10.5px] font-extrabold tracking-[0.2em] text-[#94A3B8]" style={{ fontFamily: MONO }}>{code}</span>
+          <span className="text-[10.5px] font-extrabold tracking-[0.2em] text-[#94A3B8]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{code}</span>
           <span className="text-[15px] sm:text-[16px] font-black text-[#0F1A30] truncate whitespace-nowrap">{title}</span></div>
         {right}
       </div>
@@ -46,7 +46,7 @@ function Hero({ en, title, desc, right }) {
   return (
     <div className="relative overflow-hidden rounded-[18px] sm:rounded-[22px] px-4 py-3.5 sm:px-6 sm:py-5 mb-3 sm:mb-4 text-white flex items-center justify-between gap-3 sm:gap-4 flex-wrap"
       style={{ background: "linear-gradient(rgba(143,176,240,.06) 1px, transparent 1px) 0 0/22px 22px, linear-gradient(90deg, rgba(143,176,240,.06) 1px, transparent 1px) 0 0/22px 22px, radial-gradient(600px 200px at 85% -20%, rgba(75,108,183,.45), transparent 60%), linear-gradient(120deg,#0B1428 0%,#1B2B4B 60%,#2D4C82 100%)" }}>
-      <div className="min-w-0"><div className="text-[10px] sm:text-[11px] font-extrabold tracking-[0.28em] text-[#8FB0F0] whitespace-nowrap" style={{ fontFamily: MONO }}>{en}</div>
+      <div className="min-w-0"><div className="text-[10px] sm:text-[11px] font-extrabold tracking-[0.28em] text-[#8FB0F0] whitespace-nowrap" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{en}</div>
         <div className="text-[19px] sm:text-[24px] font-black mt-0.5 tracking-tight whitespace-nowrap">{title}</div>
         {desc && <div className="hidden sm:block text-[13.5px] text-white/65 mt-0.5">{desc}</div>}</div>
       {right}
@@ -57,7 +57,7 @@ function Kpi({ k, v, sub, dark = false, loss = false }) {
   return (
     <div className={`rounded-[16px] px-4 py-3.5 border min-w-0 ${dark ? "bg-[#0F1A30] text-white border-[#0F1A30]" : "bg-white border-[#E3E8F0]"}`}>
       <div className={`text-[12.5px] font-bold ${dark ? "text-white/60" : "text-[#7A879C]"}`}>{k}</div>
-      <div className="text-[21px] sm:text-[23px] font-black mt-0.5 tabular-nums whitespace-nowrap" style={{ fontFamily: MONO, color: loss ? (dark ? "#FDA29B" : RED) : undefined }}>{v}</div>
+      <div className="text-[21px] sm:text-[23px] font-black mt-0.5 tabular-nums whitespace-nowrap" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", color: loss ? (dark ? "#FDA29B" : RED) : undefined }}>{v}</div>
       {sub && <div className={`text-[11.5px] font-semibold mt-0.5 truncate ${dark ? "text-white/50" : "text-[#9AA9C3]"}`}>{sub}</div>}
     </div>
   );
@@ -247,7 +247,7 @@ export default function CostPanel({ openUsage }) {
       <div className="flex gap-1.5 flex-wrap">
         {VIEWS.map(([k, l, en]) => (
           <button key={k} type="button" onClick={() => setView(k)} className={`h-10 px-4 rounded-xl text-[13px] font-black border inline-flex items-center gap-2 ${view === k ? "bg-[#0F1A30] text-white border-[#0F1A30]" : "bg-white text-[#1B2B4B] border-[#DCE3EE] hover:border-[#4B6CB7]"}`}>
-            <span className={`text-[9.5px] tracking-[0.18em] ${view === k ? "text-[#8FB0F0]" : "text-[#94A3B8]"}`} style={{ fontFamily: MONO }}>{en}</span>{l}
+            <span className={`text-[9.5px] tracking-[0.18em] ${view === k ? "text-[#8FB0F0]" : "text-[#94A3B8]"}`} style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{en}</span>{l}
           </button>
         ))}
       </div>
@@ -286,11 +286,11 @@ function SummaryView({ d, openUsage }) {
         <Card code="REVENUE" title="이달 매출 구성">
           {[["요금제 기본료", d.baseRev], ["사용량 초과(직원·오더·지입차·저장)", d.overRev], ["추가 청구 항목(세금계산서·문자·개발 등)", d.extraRev], ["확정 청구액(수납 관리에서 금액을 직접 정한 곳)", d.fixedRev]].map(([k, v]) => (
             <div key={k} className="flex items-center justify-between gap-3 py-2 border-t first:border-t-0 border-[#EEF1F6]">
-              <span className="text-[13.5px] font-bold text-[#3A4A66]">{k}</span><span className="text-[14.5px] font-black tabular-nums text-[#0F1A30]" style={{ fontFamily: MONO }}>{won(v)}</span>
+              <span className="text-[13.5px] font-bold text-[#3A4A66]">{k}</span><span className="text-[14.5px] font-black tabular-nums text-[#0F1A30]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{won(v)}</span>
             </div>
           ))}
           <div className="mt-2 pt-3 border-t border-dashed border-[#DCE3EE] flex justify-between items-end">
-            <span className="text-[12px] font-bold text-[#7A879C]">합계 · VAT 별도</span><span className="text-[22px] font-black tabular-nums" style={{ fontFamily: MONO }}>{won(d.revenue)}</span>
+            <span className="text-[12px] font-bold text-[#7A879C]">합계 · VAT 별도</span><span className="text-[22px] font-black tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{won(d.revenue)}</span>
           </div>
           <div className="mt-3 text-[12px] text-[#7A879C] leading-relaxed">매출은 <b>청구 › 수납 관리</b>의 이달 청구액(확정 전이면 예상액)과 같습니다. 초과 요금 계산은 <button type="button" onClick={openUsage} className="underline font-bold text-[#1B2B4B]">사용량·한도</button>, 추가 항목은 수납 관리 › [추가 항목]에서 넣습니다.</div>
         </Card>
@@ -299,7 +299,7 @@ function SummaryView({ d, openUsage }) {
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={bars} layout="vertical" margin={{ top: 4, right: 70, left: 8, bottom: 0 }}>
                 <CartesianGrid stroke="#EEF1F6" horizontal={false} />
-                <XAxis type="number" axisLine={false} tickLine={false} tickFormatter={short} tick={{ fontSize: 11, fill: "#9AA9C3", fontFamily: MONO }} />
+                <XAxis type="number" axisLine={false} tickLine={false} tickFormatter={short} tick={{ fontSize: 11, fill: "#9AA9C3", fontFamily: MONO, fontVariantNumeric: "tabular-nums" }} />
                 <YAxis type="category" dataKey="g" width={108} axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: "#3A4A66", fontWeight: 700 }} />
                 <Tooltip cursor={{ fill: "rgba(27,43,75,.05)" }} contentStyle={TT} formatter={(v) => [won(v), "월 비용"]} />
                 <Bar dataKey="v" fill={NAVY} radius={[0, 4, 4, 0]} barSize={14} label={{ position: "right", formatter: (v) => won(v), fontSize: 11, fill: "#5B6B85", fontWeight: 700 }} />
@@ -323,25 +323,25 @@ function CostTable({ d }) {
             <tr key={r.key} className="border-t border-[#EEF1F6]">
               <td className="px-3 py-2 font-bold text-[#5B6B85] whitespace-nowrap">{r.group}</td>
               <td className="px-3 py-2 font-black text-[#0F1A30] whitespace-nowrap">{r.label}</td>
-              <td className="px-3 py-2 text-center tabular-nums whitespace-nowrap" style={{ fontFamily: MONO }}>{r.unit}</td>
+              <td className="px-3 py-2 text-center tabular-nums whitespace-nowrap" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{r.unit}</td>
               <td className="px-3 py-2 text-center text-[#7A879C] whitespace-nowrap">{r.free}</td>
-              <td className="px-3 py-2 text-right tabular-nums whitespace-nowrap" style={{ fontFamily: MONO }}>{r.usage < 100 && r.usage % 1 ? r.usage.toFixed(2) : cnt(r.usage)} <span className="text-[#9AA9C3]">{r.usageUnit}</span></td>
-              <td className="px-3 py-2 text-right tabular-nums whitespace-nowrap text-[#5B6B85]" style={{ fontFamily: MONO }}>{r.billable < 100 && r.billable % 1 ? r.billable.toFixed(2) : cnt(r.billable)}</td>
-              <td className="px-3 py-2 text-right font-black tabular-nums whitespace-nowrap" style={{ fontFamily: MONO }}>{won(r.krw)}</td>
+              <td className="px-3 py-2 text-right tabular-nums whitespace-nowrap" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{r.usage < 100 && r.usage % 1 ? r.usage.toFixed(2) : cnt(r.usage)} <span className="text-[#9AA9C3]">{r.usageUnit}</span></td>
+              <td className="px-3 py-2 text-right tabular-nums whitespace-nowrap text-[#5B6B85]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{r.billable < 100 && r.billable % 1 ? r.billable.toFixed(2) : cnt(r.billable)}</td>
+              <td className="px-3 py-2 text-right font-black tabular-nums whitespace-nowrap" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{won(r.krw)}</td>
             </tr>
           ))}
-          <tr className="border-t-2 border-[#DCE3EE] bg-[#F7F9FC]"><td colSpan={6} className="px-3 py-2 font-black text-right">서버 · 사용량 변동비 소계</td><td className="px-3 py-2 text-right font-black tabular-nums" style={{ fontFamily: MONO }}>{won(d.variable.total)}</td></tr>
+          <tr className="border-t-2 border-[#DCE3EE] bg-[#F7F9FC]"><td colSpan={6} className="px-3 py-2 font-black text-right">서버 · 사용량 변동비 소계</td><td className="px-3 py-2 text-right font-black tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{won(d.variable.total)}</td></tr>
           {d.fixed.rows.map((r) => (
             <tr key={r.key} className={`border-t border-[#EEF1F6] ${r.off ? "opacity-45" : ""}`}>
               <td className="px-3 py-2 font-bold text-[#5B6B85] whitespace-nowrap">{r.group}</td>
               <td className="px-3 py-2 font-black text-[#0F1A30] whitespace-nowrap">{r.label}{r.off ? " (꺼짐)" : ""}</td>
-              <td className="px-3 py-2 text-center tabular-nums whitespace-nowrap" style={{ fontFamily: MONO }}>{r.unit}</td>
+              <td className="px-3 py-2 text-center tabular-nums whitespace-nowrap" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{r.unit}</td>
               <td className="px-3 py-2 text-center text-[#9AA9C3]">-</td><td className="px-3 py-2 text-right text-[#9AA9C3]">고정</td><td />
-              <td className="px-3 py-2 text-right font-black tabular-nums whitespace-nowrap" style={{ fontFamily: MONO }}>{won(r.krw)}</td>
+              <td className="px-3 py-2 text-right font-black tabular-nums whitespace-nowrap" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{won(r.krw)}</td>
             </tr>
           ))}
-          <tr className="border-t-2 border-[#DCE3EE] bg-[#F7F9FC]"><td colSpan={6} className="px-3 py-2 font-black text-right">고정비 소계</td><td className="px-3 py-2 text-right font-black tabular-nums" style={{ fontFamily: MONO }}>{won(d.fixed.total)}</td></tr>
-          <tr className="bg-[#0F1A30] text-white"><td colSpan={6} className="px-3 py-2.5 font-black text-right">이달 지출 합계 (월말 예상)</td><td className="px-3 py-2.5 text-right font-black tabular-nums" style={{ fontFamily: MONO }}>{won(d.cost)}</td></tr>
+          <tr className="border-t-2 border-[#DCE3EE] bg-[#F7F9FC]"><td colSpan={6} className="px-3 py-2 font-black text-right">고정비 소계</td><td className="px-3 py-2 text-right font-black tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{won(d.fixed.total)}</td></tr>
+          <tr className="bg-[#0F1A30] text-white"><td colSpan={6} className="px-3 py-2.5 font-black text-right">이달 지출 합계 (월말 예상)</td><td className="px-3 py-2.5 text-right font-black tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{won(d.cost)}</td></tr>
         </tbody>
       </table></div>
       <div className="px-5 py-3 border-t border-[#EEF1F6] text-[11.5px] text-[#7A879C] leading-relaxed">
@@ -373,7 +373,7 @@ function CompaniesView({ d }) {
               <BarChart data={chart} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
                 <CartesianGrid stroke="#EEF1F6" vertical={false} />
                 <XAxis dataKey="name" axisLine={false} tickLine={false} interval={0} tick={{ fontSize: 11, fill: "#5B6B85", fontWeight: 700 }} />
-                <YAxis axisLine={false} tickLine={false} width={52} tickFormatter={short} tick={{ fontSize: 11, fill: "#9AA9C3", fontFamily: MONO }} />
+                <YAxis axisLine={false} tickLine={false} width={52} tickFormatter={short} tick={{ fontSize: 11, fill: "#9AA9C3", fontFamily: MONO, fontVariantNumeric: "tabular-nums" }} />
                 <Tooltip cursor={{ fill: "rgba(27,43,75,.05)" }} contentStyle={TT} formatter={(v) => [wonS(v), "월 이익"]} />
                 <ReferenceLine y={0} stroke={INK} strokeOpacity={0.3} />
                 <Bar dataKey="margin" radius={[4, 4, 0, 0]} barSize={18}>{chart.map((x) => <Cell key={x.name} fill={x.margin < 0 ? RED : NAVY} />)}</Bar>
@@ -392,14 +392,14 @@ function CompaniesView({ d }) {
                 <tr key={r.name} className="border-t border-[#EEF1F6]">
                   <td className="px-3 py-2.5 font-black text-[#0F1A30] whitespace-nowrap">{r.name}</td>
                   <td className="px-3 py-2.5 text-center whitespace-nowrap">{r.plan ? <span className="inline-block px-2 py-0.5 rounded-lg bg-[#0F1A30] text-white text-[11.5px] font-black">{r.plan.name}</span> : <span className="text-[11.5px] font-bold text-[#9AA9C3]">미지정</span>}</td>
-                  <td className="px-3 py-2.5 text-right tabular-nums whitespace-nowrap" style={{ fontFamily: MONO }}>{cnt(r.act.ordersMonth)}건<div className="text-[10.5px] text-[#9AA9C3]">일 {cnt(r.act.ordersMonth / 30)}건</div></td>
-                  <td className="px-3 py-2.5 text-center tabular-nums whitespace-nowrap" style={{ fontFamily: MONO }}>{r.act.staff}명 · {r.act.fleet}대</td>
-                  <td className="px-3 py-2.5 text-right tabular-nums whitespace-nowrap text-[#5B6B85]" style={{ fontFamily: MONO }}>{r.ctr ? `${short(r.ctr.reads)} / ${short(r.ctr.writes)}` : <span className="text-[#C0CAD9]">표본 없음</span>}<div className="text-[10.5px] text-[#9AA9C3]">배분 {short(r.reads)} / {short(r.writes)}</div></td>
-                  <td className="px-3 py-2.5 text-right font-black tabular-nums whitespace-nowrap" style={{ fontFamily: MONO }}>{won(r.revenue)}</td>
-                  <td className="px-3 py-2.5 text-right tabular-nums whitespace-nowrap" style={{ fontFamily: MONO }}>{won(r.server)}<div className="text-[10.5px] text-[#9AA9C3]" title="무료 제공량이 없다고 볼 때(규모가 커졌을 때) 단가 기준">단가 기준 {won(r.gross)}</div></td>
-                  <td className="px-3 py-2.5 text-right tabular-nums whitespace-nowrap" style={{ fontFamily: MONO }}>{won(r.direct)}</td>
-                  <td className="px-3 py-2.5 text-right tabular-nums whitespace-nowrap text-[#5B6B85]" style={{ fontFamily: MONO }}>{won(r.fixedShare)}</td>
-                  <td className="px-3 py-2.5 text-right font-black tabular-nums whitespace-nowrap" style={{ fontFamily: MONO, color: neg ? RED : INK }}>{wonS(r.margin)}<div className="text-[10.5px] font-bold" style={{ color: neg ? RED : "#9AA9C3" }}>{r.marginRate == null ? "-" : `${(r.marginRate * 100).toFixed(0)}%`}</div></td>
+                  <td className="px-3 py-2.5 text-right tabular-nums whitespace-nowrap" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{cnt(r.act.ordersMonth)}건<div className="text-[10.5px] text-[#9AA9C3]">일 {cnt(r.act.ordersMonth / 30)}건</div></td>
+                  <td className="px-3 py-2.5 text-center tabular-nums whitespace-nowrap" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{r.act.staff}명 · {r.act.fleet}대</td>
+                  <td className="px-3 py-2.5 text-right tabular-nums whitespace-nowrap text-[#5B6B85]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{r.ctr ? `${short(r.ctr.reads)} / ${short(r.ctr.writes)}` : <span className="text-[#C0CAD9]">표본 없음</span>}<div className="text-[10.5px] text-[#9AA9C3]">배분 {short(r.reads)} / {short(r.writes)}</div></td>
+                  <td className="px-3 py-2.5 text-right font-black tabular-nums whitespace-nowrap" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{won(r.revenue)}</td>
+                  <td className="px-3 py-2.5 text-right tabular-nums whitespace-nowrap" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{won(r.server)}<div className="text-[10.5px] text-[#9AA9C3]" title="무료 제공량이 없다고 볼 때(규모가 커졌을 때) 단가 기준">단가 기준 {won(r.gross)}</div></td>
+                  <td className="px-3 py-2.5 text-right tabular-nums whitespace-nowrap" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{won(r.direct)}</td>
+                  <td className="px-3 py-2.5 text-right tabular-nums whitespace-nowrap text-[#5B6B85]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{won(r.fixedShare)}</td>
+                  <td className="px-3 py-2.5 text-right font-black tabular-nums whitespace-nowrap" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", color: neg ? RED : INK }}>{wonS(r.margin)}<div className="text-[10.5px] font-bold" style={{ color: neg ? RED : "#9AA9C3" }}>{r.marginRate == null ? "-" : `${(r.marginRate * 100).toFixed(0)}%`}</div></td>
                   <td className="px-3 py-2.5 text-[12px] font-bold text-[#3A4A66] min-w-[220px]">{r.recs.length ? r.recs.map((x) => <div key={x} className={x.startsWith("적자") ? "text-[#B42318]" : ""}>· {x}</div>) : <span className="text-[#9AA9C3]">-</span>}</td>
                 </tr>
               );
@@ -442,7 +442,7 @@ function BreakEvenView({ d }) {
   });
   const numBox = ({ k, l, unit, min = 0, max, step = 1 }) => (
     <label key={k} className="block">
-      <div className="flex justify-between text-[12.5px] font-bold text-[#5B6B85]"><span>{l}</span><span className="tabular-nums text-[#0F1A30] font-black" style={{ fontFamily: MONO }}>{cnt(sim[k])}{unit}</span></div>
+      <div className="flex justify-between text-[12.5px] font-bold text-[#5B6B85]"><span>{l}</span><span className="tabular-nums text-[#0F1A30] font-black" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{cnt(sim[k])}{unit}</span></div>
       <input type="range" min={min} max={max} step={step} value={sim[k]} onChange={(e) => set(k, Number(e.target.value))} className="w-full accent-[#1B2B4B]" />
     </label>
   );
@@ -464,8 +464,8 @@ function BreakEvenView({ d }) {
               <ComposedChart data={curve.pts} margin={{ top: 22, right: 16, left: 4, bottom: 4 }}>
                 <defs><linearGradient id="beRev" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#2D4C82" stopOpacity={0.18} /><stop offset="100%" stopColor="#2D4C82" stopOpacity={0.01} /></linearGradient></defs>
                 <CartesianGrid stroke="#EEF1F6" vertical={false} />
-                <XAxis dataKey="n" type="number" domain={[0, 100]} ticks={[0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100]} axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: "#9AA9C3", fontFamily: MONO }} label={{ value: "운송사 수(곳)", position: "insideBottomRight", offset: -2, fontSize: 11, fill: "#7A879C" }} />
-                <YAxis axisLine={false} tickLine={false} width={56} tickFormatter={short} tick={{ fontSize: 11, fill: "#9AA9C3", fontFamily: MONO }} />
+                <XAxis dataKey="n" type="number" domain={[0, 100]} ticks={[0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100]} axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: "#9AA9C3", fontFamily: MONO, fontVariantNumeric: "tabular-nums" }} label={{ value: "운송사 수(곳)", position: "insideBottomRight", offset: -2, fontSize: 11, fill: "#7A879C" }} />
+                <YAxis axisLine={false} tickLine={false} width={56} tickFormatter={short} tick={{ fontSize: 11, fill: "#9AA9C3", fontFamily: MONO, fontVariantNumeric: "tabular-nums" }} />
                 <Tooltip contentStyle={TT} labelFormatter={(x) => `운송사 ${x}곳`} formatter={(v, k) => [won(v), { rev: "매출", cost: "비용", profit: "이익" }[k] || k]} />
                 <Area type="monotone" dataKey="rev" stroke={NAVY} strokeWidth={2.4} fill="url(#beRev)" dot={false} isAnimationActive={false} />
                 <Line type="monotone" dataKey="cost" stroke={MID} strokeWidth={2} strokeDasharray="6 4" dot={false} isAnimationActive={false} />
@@ -489,8 +489,8 @@ function BreakEvenView({ d }) {
             {numBox({ k: "fleet", l: "평균 지입차(GPS)", unit: "대", min: 0, max: 60, })}
             {numBox({ k: "extra", l: "1곳당 추가 청구(문자·세금계산서 등)", unit: "원", min: 0, max: 200000, step: 5000, })}
             <div className="rounded-xl bg-[#F7F9FC] border border-[#EEF1F6] p-3 space-y-1.5 text-[13px]">
-              {[["1곳 월 청구(요금제+초과+추가)", won(rev1)], [`${sim.n}곳 매출`, won(at.rev)], ["고정비", won(d.fixed.total)], ["서버 변동비", won(at.variable)]].map(([k, v]) => <div key={k} className="flex justify-between gap-2"><span className="font-bold text-[#5B6B85]">{k}</span><span className="font-black tabular-nums" style={{ fontFamily: MONO }}>{v}</span></div>)}
-              <div className="flex justify-between gap-2 pt-1.5 border-t border-dashed border-[#DCE3EE]"><span className="font-black">월 이익</span><span className="font-black tabular-nums text-[15px]" style={{ fontFamily: MONO, color: at.profit < 0 ? RED : INK }}>{wonS(at.profit)}</span></div>
+              {[["1곳 월 청구(요금제+초과+추가)", won(rev1)], [`${sim.n}곳 매출`, won(at.rev)], ["고정비", won(d.fixed.total)], ["서버 변동비", won(at.variable)]].map(([k, v]) => <div key={k} className="flex justify-between gap-2"><span className="font-bold text-[#5B6B85]">{k}</span><span className="font-black tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{v}</span></div>)}
+              <div className="flex justify-between gap-2 pt-1.5 border-t border-dashed border-[#DCE3EE]"><span className="font-black">월 이익</span><span className="font-black tabular-nums text-[15px]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", color: at.profit < 0 ? RED : INK }}>{wonS(at.profit)}</span></div>
             </div>
           </div>
         </Card>
@@ -501,12 +501,12 @@ function BreakEvenView({ d }) {
           <tbody>{perPlan.map(({ p, a, gross, margin, rate }) => { const e = estimateDaily(d.model, a); return (
             <tr key={p.id} className="border-t border-[#EEF1F6]">
               <td className="px-3 py-2.5 font-black">{p.name}</td>
-              <td className="px-3 py-2.5 text-right font-black tabular-nums" style={{ fontFamily: MONO }}>{won(p.price)}</td>
-              <td className="px-3 py-2.5 text-center tabular-nums" style={{ fontFamily: MONO }}>{num(p.seats)}명 · {cnt(p.orders)}건 · {num(p.fleet)}대</td>
-              <td className="px-3 py-2.5 text-center tabular-nums text-[#5B6B85]" style={{ fontFamily: MONO }}>{short(e.reads)} / {short(e.writes)}</td>
-              <td className="px-3 py-2.5 text-right tabular-nums" style={{ fontFamily: MONO }}>{won(gross)}</td>
-              <td className="px-3 py-2.5 text-right font-black tabular-nums" style={{ fontFamily: MONO, color: margin < 0 ? RED : INK }}>{wonS(margin)}</td>
-              <td className="px-3 py-2.5 text-right font-black tabular-nums" style={{ fontFamily: MONO, color: rate < 0 ? RED : INK }}>{(rate * 100).toFixed(1)}%</td>
+              <td className="px-3 py-2.5 text-right font-black tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{won(p.price)}</td>
+              <td className="px-3 py-2.5 text-center tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{num(p.seats)}명 · {cnt(p.orders)}건 · {num(p.fleet)}대</td>
+              <td className="px-3 py-2.5 text-center tabular-nums text-[#5B6B85]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{short(e.reads)} / {short(e.writes)}</td>
+              <td className="px-3 py-2.5 text-right tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{won(gross)}</td>
+              <td className="px-3 py-2.5 text-right font-black tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", color: margin < 0 ? RED : INK }}>{wonS(margin)}</td>
+              <td className="px-3 py-2.5 text-right font-black tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", color: rate < 0 ? RED : INK }}>{(rate * 100).toFixed(1)}%</td>
             </tr>); })}</tbody>
         </table></div>
         <div className="px-5 py-3 border-t border-[#EEF1F6] text-[11.5px] text-[#7A879C]">고정비는 빼지 않은 값(공헌이익)입니다. 원가는 [비용 기준 설정] › 활동량 환산 계수로 추정 — 실측이 쌓이면 '서버 사용량'에서 [실측으로 계수 맞추기]를 누르세요.</div>
@@ -546,11 +546,11 @@ function ServerView({ d, model, saved, onRefresh, busy }) {
     <div className="space-y-4">
       {(perm || noData) && (
         <div className="rounded-2xl border border-[#DCE3EE] bg-white px-5 py-4 text-[13px] text-[#1B2B4B] leading-relaxed">
-          <div className="text-[10.5px] font-extrabold tracking-[0.24em] text-[#4B6CB7]" style={{ fontFamily: MONO }}>SETUP · CLOUD MONITORING</div>
+          <div className="text-[10.5px] font-extrabold tracking-[0.24em] text-[#4B6CB7]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>SETUP · CLOUD MONITORING</div>
           <div className="text-[15.5px] font-black mt-0.5">{perm ? "서버 사용량을 읽을 권한이 없습니다" : "아직 실측 사용량이 없습니다"}</div>
-          {perm && st?.errors?.reads && <div className="mt-1 text-[12px] text-[#7A879C] break-all" style={{ fontFamily: MONO }}>{st.errors.reads}</div>}
+          {perm && st?.errors?.reads && <div className="mt-1 text-[12px] text-[#7A879C] break-all" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{st.errors.reads}</div>}
           <ol className="mt-2 list-decimal pl-5 space-y-1">
-            <li>터미널에서 함수 배포: <code className="px-1.5 py-0.5 rounded bg-[#F2F5FA]" style={{ fontFamily: MONO }}>firebase deploy --only functions:platformUsageHourly,functions:platformUsageNow</code> (한 번)</li>
+            <li>터미널에서 함수 배포: <code className="px-1.5 py-0.5 rounded bg-[#F2F5FA]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>firebase deploy --only functions:platformUsageHourly,functions:platformUsageNow</code> (한 번)</li>
             <li>구글 클라우드 콘솔(console.cloud.google.com) → 프로젝트 <b>dispatch-app-9b92f</b> → 왼쪽 메뉴 <b>IAM 및 관리자 › IAM</b></li>
             <li><b>dispatch-app-9b92f@appspot.gserviceaccount.com</b> 줄의 연필(수정) → <b>다른 역할 추가</b> → <b>모니터링 뷰어(Monitoring Viewer)</b> → 저장 (이미 '편집자'면 필요 없음)</li>
             <li>콘솔 위 검색창에 "Cloud Monitoring API" → <b>사용</b>(이미 켜져 있으면 그대로)</li>
@@ -562,12 +562,12 @@ function ServerView({ d, model, saved, onRefresh, busy }) {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <div className="rounded-[16px] px-4 py-3.5 border bg-white border-[#E3E8F0]">
           <div className="text-[12.5px] font-bold text-[#7A879C]">오늘 읽기 / 하루 무료</div>
-          <div className="text-[21px] font-black tabular-nums mt-0.5" style={{ fontFamily: MONO }}>{todayRow ? cnt(todayRow.reads) : "-"}<span className="text-[11px] text-[#9AA9C3] ml-1">/ {cnt(fsFree.freeRead)}</span></div>
+          <div className="text-[21px] font-black tabular-nums mt-0.5" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{todayRow ? cnt(todayRow.reads) : "-"}<span className="text-[11px] text-[#9AA9C3] ml-1">/ {cnt(fsFree.freeRead)}</span></div>
           <div className="mt-2"><Meter used={num(todayRow?.reads)} limit={num(fsFree.freeRead)} /></div>
         </div>
         <div className="rounded-[16px] px-4 py-3.5 border bg-white border-[#E3E8F0]">
           <div className="text-[12.5px] font-bold text-[#7A879C]">오늘 쓰기 / 하루 무료</div>
-          <div className="text-[21px] font-black tabular-nums mt-0.5" style={{ fontFamily: MONO }}>{todayRow ? cnt(todayRow.writes) : "-"}<span className="text-[11px] text-[#9AA9C3] ml-1">/ {cnt(fsFree.freeWrite)}</span></div>
+          <div className="text-[21px] font-black tabular-nums mt-0.5" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{todayRow ? cnt(todayRow.writes) : "-"}<span className="text-[11px] text-[#9AA9C3] ml-1">/ {cnt(fsFree.freeWrite)}</span></div>
           <div className="mt-2"><Meter used={num(todayRow?.writes)} limit={num(fsFree.freeWrite)} /></div>
         </div>
         <Kpi k="이달 지금까지 서버 청구" v={mtd ? won(mtdBill) : "-"} sub={mtd ? `읽기 ${short(mtd.reads)} · 쓰기 ${short(mtd.writes)}건` : "실측 연결 후 표시"} />
@@ -581,8 +581,8 @@ function ServerView({ d, model, saved, onRefresh, busy }) {
                 <ResponsiveContainer width="100%" height="100%">
                   <ComposedChart data={chart} margin={{ top: 16, right: 10, left: 0, bottom: 0 }}>
                     <CartesianGrid stroke="#EEF1F6" vertical={false} />
-                    <XAxis dataKey="d" axisLine={false} tickLine={false} interval={4} tick={{ fontSize: 11, fill: "#9AA9C3", fontFamily: MONO }} />
-                    <YAxis axisLine={false} tickLine={false} width={48} tickFormatter={short} tick={{ fontSize: 11, fill: "#9AA9C3", fontFamily: MONO }} />
+                    <XAxis dataKey="d" axisLine={false} tickLine={false} interval={4} tick={{ fontSize: 11, fill: "#9AA9C3", fontFamily: MONO, fontVariantNumeric: "tabular-nums" }} />
+                    <YAxis axisLine={false} tickLine={false} width={48} tickFormatter={short} tick={{ fontSize: 11, fill: "#9AA9C3", fontFamily: MONO, fontVariantNumeric: "tabular-nums" }} />
                     <Tooltip contentStyle={TT} labelFormatter={(x) => `${Number(d.ym.slice(5))}월 ${x}일`} formatter={(v) => [`${cnt(v)}건`, t]} />
                     <ReferenceLine y={free} stroke={MID} strokeDasharray="5 4" label={{ value: "무료", position: "insideTopRight", fill: MID, fontSize: 11, fontWeight: 800 }} />
                     <Line type="monotone" dataKey={k} stroke={NAVY} strokeWidth={2} dot={{ r: 3, fill: NAVY, stroke: "#fff", strokeWidth: 1.5 }} connectNulls={false} isAnimationActive={false} />
@@ -600,10 +600,10 @@ function ServerView({ d, model, saved, onRefresh, busy }) {
             <tr key={p.key} className="border-t border-[#EEF1F6]">
               <td className="px-3 py-2 font-black whitespace-nowrap">{p.group} · {p.label}</td>
               <td className="px-3 py-2 text-center text-[#7A879C] whitespace-nowrap">{p.free}</td>
-              <td className="px-3 py-2 text-right tabular-nums" style={{ fontFamily: MONO }}>{m ? `${f(m.usage)} ${p.usageUnit}` : "-"}</td>
-              <td className="px-3 py-2 text-right tabular-nums" style={{ fontFamily: MONO }}>{m ? won(m.krw) : "-"}</td>
-              <td className="px-3 py-2 text-right tabular-nums" style={{ fontFamily: MONO }}>{f(p.usage)} {p.usageUnit}</td>
-              <td className="px-3 py-2 text-right font-black tabular-nums" style={{ fontFamily: MONO }}>{won(p.krw)}</td>
+              <td className="px-3 py-2 text-right tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{m ? `${f(m.usage)} ${p.usageUnit}` : "-"}</td>
+              <td className="px-3 py-2 text-right tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{m ? won(m.krw) : "-"}</td>
+              <td className="px-3 py-2 text-right tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{f(p.usage)} {p.usageUnit}</td>
+              <td className="px-3 py-2 text-right font-black tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{won(p.krw)}</td>
             </tr>); })}</tbody>
         </table></div>
         {cmsg && <div className="px-5 py-2.5 border-t border-[#EEF1F6] text-[13px] font-bold">{cmsg}</div>}
@@ -616,7 +616,7 @@ function ServerView({ d, model, saved, onRefresh, busy }) {
             <tbody>{[...d.counters].sort((a, b) => num(b.reads) - num(a.reads)).map((c) => (
               <tr key={c.id} className="border-t border-[#EEF1F6]">
                 <td className="px-3 py-2 font-black">{c.company}</td>
-                {[c.reads, c.writes, c.sessions, num(c.reads) / Math.max(1, num(c.sessions))].map((v, i) => <td key={i} className="px-3 py-2 text-right tabular-nums" style={{ fontFamily: MONO }}>{cnt(v)}</td>)}
+                {[c.reads, c.writes, c.sessions, num(c.reads) / Math.max(1, num(c.sessions))].map((v, i) => <td key={i} className="px-3 py-2 text-right tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{cnt(v)}</td>)}
               </tr>
             ))}</tbody>
           </table></div>
@@ -657,7 +657,7 @@ function SettingsModal({ model, onClose }) {
       <div className="w-full max-w-[1100px] max-h-[94vh] flex flex-col rounded-[24px] bg-[#F4F6FA] shadow-[0_40px_100px_rgba(0,0,0,0.5)] overflow-hidden">
         <div className="px-6 py-4 text-white flex items-start justify-between gap-3" style={{ background: "linear-gradient(120deg,#0B1428 0%,#1B2B4B 60%,#2D4C82 100%)" }}>
           <div>
-            <div className="text-[10.5px] font-extrabold tracking-[0.3em] text-[#8FB0F0]" style={{ fontFamily: MONO }}>COST MODEL · SETTINGS</div>
+            <div className="text-[10.5px] font-extrabold tracking-[0.3em] text-[#8FB0F0]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>COST MODEL · SETTINGS</div>
             <div className="text-[20px] font-black mt-0.5">비용 기준 설정</div>
             <div className="text-[12.5px] text-white/65 mt-0.5">모든 단가는 {m.asOf} 기준 공개 가격 <b>추정치</b>입니다 — 실제 청구서(구글 클라우드 결제 · 카드 명세)와 맞춰 고쳐 주세요.</div>
           </div>
@@ -685,7 +685,7 @@ function SettingsModal({ model, onClose }) {
                 {rows.map(([p, l, u]) => (
                   <div key={p} className="flex items-center justify-between gap-3 py-1.5 border-t first:border-t-0 border-[#EEF1F6] mt-1">
                     <span className="text-[13px] font-bold text-[#3A4A66]">{l}<span className="ml-1.5 text-[11px] text-[#9AA9C3]">기본 {String(getP(COST_DEFAULT, p))}</span></span>
-                    <span className="inline-flex items-center gap-1.5"><input type="number" step="any" value={getP(m, p) ?? ""} onChange={(e) => up(p, e.target.value === "" ? "" : Number(e.target.value))} className={inp} style={{ fontFamily: MONO }} /><span className="text-[12px] font-bold text-[#7A879C] w-12">{u}</span></span>
+                    <span className="inline-flex items-center gap-1.5"><input type="number" step="any" value={getP(m, p) ?? ""} onChange={(e) => up(p, e.target.value === "" ? "" : Number(e.target.value))} className={inp} style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }} /><span className="text-[12px] font-bold text-[#7A879C] w-12">{u}</span></span>
                   </div>
                 ))}
               </div>
@@ -695,7 +695,7 @@ function SettingsModal({ model, onClose }) {
               {(m.custom || []).map((c, i) => (
                 <div key={i} className="flex items-center gap-2 py-1.5 border-t first:border-t-0 border-[#EEF1F6] mt-1">
                   <input value={c.label} onChange={(e) => up("custom", m.custom.map((x, k) => (k === i ? { ...x, label: e.target.value } : x)))} className="h-9 flex-1 min-w-0 px-2.5 rounded-lg border border-[#DCE3EE] text-[13px] font-bold" />
-                  <input type="number" value={c.krw} onChange={(e) => up("custom", m.custom.map((x, k) => (k === i ? { ...x, krw: Number(e.target.value) || 0 } : x)))} className={inp} style={{ fontFamily: MONO }} /><span className="text-[12px] font-bold text-[#7A879C]">원</span>
+                  <input type="number" value={c.krw} onChange={(e) => up("custom", m.custom.map((x, k) => (k === i ? { ...x, krw: Number(e.target.value) || 0 } : x)))} className={inp} style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }} /><span className="text-[12px] font-bold text-[#7A879C]">원</span>
                   <button type="button" onClick={() => up("custom", m.custom.filter((_, k) => k !== i))} className="text-[#9AA9C3] px-1">✕</button>
                 </div>
               ))}
@@ -703,7 +703,7 @@ function SettingsModal({ model, onClose }) {
             </div>
           </div>
           <div className="rounded-2xl bg-[#0F1A30] text-white px-5 py-3 text-[13px] flex flex-wrap gap-x-6 gap-y-1">
-            <span>고정비 합계 <b style={{ fontFamily: MONO }}>{won(fx.total)}</b>/월</span>
+            <span>고정비 합계 <b style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{won(fx.total)}</b>/월</span>
             {fx.rows.filter((r) => r.krw > 0).map((r) => <span key={r.key} className="text-white/65">{r.label} {won(r.krw)}</span>)}
           </div>
           <div className="text-[11.5px] text-[#7A879C] leading-relaxed">출처: {m.source}</div>
