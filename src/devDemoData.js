@@ -68,6 +68,12 @@ export function demoDocsFor(col) {
   if (col === "dispatch") return orders("dispatch");
   if (col === "drivers") return NAMES.map((n, i) => fakeDoc(col, `demo-drv-${i}`, { companyName: "", 이름: n, 차량번호: `경기${80 + i}바${1000 + i * 37}`, 전화번호: `010-${2000 + i * 11}-${3000 + i * 7}`, 차량종류: CARS[i][0], 차량톤수: CARS[i][1] }));
   if (col === "clients") return CLIENTS.map((n, i) => fakeDoc(col, `demo-cl-${i}`, { companyName: "", 거래처명: n, 주소: PLACES[i % PLACES.length][1], 담당자: NAMES[i % NAMES.length], 연락처: `02-${300 + i}-${4000 + i}` }));
+  // ⭐ 2026-11-05 고정노선 화면 점검용(운행 ON/OFF·목록) — 1개는 ON, 1개는 OFF
+  if (col === "fixedRoutes") return [
+    { name: "평택→수원 데일리", client: CLIENTS[0], active: true, days: ["월", "화", "수", "목", "금"], startTime: "07:00", startDate: "2026-11-02", endDate: "" },
+    { name: "인천 야간 셔틀", client: CLIENTS[1], active: false, days: ["월", "수", "금"], startTime: "21:30", startDate: "2026-10-01", endDate: "2026-12-31" },
+  ].map((r, i) => fakeDoc(col, `demo-fr-${i}`, { companyName: "", color: "#2D4C82", autoDispatch: true, autoAccept: true, skipDates: [], driverName: NAMES[i], carNo: `경기${80 + i}바${1000 + i * 37}`, tonnage: "5톤", vehicleType: "윙바디", fareClient: "180000", fareDriver: "150000", payMethod: "계산서",
+    stops: [{ type: "상차", name: PLACES[i][0], addr: PLACES[i][1], time: "07:00" }, { type: "경유", name: PLACES[i + 1][0], addr: PLACES[i + 1][1], time: "" }, { type: "하차", name: PLACES[i + 2][0], addr: PLACES[i + 2][1], time: "" }], ...r }));
   if (col === "notices") return [0, 1, 2].map((i) => fakeDoc(col, `demo-nt-${i}`, { companyName: "", title: ["11월 배차 운영 안내 — 연말 물량 증가에 따른 야간 배차 인력 보강", "차량 점검 일정", "신규 거래처 등록 절차 변경"][i], content: "내용입니다.", createdAt: new Date(Date.now() - i * 86400000), author: NAMES[i], readBy: ["preview"] }));
   return null;
 }
