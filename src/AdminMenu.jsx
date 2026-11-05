@@ -266,11 +266,15 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
   //  운송사 관리자 회원관리에서는 승인 대기로 세지도, 승인 창을 열지도 않는다(최고관리자만 예외)
   const isPending = (u) => !!u && u.approved === false && u.employmentStatus !== "퇴사" && !["deleted", "withdrawn"].includes(u.status) && (isTotalMaster || u.role !== "shipper");
   // ⭐ 2026-11-02 점검 — !u.approved 대신 isPending — 예전 승인 계정에 승인·거절 창이 열려 거절로 잠기던 문제
-  const canEditMember = (u) => !!u && (isTotalMaster || (canApprove && isPending(u)));
+  // ⭐ 2026-11-05 회사 마스터는 재직 직원(마스터·퇴사자 제외)의 권한도 여기서 바꾼다(최고관리자 권한은 못 줌). 부서·직책은 인사 담당자가 있으면 잠김(hrLocked)
+  const canEditMember = (u) => !!u && (isTotalMaster || (canApprove && isPending(u))
+    || (isCompanyMaster && !u.isMaster && u.id !== me?.uid && u.employmentStatus !== "퇴사" && !["driver", "shipper", "totalMaster"].includes(u.role) && (u.companyName || DEFAULT_COMPANY) === effectiveCompany));
   // team — 고른 부서에 맞는 역할만(지금 역할 cur는 늘 남김)
   function assignableRoles(cur, team) {
     const base0 = canAdmin ? ROLES : isHrMgr ? ROLES.filter((r) => r !== "totalMaster") : myRoleEff === "admin" ? ["admin", "user", "test", "acctStaff", "hrManager", "hrStaff", "legalMgr", "legalStaff", "devMgr", "devStaff", "viewer"] : ["user", "test", "acctStaff", "hrStaff", "viewer"];
-    const base = byTeam(base0.filter((k) => k === "totalMaster" || k === "driver" || k === "shipper" || ROLES.includes(k)), team);
+    const all0 = base0.filter((k) => k === "totalMaster" || k === "driver" || k === "shipper" || ROLES.includes(k));
+    // ⭐ 2026-11-05 회사 마스터는 부서와 상관없이 전체 권한(부서에 맞는 권한을 앞에)
+    const base = isCompanyMaster ? (() => { const fit = byTeam(all0, team); return [...fit, ...all0.filter((k) => !fit.includes(k))]; })() : byTeam(all0, team);
     return cur && !base.includes(cur) ? [cur, ...base] : base;
   }
   // ⭐ 2026-10-31 부서·직책을 바꾸면 직책 드롭다운을 부서에 맞추고(임원 → 대표·전무·이사) 권한을 추천값으로 맞춘다
@@ -684,6 +688,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
     if (prevTeam !== nextTeam && nextTeam) {
       history.push({ date: todayStr(), type: "부서변경", detail: `${prevTeam || "미배정"} → ${nextTeam}` });
     }
+    if ((manageUser.role || "") !== editRole) history.push({ date: todayStr(), type: "권한변경", detail: `${roleLabels[manageUser.role] || manageUser.role || "-"} → ${roleLabels[editRole] || editRole}` });
     const payload = {
       name: editName.trim(),
       phone: editPhone.trim(),
