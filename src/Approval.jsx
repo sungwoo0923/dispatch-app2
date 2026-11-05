@@ -187,6 +187,31 @@ function ImageLightbox({ images, start = 0, docNo, onClose }) {
 // ✍ 2026-11-04 개인 서명 — users/{uid}.approvalSignature(작은 PNG data URL · 40KB 미만) · approvalMarkMode("stamp"|"sign")
 //  "서명"으로 해 두면 이후 내가 승인하는 결재마다 결재란에 도장 대신 내 서명이 들어간다(승인할 때 line[i].mark/sign으로 복사 — 서명을 나중에 바꿔도 예전 문서는 그대로)
 const SIGN_MAX = 40000;
+const STAMP_MAX = 60000; // ⭐ 2026-11-05 도장 이미지(작은 PNG/WEBP data URL)
+// 도장 사진·파일 → 흰 바탕을 투명하게 빼고 작은 그림으로(결재란 66×46 표시)
+async function makeStampImage(file) {
+  const url = await new Promise((ok, no) => { const r = new FileReader(); r.onload = () => ok(r.result); r.onerror = no; r.readAsDataURL(file); });
+  const img = await new Promise((ok, no) => { const i = new Image(); i.onload = () => ok(i); i.onerror = () => no(new Error("이미지를 열 수 없습니다")); i.src = url; });
+  for (const max of [220, 170, 130, 100]) {
+    const s = Math.min(1, max / Math.max(img.width, img.height));
+    const c = document.createElement("canvas"); c.width = Math.max(1, Math.round(img.width * s)); c.height = Math.max(1, Math.round(img.height * s));
+    const g = c.getContext("2d"); g.drawImage(img, 0, 0, c.width, c.height);
+    const px = g.getImageData(0, 0, c.width, c.height); const a = px.data;
+    let x0 = c.width, y0 = c.height, x1 = -1, y1 = -1;
+    for (let p = 0, k = 0; p < a.length; p += 4, k += 1) {
+      const lum = Math.min(a[p], a[p + 1], a[p + 2]);
+      if (lum > 235) a[p + 3] = 0; else if (lum > 200) a[p + 3] = Math.round(a[p + 3] * (235 - lum) / 35); // 흰 바탕 → 투명
+      if (a[p + 3] > 20) { const x = k % c.width, y = (k / c.width) | 0; if (x < x0) x0 = x; if (y < y0) y0 = y; if (x > x1) x1 = x; if (y > y1) y1 = y; }
+    }
+    g.putImageData(px, 0, 0);
+    if (x1 < 0) throw new Error("이미지에서 도장을 찾지 못했습니다(흰 바탕만 있음)");
+    const o = document.createElement("canvas"); o.width = x1 - x0 + 1; o.height = y1 - y0 + 1;
+    o.getContext("2d").drawImage(c, x0, y0, o.width, o.height, 0, 0, o.width, o.height);
+    const out = o.toDataURL("image/png");
+    if (out.length < STAMP_MAX) return out;
+  }
+  throw new Error("이미지가 너무 복잡합니다. 도장 부분만 잘라서 올려 주세요.");
+}
 function exportSignature(strokes, lw) {
   const pts = strokes.flat();
   if (!pts.length) return "";
@@ -223,7 +248,11 @@ function MiniStamp({ name, kind = "결재" }) {
 }
 function SignatureModal({ me, onClose }) {
   const W = 640; const H = 260; const LW = 5;
-  const [mode, setMode] = React.useState(me.markMode === "sign" ? "sign" : "stamp");
+  const [mode, setMode] = React.useState(me.rawMode || (me.markMode === "sign" ? "sign" : "stamp"));
+  const [stampImg, setStampImg] = React.useState(me.stampImg || "");
+  const [stampErr, setStampErr] = React.useState("");
+  const pickStamp = async (file) => { setStampErr(""); if (!file) return; if (!/^image\//.test(file.type)) { setStampErr("이미지 파일(jpg·png)만 올릴 수 있습니다"); return; } try { setStampImg(await makeStampImage(file)); } catch (e) { setStampErr(e.message); } };
+  if (me.signImg !== undefined) me = { ...me, sign: me.signImg }; // 서명 칸은 그린 서명(도장 이미지와 따로)
   const [strokes, setStrokes] = React.useState([]);
   const [redo, setRedo] = React.useState([]);
   const [drawing, setDrawing] = React.useState(!me.sign);
@@ -266,9 +295,10 @@ function SignatureModal({ me, onClose }) {
       if (!sig) { window.alert("서명이 너무 복잡합니다. 조금 더 간단히 다시 그려 주세요."); return; }
     }
     if (mode === "sign" && !sig) { window.alert("서명을 먼저 그려 주세요."); return; }
+    if (mode === "image" && !stampImg) { window.alert("도장 이미지를 먼저 올려 주세요."); return; }
     setBusy(true);
     try {
-      await updateDoc(doc(db, "users", me.uid), { approvalSignature: sig, approvalMarkMode: mode });
+      await updateDoc(doc(db, "users", me.uid), { approvalSignature: sig, approvalMarkMode: mode, ...(mode === "image" || stampImg !== (me.stampImg || "") ? { approvalStampImage: stampImg } : {}) });
       onClose();
     } catch (e) { window.alert(`저장 실패: ${e.message}`); } finally { setBusy(false); }
   };
@@ -291,8 +321,25 @@ function SignatureModal({ me, onClose }) {
           <button type="button" onClick={onClose} className="w-8 h-8 rounded-lg text-white/60 hover:text-white hover:bg-white/10 font-black">✕</button>
         </div>
         <div className="p-5 space-y-4">
-          <div className="flex gap-2">{tab("stamp", "도장", "이름이 들어간 원형 승인 도장")}{tab("sign", "서명", "직접 그린 내 서명")}</div>
-          <div className="rounded-2xl bg-white border border-[#E3E8F0] p-4">
+          <div className="flex gap-2">{tab("stamp", "도장", "이름이 들어간 원형 승인 도장")}{tab("image", "도장 이미지", "내 도장 사진·파일 올리기")}{tab("sign", "서명", "직접 그린 내 서명")}</div>
+          {mode === "image" && (
+            <div className="rounded-2xl bg-white border border-[#E3E8F0] p-4" data-ap-stamp-upload>
+              <div className="flex items-center gap-2 mb-2.5">
+                <span className="text-[11px] font-extrabold tracking-[0.22em] text-[#4B6CB7]" style={{ fontFamily: MONO }}>STAMP</span>
+                <span className="text-[13px] font-black text-[#0F1A30]">내 도장 이미지</span>
+              </div>
+              <label className="block rounded-xl border-2 border-dashed border-[#C9D6EE] bg-[#FAFBFD] p-4 text-center cursor-pointer hover:border-[#4B6CB7]"
+                onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); pickStamp(e.dataTransfer.files?.[0]); }}>
+                <input type="file" accept="image/*" className="hidden" onChange={(e) => { pickStamp(e.target.files?.[0]); e.target.value = ""; }} />
+                {stampImg
+                  ? <img src={stampImg} alt="내 도장" className="mx-auto max-h-[110px] max-w-[70%] object-contain" />
+                  : <div className="py-5 text-[13.5px] font-bold text-[#5B6B85]">눌러서 도장 사진·파일 선택<br /><span className="text-[12px] text-[#9AA9C3]">(흰 종이에 찍은 도장 사진 OK · 흰 바탕은 자동으로 투명하게)</span></div>}
+              </label>
+              {stampErr && <div className="mt-2 text-[12.5px] font-bold text-[#B42318]">{stampErr}</div>}
+              {stampImg && <div className="mt-2 flex gap-1.5"><label className={`${sbtn} inline-flex items-center cursor-pointer`}>다른 이미지<input type="file" accept="image/*" className="hidden" onChange={(e) => { pickStamp(e.target.files?.[0]); e.target.value = ""; }} /></label><button type="button" onClick={() => setStampImg("")} className={sbtn}>지우기</button></div>}
+            </div>
+          )}
+          <div className={`rounded-2xl bg-white border border-[#E3E8F0] p-4 ${mode === "image" ? "hidden" : ""}`}>
             <div className="flex items-center gap-2 mb-2.5">
               <span className="text-[11px] font-extrabold tracking-[0.22em] text-[#4B6CB7]" style={{ fontFamily: MONO }}>SIGNATURE</span>
               <span className="text-[13px] font-black text-[#0F1A30]">{drawing ? "아래 칸에 서명해 주세요(마우스·손가락)" : "저장된 내 서명"}</span>
@@ -324,7 +371,8 @@ function SignatureModal({ me, onClose }) {
             <div className="w-[74px] border border-[#0F1A30] flex flex-col">
               <div className="h-6 bg-[#EEF1F6] border-b border-[#0F1A30] text-[11.5px] font-black text-[#0F1A30] grid place-items-center truncate px-1">{me.position || "결재"}</div>
               <div className="h-[58px] grid place-items-center">
-                {mode === "sign" && (drawing ? live : me.sign)
+                {mode === "image" && stampImg ? <img src={stampImg} alt="" className="max-w-[64px] max-h-[48px] object-contain" />
+                  : mode === "sign" && (drawing ? live : me.sign)
                   ? <img src={drawing ? live : me.sign} alt="" className="max-w-[64px] max-h-[44px] object-contain" />
                   : <MiniStamp name={me.name} />}
               </div>
@@ -334,7 +382,7 @@ function SignatureModal({ me, onClose }) {
         </div>
         <div className="sticky bottom-0 px-5 py-4 bg-white border-t border-[#E3E8F0] flex gap-2">
           <button type="button" onClick={onClose} className="h-11 px-5 rounded-xl border border-[#DCE3EE] text-[13.5px] font-bold text-[#5B6B85]">취소</button>
-          <button type="button" disabled={busy} onClick={save} className="flex-1 h-11 rounded-xl bg-[#0F1A30] text-white text-[14px] font-black disabled:opacity-50">{busy ? "저장 중…" : `저장 · ${mode === "sign" ? "서명" : "도장"}으로 결재`}</button>
+          <button type="button" disabled={busy} onClick={save} className="flex-1 h-11 rounded-xl bg-[#0F1A30] text-white text-[14px] font-black disabled:opacity-50">{busy ? "저장 중…" : `저장 · ${mode === "sign" ? "서명" : mode === "image" ? "도장 이미지" : "도장"}으로 결재`}</button>
         </div>
       </div>
     </div>,
@@ -1606,7 +1654,7 @@ function Viewer({ d, me, staff, company, onClose, onRedraft, onEdit, inline = fa
     if ((kind === "reject" || kind === "c-reject") && !comment.trim()) { window.alert("반려 사유를 적어 주세요."); return; }
     if (kind === "cancel-req" && !comment.trim()) { window.alert("취소 사유를 적어 주세요."); return; }
     const signMark = me.markMode === "sign" && !!me.sign;
-    const ask = { approve: `승인할까요?\n결재란 표시: ${signMark ? "내 서명" : "도장"} (내 서명 설정에서 바꿀 수 있습니다)`, reject: "반려할까요?", withdraw: "결재를 회수할까요?", comment: "의견을 남길까요?", "cancel-req": "승인된 문서의 결재 취소를 요청할까요? 결재자들이 다시 승인하면 취소됩니다.", "c-approve": "결재 취소를 승인할까요?", "c-reject": "결재 취소 요청을 반려할까요?" }[kind];
+    const ask = { approve: `승인할까요?\n결재란 표시: ${signMark ? (me.rawMode === "image" ? "내 도장 이미지" : "내 서명") : "도장"} (내 서명 설정에서 바꿀 수 있습니다)`, reject: "반려할까요?", withdraw: "결재를 회수할까요?", comment: "의견을 남길까요?", "cancel-req": "승인된 문서의 결재 취소를 요청할까요? 결재자들이 다시 승인하면 취소됩니다.", "c-approve": "결재 취소를 승인할까요?", "c-reject": "결재 취소 요청을 반려할까요?" }[kind];
     if (!await kpConfirm(ask)) return;
     setBusy(true);
     try {
@@ -1619,7 +1667,7 @@ function Viewer({ d, me, staff, company, onClose, onRedraft, onEdit, inline = fa
         if (kind === "approve") {
           // ✍ 2026-11-04 결재 표시 — "서명"이면 지금 서명을 이 칸에 복사(문서 1MB 한도에 가까우면 도장으로)
           const room = (() => { try { return JSON.stringify(d).length + String(me.sign || "").length < 960000; } catch { return true; } })();
-          const useSign = me.markMode === "sign" && !!me.sign && String(me.sign).length < SIGN_MAX + 5000 && room;
+          const useSign = me.markMode === "sign" && !!me.sign && String(me.sign).length < STAMP_MAX + 5000 && room;
           line[i] = { ...line[i], status: "approved", at: now, comment: comment.trim(), mark: useSign ? "sign" : "stamp", ...(useSign ? { sign: me.sign } : {}) };
           const next = i + 1 < line.length ? i + 1 : -1;
           if (next >= 0) line[next] = { ...line[next], status: "pending" };
@@ -1846,7 +1894,7 @@ function Viewer({ d, me, staff, company, onClose, onRedraft, onEdit, inline = fa
                   <div className="flex items-center gap-2.5 rounded-xl bg-[#F4F6FA] border border-[#E3E8F0] px-3 py-2" data-ap-mark-row>
                     <span className="text-[10.5px] font-extrabold tracking-[0.2em] text-[#9AA9C3]" style={{ fontFamily: MONO }}>MARK</span>
                     {me.markMode === "sign" && me.sign ? <img src={me.sign} alt="내 서명" className="h-9 max-w-[90px] object-contain" /> : <MiniStamp name={me.name} kind={d.line?.[d.step]?.kind} />}
-                    <span className="text-[13px] font-black text-[#0F1A30] min-w-0 truncate">{me.markMode === "sign" && me.sign ? "내 서명으로 결재" : "도장으로 결재"}</span>
+                    <span className="text-[13px] font-black text-[#0F1A30] min-w-0 truncate">{me.markMode === "sign" && me.sign ? (me.rawMode === "image" ? "내 도장 이미지로 결재" : "내 서명으로 결재") : "도장으로 결재"}</span>
                     <button type="button" onClick={() => setSignOpen(true)} className="ml-auto h-8 px-3 rounded-lg border border-[#DCE3EE] bg-white text-[12.5px] font-black text-[#1B2B4B] hover:border-[#4B6CB7] shrink-0">{me.sign ? "변경" : "서명 등록"}</button>
                   </div>
                 )}
@@ -2238,7 +2286,9 @@ export default function ApprovalCenter({ company, me, page, setPage, openId, onO
     const st = (staff || []).find((u) => u.uid === me.uid);
     const pf = myProfile || {};
     return { ...me, name: personName(pf) || personName(st) || me.name, team: pf.team || st?.team || me.team || "", position: pf.position || st?.position || me.position || "",
-      sign: pf.approvalSignature || "", markMode: pf.approvalMarkMode === "sign" ? "sign" : "stamp" }; // ✍ 2026-11-04 내 서명·결재 표시
+      // ✍ 2026-11-04 내 서명·결재 표시 · ⭐ 2026-11-05 도장 이미지(approvalStampImage · markMode "image") — 결재란엔 서명처럼 그림으로 들어간다
+      ...(() => { const raw = ["sign", "image"].includes(pf.approvalMarkMode) ? pf.approvalMarkMode : "stamp"; const signImg = pf.approvalSignature || ""; const stampImg = pf.approvalStampImage || "";
+        return { rawMode: raw, signImg, stampImg, sign: raw === "image" ? stampImg : signImg, markMode: raw === "image" ? (stampImg ? "sign" : "stamp") : raw }; })() };
   }, [me, staff, myProfile]);
   // 🗂 인사발령 품의 작성·공문 게시 가능 여부(역할은 실제 계정 역할 — 통합인사관리자가 경리 화면이어도 인사 담당)
   const canHr = React.useMemo(() => {
@@ -2346,7 +2396,7 @@ export default function ApprovalCenter({ company, me, page, setPage, openId, onO
           <button type="button" onClick={() => setSignOpen(true)} title="결재할 때 결재란에 넣을 표시(도장·서명)를 정합니다" data-ap-mysign
             className="w-full md:w-auto h-11 md:h-auto md:self-stretch pl-2 pr-3.5 rounded-2xl bg-white/[0.07] border border-white/15 hover:bg-white/[0.12] inline-flex items-center gap-2 text-left shrink-0">
             <span className="w-9 h-7 md:h-9 rounded-lg bg-white grid place-items-center overflow-hidden">{meFull.markMode === "sign" && meFull.sign ? <img src={meFull.sign} alt="" className="max-w-[32px] max-h-[24px] object-contain" /> : <span className="w-6 h-6 rounded-full border-2 border-[#1B2B4B] text-[#1B2B4B] text-[8px] font-black grid place-items-center">승인</span>}</span>
-            <span className="leading-tight"><span className="block text-[13px] font-black">내 서명</span><span className="block text-[11px] font-bold text-white/55">{meFull.markMode === "sign" && meFull.sign ? "서명으로 결재" : "도장으로 결재"}</span></span>
+            <span className="leading-tight"><span className="block text-[13px] font-black">내 서명</span><span className="block text-[11px] font-bold text-white/55">{meFull.markMode === "sign" && meFull.sign ? (meFull.rawMode === "image" ? "도장 이미지로 결재" : "서명으로 결재") : "도장으로 결재"}</span></span>
           </button>
           {!isCat && page !== "lines" && (
             <div className="grid grid-cols-2 md:flex md:flex-col gap-1.5 w-full md:w-auto">

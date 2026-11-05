@@ -1843,6 +1843,43 @@ function ChatView({ room, roomName, roomPhoto, messages, myUid, myProfile, input
   const [showRoomMenu, setShowRoomMenu] = useState(false); // ⭐ 2026-11-03 단체방 ≡ 메뉴
   const [showAttachMenu, setShowAttachMenu] = useState(false);
   const [imgPreview, setImgPreview] = useState(null);
+  // ⭐ 2026-11-05 카카오톡처럼 — 파일을 대화창에 끌어 놓거나 Ctrl+V로 붙여넣으면 미리보기 후 전송
+  const [dropOn, setDropOn] = useState(false);
+  const [pendingFiles, setPendingFiles] = useState([]); // [{ file, url }]
+  const dragDepth = useRef(0);
+  const queueFiles = (list) => {
+    const arr = [...(list || [])].filter((f) => f && f.size > 0);
+    if (!arr.length) return;
+    setPendingFiles((p) => [...p, ...arr.map((file) => ({ file, url: /^image\//.test(file.type) ? URL.createObjectURL(file) : "" }))].slice(0, 10));
+  };
+  const clearPending = () => { setPendingFiles((p) => { p.forEach((x) => x.url && URL.revokeObjectURL(x.url)); return []; }); };
+  const sendPending = async () => {
+    const list = pendingFiles; clearPending();
+    for (const { file } of list) {
+      try { if (/^image\//.test(file.type)) await onSendImage(file); else await onSendFile(file); } catch (e) { console.error(e); }
+    }
+    setTimeout(() => inputRef?.current?.focus?.(), 0);
+  };
+  useEffect(() => {
+    if (!pendingFiles.length) return undefined;
+    const k = (e) => { if (e.key === "Enter" && !e.isComposing) { e.preventDefault(); e.stopPropagation(); sendPending(); } else if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); clearPending(); } };
+    window.addEventListener("keydown", k, true);
+    return () => window.removeEventListener("keydown", k, true);
+  }); // eslint-disable-line react-hooks/exhaustive-deps
+  const hasFiles = (e) => [...(e.dataTransfer?.types || [])].includes("Files");
+  const chatRootRef = useRef(null);
+  const queueRef = useRef(queueFiles); queueRef.current = queueFiles;
+  useEffect(() => { // Ctrl+V — 입력칸이든 대화창 아무 곳이든(다른 입력칸에 붙여넣는 건 그대로)
+    const onPaste = (e) => {
+      const fs = [...(e.clipboardData?.files || [])]; if (!fs.length) return;
+      const t = e.target; const root = chatRootRef.current;
+      const inChat = root && (root.contains(t) || t === document.body || t === document.documentElement);
+      if (!inChat) return;
+      e.preventDefault(); queueRef.current(fs);
+    };
+    document.addEventListener("paste", onPaste);
+    return () => document.removeEventListener("paste", onPaste);
+  }, []);
   const photoInputRef = useRef(null);
   const fileInputRef = useRef(null);
   const [ctxMenu, setCtxMenu] = useState(null); // {msg, x, y}
@@ -1889,7 +1926,37 @@ function ChatView({ room, roomName, roomPhoto, messages, myUid, myProfile, input
   };
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100%", background: "#fff" }}>
+    <div ref={chatRootRef} style={{ display: "flex", flexDirection: "column", height: "100%", background: "#fff", position: "relative" }}
+      onDragEnter={(e) => { if (!hasFiles(e)) return; e.preventDefault(); dragDepth.current += 1; setDropOn(true); }}
+      onDragOver={(e) => { if (!hasFiles(e)) return; e.preventDefault(); e.dataTransfer.dropEffect = "copy"; }}
+      onDragLeave={(e) => { if (!hasFiles(e)) return; dragDepth.current = Math.max(0, dragDepth.current - 1); if (!dragDepth.current) setDropOn(false); }}
+      onDrop={(e) => { if (!hasFiles(e)) return; e.preventDefault(); dragDepth.current = 0; setDropOn(false); queueFiles(e.dataTransfer.files); }}>
+      {dropOn && (
+        <div data-msg-drop style={{ position: "absolute", inset: 8, zIndex: 50, border: "3px dashed #4B6CB7", borderRadius: 16, background: "rgba(238,243,251,0.92)", display: "flex", alignItems: "center", justifyContent: "center", pointerEvents: "none" }}>
+          <div style={{ textAlign: "center", color: "#1B2B4B", fontWeight: 900, fontSize: 16 }}>여기에 놓으면 보낼 준비가 됩니다<div style={{ fontSize: 12, fontWeight: 700, color: "#5B6B85", marginTop: 4 }}>사진 · 파일 (최대 10개)</div></div>
+        </div>
+      )}
+      {pendingFiles.length > 0 && (
+        <div data-msg-pending style={{ position: "absolute", inset: 0, zIndex: 60, background: "rgba(11,20,40,0.45)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }} onClick={clearPending}>
+          <div onClick={(e) => e.stopPropagation()} style={{ background: "#fff", borderRadius: 18, width: "100%", maxWidth: 360, boxShadow: "0 18px 50px rgba(0,0,0,.25)", overflow: "hidden" }}>
+            <div style={{ padding: "14px 16px", fontWeight: 900, fontSize: 15, color: "#0F1A30" }}>{pendingFiles.length}개 보내기</div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8, padding: "0 16px 12px", maxHeight: 300, overflowY: "auto" }}>
+              {pendingFiles.map((p, i) => (
+                <div key={i} style={{ position: "relative", width: pendingFiles.length === 1 ? "100%" : 96, height: pendingFiles.length === 1 ? 220 : 96, borderRadius: 10, border: "1px solid #E3E8F0", background: "#F8FAFC", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden" }}>
+                  {p.url ? <img src={p.url} alt="" style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }} />
+                    : <div style={{ padding: 6, fontSize: 11, fontWeight: 700, color: "#3A4A66", textAlign: "center", wordBreak: "break-all" }}>📄 {p.file.name}</div>}
+                  <button type="button" onClick={() => setPendingFiles((l) => { const n = [...l]; const [x] = n.splice(i, 1); if (x?.url) URL.revokeObjectURL(x.url); return n; })}
+                    style={{ position: "absolute", top: 4, right: 4, width: 22, height: 22, borderRadius: "50%", border: "none", background: "rgba(15,26,48,.7)", color: "#fff", fontSize: 12, cursor: "pointer" }}>✕</button>
+                </div>
+              ))}
+            </div>
+            <div style={{ display: "flex", gap: 8, padding: "10px 16px 16px" }}>
+              <button type="button" onClick={clearPending} style={{ flex: 1, height: 40, borderRadius: 12, border: "1px solid #DCE3EE", background: "#fff", fontWeight: 800, color: "#5B6B85", cursor: "pointer" }}>취소</button>
+              <button type="button" onClick={sendPending} style={{ flex: 1.6, height: 40, borderRadius: 12, border: "none", background: themeMyBubble || "#1B2B4B", color: "#fff", fontWeight: 900, cursor: "pointer" }}>전송 (Enter)</button>
+            </div>
+          </div>
+        </div>
+      )}
       {/* 헤더 */}
       <div style={{ background: themeHdr, padding: "12px 14px", display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
         <button onClick={onBack} style={{ background: "none", border: "none", color: "rgba(255,255,255,0.7)", cursor: "pointer", padding: 0, display: "flex", alignItems: "center" }}>
