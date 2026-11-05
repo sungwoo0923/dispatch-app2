@@ -6,6 +6,7 @@
 //  최고관리자가 로그인하면 /choose 에서 "배차 프로그램 / 관리자 관리센터" 중 고른다.
 //  ⭐ 알록달록 금지 — 네이비 계열만.
 import Pager, { pageCount, pageSlice } from "./Pager";
+import { runDelete } from "./DeleteProgress"; // ⭐ 2026-11-05 삭제 진행 창 + 한 번에 삭제
 import React from "react";
 import { useNavigate } from "react-router-dom";
 import { signOut } from "firebase/auth";
@@ -808,7 +809,7 @@ function NoticesPanel() {
                     <button type="button" onClick={() => setDiag(n)} className="h-9 px-3.5 rounded-lg border border-[#DCE3EE] text-[13.5px] font-black text-[#2D4C82]">푸시 확인</button>
                     <button type="button" onClick={() => updateDoc(doc(db, "platformNotices", n.id), { active: n.active === false })} className="h-9 px-3.5 rounded-lg border border-[#DCE3EE] text-[13.5px] font-black text-[#1B2B4B]">{n.active === false ? "다시 게시" : "내리기"}</button>
                     <button type="button" onClick={() => { setEditId(n.id); setF({ ...blank, ...n, targetCompanies: tc, bodyHtml: n.bodyHtml || textToHtml(n.body || ""), schedule: (n.publishAt || 0) > Date.now(), ...((n.publishAt || 0) > 0 ? kstParts(n.publishAt) : {}) }); setWriting(true); }} className="h-9 px-3.5 rounded-lg bg-[#0F1A30] text-white text-[13.5px] font-black">수정</button>
-                    <button type="button" onClick={() => window.confirm("공지를 삭제할까요?\n대상 회사 공지사항 목록에서도 함께 사라집니다.") && deleteDoc(doc(db, "platformNotices", n.id))} className="h-9 px-3.5 rounded-lg border border-[#DCE3EE] text-[13.5px] font-bold text-[#7A879C]">삭제</button>
+                    <button type="button" onClick={() => window.confirm("공지를 삭제할까요?\n대상 회사 공지사항 목록에서도 함께 사라집니다.") && runDelete({ label: "공지", task: () => deleteDoc(doc(db, "platformNotices", n.id)) }).catch(() => {})} /* ⭐ 2026-11-05 삭제 진행 창 */ className="h-9 px-3.5 rounded-lg border border-[#DCE3EE] text-[13.5px] font-bold text-[#7A879C]">삭제</button>
                   </div>
                 </div>
               );

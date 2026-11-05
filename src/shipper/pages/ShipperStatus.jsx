@@ -19,6 +19,7 @@ import { updateDoc, setDoc } from "../../orderWrite"; // ★ 오더 수정시각
 import { useNavigate } from "react-router-dom";
 import { DeckStrip, SegTabs } from "../ShipUi";
 import { deleteOrderWithLog } from "../../orderHistory";
+import { deleteOrdersWithLogAtomic, runDelete } from "../../DeleteProgress"; // ⭐ 2026-11-05 삭제 진행 창 + 한 번에 삭제
 
 // 운송사 프로그램(DispatchApp.jsx StatusBadge)과 동일한 배지 디자인 — 단색 배경 + 흰 글씨 + rounded-lg
 const STATUS = {
@@ -665,11 +666,12 @@ export default function ShipperStatus() {
       openConfirm(
         `선택하신 ${targets.length}건을 영구 삭제하시겠습니까?\n삭제 후에는 복구할 수 없습니다.`,
         async () => {
-          for (const o of targets) {
-            await deleteOrderWithLog("orders", o.id);
-            await propagateDeleteToOrigin(o);
-          }
-          onDone?.(); setConfirmOpen(false);
+          // ⭐ 2026-11-05 한 건씩 지우던 것을 한 번에(writeBatch) + 삭제 진행 창 — 목록이 한 줄씩 사라지지 않게
+          //   운송사 원본 삭제(propagateDeleteToOrigin)는 예전처럼 건별(실패해도 무시)
+          setConfirmOpen(false);
+          await deleteOrdersWithLogAtomic(targets.map((o) => ({ col: "orders", id: o.id }))).catch((e) => alert("삭제 실패: " + (e?.message || e)));
+          await Promise.all(targets.map((o) => propagateDeleteToOrigin(o)));
+          onDone?.();
         }
       );
       return;

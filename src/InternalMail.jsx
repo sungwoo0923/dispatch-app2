@@ -11,6 +11,7 @@
 //    scheduledAt, cc/ccNames, important, starredBy, purgedBy, recalledFor
 import React from "react";
 import { kpConfirm } from "./kpDialog";
+import { runDelete, commitDeletes } from "./DeleteProgress"; // ⭐ 2026-11-05 삭제 진행 창 + 한 번에 처리
 import { createPortal } from "react-dom";
 import { db, auth } from "./firebase";
 import { collection, doc, onSnapshot, query, where, addDoc, updateDoc, deleteDoc, arrayUnion, arrayRemove, serverTimestamp, Timestamp } from "firebase/firestore";
@@ -542,7 +543,7 @@ export function MailWorkspace({ company, myName, box, setBox, openId, embedded =
   const removeMail = async (m) => {
     if (["drafts", "scheduled"].includes(box) || ["draft", "scheduled"].includes(statusOf(m))) {
       if (!await kpConfirm(statusOf(m) === "scheduled" ? "예약을 취소하고 메일을 지울까요?" : "임시보관 메일을 지울까요?")) return;
-      await deleteDoc(doc(db, "internalMails", m.id)).catch(() => {});
+      await runDelete({ label: "메일", task: () => deleteDoc(doc(db, "internalMails", m.id)) }).catch(() => {}); // ⭐ 2026-11-05 진행 창
     } else await upd(m, { deletedBy: arrayUnion(uid) });
     if (curId === m.id) setCurId(null);
   };
@@ -551,6 +552,17 @@ export function MailWorkspace({ company, myName, box, setBox, openId, embedded =
     if (!ms.length) return;
     if (act === "purge" && !await kpConfirm(`${ms.length}통을 영구 삭제할까요? 되돌릴 수 없습니다.`)) return;
     if (act === "delete" && ["drafts", "scheduled"].includes(box) && !await kpConfirm(`${ms.length}통을 지울까요?`)) return;
+    // ⭐ 2026-11-05 삭제·영구삭제는 한 번에(writeBatch) + 삭제 진행 창 — 메일이 한 통씩 사라지지 않게
+    if (act === "delete" || act === "purge") {
+      const ops = ms.map((m) => {
+        const r = doc(db, "internalMails", m.id);
+        if (act === "purge") return (b) => b.update(r, { purgedBy: arrayUnion(uid) });
+        return ["draft", "scheduled"].includes(statusOf(m)) ? r : (b) => b.update(r, { deletedBy: arrayUnion(uid) });
+      });
+      await runDelete({ count: ms.length, label: "메일", task: (p) => commitDeletes(db, ops, { onProgress: p }) }).catch((e) => window.alert("처리 실패: " + e.message));
+      setSel(new Set());
+      return;
+    }
     await Promise.all(ms.map((m) => {
       if (act === "read") return has(m.to, uid) ? upd(m, { readBy: arrayUnion(uid) }) : null;
       if (act === "unread") return has(m.to, uid) ? upd(m, { readBy: arrayRemove(uid) }) : null;
@@ -564,7 +576,9 @@ export function MailWorkspace({ company, myName, box, setBox, openId, embedded =
   };
   const emptyTrash = async () => {
     if (!folders.trash.length || !await kpConfirm(`휴지통의 메일 ${folders.trash.length}통을 모두 영구 삭제할까요?`)) return;
-    await Promise.all(folders.trash.map((m) => upd(m, { purgedBy: arrayUnion(uid) })));
+    // ⭐ 2026-11-05 한 번에 처리 + 삭제 진행 창
+    const _t = folders.trash;
+    await runDelete({ count: _t.length, label: "메일", task: (p) => commitDeletes(db, _t.map((m) => (b) => b.update(doc(db, "internalMails", m.id), { purgedBy: arrayUnion(uid) })), { onProgress: p }) }).catch((e) => window.alert("처리 실패: " + e.message));
   };
 
   const quote = (m) => `\n\n----- ${m.fromName}님이 ${fmtAt(toMs(m.at), true)}에 보낸 메일 -----\n${m.body || ""}`;

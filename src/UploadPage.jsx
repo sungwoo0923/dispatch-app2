@@ -5,6 +5,7 @@
 // ─────────────────────────────────────────────────────────────
 
 import React, { useState, useEffect, useRef, useCallback } from "react";
+import { runDelete, commitDeletes } from "./DeleteProgress"; // ⭐ 2026-11-05 삭제 진행 창 + 한 번에 삭제
 import { db, DEFAULT_COMPANY } from "./firebase";
 import { LogisMark, LogisTag } from "./brand"; // 🔷 2026-11-04 LogisWeb 로고
 import {
@@ -613,8 +614,8 @@ export default function UploadPage() {
                         if (!window.confirm("이 사진을 삭제하시겠습니까?")) return;
                         try {
                           const col = order?._col || "orders";
-                          await deleteDoc(doc(db, col, orderId, "attachments", f.docId));
-                          await updateDoc(doc(db, col, orderId), { attachCount: increment(-1) });
+                          // ⭐ 2026-11-05 삭제 진행 창 + 사진 삭제·첨부 수를 한 묶음으로
+                          await runDelete({ label: "사진", task: () => commitDeletes(db, [doc(db, col, orderId, "attachments", f.docId), (b) => b.update(doc(db, col, orderId), { attachCount: increment(-1) })]) });
                           setUploaded(prev => prev.filter((_, idx) => idx !== i));
                         } catch (e) { alert("삭제 실패: " + e.message); }
                       }}

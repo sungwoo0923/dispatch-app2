@@ -3,6 +3,7 @@
 //  인사 기록(이력서·근태·인사발령) · 직원 등록(계정 없이 인사 기록) · 정보 수정(공문 없이 바로) · 출근기록부 ·
 //  퇴사·권고사직 · 직책·부서 설정(회사별 추가·숨김) · 사내 규정(취업규칙 등)
 import React from "react";
+import { runDelete } from "./DeleteProgress"; // ⭐ 2026-11-05 삭제 진행 창 + 한 번에 삭제
 import { AddressField, BirthSelect } from "./ResumeInputs";
 import { addDoc, arrayUnion, collection, deleteDoc, doc, getDoc, onSnapshot, query, serverTimestamp, setDoc, updateDoc, where } from "firebase/firestore";
 import { db, auth, DEFAULT_COMPANY } from "./firebase";
@@ -595,7 +596,7 @@ export function CompanyRules({ company, canEdit = false }) {
       )}
       {edit && (
         <Sheet side en="RULES · EDIT" title={edit.id ? "규정 수정" : "규정 등록"} onClose={() => setEdit(null)}
-          footer={<>{edit.id && <button type="button" onClick={async () => { if (window.confirm("이 규정을 삭제할까요?")) { await deleteDoc(doc(db, "companyRules", edit.id)); setEdit(null); setOpen(null); } }} className="h-12 px-4 rounded-xl border border-[#DCE3EE] bg-white text-[14px] font-bold text-[#B42318]">삭제</button>}<button type="button" onClick={() => setEdit(null)} className="h-12 px-5 rounded-xl border border-[#DCE3EE] bg-white text-[14px] font-bold text-[#3A4A66]">취소</button><button type="button" onClick={save} className="flex-1 h-12 rounded-xl bg-[#0F1A30] text-white text-[15px] font-black">저장</button></>}>
+          footer={<>{edit.id && <button type="button" onClick={async () => { if (window.confirm("이 규정을 삭제할까요?")) { const _id = edit.id; await runDelete({ label: "규정", task: () => deleteDoc(doc(db, "companyRules", _id)) }); setEdit(null); setOpen(null); } /* ⭐ 2026-11-05 삭제 진행 창 */ }} className="h-12 px-4 rounded-xl border border-[#DCE3EE] bg-white text-[14px] font-bold text-[#B42318]">삭제</button>}<button type="button" onClick={() => setEdit(null)} className="h-12 px-5 rounded-xl border border-[#DCE3EE] bg-white text-[14px] font-bold text-[#3A4A66]">취소</button><button type="button" onClick={save} className="flex-1 h-12 rounded-xl bg-[#0F1A30] text-white text-[15px] font-black">저장</button></>}>
           <div><Label>분류</Label><div className="flex flex-wrap gap-1.5">{RULE_CATS.map((c) => <Chip key={c} on={edit.category === c} onClick={() => setEdit((p) => ({ ...p, category: c, title: p.title || c, body: p.body || fillCompany(RULE_TEMPLATES[c], company) || "" }))}>{c}</Chip>)}</div></div>
           <div className="grid grid-cols-[1fr_170px] gap-2"><div><Label>제목</Label><input value={edit.title} onChange={(e) => setEdit((p) => ({ ...p, title: e.target.value }))} className={inp} /></div><div><Label>시행일</Label><CustomDatePicker value={edit.effectiveDate} onChange={(e) => setEdit((p) => ({ ...p, effectiveDate: e.target.value }))} className={inp} showIcon /></div></div>
           <div><Label>내용 {RULE_TEMPLATES[edit.category] && !edit.body && <button type="button" onClick={() => setEdit((p) => ({ ...p, body: fillCompany(RULE_TEMPLATES[p.category], company) }))} className="ml-2 text-[12px] font-black text-[#2D4C82]">표준 양식 불러오기</button>}</Label><textarea value={edit.body} onChange={(e) => setEdit((p) => ({ ...p, body: e.target.value }))} rows={22} className="w-full rounded-xl border border-[#DCE3EE] bg-white px-4 py-3 text-[14.5px] leading-[1.85] outline-none focus:border-[#2D4C82]" /></div>

@@ -1,4 +1,5 @@
 import NoticeBoard, { canSeeNotice } from "./NoticeBoard";
+import { runDelete } from "./DeleteProgress"; // ⭐ 2026-11-05 삭제 진행 창 + 한 번에 삭제
 import { useBoardNoticesWithPlatform } from "./PlatformNoticeBanner";
 import { subscribeUsersLive } from "./usersLive"; // ⭐ 2026-11-02 속도 — 직원 명부 구독 공유
 import DeptDashboard from "./DeptDashboard";
@@ -1442,7 +1443,7 @@ export default function HomeDashboard({ role, user, userCompany = "", pending, d
               )}
               {(canEdit || canDelete) && !isViewer && (
                 <div className="flex gap-2 pt-3 border-t border-gray-100">
-                  {canDelete && <button onClick={() => setConfirmDialog({ message: "일정을 삭제하시겠습니까?", onConfirm: async () => { await deleteDoc(doc(db, "schedules", selectedSchedule.id)); setSelectedSchedule(null); } })} className="flex-1 py-2.5 rounded-lg border border-red-200 text-red-600 text-[13px] font-semibold hover:bg-red-50 transition"><EditableText id="home.schedule.삭제" defaultText="삭제" /></button>}
+                  {canDelete && <button onClick={() => setConfirmDialog({ message: "일정을 삭제하시겠습니까?", onConfirm: async () => { const _id = selectedSchedule.id; await runDelete({ label: "일정", task: () => deleteDoc(doc(db, "schedules", _id)) }); setSelectedSchedule(null); } }) /* ⭐ 2026-11-05 삭제 진행 창 */} className="flex-1 py-2.5 rounded-lg border border-red-200 text-red-600 text-[13px] font-semibold hover:bg-red-50 transition"><EditableText id="home.schedule.삭제" defaultText="삭제" /></button>}
                   {canEdit && <button onClick={() => { setScheduleForm({ type: selectedSchedule.type, authorName: selectedSchedule.name || "", start: selectedSchedule.start, end: selectedSchedule.end, memo: selectedSchedule.memo || "", approvers: selectedSchedule.approvers || (selectedSchedule.approverUid ? [{ uid: selectedSchedule.approverUid, name: selectedSchedule.approverName || "" }] : []) }); setScheduleOpen(true); }} className="flex-1 py-2.5 rounded-lg bg-[#1B2B4B] text-white text-[13px] font-semibold hover:bg-[#243a60] transition"><EditableText id="home.schedule.수정" defaultText="수정" /></button>}
                 </div>
               )}
@@ -1485,7 +1486,7 @@ export default function HomeDashboard({ role, user, userCompany = "", pending, d
                 if (!isHAuthor) return null;
                 return (
                 <div className="flex gap-2 mt-4 pt-4 border-t">
-                  <button onClick={() => setConfirmDialog({ message: "인수인계를 삭제하시겠습니까?", onConfirm: async () => { await deleteDoc(doc(db, "handovers", selectedHandover.id)); setSelectedHandover(null); setHandoverEditMode(false); } })} className="flex-1 py-2 rounded-lg border border-red-200 text-red-600 text-[13px] font-semibold hover:bg-red-50 transition"><EditableText id="home.handover.삭제" defaultText="삭제" /></button>
+                  <button onClick={() => setConfirmDialog({ message: "인수인계를 삭제하시겠습니까?", onConfirm: async () => { const _id = selectedHandover.id; await runDelete({ label: "인수인계", task: () => deleteDoc(doc(db, "handovers", _id)) }); setSelectedHandover(null); setHandoverEditMode(false); } }) /* ⭐ 2026-11-05 삭제 진행 창 */} className="flex-1 py-2 rounded-lg border border-red-200 text-red-600 text-[13px] font-semibold hover:bg-red-50 transition"><EditableText id="home.handover.삭제" defaultText="삭제" /></button>
                   <button onClick={() => { isEditingHandoverRef.current = true; setHandoverForm({ text: selectedHandover.text, author: selectedHandover.author, authorUid: selectedHandover.authorUid, receiver: selectedHandover.receiver, receiverUid: selectedHandover.receiverUid, date: selectedHandover.date }); setHandoverEditMode(true); }} className="flex-1 py-2 rounded-lg bg-[#1B2B4B] text-white text-[13px] font-semibold hover:bg-[#243a60] transition"><EditableText id="home.handover.수정" defaultText="수정" /></button>
                 </div>
                 );

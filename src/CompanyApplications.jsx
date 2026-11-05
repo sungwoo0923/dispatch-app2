@@ -1,5 +1,6 @@
 // src/CompanyApplications.jsx
 import { useRoleOptions } from "./customRoles";
+import { runDelete } from "./DeleteProgress"; // ⭐ 2026-11-05 삭제 진행 창 + 한 번에 삭제
 import { publishCompany } from "./publicCompanies";
 import React, { useState, useEffect, useMemo } from "react";
 import { kpConfirm } from "./kpDialog";
@@ -484,10 +485,12 @@ export default function CompanyApplications() {
     setProcessing(true);
     try {
       const appCollection = activeTab === "화주" ? "companyApplications" : "transportApplications";
-      await deleteDoc(doc(db, appCollection, app.id));
-      if (app.userId && app.userId !== auth.currentUser?.uid) {
-        await deleteDoc(doc(db, "users", app.userId));
-      }
+      await runDelete({ label: "계정", task: async () => { // ⭐ 2026-11-05 삭제 진행 창
+        await deleteDoc(doc(db, appCollection, app.id));
+        if (app.userId && app.userId !== auth.currentUser?.uid) {
+          await deleteDoc(doc(db, "users", app.userId));
+        }
+      } });
       setManagingApp(null);
     } finally {
       setProcessing(false);

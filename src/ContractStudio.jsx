@@ -3,6 +3,7 @@
 //  왼쪽: 유형 고르기 → 입력칸 → 조항(자동 셋팅, 자유롭게 수정·추가·삭제) / 오른쪽: A4 미리보기
 //  저장하면 보관함(companyContracts)에 남고, 이미지·PDF로 내려받거나 인쇄한다.
 import React from "react";
+import { runDelete } from "./DeleteProgress"; // ⭐ 2026-11-05 삭제 진행 창 + 한 번에 삭제
 import { collection, addDoc, deleteDoc, doc, onSnapshot, query, serverTimestamp, updateDoc, where } from "firebase/firestore";
 import { db } from "./firebase";
 import { kpAlert, kpConfirm } from "./kpDialog";
@@ -249,7 +250,7 @@ export default function ContractStudio({ company = "", me = {} }) {
     setTab(d.kind); if (d.kind === "driver") setSub(d.sub); if (d.kind === "labor") setLaborSub(d.sub); if (d.kind === "free") setFreeKey(d.sub);
     setTimeout(() => { autoKeys.current = new Set(); setVals(fillA(d.vals || {})); setClauses(d.clauses || []); setEditId(d.id); }, 0);
   };
-  const removeSaved = async (d) => { if (await kpConfirm(`「${d.title}」(${d.party || "-"})을 보관함에서 지울까요?`, { title: "계약서 삭제", okText: "삭제", danger: true })) await deleteDoc(doc(db, "companyContracts", d.id)); };
+  const removeSaved = async (d) => { if (await kpConfirm(`「${d.title}」(${d.party || "-"})을 보관함에서 지울까요?`, { title: "계약서 삭제", okText: "삭제", danger: true })) await runDelete({ label: "계약서", task: () => deleteDoc(doc(db, "companyContracts", d.id)) }); }; // ⭐ 2026-11-05 삭제 진행 창
 
   const groups = [...new Set(FREE_TOPICS.map((t) => t.group))];
   // 📁 내 양식 — 고친 조항·기본값을 이름 붙여 저장해 두고 다음에 그대로 불러 쓴다
@@ -271,7 +272,7 @@ export default function ContractStudio({ company = "", me = {} }) {
     const t = myTpls.find((x) => x.id === id); if (!t) return;
     setClauses((t.clauses || []).map((x) => ({ ...x }))); setVals((p) => ({ ...p, ...(t.defaults || {}) }));
   };
-  const removeTpl = async (t) => { if (await kpConfirm(`내 양식 「${t.templateName}」을 지울까요?`, { title: "양식 삭제", okText: "삭제", danger: true })) await deleteDoc(doc(db, "companyContracts", t.id)); };
+  const removeTpl = async (t) => { if (await kpConfirm(`내 양식 「${t.templateName}」을 지울까요?`, { title: "양식 삭제", okText: "삭제", danger: true })) await runDelete({ label: "양식", task: () => deleteDoc(doc(db, "companyContracts", t.id)) }); }; // ⭐ 2026-11-05 삭제 진행 창
   return (
     <div className="space-y-4">
       <div className="relative overflow-hidden rounded-[22px] px-7 py-5 text-white flex items-center justify-between gap-4 flex-wrap shadow-[0_14px_32px_rgba(15,26,48,0.25)]"

@@ -4,6 +4,7 @@
 //    전자결재 "비용·지출 결의" 승인분을 한 번에 장부로 가져오기, 매달 나가는 고정비(임대료·통신비 등) 한 번에 반영
 //  · 비품·자산: 사무가구·IT기기·소모품 등 — 수량·위치·담당자·구입가·상태, 소모품은 최소 수량 아래면 "재고 부족", 입출고 이력
 import React from "react";
+import { runDelete } from "./DeleteProgress"; // ⭐ 2026-11-05 삭제 진행 창 + 한 번에 삭제
 import { addDoc, collection, deleteDoc, doc, onSnapshot, query, serverTimestamp, setDoc, updateDoc, where, arrayUnion } from "firebase/firestore";
 import { db, auth } from "./firebase";
 import { compressImage } from "./InternalMail";
@@ -175,7 +176,7 @@ export function CashBook({ company, isViewer = false }) {
       setEdit(null);
     } catch (err) { alert(`저장 실패: ${err.message}`); } finally { setBusy(false); }
   };
-  const remove = async (e) => { if (!window.confirm("이 내역을 삭제할까요?")) return; await deleteDoc(doc(db, "acctLedger", e.id)); setEdit(null); };
+  const remove = async (e) => { if (!window.confirm("이 내역을 삭제할까요?")) return; await runDelete({ label: "내역", task: () => deleteDoc(doc(db, "acctLedger", e.id)) }); setEdit(null); }; // ⭐ 2026-11-05 삭제 진행 창
   const importApprovals = async () => {
     if (!toImport.length) return;
     if (!window.confirm(`전자결재로 승인된 지출결의 ${toImport.length}건을 장부에 넣을까요?`)) return;
@@ -491,7 +492,7 @@ function RecurringEditor({ company, rows, ledger = [], funds = [], onClose }) {
             {funds.length > 0 && <CustomSelect value={r.fundId || ""} onChange={(e) => updateDoc(doc(db, "acctRecurring", r.id), { fundId: e.target.value })} className="mt-1 h-8 px-2 rounded-lg border border-[#DCE3EE] bg-white text-[12px] font-bold text-[#1B2B4B] max-w-full"><option value="">통장·카드 지정 안 함</option>{funds.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}</CustomSelect>}</div>
           <span className="text-[13.5px] font-black tabular-nums whitespace-nowrap" style={{ fontFamily: MONO }}>{won(r.amount)}</span>
           <button type="button" onClick={() => updateDoc(doc(db, "acctRecurring", r.id), { active: r.active === false })} className={`h-8 px-2.5 rounded-lg text-[12px] font-black whitespace-nowrap ${r.active === false ? "border border-[#DCE3EE] text-[#9AA9C3]" : "bg-[#EEF3FC] text-[#1B2B4B]"}`}>{r.active === false ? "꺼짐" : "켜짐"}</button>
-          <button type="button" onClick={() => window.confirm("삭제할까요?") && deleteDoc(doc(db, "acctRecurring", r.id))} className="w-8 h-8 rounded-lg text-[#9AA9C3]">✕</button>
+          <button type="button" onClick={() => window.confirm("삭제할까요?") && runDelete({ label: "고정비", task: () => deleteDoc(doc(db, "acctRecurring", r.id)) }).catch(() => {})} /* ⭐ 2026-11-05 삭제 진행 창 */ className="w-8 h-8 rounded-lg text-[#9AA9C3]">✕</button>
         </div>
       ))}
     </Sheet>
@@ -585,7 +586,7 @@ export function AssetManager({ company, isViewer = false }) {
 
       {edit && (
         <Sheet side en={`ASSET · ${edit.id ? "EDIT" : "NEW"}`} title={edit.id ? "비품 수정" : "비품 등록"} onClose={() => setEdit(null)}
-          footer={<>{edit.id && <button type="button" onClick={async () => { if (window.confirm("삭제할까요? (폐기 처리는 상태를 '폐기'로)")) { await deleteDoc(doc(db, "officeAssets", edit.id)); /* ⭐ 2026-11-02 점검 — 비품 삭제 시 '비품 구입' 자동 지출 줄도 함께 삭제(amount 0 → 줄 제거) */ await upsertAutoEntry(db, edit.id, { company, amount: 0, auto: "asset" }).catch(() => {}); setEdit(null); } }} className="h-12 px-5 rounded-xl border border-[#DCE3EE] bg-white text-[14px] font-bold text-[#B42318]">삭제</button>}<button type="button" onClick={() => setEdit(null)} className="h-12 px-5 rounded-xl border border-[#DCE3EE] bg-white text-[14px] font-bold text-[#3A4A66]">취소</button><button type="button" disabled={busy} onClick={save} className="flex-1 h-12 rounded-xl bg-[#0F1A30] text-white text-[15px] font-black disabled:opacity-50">{busy ? "저장 중…" : "저장"}</button></>}>
+          footer={<>{edit.id && <button type="button" onClick={async () => { if (window.confirm("삭제할까요? (폐기 처리는 상태를 '폐기'로)")) { const _id = edit.id; /* ⭐ 2026-11-05 삭제 진행 창 */ await runDelete({ label: "비품", task: async () => { await deleteDoc(doc(db, "officeAssets", _id)); /* ⭐ 2026-11-02 점검 — 비품 삭제 시 '비품 구입' 자동 지출 줄도 함께 삭제(amount 0 → 줄 제거) */ await upsertAutoEntry(db, _id, { company, amount: 0, auto: "asset" }).catch(() => {}); } }); setEdit(null); } }} className="h-12 px-5 rounded-xl border border-[#DCE3EE] bg-white text-[14px] font-bold text-[#B42318]">삭제</button>}<button type="button" onClick={() => setEdit(null)} className="h-12 px-5 rounded-xl border border-[#DCE3EE] bg-white text-[14px] font-bold text-[#3A4A66]">취소</button><button type="button" disabled={busy} onClick={save} className="flex-1 h-12 rounded-xl bg-[#0F1A30] text-white text-[15px] font-black disabled:opacity-50">{busy ? "저장 중…" : "저장"}</button></>}>
           <div><Label>분류</Label><div className="flex flex-wrap gap-1.5">{ASSET_CATS.map((c) => <Chip key={c} on={edit.category === c} onClick={() => setEdit((p) => ({ ...p, category: c, unit: c === "소모품" ? (p.unit === "개" ? "개" : p.unit) : p.unit }))}>{c}</Chip>)}</div></div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
             <div><Label>품목 이름</Label><input value={edit.name} onChange={(e) => setEdit((p) => ({ ...p, name: e.target.value }))} className={inp} placeholder="예: 노트북, A4용지, 복합기" /></div>

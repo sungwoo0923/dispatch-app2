@@ -1,6 +1,7 @@
 // ===================== DispatchApp.jsx (PART 1/8) — START =====================
 import { MENU_FEATURE, planIncludes, openPlanLock, featureOn, useCompanyPlanId, PlanValueProvider, PlanValueSync, PlanLockHost, LockIcon } from "./plans";
 import { kpConfirm } from "./kpDialog";
+import { runDelete, commitDeletes, deleteDocsAtomic } from "./DeleteProgress"; // ⭐ 2026-11-05 삭제 진행 창 + 한 번에 삭제(writeBatch)
 import ProInsight from "./ProInsight";
 import BulkUploadChooser, { downloadTemplateXlsx } from "./BulkUploadChooser";
 import { buildCopyText, getCopyTpl, useCopyTemplates } from "./copyTemplates";
@@ -5058,9 +5059,52 @@ const patchDispatch = async (_id, patch, knownPrev) => {
 // 또 묻지 않도록 이 플래그로 내부 confirm만 건너뛴다(기록은 그대로 남긴다).
 // 배차표 지운 줄 열쇠(서버 functions/routeBoardSync.js tombKey 와 같은 규칙)
 const rbTombKey = (date, group, name) => [date, group || "", name].map((x) => String(x || "").toLowerCase().replace(/[\s()（）[\]]/g, "").replace(/[^0-9a-z가-힣_-]/g, "_")).join("__");
+// ⭐ 2026-11-05 여러 건 삭제가 한 줄씩 사라지던 문제 — removeDispatch(배열)이면 모든 건을 준비한 뒤
+//   writeBatch 한 번(450건씩, 동시에 커밋)으로 지워 목록이 한 번에 갱신된다. 삭제 진행 창(runDelete)도 띄운다.
+//   부수 처리(운행기록 스냅샷·기사 취소 알림·삭제 기록 deletedOrders·배차표 지운 줄·화주사 사본 삭제)는 그대로 한다.
+//   한 건(문자열/객체)도 같은 길로 간다(확인창은 원래대로 먼저, 그다음 진행 창).
 const removeDispatch = async (arg, opts = {}) => {
+  const list = (Array.isArray(arg) ? arg : [arg]).filter(Boolean);
+  if (!list.length) return;
+  // 운송완료 오더 확인 — 한 건이면 원래 문구, 여러 건이면 한 번에 묻는다(거절하면 완료 건만 빼고 지운다)
+  //   (진행 창이 뜨기 전에 묻는다 — 캐시에 없는 건은 예전처럼 준비 단계에서 건별로 묻는다)
+  let skipDone = !!opts.skipCompletedConfirm;
+  let dropDone = false;
+  if (!skipDone) {
+    const cachedOf = (a) => { const id = typeof a === "string" ? a : a?._id; return ordersCacheRef.current.find(d => d._id === id) || dispatchCacheRef.current.find(d => d._id === id) || null; };
+    const all = list.map(cachedOf);
+    const doneN = all.filter((c) => c?.기사확인상태 === "완료").length;
+    if (doneN > 0) {
+      const ok = await kpConfirm(list.length === 1 ? "운송이 완료된 오더입니다. 오더를 삭제하시겠습니까?" : `운송이 완료된 오더가 ${doneN}건 포함되어 있습니다. 오더를 삭제하시겠습니까?`);
+      if (!ok && list.length === 1) return;
+      dropDone = !ok;
+    }
+    if (all.every(Boolean)) skipDone = true;
+  }
+  return runDelete({
+    count: list.length, label: "오더",
+    task: async (progress) => {
+      const preps = (await Promise.all(list.map((a) => _prepRemoveDispatch(a, { ...opts, skipCompletedConfirm: skipDone, dropCompleted: dropDone })))).filter(Boolean);
+      if (!preps.length) return 0;
+      // 삭제 기록(deletedOrders) — 예전처럼 실패해도 삭제는 계속(따로 묶음, 기다리지 않음)
+      commitDeletes(db, preps.map((p) => (b) => b.set(doc(db, "deletedOrders", `${p.ref.parent.id}_${p.ref.id}`), { col: p.ref.parent.id, id: p.ref.id, at: serverTimestamp(), by: auth.currentUser?.email || "" }))).catch(() => {});
+      await commitDeletes(db, preps.map((p) => p.ref), { onProgress: progress });
+      // 화주사 사본 — 예전처럼 실패해도 원본 삭제엔 영향 없게 따로 묶음(묶음이 거부되면 건별로 다시)
+      const mirrors = preps.filter((p) => p.data?._transmittedOrderId).map((p) => doc(db, "orders", p.data._transmittedOrderId));
+      if (mirrors.length) {
+        commitDeletes(db, mirrors).catch(() => {
+          mirrors.forEach((r) => deleteDoc(r).catch((e) => console.error("화주사 전송사본 삭제 동기화 오류:", e)));
+        });
+      }
+      preps.forEach(_afterRemoveDispatch);
+      return preps.length;
+    },
+  });
+};
+// 삭제 전 준비(대상 찾기·완료 확인·운행기록·기사 알림) — 지울 문서 {id, ref, data, cached}를 돌려준다(건너뛰면 null)
+const _prepRemoveDispatch = async (arg, opts = {}) => {
   const id = typeof arg === "string" ? arg : arg?._id;
-  if (!id) return;
+  if (!id) return null;
 
   // ★ 메모리 캐시에서 먼저 찾기 (patchDispatch와 동일한 이유 — getDoc 왕복을 건너뛰어
   //   여러 건 선택삭제 시 순번대로 네트워크 왕복이 쌓여 버벅이던 지연을 줄인다.
@@ -5079,7 +5123,7 @@ const removeDispatch = async (arg, opts = {}) => {
     }
     if (!snap.exists()) {
       console.error("✕ 삭제 대상 없음", id);
-      return;
+      return null;
     }
     data = snap.data();
   }
@@ -5088,7 +5132,8 @@ const removeDispatch = async (arg, opts = {}) => {
   // 사라지므로, 한번 더 확인받고(다건삭제는 호출부가 이미 물어봤다) 확인/스킵
   // 시 기사 운행일지가 계속 보여줄 수 있도록 스냅샷을 남긴다.
   if (data?.기사확인상태 === "완료") {
-    if (!opts.skipCompletedConfirm && !await kpConfirm("운송이 완료된 오더입니다. 오더를 삭제하시겠습니까?")) return;
+    if (opts.dropCompleted) return null;
+    if (!opts.skipCompletedConfirm && !await kpConfirm("운송이 완료된 오더입니다. 오더를 삭제하시겠습니까?")) return null;
   }
   // ⭐ 기사님이 수락(또는 완료)한 오더가 삭제되면 기사 운행기록에 "오더취소"로 남긴다
   if ((data?.기사확인상태 === "수락" || data?.기사확인상태 === "완료") && data?.차량번호) {
@@ -5118,8 +5163,11 @@ const removeDispatch = async (arg, opts = {}) => {
   // ⭐ 사용자 요청 — "취소내역"(소프트 취소)을 없애고, 삭제하면 모든 화면에서 바로
   // 사라지도록 완전삭제한다. 기사 운행기록은 위 archiveCompletedOrderPC 스냅샷으로 남는다.
   // 삭제 기록을 남겨 다른 사용자 화면(예전 날짜 오더 포함)에서도 바로 사라지게 한다
-  logOrderDeletion(ref.parent.id, ref.id);
-  await deleteDoc(ref);
+  //   (삭제 기록·실제 삭제는 removeDispatch가 묶음으로 한다)
+  return { id, ref, data, cached };
+};
+// 삭제 뒤 처리(배차표 지운 줄 · 화주사 사본 역참조 삭제) — 사본 포인터(_transmittedOrderId)는 removeDispatch가 묶음으로 지운다
+const _afterRemoveDispatch = ({ id, data, cached }) => {
   // ⭐ 2026-11-03 배차표(구글시트)에서 자동으로 만든 오더 — 지운 줄을 양식에 기억해 두면 서버가 시트에 그 줄이 남아 있어도 다시 만들지 않는다
   //   ⭐ 운송사 분리 — 양식이 이 오더와 같은 회사일 때만(다른 회사 양식에 "지운 줄"을 남기면 그 회사 시트 줄이 안 들어온다)
   if (data?.배차표Id && data?.상차일) {
@@ -5134,9 +5182,7 @@ const removeDispatch = async (arg, opts = {}) => {
   // 연동 화주사에게 전송된 사본이 있으면(운송사가 등록/전송한 오더), 원본을 취소할 때
   // 화주사 화면의 사본도 함께 삭제되도록 한다.
   if (data?._transmittedOrderId) {
-    deleteDoc(doc(db, "orders", data._transmittedOrderId)).catch((e) =>
-      console.error("화주사 전송사본 삭제 동기화 오류:", e)
-    );
+    // (removeDispatch에서 묶음으로 삭제)
   } else if (!data?.source) {
     // _transmittedOrderId 포인터가 없어도(백포인터 기록 전에 삭제된 경우 등) originCol/originId
     // 역참조로 실제 사본을 찾아 함께 지운다 — 그러지 않으면 화주사 화면에는 "배차중"으로
@@ -5262,7 +5308,12 @@ const markEditRequestSeen = async (order) => {
 };
 
 
-  const removeDriver = async (id) => deleteDoc(doc(db, COLL.drivers, id));
+  // ⭐ 2026-11-05 기사 삭제 — 배열이면 한 번에(writeBatch) 지우고, 한 건이든 여러 건이든 삭제 진행 창을 띄운다
+  const removeDriver = async (idOrIds) => {
+    const ids = (Array.isArray(idOrIds) ? idOrIds : [idOrIds]).filter(Boolean);
+    if (!ids.length) return;
+    return deleteDocsAtomic(db, ids.map((id) => doc(db, COLL.drivers, id)), { label: "기사" });
+  };
 
   const upsertClient = async (client) => {
     // ⚠️ 거래처명을 id보다 먼저 쓰면, 이미 존재하는 문서를 수정(특히 거래처명 자체를
@@ -5312,7 +5363,12 @@ const markEditRequestSeen = async (order) => {
     } catch {}
   };
 
-  const removeClient = async (id) => deleteDoc(doc(db, COLL.clients, id));
+  // ⭐ 2026-11-05 거래처 삭제 — 배열 가능 · 한 번에 삭제 + 삭제 진행 창
+  const removeClient = async (idOrIds) => {
+    const ids = (Array.isArray(idOrIds) ? idOrIds : [idOrIds]).filter(Boolean);
+    if (!ids.length) return;
+    return deleteDocsAtomic(db, ids.map((id) => doc(db, COLL.clients, id)), { label: "거래처" });
+  };
 
   return {
     dispatchData,
@@ -21597,8 +21653,8 @@ function AttachmentViewer({ row, onClose, db, isViewed, onToggleViewed, onSaved,
     if (!await kpConfirm("이 사진을 삭제하시겠습니까?")) return;
     try {
       const col = row.__col || "orders";
-      await deleteDoc(doc(db, col, row._id, "attachments", item.id));
-      await updateDoc(doc(db, col, row._id), { attachCount: increment(-1) });
+      // ⭐ 2026-11-05 삭제 진행 창 + 사진 삭제·첨부 수 감소를 한 묶음으로
+      await runDelete({ label: "사진", task: () => commitDeletes(db, [doc(db, col, row._id, "attachments", item.id), (b) => b.update(doc(db, col, row._id), { attachCount: increment(-1) })]) });
       const mirror = getMirrorTarget();
       if (mirror) {
         try {
@@ -23570,20 +23626,28 @@ function AttachStatusPanel({ open, onClose, initialClient, dispatchData, db, com
     setDeletingAttach(true);
     setBulkDeleteProgress({ done: 0, total: targets.length });
     try {
-      await Promise.all(targets.map(async (r) => {
-        const col = r.__col || "orders";
-        const wipeOne = async (colName, id) => {
+      // ⭐ 2026-11-05 첨부 일괄삭제 — 오더마다 따로 지우면 목록의 첨부 수가 줄마다 차례로 바뀌었다.
+      //   지울 첨부를 먼저 모두 모은 뒤 writeBatch 한 번(450개씩 동시 커밋)으로 지운다(삭제 진행 창).
+      //   화주사 사본(mirror) 쪽은 예전처럼 실패해도 무시 — 따로 묶음.
+      const _ok = await runDelete({ count: targets.length, label: "첨부", task: async (progress) => {
+        const mainOps = []; const mirrorOps = [];
+        const collect = async (colName, id, ops) => {
           const snap = await getDocs(collection(db, colName, id, "attachments"));
-          await Promise.all(snap.docs.map(d => deleteDoc(d.ref)));
-          await updateDoc(doc(db, colName, id), { attachCount: 0, attachViewed: true });
+          snap.docs.forEach(d => ops.push(d.ref));
+          ops.push((b) => b.update(doc(db, colName, id), { attachCount: 0, attachViewed: true }));
         };
-        try { await wipeOne(col, r._id); } catch (e) { console.error("첨부 삭제 실패:", r._id, e); }
-        const mirror = attachMirrorTargetOf(r);
-        if (mirror) {
-          try { await wipeOne(mirror.col, mirror.id); } catch (e) { console.warn("첨부 동기화 삭제 실패(무시):", e); }
-        }
-        setBulkDeleteProgress(prev => ({ ...prev, done: prev.done + 1 }));
-      }));
+        await Promise.all(targets.map(async (r) => {
+          const col = r.__col || "orders";
+          try { await collect(col, r._id, mainOps); } catch (e) { console.error("첨부 삭제 실패:", r._id, e); }
+          const mirror = attachMirrorTargetOf(r);
+          if (mirror) {
+            try { await collect(mirror.col, mirror.id, mirrorOps); } catch (e) { console.warn("첨부 동기화 삭제 실패(무시):", e); }
+          }
+        }));
+        await commitDeletes(db, mainOps, { onProgress: (n) => { progress(Math.round((n / Math.max(1, mainOps.length)) * targets.length)); setBulkDeleteProgress({ done: Math.round((n / Math.max(1, mainOps.length)) * targets.length), total: targets.length }); } });
+        if (mirrorOps.length) commitDeletes(db, mirrorOps).catch((e) => console.warn("첨부 동기화 삭제 실패(무시):", e));
+      } }).then(() => true).catch((e) => { console.error("첨부 삭제 실패:", e); return false; });
+      if (!_ok) return;
       setVerifiedCounts(prev => {
         const next = { ...prev };
         targets.forEach(r => { next[r._id] = 0; });
@@ -29040,7 +29104,8 @@ const openDailyCloseIssueDetail = (rowId) => {
 
     // 여러 건 선택삭제 시 하나씩 순차 대기하면 건수만큼 지연이 쌓여 버벅였다 —
     // 서로 독립적인 삭제라 병렬로 처리한다.
-    Promise.all(ids.map(id => removeDispatch(id, { skipCompletedConfirm: true }))).catch((e) => {
+    // ⭐ 2026-11-05 한 건씩 병렬 삭제하면 목록이 한 줄씩 줄어들었다 — 한 번에(writeBatch) + 삭제 진행 창
+    Promise.resolve(removeDispatch(ids, { skipCompletedConfirm: true })).catch((e) => {
       console.error("삭제 실패:", e);
       showAlert("일부 오더 삭제에 실패했습니다. 목록에서 확인해주세요.\n" + (e?.message || ""));
     });
@@ -38600,7 +38665,8 @@ if (first) {
     setUndoVisible(true);
     setTimeout(() => setUndoVisible(false), 30000);
 
-    Promise.all(backup.map(row => _remove(row, { skipCompletedConfirm: true }))).catch((e) => {
+    // ⭐ 2026-11-05 한 번에 삭제(writeBatch) + 삭제 진행 창 — 예전엔 건별 병렬 삭제라 줄이 하나씩 사라졌다
+    (removeDispatch ? Promise.resolve(removeDispatch(backup.filter(Boolean), { skipCompletedConfirm: true })) : Promise.all(backup.map(row => _remove(row, { skipCompletedConfirm: true })))).catch((e) => {
       console.error("삭제 실패:", e);
       showAlert("일부 오더 삭제에 실패했습니다. 목록에서 확인해주세요.\n" + (e?.message || ""));
     });
@@ -49771,10 +49837,10 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
     // ⭐ Firestore 쓰기를 다 기다린 뒤에야 팝업이 닫혀서 "삭제"를 눌러도 한참
     // 있다가 반응하는 버벅임이 있었다 — 팝업/안내는 먼저 끝내고 실제 삭제는
     // 백그라운드로 돌린다(4파트 executeDelete와 동일한 수정).
-    showToast(`${ids.length}건 삭제 완료`);
+    // ⭐ 2026-11-05 한 번에 삭제(writeBatch) + 삭제 진행 창(완료 건 확인은 removeDispatch가 한 번에 묻는다)
     setDeleteConfirmOpen(false);
     exitDeleteMode();
-    Promise.all(ids.map((id) => removeDispatch(id))).catch((e) => {
+    Promise.resolve(removeDispatch(ids)).then(() => showToast(`${ids.length}건 삭제 완료`)).catch((e) => {
       console.error(e);
       showToast("삭제 중 오류 발생", "err");
     });
@@ -55403,7 +55469,9 @@ const handleBatchSettle = async (targetStatus) => {
             <button className="flex-1 py-2.5 rounded-xl bg-[#0B1428] text-white font-bold text-[13px] hover:bg-[#1B2B4B] transition"
               onClick={async () => {
                 const toDelete = selectedMails.size > 0 ? [...selectedMails] : emailLogs.map(l => l.id);
-                await Promise.all(toDelete.map(id => deleteDoc(doc(db, "emailLogs", id)).catch(() => {})));
+                setBulkDeleteConfirm(false);
+                // ⭐ 2026-11-05 한 번에 삭제(writeBatch) + 삭제 진행 창 — 줄이 하나씩 사라지지 않게
+                await deleteDocsAtomic(db, toDelete.map(id => doc(db, "emailLogs", id)), { label: "발송이력" }).catch(() => {});
                 setSelectedMails(new Set());
                 if (selectedMail && toDelete.includes(selectedMail.id)) setSelectedMail(null);
                 setBulkDeleteConfirm(false);
@@ -55426,9 +55494,10 @@ const handleBatchSettle = async (targetStatus) => {
               onClick={() => setDeleteLogConfirm(null)}><EditableText id="misc.btn.51945.취소" defaultText="취소" /></button>
             <button className="flex-1 py-2.5 rounded-xl bg-[#1B2B4B] text-white font-bold text-[13px] hover:bg-[#243a60] transition"
               onClick={async () => {
-                await deleteDoc(doc(db, "emailLogs", deleteLogConfirm)).catch(() => {});
-                if (selectedMail?.id === deleteLogConfirm) setSelectedMail(null);
+                const _lid = deleteLogConfirm;
                 setDeleteLogConfirm(null);
+                await runDelete({ label: "발송이력", task: () => deleteDoc(doc(db, "emailLogs", _lid)) }).catch(() => {}); // ⭐ 2026-11-05 진행 창
+                if (selectedMail?.id === _lid) setSelectedMail(null);
               }}><EditableText id="misc.btn.51951.삭제" defaultText="삭제" /></button>
           </div>
         </div>
@@ -56503,7 +56572,7 @@ function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, sho
   const removeSelected = async () => {
     if (!selected.size) return showAlert("선택된 항목이 없습니다.");
     if (!await kpConfirm(`${selected.size}건 삭제할까요?`)) return;
-    for (const id of selected) await removeDriver(id);
+    await removeDriver([...selected]); // ⭐ 2026-11-05 한 번에 삭제 + 진행 창
     setSelected(new Set());
     showAlert("삭제 완료");
   };
@@ -57135,7 +57204,7 @@ function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, sho
                 <button
                   onClick={async () => {
                     if (!await kpConfirm(`선택한 ${cleanupSelected.size}건의 중복 기사를 삭제하시겠습니까?`)) return;
-                    for (const id of cleanupSelected) await removeDriver(id);
+                    await removeDriver([...cleanupSelected]); // ⭐ 2026-11-05 한 번에 삭제 + 진행 창
                     setCleanupSelected(new Set());
                     setCleanupDone(true);
                     showAlert(`${cleanupSelected.size}건 삭제 완료`);
@@ -57206,7 +57275,7 @@ function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, sho
                                 const toDelete = sorted.slice(1).map(d => d.id).filter(Boolean);
                                 if (!toDelete.length) return;
                                 if (!await kpConfirm(`"${representative.차량번호}" 기사를 1건으로 정리합니다. 나머지 ${toDelete.length}건을 삭제합니까?`)) return;
-                                for (const id of toDelete) await removeDriver(id);
+                                await removeDriver(toDelete); // ⭐ 2026-11-05 한 번에 삭제 + 진행 창
                                 showAlert(`정리 완료 — ${toDelete.length}건 삭제`);
                               }}
                               className="px-3 py-1 rounded-lg bg-[#1B2B4B] text-white text-[12px] font-bold hover:bg-[#243a60] transition">
@@ -57542,7 +57611,12 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
   // ★★★ placeRows를 맨 위에 선언 (순서 핵심) ★★★
   // ═══════════════════════════════════════════════════
   const PLACES_COLL = "places";
-  const removePlace = async (id) => { if (!id) return; await deleteDoc(doc(db, PLACES_COLL, id)); };
+  // ⭐ 2026-11-05 하차지 삭제 — 배열이면 한 번에(writeBatch) · 삭제 진행 창
+  const removePlace = async (idOrIds) => {
+    const ids = (Array.isArray(idOrIds) ? idOrIds : [idOrIds]).filter(Boolean);
+    if (!ids.length) return;
+    await deleteDocsAtomic(db, ids.map((id) => doc(db, PLACES_COLL, id)), { label: "하차지" });
+  };
   const [placeRows, setPlaceRows] = React.useState(() => placesProp.map(normalizePlaceRow));
   // 아래 몇 개 메모는 전부 "하차지거래처" 탭에서만 쓰인다 — "기본거래처" 탭으로
   // 마운트될 때도 계산되면 탭 전환마다 낭비되는 작업이라 subTab으로 가드한다.
@@ -58033,7 +58107,7 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
   const removeSelectedFn = async () => {
     if (!selected.size) return showAlert("선택된 항목이 없습니다.");
     if (!confirm(`${selected.size}건 삭제하시겠습니까?`)) return;
-    for (const id of selected) await removeClient?.(id);
+    await removeClient?.([...selected]); // ⭐ 2026-11-05 한 번에 삭제 + 진행 창
     setSelected(new Set());
     showAlert("삭제 완료");
   };
@@ -58207,6 +58281,7 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
   const saveImport = async () => {
     if (!importSelected.length) return showAlert("불러올 항목을 선택하세요.");
     let ok = 0;
+    const _movedIds = [];
     for (const p of importSelected) {
       const existing = rows.find(r => norm(r.거래처명) === norm(p.업체명));
       await upsertClient?.({
@@ -58225,9 +58300,10 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
         id: p.업체명,
       });
       // 기본거래처로 "이동"이지 "복사"가 아니므로, 옮긴 원본은 하차지거래처에서 제거한다
-      if (p.id) await removePlace(p.id);
+      if (p.id) _movedIds.push(p.id); // ⭐ 2026-11-05 옮긴 원본은 끝에 한 번에 삭제
       ok++;
     }
+    if (_movedIds.length) await removePlace(_movedIds);
     showAlert(`${ok}건이 기본 거래처로 이동되었습니다.`);
     setImportSelected([]);
     setImportQ("");
@@ -58295,11 +58371,15 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
   const removeSelectedPlaces = async () => {
     if (!placeSelected.size) return showAlert("선택된 항목이 없습니다.");
     if (!confirm(`${placeSelected.size}건 삭제할까요?`)) return;
-    for (const id of placeSelected) {
-      const row = mergedPlaceRows.find(p => (p.id || p.업체명) === id);
-      if (row) await mergePlaceContactsIntoClient(row);
-      await removePlace(id);
-    }
+    // ⭐ 2026-11-05 담당자 병합(예전과 같음)을 먼저 끝내고, 삭제는 한 번에(진행 창) — 줄이 하나씩 사라지지 않게
+    const ids = [...placeSelected];
+    await runDelete({ count: ids.length, label: "하차지", task: async () => {
+      for (const id of ids) {
+        const row = mergedPlaceRows.find(p => (p.id || p.업체명) === id);
+        if (row) await mergePlaceContactsIntoClient(row);
+      }
+      await removePlace(ids);
+    } });
     setPlaceSelected(new Set());
     showAlert("삭제 완료");
   };
@@ -58344,7 +58424,7 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
 
   const removeDuplicatePlaces = async () => {
     if (dupSelected.size === 0) return showAlert("삭제할 중복 항목을 선택하세요.");
-    for (const id of dupSelected) await deleteDoc(doc(db, PLACES_COLL, id));
+    await removePlace([...dupSelected]); // ⭐ 2026-11-05 한 번에 삭제 + 진행 창
     setDupSelected(new Set()); showAlert(`${dupSelected.size}건 삭제 완료`);
   };
 
@@ -58605,8 +58685,7 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
                           <td className="px-2 py-2.5 text-center" onClick={e => e.stopPropagation()}>
                             <button onClick={async () => {
                               if (!confirm("삭제하시겠습니까?")) return;
-                              await mergePlaceContactsIntoClient(r);
-                              await removePlace(id);
+                              await runDelete({ label: "하차지", task: async () => { await mergePlaceContactsIntoClient(r); await removePlace(id); } }); // ⭐ 2026-11-05 진행 창
                             }}
                               className="px-2.5 py-1 bg-red-500 text-white rounded text-xs font-semibold hover:bg-red-600 transition"><EditableText id="misc.btn.54619.삭제" defaultText="삭제" /></button>
                           </td>
@@ -58639,20 +58718,21 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
               <span className="text-[14px] font-bold text-[#1B2B4B]">같은 업체명+주소, 다른 담당자 ({placeAddrDupGroups.length}건)</span>
               <button onClick={async () => {
                 if (!await kpConfirm(`${placeAddrDupGroups.length}건의 중복 거래처를 병합하시겠습니까?\n담당자 정보가 1개의 거래처로 합쳐집니다.`)) return;
-                for (const group of placeAddrDupGroups) {
-                  const primary = group[0];
-                  const duplicates = group.slice(1);
-                  const allContacts = group.map(g => ({ name: g.담당자 || "", phone: g.담당자번호 || "", isPrimary: false })).filter(c => c.name);
-                  if (allContacts.length > 0) allContacts[0].isPrimary = true;
-                  await upsertPlace?.({ ...primary, _id: primary.id, contacts: allContacts });
-                  for (const dup of duplicates) {
-                    await removePlace(dup.id);
+                // ⭐ 2026-11-05 병합(대표 저장)을 먼저 모두 끝내고, 중복 삭제는 한 번에(진행 창) — 목록도 한 번에 갱신
+                const _allDup = placeAddrDupGroups.flatMap(g => g.slice(1).map(d => d.id)).filter(Boolean);
+                const _primPatch = new Map();
+                await runDelete({ count: _allDup.length, label: "중복 하차지", task: async () => {
+                  for (const group of placeAddrDupGroups) {
+                    const primary = group[0];
+                    const allContacts = group.map(g => ({ name: g.담당자 || "", phone: g.담당자번호 || "", isPrimary: false })).filter(c => c.name);
+                    if (allContacts.length > 0) allContacts[0].isPrimary = true;
+                    await upsertPlace?.({ ...primary, _id: primary.id, contacts: allContacts });
+                    _primPatch.set(primary.id, { 담당자: allContacts.map(c => c.name).join(" / "), 담당자번호: allContacts.map(c => c.phone).join(" / ") });
                   }
-                  setPlaceRows(prev => {
-                    const dupIds = new Set(duplicates.map(d => d.id));
-                    return prev.filter(p => !dupIds.has(p.id)).map(p => p.id === primary.id ? { ...p, 담당자: allContacts.map(c => c.name).join(" / "), 담당자번호: allContacts.map(c => c.phone).join(" / ") } : p);
-                  });
-                }
+                  await removePlace(_allDup);
+                } });
+                const _dupIds = new Set(_allDup);
+                setPlaceRows(prev => prev.filter(p => !_dupIds.has(p.id)).map(p => _primPatch.has(p.id) ? { ...p, ..._primPatch.get(p.id) } : p));
                 setPlaceDupDone(true);
               }} className="h-[32px] px-4 rounded-lg text-[13px] font-semibold bg-[#1B2B4B] text-white hover:bg-[#243a60] transition">
                 <EditableText id="client.dupPopup.전체자동병합" defaultText="전체 자동 병합" />
@@ -58669,7 +58749,7 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
                       const allContacts = group.map(g => ({ name: g.담당자 || "", phone: g.담당자번호 || "", isPrimary: false })).filter(c => c.name);
                       if (allContacts.length > 0) allContacts[0].isPrimary = true;
                       await upsertPlace?.({ ...primary, _id: primary.id, contacts: allContacts });
-                      for (const dup of duplicates) await removePlace(dup.id);
+                      await removePlace(duplicates.map(d => d.id)); // ⭐ 2026-11-05 한 번에 삭제 + 진행 창
                       const dupIds = new Set(duplicates.map(d => d.id));
                       setPlaceRows(prev => prev.filter(p => !dupIds.has(p.id)).map(p => p.id === primary.id ? { ...p, 담당자: allContacts.map(c => c.name).join(" / "), 담당자번호: allContacts.map(c => c.phone).join(" / ") } : p));
                     }} className="h-[26px] px-3 rounded-lg text-[12px] font-semibold border border-[#1B2B4B] text-[#1B2B4B] hover:bg-[#1B2B4B] hover:text-white transition">
@@ -58709,9 +58789,7 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
                 <button
                   onClick={async () => {
                     if (!await kpConfirm("체크된 항목을 모두 삭제하시겠습니까?")) return;
-                    for (const id of placeDupSelected) {
-                      await removePlace(id);
-                    }
+                    await removePlace([...placeDupSelected]); // ⭐ 2026-11-05 한 번에 삭제 + 진행 창
                     setPlaceRows(prev => prev.filter(p => !placeDupSelected.has(p.id)));
                     setPlaceDupSelected(new Set());
                     setPlaceDupDone(true);
@@ -58737,9 +58815,7 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
                       onClick={async () => {
                         const toDelete = sorted.slice(1);
                         if (!await kpConfirm(`"${repr.업체명}" 최신 1건 제외 ${toDelete.length}건을 삭제하시겠습니까?`)) return;
-                        for (const p of toDelete) {
-                          await removePlace(p.id);
-                        }
+                        await removePlace(toDelete.map(p => p.id)); // ⭐ 2026-11-05 한 번에 삭제 + 진행 창
                         const delIds = new Set(toDelete.map(p => p.id));
                         setPlaceRows(prev => prev.filter(p => !delIds.has(p.id)));
                         setPlaceDupSelected(prev => { const n = new Set(prev); toDelete.forEach(p => n.delete(p.id)); return n; });

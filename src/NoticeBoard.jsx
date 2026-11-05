@@ -6,6 +6,7 @@
 //  · ⭐ 2026-11-03 받는 사람(직원) 지정 — targetUids의 직원에게만 보이게. "지정 N명"은 본문 안에서만(목록에는 안 보임).
 //  · 🔒 2026-11-03 지정 공지 비공개 — 팀·직원 지정 공지는 지정된 사람 · 작성자 · 최고관리자만(회사 관리자도 지정 안 됐으면 안 보임)
 import React from "react";
+import { runDelete } from "./DeleteProgress"; // ⭐ 2026-11-05 삭제 진행 창 + 한 번에 삭제
 import { RichHtml } from "./richText";
 import { db } from "./firebase";
 import { doc, updateDoc, deleteDoc, arrayUnion } from "firebase/firestore";
@@ -94,7 +95,7 @@ export default function NoticeBoard({ notices = [], me, canWrite, isViewer, onEd
   };
   // 💬 댓글·좋아요 — 회사 공지만(플랫폼 공지는 다른 곳 글), 화주·기사 화면에는 직원 댓글을 보이지 않는다
   const canTalk = (n) => !!n && !n._platform && !!me?.uid && !["shipper", "driver", "cafeUser"].includes(me?.role);
-  const remove = (n) => confirm("공지사항을 삭제하시겠습니까?", async () => { await deleteDoc(doc(db, "notices", n.id)); setOpenId(null); });
+  const remove = (n) => confirm("공지사항을 삭제하시겠습니까?", async () => { await runDelete({ label: "공지", task: () => deleteDoc(doc(db, "notices", n.id)) }); setOpenId(null); }); // ⭐ 2026-11-05 삭제 진행 창
 
   if (cur) {
     const ms = whenOf(cur);

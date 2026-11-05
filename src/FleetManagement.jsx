@@ -50,6 +50,7 @@ import { careSummary, vehicleDefaults } from "./vehicleCare";
 import { useCompanyFeatures } from "./companyFeatures";
 import { lazyView } from "./lazyLoad";
 import { fmtPhone } from "./formatInput";
+import { runDelete, commitDeletes } from "./DeleteProgress"; // ⭐ 2026-11-05 삭제 진행 창 + 한 번에 삭제
 const VehicleLedger = lazyView(() => import("./VehicleLedger"));
 
 // ─── 상수 ────────────────────────────────────────────────────────────────────
@@ -3242,7 +3243,7 @@ function DriverDocumentsPanel({ driverId }) {
 
   const handleDelete = async (id) => {
     if (!await kpConfirm("이 서류를 삭제할까요?")) return;
-    await deleteDoc(doc(db, "driver_documents", id)).catch(() => {});
+    await runDelete({ label: "서류", task: () => deleteDoc(doc(db, "driver_documents", id)) }).catch(() => {}); // ⭐ 2026-11-05 진행 창
   };
 
   const download = (d) => {
@@ -6683,21 +6684,14 @@ export default function FleetManagement({ dispatchData = [], role = "", forceTab
       onConfirmed: async () => {
         setPinModal(null);
         try {
+          // ⭐ 2026-11-05 지울 것(피드 기록 + 위치 이력)을 먼저 모두 모아 한 번에 삭제(writeBatch 동시 커밋) · 삭제 진행 창
           const logsToDelete = [...filteredActivityLogs];
-          for (let i = 0; i < logsToDelete.length; i += 499) {
-            const batch = writeBatch(db);
-            logsToDelete.slice(i, i + 499).forEach(log => batch.delete(doc(db, "driver_logs", log.id)));
-            await batch.commit();
-          }
           const affectedUids = [...new Set(filteredActivityLogs.map(l => l.uid).filter(Boolean))];
-          for (const uid of affectedUids) {
-            const trackSnap = await getDocs(query(collection(db, "gps_tracks"), where("driverId", "==", uid)));
-            for (let i = 0; i < trackSnap.docs.length; i += 499) {
-              const batch = writeBatch(db);
-              trackSnap.docs.slice(i, i + 499).forEach(d => batch.delete(d.ref));
-              await batch.commit();
-            }
-          }
+          await runDelete({ count: logsToDelete.length, label: "활동 기록", task: async (progress) => {
+            const trackSnaps = await Promise.all(affectedUids.map((uid) => getDocs(query(collection(db, "gps_tracks"), where("driverId", "==", uid)))));
+            const refs = [...logsToDelete.map(log => doc(db, "driver_logs", log.id)), ...trackSnaps.flatMap((ts) => ts.docs.map((d) => d.ref))];
+            await commitDeletes(db, refs, { onProgress: (n) => progress(Math.min(logsToDelete.length, n)) });
+          } });
         } catch (e) { console.error("feed delete:", e); }
       },
     });
@@ -6711,17 +6705,12 @@ export default function FleetManagement({ dispatchData = [], role = "", forceTab
       onConfirmed: async () => {
         setPinModal(null);
         try {
-          for (let i = 0; i < selectedDriverLogs.length; i += 499) {
-            const batch = writeBatch(db);
-            selectedDriverLogs.slice(i, i + 499).forEach(log => batch.delete(doc(db, "driver_logs", log.id)));
-            await batch.commit();
-          }
-          const trackSnap = await getDocs(query(collection(db, "gps_tracks"), where("driverId", "==", selected.id)));
-          for (let i = 0; i < trackSnap.docs.length; i += 499) {
-            const batch = writeBatch(db);
-            trackSnap.docs.slice(i, i + 499).forEach(d => batch.delete(d.ref));
-            await batch.commit();
-          }
+          // ⭐ 2026-11-05 기록 + 위치 이력을 모아 한 번에 삭제 · 삭제 진행 창
+          await runDelete({ count: selectedDriverLogs.length, label: "이력", task: async (progress) => {
+            const trackSnap = await getDocs(query(collection(db, "gps_tracks"), where("driverId", "==", selected.id)));
+            const refs = [...selectedDriverLogs.map(log => doc(db, "driver_logs", log.id)), ...trackSnap.docs.map(d => d.ref)];
+            await commitDeletes(db, refs, { onProgress: (n) => progress(Math.min(selectedDriverLogs.length, n)) });
+          } });
         } catch (e) { console.error("driver logs delete:", e); }
       },
     });

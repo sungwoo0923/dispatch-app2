@@ -11,6 +11,7 @@
 // [과태료·사고 서류] 회사로 날아온 과태료·범칙금·사고·보험 할증 우편을 서류로 만든다
 //  F4 = 서류 작성 · 고지서 자동 스캔(사진/Ctrl+V) → 칸 자동 채움 · 기사앱에서 열면 "기사 확인" → 기사님이 [납부 완료]/[이의 신청]
 import React from "react";
+import { runDelete } from "./DeleteProgress"; // ⭐ 2026-11-05 삭제 진행 창 + 한 번에 삭제
 import { kpConfirm, kpAlert } from "./kpDialog";
 import { collection, doc, onSnapshot, query, setDoc, addDoc, updateDoc, deleteDoc, serverTimestamp, where, writeBatch } from "firebase/firestore";
 import * as XLSX from "xlsx";
@@ -731,7 +732,7 @@ export function PenaltyCenter({ drivers = [], companyName = "", supplier = {} })
       setForm(null); setScan(null);
     } catch (e) { kpAlert(`저장 실패: ${e?.message || e}`); } finally { setBusy(false); }
   };
-  const remove = async (p) => { if (await kpConfirm("이 서류를 삭제할까요?\n기사앱 서류함에서도 사라집니다.", { title: "서류 삭제", okText: "삭제", danger: true })) { await deleteDoc(doc(db, "fleetPenalties", p.id)); setView(null); } };
+  const remove = async (p) => { if (await kpConfirm("이 서류를 삭제할까요?\n기사앱 서류함에서도 사라집니다.", { title: "서류 삭제", okText: "삭제", danger: true })) { await runDelete({ label: "서류", task: () => deleteDoc(doc(db, "fleetPenalties", p.id)) }); setView(null); } }; // ⭐ 2026-11-05 삭제 진행 창
   const setStatus = async (p, status) => {
     const extra = status === "납부 완료" ? { paidAt: serverTimestamp() } : {};
     await updateDoc(doc(db, "fleetPenalties", p.id), { status, ...extra, updatedAt: serverTimestamp() }).catch((e) => kpAlert(`변경 실패: ${e?.message || e}`));
