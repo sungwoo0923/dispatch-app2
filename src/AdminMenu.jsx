@@ -286,6 +286,25 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
     applySuggest(t, pos);
   };
   const onPositionChange = (p) => { setEditPosition(p); applySuggest(editTeam, p); };
+  // ⭐ 2026-11-05 부관리자 — 최고관리자(본 계정)가 1명 지정. 권한은 최고관리자와 같음(role totalMaster + subAdmin 표시). 해제하면 예전 권한으로
+  const isSuperMe = me?.email === TOTAL_MASTER_EMAIL;
+  const toggleSubAdmin = async (u) => {
+    if (!isSuperMe) return alert("부관리자는 최고관리자 본 계정만 지정할 수 있습니다.");
+    if (!u || u.email === TOTAL_MASTER_EMAIL) return;
+    const next = !u.subAdmin;
+    if (next) {
+      const other = users.find((x) => x.subAdmin === true && x.id !== u.id);
+      if (other) return alert(`부관리자는 1명만 둘 수 있습니다.\n먼저 「${other.name || other.email}」님의 부관리자를 해제해 주세요.`);
+    }
+    if (!await kpConfirm(next ? `"${u.name || u.email}"님을 부관리자로 지정할까요?\n최고관리자와 같은 권한(모든 운송사·관리센터·요금·삭제)을 갖습니다.` : `"${u.name || u.email}"님의 부관리자를 해제할까요?\n예전 권한(${roleLabels[u.subAdminPrevRole] || u.subAdminPrevRole || "관리자"})으로 돌아갑니다.`)) return;
+    const history = [...(u.personnelHistory || []), { date: todayStr(), type: next ? "부관리자 지정" : "부관리자 해제", detail: meDoc?.name || me?.email || "" }];
+    const patch = next
+      ? { subAdmin: true, subAdminPrevRole: u.role || "admin", role: "totalMaster", approved: true, personnelHistory: history }
+      : { subAdmin: false, role: u.subAdminPrevRole && u.subAdminPrevRole !== "totalMaster" ? u.subAdminPrevRole : "admin", personnelHistory: history };
+    await setDoc(doc(db, "users", u.id), patch, { merge: true });
+    if (manageUser?.id === u.id) setManageUser((prev) => ({ ...prev, ...patch }));
+    if (next) { setEditRole("totalMaster"); } else { setEditRole(patch.role); }
+  };
   const toggleMaster = async (u) => {
     if (!canAdmin) return;
     if (u.id === me?.uid && u.isMaster) return alert("본인의 마스터는 해제할 수 없습니다. 다른 직원을 먼저 마스터로 지정해 주세요.");
@@ -999,6 +1018,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
                             <div className="mt-1 flex items-center gap-2 flex-wrap">
                               <h3 className="text-[26px] font-black tracking-tight leading-tight">{u.name || u.email}</h3>
                               {u.email === TOTAL_MASTER_EMAIL && <span className="text-[11px] px-2 py-0.5 rounded-full bg-white/15 font-bold">총마스터</span>}
+                              {u.subAdmin === true && <span className="text-[11px] px-2 py-0.5 rounded-full bg-[#8FB0F0] text-[#0B1428] font-black" data-subadmin-badge>부관리자</span>}
                               {resigned && <span className="text-[11px] px-2 py-0.5 rounded-full border border-white/30 font-bold">퇴사 {u.resignedAt || ""}</span>}
                             </div>
                             <div className="text-[14px] font-semibold text-white/75 mt-0.5">{[u.position, u.team || "미배정"].filter(Boolean).join(" · ")}</div>
@@ -1166,6 +1186,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
                           onUnapprove={async () => { if (await kpConfirm(`"${u.name || u.email}"님의 승인을 해제할까요?\n해제하면 로그인이 막힙니다.`)) await toggleApprove({ ...u, approved: true }); }}
                           onReject={async () => { if (await removeUser(u)) setMemberModal(false); }}
                           onMaster={() => toggleMaster(u)}
+                          canSubAdmin={isSuperMe && u.email !== TOTAL_MASTER_EMAIL && u.role !== "shipper" && u.role !== "driver"} onSubAdmin={() => toggleSubAdmin(u)}
                           onResign={async () => { if (resigned && !await kpConfirm(`"${u.name || u.email}"님을 복직 처리할까요?`)) return; await setResignStatus(u, !resigned); }}
                           onDelete={async () => { if (await removeUser(u)) setMemberModal(false); }}
                         />
@@ -2073,7 +2094,7 @@ const LANDING_FONT_OPTIONS = [
 ];
 
 // 👤 회원 관리 창 — 버튼 하나로 열고, 그 안에서 승인·거절·정보수정·마스터·퇴사·삭제(모두 확인창)
-function MemberManageModal({ u, me, isTotalMaster, roles, roleLabels, f, onClose, onSave, onApprove, onUnapprove, onReject, onMaster, onResign, onDelete, canMaster = true, canAccount = true, canDelete = true, hrOpt, hrLock = false }) {
+function MemberManageModal({ u, me, isTotalMaster, roles, roleLabels, f, onClose, onSave, onApprove, onUnapprove, onReject, onMaster, onResign, onDelete, canSubAdmin = false, onSubAdmin, canMaster = true, canAccount = true, canDelete = true, hrOpt, hrLock = false }) {
   const positionsForTeam = hrOpt.positionsFor; const TEAM_OPTIONS = hrOpt.teams;
   const [busy, setBusy] = useState(false);
   const pending = u.approved === false && u.employmentStatus !== "퇴사"; // ⭐ 2026-11-02 점검 — 예전 계정(approved 없음)은 승인으로 보고 거절 버튼을 띄우지 않음
@@ -2124,6 +2145,15 @@ function MemberManageModal({ u, me, isTotalMaster, roles, roleLabels, f, onClose
               <div><label className={lab}>퇴근 시간</label>
                 <CustomSelect value={f.editWorkEnd} onChange={(e) => f.setEditWorkEnd(e.target.value)} className={`${inp} tabular-nums`}>{WORK_TIME_OPTIONS.map((t) => <option key={t} value={t}>{t}</option>)}</CustomSelect></div>
             </div>
+            {canSubAdmin && (
+              <div className="mt-3 flex items-center justify-between gap-3 rounded-xl border border-[#C9D6EE] bg-[#F5F8FD] px-3.5 py-2.5" data-subadmin>
+                <div className="min-w-0">
+                  <div className="text-[13px] font-black text-[#0F1A30]">부관리자 {u.subAdmin && <span className="ml-1 px-1.5 rounded bg-[#2D4C82] text-white text-[10.5px]">지정됨</span>}</div>
+                  <div className="text-[11.5px] text-[#7A879C]">최고관리자와 같은 권한 · 1명만 · 해제하면 예전 권한으로</div>
+                </div>
+                <button type="button" disabled={busy} onClick={run(onSubAdmin)} className={`shrink-0 h-9 px-3.5 rounded-xl text-[12.5px] font-black ${u.subAdmin ? "border border-[#0F1A30] text-[#0F1A30]" : "bg-[#2D4C82] text-white"}`}>{u.subAdmin ? "부관리자 해제" : "부관리자 지정"}</button>
+              </div>
+            )}
             {u.role !== "shipper" && canMaster && (
               <div className="mt-3 flex items-center justify-between gap-3 rounded-xl border border-[#E3E8F0] px-3.5 py-2.5">
                 <div className="min-w-0">

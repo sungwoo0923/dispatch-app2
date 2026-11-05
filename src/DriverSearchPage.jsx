@@ -250,14 +250,14 @@ export default function DriverSearchPage() {
             value={vehicleNo}
             onChange={e => setVehicleNo(e.target.value)}
             placeholder="예) 12가1234"
-            onKeyDown={handleKeyDown}
+            onKeyUp={handleKeyDown}
           />
           <InputField
             label="기사 이름"
             value={name}
             onChange={e => setName(e.target.value)}
             placeholder="이름 입력"
-            onKeyDown={handleKeyDown}
+            onKeyUp={handleKeyDown}
           />
 
           {error && (

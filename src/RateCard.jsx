@@ -925,7 +925,7 @@ ${sheet.note ? `<div class="notice">${esc(sheet.note)}</div>` : ""}
                   <label key={lb} className={`flex items-center gap-3 px-3.5 h-12 cursor-text ${i === 0 ? "border-b border-[#E3E8F0]" : ""}`}>
                     <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${i === 0 ? "bg-[#1B2B4B]" : "border-2 border-[#4B6CB7] bg-white"}`} />
                     <span className="text-[12px] font-extrabold text-[#5B6B85] w-8 shrink-0">{lb}</span>
-                    <input autoComplete="off" className="flex-1 min-w-0 bg-transparent !border-0 !shadow-none text-[14px] font-bold text-[#0F1A30] placeholder:text-[#9AA9C3] placeholder:font-medium focus:outline-none" placeholder={ph} value={val} onChange={e => set(e.target.value)} onKeyDown={e => e.key === "Enter" && handleSearch()} />
+                    <input autoComplete="off" className="flex-1 min-w-0 bg-transparent !border-0 !shadow-none text-[14px] font-bold text-[#0F1A30] placeholder:text-[#9AA9C3] placeholder:font-medium focus:outline-none" placeholder={ph} value={val} onChange={e => set(e.target.value)} onKeyUp={e => e.key === "Enter" && handleSearch()} />
                   </label>
                 ))}
               </div>

@@ -212,7 +212,9 @@ export default function TransportLogin() {
           return;
         }
 
-        if ((userData.companyName || "") !== inputCompanyName) {
+        // ⭐ 2026-11-05 부관리자(role totalMaster) — 최고관리자처럼 아무 운송사로나 들어간다(회사명·코드 확인 생략)
+        const isSubAdmin = userData.role === "totalMaster" && userData.subAdmin === true && userData.userStatus !== "banned" && userData.userStatus !== "suspended";
+        if (!isSubAdmin && (userData.companyName || "") !== inputCompanyName) {
           sessionStorage.removeItem("transportValidating");
           await signOut(auth);
           setError("회사명이 일치하지 않습니다. 가입한 회사명을 정확히 입력해주세요.");
@@ -241,7 +243,7 @@ export default function TransportLogin() {
           return;
         }
 
-        if (userData.companyCode) {
+        if (userData.companyCode && !isSubAdmin) {
           if (!inputCompanyCode) {
             sessionStorage.removeItem("transportValidating");
             await signOut(auth);
@@ -541,7 +543,7 @@ export default function TransportLogin() {
                   ref={imeFocusRef}
                   value={codeLookupQ}
                   onChange={e => setCodeLookupQ(e.target.value)}
-                  onKeyDown={e => { if (e.key === "Enter") searchCompanyCode(); }}
+                  onKeyUp={e => { if (e.key === "Enter") searchCompanyCode(); }}
                   placeholder="회사명을 입력하세요"
                   className="flex-1 border border-gray-200 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:border-[#1B2B4B] transition"
                 />

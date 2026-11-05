@@ -23601,7 +23601,7 @@ function AttachStatusPanel({ open, onClose, initialClient, dispatchData, db, com
             <div className="flex flex-col gap-1.5">
               <label className="text-[13px] font-bold text-gray-700"><EditableText id="attachStatus.label.거래처명" defaultText="거래처명" /></label>
               <input autoComplete="off" type="text" value={clientQ} onChange={e => setClientQ(e.target.value)}
-                onKeyDown={e => e.key === "Enter" && handleSearch()} placeholder="거래처명 입력"
+                onKeyUp={e => e.key === "Enter" && handleSearch()} placeholder="거래처명 입력"
                 className="border border-gray-300 rounded-lg px-3 py-2 text-[14px] outline-none focus:border-[#1B2B4B] w-[200px]" />
             </div>
             <div className="flex flex-col gap-1.5">
@@ -29616,7 +29616,7 @@ const head = isDark
       type="text"
       ref={qInputRef}
       defaultValue={qInput}
-      onKeyDown={(e) => { if (e.key === "Enter") { setQ(qInputRef.current?.value ?? ""); } }}
+      onKeyUp={(e) => { if (e.key === "Enter") { setQ(qInputRef.current?.value ?? ""); } }}
       placeholder="검색어"
       className="px-2 h-full text-[11px] w-20 outline-none"
     />
@@ -31047,7 +31047,7 @@ value={copyTarget?.화물수량 || ""}
             placeholder="예: ○○물류단지 (비워두면 전체)"
             value={copyAddrClient}
             onChange={e => setCopyAddrClient(e.target.value)}
-            onKeyDown={e => { if (e.key === "Enter") handleCopyAddrSearch(); }}
+            onKeyUp={e => { if (e.key === "Enter") handleCopyAddrSearch(); }}
           />
         </div>
         <div className="flex gap-3">
@@ -31058,7 +31058,7 @@ value={copyTarget?.화물수량 || ""}
               placeholder="예: 인천"
               value={copyAddrPickup}
               onChange={e => setCopyAddrPickup(e.target.value)}
-              onKeyDown={e => { if (e.key === "Enter") handleCopyAddrSearch(); }}
+              onKeyUp={e => { if (e.key === "Enter") handleCopyAddrSearch(); }}
             />
           </div>
           <div className="flex-1">
@@ -31068,7 +31068,7 @@ value={copyTarget?.화물수량 || ""}
               placeholder="예: 화성"
               value={copyAddrDrop}
               onChange={e => setCopyAddrDrop(e.target.value)}
-              onKeyDown={e => { if (e.key === "Enter") handleCopyAddrSearch(); }}
+              onKeyUp={e => { if (e.key === "Enter") handleCopyAddrSearch(); }}
             />
           </div>
         </div>
@@ -33761,7 +33761,7 @@ if (editTarget.하차지명) savePlaceSmart(editTarget.하차지명, editTarget.
               placeholder="예: 서울 강남구"
               value={ctxAddrPickup4}
               onChange={e => setCtxAddrPickup4(e.target.value)}
-              onKeyDown={e => { if (e.key === "Enter") handleCtxAddrSearch4(); }}
+              onKeyUp={e => { if (e.key === "Enter") handleCtxAddrSearch4(); }}
             />
           </div>
           <div className="flex-1">
@@ -33771,7 +33771,7 @@ if (editTarget.하차지명) savePlaceSmart(editTarget.하차지명, editTarget.
               placeholder="예: 경기 화성시"
               value={ctxAddrDrop4}
               onChange={e => setCtxAddrDrop4(e.target.value)}
-              onKeyDown={e => { if (e.key === "Enter") handleCtxAddrSearch4(); }}
+              onKeyUp={e => { if (e.key === "Enter") handleCtxAddrSearch4(); }}
             />
           </div>
         </div>
@@ -39532,7 +39532,7 @@ return (
           </CustomSelect>
           <input autoComplete="off" className="px-2 h-full text-[11px] w-24 outline-none" placeholder="검색어"
             ref={qInputRef} defaultValue={qInput}
-            onKeyDown={(e)=>{ if(e.key==="Enter"){ handleSearch(); } }} />
+            onKeyUp={(e)=>{ if(e.key==="Enter"){ handleSearch(); } }} />
           <button
             onClick={handleSearch}
             className={`h-full px-2 text-white text-[11px] font-bold transition ${
@@ -42493,7 +42493,7 @@ setCopyPlaceOptions(list);
             placeholder="예: ○○물류단지 (비워두면 전체)"
             value={copyAddrClient}
             onChange={e => setCopyAddrClient(e.target.value)}
-            onKeyDown={e => { if (e.key === "Enter") handleCopyAddrSearch(); }}
+            onKeyUp={e => { if (e.key === "Enter") handleCopyAddrSearch(); }}
           />
         </div>
         <div className="flex gap-3">
@@ -42504,7 +42504,7 @@ setCopyPlaceOptions(list);
               placeholder="예: 인천"
               value={copyAddrPickup}
               onChange={e => setCopyAddrPickup(e.target.value)}
-              onKeyDown={e => { if (e.key === "Enter") handleCopyAddrSearch(); }}
+              onKeyUp={e => { if (e.key === "Enter") handleCopyAddrSearch(); }}
             />
           </div>
           <div className="flex-1">
@@ -42514,7 +42514,7 @@ setCopyPlaceOptions(list);
               placeholder="예: 화성"
               value={copyAddrDrop}
               onChange={e => setCopyAddrDrop(e.target.value)}
-              onKeyDown={e => { if (e.key === "Enter") handleCopyAddrSearch(); }}
+              onKeyUp={e => { if (e.key === "Enter") handleCopyAddrSearch(); }}
             />
           </div>
         </div>
@@ -44390,7 +44390,7 @@ setCopyPlaceOptions(list);
               placeholder="예: 서울 강남구"
               value={ctxAddrPickup5}
               onChange={e => setCtxAddrPickup5(e.target.value)}
-              onKeyDown={e => { if (e.key === "Enter") handleCtxAddrSearch5(); }}
+              onKeyUp={e => { if (e.key === "Enter") handleCtxAddrSearch5(); }}
             />
           </div>
           <div className="flex-1">
@@ -44400,7 +44400,7 @@ setCopyPlaceOptions(list);
               placeholder="예: 경기 화성시"
               value={ctxAddrDrop5}
               onChange={e => setCtxAddrDrop5(e.target.value)}
-              onKeyDown={e => { if (e.key === "Enter") handleCtxAddrSearch5(); }}
+              onKeyUp={e => { if (e.key === "Enter") handleCtxAddrSearch5(); }}
             />
           </div>
         </div>
@@ -56537,7 +56537,7 @@ function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, sho
             placeholder="차량번호 · 기사명 · 연락처로 찾기 (Enter)"
             value={q}
             onChange={e => { setQ(e.target.value); setSearched(false); }}
-            onKeyDown={e => { if (e.key==="Enter") setSearched(true); }}
+            onKeyUp={e => { if (e.key==="Enter") setSearched(true); }}
           />
           <button onClick={()=>setSearched(true)} className="h-9 mr-1.5 px-5 rounded-[12px] bg-[#0F1A30] text-white text-[13.5px] font-black hover:bg-[#1B2B4B]">검색</button>
         </div>
@@ -57394,7 +57394,7 @@ function KpSearchBar({ options, field, onField, value, onChange, onSearch, place
       )}
       <svg className="ml-3 shrink-0 text-[#9AA9C3]" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="m21 21-5-5" /></svg>
       <input autoComplete="off" className="flex-1 min-w-0 h-full px-2.5 bg-transparent text-[14.5px] font-bold text-[#0F1A30] outline-none placeholder:text-[#A7B3C6] placeholder:font-medium"
-        placeholder={placeholder} value={value} onChange={(e) => onChange(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") onSearch(); }} />
+        placeholder={placeholder} value={value} onChange={(e) => onChange(e.target.value)} onKeyUp={(e) => { if (e.key === "Enter") onSearch(); }} />
       <button onClick={onSearch} className="h-9 mr-1.5 px-5 rounded-[12px] bg-[#0F1A30] text-white text-[13.5px] font-black hover:bg-[#1B2B4B]">검색</button>
     </div>
   );

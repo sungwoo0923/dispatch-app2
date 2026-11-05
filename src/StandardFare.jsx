@@ -1149,11 +1149,11 @@ export default function StandardFare({ embedded = false, defaultTab = "표준운
                 </div>
                 <div>
                   <label className={labelCls}>상차지 주소 <span className="text-[#4B6CB7]">*</span></label>
-                  <input autoComplete="off" className={inputCls} placeholder="예: 인천 서구" value={pickupAddr} onChange={e=>setPickupAddr(e.target.value)} onKeyDown={e=>e.key==="Enter"&&search()} />
+                  <input autoComplete="off" className={inputCls} placeholder="예: 인천 서구" value={pickupAddr} onChange={e=>setPickupAddr(e.target.value)} onKeyUp={e=>e.key==="Enter"&&search()} />
                 </div>
                 <div>
                   <label className={labelCls}>하차지 주소 <span className="text-[#4B6CB7]">*</span></label>
-                  <input autoComplete="off" className={inputCls} placeholder="예: 서울 송파구" value={dropAddr} onChange={e=>setDropAddr(e.target.value)} onKeyDown={e=>e.key==="Enter"&&search()} />
+                  <input autoComplete="off" className={inputCls} placeholder="예: 서울 송파구" value={dropAddr} onChange={e=>setDropAddr(e.target.value)} onKeyUp={e=>e.key==="Enter"&&search()} />
                 </div>
               </div>
             )}
@@ -1176,11 +1176,11 @@ export default function StandardFare({ embedded = false, defaultTab = "표준운
               </div>
               <div>
                 <label className={labelCls}>차량톤수</label>
-                <input autoComplete="off" className={inputCls} placeholder="예: 1, 5" value={ton} onChange={e=>setTon(e.target.value)} onKeyDown={e=>e.key==="Enter"&&search()} />
+                <input autoComplete="off" className={inputCls} placeholder="예: 1, 5" value={ton} onChange={e=>setTon(e.target.value)} onKeyUp={e=>e.key==="Enter"&&search()} />
               </div>
               <div>
                 <label className={labelCls}>화물내용</label>
-                <input autoComplete="off" className={inputCls} placeholder="예: 5파레트" value={cargo} onChange={e=>setCargo(e.target.value)} onKeyDown={e=>e.key==="Enter"&&search()} />
+                <input autoComplete="off" className={inputCls} placeholder="예: 5파레트" value={cargo} onChange={e=>setCargo(e.target.value)} onKeyUp={e=>e.key==="Enter"&&search()} />
               </div>
               <div>
                 <label className={labelCls}>정렬방식</label>

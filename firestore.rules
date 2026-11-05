@@ -478,7 +478,7 @@ service cloud.firestore {
         (isApproved() && request.auth.uid != userId) ||
         isTotalMasterUser() ||
         selfUserWriteOk(userId)
-      ) && (hireDateSame() || isHrStaff());
+      ) && (hireDateSame() || isHrStaff()) && roleEscalationOk();
       allow delete: if isApproved();
     }
     match /userProfiles/{userId} {
@@ -569,7 +569,17 @@ service cloud.firestore {
     }
     // 📝 전자결재(2026-10-28) — 기안자·결재자·참조자(participants)만 보고, 관리자는 자기 회사 문서를 모두 본다.
     function isSuperEmail() {
-      return request.auth.token.get('email', '') == "tjddnqkf@naver.com";
+      return request.auth.token.get('email', '') == "tjddnqkf@naver.com"
+        // ⭐ 2026-11-05 부관리자 — 최고관리자와 같은 권한(최고관리자 본 계정이 지정: role totalMaster + subAdmin)
+        || (isSignedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+            && myUser().get('role', '') == 'totalMaster' && myUser().get('subAdmin', false) == true);
+    }
+    // ⭐ 2026-11-05 다른 사람 계정에 최고관리자·부관리자 권한을 넣는 것은 최고관리자만(직원이 직원에게 올려 주던 구멍 막음)
+    function roleEscalationOk() {
+      return isTotalMasterUser() || (
+        (request.resource.data.get('role', '') != 'totalMaster'
+          || (resource != null && resource.data.get('role', '') == 'totalMaster'))
+        && request.resource.data.get('subAdmin', false) == (resource == null ? false : resource.data.get('subAdmin', false)));
     }
     function isCompanyAdmin(company) {
       return isSuperEmail() || myUser().get('role', '') == 'totalMaster' ||

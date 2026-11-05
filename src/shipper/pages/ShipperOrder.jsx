@@ -1201,7 +1201,7 @@ export default function ShipperOrder({ editData, onClose }) {
           </select>
           <div className="flex gap-2">
             <input value={searchKeyword} onChange={e => setSearchKeyword(e.target.value)}
-              onKeyDown={e => { if (e.key === "Enter") handleSearch(); }}
+              onKeyUp={e => { if (e.key === "Enter") handleSearch(); }}
               placeholder="검색어 입력 (Enter)"
               className={inputCls + " flex-1"} />
             <button onClick={handleSearch}

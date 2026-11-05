@@ -1543,7 +1543,7 @@ function ShipperOrderM({ user, userData, orders = [], showToast, onDone, onBack,
                 </div>
                 <input className="input-m flex-1" value={copySearch}
                   onChange={(e) => setCopySearch(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && doCopySearch()}
+                  onKeyUp={(e) => e.key === "Enter" && doCopySearch()}
                   placeholder="검색어 입력" />
                 <button onClick={doCopySearch}
                   className="px-3 py-1.5 text-xs font-semibold text-white rounded-lg shrink-0"

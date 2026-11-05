@@ -5069,7 +5069,7 @@ function CheckInLocModal({ title, initialLoc, onSave, onCancel }) {
             type="text"
             value={addr}
             onChange={e => setAddr(e.target.value)}
-            onKeyDown={e => e.key === "Enter" && handleSearch()}
+            onKeyUp={e => e.key === "Enter" && handleSearch()}
             placeholder="예: 인천시 서구 당하동 완정로8번길"
             style={{ flex: 1, padding: "9px 12px", border: "1px solid #d1d5db", borderRadius: 8, fontSize: 15, outline: "none", fontFamily: "inherit" }}
           />
