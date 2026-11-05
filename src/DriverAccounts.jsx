@@ -2,11 +2,14 @@
 // 🚚 기사관리 › 기사 앱 계정(2026-10-31) — 기사 가입 승인 · 승인된 기사를 카드로. PC·모바일 공용.
 //  카드: 차량번호 번호판 · 차종·톤수 · 연락처 · 거주지 · 필수 서류 완비율 · 가입일 → 승인/거절, 승인 해제
 import React from "react";
-import { collection, deleteDoc, doc, onSnapshot, query, setDoc, updateDoc, where } from "firebase/firestore";
+import { collection, doc, onSnapshot, query, setDoc, updateDoc, where } from "firebase/firestore";
 import { db, DEFAULT_COMPANY } from "./firebase";
 import { useCompanyDriverDocs, docProblems, DRIVER_REQUIRED_DOCS, docState } from "./driverRequiredDocs";
 import { BookHero, Chip, MONO } from "./OfficeBooks";
 import { fmtPhone } from "./formatInput";
+import { kpConfirm } from "./kpDialog";
+// ⭐ 2026-11-05 승인·거절은 프로그램 창(입력 정보 전체 · 가입유형 · 기존 기사 연동)으로 — 브라우저 확인창 대신
+import DriverApproveModal, { findDriverCandidates } from "./DriverApproveModal";
 
 const REQ = DRIVER_REQUIRED_DOCS.filter((d) => d.required);
 const tsDay = (v) => { const ms = v?.toMillis ? v.toMillis() : v?.seconds ? v.seconds * 1000 : 0; return ms ? new Date(ms + 9 * 3600e3).toISOString().slice(0, 10) : ""; };
@@ -34,6 +37,20 @@ export default function DriverAccounts({ company, isViewer = false, tab = "pendi
   const [busy, setBusy] = React.useState("");
   const [kind, setKind] = React.useState("전체");
   const docsBy = useCompanyDriverDocs(company);
+  const [open, setOpen] = React.useState(null); // { id, reject }
+  const [flash, setFlash] = React.useState("");
+  // ⭐ 2026-11-05 기사관리(drivers) — 가입 기사의 가입 문서 + 같은 기사(연동 후보) 찾기용. 가입 승인 탭에서만 받는다
+  const [drvDocs, setDrvDocs] = React.useState([]);
+  React.useEffect(() => {
+    if (!company || tab !== "pending") return undefined;
+    return onSnapshot(query(collection(db, "drivers"), where("companyName", "==", company)), (s) => setDrvDocs(s.docs.map((d) => ({ id: d.id, data: d.data() }))), () => setDrvDocs([]));
+  }, [company, tab]);
+  const [logs, setLogs] = React.useState([]);
+  React.useEffect(() => {
+    if (!company || tab !== "pending") return undefined;
+    return onSnapshot(query(collection(db, "driverSignupLogs"), where("companyName", "==", company)), (s) => setLogs(s.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => (b.at?.seconds || 0) - (a.at?.seconds || 0)).slice(0, 8)), () => setLogs([]));
+  }, [company, tab]);
+  const signupOf = (u) => drvDocs.find((d) => d.id === u.id)?.data || null;
   React.useEffect(() => {
     if (!company) return undefined;
     return onSnapshot(query(collection(db, "users"), where("companyName", "==", company)), (s) => setUsers(s.docs.map((d) => ({ id: d.id, ...d.data() })).filter((u) => u.role === "driver" && (u.companyName || DEFAULT_COMPANY) === company)), () => setUsers([]));
@@ -47,19 +64,21 @@ export default function DriverAccounts({ company, isViewer = false, tab = "pendi
     .filter((u) => kind === "전체" || (u.vehicleType || u.차량종류) === kind)
     .filter((u) => !kw || [u.name, u.carNo, u.phone, u.거주지].some((v) => String(v || "").includes(kw)))
     .sort((a, b) => String(a.name || "").localeCompare(String(b.name || ""), "ko"));
-  const approve = async (u, next) => {
+  // 승인 해제(승인된 기사 탭) — 프로그램 확인창
+  const unapprove = async (u) => {
     if (isViewer) return;
-    if (!window.confirm(next ? `${u.name || "기사"}님 가입을 승인할까요?` : `${u.name || "기사"}님 승인을 해제할까요?\n해제하면 기사앱 로그인이 막힙니다.`)) return;
+    if (!await kpConfirm(`${u.name || "기사"}님 승인을 해제할까요?\n해제하면 기사앱 로그인이 막힙니다.`)) return;
     setBusy(u.id);
     try {
-      await setDoc(doc(db, "users", u.id), { approved: next }, { merge: true });
-      await updateDoc(doc(db, "drivers", u.id), { approved: next }).catch(() => {});
+      await setDoc(doc(db, "users", u.id), { approved: false }, { merge: true });
+      await updateDoc(doc(db, "drivers", u.id), { approved: false, approvalRevoked: true }).catch(() => {}); // 승인 해제 표시 — 기사관리 목록에는 남는다
     } finally { setBusy(""); }
   };
-  const reject = async (u) => {
-    if (isViewer || !window.confirm(`${u.name || "기사"}님 가입 신청을 거절할까요? 신청 정보가 삭제됩니다.`)) return;
-    setBusy(u.id);
-    try { await deleteDoc(doc(db, "users", u.id)); await deleteDoc(doc(db, "drivers", u.id)).catch(() => {}); } finally { setBusy(""); }
+  const openU = open ? pending.find((u) => u.id === open.id) : null;
+  const onDone = (r) => {
+    const u = openU; setOpen(null);
+    setFlash(r.kind === "reject" ? `${u?.name || "기사"}님 가입 신청을 거절했습니다` : r.kind === "link" ? `${u?.name || "기사"}님을 기존 기사 정보에 연동해 「${r.type}」로 승인했습니다` : `${u?.name || "기사"}님을 「${r.type}」 기사로 승인했습니다`);
+    setTimeout(() => setFlash(""), 4000);
   };
   const docRate = (u) => { const b = docsBy?.[u.id] || {}; return REQ.filter((r) => b[r.key] && docState(b[r.key]).tone !== "bad").length / REQ.length; };
   const fullDocs = approved.filter((u) => docRate(u) >= 1).length;
@@ -80,6 +99,7 @@ export default function DriverAccounts({ company, isViewer = false, tab = "pendi
         <div className="grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-3 gap-4">
           {list.map((u) => {
             const rate = docRate(u); const p = docProblems(docsBy?.[u.id]);
+            const cands = tab === "pending" ? findDriverCandidates(u, signupOf(u), drvDocs) : [];
             return (
               <div key={u.id} className={`relative rounded-[22px] p-5 flex flex-col gap-4 text-white overflow-hidden ${tab === "pending" ? "ring-2 ring-[#8FB0F0]/60" : ""}`} style={{ background: CARD_BG, boxShadow: "0 16px 36px rgba(15,26,48,0.28), inset 0 1px 0 rgba(255,255,255,0.08)" }}>
                 <div className="flex items-start gap-3">
@@ -91,10 +111,11 @@ export default function DriverAccounts({ company, isViewer = false, tab = "pendi
                 </div>
                 <Plate no={u.carNo} big />
                 <div className="grid grid-cols-2 gap-2">
-                  {[["차종", [u.vehicleType || u.차량종류, u.tonnage || u.차량톤수].filter(Boolean).join(" ") || "-"], ["연락처", (u.phone && (fmtPhone(u.phone) || u.phone)) || "-"], ["거주지", u.거주지 || u.address || "-"], ["가입일", tsDay(u.createdAt) || "-"]].map(([k, v]) => (
+                  {[["차종", [u.차량종류, u.차량톤수].filter(Boolean).join(" ") || u.vehicleType || "-"] /* ⭐ 2026-11-05 "카고 5톤 5톤" 겹침 수정 */, ["연락처", (u.phone && (fmtPhone(u.phone) || u.phone)) || "-"], ["거주지", u.거주지 || u.address || "-"], ["가입일", tsDay(u.createdAt) || "-"]].map(([k, v]) => (
                     <div key={k} className="min-w-0 rounded-xl bg-white/[0.06] border border-white/10 px-3 py-2"><div className="text-[12px] font-bold text-white/50">{k}</div><div className="text-[15.5px] font-black truncate" style={k === "연락처" || k === "가입일" ? { fontFamily: MONO } : undefined}>{v}</div></div>
                   ))}
                 </div>
+                {cands.some((c) => c.samePlate) && <div className="rounded-xl bg-[#8FB0F0]/15 border border-[#8FB0F0]/40 px-3 py-2 text-[13px] font-black text-[#CFE0FF]">🔗 기사관리에 같은 기사 정보가 있어요 — 승인하면 연동됩니다</div>}
                 {u.요청사항 && <div className="rounded-xl bg-white/[0.06] border border-white/10 px-3 py-2 text-[13.5px] text-white/80 line-clamp-2">요청: {u.요청사항}</div>}
                 <div className="flex items-center gap-1.5 flex-wrap text-[12.5px] font-black">
                   {p.missing ? <span className="px-2 py-1 rounded-lg bg-white/10 text-white/80">서류 미제출 {p.missing}</span> : null}
@@ -106,10 +127,10 @@ export default function DriverAccounts({ company, isViewer = false, tab = "pendi
                   <div className="mt-auto flex gap-2">
                     {tab === "pending" ? (
                       <>
-                        <button type="button" disabled={busy === u.id} onClick={() => reject(u)} className="h-11 px-4 rounded-xl border border-white/20 text-[14px] font-black text-white/75">거절</button>
-                        <button type="button" disabled={busy === u.id} onClick={() => approve(u, true)} className="flex-1 h-11 rounded-xl bg-white text-[#0F1A30] text-[15px] font-black disabled:opacity-50">승인</button>
+                        <button type="button" onClick={() => setOpen({ id: u.id, reject: true })} className="h-11 px-4 rounded-xl border border-white/20 text-[14px] font-black text-white/75">거절</button>
+                        <button type="button" data-testid="drv-card-approve" onClick={() => setOpen({ id: u.id, reject: false })} className="flex-1 h-11 rounded-xl bg-white text-[#0F1A30] text-[15px] font-black disabled:opacity-50">승인</button>
                       </>
-                    ) : <button type="button" disabled={busy === u.id} onClick={() => approve(u, false)} className="ml-auto h-10 px-4 rounded-xl border border-[#FDA29B]/40 text-[13.5px] font-black text-[#FDA29B]">승인 해제</button>}
+                    ) : <button type="button" disabled={busy === u.id} onClick={() => unapprove(u)} className="ml-auto h-10 px-4 rounded-xl border border-[#FDA29B]/40 text-[13.5px] font-black text-[#FDA29B]">승인 해제</button>}
                   </div>
                 )}
               </div>
@@ -117,6 +138,33 @@ export default function DriverAccounts({ company, isViewer = false, tab = "pendi
           })}
         </div>
       )}
+      {tab === "pending" && logs.length > 0 && (
+        <div className="rounded-2xl bg-white border border-[#E3E8F0] p-4">
+          <div className="text-[13px] font-black text-[#0F1A30] mb-2">최근 처리 기록</div>
+          <div className="divide-y divide-[#F1F4F9]">
+            {logs.map((l) => (
+              <div key={l.id} className="py-2 flex items-center gap-2 text-[13px] flex-wrap">
+                <span className={`px-2 h-[22px] inline-flex items-center rounded-md text-[11.5px] font-black ${l.kind === "reject" ? "bg-[#FEE4E2] text-[#B42318]" : "bg-[#E7F0FF] text-[#2D4C82]"}`}>{l.kind === "reject" ? "거절" : l.kind === "link" ? `연동 승인 · ${l.type || ""}` : `승인 · ${l.type || ""}`}</span>
+                <span className="font-black text-[#0F1A30]">{l.name || "-"}</span>
+                <span className="font-bold text-[#5B6B85]" style={{ fontFamily: MONO }}>{l.carNo || ""}</span>
+                {l.reason && <span className="font-bold text-[#7A879C] truncate max-w-full">사유: {l.reason}</span>}
+                <span className="ml-auto text-[12px] font-bold text-[#9AA9C3]">{tsDay(l.at)} · {l.by || ""}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+      {flash && <div className="fixed left-1/2 -translate-x-1/2 bottom-6 z-[2147481000] px-5 py-3 rounded-2xl bg-[#0F1A30] text-white text-[14px] font-black shadow-[0_12px_30px_rgba(11,20,40,0.35)]">{flash}</div>}
+      {openU && (
+        <DriverApproveModal key={openU.id} u={openU} signup={signupOf(openU)} candidates={findDriverCandidates(openU, signupOf(openU), drvDocs)}
+          bizDoc={docsBy?.[openU.id]?.bizReg} company={company} startReject={!!open.reject} onClose={() => setOpen(null)} onDone={onDone} />
+      )}
     </div>
   );
+}
+
+// ⭐ 2026-11-05 모바일 「기사 앱 계정」 화면 — 가입 승인 / 승인된 기사 탭 상태를 가진 감싸개
+export function DriverAccountsPage({ company, isViewer = false, initialTab = "pending" }) {
+  const [tab, setTab] = React.useState(initialTab);
+  return <DriverAccounts company={company} isViewer={isViewer} tab={tab} onTab={setTab} />;
 }

@@ -432,7 +432,9 @@ function AcctDashboard({ company, dispatchData = [], onGo, me, att }) {
   const sixSum = six.reduce((a, x) => [a[0] + x.sale, a[1] + x.buy, a[2] + x.profit], [0, 0, 0]);
   const rate = cur[0] ? ((cur[0] - cur[1]) / cur[0]) * 100 : 0;
   const docWait = Object.values(docsBy || {}).reduce((s, b) => s + (docProblems(b).wait ? 1 : 0), 0);
-  const pendingStaff = (users || []).filter((u) => u.approved === false && u.employmentStatus !== "퇴사" && !["shipper", "cafeUser", "totalMaster"].includes(u.role)).length;
+  // ⭐ 2026-11-05 직원 가입과 기사 가입을 나눈다 — 기사는 기사관리 › 기사 앱 계정 › 가입 승인으로
+  const pendingStaff = (users || []).filter((u) => u.approved === false && u.employmentStatus !== "퇴사" && !["shipper", "cafeUser", "totalMaster", "driver"].includes(u.role)).length;
+  const pendingDrv = (users || []).filter((u) => u.approved === false && u.role === "driver").length;
   const tax = taxEvents(today).slice(0, 5);
   const banks = [...(F.list || [])].filter((f) => f.kind !== "대출").sort((a, b) => (b.balance || 0) - (a.balance || 0)).slice(0, 5);
   const bankMax = Math.max(1, ...banks.map((f) => Math.abs(f.balance || 0)));
@@ -444,7 +446,8 @@ function AcctDashboard({ company, dispatchData = [], onGo, me, att }) {
     ["용차 지급 대기", `지난달~이번 달 · 지입 제외 · ${ap.length}건`, `${short(apSum)}원`, ap.length, "정산관리:지급관리"],
     ["소모품 재고 부족", "최소 수량 이하", `${lowStock.length}종`, lowStock.length, "비품관리"],
     ["기사 서류 검토 대기", "통장 사본·사업자등록증 등", `${docWait}명`, docWait, "기사서류"],
-    ["직원·기사 가입 승인", "관리자메뉴 › 회원 관리 · 기사관리", `${pendingStaff}명`, pendingStaff, "관리자메뉴"],
+    ["직원 가입 승인", "관리자메뉴 › 회원 관리", `${pendingStaff}명`, pendingStaff, "관리자메뉴"],
+    ["기사 가입 승인", "기사관리 › 기사 앱 계정", `${pendingDrv}명`, pendingDrv, "기사승인"],
   ];
   const myName = me?.name || "";
   return (

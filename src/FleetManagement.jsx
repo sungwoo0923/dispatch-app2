@@ -1160,8 +1160,6 @@ function RegistrationTab({ usersMap, myCompanyName, driversRaw = [], myUid = nul
     return [...list, ...extra];
   }, [usersMap, rawById, myCompanyName, driversRaw]);
 
-  const pending = useMemo(() => driverList.filter(d => !d.approved)
-    .sort((a, b) => (resolveTs(b.createdAt)?.getTime() || 0) - (resolveTs(a.createdAt)?.getTime() || 0)), [driverList]);
   const approved = useMemo(() => driverList.filter(d => d.approved), [driverList]);
   const mine = useMemo(() => approved.filter(d => myUid && d.담당자?.uid === myUid), [approved, myUid]);
   const base = scope === "mine" ? mine : approved;
@@ -1220,7 +1218,7 @@ function RegistrationTab({ usersMap, myCompanyName, driversRaw = [], myUid = nul
     setApprovingId(uid);
     try {
       await updateDoc(doc(db, "users", uid), { approved: doApprove });
-      try { await updateDoc(doc(db, "drivers", uid), { approved: doApprove }); } catch (_) {}
+      try { await updateDoc(doc(db, "drivers", uid), { approved: doApprove, approvalRevoked: !doApprove }); } catch (_) {} // ⭐ 2026-11-05 승인 해제 표시(기사관리 목록에 남게)
     } catch (e) {
       console.error("approve error:", e);
     } finally {
@@ -1279,31 +1277,9 @@ function RegistrationTab({ usersMap, myCompanyName, driversRaw = [], myUid = nul
         {stat("전체 등록 기사", `${approved.length}명`)}
         {stat("지금 앱 접속중", `${approved.filter(d => d.online).length}명`, NAVY)}
         {stat("앱 미가입", `${approved.filter(d => d.noApp).length}명`, "#5B6B85")}
-        {stat("승인 대기", `${pending.length}명`, pending.length ? "#b45309" : "#6b7280")}
       </div>
 
-      {/* 승인 대기 */}
-      {pending.length > 0 && (
-        <div style={{ background: "#fffbeb", border: "1.5px solid #fcd34d", borderRadius: 12, padding: "14px 18px" }}>
-          <div style={{ fontSize: 17, fontWeight: 900, color: "#92400e", marginBottom: 8 }}>가입 승인 대기 {pending.length}명</div>
-          {pending.map(d => (
-            <div key={d.uid} style={{ display: "flex", alignItems: "center", gap: 14, padding: "10px 0", borderTop: "1px solid #fde68a", flexWrap: "wrap" }}>
-              <span style={{ fontSize: 17, fontWeight: 900, color: "#111827", minWidth: 80 }}>{d.이름}</span>
-              <span style={{ fontSize: 16, fontWeight: 800, color: "#111827", border: "1.5px solid #111827", borderRadius: 5, padding: "1px 8px" }}>{d.차량번호}</span>
-              <span style={{ fontSize: 15, fontWeight: 700, color: "#374151" }}>{[d.차량종류, d.차량톤수].filter(v => v !== "미입력").join(" ") || "-"}</span>
-              <span style={{ fontSize: 16, fontWeight: 700, color: "#111827" }}>{d.전화번호 ? formatPhone(d.전화번호) : "-"}</span>
-              {d.companyName && <span style={{ fontSize: 14, fontWeight: 700, color: "#4b5563" }}>{d.companyName}</span>}
-              <span style={{ marginLeft: "auto", fontSize: 14, color: "#6b7280", fontWeight: 700 }}>{d.createdAt ? formatDate(d.createdAt) : ""}</span>
-              <button onClick={() => handleApprove(d.uid, true)} disabled={approvingId === d.uid}
-                style={{ padding: "8px 20px", borderRadius: 8, border: "none", background: NAVY, color: "#fff", fontSize: 16, fontWeight: 800, cursor: "pointer", opacity: approvingId === d.uid ? 0.6 : 1 }}>
-                {approvingId === d.uid ? "처리중..." : "승인"}
-              </button>
-              <button onClick={() => handleApprove(d.uid, false)} disabled={!!approvingId}
-                style={{ padding: "8px 16px", borderRadius: 8, border: "1px solid #fca5a5", background: "#fff", color: "#dc2626", fontSize: 16, fontWeight: 800, cursor: "pointer" }}>거절</button>
-            </div>
-          ))}
-        </div>
-      )}
+      {/* ⭐ 2026-11-05 가입 승인 대기 배너 삭제 — 기사 가입 승인은 기사관리 › 기사 앱 계정 › 가입 승인에서만(지입·직영·임대 지정 + 기존 기사 연동) */}
 
       {/* 내 차량 / 전체 토글 + 검색·필터 */}
       <div style={{ background: "#fff", border: "1px solid #e2e7ef", borderRadius: 12, padding: "14px 16px", display: "flex", flexDirection: "column", gap: 12 }}>
@@ -6624,10 +6600,6 @@ export default function FleetManagement({ dispatchData = [], role = "", forceTab
     onDuty: drivers.filter(d => phaseById.get(d.id) !== "휴차" && d.active).length,
   }), [drivers, phaseById]);
 
-  const pendingCount = useMemo(() =>
-    Object.values(usersMap).filter(u => !u.approved).length,
-    [usersMap]
-  );
 
   // ── 핸들러 ───────────────────────────────────────────────────────────────
   const handleRefresh = useCallback(() => {
@@ -6864,11 +6836,7 @@ export default function FleetManagement({ dispatchData = [], role = "", forceTab
                 {label}
                 <span style={{ display: "block", fontFamily: FC_MONO, fontSize: 9.5, fontWeight: 800, letterSpacing: "0.18em", color: on ? "rgba(207,224,255,.75)" : "#A0AEC0", marginTop: 1 }}>{code}</span>
               </span>
-              {key === "registration" && pendingCount > 0 && (
-                <span style={{ background: "#ef4444", color: "white", fontSize: 13, fontWeight: 800, padding: "1px 7px", borderRadius: 99 }}>
-                  {pendingCount}
-                </span>
-              )}
+              {/* ⭐ 2026-11-05 가입 승인 대기 숫자 삭제(기사 앱 계정 › 가입 승인에만) */}
             </button>
             );
           })}

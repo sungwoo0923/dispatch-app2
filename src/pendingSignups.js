@@ -8,6 +8,10 @@ export const isPendingSignup = (u, company) =>
   !!u && u.approved === false && u.employmentStatus !== "퇴사" && !["deleted", "withdrawn"].includes(u.status) &&
   !["shipper", "cafeUser", "totalMaster"].includes(u.role) && (u.companyName || DEFAULT_COMPANY) === company;
 
+// ⭐ 2026-11-05 기사앱 가입 때 만든 drivers/{uid} 문서(승인 전) — 기사관리 목록·숫자에서는 빼고 기사 앱 계정 › 가입 승인에서만 보인다
+//  (승인 해제한 기사는 approvalRevoked 표시가 있어 기사관리에 그대로 남는다)
+export const isPendingSignupDriver = (d) => !!d && d.approved === false && !!d.uid && d.approvalRevoked !== true;
+
 export function usePendingSignups(company) {
   const [list, setList] = React.useState([]);
   React.useEffect(() => {
@@ -18,7 +22,7 @@ export function usePendingSignups(company) {
       const p = s.docs.map((d) => ({ id: d.id, ...d.data() })).filter((u) => isPendingSignup(u, company));
       if (!first) {
         p.filter((u) => !seen.has(u.id)).forEach((u) => {
-          const msg = u.role === "driver" ? `▸ 기사 가입 신청 · ${u.name || ""} ${u.carNo || ""}` : `◆ 직원 가입 신청 · ${u.name || u.email || ""} — 관리자메뉴 › 회원 관리에서 승인해 주세요`;
+          const msg = u.role === "driver" ? `▸ 기사 가입 신청 · ${u.name || ""} ${u.carNo || ""} — 기사관리 › 기사 앱 계정 › 가입 승인에서 승인해 주세요` /* ⭐ 2026-11-05 */ : `◆ 직원 가입 신청 · ${u.name || u.email || ""} — 관리자메뉴 › 회원 관리에서 승인해 주세요`;
           try { window.__sflowShowToast?.(msg, "info"); } catch { /* 무시 */ }
           try {
             if (typeof Notification !== "undefined" && Notification.permission === "granted" && document.visibilityState !== "visible") {

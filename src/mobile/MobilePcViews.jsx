@@ -16,6 +16,7 @@ import { useBoardNoticesWithPlatform } from "../PlatformNoticeBanner";
 import { NoticeWriter, NOTICE_WRITER_ROLES, useNoticePolicy, canWriteNoticeFor, NoticePolicyPicker } from "../HomeWriters";
 import { OrderHistoryContext } from "../orderHistory";
 import StaffManager from "../StaffManager";
+import { DriverAccountsPage } from "../DriverAccounts"; // ⭐ 2026-11-05 모바일 기사 앱 계정(가입 승인)
 import { ROLE_LABELS } from "../customRoles";
 import DeptDashboard from "../DeptDashboard";
 import DriverDocsReview from "../DriverDocsReview";
@@ -229,6 +230,7 @@ export default function MobilePcView({ kind, users = [], dispatchData = [], fixe
   );
   else if (kind === "fleet") body = <FleetView dispatchData={dispatchData} userCompany={userCompany} role={role} onRegisterBack={onRegisterBack} />;
   else if (kind === "approval") body = <ApprovalView company={userCompany} me={me} initialPage={initial || "inbox"} />;
+  else if (kind === "drvacc") body = <div className="px-3 py-3 kp-m-pc"><DriverAccountsPage company={userCompany} isViewer={role === "viewer"} /></div>; // ⭐ 2026-11-05 기사 가입 승인은 여기서만
   else if (kind === "staff") body = <StaffManager company={userCompany} role={role} myUid={me?.uid} initialTab={initial || "pending"} compact={role === "test" || role === "hrManager"} />;
   else if (kind === "notice") body = <NoticeView company={userCompany} me={{ ...(me || {}), role: me?.role || role, isMaster: me?.isMaster === true || prof?.isMaster === true }} />;
   else if (String(kind).startsWith("dept")) {

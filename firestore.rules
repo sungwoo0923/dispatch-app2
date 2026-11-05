@@ -515,6 +515,11 @@ service cloud.firestore {
         (plateId(myUser().carNo) == driverId ||
          myUser().get('companyName', '').trim() + '__' + plateId(myUser().carNo) == driverId));
     }
+    // ⭐ 2026-11-05 기사 가입 승인·거절 처리 기록(거절 사유 등) — 같은 운송사 직원만 보고 남긴다. 고치거나 지울 수 없음
+    match /driverSignupLogs/{id} {
+      allow read: if isOfficeStaff() && coMatch(resource.data);
+      allow create: if isOfficeStaff() && coCreate();
+    }
     match /transportApplications/{id} {
       allow create: if isSignedIn();
       allow get, list, delete: if isApproved();
@@ -862,7 +867,9 @@ service cloud.firestore {
         // ⭐ 2026-11-02 운임규칙 · 회사별 맞춤 기능(위에서 따로 정함)
         'fareRules', 'companyFeatures', 'companySettings', 'vehicleLedger', 'vehicleLedgerFiles', 'vehicleTypes',
         // 💰 2026-11-04 플랫폼 운영 문서 — 위에서 따로 정함(예전엔 siteConfig가 이 목록에 없어 승인된 고객사 직원도 요금·관제 집계를 읽을 수 있었다)
-        'siteConfig', 'platformConfig', 'platformUsage', 'usageCounters']);
+        'siteConfig', 'platformConfig', 'platformUsage', 'usageCounters',
+        // ⭐ 2026-11-05 기사 가입 처리 기록 — 위에서 따로 정함
+        'driverSignupLogs']);
     }
   }
 }
