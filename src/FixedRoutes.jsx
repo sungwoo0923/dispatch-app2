@@ -85,14 +85,6 @@ function GenProgressModal({ p }) {
       </div>
     </div>, document.body);
 }
-const Step = ({ n, title, sub }) => (
-  <div className="flex items-baseline gap-x-2.5 gap-y-0.5 mb-3.5 flex-wrap">
-    <span className="text-[12px] font-black text-[#2D4C82] tracking-[0.14em]" style={{ fontFamily: MONO }}>STEP {n}</span>
-    <span className="text-[17px] font-black text-[#0F1A30] whitespace-nowrap">{title}</span>
-    {sub && <span className="text-[12.5px] font-semibold text-[#9AA9C3]">{sub}</span>}
-  </div>
-);
-
 // 🔎 배차관리처럼 — 입력하면 거래처관리에 등록된 거래처·상하차지가 바로 뜬다(↑↓ 이동 · Enter 선택 · Esc 닫기)
 //  ⭐ 2026-11-02 목록을 화면 맨 위(portal)에 띄운다 — 정류지 카드·운임 상자 안에서 잘리거나 다음 칸에 가려지던 문제.
 //   한글 입력 중(조합 중) Enter·방향키는 조합이 끝난 뒤의 목록으로 처리(마지막 글자가 빠진 채 골라지던 문제).
@@ -262,6 +254,60 @@ const groupSuffix = (r, G) => (G.payer === routeClient(r) ? payKey(G.pay) : `${p
 // 묶음 이름(화면 표시용) — 거래처가 노선 거래처와 다르면 거래처도 같이
 export const groupLabel = (r, G) => (G.payer && G.payer !== routeClient(r) ? `${G.payer} ${G.pay}` : G.pay);
 const blankRoute = () => ({ name: "", client: "", color: COLORS[2], stops: [blankStop("상차"), blankStop("하차")], days: ["월", "화", "수", "목", "금"], startTime: "", tonnage: "", vehicleType: "", dispatchType: "고정기사", fareClient: "", fareDriver: "", payMethod: "", driverKey: "", driverName: "", carNo: "", phone: "", startDate: kst(), endDate: "", skipDates: [], autoDispatch: true, autoAccept: true, active: true, memo: "" });
+
+// ⭐ 2026-11-05 등록폼 새 구조 ↔ 저장 모양(생성기가 읽는 칸 그대로) 변환
+//  화면(form)에만 있는 칸: _cargo(노선 기본 화물 1번만 입력) · _fareMode("route"=노선 전체 한 번에 / "seg"=구간별로 따로)
+//                         stops[i]._more(담당자·연락처·메모 펼침) · stops[i]._payer(이 구간 청구처 다르게)
+//  저장할 때(toRoute)
+//   · 기본 화물 → 첫 정류지(상차지)의 cargo·cargoType·tonVal·tonType(생성기 mainCargo = 화물이 있는 첫 정류지) · 하차지 화물은 비운다
+//     경유·거점(가운데 정류지) 화물 = 그 정류지 칸 그대로(오더 경유지 목록에 들어간다)
+//   · "노선 전체" → fareClient·fareDriver·payMethod·fareType(단일 운임) + 정류지 운임 칸은 모두 비움(fareMode "base")
+//   · "구간별"    → 구간(앞 정류지 → 이 정류지) 운임 = 도착 정류지 stops[i].fareClient·fareDriver·payMethod·fareType
+//                   청구처 다르게를 켠 구간만 stops[i].client(끄면 비움 = 노선 거래처) · 저장 때 fareMode "stop", 기본 칸 = 합계
+//  예전 노선 불러오기(toForm)
+//   · 기본 화물 = 상차지 화물, 없으면 하차지 화물 · 정류지 운임이 있으면 "구간별"로 연다
+//     (단, 상·하차 2곳뿐이고 하차지 한 곳만 운임·같은 거래처면 "노선 전체"로 합쳐서 연다 — 배차 결과는 같다)
+const CARGO_KEYS = ["cargo", "cargoType", "tonVal", "tonType"];
+const pickCargo = (s = {}) => Object.fromEntries(CARGO_KEYS.map((k) => [k, s[k] || ""]));
+const STOP_FARE_BLANK = { fareClient: "", fareDriver: "", payMethod: "", client: "", fareType: "", fareManual: false };
+const namedIdx = (stops) => stops.map((s, i) => (String(s.name || "").trim() || String(s.addr || "").trim() ? i : -1)).filter((i) => i >= 0);
+const endsOf = (stops) => { const n = namedIdx(stops); return { first: n.length ? n[0] : 0, last: n.length ? n[n.length - 1] : stops.length - 1 }; };
+export const toForm = (r) => {
+  const f = { ...blankRoute(), ...r };
+  const stops = (Array.isArray(f.stops) && f.stops.length ? f.stops : blankRoute().stops).map((s) => ({ ...blankStop(s?.type || "하차"), ...s }));
+  const { first, last } = endsOf(stops);
+  const src = [stops[first], stops[last]].find((s) => s && (s.cargo || s.tonVal)) || {};
+  const rc = routeClient(f);
+  const t = routeTotals({ ...f, stops });
+  let mode = t.perStop ? "seg" : "route";
+  if (mode === "seg" && namedIdx(stops).length <= 2 && t.seg.length === 1 && !t.legacyClient && !t.legacyDriver && payerOf(f, t.seg[0]) === rc) {
+    const s = stops[last];
+    Object.assign(f, { fareClient: String(t.seg[0].청구 || ""), fareDriver: String(t.seg[0].기사 || ""), payMethod: s.payMethod || f.payMethod || "", fareType: s.fareType || f.fareType || "", fareManual: !!s.fareManual, fareMode: "base" });
+    stops[last] = { ...s, ...STOP_FARE_BLANK };
+    mode = "route";
+  }
+  return {
+    ...f, _cargo: pickCargo(src), _fareMode: mode,
+    stops: stops.map((s) => ({ ...s, _more: !!(s.manager || s.contact || s.memo), _payer: !!(String(s.client || "").trim() && norm(s.client) !== norm(rc)) })),
+  };
+};
+export const toRoute = (form) => {
+  const { _cargo = {}, _fareMode = "route", ...rest } = form;
+  const seg = _fareMode === "seg";
+  const { first, last } = endsOf(rest.stops || []);
+  const stops = (rest.stops || []).map((s, i) => {
+    const { _more, _payer, ...x } = s; void _more;
+    if (i === first) Object.assign(x, pickCargo(_cargo));
+    else if (i === last) Object.assign(x, pickCargo({}));
+    if (!seg || i <= first) Object.assign(x, STOP_FARE_BLANK);
+    else if (!_payer) x.client = "";
+    return x;
+  });
+  const out = { ...rest, stops };
+  if (!seg) out.fareMode = "base";
+  else if (rest.fareMode === "stop") Object.assign(out, { fareClient: "", fareDriver: "" }); // 저장 때 합계로 채운다
+  return out;
+};
 
 // ─── 배차 자동 생성 — 오늘부터 N일 앞까지, 노선·날짜마다 한 건(문서 번호 고정이라 여러 명이 동시에 열어도 중복 없음) ───
 // ⭐ 2026-11-01 지급방식이 서로 다른 정류지가 있으면 지급방식별로 나눠 여러 건 — [0]이 대표 오더(fr_노선_날짜, 전체 경로)
@@ -702,12 +748,12 @@ export default function FixedRoutes({ drivers = [], companyName = "", dispatchDa
     if (!form.name.trim()) return kpAlert("노선 이름을 입력해 주세요.");
     if (!(form.stops || []).some((s) => s.name.trim() || s.addr.trim())) return kpAlert("정류지를 한 곳 이상 입력해 주세요.");
     // ⭐ 2026-11-01 지급방식은 필수 — 빠진 칸을 빨갛게 표시하고 첫 칸으로 이동
-    const fp = fareProblems(form);
+    const fp = fareProblems(toRoute(form)); // ⭐ 2026-11-05 저장될 모양(운임 방식 반영)으로 확인
     if (fp.miss.length || fp.legacy) {
       setTried(true);
       const names = fp.miss.map((i) => (i === "route" ? "기본 운임" : `${String(i + 1).padStart(2, "0")} ${form.stops[i]?.name || form.stops[i]?.type || ""}`));
       setTimeout(() => document.getElementById(fp.miss.length ? `fr-pay-${fp.miss[0]}` : "fr-legacy")?.scrollIntoView({ behavior: "smooth", block: "center" }), 50);
-      return kpAlert([fp.miss.length ? `지급방식을 골라 주세요.\n빠진 곳: ${names.join(", ")}` : "", fp.legacy ? "기본 운임과 정류지별 운임이 같이 들어 있습니다.\nSTEP 03에서 [하차지 운임에 합치기] 또는 [기본 운임 지우기]를 눌러 주세요." : ""].filter(Boolean).join("\n\n"));
+      return kpAlert([fp.miss.length ? `지급방식을 골라 주세요.\n빠진 곳: ${names.join(", ")}` : "", fp.legacy ? "기본 운임과 구간별 운임이 같이 들어 있습니다.\n운임 칸에서 [하차지 운임에 합치기] 또는 [기본 운임 지우기]를 눌러 주세요." : ""].filter(Boolean).join("\n\n"));
     }
     setReview(true);
   };
@@ -718,15 +764,12 @@ export default function FixedRoutes({ drivers = [], companyName = "", dispatchDa
     const stops = merge && lastPaid ? p.stops.map((s, i) => (i === lastPaid.i ? { ...s, fareClient: String(toInt(s.fareClient) + toInt(p.fareClient)), fareDriver: String(toInt(s.fareDriver) + toInt(p.fareDriver)) } : s)) : p.stops;
     return { ...p, stops, fareMode: "stop", fareClient: "", fareDriver: "" };
   });
-  const applyCargoAll = () => {
-    const src = (form.stops || []).find((s, i) => i > 0 && (s.cargo || s.tonVal)) || (form.stops || []).find((s) => s.cargo || s.tonVal);
-    if (!src) return kpAlert("먼저 한 곳에 화물내용·톤수를 입력해 주세요.");
-    setForm((p) => ({ ...p, stops: p.stops.map((s, i) => (i === 0 ? s : { ...s, cargo: src.cargo, cargoType: src.cargoType, tonVal: src.tonVal, tonType: src.tonType })) }));
-  };
   const save = async () => {
     setBusy(true);
     try {
-      const data = { ...form, companyName: co, stops: form.stops.filter((s) => s.name.trim() || s.addr.trim()), updatedAt: serverTimestamp(), updatedBy: auth.currentUser?.email || "" };
+      // ⭐ 2026-11-05 화면 모양(기본 화물·운임 방식) → 저장 모양(생성기가 읽는 정류지 칸) — toRoute
+      const R = toRoute(form);
+      const data = { ...R, companyName: co, stops: R.stops.filter((s) => s.name.trim() || s.addr.trim()), updatedAt: serverTimestamp(), updatedBy: auth.currentUser?.email || "" };
       delete data.id;
       // ⭐ 2026-11-01 정류지별 운임이면 기본 운임 칸 = 정류지 합계(목록·다른 화면이 fareClient를 읽어도 같은 값)
       const tt = routeTotals(data);
@@ -781,6 +824,21 @@ export default function FixedRoutes({ drivers = [], companyName = "", dispatchDa
   };
   // ⭐ 2026-11-05 배차 만들기 + 가운데 "등록 중" 창(진행 n / 전체건)
   const [prog, setProg] = React.useState(null);
+  // ⭐ 2026-11-05 등록폼 아래 저장줄 — 화면(PC 본문·휴대폰 본문)이 overflow-x:hidden이라 sticky가 안 먹어서
+  //  자리(placeholder)의 왼쪽·너비를 재서 화면 맨 아래에 fixed로 붙인다(사이드바를 접거나 창 크기를 바꾸면 다시 잰다)
+  const barRef = React.useRef(null);
+  const [barBox, setBarBox] = React.useState(null);
+  const formOpen = !!form;
+  React.useEffect(() => {
+    const el = barRef.current;
+    if (!formOpen || !el) return undefined;
+    const upd = () => { const r = el.getBoundingClientRect(); if (!r.width) return; setBarBox((b) => (b && b.l === r.left && b.w === r.width ? b : { l: r.left, w: r.width })); };
+    upd();
+    const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(upd) : null;
+    ro?.observe(el); window.addEventListener("resize", upd);
+    const t = setInterval(upd, 1000);
+    return () => { ro?.disconnect(); window.removeEventListener("resize", upd); clearInterval(t); };
+  }, [formOpen]);
   const runGen = async (list, opts = {}) => {
     setProg({ done: 0, total: 0, made: 0 });
     try { return await ensureFixedRouteOrders(list, { force: true, ...opts, onProgress: (p) => setProg({ ...p }) }); }
@@ -808,205 +866,360 @@ export default function FixedRoutes({ drivers = [], companyName = "", dispatchDa
   const ordersOf = (r) => (dispatchData || []).filter((o) => o.고정노선Id === r.id).sort((a, b) => String(b.상차일).localeCompare(String(a.상차일))).slice(0, 8);
 
   // ───────────── 편집 화면 ─────────────
+  // ⭐ 2026-11-05 등록폼 전면 개편(팀장님 요청)
+  //  · 맨 위 머리 카드 = 노선 이름 · 거래처(청구처, 한 곳에서만) · 운행 ON/OFF · 취소/저장
+  //  · 왼쪽 ROUTE 경로 = 정류지 순서(상차 → 경유·거점 → 하차) + 그 곳의 상차/하차방법 · 담당자·연락처·메모는 접어 둠
+  //  · 오른쪽 CARGO 화물(기본 1장 + 경유·거점마다 1장) → FARE 운임(노선 전체 / 구간별) → DRIVER 기사·차량 → SCHEDULE 운행 일정
+  //  · 맨 아래 고정 저장줄 = 요일 · 기간 · 청구 합계 + [고정노선 저장] (휴대폰은 같은 순서 한 줄)
   if (form) {
     const stops = form.stops || [];
-    const fp = fareProblems(form); const fareMiss = fp.miss;
+    const R = toRoute(form);
+    const fp = fareProblems(R); const fareMiss = fp.miss;
+    const segMode = form._fareMode === "seg";
+    const RT = fp.legacy ? { ...R, fareMode: "stop" } : R;
+    const T = routeTotals(RT);
+    const groups = routePayGroups(RT);
     const clientNew = form.client.trim() && !knownClient(form.client);
-    // ⭐ 2026-11-05 이 곳 운임(청구·기사·지급방식·운임구분·거래처) — 오른쪽 STEP 02 정류지 칸 안에
-    const stopFareBox = (s, i) => {
-                        const paid = stopPaid(s);
-                        const err = tried && fareMiss.includes(i);
-                        return (
-                          <div className={`mt-2 rounded-xl border px-2.5 pt-2 pb-2.5 ${err ? "border-[#E5484D] bg-[#FFF6F6]" : paid ? "border-[#C9D6EE] bg-white" : "border-dashed border-[#DCE3EE] bg-white/60"}`}>
-                            <div className="flex items-center gap-2 mb-1.5">
-                              <span className="text-[10.5px] font-extrabold tracking-[0.18em] text-[#2D4C82]" style={{ fontFamily: MONO }}>FARE</span>
-                              <span className="text-[12.5px] font-black text-[#0F1A30]">이 곳 운임</span>
-                              {paid ? <span className="ml-auto text-[11.5px] font-black text-[#5B6B85] tabular-nums" style={{ fontFamily: MONO }}>수수료 {won(toInt(s.fareClient) - toInt(s.fareDriver))}</span>
-                                : <span className="ml-auto text-[11.5px] font-semibold text-[#9AA9C3]">없으면 비워 두세요</span>}
-                            </div>
-                            <div className="grid gap-2 grid-cols-2 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)]">
-                              <input inputMode="numeric" value={s.fareClient ? won(s.fareClient) : ""} onChange={(e) => setStop(i, { fareClient: e.target.value.replace(/[^\d]/g, "") })} placeholder="청구운임" className={`${inp} !h-10 text-right tabular-nums`} style={{ fontFamily: MONO }} />
-                              <input inputMode="numeric" value={s.fareDriver ? won(s.fareDriver) : ""} onChange={(e) => setStop(i, { fareDriver: e.target.value.replace(/[^\d]/g, "") })} placeholder="기사운임" className={`${inp} !h-10 text-right tabular-nums`} style={{ fontFamily: MONO }} />
-                              <div className="col-span-2 md:col-span-1"><PaySelect id={`fr-pay-${i}`} compact value={s.payMethod} onChange={(v) => setStop(i, { payMethod: v })} options={payTypes} error={err} /></div>
-                            </div>
-                            {/* ⭐ 2026-11-02 운임규칙 — 이 곳 운임구분(비우면 노선 기본) */}
-                            {fareR.on && (
-                              <div className="mt-2 flex items-center gap-2 flex-wrap">
-                                <span className="text-[12.5px] font-black text-[#1B2B4B]">운임구분</span>
-                                <FareTypeSelect compact rules={fareR.rules} value={s.fareType || ""} placeholder={form.fareType ? `노선 기본(${form.fareType})` : "운임구분"} onChange={(v) => setStop(i, { fareType: v })} />
-                                {(() => { const rule = findFareRule(fareR.rules, s.fareType || form.fareType); return rule ? <span className={`text-[12px] font-extrabold ${s.fareManual ? "text-amber-700" : "text-[#2D4C82]"}`}>{s.fareManual ? "기사운임 직접 입력" : fareRuleHint(rule)}</span> : null; })()}
-                                {s.fareManual && <button type="button" onClick={() => setStop(i, { fareType: s.fareType || "" })} className="h-6 px-2 rounded bg-[#1B2B4B] text-white text-[11.5px] font-extrabold">↺ 규칙대로</button>}
-                              </div>
-                            )}
-                            {/* ⭐ 2026-11-01 이 곳 거래처(청구처) — 비우면 노선 거래처 · 착불 경유지는 다른 회사가 낼 수 있다 */}
-                            {(() => {
-                              const sc = String(s.client || "").trim();
-                              const scNew = sc && !knownClient(sc);
-                              const other = sc && norm(sc) !== norm(form.client || form.name);
-                              return (
-                                <div className="mt-2 flex items-center gap-2">
-                                  <span className="shrink-0 text-[12px] font-black text-[#3A4A66] w-[64px]">거래처</span>
-                                  <Suggest value={s.client || ""} onChange={(v) => setStop(i, { client: v })} items={clients} k="거래처명" sub={clientSub} title="기본거래처"
-                                    placeholder={`비우면 노선 거래처${form.client ? ` (${form.client})` : ""}`} onPick={(c) => setStop(i, { client: c.거래처명 || c.id })} />
-                                  {scNew && <NewTag />}
-                                  {other && <span className="shrink-0 h-5 px-1.5 inline-flex items-center rounded-md bg-[#FFF3D6] text-[#7A5300] text-[10.5px] font-black">다른 거래처</span>}
-                                </div>
-                              );
-                            })()}
-                          </div>
-                        );
-                      };
-    return (
-      <div>
-        <div className="relative overflow-hidden rounded-[22px] px-4 py-4 md:px-7 md:py-6 text-white flex items-center justify-between gap-4 flex-wrap mb-4"
-          style={{ background: "linear-gradient(rgba(143,176,240,.07) 1px, transparent 1px) 0 0/22px 22px, linear-gradient(90deg, rgba(143,176,240,.07) 1px, transparent 1px) 0 0/22px 22px, linear-gradient(120deg,#0B1428 0%,#1B2B4B 60%,#2D4C82 100%)" }}>
-          <div>
-            <div className="text-[11px] font-extrabold tracking-[0.26em] text-[#8FB0F0]" style={{ fontFamily: MONO }}>FIXED ROUTE · {form.id ? "EDIT" : "NEW"}</div>
-            <div className="text-[25px] font-black">{form.id ? "고정노선 수정" : "고정노선 만들기"}</div>
-            <div className="mt-2 flex items-center gap-1.5 text-[12.5px] font-bold flex-wrap whitespace-nowrap">
-              {["① 기본 경로", "② 화물·상하차", "③ 요일·기간", "④ 기사님·운임"].map((t, i) => <span key={t} className="flex items-center gap-1.5"><span className="px-2.5 py-1 rounded-lg bg-white/10 border border-white/15">{t}</span>{i < 3 && <span className="text-white/40">›</span>}</span>)}
-            </div>
-          </div>
-          <div className="flex gap-2">
-            <button type="button" tabIndex={-1} onClick={() => setForm(null)} className="h-12 px-5 rounded-xl bg-white/10 border border-white/20 text-[14.5px] font-bold">취소</button>
-            <button type="button" tabIndex={-1} onClick={askSave} disabled={busy} className="h-12 px-6 rounded-xl bg-white text-[#0F1A30] text-[15px] font-black disabled:opacity-50">저장</button>
+    const midIdx = stops.map((_, i) => i).filter((i) => i > 0 && i < stops.length - 1);
+    const today0 = kst();
+    const hTo = [genHorizon(today0), form.endDate || "9999"].sort()[0];
+    const hFrom = form.startDate && form.startDate > today0 ? form.startDate : today0;
+    const hN = form.active === false ? 0 : routeDatesBetween(form, hFrom, hTo).length;
+    const md = (ymd) => String(ymd || "").slice(5).replace("-", "/");
+    const daysLabel = (() => { const d = form.days || []; const k = DAYS.filter((x) => d.includes(x)).join(""); return ({ 월화수목금: "평일(월~금)", 월화수목금토: "월~토", 월화수목금토일: "매일" })[k] || d.join("·") || "요일 미선택"; })();
+    const setCargo = (patch) => setForm((p) => ({ ...p, _cargo: { ...(p._cargo || {}), ...patch } }));
+    const stopName = (s) => s?.name || s?.addr || STOP_LABEL[s?.type] || s?.type || "";
+    const methodLabel = (t) => (t === "상차" ? "상차방법" : "하차방법");
+    // 운임 방식 바꾸기 — 금액이 사라지지 않게 옮긴다(노선 전체 → 마지막 구간 / 구간별 → 합계)
+    const setFareMode = async (m) => {
+      if (form._fareMode === m) return;
+      if (m === "route" && groups.length > 1 && !(await kpConfirm(`구간마다 거래처·지급방식이 달라 배차가 ${groups.length}건으로 나뉘고 있습니다.\n노선 전체 한 번에로 바꾸면 합계 금액 하나 · 지급방식 하나로 합쳐집니다.`, { title: "운임 방식 바꾸기", okText: "합치기" }))) return;
+      setForm((p) => {
+        if (m === "seg") {
+          const { last } = endsOf(p.stops);
+          const has = toInt(p.fareClient) || toInt(p.fareDriver);
+          const kept = p.stops.some((s, i) => i > 0 && stopPaid(s));
+          return { ...p, _fareMode: "seg", fareMode: "stop", fareClient: "", fareDriver: "",
+            stops: p.stops.map((s, i) => (i === last && has && !kept ? { ...s, fareClient: p.fareClient, fareDriver: p.fareDriver, payMethod: s.payMethod || p.payMethod || "", fareType: s.fareType || "", fareManual: !!p.fareManual } : s)) };
+        }
+        const t = routeTotals(toRoute(p));
+        const lastPay = [...t.seg].reverse().find((g) => g.지급방식)?.지급방식;
+        return { ...p, _fareMode: "route", fareMode: "base", fareClient: t.client ? String(t.client) : "", fareDriver: t.driver ? String(t.driver) : "", payMethod: lastPay || p.payMethod || "" };
+      });
+    };
+    const Sec = ({ en, ko, sub, right }) => (
+      <div className="flex items-center gap-2.5 mb-4 flex-wrap">
+        <span className="h-7 px-2.5 inline-flex items-center rounded-lg bg-[#0F1A30] text-[#8FB0F0] text-[11px] font-extrabold tracking-[0.2em]" style={{ fontFamily: MONO }}>{en}</span>
+        <span className="text-[17px] font-black text-[#0F1A30] whitespace-nowrap">{ko}</span>
+        {sub && <span className="text-[12.5px] font-semibold text-[#8A98B0] min-w-0">{sub}</span>}
+        {right && <div className="ml-auto">{right}</div>}
+      </div>
+    );
+    const TypeBadge = ({ t }) => <span className={`h-6 px-2 inline-flex items-center rounded-md text-[12px] font-black whitespace-nowrap ${t === "상차" || t === "하차" ? "bg-[#0F1A30] text-white" : "bg-[#EEF3FC] text-[#2D4C82] border border-[#C9D6EE]"}`}>{STOP_LABEL[t] || t}</span>;
+    const Num = ({ n, solid }) => <span className={`shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-[11.5px] font-black ${solid ? "bg-[#0F1A30] text-white" : "bg-white border-2 border-[#2D4C82] text-[#2D4C82]"}`} style={{ fontFamily: MONO }}>{String(n).padStart(2, "0")}</span>;
+    const money = (v, on, ph, err) => (
+      <input inputMode="numeric" value={v ? won(v) : ""} onChange={(e) => on(e.target.value.replace(/[^\d]/g, ""))} placeholder={ph}
+        className={`${inp} text-right tabular-nums ${err ? "!border-[#E5484D]" : ""}`} style={{ fontFamily: MONO }} />
+    );
+    // 화물내용·수량 + 단위 / 톤수·중량 + 단위 — 지금과 같은 단위 목록(회사 공용)
+    const cargoFields = (v, on) => (
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div className="min-w-0">
+          <label className={lab}>화물내용 · 수량</label>
+          <div className="flex min-w-0">
+            <input value={v.cargo || ""} onChange={(e) => on({ cargo: v.cargoType ? e.target.value.replace(/[^\d.]/g, "") : e.target.value })} placeholder={v.cargoType ? "수량" : "예: 2 또는 변압기"} className={`${inp} !rounded-r-none min-w-0`} />
+            <CustomSelect value={v.cargoType || ""} onChange={(e) => on({ cargoType: e.target.value, cargo: e.target.value ? String(v.cargo || "").replace(/[^\d.]/g, "") : v.cargo })} className="h-11 w-[84px] shrink-0 px-2 rounded-r-xl bg-[#1B2B4B] text-white text-[13px] font-black">
+              <option value="">단위</option>{cargoTypes.map((x) => <option key={x} value={x}>{x}</option>)}
+            </CustomSelect>
           </div>
         </div>
-        {/* ⭐ 2026-11-05 등록폼 다시 배치 — 왼쪽 = 기본 경로(상차지·경유지·거점지·하차지 이름·주소·담당·연락처)만,
-             오른쪽 = 나머지 전부(정류지별 화물·톤수·상하차방법·운임 / 요일·기간 / 기사·차량·배차방식·지급방식·운임) */}
-        <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.12fr)] items-start">
-          <div className={`${card} p-4 md:p-5`} data-fr-left="1">
-            <Step n="01" title="기본 경로" sub="상차지 → 경유·거점 → 하차지 · 등록된 거래처·상하차지에서 고르거나 새로 입력" />
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-5">
-              <div><label className={lab}>노선 이름 *</label><input value={form.name} onChange={(e) => set("name", e.target.value)} placeholder="예: 평택 물류센터 → 수원 3곳" className={inp} /></div>
-              <div>
-                <label className={lab}>거래처(청구처) {clientNew && <NewTag />}</label>
-                <div className="flex gap-1.5">
-                  <Suggest value={form.client} onChange={(v) => set("client", v)} items={clients} k="거래처명" sub={clientSub} title="기본거래처" placeholder="거래처명 검색" onPick={(c) => set("client", c.거래처명 || c.id)} />
-                  <button type="button" tabIndex={-1} onClick={() => setNewClient({ name: form.client.trim(), addr: "", manager: "", phone: "", email: "", memo: "", grade: "일반" })} className="h-11 px-3.5 rounded-xl border border-[#DCE3EE] bg-white text-[13.5px] font-black text-[#1B2B4B] whitespace-nowrap hover:bg-[#F5F8FD]">+ 신규등록</button>
-                </div>
+        <div className="min-w-0">
+          <label className={lab}>톤수 · 중량</label>
+          <div className="flex min-w-0">
+            <input value={v.tonVal || ""} onChange={(e) => on({ tonVal: e.target.value.replace(/[^\d.]/g, "") })} placeholder="예: 1" inputMode="decimal" className={`${inp} !rounded-r-none min-w-0`} />
+            <CustomSelect value={v.tonType || ""} onChange={(e) => on({ tonType: e.target.value })} className="h-11 w-[84px] shrink-0 px-2 rounded-r-xl bg-[#1B2B4B] text-white text-[13px] font-black">
+              <option value="">단위</option>{tonTypes.map((x) => <option key={x} value={x}>{x}</option>)}
+            </CustomSelect>
+          </div>
+        </div>
+      </div>
+    );
+    const ruleRow = (ft, onFt, manual, placeholder) => {
+      if (!fareR.on) return null;
+      const rule = findFareRule(fareR.rules, ft || (placeholder ? form.fareType : ""));
+      return (
+        <div className="mt-2.5 flex items-center gap-2 flex-wrap">
+          <span className="text-[13px] font-black text-[#3A4A66]">운임구분</span>
+          <FareTypeSelect compact rules={fareR.rules} value={ft || ""} placeholder={placeholder} onChange={onFt} />
+          {rule && <span className={`text-[12px] font-extrabold ${manual ? "text-amber-700" : "text-[#2D4C82]"}`}>{manual ? "기사운임 직접 입력" : fareRuleHint(rule)}</span>}
+          {manual && <button type="button" onClick={() => onFt(ft || "")} className="h-6 px-2 rounded bg-[#1B2B4B] text-white text-[11.5px] font-extrabold">↺ 규칙대로</button>}
+        </div>
+      );
+    };
+    return (
+      <div className="min-w-0">
+        {/* ── 머리 카드: 노선 정보 ── */}
+        <div className={`${card} overflow-hidden mb-4`} data-fr-head="1">
+          <div className="px-4 py-4 md:px-6 text-white flex items-center gap-3 flex-wrap"
+            style={{ background: "linear-gradient(rgba(143,176,240,.07) 1px, transparent 1px) 0 0/22px 22px, linear-gradient(90deg, rgba(143,176,240,.07) 1px, transparent 1px) 0 0/22px 22px, linear-gradient(120deg,#0B1428 0%,#1B2B4B 60%,#2D4C82 100%)" }}>
+            <div className="min-w-0">
+              <div className="text-[11px] font-extrabold tracking-[0.26em] text-[#8FB0F0]" style={{ fontFamily: MONO }}>FIXED ROUTE · {form.id ? "EDIT" : "NEW"}</div>
+              <div className="text-[22px] md:text-[24px] font-black leading-tight">{form.id ? "고정노선 수정" : "고정노선 만들기"}</div>
+            </div>
+            <div className="ml-auto flex items-center gap-2">
+              <div className="h-11 pl-3.5 pr-2 rounded-xl bg-white/10 border border-white/15 flex items-center gap-2.5">
+                <span className="text-[13.5px] font-black whitespace-nowrap">운행</span>
+                <OnOffSwitch dark on={form.active !== false} onChange={(v) => set("active", v)} />
+              </div>
+              <button type="button" tabIndex={-1} onClick={() => setForm(null)} className="h-11 px-4 rounded-xl bg-white/10 border border-white/20 text-[14px] font-bold whitespace-nowrap">취소</button>
+              <button type="button" tabIndex={-1} onClick={askSave} disabled={busy} className="hidden md:inline-flex items-center h-11 px-5 rounded-xl bg-white text-[#0F1A30] text-[14.5px] font-black disabled:opacity-50 whitespace-nowrap">저장</button>
+            </div>
+          </div>
+          <div className="p-4 md:px-6 md:py-5 grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4">
+            <div className="min-w-0"><label className={lab}>노선 이름 <span className="text-[#E5484D]">*</span></label><input value={form.name} onChange={(e) => set("name", e.target.value)} placeholder="예: 평택 물류센터 → 수원 3곳" className={inp} /></div>
+            <div className="min-w-0">
+              <label className={lab}>거래처(청구처) {clientNew && <NewTag />}<span className="ml-auto text-[12px] font-semibold text-[#9AA9C3]">운임을 청구하는 곳 · 한 번만 입력</span></label>
+              <div className="flex gap-1.5 min-w-0">
+                <Suggest value={form.client} onChange={(v) => set("client", v)} items={clients} k="거래처명" sub={clientSub} title="기본거래처" placeholder="거래처명 검색" onPick={(c) => set("client", c.거래처명 || c.id)} />
+                <button type="button" tabIndex={-1} onClick={() => setNewClient({ name: form.client.trim(), addr: "", manager: "", phone: "", email: "", memo: "", grade: "일반" })} className="h-11 px-3 rounded-xl border border-[#DCE3EE] bg-white text-[13.5px] font-black text-[#1B2B4B] whitespace-nowrap hover:bg-[#F5F8FD]">+ 신규</button>
               </div>
             </div>
+          </div>
+        </div>
+
+        <div className="grid gap-4 lg:grid-cols-[minmax(0,0.82fr)_minmax(0,1fr)] items-start">
+          {/* ── 왼쪽: ROUTE 경로 ── */}
+          <div className={`${card} p-4 md:p-5 min-w-0`} data-fr-left="1">
+            <Sec en="ROUTE" ko="경로" sub="상차지 → 경유·거점 → 하차지" />
             <div className="relative">
-              <div className="absolute left-[15px] md:left-[17px] top-6 bottom-6 w-[2px] bg-gradient-to-b from-[#0F1A30] via-[#C9D6EE] to-[#0F1A30]" />
+              <div className="absolute left-[13px] top-5 bottom-8 w-[2px] bg-gradient-to-b from-[#0F1A30] via-[#C9D6EE] to-[#0F1A30]" />
               {stops.map((s, i) => {
                 const isNew = (s.name || "").trim() && !knownPlace(s.name);
                 const ends = i === 0 || i === stops.length - 1;
                 return (
-                  <div key={i} className="relative flex gap-2 md:gap-3 mb-3" data-fr-stop={i}>
-                    <span className={`relative z-[1] mt-3 w-8 h-8 md:w-9 md:h-9 shrink-0 rounded-full flex items-center justify-center text-[13px] font-black shadow ${ends ? "bg-[#0F1A30] text-white" : "bg-white border-2 border-[#2D4C82] text-[#2D4C82]"}`} style={{ fontFamily: MONO }}>{String(i + 1).padStart(2, "0")}</span>
-                    <div className={`flex-1 min-w-0 rounded-2xl border p-3 md:p-3.5 ${ends ? "border-[#D5DEEC] bg-[#F8FAFD]" : "border-[#DCE6F7] bg-[#F4F8FF]"}`}>
-                      <div className="flex items-center gap-2 mb-2.5 flex-wrap">
-                        <span className="text-[15px] font-black text-[#0F1A30] whitespace-nowrap">{STOP_LABEL[s.type] || s.type}{(s.type === "상차" || s.type === "하차") ? " 정보" : ""}</span>
-                        {isNew && <NewTag />}
-                        <div className="inline-flex p-0.5 rounded-lg bg-white border border-[#E3E8F0]" title="정류지 구분 바꾸기">
-                          {STOP_TYPES.map((t) => <button tabIndex={-1} key={t} type="button" onClick={() => setStop(i, { type: t })} className={`h-7 px-2.5 rounded-md text-[12px] font-black ${s.type === t ? "bg-[#0F1A30] text-white" : "text-[#5B6B85] hover:bg-[#F3F6FA]"}`}>{t}</button>)}
+                  <div key={i} className="relative flex gap-2.5 md:gap-3 mb-3" data-fr-stop={i}>
+                    <span className="relative z-[1] mt-3"><Num n={i + 1} solid={ends} /></span>
+                    <div className={`flex-1 min-w-0 rounded-2xl border p-3 md:p-3.5 ${ends ? "border-[#D5DEEC] bg-[#F8FAFD]" : "border-[#C9D6EE] bg-[#F4F8FF]"}`}>
+                      <div className="flex items-center gap-1.5 mb-2.5 flex-wrap">
+                        <div className="inline-flex p-0.5 rounded-lg bg-white border border-[#E3E8F0]" title="정류지 구분 — 바꾸면 오른쪽 화물·운임이 같이 바뀝니다">
+                          {STOP_TYPES.map((t) => <button tabIndex={-1} key={t} type="button" onClick={() => setStop(i, { type: t })} className={`h-7 px-2 sm:px-2.5 rounded-md text-[12.5px] font-black ${s.type === t ? "bg-[#0F1A30] text-white" : "text-[#5B6B85] hover:bg-[#F3F6FA]"}`}>{t}</button>)}
                         </div>
-                        <div className="ml-auto flex items-center gap-1">
-                          <button type="button" tabIndex={-1} onClick={() => moveStop(i, -1)} disabled={i === 0} className="w-8 h-8 rounded-lg border border-[#DCE3EE] bg-white text-[13px] disabled:opacity-30" aria-label="위로">↑</button>
-                          <button type="button" tabIndex={-1} onClick={() => moveStop(i, 1)} disabled={i === stops.length - 1} className="w-8 h-8 rounded-lg border border-[#DCE3EE] bg-white text-[13px] disabled:opacity-30" aria-label="아래로">↓</button>
-                          <button type="button" tabIndex={-1} onClick={() => setForm((p) => ({ ...p, stops: p.stops.filter((_, j) => j !== i) }))} disabled={stops.length <= 1} className="w-8 h-8 rounded-lg text-[#9AA9C3] hover:bg-white hover:text-[#E5484D] disabled:opacity-30" aria-label="정류지 삭제" title="이 정류지 빼기">✕</button>
+                        {isNew && <span className="hidden sm:inline-flex"><NewTag /></span>}
+                        <div className="ml-auto flex items-center">
+                          <button type="button" tabIndex={-1} onClick={() => moveStop(i, -1)} disabled={i === 0} className="w-7 sm:w-8 h-8 rounded-lg text-[14px] text-[#5B6B85] hover:bg-white disabled:opacity-25" aria-label="위로">↑</button>
+                          <button type="button" tabIndex={-1} onClick={() => moveStop(i, 1)} disabled={i === stops.length - 1} className="w-7 sm:w-8 h-8 rounded-lg text-[14px] text-[#5B6B85] hover:bg-white disabled:opacity-25" aria-label="아래로">↓</button>
+                          <button type="button" tabIndex={-1} onClick={() => setForm((p) => ({ ...p, stops: p.stops.filter((_, j) => j !== i) }))} disabled={stops.length <= 1} className="w-7 sm:w-8 h-8 rounded-lg text-[#9AA9C3] hover:bg-white hover:text-[#E5484D] disabled:opacity-25" aria-label="정류지 삭제" title="이 정류지 빼기">✕</button>
                         </div>
                       </div>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                        <div className="sm:col-span-2 flex flex-col sm:flex-row gap-2">
-                          <Suggest value={s.name} onChange={(v) => setStop(i, { name: v, manager: "" })} items={placePool} k="업체명" sub={placeSub} tag={(x) => x._src} title={`${STOP_LABEL[s.type] || s.type} · 거래처관리`} placeholder={`${STOP_LABEL[s.type] || s.type} 검색 (업체·장소명)`}
-                            onPick={(p) => setStop(i, { name: p.업체명 || "", addr: p.주소 || s.addr, manager: p.담당자 || "", contact: p.담당자번호 ? fmtPhone(p.담당자번호) : s.contact, memo: s.memo || p.메모 || "" })} />
-                          <div className="shrink-0" title={`${s.type} 시간 · 비우면 즉시`}><TimeSelect value={s.time} onChange={(v) => setStop(i, { time: v })} /></div>
-                        </div>
-                        <input value={s.addr} onChange={(e) => setStop(i, { addr: e.target.value })} placeholder="주소" className={`${inp} sm:col-span-2`} />
-                        <input value={s.manager || ""} onChange={(e) => setStop(i, { manager: e.target.value })} placeholder="담당자(선택)" className={inp} />
-                        <input value={s.contact} inputMode="tel" onChange={(e) => setStop(i, { contact: fmtPhone(e.target.value) })} placeholder="연락처(선택)" className={inp} />
-                        <input value={s.memo} onChange={(e) => setStop(i, { memo: e.target.value })} placeholder="메모(출입·하역 안내 등)" className={`${inp} sm:col-span-2`} />
+                      <div className="flex flex-col sm:flex-row gap-2 min-w-0">
+                        <Suggest value={s.name} onChange={(v) => setStop(i, { name: v, manager: "" })} items={placePool} k="업체명" sub={placeSub} tag={(x) => x._src} title={`${STOP_LABEL[s.type] || s.type} · 거래처관리`} placeholder={`${STOP_LABEL[s.type] || s.type} 검색 (업체·장소명)`}
+                          onPick={(p) => setStop(i, { name: p.업체명 || "", addr: p.주소 || s.addr, manager: p.담당자 || "", contact: p.담당자번호 ? fmtPhone(p.담당자번호) : s.contact, memo: s.memo || p.메모 || "", _more: s._more || !!(p.담당자 || p.담당자번호) })} />
+                        <div className="shrink-0 flex items-center gap-2" title={`${s.type} 시간 · 비우면 즉시`}><TimeSelect value={s.time} onChange={(v) => setStop(i, { time: v })} />{isNew && <span className="sm:hidden"><NewTag /></span>}</div>
                       </div>
+                      <input value={s.addr} onChange={(e) => setStop(i, { addr: e.target.value })} placeholder="주소" className={`${inp} mt-2`} />
+                      <div className="mt-2 flex items-center gap-2 min-w-0" data-fr-method={i}>
+                        <span className="shrink-0 w-[62px] text-[13.5px] font-black text-[#3A4A66]">{methodLabel(s.type)}</span>
+                        <div className="flex-1 min-w-0">
+                          <CompanyOptionPicker optKey="상하차방법" title={methodLabel(s.type)} placeholder="선택" noneLabel="선택 안 함" className={`${inp} ${s.method ? "" : "!text-[#9AA9C3]"}`} value={s.method || ""} onChange={(v) => setStop(i, { method: v })} />
+                        </div>
+                      </div>
+                      <button type="button" tabIndex={-1} onClick={() => setStop(i, { _more: !s._more })} className="mt-2 h-8 px-1 inline-flex items-center gap-1.5 text-[13px] font-black text-[#2D4C82]" aria-expanded={!!s._more}>
+                        <span className={`inline-block transition-transform ${s._more ? "rotate-90" : ""}`}>›</span>담당자 · 연락처 · 메모
+                        {!s._more && (s.manager || s.contact || s.memo) && <span className="text-[12px] font-semibold text-[#7A89A3] truncate max-w-[180px]">{[s.manager, s.contact].filter(Boolean).join(" ") || "메모 있음"}</span>}
+                      </button>
+                      {s._more && (
+                        <div className="mt-1 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          <input value={s.manager || ""} onChange={(e) => setStop(i, { manager: e.target.value })} placeholder="담당자" className={inp} />
+                          <input value={s.contact} inputMode="tel" onChange={(e) => setStop(i, { contact: fmtPhone(e.target.value) })} placeholder="연락처" className={inp} />
+                          <input value={s.memo} onChange={(e) => setStop(i, { memo: e.target.value })} placeholder="메모(출입·하역 안내 등)" className={`${inp} sm:col-span-2`} />
+                        </div>
+                      )}
                     </div>
                   </div>
                 );
               })}
             </div>
-            <div className="mt-1 grid grid-cols-3 gap-2" data-fr-add="1">
-              {[["상차", "상차지"], ["경유", "경유지"], ["거점", "거점지"]].map(([t, l]) => (
-                <button tabIndex={-1} key={t} type="button" onClick={() => setForm((p) => { const a = [...p.stops]; a.splice(Math.max(0, a.length - 1), 0, blankStop(t)); return { ...p, stops: a }; })}
+            {/* ⭐ 2026-11-05 + 상차지 추가 없앰 — 경유·거점만(하차지 바로 앞에) · 상차를 더 넣으려면 정류지 구분을 "상차"로 */}
+            <div className="mt-1 pl-[38px] md:pl-[40px] grid grid-cols-2 gap-2" data-fr-add="1">
+              {[["경유", "경유지"], ["거점", "거점지"]].map(([t, l]) => (
+                <button tabIndex={-1} key={t} type="button" data-fr-add-type={t} onClick={() => setForm((p) => { const a = [...p.stops]; a.splice(Math.max(0, a.length - 1), 0, blankStop(t)); return { ...p, stops: a }; })}
                   className="h-11 rounded-xl border-2 border-dashed border-[#C9D6EE] bg-white text-[14px] font-black text-[#2D4C82] hover:bg-[#F3F7FE] hover:border-[#8FB0F0] whitespace-nowrap">+ {l} 추가</button>
               ))}
             </div>
-            <div className="text-[12.5px] text-[#7A89A3] mt-2.5 leading-relaxed">시간을 비우면 <b className="text-[#1B2B4B]">즉시</b>로 등록됩니다 · 경유·거점은 하차지 바로 앞에 추가됩니다(↑↓로 순서 변경) · <NewTag /> 표시된 곳은 저장할 때 하차지 목록에 함께 등록됩니다</div>
+            <div className="text-[12.5px] text-[#7A89A3] mt-3 leading-relaxed">시간을 비우면 <b className="text-[#1B2B4B]">즉시</b> · 경유·거점은 하차지 바로 앞에 들어갑니다(↑↓로 순서 변경) · <NewTag /> 표시된 곳은 저장할 때 거래처관리에 함께 등록됩니다</div>
           </div>
 
+          {/* ── 오른쪽: 화물 → 운임 → 기사·차량 → 운행 일정 ── */}
           <div className="space-y-4 min-w-0">
-            {/* ── STEP 02 정류지별 화물·상하차방법·운임 ── */}
+            {/* CARGO · 화물 — 기본 1장(노선 전체) + 경유·거점마다 1장 */}
             <div className={`${card} p-4 md:p-5`} data-fr-right="cargo">
-              <div className="flex items-start justify-between gap-2 flex-wrap">
-                <Step n="02" title="화물 · 상하차 · 정류지 운임" sub="정류지마다" />
-                {stops.length > 2 && <button type="button" tabIndex={-1} onClick={applyCargoAll} className="h-9 px-3 rounded-lg bg-[#0F1A30] text-white text-[13px] font-black whitespace-nowrap" title="첫 하차지(또는 입력한 곳)의 화물내용·톤수를 모든 경유·거점·하차지에 똑같이">화물·톤수 일괄적용</button>}
-              </div>
+              <Sec en="CARGO" ko="화물" sub={midIdx.length ? `기본 화물 + 경유·거점 ${midIdx.length}곳` : "이 노선에 싣는 화물"} />
               <div className="space-y-3">
-                {stops.map((s, i) => {
-                  const ends = i === 0 || i === stops.length - 1;
-                  const isPick = s.type === "상차";
+                <div className="rounded-2xl border border-[#D5DEEC] bg-[#F8FAFD] p-3.5" data-fr-cargo="main">
+                  <div className="flex items-center gap-2 mb-3 min-w-0">
+                    <span className="text-[15px] font-black text-[#0F1A30] whitespace-nowrap">기본 화물</span>
+                    <span className="min-w-0 truncate text-[13px] font-bold text-[#5B6B85]">{stopName(stops[0]) || "상차지"} → {stopName(stops[stops.length - 1]) || "하차지"}</span>
+                  </div>
+                  {cargoFields(form._cargo || {}, setCargo)}
+                </div>
+                {midIdx.map((i) => {
+                  const s = stops[i];
                   return (
-                    <div key={i} className="rounded-2xl border border-[#E3E8F0] bg-[#FBFCFE] overflow-hidden" data-fr-cargo={i}>
-                      <div className="flex items-center gap-2 px-3.5 py-2 border-b border-[#EEF1F6] bg-white">
-                        <span className={`w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-black ${ends ? "bg-[#0F1A30] text-white" : "bg-white border-2 border-[#2D4C82] text-[#2D4C82]"}`} style={{ fontFamily: MONO }}>{String(i + 1).padStart(2, "0")}</span>
-                        <span className="h-6 px-2 inline-flex items-center rounded-md bg-[#EEF3FC] text-[#1B2B4B] text-[12px] font-black">{STOP_LABEL[s.type] || s.type}</span>
-                        <span className={`min-w-0 truncate text-[14.5px] font-black ${s.name ? "text-[#0F1A30]" : "text-[#B4BFD0]"}`}>{s.name || "기본 경로에서 업체를 입력하세요"}</span>
-                        {s.time && <span className="ml-auto shrink-0 text-[12px] font-bold text-[#5B6B85]">{korTimeLabel(s.time)}</span>}
+                    <div key={i} className="rounded-2xl border border-[#C9D6EE] bg-[#F4F8FF] p-3.5" data-fr-cargo={i}>
+                      <div className="flex items-center gap-2 mb-3 min-w-0">
+                        <Num n={i + 1} />
+                        <TypeBadge t={s.type} />
+                        <span className={`min-w-0 truncate text-[15px] font-black ${s.name ? "text-[#0F1A30]" : "text-[#B4BFD0]"}`}>{s.name || "왼쪽 경로에서 업체를 입력하세요"}</span>
+                        <span className="ml-auto shrink-0 text-[12px] font-semibold text-[#8A98B0] hidden sm:inline">이 곳 화물 · 없으면 비움</span>
                       </div>
-                      <div className="p-3 grid gap-2.5 grid-cols-1 sm:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)_minmax(0,1fr)]">
-                        <div className="min-w-0">
-                          <label className={lab}>화물내용 · 수량</label>
-                          <div className="flex min-w-0">
-                            <input value={s.cargo} onChange={(e) => setStop(i, { cargo: s.cargoType ? e.target.value.replace(/[^\d.]/g, "") : e.target.value })} placeholder={s.cargoType ? "수량" : "예: 2 또는 변압기"} className={`${inp} !rounded-r-none min-w-0`} />
-                            <CustomSelect value={s.cargoType || ""} onChange={(e) => setStop(i, { cargoType: e.target.value, cargo: e.target.value ? String(s.cargo || "").replace(/[^\d.]/g, "") : s.cargo })} className="h-11 w-[78px] shrink-0 px-2 rounded-r-xl bg-[#1B2B4B] text-white text-[12.5px] font-black">
-                              <option value="">없음</option>{cargoTypes.map((v) => <option key={v} value={v}>{v}</option>)}
-                            </CustomSelect>
-                          </div>
-                        </div>
-                        <div className="min-w-0">
-                          <label className={lab}>톤수 · 중량</label>
-                          <div className="flex min-w-0">
-                            <input value={s.tonVal} onChange={(e) => setStop(i, { tonVal: e.target.value.replace(/[^\d.]/g, "") })} placeholder="예: 1" inputMode="decimal" className={`${inp} !rounded-r-none min-w-0`} />
-                            <CustomSelect value={s.tonType || ""} onChange={(e) => setStop(i, { tonType: e.target.value })} className="h-11 w-[70px] shrink-0 px-2 rounded-r-xl bg-[#1B2B4B] text-white text-[12.5px] font-black">
-                              <option value="">없음</option>{tonTypes.map((v) => <option key={v} value={v}>{v}</option>)}
-                            </CustomSelect>
-                          </div>
-                        </div>
-                        <div className="min-w-0">
-                          <label className={lab}>{isPick ? "상차방법" : "하차방법"}</label>
-                          <CompanyOptionPicker optKey="상하차방법" title={isPick ? "상차방법" : "하차방법"} placeholder="선택" noneLabel="선택 안 함" className={`${inp} ${s.method ? "" : "!text-[#9AA9C3]"}`} value={s.method || ""} onChange={(v) => setStop(i, { method: v })} />
-                        </div>
-                      </div>
-                      {i > 0 && <div className="px-3 pb-3">{stopFareBox(s, i)}</div>}
+                      {cargoFields(s, (patch) => setStop(i, patch))}
                     </div>
                   );
                 })}
               </div>
             </div>
 
-            {/* ── STEP 03 요일·시간·기간 ── */}
-            <div className={`${card} p-4 md:p-5`} data-fr-right="days">
-              <div className="flex items-start justify-between gap-2 flex-wrap">
-                <Step n="03" title="요일 · 시간 · 기간" />
-                <div className="flex items-center gap-2"><span className="text-[13px] font-black text-[#3A4A66]">운행</span><OnOffSwitch on={form.active !== false} onChange={(v) => set("active", v)} /></div>
+            {/* FARE · 운임 — 노선 전체 한 번에 / 구간별로 따로 */}
+            <div className={`${card} p-4 md:p-5`} data-fr-right="fare">
+              <Sec en="FARE" ko="운임" sub={form.client.trim() ? `청구처 ${form.client.trim()}` : "청구처 — 위 노선 정보에서 거래처 입력"} />
+              <div className="grid grid-cols-2 gap-1 p-1 rounded-2xl bg-[#F3F6FA] border border-[#E3E8F0] mb-3.5" data-fr-fare-mode={form._fareMode}>
+                {[["route", "노선 전체 한 번에", "운임 1개 · 지급방식 1개"], ["seg", "구간별로 따로", midIdx.length || segMode ? "구간마다 운임·지급방식" : "경유·거점이 있을 때"]].map(([m, t, d]) => {
+                  const on = form._fareMode === m; const dis = m === "seg" && !midIdx.length && !segMode;
+                  return (
+                    <button key={m} type="button" tabIndex={-1} disabled={dis} onClick={() => setFareMode(m)} data-fr-mode={m}
+                      className={`min-w-0 rounded-xl px-2 py-2 text-center transition ${on ? "bg-[#0F1A30] text-white shadow" : "text-[#3A4A66] hover:bg-white"} disabled:opacity-45 disabled:hover:bg-transparent`}>
+                      <span className="block text-[14px] font-black truncate">{t}</span>
+                      <span className={`block text-[11.5px] font-semibold truncate ${on ? "text-[#8FB0F0]" : "text-[#8A98B0]"}`}>{d}</span>
+                    </button>
+                  );
+                })}
               </div>
+              {!segMode ? (
+                <div data-fr-fare-route="1">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+                    <div className="min-w-0"><label className={lab}>청구운임(1회)</label>{money(form.fareClient, (v) => set("fareClient", v), "0")}</div>
+                    <div className="min-w-0"><label className={lab}>기사운임(1회)</label>{money(form.fareDriver, (v) => set("fareDriver", v), "0")}</div>
+                    <div className="col-span-2 sm:col-span-1 min-w-0"><label className={lab}>지급방식 {(toInt(form.fareClient) || toInt(form.fareDriver)) ? <span className="text-[#E5484D]">*</span> : null}</label>
+                      <PaySelect id="fr-pay-route" value={form.payMethod} onChange={(v) => set("payMethod", v)} options={payTypes} error={tried && fareMiss.includes("route")} />
+                    </div>
+                  </div>
+                  <div data-fr-fare-type="1">{ruleRow(form.fareType, (v) => set("fareType", v), form.fareManual, "")}</div>
+                </div>
+              ) : (
+                <div className="space-y-2.5" data-fr-fare-seg="1">
+                  {stops.map((s, i) => {
+                    if (i === 0) return null;
+                    const prev = stops[i - 1];
+                    const err = tried && fareMiss.includes(i);
+                    const sc = String(s.client || "").trim();
+                    const other = s._payer && sc && norm(sc) !== norm(routeClient(form));
+                    return (
+                      <div key={i} className={`rounded-2xl border p-3 md:p-3.5 ${err ? "border-[#E5484D] bg-[#FFF6F6]" : "border-[#E3E8F0] bg-[#FBFCFE]"}`} data-fr-seg={i}>
+                        <div className="flex items-center gap-1.5 mb-2.5 min-w-0">
+                          <span className="shrink-0 text-[11.5px] font-extrabold text-[#2D4C82] tabular-nums" style={{ fontFamily: MONO }}>{String(i).padStart(2, "0")}→{String(i + 1).padStart(2, "0")}</span>
+                          <span className="min-w-0 truncate text-[14px] font-black text-[#0F1A30]">{stopName(prev)} <span className="text-[#8FB0F0]">→</span> {stopName(s)}</span>
+                          <TypeBadge t={s.type} />
+                          <span className="ml-auto shrink-0 text-[12px] font-black text-[#5B6B85] tabular-nums" style={{ fontFamily: MONO }}>수수료 {won(toInt(s.fareClient) - toInt(s.fareDriver))}</span>
+                        </div>
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                          <div className="min-w-0"><label className={`${lab} !text-[13px] !mb-1`}>청구운임</label>{money(s.fareClient, (v) => setStop(i, { fareClient: v }), "0")}</div>
+                          <div className="min-w-0"><label className={`${lab} !text-[13px] !mb-1`}>기사운임</label>{money(s.fareDriver, (v) => setStop(i, { fareDriver: v }), "0")}</div>
+                          <div className="col-span-2 sm:col-span-1 min-w-0"><label className={`${lab} !text-[13px] !mb-1`}>지급방식</label><PaySelect id={`fr-pay-${i}`} value={s.payMethod} onChange={(v) => setStop(i, { payMethod: v })} options={payTypes} error={err} /></div>
+                        </div>
+                        {ruleRow(s.fareType, (v) => setStop(i, { fareType: v }), s.fareManual, form.fareType ? `노선 기본(${form.fareType})` : "운임구분")}
+                        <div className="mt-2.5 flex items-center gap-2 flex-wrap min-w-0">
+                          <label className="inline-flex items-center gap-2 cursor-pointer select-none">
+                            <input type="checkbox" checked={!!s._payer} onChange={(e) => setStop(i, e.target.checked ? { _payer: true, client: sc || form.client || "" } : { _payer: false, client: "" })} className="w-4 h-4 accent-[#0F1A30]" />
+                            <span className="text-[13px] font-black text-[#3A4A66]">청구처 다르게</span>
+                          </label>
+                          {!s._payer && <span className="text-[12px] font-semibold text-[#9AA9C3]">{form.client.trim() || "노선 거래처"}에 청구</span>}
+                          {other && <span className="h-5 px-1.5 inline-flex items-center rounded-md bg-[#FFF3D6] text-[#7A5300] text-[10.5px] font-black">다른 거래처</span>}
+                        </div>
+                        {s._payer && (
+                          <div className="mt-2 flex items-center gap-1.5 min-w-0">
+                            <Suggest value={s.client || ""} onChange={(v) => setStop(i, { client: v })} items={clients} k="거래처명" sub={clientSub} title="기본거래처" placeholder="이 구간 청구처 검색" onPick={(c) => setStop(i, { client: c.거래처명 || c.id })} />
+                            {sc && !knownClient(sc) && <NewTag />}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                  {fp.legacy && (
+                    <div id="fr-legacy" className={`rounded-xl border px-3.5 py-3 ${tried ? "border-[#E5484D] bg-[#FFF6F6]" : "border-[#F0C36D] bg-[#FFFAEE]"}`}>
+                      <div className="text-[13px] font-black text-[#0F1A30]">예전 기본 운임(청구 {won(form.fareClient)} · 기사 {won(form.fareDriver)})이 구간 운임과 따로 들어 있습니다</div>
+                      <div className="text-[12.5px] text-[#5B6B85] mt-0.5">한 가지로 정리해 주세요 — 구간별이면 1회 운임은 구간 금액의 합계입니다.</div>
+                      <div className="flex gap-1.5 mt-2 flex-wrap">
+                        <button type="button" onClick={() => resolveLegacy(true)} className="h-9 px-3 rounded-lg bg-[#0F1A30] text-white text-[12.5px] font-black">하차지 운임에 합치기</button>
+                        <button type="button" onClick={() => resolveLegacy(false)} className="h-9 px-3 rounded-lg border border-[#DCE3EE] bg-white text-[12.5px] font-black text-[#1B2B4B]">기본 운임 지우기</button>
+                      </div>
+                    </div>
+                  )}
+                  {fareR.on && <div className="flex items-center gap-2 flex-wrap" data-fr-fare-type="1"><span className="text-[13px] font-black text-[#3A4A66]">노선 기본 운임구분</span><FareTypeSelect compact rules={fareR.rules} value={form.fareType || ""} onChange={(v) => set("fareType", v)} /></div>}
+                </div>
+              )}
+              {/* 실시간 합계 */}
+              <div className="mt-3.5 grid grid-cols-3 rounded-2xl overflow-hidden bg-[#0F1A30] text-white" data-fr-total="1">
+                {[["청구 합계", T.client], ["기사 합계", T.driver], ["수수료", T.client - T.driver]].map(([k, v], j) => (
+                  <div key={k} className={`px-3 py-2.5 min-w-0 ${j ? "border-l border-white/10" : ""}`}>
+                    <div className="text-[11.5px] font-bold text-[#8FB0F0] whitespace-nowrap">{k}</div>
+                    <div className="text-[16px] md:text-[17px] font-black tabular-nums truncate" style={{ fontFamily: MONO }}>{won(v)}<span className="text-[11px] font-bold text-white/50 ml-0.5">원</span></div>
+                  </div>
+                ))}
+              </div>
+              {groups.length > 1 && (
+                <div className="mt-2 rounded-xl bg-[#FFFAEE] border border-[#F0C36D] px-3.5 py-2.5 text-[12.5px] text-[#3A4A66] leading-relaxed">
+                  <b className="text-[#0F1A30]">거래처·지급방식이 달라 배차가 하루 {groups.length}건으로 나뉩니다</b> — {groups.map((G) => `${G.payer || "-"} ${G.pay} ${won(G.client)}원`).join(" / ")} (같은 차량·같은 운행)
+                </div>
+              )}
+            </div>
+
+            {/* DRIVER · 기사·차량 */}
+            <div className={`${card} p-4 md:p-5`} data-fr-right="driver">
+              <Sec en="DRIVER" ko="기사 · 차량" />
+              <label className={lab}>배정 기사님(지입·직영)</label>
+              <CustomSelect value={form.driverKey} onChange={(e) => pickDriver(e.target.value)} className={inp}>
+                <option value="">미배정(배차중으로 생성)</option>
+                {drivers.map((d) => <option key={d.id} value={d.id}>{d.이름} · {d.차량번호}{d.차량톤수 ? ` · ${d.차량톤수}` : ""}</option>)}
+              </CustomSelect>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 mt-3">
+                {/* 🚚 2026-11-02 회사 공용 차량종류(＋ 추가 포함) */}
+                <div className="min-w-0"><label className={lab}>차량종류</label><VehicleTypePicker className={inp} value={form.vehicleType} base={VEHICLE_TYPES_FR} placeholder="선택" noneLabel="선택 안 함" onChange={(v) => set("vehicleType", v)} /></div>
+                <div className="min-w-0"><label className={lab}>차량톤수</label><input value={form.tonnage} onChange={(e) => set("tonnage", e.target.value)} placeholder="예: 5톤" className={inp} /></div>
+                <div className="col-span-2 sm:col-span-1 min-w-0"><label className={lab}>배차방식</label><CompanyOptionPicker optKey="배차방식" placeholder="고정기사" noneLabel="선택 안 함(고정기사)" className={inp} value={form.dispatchType || ""} onChange={(v) => set("dispatchType", v)} /></div>
+              </div>
+              <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {[["autoDispatch", "배차 자동 등록", "요일마다 배차가 미리 생깁니다"], ["autoAccept", "기사님 자동 수락", "매번 수락 없이 '수락' 상태로"]].map(([k, t, d]) => (
+                  <label key={k} className="flex items-center justify-between gap-3 rounded-xl border border-[#E3E8F0] px-3.5 py-2.5 cursor-pointer hover:bg-[#F8FAFD] min-w-0">
+                    <span className="min-w-0"><span className="block text-[14px] font-black text-[#0F1A30]">{t}</span><span className="block text-[12px] text-[#7A89A3] truncate">{d}</span></span>
+                    <input type="checkbox" checked={form[k] !== false} onChange={(e) => set(k, e.target.checked)} className="w-5 h-5 shrink-0 accent-[#0F1A30]" />
+                  </label>
+                ))}
+              </div>
+              <label className={`${lab} mt-3`}>노선 메모 <span className="font-semibold text-[12px] text-[#9AA9C3]">기사님 전달사항으로도 들어갑니다</span></label>
+              <textarea value={form.memo} onChange={(e) => set("memo", e.target.value)} rows={2} placeholder="예: 정문 출입 시 사전 연락" className={`${inp} !h-auto py-2.5`} />
+            </div>
+
+            {/* SCHEDULE · 운행 일정 */}
+            <div className={`${card} p-4 md:p-5`} data-fr-right="days">
+              <Sec en="SCHEDULE" ko="운행 일정" />
               <div className="grid grid-cols-7 gap-1.5 mb-2.5">
-                {DAYS.map((d) => { const on = (form.days || []).includes(d); return <button tabIndex={-1} key={d} type="button" onClick={() => set("days", on ? form.days.filter((x) => x !== d) : DAYS.filter((x) => x === d || (form.days || []).includes(x)))} className={`h-12 rounded-xl text-[15px] font-black transition ${on ? "bg-[#0F1A30] text-white shadow" : "bg-white border border-[#DCE3EE] text-[#5B6B85]"}`}>{d}</button>; })}
+                {DAYS.map((d) => { const on = (form.days || []).includes(d); return <button tabIndex={-1} key={d} type="button" onClick={() => set("days", on ? form.days.filter((x) => x !== d) : DAYS.filter((x) => x === d || (form.days || []).includes(x)))} className={`h-11 md:h-12 rounded-xl text-[15px] font-black transition ${on ? "bg-[#0F1A30] text-white shadow" : "bg-white border border-[#DCE3EE] text-[#5B6B85]"} ${d === "토" || d === "일" ? (on ? "" : "!text-[#C4262C]/70") : ""}`}>{d}</button>; })}
               </div>
               <div className="flex flex-wrap gap-1.5 mb-4">
                 {[["평일", ["월", "화", "수", "목", "금"]], ["월~토", ["월", "화", "수", "목", "금", "토"]], ["매일", DAYS], ["월수금", ["월", "수", "금"]], ["화목", ["화", "목"]]].map(([l, ds]) => <button tabIndex={-1} key={l} type="button" onClick={() => set("days", ds)} className="h-9 px-3.5 rounded-lg bg-[#F3F6FA] text-[13px] font-bold text-[#3A4A66] hover:bg-[#EAF0F8]">{l}</button>)}
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-                <div><label className={lab}>출발(상차) 시간</label><TimeSelect value={form.startTime} onChange={(v) => set("startTime", v)} /></div>
-                <div><label className={lab}>시작일</label><CustomDatePicker value={form.startDate} onChange={(e) => set("startDate", e.target.value)} className={inp} showIcon /></div>
-                <div><label className={lab}>종료일(선택)</label><CustomDatePicker value={form.endDate} onChange={(e) => set("endDate", e.target.value)} className={inp} showIcon placeholder="계속" /></div>
+              <div className="grid grid-cols-2 sm:grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)] gap-2.5">
+                <div className="col-span-2 sm:col-span-1 min-w-0"><label className={lab}>출발(상차) 시간</label><TimeSelect value={form.startTime} onChange={(v) => set("startTime", v)} /></div>
+                <div className="min-w-0"><label className={lab}>시작일</label><CustomDatePicker value={form.startDate} onChange={(e) => set("startDate", e.target.value)} className={inp} showIcon /></div>
+                <div className="min-w-0"><label className={lab}>종료일(선택)</label><CustomDatePicker value={form.endDate} onChange={(e) => set("endDate", e.target.value)} className={inp} showIcon placeholder="계속" /></div>
               </div>
-              <div className="mt-2.5 rounded-xl bg-[#F5F8FD] border border-[#E3E8F0] px-3.5 py-2.5 text-[12.5px] text-[#3A4A66] leading-relaxed" data-fr-horizon="1">
-                {(() => { const today = kst(); const to = [genHorizon(today), form.endDate || "9999"].sort()[0]; const from = form.startDate && form.startDate > today ? form.startDate : today; const n = form.active === false ? 0 : routeDatesBetween(form, from, to).length; return form.active === false
+              <div className="mt-3 rounded-xl bg-[#F5F8FD] border border-[#E3E8F0] px-3.5 py-2.5 text-[13px] text-[#3A4A66] leading-relaxed" data-fr-horizon="1">
+                {form.active === false
                   ? <><b className="text-[#0F1A30]">운행 OFF</b> — 저장해도 새 배차를 만들지 않습니다(이미 만든 배차는 그대로)</>
-                  : <>저장하면 <b className="text-[#0F1A30]">{from.slice(5).replace("-", "/")} ~ {to.slice(5).replace("-", "/")}</b> 운행일 <b className="text-[#0F1A30]">{n}건</b>을 먼저 만들고, {form.endDate && form.endDate <= to ? "종료일까지면 끝납니다" : "그 뒤는 매달(새 달에 앱을 열 때) 이어서 만듭니다 — 종료일이 없어도 끝없이 만들지 않습니다"}</>; })()}
+                  : <>저장하면 <b className="text-[#0F1A30] tabular-nums">{md(hFrom)} ~ {md(hTo)} 운행일 {hN}건</b>을 먼저 만들고, {form.endDate && form.endDate <= hTo ? "종료일까지면 끝납니다" : "그 뒤는 매달(새 달에 앱을 열 때) 이어서 만듭니다"}</>}
               </div>
               <div className="mt-3">
-                <label className={lab}>쉬는 날 <span className="font-semibold text-[#9AA9C3]">달력에서 여러 날을 눌러 고르세요</span></label>
+                <label className={lab}>쉬는 날 <span className="font-semibold text-[12px] text-[#9AA9C3]">달력에서 여러 날을 눌러 고르세요</span></label>
                 <MultiDateSelect value={form.skipDates || []} onChange={(v) => set("skipDates", v)} className={inp} placeholder="쉬는 날 고르기" />
                 {(form.skipDates || []).length > 0 && (
                   <div className="flex flex-wrap gap-1.5 mt-2">
@@ -1015,106 +1228,28 @@ export default function FixedRoutes({ drivers = [], companyName = "", dispatchDa
                 )}
               </div>
             </div>
-
-            {/* ── STEP 04 기사·차량·배차·운임 ── */}
-            <div className={`${card} p-4 md:p-5`} data-fr-right="fare">
-              <Step n="04" title="기사님 · 차량 · 운임" />
-              <label className={lab}>배정 기사님(지입·직영)</label>
-              <CustomSelect value={form.driverKey} onChange={(e) => pickDriver(e.target.value)} className={inp}>
-                <option value="">미배정(배차중으로 생성)</option>
-                {drivers.map((d) => <option key={d.id} value={d.id}>{d.이름} · {d.차량번호}{d.차량톤수 ? ` · ${d.차량톤수}` : ""}</option>)}
-              </CustomSelect>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 mt-2.5">
-                {/* 🚚 2026-11-02 회사 공용 차량종류(＋ 추가 포함) */}
-                <div><label className={lab}>차량종류</label><VehicleTypePicker className={inp} value={form.vehicleType} base={VEHICLE_TYPES_FR} placeholder="선택" noneLabel="선택 안 함" onChange={(v) => set("vehicleType", v)} /></div>
-                <div><label className={lab}>차량톤수</label><input value={form.tonnage} onChange={(e) => set("tonnage", e.target.value)} placeholder="예: 5톤" className={inp} /></div>
-                <div><label className={lab}>배차방식</label><CompanyOptionPicker optKey="배차방식" placeholder="고정기사" noneLabel="선택 안 함(고정기사)" className={inp} value={form.dispatchType || ""} onChange={(v) => set("dispatchType", v)} /></div>
-              </div>
-              {/* ⭐ 2026-11-01 운임 — 정류지별 운임이 있으면 기본 운임 칸은 잠기고 정류지 합계를 보여준다 */}
-              {(() => {
-                const t = routeTotals(fp.legacy ? { ...form, fareMode: "stop" } : form);
-                const lock = fp.perStop && !fp.legacy;
-                const fareInp = (k, label, val) => (
-                  <div>
-                    <label className={lab}>{label}{lock && <span className="ml-auto text-[10.5px] font-extrabold tracking-[0.12em] text-[#2D4C82]" style={{ fontFamily: MONO }}>AUTO</span>}</label>
-                    <div className="relative">
-                      <input inputMode="numeric" readOnly={lock} tabIndex={lock ? -1 : undefined} value={lock ? won(val) : form[k] ? won(form[k]) : ""} onChange={(e) => !lock && set(k, e.target.value.replace(/[^\d]/g, ""))}
-                        className={`${inp} text-right tabular-nums ${lock ? "!bg-[#EEF3FC] !border-[#C9D6EE] !text-[#1B2B4B] cursor-not-allowed pl-8" : ""}`} style={{ fontFamily: MONO }} title={lock ? "정류지별 운임의 합계입니다 · 금액은 STEP 02 정류지에서 고치세요" : undefined} />
-                      {lock && <svg className="absolute left-3 top-1/2 -translate-y-1/2 text-[#2D4C82]" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round"><rect x="4" y="11" width="16" height="10" rx="2" /><path d="M8 11V7a4 4 0 0 1 8 0v4" /></svg>}
-                    </div>
-                  </div>
-                );
-                return (
-                  <div className="mt-4 pt-4 border-t border-[#EEF1F6]">
-                    <div className="flex items-center gap-2 mb-2.5">
-                      <span className="text-[10.5px] font-extrabold tracking-[0.18em] text-[#2D4C82]" style={{ fontFamily: MONO }}>FARE</span>
-                      <span className="text-[15px] font-black text-[#0F1A30]">운임 · 지급방식</span>
-                      {fp.perStop
-                        ? <span className="inline-flex items-center gap-1.5 h-6 px-2.5 rounded-lg bg-[#0F1A30] text-white text-[12px] font-black"><span className="w-1.5 h-1.5 rounded-full bg-[#8FB0F0]" />정류지별 운임 적용 중 · {t.seg.length}곳</span>
-                        : <span className="inline-flex items-center h-6 px-2.5 rounded-lg bg-[#F3F6FA] border border-[#E3E8F0] text-[#3A4A66] text-[12px] font-black">단일 운임</span>}
-                    </div>
-                    {/* ⭐ 2026-11-02 운임규칙 — 노선 기본 운임구분 */}
-                    {fareR.on && (
-                      <div className="mb-2.5 flex items-center gap-2 flex-wrap" data-fr-fare-type="1">
-                        <label className={`${lab} !mb-0`}>운임구분(노선 기본)</label>
-                        <FareTypeSelect compact rules={fareR.rules} value={form.fareType || ""} onChange={(v) => set("fareType", v)} />
-                        {(() => { const rule = findFareRule(fareR.rules, form.fareType); return rule ? <span className={`text-[12.5px] font-extrabold ${form.fareManual && !lock ? "text-amber-700" : "text-[#2D4C82]"}`}>{form.fareManual && !lock ? "기사운임 직접 입력" : fareRuleHint(rule)}</span> : null; })()}
-                        {form.fareManual && !lock && <button type="button" onClick={() => set("fareType", form.fareType || "")} className="h-6 px-2 rounded bg-[#1B2B4B] text-white text-[11.5px] font-extrabold">↺ 규칙대로</button>}
-                      </div>
-                    )}
-                    <div className={`grid gap-2.5 ${fp.perStop ? "grid-cols-2" : "grid-cols-1 sm:grid-cols-3"}`}>
-                      {fareInp("fareClient", "기본 청구운임(1회)", t.client)}
-                      {fareInp("fareDriver", "기본 기사운임(1회)", t.driver)}
-                      {!fp.perStop && (
-                        <div><label className={lab}>지급방식 {(toInt(form.fareClient) || toInt(form.fareDriver)) ? <span className="text-[#E5484D]">*</span> : null}</label>
-                          <PaySelect id="fr-pay-route" value={form.payMethod} onChange={(v) => set("payMethod", v)} options={payTypes} error={tried && fareMiss.includes("route")} />
-                        </div>
-                      )}
-                    </div>
-                    {fp.legacy && (
-                      <div id="fr-legacy" className={`mt-2.5 rounded-xl border px-3.5 py-3 ${tried ? "border-[#E5484D] bg-[#FFF6F6]" : "border-[#F0C36D] bg-[#FFFAEE]"}`}>
-                        <div className="text-[13px] font-black text-[#0F1A30]">기본 운임(청구 {won(form.fareClient)} · 기사 {won(form.fareDriver)})이 정류지별 운임과 따로 들어 있습니다</div>
-                        <div className="text-[12.5px] text-[#5B6B85] mt-0.5">헷갈리지 않게 한 가지로 정리해 주세요 — 정류지별 운임을 쓰면 1회 운임은 정류지 금액의 합계입니다.</div>
-                        <div className="flex gap-1.5 mt-2 flex-wrap">
-                          <button type="button" onClick={() => resolveLegacy(true)} className="h-9 px-3 rounded-lg bg-[#0F1A30] text-white text-[12.5px] font-black">하차지 운임에 합치기</button>
-                          <button type="button" onClick={() => resolveLegacy(false)} className="h-9 px-3 rounded-lg border border-[#DCE3EE] bg-white text-[12.5px] font-black text-[#1B2B4B]">기본 운임 지우기</button>
-                        </div>
-                      </div>
-                    )}
-                    {fp.perStop ? (
-                      <div className="mt-2.5">
-                        <FareTable r={fp.legacy ? { ...form, fareMode: "stop" } : form} />
-                        <div className="mt-1.5 text-[12px] text-[#7A89A3]">금액·지급방식은 STEP 02 정류지에서 고치세요 · 배차에는 합계(청구·기사·수수료)와 정류지별 금액이 같이 들어갑니다</div>
-                      </div>
-                    ) : (
-                      <div className="mt-2.5 rounded-xl bg-[#F5F8FD] border border-[#E3E8F0] px-4 py-3">
-                        <div className="flex justify-between text-[14px] font-black text-[#0F1A30]"><span>1회 합계</span><span className="tabular-nums" style={{ fontFamily: MONO }}>청구 {won(t.client)} · 기사 {won(t.driver)}</span></div>
-                        <div className="mt-1 text-[12.5px] text-[#5B6B85]">정류지마다 운임이 다르면 STEP 02 정류지의 "이 곳 운임"에 넣으세요 — 여기 칸은 자동 합계로 바뀝니다</div>
-                      </div>
-                    )}
-                  </div>
-                );
-              })()}
-              {[["autoDispatch", "배차 자동 등록", "정해진 요일에 배차가 미리 생겨 배차현황·실시간배차현황·기사앱에 보입니다"],
-                ["autoAccept", "기사님 수락 생략(자동 수락)", "고정노선은 매번 수락할 필요 없이 '수락' 상태로 들어갑니다 · 기사님은 운행만 하면 됩니다"]].map(([k, t, d]) => (
-                <label key={k} className="mt-2.5 flex items-center justify-between gap-3 rounded-xl border border-[#E3E8F0] px-4 py-3 cursor-pointer hover:bg-[#F8FAFD]">
-                  <span><span className="block text-[14px] font-black text-[#0F1A30]">{t}</span><span className="block text-[12.5px] text-[#7A89A3]">{d}</span></span>
-                  <input type="checkbox" checked={form[k] !== false} onChange={(e) => set(k, e.target.checked)} className="w-5 h-5 accent-[#0F1A30]" />
-                </label>
-              ))}
-              <label className={`${lab} mt-3`}>노선 메모</label>
-              <textarea value={form.memo} onChange={(e) => set("memo", e.target.value)} rows={2} placeholder="노선 메모(기사님 전달사항으로도 들어갑니다)" className={`${inp} !h-auto py-2.5`} />
-            </div>
           </div>
         </div>
-        {/* ⭐ 2026-10-31 입력을 마친 맨 아래에서 바로 저장·취소(위 머리줄까지 올라가지 않아도 된다) */}
-        <div className="mt-4 flex gap-2 justify-end">
-          <button type="button" tabIndex={-1} onClick={() => setForm(null)} className="h-12 px-6 rounded-xl border border-[#DCE3EE] bg-white text-[14.5px] font-bold text-[#3A4A66] flex-1 md:flex-none">취소</button>
-          <button type="button" tabIndex={-1} onClick={askSave} disabled={busy} className="h-12 px-8 rounded-xl bg-[#0F1A30] text-white text-[15px] font-black disabled:opacity-50 flex-[2] md:flex-none">{form.id ? "수정 저장" : "고정노선 저장"}</button>
+        {/* ⭐ 2026-11-05 아래 고정 저장줄 — 요일 · 기간 · 청구 합계 한 줄 + [고정노선 저장] */}
+        <div ref={barRef} className="mt-4 h-[84px] md:h-[88px]" aria-hidden="true" />
+        <div className="fixed bottom-0 z-[60] pt-2" style={{ left: barBox ? barBox.l : 12, width: barBox ? barBox.w : "calc(100% - 24px)", paddingBottom: "max(env(safe-area-inset-bottom, 0px), 10px)" }} data-fr-bar="1">
+          <div className="rounded-2xl bg-white/95 backdrop-blur border border-[#D5DEEC] shadow-[0_-4px_24px_rgba(16,24,40,0.10)] px-3 py-2.5 md:px-5 md:py-3 flex items-center gap-2.5 md:gap-4">
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-1.5 text-[11px] font-extrabold tracking-[0.18em] text-[#2D4C82]" style={{ fontFamily: MONO }}>
+                <span className={`w-1.5 h-1.5 rounded-full ${form.active === false ? "bg-[#CBD5E3]" : "bg-[#2D4C82]"}`} />{form.active === false ? "OFF" : "SUMMARY"}
+              </div>
+              <div className="text-[13.5px] md:text-[14.5px] font-black text-[#0F1A30] min-w-0 sm:truncate">
+                <span className="block sm:inline truncate">{daysLabel} · {md(form.startDate) || "오늘"} ~ {form.endDate ? md(form.endDate) : "계속"}</span>
+                <span className="hidden sm:inline"> · </span><span className="block sm:inline tabular-nums truncate">청구 {won(T.client)}원{T.client ? <span className="text-[#7A89A3] font-bold"> · 수수료 {won(T.client - T.driver)}</span> : null}</span>
+              </div>
+            </div>
+            <button type="button" tabIndex={-1} onClick={() => setForm(null)} className="hidden md:inline-flex items-center h-12 px-5 rounded-xl border border-[#DCE3EE] bg-white text-[14.5px] font-bold text-[#3A4A66] whitespace-nowrap">취소</button>
+            <button type="button" tabIndex={-1} onClick={askSave} disabled={busy} data-fr-save="1" className="shrink-0 h-12 px-5 md:px-8 rounded-xl bg-[#0F1A30] text-white text-[15px] font-black disabled:opacity-50 whitespace-nowrap">{form.id ? "수정 저장" : "고정노선 저장"}</button>
+          </div>
         </div>
         {review && (() => {
-          const st = (form.stops || []).filter((x) => x.name.trim() || x.addr.trim());
-          const t = routeTotals(form);
+          const st = (R.stops || []).filter((x) => x.name.trim() || x.addr.trim());
+          const t = routeTotals(R);
           const first = st[0] || {}; const last = st[st.length - 1] || {};
           const mid = st.slice(1, -1);
           // ⭐ 2026-10-31 화면 최상단에(모바일 상단바 밑에 깔리지 않게) · 휴대폰은 전체 화면
@@ -1151,7 +1286,7 @@ export default function FixedRoutes({ drivers = [], companyName = "", dispatchDa
                             <span className="text-[11px] font-extrabold tracking-[0.14em] text-[#4B6CB7]">{x.type}</span>
                             <span className="text-[15.5px] font-black text-[#0F1A30]">{x.name || "-"}</span>
                             <span className="px-2 py-0.5 rounded-md bg-[#EEF2F8] text-[12px] font-black text-[#1B2B4B]">{korTimeLabel(x.time || (i === 0 ? form.startTime : ""))}</span>
-                            {(i > 0 && stopPaid(x)) ? <span className="ml-auto flex items-center gap-1.5">{(() => { const pc = payerOf(form, { 거래처: String(x.client || "").trim() }); const other = pc !== routeClient(form); return <span className={`h-6 px-2 inline-flex items-center rounded-md text-[11.5px] font-black ${other ? "bg-[#FFF3D6] text-[#7A5300]" : "bg-[#EEF2F8] text-[#1B2B4B]"}`} title="거래처(청구처)">{pc || "-"}</span>; })()}<span className="h-6 px-2 inline-flex items-center rounded-md bg-[#0F1A30] text-white text-[11.5px] font-black">{x.payMethod || "-"}</span><span className="text-[12.5px] font-black text-[#0B1428] tabular-nums" style={{ fontFamily: MONO }}>청구 {won(x.fareClient)} · 기사 {won(x.fareDriver)}</span></span> : null}
+                            {(i > 0 && stopPaid(x)) ? <span className="ml-auto flex items-center gap-1.5">{(() => { const pc = payerOf(R, { 거래처: String(x.client || "").trim() }); const other = pc !== routeClient(R); return <span className={`h-6 px-2 inline-flex items-center rounded-md text-[11.5px] font-black ${other ? "bg-[#FFF3D6] text-[#7A5300]" : "bg-[#EEF2F8] text-[#1B2B4B]"}`} title="거래처(청구처)">{pc || "-"}</span>; })()}<span className="h-6 px-2 inline-flex items-center rounded-md bg-[#0F1A30] text-white text-[11.5px] font-black">{x.payMethod || "-"}</span><span className="text-[12.5px] font-black text-[#0B1428] tabular-nums" style={{ fontFamily: MONO }}>청구 {won(x.fareClient)} · 기사 {won(x.fareDriver)}</span></span> : null}
                           </div>
                           <div className="text-[13px] font-semibold text-[#3A4A66] mt-0.5">{x.addr || "-"}</div>
                           {(cargoText(x) || tonText(x) || x.contact || x.memo) && <div className="text-[12.5px] text-[#7A89A3] mt-0.5">{[cargoText(x) && `화물 ${cargoText(x)}`, tonText(x) && `톤수 ${tonText(x)}`, x.contact, x.memo].filter(Boolean).join(" · ")}</div>}
@@ -1161,14 +1296,14 @@ export default function FixedRoutes({ drivers = [], companyName = "", dispatchDa
                     {t.seg.length > 0 && (
                       <div className="bg-white rounded-2xl border border-[#E3E8F0] p-4">
                         <div className="flex items-center gap-2 mb-2.5"><span className="text-[10.5px] font-extrabold tracking-[0.18em] text-[#2D4C82]" style={{ fontFamily: MONO }}>FARE · PER STOP</span><span className="text-[13.5px] font-black text-[#0F1A30]">정류지별 운임</span></div>
-                        <FareTable r={form} />
+                        <FareTable r={R} />
                       </div>
                     )}
                     <div className="bg-white rounded-2xl border border-[#E3E8F0] p-4 text-[13.5px] text-[#3A4A66] space-y-1.5">
                       <div className="text-[13.5px] font-black text-[#0F1A30] mb-1">배차에 이렇게 들어갑니다</div>
                       <div>· 배차방식 <b className="text-[#0F1A30]">고정기사</b> · 배차상태 <b className="text-[#0F1A30]">{form.carNo ? (form.autoAccept !== false ? "배차완료(기사님 자동 수락)" : "승인대기(기사님 수락 필요)") : "배차중(기사 미배정)"}</b></div>
                       <div>· 상차 {first.name || "-"} → 하차 {last.name || "-"}{mid.length ? ` · 경유·거점 ${mid.length}곳` : ""}</div>
-                      {t.seg.length ? (() => { const gs = routePayGroups(form); return (
+                      {t.seg.length ? (() => { const gs = routePayGroups(R); return (
                         <>
                           <div>· <b className="text-[#0F1A30]">정류지별 운임 {t.seg.length}곳</b> — 청구·기사운임·수수료는 합계로, 정류지별 금액·지급방식은 오더의 정류지운임·경유지·기사앱에 따로 들어갑니다</div>
                           {gs.length > 1
@@ -1216,7 +1351,7 @@ export default function FixedRoutes({ drivers = [], companyName = "", dispatchDa
             <div key={k} className="px-3.5 py-1.5 rounded-xl bg-white/[0.07] border border-white/10"><div className="text-[10.5px] font-bold text-white/55">{k}</div><div className="text-[16px] font-black tabular-nums" style={{ fontFamily: MONO }}>{v}</div></div>
           ))}
           <button type="button" onClick={genNow} className="h-11 px-4 rounded-xl bg-white/10 border border-white/20 text-[13px] font-black">배차 미리 만들기</button>
-          <button type="button" onClick={() => setForm(blankRoute())} className="h-11 px-5 rounded-xl bg-white text-[#0F1A30] text-[13.5px] font-black">+ 노선 만들기</button>
+          <button type="button" onClick={() => setForm(toForm(blankRoute()))} className="h-11 px-5 rounded-xl bg-white text-[#0F1A30] text-[13.5px] font-black">+ 노선 만들기</button>
         </div>
       </div>
       {msg && <div className="mb-3 rounded-xl bg-[#0F1A30] text-white px-4 py-2.5 text-[13px] font-bold">{msg}</div>}
@@ -1229,7 +1364,7 @@ export default function FixedRoutes({ drivers = [], companyName = "", dispatchDa
             const on = r.id === selId;
             return (
               // ⭐ 2026-11-05 줄마다 운행 ON/OFF 스위치(줄 안에 버튼을 넣으려고 줄은 div)
-              <div key={r.id} role="button" tabIndex={0} data-fr-row={r.id} onClick={() => setSelId(r.id)} onDoubleClick={() => setForm({ ...blankRoute(), ...r })} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setSelId(r.id); } }}
+              <div key={r.id} role="button" tabIndex={0} data-fr-row={r.id} onClick={() => setSelId(r.id)} onDoubleClick={() => setForm(toForm(r))} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setSelId(r.id); } }}
                 className={`w-full text-left px-4 py-3 border-b border-[#EEF1F6] transition cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-[#8FB0F0] ${on ? "bg-[#0F1A30] text-white" : "hover:bg-[#F5F8FD]"}`}>
                 <div className="flex items-center gap-2">
                   <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: on ? "#8FB0F0" : r.color || "#2D4C82" }} />
@@ -1266,7 +1401,7 @@ export default function FixedRoutes({ drivers = [], companyName = "", dispatchDa
                   <div className="text-[19px] font-black truncate">{sel.name}</div>
                 </div>
                 <span className="flex items-center gap-1.5 text-[12.5px] font-black text-white/80">운행<OnOffSwitch on={!!sel.active} dark onChange={(v) => toggleActive(sel, v)} /></span>
-                <button type="button" onClick={() => setForm({ ...blankRoute(), ...sel })} className="h-9 px-3 rounded-xl bg-white text-[#0F1A30] text-[12.5px] font-black">수정</button>
+                <button type="button" onClick={() => setForm(toForm(sel))} className="h-9 px-3 rounded-xl bg-white text-[#0F1A30] text-[12.5px] font-black">수정</button>
                 <button type="button" onClick={() => remove(sel)} className="h-9 px-3 rounded-xl bg-white/10 border border-white/20 text-[12.5px] font-black">삭제</button>
               </div>
               <div className="p-5 grid gap-4 md:grid-cols-2">
