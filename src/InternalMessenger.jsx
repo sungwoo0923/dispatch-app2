@@ -680,19 +680,47 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
   };
 
   // ── 이미지 전송 ──
-  const sendImage = async (file) => {
-    if (!file) return;
+  // ⚡ 2026-11-05 빠르게 — 보내기 전에 줄이고(긴 변 1600px · JPEG 80%, 보통 4~8MB → 200~400KB),
+  //  올리는 동안 입력창 위에 미리보기(보내는 중)를 바로 띄운다. 여러 장은 동시에 올린다.
+  const [sendingImgs, setSendingImgs] = useState([]); // [{ id, url }]
+  const shrinkForChat = async (file) => {
+    if (!/^image\/(jpeg|png|webp|heic|heif|bmp)/i.test(file.type) || file.size < 350 * 1024) return file;
+    try {
+      const bmp = await (window.createImageBitmap ? createImageBitmap(file) : new Promise((ok, no) => { const i = new Image(); i.onload = () => ok(i); i.onerror = no; i.src = URL.createObjectURL(file); }));
+      const r = Math.min(1, 1600 / Math.max(bmp.width, bmp.height));
+      const c = document.createElement("canvas"); c.width = Math.round(bmp.width * r); c.height = Math.round(bmp.height * r);
+      const g = c.getContext("2d"); g.fillStyle = "#fff"; g.fillRect(0, 0, c.width, c.height); g.drawImage(bmp, 0, 0, c.width, c.height);
+      const blob = await new Promise((ok) => c.toBlob(ok, "image/jpeg", 0.8));
+      if (!blob || blob.size >= file.size) return file;
+      return new File([blob], String(file.name || "image").replace(/\.[^.]+$/, "") + ".jpg", { type: "image/jpeg" });
+    } catch { return file; }
+  };
+  const sendImage = async (file0) => {
+    if (!file0) return;
+    const tmpId = `${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+    const tmpUrl = URL.createObjectURL(file0);
+    setSendingImgs((p) => [...p, { id: tmpId, url: tmpUrl }]);
+    try { await sendImageInner(file0); } finally {
+      setSendingImgs((p) => p.filter((x) => x.id !== tmpId)); setTimeout(() => URL.revokeObjectURL(tmpUrl), 4000);
+    }
+  };
+  const roomMakingRef = useRef(null); // 새 방에 사진 여러 장을 동시에 보내도 방은 한 번만 만든다
+  const sendImageInner = async (file0) => {
     let room = activeRoom;
     if (!room && pendingRoom) {
       try {
-        const roomRef = await addDoc(collection(db, ROOMS_COLL), pendingRoom.roomData);
-        room = { id: roomRef.id, ...pendingRoom.roomData };
-        setActiveRoom(room); setPendingRoom(null);
+        if (!roomMakingRef.current) {
+          roomMakingRef.current = addDoc(collection(db, ROOMS_COLL), pendingRoom.roomData).then((roomRef) => {
+            const r = { id: roomRef.id, ...pendingRoom.roomData }; setActiveRoom(r); setPendingRoom(null); return r;
+          }).finally(() => { setTimeout(() => { roomMakingRef.current = null; }, 3000); });
+        }
+        room = await roomMakingRef.current;
       } catch { return; }
     }
     if (!room) return;
+    const file = await shrinkForChat(file0);
     const path = `chat_images/${room.id}/${Date.now()}_${file.name}`;
-    const snap = await uploadBytes(storageRef(storage, path), file);
+    const snap = await uploadBytes(storageRef(storage, path), file, { contentType: file.type || "image/jpeg", cacheControl: "public,max-age=31536000" });
     const url = await getDownloadURL(snap.ref);
     const senderName = myProfile?.name || myEmail.split("@")[0];
     await addDoc(collection(db, MSGS_COLL), {
@@ -704,7 +732,7 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
     const others2 = room.members?.filter(uid => uid !== myUid) || [];
     const unreadUpdate2 = {};
     others2.forEach(uid => { unreadUpdate2[`unreadCount.${uid}`] = increment(1); });
-    await updateDoc(doc(db, ROOMS_COLL, room.id), {
+    updateDoc(doc(db, ROOMS_COLL, room.id), { // 방 목록 갱신은 기다리지 않는다
       lastMsg: "[사진]", lastAt: serverTimestamp(), lastSenderUid: myUid,
       [`lastRead.${myUid}`]: serverTimestamp(), ...unreadUpdate2,
     }).catch(() => {});
@@ -1021,7 +1049,7 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
     onSendLocation: sendLocation,
     onSendContact: () => setContactPickModal(true),
     onSendNotice: () => setShowNoticeInput(true),
-    fileUploading, friends, mobileMode,
+    fileUploading, friends, mobileMode, sendingImgs,
     themeHdr, themeMyBubble, themeChatBg,
     replyTo, setReplyTo,
     onReply: (msg) => setReplyTo({ id: msg.id, text: msg.text, senderName: msg.senderName }),
@@ -1838,7 +1866,7 @@ function FriendsView({ myProfile, friends, rooms, unreadMap, totalUnread, getRoo
 }
 
 // ════════════════ 채팅 뷰 ════════════════
-function ChatView({ room, roomName, roomPhoto, messages, myUid, myProfile, input, setInput, onSend, onBack, onClose, editMsg, setEditMsg, editText, setEditText, onSaveEdit, onDeleteMsg, msgSearch, setMsgSearch, msgContainerRef, inputRef, onSendImage, onSendFile, onSendLocation, onSendContact, onSendNotice, fileUploading, friends, mobileMode, themeHdr, themeMyBubble, themeChatBg, replyTo, setReplyTo, onReply, onAddReaction, onSendToSelf, groupPeople = [], onShowMembers, onInvite, onRename, onLeave }) {
+function ChatView({ room, roomName, roomPhoto, messages, myUid, myProfile, input, setInput, onSend, onBack, onClose, editMsg, setEditMsg, editText, setEditText, onSaveEdit, onDeleteMsg, msgSearch, setMsgSearch, msgContainerRef, inputRef, onSendImage, onSendFile, onSendLocation, onSendContact, onSendNotice, fileUploading, sendingImgs = [], friends, mobileMode, themeHdr, themeMyBubble, themeChatBg, replyTo, setReplyTo, onReply, onAddReaction, onSendToSelf, groupPeople = [], onShowMembers, onInvite, onRename, onLeave }) {
   const [showSearch, setShowSearch] = useState(false);
   const [showRoomMenu, setShowRoomMenu] = useState(false); // ⭐ 2026-11-03 단체방 ≡ 메뉴
   const [showAttachMenu, setShowAttachMenu] = useState(false);
@@ -1855,9 +1883,10 @@ function ChatView({ room, roomName, roomPhoto, messages, myUid, myProfile, input
   const clearPending = () => { setPendingFiles((p) => { p.forEach((x) => x.url && URL.revokeObjectURL(x.url)); return []; }); };
   const sendPending = async () => {
     const list = pendingFiles; clearPending();
-    for (const { file } of list) {
-      try { if (/^image\//.test(file.type)) await onSendImage(file); else await onSendFile(file); } catch (e) { console.error(e); }
-    }
+    // 사진은 동시에, 파일은 차례로
+    const imgs = list.filter(({ file }) => /^image\//.test(file.type)); const others = list.filter(({ file }) => !/^image\//.test(file.type));
+    await Promise.all(imgs.map(({ file }) => Promise.resolve(onSendImage(file)).catch((e) => console.error(e))));
+    for (const { file } of others) { try { await onSendFile(file); } catch (e) { console.error(e); } }
     setTimeout(() => inputRef?.current?.focus?.(), 0);
   };
   useEffect(() => {
@@ -2332,6 +2361,12 @@ function ChatView({ room, roomName, roomPhoto, messages, myUid, myProfile, input
         </div>
       )}
 
+      {sendingImgs.length > 0 && (
+        <div data-msg-sending style={{ padding: "6px 12px", background: "#fff", borderTop: "1px solid #e5e7eb", display: "flex", alignItems: "center", gap: 6, flexShrink: 0, overflowX: "auto" }}>
+          {sendingImgs.map((x) => <div key={x.id} style={{ position: "relative", width: 44, height: 44, borderRadius: 8, overflow: "hidden", flexShrink: 0, background: "#f1f5f9" }}><img src={x.url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", opacity: 0.55 }} /><div style={{ position: "absolute", inset: 0, display: "grid", placeItems: "center" }}><div className="animate-spin" style={{ width: 18, height: 18, borderRadius: "50%", border: "2.5px solid #fff", borderTopColor: "#1B2B4B" }} /></div></div>)}
+          <span style={{ fontSize: 12, fontWeight: 700, color: "#5B6B85", whiteSpace: "nowrap" }}>사진 보내는 중… {sendingImgs.length}장</span>
+        </div>
+      )}
       {/* 입력창 — form으로 감싸 iOS가 외부 date input으로 네비게이션 못 하게 차단 */}
       <div style={{ padding: "8px 12px 12px", background: "#fff", borderTop: showAttachMenu ? "none" : "1px solid #e5e7eb", flexShrink: 0 }}>
         <form onSubmit={e => e.preventDefault()} style={{ display: "flex", alignItems: "flex-end", gap: 6, background: "#f8fafc", border: "1px solid #e5e7eb", borderRadius: 20, padding: "6px 6px 6px 4px" }}>
