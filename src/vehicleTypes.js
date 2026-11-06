@@ -22,7 +22,7 @@ const resolveCompany = (company) => {
 const clean = (s) => String(s || "").replace(/\s+/g, " ").trim().slice(0, 30);
 
 // ── 회사별 구독 공유 ──
-const EMPTY = Object.freeze({ loaded: false, custom: Object.freeze([]) });
+const EMPTY = Object.freeze({ loaded: false, custom: Object.freeze([]), hidden: Object.freeze([]) }); // ⭐ 2026-11-06 hidden — 회사가 지운 기본 차량종류
 const stores = new Map();
 function getStore(co) {
   let s = stores.get(co);
@@ -34,10 +34,11 @@ function startStore(co, s) {
   try {
     s.unsub = onSnapshot(doc(db, "vehicleTypes", co), (snap) => {
       const list = snap.exists() && Array.isArray(snap.data().custom) ? snap.data().custom.map(clean).filter(Boolean) : [];
-      s.state = { loaded: true, custom: [...new Set(list)] };
+      const hid = snap.exists() && Array.isArray(snap.data().hidden) ? snap.data().hidden.map(clean).filter(Boolean) : [];
+      s.state = { loaded: true, custom: [...new Set(list)], hidden: [...new Set(hid)] };
       s.listeners.forEach((fn) => fn());
-    }, () => { s.state = { loaded: true, custom: [] }; s.listeners.forEach((fn) => fn()); });
-  } catch { s.state = { loaded: true, custom: [] }; }
+    }, () => { s.state = { loaded: true, custom: [], hidden: [] }; s.listeners.forEach((fn) => fn()); });
+  } catch { s.state = { loaded: true, custom: [], hidden: [] }; }
 }
 function subscribeCo(co, cb) {
   if (!co) return () => {};
@@ -55,10 +56,15 @@ function subscribeCo(co, cb) {
 }
 
 // 기본 목록 + 회사 추가 목록(중복 제거, 기본 순서 유지 → 추가한 것은 뒤에)
-export function mergeVehicleTypes(base = VT_DEFAULTS, custom = []) {
-  const out = []; const seen = new Set();
-  for (const v of [...(base || []), ...(custom || [])]) { const c = clean(v); if (c && !seen.has(c)) { seen.add(c); out.push(c); } }
+// ⭐ 2026-11-06 hidden: 회사가 🗑로 지운 기본 차량종류(목록에서만 빠짐 · 저장된 값은 그대로)
+export function mergeVehicleTypes(base = VT_DEFAULTS, custom = [], hidden = []) {
+  const out = []; const seen = new Set(); const hid = new Set((hidden || []).map(clean));
+  for (const v of [...(base || []), ...(custom || [])]) { const c = clean(v); if (c && !seen.has(c) && !hid.has(c)) { seen.add(c); out.push(c); } }
   return out;
+}
+export function currentHiddenVehicleTypes(company) {
+  const co = resolveCompany(company);
+  return co ? (getStore(co).state.hidden || []) : [];
 }
 // 지금 회사의 추가 목록(구독 중일 때만 값이 있다 — 렌더 중 바로 읽는 곳용)
 export function currentCustomVehicleTypes(company) {
@@ -66,7 +72,7 @@ export function currentCustomVehicleTypes(company) {
   return co ? getStore(co).state.custom : [];
 }
 // 화면에서 기본 목록과 합친 목록 — 렌더 중 바로 읽기(위쪽 어딘가에서 useVehicleTypes가 구독하고 있어야 최신)
-export const withCustomVehicleTypes = (base = VT_DEFAULTS, company) => mergeVehicleTypes(base, currentCustomVehicleTypes(company));
+export const withCustomVehicleTypes = (base = VT_DEFAULTS, company) => mergeVehicleTypes(base, currentCustomVehicleTypes(company), currentHiddenVehicleTypes(company));
 
 // { loaded, custom, all, company }
 export function useVehicleTypes(company, base = VT_DEFAULTS) {
@@ -75,7 +81,7 @@ export function useVehicleTypes(company, base = VT_DEFAULTS) {
   const getSnap = React.useCallback(() => (co ? getStore(co).state : EMPTY), [co]);
   const st = React.useSyncExternalStore(subscribe, getSnap, getSnap);
   const baseKey = (base || []).join("|");
-  return React.useMemo(() => ({ loaded: st.loaded, custom: st.custom, all: mergeVehicleTypes(base, st.custom), company: co }), [st, baseKey, co]); // eslint-disable-line react-hooks/exhaustive-deps
+  return React.useMemo(() => ({ loaded: st.loaded, custom: st.custom, hidden: st.hidden || [], all: mergeVehicleTypes(base, st.custom, st.hidden), company: co }), [st, baseKey, co]); // eslint-disable-line react-hooks/exhaustive-deps
 }
 
 export async function addVehicleType(company, name) {
@@ -83,17 +89,38 @@ export async function addVehicleType(company, name) {
   if (!co) throw new Error("회사 정보를 찾지 못했습니다");
   if (!v) throw new Error("차량종류 이름을 입력해 주세요");
   const by = auth.currentUser?.uid || "";
-  await setDoc(doc(db, "vehicleTypes", co), { companyName: co, custom: arrayUnion(v), updatedAt: Date.now(), updatedBy: by }, { merge: true });
+  const s0 = getStore(co);
+  const wasHidden = (s0.state.hidden || []).includes(v);
+  // ⭐ 2026-11-06 지운 기본 차량종류를 다시 추가하면 숨김만 푼다
+  await setDoc(doc(db, "vehicleTypes", co), { companyName: co, ...(wasHidden ? { hidden: arrayRemove(v) } : { custom: arrayUnion(v) }), updatedAt: Date.now(), updatedBy: by }, { merge: true });
   // 화면이 바로 보이게(서버 응답 전에도)
   const s = getStore(co);
-  if (!s.state.custom.includes(v)) { s.state = { loaded: true, custom: [...s.state.custom, v] }; s.listeners.forEach((fn) => fn()); }
+  if (wasHidden) { s.state = { ...s.state, loaded: true, hidden: (s.state.hidden || []).filter((x) => x !== v) }; s.listeners.forEach((fn) => fn()); }
+  else if (!s.state.custom.includes(v)) { s.state = { ...s.state, loaded: true, custom: [...s.state.custom, v] }; s.listeners.forEach((fn) => fn()); }
   return v;
 }
-export async function removeVehicleType(company, name) {
+// ⭐ 2026-11-06 회사 추가 항목은 목록에서 빼고, 기본 항목(base·VT_DEFAULTS)은 숨김 목록(hidden)에 넣는다 — 회사 공용
+export async function removeVehicleType(company, name, base = VT_DEFAULTS) {
   const co = resolveCompany(company); const v = clean(name);
   if (!co || !v) return;
-  await setDoc(doc(db, "vehicleTypes", co), { companyName: co, custom: arrayRemove(v), updatedAt: Date.now(), updatedBy: auth.currentUser?.uid || "" }, { merge: true });
+  const s = getStore(co);
+  const isCustom = (s.state.custom || []).includes(v);
+  const isBase = (base || []).map(clean).includes(v) || VT_DEFAULTS.includes(v);
+  const hide = isBase || !isCustom;
+  await setDoc(doc(db, "vehicleTypes", co), { companyName: co, ...(isCustom ? { custom: arrayRemove(v) } : {}), ...(hide ? { hidden: arrayUnion(v) } : {}), updatedAt: Date.now(), updatedBy: auth.currentUser?.uid || "" }, { merge: true });
+  s.state = { ...s.state, loaded: true, custom: (s.state.custom || []).filter((x) => x !== v), hidden: hide ? [...new Set([...(s.state.hidden || []), v])] : (s.state.hidden || []) };
+  s.listeners.forEach((fn) => fn());
 }
+// 지운 기본 차량종류 되살리기
+export async function restoreVehicleType(company, name) {
+  const co = resolveCompany(company); const v = clean(name);
+  if (!co || !v) return;
+  await setDoc(doc(db, "vehicleTypes", co), { companyName: co, hidden: arrayRemove(v), updatedAt: Date.now(), updatedBy: auth.currentUser?.uid || "" }, { merge: true });
+  const s = getStore(co);
+  s.state = { ...s.state, hidden: (s.state.hidden || []).filter((x) => x !== v) };
+  s.listeners.forEach((fn) => fn());
+}
+const trashSvg = () => React.createElement("svg", { width: 15, height: 15, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2.2, strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": true }, React.createElement("path", { d: "M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3" }));
 
 // ───────────────────────── 화면 부품 ─────────────────────────
 const h = React.createElement;
@@ -153,6 +180,11 @@ export function VehicleTypePicker({ value, onChange, base = VT_DEFAULTS, company
     setBusy(true); setErr("");
     try { await addVehicleType(vt.company, v); pick(v); setNewName(""); } catch (e) { setErr(e?.message?.includes("permission") ? "추가 권한이 없습니다" : (e?.message || "추가하지 못했습니다")); } finally { setBusy(false); }
   };
+  const doRemove = async (v) => {
+    if (!window.confirm(`'${v}' 차량종류를 회사 목록에서 삭제할까요?\n회사의 모든 화면(PC·모바일) 목록에서 빠집니다. 이미 저장된 오더·기사 정보는 그대로예요.`)) return;
+    setBusy(true); setErr("");
+    try { await removeVehicleType(vt.company, v, base); } catch (e) { setErr(e?.message?.includes("permission") ? "삭제 권한이 없습니다" : (e?.message || "삭제하지 못했습니다")); setAdding(true); } finally { setBusy(false); }
+  };
   React.useEffect(() => { if (act >= opts.length) setAct(Math.max(0, opts.length - 1)); }, [opts.length]); // eslint-disable-line react-hooks/exhaustive-deps
   React.useEffect(() => {
     if (!open) return undefined;
@@ -211,7 +243,16 @@ export function VehicleTypePicker({ value, onChange, base = VT_DEFAULTS, company
     h("span", { style: { flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: 14.5, fontWeight: o.none ? 700 : 800, color: o.none ? "#8E9BB2" : "#0F1A30" } }, o.none ? (noneLabel || "선택 안 함") : o.v),
     // ⭐ 2026-11-02 "회사"만 작게 써 있어 안 보인다는 의견 — 일반 글꼴·큰 글씨로 "회사 추가"
     o.custom ? h("span", { title: "우리 회사에서 추가한 차량종류", style: { flexShrink: 0, fontSize: 12, fontWeight: 800, lineHeight: "20px", padding: "0 8px", borderRadius: 999, background: "#EEF3FC", border: "1px solid #C9D5EA", color: "#1B2B4B", whiteSpace: "nowrap" } }, "회사 추가") : null,
-    o.legacy ? h("span", { style: { fontSize: 12, fontWeight: 800, color: "#B54708" } }, "직접 입력값") : null);
+    o.legacy ? h("span", { style: { fontSize: 12, fontWeight: 800, color: "#B54708" } }, "직접 입력값") : null,
+    // ⭐ 2026-11-06 🗑 항목 삭제(회사 공용 · 기본 항목도) — 확인 후
+    allowAdd && !o.none && !o.legacy ? h("button", {
+      type: "button", title: `${o.v} 삭제`, "aria-label": `${o.v} 삭제`, "data-vt-del": "1", disabled: busy,
+      onMouseDown: (e) => { e.preventDefault(); e.stopPropagation(); },
+      onClick: (e) => { e.preventDefault(); e.stopPropagation(); doRemove(o.v); },
+      onMouseEnter: (e) => { e.currentTarget.style.background = "#FFF1EE"; e.currentTarget.style.color = "#B42318"; },
+      onMouseLeave: (e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "#9AA9C3"; },
+      style: { flexShrink: 0, width: 28, height: 28, borderRadius: 8, border: "none", background: "transparent", color: "#9AA9C3", cursor: "pointer", display: "grid", placeItems: "center" },
+    }, trashSvg()) : null);
   };
   const menuEl = h("div", {
     ref: menu, role: "listbox", "data-vt-menu": "1", tabIndex: -1, onKeyDownCapture: (e) => { if (e.target === menu.current) onSearchKey(e); },
@@ -270,7 +311,7 @@ function VehicleTypeDialog({ company, initial = "", onAdded, onClose }) {
   };
   const del = async (v) => {
     if (!window.confirm(`"${v}" 차량종류를 회사 목록에서 뺄까요?\n(이미 저장된 오더·기사 정보는 그대로입니다)`)) return;
-    try { await removeVehicleType(vt.company, v); } catch (e) { setErr(e?.message || "삭제하지 못했습니다"); }
+    try { await removeVehicleType(vt.company, v, VT_DEFAULTS); } catch (e) { setErr(e?.message || "삭제하지 못했습니다"); }
   };
   return h("div", {
     "data-kp-dialog": "1", "data-vt-dialog": "1",
@@ -280,7 +321,7 @@ function VehicleTypeDialog({ company, initial = "", onAdded, onClose }) {
   h("div", { role: "dialog", "aria-modal": "true", onMouseDown: (e) => e.stopPropagation(), style: { width: "min(420px,100%)", borderRadius: 20, background: "#fff", overflow: "hidden", boxShadow: "0 30px 80px rgba(8,14,30,.45)" } },
     h("div", { style: { padding: "18px 20px 16px", color: "#fff", background: "radial-gradient(120% 120% at 0% 0%,#2D4C82 0%,#1B2B4B 50%,#0B1428 100%)" } },
       h("div", { style: { fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 11, fontWeight: 900, letterSpacing: "0.22em", color: "#8FB0F0" } }, "VEHICLE TYPE"),
-      h("div", { style: { fontSize: 17, fontWeight: 900, marginTop: 3 } }, "차량종류 추가"),
+      h("div", { style: { fontSize: 17, fontWeight: 900, marginTop: 3 } }, "차량종류 추가 · 관리"),
       h("div", { style: { fontSize: 13, fontWeight: 600, color: "#C9D6EE", marginTop: 3 } }, "추가하면 회사의 모든 화면(PC·모바일) 차량종류 목록에 나옵니다")),
     h("div", { style: { padding: "16px 20px 6px" } },
       h("div", { style: { display: "flex", gap: 8 } },
@@ -292,11 +333,15 @@ function VehicleTypeDialog({ company, initial = "", onAdded, onClose }) {
         }),
         h("button", { type: "button", disabled: busy, onClick: submit, style: { height: 44, padding: "0 18px", borderRadius: 12, border: "none", background: "#1B2B4B", color: "#fff", fontSize: 14, fontWeight: 900, cursor: "pointer", opacity: busy ? 0.6 : 1 } }, busy ? "추가 중" : "추가")),
       err ? h("div", { style: { fontSize: 13, fontWeight: 800, color: "#C0352B", marginTop: 6 } }, err) : null,
-      h("div", { style: { marginTop: 14, fontSize: 12.5, fontWeight: 900, color: "#5B6B85", letterSpacing: "0.04em" } }, `회사에서 추가한 차량종류 ${vt.custom.length}개`),
-      h("div", { style: { display: "flex", flexWrap: "wrap", gap: 6, marginTop: 8, maxHeight: 150, overflowY: "auto" } },
-        vt.custom.length ? vt.custom.map((v) => h("span", { key: v, style: { display: "inline-flex", alignItems: "center", gap: 4, height: 28, padding: "0 4px 0 10px", borderRadius: 8, border: "1px solid #C9D5EA", background: "#F7F9FC", fontSize: 13.5, fontWeight: 800, color: "#0F1A30" } },
-          v, h("button", { type: "button", onClick: () => del(v), title: "목록에서 빼기", style: { width: 20, height: 20, borderRadius: 6, border: "none", background: "transparent", color: "#9AA9C3", cursor: "pointer", fontSize: 12, fontWeight: 900 } }, "✕")))
-          : h("span", { style: { fontSize: 13, fontWeight: 700, color: "#9AA9C3" } }, "아직 없습니다 — 위에서 추가해 보세요"))),
+      // ⭐ 2026-11-06 기본 항목까지 모두 🗑로 지울 수 있다(회사 공용) · 지운 기본 항목은 아래에서 되살리기
+      h("div", { style: { marginTop: 14, fontSize: 12.5, fontWeight: 900, color: "#5B6B85", letterSpacing: "0.04em" } }, `회사 차량종류 목록 ${vt.all.length}개`),
+      h("div", { style: { display: "flex", flexWrap: "wrap", gap: 6, marginTop: 8, maxHeight: 170, overflowY: "auto" } },
+        vt.all.length ? vt.all.map((v) => h("span", { key: v, style: { display: "inline-flex", alignItems: "center", gap: 2, height: 30, padding: "0 2px 0 10px", borderRadius: 8, border: "1px solid #C9D5EA", background: vt.custom.includes(v) ? "#EEF3FC" : "#F7F9FC", fontSize: 13.5, fontWeight: 800, color: "#0F1A30" } },
+          v, h("button", { type: "button", onClick: () => del(v), title: "목록에서 삭제", "data-vt-del": "1", style: { width: 26, height: 26, borderRadius: 6, border: "none", background: "transparent", color: "#9AA9C3", cursor: "pointer", display: "grid", placeItems: "center" } }, trashSvg())))
+          : h("span", { style: { fontSize: 13, fontWeight: 700, color: "#9AA9C3" } }, "아직 없습니다 — 위에서 추가해 보세요")),
+      (vt.hidden || []).length ? h("div", { style: { marginTop: 10, fontSize: 12.5, fontWeight: 700, color: "#7A8AA6", display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center" } },
+        h("span", null, "지운 기본 항목:"),
+        ...(vt.hidden || []).map((v) => h("button", { key: v, type: "button", onClick: () => restoreVehicleType(vt.company, v).catch(() => {}), title: "되살리기", style: { height: 26, padding: "0 8px", borderRadius: 7, border: "1px dashed #9FB2D3", background: "#fff", color: "#2D4C82", fontSize: 12.5, fontWeight: 800, cursor: "pointer" } }, `↺ ${v}`))) : null),
     h("div", { style: { padding: "14px 20px 18px", display: "flex", justifyContent: "flex-end" } },
       h("button", { type: "button", onClick: onClose, style: { height: 38, padding: "0 16px", borderRadius: 10, border: "1px solid #DCE3EE", background: "#fff", color: "#3A4A66", fontSize: 14, fontWeight: 900, cursor: "pointer" } }, "닫기"))));
 }

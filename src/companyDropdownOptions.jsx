@@ -166,6 +166,31 @@ export async function addCompanyDropdownOption(key, name, company) {
   return v;
 }
 
+// ⭐ 2026-11-06 선택 목록의 🗑 삭제 — 회사 목록에서 하나 뺀다(회사 공용 · PC·모바일 모든 화면)
+//  · 회사가 아직 목록을 바꾼 적이 없으면(기본 목록 상태) 기본 목록에서 그 이름만 뺀 목록으로 처음 저장 → 기본 항목도 지울 수 있다
+//  · 마지막 하나는 지우지 않는다(빈 목록이면 기본 목록이 다시 나오기 때문)
+//  · 이미 저장된 오더 값은 그대로(목록에 없으면 "직접 입력값"으로 보인다)
+export async function removeCompanyDropdownOption(key, name, company) {
+  const co = String(company || "").trim() || resolveCompanyKey();
+  const v = clean(name);
+  if (!co) throw new Error("회사 정보를 찾지 못했습니다");
+  if (!v) return null;
+  const ref = doc(db, "companySettings", co);
+  let stored = companyOptionsSnapshot(co).opts?.[key];
+  if (!companyOptionsSnapshot(co).loaded) {
+    try { const snap = await getDoc(ref); stored = snap.exists() ? snap.data()?.dropdownOptions?.[key] : null; } catch { /* 아래에서 기본 목록으로 */ }
+  }
+  const cur = listFromStored(stored, key);
+  const next = cur.filter((x) => x !== v);
+  if (next.length === cur.length) return null;
+  if (!next.length) throw new Error("마지막 항목은 지울 수 없어요");
+  await setDoc(ref, { dropdownOptions: { [key]: next } }, { merge: true });
+  const st = getStore(co);
+  st.state = { loaded: true, opts: { ...(st.state.opts || {}), [key]: next } };
+  emit(st);
+  return v;
+}
+
 // ⭐ 편집모드일 때만 드롭다운 옆에 붙는 "옵션 관리" 버튼 + 모달 — EditableText와
 // 같은 상호작용(클릭해서 바로 고치기) 느낌을 유지하되, 목록 추가/삭제/순서변경이
 // 필요해 모달로 뺐다. isTotalMaster가 아니거나 편집모드가 꺼져있으면 아무것도

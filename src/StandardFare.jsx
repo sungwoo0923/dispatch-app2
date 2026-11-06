@@ -12,6 +12,28 @@ const VEHICLE_TYPES = [
 
 const clean = (s) => String(s || "").replace(/\s+/g, "").trim().toLowerCase();
 
+// ⭐ 2026-11-06 자사운임표 검색 정확도 — 띄어쓰기·(주)·주식회사·괄호·점 등을 무시하고, 시·도 긴 이름은 짧게 맞춘다
+//  · 예) "인천 서구" ↔ "인천광역시 서구 원창동" · "(주)한국상사" ↔ "한국상사" · "아산 한국자동차" ↔ "한국자동차 아산공장"
+//  · 검색어를 띄어쓰기로 나눈 조각이 모두 들어 있으면 맞음(순서 무관) — 붙여 쓴 검색어도 그대로 포함 비교
+const SF_SIDO = [["서울특별시", "서울"], ["부산광역시", "부산"], ["대구광역시", "대구"], ["인천광역시", "인천"], ["광주광역시", "광주"], ["대전광역시", "대전"], ["울산광역시", "울산"], ["세종특별자치시", "세종"], ["경기도", "경기"], ["강원특별자치도", "강원"], ["강원도", "강원"], ["충청북도", "충북"], ["충청남도", "충남"], ["전북특별자치도", "전북"], ["전라북도", "전북"], ["전라남도", "전남"], ["경상북도", "경북"], ["경상남도", "경남"], ["제주특별자치도", "제주"]];
+const sfNorm = (v) => {
+  let t = String(v ?? "").toLowerCase();
+  for (const [a, b] of SF_SIDO) t = t.split(a).join(b);
+  return t.replace(/\(주\)|㈜|주식회사|\(유\)|유한회사/g, "").replace(/[\s()[\]{}.,·\-_/~'"]+/g, "");
+};
+const sfTokens = (q) => String(q ?? "").split(/[\s,]+/).map(sfNorm).filter(Boolean);
+// hay 여러 개(이름·주소 등) 중 하나라도 검색어에 맞으면 true
+function sfMatch(q, ...hays) {
+  const whole = sfNorm(q);
+  if (!whole) return true;
+  const toks = sfTokens(q);
+  const hs = hays.map(sfNorm).filter(Boolean);
+  if (!hs.length) return false;
+  if (hs.some((h) => h.includes(whole))) return true;
+  // 조각마다 — 이름·주소 어느 쪽에 있어도 된다(예: "한국상사 아산" → 이름 한국상사 + 주소 아산)
+  return toks.length > 1 && toks.every((t) => hs.some((h) => h.includes(t)));
+}
+
 function toYMD(v) {
   if (!v) return "";
   if (v?.toDate && typeof v.toDate === "function") {
@@ -390,15 +412,16 @@ function PlaceSuggest({ value, onChange, names = [], placeholder, onKeyDown }) {
 
   const dq = React.useDeferredValue(query);
   const filtered = useMemo(() => {
-    const q = (dq || "").replace(/\s+/g, "").toLowerCase();
-    if (!q || q.length < 1) return [];
+    // ⭐ 2026-11-06 앞 두 글자만 같아도 뜨던 엉뚱한 목록 제거 — 같은 기준(sfNorm·조각)으로 정확 → 시작 → 포함 → 조각 순
+    const q = sfNorm(dq);
+    if (!q) return [];
     return names
       .map(n => {
-        const nc = n.replace(/\s+/g, "").toLowerCase();
+        const nc = sfNorm(n);
         if (nc === q) return { name: n, score: 100 };
-        if (nc.startsWith(q) || q.startsWith(nc.slice(0, 2))) return { name: n, score: 80 };
+        if (nc.startsWith(q)) return { name: n, score: 80 };
         if (nc.includes(q)) return { name: n, score: 60 };
-        if (q.includes(nc.slice(0, 3))) return { name: n, score: 40 };
+        if (sfMatch(dq, n)) return { name: n, score: 40 };
         return null;
       })
       .filter(Boolean)
@@ -444,9 +467,8 @@ function ClientSearch({ value, onChange, clients }) {
 
   const dq = React.useDeferredValue(query);
   const filtered = useMemo(() => {
-    const q = clean(dq);
-    if (!q) return clients.slice(0, 10);
-    return clients.filter(c => clean(c).includes(q)).slice(0, 10);
+    if (!sfNorm(dq)) return clients.slice(0, 10);
+    return clients.filter(c => sfMatch(dq, c)).slice(0, 10); // ⭐ 2026-11-06 (주)·띄어쓰기 무시
   }, [dq, clients]);
 
   useEffect(() => {
@@ -783,22 +805,21 @@ export default function StandardFare({ embedded = false, defaultTab = "표준운
   // 같은 필터(화물/톤수/차량/거래처 등)를 동일하게 적용한다.
   const runFilter = (pk, pAddr, dr, dAddr, extraList = []) => {
     let list = [...dispatchData, ...extraList];
+    // ⭐ 2026-11-06 sfMatch — 띄어쓰기·(주)·시도 표기·조각 순서와 상관없이(예전: 공백만 지우고 통째로 포함 비교 → "인천 서구"가 "인천광역시 서구"를 못 찾음)
     list = list.filter(r => {
-      const name = clean(r.상차지명||""), addr = clean(r.상차지주소||"");
-      const p = clean(pk), pa = clean(pAddr);
+      const p = String(pk || "").trim(), pa = String(pAddr || "").trim();
       if (!p && !pa) return true;
-      const mainMatches = (p && (name.includes(p)||addr.includes(p))) || (pa && (name.includes(pa)||addr.includes(pa)));
+      const mainMatches = (p && sfMatch(p, r.상차지명, r.상차지주소)) || (pa && sfMatch(pa, r.상차지주소, r.상차지명));
       if (mainMatches) return true;
-      if (includeVia && p) return getPickupVias(r).some(n => clean(n).includes(p));
+      if (includeVia && p) return getPickupVias(r).some(n => sfMatch(p, n));
       return false;
     });
     list = list.filter(r => {
-      const name = clean(r.하차지명||""), addr = clean(r.하차지주소||"");
-      const d = clean(dr), da = clean(dAddr);
+      const d = String(dr || "").trim(), da = String(dAddr || "").trim();
       if (!d && !da) return true;
-      const mainMatches = (d && (name.includes(d)||addr.includes(d))) || (da && (name.includes(da)||addr.includes(da)));
+      const mainMatches = (d && sfMatch(d, r.하차지명, r.하차지주소)) || (da && sfMatch(da, r.하차지주소, r.하차지명));
       if (mainMatches) return true;
-      if (includeVia && d) return getDropVias(r).some(n => clean(n).includes(d));
+      if (includeVia && d) return getDropVias(r).some(n => sfMatch(d, n));
       return false;
     });
     if (cargo.trim()) {
@@ -820,7 +841,7 @@ export default function StandardFare({ embedded = false, defaultTab = "표준운
       list = list.filter(r => normalizeVehicleGroup(r.차량종류) === vg);
     }
     if (client !== "전체" && client !== "") {
-      list = list.filter(r => clean(r.거래처명) === clean(client));
+      list = list.filter(r => sfNorm(r.거래처명) === sfNorm(client)); // ⭐ 2026-11-06 (주)·띄어쓰기 무시
     }
     // ⭐ 경유지 있는 오더(다구간 배차) 제외 — 청구운임에 경유 구간 요금이 섞여있어
     // 순수 "상차지→하차지" 단일구간 시세만 보고 싶을 때 끌 수 있다.

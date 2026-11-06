@@ -775,6 +775,7 @@ export default function RouteBoard({ companyName = "" }) {
   };
   // 시트와 비교 — 저장된 줄 중 시트에 없는 줄(같은 묶음·같은 도착지 개수 기준) · 시트에만 있는 줄
   const checkingRef = React.useRef(false);
+  const sheetMtRef = React.useRef({}); // 💰 2026-11-06 탭별 마지막 시트 수정시각
   const rowsRef = React.useRef(rows); rowsRef.current = rows; // 비교는 항상 지금 표 기준
   const checkSheet = async (force = false) => {
     if (!form?.sheetUrl || orders === null || checkingRef.current) return;
@@ -783,7 +784,12 @@ export default function RouteBoard({ companyName = "" }) {
     try {
       const tab = await resolveTab();
       if (!tab) { setSheetDiff({ tab: "", at: Date.now(), gone: new Set(), added: {} }); return; }
-      const d = await sheetApi({ action: "read", url: form.sheetUrl, tab });
+      // 💰 2026-11-06 1분 확인은 "시트가 바뀌었을 때만" 값을 읽는다(서버가 Drive 수정시각으로 비교 · 같으면 unchanged)
+      const mtKey = `${form.sheetUrl}|${tab}`;
+      const cached = sheetMtRef.current[mtKey];
+      let d = await sheetApi({ action: "read", url: form.sheetUrl, tab, ...(!force ? { ifChanged: cached?.mt || "-" } : {}) });
+      if (d.unchanged && cached?.rows) d = { rows: cached.rows }; // 시트 그대로 → 지난번 값으로 비교(표에서 바뀐 것만 반영)
+      else if (d.modifiedTime) sheetMtRef.current[mtKey] = { mt: d.modifiedTime, rows: d.rows };
       const p = parseBoardTab(form, d.rows);
       const cN = colOf("하차지명");
       if (!cN || !p.headers) { setSheetDiff({ tab, at: Date.now(), gone: new Set(), added: {}, bad: true }); return; }

@@ -6085,9 +6085,52 @@ exports.sheetOcr = functions.runWith({ timeoutSeconds: 120, memory: "512MB" }).h
 
 // 📋 2026-11-03 배차표 ↔ 구글시트 자동 연동(10분마다) — 규칙은 functions/routeBoardSync.js 맨 위 설명
 const { syncBoard: _syncBoard } = require("./routeBoardSync");
-async function runRouteBoardSync(form, { force = false, range = null } = {}) {
+// 💰 2026-11-06 바뀌었을 때만 읽기 — 시트 값을 통째로 읽기 전에 Drive files.get(fields=modifiedTime) 1번으로 "시트가 바뀌었나"만 본다
+//  · 바뀐 게 없고(마지막으로 맞춘 뒤 modifiedTime 그대로) · 프로그램에서 추가해 시트에 아직 안 넣은 줄도 없고 · 1시간 안에 전체 맞춤을 했으면 → 건너뜀
+//  · 1시간마다 한 번은 무조건 전체 맞춤(안전장치) · 화면에서 고친 내용은 그 자리에서 바로 맞춤(action sync, auto 아님)을 불러 시트에 쓴다
+//  · Drive API를 못 쓰면(꺼져 있음·권한 없음) 예전처럼 매번 전체 맞춤(30분 동안 다시 묻지 않음)
+const DRIVE_META_SCOPES = ["https://www.googleapis.com/auth/drive.metadata.readonly"];
+const ROUTE_FULL_SYNC_MS = 60 * 60 * 1000;
+let _driveMetaClient = null;
+let _driveMetaOffUntil = 0;
+async function sheetModifiedTime(sid) {
+  if (!sid || Date.now() < _driveMetaOffUntil) return "";
+  try {
+    if (!_driveMetaClient) _driveMetaClient = await new GoogleAuth({ scopes: DRIVE_META_SCOPES }).getClient();
+    const r = await _driveMetaClient.request({ url: `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(sid)}?fields=modifiedTime&supportsAllDrives=true`, method: "GET" });
+    return String(r?.data?.modifiedTime || "");
+  } catch (e) {
+    const st = e?.response?.status;
+    if (st === 403 || st === 401) _driveMetaOffUntil = Date.now() + 30 * 60 * 1000;
+    console.warn(`[배차표 연동] 시트 수정시각 확인 실패(${st || "-"}) — 전체 맞춤으로`, e?.message || e);
+    return "";
+  }
+}
+// 이번에 시트 값을 읽어야 하나? → { need, mt, reason }
+const fs0Ref = (boardId) => db.collection("routeBoards").doc(String(boardId));
+async function routeBoardNeedsSync(form, sid) {
+  const mt = await sheetModifiedTime(sid);
+  if (!mt) return { need: true, mt: "", reason: "no-meta" };
+  if (mt !== String(form.sheetModifiedTime || "")) return { need: true, mt, reason: "sheet-changed" };
+  if (Date.now() - Number(form.fullSyncAt || 0) >= ROUTE_FULL_SYNC_MS) return { need: true, mt, reason: "hourly" };
+  if (Number(form.pushWantedAt || 0) > Number(form.fullSyncAt || 0)) return { need: true, mt, reason: "program-edit" };
+  try {
+    const pend = await db.collection("orders").where("배차표Id", "==", form.id).where("companyName", "==", form.companyName || "").where("시트추가대기", "==", true).limit(1).get();
+    if (!pend.empty) return { need: true, mt, reason: "pending-add" };
+  } catch (e) { return { need: true, mt, reason: "pending-check-failed" }; }
+  return { need: false, mt, reason: "unchanged" };
+}
+async function runRouteBoardSync(form, { force = false, range = null, mt: mt0 = null } = {}) {
   const sid = parseSpreadsheetId(form.sheetUrl);
   if (!sid) return { skipped: "no-sheet" };
+  const before = mt0 != null ? mt0 : await sheetModifiedTime(sid);
+  const r = await runRouteBoardSyncRaw(form, sid, { force, range });
+  // 우리가 시트에 쓴 경우(칸 쓰기·줄 끼우기)엔 modifiedTime이 바뀌었으니 다시 받아 둔다(다음 확인이 "바뀜"으로 헛돌지 않게)
+  const after = (r && (r.pushed || r.appended)) ? await sheetModifiedTime(sid) : before;
+  await db.collection("routeBoards").doc(form.id).set({ sheetModifiedTime: after || "", fullSyncAt: Date.now(), syncCheckedAt: Date.now() }, { merge: true }).catch(() => {});
+  return r;
+}
+async function runRouteBoardSyncRaw(form, sid, { force = false, range = null } = {}) {
   const tabIds = {};
   return _syncBoard({
     db, FieldValue, form: force ? { ...form, syncHash: {} } : form, range,
@@ -6113,7 +6156,11 @@ exports.syncRouteBoards = functions.runWith({ timeoutSeconds: 300, memory: "512M
     if (!form.sheetUrl || form.autoSync === false) continue;
     // 💰 2026-11-04 서버 비용 — 열려 있는 화면이 4분 안에 이미 맞췄으면 이번 5분 차례는 건너뜀(같은 시트·오더를 또 읽지 않게)
     if (Date.now() - Number(form.syncedAt || 0) < 4 * 60 * 1000) continue;
-    try { const r = await runRouteBoardSync(form); if (r.created || r.updated || r.gone || r.deleted) console.log(`[배차표 연동] ${form.companyName} ${form.name}`, JSON.stringify(r)); }
+    try {
+      // 💰 2026-11-06 시트가 안 바뀌었으면(Drive modifiedTime) 값 읽기 없이 건너뜀 · 1시간마다 한 번은 전체
+      const chk = await routeBoardNeedsSync(form, parseSpreadsheetId(form.sheetUrl));
+      if (!chk.need) { await d.ref.set({ syncCheckedAt: Date.now() }, { merge: true }).catch(() => {}); continue; }
+      const r = await runRouteBoardSync(form, { mt: chk.mt }); if (r.created || r.updated || r.gone || r.deleted) console.log(`[배차표 연동] ${form.companyName} ${form.name} (${chk.reason})`, JSON.stringify(r)); }
     catch (e) { console.error(`[배차표 연동 실패] ${form.companyName} ${form.name}:`, e?.message || e); }
   }
   return null;
@@ -6135,20 +6182,45 @@ exports.routeBoardSheet = functions.runWith({ timeoutSeconds: 540, memory: "512M
   body = body || {};
   try {
     const me = await requireStaff(req, body);
+    // ⭐ 2026-11-06 sync는 양식(boardId)만으로도 — 시트 주소는 양식에 저장된 것을 쓴다(화면에서 고친 뒤 바로 시트에 쓰기)
+    let syncForm = null;
+    if (body.action === "sync" && !body.url && body.boardId) {
+      const fs0 = await db.collection("routeBoards").doc(String(body.boardId)).get();
+      if (fs0.exists) { syncForm = { id: fs0.id, ...fs0.data() }; body.url = syncForm.sheetUrl || ""; }
+    }
     const id = parseSpreadsheetId(body.url);
     if (!id) { res.status(400).json({ error: "구글시트 주소가 올바르지 않습니다." }); return; }
-    const meta = await sheetsApiFor(id, "GET", "?fields=properties.title,sheets.properties(title,index)");
-    const tabs = (meta.sheets || []).map((x) => x.properties).sort((a, b) => a.index - b.index).map((t) => t.title);
-    if (body.action === "tabs") { res.json({ title: meta.properties?.title || "", tabs }); return; }
+    // 💰 2026-11-06 시트 정보(탭 목록)는 필요한 작업에서만 읽는다 — 예전엔 30초 자동 맞춤(건너뛰는 경우 포함)마다 Sheets API를 1번씩 불렀다
+    let _meta = null;
+    const getMeta = async () => (_meta || (_meta = await sheetsApiFor(id, "GET", "?fields=properties.title,sheets.properties(title,index)")));
+    const tabsOf = (m) => (m.sheets || []).map((x) => x.properties).sort((a, b) => a.index - b.index).map((t) => t.title);
+    // 💰 2026-11-06 read + ifChanged(지난번 modifiedTime) — 시트가 그대로면 값을 읽지 않고 unchanged만 돌려준다(배차표 화면 1분 확인)
+    if (body.action === "read" && body.ifChanged) {
+      const mt = await sheetModifiedTime(id);
+      if (mt && mt === String(body.ifChanged)) { res.json({ unchanged: true, modifiedTime: mt }); return; }
+      body._mt = mt;
+    }
+    if (body.action === "tabs") { const meta = await getMeta(); res.json({ title: meta.properties?.title || "", tabs: tabsOf(meta) }); return; }
     // ⭐ 2026-11-03 sync: 이 양식의 시트를 지금 바로 맞춤(새 줄·새 날짜 탭 → 오더 생성, 화주 칸 반영, 지워진 줄 표시)
     if (body.action === "sync") {
-      const fs = await db.collection("routeBoards").doc(String(body.boardId || "x")).get();
-      if (!fs.exists) { res.status(404).json({ error: "양식을 찾을 수 없습니다." }); return; }
-      const form = { id: fs.id, ...fs.data() };
+      let form = syncForm;
+      if (!form) {
+        const fs = await db.collection("routeBoards").doc(String(body.boardId || "x")).get();
+        if (!fs.exists) { res.status(404).json({ error: "양식을 찾을 수 없습니다." }); return; }
+        form = { id: fs.id, ...fs.data() };
+      }
       if (!me.isTM && form.companyName !== me.company) { res.status(403).json({ error: "다른 회사 양식입니다." }); return; }
       if (parseSpreadsheetId(form.sheetUrl) !== id) { res.status(400).json({ error: "양식에 저장된 시트 주소와 다릅니다." }); return; }
-      // 💰 2026-11-04 서버 비용 — 화면의 30초 자동 맞춤(auto)은 다른 화면·서버가 25초 안에 이미 맞췄으면 건너뜀(직원 수만큼 겹치던 읽기 제거)
+      // 💰 2026-11-04 서버 비용 — 화면의 자동 맞춤(auto)은 다른 화면·서버가 25초 안에 이미 맞췄으면 건너뜀(직원 수만큼 겹치던 읽기 제거)
       if (body.auto === true && !body.from && Date.now() - Number(form.syncedAt || 0) < 25 * 1000) { res.json({ skipped: "recent", syncedAt: Number(form.syncedAt || 0) }); return; }
+      // 💰 2026-11-06 자동 맞춤(auto)은 시트가 바뀌었을 때만(Drive modifiedTime) · 다른 화면이 25초 안에 확인했으면 그 결과를 그대로
+      if (body.auto === true && !body.from) {
+        if (Date.now() - Number(form.syncCheckedAt || 0) < 25 * 1000 && Number(form.syncCheckedAt || 0) > Number(form.pushWantedAt || 0)) { res.json({ skipped: "unchanged", checkedAt: Number(form.syncCheckedAt || 0) }); return; }
+        const chk = await routeBoardNeedsSync(form, id);
+        if (!chk.need) { await fs0Ref(form.id).set({ syncCheckedAt: Date.now() }, { merge: true }).catch(() => {}); res.json({ skipped: "unchanged", checkedAt: Date.now() }); return; }
+        res.json({ ...(await runRouteBoardSync(form, { mt: chk.mt })), reason: chk.reason });
+        return;
+      }
       // ⭐ 2026-11-03 기간 가져오기(입고일=탭 날짜 기준, 최대 120일)
       const okD = (x) => /^\d{4}-\d{2}-\d{2}$/.test(String(x || ""));
       let range = null;
@@ -6162,15 +6234,17 @@ exports.routeBoardSheet = functions.runWith({ timeoutSeconds: 540, memory: "512M
     }
     if (body.action === "read") {
       const tab = String(body.tab || "");
+      const meta = await getMeta(); const tabs = tabsOf(meta);
       if (!tabs.includes(tab)) { res.status(400).json({ error: "탭을 찾을 수 없습니다." }); return; }
       const got = await sheetsApiFor(id, "GET", `/values/${encodeURIComponent(`${quoteTab(tab)}!A1:AZ3000`)}?valueRenderOption=FORMATTED_VALUE&dateTimeRenderOption=FORMATTED_STRING`);
       console.log(`[배차표 시트] ${me.company} ${me.email} ${id} ${tab}`);
-      res.json({ title: meta.properties?.title || "", tab, rows: got.values || [] });
+      res.json({ title: meta.properties?.title || "", tab, rows: got.values || [], ...(body._mt ? { modifiedTime: body._mt } : {}) }); // ⭐ 2026-11-06 다음 확인 때 ifChanged로
       return;
     }
     // ⭐ write: 배차표 → 시트(화면이 정한 칸만 — 차량·기사·수량·운송업체·시간·비고). 도착지·시군구·합계 칸은 화면에서 빼고 보낸다.
     if (body.action === "write") {
       const tab = String(body.tab || "");
+      const tabs = tabsOf(await getMeta());
       if (!tabs.includes(tab)) { res.status(400).json({ error: "탭을 찾을 수 없습니다." }); return; }
       const ups = (Array.isArray(body.updates) ? body.updates : []).filter((u) => /^[A-Z]{1,3}\d{1,5}$/.test(String(u?.a1 || ""))).slice(0, 3000);
       if (!ups.length) { res.json({ updated: 0 }); return; }

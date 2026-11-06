@@ -194,6 +194,27 @@ export async function addFareRuleQuick(company, { name, value }) {
   return rule;
 }
 
+// ⭐ 2026-11-06 운임구분 🗑 삭제 — 드롭다운 줄에서 바로 회사 운임 규칙(fareRules/{회사}.rules)에서 뺀다(회사 공용)
+//  · 이미 그 운임구분으로 저장된 오더는 그대로(목록에 없으면 이름만 보임)
+export async function removeFareRuleQuick(company, rule) {
+  const co = resolveCompany(company);
+  if (!co) throw new Error("회사 정보를 찾지 못했습니다");
+  const cur = Array.isArray(getStore(co).state?.data?.rules) ? getStore(co).state.data.rules : [];
+  const nm = String(rule?.name || "").trim();
+  const next = cur.filter((r) => !(rule?.id ? r?.id === rule.id : String(r?.name || "").trim() === nm));
+  if (next.length === cur.length) return null;
+  const u = auth?.currentUser;
+  const by = u?.displayName || (u?.email || "").split("@")[0] || "";
+  await setDoc(doc(db, "fareRules", co), {
+    companyName: co,
+    rules: next,
+    history: arrayUnion({ at: Date.now(), by, change: `규칙 삭제 ${nm} · 운임구분에서 바로 삭제` }),
+    updatedAt: serverTimestamp(),
+    updatedBy: by,
+  }, { merge: true });
+  return nm;
+}
+
 // ── 작은 UI 조각 ──
 const h = React.createElement;
 
@@ -245,6 +266,11 @@ export function FareTypeSelect({ value, onChange, rules = [], className = "", di
       pendingRef.current = "";
       setAddErr(e?.code === "permission-denied" ? "추가 권한이 없습니다" : (e?.message || "추가하지 못했습니다"));
     } finally { setAddBusy(false); }
+  };
+  const delRule = async (o) => {
+    if (!window.confirm(`운임구분 '${o.name}'을(를) 삭제할까요?\n회사관리 › 운임 규칙에서도 빠집니다(회사 공용). 이미 저장된 오더 값은 그대로예요.`)) return;
+    try { await removeFareRuleQuick(company, o); if (String(value || "") === String(o.name)) onChange?.(""); }
+    catch (e) { setAdding(true); setAddErr(e?.code === "permission-denied" ? "삭제 권한이 없습니다" : (e?.message || "삭제하지 못했습니다")); }
   };
   const place = React.useCallback(() => {
     const el = btn.current; if (!el) return;
@@ -334,7 +360,14 @@ export function FareTypeSelect({ value, onChange, rules = [], className = "", di
           : o.extra ? h("span", { className: "flex-1 text-[13px] font-extrabold text-[#5B6B85]" }, o.label)
           : h(React.Fragment, null,
             h("span", { className: "flex-1 min-w-0 truncate text-[14.5px] font-extrabold text-[#0F1A30]" }, o.name, o.active === false ? h("span", { className: "ml-1 text-[11px] font-bold text-[#B54708]" }, "(사용 안 함)") : null),
-            h("span", { className: "shrink-0 tabular-nums px-2 h-[22px] inline-flex items-center rounded-full bg-[#1B2B4B] text-[#E9C46A] text-[12.5px] font-black" }, o.type === "fixed" ? `고정 ${fmtRuleVal(o)}` : `수수료 ${fmtRuleVal(o)}`)));
+            h("span", { className: "shrink-0 tabular-nums px-2 h-[22px] inline-flex items-center rounded-full bg-[#1B2B4B] text-[#E9C46A] text-[12.5px] font-black" }, o.type === "fixed" ? `고정 ${fmtRuleVal(o)}` : `수수료 ${fmtRuleVal(o)}`),
+            // ⭐ 2026-11-06 🗑 운임구분 삭제(회사 공용) — 확인 후
+            canAdd ? h("button", {
+              type: "button", title: `${o.name} 삭제`, "aria-label": `${o.name} 삭제`, "data-fare-del": "1",
+              onMouseDown: (e) => { e.preventDefault(); e.stopPropagation(); },
+              onClick: (e) => { e.preventDefault(); e.stopPropagation(); delRule(o); },
+              className: "shrink-0 w-7 h-7 rounded-lg grid place-items-center text-[#9AA9C3] hover:text-[#B42318] hover:bg-[#FFF1EE] transition",
+            }, h("svg", { width: 15, height: 15, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2.2, strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": true }, h("path", { d: "M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3" }))) : null));
       })),
     list.length === 0 && !canAdd ? h("div", { className: "px-4 py-3 text-[13px] font-bold text-[#8E9BB2] border-t border-[#EEF2F7]" }, "회사관리 › 운임 규칙에서 규칙을 먼저 만들어 주세요") : null,
     canAdd ? h("div", { className: "border-t border-[#EEF2F7] bg-[#F7F9FC] px-2 py-2", "data-fare-add": "1" },
