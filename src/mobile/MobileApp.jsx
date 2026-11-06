@@ -42,6 +42,7 @@ import { useRouteBoardIds } from "../routeBoardIds"; // ⭐ 2026-11-05 고정노
 import { useRouteCarrierFilter } from "../routeCarriers"; // ⭐ 2026-11-06 운송업체 설정 — 숨긴 업체 오더는 모바일 어디에도 안 보이게
 import { useMobileDetailGetters } from "../detailGetters"; // ⭐ 2026-11-05 PC·모바일 일치 — 세부검색 배차담당자·청구사업자 값
 import { pickUnassignedOrders } from "../unassignedRule"; // ⭐ 2026-11-05 PC·모바일 일치 — 미배차 기준 공용
+import { useBadgeSeenSync, useUnseenItems, useMarkSeenOnView, unionCount } from "../seenBadges"; // ⭐ 2026-11-06 메뉴 숫자 = 계정별 안 본 것
 import { planIncludes, useCompanyPlanId } from "../plans"; // ⭐ 2026-11-05 인사이트 메뉴 요금제(PC와 같게)
 import { ShellIcon } from "../AdminShell";
 // ⭐ 작은 표시 전용 저장소 — "최신 정보 확인 중"·첫 진입 진행률이 바뀔 때 화면 전체(오더 목록)를
@@ -4253,7 +4254,18 @@ const [mUnDetail, setMUnDetail] = useState(null); // 🔎 미배차 세부검색
 const unassignedOrders = useMemo(() => pickUnassignedOrders(listOrders), [listOrders]);
 // ⭐ 2026-11-05 PC·모바일 일치 — PC 배차현황 › 고정노선현황 탭 숫자와 같게: 이 회사 배차표 양식의 오더 중 미배차
 const routeBoardIdsM = useRouteBoardIds((localStorage.getItem("loginCompany") || userCompany || localStorage.getItem("userCompany") || DEFAULT_COMPANY).trim());
-const fixedUnassignedCount = useMemo(() => pickUnassignedOrders(allOrders.filter((r) => r.배차표Id && routeBoardIdsM.has(r.배차표Id))).length, [allOrders, routeBoardIdsM]);
+const fixedUnassignedOrders = useMemo(() => pickUnassignedOrders(allOrders.filter((r) => r.배차표Id && routeBoardIdsM.has(r.배차표Id))), [allOrders, routeBoardIdsM]);
+// ⭐ 2026-11-06 계정별 안 본 숫자 — 메뉴 숫자는 "그 화면에서 아직 안 본 미배차"만. 등록내역(list)·미배차현황(unassigned)·고정노선현황(fixed)
+//  화면을 1.5초 보면 그 메뉴 숫자가 사라지고, 새로 생긴 오더만 다시 숫자로. PC와 같은 기록(seenBadges.js · 이 기기 + users/{uid}.badgeSeen)
+useBadgeSeenSync(["driver", "shipper"].includes(role) ? "" : user?.uid, myProfM?.badgeSeen);
+const unseenListOrders = useUnseenItems("list", unassignedOrders);
+const unseenUnassignedOrders = useUnseenItems("unassigned", unassignedOrders);
+const unseenFixedOrders = useUnseenItems("fixed", fixedUnassignedOrders);
+useMarkSeenOnView(page === "list", "list", unassignedOrders);
+useMarkSeenOnView(page === "unassigned", "unassigned", unassignedOrders);
+useMarkSeenOnView(page === "fixedroute", "fixed", fixedUnassignedOrders);
+// 햄버거(머리띠) 합계용 — 볼 수 있는 메뉴의 것만, 같은 오더는 한 번
+const unseenDispatchTotal = unionCount(menuOkM("배차현황") ? unseenListOrders : [], menuOkM("배차관리") ? unseenUnassignedOrders : [], menuOkM("배차현황") ? unseenFixedOrders : []);
 
 // 📤 정보미전달 오더 (오늘 이후 + 전달미완료)
 const undeliveredOrders = useMemo(() => {
@@ -5787,7 +5799,7 @@ const title =
   onRefresh={page === "list" ? handleRefresh : undefined}
   onValidateOrders={undefined /* ⭐ 2026-11-04 오더검증 버튼 없앰 */}
   onMenu={page === "list" || page === "dept" ? () => setShowMenu(true) : undefined}
-  menuBadge={(alertCounts.approval || 0) + (alertCounts.mineNew || 0) + (alertCounts.handover || 0) + (alertCounts.notice || 0) + ((["admin", "totalMaster", "superadmin", "viewer"].includes(role) || deptMode) ? (alertCounts.signupStaff || 0) + (alertCounts.signupDriver || 0) : 0) + drvCounts.orders + drvCounts.docs + drvCounts.sos /* ⭐ 2026-11-05 기사앱 이벤트 */}
+  menuBadge={(alertCounts.approval || 0) + (alertCounts.mineNew || 0) + (alertCounts.handover || 0) + (alertCounts.notice || 0) + ((["admin", "totalMaster", "superadmin", "viewer"].includes(role) || deptMode) ? (alertCounts.signupStaff || 0) + (alertCounts.signupDriver || 0) : 0) + drvCounts.orders + drvCounts.docs + drvCounts.sos /* ⭐ 2026-11-05 기사앱 이벤트 */ + unseenDispatchTotal /* ⭐ 2026-11-06 안 본 미배차·고정노선 미배차 */}
   notifCount={unreadCount}
   onNotifClick={() => { setShowNotifPanel(true); markAllRead(); }}
   messengerUnread={messengerUnread}
@@ -5971,8 +5983,9 @@ onGoAttendance={() => {
           execFull={execFull}
           onToggleExec={() => { toggleExecFull(); setShowMenu(false); }}
           alertCounts={{ ...alertCounts, drvOrders: drvCounts.orders, drvDocs: drvCounts.docs, drvSos: drvCounts.sos }}
-          unassignedCount={unassignedOrders.length}
-          fixedUnassignedCount={fixedUnassignedCount}
+          unassignedCount={unseenUnassignedOrders.length /* ⭐ 2026-11-06 안 본 것만 */}
+          listUnseenCount={unseenListOrders.length}
+          fixedUnassignedCount={unseenFixedOrders.length}
           onDeleteAll={deleteAllOrders}
           setUiScale={setUiScale}
           uiScale={uiScale}
@@ -7768,6 +7781,7 @@ function MobileSideMenu({
   alertCounts,
   unassignedCount = 0,
   fixedUnassignedCount = 0,
+  listUnseenCount = 0, // ⭐ 2026-11-06 등록내역 — 안 본 미배차
   deptMode = null,
   isExec = false,
   roleViews = null,
@@ -7957,7 +7971,7 @@ function MobileSideMenu({
           )}
           {!deptMode && (
           <MenuSection title="배차관리" en="DISPATCH" dark={dark} alwaysOpen>
-            {ok("배차현황") && <MenuItem label="등록내역" icon="list" onClick={onGoList} badge={alertCounts?.drvOrders || (unassignedCount > 0 ? unassignedCount : null)} dark={dark} />}{/* ⭐ 2026-11-05 PC·모바일 일치 — 기사 수락/거절이 없으면 PC 배차현황 탭처럼 미배차 숫자 */}{/* ⭐ 2026-11-05 기사 수락/거절 */}
+            {ok("배차현황") && <MenuItem label="등록내역" icon="list" onClick={onGoList} badge={((alertCounts?.drvOrders || 0) + (listUnseenCount || 0)) || null} dark={dark} />}{/* ⭐ 2026-11-06 기사 수락/거절(본 시각 기준) + 안 본 미배차 */}{/* ⭐ 2026-11-05 PC·모바일 일치 — 기사 수락/거절이 없으면 PC 배차현황 탭처럼 미배차 숫자 */}{/* ⭐ 2026-11-05 기사 수락/거절 */}
             {role !== "test" && ok("배차관리") && <MenuItem label="화물등록" icon="truck" onClick={onGoCreate} dark={dark} />}
             {ok("배차관리") && <MenuItem label="미배차현황" icon="alert" onClick={onGoUnassigned} badge={unassignedCount > 0 ? unassignedCount : null} dark={dark} />}
             {ok("배차현황") && <MenuItem label="고정노선현황" icon="route" onClick={() => onGo?.("fixedroute")} badge={fixedUnassignedCount > 0 ? fixedUnassignedCount : null} dark={dark} />}

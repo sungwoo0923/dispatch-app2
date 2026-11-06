@@ -2854,6 +2854,7 @@ import { MailHeaderButton, sendInternalMail, useMailCounts } from "./InternalMai
 import { useApprovalCounts } from "./Approval";
 import { ORDER_MGR_EMPTY, orderStaffNameRaw as _orderStaffNameRaw, useDetailGetters } from "./detailGetters"; // ⭐ 2026-11-05 PC·모바일 일치 — 세부검색 값 공용
 import { pickUnassignedOrders } from "./unassignedRule"; // ⭐ 2026-11-05 PC·모바일 일치 — 미배차 기준 공용
+import { useBadgeSeenSync, useUnseenItems, useMarkSeenOnView, unionCount } from "./seenBadges"; // ⭐ 2026-11-06 메뉴 숫자 = 계정별 안 본 것
 import { useMobileAlerts } from "./mobile/mobileAlerts";
 import { loadAcctPayments, saveAcctPayments, loadPlManual, savePlManual } from "./acctPayments";
 import { bumpDriverPayout, addClientCollection, removeClientCollections } from "./ledgerAuto";
@@ -8091,6 +8092,19 @@ const newVer = useNewVersion(); // ★ 새 버전이 배포되면 버전 표시 
   useDriverEventFeeds({ uid: user?.uid, company: deptCompany, canDocs: canApproveSignup, canSos: role !== "viewer" });
   const drvCounts = useDriverEventCounts();
   React.useEffect(() => { setDriverSeenServer(myProfileDoc?.driverEventsSeen); }, [myProfileDoc?.driverEventsSeen]);
+  // ⭐ 2026-11-06 계정별 안 본 숫자 — 배차현황(list)·미배차현황(unassigned)·고정노선현황(fixed) 탭 숫자는 그 탭을 1.5초 보면 사라지고,
+  //  새로 생긴 오더만 다시 숫자로(seenBadges.js · 이 브라우저 + users/{uid}.badgeSeen — 모바일 등록내역·미배차현황·고정노선현황과 같은 기록)
+  useBadgeSeenSync(user?.uid, myProfileDoc?.badgeSeen);
+  const pcUnassigned = useMemo(() => pickUnassignedOrders(listDispatchData), [listDispatchData]);
+  const pcFixedUnassigned = useMemo(() => pickUnassignedOrders(dispatchDataFiltered.filter((r) => r.배차표Id && myRouteBoardIds.has(r.배차표Id))), [dispatchDataFiltered, myRouteBoardIds]); // ⭐ 이 회사 양식의 오더만
+  const unseenListArr = useUnseenItems("list", pcUnassigned);
+  const unseenUnassignedArr = useUnseenItems("unassigned", pcUnassigned);
+  const unseenFixedArr = useUnseenItems("fixed", pcFixedUnassigned);
+  const unseenList = unseenListArr.length, unseenUnassigned = unseenUnassignedArr.length, unseenFixed = unseenFixedArr.length;
+  const unseenDispatchTotal = unionCount(unseenListArr, unseenUnassignedArr, unseenFixedArr); // 상단 메뉴 합계 — 같은 오더는 한 번
+  useMarkSeenOnView(menu === "배차현황" && 배차현황Tab === "배차현황", "list", pcUnassigned);
+  useMarkSeenOnView(menu === "배차현황" && 배차현황Tab === "미배차현황", "unassigned", pcUnassigned);
+  useMarkSeenOnView(menu === "배차현황" && 배차현황Tab === "고정노선현황", "fixed", pcFixedUnassigned);
   React.useEffect(() => { setDriverToastsMuted(!notificationsEnabled); }, [notificationsEnabled]);
   // 그 화면을 보고 있으면 "봤음"으로(토스트·줄 칩 맥박은 그대로 보이고 4초 뒤 숫자만 사라짐)
   React.useEffect(() => {
@@ -8499,14 +8513,15 @@ return (
               const navN = m === "HOME" ? (mailCountsNav.unread || 0) + (alertsNav.handover || 0) + (apSep ? 0 : apN)
                 : m === "전자결재" ? apN + (alertsNav.handover || 0)
                 : m === "기사관리" ? (canApproveSignup ? alertsNav.signupDriver || 0 : 0) + drvCounts.docs
-                : m === "실시간배차현황" || m === "배차현황" ? drvCounts.orders
+                : m === "실시간배차현황" ? drvCounts.orders
+                : m === "배차현황" ? drvCounts.orders + unseenDispatchTotal /* ⭐ 2026-11-06 안 본 미배차·고정노선 미배차 */
                 : m === "지입차관리" ? drvCounts.sos
                 : m === "관리자메뉴" ? pendingStaffSignups : 0;
               const subBadges = {
                 HOME: { 공지사항: alertsNav.notice || 0, "ap:inbox": apSep ? 0 : apCountsNav.todo, teamsched: 0 },
                 전자결재: { inbox: apCountsNav.todo, mine: apCountsNav.mineNew, handover: alertsNav.handover },
                 기사관리: { "acc:pending": canApproveSignup ? alertsNav.signupDriver : 0, "docs:driver": drvCounts.docs },
-                배차현황: { 배차현황: drvCounts.orders },
+                배차현황: { 배차현황: drvCounts.orders + unseenList, 미배차현황: unseenUnassigned, 고정노선현황: unseenFixed }, // ⭐ 2026-11-06 안 본 것만
                 지입차관리: { tracking: drvCounts.sos },
                 관리자메뉴: { members: pendingStaffSignups },
               }[m];
@@ -8526,7 +8541,7 @@ return (
                 >
                   <ShellIcon name={KP_SIDE_ICONS[m] || "dashboard"} size={14} className={`kp-nav-ico shrink-0 ${isActive ? "" : "opacity-70"} ${deptMode && DEPT_MENUS[deptMode].length <= 8 ? "" : "hidden min-[2050px]:inline-block"}`} />
                   <EditableText id={`nav.${m}`} defaultText={m} />
-                  {navN > 0 && st !== "locked" && <KakaoBadge n={navN} size="sm" className="ml-1 align-middle" title={m === "관리자메뉴" ? `가입 승인 대기 ${navN}명` : m === "실시간배차현황" || m === "배차현황" ? `기사 수락/거절 ${navN}건` : m === "지입차관리" ? `긴급 상황 ${navN}건` : `새 소식 ${navN}건`} />}
+                  {navN > 0 && st !== "locked" && <KakaoBadge n={navN} size="sm" className="ml-1 align-middle" title={m === "관리자메뉴" ? `가입 승인 대기 ${navN}명` : m === "실시간배차현황" ? `기사 수락/거절 ${navN}건` : m === "배차현황" ? [drvCounts.orders && `기사 수락/거절 ${drvCounts.orders}건`, (unseenList || unseenUnassigned) && `새 미배차 ${Math.max(unseenList, unseenUnassigned)}건`, unseenFixed && `새 고정노선 미배차 ${unseenFixed}건`].filter(Boolean).join(" · ") : m === "지입차관리" ? `긴급 상황 ${navN}건` : `새 소식 ${navN}건`} />}
                   {st === "locked" && <span className="ml-1 opacity-60"><LockIcon /></span>}
                   {m === "인사이트" && st !== "locked" && <span className="ml-1 px-1 py-px rounded bg-[#8FB0F0]/20 text-[#8FB0F0] text-[9px] font-black tracking-wider align-middle">PRO</span>}
                 </button>
@@ -8854,7 +8869,7 @@ return (
 
         {menu === "배차현황" && (
           <KpSubNav code="DISPATCH" title="배차현황" icon="truck" active={배차현황Tab} onSelect={set배차현황Tab}
-            items={(() => { const n = pickUnassignedOrders(listDispatchData).length; return [{ key: "배차현황", label: "배차현황", en: "ALL ORDERS", icon: "list", badge: n, badgeTitle: `미배차 ${n}건` }, { key: "미배차현황", label: "미배차현황", en: "PENDING", icon: "hourglass", badge: n, badgeTitle: `미배차 ${n}건` }, (() => { const fx = pickUnassignedOrders(dispatchDataFiltered.filter((r) => r.배차표Id && myRouteBoardIds.has(r.배차표Id))).length; /* ⭐ 이 회사 양식의 오더만 */ return { key: "고정노선현황", label: "고정노선현황", en: "FIXED ROUTE", icon: "route", badge: fx, badgeTitle: `고정노선 미배차 ${fx}건` }; })()]; })()}>
+            items={(() => { const n = unseenUnassigned, ln = unseenList, fx = unseenFixed; /* ⭐ 2026-11-06 계정별 안 본 것만(전체 미배차 건수는 각 화면 안에 그대로) */ return [{ key: "배차현황", label: "배차현황", en: "ALL ORDERS", icon: "list", badge: drvCounts.orders + ln, badgeTitle: [drvCounts.orders && `기사 수락/거절 ${drvCounts.orders}건`, `새 미배차 ${ln}건 (전체 ${pcUnassigned.length}건)`].filter(Boolean).join(" · ") }, { key: "미배차현황", label: "미배차현황", en: "PENDING", icon: "hourglass", badge: n, badgeTitle: `새 미배차 ${n}건 (전체 ${pcUnassigned.length}건)` }, { key: "고정노선현황", label: "고정노선현황", en: "FIXED ROUTE", icon: "route", badge: fx, badgeTitle: `새 고정노선 미배차 ${fx}건 (전체 ${pcFixedUnassigned.length}건)` }]; })()}>
             {배차현황Tab === "배차현황" && (
               <DispatchStatus
                 key={`ds-${viewResetKey}`}
