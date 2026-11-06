@@ -6868,14 +6868,12 @@ exports.orderMarketOnTakerOrderWrite = functions.firestore
    ⭐ 2026-11-06 로지스웹 허브 콜(hubOrders) — 평점 · 완료 건수 · 취소 기록 집계(hubStats, 회원은 쓸 수 없음)
    규칙은 functions/hubCall.js 맨 위 설명
 ============================== */
-const _hubCall = require("./hubCall");
-exports.hubOrderOnWrite = functions.firestore
-  .document("hubOrders/{id}")
-  .onWrite(async (change, context) => {
-    try {
-      await _hubCall.onHubOrderWrite(db, FieldValue, context.params.id, change.before.exists ? change.before.data() : null, change.after.exists ? change.after.data() : null);
-    } catch (e) { console.error("[허브 콜] 집계 실패:", e); }
-  });
+// ⭐ 2026-11-06 (2차) 허브 트리거(집계 · 알림 · 푸시 · 예치금 원장 · 로지스웹 연동 · 기사앱 위치 넘기기)는 functions/hubTriggers.js
+//  hubOrderOnWrite · hubChargeOnWrite · hubPayoutOnWrite · hubAdjustOnCreate · hubNoticeOnCreate · hubDriverLocMirror
+Object.assign(exports, require("./hubTriggers").register({
+  functions, db, FieldValue, sendPushAndCleanup, userTokens,
+  getStorage: () => require("firebase-admin/storage").getStorage(),
+}));
 
 // 🤖 2026-11-06 AI 팀 — 관리자센터에서 팀별(경리·재무·영업·운영·보안·홍보) Claude 에이전트와 대화.
 //  최고관리자·부관리자(role totalMaster)만. Claude API 키는 Firebase 비밀값 ANTHROPIC_API_KEY.

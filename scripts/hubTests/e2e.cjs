@@ -113,6 +113,8 @@ async function postOrder(p, prefix, o) {
   await p.selectOption('[data-testid="pf-vtype"]', o.vtype); await p.selectOption('[data-testid="pf-vton"]', o.vton);
   await p.fill('[data-testid="pf-fare"]', String(o.fare));
   if (o.urgent) await p.check('[data-testid="pf-urgent"]');
+  // ⭐ 2026-11-06 인수증 · 예치금 결제는 예치금이 있어야 올릴 수 있다 — 이 흐름은 예치금 없이 직접 정산(계좌이체)으로(예치금 흐름은 e2e_hub2.cjs)
+  await p.click(`[data-testid="pf-pay-${o.pay || "계좌이체"}"]`);
   await shot(p, `${prefix}-post-1-filled`);
   await p.locator('[data-testid="post-form"] .overflow-y-auto').evaluate((el) => el.scrollTo(0, el.scrollHeight));
   await shot(p, `${prefix}-post-2-fare`);

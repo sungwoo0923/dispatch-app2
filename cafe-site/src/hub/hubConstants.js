@@ -42,8 +42,83 @@ export const BIZ_STATUS = ["확인 전", "계속사업자", "휴업자", "폐업
 
 export const HUB_VEHICLES = ["카고", "윙바디", "탑", "냉장탑", "냉동탑", "냉장윙", "냉동윙", "리프트", "라보", "다마스", "츄레라", "로브이", "덤프", "기타"];
 export const HUB_TONS = ["0.5톤", "1톤", "1.4톤", "2.5톤", "3.5톤", "5톤", "5톤축", "8톤", "11톤", "14톤", "18톤", "25톤"];
-export const PAY_METHODS = ["인수증", "선불", "착불", "계좌이체", "계산서"];
+export const PAY_METHODS = ["인수증", "예치금", "선불", "착불", "계좌이체", "계산서"];
 export const LOAD_METHODS = ["지게차", "수작업", "호이스트", "크레인", "컨베이어", "기사 수작업"];
+// ⭐ 2026-11-06 예치금 · 정산(서버 functions/hubWallet.js와 같은 기준)
+//  예치금 결제: 확정 때 등록자 예치금에서 운임+수수료 보류 → 계산서 발행 시 차감 · 차주 지급 예정 · 수수료는 등록자에게
+//  현금(선불·착불): 차주가 화주에게 직접 받음 → 운송완료 때 차주 예치금에서 수수료를 등록자에게(모자라면 미정산)
+//  그 밖(계좌이체·계산서): 당사자끼리 직접 정산(원장에 남기지 않음)
+export const DEPOSIT_PAY = ["인수증", "예치금"];
+export const CASH_PAY = ["선불", "착불"];
+export const payKind = (m) => (DEPOSIT_PAY.includes(m) ? "deposit" : CASH_PAY.includes(m) ? "cash" : "direct");
+export const PAY_HINT = {
+  deposit: "예치금 결제 — 배차 확정 때 운임+수수료를 예치금에서 보류하고, 계산서 발행 후 차주에게 지급합니다.",
+  cash: "현금 결제 — 차주가 화주에게 직접 받고, 수수료는 운송완료 때 차주 예치금에서 등록자에게 정산됩니다.",
+  direct: "직접 정산 — 등록자와 차주가 직접 주고받습니다(허브 예치금과 무관).",
+};
+export const LEDGER_LABEL = {
+  charge: "충전", hold: "보류", release: "보류 해제", deduct: "차감", fee_income: "수수료 입금", payout_scheduled: "지급 예정",
+  payout_done: "지급 완료", fee_paid: "수수료 납부", fee_owed: "미정산 발생", debt_paid: "미정산 상환", adjust: "관리자 조정", platform_fee: "플랫폼 수수료",
+};
+export const SETTLE_LABEL = {
+  held: "예치금 보류 중", hold_failed: "예치금 부족", released: "보류 해제", settled: "정산 완료", fee_paid: "수수료 정산 완료", fee_owed: "수수료 미정산",
+};
+export const BANKS = ["국민", "신한", "우리", "하나", "농협", "기업", "SC제일", "씨티", "카카오뱅크", "토스뱅크", "케이뱅크", "새마을금고", "신협", "우체국", "수협", "부산", "대구", "경남", "광주", "전북", "제주", "산업"];
+
+// ⭐ 2026-11-06 관리자가 바꾸는 목록(hubSettings/config.lists) — 같은 배열을 그 자리에서 바꿔 모든 화면이 함께 따라간다
+const DEFAULT_LISTS = {};
+export function applyHubLists(lists) {
+  const targets = { vehicles: HUB_VEHICLES, tons: HUB_TONS, payMethods: PAY_METHODS, loadMethods: LOAD_METHODS, regions: SIDO_LIST };
+  for (const [k, arr] of Object.entries(targets)) {
+    if (!DEFAULT_LISTS[k]) DEFAULT_LISTS[k] = [...arr];
+    let next = Array.isArray(lists?.[k]) && lists[k].length ? lists[k].map((x) => String(x).trim()).filter(Boolean) : DEFAULT_LISTS[k];
+    if (k === "regions") next = next.filter((s) => SIGUNGU[s]);
+    if (!next.length) next = DEFAULT_LISTS[k];
+    arr.splice(0, arr.length, ...next);
+  }
+}
+export const defaultLists = () => { applyHubLists(null); return Object.fromEntries(Object.entries(DEFAULT_LISTS).map(([k, v]) => [k, [...v]])); };
+// 기본 수수료(설정: 정액 원 · 운임의 %)
+export function defaultFee(cfg, fare) {
+  const f = cfg?.fee || {};
+  if (f.mode === "percent") return Math.round(((Number(fare) || 0) * (Number(f.value) || 0)) / 100 / 1000) * 1000;
+  return Number(f.value) || 0;
+}
+
+// ⭐ 2026-11-06 주소 → 허브 지역(시·도 / 시·군·구) — 오더 스캔 결과를 허브 칸에 넣을 때
+const SIDO_ALIAS = [
+  [/^서울(특별시|시)?$/, "서울"], [/^부산(광역시|시)?$/, "부산"], [/^대구(광역시|시)?$/, "대구"], [/^인천(광역시|시)?$/, "인천"], [/^광주(광역시)?$/, "광주"],
+  [/^대전(광역시|시)?$/, "대전"], [/^울산(광역시|시)?$/, "울산"], [/^세종(특별자치시|시)?$/, "세종"], [/^경기(도)?$/, "경기"], [/^강원(특별자치도|도)?$/, "강원"],
+  [/^충(청)?북(도)?$|^충청북도$/, "충북"], [/^충(청)?남(도)?$|^충청남도$/, "충남"], [/^전(라)?북(도)?$|^전라북도$|^전북특별자치도$/, "전북"], [/^전(라)?남(도)?$|^전라남도$/, "전남"],
+  [/^경(상)?북(도)?$|^경상북도$/, "경북"], [/^경(상)?남(도)?$|^경상남도$/, "경남"], [/^제주(특별자치도|도)?$/, "제주"],
+];
+export function regionFromAddress(addr) {
+  const toks = String(addr || "").replace(/[(),]/g, " ").split(/\s+/).filter(Boolean);
+  let sido = "", sgg = "";
+  for (let i = 0; i < Math.min(toks.length, 3) && !sido; i++) {
+    const hit = SIDO_ALIAS.find(([re]) => re.test(toks[i]));
+    if (hit) {
+      sido = hit[1];
+      const list = sigunguOf(sido);
+      for (const t of toks.slice(i + 1, i + 3)) { const m = list.find((g) => g === t || (t.length >= 2 && g.startsWith(t.replace(/(시|군|구)$/, "")) && g.length - t.length <= 1)); if (m) { sgg = m; break; } }
+      if (sido === "세종") sgg = "세종시";
+    }
+  }
+  if (!sido) {
+    // 시·도 없이 "화성시 향남읍 …" — 시·군·구 이름이 한 곳에만 있으면 그곳
+    for (const t of toks.slice(0, 2)) {
+      const hits = Object.keys(SIGUNGU).filter((sd) => sigunguOf(sd).includes(t));
+      if (hits.length === 1) { sido = hits[0]; sgg = t; break; }
+    }
+  }
+  return { sido, sigungu: sgg };
+}
+// 스캔 글자 → 허브 목록 값(가장 비슷한 것)
+export function matchListValue(list, raw) {
+  const v = String(raw || "").replace(/\s+/g, "");
+  if (!v) return "";
+  return list.find((x) => x === v) || list.find((x) => v.includes(x)) || list.find((x) => x.includes(v)) || "";
+}
 
 // 시·도 → 시·군·구 (2024 행정구역)
 export const SIGUNGU = {

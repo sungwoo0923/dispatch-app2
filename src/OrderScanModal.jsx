@@ -76,7 +76,7 @@ export function scanDropDate(patch, info, formPickDate) {
   return { 하차일: shiftDay(formPickDate, info.dropRel) };
 }
 
-export default function OrderScanModal({ onClose, onApply, places: placesRaw = [], clients = [], initial = null }) {
+export default function OrderScanModal({ onClose, onApply, places: placesRaw = [], clients = [], initial = null, applyLabel = "배차관리에 적용" }) {
   const places = React.useMemo(() => normPlaces(placesRaw), [placesRaw]);
   const [stage, setStage] = React.useState("input"); // input | scanning | result
   const [src, setSrc] = React.useState(null); // { type: "text", text } | { type: "image", url, w, h }
@@ -252,6 +252,7 @@ export default function OrderScanModal({ onClose, onApply, places: placesRaw = [
       pickupMgrScanned: result?.fields?.상차지담당자 && !result.fields.상차지담당자.via,
       dropMgrScanned: result?.fields?.하차지담당자 && !result.fields.하차지담당자.via,
       dropRel, // 상차일이 스캔에 없을 때 화면의 상차일 기준으로 하차일을 맞추는 데 쓴다
+      text: blocks[bi] || typed || "", // ⭐ 2026-11-06 스캔 원문(로지스웹 허브가 결제 방식 · 수수료를 원문에서 찾는다)
     });
   };
 
@@ -531,7 +532,7 @@ export default function OrderScanModal({ onClose, onApply, places: placesRaw = [
               <div className="px-4 md:px-5 py-3 md:py-3.5 border-t border-[#EEF1F6] flex items-center gap-2 shrink-0">
                 <span className="hidden md:block text-[11.5px] text-[#9AA9C3] leading-snug">칸을 눌러 바로 고칠 수 있어요<br />적용 후 저장 전에 한 번 더 확인하세요</span>
                 <button onClick={onClose} className="ml-auto h-11 px-4 rounded-[13px] border border-[#E3E8F0] text-[#3A4A66] text-[13px] font-bold">취소</button>
-                <button onClick={apply} disabled={!result || scanning} className="h-11 px-6 rounded-[13px] text-white text-[14px] font-black disabled:opacity-40 shadow-[0_10px_22px_rgba(15,26,48,0.28)]" style={{ background: "linear-gradient(120deg,#0F1A30,#2D4C82)" }}>배차관리에 적용</button>
+                <button onClick={apply} disabled={!result || scanning} className="h-11 px-6 rounded-[13px] text-white text-[14px] font-black disabled:opacity-40 shadow-[0_10px_22px_rgba(15,26,48,0.28)]" style={{ background: "linear-gradient(120deg,#0F1A30,#2D4C82)" }}>{applyLabel}</button>
               </div>
             </div>
           </div>

@@ -11,7 +11,10 @@ import { doc, getDoc } from "firebase/firestore";
 import { auth, db } from "../firebase";
 import { HI, Btn, Chip, Badge, Card, Empty, Seg, HubMark, NAVY_BG, HUB_CSS, NUMS, useToast, Avatar, selectCls, inputCls, Drawer, Field } from "./hubUi";
 import { ROLES, SOURCE_LABEL, canPost, canTake, SIDO_LIST, HUB_VEHICLES, HUB_TONS, tonValue, regionLL, kmBetweenLL, nearestRegion, ago, STATUS, ACTIVE, speakText, routeText, manwon, kstYmd, tsMs, fareFitness, DOC_TYPES } from "./hubConstants";
-import { subscribeMember, subscribeBoard, refreshBoard, subscribeMine, subscribeNotices, markRead, updatePrefs, localSession, subscribeStats, ratingAvg, fetchPrivate } from "./hubApi";
+import { subscribeMember, subscribeBoard, refreshBoard, subscribeMine, subscribeNotices, markRead, updatePrefs, localSession, subscribeStats, ratingAvg, fetchPrivate, subscribeHubConfig, subscribeWallet, subscribeAnnouncements, enableHubPush, pushEnabledHere, disableHubPush } from "./hubApi";
+import { applyHubLists } from "./hubConstants";
+import HubWallet, { wonFull } from "./HubWallet";
+import { useHubLocationShare } from "./hubLiveShare";
 import HubOrderCard from "./HubOrderCard";
 import HubOrderDetail from "./HubOrderDetail";
 import HubPostForm from "./HubPostForm";
@@ -101,6 +104,10 @@ export default function HubApp() {
   const [authUser, setAuthUser] = useState(undefined);
   const [me, setMe] = useState(undefined);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [adminChecked, setAdminChecked] = useState(false);
+  const [cfg, setCfg] = useState({});
+  const [wallet, setWallet] = useState(null);
+  const [anns, setAnns] = useState([]);
   const [board, setBoard] = useState([]);
   const [posts, setPosts] = useState([]);
   const [jobs, setJobs] = useState([]);
@@ -125,7 +132,7 @@ export default function HubApp() {
   useEffect(() => onAuthStateChanged(auth, (u) => setAuthUser(u || null)), []);
   useEffect(() => {
     if (!authUser) { setMe(authUser === null ? null : undefined); return; }
-    getDoc(doc(db, "users", authUser.uid)).then((s) => setIsAdmin(authUser.email === TOTAL_MASTER_EMAIL || (s.exists() && s.data().role === "totalMaster"))).catch(() => setIsAdmin(authUser.email === TOTAL_MASTER_EMAIL));
+    getDoc(doc(db, "users", authUser.uid)).then((s) => setIsAdmin(authUser.email === TOTAL_MASTER_EMAIL || (s.exists() && s.data().role === "totalMaster"))).catch(() => setIsAdmin(authUser.email === TOTAL_MASTER_EMAIL)).finally(() => setAdminChecked(true));
     return subscribeMember(authUser.uid, (m) => setMe(m ? { ...m, uid: authUser.uid } : null));
   }, [authUser]);
   // 한 계정 한 기기 — 다른 기기에서 로그인하면 여기서 로그아웃
@@ -136,6 +143,10 @@ export default function HubApp() {
   }, [me?.activeSession]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const approved = me?.status === "approved";
+  // ⭐ 2026-11-06 관리자 설정(수수료 · 입금 계좌 · 목록) — 목록은 hubConstants 배열을 그 자리에서 바꿔 모든 화면이 따라간다
+  useEffect(() => { if (!authUser) return undefined; return subscribeHubConfig((c) => { applyHubLists(c?.lists); setCfg(c || {}); }); }, [authUser]);
+  useEffect(() => { if (!approved) return undefined; return subscribeWallet(me.uid, setWallet); }, [approved, me?.uid]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (!approved && !isAdmin) return undefined; return subscribeAnnouncements(setAnns); }, [approved, isAdmin]);
   const onAdded = useCallback((o) => {
     const m = meRef.current;
     if (!m) return;
@@ -170,6 +181,8 @@ export default function HubApp() {
   const favorites = me?.prefs?.favorites || [];
   const favSet = useMemo(() => new Set(favorites.map((x) => x.uid)), [favorites]);
   const activeJob = jobs.find((j) => ACTIVE.includes(j.status));
+  // ⭐ 위치관제 — 확정된 배차 · 상차완료 동안 이 기기 위치를 등록자에게(운송완료 · 취소되면 멈춤)
+  const liveShare = useHubLocationShare(approved ? me : null, jobs);
 
   const filtered = useMemo(() => {
     const today = kstYmd(), tom = kstYmd(1);
@@ -209,6 +222,9 @@ export default function HubApp() {
   if (authUser === undefined || me === undefined) return <Loading />;
   if (authUser === null) return <Navigate to="/login" replace />;
   const logout = async () => { await signOut(auth); nav("/login", { replace: true }); };
+  if (me === null && !adminChecked) return <Loading />;
+  // ⭐ 2026-11-06 허브 회원 정보가 없는 최고관리자 — 관리자 콘솔만(휴대폰 · PC)
+  if (me === null && isAdmin) return <AdminOnly admin={{ uid: authUser.uid, email: authUser.email }} cfg={cfg} logout={logout} />;
   if (me === null) {
     // 로그인했지만 허브 회원 정보가 없다 — 가입 이어서 작성
     return <Navigate to="/signup" replace />;
@@ -224,10 +240,13 @@ export default function HubApp() {
     ["board", "오더", "board", 0],
     ...(taker ? [["jobs", "내 배차", "truck", activeJobs]] : []),
     ...(poster ? [["posts", "내 오더", "list", postsWaiting]] : []),
+    ["wallet", "정산", "wallet", 0],
     ["notices", "알림", "bell", unread],
     ["me", "내 정보", "user", 0],
-    ...(isAdmin ? [["admin", "회원 승인", "shield", 0]] : []),
+    ...(isAdmin ? [["admin", "관리자", "shield", 0]] : []),
   ];
+  // 휴대폰 아래 탭은 5칸 — 알림은 위 앱바 종 아이콘으로
+  const MTABS = TABS.filter(([k]) => k !== "notices").slice(0, 5);
   const go = (k) => { setTab(k); if (openId || loc.pathname === "/admin") nav("/"); window.scrollTo({ top: 0 }); };
   const openOrder = (o) => nav(`/order/${o.id}`);
   const closeOrder = () => nav(tab === "admin" ? "/admin" : "/");
@@ -288,6 +307,7 @@ export default function HubApp() {
   );
 
   const urgentN = board.filter((o) => o.긴급).length;
+  const shownAnns = anns.filter((a) => a.active !== false && a.pinned);
   const BoardView = (
     <div onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd}>
       <div className="lg:hidden flex justify-center overflow-hidden transition-[height]" style={{ height: pull }}><span className={`mt-3 w-10 h-10 rounded-full bg-white shadow inline-flex items-center justify-center text-[#2D4C82] ${refreshing ? "animate-spin" : ""}`} style={{ transform: `rotate(${pull * 3}deg)` }}><HI name="refresh" size={19} /></span></div>
@@ -299,6 +319,23 @@ export default function HubApp() {
           </div>
         </aside>
         <div className="min-w-0 space-y-3.5">
+          {shownAnns.length > 0 && (
+            <div className="space-y-2" data-testid="announce-banner">
+              {shownAnns.slice(0, 2).map((a) => (
+                <div key={a.id} className="rounded-[20px] px-4 py-3 text-white flex gap-3 items-start" style={NAVY_BG}>
+                  <HI name="megaphone" size={19} className="text-[#8FB0F0] shrink-0 mt-0.5" />
+                  <div className="min-w-0"><div className="text-[15.5px] font-extrabold">{a.title}</div>{a.body && <div className="text-[14px] text-white/70 leading-snug whitespace-pre-line line-clamp-2">{a.body}</div>}</div>
+                </div>
+              ))}
+            </div>
+          )}
+          {liveShare?.job && (
+            <button type="button" onClick={() => openOrder(liveShare.job)} className="w-full rounded-2xl bg-white ring-1 ring-inset ring-[#DCE3EE] px-4 py-3 flex items-center gap-2.5 text-left" data-testid="live-share-bar">
+              <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${liveShare.on ? "bg-[#34D399] animate-pulse" : "bg-[#A3AEC0]"}`} />
+              <span className="text-[14.5px] font-bold text-[#1B2B4B] truncate">{liveShare.denied ? "위치 권한을 허용해야 등록자가 차량 위치를 볼 수 있습니다" : `위치 공유 중 · ${routeText(liveShare.job)}`}</span>
+              <HI name="chevron" size={18} className="ml-auto text-[#8592A8] shrink-0" />
+            </button>
+          )}
           <div className="grid grid-cols-3 gap-2.5">
             {[["모집중", board.length, "건"], ["긴급", urgentN, "건"], [taker ? "내 배차 진행" : "내 오더 배차", taker ? activeJobs : postsWaiting, "건"]].map(([l, v, u]) => (
               <div key={l} className="rounded-[18px] lg:rounded-[20px] bg-white ring-1 ring-inset ring-[#E2E7EF] px-3.5 py-2.5 lg:px-4 lg:py-3">
@@ -351,7 +388,7 @@ export default function HubApp() {
     <Card className="overflow-hidden" data-testid="notices">
       {notices.length === 0 ? <div className="p-10 text-center text-[15.5px] text-[#8592A8]">새 알림이 없습니다.</div> : notices.map((n) => (
         <button key={n.id} type="button" onClick={() => { markRead(n.id); if (n.orderId) nav(`/order/${n.orderId}`); }} className={`w-full text-left px-5 py-4 flex gap-3.5 border-b border-[#EEF1F6] last:border-0 ${n.read ? "" : "bg-[#F3F7FE]"}`}>
-          <span className={`w-11 h-11 rounded-2xl inline-flex items-center justify-center shrink-0 ${n.read ? "bg-[#F2F5FA] text-[#8592A8]" : "bg-[#0F1A30] text-[#8FB0F0]"}`}><HI name={{ assigned: "bolt", quickCancel: "clock", released: "alert", cancelled: "close", loaded: "box", delivered: "flag" }[n.type] || "bell"} size={19} /></span>
+          <span className={`w-11 h-11 rounded-2xl inline-flex items-center justify-center shrink-0 ${n.read ? "bg-[#F2F5FA] text-[#8592A8]" : "bg-[#0F1A30] text-[#8FB0F0]"}`}><HI name={{ assigned: "bolt", confirmed: "check", quickCancel: "clock", released: "alert", cancelled: "close", loaded: "box", delivered: "flag", pod: "file", invoice: "receipt", settle: "won", wallet: "wallet" }[n.type] || "bell"} size={19} /></span>
           <span className="min-w-0 flex-1"><span className="block text-[16px] font-extrabold text-[#0F1A30]">{n.title}</span><span className="block text-[15px] text-[#55657F] leading-snug mt-0.5">{n.body}</span></span>
           <span className="text-[13.5px] text-[#8592A8] shrink-0">{ago(n.createdAt)}</span>
         </button>
@@ -359,14 +396,15 @@ export default function HubApp() {
     </Card>
   );
 
-  const titles = { board: "실시간 오더", jobs: "내 배차", posts: "내 오더", notices: "알림", me: "내 정보", admin: "허브 회원 승인" };
+  const titles = { board: "실시간 오더", jobs: "내 배차", posts: "내 오더", wallet: "예치금 · 정산", notices: "알림", me: "내 정보", admin: "허브 관리자" };
   let body = null;
   if (tab === "board") body = BoardView;
   else if (tab === "jobs" && taker) body = ListView({ rows: jobs, kind: "jobs" });
   else if (tab === "posts" && poster) body = ListView({ rows: posts, kind: "posts" });
   else if (tab === "notices") body = NoticesView;
-  else if (tab === "me") body = <MeView me={me} isAdmin={isAdmin} logout={logout} openAlert={() => setAlertOpen(true)} favorites={favorites} toast={toast} />;
-  else if (tab === "admin" && isAdmin) body = <HubAdmin admin={{ uid: me.uid, email: authUser.email }} toast={toast} />;
+  else if (tab === "wallet") body = <HubWallet me={me} cfg={cfg} toast={toast} />;
+  else if (tab === "me") body = <MeView me={me} isAdmin={isAdmin} logout={logout} openAlert={() => setAlertOpen(true)} favorites={favorites} toast={toast} wallet={wallet} openWallet={() => go("wallet")} />;
+  else if (tab === "admin" && isAdmin) body = <HubAdmin admin={{ uid: me.uid, email: authUser.email }} me={me} cfg={cfg} toast={toast} />;
   else body = BoardView;
 
   const editOrder = async (o) => { const detail = await fetchPrivate(o.id, "detail"); setForm({ editing: { id: o.id, pub: o, detail } }); };
@@ -402,6 +440,7 @@ export default function HubApp() {
             <img src="/brand/logisweb-mark-square.svg" alt="" className="w-9 h-9 rounded-[10px]" />
             <div className="min-w-0 flex-1"><div className="text-[18px] font-extrabold leading-tight truncate">{titles[tab]}</div><div className="text-[13px] font-semibold text-white/55 truncate">{ROLES[me.role]?.label} · {me.name}</div></div>
             {taker && <button type="button" onClick={() => setAlertOpen(true)} aria-label="콜 알림 설정" data-testid="btn-alert-m" className={`w-11 h-11 rounded-2xl inline-flex items-center justify-center ${alertOn ? "bg-[#8FB0F0] text-[#0B1428]" : "bg-white/10"}`}><HI name="volume" size={19} /></button>}
+            <button type="button" onClick={() => go("notices")} aria-label="알림" data-testid="btn-bell-m" className={`relative w-11 h-11 rounded-2xl inline-flex items-center justify-center ${tab === "notices" ? "bg-[#8FB0F0] text-[#0B1428]" : "bg-white/10"}`}><HI name="bell" size={19} />{unread > 0 && <span className="absolute -top-1 -right-1 min-w-[20px] h-5 px-1 rounded-full bg-[#8FB0F0] text-[#0B1428] text-[12px] font-extrabold inline-flex items-center justify-center" data-testid="bell-count">{unread}</span>}</button>
             <button type="button" onClick={doRefresh} aria-label="새로고침" className="w-11 h-11 rounded-2xl bg-white/10 inline-flex items-center justify-center"><HI name="refresh" size={19} className={refreshing ? "animate-spin" : ""} /></button>
           </div>
         </div>
@@ -420,8 +459,8 @@ export default function HubApp() {
 
       {/* 휴대폰 아래 탭바 */}
       <nav className="lg:hidden fixed bottom-0 inset-x-0 z-40 bg-white/95 backdrop-blur-md border-t border-[#E2E7EF] pb-[env(safe-area-inset-bottom)]">
-        <div className="grid" style={{ gridTemplateColumns: `repeat(${Math.min(TABS.length, 5)}, minmax(0,1fr))` }}>
-          {TABS.slice(0, 5).map(([k, l, ic, n]) => (
+        <div className="grid" style={{ gridTemplateColumns: `repeat(${MTABS.length}, minmax(0,1fr))` }}>
+          {MTABS.map(([k, l, ic, n]) => (
             <button key={k} type="button" onClick={() => go(k)} data-testid={`tab-${k}`} aria-current={tab === k ? "page" : undefined} className={`relative h-[64px] flex flex-col items-center justify-center gap-1 text-[13.5px] font-bold ${tab === k ? "text-[#0F1A30]" : "text-[#8592A8]"}`}>
               <span className={`w-12 h-8 rounded-full inline-flex items-center justify-center transition ${tab === k ? "bg-[#0F1A30] text-[#8FB0F0]" : ""}`}><HI name={ic} size={20} /></span>{l}
               {n > 0 && <span className="absolute top-1.5 left-1/2 ml-2 min-w-[18px] h-[18px] px-1 rounded-full bg-[#2D4C82] text-white text-[11.5px] font-extrabold inline-flex items-center justify-center">{n}</span>}
@@ -437,8 +476,8 @@ export default function HubApp() {
 
       {filterOpen && <Drawer onClose={() => setFilterOpen(false)} title="필터" sub={`조건에 맞는 오더 ${filtered.length}건`}><div className="flex-1 overflow-y-auto p-4">{FilterBody}</div><div className="p-4 bg-white border-t border-[#E2E7EF] pb-[max(16px,env(safe-area-inset-bottom))]"><Btn size="xl" className="w-full" onClick={() => setFilterOpen(false)}>{filtered.length}건 보기</Btn></div></Drawer>}
       {alertOpen && <AlertSettings me={me} onClose={() => setAlertOpen(false)} toast={toast} />}
-      {openId && <HubOrderDetail key={openId} id={openId} me={me} onClose={closeOrder} toast={toast} favorites={favorites} onEdit={(o) => { closeOrder(); editOrder(o); }} />}
-      {form && <HubPostForm me={me} editing={form.editing} onClose={() => setForm(null)} toast={toast} onDone={() => { if (tab !== "board") setTab("posts"); }} />}
+      {openId && <HubOrderDetail key={openId} id={openId} me={me} onClose={closeOrder} toast={toast} favorites={favorites} isAdmin={isAdmin} liveShare={liveShare} onEdit={(o) => { closeOrder(); editOrder(o); }} />}
+      {form && <HubPostForm me={me} editing={form.editing} cfg={cfg} wallet={wallet} openWallet={() => { setForm(null); go("wallet"); }} onClose={() => setForm(null)} toast={toast} onDone={() => { if (tab !== "board") setTab("posts"); }} />}
       {toastNode}
     </div>
   );
@@ -486,7 +525,27 @@ function AlertSettings({ me, onClose, toast }) {
   );
 }
 
-function MeView({ me, isAdmin, logout, openAlert, favorites, toast }) {
+// ⭐ 2026-11-06 이 기기 푸시 알림 켜기/끄기(배차 · 확정 · 취소 · 상하차 · 인수증 · 정산 알림이 앱을 닫아도 온다)
+function PushCard({ me, toast }) {
+  const [on, setOn] = useState(() => pushEnabledHere(me));
+  const [busy, setBusy] = useState(false);
+  const toggle = async () => {
+    setBusy(true);
+    try {
+      if (on) { await disableHubPush(me); setOn(false); toast("이 기기 푸시 알림을 껐습니다"); }
+      else { await enableHubPush(me); setOn(true); toast("이 기기 푸시 알림을 켰습니다"); }
+    } catch (e) { toast(e?.message || "푸시 알림을 켜지 못했습니다", 4200); } finally { setBusy(false); }
+  };
+  return (
+    <Card className="p-4 flex items-center gap-3" data-testid="push-card">
+      <span className={`w-11 h-11 rounded-2xl inline-flex items-center justify-center shrink-0 ${on ? "bg-[#0F1A30] text-[#8FB0F0]" : "bg-[#F2F5FA] text-[#55657F]"}`}><HI name="bell" size={19} /></span>
+      <div className="min-w-0 flex-1"><div className="text-[16px] font-extrabold text-[#0F1A30]">푸시 알림 {on ? "켜짐" : "꺼짐"}</div><div className="text-[14px] text-[#55657F] leading-snug">배차신청 · 확정 · 취소 · 상하차 · 인수증 · 정산을 앱을 닫아도 알려 드립니다.</div></div>
+      <Btn kind={on ? "ghost" : "primary"} size="md" disabled={busy} onClick={toggle} data-testid="push-toggle">{busy ? "…" : on ? "끄기" : "켜기"}</Btn>
+    </Card>
+  );
+}
+
+function MeView({ me, isAdmin, logout, openAlert, favorites, toast, wallet, openWallet }) {
   const [st, setSt] = useState(null);
   useEffect(() => subscribeStats(me.uid, setSt), [me.uid]);
   const avg = ratingAvg(st);
@@ -513,6 +572,12 @@ function MeView({ me, isAdmin, logout, openAlert, favorites, toast }) {
         </Card>
       </div>
       <div className="space-y-4">
+        <button type="button" onClick={openWallet} className="w-full text-left rounded-[22px] p-4 bg-white ring-1 ring-inset ring-[#E2E7EF] flex items-center gap-3" data-testid="me-wallet">
+          <span className="w-11 h-11 rounded-2xl bg-[#0F1A30] text-[#8FB0F0] inline-flex items-center justify-center shrink-0"><HI name="wallet" size={19} /></span>
+          <span className="min-w-0 flex-1"><span className="block text-[14px] font-bold text-[#8592A8]">예치금 · 정산</span><span className="block text-[20px] font-extrabold text-[#0F1A30]" style={NUMS}>{wonFull(wallet?.available)}</span><span className="block text-[13.5px] text-[#55657F] truncate">보류 {wonFull(wallet?.held)} · 지급 예정 {wonFull(wallet?.pending)}{wallet?.owed ? ` · 미정산 ${wonFull(wallet.owed)}` : ""}{me.bank?.number ? ` · 정산 계좌 ${me.bank.bank} ${String(me.bank.number).slice(-4).padStart(8, "*")}` : ""}</span></span>
+          <HI name="chevron" size={18} className="text-[#8592A8]" />
+        </button>
+        <PushCard me={me} toast={toast} />
         {canTake(me) && <AlertCard me={me} onOpen={openAlert} />}
         <Card className="p-4">
           <div className="text-[16px] font-extrabold text-[#0F1A30] mb-2 flex items-center gap-2"><HI name="heart" size={18} className="text-[#2D4C82]" />즐겨찾기 {favorites.length ? favorites.length : ""}</div>
@@ -522,10 +587,25 @@ function MeView({ me, isAdmin, logout, openAlert, favorites, toast }) {
         </Card>
         <Card className="p-4 space-y-2">
           {me.source === "logisweb-staff" && <a href="/exchange" className="h-12 px-4 rounded-2xl bg-[#F5F7FB] flex items-center gap-2 text-[16px] font-bold text-[#1B2B4B]"><HI name="swap" size={18} />운송사 간 오더 거래소 <HI name="chevron" size={18} className="ml-auto" /></a>}
-          {isAdmin && <a href="/admin" className="h-12 px-4 rounded-2xl bg-[#F5F7FB] flex items-center gap-2 text-[16px] font-bold text-[#1B2B4B]"><HI name="shield" size={18} />허브 회원 승인 <HI name="chevron" size={18} className="ml-auto" /></a>}
+          {isAdmin && <a href="/admin" className="h-12 px-4 rounded-2xl bg-[#F5F7FB] flex items-center gap-2 text-[16px] font-bold text-[#1B2B4B]" data-testid="me-admin"><HI name="shield" size={18} />허브 관리자 콘솔 <HI name="chevron" size={18} className="ml-auto" /></a>}
           <Btn kind="ghost" className="w-full" onClick={logout} data-testid="btn-logout"><HI name="logout" size={18} />로그아웃</Btn>
         </Card>
       </div>
+    </div>
+  );
+}
+
+// ⭐ 2026-11-06 허브 회원 문서가 없는 최고관리자(관리센터에서만 쓰던 계정) — 관리자 콘솔만 보여준다(휴대폰 · PC)
+function AdminOnly({ admin, cfg, logout }) {
+  const [toastNode, toast] = useToast();
+  return (
+    <div className="min-h-screen bg-[#EEF1F6]">
+      <style>{HUB_CSS}</style>
+      <header className="text-white px-4 lg:px-8 pt-[env(safe-area-inset-top)]" style={NAVY_BG}>
+        <div className="h-[64px] max-w-[1440px] flex items-center gap-3"><HubMark size={34} /><span className="text-[16px] font-extrabold text-[#8FB0F0] hidden sm:inline">허브 관리자</span><button type="button" onClick={logout} className="ml-auto h-11 px-4 rounded-2xl bg-white/10 text-[15px] font-bold" data-testid="btn-logout">로그아웃</button></div>
+      </header>
+      <main className="px-4 lg:px-8 py-4 lg:py-6 max-w-[1440px]"><HubAdmin admin={admin} cfg={cfg} toast={toast} /></main>
+      {toastNode}
     </div>
   );
 }

@@ -9,13 +9,13 @@ import { createUserWithEmailAndPassword, onAuthStateChanged } from "firebase/aut
 import { auth } from "../firebase";
 import HubAuthLayout from "./HubAuthLayout";
 import { HI, Btn, Field, inputCls, selectCls, Chip, FilePick } from "./hubUi";
-import { ROLES, ROLE_DOCS, DOC_TYPES, HUB_VEHICLES, HUB_TONS, SIDO_LIST, sigunguOf, fmtPhone, fmtBizNo, bizNoValid } from "./hubConstants";
+import { ROLES, ROLE_DOCS, DOC_TYPES, HUB_VEHICLES, HUB_TONS, SIDO_LIST, sigunguOf, fmtPhone, fmtBizNo, bizNoValid, BANKS } from "./hubConstants";
 import { getMember, submitApplication, uploadMemberFile, claimSession } from "./hubApi";
 import { authErrorText } from "./hubLink";
 
 const STEPS = ["유형", "계정", "정보", "서류", "확인"];
 const EMPTY = { email: "", pw: "", pw2: "", name: "", phone: "", companyName: "", bizNo: "", ceoName: "", managerTitle: "", bizAddress: "", permitNo: "",
-  plate: "", vtype: "", vton: "", vlen: "", vwid: "", homeSido: "", homeSgg: "", regions: [] };
+  plate: "", vtype: "", vton: "", vlen: "", vwid: "", homeSido: "", homeSgg: "", regions: [], bank: "", bankNo: "", bankHolder: "" };
 
 export default function HubSignup() {
   const [sp] = useSearchParams();
@@ -40,7 +40,7 @@ export default function HubSignup() {
       setRole(m.role);
       setF((p) => ({ ...p, name: m.name || "", phone: m.phone || "", companyName: m.companyName || "", bizNo: m.bizNo || "", ceoName: m.ceoName || "", managerTitle: m.managerTitle || "", bizAddress: m.bizAddress || "", permitNo: m.permitNo || "",
         plate: m.vehicle?.plate || "", vtype: m.vehicle?.type || "", vton: m.vehicle?.ton || "", vlen: m.vehicle?.length || "", vwid: m.vehicle?.width || "",
-        homeSido: m.home?.sido || "", homeSgg: m.home?.sigungu || "", regions: m.regions || [] }));
+        homeSido: m.home?.sido || "", homeSgg: m.home?.sigungu || "", regions: m.regions || [], bank: m.bank?.bank || "", bankNo: m.bank?.number || "", bankHolder: m.bank?.holder || "" }));
       setFiles({ ...(m.docs || {}), ...(m.photoPath ? { photo: { path: m.photoPath, name: "프로필 사진" } } : {}) });
       setStep(2);
     });
@@ -115,6 +115,8 @@ export default function HubSignup() {
         vehicle: role === "driver" ? { plate: f.plate.replace(/\s+/g, ""), type: f.vtype, ton: f.vton, length: f.vlen, width: f.vwid } : null,
         home: role === "driver" ? { sido: f.homeSido, sigungu: f.homeSgg } : null,
         regions: role === "driver" ? f.regions : [],
+        // ⭐ 2026-11-06 운임 받을 정산 계좌(차주 · 운송사) — 예치금 결제 오더 운임이 이 계좌로 지급된다
+        ...(role !== "shipper" && f.bankNo ? { bank: { bank: f.bank, number: f.bankNo.replace(/[^\d-]/g, ""), holder: (f.bankHolder || f.name).trim() } } : {}),
         docs: docMap,
         photoPath: photo?.path || "",
         agree: { terms: true, privacy: true, docs: true, at: Date.now() },
@@ -206,6 +208,16 @@ export default function HubSignup() {
               </div>
             </Field>
           </>}
+          {role !== "shipper" && (
+            <div className="rounded-2xl bg-[#F5F8FD] ring-1 ring-inset ring-[#DCE3EE] p-4 space-y-3" data-testid="su-bank-box">
+              <div className="text-[15.5px] font-extrabold text-[#0F1A30]">정산 계좌 <span className="text-[13.5px] font-semibold text-[#8592A8]">운임 받을 계좌 · 나중에 [정산]에서도 등록</span></div>
+              <div className="grid grid-cols-2 gap-3">
+                <Field label="은행"><select className={selectCls} value={f.bank} onChange={set("bank")} data-testid="su-bank"><option value="">선택</option>{BANKS.map((b) => <option key={b}>{b}</option>)}</select></Field>
+                <Field label="계좌번호"><input className={inputCls} inputMode="numeric" value={f.bankNo} onChange={set("bankNo")} placeholder="숫자만" data-testid="su-bank-no" /></Field>
+              </div>
+              <Field label="예금주" hint="사업자 · 본인 이름과 같아야 지급됩니다"><input className={inputCls} value={f.bankHolder} onChange={set("bankHolder")} placeholder={f.name || "예금주"} data-testid="su-bank-holder" /></Field>
+            </div>
+          )}
         </div>
       )}
 

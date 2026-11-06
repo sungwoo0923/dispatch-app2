@@ -4,13 +4,70 @@
 //                  → [상차완료] → [운송완료 + 인수증 사진] → 등록자 평가
 //  · 등록자(화주·운송사): 배차된 차주 카드(이름·연락처·차량번호·차종·톤수·적재함·평점·완료·인증) · 배차 취소(재모집) ·
 //                  오더 취소 · 운송완료 확인 · 차주 평가 · 정산 메모
-import React, { useEffect, useRef, useState } from "react";
-import { HI, Btn, Badge, Card, Drawer, RouteLine, Ring, Stars, Avatar, Confirm, NUMS } from "./hubUi";
-import { manwon, fareFitness, referenceFare, dayLabel, ago, STATUS, ROLES, SOURCE_LABEL, canTake, CANCEL_WINDOW_MS, tsMs, maskName } from "./hubConstants";
+//  ⭐ 2026-11-06 (2차) · 등록자(+관리자): 배차 확정 ~ 운송완료 동안 [실시간 관제](배차 프로그램과 같은 지도)
+//                  · 인수증 · 서류 여러 장 보기 · 저장 · 공유 · 정산(예치금 보류 · 차감 · 지급) 상태
+//                  · 배차된 회원: 운송완료 때 인수증 여러 장 · 운송완료 뒤 더 올리기 · 계산서 발행(승인번호) → 서버가 정산
+import React, { Suspense, lazy, useEffect, useRef, useState } from "react";
+import { HI, Btn, Badge, Card, Drawer, RouteLine, Ring, Stars, Avatar, Confirm, NUMS, Field, inputCls } from "./hubUi";
+import { manwon, fareFitness, referenceFare, dayLabel, ago, STATUS, ROLES, SOURCE_LABEL, canTake, CANCEL_WINDOW_MS, tsMs, maskName, payKind, PAY_HINT, SETTLE_LABEL, kstYmd } from "./hubConstants";
 import {
   subscribeOrder, subscribePrivate, fetchPrivate, requestDispatch, cancelDispatch, releaseTaker, cancelOrder,
-  markLoaded, markDelivered, confirmDispatch, rateOrder, saveSettleNote, subscribeStats, ratingAvg, fileUrl, reportParty, updatePrefs,
+  markLoaded, markDelivered, confirmDispatch, rateOrder, saveSettleNote, subscribeStats, ratingAvg, reportParty, updatePrefs,
+  liveActive, issueInvoice, subscribeLive,
 } from "./hubApi";
+import HubPod from "./HubPod";
+const HubLiveTrack = lazy(() => import("./HubLiveTrack"));
+const wonF = (n) => `${(Math.round(Number(n) || 0)).toLocaleString("ko-KR")}원`;
+
+// 정산 상태 — 결제 방식별(예치금 결제 · 현금 · 직접)
+function SettleCard({ o, isPoster, isTaker }) {
+  const kind = payKind(o.지급방식);
+  const s = o.settle || {};
+  const F = Number(o.운임) || 0, C = Number(o.수수료) || 0;
+  const steps = kind === "deposit"
+    ? [["배차 확정 · 예치금 보류", ["held", "settled"].includes(s.status) || s.payoutStatus], ["운송완료", o.status === "delivered"], ["계산서 발행", !!o.invoice], ["예치금 차감 · 지급 대기", s.status === "settled"], ["지급 완료", s.payoutStatus === "paid"]]
+    : kind === "cash" ? [["운송완료(현금 수령)", o.status === "delivered"], [C ? `수수료 ${wonF(C)} 정산` : "수수료 없음", s.status === "fee_paid" || !C]] : [];
+  return (
+    <Card className="p-4" data-testid="settle-card">
+      <div className="flex items-center gap-2 mb-1"><HI name="wallet" size={18} className="text-[#2D4C82]" /><span className="text-[16px] font-extrabold text-[#0F1A30]">정산</span><Badge>{o.지급방식 || "협의"}</Badge>
+        {s.status && <Badge tone={["settled", "fee_paid"].includes(s.status) ? "navy" : s.status === "hold_failed" || s.status === "fee_owed" ? "line" : "sky"} className="ml-auto"><span data-testid="settle-status">{SETTLE_LABEL[s.status] || s.status}</span></Badge>}
+      </div>
+      <div className="text-[14px] text-[#55657F] leading-relaxed">{PAY_HINT[kind]}</div>
+      <div className="mt-2 grid grid-cols-3 gap-2 text-center">
+        {[["운임(차주)", F], ["수수료(등록자)", C], ["합계", F + C]].map(([l, v]) => <div key={l} className="rounded-2xl bg-[#F5F8FD] px-2 py-2"><div className="text-[12.5px] font-bold text-[#8592A8]">{l}</div><div className="text-[15.5px] font-extrabold text-[#0F1A30]" style={NUMS}>{wonF(v)}</div></div>)}
+      </div>
+      {steps.length > 0 && (
+        <ol className="mt-3 space-y-1.5">
+          {steps.map(([t, done], i) => <li key={t} className="flex items-center gap-2 text-[14.5px]"><span className={`w-6 h-6 rounded-full inline-flex items-center justify-center text-[12px] font-extrabold ${done ? "bg-[#0F1A30] text-[#8FB0F0]" : "bg-[#EEF2F8] text-[#8592A8]"}`}>{done ? <HI name="check" size={13} /> : i + 1}</span><span className={`font-bold ${done ? "text-[#0F1A30]" : "text-[#8592A8]"}`}>{t}</span></li>)}
+        </ol>
+      )}
+      {s.status === "hold_failed" && isPoster && <div className="mt-2 rounded-2xl bg-[#F3F7FE] ring-1 ring-inset ring-[#C7D3E8] px-3 py-2.5 text-[14px] font-bold text-[#0F1A30]">예치금이 부족해 보류하지 못했습니다(필요 {wonF(s.need)}). [정산] 탭에서 충전해 주세요.</div>}
+      {s.status === "fee_owed" && <div className="mt-2 rounded-2xl bg-[#F3F7FE] ring-1 ring-inset ring-[#C7D3E8] px-3 py-2.5 text-[14px] font-bold text-[#0F1A30]">{isTaker ? "예치금이 부족해 수수료가 미정산입니다. 충전하면 자동으로 정산됩니다." : "차주 수수료가 미정산입니다. 차주가 충전하면 자동으로 입금됩니다."}</div>}
+      {o.invoice && <div className="mt-3 pt-3 border-t border-[#EEF1F6] text-[14.5px] text-[#3A4A66]" data-testid="invoice-info"><b className="text-[#0F1A30]">계산서</b> 승인번호 {o.invoice.no} · {o.invoice.date} · {wonF(o.invoice.amount)}</div>}
+    </Card>
+  );
+}
+
+// 계산서 발행 등록(배차된 회원) — 홈택스 · 발행 프로그램에서 발행한 세금계산서 승인번호(팝빌 등 자동 발행 연동은 아직 없음)
+function InvoiceForm({ o, busy, run }) {
+  const [v, setV] = useState({ no: "", date: kstYmd(), amount: String(Number(o.운임) || ""), bizNo: "" });
+  const [file, setFile] = useState(null);
+  const ref = useRef(null);
+  return (
+    <Card className="p-4" data-testid="invoice-form">
+      <div className="flex items-center gap-2 mb-1"><HI name="receipt" size={18} className="text-[#2D4C82]" /><span className="text-[16px] font-extrabold text-[#0F1A30]">계산서 발행 등록</span></div>
+      <div className="text-[14px] text-[#55657F] mb-3 leading-relaxed">홈택스 · 발행 프로그램에서 등록자 앞으로 세금계산서를 발행한 뒤 승인번호를 넣으면, 예치금에서 운임이 차감되어 지급 대기열에 올라갑니다.</div>
+      <div className="grid grid-cols-2 gap-2.5">
+        <Field label="승인번호" required className="col-span-2"><input className={inputCls} value={v.no} onChange={(e) => setV((p) => ({ ...p, no: e.target.value.slice(0, 40) }))} placeholder="예: 20261107-41000000-12345678" data-testid="inv-no" /></Field>
+        <Field label="발행일"><input type="date" className={inputCls} value={v.date} onChange={(e) => setV((p) => ({ ...p, date: e.target.value }))} data-testid="inv-date" /></Field>
+        <Field label="공급가액(원)"><input className={`${inputCls} text-right`} inputMode="numeric" value={v.amount} onChange={(e) => setV((p) => ({ ...p, amount: e.target.value.replace(/[^\d]/g, "").slice(0, 10) }))} style={NUMS} data-testid="inv-amount" /></Field>
+      </div>
+      <button type="button" onClick={() => ref.current?.click()} className="mt-2.5 w-full h-11 rounded-2xl bg-white ring-1 ring-inset ring-[#D6DEEA] text-[14.5px] font-bold text-[#1B2B4B] inline-flex items-center justify-center gap-2"><HI name="upload" size={16} />{file ? `계산서 파일: ${file.name.slice(0, 22)}` : "계산서 파일 첨부(선택)"}</button>
+      <input ref={ref} type="file" accept="image/*,application/pdf" className="sr-only" onChange={(e) => { const f = e.target.files?.[0]; if (f) setFile(f); e.target.value = ""; }} />
+      <Btn className="w-full mt-2.5" disabled={!!busy} data-testid="inv-submit" onClick={() => run("inv", () => issueInvoice(o, { ...v, file }), "계산서를 등록했습니다 · 정산이 진행됩니다")}>{busy === "inv" ? "등록 중…" : "계산서 발행 등록"}</Btn>
+    </Card>
+  );
+}
 
 const myReqAt = new Map(); // 내가 신청한 순간(이 기기 시각) — 카운트다운 기준
 const telHref = (p) => `tel:${String(p || "").replace(/[^\d+]/g, "")}`;
@@ -38,23 +95,27 @@ function Row({ k, v, strong }) {
   );
 }
 
-export default function HubOrderDetail({ id, me, onClose, toast, onEdit, favorites = [] }) {
+export default function HubOrderDetail({ id, me, onClose, toast, onEdit, favorites = [], isAdmin = false, adminSlot = null, liveShare = null }) {
   const [o, setO] = useState(undefined);
   const [detail, setDetail] = useState(null);
   const [match, setMatch] = useState(null);
   const [left, setLeft] = useState(0);
   const [busy, setBusy] = useState("");
   const [ask, setAsk] = useState(null); // 확인 창
-  const [pod, setPod] = useState(null);
-  const [podUrl, setPodUrl] = useState("");
+  const [pods, setPods] = useState([]);
   const [rate, setRate] = useState({ score: 5, comment: "" });
   const [note, setNote] = useState("");
   const [noteSaved, setNoteSaved] = useState(false);
+  const [liveOpen, setLiveOpen] = useState(false);
+  const [livePing, setLivePing] = useState(null);
   const podInput = useRef(null);
 
   useEffect(() => subscribeOrder(id, setO), [id]);
   const isPoster = !!o && o.posterUid === me.uid;
   const isTaker = !!o && o.takerUid === me.uid;
+  const seesLive = !!o && (isPoster || isAdmin) && liveActive(o);
+  // 등록자 · 관리자: 위치 수신 상태(마지막 수신 시각) — 관제 버튼 옆에 표시
+  useEffect(() => (seesLive ? subscribeLive(id, setLivePing) : (setLivePing(null), undefined)), [id, seesLive]);
   const st = o ? STATUS[o.status] || STATUS.open : STATUS.open;
 
   // 카운트다운(내 신청)
@@ -70,11 +131,11 @@ export default function HubOrderDetail({ id, me, onClose, toast, onEdit, favorit
 
   // 등록자: 상세·배차 정보 실시간
   useEffect(() => {
-    if (!isPoster) return;
+    if (!isPoster && !isAdmin) return;
     const a = subscribePrivate(id, "detail", setDetail);
     const b = subscribePrivate(id, "match", setMatch);
     return () => { a(); b(); };
-  }, [id, isPoster, o?.takerUid]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [id, isPoster, isAdmin, o?.takerUid]); // eslint-disable-line react-hooks/exhaustive-deps
   // 배차된 회원: 10초 확정 뒤 상세 공개(서버 시각 기준이라 몇 번 다시 시도)
   const confirmed = isTaker && (o?.status === "loaded" || o?.status === "delivered" || (o?.status === "assigned" && o?.confirmed === true));
   // 10초가 지나면 "확정" 표시를 남긴다(배차된 회원 · 등록자 화면 중 먼저 본 쪽) — 서버 시각 기준이라 실패하면 잠시 뒤 다시
@@ -91,7 +152,7 @@ export default function HubOrderDetail({ id, me, onClose, toast, onEdit, favorit
     return () => { stop = true; clearTimeout(timer); };
   }, [o?.id, o?.status, o?.confirmed, o?.assignedAt, isTaker, isPoster, left <= 0]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
-    if (!confirmed) { if (!isPoster) setDetail(null); return; }
+    if (!confirmed) { if (!isPoster && !isAdmin) setDetail(null); return; }
     let n = 0, stop = false;
     const tryFetch = async () => {
       const d = await fetchPrivate(id, "detail");
@@ -102,7 +163,6 @@ export default function HubOrderDetail({ id, me, onClose, toast, onEdit, favorit
     tryFetch();
     return () => { stop = true; };
   }, [confirmed, id]); // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => { if (o?.podPath && (isPoster || isTaker)) fileUrl(o.podPath).then(setPodUrl).catch(() => {}); }, [o?.podPath, isPoster, isTaker]);
   useEffect(() => { if (o && (isPoster || isTaker)) fetchPrivate(id, `settle_${me.uid}`).then((d) => setNote(d?.text || "")); }, [o?.id, isPoster, isTaker]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const run = async (label, fn, okMsg) => {
@@ -110,7 +170,9 @@ export default function HubOrderDetail({ id, me, onClose, toast, onEdit, favorit
     try { await fn(); if (okMsg) toast?.(okMsg); }
     catch (e) {
       const denied = String(e?.code || e?.message || "").includes("permission");
-      toast?.(denied ? "처리할 수 없는 상태입니다(권한 또는 시간 초과)." : e?.message || "처리하지 못했습니다.", 3600);
+      const depo = o && payKind(o.지급방식) === "deposit";
+      const deniedMsg = depo && label === "req" ? "배차신청할 수 없습니다 — 등록자 예치금이 부족하거나 이미 배차된 오더입니다." : "처리할 수 없는 상태입니다(권한 또는 시간 초과).";
+      toast?.(denied ? deniedMsg : e?.message || "처리하지 못했습니다.", 3600);
     } finally { setBusy(""); setAsk(null); }
   };
 
@@ -163,10 +225,11 @@ export default function HubOrderDetail({ id, me, onClose, toast, onEdit, favorit
     action = (
       <div className="space-y-2.5">
         <button type="button" onClick={() => podInput.current?.click()} data-testid="btn-pod" className="w-full h-14 rounded-2xl bg-white ring-1 ring-inset ring-[#D6DEEA] text-[16px] font-bold text-[#1B2B4B] inline-flex items-center justify-center gap-2">
-          <HI name="camera" size={20} />{pod ? `인수증: ${pod.name.slice(0, 18)}` : "인수증 사진 찍기 · 고르기"}
+          <HI name="camera" size={20} />{pods.length ? `인수증 · 서류 ${pods.length}장 선택됨` : "인수증 · 서류 사진(여러 장)"}
         </button>
-        <input ref={podInput} type="file" accept="image/*" capture="environment" className="sr-only" data-testid="pod-input" onChange={(e) => { const f = e.target.files?.[0]; if (f) setPod(f); e.target.value = ""; }} />
-        <Btn size="xl" className="w-full" disabled={!!busy} data-testid="btn-delivered" onClick={() => run("dlv", () => markDelivered(o, me, pod), "운송완료! 수고하셨습니다")}><HI name="flag" size={20} />{busy === "dlv" ? "올리는 중…" : "운송완료"}</Btn>
+        <input ref={podInput} type="file" accept="image/*,application/pdf" multiple className="sr-only" data-testid="pod-input" onChange={(e) => { const fs = [...(e.target.files || [])]; if (fs.length) setPods((p) => [...p, ...fs].slice(0, 30)); e.target.value = ""; }} />
+        {pods.length > 0 && <div className="flex gap-1.5 flex-wrap">{pods.map((f, i) => <span key={i} className="h-8 pl-3 pr-1 rounded-full bg-[#EAF0FA] text-[13px] font-bold text-[#1B2B4B] inline-flex items-center gap-1">{f.name.slice(0, 14)}<button type="button" aria-label="빼기" onClick={() => setPods((p) => p.filter((_, j) => j !== i))} className="w-6 h-6 rounded-full inline-flex items-center justify-center hover:bg-white"><HI name="close" size={12} /></button></span>)}</div>}
+        <Btn size="xl" className="w-full" disabled={!!busy} data-testid="btn-delivered" onClick={() => run("dlv", () => markDelivered(o, me, pods), "운송완료! 수고하셨습니다")}><HI name="flag" size={20} />{busy === "dlv" ? "올리는 중…" : `운송완료${pods.length ? ` · 인수증 ${pods.length}장` : ""}`}</Btn>
       </div>
     );
   } else if (isPoster && o.status === "loaded") {
@@ -204,8 +267,26 @@ export default function HubOrderDetail({ id, me, onClose, toast, onEdit, favorit
         </div>
 
         <div className="px-4 lg:px-5 pb-5 space-y-3.5">
-          {/* 배차된 차주 카드(등록자) */}
-          {isPoster && o.takerUid && match && (
+          {/* ⭐ 위치관제 — 등록자 · 관리자(확정 ~ 운송완료) */}
+          {seesLive && (
+            <button type="button" onClick={() => setLiveOpen(true)} data-testid="btn-live" className="w-full text-left rounded-[22px] p-4 text-white flex items-center gap-3.5" style={{ background: "linear-gradient(120deg,#0B1428,#1B2B4B 60%,#2D4C82)" }}>
+              <span className="relative w-12 h-12 rounded-2xl bg-white/10 ring-1 ring-inset ring-white/15 inline-flex items-center justify-center shrink-0"><HI name="map" size={22} className="text-[#8FB0F0]" />{livePing?.lat != null && <span className="absolute -right-0.5 -top-0.5 w-3 h-3 rounded-full bg-[#34D399] ring-2 ring-[#0F1A30] animate-pulse" />}</span>
+              <span className="min-w-0 flex-1">
+                <span className="block text-[17px] font-extrabold">실시간 관제 · 차량 위치</span>
+                <span className="block text-[14px] text-white/65 truncate" data-testid="live-ping">{livePing?.lat != null ? `${match?.vehicle?.plate || "차량"} · ${ago(livePing.updatedAt)} 수신 · ${Math.round(livePing.speed || 0)}km/h` : "차주 위치를 기다리는 중 · 운송완료까지 볼 수 있습니다"}</span>
+              </span>
+              <HI name="chevron" size={20} className="text-[#8FB0F0]" />
+            </button>
+          )}
+          {isTaker && liveActive(o) && (
+            <div className="rounded-2xl bg-white ring-1 ring-inset ring-[#DCE3EE] px-4 py-3 flex items-center gap-2.5 text-[14.5px] font-bold text-[#1B2B4B]" data-testid="live-share-state">
+              <span className={`w-2.5 h-2.5 rounded-full ${liveShare?.on && liveShare.job?.id === o.id ? "bg-[#34D399] animate-pulse" : "bg-[#A3AEC0]"}`} />
+              {liveShare?.denied ? "위치 권한이 꺼져 있어 등록자가 위치를 볼 수 없습니다 — 설정에서 허용해 주세요." : liveShare?.on && liveShare.job?.id === o.id ? `위치 공유 중 · 등록자가 운송완료까지 차량 위치를 봅니다${liveShare.last ? ` · ${ago(liveShare.last)}` : ""}` : "위치 공유 준비 중…"}
+            </div>
+          )}
+
+          {/* 배차된 차주 카드(등록자 · 관리자) */}
+          {(isPoster || isAdmin) && o.takerUid && match && (
             <Card className="p-4" data-testid="taker-card">
               <div className="text-[14px] font-bold text-[#2D4C82] mb-3">{o.status === "assigned" && !o.confirmed ? "배차신청 · 10초 뒤 확정" : "배차 확정된 차량"}</div>
               <div className="flex items-center gap-3.5">
@@ -239,7 +320,7 @@ export default function HubOrderDetail({ id, me, onClose, toast, onEdit, favorit
           )}
 
           {/* 상세주소 · 연락처 */}
-          {(isPoster || confirmed) && detail ? (
+          {(isPoster || isAdmin || confirmed) && detail ? (
             <Card className="p-4" data-testid="detail-private">
               <div className="text-[14px] font-bold text-[#2D4C82] mb-1 flex items-center gap-1.5"><HI name="lock" size={15} />{isPoster ? "상세 정보(배차 확정 후 차주에게 공개)" : "배차 확정 · 상세 정보"}</div>
               <div className="divide-y divide-[#EEF1F6]">
@@ -253,7 +334,7 @@ export default function HubOrderDetail({ id, me, onClose, toast, onEdit, favorit
               </div>
               {!isPoster && posterPhone && <a href={telHref(posterPhone)} data-testid="btn-call-poster" className="mt-3 h-12 rounded-2xl w-full inline-flex items-center justify-center gap-2 text-white text-[16px] font-bold" style={{ background: "linear-gradient(120deg,#0F1A30,#2D4C82)" }}><HI name="phone" size={18} />등록자에게 전화</a>}
             </Card>
-          ) : (!isPoster && (
+          ) : (!isPoster && !isAdmin && (
             <Card className="p-4 flex items-start gap-3">
               <span className="w-11 h-11 rounded-2xl bg-[#F2F5FA] text-[#55657F] inline-flex items-center justify-center shrink-0"><HI name="lock" size={19} /></span>
               <div className="text-[15px] text-[#55657F] leading-relaxed"><b className="text-[#0F1A30]">상세주소 · 연락처는 배차 확정 후 공개</b><br />배차신청하고 10초가 지나면 상·하차 정확한 주소와 등록자 연락처가 보입니다.</div>
@@ -287,8 +368,13 @@ export default function HubOrderDetail({ id, me, onClose, toast, onEdit, favorit
             </div>
           </Card>
 
-          {/* 인수증 */}
-          {podUrl && <Card className="p-4"><div className="text-[16px] font-extrabold text-[#0F1A30] mb-2">인수증</div><a href={podUrl} target="_blank" rel="noreferrer"><img src={podUrl} alt="인수증" className="w-full max-h-[320px] object-contain rounded-2xl bg-[#F2F5FA]" data-testid="pod-img" /></a></Card>}
+          {/* 인수증 · 서류(여러 장) — 보기 · 저장 · 공유 / 배차된 회원은 운송완료 뒤에도 더 올리기 */}
+          {(isPoster || isTaker || isAdmin) && o.status === "delivered" && <HubPod o={o} canAdd={isTaker} toast={toast} />}
+
+          {/* 정산(예치금) · 계산서 */}
+          {(isPoster || isTaker || isAdmin) && o.takerUid && o.status !== "open" && <SettleCard o={o} isPoster={isPoster} isTaker={isTaker} />}
+          {isTaker && o.status === "delivered" && !o.invoice && payKind(o.지급방식) === "deposit" && <InvoiceForm o={o} busy={busy} run={run} />}
+          {isAdmin && adminSlot ? adminSlot(o, detail, match) : null}
 
           {/* 평가 */}
           {o.status === "delivered" && (isPoster || isTaker) && (
@@ -331,6 +417,7 @@ export default function HubOrderDetail({ id, me, onClose, toast, onEdit, favorit
 
       {ask?.k === "release" && <Confirm title="배차를 취소할까요?" body={"차주에게 알림이 가고 오더가 다시 모집중이 됩니다.\n상차 직전 취소는 차주에게 큰 손해이니 먼저 전화로 협의해 주세요."} okText="배차 취소" onCancel={() => setAsk(null)} onOk={() => run("rel", () => releaseTaker(o, me, "등록자 취소"), "배차를 취소하고 다시 모집합니다")} />}
       {ask?.k === "cancelOrder" && <Confirm title="오더를 취소할까요?" body={o.takerUid ? "배차된 차주에게 취소 알림이 갑니다." : "보드에서 내려갑니다."} okText="오더 취소" onCancel={() => setAsk(null)} onOk={() => run("co", () => cancelOrder(o, me), "오더를 취소했습니다")} />}
+      {liveOpen && <Suspense fallback={null}><HubLiveTrack order={o} detail={detail} match={match} mobile={typeof window !== "undefined" && window.innerWidth < 768} onClose={() => setLiveOpen(false)} /></Suspense>}
       {ask?.k === "report" && <Confirm title="신고하기" body="노쇼 · 연락 두절 · 허위 정보 등을 관리자에게 알립니다." okText="노쇼 신고" onCancel={() => setAsk(null)} onOk={() => run("rep", () => reportParty(me, o, ask.uid, "noshow", "등록자 신고"), "신고를 접수했습니다")} />}
     </Drawer>
   );
