@@ -11,7 +11,7 @@ export default {
         secondary: "#f4f6fa",
       },
       fontFamily: {
-        sans: ["Pretendard", "Noto Sans KR", "system-ui", "sans-serif"],
+        sans: ["Noto Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", "system-ui", "sans-serif"],
       },
     },
   },

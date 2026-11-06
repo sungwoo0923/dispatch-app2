@@ -2877,6 +2877,9 @@ import { useFareRules, FareTypeSelect, FareRuleHint, fareFormChange, farePatchOf
 import { useTableSort, sortRows, SortTh } from "./tableSort";
 import { useCompanyFeatures } from "./companyFeatures";
 import { BRAND, LogisMark, LogisWordmark, LogisTag } from "./brand";
+// ⭐ 2026-11-06 로지스웹 허브(운송사 간 오더 거래소) — [저장 + 허브 등록]
+import { MARKET_SHORT } from "./orderMarketConfig";
+import { shareToOrderMarket } from "./orderMarketShare";
 
 // 기사전달용 업로드 링크 단축 — /upload?id=...&t=... (길고 낯설어 기사들이 거부감을
 // 느낄 수 있는 형태)를 /u/{code} 형태로 줄인다. code는 토큰에서 파생시켜, 같은
@@ -13959,40 +13962,24 @@ const savePromise = Promise.all(Array.from({ length: saveCount }, (_, i) => {
 // ⭐ 2026-11-03 청구 사업자 기억 — 다음에 같은 거래처·상차지·하차지가 들어오면 이 사업자로 자동 맞춘다
 if (dmBiz.multi) rememberBiz(dmBiz, rec, { clientDefault: bizClientDefault(rec.거래처명) });
 
-// ★ 배차마당(카페사이트) 공유 — "저장 + 배차마당 등록" 버튼으로 저장하면 카페 게시판에도 같은 오더를 올린다.
-// (2026-10-27 — 회사정보의 공유 온/오프 스위치는 없앴다. 이 버튼을 누르는 것 자체가 공유한다는 뜻) 배차마당은 이 프로그램과
-// 완전히 분리된 별도 사이트(별도 저장소/배포)라 코드는 공유하지 않고, 같은
-// Firestore 프로젝트의 cafeOrders 컬렉션에 직접(self-contained) 기록만 한다.
+// ★ 로지스웹 허브(예전 배차마당) 공유 — "저장 + 허브 등록" 버튼으로 저장하면 오더마켓에도 같은 오더를 올린다.
+// (2026-10-27 — 회사정보의 공유 온/오프 스위치는 없앴다. 이 버튼을 누르는 것 자체가 공유한다는 뜻) 오더마켓은 이 프로그램과
+// 완전히 분리된 별도 사이트(cafe-site)라 코드는 공유하지 않고, 같은 Firestore 프로젝트의 cafeOrders 컬렉션에 직접 기록만 한다.
+// ⭐ 2026-11-06 운송사 간 오더 거래 — 정확한 주소·연락처는 비공개 문서로 나눠 저장하고(매칭된 운송사에게만 공개),
+//  저장된 오더 번호를 함께 남겨 상대 운송사의 배차/운송 진행이 이 오더에 반영되게 한다(src/orderMarketShare.js).
 // 실패해도 정작 오더 저장 자체는 이미 끝났으므로 여기서 막지 않고 조용히 넘어간다.
 if (shareToCafe) {
   (async () => {
     try {
-      const printerInfo = await fetchPrinterInfo();
-      const cafeRef = await addDoc(collection(db, "cafeOrders"), {
-        companyName: rec.companyName,
+      const [printerInfo, savedIds] = await Promise.all([fetchPrinterInfo(), savePromise.catch(() => [])]);
+      await shareToOrderMarket(db, {
+        rec,
+        savedIds,
+        uid: auth.currentUser?.uid || "",
+        profile: printerInfo || {},
         posterName: (typeof myRealName !== "undefined" && myRealName) || printerInfo?.name || auth.currentUser?.email?.split("@")[0] || "",
-        posterNickname: rec.companyName,
-        posterUid: auth.currentUser?.uid || "",
-        source: "company",
-        상차지명: rec.상차지명 || "", 상차지주소: rec.상차지주소 || "",
-        하차지명: rec.하차지명 || "", 하차지주소: rec.하차지주소 || "",
-        화물내용: rec.화물내용 || "", 차량톤수: rec.차량톤수 || "", 차량종류: rec.차량종류 || "",
-        지급방식: rec.지급방식 || "", 상차방법: rec.상차방법 || "", 하차방법: rec.하차방법 || "",
-        상차일: rec.상차일 || "", 상차시간: rec.상차시간 || "", 하차일: rec.하차일 || "", 하차시간: rec.하차시간 || "",
-        운임: rec.청구운임 ? String(rec.청구운임) : "",
-        혼적: !!rec.혼적, 운행유형: rec.운행유형 || "편도", 긴급: !!rec.긴급,
-        경유여부: (rec.경유상차목록?.length > 0 || rec.경유하차목록?.length > 0),
-        메모: rec.메모 || "",
-        status: "open",
-        applicantUid: null, applicantName: null, applicantNickname: null,
-        applyRequestedAt: null, confirmedAt: null,
-        createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
       });
-      await setDoc(doc(db, "cafeOrders", cafeRef.id, "contact", "info"), {
-        posterPhone: printerInfo?.phone || "",
-        posterName: (typeof myRealName !== "undefined" && myRealName) || printerInfo?.name || "",
-      });
-    } catch (e) { console.error("배차마당 등록 실패:", e); }
+    } catch (e) { console.error(`${MARKET_SHORT} 등록 실패:`, e); }
   })();
 }
 
@@ -20186,12 +20173,12 @@ setConfirmChange(null);
       </div>
     )}
 
-    {/* 배차마당 등록 — 저장과 동시에 배차마당 카페사이트에도 공유 */}
+    {/* 허브 등록 — 저장과 동시에 로지스웹 허브(운송사 간 오더 거래소)에도 공유 · ⭐ 2026-11-06 이름은 src/orderMarketConfig.js */}
     <button type="button"
       disabled={isSaving}
       className="w-full h-11 rounded-xl border-2 border-[#1B2B4B] bg-white text-[#1B2B4B] hover:bg-[#F4F7FC] font-black text-[14.5px] transition disabled:opacity-50"
       onClick={() => doSave(true)}>
-      {isSaving ? "저장 중..." : "저장 + 배차마당 등록"}
+      {isSaving ? "저장 중..." : `저장 + ${MARKET_SHORT} 등록`}
     </button>
 
   </div>

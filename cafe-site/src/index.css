@@ -1,9 +1,16 @@
-@import url("https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700;800&display=swap");
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-body {
-  font-family: "Pretendard", "Noto Sans KR", system-ui, sans-serif;
+/* ⭐ 2026-11-06 로지스웹 허브 — 로지스웹 운송 프로그램과 같은 기본 글꼴(Noto Sans KR), 고정폭 글꼴 없음 */
+html, body {
+  font-family: "Noto Sans KR", "Apple SD Gothic Neo", "맑은 고딕", "Malgun Gothic", system-ui, sans-serif;
+  background: #F2F4F8;
+  color: #0F1A30;
+  letter-spacing: -0.3px;
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
 }
+body { overflow-x: hidden; }

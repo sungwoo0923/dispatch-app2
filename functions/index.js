@@ -6419,3 +6419,26 @@ exports.platformUsageNow = functions.runWith({ timeoutSeconds: 120, memory: "256
     res.status(e.status || 500).json({ error: e?.message || String(e) });
   }
 });
+
+/* ==============================
+   ⭐ 2026-11-06 오더마켓(운송사 간 오더 거래) — 규칙은 functions/orderMarket.js 맨 위 설명
+   ① 게시글 매칭완료 → 받은 운송사 프로그램에 오더 생성(orders/mkt_{id})
+   ② 받은 운송사 오더 배차/운송 진행 → 게시글 단계 + 올린 운송사 원래 오더에 반영
+============================== */
+const _orderMarket = require("./orderMarket");
+exports.orderMarketOnListingUpdate = functions.firestore
+  .document("cafeOrders/{id}")
+  .onUpdate(async (change, context) => {
+    try {
+      await _orderMarket.onListingUpdate(db, FieldValue, context.params.id, change.before.data(), change.after.data());
+    } catch (e) { console.error("[오더마켓] 매칭 처리 실패:", e); }
+  });
+exports.orderMarketOnTakerOrderWrite = functions.firestore
+  .document("orders/{id}")
+  .onWrite(async (change, context) => {
+    const after = change.after.exists ? change.after.data() : null;
+    if (!after || after.source !== "ordermarket") return; // 오더마켓에서 받은 오더만(나머지 오더는 바로 끝)
+    try {
+      await _orderMarket.onTakerOrderUpdate(db, FieldValue, context.params.id, change.before.exists ? change.before.data() : null, after);
+    } catch (e) { console.error("[오더마켓] 진행 반영 실패:", e); }
+  });

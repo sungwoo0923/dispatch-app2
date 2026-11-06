@@ -115,7 +115,7 @@ export default function PlaceAutocomplete({
     else if (e.key === "Escape") setOpen(null);
   };
 
-  const field = "w-full h-11 border border-[#DCE3EE] rounded-xl px-3.5 text-[13.5px] font-semibold text-[#0F1A30] bg-white outline-none focus:border-[#4B6CB7] focus:ring-4 focus:ring-[#4B6CB7]/10 transition placeholder:text-[#9AA9C3] placeholder:font-medium";
+  const field = "w-full h-12 border border-[#DCE3EE] rounded-xl px-3.5 text-[15px] font-medium text-[#0F1A30] bg-white outline-none focus:border-[#2D4C82] focus:ring-4 focus:ring-[#2D4C82]/10 transition placeholder:text-[#9AA9C3] placeholder:font-medium";
 
   return (
     <div className="relative" ref={wrapRef}>
@@ -146,14 +146,14 @@ export default function PlaceAutocomplete({
         <div className="absolute z-50 left-0 right-0 top-full mt-1.5 bg-white border border-[#DCE3EE] rounded-xl shadow-[0_18px_40px_rgba(15,26,48,0.18)] max-h-72 overflow-auto">
           {options.map((p, i) => (
             <div key={p.src + p.name + p.addr + i}
-              className={`px-3 py-2 text-[13px] cursor-pointer border-b border-gray-50 last:border-0 ${i === activeIdx ? "bg-[#1B2B4B]/10" : "hover:bg-gray-50"}`}
+              className={`px-3.5 py-2.5 text-[14px] cursor-pointer border-b border-gray-50 last:border-0 ${i === activeIdx ? "bg-[#1B2B4B]/10" : "hover:bg-gray-50"}`}
               onMouseEnter={() => setActiveIdx(i)}
               onMouseDown={e => { e.preventDefault(); pick(p); }}>
               <div className="flex items-center gap-1.5">
-                {p.src === "pool" && <span className="text-[10px] font-bold px-1.5 py-px rounded border border-[#1B2B4B]/30 text-[#1B2B4B] shrink-0">자주쓰는</span>}
+                {p.src === "pool" && <span className="text-[12px] font-bold px-1.5 py-px rounded border border-[#1B2B4B]/30 text-[#1B2B4B] shrink-0">자주쓰는</span>}
                 <span className="font-bold text-gray-900 truncate">{p.name || "(이름 없음)"}</span>
               </div>
-              {p.addr && <div className="text-[11px] text-gray-500 truncate">{p.addr}</div>}
+              {p.addr && <div className="text-[13px] text-gray-500 truncate">{p.addr}</div>}
             </div>
           ))}
         </div>

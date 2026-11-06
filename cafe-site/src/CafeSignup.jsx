@@ -1,5 +1,6 @@
 // ======================= cafe-site/src/CafeSignup.jsx =======================
-// 배차마당 회원가입 — 운송사/화주사처럼 승인 절차 없이 가입 즉시 이용 가능하다.
+// 로지스웹 허브 둘러보기 회원가입 — 승인 절차 없이 가입 즉시 열람 가능.
+// ⭐ 2026-11-06 오더 올리기·잡기는 로지스웹 운송사 계정만(firestore.rules) — 이 가입은 "둘러보기(열람)" 계정이다.
 // 2026-10-28 리디자인 — 로그인과 같은 분할 화면(AuthLayout)
 import React, { useState } from "react";
 import { auth, db } from "./firebase";
@@ -11,7 +12,7 @@ import { inputCls, btnPrimary, btnPrimaryStyle } from "./ui";
 
 const F = ({ label, children }) => (
   <label className="block">
-    <span className="text-[12.5px] font-bold text-[#5B6B85]">{label}</span>
+    <span className="text-[14px] font-bold text-[#55657F]">{label}</span>
     <div className="mt-1.5">{children}</div>
   </label>
 );
@@ -70,8 +71,11 @@ export default function CafeSignup() {
   };
 
   return (
-    <AuthLayout en="CREATE ACCOUNT" title="회원가입"
-      footer={<Link to="/login" className="text-[13px] font-semibold text-[#7A879C] hover:text-[#0F1A30]">이미 계정이 있으신가요? <b className="text-[#1B2B4B]">로그인</b></Link>}>
+    <AuthLayout sub="둘러보기 회원" title="회원가입"
+      footer={<Link to="/login" className="text-[14px] font-semibold text-[#55657F] hover:text-[#0F1A30]">이미 계정이 있으신가요? <b className="text-[#1B2B4B]">로그인</b></Link>}>
+      <div className="mb-4 rounded-xl bg-[#EAF0FA] ring-1 ring-inset ring-[#D5E0F2] px-4 py-3 text-[14px] text-[#1B2B4B] leading-relaxed">
+        <b>로지스웹을 쓰는 운송사라면 가입 없이</b> 운송사 계정으로 바로 로그인하세요. 여기서 가입한 계정은 오더를 둘러보기만 할 수 있습니다.
+      </div>
       <form className="space-y-3.5" onSubmit={(e) => { e.preventDefault(); submit(); }}>
         <F label="이메일 (아이디)"><input className={inputCls} placeholder="name@company.com" type="email" autoComplete="username" value={email} onChange={(e) => setEmail(e.target.value)} /></F>
         <div className="grid grid-cols-2 gap-2.5">
@@ -87,10 +91,10 @@ export default function CafeSignup() {
 
         <label className="flex items-start gap-2.5 rounded-xl bg-[#F5F8FD] border border-[#E3E8F0] px-3.5 py-3 cursor-pointer">
           <input type="checkbox" checked={agree} onChange={(e) => setAgree(e.target.checked)} className="mt-0.5 w-4 h-4 accent-[#1B2B4B]" />
-          <span className="text-[12.5px] text-[#3A4A66] leading-relaxed">배차가 <b>확정된 상대방에게만</b> 회사명·이름·휴대폰번호가 공개되는 것에 동의합니다.</span>
+          <span className="text-[14px] text-[#3A4A66] leading-relaxed">거래가 <b>매칭된 상대방에게만</b> 회사명·이름·휴대폰번호가 공개되는 것에 동의합니다.</span>
         </label>
 
-        {error && <div className="rounded-xl bg-[#F5F8FD] border border-[#DCE3EE] px-3.5 py-2.5 text-[13px] font-bold text-[#0F1A30]">⚠ {error}</div>}
+        {error && <div className="rounded-xl bg-[#F5F8FD] border border-[#DCE3EE] px-3.5 py-2.5 text-[14px] font-bold text-[#0F1A30]">⚠ {error}</div>}
 
         <button type="submit" disabled={loading} className={`w-full ${btnPrimary}`} style={btnPrimaryStyle}>
           {loading ? "가입 중…" : "가입하고 시작하기"}
