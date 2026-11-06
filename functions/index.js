@@ -1280,23 +1280,31 @@ exports.notifyChatMessage = functions.firestore
     const members = (roomSnap.data()?.members || []).filter((uid) => uid !== data.senderUid);
     if (!members.length) return;
 
+    // ⭐ 2026-11-06 @멘션된 사람은 제목에 "님이 회원님을 언급" — 따로 묶어 보낸다
+    const mentioned = new Set(Array.isArray(data.mentions) ? data.mentions : []);
     const tokens = [];
+    const mentionTokens = [];
     await Promise.all(members.map(async (uid) => {
       try {
         const uSnap = await db.collection("users").doc(uid).get();
-        if (isPushTypeEnabled(uSnap.data()?.pushPrefs, "메신저")) tokens.push(...userTokens(uSnap.data()));
+        if (isPushTypeEnabled(uSnap.data()?.pushPrefs, "메신저")) (mentioned.has(uid) ? mentionTokens : tokens).push(...userTokens(uSnap.data()));
       } catch (e) {
         console.warn("메신저 알림용 토큰 조회 실패:", uid, e?.message || e);
       }
     }));
-    if (!tokens.length) return;
+    if (!tokens.length && !mentionTokens.length) return;
 
-    const body = data.type === "image" ? "사진을 보냈습니다" : String(data.text || "").slice(0, 80);
-    await sendPushAndCleanup(tokens, {
-      notification: { title: data.senderName || "사내 메신저", body },
-      android: { priority: "high" },
-      apns: { payload: { aps: { sound: "default" } } },
-    }, "사내 메신저");
+    const o = data.order || {};
+    const body = data.type === "image" ? "사진을 보냈습니다"
+      : data.type === "order" ? `[오더] ${o.상차지명 || "-"} → ${o.하차지명 || "-"}${o.상차일 ? ` (${o.상차일})` : ""}`
+        : String(data.text || "").slice(0, 80);
+    const base = { android: { priority: "high" }, apns: { payload: { aps: { sound: "default" } } } };
+    if (tokens.length) {
+      await sendPushAndCleanup(tokens, { ...base, notification: { title: data.senderName || "사내 메신저", body } }, "사내 메신저");
+    }
+    if (mentionTokens.length) {
+      await sendPushAndCleanup(mentionTokens, { ...base, notification: { title: `${data.senderName || "누군가"}님이 회원님을 언급했습니다`, body } }, "사내 메신저(멘션)");
+    }
   });
 
 /* ==============================================================

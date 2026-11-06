@@ -7503,6 +7503,7 @@ useEffect(() => {
               body: JSON.stringify({
                 to: data.to, subject: data.subject, html: data.html,
                 attachments: data.attachments || [], fromName: data.fromName || "",
+                replyTo: data.replyTo || "", // ⭐ 2026-11-06 일반 이메일 보내는 사람 이메일(답장 받을 주소)
               }),
             });
             await updateDoc(doc(db, "scheduledEmails", d.id), res.ok
@@ -24716,12 +24717,15 @@ function scheduledEmailAttachSize(attachments) {
 // 정산관리의 이메일 발송 지점들이 공용으로 쓰는 "예약발송 등록" — 즉시 보내는 대신
 // scheduledEmails 컬렉션에 저장해두면, DispatchApp의 예약 이메일 체커가 예약시각에 맞춰
 // 대신 발송한다(위쪽 useEffect 참고).
-async function scheduleEmailDoc({ companyName, to, subject, html, attachments = [], fromName, sendAt, type = "예약메일", meta = {} }) {
+// ⭐ 2026-11-06 일반 이메일 주소 확인(보내는 사람·받는 사람)
+const GEN_MAIL_RE = /^[^\s@<>(),;:"[\]\\]+@[^\s@<>(),;:"[\]\\]+\.[^\s@<>(),;:"[\]\\]{2,}$/;
+async function scheduleEmailDoc({ companyName, to, subject, html, attachments = [], fromName, replyTo = "", sendAt, type = "예약메일", meta = {} }) {
   await addDoc(collection(db, "scheduledEmails"), {
     companyName: companyName || "",
     to, subject, html,
     attachments,
     fromName: fromName || "",
+    replyTo: replyTo || "", // ⭐ 2026-11-06 보내는 사람 이메일(답장 받을 주소)
     sendAt,
     status: "pending",
     type,
@@ -51838,6 +51842,10 @@ const [generalEmailFiles, setGeneralEmailFiles] = useState([]);
 const [generalEmailAddrOpen, setGeneralEmailAddrOpen] = useState(false);
 const [generalEmailAddrQuery, setGeneralEmailAddrQuery] = useState("");
 const [generalEmailAddrActiveIdx, setGeneralEmailAddrActiveIdx] = useState(0);
+// ⭐ 2026-11-06 일반 이메일 — 보내는 사람(이름·이메일)을 직접 입력. 마지막에 쓴 값을 이 기기에 기억한다
+const [generalEmailFromName, setGeneralEmailFromName] = useState("");
+const [generalEmailFromAddr, setGeneralEmailFromAddr] = useState("");
+const genMailFromKey = `kpGenMailFrom:${auth.currentUser?.uid || "me"}`;
 const [batchSendList, setBatchSendList] = useState([]); // [{name, email, start, end, mapped, totals, clientInfo}]
 const [batchSendOpen, setBatchSendOpen] = useState(false);
 const [batchSending, setBatchSending] = useState(false);
@@ -51893,7 +51901,7 @@ const [includeCardAr, setIncludeCardAr] = useState(true);
     return () => unsub();
   }, []);
 
-  const logEmail = async ({ type, client, to, subject, body, attachmentNames, status, error }) => {
+  const logEmail = async ({ type, client, to, subject, body, attachmentNames, status, error, fromName, replyTo, sentFrom }) => {
     const id = crypto.randomUUID();
     await setDoc(doc(db, "emailLogs", id), {
       id, type, client, to, subject,
@@ -51901,6 +51909,8 @@ const [includeCardAr, setIncludeCardAr] = useState(true);
       attachmentNames: attachmentNames || [],
       status,
       error: error || null,
+      // ⭐ 2026-11-06 보내는 사람 기록(표시 이름 · 답장 받을 주소 · 실제 발송 계정)
+      ...(fromName ? { fromName } : {}), ...(replyTo ? { replyTo } : {}), ...(sentFrom ? { sentFrom } : {}),
       sentAt: Date.now(),
       sentBy: auth.currentUser?.email || "",
     });
@@ -53054,6 +53064,10 @@ const handleBatchSettle = async (targetStatus) => {
                       setGeneralEmailBody(`안녕하세요, ${client ? `${client} 담당자님.` : "담당자님."}\n\n${COMPANY_PRINT.name}입니다.\n\n\n\n감사합니다.\n${COMPANY_PRINT.name}\n${COMPANY_PRINT.contact}`);
                       setGeneralEmailFiles([]);
                       setGeneralEmailScheduleOn(false); setGeneralEmailScheduleAt("");
+                      // ⭐ 2026-11-06 보내는 사람 — 마지막에 쓴 값 → 없으면 "회사명 배차팀" · 내 로그인 이메일
+                      { let saved = null; try { saved = JSON.parse(localStorage.getItem(genMailFromKey) || "null"); } catch { saved = null; }
+                        setGeneralEmailFromName(saved?.name || `${COMPANY_PRINT.name || userCompany || ""} 배차팀`.trim());
+                        setGeneralEmailFromAddr(saved?.email ?? (auth.currentUser?.email || "")); }
                       setGeneralEmailOpen(true);
                     }}
                     className={csBtn}
@@ -53381,6 +53395,21 @@ const handleBatchSettle = async (targetStatus) => {
                   <button className="text-white/60 hover:text-white text-xl" onClick={() => setGeneralEmailOpen(false)}>×</button>
                 </div>
                 <div className="p-6 space-y-4">
+                  {/* ⭐ 2026-11-06 보내는 사람(이름·이메일) 직접 입력 */}
+                  <div data-genmail-from className="rounded-xl border border-[#D5E0F2] bg-[#F5F8FD] p-3.5">
+                    <div className="text-[13px] font-black text-[#0F1A30] mb-2">보내는 사람</div>
+                    <div className="grid grid-cols-[1fr_1.4fr] gap-2">
+                      <input autoComplete="off" data-genmail-from-name className="border-2 border-gray-300 rounded-lg px-3 py-2.5 text-[13px] outline-none focus:border-[#1B2B4B] bg-white"
+                        placeholder="이름 (예: 홍길동 · 배차팀)" maxLength={60} value={generalEmailFromName} onChange={e => setGeneralEmailFromName(e.target.value)} />
+                      <input autoComplete="off" type="email" data-genmail-from-email className={`border-2 rounded-lg px-3 py-2.5 text-[13px] outline-none bg-white ${generalEmailFromAddr.trim() && !GEN_MAIL_RE.test(generalEmailFromAddr.trim()) ? "border-[#B42318]" : "border-gray-300 focus:border-[#1B2B4B]"}`}
+                        placeholder="답장 받을 이메일 (예: me@company.com)" value={generalEmailFromAddr} onChange={e => setGeneralEmailFromAddr(e.target.value)} />
+                    </div>
+                    {generalEmailFromAddr.trim() && !GEN_MAIL_RE.test(generalEmailFromAddr.trim()) && <div className="mt-1.5 text-[12px] font-bold text-[#B42318]">이메일 형식이 올바르지 않습니다.</div>}
+                    <div className="mt-2 text-[12px] leading-relaxed text-[#5B6B85]">
+                      받는 사람에게는 <b className="text-[#0F1A30]">{(generalEmailFromName || "배차팀").trim() || "배차팀"}</b>(으)로 보이고, <b className="text-[#0F1A30]">[답장]을 누르면 {generalEmailFromAddr.trim() || "입력한 이메일"}</b>로 갑니다.
+                      메일 서버 보안 규칙(SPF·DMARC) 때문에 실제 발송 주소는 프로그램 공용 발송 계정으로 나갑니다.
+                    </div>
+                  </div>
                   <div>
                     <label className="text-[13px] font-bold text-gray-700 mb-1 block">수신 이메일</label>
                     <div className="relative">
@@ -53545,18 +53574,25 @@ const handleBatchSettle = async (targetStatus) => {
                   <div className="flex gap-3 pt-2">
                     <button onClick={() => setGeneralEmailOpen(false)} className="flex-1 py-2.5 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold text-[13px]"><EditableText id="misc.btn.49999.취소" defaultText="취소" /></button>
                     <button
+                      data-genmail-send
                       disabled={generalEmailSending || !generalEmailTo.trim() || !generalEmailSubject.trim() || (generalEmailScheduleOn && !generalEmailScheduleAt)}
                       onClick={async () => {
                         if (!generalEmailTo.trim()) return showAlert("수신 이메일을 입력하세요.");
                         if (!generalEmailSubject.trim()) return showAlert("제목을 입력하세요.");
                         if (generalEmailScheduleOn && !generalEmailScheduleAt) return showAlert("예약 발송 시각을 선택하세요.");
                         if (generalEmailScheduleOn && new Date(generalEmailScheduleAt).getTime() <= Date.now()) return showAlert("예약 시각은 현재 시각 이후여야 합니다.");
+                        // ⭐ 2026-11-06 입력 확인 — 받는 주소 · 보내는 사람 이메일 형식
+                        const toBad = generalEmailTo.split(/[,;\n]/).map(s => s.trim()).filter(Boolean).filter(s => !GEN_MAIL_RE.test((/<([^>]+)>/.exec(s) || [null, s])[1].trim()));
+                        if (toBad.length) return showAlert(`수신 이메일 형식을 확인하세요: ${toBad.join(", ")}`);
+                        const fromAddr = generalEmailFromAddr.trim();
+                        if (fromAddr && !GEN_MAIL_RE.test(fromAddr)) return showAlert("보내는 사람 이메일 형식을 확인하세요.");
+                        try { localStorage.setItem(genMailFromKey, JSON.stringify({ name: generalEmailFromName.trim(), email: fromAddr })); } catch { /* 저장 실패 무시 */ }
                         setGeneralEmailSending(true);
                         const bodyLines = (generalEmailBody || "").split("\n").map(l => `<p style="margin:0 0 6px">${l || "&nbsp;"}</p>`).join("");
                         const cardSection = (includeCardGeneral && cardImage) ? `<hr style="border:none;border-top:1px solid #e5e7eb;margin:20px 0"/><img src="${cardImage}" alt="명함" style="width:100%;max-width:500px;border-radius:8px;display:block" onerror="this.style.display='none'"/>` : "";
                         const bodyHtml = `<div style="font-family:sans-serif;font-size:14px;color:#333;line-height:1.8;max-width:600px">${bodyLines}${cardSection}</div>`;
                         const attachments = generalEmailFiles.map(f => ({ filename: f.name, content: f.base64, encoding: "base64" }));
-                        const fromName = `${COMPANY_PRINT.name || userCompany || "배차팀"} 배차팀`;
+                        const fromName = generalEmailFromName.trim() || `${COMPANY_PRINT.name || userCompany || "배차팀"} 배차팀`;
                         try {
                           if (generalEmailScheduleOn) {
                             if (scheduledEmailAttachSize(attachments) > SCHEDULED_EMAIL_ATTACH_LIMIT) {
@@ -53566,7 +53602,7 @@ const handleBatchSettle = async (targetStatus) => {
                             }
                             await scheduleEmailDoc({
                               companyName: userCompany, to: generalEmailTo, subject: generalEmailSubject, html: bodyHtml,
-                              attachments, fromName, sendAt: new Date(generalEmailScheduleAt),
+                              attachments, fromName, replyTo: fromAddr, sendAt: new Date(generalEmailScheduleAt),
                               type: "일반이메일", meta: { client: client || "-", body: generalEmailBody || "" },
                             });
                             showAlert(`${new Date(generalEmailScheduleAt).toLocaleString("ko-KR")}에 발송 예약되었습니다.`);
@@ -53583,18 +53619,23 @@ const handleBatchSettle = async (targetStatus) => {
                               html: bodyHtml,
                               attachments,
                               fromName,
+                              fromEmail: fromAddr, replyTo: fromAddr, // ⭐ 2026-11-06 답장 받을 주소
                             }),
                           });
+                          const logBase = { type: "일반이메일", client: client || "-", to: generalEmailTo, subject: generalEmailSubject, body: generalEmailBody || "", attachmentNames: generalEmailFiles.map(f => f.name), fromName, replyTo: fromAddr };
                           if (res.ok) {
-                            logEmail({ type: "일반이메일", client: client || "-", to: generalEmailTo, subject: generalEmailSubject, body: generalEmailBody || "", attachmentNames: generalEmailFiles.map(f => f.name), status: "success" });
-                            showAlert(`${generalEmailTo} 로 발송 완료`);
+                            let info = {}; try { info = await res.json(); } catch { info = {}; }
+                            logEmail({ ...logBase, status: "success", sentFrom: info.sentFrom || "" }).catch(() => {});
+                            showAlert(`${generalEmailTo} 로 발송 완료${fromAddr ? `\n보낸 사람: ${fromName} · 답장 받을 주소 ${fromAddr}` : ""}`);
                             setGeneralEmailOpen(false);
                           } else {
                             let errMsg = `서버 오류 (${res.status})`;
                             try { const errData = await res.json(); errMsg = errData.error || errMsg; } catch {}
+                            logEmail({ ...logBase, status: "failed", error: errMsg }).catch(() => {}); // ⭐ 2026-11-06 실패도 기록
                             showAlert(`발송 실패: ${errMsg}`);
                           }
                         } catch (e) {
+                          logEmail({ type: "일반이메일", client: client || "-", to: generalEmailTo, subject: generalEmailSubject, body: generalEmailBody || "", attachmentNames: generalEmailFiles.map(f => f.name), fromName, replyTo: fromAddr, status: "failed", error: e.message }).catch(() => {});
                           showAlert(`발송 중 오류: ${e.message}`);
                         } finally {
                           setGeneralEmailSending(false);
