@@ -6868,62 +6868,12 @@ exports.orderMarketOnTakerOrderWrite = functions.firestore
    ⭐ 2026-11-06 로지스웹 허브 콜(hubOrders) — 평점 · 완료 건수 · 취소 기록 집계(hubStats, 회원은 쓸 수 없음)
    규칙은 functions/hubCall.js 맨 위 설명
 ============================== */
-const _hubCall = require("./hubCall");
-exports.hubOrderOnWrite = functions.firestore
-  .document("hubOrders/{id}")
-  .onWrite(async (change, context) => {
-    try {
-      // ⭐ 2026-11-06 (2차) 알림 · 예치금 보류/정산 · 로지스웹 배차 프로그램 연동(인수증 첨부)까지 — functions/hubCall.js
-      const { getStorage } = require("firebase-admin/storage");
-      await _hubCall.onHubOrderWrite(db, FieldValue, context.params.id, change.before.exists ? change.before.data() : null, change.after.exists ? change.after.data() : null, { storage: getStorage() });
-    } catch (e) { console.error("[허브 콜] 집계 실패:", e); }
-  });
-
-/* ==============================
-   ⭐ 2026-11-06 로지스웹 허브 — 예치금 원장 · 푸시 · 위치관제(설명: functions/hubWallet.js · hubCall.js 맨 위)
-   회원은 잔액(hubWallets) · 원장(hubLedger)을 쓸 수 없다(규칙 write false) — 아래 트리거만 트랜잭션으로 쓴다.
-============================== */
-const _hubWallet = require("./hubWallet");
-// 충전 요청 → 관리자 [입금 확인](status confirmed) → 예치금 +, 미정산 자동 상환
-exports.hubChargeOnWrite = functions.firestore.document("hubCharges/{id}").onWrite(async (change, context) => {
-  const a = change.after.exists ? change.after.data() : null;
-  if (!a || a.status !== "confirmed" || a.creditedAt) return;
-  try { await _hubWallet.creditCharge(db, FieldValue, context.params.id); } catch (e) { console.error("[허브 예치금] 충전 반영 실패:", e); }
-});
-// 지급 대기열 — [지급 요청](requested → 지급대행 어댑터 requestPayout) · [지급완료](paid → 지급 예정 → 지급 완료)
-exports.hubPayoutOnWrite = functions.firestore.document("hubPayouts/{id}").onWrite(async (change, context) => {
-  try { await _hubWallet.onPayoutWrite(db, FieldValue, context.params.id, change.before.exists ? change.before.data() : null, change.after.exists ? change.after.data() : null); } catch (e) { console.error("[허브 예치금] 지급 처리 실패:", e); }
-});
-// 관리자 조정
-exports.hubAdjustOnCreate = functions.firestore.document("hubAdjustments/{id}").onCreate(async (snap, context) => {
-  try { await _hubWallet.applyAdjustment(db, FieldValue, context.params.id); } catch (e) { console.error("[허브 예치금] 조정 실패:", e); }
-});
-// 허브 알림(hubNotices) → 받는 사람 기기로 푸시(허브 앱 토큰 hubMembers.fcmTokens + 로지스웹 계정이면 users 토큰)
-exports.hubNoticeOnCreate = functions.firestore.document("hubNotices/{id}").onCreate(async (snap) => {
-  const n = snap.data() || {};
-  if (!n.toUid) return;
-  try {
-    const [ms, us] = await Promise.all([db.collection("hubMembers").doc(n.toUid).get(), db.collection("users").doc(n.toUid).get()]);
-    const m = ms.exists ? ms.data() : {};
-    if (m.prefs?.push === false) { await snap.ref.update({ push: { count: 0, skipped: "off" } }); return; }
-    const out = new Set(Array.isArray(m.fcmTokensOut) ? m.fcmTokensOut : []);
-    const tokens = [...new Set([...(Array.isArray(m.fcmTokens) ? m.fcmTokens : []), ...userTokens(us.exists ? us.data() : null)])].filter((t) => t && !out.has(t));
-    if (!tokens.length) { await snap.ref.update({ push: { count: 0 } }); return; }
-    const link = `/order/${n.orderId || ""}`.replace(/\/$/, "");
-    const res = await sendPushAndCleanup(tokens, {
-      notification: { title: String(n.title || "로지스웹 허브"), body: String(n.body || "") },
-      data: { type: `hub_${n.type || ""}`, url: n.orderId ? link : "/", orderId: String(n.orderId || ""), tag: `hub-${snap.id}` },
-    }, `허브 ${n.type || ""}`);
-    await snap.ref.update({ push: { count: tokens.length, success: res?.successCount ?? 0, at: FieldValue.serverTimestamp() } });
-  } catch (e) { console.error("[허브 푸시] 실패:", e); }
-});
-// 로지스웹 소속 기사 — 기사앱(백그라운드 GPS)이 쓴 drivers/{uid} 위치를 진행 중인 허브 오더 관제로 넘긴다.
-//  배차 확정 때 drivers/{uid}.hubActiveOrderId 가 켜진 기사만(그 외 기사 위치 갱신은 바로 끝 — 읽기 0)
-exports.hubDriverLocMirror = functions.firestore.document("drivers/{uid}").onUpdate(async (change, context) => {
-  const a = change.after.data();
-  if (!a?.hubActiveOrderId) return;
-  try { await _hubCall.mirrorDriverLocation(db, FieldValue, context.params.uid, change.before.data(), a); } catch (e) { console.error("[허브 관제] 기사앱 위치 넘기기 실패:", e); }
-});
+// ⭐ 2026-11-06 (2차) 허브 트리거(집계 · 알림 · 푸시 · 예치금 원장 · 로지스웹 연동 · 기사앱 위치 넘기기)는 functions/hubTriggers.js
+//  hubOrderOnWrite · hubChargeOnWrite · hubPayoutOnWrite · hubAdjustOnCreate · hubNoticeOnCreate · hubDriverLocMirror
+Object.assign(exports, require("./hubTriggers").register({
+  functions, db, FieldValue, sendPushAndCleanup, userTokens,
+  getStorage: () => require("firebase-admin/storage").getStorage(),
+}));
 
 // 🤖 2026-11-06 AI 팀 — 관리자센터에서 팀별(경리·재무·영업·운영·보안·홍보) Claude 에이전트와 대화.
 //  최고관리자·부관리자(role totalMaster)만. Claude API 키는 Firebase 비밀값 ANTHROPIC_API_KEY.

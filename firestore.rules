@@ -721,6 +721,8 @@ service cloud.firestore {
             && hubOrdAfter(id).get('status', '') == 'assigned' && hubMatchOk(request.resource.data)) ||
           (docId == 'settle_' + request.auth.uid && request.resource.data.keys().hasOnly(['text', 'updatedAt'])
             && (hubOrdAfter(id).get('posterUid', '') == request.auth.uid || hubOrdAfter(id).get('takerUid', '') == request.auth.uid)));
+        // ⭐ 2026-11-06 최고관리자 — 상세주소 · 연락처까지 고칠 수 있다(관리자 콘솔 오더 편집, 정산 메모는 제외)
+        allow create, update: if hubAdmin() && docId in ['detail', 'match'];
         allow delete: if hubAdmin() || (isSignedIn() && (
           hubOrd(id).get('posterUid', '') == request.auth.uid ||
           (docId == 'match' && resource.data.get('takerUid', '') == request.auth.uid)));

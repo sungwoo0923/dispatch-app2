@@ -111,8 +111,9 @@ async function holdForOrder(db, FieldValue, id, o) {
   const key = `hold_${id}_${tsMs(o.assignedAt) || "x"}`;
   const r = await runLedger(db, FieldValue, key, async ({ getW, get }) => {
     const cur = (await get(oref(db, id))).data() || {};
-    if (cur.status !== "assigned" || cur.confirmed !== true || cur.takerUid !== o.takerUid) return { abort: true, result: { stale: true } };
-    if (cur.settle?.status === "held") return { abort: true, result: { already: true } };
+    // 확정 뒤 곧바로 상차 · 운송완료까지 눌렀어도(트리거가 늦게 돌아도) 같은 배차면 보류한다
+    if (!["assigned", "loaded", "delivered"].includes(cur.status) || cur.confirmed !== true || cur.takerUid !== o.takerUid) return { abort: true, result: { stale: true } };
+    if (["held", "settled"].includes(cur.settle?.status)) return { abort: true, result: { already: true } };
     const w = await getW(o.posterUid);
     if (w.available < T) return { abort: true, result: { insufficient: true, need: T, have: w.available } };
     return {

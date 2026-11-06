@@ -4,7 +4,7 @@
 //  ⚠️ 실제 돈 보관 · 이체는 지급대행(PG) 계약 뒤 — 지금은 관리자가 입금 확인 · 직접 이체 후 [지급완료] 처리하는 원장 방식.
 import React, { useEffect, useMemo, useState } from "react";
 import { HI, Btn, Badge, Card, Field, inputCls, selectCls, NUMS, NAVY_BG, Empty } from "./hubUi";
-import { LEDGER_LABEL, BANKS, canTake, canPost, ago, tsMs, fmtPhone } from "./hubConstants";
+import { LEDGER_LABEL, BANKS, canTake, canPost, ago, tsMs } from "./hubConstants";
 import { subscribeWallet, subscribeLedger, subscribeMyCharges, subscribeMyPayouts, subscribeMyDebts, requestCharge, cancelCharge, saveBank } from "./hubApi";
 
 export const wonFull = (n) => `${(Math.round(Number(n) || 0)).toLocaleString("ko-KR")}원`;
@@ -23,7 +23,8 @@ export function WalletSummary({ w, compact = false }) {
       <div className={`grid ${compact ? "grid-cols-2" : "grid-cols-2 sm:grid-cols-4"} gap-2 mt-4`}>
         {[["보류", w?.held, "wallet-held", "배차 확정 오더"], ["지급 예정", w?.pending, "wallet-pending", "받을 운임"], ["미정산", w?.owed, "wallet-owed", "낼 수수료"], ["수수료 수입", w?.feeEarned, "wallet-fee", "누계"]].map(([l, v, t, s]) => (
           <div key={l} className="rounded-2xl bg-white/[0.07] ring-1 ring-inset ring-white/10 px-3 py-2.5 min-w-0">
-            <div className="text-[13px] text-white/60 font-bold">{l} <span className="text-white/35 font-semibold">{s}</span></div>
+            <div className="text-[13px] text-white/60 font-bold truncate">{l}</div>
+            <div className="text-[11.5px] text-white/35 font-semibold truncate -mt-0.5">{s}</div>
             <div className="text-[18px] font-extrabold truncate" style={NUMS} data-testid={t}>{wonFull(v)}</div>
           </div>
         ))}
@@ -159,7 +160,7 @@ export default function HubWallet({ me, cfg, toast }) {
             </div>
           )}
         </Card>
-        <div className="text-[13px] text-[#8592A8] leading-relaxed px-1">예치금은 로지스웹 허브 정산 장부입니다. 실제 입금 · 지급은 회사 계좌로 처리되며, 지급대행(PG) 연동 후에는 자동 이체로 바뀝니다. 문의 {fmtPhone(cfg?.supportPhone || "") || "고객센터"}</div>
+        <div className="text-[13px] text-[#8592A8] leading-relaxed px-1">예치금은 로지스웹 허브 정산 장부입니다. 실제 입금 · 지급은 회사 계좌로 처리되며, 지급대행(PG) 연동 후에는 자동 이체로 바뀝니다. 문의 {cfg?.supportPhone || "고객센터"}</div>
       </div>
     </div>
   );
