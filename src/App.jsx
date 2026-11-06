@@ -18,7 +18,8 @@ import {
 } from "react-router-dom";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import { publishCompany, backfillPublicCompanies } from "./publicCompanies";
-import { auth, db, DEFAULT_COMPANY } from "./firebase";
+import { auth, db, DEFAULT_COMPANY, IS_MOBILE_PREVIEW } from "./firebase";
+import { ContractEndedScreen, useContractStatusFor } from "./companyContract"; // ⭐ 2026-11-06 계약종료 — 회사 전체 접속 차단 화면
 import { setBlindViewerRole, setAutoBlind } from "./blind";
 import {
   checkLoginSession, replaceAndCreate, watchMySession, startHeartbeat, installEndOnSignOut,
@@ -161,6 +162,7 @@ function PreviewApp() {
   const pvRole = import.meta.env.DEV && ["test", "hrManager", "hrAcct", "allMgr", "acctStaff", "hrStaff", "legalMgr", "legalStaff", "devMgr", "devStaff", "user", "viewer"].includes(qs.get("role")) ? qs.get("role") : "admin";
   const pvExec = import.meta.env.DEV && qs.get("role") === "exec";
   setPreviewMode(true); setPreviewPlan(plan); setTenant(co);
+  try { window.__kpPreviewDemo = true; } catch { /* 무시 */ } // ⭐ 2026-11-06 모바일 미리보기 iframe이 진짜 로그인 계정을 받아가지 않게
   const fakeUser = React.useMemo(() => ({ uid: "preview", email: "preview@kp-flow.app", displayName: "둘러보기" }), []);
   const [toast, setToast] = React.useState(false);
   React.useEffect(() => {
@@ -183,7 +185,8 @@ function PreviewApp() {
 }
 
 function EntryGate({ children }) {
-  return kpEntry() === "app" ? children : <Navigate to="/choose" replace />;
+  // ⭐ 2026-11-06 모바일 미리보기 iframe은 고르는 화면 없이 바로(부모 창이 이미 배차 프로그램 안)
+  return IS_MOBILE_PREVIEW || kpEntry() === "app" ? children : <Navigate to="/choose" replace />;
 }
 
 export default function App() {
@@ -192,6 +195,8 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [approved, setApproved] = useState(false);
   const [userCompany, setUserCompany] = useState("");
+  // ⭐ 2026-11-06 계약종료 — 이 계정이 속한 운송사(화주는 연동 운송사). companyPlans/{회사}.status == "ended"면 최고관리자·부관리자 외 모두 차단
+  const [contractCo, setContractCo] = useState("");
   // ⭐ 2026-11-05 기사 로그인/가입 화면이 계정을 확인하는 동안(잠깐 로그인했다가 이름·회사가 다르면 다시 로그아웃) —
   //  예전엔 그 사이 users 문서가 먼저 도착해 /driver-home으로 넘겼다가 로그아웃되며 /driver-login이 새로 그려져
   //  실패 안내가 사라졌다("새로고침되고 아무 말 없이 로그인 화면"). 확인이 끝날 때까지 기사 화면 이동을 멈춘다.
@@ -220,6 +225,7 @@ export default function App() {
   }, [user, role]);
   // updateReady 팝업 제거됨 - UpdateBanner가 자동 처리
   const [splashDone, setSplashDone] = useState(false);
+  const { ended: contractEnded, info: contractInfo } = useContractStatusFor(user && role !== "totalMaster" ? contractCo : "");
 
   // ⭐ 로그인 관리 — 같은 계정으로 PC 2대(또는 모바일 2대)가 동시에 로그인하지 못하게 한다(최고관리자 제외).
   //  sessionConflict: 같은 종류 기기가 이미 로그인 중 → "기존 로그인 끊고 로그인 / 취소" 선택창
@@ -228,7 +234,8 @@ export default function App() {
   const [sessionBusy, setSessionBusy] = useState(false);
   const [kickedReason, setKickedReason] = useState(null);
   const sessionGateRef = useRef({ uid: null, stop: null });
-  useEffect(() => { installEndOnSignOut(); }, []);
+  // ⭐ 2026-11-06 모바일 미리보기 iframe은 로그인 세션을 따로 기록·감시하지 않는다(부모 창 세션을 끝내거나 중복 로그인으로 보지 않게)
+  useEffect(() => { if (!IS_MOBILE_PREVIEW) installEndOnSignOut(); }, []);
   const startSessionWatch = (id) => {
     const unwatch = watchMySession(id, (reason) => {
       // ⭐ 2026-11-01 내가 직접 로그아웃한 경우(logout)는 "끊겼습니다" 안내·재로그아웃을 하지 않는다
@@ -240,6 +247,7 @@ export default function App() {
     sessionGateRef.current.stop = () => { unwatch(); stopBeat(); };
   };
   useEffect(() => {
+    if (IS_MOBILE_PREVIEW) return;
     if (!user || !role || role === "cafeUser") {
       if (!user) {
         sessionGateRef.current.stop?.();
@@ -597,13 +605,13 @@ export default function App() {
   // 빨리 끝나면 최소 시간만 채우고 전환된다.
   const [minSplashDone, setMinSplashDone] = useState(false);
   useEffect(() => {
-    const MIN_MS = isSmartPhone() ? 500 : 350;
+    const MIN_MS = IS_MOBILE_PREVIEW ? 0 : isSmartPhone() ? 500 : 350;
     const timer = setTimeout(() => setMinSplashDone(true), MIN_MS);
     return () => clearTimeout(timer);
   }, []);
   // ⭐ 2026-10-29 — 로고 화면이 너무 빨리 지나간다는 의견으로 PC·모바일 모두 1초 더 보여준다
   //    (준비가 끝난 뒤 1초 유지 → 실제 로딩이 길어도 항상 지금보다 정확히 1초 길게 보인다)
-  const SPLASH_EXTRA_MS = 1000;
+  const SPLASH_EXTRA_MS = IS_MOBILE_PREVIEW ? 0 : 1000;
   useEffect(() => {
     if (loading || !minSplashDone) return;
     const t = setTimeout(() => setSplashDone(true), SPLASH_EXTRA_MS);
@@ -661,8 +669,8 @@ export default function App() {
       try { unsubUserRef.current?.(); } catch { /* 무시 */ }
       unsubUserRef.current = null;
       if (!u) {
-        try { sessionStorage.removeItem("kpEntry"); } catch { }
-        if (sessionLogRef.current.uid && sessionLogRef.current.info) {
+        if (!IS_MOBILE_PREVIEW) { try { sessionStorage.removeItem("kpEntry"); } catch { } } // 미리보기 iframe은 부모 창 진입 선택을 지우지 않는다
+        if (!IS_MOBILE_PREVIEW && sessionLogRef.current.uid && sessionLogRef.current.info) {
           addDoc(collection(db, "sessionLogs"), {
             ...sessionLogRef.current.info,
             event: "logout",
@@ -673,6 +681,7 @@ export default function App() {
         setUser(null);
         setRole(null);
         setApproved(false);
+        setContractCo("");
         setLoading(false);
         return;
       }
@@ -696,10 +705,13 @@ export default function App() {
           }
           const dataRole = isMasterEmail ? "totalMaster" : (data.role || "user");
           setRole(dataRole);
+          setContractCo(["totalMaster", "cafeUser"].includes(dataRole) ? ""
+            : dataRole === "shipper" ? String(data.linkedTransportCompany?.companyName || "").trim()
+              : String(data.companyName || DEFAULT_COMPANY || "").trim());
           setMasterPcPhone(data.pcVerifyPhone || "");
           // 스냅샷은 프로필이 바뀔 때마다 재발화될 수 있어, 이 uid로 로그인 기록을 아직
           // 남기지 않았을 때만(세션당 1회) 기록한다.
-          if (sessionLogRef.current.uid !== u.uid) {
+          if (sessionLogRef.current.uid !== u.uid && !IS_MOBILE_PREVIEW) {
             const loginInfo = {
               uid: u.uid,
               email: u.email || "",
@@ -809,6 +821,20 @@ export default function App() {
 
   const isMobile = isSmartPhone();
 
+  // ⭐ 2026-11-06 계약종료 — 데이터는 그대로 두고 그 회사 사람(직원·기사·화주)은 어떤 화면도 못 쓰게 막는다.
+  //  최고관리자·부관리자(role totalMaster)는 예외. 서버 규칙(isApproved)도 같은 기준으로 막는다.
+  if (user && contractEnded && role && role !== "totalMaster" && user.email !== TOTAL_MASTER_EMAIL) {
+    return <ContractEndedScreen company={contractCo} info={contractInfo} onLogout={() => signOut(auth).catch(() => {})} />;
+  }
+  // ⭐ 2026-11-06 모바일 미리보기 iframe — 부모 창과 다른 계정이면 절대 보여 주지 않는다(다른 계정 화면이 섞이는 일 방지)
+  const previewParentUid = (() => { try { return IS_MOBILE_PREVIEW ? (window.parent.__kpAuth?.currentUser?.uid || "") : ""; } catch { return ""; } })();
+  if (IS_MOBILE_PREVIEW && user && previewParentUid && previewParentUid !== user.uid) {
+    return <div style={{ position: "fixed", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", padding: 24, textAlign: "center", background: "#0F1A30", color: "#CFE0FF", fontSize: 15, fontWeight: 700, lineHeight: 1.6 }}>PC 계정이 바뀌었습니다.<br />미리보기를 닫았다가 다시 열어 주세요.</div>;
+  }
+  if (IS_MOBILE_PREVIEW && !user && window.location.pathname !== "/preview") {
+    return <div style={{ position: "fixed", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", padding: 24, textAlign: "center", background: "#0F1A30", color: "#CFE0FF", fontSize: 15, fontWeight: 700, lineHeight: 1.6 }}>PC에 로그인한 계정을 찾지 못했습니다.<br />미리보기를 닫았다가 다시 열어 주세요.</div>;
+  }
+
   const routeFallback = (
     <div style={{ position: "fixed", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", background: "radial-gradient(90% 60% at 50% 0%, #22396A 0%, #0F1A30 55%, #060D1C 100%)" }}>
       <style>{`
@@ -832,8 +858,8 @@ export default function App() {
   return (
     <>
       {/* 자동 업데이트 배너 (팝업 없이 상단 배너로 표시 후 자동 새로고침). */}
-      <UpdateBanner />
-      <VersionCheck />
+      {!IS_MOBILE_PREVIEW && <UpdateBanner />}
+      {!IS_MOBILE_PREVIEW && <VersionCheck />}
       {/* ⭐ 2026-11-06 문구 편집 모드 — 최고관리자·부관리자에게만 왼쪽 아래 "✎ 문구" 단추(Ctrl+Shift+E) · 적용은 모든 사용자 */}
       <TextOverrideLayer role={role} user={user} />
 

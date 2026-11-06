@@ -105,7 +105,7 @@ import {
 } from "firebase/firestore";
 import { writeOrderDeletedNotice } from "../driverDeleteNotice"; // ⭐ 2026-11-05 기사앱 삭제 오더 팝업
 import { updateDoc, setDoc } from "../orderWrite"; // ★ 오더 수정시각 자동 기록(여러 사용자 실시간 일치)
-import { db, auth, FUNCTIONS_BASE, DEFAULT_COMPANY, clearFcmToken } from "../firebase";
+import { db, auth, FUNCTIONS_BASE, DEFAULT_COMPANY, clearFcmToken, IS_MOBILE_PREVIEW } from "../firebase";
 import { signOut } from "firebase/auth";
 import { version as APP_VERSION } from "../../package.json";
 import { useNewVersion, openUpdatePopup } from "../VersionCheck";
@@ -116,6 +116,7 @@ const MonthCompareAnalysis = lazyView(() => import("../MonthCompareAnalysis"));
 import { MailHeaderButton } from "../InternalMail";
 import BannerCenter from "../BannerCenter";
 import { publishDriverOrderRows, useDriverEventFeeds, useDriverEventCounts, setDriverSeenServer, setDriverToastsMuted, markDriverSeen, focusOrderRow, DriverEventToasts, DriverAckChip } from "../driverEvents"; // ⭐ 2026-11-05 기사앱 수락/거절·서류·긴급 알림(위쪽 배너·빨간 숫자)
+import { ContractExpiryBanner } from "../companyContract"; // ⭐ 2026-11-06 계약 만료 안내 띠
 import NotifyCenter from "../NotifyCenter"; // ⭐ 2026-11-03 알림 통합 — 가운데 알림 팝업
 import { RemoteSupportHost } from "../RemoteSupport"; // ⭐ 2026-11-02 원격지원 —
 import OrderCongratsPopup from "../OrderCongratsPopup";
@@ -3817,6 +3818,7 @@ function _todayKSTStr() {
 async function _autoCheckIn(co, uid, name, onSuccess) {
   // ⭐ 최고관리자는 출근하는 직원이 아니라 프로그램 관리 계정 — 출근 기록을 남기지 않는다
   if (localStorage.getItem("role") === "totalMaster" || auth.currentUser?.email === "tjddnqkf@naver.com") return false;
+  if (IS_MOBILE_PREVIEW) return false; // ⭐ 2026-11-06 관리자메뉴 모바일 미리보기 화면은 출근 기록을 남기지 않는다
   await undoAutoCheckOut({ uid }).catch(() => false);
   const r = await tryAutoCheckIn({ uid, name, company: co, source: "auto_mobile_location" });
   if (r.ok && onSuccess) onSuccess(`${r.leave ? `${r.leave} · ` : ""}출근 처리되었습니다 (${new Date().toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })})`);
@@ -3825,6 +3827,7 @@ async function _autoCheckIn(co, uid, name, onSuccess) {
 
 // 자동 퇴근 처리
 async function _autoCheckOut(co, uid, name, onSuccess) {
+  if (IS_MOBILE_PREVIEW) return false; // ⭐ 2026-11-06 미리보기는 퇴근 기록도 안 남김
   const r = await tryAutoCheckOut({ uid });
   if (r.ok && onSuccess) onSuccess(`퇴근 처리되었습니다 (${new Date().toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })})`);
   return r.ok;
@@ -3905,7 +3908,12 @@ useEffect(() => {
       const createdAt = data.createdAt?.toDate ? data.createdAt.toDate() : null;
       if (createdAt && createdAt < since) return;
       let msg, notifStatus;
-      if (data.type === "approval_request") {
+      if (data.type === "contract_expiry") {
+        // ⭐ 2026-11-06 이용 계약 만료 안내(30·7·1일 전) — 한 번 보여 주면 읽음
+        msg = data.msg || "[이용 계약] 계약 만료가 다가옵니다.";
+        notifStatus = "request";
+        updateDoc(doc(db, "notifications", change.doc.id), { read: true }).catch(() => {});
+      } else if (data.type === "approval_request") {
         msg = `[${data.scheduleType || "일정"}] ${data.fromName || "작성자"}님의 결재 요청이 있습니다.`;
         notifStatus = "request";
       } else if (data.type === "re_request") {
@@ -5755,6 +5763,12 @@ const title =
             if (it.src === "handover") { window.__kpOpenHandover = it.id; window.__kpOpenApproval = { page: "handover" }; window.dispatchEvent(new Event("kp-open-approval")); return; }
             window.__kpOpenNotice = it.openId || it.id; setPage("notice"); setTimeout(() => window.dispatchEvent(new CustomEvent("kp:openNotice")), 0);
           }} />
+      )}
+      {/* ⭐ 2026-11-06 이용 계약 만료 안내(30일 전부터) — 대표·임원·경리·마스터에게만(화면 맨 위 띠) */}
+      {!["driver", "shipper"].includes(role) && myProfM && (
+        <div style={{ position: "fixed", left: 0, right: 0, top: "env(safe-area-inset-top, 0px)", zIndex: 9000 }}>
+          <ContractExpiryBanner mobile company={(localStorage.getItem("loginCompany") || userCompany || localStorage.getItem("userCompany") || DEFAULT_COMPANY).trim()} me={{ ...myProfM, role: realRole || role }} />
+        </div>
       )}
       <CheckoutReminderHost uid={user?.uid} role={realRole} email={user?.email} />{/* ⭐ 2026-11-03 퇴근 10분 전 알림 */}
       <PersonalTodayHost uid={user?.uid} mobile />{/* ⭐ 2026-11-03 오늘 개인 일정 — 위쪽 알림줄 */}

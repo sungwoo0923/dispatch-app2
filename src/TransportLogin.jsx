@@ -221,6 +221,17 @@ export default function TransportLogin() {
           return;
         }
 
+        // ⭐ 2026-11-06 계약종료된 운송사 — 로그인 단계에서 바로 안내(관리센터 › 이용 계약·만료). 부관리자는 예외
+        if (!isSubAdmin) {
+          const plan = await getDoc(doc(db, "companyPlans", String(userData.companyName || "돌캐").trim() || "돌캐")).catch(() => null);
+          if (plan?.exists() && plan.data()?.status === "ended") {
+            sessionStorage.removeItem("transportValidating");
+            await signOut(auth);
+            setError("계약이 종료되었습니다. 관리자에게 문의해 주세요.");
+            return;
+          }
+        }
+
         if (userData.userStatus === "banned") {
           sessionStorage.removeItem("transportValidating");
           await signOut(auth);
