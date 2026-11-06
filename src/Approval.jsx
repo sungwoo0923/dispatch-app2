@@ -1975,6 +1975,8 @@ function Viewer({ d, me, staff, company, onClose, onRedraft, onEdit, inline = fa
 
 // ─────────────────────────── 문서 목록 ───────────────────────────
 function DocList({ docs, onOpen, empty, uid, compact = false }) {
+  const [sortMode, setSortMode] = React.useState(() => { try { return localStorage.getItem("kpApSort") || "status"; } catch { return "status"; } });
+  const pickSort = (m) => { setSortMode(m); try { localStorage.setItem("kpApSort", m); } catch { /* 무시 */ } };
   if (docs === null) return <div className="py-16 text-center text-[14.5px] text-[#5B6B85]">불러오는 중…</div>;
   if (!docs.length) return (
     <div className="py-16 text-center">
@@ -1983,11 +1985,29 @@ function DocList({ docs, onOpen, empty, uid, compact = false }) {
     </div>
   );
   // ⭐ 2026-10-31 날짜별로 묶어서(기안일 기준)
+  // ⭐ 2026-11-07 같은 날짜 안에서는 처리할 것 먼저 — 내 차례 → 진행 중 → 지급 대기 → 결재 완료 → 반려 → 취소·회수 (같은 단계는 최신순)
+  //  위쪽 [진행 중 먼저 | 최신순] 으로 바꿀 수 있고, 고른 값은 이 기기에 기억
   const WD = "일월화수목금토";
+  const rankOf = (d) => {
+    if (myTurn(d, uid)) return 0;
+    if (d.status === "pending" || d.cancel?.status === "pending") return 1;
+    if (d.status === "approved") return payState(d) === "wait" ? 2 : 3;
+    if (d.status === "rejected") return 4;
+    return 5; // cancelled · withdrawn 등
+  };
   const groups = [];
-  docs.forEach((d) => { const k = ymd(toMs(d.createdAt)); const g = groups[groups.length - 1]; if (g && g.k === k) g.list.push(d); else groups.push({ k, list: [d] }); });
+  docs.forEach((d) => { const k = ymd(toMs(d.createdAt)); const g = groups.find((x) => x.k === k); if (g) g.list.push(d); else groups.push({ k, list: [d] }); });
+  groups.sort((a, b) => b.k.localeCompare(a.k));
+  groups.forEach((g) => g.list.sort((a, b) => (sortMode === "status" ? rankOf(a) - rankOf(b) : 0) || toMs(b.createdAt) - toMs(a.createdAt)));
   return (
     <div>
+      <div className="flex items-center justify-end gap-1.5 px-3.5 md:px-5 py-2 border-b border-[#EEF1F6] bg-white" data-ap-sort>
+        <span className="text-[13px] font-bold text-[#5B6B85] mr-1">정렬</span>
+        {[["status", "진행 중 먼저"], ["latest", "최신순"]].map(([k, l]) => (
+          <button key={k} type="button" onClick={() => pickSort(k)}
+            className={`h-8 px-3 rounded-lg text-[13px] font-black border ${sortMode === k ? "bg-[#0F1A30] text-white border-[#0F1A30]" : "bg-white text-[#3A4A66] border-[#DCE3EE] hover:bg-[#F5F8FD]"}`}>{l}</button>
+        ))}
+      </div>
       {groups.map((g) => (
       <div key={g.k}>
       <div className="sticky top-0 z-[1] px-3.5 md:px-5 py-1.5 bg-[#F5F8FD] border-y border-[#EEF1F6] flex items-center gap-2">
