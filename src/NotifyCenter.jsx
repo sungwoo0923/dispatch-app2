@@ -47,7 +47,14 @@ const KIND = {
   apCc: { head: "결재 참조", en: "CC · APPROVED", go: "전자결재에서 열기" },
   apPaid: { head: "지급 완료", en: "PAID", go: "전자결재에서 열기" }, // ⭐ 2026-11-04 지출결의 지급완료
   handover: { head: "인수인계", en: "HANDOVER", go: "인수인계 열기" },
+  // ⭐ 2026-11-06 인사·급여 알림(hrNotices) — 급여명세서 발행 · 연차 사용 촉진(근로기준법 61조)
+  payslip: { head: "급여명세서", en: "PAYSLIP", go: "급여명세서 열기" },
+  leave1: { head: "연차 사용 촉진", en: "ANNUAL LEAVE · 1ST NOTICE", go: "사용 계획 제출" },
+  leave2: { head: "연차 사용시기 지정", en: "ANNUAL LEAVE · 2ND NOTICE", go: "연차 사용 계획 보기" },
+  leaveHr: { head: "연차 사용 촉진", en: "HR · LEAVE PROMOTION", go: "연차 사용 촉진 열기" },
+  leavePlan: { head: "연차 사용 계획", en: "HR · LEAVE PLAN", go: "연차 사용 촉진 열기" },
 };
+const HR_NOTICE_POP_WINDOW = 30 * DAY_MS;
 
 // 결재 문서 한 건 → 나에게 띄울 팝업(없으면 null)
 function approvalItem(d, uid, now, localSeen) {
@@ -87,6 +94,7 @@ function approvalItem(d, uid, now, localSeen) {
 async function markRead(it, uid) {
   try {
     if (it.src === "notice") await updateDoc(doc(db, "notices", it.id), { readBy: arrayUnion(uid) });
+    else if (it.src === "hrNotice") await updateDoc(doc(db, "hrNotices", it.id), { readAt: Date.now() });
     else if (it.src === "platform") markPlatformNoticeRead(it.id);
     else if (it.src === "handover") {
       await updateDoc(doc(db, "handovers", it.id), { readBy: arrayUnion(uid) });
@@ -107,6 +115,7 @@ export function useNotifyQueue({ uid, role, team = "", company = "" }) {
   const [notices, setNotices] = React.useState(null);
   const [aps, setAps] = React.useState(null);
   const [hos, setHos] = React.useState(null);
+  const [hrn, setHrn] = React.useState([]); // ⭐ 2026-11-06 인사·급여 알림(본인 것만 — 보안 규칙)
   const co = String(company || "").trim();
   const plat = usePlatformNotices({ audience: "carrier", company: co });
   const platRead = usePlatformRead();
@@ -123,6 +132,10 @@ export function useNotifyQueue({ uid, role, team = "", company = "" }) {
     if (!uid) return undefined;
     return onSnapshot(collection(db, "handovers"), (s) => setHos(s.docs.map((d) => ({ id: d.id, ...d.data() }))), () => setHos([]));
   }, [uid, co]);
+  React.useEffect(() => {
+    if (!uid) return undefined;
+    return onSnapshot(query(collection(db, "hrNotices"), where("uid", "==", uid)), (s) => setHrn(s.docs.map((d) => ({ id: d.id, ...d.data() }))), () => setHrn([]));
+  }, [uid]);
   const queue = React.useMemo(() => {
     if (!uid) return [];
     const out = [];
@@ -147,8 +160,14 @@ export function useNotifyQueue({ uid, role, team = "", company = "" }) {
       out.push({ key: `h:${h.id}`, src: "handover", id: h.id, kind: "handover", at, title: `${h.author || ""}님의 인수인계`, sub: `${h.date || ""}${h.receiver ? ` · 받는 사람 ${h.receiver}` : ""}`, content: h.text });
     });
     (aps || []).forEach((d) => { const it = approvalItem(d, uid, now, localSeen); if (it) out.push({ ...it, src: "approval" }); });
+    (hrn || []).forEach((h) => {
+      if (h.readAt || (co && coOf(h) !== co)) return;
+      const at = toMs(h.createdAt) || now;
+      if (now - at > HR_NOTICE_POP_WINDOW) return;
+      out.push({ key: `hn:${h.id}`, src: "hrNotice", id: h.id, kind: KIND[h.kind] ? h.kind : "notice", link: h.link || "", refId: h.refId || "", at, title: h.title || "인사 알림", sub: "인사관리부", content: h.body });
+    });
     return out.sort((a, b) => (b.at || 0) - (a.at || 0)).slice(0, 50);
-  }, [uid, role, team, co, notices, plat, platRead, hos, aps, now, localSeen]);
+  }, [uid, role, team, co, notices, plat, platRead, hos, aps, hrn, now, localSeen]);
   const ready = notices !== null && aps !== null && hos !== null;
   return { queue, ready, bumpLocal: () => setLocalSeen(readLocal()) };
 }

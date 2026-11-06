@@ -42,6 +42,11 @@ const PcSettlement = React.lazy(() => import("../DispatchApp").then((m) => ({ de
 // 🏢 경리·인사 모드 — PC 정산관리·회계관리·인사관리 화면
 const PcSettleMobile = React.lazy(() => import("../DispatchApp").then((m) => ({ default: m.PcSettleMobile })));
 const PcAccounting = React.lazy(() => import("../DispatchApp").then((m) => ({ default: m.PcAccounting })));
+// ⭐ 2026-11-06 직원 급여 · 급여명세서 · 연차 사용 촉진
+const PayrollCenter = React.lazy(() => import("../Payroll"));
+const MyPayslips = React.lazy(() => import("../Payroll").then((m) => ({ default: m.MyPayslips })));
+const LeavePromotionBoard = React.lazy(() => import("../LeavePromotion"));
+const MyLeavePlan = React.lazy(() => import("../LeavePromotion").then((m) => ({ default: m.MyLeavePlan })));
 const PcHrPage = React.lazy(() => import("../DispatchApp").then((m) => ({ default: m.PcHrPage })));
 // ⭐ 2026-11-05 PC·모바일 일치 — 기사관리·거래처관리(PC 화면 그대로)
 const PcDriverMobile = React.lazy(() => import("../DispatchApp").then((m) => ({ default: m.PcDriverMobile })));
@@ -283,9 +288,13 @@ export default function MobilePcView({ kind, users = [], dispatchData = [], carr
     else if (k === "approvals") body = <div className="kp-m-pc kp-m-approval"><ExecApprovals company={userCompany} me={me} /></div>;
     else if (k === "schedule") body = wrap(<TeamSchedule company={userCompany} />);
     else if (k === "settle") body = lazy(<DetailScope data={salesData} getters={detGet} title="세부검색 · 정산관리">{(detRows, detBtn) => <><div className="px-3 pt-3 flex justify-end">{detBtn}</div><PcSettleMobile dispatchData={detRows} companyName={userCompany} role={role} isViewer={isViewer} clients={clients} /></>}</DetailScope>);
-    else if (k === "acct") body = lazy(<PcAccounting company={userCompany} fixedRows={fixedRows} clients={clients} isViewer={isViewer} />);
+    else if (k === "acct") body = lazy(<PcAccounting company={userCompany} fixedRows={fixedRows} clients={clients} isViewer={isViewer} role={role} />);
+    else if (k === "payroll") body = <React.Suspense fallback={<Loading />}><div className="px-3 py-3 kp-m-pc"><PayrollCenter company={userCompany} role={role} /></div></React.Suspense>;
+    else if (k === "payslip") body = <React.Suspense fallback={<Loading />}><div className="px-3 py-3 kp-m-pc"><MyPayslips company={userCompany} uid={me?.uid} /></div></React.Suspense>;
+    else if (k === "leaveplan") body = <React.Suspense fallback={<Loading />}><div className="px-3 py-3 kp-m-pc"><MyLeavePlan company={userCompany} uid={me?.uid} /></div></React.Suspense>;
+    else if (k === "leavepromo") body = <React.Suspense fallback={<Loading />}><div className="px-3 py-3 kp-m-pc"><LeavePromotionBoard company={userCompany} canManage={role === "hrManager" || role === "totalMaster" || role === "hrAcct" || role === "allMgr" || role === "hrStaff" || /인사/.test(String(me?.team || "")) || me?.isMaster === true} /></div></React.Suspense>;
     // ⭐ 2026-11-02 점검 — 모바일 인사관리부에도 me 전달(부고 알림 작성자 이름·uid 누락으로 본인 푸시/메일·타인 수정 가능 문제 수정, PC 와 동일)
-    else if (k === "hr") body = <div className="kp-m-pc"><HrHub company={userCompany} me={{ uid: me?.uid, name: me?.name || me?.displayName || "" }} canManage={role === "hrManager" || role === "totalMaster" || role === "hrAcct" || (/인사/.test(String(me?.team || "")) && role !== "viewer")}
+    else if (k === "hr") body = <div className="kp-m-pc"><HrHub company={userCompany} me={{ uid: me?.uid, name: me?.name || me?.displayName || "" }} role={role} canManage={role === "hrManager" || role === "totalMaster" || role === "hrAcct" || (/인사/.test(String(me?.team || "")) && role !== "viewer")}
       renderRecord={(focusUid) => <React.Suspense fallback={<Loading />}><PcHrPage userCompany={userCompany} role={role} userId={me?.uid || ""} focusUid={focusUid} /></React.Suspense>}
       renderAttendance={() => <AttendanceBoard userCompany={userCompany} role={role} user={me} />} /></div>;
     else if (k === "cashbook") body = <div className="kp-m-pc"><FundsWorkspace company={userCompany} isViewer={isViewer} /></div>;

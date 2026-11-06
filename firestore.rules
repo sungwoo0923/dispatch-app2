@@ -869,6 +869,107 @@ service cloud.firestore {
           && get(/databases/$(database)/documents/supportSessions/$(sid)).data.get('requesterUid', '') == request.auth.uid);
       }
     }
+    // ════════════════════════════════════════════════════════════
+    // 💰 ⭐ 2026-11-06 직원 급여(급여 계산·명세서) · 연차 사용 촉진 — 잠금 스위치와 상관없이 항상 회사 검사
+    //  수정: 경리관리자(test)·통합인사관리자(hrAcct)·통합관리자(allMgr)·회사 마스터·최고관리자 + 권한 관리에서 [급여관리] "수정"인 역할
+    //  조회: 인사관리자(기본 조회 — 권한 관리에서 숨김/수정 가능)·대표(직책)·임원 화면 역할 + [급여관리] "조회"인 역할
+    //  직원 본인: 발행된(published) 본인 명세서만 읽고 "읽음(readAt)"만 표시 · 본인 연차 촉진 문서에 사용 계획만 제출
+    //  화면 기준은 src/payrollAccess.js(같은 판단)
+    // ════════════════════════════════════════════════════════════
+    function payRoleMenus() {
+      let r = myUser().get('role', '');
+      let p = /databases/$(database)/documents/customRoles/$(r);
+      let ov = /databases/$(database)/documents/companyRoleOverrides/$(myUser().get('companyName', ''));
+      let g = exists(p) ? get(p).data : {};
+      let o = exists(ov) ? get(ov).data.get('roles', {}).get(r, {}) : {};
+      return ('menus' in o) ? o.get('menus', {}) : g.get('menus', {});
+    }
+    function payFixedRole() {
+      return myUser().get('role', '') in ['admin', 'user', 'viewer', 'hrManager', 'test', 'hrAcct', 'allMgr', 'totalMaster', 'driver', 'shipper', 'cafeUser'];
+    }
+    function payrollEditor() {
+      return isTotalMasterUser() || (isApproved() && (
+        myUser().get('role', '') in ['test', 'hrAcct', 'allMgr'] || myUser().get('isMaster', false) == true
+        || (myUser().get('role', '') == 'hrManager' && payRoleMenus().get('급여관리', 'read') == 'write')
+        || (!payFixedRole() && payRoleMenus().get('급여관리', 'hidden') == 'write')));
+    }
+    function payrollViewer() {
+      return payrollEditor() || (isApproved() && (
+        (myUser().get('role', '') == 'hrManager' && payRoleMenus().get('급여관리', 'read') != 'hidden')
+        || myUser().get('position', '') in ['대표', '대표이사'] || isExecRoleUser()
+        || (!payFixedRole() && payRoleMenus().get('급여관리', 'hidden') == 'read')));
+    }
+    // 연차 촉진 관리(발송·날짜 지정) — 인사팀(isHrStaff) + 회사 마스터
+    function leaveManager() {
+      return isApproved() && (isHrStaff() || myUser().get('isMaster', false) == true);
+    }
+    function payCo(d) {
+      return isTotalMasterUser() || d.get('companyName', '') == myCo();
+    }
+    // 급여·연차 설정(payrollSettings/{회사}) — 요율은 급여 담당, 연차 촉진 설정(leave)은 인사 담당도
+    match /payrollSettings/{co} {
+      allow read: if isTotalMasterUser() || (myCo() == co && (payrollViewer() || leaveManager() || (isApproved() && myUser().get('role', '') in ['test', 'acctStaff'])));
+      allow create, update: if (isTotalMasterUser() || myCo() == co) && request.resource.data.get('companyName', '') == co && (
+        payrollEditor()
+        || (leaveManager() && (resource == null
+          ? request.resource.data.keys().hasOnly(['companyName', 'leave', 'leaveUpdatedAt', 'leaveUpdatedBy'])
+          : request.resource.data.diff(resource.data).affectedKeys().hasOnly(['companyName', 'leave', 'leaveUpdatedAt', 'leaveUpdatedBy']))));
+      allow delete: if isTotalMasterUser();
+    }
+    // 직원별 급여 설정 · 월 급여 처리(확정·발행·지급 기록)
+    match /payrollEmployees/{id} {
+      allow read: if (resource == null && payrollViewer()) || (payrollViewer() && payCo(resource.data));
+      allow create: if payrollEditor() && payCo(request.resource.data);
+      allow update: if payrollEditor() && payCo(resource.data) && request.resource.data.get('companyName', '') == resource.data.get('companyName', '');
+      allow delete: if payrollEditor() && payCo(resource.data);
+    }
+    match /payrollRuns/{id} {
+      allow read: if (resource == null && payrollViewer()) || (payrollViewer() && payCo(resource.data));
+      allow create: if payrollEditor() && payCo(request.resource.data);
+      allow update: if payrollEditor() && payCo(resource.data) && request.resource.data.get('companyName', '') == resource.data.get('companyName', '');
+      allow delete: if isTotalMasterUser();
+    }
+    // 급여명세서 — 확정(confirmed)·지급(paid)된 명세서는 금액을 못 바꾸고 상태(확정 해제·발행·지급)만
+    match /payslips/{id} {
+      allow read: if (resource != null && isSignedIn() && resource.data.get('uid', '') == request.auth.uid && resource.data.get('published', false) == true)
+        || (resource == null && payrollViewer())
+        || (payrollViewer() && payCo(resource.data));
+      allow create: if payrollEditor() && payCo(request.resource.data);
+      allow update: if (payrollEditor() && payCo(resource.data)
+          && request.resource.data.get('companyName', '') == resource.data.get('companyName', '')
+          && request.resource.data.get('uid', '') == resource.data.get('uid', '')
+          && (resource.data.get('status', 'draft') == 'draft'
+            || request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'published', 'publishedAt', 'publishedBy', 'paidAt', 'paidDate', 'updatedAt', 'updatedBy', 'unlockReason'])))
+        || (isSignedIn() && resource.data.get('uid', '') == request.auth.uid && resource.data.get('published', false) == true
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['readAt']));
+      allow delete: if payrollEditor() && payCo(resource.data) && resource.data.get('status', 'draft') == 'draft';
+    }
+    // 인사·급여 알림(명세서 발행 · 연차 촉진) — 받는 사람만 읽고 읽음 표시
+    match /hrNotices/{id} {
+      allow read: if isSignedIn() && resource.data.get('uid', '') == request.auth.uid;
+      allow update: if isSignedIn() && resource.data.get('uid', '') == request.auth.uid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['readAt']);
+      allow create: if isTotalMasterUser() || (isApproved() && request.resource.data.get('companyName', '') == myCo()
+        && request.resource.data.get('uid', '') is string
+        && (request.resource.data.get('kind', '') == 'leavePlan' || payrollEditor() || leaveManager()));
+      allow delete: if isTotalMasterUser();
+    }
+    // 연차 사용 촉진 기록 — log는 덧붙이기만(지우거나 고치지 못함: 법적 증빙)
+    match /leavePromotions/{id} {
+      allow read: if (resource != null && isSignedIn() && resource.data.get('uid', '') == request.auth.uid)
+        || (resource == null && isApproved())
+        || ((leaveManager() || isTotalMasterUser() || (isApproved() && myUser().get('role', '') in ['test', 'acctStaff'])) && payCo(resource.data));
+      allow create: if (leaveManager() || isTotalMasterUser()) && payCo(request.resource.data);
+      allow update: if ((leaveManager() || isTotalMasterUser()) && payCo(resource.data)
+          && request.resource.data.get('companyName', '') == resource.data.get('companyName', '')
+          && request.resource.data.get('log', []).hasAll(resource.data.get('log', [])))
+        || (isSignedIn() && resource.data.get('uid', '') == request.auth.uid
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['plan', 'log', 'updatedAt'])
+          && request.resource.data.get('log', []).size() == resource.data.get('log', []).size() + 1
+          && request.resource.data.get('log', []).hasAll(resource.data.get('log', []))
+          && request.resource.data.log[request.resource.data.log.size() - 1].get('type', '') == 'plan');
+      allow delete: if isTotalMasterUser();
+    }
     match /{col}/{rest=**} {
       allow read, write: if isApproved() && !(col in ['adminSecrets', 'resetBackups', 'resetLogs', 'resetJobs', 'loginSessions', 'orderTrash', 'recurringRuns', 'internalMails', 'approvals', 'boardPosts', 'notices', 'handovers', 'salesQuotes', 'contracts', 'platformNotices', 'platformInvoices', 'companyPlans', 'publicPricing', 'planRequests', 'userPrefs', 'companyRoleOverrides', 'customRoles', 'supportRequests', 'supportSessions', 'driverStatements', 'fleetPenalties', 'fixedRoutes', 'routeBoards', 'personalSchedules', 'publicCompanies', 'companyContracts',
         // 🔒 회사별로 잠근 컬렉션(위에서 따로 정함)
@@ -882,7 +983,9 @@ service cloud.firestore {
         // ⭐ 2026-11-05 기사 가입 처리 기록 — 위에서 따로 정함
         'driverSignupLogs',
         // ⭐ 2026-11-06 문구 편집 모드 — 위에서 따로 정함(쓰기는 최고관리자만)
-        'textOverrides', 'textOverridesPublic']);
+        'textOverrides', 'textOverridesPublic',
+        // 💰 2026-11-06 직원 급여 · 연차 촉진 — 위에서 따로 정함
+        'payrollSettings', 'payrollEmployees', 'payrollRuns', 'payslips', 'hrNotices', 'leavePromotions']);
     }
   }
 }
