@@ -230,7 +230,7 @@ function MobileBoard({ company, me }) {
 }
 
 const frDateOf = (r) => String(r?.입고일 || r?.하차일 || r?.상차일 || "").slice(0, 10); // 고정노선은 입고일 기준
-export default function MobilePcView({ kind, users = [], dispatchData = [], fixedRows = [], clients = [], places = [], drivers = [], role = "", userCompany = "", me: meIn, loadRange, loadFullHistory, onRegisterBack, initial, onGo, deptMode }) {
+export default function MobilePcView({ kind, users = [], dispatchData = [], carrierPoolRows = null, fixedRows = [], clients = [], places = [], drivers = [], role = "", userCompany = "", me: meIn, loadRange, loadFullHistory, onRegisterBack, initial, onGo, deptMode }) {
   // ⭐ 이름은 본인 사용자 문서에서(계정 아이디로 적히던 문제)
   const prof = useMyProfile(meIn?.uid);
   const me = React.useMemo(() => (meIn ? { ...meIn, name: personName(prof) || meIn.name, team: prof?.team || meIn.team || "", position: prof?.position || meIn.position || "" } : meIn), [meIn, prof]);
@@ -242,7 +242,7 @@ export default function MobilePcView({ kind, users = [], dispatchData = [], fixe
   let body = null;
   if (kind === "fare") body = <FareView initialTab={initial || "전국운임조회"} />;
   else if (kind === "ratecard") body = <div className="kp-m-pc"><RateCard dispatchData={dispatchData} userCompany={userCompany} clients={clients} /></div>;
-  else if (kind === "fixedroute") body = <DetailScope data={dispatchData} getters={detGet} dateOf={frDateOf} dateLabel="입고일 기준" title="세부검색 · 고정노선현황">{(detRows, detBtn) => <><div className="px-3 pt-3 flex justify-end">{detBtn}</div><MobileFixedRouteView company={userCompany} dispatchData={detRows} drivers={drivers || []} clients={clients} places={places} disabled={role === "viewer"} /></>}</DetailScope>;
+  else if (kind === "fixedroute") body = <DetailScope data={dispatchData} getters={detGet} dateOf={frDateOf} dateLabel="입고일 기준" title="세부검색 · 고정노선현황">{(detRows, detBtn) => <><div className="px-3 pt-3 flex justify-end">{detBtn}</div><MobileFixedRouteView company={userCompany} role={role} dispatchData={detRows} carrierPoolRows={carrierPoolRows} drivers={drivers || []} clients={clients} places={places} disabled={role === "viewer"} /></>}</DetailScope>;
   else if (kind === "perms") body = (
     <React.Suspense fallback={<Loading />}>
       <div className="kp-m-pc px-2 py-2 overflow-x-auto"><RolePermissionsPanel users={(users || []).filter((u) => String(u.companyName || "").trim() === String(userCompany || "").trim())} roleLabels={ROLE_LABELS} lockScope={String(userCompany || "").trim()} /></div>

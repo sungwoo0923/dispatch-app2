@@ -7,6 +7,10 @@
 //  · 기본값: 설정을 한 번도 저장하지 않았거나 뺄 업체가 하나도 없으면 지금과 똑같이 전부 포함(필터 없음).
 //    시트에 새로 생긴 업체(설정에 아직 없는 이름)·운송업체 칸이 빈 오더도 포함한다.
 //  · 일반 오더(배차표Id 없음)는 어떤 경우에도 영향 없음.
+//  ⭐ 2026-11-06 끄거나 삭제한 업체의 오더는 정산·매출뿐 아니라 프로그램 어디에도 보이지 않게(isVisible = 같은 기준)
+//    · PC: DispatchApp 데이터 입구(useRealtimeCollections 결과 바로 뒤)에서 한 번 거름 → 모든 화면·숫자·검색·엑셀이 그대로 따른다
+//    · 모바일: MobileApp 오더 상태 바로 뒤에서 한 번 거름
+//    · 시트 연동(서버)은 그대로 — 오더는 계속 맞춰지고 저장소에 남는다. 운송업체 설정 창만 숨긴 업체·건수를 보여 준다(다시 켤 수 있게)
 import React from "react";
 import { doc, onSnapshot, setDoc } from "firebase/firestore";
 import { getTenant } from "./fsTenant";
@@ -97,7 +101,8 @@ export function useRouteCarrierFilter(company) {
   return React.useMemo(() => {
     const pred = makeIsCountable(setting);
     const sig = excludedKeysOf(setting).join("|");
-    return { company: co, ready, active: !!pred, sig, isCountable: pred || ALL, filter: (rows) => (pred && Array.isArray(rows) ? rows.filter(pred) : rows) };
+    // ⭐ 2026-11-06 isVisible — 화면에 보일 오더인지(정산·매출 포함 기준과 똑같다)
+    return { company: co, ready, active: !!pred, sig, isCountable: pred || ALL, isVisible: pred || ALL, filter: (rows) => (pred && Array.isArray(rows) ? rows.filter(pred) : rows) };
   }, [setting, ready, co]);
 }
 // 행 목록을 바로 걸러 주는 훅(같은 배열이면 같은 결과 — 화면이 쓸데없이 다시 그려지지 않게)

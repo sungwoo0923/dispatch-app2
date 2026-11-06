@@ -799,9 +799,10 @@ export default function HomeDashboard({ role, user, userCompany = "", pending, d
   }, [topClients]);
 
   const allPendingOrders = useMemo(() => {
-    return allDispatchData // ⭐ 2026-11-05 미배차 목록은 운송업체 설정과 상관없이 전체
+    return allDispatchData // ⭐ 2026-11-06 숨긴 운송업체 오더는 이미 데이터 입구(DispatchApp)에서 빠져 있다
       .filter(d => {
         if (d?.배차상태 === "배차완료") return false;
+        if (d?.배차표Id) return false; // ⭐ 2026-11-06 고정노선(배차표) 오더는 고정노선현황에서만 — 홈 미배차 목록에도 안 보이게
         const 상차일 = d?.상차일자 || d?.상차일 || d?.상차 || "";
         const 거래처명 = d?.거래처명 || "";
         return 상차일.trim() || 거래처명.trim();

@@ -39,6 +39,7 @@ import { withCo, getTenant } from "../fsTenant";
 const MobilePcView = React.lazy(() => import("./MobilePcViews"));
 import { useMobileAlerts } from "./mobileAlerts";
 import { useRouteBoardIds } from "../routeBoardIds"; // ⭐ 2026-11-05 고정노선 미배차 메뉴 숫자
+import { useRouteCarrierFilter } from "../routeCarriers"; // ⭐ 2026-11-06 운송업체 설정 — 숨긴 업체 오더는 모바일 어디에도 안 보이게
 import { useMobileDetailGetters } from "../detailGetters"; // ⭐ 2026-11-05 PC·모바일 일치 — 세부검색 배차담당자·청구사업자 값
 import { pickUnassignedOrders } from "../unassignedRule"; // ⭐ 2026-11-05 PC·모바일 일치 — 미배차 기준 공용
 import { planIncludes, useCompanyPlanId } from "../plans"; // ⭐ 2026-11-05 인사이트 메뉴 요금제(PC와 같게)
@@ -2580,14 +2581,19 @@ const quickRange = (days) => {
   // 1. Firestore 실시간 연동 (🔥 전체 데이터 — PC와 동일)
   // --------------------------------------------------
   // ⭐ 블라인드 오더(최고관리자 전용)는 어떤 경로로 들어오든 여기서 걸러진다.
-  const [orders, setOrdersRaw] = useState([]);
+  const [ordersAll, setOrdersRaw] = useState([]);
   const setOrders = React.useCallback((v) => setOrdersRaw(prev => cleanMgrRows(hideBlind(typeof v === "function" ? v(prev) : v))), []); // 고정노선 자리 채움 "담당자" → 빈 값
+  // ⭐ 2026-11-06 고정노선현황 › 운송업체 설정 — 끄거나 삭제한 업체의 오더는 데이터 입구에서 한 번 거른다(PC와 같은 기준)
+  //   목록·숫자·배지·검색·미배차·알림·통계·지입차관리 모두 아래 orders/allOrders를 쓰므로 그대로 따른다 · 시트 연동은 그대로
+  const carrierVisM = useRouteCarrierFilter(getTenant() || userCompany || "");
+  const orders = useMemo(() => carrierVisM.filter(ordersAll) || [], [ordersAll, carrierVisM]);
   // ⭐ 2026-11-05 기사 수락/거절 — 이미 받은 오더 배열로만(줄마다 구독 없음) · 내가 등록/배차확정한 오더만
   const drvMeNameM = mobileUsers.find((u) => (u.uid || u.id) === user?.uid)?.name || myProfM?.name || "";
   const drvMeM = React.useMemo(() => ({ uid: ["driver", "shipper"].includes(role) ? "" : (user?.uid || ""), email: user?.email || "", name: drvMeNameM, isAdmin: ["admin", "totalMaster", "superadmin", "allMgr"].includes(realRole || role) }), [user?.uid, user?.email, drvMeNameM, realRole, role]);
   React.useEffect(() => { publishDriverOrderRows(orders, drvMeM); }, [orders, drvMeM]);
   React.useEffect(() => { setDriverToastsMuted(!alarmEnabled); }, [alarmEnabled]);
-  const [canceledOrders, setCanceledOrdersRaw] = useState([]);
+  const [canceledOrdersAll, setCanceledOrdersRaw] = useState([]);
+  const canceledOrders = useMemo(() => carrierVisM.filter(canceledOrdersAll) || [], [canceledOrdersAll, carrierVisM]); // ⭐ 2026-11-06
   const setCanceledOrders = React.useCallback((v) => setCanceledOrdersRaw(prev => hideBlind(typeof v === "function" ? v(prev) : v)), []); // ★ 취소내역 화면용
   // ⭐ 앱을 백그라운드에 뒀다가 다시 열었을 때, 서버 재조회가 오래 걸리는 동안(기기가
   // 막 깨어나 네트워크 재연결이 느릴 때) 화면에 남아있던 오래된 오더 상태를 보거나
@@ -2733,12 +2739,18 @@ const quickRange = (days) => {
   // 화면에서 쓰는 전체 목록 = 실시간 오더 + 불러온 예전 오더(같은 오더면 실시간 쪽 우선)
   // 예전 오더 목록 정리(블라인드 제외·취소 분리)는 보관소가 바뀔 때만 한 번
   const extraSplit = useMemo(() => {
-    const all = cleanMgrRows(hideBlind([...extraMap.values()]));
+    const all = carrierVisM.filter(cleanMgrRows(hideBlind([...extraMap.values()]))) || []; // ⭐ 2026-11-06 숨긴 운송업체 오더 빼기
     return {
       active: all.filter((o) => !isCancelledOrder(o)),
       canceled: all.filter((o) => isCancelledOrder(o)),
     };
-  }, [extraMap]);
+  }, [extraMap, carrierVisM]);
+  // ⭐ 2026-11-06 운송업체 설정 창 전용 — 숨긴 업체 오더까지(건수 보여 주고 다시 켤 수 있게 · 화면 목록에는 안 씀)
+  const carrierPoolRowsM = useMemo(() => {
+    const m = new Map();
+    [...ordersAll, ...extraMap.values()].forEach((o) => { if (o?.배차표Id) { const k = `${o.__col}/${o._id}`; if (!m.has(k)) m.set(k, o); } });
+    return [...m.values()];
+  }, [ordersAll, extraMap]);
   const allOrdersCombined = useMemo(() => {
     if (extraMap.size === 0) return { orders, canceled: canceledOrders };
     const liveKeys = new Set();
@@ -4118,8 +4130,8 @@ const thisMonth = thisMonthKST();
   const [mDetail, setMDetail] = useState(null);
   const mDetailGet = useMobileDetailGetters((localStorage.getItem("loginCompany") || userCompany || localStorage.getItem("userCompany") || DEFAULT_COMPANY).trim());
   const filteredOrders = useMemo(() => {
-    // ⭐ 2026-11-05 검색어·세부검색이 있으면 고정노선(구글시트 배차표) 오더도 같이 찾기(PC 배차현황과 같은 기준)
-    let base = (appliedSearchText.trim() || mDetail) ? [...allOrders] : [...listOrders];
+    // ⭐ 2026-11-06 검색어·세부검색이 있어도 고정노선(구글시트 배차표) 오더는 넣지 않는다 — 고정노선현황에서만(PC와 같음)
+    let base = [...listOrders];
 
     // 🔹 오늘 / 날짜 선택 여부
     const today = todayStr();
@@ -6696,7 +6708,7 @@ onGoAttendance={() => {
           <div style={page === "list" ? undefined : { display: "none" }}>
           <MobileOrderList
             renderAllFirst={listScrollYRef.current > 0}
-            allOrders={allOrders}
+            allOrders={listOrders}
             mDetail={mDetail}
             setMDetail={setMDetail}
             detailGetters={mDetailGet}
@@ -6854,7 +6866,7 @@ setOpenMemo={setOpenMemo}
             <MobilePcView key={page}
               kind={page === "ratecard" ? "ratecard" : page === "approval" ? "approval" : page === "staff" ? "staff" : page === "drvacc" ? "drvacc" : page === "drivers" ? "drivers" : page === "clients" ? "clients" : page === "fixedroute" ? "fixedroute" : page === "perms" ? "perms" : "fare"} drivers={drivers} users={mobileUsers}
               initial={page === "company-fare" ? "자사운임표" : undefined}
-              dispatchData={allOrders} clients={clients} places={places} role={role} userCompany={pcViewCompany} me={pcViewMe}
+              dispatchData={allOrders} carrierPoolRows={page === "fixedroute" ? carrierPoolRowsM : undefined} clients={clients} places={places} role={role} userCompany={pcViewCompany} me={pcViewMe}
               loadRange={loadRange} loadFullHistory={loadFullHistory} />
           </React.Suspense>
         )}

@@ -47,7 +47,8 @@ import { useMyProfile } from "./userNames";
 import { useCompanyStaff, masterHasHr, isHrStaffUser } from "./hrHandover";
 import { AttendanceQuickButton, CheckoutReminderHost } from "./attendanceQuick";
 import { PersonalTodayHost } from "./PersonalSchedule";
-import FixedRouteStatusHost, { FixedRouteCells, fixedHeaderOf, fixedLookOf, useRouteBoardIds } from "./FixedRouteStatus";
+import FixedRouteStatusHost, { FixedRouteCells, fixedHeaderOf, fixedLookOf, useRouteBoardIds, useRouteEditGuard, routeOwnerName, ROUTE_LOCK_MSG } from "./FixedRouteStatus";
+import { carrierOf } from "./routeCarriers"; // ⭐ 2026-11-06 고정노선현황 운송사 검색
 import { useRouteCarrierFilter } from "./routeCarriers"; // ⭐ 2026-11-05 고정노선 운송업체 설정 — 끈 업체 오더는 정산·매출에서 뺀다
 import ColumnStyleHost from "./ColumnStyle"; // 🎨 2026-11-03 컬럼명 오른쪽 클릭 → 색 변경 // ⭐ 2026-11-03 배차현황 › 고정노선현황
 import { usePendingSignups, isPendingSignupDriver } from "./pendingSignups";
@@ -7651,10 +7652,10 @@ useEffect(() => {
   // const [dispatchData, setDispatchData] = useState([]);  
   // ---------------- Firestore 실시간 훅 ----------------
   const {
-    dispatchData,
+    dispatchData: dispatchDataAll, // ⭐ 2026-11-06 운송업체 설정으로 숨긴 업체 오더까지 담긴 원본(아래에서 한 번 거름)
     setDispatchData,   // ★ 추가
     liveDataReady,
-    recentDispatchData,
+    recentDispatchData: recentDispatchDataAll,
     recentLiveDataReady,
     drivers,
     clients,
@@ -7676,6 +7677,12 @@ useEffect(() => {
     loadFullHistory,
     historyLoading,
   } = useRealtimeCollections(user, userCompany, role);
+  // ⭐ 2026-11-06 고정노선현황 › 운송업체 설정 — 끄거나 삭제한 업체의 오더는 프로그램 어디에도 안 보이게(데이터 입구에서 한 번)
+  //   목록·건수·배지·검색·미배차·실시간·지입차관리·대시보드·엑셀이 모두 아래 dispatchData를 쓰므로 그대로 따른다.
+  //   정산·매출은 원래부터 같은 기준으로 빠졌고, 시트 연동은 서버가 그대로 한다(오더는 저장소에 남음).
+  const routeCarrierF = useRouteCarrierFilter(getTenant() || userCompany || localStorage.getItem("userCompany") || "");
+  const dispatchData = useMemo(() => routeCarrierF.filter(dispatchDataAll) || [], [dispatchDataAll, routeCarrierF]);
+  const recentDispatchData = useMemo(() => routeCarrierF.filter(recentDispatchDataAll) || [], [recentDispatchDataAll, routeCarrierF]);
   const orderHistoryApi = React.useMemo(() => ({ loadRange, loadFullHistory }), [loadRange, loadFullHistory]);
   const [pcBootDone, setPcBootDone] = useState(false);
   // 🛣 고정노선 — 정해진 요일의 배차를 미리 만들어 배차현황·실시간배차현황·기사앱에 보이게
@@ -7766,10 +7773,12 @@ useEffect(() => {
   const listDispatchData = useMemo(() => dispatchDataFiltered.filter((r) => !r?.배차표Id), [dispatchDataFiltered]);
   // ⭐ 2026-11-05 고정노선현황 › 운송업체 설정 — 끄거나 삭제한 운송업체의 고정노선 오더는 정산·매출 계산에서 뺀다(설정 전이면 전부 그대로)
   //   매출관리·정산관리(거래처정산·거래명세서·미수금·용차지급·지입정산)·인사이트·홈 통계·AI 비서 합계가 이 값을 쓴다
-  const routeCarrierF = useRouteCarrierFilter(getTenant() || userCompany || localStorage.getItem("userCompany") || "");
+  //   ⭐ 2026-11-06 화면 데이터(dispatchData)에서 이미 빠져 있다 — 아래 거름은 그대로 둬도 결과가 같다(이중 안전)
   const salesDispatchData = useMemo(() => routeCarrierF.filter(dispatchDataFiltered), [dispatchDataFiltered, routeCarrierF]);
   const salesRawDispatchData = useMemo(() => routeCarrierF.filter(dispatchData) || [], [dispatchData, routeCarrierF]);
   const listRecentDispatchData = useMemo(() => recentDispatchDataFiltered.filter((r) => !r?.배차표Id), [recentDispatchDataFiltered]);
+  // ⭐ 2026-11-06 운송업체 설정 창 전용 — 숨긴 업체 오더까지 센다(다시 켤 수 있게 · 화면 목록에는 안 씀)
+  const routeCarrierPoolRows = useMemo(() => filterByCompanyAndRole((dispatchDataAll || []).filter((r) => r?.배차표Id)), [dispatchDataAll, filterByCompanyAndRole]);
 
 
   // ⭐ 내 정보 통계 계산
@@ -7898,7 +7907,9 @@ useEffect(() => {
         role === "admin" ? true : (!d?.작성자 || d.작성자 === user.email);
 
       // ⭐ 핵심: 오늘 + 차량번호 없음 = 미배차
+      // ⭐ 2026-11-06 고정노선(배차표) 오더는 고정노선현황에서만 — 홈 미배차 숫자에서도 뺀다(배차현황 미배차 배지와 같은 기준)
       return (
+        !d?.배차표Id &&
         isMine &&
         dateKST === todayStrKST &&
         (!d.차량번호 || !String(d.차량번호).trim())
@@ -8850,7 +8861,6 @@ return (
                 role={role}
                 userCompany={userCompany}
                 dispatchData={listDispatchData}
-                searchPoolData={dispatchDataFiltered}
                 timeOptions={timeOptions}
                 tonOptions={tonOptions}
                 drivers={drivers}
@@ -8894,7 +8904,7 @@ return (
             )}
             {/* ⭐ 2026-11-03 고정노선현황 — 배차표 양식(화주사 구글시트) 오더를 배차현황과 같은 화면으로, 열은 시트 순서 · 시트 실시간 연동 */}
             {배차현황Tab === "고정노선현황" && (
-              <FixedRouteStatusHost company={userCompany || localStorage.getItem("userCompany") || ""} dispatchData={dispatchDataFiltered} places={places} drivers={drivers} disabled={isViewer}
+              <FixedRouteStatusHost company={userCompany || localStorage.getItem("userCompany") || ""} dispatchData={dispatchDataFiltered} carrierPoolRows={routeCarrierPoolRows} places={places} drivers={drivers} disabled={isViewer}
                 render={(form, rows) => (
                   <DispatchStatus
                     key={`fr-${form.id}-${viewResetKey}`}
@@ -15254,7 +15264,7 @@ React.useEffect(() => {
       className={DM_BTN_SECONDARY}>
       <DmIcon name="lookup" />담당자·차량 조회
     </button>
-    <OrderLookupModal open={dmLookupOpen} onClose={() => setDmLookupOpen(false)} rows={dispatchData} nameOf={dmLookupNameOf} />
+    <OrderLookupModal open={dmLookupOpen} onClose={() => setDmLookupOpen(false)} rows={dmLookupOpen ? (dispatchData || []).filter((r) => !r?.배차표Id) : []} nameOf={dmLookupNameOf} />{/* ⭐ 2026-11-06 고정노선(배차표) 오더는 고정노선현황에서만 */}
     {recurringOpen && createPortal(<RecurringManagerModal form={form} onClose={() => setRecurringOpen(false)} />, document.body)}
 
   </div>
@@ -29791,7 +29801,7 @@ const head = isDark
   </div>
   <DetailFilterButton rows={rtDayRows} value={rtDetail} onApply={setRtDetail} withDate={false} getters={rtDetailGet} title="세부검색 · 실시간" />
   <button onClick={() => setLookupOpen(true)} title="기간 + 배차담당자 + 차량번호·기사명으로 찾기" className="px-2 py-1 rounded-lg bg-white text-[#1B2B4B] border-2 border-[#1B2B4B] text-[11px] font-black whitespace-nowrap flex-shrink-0 hover:bg-[#EEF2F8]">담당자·차량 조회</button>
-  <OrderLookupModal open={lookupOpen} onClose={() => setLookupOpen(false)} rows={historyDispatchData} nameOf={lookupNameOf} />
+  <OrderLookupModal open={lookupOpen} onClose={() => setLookupOpen(false)} rows={lookupOpen ? (historyDispatchData || []).filter((r) => !r?.배차표Id) : []} nameOf={lookupNameOf} />{/* ⭐ 2026-11-06 실시간 조회에도 고정노선(배차표) 오더는 빼기 */}
   {/* ⭐ 2026-11-05 실시간 관제 — 지금 목록의 배차완료 지입·직영·임대 기사 전체 지도 */}
   <FleetLiveButton rows={filtered} size="md" />
   {/* 날짜 버튼 */}
@@ -35331,7 +35341,6 @@ function DispatchStatus({
   role,
   userCompany = "",
   dispatchData = [],
-  searchPoolData = null, // ⭐ 2026-11-05 검색할 때는 고정노선(구글시트 배차표) 오더도 같이 찾기
   focusOrderId,
   clearFocusOrder,
   setDispatchData,
@@ -36614,7 +36623,15 @@ const [appliedEndDate, setAppliedEndDate] = React.useState("");
   const [extraHistoricalRows, setExtraHistoricalRows] = React.useState([]);
   const [extraHistoricalLoading, setExtraHistoricalLoading] = React.useState(false);
   // ⭐ 조회 기간이 실시간 범위(최근 7일~) 밖이면 그 기간만 공용 보관소로 불러온다(부모 dispatchData에 합쳐짐)
-  useLoadOrderRange(appliedStartDate || appliedEndDate || null, appliedEndDate || appliedStartDate);
+  // ⭐ 2026-11-06 고정노선현황은 입고일(= 상차일 + 하차일수) 기준 조회 — 상차일로 불러오므로 하차일수(+주말 여유 3일)만큼 앞에서부터 불러온다
+  //   (예전엔 고른 기간의 첫날 입고분이 안 불러와져 "삼다수 검색했는데 11건만" 나오던 원인)
+  const dsLoadFrom = (() => {
+    const f = appliedStartDate || appliedEndDate || null;
+    if (!fixedForm || !f || !/^\d{4}-\d{2}-\d{2}$/.test(f)) return f;
+    const back = Math.max(0, parseInt(fixedForm.dropOffset, 10) || 0) + 3;
+    const d = new Date(`${f}T00:00:00Z`); d.setUTCDate(d.getUTCDate() - back); return d.toISOString().slice(0, 10);
+  })();
+  useLoadOrderRange(dsLoadFrom, appliedEndDate || appliedStartDate);
   // 🔽 정렬 — ⭐ "정렬/필터" 팝업은 없앴고, 표 머리글(컬럼명)을 누르면 바로 정렬된다
   // (▲오름 → ▼내림 → 해제). 이 브라우저에만 기억하고 Firestore에는 저장하지 않는다.
   const dsSort = useTableSort(fixedForm ? "fixedRouteStatus" : "dispatchStatus"); // ⭐ 고정노선현황은 따로(배차현황 정렬이 시트 순서를 섞지 않게)
@@ -38312,6 +38329,15 @@ if (mode === "driver") {
   const dsFixedLook = React.useMemo(() => (fixedForm ? fixedLookOf(fixedForm) : null), [fixedForm]); // ⭐ 리터·총계 머리글 색
   const [dsDetail, setDsDetail] = React.useState(null); // 🔎 세부검색(최대 3차 + 기간)
   const dsDetailGet = useDetailGetters(userNameMap, userCompany);
+  // ⭐ 2026-11-06 고정노선현황 배차담당자 — 등록 직원이 없으면(시트 자동 오더) 배차한 사람(배차확정자)
+  const dsStaffOf = React.useCallback((r) => {
+    const n = _orderStaffNameRaw(r, userNameMap);
+    return String((n && n !== "고정노선" ? n : "") || r?.배차확정자 || n || "");
+  }, [userNameMap]);
+  // ⭐ 2026-11-06 고정노선현황 수정 권한 — 배차담당자는 본인 오더만, 마스터는 전부(src/FixedRouteStatus.jsx useRouteEditGuard)
+  const frGuard = useRouteEditGuard(role);
+  const frCanEdit = React.useCallback((r) => !fixedForm || frGuard.canEdit(r), [fixedForm, frGuard]);
+  const frLockAlert = (r) => showAlert(`🔒 ${ROUTE_LOCK_MSG}${routeOwnerName(r, userNameMap) ? ` (담당: ${routeOwnerName(r, userNameMap)})` : ""}\n본인이 등록·배차한 오더만 고칠 수 있어요 · 마스터는 모든 오더 수정 가능`);
   const dsDateOf = React.useCallback((r) => String(fixedForm ? (r.입고일 || r.하차일 || r.상차일 || "") : (r.상차일 || r.상차일자 || "")).slice(0, 10), [fixedForm]);
   const applyDsDetail = (v) => {
     setDsDetail(v); setPage(0);
@@ -38783,8 +38809,8 @@ const filteredBase = React.useMemo(() => {
     const hasOverrides = Object.keys(localOverrides).length > 0;
     // ⭐ dispatchData(최근 13개월 실시간)에 없는, 그보다 오래된 구간을 조회할 때만
     // 별도로 getDocs 조회해둔 extraHistoricalRows를 여기서 합친다(평소엔 빈 배열).
-    // ⭐ 2026-11-05 검색어·세부검색이 있으면 고정노선 오더까지 포함(화주사 이름으로 찾았는데 0건 나오던 문제)
-    const pool = (searchPoolData && (q.trim() || dsDetail)) ? searchPoolData : (dispatchData || []);
+    // ⭐ 2026-11-06 검색·세부검색 때도 받은 목록만 — 배차현황엔 고정노선(배차표Id) 오더가 절대 섞이지 않는다(고정노선현황에서만)
+    const pool = dispatchData || [];
     const baseData = extraHistoricalRows.length > 0
       ? [...pool, ...extraHistoricalRows]
       : pool;
@@ -38846,9 +38872,14 @@ const filteredBase = React.useMemo(() => {
         case "dispatch":
           return get(r.배차방식).includes(keyword);
         case "car":
-          return get(r.차량번호).includes(keyword);
+          return get(r.차량번호).replace(/\s+/g, "").includes(keyword.replace(/\s+/g, ""));
         case "driver":
-          return get(r.이름).includes(keyword);
+          return get(r.이름).includes(keyword) || get(r.기사명).includes(keyword);
+        // ⭐ 2026-11-06 배차담당자(등록·배차한 직원) · 운송사(고정노선 시트 운송업체 칸)
+        case "mgr":
+          return dsStaffOf(r).toLowerCase().includes(keyword);
+        case "carrier":
+          return carrierOf(r).toLowerCase().includes(keyword);
         default:
           return (
             get(r.거래처명).includes(keyword) ||
@@ -38857,7 +38888,16 @@ const filteredBase = React.useMemo(() => {
             get(r.차량번호).includes(keyword) ||
             get(r.이름).includes(keyword) ||
             get(r.지급방식).includes(keyword) ||
-            get(r.배차방식).includes(keyword)
+            get(r.배차방식).includes(keyword) ||
+            // ⭐ 2026-11-06 고정노선현황 통합 검색 — 배차담당자·운송사·기사 전화·시군구·묶음·시트 추가 칸까지
+            (!!fixedForm && (
+              dsStaffOf(r).toLowerCase().includes(keyword) ||
+              carrierOf(r).toLowerCase().includes(keyword) ||
+              get(r.전화번호).includes(keyword) ||
+              get(r.하차지주소).includes(keyword) ||
+              get(r.배차표묶음).includes(keyword) ||
+              Object.values(r.추가정보 || {}).some((v) => get(v).includes(keyword))
+            ))
           );
       }
     });
@@ -38900,10 +38940,10 @@ const filteredBase = React.useMemo(() => {
   return data;
 }, [
   dispatchData,
-  searchPoolData,
   localOverrides,
   q,
   searchType,
+  dsStaffOf,
   appliedStartDate,
   appliedEndDate,
   loaded,
@@ -39037,6 +39077,8 @@ const save = {
     const close = () => setContextMenuDS(null);
     const onKey = (e) => {
       if (e.key === "Delete" && contextMenuDS) {
+        // ⭐ 2026-11-06 고정노선현황 — 담당자가 아닌 줄이 섞여 있으면 지우지 않는다
+        { const _id = getId(contextMenuDS.row); const ids = selected.has(_id) ? [...selected] : [_id]; const bad = fixedForm && (dispatchData || []).find((x) => ids.includes(getId(x)) && !frCanEdit(x)); if (bad) { setContextMenuDS(null); frLockAlert(bad); return; } }
         { const _id = getId(contextMenuDS.row); if (!selected.has(_id)) setSelected(new Set([_id])); } // ⭐ 선택한 줄 위에서 지우면 선택한 줄 전부
         setShowDeletePopup(true);
         setContextMenuDS(null);
@@ -39046,7 +39088,7 @@ const save = {
     document.addEventListener("click", close);
     document.addEventListener("keydown", onKey);
     return () => { document.removeEventListener("click", close); document.removeEventListener("keydown", onKey); };
-  }, [contextMenuDS, selected]);
+  }, [contextMenuDS, selected, dispatchData, frCanEdit]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ===================== 상차 임박 경고 (Part 5) =====================
   const [dsWarningExpanded, setDsWarningExpanded] = React.useState(false);
@@ -39679,6 +39721,9 @@ return (
             <option value="drop">하차지</option>
             <option value="car">차량번호</option>
             <option value="driver">기사명</option>
+            {/* ⭐ 2026-11-06 고정노선현황 — 배차담당자·운송사로도 찾기 */}
+            {fixedForm && <option value="mgr">배차담당자</option>}
+            {fixedForm && <option value="carrier">운송사</option>}
             <option value="pay">지급방식</option>
             <option value="dispatch">배차방식</option>
           </CustomSelect>
@@ -39743,7 +39788,7 @@ return (
               onFile={(e) => { setBulkChooserOpen(false); handleBulkFile(e); e.target.value = ""; }}
             />
           )}
-          <button className="px-2 py-1 rounded-lg bg-red-600 text-white text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap" onClick={()=>{if(!selected.size)return showAlert("삭제할 항목이 없습니다.");setShowDeletePopup(true);}}><EditableText id="status.toolbar.선택삭제" defaultText="선택삭제" /></button>
+          <button className="px-2 py-1 rounded-lg bg-red-600 text-white text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap" onClick={()=>{if(!selected.size)return showAlert("삭제할 항목이 없습니다.");{const bad=fixedForm&&(dispatchData||[]).find((x)=>selected.has(getId(x))&&!frCanEdit(x));if(bad)return frLockAlert(bad);}setShowDeletePopup(true);}}><EditableText id="status.toolbar.선택삭제" defaultText="선택삭제" /></button>
           <button className="px-2 py-1 rounded-lg bg-gray-300 text-gray-800 text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap" onClick={()=>setSelected(new Set())}><EditableText id="status.toolbar.선택초기화" defaultText="선택초기화" /></button>
           <button className="px-2 py-1 rounded-lg bg-[#1B2B4B] text-white text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap" onClick={downloadExcel}><EditableText id="status.toolbar.엑셀다운" defaultText="엑셀다운" /></button>
           <button onClick={() => setDailyCloseOpen(true)} className="px-2 py-1 rounded-lg bg-gray-700 text-white text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap"><EditableText id="status.toolbar.일마감" defaultText="일마감" /></button>
@@ -39817,21 +39862,23 @@ return (
   ];
 
   // ⭐ 2026-11-03 고정노선현황 — 시트 열 순서의 칸(바로 고치기) · 오른쪽 클릭 메뉴(기사복사 등)·두 번 누르면 오더복사/수정 패널은 배차현황과 같다
+  // ⭐ 2026-11-06 담당자가 아니면(마스터 제외) 이 줄은 잠금 — 글자만 보이고 두 번 눌러도 수정 모드가 안 열린다
+  const frLocked = !!fixedForm && !isViewer && !frCanEdit(row);
   if (fixedForm) return (
-    <tr key={id} id={`row-${id}`}
+    <tr key={id} id={`row-${id}`} data-lock={frLocked ? "1" : undefined}
       onContextMenu={(e) => { e.preventDefault(); const _z = parseFloat(document.getElementById("root")?.style.zoom) || 1; setContextMenuDS({ x: e.clientX / _z, y: e.clientY / _z, row: r }); }}
-      onDoubleClick={() => { if (!isViewer) setFixedEditId((cur) => (cur === id ? null : id)); }}
+      onDoubleClick={() => { if (isViewer) return; if (frLocked) { frLockAlert(row); return; } setFixedEditId((cur) => (cur === id ? null : id)); }}
       onKeyDownCapture={fixedEditId === id ? (e) => fixedRowKey(e, id) : undefined}
       data-gstart={i > 0 && (String(pageRows[i - 1]?.배차표묶음 || "") !== String(r.배차표묶음 || "") || String(pageRows[i - 1]?.상차일 || "") !== String(r.상차일 || "")) ? "1" : undefined}
-      title={fixedEditId === id ? "수정 중 — ←→ 칸 이동 · ↑↓ 위아래 줄 · Enter 저장하고 끝내기 · Esc 끝내기" : isViewer ? undefined : "두 번 누르면 이 줄을 수정할 수 있어요"}
+      title={fixedEditId === id ? "수정 중 — ←→ 칸 이동 · ↑↓ 위아래 줄 · Enter 저장하고 끝내기 · Esc 끝내기" : isViewer ? undefined : frLocked ? `🔒 ${ROUTE_LOCK_MSG}${routeOwnerName(row, userNameMap) ? ` (담당: ${routeOwnerName(row, userNameMap)})` : ""}` : "두 번 누르면 이 줄을 수정할 수 있어요"}
       className={`kp-frs-row transition-colors ${fixedEditId === id ? "bg-[#EEF4FF] outline outline-2 -outline-offset-2 outline-[#2D4C82]" : selected.has(id) ? "bg-blue-50" : !String(row.차량번호 || "").trim() && row.배차상태 !== "배차취소" ? "bg-[#FFFAF2] hover:bg-[#FFF3E0]" : i % 2 === 0 ? "bg-white hover:bg-[#F5F8FD]" : "bg-[#FAFBFD] hover:bg-[#F5F8FD]"}`}>
       <td className="px-3 py-2 text-center border-b border-[#E9EDF4] border-r border-r-[#F1F4F9]"><input autoComplete="off" type="checkbox" checked={selected.has(id)} onChange={() => toggleOne(id)} /></td>
       <td className="px-3 py-2 text-[13.5px] font-bold text-[#5B6B85] text-center border-b border-[#E9EDF4] border-r border-r-[#F1F4F9] tabular-nums">
         {fixedEditId === id
           ? <button type="button" onClick={(e) => { e.stopPropagation(); setFixedEditId(null); }} className="h-7 px-2 rounded-lg bg-[#1B2B4B] text-white text-[11.5px] font-black whitespace-nowrap">완료</button>
-          : (page * pageSize) + i + 1}
+          : <span className="inline-flex items-center gap-1">{(page * pageSize) + i + 1}{frLocked && <svg data-kp="frs-lock" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#9AA9C3" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-label={ROUTE_LOCK_MSG}><rect x="5" y="11" width="14" height="10" rx="2" /><path d="M8 11V7a4 4 0 0 1 8 0v4" /></svg>}</span>}
       </td>
-      <FixedRouteCells form={fixedForm} row={row} drivers={drivers} clients={clients} disabled={isViewer} editing={fixedEditId === id} onPatch={(patch) => patchDispatch(id, patch)} />
+      <FixedRouteCells form={fixedForm} row={row} drivers={drivers} clients={clients} disabled={isViewer || frLocked} editing={fixedEditId === id && !frLocked} onPatch={(patch) => patchDispatch(id, patch)} />
     </tr>
   );
 
@@ -44322,6 +44369,7 @@ setCopyPlaceOptions(list);
             onClick={() => {
               // 오더복사수정패널을 연다 (선택한 오더 수정 팝업은 폐지)
               const r = contextMenuDS.row;
+              if (!frCanEdit(r)) { setContextMenuDS(null); frLockAlert(r); return; } // ⭐ 2026-11-06 고정노선현황 — 담당자만 수정
               const raw = String(r.화물내용 || "");
               const KNOWN_SUFFIXES = [...new Set(["파레트", "파렛트", "박스", "통", ...cpCargoTypeOptions])].sort((a, b) => b.length - a.length);
               let cargoNum = "", cargoType = "";

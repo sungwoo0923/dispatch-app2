@@ -15,7 +15,40 @@ import { sheetApi, BoardSuggest } from "./RouteBoard";
 import { ownerOf, rateFor } from "./routeBoardSheet";
 import { useRouteCarrierSetting, useRouteCarrierFilter, saveRouteCarrierSetting, carriersInOrders, carrierKey, carrierOf } from "./routeCarriers"; // ⭐ 2026-11-05 운송업체 설정(정산·매출 포함 여부)
 
+import { isMyOrder } from "./driverEvents"; // ⭐ 2026-11-06 내 오더 판단(기사 수락/거절 알림과 같은 기준)
+import { useMyProfile, personName } from "./userNames";
+import { orderStaffNameRaw, useUserNameMap } from "./detailGetters";
+
 const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
+
+// ⭐ 2026-11-06 고정노선현황 수정 권한 — 배차담당자는 본인이 등록·배차한 오더만, 마스터(관리자급)는 전부
+//  · 본인 오더 = 등록자(createdByUid·createdByEmail·작성자) 또는 배차한 사람(배차확정자) — driverEvents.isMyOrder와 같은 기준
+//  · 시트에서 자동으로 들어와 아직 아무도 잡지 않은 오더(작성자 "배차표 자동" · 배차확정자 없음)는 누구나 배차할 수 있다
+//    → 차량을 넣어 배차하면 배차확정자가 그 사람으로 남아 그때부터 그 사람(과 마스터)만 고칠 수 있다
+//  · 마스터 = admin·totalMaster·superadmin·test·allMgr 역할, 직원 문서 isMaster, 최고관리자 계정
+//  · 화면(UI)에서 막는다(서버 규칙은 그대로) — 잠긴 줄은 글자만 보이고 "담당자만 수정할 수 있습니다" 안내
+export const ROUTE_LOCK_MSG = "담당자만 수정할 수 있습니다";
+const ROUTE_EDIT_ALL_ROLES = new Set(["admin", "totalMaster", "superadmin", "test", "allMgr"]);
+const AUTO_OWNER = new Set(["", "배차표 자동", "배차표", "고정노선", "담당자", "미지정"]);
+const humanOf = (v) => { const t = String(v ?? "").trim(); return t && !AUTO_OWNER.has(t) ? t : ""; };
+const OWNER_KEYS = ["createdByUid", "createdByEmail", "작성자", "등록자이메일", "createdBy", "배차확정자", "등록자명", "createdByName", "등록자"];
+export const routeOrderHasOwner = (r) => !!r && OWNER_KEYS.some((k) => humanOf(r[k]));
+// 이 오더의 담당자 이름(잠금 안내용) — 배차한 사람 → 등록 직원
+export const routeOwnerName = (r, nameMap) => humanOf(r?.배차확정자) || humanOf(orderStaffNameRaw(r, nameMap)) || humanOf(r?.등록자명) || "";
+export function useRouteEditGuard(role) {
+  const uid = auth.currentUser?.uid || "";
+  const email = auth.currentUser?.email || "";
+  const prof = useMyProfile(uid && uid !== "preview" ? uid : "");
+  const r0 = role || (() => { try { return localStorage.getItem("role") || ""; } catch { return ""; } })();
+  const isPv = (() => { try { return window.location.pathname.startsWith("/preview"); } catch { return false; } })(); // 둘러보기(로그인 전) — 가짜 사용자 "둘러보기"
+  const name = personName(prof) || auth.currentUser?.displayName || (isPv ? "둘러보기" : "");
+  return React.useMemo(() => {
+    const all = ROUTE_EDIT_ALL_ROLES.has(r0) || prof?.isMaster === true || isMasterOnly();
+    const me = { uid, email, name };
+    const canEdit = (r) => all || !routeOrderHasOwner(r) || isMyOrder(r, me);
+    return { all, me, canEdit };
+  }, [r0, prof?.isMaster, uid, email, name]);
+}
 import { LiveDriverChip, FleetLiveButton, useFleetLivePublish } from "./liveFleet"; // ⭐ 2026-11-05 배차완료 지입·직영·임대 기사 실시간 관제
 const toInt = (v) => parseInt(String(v ?? "").replace(/[^\d-]/g, ""), 10) || 0;
 const normPlate = (s = "") => String(s).replace(/\s+/g, "").toUpperCase();
@@ -54,6 +87,7 @@ export function fixedLookOf(form) {
 const cargoText = (qty) => { const total = Object.values(qty).reduce((a, n) => a + n, 0); return { 화물내용: Object.keys(qty).length ? `${Object.entries(qty).map(([k, n]) => `${k} ${n}`).join(" · ")} (총 ${total})` : "", 화물수량: total ? String(total) : "" }; };
 const valueOf = (c, row) => {
   if (c.kind === "qty") return row.품목수량?.[c.label] ? String(row.품목수량[c.label]) : "";
+  if (c.id === CARRIER_VCOL) return carrierOf(row); // ⭐ 2026-11-06 양식에 운송업체 열이 없을 때 붙인 칸
   if (c.kind === "extra") return String(row.추가정보?.[c.label] ?? "");
   if (c.kind === "sum") { const t = Object.values(row.품목수량 || {}).reduce((a, n) => a + toInt(n), 0); return t ? String(t) : ""; }
   // ⭐ 2026-11-03 시군구 칸은 시트에 적힌 그대로(여주시) — 오더에는 기사 길안내용 풀주소를 그대로 둔다
@@ -105,6 +139,13 @@ function VehicleCell({ field, value, drivers, disabled, onPick, onCommit, placeh
 
 // 🏢 2026-11-03 운송업체 칸 — 기본거래처에 있으면 드롭다운(스마트 검색), 없으면 그냥 직접 입력
 const isCarrierCol = (c) => c.kind === "extra" && /운송업체|운송사/.test(String(c.label || ""));
+// ⭐ 2026-11-06 운송업체 칸이 꼭 보이게 — 양식(시트 제목줄)에 운송업체 열이 없는데 오더에 운송업체 값이 있으면 표 끝에 칸을 붙인다(화면에만)
+const CARRIER_VCOL = "__carrier";
+export function withCarrierCol(form, rows) {
+  if (!form || (form.columns || []).some(isCarrierCol)) return form;
+  if (!(rows || []).some((r) => carrierOf(r))) return form;
+  return { ...form, columns: [...(form.columns || []), { id: CARRIER_VCOL, label: "운송업체", kind: "extra" }] };
+}
 function CarrierCell({ value, clients, disabled, onCommit }) {
   const [v, setV] = React.useState(value);
   const picked = React.useRef(false);
@@ -146,6 +187,7 @@ export function FixedRouteCells({ form, row, drivers = [], clients = [], onPatch
       const addr = keepFull ? row.하차지주소 : val;
       return onPatch({ ...(keepFull ? {} : { 하차지주소: val }), 시트기준값: { ...(row.시트기준값 || {}), [c.id]: val }, ...fareOf(row.품목수량, addr) });
     }
+    if (c.id === CARRIER_VCOL) return onPatch({ 추가정보: { ...(row.추가정보 || {}), 운송업체: val } }); // ⭐ 2026-11-06
     if (c.kind === "extra") return onPatch({ 추가정보: { ...(row.추가정보 || {}), [c.label]: val } });
     if (c.field === "차량번호") {
       const d = val ? drivers.find((x) => normPlate(x.차량번호) === normPlate(val)) : null;
@@ -387,6 +429,8 @@ function RangeImportModal({ form, onClose }) {
 // ⭐ 2026-11-05 운송업체 설정 — 시트 "운송업체" 칸에 나오는 업체 중 체크한 곳만 정산·매출에 넣는다(src/routeCarriers.js)
 //  · 목록 = 저장한 업체 + 지금 오더(고정노선)에 나오는 업체 · 켜기/끄기·삭제·추가는 누르는 즉시 저장
 //  · 끄거나 삭제한 업체의 고정노선 오더는 정산관리·매출관리·거래명세서·미수금·인사이트·대시보드 합계에서 빠진다(PC·모바일)
+//  ⭐ 2026-11-06 + 프로그램 어디에도 안 보인다(목록·숫자·검색·실시간·지입차관리·엑셀·모바일) · 시트 연동은 그대로
+//    이 창만 숨긴 업체와 그 오더 건수를 보여 준다(rows = 숨긴 오더까지 담긴 carrierPoolRows) — 다시 켜면 바로 보인다
 const CARRIER_ADMIN_ROLES = new Set(["admin", "totalMaster", "test", "allMgr", "hrAcct", "hrManager"]);
 export function RouteCarrierModal({ company, rows = [], disabled = false, onClose }) {
   const { setting, ready } = useRouteCarrierSetting(company);
@@ -421,11 +465,11 @@ export function RouteCarrierModal({ company, rows = [], disabled = false, onClos
   };
   const base = () => list.map((c) => ({ name: c.name, on: c.on }));
   const removedOf = () => [...(setting?.removed || [])];
-  const toggle = (name) => persist(base().map((c) => (c.name === name ? { ...c, on: !c.on } : c)), removedOf(), `'${name}' ${list.find((c) => c.name === name)?.on ? "정산·매출에서 뺐습니다" : "정산·매출에 넣었습니다"}`);
-  const setAll = (on) => persist(base().map((c) => ({ ...c, on })), removedOf(), on ? "모두 포함했습니다" : "모두 뺐습니다");
+  const toggle = (name) => persist(base().map((c) => (c.name === name ? { ...c, on: !c.on } : c)), removedOf(), `'${name}' ${list.find((c) => c.name === name)?.on ? "숨겼습니다(화면·정산·매출에서 빠짐)" : "다시 보이게 했습니다(화면·정산·매출 포함)"}`);
+  const setAll = (on) => persist(base().map((c) => ({ ...c, on })), removedOf(), on ? "모두 보이게 했습니다" : "모두 숨겼습니다");
   const remove = async (name) => {
     const n = countOf.get(carrierKey(name)) || 0;
-    if (!window.confirm(`'${name}'을(를) 목록에서 삭제할까요?${n ? `\n이 업체 고정노선 오더 ${n}건은 정산·매출에서 빠집니다.` : ""}\n같은 이름으로 다시 추가하면 되살아납니다.`)) return;
+    if (!window.confirm(`'${name}'을(를) 목록에서 삭제할까요?${n ? `\n이 업체 고정노선 오더 ${n}건은 프로그램 어디에도 보이지 않고 정산·매출에서도 빠집니다(시트 연동은 그대로).` : ""}\n같은 이름으로 다시 추가하면 되살아납니다.`)) return;
     persist(base().filter((c) => c.name !== name), [...removedOf(), name], `'${name}' 삭제했습니다`);
   };
   const add = async () => {
@@ -447,7 +491,7 @@ export function RouteCarrierModal({ company, rows = [], disabled = false, onClos
           <div className="min-w-0">
             <div className="text-[10.5px] font-extrabold tracking-[0.28em] text-[#8FB0F0]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>CARRIER · SETTLEMENT</div>
             <div className="text-[17px] font-black mt-0.5">운송업체 설정</div>
-            <div className="text-[12.5px] text-white/65 font-semibold mt-0.5 leading-relaxed">체크한 운송업체의 고정노선 오더만 <b className="text-white">정산·매출</b>에 들어갑니다. 끄거나 삭제한 업체는 정산관리·매출관리·거래명세서·미수금·대시보드 합계에서 빠집니다.</div>
+            <div className="text-[12.5px] text-white/65 font-semibold mt-0.5 leading-relaxed">체크한 운송업체의 고정노선 오더만 <b className="text-white">화면과 정산·매출</b>에 나옵니다. 끄거나 삭제한 업체의 오더는 <b className="text-white">프로그램 어디에도 보이지 않고 정산·매출에서도 빠집니다</b> · 시트 연동은 그대로</div>{/* ⭐ 2026-11-06 */}
           </div>
           <button type="button" onClick={onClose} className="ml-auto shrink-0 h-8 px-3 rounded-lg bg-white/10 hover:bg-white/20 text-[12px] font-bold">닫기 <span className="text-white/50 hidden md:inline">ESC</span></button>
         </div>
@@ -474,7 +518,7 @@ export function RouteCarrierModal({ company, rows = [], disabled = false, onClos
           )}
           {ready && shown.map((c) => (
             <div key={c.name} data-kp="carrier-row" data-on={c.on ? "1" : "0"} className={`flex items-center gap-3 px-3 py-2.5 rounded-xl transition ${c.on ? "hover:bg-[#F5F8FD]" : "bg-[#FAFBFD]"}`}>
-              <button type="button" role="switch" aria-checked={c.on} disabled={busy || !canEdit} onClick={() => toggle(c.name)} title={c.on ? "누르면 정산·매출에서 뺍니다" : "누르면 정산·매출에 넣습니다"}
+              <button type="button" role="switch" aria-checked={c.on} disabled={busy || !canEdit} onClick={() => toggle(c.name)} title={c.on ? "누르면 숨깁니다(화면·정산·매출에서 빠짐)" : "누르면 다시 보입니다(화면·정산·매출 포함)"}
                 className={`relative shrink-0 w-[46px] h-[26px] rounded-full transition disabled:opacity-60 ${c.on ? "bg-[#1B2B4B]" : "bg-[#D5DCE7]"}`}>
                 <span className={`absolute top-[3px] w-5 h-5 rounded-full bg-white shadow transition-all ${c.on ? "left-[23px]" : "left-[3px]"}`} />
               </button>
@@ -483,17 +527,17 @@ export function RouteCarrierModal({ company, rows = [], disabled = false, onClos
                 <div className="text-[12px] font-semibold text-[#7A8AA6] flex items-center gap-1.5">
                   {c.count ? <span>오더 {c.count.toLocaleString()}건</span> : <span>지금 오더 없음</span>}
                   {c.isNew && <span className="inline-flex items-center h-[18px] px-1.5 rounded-md bg-[#8FB0F0]/25 text-[#2D4C82] text-[10.5px] font-black">새 업체</span>}
-                  {!c.on && <span className="inline-flex items-center h-[18px] px-1.5 rounded-md bg-[#FFF1EE] text-[#B42318] text-[10.5px] font-black">정산·매출 제외</span>}
+                  {!c.on && <span className="inline-flex items-center h-[18px] px-1.5 rounded-md bg-[#FFF1EE] text-[#B42318] text-[10.5px] font-black">숨김 · 정산 제외</span>}
                 </div>
               </div>
-              {canEdit && <button type="button" disabled={busy} onClick={() => remove(c.name)} title="목록에서 삭제(정산·매출에서도 빠짐)"
+              {canEdit && <button type="button" disabled={busy} onClick={() => remove(c.name)} title="목록에서 삭제(화면·정산·매출에서 빠짐)"
                 className="shrink-0 w-9 h-9 rounded-lg inline-flex items-center justify-center text-[#9AA9C3] hover:text-[#B42318] hover:bg-[#FFF1EE] disabled:opacity-50">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3" /></svg>
               </button>}
             </div>
           ))}
           {ready && !q && removedHidden.length > 0 && (
-            <div className="mx-3 mt-2 mb-1 text-[12px] font-semibold text-[#9AA9C3]">삭제한 업체(오더는 계속 제외): {removedHidden.join(", ")}</div>
+            <div className="mx-3 mt-2 mb-1 text-[12px] font-semibold text-[#9AA9C3]">삭제한 업체(오더는 계속 숨김 · 같은 이름으로 추가하면 다시 보임): {removedHidden.join(", ")}</div>
           )}
         </div>
         <div className="px-5 md:px-6 py-4 border-t border-[#E9EDF4] bg-[#F7F9FC] space-y-2">
@@ -504,7 +548,7 @@ export function RouteCarrierModal({ company, rows = [], disabled = false, onClos
               <button type="button" disabled={busy} onClick={add} className="shrink-0 h-11 px-5 rounded-xl bg-[#1B2B4B] hover:bg-[#2D4C82] text-white text-[14px] font-black disabled:opacity-60">{busy ? "저장 중…" : "저장"}</button>
             </div>
           ) : <div className="text-[13px] font-semibold text-[#7A8AA6]">보기 전용입니다 — 관리자만 바꿀 수 있어요.</div>}
-          <div className={`text-[12.5px] font-bold min-h-[18px] ${msg.err ? "text-[#B42318]" : "text-[#2D4C82]"}`}>{msg.t || (setting ? `시트에 새로 생긴 업체는 자동으로 포함됩니다 · 일반 오더는 영향 없음` : "아직 설정 전 — 지금은 모든 운송업체가 정산·매출에 들어갑니다")}</div>
+          <div className={`text-[12.5px] font-bold min-h-[18px] ${msg.err ? "text-[#B42318]" : "text-[#2D4C82]"}`}>{msg.t || (setting ? `시트에 새로 생긴 업체는 자동으로 보입니다 · 숨겨도 시트 연동은 그대로 · 일반 오더는 영향 없음` : "아직 설정 전 — 지금은 모든 운송업체 오더가 보이고 정산·매출에 들어갑니다")}</div>
         </div>
       </div>
     </div>, document.body);
@@ -536,7 +580,7 @@ function ForeignOrdersCard({ list, disabled }) {
   );
 }
 
-export default function FixedRouteStatusHost({ company, dispatchData = [], render, places = [], drivers = [], disabled = false }) {
+export default function FixedRouteStatusHost({ company, dispatchData = [], carrierPoolRows = null, render, places = [], drivers = [], disabled = false }) {
   useFleetLivePublish(drivers); // ⭐ 2026-11-05 실시간 관제 색인(이미 받은 drivers · 추가 읽기 없음)
   const [addOpen, setAddOpen] = React.useState(false);
   const [rangeOpen, setRangeOpen] = React.useState(false);
@@ -553,6 +597,9 @@ export default function FixedRouteStatusHost({ company, dispatchData = [], rende
   React.useEffect(() => { try { if (form?.id) localStorage.setItem("kpFixedStatusForm", form.id); } catch { /* 무시 */ } }, [form?.id]);
   const rowsOf = React.useCallback((f) => (dispatchData || []).filter((r) => r.배차표Id === f.id), [dispatchData]);
   const rows = form ? rowsOf(form) : [];
+  // ⭐ 2026-11-06 운송업체 칸 — 양식에 열이 없어도 오더에 값이 있으면 화면 표에 붙인다(같은 양식이면 같은 객체 → 화면이 다시 만들어지지 않게)
+  const hasCarrierVal = rows.some((r) => carrierOf(r));
+  const formView = React.useMemo(() => (form ? withCarrierCol(form, hasCarrierVal ? [{ 추가정보: { 운송업체: "1" } }] : []) : form), [form, hasCarrierVal]);
   // 30초마다 시트와 맞춤(화면을 연 동안) — 서버가 새 탭·새 줄·바뀐 칸을 처리
   // 💰 2026-11-04 서버 비용 — 30초 자동 맞춤은 auto 표시를 붙여 보낸다: 같은 양식을 다른 직원 화면이 25초 안에 이미 맞췄으면 서버가 건너뛴다
   //  (직원 여러 명이 같은 화면을 열어 두면 30초마다 사람 수만큼 시트·오더를 다시 읽던 것을 양식당 1번으로)
@@ -581,9 +628,10 @@ export default function FixedRouteStatusHost({ company, dispatchData = [], rende
   );
   const unassigned = pickUnassignedOrders(rows).length; // ⭐ 2026-11-05 PC·모바일 일치 — 메뉴 숫자와 같은 미배차 기준
   // ⭐ 2026-11-05 운송업체 설정 — 이 회사 양식 오더 전체(모든 양식)에서 업체 모으기 · 정산·매출 제외 건수
-  const companyRouteRows = (dispatchData || []).filter((r) => r.배차표Id && formIdSet.has(r.배차표Id));
+  // ⭐ 2026-11-06 화면 데이터(dispatchData)에는 숨긴 업체 오더가 없다 — 설정 창·숨김 건수는 숨긴 오더까지 담긴 carrierPoolRows로
+  const companyRouteRows = (carrierPoolRows || dispatchData || []).filter((r) => r.배차표Id && formIdSet.has(r.배차표Id));
   const hasCarrierCol = forms.some((f) => (f.columns || []).some(isCarrierCol)) || companyRouteRows.some((r) => carrierOf(r));
-  const carrierOff = carrierF.active ? companyRouteRows.filter((r) => !carrierF.isCountable(r)).length : 0;
+  const carrierOff = carrierF.active ? companyRouteRows.filter((r) => !carrierF.isVisible(r)).length : 0;
   return (
     <div className="space-y-3 kp-frs">
       <style>{`.kp-frs-cell{height:34px;padding:0 8px;border-radius:8px;border:1px solid transparent;background:transparent;font-size:13.5px;color:#0F1A30;outline:none;transition:border-color .12s,background .12s}
@@ -624,11 +672,11 @@ export default function FixedRouteStatusHost({ company, dispatchData = [], rende
                 className="h-10 px-3.5 rounded-xl inline-flex items-center gap-1.5 text-[13px] font-black bg-white/[0.06] border border-white/15 text-white/85 hover:bg-white/[0.12]">기간 가져오기</button>
             )}
             {(hasCarrierCol || carrierF.active) && (
-              <button type="button" onClick={() => setCarrierOpen(true)} data-kp="carrier-open" title="시트 운송업체 중 정산·매출에 넣을 업체 고르기"
+              <button type="button" onClick={() => setCarrierOpen(true)} data-kp="carrier-open" title="시트 운송업체 중 보일 업체 고르기 — 끄면 화면·정산·매출에서 빠짐"
                 className="h-10 px-3.5 rounded-xl inline-flex items-center gap-1.5 text-[13px] font-black bg-white/[0.06] border border-white/15 text-white/90 hover:bg-white/[0.12]">
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 7h11v9H3zM14 10h4l3 3v3h-7" /><circle cx="7" cy="18" r="1.6" /><circle cx="17" cy="18" r="1.6" /></svg>
                 운송업체 설정
-                {carrierOff > 0 && <span className="ml-0.5 inline-flex items-center h-[20px] px-1.5 rounded-md bg-[#FF8A7A]/20 text-[#FFC2B8] text-[11px] font-black" title="정산·매출에서 빠지는 고정노선 오더">제외 {carrierOff}</span>}
+                {carrierOff > 0 && <span className="ml-0.5 inline-flex items-center h-[20px] px-1.5 rounded-md bg-[#FF8A7A]/20 text-[#FFC2B8] text-[11px] font-black" title="숨긴 운송업체의 고정노선 오더(화면·정산·매출에서 빠짐 · 시트 연동은 그대로)">숨김 {carrierOff}</span>}
               </button>
             )}
             {form && !disabled && (
@@ -656,7 +704,7 @@ export default function FixedRouteStatusHost({ company, dispatchData = [], rende
         </div>
       </div>
       <ForeignOrdersCard list={foreign} disabled={disabled} />
-      {form && render(form, rows)}
+      {form && render(formView, rows)}
       {carrierOpen && <RouteCarrierModal company={company} rows={companyRouteRows} disabled={disabled} onClose={() => setCarrierOpen(false)} />}
       {rangeOpen && form && <RangeImportModal form={form} onClose={() => setRangeOpen(false)} />}
       {addOpen && form && <AddFixedOrderModal form={form} rows={rows} places={places} drivers={drivers} onClose={(ok) => { setAddOpen(false); if (ok && form.sheetUrl) setTimeout(() => runSync(form), 800); }} />}
@@ -670,34 +718,58 @@ export default function FixedRouteStatusHost({ company, dispatchData = [], rende
 const FR_STATUS = [["ALL", "전체"], ["UNASSIGNED", "미배차"], ["COMPLETE", "배차완료"], ["UNDELIVERED", "미전달"]];
 const frIn = (r) => String(r.입고일 || r.하차일 || r.상차일 || "").slice(0, 10);
 const frStatusOk = (r, st) => (st === "UNASSIGNED" ? r.배차상태 === "배차중" : st === "COMPLETE" ? r.배차상태 === "배차완료" : st === "UNDELIVERED" ? (r.업체전달상태 || "미전달") !== "전달완료" : true);
-const frSearchOk = (r, q) => {
+// ⭐ 2026-11-06 검색 종류(PC 배차현황 검색창과 같은 이름) — 통합/거래처/상차지/하차지/차량번호/기사명/배차담당자/운송사
+export const FR_SEARCH_TYPES = [["all", "통합"], ["client", "거래처"], ["pickup", "상차지"], ["drop", "하차지"], ["car", "차량번호"], ["driver", "기사명"], ["mgr", "배차담당자"], ["carrier", "운송사"]];
+const frStaffOf = (r, nameMap) => { const n = orderStaffNameRaw(r, nameMap); return String((n && n !== "고정노선" ? n : "") || r?.배차확정자 || n || ""); };
+const frSearchOk = (r, q, type = "all", nameMap = null) => {
   const k = String(q || "").trim().toLowerCase();
   if (!k) return true;
   const g = (v) => String(v || "").toLowerCase();
-  return g(r.거래처명).includes(k) || g(r.상차지명).includes(k) || g(r.하차지명).includes(k) || g(r.차량번호).includes(k) || g(r.이름).includes(k) || g(r.지급방식).includes(k) || g(r.배차방식).includes(k);
+  const ns = (v) => g(v).replace(/\s+/g, "");
+  switch (type) {
+    case "client": return g(r.거래처명).includes(k);
+    case "pickup": return g(r.상차지명).includes(k) || g(r.배차표묶음).includes(k);
+    case "drop": return g(r.하차지명).includes(k) || g(r.하차지주소).includes(k);
+    case "car": return ns(r.차량번호).includes(k.replace(/\s+/g, ""));
+    case "driver": return g(r.이름).includes(k) || g(r.기사명).includes(k);
+    case "mgr": return g(frStaffOf(r, nameMap)).includes(k);
+    case "carrier": return g(carrierOf(r)).includes(k);
+    default:
+      return g(r.거래처명).includes(k) || g(r.상차지명).includes(k) || g(r.하차지명).includes(k) || g(r.차량번호).includes(k) || g(r.이름).includes(k) || g(r.지급방식).includes(k) || g(r.배차방식).includes(k)
+        || g(frStaffOf(r, nameMap)).includes(k) || g(carrierOf(r)).includes(k) || g(r.전화번호).includes(k) || g(r.하차지주소).includes(k) || g(r.배차표묶음).includes(k)
+        || Object.values(r.추가정보 || {}).some((v) => g(v).includes(k));
+  }
 };
-function MobileFixedRouteBody({ form, rows, range, setRange, status, setStatus, q, setQ, drivers, clients, disabled }) {
+function MobileFixedRouteBody({ form, rows, range, setRange, status, setStatus, q, setQ, qType = "all", setQType = () => {}, role = "", drivers, clients, disabled }) {
   const [editId, setEditId] = React.useState(null);
   const [qInput, setQInput] = React.useState(q);
+  const [qTypeInput, setQTypeInput] = React.useState(qType);
+  const nameMap = useUserNameMap(); // ⭐ 2026-11-06 배차담당자 이름(직원 목록 공용 구독)
+  const guard = useRouteEditGuard(role); // ⭐ 2026-11-06 담당자만 수정(마스터는 전부)
   const [from, setFrom] = React.useState(range.from);
   const [to, setTo] = React.useState(range.to);
   React.useEffect(() => { setFrom(range.from); setTo(range.to); }, [range.from, range.to]);
   // 입고일 = 상차일 + 하차일수 → 고른 기간의 오더를 다 보려면 상차일 기준으로 하차일수만큼 앞에서부터 불러온다
   const { loadRange } = useOrderHistory();
-  const off = Math.max(0, toInt(form.dropOffset));
+  const off = Math.max(0, toInt(form.dropOffset)) + 3; // ⭐ 2026-11-06 PC와 같게 — 하차일수 + 주말 여유 3일
   React.useEffect(() => { if (range.from) loadRange(addDaysStr(range.from, -off), range.to || range.from); }, [range.from, range.to, off, loadRange]);
-  const patch = (r) => (p) => updateDoc(doc(db, r.__col || "orders", r._id || r.id), { ...p, 최종수정자: auth.currentUser?.email || "", updatedAt: Date.now() }).catch((e) => window.alert(`저장하지 못했습니다: ${e?.message || e}`));
+  // ⭐ 2026-11-06 처음 배차(차량 넣기)하면 배차한 사람을 남긴다(PC patchDispatch와 같은 칸) → 그 사람이 이 오더의 담당자
+  const patch = (r) => (p) => {
+    const extra = p.배차상태 === "배차완료" && r.배차상태 !== "배차완료" ? { 배차확정일시: serverTimestamp(), 배차확정자: guard.me.name || auth.currentUser?.email?.split("@")[0] || "" }
+      : p.배차상태 === "배차중" && r.배차상태 === "배차완료" ? { 배차확정일시: null, 배차확정자: null } : {};
+    return updateDoc(doc(db, r.__col || "orders", r._id || r.id), { ...p, ...extra, 최종수정자: auth.currentUser?.email || "", updatedAt: Date.now() }).catch((e) => window.alert(`저장하지 못했습니다: ${e?.message || e}`));
+  };
   const gi = (r) => { const i = (form.groups || []).findIndex((g) => g.name === r.배차표묶음); return i < 0 ? 999 : i; };
   const inRange = React.useMemo(() => rows.filter((r) => { const d = frIn(r); if (!d) return false; return range.from <= range.to ? d >= range.from && d <= range.to : d >= range.from || d <= range.to; }), [rows, range.from, range.to]);
   const counts = React.useMemo(() => {
-    const base = inRange.filter((r) => frSearchOk(r, q));
+    const base = inRange.filter((r) => frSearchOk(r, q, qType, nameMap));
     return { ALL: base.length, UNASSIGNED: base.filter((r) => frStatusOk(r, "UNASSIGNED")).length, COMPLETE: base.filter((r) => frStatusOk(r, "COMPLETE")).length, UNDELIVERED: base.filter((r) => frStatusOk(r, "UNDELIVERED")).length };
-  }, [inRange, q]);
-  const list = React.useMemo(() => inRange.filter((r) => frStatusOk(r, status) && frSearchOk(r, q))
-    .sort((a, b) => frIn(a).localeCompare(frIn(b)) || gi(a) - gi(b) || (a.시트줄 ?? 1e9) - (b.시트줄 ?? 1e9) || (a.배차표순번 || 0) - (b.배차표순번 || 0)), [inRange, status, q]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [inRange, q, qType, nameMap]);
+  const list = React.useMemo(() => inRange.filter((r) => frStatusOk(r, status) && frSearchOk(r, q, qType, nameMap))
+    .sort((a, b) => frIn(a).localeCompare(frIn(b)) || gi(a) - gi(b) || (a.시트줄 ?? 1e9) - (b.시트줄 ?? 1e9) || (a.배차표순번 || 0) - (b.배차표순번 || 0)), [inRange, status, q, qType, nameMap]); // eslint-disable-line react-hooks/exhaustive-deps
   const sum = React.useMemo(() => { const sale = list.reduce((s, r) => s + toInt(r.청구운임), 0); const drv = list.reduce((s, r) => s + toInt(r.기사운임), 0); return { sale, drv, fee: sale - drv }; }, [list]);
   const head = fixedHeaderOf(form).filter((h) => h !== "선택");
-  const apply = (f = from, t = to) => { if (!f || !t) { window.alert("조회 기간을 입력해주세요."); return; } if (f > t) { window.alert("조회 시작일이 종료일보다 늦을 수 없습니다."); return; } setRange({ from: f, to: t }); setQ(qInput); };
+  const apply = (f = from, t = to) => { if (!f || !t) { window.alert("조회 기간을 입력해주세요."); return; } if (f > t) { window.alert("조회 시작일이 종료일보다 늦을 수 없습니다."); return; } setRange({ from: f, to: t }); setQ(qInput); setQType(qTypeInput); };
   const quick = (f, t) => { setFrom(f); setTo(t); setRange({ from: f, to: t }); };
   const td = kstDay();
   const monthFirst = `${td.slice(0, 7)}-01`;
@@ -719,8 +791,13 @@ function MobileFixedRouteBody({ form, rows, range, setRange, status, setStatus, 
           <span className="flex-1 min-w-0"><CustomDatePicker value={to} onChange={(e) => setTo(e.target.value)} className="h-9 w-full px-2 rounded-lg border border-[#DCE3EE] text-[12.5px] font-semibold bg-white" /></span>
         </div>
         <div className="flex items-center gap-1.5">
-          <input value={qInput} onChange={(e) => setQInput(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") apply(); }} placeholder="거래처·상하차지·차량번호·기사 검색"
-            className="flex-1 min-w-0 h-9 px-3 rounded-lg border border-[#DCE3EE] text-[13px] font-semibold text-[#0F1A30] bg-white outline-none focus:border-[#2D4C82]" />
+          {/* ⭐ 2026-11-06 검색 종류 — 통합/거래처/상차지/하차지/차량번호/기사명/배차담당자/운송사 */}
+          <select value={qTypeInput} onChange={(e) => setQTypeInput(e.target.value)} data-kp="frs-qtype" aria-label="검색 종류"
+            className="shrink-0 h-9 pl-2 pr-1 rounded-lg border border-[#1B2B4B] bg-[#1B2B4B] text-white text-[12.5px] font-black outline-none">
+            {FR_SEARCH_TYPES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+          </select>
+          <input value={qInput} onChange={(e) => setQInput(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") apply(); }} placeholder={qTypeInput === "all" ? "거래처·차량번호·기사·담당자·운송사" : `${(FR_SEARCH_TYPES.find((x) => x[0] === qTypeInput) || [])[1] || ""} 검색`}
+            data-kp="frs-q" className="flex-1 min-w-0 h-9 px-3 rounded-lg border border-[#DCE3EE] text-[13px] font-semibold text-[#0F1A30] bg-white outline-none focus:border-[#2D4C82]" />
           <button type="button" onClick={() => apply()} className="h-9 px-4 rounded-lg bg-[#1B2B4B] text-white text-[13px] font-black shrink-0">조회</button>
         </div>
         <div className="flex items-center gap-1.5 overflow-x-auto" style={{ WebkitOverflowScrolling: "touch" }}>
@@ -747,14 +824,18 @@ function MobileFixedRouteBody({ form, rows, range, setRange, status, setStatus, 
             {list.length === 0 && <tr><td colSpan={head.length} className="py-10 text-center text-[#9AA9C3] font-semibold">조건에 맞는 오더가 없어요</td></tr>}
             {list.map((r, i) => {
               const id = r._id || r.id;
+              const locked = !disabled && !guard.canEdit(r); // ⭐ 2026-11-06 담당자가 아니면 잠금
+              const owner = locked ? routeOwnerName(r, nameMap) : "";
               return (
-                <tr key={id} className={`kp-frs-row ${editId === id ? "bg-[#EEF4FF] outline outline-2 -outline-offset-2 outline-[#2D4C82]" : i % 2 ? "bg-[#FAFBFD]" : "bg-white"}`}
-                  onDoubleClick={() => { if (!disabled) setEditId((c) => (c === id ? null : id)); }}
+                <tr key={id} data-lock={locked ? "1" : undefined} title={locked ? `🔒 ${ROUTE_LOCK_MSG}${owner ? ` (담당: ${owner})` : ""}` : undefined}
+                  className={`kp-frs-row ${editId === id ? "bg-[#EEF4FF] outline outline-2 -outline-offset-2 outline-[#2D4C82]" : i % 2 ? "bg-[#FAFBFD]" : "bg-white"}`}
+                  onDoubleClick={() => { if (disabled) return; if (locked) { window.alert(`🔒 ${ROUTE_LOCK_MSG}${owner ? ` (담당: ${owner})` : ""}\n본인이 등록·배차한 오더만 고칠 수 있어요 · 마스터는 모든 오더 수정 가능`); return; } setEditId((c) => (c === id ? null : id)); }}
                   onKeyDown={(e) => { if (e.key === "Enter" && e.target.tagName === "INPUT" && !document.querySelector("[role=listbox]")) { e.target.blur(); setTimeout(() => setEditId(null), 220); } }}>
                   <td className="px-2 py-1.5 text-center font-bold text-[#5B6B85] border-b border-[#E9EDF4] border-r border-r-[#E3E8F0]">
-                    {editId === id ? <button type="button" onClick={() => setEditId(null)} className="h-7 px-2 rounded-lg bg-[#1B2B4B] text-white text-[11px] font-black">완료</button> : i + 1}
+                    {editId === id && !locked ? <button type="button" onClick={() => setEditId(null)} className="h-7 px-2 rounded-lg bg-[#1B2B4B] text-white text-[11px] font-black">완료</button>
+                      : <span className="inline-flex items-center gap-1">{i + 1}{locked && <svg data-kp="frs-lock" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#9AA9C3" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-label={ROUTE_LOCK_MSG}><rect x="5" y="11" width="14" height="10" rx="2" /><path d="M8 11V7a4 4 0 0 1 8 0v4" /></svg>}</span>}
                   </td>
-                  <FixedRouteCells form={form} row={r} drivers={drivers} clients={clients} disabled={disabled} editing={editId === id} onPatch={patch(r)} />
+                  <FixedRouteCells form={form} row={r} drivers={drivers} clients={clients} disabled={disabled || locked} editing={editId === id && !locked} onPatch={patch(r)} />
                 </tr>
               );
             })}
@@ -764,14 +845,15 @@ function MobileFixedRouteBody({ form, rows, range, setRange, status, setStatus, 
     </div>
   );
 }
-export function MobileFixedRouteView({ company, dispatchData = [], drivers = [], clients = [], places = [], disabled = false }) {
+export function MobileFixedRouteView({ company, role = "", dispatchData = [], carrierPoolRows = null, drivers = [], clients = [], places = [], disabled = false }) {
   const [range, setRange] = React.useState(() => ({ from: kstDay(), to: kstDay() })); // PC처럼 처음엔 오늘
   const [status, setStatus] = React.useState("ALL");
   const [q, setQ] = React.useState("");
+  const [qType, setQType] = React.useState("all"); // ⭐ 2026-11-06 검색 종류
   return (
     <div className="px-2 py-2 kp-m-pc">
-      <FixedRouteStatusHost company={company} dispatchData={dispatchData} places={places} drivers={drivers} disabled={disabled}
-        render={(form, rows) => <MobileFixedRouteBody key={form.id} form={form} rows={rows} range={range} setRange={setRange} status={status} setStatus={setStatus} q={q} setQ={setQ} drivers={drivers} clients={clients} disabled={disabled} />} />
+      <FixedRouteStatusHost company={company} dispatchData={dispatchData} carrierPoolRows={carrierPoolRows} places={places} drivers={drivers} disabled={disabled}
+        render={(form, rows) => <MobileFixedRouteBody key={form.id} form={form} rows={rows} range={range} setRange={setRange} status={status} setStatus={setStatus} q={q} setQ={setQ} qType={qType} setQType={setQType} role={role} drivers={drivers} clients={clients} disabled={disabled} />} />
     </div>
   );
 }
