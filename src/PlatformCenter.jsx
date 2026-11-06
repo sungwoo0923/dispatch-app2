@@ -30,6 +30,7 @@ import { toBoardNotice } from "./PlatformNoticeBanner";
 import { compressImage } from "./InternalMail";
 const HomepageEditor = React.lazy(() => import("./HomepageEditor")); // ⭐ 2026-11-03 소개 홈페이지 편집기
 const CostPanel = React.lazy(() => import("./CostPanel")); // 💰 2026-11-04 비용 · 손익(최고관리자 전용)
+import { AiTeamHub, AiTeamChat, AI_TEAM_TABS } from "./AiTeamPanel"; // 🤖 2026-11-06 AI 팀
 import { RemoteSupportAdminPanel } from "./RemoteSupport"; // ⭐ 2026-11-02 원격지원 —
 import { CustomSelect } from "./CustomSelect";
 import { RichTextEditor, htmlToText, textToHtml, sanitizeHtml } from "./richText"; // ⭐ 2026-11-03 공지 글자 꾸미기
@@ -51,6 +52,7 @@ const SECTIONS = [
     { key: "live", label: "실시간 접속", en: "LIVE", icon: "users" }, // ⭐ 2026-11-02 관리자센터
     { key: "support", label: "원격 지원", en: "SUPPORT", icon: "phone" }, // ⭐ 2026-11-02 원격지원 —
   ] },
+  { key: "aiteam", label: "AI 팀", en: "AI TEAMS", icon: "spark", items: AI_TEAM_TABS }, // 🤖 2026-11-06 팀별 Claude 에이전트
   { key: "clients", label: "고객사", en: "CLIENTS", icon: "building", items: [
     { key: "companies", label: "운송사 관제", en: "CARRIERS", icon: "building" },
     { key: "shippers", label: "화주사 관제", en: "SHIPPERS", icon: "link" },
@@ -1112,6 +1114,8 @@ function PlatformCenterInner({ user }) {
     );
   } else if (tab === "todo") body = <TodayPanel go={setTab} />;
   else if (tab === "live") body = <LiveTab openCompany={openCompany} />;
+  else if (tab === "ai:hub") body = <AiTeamHub go={setTab} />; // 🤖 2026-11-06 AI 팀
+  else if (tab.startsWith("ai:")) body = <AiTeamChat teamKey={tab.slice(3)} />;
   // ⭐ 2026-11-02 원격지원 — 요청 목록 · 승인/거절/완료 · 화면 보기 · 원격 번호
   // ⭐ 2026-11-05 원격 지원 걸기 — 설명에 "먼저 걸기" 추가
   else if (tab === "support") body = <><Hero en="DASHBOARD · SUPPORT" title="원격 지원" desc="직원이 보낸 원격 지원 요청을 승인하거나, [원격 지원 걸기]로 직원에게 먼저 요청합니다(직원이 수락해야 시작) — 직원 화면을 실시간으로 보거나(화면 공유) 원격 프로그램 번호를 받습니다." right={<Clock />} /><RemoteSupportAdminPanel me={user} /></>;
