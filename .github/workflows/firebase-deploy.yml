@@ -14,6 +14,11 @@ on:
           - "규칙+색인+저장소만"
           - "서버 기능 전체(functions)"
           - "전부(규칙+색인+저장소+functions)"
+      custom:
+        description: "직접 입력(채우면 위 선택 무시) 예: firestore:rules,functions:dailyReportPush"
+        type: string
+        required: false
+        default: ""
 
 concurrency:
   group: firebase-deploy
@@ -44,12 +49,14 @@ jobs:
       - name: 대상 정하기
         id: t
         run: |
+          CUSTOM="${{ inputs.custom }}"
           case "${{ inputs.target }}" in
             허브*) ONLY="firestore:rules,firestore:indexes,storage,functions:hubOrderOnWrite" ;;
             규칙*) ONLY="firestore:rules,firestore:indexes,storage" ;;
             서버*) ONLY="functions" ;;
             *)     ONLY="firestore:rules,firestore:indexes,storage,functions" ;;
           esac
+          if [ -n "$CUSTOM" ]; then ONLY="$CUSTOM"; fi
           echo "only=$ONLY" >> "$GITHUB_OUTPUT"
           echo "배포 대상: $ONLY"
 
