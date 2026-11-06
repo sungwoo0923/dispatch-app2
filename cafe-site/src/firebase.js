@@ -4,6 +4,7 @@
 // cafeOrders 컬렉션을 공유한다. 설정값은 본체의 src/firebase.js와 동일하다.
 import { initializeApp } from "firebase/app";
 import { getAuth, connectAuthEmulator } from "firebase/auth";
+import { getStorage, connectStorageEmulator } from "firebase/storage";
 import {
   initializeFirestore,
   getFirestore,
@@ -24,19 +25,23 @@ const firebaseConfig = {
 
 // ⭐ 2026-11-06 테스트 전용 — VITE_USE_EMULATOR=1로 띄울 때만 로컬 가상 서버(Firebase 에뮬레이터)에 붙는다.
 //  본체(src/firebase.js)와 같은 가상 프로젝트 이름(demo-kpflow)을 써서 두 앱이 같은 가상 데이터를 본다.
-const USE_EMU = import.meta.env.VITE_USE_EMULATOR === "1";
-if (USE_EMU) firebaseConfig.projectId = "demo-kpflow";
+// ⭐ 2026-11-06 포트는 VITE_EMU_AUTH_PORT · VITE_EMU_FS_PORT · VITE_EMU_STORAGE_PORT 로 바꿀 수 있다(기본 9099 · 8080 · 9199).
+export const USE_EMU = import.meta.env.VITE_USE_EMULATOR === "1";
+const EMU_AUTH = Number(import.meta.env.VITE_EMU_AUTH_PORT || 9099);
+const EMU_FS = Number(import.meta.env.VITE_EMU_FS_PORT || 8080);
+const EMU_ST = Number(import.meta.env.VITE_EMU_STORAGE_PORT || 9199);
+if (USE_EMU) firebaseConfig.projectId = "demo-kpflow"; // (Storage 버킷 이름은 본체와 같게 둔다 — 관리센터가 같은 서류를 본다)
 
 const app = initializeApp(firebaseConfig);
 
 export const auth = getAuth(app);
-if (USE_EMU) { try { connectAuthEmulator(auth, "http://127.0.0.1:9099", { disableWarnings: true }); } catch { /* 무시 */ } }
+if (USE_EMU) { try { connectAuthEmulator(auth, `http://127.0.0.1:${EMU_AUTH}`, { disableWarnings: true }); } catch { /* 무시 */ } }
 
 // IndexedDB 영구 캐시 시도 → 실패 시 기본 메모리 캐시로 폴백 (본체와 동일한 방식)
 function createDb() {
   if (USE_EMU) {
     const d = getFirestore(app);
-    try { connectFirestoreEmulator(d, "127.0.0.1", 8080); } catch { /* 무시 */ }
+    try { connectFirestoreEmulator(d, "127.0.0.1", EMU_FS); } catch { /* 무시 */ }
     return d;
   }
   try {
@@ -50,3 +55,7 @@ function createDb() {
   }
 }
 export const db = createDb();
+
+// ⭐ 2026-11-06 허브 회원 서류(사업자등록증 등) · 프로필 사진 · 인수증 사진 — Storage(규칙: storage.rules 의 hub/ 경로)
+export const storage = getStorage(app);
+if (USE_EMU) { try { connectStorageEmulator(storage, "127.0.0.1", EMU_ST); } catch { /* 무시 */ } }
