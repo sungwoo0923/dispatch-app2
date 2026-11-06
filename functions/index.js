@@ -1454,6 +1454,7 @@ async function sendGsheetMineBatch(items) {
   const byTab = new Map();
   const skipped = [];
   for (const it of items) {
+    if (!isGsheetDolcaeOrder(it.data)) { skipped.push(it); continue; } // ⭐ 2026-11-06 돌캐 오더만
     const tab = isGsheetCanceled(it.data) ? null : gsheetMonthTabName(it.data.상차일); // ★ 블라인드여도 내 오더는 시트로 보낸다(프로그램에서만 숨김)
     if (!tab) { skipped.push(it); continue; }
     if (!byTab.has(tab)) byTab.set(tab, []);
@@ -1557,6 +1558,15 @@ async function sendGsheetMineBatch(items) {
 const GSHEET_LINK_OFF_MESSAGE = "프로그램과 구글시트 연결이 끊겨 있습니다(시트 수기 작성 중) — 시트를 덮어쓰지 않도록 이 작업은 실행하지 않았습니다.";
 // 이 시트 전용 동기화 대상 회사명 — 다른 회사 데이터가 섞이지 않도록 반드시 필터링한다.
 const GSHEET_TARGET_COMPANY = "돌캐";
+// ⭐ 2026-11-06 돌캐 시트에는 돌캐 오더만 — "내 오더만 보내기"가 작성자 이메일만 보고 회사를 안 봐서,
+//  최고관리자가 다른 운송사(예: 태진)에서 고정노선·배차표 오더를 만들면 그 오더까지 돌캐 시트에 들어갔다.
+//  다른 회사 오더 · 배차표(구글시트 고정노선) 오더 · 지입차관리 고정노선 오더는 전송 대상에서 뺀다.
+function isGsheetDolcaeOrder(d) {
+  if (!d) return false;
+  if ((d.companyName || GSHEET_TARGET_COMPANY) !== GSHEET_TARGET_COMPANY) return false;
+  if (d.배차표Id || d._autoSheet || d.고정노선Id || d.등록기기 === "배차표") return false;
+  return true;
+}
 // "차량번호로 기사명/전화번호 자동매칭"에 쓰이는 기준표 시트 이름(A:기사명, B:차량정보(차량번호), C:전화번호, D:비고).
 const GSHEET_UNIQUE_TAB = "고유값";
 
@@ -3429,12 +3439,19 @@ exports.syncDispatchToGoogleSheet =
           const createdMs = after.createdAt?.toMillis?.() || (typeof after.createdAt === "number" ? after.createdAt : Date.now());
           if (mine?.enabled && mine.email &&
               String(after.작성자 || "").trim().toLowerCase() === String(mine.email).trim().toLowerCase() &&
-              createdMs >= sinceMs && !after.importBatchId && after.source !== "transport_transmit") {
+              createdMs >= sinceMs && !after.importBatchId && after.source !== "transport_transmit" &&
+              isGsheetDolcaeOrder(after)) { // ⭐ 2026-11-06 돌캐 오더만
             await change.after.ref.update({ _gsheetMine: true }).catch(() => {});
           }
           return; // 전송 대기 — [구글시트로 전송] 버튼을 누를 때 들어간다
         }
         if (!isMine) return;
+        // ⭐ 2026-11-06 예전에 잘못 표시된 다른 회사·고정노선 오더 — 시트에 들어간 줄은 지우고 표시를 뗀다(다시 안 들어가게)
+        if (!isGsheetDolcaeOrder(after || before)) {
+          if (sentOf(before) || sentOf(after)) await removeDocFromGsheet(`${col}/${dispatchId}`, before || after).catch((e) => console.warn("다른 회사 오더 시트 줄 정리 실패:", e?.message || e));
+          if (after) await change.after.ref.update({ _gsheetMine: FieldValue.delete(), _gsheetMineSent: FieldValue.delete(), _gsheetSync: FieldValue.delete() }).catch(() => {});
+          return;
+        }
         const wasSent = sentOf(before);
         const isSent = sentOf(after) || wasSent;
         if (!isSent) {
