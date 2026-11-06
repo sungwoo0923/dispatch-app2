@@ -430,12 +430,10 @@ body:has(.kp-m input:focus, .kp-m textarea:focus) .kp-m-toast { display: none; }
   margin: 12px 10px 0; border-radius: 22px; background: #fff;
   border: 1px solid #E3E8F0; box-shadow: 0 1px 2px rgba(16,24,40,.04), 0 10px 26px rgba(16,24,40,.06);
 }
+/* ⭐ 2026-11-06 합계(청구·기사·수수료) 띠 — 격자·그라데이션(밝은 남색 쪽에서 글자가 흐려짐) 대신 한 가지 진한 남색 + 흰 글자(대비 16:1) */
 .kp-m-b .kp-b-kpi {
-  background:
-    linear-gradient(rgba(143,176,240,.08) 1px, transparent 1px) 0 0/18px 18px,
-    linear-gradient(90deg, rgba(143,176,240,.08) 1px, transparent 1px) 0 0/18px 18px,
-    linear-gradient(135deg, #0B1428 0%, #1B2B4B 60%, #2D4C82 100%);
-  box-shadow: 0 10px 24px rgba(15,26,48,.28), inset 0 1px 0 rgba(255,255,255,.06);
+  background: #0B1428;
+  box-shadow: 0 10px 24px rgba(15,26,48,.28);
   border: 1px solid #0B1428;
 }
 .kp-m-b .kp-b-countbar { background: transparent; padding-top: 12px; }

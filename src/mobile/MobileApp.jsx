@@ -29,6 +29,8 @@ const MobileIntelView = lazyView(() => import("./MobileIntelView"));
 import InternalMessenger from "../InternalMessenger";
 import { subscribeOrderSync, deleteOrderWithLog, historyStartDate, pcLiveWindowStart } from "../orderHistory";
 import CustomDatePicker from "../CustomDatePicker";
+import { askCopyDates } from "../CopyCountDialog"; // ⭐ 2026-11-06 오더 복사 — 몇 건·건별 날짜
+import { UrgentBadge, URGENT_BAR, URGENT_TINT } from "../urgentOrder"; // ⭐ 2026-11-06 긴급 오더 강조
 import MobileSelect from "./MobileSelect"; // ⭐ 2026-11-02 기본 select → 남색 바텀시트 선택기
 import RouteMapModal from "../RouteMapModal";
 import southKorea from "@svg-maps/south-korea";
@@ -1987,7 +1989,7 @@ const getOrderSortTime = (o = {}) => {
 };
 // 긴급 오더 판단 (PC/모바일 공통)
 const isUrgentOrder = (o = {}) => {
-  return o.긴급 === true;
+  return !!o && (o.긴급 === true || o.긴급 === "true" || o.긴급 === "Y"); // ⭐ 2026-11-06 PC(src/urgentOrder.jsx)와 같은 기준
 };
 const normalizePhone = (p = "") =>
   String(p).replace(/[^\d+]/g, "");
@@ -4214,6 +4216,11 @@ base = base.filter((o) => {
     return normalize(o.하차지주소).includes(q);
 if (appliedSearchType === "메모")
   return normalize(o.메모 || o.적요).includes(q);
+  // ⭐ 2026-11-06 운임구분(월대·일대) · 통합(여러 칸 + 운임구분)
+  if (appliedSearchType === "운임구분")
+    return normalize(o.운임구분 || "").includes(q);
+  if (appliedSearchType === "통합")
+    return [o.거래처명, o.기사명, o.이름, o.차량번호, o.상차지명, o.상차지주소, o.하차지명, o.하차지주소, o.메모, o.적요, o.지급방식, o.배차방식, o.운임구분].some((v) => normalize(v || "").includes(q));
   return true;
 });
 
@@ -4888,8 +4895,8 @@ const groupedByDate = useMemo(() => {
     }
   };
   // 📦 오더복사 → 등록창 이동 (오늘 날짜 기준)
-const handleOrderDuplicate = (order) => {
- const today = todayKST();
+const handleOrderDuplicate0 = (order, plan = null) => {
+ const today = plan?.[0]?.상차일 || todayKST(); const todayDrop = plan?.[0]?.하차일 || today; // ⭐ 2026-11-06 복사 건수 창에서 고른 날짜
 
   const _pendingContactItems = [];
   [
@@ -4910,7 +4917,7 @@ const handleOrderDuplicate = (order) => {
     상차일: today,
     상차시간: order.상차시간 || "",
     상차시간기준: order.상차시간기준 || null,
-    하차일: today,
+    하차일: todayDrop,
     하차시간: order.하차시간 || "",
     하차시간기준: order.하차시간기준 || null,
 
@@ -4960,14 +4967,17 @@ const handleOrderDuplicate = (order) => {
     _pendingContactItems,
   });
 
+  // ⭐ 2026-11-06 복사 건수 — 2건 이상이면 등록창의 "수량 + 날짜 개별 설정"으로 그대로 넘긴다(등록을 누르면 그 수만큼)
+  if (plan && plan.length > 1) { setMultiCount(plan.length); setUseSeparateDates(true); setOrderDates(plan.map((x) => x.상차일)); setOrderDropDates(plan.map((x) => x.하차일)); }
+  else { setMultiCount(1); setUseSeparateDates(false); }
   setSelectedOrder(null);
   setPrevPage("list");
   setPage("form");
   window.scrollTo(0, 0);
 };
 
-const handleOrderDuplicateWithDriver = (order) => {
-  const today = todayKST();
+const handleOrderDuplicateWithDriver0 = (order, plan = null) => {
+  const today = plan?.[0]?.상차일 || todayKST(); const todayDrop = plan?.[0]?.하차일 || today; // ⭐ 2026-11-06 복사 건수 창에서 고른 날짜
 
   const _pendingContactItems = [];
   [
@@ -4987,7 +4997,7 @@ const handleOrderDuplicateWithDriver = (order) => {
     상차일: today,
     상차시간: order.상차시간 || "",
     상차시간기준: order.상차시간기준 || null,
-    하차일: today,
+    하차일: todayDrop,
     하차시간: order.하차시간 || "",
     하차시간기준: order.하차시간기준 || null,
     상차지명: order.상차지명 || "",
@@ -5026,11 +5036,18 @@ const handleOrderDuplicateWithDriver = (order) => {
     _returnToDetail: false,
     _pendingContactItems,
   });
+  // ⭐ 2026-11-06 복사 건수 — 2건 이상이면 등록창의 "수량 + 날짜 개별 설정"으로 그대로 넘긴다(등록을 누르면 그 수만큼)
+  if (plan && plan.length > 1) { setMultiCount(plan.length); setUseSeparateDates(true); setOrderDates(plan.map((x) => x.상차일)); setOrderDropDates(plan.map((x) => x.하차일)); }
+  else { setMultiCount(1); setUseSeparateDates(false); }
   setSelectedOrder(null);
   setPrevPage("list");
   setPage("form");
   window.scrollTo(0, 0);
 };
+
+// ⭐ 2026-11-06 오더 복사 — 먼저 "몇 건 복사?" 창(건마다 상차일·하차일 · 처음엔 모두 오늘)
+const handleOrderDuplicate = async (order) => { const plan = await askCopyDates({ mobile: true, title: "오더 복사", sub: "몇 건을 복사할지 고르고 건마다 날짜를 정해 주세요. 등록창에서 확인 후 등록하면 그 수만큼 만들어져요." }); if (plan) handleOrderDuplicate0(order, plan); };
+const handleOrderDuplicateWithDriver = async (order) => { const plan = await askCopyDates({ mobile: true, title: "오더 복사(기사 포함)", sub: "몇 건을 복사할지 고르고 건마다 날짜를 정해 주세요. 등록창에서 확인 후 등록하면 그 수만큼 만들어져요." }); if (plan) handleOrderDuplicateWithDriver0(order, plan); };
 
 // 운송사가 연동 화주사로 전송(자동/수동)한 오더를 삭제할 때, 화주사 화면이 실제로 구독하는
 // 사본 문서도 함께 지운다. 그러지 않으면 원본은 없어져도 화주사 화면에는 "배차중"으로
@@ -9238,10 +9255,10 @@ const summary = useMemo(() => {
           const dt = cardVersionB
             ? {
                 panel: "kp-b-kpi !rounded-[20px] !py-3.5",
-                label: "text-[#8FB0F0]",
+                label: "text-[#DCE6FA]", // ⭐ 2026-11-06 합계 띠 글자 대비 높이기(흐린 하늘색·번짐 효과 제거)
                 value: "text-white",
-                divider: "border-white/10",
-                glow: "0 0 10px rgba(120,170,255,0.35)",
+                divider: "border-white/20",
+                glow: "none",
               }
             : {
                 // ⭐ A형 — 영수증(티켓) 느낌의 흰 패널, 큰 숫자, 점선 구분
@@ -9278,12 +9295,12 @@ const summary = useMemo(() => {
                 ].map(({ label, en, value }, i) => (
                   <div key={label} className={`flex-1 text-center px-1 ${i > 0 ? `border-l ${dt.divider}` : ""}`}>
                     {cardVersionB ? (
-                      <div className="mb-1 leading-none whitespace-nowrap overflow-hidden"><span className="kp-b-mono text-[8.5px] font-extrabold tracking-[0.2em] text-[#6E8BC4] max-[379px]:hidden">{en} </span><span className="text-[11px] font-bold text-[#CFE0FF]">{label}</span></div>
+                      <div className="mb-1 leading-none whitespace-nowrap overflow-hidden"><span className="kp-b-mono text-[9px] font-extrabold tracking-[0.16em] text-[#A9C1F0] max-[379px]:hidden">{en} </span><span className="text-[12px] font-extrabold text-white">{label}</span></div>
                     ) : (
                       <div className={`text-[9px] font-bold tracking-[0.15em] uppercase mb-1 whitespace-nowrap ${dt.label}`}>{label}</div>
                     )}
                     <div
-                      className={`${cardVersionB ? "kp-b-mono text-[15.5px]" : "text-[14px]"} font-extrabold tabular-nums whitespace-nowrap ${dt.value}`}
+                      className={`${cardVersionB ? "kp-b-mono text-[16.5px] font-black" : "text-[14px] font-extrabold"} tabular-nums whitespace-nowrap ${dt.value}`}
                       style={{ textShadow: dt.glow }}
                     >
                       <DialNumber value={value} />
@@ -9386,6 +9403,7 @@ const summary = useMemo(() => {
                     compact noArrow
                     onChange={(e) => setSearchType(e.target.value)}
                   >
+                    <option value="통합">통합</option>{/* ⭐ 2026-11-06 통합(운임구분 포함) */}
                     <option value="거래처명">거래처명</option>
                     <option value="기사명">기사명</option>
                     <option value="차량번호">차량번호</option>
@@ -9394,6 +9412,7 @@ const summary = useMemo(() => {
                     <option value="하차지명">하차지명</option>
                     <option value="하차지주소">하차지주소</option>
                     <option value="메모">메모</option>
+                    <option value="운임구분">운임구분</option>{/* ⭐ 2026-11-06 */}
                   </MobileSelect>
                   <IconChevronDown className={`w-3 h-3 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none ${icon}`} />
                 </div>
@@ -11191,11 +11210,11 @@ const dropTime = order.하차시간 ? fmtDispatchTimeM(order.하차시간, order
           (statusBlink && !selected ? " card-status-blink" : "")
         }
         ref={offRef}
-        style={{ "--glow-c": statusRing }}
+        style={{ "--glow-c": statusRing, ...(isUrgentOrder(order) && !selected ? { backgroundColor: URGENT_TINT, borderColor: "#FCA5A5" } : {}) }}
         onClick={onSelect}
       >
-        {/* 왼쪽 상태 레일 */}
-        <span className="absolute left-0 top-0 bottom-0 w-[4px]" style={{ background: `linear-gradient(180deg, ${statusDot}, ${statusRing})` }} />
+        {/* 왼쪽 상태 레일 — ⭐ 2026-11-06 긴급 오더는 빨간 레일 */}
+        <span className="absolute left-0 top-0 bottom-0 w-[4px]" style={{ background: isUrgentOrder(order) ? URGENT_BAR : `linear-gradient(180deg, ${statusDot}, ${statusRing})`, ...(isUrgentOrder(order) ? { width: 5 } : {}) }} />
 
         {/* 머리줄 — 날짜·거래처·첨부·뱃지 | 메모·냉장·상태 */}
         <div className="pl-4 pr-3 pt-2.5 pb-2 flex flex-wrap items-center justify-between gap-x-2 gap-y-1 border-b border-[#EEF1F6]" style={{ background: `linear-gradient(90deg, ${statusWash}, rgba(255,255,255,0) 70%)` }}>
@@ -11224,9 +11243,7 @@ const dropTime = order.하차시간 ? fmtDispatchTimeM(order.하차시간, order
                 <span className="w-1.5 h-1.5 rounded-full bg-[#CFE0FF] animate-pulse" />
               )}
             </button>
-            {isUrgentOrder(order) && (
-              <span className="text-[0.68em] font-black text-white bg-[#0F1A30] px-1.5 py-0.5 rounded-md shrink-0">긴급</span>
-            )}
+            {isUrgentOrder(order) && <UrgentBadge className="!text-[0.7em]" />}{/* ⭐ 2026-11-06 긴급 빨간 알약 */}
             {String(order.운행유형 || "").trim() === "왕복" && (
               <span className="text-[0.68em] font-extrabold tracking-wide border border-[#1B2B4B] text-[#1B2B4B] px-1.5 py-0.5 rounded-md shrink-0">왕복</span>
             )}
@@ -11373,7 +11390,7 @@ const dropTime = order.하차시간 ? fmtDispatchTimeM(order.하차시간, order
     (statusBlink && !selected ? " card-status-blink" : "")
   }
   ref={offRef}
-  style={{ "--glow-c": statusRing }}
+  style={{ "--glow-c": statusRing, ...(isUrgentOrder(order) && !selected ? { backgroundColor: URGENT_TINT, borderColor: "#FCA5A5", boxShadow: `inset 5px 0 0 ${URGENT_BAR}` } : {}) }}
   onClick={onSelect}
 >
   {/* ── 윗줄: 거래처 · 메모 / 배지들 ── */}
@@ -11387,9 +11404,7 @@ const dropTime = order.하차시간 ? fmtDispatchTimeM(order.하차시간, order
       )}
     </div>
     <div className="flex flex-wrap items-center justify-end gap-1">
-      {!showUndeliveredOnly && isUrgentOrder(order) && (
-        <span className="h-[19px] px-1.5 inline-flex items-center rounded-md border-[1.5px] border-[#0F1A30] text-[#0F1A30] text-[10px] font-black leading-none">긴급</span>
-      )}
+      {isUrgentOrder(order) && <UrgentBadge className="h-[19px] !text-[10.5px]" />}{/* ⭐ 2026-11-06 긴급 빨간 알약(미전달만 보기에서도) */}
       {(() => {
         if (!order.상차일 || !order.상차시간) return null;
         const now = new Date(Date.now() + 9 * 60 * 60 * 1000);
@@ -16587,7 +16602,7 @@ const pickDrop = (c) => {
               <button type="button" onClick={() => setMultiCount(v => Math.max(1, v - 1))}
                 className="w-6 h-6 rounded bg-white border border-gray-300 text-gray-600 font-bold text-sm flex items-center justify-center active:bg-gray-100">−</button>
               <span className="text-[13px] font-bold text-gray-800 min-w-[20px] text-center">{multiCount}</span>
-              <button type="button" onClick={() => setMultiCount(v => Math.min(10, v + 1))}
+              <button type="button" onClick={() => setMultiCount(v => Math.min(30, v + 1)) /* ⭐ 2026-11-06 복사 30건까지 */}
                 className="w-6 h-6 rounded bg-white border border-gray-300 text-gray-600 font-bold text-sm flex items-center justify-center active:bg-gray-100">+</button>
             </div>
           </div>
