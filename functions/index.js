@@ -6908,3 +6908,19 @@ exports.aiTeamChat = functions.runWith({ secrets: ["ANTHROPIC_API_KEY"], timeout
     res.status(status).json({ error: msg });
   }
 });
+
+/* ==================================================================
+   📊 2026-11-06 일일 경영 보고(DAILY REPORT) — 임원 화면 역할에게 아침 푸시(·요약 메일)
+   30분마다(06:00~10:00 사이에만 일함) 받는 시간이 된 사람에게 보낸다. 계산·대상은 functions/dailyReport.js.
+   메일은 계약 만료 안내와 같은 공용 메일 서버(/api/send-email · siteConfig/contractNotice.sendEmailUrl).
+================================================================== */
+const _dailyReport = require("./dailyReport")({
+  db, FieldValue, sendPushAndCleanup, userTokens,
+  sendMail: (to, subject, html) => sendContractMail(to, subject, html),
+  validMail: (e) => validMail(e),
+  defaultCompany: PUSH_DEFAULT_COMPANY,
+});
+exports.dailyReportPush = functions.runWith({ timeoutSeconds: 300, memory: "512MB" }).pubsub
+  .schedule("every 30 minutes")
+  .timeZone("Asia/Seoul")
+  .onRun(async () => { await _dailyReport.run(); return null; });

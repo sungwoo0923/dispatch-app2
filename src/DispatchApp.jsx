@@ -3,6 +3,8 @@ import { MENU_FEATURE, planIncludes, openPlanLock, featureOn, useCompanyPlanId, 
 import { kpConfirm } from "./kpDialog";
 import { runDelete, commitDeletes, deleteDocsAtomic } from "./DeleteProgress"; // ⭐ 2026-11-05 삭제 진행 창 + 한 번에 삭제(writeBatch)
 import ProInsight from "./ProInsight";
+import DailyReport, { DailyReportPopupHost } from "./DailyReport"; // 📊 2026-11-06 일일 경영 보고(임원 화면 · 대표·임원 일일 보고서)
+import { canSeeBriefing, BRIEF_MENU, BRIEF_LABEL } from "./dailyReport";
 import BulkUploadChooser, { downloadTemplateXlsx } from "./BulkUploadChooser";
 import { buildCopyText, getCopyTpl, useCopyTemplates } from "./copyTemplates";
 import { CopyTemplateHost, openCopyTemplateEditor } from "./CopyTemplateEditor";
@@ -3354,7 +3356,7 @@ const DEPT_MENUS = {
   hr: ["HOME", "전자결재", "인사관리부", "증명서발급", "기사관리", "관리자메뉴", "회사관리"],
   // 👔 임원(대표·전무·이사) — 보고·결재·매출 중심
   // 결재는 홈 › 전자결재에 다 있어 상단에서 뺐다(2026-10-31)
-  exec: ["HOME", "자금현황", "스케줄", "매출관리", "인사이트", "관리자메뉴", "회사관리"], // 직원일정은 HOME › 사내 게시판으로(2026-11-01)
+  exec: ["HOME", "일일경영보고", "자금현황", "스케줄", "매출관리", "인사이트", "관리자메뉴", "회사관리"], // 📊 2026-11-06 일일 경영 보고 — 임원 홈(경영 브리핑) 바로 다음 // 직원일정은 HOME › 사내 게시판으로(2026-11-01)
 };
 // 부서 모드 왼쪽 메뉴 묶음
 const DEPT_SIDE_GROUPS = {
@@ -3370,7 +3372,7 @@ const DEPT_SIDE_GROUPS = {
     { label: "관리", items: ["관리자메뉴", "회사관리"] },
   ],
   exec: [
-    { label: "경영", items: ["HOME", "자금현황", "매출관리", "인사이트"] },
+    { label: "경영", items: ["HOME", "일일경영보고", "자금현황", "매출관리", "인사이트"] },
     { label: "일정", items: ["스케줄"] },
     { label: "관리", items: ["관리자메뉴", "회사관리"] },
   ],
@@ -3381,7 +3383,7 @@ const KP_SIDE_ICONS = {
   회사관리: "idcard", 관리자메뉴: "key", 관리센터: "shield", 인사이트: "chart",
   회계관리: "money", 인사관리부: "idcard", 출근기록부: "clock", 직원관리: "users", 기사서류: "file",
   자금관리: "wallet", 비품관리: "list", 연차관리: "flag", 입퇴사관리: "check", 증명서발급: "stamp",
-  결재함: "stamp", 직원일정: "clock", 자금현황: "wallet", 스케줄: "pin", 전자결재: "stamp",
+  결재함: "stamp", 직원일정: "clock", 자금현황: "wallet", 스케줄: "pin", 전자결재: "stamp", 일일경영보고: "chart",
 };
 function KpSideMenu({ open, onOpen, onClose, menuState, active, onSelect, company, email, groups = KP_SIDE_GROUPS }) {
   React.useEffect(() => {
@@ -3446,7 +3448,7 @@ function KpSideMenu({ open, onOpen, onClose, menuState, active, onSelect, compan
                         style={{ opacity: 1 }}
                       >
                         <ShellIcon name={KP_SIDE_ICONS[m]} size={18} className={on ? "text-[#1B2B4B]" : "text-blue-200/80"} />
-                        <span className="flex-1 text-left truncate">{m}</span>
+                        <span className="flex-1 text-left truncate">{m === BRIEF_MENU ? BRIEF_LABEL : m}</span>
                         {st === "locked" && <span className="opacity-60"><LockIcon size={12} /></span>}
                         {on && <span className="w-1.5 h-1.5 rounded-full bg-[#4B6CB7]" />}
                       </button>
@@ -8114,6 +8116,8 @@ const newVer = useNewVersion(); // ★ 새 버전이 배포되면 버전 표시 
   const toggleExecFull = () => { const v = !execFull; setExecFull(v); try { localStorage.setItem("kpExecFull", v ? "1" : "0"); } catch { /* 무시 */ } setMenu("HOME"); };
   const deptMode = deptModeOf(role, customRole) || (isExec && !execFull ? "exec" : null);
   const deptCompany = (localStorage.getItem("loginCompany") || userCompany || localStorage.getItem("userCompany") || DEFAULT_COMPANY || "").trim();
+  // 📊 2026-11-06 일일 경영 보고 — 임원 화면 역할(isExec: 권한 관리 › "임원 화면")만(src/dailyReport.js canSeeBriefing)
+  const canBriefing = canSeeBriefing({ isExec });
   // 🔢 2026-11-02 상단 메뉴 숫자 — 새로 온 것(결재 차례·안 읽은 메일·공지·인수인계·가입 신청)을 메뉴와 세부 메뉴에 표시
   const apCountsNav = useApprovalCounts();
   const mailCountsNav = useMailCounts();
@@ -8355,6 +8359,8 @@ const newVer = useNewVersion(); // ★ 새 버전이 배포되면 버전 표시 
   // ---------------- 메뉴 UI ----------------
   // 메뉴 보이기 규칙(상단 메뉴·왼쪽 메뉴 공용) — "hidden" | "blocked" | "ok"
   const menuState = (m) => {
+    // 📊 2026-11-06 일일 경영 보고 — 임원 화면 역할만(기존 임원 판정 isExec 그대로)
+    if (m === BRIEF_MENU) return canBriefing ? "ok" : "hidden";
     // 🏢 2026-10-31 부서 모드 — 경리·인사 권한은 배차 메뉴 없이 부서 업무 메뉴만
     // ⚙ 권한 관리에서 경리·인사관리자 메뉴를 숨겼으면 부서 화면에서도 숨긴다
     if (deptMode && deptMode !== "exec") return (DEPT_MENUS[deptMode].includes(m) && !(customRole && getMenuAccess(customRoles, role, m) === "hidden") ? "ok" : "hidden");
@@ -8442,6 +8448,8 @@ return (
       <RemoteSupportHost user={user} profile={myProfileDoc} company={userCompany || localStorage.getItem("userCompany") || ""} />
       <OrderCongratsPopup uid={user?.uid} profile={myProfileDoc} />
       <BirthdayPopup uid={user?.uid} profile={myProfileDoc} company={deptCompany} />
+      {/* 📊 2026-11-06 일일 경영 보고 — 받는 시간 이후 그날 첫 접속 때 요약 팝업(임원 화면 역할) */}
+      {canBriefing && <DailyReportPopupHost company={deptCompany} dispatchData={salesDispatchData} drivers={drivers} me={{ uid: user?.uid }} role={realRole || role} isExec={isExec} customRole={customRole} profile={myProfileDoc} onOpenReport={() => handleMenuClick(BRIEF_MENU)} />}
       {/* ⭐ 2026-11-02 관리자센터2 — 선택한 운송사 대상 공지도 받도록 회사 전달 */}
       {/* ⭐ 2026-11-03 배너를 누르면 펼치지 않고 홈 › 공지사항의 그 글로 바로 이동 */}
       <PlatformNoticeBanner audience="carrier" onOpen={(id) => { window.__kpOpenNotice = `plat:${id}`; setMenu("HOME"); setTimeout(() => window.dispatchEvent(new CustomEvent("kp:openNotice")), 0); }} company={role === "totalMaster" ? (localStorage.getItem("loginCompany") || userCompany || "") : (userCompany || localStorage.getItem("userCompany") || "")} />
@@ -8577,7 +8585,7 @@ return (
                     }`}
                 >
                   <ShellIcon name={KP_SIDE_ICONS[m] || "dashboard"} size={14} className={`kp-nav-ico shrink-0 ${isActive ? "" : "opacity-70"} ${deptMode && DEPT_MENUS[deptMode].length <= 8 ? "" : "hidden min-[2050px]:inline-block"}`} />
-                  <EditableText id={`nav.${m}`} defaultText={m} />
+                  <EditableText id={`nav.${m}`} defaultText={m === BRIEF_MENU ? BRIEF_LABEL : m} />
                   {navN > 0 && st !== "locked" && <KakaoBadge n={navN} size="sm" className="ml-1 align-middle" title={m === "관리자메뉴" ? `가입 승인 대기 ${navN}명` : m === "실시간배차현황" ? `기사 수락/거절 ${navN}건` : m === "배차현황" ? [drvCounts.orders && `기사 수락/거절 ${drvCounts.orders}건`, (unseenList || unseenUnassigned) && `새 미배차 ${Math.max(unseenList, unseenUnassigned)}건`, unseenFixed && `새 고정노선 미배차 ${unseenFixed}건`].filter(Boolean).join(" · ") : m === "지입차관리" ? `긴급 상황 ${navN}건` : `새 소식 ${navN}건`} />}
                   {st === "locked" && <span className="ml-1 opacity-60"><LockIcon /></span>}
                   {m === "인사이트" && st !== "locked" && <span className="ml-1 px-1 py-px rounded bg-[#8FB0F0]/20 text-[#8FB0F0] text-[9px] font-black tracking-wider align-middle">PRO</span>}
@@ -8819,7 +8827,7 @@ return (
 
       {/* ---------------- 화면 렌더링 ---------------- */}
       <ColumnStyleHost company={userCompany || localStorage.getItem("userCompany") || ""} />
-      <main className={`kp-main ${menu === "HOME" ? "kp-main-bare" : ""} rounded shadow p-4 w-full min-w-0 ${darkMode ? "bg-gray-900 text-gray-100" : "bg-white text-gray-900"}`}>
+      <main className={`kp-main ${menu === "HOME" || menu === BRIEF_MENU ? "kp-main-bare" : ""} rounded shadow p-4 w-full min-w-0 ${darkMode ? "bg-gray-900 text-gray-100" : "bg-white text-gray-900"}`}>
         {!darkMode && <KpPageHeader menu={menu} />}
         {menu === "HOME" && (
           <HomeDashboard
@@ -8868,6 +8876,13 @@ return (
             markEditRequestSeen={markEditRequestSeen}
             approvedShippers={approvedShippers}
           />
+        )}
+
+        {menu === BRIEF_MENU && canBriefing && (
+          <div className="px-0 lg:px-5 pb-7">
+            <DailyReport company={deptCompany} dispatchData={salesDispatchData} drivers={drivers} me={{ uid: user?.uid, email: user?.email, name: myRealName }} role={realRole || role} profile={myProfileDoc} canGo={(m) => m === "결재함" || menuState(m) === "ok"}
+              onGo={(m) => { if (m === "결재함") { window.__kpOpenApproval = { page: "inbox" }; window.dispatchEvent(new Event("kp-open-approval")); return; } if (m === "배차현황") { handleMenuClick("배차현황"); setTimeout(() => emitSubnav("DISPATCH", "미배차현황"), 0); return; } handleMenuClick(m); }} />
+          </div>
         )}
 
         {menu === "인사이트" && (role === "admin" || role === "totalMaster") && planIncludes(planId, "insight") && (

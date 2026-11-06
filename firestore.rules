@@ -1333,6 +1333,25 @@ service cloud.firestore {
           && request.resource.data.log[request.resource.data.log.size() - 1].get('type', '') == 'plan');
       allow delete: if isTotalMasterUser();
     }
+    // 📊 2026-11-06 일일 경영 보고(임원 화면 · 대표·임원 일일 보고서) — src/dailyReport.js · functions/dailyReport.js
+    //  받기 설정(사람마다): 본인만 읽고 쓴다(회사는 내 회사로만). 서버 푸시는 관리자 SDK로 읽는다.
+    match /dailyReportPrefs/{uid} {
+      allow read, delete: if isSignedIn() && request.auth.uid == uid;
+      allow create, update: if isApproved() && request.auth.uid == uid && request.resource.data.get('uid', '') == uid
+        && (isTotalMasterUser() || request.resource.data.get('companyName', '') == myCo());
+    }
+    //  회사 설정(받는 사람 recipients{uid:true|false}): 그 회사 직원은 읽고, 최고관리자·회사 관리자(isCompanyAdmin)·마스터·대표 직책만 바꾼다
+    match /dailyReportCompany/{co} {
+      allow read: if isTotalMasterUser() || (isApproved() && myCo() == co);
+      allow create, update: if (isTotalMasterUser() || (isApproved() && myCo() == co && (isCompanyAdmin(co) || myUser().get('isMaster', false) == true
+          || myUser().get('position', '') in ['대표', '대표이사', '사장'])))
+        && request.resource.data.get('companyName', '') == co;
+      allow delete: if isTotalMasterUser();
+    }
+    //  발송 기록(중복 발송 방지) — 서버만
+    match /dailyReportLogs/{id} {
+      allow read, write: if false;
+    }
     match /{col}/{rest=**} {
       allow read, write: if isApproved() && !(col in ['adminSecrets', 'resetBackups', 'resetLogs', 'resetJobs', 'loginSessions', 'orderTrash', 'recurringRuns', 'internalMails', 'approvals', 'boardPosts', 'notices', 'handovers', 'salesQuotes', 'contracts', 'platformNotices', 'platformInvoices', 'companyPlans', 'publicPricing', 'planRequests', 'userPrefs', 'companyRoleOverrides', 'customRoles', 'supportRequests', 'supportSessions', 'driverStatements', 'fleetPenalties', 'fixedRoutes', 'routeBoards', 'personalSchedules', 'publicCompanies', 'companyContracts',
         // 🔒 회사별로 잠근 컬렉션(위에서 따로 정함)
@@ -1354,7 +1373,9 @@ service cloud.firestore {
         // 💰 2026-11-06 직원 급여 · 연차 촉진 — 위에서 따로 정함
         'payrollSettings', 'payrollEmployees', 'payrollRuns', 'payslips', 'hrNotices', 'leavePromotions',
         // 🤖 2026-11-06 AI 팀 사용 기록 — 위에서 따로 정함
-        'aiTeamLogs']);
+        'aiTeamLogs',
+        // 📊 2026-11-06 일일 경영 보고 — 위에서 따로 정함
+        'dailyReportPrefs', 'dailyReportCompany', 'dailyReportLogs']);
     }
   }
 }

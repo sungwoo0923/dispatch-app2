@@ -424,7 +424,7 @@ export default function RolePermissionsPanel({ users: allUsers = [], roleLabels 
                     <div className="rounded-xl border border-gray-200 px-4 py-3 flex flex-wrap items-center gap-3">
                       <div className="min-w-0">
                         <div className="text-[13.5px] font-black text-[#1B2B4B]">로그인하면 보이는 화면</div>
-                        <div className="text-[11.5px] text-gray-500">임원 화면 = 경영 브리핑·결재함·임원 스케줄·직원 일정 (상단 [전체 메뉴]로 아래 메뉴 권한 화면 전환)</div>
+                        <div className="text-[11.5px] text-gray-500">임원 화면 = 경영 브리핑·일일 경영 보고·결재함·임원 스케줄·직원 일정 (상단 [전체 메뉴]로 아래 메뉴 권한 화면 전환)</div>
                       </div>
                       <div className="ml-auto inline-flex rounded-xl bg-gray-100 p-1">
                         {ROLE_SCREENS.map(([k, l]) => <button key={k || "normal"} onClick={() => setDraft((d) => ({ ...d, screen: k }))} className={`px-3.5 py-1.5 rounded-lg text-[12.5px] font-bold ${(draft.screen || "") === k ? "bg-white text-[#1B2B4B] shadow-sm" : "text-gray-500"}`}>{l}</button>)}
