@@ -20,6 +20,9 @@ import { RULE_CATS, RULE_TEMPLATES, fillCompany } from "./companyRuleTemplates";
 import { fmtPhone } from "./formatInput";
 import { CustomSelect } from "./CustomSelect";
 import CustomDatePicker from "./CustomDatePicker"; // 📅 2026-11-04 날짜 입력은 프로그램 달력으로
+import { usePayrollAccess } from "./payrollAccess"; // ⭐ 2026-11-06 급여 대장(조회)·연차 사용 촉진
+const PayrollCenter = React.lazy(() => import("./Payroll"));
+const LeavePromotionBoard = React.lazy(() => import("./LeavePromotion"));
 
 const kstDay = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
 const inp = "h-11 w-full px-3 rounded-xl border border-[#DCE3EE] bg-white text-[14px] font-semibold text-[#0F1A30] outline-none focus:border-[#2D4C82]";
@@ -615,7 +618,7 @@ const REC_VIEWS = [
   { view: "인사발령 이력", label: "인사발령 이력", en: "HISTORY", icon: "history" },
 ];
 const REC_FIRST = `rec:${REC_VIEWS[0].view}`;
-export default function HrHub({ company, canManage, renderRecord, renderAttendance, me = {} }) {
+export default function HrHub({ company, canManage, renderRecord, renderAttendance, me = {}, role = "" }) {
   const [tab, setTabRaw] = React.useState(() => { try { const v = sessionStorage.getItem("kpHrTab"); sessionStorage.removeItem("kpHrTab"); return !v || v === "record" ? REC_FIRST : v; } catch { return REC_FIRST; } });
   const setTab = (k) => setTabRaw(k === "record" ? REC_FIRST : k);
   const recView = tab.startsWith("rec:") ? tab.slice(4) : null;
@@ -623,6 +626,7 @@ export default function HrHub({ company, canManage, renderRecord, renderAttendan
   const [focusUid, setFocusUid] = React.useState(() => { try { const v = sessionStorage.getItem("kpHrFocus"); sessionStorage.removeItem("kpHrFocus"); return v || null; } catch { return null; } });
   // ⭐ 2026-11-01 직원이 직접 작성·제출한 이력서 중 인사팀이 아직 안 본 수 → [인사 기록] 숫자
   const [newResumes, setNewResumes] = React.useState(0);
+  const payAcc = usePayrollAccess(company, me?.uid || auth.currentUser?.uid || "preview", role, auth.currentUser?.email || "");
   React.useEffect(() => {
     if (!company) return undefined;
     return onSnapshot(query(collection(db, "hrResumes"), where("companyName", "==", company), where("hrSeen", "==", false)), (sn) => setNewResumes(sn.size), () => setNewResumes(0));
@@ -639,7 +643,9 @@ export default function HrHub({ company, canManage, renderRecord, renderAttendan
         { label: "근태", items: [
           { key: "attendance", label: "출근기록부", en: "ATTENDANCE", icon: "clock" },
           { key: "leave", label: "연차 관리", en: "ANNUAL LEAVE", icon: "flag" },
+          { key: "leavepromo", label: "연차 사용 촉진", en: "LEAVE PROMOTION", icon: "bell" }, // ⭐ 2026-11-06 근로기준법 61조
         ] },
+        ...(payAcc.canView ? [{ label: "급여", items: [{ key: "payroll", label: payAcc.canEdit ? "급여 계산" : "급여 대장(조회)", en: "PAYROLL", icon: "money" }] }] : []),
         { label: "설정 · 규정", items: [
           { key: "settings", label: "직책·부서 설정", en: "SETTINGS", icon: "key" },
           { key: "rules", label: "사내 규정", en: "RULES", icon: "list" },
@@ -651,6 +657,8 @@ export default function HrHub({ company, canManage, renderRecord, renderAttendan
       {(tab === "edit" || tab === "resign") && <StaffInfoBoard company={company} canManage={canManage} />}
       {tab === "leave" && <LeaveLedger company={company} canManage={canManage} />}
       {tab === "attendance" && renderAttendance?.()}
+      {tab === "leavepromo" && <React.Suspense fallback={<div className="py-24 text-center text-[14px] font-bold text-[#9AA9C3]">불러오는 중…</div>}><LeavePromotionBoard company={company} canManage={canManage || payAcc.leaveManager} /></React.Suspense>}
+      {tab === "payroll" && payAcc.canView && <React.Suspense fallback={<div className="py-24 text-center text-[14px] font-bold text-[#9AA9C3]">불러오는 중…</div>}><PayrollCenter company={company} role={role} /></React.Suspense>}
       {tab === "settings" && <HrSettingsPanel company={company} canManage={canManage} />}
       {tab === "rules" && <CompanyRules company={company} canEdit={canManage} />}
       {tab === "obit" && <ObituaryWriter company={company} me={me} onCancel={() => setTab("record")} onSaved={() => { alert("공지사항에 부고를 올렸습니다."); setTab("record"); }} />}

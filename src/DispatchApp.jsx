@@ -63,6 +63,11 @@ import { AssetManager } from "./OfficeBooks";
 import { FundsWorkspace, FundsBoard, isCeoPosition } from "./FundsBoard";
 import { AccountingOverview, RetireDesk, useYearOrders } from "./AcctSuite";
 import HrHub from "./HrHub";
+import { usePayrollAccess } from "./payrollAccess"; // ⭐ 2026-11-06 직원 급여·연차 촉진 권한
+const PayrollCenterLazy = React.lazy(() => import("./Payroll"));
+const MyPayslipsLazy = React.lazy(() => import("./Payroll").then((m) => ({ default: m.MyPayslips })));
+const LeavePromotionLazy = React.lazy(() => import("./LeavePromotion"));
+const MyLeavePlanLazy = React.lazy(() => import("./LeavePromotion").then((m) => ({ default: m.MyLeavePlan })));
 // ⭐ 2026-11-02 속도 — 메뉴를 눌러야 보이는 큰 화면은 따로 떼어 처음 열 때 받는다(첫 실행 JS 감소) — 사용 안 하던 StandardFare·DispatchFormNew import 제거
 const DriverAccounts = lazyView(() => import("./DriverAccounts"));
 const ClassicResume = lazyView(() => import("./ClassicResume"));
@@ -8426,6 +8431,8 @@ return (
         onGo={(it) => {
           if (it.src === "approval") { window.__kpOpenApproval = { id: it.id, page: it.page || "inbox" }; window.dispatchEvent(new Event("kp-open-approval")); return; }
           if (it.src === "handover") { window.__kpOpenHandover = it.id; setMenu("HOME"); setTimeout(() => window.dispatchEvent(new Event("kp-open-handover")), 0); return; }
+          // ⭐ 2026-11-06 인사·급여 알림 — 급여명세서 · 연차 사용 계획(직원) · 연차 사용 촉진(인사)은 회사관리 안의 그 탭으로
+          if (it.src === "hrNotice") { try { sessionStorage.setItem("kpCmTab", { payslip: "급여명세서", leavePlan: "연차 사용 계획", leavePromo: "연차 사용 촉진" }[it.link] || "급여명세서"); } catch { /* 무시 */ } setMenu("회사관리"); setTimeout(() => window.dispatchEvent(new Event("kp-cm-tab")), 0); return; }
           window.__kpOpenNotice = it.openId || it.id; setMenu("HOME"); setTimeout(() => window.dispatchEvent(new CustomEvent("kp:openNotice")), 0);
         }} />
       <DriverEventToasts onView={onDriverEventView} />{/* ⭐ 2026-11-05 기사 수락/거절·서류·긴급 — 오른쪽 아래 토스트(포커스 안 뺏음 · 8초) */}
@@ -9188,11 +9195,11 @@ return (
         {menu === "스케줄" && menuState("스케줄") === "ok" && <ExecScheduleBoard company={deptCompany} me={{ uid: user?.uid, name: myProfileDoc?.name || user?.displayName || "", position: myProfileDoc?.position || "" }} canWrite />}
         {menu === "전자결재" && menuState("전자결재") === "ok" && <ApprovalWorkspace company={deptCompany} me={{ uid: user?.uid, name: myProfileDoc?.name || user?.displayName || "", team: myProfileDoc?.team || "", position: myProfileDoc?.position || "", role }} />}
         {/* 🏢 2026-10-31 경리·인사 부서 메뉴 */}
-        {menu === "회계관리" && menuState("회계관리") === "ok" && <AccountingWorkspace company={deptCompany} fixedRows={fixedRows} clients={clients} isViewer={isViewer} />}
+        {menu === "회계관리" && menuState("회계관리") === "ok" && <AccountingWorkspace company={deptCompany} fixedRows={fixedRows} clients={clients} isViewer={isViewer} role={realRole || role} />}
         {menu === "자금관리" && menuState("자금관리") === "ok" && <FundsWorkspace company={deptCompany} isViewer={isViewer} />}
         {menu === "비품관리" && menuState("비품관리") === "ok" && <AssetManager company={deptCompany} isViewer={isViewer} />}
         {menu === "인사관리부" && menuState("인사관리부") === "ok" && (
-          <HrHub company={deptCompany} canManage={role === "hrManager" || role === "totalMaster" || ["hrAcct", "allMgr"].includes(realRole) || (/인사/.test(String(myProfileDoc?.team || "")) && role !== "viewer") || masterHrMain || (!!customRole && getMenuAccess(customRoles, role, "인사관리부") === "write")} me={{ uid: user?.uid, name: myProfileDoc?.name || user?.displayName || "" }}
+          <HrHub company={deptCompany} canManage={role === "hrManager" || role === "totalMaster" || ["hrAcct", "allMgr"].includes(realRole) || (/인사/.test(String(myProfileDoc?.team || "")) && role !== "viewer") || masterHrMain || (!!customRole && getMenuAccess(customRoles, role, "인사관리부") === "write")} me={{ uid: user?.uid, name: myProfileDoc?.name || user?.displayName || "" }} role={realRole || role}
             renderRecord={(focusUid) => <HRManagementPage userCompany={deptCompany} role={role} userId={auth?.currentUser?.uid || ""} focusUid={focusUid} />}
             renderAttendance={() => <AttendanceBoard userCompany={deptCompany} role={role} user={user} />} />
         )}
@@ -60704,7 +60711,15 @@ function MyProfilePage({ user, todayStats, myStats, cardImage, setCardImage, car
 
 // ─────────── 회사관리 탭 래퍼 ───────────
 function CompanyManagementWrapper({ userCompany, role, userId, user, todayStats, myStats, cardImage, setCardImage, cardImageUploading, setCardImageUploading, showAlert }) {
-  const [tab, setTab] = React.useState("회사정보");
+  // ⭐ 2026-11-06 알림 팝업 [급여명세서 열기]·[사용 계획 제출] 등 — 다른 화면에서 이 탭으로 바로(kpCmTab)
+  //  (첫 값은 읽기만 하고 지우는 것은 effect에서 — 개발 모드 StrictMode가 초기값 함수를 두 번 불러도 값이 남게)
+  const peekCmTab = () => { try { return sessionStorage.getItem("kpCmTab") || ""; } catch { return ""; } };
+  const [tab, setTab] = React.useState(() => peekCmTab() || "회사정보");
+  React.useEffect(() => {
+    try { sessionStorage.removeItem("kpCmTab"); } catch { /* 무시 */ }
+    const h = () => { const v = peekCmTab(); if (v) { setTab(v); try { sessionStorage.removeItem("kpCmTab"); } catch { /* 무시 */ } } };
+    window.addEventListener("kp-cm-tab", h); return () => window.removeEventListener("kp-cm-tab", h);
+  }, []);
   // ⭐ 2026-10-31 인사관리부는 마스터(회사 첫 가입자)·인사관리자만. 인사관리자는 상단 [인사관리부] 안에 다 있으므로 여기서는 뺀다
   const myDocCM = useMyProfile(user?.uid);
   // ⭐ 2026-11-01 마스터는 인사 담당자(인사관리자·경리+인사·인사 부서)가 없을 때만 인사관리부 — 생기면 자동으로 넘어간다
@@ -60713,10 +60728,15 @@ function CompanyManagementWrapper({ userCompany, role, userId, user, todayStats,
   const tabs0 = role === "hrManager" ? ["회사정보", "조직도", "내정보", "내 이력서"] : canViewHR ? ["회사정보", "조직도", "내정보", "내 이력서", "출근기록부", "인사관리부"] : ["회사정보", "조직도", "내정보", "내 이력서", "출근기록부"];
   // ⭐ 2026-11-02 운임규칙 — 최고관리자가 이 회사에 켜 준 경우에만(관리자센터 › 회사별 맞춤 기능). 회사 직원 누구나 보고 고친다(조회전용은 보기만)
   const fareCM = useFareRules(getTenant() || userCompany);
-  const tabs = !fareCM.feature || role === "driver" || role === "shipper" ? tabs0 : [...tabs0.slice(0, 2), "운임 규칙", ...tabs0.slice(2)];
+  const tabs1 = !fareCM.feature || role === "driver" || role === "shipper" ? tabs0 : [...tabs0.slice(0, 2), "운임 규칙", ...tabs0.slice(2)];
+  // ⭐ 2026-11-06 내 급여명세서·연차 사용 계획(누구나 본인 것) · 급여관리(급여 권한) · 연차 사용 촉진(인사·경리)
+  const payCM = usePayrollAccess(userCompany, user?.uid, role, user?.email || "");
+  const staffCM = role !== "driver" && role !== "shipper";
+  const tabs = [...tabs1, ...(staffCM ? ["급여명세서", "연차 사용 계획"] : []), ...(staffCM && payCM.canView ? ["급여관리"] : []), ...(staffCM && payCM.leaveViewer ? ["연차 사용 촉진"] : [])];
 
   // ⭐ 디자인 개편 — 관리자메뉴와 같은 왼쪽 메뉴바 + 상단 인사 카드(AdminShell 공용 레이아웃)
-  const TAB_ICONS = { 회사정보: "building", 조직도: "users", "운임 규칙": "money", 내정보: "user", "내 이력서": "idcard", 출근기록부: "clock", 인사관리부: "idcard" };
+  const TAB_ICONS = { 회사정보: "building", 조직도: "users", "운임 규칙": "money", 내정보: "user", "내 이력서": "idcard", 출근기록부: "clock", 인사관리부: "idcard", 급여명세서: "receipt", "연차 사용 계획": "flag", 급여관리: "money", "연차 사용 촉진": "bell" };
+  const payFallback = <div className="py-24 text-center text-[14px] font-bold text-[#9AA9C3]">불러오는 중…</div>;
   const won = (n) => `${Math.round(Number(n) || 0).toLocaleString()}원`;
   const myName = user?.displayName || (user?.email || "").split("@")[0] || "";
   return (
@@ -60742,6 +60762,10 @@ function CompanyManagementWrapper({ userCompany, role, userId, user, todayStats,
       {/* ⭐ 2026-11-02 운임규칙 — 회사관리 › 운임 규칙 */}
       {tab === "운임 규칙" && fareCM.feature && <FareRulesSettings company={userCompany} canEdit={role !== "viewer"} myName={myDocCM?.name || myName} />}
       {tab === "내 이력서" && <HRManagementPage userCompany={userCompany} role={role} userId={userId} selfOnly />}
+      {tab === "급여명세서" && <React.Suspense fallback={payFallback}><MyPayslipsLazy company={userCompany} uid={user?.uid} /></React.Suspense>}
+      {tab === "연차 사용 계획" && <React.Suspense fallback={payFallback}><MyLeavePlanLazy company={userCompany} uid={user?.uid} /></React.Suspense>}
+      {tab === "급여관리" && payCM.canView && <React.Suspense fallback={payFallback}><PayrollCenterLazy company={userCompany} role={role} /></React.Suspense>}
+      {tab === "연차 사용 촉진" && payCM.leaveViewer && <React.Suspense fallback={payFallback}><LeavePromotionLazy company={userCompany} canManage={payCM.leaveManager} /></React.Suspense>}
       {tab === "내정보" && (
         <MyProfilePage
           user={user}
@@ -61620,7 +61644,7 @@ function PCERPPage({ userCompany = "", drivers = [], clients = [], places = [], 
   const monthRevenue = monthOrders.reduce((s,o)=>s+Number(o.청구운임||0),0);
   const monthDriverFee = monthOrders.reduce((s,o)=>s+Number(o.기사운임||0),0);
 
-  // ── 급여관리 ──
+  // ── 기사 운임 집계(⭐ 2026-11-06 "급여관리"에서 이름 변경 — 직원 급여 계산과 혼동 방지) ──
   const [payYear, setPayYear] = React.useState(now.getFullYear());
   const [payMonth, setPayMonth] = React.useState(now.getMonth()+1);
   const payMonthStr = `${payYear}-${String(payMonth).padStart(2,"0")}`;
@@ -61749,7 +61773,7 @@ function PCERPPage({ userCompany = "", drivers = [], clients = [], places = [], 
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"/></svg> ERP 목록으로
         </button>
         <div className="flex items-center gap-4 mb-5">
-          <h3 className="text-[17px] font-bold text-gray-900"><EditableText id="hr.erp.payroll.title" defaultText="급여관리" /></h3>
+          <h3 className="text-[17px] font-bold text-gray-900"><EditableText id="hr.erp.payroll.title" defaultText="기사 운임 집계" /></h3>
           <div className="flex items-center gap-1.5">
             <button onClick={()=>{let m=payMonth-1,y=payYear;if(m<1){m=12;y--;}setPayMonth(m);setPayYear(y);}} className="w-7 h-7 border border-gray-200 rounded-lg flex items-center justify-center hover:bg-gray-50">
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#374151" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
@@ -61813,7 +61837,7 @@ function PCERPPage({ userCompany = "", drivers = [], clients = [], places = [], 
         <ERPCard title="직원관리" icon="◆" sub="임직원 현황 및 권한" onClick={()=>setSubPage("직원관리")} />
         <ERPCard title="차량관리" icon="▸" sub={`등록 차량 ${drivers.length}대`} badge={drivers.length} onClick={()=>setSubPage("차량관리")} />
         <ERPCard title="거래처관리" icon="◆" sub={`거래처 ${allClients.length}곳`} badge={allClients.length} onClick={()=>setSubPage("거래처관리")} />
-        <ERPCard title="급여관리" icon="₩" sub="월별 기사 운임 정산" onClick={()=>setSubPage("급여관리")} />
+        <ERPCard title="기사 운임 집계" icon="₩" sub="월별 기사 운임 집계 (직원 급여는 경리 › 급여 계산)" onClick={()=>setSubPage("급여관리")} />
         <ERPCard title="근태관리" icon="▤" sub="준비 중" onClick={()=>{}} />
         <ERPCard title="운행일지" icon="●" sub="준비 중" onClick={()=>{}} />
       </div>
@@ -62588,12 +62612,15 @@ export function PcClientMobile({ clients = [], places = [], userCompany = "", ro
     places={places} showAlert={(m) => window.alert(m)} initialTab={initialTab} hideTabs userCompany={userCompany} />;
 }
 // 📊 경리 › 회계관리 — 회계 개요(시각화) · 회계 장부(미수·지급·부가세·원가) · 퇴직 정산
-function AccountingWorkspace({ company, fixedRows = [], clients = [], isViewer = false }) {
+function AccountingWorkspace({ company, fixedRows = [], clients = [], isViewer = false, role = "" }) {
   const [tab, setTab] = React.useState("overview");
   const yearRows = useYearOrders(company, fixedRows);
+  // ⭐ 2026-11-06 직원 급여 계산(급여관리 권한 — payrollAccess.js)
+  const payAcc = usePayrollAccess(company, auth.currentUser?.uid || "preview", role, auth.currentUser?.email || "");
   return (
     <KpSubNav code="ACCOUNTING" title="회계관리" icon="money" active={tab} onSelect={setTab}
-      items={[{ key: "overview", label: "회계 개요", en: "OVERVIEW", icon: "chart" }, { key: "book", label: "회계 장부", en: "LEDGER", icon: "sheet" }, { key: "retire", label: "퇴직 정산", en: "RETIREMENT", icon: "user" }]}>
+      items={[{ key: "overview", label: "회계 개요", en: "OVERVIEW", icon: "chart" }, { key: "book", label: "회계 장부", en: "LEDGER", icon: "sheet" }, ...(payAcc.canView ? [{ key: "payroll", label: "급여 계산", en: "PAYROLL", icon: "money" }] : []), { key: "retire", label: "퇴직 정산", en: "RETIREMENT", icon: "user" }]}>
+      {tab === "payroll" && payAcc.canView && <React.Suspense fallback={<div className="py-24 text-center text-[14px] font-bold text-[#9AA9C3]">급여 화면 불러오는 중…</div>}><PayrollCenterLazy company={company} role={role} /></React.Suspense>}
       {tab === "overview" && <AccountingOverview company={company} orders={yearRows} />}
       {tab === "book" && (yearRows ? <AccountingDashboard dispatchData={yearRows} fixedRows={[]} clients={clients} isViewer={isViewer} /> : <div className="py-24 text-center text-[14px] font-bold text-[#9AA9C3]">올해 운행 내역을 불러오는 중…</div>)}
       {tab === "retire" && <RetireDesk company={company} isViewer={isViewer} />}

@@ -13,9 +13,11 @@ export const CUSTOMIZABLE_MENUS = [
   "HOME", "전자결재", "배차관리", "실시간배차현황", "배차현황", "단가표", "운임조회",
   "기사관리", "거래처관리", "지입차관리", "매출관리", "정산관리", "인사이트",
   "회계관리", "자금관리", "비품관리", "인사관리부", "증명서발급", "직원일정", "회사관리",
+  // ⭐ 2026-11-06 직원 급여(급여 계산·명세서 발행) — 화면은 회계관리·인사관리부·회사관리 안의 [급여] 탭. 보안 규칙(payrollLevel)도 이 값을 본다
+  "급여관리",
 ];
 // 부서·임원 전용 메뉴 — 내장 권한은 원래 쓰던 화면 기준 기본값, 직접 만든 권한은 켜면 그 메뉴가 보인다
-export const DEPT_ONLY_MENUS = ["전자결재", "회계관리", "자금관리", "비품관리", "인사관리부", "증명서발급", "직원일정"];
+export const DEPT_ONLY_MENUS = ["전자결재", "회계관리", "자금관리", "비품관리", "인사관리부", "증명서발급", "직원일정", "급여관리"];
 
 export function defaultMenuAccess() {
   const m = {};
@@ -85,8 +87,9 @@ export function builtinDefaultMenuAccess(roleKey) {
   CUSTOMIZABLE_MENUS.forEach(k => { write[k] = DEPT_ONLY_MENUS.includes(k) ? "hidden" : "write"; });
   const only = (list, readList = []) => Object.fromEntries(CUSTOMIZABLE_MENUS.map((k) => [k, list.includes(k) ? "write" : readList.includes(k) ? "read" : "hidden"]));
   const union = (...keys) => Object.fromEntries(CUSTOMIZABLE_MENUS.map((k) => [k, keys.reduce((lv, r) => maxLv(lv, builtinDefaultMenuAccess(r)[k]), "hidden")]));
-  if (roleKey === "test") return only(["HOME", "전자결재", "배차현황", "정산관리", "매출관리", "회계관리", "자금관리", "비품관리", "기사관리", "회사관리"]);
-  if (roleKey === "hrManager") return only(["HOME", "전자결재", "인사관리부", "증명서발급", "기사관리", "회사관리"]);
+  if (roleKey === "test") return only(["HOME", "전자결재", "배차현황", "정산관리", "매출관리", "회계관리", "자금관리", "비품관리", "기사관리", "회사관리", "급여관리"]);
+  // ⭐ 2026-11-06 인사관리자는 급여를 "조회"만(권한 관리에서 수정으로 올리거나 숨길 수 있다)
+  if (roleKey === "hrManager") return only(["HOME", "전자결재", "인사관리부", "증명서발급", "기사관리", "회사관리"], ["급여관리"]);
   // 경리사무원 — 경리 화면에서 자금·매출은 빼고 / 인사사무원 — 인사 화면에서 기사관리(기사 승인)는 빼고
   if (roleKey === "acctStaff") return only(["HOME", "전자결재", "배차현황", "정산관리", "회계관리", "비품관리", "회사관리"], ["기사관리"]);
   if (roleKey === "hrStaff") return only(["HOME", "전자결재", "인사관리부", "증명서발급", "회사관리"]);

@@ -5744,6 +5744,94 @@ exports.vehicleCareReminders = functions.runWith({ timeoutSeconds: 300, memory: 
   return null;
 });
 
+// 📅 ⭐ 2026-11-06 연차 사용 촉진 자동 알림(근로기준법 61조) — 매일 아침 9시 20분(한국시간)
+//  회기(입사일/회계연도 기준 — payrollSettings/{회사}.leave) 종료 6개월 전 1차(직원은 10일 안에 사용 계획 제출) · 2개월 전 2차(계획 미제출자 — 회사가 사용 시기 지정 예정 안내)
+//  1년 미만(월차)은 3개월 전·1개월 전. 직원: 앱 알림(hrNotices 팝업) + 사내메일(푸시) + 이메일(예약 메일 — 회사 PC 프로그램이 켜져 있을 때 발송)
+//  인사·경리 담당자: 오늘 발송 대상·계획 기한 지난 사람 목록. 모든 발송은 leavePromotions/{id}.log 에 시각과 함께(지울 수 없음)
+//  ※ 이 서버에는 메일 발송 계정이 없어 이메일은 scheduledEmails(브라우저 발송기)를 쓴다. 자동 발송을 끈 회사(leave.autoSend=false)는 담당자에게만 알린다.
+const LP = require("./leavePromote");
+const realEmailOf = (u) => { const e = String(u?.email || "").trim(); return e && /@/.test(e) && !/@driver\.run25\.kr$/i.test(e) && !u?.noAccount ? e : ""; };
+const htmlEsc = (s) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+exports.leavePromotionDaily = functions.runWith({ timeoutSeconds: 300, memory: "512MB" }).pubsub.schedule("20 9 * * *").timeZone("Asia/Seoul").onRun(async () => {
+  const today = kstDateStr();
+  const [usersSnap, profSnap, setSnap, apSnap] = await Promise.all([
+    db.collection("users").get(),
+    db.collection("userProfiles").get(),
+    db.collection("payrollSettings").get(),
+    db.collection("approvals").where("cat", "==", "leave").where("status", "==", "approved").get(),
+  ]);
+  const prof = new Map(profSnap.docs.map((d) => [d.id, d.data() || {}]));
+  const cfgOf = new Map(setSnap.docs.map((d) => [d.id, d.data()?.leave || {}]));
+  const usedBy = new Map();
+  apSnap.docs.forEach((d) => { const a = d.data() || {}; const x = LP.leaveUseOf(a); if (!x || !a.drafterUid) return; if (!usedBy.has(a.drafterUid)) usedBy.set(a.drafterUid, []); usedBy.get(a.drafterUid).push(x); });
+  const staff = usersSnap.docs.map((d) => ({ id: d.id, ...d.data() }))
+    .filter((u) => !NON_STAFF_ROLES.has(u.role) && u.role !== "totalMaster" && u.approved !== false && u.employmentStatus !== "퇴사");
+  const byCo = new Map();
+  staff.forEach((u) => { const co = String(u.companyName || PUSH_DEFAULT_COMPANY).trim(); if (!byCo.has(co)) byCo.set(co, []); byCo.get(co).push(u); });
+  let total = 0;
+  for (const [co, list] of byCo) {
+    try {
+      const c = cfgOf.get(co) || {};
+      const opt = { basis: c.basis || "hire", fiscalStart: c.fiscalStart || "01-01" };
+      const recSnap = await db.collection("leavePromotions").where("companyName", "==", co).get();
+      const recs = new Map(recSnap.docs.map((d) => [d.id, d.data() || {}]));
+      const sent = []; const overdue = [];
+      for (const u of list) {
+        const pf = prof.get(u.id) || {};
+        const period = LP.leavePeriodOf(pf.hireDate || u.hireDate || "", today, opt);
+        if (!period) continue;
+        const adj = (pf.leaveAdjust || []).filter((x) => x.period === period.from).reduce((s, x) => s + (Number(x.days) || 0), 0);
+        const used = (usedBy.get(u.id) || []).filter((x) => x.date >= period.from && x.date <= period.to).reduce((s, x) => s + x.days, 0);
+        const tot = period.total + adj;
+        const remain = Math.max(0, tot - used);
+        const id = LP.promoId(co, u.id, period.from);
+        const ref = db.collection("leavePromotions").doc(id);
+        const rec = recs.get(id) || {};
+        const name = u.name || "";
+        const now = Date.now();
+        // 1차 계획 제출 기한(10일)이 지났는데 계획이 없으면 담당자에게 한 번 알림
+        if (rec.n1?.due && today > rec.n1.due && !rec.plan?.submittedAt && !rec.n1.overdueNotified && remain > 0) {
+          overdue.push({ name, remain, due: rec.n1.due });
+          await ref.set({ n1: { overdueNotified: now }, log: FieldValue.arrayUnion({ at: now, type: "overdue", by: "auto", byName: "자동(서버)", auto: true, remain, due: rec.n1.due }) }, { merge: true });
+        }
+        const stage = LP.promoteStageDue(period, today, rec, remain);
+        if (!stage) continue;
+        const kind = stage === "first" ? "n1" : "n2";
+        if (c.autoSend === false) { sent.push({ name, kind, remain, manual: true }); continue; }
+        const due = LP.addDaysStr(today, 10);
+        const t = LP.promoteText(kind, { name, label: period.label, from: period.from, to: period.to, remain, due, company: co });
+        const email = c.email === false ? "" : realEmailOf(u);
+        const channel = ["앱 알림", "사내메일", ...(email ? ["이메일(예약)"] : [])];
+        const entry = kind === "n1" ? { sentAt: now, by: "auto", byName: "자동(서버)", remain, due, auto: true } : { sentAt: now, by: "auto", byName: "자동(서버)", remain, dates: [], auto: true };
+        await ref.set({
+          companyName: co, uid: u.id, name, label: period.label, periodFrom: period.from, periodTo: period.to, total: tot, used, remain, basis: opt.basis,
+          [kind]: entry, log: FieldValue.arrayUnion({ at: now, type: kind, by: "auto", byName: "자동(서버)", auto: true, channel, remain, ...(kind === "n1" ? { due } : { dates: [] }) }),
+          updatedAt: FieldValue.serverTimestamp(),
+        }, { merge: true });
+        await db.collection("hrNotices").add({ companyName: co, uid: u.id, kind: kind === "n1" ? "leave1" : "leave2", link: "leavePlan", refId: id, title: t.subject, body: t.body, createdAt: FieldValue.serverTimestamp(), createdBy: "auto" });
+        await db.collection("internalMails").add({ company: co, fromUid: "system", fromEmail: "", fromName: "인사관리부(자동)", subject: t.subject, body: t.body, images: [], kind: "hr", important: true, status: "sent", at: FieldValue.serverTimestamp(), readBy: [], deletedBy: [], starredBy: [], to: [u.id], toNames: [name], cc: [], ccNames: [] });
+        if (email) await db.collection("scheduledEmails").add({ companyName: co, status: "pending", sendAt: Timestamp.now(), to: email, subject: t.subject, html: `<div style="font-family:'Malgun Gothic',sans-serif;font-size:15px;line-height:1.8;white-space:pre-wrap">${htmlEsc(t.body)}</div>`, fromName: `${co} 인사관리부`, kind: "leavePromotion", createdAt: FieldValue.serverTimestamp(), createdBy: "leavePromotionDaily" });
+        sent.push({ name, kind, remain });
+        total += 1;
+      }
+      if (!sent.length && !overdue.length) continue;
+      const hr = list.filter((u) => ["hrManager", "hrAcct", "allMgr", "hrStaff", "test"].includes(u.role) || /인사/.test(String(u.team || "")));
+      const managers = (hr.length ? hr : list.filter((u) => u.isMaster === true)).slice(0, 30);
+      if (!managers.length) continue;
+      const lines = [
+        ...sent.map((x) => `· ${x.name} — ${x.kind === "n1" ? "1차 촉진" : "2차(사용 시기 지정 필요)"} · 잔여 ${x.remain}일${x.manual ? " · 자동 발송 꺼짐 → 직접 발송 필요" : " · 자동 발송함"}`),
+        ...overdue.map((x) => `· ${x.name} — 사용 계획 제출 기한(${x.due}) 지남 · 잔여 ${x.remain}일 → 2차 때 회사가 날짜 지정`),
+      ];
+      const title = `연차 사용 촉진 — 오늘 ${sent.length}명${overdue.length ? ` · 계획 미제출 ${overdue.length}명` : ""}`;
+      const body = `${lines.join("\n")}\n\n인사관리부 › 근태 › 연차 사용 촉진에서 발송 기록 확인 · 재발송 · 2차 사용일 지정을 할 수 있습니다.`;
+      for (const m of managers) await db.collection("hrNotices").add({ companyName: co, uid: m.id, kind: "leaveHr", link: "leavePromo", title, body, createdAt: FieldValue.serverTimestamp(), createdBy: "auto" });
+      await db.collection("internalMails").add({ company: co, fromUid: "system", fromEmail: "", fromName: "인사관리부(자동)", subject: `[연차 사용 촉진] ${title}`, body, images: [], kind: "hr", important: false, status: "sent", at: FieldValue.serverTimestamp(), readBy: [], deletedBy: [], starredBy: [], to: managers.map((m) => m.id), toNames: managers.map((m) => m.name || ""), cc: [], ccNames: [] });
+    } catch (e) { console.error("연차 촉진 실패:", co, e); }
+  }
+  console.log(`◆ 연차 사용 촉진 자동 발송 ${total}명`);
+  return null;
+});
+
 exports.sendScheduledMails = functions.pubsub.schedule("every 5 minutes").timeZone("Asia/Seoul").onRun(async () => {
   const due = await db.collection("internalMails").where("scheduledAt", "<=", Timestamp.now()).limit(100).get();
   for (const d of due.docs) {
