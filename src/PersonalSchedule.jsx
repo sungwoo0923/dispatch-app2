@@ -7,6 +7,7 @@
 //          당일에는 PC 접속 시 오른쪽 아래 배너 · 모바일은 위쪽 알림줄(잠깐 떴다 사라짐) — PersonalTodayHost
 //  · 생일: 직원 일정·임원 일정 달력에 "○○○ 생일" 표시(birthdaysOn)
 import React from "react";
+import { runDelete } from "./DeleteProgress"; // ⭐ 2026-11-05 삭제 진행 창 + 한 번에 삭제
 import { addDoc, collection, deleteDoc, doc, onSnapshot, query, serverTimestamp, setDoc, updateDoc, where } from "firebase/firestore";
 import { db, auth } from "./firebase";
 import CustomDatePicker from "./CustomDatePicker";
@@ -14,7 +15,7 @@ import { CustomSelect } from "./CustomSelect";
 import { TimeSelect } from "./kpInputs";
 import { getNationalHolidayLabel } from "./attendanceUtils";
 
-const MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
+const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
 const DOW = ["일", "월", "화", "수", "목", "금", "토"];
 const kstToday = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
 const addDay = (ymd, n) => { const d = new Date(`${ymd}T00:00:00Z`); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
@@ -68,7 +69,7 @@ export function PersonalModeSwitch({ on, onChange }) {
       <span className={`relative w-10 h-6 rounded-full transition ${on ? "bg-[#1B2B4B]" : "bg-white/25"}`}>
         <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-all ${on ? "left-[18px]" : "left-0.5"}`} />
       </span>
-      <span className="w-7 text-left text-[11px] tracking-wider" style={{ fontFamily: MONO }}>{on ? "ON" : "OFF"}</span>
+      <span className="w-7 text-left text-[11px] tracking-wider" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{on ? "ON" : "OFF"}</span>
     </button>
   );
 }
@@ -134,7 +135,7 @@ export function PersonalSchedule({ company, modeSwitch, staff = [] }) {
       setEdit(null);
     } catch (err) { alert(`저장하지 못했습니다: ${err?.message || err}`); } finally { setBusy(false); }
   };
-  const remove = async (e) => { if (!window.confirm("이 일정을 지울까요?")) return; await deleteDoc(doc(db, "personalSchedules", e.id)).catch((err) => alert(err.message)); setEdit(null); };
+  const remove = async (e) => { if (!window.confirm("이 일정을 지울까요?")) return; await runDelete({ label: "일정", task: () => deleteDoc(doc(db, "personalSchedules", e.id)) }).catch((err) => alert(err.message)); setEdit(null); }; // ⭐ 2026-11-05 삭제 진행 창
   const dayList = by[pick] || [];
   const dayBirth = birthdaysOn(staff, pick);
   const inp = "h-11 w-full px-3.5 rounded-xl border border-[#DCE3EE] bg-white text-[14.5px] font-semibold text-[#0F1A30] outline-none focus:border-[#2D4C82]";
@@ -145,7 +146,7 @@ export function PersonalSchedule({ company, modeSwitch, staff = [] }) {
       <div className="relative overflow-hidden rounded-[22px] px-4 md:px-6 py-4 text-white" style={{ background: "linear-gradient(120deg,#0B1428 0%,#1B2B4B 60%,#2D4C82 100%)" }}>
         <div className="relative flex items-start justify-between gap-3 flex-wrap">
           <div>
-            <div className="text-[10.5px] font-extrabold tracking-[0.3em] text-[#8FB0F0]" style={{ fontFamily: MONO }}>MY · SCHEDULE</div>
+            <div className="text-[10.5px] font-extrabold tracking-[0.3em] text-[#8FB0F0]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>MY · SCHEDULE</div>
             <div className="text-[20px] md:text-[24px] font-black mt-0.5">개인 일정</div>
             <div className="text-[12.5px] text-white/55">나만 보는 일정입니다 · 날짜를 두 번 누르면 바로 등록</div>
           </div>
@@ -153,7 +154,7 @@ export function PersonalSchedule({ company, modeSwitch, staff = [] }) {
             {modeSwitch}
             <div className="flex items-center gap-1.5">{/* 달 이동·등록은 한 묶음(휴대폰에서 줄이 갈라지지 않게) */}
               <button type="button" onClick={() => move(-1)} className="w-9 h-9 rounded-xl bg-white/10 font-black">‹</button>
-              <span className="h-9 px-3.5 rounded-xl bg-white text-[#0B1530] font-black grid place-items-center tabular-nums" style={{ fontFamily: MONO }}>{ym.replace("-", ".")}</span>
+              <span className="h-9 px-3.5 rounded-xl bg-white text-[#0B1530] font-black grid place-items-center tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{ym.replace("-", ".")}</span>
               <button type="button" onClick={() => move(1)} className="w-9 h-9 rounded-xl bg-white/10 font-black">›</button>
               <button type="button" onClick={() => setEdit(blank())} className="h-9 px-4 rounded-xl bg-white text-[#0F1A30] text-[13.5px] font-black whitespace-nowrap">+ 일정 등록</button>
             </div>
@@ -175,7 +176,7 @@ export function PersonalSchedule({ company, modeSwitch, staff = [] }) {
                   {d && (
                     <>
                       <div className="flex items-center gap-1 min-w-0">
-                        <div className={`text-[12px] md:text-[13px] font-black tabular-nums shrink-0 ${d === today ? "w-6 h-6 rounded-full bg-[#0F1A30] text-white grid place-items-center" : (i % 7 === 0 || getNationalHolidayLabel(d)) ? "text-[#D92D20]" : i % 7 === 6 ? "text-[#2D4C82]" : "text-[#0F1A30]"}`} style={{ fontFamily: MONO }}>{Number(d.slice(8))}</div>
+                        <div className={`text-[12px] md:text-[13px] font-black tabular-nums shrink-0 ${d === today ? "w-6 h-6 rounded-full bg-[#0F1A30] text-white grid place-items-center" : (i % 7 === 0 || getNationalHolidayLabel(d)) ? "text-[#D92D20]" : i % 7 === 6 ? "text-[#2D4C82]" : "text-[#0F1A30]"}`} style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{Number(d.slice(8))}</div>
                         {getNationalHolidayLabel(d) && <span className="hidden md:inline text-[10.5px] font-bold text-[#D92D20] truncate">{getNationalHolidayLabel(d)}</span>}
                       </div>
                       <div className="hidden md:block mt-1 space-y-0.5">
@@ -198,7 +199,7 @@ export function PersonalSchedule({ company, modeSwitch, staff = [] }) {
         <div className="space-y-3 self-start">
           <div className="rounded-[20px] bg-white border border-[#E3E8F0] overflow-hidden">
             <div className="px-4 pt-3.5 pb-2.5 border-b border-[#EEF1F6] flex items-center gap-2">
-              <div className="flex-1"><div className="text-[9.5px] font-extrabold tracking-[0.24em] text-[#4B6CB7]" style={{ fontFamily: MONO }}>DAY DETAIL</div>
+              <div className="flex-1"><div className="text-[9.5px] font-extrabold tracking-[0.24em] text-[#4B6CB7]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>DAY DETAIL</div>
                 <div className="text-[15px] font-black text-[#0F1A30]">{pick.replace(/-/g, ".")} ({DOW[new Date(`${pick}T00:00:00Z`).getUTCDay()]})</div></div>
               <button type="button" onClick={() => setEdit(blank(pick))} className="h-8 px-3 rounded-lg bg-[#0F1A30] text-white text-[12.5px] font-black">+ 이 날 등록</button>
             </div>
@@ -219,10 +220,10 @@ export function PersonalSchedule({ company, modeSwitch, staff = [] }) {
             )}
           </div>
           <div className="rounded-[20px] bg-white border border-[#E3E8F0] overflow-hidden">
-            <div className="px-4 pt-3.5 pb-2.5 border-b border-[#EEF1F6]"><div className="text-[9.5px] font-extrabold tracking-[0.24em] text-[#4B6CB7]" style={{ fontFamily: MONO }}>UPCOMING</div><div className="text-[15px] font-black text-[#0F1A30]">다가오는 일정</div></div>
+            <div className="px-4 pt-3.5 pb-2.5 border-b border-[#EEF1F6]"><div className="text-[9.5px] font-extrabold tracking-[0.24em] text-[#4B6CB7]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>UPCOMING</div><div className="text-[15px] font-black text-[#0F1A30]">다가오는 일정</div></div>
             {!upcoming.length ? <div className="py-6 text-center text-[13px] font-bold text-[#9AA9C3]">예정된 일정이 없습니다</div> : upcoming.map((e) => (
               <button key={e.id} type="button" onClick={() => { setPick(e.date); setYm(e.date.slice(0, 7)); }} className="w-full text-left flex items-center gap-3 px-4 py-2 border-b border-[#F1F4F9] last:border-b-0 hover:bg-[#F7F9FC]">
-                <span className="w-11 shrink-0 text-center"><span className="block text-[10.5px] font-black text-[#7A879C]">{DOW[new Date(`${e.date}T00:00:00Z`).getUTCDay()]}</span><span className="block text-[15px] font-black tabular-nums text-[#0F1A30]" style={{ fontFamily: MONO }}>{e.date.slice(5).replace("-", ".")}</span></span>
+                <span className="w-11 shrink-0 text-center"><span className="block text-[10.5px] font-black text-[#7A879C]">{DOW[new Date(`${e.date}T00:00:00Z`).getUTCDay()]}</span><span className="block text-[15px] font-black tabular-nums text-[#0F1A30]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{e.date.slice(5).replace("-", ".")}</span></span>
                 <span className="min-w-0 flex-1"><span className="block text-[14px] font-black text-[#0F1A30] truncate">{e.title}</span><span className="block text-[12px] text-[#7A879C] truncate">{e.allDay || !e.start ? "종일" : hmLabel(e.start)}{e.place ? ` · ${e.place}` : ""}</span></span>
                 <span className="w-2 h-2 rounded-full shrink-0" style={{ background: e.color || "#1B2B4B" }} />
               </button>
@@ -235,7 +236,7 @@ export function PersonalSchedule({ company, modeSwitch, staff = [] }) {
         <div className="fixed inset-0 z-[100000] bg-black/45 flex justify-end" onClick={() => setEdit(null)}>
           <div className="h-full w-full md:w-[520px] bg-white flex flex-col shadow-[-24px_0_60px_rgba(15,26,48,0.25)]" onClick={(ev) => ev.stopPropagation()}>
             <div className="px-5 py-4 border-b border-[#EEF1F6] flex items-center gap-3" style={{ paddingTop: "max(env(safe-area-inset-top, 0px), 16px)" }}>
-              <div className="flex-1"><div className="text-[10.5px] font-extrabold tracking-[0.3em] text-[#4B6CB7]" style={{ fontFamily: MONO }}>{edit.id ? "EDIT · MY SCHEDULE" : "NEW · MY SCHEDULE"}</div><div className="text-[20px] font-black text-[#0F1A30]">{edit.id ? "개인 일정 수정" : "개인 일정 등록"}</div></div>
+              <div className="flex-1"><div className="text-[10.5px] font-extrabold tracking-[0.3em] text-[#4B6CB7]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{edit.id ? "EDIT · MY SCHEDULE" : "NEW · MY SCHEDULE"}</div><div className="text-[20px] font-black text-[#0F1A30]">{edit.id ? "개인 일정 수정" : "개인 일정 등록"}</div></div>
               <button type="button" onClick={() => setEdit(null)} className="w-10 h-10 rounded-xl border border-[#DCE3EE] text-[#5B6B85]">✕</button>
             </div>
             <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">

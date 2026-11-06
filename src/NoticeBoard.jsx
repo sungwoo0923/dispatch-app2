@@ -6,6 +6,7 @@
 //  · ⭐ 2026-11-03 받는 사람(직원) 지정 — targetUids의 직원에게만 보이게. "지정 N명"은 본문 안에서만(목록에는 안 보임).
 //  · 🔒 2026-11-03 지정 공지 비공개 — 팀·직원 지정 공지는 지정된 사람 · 작성자 · 최고관리자만(회사 관리자도 지정 안 됐으면 안 보임)
 import React from "react";
+import { runDelete } from "./DeleteProgress"; // ⭐ 2026-11-05 삭제 진행 창 + 한 번에 삭제
 import { RichHtml } from "./richText";
 import { db } from "./firebase";
 import { doc, updateDoc, deleteDoc, arrayUnion } from "firebase/firestore";
@@ -13,13 +14,14 @@ import { doc, updateDoc, deleteDoc, arrayUnion } from "firebase/firestore";
 import { PlatformBadge, platformReadIds, markPlatformNoticeRead } from "./PlatformNoticeBanner";
 import { noticeTargetUids, canSeeTargetedNotice } from "./notifyCore";
 import PostComments, { PostLikeButton, PostCounts } from "./PostComments"; // 💬 2026-11-03 댓글·대댓글·좋아요
+import { LogisMark } from "./brand"; // 🔷 2026-11-04 LogisWeb 마크
 
 // ⭐ 2026-11-02 관리자센터2 — 플랫폼 공지(_platform)는 관리자 관리센터가 올린 글: 회사에서 고치거나 지울 수 없고,
 //  읽음 표시는 서버 문서 대신 이 브라우저에만 기록한다(다른 회사 직원 uid가 한 문서에 쌓이지 않게).
 //  ⭐ 2026-11-03 읽음 기록은 PlatformNoticeBanner와 한 곳(맨 위 띠·가운데 팝업과 같은 기록)
 const markPlatRead = (id) => markPlatformNoticeRead(String(id || "").replace(/^plat:/, ""));
 
-const MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
+const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
 export const MAX_PINNED = 5;
 const toMs = (v) => (v?.toMillis ? v.toMillis() : v?.seconds ? v.seconds * 1000 : typeof v === "number" ? v : 0);
 const shortDate = (ms) => {
@@ -39,7 +41,7 @@ export const noticeTargetTitle = (n) => { const names = Array.isArray(n?.targetN
 // 이 사람이 볼 수 있는 공지인지 — 지정이 없으면 전체, 팀 지정이면 그 팀 + 작성자 + 관리자
 // ⭐ 2026-11-03 직원 지정(targetUids)이면 지정된 직원 + 작성자 + 관리자(팀 지정과 같은 규칙)
 // ⭐ 2026-11-03 예약 게시 — 게시 시각(publishAt ms)이 아직 안 됐으면 작성자·관리자만 본다(예약 표시와 함께)
-export const NOTICE_SCHEDULE_ROLES = ["admin", "totalMaster", "superadmin", "hrManager", "hrAcct"];
+export const NOTICE_SCHEDULE_ROLES = ["admin", "totalMaster", "superadmin", "hrManager", "hrAcct", "allMgr"];
 export const noticePublishAt = (n) => Number(n?.publishAt) || 0;
 export const isNoticeScheduled = (n, now = Date.now()) => !n?._platform && noticePublishAt(n) > now;
 export const noticeAudiences = (n) => (Array.isArray(n?.audiences) && n.audiences.length ? n.audiences : n?.audience === "shipper" || n?.audience === "all" ? ["internal", "shipper"] : ["internal"]);
@@ -58,7 +60,7 @@ const PAGE = 15;
 // 목록 날짜·순서 — 예약 게시 글은 게시 시각 기준
 const whenOf = (n) => Math.max(toMs(n.createdAt), noticePublishAt(n));
 const Eye = ({ size = 13 }) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z" /><circle cx="12" cy="12" r="3" /></svg>;
-const SchedBadge = ({ n, big }) => <span title="예약 게시 — 이 시각에 직원들에게 보이고 알림이 갑니다(지금은 작성자·관리자만 보임)" className={`shrink-0 inline-flex items-center gap-1 rounded-md bg-[#0F1A30] text-[#8FB0F0] font-black whitespace-nowrap ${big ? "px-2 py-0.5 text-[11px]" : "px-1.5 py-0.5 text-[10.5px]"}`} style={{ fontFamily: MONO }}>{scheduleLabel(noticePublishAt(n))}</span>;
+const SchedBadge = ({ n, big }) => <span title="예약 게시 — 이 시각에 직원들에게 보이고 알림이 갑니다(지금은 작성자·관리자만 보임)" className={`shrink-0 inline-flex items-center gap-1 rounded-md bg-[#0F1A30] text-[#8FB0F0] font-black whitespace-nowrap ${big ? "px-2 py-0.5 text-[11px]" : "px-1.5 py-0.5 text-[10.5px]"}`} style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{scheduleLabel(noticePublishAt(n))}</span>;
 const AudBadges = ({ n, big }) => { const a = noticeAudiences(n); const cls = `shrink-0 rounded border border-[#C9D6EE] text-[#2D4C82] font-black ${big ? "px-2 py-0.5 rounded-md text-[11px]" : "px-1.5 py-0.5 text-[10.5px]"}`; return <>{a.includes("shipper") && <span className={cls}>{big ? "화주사 공개" : "화주사"}</span>}{a.includes("driver") && <span className={cls}>{big ? "기사 공개" : "기사"}</span>}{!a.includes("internal") && <span className={cls}>직원 제외</span>}</>; };
 export default function NoticeBoard({ notices = [], me, canWrite, isViewer, onEdit, confirm, openId, setOpenId }) {
   const [q, setQ] = React.useState("");
@@ -85,13 +87,15 @@ export default function NoticeBoard({ notices = [], me, canWrite, isViewer, onEd
   const isNew = (n) => !isNoticeScheduled(n) && Date.now() - whenOf(n) < 24 * 3600e3;
   const isSA = ["superadmin", "totalMaster"].includes(me?.role);
   const canManage = (n) => !n._platform && !isViewer && (isSA || (canWrite && (n.authorUid ? n.authorUid === me?.uid : true)));
+  // ⭐ 2026-11-04 관리자(·마스터)는 임원 등 다른 사람이 올린 회사 공지도 삭제할 수 있다(수정은 작성자만)
+  const canRemove = (n) => !!n && !n._platform && !isViewer && (canManage(n) || ["admin", "allMgr"].includes(me?.role) || me?.isMaster === true);
   const togglePin = async (n) => {
     if (!n.pinned && visible.filter((x) => x.pinned && !x._platform).length >= MAX_PINNED) { window.alert(`상단 고정은 ${MAX_PINNED}개까지입니다. 다른 고정을 먼저 해제해 주세요.`); return; }
     await updateDoc(doc(db, "notices", n.id), { pinned: !n.pinned, pinnedAt: n.pinned ? null : Date.now() }).catch((e) => window.alert(e.message));
   };
   // 💬 댓글·좋아요 — 회사 공지만(플랫폼 공지는 다른 곳 글), 화주·기사 화면에는 직원 댓글을 보이지 않는다
   const canTalk = (n) => !!n && !n._platform && !!me?.uid && !["shipper", "driver", "cafeUser"].includes(me?.role);
-  const remove = (n) => confirm("공지사항을 삭제하시겠습니까?", async () => { await deleteDoc(doc(db, "notices", n.id)); setOpenId(null); });
+  const remove = (n) => confirm("공지사항을 삭제하시겠습니까?", async () => { await runDelete({ label: "공지", task: () => deleteDoc(doc(db, "notices", n.id)) }); setOpenId(null); }); // ⭐ 2026-11-05 삭제 진행 창
 
   if (cur) {
     const ms = whenOf(cur);
@@ -100,11 +104,15 @@ export default function NoticeBoard({ notices = [], me, canWrite, isViewer, onEd
         <div className="px-4 sm:px-8 py-5 border-b border-[#EEF1F6]">
           <div className="flex items-center gap-2">
             <button type="button" onClick={() => setOpenId(null)} className="h-9 px-3.5 rounded-xl border border-[#DCE3EE] text-[13px] font-black text-[#1B2B4B] hover:bg-[#F5F8FD]">← 목록</button>
-            {canManage(cur) && (
+            {canManage(cur) ? (
               <div className="ml-auto flex gap-1.5">
                 <button type="button" onClick={() => togglePin(cur)} className="h-9 px-3.5 rounded-xl border border-[#DCE3EE] text-[12.5px] font-black text-[#1B2B4B] hover:bg-[#F5F8FD]">{cur.pinned ? "고정 해제" : "상단 고정"}</button>
                 <button type="button" onClick={() => onEdit(cur)} className="h-9 px-3.5 rounded-xl bg-[#0F1A30] text-white text-[12.5px] font-black">수정</button>
                 <button type="button" onClick={() => remove(cur)} className="h-9 px-3.5 rounded-xl border border-[#DCE3EE] text-[12.5px] font-black text-[#7A879C] hover:bg-[#F5F8FD]">삭제</button>
+              </div>
+            ) : canRemove(cur) && (
+              <div className="ml-auto flex gap-1.5">
+                <button type="button" onClick={() => remove(cur)} title="관리자 권한으로 삭제" className="h-9 px-3.5 rounded-xl border border-[#DCE3EE] text-[12.5px] font-black text-[#7A879C] hover:bg-[#F5F8FD]">삭제</button>
               </div>
             )}
           </div>
@@ -121,11 +129,11 @@ export default function NoticeBoard({ notices = [], me, canWrite, isViewer, onEd
           <h2 className="mt-2 text-[20px] sm:text-[24px] font-black text-[#0F1A30] leading-snug break-words">{cur.title || "공지사항"}</h2>
           <div className="mt-3 flex items-center gap-3">
             {cur._platform
-              ? <span className="w-10 h-10 rounded-xl flex items-center justify-center text-[13px] font-black" style={{ background: "linear-gradient(135deg,#0B1428,#1B2B4B)", color: "#E9C46A", boxShadow: "inset 0 0 0 1px rgba(233,196,106,.45)" }}>KP</span>
+              ? <LogisMark size={40} />
               : <span className="w-10 h-10 rounded-xl flex items-center justify-center text-white font-black" style={{ background: "linear-gradient(135deg,#1B2B4B,#2D4C82)" }}>{String(cur.author || "?").slice(0, 1)}</span>}
             <div className="leading-tight">
               <div className="text-[14px] font-black text-[#0F1A30]">{cur.author || "-"}</div>
-              <div className="text-[12px] text-[#7A879C] tabular-nums flex items-center flex-wrap gap-x-1">{fullDate(ms)}{isNoticeScheduled(cur) ? " 게시 예정" : ""}{cur._platform ? (cur.updatedAt ? ` · 수정 ${fullDate(toMs(cur.updatedAt))}` : "") + " · KP-Flow 운영팀이 보낸 공지입니다" : ""}<span className="inline-flex items-center gap-1 font-bold text-[#5B6B85]" title="조회수 — 한 계정 1회">· <Eye size={12} /> 조회 {noticeViews(cur)}</span></div>
+              <div className="text-[12px] text-[#7A879C] tabular-nums flex items-center flex-wrap gap-x-1">{fullDate(ms)}{isNoticeScheduled(cur) ? " 게시 예정" : ""}{cur._platform ? (cur.updatedAt ? ` · 수정 ${fullDate(toMs(cur.updatedAt))}` : "") + " · LogisWeb 운영팀이 보낸 공지입니다" : ""}<span className="inline-flex items-center gap-1 font-bold text-[#5B6B85]" title="조회수 — 한 계정 1회">· <Eye size={12} /> 조회 {noticeViews(cur)}</span></div>
               {cur.revisedAt && <div className="text-[12px] font-bold text-[#B54708] tabular-nums">{cur.hrOrder?.status === "cancelled" ? "취소" : "수정"} {fullDate(toMs(cur.revisedAt))}{cur.revisedBy ? ` · ${cur.revisedBy}` : ""}</div>}
             </div>
           </div>
@@ -160,7 +168,7 @@ export default function NoticeBoard({ notices = [], me, canWrite, isViewer, onEd
         className={`w-full grid grid-cols-[52px_minmax(0,1fr)_auto] md:grid-cols-[64px_minmax(0,1fr)_120px_110px_64px] items-center gap-2.5 md:gap-3 px-3 md:px-5 h-[60px] md:h-[56px] border-b border-[#F1F4F9] text-left transition hover:bg-[#F5F8FD] ${n._platform ? "bg-[linear-gradient(90deg,#FBF7EC,#F6F8FC_40%)]" : pin ? "bg-[#F3F6FB]" : ""}`}>
         <span className="text-center">
           {pin ? <span className="inline-flex items-center justify-center whitespace-nowrap h-6 px-1.5 rounded-md bg-[#0F1A30] text-[#8FB0F0] text-[10.5px] font-black">• 고정</span>
-            : <span className="text-[14px] font-bold text-[#5B6B85] tabular-nums" style={{ fontFamily: MONO }}>{no}</span>}
+            : <span className="text-[14px] font-bold text-[#5B6B85] tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{no}</span>}
         </span>
         <span className="min-w-0 flex flex-col md:flex-row md:items-center gap-0.5 md:gap-1.5">
         <span className="min-w-0 flex items-center gap-1.5 whitespace-nowrap">
@@ -181,8 +189,8 @@ export default function NoticeBoard({ notices = [], me, canWrite, isViewer, onEd
           : <span className="md:hidden truncate text-[12px] font-bold text-[#7A879C] inline-flex items-center gap-1.5">{n.author || "-"}<span className="inline-flex items-center gap-0.5 font-semibold text-[#9AA9C3] tabular-nums"><Eye size={11} />{noticeViews(n)}</span></span>}
         </span>
         <span className={`hidden md:block truncate text-[14px] font-bold ${n._platform ? "text-[#8A6A16]" : "text-[#1B2B4B]"}`}>{n.author || "-"}</span>
-        <span className="text-right text-[14px] font-semibold text-[#3A4A66] tabular-nums whitespace-nowrap" style={{ fontFamily: MONO }}>{shortDate(whenOf(n))}</span>
-        <span className="hidden md:inline-flex items-center justify-center gap-1 text-[13px] font-semibold text-[#5B6B85] tabular-nums" style={{ fontFamily: MONO }} title="조회수 — 한 계정 1회"><Eye size={12} />{noticeViews(n)}</span>
+        <span className="text-right text-[14px] font-semibold text-[#3A4A66] tabular-nums whitespace-nowrap" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{shortDate(whenOf(n))}</span>
+        <span className="hidden md:inline-flex items-center justify-center gap-1 text-[13px] font-semibold text-[#5B6B85] tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }} title="조회수 — 한 계정 1회"><Eye size={12} />{noticeViews(n)}</span>
       </button>
     );
   };

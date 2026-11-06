@@ -6,6 +6,7 @@
 //  최고관리자가 로그인하면 /choose 에서 "배차 프로그램 / 관리자 관리센터" 중 고른다.
 //  ⭐ 알록달록 금지 — 네이비 계열만.
 import Pager, { pageCount, pageSlice } from "./Pager";
+import { runDelete } from "./DeleteProgress"; // ⭐ 2026-11-05 삭제 진행 창 + 한 번에 삭제
 import React from "react";
 import { useNavigate } from "react-router-dom";
 import { signOut } from "firebase/auth";
@@ -18,7 +19,7 @@ import PlatformMonitor, { estimateBill, usePhone } from "./PlatformMonitor";
 import { PlatformLiveProvider, usePlatformLive, mergeCompanies, LiveNowPanel, SignupTimeline, DupeWarning, HeaderLivePill, Panel as LivePanel, normCo } from "./PlatformLive";
 import { ShellIcon } from "./AdminShell";
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts";
-import { useSalesPricing, applyPlanBill, planUsageOf } from "./SalesQuote";
+import { useSalesPricing, applyPlanBill, planUsageOf, ADDON_CATALOG, ADDON_KIND_LABEL, addonRate, itemsTotal, billLines } from "./SalesQuote";
 import { ContractBuilder, ContractList, ContractTemplates } from "./ContractCenter";
 import { NotifTemplatePanel, LandingPageEditPanel, ShipperForceUpdatePanel } from "./AdminMenu";
 import { AdminSessionsPanel } from "./LoginManager";
@@ -28,6 +29,7 @@ import NoticeBoard from "./NoticeBoard";
 import { toBoardNotice } from "./PlatformNoticeBanner";
 import { compressImage } from "./InternalMail";
 const HomepageEditor = React.lazy(() => import("./HomepageEditor")); // ⭐ 2026-11-03 소개 홈페이지 편집기
+const CostPanel = React.lazy(() => import("./CostPanel")); // 💰 2026-11-04 비용 · 손익(최고관리자 전용)
 import { RemoteSupportAdminPanel } from "./RemoteSupport"; // ⭐ 2026-11-02 원격지원 —
 import { CustomSelect } from "./CustomSelect";
 import { RichTextEditor, htmlToText, textToHtml, sanitizeHtml } from "./richText"; // ⭐ 2026-11-03 공지 글자 꾸미기
@@ -35,8 +37,9 @@ import CustomDatePicker from "./CustomDatePicker";
 import { TimeSelect } from "./kpInputs";
 import "./pcTheme.css";
 import { fmtPhone } from "./formatInput";
+import { LogisMark, LogisWordmark, LogisTag } from "./brand"; // 🔷 2026-11-04 LogisWeb 로고
 
-const MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
+const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
 const pad = (n) => String(n).padStart(2, "0");
 const ymd = (d = new Date()) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 
@@ -68,6 +71,7 @@ const SECTIONS = [
     { key: "billing", label: "요금·청구", en: "BILLING", icon: "money" },
     { key: "payments", label: "수납 관리", en: "COLLECTION", icon: "wallet" },
     { key: "usage", label: "사용량·한도", en: "USAGE", icon: "server" }, // ⭐ 2026-11-03 요금제 한도 대비 사용량·초과 요금
+    { key: "cost", label: "비용·손익", en: "COST · P&L", icon: "trend" }, // 💰 2026-11-04 매출 vs 서버·운영 지출 · 운송사별 원가 · 손익분기
   ] },
   { key: "ops", label: "운영", en: "OPERATIONS", icon: "server", items: [
     { key: "notices", label: "플랫폼 공지", en: "BROADCAST", icon: "bell" },
@@ -93,7 +97,7 @@ function Card({ code, title, right, children, bodyClass = "p-5" }) {
     <div className="bg-white rounded-[18px] border border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_10px_26px_rgba(16,24,40,0.05)] overflow-hidden min-w-0">
       <div className="flex items-center justify-between gap-3 px-4 sm:px-5 h-[46px] sm:h-[50px] bg-[#F7F9FC] border-b border-[#E8EDF4]">
         <div className="flex items-center gap-2 min-w-0"><span className="w-1.5 h-1.5 rotate-45 bg-[#1B2B4B]" />
-          <span className="text-[10.5px] font-extrabold tracking-[0.2em] text-[#94A3B8]" style={{ fontFamily: MONO }}>{code}</span>
+          <span className="text-[10.5px] font-extrabold tracking-[0.2em] text-[#94A3B8]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{code}</span>
           <span className="text-[15px] sm:text-[16px] font-black text-[#0F1A30] truncate whitespace-nowrap">{title}</span></div>
         {right}
       </div>
@@ -105,7 +109,7 @@ function Hero({ en, title, desc, right }) {
   return (
     <div className="kp-hero relative overflow-hidden rounded-[18px] sm:rounded-[22px] px-4 py-3.5 sm:px-6 sm:py-5 mb-3 sm:mb-4 text-white flex items-center justify-between gap-3 sm:gap-4 flex-wrap"
       style={{ background: "linear-gradient(rgba(143,176,240,.06) 1px, transparent 1px) 0 0/22px 22px, linear-gradient(90deg, rgba(143,176,240,.06) 1px, transparent 1px) 0 0/22px 22px, radial-gradient(600px 200px at 85% -20%, rgba(75,108,183,.45), transparent 60%), linear-gradient(120deg,#0B1428 0%,#1B2B4B 60%,#2D4C82 100%)" }}>
-      <div className="min-w-0"><div className="text-[10px] sm:text-[11px] font-extrabold tracking-[0.28em] text-[#8FB0F0] whitespace-nowrap" style={{ fontFamily: MONO }}>{en}</div>
+      <div className="min-w-0"><div className="text-[10px] sm:text-[11px] font-extrabold tracking-[0.28em] text-[#8FB0F0] whitespace-nowrap" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{en}</div>
         <div className="text-[19px] sm:text-[24px] font-black mt-0.5 tracking-tight whitespace-nowrap">{title}</div>
         {desc && <div className="hidden sm:block text-[13.5px] text-white/65 mt-0.5">{desc}</div>}</div>
       {right}
@@ -115,7 +119,7 @@ function Hero({ en, title, desc, right }) {
 function Clock() {
   const [n, setN] = React.useState(() => new Date());
   React.useEffect(() => { const t = setInterval(() => setN(new Date()), 1000); return () => clearInterval(t); }, []);
-  return <span className="text-[13px] font-black text-white tabular-nums" style={{ fontFamily: MONO }}>{pad(n.getHours())}:{pad(n.getMinutes())}<span className="text-white/40">:{pad(n.getSeconds())}</span></span>;
+  return <span className="text-[13px] font-black text-white tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{pad(n.getHours())}:{pad(n.getMinutes())}<span className="text-white/40">:{pad(n.getSeconds())}</span></span>;
 }
 function useCol(name, order = "createdAt", n = 300) {
   const [list, setList] = React.useState(null);
@@ -165,7 +169,7 @@ function TodayPanel({ go }) {
         {kpi.map(([l, v, u], i) => (
           <div key={l} className={`rounded-[16px] px-4 py-3.5 border ${i === 3 ? "bg-[#0F1A30] text-white border-[#0F1A30]" : "bg-white border-[#E3E8F0]"}`}>
             <div className={`text-[12.5px] font-bold ${i === 3 ? "text-white/60" : "text-[#7A879C]"}`}>{l}</div>
-            <div className="text-[26px] font-black mt-0.5" style={{ fontFamily: MONO }}>{v}<span className={`text-[13px] ml-1 ${i === 3 ? "text-white/50" : "text-[#9AA9C3]"}`}>{u}</span></div>
+            <div className="text-[26px] font-black mt-0.5" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{v}<span className={`text-[13px] ml-1 ${i === 3 ? "text-white/50" : "text-[#9AA9C3]"}`}>{u}</span></div>
           </div>
         ))}
       </div>
@@ -173,8 +177,8 @@ function TodayPanel({ go }) {
       <Card code="QUEUE" title={`처리할 일 ${tasks.length}건`} bodyClass="p-2">
         {tasks.length === 0 ? <div className="py-14 text-center text-[#9AA9C3]">지금 처리할 일이 없습니다 ✓</div> : tasks.map((t, i) => (
           <button key={i} type="button" onClick={() => go(t.to)} className="w-full flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-[#F5F8FD] text-left">
-            <span className={`w-16 shrink-0 text-center py-1 rounded-md text-[10.5px] font-extrabold tracking-[0.12em] ${t.lv >= 2 ? "bg-[#0F1A30] text-white" : t.lv === 1 ? "bg-[#DCE6F7] text-[#1B2B4B]" : "border border-[#DCE3EE] text-[#5B6B85]"}`} style={{ fontFamily: MONO }}>{t.code}</span>
-            <span className="flex-1 min-w-0"><span className="block text-[14.5px] font-black text-[#0F1A30] truncate">{t.text}</span>{t.sub && <span className="block text-[12px] text-[#7A89A3]" style={{ fontFamily: MONO }}>{t.sub}</span>}</span>
+            <span className={`w-16 shrink-0 text-center py-1 rounded-md text-[10.5px] font-extrabold tracking-[0.12em] ${t.lv >= 2 ? "bg-[#0F1A30] text-white" : t.lv === 1 ? "bg-[#DCE6F7] text-[#1B2B4B]" : "border border-[#DCE3EE] text-[#5B6B85]"}`} style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{t.code}</span>
+            <span className="flex-1 min-w-0"><span className="block text-[14.5px] font-black text-[#0F1A30] truncate">{t.text}</span>{t.sub && <span className="block text-[12px] text-[#7A89A3]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{t.sub}</span>}</span>
             <span className="text-[#9AA9C3]">›</span>
           </button>
         ))}
@@ -207,9 +211,9 @@ function InquiriesPanel({ toQuote }) {
                 <tr key={q.id} onClick={() => setSel(q.id)} className={`border-t border-[#EEF1F6] cursor-pointer ${sel === q.id ? "bg-[#EEF3FB]" : "hover:bg-[#F5F8FD]"}`}>
                   <td className="px-3 py-2.5 font-black text-[#0F1A30]">{q.companyName}{q.type === "무료체험" && <span className="ml-1.5 px-1.5 py-0.5 rounded-md border border-[#1B2B4B] text-[10.5px] font-black text-[#1B2B4B]">무료체험</span>}</td>
                   <td className="px-3 py-2.5 text-center">{q.name}</td>
-                  <td className="px-3 py-2.5 text-center" style={{ fontFamily: MONO }}>{fmtPhone(q.phone) || q.phone}</td>
+                  <td className="px-3 py-2.5 text-center" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{fmtPhone(q.phone) || q.phone}</td>
                   <td className="px-3 py-2.5 text-center text-[#5B6B85]">{q.vehicles || "-"}</td>
-                  <td className="px-3 py-2.5 text-center text-[12.5px] text-[#5B6B85]" style={{ fontFamily: MONO }}>{msOf(q.createdAt) ? ymd(new Date(msOf(q.createdAt))) : "-"}</td>
+                  <td className="px-3 py-2.5 text-center text-[12.5px] text-[#5B6B85]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{msOf(q.createdAt) ? ymd(new Date(msOf(q.createdAt))) : "-"}</td>
                   <td className="px-3 py-2.5 text-center"><span className={`px-2 py-0.5 rounded-md text-[12px] font-black ${(!q.status || q.status === "신규") ? "bg-[#0F1A30] text-white" : "bg-[#EEF2F8] text-[#1B2B4B]"}`}>{q.status || "신규"}</span></td>
                 </tr>))}</tbody>
             </table></div>
@@ -244,12 +248,12 @@ const PAY_STATUS = ["미청구", "청구", "입금완료", "연체"];
 //  · 숫자는 서버 집계(siteConfig/platformStats · 매일 새벽 4시 전체 + 지금 갱신) — 모든 문서의 회사명(companyName) 기준으로 센다
 //  · 직원 수는 실시간(usePlatformLive), 이달 오더는 오늘까지 건수로 월말 예상
 function UsageBar({ used, limit, unit = "", fmt = (n) => Number(n || 0).toLocaleString() }) {
-  if (!limit) return <div className="text-[13.5px] font-black text-[#0F1A30] tabular-nums" style={{ fontFamily: MONO }}>{fmt(used)}{unit}<span className="ml-1 text-[11px] font-bold text-[#9AA9C3]">한도 없음</span></div>;
+  if (!limit) return <div className="text-[13.5px] font-black text-[#0F1A30] tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{fmt(used)}{unit}<span className="ml-1 text-[11px] font-bold text-[#9AA9C3]">한도 없음</span></div>;
   const r = used / limit; const pct = Math.min(100, Math.round(r * 100));
   const tone = r > 1 ? "#B42318" : r >= 0.8 ? "#B54708" : "#1B2B4B";
   return (
     <div className="min-w-[120px]">
-      <div className="flex items-baseline justify-between gap-2 tabular-nums" style={{ fontFamily: MONO }}>
+      <div className="flex items-baseline justify-between gap-2 tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>
         <span className="text-[13.5px] font-black" style={{ color: tone }}>{fmt(used)}{unit}</span>
         <span className="text-[11px] font-bold text-[#9AA9C3]">/ {fmt(limit)}{unit}</span>
       </div>
@@ -310,7 +314,7 @@ function UsagePanel() {
         {[["요금제 지정 운송사", `${rows.filter((r) => r.p).length}곳`, `전체 ${rows.length}곳`], ["한도 초과 운송사", `${overCos.length}곳`, overCos.slice(0, 3).map((r) => r.c.name).join(" · ") || "없음"], ["이달 초과 요금 합계", won(sumOver), "VAT 별도 · 월말 예상"], ["이달 예상 청구 합계", won(sumTotal), "기본료 + 초과 요금"]].map(([k, v, sub], i) => (
           <div key={k} className={`rounded-[16px] px-4 py-3.5 border ${i === 2 ? "bg-[#0F1A30] text-white border-[#0F1A30]" : "bg-white border-[#E3E8F0]"}`}>
             <div className={`text-[12.5px] font-bold ${i === 2 ? "text-white/60" : "text-[#7A879C]"}`}>{k}</div>
-            <div className="text-[22px] font-black mt-0.5 tabular-nums" style={{ fontFamily: MONO }}>{v}</div>
+            <div className="text-[22px] font-black mt-0.5 tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{v}</div>
             <div className={`text-[11.5px] font-semibold mt-0.5 truncate ${i === 2 ? "text-white/50" : "text-[#9AA9C3]"}`}>{sub}</div>
           </div>
         ))}
@@ -325,11 +329,11 @@ function UsagePanel() {
                 <td className="px-3 py-2.5 text-center whitespace-nowrap">{p ? <span className="inline-block px-2.5 py-1 rounded-lg bg-[#0F1A30] text-white text-[12px] font-black">{p.name}</span> : <span className="text-[12px] font-bold text-[#9AA9C3]">미지정(한도 없음)</span>}</td>
                 <td className="px-3 py-2.5"><UsageBar used={c.staff || 0} limit={p ? Number(p.seats) : 0} unit="명" /></td>
                 <td className="px-3 py-2.5"><UsageBar used={projected} limit={p ? Number(p.orders) : 0} unit="건" /><div className="text-[10.5px] font-semibold text-[#9AA9C3] mt-0.5">오늘까지 {Number(c.m?.toDate ?? c.m?.cnt ?? 0).toLocaleString()}건 · 이달 전체 {Number(c.m?.cnt || 0).toLocaleString()}건{c.m?.fixed ? ` (고정노선 ${Number(c.m.fixed).toLocaleString()})` : ""}</div></td>
-                <td className="px-3 py-2.5 text-center tabular-nums font-black" style={{ fontFamily: MONO }}>{Number(c.fleetJ || 0).toLocaleString()}대{p && !["standard", "pro"].includes(p.id) && c.fleetJ ? <div className="text-[10.5px] font-semibold text-[#9AA9C3]">요금제에 없음</div> : null}</td>
+                <td className="px-3 py-2.5 text-center tabular-nums font-black" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{Number(c.fleetJ || 0).toLocaleString()}대{p && !["standard", "pro"].includes(p.id) && c.fleetJ ? <div className="text-[10.5px] font-semibold text-[#9AA9C3]">요금제에 없음</div> : null}</td>
                 <td className="px-3 py-2.5"><UsageBar used={storageGB} limit={p ? (u?.limitGB || 0) : 0} unit="GB" fmt={(n) => Number(n || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })} /><div className="text-[10.5px] font-semibold text-[#9AA9C3] mt-0.5">파일 {Number(c.storageFiles || 0).toLocaleString()}개</div></td>
                 <td className="px-3 py-2.5 text-right whitespace-nowrap">
                   {u?.over ? (
-                    <div className="space-y-0.5 text-[12px] font-bold text-[#5B6B85] tabular-nums" style={{ fontFamily: MONO }}>
+                    <div className="space-y-0.5 text-[12px] font-bold text-[#5B6B85] tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>
                       {u.fee.seats ? <div>계정 +{u.extra.seats}명 · {won(u.fee.seats)}</div> : null}
                       {u.fee.orders ? <div>오더 +{u.extra.orders.toLocaleString()}건 · {won(u.fee.orders)}</div> : null}
                       {u.fee.fleet ? <div>지입 {u.extra.fleet}대 · {won(u.fee.fleet)}</div> : null}
@@ -338,7 +342,7 @@ function UsagePanel() {
                     </div>
                   ) : <span className="text-[12px] font-bold text-[#9AA9C3]">{p ? "없음" : "-"}</span>}
                 </td>
-                <td className="px-3 py-2.5 text-right font-black text-[#0F1A30] tabular-nums whitespace-nowrap" style={{ fontFamily: MONO }}>{p ? won(total) : "-"}{p ? <div className="text-[10.5px] font-semibold text-[#9AA9C3]">기본 {won(p.price)}</div> : null}</td>
+                <td className="px-3 py-2.5 text-right font-black text-[#0F1A30] tabular-nums whitespace-nowrap" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{p ? won(total) : "-"}{p ? <div className="text-[10.5px] font-semibold text-[#9AA9C3]">기본 {won(p.price)}</div> : null}</td>
               </tr>
             ))}</tbody>
           </table></div>
@@ -379,22 +383,30 @@ function PaymentsPanel() {
     } catch (e) { window.alert(e.message); }
   };
   const planBill = (c, base) => applyPlanBill(base, c, plans[c.name]?.planId, sales); // ⭐ 2026-11-02 관리자센터2 — 요금·청구와 같은 계산(SalesQuote.applyPlanBill)
+  const [addon, setAddon] = React.useState(null); // ⭐ 2026-11-04 추가 항목 편집 중인 회사
   if (!stats || !pricing) return <div className="py-20 text-center text-[#9AA9C3]">불러오는 중…</div>;
   const days = new Date(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 0).getDate();
   const companies = mergeCompanies(stats.companies, live).map((c) => ({ ...c, bill: planBill(c, estimateBill(c, pricing, days, days)) }));
   const key = (c) => `${month}_${c.name}`.replace(/\//g, "_");
-  const amountOf = (c) => rows[key(c)]?.amount ?? c.bill.total;
+  // ⭐ 2026-11-04 추가 청구 — 청구액 = 자동 계산(기본료+초과) + 추가 항목(세금계산서·문자·개발 등). 칸에서 직접 고친 금액이 있으면 그 값
+  const autoOf = (c) => c.bill.total + itemsTotal(rows[key(c)]?.items);
+  const amountOf = (c) => rows[key(c)]?.amount ?? autoOf(c);
   const sum = (st) => companies.filter((c) => (rows[key(c)]?.status || "미청구") === st).reduce((a, c) => a + amountOf(c), 0);
-  const save = (c, patch) => setDoc(doc(db, "platformInvoices", key(c)), { month, company: c.name, amount: amountOf(c), ...patch, updatedAt: serverTimestamp() }, { merge: true }).catch((e) => window.alert(e.message));
+  const save = (c, patch) => setDoc(doc(db, "platformInvoices", key(c)), { month, company: c.name, amount: amountOf(c), lines: billLines(c.bill), ...patch, updatedAt: serverTimestamp() }, { merge: true }).catch((e) => window.alert(e.message));
+  const saveItems = (c, items) => {
+    const r = rows[key(c)] || {};
+    const amount = r.amountManual ? Math.max(0, Number(r.amount || 0) + itemsTotal(items) - itemsTotal(r.items)) : c.bill.total + itemsTotal(items);
+    return save(c, { items, amount });
+  };
   return (
     <div className="space-y-4">
       <Hero en="BILLING · COLLECTION" title="수납 관리" desc="가입사별 이달 청구액을 확정하고 청구·입금 상태를 기록합니다. (금액은 요금·청구 기준 예상액 — 칸에서 바로 고칠 수 있습니다)"
-        right={<input type="month" value={month} onChange={(e) => setMonth(e.target.value)} className="h-10 px-3 rounded-xl bg-white/10 ring-1 ring-white/25 text-white font-black" style={{ fontFamily: MONO, colorScheme: "dark" }} />} />
+        right={<input type="month" value={month} onChange={(e) => setMonth(e.target.value)} className="h-10 px-3 rounded-xl bg-white/10 ring-1 ring-white/25 text-white font-black" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", colorScheme: "dark" }} />} />
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         {PAY_STATUS.map((st, i) => (
           <div key={st} className={`rounded-[16px] px-4 py-3.5 border ${i === 2 ? "bg-[#0F1A30] text-white border-[#0F1A30]" : "bg-white border-[#E3E8F0]"}`}>
             <div className={`text-[12.5px] font-bold ${i === 2 ? "text-white/60" : "text-[#7A879C]"}`}>{st}</div>
-            <div className="text-[22px] font-black mt-0.5" style={{ fontFamily: MONO }}>{sum(st).toLocaleString()}<span className="text-[12px] ml-1 opacity-50">원</span></div>
+            <div className="text-[22px] font-black mt-0.5" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{sum(st).toLocaleString()}<span className="text-[12px] ml-1 opacity-50">원</span></div>
           </div>
         ))}
       </div>
@@ -411,7 +423,14 @@ function PaymentsPanel() {
                     {(sales?.plans || []).filter((p) => ["lite", "basic", "standard", "pro"].includes(p.id)).map((p) => <option key={p.id} value={p.id}>{p.name} · {Number(p.price || 0).toLocaleString()}</option>)}
                   </CustomSelect>
                 </td>
-                <td className="px-3 py-2 text-right"><input defaultValue={amountOf(c).toLocaleString()} key={`${key(c)}_${amountOf(c)}`} onBlur={(e) => save(c, { amount: Number(e.target.value.replace(/[^\d]/g, "")) || 0 })} className="w-36 h-9 px-2 rounded-lg border border-[#DCE3EE] text-right font-black" style={{ fontFamily: MONO }} /></td>
+                <td className="px-3 py-2 text-right">
+                  <input defaultValue={amountOf(c).toLocaleString()} key={`${key(c)}_${amountOf(c)}`} onBlur={(e) => { const v = Number(e.target.value.replace(/[^\d]/g, "")) || 0; if (v === amountOf(c) && rows[key(c)]) return; save(c, { amount: v, amountManual: v !== autoOf(c) }); }} className="w-36 h-9 px-2 rounded-lg border border-[#DCE3EE] text-right font-black" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }} />
+                  <div className="mt-1 flex items-center justify-end gap-1.5">
+                    {(r.items || []).length > 0 && <span className="text-[11px] font-bold text-[#5B6B85] tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>추가 {(r.items || []).length}건 · {itemsTotal(r.items).toLocaleString()}</span>}
+                    <button type="button" onClick={() => setAddon(c)} className="h-7 px-2 rounded-md border border-[#DCE3EE] text-[11.5px] font-black text-[#1B2B4B] hover:border-[#4B6CB7]">+ 추가 항목</button>
+                  </div>
+                  {r.amountManual && <div className="text-[10.5px] font-bold text-[#9AA9C3]">직접 정한 금액 · 자동 {autoOf(c).toLocaleString()}</div>}
+                </td>
                 <td className="px-3 py-2 text-center"><div className="inline-flex gap-1">{PAY_STATUS.map((st) => (
                   <button key={st} type="button" onClick={() => save(c, { status: st, ...(st === "입금완료" && !r.paidAt ? { paidAt: ymd() } : {}) })} className={`h-8 px-2.5 rounded-lg text-[12px] font-black border ${(r.status || "미청구") === st ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "border-[#DCE3EE] text-[#5B6B85]"}`}>{st}</button>))}</div></td>
                 <td className="px-3 py-2 text-center"><span className="inline-block w-[140px]"><CustomDatePicker value={r.paidAt || ""} onChange={(e) => save(c, { paidAt: e.target.value })} className="h-9 w-full px-2 rounded-lg border border-[#DCE3EE] text-[13px] font-semibold" placeholder="입금일" /></span></td>
@@ -420,6 +439,58 @@ function PaymentsPanel() {
           </table></div>
         )}
       </Card>
+      {addon && <AddonModal company={addon} month={month} sales={sales} planId={plans[addon.name]?.planId || ""} items={rows[key(addon)]?.items || []} bill={addon.bill} onClose={() => setAddon(null)} onSave={async (items) => { await saveItems(addon, items); setAddon(null); }} />}
+    </div>
+  );
+}
+
+// 🧾 2026-11-04 추가 청구 항목(이달 청구서에 붙는 줄) — 단가는 요금제 관리 값, 수량만 넣으면 금액 자동
+function AddonModal({ company, month, sales, planId, items: initial, bill, onClose, onSave }) {
+  const [items, setItems] = React.useState(() => initial.map((x) => ({ ...x })));
+  const [busy, setBusy] = React.useState(false);
+  const add = (a) => setItems((l) => [...l, { key: a.key, label: a.label, qty: 1, unit: addonRate(a.key, sales, planId), kind: a.kind, amount: addonRate(a.key, sales, planId) }]);
+  const upd = (i, patch) => setItems((l) => l.map((x, k) => { if (k !== i) return x; const y = { ...x, ...patch }; y.amount = Math.round(Number(y.qty || 0) * Number(y.unit || 0)); return y; }));
+  const lines = billLines(bill);
+  const total = lines.reduce((a, x) => a + x.amount, 0) + itemsTotal(items);
+  return (
+    <div className="fixed inset-0 z-[100060] bg-[#0B1428]/70 backdrop-blur-[3px] flex items-center justify-center p-3" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="w-full max-w-[860px] max-h-[92vh] flex flex-col rounded-[22px] bg-[#F4F6FA] overflow-hidden shadow-[0_40px_100px_rgba(0,0,0,0.5)]">
+        <div className="px-6 py-4 text-white flex justify-between items-start gap-3" style={{ background: "linear-gradient(120deg,#0B1428 0%,#1B2B4B 60%,#2D4C82 100%)" }}>
+          <div><div className="text-[10.5px] font-extrabold tracking-[0.3em] text-[#8FB0F0]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>INVOICE · ADD-ONS · {month}</div>
+            <div className="text-[19px] font-black mt-0.5">{company.name} — 이달 청구서 추가 항목</div>
+            <div className="text-[12.5px] text-white/60">단가는 영업 › 요금제 관리 값(VAT 별도). 수량·단가를 고치면 금액이 바뀝니다.</div></div>
+          <button type="button" onClick={onClose} className="h-9 px-3.5 rounded-xl bg-white/10 border border-white/20 text-[13px] font-bold">닫기 ✕</button>
+        </div>
+        <div className="flex-1 overflow-y-auto p-5 space-y-4">
+          <div className="flex flex-wrap gap-1.5">{ADDON_CATALOG.map((a) => (
+            <button key={a.key} type="button" onClick={() => add(a)} className="h-9 px-3 rounded-xl bg-white border border-[#DCE3EE] text-[12.5px] font-black text-[#1B2B4B] hover:border-[#4B6CB7]">
+              + {a.label}<span className="ml-1.5 text-[10.5px] text-[#9AA9C3]">{ADDON_KIND_LABEL[a.kind]}{a.rateKey ? ` · ${addonRate(a.key, sales, planId).toLocaleString()}원/${a.unit}` : ""}</span>
+            </button>))}</div>
+          <div className="bg-white rounded-2xl border border-[#E3E8F0] overflow-x-auto">
+            <table className="w-full text-[13.5px]" style={{ minWidth: 560 }}>
+              <thead><tr className="bg-[#1B2B4B] text-white">{["항목", "수량", "단가", "금액", ""].map((h, i) => <th key={i} className="px-3 py-2 text-center font-extrabold">{h}</th>)}</tr></thead>
+              <tbody>
+                {lines.map((x) => <tr key={x.key} className="border-t border-[#EEF1F6] text-[#5B6B85]"><td className="px-3 py-2 font-bold">{x.label} <span className="text-[11px] text-[#9AA9C3]">자동</span></td><td /><td /><td className="px-3 py-2 text-right font-black tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{x.amount.toLocaleString()}</td><td /></tr>)}
+                {items.map((x, i) => (
+                  <tr key={i} className="border-t border-[#EEF1F6]">
+                    <td className="px-3 py-2"><input value={x.label} onChange={(e) => upd(i, { label: e.target.value })} className="h-9 w-full px-2 rounded-lg border border-[#DCE3EE] font-bold" /></td>
+                    <td className="px-3 py-2"><input inputMode="decimal" value={x.qty} onChange={(e) => upd(i, { qty: Number(e.target.value.replace(/[^\d.]/g, "")) || 0 })} className="h-9 w-20 px-2 rounded-lg border border-[#DCE3EE] text-right font-black" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }} /></td>
+                    <td className="px-3 py-2"><input inputMode="numeric" value={x.unit} onChange={(e) => upd(i, { unit: Number(e.target.value.replace(/[^\d]/g, "")) || 0 })} className="h-9 w-28 px-2 rounded-lg border border-[#DCE3EE] text-right font-black" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }} /></td>
+                    <td className="px-3 py-2 text-right font-black tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{Number(x.amount || 0).toLocaleString()}</td>
+                    <td className="px-2 py-2 text-center"><button type="button" onClick={() => setItems((l) => l.filter((_, k) => k !== i))} className="text-[#9AA9C3] px-1.5">✕</button></td>
+                  </tr>
+                ))}
+                {!items.length && <tr className="border-t border-[#EEF1F6]"><td colSpan={5} className="px-3 py-5 text-center text-[#9AA9C3] text-[13px]">위 버튼으로 이번 달에 청구할 항목을 넣으세요(예: 세금계산서 120건, 맞춤 개발 6시간).</td></tr>}
+              </tbody>
+            </table>
+          </div>
+          <div className="rounded-2xl bg-[#0F1A30] text-white px-5 py-3 flex justify-between items-center"><span className="text-[13px] font-bold text-white/70">이달 청구 예상 (VAT 별도)</span><span className="text-[20px] font-black tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{total.toLocaleString()}원</span></div>
+        </div>
+        <div className="px-5 py-3 bg-white border-t border-[#E3E8F0] flex justify-end gap-2">
+          <button type="button" onClick={onClose} className="h-10 px-4 rounded-xl border border-[#DCE3EE] text-[13px] font-black">취소</button>
+          <button type="button" disabled={busy} onClick={async () => { setBusy(true); try { await onSave(items.filter((x) => x.label)); } finally { setBusy(false); } }} className="h-10 px-5 rounded-xl bg-[#0F1A30] text-white text-[13px] font-black disabled:opacity-50">저장</button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -474,7 +545,7 @@ function CompanyPicker({ selected, setSelected }) {
             <button key={c.name} type="button" onClick={() => toggle(c.name)} className={`w-full flex items-center gap-3 px-3.5 h-12 text-left ${on ? "bg-[#EEF3FB]" : "hover:bg-[#F7F9FC]"}`}>
               <span className={`w-5 h-5 rounded-md border-2 flex items-center justify-center text-[12px] font-black shrink-0 ${on ? "bg-[#1B2B4B] border-[#1B2B4B] text-white" : "border-[#C9D3E3] bg-white"}`}>{on ? "✓" : ""}</span>
               <span className="flex-1 min-w-0 truncate text-[14.5px] font-black text-[#0F1A30]">{c.name}</span>
-              {c.code && <span className="text-[12.5px] font-bold text-[#7A879C] whitespace-nowrap" style={{ fontFamily: MONO }}>{c.code}</span>}
+              {c.code && <span className="text-[12.5px] font-bold text-[#7A879C] whitespace-nowrap" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{c.code}</span>}
               <span className="w-16 text-right text-[13px] font-semibold text-[#5B6B85] whitespace-nowrap">직원 {c.staff}명</span>
             </button>); })}
       </div>
@@ -488,7 +559,7 @@ function PlatformNoticePreview({ draft, onClose }) {
     <div className="fixed inset-0 z-[99990] bg-[rgba(11,20,40,.55)] flex items-start justify-center p-3 sm:p-8 overflow-y-auto" onClick={onClose}>
       <div className="w-full max-w-[980px] rounded-[22px] bg-[#EEF1F6] p-3 sm:p-5 space-y-3 shadow-2xl" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between gap-3 flex-wrap">
-          <div><div className="text-[11px] font-extrabold tracking-[0.26em] text-[#4B6CB7]" style={{ fontFamily: MONO }}>PREVIEW</div>
+          <div><div className="text-[11px] font-extrabold tracking-[0.26em] text-[#4B6CB7]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>PREVIEW</div>
             <div className="text-[17px] font-black text-[#0F1A30]">운송사 홈 › 공지사항에서 이렇게 보입니다</div></div>
           <div className="flex gap-1.5">
             <button type="button" onClick={() => setOpenId(null)} className={`h-10 px-4 rounded-xl text-[13.5px] font-black border ${!openId ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white border-[#DCE3EE] text-[#1B2B4B]"}`}>목록</button>
@@ -597,7 +668,7 @@ function NoticesPanel() {
       const pushPending = !!publishAt && (editId ? (prev?.push !== false && !prev?.pushedAt) : f.push !== false);
       const data = { title: f.title.trim().slice(0, 200), body: htmlToText(bodyHtml) || f.body || "", bodyHtml, publishAt, pushPending, level: f.level, category: f.level, audience: f.audience,
         targetCompanies: f.audience === "selected" ? f.targetCompanies : [], active: f.active !== false, endDate: f.endDate || "",
-        pinned: !!f.pinned, banner: f.banner !== false, board: true, image: f.image || "", author: "KP-Flow 운영팀" };
+        pinned: !!f.pinned, banner: f.banner !== false, board: true, image: f.image || "", author: "LogisWeb 운영팀" };
       if (editId) await updateDoc(doc(db, "platformNotices", editId), { ...data, updatedAt: serverTimestamp() });
       else await addDoc(collection(db, "platformNotices"), { ...data, push: f.push !== false, createdAt: serverTimestamp(), authorEmail: auth.currentUser?.email || "" });
       close();
@@ -639,8 +710,8 @@ function NoticesPanel() {
             </div>
           </div>
           <div className="justify-self-start flex items-center gap-2.5 h-[50px] px-3 rounded-xl bg-[#F5F8FD] border border-[#E3E8F0]">
-            <span className="w-9 h-9 rounded-lg flex items-center justify-center text-[12px] font-black" style={{ background: "linear-gradient(135deg,#0B1428,#1B2B4B)", color: "#E9C46A" }}>KP</span>
-            <div className="leading-tight"><div className="text-[14px] font-black text-[#0F1A30] whitespace-nowrap">KP-Flow 운영팀</div><div className="text-[12px] text-[#7A879C]">작성자 · 자동</div></div>
+            <LogisMark size={36} />
+            <div className="leading-tight"><div className="text-[14px] font-black text-[#0F1A30] whitespace-nowrap">LogisWeb 운영팀</div><div className="text-[12px] text-[#7A879C]">작성자 · 자동</div></div>
           </div>
         </div>
         {f.audience === "selected" && (
@@ -704,7 +775,7 @@ function NoticesPanel() {
         right={<button type="button" onClick={() => { setF(blank); setEditId(null); setWriting(true); }} className="h-11 px-5 rounded-xl bg-white text-[#0F1A30] text-[14.5px] font-black inline-flex items-center gap-2 whitespace-nowrap"><ShellIcon name="pen" size={15} />새 공지 작성</button>} />
       <Card code="POSTED" title={`게시한 공지 ${(list || []).length}건`} bodyClass="p-0">
         <div className="px-4 sm:px-5 py-3 border-b border-[#EEF1F6]"><div className="inline-flex items-center gap-1 p-1 rounded-xl bg-[#EEF2F8]">{[["all", "전체", (list || []).length], ["live", "게시 중", liveN], ["off", "내림·종료", (list || []).length - liveN]].map(([k, l, n]) => (
-          <button key={k} type="button" onClick={() => setFilter(k)} className={`h-9 px-3.5 rounded-lg text-[13.5px] font-black whitespace-nowrap ${filter === k ? "bg-[#1B2B4B] text-white" : "text-[#5B6B85]"}`}>{l} <span style={{ fontFamily: MONO }}>{n}</span></button>))}</div></div>
+          <button key={k} type="button" onClick={() => setFilter(k)} className={`h-9 px-3.5 rounded-lg text-[13.5px] font-black whitespace-nowrap ${filter === k ? "bg-[#1B2B4B] text-white" : "text-[#5B6B85]"}`}>{l} <span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{n}</span></button>))}</div></div>
         {!list ? <div className="py-14 text-center text-[#9AA9C3]">불러오는 중…</div> : rows.length === 0 ? <div className="py-16 text-center text-[15px] text-[#9AA9C3]">게시한 공지가 없습니다 — 오른쪽 위 '새 공지 작성'</div> : (
           <div className="divide-y divide-[#EEF1F6]">
             {rows.map((n) => {
@@ -723,10 +794,10 @@ function NoticesPanel() {
                     <div className="mt-1 flex items-center gap-2 flex-wrap text-[13px] text-[#7A89A3]">
                       <span className={`px-2 py-0.5 rounded-md font-black ${n.audience === "selected" ? "bg-[#1B2B4B] text-white" : "border border-[#D5E0F2] text-[#1B2B4B]"}`}>{pnAudLabel(n)}</span>
                       {n.audience === "selected" && <span className="font-semibold text-[#3A4A66] truncate max-w-[360px]">{tc.slice(0, 3).join(", ")}{tc.length > 3 ? ` 외 ${tc.length - 3}곳` : ""}</span>}
-                      <span style={{ fontFamily: MONO }}>{msOf(n.createdAt) ? ymd(new Date(msOf(n.createdAt))) : ""}{n.endDate ? ` ~ ${n.endDate}` : ""}</span>
+                      <span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{msOf(n.createdAt) ? ymd(new Date(msOf(n.createdAt))) : ""}{n.endDate ? ` ~ ${n.endDate}` : ""}</span>
                       {n.banner === false && <span>배너 없음</span>}
                       {/* ⭐ 2026-11-03 조회수 — 회사 공지사항에서 글을 연 계정 수(한 계정 1회, viewedBy) */}
-                      <span className="inline-flex items-center gap-1 font-bold text-[#3A4A66] tabular-nums" title="조회수 — 한 계정 1회" style={{ fontFamily: MONO }}>
+                      <span className="inline-flex items-center gap-1 font-bold text-[#3A4A66] tabular-nums" title="조회수 — 한 계정 1회" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>
                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z" /><circle cx="12" cy="12" r="3" /></svg>조회 {(n.viewedBy || []).length}
                       </span>
                       {on && (n.publishAt || 0) > Date.now()
@@ -738,7 +809,7 @@ function NoticesPanel() {
                     <button type="button" onClick={() => setDiag(n)} className="h-9 px-3.5 rounded-lg border border-[#DCE3EE] text-[13.5px] font-black text-[#2D4C82]">푸시 확인</button>
                     <button type="button" onClick={() => updateDoc(doc(db, "platformNotices", n.id), { active: n.active === false })} className="h-9 px-3.5 rounded-lg border border-[#DCE3EE] text-[13.5px] font-black text-[#1B2B4B]">{n.active === false ? "다시 게시" : "내리기"}</button>
                     <button type="button" onClick={() => { setEditId(n.id); setF({ ...blank, ...n, targetCompanies: tc, bodyHtml: n.bodyHtml || textToHtml(n.body || ""), schedule: (n.publishAt || 0) > Date.now(), ...((n.publishAt || 0) > 0 ? kstParts(n.publishAt) : {}) }); setWriting(true); }} className="h-9 px-3.5 rounded-lg bg-[#0F1A30] text-white text-[13.5px] font-black">수정</button>
-                    <button type="button" onClick={() => window.confirm("공지를 삭제할까요?\n대상 회사 공지사항 목록에서도 함께 사라집니다.") && deleteDoc(doc(db, "platformNotices", n.id))} className="h-9 px-3.5 rounded-lg border border-[#DCE3EE] text-[13.5px] font-bold text-[#7A879C]">삭제</button>
+                    <button type="button" onClick={() => window.confirm("공지를 삭제할까요?\n대상 회사 공지사항 목록에서도 함께 사라집니다.") && runDelete({ label: "공지", task: () => deleteDoc(doc(db, "platformNotices", n.id)) }).catch(() => {})} /* ⭐ 2026-11-05 삭제 진행 창 */ className="h-9 px-3.5 rounded-lg border border-[#DCE3EE] text-[13.5px] font-bold text-[#7A879C]">삭제</button>
                   </div>
                 </div>
               );
@@ -810,17 +881,17 @@ function EmptyCompanyCheck() {
         <span className="text-[12.5px] font-black text-[#3A4A66]">삭제 기준일</span>
         <span className="inline-block w-[150px]"><CustomDatePicker value={before} onChange={(e) => setBefore(e.target.value)} className="h-9 w-full px-2 rounded-lg border border-[#DCE3EE] text-[13px] font-semibold" /></span>
         <span className="text-[12px] text-[#9AA9C3]">이 날짜 이전(날짜 없는 것 포함)만 지웁니다</span>
-        {rows.length > 0 && <span className="ml-auto text-[13px] font-black text-[#0F1A30]">회사명 없음 합계 <span style={{ fontFamily: MONO }}>{totalEmpty.toLocaleString()}</span>건</span>}
+        {rows.length > 0 && <span className="ml-auto text-[13px] font-black text-[#0F1A30]">회사명 없음 합계 <span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{totalEmpty.toLocaleString()}</span>건</span>}
       </div>
       {rows.length > 0 && (
         <div className="mt-3 overflow-x-auto"><table className="w-full text-[13px]" style={{ minWidth: 860 }}>
           <thead><tr className="bg-[#1B2B4B] text-white">{["데이터", "전체", "회사명 없음", "날짜 범위", "예시", ""].map((h) => <th key={h} className="px-3 py-2 text-center font-extrabold whitespace-nowrap">{h}</th>)}</tr></thead>
           <tbody>{rows.map((c) => { const r = res[c]; return (
             <tr key={c} className={`border-t border-[#EEF1F6] ${r.empty ? "" : "opacity-60"}`}>
-              <td className="px-3 py-2 font-black text-[#0F1A30] whitespace-nowrap">{EMPTY_CO_LABEL[c]}<div className="text-[10.5px] font-semibold text-[#9AA9C3]" style={{ fontFamily: MONO }}>{c}</div></td>
-              <td className="px-3 py-2 text-right tabular-nums" style={{ fontFamily: MONO }}>{r.total.toLocaleString()}</td>
-              <td className={`px-3 py-2 text-right tabular-nums font-black ${r.empty ? "text-[#B42318]" : "text-[#9AA9C3]"}`} style={{ fontFamily: MONO }}>{r.empty.toLocaleString()}</td>
-              <td className="px-3 py-2 text-center whitespace-nowrap text-[12px] text-[#5B6B85] tabular-nums" style={{ fontFamily: MONO }}>{r.empty ? `${r.oldest || "?"} ~ ${r.newest || "?"}${r.noDate ? ` · 날짜없음 ${r.noDate}` : ""}` : "-"}</td>
+              <td className="px-3 py-2 font-black text-[#0F1A30] whitespace-nowrap">{EMPTY_CO_LABEL[c]}<div className="text-[10.5px] font-semibold text-[#9AA9C3]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{c}</div></td>
+              <td className="px-3 py-2 text-right tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{r.total.toLocaleString()}</td>
+              <td className={`px-3 py-2 text-right tabular-nums font-black ${r.empty ? "text-[#B42318]" : "text-[#9AA9C3]"}`} style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{r.empty.toLocaleString()}</td>
+              <td className="px-3 py-2 text-center whitespace-nowrap text-[12px] text-[#5B6B85] tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{r.empty ? `${r.oldest || "?"} ~ ${r.newest || "?"}${r.noDate ? ` · 날짜없음 ${r.noDate}` : ""}` : "-"}</td>
               <td className="px-3 py-2 text-[12px] text-[#7A879C] max-w-[260px] truncate" title={r.sample.map((x) => `${x.day} ${x.title}`).join("\n")}>{r.sample.map((x) => `${x.day || "날짜없음"} ${x.title}`).join(" · ") || "-"}</td>
               <td className="px-3 py-2 text-center whitespace-nowrap">
                 {r.state === "진행 중" ? <span className="text-[12px] font-bold text-[#2D4C82] animate-pulse">진행 중…</span>
@@ -895,7 +966,7 @@ function TenancyPanel() {
           <div className="mt-3 grid grid-cols-2 lg:grid-cols-4 gap-2">
             {TENANT_COLS.filter((c) => prog[c]).map((c) => (
               <div key={c} className="rounded-xl border border-[#E3E8F0] px-3 py-2">
-                <div className="text-[12.5px] font-black text-[#0F1A30]" style={{ fontFamily: MONO }}>{c}</div>
+                <div className="text-[12.5px] font-black text-[#0F1A30]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{c}</div>
                 <div className="text-[12px] text-[#5B6B85] whitespace-nowrap">{prog[c].state} · {prog[c].scanned.toLocaleString()}건 중 {prog[c].updated.toLocaleString()}건 채움</div>
               </div>
             ))}
@@ -929,7 +1000,7 @@ function SessionLogsPanel() {
           <thead className="sticky top-0"><tr className="bg-[#1B2B4B] text-white">{["시각", "구분", "회사", "이름", "이메일", "기기"].map((h) => <th key={h} className="px-3 py-2.5 text-center font-extrabold">{h}</th>)}</tr></thead>
           <tbody>{pageSlice(rows, Math.min(page, pageCount(rows.length))).map((l) => (
             <tr key={l.id} className="border-t border-[#EEF1F6]">
-              <td className="px-3 py-2 text-center text-[12.5px] text-[#5B6B85] whitespace-nowrap" style={{ fontFamily: MONO }}>{msOf(l.at) ? new Date(msOf(l.at)).toLocaleString("ko-KR", { hour12: false }) : "-"}</td>
+              <td className="px-3 py-2 text-center text-[12.5px] text-[#5B6B85] whitespace-nowrap" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{msOf(l.at) ? new Date(msOf(l.at)).toLocaleString("ko-KR", { hour12: false }) : "-"}</td>
               <td className="px-3 py-2 text-center"><span className="px-2 py-0.5 rounded-md bg-[#EEF2F8] text-[#1B2B4B] text-[12px] font-black">{l.event || "-"}</span></td>
               <td className="px-3 py-2 text-center font-bold">{l.companyName || "-"}</td>
               <td className="px-3 py-2 text-center">{l.name || "-"}</td>
@@ -964,8 +1035,8 @@ function LiveTab({ openCompany }) {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         {kpi.map(([code, l, v, foot, dark]) => (
           <div key={code} className={`rounded-[16px] px-4 py-3.5 border min-w-0 ${dark ? "bg-[linear-gradient(135deg,#0F1A30,#1B2B4B_60%,#2D4C82)] text-white border-[#0F1A30]" : "bg-white border-[#E3E8F0]"}`}>
-            <div className="flex items-center justify-between gap-2"><span className={`text-[13px] font-bold truncate ${dark ? "text-white/70" : "text-[#5B6B85]"}`}>{l}</span><span className={`text-[10px] font-extrabold tracking-[0.16em] ${dark ? "text-[#8FB0F0]" : "text-[#94A3B8]"}`} style={{ fontFamily: MONO }}>{code}</span></div>
-            <div className="text-[28px] font-black mt-1 leading-none" style={{ fontFamily: MONO }}>{live.ready ? v : "-"}<span className={`text-[13px] ml-1 ${dark ? "text-white/50" : "text-[#9AA9C3]"}`}>명</span></div>
+            <div className="flex items-center justify-between gap-2"><span className={`text-[13px] font-bold truncate ${dark ? "text-white/70" : "text-[#5B6B85]"}`}>{l}</span><span className={`text-[10px] font-extrabold tracking-[0.16em] ${dark ? "text-[#8FB0F0]" : "text-[#94A3B8]"}`} style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{code}</span></div>
+            <div className="text-[28px] font-black mt-1 leading-none" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{live.ready ? v : "-"}<span className={`text-[13px] ml-1 ${dark ? "text-white/50" : "text-[#9AA9C3]"}`}>명</span></div>
             <div className={`text-[12px] font-semibold mt-1.5 truncate ${dark ? "text-white/60" : "text-[#7A879C]"}`}>{foot}</div>
           </div>
         ))}
@@ -979,7 +1050,7 @@ function LiveTab({ openCompany }) {
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={coRows} layout="vertical" margin={{ top: 0, right: 12, left: 0, bottom: 0 }} onClick={(e) => e?.activeLabel && openCompany?.(e.activeLabel)}>
                     <CartesianGrid stroke="#EEF1F6" horizontal={false} />
-                    <XAxis type="number" allowDecimals={false} axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: "#9ca3af", fontFamily: MONO }} />
+                    <XAxis type="number" allowDecimals={false} axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: "#9ca3af", fontFamily: MONO, fontVariantNumeric: "tabular-nums" }} />
                     <YAxis type="category" dataKey="name" width={phone ? 84 : 110} axisLine={false} tickLine={false} tick={{ fontSize: 12.5, fill: "#0F1A30", fontWeight: 700 }} />
                     <Tooltip cursor={{ fill: "rgba(27,43,75,.05)" }} formatter={(v, n) => [`${v}명`, n === "now" ? "지금 접속" : "24시간(지금 제외)"]} contentStyle={{ borderRadius: 10, border: "1px solid #E3E8F0", fontSize: 13, fontWeight: 700 }} />
                     <Bar dataKey="now" stackId="a" fill="#1B2B4B" radius={[4, 0, 0, 4]} barSize={16} />
@@ -1013,7 +1084,7 @@ function PlatformCenterInner({ user }) {
   const [focusCompany, setFocusCompany] = React.useState(null);
   const section = sectionOf(tab);
   const phone = usePhone();
-  React.useEffect(() => { document.title = "KP-Flow 관리자 관리센터"; }, []);
+  React.useEffect(() => { document.title = "LogisWeb 관리자 관리센터"; }, []);
   const toApp = () => { try { sessionStorage.setItem("kpEntry", "app"); } catch { /* 무시 */ } navigate("/app"); };
   const logout = async () => { if (!window.confirm("로그아웃할까요?")) return; try { sessionStorage.removeItem("kpEntry"); } catch { /* 무시 */ } await signOut(auth).catch(() => {}); navigate("/login"); };
   const openContract = (patch) => { setContractCtx((c) => ({ initial: null, fromQuote: null, ...patch, key: c.key + 1 })); setTab("contract:new"); };
@@ -1042,13 +1113,15 @@ function PlatformCenterInner({ user }) {
   } else if (tab === "todo") body = <TodayPanel go={setTab} />;
   else if (tab === "live") body = <LiveTab openCompany={openCompany} />;
   // ⭐ 2026-11-02 원격지원 — 요청 목록 · 승인/거절/완료 · 화면 보기 · 원격 번호
-  else if (tab === "support") body = <><Hero en="DASHBOARD · SUPPORT" title="원격 지원" desc="직원이 보낸 원격 지원 요청 — 승인하면 직원 화면을 실시간으로 보거나(화면 공유) 원격 프로그램 번호를 받습니다." right={<Clock />} /><RemoteSupportAdminPanel me={user} /></>;
+  // ⭐ 2026-11-05 원격 지원 걸기 — 설명에 "먼저 걸기" 추가
+  else if (tab === "support") body = <><Hero en="DASHBOARD · SUPPORT" title="원격 지원" desc="직원이 보낸 원격 지원 요청을 승인하거나, [원격 지원 걸기]로 직원에게 먼저 요청합니다(직원이 수락해야 시작) — 직원 화면을 실시간으로 보거나(화면 공유) 원격 프로그램 번호를 받습니다." right={<Clock />} /><RemoteSupportAdminPanel me={user} /></>;
   else if (tab === "inquiries") body = <InquiriesPanel toQuote={(q) => { try { sessionStorage.setItem("kpQuoteSeed", JSON.stringify({ customer: q.companyName || "", contact: q.name || "", phone: q.phone || "" })); } catch { /* 무시 */ } setTab("sales:quote"); }} />;
   else if (tab === "contract:list") body = <><Hero en="CONTRACTS · STATUS" title="계약 현황" desc="작성 → 서명 요청 → 고객 전자서명 → 체결까지 한 곳에서. 만료 2개월 전부터 갱신 대상으로 표시됩니다." /><ContractList onNew={() => openContract({})} onEdit={(c) => openContract({ initial: c })} /></>;
   else if (tab === "contract:new") body = <><Hero en="CONTRACTS · NEW" title={contractCtx.initial ? "계약서 수정" : "계약서 작성"} desc="견적을 불러오면 요금·기간이 자동으로 채워집니다. 저장하고 서명 요청을 누르면 고객용 서명 링크가 복사됩니다." /><ContractBuilder key={contractCtx.key} initial={contractCtx.initial} fromQuoteDoc={contractCtx.fromQuote} onDone={() => setTab("contract:list")} /></>;
   else if (tab === "contract:templates") body = <><Hero en="CONTRACTS · TEMPLATES" title="계약서 양식" desc="기본 이용계약서를 바탕으로 조항을 자유롭게 고치고, 양식을 여러 개 둘 수 있습니다." /><ContractTemplates /></>;
   else if (tab === "payments") body = <PaymentsPanel />;
   else if (tab === "usage") body = <UsagePanel />;
+  else if (tab === "cost") body = <React.Suspense fallback={<div className="py-20 text-center text-[#9AA9C3]">불러오는 중…</div>}><CostPanel openUsage={() => setTab("usage")} /></React.Suspense>;
   else if (tab === "notices") body = <NoticesPanel />;
   else if (tab === "notifTemplate") body = <><Hero en="OPERATIONS · MESSAGES" title="알림 문구" desc="배차 알림 등 자동 발송 문구를 관리합니다." /><NotifTemplatePanel /></>;
   else if (tab === "forceUpdate") body = <><Hero en="OPERATIONS · UPDATE" title="화주사 강제 업데이트" desc="화주사 화면을 최신 버전으로 새로고침시킵니다." /><ShipperForceUpdatePanel currentVersion={typeof __APP_VERSION__ !== "undefined" ? __APP_VERSION__ : ""} /></>;
@@ -1070,10 +1143,10 @@ function PlatformCenterInner({ user }) {
       {/* ── 상단 바 ── ⭐ 2026-11-02 관리자센터: 메뉴 버튼 h-10 · 14px · 아이콘 · 처리 대기 배지 · 좁으면 가로 스크롤 */}
       <header className="kp-pc-head sticky top-0 z-40 h-16 flex items-center gap-3 px-4 2xl:px-6 text-white">
         <div className="flex items-center gap-2.5 shrink-0">
-          <img src="/logo.png" alt="" className="w-9 h-9 rounded-[10px] bg-white object-contain p-0.5" onError={(e) => { e.currentTarget.style.display = "none"; }} />
+          <LogisMark size={36} />
           <div className="leading-none">
-            <div className="text-[16px] font-black tracking-[0.02em] whitespace-nowrap">KP-Flow</div>
-            <div className="text-[9.5px] font-extrabold tracking-[0.3em] text-[#8FB0F0] mt-1 whitespace-nowrap" style={{ fontFamily: MONO }}>PLATFORM ADMIN</div>
+            <LogisWordmark height={12} />
+            <div className="text-[9.5px] font-extrabold tracking-[0.3em] text-[#8FB0F0] mt-1.5 whitespace-nowrap" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>PLATFORM ADMIN</div>
           </div>
         </div>
         <span className="hidden 2xl:block w-px h-7 bg-white/15 shrink-0" />
@@ -1086,7 +1159,7 @@ function PlatformCenterInner({ user }) {
                 className={`kp-pc-navbtn relative shrink-0 h-10 px-3.5 2xl:px-4 rounded-xl text-[14px] whitespace-nowrap inline-flex items-center gap-2 transition ${on ? "kp-on font-black" : "font-bold text-white/70 hover:text-white hover:bg-white/[0.09]"}`}>
                 <ShellIcon name={s.icon} size={16} className={`hidden 2xl:block ${on ? "text-[#2D4C82]" : "text-[#8FB0F0]"}`} />
                 {s.label}
-                {b > 0 && <span className={`min-w-[20px] h-5 px-1.5 rounded-full text-[11px] font-black inline-flex items-center justify-center ${on ? "bg-[#1B2B4B] text-white" : "bg-white text-[#0F1A30]"}`} style={{ fontFamily: MONO }}>{b > 99 ? "99+" : b}</span>}
+                {b > 0 && <span className={`min-w-[20px] h-5 px-1.5 rounded-full text-[11px] font-black inline-flex items-center justify-center ${on ? "bg-[#1B2B4B] text-white" : "bg-white text-[#0F1A30]"}`} style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{b > 99 ? "99+" : b}</span>}
               </button>
             );
           })}
@@ -1177,10 +1250,10 @@ function PlatformMobileShell({ user, sections = SECTIONS, section, tab, setTab, 
       <style>{PM_MOBILE_CSS}</style>
       <header className="sticky top-0 z-40 text-white shadow-[0_6px_18px_rgba(11,20,40,0.28)]" style={{ background: "linear-gradient(90deg,#0B1428 0%,#13213F 55%,#1B2B4B 100%)", paddingTop: "env(safe-area-inset-top, 0px)" }}>
         <div className="h-[56px] flex items-center gap-2 px-3">
-          <img src="/logo.png" alt="" className="w-7 h-7 rounded-lg bg-white object-contain p-0.5 shrink-0" onError={(e) => { e.currentTarget.style.display = "none"; }} />
+          <LogisMark size={30} />
           <div className="min-w-0 flex-1 leading-none">
             <div className="text-[14px] font-black whitespace-nowrap">관리자 관리센터</div>
-            <div className="text-[9px] font-extrabold tracking-[0.26em] text-[#8FB0F0] mt-1 truncate whitespace-nowrap" style={{ fontFamily: MONO }}>{user?.email || "PLATFORM"}</div>
+            <div className="text-[9px] font-extrabold tracking-[0.26em] text-[#8FB0F0] mt-1 truncate whitespace-nowrap" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{user?.email || "PLATFORM"}</div>
           </div>
           <HeaderLivePill phone onClick={() => setTab("live")} />
           <button type="button" onClick={toApp} className="shrink-0 h-9 px-2.5 rounded-[10px] bg-white text-[#0F1A30] text-[13px] font-black whitespace-nowrap">배차앱 ↗</button>
@@ -1229,7 +1302,7 @@ export function EntryChooser({ user }) {
     <button type="button" onClick={() => go(k)}
       className={`group text-left rounded-[22px] sm:rounded-[26px] p-5 sm:p-7 transition relative overflow-hidden border ${primary ? "border-[#8FB0F0]/40" : "border-white/10"} hover:-translate-y-1 hover:border-[#8FB0F0]/70`}
       style={{ background: primary ? "linear-gradient(150deg, rgba(75,108,183,.45), rgba(27,43,75,.35))" : "rgba(255,255,255,.04)" }}>
-      <div className="text-[10px] sm:text-[11px] font-extrabold tracking-[0.3em] text-[#8FB0F0] whitespace-nowrap" style={{ fontFamily: MONO }}>{en}</div>
+      <div className="text-[10px] sm:text-[11px] font-extrabold tracking-[0.3em] text-[#8FB0F0] whitespace-nowrap" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{en}</div>
       <div className="text-[21px] sm:text-[26px] font-black text-white mt-1 sm:mt-1.5 whitespace-nowrap">{title}</div>
       <div className="text-[12.5px] sm:text-[14px] text-white/60 mt-1 leading-relaxed whitespace-nowrap truncate">{desc}</div>
       <ul className="mt-3.5 sm:mt-5 grid grid-cols-1 gap-y-1 sm:gap-y-1.5">{points.map((p) => <li key={p} className="flex items-center gap-2 min-w-0 text-[12px] sm:text-[13.5px] font-semibold text-white/80"><span className="w-1.5 h-1.5 rotate-45 bg-[#8FB0F0] shrink-0" /><span className="truncate whitespace-nowrap">{p}</span></li>)}</ul>
@@ -1242,7 +1315,7 @@ export function EntryChooser({ user }) {
       <div className="w-full max-w-[980px]">
         <div className="flex items-end justify-between gap-3 mb-5 sm:mb-8">
           <div className="min-w-0">
-            <div className="text-[10px] sm:text-[11.5px] font-extrabold tracking-[0.3em] text-[#8FB0F0] whitespace-nowrap" style={{ fontFamily: MONO }}>KP-FLOW · SELECT WORKSPACE</div>
+            <div className="text-[10px] sm:text-[11.5px] font-extrabold tracking-[0.3em] text-[#8FB0F0] whitespace-nowrap" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}><LogisTag height={8.5} text="SELECT WORKSPACE" /></div>
             <div className="text-[24px] sm:text-[32px] font-black tracking-tight mt-1 whitespace-nowrap">어디로 들어갈까요?</div>
             <div className="text-[12px] sm:text-[14.5px] text-white/55 mt-1 truncate whitespace-nowrap">{user?.email}<span className="hidden sm:inline"> · 최고관리자 계정은 매번 들어갈 곳을 고릅니다.</span></div>
           </div>
@@ -1252,7 +1325,7 @@ export function EntryChooser({ user }) {
           <Item k="platform" primary en="PLATFORM CONTROL" title="관리자 관리센터" desc="이 프로그램 플랫폼을 운영하는 화면입니다." points={["가입사 관제 · 사용량 · 건강도", "요금제 · 견적 · 전자계약", "청구 · 수납 · 플랫폼 공지", "로그인 관리 · 접속 이력 · 데이터"]} />
           <Item k="app" en="DISPATCH WORKSPACE" title="배차 프로그램" desc="운송사 화면으로 들어가 실제 배차 업무를 봅니다." points={["배차관리 · 실시간 배차현황", "매출 · 정산 · 회사관리", "고객사 화면 점검 · 지원", "로그인 때 고른 회사로 진입"]} />
         </div>
-        <div className="mt-4 sm:mt-6 text-center text-[11px] sm:text-[12px] text-white/35 whitespace-nowrap" style={{ fontFamily: MONO }}>들어간 뒤에도 언제든 전환할 수 있습니다</div>
+        <div className="mt-4 sm:mt-6 text-center text-[11px] sm:text-[12px] text-white/35 whitespace-nowrap" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>들어간 뒤에도 언제든 전환할 수 있습니다</div>
       </div>
     </div>
   );

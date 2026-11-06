@@ -680,19 +680,47 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
   };
 
   // ── 이미지 전송 ──
-  const sendImage = async (file) => {
-    if (!file) return;
+  // ⚡ 2026-11-05 빠르게 — 보내기 전에 줄이고(긴 변 1600px · JPEG 80%, 보통 4~8MB → 200~400KB),
+  //  올리는 동안 입력창 위에 미리보기(보내는 중)를 바로 띄운다. 여러 장은 동시에 올린다.
+  const [sendingImgs, setSendingImgs] = useState([]); // [{ id, url }]
+  const shrinkForChat = async (file) => {
+    if (!/^image\/(jpeg|png|webp|heic|heif|bmp)/i.test(file.type) || file.size < 350 * 1024) return file;
+    try {
+      const bmp = await (window.createImageBitmap ? createImageBitmap(file) : new Promise((ok, no) => { const i = new Image(); i.onload = () => ok(i); i.onerror = no; i.src = URL.createObjectURL(file); }));
+      const r = Math.min(1, 1600 / Math.max(bmp.width, bmp.height));
+      const c = document.createElement("canvas"); c.width = Math.round(bmp.width * r); c.height = Math.round(bmp.height * r);
+      const g = c.getContext("2d"); g.fillStyle = "#fff"; g.fillRect(0, 0, c.width, c.height); g.drawImage(bmp, 0, 0, c.width, c.height);
+      const blob = await new Promise((ok) => c.toBlob(ok, "image/jpeg", 0.8));
+      if (!blob || blob.size >= file.size) return file;
+      return new File([blob], String(file.name || "image").replace(/\.[^.]+$/, "") + ".jpg", { type: "image/jpeg" });
+    } catch { return file; }
+  };
+  const sendImage = async (file0) => {
+    if (!file0) return;
+    const tmpId = `${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+    const tmpUrl = URL.createObjectURL(file0);
+    setSendingImgs((p) => [...p, { id: tmpId, url: tmpUrl }]);
+    try { await sendImageInner(file0); } finally {
+      setSendingImgs((p) => p.filter((x) => x.id !== tmpId)); setTimeout(() => URL.revokeObjectURL(tmpUrl), 4000);
+    }
+  };
+  const roomMakingRef = useRef(null); // 새 방에 사진 여러 장을 동시에 보내도 방은 한 번만 만든다
+  const sendImageInner = async (file0) => {
     let room = activeRoom;
     if (!room && pendingRoom) {
       try {
-        const roomRef = await addDoc(collection(db, ROOMS_COLL), pendingRoom.roomData);
-        room = { id: roomRef.id, ...pendingRoom.roomData };
-        setActiveRoom(room); setPendingRoom(null);
+        if (!roomMakingRef.current) {
+          roomMakingRef.current = addDoc(collection(db, ROOMS_COLL), pendingRoom.roomData).then((roomRef) => {
+            const r = { id: roomRef.id, ...pendingRoom.roomData }; setActiveRoom(r); setPendingRoom(null); return r;
+          }).finally(() => { setTimeout(() => { roomMakingRef.current = null; }, 3000); });
+        }
+        room = await roomMakingRef.current;
       } catch { return; }
     }
     if (!room) return;
+    const file = await shrinkForChat(file0);
     const path = `chat_images/${room.id}/${Date.now()}_${file.name}`;
-    const snap = await uploadBytes(storageRef(storage, path), file);
+    const snap = await uploadBytes(storageRef(storage, path), file, { contentType: file.type || "image/jpeg", cacheControl: "public,max-age=31536000" });
     const url = await getDownloadURL(snap.ref);
     const senderName = myProfile?.name || myEmail.split("@")[0];
     await addDoc(collection(db, MSGS_COLL), {
@@ -704,7 +732,7 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
     const others2 = room.members?.filter(uid => uid !== myUid) || [];
     const unreadUpdate2 = {};
     others2.forEach(uid => { unreadUpdate2[`unreadCount.${uid}`] = increment(1); });
-    await updateDoc(doc(db, ROOMS_COLL, room.id), {
+    updateDoc(doc(db, ROOMS_COLL, room.id), { // 방 목록 갱신은 기다리지 않는다
       lastMsg: "[사진]", lastAt: serverTimestamp(), lastSenderUid: myUid,
       [`lastRead.${myUid}`]: serverTimestamp(), ...unreadUpdate2,
     }).catch(() => {});
@@ -1021,7 +1049,7 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
     onSendLocation: sendLocation,
     onSendContact: () => setContactPickModal(true),
     onSendNotice: () => setShowNoticeInput(true),
-    fileUploading, friends, mobileMode,
+    fileUploading, friends, mobileMode, sendingImgs,
     themeHdr, themeMyBubble, themeChatBg,
     replyTo, setReplyTo,
     onReply: (msg) => setReplyTo({ id: msg.id, text: msg.text, senderName: msg.senderName }),
@@ -1465,7 +1493,7 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
         }}>
           {/* 크기 버튼(작게·보통·크게) — 창 위쪽 오른편 */}
           <div style={{ position: "absolute", top: -34, right: 0, display: "flex", alignItems: "center", gap: 6, padding: "3px 4px 3px 10px", borderRadius: 12, background: "#0F1A30", boxShadow: "0 8px 20px rgba(15,26,48,0.3)" }}>
-            <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: "0.22em", color: "#8FB0F0", fontFamily: "'JetBrains Mono',monospace" }}>SIZE</span>
+            <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: "0.22em", color: "#8FB0F0", fontFamily: "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif", fontVariantNumeric: "tabular-nums" }}>SIZE</span>
             <SizeButtons preset={winPreset} onPick={pickWin} />
           </div>
           {/* 리사이즈 핸들 (패널 왼쪽 상단 모서리) */}
@@ -1838,11 +1866,49 @@ function FriendsView({ myProfile, friends, rooms, unreadMap, totalUnread, getRoo
 }
 
 // ════════════════ 채팅 뷰 ════════════════
-function ChatView({ room, roomName, roomPhoto, messages, myUid, myProfile, input, setInput, onSend, onBack, onClose, editMsg, setEditMsg, editText, setEditText, onSaveEdit, onDeleteMsg, msgSearch, setMsgSearch, msgContainerRef, inputRef, onSendImage, onSendFile, onSendLocation, onSendContact, onSendNotice, fileUploading, friends, mobileMode, themeHdr, themeMyBubble, themeChatBg, replyTo, setReplyTo, onReply, onAddReaction, onSendToSelf, groupPeople = [], onShowMembers, onInvite, onRename, onLeave }) {
+function ChatView({ room, roomName, roomPhoto, messages, myUid, myProfile, input, setInput, onSend, onBack, onClose, editMsg, setEditMsg, editText, setEditText, onSaveEdit, onDeleteMsg, msgSearch, setMsgSearch, msgContainerRef, inputRef, onSendImage, onSendFile, onSendLocation, onSendContact, onSendNotice, fileUploading, sendingImgs = [], friends, mobileMode, themeHdr, themeMyBubble, themeChatBg, replyTo, setReplyTo, onReply, onAddReaction, onSendToSelf, groupPeople = [], onShowMembers, onInvite, onRename, onLeave }) {
   const [showSearch, setShowSearch] = useState(false);
   const [showRoomMenu, setShowRoomMenu] = useState(false); // ⭐ 2026-11-03 단체방 ≡ 메뉴
   const [showAttachMenu, setShowAttachMenu] = useState(false);
   const [imgPreview, setImgPreview] = useState(null);
+  // ⭐ 2026-11-05 카카오톡처럼 — 파일을 대화창에 끌어 놓거나 Ctrl+V로 붙여넣으면 미리보기 후 전송
+  const [dropOn, setDropOn] = useState(false);
+  const [pendingFiles, setPendingFiles] = useState([]); // [{ file, url }]
+  const dragDepth = useRef(0);
+  const queueFiles = (list) => {
+    const arr = [...(list || [])].filter((f) => f && f.size > 0);
+    if (!arr.length) return;
+    setPendingFiles((p) => [...p, ...arr.map((file) => ({ file, url: /^image\//.test(file.type) ? URL.createObjectURL(file) : "" }))].slice(0, 10));
+  };
+  const clearPending = () => { setPendingFiles((p) => { p.forEach((x) => x.url && URL.revokeObjectURL(x.url)); return []; }); };
+  const sendPending = async () => {
+    const list = pendingFiles; clearPending();
+    // 사진은 동시에, 파일은 차례로
+    const imgs = list.filter(({ file }) => /^image\//.test(file.type)); const others = list.filter(({ file }) => !/^image\//.test(file.type));
+    await Promise.all(imgs.map(({ file }) => Promise.resolve(onSendImage(file)).catch((e) => console.error(e))));
+    for (const { file } of others) { try { await onSendFile(file); } catch (e) { console.error(e); } }
+    setTimeout(() => inputRef?.current?.focus?.(), 0);
+  };
+  useEffect(() => {
+    if (!pendingFiles.length) return undefined;
+    const k = (e) => { if (e.key === "Enter" && !e.isComposing) { e.preventDefault(); e.stopPropagation(); sendPending(); } else if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); clearPending(); } };
+    window.addEventListener("keydown", k, true);
+    return () => window.removeEventListener("keydown", k, true);
+  }); // eslint-disable-line react-hooks/exhaustive-deps
+  const hasFiles = (e) => [...(e.dataTransfer?.types || [])].includes("Files");
+  const chatRootRef = useRef(null);
+  const queueRef = useRef(queueFiles); queueRef.current = queueFiles;
+  useEffect(() => { // Ctrl+V — 입력칸이든 대화창 아무 곳이든(다른 입력칸에 붙여넣는 건 그대로)
+    const onPaste = (e) => {
+      const fs = [...(e.clipboardData?.files || [])]; if (!fs.length) return;
+      const t = e.target; const root = chatRootRef.current;
+      const inChat = root && (root.contains(t) || t === document.body || t === document.documentElement);
+      if (!inChat) return;
+      e.preventDefault(); queueRef.current(fs);
+    };
+    document.addEventListener("paste", onPaste);
+    return () => document.removeEventListener("paste", onPaste);
+  }, []);
   const photoInputRef = useRef(null);
   const fileInputRef = useRef(null);
   const [ctxMenu, setCtxMenu] = useState(null); // {msg, x, y}
@@ -1889,7 +1955,37 @@ function ChatView({ room, roomName, roomPhoto, messages, myUid, myProfile, input
   };
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100%", background: "#fff" }}>
+    <div ref={chatRootRef} style={{ display: "flex", flexDirection: "column", height: "100%", background: "#fff", position: "relative" }}
+      onDragEnter={(e) => { if (!hasFiles(e)) return; e.preventDefault(); dragDepth.current += 1; setDropOn(true); }}
+      onDragOver={(e) => { if (!hasFiles(e)) return; e.preventDefault(); e.dataTransfer.dropEffect = "copy"; }}
+      onDragLeave={(e) => { if (!hasFiles(e)) return; dragDepth.current = Math.max(0, dragDepth.current - 1); if (!dragDepth.current) setDropOn(false); }}
+      onDrop={(e) => { if (!hasFiles(e)) return; e.preventDefault(); dragDepth.current = 0; setDropOn(false); queueFiles(e.dataTransfer.files); }}>
+      {dropOn && (
+        <div data-msg-drop style={{ position: "absolute", inset: 8, zIndex: 50, border: "3px dashed #4B6CB7", borderRadius: 16, background: "rgba(238,243,251,0.92)", display: "flex", alignItems: "center", justifyContent: "center", pointerEvents: "none" }}>
+          <div style={{ textAlign: "center", color: "#1B2B4B", fontWeight: 900, fontSize: 16 }}>여기에 놓으면 보낼 준비가 됩니다<div style={{ fontSize: 12, fontWeight: 700, color: "#5B6B85", marginTop: 4 }}>사진 · 파일 (최대 10개)</div></div>
+        </div>
+      )}
+      {pendingFiles.length > 0 && (
+        <div data-msg-pending style={{ position: "absolute", inset: 0, zIndex: 60, background: "rgba(11,20,40,0.45)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }} onClick={clearPending}>
+          <div onClick={(e) => e.stopPropagation()} style={{ background: "#fff", borderRadius: 18, width: "100%", maxWidth: 360, boxShadow: "0 18px 50px rgba(0,0,0,.25)", overflow: "hidden" }}>
+            <div style={{ padding: "14px 16px", fontWeight: 900, fontSize: 15, color: "#0F1A30" }}>{pendingFiles.length}개 보내기</div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8, padding: "0 16px 12px", maxHeight: 300, overflowY: "auto" }}>
+              {pendingFiles.map((p, i) => (
+                <div key={i} style={{ position: "relative", width: pendingFiles.length === 1 ? "100%" : 96, height: pendingFiles.length === 1 ? 220 : 96, borderRadius: 10, border: "1px solid #E3E8F0", background: "#F8FAFC", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden" }}>
+                  {p.url ? <img src={p.url} alt="" style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }} />
+                    : <div style={{ padding: 6, fontSize: 11, fontWeight: 700, color: "#3A4A66", textAlign: "center", wordBreak: "break-all" }}>📄 {p.file.name}</div>}
+                  <button type="button" onClick={() => setPendingFiles((l) => { const n = [...l]; const [x] = n.splice(i, 1); if (x?.url) URL.revokeObjectURL(x.url); return n; })}
+                    style={{ position: "absolute", top: 4, right: 4, width: 22, height: 22, borderRadius: "50%", border: "none", background: "rgba(15,26,48,.7)", color: "#fff", fontSize: 12, cursor: "pointer" }}>✕</button>
+                </div>
+              ))}
+            </div>
+            <div style={{ display: "flex", gap: 8, padding: "10px 16px 16px" }}>
+              <button type="button" onClick={clearPending} style={{ flex: 1, height: 40, borderRadius: 12, border: "1px solid #DCE3EE", background: "#fff", fontWeight: 800, color: "#5B6B85", cursor: "pointer" }}>취소</button>
+              <button type="button" onClick={sendPending} style={{ flex: 1.6, height: 40, borderRadius: 12, border: "none", background: themeMyBubble || "#1B2B4B", color: "#fff", fontWeight: 900, cursor: "pointer" }}>전송 (Enter)</button>
+            </div>
+          </div>
+        </div>
+      )}
       {/* 헤더 */}
       <div style={{ background: themeHdr, padding: "12px 14px", display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
         <button onClick={onBack} style={{ background: "none", border: "none", color: "rgba(255,255,255,0.7)", cursor: "pointer", padding: 0, display: "flex", alignItems: "center" }}>
@@ -2265,6 +2361,12 @@ function ChatView({ room, roomName, roomPhoto, messages, myUid, myProfile, input
         </div>
       )}
 
+      {sendingImgs.length > 0 && (
+        <div data-msg-sending style={{ padding: "6px 12px", background: "#fff", borderTop: "1px solid #e5e7eb", display: "flex", alignItems: "center", gap: 6, flexShrink: 0, overflowX: "auto" }}>
+          {sendingImgs.map((x) => <div key={x.id} style={{ position: "relative", width: 44, height: 44, borderRadius: 8, overflow: "hidden", flexShrink: 0, background: "#f1f5f9" }}><img src={x.url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", opacity: 0.55 }} /><div style={{ position: "absolute", inset: 0, display: "grid", placeItems: "center" }}><div className="animate-spin" style={{ width: 18, height: 18, borderRadius: "50%", border: "2.5px solid #fff", borderTopColor: "#1B2B4B" }} /></div></div>)}
+          <span style={{ fontSize: 12, fontWeight: 700, color: "#5B6B85", whiteSpace: "nowrap" }}>사진 보내는 중… {sendingImgs.length}장</span>
+        </div>
+      )}
       {/* 입력창 — form으로 감싸 iOS가 외부 date input으로 네비게이션 못 하게 차단 */}
       <div style={{ padding: "8px 12px 12px", background: "#fff", borderTop: showAttachMenu ? "none" : "1px solid #e5e7eb", flexShrink: 0 }}>
         <form onSubmit={e => e.preventDefault()} style={{ display: "flex", alignItems: "flex-end", gap: 6, background: "#f8fafc", border: "1px solid #e5e7eb", borderRadius: 20, padding: "6px 6px 6px 4px" }}>

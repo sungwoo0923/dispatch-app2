@@ -11,11 +11,14 @@
 // [과태료·사고 서류] 회사로 날아온 과태료·범칙금·사고·보험 할증 우편을 서류로 만든다
 //  F4 = 서류 작성 · 고지서 자동 스캔(사진/Ctrl+V) → 칸 자동 채움 · 기사앱에서 열면 "기사 확인" → 기사님이 [납부 완료]/[이의 신청]
 import React from "react";
+import { runDelete } from "./DeleteProgress"; // ⭐ 2026-11-05 삭제 진행 창 + 한 번에 삭제
 import { kpConfirm, kpAlert } from "./kpDialog";
 import { collection, doc, onSnapshot, query, setDoc, addDoc, updateDoc, deleteDoc, serverTimestamp, where, writeBatch } from "firebase/firestore";
 import * as XLSX from "xlsx";
 import { db, auth } from "./firebase";
-import { StatementDoc, PenaltyDoc, ImageViewer, PENALTY_KINDS, PENALTY_PAYERS, won, MONO, acctLine } from "./driverDocs";
+import { StatementDoc, PenaltyDoc, ImageViewer, PENALTY_KINDS, PENALTY_PAYERS, won, acctLine } from "./driverDocs";
+// ⭐ 2026-11-05 고정폭 글씨 → 상단 메뉴와 같은 기본 글씨체(흐릿해 보인다는 의견)
+const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
 import { validateAccount, formatAccount } from "./bankUtil";
 import { compressImage } from "./InternalMail";
 import CustomDatePicker from "./CustomDatePicker";
@@ -42,26 +45,28 @@ const card = "rounded-[18px] bg-white border border-[#E3E8F0] shadow-[0_1px_2px_
 const inp = "h-11 px-3 rounded-xl border border-[#DCE3EE] bg-white text-[14px] font-semibold text-[#0F1A30] outline-none focus:border-[#2D4C82] focus:ring-2 focus:ring-[#2D4C82]/15";
 const btnL = "h-11 px-4 rounded-xl border border-[#DCE3EE] bg-white text-[14px] font-black text-[#1B2B4B] hover:bg-[#F5F8FD] whitespace-nowrap disabled:opacity-40";
 const btnD = "h-11 px-5 rounded-xl bg-[#0F1A30] text-white text-[14px] font-black whitespace-nowrap disabled:opacity-40";
-const TH = "px-3 py-3.5 text-left text-[13.5px] font-black whitespace-nowrap";
-const TD = "px-3 py-3 text-[14px] whitespace-nowrap";
-const Chip = ({ children, dark, soft }) => <span className={`inline-flex items-center h-7 px-2.5 rounded-lg text-[12.5px] font-black whitespace-nowrap ${dark ? "bg-[#0F1A30] text-white" : soft ? "bg-[#F3F6FA] text-[#7A89A3] border border-[#E3E8F0]" : "bg-[#EEF3FC] text-[#1B2B4B] border border-[#C9D6EE]"}`}>{children}</span>;
-const Label = ({ children, sub }) => <div className="text-[13px] font-black text-[#3A4A66] mb-1.5 whitespace-nowrap">{children}{sub && <span className="ml-1.5 text-[12px] font-semibold text-[#9AA9C3]">{sub}</span>}</div>;
+// ⭐ 2026-11-05 지입정산관리 글씨 키움(표 15px · 금액 16px 굵게)
+const TH = "px-3 py-3.5 text-left text-[15px] font-black whitespace-nowrap";
+const TD = "px-3 py-3.5 text-[15px] whitespace-nowrap";
+const NUM = "text-[16px] font-black text-[#0B1428]";
+const Chip = ({ children, dark, soft }) => <span className={`inline-flex items-center h-7 px-2.5 rounded-lg text-[14px] font-black whitespace-nowrap ${dark ? "bg-[#0F1A30] text-white" : soft ? "bg-[#F3F6FA] text-[#5B6B85] border border-[#E3E8F0]" : "bg-[#EEF3FC] text-[#1B2B4B] border border-[#C9D6EE]"}`}>{children}</span>;
+const Label = ({ children, sub }) => <div className="text-[14px] font-black text-[#3A4A66] mb-1.5 whitespace-nowrap">{children}{sub && <span className="ml-1.5 text-[14px] font-semibold text-[#5B6B85]">{sub}</span>}</div>;
 
 function Hero({ en, title, desc, children }) {
   return (
     <div className="relative overflow-hidden rounded-[22px] px-7 py-6 text-white flex items-center justify-between gap-4 flex-wrap mb-4"
       style={{ background: "linear-gradient(rgba(143,176,240,.07) 1px, transparent 1px) 0 0/22px 22px, linear-gradient(90deg, rgba(143,176,240,.07) 1px, transparent 1px) 0 0/22px 22px, linear-gradient(120deg,#0B1428 0%,#1B2B4B 60%,#2D4C82 100%)" }}>
       <div className="min-w-0">
-        <div className="text-[11px] font-extrabold tracking-[0.26em] text-[#8FB0F0]" style={{ fontFamily: MONO }}>{en}</div>
+        <div className="text-[14px] font-extrabold tracking-[0.12em] text-[#8FB0F0]" style={{ fontFamily: MONO }}>{en}</div>
         <div className="text-[25px] font-black">{title}</div>
-        <div className="text-[13.5px] text-white/65">{desc}</div>
+        <div className="text-[14px] text-white/85">{desc}</div>
       </div>
       {children}
     </div>
   );
 }
 const Stat = ({ k, v }) => (
-  <div className="px-4 py-2 rounded-xl bg-white/[0.07] border border-white/10 whitespace-nowrap"><div className="text-[11.5px] font-bold text-white/55">{k}</div><div className="text-[18px] font-black tabular-nums" style={{ fontFamily: MONO }}>{v}</div></div>
+  <div className="px-4 py-2 rounded-xl bg-white/[0.07] border border-white/10 whitespace-nowrap"><div className="text-[14px] font-bold text-white/85">{k}</div><div className="text-[23px] leading-tight font-black tabular-nums" style={{ fontFamily: MONO }}>{v}</div></div>
 );
 
 function useCompanyDoc(col, id) {
@@ -84,19 +89,19 @@ function DeductionEditor({ title, sub, value = [], auto = [], gross = 0, onSave,
     <div className="fixed inset-0 z-[99995] bg-[#0B1428]/55 flex items-center justify-center p-4">
       <div className="w-full max-w-[720px] rounded-[22px] bg-white overflow-hidden shadow-2xl">
         <div className="px-6 py-5 text-white" style={{ background: "linear-gradient(120deg,#0B1428,#1B2B4B 70%,#2D4C82)" }}>
-          <div className="text-[11px] font-extrabold tracking-[0.24em] text-[#8FB0F0]" style={{ fontFamily: MONO }}>DEDUCTIONS</div>
+          <div className="text-[14px] font-extrabold tracking-[0.12em] text-[#8FB0F0]" style={{ fontFamily: MONO }}>DEDUCTIONS</div>
           <div className="text-[20px] font-black">{title}</div>
-          {sub && <div className="text-[13px] text-white/65">{sub}</div>}
+          {sub && <div className="text-[14px] text-white/85">{sub}</div>}
         </div>
         <div className="p-6 space-y-2 max-h-[62vh] overflow-y-auto">
-          <div className={`grid ${COLS} gap-2 text-[12.5px] font-black text-[#7A89A3] px-1`}><span>순번</span><span>공제 항목</span><span>내용</span><span className="text-right">금액</span><span /></div>
+          <div className={`grid ${COLS} gap-2 text-[14px] font-black text-[#5B6B85] px-1`}><span>순번</span><span>공제 항목</span><span>내용</span><span className="text-right">금액</span><span /></div>
           {auto.map((d, i) => (
             <div key={`a${i}`} className={`grid ${COLS} gap-2 items-center`}>
               <span className="text-[14px] font-black text-[#5B6B85] text-center tabular-nums" style={{ fontFamily: MONO }}>{i + 1}</span>
               <div className={`${inp} w-full flex items-center bg-[#F5F8FD]`}>{d.kind || kindOfLabel(d.label)}</div>
-              <div className={`${inp} w-full flex items-center gap-1.5 bg-[#F5F8FD] min-w-0`}><span className="shrink-0 h-6 px-1.5 rounded-md bg-[#0F1A30] text-white text-[11px] font-black inline-flex items-center">{d.src}</span><span className="truncate">{d.memo || d.label}</span></div>
+              <div className={`${inp} w-full flex items-center gap-1.5 bg-[#F5F8FD] min-w-0`}><span className="shrink-0 h-6 px-1.5 rounded-md bg-[#0F1A30] text-white text-[13px] font-black inline-flex items-center">{d.src}</span><span className="truncate">{d.memo || d.label}</span></div>
               <div className={`${inp} w-full flex items-center justify-end bg-[#F5F8FD] tabular-nums`} style={{ fontFamily: MONO }}>{won(d.amount)}</div>
-              <span className="w-10 h-10 flex items-center justify-center text-[#9AA9C3]" title={d.src === "과태료" ? "과태료·사고 서류에서 수정" : d.src === "공통" ? "[공통 공제]에서 수정" : "기사관리에서 수정"}>■</span>
+              <span className="w-10 h-10 flex items-center justify-center text-[#5B6B85]" title={d.src === "과태료" ? "과태료·사고 서류에서 수정" : d.src === "공통" ? "[공통 공제]에서 수정" : "기사관리에서 수정"}>■</span>
             </div>
           ))}
           {list.map((d, j) => {
@@ -109,15 +114,15 @@ function DeductionEditor({ title, sub, value = [], auto = [], gross = 0, onSave,
                 </CustomSelect>
                 <input value={d.kind === "기타" ? d.label : d.label === d.kind ? "" : String(d.label).replace(`${d.kind} `, "")} onChange={(e) => upd(i, { label: d.kind === "기타" ? e.target.value : `${d.kind}${e.target.value ? ` ${e.target.value}` : ""}` })} placeholder={d.kind === "기타" ? "항목 이름" : "예: 10월분"} className={`${inp} w-full`} />
                 <input inputMode="numeric" value={d.amount ? toInt(d.amount).toLocaleString() : ""} onChange={(e) => upd(i, { amount: e.target.value.replace(/[^\d]/g, "") })} placeholder="0" className={`${inp} w-full text-right tabular-nums`} style={{ fontFamily: MONO }} />
-                <button type="button" onClick={() => setList((p) => p.filter((_, k) => k !== i))} className="w-10 h-10 rounded-xl text-[#9AA9C3] hover:bg-[#F5F8FD] text-[15px]" aria-label="항목 삭제">✕</button>
+                <button type="button" onClick={() => setList((p) => p.filter((_, k) => k !== i))} className="w-10 h-10 rounded-xl text-[#5B6B85] hover:bg-[#F5F8FD] text-[15px]" aria-label="항목 삭제">✕</button>
               </div>
             );
           })}
           <button type="button" onClick={() => setList((p) => [...p, { kind: "세금", label: "세금", amount: "" }])} className="w-full h-11 rounded-xl border-2 border-dashed border-[#C9D2E0] text-[14px] font-black text-[#5B6B85] hover:bg-[#F7F9FC]">+ 공제 항목 추가</button>
-          {auto.length > 0 && <div className="text-[12.5px] text-[#7A89A3] pt-1">■ 자동 공제 — 공통 공제는 [공통 공제], 과태료는 과태료·사고 서류, 기사님 고정 공제는 기사관리에서 고칩니다</div>}
+          {auto.length > 0 && <div className="text-[14px] text-[#5B6B85] pt-1">■ 자동 공제 — 공통 공제는 [공통 공제], 과태료는 과태료·사고 서류, 기사님 고정 공제는 기사관리에서 고칩니다</div>}
         </div>
         <div className="px-6 py-4 border-t border-[#E3E8F0] flex items-center gap-2">
-          <div className="text-[14px] font-bold text-[#5B6B85]">합계 <b className="text-[18px] text-[#0B1428] tabular-nums" style={{ fontFamily: MONO }}>{won(total)}</b>원</div>
+          <div className="text-[14px] font-bold text-[#5B6B85]">합계 <b className="text-[20px] text-[#0B1428] tabular-nums" style={{ fontFamily: MONO }}>{won(total)}</b>원</div>
           <button type="button" onClick={onClose} className={`${btnL} ml-auto`}>취소</button>
           <button type="button" onClick={() => onSave(list.filter((d) => (d.label || d.kind) && toInt(d.amount)).map((d) => ({ label: (d.label || d.kind).trim(), amount: toInt(d.amount) })))} className={btnD}>저장</button>
         </div>
@@ -207,7 +212,7 @@ function useStatements({ drivers, dispatchData, co, ym, vatMode, includeEmpty = 
 const StatusChip = ({ s }) => (!s ? <Chip soft>미발송</Chip> : <Chip dark={s.status === "confirmed"}>{s.status === "confirmed" ? "확인 완료" : s.status === "read" || s.readAt ? "읽음" : "발송됨"}</Chip>);
 const VatToggle = ({ value, onChange }) => (
   <div className="inline-flex p-1 rounded-xl bg-[#EEF2F8] gap-1">
-    {[["biz", "사업자 기사님 부가세 10%"], ["none", "부가세 없음"]].map(([k, l]) => <button key={k} type="button" onClick={() => onChange(k)} className={`h-9 px-3.5 rounded-lg text-[13.5px] font-black whitespace-nowrap ${value === k ? "bg-white text-[#0F1A30] shadow" : "text-[#5B6B85]"}`}>{l}</button>)}
+    {[["biz", "사업자 기사님 부가세 10%"], ["none", "부가세 없음"]].map(([k, l]) => <button key={k} type="button" onClick={() => onChange(k)} className={`h-9 px-3.5 rounded-lg text-[14px] font-black whitespace-nowrap ${value === k ? "bg-white text-[#0F1A30] shadow" : "text-[#5B6B85]"}`}>{l}</button>)}
   </div>
 );
 
@@ -312,43 +317,43 @@ export function BatchStatementsPanel({ drivers = [], dispatchData = [], companyN
             {shown.map((r, i) => (
               <tr key={r.key} className={`border-b border-[#EEF1F6] ${sel.has(r.key) ? "bg-[#EEF3FC]" : i % 2 ? "bg-[#FAFBFD]" : "bg-white"} hover:bg-[#F3F7FD]`}>
                 <td className="text-center"><input type="checkbox" className="w-4 h-4" checked={sel.has(r.key)} onChange={() => toggle(r.key)} /></td>
-                <td className={`${TD} text-[#7A89A3] font-bold tabular-nums`} style={{ fontFamily: MONO }}>{i + 1}</td>
+                <td className={`${TD} text-[#5B6B85] font-bold tabular-nums`} style={{ fontFamily: MONO }}>{i + 1}</td>
                 <td className={`${TD} font-black text-[#0F1A30]`}>{r.d.차량번호 || "-"}</td>
-                <td className={`${TD} font-black text-[#0F1A30]`}>{r.d.이름}{!r.d.appUid && <span className="ml-1.5 text-[11.5px] font-bold text-[#9AA9C3]">앱 미가입</span>}</td>
+                <td className={`${TD} font-black text-[#0F1A30]`}>{r.d.이름}{!r.d.appUid && <span className="ml-1.5 text-[14px] font-bold text-[#5B6B85]">앱 미가입</span>}</td>
                 <td className={`${TD} tabular-nums text-[#3A4A66]`}>{(r.d.전화번호 && (fmtPhone(r.d.전화번호) || r.d.전화번호)) || "-"}</td>
                 <td className={`${TD} tabular-nums text-[#3A4A66]`}>{r.d.사업자번호 ? fmtBiz(r.d.사업자번호) : "-"}</td>
                 <td className={`${TD} text-[#3A4A66]`}>{r.d.사업자상호 || "-"}</td>
-                <td className={`${TD} font-bold text-[#0F1A30] tabular-nums`}>{r.d.정산계좌?.acct ? acctLine(r.d.정산계좌) : <span className="text-[#9AA9C3]">미등록</span>}</td>
+                <td className={`${TD} font-bold text-[#0F1A30] tabular-nums`}>{r.d.정산계좌?.acct ? acctLine(r.d.정산계좌) : <span className="text-[#5B6B85]">미등록</span>}</td>
                 <td className={TD}>{r.bankCheck.level === "ok" ? <Chip>✓ 계좌확인완료</Chip> : <Chip soft>! {r.bankCheck.msg}</Chip>}</td>
-                <td className={`${TD} text-right tabular-nums font-bold`}>{r.trips.length}</td>
-                <td className={`${TD} text-right tabular-nums font-bold`} style={{ fontFamily: MONO }}>{won(r.gross)}</td>
-                <td className={`${TD} text-right tabular-nums text-[#5B6B85]`} style={{ fontFamily: MONO }}>{r.vat ? won(r.vat) : "-"}</td>
+                <td className={`${TD} ${NUM} text-right tabular-nums`}>{r.trips.length}</td>
+                <td className={`${TD} ${NUM} text-right tabular-nums`} style={{ fontFamily: MONO }}>{won(r.gross)}</td>
+                <td className={`${TD} text-right tabular-nums text-[16px] font-bold text-[#3A4A66]`} style={{ fontFamily: MONO }}>{r.vat ? won(r.vat) : "-"}</td>
                 <td className={`${TD} text-right`}>
                   <button type="button" onClick={() => setDedEdit({ key: r.key, title: `${r.d.이름} 기사님 공제`, sub: "자동 공제(■)와 이번 달 추가 공제를 함께 봅니다", value: r.extra, auto: r.auto, gross: r.gross })}
                     title={r.deductions.map((d) => `${d.label} ${won(d.amount)}`).join("\n") || "공제 추가"}
                     className="h-9 px-3 rounded-lg border border-[#DCE3EE] bg-white hover:bg-[#F5F8FD] text-[14px] font-black tabular-nums text-[#1B2B4B]" style={{ fontFamily: MONO }}>
-                    {r.deductTotal ? `-${won(r.deductTotal)}` : "+ 공제"}{r.deductions.length ? <span className="ml-1.5 text-[11.5px] text-[#7A89A3]">{r.deductions.length}건</span> : null}
+                    {r.deductTotal ? `-${won(r.deductTotal)}` : "+ 공제"}{r.deductions.length ? <span className="ml-1.5 text-[14px] text-[#5B6B85]">{r.deductions.length}건</span> : null}
                   </button>
                 </td>
-                <td className={`${TD} text-right tabular-nums font-black text-[15.5px] text-[#0B1428]`} style={{ fontFamily: MONO }}>{won(r.net)}</td>
+                <td className={`${TD} text-right tabular-nums font-black text-[17px] text-[#0B1428]`} style={{ fontFamily: MONO }}>{won(r.net)}</td>
                 <td className={TD}><StatusChip s={sent[r.key]} /></td>
                 <td className={TD}>
-                  <button type="button" onClick={() => setPreview(i)} className="h-9 px-3.5 rounded-lg border border-[#DCE3EE] text-[13.5px] font-black text-[#1B2B4B]">보기</button>
-                  <button type="button" onClick={() => sendSelected(new Set([r.key]))} className="ml-1.5 h-9 px-3.5 rounded-lg bg-[#1B2B4B] text-white text-[13.5px] font-black">발송</button>
+                  <button type="button" onClick={() => setPreview(i)} className="h-9 px-3.5 rounded-lg border border-[#DCE3EE] text-[14px] font-black text-[#1B2B4B]">보기</button>
+                  <button type="button" onClick={() => sendSelected(new Set([r.key]))} className="ml-1.5 h-9 px-3.5 rounded-lg bg-[#1B2B4B] text-white text-[14px] font-black">발송</button>
                 </td>
               </tr>
             ))}
-            {!shown.length && <tr><td colSpan={16} className="py-20 text-center text-[15px] font-bold text-[#9AA9C3]">{ym} 기간에 운행한 지입·직영·임대 기사님이 없습니다</td></tr>}
+            {!shown.length && <tr><td colSpan={16} className="py-20 text-center text-[15px] font-bold text-[#5B6B85]">{ym} 기간에 운행한 지입·직영·임대 기사님이 없습니다</td></tr>}
           </tbody>
           {shown.length > 0 && (
             <tfoot>
               <tr className="bg-[#F3F6FA] font-black text-[#0F1A30] text-[14.5px]">
                 <td /><td colSpan={8} className="px-3 py-3.5">합계 {shown.length}명</td>
-                <td className="px-3 text-right tabular-nums">{totals.n}</td>
-                <td className="px-3 text-right tabular-nums" style={{ fontFamily: MONO }}>{won(totals.gross)}</td>
-                <td className="px-3 text-right tabular-nums" style={{ fontFamily: MONO }}>{won(totals.vat)}</td>
-                <td className="px-3 text-right tabular-nums" style={{ fontFamily: MONO }}>-{won(totals.ded)}</td>
-                <td className="px-3 text-right tabular-nums text-[16px]" style={{ fontFamily: MONO }}>{won(totals.net)}</td><td colSpan={2} />
+                <td className="px-3 text-right tabular-nums text-[16px]">{totals.n}</td>
+                <td className="px-3 text-right tabular-nums text-[16px]" style={{ fontFamily: MONO }}>{won(totals.gross)}</td>
+                <td className="px-3 text-right tabular-nums text-[16px]" style={{ fontFamily: MONO }}>{won(totals.vat)}</td>
+                <td className="px-3 text-right tabular-nums text-[16px]" style={{ fontFamily: MONO }}>-{won(totals.ded)}</td>
+                <td className="px-3 text-right tabular-nums text-[18px]" style={{ fontFamily: MONO }}>{won(totals.net)}</td><td colSpan={2} />
               </tr>
             </tfoot>
           )}
@@ -362,7 +367,7 @@ export function BatchStatementsPanel({ drivers = [], dispatchData = [], companyN
           <div className="w-full max-w-[1000px] h-full bg-[#F3F6FA] flex flex-col shadow-2xl">
             <div className="px-6 py-4 flex items-center gap-2 text-white" style={{ background: "linear-gradient(120deg,#0B1428,#1B2B4B 70%,#2D4C82)" }}>
               <div className="min-w-0 flex-1">
-                <div className="text-[11px] font-extrabold tracking-[0.24em] text-[#8FB0F0]" style={{ fontFamily: MONO }}>PREVIEW · {preview + 1} / {shown.length}</div>
+                <div className="text-[14px] font-extrabold tracking-[0.12em] text-[#8FB0F0]" style={{ fontFamily: MONO }}>PREVIEW · {preview + 1} / {shown.length}</div>
                 <div className="text-[20px] font-black truncate">{cur.d.이름} · {cur.d.차량번호}</div>
               </div>
               <button type="button" onClick={() => setPreview((p) => Math.max(0, p - 1))} disabled={preview === 0} className="h-11 w-11 rounded-xl bg-white/10 border border-white/20 text-[20px] font-black disabled:opacity-30">‹</button>
@@ -438,27 +443,27 @@ export function SingleStatementPanel({ drivers = [], dispatchData = [], companyN
               return (
                 <button key={r.key} type="button" onClick={() => setSelKey(r.key)} className={`w-full text-left px-4 py-3 border-b border-[#EEF1F6] transition ${on ? "bg-[#0F1A30] text-white" : "hover:bg-[#F5F8FD]"} ${r.trips.length || r.deductTotal ? "" : "opacity-55"}`}>
                   <div className="flex items-center gap-2">
-                    <span className="text-[15px] font-black truncate flex-1">{r.d.이름} <span className={`text-[12.5px] font-bold ${on ? "text-white/70" : "text-[#7A89A3]"}`}>{r.d.차량번호}</span></span>
-                    <span className={`text-[11.5px] font-black px-1.5 py-0.5 rounded ${on ? "bg-white/15" : "bg-[#EEF3FC] text-[#1B2B4B]"}`}>{r.d.등급 || "지입"}</span>
+                    <span className="text-[15px] font-black truncate flex-1">{r.d.이름} <span className={`text-[14px] font-bold ${on ? "text-white/85" : "text-[#5B6B85]"}`}>{r.d.차량번호}</span></span>
+                    <span className={`text-[14px] font-black px-1.5 py-0.5 rounded ${on ? "bg-white/15" : "bg-[#EEF3FC] text-[#1B2B4B]"}`}>{r.d.등급 || "지입"}</span>
                   </div>
-                  <div className={`mt-1 flex items-center justify-between text-[13px] ${on ? "text-white/75" : "text-[#5B6B85]"}`}>
+                  <div className={`mt-1 flex items-center justify-between text-[14px] ${on ? "text-white/75" : "text-[#5B6B85]"}`}>
                     <span>{r.trips.length}건 · {sent[r.key] ? (sent[r.key].status === "confirmed" ? "확인 완료" : "발송됨") : "미발송"}</span>
                     <b className={`tabular-nums ${on ? "text-white" : "text-[#0B1428]"}`} style={{ fontFamily: MONO }}>{won(r.net)}원</b>
                   </div>
                 </button>
               );
             })}
-            {!list.length && <div className="py-14 text-center text-[14px] font-bold text-[#9AA9C3]">지입·직영·임대 기사님이 없습니다</div>}
+            {!list.length && <div className="py-14 text-center text-[14px] font-bold text-[#5B6B85]">지입·직영·임대 기사님이 없습니다</div>}
           </div>
         </div>
-        {!cur ? <div className={`${card} py-24 text-center text-[15px] font-bold text-[#9AA9C3]`}>기사님을 고르세요</div> : (
+        {!cur ? <div className={`${card} py-24 text-center text-[15px] font-bold text-[#5B6B85]`}>기사님을 고르세요</div> : (
           <div className="space-y-3 min-w-0">
             <div className={`${card} p-5`}>
               <div className="flex items-start gap-4 flex-wrap">
                 <span className="w-14 h-14 rounded-2xl bg-[#0F1A30] text-white flex items-center justify-center text-[22px] font-black">{String(cur.d.이름).slice(0, 1)}</span>
                 <div className="min-w-0 flex-1">
                   <div className="text-[22px] font-black text-[#0F1A30]">{cur.d.이름} <span className="text-[15px] font-bold text-[#5B6B85]">{cur.d.차량번호}</span></div>
-                  <div className="text-[13.5px] text-[#5B6B85] mt-0.5 flex flex-wrap gap-x-3">
+                  <div className="text-[14px] text-[#5B6B85] mt-0.5 flex flex-wrap gap-x-3">
                     <span>{(cur.d.전화번호 && (fmtPhone(cur.d.전화번호) || cur.d.전화번호)) || "-"}</span><span>사업자 {cur.d.사업자번호 ? fmtBiz(cur.d.사업자번호) : "-"}</span><span>{cur.d.사업자상호 || ""}</span>
                     <span>{cur.d.정산계좌?.acct ? acctLine(cur.d.정산계좌) : "계좌 미등록"}</span>
                   </div>
@@ -471,8 +476,8 @@ export function SingleStatementPanel({ drivers = [], dispatchData = [], companyN
               <div className="grid grid-cols-2 lg:grid-cols-5 gap-2 mt-4">
                 {[["운행", `${cur.trips.length}건`], ["운임 합계", won(cur.gross)], ["부가세", won(cur.vat)], ["공제", `-${won(cur.deductTotal)}`], ["실지급액", won(cur.net)]].map(([k, v], i) => (
                   <div key={k} className={`rounded-xl px-4 py-3 ${i === 4 ? "bg-[#0F1A30] text-white" : "bg-[#F5F8FD] border border-[#E3E8F0]"}`}>
-                    <div className={`text-[12.5px] font-bold ${i === 4 ? "text-[#8FB0F0]" : "text-[#7A89A3]"}`}>{k}</div>
-                    <div className="text-[20px] font-black tabular-nums" style={{ fontFamily: MONO }}>{v}</div>
+                    <div className={`text-[14px] font-bold ${i === 4 ? "text-[#8FB0F0]" : "text-[#5B6B85]"}`}>{k}</div>
+                    <div className="text-[24px] leading-tight font-black tabular-nums" style={{ fontFamily: MONO }}>{v}</div>
                   </div>
                 ))}
               </div>
@@ -488,7 +493,7 @@ export function SingleStatementPanel({ drivers = [], dispatchData = [], companyN
             </div>
             <div className={`${card} overflow-hidden`}>
               <div className="px-4 py-3 border-b border-[#EEF1F6] flex items-center gap-2">
-                <div className="text-[16px] font-black text-[#0F1A30]">운행 내역 <span className="text-[13px] font-bold text-[#7A89A3]">{ym}</span></div>
+                <div className="text-[16px] font-black text-[#0F1A30]">운행 내역 <span className="text-[14px] font-bold text-[#5B6B85]">{ym}</span></div>
                 <input value={tq} onChange={(e) => setTq(e.target.value)} placeholder="거래처·상하차지·화물 거르기" className={`${inp} ml-auto w-72`} />
               </div>
               <div className="overflow-x-auto">
@@ -497,18 +502,18 @@ export function SingleStatementPanel({ drivers = [], dispatchData = [], companyN
                   <tbody>
                     {trips.map((t, i) => (
                       <tr key={i} className={`border-b border-[#EEF1F6] ${i % 2 ? "bg-[#FAFBFD]" : "bg-white"}`}>
-                        <td className={`${TD} text-[#7A89A3] font-bold tabular-nums`} style={{ fontFamily: MONO }}>{i + 1}</td>
+                        <td className={`${TD} text-[#5B6B85] font-bold tabular-nums`} style={{ fontFamily: MONO }}>{i + 1}</td>
                         <td className={`${TD} tabular-nums font-bold`} style={{ fontFamily: MONO }}>{t.date}</td>
-                        <td className={`${TD} font-black text-[#0F1A30]`}>{t.client}{t.route && <span className="ml-1.5 text-[11px] font-black px-1.5 py-0.5 rounded bg-[#EEF3FC] text-[#1B2B4B]">고정</span>}</td>
+                        <td className={`${TD} font-black text-[#0F1A30]`}>{t.client}{t.route && <span className="ml-1.5 text-[14px] font-black px-1.5 py-0.5 rounded bg-[#EEF3FC] text-[#1B2B4B]">고정</span>}</td>
                         <td className={TD}>{t.from}</td>
                         <td className={`${TD} text-[#5B6B85] max-w-[220px] overflow-hidden text-ellipsis`} title={t.via}>{t.via || "-"}</td>
                         <td className={TD}>{t.to}</td>
                         <td className={`${TD} text-[#5B6B85]`}>{t.cargo || "-"}</td>
                         <td className={`${TD} text-[#5B6B85]`}>{t.ton || "-"}</td>
-                        <td className={`${TD} text-right font-black tabular-nums`} style={{ fontFamily: MONO }}>{won(t.fare)}</td>
+                        <td className={`${TD} ${NUM} text-right tabular-nums`} style={{ fontFamily: MONO }}>{won(t.fare)}</td>
                       </tr>
                     ))}
-                    {!trips.length && <tr><td colSpan={9} className="py-16 text-center text-[14px] font-bold text-[#9AA9C3]">{ym} 운행 내역이 없습니다</td></tr>}
+                    {!trips.length && <tr><td colSpan={9} className="py-16 text-center text-[14px] font-bold text-[#5B6B85]">{ym} 운행 내역이 없습니다</td></tr>}
                   </tbody>
                   {trips.length > 0 && <tfoot><tr className="bg-[#F3F6FA] font-black text-[14.5px]"><td colSpan={8} className="px-3 py-3">합계 {trips.length}건</td><td className="px-3 text-right tabular-nums" style={{ fontFamily: MONO }}>{won(trips.reduce((s, t) => s + t.fare, 0))}</td></tr></tfoot>}
                 </table>
@@ -523,7 +528,7 @@ export function SingleStatementPanel({ drivers = [], dispatchData = [], companyN
           <div className="w-full max-w-[1000px] h-full bg-[#F3F6FA] flex flex-col shadow-2xl">
             <div className="px-6 py-4 flex items-center gap-2 text-white" style={{ background: "linear-gradient(120deg,#0B1428,#1B2B4B 70%,#2D4C82)" }}>
               <div className="min-w-0 flex-1">
-                <div className="text-[11px] font-extrabold tracking-[0.24em] text-[#8FB0F0]" style={{ fontFamily: MONO }}>STATEMENT · {ym}</div>
+                <div className="text-[14px] font-extrabold tracking-[0.12em] text-[#8FB0F0]" style={{ fontFamily: MONO }}>STATEMENT · {ym}</div>
                 <div className="text-[20px] font-black truncate">{cur.d.이름} · {cur.d.차량번호}</div>
               </div>
               <button type="button" onClick={printDoc} className="h-11 px-4 rounded-xl bg-white/10 border border-white/20 text-[14px] font-black">인쇄</button>
@@ -582,10 +587,10 @@ function PenaltyScanModal({ onClose, onApply }) {
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#CFE0FF" strokeWidth="2" strokeLinecap="round"><path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2" /><path d="M3 12h18" /></svg>
           </div>
           <div className="relative min-w-0">
-            <div className="text-[10.5px] font-extrabold tracking-[0.3em] text-[#8FB0F0]" style={{ fontFamily: MONO }}>NOTICE SCAN</div>
+            <div className="text-[14px] font-extrabold tracking-[0.3em] text-[#8FB0F0]" style={{ fontFamily: MONO }}>NOTICE SCAN</div>
             <div className="text-[18px] font-black leading-tight">고지서 스캔</div>
           </div>
-          <div className="relative ml-4 hidden md:flex items-center gap-2 text-[12px] font-bold text-white/60">
+          <div className="relative ml-4 hidden md:flex items-center gap-2 text-[14px] font-bold text-white/85">
             <kbd className="px-2 h-6 inline-flex items-center rounded-md bg-white/10 ring-1 ring-white/15 text-white" style={{ fontFamily: MONO }}>Ctrl</kbd>+<kbd className="px-2 h-6 inline-flex items-center rounded-md bg-white/10 ring-1 ring-white/15 text-white" style={{ fontFamily: MONO }}>V</kbd>
             <span>고지서 사진·캡처나 안내 문자를 바로 붙여넣으세요</span>
           </div>
@@ -599,19 +604,19 @@ function PenaltyScanModal({ onClose, onApply }) {
                 <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="4" y="3" width="16" height="18" rx="2" /><path d="M8 8h8M8 12h8M8 16h5" /></svg>
               </div>
               <div className="mt-5 text-[20px] font-black text-[#0F1A30]"><span className="hidden md:inline">Ctrl + V 로 붙여넣기</span><span className="md:hidden">고지서 사진으로 스캔</span></div>
-              <div className="mt-1.5 text-[13.5px] text-[#5B6B85] leading-relaxed">과태료·범칙금 <b className="text-[#0F1A30]">고지서 사진</b>이나 <b className="text-[#0F1A30]">캡처</b>를 붙여넣으면<br />차량번호·일시·장소·금액·납부기한을 자동으로 읽어요</div>
+              <div className="mt-1.5 text-[14px] text-[#5B6B85] leading-relaxed">과태료·범칙금 <b className="text-[#0F1A30]">고지서 사진</b>이나 <b className="text-[#0F1A30]">캡처</b>를 붙여넣으면<br />차량번호·일시·장소·금액·납부기한을 자동으로 읽어요</div>
               <div className="mt-5 flex gap-2">
-                <button type="button" onClick={() => fileRef.current?.click()} className="h-10 px-4 rounded-[12px] border border-[#E3E8F0] bg-white text-[#0F1A30] text-[13px] font-bold hover:border-[#4B6CB7]">사진 · 이미지 선택</button>
+                <button type="button" onClick={() => fileRef.current?.click()} className="h-10 px-4 rounded-[12px] border border-[#E3E8F0] bg-white text-[#0F1A30] text-[14px] font-bold hover:border-[#4B6CB7]">사진 · 이미지 선택</button>
                 <input ref={fileRef} type="file" accept="image/*" hidden onChange={(e) => { run(e.target.files?.[0]); e.target.value = ""; }} />
               </div>
-              <div className="mt-4 text-[11.5px] text-[#9AA9C3]">이미지는 끌어다 놓아도 됩니다 · 한글 인식이라 처음 한 번은 조금 걸려요</div>
-              {err && <div className="mt-4 px-4 py-2 rounded-xl bg-[#F3F6FA] border border-[#DCE3EE] text-[12.5px] font-bold text-[#0F1A30]">! {err}</div>}
+              <div className="mt-4 text-[14px] text-[#5B6B85]">이미지는 끌어다 놓아도 됩니다 · 한글 인식이라 처음 한 번은 조금 걸려요</div>
+              {err && <div className="mt-4 px-4 py-2 rounded-xl bg-[#F3F6FA] border border-[#DCE3EE] text-[14px] font-bold text-[#0F1A30]">! {err}</div>}
             </div>
             <div className="flex flex-col min-h-[260px] md:min-h-0 rounded-[22px] bg-white border border-[#E3E8F0] p-4 md:p-5">
-              <div className="text-[10.5px] font-extrabold tracking-[0.26em] text-[#4B6CB7]" style={{ fontFamily: MONO }}>TEXT</div>
+              <div className="text-[14px] font-extrabold tracking-[0.12em] text-[#4B6CB7]" style={{ fontFamily: MONO }}>TEXT</div>
               <div className="text-[15px] font-black text-[#0F1A30]">문자·메일 내용 붙여넣기</div>
               <textarea value={typed} onChange={(e) => setTyped(e.target.value)} placeholder={"예)\n[과태료 사전통지] 차량번호 서울12가1000\n위반일시 2026.10.12 14:20 / 장소 경부고속도로 서울방향 123km\n제한속도 100km/h 구간 128km/h 주행\n납부금액 70,000원 / 납부기한 2026.11.10 ○○경찰서"}
-                className="mt-3 flex-1 min-h-0 w-full rounded-[14px] border border-[#E3E8F0] bg-[#F7F9FC] px-4 py-3 text-[13.5px] font-semibold text-[#0F1A30] leading-relaxed resize-none outline-none focus:bg-white focus:border-[#4B6CB7] focus:ring-4 focus:ring-[#4B6CB7]/10 placeholder:text-[#A7B3C6]" />
+                className="mt-3 flex-1 min-h-0 w-full rounded-[14px] border border-[#E3E8F0] bg-[#F7F9FC] px-4 py-3 text-[14px] font-semibold text-[#0F1A30] leading-relaxed resize-none outline-none focus:bg-white focus:border-[#4B6CB7] focus:ring-4 focus:ring-[#4B6CB7]/10 placeholder:text-[#A7B3C6]" />
               <button type="button" onClick={() => runText(typed)} disabled={!typed.trim()} className="mt-3 h-12 rounded-[14px] text-white text-[14.5px] font-black disabled:opacity-40 shadow-[0_12px_24px_rgba(15,26,48,0.25)]" style={{ background: "linear-gradient(120deg,#0F1A30,#2D4C82)" }}>스캔하기</button>
             </div>
           </div>
@@ -619,28 +624,28 @@ function PenaltyScanModal({ onClose, onApply }) {
           <div className="flex-1 min-h-0 grid grid-cols-1 grid-rows-[minmax(0,40%)_minmax(0,1fr)] md:grid-rows-1 md:grid-cols-[1.1fr_1fr] gap-3 md:gap-5 p-3 md:p-6">
             <div className="relative min-h-0 rounded-[22px] bg-white border border-[#E3E8F0] overflow-hidden flex flex-col">
               <div className="px-4 py-3 border-b border-[#EEF1F6] flex items-center gap-2">
-                <span className="text-[13.5px] font-black text-[#0F1A30]">{img ? "고지서 이미지" : "붙여넣은 내용"}</span>
-                {found && <button type="button" onClick={() => { setStage("input"); setFound(null); setImg(""); }} className="ml-auto h-8 px-3 rounded-[10px] border border-[#E3E8F0] text-[12px] font-bold text-[#3A4A66] hover:border-[#4B6CB7]">다시 붙여넣기</button>}
+                <span className="text-[14px] font-black text-[#0F1A30]">{img ? "고지서 이미지" : "붙여넣은 내용"}</span>
+                {found && <button type="button" onClick={() => { setStage("input"); setFound(null); setImg(""); }} className="ml-auto h-8 px-3 rounded-[10px] border border-[#E3E8F0] text-[14px] font-bold text-[#3A4A66] hover:border-[#4B6CB7]">다시 붙여넣기</button>}
               </div>
               <div className="relative flex-1 min-h-0 overflow-auto bg-[#F7F9FC] flex items-start justify-center p-3">
-                {img ? <img src={img} alt="고지서" className="max-w-full" /> : <pre className="whitespace-pre-wrap text-[13.5px] text-[#0F1A30] w-full">{typed}</pre>}
+                {img ? <img src={img} alt="고지서" className="max-w-full" /> : <pre className="whitespace-pre-wrap text-[14px] text-[#0F1A30] w-full">{typed}</pre>}
                 {!found && <span className="absolute left-0 right-0 h-[3px] bg-[#8FB0F0] shadow-[0_0_18px_#8FB0F0]" style={{ animation: "psBeam 1.4s ease-in-out infinite alternate" }} />}
               </div>
             </div>
             <div className="min-h-0 rounded-[22px] bg-white border border-[#E3E8F0] flex flex-col overflow-hidden">
               <div className="px-5 py-4 border-b border-[#EEF1F6]">
-                <div className="text-[10.5px] font-extrabold tracking-[0.26em] text-[#4B6CB7]" style={{ fontFamily: MONO }}>RESULT</div>
+                <div className="text-[14px] font-extrabold tracking-[0.12em] text-[#4B6CB7]" style={{ fontFamily: MONO }}>RESULT</div>
                 <div className="text-[15px] font-black text-[#0F1A30]">{found ? `${cnt}개 항목을 읽었어요` : `${prog.msg || "읽는 중"} ${prog.pct ? `${prog.pct}%` : ""}`}</div>
                 {!found && <div className="mt-2 h-2 rounded-full bg-[#EEF2F8] overflow-hidden"><div className="h-full bg-[#2D4C82] transition-all" style={{ width: `${prog.pct || 5}%` }} /></div>}
               </div>
               <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-1.5">
                 {found && SCAN_FIELDS.map(([k, l]) => (
                   <div key={k} className="grid grid-cols-[110px_minmax(0,1fr)] items-center gap-2">
-                    <span className="text-[13px] font-black text-[#5B6B85]">{l}</span>
+                    <span className="text-[14px] font-black text-[#5B6B85]">{l}</span>
                     <input value={found[k] ?? ""} onChange={(e) => setFound((p) => ({ ...p, [k]: e.target.value }))} placeholder="읽지 못함" className={`${inp} w-full ${found[k] ? "" : "bg-[#F7F9FC]"}`} />
                   </div>
                 ))}
-                {err && <div className="text-[13px] font-bold text-[#0F1A30]">! {err}</div>}
+                {err && <div className="text-[14px] font-bold text-[#0F1A30]">! {err}</div>}
               </div>
               <div className="p-4 border-t border-[#EEF1F6] flex gap-2">
                 <button type="button" onClick={onClose} className={`${btnL} flex-1`}>취소</button>
@@ -731,7 +736,7 @@ export function PenaltyCenter({ drivers = [], companyName = "", supplier = {} })
       setForm(null); setScan(null);
     } catch (e) { kpAlert(`저장 실패: ${e?.message || e}`); } finally { setBusy(false); }
   };
-  const remove = async (p) => { if (await kpConfirm("이 서류를 삭제할까요?\n기사앱 서류함에서도 사라집니다.", { title: "서류 삭제", okText: "삭제", danger: true })) { await deleteDoc(doc(db, "fleetPenalties", p.id)); setView(null); } };
+  const remove = async (p) => { if (await kpConfirm("이 서류를 삭제할까요?\n기사앱 서류함에서도 사라집니다.", { title: "서류 삭제", okText: "삭제", danger: true })) { await runDelete({ label: "서류", task: () => deleteDoc(doc(db, "fleetPenalties", p.id)) }); setView(null); } }; // ⭐ 2026-11-05 삭제 진행 창
   const setStatus = async (p, status) => {
     const extra = status === "납부 완료" ? { paidAt: serverTimestamp() } : {};
     await updateDoc(doc(db, "fleetPenalties", p.id), { status, ...extra, updatedAt: serverTimestamp() }).catch((e) => kpAlert(`변경 실패: ${e?.message || e}`));
@@ -755,17 +760,17 @@ export function PenaltyCenter({ drivers = [], companyName = "", supplier = {} })
         {scanOpen && <PenaltyScanModal onClose={() => setScanOpen(false)} onApply={applyScan} />}
         {scan && (
           <div className={`${card} px-5 py-3.5 mb-3 flex items-center gap-3`}>
-            <span className="text-[11px] font-extrabold tracking-[0.22em] text-[#2D4C82]" style={{ fontFamily: MONO }}>SCAN</span>
+            <span className="text-[14px] font-extrabold tracking-[0.12em] text-[#2D4C82]" style={{ fontFamily: MONO }}>SCAN</span>
             {scan.done ? (
               <span className="text-[14px] font-bold text-[#0F1A30]">{scan.err ? `읽지 못했어요 (${scan.err})` : scan.count ? `${scan.count}개 칸을 채웠어요${scan.driver ? ` · 차량번호로 ${scan.driver} 기사님을 찾았어요` : ""} — 내용을 한 번 확인해 주세요` : "읽은 내용이 없어요. 더 밝고 반듯하게 찍어 주세요"}</span>
             ) : (
               <>
                 <span className="text-[14px] font-bold text-[#0F1A30] whitespace-nowrap">{scan.msg}</span>
                 <div className="flex-1 h-2 rounded-full bg-[#EEF2F8] overflow-hidden"><div className="h-full bg-[#2D4C82] transition-all" style={{ width: `${scan.pct || 4}%` }} /></div>
-                <span className="text-[13px] font-black tabular-nums text-[#5B6B85]" style={{ fontFamily: MONO }}>{scan.pct || 0}%</span>
+                <span className="text-[14px] font-black tabular-nums text-[#5B6B85]" style={{ fontFamily: MONO }}>{scan.pct || 0}%</span>
               </>
             )}
-            {scan.done && <button type="button" onClick={() => setScan(null)} className="ml-auto h-9 px-3 rounded-lg text-[13px] font-bold text-[#5B6B85] hover:bg-[#F5F8FD]">닫기</button>}
+            {scan.done && <button type="button" onClick={() => setScan(null)} className="ml-auto h-9 px-3 rounded-lg text-[14px] font-bold text-[#5B6B85] hover:bg-[#F5F8FD]">닫기</button>}
           </div>
         )}
         <div className="grid gap-4 xl:grid-cols-[minmax(0,0.82fr)_minmax(0,1.18fr)]">
@@ -774,23 +779,23 @@ export function PenaltyCenter({ drivers = [], companyName = "", supplier = {} })
               <span className="w-10 h-10 rounded-xl bg-white/10 ring-1 ring-white/20 flex items-center justify-center shrink-0">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#CFE0FF" strokeWidth="2" strokeLinecap="round"><path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2" /><path d="M3 12h18" /></svg>
               </span>
-              <span className="min-w-0 flex-1"><span className="block text-[15.5px] font-black">고지서 자동 스캔</span><span className="block text-[12.5px] text-white/65">사진·캡처·문자를 붙여넣으면 아래 칸이 자동으로 채워져요</span></span>
-              <span className="h-9 px-3.5 rounded-xl bg-white text-[#0F1A30] text-[13px] font-black inline-flex items-center">스캔</span>
+              <span className="min-w-0 flex-1"><span className="block text-[15.5px] font-black">고지서 자동 스캔</span><span className="block text-[14px] text-white/85">사진·캡처·문자를 붙여넣으면 아래 칸이 자동으로 채워져요</span></span>
+              <span className="h-9 px-3.5 rounded-xl bg-white text-[#0F1A30] text-[14px] font-black inline-flex items-center">스캔</span>
             </button>
             <div>
               <Label>대상 기사님</Label>
               {form.driverName ? (
                 <div className="flex items-center gap-3 rounded-xl border border-[#C9D6EE] bg-[#F3F6FB] px-4 py-3">
                   <span className="w-10 h-10 rounded-xl bg-[#0F1A30] text-white flex items-center justify-center font-black">{String(form.driverName).slice(0, 1)}</span>
-                  <div className="min-w-0 flex-1"><div className="text-[15.5px] font-black text-[#0F1A30]">{form.driverName}</div><div className="text-[13px] text-[#5B6B85]">{form.carNo} · {form.phone}</div></div>
-                  <button type="button" onClick={() => set("driverName", "")} className="h-9 px-3.5 rounded-lg border border-[#DCE3EE] text-[13px] font-bold text-[#5B6B85] bg-white">변경</button>
+                  <div className="min-w-0 flex-1"><div className="text-[15.5px] font-black text-[#0F1A30]">{form.driverName}</div><div className="text-[14px] text-[#5B6B85]">{form.carNo} · {form.phone}</div></div>
+                  <button type="button" onClick={() => set("driverName", "")} className="h-9 px-3.5 rounded-lg border border-[#DCE3EE] text-[14px] font-bold text-[#5B6B85] bg-white">변경</button>
                 </div>
               ) : (
                 <div className="relative">
                   <input autoFocus value={dq} onChange={(e) => setDq(e.target.value)} placeholder="이름 · 차량번호 · 연락처로 검색" className={`${inp} w-full`} />
                   {matches.length > 0 && (
                     <div className="absolute z-20 left-0 right-0 top-full mt-1 rounded-xl border border-[#DCE3EE] bg-white shadow-xl overflow-hidden">
-                      {matches.map((d) => <button key={d.id} type="button" onClick={() => pickDriver(d)} className="w-full text-left px-4 py-3 hover:bg-[#F3F6FA] border-b border-[#EEF1F6] last:border-0 text-[14px]"><b className="text-[#0F1A30]">{d.이름}</b> <span className="text-[13px] text-[#5B6B85]">{d.차량번호} · {d.전화번호}</span></button>)}
+                      {matches.map((d) => <button key={d.id} type="button" onClick={() => pickDriver(d)} className="w-full text-left px-4 py-3 hover:bg-[#F3F6FA] border-b border-[#EEF1F6] last:border-0 text-[14px]"><b className="text-[#0F1A30]">{d.이름}</b> <span className="text-[14px] text-[#5B6B85]">{d.차량번호} · {d.전화번호}</span></button>)}
                     </div>
                   )}
                 </div>
@@ -816,9 +821,9 @@ export function PenaltyCenter({ drivers = [], companyName = "", supplier = {} })
               </label>
               {String(form.payer).startsWith("기사 부담") && (
                 <div className="col-span-2 flex items-center gap-2 flex-wrap rounded-xl bg-[#F5F8FD] border border-[#E3E8F0] px-3.5 py-2.5">
-                  <span className="text-[13px] font-black text-[#3A4A66] whitespace-nowrap">공제할 정산월</span>
+                  <span className="text-[14px] font-black text-[#3A4A66] whitespace-nowrap">공제할 정산월</span>
                   <MonthPicker value={form.deductPeriod || ymOf(form.date)} onChange={(v) => set("deductPeriod", v)} />
-                  <span className="text-[12.5px] text-[#7A89A3]">지급명세서를 보내면 자동으로 "납부 완료"가 됩니다</span>
+                  <span className="text-[14px] text-[#5B6B85]">지급명세서를 보내면 자동으로 "납부 완료"가 됩니다</span>
                 </div>
               )}
             </div>
@@ -828,21 +833,21 @@ export function PenaltyCenter({ drivers = [], companyName = "", supplier = {} })
                 {(form.photos || []).map((src, i) => (
                   <div key={i} className="relative aspect-[4/3] rounded-xl overflow-hidden border border-[#DCE3EE] bg-[#F3F6FA]">
                     <img src={src} alt="" className="w-full h-full object-contain" />
-                    <button type="button" onClick={() => set("photos", form.photos.filter((_, j) => j !== i))} className="absolute top-1 right-1 w-6 h-6 rounded-full bg-[#0B1428]/80 text-white text-[12px]" aria-label="사진 삭제">✕</button>
+                    <button type="button" onClick={() => set("photos", form.photos.filter((_, j) => j !== i))} className="absolute top-1 right-1 w-6 h-6 rounded-full bg-[#0B1428]/80 text-white text-[13px]" aria-label="사진 삭제">✕</button>
                   </div>
                 ))}
-                {(form.photos || []).length < 4 && <button type="button" onClick={() => fileRef.current?.click()} className="aspect-[4/3] rounded-xl border-2 border-dashed border-[#C9D2E0] text-[#5B6B85] text-[13.5px] font-bold">+ 사진</button>}
+                {(form.photos || []).length < 4 && <button type="button" onClick={() => fileRef.current?.click()} className="aspect-[4/3] rounded-xl border-2 border-dashed border-[#C9D2E0] text-[#5B6B85] text-[14px] font-bold">+ 사진</button>}
               </div>
               <input ref={fileRef} type="file" accept="image/*" multiple hidden onChange={async (e) => { const fl = [...(e.target.files || [])].slice(0, 4 - (form.photos || []).length); e.target.value = ""; const out = await Promise.all(fl.map((f) => compressImage(f, 1600, 0.82))).catch(() => []); set("photos", [...(form.photos || []), ...out].slice(0, 4)); }} />
             </div>
             <label className="block"><Label>기사님에게 남길 말</Label><textarea value={form.memo} onChange={(e) => set("memo", e.target.value)} rows={2} placeholder="예: 이번 달 정산에서 공제됩니다. 이의가 있으면 앱에서 [이의 신청]을 눌러 주세요." className={`${inp} w-full !h-auto py-2.5`} /></label>
           </div>
           <div className="xl:sticky xl:top-3 self-start">
-            <div className="text-[11.5px] font-extrabold tracking-[0.22em] text-[#2D4C82] mb-2" style={{ fontFamily: MONO }}>LIVE PREVIEW · 기사앱에 이렇게 보입니다</div>
+            <div className="text-[14px] font-extrabold tracking-[0.12em] text-[#2D4C82] mb-2" style={{ fontFamily: MONO }}>LIVE PREVIEW · 기사앱에 이렇게 보입니다</div>
             <div className="flex gap-2 justify-end mb-2">
-              <button type="button" onClick={() => printA4(formDocRef.current, `과태료처리안내서_${preview.driverName || ""}`)} className="h-9 px-3.5 rounded-lg border border-[#DCE3EE] bg-white text-[12.5px] font-black text-[#1B2B4B]">인쇄</button>
-              <button type="button" onClick={() => savePngA4(formDocRef.current, `과태료처리안내서_${preview.driverName || ""}`)} className="h-9 px-3.5 rounded-lg border border-[#DCE3EE] bg-white text-[12.5px] font-black text-[#1B2B4B]">이미지 저장</button>
-              <button type="button" onClick={() => savePdfA4(formDocRef.current, `과태료처리안내서_${preview.driverName || ""}`)} className="h-9 px-3.5 rounded-lg border border-[#DCE3EE] bg-white text-[12.5px] font-black text-[#1B2B4B]">PDF</button>
+              <button type="button" onClick={() => printA4(formDocRef.current, `과태료처리안내서_${preview.driverName || ""}`)} className="h-9 px-3.5 rounded-lg border border-[#DCE3EE] bg-white text-[14px] font-black text-[#1B2B4B]">인쇄</button>
+              <button type="button" onClick={() => savePngA4(formDocRef.current, `과태료처리안내서_${preview.driverName || ""}`)} className="h-9 px-3.5 rounded-lg border border-[#DCE3EE] bg-white text-[14px] font-black text-[#1B2B4B]">이미지 저장</button>
+              <button type="button" onClick={() => savePdfA4(formDocRef.current, `과태료처리안내서_${preview.driverName || ""}`)} className="h-9 px-3.5 rounded-lg border border-[#DCE3EE] bg-white text-[14px] font-black text-[#1B2B4B]">PDF</button>
             </div>
             <div ref={formDocRef}><PenaltyDoc p={preview} supplier={supplier} wide onPhoto={(i) => setViewer({ images: form.photos, index: i })} /></div>
           </div>
@@ -860,7 +865,7 @@ export function PenaltyCenter({ drivers = [], companyName = "", supplier = {} })
           <Stat k="전체" v={`${list.length}건`} />
           <Stat k="미처리" v={`${list.filter((p) => !["납부 완료", "취소"].includes(p.status)).length}건`} />
           <Stat k="금액 합계" v={`${won(sum)}원`} />
-          <button type="button" onClick={() => setForm(blank())} className="h-12 px-6 rounded-xl bg-white text-[#0F1A30] text-[15px] font-black">+ 서류 작성 <span className="ml-1 text-[11.5px] text-[#7A89A3]" style={{ fontFamily: MONO }}>F4</span></button>
+          <button type="button" onClick={() => setForm(blank())} className="h-12 px-6 rounded-xl bg-white text-[#0F1A30] text-[15px] font-black">+ 서류 작성 <span className="ml-1 text-[14px] text-[#5B6B85]" style={{ fontFamily: MONO }}>F4</span></button>
         </div>
       </Hero>
       <div className={`${card} p-4 mb-3 flex items-center gap-2 flex-wrap`}>
@@ -879,7 +884,7 @@ export function PenaltyCenter({ drivers = [], companyName = "", supplier = {} })
           <tbody>
             {shown.map((p, i) => (
               <tr key={p.id} onClick={() => setView(p)} className={`border-b border-[#EEF1F6] cursor-pointer ${i % 2 ? "bg-[#FAFBFD]" : "bg-white"} hover:bg-[#EEF3FC]`}>
-                <td className={`${TD} text-[#7A89A3] font-bold tabular-nums`} style={{ fontFamily: MONO }}>{i + 1}</td>
+                <td className={`${TD} text-[#5B6B85] font-bold tabular-nums`} style={{ fontFamily: MONO }}>{i + 1}</td>
                 <td className={`${TD} tabular-nums font-bold text-[#0F1A30]`} style={{ fontFamily: MONO }}>{p.date}{p.time ? ` ${p.time}` : ""}</td>
                 <td className={TD}><Chip>{p.kind}</Chip></td>
                 <td className={`${TD} font-black text-[#0F1A30]`}>{p.carNo || "-"}</td>
@@ -889,15 +894,15 @@ export function PenaltyCenter({ drivers = [], companyName = "", supplier = {} })
                 <td className={`${TD} text-[#3A4A66] max-w-[300px] overflow-hidden text-ellipsis`} title={p.detail}>{p.detail || "-"}</td>
                 <td className={`${TD} text-[#3A4A66] max-w-[240px] overflow-hidden text-ellipsis`} title={p.place}>{p.place || "-"}</td>
                 <td className={`${TD} text-[#3A4A66]`}>{p.agency || "-"}</td>
-                <td className={`${TD} text-right font-black tabular-nums`} style={{ fontFamily: MONO }}>{won(p.amount)}</td>
+                <td className={`${TD} ${NUM} text-right tabular-nums`} style={{ fontFamily: MONO }}>{won(p.amount)}</td>
                 <td className={`${TD} tabular-nums text-[#3A4A66]`} style={{ fontFamily: MONO }}>{p.dueDate || "-"}</td>
                 <td className={`${TD} font-bold text-[#3A4A66]`}>{p.payer}</td>
                 <td className={TD}><Chip dark={p.status === "납부 완료"} soft={p.status === "취소"}>{p.status}</Chip></td>
-                <td className={`${TD} tabular-nums text-[#3A4A66]`} style={{ fontFamily: MONO }}>{fmtTs(p.confirmedAt || p.readAt) || <span className="text-[#C3CDDD]">-</span>}</td>
-                <td className={`${TD} tabular-nums text-[#3A4A66]`} style={{ fontFamily: MONO }}>{p.paidAt ? `납부 ${fmtTs(p.paidAt)}` : p.objectedAt ? `이의 ${fmtTs(p.objectedAt)}` : <span className="text-[#C3CDDD]">-</span>}</td>
+                <td className={`${TD} tabular-nums text-[#3A4A66]`} style={{ fontFamily: MONO }}>{fmtTs(p.confirmedAt || p.readAt) || <span className="text-[#5B6B85]">-</span>}</td>
+                <td className={`${TD} tabular-nums text-[#3A4A66]`} style={{ fontFamily: MONO }}>{p.paidAt ? `납부 ${fmtTs(p.paidAt)}` : p.objectedAt ? `이의 ${fmtTs(p.objectedAt)}` : <span className="text-[#5B6B85]">-</span>}</td>
               </tr>
             ))}
-            {!shown.length && <tr><td colSpan={cols.length} className="py-20 text-center text-[15px] font-bold text-[#9AA9C3]">{list.length ? "조건에 맞는 서류가 없습니다" : "등록된 서류가 없습니다 · F4로 바로 작성"}</td></tr>}
+            {!shown.length && <tr><td colSpan={cols.length} className="py-20 text-center text-[15px] font-bold text-[#5B6B85]">{list.length ? "조건에 맞는 서류가 없습니다" : "등록된 서류가 없습니다 · F4로 바로 작성"}</td></tr>}
           </tbody>
         </table>
       </div>
@@ -906,7 +911,7 @@ export function PenaltyCenter({ drivers = [], companyName = "", supplier = {} })
           <div className="w-full max-w-[1100px] h-full bg-[#F3F6FA] flex flex-col shadow-2xl">
             <div className="px-6 py-4 flex items-center gap-2 text-white" style={{ background: "linear-gradient(120deg,#0B1428,#1B2B4B 70%,#2D4C82)" }}>
               <div className="flex-1 min-w-0">
-                <div className="text-[11px] font-extrabold tracking-[0.24em] text-[#8FB0F0]" style={{ fontFamily: MONO }}>VEHICLE NOTICE · {view.status}</div>
+                <div className="text-[14px] font-extrabold tracking-[0.12em] text-[#8FB0F0]" style={{ fontFamily: MONO }}>VEHICLE NOTICE · {view.status}</div>
                 <div className="text-[20px] font-black truncate">{view.kind} · {view.driverName} · {view.carNo}</div>
               </div>
               <CustomSelect value={view.status} onChange={(e) => setStatus(view, e.target.value)} className="h-11 px-3 rounded-xl bg-white/10 border border-white/20 text-white text-[14px] font-black w-36">

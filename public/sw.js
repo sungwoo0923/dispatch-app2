@@ -73,7 +73,7 @@ self.addEventListener("push", (event) => {
       body,
       icon: `/icons/${iconFile}?v=${VERSION}`,
       // ⭐ 2026-10-19 — 안드로이드 상단바·알림 머리의 작은 아이콘(배지). 안드로이드는 이 자리를 무조건 "단색 실루엣"으로만
-      // 그린다(색 있는 로고는 시스템이 허용 안 함). 예전엔 트럭 실루엣이라 흰 트럭으로 보였다 → 로고의 "KP" 글자 실루엣으로 교체.
+      // 그린다(색 있는 로고는 시스템이 허용 안 함). 예전엔 트럭 실루엣이라 흰 트럭으로 보였다 → 로고 실루엣으로 교체(2026-11-04 LogisWeb 마크).
       badge: `/icons/badge-kp-96.png?v=${VERSION}`,
       vibrate: [200, 100, 200],
       tag: data.tag || `kpflow-${Date.now()}`,
@@ -85,12 +85,19 @@ self.addEventListener("push", (event) => {
 
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
+  // ⭐ 2026-11-05 기사앱 알림(신규 오더·취소·출근 알림)은 눌렀을 때 기사 화면으로 연다(예전엔 항상 /app → 운송사 화면으로 감)
+  const t = String(event.notification?.data?.type || "");
+  const target = /^(fleet_|driver_)/.test(t) ? "/driver-home" : "/app";
   event.waitUntil(
     clients.matchAll({ type: "window", includeUncontrolled: true }).then((list) => {
+      const isDrv = target === "/driver-home";
       for (const client of list) {
+        // 기사 알림은 이미 열린 기사 화면을 앞으로(없으면 아무 창이나)
+        if (isDrv && !String(client.url || "").includes("/driver")) continue;
         if ("focus" in client) return client.focus();
       }
-      if (clients.openWindow) return clients.openWindow("/app");
+      if (!isDrv) for (const client of list) { if ("focus" in client) return client.focus(); }
+      if (clients.openWindow) return clients.openWindow(target);
     })
   );
 });

@@ -3,6 +3,7 @@
 //  받은/보낸/회사 전체(관리자) 목록 · 받는 사람별 확인 여부 · 열면 자동 확인 · 작성자는 수정/삭제.
 //  작성은 기존 인수인계 작성 화면(HomeWriters › HandoverWriter)을 그대로 쓴다.
 import React from "react";
+import { runDelete } from "./DeleteProgress"; // ⭐ 2026-11-05 삭제 진행 창 + 한 번에 삭제
 import { collection, deleteDoc, doc, onSnapshot, updateDoc, arrayUnion } from "firebase/firestore";
 import { db } from "./firebase";
 import { savePdf } from "./a4Export";
@@ -10,10 +11,10 @@ import { ShellIcon } from "./AdminShell";
 import { HandoverWriter, handoverReceivers } from "./HomeWriters";
 import { useUserNames } from "./userNames";
 
-const MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
+const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
 const HERO_BG = "linear-gradient(rgba(143,176,240,.07) 1px, transparent 1px) 0 0/22px 22px, linear-gradient(90deg, rgba(143,176,240,.07) 1px, transparent 1px) 0 0/22px 22px, linear-gradient(120deg,#0B1428 0%,#1B2B4B 60%,#2D4C82 100%)";
 const toMs = (t) => (t?.toMillis ? t.toMillis() : t?.seconds ? t.seconds * 1000 : typeof t === "number" ? t : 0);
-const ADMIN_ROLES = ["admin", "totalMaster", "superadmin", "hrManager"];
+const ADMIN_ROLES = ["admin", "totalMaster", "superadmin", "hrManager", "allMgr"];
 
 // 내가 받은 인수인계 중 아직 안 본 개수(메뉴 숫자)
 export function useHandoverUnread(uid) {
@@ -75,7 +76,7 @@ export default function HandoverCenter({ company, me, isViewer = false }) {
   }, [list, uid]); // eslint-disable-line react-hooks/exhaustive-deps
   const remove = async (h) => {
     if (!window.confirm("인수인계를 삭제하시겠습니까?")) return;
-    await deleteDoc(doc(db, "handovers", h.id)).catch((e) => window.alert(e.message));
+    await runDelete({ label: "인수인계", task: () => deleteDoc(doc(db, "handovers", h.id)) }).catch((e) => window.alert(e.message)); // ⭐ 2026-11-05 삭제 진행 창
     setOpen(null);
   };
 
@@ -93,7 +94,7 @@ export default function HandoverCenter({ company, me, isViewer = false }) {
     <div className="space-y-4">
       <div className="relative overflow-hidden rounded-[22px] px-4 py-4 md:px-7 md:py-5 text-white flex items-center justify-between gap-4 flex-wrap shadow-[0_14px_32px_rgba(15,26,48,0.25)]" style={{ background: HERO_BG }}>
         <div>
-          <div className="text-[11px] md:text-[12px] font-extrabold tracking-[0.26em] text-[#8FB0F0]" style={{ fontFamily: MONO }}>E-APPROVAL · HANDOVER</div>
+          <div className="text-[11px] md:text-[12px] font-extrabold tracking-[0.26em] text-[#8FB0F0]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>E-APPROVAL · HANDOVER</div>
           <div className="text-[20px] md:text-[24px] font-black mt-0.5">인수인계</div>
           <div className="text-[12.5px] md:text-[14px] text-white/60 mt-0.5">업무를 넘기고, 받는 사람마다 확인 여부를 봅니다</div>
         </div>
@@ -101,7 +102,7 @@ export default function HandoverCenter({ company, me, isViewer = false }) {
           {[["내 미확인", unread], ["받은", sets.in.length], ["보낸", sets.out.length]].map(([l, v]) => (
             <div key={l} className="flex-1 md:flex-none min-w-0 md:min-w-[96px] px-3 md:px-4 py-2 rounded-2xl bg-white/[0.07] border border-white/10">
               <div className="text-[12px] font-bold text-white/55">{l}</div>
-              <div className="text-[20px] font-black tabular-nums" style={{ fontFamily: MONO }}>{v}</div>
+              <div className="text-[20px] font-black tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{v}</div>
             </div>
           ))}
         </div>
@@ -145,7 +146,7 @@ export default function HandoverCenter({ company, me, isViewer = false }) {
                     </div>
                     <div className="text-[12.5px] text-[#5B6B85] truncate mt-0.5">
                       {authorName(h)} → {(h.receivers || []).length > 1 ? `${h.receivers[0].name} 외 ${h.receivers.length - 1}명` : h.receiver || "-"}
-                      <span className="text-[#9AA9C3]" style={{ fontFamily: MONO }}> · {timeLabel(h)}</span>
+                      <span className="text-[#9AA9C3]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}> · {timeLabel(h)}</span>
                     </div>
                   </div>
                   <span className={`shrink-0 h-7 px-2.5 leading-7 rounded-full text-[12px] font-black ${allRead ? "bg-[#EEF3FB] text-[#1B2B4B]" : "bg-[#0F1A30] text-white"}`}>
@@ -163,7 +164,7 @@ export default function HandoverCenter({ company, me, isViewer = false }) {
           <div className="w-full md:max-w-[620px] max-h-[88vh] bg-white rounded-t-[24px] md:rounded-[22px] overflow-hidden flex flex-col shadow-2xl" onClick={(e) => e.stopPropagation()}>
             <div className="px-5 py-4 text-white flex items-center gap-3" style={{ background: HERO_BG }}>
               <div className="min-w-0 flex-1">
-                <div className="text-[11px] font-extrabold tracking-[0.22em] text-[#8FB0F0]" style={{ fontFamily: MONO }}>HANDOVER · {cur.date || ""}</div>
+                <div className="text-[11px] font-extrabold tracking-[0.22em] text-[#8FB0F0]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>HANDOVER · {cur.date || ""}</div>
                 <div className="text-[17px] font-black truncate">{dateLabel(cur)}</div>
               </div>
               <button type="button" disabled={pdfBusy} onClick={async () => { setPdfBusy(true); try { await savePdf(pdfRef.current, `인수인계_${cur.date || ""}_${cur.author || ""}`); } catch (e) { window.alert(`PDF 저장 실패: ${e.message}`); } finally { setPdfBusy(false); } }} className="h-9 px-3 rounded-xl bg-white text-[#0F1A30] text-[12.5px] font-black shrink-0 disabled:opacity-50">{pdfBusy ? "저장 중…" : "PDF 저장"}</button>
@@ -172,7 +173,7 @@ export default function HandoverCenter({ company, me, isViewer = false }) {
             <div ref={pdfRef} className="flex-1 overflow-y-auto px-5 py-4 space-y-3.5 bg-white">
               <div className="grid grid-cols-2 gap-2">
                 <div className="rounded-xl bg-[#F5F8FD] border border-[#E3E8F0] px-3 py-2"><div className="text-[11.5px] font-bold text-[#7A879C]">보낸 사람</div><div className="text-[14px] font-black text-[#0F1A30] truncate">{authorName(cur)}</div></div>
-                <div className="rounded-xl bg-[#F5F8FD] border border-[#E3E8F0] px-3 py-2"><div className="text-[11.5px] font-bold text-[#7A879C]">등록</div><div className="text-[14px] font-black text-[#0F1A30] tabular-nums" style={{ fontFamily: MONO }}>{timeLabel(cur) || "-"}</div></div>
+                <div className="rounded-xl bg-[#F5F8FD] border border-[#E3E8F0] px-3 py-2"><div className="text-[11.5px] font-bold text-[#7A879C]">등록</div><div className="text-[14px] font-black text-[#0F1A30] tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{timeLabel(cur) || "-"}</div></div>
               </div>
               <div>
                 <div className="text-[12.5px] font-black text-[#3A4A66] mb-1.5">받는 사람</div>

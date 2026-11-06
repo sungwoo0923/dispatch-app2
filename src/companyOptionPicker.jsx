@@ -10,7 +10,7 @@ import React from "react";
 import { createPortal } from "react-dom";
 import { addCompanyDropdownOption, useCompanyOptionList } from "./companyDropdownOptions";
 
-const MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
+const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
 const FONT = "'Pretendard','Noto Sans KR',sans-serif";
 const clean = (s) => String(s ?? "").replace(/\s+/g, " ").trim().slice(0, 30);
 export const OPTION_META = {
@@ -196,7 +196,7 @@ function OptionMenu({ anchor, optKey, cur, meta, ttl, noneLabel, allowNone, allo
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 7 }}>
           <span style={{ display: "inline-flex", alignItems: "baseline", gap: 6, whiteSpace: "nowrap" }}>
             <span style={{ fontSize: pos.sheet ? 16 : 14, fontWeight: 900, color: "#0F1A30" }}>{ttl}</span>
-            <span style={{ fontFamily: MONO, fontSize: 10.5, fontWeight: 800, letterSpacing: "0.1em", color: "#4B6CB7" }}>{meta.tag}</span>
+            <span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 10.5, fontWeight: 800, letterSpacing: "0.1em", color: "#4B6CB7" }}>{meta.tag}</span>
           </span>
           {pos.sheet
             ? <button type="button" onClick={() => onClose(false)} style={{ height: 32, padding: "0 12px", borderRadius: 9, border: "1px solid #DCE3EE", background: "#fff", color: "#3A4A66", fontSize: 13.5, fontWeight: 900 }}>닫기</button>

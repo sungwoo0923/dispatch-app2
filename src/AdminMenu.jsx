@@ -1,5 +1,6 @@
 // src/AdminMenu.jsx
 import BillingCenter from "./BillingCenter";
+import { runDelete, commitDeletes } from "./DeleteProgress"; // ⭐ 2026-11-05 삭제 진행 창 + 한 번에 삭제
 import { billingAccess } from "./billingAccess";
 import { kpConfirm } from "./kpDialog";
 import { CopyTemplateEditor } from "./CopyTemplateEditor";
@@ -37,7 +38,8 @@ import SheetImportPanel from "./SheetImportPanel";
 import GsheetMinePanel from "./GsheetMinePanel";
 import BlindMinePanel from "./BlindMinePanel";
 import TrashPanel from "./TrashPanel";
-import { useCustomRoles, roleScreen } from "./customRoles";
+import { useCustomRoles, roleScreen, ROLE_LABELS, roleOptionsFrom, rolesForTeam } from "./customRoles";
+import { useCompanyFeatures } from "./companyFeatures"; // ⭐ 2026-11-04 마스터 권한 관리(회사별로 켬)
 import { EditableText } from "./EditMode";
 import { useLoadOrderRange, monthEnd, monthStart } from "./orderHistory";
 import { fmtBizNo, fmtPhone } from "./formatInput";
@@ -68,17 +70,7 @@ const fmtDate = (ts) => {
   });
 };
 
-const ROLE_LABELS = {
-  totalMaster: "최고관리자",
-  admin: "관리자",
-  hrManager: "인사관리자",
-  hrAcct: "통합인사관리자",
-  user: "실무자",
-  viewer: "조회전용",
-  driver: "기사",
-  shipper: "화주",
-  test: "경리/회계",
-};
+// 역할 이름은 customRoles.js ROLE_LABELS(PC·모바일 공용)
 
 const DotBadge = ({ active, label, activeLabel, inactiveLabel }) => (
   <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-semibold border ${active ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-gray-100 text-gray-500 border-gray-200"}`}>
@@ -150,12 +142,22 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
   const me = auth.currentUser;
   const isTotalMaster = parentRole === "totalMaster" || me?.email === TOTAL_MASTER_EMAIL || myRole === "totalMaster";
   const customRoles = useCustomRoles();
-  const roleLabels = { ...ROLE_LABELS, ...Object.fromEntries(customRoles.map(r => [r.key, r.label])) };
+  const roleOpts = React.useMemo(() => roleOptionsFrom(customRoles), [customRoles]);
+  const roleLabels = { ...ROLE_LABELS, ...Object.fromEntries(roleOpts) };
   const execRoleKeys = customRoles.filter((r) => roleScreen(r) === "exec").map((r) => r.key);
-  const suggestR = (x) => (isExecProfile(x) && execRoleKeys[0] ? execRoleKeys[0] : suggestRole(x));
+  // ⭐ 2026-11-04 기본 역할(통합관리자·통합인사관리자·사무원·법무·개발 포함) + 권한 관리에서 만든 역할
   const ROLES = isTotalMaster
-    ? ["totalMaster", "admin", "hrManager", "hrAcct", "user", "viewer", "driver", "shipper", "test", ...customRoles.map(r => r.key).filter((k) => !["admin", "hrManager", "hrAcct", "user", "viewer", "test"].includes(k))]
-    : ["admin", "hrManager", "hrAcct", "user", "viewer", "test", ...customRoles.map(r => r.key).filter((k) => !["admin", "hrManager", "hrAcct", "user", "viewer", "test"].includes(k))];
+    ? ["totalMaster", ...roleOpts.map(([k]) => k), "driver", "shipper"]
+    : roleOpts.map(([k]) => k);
+  // 🏢 2026-11-04 부서 → 권한 거르기(customRoles.js rolesForTeam) — 맞는 역할이 하나도 없으면 그대로
+  const fitKeys = (team) => rolesForTeam(team, roleOpts, customRoles).map(([k]) => k);
+  const byTeam = (list, team) => { if (!team) return list; const f = fitKeys(team); const l = list.filter((k) => f.includes(k)); return l.length ? l : list; };
+  // 추천 권한이 그 부서에 맞지 않으면(또는 지정할 수 없으면) 그 부서의 첫 역할로
+  const suggestR = (x) => {
+    const s0 = isExecProfile(x) && execRoleKeys[0] ? execRoleKeys[0] : suggestRole(x);
+    const list = byTeam(assignableRoles(), x?.team);
+    return list.includes(s0) ? s0 : (list[0] || s0);
+  };
   // ⭐ 2026-11-02 회사 분리 — 최고관리자는 본인 문서의 회사(예: 돌캐)가 아니라 "지금 들어가 있는 회사"(로그인 회사)를 기준으로.
   //  예전엔 최고관리자가 태진에 들어가도 연동 화주사·화주사 전송·인사 설정이 본인 문서 회사로 잡혔다.
   const effectiveCompany = isTotalMaster
@@ -244,13 +246,16 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
   const meDoc = users.find((u) => u.id === me?.uid);
   const isCompanyMaster = !isTotalMaster && meDoc?.isMaster === true && meDoc?.role !== "shipper" && meDoc?.role !== "driver";
   const canAdmin = isTotalMaster || isCompanyMaster;
+  // ⭐ 2026-11-04 권한 관리 — 최고관리자가 "마스터 권한 관리"를 켠 회사(예: 태진)만 마스터에게도 보인다(자기 회사 전용으로만)
+  const coFeat = useCompanyFeatures(effectiveCompany);
+  const masterPerms = isCompanyMaster && coFeat.masterRolePerms === true;
   const hrOpt = useHrOptions(effectiveCompany);
   const positionsForTeam = hrOpt.positionsFor;
   const TEAM_OPTIONS = hrOpt.teams;
   // ⭐ 2026-10-31 가입 승인은 관리자·경리·인사관리자부터 — 인사관리자는 인사권(승인 후 정보·권한 변경·퇴사)까지
   const myRoleEff = meDoc?.role || myRole || parentRole;
-  const isHrMgr = !canAdmin && (myRoleEff === "hrManager" || myRoleEff === "hrAcct");
-  const canApprove = canAdmin || ["admin", "hrManager", "hrAcct", "test"].includes(myRoleEff);
+  const isHrMgr = !canAdmin && ["hrManager", "hrAcct", "allMgr"].includes(myRoleEff);
+  const canApprove = canAdmin || ["admin", "hrManager", "hrAcct", "allMgr", "test"].includes(myRoleEff);
   // ⭐ 2026-11-01 마스터 인사권 자동 인계 — 인사 담당자가 생기면 마스터는 재직 직원의 부서·직책·퇴사를 바꾸지 않는다
   //  (승인·권한 지정·마스터 지정은 그대로 — 인사관리자를 지정해야 하므로). 가입 승인 대기자는 마스터도 부서·직책 지정 가능
   const hrHanded = isCompanyMaster && !isTotalMaster && !masterHasHr(meDoc, users.filter((x) => (x.companyName || DEFAULT_COMPANY) === effectiveCompany), me?.uid);
@@ -262,11 +267,17 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
   //  운송사 관리자 회원관리에서는 승인 대기로 세지도, 승인 창을 열지도 않는다(최고관리자만 예외)
   const isPending = (u) => !!u && u.approved === false && u.employmentStatus !== "퇴사" && !["deleted", "withdrawn"].includes(u.status) && (isTotalMaster || u.role !== "shipper");
   // ⭐ 2026-11-02 점검 — !u.approved 대신 isPending — 예전 승인 계정에 승인·거절 창이 열려 거절로 잠기던 문제
-  const canEditMember = (u) => !!u && (isTotalMaster || (canApprove && isPending(u)));
-  const assignableRoles = (cur) => {
-    const base = canAdmin ? ROLES : isHrMgr ? ROLES.filter((r) => r !== "totalMaster") : myRoleEff === "admin" ? ["admin", "user", "test", "hrManager", "viewer"] : ["user", "test", "viewer"];
+  // ⭐ 2026-11-05 회사 마스터는 재직 직원(마스터·퇴사자 제외)의 권한도 여기서 바꾼다(최고관리자 권한은 못 줌). 부서·직책은 인사 담당자가 있으면 잠김(hrLocked)
+  const canEditMember = (u) => !!u && (isTotalMaster || (canApprove && isPending(u))
+    || (isCompanyMaster && !u.isMaster && u.id !== me?.uid && u.employmentStatus !== "퇴사" && !["driver", "shipper", "totalMaster"].includes(u.role) && (u.companyName || DEFAULT_COMPANY) === effectiveCompany));
+  // team — 고른 부서에 맞는 역할만(지금 역할 cur는 늘 남김)
+  function assignableRoles(cur, team) {
+    const base0 = canAdmin ? ROLES : isHrMgr ? ROLES.filter((r) => r !== "totalMaster") : myRoleEff === "admin" ? ["admin", "user", "test", "acctStaff", "hrManager", "hrStaff", "legalMgr", "legalStaff", "devMgr", "devStaff", "viewer"] : ["user", "test", "acctStaff", "hrStaff", "viewer"];
+    const all0 = base0.filter((k) => k === "totalMaster" || k === "driver" || k === "shipper" || ROLES.includes(k));
+    // ⭐ 2026-11-05 회사 마스터는 부서와 상관없이 전체 권한(부서에 맞는 권한을 앞에)
+    const base = isCompanyMaster ? (() => { const fit = byTeam(all0, team); return [...fit, ...all0.filter((k) => !fit.includes(k))]; })() : byTeam(all0, team);
     return cur && !base.includes(cur) ? [cur, ...base] : base;
-  };
+  }
   // ⭐ 2026-10-31 부서·직책을 바꾸면 직책 드롭다운을 부서에 맞추고(임원 → 대표·전무·이사) 권한을 추천값으로 맞춘다
   const applySuggest = (team, position) => setEditRole((r) => (r === "totalMaster" ? r : suggestR({ team, position })));
   const onTeamChange = (t) => {
@@ -276,6 +287,25 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
     applySuggest(t, pos);
   };
   const onPositionChange = (p) => { setEditPosition(p); applySuggest(editTeam, p); };
+  // ⭐ 2026-11-05 부관리자 — 최고관리자(본 계정)가 1명 지정. 권한은 최고관리자와 같음(role totalMaster + subAdmin 표시). 해제하면 예전 권한으로
+  const isSuperMe = me?.email === TOTAL_MASTER_EMAIL;
+  const toggleSubAdmin = async (u) => {
+    if (!isSuperMe) return alert("부관리자는 최고관리자 본 계정만 지정할 수 있습니다.");
+    if (!u || u.email === TOTAL_MASTER_EMAIL) return;
+    const next = !u.subAdmin;
+    if (next) {
+      const other = users.find((x) => x.subAdmin === true && x.id !== u.id);
+      if (other) return alert(`부관리자는 1명만 둘 수 있습니다.\n먼저 「${other.name || other.email}」님의 부관리자를 해제해 주세요.`);
+    }
+    if (!await kpConfirm(next ? `"${u.name || u.email}"님을 부관리자로 지정할까요?\n최고관리자와 같은 권한(모든 운송사·관리센터·요금·삭제)을 갖습니다.` : `"${u.name || u.email}"님의 부관리자를 해제할까요?\n예전 권한(${roleLabels[u.subAdminPrevRole] || u.subAdminPrevRole || "관리자"})으로 돌아갑니다.`)) return;
+    const history = [...(u.personnelHistory || []), { date: todayStr(), type: next ? "부관리자 지정" : "부관리자 해제", detail: meDoc?.name || me?.email || "" }];
+    const patch = next
+      ? { subAdmin: true, subAdminPrevRole: u.role || "admin", role: "totalMaster", approved: true, personnelHistory: history }
+      : { subAdmin: false, role: u.subAdminPrevRole && u.subAdminPrevRole !== "totalMaster" ? u.subAdminPrevRole : "admin", personnelHistory: history };
+    await setDoc(doc(db, "users", u.id), patch, { merge: true });
+    if (manageUser?.id === u.id) setManageUser((prev) => ({ ...prev, ...patch }));
+    if (next) { setEditRole("totalMaster"); } else { setEditRole(patch.role); }
+  };
   const toggleMaster = async (u) => {
     if (!canAdmin) return;
     if (u.id === me?.uid && u.isMaster) return alert("본인의 마스터는 해제할 수 없습니다. 다른 직원을 먼저 마스터로 지정해 주세요.");
@@ -325,19 +355,22 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
   };
   // 최고관리자가 회사 거르기 없이(관리센터 등) 볼 때만 화주 계정 전체
   const tenantNow = getTenant();
+  // ⭐ 2026-11-05 기사앱 가입 기사(role driver)는 회원관리에 보이지 않는다(목록·승인 대기 숫자 모두) —
+  //  기사 가입 승인은 기사관리 › 기사 앱 계정 › 가입 승인에서만(지입·직영·임대 지정 + 기존 기사 연동)
   const visibleUsers = useMemo(() => {
     if (isTotalMaster) {
-      if (!tenantNow) return users;
-      return users.filter((u) => u.role !== "shipper" || shipperLinkedTo(u, effectiveCompany));
+      if (!tenantNow) return users.filter((u) => u.role !== "driver");
+      return users.filter((u) => u.role !== "driver" && (u.role !== "shipper" || shipperLinkedTo(u, effectiveCompany)));
     }
     return users.filter(u =>
+      u.role !== "driver" &&
       u.email !== TOTAL_MASTER_EMAIL &&
       u.role !== "totalMaster" &&
       (u.role === "shipper" ? shipperLinkedTo(u, effectiveCompany) : (u.companyName || DEFAULT_COMPANY) === effectiveCompany)
     );
   }, [users, isTotalMaster, effectiveCompany, shipperLinkCompanies, tenantNow]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const ROLE_ORDER = ["totalMaster","admin","user","test","viewer","driver","shipper"];
+  const ROLE_ORDER = ["totalMaster", "allMgr", "hrAcct", "admin", "user", "test", "acctStaff", "hrManager", "hrStaff", "legalMgr", "legalStaff", "devMgr", "devStaff", "viewer", "driver", "shipper"];
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     return visibleUsers
@@ -620,15 +653,18 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
     if (me?.uid === u.id) return alert("본인 계정은 삭제할 수 없습니다.");
     if (!isTotalMaster && (u.companyName || DEFAULT_COMPANY) !== effectiveCompany) return;
     if (!await kpConfirm(`"${u.name || u.email}" 계정을 삭제할까요?\n가입신청 내역도 함께 삭제됩니다.`, { title: "계정 삭제", okText: "삭제", danger: true })) return false;
-    await deleteDoc(doc(db, "users", u.id));
-    try {
-      const tSnap = await getDocs(query(collection(db, "transportApplications"), where("userId", "==", u.id)));
-      for (const d of tSnap.docs) await deleteDoc(doc(db, "transportApplications", d.id));
-    } catch (_) {}
-    try {
-      const cSnap = await getDocs(query(collection(db, "companyApplications"), where("userId", "==", u.id)));
-      for (const d of cSnap.docs) await deleteDoc(doc(db, "companyApplications", d.id));
-    } catch (_) {}
+    // ⭐ 2026-11-05 삭제 진행 창 + 가입신청 내역은 한 번에(writeBatch)
+    await runDelete({ label: "계정", task: async () => {
+      await deleteDoc(doc(db, "users", u.id));
+      try {
+        const tSnap = await getDocs(query(collection(db, "transportApplications"), where("userId", "==", u.id)));
+        await commitDeletes(db, tSnap.docs.map((d) => doc(db, "transportApplications", d.id)));
+      } catch (_) {}
+      try {
+        const cSnap = await getDocs(query(collection(db, "companyApplications"), where("userId", "==", u.id)));
+        await commitDeletes(db, cSnap.docs.map((d) => doc(db, "companyApplications", d.id)));
+      } catch (_) {}
+    } });
     setManageUser(null);
     return true;
   };
@@ -678,6 +714,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
     if (prevTeam !== nextTeam && nextTeam) {
       history.push({ date: todayStr(), type: "부서변경", detail: `${prevTeam || "미배정"} → ${nextTeam}` });
     }
+    if ((manageUser.role || "") !== editRole) history.push({ date: todayStr(), type: "권한변경", detail: `${roleLabels[manageUser.role] || manageUser.role || "-"} → ${roleLabels[editRole] || editRole}` });
     const payload = {
       name: editName.trim(),
       phone: editPhone.trim(),
@@ -834,7 +871,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
     { key: "ops", label: "운영 관리", tabs: ["loginSessions", "sessionLogs", "forceUpdate", "permissions", "sheetImport", "gsheetMine", "blindMine", "trash", "companyReset"] },
     { key: "settings", label: "환경 설정", tabs: ["billing", "setup", "copyTemplate", "landingEdit", "notifTemplate"] },
   ]
-    .map((g) => ({ ...g, tabs: g.tabs.filter((t) => (!REQUIRES_MASTER_TABS.has(t) || isTotalMaster) && (t !== "billing" || billingAcc.view)) })) // 💳 구독·결제는 경리·재무·임원·대표만(billingAccess.js)
+    .map((g) => ({ ...g, tabs: g.tabs.filter((t) => (!REQUIRES_MASTER_TABS.has(t) || isTotalMaster || (t === "permissions" && masterPerms)) && (t !== "billing" || billingAcc.view)) })) // 💳 구독·결제는 경리·재무·임원·대표만(billingAccess.js)
     // 🏢 부서 관리자메뉴 — 경리: 회원 승인 + 구독·결제 / 인사: 회원(인사권) + 로그인 관리. 배차용(기사복사 문구·화주사 등)은 뺀다
     .map((g) => (deptMode ? { ...g, tabs: g.tabs.filter((t) => (DEPT_ADMIN_TABS[deptMode] || []).includes(t) || (t === "billing" && billingAcc.view)) } : g))
     .filter((g) => g.tabs.length > 0);
@@ -910,7 +947,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
                     style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%237A879C' d='M6 8L1 3h10z'/%3E%3C/svg%3E")`, backgroundRepeat: "no-repeat", backgroundPosition: "right 12px center" }}
                   >
                     <option value="all">전체 권한</option>
-                    {ROLES.map(r => (
+                    {ROLES.filter((r) => r !== "driver").map(r => ( /* ⭐ 2026-11-05 기사는 회원관리에서 뺌 */
                       <option key={r} value={r}>{roleLabels[r] || r}</option>
                     ))}
                   </CustomSelect>
@@ -988,6 +1025,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
                             <div className="mt-1 flex items-center gap-2 flex-wrap">
                               <h3 className="text-[26px] font-black tracking-tight leading-tight">{u.name || u.email}</h3>
                               {u.email === TOTAL_MASTER_EMAIL && <span className="text-[11px] px-2 py-0.5 rounded-full bg-white/15 font-bold">총마스터</span>}
+                              {u.subAdmin === true && <span className="text-[11px] px-2 py-0.5 rounded-full bg-[#8FB0F0] text-[#0B1428] font-black" data-subadmin-badge>부관리자</span>}
                               {resigned && <span className="text-[11px] px-2 py-0.5 rounded-full border border-white/30 font-bold">퇴사 {u.resignedAt || ""}</span>}
                             </div>
                             <div className="text-[14px] font-semibold text-white/75 mt-0.5">{[u.position, u.team || "미배정"].filter(Boolean).join(" · ")}</div>
@@ -1123,7 +1161,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
                               <label className="block text-[11.5px] font-bold text-[#7A879C] mb-1.5">권한</label>
                               <CustomSelect value={editRole} onChange={e => setEditRole(e.target.value)} disabled={!canEditMember(u)}
                                 className="w-full h-10 border border-[#DCE3EE] rounded-xl px-3 text-[13.5px] font-semibold text-[#0F1A30] focus:outline-none focus:border-[#4B6CB7] focus:ring-4 focus:ring-[#4B6CB7]/10 bg-white">
-                                {assignableRoles(u.role).map(r => <option key={r} value={r}>{roleLabels[r] || r}</option>)}
+                                {assignableRoles(editRole, editTeam).map(r => <option key={r} value={r}>{roleLabels[r] || r}</option>)}
                               </CustomSelect>
                               <p className="mt-1 text-[11px] font-bold text-[#7A879C]">{`추천: ${roleLabels[suggestR({ team: editTeam, position: editPosition })] || ROLE_NAME[suggestR({ team: editTeam, position: editPosition })]} (부서·직책 기준)`}</p>
                             </div>
@@ -1143,7 +1181,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
                       </div>
                       {memberModal && canEditMember(u) && canManage && (
                         <MemberManageModal
-                          u={u} me={me} isTotalMaster={isTotalMaster} roles={assignableRoles(u.role)} roleLabels={roleLabels}
+                          u={u} me={me} isTotalMaster={isTotalMaster} roles={assignableRoles(editRole, editTeam)} roleLabels={roleLabels}
                           canMaster={isTotalMaster} canAccount={isTotalMaster} canDelete={isTotalMaster} hrOpt={hrOpt} hrLock={hrLocked(u)}
                           f={{ editName, setEditName, editPhone, setEditPhone, editRole, setEditRole, editCompany, setEditCompany, editWorkStart, setEditWorkStart, editWorkEnd, setEditWorkEnd, editPosition, setEditPosition: onPositionChange, editTeam, setEditTeam: onTeamChange, suggestR }}
                           onClose={() => { setMemberModal(false); setEditMode(false); }}
@@ -1155,6 +1193,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
                           onUnapprove={async () => { if (await kpConfirm(`"${u.name || u.email}"님의 승인을 해제할까요?\n해제하면 로그인이 막힙니다.`)) await toggleApprove({ ...u, approved: true }); }}
                           onReject={async () => { if (await removeUser(u)) setMemberModal(false); }}
                           onMaster={() => toggleMaster(u)}
+                          canSubAdmin={isSuperMe && u.email !== TOTAL_MASTER_EMAIL && u.role !== "shipper" && u.role !== "driver"} onSubAdmin={() => toggleSubAdmin(u)}
                           onResign={async () => { if (resigned && !await kpConfirm(`"${u.name || u.email}"님을 복직 처리할까요?`)) return; await setResignStatus(u, !resigned); }}
                           onDelete={async () => { if (await removeUser(u)) setMemberModal(false); }}
                         />
@@ -1287,7 +1326,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
                     <input
                       value={transmitCompanyQuery}
                       onChange={e => { setTransmitCompanyQuery(e.target.value); setTransmitSearched(false); setTransmitResult(null); }}
-                      placeholder="예) 반찬단지"
+                      placeholder="예) ○○물류단지"
                       list="admin-transmit-company-list"
                       className="w-[200px] border border-[#DCE3EE] rounded-lg px-3 py-2 text-[13px] outline-none focus:border-[#1B2B4B]"
                     />
@@ -1554,6 +1593,10 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
           {/* ====== 권한 관리 탭 (최고관리자 전용) ====== */}
           {adminTab === "permissions" && isTotalMaster && (
             <RolePermissionsPanel users={users} roleLabels={roleLabels} />
+          )}
+          {/* ⭐ 2026-11-04 회사 마스터 — 자기 회사 전용 권한만(공통 권한·다른 운송사는 못 바꿈) */}
+          {adminTab === "permissions" && !isTotalMaster && masterPerms && (
+            <RolePermissionsPanel users={users.filter((u) => String(u.companyName || "").trim() === String(effectiveCompany || "").trim())} roleLabels={roleLabels} lockScope={String(effectiveCompany || "").trim()} />
           )}
 
           {/* ====== 랜딩페이지 편집 탭 (최고관리자 전용) ====== */}
@@ -2040,11 +2083,11 @@ const DEFAULT_BADGE = "물류 관리 플랫폼";
 const DEFAULT_HEADLINE_1 = "더 스마트한";
 const DEFAULT_HEADLINE_2 = "물류 관리";
 const DEFAULT_SUBTITLE_1 = "배차 관리부터 차주 관리, 운임 정산까지";
-const DEFAULT_SUBTITLE_2 = "KP-Flow 하나로 물류 업무를 최적화하세요.";
+const DEFAULT_SUBTITLE_2 = "LogisWeb 하나로 물류 업무를 최적화하세요.";
 const DEFAULT_CTA_TRANSPORT = "운송사 시작하기";
 const DEFAULT_CTA_DRIVER = "차주 시작하기";
 const DEFAULT_CTA_SHIPPER = "화주사 시작하기";
-const DEFAULT_FOOTER = "© 2025 KP-Flow Logistics. All rights reserved.";
+const DEFAULT_FOOTER = "© 2025 LogisWeb. All rights reserved.";
 const DEFAULT_LANDING_FEATURES = [
   { title: "배차 관리", desc: "실시간 배차 등록 및 현황 관리" },
   { title: "차주 관리", desc: "차주 정보 및 운행 현황 통합 관리" },
@@ -2058,7 +2101,7 @@ const LANDING_FONT_OPTIONS = [
 ];
 
 // 👤 회원 관리 창 — 버튼 하나로 열고, 그 안에서 승인·거절·정보수정·마스터·퇴사·삭제(모두 확인창)
-function MemberManageModal({ u, me, isTotalMaster, roles, roleLabels, f, onClose, onSave, onApprove, onUnapprove, onReject, onMaster, onResign, onDelete, canMaster = true, canAccount = true, canDelete = true, hrOpt, hrLock = false }) {
+function MemberManageModal({ u, me, isTotalMaster, roles, roleLabels, f, onClose, onSave, onApprove, onUnapprove, onReject, onMaster, onResign, onDelete, canSubAdmin = false, onSubAdmin, canMaster = true, canAccount = true, canDelete = true, hrOpt, hrLock = false }) {
   const positionsForTeam = hrOpt.positionsFor; const TEAM_OPTIONS = hrOpt.teams;
   const [busy, setBusy] = useState(false);
   const pending = u.approved === false && u.employmentStatus !== "퇴사"; // ⭐ 2026-11-02 점검 — 예전 계정(approved 없음)은 승인으로 보고 거절 버튼을 띄우지 않음
@@ -2109,6 +2152,15 @@ function MemberManageModal({ u, me, isTotalMaster, roles, roleLabels, f, onClose
               <div><label className={lab}>퇴근 시간</label>
                 <CustomSelect value={f.editWorkEnd} onChange={(e) => f.setEditWorkEnd(e.target.value)} className={`${inp} tabular-nums`}>{WORK_TIME_OPTIONS.map((t) => <option key={t} value={t}>{t}</option>)}</CustomSelect></div>
             </div>
+            {canSubAdmin && (
+              <div className="mt-3 flex items-center justify-between gap-3 rounded-xl border border-[#C9D6EE] bg-[#F5F8FD] px-3.5 py-2.5" data-subadmin>
+                <div className="min-w-0">
+                  <div className="text-[13px] font-black text-[#0F1A30]">부관리자 {u.subAdmin && <span className="ml-1 px-1.5 rounded bg-[#2D4C82] text-white text-[10.5px]">지정됨</span>}</div>
+                  <div className="text-[11.5px] text-[#7A879C]">최고관리자와 같은 권한 · 1명만 · 해제하면 예전 권한으로</div>
+                </div>
+                <button type="button" disabled={busy} onClick={run(onSubAdmin)} className={`shrink-0 h-9 px-3.5 rounded-xl text-[12.5px] font-black ${u.subAdmin ? "border border-[#0F1A30] text-[#0F1A30]" : "bg-[#2D4C82] text-white"}`}>{u.subAdmin ? "부관리자 해제" : "부관리자 지정"}</button>
+              </div>
+            )}
             {u.role !== "shipper" && canMaster && (
               <div className="mt-3 flex items-center justify-between gap-3 rounded-xl border border-[#E3E8F0] px-3.5 py-2.5">
                 <div className="min-w-0">

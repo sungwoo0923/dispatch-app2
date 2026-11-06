@@ -9,11 +9,16 @@ import { addDoc, collection, doc, onSnapshot, serverTimestamp } from "firebase/f
 import { db } from "./firebase";
 
 export const PLAN_IDS = ["lite", "basic", "standard", "pro"];
+// ⭐ 2026-11-04 요금표 재설정(비용·손익 분석 기준) — 가격 사다리: 59,000 / 129,000 / 249,000 / 449,000 (VAT 별도)
+//  · seats 직원 계정 · orders 월 오더 · fleet 포함 지입차(GPS 관리) 대수 · storageGB 포함 저장 용량 · setupFee 초기 도입비(12개월 약정 시 면제)
+//  · 이미 저장된 요금(요금제 관리)은 그대로 둔다 — 관리센터 › 영업 › 요금제 관리 [추천 요금표 적용]을 눌러야 바뀐다(RECOMMENDED_PLAN_VERSION)
+//  · 이 값이 기본값으로 쓰이는 곳: 저장된 요금이 아직 없을 때(신규 설치) · 공개 요금(publicPricing) 문서가 없을 때
+export const RECOMMENDED_PLAN_VERSION = "2026-11";
 export const PLAN_DEFAULTS = [
-  { id: "lite", name: "라이트", en: "LITE", price: 49000, seats: 2, orders: 500, target: "1인 주선 · 개인 운송" },
-  { id: "basic", name: "베이직", en: "BASIC", price: 99000, seats: 5, orders: 1500, target: "소규모 운송사 · 2~5인" },
-  { id: "standard", name: "스탠다드", en: "STANDARD", price: 150000, seats: 10, orders: 3000, target: "일반 운송사 · 6~10인", recommended: true },
-  { id: "pro", name: "프로", en: "PRO", price: 349000, seats: 25, orders: 8000, target: "중견 운송사 · 10인 이상" },
+  { id: "lite", name: "라이트", en: "LITE", price: 59000, seats: 2, orders: 600, fleet: 0, storageGB: 5, setupFee: 0, target: "1인 주선 · 개인 운송 (일 20건 안팎)" },
+  { id: "basic", name: "베이직", en: "BASIC", price: 129000, seats: 5, orders: 2000, fleet: 0, storageGB: 10, setupFee: 200000, target: "소규모 운송사 · 2~5인 (일 50~70건)" },
+  { id: "standard", name: "스탠다드", en: "STANDARD", price: 249000, seats: 12, orders: 4500, fleet: 10, storageGB: 30, setupFee: 400000, target: "일반 운송사 · 6~12인 (일 100~150건)", recommended: true },
+  { id: "pro", name: "프로", en: "PRO", price: 449000, seats: 25, orders: 10000, fleet: 30, storageGB: 100, setupFee: 700000, target: "중견 운송사 · 13인 이상 (일 200~330건)" },
 ];
 
 // 기능표 — min: 이 요금제부터 사용 가능
@@ -73,16 +78,18 @@ export const openPlanLock = (feature) => window.dispatchEvent(new CustomEvent("k
 
 // 공개 요금(가격 등) — 없으면 기본값
 export function usePublicPricing() {
-  const [p, setP] = React.useState({ plans: PLAN_DEFAULTS, bank: "", supplier: "KP-Flow" });
+  const [p, setP] = React.useState({ plans: PLAN_DEFAULTS, bank: "", supplier: "LogisWeb" });
   React.useEffect(() => onSnapshot(doc(db, "publicPricing", "current"), (s) => {
     if (!s.exists()) return;
     const d = s.data();
-    setP({ ...d, plans: PLAN_IDS.map((id) => ({ ...PLAN_DEFAULTS.find((x) => x.id === id), ...(d.plans || []).find((x) => x.id === id) })) });
+    // ⭐ 2026-11-04 저장된 요금이 있으면 새 기본값의 포함 지입차·저장 용량·도입비는 섞지 않는다(관리자가 [추천 요금표 적용]을 눌러야 생김)
+    const legacy = (id) => { const { fleet, storageGB, setupFee, ...rest } = PLAN_DEFAULTS.find((x) => x.id === id) || {}; void fleet; void storageGB; void setupFee; return rest; };
+    setP({ ...d, plans: PLAN_IDS.map((id) => ({ ...legacy(id), ...(d.plans || []).find((x) => x.id === id) })) });
   }, () => {}), []);
   return p;
 }
 
-const MONO = "'JetBrains Mono','IBM Plex Mono',ui-monospace,monospace";
+const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
 const won = (n) => `${Math.round(Number(n) || 0).toLocaleString()}`;
 
 // ─── 넷플릭스식 요금제 비교표 ───
@@ -94,7 +101,7 @@ export function PlanMatrix({ plans = PLAN_DEFAULTS, current = null, highlight = 
         <thead>
           <tr>
             <th className="text-left align-bottom pb-3 pr-3" style={{ width: "34%" }}>
-              <div className="text-[10.5px] font-extrabold tracking-[0.26em] text-[#4B6CB7]" style={{ fontFamily: MONO }}>COMPARE PLANS</div>
+              <div className="text-[10.5px] font-extrabold tracking-[0.26em] text-[#4B6CB7]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>COMPARE PLANS</div>
               <div className="text-[17px] font-black text-[#0F1A30]">요금제별 사용 범위</div>
             </th>
             {cols.map((p) => {
@@ -102,9 +109,9 @@ export function PlanMatrix({ plans = PLAN_DEFAULTS, current = null, highlight = 
               return (
                 <th key={p.id} className="px-1.5 pb-3 align-bottom">
                   <div className={`rounded-2xl px-3 py-3 text-center border ${on ? "bg-[#0F1A30] text-white border-[#0F1A30] shadow-[0_12px_26px_rgba(15,26,48,0.3)]" : hi ? "bg-[#F2F5FA] border-[#2D4C82] text-[#0F1A30]" : "bg-white border-[#E3E8F0] text-[#0F1A30]"}`}>
-                    <div className={`text-[10px] font-extrabold tracking-[0.24em] ${on ? "text-[#8FB0F0]" : "text-[#4B6CB7]"}`} style={{ fontFamily: MONO }}>{p.en}</div>
+                    <div className={`text-[10px] font-extrabold tracking-[0.24em] ${on ? "text-[#8FB0F0]" : "text-[#4B6CB7]"}`} style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{p.en}</div>
                     <div className="text-[16px] font-black mt-0.5 whitespace-nowrap">{p.name}</div>
-                    <div className="text-[18px] font-black mt-1 tabular-nums whitespace-nowrap" style={{ fontFamily: MONO }}>{won(p.price)}<span className={`text-[10.5px] font-bold ml-0.5 ${on ? "text-white/60" : "text-[#7A89A3]"}`}>원/월</span></div>
+                    <div className="text-[18px] font-black mt-1 tabular-nums whitespace-nowrap" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{won(p.price)}<span className={`text-[10.5px] font-bold ml-0.5 ${on ? "text-white/60" : "text-[#7A89A3]"}`}>원/월</span></div>
                     <div className={`text-[11px] font-bold mt-0.5 whitespace-nowrap ${on ? "text-white/60" : "text-[#7A89A3]"}`}>{p.seats}명 · 월 {Number(p.orders || 0).toLocaleString()}건</div>
                     {(on || (hi && p.recommended)) && <div className={`mt-1.5 inline-block px-2 py-0.5 rounded-md text-[10.5px] font-black ${on ? "bg-white text-[#0F1A30]" : "bg-[#0F1A30] text-white"}`}>{on ? "사용 중" : "추천"}</div>}
                   </div>
@@ -159,9 +166,9 @@ export const PLAN_MATRIX_CSS = `
   .pm-t{text-align:left;font-size:12px;color:#0F1A30;vertical-align:bottom;padding:0 6px 8px 0;width:36%}
   .pm-h{padding:0 3px 8px;vertical-align:bottom}
   .pm-h>div{text-align:center}
-  .pm-h .pm-en{font-family:monospace;font-size:8.5px;letter-spacing:.2em;color:#4B6CB7;font-weight:800}
+  .pm-h .pm-en{font-family:'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif;font-variant-numeric:tabular-nums;font-size:8.5px;letter-spacing:.2em;color:#4B6CB7;font-weight:800}
   .pm-h .pm-n{font-size:13px;font-weight:900;color:#0F1A30;margin-top:2px}
-  .pm-h .pm-p{font-size:14px;font-weight:900;color:#0F1A30;font-family:monospace}
+  .pm-h .pm-p{font-size:14px;font-weight:900;color:#0F1A30;font-family:'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif;font-variant-numeric:tabular-nums}
   .pm-h .pm-p span{font-size:9px;color:#7A89A3;margin-left:1px}
   .pm-h .pm-s{font-size:9.5px;color:#7A89A3}
   .pm-h.on>div,.pm-h.rec>div{}
@@ -206,7 +213,7 @@ export function PlanLockHost({ userEmail = "", userName = "", canRequest = true 
           <span className="absolute inset-0 opacity-[0.06] pointer-events-none" style={{ backgroundImage: "linear-gradient(#fff 1px,transparent 1px),linear-gradient(90deg,#fff 1px,transparent 1px)", backgroundSize: "22px 22px" }} />
           <div className="relative flex items-start justify-between gap-4">
             <div>
-              <div className="text-[10.5px] font-extrabold tracking-[0.3em] text-[#8FB0F0]" style={{ fontFamily: MONO }}>UPGRADE · {need?.en}</div>
+              <div className="text-[10.5px] font-extrabold tracking-[0.3em] text-[#8FB0F0]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>UPGRADE · {need?.en}</div>
               <div className="text-[22px] font-black mt-1">■ {need?.name} 요금제부터 쓸 수 있는 기능입니다</div>
               <div className="text-[13.5px] text-white/70 mt-1">{f?.label}</div>
             </div>

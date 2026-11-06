@@ -1,4 +1,5 @@
 import NoticeBoard, { canSeeNotice } from "./NoticeBoard";
+import { runDelete } from "./DeleteProgress"; // ⭐ 2026-11-05 삭제 진행 창 + 한 번에 삭제
 import { useBoardNoticesWithPlatform } from "./PlatformNoticeBanner";
 import { subscribeUsersLive } from "./usersLive"; // ⭐ 2026-11-02 속도 — 직원 명부 구독 공유
 import DeptDashboard from "./DeptDashboard";
@@ -24,6 +25,7 @@ import { createPortal } from "react-dom";
 import { BannerCard, BannerStyles } from "./BannerCenter";
 import { isNoticeUnread, useMinuteTick } from "./notifyCore";
 import HomeDeck, { buildPastStats } from "./HomeDeck";
+import { useRouteCarrierFilter } from "./routeCarriers"; // ⭐ 2026-11-05 고정노선 운송업체 설정
 import KpSubNav from "./KpSubNav";
 import { MailWorkspace, MAIL_FOLDERS, useMailCounts, folderBadge } from "./InternalMail";
 import ApprovalCenter, { useApprovalCounts } from "./Approval";
@@ -166,7 +168,7 @@ function Pagination({ page, total, onChange }) {
     <div className="flex justify-center gap-1.5 pt-4">
       {Array.from({ length: total }).map((_, i) => (
         <button key={i} onClick={() => onChange(i + 1)}
-          style={{ fontFamily: "'JetBrains Mono','SF Mono',ui-monospace,monospace" }}
+          style={{ fontFamily: "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif", fontVariantNumeric: "tabular-nums" }}
           className={`w-9 h-9 rounded-xl text-[13px] font-extrabold transition ${i + 1 === page ? "bg-[#1B2B4B] text-white shadow-[0_4px_10px_rgba(27,43,75,0.25)]" : "bg-white border border-[#E3E8F0] text-[#4b5563] hover:bg-[#F4F7FC]"}`}>
           {i + 1}
         </button>
@@ -415,7 +417,7 @@ function lockHomeGroups(planId, groups) {
   return out;
 }
 
-export default function HomeDashboard({ role, user, userCompany = "", pending, delayed, dispatchData = [], onOrderDoubleClick, dept = null, onDeptGo }) {
+export default function HomeDashboard({ role, user, userCompany = "", pending, delayed, dispatchData: allDispatchData = [], onOrderDoubleClick, dept = null, onDeptGo }) {
   // ⭐ 년 매출·당월 매출·누적 오더 — 예전엔 새로고침할 때마다 올해 오더 전체(수천~만 건)를 서버에서 다시 받아
   // 새로고침이 느리고 버벅였다. "실시간 범위(최근 7일) 이전" 기간의 합계는 하루 동안 거의 안 바뀌므로
   // 하루 1번만 받아 계산해 PC에 저장해 두고(homePastStats), 최근 7일~은 실시간 데이터로 더한다.
@@ -430,14 +432,18 @@ export default function HomeDashboard({ role, user, userCompany = "", pending, d
         : (userCompany || localStorage.getItem("userCompany") || DEFAULT_COMPANY);
     } catch { return userCompany || DEFAULT_COMPANY; }
   })();
+  // ⭐ 2026-11-05 고정노선 운송업체 설정 — 끈 업체 오더는 홈 매출·실적·대시보드 합계에서 뺀다(미배차 목록은 그대로 전체)
+  const carrierF = useRouteCarrierFilter(homeCompany);
+  const dispatchData = useMemo(() => carrierF.filter(allDispatchData) || [], [allDispatchData, carrierF]);
   const [pastCache, setPastCache] = useState(() => {
     try {
       const c = JSON.parse(localStorage.getItem("homePastStats") || "null");
-      return c && c.v === 4 && c.company === homeCompany && c.liveStart === liveStartStr && c.calYear === new Date().getFullYear() ? c : null;
+      return c && c.v === 4 && c.company === homeCompany && c.liveStart === liveStartStr && c.calYear === new Date().getFullYear() && (!carrierF.ready || (c.cs || "") === carrierF.sig) ? c : null;
     } catch { return null; }
   });
   useEffect(() => {
     markBootBase(pcBootStore, "homeMounted");
+    if (!carrierF.ready) return undefined; // ⭐ 2026-11-05 운송업체 설정을 받은 뒤 계산
     // 오늘 이미 계산해 둔 지난 기간 합계가 있으면 다시 받지 않는다(첫 진입 로딩 화면에 "준비 완료" 알림)
     let alive = true;
     // 합계만 계산하고 화면 데이터에는 합치지 않는다 — 수천 건을 화면 데이터에 합치면 그 순간 전체 화면이 다시 그려져 버벅인다
@@ -448,14 +454,15 @@ export default function HomeDashboard({ role, user, userCompany = "", pending, d
         .then((snaps) => {
           const rows = snaps.flatMap((sn) => sn.docs.map((d) => d.data() || {})).filter((row) =>
             (row.companyName || DEFAULT_COMPANY) === homeCompany &&
-            row.source !== "transport_transmit" && row.배차상태 !== "배차취소" && !["취소", "배차취소", "오더취소", "취소됨"].includes(row.상태));
-          const c = { ...sumStats(rows), ...buildPastStats(rows, new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 7)), v: 4, company: homeCompany, liveStart: liveStartStr, calYear: y, savedAt: Date.now() };
+            row.source !== "transport_transmit" && row.배차상태 !== "배차취소" && !["취소", "배차취소", "오더취소", "취소됨"].includes(row.상태) &&
+            carrierF.isCountable(row)); // ⭐ 2026-11-05 운송업체 설정
+          const c = { ...sumStats(rows), ...buildPastStats(rows, new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 7)), v: 4, company: homeCompany, liveStart: liveStartStr, calYear: y, savedAt: Date.now(), cs: carrierF.sig };
           try { localStorage.setItem("homePastStats", JSON.stringify(c)); } catch { /* 용량 초과 등은 무시 */ }
           if (alive) setPastCache(c);
         })
         .catch((e) => console.warn("홈 통계(지난 기간) 불러오기 실패:", e));
     };
-    if (pastCache) {
+    if (pastCache && (pastCache.cs || "") === carrierF.sig) {
       markBootBase(pcBootStore, "home");
       // 저장값이 있어도 그 뒤에 초기화·가져오기가 있었으면 뒤에서 조용히 다시 계산한다
       getDoc(doc(db, "systemConfig", "dataVersion")).then((snap) => {
@@ -468,7 +475,7 @@ export default function HomeDashboard({ role, user, userCompany = "", pending, d
     }
     return () => { alive = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [carrierF.ready, carrierF.sig]);
   const isEditingHandoverRef = useRef(false);
   const [toast, setToast] = useState(null);
   const [firestoreSeenReady, setFirestoreSeenReady] = useState(false);
@@ -792,9 +799,10 @@ export default function HomeDashboard({ role, user, userCompany = "", pending, d
   }, [topClients]);
 
   const allPendingOrders = useMemo(() => {
-    return dispatchData
+    return allDispatchData // ⭐ 2026-11-06 숨긴 운송업체 오더는 이미 데이터 입구(DispatchApp)에서 빠져 있다
       .filter(d => {
         if (d?.배차상태 === "배차완료") return false;
+        if (d?.배차표Id) return false; // ⭐ 2026-11-06 고정노선(배차표) 오더는 고정노선현황에서만 — 홈 미배차 목록에도 안 보이게
         const 상차일 = d?.상차일자 || d?.상차일 || d?.상차 || "";
         const 거래처명 = d?.거래처명 || "";
         return 상차일.trim() || 거래처명.trim();
@@ -804,7 +812,7 @@ export default function HomeDashboard({ role, user, userCompany = "", pending, d
         const db2 = b?.상차일자 || b?.상차일 || b?.상차 || "";
         return da < db2 ? -1 : da > db2 ? 1 : 0;
       });
-  }, [dispatchData]);
+  }, [allDispatchData]);
 
   // ⭐ 미배차 롤링 목록은 PendingTicker(아래)가 따로 넘긴다 — 3초마다 홈 화면 전체를 다시 그리던 원인
 
@@ -1011,7 +1019,7 @@ export default function HomeDashboard({ role, user, userCompany = "", pending, d
         <div className="relative overflow-hidden rounded-[22px] px-7 py-5 text-white flex items-center justify-between gap-4 flex-wrap shadow-[0_14px_32px_rgba(15,26,48,0.25)]"
           style={{ background: "linear-gradient(rgba(143,176,240,.07) 1px, transparent 1px) 0 0/22px 22px, linear-gradient(90deg, rgba(143,176,240,.07) 1px, transparent 1px) 0 0/22px 22px, linear-gradient(120deg,#0B1428 0%,#1B2B4B 60%,#2D4C82 100%)" }}>
           <div>
-            <div className="text-[11px] font-extrabold tracking-[0.26em] text-[#8FB0F0]" style={{ fontFamily: "'JetBrains Mono','SF Mono',ui-monospace,monospace" }}>
+            <div className="text-[11px] font-extrabold tracking-[0.26em] text-[#8FB0F0]" style={{ fontFamily: "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif", fontVariantNumeric: "tabular-nums" }}>
               BOARD · {boardTab === "공지사항" ? "NOTICE" : boardTab === "휴가/외근" ? "SCHEDULE" : "HANDOVER"}
             </div>
             <h2 className="text-[24px] font-black tracking-tight mt-0.5">{boardTab}</h2>
@@ -1026,7 +1034,7 @@ export default function HomeDashboard({ role, user, userCompany = "", pending, d
             ].map(([k, v]) => (
               <div key={k} className="rounded-2xl bg-white/[0.08] ring-1 ring-white/15 px-4 py-2 text-center min-w-[96px]">
                 <div className="text-[12px] font-bold text-blue-100/70">{k}</div>
-                <div className="text-[22px] font-black leading-tight" style={{ fontFamily: "'JetBrains Mono','SF Mono',ui-monospace,monospace" }}>{v}</div>
+                <div className="text-[22px] font-black leading-tight" style={{ fontFamily: "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif", fontVariantNumeric: "tabular-nums" }}>{v}</div>
               </div>
             ))}
             {!isViewer && (boardTab !== "공지사항" || canWriteNotice) && (
@@ -1436,7 +1444,7 @@ export default function HomeDashboard({ role, user, userCompany = "", pending, d
               )}
               {(canEdit || canDelete) && !isViewer && (
                 <div className="flex gap-2 pt-3 border-t border-gray-100">
-                  {canDelete && <button onClick={() => setConfirmDialog({ message: "일정을 삭제하시겠습니까?", onConfirm: async () => { await deleteDoc(doc(db, "schedules", selectedSchedule.id)); setSelectedSchedule(null); } })} className="flex-1 py-2.5 rounded-lg border border-red-200 text-red-600 text-[13px] font-semibold hover:bg-red-50 transition"><EditableText id="home.schedule.삭제" defaultText="삭제" /></button>}
+                  {canDelete && <button onClick={() => setConfirmDialog({ message: "일정을 삭제하시겠습니까?", onConfirm: async () => { const _id = selectedSchedule.id; await runDelete({ label: "일정", task: () => deleteDoc(doc(db, "schedules", _id)) }); setSelectedSchedule(null); } }) /* ⭐ 2026-11-05 삭제 진행 창 */} className="flex-1 py-2.5 rounded-lg border border-red-200 text-red-600 text-[13px] font-semibold hover:bg-red-50 transition"><EditableText id="home.schedule.삭제" defaultText="삭제" /></button>}
                   {canEdit && <button onClick={() => { setScheduleForm({ type: selectedSchedule.type, authorName: selectedSchedule.name || "", start: selectedSchedule.start, end: selectedSchedule.end, memo: selectedSchedule.memo || "", approvers: selectedSchedule.approvers || (selectedSchedule.approverUid ? [{ uid: selectedSchedule.approverUid, name: selectedSchedule.approverName || "" }] : []) }); setScheduleOpen(true); }} className="flex-1 py-2.5 rounded-lg bg-[#1B2B4B] text-white text-[13px] font-semibold hover:bg-[#243a60] transition"><EditableText id="home.schedule.수정" defaultText="수정" /></button>}
                 </div>
               )}
@@ -1479,7 +1487,7 @@ export default function HomeDashboard({ role, user, userCompany = "", pending, d
                 if (!isHAuthor) return null;
                 return (
                 <div className="flex gap-2 mt-4 pt-4 border-t">
-                  <button onClick={() => setConfirmDialog({ message: "인수인계를 삭제하시겠습니까?", onConfirm: async () => { await deleteDoc(doc(db, "handovers", selectedHandover.id)); setSelectedHandover(null); setHandoverEditMode(false); } })} className="flex-1 py-2 rounded-lg border border-red-200 text-red-600 text-[13px] font-semibold hover:bg-red-50 transition"><EditableText id="home.handover.삭제" defaultText="삭제" /></button>
+                  <button onClick={() => setConfirmDialog({ message: "인수인계를 삭제하시겠습니까?", onConfirm: async () => { const _id = selectedHandover.id; await runDelete({ label: "인수인계", task: () => deleteDoc(doc(db, "handovers", _id)) }); setSelectedHandover(null); setHandoverEditMode(false); } }) /* ⭐ 2026-11-05 삭제 진행 창 */} className="flex-1 py-2 rounded-lg border border-red-200 text-red-600 text-[13px] font-semibold hover:bg-red-50 transition"><EditableText id="home.handover.삭제" defaultText="삭제" /></button>
                   <button onClick={() => { isEditingHandoverRef.current = true; setHandoverForm({ text: selectedHandover.text, author: selectedHandover.author, authorUid: selectedHandover.authorUid, receiver: selectedHandover.receiver, receiverUid: selectedHandover.receiverUid, date: selectedHandover.date }); setHandoverEditMode(true); }} className="flex-1 py-2 rounded-lg bg-[#1B2B4B] text-white text-[13px] font-semibold hover:bg-[#243a60] transition"><EditableText id="home.handover.수정" defaultText="수정" /></button>
                 </div>
                 );

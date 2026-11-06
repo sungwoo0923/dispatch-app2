@@ -127,7 +127,7 @@ export default function OrgChart({ userCompany }) {
           <div className="w-[260px] rounded-[20px] p-2.5 text-left" style={{ background: "linear-gradient(180deg,rgba(255,255,255,0.07),rgba(255,255,255,0.03))", boxShadow: "inset 0 0 0 1px rgba(143,176,240,0.25), 0 12px 28px rgba(0,0,0,0.25)" }}>
             <div className="flex items-center justify-between px-1.5 pb-2">
               <span className="flex items-center gap-2"><span className="w-1.5 h-5 rounded-full bg-gradient-to-b from-[#8FB0F0] to-[#4B6CB7] shadow-[0_0_8px_rgba(143,176,240,0.8)]" /><span className="text-[16px] font-black text-white">{t.name}</span></span>
-              <span className="text-[12px] font-black text-[#8FB0F0] tabular-nums" style={{ fontFamily: "'JetBrains Mono',ui-monospace,monospace" }}>{t.list.length}명</span>
+              <span className="text-[12px] font-black text-[#8FB0F0] tabular-nums" style={{ fontFamily: "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif", fontVariantNumeric: "tabular-nums" }}>{t.list.length}명</span>
             </div>
             <div className="relative pl-4">
               <span className="absolute left-[7px] top-3 bottom-5 w-[2px] bg-[#4B6CB7]/60 rounded" />

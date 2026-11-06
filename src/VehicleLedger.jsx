@@ -6,6 +6,7 @@
 //     기본정보 변경·기타 이력 — 한 페이지에서 한눈에, A4 인쇄·엑셀 저장
 //  휴대폰(좁은 화면)에서는 표 대신 카드로 그린다.
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { runDelete } from "./DeleteProgress"; // ⭐ 2026-11-05 삭제 진행 창 + 한 번에 삭제
 import { createPortal } from "react-dom";
 import { collection, doc, onSnapshot, query, where, setDoc, deleteDoc, runTransaction, serverTimestamp } from "firebase/firestore";
 import * as XLSX from "xlsx";
@@ -21,8 +22,9 @@ import { careSummary, vehicleDefaults, TRUCK_MODELS } from "./vehicleCare";
 import { useVehicleTypes, VehicleTypePicker, VT_DEFAULTS } from "./vehicleTypes"; // 🚚 2026-11-02 회사 공용 차량종류
 import { fmtPhone as fmtPhoneLive } from "./formatInput"; // 입력 중 하이픈(02·031·010 등)
 
-const C = { ink: "#0B1428", navy: "#0F1A30", mid: "#1B2B4B", blue: "#2D4C82", sky: "#8FB0F0", line: "#E3E8F0", soft: "#F4F6FA", sub: "#5B6B85", mute: "#9AA9C3", pale: "#EEF2F9" };
-const MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
+const C = { ink: "#0B1428", navy: "#0F1A30", mid: "#1B2B4B", blue: "#2D4C82", sky: "#8FB0F0", line: "#E3E8F0", soft: "#F4F6FA", sub: "#5B6B85", mute: "#5B6B85" /* ⭐ 2026-11-05 흐린 글씨 금지 — #9AA9C3 → #5B6B85 */, pale: "#EEF2F9" };
+// ⭐ 2026-11-05 고정폭 글씨 → 기본 글씨체(흐릿해 보인다는 의견)
+const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
 const TAB = { fontVariantNumeric: "tabular-nums" };
 const VL_CSS = `.vl-row{background:#fff}.vl-row:hover{background:#F2F6FD}.vl-row.vl-hot{background:#E6EEFB}.vl-row.vl-hot>td:first-child{box-shadow:inset 3px 0 0 #2D4C82}.vl-row:focus-visible{background:#E6EEFB}.vl-card{transition:box-shadow .15s,border-color .15s}.vl-card:hover{border-color:#8FB0F0 !important;box-shadow:0 8px 22px rgba(27,43,75,.10)}
         .vl-spin{display:inline-block;width:14px;height:14px;border:2px solid #DCE3EE;border-top-color:#1B2B4B;border-radius:50%;animation:vlspin .8s linear infinite;vertical-align:-2px;margin-right:6px}@keyframes vlspin{to{transform:rotate(360deg)}}`;
@@ -48,7 +50,7 @@ function Btn({ children, onClick, kind = "ghost", disabled, style, title, type =
 function Field({ label, children, wide }) {
   return (
     <label style={{ display: "flex", flexDirection: "column", gap: 5, gridColumn: wide ? "1 / -1" : undefined, minWidth: 0 }}>
-      <span style={{ fontSize: 13.5, fontWeight: 800, color: C.sub }}>{label}</span>
+      <span style={{ fontSize: 14, fontWeight: 800, color: C.sub }}>{label}</span>
       {children}
     </label>
   );
@@ -140,7 +142,7 @@ function LedgerSelect({ value, onChange, options = [], placeholder = "선택", a
     <button ref={btn} type="button" data-ls="1" aria-haspopup="listbox" aria-expanded={open} title={title}
       onClick={(e) => { e.preventDefault(); e.stopPropagation(); open ? close() : openIt(); }}
       onKeyDown={(e) => { if (!open && (e.key === "ArrowDown" || e.key === "Enter" || e.key === " ")) { e.preventDefault(); e.stopPropagation(); openIt(); } }}
-      style={{ ...inp, height: h, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, cursor: "pointer", textAlign: "left", fontWeight: cur ? 800 : 600, color: cur ? C.navy : "#9AA9C3", borderColor: open ? C.blue : "#D5DDEA", boxShadow: open ? "0 0 0 4px rgba(45,76,130,.12)" : "none", ...(style || {}) }}>
+      style={{ ...inp, height: h, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, cursor: "pointer", textAlign: "left", fontWeight: cur ? 800 : 600, color: cur ? C.navy : "#5B6B85", borderColor: open ? C.blue : "#D5DDEA", boxShadow: open ? "0 0 0 4px rgba(45,76,130,.12)" : "none", ...(style || {}) }}>
       <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0 }}>{cur ? (list.find((o) => !o.group && String(o.v) === cur)?.label ?? cur) : placeholder}</span>{chev}
     </button>
     {open && pos && createPortal(
@@ -152,7 +154,7 @@ function LedgerSelect({ value, onChange, options = [], placeholder = "선택", a
         </div>
         <div style={{ overflowY: "auto", padding: "5px 0", flex: 1 }}>
           {items.map((o, i) => o.group ? (
-            <div key={`g_${o.group}_${i}`} style={{ padding: "8px 16px 4px", fontSize: 12.5, fontWeight: 900, color: C.blue }}>{o.group}</div>
+            <div key={`g_${o.group}_${i}`} style={{ padding: "8px 16px 4px", fontSize: 14, fontWeight: 900, color: C.blue }}>{o.group}</div>
           ) : (
             <div key={`${o.v}_${i}`} role="option" data-ls-idx={i} aria-selected={!o.custom && String(o.v) === cur}
               onMouseEnter={() => setAct(i)} onMouseDown={(e) => e.preventDefault()} onClick={() => pick(o)}
@@ -160,13 +162,13 @@ function LedgerSelect({ value, onChange, options = [], placeholder = "선택", a
                 background: i === act ? "#EEF3FC" : "transparent", ...(o.custom ? { border: "1.5px dashed #9FB2D3", justifyContent: "center", color: C.mid, fontWeight: 900, fontSize: 14 } : {}) }}>
               {o.custom ? <>✎ {customLabel}</> : (<>
                 <span style={{ width: 15, height: 15, borderRadius: 999, flexShrink: 0, display: "grid", placeItems: "center", border: `2px solid ${String(o.v) === cur && !o.none ? "#1B2B4B" : (o.none && !cur ? "#1B2B4B" : "#C9D5EA")}`, background: (String(o.v) === cur && !o.none) || (o.none && !cur) ? "#1B2B4B" : "#fff" }}>{((String(o.v) === cur && !o.none) || (o.none && !cur)) && <span style={{ width: 5, height: 5, borderRadius: 99, background: "#fff" }} />}</span>
-                <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: 14.5, fontWeight: o.none ? 700 : 800, color: o.none ? "#8E9BB2" : C.navy }}>{o.none ? noneLabel : (o.label ?? o.v)}</span>
-                {o.sub && <span style={{ flexShrink: 0, fontSize: 12.5, fontWeight: 700, color: C.mute }}>{o.sub}</span>}
-                {o.legacy && <span style={{ flexShrink: 0, fontSize: 12, fontWeight: 800, color: "#B54708" }}>직접 입력값</span>}
+                <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: 14.5, fontWeight: o.none ? 700 : 800, color: o.none ? "#5B6B85" : C.navy }}>{o.none ? noneLabel : (o.label ?? o.v)}</span>
+                {o.sub && <span style={{ flexShrink: 0, fontSize: 14, fontWeight: 700, color: C.mute }}>{o.sub}</span>}
+                {o.legacy && <span style={{ flexShrink: 0, fontSize: 14, fontWeight: 800, color: "#B54708" }}>직접 입력값</span>}
               </>)}
             </div>
           ))}
-          {nq && !items.some((o) => !o.group && !o.custom) && <div style={{ padding: "10px 16px", fontSize: 13.5, fontWeight: 700, color: C.mute }}>찾는 항목이 없습니다 · Enter로 "{q.trim()}" 그대로 입력</div>}
+          {nq && !items.some((o) => !o.group && !o.custom) && <div style={{ padding: "10px 16px", fontSize: 14, fontWeight: 700, color: C.mute }}>찾는 항목이 없습니다 · Enter로 "{q.trim()}" 그대로 입력</div>}
         </div>
       </div>, document.body)}
   </>);
@@ -203,7 +205,7 @@ function Modal({ title, onClose, children, footer, width = 760 }) {
   );
 }
 const EqDot = ({ on, label }) => (
-  <span style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "3px 8px", borderRadius: 99, fontSize: 13, fontWeight: 800, background: on ? C.mid : "#F1F4F9", color: on ? "#fff" : "#A7B3C7" }}>{label}</span>
+  <span style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "3px 8px", borderRadius: 99, fontSize: 14, fontWeight: 800, background: on ? C.mid : "#F1F4F9", color: on ? "#fff" : "#5B6B85" }}>{label}</span>
 );
 
 // ── 기본 정보 입력 폼(등록·수정 공용) ──
@@ -214,7 +216,7 @@ const FormGroup = ({ title, code, children }) => (
   <div style={{ border: `1px solid ${C.line}`, borderRadius: 14, overflow: "hidden" }}>
     <div style={{ padding: "9px 14px", background: "#F7F9FC", borderBottom: `1px solid ${C.line}`, display: "flex", alignItems: "baseline", gap: 8 }}>
       <span style={{ fontSize: 14.5, fontWeight: 900, color: C.navy }}>{title}</span>
-      {code && <span style={{ fontFamily: MONO, fontSize: 10.5, fontWeight: 800, letterSpacing: "0.12em", color: C.blue }}>{code}</span>}
+      {code && <span style={{ fontFamily: MONO, fontSize: 12.5, fontWeight: 800, letterSpacing: "0.12em", color: C.blue }}>{code}</span>}
     </div>
     <div style={{ padding: 14, display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(190px, 1fr))", gap: 12 }}>{children}</div>
   </div>
@@ -228,11 +230,11 @@ function BasicForm({ v, set, purposeOpts, companyOpts, isNew, company }) {
     <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
       <FormGroup title="차량" code="VEHICLE">
         <Field label="차량번호 *"><input {...f("차량번호")} placeholder="예) 경기12가3456" /></Field>
-        <Field label="차량종류"><VehicleTypePicker value={v.용도 || ""} onChange={(x) => set({ ...v, 용도: x })} base={typeBase} company={company} placeholder="선택" style={{ ...inp, cursor: "pointer", fontWeight: v.용도 ? 800 : 600, color: v.용도 ? C.navy : "#9AA9C3" }} /></Field>
+        <Field label="차량종류"><VehicleTypePicker value={v.용도 || ""} onChange={(x) => set({ ...v, 용도: x })} base={typeBase} company={company} placeholder="선택" style={{ ...inp, cursor: "pointer", fontWeight: v.용도 ? 800 : 600, color: v.용도 ? C.navy : "#5B6B85" }} /></Field>
         <Field label="톤수">{sel("톤수", TON_OPTS, { customPlaceholder: "예) 6.5톤" })}</Field>
         <Field label="모델 (제조사·모델)"><LedgerSelect value={v.모델 || ""} onChange={(x) => set({ ...v, 모델: x, 제조사: makerOf(x) || (x ? v.제조사 || "" : "") })} options={MODEL_OPTS} placeholder="모델 선택" customPlaceholder="예) 엑시언트 25.5톤" /></Field>
         <Field label="연식"><LedgerSelect value={v.연식 || ""} onChange={(x) => set({ ...v, 연식: String(x || "").replace(/[^\d]/g, "").slice(0, 4) })} options={YEAR_OPTS} placeholder="연식 선택" customPlaceholder="예) 2019" /></Field>
-        <Field label="차대번호"><input {...f("차대번호")} placeholder="17자리 영문·숫자" style={{ ...inp, fontFamily: MONO, textTransform: "uppercase" }} /></Field>
+        <Field label="차대번호"><input {...f("차대번호")} placeholder="17자리 영문·숫자" style={{ ...inp, fontFamily: MONO, fontVariantNumeric: "tabular-nums", textTransform: "uppercase" }} /></Field>
       </FormGroup>
       <FormGroup title="소속·보험" code="OWNER">
         <Field label="회사(소속)">{sel("회사", companyOpts, { customPlaceholder: "소속·차주 회사" })}</Field>
@@ -241,7 +243,7 @@ function BasicForm({ v, set, purposeOpts, companyOpts, isNew, company }) {
       </FormGroup>
       <FormGroup title="장비" code="EQUIPMENT">
         <Field label="유류카드 카드사">{sel("유류카드사", FUEL_CARD_OPTS, { customPlaceholder: "카드사 이름" })}</Field>
-        <Field label="유류카드 번호"><input {...f("유류카드번호")} inputMode="numeric" placeholder="카드 번호" style={{ ...inp, fontFamily: MONO }} /></Field>
+        <Field label="유류카드 번호"><input {...f("유류카드번호")} inputMode="numeric" placeholder="카드 번호" style={{ ...inp, fontFamily: MONO, fontVariantNumeric: "tabular-nums" }} /></Field>
         <Field label="하이패스">{sel("하이패스", HIPASS_OPTS, { customPlaceholder: "카드·단말 번호" })}</Field>
         <Field label="GPS">{sel("GPS", GPS_OPTS, { customPlaceholder: "단말·업체 이름" })}</Field>
         <Field label="덮개">{sel("덮개", COVER_OPTS, { customPlaceholder: "덮개 종류" })}</Field>
@@ -270,12 +272,12 @@ function Evidence({ files = [], onAdd, onRemove, canEdit, compact }) {
     <span style={{ display: "inline-flex", gap: 5, flexWrap: "wrap", alignItems: "center" }} onClick={(e) => e.stopPropagation()}>
       {files.map((m) => (
         <span key={m.id} style={{ display: "inline-flex", alignItems: "center", borderRadius: 7, border: `1px solid ${C.line}`, background: C.pale, overflow: "hidden" }}>
-          <button type="button" onClick={() => open(m)} title={m.name} style={{ border: "none", background: "transparent", padding: "3px 8px", fontSize: 13, fontWeight: 800, color: C.blue, cursor: "pointer", maxWidth: compact ? 90 : 140, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{m.type === "pdf" ? "PDF" : "사진"} · {m.name}</button>
-          {canEdit && onRemove && <button type="button" onClick={() => onRemove(m)} style={{ border: "none", borderLeft: `1px solid ${C.line}`, background: "#fff", padding: "3px 6px", fontSize: 13, color: C.mute, cursor: "pointer" }}>×</button>}
+          <button type="button" onClick={() => open(m)} title={m.name} style={{ border: "none", background: "transparent", padding: "3px 8px", fontSize: 14, fontWeight: 800, color: C.blue, cursor: "pointer", maxWidth: compact ? 90 : 140, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{m.type === "pdf" ? "PDF" : "사진"} · {m.name}</button>
+          {canEdit && onRemove && <button type="button" onClick={() => onRemove(m)} style={{ border: "none", borderLeft: `1px solid ${C.line}`, background: "#fff", padding: "3px 6px", fontSize: 14, color: C.mute, cursor: "pointer" }}>×</button>}
         </span>
       ))}
       {canEdit && onAdd && (<>
-        <button type="button" disabled={busy} onClick={() => ref.current?.click()} style={{ border: `1px dashed ${C.sky}`, background: "#fff", borderRadius: 7, padding: "3px 9px", fontSize: 13, fontWeight: 800, color: C.blue, cursor: "pointer" }}>{busy ? "올리는 중…" : "+ 증빙"}</button>
+        <button type="button" disabled={busy} onClick={() => ref.current?.click()} style={{ border: `1px dashed ${C.sky}`, background: "#fff", borderRadius: 7, padding: "3px 9px", fontSize: 14, fontWeight: 800, color: C.blue, cursor: "pointer" }}>{busy ? "올리는 중…" : "+ 증빙"}</button>
         <input ref={ref} type="file" accept="image/*,application/pdf" multiple hidden onChange={async (e) => {
           const fs = Array.from(e.target.files || []); e.target.value = "";
           if (!fs.length) return;
@@ -283,7 +285,7 @@ function Evidence({ files = [], onAdd, onRemove, canEdit, compact }) {
           try { await onAdd(fs); } finally { setBusy(false); }
         }} />
       </>)}
-      {!files.length && !canEdit && <span style={{ color: "#C0CADB", fontSize: 13 }}>-</span>}
+      {!files.length && !canEdit && <span style={{ color: "#5B6B85", fontSize: 14 }}>-</span>}
       {view && (
         <Modal title={view.name} onClose={() => setView(null)} width={900}>
           <img src={view.src} alt={view.name} style={{ width: "100%", height: "auto", borderRadius: 10 }} />
@@ -335,10 +337,10 @@ function RowEditor({ kind, row, onSave, onClose, kindOpts, onDelete }) {
           if (t === "textarea") return <Field key={k} label={L} wide><textarea value={r[k] || ""} onChange={(e) => setR({ ...r, [k]: e.target.value })} rows={3} style={{ ...inp, height: "auto", padding: 10, resize: "vertical", fontFamily: "inherit" }} /></Field>;
           if (t === "kind") return <Field key={k} label={L}><SelectOrType value={r[k]} onChange={(x) => setR({ ...r, [k]: x })} options={kindOpts} /></Field>;
           if (t === "logkind") return <Field key={k} label={L}><LedgerSelect allowCustom={false} value={r[k] || "이력"} onChange={(x) => setR({ ...r, [k]: x || "이력" })} options={["변경", "이력"]} noneLabel="이력" /></Field>;
-          if (t === "money") return <Field key={k} label={L}><input inputMode="numeric" value={r[k] === "" || r[k] == null ? "" : won(num(r[k]))} onChange={(e) => setR({ ...r, [k]: e.target.value.replace(/[^\d]/g, "") })} style={{ ...inp, textAlign: "right", fontFamily: MONO }} placeholder="0" /></Field>;
+          if (t === "money") return <Field key={k} label={L}><input inputMode="numeric" value={r[k] === "" || r[k] == null ? "" : won(num(r[k]))} onChange={(e) => setR({ ...r, [k]: e.target.value.replace(/[^\d]/g, "") })} style={{ ...inp, textAlign: "right", fontFamily: MONO, fontVariantNumeric: "tabular-nums" }} placeholder="0" /></Field>;
           if (t === "vat") return (
             <Field key={k} label={L}>
-              <input inputMode="numeric" value={r.부가세 === "" || r.부가세 == null ? "" : won(num(r.부가세))} onChange={(e) => setR({ ...r, 부가세: e.target.value.replace(/[^\d]/g, "") })} style={{ ...inp, textAlign: "right", fontFamily: MONO }} placeholder={`${won(autoVat)} (자동)`} />
+              <input inputMode="numeric" value={r.부가세 === "" || r.부가세 == null ? "" : won(num(r.부가세))} onChange={(e) => setR({ ...r, 부가세: e.target.value.replace(/[^\d]/g, "") })} style={{ ...inp, textAlign: "right", fontFamily: MONO, fontVariantNumeric: "tabular-nums" }} placeholder={`${won(autoVat)} (자동)`} />
             </Field>
           );
           if (t === "date") return <Field key={k} label={L}><DateField value={r[k] || ""} onChange={(x) => setR({ ...r, [k]: x })} /></Field>;
@@ -348,23 +350,23 @@ function RowEditor({ kind, row, onSave, onClose, kindOpts, onDelete }) {
       </div>
       {kind === "repairs" && (
         <div style={{ marginTop: 14, padding: "12px 14px", borderRadius: 12, background: C.soft, display: "flex", gap: 18, flexWrap: "wrap", fontSize: 14.5, fontWeight: 700, color: C.sub }}>
-          <span>공가 <b style={{ color: C.navy, fontFamily: MONO }}>{won(num(r.공가))}</b></span>
-          <span>부가세 <b style={{ color: C.navy, fontFamily: MONO }}>{won(repairVat(r))}</b></span>
-          <span>합금액 <b style={{ color: C.navy, fontFamily: MONO, fontSize: 16 }}>{won(num(r.공가) + repairVat(r))}</b>원</span>
+          <span>공가 <b style={{ color: C.navy, fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{won(num(r.공가))}</b></span>
+          <span>부가세 <b style={{ color: C.navy, fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{won(repairVat(r))}</b></span>
+          <span>합금액 <b style={{ color: C.navy, fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 16 }}>{won(num(r.공가) + repairVat(r))}</b>원</span>
         </div>
       )}
       {err && <div style={{ marginTop: 12, padding: "10px 12px", borderRadius: 10, background: "#FEF3F2", color: "#B42318", fontSize: 14, fontWeight: 800 }}>{err}</div>}
       {hasFiles && (
         <div style={{ marginTop: 12, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-          <span style={{ fontSize: 13.5, fontWeight: 800, color: C.sub, marginRight: 4 }}>증빙</span>
-          {(r.files || []).map((m) => <span key={m.id} style={{ padding: "3px 9px", borderRadius: 7, background: C.pale, fontSize: 13, fontWeight: 800, color: C.blue }}>{m.type === "pdf" ? "PDF" : "사진"} · {m.name}</span>)}
+          <span style={{ fontSize: 14, fontWeight: 800, color: C.sub, marginRight: 4 }}>증빙</span>
+          {(r.files || []).map((m) => <span key={m.id} style={{ padding: "3px 9px", borderRadius: 7, background: C.pale, fontSize: 14, fontWeight: 800, color: C.blue }}>{m.type === "pdf" ? "PDF" : "사진"} · {m.name}</span>)}
           {pending.map((f, i) => (
-            <span key={i} style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "3px 4px 3px 9px", borderRadius: 7, border: `1px dashed ${C.sky}`, fontSize: 13, fontWeight: 800, color: C.blue }}>
+            <span key={i} style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "3px 4px 3px 9px", borderRadius: 7, border: `1px dashed ${C.sky}`, fontSize: 14, fontWeight: 800, color: C.blue }}>
               새 {/pdf/i.test(f.type) ? "PDF" : "사진"} · {f.name.length > 16 ? f.name.slice(0, 15) + "…" : f.name}
               <button type="button" onClick={() => setPending(pending.filter((_, j) => j !== i))} style={{ border: "none", background: "none", color: C.mute, cursor: "pointer", fontSize: 14 }}>×</button>
             </span>
           ))}
-          <button type="button" onClick={() => fileRef.current?.click()} style={{ height: 34, padding: "0 12px", borderRadius: 8, border: `1px dashed ${C.sky}`, background: "#fff", color: C.blue, fontSize: 13.5, fontWeight: 800, cursor: "pointer" }}>+ 사진·PDF (촬영 가능)</button>
+          <button type="button" onClick={() => fileRef.current?.click()} style={{ height: 34, padding: "0 12px", borderRadius: 8, border: `1px dashed ${C.sky}`, background: "#fff", color: C.blue, fontSize: 14, fontWeight: 800, cursor: "pointer" }}>+ 사진·PDF (촬영 가능)</button>
           <input ref={fileRef} type="file" accept="image/*,application/pdf" multiple hidden onChange={(e) => { const fs = Array.from(e.target.files || []); e.target.value = ""; setPending((p) => [...p, ...fs]); }} />
         </div>
       )}
@@ -413,7 +415,7 @@ function ImportModal({ onClose, onImport, existing }) {
             ))}</tbody>
           </table>
         </div>
-        <div style={{ marginTop: 6, fontSize: 13.5, color: C.mute }}>연두색 줄 = 새로 등록되는 차량</div>
+        <div style={{ marginTop: 6, fontSize: 14, color: C.mute }}>연두색 줄 = 새로 등록되는 차량</div>
       </>)}
     </Modal>
   );
@@ -427,7 +429,7 @@ function Section({ id, title, code, right, children }) {
     <section id={id} style={{ background: "#fff", border: `1px solid ${C.line}`, borderRadius: 16, overflow: "hidden", scrollMarginTop: 70 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", padding: "12px 16px", background: "#F7F9FC", borderBottom: `1px solid #E8EDF4` }}>
         <div style={{ flex: 1, minWidth: 160 }}>
-          <div style={{ fontFamily: MONO, fontSize: 11, fontWeight: 800, letterSpacing: "0.22em", color: C.mute }}>{code}</div>
+          <div style={{ fontFamily: MONO, fontSize: 12.5, fontWeight: 800, letterSpacing: "0.12em", color: C.mute }}>{code}</div>
           <div style={{ fontSize: 17, fontWeight: 900, color: C.navy }}>{title}</div>
         </div>
         {right}
@@ -564,7 +566,7 @@ function Ledger({ v, co, appDriver, linkRaw, drivers, canEdit, by, narrow, purpo
   const removeVehicle = async () => {
     if (!(await kpConfirm(`${v.차량번호} 차량과 모든 이력·증빙을 삭제할까요? 되돌릴 수 없습니다.`, { title: "차량 삭제", okText: "삭제", danger: true }))) return;
     const files = [...(v.repairs || []), ...(v.structures || [])].flatMap((r) => r.files || []);
-    await deleteDoc(ref);
+    await runDelete({ label: "차량", task: () => deleteDoc(ref) }); // ⭐ 2026-11-05 삭제 진행 창
     deleteEvidence(files).catch(() => {});
     onBack(); toast("삭제했습니다");
   };
@@ -602,7 +604,7 @@ function Ledger({ v, co, appDriver, linkRaw, drivers, canEdit, by, narrow, purpo
       <div style={{ display: "flex", flexDirection: "column" }}>
         {sorted.map((r) => (
           <div key={r.id} style={{ padding: "12px 14px", borderTop: `1px solid #EEF1F6` }} onClick={() => canEdit && setEditor({ kind, row: r })}>
-            {render ? render(r) : cols.map(([k, l]) => r[k] ? <div key={k} style={{ fontSize: 14.5, color: C.navy, lineHeight: 1.5 }}><b style={{ color: C.sub, fontSize: 13.5, marginRight: 6 }}>{l}</b>{typeof r[k] === "number" || k === "금액" ? won(num(r[k])) : r[k]}</div> : null)}
+            {render ? render(r) : cols.map(([k, l]) => r[k] ? <div key={k} style={{ fontSize: 14.5, color: C.navy, lineHeight: 1.5 }}><b style={{ color: C.sub, fontSize: 14, marginRight: 6 }}>{l}</b>{typeof r[k] === "number" || k === "금액" ? won(num(r[k])) : r[k]}</div> : null)}
             {"files" in HIST[kind].empty() && <div style={{ marginTop: 6 }}><Evidence files={r.files} canEdit={canEdit} compact onAdd={(fs) => addFiles(kind, r, fs)} onRemove={(m) => rmFile(kind, r, m)} /></div>}
           </div>
         ))}
@@ -630,18 +632,18 @@ function Ledger({ v, co, appDriver, linkRaw, drivers, canEdit, by, narrow, purpo
       <div style={{ borderRadius: 18, padding: narrow ? 14 : "18px 22px", color: "#fff", background: HERO_BG, display: "flex", alignItems: "center", gap: narrow ? 12 : 18, flexWrap: "wrap" }}>
         {drawer ? (
           <div style={{ width: "100%", display: "flex", alignItems: "center", gap: 8 }}>
-            <span style={{ fontFamily: MONO, fontSize: 11, fontWeight: 800, letterSpacing: "0.18em", color: C.sky, flex: 1, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{narrow ? "VEHICLE" : "VEHICLE · 차량 정보"}</span>
+            <span style={{ fontFamily: MONO, fontSize: 12.5, fontWeight: 800, letterSpacing: "0.12em", color: C.sky, flex: 1, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{narrow ? "VEHICLE" : "VEHICLE · 차량 정보"}</span>
             {canEdit && !edit && <Btn kind="light" onClick={startEdit}>✎ 기본 정보 수정</Btn>}
             <Btn kind="light" onClick={onBack} title="닫기 (Esc)">✕ 닫기</Btn>
           </div>
         ) : <div style={{ width: narrow ? "100%" : "auto" }}><Btn kind="light" onClick={onBack}>← 차량 목록</Btn></div>}
         <button type="button" onClick={() => canEdit && photoRef.current?.click()} title={canEdit ? "차량 사진 바꾸기" : ""} style={{ position: "relative", width: narrow ? 92 : 132, height: narrow ? 70 : 96, borderRadius: 14, border: "1px solid rgba(143,176,240,.35)", background: photo ? `center/cover no-repeat url(${photo})` : "rgba(255,255,255,.06)", display: "flex", alignItems: "center", justifyContent: "center", cursor: canEdit ? "pointer" : "default", flexShrink: 0, overflow: "hidden", padding: 0 }}>
           {!photo && <TruckIcon s={narrow ? 34 : 44} />}
-          {canEdit && <span style={{ position: "absolute", left: 0, right: 0, bottom: 0, padding: "3px 0", background: "rgba(11,20,40,.62)", fontSize: 12, fontWeight: 800, color: "#fff" }}>{photo ? "사진 변경" : "+ 차량 사진"}</span>}
+          {canEdit && <span style={{ position: "absolute", left: 0, right: 0, bottom: 0, padding: "3px 0", background: "rgba(11,20,40,.62)", fontSize: 14, fontWeight: 800, color: "#fff" }}>{photo ? "사진 변경" : "+ 차량 사진"}</span>}
         </button>
         <input ref={photoRef} type="file" accept="image/*" hidden onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) uploadPhoto(f); }} />
         <div style={{ flex: 1, minWidth: narrow ? 0 : 240, display: "flex", flexDirection: "column", gap: 8 }}>
-          <div style={{ fontFamily: MONO, fontSize: 11, fontWeight: 800, letterSpacing: "0.26em", color: C.sky }}>VEHICLE LEDGER · 관리대장</div>
+          <div style={{ fontFamily: MONO, fontSize: 12.5, fontWeight: 800, letterSpacing: "0.12em", color: C.sky }}>VEHICLE LEDGER · 관리대장</div>
           <div><Plate text={v.차량번호} size={narrow ? "md" : "lg"} /></div>
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap", fontSize: 14, fontWeight: 700 }}>
             {[v.용도, v.톤수, v.회사].filter(Boolean).map((t) => <span key={t} style={{ padding: "3px 10px", borderRadius: 99, background: "rgba(255,255,255,.1)", border: "1px solid rgba(143,176,240,.25)" }}>{t}</span>)}
@@ -652,7 +654,7 @@ function Ledger({ v, co, appDriver, linkRaw, drivers, canEdit, by, narrow, purpo
         <div style={{ display: "grid", gridTemplateColumns: "repeat(3, auto)", gap: 8, alignItems: "stretch" }}>
           {[["정비", `${reps.length}건`], [`${new Date().getFullYear()} 정비비`, won(reps.filter((r) => String(r.일자 || "").startsWith(String(new Date().getFullYear()))).reduce((s2, r) => s2 + num(r.공가) + repairVat(r), 0))], ["주행거리", linkRaw?.care?.odometer ? `${Number(linkRaw.care.odometer).toLocaleString()}km` : "-"]].map(([l, n]) => (
             <div key={l} style={{ padding: "8px 12px", borderRadius: 12, border: "1px solid rgba(143,176,240,.28)", background: "rgba(255,255,255,.05)", minWidth: narrow ? 0 : 96 }}>
-              <div style={{ fontSize: 12.5, fontWeight: 700, color: "rgba(255,255,255,.66)", whiteSpace: "nowrap" }}>{l}</div>
+              <div style={{ fontSize: 14, fontWeight: 700, color: "rgba(255,255,255,.85)", whiteSpace: "nowrap" }}>{l}</div>
               <div style={{ fontFamily: MONO, fontSize: narrow ? 15 : 18, fontWeight: 800, whiteSpace: "nowrap", ...TAB }}>{n}</div>
             </div>
           ))}
@@ -681,8 +683,8 @@ function Ledger({ v, co, appDriver, linkRaw, drivers, canEdit, by, narrow, purpo
             <div style={{ display: "grid", gridTemplateColumns: narrow ? "repeat(2, minmax(0,1fr))" : "repeat(5, minmax(0,1fr))", gap: 0, border: `1px solid ${C.line}`, borderRadius: 12, overflow: "hidden" }}>
               {info.map(([k, val]) => (
                 <div key={k} style={{ padding: "10px 12px", borderRight: `1px solid ${C.line}`, borderBottom: `1px solid ${C.line}`, minWidth: 0 }}>
-                  <div style={{ fontSize: 13, fontWeight: 800, color: C.mute }}>{k}</div>
-                  <div style={{ fontSize: 15.5, fontWeight: 800, color: val ? C.navy : "#C0CADB", marginTop: 2, wordBreak: "break-all" }}>{val || "-"}</div>
+                  <div style={{ fontSize: 14, fontWeight: 800, color: C.mute }}>{k}</div>
+                  <div style={{ fontSize: 15.5, fontWeight: 800, color: val ? C.navy : "#5B6B85", marginTop: 2, wordBreak: "break-all" }}>{val || "-"}</div>
                 </div>
               ))}
             </div>
@@ -690,7 +692,7 @@ function Ledger({ v, co, appDriver, linkRaw, drivers, canEdit, by, narrow, purpo
             <div style={{ display: "grid", gridTemplateColumns: narrow ? "minmax(0,1fr)" : "repeat(5, minmax(0,1fr))", gap: 10, marginTop: 8 }}>
               {[["유류카드", [v.유류카드사, v.유류카드번호].filter(Boolean).join(" · "), hasEquip(v.유류카드번호)], ["하이패스", v.하이패스, hasEquip(v.하이패스)], ["GPS", v.GPS, hasEquip(v.GPS)], ["덮개", v.덮개, hasEquip(v.덮개)], ["박스", [v.박스, v.박스메모].filter(Boolean).join(" · "), hasEquip(v.박스)]].map(([k, val, on]) => (
                 <div key={k} style={{ padding: "12px 14px", borderRadius: 12, background: on ? "linear-gradient(135deg,#0F1A30,#1B2B4B)" : C.soft, color: on ? "#fff" : C.mute, display: "flex", alignItems: narrow ? "center" : "flex-start", flexDirection: narrow ? "row" : "column", gap: narrow ? 10 : 2 }}>
-                  <div style={{ fontSize: 13, fontWeight: 900, color: on ? C.sky : C.mute, minWidth: narrow ? 64 : 0 }}>{k}</div>
+                  <div style={{ fontSize: 14, fontWeight: 900, color: on ? C.sky : C.mute, minWidth: narrow ? 64 : 0 }}>{k}</div>
                   <div style={{ fontSize: 15, fontWeight: 800, wordBreak: "break-all" }}>{val || "없음"}</div>
                 </div>
               ))}
@@ -701,7 +703,7 @@ function Ledger({ v, co, appDriver, linkRaw, drivers, canEdit, by, narrow, purpo
       </Section>
 
       {/* 점검·소모품 — 기존 '차량 관리'(기사앱 점검) 데이터를 그대로(기사 문서에 저장) */}
-      <Section id="vl-care" title="점검·소모품" code="CARE · 기사앱 연동" right={linkRaw && <span style={{ fontSize: 13.5, fontWeight: 700, color: C.sub }}>기사관리 · {linkRaw.이름 || linkRaw.name} 차량 정보와 함께 저장됩니다</span>}>
+      <Section id="vl-care" title="점검·소모품" code="CARE · 기사앱 연동" right={linkRaw && <span style={{ fontSize: 14, fontWeight: 700, color: C.sub }}>기사관리 · {linkRaw.이름 || linkRaw.name} 차량 정보와 함께 저장됩니다</span>}>
         <div style={{ padding: narrow ? 12 : "14px 18px" }}>
           {linkRaw
             ? <VehicleCarePanel key={linkRaw.id} driverId={linkRaw.id} drv={linkRaw} by={by} staff large={!narrow} onToast={toast} />
@@ -711,7 +713,7 @@ function Ledger({ v, co, appDriver, linkRaw, drivers, canEdit, by, narrow, purpo
 
       {/* 타임라인 */}
       <Section id="vl-timeline" title="이력 타임라인" code="TIMELINE" right={<div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
-        {[["all", "전체"], ...Object.entries(TL).map(([k, [l]]) => [k, l])].map(([k, l]) => <button key={k} type="button" onClick={() => setTlKind(k)} style={{ height: 32, padding: "0 12px", borderRadius: 99, border: `1px solid ${tlKind === k ? C.mid : "#D5DDEA"}`, background: tlKind === k ? C.mid : "#fff", color: tlKind === k ? "#fff" : C.sub, fontSize: 13.5, fontWeight: 800, cursor: "pointer" }}>{l}</button>)}
+        {[["all", "전체"], ...Object.entries(TL).map(([k, [l]]) => [k, l])].map(([k, l]) => <button key={k} type="button" onClick={() => setTlKind(k)} style={{ height: 32, padding: "0 12px", borderRadius: 99, border: `1px solid ${tlKind === k ? C.mid : "#D5DDEA"}`, background: tlKind === k ? C.mid : "#fff", color: tlKind === k ? "#fff" : C.sub, fontSize: 14, fontWeight: 800, cursor: "pointer" }}>{l}</button>)}
       </div>}>
         {!events.length ? <div style={{ padding: 28, textAlign: "center", color: C.mute, fontSize: 14.5 }}>아직 기록된 이력이 없습니다. 아래에서 정비·구조변경·기사 탑승을 추가하면 여기에 날짜순으로 쌓입니다.</div> : (
           <div style={{ padding: narrow ? "12px 12px 8px" : "16px 22px 10px" }}>
@@ -720,18 +722,18 @@ function Ledger({ v, co, appDriver, linkRaw, drivers, canEdit, by, narrow, purpo
               const yr = String(e.d || "").slice(0, 4); const prevYr = i ? String(evShown[i - 1].d || "").slice(0, 4) : "";
               return (
                 <React.Fragment key={i}>
-                  {yr !== prevYr && <div style={{ fontFamily: MONO, fontSize: 13, fontWeight: 800, letterSpacing: "0.16em", color: C.mute, margin: i ? "10px 0 6px" : "0 0 6px" }}>{yr || "날짜 없음"}</div>}
+                  {yr !== prevYr && <div style={{ fontFamily: MONO, fontSize: 13, fontWeight: 800, letterSpacing: "0.12em", color: C.mute, margin: i ? "10px 0 6px" : "0 0 6px" }}>{yr || "날짜 없음"}</div>}
                   <div style={{ display: "grid", gridTemplateColumns: narrow ? "52px 18px 1fr" : "96px 22px 1fr auto", alignItems: "start", columnGap: 8 }}>
-                    <span style={{ fontFamily: MONO, fontSize: 14, fontWeight: 800, color: C.sub, paddingTop: 2, ...TAB }}>{narrow ? String(e.d || "").slice(5) : e.d}</span>
+                    <span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 14, fontWeight: 800, color: C.sub, paddingTop: 2, ...TAB }}>{narrow ? String(e.d || "").slice(5) : e.d}</span>
                     <span style={{ position: "relative", display: "flex", justifyContent: "center", alignSelf: "stretch" }}>
                       <span style={{ position: "absolute", top: 0, bottom: 0, width: 2, background: "#E3E8F0" }} />
                       <span style={{ position: "relative", marginTop: 5, width: 11, height: 11, borderRadius: 99, background: col, boxShadow: "0 0 0 3px #fff" }} />
                     </span>
                     <div style={{ paddingBottom: 12, minWidth: 0 }}>
-                      <div style={{ fontSize: 15, fontWeight: 800, color: C.navy, wordBreak: "keep-all" }}><span style={{ fontSize: 12.5, fontWeight: 900, color: col, marginRight: 6 }}>{l}</span>{e.t}</div>
-                      {(e.s || e.files > 0 || (narrow && e.amt)) ? <div style={{ fontSize: 13.5, color: C.sub, marginTop: 1 }}>{[e.s, e.files ? `증빙 ${e.files}` : "", narrow && e.amt ? `${won(e.amt)}원` : ""].filter(Boolean).join(" · ")}</div> : null}
+                      <div style={{ fontSize: 15, fontWeight: 800, color: C.navy, wordBreak: "keep-all" }}><span style={{ fontSize: 14, fontWeight: 900, color: col, marginRight: 6 }}>{l}</span>{e.t}</div>
+                      {(e.s || e.files > 0 || (narrow && e.amt)) ? <div style={{ fontSize: 14, color: C.sub, marginTop: 1 }}>{[e.s, e.files ? `증빙 ${e.files}` : "", narrow && e.amt ? `${won(e.amt)}원` : ""].filter(Boolean).join(" · ")}</div> : null}
                     </div>
-                    {!narrow && <span style={{ fontFamily: MONO, fontSize: 15, fontWeight: 800, color: C.navy, paddingTop: 1, ...TAB }}>{e.amt ? `${won(e.amt)}원` : ""}</span>}
+                    {!narrow && <span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 15, fontWeight: 800, color: C.navy, paddingTop: 1, ...TAB }}>{e.amt ? `${won(e.amt)}원` : ""}</span>}
                   </div>
                 </React.Fragment>
               );
@@ -750,7 +752,7 @@ function Ledger({ v, co, appDriver, linkRaw, drivers, canEdit, by, narrow, purpo
           <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0,1fr))", gap: 8, flex: narrow ? "1 1 100%" : "0 0 400px" }}>
             {[["공가", sum.g], ["부가세", sum.v], ["합금액", sum.g + sum.v]].map(([l, n], i) => (
               <div key={l} style={{ padding: "10px 12px", borderRadius: 12, background: i === 2 ? "linear-gradient(135deg,#0F1A30,#2D4C82)" : C.soft, color: i === 2 ? "#fff" : C.navy }}>
-                <div style={{ fontSize: 13, fontWeight: 800, opacity: 0.75 }}>{l} · {repShown.length}건</div>
+                <div style={{ fontSize: 14, fontWeight: 800, opacity: 0.75 }}>{l} · {repShown.length}건</div>
                 <div style={{ fontFamily: MONO, fontSize: narrow ? 16 : 19, fontWeight: 800, marginTop: 2 }}>{won(n)}</div>
               </div>
             ))}
@@ -759,9 +761,9 @@ function Ledger({ v, co, appDriver, linkRaw, drivers, canEdit, by, narrow, purpo
             <div style={{ flex: 1, minWidth: 260, display: "grid", gridTemplateColumns: "repeat(12, minmax(0,1fr))", gap: 4, alignItems: "end" }}>
               {monthly.map((m, i) => (
                 <button key={i} type="button" onClick={() => setMonth(month === i + 1 ? 0 : i + 1)} title={`${i + 1}월 ${won(m)}원`} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, border: "none", background: "transparent", cursor: "pointer", padding: 0 }}>
-                  <span style={{ fontSize: 11.5, fontFamily: MONO, fontWeight: 700, color: C.sub, whiteSpace: "nowrap" }}>{m ? (m >= 10000 ? `${Math.round(m / 10000)}만` : won(m)) : ""}</span>
+                  <span style={{ fontSize: 14, fontFamily: MONO, fontWeight: 700, color: C.sub, whiteSpace: "nowrap" }}>{m ? (m >= 10000 ? `${Math.round(m / 10000)}만` : won(m)) : ""}</span>
                   <span style={{ width: "100%", height: Math.max(4, Math.round((m / maxM) * 48)), borderRadius: 4, background: month === i + 1 ? C.blue : m ? C.sky : "#E6EBF3" }} />
-                  <span style={{ fontSize: 13, fontWeight: month === i + 1 ? 900 : 700, color: month === i + 1 ? C.blue : C.sub, whiteSpace: "nowrap" }}>{narrow ? i + 1 : `${i + 1}월`}</span>
+                  <span style={{ fontSize: 14, fontWeight: month === i + 1 ? 900 : 700, color: month === i + 1 ? C.blue : C.sub, whiteSpace: "nowrap" }}>{narrow ? i + 1 : `${i + 1}월`}</span>
                 </button>
               ))}
             </div>
@@ -773,11 +775,11 @@ function Ledger({ v, co, appDriver, linkRaw, drivers, canEdit, by, narrow, purpo
             <div key={r.id} style={{ padding: "12px 14px", borderTop: `1px solid #EEF1F6` }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }} onClick={() => canEdit && setEditor({ kind: "repairs", row: r })}>
                 <span style={{ fontFamily: MONO, fontSize: 14, fontWeight: 800, color: C.sub }}>{r.일자}</span>
-                {r.구분 && <span style={{ padding: "2px 8px", borderRadius: 6, background: C.pale, color: C.blue, fontSize: 13, fontWeight: 800 }}>{r.구분}</span>}
+                {r.구분 && <span style={{ padding: "2px 8px", borderRadius: 6, background: C.pale, color: C.blue, fontSize: 14, fontWeight: 800 }}>{r.구분}</span>}
                 <span style={{ marginLeft: "auto", fontFamily: MONO, fontSize: 16, fontWeight: 800, color: C.navy }}>{won(num(r.공가) + repairVat(r))}</span>
               </div>
               <div style={{ fontSize: 15, fontWeight: 700, color: C.navy, marginTop: 4, whiteSpace: "pre-wrap" }} onClick={() => canEdit && setEditor({ kind: "repairs", row: r })}>{r.내용 || "-"}</div>
-              <div style={{ fontSize: 13.5, color: C.sub, marginTop: 2 }}>{[r.업체, r.업체번호, num(r.공가) ? `공가 ${won(num(r.공가))} + 부가세 ${won(repairVat(r))}` : "", r.비고].filter(Boolean).join(" · ")}</div>
+              <div style={{ fontSize: 14, color: C.sub, marginTop: 2 }}>{[r.업체, r.업체번호, num(r.공가) ? `공가 ${won(num(r.공가))} + 부가세 ${won(repairVat(r))}` : "", r.비고].filter(Boolean).join(" · ")}</div>
               <div style={{ marginTop: 6, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                 <Evidence files={r.files} canEdit={canEdit} compact onAdd={(fs) => addFiles("repairs", r, fs)} onRemove={(m) => rmFile("repairs", r, m)} />
                 {canEdit && <span style={{ marginLeft: "auto" }}><RowActs onEdit={() => setEditor({ kind: "repairs", row: r })} onDel={() => delRow("repairs", r)} /></span>}
@@ -791,14 +793,14 @@ function Ledger({ v, co, appDriver, linkRaw, drivers, canEdit, by, narrow, purpo
               <tbody>
                 {repShown.map((r) => (
                   <tr key={r.id} className="vl-row" title={canEdit ? "눌러서 수정·삭제" : ""} onClick={() => canEdit && setEditor({ kind: "repairs", row: r })} style={{ cursor: canEdit ? "pointer" : "default" }}>
-                    <td style={{ ...td, whiteSpace: "nowrap", fontFamily: MONO, fontSize: 14 }}>{r.일자}</td>
+                    <td style={{ ...td, whiteSpace: "nowrap", fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 14 }}>{r.일자}</td>
                     <td style={{ ...td, whiteSpace: "nowrap" }}>{r.구분}</td>
                     <td style={{ ...td, minWidth: 170, whiteSpace: "pre-wrap" }}>{r.내용}</td>
                     <td style={{ ...td, whiteSpace: "nowrap" }}>{r.업체}</td>
                     <td style={{ ...td, whiteSpace: "nowrap" }}>{r.업체번호}</td>
-                    <td style={{ ...td, textAlign: "right", fontFamily: MONO }}>{won(num(r.공가))}</td>
-                    <td style={{ ...td, textAlign: "right", fontFamily: MONO, color: C.sub }}>{won(repairVat(r))}</td>
-                    <td style={{ ...td, textAlign: "right", fontFamily: MONO, fontWeight: 800 }}>{won(num(r.공가) + repairVat(r))}</td>
+                    <td style={{ ...td, textAlign: "right", fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{won(num(r.공가))}</td>
+                    <td style={{ ...td, textAlign: "right", fontFamily: MONO, fontVariantNumeric: "tabular-nums", color: C.sub }}>{won(repairVat(r))}</td>
+                    <td style={{ ...td, textAlign: "right", fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontWeight: 800 }}>{won(num(r.공가) + repairVat(r))}</td>
                     <td style={{ ...td, minWidth: 150 }}>{r.비고 && <div style={{ marginBottom: 4 }}>{r.비고}</div>}<Evidence files={r.files} canEdit={canEdit} compact onAdd={(fs) => addFiles("repairs", r, fs)} onRemove={(m) => rmFile("repairs", r, m)} /></td>
                   </tr>
                 ))}
@@ -808,7 +810,7 @@ function Ledger({ v, co, appDriver, linkRaw, drivers, canEdit, by, narrow, purpo
                 <td style={{ ...td, textAlign: "right", fontFamily: MONO, fontWeight: 800 }}>{won(sum.g)}</td>
                 <td style={{ ...td, textAlign: "right", fontFamily: MONO, fontWeight: 800 }}>{won(sum.v)}</td>
                 <td style={{ ...td, textAlign: "right", fontFamily: MONO, fontWeight: 900 }}>{won(sum.g + sum.v)}</td>
-                <td style={{ ...td, color: C.mute, fontSize: 13.5, fontWeight: 600 }}>{canEdit ? "줄을 누르면 수정" : ""}</td>
+                <td style={{ ...td, color: C.mute, fontSize: 14, fontWeight: 600 }}>{canEdit ? "줄을 누르면 수정" : ""}</td>
               </tr></tfoot>
             </table>
           </div>
@@ -817,7 +819,7 @@ function Ledger({ v, co, appDriver, linkRaw, drivers, canEdit, by, narrow, purpo
 
       {/* 구조변경 */}
       <Section id="vl-structures" title="구조변경 이력" code="STRUCTURE" right={canEdit && <Btn kind="primary" onClick={() => setEditor({ kind: "structures", row: null })}>+ 구조변경 추가</Btn>}>
-        {HistTable({ kind: "structures", rows: v.structures || [], cols: [["일자", "일자", { whiteSpace: "nowrap", fontFamily: MONO, fontSize: 14 }], ["내용", "내용", { minWidth: 260, whiteSpace: "pre-wrap" }], ["업체", "업체", { whiteSpace: "nowrap" }], ["금액", "금액", { textAlign: "right", fontFamily: MONO }], ["비고", "비고"]] })}
+        {HistTable({ kind: "structures", rows: v.structures || [], cols: [["일자", "일자", { whiteSpace: "nowrap", fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 14 }], ["내용", "내용", { minWidth: 260, whiteSpace: "pre-wrap" }], ["업체", "업체", { whiteSpace: "nowrap" }], ["금액", "금액", { textAlign: "right", fontFamily: MONO, fontVariantNumeric: "tabular-nums" }], ["비고", "비고"]] })}
       </Section>
 
       {/* 기사 탑승 */}
@@ -832,12 +834,12 @@ function Ledger({ v, co, appDriver, linkRaw, drivers, canEdit, by, narrow, purpo
             : <span style={{ fontSize: 14.5, color: C.mute }}>{appDriver ? `탑승 이력 없음 · 기사관리 등록 기사: ${appDriver.이름} ${appDriver.전화번호 || ""}` : "배정된 기사가 없습니다"}</span>}
         </div>
         {HistTable({ kind: "driverHist", rows: v.driverHist || [], cols: [["시작", "시작", { whiteSpace: "nowrap", fontFamily: MONO, fontSize: 14 }], ["종료", "종료", { whiteSpace: "nowrap", fontFamily: MONO, fontSize: 14 }], ["이름", "기사", { whiteSpace: "nowrap", fontWeight: 800 }], ["연락처", "연락처", { whiteSpace: "nowrap" }], ["비고", "비고"]],
-          render: (r) => <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}><b style={{ fontSize: 15.5, color: C.navy }}>{r.이름}</b><a href={`tel:${r.연락처}`} onClick={(e) => e.stopPropagation()} style={{ fontSize: 14, color: C.blue }}>{r.연락처}</a><span style={{ marginLeft: "auto", fontFamily: MONO, fontSize: 13.5, color: r.종료 ? C.sub : C.blue, fontWeight: 800 }}>{r.시작} ~ {r.종료 || "현재"}</span>{r.비고 && <div style={{ width: "100%", fontSize: 13.5, color: C.sub }}>{r.비고}</div>}</div> })}
+          render: (r) => <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}><b style={{ fontSize: 15.5, color: C.navy }}>{r.이름}</b><a href={`tel:${r.연락처}`} onClick={(e) => e.stopPropagation()} style={{ fontSize: 14, color: C.blue }}>{r.연락처}</a><span style={{ marginLeft: "auto", fontFamily: MONO, fontSize: 14, color: r.종료 ? C.sub : C.blue, fontWeight: 800 }}>{r.시작} ~ {r.종료 || "현재"}</span>{r.비고 && <div style={{ width: "100%", fontSize: 14, color: C.sub }}>{r.비고}</div>}</div> })}
       </Section>
 
       {/* 변경·기타 이력 */}
       <Section id="vl-logs" title="기본정보 변경·기타 이력" code="LOG" right={canEdit && <Btn kind="primary" onClick={() => setEditor({ kind: "logs", row: null })}>+ 이력 추가</Btn>}>
-        {HistTable({ kind: "logs", rows: v.logs || [], cols: [["일자", "일자", { whiteSpace: "nowrap", fontFamily: MONO, fontSize: 14 }], ["내용", "내용", { whiteSpace: "nowrap", fontWeight: 800 }], ["구분", "변경/이력", { whiteSpace: "nowrap", textAlign: "center" }], ["날짜", "날짜", { whiteSpace: "nowrap", fontFamily: MONO, fontSize: 14 }], ["세부내용", "세부내용", { minWidth: 240, whiteSpace: "pre-wrap" }], ["비고", "비고", { color: C.sub }]] })}
+        {HistTable({ kind: "logs", rows: v.logs || [], cols: [["일자", "일자", { whiteSpace: "nowrap", fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 14 }], ["내용", "내용", { whiteSpace: "nowrap", fontWeight: 800 }], ["구분", "변경/이력", { whiteSpace: "nowrap", textAlign: "center" }], ["날짜", "날짜", { whiteSpace: "nowrap", fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 14 }], ["세부내용", "세부내용", { minWidth: 240, whiteSpace: "pre-wrap" }], ["비고", "비고", { color: C.sub }]] })}
       </Section>
 
       <style>{VL_CSS}</style>
@@ -894,7 +896,7 @@ function LedgerDrawer({ onClose, onDouble, narrow, children }) {
 }
 
 function RowActs({ onEdit, onDel }) {
-  const b = { height: 32, padding: "0 10px", borderRadius: 8, fontSize: 13.5, fontWeight: 800, cursor: "pointer", background: "#fff" };
+  const b = { height: 32, padding: "0 10px", borderRadius: 8, fontSize: 14, fontWeight: 800, cursor: "pointer", background: "#fff" };
   return (
     <span style={{ display: "inline-flex", gap: 4 }} onClick={(e) => e.stopPropagation()}>
       <button type="button" onClick={onEdit} style={{ ...b, border: `1px solid #D5DDEA`, color: C.mid }}>수정</button>
@@ -909,7 +911,7 @@ function RowActs({ onEdit, onDel }) {
 // 기존 "차량 관리"(기사앱 점검·소모품) 칸 + 태진 "차량 전체 현황" 칸
 const COLS = [
   // ⭐ 2026-11-02 담당자는 순번 바로 뒤(고정 칸) — 누가 맡은 차량인지 먼저 보이게
-  ["순번", "순번", 56], ["담당자", "담당자", 96], ["차량번호", "차량번호", 150], ["용도", "차량종류", 110], ["톤수", "톤수", 70], ["회사", "회사", 110], ["현재기사", "현재 기사", 118], ["기사연락처", "기사 연락처", 136], ["기사변경일", "기사 변경일", 116],
+  ["순번", "순번", 56], ["담당자", "담당자", 96], ["차량번호", "차량번호", 150], ["용도", "차량종류", 110], ["톤수", "톤수", 70], ["회사", "회사", 110], ["현재기사", "현재 기사", 118], ["가입유형", "가입유형", 96], ["기사연락처", "기사 연락처", 136], ["기사변경일", "기사 변경일", 116],
   ["차대번호", "차대번호", 180], ["보험사", "보험사", 90], ["유류카드번호", "유류", 120], ["하이패스", "하이패스", 100], ["GPS", "GPS", 80], ["덮개", "덮개", 70], ["박스", "박스", 90], ["차주명", "차주명", 90],
   ["모델연식", "모델·연식", 140], ["주행거리", "주행거리", 110], ["엔진오일", "엔진오일", 100], ["점검알림", "점검 알림", 200],
 ];
@@ -943,22 +945,23 @@ function VehicleCard({ r, onOpen, onSelect, touch = false, hot = false }) {
       title={touch ? "" : "두 번 누르면 차량 정보 · 수정 패널이 열립니다"} className={`vl-card${hot ? " vl-hot" : ""}`} style={{ textAlign: "left", border: `1px solid ${hot ? C.mid : C.line}`, background: "#fff", borderRadius: 14, padding: 14, cursor: "pointer", display: "flex", flexDirection: "column", gap: 9, minWidth: 0, width: "100%" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", minWidth: 0 }}>
         <Plate text={r.차량번호} />
-        {r.용도 && <span style={{ padding: "2px 8px", borderRadius: 6, background: C.pale, color: C.blue, fontSize: 13, fontWeight: 800, whiteSpace: "nowrap" }}>{r.용도}</span>}
-        {r.톤수 && <span style={{ fontSize: 13.5, color: C.sub, fontWeight: 700, whiteSpace: "nowrap" }}>{r.톤수}</span>}
-        {r.virtual && <span title="아직 대장에 아무것도 저장하지 않은 차량" style={{ marginLeft: "auto", padding: "2px 7px", borderRadius: 6, border: `1px dashed ${C.sky}`, color: C.blue, fontSize: 12.5, fontWeight: 800, whiteSpace: "nowrap" }}>대장 미작성</span>}
+        {r.용도 && <span style={{ padding: "2px 8px", borderRadius: 6, background: C.pale, color: C.blue, fontSize: 14, fontWeight: 800, whiteSpace: "nowrap" }}>{r.용도}</span>}
+        {r.톤수 && <span style={{ fontSize: 14, color: C.sub, fontWeight: 700, whiteSpace: "nowrap" }}>{r.톤수}</span>}
+        {r.virtual && <span title="아직 대장에 아무것도 저장하지 않은 차량" style={{ marginLeft: "auto", padding: "2px 7px", borderRadius: 6, border: `1px dashed ${C.sky}`, color: C.blue, fontSize: 14, fontWeight: 800, whiteSpace: "nowrap" }}>대장 미작성</span>}
       </div>
       <div style={{ display: "flex", alignItems: "baseline", gap: 8, fontSize: 14.5, color: r.현재기사 ? C.navy : C.mute, fontWeight: 800, minWidth: 0 }}>
         <span style={{ whiteSpace: "nowrap" }}>{r.현재기사 || "기사 미배정"}</span>
-        {r.appJoined && <span style={{ padding: "1px 7px", borderRadius: 6, background: C.mid, color: "#fff", fontSize: 12, fontWeight: 800, whiteSpace: "nowrap" }}>앱 가입</span>}
+        {r.가입유형 && <span title="가입유형" style={{ padding: "1px 8px", borderRadius: 6, background: r.가입유형 === "지입" ? C.mid : C.pale, color: r.가입유형 === "지입" ? "#fff" : C.blue, fontSize: 14, fontWeight: 800, whiteSpace: "nowrap" }}>{r.가입유형}</span>}
+        {r.appJoined && <span style={{ padding: "1px 7px", borderRadius: 6, background: C.mid, color: "#fff", fontSize: 14, fontWeight: 800, whiteSpace: "nowrap" }}>앱 가입</span>}
         {r.기사연락처 && <span style={{ color: C.blue, fontWeight: 600, whiteSpace: "nowrap", ...TAB }}>{r.기사연락처}</span>}
-        <span style={{ marginLeft: "auto", fontSize: 13.5, color: C.sub, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{[r.담당자 && `담당 ${r.담당자}`, r.회사].filter(Boolean).join(" · ")}</span>
+        <span style={{ marginLeft: "auto", fontSize: 14, color: C.sub, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{[r.담당자 && `담당 ${r.담당자}`, r.회사].filter(Boolean).join(" · ")}</span>
       </div>
       <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>{EQUIP.map((e) => <EqDot key={e.key} on={hasEquip(r[e.key])} label={e.label} />)}</div>
-      <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13.5, color: C.sub, fontWeight: 700, borderTop: "1px dashed #E3E8F0", paddingTop: 8 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14, color: C.sub, fontWeight: 700, borderTop: "1px dashed #E3E8F0", paddingTop: 8 }}>
         <span style={{ fontFamily: MONO, ...TAB }}>{r.cs?.odometer ? `${r.cs.odometer.toLocaleString()}km` : "주행거리 -"}</span>
         <span style={{ marginLeft: "auto" }}>{alerts?.length ? <span style={{ padding: "2px 8px", borderRadius: 6, background: r.cs.over ? C.navy : "#DCE6F7", color: r.cs.over ? "#fff" : C.mid, fontWeight: 800 }}>점검 {alerts.length}</span> : r.linkRaw ? (r.cs?.setupDone || r.cs?.odometer ? "점검 정상" : "점검 미설정") : "점검 데이터 없음"}</span>
         {r.yearCost > 0 && <span style={{ fontFamily: MONO, color: C.navy, ...TAB }}>정비 {won(r.yearCost)}</span>}
-        {touch && <span aria-hidden="true" style={{ flexShrink: 0, height: 26, padding: "0 10px", borderRadius: 8, background: C.navy, color: "#fff", fontSize: 13, fontWeight: 800, display: "inline-flex", alignItems: "center", whiteSpace: "nowrap" }}>열기 ›</span>}
+        {touch && <span aria-hidden="true" style={{ flexShrink: 0, height: 26, padding: "0 10px", borderRadius: 8, background: C.navy, color: "#fff", fontSize: 14, fontWeight: 800, display: "inline-flex", alignItems: "center", whiteSpace: "nowrap" }}>열기 ›</span>}
       </div>
     </button>
   );
@@ -1025,6 +1028,7 @@ export default function VehicleLedger({ company = "", drivers = [], canEdit = tr
       const mdl = [av.제조사 || v.제조사, av.모델 || v.모델].filter(Boolean).join(" "); const yr = av.연식 || v.연식 || "";
       return {
         ...v, virtual, linkRaw, appDriver: app, cv, cs,
+        가입유형: linkRaw?.등급 || "", // ⭐ 2026-11-05 가입유형(지입/직영/임대) 칸
         담당자: linkRaw?.담당자?.name || "", 담당자Uid: linkRaw?.담당자?.uid || "", appJoined: !!linkRaw?.uid,
         용도: v.용도 || v.차량종류 || (virtual ? cv?.적재함 || "" : ""), 톤수: v.톤수 || cv?.톤 || "",
         현재기사: cur?.이름 || app?.이름 || "", 기사연락처: cur?.연락처 || app?.전화번호 || "", 기사변경일: cur?.시작 || "", fromApp: !cur && !!app,
@@ -1178,7 +1182,7 @@ export default function VehicleLedger({ company = "", drivers = [], canEdit = tr
   // ⭐ 2026-11-02 글씨 키움(작아서 안 보인다는 의견)
   const kpiLabel = { fontFamily: MONO, fontSize: 12.5, fontWeight: 800, letterSpacing: "0.12em", color: C.sky, whiteSpace: "nowrap" };
   const kpiNum = { fontFamily: MONO, fontSize: narrow ? 24 : 30, fontWeight: 800, lineHeight: 1.1, whiteSpace: "nowrap", ...TAB };
-  const kpiSub = { fontSize: 14.5, color: "rgba(255,255,255,.78)", fontWeight: 700, wordBreak: "keep-all", lineHeight: 1.4 };
+  const kpiSub = { fontSize: 14.5, color: "rgba(255,255,255,.85)", fontWeight: 700, wordBreak: "keep-all", lineHeight: 1.4 };
   const maxP = Math.max(1, ...purposeCnt.map((x) => x[1]));
   const cardMode = narrow || mode === "card";
   const resetFilters = () => { setQ(""); setFPurpose(""); setFCo(""); setFEq(""); setFCare(false); setMine(false); };
@@ -1188,16 +1192,16 @@ export default function VehicleLedger({ company = "", drivers = [], canEdit = tr
       <div style={{ borderRadius: 18, padding: narrow ? 16 : "20px 22px", color: "#fff", background: HERO_BG, display: "flex", flexDirection: "column", gap: 16 }}>
         <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
           <div>
-            <div style={{ fontFamily: MONO, fontSize: 11, fontWeight: 800, letterSpacing: "0.26em", color: C.sky }}>FLEET · VEHICLE LEDGER</div>
+            <div style={{ fontFamily: MONO, fontSize: 12.5, fontWeight: 800, letterSpacing: "0.12em", color: C.sky }}>FLEET · VEHICLE LEDGER</div>
             <div style={{ fontSize: 23, fontWeight: 900, marginTop: 2 }}>차량 관리</div>
-            {!narrow && <div style={{ fontSize: 14, color: "rgba(255,255,255,.66)", marginTop: 2 }}>차량 전체 현황 · 장비 · 정비/구조변경/기사 탑승 이력 · 기사앱 점검·소모품을 차량별 관리대장으로 한눈에.</div>}
+            {!narrow && <div style={{ fontSize: 14, color: "rgba(255,255,255,.85)", marginTop: 2 }}>차량 전체 현황 · 장비 · 정비/구조변경/기사 탑승 이력 · 기사앱 점검·소모품을 차량별 관리대장으로 한눈에.</div>}
           </div>
-          <div style={{ fontFamily: MONO, fontSize: 12, color: "rgba(143,176,240,.8)", letterSpacing: "0.12em" }}>{co} · {today()}</div>
+          <div style={{ fontFamily: MONO, fontSize: 12.5, color: "rgba(143,176,240,.95)", letterSpacing: "0.12em" }}>{co} · {today()}</div>
         </div>
         <div style={{ display: "grid", gridTemplateColumns: narrow ? "repeat(2, minmax(0,1fr))" : "1fr 1.5fr 1fr 1fr 1.2fr", gap: 10 }}>
           <button type="button" onClick={resetFilters} style={tile(false)}>
-            <span style={kpiLabel}>TOTAL</span>{narrow && <span style={{ fontSize: 13.5, fontWeight: 800, marginTop: -2 }}>전체 차량</span>}
-            <span style={kpiNum}>{rows.length}<span style={{ fontSize: 15, marginLeft: 3, color: "rgba(255,255,255,.7)" }}>대</span></span>
+            <span style={kpiLabel}>TOTAL</span>{narrow && <span style={{ fontSize: 14, fontWeight: 800, marginTop: -2 }}>전체 차량</span>}
+            <span style={kpiNum}>{rows.length}<span style={{ fontSize: 15, marginLeft: 3, color: "rgba(255,255,255,.85)" }}>대</span></span>
             <span style={kpiSub}>{narrow ? `배정 ${assigned} · 미작성 ${virtualN}` : `기사 배정 ${assigned} · 대장 미작성 ${virtualN}`}</span>
           </button>
           <div style={{ ...tile(false), cursor: "default", gridColumn: narrow ? "1 / -1" : undefined, order: narrow ? 9 : undefined }}>
@@ -1205,27 +1209,27 @@ export default function VehicleLedger({ company = "", drivers = [], canEdit = tr
             <div style={{ display: "flex", flexDirection: "column", gap: 4, marginTop: 2 }}>
               {purposeCnt.slice(0, 4).map(([k, n]) => (
                 <button key={k} type="button" onClick={() => setFPurpose(fPurpose === k || k === "미지정" ? "" : k)} style={{ display: "grid", gridTemplateColumns: "64px 1fr 30px", alignItems: "center", gap: 8, background: "none", border: "none", padding: 0, color: "#fff", cursor: "pointer" }}>
-                  <span style={{ fontSize: 13.5, fontWeight: 800, textAlign: "left", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", color: fPurpose === k ? "#fff" : "rgba(255,255,255,.8)" }}>{k}</span>
+                  <span style={{ fontSize: 14, fontWeight: 800, textAlign: "left", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", color: fPurpose === k ? "#fff" : "rgba(255,255,255,.8)" }}>{k}</span>
                   <span style={{ height: 6, borderRadius: 3, background: "rgba(143,176,240,.18)", overflow: "hidden" }}><span style={{ display: "block", height: "100%", width: `${(n / maxP) * 100}%`, background: fPurpose === k ? "#fff" : C.sky, borderRadius: 3 }} /></span>
-                  <span style={{ fontFamily: MONO, fontSize: 13.5, fontWeight: 800, textAlign: "right" }}>{n}</span>
+                  <span style={{ fontFamily: MONO, fontSize: 14, fontWeight: 800, textAlign: "right" }}>{n}</span>
                 </button>
               ))}
               {!purposeCnt.length && <span style={kpiSub}>차량이 없습니다</span>}
             </div>
           </div>
           <button type="button" onClick={() => setFEq(fEq === "any:0" ? "" : "any:0")} style={tile(fEq === "any:0")}>
-            <span style={kpiLabel}>{narrow ? "EQUIP" : "EQUIP · 장비 미등록"}</span>{narrow && <span style={{ fontSize: 13.5, fontWeight: 800, marginTop: -2 }}>장비 미등록</span>}
-            <span style={kpiNum}>{eqMissing}<span style={{ fontSize: 15, marginLeft: 3, color: "rgba(255,255,255,.7)" }}>대</span></span>
+            <span style={kpiLabel}>{narrow ? "EQUIP" : "EQUIP · 장비 미등록"}</span>{narrow && <span style={{ fontSize: 14, fontWeight: 800, marginTop: -2 }}>장비 미등록</span>}
+            <span style={kpiNum}>{eqMissing}<span style={{ fontSize: 15, marginLeft: 3, color: "rgba(255,255,255,.85)" }}>대</span></span>
             <span style={kpiSub}>{narrow ? "빈 장비 칸 있음" : "5종 장비 중 빈 칸이 있는 차량"}</span>
           </button>
           <button type="button" onClick={() => setFCare(!fCare)} style={tile(fCare)}>
-            <span style={kpiLabel}>{narrow ? "CARE" : "CARE · 점검 필요"}</span>{narrow && <span style={{ fontSize: 13.5, fontWeight: 800, marginTop: -2 }}>점검 필요</span>}
-            <span style={kpiNum}>{careNeed}<span style={{ fontSize: 15, marginLeft: 3, color: "rgba(255,255,255,.7)" }}>대</span></span>
+            <span style={kpiLabel}>{narrow ? "CARE" : "CARE · 점검 필요"}</span>{narrow && <span style={{ fontSize: 14, fontWeight: 800, marginTop: -2 }}>점검 필요</span>}
+            <span style={kpiNum}>{careNeed}<span style={{ fontSize: 15, marginLeft: 3, color: "rgba(255,255,255,.85)" }}>대</span></span>
             <span style={kpiSub}>교체 지남 {careOver}{narrow ? "" : " · 기사앱 점검 기준"}</span>
           </button>
           <div style={{ ...tile(false), cursor: "default", background: "linear-gradient(135deg,rgba(143,176,240,.22),rgba(143,176,240,.06))" }}>
-            <span style={kpiLabel}>{narrow ? "REPAIR" : "REPAIR · 이번 달 정비비"}</span>{narrow && <span style={{ fontSize: 13.5, fontWeight: 800, marginTop: -2 }}>이번 달 정비비</span>}
-            <span style={kpiNum}>{won(monthCost)}<span style={{ fontSize: 15, marginLeft: 3, color: "rgba(255,255,255,.7)" }}>원</span></span>
+            <span style={kpiLabel}>{narrow ? "REPAIR" : "REPAIR · 이번 달 정비비"}</span>{narrow && <span style={{ fontSize: 14, fontWeight: 800, marginTop: -2 }}>이번 달 정비비</span>}
+            <span style={kpiNum}>{won(monthCost)}<span style={{ fontSize: 15, marginLeft: 3, color: "rgba(255,255,255,.85)" }}>원</span></span>
             <span style={kpiSub}>{narrow ? `올해 ${won(yearCost)}` : `${thisYear}년 누적 ${won(yearCost)}원`}</span>
           </div>
         </div>
@@ -1235,7 +1239,7 @@ export default function VehicleLedger({ company = "", drivers = [], canEdit = tr
         {/* 도구 줄 */}
         <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", padding: "12px 14px", background: "#F7F9FC", borderBottom: `1px solid #E8EDF4` }}>
           <div style={{ display: "flex", flexDirection: "column", marginRight: 6 }}>
-            <span style={{ fontFamily: MONO, fontSize: 10.5, fontWeight: 800, letterSpacing: "0.22em", color: C.mute, whiteSpace: "nowrap" }}>FLEET LIST <span style={{ fontFamily: "'Pretendard','Noto Sans KR',sans-serif", fontSize: 11.5, letterSpacing: 0, color: C.blue, fontWeight: 800, marginLeft: 6 }}>{narrow ? "· 탭하면 열기" : "· 두 번 눌러 열기"}</span></span>
+            <span style={{ fontFamily: MONO, fontSize: 12.5, fontWeight: 800, letterSpacing: "0.12em", color: C.mute, whiteSpace: "nowrap" }}>FLEET LIST <span style={{ fontFamily: "'Pretendard','Noto Sans KR',sans-serif", fontSize: 14, letterSpacing: 0, color: C.blue, fontWeight: 800, marginLeft: 6 }}>{narrow ? "· 탭하면 열기" : "· 두 번 눌러 열기"}</span></span>
             <span style={{ fontSize: 16, fontWeight: 900, color: C.navy, whiteSpace: "nowrap" }}>차량 전체 현황 <span style={{ fontFamily: MONO, color: C.blue }}>{shown.length}</span><span style={{ fontSize: 14, color: C.mute }}> / {rows.length}대</span></span>
           </div>
           <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="차량번호·기사·차주·차대번호 검색" style={{ ...inp, width: narrow ? "100%" : 250, height: 38 }} />
@@ -1251,8 +1255,8 @@ export default function VehicleLedger({ company = "", drivers = [], canEdit = tr
           {/* ⭐ 2026-11-02 내 차량만 보기 — 기사관리에서 내가 담당자로 지정된 차량 */}
           <button type="button" onClick={() => setMine(!mine)} title="기사관리에서 내가 담당자로 지정된 차량만 봅니다 (이 화면에만 적용)"
             style={{ height: 38, padding: "0 14px", borderRadius: 10, border: `1px solid ${mine ? C.mid : "#D5DDEA"}`, background: mine ? C.mid : "#fff", color: mine ? "#fff" : C.mid, fontSize: 14.5, fontWeight: 800, cursor: "pointer", whiteSpace: "nowrap", display: "inline-flex", alignItems: "center", gap: 6 }}>
-            <span style={{ width: 16, height: 16, borderRadius: 5, border: `2px solid ${mine ? "#fff" : "#9FB2D3"}`, display: "grid", placeItems: "center", fontSize: 11, lineHeight: 1 }}>{mine ? "✓" : ""}</span>
-            내 차량만 보기 <span style={{ fontFamily: MONO, fontSize: 13, opacity: 0.8 }}>{mineCount}</span>
+            <span style={{ width: 16, height: 16, borderRadius: 5, border: `2px solid ${mine ? "#fff" : "#9FB2D3"}`, display: "grid", placeItems: "center", fontSize: 14, lineHeight: 1 }}>{mine ? "✓" : ""}</span>
+            내 차량만 보기 <span style={{ fontFamily: MONO, fontSize: 14, opacity: 0.8 }}>{mineCount}</span>
           </button>
           <div style={{ marginLeft: "auto", display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
             {!narrow && (
@@ -1290,7 +1294,7 @@ export default function VehicleLedger({ company = "", drivers = [], canEdit = tr
               <table style={{ width: "100%", borderCollapse: "separate", borderSpacing: 0, minWidth: 2100 }}>
                 <thead><tr>{COLS.map(([k, l, w]) => (
                   <th key={k} onClick={() => k !== "순번" && sortBy(k)} title={k === "순번" ? "" : "누르면 정렬 (내 화면에만 적용)"} style={{ ...th, minWidth: w, cursor: k === "순번" ? "default" : "pointer", userSelect: "none", ...(k === "순번" ? { left: 0, zIndex: 3, width: 56 } : {}), ...(k === "담당자" ? { left: 56, zIndex: 3, width: 96 } : {}), ...(k === "차량번호" ? { left: 152, zIndex: 3, textAlign: "left" } : {}), ...(k === "모델연식" ? { borderLeft: "2px solid #8FB0F0" } : {}) }}>
-                    {l}{k !== "순번" && <span style={{ marginLeft: 4, fontSize: 12, color: sort.k === k ? "#fff" : "rgba(143,176,240,.55)" }}>{sort.k === k ? (sort.d > 0 ? "▲" : "▼") : "↕"}</span>}
+                    {l}{k !== "순번" && <span style={{ marginLeft: 4, fontSize: 14, color: sort.k === k ? "#fff" : "rgba(143,176,240,.95)" }}>{sort.k === k ? (sort.d > 0 ? "▲" : "▼") : "↕"}</span>}
                   </th>
                 ))}</tr></thead>
                 <tbody>
@@ -1305,19 +1309,20 @@ export default function VehicleLedger({ company = "", drivers = [], canEdit = tr
                           const eq = EQ_KEYS.includes(k);
                           const base = { ...td, whiteSpace: "nowrap", textAlign: "center", borderTop: "none", borderBottom: "1px solid #EEF1F6", ...(k === "모델연식" ? { borderLeft: "2px solid #DCE6F7" } : {}) };
                           if (k === "순번") return <td key={k} style={{ ...base, position: "sticky", left: 0, background: "inherit", zIndex: 1, width: 56, fontFamily: MONO, fontSize: 14, color: C.sub, fontWeight: 800 }}>{ri + 1}</td>;
-                          if (k === "차량번호") return <td key={k} style={{ ...base, position: "sticky", left: 152, background: "inherit", textAlign: "left", zIndex: 1, boxShadow: "1px 0 0 #EEF1F6" }}><span style={{ fontWeight: 900, fontSize: 15 }}>{val}</span>{r.virtual && <span title="관리대장 미작성 — 기사관리에 있는 지입·직영·임대 차량이지만 아직 대장에 아무것도 저장하지 않은 차량입니다. 정보를 저장하면 대장이 만들어지고 이 표시는 사라집니다." style={{ marginLeft: 6, padding: "2px 7px", borderRadius: 6, border: `1px dashed ${C.sky}`, fontSize: 12.5, color: C.blue, fontWeight: 800 }}>대장 미작성</span>}</td>;
-                          if (k === "현재기사") return <td key={k} style={{ ...base, fontWeight: 800 }}>{val || <span style={{ color: "#C0CADB" }}>-</span>}{r.appJoined && <span title="이 기사님은 기사앱에 가입했습니다(점검·소모품·제원이 기사앱과 연동)" style={{ marginLeft: 6, padding: "1px 7px", borderRadius: 6, background: C.mid, color: "#fff", fontSize: 12, fontWeight: 800 }}>앱 가입</span>}</td>;
-                          if (k === "담당자") return <td key={k} style={{ ...base, position: "sticky", left: 56, background: "inherit", zIndex: 1, width: 96, maxWidth: 96, overflow: "hidden", textOverflow: "ellipsis", fontWeight: 800, color: val ? (r.담당자Uid && r.담당자Uid === myUid ? C.blue : C.navy) : "#C0CADB" }}>{val || "-"}</td>;
-                          if (k === "용도") return <td key={k} style={base}>{val ? <span style={{ padding: "2px 8px", borderRadius: 6, background: C.pale, color: C.blue, fontSize: 13.5, fontWeight: 800 }}>{val}</span> : <span style={{ color: "#C0CADB" }}>-</span>}</td>;
+                          if (k === "차량번호") return <td key={k} style={{ ...base, position: "sticky", left: 152, background: "inherit", textAlign: "left", zIndex: 1, boxShadow: "1px 0 0 #EEF1F6" }}><span style={{ fontWeight: 900, fontSize: 15 }}>{val}</span>{r.virtual && <span title="관리대장 미작성 — 기사관리에 있는 지입·직영·임대 차량이지만 아직 대장에 아무것도 저장하지 않은 차량입니다. 정보를 저장하면 대장이 만들어지고 이 표시는 사라집니다." style={{ marginLeft: 6, padding: "2px 7px", borderRadius: 6, border: `1px dashed ${C.sky}`, fontSize: 14, color: C.blue, fontWeight: 800 }}>대장 미작성</span>}</td>;
+                          if (k === "현재기사") return <td key={k} style={{ ...base, fontWeight: 800 }}>{val || <span style={{ color: "#5B6B85" }}>-</span>}{r.appJoined && <span title="이 기사님은 기사앱에 가입했습니다(점검·소모품·제원이 기사앱과 연동)" style={{ marginLeft: 6, padding: "1px 7px", borderRadius: 6, background: C.mid, color: "#fff", fontSize: 14, fontWeight: 800 }}>앱 가입</span>}</td>;
+                          if (k === "가입유형") return <td key={k} style={base}>{val ? <span style={{ display: "inline-flex", alignItems: "center", height: 26, padding: "0 11px", borderRadius: 8, fontSize: 14, fontWeight: 800, ...(val === "지입" ? { background: C.mid, color: "#fff" } : val === "직영" ? { background: "#E6F2EF", color: "#0F5F57", border: "1px solid #B9DCD5" } : { background: C.pale, color: C.blue, border: "1px solid #C9D7EE" }) }}>{val}</span> : <span style={{ color: C.sub }}>-</span>}</td>;
+                          if (k === "담당자") return <td key={k} style={{ ...base, position: "sticky", left: 56, background: "inherit", zIndex: 1, width: 96, maxWidth: 96, overflow: "hidden", textOverflow: "ellipsis", fontWeight: 800, color: val ? (r.담당자Uid && r.담당자Uid === myUid ? C.blue : C.navy) : "#5B6B85" }}>{val || "-"}</td>;
+                          if (k === "용도") return <td key={k} style={base}>{val ? <span style={{ padding: "2px 8px", borderRadius: 6, background: C.pale, color: C.blue, fontSize: 14, fontWeight: 800 }}>{val}</span> : <span style={{ color: "#5B6B85" }}>-</span>}</td>;
                           if (eq) {
                             const on = hasEquip(val);
                             const short = /^(o|○|있음|유|y|yes)$/i.test(String(val || "").trim());
-                            return <td key={k} style={{ ...base, maxWidth: 160, overflow: "hidden", textOverflow: "ellipsis" }} title={val || ""}>{on ? (short ? <span style={{ color: C.blue, fontWeight: 900 }}>●</span> : <span style={{ fontSize: 14 }}>{val}</span>) : <span style={{ color: "#C0CADB" }}>{val || "-"}</span>}</td>;
+                            return <td key={k} style={{ ...base, maxWidth: 160, overflow: "hidden", textOverflow: "ellipsis" }} title={val || ""}>{on ? (short ? <span style={{ color: C.blue, fontWeight: 900 }}>●</span> : <span style={{ fontSize: 14 }}>{val}</span>) : <span style={{ color: "#5B6B85" }}>{val || "-"}</span>}</td>;
                           }
-                          if (k === "주행거리") return <td key={k} style={{ ...base, fontFamily: MONO, fontWeight: 800 }}>{r.cs?.odometer ? `${r.cs.odometer.toLocaleString()}km` : <span style={{ color: "#C0CADB" }}>-</span>}</td>;
-                          if (k === "엔진오일") return <td key={k} style={base}>{cc.oil ? <span style={{ padding: "2px 8px", borderRadius: 6, background: cc.oil.level === 2 ? C.navy : "#DCE6F7", color: cc.oil.level === 2 ? "#fff" : C.mid, fontSize: 13, fontWeight: 800 }}>{cc.oil.text}</span> : cc.oilLast ? <span style={{ color: C.sub, fontSize: 14 }}>정상</span> : <span style={{ color: "#C0CADB", fontSize: 14 }}>{r.linkRaw ? "기록 없음" : "-"}</span>}</td>;
-                          if (k === "점검알림") return <td key={k} style={{ ...base, textAlign: "left", maxWidth: 240, overflow: "hidden", textOverflow: "ellipsis" }}>{cc.alerts?.length ? cc.alerts.slice(0, 3).map((a) => a.label).join(" · ") + (cc.alerts.length > 3 ? ` 외 ${cc.alerts.length - 3}` : "") : <span style={{ color: "#C0CADB" }}>-</span>}</td>;
-                          return <td key={k} style={{ ...base, color: val ? C.navy : "#C0CADB", fontFamily: ["기사변경일", "차대번호"].includes(k) ? MONO : undefined, fontSize: k === "차대번호" ? 14 : 14.5 }}>{val || "-"}</td>;
+                          if (k === "주행거리") return <td key={k} style={{ ...base, fontFamily: MONO, fontWeight: 800 }}>{r.cs?.odometer ? `${r.cs.odometer.toLocaleString()}km` : <span style={{ color: "#5B6B85" }}>-</span>}</td>;
+                          if (k === "엔진오일") return <td key={k} style={base}>{cc.oil ? <span style={{ padding: "2px 8px", borderRadius: 6, background: cc.oil.level === 2 ? C.navy : "#DCE6F7", color: cc.oil.level === 2 ? "#fff" : C.mid, fontSize: 14, fontWeight: 800 }}>{cc.oil.text}</span> : cc.oilLast ? <span style={{ color: C.sub, fontSize: 14 }}>정상</span> : <span style={{ color: "#5B6B85", fontSize: 14 }}>{r.linkRaw ? "기록 없음" : "-"}</span>}</td>;
+                          if (k === "점검알림") return <td key={k} style={{ ...base, textAlign: "left", maxWidth: 240, overflow: "hidden", textOverflow: "ellipsis" }}>{cc.alerts?.length ? cc.alerts.slice(0, 3).map((a) => a.label).join(" · ") + (cc.alerts.length > 3 ? ` 외 ${cc.alerts.length - 3}` : "") : <span style={{ color: "#5B6B85" }}>-</span>}</td>;
+                          return <td key={k} style={{ ...base, color: val ? C.navy : "#5B6B85", fontFamily: ["기사변경일", "차대번호"].includes(k) ? MONO : undefined, fontSize: k === "차대번호" ? 14 : 14.5 }}>{val || "-"}</td>;
                         })}
                       </tr>
                     );

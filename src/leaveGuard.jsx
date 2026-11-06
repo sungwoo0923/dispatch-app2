@@ -8,7 +8,7 @@
 import React from "react";
 import { createRoot } from "react-dom/client";
 
-const MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
+const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
 let current = null; // { label, onSave, onDiscard }
 let opening = null;
 
@@ -38,7 +38,7 @@ function LeaveDialog({ label, onDone }) {
       <div role="dialog" aria-modal="true" style={{ width: "min(460px,100%)", borderRadius: 22, overflow: "hidden", background: "#fff", boxShadow: "0 30px 80px rgba(11,20,40,.45)", animation: "kplv .16s ease-out" }}>
         <style>{"@keyframes kplv{from{transform:translateY(8px) scale(.98);opacity:0}to{transform:none;opacity:1}}"}</style>
         <div style={{ padding: "18px 22px 14px", color: "#fff", background: "linear-gradient(120deg,#0B1428 0%,#1B2B4B 65%,#2D4C82 100%)" }}>
-          <div style={{ fontFamily: MONO, fontSize: 10, fontWeight: 800, letterSpacing: "0.26em", color: "#8FB0F0" }}>UNSAVED · 작성 중</div>
+          <div style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 10, fontWeight: 800, letterSpacing: "0.26em", color: "#8FB0F0" }}>UNSAVED · 작성 중</div>
           <div style={{ fontSize: 18, fontWeight: 900, marginTop: 2 }}>작성 중인 문서가 있습니다</div>
         </div>
         <div style={{ padding: "18px 22px 4px", fontSize: 15, lineHeight: 1.7, color: "#0F1A30", fontWeight: 700, wordBreak: "keep-all" }}>

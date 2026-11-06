@@ -11,19 +11,17 @@ import { html2canvas } from "./lazyLoad"; // ⭐ 2026-11-02 속도 — 캡처 �
 import { db, auth } from "./firebase";
 import { addDoc, collection, doc, increment, onSnapshot, query, serverTimestamp, setDoc, updateDoc, where } from "firebase/firestore";
 import { suggestRole, isExecProfile, useHrOptions } from "./hrConstants";
-import { useRoleOptions } from "./customRoles";
+import { useRoleOptions, BASE_ROLE_OPTIONS, ROLE_LABELS } from "./customRoles";
 import { sendInternalMail, useCompanyStaff, compressImage } from "./InternalMail";
 import { CustomSelect } from "./CustomSelect";
 import CustomDatePicker from "./CustomDatePicker";
 
-export const HR_ROLE_OPTIONS = [
-  ["user", "실무자"], ["admin", "관리자"], ["hrManager", "인사관리자"], ["hrAcct", "통합인사관리자"], ["test", "경리/회계"], ["viewer", "조회전용"],
-];
+export const HR_ROLE_OPTIONS = BASE_ROLE_OPTIONS.map(([k]) => [k, ROLE_LABELS[k]]);
 const roleName = (r) => (HR_ROLE_OPTIONS.find(([k]) => k === r) || [r, r || "-"])[1];
 const today = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
 const korDate = (s) => { const [y, m, d] = String(s || "").split("-").map(Number); return y ? `${y}년 ${m}월 ${d}일` : ""; };
 export const JUNIOR_RANKS = ["인턴", "사원", "주임", "대리"];
-const RANK = ["인턴", "사원", "주임", "대리", "과장", "차장", "부장", "팀장", "파트장", "이사", "전무", "대표", "대표이사"];
+const RANK = ["인턴", "사원", "주임", "대리", "과장", "차장", "부장", "팀장", "파트장", "실장", "이사", "전무", "대표", "대표이사"];
 
 function autoType(cur, next) {
   const t = [];
@@ -63,8 +61,13 @@ export default function PersonnelOrder({ company, target, myName, isSelf, revise
   const roleName = ro.label;
   // ⭐ 2026-11-01 대리까지(인턴·사원·주임·대리)는 일반 사무원 — 직책을 고르면 권한이 자동으로 일반 사무원(실무자)으로 바뀐다
   //   (회사에서 "일반사무원" 이름의 권한을 만들어 두었으면 그 권한). 권한 칸에서 다시 고르면 고른 대로 발령된다
-  const staffRole = (ro.options.find(([, l]) => /사무원/.test(String(l || ""))) || ["user"])[0];
-  const suggestR = (x) => (isExecProfile(x) && ro.execKeys[0] ? ro.execKeys[0] : JUNIOR_RANKS.includes(String(x?.position || "").trim()) ? staffRole : suggestRole(x));
+  //   ⭐ 2026-11-04 경리·인사·법무·개발은 그 부서 사무원 기본 역할(suggestRole), 추천이 그 부서에 맞지 않으면 그 부서의 첫 역할
+  const staffRole = (ro.options.find(([k, l]) => !BASE_ROLE_OPTIONS.some(([b]) => b === k) && /사무원/.test(String(l || ""))) || ["user"])[0];
+  const suggestR = (x) => {
+    const s0 = isExecProfile(x) && ro.execKeys[0] ? ro.execKeys[0] : suggestRole(x);
+    const s1 = s0 === "user" && JUNIOR_RANKS.includes(String(x?.position || "").trim()) ? staffRole : s0;
+    return ro.fits(s1, x?.team) ? s1 : ro.fits(s0, x?.team) ? s0 : ro.firstFor(x?.team);
+  };
   const hrOpt = useHrOptions(company);
   const positionsForTeam = hrOpt.positionsFor; const TEAM_OPTIONS = hrOpt.teams;
   const staff = useCompanyStaff(company);
@@ -213,7 +216,7 @@ export default function PersonnelOrder({ company, target, myName, isSelf, revise
   const selS = "h-10 w-full px-3 rounded-xl border border-[#DCE3EE] bg-white text-[13.5px] font-bold text-[#0F1A30] outline-none focus:border-[#4B6CB7]";
   const addable = (staff || []).filter((u) => !rows.some((r) => r.uid === u.uid) && u.role !== "totalMaster");
   const multi = rows.length > 1;
-  const MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
+  const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
   const cell = "border-r border-[#0F1A30]/70 px-1.5 py-2 min-w-0";
 
   return (
@@ -236,7 +239,7 @@ export default function PersonnelOrder({ company, target, myName, isSelf, revise
         )}
         <div className="rounded-2xl border border-[#E3E8F0] bg-white p-5 space-y-3">
           <div>
-            <div className="text-[11px] font-extrabold tracking-[0.22em] text-[#4B6CB7]" style={{ fontFamily: MONO }}>APPOINTMENT</div>
+            <div className="text-[11px] font-extrabold tracking-[0.22em] text-[#4B6CB7]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>APPOINTMENT</div>
             <div className="text-[17px] font-black text-[#0F1A30]">발령 공문 <span className="text-[13px] font-bold text-[#7A879C]">대상자 {rows.length}명</span></div>
           </div>
           <label className="block"><span className="text-[12.5px] font-bold text-[#7A879C]">시행일(공문 날짜)</span>
@@ -248,7 +251,7 @@ export default function PersonnelOrder({ company, target, myName, isSelf, revise
           return (
             <div key={r.uid} className="rounded-2xl border border-[#E3E8F0] bg-white p-4 space-y-3">
               <div className="flex items-start gap-2">
-                <span className="w-7 h-7 shrink-0 rounded-lg bg-[#0F1A30] text-[#8FB0F0] text-[12px] font-black grid place-items-center" style={{ fontFamily: MONO }}>{String(i + 1).padStart(2, "0")}</span>
+                <span className="w-7 h-7 shrink-0 rounded-lg bg-[#0F1A30] text-[#8FB0F0] text-[12px] font-black grid place-items-center" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{String(i + 1).padStart(2, "0")}</span>
                 <div className="flex-1 min-w-0">
                   <div className="text-[15.5px] font-black text-[#0F1A30] truncate">{u?.name || rv(r, "name") || "(불러오는 중)"}</div>
                   <div className="text-[12px] font-bold text-[#7A879C] truncate">{revFrom[r.uid] ? "발령 전" : "현재"} {c.team || "미배정"} · {c.position || "-"} · {roleName(c.role)}</div>
@@ -271,7 +274,7 @@ export default function PersonnelOrder({ company, target, myName, isSelf, revise
               </div>
               <label className="block"><span className="text-[12px] font-bold text-[#7A879C]">권한</span>
                 <CustomSelect value={r.next.role} disabled={self || r.next.role === "totalMaster"} onChange={(e) => setNextOf(r.uid, (p) => ({ ...p, role: e.target.value }))} className={`${selS} disabled:bg-[#F5F7FA] disabled:text-[#9AA9C3]`}>
-                  {[...ro.options, ...(ro.options.some(([k]) => k === c.role) ? [] : [[c.role, roleName(c.role)]])].map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+                  {ro.forTeam(r.next.team, r.next.role).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
                 </CustomSelect>
                 {self && <span className="text-[11.5px] text-[#9AA9C3]">본인 권한은 최고관리자만 바꿀 수 있습니다</span>}
               </label>

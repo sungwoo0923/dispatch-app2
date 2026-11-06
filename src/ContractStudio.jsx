@@ -3,6 +3,7 @@
 //  왼쪽: 유형 고르기 → 입력칸 → 조항(자동 셋팅, 자유롭게 수정·추가·삭제) / 오른쪽: A4 미리보기
 //  저장하면 보관함(companyContracts)에 남고, 이미지·PDF로 내려받거나 인쇄한다.
 import React from "react";
+import { runDelete } from "./DeleteProgress"; // ⭐ 2026-11-05 삭제 진행 창 + 한 번에 삭제
 import { collection, addDoc, deleteDoc, doc, onSnapshot, query, serverTimestamp, updateDoc, where } from "firebase/firestore";
 import { db } from "./firebase";
 import { kpAlert, kpConfirm } from "./kpDialog";
@@ -12,14 +13,18 @@ import { DRIVER_KINDS, LABOR_KINDS, FREE_TOPICS, contractSpec, fillVars } from "
 import { useFleetDrivers } from "./FleetPayDocs";
 import { savePng, savePdf, printA4 } from "./a4Export";
 import { fmtBizNo, fmtPhone } from "./formatInput";
+import { useCompanyRegInfo } from "./companyRegInfo";
+import { useCompanyBiz, printInfoForBiz, BizPicker } from "./companyBiz";
 
-const MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
+const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
 const card = "rounded-[18px] bg-white border border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_8px_20px_rgba(16,24,40,0.05)]";
 const inp = "h-11 w-full px-3 rounded-xl border border-[#D3DBE8] bg-white text-[14.5px] font-semibold text-[#0F1A30] placeholder:text-[#8E9BB2] outline-none focus:border-[#2D4C82] focus:ring-2 focus:ring-[#2D4C82]/15";
 const lab = "block text-[13px] font-black text-[#3A4A66] mb-1.5";
 const toInt = (v) => parseInt(String(v ?? "0").replace(/[^\d-]/g, ""), 10) || 0;
 const kstToday = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
 const korDate = (d) => (d ? `${d.slice(0, 4)}년 ${Number(d.slice(5, 7))}월 ${Number(d.slice(8, 10))}일` : "");
+// 우리 회사 칸(갑 키) ← 등록 정보 필드
+const A_KEYS = [["갑상호", "name"], ["갑대표", "ceo"], ["갑사업자번호", "bizNo"], ["갑주소", "addr"], ["갑연락처", "phone"]];
 const KIND_LABEL = { driver: "운송계약서", labor: "근로계약서", client: "거래처 운송계약서", free: "자율양식 계약서" };
 
 // 입력값 → 문서에 넣을 글자(금액은 콤마+원, 날짜는 한글)
@@ -45,11 +50,11 @@ export function ContractPaper({ title, spec, vals, clauses, paperRef }) {
     var rightL = { role: "근로자 (을)", name: vals.을상호, ceo: "", biz: vals.을사업자번호, addr: vals.을주소, tel: vals.을연락처, birth: true }; // eslint-disable-line no-var
   }
   const left0 = isClient ? { role: "갑 (화주)", name: vals.을상호, ceo: vals.을대표, biz: vals.을사업자번호, addr: vals.을주소 } : { role: "갑", name: vals.갑상호, ceo: vals.갑대표, biz: vals.갑사업자번호, addr: vals.갑주소, tel: vals.갑연락처 };
-  const right0 = isClient ? { role: "을 (운송사)", name: vals.갑상호, ceo: vals.갑대표, biz: vals.갑사업자번호, addr: vals.갑주소 } : { role: "을", name: vals.을상호, ceo: vals.을대표, biz: vals.을사업자번호, addr: vals.을주소, tel: vals.을연락처 };
+  const right0 = isClient ? { role: "을 (운송사)", name: vals.갑상호, ceo: vals.갑대표, biz: vals.갑사업자번호, addr: vals.갑주소, tel: vals.갑연락처 } : { role: "을", name: vals.을상호, ceo: vals.을대표, biz: vals.을사업자번호, addr: vals.을주소, tel: vals.을연락처 };
   const left = isLabor ? leftL : left0; const right = isLabor ? rightL : right0;
   const blocks = [
     <div key="h" style={{ textAlign: "center", borderBottom: "3px double #0F1A30", paddingBottom: 18, marginBottom: 24 }}>
-      <div style={{ fontFamily: MONO, fontSize: 10.5, letterSpacing: "0.3em", color: "#2D4C82", fontWeight: 800 }}>CONTRACT</div>
+      <div style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 10.5, letterSpacing: "0.3em", color: "#2D4C82", fontWeight: 800 }}>CONTRACT</div>
       <div style={{ fontSize: 27, fontWeight: 900, letterSpacing: "0.06em", marginTop: 6 }}>{title}</div>
     </div>,
     ...clauses.map((cl, i) => (
@@ -101,7 +106,7 @@ export function ContractPaper({ title, spec, vals, clauses, paperRef }) {
         {pages.map((idxs, pi) => (
           <div key={pi} className="kp-a4page" style={pageStyle}>
             {idxs.map((i) => blocks[i])}
-            <div style={{ position: "absolute", left: 0, right: 0, bottom: 26, textAlign: "center", fontSize: 12, color: "#5B6B85", fontFamily: MONO }}>- {pi + 1} / {pages.length} -</div>
+            <div style={{ position: "absolute", left: 0, right: 0, bottom: 26, textAlign: "center", fontSize: 12, color: "#5B6B85", fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>- {pi + 1} / {pages.length} -</div>
           </div>
         ))}
       </div>
@@ -161,25 +166,62 @@ export default function ContractStudio({ company = "", me = {} }) {
   const subKey = kind === "driver" ? sub : kind === "labor" ? laborSub : kind === "free" ? freeKey : "";
   const spec = kind ? contractSpec(kind, subKey) : null;
 
-  // 갑(우리 회사) 정보는 한 번 넣으면 기억
+  // ⭐ 2026-11-04 갑(우리 회사) 정보 — 회사관리 › 회사정보(transportApplications)에 등록된 대표자·상호·사업자번호·주소·연락처를
+  //    계약서를 새로 만들 때 / 보관함 문서를 열었는데 칸이 비어 있을 때 자동으로 채운다(사용자가 직접 입력한 값은 절대 덮지 않음).
+  //    추가 사업자가 있으면 [계약 사업자]로 고른 사업자의 정보(companySettings.bizList)로 채운다.
+  //    등록 정보가 없는 칸만 예전처럼 마지막으로 쓴 값(브라우저 기억)으로 채운다.
+  const info = useCompanyRegInfo(co);
+  const biz = useCompanyBiz(co);
+  const bizName = String(vals.계약사업자 || "").trim();
+  const companyA = React.useMemo(() => {
+    const base = { name: co, ceo: "", bizNo: "", addr: "", phone: "", fax: "", email: "", ...(info || {}) };
+    if (!base.name) base.name = co;
+    const b = bizName && bizName !== co ? biz.find(bizName) : null;
+    return b ? printInfoForBiz(base, b) : base;
+  }, [info, biz, bizName, co]);
+  const aRef = React.useRef(companyA); aRef.current = companyA;
+  const autoKeys = React.useRef(new Set()); // 자동으로 채운 칸(사용자가 고치면 빠진다) — 등록 정보가 늦게 오면 이 칸만 갱신
+  const forceA = React.useRef(false); // 계약 사업자를 바꿨을 때는 갑 칸 전체를 그 사업자 정보로
   const aKey = `kpContractA_${co}`;
   const loadA = () => { try { return JSON.parse(localStorage.getItem(aKey) || "{}"); } catch { return {}; } };
+  const fillA = (p, force = false) => {
+    const A = aRef.current; const mem = loadA(); const out = { ...p };
+    A_KEYS.forEach(([k, f]) => {
+      const raw = String(A[f] || "").trim();
+      const reg = raw && k === "갑사업자번호" ? fmtBizNo(raw) : raw && k === "갑연락처" ? fmtPhone(raw) : raw;
+      const empty = !String(out[k] || "").trim();
+      if (force) { out[k] = reg; autoKeys.current.add(k); return; }
+      if (!empty && !autoKeys.current.has(k)) return; // 사용자가 입력한 값 — 그대로
+      const next = reg || (empty ? String(mem[k] || "").trim() : out[k]) || (k === "갑상호" ? co : "");
+      if (next) { out[k] = next; autoKeys.current.add(k); }
+    });
+    return out;
+  };
   const resetDoc = React.useCallback(() => {
     if (!spec) return;
-    const a = loadA();
     const base = { 계약일: kstToday(), 시작일: kstToday() };
     // 거래처 계약서는 우리 회사가 "을(운송사)" 칸 → 갑상호 키를 그대로 운송사로 쓴다
-    setVals({ ...base, 갑상호: a.갑상호 || co, 갑대표: a.갑대표 || "", 갑사업자번호: a.갑사업자번호 || "", 갑주소: a.갑주소 || "", 갑연락처: a.갑연락처 || "" });
+    autoKeys.current = new Set();
+    setVals(fillA(base));
     setClauses(spec.clauses.map((x) => ({ ...x })));
     setEditId(null);
   }, [tab, subKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  // 등록 정보가 늦게 도착하거나 계약 사업자를 바꾸면 → 자동으로 채운 칸·빈 칸만 다시 채움
+  React.useEffect(() => {
+    const force = forceA.current; forceA.current = false;
+    setVals((p) => fillA(p, force));
+  }, [companyA]); // eslint-disable-line react-hooks/exhaustive-deps
   React.useEffect(() => { resetDoc(); }, [resetDoc]);
   React.useEffect(() => {
     if (!co) return undefined;
     return onSnapshot(query(collection(db, "companyContracts"), where("companyName", "==", co)), (s) => setSaved(s.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => (b.updatedAt?.seconds || 0) - (a.updatedAt?.seconds || 0))), () => setSaved([]));
   }, [co]);
 
-  const set = (k, v) => setVals((p) => ({ ...p, [k]: v }));
+  const set = (k, v) => { autoKeys.current.delete(k); setVals((p) => ({ ...p, [k]: v })); };
+  const pickBiz = (n) => {
+    if (String(n || "").trim() === bizName) return;
+    forceA.current = true; setVals((p) => ({ ...p, 계약사업자: n }));
+  };
   const setCl = (i, patch) => setClauses((p) => p.map((x, j) => (j === i ? { ...x, ...patch } : x)));
   const moveCl = (i, d) => setClauses((p) => { const a = [...p]; const j = i + d; if (j < 0 || j >= a.length) return p; [a[i], a[j]] = [a[j], a[i]]; return a; });
   const pickDriver = (id) => {
@@ -206,9 +248,9 @@ export default function ContractStudio({ company = "", me = {} }) {
   };
   const openSaved = (d) => {
     setTab(d.kind); if (d.kind === "driver") setSub(d.sub); if (d.kind === "labor") setLaborSub(d.sub); if (d.kind === "free") setFreeKey(d.sub);
-    setTimeout(() => { setVals(d.vals || {}); setClauses(d.clauses || []); setEditId(d.id); }, 0);
+    setTimeout(() => { autoKeys.current = new Set(); setVals(fillA(d.vals || {})); setClauses(d.clauses || []); setEditId(d.id); }, 0);
   };
-  const removeSaved = async (d) => { if (await kpConfirm(`「${d.title}」(${d.party || "-"})을 보관함에서 지울까요?`, { title: "계약서 삭제", okText: "삭제", danger: true })) await deleteDoc(doc(db, "companyContracts", d.id)); };
+  const removeSaved = async (d) => { if (await kpConfirm(`「${d.title}」(${d.party || "-"})을 보관함에서 지울까요?`, { title: "계약서 삭제", okText: "삭제", danger: true })) await runDelete({ label: "계약서", task: () => deleteDoc(doc(db, "companyContracts", d.id)) }); }; // ⭐ 2026-11-05 삭제 진행 창
 
   const groups = [...new Set(FREE_TOPICS.map((t) => t.group))];
   // 📁 내 양식 — 고친 조항·기본값을 이름 붙여 저장해 두고 다음에 그대로 불러 쓴다
@@ -230,13 +272,13 @@ export default function ContractStudio({ company = "", me = {} }) {
     const t = myTpls.find((x) => x.id === id); if (!t) return;
     setClauses((t.clauses || []).map((x) => ({ ...x }))); setVals((p) => ({ ...p, ...(t.defaults || {}) }));
   };
-  const removeTpl = async (t) => { if (await kpConfirm(`내 양식 「${t.templateName}」을 지울까요?`, { title: "양식 삭제", okText: "삭제", danger: true })) await deleteDoc(doc(db, "companyContracts", t.id)); };
+  const removeTpl = async (t) => { if (await kpConfirm(`내 양식 「${t.templateName}」을 지울까요?`, { title: "양식 삭제", okText: "삭제", danger: true })) await runDelete({ label: "양식", task: () => deleteDoc(doc(db, "companyContracts", t.id)) }); }; // ⭐ 2026-11-05 삭제 진행 창
   return (
     <div className="space-y-4">
       <div className="relative overflow-hidden rounded-[22px] px-7 py-5 text-white flex items-center justify-between gap-4 flex-wrap shadow-[0_14px_32px_rgba(15,26,48,0.25)]"
         style={{ background: "linear-gradient(rgba(143,176,240,.07) 1px, transparent 1px) 0 0/22px 22px, linear-gradient(90deg, rgba(143,176,240,.07) 1px, transparent 1px) 0 0/22px 22px, linear-gradient(120deg,#0B1428 0%,#1B2B4B 60%,#2D4C82 100%)" }}>
         <div>
-          <div className="text-[12px] font-extrabold tracking-[0.26em] text-[#8FB0F0]" style={{ fontFamily: MONO }}>E-APPROVAL · CONTRACT</div>
+          <div className="text-[12px] font-extrabold tracking-[0.26em] text-[#8FB0F0]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>E-APPROVAL · CONTRACT</div>
           <div className="text-[24px] font-black mt-0.5">계약서</div>
           <div className="text-[14px] text-white/60 mt-0.5">유형을 고르면 조항이 자동으로 셋팅됩니다 · 모든 조항은 자유롭게 고칠 수 있어요 · 이미지·PDF 저장</div>
         </div>
@@ -245,7 +287,7 @@ export default function ContractStudio({ company = "", me = {} }) {
       {/* ⭐ 2026-10-31 계약서 종류 — 오른쪽 끝 버튼 대신 왼쪽 입력칸 맨 위에 드롭다운으로(시야에 바로 들어오게) */}
       <div className="w-full max-w-[560px]">
         <label className="block">
-          <span className="block text-[11px] font-extrabold tracking-[0.22em] text-[#4B6CB7] mb-1.5" style={{ fontFamily: MONO }}>CONTRACT TYPE · 계약서 종류</span>
+          <span className="block text-[11px] font-extrabold tracking-[0.22em] text-[#4B6CB7] mb-1.5" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>CONTRACT TYPE · 계약서 종류</span>
           <span className="relative block">
             <CustomSelect value={tab} onChange={(e) => setTab(e.target.value)}
               className="appearance-none w-full h-[52px] pl-12 pr-8 rounded-2xl border-2 border-[#1B2B4B] bg-white text-[16px] font-black text-[#0F1A30] outline-none shadow-[0_6px_18px_rgba(15,26,48,0.10)] focus:ring-4 focus:ring-[#2D4C82]/15 cursor-pointer">
@@ -263,11 +305,11 @@ export default function ContractStudio({ company = "", me = {} }) {
           </div>
           {docs.map((d, i) => (
             <div key={d.id} className="grid grid-cols-[60px_minmax(0,1.4fr)_minmax(0,1fr)_120px_130px_160px] gap-3 px-5 h-[56px] items-center border-b border-[#F1F4F9] hover:bg-[#F8FAFD]">
-              <span className="text-[14px] font-bold text-[#5B6B85] tabular-nums" style={{ fontFamily: MONO }}>{docs.length - i}</span>
+              <span className="text-[14px] font-bold text-[#5B6B85] tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{docs.length - i}</span>
               <button type="button" onClick={() => openSaved(d)} className="text-left text-[15px] font-black text-[#0F1A30] truncate hover:underline">{d.title}</button>
               <span className="text-[14px] font-bold text-[#1B2B4B] truncate">{d.party || "-"}</span>
               <span className="text-[13px] font-black text-[#2D4C82]">{KIND_LABEL[d.kind]}{d.kind === "driver" || d.kind === "labor" ? `·${d.sub}` : ""}</span>
-              <span className="text-[14px] text-[#3A4A66] tabular-nums" style={{ fontFamily: MONO }}>{d.contractDate || "-"}</span>
+              <span className="text-[14px] text-[#3A4A66] tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{d.contractDate || "-"}</span>
               <span className="flex gap-1.5 justify-end">
                 <button type="button" onClick={() => openSaved(d)} className="h-9 px-3.5 rounded-lg bg-[#0F1A30] text-white text-[13px] font-black">열기</button>
                 <button type="button" onClick={() => removeSaved(d)} className="h-9 px-3.5 rounded-lg border border-[#DCE3EE] text-[13px] font-bold text-[#5B6B85]">삭제</button>
@@ -336,6 +378,13 @@ export default function ContractStudio({ company = "", me = {} }) {
                 </div>
               )}
               <div className="text-[16px] font-black text-[#0F1A30] pt-1">{title}</div>
+              {biz.multi && (
+                <div className="rounded-xl border border-[#DCE3EE] bg-[#F8FAFD] p-3">
+                  <BizPicker biz={biz} value={vals.계약사업자 || ""} onChange={pickBiz} label="계약 사업자" />
+                  <div className="text-[12px] text-[#5B6B85] mt-1.5">고른 사업자의 등록 정보(상호·대표자·사업자번호·주소·연락처)로 우리 회사 칸이 채워집니다</div>
+                </div>
+              )}
+              {info && <div className="text-[12px] font-bold text-[#5B6B85] -mt-1">우리 회사 칸은 회사정보에 등록된 값으로 자동 입력됩니다 · 고쳐 쓸 수 있어요</div>}
               <div className="grid grid-cols-2 gap-x-2.5 gap-y-3">
                 {spec.fields.map((f) => (
                   <label key={f.k} className={`block min-w-0 ${f.half ? "" : "col-span-2"}`}>
@@ -373,7 +422,7 @@ export default function ContractStudio({ company = "", me = {} }) {
           <div className="min-w-0">
             <div className="sticky top-3 space-y-3">
               <div className={`${card} p-3 flex items-center gap-2 flex-wrap`}>
-                <span className="text-[12px] font-extrabold tracking-[0.2em] text-[#2D4C82] px-1" style={{ fontFamily: MONO }}>LIVE PREVIEW</span>
+                <span className="text-[12px] font-extrabold tracking-[0.2em] text-[#2D4C82] px-1" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>LIVE PREVIEW</span>
                 {editId && <span className="text-[12.5px] font-black px-2 py-1 rounded-md bg-[#EEF3FC] text-[#1B2B4B]">보관함 문서 수정 중</span>}
                 <div className="ml-auto flex gap-1.5 flex-wrap">
                   <button type="button" onClick={resetDoc} className="h-10 px-3.5 rounded-xl border border-[#DCE3EE] text-[13.5px] font-bold text-[#3A4A66]">새로 쓰기</button>

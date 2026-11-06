@@ -10,6 +10,7 @@ import { doc, getDoc, getFirestore, collection, getDocs, query, where } from "fi
 import { useNavigate, Link } from "react-router-dom";
 import { Loader2 } from "lucide-react";
 import { useMfaPrompt, mfaErrorText } from "./MfaModal";
+import { LogisMark, LogisWordmark, LogisTag } from "./brand"; // 🔷 2026-11-04 LogisWeb 로고
 
 const TOTAL_MASTER_EMAIL = "tjddnqkf@naver.com";
 
@@ -211,7 +212,9 @@ export default function TransportLogin() {
           return;
         }
 
-        if ((userData.companyName || "") !== inputCompanyName) {
+        // ⭐ 2026-11-05 부관리자(role totalMaster) — 최고관리자처럼 아무 운송사로나 들어간다(회사명·코드 확인 생략)
+        const isSubAdmin = userData.role === "totalMaster" && userData.subAdmin === true && userData.userStatus !== "banned" && userData.userStatus !== "suspended";
+        if (!isSubAdmin && (userData.companyName || "") !== inputCompanyName) {
           sessionStorage.removeItem("transportValidating");
           await signOut(auth);
           setError("회사명이 일치하지 않습니다. 가입한 회사명을 정확히 입력해주세요.");
@@ -240,7 +243,7 @@ export default function TransportLogin() {
           return;
         }
 
-        if (userData.companyCode) {
+        if (userData.companyCode && !isSubAdmin) {
           if (!inputCompanyCode) {
             sessionStorage.removeItem("transportValidating");
             await signOut(auth);
@@ -366,10 +369,10 @@ export default function TransportLogin() {
         <div className="absolute -left-24 bottom-[-180px] w-[460px] h-[460px] rounded-full" style={{ background: "radial-gradient(circle, rgba(75,108,183,0.18), transparent 65%)" }} />
 
         <div className="relative flex items-center gap-3">
-          <img src="/icons/sflow-icon.png" alt="" className="w-11 h-11 rounded-[13px] ring-1 ring-white/20" />
+          <LogisMark size={46} />
           <div>
-            <div className="text-[18px] font-black tracking-[0.18em]">KP-FLOW</div>
-            <div className="text-[10.5px] font-bold tracking-[0.3em] text-white/45">LOGISTICS DISPATCH SYSTEM</div>
+            <div className="mb-2"><LogisWordmark height={16} /></div>
+            <div className="text-[10.5px] font-bold tracking-[0.3em] text-white/45">LOGISTICS DISPATCH NETWORK</div>
           </div>
         </div>
 
@@ -377,7 +380,7 @@ export default function TransportLogin() {
           <div className="flex items-center gap-2 text-[11.5px] font-extrabold tracking-[0.28em] text-[#8FB0F0]">
             <span className="w-1.5 h-1.5 rounded-full bg-[#6E95E8] kp-pulse" /> SYSTEM ONLINE
           </div>
-          <div className="mt-4 font-black leading-none tabular-nums" style={{ fontSize: 88, letterSpacing: "-0.02em", fontFamily: "'JetBrains Mono','SF Mono',ui-monospace,monospace" }}>
+          <div className="mt-4 font-black leading-none tabular-nums" style={{ fontSize: 88, letterSpacing: "-0.02em", fontFamily: "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif", fontVariantNumeric: "tabular-nums" }}>
             {pad(now.getHours())}<span className="kp-pulse text-white/40">:</span>{pad(now.getMinutes())}
             <span className="text-[30px] text-white/35 ml-2">{pad(now.getSeconds())}</span>
           </div>
@@ -389,7 +392,7 @@ export default function TransportLogin() {
         </div>
 
         <div className="relative flex items-center gap-6 text-[11px] font-bold tracking-[0.2em] text-white/35">
-          <span>SECURE · TLS</span><span>REAL-TIME SYNC</span><span>© KP-FLOW</span>
+          <span>SECURE · TLS</span><span>REAL-TIME SYNC</span><span>© LogisWeb</span>
         </div>
       </div>
 
@@ -398,9 +401,9 @@ export default function TransportLogin() {
         <div className="kp-login-in w-full max-w-[420px]">
           {/* 모바일 머리 */}
           <div className="lg:hidden flex flex-col items-center mb-4">
-            <img src="/icons/sflow-icon.png" alt="" className="w-12 h-12 rounded-[14px] shadow-[0_10px_24px_rgba(15,26,48,0.25)]" />
-            <div className="mt-2 text-[17px] font-black tracking-[0.18em] text-[#0F1A30]">KP-FLOW</div>
-            <div className="text-[10.5px] font-bold tracking-[0.3em] text-[#9AA9C3]">LOGISTICS DISPATCH SYSTEM</div>
+            <LogisMark size={52} style={{ filter: "drop-shadow(0 10px 24px rgba(15,26,48,0.25))" }} />
+            <div className="mt-2.5"><LogisTag height={13} chip /></div>
+            <div className="mt-1.5 text-[10.5px] font-bold tracking-[0.3em] text-[#9AA9C3]">LOGISTICS DISPATCH NETWORK</div>
           </div>
 
           <div className="bg-white rounded-[26px] border border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_24px_60px_rgba(15,26,48,0.10)] px-5 sm:px-10 pt-6 sm:pt-9 pb-6 sm:pb-8">
@@ -410,7 +413,7 @@ export default function TransportLogin() {
 
             {field("code", "회사코드", (
               <input type="text" placeholder="승인 후 발급된 코드" value={companyCode} onChange={(e) => setCompanyCode(e.target.value.toUpperCase())} onKeyDown={handleKeyDown}
-                className={`${inputCls} ${companyCode ? "tracking-[0.12em] font-mono" : ""}`} />
+                className={`${inputCls} ${companyCode ? "tracking-[0.12em] tabular-nums" : ""}`} />
             ))}
             {field("company", "회사명", (
               <input type="text" placeholder="가입한 회사명" value={companyName} onChange={(e) => setCompanyName(e.target.value)} onKeyDown={handleKeyDown} className={inputCls} />
@@ -436,10 +439,7 @@ export default function TransportLogin() {
                 <span className="text-[#C2453D] font-black">!</span><span>{error}</span>
               </div>
             )}
-            {error && previewInfo && (
-              <button type="button" onClick={() => navigate(`/preview?co=${encodeURIComponent(previewInfo.co)}&plan=${previewInfo.plan}`)}
-                className="w-full h-11 mb-4 rounded-xl bg-[#1B2B4B] text-white text-[13.5px] font-black">승인 전 둘러보기</button>
-            )}
+            {/* ⭐ 2026-11-04 승인 전 둘러보기 없앰 */}
             {msg && (
               <div className="text-[13px] font-semibold text-[#0F1A30] mb-4 bg-[#F2F6FC] border border-[#D9E3F3] rounded-xl px-3.5 py-2.5">{msg}</div>
             )}
@@ -465,7 +465,7 @@ export default function TransportLogin() {
               <Link to="/login" className="h-11 rounded-xl border border-[#E3E8F0] text-[#5B6B85] text-[13.5px] font-bold flex items-center justify-center hover:bg-[#F5F7FB] transition">다른 유형 로그인</Link>
             </div>
           </div>
-          <div className="text-center mt-5 text-[11px] font-bold tracking-[0.2em] text-[#B4BFD0]">KP-FLOW · LOGISTICS</div>
+          <div className="flex justify-center mt-5 text-[11px] font-bold tracking-[0.2em] text-[#B4BFD0]"><LogisTag height={7.5} chip text="LOGISTICS" /></div>
         </div>
       </div>
 
@@ -483,7 +483,7 @@ export default function TransportLogin() {
                 <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#8FB0F0" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" /><path d="m9 12 2 2 4-4" /></svg>
               </div>
               <div className="mt-3 text-[24px] font-black tracking-tight">로그인 완료</div>
-              <div className="text-[13px] text-white/55 mt-0.5">{companyName || "KP-FLOW"}</div>
+              <div className="text-[13px] text-white/55 mt-0.5">{companyName || "LogisWeb"}</div>
 
               {/* 큰 디지털 카운트 */}
               <div className="mt-7 flex flex-col items-center">
@@ -496,7 +496,7 @@ export default function TransportLogin() {
                     <defs><linearGradient id="kpRing" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stopColor="#8FB0F0" /><stop offset="100%" stopColor="#ffffff" /></linearGradient></defs>
                   </svg>
                   <div className="absolute inset-0 flex flex-col items-center justify-center">
-                    <div key={countdown} className="kp-login-in font-black tabular-nums leading-none" style={{ fontSize: 60, fontFamily: "'JetBrains Mono','SF Mono',ui-monospace,monospace" }}>{pad(countdown)}</div>
+                    <div key={countdown} className="kp-login-in font-black tabular-nums leading-none" style={{ fontSize: 60, fontFamily: "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif", fontVariantNumeric: "tabular-nums" }}>{pad(countdown)}</div>
                     <div className="text-[10px] font-extrabold tracking-[0.3em] text-white/40 mt-1">SEC</div>
                   </div>
                 </div>
@@ -543,7 +543,7 @@ export default function TransportLogin() {
                   ref={imeFocusRef}
                   value={codeLookupQ}
                   onChange={e => setCodeLookupQ(e.target.value)}
-                  onKeyDown={e => { if (e.key === "Enter") searchCompanyCode(); }}
+                  onKeyUp={e => { if (e.key === "Enter") searchCompanyCode(); }}
                   placeholder="회사명을 입력하세요"
                   className="flex-1 border border-gray-200 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:border-[#1B2B4B] transition"
                 />
@@ -565,7 +565,7 @@ export default function TransportLogin() {
                     <div key={`${r.companyName}|${r.companyCode}`} className="flex items-center justify-between px-4 py-3 border-b border-gray-50 last:border-b-0 hover:bg-blue-50/30">
                       <div>
                         <div className="text-[13px] font-semibold text-gray-800">{r.companyName}</div>
-                        <div className="text-[12px] font-mono text-[#1B2B4B] font-bold">{r.companyCode}</div>
+                        <div className="text-[12px] tabular-nums text-[#1B2B4B] font-bold">{r.companyCode}</div>
                       </div>
                       <button
                         onClick={() => {

@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
+import { runDelete } from "./DeleteProgress"; // ⭐ 2026-11-05 삭제 진행 창 + 한 번에 삭제
 import { workWindow } from "./autoAttendance";
 import { collection, deleteDoc, doc, onSnapshot, query, setDoc, where, addDoc, arrayUnion, getDocs } from "firebase/firestore";
 import { geocodeAddress } from "./tmapFareCalc";
@@ -12,12 +13,14 @@ import {
   approveChangeReq, rejectChangeReq, approveCheckInReq, rejectCheckInReq, submitChangeReq, submitCheckInReq,
 } from "./attendanceApproval";
 import { CustomSelect } from "./CustomSelect";
+import CustomDatePicker from "./CustomDatePicker"; // 📅 2026-11-04 날짜·시간 입력은 프로그램 달력/드롭다운으로
+import { HourMinuteSelect } from "./kpTimePick";
 
 // ⭐ 2026-11-01 출근기록부 리디자인 — 네이비 히어로 + 오늘 KPI + 월간 그리드(이름 고정 · 오늘 강조 · 공휴일 빨간색+명칭)
 //  권한: 출·퇴근 기록 직접 수정은 인사팀만(최고관리자 포함), 본인 기록은 누구나 "수정 요청" → 인사팀 승인
 //        인사팀 본인 요청은 임원에게(임원 1명 승인으로 종결) — 로직은 attendanceApproval.js
-const ADMIN_ROLES = ["totalMaster", "admin"];
-const MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
+const ADMIN_ROLES = ["totalMaster", "admin", "allMgr"];
+const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
 const WD = ["일", "월", "화", "수", "목", "금", "토"];
 const LEAVE_SET = new Set(["연차", "오전반차", "오후반차", "병가", "경조사", "휴직", "육아휴직", "출산휴가"]);
 const WORK_SET = new Set(["출근", "외근", "조퇴"]);
@@ -494,7 +497,7 @@ export default function AttendanceBoard({ userCompany, role, user }) {
     setNewHolidayDate("");
     setNewHolidayLabel("");
   };
-  const removeHoliday = async (id) => { await deleteDoc(doc(db, "holidays", id)); };
+  const removeHoliday = async (id) => { await runDelete({ label: "휴일", task: () => deleteDoc(doc(db, "holidays", id)) }); }; // ⭐ 2026-11-05 삭제 진행 창
 
   // ─── 월간 집계(직원별) ─────────────────────────────────────────
   const monthAgg = useMemo(() => {
@@ -554,16 +557,16 @@ export default function AttendanceBoard({ userCompany, role, user }) {
         <div className="relative px-5 md:px-7 pt-5 pb-5">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div className="min-w-0">
-              <div className="text-[11.5px] font-extrabold tracking-[0.3em] text-[#9FB4DA]" style={{ fontFamily: MONO }}>ATTENDANCE · {year}.{String(month).padStart(2, "0")}</div>
+              <div className="text-[11.5px] font-extrabold tracking-[0.3em] text-[#9FB4DA]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>ATTENDANCE · {year}.{String(month).padStart(2, "0")}</div>
               <h2 className="mt-1.5 text-[26px] md:text-[28px] font-black tracking-tight">출근기록부</h2>
               <div className="mt-1 text-[13.5px] text-white/65 font-semibold">
-                {company || "회사"} · 직원 {activeEmployees.length}명 · 오늘 <span style={{ fontFamily: MONO }}>{todayDateStr.replace(/-/g, ".")}</span> ({todayWd}){todayOff && <span className="ml-1.5 text-[#FFB4A8]">{getHolidayLabel(todayDateStr, holidays) || "주말"}</span>}
+                {company || "회사"} · 직원 {activeEmployees.length}명 · 오늘 <span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{todayDateStr.replace(/-/g, ".")}</span> ({todayWd}){todayOff && <span className="ml-1.5 text-[#FFB4A8]">{getHolidayLabel(todayDateStr, holidays) || "주말"}</span>}
               </div>
             </div>
             <div className="flex items-center gap-1.5 bg-white/[0.08] border border-white/15 rounded-2xl p-1.5">
               <button onClick={() => goMonth(-1)} aria-label="이전 달" className="w-10 h-10 rounded-xl hover:bg-white/10 text-[18px] font-black">‹</button>
               <div className="px-2 text-center min-w-[120px]">
-                <div className="text-[18px] font-black tabular-nums" style={{ fontFamily: MONO }}>{year}.{String(month).padStart(2, "0")}</div>
+                <div className="text-[18px] font-black tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{year}.{String(month).padStart(2, "0")}</div>
                 <div className="text-[11px] text-white/55 font-bold">{year}년 {month}월</div>
               </div>
               <button onClick={() => goMonth(1)} aria-label="다음 달" className="w-10 h-10 rounded-xl hover:bg-white/10 text-[18px] font-black">›</button>
@@ -581,9 +584,9 @@ export default function AttendanceBoard({ userCompany, role, user }) {
               <div key={t.k} className="rounded-2xl bg-white/[0.07] border border-white/[0.12] px-4 py-3 min-w-0 backdrop-blur-sm">
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-[13px] font-bold text-white/70 whitespace-nowrap">{t.l}</span>
-                  <span className="text-[9.5px] font-extrabold tracking-[0.2em] text-white/35" style={{ fontFamily: MONO }}>{t.k}</span>
+                  <span className="text-[9.5px] font-extrabold tracking-[0.2em] text-white/35" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{t.k}</span>
                 </div>
-                <div className={`mt-1 text-[30px] leading-none font-black tabular-nums ${t.warn ? "text-[#FFB4A8]" : ""}`} style={{ fontFamily: MONO }}>
+                <div className={`mt-1 text-[30px] leading-none font-black tabular-nums ${t.warn ? "text-[#FFB4A8]" : ""}`} style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>
                   {t.v}<span className="ml-1 text-[14px] font-bold text-white/55">{t.u}</span>
                 </div>
                 {t.bar != null ? (
@@ -643,12 +646,12 @@ export default function AttendanceBoard({ userCompany, role, user }) {
       {/* 출근지 설정 패널 */}
       {isAdmin && showOfficePanel && (
         <section className="bg-white rounded-2xl border border-[#E3E8F0] p-5">
-          <div className="text-[11px] font-extrabold tracking-[0.24em] text-[#8A97AD]" style={{ fontFamily: MONO }}>OFFICE · GEOFENCE</div>
+          <div className="text-[11px] font-extrabold tracking-[0.24em] text-[#8A97AD]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>OFFICE · GEOFENCE</div>
           <div className="text-[16px] font-black text-[#0F1A30] mb-3">출근지 설정</div>
           {officeLocation && (
             <div className="mb-3 px-3.5 py-2.5 rounded-xl bg-[#EEF3FC] border border-[#D5E0F3] text-[13.5px] text-[#1B2B4B]">
               <span className="font-black">현재 출근지</span> · {officeLocation.address || `${officeLocation.lat}, ${officeLocation.lng}`}
-              <span className="ml-2 text-[12px] text-[#5B6B85]" style={{ fontFamily: MONO }}>({officeLocation.lat?.toFixed?.(5)}, {officeLocation.lng?.toFixed?.(5)})</span>
+              <span className="ml-2 text-[12px] text-[#5B6B85]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>({officeLocation.lat?.toFixed?.(5)}, {officeLocation.lng?.toFixed?.(5)})</span>
             </div>
           )}
           <div className="flex flex-col gap-2.5">
@@ -707,12 +710,12 @@ export default function AttendanceBoard({ userCompany, role, user }) {
       {/* 공휴일 관리 패널 */}
       {isAdmin && showHolidayPanel && (
         <section className="bg-white rounded-2xl border border-[#E3E8F0] p-5">
-          <div className="text-[11px] font-extrabold tracking-[0.24em] text-[#8A97AD]" style={{ fontFamily: MONO }}>HOLIDAYS · {year}</div>
+          <div className="text-[11px] font-extrabold tracking-[0.24em] text-[#8A97AD]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>HOLIDAYS · {year}</div>
           <div className="text-[16px] font-black text-[#0F1A30] mb-2">대한민국 법정공휴일 <span className="text-[13px] font-bold text-[#8A97AD]">({year}년, 자동 반영)</span></div>
           <div className="flex flex-wrap gap-2 mb-5">
             {(KR_NATIONAL_HOLIDAYS[year] || []).map(([d, label]) => (
               <div key={d} className="px-2.5 py-1.5 rounded-lg bg-[#FFF1F1] border border-[#F6D2D2] text-[13px] font-bold text-[#C0352F]">
-                <span style={{ fontFamily: MONO }}>{d.slice(5).replace("-", ".")}</span> · {label}
+                <span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{d.slice(5).replace("-", ".")}</span> · {label}
               </div>
             ))}
             {!(KR_NATIONAL_HOLIDAYS[year] || []).length && (
@@ -721,14 +724,14 @@ export default function AttendanceBoard({ userCompany, role, user }) {
           </div>
           <div className="text-[15px] font-black text-[#0F1A30] mb-2">회사 지정 휴일 추가</div>
           <div className="flex flex-wrap items-center gap-2 mb-3">
-            <input type="date" value={newHolidayDate} onChange={e => setNewHolidayDate(e.target.value)} className={inputCls} />
+            <CustomDatePicker value={newHolidayDate} onChange={e => setNewHolidayDate(e.target.value)} className={`${inputCls} min-w-[150px] tabular-nums whitespace-nowrap`} showIcon />
             <input type="text" placeholder="명칭 (예: 창립기념일)" value={newHolidayLabel} onChange={e => setNewHolidayLabel(e.target.value)} className={`${inputCls} flex-1 max-w-xs`} />
             <button onClick={addHoliday} className="h-10 px-5 rounded-xl bg-[#1B2B4B] text-white text-[13.5px] font-bold">추가</button>
           </div>
           <div className="flex flex-wrap gap-2">
             {holidays.filter(h => String(h.date || "").startsWith(`${year}-`)).sort((a, b) => a.date.localeCompare(b.date)).map(h => (
               <div key={h.id} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-[#F5F7FB] border border-[#E3E8F0] text-[13px] font-bold text-[#3A4A66]">
-                <span style={{ fontFamily: MONO }}>{h.date}</span> · {h.label}
+                <span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{h.date}</span> · {h.label}
                 <button onClick={() => removeHoliday(h.id)} aria-label="삭제" className="text-[#8A97AD] hover:text-[#C0352F] font-black ml-1">×</button>
               </div>
             ))}
@@ -745,12 +748,12 @@ export default function AttendanceBoard({ userCompany, role, user }) {
           {isCurMonth && myEmp && (
             <div className="bg-white rounded-2xl border border-[#E3E8F0] px-5 py-4 flex flex-wrap items-center gap-4">
               <div className="min-w-0">
-                <div className="text-[11px] font-extrabold tracking-[0.24em] text-[#8A97AD]" style={{ fontFamily: MONO }}>MY TODAY</div>
+                <div className="text-[11px] font-extrabold tracking-[0.24em] text-[#8A97AD]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>MY TODAY</div>
                 <div className="text-[15px] font-black text-[#0F1A30]">오늘 내 출퇴근</div>
               </div>
               <div className="flex items-center gap-5">
-                <div><div className="text-[12px] font-bold text-[#8A97AD]">출근</div><div className="text-[20px] font-black text-[#0F1A30] tabular-nums" style={{ fontFamily: MONO }}>{myTodayRec?.checkInTime ? fmtTime(myTodayRec.checkInTime) : (myTodayRec?.status && myTodayRec.status !== "출근" ? myTodayRec.status : "--:--")}</div></div>
-                <div><div className="text-[12px] font-bold text-[#8A97AD]">퇴근</div><div className="text-[20px] font-black text-[#0F1A30] tabular-nums" style={{ fontFamily: MONO }}>{myTodayRec?.checkOutTime ? fmtTime(myTodayRec.checkOutTime) : "--:--"}</div></div>
+                <div><div className="text-[12px] font-bold text-[#8A97AD]">출근</div><div className="text-[20px] font-black text-[#0F1A30] tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{myTodayRec?.checkInTime ? fmtTime(myTodayRec.checkInTime) : (myTodayRec?.status && myTodayRec.status !== "출근" ? myTodayRec.status : "--:--")}</div></div>
+                <div><div className="text-[12px] font-bold text-[#8A97AD]">퇴근</div><div className="text-[20px] font-black text-[#0F1A30] tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{myTodayRec?.checkOutTime ? fmtTime(myTodayRec.checkOutTime) : "--:--"}</div></div>
                 {myTodayRec?.checkInTime && isLate(myTodayRec, myEmp) && <span className="px-2.5 py-1 rounded-full bg-[#FFF1F1] text-[#C0352F] text-[12px] font-black">지각</span>}
                 {myEmp?.workStartTime && <div className="text-[12.5px] text-[#8A97AD] font-semibold">정규 {myEmp.workStartTime} ~ {myEmp.workEndTime || "-"}</div>}
               </div>
@@ -778,12 +781,12 @@ export default function AttendanceBoard({ userCompany, role, user }) {
           )}
           {myRejectedChange.length > 0 && (
             <div className="bg-white rounded-2xl border border-[#F6D2D2] px-5 py-4">
-              <div className="text-[11px] font-extrabold tracking-[0.24em] text-[#C0352F]/70" style={{ fontFamily: MONO }}>REJECTED</div>
+              <div className="text-[11px] font-extrabold tracking-[0.24em] text-[#C0352F]/70" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>REJECTED</div>
               <div className="text-[15px] font-black text-[#0F1A30] mb-2">거절된 수정 요청</div>
               <div className="flex flex-wrap gap-2">
                 {myRejectedChange.slice(0, 6).map(req => (
                   <div key={req.id} className="px-3 py-2 rounded-xl bg-[#FFF8F8] border border-[#F6D2D2]">
-                    <div className="text-[13px] font-black text-[#3A4A66]"><span style={{ fontFamily: MONO }}>{req.date}</span> · {req.requestedStatus}</div>
+                    <div className="text-[13px] font-black text-[#3A4A66]"><span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{req.date}</span> · {req.requestedStatus}</div>
                     <div className="text-[12.5px] text-[#8A5A57]">사유: {req.rejectionReason || "사유 없음"}</div>
                   </div>
                 ))}
@@ -803,7 +806,7 @@ export default function AttendanceBoard({ userCompany, role, user }) {
         <span className="h-7 px-2.5 rounded-lg text-[12.5px] font-black inline-flex items-center gap-1.5 bg-white border border-[#E3E8F0] text-[#3A4A66]"><span className="w-2 h-2 rounded-full bg-[#E5A93B]" />요청 대기</span>
         <span className="h-7 px-2.5 rounded-lg text-[12.5px] font-black inline-flex items-center gap-1.5 bg-[#FFF4D6] border border-[#E7D3A1] text-[#6B5320]">내 기록</span>
         {monthHolidays.map(([ds, label]) => (
-          <span key={ds} className="h-7 px-2.5 rounded-lg text-[12.5px] font-bold inline-flex items-center bg-[#FFF1F1] text-[#C0352F]"><span style={{ fontFamily: MONO }}>{ds.slice(5).replace("-", ".")}</span>&nbsp;{label}</span>
+          <span key={ds} className="h-7 px-2.5 rounded-lg text-[12.5px] font-bold inline-flex items-center bg-[#FFF1F1] text-[#C0352F]"><span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{ds.slice(5).replace("-", ".")}</span>&nbsp;{label}</span>
         ))}
         <span className="ml-auto text-[13px] font-semibold text-[#5B6B85]">
           {isHrStaff
@@ -820,7 +823,7 @@ export default function AttendanceBoard({ userCompany, role, user }) {
             <thead>
               <tr>
                 <th className="sticky left-0 top-0 z-[4] bg-[#F8FAFD] px-4 py-2.5 text-left border-b border-r border-[#E3E8F0] min-w-[184px] w-[184px]">
-                  <div className="text-[10.5px] font-extrabold tracking-[0.22em] text-[#8A97AD]" style={{ fontFamily: MONO }}>STAFF</div>
+                  <div className="text-[10.5px] font-extrabold tracking-[0.22em] text-[#8A97AD]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>STAFF</div>
                   <div className="text-[14px] font-black text-[#0F1A30]">이름 <span className="text-[12px] font-bold text-[#8A97AD]">{visibleEmployees.length}명</span></div>
                 </th>
                 {dayList.map(d => {
@@ -832,7 +835,7 @@ export default function AttendanceBoard({ userCompany, role, user }) {
                   return (
                     <th key={d} title={hLabel ? `공휴일 · ${hLabel}` : wd === 0 ? "일요일" : wd === 6 ? "토요일" : ""}
                       className={`sticky top-0 z-[2] px-0.5 pt-2 pb-1.5 text-center border-b border-[#E3E8F0] min-w-[40px] align-top ${isToday ? "bg-[#0F1A30] text-white" : red ? "bg-[#FFF5F5] text-[#D23F3F]" : wd === 6 ? "bg-[#F4F7FF] text-[#2D5BD8]" : "bg-[#F8FAFD] text-[#3A4A66]"}`}>
-                      <div className="text-[15px] font-black leading-none tabular-nums" style={{ fontFamily: MONO }}>{d}</div>
+                      <div className="text-[15px] font-black leading-none tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{d}</div>
                       <div className={`mt-1 text-[11px] font-bold ${isToday ? "text-white/70" : "opacity-80"}`}>{WD[wd]}</div>
                       {hLabel && <div className={`mt-0.5 mx-auto max-w-[38px] line-clamp-2 break-all text-[9.5px] font-black leading-[1.15] ${isToday ? "text-[#FFB4A8]" : "text-[#D23F3F]"}`}>{hLabel}</div>}
                     </th>
@@ -840,7 +843,7 @@ export default function AttendanceBoard({ userCompany, role, user }) {
                 })}
                 {[["출근", "WORK"], ["지각", "LATE"], ["휴가", "LEAVE"]].map(([l, k], i) => (
                   <th key={k} className={`sticky top-0 z-[2] bg-[#F8FAFD] px-1.5 py-2 text-center border-b border-[#E3E8F0] min-w-[50px] ${i === 0 ? "border-l" : ""}`}>
-                    <div className="text-[9.5px] font-extrabold tracking-[0.16em] text-[#8A97AD]" style={{ fontFamily: MONO }}>{k}</div>
+                    <div className="text-[9.5px] font-extrabold tracking-[0.16em] text-[#8A97AD]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{k}</div>
                     <div className="text-[12.5px] font-black text-[#0F1A30]">{l}</div>
                   </th>
                 ))}
@@ -866,7 +869,7 @@ export default function AttendanceBoard({ userCompany, role, user }) {
                       </div>
                       <div className="mt-0.5 text-[11.5px] font-semibold text-[#8A97AD] truncate max-w-[156px]">
                         {[emp.team, emp.position].filter(Boolean).join(" · ") || "부서 미지정"}
-                        <span className="ml-1.5 tabular-nums" style={{ fontFamily: MONO }}>{emp.workStartTime ? `${emp.workStartTime}~${emp.workEndTime || "?"}` : ""}</span>
+                        <span className="ml-1.5 tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{emp.workStartTime ? `${emp.workStartTime}~${emp.workEndTime || "?"}` : ""}</span>
                       </div>
                     </td>
                     {dayList.map(d => {
@@ -908,7 +911,7 @@ export default function AttendanceBoard({ userCompany, role, user }) {
                             disabled={!clickable}
                             onClick={() => clickable && openCell(emp, ds, effStatus, rec)}
                             className={`w-full min-w-[34px] h-9 rounded-lg text-[12px] font-black tabular-nums flex items-center justify-center relative transition ${chipCls} ${clickable ? "cursor-pointer hover:brightness-110 hover:ring-2 hover:ring-[#2D4C82]/30" : "cursor-default"}`}
-                            style={effStatus === "출근" && checkIn ? { fontFamily: MONO, fontSize: 11.5, letterSpacing: "-0.04em" } : undefined}
+                            style={effStatus === "출근" && checkIn ? { fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 11.5, letterSpacing: "-0.04em" } : undefined}
                             title={tooltip}
                           >
                             {text}
@@ -919,9 +922,9 @@ export default function AttendanceBoard({ userCompany, role, user }) {
                         </td>
                       );
                     })}
-                    <td className="px-1.5 text-center border-b border-l border-[#EEF1F6] text-[14px] font-black text-[#0F1A30] tabular-nums" style={{ fontFamily: MONO }}>{agg.work}</td>
-                    <td className={`px-1.5 text-center border-b border-[#EEF1F6] text-[14px] font-black tabular-nums ${agg.lateCount ? "text-[#E5484D]" : "text-[#C3CAD6]"}`} style={{ fontFamily: MONO }}>{agg.lateCount}</td>
-                    <td className={`px-1.5 text-center border-b border-[#EEF1F6] text-[14px] font-black tabular-nums ${agg.leave ? "text-[#7C5CC4]" : "text-[#C3CAD6]"}`} style={{ fontFamily: MONO }}>{agg.leave}</td>
+                    <td className="px-1.5 text-center border-b border-l border-[#EEF1F6] text-[14px] font-black text-[#0F1A30] tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{agg.work}</td>
+                    <td className={`px-1.5 text-center border-b border-[#EEF1F6] text-[14px] font-black tabular-nums ${agg.lateCount ? "text-[#E5484D]" : "text-[#C3CAD6]"}`} style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{agg.lateCount}</td>
+                    <td className={`px-1.5 text-center border-b border-[#EEF1F6] text-[14px] font-black tabular-nums ${agg.leave ? "text-[#7C5CC4]" : "text-[#C3CAD6]"}`} style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{agg.leave}</td>
                   </tr>
                 );
               })}
@@ -974,7 +977,7 @@ export default function AttendanceBoard({ userCompany, role, user }) {
             <div className="bg-[#0F1A30] text-white rounded-2xl shadow-2xl p-4 space-y-2.5 border border-white/10" style={{ boxShadow: `inset 4px 0 0 ${tone}, 0 20px 40px rgba(15,26,48,0.35)` }}>
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <div className="text-[10.5px] font-extrabold tracking-[0.22em] text-white/45" style={{ fontFamily: MONO }}>ATTENDANCE · {isRequest ? "REQUEST" : notif.status === "approved" ? "APPROVED" : notif.status === "rejected" ? "REJECTED" : "NOTICE"}</div>
+                  <div className="text-[10.5px] font-extrabold tracking-[0.22em] text-white/45" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>ATTENDANCE · {isRequest ? "REQUEST" : notif.status === "approved" ? "APPROVED" : notif.status === "rejected" ? "REJECTED" : "NOTICE"}</div>
                   <div className="mt-1 text-[14px] font-bold leading-snug">{notif.msg}</div>
                 </div>
                 <button onClick={dismissPcNotif} aria-label="닫기" className="text-white/60 hover:text-white font-bold text-[20px] leading-none shrink-0">×</button>
@@ -1030,7 +1033,7 @@ export default function AttendanceBoard({ userCompany, role, user }) {
       {changeRequestCell && (
         <Modal title="수정 요청" eyebrow="CHANGE · REQUEST" onClose={() => setChangeRequestCell(null)} narrow>
           <div className="space-y-4">
-            <div className="text-[13px] text-[#5B6B85]"><span style={{ fontFamily: MONO }}>{changeRequestCell.date}</span> · {changeRequestCell.emp.name} — <b className="text-[#1B2B4B]">{myApproverLabel}</b> 승인 후 반영됩니다.</div>
+            <div className="text-[13px] text-[#5B6B85]"><span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{changeRequestCell.date}</span> · {changeRequestCell.emp.name} — <b className="text-[#1B2B4B]">{myApproverLabel}</b> 승인 후 반영됩니다.</div>
             {(() => {
               const rejReason = rejectedChangeMap[`${changeRequestCell.emp.uid}_${changeRequestCell.date}`];
               return rejReason ? (
@@ -1050,11 +1053,11 @@ export default function AttendanceBoard({ userCompany, role, user }) {
               <div className="grid grid-cols-2 gap-2">
                 <label className="block">
                   <div className="text-[13px] font-bold text-[#3A4A66] mb-1">출근 시간</div>
-                  <input type="time" value={changeReqTime} onChange={e => setChangeReqTime(e.target.value)} className={`${inputCls} w-full`} />
+                  <HourMinuteSelect value={changeReqTime} onChange={e => setChangeReqTime(e.target.value)} className={`${inputCls} w-full text-left`} />
                 </label>
                 <label className="block">
                   <div className="text-[13px] font-bold text-[#3A4A66] mb-1">퇴근 시간 (선택)</div>
-                  <input type="time" value={changeReqCheckOut} onChange={e => setChangeReqCheckOut(e.target.value)} className={`${inputCls} w-full`} />
+                  <HourMinuteSelect value={changeReqCheckOut} onChange={e => setChangeReqCheckOut(e.target.value)} className={`${inputCls} w-full text-left`} />
                 </label>
               </div>
             )}
@@ -1078,7 +1081,7 @@ export default function AttendanceBoard({ userCompany, role, user }) {
           <div className="text-[13px] text-[#5B6B85] mb-4">실제 출근한 시간을 입력하세요. <b className="text-[#1B2B4B]">{myApproverLabel}</b> 승인 후 출근 처리됩니다.</div>
           <label className="block mb-4">
             <div className="text-[13px] font-bold text-[#3A4A66] mb-1">출근 시간</div>
-            <input type="time" value={requestCheckInTime} onChange={e => setRequestCheckInTime(e.target.value)} className={`${inputCls} w-full h-11 text-[16px]`} />
+            <HourMinuteSelect value={requestCheckInTime} onChange={e => setRequestCheckInTime(e.target.value)} className={`${inputCls} w-full h-11 text-[16px] text-left`} />
           </label>
           <div className="flex gap-2">
             <button onClick={() => setShowCheckInRequestModal(false)} className="flex-1 h-11 rounded-xl border border-[#DCE3EE] text-[14px] font-bold text-[#5B6B85]">취소</button>
@@ -1114,11 +1117,11 @@ export default function AttendanceBoard({ userCompany, role, user }) {
             <div className="space-y-3">
               <label className="block">
                 <div className="text-[13px] font-bold text-[#3A4A66] mb-1.5">출근 시간</div>
-                <input type="time" value={editWorkStart} onChange={e => setEditWorkStart(e.target.value)} className={`${inputCls} w-full`} />
+                <HourMinuteSelect value={editWorkStart} onChange={e => setEditWorkStart(e.target.value)} className={`${inputCls} w-full text-left`} />
               </label>
               <label className="block">
                 <div className="text-[13px] font-bold text-[#3A4A66] mb-1.5">퇴근 시간</div>
-                <input type="time" value={editWorkEnd} onChange={e => setEditWorkEnd(e.target.value)} className={`${inputCls} w-full`} />
+                <HourMinuteSelect value={editWorkEnd} onChange={e => setEditWorkEnd(e.target.value)} className={`${inputCls} w-full text-left`} />
               </label>
               <div className="flex gap-2 pt-1">
                 <button onClick={() => setEditScheduleEmp(null)} className="flex-1 h-10 rounded-xl border border-[#DCE3EE] text-[#5B6B85] text-[13.5px] font-bold">취소</button>
@@ -1135,7 +1138,7 @@ export default function AttendanceBoard({ userCompany, role, user }) {
           <div className="mb-4 px-3.5 py-3 rounded-xl bg-[#F5F7FB] border border-[#E3E8F0] flex items-center justify-between">
             <div>
               <div className="text-[12.5px] font-bold text-[#8A97AD]">정규 근무시간</div>
-              <div className="text-[15px] font-black text-[#0F1A30] mt-0.5 tabular-nums" style={{ fontFamily: MONO }}>{summaryEmp.workStartTime || "-"} ~ {summaryEmp.workEndTime || "-"}</div>
+              <div className="text-[15px] font-black text-[#0F1A30] mt-0.5 tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{summaryEmp.workStartTime || "-"} ~ {summaryEmp.workEndTime || "-"}</div>
             </div>
             <button onClick={(e) => { e.stopPropagation(); setEditWorkStart(summaryEmp.workStartTime || "09:00"); setEditWorkEnd(summaryEmp.workEndTime || "18:00"); setEditScheduleEmp(summaryEmp); }} className={btnCls(false)}>설정</button>
           </div>
@@ -1144,14 +1147,14 @@ export default function AttendanceBoard({ userCompany, role, user }) {
               summaryData.counts[key] ? (
                 <div key={key} className="flex items-center justify-between px-3 py-2.5 rounded-xl border border-[#E3E8F0]">
                   <span className={`px-2 py-0.5 rounded-md text-[12px] font-black ${ATTENDANCE_STATUS_COLOR[key]}`}>{key}</span>
-                  <span className="text-[16px] font-black text-[#0F1A30] tabular-nums" style={{ fontFamily: MONO }}>{summaryData.counts[key]}<span className="text-[12px] text-[#8A97AD] ml-0.5">일</span></span>
+                  <span className="text-[16px] font-black text-[#0F1A30] tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{summaryData.counts[key]}<span className="text-[12px] text-[#8A97AD] ml-0.5">일</span></span>
                 </div>
               ) : null
             ))}
             {summaryData.lateCount > 0 && (
               <div className="flex items-center justify-between px-3 py-2.5 rounded-xl border border-[#F6D2D2] bg-[#FFF8F8]">
                 <span className="text-[13px] font-black text-[#C0352F]">지각</span>
-                <span className="text-[16px] font-black text-[#C0352F] tabular-nums" style={{ fontFamily: MONO }}>{summaryData.lateCount}<span className="text-[12px] ml-0.5">회</span></span>
+                <span className="text-[16px] font-black text-[#C0352F] tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{summaryData.lateCount}<span className="text-[12px] ml-0.5">회</span></span>
               </div>
             )}
             {Object.keys(summaryData.counts).length === 0 && (
@@ -1171,7 +1174,7 @@ export default function AttendanceBoard({ userCompany, role, user }) {
               <label key={emp.uid} className="flex items-center gap-3 py-2.5 cursor-pointer">
                 <input type="checkbox" checked={!hiddenEmpUids.includes(emp.uid)} onChange={() => toggleHideEmp(emp.uid)} className="w-4 h-4 accent-[#1B2B4B]" />
                 <span className="flex-1 text-[14.5px] font-bold text-[#0F1A30]">{emp.name || emp.email}<span className="ml-2 text-[12px] font-semibold text-[#8A97AD]">{[emp.team, emp.position].filter(Boolean).join(" · ")}</span></span>
-                {emp.workStartTime && <span className="text-[12px] text-[#8A97AD] tabular-nums" style={{ fontFamily: MONO }}>{emp.workStartTime}~{emp.workEndTime || "-"}</span>}
+                {emp.workStartTime && <span className="text-[12px] text-[#8A97AD] tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{emp.workStartTime}~{emp.workEndTime || "-"}</span>}
               </label>
             ))}
           </div>
@@ -1191,7 +1194,7 @@ function Modal({ title, eyebrow, count, onClose, narrow = false, children }) {
       <div className={`bg-white rounded-2xl shadow-2xl w-full ${narrow ? "max-w-sm" : "max-w-md"} overflow-hidden`} onClick={e => e.stopPropagation()}>
         <div className="bg-[#0F1A30] px-5 py-3.5 flex items-center justify-between">
           <div className="min-w-0">
-            {eyebrow && <div className="text-[10.5px] font-extrabold tracking-[0.24em] text-[#9FB4DA]" style={{ fontFamily: MONO }}>{eyebrow}</div>}
+            {eyebrow && <div className="text-[10.5px] font-extrabold tracking-[0.24em] text-[#9FB4DA]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{eyebrow}</div>}
             <div className="text-white font-black text-[16px] truncate">{title}{count != null && <span className="ml-2 px-2 py-0.5 rounded-full bg-white/15 text-[12px]">{count}</span>}</div>
           </div>
           <button onClick={onClose} aria-label="닫기" className="text-white/70 hover:text-white font-bold text-[22px] leading-none">×</button>
@@ -1262,11 +1265,11 @@ function EditForm({ editCell, onSave, onCancel }) {
           <div className="grid grid-cols-2 gap-2">
             <label className="block">
               <div className="text-[13px] font-bold text-[#3A4A66] mb-1.5">출근 시간</div>
-              <input type="time" value={time} onChange={e => setTime(e.target.value)} className={`${inputCls} w-full`} />
+              <HourMinuteSelect value={time} onChange={e => setTime(e.target.value)} className={`${inputCls} w-full text-left`} />
             </label>
             <label className="block">
               <div className="text-[13px] font-bold text-[#3A4A66] mb-1.5">퇴근 시간 (선택)</div>
-              <input type="time" value={checkOutTime} onChange={e => setCheckOutTime(e.target.value)} className={`${inputCls} w-full`} />
+              <HourMinuteSelect value={checkOutTime} onChange={e => setCheckOutTime(e.target.value)} className={`${inputCls} w-full text-left`} />
             </label>
           </div>
           {(() => {

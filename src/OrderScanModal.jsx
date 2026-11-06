@@ -12,7 +12,7 @@ import { parseOrderScan, splitOrders } from "./orderScanParser";
 import { verifyAddress } from "./tmapFareCalc";
 import { fmtPhone } from "./formatInput";
 
-const MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
+const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
 const ROLE_STYLE = {
   상차: "bg-[#0F1A30] text-white", 하차: "bg-[#4B6CB7] text-white", 경로: "bg-[#2D4C82] text-white",
   시간: "bg-[#E6EEFC] text-[#1B2B4B]", 날짜: "bg-[#E6EEFC] text-[#1B2B4B]", 차량: "bg-[#DCE6F7] text-[#0F1A30]",
@@ -294,11 +294,11 @@ export default function OrderScanModal({ onClose, onApply, places: placesRaw = [
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#CFE0FF" strokeWidth="2" strokeLinecap="round"><path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2" /><path d="M3 12h18" /></svg>
           </div>
           <div className="relative min-w-0">
-            <div className="text-[10.5px] font-extrabold tracking-[0.3em] text-[#8FB0F0]" style={{ fontFamily: MONO }}>ORDER SCAN</div>
+            <div className="text-[10.5px] font-extrabold tracking-[0.3em] text-[#8FB0F0]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>ORDER SCAN</div>
             <div className="text-[18px] font-black leading-tight">오더스캔</div>
           </div>
           <div className="relative ml-4 hidden md:flex items-center gap-2 text-[12px] font-bold text-white/60">
-            <kbd className="px-2 h-6 inline-flex items-center rounded-md bg-white/10 ring-1 ring-white/15 text-white" style={{ fontFamily: MONO }}>Ctrl</kbd>+<kbd className="px-2 h-6 inline-flex items-center rounded-md bg-white/10 ring-1 ring-white/15 text-white" style={{ fontFamily: MONO }}>V</kbd>
+            <kbd className="px-2 h-6 inline-flex items-center rounded-md bg-white/10 ring-1 ring-white/15 text-white" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>Ctrl</kbd>+<kbd className="px-2 h-6 inline-flex items-center rounded-md bg-white/10 ring-1 ring-white/15 text-white" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>V</kbd>
             <span>글이나 캡처 이미지를 바로 붙여넣으세요</span>
           </div>
           <button onClick={onClose} className="relative ml-auto w-9 h-9 rounded-[11px] bg-white/10 hover:bg-white/20 text-white text-[16px]">✕</button>
@@ -322,9 +322,9 @@ export default function OrderScanModal({ onClose, onApply, places: placesRaw = [
               {err && <div className="mt-4 px-4 py-2 rounded-xl bg-[#FFF5F4] border border-[#F3D3CF] text-[12.5px] font-bold text-[#0F1A30]">! {err}</div>}
             </div>
             <div className="flex flex-col min-h-[260px] md:min-h-0 rounded-[22px] bg-white border border-[#E3E8F0] p-4 md:p-5">
-              <div className="text-[10.5px] font-extrabold tracking-[0.26em] text-[#4B6CB7]" style={{ fontFamily: MONO }}>TEXT</div>
+              <div className="text-[10.5px] font-extrabold tracking-[0.26em] text-[#4B6CB7]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>TEXT</div>
               <div className="text-[15px] font-black text-[#0F1A30]">직접 입력 · 붙여넣기</div>
-              <textarea data-os-input="1" value={typed} onChange={(e) => setTyped(e.target.value)} placeholder={"예)\n상차: 크레팜 인천 서구 원창동 381-12\n하차: 케이씨로지스 14시까지\n5톤 냉동윙 6파레트 / 운임 32만"}
+              <textarea data-os-input="1" value={typed} onChange={(e) => setTyped(e.target.value)} placeholder={"예)\n상차: ○○식품 인천 서구 ○○동 123-4\n하차: △△물류센터 14시까지\n5톤 냉동윙 6파레트 / 운임 32만"}
                 className="mt-3 flex-1 min-h-0 w-full rounded-[14px] border border-[#E3E8F0] bg-[#F7F9FC] px-4 py-3 text-[13.5px] font-semibold text-[#0F1A30] leading-relaxed resize-none outline-none focus:bg-white focus:border-[#4B6CB7] focus:ring-4 focus:ring-[#4B6CB7]/10 placeholder:text-[#A7B3C6]" />
               <button onClick={() => startText(typed)} disabled={!typed.trim()} className="mt-3 h-12 rounded-[14px] text-white text-[14.5px] font-black disabled:opacity-40 shadow-[0_12px_24px_rgba(15,26,48,0.25)]" style={{ background: "linear-gradient(120deg,#0F1A30,#2D4C82)" }}>스캔하기</button>
             </div>
@@ -335,7 +335,7 @@ export default function OrderScanModal({ onClose, onApply, places: placesRaw = [
             {/* 왼쪽: 원문(글/이미지) + 스캔 빛줄 */}
             <div className="relative min-h-0 rounded-[22px] bg-white border border-[#E3E8F0] overflow-hidden flex flex-col">
               <div className="px-5 py-3 flex items-center gap-2 border-b border-[#EEF1F6] shrink-0">
-                <span className="text-[10.5px] font-extrabold tracking-[0.26em] text-[#4B6CB7]" style={{ fontFamily: MONO }}>{src?.type === "image" ? "IMAGE" : "TEXT"}</span>
+                <span className="text-[10.5px] font-extrabold tracking-[0.26em] text-[#4B6CB7]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{src?.type === "image" ? "IMAGE" : "TEXT"}</span>
                 <span className="text-[13.5px] font-black text-[#0F1A30]">{src?.type === "image" ? "캡처 이미지" : "붙여넣은 오더"}</span>
                 {scanning && <span className="ml-auto flex items-center gap-1.5 text-[12px] font-bold text-[#4B6CB7]"><span className="w-1.5 h-1.5 rounded-full bg-[#4B6CB7]" style={{ animation: "osPulse 1s infinite" }} />{src?.type === "image" ? `${ocr.status}${ocr.pct ? ` ${ocr.pct}%` : ""}` : "스캔 중"}</span>}
                 {!scanning && <button onClick={() => { setStage("input"); setResult(null); setSrc(null); setOcrLines([]); }} className="ml-auto h-8 px-3 rounded-[10px] border border-[#E3E8F0] text-[12px] font-bold text-[#3A4A66] hover:border-[#4B6CB7]">다시 붙여넣기</button>}
@@ -396,10 +396,10 @@ export default function OrderScanModal({ onClose, onApply, places: placesRaw = [
             <div className="min-h-0 flex flex-col rounded-[22px] bg-white border border-[#E3E8F0] overflow-hidden">
               <div className="px-5 py-3 border-b border-[#EEF1F6] shrink-0">
                 <div className="flex items-center gap-2">
-                  <span className="text-[10.5px] font-extrabold tracking-[0.26em] text-[#4B6CB7]" style={{ fontFamily: MONO }}>RESULT</span>
+                  <span className="text-[10.5px] font-extrabold tracking-[0.26em] text-[#4B6CB7]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>RESULT</span>
                   <span className="text-[13.5px] font-black text-[#0F1A30]">인식 결과</span>
                   {result && !scanning && (
-                    <span className="ml-auto flex items-center gap-1.5 text-[11.5px] font-black" style={{ fontFamily: MONO }}>
+                    <span className="ml-auto flex items-center gap-1.5 text-[11.5px] font-black" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>
                       <span className="px-2 h-6 inline-flex items-center rounded-full bg-[#0F1A30] text-white">✓ {result.recognized}</span>
                       {warnN > 0 && <span className="px-2 h-6 inline-flex items-center rounded-full bg-[#E6EEFC] text-[#1B2B4B]">! {warnN}</span>}
                       {errN > 0 && <span className="px-2 h-6 inline-flex items-center rounded-full bg-white text-[#0F1A30] ring-1 ring-[#0F1A30]">✕ {errN}</span>}
@@ -440,7 +440,7 @@ export default function OrderScanModal({ onClose, onApply, places: placesRaw = [
                       <div key={g.title} style={{ animation: `osTag .3s ease ${gi * 0.08}s both` }}>
                         <div className="flex items-baseline gap-2 mb-1.5">
                           <span className="text-[13px] font-black text-[#0F1A30]">{g.title}</span>
-                          <span className="text-[9.5px] font-extrabold tracking-[0.24em] text-[#9AA9C3]" style={{ fontFamily: MONO }}>{g.en}</span>
+                          <span className="text-[9.5px] font-extrabold tracking-[0.24em] text-[#9AA9C3]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{g.en}</span>
                           {(g.title === "상차" || g.title === "하차") && (() => {
                             const c = addrCheck[g.title === "상차" ? "상차지" : "하차지"];
                             if (!c) return null;
@@ -507,7 +507,7 @@ export default function OrderScanModal({ onClose, onApply, places: placesRaw = [
                       <div>
                         <div className="flex items-baseline gap-2 mb-1.5">
                           <span className="text-[13px] font-black text-[#0F1A30]">기사 전달사항</span>
-                          <span className="text-[9.5px] font-extrabold tracking-[0.24em] text-[#9AA9C3]" style={{ fontFamily: MONO }}>NOTICE</span>
+                          <span className="text-[9.5px] font-extrabold tracking-[0.24em] text-[#9AA9C3]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>NOTICE</span>
                         </div>
                         <textarea value={vals.전달사항 || ""} onChange={(e) => setVals((p) => ({ ...p, 전달사항: e.target.value }))} rows={Math.min(8, String(vals.전달사항 || "").split("\n").length + 1)}
                           className="w-full rounded-[12px] border border-[#EEF1F6] bg-[#F7F9FC] px-3 py-2 text-[12.5px] font-semibold text-[#0F1A30] leading-relaxed outline-none focus:bg-white focus:border-[#4B6CB7]" />

@@ -2,8 +2,7 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import { db } from "./firebase";
 import { collection, onSnapshot, query, where, getDocs } from "firebase/firestore";
-import { specialDemandInfo, KOREAN_HOLIDAYS } from "./CustomDatePicker";
-import { ensureWeatherLoaded, getWeatherSpecialInfo } from "./weatherUtil";
+import { KOREAN_HOLIDAYS } from "./CustomDatePicker"; // ⭐ 2026-11-04 특수운임 제거
 import { CustomSelect } from "./CustomSelect";
 
 const VEHICLE_TYPES = [
@@ -169,35 +168,6 @@ function classifyFare(fare, avg, row) {
   if (ratio <= 1.15 + boost) return "NORMAL";
   if (ratio <= 1.3 + boost) return "TIGHT";
   return "SPIKE";
-}
-
-// 오더 저장 당시 명시적으로 "특수운임(연휴·성수기·기상)"으로 표시됐는지. 이
-// 필드가 없는 과거 오더는 상차일 기준으로 공휴일 캘린더 + 그 날 실제 강수/
-// 적설 여부(weatherUtil)에 다시 대조해 판단한다(연휴 인접일 포함).
-function isSpecialDemandRow(row) {
-  if (row?.특수운임 === true) return true;
-  if (row?.특수운임 === false) return false;
-  if (specialDemandInfo(row?.상차일)?.special) return true;
-  return !!getWeatherSpecialInfo(row?.상차일)?.special;
-}
-
-// 배지/툴팁에 보여줄 구체적인 사유 — 저장된 사유가 있으면 그대로, 없으면
-// 공휴일→기상 순으로 다시 판단한다.
-function getSpecialReasonText(row) {
-  if (row?.특수운임사유) return row.특수운임사유;
-  const h = specialDemandInfo(row?.상차일);
-  if (h.special) return h.reason;
-  const w = getWeatherSpecialInfo(row?.상차일);
-  if (w.special) return w.reason;
-  return "";
-}
-// 표 안 배지는 좁아서 "우천(12mm)"처럼 괄호 상세까지 넣으면 지저분해 보여,
-// 짧은 라벨(우천/강설)만 쓰고 상세 수치는 title 툴팁으로만 보여준다.
-function getSpecialBadgeLabel(row) {
-  const reason = getSpecialReasonText(row);
-  if (/^우천/.test(reason)) return "우천";
-  if (/^강설/.test(reason)) return "강설";
-  return "특수일";
 }
 
 function isTransitStop(r) {
@@ -556,8 +526,6 @@ const VEHICLE_CATEGORIES = [
 ];
 
 export default function StandardFare({ embedded = false, defaultTab = "표준운임" }) {
-  // ⭐ 오늘/최근 비·눈이 왔는지 자동 인식 — isSpecialDemandRow가 참고한다.
-  useEffect(() => { ensureWeatherLoaded(); }, []);
   const [dispatchData, setDispatchData] = useState([]);
   const [activeTab, setActiveTab] = useState(embedded ? defaultTab : "표준운임"); // "표준운임" | "전국운임표"
 
@@ -588,10 +556,6 @@ export default function StandardFare({ embedded = false, defaultTab = "표준운
   // 경유지가 있는 오더는 청구운임에 추가 구간 요금이 섞여있어, 순수 "상차지→하차지"
   // 단일구간 시세만 보고 싶을 때는 꺼서 제외할 수 있게 한다. 기본값은 켜짐(기존 동작 유지).
   const [includeViaOrders, setIncludeViaOrders] = useState(true);
-  // ⭐ 연휴·성수기(특수일)로 표시된 오더를 평균/최고/최저 등 통계 계산에 포함할지
-  // 여부. 기본값은 꺼짐(기존 동작 유지 — 특수일은 평소 시세를 왜곡할 수 있어
-  // 기본적으로 제외). 켜면 특수일 포함 전체 기준으로 통계를 다시 계산한다.
-  const [includeSpecial, setIncludeSpecial] = useState(false);
 
   // 전국운임 상태
   const [nfFrom, setNfFrom] = useState("");
@@ -1015,13 +979,7 @@ export default function StandardFare({ embedded = false, defaultTab = "표준운
 
   const stats = useMemo(() => {
     if (!result.length) return null;
-    // ⭐ 연휴·성수기로 표시된 오더는 평소보다 운임이 높게 형성된 경우가 많아, 그대로
-    // 평균/최고/최저에 섞으면 그 특수 운임이 이 노선의 "평소 시세"처럼 보이게 된다 —
-    // 기본적으로 통계 계산에서는 제외하고, 건수만 별도로 알려준다. includeSpecial
-    // 토글을 켜면 사용자가 직접 특수일까지 포함해서 다시 계산해볼 수 있다.
-    const normalRows = result.filter(r => !isSpecialDemandRow(r));
-    const statRows = includeSpecial || normalRows.length === 0 ? result : normalRows;
-    const specialCount = result.length - normalRows.length;
+    const statRows = result;
     const fares = statRows.map(r=>Number(String(r.청구운임||0).replace(/[^\d]/g,""))).filter(n=>n>0);
     if (!fares.length) return null;
     const avg = Math.round(fares.reduce((a,b)=>a+b,0)/fares.length);
@@ -1029,8 +987,8 @@ export default function StandardFare({ embedded = false, defaultTab = "표준운
     const avgDriver = drivers.length ? Math.round(drivers.reduce((a,b)=>a+b,0)/drivers.length) : 0;
     const normal = result.filter(r=>r.fareLevel==="NORMAL").length;
     const spike = result.filter(r=>r.fareLevel==="SPIKE").length;
-    return { count: result.length, avg, min: Math.min(...fares), max: Math.max(...fares), avgDriver, normal, spike, specialCount };
-  }, [result, includeSpecial]);
+    return { count: result.length, avg, min: Math.min(...fares), max: Math.max(...fares), avgDriver, normal, spike };
+  }, [result]);
 
   // ⭐ 렉 개선 — 결과표(수백~수천 줄)는 결과가 바뀔 때만 다시 그린다. 예전엔 왼쪽 입력칸에 한 글자 칠 때마다
   // 표 전체를 다시 그려서 글자가 끊겨 들어갔다.
@@ -1068,14 +1026,6 @@ export default function StandardFare({ embedded = false, defaultTab = "표준운
                             <tr key={r._id} className={`border-b border-gray-100 transition hover:bg-[#F2F6FC] ${i%2===0?"bg-white":"bg-gray-50/40"}`}>
                               <td className="px-3 py-2.5 text-center text-[13px] text-gray-700 font-medium whitespace-nowrap">
                                 {r.상차일}
-                                {isSpecialDemandRow(r) && (
-                                  <span
-                                    className="ml-1 px-1.5 py-0.5 rounded bg-black text-white text-[10px] font-extrabold align-middle"
-                                    title={`${getSpecialReasonText(r) || "연휴·성수기 등 특수 상황"} 배차로 표시된 오더입니다.${includeSpecial ? "" : " 평균 운임 계산에서는 제외됩니다."}`}
-                                  >
-                                    {getSpecialBadgeLabel(r)}
-                                  </span>
-                                )}
                               </td>
                               <td className="px-3 py-2.5 text-center whitespace-nowrap">
                                 {r.긴급 === true ? <span className="px-1.5 py-0.5 rounded-full bg-[#1B2B4B] text-white text-[11px] font-bold">긴급</span> : <span className="text-gray-400">-</span>}
@@ -1105,7 +1055,7 @@ export default function StandardFare({ embedded = false, defaultTab = "표준운
                     </tbody>
                   </table>
                 </div>
-              </div>), [result, includeSpecial]); // eslint-disable-line react-hooks/exhaustive-deps
+              </div>), [result]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const inputCls = "w-full h-11 px-3.5 text-[14px] font-semibold text-[#0F1A30] rounded-[12px] border border-[#E3E8F0] bg-[#F7F9FC] focus:bg-white focus:border-[#4B6CB7] focus:ring-4 focus:ring-[#4B6CB7]/10 focus:outline-none placeholder:text-[#A7B3C6] placeholder:font-medium transition";
   const labelCls = "block text-[11.5px] font-extrabold tracking-[0.06em] text-[#7A879C] mb-1.5";
@@ -1150,7 +1100,7 @@ export default function StandardFare({ embedded = false, defaultTab = "표준운
           {/* ───────── 왼쪽: 검색 패널 ───────── */}
           <div className="bg-white rounded-[22px] border border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_12px_30px_rgba(16,24,40,0.07)] p-5 md:sticky md:top-4 min-w-0">
             <div className="mb-4">
-              <div className="text-[10.5px] font-extrabold tracking-[0.28em] text-[#4B6CB7]" style={{ fontFamily: "'JetBrains Mono','SF Mono',ui-monospace,monospace" }}>SEARCH</div>
+              <div className="text-[10.5px] font-extrabold tracking-[0.28em] text-[#4B6CB7]" style={{ fontFamily: "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif", fontVariantNumeric: "tabular-nums" }}>SEARCH</div>
               <div className="text-[17px] font-black text-[#0F1A30]">조회 조건</div>
             </div>
 
@@ -1184,7 +1134,7 @@ export default function StandardFare({ embedded = false, defaultTab = "표준운
                 </div>
                 <div>
                   <label className={labelCls}>상차지명 <span className="text-[#4B6CB7]">*</span></label>
-                  <PlaceSuggest value={pickup} onChange={setPickup} names={pickupNames} placeholder="예: 송원" onKeyDown={e=>e.key==="Enter"&&search()} />
+                  <PlaceSuggest value={pickup} onChange={setPickup} names={pickupNames} placeholder="예: ○○상사" onKeyDown={e=>e.key==="Enter"&&search()} />
                 </div>
                 <div>
                   <label className={labelCls}>하차지명 <span className="text-[#4B6CB7]">*</span></label>
@@ -1199,11 +1149,11 @@ export default function StandardFare({ embedded = false, defaultTab = "표준운
                 </div>
                 <div>
                   <label className={labelCls}>상차지 주소 <span className="text-[#4B6CB7]">*</span></label>
-                  <input autoComplete="off" className={inputCls} placeholder="예: 인천 서구" value={pickupAddr} onChange={e=>setPickupAddr(e.target.value)} onKeyDown={e=>e.key==="Enter"&&search()} />
+                  <input autoComplete="off" className={inputCls} placeholder="예: 인천 서구" value={pickupAddr} onChange={e=>setPickupAddr(e.target.value)} onKeyUp={e=>e.key==="Enter"&&search()} />
                 </div>
                 <div>
                   <label className={labelCls}>하차지 주소 <span className="text-[#4B6CB7]">*</span></label>
-                  <input autoComplete="off" className={inputCls} placeholder="예: 서울 송파구" value={dropAddr} onChange={e=>setDropAddr(e.target.value)} onKeyDown={e=>e.key==="Enter"&&search()} />
+                  <input autoComplete="off" className={inputCls} placeholder="예: 서울 송파구" value={dropAddr} onChange={e=>setDropAddr(e.target.value)} onKeyUp={e=>e.key==="Enter"&&search()} />
                 </div>
               </div>
             )}
@@ -1212,13 +1162,9 @@ export default function StandardFare({ embedded = false, defaultTab = "표준운
               <input autoComplete="off" type="checkbox" className="w-3.5 h-3.5 accent-[#1B2B4B]" checked={includeVia} onChange={() => setIncludeVia(v => !v)} />
               <span className="text-[12.5px] font-semibold text-[#3A4A66]">경유지명도 검색에 포함</span>
             </label>
-            <label className="flex items-center gap-1.5 mb-2 cursor-pointer select-none w-fit" title="경유지가 있는 오더는 청구운임에 경유 구간 요금까지 섞여있어, 순수 상차지→하차지 단일구간 시세만 보려면 꺼주세요.">
+            <label className="flex items-center gap-1.5 mb-4 cursor-pointer select-none w-fit" title="경유지가 있는 오더는 청구운임에 경유 구간 요금까지 섞여있어, 순수 상차지→하차지 단일구간 시세만 보려면 꺼주세요.">
               <input autoComplete="off" type="checkbox" className="w-3.5 h-3.5 accent-[#1B2B4B]" checked={includeViaOrders} onChange={() => setIncludeViaOrders(v => !v)} />
               <span className="text-[12.5px] font-semibold text-[#3A4A66]">경유지 있는 오더도 결과·평균에 포함</span>
-            </label>
-            <label className="flex items-center gap-1.5 mb-4 cursor-pointer select-none w-fit" title="연휴·성수기·우천/폭설 등 특수일로 표시된 오더는 평소보다 운임이 높게 형성된 경우가 많아 기본적으로 평균 계산에서 제외됩니다(우천/폭설은 자동 감지). 켜면 특수일 포함 전체 기준으로 다시 계산합니다.">
-              <input autoComplete="off" type="checkbox" className="w-3.5 h-3.5 accent-[#1B2B4B]" checked={includeSpecial} onChange={() => setIncludeSpecial(v => !v)} />
-              <span className="text-[12.5px] font-semibold text-[#3A4A66]">특수일(연휴·성수기·기상)도 평균에 포함</span>
             </label>
 
             <div className="space-y-4 mb-5">
@@ -1230,11 +1176,11 @@ export default function StandardFare({ embedded = false, defaultTab = "표준운
               </div>
               <div>
                 <label className={labelCls}>차량톤수</label>
-                <input autoComplete="off" className={inputCls} placeholder="예: 1, 5" value={ton} onChange={e=>setTon(e.target.value)} onKeyDown={e=>e.key==="Enter"&&search()} />
+                <input autoComplete="off" className={inputCls} placeholder="예: 1, 5" value={ton} onChange={e=>setTon(e.target.value)} onKeyUp={e=>e.key==="Enter"&&search()} />
               </div>
               <div>
                 <label className={labelCls}>화물내용</label>
-                <input autoComplete="off" className={inputCls} placeholder="예: 5파레트" value={cargo} onChange={e=>setCargo(e.target.value)} onKeyDown={e=>e.key==="Enter"&&search()} />
+                <input autoComplete="off" className={inputCls} placeholder="예: 5파레트" value={cargo} onChange={e=>setCargo(e.target.value)} onKeyUp={e=>e.key==="Enter"&&search()} />
               </div>
               <div>
                 <label className={labelCls}>정렬방식</label>
@@ -1281,7 +1227,7 @@ export default function StandardFare({ embedded = false, defaultTab = "표준운
               <div className="rounded-[20px] flex items-stretch divide-x divide-white/10 overflow-hidden shadow-[0_16px_36px_rgba(15,26,48,0.25)]" style={{ background: "linear-gradient(120deg,#0B1428,#0F1A30 50%,#1B2B4B)" }}>
                 {[
                   { label: "조회 건수", value: `${stats.count}건` },
-                  { label: "평균 청구운임", value: `${stats.avg.toLocaleString()}원`, sub: stats.specialCount > 0 ? `연휴·성수기 ${stats.specialCount}건 ${includeSpecial ? "포함" : "제외"}` : undefined },
+                  { label: "평균 청구운임", value: `${stats.avg.toLocaleString()}원` },
                   { label: "최저 운임", value: `${stats.min.toLocaleString()}원` },
                   { label: "최고 운임", value: `${stats.max.toLocaleString()}원` },
                   { label: "평균 기사운임", value: `${stats.avgDriver.toLocaleString()}원`, sub: `마진 ${(stats.avg-stats.avgDriver).toLocaleString()}원` },

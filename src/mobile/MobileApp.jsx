@@ -1,16 +1,19 @@
 // ======================= src/mobile/MobileApp.jsx (PART 1/3) =======================
 import { subscribeUsersLive } from "../usersLive"; // ⭐ 2026-11-02 속도 — 직원 명부 구독 공유
+import { runDelete, deleteOrdersWithLogAtomic } from "../DeleteProgress"; // ⭐ 2026-11-05 삭제 진행 창 + 한 번에 삭제
 import { RichHtml } from "../richText"; // ⭐ 2026-11-03 공지 꾸민 글 보여주기
 import { isMasterKey } from "../monthCompare"; // ⭐ 2026-11-03 최고관리자 계정은 "최고관리자"로
 import { useMyProfile } from "../userNames";
+import { useCompanyFeatures } from "../companyFeatures"; // ⭐ 2026-11-04 마스터 권한 관리(회사별)
 import { useCompanyDropdownSync, dropdownList } from "../companyDropdownOptions";
 import { CompanyOptionPicker } from "../companyOptionPicker"; // 🧾 2026-11-02 지급방식·배차방식·상/하차방법 공용 선택기(＋ 추가)
 import { AttendanceQuickButton, officeRadii, CheckoutReminderHost } from "../attendanceQuick";
 import { PersonalTodayHost } from "../PersonalSchedule";
 import { makeClientMatcher } from "../clientMatch"; // ⭐ 2026-11-03 거래처 검색
 import { useCompanyBiz, BizPicker, BizChip, bizOf, BizSelect, resolveBiz, rememberBizFor, normBizKey } from "../companyBiz"; // ⭐ 2026-11-03 여러 사업자
-import { useCustomRoles, findCustomRole, getMenuAccess, roleScreen } from "../customRoles";
+import { useCustomRoles, findCustomRole, getMenuAccess, roleScreen, useRoleView, applyRoleMenus } from "../customRoles";
 import { useReadOnlyGuard } from "../readOnlyGuard";
+import { useDriverEditChoice, DriverEditButton, SamePlateChips, pickDriverFor, isRegisteredCombo, saveDriverChoice } from "../DriverEditChoice"; // ⭐ 2026-11-05 매칭된 기사 이름·전화 [수정]
 import { confirmLeave } from "../leaveGuard";
 import { hideBlind, isBlindHidden, canSeeBlind, autoBlindNew } from "../blind";
 import { cleanMgrRows, mgrName } from "../mgrPlaceholder";
@@ -24,7 +27,7 @@ import { lazyView } from "../lazyLoad";
 const MobileAttendanceBoard = lazyView(() => import("./MobileAttendanceBoard"));
 const MobileIntelView = lazyView(() => import("./MobileIntelView"));
 import InternalMessenger from "../InternalMessenger";
-import { subscribeOrderSync, deleteOrderWithLog, historyStartDate } from "../orderHistory";
+import { subscribeOrderSync, deleteOrderWithLog, historyStartDate, pcLiveWindowStart } from "../orderHistory";
 import CustomDatePicker from "../CustomDatePicker";
 import MobileSelect from "./MobileSelect"; // ⭐ 2026-11-02 기본 select → 남색 바텀시트 선택기
 import RouteMapModal from "../RouteMapModal";
@@ -35,6 +38,12 @@ import { withCo, getTenant } from "../fsTenant";
 // 📱 PC와 같은 화면(매출관리·운임조회·단가표·지입차관리·전자결재·직원관리) — 메뉴를 열 때만 불러온다
 const MobilePcView = React.lazy(() => import("./MobilePcViews"));
 import { useMobileAlerts } from "./mobileAlerts";
+import { useRouteBoardIds } from "../routeBoardIds"; // ⭐ 2026-11-05 고정노선 미배차 메뉴 숫자
+import { useRouteCarrierFilter } from "../routeCarriers"; // ⭐ 2026-11-06 운송업체 설정 — 숨긴 업체 오더는 모바일 어디에도 안 보이게
+import { useMobileDetailGetters } from "../detailGetters"; // ⭐ 2026-11-05 PC·모바일 일치 — 세부검색 배차담당자·청구사업자 값
+import { pickUnassignedOrders } from "../unassignedRule"; // ⭐ 2026-11-05 PC·모바일 일치 — 미배차 기준 공용
+import { useBadgeSeenSync, useUnseenItems, useMarkSeenOnView, unionCount } from "../seenBadges"; // ⭐ 2026-11-06 메뉴 숫자 = 계정별 안 본 것
+import { planIncludes, useCompanyPlanId } from "../plans"; // ⭐ 2026-11-05 인사이트 메뉴 요금제(PC와 같게)
 import { ShellIcon } from "../AdminShell";
 // ⭐ 작은 표시 전용 저장소 — "최신 정보 확인 중"·첫 진입 진행률이 바뀔 때 화면 전체(오더 목록)를
 // 다시 그리지 않고 그 표시만 바꾼다(저사양 폰에서 스크롤 끊김 방지)
@@ -94,6 +103,7 @@ import {
   disableNetwork,
   enableNetwork,
 } from "firebase/firestore";
+import { writeOrderDeletedNotice } from "../driverDeleteNotice"; // ⭐ 2026-11-05 기사앱 삭제 오더 팝업
 import { updateDoc, setDoc } from "../orderWrite"; // ★ 오더 수정시각 자동 기록(여러 사용자 실시간 일치)
 import { db, auth, FUNCTIONS_BASE, DEFAULT_COMPANY, clearFcmToken } from "../firebase";
 import { signOut } from "firebase/auth";
@@ -105,6 +115,7 @@ import { isWeekend, findApprovedLeaveForDate, isHoliday } from "../attendanceUti
 const MonthCompareAnalysis = lazyView(() => import("../MonthCompareAnalysis"));
 import { MailHeaderButton } from "../InternalMail";
 import BannerCenter from "../BannerCenter";
+import { publishDriverOrderRows, useDriverEventFeeds, useDriverEventCounts, setDriverSeenServer, setDriverToastsMuted, markDriverSeen, focusOrderRow, DriverEventToasts, DriverAckChip } from "../driverEvents"; // ⭐ 2026-11-05 기사앱 수락/거절·서류·긴급 알림(위쪽 배너·빨간 숫자)
 import NotifyCenter from "../NotifyCenter"; // ⭐ 2026-11-03 알림 통합 — 가운데 알림 팝업
 import { RemoteSupportHost } from "../RemoteSupport"; // ⭐ 2026-11-02 원격지원 —
 import OrderCongratsPopup from "../OrderCongratsPopup";
@@ -114,13 +125,22 @@ import OrderScanModal, { scanDropDate } from "../OrderScanModal";
 // ⭐ 2026-11-02 운임규칙 — 회사별 운임 규칙(운임구분 → 기사운임·수수료 자동)
 import { useFareRules, FareTypeSelect, FareRuleHint, fareFormChange } from "../fareRules";
 import DetailFilterButton, { applyDetailFilter } from "../DetailFilter"; // 🔎 2026-11-03 세부검색(최대 3차)
+import { useFixedRouteAutoDispatch } from "../FixedRoutes"; // ⭐ 2026-11-05 고정노선 배차 이어서 만들기
 import { VehicleTypePicker, currentCustomVehicleTypes, useVehicleTypes } from "../vehicleTypes"; // 🚚 2026-11-02 회사 공용 차량종류
+import { LogisMark, LogisWordmark, LogisTag, LogisLockup } from "../brand"; // 🔷 2026-11-04 LogisWeb 로고
+import { LiveDriverChip, FleetLiveButton, useFleetLivePublish } from "../liveFleet"; // ⭐ 2026-11-05 배차완료 지입·직영·임대 기사 실시간 관제
 
 
 
 // ⭐ 오더 취소(소프트) 상태로 취급하는 값들 — 이 값이면 등록내역/미배차 등 정상 목록에서는
 // 제외되고, 대신 "취소내역" 화면에서만 보인다(완전삭제 전까지 복구 가능).
 const CANCELED_STATUS_LIST = ["취소", "배차취소", "오더취소", "취소됨"];
+// ⭐ 2026-11-05 PC·모바일 일치 — PC에서 기사관리·거래처관리 메뉴를 보는 기본 역할(맞춤 역할은 메뉴 권한 ok()로)
+const PC_DRIVER_MENU_ROLES = { has: (r) => ["admin", "totalMaster", "user", "test", "hrManager", "viewer"].includes(r) || /^role_/.test(String(r || "")) };
+const PC_CLIENT_MENU_ROLES = { has: (r) => ["admin", "totalMaster", "user", "test", "viewer"].includes(r) || /^role_/.test(String(r || "")) };
+// ⭐ 2026-11-05 PC·모바일 일치 — PC는 상태가 취소 목록이거나 배차상태가 "배차취소"(화주사가 취소 승인)인 오더를
+//   배차현황·실시간·이력·동기화 어디서든 뺀다. 모바일도 같은 한 가지 기준으로 정상 목록에서 뺀다.
+const isCancelledOrder = (o) => !!o && (CANCELED_STATUS_LIST.includes(o.상태) || String(o.배차상태 || "").trim() === "배차취소");
 // ⭐ 2026-10-30 모바일 딜레이 — 저장(updateDoc)은 서버가 "받았다"고 답할 때까지 기다린다. LTE에서는 이게 수 초~수십 초라
 //   "기사취소를 눌러도 한참 뒤에 취소된다"의 원인이었다. 화면은 먼저 바꾸고 저장은 뒤에서 마저 하게 한다.
 //   (Firestore는 같은 폰의 실시간 목록에 쓴 내용을 즉시 반영하고, 끊겨도 다시 연결되면 자동으로 보낸다)
@@ -144,7 +164,7 @@ const localizeSentinels = (patch = {}, prev = {}) => {
 //   예전엔 이런 오더도 후보로 잡혀, 내일 날짜로 등록한 직후 운임조회를 누르면 방금 등록한 오더(또는 같이 등록한 여러 건)만 보였다.
 const isFareHistoryCandidate = (o, cur, today) => {
   if (!o || (cur && (o.id === cur.id || (o._id && o._id === cur._id)))) return false;
-  if (CANCELED_STATUS_LIST.includes(o.상태)) return false;
+  if (isCancelledOrder(o)) return false;
   const d = String(o.상차일 || "").slice(0, 10);
   const confirmed = !!String(o.차량번호 || "").trim() && String(o.배차상태 || o.상태 || "") !== "배차중";
   if (d >= today && !confirmed) return false;
@@ -162,12 +182,44 @@ function useDelayedFlag(on, ms) {
   }, [on, ms]);
   return v;
 }
+// ⭐ 2026-11-04 끊김 개선 — 화면 밖 카드의 깜빡임(배차중 점·뱃지·메모) 애니메이션을 멈춘다.
+//  카드 수십 장의 무한 애니메이션이 화면에 안 보여도 매 프레임 다시 계산돼 스크롤이 버벅였다.
+//  관찰자 하나를 모든 카드가 같이 쓰고, React 상태 대신 data-kp-off 표시만 바꿔 다시 그리기(리렌더)는 없다.
+let _kpOffIO = null;
+function useOffscreenPause(dep) {
+  const ref = React.useRef(null);
+  React.useEffect(() => {
+    const el = ref.current;
+    if (!el || typeof IntersectionObserver === "undefined") return undefined;
+    if (!_kpOffIO) {
+      _kpOffIO = new IntersectionObserver((entries) => {
+        for (const e of entries) { if (e.isIntersecting) delete e.target.dataset.kpOff; else e.target.dataset.kpOff = "1"; }
+      }, { rootMargin: "150px 0px" });
+    }
+    _kpOffIO.observe(el);
+    return () => { _kpOffIO?.unobserve(el); delete el.dataset.kpOff; };
+  }, [dep]);
+  return ref;
+}
+// 등록내역 목록에서 지금 화면 맨 위에 보이는 카드(키·화면 위치) — 상세 다녀온 뒤 같은 자리로 돌아오기용
+function readListAnchor() {
+  try {
+    for (const el of document.querySelectorAll(".kp-m-cv")) {
+      const r = el.getBoundingClientRect();
+      if (r.bottom > 80) return { key: el.dataset.kpKey, top: r.top };
+    }
+  } catch { /* 무시 */ }
+  return null;
+}
 const bgWrite = (p, what = "저장") => {
   Promise.resolve(p).catch((e) => {
     console.error(`${what} 실패:`, e);
     alert(`${what} 중 오류가 발생했습니다. 네트워크 확인 후 다시 시도해주세요.\n${e?.message || ""}`);
   });
 };
+// ⭐ 2026-11-05 오더 삭제(한 건·여러 건) — 삭제 기록(deletedOrders) + 삭제를 묶음(writeBatch)으로 한 번에, 삭제 진행 창.
+//   예전엔 건마다 deleteOrderWithLog를 따로 보내 목록이 한 줄씩 줄어들었다. items: [{ col, id }]
+const deleteOrdersAtomicMobile = (items) => deleteOrdersWithLogAtomic(items, { label: "오더" });
 
 // 🔥 role 기반 컬렉션 분기
 const role = localStorage.getItem("role") || "user";
@@ -1091,8 +1143,12 @@ function BackIconButton({ onClick }) {
 const toNumber = (v) =>
   Number(String(v ?? "").replace(/[^\d]/g, "")) || 0;
 
+// ⭐ 2026-11-04 속도 — toLocaleString("ko-KR")은 부를 때마다 숫자 형식기를 새로 만들어 느리다(카드마다 2번씩).
+//  같은 결과를 내는 형식기 하나를 만들어 두고 계속 쓴다.
+const _nfKo = (() => { try { return new Intl.NumberFormat("ko-KR"); } catch { return null; } })();
+const _nfDefault = (() => { try { return new Intl.NumberFormat(); } catch { return null; } })();
 const fmtMoney = (v) =>
-  `${Number(v || 0).toLocaleString("ko-KR")}원`;
+  `${_nfKo ? _nfKo.format(Number(v || 0)) : Number(v || 0).toLocaleString("ko-KR")}원`;
 // 🔥 검색용 정규화 (여기에 추가)
 const normalize = (s = "") =>
   String(s)
@@ -1197,8 +1253,8 @@ function fmtDispatchTimeM(v, gubun) {
 const fmtM = (v) => {
   const n = Number(v) || 0;
   if (n >= 100000000) return `${(n / 100000000).toFixed(1)}억원`;
-  if (n >= 10000) return `${Math.round(n / 10000).toLocaleString()}만원`;
-  return `${n.toLocaleString()}원`;
+  if (n >= 10000) return `${_nfDefault ? _nfDefault.format(Math.round(n / 10000)) : Math.round(n / 10000).toLocaleString()}만원`;
+  return `${_nfDefault ? _nfDefault.format(n) : n.toLocaleString()}원`;
 };
 
 // 디지털 다이얼 스타일 카운트업 숫자
@@ -1561,6 +1617,8 @@ const getStatus = (o = {}) => {
   const car = String(o.차량번호 || "").trim();
   return car ? "배차완료" : "배차중";
 };
+// ⭐ 2026-11-05 PC·모바일 일치 — 배차현황 상태 탭·숫자는 PC처럼 배차상태 값 기준(승인대기 등은 "전체"에만) · 값이 비어 있으면 차량번호로
+const getStatusPc = (o = {}) => String(o.배차상태 || "").trim() || getStatus(o);
 
 // 수정이력 추적 대상 필드 (PC DispatchApp.jsx의 history 배열과 동일 포맷을 공유한다)
 const HISTORY_TRACKED_FIELDS = [
@@ -1990,9 +2048,10 @@ const prevDayStr = (ymd) => { const d = new Date(`${ymd}T00:00:00Z`); d.setUTCDa
 
 export default function MobileApp({ role: realRole, user, userCompany = "", forceExec = false }) {
   useVehicleTypes(getTenant() || userCompany); // 🚚 2026-11-02 회사 공용 차량종류(추가한 이름이 모든 목록에 바로 보이게 구독 유지)
-  // 🔀 통합인사관리자(hrAcct) — 메뉴에서 경리 화면 ↔ 인사 화면 전환
-  const [hrAcctView, setHrAcctView] = useState(() => { try { return localStorage.getItem("kpHrAcctView") || "acct"; } catch { return "acct"; } });
-  const role = realRole === "hrAcct" ? (hrAcctView === "hr" ? "hrManager" : "test") : realRole;
+  // 🔀 화면 전환 역할 — 통합인사관리자(hrAcct): 경리 ↔ 인사 / 통합관리자(allMgr): 운송 ↔ 경리 ↔ 인사(메뉴 › 화면 전환)
+  //  경리사무원·인사사무원은 경리/인사 화면 역할로 동작 — PC(DispatchApp)와 같은 customRoles.js useRoleView
+  const roleView = useRoleView(realRole);
+  const role = roleView.role;
   useCompanyDropdownSync(realRole, userCompany); // ⭐ PC 편집모드에서 바꾼 회사별 배차방식 옵션을 모바일에도
   // ⭐ LTE 속도 — 앱을 켜면 오더·기사·거래처·공지·일정 등 10여 개 구독이 한꺼번에 전파를 나눠 써서,
   // 약한 LTE에선 정작 오더가 늦게 들어왔다. 오더가 서버와 맞춰진 뒤에 나머지(기사·거래처·공지 등)를 시작한다.
@@ -2003,12 +2062,28 @@ export default function MobileApp({ role: realRole, user, userCompany = "", forc
   const readyStage3 = useDelayedFlag(secondaryReady, 2400);
   const readyStage4 = useDelayedFlag(secondaryReady, 3600);
   const readyStage5 = useDelayedFlag(secondaryReady, 4800);
+  // ⭐ 2026-11-05 고정노선 배차 이어서 만들기 — 휴대폰으로만 접속하는 날(새 달 첫날 등)에도 이번 달 말일까지 채운다(PC와 같은 함수 · 같은 문서 번호라 중복 없음)
+  useFixedRouteAutoDispatch(readyStage5 && role !== "viewer" ? (getTenant() || userCompany || localStorage.getItem("userCompany") || "") : "");
   // ⭐ 글자 크기 설정(기본/크게/더 크게) — 아래 zoom 리셋 로직에서 함께 적용되어야
   // 화면 전체(글자+버튼+아이콘)가 실제로 커진다.
   const [fontScale, setFontScale] = useState(() => Number(localStorage.getItem("fontScale") || "1"));
   // 쉬운모드는 2026-11-01 없앰 — 예전에 켜 둔 기기도 일반 화면으로
   React.useEffect(() => { try { localStorage.removeItem("easyMode"); } catch { /* 무시 */ } }, []);
-  const effectiveScale = fontScale;
+  // ⭐ 2026-11-04 폴더블 분할화면 — 글자 크기 배율(zoom)은 화면 폭을 그만큼 좁게 만든다(412px × 1.2배 = 343px 화면).
+  //  분할화면(340~460px)에서 "크게/아주 크게"를 쓰면 버튼·검색칸이 겹치고 글자가 한 자씩 줄바꿈됐다.
+  //  배율을 적용한 뒤에도 화면 폭이 최소 MIN_LAYOUT_W(px)는 남도록 배율을 자동으로 줄인다(유튜브·카톡처럼).
+  const [vwForScale, setVwForScale] = useState(() => (typeof window !== "undefined" ? window.innerWidth : 400));
+  useEffect(() => {
+    let t = null;
+    const on = () => { clearTimeout(t); t = setTimeout(() => setVwForScale(window.innerWidth), 120); };
+    window.addEventListener("resize", on);
+    window.addEventListener("orientationchange", on);
+    return () => { clearTimeout(t); window.removeEventListener("resize", on); window.removeEventListener("orientationchange", on); };
+  }, []);
+  const MIN_LAYOUT_W = 340;
+  const effectiveScale = fontScale > 1
+    ? Math.max(1, Math.min(fontScale, Math.floor((vwForScale / MIN_LAYOUT_W) * 100) / 100))
+    : fontScale;
 
   // ★ 배차확정자(=이 계정으로 배차완료 처리한 사람) 표시용 실명 — PC(DispatchApp)의
   // myRealName과 동일하게 users/{uid}.name을 우선 사용한다. 이메일 앞부분(계정 아이디)이
@@ -2026,8 +2101,16 @@ export default function MobileApp({ role: realRole, user, userCompany = "", forc
   const dispatcherName = myRealName || user?.displayName || user?.email?.split("@")[0] || "";
 
   useEffect(() => {
+    // ⭐ 2026-11-04 버그수정 — 예전엔 #root · body · html 세 곳에 같은 배율을 동시에 걸어서 배율이 세제곱으로 겹쳤다
+    //  ("크게" 1.1 → 실제 1.33배, "아주 크게" 1.2 → 1.73배). 412px 폰도 238px 화면처럼 그려져 버튼이 화면 밖으로
+    //  밀려나고 겹쳤다(분할화면에서 특히 심함). 배율은 #root 한 곳에만 건다(다른 화면들이 #root의 zoom 값을 읽어 좌표를 보정한다).
+    //  배율 1이면 아예 선언하지 않는다(index.css 주석 — iOS에서 zoom 선언만으로 fixed 하단바 위치가 틀어지는 문제).
     const root = document.getElementById("root");
-    if (root) root.style.zoom = String(effectiveScale);
+    if (root) {
+      root.style.zoom = effectiveScale === 1 ? "" : String(effectiveScale);
+      // mobileTheme.css가 vh·vw 크기(팝업 최대 높이·메뉴 폭)를 이 배율만큼 되돌리는 데 쓴다
+      if (effectiveScale === 1) root.style.removeProperty("--kp-zoom"); else root.style.setProperty("--kp-zoom", String(effectiveScale));
+    }
     // viewport 강제 리셋 — 브라우저에서 확대/축소 후 앱 접속해도 항상 1:1 비율 유지
     const meta = document.querySelector('meta[name="viewport"]');
     const resetContent = "width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no, viewport-fit=cover";
@@ -2039,13 +2122,12 @@ export default function MobileApp({ role: realRole, user, userCompany = "", forc
       m.content = resetContent;
       document.head.appendChild(m);
     }
-    // document.body zoom/transform 리셋 (일부 브라우저 잔여 줌 제거) — 글자크기 설정 배율 적용
-    document.body.style.zoom = String(effectiveScale);
-    document.documentElement.style.zoom = String(effectiveScale);
+    // document.body/html의 잔여 zoom 제거(배율은 위 #root에만)
+    document.body.style.zoom = "";
+    document.documentElement.style.zoom = "";
     return () => {
       if (meta) meta.content = "width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes, viewport-fit=cover";
-      document.body.style.zoom = "";
-      document.documentElement.style.zoom = "";
+      if (root) { root.style.zoom = ""; root.style.removeProperty("--kp-zoom"); }
     };
   }, [effectiveScale]);
   // ===================== 연동 승인된 화주사 목록(자동 전송용) =====================
@@ -2068,7 +2150,8 @@ export default function MobileApp({ role: realRole, user, userCompany = "", forc
   // 👔 임원(부서 임원 · 대표/전무/이사) — 경영 브리핑으로 시작. 관리자 권한 임원은 메뉴에서 [전체 메뉴]로 전환
   const myProfM = useMyProfile(user?.uid);
   // ⭐ 2026-10-31 권한 관리 설정을 모바일에도 — 메뉴 숨김 · 임원 화면은 "임원 화면" 역할만
-  const customRolesM = useCustomRoles();
+  const customRolesRawM = useCustomRoles();
+  const customRolesM = React.useMemo(() => applyRoleMenus(customRolesRawM, realRole, role), [customRolesRawM, realRole, role]);
   const customRoleM = findCustomRole(customRolesM, role);
   const isExecM = forceExec || roleScreen(customRoleM) === "exec";
   // 운송사별 권한 설정으로 켠 부서 메뉴(예: A운송사 관리자 → 인사관리부)
@@ -2076,7 +2159,7 @@ export default function MobileApp({ role: realRole, user, userCompany = "", forc
   const deptOkM = (m) => !!customRoleM && getMenuAccess(customRolesM, role, m) !== "hidden";
   const menuOkM = React.useCallback((m) => !customRoleM || getMenuAccess(customRolesM, role, m) !== "hidden", [customRoleM, customRolesM, role]);
   // 🔒 2026-11-01 조회만 허락된 화면에서 수정·저장·삭제를 누르면 바로 "권한 없음"
-  const PAGE_MENU_M = { list: "배차현황", detail: "배차현황", canceled: "배차현황", form: "배차관리", unassigned: "배차관리", fleet: "지입차관리", sales: "매출관리", ratecard: "단가표", fare: "운임조회", intel: "인사이트", "dept:settle": "정산관리", "dept:acct": "회계관리", "dept:cashbook": "자금관리", "dept:funds": "자금관리", "dept:assets": "비품관리", "dept:hr": "인사관리부", "dept:cert": "증명서발급", "dept:driverdocs": "기사관리" }; // ⭐ 2026-11-03 가입 승인(staff)은 기사관리 조회권한과 별개 — PC처럼 관리자·경리·인사는 승인·거절 가능
+  const PAGE_MENU_M = { drivers: "기사관리", clients: "거래처관리", list: "배차현황", detail: "배차현황", canceled: "배차현황", form: "배차관리", unassigned: "배차관리", fleet: "지입차관리", sales: "매출관리", ratecard: "단가표", fare: "운임조회", intel: "인사이트", "dept:settle": "정산관리", "dept:acct": "회계관리", "dept:cashbook": "자금관리", "dept:funds": "자금관리", "dept:assets": "비품관리", "dept:hr": "인사관리부", "dept:cert": "증명서발급", "dept:driverdocs": "기사관리" }; // ⭐ 2026-11-03 가입 승인(staff)은 기사관리 조회권한과 별개 — PC처럼 관리자·경리·인사는 승인·거절 가능
   const [execFull, setExecFull] = useState(() => { try { return localStorage.getItem("kpExecFull") === "1"; } catch { return false; } });
   const deptMode = role === "test" ? "acct" : role === "hrManager" ? "hr" : isExecM && !execFull ? "exec" : null;
   const [page, setPage] = useState(deptMode ? "dept" : "list");
@@ -2087,10 +2170,11 @@ export default function MobileApp({ role: realRole, user, userCompany = "", forc
   useEffect(() => {
     if (!["list", "detail", "form"].includes(page)) deptListOkRef.current = false;
     if (deptMode && page === "list" && !(deptMode === "acct" && deptListOkRef.current)) setPage("dept");
-    if (!deptMode && (page === "dept" || (String(page).startsWith("dept:") && page !== "dept:execsched" && page !== "dept:schedule" && page !== "dept:rules" && page !== "dept:board" && page !== "dept:farerules" && page !== "dept:myresume" && !(DEPT_PAGE_MENU[page] && deptOkM(DEPT_PAGE_MENU[page]))))) setPage("list");
+    if (!deptMode && (page === "dept" || (String(page).startsWith("dept:") && page !== "dept:execsched" && page !== "dept:settle" && page !== "dept:driverdocs" && page !== "dept:schedule" && page !== "dept:rules" && page !== "dept:board" && page !== "dept:farerules" && page !== "dept:myresume" && !(DEPT_PAGE_MENU[page] && deptOkM(DEPT_PAGE_MENU[page]))))) setPage("list");
   }, [deptMode, page]);
   const toggleExecFull = () => { const v = !execFull; setExecFull(v); try { localStorage.setItem("kpExecFull", v ? "1" : "0"); } catch { /* 무시 */ } setPage(v ? "list" : "dept"); };
   const listScrollYRef = useRef(0); // 리스트 스크롤 위치 저장
+  const listAnchorRef = useRef(null); // ⭐ 2026-11-04 복귀 기준 카드(화면 맨 위 카드와 그 위치)
   const unassignedScrollYRef = useRef(0); // 미배차/정보미전달 스크롤 위치 저장
   const [unassignedTab, setUnassignedTab] = useState("미배차"); // 탭 상태 (부모에서 관리)
 
@@ -2098,7 +2182,22 @@ export default function MobileApp({ role: realRole, user, userCompany = "", forc
   useEffect(() => {
     if (page === "list" && listScrollYRef.current > 0) {
       const y = listScrollYRef.current;
-      requestAnimationFrame(() => { window.scrollTo(0, y); });
+      // ⭐ 2026-11-04 화면 밖 카드는 그리기를 건너뛰므로(.kp-m-cv) 높이가 어림값이다 — 복원하는 순간만
+      //   전부 실제 높이로 한 번 재서 카드마다 적어 두고, 정확히 같은 자리로 돌아간다.
+      const root = document.documentElement;
+      root.classList.add("kp-cv-off");
+      const anchor = listAnchorRef.current;
+      requestAnimationFrame(() => {
+        let ty = y;
+        try {
+          document.querySelectorAll(".kp-m-cv").forEach((el) => { el.style.containIntrinsicSize = `auto ${el.offsetHeight}px`; });
+          // 떠날 때 맨 위에 보이던 카드가 같은 높이에 오도록(건너뛴 카드의 어림 높이 때문에 y값이 어긋날 수 있다)
+          const el = anchor && [...document.querySelectorAll(".kp-m-cv")].find((e) => e.dataset.kpKey === anchor.key);
+          if (el) ty = Math.max(0, Math.round(el.getBoundingClientRect().top + window.scrollY - anchor.top));
+        } catch { /* 무시 */ }
+        root.classList.remove("kp-cv-off");
+        window.scrollTo(0, ty);
+      });
     }
     if (page === "unassigned" && unassignedScrollYRef.current > 0) {
       const y = unassignedScrollYRef.current;
@@ -2435,6 +2534,18 @@ const quickRange = (days) => {
     // ⭐ 2026-11-02 점검 — 결재 요청은 BannerCenter가 이미 띄우므로 위쪽 배너 중복 표시 안 함
     onAlert: (msg, key, id) => { if (key === "approval") return; showTopOrderBanner(msg, key === "notice" ? id : null); },
   });
+  // ⭐ 2026-11-05 기사앱 이벤트(PC와 같은 기준) — 수락/거절은 이미 받은 오더(orders)에서, 서류(검토 대기)·긴급(미처리)은 작은 구독 1개씩
+  const drvCompanyM = (localStorage.getItem("loginCompany") || userCompany || localStorage.getItem("userCompany") || DEFAULT_COMPANY).trim();
+  const drvCounts = useDriverEventCounts();
+  React.useEffect(() => { setDriverSeenServer(myProfM?.driverEventsSeen); }, [myProfM?.driverEventsSeen]);
+  React.useEffect(() => {
+    if (page !== "list" || !drvCounts.orders) return undefined;
+    const t = setTimeout(() => markDriverSeen("orders"), 4000);
+    return () => clearTimeout(t);
+  }, [page, drvCounts.orders]);
+  React.useEffect(() => { if (page === "dept:driverdocs" && drvCounts.docs) markDriverSeen("docs"); }, [page, drvCounts.docs]);
+  React.useEffect(() => { if (page === "fleet" && drvCounts.sosUnseen) markDriverSeen("sos"); }, [page, drvCounts.sosUnseen]);
+  useDriverEventFeeds({ uid: ["driver", "shipper"].includes(role) ? "" : user?.uid, company: drvCompanyM, canDocs: ["admin", "totalMaster", "superadmin", "test", "hrManager", "hrAcct", "allMgr"].includes(realRole || role) || myProfM?.isMaster === true, canSos: role !== "viewer" });
   // ⭐ 2026-11-03 위쪽 공지 알림줄 — 그 공지를 어디서든(공지사항 · 가운데 팝업) 읽으면 바로 사라진다
   useEffect(() => {
     if (!topOrderBanner?.noticeId || !user?.uid) return undefined;
@@ -2471,9 +2582,19 @@ const quickRange = (days) => {
   // 1. Firestore 실시간 연동 (🔥 전체 데이터 — PC와 동일)
   // --------------------------------------------------
   // ⭐ 블라인드 오더(최고관리자 전용)는 어떤 경로로 들어오든 여기서 걸러진다.
-  const [orders, setOrdersRaw] = useState([]);
+  const [ordersAll, setOrdersRaw] = useState([]);
   const setOrders = React.useCallback((v) => setOrdersRaw(prev => cleanMgrRows(hideBlind(typeof v === "function" ? v(prev) : v))), []); // 고정노선 자리 채움 "담당자" → 빈 값
-  const [canceledOrders, setCanceledOrdersRaw] = useState([]);
+  // ⭐ 2026-11-06 고정노선현황 › 운송업체 설정 — 끄거나 삭제한 업체의 오더는 데이터 입구에서 한 번 거른다(PC와 같은 기준)
+  //   목록·숫자·배지·검색·미배차·알림·통계·지입차관리 모두 아래 orders/allOrders를 쓰므로 그대로 따른다 · 시트 연동은 그대로
+  const carrierVisM = useRouteCarrierFilter(getTenant() || userCompany || "");
+  const orders = useMemo(() => carrierVisM.filter(ordersAll) || [], [ordersAll, carrierVisM]);
+  // ⭐ 2026-11-05 기사 수락/거절 — 이미 받은 오더 배열로만(줄마다 구독 없음) · 내가 등록/배차확정한 오더만
+  const drvMeNameM = mobileUsers.find((u) => (u.uid || u.id) === user?.uid)?.name || myProfM?.name || "";
+  const drvMeM = React.useMemo(() => ({ uid: ["driver", "shipper"].includes(role) ? "" : (user?.uid || ""), email: user?.email || "", name: drvMeNameM, isAdmin: ["admin", "totalMaster", "superadmin", "allMgr"].includes(realRole || role) }), [user?.uid, user?.email, drvMeNameM, realRole, role]);
+  React.useEffect(() => { publishDriverOrderRows(orders, drvMeM); }, [orders, drvMeM]);
+  React.useEffect(() => { setDriverToastsMuted(!alarmEnabled); }, [alarmEnabled]);
+  const [canceledOrdersAll, setCanceledOrdersRaw] = useState([]);
+  const canceledOrders = useMemo(() => carrierVisM.filter(canceledOrdersAll) || [], [canceledOrdersAll, carrierVisM]); // ⭐ 2026-11-06
   const setCanceledOrders = React.useCallback((v) => setCanceledOrdersRaw(prev => hideBlind(typeof v === "function" ? v(prev) : v)), []); // ★ 취소내역 화면용
   // ⭐ 앱을 백그라운드에 뒀다가 다시 열었을 때, 서버 재조회가 오래 걸리는 동안(기기가
   // 막 깨어나 네트워크 재연결이 느릴 때) 화면에 남아있던 오래된 오더 상태를 보거나
@@ -2619,12 +2740,18 @@ const quickRange = (days) => {
   // 화면에서 쓰는 전체 목록 = 실시간 오더 + 불러온 예전 오더(같은 오더면 실시간 쪽 우선)
   // 예전 오더 목록 정리(블라인드 제외·취소 분리)는 보관소가 바뀔 때만 한 번
   const extraSplit = useMemo(() => {
-    const all = cleanMgrRows(hideBlind([...extraMap.values()]));
+    const all = carrierVisM.filter(cleanMgrRows(hideBlind([...extraMap.values()]))) || []; // ⭐ 2026-11-06 숨긴 운송업체 오더 빼기
     return {
-      active: all.filter((o) => !CANCELED_STATUS_LIST.includes(o.상태)),
-      canceled: all.filter((o) => CANCELED_STATUS_LIST.includes(o.상태)),
+      active: all.filter((o) => !isCancelledOrder(o)),
+      canceled: all.filter((o) => isCancelledOrder(o)),
     };
-  }, [extraMap]);
+  }, [extraMap, carrierVisM]);
+  // ⭐ 2026-11-06 운송업체 설정 창 전용 — 숨긴 업체 오더까지(건수 보여 주고 다시 켤 수 있게 · 화면 목록에는 안 씀)
+  const carrierPoolRowsM = useMemo(() => {
+    const m = new Map();
+    [...ordersAll, ...extraMap.values()].forEach((o) => { if (o?.배차표Id) { const k = `${o.__col}/${o._id}`; if (!m.has(k)) m.set(k, o); } });
+    return [...m.values()];
+  }, [ordersAll, extraMap]);
   const allOrdersCombined = useMemo(() => {
     if (extraMap.size === 0) return { orders, canceled: canceledOrders };
     const liveKeys = new Set();
@@ -2637,6 +2764,8 @@ const quickRange = (days) => {
     };
   }, [orders, canceledOrders, extraSplit, extraMap.size]);
   const allOrders = allOrdersCombined.orders;
+  // ⭐ 2026-11-04 고정노선(구글시트 배차표) 오더는 고정노선현황에서만 — 일반 배차현황·미배차·정보미전달에는 넣지 않는다(PC와 같음)
+  const listOrders = useMemo(() => allOrders.filter((o) => !o?.배차표Id), [allOrders]);
   const allCanceledOrders = allOrdersCombined.canceled;
   // 화면에서 바로 고친 값을 실시간 목록·예전 오더 보관소 양쪽에 반영
   const patchLocalOrder = React.useCallback((id, patchIn) => {
@@ -2664,6 +2793,7 @@ const [isRefreshing, setIsRefreshing] = useState(false);
   const [orderIssues, setOrderIssues] = useState(null); // null=닫힘, {duplicates,reversedDate,feeReversed,badPhone}=결과
   const [orderIssuesScope, setOrderIssuesScope] = useState("thisMonth"); // "thisMonth" | "twoMonths"
   const [drivers, setDrivers] = useState([]);
+  useFleetLivePublish(drivers); // ⭐ 2026-11-05 이미 받는 drivers로 실시간 관제 색인 갱신(추가 읽기 없음)
   const [clients, setClients] = useState([]);
   const [places, setPlaces] = useState([]);
   const [fixedClientRows, setFixedClientRows] = useState([]);
@@ -2743,7 +2873,7 @@ const handleValidateOrders = async (includeLastMonth = false) => {
   const months = includeLastMonth ? [prevMonthOf(thisMonth), thisMonth] : [thisMonth];
   // 검사 기간 중 실시간 범위 밖(예전 날짜) 오더를 먼저 불러온다
   const fetched = await loadRange(`${months[0]}-01`, todayKST());
-  const fetchedNew = hideBlind(fetched.filter((o) => !CANCELED_STATUS_LIST.includes(o.상태)));
+  const fetchedNew = hideBlind(fetched.filter((o) => !isCancelledOrder(o)));
   const seen = new Set(allOrders.map((o) => `${o.__col}/${o._id}`));
   const pool = [...allOrders, ...fetchedNew.filter((o) => !seen.has(`${o.__col}/${o._id}`))];
   const scoped = pool.filter((o) => months.includes(String(o.상차일 || "").slice(0, 7)));
@@ -2773,7 +2903,7 @@ const handleCancelDuplicateOrder = async (o) => {
 // 직접 값을 고칠 수 있게 한다(카드 탭했을 때와 동일한 이동 로직).
 const handleOpenIssueOrder = (o) => {
   setOrderIssues(null);
-  listScrollYRef.current = window.scrollY;
+  listScrollYRef.current = window.scrollY; listAnchorRef.current = readListAnchor();
   setSelectedOrder(o);
   setDetailFrom("list");
   setPage("detail");
@@ -2887,9 +3017,9 @@ collections.forEach((name) => {
       });
       const allMapped = snap.docs.map((d) => objCache.get(d.id) || { __col: name, ...d.data(), _id: d.id, id: d.id })
         .filter((o) => o.source !== "transport_transmit");
-      const list = allMapped.filter((o) => !CANCELED_STATUS_LIST.includes(o.상태));
+      const list = allMapped.filter((o) => !isCancelledOrder(o));
       // ⭐ 취소내역 화면용 — 같은 스냅샷에서 취소 상태인 것만 따로 모은다(리스너 중복 없이).
-      const canceledList = allMapped.filter((o) => CANCELED_STATUS_LIST.includes(o.상태));
+      const canceledList = allMapped.filter((o) => isCancelledOrder(o));
       setOrdersLoaded(true);
       // ⭐ 첫 화면 로딩 진행률용 — 컬렉션별로 받은 오더 수(서버 응답 기준)
       setInitLoadCounts((p) => (p[name] === snap.size ? p : { ...p, [name]: snap.size }));
@@ -3135,8 +3265,8 @@ const refreshFromServer = React.useCallback(async ({ force = false, since, manua
     const upKeys = new Set(upserts.map(keyOf));
     const drop = (o) => upKeys.has(keyOf(o)) || removedKeys.has(keyOf(o));
     startTransition(() => {
-      setOrders((prev) => [...prev.filter((o) => !drop(o)), ...upserts.filter((o) => !CANCELED_STATUS_LIST.includes(o.상태))]);
-      setCanceledOrders((prev) => [...prev.filter((o) => !drop(o)), ...upserts.filter((o) => CANCELED_STATUS_LIST.includes(o.상태))]);
+      setOrders((prev) => [...prev.filter((o) => !drop(o)), ...upserts.filter((o) => !isCancelledOrder(o))]);
+      setCanceledOrders((prev) => [...prev.filter((o) => !drop(o)), ...upserts.filter((o) => isCancelledOrder(o))]);
     });
     if (extraUpserts.length) mergeExtra(extraUpserts);
     markSynced(startedAt);
@@ -3984,6 +4114,10 @@ const thisMonth = thisMonthKST();
   }, [page, appliedStartDate, appliedEndDate, onlyToday, thisMonth, loadRange]);
   useEffect(() => {
     if (page === "canceled") loadCanceledHistory();
+    // ⭐ 2026-11-05 PC·모바일 일치 — PC 실시간 범위는 최근 7일~, 모바일은 어제~. 고정노선현황(입고일 = 상차일 + 하차일수)과
+    //   경리·임원 대시보드(최근 7일~을 전제로 집계)는 PC와 같은 7일~을 먼저 받아 둔다(실시간 범위 안쪽은 loadRange가 건너뜀)
+    else if (page === "fixedroute") loadRange(pcLiveWindowStart(), todayKST());
+    else if (page === "dept") loadRange(pcLiveWindowStart(), prevDayStr(mobileLiveStart()));
     else if (page === "fleet" || page === "ratecard" || page === "myinfo" || page === "company-fare") loadFullHistory(); // 누적 매출·운임표·내 전체 실적
     else if (page === "intel") {
       const y = todayKST().slice(0, 4);
@@ -3993,8 +4127,12 @@ const thisMonth = thisMonthKST();
     }
   }, [page, loadRange, loadFullHistory, loadCanceledHistory]);
 
+  // 🔎 세부검색(배차현황) — ⭐ 2026-11-05 PC·모바일 일치: 목록 화면에서 메인으로 올림(세부검색만 걸어도 PC처럼 고정노선 오더까지 찾기)
+  const [mDetail, setMDetail] = useState(null);
+  const mDetailGet = useMobileDetailGetters((localStorage.getItem("loginCompany") || userCompany || localStorage.getItem("userCompany") || DEFAULT_COMPANY).trim());
   const filteredOrders = useMemo(() => {
-    let base = [...allOrders];
+    // ⭐ 2026-11-06 검색어·세부검색이 있어도 고정노선(구글시트 배차표) 오더는 넣지 않는다 — 고정노선현황에서만(PC와 같음)
+    let base = [...listOrders];
 
     // 🔹 오늘 / 날짜 선택 여부
     const today = todayStr();
@@ -4020,14 +4158,14 @@ if (onlyToday) {
     // 2) 상단 탭: 전체 / 배차중 / 배차완료
     base = base.filter((o) => {
       if (statusTab === "전체") return true;
-      const state = getStatus(o); // ▲ 차량번호 기준 상태
+      const state = getStatusPc(o); // ⭐ 2026-11-05 PC와 같은 배차상태 기준
       return state === statusTab;
     });
 
     // 3) 드롭다운 배차상태 (배차 전체 / 배차중 / 배차완료)
     base = base.filter((o) => {
       if (!assignFilter) return true;
-      const state = getStatus(o);
+      const state = getStatusPc(o);
       return state === assignFilter;
     });
 
@@ -4092,6 +4230,7 @@ if (appliedSearchType === "메모")
 
     return base;
   }, [
+    listOrders,
     allOrders,
     statusTab,
     assignFilter,
@@ -4102,6 +4241,7 @@ if (appliedSearchType === "메모")
     appliedSearchText,
     thisMonth,
     onlyToday,
+    mDetail,
   ]);
 
 
@@ -4110,22 +4250,22 @@ if (appliedSearchType === "메모")
 // ✅ 미배차 오더 (차량번호 없는 것)
 // ⭐ 2026-11-02 PC 미배차 기준과 통일 — 배차중(또는 상태 비어 있음) + 차량번호 없음 + 취소 아님 + 같은 오더는 한 번만
 const [mUnDetail, setMUnDetail] = useState(null); // 🔎 미배차 세부검색(기간 + 1~3차)
-const unassignedOrders = useMemo(() => {
-  const seen = new Set();
-  return allOrders.filter((o) => {
-    const st = String(o.배차상태 || "").trim();
-    if (st && st !== "배차중") return false;          // 승인대기·배차완료·배차취소 등은 미배차가 아님
-    if (String(o.차량번호 || "").trim()) return false;
-    if (CANCELED_STATUS_LIST.includes(String(o.상태 || "").trim()) || o.지급방식 === "취소") return false;
-    if (o.source === "transport_transmit") return false;
-    if (!(String(o.상차지명 || "").trim() || String(o.하차지명 || "").trim())) return false; // ★ 상/하차지 없는 빈 오더 제외
-    if (!getPickupDate(o)) return false;              // ★ 날짜 없는 오더 제외
-    const k = `${o.__col || ""}/${o._id || ""}`;
-    if (o._id && seen.has(k)) return false;
-    seen.add(k);
-    return true;
-  });
-}, [allOrders]);
+// ⭐ 2026-11-05 PC·모바일 일치 — PC와 같은 파일(unassignedRule.js)의 기준 하나만 쓴다
+const unassignedOrders = useMemo(() => pickUnassignedOrders(listOrders), [listOrders]);
+// ⭐ 2026-11-05 PC·모바일 일치 — PC 배차현황 › 고정노선현황 탭 숫자와 같게: 이 회사 배차표 양식의 오더 중 미배차
+const routeBoardIdsM = useRouteBoardIds((localStorage.getItem("loginCompany") || userCompany || localStorage.getItem("userCompany") || DEFAULT_COMPANY).trim());
+const fixedUnassignedOrders = useMemo(() => pickUnassignedOrders(allOrders.filter((r) => r.배차표Id && routeBoardIdsM.has(r.배차표Id))), [allOrders, routeBoardIdsM]);
+// ⭐ 2026-11-06 계정별 안 본 숫자 — 메뉴 숫자는 "그 화면에서 아직 안 본 미배차"만. 등록내역(list)·미배차현황(unassigned)·고정노선현황(fixed)
+//  화면을 1.5초 보면 그 메뉴 숫자가 사라지고, 새로 생긴 오더만 다시 숫자로. PC와 같은 기록(seenBadges.js · 이 기기 + users/{uid}.badgeSeen)
+useBadgeSeenSync(["driver", "shipper"].includes(role) ? "" : user?.uid, myProfM?.badgeSeen);
+const unseenListOrders = useUnseenItems("list", unassignedOrders);
+const unseenUnassignedOrders = useUnseenItems("unassigned", unassignedOrders);
+const unseenFixedOrders = useUnseenItems("fixed", fixedUnassignedOrders);
+useMarkSeenOnView(page === "list", "list", unassignedOrders);
+useMarkSeenOnView(page === "unassigned", "unassigned", unassignedOrders);
+useMarkSeenOnView(page === "fixedroute", "fixed", fixedUnassignedOrders);
+// 햄버거(머리띠) 합계용 — 볼 수 있는 메뉴의 것만, 같은 오더는 한 번
+const unseenDispatchTotal = unionCount(menuOkM("배차현황") ? unseenListOrders : [], menuOkM("배차관리") ? unseenUnassignedOrders : [], menuOkM("배차현황") ? unseenFixedOrders : []);
 
 // 📤 정보미전달 오더 (오늘 이후 + 전달미완료)
 const undeliveredOrders = useMemo(() => {
@@ -4137,6 +4277,7 @@ const undeliveredOrders = useMemo(() => {
 
       if (!pickupDate) return false;
       if (pickupDate < today) return false;
+      if (o?.배차표Id) return false; // ⭐ 2026-11-04 고정노선 오더는 고정노선현황에서만
       if (o.업체전달상태 === "전달완료") return false;
       // 배차 전(차량번호 없음)인 오더는 미배차현황에만 있어야 하고, 정보미전달은
       // 배차는 됐지만 아직 업체에 정보 전달이 안 된 것만 대상이어야 한다.
@@ -4925,15 +5066,8 @@ const notifyFleetCancelMobile = (order, orderId) => {
   const norm = (v = "") => String(v).replace(/\s+/g, "").toLowerCase().replace(/-/g, "");
   const drv = (drivers || []).find(d => norm(d.차량번호) === norm(order.차량번호));
   if (drv?.등급 !== "지입") return;
-  addDoc(collection(db, "driver_notifications"), {
-    driverId: drv.id,
-    type: "canceled",
-    orderId,
-    title: "배차가 취소되었습니다",
-    body: `담당자가 ${order.거래처명 || ""} ${order.상차지명 || "-"} → ${order.하차지명 || "-"} 오더를 취소했습니다.`,
-    createdAt: serverTimestamp(),
-    read: false,
-  }).catch(() => {});
+  // ⭐ 2026-11-05 기사앱 "삭제된 오더" 팝업용 안내 문서(오더 요약 포함) — 따로 저장, 삭제는 기다리지 않는다
+  writeOrderDeletedNotice(db, { driverId: drv.id, orderId, data: order });
 };
 
 const deleteSingleOrder = async (order) => {
@@ -4951,8 +5085,8 @@ const deleteSingleOrder = async (order) => {
   const id = order.id || order._id;
   if (!col || !id) return;
   notifyFleetCancelMobile(order, id);
-  // ⭐ 사용자 요청 — 취소내역 없이 완전삭제(모든 화면에서 사라짐)
-  await deleteOrderWithLog(col, id);
+  // ⭐ 사용자 요청 — 취소내역 없이 완전삭제(모든 화면에서 사라짐) · ⭐ 2026-11-05 삭제 진행 창
+  await deleteOrdersAtomicMobile([{ col, id }]);
   deleteShipperMirrorMobile(order).catch(() => {});
   setOrders(prev => prev.filter(o => (o.id || o._id) !== id));
 };
@@ -4960,21 +5094,38 @@ const deleteSingleOrder = async (order) => {
   // --------------------------------------------------
   // 🔵 모바일 전용 upsertDriver
   // --------------------------------------------------
-  const upsertDriver = async ({ id, 차량번호, 이름, 전화번호 }) => {
+  const upsertDriver = async ({ id, 차량번호, 이름, 전화번호, 별도추가 }) => {
     if (!차량번호) return;
 
     const norm = (s = "") => String(s).replace(/\s+/g, "").toLowerCase();
+    // ⭐ 2026-11-05 새 기사 문서엔 회사 이름을 꼭 넣는다 — 빠져 있으면 PC/모바일 목록(회사 필터)에서
+    //  기본 회사 기사로 취급돼 안 보이고, 회사 잠금 규칙(coCreate)에서도 저장이 거부된다.
+    const myCo = (localStorage.getItem("loginCompany") || userCompany || localStorage.getItem("userCompany") || DEFAULT_COMPANY).trim();
 
     // ⭐ id가 명시적으로 넘어오면(예: "신규 기사로 별도 등록") 차량번호로 기존 문서를
     // 찾지 않고 항상 새 문서를 만든다 — PC(DispatchApp.jsx)와 동일하게, 같은
     // 차량번호라도 "별도 등록"을 눌렀는데 기존 기사(예: 이봉우)를 그대로 덮어써버리는
     // 버그를 막는다.
+    // ⭐ 2026-11-05 단, 이미 있는 기사 문서 id(이름·전화 [수정] → "기존 정보 변경")면 그 문서의
+    //  이름·전화번호만 바꾼다(등급·메모·회사 등 나머지 정보는 그대로).
     if (id) {
+      const existingById = drivers.find((d) => d.id === id);
+      if (existingById) {
+        await updateDoc(doc(db, "drivers", id), {
+          차량번호: 차량번호 || existingById.차량번호 || "",
+          이름: 이름 || "",
+          전화번호: 전화번호 || "",
+          updatedAt: serverTimestamp(),
+        });
+        return id;
+      }
       await setDoc(doc(db, "drivers", id), {
         차량번호: 차량번호 || "",
         이름: 이름 || "",
         전화번호: 전화번호 || "",
         메모: "",
+        companyName: myCo,
+        ...(별도추가 ? { 별도추가: true } : {}),
         createdAt: serverTimestamp(),
       });
       return id;
@@ -5000,6 +5151,7 @@ const deleteSingleOrder = async (order) => {
       이름: 이름 || "",
       전화번호: 전화번호 || "",
       메모: "",
+      companyName: myCo, // ⭐ 2026-11-05
       createdAt: serverTimestamp(),
     });
 
@@ -5170,7 +5322,7 @@ const deleteSingleOrder = async (order) => {
       archiveCompletedOrderMobile(deleteConfirmMobile, deleteConfirmMobile.id, "오더삭제");
     }
     // ⭐ 사용자 요청 — 취소내역 없이 완전삭제(모든 화면에서 사라짐)
-    bgWrite(deleteOrderWithLog(deleteConfirmMobile.__col, deleteConfirmMobile.id), "오더 삭제"); // 화면 먼저(삭제는 뒤에서)
+    bgWrite(deleteOrdersAtomicMobile([{ col: deleteConfirmMobile.__col, id: deleteConfirmMobile.id }]), "오더 삭제"); // 화면 먼저(삭제는 뒤에서) · ⭐ 2026-11-05 삭제 진행 창
     deleteShipperMirrorMobile(deleteConfirmMobile).catch(() => {});
     setDeleteConfirmMobile(null);
     setSelectedOrder(null);
@@ -5201,17 +5353,19 @@ const deleteSingleOrder = async (order) => {
     const fleetCount = selectedOrders.filter(o => o.기사확인상태 === "대기" || o.기사확인상태 === "수락").length;
     if (fleetCount > 0 && !window.confirm(`지입 기사에게 배차된 오더가 ${fleetCount}건 포함되어 있습니다.\n삭제하면 기사앱에서도 오더가 사라집니다. 삭제하시겠습니까?`)) return;
     try {
+      // ⭐ 2026-11-05 한 건씩 보내던 삭제를 한 번에(writeBatch) + 삭제 진행 창 — 목록이 한 줄씩 사라지지 않게
+      const _targets = [];
       for (const order of selectedOrders) {
         const col = order.__col || collName;
         const id = order.id || order._id;
         if (col && id) {
           notifyFleetCancelMobile(order, id);
           if (["수락", "완료"].includes(order.기사확인상태) && order.차량번호) archiveCompletedOrderMobile(order, id, "오더삭제");
-          // ⭐ 사용자 요청 — 취소내역 없이 완전삭제(모든 화면에서 사라짐)
-          bgWrite(deleteOrderWithLog(col, id), "오더 삭제");
-          deleteShipperMirrorMobile(order).catch(() => {});
+          _targets.push({ col, id, order });
         }
       }
+      // ⭐ 사용자 요청 — 취소내역 없이 완전삭제(모든 화면에서 사라짐)
+      bgWrite(deleteOrdersAtomicMobile(_targets).then(() => { _targets.forEach(({ order }) => deleteShipperMirrorMobile(order).catch(() => {})); }), "오더 삭제");
       const deletedIds = new Set(selectedOrders.map(o => o.id || o._id));
       setOrders(prev => prev.filter(o => !deletedIds.has(o.id) && !deletedIds.has(o._id)));
       showSuccess(`${selectedOrders.length}개 오더 삭제 완료`);
@@ -5237,7 +5391,11 @@ const title =
   : page === "sales" ? "매출관리"
   : page === "approval" ? "전자결재"
   : page === "staff" ? "직원 관리"
+  : page === "drvacc" ? "기사 앱 계정"
+  : page === "drivers" ? "기사관리"
+  : page === "clients" ? "거래처관리"
   : page === "fixedroute" ? "고정노선현황"
+  : page === "perms" ? "권한 관리"
   : page === "dept" ? (deptMode === "exec" ? "경영 브리핑" : deptMode === "hr" ? "인사관리" : "경리·회계")
   : String(page).startsWith("dept:") ? ({ "dept:settle": "정산관리", "dept:acct": "회계관리", "dept:assets": "비품·자산", "dept:hr": "인사관리부", "dept:leave": "연차 관리", "dept:onboarding": "입·퇴사 관리", "dept:cert": "증명서 발급", "dept:driverdocs": "기사 서류", "dept:approvals": "결재함", "dept:schedule": "직원 일정", "dept:funds": "자금 현황", "dept:execsched": "임원 일정", "dept:rules": "사내 규정", "dept:board": "사내 게시판", "dept:farerules": "운임 규칙", "dept:cashbook": "자금 관리", "dept:myresume": "내 이력서" }[page] || "")
   : page === "status" ? "배차현황"
@@ -5375,7 +5533,7 @@ const title =
   // ⚠️ z-50이던 시절엔 다른 화면 요소(하단 액션바 등)가 같은 z-50으로 뒤에 그려지는
   // 순서상 토스트를 덮어버려 안 보이는 경우가 있었다. 다른 팝업들처럼 확실히
   // 최상단(z-[999999])에 뜨도록 올리고, 하단 네비/버튼 위로 자리도 더 띄운다.
-  <div className="fixed bottom-20 left-1/2 -translate-x-1/2 z-[999999]
+  <div className="kp-m-toast fixed bottom-20 left-1/2 -translate-x-1/2 z-[999999]
                   bg-black text-white px-4 py-3 rounded-xl shadow-lg
                   flex items-center gap-3 max-w-[95vw]">
     {/* 분할화면 등 화면 폭이 좁아져도 메시지가 3줄로 꺾여 보이지 않도록
@@ -5578,6 +5736,16 @@ const title =
 )}
 
       <BannerCenter bottom={86} />
+      {/* ⭐ 2026-11-05 기사 수락/거절·서류·긴급 — 위쪽 배너(포커스 안 뺏음 · 8초 뒤 사라짐) · [보기]는 그 카드로 */}
+      {!["driver", "shipper"].includes(role) && (
+        <DriverEventToasts mobile onView={(e) => {
+          if (e.kind === "doc") { markDriverSeen("docs"); setPage("dept:driverdocs"); return; }
+          if (e.kind === "sos") { markDriverSeen("sos"); setPage("fleet"); return; }
+          markDriverSeen("orders");
+          if (e.row?.배차표Id) { setPage("fixedroute"); return; }
+          setShowMenu(false); setPage("list"); setTimeout(() => focusOrderRow(e.id), 300);
+        }} />
+      )}
       {/* ⭐ 2026-11-03 알림 통합 — 새 공지·인사발령·결재 요청/결과·인수인계는 가운데 팝업(아래쪽 배너 없앰) */}
       {!["driver", "shipper"].includes(role) && (
         <NotifyCenter mobile uid={user?.uid} role={realRole || role} team={myProfM?.team || (() => { try { return window.__kpMeTeam || ""; } catch { return ""; } })()}
@@ -5622,16 +5790,16 @@ const title =
         }
     : String(page).startsWith("dept:")
       ? () => setPage("dept")
-    : page === "notice" || page === "schedule" || page === "unassigned" || page === "canceled" || page === "handover" || page === "attendance" || page === "ratecard" || page === "myinfo" || page === "settings" || page === "fleet" || page === "intel" || page === "national-fare" || page === "gsheet" || page === "blind" || page === "company-fare" || page === "sales" || page === "approval" || page === "staff" || page === "fixedroute"
+    : page === "notice" || page === "schedule" || page === "unassigned" || page === "canceled" || page === "handover" || page === "attendance" || page === "ratecard" || page === "myinfo" || page === "settings" || page === "fleet" || page === "intel" || page === "national-fare" || page === "gsheet" || page === "blind" || page === "company-fare" || page === "sales" || page === "approval" || page === "staff" || page === "drvacc" || page === "drivers" || page === "clients" || page === "fixedroute" || page === "perms"
       ? () => setPage("list")
       : page === "fare"
       ? () => setPage(prevPage || "list")
       : undefined
   }
   onRefresh={page === "list" ? handleRefresh : undefined}
-  onValidateOrders={page === "list" ? () => handleValidateOrders(false) : undefined}
+  onValidateOrders={undefined /* ⭐ 2026-11-04 오더검증 버튼 없앰 */}
   onMenu={page === "list" || page === "dept" ? () => setShowMenu(true) : undefined}
-  menuBadge={(alertCounts.approval || 0) + (alertCounts.handover || 0) + (alertCounts.notice || 0) + ((["admin", "totalMaster", "superadmin", "viewer"].includes(role) || deptMode) ? (alertCounts.signupStaff || 0) + (alertCounts.signupDriver || 0) : 0)}
+  menuBadge={(alertCounts.approval || 0) + (alertCounts.mineNew || 0) + (alertCounts.handover || 0) + (alertCounts.notice || 0) + ((["admin", "totalMaster", "superadmin", "viewer"].includes(role) || deptMode) ? (alertCounts.signupStaff || 0) + (alertCounts.signupDriver || 0) : 0) + drvCounts.orders + drvCounts.docs + drvCounts.sos /* ⭐ 2026-11-05 기사앱 이벤트 */ + unseenDispatchTotal /* ⭐ 2026-11-06 안 본 미배차·고정노선 미배차 */}
   notifCount={unreadCount}
   onNotifClick={() => { setShowNotifPanel(true); markAllRead(); }}
   messengerUnread={messengerUnread}
@@ -5808,13 +5976,16 @@ onGoAttendance={() => {
           isExec={isExecM}
           menuOk={menuOkM}
           deptOk={deptOkM}
-          hrAcct={realRole === "hrAcct" ? hrAcctView : null}
-          onToggleHrAcct={() => { const v = hrAcctView === "hr" ? "acct" : "hr"; setHrAcctView(v); try { localStorage.setItem("kpHrAcctView", v); } catch { /* 무시 */ } setPage("dept"); setShowMenu(false); }}
+          roleViews={roleView.views}
+          roleViewCur={roleView.view}
+          onRoleView={(v) => { roleView.setView(v); setPage(v === "dispatch" ? "list" : "dept"); setShowMenu(false); }}
           isCeo={forceExec || ["대표", "대표이사", "사장"].includes(String(myProfM?.position || "").trim())}
           execFull={execFull}
           onToggleExec={() => { toggleExecFull(); setShowMenu(false); }}
-          alertCounts={alertCounts}
-          unassignedCount={unassignedOrders.length}
+          alertCounts={{ ...alertCounts, drvOrders: drvCounts.orders, drvDocs: drvCounts.docs, drvSos: drvCounts.sos }}
+          unassignedCount={unseenUnassignedOrders.length /* ⭐ 2026-11-06 안 본 것만 */}
+          listUnseenCount={unseenListOrders.length}
+          fixedUnassignedCount={unseenFixedOrders.length}
           onDeleteAll={deleteAllOrders}
           setUiScale={setUiScale}
           uiScale={uiScale}
@@ -6042,7 +6213,7 @@ onGoAttendance={() => {
         {(canEdit || canDelete) && (
           <div className="flex gap-2 pt-3 border-t border-gray-100">
             {canDelete && (
-              <button onClick={() => setConfirmDialog({ message: "일정을 삭제하시겠습니까?", onConfirm: async () => { await deleteDoc(doc(db, "schedules", selectedSchedule.id)); setSelectedSchedule(null); } })} className="flex-1 py-2.5 rounded-xl border border-red-200 text-red-500 text-sm font-semibold">삭제</button>
+              <button onClick={() => setConfirmDialog({ message: "일정을 삭제하시겠습니까?", onConfirm: async () => { const _id = selectedSchedule.id; await runDelete({ label: "일정", task: () => deleteDoc(doc(db, "schedules", _id)) }); setSelectedSchedule(null); } }) /* ⭐ 2026-11-05 삭제 진행 창 */} className="flex-1 py-2.5 rounded-xl border border-red-200 text-red-500 text-sm font-semibold">삭제</button>
             )}
             {canEdit && (
               <button onClick={() => {
@@ -6298,12 +6469,12 @@ onGoAttendance={() => {
         </div>
         {(() => {
           // ⭐ 2026-11-02 점검 — 규칙(isBoardAdmin)과 맞춤: 공지 관리 권한자만 수정·삭제 버튼 표시
-          const isNAuthor = ["admin", "hrManager", "hrAcct", "totalMaster"].includes(role) && (!selectedNotice.authorUid || selectedNotice.authorUid === currentUser?.uid);
+          const isNAuthor = ["admin", "hrManager", "hrAcct", "allMgr", "totalMaster"].includes(role) && (!selectedNotice.authorUid || selectedNotice.authorUid === currentUser?.uid);
           const isSA = role === "superadmin" || role === "totalMaster";
           if (!isNAuthor && !isSA) return null;
           return (
           <div className="flex gap-2 pt-2 border-t border-gray-100">
-            <button onClick={() => setConfirmDialog({ message: "공지사항을 삭제하시겠습니까?", onConfirm: async () => { /* ⭐ 2026-11-02 점검 — 삭제 실패 시 알림 */ try { await deleteDoc(doc(db, "notices", selectedNotice.id)); setSelectedNotice(null); } catch (e) { alert(e?.message || "삭제 실패"); } } })}
+            <button onClick={() => setConfirmDialog({ message: "공지사항을 삭제하시겠습니까?", onConfirm: async () => { /* ⭐ 2026-11-02 점검 — 삭제 실패 시 알림 */ try { const _id = selectedNotice.id; await runDelete({ label: "공지", task: () => deleteDoc(doc(db, "notices", _id)) }); setSelectedNotice(null); } /* ⭐ 2026-11-05 삭제 진행 창 */ catch (e) { alert(e?.message || "삭제 실패"); } } })}
               className="flex-1 py-2.5 rounded-xl border border-red-200 text-red-500 text-sm font-semibold">삭제</button>
             <button onClick={() => { setNoticeForm({ category: selectedNotice.category || "공지사항", author: selectedNotice.author, content: selectedNotice.content, audience: selectedNotice.audience || "internal" }); setNoticeOpen(true); }}
               className={`flex-1 py-2.5 rounded-xl text-white text-sm font-semibold ${cardVersionB ? "bg-[#1B2B4B]" : "bg-blue-600"}`}>수정</button>
@@ -6501,7 +6672,7 @@ onGoAttendance={() => {
           {(currentUser?.uid === selectedHandover.authorUid || role === "superadmin" || role === "totalMaster") && (
             <div className="flex gap-2 pt-2 border-t">
               <button
-                onClick={() => setConfirmDialog({ message: "인수인계를 삭제하시겠습니까?", onConfirm: async () => { await deleteDoc(doc(db, "handovers", selectedHandover.id)); setSelectedHandover(null); } })}
+                onClick={() => setConfirmDialog({ message: "인수인계를 삭제하시겠습니까?", onConfirm: async () => { const _id = selectedHandover.id; await runDelete({ label: "인수인계", task: () => deleteDoc(doc(db, "handovers", _id)) }); setSelectedHandover(null); } }) /* ⭐ 2026-11-05 삭제 진행 창 */}
                 className="flex-1 py-2.5 rounded-xl border border-red-200 text-red-600 text-sm font-semibold"
               >
                 삭제
@@ -6549,7 +6720,11 @@ onGoAttendance={() => {
         {(page === "list" || page === "detail") && ordersLoaded && initLoadDone && bootDone && (
           <div style={page === "list" ? undefined : { display: "none" }}>
           <MobileOrderList
-            allOrders={allOrders}
+            renderAllFirst={listScrollYRef.current > 0}
+            allOrders={listOrders}
+            mDetail={mDetail}
+            setMDetail={setMDetail}
+            detailGetters={mDetailGet}
             dispatcherName={dispatcherName}
             userCompany={userCompany}
             groupedByDate={groupedByDate}
@@ -6569,7 +6744,7 @@ onGoAttendance={() => {
             onlyToday={onlyToday}
 setOnlyToday={setOnlyToday}
 onSelect={(o) => {
-  listScrollYRef.current = window.scrollY;
+  listScrollYRef.current = window.scrollY; listAnchorRef.current = readListAnchor();
   setSelectedOrder(o);
   setDetailFrom("list");
   setPage("detail");
@@ -6608,7 +6783,7 @@ setOpenMemo={setOpenMemo}
 {(page === "dept" || String(page).startsWith("dept:")) && (
   <React.Suspense fallback={null}>
     <MobilePcView key={page} kind={page} deptMode={deptMode} dispatchData={allOrders} fixedRows={fixedClientRows} clients={clients} places={places} role={role} userCompany={pcViewCompany} me={pcViewMe} loadRange={loadRange} loadFullHistory={loadFullHistory}
-      onGo={(k) => { const [m0, id] = String(k).split(":"); if (k === "배차현황") deptListOkRef.current = true; if (m0 === "결재함" && id) { try { sessionStorage.setItem("kpExecApOpen", id); } catch { /* 무시 */ } } setPage({ 결재함: "approval", 직원일정: "dept:schedule", 자금현황: "dept:funds", 스케줄: "dept:execsched", 실시간배차현황: "unassigned", 인사이트: "intel", 정산관리: "dept:settle", "정산관리:지급관리": "dept:settle", 회계관리: "dept:acct", 매출관리: "sales", 인사관리부: "dept:hr", 출근기록부: "attendance", 연차관리: "dept:leave", 입퇴사관리: "dept:onboarding", 증명서발급: "dept:cert", 수입지출: "dept:cashbook", 비품관리: "dept:assets", 전자결재: "approval", 배차현황: "list", 관리자메뉴: "staff", 직원관리: "staff", 기사서류: "dept:driverdocs", 기사관리: "dept:driverdocs", 자금관리: "dept:cashbook", "자금관리:book": "dept:cashbook", "인사관리부:leave": "dept:leave", 기사승인: "staff" }[m0 === "결재함" ? "결재함" : k] || "dept"); /* ⭐ 2026-11-02 점검 — 경리·인사 홈 바로가기 키(자금관리·연차·기사승인) 추가 */ }} />
+      onGo={(k) => { const [m0, id] = String(k).split(":"); if (k === "배차현황") deptListOkRef.current = true; if (m0 === "결재함" && id) { try { sessionStorage.setItem("kpExecApOpen", id); } catch { /* 무시 */ } } setPage({ 결재함: "approval", 직원일정: "dept:schedule", 자금현황: "dept:funds", 스케줄: "dept:execsched", 실시간배차현황: "unassigned", 인사이트: "intel", 정산관리: "dept:settle", "정산관리:지급관리": "dept:settle", 회계관리: "dept:acct", 매출관리: "sales", 인사관리부: "dept:hr", 출근기록부: "attendance", 연차관리: "dept:leave", 입퇴사관리: "dept:onboarding", 증명서발급: "dept:cert", 수입지출: "dept:cashbook", 비품관리: "dept:assets", 전자결재: "approval", 배차현황: "list", 관리자메뉴: "staff", 직원관리: "staff", 기사서류: "dept:driverdocs", 기사관리: "dept:driverdocs", 자금관리: "dept:cashbook", "자금관리:book": "dept:cashbook", "인사관리부:leave": "dept:leave", 기사승인: "drvacc" /* ⭐ 2026-11-05 기사 가입 승인 → 기사 앱 계정 */ }[m0 === "결재함" ? "결재함" : k] || "dept"); /* ⭐ 2026-11-02 점검 — 경리·인사 홈 바로가기 키(자금관리·연차·기사승인) 추가 */ }} />
   </React.Suspense>
 )}
 {page === "sales" && (
@@ -6699,12 +6874,12 @@ setOpenMemo={setOpenMemo}
             cardVersionB={cardVersionB}
           />
         )}
-        {(page === "national-fare" || page === "company-fare" || page === "ratecard" || page === "approval" || page === "staff" || page === "fixedroute") && (
+        {(page === "national-fare" || page === "company-fare" || page === "ratecard" || page === "approval" || page === "staff" || page === "drvacc" || page === "drivers" || page === "clients" || page === "fixedroute" || page === "perms") && (
           <React.Suspense fallback={null}>
             <MobilePcView key={page}
-              kind={page === "ratecard" ? "ratecard" : page === "approval" ? "approval" : page === "staff" ? "staff" : page === "fixedroute" ? "fixedroute" : "fare"} drivers={drivers}
+              kind={page === "ratecard" ? "ratecard" : page === "approval" ? "approval" : page === "staff" ? "staff" : page === "drvacc" ? "drvacc" : page === "drivers" ? "drivers" : page === "clients" ? "clients" : page === "fixedroute" ? "fixedroute" : page === "perms" ? "perms" : "fare"} drivers={drivers} users={mobileUsers}
               initial={page === "company-fare" ? "자사운임표" : undefined}
-              dispatchData={allOrders} clients={clients} places={places} role={role} userCompany={pcViewCompany} me={pcViewMe}
+              dispatchData={allOrders} carrierPoolRows={page === "fixedroute" ? carrierPoolRowsM : undefined} clients={clients} places={places} role={role} userCompany={pcViewCompany} me={pcViewMe}
               loadRange={loadRange} loadFullHistory={loadFullHistory} />
           </React.Suspense>
         )}
@@ -6754,10 +6929,10 @@ setOpenMemo={setOpenMemo}
     dispatcherName={dispatcherName}
     title="미배차 / 정보미전달"
     orders={{
-      unassigned: mUnDetail ? applyDetailFilter(unassignedOrders, mUnDetail) : unassignedOrders,
-      undelivered: mUnDetail ? applyDetailFilter(undeliveredOrders, mUnDetail) : undeliveredOrders,
+      unassigned: mUnDetail ? applyDetailFilter(unassignedOrders, mUnDetail, { getters: mDetailGet }) : unassignedOrders,
+      undelivered: mUnDetail ? applyDetailFilter(undeliveredOrders, mUnDetail, { getters: mDetailGet }) : undeliveredOrders,
     }}
-    detailBtn={<DetailFilterButton rows={unassignedTab === "정보미전달" ? undeliveredOrders : unassignedOrders} value={mUnDetail} onApply={setMUnDetail} title="세부검색 · 미배차" />}
+    detailBtn={<DetailFilterButton rows={unassignedTab === "정보미전달" ? undeliveredOrders : unassignedOrders} value={mUnDetail} onApply={setMUnDetail} getters={mDetailGet} title="세부검색 · 미배차" />}
     unassignedTypeFilter={unassignedTypeFilter}
     setUnassignedTypeFilter={setUnassignedTypeFilter}
     setTodayRange={setTodayRange}
@@ -7232,7 +7407,7 @@ function MobileVersionChip({ dark = false }) {
 }
 
 // ⭐ 2026-11-03 카톡처럼 진한 빨강 숫자(모바일 테마가 bg-rose-500을 남색으로 바꾸므로 색은 style로 고정)
-const RED_PILL = { background: "#E5332A", color: "#fff", fontWeight: 900 };
+const RED_PILL = { background: "#FF3B30", color: "#fff", fontWeight: 800 }; // ⭐ 2026-11-05 카카오톡 빨강
 const MobileHeader = React.memo(function MobileHeader({ title, onBack, onRefresh, onValidateOrders, onMenu, menuBadge = 0, notifCount = 0, onNotifClick, cardVersionB = false, messengerUnread = 0, onMessengerClick, mailCompany = "", mailName = "", attUid = "", attRole = "", attEmail = "" }) {
   const newVer = useNewVersion(); // ★ 새 버전 배포 시 메뉴 버튼에 점 표시
   // ⭐ 2026-10-22 디자인 개선 — A형: 반투명 흰 머리줄 / B형: 남색 그라데이션 머리줄. 버튼은 둥근 네모 타일.
@@ -7272,7 +7447,7 @@ const MobileHeader = React.memo(function MobileHeader({ title, onBack, onRefresh
 
       {/* ⭐ 제목 — 양쪽 버튼 칸을 같은 폭으로 잡아 가운데, 화면이 좁으면(분할화면) 버튼과 겹치지 않고 제목이 줄어든다 */}
       <div className="min-w-0 text-center leading-none pointer-events-none overflow-hidden">
-        <div className={`text-[9.5px] font-extrabold tracking-[0.24em] whitespace-nowrap ${cardVersionB ? "text-[#8FB0F0]" : "text-[#4B6CB7]"}`}>KP-FLOW</div>
+        <div className="flex justify-center"><LogisTag height={7.5} chip={!cardVersionB} /></div>
         <div className={`mt-1 font-black text-[16px] tracking-tight truncate whitespace-nowrap ${cardVersionB ? "text-white" : "text-[#0F1A30]"}`}>{title}</div>
       </div>
 
@@ -7549,7 +7724,7 @@ function TopStatusPill({ historyLoading, hidden }) {
   );
 }
 
-// ⭐ 첫 진입 로딩 화면(KP-Flow) — 네이비 화면 위로 트럭이 전체 진행률만큼 길을 달리고,
+// ⭐ 첫 진입 로딩 화면(LogisWeb) — 네이비 화면 위로 트럭이 전체 진행률만큼 길을 달리고,
 // 아래 4단계가 차례대로 0 → 100% 채워진다. 전부 100%가 되면 부드럽게 사라지며 최신 상태로 열린다.
 function MobileLoadingScreen({ loaded = 0, total = null, cacheDone = false, onAllDone, onSkip }) {
   const bs = useMiniStore(bootStageStore);
@@ -7568,6 +7743,7 @@ function MobileLoadingScreen({ loaded = 0, total = null, cacheDone = false, onAl
   return <KpBootScreen targets={targets} subs={subs} onAllDone={onAllDone} onSkip={onSkip} variant="mobile" />;
 }
 
+let SIDE_MENU_SCROLL = 0; // 사이드 메뉴 스크롤 위치(앱이 켜져 있는 동안 기억)
 function MobileSideMenu({
   onClose,
   onGoList,
@@ -7604,10 +7780,13 @@ function MobileSideMenu({
   onGo,
   alertCounts,
   unassignedCount = 0,
+  fixedUnassignedCount = 0,
+  listUnseenCount = 0, // ⭐ 2026-11-06 등록내역 — 안 본 미배차
   deptMode = null,
   isExec = false,
-  hrAcct = null,
-  onToggleHrAcct,
+  roleViews = null,
+  roleViewCur = "",
+  onRoleView,
   isCeo = false,
   execFull = false,
   onToggleExec,
@@ -7615,10 +7794,22 @@ function MobileSideMenu({
   deptOk = () => false,
 }) {
   const fareMenu = useFareRules(); // ⭐ 2026-11-02 운임규칙 — 최고관리자가 켜 준 회사만 메뉴 표시
+  // ⭐ 2026-11-04 메뉴를 닫았다 다시 열어도(내정보 등 들어갔다 와도) 보던 위치 그대로 — 맨 위로 튀지 않게
+  const menuScrollRef = useRef(null);
+  React.useLayoutEffect(() => {
+    const el = menuScrollRef.current; if (!el) return undefined;
+    el.scrollTop = SIDE_MENU_SCROLL;
+    const r = requestAnimationFrame(() => { if (el) el.scrollTop = SIDE_MENU_SCROLL; }); // 펼쳐지는 섹션이 그려진 뒤 한 번 더
+    return () => cancelAnimationFrame(r);
+  }, []);
   const isAdminRole = ["admin", "totalMaster", "superadmin"].includes(role);
   const ok = menuOk;
+  const planIdM = useCompanyPlanId((role === "totalMaster" ? (localStorage.getItem("loginCompany") || "") : (localStorage.getItem("userCompany") || localStorage.getItem("loginCompany") || "")).trim()); // ⭐ 2026-11-05 PC와 같은 요금제 잠금
   const canRevenue = ["admin", "totalMaster", "superadmin", "test", "viewer"].includes(role);
   const canAdminMenu = isAdminRole || role === "viewer";
+  // ⭐ 2026-11-04 권한 관리 — 최고관리자가 켠 회사의 마스터만(자기 회사 것만)
+  const coFeatM = useCompanyFeatures();
+  const canPermsM = role !== "totalMaster" && mobileUsers?.find((u) => u.id === currentUser?.uid)?.isMaster === true && coFeatM.masterRolePerms === true;
   const myName =
     mobileUsers?.find(u => u.id === currentUser?.uid)?.name ||
     currentUser?.email ||
@@ -7695,11 +7886,7 @@ function MobileSideMenu({
         }`}>
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2.5">
-              <img src="/icons/sflow-icon.png" alt="KP-Flow" className={`w-9 h-9 rounded-[11px] shrink-0 ${dark ? "ring-1 ring-white/15" : "ring-1 ring-[#E3E8F0]"}`} />
-              <div className="min-w-0">
-                <div className={`text-[10px] font-extrabold tracking-[0.22em] ${dark ? "text-[#8FB0F0]" : "text-[#4B6CB7]"}`}>DISPATCH</div>
-                <div className={`text-[15px] font-black tracking-tight truncate whitespace-nowrap ${dark ? "text-white" : "text-[#0F1A30]"}`}>KP-Flow</div>
-              </div>
+              <LogisLockup mark={34} word={12} sub="dispatch" chip={!dark} />
             </div>
             {/* 이름·접속시각 — 좁은 화면에서도 글자가 쪼개지지 않게 이름 한 줄, 시각 한 줄로 */}
             <div className={`mt-3 flex items-center gap-2 px-3 py-2 rounded-xl max-w-full ${dark ? "bg-white/[0.08] border border-white/10" : "bg-[#F5F8FD] border border-[#E3E8F0]"}`}>
@@ -7725,7 +7912,7 @@ function MobileSideMenu({
         {/* 메뉴 본문 + 하단 컨트롤 — 사용자 요청: 메뉴 목록만 따로 작은 칸 안에서
             스크롤되던 걸 없애고, 드로어 전체(메뉴~로그아웃~버전)가 하나로 이어져
             일반 스크롤바로 오르내리게 통합했다. */}
-        <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain py-1" style={{ WebkitOverflowScrolling: "touch", paddingBottom: "max(env(safe-area-inset-bottom, 0px), 16px)" }}>
+        <div ref={menuScrollRef} onScroll={(e) => { SIDE_MENU_SCROLL = e.currentTarget.scrollTop; }} className="flex-1 min-h-0 overflow-y-auto overscroll-contain py-1" style={{ WebkitOverflowScrolling: "touch", paddingBottom: "max(env(safe-area-inset-bottom, 0px), 16px)" }}>
           {/* ⭐ 2026-10-31 — PC 메뉴와 같은 구성·권한 규칙(DispatchApp menuState)으로 정리.
               실무자: 매출관리 숨김 / 경리·회계: 화물등록·단가표 숨김 / 관리자 전용 메뉴: 관리자·마스터·조회전용 /
               최고관리자 전용(관리센터·구글시트·블라인드·회사코드조회)은 최고관리자만.
@@ -7737,6 +7924,7 @@ function MobileSideMenu({
               {ok("정산관리") && <MenuItem label="정산관리" icon="receipt" onClick={() => onGo?.("dept:settle")} dark={dark} />}
               {ok("매출관리") && <MenuItem label="매출관리" icon="chart" onClick={onGoSales} dark={dark} />}
               {ok("회계관리") && <MenuItem label="회계관리" icon="money" onClick={() => onGo?.("dept:acct")} dark={dark} />}
+              {ok("거래처관리") && <MenuItem label="거래처관리" icon="building" onClick={() => onGo?.("clients")} dark={dark} />}{/* ⭐ 2026-11-05 PC 경리(test)도 거래처관리를 본다 */}
             </MenuSection>
             <MenuSection title="자금 · 총무" en="FINANCE · OFFICE" dark={dark} alwaysOpen>
               {ok("자금관리") && <MenuItem label="자금 관리" icon="wallet" onClick={() => onGo?.("dept:cashbook")} dark={dark} />}
@@ -7758,12 +7946,13 @@ function MobileSideMenu({
               <MenuItem label="임원 스케줄" icon="pin" onClick={() => onGo?.("dept:execsched")} dark={dark} />
               {(canRevenue || isExec) && ok("매출관리") && <MenuItem label="매출관리" icon="chart" onClick={onGoSales} dark={dark} />}
               {(isAdminRole || isExec) && ok("인사이트") && <MenuItem label="경영인텔리전스" icon="trend" onClick={onGoIntel} dark={dark} />}
-              {isAdminRole && <MenuItem label="직원 관리" icon="users" onClick={() => onGo?.("staff")} badge={(alertCounts?.signupStaff || 0) + (alertCounts?.signupDriver || 0) || null} dark={dark} />}
+              {isAdminRole && <MenuItem label="직원 관리" icon="users" onClick={() => onGo?.("staff")} badge={alertCounts?.signupStaff || null} dark={dark} />}
+              {isAdminRole && <MenuItem label="기사 앱 계정 · 가입 승인" icon="truck" onClick={() => onGo?.("drvacc")} badge={alertCounts?.signupDriver || null} dark={dark} />}
             </MenuSection>
           )}
-          {hrAcct && (
-            <MenuSection title="화면 전환" en="HR · ACCOUNTING" dark={dark} alwaysOpen>
-              <MenuItem label={hrAcct === "hr" ? "경리 화면으로 전환" : "인사 화면으로 전환"} icon="refresh" onClick={onToggleHrAcct} dark={dark} />
+          {roleViews && (
+            <MenuSection title="화면 전환" en={roleViews.length > 2 ? "DISPATCH · ACCOUNTING · HR" : "HR · ACCOUNTING"} dark={dark} alwaysOpen>
+              {roleViews.filter(([k]) => k !== roleViewCur).map(([k, , lb]) => <MenuItem key={k} label={`${lb} 화면으로 전환`} icon="refresh" onClick={() => onRoleView?.(k)} dark={dark} />)}
             </MenuSection>
           )}
           {isExec && (
@@ -7773,17 +7962,23 @@ function MobileSideMenu({
           )}
           {(deptMode === "acct" || deptMode === "hr") && (
             <MenuSection title="직원 · 기사" en="PEOPLE" dark={dark} alwaysOpen>
-              <MenuItem label="가입 승인(직원·기사)" icon="users" onClick={() => onGo?.("staff")} badge={(alertCounts?.signupStaff || 0) + (alertCounts?.signupDriver || 0) || null} dark={dark} />
-              <MenuItem label="기사 서류" icon="file" onClick={() => onGo?.("dept:driverdocs")} dark={dark} />
+              {/* ⭐ 2026-11-05 직원 가입 승인과 기사 가입 승인(기사 앱 계정)을 나눔 — 숫자도 각각 */}
+              <MenuItem label="직원 가입 승인" icon="users" onClick={() => onGo?.("staff")} badge={alertCounts?.signupStaff || null} dark={dark} />
+              <MenuItem label="기사 앱 계정 · 가입 승인" icon="truck" onClick={() => onGo?.("drvacc")} badge={alertCounts?.signupDriver || null} dark={dark} />
+              <MenuItem label="기사 서류" icon="file" onClick={() => onGo?.("dept:driverdocs")} badge={alertCounts?.drvDocs || null} dark={dark} />
+              {ok("기사관리") && <MenuItem label="기사관리" icon="user" onClick={() => onGo?.("drivers")} dark={dark} />}{/* ⭐ 2026-11-05 PC 경리·인사도 기사관리를 본다 */}
             </MenuSection>
           )}
           {!deptMode && (
           <MenuSection title="배차관리" en="DISPATCH" dark={dark} alwaysOpen>
-            {ok("배차현황") && <MenuItem label="등록내역" icon="list" onClick={onGoList} dark={dark} />}
+            {ok("배차현황") && <MenuItem label="등록내역" icon="list" onClick={onGoList} badge={((alertCounts?.drvOrders || 0) + (listUnseenCount || 0)) || null} dark={dark} />}{/* ⭐ 2026-11-06 기사 수락/거절(본 시각 기준) + 안 본 미배차 */}{/* ⭐ 2026-11-05 PC·모바일 일치 — 기사 수락/거절이 없으면 PC 배차현황 탭처럼 미배차 숫자 */}{/* ⭐ 2026-11-05 기사 수락/거절 */}
             {role !== "test" && ok("배차관리") && <MenuItem label="화물등록" icon="truck" onClick={onGoCreate} dark={dark} />}
             {ok("배차관리") && <MenuItem label="미배차현황" icon="alert" onClick={onGoUnassigned} badge={unassignedCount > 0 ? unassignedCount : null} dark={dark} />}
-            {ok("배차현황") && <MenuItem label="고정노선현황" icon="route" onClick={() => onGo?.("fixedroute")} dark={dark} />}{/* ⭐ 2026-11-03 구글시트 배차표 */}
-            {ok("지입차관리") && <MenuItem label="지입차관리" icon="route" onClick={onGoFleet} dark={dark} />}{/* ⭐ 2026-11-03 배차관리 안으로 */}
+            {ok("배차현황") && <MenuItem label="고정노선현황" icon="route" onClick={() => onGo?.("fixedroute")} badge={fixedUnassignedCount > 0 ? fixedUnassignedCount : null} dark={dark} />}
+            {/* ⭐ 2026-11-05 PC·모바일 일치 — PC 기사관리·거래처관리와 같은 화면(PC에서 그 메뉴를 보는 권한만) */}
+            {PC_DRIVER_MENU_ROLES.has(role) && ok("기사관리") && <MenuItem label="기사관리" icon="user" onClick={() => onGo?.("drivers")} dark={dark} />}
+            {PC_CLIENT_MENU_ROLES.has(role) && ok("거래처관리") && <MenuItem label="거래처관리" icon="building" onClick={() => onGo?.("clients")} dark={dark} />}{/* ⭐ 2026-11-03 구글시트 배차표 */}
+            {ok("지입차관리") && <MenuItem label="지입차관리" icon="route" onClick={onGoFleet} badge={alertCounts?.drvSos || null} dark={dark} />}{/* ⭐ 2026-11-03 배차관리 안으로 */}
           </MenuSection>
           )}
           {!deptMode && ["인사관리부", "회계관리", "자금관리", "비품관리", "증명서발급"].some(deptOk) && (
@@ -7802,7 +7997,7 @@ function MobileSideMenu({
             {/* ⭐ 2026-11-01 직원 일정(연차·외근 등 부재 달력)은 모든 직원이 본다 — PC 홈 › 사내 게시판과 같게 */}
             <MenuItem label="직원 일정" icon="clock" onClick={() => onGo?.("dept:schedule")} dark={dark} />
             {deptMode !== "exec" && <MenuItem label="임원 일정" icon="pin" onClick={() => onGo?.("dept:execsched")} dark={dark} />}
-            {ok("전자결재") && <MenuItem label="전자결재" icon="stamp" onClick={() => onGo?.("approval")} badge={(alertCounts?.approval || 0) + (alertCounts?.handover || 0) || null} dark={dark} />}
+            {ok("전자결재") && <MenuItem label="전자결재" icon="stamp" onClick={() => onGo?.("approval")} badge={(alertCounts?.approval || 0) + (alertCounts?.mineNew || 0) + (alertCounts?.handover || 0) || null} dark={dark} />}
             <MenuItem label="출근기록부" icon="clock" onClick={onGoAttendance} dark={dark} />
             <MenuItem label="사내 규정" icon="list" onClick={() => onGo?.("dept:rules")} dark={dark} />
             {fareMenu.feature && role !== "driver" && role !== "shipper" && <MenuItem label="운임 규칙" icon="money" onClick={() => onGo?.("dept:farerules")} dark={dark} />}{/* ⭐ 2026-11-02 운임규칙 */}
@@ -7814,11 +8009,17 @@ function MobileSideMenu({
           </MenuSection>
           <MenuSection title="기사 · 매출" en="FLEET · REVENUE" dark={dark} alwaysOpen>
             {canRevenue && ok("매출관리") && <MenuItem label="매출관리" icon="chart" onClick={onGoSales} dark={dark} />}
+            {/* ⭐ 2026-11-05 PC·모바일 일치 — PC 매출·정산 묶음의 정산관리·인사이트(PC와 같은 권한·요금제) */}
+            {(canRevenue || /^role_/.test(String(role || ""))) && ok("정산관리") && <MenuItem label="정산관리" icon="receipt" onClick={() => onGo?.("dept:settle")} dark={dark} />}
+            {(role === "admin" || role === "totalMaster") && ok("인사이트") && planIncludes(planIdM, "insight") && <MenuItem label="인사이트" icon="trend" onClick={onGoIntel} dark={dark} />}
           </MenuSection>
           </>)}
           {canAdminMenu && !deptMode && (
             <MenuSection title="관리자 전용 메뉴" en="ADMIN" dark={dark} alwaysOpen>
-              <MenuItem label="직원 관리" icon="users" onClick={() => onGo?.("staff")} badge={(alertCounts?.signupStaff || 0) + (alertCounts?.signupDriver || 0) || null} dark={dark} />
+              <MenuItem label="직원 관리" icon="users" onClick={() => onGo?.("staff")} badge={alertCounts?.signupStaff || null} dark={dark} />
+              <MenuItem label="기사 앱 계정 · 가입 승인" icon="truck" onClick={() => onGo?.("drvacc")} badge={alertCounts?.signupDriver || null} dark={dark} />
+              <MenuItem label="기사 서류" icon="file" onClick={() => onGo?.("dept:driverdocs")} badge={alertCounts?.drvDocs || null} dark={dark} />{/* ⭐ 2026-11-05 기사앱 서류 업로드 숫자 */}
+              {canPermsM && <MenuItem label="권한 관리" icon="key" onClick={() => onGo?.("perms")} dark={dark} />}
             </MenuSection>
           )}
           {role === "totalMaster" && (
@@ -7885,7 +8086,7 @@ function MobileSideMenu({
             >{dark && <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9" /></svg>}로그아웃</button>
           </div>
           <div className={`${dark ? "px-5 pb-4" : "px-5 py-2"} flex items-center justify-between`}>
-            <span className={`text-[11px] ${dark ? "text-white/35 font-bold tracking-[0.2em]" : "text-gray-400"}`} style={dark ? { fontFamily: KPM_MONO } : undefined}>{dark ? "KP-FLOW · BUILD" : "버전"}</span>
+            <span className={`text-[11px] ${dark ? "text-white/35 font-bold tracking-[0.2em]" : "text-gray-400"}`} style={dark ? { fontFamily: KPM_MONO, fontVariantNumeric: "tabular-nums" } : undefined}>{dark ? <LogisTag height={7} text="BUILD" /> : "버전"}</span>
             <MobileVersionChip dark={dark} />
           </div>
         </div>
@@ -7949,7 +8150,7 @@ function MobileSideMenu({
                         </div>
                       </div>
                       <div className="flex items-center gap-2 shrink-0">
-                        <span className="font-mono text-[13px] font-bold text-[#1B2B4B]">{g.code}</span>
+                        <span className="tabular-nums text-[13px] font-bold text-[#1B2B4B]">{g.code}</span>
                         <button
                           onClick={() => navigator.clipboard?.writeText(g.code)}
                           className="px-2.5 py-1 rounded-lg text-[11px] font-semibold text-[#1B2B4B] border border-[#1B2B4B]/30"
@@ -7989,20 +8190,20 @@ function KpmDrawerHead({ myName, role, loginTime, onClose, fmtLoginTime }) {
   return (
     <div className="px-4 pt-4 pb-3">
       <div className="flex items-center gap-2.5">
-        <img src="/icons/sflow-icon.png" alt="KP-Flow" className="w-9 h-9 rounded-[11px] shrink-0 ring-1 ring-white/20" />
+        <LogisMark size={36} />
         <div className="min-w-0 flex-1">
-          <div className="text-[9.5px] font-extrabold tracking-[0.3em] text-[#8FB0F0]" style={{ fontFamily: KPM_MONO }}>DISPATCH · CONSOLE</div>
-          <div className="text-[15px] font-black tracking-tight">KP-Flow</div>
+          <div className="text-[9.5px] font-extrabold tracking-[0.3em] text-[#8FB0F0]" style={{ fontFamily: KPM_MONO, fontVariantNumeric: "tabular-nums" }}>DISPATCH · CONSOLE</div>
+          <div className="mt-1.5"><LogisWordmark height={12} /></div>
         </div>
         <button type="button" onClick={onClose} aria-label="닫기" className="w-9 h-9 rounded-[11px] bg-white/[0.07] ring-1 ring-white/10 grid place-items-center text-white/80">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12" /></svg>
         </button>
       </div>
       <div className="mt-3.5 flex items-end justify-between">
-        <div className="flex items-center gap-1.5 text-[9.5px] font-extrabold tracking-[0.24em] text-[#8FB0F0]" style={{ fontFamily: KPM_MONO }}>
+        <div className="flex items-center gap-1.5 text-[9.5px] font-extrabold tracking-[0.24em] text-[#8FB0F0]" style={{ fontFamily: KPM_MONO, fontVariantNumeric: "tabular-nums" }}>
           <span className="w-1.5 h-1.5 rounded-full bg-[#6E95E8] animate-pulse" />SYSTEM ONLINE
         </div>
-        <div className="font-black tabular-nums leading-none" style={{ fontFamily: KPM_MONO, fontSize: 30, letterSpacing: "-0.02em" }}>
+        <div className="font-black tabular-nums leading-none" style={{ fontFamily: KPM_MONO, fontVariantNumeric: "tabular-nums", fontSize: 30, letterSpacing: "-0.02em" }}>
           {p2(now.getHours())}<span className="text-white/35">:</span>{p2(now.getMinutes())}<span className="text-[14px] text-white/35 ml-1">{p2(now.getSeconds())}</span>
         </div>
       </div>
@@ -8037,7 +8238,7 @@ function KpmDrawerControls({ alarmEnabled, toggleAlarm, uiScale, setUiScale, car
   return (
     <div className="px-3 pt-3.5 pb-2">
       <div className="px-2 pb-2 flex items-center gap-2">
-        <span className="text-[9.5px] font-extrabold tracking-[0.26em] text-[#8FB0F0]" style={{ fontFamily: KPM_MONO }}>CONTROL</span>
+        <span className="text-[9.5px] font-extrabold tracking-[0.26em] text-[#8FB0F0]" style={{ fontFamily: KPM_MONO, fontVariantNumeric: "tabular-nums" }}>CONTROL</span>
         <span className="text-[11px] font-bold text-white/40">빠른 설정</span>
         <span className="flex-1 h-px bg-gradient-to-r from-white/15 to-transparent" />
       </div>
@@ -8065,14 +8266,16 @@ function KpmDrawerControls({ alarmEnabled, toggleAlarm, uiScale, setUiScale, car
   );
 }
 
+const MENU_SECTION_OPEN = {}; // ⭐ 2026-11-04 펼친 메뉴 묶음 기억(메뉴를 다시 열어도 그대로)
 function MenuSection({ title, en, children, dark, alwaysOpen = false }) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen0] = useState(() => !!MENU_SECTION_OPEN[title]);
+  const setOpen = (v) => setOpen0((p) => { const n = typeof v === "function" ? v(p) : v; MENU_SECTION_OPEN[title] = n; return n; });
   if (dark) {
     // B형 — 영문 코드 + 한글 제목 + 가는 선, 항목은 카드처럼 묶어서
     return (
       <div className="px-3 pt-3.5">
         <div className="px-2 pb-2 flex items-center gap-2">
-          <span className="text-[9.5px] font-extrabold tracking-[0.26em] text-[#8FB0F0]" style={{ fontFamily: KPM_MONO }}>{en || title}</span>
+          <span className="text-[9.5px] font-extrabold tracking-[0.26em] text-[#8FB0F0]" style={{ fontFamily: KPM_MONO, fontVariantNumeric: "tabular-nums" }}>{en || title}</span>
           <span className="text-[11px] font-bold text-white/40">{title}</span>
           <span className="flex-1 h-px bg-gradient-to-r from-white/15 to-transparent" />
         </div>
@@ -8679,6 +8882,9 @@ function MobileEstimateModal({ orders = [], userCompany = "", onClose }) {
 // ======================================================================
 function MobileOrderList({
   allOrders = [],
+  mDetail = null,
+  setMDetail = () => {},
+  detailGetters,
   groupedByDate,
   statusTab,
   setStatusTab,
@@ -8723,8 +8929,10 @@ function MobileOrderList({
   showToast,
   showSuccess,
   upsertDriver,
+  renderAllFirst = false,
 }) {
   const [attachViewOrder, setAttachViewOrder] = useState(null);
+  useFleetLivePublish(drivers); // ⭐ 2026-11-05 실시간 관제 색인(같은 배열이면 아무것도 안 함)
   const handleOpenAttach = (order) => {
     // ⭐ 열기만 해서는 확인 처리하지 않는다 — 실제로 파일을 1장 이상 저장했을 때만
     // attachViewed를 true로 바꾼다(CardAttachViewer의 markAttachViewedSaved 참고).
@@ -8805,10 +9013,12 @@ function MobileOrderList({
   // 그대로 참조하므로, 여기서 같은 이름으로 다시 선언해 필터링·정렬된 결과로 가려버린다
   // (한 곳만 고치면 전체에 일관되게 반영됨).
   // 🔎 세부검색 — 기간은 위 날짜 조회로, 1~3차 조건은 여기서
-  const [mDetail, setMDetail] = useState(null);
   const applyMDetail = (v) => { setMDetail(v); if (v?.from && v?.to) { setStartDate(v.from); setEndDate(v.to); setAppliedStartDate(v.from); setAppliedEndDate(v.to); } };
   const groupedByDateRaw = groupedByDate;
-  groupedByDate = (() => {
+  // ⭐ 2026-11-04 속도 — 예전엔 목록이 다시 그려질 때마다(입력·팝업 열고 닫기 등) 전체 오더를 다시 거르고 정렬했다.
+  //   조건이 같으면 지난 결과를 그대로 쓴다(결과는 동일).
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  groupedByDate = useMemo(() => {
     const next = new Map();
     groupedByDateRaw.forEach((list, key) => {
       let filtered = list;
@@ -8817,11 +9027,11 @@ function MobileOrderList({
       if (payTypeFilter.size > 0) filtered = filtered.filter(o => payTypeFilter.has(classifyPayType(o)));
       if (chargeMissingOnly) filtered = filtered.filter(o => !(Number(o.청구운임) > 0));
       if (driverFeeMissingOnly) filtered = filtered.filter(o => !(Number(o.기사운임) > 0));
-      if (mDetail) filtered = applyDetailFilter(filtered, mDetail, { withDate: false });
+      if (mDetail) filtered = applyDetailFilter(filtered, mDetail, { withDate: false, getters: detailGetters });
       if (filtered.length) next.set(key, sortOrdersByMode(filtered));
     });
     return next;
-  })();
+  }, [groupedByDateRaw, orderTypeFilter, assignMethodFilter, payTypeFilter, chargeMissingOnly, driverFeeMissingOnly, mDetail, orderSortMode, detailGetters]);
   const [uploadLinkModal, setUploadLinkModal] = useState(false);
   const [estimateModal, setEstimateModal] = useState(false);
   const [deleteConfirmOrder, setDeleteConfirmOrder] = useState(null);
@@ -8847,6 +9057,17 @@ function MobileOrderList({
     groupedByDate.forEach(list => list.forEach(o => result.push(o)));
     return result;
   }, [groupedByDate]);
+
+  // ⭐ 2026-11-04 앱 켤 때 버벅임 — 카드 수백 장을 한 번에 만들면 폰이 몇 초 멈췄다. 처음엔 위쪽 카드만 바로 그리고
+  //   나머지는 조금씩(낮은 우선순위로) 이어 붙인다. 결국 전부 그려지고, 한 번 늘어난 개수는 줄지 않는다.
+  //   상세 → 목록 스크롤 복원이 필요할 때는 처음부터 전부 그린다.
+  const totalCards = allVisibleOrders.length;
+  const [renderLimit, setRenderLimit] = useState(() => (renderAllFirst ? Number.MAX_SAFE_INTEGER : 24));
+  useEffect(() => {
+    if (renderLimit >= totalCards) return undefined;
+    const t = setTimeout(() => startTransition(() => setRenderLimit((l) => l + 30)), 16);
+    return () => clearTimeout(t);
+  }, [renderLimit, totalCards]);
 
   const selectedOrders = useMemo(
     () => allVisibleOrders.filter(o => selectedIds.has(o.id || o._id)),
@@ -8944,10 +9165,10 @@ function MobileOrderList({
 
   groupedByDate.forEach(list => {
     list.forEach(o => {
-      const status = o.차량번호 ? "배차완료" : "배차중";
+      const status = getStatusPc(o); // ⭐ 2026-11-05 PC와 같은 배차상태 기준
 
       if (status === "배차완료") done++;
-      else ing++;
+      else if (status === "배차중") ing++;
     });
   });
 
@@ -9057,9 +9278,9 @@ const summary = useMemo(() => {
                 ].map(({ label, en, value }, i) => (
                   <div key={label} className={`flex-1 text-center px-1 ${i > 0 ? `border-l ${dt.divider}` : ""}`}>
                     {cardVersionB ? (
-                      <div className="mb-1 leading-none"><span className="kp-b-mono text-[8.5px] font-extrabold tracking-[0.2em] text-[#6E8BC4]">{en}</span> <span className="text-[11px] font-bold text-[#CFE0FF]">{label}</span></div>
+                      <div className="mb-1 leading-none whitespace-nowrap overflow-hidden"><span className="kp-b-mono text-[8.5px] font-extrabold tracking-[0.2em] text-[#6E8BC4] max-[379px]:hidden">{en} </span><span className="text-[11px] font-bold text-[#CFE0FF]">{label}</span></div>
                     ) : (
-                      <div className={`text-[9px] font-bold tracking-[0.15em] uppercase mb-1 ${dt.label}`}>{label}</div>
+                      <div className={`text-[9px] font-bold tracking-[0.15em] uppercase mb-1 whitespace-nowrap ${dt.label}`}>{label}</div>
                     )}
                     <div
                       className={`${cardVersionB ? "kp-b-mono text-[15.5px]" : "text-[14px]"} font-extrabold tabular-nums whitespace-nowrap ${dt.value}`}
@@ -9155,9 +9376,10 @@ const summary = useMemo(() => {
                 </div>
               </div>
 
-              {/* 검색줄 */}
-              <div className="flex gap-2 text-sm">
-                <div className="relative w-28 shrink-0">
+              {/* 검색줄 — ⭐ 2026-11-04 폴더블 분할화면처럼 좁으면(칸 폭 320px 미만) 검색칸을 아랫줄 전체 폭으로 내린다
+                  (예전엔 검색칸이 0px로 눌려 "조회" 버튼이 검색칸을 덮었다 — mobileTheme.css .kp-m-searchrow) */}
+              <div className="kp-m-searchrow"><div className="kp-m-searchrow-in flex gap-2 text-sm">
+                <div className="kp-m-searchrow-sel relative w-28 shrink-0">
                   <MobileSelect
                     className={`w-full appearance-none rounded-xl pl-3 pr-7 py-1.5 text-[13px] focus:outline-none focus:ring-2 transition ${field}`}
                     value={searchType}
@@ -9175,7 +9397,7 @@ const summary = useMemo(() => {
                   </MobileSelect>
                   <IconChevronDown className={`w-3 h-3 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none ${icon}`} />
                 </div>
-                <div className="relative flex-1 min-w-0">
+                <div className="kp-m-searchrow-q relative flex-1 min-w-0">
                   <IconSearch className={`w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none ${icon}`} />
                   <input autoComplete="off"
                     className={`w-full rounded-xl pl-8 pr-14 py-1.5 text-[13px] focus:outline-none focus:ring-2 transition ${field}`}
@@ -9207,15 +9429,15 @@ const summary = useMemo(() => {
                       setAppliedSearchType(searchType);
                       setAppliedSearchText(searchText);
                     }}
-                    className={`absolute right-1 top-1/2 -translate-y-1/2 px-2.5 py-1 rounded-lg text-[11px] font-bold transition active:scale-95 ${
+                    className={`absolute right-1 top-1/2 -translate-y-1/2 px-2.5 py-1 rounded-lg text-[11px] font-bold whitespace-nowrap transition active:scale-95 ${
                       cardVersionB ? "bg-[#1B2B4B] text-white active:bg-[#243a60]" : "bg-[#0F1A30] text-white"
                     }`}
                   >
                     조회
                   </button>
                 </div>
-                <DetailFilterButton rows={allOrders} value={mDetail} onApply={applyMDetail} title="세부검색 · 배차현황" />
-              </div>
+                <DetailFilterButton rows={allOrders} value={mDetail} onApply={applyMDetail} getters={detailGetters} title="세부검색 · 배차현황" className="kp-m-searchrow-btn" />
+              </div></div>
             </>
           );
         })()}
@@ -9231,6 +9453,8 @@ const summary = useMemo(() => {
           )}
         </span>
         <div className="flex items-center gap-1.5 min-w-0 overflow-x-auto no-scrollbar">
+          {/* ⭐ 2026-11-05 실시간 관제 — 지금 목록의 배차완료 지입·직영·임대 기사 전체 지도(전체 화면) */}
+          <FleetLiveButton rows={allVisibleOrders} mobile className={cardVersionB ? "!h-[30px] !rounded-[10px] !text-[12px] px-2.5" : "!h-[30px] !rounded-full !text-[12px] px-3"} />
           <button
             onClick={() => setOrderTypeFilterOpen(true)}
             className={`text-[12px] font-semibold border transition-colors ${
@@ -9278,8 +9502,11 @@ const summary = useMemo(() => {
           </div>
         )}
 
-        {dates.map((dateKey) => {
-          const list = groupedByDate.get(dateKey) || [];
+        {(() => { let budget = renderLimit; return dates.map((dateKey) => {
+          if (budget <= 0) return null;
+          const fullList = groupedByDate.get(dateKey) || [];
+          const list = fullList.length > budget ? fullList.slice(0, budget) : fullList;
+          budget -= list.length;
           return (
             <div key={dateKey}>
             <div className={`flex items-center justify-between gap-2 mb-3 px-1 ${cardVersionB ? "py-0.5" : ""}`}>
@@ -9343,7 +9570,7 @@ const summary = useMemo(() => {
                   const isChecked = selectedIds.has(oid);
                   return (
                     // ⭐ 2026-10-29: 화면 키는 컬렉션+실제 문서번호 — 키가 겹치면 조회 결과와 상관없는 카드가 남아 보였다
-                    <div key={`${o.__col || ""}/${o._id || o.id}`} className={`relative rounded-xl ${multiSelectMode ? "pl-10 transition-all" : ""}`}
+                    <div key={`${o.__col || ""}/${o._id || o.id}`} data-kp-key={`${o.__col || ""}/${o._id || o.id}`} className={`kp-m-cv relative rounded-xl ${multiSelectMode ? "pl-10 transition-all" : ""}`}
                       style={{ WebkitTouchCallout: "none", userSelect: "none", WebkitUserSelect: "none" }}
                       onContextMenu={(e) => e.preventDefault()}
                       onTouchStart={multiSelectMode ? undefined : (e) => {
@@ -9410,7 +9637,7 @@ const summary = useMemo(() => {
               </div>
             </div>
           );
-        })}
+        }); })()}
       </div>
     </div>
 
@@ -10363,7 +10590,7 @@ function QuickEditModal({ order, drivers, cardVersionB, onClose, onSuccess, disp
   const fareK = (key, value) => {
     const num = (x) => (String(x).trim() === "" ? "" : Number(String(x).replace(/[^\d]/g, "")) || 0);
     const cur = { 청구운임: num(claim), 기사운임: num(fee), ...fareT };
-    const n = fareFormChange(cur, key, key === "청구운임" || key === "기사운임" ? num(value) : value, fareRK.rules, { asString: false, withFee: false });
+    const n = fareFormChange(cur, key, key === "청구운임" || key === "기사운임" ? num(value) : value, fareRK.rules, { asString: false, withFee: false, emptyDriver: "" });
     const fmt = (x) => (x === "" || x == null ? "" : Number(x).toLocaleString());
     setClaim(fmt(n.청구운임)); setFee(fmt(n.기사운임)); setFareT({ 운임구분: n.운임구분 || "", 운임수동: !!n.운임수동 });
   };
@@ -10436,7 +10663,8 @@ function QuickEditModal({ order, drivers, cardVersionB, onClose, onSuccess, disp
       if (name || phone) { setCarNo(""); setDriverName(name || ""); setDriverPhone(phone || ""); setIsNewDriver(false); }
       return;
     }
-    const existing = (drivers || []).find(d => nd(d.차량번호) === nd(plate));
+    // ⭐ 2026-11-05 같은 차량번호 기사가 여러 명이면 이름·전화가 가장 가까운 기사와 비교
+    const existing = pickDriverFor(drivers, plate, name, phone);
     if (!existing) {
       setCarNo(plate); setDriverName(name || ""); setDriverPhone(formatPhone(phone || "")); setIsNewDriver(true);
       clearSmartInput();
@@ -10474,7 +10702,7 @@ function QuickEditModal({ order, drivers, cardVersionB, onClose, onSuccess, disp
     const nm = driverName.trim();
     const ph = driverPhone.trim();
     if (!pl) { setIsNewDriver(false); return; }
-    const existing = (drivers || []).find(d => nd(d.차량번호) === nd(pl));
+    const existing = pickDriverFor(drivers, pl, nm, ph); // ⭐ 2026-11-05 같은 차량번호 기사 여러 명 대비
     if (!existing) {
       // 등록되지 않은 차량번호 → 이름을 입력했을 때만 "신규 기사" 뱃지를 표시한다.
       setIsNewDriver(!!nm);
@@ -10752,7 +10980,8 @@ function QuickEditModal({ order, drivers, cardVersionB, onClose, onSuccess, disp
                   className="py-3 rounded-xl bg-[#1B2B4B] text-white text-sm font-bold"
                   onClick={async () => {
                     const { plate, name: nm, phone: ph } = driverConflictPopup.input;
-                    if (typeof upsertDriver === "function") await upsertDriver({ 차량번호: plate, 이름: nm, 전화번호: ph });
+                    // ⭐ 2026-11-05 비교한 그 기사 문서(id)를 정확히 바꾼다
+                    await saveDriverChoice("update", { existing: driverConflictPopup.existing, plate, name: nm, phone: ph, upsertDriver, company: (localStorage.getItem("loginCompany") || localStorage.getItem("userCompany") || "") });
                     setCarNo(plate); setDriverName(nm); setDriverPhone(formatPhone(ph));
                     setIsNewDriver(false);
                     setDriverConflictPopup(null);
@@ -10765,7 +10994,7 @@ function QuickEditModal({ order, drivers, cardVersionB, onClose, onSuccess, disp
                 className="w-full py-3 rounded-xl bg-white border border-[#1B2B4B] text-[#1B2B4B] text-sm font-bold"
                 onClick={async () => {
                   const { plate, name: nm, phone: ph } = driverConflictPopup.input;
-                  if (typeof upsertDriver === "function") await upsertDriver({ id: crypto.randomUUID(), 차량번호: plate, 이름: nm, 전화번호: ph });
+                  await saveDriverChoice("add", { plate, name: nm, phone: ph, upsertDriver, company: (localStorage.getItem("loginCompany") || localStorage.getItem("userCompany") || "") }); // ⭐ 2026-11-05 별도 문서 이름 = 회사__차량번호__x…
                   setCarNo(plate); setDriverName(nm); setDriverPhone(formatPhone(ph));
                   setIsNewDriver(false);
                   setDriverConflictPopup(null);
@@ -10805,6 +11034,7 @@ const MobileOrderCard = React.memo(function MobileOrderCard({
   dispatcherName = "",
 }) {
   const cBiz = useCompanyBiz(getTenant() || localStorage.getItem("userCompany") || ""); // ⭐ 2026-11-03 여러 사업자
+  const offRef = useOffscreenPause(cardVersionB); // ⭐ 2026-11-04 화면 밖이면 깜빡임 멈춤(스크롤 끊김 개선)
   const claim = getClaim(order);
   const fee = order.기사운임 ?? 0;
   const state = getStatus(order);
@@ -10925,7 +11155,7 @@ const dropTime = order.하차시간 ? fmtDispatchTimeM(order.하차시간, order
 
   if (cardVersionB) {
     // ── B VERSION(2026-10-28 디지털 리디자인): 관제 패널형 카드 — 상/하 마커 · 고정폭 숫자 · 네이비 단색 ──
-    const MONO_B = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
+    const MONO_B = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
     const pStopsB = validStops(order.경유상차목록 || order.경유지_상차);
     const dStopsB = validStops(order.경유하차목록 || order.경유지_하차);
     const viaStopsB = [...pStopsB, ...dStopsB];
@@ -10939,7 +11169,7 @@ const dropTime = order.하차시간 ? fmtDispatchTimeM(order.하차시간, order
           <div className="flex items-center justify-between gap-2">
             <span className="text-[1.02em] font-extrabold text-[#0F1A30] truncate leading-tight">{name}</span>
             <span className="flex items-center gap-1 shrink-0">
-              <span className="text-[0.74em] font-bold text-[#1B2B4B] bg-[#EEF3FB] px-1.5 py-0.5 rounded-md tabular-nums" style={{ fontFamily: MONO_B }}>{time}</span>
+              <span className="text-[0.74em] font-bold text-[#1B2B4B] bg-[#EEF3FB] px-1.5 py-0.5 rounded-md tabular-nums" style={{ fontFamily: MONO_B, fontVariantNumeric: "tabular-nums" }}>{time}</span>
               {day && <span className={`text-[0.68em] px-1 py-0.5 rounded border tabular-nums font-semibold ${dayBadgeClass(day)}`}>{day}</span>}
             </span>
           </div>
@@ -10949,7 +11179,7 @@ const dropTime = order.하차시간 ? fmtDispatchTimeM(order.하차시간, order
     );
     return (
       <>
-      <div
+      <div data-order-id={order._id || order.id}
         className={
           "kp-m-card kp-b-card relative bg-white rounded-[18px] border transition-colors overflow-hidden " +
           (selected ? "kp-m-card-on " : "") +
@@ -10960,6 +11190,7 @@ const dropTime = order.하차시간 ? fmtDispatchTimeM(order.하차시간, order
               : "border-[#E3E8F0]") +
           (statusBlink && !selected ? " card-status-blink" : "")
         }
+        ref={offRef}
         style={{ "--glow-c": statusRing }}
         onClick={onSelect}
       >
@@ -10969,7 +11200,7 @@ const dropTime = order.하차시간 ? fmtDispatchTimeM(order.하차시간, order
         {/* 머리줄 — 날짜·거래처·첨부·뱃지 | 메모·냉장·상태 */}
         <div className="pl-4 pr-3 pt-2.5 pb-2 flex flex-wrap items-center justify-between gap-x-2 gap-y-1 border-b border-[#EEF1F6]" style={{ background: `linear-gradient(90deg, ${statusWash}, rgba(255,255,255,0) 70%)` }}>
           <div className="flex flex-wrap items-center gap-1.5 min-w-0">
-            <span className="text-[0.7em] font-extrabold text-white bg-[#1B2B4B] px-1.5 py-0.5 rounded-md tabular-nums shrink-0" style={{ fontFamily: MONO_B }}>{String(order.상차일 || "").slice(5) || "--"}</span>
+            <span className="text-[0.7em] font-extrabold text-white bg-[#1B2B4B] px-1.5 py-0.5 rounded-md tabular-nums shrink-0" style={{ fontFamily: MONO_B, fontVariantNumeric: "tabular-nums" }}>{String(order.상차일 || "").slice(5) || "--"}</span>
             {order.거래처명 && (
               <span className="text-[0.8em] font-extrabold text-[#1B2B4B] truncate max-w-[150px] inline-flex items-center">{cBiz.multi && <BizChip name={bizOf(order, cBiz.defaultName)} main={bizOf(order, cBiz.defaultName) === cBiz.defaultName} />}{order.거래처명}</span>
             )}
@@ -11031,6 +11262,7 @@ const dropTime = order.하차시간 ? fmtDispatchTimeM(order.하차시간, order
             )}
             <div className="relative inline-block shrink-0">
               <TransportStatusBadge order={order} compact onClick={openReqModal} />
+              <DriverAckChip row={order} className="ml-1" />{/* ⭐ 2026-11-05 기사앱 수락/거절 */}
               {isRecentlyEditedByShipper && !isEditRequested && (
                 <span title="화주사가 오더 정보를 수정했습니다"
                   className="absolute -bottom-1 -left-1 w-2.5 h-2.5 rounded-full bg-[#6E95E8] border-2 border-white" />
@@ -11076,12 +11308,12 @@ const dropTime = order.하차시간 ? fmtDispatchTimeM(order.하차시간, order
             </div>
             <div className="flex min-[380px]:flex-col justify-between min-[380px]:justify-center gap-x-4 gap-y-0.5 shrink-0 px-3 py-1.5 rounded-xl text-white" style={{ background: "linear-gradient(135deg,#0F1A30,#1B2B4B 60%,#2D4C82)" }}>
               <span className="flex items-baseline justify-between gap-2">
-                <span className="text-[0.6em] text-[#8FB0F0] font-black tracking-[0.12em]">청구</span>
-                <span className="text-[0.86em] font-extrabold tabular-nums" style={{ fontFamily: MONO_B }}>{fmtMoney(claim)}</span>
+                <span className="text-[0.6em] text-[#8FB0F0] font-black tracking-[0.12em] whitespace-nowrap shrink-0">청구</span>
+                <span className="text-[0.86em] font-extrabold tabular-nums" style={{ fontFamily: MONO_B, fontVariantNumeric: "tabular-nums" }}>{fmtMoney(claim)}</span>
               </span>
               <span className="flex items-baseline justify-between gap-2">
-                <span className="text-[0.6em] text-[#8FB0F0] font-black tracking-[0.12em]">기사</span>
-                <span className="text-[0.86em] font-bold tabular-nums text-[#CFE0FF]" style={{ fontFamily: MONO_B }}>{fmtMoney(fee)}</span>
+                <span className="text-[0.6em] text-[#8FB0F0] font-black tracking-[0.12em] whitespace-nowrap shrink-0">기사</span>
+                <span className="text-[0.86em] font-bold tabular-nums text-[#CFE0FF]" style={{ fontFamily: MONO_B, fontVariantNumeric: "tabular-nums" }}>{fmtMoney(fee)}</span>
               </span>
             </div>
           </div>
@@ -11089,10 +11321,12 @@ const dropTime = order.하차시간 ? fmtDispatchTimeM(order.하차시간, order
           {/* 배차완료 시 기사 연락 */}
           {state === "배차완료" && (order.이름 || order.차량번호) && (
             <div className="flex items-center gap-2 mt-2.5 pt-2.5 border-t border-dashed border-[#E3E8F0]">
-              {order.차량번호 && <span className="text-[0.74em] font-extrabold text-[#0F1A30] px-1.5 py-0.5 rounded-md border-[1.5px] border-[#0F1A30] shrink-0" style={{ fontFamily: MONO_B }}>{order.차량번호}</span>}
+              {order.차량번호 && <span className="text-[0.74em] font-extrabold text-[#0F1A30] px-1.5 py-0.5 rounded-md border-[1.5px] border-[#0F1A30] shrink-0" style={{ fontFamily: MONO_B, fontVariantNumeric: "tabular-nums" }}>{order.차량번호}</span>}
               <span className="text-[0.8em] font-bold text-[#334155] truncate flex-1">
                 {[order.이름, order.전화번호 ? formatPhone(order.전화번호) : ""].filter(Boolean).join(" · ")}
               </span>
+              {/* ⭐ 2026-11-05 지입·직영·임대 기사앱 실시간 위치 */}
+              <LiveDriverChip order={order} mobile variant="compact" className="shrink-0" />{/* ⭐ 2026-11-05 작은 칩(점 + N분) */}
               {order.전화번호 && (
                 <div className="flex gap-1.5">
                   <a href={`tel:${order.전화번호}`} onClick={e => e.stopPropagation()} style={{ touchAction: "manipulation", background: "linear-gradient(135deg,#2D4C82,#1B2B4B)" }}
@@ -11131,13 +11365,14 @@ const dropTime = order.하차시간 ? fmtDispatchTimeM(order.하차시간, order
   return (
    <>
    {/* ⭐ A형(2026-10-22 새 디자인) — 탑승권(티켓) 스타일: 큰 출발→도착, 절취선, 아래 운임 스텁. 남색 계열만 사용 */}
-   <div
+   <div data-order-id={order._id || order.id}
   className={
     "kp-m-card kp-ticket relative bg-white rounded-2xl shadow border transition-colors " +
     (selected ? "kp-m-card-on " : "") +
     (flash && !selected ? "order-flash-blue " : "") +
     (statusBlink && !selected ? " card-status-blink" : "")
   }
+  ref={offRef}
   style={{ "--glow-c": statusRing }}
   onClick={onSelect}
 >
@@ -11189,6 +11424,7 @@ const dropTime = order.하차시간 ? fmtDispatchTimeM(order.하차시간, order
       </button>
       <div className="relative inline-flex items-center shrink-0">
         <TransportStatusBadge order={order} className="inline-flex items-center leading-none" onClick={openReqModal} flat compact />
+        <DriverAckChip row={order} className="ml-1" />{/* ⭐ 2026-11-05 기사앱 수락/거절 */}
         {isRecentlyEditedByShipper && !isEditRequested && (
           <span title="화주사가 오더 정보를 수정했습니다" className="absolute -bottom-1 -left-1 w-2.5 h-2.5 rounded-full bg-[#4B6CB7] border-2 border-white" />
         )}
@@ -11263,6 +11499,8 @@ const dropTime = order.하차시간 ? fmtDispatchTimeM(order.하차시간, order
       <span className="text-[11.5px] font-semibold text-[#3A4A66] truncate flex-1">
         {[order.차량번호, order.이름, order.전화번호 ? formatPhone(order.전화번호) : ""].filter(Boolean).join(" · ")}
       </span>
+      {/* ⭐ 2026-11-05 지입·직영·임대 기사앱 실시간 위치 */}
+      <LiveDriverChip order={order} mobile variant="compact" className="shrink-0" />{/* ⭐ 2026-11-05 작은 칩(점 + N분) */}
       {order.전화번호 && (
         <div className="flex gap-1">
           <a href={`tel:${order.전화번호}`} onClick={e => e.stopPropagation()} style={{ touchAction: "manipulation" }}
@@ -11521,7 +11759,7 @@ function QuickEditSheet({ order, onClose, onSaved, cardVersionB, clients = [], b
   const fareQ = (key, value) => setF((p) => {
     const num = { ...p, 청구운임: p.청구운임 === "" ? "" : toNum(p.청구운임), 기사운임: p.기사운임 === "" ? "" : toNum(p.기사운임) };
     const v = key === "청구운임" || key === "기사운임" ? (String(value).trim() === "" ? "" : toNum(value)) : value;
-    const n = fareFormChange(num, key, v, fareRQ.rules, { asString: false, withFee: false });
+    const n = fareFormChange(num, key, v, fareRQ.rules, { asString: false, withFee: false, emptyDriver: "" });
     const fmt = (x) => (x === "" || x == null ? "" : toNum(x).toLocaleString());
     return { ...p, 운임구분: n.운임구분 || "", 운임수동: !!n.운임수동, 청구운임: fmt(n.청구운임), 기사운임: fmt(n.기사운임) };
   });
@@ -12357,7 +12595,7 @@ const pickupTimeText = order.상차시간
     const byPlate = drivers.filter(d => normD(d.차량번호) === normD(pl));
 
     if (byPlate.length > 0) {
-      const existing = byPlate[0];
+      const existing = pickDriverFor(drivers, pl, nm, ph) || byPlate[0]; // ⭐ 2026-11-05 같은 차량번호 기사 여러 명 대비
       const sameName = normD(existing.이름) === normD(nm);
 
       if (sameName) {
@@ -12390,7 +12628,7 @@ const pickupTimeText = order.상차시간
     const pl = carNo.trim();
     const nm = name.trim();
     if (!pl) return;
-    const existing = drivers.find(d => normD(d.차량번호) === normD(pl));
+    const existing = pickDriverFor(drivers, pl, nm, phone); // ⭐ 2026-11-05 같은 차량번호 기사 여러 명 대비
     if (!existing) return; // 등록되지 않은 차량번호는 그대로 신규로 둔다
     if (!nm || normD(existing.이름) === normD(nm)) {
       // 이름을 아직 안 썼거나 동일하면 최신 등록 정보로 자동완성만 해준다
@@ -13201,7 +13439,8 @@ const handleAssignClick = () => {
                       className="py-3 rounded-xl bg-[#1B2B4B] text-white text-sm font-bold"
                       onClick={async () => {
                         const { plate, name: nm, phone: ph } = driverConflictPopup.input;
-                        await upsertDriver({ 차량번호: plate, 이름: nm, 전화번호: ph });
+                        // ⭐ 2026-11-05 비교한 그 기사 문서(id)를 정확히 바꾼다
+                        await saveDriverChoice("update", { existing: driverConflictPopup.existing, plate, name: nm, phone: ph, upsertDriver, company: (localStorage.getItem("loginCompany") || localStorage.getItem("userCompany") || "") });
                         setCarNo(plate); setName(nm); setPhone(fmtPhone(ph));
                         setDriverConflictPopup(null);
                         showToast("기사 정보를 덮어썼습니다");
@@ -13213,8 +13452,10 @@ const handleAssignClick = () => {
                     className="w-full py-3 rounded-xl bg-white border border-[#1B2B4B] text-[#1B2B4B] text-sm font-bold"
                     onClick={async () => {
                       const { plate, name: nm, phone: ph } = driverConflictPopup.input;
-                      await upsertDriver({ 차량번호: plate, 이름: nm, 전화번호: ph });
+                      // ⚠️ 2026-11-05 예전엔 id 없이 불러 기존 기사를 덮어썼다 → 별도 문서(회사__차량번호__x…)로 추가
+                      await saveDriverChoice("add", { plate, name: nm, phone: ph, upsertDriver, company: (localStorage.getItem("loginCompany") || localStorage.getItem("userCompany") || "") });
                       setCarNo(plate); setName(nm); setPhone(fmtPhone(ph));
+                      setIsNewDriver(false);
                       setDriverConflictPopup(null);
                       showToast(`신규 기사 등록: ${nm || plate}`);
                     }}
@@ -14033,7 +14274,7 @@ function SmartOrderParser({ clients, drivers = [], onApply, onClose, cardVersion
           <textarea
             className="w-full border border-gray-200 rounded-2xl px-4 py-3 text-[13px] text-gray-800 resize-none focus:outline-none focus:border-[var(--smart-accent)] bg-gray-50"
             rows={7}
-            placeholder={"오더 내용을 그대로 붙여넣으세요\n\n예:\n1.상차지\n반찬단지 물류센터\n인천 서구 북항로 28-29\n상차시간: 16시\n\n하차지: 순수본\n전라북도 익산시 왕궁면 무왕로 2182\n중량: 400KG / 1파렛트\n냉장차량"}
+            placeholder={"오더 내용을 그대로 붙여넣으세요\n\n예:\n1.상차지\n○○물류센터\n인천 서구 ○○로 123\n상차시간: 16시\n\n하차지: △△식품\n전라북도 익산시 ○○면 ○○로 456\n중량: 400KG / 1파렛트\n냉장차량"}
             value={text}
             onChange={e => { setText(e.target.value); setResult(null); setAutoFilledFromClipboard(false); }}
           />
@@ -14369,6 +14610,12 @@ const chooseClient = (c) => {
 };
 
 const [showNewDriver, setShowNewDriver] = useState(false);
+// ⭐ 2026-11-05 등록 기사와 매칭되면 기사명·연락처 잠금 + [수정] → 기존 정보 변경 / 별도 추가 선택
+const mfDrvEdit = useDriverEditChoice({ drivers, upsertDriver, company: (localStorage.getItem("loginCompany") || localStorage.getItem("userCompany") || ""), notify: (m) => showToast?.(m) });
+useEffect(() => { mfDrvEdit.reset(); }, [form?._editId]); // eslint-disable-line react-hooks/exhaustive-deps
+useEffect(() => { if (!form?.차량번호) mfDrvEdit.reset(); }, [form?.차량번호]); // eslint-disable-line react-hooks/exhaustive-deps
+const mfDrvCur = { 차량번호: form?.차량번호 || "", 이름: form?.기사명 || "", 전화번호: form?.전화번호 || "" };
+const mfDrvLocked = !mfDrvEdit.editing && isRegisteredCombo(drivers, mfDrvCur.차량번호, mfDrvCur.이름, mfDrvCur.전화번호);
 // ⭐ 기사 스마트검색에서 차량번호는 같은데 이름이 다른 기사를 입력했을 때 확인받는
 // 충돌 팝업 — 상세보기(MobileOrderDetail)와 동일한 개념이지만 이 폼 전용 state다.
 const [formConflictPopup, setFormConflictPopup] = useState(null);
@@ -14694,7 +14941,7 @@ const handleFormSmartCommit = (val) => {
     return;
   }
 
-  const existing = (drivers || []).find(d => nd(d.차량번호) === nd(plate));
+  const existing = pickDriverFor(drivers, plate, name, phone); // ⭐ 2026-11-05 같은 차량번호 기사 여러 명 대비
   if (existing) {
     const sameName = !name || nd(existing.이름) === nd(name);
     if (sameName) {
@@ -16205,6 +16452,7 @@ const pickDrop = (c) => {
               value={form.차량번호}
               onChange={(e) => {
                 const v = e.target.value;
+                mfDrvEdit.reset(); // ⭐ 2026-11-05 차량번호가 바뀌면 [수정] 상태 해제
                 update("차량번호", v);
                 setShowNewDriver(false);
 
@@ -16242,8 +16490,10 @@ const pickDrop = (c) => {
           label="기사명"
           input={
             <input autoComplete="off"
-              className="w-full border-0 border-b-2 border-gray-300 rounded-none px-1 py-1.5 text-[13px] font-semibold text-gray-900 bg-transparent focus:outline-none focus:border-[var(--reg-accent)] transition"
+              data-driver-field="name"
+              className={`w-full border-0 border-b-2 rounded-none px-1 py-1.5 text-[13px] font-semibold text-gray-900 focus:outline-none focus:border-[var(--reg-accent)] transition ${mfDrvLocked ? "border-gray-200 bg-[#F1F4F9] text-[#1B2B4B]" : mfDrvEdit.editing ? "border-[#2D4C82] bg-[#EEF3FC]" : "border-gray-300 bg-transparent"}`}
               value={form.기사명 || ""}
+              readOnly={mfDrvLocked}
               onChange={(e) => update("기사명", e.target.value)}
             />
           }
@@ -16254,16 +16504,32 @@ const pickDrop = (c) => {
         <RowLabelInput
           label="연락처"
           input={
+            <div className="flex items-center gap-1.5">
             <input autoComplete="off"
-              className="w-full border-0 border-b-2 border-gray-300 rounded-none px-1 py-1.5 text-[13px] font-semibold text-gray-900 bg-transparent focus:outline-none focus:border-[var(--reg-accent)] transition"
+              data-driver-field="phone"
+              className={`min-w-0 flex-1 border-0 border-b-2 rounded-none px-1 py-1.5 text-[13px] font-semibold text-gray-900 focus:outline-none focus:border-[var(--reg-accent)] transition ${mfDrvLocked ? "border-gray-200 bg-[#F1F4F9] text-[#1B2B4B]" : mfDrvEdit.editing ? "border-[#2D4C82] bg-[#EEF3FC]" : "border-gray-300 bg-transparent"}`}
               inputMode="tel"
               placeholder="010-0000-0000"
               value={form.전화번호 || ""}
+              readOnly={mfDrvLocked}
               onChange={(e) => update("전화번호", formatPhoneLive(e.target.value))}
             />
+            {(mfDrvLocked || mfDrvEdit.editing) && (
+              <DriverEditButton compact editing={mfDrvEdit.editing}
+                onEdit={() => mfDrvEdit.begin(mfDrvCur)}
+                onDone={() => mfDrvEdit.finish(mfDrvCur)}
+                onRevert={() => { const o = mfDrvEdit.revert(); if (o) setForm((p) => ({ ...p, 기사명: o.이름, 전화번호: o.전화번호 })); }} />
+            )}
+            </div>
           }
         />
       </div>
+      {/* ⭐ 2026-11-05 같은 차량번호 기사가 여러 명(별도 추가 등)이면 골라 바꾼다 */}
+      {!mfDrvEdit.editing && (
+        <SamePlateChips className="px-2.5 py-2 border-t border-gray-100" drivers={drivers} plate={form.차량번호} name={form.기사명} phone={form.전화번호}
+          onPick={(d) => setForm((p) => ({ ...p, 기사명: d.이름 || "", 전화번호: formatPhoneLive(d.전화번호 || "") }))} />
+      )}
+      {mfDrvEdit.modal}
 
       {/* ⭐ 등록되지 않은 차량번호면 "신규 기사"만 표시하고, 클릭 없이 오더 저장 시
           자동으로 기사관리에 등록한다(아래 onSave 버튼 참고) — 예전엔 이 버튼을
@@ -16389,7 +16655,8 @@ const pickDrop = (c) => {
 
       <div className="mt-4 mb-8 space-y-2">
         <button
-          onClick={() => {
+          onClick={async () => {
+            if (!(await mfDrvEdit.finish(mfDrvCur))) return; // ⭐ 2026-11-05 [수정] 중이면 먼저 변경/별도추가 선택
             if (!validateRequiredMobile()) return;
             // ⭐ 신규 기사면 여기서 자동 등록 — 아래 저장/등록과 별도 버튼을 누를 필요 없다.
             if (showNewDriver && (form.차량번호 || "").trim()) {
@@ -17223,7 +17490,7 @@ const pickDrop = (c) => {
           <div className="bg-blue-50 rounded-xl p-3 text-[12px] text-blue-700 space-y-1">
             <div className="font-bold mb-1">음성 예시 (항목별로 끊어 말하면 더 정확해요)</div>
             <div>"거래처는 테스트업체 상차지는 테스트업체 하차지는 주주물류 화물내용은 박스 5개 내일 오전 10시"</div>
-            <div>"거래처는 후레쉬2공장 하차지는 수원종합운동장 3톤 냉장 오늘 즉시"</div>
+            <div>"거래처는 ○○식품 하차지는 △△물류센터 3톤 냉장 오늘 즉시"</div>
           </div>
         )}
 
@@ -17668,7 +17935,8 @@ const pickDrop = (c) => {
             className="py-3 rounded-xl bg-[#1B2B4B] text-white text-sm font-bold"
             onClick={async () => {
               const { plate, name: nm, phone: ph } = formConflictPopup.input;
-              await upsertDriver({ 차량번호: plate, 이름: nm, 전화번호: ph });
+              // ⭐ 2026-11-05 비교한 그 기사 문서(id)를 정확히 바꾼다
+              await saveDriverChoice("update", { existing: formConflictPopup.existing, plate, name: nm, phone: ph, upsertDriver, company: (localStorage.getItem("loginCompany") || localStorage.getItem("userCompany") || "") });
               update("차량번호", plate); update("기사명", nm || ""); update("전화번호", ph || "");
               setShowNewDriver(false);
               setFormConflictPopup(null);
@@ -17679,11 +17947,15 @@ const pickDrop = (c) => {
         <button
           style={{ touchAction: "manipulation" }}
           className="w-full py-3 rounded-xl bg-white border border-[#1B2B4B] text-[#1B2B4B] text-sm font-bold"
-          onClick={() => {
+          onClick={async () => {
             const { plate, name: nm, phone: ph } = formConflictPopup.input;
             update("차량번호", plate); update("기사명", nm || ""); update("전화번호", ph || "");
-            setShowNewDriver(true);
+            // ⚠️ 2026-11-05 예전엔 "신규 기사" 표시만 하고 저장 때 차량번호로 upsert → 기존 기사를 덮어썼다.
+            //  바로 별도 문서(회사__차량번호__x…)로 추가한다.
+            await saveDriverChoice("add", { plate, name: nm, phone: ph, upsertDriver, company: (localStorage.getItem("loginCompany") || localStorage.getItem("userCompany") || "") });
+            setShowNewDriver(false);
             setFormConflictPopup(null);
+            showToast?.(`신규 기사로 별도 등록: ${nm || plate}`);
           }}
         >신규 기사로 별도 등록</button>
       </div>
@@ -18615,7 +18887,7 @@ ${coreBlockMd}${order.전달사항?.trim() ? `\n\n◆ 전달사항\n${order.전�
 function RowLabelInput({ label, input, right, labelClassName = "" }) {
   return (
     <div className="flex border-b border-[#EEF1F6] last:border-b-0 overflow-hidden">
-      <div className={`${right ? "w-[104px]" : "w-[88px]"} shrink-0 px-2.5 py-2.5 text-[11.5px] font-bold text-[#5B6B85] bg-[#F7F9FC] border-r border-[#EEF1F6] flex items-center justify-between gap-1 ${labelClassName}`}>
+      <div className={`${right ? "w-[104px] max-[359px]:w-[92px]" : "w-[88px] max-[359px]:w-[72px]"} shrink-0 px-2.5 max-[359px]:px-2 py-2.5 text-[11.5px] font-bold text-[#5B6B85] bg-[#F7F9FC] border-r border-[#EEF1F6] flex items-center justify-between gap-1 ${labelClassName}`}>
         <span className="leading-tight break-keep">{label}</span>
         {right && <span className="ml-1 shrink-0 whitespace-nowrap [&_button]:whitespace-nowrap [&_span]:whitespace-nowrap">{right}</span>}
       </div>
@@ -18633,8 +18905,10 @@ function MobilePlaceSuggest({ value, onChange, names = [], placeholder, onKeyDow
 
   useEffect(() => { setQuery(value || ""); }, [value]);
 
+  // ⭐ 2026-11-04 입력 끊김 — 지명 수천 개를 거르는 일은 글자 입력보다 뒤로 미룬다(PC와 동일, 결과 같음)
+  const dq = React.useDeferredValue(query);
   const filtered = useMemo(() => {
-    const q = (query || "").replace(/\s+/g, "").toLowerCase();
+    const q = (dq || "").replace(/\s+/g, "").toLowerCase();
     if (!q || q.length < 1) return [];
     return names
       .map(n => {
@@ -18649,7 +18923,7 @@ function MobilePlaceSuggest({ value, onChange, names = [], placeholder, onKeyDow
       .sort((a, b) => b.score - a.score)
       .slice(0, 10)
       .map(x => x.name);
-  }, [query, names]);
+  }, [dq, names]);
 
   return (
     <div className="relative">
@@ -18759,7 +19033,7 @@ function MobileMyInfo({ currentUser, mobileUsers, loginTime, orders = [], userCo
       {/* 프로필 히어로 */}
       <div className="relative overflow-hidden rounded-[22px] text-white px-5 pt-5 pb-4 shadow-[0_14px_32px_rgba(15,26,48,0.28)]" style={{ background: KPM_HERO_BG }}>
         <div className="flex items-center justify-between">
-          <span className="text-[10px] font-extrabold tracking-[0.26em] text-[#8FB0F0]" style={{ fontFamily: KPM_MONO }}>MY PROFILE</span>
+          <span className="text-[10px] font-extrabold tracking-[0.26em] text-[#8FB0F0]" style={{ fontFamily: KPM_MONO, fontVariantNumeric: "tabular-nums" }}>MY PROFILE</span>
           <span className="h-6 px-2.5 rounded-full bg-white/10 ring-1 ring-white/15 text-[11px] font-black grid place-items-center">{roleKo}{me?.isMaster ? " · 마스터" : ""}</span>
         </div>
         <div className="mt-3 flex items-center gap-3.5">
@@ -18767,7 +19041,7 @@ function MobileMyInfo({ currentUser, mobileUsers, loginTime, orders = [], userCo
           <div className="min-w-0">
             <div className="text-[21px] font-black tracking-tight truncate">{myName}</div>
             <div className="text-[12.5px] text-white/60 truncate">{[myCompany, team, position].filter(Boolean).join(" · ") || "-"}</div>
-            <div className="text-[11.5px] text-white/45 truncate" style={{ fontFamily: KPM_MONO }}>{myEmail}</div>
+            <div className="text-[11.5px] text-white/45 truncate" style={{ fontFamily: KPM_MONO, fontVariantNumeric: "tabular-nums" }}>{myEmail}</div>
           </div>
         </div>
         <div className="mt-4 grid grid-cols-2 gap-2">
@@ -18777,7 +19051,7 @@ function MobileMyInfo({ currentUser, mobileUsers, loginTime, orders = [], userCo
           </div>
           <div className="rounded-xl bg-white/[0.07] ring-1 ring-white/10 px-3 py-2">
             <div className="text-[10px] font-bold text-white/50">로그인</div>
-            <div className="text-[13px] font-black tabular-nums whitespace-normal break-keep leading-snug" style={{ fontFamily: KPM_MONO }}>{fmtTime(loginTime)}</div>
+            <div className="text-[13px] font-black tabular-nums whitespace-normal break-keep leading-snug" style={{ fontFamily: KPM_MONO, fontVariantNumeric: "tabular-nums" }}>{fmtTime(loginTime)}</div>
           </div>
         </div>
       </div>
@@ -18786,9 +19060,9 @@ function MobileMyInfo({ currentUser, mobileUsers, loginTime, orders = [], userCo
       <KpmCard en="ACTIVITY" title="내 활동 통계">
         <div className="grid grid-cols-4 gap-1.5">
           {[["오늘", todayCount], ["이번 달", thisMonthCount], ["배차완료", completedCount], ["전체", totalCount]].map(([l, v], idx) => (
-            <div key={l} className={`rounded-xl px-2 py-2.5 text-center ${idx === 0 ? "bg-[#1B2B4B] text-white" : "bg-[#F5F8FD] border border-[#E3E8F0]"}`}>
-              <div className={`text-[20px] font-black tabular-nums leading-none ${idx === 0 ? "" : "text-[#0F1A30]"}`} style={{ fontFamily: KPM_MONO }}>{v}</div>
-              <div className={`text-[11px] font-bold mt-1 ${idx === 0 ? "text-white/60" : "text-[#7A879C]"}`}>{l}</div>
+            <div key={l} className={`min-w-0 rounded-xl px-1.5 py-2.5 text-center ${idx === 0 ? "bg-[#1B2B4B] text-white" : "bg-[#F5F8FD] border border-[#E3E8F0]"}`}>
+              <div className={`text-[20px] font-black tabular-nums leading-none ${idx === 0 ? "" : "text-[#0F1A30]"}`} style={{ fontFamily: KPM_MONO, fontVariantNumeric: "tabular-nums" }}>{v}</div>
+              <div className={`text-[11px] font-bold mt-1 whitespace-nowrap truncate ${idx === 0 ? "text-white/60" : "text-[#7A879C]"}`}>{l}</div>
             </div>
           ))}
         </div>
@@ -18799,7 +19073,7 @@ function MobileMyInfo({ currentUser, mobileUsers, loginTime, orders = [], userCo
         {/* ⭐ 2026-11-01 입사일은 인사팀(인사관리부 › 인사관리 › 직원관리)에서만 바꿀 수 있다 — 여기서는 보기만 */}
         <div className="flex items-center gap-2 rounded-xl bg-[#F5F8FD] border border-[#E3E8F0] px-3 h-11">
           <span className="text-[12px] font-bold text-[#7A879C]">입사일</span>
-          <span className="text-[14.5px] font-black text-[#0F1A30] tabular-nums" style={{ fontFamily: KPM_MONO }}>{hireDate || "미등록"}</span>
+          <span className="text-[14.5px] font-black text-[#0F1A30] tabular-nums" style={{ fontFamily: KPM_MONO, fontVariantNumeric: "tabular-nums" }}>{hireDate || "미등록"}</span>
           <span className="ml-auto text-[10.5px] font-bold text-[#9AA9C3]">변경은 인사팀</span>
         </div>
         {leave ? (
@@ -18832,7 +19106,7 @@ function MobileMyInfo({ currentUser, mobileUsers, loginTime, orders = [], userCo
           <img src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(window.location.origin)}`} alt="앱 QR코드"
             className="w-[104px] h-[104px] rounded-xl border border-[#E3E8F0] shrink-0 bg-white" />
           <div className="min-w-0 flex-1 space-y-1.5">
-            <div className="flex items-center justify-between gap-2"><span className="text-[11.5px] font-bold text-[#7A879C]">앱</span><span className="text-[12.5px] font-black text-[#0F1A30] truncate">KP-Flow 모바일</span></div>
+            <div className="flex items-center justify-between gap-2"><span className="text-[11.5px] font-bold text-[#7A879C]">앱</span><span className="text-[12.5px] font-black text-[#0F1A30] truncate">LogisWeb 모바일</span></div>
             <div className="flex items-center justify-between gap-2"><span className="text-[11.5px] font-bold text-[#7A879C]">버전</span><MobileVersionChip /></div>
             <div className="flex items-center justify-between gap-2"><span className="text-[11.5px] font-bold text-[#7A879C]">플랫폼</span><span className="text-[12.5px] font-black text-[#0F1A30]">{platform}</span></div>
             <div className="text-[10.5px] text-[#9AA9C3] break-all">QR을 스캔하면 바로 접속 · {window.location.host}</div>
@@ -18855,14 +19129,14 @@ function MobileFixedRouteNotice({ order }) {
 }
 
 // ── 모바일 공통 디자인 조각(내정보·설정) — PC 화면과 같은 네이비 디지털 톤 ──
-const KPM_MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
+const KPM_MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
 const KPM_HERO_BG = "linear-gradient(rgba(143,176,240,.07) 1px, transparent 1px) 0 0/22px 22px, linear-gradient(90deg, rgba(143,176,240,.07) 1px, transparent 1px) 0 0/22px 22px, linear-gradient(125deg,#0B1428 0%,#1B2B4B 60%,#2D4C82 100%)";
 function KpmCard({ en, title, right, children, flush = false }) {
   return (
     <div className="rounded-[20px] bg-white border border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_10px_24px_rgba(16,24,40,0.05)] overflow-hidden">
       <div className="px-4 pt-3.5 pb-2.5 flex items-center justify-between gap-2">
         <div className="min-w-0">
-          <div className="text-[9.5px] font-extrabold tracking-[0.24em] text-[#4B6CB7]" style={{ fontFamily: KPM_MONO }}>{en}</div>
+          <div className="text-[9.5px] font-extrabold tracking-[0.24em] text-[#4B6CB7]" style={{ fontFamily: KPM_MONO, fontVariantNumeric: "tabular-nums" }}>{en}</div>
           <div className="text-[15px] font-black text-[#0F1A30] tracking-tight truncate">{title}</div>
         </div>
         {right}
@@ -18875,13 +19149,13 @@ function KpmRow({ label, sub, value, right, onClick, mono = false, danger = fals
   const Tag = onClick ? "button" : "div";
   return (
     <Tag type={onClick ? "button" : undefined} onClick={onClick}
-      className={`w-full flex items-center justify-between gap-3 px-4 py-3 text-left border-b border-[#EEF1F6] last:border-b-0 ${onClick ? "active:bg-[#F5F8FD]" : ""}`}>
-      <div className="min-w-0">
+      className={`w-full flex flex-wrap items-center justify-between gap-x-3 gap-y-2 px-4 py-3 text-left border-b border-[#EEF1F6] last:border-b-0 ${onClick ? "active:bg-[#F5F8FD]" : ""}`}>
+      <div className="min-w-[6.5rem] flex-1">
         <div className={`text-[13.5px] font-bold ${danger ? "text-[#B42318]" : "text-[#0F1A30]"}`}>{label}</div>
         {sub && <div className="text-[11.5px] text-[#7A879C] mt-0.5 leading-snug">{sub}</div>}
       </div>
-      {value !== undefined && <span className={`shrink-0 max-w-[60%] text-right text-[13px] font-black text-[#0F1A30] truncate ${mono ? "tabular-nums" : ""}`} style={mono ? { fontFamily: KPM_MONO } : undefined}>{value}</span>}
-      {right && <div className="shrink-0">{right}</div>}
+      {value !== undefined && <span className={`shrink-0 max-w-[60%] text-right text-[13px] font-black text-[#0F1A30] truncate ${mono ? "tabular-nums" : ""}`} style={mono ? { fontFamily: KPM_MONO, fontVariantNumeric: "tabular-nums" } : undefined}>{value}</span>}
+      {right && <div className="shrink-0 ml-auto">{right}</div>}
     </Tag>
   );
 }
@@ -20036,21 +20310,31 @@ const [showAddressConfirmPopup, setShowAddressConfirmPopup] = useState(false);
   useEffect(() => {
     const d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); d.setMonth(d.getMonth() - 13);
     const liveWindowStart = d.toISOString().slice(0, 10);
-    let dispatchCache = [];
-    let ordersCache = [];
+    // ⭐ 2026-11-04 입력 끊김 — 예전엔 누가 오더 하나만 고쳐도 13개월치(수천 건)를 전부 다시 변환·합쳐서
+    //   상/하차지를 치는 도중 글자가 멈칫했다. 바뀐 문서만 반영하고, 0.3초씩 모아 낮은 우선순위로 갱신한다(PC와 동일).
+    const dispatchCache = new Map();
+    const ordersCache = new Map();
+    let timer = null;
     const merge = () => {
-      const map = new Map();
-      dispatchCache.forEach(r => map.set(r.id, r));
-      ordersCache.forEach(r => map.set(r.id, r));
-      setDispatchData(cleanMgrRows(hideBlind(Array.from(map.values()))));
+      timer = null;
+      startTransition(() => {
+        const map = new Map();
+        dispatchCache.forEach(r => map.set(r.id, r));
+        ordersCache.forEach(r => map.set(r.id, r));
+        setDispatchData(cleanMgrRows(hideBlind(Array.from(map.values()))));
+      });
     };
     const mapDoc = (d) => {
       const data = d.data();
       return { id: d.id, ...data, 등록일: toYMD(data.등록일), 상차일: toYMD(data.상차일), 하차일: toYMD(data.하차일) };
     };
-    const unsub1 = onSnapshot(query(collection(db, "dispatch"), where("상차일", ">=", liveWindowStart)), (snap) => { dispatchCache = snap.docs.map(mapDoc); merge(); });
-    const unsub2 = onSnapshot(query(collection(db, "orders"), where("상차일", ">=", liveWindowStart)), (snap) => { ordersCache = snap.docs.map(mapDoc); merge(); });
-    return () => { unsub1(); unsub2(); };
+    const apply = (cache) => (snap) => {
+      snap.docChanges().forEach((ch) => { if (ch.type === "removed") cache.delete(ch.doc.id); else cache.set(ch.doc.id, mapDoc(ch.doc)); });
+      if (!timer) timer = setTimeout(merge, 300);
+    };
+    const unsub1 = onSnapshot(query(collection(db, "dispatch"), where("상차일", ">=", liveWindowStart)), apply(dispatchCache));
+    const unsub2 = onSnapshot(query(collection(db, "orders"), where("상차일", ">=", liveWindowStart)), apply(ordersCache));
+    return () => { unsub1(); unsub2(); if (timer) clearTimeout(timer); };
   }, []);
 
   const pickupNames = useMemo(() =>
@@ -20497,11 +20781,11 @@ const runNationalFareInPopup = async () => {
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <div className="text-[12px] font-bold text-gray-900 mb-1">상차지명</div>
-                <MobilePlaceSuggest value={pickup} onChange={setPickup} names={pickupNames} placeholder="예: 인천 후레쉬2공장" onKeyDown={e=>e.key==="Enter"&&calcFareMobile()} />
+                <MobilePlaceSuggest value={pickup} onChange={setPickup} names={pickupNames} placeholder="예: ○○식품 2공장" onKeyDown={e=>e.key==="Enter"&&calcFareMobile()} />
               </div>
               <div>
                 <div className="text-[12px] font-bold text-gray-900 mb-1">하차지명</div>
-                <MobilePlaceSuggest value={drop} onChange={setDrop} names={dropNames} placeholder="예: 반찬단지" onKeyDown={e=>e.key==="Enter"&&calcFareMobile()} />
+                <MobilePlaceSuggest value={drop} onChange={setDrop} names={dropNames} placeholder="예: ○○물류단지" onKeyDown={e=>e.key==="Enter"&&calcFareMobile()} />
               </div>
             </div>
           ) : (
@@ -21348,7 +21632,7 @@ function MobileCanceledList({ orders = [], onBack, cardVersionB = false, mobileU
     if (!purgeTarget || busy) return;
     setBusy(true);
     try {
-      await deleteOrderWithLog(purgeTarget.__col, purgeTarget.id);
+      await deleteOrdersAtomicMobile([{ col: purgeTarget.__col, id: purgeTarget.id }]); // ⭐ 2026-11-05 삭제 진행 창
       setPurgeTarget(null);
       flash("완전 삭제 완료");
     } catch (e) {
@@ -21362,8 +21646,9 @@ function MobileCanceledList({ orders = [], onBack, cardVersionB = false, mobileU
     if (!sorted.length || busy) return;
     setBusy(true);
     try {
-      await Promise.all(sorted.map((o) => deleteOrderWithLog(o.__col, o.id)));
       setPurgeAll(false);
+      // ⭐ 2026-11-05 건별 병렬 삭제 → 한 번에(writeBatch) + 삭제 진행 창(한 줄씩 사라지지 않게)
+      await deleteOrdersAtomicMobile(sorted.map((o) => ({ col: o.__col, id: o.id })));
       flash("전체 삭제 완료");
     } catch (e) {
       alert("전체 삭제 중 오류가 발생했습니다: " + e.message);
@@ -22215,7 +22500,7 @@ function MobileSettingsPage({ onBack, cardVersionB, setCardVersionB, alarmEnable
     { key: "미배차", label: "미배차 임박 알림", sub: "상차 1시간 전인데 아직 미배차면" },
     { key: "배차취소", label: "배차취소 알림", sub: "오더가 취소되거나 삭제되면" },
   ];
-  const isAdminLike = ["admin", "totalMaster", "superadmin", "test", "hrManager", "hrAcct"].includes(role);
+  const isAdminLike = ["admin", "totalMaster", "superadmin", "test", "hrManager", "hrAcct", "allMgr"].includes(role);
   const W = (key, label, sub) => ({ key, label, sub });
   const TEAM_PUSH = {
     acct: [
@@ -22319,7 +22604,7 @@ function MobileSettingsPage({ onBack, cardVersionB, setCardVersionB, alarmEnable
 
         {/* 히어로 */}
         <div className="relative overflow-hidden rounded-[22px] text-white px-5 py-4 shadow-[0_14px_32px_rgba(15,26,48,0.28)]" style={{ background: KPM_HERO_BG }}>
-          <div className="text-[10px] font-extrabold tracking-[0.26em] text-[#8FB0F0]" style={{ fontFamily: KPM_MONO }}>SETTINGS · PREFERENCES</div>
+          <div className="text-[10px] font-extrabold tracking-[0.26em] text-[#8FB0F0]" style={{ fontFamily: KPM_MONO, fontVariantNumeric: "tabular-nums" }}>SETTINGS · PREFERENCES</div>
           <div className="text-[21px] font-black tracking-tight mt-0.5">설정</div>
           <div className="text-[12px] text-white/55 truncate">{[userCompany, ROLE_KO[role] || role, currentUser?.email].filter(Boolean).join(" · ")}</div>
           <div className="mt-3 grid grid-cols-3 gap-1.5">
@@ -22392,8 +22677,8 @@ function MobileSettingsPage({ onBack, cardVersionB, setCardVersionB, alarmEnable
         </KpmCard>
 
         <KpmCard en="ABOUT" title="앱 정보" flush>
-          <KpmRow label="버전" sub="KP-FLOW 배차관리" right={<div className="flex items-center gap-1.5"><span className="text-[12px] text-[#5B6B85] font-bold" style={{ fontFamily: KPM_MONO }}>v{appVersion}</span><span className="text-[10px] font-black px-1.5 py-0.5 rounded-full bg-[#EEF3FC] text-[#1B2B4B]">최신</span></div>} />
-          <KpmRow label="제작" value="KP-FLOW Logistics" />
+          <KpmRow label="버전" sub="LogisWeb 배차관리" right={<div className="flex items-center gap-1.5"><span className="text-[12px] text-[#5B6B85] font-bold" style={{ fontFamily: KPM_MONO, fontVariantNumeric: "tabular-nums" }}>v{appVersion}</span><span className="text-[10px] font-black px-1.5 py-0.5 rounded-full bg-[#EEF3FC] text-[#1B2B4B]">최신</span></div>} />
+          <KpmRow label="제작" value="LogisWeb" />
         </KpmCard>
 
       </div>

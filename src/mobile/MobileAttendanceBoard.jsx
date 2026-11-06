@@ -14,7 +14,7 @@ import {
 // ⭐ 2026-11-01 권한·결재는 PC 출근기록부와 같은 규칙(attendanceApproval.js)
 //  · 직접 수정: 인사팀(본인 기록 제외)·최고관리자 — 모바일은 본인 달력만 보여서 사실상 최고관리자만
 //  · 본인 기록 수정·출근 요청 → 일반 직원은 인사팀, 인사팀 본인은 임원에게(임원 1명 승인으로 종결)
-const ADMIN_ROLES = ["totalMaster", "admin"];
+const ADMIN_ROLES = ["totalMaster", "admin", "allMgr"];
 
 function daysInMonth(year, month) {
   return new Date(year, month, 0).getDate();

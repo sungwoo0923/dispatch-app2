@@ -6,28 +6,64 @@
 //   ① where("audience","in",["all","carrier"|"shipper"])  ② where("targetCompanies","array-contains", 우리 회사)
 //  같은 글이 운송사 홈 › 공지사항 목록에도 "플랫폼 공지" 표시로 섞여 나온다(usePlatformNotices + toBoardNotice).
 import React from "react";
-import { collection, onSnapshot, query, where } from "firebase/firestore";
-import { db } from "./firebase";
+import { collection, onSnapshot, query, where, doc, updateDoc, arrayUnion } from "firebase/firestore";
+import { db, auth } from "./firebase";
+import { LogisMark } from "./brand"; // 🔷 2026-11-04 LogisWeb 마크
 
 const DISMISS_KEY = "kpPlatformNoticeDismissed";
 // ⭐ 2026-11-03 알림 통합 — "읽음"은 한 곳에서: 띠를 닫아도 · 공지사항에서 열어도 · 가운데 팝업을 닫거나 열어도 같은 기록(이 브라우저)
 //  플랫폼 공지는 다른 회사 직원 uid가 한 문서에 쌓이지 않게 서버 대신 이 브라우저에 남긴다(NoticeBoard와 같은 키)
 const PLAT_READ_KEY = "kpPlatNoticeRead";
 const readList = (k) => { try { const v = JSON.parse(localStorage.getItem(k) || "[]"); return Array.isArray(v) ? v : []; } catch { return []; } };
-export const platformReadIds = () => new Set([...readList(DISMISS_KEY), ...readList(PLAT_READ_KEY)].map((x) => String(x).replace(/^plat:/, ""))); // 예전 기록은 "plat:" 붙은 id
+// ⭐ 2026-11-04 "다시 보지 않기"는 계정에 저장(users/{uid}.platformNoticeHidden) — PC에서 누르면 모바일에서도, 앱을 껐다 켜도 다시 안 뜬다
+//  "닫기"는 이번 접속(세션)에서만 닫는다 → 앱을 다시 켜면 또 뜬다
+const SESSION_KEY = "kpPlatNoticeSessionClosed";
+let SERVER_HIDDEN = new Set();
+const readSession = () => { try { const v = JSON.parse(sessionStorage.getItem(SESSION_KEY) || "[]"); return Array.isArray(v) ? v : []; } catch { return []; } };
+export const platformReadIds = () => new Set([...readList(DISMISS_KEY), ...readList(PLAT_READ_KEY), ...SERVER_HIDDEN].map((x) => String(x).replace(/^plat:/, ""))); // 예전 기록은 "plat:" 붙은 id
+const ping = () => { try { window.dispatchEvent(new Event("kp-plat-read")); } catch { /* 무시 */ } };
 export function markPlatformNoticeRead(id) {
   if (!id) return;
   try { const l = readList(PLAT_READ_KEY); if (!l.includes(id)) localStorage.setItem(PLAT_READ_KEY, JSON.stringify([...l, id].slice(-300))); } catch { /* 무시 */ }
-  try { window.dispatchEvent(new Event("kp-plat-read")); } catch { /* 무시 */ }
+  ping();
 }
-// 읽은 플랫폼 공지 목록(다른 화면에서 읽으면 바로 바뀐다 · 다른 창은 storage 이벤트로)
+// 다시 보지 않기 — 이 브라우저 + 계정(다른 기기까지)
+export function hidePlatformNoticeForever(id) {
+  if (!id) return;
+  markPlatformNoticeRead(id);
+  SERVER_HIDDEN = new Set([...SERVER_HIDDEN, id]); ping();
+  const uid = auth?.currentUser?.uid;
+  if (uid) updateDoc(doc(db, "users", uid), { platformNoticeHidden: arrayUnion(id) }).catch(() => {});
+}
+// 닫기 — 이번 접속에서만
+export function closePlatformNoticeForSession(id) {
+  if (!id) return;
+  try { const l = readSession(); if (!l.includes(id)) sessionStorage.setItem(SESSION_KEY, JSON.stringify([...l, id].slice(-200))); } catch { /* 무시 */ }
+  ping();
+}
+export const platformSessionClosed = () => new Set(readSession());
+// 계정에 저장된 "다시 보지 않기" 목록을 실시간으로(다른 기기에서 눌러도 바로 반영)
+let serverSub = null, serverUid = "";
+function watchServer() {
+  const uid = auth?.currentUser?.uid || "";
+  if (!uid || uid === serverUid) return;
+  try { serverSub?.(); } catch { /* 무시 */ }
+  serverUid = uid;
+  serverSub = onSnapshot(doc(db, "users", uid), (s) => {
+    const arr = s.exists() ? s.data()?.platformNoticeHidden : null;
+    SERVER_HIDDEN = new Set(Array.isArray(arr) ? arr.map(String) : []); ping();
+  }, () => {});
+}
+// 읽은 플랫폼 공지 목록(다른 화면에서 읽으면 바로 바뀐다 · 다른 창은 storage 이벤트로 · 다른 기기는 계정 기록으로)
 export function usePlatformRead() {
   const [ids, setIds] = React.useState(platformReadIds);
   React.useEffect(() => {
     const h = () => setIds(platformReadIds());
+    watchServer();
+    const unAuth = auth?.onAuthStateChanged ? auth.onAuthStateChanged(() => watchServer()) : null;
     window.addEventListener("kp-plat-read", h);
     window.addEventListener("storage", h);
-    return () => { window.removeEventListener("kp-plat-read", h); window.removeEventListener("storage", h); };
+    return () => { window.removeEventListener("kp-plat-read", h); window.removeEventListener("storage", h); try { unAuth?.(); } catch { /* 무시 */ } };
   }, []);
   return ids;
 }
@@ -67,7 +103,7 @@ export function usePlatformNotices({ audience = "carrier", company = "" } = {}) 
 // 회사 공지사항 목록(NoticeBoard)에 섞을 모양으로 — id 앞에 plat: 를 붙여 회사 공지와 섞이지 않게
 export const toBoardNotice = (n) => ({
   ...n, id: `plat:${n.id}`, platformId: n.id, _platform: true,
-  content: n.body || "", contentHtml: n.bodyHtml || "", category: n.level || "안내", author: n.author || "KP-Flow 운영팀",
+  content: n.body || "", contentHtml: n.bodyHtml || "", category: n.level || "안내", author: n.author || "LogisWeb 운영팀",
   ...(n.publishAt ? { createdAt: n.publishAt } : {}), // 예약 게시는 게시 시각을 작성일로
   teams: [], targetUids: [], readBy: [], viewedBy: Array.isArray(n.viewedBy) ? n.viewedBy : [], audience: "platform", // ⭐ 2026-11-03 조회수(viewedBy) // ⭐ 2026-11-03 직원 지정 없음(우리 회사 직원 전체)
 });
@@ -80,13 +116,13 @@ export function useBoardNoticesWithPlatform(notices, company, dateOf) {
   }, [plat, notices, dateOf]);
 }
 
-// "플랫폼 공지" 표시 — 네이비 바탕 + 금색 글씨 + KP 마크(회사 공지와 한눈에 구분)
+// "플랫폼 공지" 표시 — 네이비 바탕 + 금색 글씨 + LogisWeb 마크(회사 공지와 한눈에 구분)
 export function PlatformBadge({ size = "sm" }) {
   const big = size === "lg";
   return (
     <span className={`shrink-0 inline-flex items-center gap-1 rounded-full whitespace-nowrap font-black ${big ? "h-7 pl-1 pr-2.5 text-[12.5px]" : "h-[22px] pl-0.5 pr-2 text-[11.5px]"}`}
       style={{ background: "linear-gradient(90deg,#0B1428,#1B2B4B)", color: "#E9C46A", boxShadow: "inset 0 0 0 1px rgba(233,196,106,.45)" }}>
-      <span className={`inline-flex items-center justify-center rounded-full font-black ${big ? "w-5 h-5 text-[9.5px]" : "w-[18px] h-[18px] text-[8.5px]"}`} style={{ background: "#E9C46A", color: "#0B1428", letterSpacing: "-0.04em" }}>KP</span>
+      <LogisMark size={big ? 20 : 18} />
       플랫폼 공지
     </span>
   );

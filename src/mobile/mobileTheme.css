@@ -31,6 +31,16 @@
   border-color: var(--m-line) !important;
   box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04), 0 8px 22px rgba(16, 24, 40, 0.06) !important;
 }
+/* ⭐ 2026-11-04 끊김 개선 — 배차중 카드의 "빛나는 테두리"(cardStatusGlow, box-shadow 무한 애니메이션)는
+   위의 box-shadow !important에 덮여 화면에는 전혀 보이지 않으면서, 카드 수십 장을 매 프레임 다시 계산·그리게 해
+   스크롤·화면 전체를 버벅이게 했다. 보이는 모양은 그대로 두고 애니메이션만 끈다. */
+.kp-m .kp-m-card.card-status-blink { animation: none !important; }
+/* 화면 밖(위아래 150px 바깥) 카드 안의 깜빡임(배차중 점·뱃지·메모)은 멈춘다 — 화면에 들어오면 다시 깜빡인다 */
+.kp-m .kp-m-card[data-kp-off] * { animation: none !important; }
+/* 등록내역 카드 한 줄 — 화면 밖 카드는 그리기를 건너뛴다(스크롤 끊김 개선). 카드 그림자는 원래도
+   SwipeableRow(overflow-x:hidden) 안에서 잘리므로 모양 변화 없음. 높이는 한 번 그려진 값을 기억(auto). */
+.kp-m .kp-m-cv { content-visibility: auto; contain-intrinsic-size: auto 230px; }
+.kp-cv-off .kp-m .kp-m-cv { content-visibility: visible; } /* 목록 스크롤 위치 복원하는 순간만 */
 .kp-m .kp-m-card.kp-m-card-on {
   border-color: #1B2B4B !important;
   box-shadow: 0 0 0 2px rgba(27, 43, 75, 0.18), 0 8px 22px rgba(16, 24, 40, 0.08) !important;
@@ -89,6 +99,66 @@
 .kp-m-form .kp-m-form-card textarea[class~="rounded"] { border-radius: 10px; }
 .kp-m-form .kp-m-form-card input::placeholder,
 .kp-m-form .kp-m-form-card textarea::placeholder { color: #A7B3C6; }
+
+/* ===================== 폴더블 · 분할화면 대응 (2026-11-04) =====================
+   갤럭시 Z폴드 분할화면(340~460px)·커버화면(320~344px)·위아래 분할(높이 450px)에서
+   버튼끼리/검색칸과 겹치거나 글자가 한 자씩 세로로 쪼개지던 문제를 공통 규칙으로 막는다. */
+
+/* ① 한글은 단어(어절) 단위로 줄바꿈 — "발행 이 / 력"처럼 글자 중간에서 끊기지 않게.
+      칸보다 긴 단어 하나만 마지막 수단으로 끊는다(break-word는 최소 폭 계산에 영향을 주지 않음). */
+.kp-m { word-break: keep-all; overflow-wrap: break-word; }
+.kp-m input, .kp-m textarea { word-break: normal; }
+
+/* ② 높이가 정해진 버튼(h-8·h-10·h-[30px] …)은 한 줄 전용 — 줄바꿈되면 글자가 버튼 밖으로 넘쳐 옆 버튼과 겹친다 */
+.kp-m button:is([class^="h-"], [class*=" h-"]):not([class*=" h-full"]):not([class*=" h-auto"]):not([class^="h-full"]):not([class^="h-auto"]) { white-space: nowrap; }
+
+/* ③ 머리줄 — 아주 좁은 화면(커버화면·분할)에서는 아이콘 버튼을 조금 줄여 가운데 제목이 사라지지 않게 */
+@media (max-width: 359px) {
+  .kp-m .kp-m-header { column-gap: 4px !important; }
+  .kp-m .kp-m-header .kp-m-hbtn { width: 29px; height: 29px; border-radius: 9px; }
+  .kp-m .kp-m-header > div:not([style]) { gap: 3px !important; }
+}
+
+/* ④ 글자 크기 배율(#root zoom)을 쓰면 vh·vw 단위도 같이 커져 팝업·메뉴가 화면 밖으로 나갔다 — 배율만큼 되돌린다.
+      (--kp-zoom은 MobileApp이 #root에 배율을 걸 때 함께 넣는다. 배율 1이면 아무 변화 없음) */
+#root .max-h-\[50vh\] { max-height: calc(50vh / var(--kp-zoom, 1)); }
+#root .max-h-\[60vh\] { max-height: calc(60vh / var(--kp-zoom, 1)); }
+#root .max-h-\[62vh\] { max-height: calc(62vh / var(--kp-zoom, 1)); }
+#root .max-h-\[70vh\] { max-height: calc(70vh / var(--kp-zoom, 1)); }
+#root .max-h-\[75vh\] { max-height: calc(75vh / var(--kp-zoom, 1)); }
+#root .max-h-\[78vh\] { max-height: calc(78vh / var(--kp-zoom, 1)); }
+#root .max-h-\[80vh\] { max-height: calc(80vh / var(--kp-zoom, 1)); }
+#root .max-h-\[85vh\] { max-height: calc(85vh / var(--kp-zoom, 1)); }
+#root .max-h-\[88vh\] { max-height: calc(88vh / var(--kp-zoom, 1)); }
+#root .max-h-\[90vh\] { max-height: calc(90vh / var(--kp-zoom, 1)); }
+#root .max-h-\[92vh\] { max-height: calc(92vh / var(--kp-zoom, 1)); }
+#root .min-h-\[70vh\] { min-height: calc(70vh / var(--kp-zoom, 1)); }
+#root .w-\[78vw\] { width: calc(78vw / var(--kp-zoom, 1)); }
+#root .max-w-\[78vw\] { max-width: calc(78vw / var(--kp-zoom, 1)); }
+#root .w-\[84vw\] { width: calc(84vw / var(--kp-zoom, 1)); }
+#root .max-w-\[84vw\] { max-width: calc(84vw / var(--kp-zoom, 1)); }
+#root .w-\[90vw\] { width: calc(90vw / var(--kp-zoom, 1)); }
+#root .max-w-\[90vw\] { max-width: calc(90vw / var(--kp-zoom, 1)); }
+#root .w-\[94vw\] { width: calc(94vw / var(--kp-zoom, 1)); }
+#root .max-w-\[94vw\] { max-width: calc(94vw / var(--kp-zoom, 1)); }
+#root .w-\[95vw\] { width: calc(95vw / var(--kp-zoom, 1)); }
+#root .max-w-\[95vw\] { max-width: calc(95vw / var(--kp-zoom, 1)); }
+
+/* ⑤ 등록내역 검색줄(거래처명 · 검색칸 · 세부검색) — 칸이 좁으면 검색칸을 아랫줄 전체 폭으로 */
+.kp-m .kp-m-searchrow { container-type: inline-size; }
+.kp-m .kp-m-searchrow-in { flex-wrap: wrap; }
+@container (max-width: 319px) {
+  .kp-m .kp-m-searchrow-sel { flex: 1 1 0%; width: auto; min-width: 0; }
+  .kp-m .kp-m-searchrow-q { order: 9; flex-basis: 100%; }
+  .kp-m .kp-m-searchrow-btn { align-self: stretch; }
+  .kp-m .kp-m-searchrow-btn > button { height: 100%; }
+}
+
+/* ⑥ 하단 알림(상차 임박 등) — 입력 중(키보드가 올라와 화면이 짧아진 분할화면)에는 입력칸을 가리지 않게 잠시 숨긴다 */
+body:has(.kp-m input:focus, .kp-m textarea:focus) .kp-m-toast { display: none; }
+
+/* ⑦ 모바일 안의 팝업(가운데 카드형) — 화면보다 커지지 않게 */
+.kp-m .fixed.inset-0 > [class*="max-w-"][class*="rounded"] { max-width: min(100%, calc(100vw - 16px)); }
 
 /* =================== 색 → 남색 계열(자동 생성) =================== */
 .kp-m .bg-blue-50{background-color:#EEF3FB}
@@ -344,7 +414,7 @@
     linear-gradient(rgba(27,43,75,.035) 1px, transparent 1px) 0 0/22px 22px,
     linear-gradient(90deg, rgba(27,43,75,.035) 1px, transparent 1px) 0 0/22px 22px,
     #EEF2F8 !important; }
-.kp-m-b .kp-b-mono { font-family: 'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace; letter-spacing: -0.01em; }
+.kp-m-b .kp-b-mono { font-family: 'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif;font-variant-numeric:tabular-nums; letter-spacing: -0.01em; }
 .kp-m-b .kp-m-header { box-shadow: none !important; }
 .kp-m-b .kp-b-tabs {
   background: linear-gradient(120deg, #0F1A30 0%, #1B2B4B 55%, #2D4C82 100%);

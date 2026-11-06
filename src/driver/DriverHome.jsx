@@ -1,6 +1,7 @@
 // DriverHome.jsx — 지입기사 전용 앱 (리뉴얼)
 import React, { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import { kpConfirm } from "../kpDialog";
+import { deleteDocsAtomic } from "../DeleteProgress"; // ⭐ 2026-11-05 삭제 진행 창 + 한 번에 삭제
 import { html2canvas } from "../lazyLoad"; // ⭐ 2026-11-02 속도 — 캡처 라이브러리는 처음 캡처할 때 받는다
 import { db, auth, DEFAULT_COMPANY } from "../firebase";
 import {
@@ -34,6 +35,10 @@ import DriverNotices from "./DriverNotices"; // ⭐ 2026-11-03 회사 공지(공
 import { useDriverDocs, docProblems } from "../driverRequiredDocs";
 import { useVehicleTypes } from "../vehicleTypes"; // 🚚 2026-11-02 회사 공용 차량종류
 import MobileSelect from "../mobile/MobileSelect"; // ⭐ 2026-11-02 기본 select → 남색 바텀시트 선택기
+import { LogisTag } from "../brand"; // 🔷 2026-11-04 LogisWeb 로고
+// ⭐ 2026-11-05 출근 안내·새 오더 승인/거절·삭제 오더 안내 팝업, 빨간 숫자 배지, 알림 켜기 안내, 긴급 연락처(차량 담당자)
+import DriverUpdateBanner from "./DriverUpdateBanner"; // ⭐ 2026-11-05 웹·APK 업데이트 안내
+import { CheckinPrompt, shouldPromptCheckin, WorkStartSetting, NewOrderPopup, DeletedOrdersPopup, PushSetupCard, RedBadge, useEmergencyContact, KP_RED } from "./DriverPopups";
 
 // ⭐ 오더 타임라인 — 기사 행동(수락/거절/수정확인/상차지도착/상차완료/운송완료 등)을
 // 오더 문서의 기사타임라인 배열에 "덮어쓰지 않고" 계속 쌓는다(관리자 지입차관리 타임라인).
@@ -116,6 +121,10 @@ function registerNativePush(uid) {
           .catch((e) => console.error("[FCM] 네이티브 토큰 저장 실패:", e));
       });
       await PushNotifications.addListener("registrationError", (e) => console.error("[FCM] 네이티브 푸시 등록 실패:", e));
+      // ⭐ 2026-11-05 알림 채널 "orders"(중요도 높음 = 화면 위 배너 + 소리) — 서버가 android.notification.channelId:"orders"로 보낸다
+      try { await PushNotifications.createChannel({ id: "orders", name: "배차·출근 알림", description: "새 오더·오더 취소·출근 시간 알림", importance: 5, visibility: 1, vibration: true }); } catch { /* 예전 플러그인 — 기본 채널 사용 */ }
+      // 알림을 눌러 앱이 열리면 기사 홈으로
+      try { await PushNotifications.addListener("pushNotificationActionPerformed", () => { if (!String(window.location.pathname).startsWith("/driver-home")) window.location.href = "/driver-home"; }); } catch { /* 무시 */ }
       await PushNotifications.register();
     } catch (e) {
       nativePushRegisteredUid = "";
@@ -1070,7 +1079,8 @@ function useCollisionDetection(uid, driverRef, posRef, onCollision) {
 }
 
 // ─── 메인 컴포넌트 ────────────────────────────────────────────────────────────
-const DRV_MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
+// ⭐ 2026-11-05 사장님 요청 — 기사앱은 고정폭(디지털) 글꼴을 쓰지 않고 상단 메뉴와 같은 기본 고딕으로(이름은 그대로 둔다)
+const DRV_MONO = "inherit";
 export default function DriverHome() {
   const [uid, setUid] = useState(null);
   const [driver, setDriver] = useState(null);
@@ -1175,7 +1185,10 @@ export default function DriverHome() {
       // ⭐ 2026-11-02 점검 — APK(네이티브)는 웹 푸시가 불가하므로 네이티브 푸시 플러그인으로 토큰 등록
       if (isNative()) {
         registerNativePush(u.uid);
-      } else {
+      } else if (typeof Notification !== "undefined" && Notification.permission === "granted") {
+        // ⭐ 2026-11-05 버그수정(아이폰 푸시 0건) — 예전엔 로그인하자마자 알림 권한을 자동으로 물었는데, 아이폰은
+        //  "버튼을 누를 때"만 권한을 물을 수 있어(자동 요청은 무시) 토큰이 한 번도 저장되지 않았다.
+        //  이미 허용된 기기만 여기서 토큰을 새로 고치고, 아직이면 홈의 [알림 켜기] 버튼(PushSetupCard)으로 받는다.
         import("../firebase").then(({ saveFcmToken }) => {
           saveFcmToken(u).catch(() => {});
         }).catch(() => {});
@@ -1270,7 +1283,8 @@ export default function DriverHome() {
   const deleteAllNotifications = useCallback(async () => {
     if (!notifications.length) return;
     try {
-      await Promise.all(notifications.map(n => deleteDoc(doc(db, "driver_notifications", n.id))));
+      // ⭐ 2026-11-05 한 번에(writeBatch) + 삭제 진행 창 — 알림이 하나씩 사라지지 않게
+      await deleteDocsAtomic(db, notifications.map(n => doc(db, "driver_notifications", n.id)), { label: "알림" });
     } catch (_) {}
   }, [notifications]);
 
@@ -1448,6 +1462,8 @@ export default function DriverHome() {
       setStatusLoading(false);
     }
   }, [uid, statusLoading, pos, driver, resetTotalDist]);
+  const updateStatusRef = useRef(null); // ⭐ 2026-11-05 오더 수락 시 자동 출근에서 최신 updateStatus를 부른다
+  updateStatusRef.current = updateStatus;
 
   // Active status → reset both refs so auto-checkin can fire again on next return
   useEffect(() => {
@@ -1555,9 +1571,14 @@ export default function DriverHome() {
       // ⭐ 휴차중에 오늘(또는 지난) 오더를 수락하면 일하는 것이므로 자동으로 "대기"로 돌려
       // 위치 추적·상태 표시가 다시 동작하게 한다. 내일 이후 오더는 휴차 상태 그대로 둔다.
       const accDate = String(accepted?.상차일 || "").slice(0, 10);
-      if ((driver?.status === "휴차" || driver?.mainStatus === "휴차") && (!accDate || accDate <= kstDateStr())) {
-        updateDoc(doc(db, "drivers", uid), { status: "대기", mainStatus: "대기", active: false, updatedAt: serverTimestamp() }).catch(() => {});
-        showToast("오더를 수락했습니다 — 휴차를 해제하고 대기 상태로 바꿨습니다");
+      // ⭐ 2026-11-05 사장님 요청 — 출근을 잊은 채 오늘 오더를 수락하면 자동으로 출근 처리한다(휴차였으면 휴차도 풀린다).
+      //  내일 이후 오더는 상태를 그대로 둔다. 오늘 이미 최종퇴근했으면 건드리지 않는다.
+      const st0 = String(driver?.status || "").trim();
+      const notIn = !st0 || st0 === "퇴근" || st0 === "대기" || st0 === "휴차" || driver?.mainStatus === "휴차";
+      const doneToday = driver?.isFinalCheckout && driver?.workDate === kstDateStr();
+      if (notIn && !doneToday && (!accDate || accDate <= kstDateStr())) {
+        await updateStatusRef.current?.("출근");
+        showToast(st0 === "휴차" ? "오더를 수락했습니다 — 휴차를 풀고 출근 처리했습니다" : "오더를 수락했습니다 — 출근 처리했습니다");
       } else
       showToast("오더를 수락했습니다");
     } catch (e) {
@@ -1565,21 +1586,23 @@ export default function DriverHome() {
     } finally {
       setOrderActionLoading(false);
     }
-  }, [orderActionLoading, myOrders, driver?.status, driver?.mainStatus, driver?.name, uid]);
+  }, [orderActionLoading, myOrders, driver?.status, driver?.mainStatus, driver?.name, driver?.isFinalCheckout, driver?.workDate, uid]);
 
-  const handleRejectOrderSubmit = useCallback(async () => {
-    if (!rejectModal || orderActionLoading) return;
-    if (!rejectReason.trim()) { showToast("거절 사유를 입력해주세요"); return; }
+  // ⭐ 2026-11-05 거절 사유는 선택(비워도 거절됨) — 새 오더 팝업은 target·reason을 직접 넘긴다
+  const handleRejectOrderSubmit = useCallback(async (target = null, reasonArg = null) => {
+    const rm = target || rejectModal;
+    const reason = String(reasonArg ?? rejectReason ?? "").trim();
+    if (!rm || orderActionLoading) return;
     setOrderActionLoading(true);
     try {
       // ⭐ 사용자 요청 — 거절하면 이 오더는 다시 배차 전 상태(배차중)로 돌아가야 하고,
       // 4/5파트 배차현황에서도 차량번호/이름/전화번호가 사라져야 한다(이 기사에게
       // 배정됐던 흔적을 지워 담당자가 바로 다른 차량을 다시 배정할 수 있게).
-      await updateDoc(doc(db, rejectModal.col || "orders", rejectModal.orderId), {
+      await updateDoc(doc(db, rm.col || "orders", rm.orderId), {
         기사확인상태: "거절",
-        기사거절사유: rejectReason.trim(),
+        기사거절사유: reason,
         기사확인일시: serverTimestamp(),
-        ...tlLog("거절", driver?.name, { detail: rejectReason.trim() }),
+        ...tlLog("거절", driver?.name, { detail: reason }),
         차량번호: "",
         이름: "",
         전화번호: "",
@@ -1599,7 +1622,7 @@ export default function DriverHome() {
     } finally {
       setOrderActionLoading(false);
     }
-  }, [rejectModal, rejectReason, orderActionLoading, driver?.name]);
+  }, [rejectModal, rejectReason, orderActionLoading, driver?.name]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ⭐ 수정확인 — 지금 내용을 새 기준값으로 저장하고 확인 시각을 남긴다(관리자 노선관리에 표시)
   const handleConfirmChange = useCallback(async (o) => {
@@ -1943,6 +1966,64 @@ export default function DriverHome() {
     window.location.href = "/driver-login";
   };
 
+  // ─────────── ⭐ 2026-11-05 기사앱 팝업·알림 ───────────
+  // (1) 알림(푸시) 켜기 안내 — 아이폰은 홈 화면 앱 + 버튼 눌러 허용해야 토큰이 생긴다
+  const computePushKind = () => {
+    if (isNative() || typeof window === "undefined") return null;
+    const ua = navigator.userAgent || "";
+    const isIOS = /iphone|ipad|ipod/i.test(ua) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+    const standalone = window.navigator.standalone === true || !!window.matchMedia?.("(display-mode: standalone)")?.matches;
+    if (isIOS && !standalone) return "ios-browser";
+    if (typeof Notification === "undefined" || !("serviceWorker" in navigator)) return isIOS ? "ios-old" : null;
+    if (Notification.permission === "default") return "default";
+    if (Notification.permission === "denied") return "denied";
+    return null;
+  };
+  const [pushKind, setPushKind] = useState(() => { try { return computePushKind(); } catch { return null; } });
+  const [pushCardHidden, setPushCardHidden] = useState(() => { try { return Number(localStorage.getItem("kpPushCardHide") || 0) > Date.now(); } catch { return false; } });
+  const hidePushCard = () => { setPushCardHidden(true); try { localStorage.setItem("kpPushCardHide", String(Date.now() + 24 * 3600e3)); } catch { /* 무시 */ } };
+  const enablePush = async () => {
+    let perm = "default";
+    try { perm = await Notification.requestPermission(); } catch { /* 무시 */ } // 버튼 누른 그 순간에 바로 물어야 아이폰이 허용 창을 띄운다
+    if (perm === "granted") {
+      try { const { saveFcmToken } = await import("../firebase"); await saveFcmToken(auth.currentUser); showToast("알림이 켜졌습니다"); } catch { showToast("알림 등록 중 오류가 발생했습니다"); }
+    } else showToast("알림이 허용되지 않았습니다");
+    setPushKind(computePushKind());
+  };
+  // (2) 새 오더 팝업 — 수락 대기 오더를 가운데 큰 팝업으로(나중에 보기를 누른 오더는 이번 실행 동안 다시 안 띄움)
+  const laterOrderIdsRef = useRef(new Set());
+  const [, setLaterTick] = useState(0);
+  const popupOrders = driver?.등급 === "지입"
+    ? myOrders.filter(o => o.기사확인상태 === "대기" && o.배차상태 !== "배차취소" && o.상태 !== "취소" && !laterOrderIdsRef.current.has(o._id))
+    : [];
+  const popupOrder = popupOrders[0] || null;
+  // (3) 삭제된 오더 안내 — driver_notifications(deleted·popup, 아직 [확인] 안 누름)
+  const deletedNotices = notifications.filter(n => n.deleted && n.popup && !n.popupAck);
+  const [deletedBusy, setDeletedBusy] = useState(false);
+  const confirmDeletedNotices = async () => {
+    setDeletedBusy(true);
+    try { await Promise.all(deletedNotices.map(n => updateDoc(doc(db, "driver_notifications", n.id), { popupAck: true, read: true }))); } catch { showToast("처리 중 오류가 발생했습니다"); }
+    setDeletedBusy(false);
+  };
+  // (4) 출근 안내 — 출근 시간대인데 출근 안 했으면(나중에 = 30분 쉬었다가 다시)
+  const [checkinSnoozeUntil, setCheckinSnoozeUntil] = useState(() => { try { return Number(localStorage.getItem("kpCheckinSnooze") || 0); } catch { return 0; } });
+  const snoozeCheckin = (min = 30) => { const t = Date.now() + min * 60e3; setCheckinSnoozeUntil(t); try { localStorage.setItem("kpCheckinSnooze", String(t)); } catch { /* 무시 */ } };
+  //  (c) 기본 출근지(내 출근지 → 회사 기본 출근지) 500m 안이면 "출근지에 도착하셨어요"로 안내
+  const nearCheckIn = (() => {
+    const loc = driver?.checkInLocation || companyDefaultLoc;
+    if (!loc?.lat || !loc?.lng || !pos || (pos.accuracy != null && pos.accuracy > 100)) return false;
+    return calcDist(pos.lat, pos.lng, loc.lat, loc.lng) <= 0.5;
+  })();
+  const showCheckinPrompt = !!driver && !statusLoading && Date.now() > checkinSnoozeUntil && shouldPromptCheckin(driver);
+  const saveWorkStart = async (patch) => {
+    if (!uid) return;
+    try { await updateDoc(doc(db, "drivers", uid), patch); showToast(patch.출근시간 !== undefined ? (patch.출근시간 ? `매일 ${patch.출근시간} 출근 알림을 보내드려요` : "출근 알림 시간을 지웠습니다") : (patch.출근알림 ? "출근 알림을 켰습니다" : "출근 알림을 껐습니다")); }
+    catch { showToast("저장 중 오류가 발생했습니다"); }
+  };
+  // (5) 긴급상황 전화 — 차량 담당자 → 회사 대표 연락처
+  const emergencyContact = useEmergencyContact(driver, companyContact);
+  const unreadNotifCount = notifications.filter(n => !n.read).length;
+
   // ⭐ 오더장 슬라이드 — 진행중(먼저 수락한) 오더 → 다음 오더 → 수락 대기 오더 순서.
   // 좌우로 밀거나 ‹ › 버튼으로 넘긴다. 새 오더(수락 대기)가 들어오면 그 오더장으로 자동 이동.
   const _canceled = (o) => o.배차상태 === "배차취소" || o.상태 === "취소";
@@ -2016,11 +2097,28 @@ export default function DriverHome() {
   } else {
     actions = getActions(currentStatus, driver.isFinalCheckout);
   }
+  // ⭐ 2026-11-05 차량 탭 배지 — 정비·만기 알림 개수
+  const vehicleAlertCount = driver.care?.setupDone ? careSummary({ vehicle: vehicleDefaults(driver), care: driver.care || {} }).alerts.length : 0;
   const dateStr = `${_td.getFullYear()}.${String(_td.getMonth()+1).padStart(2,"0")}.${String(_td.getDate()).padStart(2,"0")}`;
 
   return (
     <div style={{ minHeight: "100vh", background: "#f4f6f9", paddingBottom: 72, fontFamily: '"Noto Sans KR", sans-serif' }}>
       <style>{`@keyframes fmBlink { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }`}</style>
+
+      {/* ⭐ 2026-11-05 가운데 큰 팝업 — 삭제된 오더 안내 > 새 오더 승인/거절 > 출근 안내 (한 번에 하나만) */}
+      {deletedNotices.length > 0 ? (
+        <DeletedOrdersPopup notices={deletedNotices} busy={deletedBusy} onConfirm={confirmDeletedNotices} />
+      ) : popupOrder && !rejectModal ? (
+        <NewOrderPopup order={popupOrder} count={popupOrders.length} loading={orderActionLoading}
+          onAccept={() => handleAcceptOrder(popupOrder._id, popupOrder.__col)}
+          onReject={(reason) => handleRejectOrderSubmit({ orderId: popupOrder._id, col: popupOrder.__col }, reason)}
+          onLater={() => { laterOrderIdsRef.current.add(popupOrder._id); setLaterTick(t => t + 1); }} />
+      ) : showCheckinPrompt && !collisionAlert ? (
+        <CheckinPrompt driver={driver} nearCheckIn={nearCheckIn} loading={statusLoading}
+          onCheckin={() => handleActionButton({ status: "출근" })}
+          onLater={() => snoozeCheckin(30)}
+          onSetTime={() => { snoozeCheckin(30); setActiveTab("settings"); }} />
+      ) : null}
 
       {/* 충돌 감지 경고 모달 */}
       {collisionAlert && (
@@ -2080,7 +2178,7 @@ export default function DriverHome() {
                   const t = n.createdAt?.toDate?.();
                   return (
                     <div key={n.id} style={{ padding: "13px 18px", borderBottom: "1px solid #EEF2F8", display: "flex", gap: 10, background: n.read ? "#fff" : "#EEF3FB" }}>
-                      <span style={{ width: 8, height: 8, borderRadius: "50%", background: n.type === "canceled" ? "#0F1A30" : "#1B2B4B", marginTop: 5, flexShrink: 0 }} />
+                      <span style={{ width: 8, height: 8, borderRadius: "50%", background: n.read ? "#C9D2E0" : KP_RED, marginTop: 5, flexShrink: 0 }} />
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ fontSize: 13, fontWeight: 800, color: "#0F1A30" }}>{n.title || "알림"}</div>
                         {n.body && <div style={{ fontSize: 12, color: "#5B6B85", marginTop: 2, wordBreak: "break-word" }}>{n.body}</div>}
@@ -2100,7 +2198,7 @@ export default function DriverHome() {
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", zIndex: 9998, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 24px" }}>
           <div style={{ background: "white", borderRadius: 18, padding: "22px", maxWidth: 340, width: "100%", boxShadow: "0 8px 32px rgba(0,0,0,0.25)" }}>
             <div style={{ fontSize: 16, fontWeight: 800, color: "#0F1A30", marginBottom: 4 }}>오더 거절 사유</div>
-            <div style={{ fontSize: 12, color: "#9AA9C3", marginBottom: 14 }}>거절 사유는 관리자에게 바로 전달됩니다.</div>
+            <div style={{ fontSize: 12, color: "#9AA9C3", marginBottom: 14 }}>거절 사유는 관리자에게 바로 전달됩니다. (비워도 됩니다)</div>
             <textarea
               value={rejectReason}
               onChange={e => setRejectReason(e.target.value)}
@@ -2117,7 +2215,7 @@ export default function DriverHome() {
                 취소
               </button>
               <button
-                onClick={handleRejectOrderSubmit}
+                onClick={() => handleRejectOrderSubmit()}
                 disabled={orderActionLoading}
                 style={{ flex: 1, padding: "13px", borderRadius: 12, border: "none", background: "#0F1A30", color: "white", fontSize: 14, fontWeight: 700, cursor: orderActionLoading ? "not-allowed" : "pointer", opacity: orderActionLoading ? 0.6 : 1 }}
               >
@@ -2152,7 +2250,7 @@ export default function DriverHome() {
         <div style={{
           position: "fixed", top: 16, left: "50%", transform: "translateX(-50%)",
           background: "#1B2B4B", color: "white", fontSize: 13, fontWeight: 600,
-          padding: "10px 20px", borderRadius: 24, zIndex: 9999,
+          padding: "10px 20px", borderRadius: 24, zIndex: 10100, // ⭐ 2026-11-05 가운데 팝업(10050~) 위에도 보이게
           boxShadow: "0 4px 16px rgba(0,0,0,0.25)",
         }}>
           {toast}
@@ -2173,6 +2271,9 @@ export default function DriverHome() {
         </div>
       )}
 
+      {/* ⭐ 2026-11-05 업데이트 안내 띠 — 웹 새 버전 [업데이트] · APK 새 버전 [설치] */}
+      <DriverUpdateBanner />
+
       {/* ─── 상단 헤더 ─── */}
       {/* ⭐ 2026-10-29 리디자인 — 운송사 PC와 같은 네이비 그라데이션 + 디지털 격자 */}
       <div style={{ background: "linear-gradient(135deg, #0B1428 0%, #1B2B4B 55%, #2D4C82 100%)", padding: "16px 20px 20px", position: "sticky", top: 0, zIndex: 100, boxShadow: "0 10px 30px rgba(11,20,40,0.35)", overflow: "hidden" }}>
@@ -2183,7 +2284,7 @@ export default function DriverHome() {
               <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 7h13l5 5v5h-2M3 7v10h2m0 0a2 2 0 1 0 4 0m-4 0a2 2 0 1 1 4 0m0 0h6m0 0a2 2 0 1 0 4 0m-4 0a2 2 0 1 1 4 0" /></svg>
             </div>
             <div style={{ minWidth: 0 }}>
-              <div style={{ fontSize: 9.5, color: "#8FB0F0", fontWeight: 800, letterSpacing: "0.26em", fontFamily: DRV_MONO, marginBottom: 3 }}>KP-FLOW · DRIVER</div>
+              <div style={{ fontSize: 9.5, color: "#8FB0F0", fontWeight: 800, letterSpacing: "0.26em", fontFamily: DRV_MONO, marginBottom: 4 }}><LogisTag height={7.5} text="DRIVER" /></div>
               <div style={{ fontSize: 19, fontWeight: 900, color: "white", letterSpacing: "-0.3px" }}>{driver.name || "-"}</div>
               <div style={{ fontSize: 12, color: "rgba(255,255,255,0.6)", marginTop: 1, fontFamily: DRV_MONO }}>{driver.carNo || "-"} {driver.vehicleType ? `· ${driver.vehicleType}` : ""}</div>
             </div>
@@ -2200,10 +2301,9 @@ export default function DriverHome() {
               </button>
               {/* 알림 종 */}
               <button onClick={() => { setShowNotifPanel(true); markNotificationsRead(); }} style={{ position: "relative", background: "rgba(255,255,255,0.1)", border: "none", borderRadius: 8, width: 32, height: 32, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                <svg width="16" height="16" fill="none" stroke="rgba(255,255,255,0.7)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
-                {notifications.some(n => !n.read) && (
-                  <span style={{ position: "absolute", top: 3, right: 4, width: 8, height: 8, borderRadius: "50%", background: "#0F1A30", boxShadow: "0 0 0 2px #1B2B4B" }} />
-                )}
+                <svg width="16" height="16" fill="none" stroke={unreadNotifCount > 0 ? "#fff" : "rgba(255,255,255,0.7)"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+                {/* ⭐ 2026-11-05 새 알림은 빨간 숫자 배지로(예전: 남색 점이라 안 보였다) */}
+                {unreadNotifCount > 0 && <RedBadge n={unreadNotifCount} style={{ position: "absolute", top: -6, right: -8, boxShadow: "0 0 0 2px #1B2B4B" }} />}
               </button>
               {/* 설정 버튼 */}
               <button onClick={() => setActiveTab("settings")} style={{ background: "rgba(255,255,255,0.1)", border: "none", borderRadius: 8, width: 32, height: 32, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -2260,6 +2360,8 @@ export default function DriverHome() {
       {activeTab === "docs" && <DriverDocBox uid={uid} inbox={inbox} companyName={driver?.companyName || ""} />}
       {activeTab === "home" && (
         <div style={{ padding: "16px 16px 0" }}>
+          {/* ⭐ 2026-11-05 새 오더 알림(푸시) 켜기 안내 — 아이폰: 홈 화면 앱으로 열고 [알림 켜기]를 눌러야 알림이 온다 */}
+          {!pushCardHidden && <PushSetupCard kind={pushKind} onEnable={enablePush} onClose={hidePushCard} />}
           {docNeed > 0 && (
             <button type="button" onClick={() => { try { sessionStorage.setItem("kpDocTab", "submit"); } catch (_) { /* 무시 */ } setActiveTab("docs"); }}
               style={{ width: "100%", textAlign: "left", marginBottom: 12, padding: "12px 14px", borderRadius: 16, border: "1px solid #F5C2C2", background: "#FFF8F8", display: "flex", alignItems: "center", gap: 10 }}>
@@ -2673,10 +2775,12 @@ export default function DriverHome() {
       {activeTab === "contacts" && (
         <div style={{ padding: "16px" }}>
           {[
-            ...(companyContact ? [{
+            ...((companyContact || emergencyContact?.kind === "manager") ? [{
               section: "회사 연락처",
               items: [
-                { name: companyContact.name, number: formatPhone(companyContact.phone), tel: companyContact.phone.replace(/[^0-9]/g, ""), desc: "배차팀" },
+                // ⭐ 2026-11-05 기사관리에서 정한 내 차량 담당자를 맨 위에
+                ...(emergencyContact?.kind === "manager" ? [{ name: emergencyContact.name, number: formatPhone(emergencyContact.phone), tel: String(emergencyContact.phone).replace(/[^0-9]/g, ""), desc: "내 차량 담당자" }] : []),
+                ...(companyContact ? [{ name: companyContact.name, number: formatPhone(companyContact.phone), tel: companyContact.phone.replace(/[^0-9]/g, ""), desc: "회사 대표전화" }] : []),
               ],
             }] : []),
             {
@@ -2747,6 +2851,9 @@ export default function DriverHome() {
           </div>
 
           {uid && <DriverPayInfoCard uid={uid} driver={driver || {}} />}
+
+          {/* ⭐ 2026-11-05 출근 알림 — 출근 시간을 정하면 10분 전·정시에 휴대폰 알림(서버 remindDriverCheckin) */}
+          <WorkStartSetting driver={driver} onSave={saveWorkStart} />
 
           {/* ⭐ 사용자 요청 — 알림/푸시 on-off를 기사 본인이 설정에서 끄고 켤 수 있어야 한다 */}
           <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 8, paddingLeft: 4 }}><span style={{ width: 6, height: 6, background: "#2D4C82", transform: "rotate(45deg)" }} /><span style={{ fontSize: 9.5, fontWeight: 800, color: "#9AA9C3", letterSpacing: "0.22em", fontFamily: DRV_MONO }}>ALERT</span><span style={{ fontSize: 13.5, fontWeight: 900, color: "#0F1A30" }}>알림 설정</span></div>
@@ -3142,7 +3249,7 @@ export default function DriverHome() {
           <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 8, paddingLeft: 4 }}><span style={{ width: 6, height: 6, background: "#2D4C82", transform: "rotate(45deg)" }} /><span style={{ fontSize: 9.5, fontWeight: 800, color: "#9AA9C3", letterSpacing: "0.22em", fontFamily: DRV_MONO }}>APP</span><span style={{ fontSize: 13.5, fontWeight: 900, color: "#0F1A30" }}>앱 정보</span></div>
           <div style={{ background: "white", borderRadius: 16, boxShadow: "0 1px 6px rgba(0,0,0,0.06)", border: "1px solid #E3E8F0", overflow: "hidden", marginBottom: 20 }}>
             {[
-              ["앱 이름", "KP-Flow 기사 앱"],
+              ["앱 이름", "LogisWeb 기사 앱"],
               ["회사", driver.companyName || "-"],
             ].map(([label, value], i, arr) => (
               <div key={label} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "13px 16px", borderBottom: i < arr.length - 1 ? "1px solid #EEF2F8" : "none" }}>
@@ -3547,11 +3654,27 @@ export default function DriverHome() {
             {/* 즉시 전화 버튼 */}
             <div style={{ padding: "18px 20px 0" }}>
               <div style={{ fontSize: 12, fontWeight: 700, color: "#9AA9C3", marginBottom: 10, letterSpacing: "0.05em" }}>즉시 전화 연결</div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 16 }}>
+              {/* ⭐ 2026-11-05 누구에게 전화가 가는지 크게 보여준다 */}
+              {emergencyContact ? (
+                <a href={`tel:${String(emergencyContact.phone).replace(/[^0-9]/g, "")}`} style={{ display: "flex", alignItems: "center", gap: 12, padding: "14px 16px", borderRadius: 16, background: "linear-gradient(135deg,#0F1A30,#1B2B4B 55%,#2D4C82)", color: "#fff", textDecoration: "none", marginBottom: 12, boxShadow: "0 8px 20px rgba(27,43,75,0.3)" }}>
+                  <span style={{ width: 46, height: 46, borderRadius: "50%", background: "rgba(255,255,255,0.15)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                    <svg width="22" height="22" fill="none" stroke="white" strokeWidth="2" viewBox="0 0 24 24"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 013.07 8.63a19.79 19.79 0 01-3.07-8.7A2 2 0 012 0h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L6.91 7.91a16 16 0 006.13 6.13l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z"/></svg>
+                  </span>
+                  <span style={{ flex: 1, minWidth: 0 }}>
+                    <span style={{ display: "block", fontSize: 15, color: "#8FB0F0", fontWeight: 800 }}>{emergencyContact.label}에게 전화</span>
+                    <span style={{ display: "block", fontSize: 20, fontWeight: 900, marginTop: 2 }}>{emergencyContact.name}</span>
+                    <span style={{ display: "block", fontSize: 17, fontWeight: 700, color: "rgba(255,255,255,0.85)", marginTop: 1 }}>{formatPhone(emergencyContact.phone)}</span>
+                  </span>
+                </a>
+              ) : (
+                <div style={{ fontSize: 16, color: "#5B6B85", background: "#F5F8FD", borderRadius: 12, padding: "12px 14px", marginBottom: 12 }}>담당자·회사 연락처가 아직 등록되지 않았습니다. 회사에 알려 주세요.</div>
+              )}
+              <div style={{ display: "grid", gridTemplateColumns: emergencyContact ? "1fr 1fr 1fr" : "1fr 1fr", gap: 10, marginBottom: 16 }}>
                 {[
                   { label: "119", sub: "화재·구급", tel: "119", color: "#0F1A30", bg: "#EEF3FB" },
                   { label: "112", sub: "경찰 신고", tel: "112", color: "#4B6CB7", bg: "#EEF3FB" },
-                  { label: "배차팀", sub: "1533-2525", tel: "15332525", color: "#1B2B4B", bg: "#EEF3FB" },
+                  // ⭐ 2026-11-05 예전엔 모든 회사가 고정 번호(1533-2525)로 걸렸다 → 이 차량 담당자(기사관리) → 없으면 회사 대표 연락처
+                  ...(emergencyContact ? [{ label: emergencyContact.kind === "manager" ? "담당자" : "회사", sub: formatPhone(emergencyContact.phone), tel: String(emergencyContact.phone).replace(/[^0-9]/g, ""), color: "#1B2B4B", bg: "#EEF3FB" }] : []),
                 ].map(({ label, sub, tel, color, bg }) => (
                   <a key={label} href={`tel:${tel}`} style={{ display: "flex", flexDirection: "column", alignItems: "center", padding: "16px 8px", borderRadius: 14, background: bg, border: `1.5px solid ${color}30`, textDecoration: "none", cursor: "pointer" }}>
                     <div style={{ width: 40, height: 40, borderRadius: "50%", background: color, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 8 }}>
@@ -3590,7 +3713,7 @@ export default function DriverHome() {
         paddingBottom: "env(safe-area-inset-bottom, 0px)",
       }}>
         {[
-          { key: "home", label: "홈", icon: (
+          { key: "home", label: "홈", badge: pendingOrders.length, icon: (
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>
             </svg>
@@ -3600,7 +3723,7 @@ export default function DriverHome() {
               <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/>
             </svg>
           )},
-          { key: "vehicle", label: "차량", icon: (
+          { key: "vehicle", label: "차량", badge: vehicleAlertCount, icon: (
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <rect x="1" y="6" width="14" height="10" rx="1.5"/><path d="M15 10h4l3 3v3h-7z"/><circle cx="6" cy="18" r="1.8"/><circle cx="18" cy="18" r="1.8"/>
             </svg>
@@ -3610,11 +3733,7 @@ export default function DriverHome() {
               <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M8 13h8"/>
             </svg>
           )},
-          { key: "temperature", label: "온도", icon: (
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M14 14.76V3.5a2.5 2.5 0 0 0-5 0v11.26a4.5 4.5 0 1 0 5 0z"/>
-            </svg>
-          )},
+          // ⭐ 2026-11-05 사장님 요청 — 하단 탭에서 "온도" 탭은 뺐다(적재함 온도 화면 코드는 남겨 둠)
           { key: "contacts", label: "연락처", icon: (
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 013.07 8.63a19.79 19.79 0 01-3.07-8.7A2 2 0 012 0h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L6.91 7.91a16 16 0 006.13 6.13l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z"/>
@@ -3638,8 +3757,9 @@ export default function DriverHome() {
               background: activeTab === key ? "linear-gradient(135deg,#1B2B4B,#2D4C82)" : "transparent",
               boxShadow: activeTab === key ? "0 6px 14px rgba(27,43,75,0.3)" : "none",
             }}>{icon}</span>
-            <span style={{ fontSize: 10.5, letterSpacing: "-0.2px" }}>{label}</span>
-            {badge > 0 && <span style={{ position: "absolute", top: 4, right: "calc(50% - 26px)", minWidth: 16, height: 16, padding: "0 4px", borderRadius: 8, background: "#0B1428", color: "#fff", fontSize: 10, fontWeight: 900, display: "flex", alignItems: "center", justifyContent: "center", border: "1.5px solid #fff" }}>{badge}</span>}
+            <span style={{ fontSize: 12.5, letterSpacing: "-0.2px" }}>{label}</span>
+            {/* ⭐ 2026-11-05 카카오톡처럼 빨간 숫자 배지(#FF3B30 + 흰 숫자) */}
+            <RedBadge n={badge} style={{ position: "absolute", top: 2, right: "calc(50% - 30px)" }} />
           </button>
         ))}
       </div>

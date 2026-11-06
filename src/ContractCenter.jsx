@@ -5,14 +5,16 @@
 //  - 고객은 로그인 없이 링크로 열고, 서명 칸만 채울 수 있다(firestore.rules). 서명 후엔 문서 지문(SHA-256)을 함께 남긴다.
 //  ⭐ 알록달록 금지 — 네이비 계열만.
 import React from "react";
+import { runDelete } from "./DeleteProgress"; // ⭐ 2026-11-05 삭제 진행 창 + 한 번에 삭제
 import { kpConfirm } from "./kpDialog";
 import { collection, deleteDoc, doc, onSnapshot, orderBy, query, serverTimestamp, setDoc, updateDoc } from "firebase/firestore";
 import { db } from "./firebase";
 import { useSalesPricing } from "./SalesQuote";
 import { CustomSelect } from "./CustomSelect";
+import CustomDatePicker from "./CustomDatePicker";
 import { fmtBizNo, fmtPhone } from "./formatInput";
 
-export const C_MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
+export const C_MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
 const won = (n) => `${Math.round(Number(n) || 0).toLocaleString()}원`;
 const pad = (n) => String(n).padStart(2, "0");
 const ymd = (d = new Date()) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
@@ -20,22 +22,22 @@ const addMonths = (s, n) => { const d = new Date(`${s}T00:00:00`); d.setMonth(d.
 export const esc = (s) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 const randomId = () => { const a = new Uint8Array(18); crypto.getRandomValues(a); return Array.from(a, (b) => "abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789"[b % 56]).join(""); };
 
-// ─── 기본 양식(KP-Flow 서비스 이용계약서) ───
+// ─── 기본 양식(LogisWeb 서비스 이용계약서) ───
 export const CONTRACT_VARS = [
   ["계약일", "계약 체결일"], ["고객사", "고객사 상호"], ["고객대표", "고객사 대표자"], ["고객사업자번호", "고객사 사업자번호"], ["고객주소", "고객사 주소"], ["고객연락처", "고객사 연락처"],
   ["공급자상호", "공급자 상호"], ["공급자대표", "공급자 대표"], ["공급자사업자번호", "공급자 사업자번호"], ["공급자주소", "공급자 주소"], ["공급자연락처", "공급자 연락처"],
   ["요금제", "요금제 이름"], ["직원계정", "포함 직원 계정 수"], ["포함오더", "포함 오더 수(월)"], ["월이용료", "월 이용료"], ["초기비용", "초기 비용(1회)"],
   ["계약기간", "계약 기간(개월)"], ["시작일", "서비스 시작일"], ["종료일", "서비스 종료일"], ["결제방식", "결제 방식"], ["결제일", "매월 결제일"], ["추가옵션", "추가 옵션 내역"], ["특약", "특약 사항"],
 ];
-export const DEFAULT_TEMPLATE_BODY = `# KP-Flow 서비스 이용계약서
+export const DEFAULT_TEMPLATE_BODY = `# LogisWeb 서비스 이용계약서
 
-{{공급자상호}}(이하 "공급자")와 {{고객사}}(이하 "고객")는 공급자가 제공하는 운송 배차 관리 서비스 KP-Flow의 이용에 관하여 다음과 같이 계약을 체결한다.
+{{공급자상호}}(이하 "공급자")와 {{고객사}}(이하 "고객")는 공급자가 제공하는 운송 배차 관리 서비스 LogisWeb의 이용에 관하여 다음과 같이 계약을 체결한다.
 
 제1조 (목적)
-본 계약은 공급자가 고객에게 KP-Flow 서비스를 제공하고, 고객이 이를 이용함에 있어 양 당사자의 권리·의무 및 책임 사항을 정함을 목적으로 한다.
+본 계약은 공급자가 고객에게 LogisWeb 서비스를 제공하고, 고객이 이를 이용함에 있어 양 당사자의 권리·의무 및 책임 사항을 정함을 목적으로 한다.
 
 제2조 (서비스의 내용)
-① "서비스"란 공급자가 인터넷을 통해 제공하는 운송 배차 관리 프로그램 KP-Flow로서 배차관리, 실시간 배차현황, 거래처·하차지·기사 관리, 단가표·운임조회, 매출·정산·지급관리, 화주사 전용 포털, 기사 전용 앱 및 이에 부수하는 기능을 말한다.
+① "서비스"란 공급자가 인터넷을 통해 제공하는 운송 배차 관리 프로그램 LogisWeb으로서 배차관리, 실시간 배차현황, 거래처·하차지·기사 관리, 단가표·운임조회, 매출·정산·지급관리, 화주사 전용 포털, 기사 전용 앱 및 이에 부수하는 기능을 말한다.
 ② 고객이 이용하는 요금제는 「{{요금제}}」이며, 직원 계정 {{직원계정}}명과 월 오더 {{포함오더}}건이 포함된다.
 ③ 일반 기사의 기사 앱 이용과 화주사 포털 이용은 별도 요금 없이 제공한다.
 
@@ -95,7 +97,7 @@ export const DEFAULT_TEMPLATE_BODY = `# KP-Flow 서비스 이용계약서
 본 계약의 성립을 증명하기 위하여 계약서를 작성하고, 양 당사자가 서명(전자서명 포함)한 후 각 1부씩 보관한다.
 
 {{계약일}}`;
-export const DEFAULT_TEMPLATES = [{ id: "kp-service", name: "KP-Flow 서비스 이용계약서 (기본)", body: DEFAULT_TEMPLATE_BODY }];
+export const DEFAULT_TEMPLATES = [{ id: "kp-service", name: "LogisWeb 서비스 이용계약서 (기본)", body: DEFAULT_TEMPLATE_BODY }];
 
 // 양식 → HTML (제N조/# 머리줄 굵게, {{변수}} 치환. 비어 있는 변수는 밑줄 칸으로)
 export function renderContractHtml(body, vars, { highlight = false } = {}) {
@@ -169,7 +171,7 @@ function Card({ code, title, right, children, className = "", bodyClass = "p-5" 
     <div className={`bg-white rounded-[18px] border border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_10px_26px_rgba(16,24,40,0.05)] overflow-hidden ${className}`}>
       <div className="flex items-center justify-between gap-x-3 gap-y-1.5 flex-wrap px-4 sm:px-5 py-2 min-h-[46px] sm:min-h-[50px] bg-[#F7F9FC] border-b border-[#E8EDF4]">
         <div className="flex items-center gap-2 min-w-0"><span className="w-1.5 h-1.5 rotate-45 bg-[#1B2B4B]" />
-          <span className="text-[10.5px] font-extrabold tracking-[0.2em] text-[#94A3B8]" style={{ fontFamily: C_MONO }}>{code}</span>
+          <span className="text-[10.5px] font-extrabold tracking-[0.2em] text-[#94A3B8]" style={{ fontFamily: C_MONO, fontVariantNumeric: "tabular-nums" }}>{code}</span>
           <span className="text-[15px] sm:text-[16px] font-black text-[#0F1A30] truncate whitespace-nowrap">{title}</span></div>
         {right}
       </div>
@@ -202,7 +204,7 @@ export function ContractList({ onNew, onEdit }) {
         {[["작성 중", list.filter((c) => c.status === "작성").length, "건"], ["서명 대기", list.filter((c) => c.status === "발송").length, "건"], ["서명 완료", list.filter((c) => c.status === "서명완료").length, "건"], ["만료 임박(2개월)", soon.length, "건"], ["계약 월 매출", signedMRR.toLocaleString(), "원"]].map(([l, v, u], i) => (
           <div key={l} className={`rounded-[16px] px-4 py-3.5 border ${i === 4 ? "bg-[#0F1A30] text-white border-[#0F1A30]" : "bg-white border-[#E3E8F0]"}`}>
             <div className={`text-[12.5px] font-bold ${i === 4 ? "text-white/60" : "text-[#7A879C]"}`}>{l}</div>
-            <div className="text-[24px] font-black mt-0.5" style={{ fontFamily: C_MONO }}>{v}<span className={`text-[13px] ml-1 ${i === 4 ? "text-white/50" : "text-[#9AA9C3]"}`}>{u}</span></div>
+            <div className="text-[24px] font-black mt-0.5" style={{ fontFamily: C_MONO, fontVariantNumeric: "tabular-nums" }}>{v}<span className={`text-[13px] ml-1 ${i === 4 ? "text-white/50" : "text-[#9AA9C3]"}`}>{u}</span></div>
           </div>
         ))}
       </div>
@@ -218,11 +220,11 @@ export function ContractList({ onNew, onEdit }) {
               <thead><tr className="bg-[#1B2B4B] text-white">{["계약번호", "고객사", "요금제", "월 이용료", "기간", "상태", "서명", ""].map((h) => <th key={h} className="px-3 py-2.5 text-center font-extrabold whitespace-nowrap">{h}</th>)}</tr></thead>
               <tbody>{shown.map((c) => (
                 <tr key={c.id} className="border-t border-[#EEF1F6] hover:bg-[#F5F8FD]">
-                  <td className="px-3 py-2.5 text-center text-[12.5px] text-[#5B6B85]" style={{ fontFamily: C_MONO }}>{c.no}</td>
+                  <td className="px-3 py-2.5 text-center text-[12.5px] text-[#5B6B85]" style={{ fontFamily: C_MONO, fontVariantNumeric: "tabular-nums" }}>{c.no}</td>
                   <td className="px-3 py-2.5 font-black text-[#0F1A30]">{c.vars?.고객사 || "-"}{soon.includes(c) && <span className="ml-2 px-1.5 py-0.5 rounded-md border border-[#1B2B4B] text-[10.5px] font-black text-[#1B2B4B]">만료 임박</span>}</td>
                   <td className="px-3 py-2.5 text-center">{c.vars?.요금제 || "-"}</td>
-                  <td className="px-3 py-2.5 text-right font-black" style={{ fontFamily: C_MONO }}>{Number(c.monthly || 0).toLocaleString()}</td>
-                  <td className="px-3 py-2.5 text-center text-[12.5px] text-[#5B6B85]" style={{ fontFamily: C_MONO }}>{c.vars?.시작일 || "-"} ~ {c.vars?.종료일 || "-"}</td>
+                  <td className="px-3 py-2.5 text-right font-black" style={{ fontFamily: C_MONO, fontVariantNumeric: "tabular-nums" }}>{Number(c.monthly || 0).toLocaleString()}</td>
+                  <td className="px-3 py-2.5 text-center text-[12.5px] text-[#5B6B85]" style={{ fontFamily: C_MONO, fontVariantNumeric: "tabular-nums" }}>{c.vars?.시작일 || "-"} ~ {c.vars?.종료일 || "-"}</td>
                   <td className="px-3 py-2.5 text-center"><Status s={c.status} /></td>
                   <td className="px-3 py-2.5 text-center text-[12.5px] text-[#5B6B85]">{c.status === "서명완료" ? `${c.signer?.name || ""} · ${c.signedAt?.toDate ? ymd(c.signedAt.toDate()) : ""}` : c.status === "발송" ? (c.viewedAt ? "열람함" : "미열람") : "-"}</td>
                   <td className="px-3 py-2.5 whitespace-nowrap text-right">
@@ -231,7 +233,7 @@ export function ContractList({ onNew, onEdit }) {
                     {c.status === "발송" && <button type="button" onClick={() => copy(c)} className="h-8 px-3 rounded-lg border border-[#1B2B4B] text-[12.5px] font-black text-[#1B2B4B] mr-1">{copied === c.id ? "복사됨 ✓" : "서명 링크 복사"}</button>}
                     <button type="button" onClick={() => printContract(c)} className="h-8 px-3 rounded-lg border border-[#DCE3EE] text-[12.5px] font-black text-[#1B2B4B] mr-1">보기·인쇄</button>
                     {c.status !== "서명완료" && c.status !== "취소" && <button type="button" onClick={() => window.confirm("이 계약서를 취소할까요? 서명 링크도 더 이상 쓸 수 없습니다.") && updateDoc(doc(db, "contracts", c.id), { status: "취소" })} className="h-8 px-3 rounded-lg border border-[#DCE3EE] text-[12.5px] font-bold text-[#7A879C] mr-1">취소</button>}
-                    {c.status !== "서명완료" && <button type="button" onClick={() => window.confirm("계약서를 완전히 삭제할까요?") && deleteDoc(doc(db, "contracts", c.id))} className="h-8 px-3 rounded-lg border border-[#DCE3EE] text-[12.5px] font-bold text-[#7A879C]">삭제</button>}
+                    {c.status !== "서명완료" && <button type="button" onClick={() => window.confirm("계약서를 완전히 삭제할까요?") && runDelete({ label: "계약서", task: () => deleteDoc(doc(db, "contracts", c.id)) }).catch(() => {})} /* ⭐ 2026-11-05 삭제 진행 창 */ className="h-8 px-3 rounded-lg border border-[#DCE3EE] text-[12.5px] font-bold text-[#7A879C]">삭제</button>}
                   </td>
                 </tr>))}
               </tbody>
@@ -256,6 +258,11 @@ const fromQuote = (q, cfg) => {
     월이용료: q?.monthly != null ? won(q.monthly) : "", 초기비용: q?.oneTime != null ? won(q.oneTime) : "", 계약기간: String(inp2.contractMonths || 12),
     결제방식: inp2.billing === "annual" ? "연간 선결제" : inp2.billing === "semi" ? "6개월 선결제" : "월 결제(계좌이체)", 추가옵션: opts.join(", ") || "없음", 특약: inp2.memo || "없음",
   };
+};
+// 계약서에 찍히는 공급자 — 화면에서 고친 값(vars) 우선, 비어 있으면 등록된 공급자 정보
+const supplierOf = (cfg, vars) => {
+  const s = cfg?.supplier || {};
+  return { ...s, name: vars.공급자상호 || s.name || "", ceo: vars.공급자대표 || s.ceo || "", bizNo: vars.공급자사업자번호 || s.bizNo || "", address: vars.공급자주소 || s.address || "", phone: vars.공급자연락처 || s.phone || "" };
 };
 export function ContractBuilder({ initial, fromQuoteDoc, onDone }) {
   const tpl = useContractTemplates();
@@ -292,7 +299,7 @@ export function ContractBuilder({ initial, fromQuoteDoc, onDone }) {
       const no = initial?.no || `C-${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}-${String(d.getHours() * 60 + d.getMinutes()).padStart(4, "0")}`;
       const data = {
         no, title: `${template.name} — ${vars.고객사}`, templateId: template.id, templateName: template.name, vars, monthly: Number(monthly) || 0, quoteNo,
-        bodyHtml: renderContractHtml(template.body, vars), supplier: { ...(cfg.supplier || {}) }, supplierSeal: tpl.supplierSeal || "",
+        bodyHtml: renderContractHtml(template.body, vars), supplier: supplierOf(cfg, vars), supplierSeal: tpl.supplierSeal || "",
         status: send ? "발송" : "작성", updatedAt: serverTimestamp(), ...(initial?.id ? {} : { createdAt: serverTimestamp() }), ...(send ? { sentAt: serverTimestamp() } : {}),
       };
       await setDoc(doc(db, "contracts", id), data, { merge: true });
@@ -303,7 +310,11 @@ export function ContractBuilder({ initial, fromQuoteDoc, onDone }) {
       onDone?.();
     } catch (e) { window.alert(`저장 실패: ${e.message}`); } finally { setBusy(false); }
   };
-  const F = ({ k, label, type = "text", ph }) => (
+  const F = ({ k, label, type = "text", ph }) => type === "date" ? (
+    // 📅 2026-11-04 날짜는 프로그램 달력으로(저장 형식 YYYY-MM-DD 그대로)
+    <label className="block"><span className="text-[12px] font-bold text-[#7A879C]">{label}</span>
+      <CustomDatePicker value={vars[k] || ""} onChange={(e) => set(k, e.target.value)} className={`${inp} mt-1 w-full tabular-nums whitespace-nowrap`} showIcon /></label>
+  ) : (
     <label className="block"><span className="text-[12px] font-bold text-[#7A879C]">{label}</span>
       <input type={type} value={vars[k] || ""} placeholder={ph || (/사업자번호$/.test(k) ? "000-00-00000" : /연락처$/.test(k) ? "010-0000-0000" : undefined)} inputMode={/연락처$/.test(k) ? "tel" : /사업자번호$/.test(k) ? "numeric" : undefined} onChange={(e) => set(k, /연락처$/.test(k) ? fmtPhone(e.target.value) : /사업자번호$/.test(k) ? fmtBizNo(e.target.value) : e.target.value)} className={`${inp} mt-1`} /></label>
   );
@@ -329,6 +340,15 @@ export function ContractBuilder({ initial, fromQuoteDoc, onDone }) {
             <div className="col-span-2">{F({ k: "고객연락처", label: "연락처" })}</div>
           </div>
         </Card>
+        {/* ⭐ 2026-11-04 공급자(우리) 정보 — 요금제 관리 › 공급자 정보에 등록된 값이 자동으로 채워진다(빈 칸만 채움 · 고쳐 쓸 수 있음) */}
+        <Card code="SUPPLIER" title="공급자 정보" right={<span className="text-[11.5px] font-bold text-[#7A879C] whitespace-nowrap">등록 정보 자동 입력</span>}>
+          <div className="grid grid-cols-2 gap-2.5">
+            <div className="col-span-2">{F({ k: "공급자상호", label: "공급자 상호" })}</div>
+            {F({ k: "공급자대표", label: "대표자" })}{F({ k: "공급자사업자번호", label: "사업자번호" })}
+            <div className="col-span-2">{F({ k: "공급자주소", label: "주소" })}</div>
+            <div className="col-span-2">{F({ k: "공급자연락처", label: "연락처" })}</div>
+          </div>
+        </Card>
         <Card code="TERMS" title="계약 조건">
           <div className="grid grid-cols-2 gap-2.5">
             {F({ k: "요금제", label: "요금제" })}{F({ k: "월이용료", label: "월 이용료", ph: "199,000원" })}
@@ -343,7 +363,7 @@ export function ContractBuilder({ initial, fromQuoteDoc, onDone }) {
               <textarea value={vars.특약 || ""} onChange={(e) => set("특약", e.target.value)} rows={3} className={`${inp} h-auto py-2 mt-1 leading-relaxed`} /></label></div>
             {F({ k: "계약일", label: "계약일", type: "date" })}
             <label className="block"><span className="text-[12px] font-bold text-[#7A879C]">월 금액(집계용, 숫자)</span>
-              <input inputMode="numeric" value={monthly ? Number(monthly).toLocaleString() : ""} onChange={(e) => setMonthly(Number(e.target.value.replace(/[^\d]/g, "")) || 0)} className={`${inp} mt-1 text-right`} style={{ fontFamily: C_MONO }} /></label>
+              <input inputMode="numeric" value={monthly ? Number(monthly).toLocaleString() : ""} onChange={(e) => setMonthly(Number(e.target.value.replace(/[^\d]/g, "")) || 0)} className={`${inp} mt-1 text-right`} style={{ fontFamily: C_MONO, fontVariantNumeric: "tabular-nums" }} /></label>
           </div>
         </Card>
         <div className="flex gap-2">
@@ -353,13 +373,13 @@ export function ContractBuilder({ initial, fromQuoteDoc, onDone }) {
       </div>
       <div className="rounded-[20px] bg-[#E9EDF3] p-5 xl:sticky xl:top-4 max-h-[calc(100vh-140px)] overflow-auto">
         <div className="flex items-center justify-between gap-3 mb-3 px-1 min-w-0">
-          <span className="text-[12px] font-extrabold tracking-[0.2em] text-[#5A6A85] whitespace-nowrap" style={{ fontFamily: C_MONO }}>LIVE PREVIEW</span>
+          <span className="text-[12px] font-extrabold tracking-[0.2em] text-[#5A6A85] whitespace-nowrap" style={{ fontFamily: C_MONO, fontVariantNumeric: "tabular-nums" }}>LIVE PREVIEW</span>
           <span className="text-[12px] font-bold text-[#7A879C] whitespace-nowrap truncate">밝게 표시된 곳이 채워진 값입니다</span>
         </div>
         <style>{CONTRACT_CSS}</style>
         <div className="bg-white mx-auto w-full max-w-[1180px] px-12 py-12 shadow-[0_10px_30px_rgba(15,26,48,0.12)]">
           <div className="kp-contract big" dangerouslySetInnerHTML={{ __html: renderContractHtml(template.body, vars, { highlight: true }) }} />
-          <div dangerouslySetInnerHTML={{ __html: signBlockHtml({ supplier: cfg.supplier, supplierSeal: tpl.supplierSeal, vars, status: "작성" }) }} />
+          <div dangerouslySetInnerHTML={{ __html: signBlockHtml({ supplier: supplierOf(cfg, vars), supplierSeal: tpl.supplierSeal, vars, status: "작성" }) }} />
         </div>
       </div>
     </div>
@@ -418,7 +438,7 @@ export function ContractTemplates() {
         <Card code="EDIT" title="양식 편집">
           <label className="block mb-2"><span className="text-[12px] font-bold text-[#7A879C]">양식 이름</span><input value={t.name} onChange={(e) => upd({ name: e.target.value })} className={`${inp} mt-1`} /></label>
           <div className="text-[12px] font-bold text-[#7A879C] mb-1.5">자리표시 넣기 <span className="font-semibold">(누르면 커서 위치에 들어갑니다)</span></div>
-          <div className="flex flex-wrap gap-1 mb-2">{CONTRACT_VARS.map(([k, d]) => <button key={k} type="button" title={d} onClick={() => insertVar(k)} className="h-7 px-2 rounded-md border border-[#DCE3EE] text-[11.5px] font-bold text-[#1B2B4B] hover:border-[#4B6CB7]" style={{ fontFamily: C_MONO }}>{`{{${k}}}`}</button>)}</div>
+          <div className="flex flex-wrap gap-1 mb-2">{CONTRACT_VARS.map(([k, d]) => <button key={k} type="button" title={d} onClick={() => insertVar(k)} className="h-7 px-2 rounded-md border border-[#DCE3EE] text-[11.5px] font-bold text-[#1B2B4B] hover:border-[#4B6CB7]" style={{ fontFamily: C_MONO, fontVariantNumeric: "tabular-nums" }}>{`{{${k}}}`}</button>)}</div>
           <textarea ref={taRef} value={t.body} onChange={(e) => upd({ body: e.target.value })} rows={28} className={`${inp} h-auto py-3 leading-[1.75] text-[13px] font-medium`} style={{ fontFamily: "inherit" }} />
           <div className="mt-2 text-[11.5px] text-[#9AA9C3] leading-relaxed">작성 규칙: 맨 앞에 <b>#</b> 을 붙이면 제목, <b>제N조</b>로 시작하는 줄은 굵은 조항 제목이 됩니다.</div>
         </Card>

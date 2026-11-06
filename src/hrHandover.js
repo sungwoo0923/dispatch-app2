@@ -12,7 +12,7 @@ import { db, DEFAULT_COMPANY } from "./firebase";
 export const isHrStaffUser = (u) =>
   !!u && !u.noAccount && u.approved !== false && u.employmentStatus !== "퇴사" &&
   !["driver", "shipper", "cafeUser", "totalMaster"].includes(u.role) &&
-  (["hrManager", "hrAcct"].includes(u.role) || /인사/.test(String(u.team || "")));
+  (["hrManager", "hrAcct", "allMgr", "hrStaff"].includes(u.role) || /인사/.test(String(u.team || "")));
 
 // 나(exceptUid)를 뺀 인사 담당자가 있는지
 export const companyHasHrStaff = (users, exceptUid) =>

@@ -32,21 +32,27 @@ async function signInAnyPassword(auth, email, carNo) {
 export async function signInDriver(auth, db, companyName, carNo) {
   const co = String(companyName || "").trim();
   let lastErr = null;
+  let otherCoErr = null;
+  const sameCo = (a, b) => String(a || "").replace(/\s+/g, "") === String(b || "").replace(/\s+/g, "");
   for (const email of [legacyDriverEmail(carNo), scopedDriverEmail(co, carNo)]) {
     try {
       const res = await signInAnyPassword(auth, email, carNo);
       const snap = await getDoc(doc(db, "users", res.user.uid)).catch(() => null);
       const owner = (snap?.exists() ? snap.data().companyName || "" : "").trim();
-      if (owner && owner !== co) {
+      if (owner && !sameCo(owner, co)) {
         await signOut(auth).catch(() => {});
-        lastErr = Object.assign(new Error("other company"), { code: "driver/other-company" });
+        otherCoErr = Object.assign(new Error("other company"), { code: "driver/other-company" });
         continue;
       }
       return { uid: res.user.uid, email };
     } catch (e) {
       lastErr = e;
+      // ⭐ 2026-11-05 인터넷 끊김·시도 과다는 다음 계정을 시도해도 같다 — 바로 알린다
+      if (e?.code === "auth/network-request-failed" || e?.code === "auth/too-many-requests" || e?.code === "auth/user-disabled") break;
     }
   }
+  // ⭐ 2026-11-05 예전엔 "다른 회사 계정" 오류가 다음 시도(회사별 계정 없음) 오류에 덮여, 운송사가 다르다는 이유를 알 수 없었다
+  if (otherCoErr && !["auth/network-request-failed", "auth/too-many-requests", "auth/user-disabled"].includes(lastErr?.code)) throw otherCoErr;
   throw lastErr || new Error("login failed");
 }
 

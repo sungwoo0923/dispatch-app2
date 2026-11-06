@@ -13,7 +13,7 @@ import { ref as storageRef, uploadBytes, getDownloadURL } from "firebase/storage
 import { auth, db, storage } from "./firebase";
 import { kpConfirm } from "./kpDialog";
 
-const MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
+const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
 const LOCAL = typeof location !== "undefined" && /^(localhost|127\.0\.0\.1)$/.test(location.hostname);
 const DEFAULT_URL = LOCAL ? "http://127.0.0.1:5500/" : "https://dispatch-app2-vskk.vercel.app/";
 const EMPTY = { v: 1, page: {}, ops: [], els: {} };
@@ -353,7 +353,7 @@ export default function HomepageEditor() {
               <LazyInput textarea rows={Math.min(8, Math.max(2, Math.ceil((sel.text || "").length / 34)))} value={sel.text} onCommit={(v) => send({ cmd: "setText", key: sel.key, text: v })} />
               {sel.html && /<(b|strong|br|span|small|svg|em|i)\b/i.test(sel.html) && (
                 <details className="text-[12px]"><summary className="cursor-pointer text-[#4B6CB7] font-bold">굵게·줄바꿈까지 고치기(HTML)</summary>
-                  <LazyInput textarea rows={4} value={sel.html} onCommit={(v) => send({ cmd: "setHtml", key: sel.key, html: v })} className={cls(inp, "font-mono text-[11.5px]")} />
+                  <LazyInput textarea rows={4} value={sel.html} onCommit={(v) => send({ cmd: "setHtml", key: sel.key, html: v })} className={cls(inp, "tabular-nums text-[11.5px]")} />
                   <div className="text-[11px] text-[#9AA9C3] mt-1">&lt;b&gt;굵게&lt;/b&gt; · &lt;br&gt; 줄바꿈 · &lt;span style="color:#2D5BD8"&gt;색&lt;/span&gt;</div>
                 </details>
               )}
@@ -475,7 +475,7 @@ export default function HomepageEditor() {
           </Sec>
           <Sec title="전체 글자 찾아 바꾸기"><FindReplace onRun={(find, replace) => send({ cmd: "replaceText", find, replace })} /></Sec>
           <Sec title="직접 CSS (고급)">
-            <LazyInput textarea rows={6} value={p.css || ""} placeholder={".hero h1 { font-size: 60px; }"} onCommit={(v) => setPage({ css: v })} className={cls(inp, "font-mono text-[11.5px]")} />
+            <LazyInput textarea rows={6} value={p.css || ""} placeholder={".hero h1 { font-size: 60px; }"} onCommit={(v) => setPage({ css: v })} className={cls(inp, "tabular-nums text-[11.5px]")} />
           </Sec>
         </div>
       );
@@ -625,7 +625,7 @@ export default function HomepageEditor() {
       {/* 상단 도구줄 */}
       <div className="flex items-center gap-2 flex-wrap px-3 py-2 bg-[#0F1A30] text-white rounded-t-[14px]">
         <div className="flex items-center gap-2 mr-1">
-          <span className="text-[10px] font-extrabold tracking-[0.24em] text-[#8FB0F0]" style={{ fontFamily: MONO }}>HOMEPAGE</span>
+          <span className="text-[10px] font-extrabold tracking-[0.24em] text-[#8FB0F0]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>HOMEPAGE</span>
           <span className="text-[14px] font-black">홈페이지 편집</span>
         </div>
         <div className="flex rounded-lg bg-white/10 p-0.5">
@@ -673,7 +673,7 @@ function FindReplace({ onRun }) {
   const [a, setA] = React.useState(""); const [b, setB] = React.useState("");
   return (
     <div className="space-y-1.5">
-      <input className={inp} value={a} onChange={(e) => setA(e.target.value)} placeholder="찾을 글자 (예: KP-Flow)" />
+      <input className={inp} value={a} onChange={(e) => setA(e.target.value)} placeholder="찾을 글자 (예: LogisWeb)" />
       <input className={inp} value={b} onChange={(e) => setB(e.target.value)} placeholder="바꿀 글자" />
       <button type="button" className={cls(btnDark, "w-full")} disabled={!a} onClick={() => onRun(a, b)}>모두 바꾸기</button>
     </div>

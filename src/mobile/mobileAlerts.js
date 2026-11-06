@@ -8,15 +8,17 @@ import { collection, onSnapshot, query, where } from "firebase/firestore";
 import { db, DEFAULT_COMPANY } from "../firebase";
 import { isNoticeUnread, noticePublished, useMinuteTick, canSeeTargetedNotice } from "../notifyCore";
 
-const ADMIN_ROLES = ["admin", "totalMaster", "superadmin"];
+const ADMIN_ROLES = ["admin", "totalMaster", "superadmin", "allMgr"];
 const myTurn = (d, uid) => (d.status === "pending" && d.line?.[d.step]?.uid === uid)
   || (d.status === "approved" && d.cancel?.status === "pending" && d.cancel.line?.[d.cancel.step]?.uid === uid);
+// ⭐ 2026-11-05 PC·모바일 일치 — PC 전자결재 숫자 = 결재할 차례(todo) + 내 기안 새 결과(mineNew) + 인수인계. Approval.jsx mineUnread와 같은 기준
+const mineUnread = (d, uid) => d.drafterUid === uid && (d.drafterUnread === true || (d.drafterUnread === undefined && d.status === "rejected" && !(d.seenBy || []).includes(uid)));
 const handoverTo = (h) => (Array.isArray(h?.receiverUids) && h.receiverUids.length ? h.receiverUids : h?.receiverUid ? [h.receiverUid] : []);
 // ⭐ 2026-11-03 지정 공지 비공개 — 지정된 사람(팀원)·작성자·최고관리자만(notifyCore.canSeeTargetedNotice — PC와 같은 기준)
 const canSeeNotice = (n, me) => canSeeTargetedNotice(n, me);
 
 export function useMobileAlerts({ uid, role, team = "", company = "", onAlert }) {
-  const [counts, setCounts] = React.useState({ approval: 0, handover: 0, signupStaff: 0, signupDriver: 0, notice: 0 });
+  const [counts, setCounts] = React.useState({ approval: 0, mineNew: 0, handover: 0, signupStaff: 0, signupDriver: 0, notice: 0 });
   const alertRef = React.useRef(onAlert);
   alertRef.current = onAlert;
   const set = (k, v) => setCounts((c) => (c[k] === v ? c : { ...c, [k]: v }));
@@ -34,11 +36,13 @@ export function useMobileAlerts({ uid, role, team = "", company = "", onAlert })
     if (!uid) return undefined;
     const w = watch("approval");
     return onSnapshot(query(collection(db, "approvals"), where("participants", "array-contains", uid)), (s) => {
-      const todo = s.docs.map((d) => ({ id: d.id, ...d.data() })).filter((d) => myTurn(d, uid) && !(d.hiddenBy || []).includes(uid));
+      const all = s.docs.map((d) => ({ id: d.id, ...d.data() })).filter((d) => !(d.hiddenBy || []).includes(uid));
+      const todo = all.filter((d) => myTurn(d, uid));
       set("approval", todo.length);
+      set("mineNew", all.filter((d) => mineUnread(d, uid)).length);
       const byKey = new Map(todo.map((d) => [`${d.id}_${d.step}_${d.cancel?.step ?? ""}`, d]));
       w([...byKey.keys()], (k) => { const d = byKey.get(k); return `✎ 결재 요청 · ${d.drafter?.name || ""} — ${d.title || d.formLabel || "결재 문서"}`; });
-    }, () => set("approval", 0));
+    }, () => { set("approval", 0); set("mineNew", 0); });
   }, [uid]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // 🔁 인수인계 — 내가 받은 것 중 안 본 것
@@ -54,7 +58,7 @@ export function useMobileAlerts({ uid, role, team = "", company = "", onAlert })
   }, [uid]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // 🙋 가입 신청 — 관리자 이상(조회전용 포함 관리자 메뉴를 보는 사람)
-  const isAdmin = ADMIN_ROLES.includes(role) || role === "viewer" || role === "test" || role === "hrManager" || role === "hrAcct"; // 경리·인사도 직원·기사 승인
+  const isAdmin = ADMIN_ROLES.includes(role) || role === "viewer" || role === "test" || role === "hrManager" || role === "hrAcct" || role === "allMgr"; // 경리·인사도 직원·기사 승인
   React.useEffect(() => {
     if (!uid || !isAdmin || !company) return undefined;
     const w = watch("signup");

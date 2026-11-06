@@ -14,6 +14,7 @@ import {
   doc, getDoc, setDoc, serverTimestamp, collection, query, where, getDocs, addDoc, updateDoc,
 } from "firebase/firestore";
 import { fmtPhone } from "./formatInput";
+import { LogisMark } from "./brand"; // 🔷 2026-11-04 LogisWeb 로고
 
 // 운송사 목록 — 가입 화면이 열릴 때 한 번 받아 두고, 입력할 때마다 바로 거른다(드롭다운 즉시)
 let companyListPromise = null;
@@ -121,14 +122,14 @@ function TermsBox({ title, text }) {
 }
 
 // ── Step 1: 가입 유형 선택 ────────────────────────────────────────────────────
-const MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
+const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
 const GRID_BG = "linear-gradient(rgba(143,176,240,.07) 1px, transparent 1px) 0 0/26px 26px, linear-gradient(90deg, rgba(143,176,240,.07) 1px, transparent 1px) 0 0/26px 26px, linear-gradient(135deg,#0B1428 0%,#1B2B4B 60%,#2D4C82 100%)";
 function TypeSelect({ onSelect }) {
   const navigate = useNavigate();
   const Card = ({ type, en, title, desc, points, dark }) => (
     <button type="button" onClick={() => onSelect(type)}
       className={`group text-left rounded-[22px] p-7 border transition-all duration-200 hover:-translate-y-0.5 ${dark ? "bg-[#0F1A30] border-[#0F1A30] text-white shadow-[0_18px_40px_rgba(11,20,40,.35)]" : "bg-white border-[#DCE3EE] text-[#0F1A30] hover:border-[#2D4C82] shadow-[0_8px_24px_rgba(15,26,48,.08)]"}`}>
-      <div className={`text-[11px] font-extrabold tracking-[0.26em] ${dark ? "text-[#8FB0F0]" : "text-[#2D4C82]"}`} style={{ fontFamily: MONO }}>{en}</div>
+      <div className={`text-[11px] font-extrabold tracking-[0.26em] ${dark ? "text-[#8FB0F0]" : "text-[#2D4C82]"}`} style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{en}</div>
       <div className="text-[22px] font-black mt-1.5">{title}</div>
       <div className={`text-[14px] mt-1 ${dark ? "text-white/65" : "text-[#5B6B85]"}`}>{desc}</div>
       <div className="mt-5 space-y-2">
@@ -141,13 +142,13 @@ function TypeSelect({ onSelect }) {
     <div className="min-h-screen flex items-center justify-center px-4 py-10" style={{ background: GRID_BG }}>
       <div className="w-full max-w-[880px]">
         <div className="text-center mb-8">
-          <img src="/icons/sflow-icon.png" alt="" className="w-14 h-14 rounded-2xl shadow-lg mx-auto mb-4" />
-          <div className="text-[11px] font-extrabold tracking-[0.3em] text-[#8FB0F0]" style={{ fontFamily: MONO }}>TRANSPORT · SIGN UP</div>
+          <LogisMark size={56} style={{ margin: "0 auto 16px", filter: "drop-shadow(0 10px 20px rgba(0,0,0,0.3))" }} />
+          <div className="text-[11px] font-extrabold tracking-[0.3em] text-[#8FB0F0]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>TRANSPORT · SIGN UP</div>
           <h1 className="text-[30px] font-black text-white tracking-tight mt-1">운송사 회원가입</h1>
           <p className="text-[14.5px] text-white/60 mt-1.5">가입 유형을 골라 주세요</p>
         </div>
         <div className="grid gap-4 md:grid-cols-2">
-          <Card type="신규" dark en="NEW COMPANY" title="신규 가입신청" desc="처음 쓰는 운송사 등록" points={["회사 정보 · 사업자번호", "요금제 선택", "승인 후 바로 사용(승인 전 둘러보기)"]} />
+          <Card type="신규" dark en="NEW COMPANY" title="신규 가입신청" desc="처음 쓰는 운송사 등록" points={["회사 정보 · 사업자번호", "요금제 선택", "승인 후 바로 사용"]} />
           <Card type="기존" en="JOIN EXISTING" title="기존 회사 추가 가입" desc="이미 쓰는 회사의 직원 계정" points={["회사명 검색 → 선택", "담당자 정보 입력", "회사 관리자가 승인하면 사용"]} />
         </div>
         <p className="text-center text-[14px] text-white/60 mt-7">
@@ -445,13 +446,13 @@ function SignupForm({ signupType, onBack }) {
         {/* 왼쪽(PC) · 위(모바일) 안내 패널 */}
         <div className="relative text-white px-7 py-7 lg:py-10 flex flex-col" style={{ background: GRID_BG }}>
           <button type="button" onClick={onBack} className="self-start h-9 px-3.5 rounded-xl bg-white/10 border border-white/20 text-[13px] font-bold hover:bg-white/15">← 가입 유형</button>
-          <div className="mt-6 text-[11px] font-extrabold tracking-[0.26em] text-[#8FB0F0]" style={{ fontFamily: MONO }}>{signupType === "신규" ? "NEW COMPANY" : "JOIN EXISTING"}</div>
+          <div className="mt-6 text-[11px] font-extrabold tracking-[0.26em] text-[#8FB0F0]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{signupType === "신규" ? "NEW COMPANY" : "JOIN EXISTING"}</div>
           <h1 className="text-[26px] font-black mt-1">{signupType === "신규" ? "신규 가입신청" : "기존 회사 추가 가입"}</h1>
           <p className="text-white/65 text-[14px] mt-1.5 leading-relaxed">{signupType === "신규" ? "회사 정보와 담당자 정보를 입력하면 관리자 승인 후 바로 쓸 수 있어요." : "소속 회사를 검색해서 고르고 담당자 정보를 입력해 주세요. 회사 관리자가 승인하면 로그인할 수 있어요."}</p>
           <div className="hidden lg:block mt-8 space-y-3">
             {["회사 정보", "담당자 정보", "계정 정보", "약관 동의"].map((t, i) => (
               <div key={t} className="flex items-center gap-3">
-                <span className="w-8 h-8 rounded-lg bg-white/10 border border-white/20 flex items-center justify-center text-[12px] font-black" style={{ fontFamily: MONO }}>{String(i + 1).padStart(2, "0")}</span>
+                <span className="w-8 h-8 rounded-lg bg-white/10 border border-white/20 flex items-center justify-center text-[12px] font-black" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{String(i + 1).padStart(2, "0")}</span>
                 <span className="text-[14.5px] font-bold text-white/85">{t}</span>
               </div>
             ))}
@@ -653,9 +654,7 @@ function SignupForm({ signupType, onBack }) {
           {success && (
             <div className="md:col-span-2 bg-[#EEF3FC] border border-[#C9D6EE] text-[#0F1A30] text-[14px] px-4 py-3.5 rounded-xl font-bold">
               운송사 가입신청이 완료되었습니다. 관리자 승인 후 로그인이 가능합니다.
-              <div className="grid grid-cols-2 gap-2 mt-2.5">
-                <button type="button" onClick={() => navigate(`/preview?co=${encodeURIComponent(companyName.trim())}&plan=${signupType === "신규" ? planId : ""}`)}
-                  className="h-10 rounded-xl bg-[#1B2B4B] text-white text-[13px] font-black">승인 전 둘러보기</button>
+              <div className="grid grid-cols-1 gap-2 mt-2.5">{/* ⭐ 2026-11-04 승인 전 둘러보기 없앰 */}
                 <button type="button" onClick={() => navigate("/login")}
                   className="h-10 rounded-xl border border-[#1B2B4B]/30 bg-white text-[#1B2B4B] text-[13px] font-black">로그인 화면으로</button>
               </div>

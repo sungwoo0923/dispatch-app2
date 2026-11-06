@@ -4,6 +4,7 @@
 //    (입력 권한이 있는 누구나 쓴다 · 자동 생성분은 알림을 보내지 않는다 · 같은 날짜로는 한 번만)
 //  - 마감보고: 일마감 검증 창 [마감보고 전송] — 그날 실적·검증 결과를 고른 사람들에게 푸시로 보낸다.
 import React from "react";
+import { runDelete } from "./DeleteProgress"; // ⭐ 2026-11-05 삭제 진행 창 + 한 번에 삭제
 import { db, auth } from "./firebase";
 import { collection, doc, onSnapshot, query, where, addDoc, updateDoc, deleteDoc, serverTimestamp } from "firebase/firestore";
 import { callFn, kstToday, addDays, won } from "./kpApi";
@@ -151,7 +152,7 @@ export function RecurringManagerModal({ form, onClose }) {
             <div className="px-3.5 py-2.5 rounded-xl bg-[#F5F8FD] text-[13px] text-[#3A4A66] leading-relaxed">
               <b className="text-[#0F1A30]">{form.거래처명}</b> · {form.상차지명} → {form.하차지명}{form.상차시간 ? ` · ${form.상차시간}` : ""}{dropOffset ? ` · 하차 ${dropOffset}일 뒤` : ""} · 청구 {won(form.청구운임)}{form.기사운임 ? ` / 기사 ${won(form.기사운임)}` : ""}
             </div>
-            <input value={name} onChange={(e) => setName(e.target.value)} placeholder="이름(예: 펠프렌 매일 김포)"
+            <input value={name} onChange={(e) => setName(e.target.value)} placeholder="이름(예: ○○ 매일 김포)"
               className="w-full h-11 px-3.5 rounded-xl border border-[#DCE3EE] text-[14px] font-semibold text-[#0F1A30] outline-none focus:border-[#4B6CB7]" />
             <ScheduleFields days={days} setDays={setDays} hour={hour} setHour={setHour} when={when} setWhen={setWhen} />
             <div className="flex flex-wrap items-center justify-between gap-3">
@@ -194,7 +195,7 @@ export function RecurringManagerModal({ form, onClose }) {
                 <div className="flex items-center gap-1.5 shrink-0">
                   <span className="text-[12px] font-bold text-[#7A879C] mr-1">{t.active ? (next ? `다음 ${next.slice(5).replace("-", "/")}(${DAYS[dowOf(next)]})` : "") : "멈춤"}</span>
                   <button onClick={() => patch(t.id, { active: !t.active })} className={`h-8 px-3 rounded-lg text-[12px] font-black border ${t.active ? "border-[#E3E8F0] text-[#0F1A30]" : "bg-[#0F1A30] text-white border-[#0F1A30]"}`}>{t.active ? "멈추기" : "다시 켜기"}</button>
-                  <button onClick={() => { if (window.confirm(`"${t.name}" 정기오더를 지울까요?\n(이미 만들어진 오더는 그대로 남습니다)`)) deleteDoc(doc(db, "recurringOrders", t.id)); }} className="h-8 px-3 rounded-lg text-[12px] font-black border border-[#E3E8F0] text-[#7A879C]">삭제</button>
+                  <button onClick={() => { if (window.confirm(`"${t.name}" 정기오더를 지울까요?\n(이미 만들어진 오더는 그대로 남습니다)`)) runDelete({ label: "정기오더", task: () => deleteDoc(doc(db, "recurringOrders", t.id)) }).catch(() => {}); /* ⭐ 2026-11-05 삭제 진행 창 */ }} className="h-8 px-3 rounded-lg text-[12px] font-black border border-[#E3E8F0] text-[#7A879C]">삭제</button>
                 </div>
               </div>
               <ScheduleFields sm days={t.days || []} setDays={(d) => d.length && patch(t.id, { days: d })}

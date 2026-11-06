@@ -8,9 +8,8 @@ import { db, DEFAULT_COMPANY } from "./firebase";
 import KpSubNav from "./KpSubNav";
 import { Sheet } from "./OfficeBooks";
 import { useRoleOptions } from "./customRoles";
-import DriverAccounts from "./DriverAccounts";
 
-const MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
+const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
 function Loading() {
   return <div className="py-24 flex flex-col items-center gap-3 text-[#7A879C]"><span className="w-6 h-6 border-[3px] border-[#DCE3EE] border-t-[#1B2B4B] rounded-full animate-spin" /><span className="text-[12.5px] font-bold">불러오는 중…</span></div>;
 }
@@ -42,7 +41,7 @@ function Avatar({ name }) {
 export default function StaffManager({ company, role, myUid, initialTab = "pending", compact = false }) {
   const ro = useRoleOptions();
   const [users, setUsers] = React.useState(null);
-  const [tab, setTab] = React.useState(initialTab);
+  const [tab, setTab] = React.useState(initialTab === "dpending" || initialTab === "drivers" ? "pending" : initialTab);
   const [busy, setBusy] = React.useState("");
   const [q, setQ] = React.useState("");
   const [menuOpen, setMenuOpen] = React.useState(null);
@@ -102,7 +101,7 @@ export default function StaffManager({ company, role, myUid, initialTab = "pendi
   const kw = q.trim();
   const match = (u) => !kw || [u.name, u.email, u.phone, u.team, u.position, u.carNo].some((v) => String(v || "").includes(kw));
   const L = (lists[tab] || []).filter(match);
-  const isDriverTab = tab === "dpending" || tab === "drivers";
+  const isDriverTab = false; // ⭐ 2026-11-05 기사 탭 없음(기사 앱 계정 화면으로 옮김)
   const canRole = (isMaster || role === "hrManager") && !isViewer;
   const empty = { pending: "승인 대기 중인 직원이 없습니다", staff: "직원이 없습니다", left: "퇴사자가 없습니다", dpending: "가입 신청한 기사님이 없습니다", drivers: "승인된 기사님이 없습니다" }[tab];
   // 재직 직원 — 팀별로
@@ -127,7 +126,7 @@ export default function StaffManager({ company, role, myUid, initialTab = "pendi
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5 flex-wrap">
             <span className="text-[14.5px] font-black text-[#0F1A30] truncate">{u.name || "-"}</span>
-            {isDriverTab ? u.carNo && <span className="px-1.5 h-[20px] rounded-md border border-[#0F1A30] text-[#0F1A30] text-[11.5px] font-black grid place-items-center" style={{ fontFamily: MONO }}>{u.carNo}</span>
+            {isDriverTab ? u.carNo && <span className="px-1.5 h-[20px] rounded-md border border-[#0F1A30] text-[#0F1A30] text-[11.5px] font-black grid place-items-center" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{u.carNo}</span>
               : u.position && <span className="text-[12.5px] font-bold text-[#5B6B85]">{u.position}</span>}
             {u.isMaster && <span className="px-1.5 h-[18px] rounded-md bg-[#0F1A30] text-white text-[10px] font-black grid place-items-center">마스터</span>}
             {!isDriverTab && tab !== "left" && <span className="px-1.5 h-[18px] rounded-md bg-[#EEF3FC] text-[#1B2B4B] text-[10.5px] font-black grid place-items-center">{ro.label(u.role)}</span>}
@@ -164,10 +163,17 @@ export default function StaffManager({ company, role, myUid, initialTab = "pendi
                   </div>
                   {!isDriverTab && canRole && !u.isMaster && (
                     <>
-                      <div className="px-2 pt-1 pb-1 text-[11.5px] font-black text-[#9AA9C3]">권한 변경</div>
-                      {ro.options.map(([rk, rl]) => (
-                        <button key={rk} type="button" onClick={() => { setMenuOpen(null); changeRole(u, rk); }} className={`w-full text-left px-3 h-11 rounded-xl text-[14.5px] font-bold ${u.role === rk ? "bg-[#EEF3FC] text-[#1B2B4B]" : "text-[#3A4A66] hover:bg-[#F5F8FD]"}`}>{u.role === rk ? "✓ " : ""}{rl}</button>
-                      ))}
+                      <div className="px-2 pt-1 pb-1 text-[11.5px] font-black text-[#9AA9C3]">권한 변경{u.team ? ` · ${u.team}에 맞는 권한` : ""}</div>
+                      {/* 🏢 2026-11-04 그 직원 부서에 맞는 권한만(customRoles.js rolesForTeam) */}
+                      {(() => {
+                        // ⭐ 2026-11-05 마스터는 최고관리자를 뺀 모든 권한(부서에 맞는 권한 먼저, 그 아래 「다른 권한」)
+                        const fit = ro.forTeam(u.team, u.role);
+                        const rest = isMaster ? ro.options.filter(([k]) => !["totalMaster", "driver", "shipper"].includes(k) && !fit.some(([x]) => x === k)) : [];
+                        const btn = ([rk, rl]) => (
+                          <button key={rk} type="button" data-role-opt={rk} onClick={() => { setMenuOpen(null); changeRole(u, rk); }} className={`w-full text-left px-3 h-11 rounded-xl text-[14.5px] font-bold ${u.role === rk ? "bg-[#EEF3FC] text-[#1B2B4B]" : "text-[#3A4A66] hover:bg-[#F5F8FD]"}`}>{u.role === rk ? "✓ " : ""}{rl}</button>
+                        );
+                        return (<>{fit.map(btn)}{rest.length > 0 && <div className="px-2 pt-2 pb-1 text-[11.5px] font-black text-[#9AA9C3]">다른 권한 (마스터)</div>}{rest.map(btn)}</>);
+                      })()}
                       <div className="h-px bg-[#EEF2F8] my-1.5" />
                     </>
                   )}
@@ -186,13 +192,10 @@ export default function StaffManager({ company, role, myUid, initialTab = "pendi
           { key: "pending", label: "직원 승인 대기", en: "PENDING", icon: "hourglass", badge: lists.pending.length },
           ...(compact ? [] : [{ key: "staff", label: "재직 직원", en: "STAFF", icon: "users" }, { key: "left", label: "퇴사자", en: "LEFT", icon: "user" }]),
         ] },
-        { label: "기사관리", items: [
-          { key: "dpending", label: "기사 가입 승인", en: "DRIVER SIGNUP", icon: "truck", badge: lists.dpending.length },
-          { key: "drivers", label: "승인된 기사", en: "DRIVERS", icon: "idcard" },
-        ] },
+        // ⭐ 2026-11-05 기사 가입 승인 탭은 뺐다 — 기사관리 › 기사 앱 계정 › 가입 승인(모바일: 메뉴 「기사 앱 계정」)에서만
       ]}>
       {/* ⭐ 2026-10-31 기사 탭은 기사관리와 같은 디지털 카드(번호판·서류 완비율)로 */}
-      {isDriverTab ? <DriverAccounts company={company} isViewer={isViewer} tab={tab === "dpending" ? "pending" : "drivers"} onTab={(k) => setTab(k === "pending" ? "dpending" : "drivers")} /> : (<>
+      {(<>
       <div className="flex flex-col md:flex-row md:items-center gap-2 mb-3">
         <div className="grid grid-cols-3 gap-2 md:w-[420px]">
           {(isDriverTab
@@ -200,7 +203,7 @@ export default function StaffManager({ company, role, myUid, initialTab = "pendi
             : [["승인 대기", lists.pending.length], ["재직", lists.staff.length], ["퇴사", lists.left.length]]).map(([l, v]) => (
             <div key={l} className="rounded-2xl bg-white border border-[#E3E8F0] px-3 py-2">
               <div className="text-[11.5px] font-bold text-[#7A879C]">{l}</div>
-              <div className="text-[19px] font-black text-[#0F1A30] tabular-nums" style={{ fontFamily: MONO }}>{v}</div>
+              <div className="text-[19px] font-black text-[#0F1A30] tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{v}</div>
             </div>
           ))}
         </div>
@@ -215,7 +218,7 @@ export default function StaffManager({ company, role, myUid, initialTab = "pendi
               <div className="px-4 py-2.5 border-b border-[#EEF1F6] flex items-center gap-2 bg-[#F7F9FC] rounded-t-2xl">
                 <span className="w-1.5 h-4 rounded-full bg-[#1B2B4B]" />
                 <span className="text-[14px] font-black text-[#0F1A30]">{t}</span>
-                <span className="text-[12px] font-black text-[#7A879C] tabular-nums" style={{ fontFamily: MONO }}>{us.length}명</span>
+                <span className="text-[12px] font-black text-[#7A879C] tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{us.length}명</span>
               </div>
               <div className="divide-y divide-[#F1F4F9]">{us.map((u) => <Row key={u.id} u={u} />)}</div>
             </div>
@@ -226,7 +229,7 @@ export default function StaffManager({ company, role, myUid, initialTab = "pendi
           {leftGroups.map(([m, us]) => (
             <div key={m} className="rounded-2xl bg-white border border-[#E3E8F0] overflow-hidden">
               <div className="px-4 py-2.5 border-b border-[#EEF1F6] flex items-center gap-2 bg-[#F7F9FC]">
-                <span className="text-[13.5px] font-black text-[#0F1A30]" style={{ fontFamily: MONO }}>{m.replace("-", ".")}</span>
+                <span className="text-[13.5px] font-black text-[#0F1A30]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{m.replace("-", ".")}</span>
                 <span className="text-[12px] font-bold text-[#7A879C]">퇴사 {us.length}명</span>
               </div>
               <div className="divide-y divide-[#F1F4F9]">{us.map((u) => <Row key={u.id} u={u} />)}</div>

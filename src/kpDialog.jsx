@@ -6,7 +6,7 @@
 import React from "react";
 import { createRoot } from "react-dom/client";
 
-const MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
+const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
 
 function Dialog({ message, title, okText, cancelText, danger, alertOnly, onDone }) {
   const okRef = React.useRef(null);
@@ -25,7 +25,7 @@ function Dialog({ message, title, okText, cancelText, danger, alertOnly, onDone 
       <div role="dialog" aria-modal="true" style={{ width: "min(440px,100%)", borderRadius: 22, overflow: "hidden", background: "#fff", boxShadow: "0 30px 80px rgba(11,20,40,.45)", animation: "kpdlg .16s ease-out" }}>
         <style>{"@keyframes kpdlg{from{transform:translateY(8px) scale(.98);opacity:0}to{transform:none;opacity:1}}"}</style>
         <div style={{ padding: "18px 22px 14px", color: "#fff", background: "linear-gradient(120deg,#0B1428 0%,#1B2B4B 65%,#2D4C82 100%)" }}>
-          <div style={{ fontFamily: MONO, fontSize: 10, fontWeight: 800, letterSpacing: "0.26em", color: "#8FB0F0" }}>{alertOnly ? "NOTICE" : danger ? "CONFIRM · CAUTION" : "CONFIRM"}</div>
+          <div style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 10, fontWeight: 800, letterSpacing: "0.26em", color: "#8FB0F0" }}>{alertOnly ? "NOTICE" : danger ? "CONFIRM · CAUTION" : "CONFIRM"}</div>
           <div style={{ fontSize: 18, fontWeight: 900, marginTop: 2 }}>{title || (alertOnly ? "알림" : "확인해 주세요")}</div>
         </div>
         <div style={{ padding: "18px 22px 6px", fontSize: 15, lineHeight: 1.7, color: "#0F1A30", fontWeight: 600, wordBreak: "keep-all" }}>

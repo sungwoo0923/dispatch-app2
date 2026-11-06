@@ -9,7 +9,7 @@ import { doc, onSnapshot, setDoc, serverTimestamp } from "firebase/firestore";
 import { db, auth } from "./firebase";
 import { getTenant } from "./fsTenant";
 
-const MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
+const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
 const LS = "kpColStyle:v1";
 const read = () => { try { return JSON.parse(localStorage.getItem(LS) || "{}") || {}; } catch { return {}; } };
 let STORE = read();
@@ -114,7 +114,7 @@ function StyleModal({ target, onClose }) {
   const lab = "text-[11.5px] font-black text-[#5B6B85] mb-1.5";
 
   return createPortal(
-    <div className="fixed inset-0 z-[2147483100] flex items-center justify-center bg-[#060C1A]/55 backdrop-blur-[3px] p-3" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+    <div className="fixed inset-0 z-[2147483100] flex items-center justify-center bg-[#060C1A]/55 backdrop-blur-[3px] p-3">
       <div className="w-[min(520px,96vw)] max-h-[94vh] flex flex-col rounded-[22px] bg-[#F4F6FA] shadow-[0_30px_80px_rgba(6,12,26,0.55)] overflow-hidden ring-1 ring-white/10">
         <div className="relative overflow-hidden px-5 pt-4 pb-4 text-white" style={{ background: "radial-gradient(600px 220px at 85% -30%, rgba(110,149,232,.32), transparent 60%), linear-gradient(120deg,#060C1A 0%,#0F1A30 45%,#1B2B4B 100%)" }}>
           <div className="absolute inset-0 pointer-events-none" style={{ background: "linear-gradient(rgba(143,176,240,.07) 1px, transparent 1px) 0 0/22px 22px, linear-gradient(90deg, rgba(143,176,240,.07) 1px, transparent 1px) 0 0/22px 22px" }} />
@@ -123,7 +123,7 @@ function StyleModal({ target, onClose }) {
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#CFE0FF" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3a9 9 0 1 0 0 18c1.1 0 1.5-.9 1.5-1.6 0-.9-.7-1.4-.7-2.3 0-1 .8-1.6 1.8-1.6H17a4 4 0 0 0 4-4C21 6.6 17 3 12 3z" /><circle cx="7.5" cy="11" r="1.2" fill="#CFE0FF" /><circle cx="10.5" cy="7" r="1.2" fill="#CFE0FF" /><circle cx="15" cy="7.5" r="1.2" fill="#CFE0FF" /></svg>
             </div>
             <div className="min-w-0">
-              <div className="text-[10px] font-extrabold tracking-[0.3em] text-[#8FB0F0]" style={{ fontFamily: MONO }}>COLUMN STYLE</div>
+              <div className="text-[10px] font-extrabold tracking-[0.3em] text-[#8FB0F0]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>COLUMN STYLE</div>
               <div className="text-[18px] font-black tracking-tight truncate">“{col}” 칸 색 변경</div>
             </div>
             <button onClick={onClose} className="ml-auto h-8 px-3 rounded-xl bg-white/[0.08] border border-white/15 hover:bg-white/[0.16] text-[12px] font-black">닫기</button>
@@ -151,7 +151,7 @@ function StyleModal({ target, onClose }) {
               <div className={lab}>글씨 크기</div>
               <div className="inline-flex flex-wrap p-1 rounded-xl bg-[#EEF2F8] border border-[#E3E8F0]">
                 {SIZES.map((z) => (
-                  <button key={z || "d"} type="button" onClick={() => set({ size: z })} className={`h-8 min-w-[38px] px-2 rounded-lg text-[12px] font-black tabular-nums transition ${String(p.size || "") === String(z) ? "bg-[#0F1A30] text-white" : "text-[#5B6B85] hover:text-[#0F1A30]"}`} style={z ? { fontFamily: MONO } : undefined}>{z || "기본"}</button>
+                  <button key={z || "d"} type="button" onClick={() => set({ size: z })} className={`h-8 min-w-[38px] px-2 rounded-lg text-[12px] font-black tabular-nums transition ${String(p.size || "") === String(z) ? "bg-[#0F1A30] text-white" : "text-[#5B6B85] hover:text-[#0F1A30]"}`} style={z ? { fontFamily: MONO, fontVariantNumeric: "tabular-nums" } : undefined}>{z || "기본"}</button>
                 ))}
               </div>
             </div>
@@ -242,7 +242,7 @@ export default function ColumnStyleHost({ company = "" }) {
           <div className="absolute w-[200px] rounded-xl bg-white border border-[#DCE3EE] shadow-[0_16px_36px_rgba(15,26,48,.22)] py-1.5 overflow-hidden"
             style={{ left: Math.min(menu.x, window.innerWidth - 210), top: Math.min(menu.y, window.innerHeight - 120) }} onMouseDown={(e) => e.stopPropagation()}>
             <div className="px-3 pt-0.5 pb-1.5 border-b border-[#EEF2F8] mb-1">
-              <div className="text-[9.5px] font-extrabold tracking-[0.22em] text-[#9AA9C3]" style={{ fontFamily: MONO }}>COLUMN</div>
+              <div className="text-[9.5px] font-extrabold tracking-[0.22em] text-[#9AA9C3]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>COLUMN</div>
               <div className="text-[13px] font-black text-[#0F1A30] truncate">{menu.col}</div>
             </div>
             <button type="button" onClick={() => { setTarget({ tkey: menu.tkey, col: menu.col }); setMenu(null); }} className="w-full h-9 px-3 flex items-center gap-2 text-left text-[13px] font-bold text-[#0F1A30] hover:bg-[#EEF2F8]">

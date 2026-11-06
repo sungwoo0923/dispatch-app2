@@ -1,5 +1,6 @@
 // src/CompanyApplications.jsx
 import { useRoleOptions } from "./customRoles";
+import { runDelete } from "./DeleteProgress"; // ⭐ 2026-11-05 삭제 진행 창 + 한 번에 삭제
 import { publishCompany } from "./publicCompanies";
 import React, { useState, useEffect, useMemo } from "react";
 import { kpConfirm } from "./kpDialog";
@@ -66,13 +67,13 @@ const InfoRow = ({ label, value }) => (
 
 const PLANS = [["lite", "라이트"], ["basic", "베이직"], ["standard", "스탠다드"], ["pro", "프로"]];
 const planName = (id) => (PLANS.find(([k]) => k === id) || [])[1] || id || "-";
-const MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
+const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
 // 상세 패널의 섹션 카드
 const Sec = ({ title, en, children, right }) => (
   <div className="rounded-2xl border border-[#E3E8F0] bg-white overflow-hidden">
     <div className="px-4 py-2.5 flex items-center justify-between gap-2 border-b border-[#EEF1F6] bg-[#F7F9FC]">
       <div className="min-w-0 flex items-baseline gap-2">
-        {en && <span className="text-[9.5px] font-extrabold tracking-[0.22em] text-[#8FB0F0] whitespace-nowrap" style={{ fontFamily: MONO }}>{en}</span>}
+        {en && <span className="text-[9.5px] font-extrabold tracking-[0.22em] text-[#8FB0F0] whitespace-nowrap" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{en}</span>}
         <span className="text-[13px] font-black text-[#0F1A30] whitespace-nowrap">{title}</span>
       </div>
       {right}
@@ -484,10 +485,12 @@ export default function CompanyApplications() {
     setProcessing(true);
     try {
       const appCollection = activeTab === "화주" ? "companyApplications" : "transportApplications";
-      await deleteDoc(doc(db, appCollection, app.id));
-      if (app.userId && app.userId !== auth.currentUser?.uid) {
-        await deleteDoc(doc(db, "users", app.userId));
-      }
+      await runDelete({ label: "계정", task: async () => { // ⭐ 2026-11-05 삭제 진행 창
+        await deleteDoc(doc(db, appCollection, app.id));
+        if (app.userId && app.userId !== auth.currentUser?.uid) {
+          await deleteDoc(doc(db, "users", app.userId));
+        }
+      } });
       setManagingApp(null);
     } finally {
       setProcessing(false);
@@ -536,7 +539,7 @@ export default function CompanyApplications() {
       <div className="rounded-[22px] overflow-hidden mb-4 shadow-[0_10px_26px_rgba(15,26,48,0.12)]" style={{ background: "linear-gradient(120deg,#0B1428 0%,#1B2B4B 60%,#2D4C82 100%)" }}>
         <div className="px-5 md:px-7 pt-5 pb-4 flex items-start justify-between gap-4 flex-wrap">
           <div className="min-w-0">
-            <div className="text-[10.5px] font-extrabold tracking-[0.28em] text-[#8FB0F0] whitespace-nowrap" style={{ fontFamily: MONO }}>APPLICATIONS · 가입 심사</div>
+            <div className="text-[10.5px] font-extrabold tracking-[0.28em] text-[#8FB0F0] whitespace-nowrap" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>APPLICATIONS · 가입 심사</div>
             <h1 className="text-[22px] font-black text-white whitespace-nowrap"><EditableText id="companyApp.header.title" defaultText="가입신청 관리" /></h1>
             <p className="text-[12.5px] text-white/60 whitespace-nowrap">
               {activeTab === "화주" ? <EditableText id="companyApp.header.subtitle.화주" defaultText="화주 신청 관리" /> : activeTab === "운송" ? <EditableText id="companyApp.header.subtitle.운송" defaultText="운송사 신청 관리" /> : activeTab === "기사" ? <EditableText id="companyApp.header.subtitle.기사" defaultText="기사 신청 관리" /> : "회사 정보 수정 요청"}
@@ -556,9 +559,9 @@ export default function CompanyApplications() {
               <button key={label} type="button"
                 onClick={() => setStatusFilter(en === "TOTAL" ? "all" : en === "PENDING" ? "pending" : en === "APPROVED" ? "approved" : "rejected")}
                 className={`text-left px-5 py-3 transition ${hot && value > 0 ? "bg-[#2D4C82]/60" : "bg-[#0B1428]/40"} hover:bg-white/10`}>
-                <div className="text-[9.5px] font-extrabold tracking-[0.22em] text-[#8FB0F0]" style={{ fontFamily: MONO }}>{en}</div>
+                <div className="text-[9.5px] font-extrabold tracking-[0.22em] text-[#8FB0F0]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{en}</div>
                 <div className="flex items-baseline gap-1.5">
-                  <span className="text-[24px] font-black text-white tabular-nums" style={{ fontFamily: MONO }}>{value}</span>
+                  <span className="text-[24px] font-black text-white tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{value}</span>
                   <span className="text-[12px] text-white/60 whitespace-nowrap"><EditableText id={`companyApp.stat.${label}`} defaultText={label} /></span>
                 </div>
               </button>
@@ -753,7 +756,7 @@ export default function CompanyApplications() {
           {searchQuery && (
             <button onClick={() => setSearchQuery("")} className="text-gray-400 hover:text-gray-600 text-[12px]">✕</button>
           )}
-          <span className="text-[13px] text-[#1B2B4B] font-black tabular-nums whitespace-nowrap" style={{ fontFamily: MONO }}>{filtered.length}건</span>
+          <span className="text-[13px] text-[#1B2B4B] font-black tabular-nums whitespace-nowrap" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{filtered.length}건</span>
         </div>
       </div>
 
@@ -814,7 +817,7 @@ export default function CompanyApplications() {
                           </span>
                         )}
                         {app.status === "approved" && app.companyCode && (
-                          <div className="text-[11px] text-gray-400 font-mono">{app.companyCode}</div>
+                          <div className="text-[11px] text-gray-400 tabular-nums">{app.companyCode}</div>
                         )}
                         {app.status === "approved" && app.userStatus === "suspended" && (
                           <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-semibold bg-gray-100 text-gray-500 border border-gray-200">
@@ -896,7 +899,7 @@ export default function CompanyApplications() {
             onClick={(e) => e.stopPropagation()}>
             <div className="px-6 py-5 flex items-start justify-between gap-3 sticky top-0 z-10" style={{ background: "linear-gradient(120deg,#0B1428 0%,#1B2B4B 65%,#2D4C82 100%)" }}>
               <div className="min-w-0">
-                <div className="text-[10px] font-extrabold tracking-[0.26em] text-[#8FB0F0] whitespace-nowrap" style={{ fontFamily: MONO }}>
+                <div className="text-[10px] font-extrabold tracking-[0.26em] text-[#8FB0F0] whitespace-nowrap" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>
                   {activeTab === "기사" ? "DRIVER" : activeTab === "운송" ? "CARRIER" : "SHIPPER"} · {managingApp.type === "기존" ? "기존 회사 추가" : activeTab === "기사" ? "기사 신청" : "신규 가입"}
                 </div>
                 <div className="text-white text-[20px] font-black whitespace-nowrap overflow-hidden text-ellipsis">
@@ -1049,7 +1052,7 @@ export default function CompanyApplications() {
                         <StatusBadge status={st} />
                         <div className="flex items-center gap-2">
                           {activeTab !== "기사" && managingApp.status === "approved" && managingApp.companyCode && (
-                            <span className="text-[13px] font-mono font-bold text-[#1B2B4B]">{managingApp.companyCode}</span>
+                            <span className="text-[13px] tabular-nums font-bold text-[#1B2B4B]">{managingApp.companyCode}</span>
                           )}
                           {managingApp.status === "approved" && managingApp.userStatus === "suspended" && (
                             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold bg-gray-100 text-gray-500 border border-gray-200">
@@ -1121,7 +1124,7 @@ export default function CompanyApplications() {
                   <div className="px-4 py-4 space-y-3">
                     <div className="text-[12.5px] text-gray-500">지금: <b className="text-[#1B2B4B]">{ro.label(tUser.role)}</b>{tUser.isMaster ? " · 마스터" : ""}</div>
                     <div className="grid grid-cols-4 gap-1.5">
-                      {ro.options.map(([k, l]) => (
+                      {ro.forTeam(tUser.team, tRole).map(([k, l]) => (
                         <button key={k} type="button" onClick={() => setTRole(k)} className={`h-9 rounded-lg text-[12px] font-bold whitespace-nowrap ${tRole === k ? "bg-[#1B2B4B] text-white" : "border border-gray-200 text-[#1B2B4B]"}`}>{l}</button>
                       ))}
                     </div>
@@ -1298,7 +1301,7 @@ export default function CompanyApplications() {
             <div className="p-6">
               <div className="bg-gray-50 border border-gray-200 rounded-xl p-5 text-center mb-5">
                 <p className="text-[12px] text-gray-500 mb-2"><EditableText id="companyApp.codeNotice.발급된회사코드" defaultText="발급된 회사코드" /></p>
-                <p className="text-[28px] font-extrabold text-[#1B2B4B] tracking-widest font-mono">{codeNotice.companyCode}</p>
+                <p className="text-[28px] font-extrabold text-[#1B2B4B] tracking-widest tabular-nums">{codeNotice.companyCode}</p>
                 <button
                   onClick={() => navigator.clipboard.writeText(codeNotice.companyCode)}
                   className="mt-3 px-4 py-1.5 rounded-lg text-[12px] font-semibold bg-[#1B2B4B] text-white hover:bg-[#243d6a] transition"
@@ -1328,7 +1331,7 @@ export default function CompanyApplications() {
                 {codeNotice.phone && (
                   <div className="flex items-center justify-between w-full px-4 py-3 rounded-xl border border-gray-200 bg-gray-50">
                     <span className="text-[13px] font-semibold text-gray-700"><EditableText id="companyApp.codeNotice.핸드폰으로직접전달" defaultText="핸드폰으로 직접 전달" /></span>
-                    <span className="text-[12px] font-mono text-gray-600">{formatPhone(codeNotice.phone)}</span>
+                    <span className="text-[12px] tabular-nums text-gray-600">{formatPhone(codeNotice.phone)}</span>
                   </div>
                 )}
               </div>
@@ -1411,7 +1414,7 @@ export default function CompanyApplications() {
                               <span key={t} className="inline-block px-2 py-0.5 rounded-full text-[10px] font-bold mr-1 bg-[#1B2B4B]/10 text-[#1B2B4B]">{t}</span>
                             ))}
                           </td>
-                          <td className="px-4 py-3 text-center font-mono text-[13px] font-bold text-[#1B2B4B]">{g.code}</td>
+                          <td className="px-4 py-3 text-center tabular-nums text-[13px] font-bold text-[#1B2B4B]">{g.code}</td>
                           <td className="px-4 py-3 text-center">
                             <button
                               onClick={() => navigator.clipboard.writeText(g.code)}

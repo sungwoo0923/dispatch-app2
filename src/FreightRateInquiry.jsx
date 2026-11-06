@@ -441,13 +441,13 @@ const fmtMoney=(n)=>{
 const fmtTime=(m)=>{const h=Math.floor(m/60);const mm=m%60;return h>0?`${h}h ${mm}m`:`${mm}m`;};
 
 // ─── 왼쪽 콘솔 단계 제목 (01 ROUTE 상·하차지 …) ─────────────────────────────
-const FARE_MONO="'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
+const FARE_MONO="'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
 function FareStep({ n, en, title, req }) {
   return (
     <div className="flex items-center gap-2.5 mb-2.5">
-      <span className="w-7 h-7 rounded-lg bg-[#0F1A30] text-white text-[11px] font-black flex items-center justify-center shrink-0" style={{fontFamily:FARE_MONO}}>{n}</span>
+      <span className="w-7 h-7 rounded-lg bg-[#0F1A30] text-white text-[11px] font-black flex items-center justify-center shrink-0" style={{fontFamily:FARE_MONO, fontVariantNumeric: "tabular-nums"}}>{n}</span>
       <span className="text-[14px] font-black text-[#0F1A30]">{title}{req&&<span className="text-[#4B6CB7] ml-0.5">*</span>}</span>
-      <span className="ml-auto text-[9.5px] font-extrabold tracking-[0.22em] text-[#9AA9C3]" style={{fontFamily:FARE_MONO}}>{en}</span>
+      <span className="ml-auto text-[9.5px] font-extrabold tracking-[0.22em] text-[#9AA9C3]" style={{fontFamily:FARE_MONO, fontVariantNumeric: "tabular-nums"}}>{en}</span>
     </div>
   );
 }
@@ -515,7 +515,7 @@ const KoreaMap=React.memo(function KoreaMap({fromP,toP,viaKey,aPath,onPick}){
   const provinces=Object.keys(PROVINCE_PATHS);
   const SMALL=["서울","인천","세종","대전","대구","광주","울산","부산","제주"];
   const viaProvs=viaKey?viaKey.split("|"):[];
-  const MONO="'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
+  const MONO="'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
   return(
     <svg viewBox="0 0 524 631" className="w-full h-full" preserveAspectRatio="xMidYMid meet" style={{userSelect:"none",display:"block"}}>
       <defs>
@@ -558,7 +558,7 @@ const KoreaMap=React.memo(function KoreaMap({fromP,toP,viaKey,aPath,onPick}){
             <circle cx={bx} cy={by} r="4" fill="#FFFFFF"/>
             <line x1={bx} y1={by-5} x2={bx} y2={ty+12} stroke="#CFE0FF" strokeWidth="1.4" strokeOpacity="0.8"/>
             <rect x={bx-34} y={ty-14} width="68" height="26" rx="8" fill={dark?"#0B1428":"#FFFFFF"} stroke="#CFE0FF" strokeWidth="1.2"/>
-            <text x={bx-26} y={ty-0.5} dominantBaseline="middle" fontSize="8" fontWeight="900" fill={dark?"#8FB0F0":"#4B6CB7"} style={{fontFamily:MONO,letterSpacing:"0.1em"}}>{tag}</text>
+            <text x={bx-26} y={ty-0.5} dominantBaseline="middle" fontSize="8" fontWeight="900" fill={dark?"#8FB0F0":"#4B6CB7"} style={{fontFamily:MONO, fontVariantNumeric: "tabular-nums",letterSpacing:"0.1em"}}>{tag}</text>
             <text x={bx+14} y={ty-0.5} textAnchor="middle" dominantBaseline="middle" fontSize="11" fontWeight="900" fill={dark?"#FFFFFF":"#0F1A30"}>{prov}</text>
           </g>
         );
@@ -569,7 +569,7 @@ const KoreaMap=React.memo(function KoreaMap({fromP,toP,viaKey,aPath,onPick}){
         return(
           <g key={`v-${i}`} style={{pointerEvents:"none"}}>
             <rect x={bx-15} y={by-30} width="30" height="18" rx="6" fill="#0B1428" stroke="#8FB0F0" strokeWidth="1"/>
-            <text x={bx} y={by-21} textAnchor="middle" dominantBaseline="middle" fontSize="9" fontWeight="900" fill="#CFE0FF" style={{fontFamily:MONO}}>V{i+1}</text>
+            <text x={bx} y={by-21} textAnchor="middle" dominantBaseline="middle" fontSize="9" fontWeight="900" fill="#CFE0FF" style={{fontFamily:MONO, fontVariantNumeric: "tabular-nums"}}>V{i+1}</text>
           </g>
         );
       })}
@@ -615,7 +615,13 @@ function NationalFareTab() {
   // ⭐ Firestore 읽기 절감 — where() 없이 orders/dispatch 전체를 무제한 실시간 구독하면
   // 오더 이력이 쌓일수록(그리고 누가 오더 하나만 수정해도 접속 중인 모두의 화면에서
   // 다시) 전체를 읽어들인다 — 운임 매칭에 충분한 최근 13개월치만 구독하도록 좁힌다.
+  // ⭐ 2026-11-04 입력 끊김 — 화면을 열자마자 13개월치 오더 수천 건을 받아 정리하느라, 그 사이 상/하차지를
+  // 치면 글자가 늦게·끊겨 들어갔다(특히 느린 폰). 이 자료는 상·하차지가 정해져 "결과"를 볼 때(refData)만
+  // 쓰므로, 처음 결과 단계가 됐을 때 구독을 시작한다(한 번 시작하면 화면을 나갈 때까지 유지).
+  const [wantHistory,setWantHistory]=useState(false);
+  useEffect(()=>{if(step==="result")setWantHistory(true);},[step]);
   useEffect(()=>{
+    if(!wantHistory)return undefined;
     const d=new Date(); d.setMinutes(d.getMinutes()-d.getTimezoneOffset()); d.setMonth(d.getMonth()-13);
     const liveWindowStart=d.toISOString().slice(0,10);
     // ⭐ 렉 개선 — 오더 하나만 바뀌어도 전체(수천 건)를 다시 만들던 것을 "바뀐 것만" 반영하고,
@@ -627,7 +633,7 @@ function NationalFareTab() {
     const u1=onSnapshot(query(collection(db,"dispatch"),where("상차일",">=",liveWindowStart)),apply(c1),()=>{});
     const u2=onSnapshot(query(collection(db,"orders"),where("상차일",">=",liveWindowStart)),apply(c2),()=>{});
     return()=>{u1();u2();if(t)clearTimeout(t);};
-  },[]);
+  },[wantHistory]);
   useEffect(()=>{
     if(fromSelectedRef.current){fromSelectedRef.current=false;return;}
     if(!fromSearch.trim()||fromSearch.length<2){setFromResults([]);return;}
@@ -916,7 +922,7 @@ function NationalFareTab() {
     // 잘려 보이는 문제가 있었다. 내부 스크롤을 없애고 페이지 자체 스크롤 하나로
     // 통일해 이런 종류의 "잘려서 안 보임" 문제 자체가 생기지 않게 한다. 오른쪽
     // 지도만 sticky로 고정해 왼쪽 폼이 길어져도 화면에서 눈에 계속 보이게 한다.
-    <div className="flex flex-col md:flex-row gap-4 md:gap-5 md:items-start">
+    <div className="flex flex-col lg:flex-row gap-4 lg:gap-5 lg:items-start">
 
       {/* 화물 유형 변경 시 운임 차액을 화면 중앙에 잠깐 보여주는 토스트 */}
       {cargoToast&&(
@@ -929,14 +935,14 @@ function NationalFareTab() {
 
       {/* ── 왼쪽 패널 ── */}
       {/* ⭐ 2026-10-29 리디자인 — 흩어져 있던 입력들을 한 장의 "운임 계산 콘솔" 카드로 묶고 01~04 단계로 정리 */}
-      <div className="w-full md:w-auto md:flex-[4] min-w-0 bg-white rounded-[22px] border border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_10px_28px_rgba(16,24,40,0.06)]">
+      <div className="w-full lg:w-auto lg:flex-[4] min-w-0 bg-white rounded-[22px] border border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_10px_28px_rgba(16,24,40,0.06)]">
 
         {/* 콘솔 머리 + 독차/혼적 토글 */}
         <div className="relative px-5 pt-4 pb-4 rounded-t-[22px] overflow-hidden text-white" style={{background:"linear-gradient(120deg,#0F1A30 0%,#1B2B4B 55%,#2D4C82 100%)"}}>
           <span className="absolute inset-0 opacity-[0.10]" style={{backgroundImage:"linear-gradient(#fff 1px,transparent 1px),linear-gradient(90deg,#fff 1px,transparent 1px)",backgroundSize:"14px 14px"}}/>
           <div className="relative flex items-center justify-between gap-3">
             <div>
-              <div className="text-[10px] font-extrabold tracking-[0.26em] text-[#8FB0F0]" style={{fontFamily:FARE_MONO}}>FARE CONSOLE</div>
+              <div className="text-[10px] font-extrabold tracking-[0.26em] text-[#8FB0F0]" style={{fontFamily:FARE_MONO, fontVariantNumeric: "tabular-nums"}}>FARE CONSOLE</div>
               <div className="text-[16px] font-black mt-0.5">운임 계산 조건</div>
             </div>
             {(fromP||toP||vias.length>0)&&<button onClick={reset} className="h-8 px-3 rounded-lg bg-white/10 ring-1 ring-white/15 text-[12px] font-bold text-white/85 hover:bg-white/20 transition">초기화</button>}
@@ -1123,7 +1129,7 @@ function NationalFareTab() {
                 <button key={ct.id} onClick={()=>setCargoType(ct.id)}
                   className={`flex-1 py-2.5 rounded-xl text-[13px] font-black transition ${cargoType===ct.id?"bg-[#0F1A30] text-white shadow-[0_8px_18px_rgba(15,26,48,0.25)]":"text-[#5B6B85] hover:text-[#0F1A30] hover:bg-white/70"}`}>
                   {ct.name}
-                  {sub && <span className={`block text-[10.5px] font-bold mt-0.5 ${cargoType===ct.id?"text-[#8FB0F0]":"text-[#9AA9C3]"}`} style={{fontFamily:FARE_MONO}}>{sub}</span>}
+                  {sub && <span className={`block text-[10.5px] font-bold mt-0.5 ${cargoType===ct.id?"text-[#8FB0F0]":"text-[#9AA9C3]"}`} style={{fontFamily:FARE_MONO, fontVariantNumeric: "tabular-nums"}}>{sub}</span>}
                 </button>
               );
             })}
@@ -1145,7 +1151,7 @@ function NationalFareTab() {
                   className={`flex items-center gap-2.5 px-3 h-12 rounded-xl text-[13px] font-bold border text-left transition ${opt.active?"bg-[#0F1A30] text-white border-[#0F1A30]":"bg-white text-[#3A4A66] border-[#E3E8F0] hover:border-[#8FB0F0]"}`}>
                   <span className={`w-[18px] h-[18px] rounded-md flex items-center justify-center text-[11px] shrink-0 ${opt.active?"bg-white text-[#0F1A30]":"border-2 border-[#C9D2E0]"}`}>{opt.active?"✓":""}</span>
                   <span className="flex-1 min-w-0 truncate">{opt.label}</span>
-                  {opt.sub&&<span className={`text-[11px] font-bold shrink-0 ${opt.active?"text-[#8FB0F0]":"text-[#9AA9C3]"}`} style={{fontFamily:FARE_MONO}}>{opt.sub}</span>}
+                  {opt.sub&&<span className={`text-[11px] font-bold shrink-0 ${opt.active?"text-[#8FB0F0]":"text-[#9AA9C3]"}`} style={{fontFamily:FARE_MONO, fontVariantNumeric: "tabular-nums"}}>{opt.sub}</span>}
                 </button>
               ))}
             </div>
@@ -1294,10 +1300,10 @@ function NationalFareTab() {
       </div>
 
       {/* ── 오른쪽 지도 (디지털) ── */}
-      <div className="kp-fare-map w-full md:w-auto md:flex-[6] min-w-0 rounded-[24px] flex flex-col overflow-hidden sticky ring-1 ring-[#0F1A30]/10 shadow-[0_24px_60px_rgba(15,26,48,0.28)]"
+      <div className="kp-fare-map w-full lg:w-auto lg:flex-[6] min-w-0 rounded-[24px] flex flex-col overflow-hidden sticky ring-1 ring-[#0F1A30]/10 shadow-[0_24px_60px_rgba(15,26,48,0.28)]"
         style={{top:16,height:"calc(100vh - 250px)",minHeight:560,background:"radial-gradient(90% 70% at 50% 15%, #1C3160 0%, #0F1A30 55%, #070E1E 100%)"}}>
         <div className="px-5 py-3.5 flex items-center gap-3 shrink-0 border-b border-white/[0.08]">
-          <span className="text-[10.5px] font-extrabold tracking-[0.28em] text-[#8FB0F0]" style={{fontFamily:"'JetBrains Mono','SF Mono',ui-monospace,monospace"}}>ROUTE MAP</span>
+          <span className="text-[10.5px] font-extrabold tracking-[0.28em] text-[#8FB0F0]" style={{fontFamily:"'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif", fontVariantNumeric: "tabular-nums"}}>ROUTE MAP</span>
           {step!=="result"&&(
             <span className="inline-flex items-center gap-1.5 h-7 px-3 rounded-full bg-white/[0.07] ring-1 ring-white/10 text-[11.5px] font-bold text-white/85 whitespace-nowrap">
               <span className="w-1.5 h-1.5 rounded-full bg-[#8FB0F0] animate-pulse"/>
@@ -1343,7 +1349,7 @@ export default function FreightRateInquiry({ forceTab = "", hideHeader = false }
   const activeTab=forceTab||tabState;
   // ⭐ 상단 메뉴 › 운임조회 세부 메뉴에서 고른 탭으로 바로 이동
   useSubnavTarget(forceTab ? "" : "FARE LOOKUP", ["전국운임조회","자사운임표"], setActiveTab, [["전국운임조회","전국운임조회"],["자사운임표","자사운임표"]]);
-  const MONO="'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
+  const MONO="'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
   return(
     <div className="w-full">
       {!hideHeader && <div className="relative overflow-hidden rounded-[24px] mb-5 px-7 py-5 text-white shadow-[0_18px_40px_rgba(15,26,48,0.25)]"
@@ -1351,7 +1357,7 @@ export default function FreightRateInquiry({ forceTab = "", hideHeader = false }
         <div className="absolute inset-0 opacity-[0.08]" style={{backgroundImage:"linear-gradient(#fff 1px,transparent 1px),linear-gradient(90deg,#fff 1px,transparent 1px)",backgroundSize:"32px 32px"}}/>
         <div className="relative flex flex-wrap items-center justify-between gap-4">
           <div>
-            <div className="text-[11px] font-extrabold tracking-[0.3em] text-[#8FB0F0]" style={{fontFamily:MONO}}>FARE LOOKUP</div>
+            <div className="text-[11px] font-extrabold tracking-[0.3em] text-[#8FB0F0]" style={{fontFamily:MONO, fontVariantNumeric: "tabular-nums"}}>FARE LOOKUP</div>
             <div className="text-[26px] font-black tracking-tight leading-tight mt-0.5">운임조회</div>
             <div className="text-[13px] text-white/55 mt-0.5">{FARE_TABS.find(t=>t.key===activeTab)?.desc}</div>
           </div>
@@ -1359,7 +1365,7 @@ export default function FreightRateInquiry({ forceTab = "", hideHeader = false }
             {FARE_TABS.map(t=>(
               <button key={t.key} onClick={()=>setActiveTab(t.key)}
                 className={`h-12 px-5 rounded-[12px] text-left transition whitespace-nowrap ${activeTab===t.key?"bg-white text-[#0F1A30] shadow-[0_8px_20px_rgba(0,0,0,0.25)]":"text-white/70 hover:text-white hover:bg-white/[0.06]"}`}>
-                <div className={`text-[9.5px] font-extrabold tracking-[0.24em] ${activeTab===t.key?"text-[#4B6CB7]":"text-white/40"}`} style={{fontFamily:MONO}}>{t.en}</div>
+                <div className={`text-[9.5px] font-extrabold tracking-[0.24em] ${activeTab===t.key?"text-[#4B6CB7]":"text-white/40"}`} style={{fontFamily:MONO, fontVariantNumeric: "tabular-nums"}}>{t.en}</div>
                 <div className="text-[14px] font-black leading-tight">{t.key}</div>
               </button>
             ))}

@@ -11,6 +11,7 @@
 //   · 오더에 남기는 것: 배차표Id·배차표명·배차표묶음·배차표순번, 품목수량{칸이름:수량}, 추가정보{칸이름:값}
 //   · 배차관리에서 고친 차량·기사·시간도 이 화면에 그대로 보인다(같은 오더를 읽으므로).
 import React from "react";
+import { runDelete } from "./DeleteProgress"; // ⭐ 2026-11-05 삭제 진행 창 + 한 번에 삭제
 import { createPortal } from "react-dom";
 import { collection, doc, onSnapshot, query, where, getDocs, setDoc, addDoc, updateDoc, deleteDoc, serverTimestamp, writeBatch } from "firebase/firestore";
 import { db, auth, FUNCTIONS_BASE } from "./firebase";
@@ -455,7 +456,7 @@ function FormEditor({ init, onClose, onSaved, co, clients = [], places = [] }) {
           <button onClick={onClose} className={`${btn} text-[#5B6B85]`}>닫기</button>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mb-6">
-          <label className="block"><span className="text-[12.5px] font-black text-[#3A4A66]">양식 이름</span><input value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} className={inp} placeholder="예: 태진 삼다수" /></label>
+          <label className="block"><span className="text-[12.5px] font-black text-[#3A4A66]">양식 이름</span><input value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} className={inp} placeholder="예: ○○ 생수 배차표" /></label>
           <label className="block"><span className="text-[12.5px] font-black text-[#3A4A66]">거래처명(청구처)</span><BoardSuggest value={f.client} onChange={(v) => setF((p) => ({ ...p, client: v }))} onPick={(c) => setF((p) => ({ ...p, client: c.거래처명 }))}
             items={clients} k="거래처명" sub={(c) => [c.주소, c.담당자].filter(Boolean).join(" · ")} className={inp} placeholder="모든 줄에 같은 거래처" title="기본거래처" /></label>
           <label className="block"><span className="text-[12.5px] font-black text-[#3A4A66]">하차일</span>
@@ -823,7 +824,7 @@ export default function RouteBoard({ companyName = "" }) {
     setBusy((b) => b || "sync");
     try {
       const r = await sheetApi({ action: "sync", url: form.sheetUrl, boardId: form.id });
-      if (!quiet || r.created || r.updated || r.gone) setMsg(`시트와 맞췄습니다 — 새 오더 ${r.created || 0}건 · 화주 입력 반영 ${r.updated || 0}건${r.gone ? ` · 시트에서 지워진 줄 ${r.gone}건` : ""}`);
+      if (!quiet || r.created || r.updated || r.gone || r.deleted) setMsg(`시트와 맞췄습니다 — 새 오더 ${r.created || 0}건 · 화주 입력 반영 ${r.updated || 0}건${r.deleted ? ` · 시트에서 지운 줄 ${r.deleted}건 삭제(휴지통 7일 보관)` : ""}${r.gone ? ` · 시트에서 지워진 줄 ${r.gone}건(확인 필요)` : ""}`);
       setTimeout(() => checkRef.current(true), 800);
     } catch (e) { if (!quiet) kpAlert(`시트와 맞추지 못했습니다: ${e?.message || e}`); }
     finally { setBusy((b) => (b === "sync" ? "" : b)); }
@@ -838,6 +839,14 @@ export default function RouteBoard({ companyName = "" }) {
   const isGone = (r) => (sheetDiff?.gone?.has(r.key) || r.sheetGone) && !keepKeys.has(r.key);
   const addedCount = Object.values(sheetDiff?.added || {}).reduce((a, v) => a + v.length, 0);
   const goneCount = Object.values(rows).flat().filter(isGone).length;
+  // ⭐ 2026-11-04 시트에서 줄을 지운 게 보이면 바로 서버와 맞춰 프로그램 오더도 지운다(같은 상태로는 한 번만 — 서버가 안전장치로 남기면 표시만)
+  const goneSig = Object.values(rows).flat().filter(isGone).map((r) => r.key).sort().join(",");
+  const goneSyncRef = React.useRef("");
+  React.useEffect(() => {
+    if (!goneSig || dirty || !form?.sheetUrl || form.autoSync === false || busy) return;
+    const k = `${form.id}|${date}|${goneSig}`; if (goneSyncRef.current === k) return;
+    goneSyncRef.current = k; syncNow(true);
+  }, [goneSig, dirty, busy]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const save = async () => {
     setBusy("save");
@@ -919,7 +928,7 @@ export default function RouteBoard({ companyName = "" }) {
   };
   const delForm = async () => {
     if (!(await kpConfirm(`'${form.name}' 양식을 지울까요?\n(이미 만든 오더는 지워지지 않습니다)`))) return;
-    await deleteDoc(doc(db, "routeBoards", form.id)).catch((e) => kpAlert(e.message));
+    await runDelete({ label: "양식", task: () => deleteDoc(doc(db, "routeBoards", form.id)) }).catch((e) => kpAlert(e.message)); // ⭐ 2026-11-05 삭제 진행 창
     setFormId("");
   };
 
@@ -973,7 +982,7 @@ export default function RouteBoard({ companyName = "" }) {
             <div className={`rounded-xl border px-4 py-2.5 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[13px] ${goneCount ? "bg-[#FFF8E6] border-[#F7D58A]" : "bg-[#F5F8FD] border-[#E3E8F0]"}`}>
               <span className="font-black text-[#0F1A30]">구글시트 연동</span>
               <span className="text-[#5B6B85]">{sheetDiff.error ? `확인 실패 — ${sheetDiff.error}` : !sheetDiff.tab ? "이 날짜 탭이 시트에 없습니다" : sheetDiff.bad ? `'${sheetDiff.tab}' 탭에서 제목줄을 못 찾았습니다` : `'${sheetDiff.tab}' 탭 · ${new Date(sheetDiff.at).toLocaleTimeString("ko-KR", { timeZone: "Asia/Seoul", hour: "2-digit", minute: "2-digit" })} 확인 · ${form.autoSync === false ? "자동 연동 꺼짐" : "새 줄·새 날짜 탭은 자동으로 오더 생성"} · 저장하면 차량·운송업체·단가·입차시간이 시트에 입력`}</span>
-              {goneCount > 0 && <span className="font-black text-red-600">시트에서 지워진 줄 {goneCount}개(표에 빨간 표시)</span>}
+              {goneCount > 0 && <span className="font-black text-red-600">시트에서 지운 줄 {goneCount}개 — 프로그램에서도 자동으로 삭제합니다{form.autoSync === false ? "(자동 연동이 꺼져 있어 [지금 맞추기]를 눌러 주세요)" : ""}</span>}
               {/* ⭐ 2026-11-03 "새로 생긴 줄 지금 가져오기" 제거 — 자동 연동·[지금 맞추기]·고정노선현황 [기간 가져오기]로 들어온다 */}
               <button type="button" onClick={() => syncNow(false)} disabled={busy === "sync"} className="ml-auto h-8 px-3 rounded-lg border border-[#DCE3EE] text-[12.5px] font-bold text-[#3A4A66] disabled:opacity-50">{busy === "sync" ? "맞추는 중…" : "지금 맞추기"}</button>
             </div>

@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef } from "react";
 import { db, auth } from "../../firebase";
+import { runDelete } from "../../DeleteProgress"; // ⭐ 2026-11-05 삭제 진행 창
 import { getDoc, collection, query, where, getDocs, doc, deleteDoc, addDoc, updateDoc, serverTimestamp } from "firebase/firestore";
 
 const EMPTY_FORM = { name: "", address: "", 담당자명: "", 담당자번호: "", 메모: "" };
@@ -85,7 +86,7 @@ export default function SettingsAddress() {
 
   const handleDelete = async (id) => {
     if (!window.confirm("삭제하시겠습니까?")) return;
-    await deleteDoc(doc(db, "places", id));
+    await runDelete({ label: "주소", task: () => deleteDoc(doc(db, "places", id)) }); // ⭐ 2026-11-05 삭제 진행 창
     loadAddress();
   };
 
@@ -198,7 +199,7 @@ export default function SettingsAddress() {
       {/* 상단 */}
       <div className="flex justify-between items-center mb-6">
         <div>
-          <div className=""><div className="text-[10px] font-extrabold tracking-[0.24em] text-[#4B6CB7]" style={{ fontFamily: "'JetBrains Mono',ui-monospace,monospace" }}>ADDRESS</div><h2 className="text-[19px] font-black text-[#0F1A30] tracking-tight">주소록 관리</h2></div>
+          <div className=""><div className="text-[10px] font-extrabold tracking-[0.24em] text-[#4B6CB7]" style={{ fontFamily: "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif", fontVariantNumeric: "tabular-nums" }}>ADDRESS</div><h2 className="text-[19px] font-black text-[#0F1A30] tracking-tight">주소록 관리</h2></div>
           <p className="text-sm text-gray-400 mt-0.5">오더 등록 시 입력한 장소가 자동으로 저장됩니다</p>
         </div>
         <div className="flex gap-2">
@@ -366,7 +367,7 @@ export default function SettingsAddress() {
               <p className="text-sm text-gray-500 mb-4">
                 엑셀 파일(.xlsx)에 아래 열을 포함해 업로드하세요.
               </p>
-              <div className="bg-gray-50 rounded-lg p-3 text-xs text-gray-600 font-mono mb-4">
+              <div className="bg-gray-50 rounded-lg p-3 text-xs text-gray-600 tabular-nums mb-4">
                 회사명 | 주소 | 담당자 | 담당자번호 | 메모
               </div>
               <label className={`block w-full text-center py-3 bg-[#1B2B4B] text-white rounded-lg cursor-pointer hover:opacity-90 font-semibold ${bulkLoading ? "opacity-50" : ""}`}>

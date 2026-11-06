@@ -10,7 +10,7 @@ import CustomDatePicker from "./CustomDatePicker";
 import { fmtPhone } from "./formatInput";
 import { CustomSelect } from "./CustomSelect";
 
-const MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
+const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
 const inp = "h-11 w-full px-3 rounded-xl border border-[#DCE3EE] bg-white text-[14px] font-semibold text-[#0F1A30] outline-none focus:border-[#2D4C82]";
 const L = ({ children }) => <div className="text-[12.5px] font-black text-[#3A4A66] mb-1.5">{children}</div>;
 const RELS = ["부친", "모친", "빙부", "빙모", "시부", "시모", "조부", "조모", "외조부", "외조모", "배우자", "자녀", "형제", "자매", "본인"];
@@ -121,7 +121,7 @@ export default function ObituaryWriter({ company, me = {}, onCancel, onSaved, in
     <div className="space-y-4">
       <div className="rounded-[22px] px-6 py-5 text-white flex items-center gap-4 flex-wrap" style={{ background: "linear-gradient(120deg,#111,#2A2A2A 60%,#3A3A3A)" }}>
         <div className="flex-1 min-w-[220px]">
-          <div className="text-[11px] font-extrabold tracking-[0.3em] text-white/50" style={{ fontFamily: MONO }}>NOTICE · OBITUARY</div>
+          <div className="text-[11px] font-extrabold tracking-[0.3em] text-white/50" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>NOTICE · OBITUARY</div>
           <div className="text-[22px] font-black mt-0.5">{editing ? "부고 수정" : "부고 알림"}</div>
           <div className="text-[13px] text-white/60">왼쪽에 입력하면 오른쪽 부고장에 바로 반영됩니다 · 올리면 공지사항에 게시되고 알림이 갑니다</div>
         </div>
@@ -131,7 +131,7 @@ export default function ObituaryWriter({ company, me = {}, onCancel, onSaved, in
       <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,520px)_minmax(0,1fr)] gap-4 items-start">
         <div className="space-y-3">
           <div className="rounded-[20px] bg-white border border-[#E3E8F0] p-5 space-y-3">
-            <div className="text-[11px] font-extrabold tracking-[0.22em] text-[#4B6CB7]" style={{ fontFamily: MONO }}>STEP 1 · 상주 직원</div>
+            <div className="text-[11px] font-extrabold tracking-[0.22em] text-[#4B6CB7]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>STEP 1 · 상주 직원</div>
             <CustomSelect value={f.empUid} onChange={(e) => pickEmp(e.target.value)} className={inp}>
               <option value="">직원 선택(우리 회사 직원의 부고일 때)</option>
               {staff.map((u) => <option key={u.uid} value={u.uid}>{[u.name, u.team, u.position].filter(Boolean).join(" · ")}</option>)}
@@ -139,7 +139,7 @@ export default function ObituaryWriter({ company, me = {}, onCancel, onSaved, in
             <div><L>고인과의 관계</L><div className="flex flex-wrap gap-1.5">{RELS.map((r) => <button key={r} type="button" onClick={() => set("rel", r)} className={`h-8 px-3 rounded-full text-[12.5px] font-black border ${f.rel === r ? "bg-[#111] text-white border-[#111]" : "bg-white text-[#5B6B85] border-[#DCE3EE]"}`}>{r}</button>)}</div></div>
           </div>
           <div className="rounded-[20px] bg-white border border-[#E3E8F0] p-5 space-y-3">
-            <div className="text-[11px] font-extrabold tracking-[0.22em] text-[#4B6CB7]" style={{ fontFamily: MONO }}>STEP 2 · 고인 · 빈소</div>
+            <div className="text-[11px] font-extrabold tracking-[0.22em] text-[#4B6CB7]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>STEP 2 · 고인 · 빈소</div>
             <div className="grid grid-cols-[1fr_110px] gap-2"><div><L>고인 성함 *</L><input value={f.deceased} onChange={(e) => set("deceased", e.target.value)} className={inp} /></div><div><L>향년</L><input inputMode="numeric" value={f.age} onChange={(e) => set("age", e.target.value.replace(/\D/g, ""))} className={inp} placeholder="세" /></div></div>
             <div className="grid grid-cols-2 gap-2"><div><L>별세일</L><CustomDatePicker value={f.date} onChange={(e) => set("date", e.target.value)} className={inp} showIcon /></div><div><L>시각(선택)</L><input type="time" value={f.time} onChange={(e) => set("time", e.target.value)} className={inp} /></div></div>
             <div className="grid grid-cols-[1fr_120px] gap-2"><div><L>빈소(장례식장) *</L><input value={f.hall} onChange={(e) => set("hall", e.target.value)} className={inp} placeholder="예: ○○대학교병원 장례식장" /></div><div><L>호실</L><input value={f.room} onChange={(e) => set("room", e.target.value)} className={inp} placeholder="특1호실" /></div></div>
@@ -154,7 +154,7 @@ export default function ObituaryWriter({ company, me = {}, onCancel, onSaved, in
           </div>
         </div>
         <div className="rounded-[20px] bg-[#EDEDED] border border-[#DCDCDC] p-5 overflow-x-auto xl:sticky xl:top-[76px]">
-          <div className="flex items-center justify-between mb-3"><span className="text-[11px] font-extrabold tracking-[0.24em] text-[#6B6B6B]" style={{ fontFamily: MONO }}>LIVE PREVIEW</span><span className="text-[12px] font-bold text-[#7A7A7A] truncate ml-3">{title}</span></div>
+          <div className="flex items-center justify-between mb-3"><span className="text-[11px] font-extrabold tracking-[0.24em] text-[#6B6B6B]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>LIVE PREVIEW</span><span className="text-[12px] font-bold text-[#7A7A7A] truncate ml-3">{title}</span></div>
           <div ref={paperRef} className="w-fit mx-auto shadow-[0_18px_40px_rgba(0,0,0,0.18)]"><ObituaryPaper f={f} company={company} /></div>
         </div>
       </div>

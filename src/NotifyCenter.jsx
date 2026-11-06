@@ -14,13 +14,13 @@ import { createPortal } from "react-dom";
 import { db, DEFAULT_COMPANY } from "./firebase";
 import { arrayUnion, collection, doc, onSnapshot, query, updateDoc, where } from "firebase/firestore";
 import { canSeeNotice } from "./NoticeBoard";
-import { usePlatformNotices, usePlatformRead, markPlatformNoticeRead, PlatformBadge } from "./PlatformNoticeBanner";
+import { usePlatformNotices, usePlatformRead, markPlatformNoticeRead, PlatformBadge, hidePlatformNoticeForever, closePlatformNoticeForSession, platformSessionClosed } from "./PlatformNoticeBanner";
 import { RichHtml } from "./richText";
 import { DAY_MS, isNoticeUnread, noticeAtMs, toMs, useMinuteTick } from "./notifyCore";
 
 const ApprovalDocPreview = React.lazy(() => import("./Approval").then((m) => ({ default: m.ApprovalDocPreview })));
 
-const MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
+const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
 const NOTICE_POP_WINDOW = 3 * DAY_MS;    // 공지·인사발령: 최근 3일 안의 안 읽은 글만 팝업(오래된 글은 메뉴 숫자로)
 const HANDOVER_POP_WINDOW = 7 * DAY_MS;
 const APPROVAL_POP_WINDOW = 30 * DAY_MS;
@@ -45,6 +45,7 @@ const KIND = {
   apCancel: { head: "결재 취소", en: "CANCELLED", go: "전자결재에서 열기" },
   apCancelNo: { head: "취소 거부", en: "CANCEL REJECTED", go: "전자결재에서 열기" },
   apCc: { head: "결재 참조", en: "CC · APPROVED", go: "전자결재에서 열기" },
+  apPaid: { head: "지급 완료", en: "PAID", go: "전자결재에서 열기" }, // ⭐ 2026-11-04 지출결의 지급완료
   handover: { head: "인수인계", en: "HANDOVER", go: "인수인계 열기" },
 };
 
@@ -71,9 +72,10 @@ function approvalItem(d, uid, now, localSeen) {
     if (d.status === "rejected") { const r = line.find((x) => x.status === "rejected"); kind = "apNo"; sub = `${r?.name || ""} ${r?.position || ""} · 사유: ${r?.comment || "-"}`; }
     else if (d.status === "cancelled") { kind = "apCancel"; sub = "문서가 결재 취소되었습니다."; }
     else if (d.status === "approved" && d.cancel?.status === "rejected") { const r = (d.cancel.line || []).find((x) => x.status === "rejected"); kind = "apCancelNo"; sub = `${r?.name || ""} · ${r?.comment || ""}`; }
+    else if (d.status === "approved" && d.paid?.at) { kind = "apPaid"; sub = `[지급 완료] ${d.title || ""} — ${Math.round(Number(d.amount) || 0).toLocaleString("ko-KR")}원 지급되었습니다${d.paid.date ? ` · 지급일 ${d.paid.date}` : ""}`; }
     else if (d.status === "approved") sub = "결재가 모두 끝났습니다(최종 승인).";
     else { const last = [...line].reverse().find((x) => x.status === "approved"); sub = `${last ? `${last.name || ""} ${last.position || ""} 승인 · ` : ""}${okN}/${line.length} 진행 중`; }
-    return { ...base, key: `apm:${d.id}:${d.status}:${okN}`, kind, sub, page: "mine", mark: { t: "apMine" } };
+    return { ...base, key: `apm:${d.id}:${d.status}:${okN}${d.status === "approved" && d.paid?.at ? `:paid${d.paid.at}` : ""}`, kind, sub, page: "mine", mark: { t: "apMine" } };
   }
   // 참조 — 최종 승인된 문서
   if ((d.ccUids || []).includes(uid) && d.drafterUid !== uid && d.status === "approved" && !(d.ccReadBy || []).includes(uid) && now - at < CC_POP_WINDOW)
@@ -132,10 +134,10 @@ export function useNotifyQueue({ uid, role, team = "", company = "" }) {
       out.push({ key: `n:${n.id}`, src: "notice", id: n.id, openId: n.id, kind, at: noticeAtMs(n), title: n.title || n.category || "공지사항", sub: `${n.author || ""}${n.category && kind === "notice" && n.category !== "공지사항" ? ` · ${n.category}` : ""}`, content: n.content, contentHtml: n.contentHtml, image: n.image });
     });
     plat.forEach((n) => {
-      if (platRead.has(n.id) || n.authorUid === uid) return;
+      if (platRead.has(n.id) || platformSessionClosed().has(n.id) || n.authorUid === uid) return; // ⭐ 2026-11-04 닫기(이번 접속)·다시 보지 않기(계정)
       const at = n.publishAt || toMs(n.createdAt);
       if (at && now - at > NOTICE_POP_WINDOW) return;
-      out.push({ key: `p:${n.id}`, src: "platform", id: n.id, openId: `plat:${n.id}`, kind: "platform", at, title: n.title || "플랫폼 공지", sub: `${n.author || "KP-Flow 운영팀"} · ${n.level || "안내"}`, content: n.body, contentHtml: n.bodyHtml });
+      out.push({ key: `p:${n.id}`, src: "platform", id: n.id, openId: `plat:${n.id}`, kind: "platform", at, title: n.title || "플랫폼 공지", sub: `${n.author || "LogisWeb 운영팀"} · ${n.level || "안내"}`, content: n.body, contentHtml: n.bodyHtml });
     });
     (hos || []).forEach((h) => {
       if (co && coOf(h) !== co) return;
@@ -178,7 +180,7 @@ function ScrollBody({ children, onMore, moreLabel = "전체 보기 →" }) {
 }
 
 // 팝업 한 장(화면 그리기만 — 테스트에서도 바로 쓴다)
-export function NotifyModal({ item, index = 1, total = 1, company = "", mobile = false, onClose, onGo }) {
+export function NotifyModal({ item, index = 1, total = 1, company = "", mobile = false, onClose, onGo, onNever }) {
   React.useEffect(() => {
     const h = (e) => { if (e.key === "Escape") onClose?.(); };
     window.addEventListener("keydown", h);
@@ -198,10 +200,10 @@ export function NotifyModal({ item, index = 1, total = 1, company = "", mobile =
         <div className="relative shrink-0 px-5 sm:px-7 pt-4 pb-4 text-white" style={{ background: "linear-gradient(rgba(143,176,240,.07) 1px, transparent 1px) 0 0/22px 22px, linear-gradient(90deg, rgba(143,176,240,.07) 1px, transparent 1px) 0 0/22px 22px, linear-gradient(120deg,#0B1428 0%,#1B2B4B 60%,#2D4C82 100%)" }}>
           <div className="flex items-center gap-2 min-w-0">
             <span className="min-w-0 inline-flex items-center gap-2 whitespace-nowrap truncate">
-              <span className="text-[11.5px] font-extrabold tracking-[0.22em] text-[#8FB0F0]" style={{ fontFamily: MONO }}>{K.en}</span>
+              <span className="text-[11.5px] font-extrabold tracking-[0.22em] text-[#8FB0F0]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{K.en}</span>
               {when && <span className="text-[13px] font-bold text-white/80 tracking-normal" style={{ fontFamily: "'Noto Sans KR','Pretendard',system-ui,sans-serif" }}>{when}</span>}
             </span>
-            {total > 1 && <span className="ml-auto shrink-0 h-6 px-2.5 rounded-full bg-white/10 ring-1 ring-white/20 text-[11.5px] font-black tabular-nums grid place-items-center" style={{ fontFamily: MONO }} data-testid="notify-count">{index} / {total}</span>}
+            {total > 1 && <span className="ml-auto shrink-0 h-6 px-2.5 rounded-full bg-white/10 ring-1 ring-white/20 text-[11.5px] font-black tabular-nums grid place-items-center" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }} data-testid="notify-count">{index} / {total}</span>}
           </div>
           <div className="mt-1.5 font-black whitespace-nowrap overflow-hidden leading-[1.15]" data-testid="notify-head"
             style={{ fontSize: mobile ? "clamp(19px, 6.4vw, 30px)" : "clamp(24px, 2.6vw, 34px)", letterSpacing: mobile ? "0.3em" : "0.34em", color: warn ? "#FFD6D3" : "#fff" }}>{K.head}</div>
@@ -242,7 +244,10 @@ export function NotifyModal({ item, index = 1, total = 1, company = "", mobile =
         {/* 버튼 */}
         <div className="shrink-0 flex justify-center gap-2 px-4 sm:px-7 py-3 border-t border-[#EEF1F6] bg-[#F8FAFD]" style={mobile ? { paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 12px)" } : undefined}>
           <button type="button" onClick={onClose} className="h-10 px-5 min-w-[96px] rounded-xl border border-[#DCE3EE] bg-white text-[13.5px] font-black text-[#1B2B4B] whitespace-nowrap" data-testid="notify-close">{total > 1 ? "닫고 다음" : "닫기"}</button>
-          <button type="button" onClick={() => onGo?.(item)} className="h-10 px-5 rounded-xl bg-[#0F1A30] text-white text-[13.5px] font-black whitespace-nowrap overflow-hidden text-ellipsis" data-testid="notify-go">{K.go} →</button>
+          {item.src === "platform"
+            /* ⭐ 2026-11-04 플랫폼 공지 — "공지사항에서 열기" 대신 "다시 보지 않기"(PC·모바일 어디서 눌러도 계정 전체에서 다시 안 뜸) */
+            ? <button type="button" onClick={() => onNever?.(item)} className="h-10 px-5 rounded-xl bg-[#0F1A30] text-white text-[13.5px] font-black whitespace-nowrap" data-testid="notify-never">다시 보지 않기</button>
+            : <button type="button" onClick={() => onGo?.(item)} className="h-10 px-5 rounded-xl bg-[#0F1A30] text-white text-[13.5px] font-black whitespace-nowrap overflow-hidden text-ellipsis" data-testid="notify-go">{K.go} →</button>}
         </div>
       </div>
       <style>{`@keyframes kpNotifyIn{from{opacity:0;transform:translateY(10px) scale(.98)}to{opacity:1;transform:none}}.kp-notify-in{animation:kpNotifyIn .26s cubic-bezier(.2,.9,.3,1.1) both}`}</style>
@@ -264,10 +269,12 @@ export default function NotifyCenter({ uid, role, team = "", company = "", mobil
   const finish = (it) => {
     setDone((p) => new Set(p).add(it.key));
     setCurKey(null);
+    if (it.src === "platform") { closePlatformNoticeForSession(it.id); return; } // 닫기 = 이번 접속에서만(다음에 켜면 또 뜸)
     markRead(it, uid).then(() => { if (it.mark?.t === "local") bumpLocal(); });
   };
   return (
     <NotifyModal item={cur} index={1} total={live.length} company={company} mobile={mobile}
+      onNever={(it) => { setDone((p) => new Set(p).add(it.key)); setCurKey(null); hidePlatformNoticeForever(it.id); }}
       onClose={() => finish(cur)}
       onGo={(it) => { finish(it); onGo?.(it); }} />
   );

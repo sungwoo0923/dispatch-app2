@@ -4,8 +4,9 @@ import SettingsProfile from "./SettingsProfile";
 import SettingsUsers from "./SettingsUsers";
 import SettingsTransport from "./SettingsTransport";
 import SettingsAddress from "./SettingsAddress";
+import { LogisTag } from "../../brand"; // 🔷 2026-11-04 LogisWeb 로고
 
-const MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
+const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
 // ⭐ 2026-10-29 리디자인 — 왼쪽 메뉴를 운송사 프로그램과 같은 어두운 네이비 패널로
 const MENUS = [
   ["profile", "COMPANY", "회사 설정", "회사·은행·연락처 정보", "M3 21h18M5 21V7l7-4 7 4v14M9 21v-6h6v6"],
@@ -25,7 +26,7 @@ export default function ShipperSettings() {
         style={{ background: "radial-gradient(120% 70% at 20% 0%, #22396A 0%, #0F1A30 55%, #0B1428 100%)" }}>
         <div className="relative px-5 pt-5 pb-4 border-b border-white/10">
           <span className="absolute inset-0 opacity-[0.07]" style={{ backgroundImage: "linear-gradient(#fff 1px,transparent 1px),linear-gradient(90deg,#fff 1px,transparent 1px)", backgroundSize: "18px 18px" }} />
-          <div className="relative text-[10px] font-extrabold tracking-[0.26em] text-[#8FB0F0]" style={{ fontFamily: MONO }}>MASTER SETTINGS</div>
+          <div className="relative text-[10px] font-extrabold tracking-[0.26em] text-[#8FB0F0]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>MASTER SETTINGS</div>
           <div className="relative text-[17px] font-black mt-0.5">마스터설정</div>
         </div>
         <nav className="p-3 space-y-1">
@@ -38,7 +39,7 @@ export default function ShipperSettings() {
                   <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d={icon} /></svg>
                 </span>
                 <span className="min-w-0">
-                  <span className="block text-[9.5px] font-extrabold tracking-[0.2em] text-[#8FB0F0]/80" style={{ fontFamily: MONO }}>{en}</span>
+                  <span className="block text-[9.5px] font-extrabold tracking-[0.2em] text-[#8FB0F0]/80" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{en}</span>
                   <span className={`block text-[14px] font-extrabold leading-tight ${on ? "text-white" : "text-white/80"}`}>{label}</span>
                   <span className="block text-[11px] text-white/45 truncate">{desc}</span>
                 </span>
@@ -46,7 +47,7 @@ export default function ShipperSettings() {
             );
           })}
         </nav>
-        <div className="px-5 py-3 border-t border-white/10 text-[10px] tracking-[0.2em] text-white/35" style={{ fontFamily: MONO }}>KP-FLOW · SHIPPER</div>
+        <div className="px-5 py-3 border-t border-white/10 text-[10px] tracking-[0.2em] text-white/35" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}><LogisTag height={7} text="SHIPPER" /></div>
       </aside>
 
       {/* ===== 우측 ===== */}

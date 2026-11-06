@@ -6,6 +6,7 @@
 //  - 관리자게시판: 관리자·최고관리자·인사관리자 / 임원게시판: 권한 설정 전까지 최고관리자만 — 보안규칙도 같은 기준
 //  - 글쓴이·관리자는 수정·삭제, 관리자는 상단 고정. 댓글, 조회수(읽은 사람 수), 새 글 N 표시.
 import React from "react";
+import { runDelete } from "./DeleteProgress"; // ⭐ 2026-11-05 삭제 진행 창 + 한 번에 삭제
 import { kpConfirm } from "./kpDialog";
 import { db } from "./firebase";
 import { collection, doc, onSnapshot, query, where, addDoc, updateDoc, deleteDoc, arrayUnion, serverTimestamp } from "firebase/firestore";
@@ -13,7 +14,7 @@ import { ShellIcon } from "./AdminShell";
 import { compressImage } from "./InternalMail";
 import PostComments, { PostLikeButton, PostCounts } from "./PostComments"; // 💬 2026-11-03 댓글·대댓글·좋아요
 
-const MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
+const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
 const toMs = (v) => (v?.toMillis ? v.toMillis() : typeof v === "number" ? v : v?.seconds ? v.seconds * 1000 : 0);
 const fmt = (ms, full) => {
   if (!ms) return "";
@@ -111,7 +112,7 @@ export default function BoardPage({ company, me, board }) {
   };
   const remove = async (p) => {
     if (!await kpConfirm("이 글을 삭제할까요?")) return;
-    await deleteDoc(doc(db, "boardPosts", p.id)).catch((e) => window.alert(e.message));
+    await runDelete({ label: "게시글", task: () => deleteDoc(doc(db, "boardPosts", p.id)) }).catch((e) => window.alert(e.message)); // ⭐ 2026-11-05 삭제 진행 창
     setOpenId(null);
   };
   const isNew = (p) => Date.now() - toMs(p.createdAt) < 24 * 3600e3;
@@ -121,18 +122,18 @@ export default function BoardPage({ company, me, board }) {
       <div className="relative overflow-hidden rounded-[22px] px-7 py-5 text-white flex items-center justify-between gap-4 flex-wrap shadow-[0_14px_32px_rgba(15,26,48,0.25)]"
         style={{ background: "linear-gradient(rgba(143,176,240,.07) 1px, transparent 1px) 0 0/22px 22px, linear-gradient(90deg, rgba(143,176,240,.07) 1px, transparent 1px) 0 0/22px 22px, linear-gradient(120deg,#0B1428 0%,#1B2B4B 60%,#2D4C82 100%)" }}>
         <div>
-          <div className="text-[11px] font-extrabold tracking-[0.26em] text-[#8FB0F0]" style={{ fontFamily: MONO }}>BOARD · {B.en}</div>
+          <div className="text-[11px] font-extrabold tracking-[0.26em] text-[#8FB0F0]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>BOARD · {B.en}</div>
           <div className="text-[24px] font-black mt-0.5">{B.label}</div>
           <div className="text-[13px] text-white/60 mt-0.5">{B.desc}</div>
         </div>
-        <div className="flex items-center gap-2.5">
+        <div className="flex items-center gap-2.5 flex-wrap max-sm:w-full">
           {[["전체 글", (posts || []).length], ["오늘 새 글", (posts || []).filter(isNew).length]].map(([l, v]) => (
-            <div key={l} className="min-w-[96px] px-4 py-2.5 rounded-2xl bg-white/[0.07] border border-white/10">
-              <div className="text-[11.5px] font-bold text-white/55">{l}</div>
-              <div className="text-[20px] font-black tabular-nums" style={{ fontFamily: MONO }}>{v}</div>
+            <div key={l} className="min-w-[84px] max-sm:flex-1 px-4 py-2.5 rounded-2xl bg-white/[0.07] border border-white/10">
+              <div className="text-[11.5px] font-bold text-white/55 whitespace-nowrap truncate">{l}</div>
+              <div className="text-[20px] font-black tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{v}</div>
             </div>
           ))}
-          <button type="button" onClick={() => { setForm({ title: "", content: "", images: [], pinned: false }); setOpenId(null); }} className="h-11 px-5 rounded-xl bg-white text-[#0F1A30] text-[13.5px] font-black inline-flex items-center gap-2 shadow-[0_8px_18px_rgba(0,0,0,0.25)]"><ShellIcon name="pen" size={15} />글쓰기</button>
+          <button type="button" onClick={() => { setForm({ title: "", content: "", images: [], pinned: false }); setOpenId(null); }} className="h-11 px-5 rounded-xl bg-white text-[#0F1A30] text-[13.5px] font-black inline-flex items-center justify-center gap-2 whitespace-nowrap shrink-0 max-sm:flex-1 shadow-[0_8px_18px_rgba(0,0,0,0.25)]"><ShellIcon name="pen" size={15} />글쓰기</button>
         </div>
       </div>
 
@@ -196,7 +197,8 @@ export default function BoardPage({ company, me, board }) {
             <span className="ml-auto text-[12.5px] font-bold text-[#9AA9C3]">{sorted.length}개의 글</span>
           </div>
           <div className="flex px-5 h-11 items-center bg-[#F3F6FA] border-b border-[#E3E8F0] text-[14px] font-black text-[#1B2B4B]">
-            <span className="w-14 text-center">번호</span><span className="flex-1 pl-2">제목</span><span className="w-28">작성자</span><span className="w-[110px] text-right">날짜</span><span className="w-14 text-center">조회</span>
+            {/* ⭐ 2026-11-04 휴대폰 폭(분할화면 포함)에서는 번호·조회 칸을 빼고 작성자·날짜 칸을 줄인다 — 고정 칸 합(334px)이 화면보다 넓어 제목이 0px이 됐다 */}
+            <span className="w-14 text-center max-sm:hidden">번호</span><span className="flex-1 min-w-0 pl-2 max-sm:pl-0 whitespace-nowrap">제목</span><span className="w-28 max-sm:w-16 whitespace-nowrap">작성자</span><span className="w-[110px] max-sm:w-[72px] text-right whitespace-nowrap">날짜</span><span className="w-14 text-center max-sm:hidden">조회</span>
           </div>
           {posts === null ? <div className="py-16 text-center text-[13.5px] text-[#9AA9C3]">불러오는 중…</div> : !shown.length ? (
             <div className="py-16 text-center">
@@ -207,16 +209,16 @@ export default function BoardPage({ company, me, board }) {
             const unread = !(p.readBy || []).includes(me.uid);
             return (
               <button key={p.id} type="button" onClick={() => setOpenId(p.id)} className={`w-full flex px-5 h-[56px] items-center border-b border-[#F1F4F9] text-left hover:bg-[#F8FAFD] ${p.pinned ? "bg-[#F5F8FD]" : ""}`}>
-                <span className="w-14 text-center text-[14px] font-bold text-[#5B6B85] tabular-nums">{p.pinned ? <span className="text-[10.5px] font-black px-1.5 py-0.5 rounded bg-[#0F1A30] text-[#8FB0F0]">•</span> : sorted.length - ((page - 1) * PAGE + i)}</span>
-                <span className="flex-1 min-w-0 flex items-center gap-1.5 pl-2">
+                <span className="w-14 text-center text-[14px] font-bold text-[#5B6B85] tabular-nums max-sm:hidden">{p.pinned ? <span className="text-[10.5px] font-black px-1.5 py-0.5 rounded bg-[#0F1A30] text-[#8FB0F0]">•</span> : sorted.length - ((page - 1) * PAGE + i)}</span>
+                <span className="flex-1 min-w-0 flex items-center gap-1.5 pl-2 max-sm:pl-0">
                   <span className={`truncate ${p.pinned ? "text-[15.5px] font-black text-[#0B1428]" : unread ? "text-[15px] font-black text-[#0F1A30]" : "text-[15px] font-semibold text-[#3A4A66]"}`}>{p.title}</span>
                   {(p.images || []).length > 0 && <span className="text-[11px] text-[#9AA9C3]">◎</span>}
                   {isNew(p) && unread && <span className="w-[18px] h-[18px] rounded-full bg-[#1B2B4B] text-white text-[10px] font-black flex items-center justify-center">N</span>}
                   <PostCounts p={p} className="ml-1" />
                 </span>
-                <span className="w-28 truncate text-[14px] font-bold text-[#1B2B4B]">{p.authorName}</span>
-                <span className="w-[110px] text-right text-[14px] font-semibold text-[#3A4A66] tabular-nums whitespace-nowrap">{fmt(toMs(p.createdAt))}</span>
-                <span className="w-14 text-center text-[14px] font-semibold text-[#3A4A66] tabular-nums">{(p.readBy || []).length}</span>
+                <span className="w-28 max-sm:w-16 shrink-0 truncate text-[14px] max-sm:text-[12.5px] font-bold text-[#1B2B4B]">{p.authorName}</span>
+                <span className="w-[110px] max-sm:w-[72px] shrink-0 text-right text-[14px] max-sm:text-[12px] font-semibold text-[#3A4A66] tabular-nums whitespace-nowrap truncate">{fmt(toMs(p.createdAt))}</span>
+                <span className="w-14 text-center text-[14px] font-semibold text-[#3A4A66] tabular-nums max-sm:hidden">{(p.readBy || []).length}</span>
               </button>
             );
           })}

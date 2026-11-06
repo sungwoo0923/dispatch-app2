@@ -8,7 +8,7 @@ import { isExecProfile } from "./hrConstants";
 
 export const isFinanceProfile = (u, role = "") => {
   const r = role || u?.role || "";
-  return r === "test" || r === "hrAcct" || /경리|회계|재무/.test(String(u?.team || ""));
+  return ["test", "hrAcct", "allMgr", "acctStaff"].includes(r) || /경리|회계|재무/.test(String(u?.team || ""));
 };
 
 export function billingAccess(u, { totalMaster = false, role = "", viewer = false } = {}) {

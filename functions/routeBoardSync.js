@@ -4,7 +4,8 @@
 //    ① 시트에 새로 생긴 줄 → 오더 자동 생성(새 탭 = 새 날짜도 자동)
 //    ② 이미 있는 줄 → "화주가 입력하는 칸"(도착지·시군구·리터 수량·비고 등)만 시트 값으로 맞춤
 //       "운송사가 입력하는 칸"(차량번호·기사·운송업체·단가·입차시간)은 프로그램 값을 지킨다(시트로는 화면 저장 때 써 준다)
-//    ③ 시트에서 지워진 줄 → 오더는 지우지 않고 시트삭제됨: true 표시(화면에서 확인 후 삭제)
+//    ③ 시트에서 지워진 줄 → ⭐ 2026-11-04 프로그램 오더도 삭제(휴지통에 7일 보관 · 되살리기 가능)
+//       안전장치: 시트를 제대로 못 읽은 것 같으면(그 묶음 줄이 하나도 없음 · 한 번에 너무 많이 사라짐) 지우지 않고 "시트에서 삭제됨" 표시만
 //  · 줄 맞추기: 같은 묶음 안에서 도착지가 같은 줄끼리 순서대로(같은 도착지가 여러 줄이면 1번째↔1번째)
 
 const cell = (v) => String(v ?? "").replace(/ /g, " ").trim();
@@ -211,7 +212,7 @@ async function syncBoard({ db, FieldValue, form, readTabs, readTab, writeCells, 
     const tomb = range ? {} : (form.삭제한줄 || {}); const tombUsed = {}; // ⭐ [기간 가져오기](range)는 지운 줄까지 다시 가져온다
     hashes[tab] = hash; // (양방향이라 시트가 그대로여도 프로그램에서 바뀐 값을 시트에 써야 해서 건너뛰지 않음 — 바뀐 칸만 씀)
     sum.dates.push(date);
-    const batch = db.batch(); let ops = 0; const pushes = []; const appends = [];
+    const batch = db.batch(); let ops = 0; const pushes = []; const appends = []; const goneAll = [];
     for (const g of form.groups) {
       const mine = orders.filter((o) => (o.배차표묶음 || form.groups[0].name) === g.name).sort((a, b) => (a.배차표순번 || 0) - (b.배차표순번 || 0));
       const pool = {}; mine.forEach((o) => { const k = nm(o.하차지명); (pool[k] = pool[k] || []).push(o); });
@@ -331,8 +332,24 @@ async function syncBoard({ db, FieldValue, form, readTabs, readTab, writeCells, 
           appends.push({ g: g.name, afterRi: mt.lastRi, vals, base, ref: o.ref });
         });
       }
-      // 시트에서 지워진 줄 — 표시만(프로그램에서 추가해 시트에 넣을 줄은 제외)
-      mine.forEach((o) => { if (!matched.has(o.ref.path) && !o.시트삭제됨 && !o.시트유지 && !o.시트추가대기) { batch.update(o.ref, { 시트삭제됨: true }); ops += 1; sum.gone += 1; } });
+      // 시트에서 지워진 줄 — 모아 두었다가 아래에서 삭제(프로그램에서 추가해 시트에 넣을 줄·"유지"로 남긴 줄은 제외)
+      const sheetRows = (p.groups[g.name] || []).filter((v) => nm(v[nameCol.id])).length;
+      mine.forEach((o) => {
+        if (matched.has(o.ref.path) || o.시트유지 || o.시트추가대기) return;
+        goneAll.push({ o, safe: sheetRows > 0 }); // 그 묶음에 시트 줄이 하나도 없으면(못 읽었을 수 있음) 지우지 않는다
+      });
+    }
+    // ⭐ 2026-11-04 시트에서 지운 줄 → 오더 삭제(서버가 휴지통에 7일 보관) — 한 탭에서 너무 많이 사라지면(시트 읽기 문제일 수 있음) 표시만
+    if (goneAll.length) {
+      const tooMany = goneAll.length > Math.max(5, Math.ceil(orders.length * 0.5));
+      for (const { o, safe } of goneAll) {
+        if (safe && !tooMany) {
+          batch.delete(o.ref);
+          batch.set(db.collection("deletedOrders").doc(`orders_${o.ref.id}`), { col: "orders", id: o.ref.id, at: FieldValue.serverTimestamp(), by: "구글시트 연동(시트에서 삭제)", companyName: co });
+          ops += 2; sum.deleted = (sum.deleted || 0) + 1;
+        } else if (!o.시트삭제됨) { batch.update(o.ref, { 시트삭제됨: true }); ops += 1; sum.gone += 1; }
+      }
+      if (tooMany) sum.goneHeld = (sum.goneHeld || 0) + goneAll.length;
     }
     if (ops) await batch.commit();
     if (pushes.length && writeCells) { await writeCells(tab, pushes); sum.pushed = (sum.pushed || 0) + pushes.length; hashes[tab] = ""; } // 시트를 고쳤으니 다음에 다시 읽기

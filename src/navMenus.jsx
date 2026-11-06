@@ -4,8 +4,9 @@
 //  · 세부 메뉴를 누르면 그 메뉴 화면을 열고, 화면의 왼쪽 메뉴가 해당 항목으로 바로 이동한다(useSubnavTarget)
 import React from "react";
 import { createPortal } from "react-dom";
+import { SWITCH_ROLES, readSwitchView } from "./customRoles";
 
-const MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
+const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
 
 // ⭐ 2026-11-02 화면 점검 — 기본 세부 메뉴 이름을 실제 화면 왼쪽 메뉴 이름과 똑같이 맞춤(매출관리·전자결재·자금관리·인사관리부의 "A · B" → "A·B").
 //   과태료·사고 서류는 지입차관리가 아니라 기사관리 › 서류관리로 옮겨졌으므로 지입차관리에는 넣지 않는다(FleetManagement.jsx 왼쪽 메뉴에 없음).
@@ -23,12 +24,12 @@ export const MENU_SUBS = {
   인사관리부: { code: "HUMAN RESOURCES", items: [["record", "인사관리"], ["edit", "직원관리"], ["register", "직원 등록"], ["attendance", "출근기록부"], ["leave", "연차 관리"], ["settings", "직책·부서 설정"], ["rules", "사내 규정"], ["obit", "부고 알림"]] },
   회사관리: { code: "COMPANY", items: [["회사정보", "회사정보"], ["조직도", "조직도"], ["내정보", "내정보"], ["내 이력서", "내 이력서"]] }, // ⭐ 2026-11-02 점검 — 기본 목록에서 '출근기록부' 제거(인사관리자 등 그 탭이 없는 사람에게 눌러도 이동 안 되는 메뉴가 보였음). 탭이 있는 사람은 화면을 열면 registerSubnav로 다시 보인다
   운임조회: { code: "FARE LOOKUP", items: [["전국운임조회", "전국운임조회"], ["자사운임표", "자사운임표"]] },
-  지입차관리: { code: "FLEET CONTROL", items: [["tracking", "관제현황"], ["route", "노선관리"], ["fixed", "고정노선"], ["history", "이력 조회"], ["attendance", "출근기록부"], ["temperature", "온도 관제"], ["cargo-camera", "적재함 카메라"], ["vehicle", "차량 관리"], ["registration", "기사 등록 관리"]] },
+  지입차관리: { code: "FLEET CONTROL", items: [["tracking", "관제현황"], ["route", "노선관리"], ["fixed", "고정노선"], ["history", "이력 조회"], ["attendance", "출근기록부"], ["vehicle", "차량 관리"], ["registration", "기사 등록 관리"]] },
   관리자메뉴: { code: "ADMIN", items: [["members", "회원 관리"], ["linked", "연동 화주사"], ["loginSessions", "로그인 관리"], ["setup", "초기 설정 · 튜토리얼"]] }, // ⭐ 2026-11-03 구독·결제는 볼 수 있는 사람(경리·재무·임원·대표)만 — 화면을 열면 registerSubnav로 보인다
 };
 
 // ⭐ 실제 화면의 왼쪽 메뉴를 기억 — 팀·권한마다 보이는 항목이 달라서, 한 번이라도 연 화면은 그 사람이 실제로 보는 항목만 펼친다
-const REG_KEY = (code) => { let r = ""; try { r = (localStorage.getItem("role") || "") + (localStorage.getItem("role") === "hrAcct" ? `-${localStorage.getItem("kpHrAcctView") || "acct"}` : ""); } catch { /* 무시 */ } return `kpSubnavReg:${r}:${code}`; };
+const REG_KEY = (code) => { let r = ""; try { const rr = localStorage.getItem("role") || ""; r = rr + (SWITCH_ROLES[rr] ? `-${readSwitchView(rr)}` : ""); } catch { /* 무시 */ } return `kpSubnavReg:${r}:${code}`; }; // 화면 전환 역할(통합관리자·통합인사관리자)은 화면별로
 const _reg = {};
 export function registerSubnav(code, items) {
   if (!code || !Array.isArray(items) || !items.length) return;
@@ -129,7 +130,7 @@ export function NavHover({ menu, label, disabled = false, onOpenMenu, badges = n
           <div style={{ position: "absolute", top: -8, left: 0, right: 0, height: 8 }} />
           <div className="rounded-2xl overflow-hidden shadow-[0_24px_60px_rgba(5,10,25,0.45)] ring-1 ring-white/10" style={{ background: "linear-gradient(160deg,#0F1A30 0%,#152340 60%,#1B2B4B 100%)" }}>
             <div className="px-4 pt-3 pb-2 border-b border-white/10">
-              <div className="text-[9.5px] font-extrabold tracking-[0.26em] text-[#8FB0F0]" style={{ fontFamily: MONO }}>{conf.code}</div>
+              <div className="text-[9.5px] font-extrabold tracking-[0.26em] text-[#8FB0F0]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{conf.code}</div>
               <div className="text-[14px] font-black text-white mt-0.5">{label || menu}</div>
             </div>
             <div className="p-1.5 overflow-y-auto" style={{ maxHeight: "min(70vh, 520px)", overscrollBehavior: "contain" }}>
@@ -139,7 +140,7 @@ export function NavHover({ menu, label, disabled = false, onOpenMenu, badges = n
                   style={{ transitionDelay: shown ? `${i * 18}ms` : "0ms" }}>
                   <span className="w-1.5 h-1.5 rotate-45 bg-[#8FB0F0]/70 shrink-0" />
                   <span className="truncate flex-1">{l}</span>
-                  {(() => { const b = badges?.[key]; const on = typeof b === "string" ? !!b : b > 0; return on ? <span className="shrink-0 min-w-[20px] h-5 px-1.5 rounded-full bg-rose-500 text-white text-[11px] font-black grid place-items-center tabular-nums">{typeof b === "number" && b > 99 ? "99+" : b}</span> : null; })()}
+                  {(() => { const b = badges?.[key]; const on = typeof b === "string" ? !!b : b > 0; return on ? <span className="shrink-0 min-w-[20px] h-5 px-1.5 rounded-full bg-[#FF3B30] text-white text-[11px] font-extrabold grid place-items-center tabular-nums shadow-[0_1px_2px_rgba(0,0,0,.18)]">{typeof b === "number" && b > 99 ? "99+" : b}</span> : null; })()}
                 </button>
               ))}
             </div>

@@ -1,5 +1,6 @@
 // ===================== src/RateCard.jsx =====================
 import React, { useState, useMemo, useRef, useEffect } from "react";
+import { runDelete } from "./DeleteProgress"; // ⭐ 2026-11-05 삭제 진행 창 + 한 번에 삭제
 import { kpConfirm } from "./kpDialog";
 import * as XLSX from "xlsx";
 import { useLoadFullOrderHistory } from "./orderHistory";
@@ -35,7 +36,7 @@ function rateCardHtml({ company = {}, info = {}, rows = [], today = new Date().t
 body{background:#EEF2F8;color:#0F1A30}
 .page{width:1123px;margin:18px auto;background:#fff;border-radius:18px;overflow:hidden;box-shadow:0 18px 50px rgba(15,26,48,.18)}
 .hero{padding:22px 30px;color:#fff;display:flex;justify-content:space-between;align-items:flex-end;gap:20px;background:linear-gradient(120deg,#0B1428 0%,#1B2B4B 60%,#2D4C82 100%)}
-.en{font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:800;letter-spacing:.3em;color:#8FB0F0}
+.en{font-family:'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif;font-variant-numeric:tabular-nums;font-size:11px;font-weight:800;letter-spacing:.3em;color:#8FB0F0}
 .title{font-size:30px;font-weight:900;letter-spacing:.06em;margin-top:2px}
 .co{text-align:right;font-size:12.5px;line-height:1.7;color:rgba(255,255,255,.75)}
 .co b{color:#fff;font-size:16px}
@@ -53,8 +54,8 @@ thead th{background:#0B1428;color:#fff;font-weight:900;font-size:13.5px;white-sp
 thead th:first-child{border-radius:10px 0 0 0;width:110px;background:#1B2B4B}
 thead th:last-child{border-radius:0 10px 0 0}
 tbody th{background:#F3F6FA;color:#3A4A66;font-size:12.5px;font-weight:900;text-align:left;padding-left:14px}
-.price{font-family:'JetBrains Mono',monospace;font-size:16px;font-weight:800;color:#0B1428}
-.range{font-family:'JetBrains Mono',monospace;font-size:11.5px;color:#5B6B85;font-weight:600;line-height:1.5}
+.price{font-family:'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif;font-variant-numeric:tabular-nums;font-size:16px;font-weight:800;color:#0B1428}
+.range{font-family:'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif;font-variant-numeric:tabular-nums;font-size:11.5px;color:#5B6B85;font-weight:600;line-height:1.5}
 .lv{display:inline-block;padding:2px 8px;border-radius:6px;font-size:11px;font-weight:900}
 .lv-h{background:#0F1A30;color:#fff}.lv-m{background:#DCE6F7;color:#1B2B4B}.lv-l{background:#F3F6FA;color:#7A89A3;border:1px solid #E3E8F0}
 .foot{display:flex;gap:16px;padding:14px 30px 24px;align-items:stretch}
@@ -368,7 +369,7 @@ const [detailModal, setDetailModal] = useState(null);
   const removeMultiSheet = async (id) => {
     if (!await kpConfirm("이 단가표를 삭제할까요?")) return;
     try {
-      await deleteDoc(doc(db, "multiRateSheets", id));
+      await runDelete({ label: "단가표", task: () => deleteDoc(doc(db, "multiRateSheets", id)) }); // ⭐ 2026-11-05 삭제 진행 창
       if (multiSelectedId === id) setMultiSelectedId(null);
     } catch (e) { console.error(e); alert("삭제에 실패했습니다."); }
   };
@@ -431,7 +432,7 @@ const [detailModal, setDetailModal] = useState(null);
   const downloadMultiTemplate = (sheet) => {
     if (!sheet) return;
     const header = ["하차지", "주소", ...(sheet.columns || []).map(c => c.label)];
-    const example = ["예: 쿠팡(인천13센터)", "인천 서구 북항로 28-23", ...(sheet.columns || []).map(() => "")];
+    const example = ["예: ○○센터(인천)", "인천 서구 ○○로 123", ...(sheet.columns || []).map(() => "")];
     const ws = XLSX.utils.aoa_to_sheet([header, example]);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "단가표양식");
@@ -837,9 +838,9 @@ ${sheet.note ? `<div class="notice">${esc(sheet.note)}</div>` : ""}
   const labelCls="block text-[12px] font-bold text-gray-900 mb-1";
 
   // ⭐ 2026-10-29 리디자인 — 매출관리·배차현황과 같은 왼쪽 속메뉴(KpSubNav) + 네이비 디지털 카드
-  const RC_MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
+  const RC_MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
   const seg = (on) => `flex-1 h-10 rounded-[10px] text-[13px] font-bold transition ${on ? "bg-white text-[#0F1A30] shadow-[0_2px_8px_rgba(15,26,48,0.14)]" : "text-[#5B6B85] hover:text-[#0F1A30]"}`;
-  const Eyebrow = ({ children }) => <div style={{ fontFamily: RC_MONO }} className="text-[10.5px] font-extrabold tracking-[0.24em] text-[#4B6CB7]">{children}</div>;
+  const Eyebrow = ({ children }) => <div style={{ fontFamily: RC_MONO, fontVariantNumeric: "tabular-nums" }} className="text-[10.5px] font-extrabold tracking-[0.24em] text-[#4B6CB7]">{children}</div>;
   const FieldLabel = ({ children, req }) => <div className="text-[12px] font-bold text-[#3A4A66] mb-1.5">{children}{req && <span className="text-[#4B6CB7] ml-0.5">*</span>}</div>;
   const boxInput = "w-full h-11 px-3.5 rounded-xl bg-[#F5F8FD] border border-[#E3E8F0] text-[14px] font-semibold text-[#0F1A30] placeholder:text-[#9AA9C3] placeholder:font-medium focus:bg-white focus:outline-none transition";
   const PrintIcon = () => <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9V3h12v6M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" /><path d="M6 14h12v7H6z" /></svg>;
@@ -878,12 +879,12 @@ ${sheet.note ? `<div class="notice">${esc(sheet.note)}</div>` : ""}
             {pageMode === "노선별" ? "과거 배차 실적으로 노선·톤수별 권장 단가를 자동 계산합니다" : "기준지 1곳 → 하차지 여러 곳의 톤수·구간별 단가를 한 표로 관리합니다"}
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           {pageMode === "노선별" ? (
             <>
               <button onClick={() => setHistoryModal(true)} className="h-10 px-4 inline-flex items-center gap-2 rounded-xl bg-white border border-[#DCE3EF] text-[#1B2B4B] text-[13px] font-bold hover:bg-[#F5F8FD] transition">
                 발행 이력
-                {printHistory.length > 0 && <span style={{ fontFamily: RC_MONO }} className="min-w-[20px] h-5 px-1.5 rounded-full bg-[#EEF3FB] text-[#1B2B4B] text-[11px] font-extrabold inline-flex items-center justify-center">{printHistory.length}</span>}
+                {printHistory.length > 0 && <span style={{ fontFamily: RC_MONO, fontVariantNumeric: "tabular-nums" }} className="min-w-[20px] h-5 px-1.5 rounded-full bg-[#EEF3FB] text-[#1B2B4B] text-[11px] font-extrabold inline-flex items-center justify-center">{printHistory.length}</span>}
               </button>
               <button onClick={openManualModal} className="h-10 px-4 rounded-xl bg-white border border-[#1B2B4B] text-[#1B2B4B] text-[13px] font-bold hover:bg-[#F5F8FD] transition">직접 작성</button>
               <button onClick={handlePrint} disabled={!result || resultRows.length === 0} className="h-10 px-5 inline-flex items-center gap-2 rounded-xl bg-[#1B2B4B] text-white text-[13px] font-bold hover:bg-[#2D4C82] transition disabled:opacity-40 disabled:cursor-not-allowed">
@@ -911,7 +912,7 @@ ${sheet.note ? `<div class="notice">${esc(sheet.note)}</div>` : ""}
           <div className="relative px-5 py-4 text-white overflow-hidden" style={{ background: "linear-gradient(120deg, #0F1A30 0%, #1B2B4B 55%, #2D4C82 100%)" }}>
             <span className="absolute inset-0 opacity-[0.10]" style={{ backgroundImage: "linear-gradient(#fff 1px,transparent 1px),linear-gradient(90deg,#fff 1px,transparent 1px)", backgroundSize: "14px 14px" }} />
             <div className="relative">
-              <div style={{ fontFamily: RC_MONO }} className="text-[10px] font-extrabold tracking-[0.26em] text-[#8FB0F0]">ROUTE INPUT</div>
+              <div style={{ fontFamily: RC_MONO, fontVariantNumeric: "tabular-nums" }} className="text-[10px] font-extrabold tracking-[0.26em] text-[#8FB0F0]">ROUTE INPUT</div>
               <div className="text-[16px] font-black mt-0.5">노선 조건</div>
             </div>
           </div>
@@ -925,7 +926,7 @@ ${sheet.note ? `<div class="notice">${esc(sheet.note)}</div>` : ""}
                   <label key={lb} className={`flex items-center gap-3 px-3.5 h-12 cursor-text ${i === 0 ? "border-b border-[#E3E8F0]" : ""}`}>
                     <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${i === 0 ? "bg-[#1B2B4B]" : "border-2 border-[#4B6CB7] bg-white"}`} />
                     <span className="text-[12px] font-extrabold text-[#5B6B85] w-8 shrink-0">{lb}</span>
-                    <input autoComplete="off" className="flex-1 min-w-0 bg-transparent !border-0 !shadow-none text-[14px] font-bold text-[#0F1A30] placeholder:text-[#9AA9C3] placeholder:font-medium focus:outline-none" placeholder={ph} value={val} onChange={e => set(e.target.value)} onKeyDown={e => e.key === "Enter" && handleSearch()} />
+                    <input autoComplete="off" className="flex-1 min-w-0 bg-transparent !border-0 !shadow-none text-[14px] font-bold text-[#0F1A30] placeholder:text-[#9AA9C3] placeholder:font-medium focus:outline-none" placeholder={ph} value={val} onChange={e => set(e.target.value)} onKeyUp={e => e.key === "Enter" && handleSearch()} />
                   </label>
                 ))}
               </div>
@@ -1009,7 +1010,7 @@ ${sheet.note ? `<div class="notice">${esc(sheet.note)}</div>` : ""}
             <div className="relative rounded-[20px] overflow-hidden text-center py-20 px-6" style={{ background: "radial-gradient(90% 120% at 50% 0%, #22396A 0%, #0F1A30 60%, #0B1428 100%)" }}>
               <span className="absolute inset-0 opacity-[0.08]" style={{ backgroundImage: "linear-gradient(#fff 1px,transparent 1px),linear-gradient(90deg,#fff 1px,transparent 1px)", backgroundSize: "28px 28px" }} />
               <div className="relative">
-                <div style={{ fontFamily: RC_MONO }} className="text-[11px] font-extrabold tracking-[0.3em] text-[#8FB0F0]">RATE ENGINE · READY</div>
+                <div style={{ fontFamily: RC_MONO, fontVariantNumeric: "tabular-nums" }} className="text-[11px] font-extrabold tracking-[0.3em] text-[#8FB0F0]">RATE ENGINE · READY</div>
                 <div className="text-[18px] font-black text-white mt-2">좌측 검색 조건을 입력하여 단가표 생성</div>
                 <div className="text-[13px] text-white/55 mt-1.5">배차 데이터를 분석하여 특이값을 제외한 톤수별 권장 단가를 계산합니다.</div>
               </div>
@@ -1023,7 +1024,7 @@ ${sheet.note ? `<div class="notice">${esc(sheet.note)}</div>` : ""}
                 <span className="absolute inset-0 opacity-[0.08]" style={{ backgroundImage: "linear-gradient(#fff 1px,transparent 1px),linear-gradient(90deg,#fff 1px,transparent 1px)", backgroundSize: "18px 18px" }} />
                 <div className="relative px-6 py-5 flex items-start justify-between gap-6 flex-wrap">
                   <div className="min-w-0">
-                    <div style={{ fontFamily: RC_MONO }} className="text-[10.5px] font-extrabold tracking-[0.26em] text-[#8FB0F0]">TRANSPORT RATE CARD · {today}</div>
+                    <div style={{ fontFamily: RC_MONO, fontVariantNumeric: "tabular-nums" }} className="text-[10.5px] font-extrabold tracking-[0.26em] text-[#8FB0F0]">TRANSPORT RATE CARD · {today}</div>
                     <div className="flex items-center gap-3 mt-2 flex-wrap">
                       <span className="text-[28px] font-black tracking-tight">{result.pickup}</span>
                       <svg width="34" height="14" viewBox="0 0 34 14" fill="none" stroke="#8FB0F0" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 7h30M25 1l6 6-6 6" /></svg>
@@ -1038,8 +1039,8 @@ ${sheet.note ? `<div class="notice">${esc(sheet.note)}</div>` : ""}
                   <div className="text-right text-[12.5px] text-white/70 leading-6 shrink-0">
                     <div className="text-[17px] font-black text-white">{COMPANY.name}</div>
                     {COMPANY.manager && <div className="font-bold text-white/85">{COMPANY.manager}</div>}
-                    {(COMPANY.phone || COMPANY.tel) && <div style={{ fontFamily: RC_MONO }} className="text-[12px]">{[COMPANY.phone, COMPANY.tel].filter(Boolean).join("  ·  ")}</div>}
-                    {COMPANY.email && <div style={{ fontFamily: RC_MONO }} className="text-[12px]">{COMPANY.email}</div>}
+                    {(COMPANY.phone || COMPANY.tel) && <div style={{ fontFamily: RC_MONO, fontVariantNumeric: "tabular-nums" }} className="text-[12px]">{[COMPANY.phone, COMPANY.tel].filter(Boolean).join("  ·  ")}</div>}
+                    {COMPANY.email && <div style={{ fontFamily: RC_MONO, fontVariantNumeric: "tabular-nums" }} className="text-[12px]">{COMPANY.email}</div>}
                   </div>
                 </div>
               </div>
@@ -1056,10 +1057,10 @@ ${sheet.note ? `<div class="notice">${esc(sheet.note)}</div>` : ""}
                     <div key={en} className={`rounded-2xl border px-4 py-3.5 ${i === 0 ? "bg-[#0F1A30] border-[#0F1A30] text-white" : "bg-white border-[#E3E8F0]"}`}>
                       <div className="flex items-center justify-between">
                         <span className={`text-[12px] font-bold ${i === 0 ? "text-white/80" : "text-[#3A4A66]"}`}>{lb}</span>
-                        <span style={{ fontFamily: RC_MONO }} className={`text-[9.5px] font-extrabold tracking-[0.2em] ${i === 0 ? "text-[#8FB0F0]" : "text-[#9AA9C3]"}`}>{en}</span>
+                        <span style={{ fontFamily: RC_MONO, fontVariantNumeric: "tabular-nums" }} className={`text-[9.5px] font-extrabold tracking-[0.2em] ${i === 0 ? "text-[#8FB0F0]" : "text-[#9AA9C3]"}`}>{en}</span>
                       </div>
                       <div className="mt-1.5 flex items-baseline gap-1">
-                        <span style={{ fontFamily: RC_MONO }} className={`text-[22px] font-black tabular-nums ${i === 0 ? "text-white" : "text-[#0F1A30]"}`}>{v}</span>
+                        <span style={{ fontFamily: RC_MONO, fontVariantNumeric: "tabular-nums" }} className={`text-[22px] font-black tabular-nums ${i === 0 ? "text-white" : "text-[#0F1A30]"}`}>{v}</span>
                         <span className={`text-[12px] font-bold ${i === 0 ? "text-white/60" : "text-[#7A89A3]"}`}>{unit}</span>
                       </div>
                     </div>
@@ -1072,7 +1073,7 @@ ${sheet.note ? `<div class="notice">${esc(sheet.note)}</div>` : ""}
               <div className="bg-white rounded-[20px] border border-[#E3E8F0] overflow-hidden">
                 <div className="px-5 py-3.5 border-b border-[#EEF1F6] flex items-center gap-2">
                   <span className="w-1.5 h-1.5 rotate-45 bg-[#1B2B4B]" />
-                  <span style={{ fontFamily: RC_MONO }} className="text-[10.5px] font-extrabold tracking-[0.22em] text-[#9AA9C3]">RATES</span>
+                  <span style={{ fontFamily: RC_MONO, fontVariantNumeric: "tabular-nums" }} className="text-[10.5px] font-extrabold tracking-[0.22em] text-[#9AA9C3]">RATES</span>
                   <span className="text-[15px] font-black text-[#0F1A30]">{result.viewMode === "파렛수별" ? "파렛수별" : "톤수별"} 권장 단가</span>
                 </div>
                 <table className="w-full text-[13px]">
@@ -1094,12 +1095,12 @@ ${sheet.note ? `<div class="notice">${esc(sheet.note)}</div>` : ""}
                             <span className="inline-flex items-center justify-center min-w-[78px] h-8 px-3 rounded-lg bg-[#EEF3FB] text-[14px] font-black text-[#1B2B4B]">{row.display}</span>
                           </td>
                           <td className="px-4 py-4 text-center">
-                            <span style={{ fontFamily: RC_MONO }} className="text-[19px] font-black text-[#0F1A30] tabular-nums">{s.avg.toLocaleString()}</span>
+                            <span style={{ fontFamily: RC_MONO, fontVariantNumeric: "tabular-nums" }} className="text-[19px] font-black text-[#0F1A30] tabular-nums">{s.avg.toLocaleString()}</span>
                             <span className="text-[12px] text-[#7A89A3] ml-1 font-bold">원</span>
                           </td>
-                          <td style={{ fontFamily: RC_MONO }} className="px-4 py-4 text-center text-[13px] text-[#3A4A66] font-bold tabular-nums">{roundDown10k(s.min).toLocaleString()} ~ {roundDown10k(s.max).toLocaleString()}</td>
+                          <td style={{ fontFamily: RC_MONO, fontVariantNumeric: "tabular-nums" }} className="px-4 py-4 text-center text-[13px] text-[#3A4A66] font-bold tabular-nums">{roundDown10k(s.min).toLocaleString()} ~ {roundDown10k(s.max).toLocaleString()}</td>
                           <td className="px-4 py-4 text-center">
-                            <button onClick={() => setDetailModal({ rows: s.rows, bucket: row.display })} style={{ fontFamily: RC_MONO }}
+                            <button onClick={() => setDetailModal({ rows: s.rows, bucket: row.display })} style={{ fontFamily: RC_MONO, fontVariantNumeric: "tabular-nums" }}
                               className="h-8 px-3 rounded-lg border border-[#DCE3EF] text-[13px] font-extrabold text-[#1B2B4B] hover:bg-[#1B2B4B] hover:text-white hover:border-[#1B2B4B] transition tabular-nums">
                               {s.count}건
                             </button>
@@ -1185,7 +1186,7 @@ ${sheet.note ? `<div class="notice">${esc(sheet.note)}</div>` : ""}
                   <Eyebrow>SHEETS</Eyebrow>
                   <div className="text-[15px] font-black text-[#0F1A30]">저장된 단가표</div>
                 </div>
-                <span style={{ fontFamily: RC_MONO }} className="h-6 px-2 rounded-full bg-[#EEF3FB] text-[#1B2B4B] text-[11px] font-extrabold inline-flex items-center">{multiSheets.length}</span>
+                <span style={{ fontFamily: RC_MONO, fontVariantNumeric: "tabular-nums" }} className="h-6 px-2 rounded-full bg-[#EEF3FB] text-[#1B2B4B] text-[11px] font-extrabold inline-flex items-center">{multiSheets.length}</span>
               </div>
               <button onClick={createMultiSheet} disabled={multiSaving}
                 className="w-full h-11 mt-3 rounded-xl bg-[#1B2B4B] text-white text-[13px] font-black hover:bg-[#2D4C82] transition disabled:opacity-50">
@@ -1207,7 +1208,7 @@ ${sheet.note ? `<div class="notice">${esc(sheet.note)}</div>` : ""}
                         <span className={`w-9 h-9 rounded-lg flex items-center justify-center text-[13px] font-black shrink-0 ${on ? "bg-white/15 text-white" : "bg-[#EEF3FB] text-[#1B2B4B]"}`}>{(s.baseName || "?").slice(0, 1)}</span>
                         <span className="min-w-0 flex-1">
                           <span className="block font-bold text-[13.5px] truncate">{s.baseName || "이름 없음"}</span>
-                          <span style={{ fontFamily: RC_MONO }} className={`block text-[11px] mt-0.5 ${on ? "text-white/60" : "text-[#7A89A3]"}`}>하차지 {(s.rows || []).length}곳 · 구간 {(s.columns || []).length}개</span>
+                          <span style={{ fontFamily: RC_MONO, fontVariantNumeric: "tabular-nums" }} className={`block text-[11px] mt-0.5 ${on ? "text-white/60" : "text-[#7A89A3]"}`}>하차지 {(s.rows || []).length}곳 · 구간 {(s.columns || []).length}개</span>
                         </span>
                       </button>
                     );
@@ -1223,7 +1224,7 @@ ${sheet.note ? `<div class="notice">${esc(sheet.note)}</div>` : ""}
               <div className="relative rounded-[20px] overflow-hidden text-center py-20 px-6" style={{ background: "radial-gradient(90% 120% at 50% 0%, #22396A 0%, #0F1A30 60%, #0B1428 100%)" }}>
                 <span className="absolute inset-0 opacity-[0.08]" style={{ backgroundImage: "linear-gradient(#fff 1px,transparent 1px),linear-gradient(90deg,#fff 1px,transparent 1px)", backgroundSize: "28px 28px" }} />
                 <div className="relative">
-                  <div style={{ fontFamily: RC_MONO }} className="text-[11px] font-extrabold tracking-[0.3em] text-[#8FB0F0]">MULTI DESTINATION</div>
+                  <div style={{ fontFamily: RC_MONO, fontVariantNumeric: "tabular-nums" }} className="text-[11px] font-extrabold tracking-[0.3em] text-[#8FB0F0]">MULTI DESTINATION</div>
                   <div className="text-[18px] font-black text-white mt-2">좌측 패널에서 단가표를 선택하거나 새 단가표 생성</div>
                   <div className="text-[13px] text-white/55 mt-1.5">메인 상차지 기준, 다중 하차지별 운송 단가를 통합 관리합니다.</div>
                 </div>
@@ -1280,7 +1281,7 @@ ${sheet.note ? `<div class="notice">${esc(sheet.note)}</div>` : ""}
                   <div className="px-5 py-3.5 border-b border-[#EEF1F6] flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <span className="w-1.5 h-1.5 rotate-45 bg-[#1B2B4B]" />
-                      <span style={{ fontFamily: RC_MONO }} className="text-[10.5px] font-extrabold tracking-[0.22em] text-[#9AA9C3]">MATRIX</span>
+                      <span style={{ fontFamily: RC_MONO, fontVariantNumeric: "tabular-nums" }} className="text-[10.5px] font-extrabold tracking-[0.22em] text-[#9AA9C3]">MATRIX</span>
                       <span className="text-[15px] font-black text-[#0F1A30]">하차지별 단가표</span>
                     </div>
                     <div className="flex items-center gap-2">
@@ -1337,7 +1338,7 @@ ${sheet.note ? `<div class="notice">${esc(sheet.note)}</div>` : ""}
                             </td>
                             {(selectedSheet.columns || []).map(c => (
                               <td key={c.id} className="px-2 py-1.5 border-r border-[#EEF1F6]">
-                                <input autoComplete="off" style={{ fontFamily: RC_MONO }}
+                                <input autoComplete="off" style={{ fontFamily: RC_MONO, fontVariantNumeric: "tabular-nums" }}
                                   className="w-full px-2 py-1.5 text-[13px] font-extrabold text-[#1B2B4B] text-right tabular-nums rounded-lg border border-transparent hover:border-[#DCE3EF] focus:outline-none bg-transparent placeholder:text-[#C9D2E0]"
                                   placeholder="-"
                                   defaultValue={r.prices?.[c.id] ? Number(r.prices[c.id]).toLocaleString() : ""}

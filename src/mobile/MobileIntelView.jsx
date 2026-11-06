@@ -1,5 +1,7 @@
 // src/mobile/MobileIntelView.jsx — 경영인텔리전스 (모바일 totalMaster 전용)
 import React, { useState, useMemo, useEffect, useRef } from "react";
+import { useRouteCarrierFilter } from "../routeCarriers"; // ⭐ 2026-11-05 고정노선 운송업체 설정
+import { isInsightRow, insightRange } from "../ProInsight"; // ⭐ 2026-11-05 PC·모바일 일치 — 인사이트 매출 기준 공용
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from "recharts";
@@ -261,7 +263,11 @@ function getY(dateStr) { return dateStr?.slice(0, 4) ?? ""; }
 // ────────────────────────────────────────────────
 //  MAIN COMPONENT
 // ────────────────────────────────────────────────
-export default function MobileIntelView({ dispatchData = [], cardVersionB = false }) {
+export default function MobileIntelView({ dispatchData: allDispatchData = [], cardVersionB = false }) {
+  // ⭐ 2026-11-05 고정노선 운송업체 설정 — 끈 업체 오더는 경영인텔리전스 매출에서 뺀다
+  const carrierF = useRouteCarrierFilter();
+  // ⭐ 2026-11-05 PC·모바일 일치 — PC 인사이트(ProInsight)와 같은 기준: 상차일 있음 · 취소 아님 · 청구운임 > 0
+  const dispatchData = React.useMemo(() => (carrierF.filter(allDispatchData) || []).filter(isInsightRow), [allDispatchData, carrierF]);
   const [verified, setVerified] = useState(() => {
     return sessionStorage.getItem("exec_intel_ok") === "1";
   });
@@ -289,8 +295,10 @@ function IntelDashboard({ dispatchData, accent = NAVY }) {
   const cmPrefix = `${cyStr}-${cm}`;
   const pmPrefix = `${pmY}-${pm}`;
 
-  const thisMonth = useMemo(() => dispatchData.filter(d => getYM(d.상차일) === cmPrefix), [dispatchData, cmPrefix]);
-  const lastMonth = useMemo(() => dispatchData.filter(d => getYM(d.상차일) === pmPrefix), [dispatchData, pmPrefix]);
+  // ⭐ 2026-11-05 PC·모바일 일치 — PC 인사이트 "이번 달"과 같은 기간(1일~오늘) · 전월 대비도 PC처럼 지난달 같은 날까지
+  const { s: tmS, e: tmE, ps: pmS, pe: pmE } = insightRange("this");
+  const thisMonth = useMemo(() => dispatchData.filter(d => d.상차일 >= tmS && d.상차일 <= tmE), [dispatchData, tmS, tmE]);
+  const lastMonth = useMemo(() => dispatchData.filter(d => d.상차일 >= pmS && d.상차일 <= pmE), [dispatchData, pmS, pmE]);
   const thisYear  = useMemo(() => dispatchData.filter(d => getY(d.상차일) === cyStr), [dispatchData, cyStr]);
 
   const tmRev  = useMemo(() => thisMonth.reduce((s, d) => s + toInt(d.청구운임), 0), [thisMonth]);

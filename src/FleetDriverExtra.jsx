@@ -5,13 +5,15 @@
 //  · 지입 계약(시작일·월 지입료·명의) — 월 지입료는 지급명세서 기사별 공제에 자동 반영
 //  · 차량 기본정보(차명·연식·정비 주기·검사/보험 만기)는 기사앱 첫 설정과 같은 마법사로 직접 입력
 import React from "react";
+import { createPortal } from "react-dom"; // ⭐ 2026-11-05 DriverCombo 드롭다운
+import CustomDatePicker from "./CustomDatePicker"; // 📅 2026-11-04 날짜 입력은 프로그램 달력으로
 import BankAccountInput from "./BankAccountInput";
 import { onlyDigits } from "./bankUtil";
 import { VehicleSetupWizard } from "./VehicleCarePanel";
 
 export const DRIVER_APK_URL = "https://github.com/sungwoo0923/dispatch-app2/releases/download/driver-apk-latest/app-debug.apk"; // ⭐ 2026-11-03 누르면 바로 APK 파일 다운로드(예전: 릴리즈 페이지에서 파일을 찾아 눌러야 했음)
-const lab = "block text-[12px] font-semibold text-[#5B6B85] mb-1";
-const inp = "border border-[#DCE3EE] rounded-lg px-3 py-2 text-[13px] w-full focus:border-[#2D4C82] outline-none bg-white";
+const lab = "block text-[14px] font-semibold text-[#5B6B85] mb-1";
+const inp = "border border-[#DCE3EE] rounded-lg px-3 py-2 text-[14px] w-full focus:border-[#2D4C82] outline-none bg-white";
 const fmtBiz = (v) => { const d = onlyDigits(v).slice(0, 10); return d.length > 5 ? `${d.slice(0, 3)}-${d.slice(3, 5)}-${d.slice(5)}` : d.length > 3 ? `${d.slice(0, 3)}-${d.slice(3)}` : d; };
 
 // 기사앱 상태 — drivers 문서에 uid(가입 계정)가 있으면 가입, approved면 승인, heartbeat가 최근이면 사용 중
@@ -19,7 +21,7 @@ export function appStatusOf(d = {}) {
   const ms = (v) => (v?.toMillis ? v.toMillis() : v?.seconds ? v.seconds * 1000 : typeof v === "number" ? v : 0);
   const seen = Math.max(ms(d.heartbeatAt), ms(d.updatedAt && d.uid ? d.updatedAt : 0));
   if (!d.uid) return { key: "none", label: "앱 미가입", desc: "기사앱 설치·가입 전" };
-  if (d.approved === false) return { key: "pending", label: "가입 승인 대기", desc: "지입차관리 › 기사 등록 관리에서 승인" };
+  if (d.approved === false) return { key: "pending", label: "가입 승인 대기", desc: "기사관리 › 기사 앱 계정 › 가입 승인에서 승인" }; // ⭐ 2026-11-05
   if (seen && Date.now() - seen < 3 * 86400000) return { key: "active", label: "앱 사용 중", desc: `최근 접속 ${new Date(seen).toLocaleDateString("ko-KR")}` };
   return { key: "idle", label: "가입·승인됨", desc: seen ? `마지막 접속 ${new Date(seen).toLocaleDateString("ko-KR")}` : "아직 접속 기록 없음" };
 }
@@ -37,10 +39,10 @@ export function AppStatusBadge({ d, company, big = false }) {
   const tone = s.key === "active" ? "bg-[#0F1A30] text-white" : s.key === "idle" ? "bg-[#EEF3FC] text-[#1B2B4B] border border-[#C9D6EE]" : "bg-white text-[#5B6B85] border border-[#DCE3EE]";
   return (
     <span className="inline-flex items-center gap-1.5">
-      <span className={`inline-flex items-center gap-1 h-7 px-2.5 rounded-lg text-[12px] font-black whitespace-nowrap ${tone}`} title={s.desc}>
+      <span className={`inline-flex items-center gap-1 h-7 px-2.5 rounded-lg text-[14px] font-black whitespace-nowrap ${tone}`} title={s.desc}>
         <span className={`w-1.5 h-1.5 rounded-full ${s.key === "active" ? "bg-[#8FB0F0]" : s.key === "none" ? "bg-[#C9D3E3]" : "bg-[#2D4C82]"}`} />{s.label}
       </span>
-      {s.key === "none" && <button type="button" onClick={copy} className={`h-7 px-2.5 rounded-lg border border-[#C9D6EE] text-[12px] font-black text-[#1B2B4B] bg-white whitespace-nowrap ${big ? "" : ""}`}>{copied ? "복사됨 ✓" : "가입 안내 복사"}</button>}
+      {s.key === "none" && <button type="button" onClick={copy} className={`h-7 px-2.5 rounded-lg border border-[#C9D6EE] text-[14px] font-black text-[#1B2B4B] bg-white whitespace-nowrap ${big ? "" : ""}`}>{copied ? "복사됨 ✓" : "가입 안내 복사"}</button>}
     </span>
   );
 }
@@ -59,8 +61,8 @@ export default function FleetExtraFields({ value: v, onChange, company }) {
       <div className="col-span-2 mt-1 rounded-2xl border border-[#DCE3EE] overflow-hidden">
         <div className="px-4 py-2.5 text-white flex items-center justify-between gap-2" style={{ background: "linear-gradient(120deg,#0B1428,#1B2B4B 70%,#2D4C82)" }}>
           <div>
-            <div className="text-[9.5px] font-extrabold tracking-[0.24em] text-[#8FB0F0]">FLEET · 지입 기본정보</div>
-            <div className="text-[13.5px] font-black">정산 · 계약 · 차량 · 기사앱</div>
+            <div className="text-[14px] font-extrabold tracking-[0.12em] text-[#8FB0F0]">FLEET · 지입 기본정보</div>
+            <div className="text-[14px] font-black">정산 · 계약 · 차량 · 기사앱</div>
           </div>
           <AppStatusBadge d={v} company={company} />
         </div>
@@ -68,14 +70,14 @@ export default function FleetExtraFields({ value: v, onChange, company }) {
           <div className="col-span-2"><BankAccountInput value={v.정산계좌 || { bank: "", acct: "", holder: "" }} onChange={(b) => set({ 정산계좌: b })} noFav /></div>
           <div><label className={lab}>사업자등록번호</label><input inputMode="numeric" className={inp} value={fmtBiz(v.사업자번호 || "")} onChange={(e) => set({ 사업자번호: onlyDigits(e.target.value).slice(0, 10) })} placeholder="000-00-00000" /></div>
           <div><label className={lab}>상호</label><input className={inp} value={v.사업자상호 || ""} onChange={(e) => set({ 사업자상호: e.target.value })} placeholder="사업자등록증 상호" /></div>
-          <div><label className={lab}>지입 계약 시작일</label><input type="date" className={inp} value={v.지입계약일 || ""} onChange={(e) => set({ 지입계약일: e.target.value })} /></div>
-          <div><label className={lab}>월 지입료 <span className="font-normal text-[#9AA9C3]">(명세서 자동 공제)</span></label><input inputMode="numeric" className={`${inp} text-right`} value={fee ? Number(fee).toLocaleString() : ""} onChange={(e) => setFee(e.target.value)} placeholder="0" /></div>
+          <div><label className={lab}>지입 계약 시작일</label><CustomDatePicker className={inp} value={v.지입계약일 || ""} onChange={(e) => set({ 지입계약일: e.target.value })} showIcon /></div>
+          <div><label className={lab}>월 지입료 <span className="font-normal text-[#5B6B85]">(명세서 자동 공제)</span></label><input inputMode="numeric" className={`${inp} text-right`} value={fee ? Number(fee).toLocaleString() : ""} onChange={(e) => setFee(e.target.value)} placeholder="0" /></div>
           <div className="col-span-2 flex items-center justify-between gap-3 rounded-xl bg-white border border-[#E3E8F0] px-3.5 py-2.5">
             <div className="min-w-0">
-              <div className="text-[13px] font-black text-[#0F1A30]">차량 기본정보</div>
-              <div className="text-[12px] text-[#5B6B85] truncate">{veh.모델 ? `${veh.제조사 ? `${veh.제조사} ` : ""}${veh.모델}${veh.연식 ? ` · ${veh.연식}년식` : ""}${v.care?.dates?.inspection ? ` · 검사 ${v.care.dates.inspection}` : ""}${v.care?.dates?.insurance ? ` · 보험 ${v.care.dates.insurance}` : ""}` : "입력된 내용이 없어요 · 기사님이 앱에서 작성하시거나 관리자가 여기서 직접 입력"}</div>
+              <div className="text-[14px] font-black text-[#0F1A30]">차량 기본정보</div>
+              <div className="text-[14px] text-[#5B6B85] truncate">{veh.모델 ? `${veh.제조사 ? `${veh.제조사} ` : ""}${veh.모델}${veh.연식 ? ` · ${veh.연식}년식` : ""}${v.care?.dates?.inspection ? ` · 검사 ${v.care.dates.inspection}` : ""}${v.care?.dates?.insurance ? ` · 보험 ${v.care.dates.insurance}` : ""}` : "입력된 내용이 없어요 · 기사님이 앱에서 작성하시거나 관리자가 여기서 직접 입력"}</div>
             </div>
-            <button type="button" onClick={() => setWizard(true)} disabled={!v.id} className="shrink-0 h-9 px-3.5 rounded-lg bg-[#0F1A30] text-white text-[12.5px] font-black disabled:opacity-40">{v.care?.setupDone ? "수정" : "입력"}</button>
+            <button type="button" onClick={() => setWizard(true)} disabled={!v.id} className="shrink-0 h-9 px-3.5 rounded-lg bg-[#0F1A30] text-white text-[14px] font-black disabled:opacity-40">{v.care?.setupDone ? "수정" : "입력"}</button>
           </div>
         </div>
       </div>
@@ -85,5 +87,83 @@ export default function FleetExtraFields({ value: v, onChange, company }) {
         </div>
       )}
     </>
+  );
+}
+
+// ⭐ 2026-11-05 이력 조회 › 기사 선택 — 이름·차량번호를 입력해 찾는 검색형 선택 목록(↑↓ Enter · 마우스)
+//  드롭다운은 body에 띄워(createPortal) 가로 스크롤 영역(모바일)에서도 잘리지 않는다.
+const normQ = (s) => String(s || "").replace(/[\s-]/g, "").toLowerCase();
+export function DriverCombo({ drivers = [], value = "", onChange, placeholder = "기사 이름 또는 차량번호 입력", height = 44 }) {
+  const [q, setQ] = React.useState("");
+  const [open, setOpen] = React.useState(false);
+  const [hi, setHi] = React.useState(0);
+  const [rect, setRect] = React.useState(null);
+  const boxRef = React.useRef(null);
+  const listRef = React.useRef(null);
+  const inputRef = React.useRef(null);
+  const cur = drivers.find((d) => d.id === value) || null;
+  const label = (d) => `${d.이름 || d.name || "-"}${d.차량번호 ? ` · ${d.차량번호}` : ""}`;
+  const list = React.useMemo(() => {
+    const k = normQ(q);
+    const arr = !k ? drivers : drivers.filter((d) => [d.이름, d.name, d.차량번호, d.전화번호].some((x) => normQ(x).includes(k)));
+    return arr.slice(0, 200);
+  }, [drivers, q]);
+  const place = React.useCallback(() => {
+    const r = boxRef.current?.getBoundingClientRect();
+    if (r) setRect({ left: r.left, top: r.bottom + 6, width: r.width, up: window.innerHeight - r.bottom < 260 && r.top > 300, topEdge: r.top - 6 });
+  }, []);
+  React.useEffect(() => {
+    if (!open) return undefined;
+    place();
+    const onDoc = (e) => { if (!boxRef.current?.contains(e.target) && !listRef.current?.contains(e.target)) { setOpen(false); setQ(""); } };
+    window.addEventListener("resize", place); window.addEventListener("scroll", place, true);
+    document.addEventListener("mousedown", onDoc); document.addEventListener("touchstart", onDoc);
+    return () => { window.removeEventListener("resize", place); window.removeEventListener("scroll", place, true); document.removeEventListener("mousedown", onDoc); document.removeEventListener("touchstart", onDoc); };
+  }, [open, place]);
+  React.useEffect(() => { setHi(0); }, [q]);
+  React.useEffect(() => { const el = listRef.current?.querySelector(`[data-i="${hi}"]`); el?.scrollIntoView?.({ block: "nearest" }); }, [hi, open]);
+  const pick = (d) => { onChange?.(d ? d.id : ""); setQ(""); setOpen(false); inputRef.current?.blur(); };
+  const onKey = (e) => {
+    if (e.nativeEvent?.isComposing) return;
+    if (e.key === "ArrowDown") { e.preventDefault(); if (!open) setOpen(true); else setHi((h) => Math.min(list.length - 1, h + 1)); }
+    else if (e.key === "ArrowUp") { e.preventDefault(); setHi((h) => Math.max(0, h - 1)); }
+    else if (e.key === "Enter") { e.preventDefault(); if (open && list[hi]) pick(list[hi]); else setOpen(true); }
+    else if (e.key === "Escape") { setOpen(false); setQ(""); }
+  };
+  return (
+    <div ref={boxRef} style={{ position: "relative", width: "100%" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, height, padding: "0 12px", borderRadius: 12, border: `1.5px solid ${open ? "#2D4C82" : "#DCE3EE"}`, background: "#fff", boxShadow: open ? "0 0 0 4px rgba(45,76,130,.12)" : "none", transition: "all .12s", cursor: "text" }}
+        onClick={() => { setOpen(true); inputRef.current?.focus(); }}>
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#5B6B85" strokeWidth="2.2" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
+        <style>{`.fc-combo-in,.fc-combo-in:focus,.fc-combo-in:hover{border:0!important;box-shadow:none!important;outline:none!important;background:transparent!important;padding:0!important;height:auto!important;min-height:0!important}`}</style>
+        <input ref={inputRef} className="fc-combo-in" value={open ? q : (cur ? label(cur) : "")} onChange={(e) => { setQ(e.target.value); setOpen(true); }} onFocus={() => setOpen(true)} onKeyDown={onKey}
+          placeholder={cur ? label(cur) : placeholder} aria-label="기사 검색" role="combobox" aria-expanded={open}
+          style={{ flex: 1, minWidth: 0, border: "none", outline: "none", background: "transparent", fontSize: 15, fontWeight: 800, color: "#0F1A30" }} />
+        {cur && !open && <button type="button" title="선택 지우기" onClick={(e) => { e.stopPropagation(); pick(null); }} style={{ width: 24, height: 24, borderRadius: 7, border: "none", background: "#EEF2F9", color: "#3A4A66", fontSize: 14, fontWeight: 900, cursor: "pointer", flexShrink: 0 }}>×</button>}
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#1B2B4B" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" style={{ transform: open ? "rotate(180deg)" : "none", transition: "transform .15s", flexShrink: 0 }}><path d="m6 9 6 6 6-6" /></svg>
+      </div>
+      {open && rect && createPortal(
+        <div ref={listRef} role="listbox" style={{ position: "fixed", left: Math.max(8, Math.min(rect.left, window.innerWidth - Math.max(rect.width, 260) - 8)), width: Math.min(Math.max(rect.width, 260), window.innerWidth - 16), ...(rect.up ? { bottom: window.innerHeight - rect.topEdge } : { top: rect.top }), zIndex: 2147482000, maxHeight: 320, overflowY: "auto", background: "#fff", border: "1px solid #DCE3EE", borderRadius: 14, boxShadow: "0 18px 40px rgba(11,20,40,.22)", padding: 6 }}>
+          <div style={{ padding: "6px 10px 8px", fontSize: 14, fontWeight: 800, color: "#5B6B85", display: "flex", justifyContent: "space-between" }}><span>{q ? `"${q}" 검색 결과` : "전체 기사"}</span><span style={{ fontVariantNumeric: "tabular-nums" }}>{list.length}명</span></div>
+          {list.length === 0 && <div style={{ padding: "18px 10px", textAlign: "center", fontSize: 14, fontWeight: 700, color: "#5B6B85" }}>맞는 기사가 없습니다</div>}
+          {list.map((d, i) => {
+            const on = i === hi; const sel = d.id === value;
+            return (
+              <div key={d.id} data-i={i} role="option" aria-selected={sel} onMouseEnter={() => setHi(i)} onMouseDown={(e) => { e.preventDefault(); pick(d); }}
+                style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 10px", borderRadius: 10, cursor: "pointer", background: on ? "#EEF3FB" : "transparent" }}>
+                <span style={{ width: 32, height: 32, borderRadius: 9, flexShrink: 0, background: sel ? "linear-gradient(135deg,#2D4C82,#0F1A30)" : "#EEF2F9", color: sel ? "#fff" : "#1B2B4B", display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 15, fontWeight: 900 }}>{String(d.이름 || d.name || "?").slice(0, 1)}</span>
+                <span style={{ flex: 1, minWidth: 0 }}>
+                  <span style={{ display: "block", fontSize: 15, fontWeight: 800, color: "#0F1A30", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{d.이름 || d.name || "-"}</span>
+                  <span style={{ display: "block", fontSize: 14, fontWeight: 700, color: "#3A4A66", fontVariantNumeric: "tabular-nums" }}>{d.차량번호 || "차량번호 없음"}</span>
+                </span>
+                {d.등급 && <span style={{ fontSize: 14, fontWeight: 800, padding: "2px 8px", borderRadius: 6, background: d.등급 === "지입" ? "#1B2B4B" : "#EEF3FB", color: d.등급 === "지입" ? "#fff" : "#2D4C82", flexShrink: 0 }}>{d.등급}</span>}
+                {sel && <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#2D4C82" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="m5 12 5 5 9-10" /></svg>}
+              </div>
+            );
+          })}
+        </div>,
+        document.body,
+      )}
+    </div>
   );
 }

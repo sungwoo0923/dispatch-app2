@@ -8,7 +8,7 @@ import { db } from "./firebase";
 import { usePlan, PLAN_DEFAULTS } from "./plans";
 import { billingAccess } from "./billingAccess";
 
-const MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
+const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
 const go = (menu) => { try { window.__setMainTab?.(menu); window.scrollTo(0, 0); } catch { /* 무시 */ } };
 
 async function hasAny(col, co, extra = []) {
@@ -55,7 +55,7 @@ export default function MasterChecklist({ user, userCompany }) {
   const planName = (PLAN_DEFAULTS.find((p) => p.id === planId) || {}).name;
   const items = [
     { k: "company", done: st.seal, title: "회사 정보 · 직인 등록", desc: "운임확인서·견적서·거래명세서에 찍힐 회사 정보와 직인", act: "회사관리", to: () => go("회사관리") },
-    { k: "invite", done: st.staff >= 2, title: "직원 초대", desc: `직원이 가입 화면에서 '기존 회사' → "${co}" 선택 후 가입 → 마스터가 승인`, act: copied ? "복사됨 ✓" : "가입 링크 복사", to: async () => { try { await navigator.clipboard.writeText(`[${co}] KP-Flow 가입 안내\n${signupUrl}\n가입 화면에서 '기존 회사'를 고르고 "${co}"를 선택해 주세요.`); setCopied(true); setTimeout(() => setCopied(false), 2000); } catch { window.prompt("아래 주소를 복사해 직원에게 보내주세요", signupUrl); } } },
+    { k: "invite", done: st.staff >= 2, title: "직원 초대", desc: `직원이 가입 화면에서 '기존 회사' → "${co}" 선택 후 가입 → 마스터가 승인`, act: copied ? "복사됨 ✓" : "가입 링크 복사", to: async () => { try { await navigator.clipboard.writeText(`[${co}] LogisWeb 가입 안내\n${signupUrl}\n가입 화면에서 '기존 회사'를 고르고 "${co}"를 선택해 주세요.`); setCopied(true); setTimeout(() => setCopied(false), 2000); } catch { window.prompt("아래 주소를 복사해 직원에게 보내주세요", signupUrl); } } },
     { k: "perm", done: st.staff >= 2 && !!settings?.masterPermDone, title: "직원 권한 · 부서 · 직책 지정", desc: "관리자메뉴 › 회원 관리에서 직원을 눌러 승인하고 권한·부서·직책을 정합니다", act: "회원 관리", to: async () => { go("관리자메뉴"); await setDoc(doc(db, "companySettings", co), { masterPermDone: true }, { merge: true }).catch(() => {}); } },
     { k: "drivers", done: st.drivers > 0, title: "기사 · 차량 등록", desc: "기사관리에서 직접 또는 엑셀 대용량 업로드(양식 제공) · 지입차는 등급을 '지입'으로", act: "기사관리", to: () => go("기사관리") },
     { k: "clients", done: st.clients > 0 || st.places > 0, title: "거래처 · 하차지 등록", desc: "거래처관리에서 기본거래처·하차지를 엑셀로 한 번에 올릴 수 있습니다", act: "거래처관리", to: () => go("거래처관리") },
@@ -70,13 +70,13 @@ export default function MasterChecklist({ user, userCompany }) {
     <div className="mb-4 rounded-[20px] overflow-hidden border border-[#0F1A30] bg-white shadow-[0_10px_26px_rgba(15,26,48,0.10)]">
       <div className="px-5 py-4 text-white flex items-center justify-between gap-4 flex-wrap" style={{ background: "linear-gradient(120deg,#0B1428 0%,#1B2B4B 60%,#2D4C82 100%)" }}>
         <div className="min-w-0">
-          <div className="text-[10.5px] font-extrabold tracking-[0.28em] text-[#8FB0F0] whitespace-nowrap" style={{ fontFamily: MONO }}>MASTER · GETTING STARTED</div>
+          <div className="text-[10.5px] font-extrabold tracking-[0.28em] text-[#8FB0F0] whitespace-nowrap" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>MASTER · GETTING STARTED</div>
           <div className="text-[19px] font-black whitespace-nowrap">{co} 시작 체크리스트</div>
           <div className="text-[12.5px] text-white/65 whitespace-nowrap">처음 시작하는 관리자에게 보입니다 · 끝난 항목은 자동으로 체크됩니다</div>
         </div>
         <div className="flex items-center gap-3">
           <div className="text-right">
-            <div className="text-[24px] font-black tabular-nums" style={{ fontFamily: MONO }}>{doneN}<span className="text-[14px] text-white/50"> / {items.length}</span></div>
+            <div className="text-[24px] font-black tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{doneN}<span className="text-[14px] text-white/50"> / {items.length}</span></div>
             <div className="w-28 h-1.5 rounded-full bg-white/15 overflow-hidden"><div className="h-full bg-[#8FB0F0]" style={{ width: `${(doneN / items.length) * 100}%` }} /></div>
           </div>
           <button type="button" onClick={hide} className="h-9 px-3 rounded-xl bg-white/10 ring-1 ring-white/20 text-[12.5px] font-black whitespace-nowrap">숨기기</button>

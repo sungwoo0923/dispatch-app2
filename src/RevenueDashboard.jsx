@@ -6,7 +6,7 @@ import React, { useMemo, useState } from "react";
 import { ResponsiveContainer, ComposedChart, Bar, Line, XAxis, YAxis, Tooltip, CartesianGrid, Cell, BarChart } from "recharts";
 import { creatorOf, useStaffNames } from "./monthCompare";
 
-const MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
+const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
 const NAVY = "#1B2B4B";
 const toInt = (v) => parseInt(String(v ?? "0").replace(/[^\d-]/g, ""), 10) || 0;
 const short = (n) => {
@@ -22,9 +22,9 @@ const statOf = (list) => {
 };
 
 function Delta({ cur, prev, suffix = "", dark = false }) {
-  if (!prev) return <span style={{ fontFamily: MONO, fontSize: 12.5, color: dark ? "rgba(207,224,255,.6)" : "#9ca3af" }}>비교 없음</span>;
+  if (!prev) return <span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 12.5, color: dark ? "rgba(207,224,255,.6)" : "#9ca3af" }}>비교 없음</span>;
   const r = ((cur - prev) / Math.abs(prev)) * 100;
-  return <span style={{ fontFamily: MONO, fontSize: 12.5, fontWeight: 800, color: dark ? (r >= 0 ? "#CFE0FF" : "rgba(207,224,255,.7)") : (r >= 0 ? NAVY : "#64748b") }}>{r >= 0 ? "▲" : "▼"} {Math.abs(r).toFixed(1)}%{suffix}</span>;
+  return <span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 12.5, fontWeight: 800, color: dark ? (r >= 0 ? "#CFE0FF" : "rgba(207,224,255,.7)") : (r >= 0 ? NAVY : "#64748b") }}>{r >= 0 ? "▲" : "▼"} {Math.abs(r).toFixed(1)}%{suffix}</span>;
 }
 
 function Tile({ code, label, value, unit, foot, dark }) {
@@ -37,10 +37,10 @@ function Tile({ code, label, value, unit, foot, dark }) {
     }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "2px 8px", flexWrap: "wrap" }}>
         <span style={{ fontSize: 14, fontWeight: 800, color: dark ? "rgba(255,255,255,.82)" : "#4b5563", whiteSpace: "nowrap" }}>{label}</span>
-        <span style={{ fontFamily: MONO, fontSize: 10.5, fontWeight: 800, letterSpacing: "0.16em", color: dark ? "rgba(143,176,240,.9)" : "#94A3B8", whiteSpace: "nowrap" }}>{code}</span>
+        <span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 10.5, fontWeight: 800, letterSpacing: "0.16em", color: dark ? "rgba(143,176,240,.9)" : "#94A3B8", whiteSpace: "nowrap" }}>{code}</span>
       </div>
       <div style={{ marginTop: 9, display: "flex", alignItems: "baseline", gap: 5 }}>
-        <span style={{ fontFamily: MONO, fontSize: 27, fontWeight: 800, color: dark ? "#fff" : "#0F1A30", letterSpacing: "-0.02em", whiteSpace: "nowrap" }}>{value}</span>
+        <span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 27, fontWeight: 800, color: dark ? "#fff" : "#0F1A30", letterSpacing: "-0.02em", whiteSpace: "nowrap" }}>{value}</span>
         {unit && <span style={{ fontSize: 13, fontWeight: 700, color: dark ? "rgba(207,224,255,.55)" : "#9ca3af" }}>{unit}</span>}
       </div>
       {foot && <div style={{ marginTop: 5, fontSize: 12.5, fontWeight: 600, color: dark ? "rgba(207,224,255,.65)" : "#6b7280", display: "flex", gap: 6, alignItems: "center", whiteSpace: "nowrap" }}>{foot}</div>}
@@ -54,7 +54,7 @@ export function RvCard({ code, title, right, children, style, bodyStyle }) {
       <div style={{ padding: "12px 18px", background: "#F7F9FC", borderBottom: "1px solid #E8EDF4", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap", rowGap: 6 }}>
         <span style={{ display: "inline-flex", alignItems: "center", gap: 9, minWidth: 0 }}>
           <span style={{ width: 7, height: 7, borderRadius: 2, background: NAVY, transform: "rotate(45deg)" }} />
-          {code && <span style={{ fontFamily: MONO, fontSize: 11, fontWeight: 800, letterSpacing: "0.18em", color: "#94A3B8", whiteSpace: "nowrap" }}>{code}</span>}
+          {code && <span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 11, fontWeight: 800, letterSpacing: "0.18em", color: "#94A3B8", whiteSpace: "nowrap" }}>{code}</span>}
           <span style={{ fontSize: 16.5, fontWeight: 800, color: "#0F1A30", whiteSpace: "nowrap" }}>{title}</span>
         </span>
         {right}
@@ -99,7 +99,7 @@ function TargetEditor({ config, hasExcluded, lastYearSale = 0, year, onSave, onC
   const [err, setErr] = useState("");
   const n = Number(String(amount).replace(/[^\d]/g, "")) || 0;
   const presets = lastYearSale > 0 ? [5, 10, 15, 20].map((p) => [`전년 +${p}%`, Math.round((lastYearSale * (1 + p / 100)) / 1e6) * 1e6]) : [];
-  const inputSt = { width: "100%", height: 40, border: "1px solid #D5DEEC", borderRadius: 10, padding: "0 12px", fontFamily: MONO, fontSize: 16, fontWeight: 800, color: "#0F1A30", textAlign: "right", outline: "none", boxSizing: "border-box" };
+  const inputSt = { width: "100%", height: 40, border: "1px solid #D5DEEC", borderRadius: 10, padding: "0 12px", fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 16, fontWeight: 800, color: "#0F1A30", textAlign: "right", outline: "none", boxSizing: "border-box" };
   const save = async () => {
     const g = Number(growth);
     if (hasExcluded && (!Number.isFinite(g) || g < -100 || g > 1000)) { setErr("성장률은 -100 ~ 1000 사이로 입력해 주세요."); return; }
@@ -115,7 +115,7 @@ function TargetEditor({ config, hasExcluded, lastYearSale = 0, year, onSave, onC
           <input autoFocus inputMode="numeric" value={n ? n.toLocaleString() : ""} placeholder="0" onChange={(e) => setAmount(e.target.value)} style={{ ...inputSt, paddingRight: 30 }} />
           <span style={{ position: "absolute", right: 11, top: 11, fontSize: 13, fontWeight: 700, color: "#6b7280" }}>원</span>
         </div>
-        <div style={{ marginTop: 4, fontFamily: MONO, fontSize: 12, color: "#6b7280", textAlign: "right" }}>{n ? `≈ ${short(n)}원 · 월 ${short(n / 12)}원` : "0원이면 '미설정'으로 표시됩니다"}</div>
+        <div style={{ marginTop: 4, fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 12, color: "#6b7280", textAlign: "right" }}>{n ? `≈ ${short(n)}원 · 월 ${short(n / 12)}원` : "0원이면 '미설정'으로 표시됩니다"}</div>
       </label>
       {presets.length > 0 && (
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
@@ -226,8 +226,8 @@ export default function RevenueDashboard({ rows = [], targetMonth, forecast, yea
       <div className="kp-rv-kpi" style={{ display: "grid", gridTemplateColumns: "repeat(5, minmax(0,1fr))", gap: 12 }}>
         <Tile dark code="REVENUE" label={`${M}월 매출`} value={short(m.sale)} unit="원" foot={<><Delta dark cur={m.sale} prev={pm.sale} /><span>전월 같은 기간</span></>} />
         <Tile code="PROFIT" label={`${M}월 수익`} value={short(m.profit)} unit="원" foot={<><Delta cur={m.profit} prev={pm.profit} /><span>전월 같은 기간</span></>} />
-        <Tile code="MARGIN" label="매익률" value={m.rate.toFixed(1)} unit="%" foot={<span>전월 <b style={{ fontFamily: MONO, color: NAVY }}>{pmAll.rate.toFixed(1)}%</b> · {(m.rate - pmAll.rate >= 0 ? "+" : "") + (m.rate - pmAll.rate).toFixed(1)}%p</span>} />
-        <Tile code="ORDERS" label="오더 건수" value={m.cnt.toLocaleString()} unit="건" foot={<span>건당 <b style={{ fontFamily: MONO, color: NAVY }}>{short(m.cnt ? m.sale / m.cnt : 0)}</b>원 · <Delta cur={m.cnt} prev={pm.cnt} /></span>} />
+        <Tile code="MARGIN" label="매익률" value={m.rate.toFixed(1)} unit="%" foot={<span>전월 <b style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", color: NAVY }}>{pmAll.rate.toFixed(1)}%</b> · {(m.rate - pmAll.rate >= 0 ? "+" : "") + (m.rate - pmAll.rate).toFixed(1)}%p</span>} />
+        <Tile code="ORDERS" label="오더 건수" value={m.cnt.toLocaleString()} unit="건" foot={<span>건당 <b style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", color: NAVY }}>{short(m.cnt ? m.sale / m.cnt : 0)}</b>원 · <Delta cur={m.cnt} prev={pm.cnt} /></span>} />
         <Tile code="FORECAST" label="월말 예상 매출" value={isCurrent && forecast ? short(forecast.sale) : short(m.sale)} unit="원" foot={isCurrent && forecast ? <span>예상 {forecast.count.toLocaleString()}건 · 수익 {short(forecast.profit)}</span> : <span>마감된 달</span>} />
       </div>
 
@@ -244,9 +244,9 @@ export default function RevenueDashboard({ rows = [], targetMonth, forecast, yea
             <ResponsiveContainer width="100%" height="100%">
               <ComposedChart data={daily} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
                 <CartesianGrid stroke="#EEF1F6" vertical={false} />
-                <XAxis dataKey="day" axisLine={false} tickLine={false} interval={1} tick={{ fontSize: 11, fill: "#6b7280", fontFamily: MONO }} />
-                <YAxis yAxisId="d" axisLine={false} tickLine={false} width={52} tick={{ fontSize: 11, fill: "#9ca3af", fontFamily: MONO }} tickFormatter={short} />
-                <YAxis yAxisId="c" orientation="right" axisLine={false} tickLine={false} width={58} tick={{ fontSize: 11, fill: "#9ca3af", fontFamily: MONO }} tickFormatter={short} />
+                <XAxis dataKey="day" axisLine={false} tickLine={false} interval={1} tick={{ fontSize: 11, fill: "#6b7280", fontFamily: MONO, fontVariantNumeric: "tabular-nums" }} />
+                <YAxis yAxisId="d" axisLine={false} tickLine={false} width={52} tick={{ fontSize: 11, fill: "#9ca3af", fontFamily: MONO, fontVariantNumeric: "tabular-nums" }} tickFormatter={short} />
+                <YAxis yAxisId="c" orientation="right" axisLine={false} tickLine={false} width={58} tick={{ fontSize: 11, fill: "#9ca3af", fontFamily: MONO, fontVariantNumeric: "tabular-nums" }} tickFormatter={short} />
                 <Tooltip contentStyle={tipStyle} formatter={(v, n) => [v == null ? "-" : `${Number(v).toLocaleString()}원`, { sale: "일 매출", cum: "이번 달 누적", prevCum: "전월 누적", profit: "일 수익" }[n] || n]} labelFormatter={(l) => `${M}월 ${l}일`} />
                 <Bar yAxisId="d" dataKey="sale" radius={[4, 4, 0, 0]} barSize={12}>
                   {daily.map((d) => <Cell key={d.day} fill={d.wkend ? "#C9D3E4" : "#9FB2D6"} />)}
@@ -269,7 +269,7 @@ export default function RevenueDashboard({ rows = [], targetMonth, forecast, yea
               {[[hasExcluded ? "순수 운송 매출" : "운송 매출", `${short(yearPureSale)}원`], ["연간 목표", yearTarget > 0 ? `${short(yearTarget)}원` : (onSaveTarget ? "오른쪽 위 '목표 설정'" : "관리자에게 설정 요청")], ["남은 금액", yearTarget > 0 ? `${short(Math.max(0, yearTarget - yearPureSale))}원` : "-"]].map(([k, v]) => (
                 <div key={k}>
                   <div style={{ fontSize: 12, fontWeight: 700, color: "#6b7280" }}>{k}</div>
-                  <div style={{ fontFamily: MONO, fontSize: 16, fontWeight: 800, color: "#0F1A30" }}>{v}</div>
+                  <div style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 16, fontWeight: 800, color: "#0F1A30" }}>{v}</div>
                 </div>
               ))}
             </div>
@@ -283,7 +283,7 @@ export default function RevenueDashboard({ rows = [], targetMonth, forecast, yea
             return (
               <div style={{ marginTop: 12 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12.5, fontWeight: 700, color: "#4b5563", marginBottom: 5 }}>
-                  <span>연도 진행 <b style={{ fontFamily: MONO }}>{(elapsedYear * 100).toFixed(0)}%</b></span>
+                  <span>연도 진행 <b style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{(elapsedYear * 100).toFixed(0)}%</b></span>
                   <span style={{ color: achieve >= elapsedYear ? NAVY : "#64748b" }}>{achieve >= elapsedYear ? "목표 페이스 이상" : "목표 페이스 미달"}</span>
                 </div>
                 <div style={{ position: "relative", height: 8, borderRadius: 99, background: "#E8EDF4" }}>
@@ -294,7 +294,7 @@ export default function RevenueDashboard({ rows = [], targetMonth, forecast, yea
                   {[["페이스 대비", `${gap >= 0 ? "+" : "−"}${short(Math.abs(gap))}원`], [monthsLeft > 0 ? `남은 ${monthsLeft}개월 월평균 필요` : "월평균 필요", monthsLeft > 0 ? `${short(perMonth)}원` : "-"]].map(([k, v]) => (
                     <div key={k} style={{ borderRadius: 10, padding: "8px 10px", background: "#F5F8FD", border: "1px solid #E3E8F0" }}>
                       <div style={{ fontSize: 11.5, fontWeight: 700, color: "#6b7280" }}>{k}</div>
-                      <div style={{ fontFamily: MONO, fontSize: 14.5, fontWeight: 800, color: "#0F1A30", marginTop: 1 }}>{v}</div>
+                      <div style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 14.5, fontWeight: 800, color: "#0F1A30", marginTop: 1 }}>{v}</div>
                     </div>
                   ))}
                 </div>
@@ -314,8 +314,8 @@ export default function RevenueDashboard({ rows = [], targetMonth, forecast, yea
                 <defs><linearGradient id="rvBar" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#2D4C82" /><stop offset="1" stopColor={NAVY} /></linearGradient></defs>
                 <CartesianGrid stroke="#EEF1F6" vertical={false} />
                 <XAxis dataKey="label" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: "#4b5563", fontWeight: 700 }} />
-                <YAxis yAxisId="s" axisLine={false} tickLine={false} width={60} tick={{ fontSize: 11, fill: "#9ca3af", fontFamily: MONO }} tickFormatter={short} />
-                <YAxis yAxisId="r" orientation="right" axisLine={false} tickLine={false} width={36} tick={{ fontSize: 11, fill: "#9ca3af", fontFamily: MONO }} tickFormatter={(v) => `${v}%`} />
+                <YAxis yAxisId="s" axisLine={false} tickLine={false} width={60} tick={{ fontSize: 11, fill: "#9ca3af", fontFamily: MONO, fontVariantNumeric: "tabular-nums" }} tickFormatter={short} />
+                <YAxis yAxisId="r" orientation="right" axisLine={false} tickLine={false} width={36} tick={{ fontSize: 11, fill: "#9ca3af", fontFamily: MONO, fontVariantNumeric: "tabular-nums" }} tickFormatter={(v) => `${v}%`} />
                 <Tooltip contentStyle={tipStyle} formatter={(v, n) => (n === "rate" ? [`${v}%`, "매익률"] : [`${Number(v).toLocaleString()}원`, "매출"])} />
                 <Bar yAxisId="s" dataKey="sale" radius={[6, 6, 0, 0]} barSize={26}>
                   {monthly.map((d) => <Cell key={d.label} fill={d.on ? NAVY : "#9FB2D6"} />)}
@@ -343,19 +343,19 @@ export default function RevenueDashboard({ rows = [], targetMonth, forecast, yea
 
       {/* 거래처 · 증감 · 담당자 */}
       <div className="kp-rv-stack" style={{ display: "grid", gridTemplateColumns: "minmax(0,1.35fr) minmax(0,1fr) minmax(0,1fr)", gap: 14 }}>
-        <RvCard code="TOP 10" title={`${M}월 거래처 매출 순위`} right={<span style={{ fontSize: 12.5, fontWeight: 700, color: "#6b7280" }}>신규 거래처 <b style={{ fontFamily: MONO, color: NAVY }}>{clients.newCnt}</b>곳</span>}>
+        <RvCard code="TOP 10" title={`${M}월 거래처 매출 순위`} right={<span style={{ fontSize: 12.5, fontWeight: 700, color: "#6b7280" }}>신규 거래처 <b style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", color: NAVY }}>{clients.newCnt}</b>곳</span>}>
           {clients.top.length === 0 ? <div style={{ padding: "30px 0", textAlign: "center", color: "#9ca3af" }}>이 달 매출이 없습니다</div> : (
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
               {clients.top.map((c, i) => (
                 <button key={c.name} type="button" onClick={() => onOpenClient?.(c.name)} style={{ display: "grid", gridTemplateColumns: "26px minmax(0,1fr) 84px 66px", alignItems: "center", gap: 8, border: "none", background: "transparent", padding: 0, cursor: onOpenClient ? "pointer" : "default", textAlign: "left" }}>
-                  <span style={{ fontFamily: MONO, fontSize: 13, fontWeight: 800, color: i < 3 ? NAVY : "#94A3B8" }}>{String(i + 1).padStart(2, "0")}</span>
+                  <span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 13, fontWeight: 800, color: i < 3 ? NAVY : "#94A3B8" }}>{String(i + 1).padStart(2, "0")}</span>
                   <span style={{ minWidth: 0 }}>
                     <span style={{ display: "block", fontSize: 14.5, fontWeight: 800, color: "#0F1A30", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{c.name}</span>
                     <span style={{ display: "block", height: 5, borderRadius: 99, background: "#EEF1F6", marginTop: 4, overflow: "hidden" }}>
                       <span style={{ display: "block", height: "100%", width: `${(c.v / clients.top[0].v) * 100}%`, background: i === 0 ? NAVY : "#6E8BC4", borderRadius: 99 }} />
                     </span>
                   </span>
-                  <span style={{ fontFamily: MONO, fontSize: 14, fontWeight: 800, color: "#0F1A30", textAlign: "right" }}>{short(c.v)}<span style={{ display: "block", fontSize: 11, color: "#9ca3af", fontWeight: 700 }}>{clients.total ? ((c.v / clients.total) * 100).toFixed(1) : 0}%</span></span>
+                  <span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 14, fontWeight: 800, color: "#0F1A30", textAlign: "right" }}>{short(c.v)}<span style={{ display: "block", fontSize: 11, color: "#9ca3af", fontWeight: 700 }}>{clients.total ? ((c.v / clients.total) * 100).toFixed(1) : 0}%</span></span>
                   <span style={{ textAlign: "right" }}><Delta cur={c.v} prev={c.p} /></span>
                 </button>
               ))}
@@ -370,7 +370,7 @@ export default function RevenueDashboard({ rows = [], targetMonth, forecast, yea
               {list.length === 0 ? <div style={{ fontSize: 13, color: "#9ca3af", padding: "4px 0 8px" }}>없음</div> : list.map((x) => (
                 <div key={x.name} style={{ display: "flex", justifyContent: "space-between", gap: 8, padding: "6px 0", borderTop: "1px solid #EEF1F6" }}>
                   <span style={{ fontSize: 14, fontWeight: 700, color: "#0F1A30", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{x.name}</span>
-                  <span style={{ fontFamily: MONO, fontSize: 13.5, fontWeight: 800, color: x.d >= 0 ? NAVY : "#64748b", whiteSpace: "nowrap" }}>{x.d >= 0 ? "+" : "−"}{short(Math.abs(x.d))}</span>
+                  <span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 13.5, fontWeight: 800, color: x.d >= 0 ? NAVY : "#64748b", whiteSpace: "nowrap" }}>{x.d >= 0 ? "+" : "−"}{short(Math.abs(x.d))}</span>
                 </div>
               ))}
             </div>
@@ -382,12 +382,12 @@ export default function RevenueDashboard({ rows = [], targetMonth, forecast, yea
           {staff.length === 0 ? <div style={{ padding: "30px 0", textAlign: "center", color: "#9ca3af" }}>데이터 없음</div> : staff.map((s, i) => (
             <div key={s.name} style={{ padding: "6px 0", borderTop: i ? "1px solid #EEF1F6" : "none" }}>
               <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
-                <span style={{ fontSize: 14, fontWeight: 800, color: "#0F1A30" }}><span style={{ fontFamily: MONO, color: i < 3 ? NAVY : "#94A3B8", marginRight: 7 }}>{String(i + 1).padStart(2, "0")}</span>{s.name}</span>
-                <span style={{ fontFamily: MONO, fontSize: 13.5, fontWeight: 800, color: "#0F1A30" }}>{short(s.sale)}</span>
+                <span style={{ fontSize: 14, fontWeight: 800, color: "#0F1A30" }}><span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", color: i < 3 ? NAVY : "#94A3B8", marginRight: 7 }}>{String(i + 1).padStart(2, "0")}</span>{s.name}</span>
+                <span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 13.5, fontWeight: 800, color: "#0F1A30" }}>{short(s.sale)}</span>
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 4 }}>
                 <div style={{ flex: 1, height: 5, borderRadius: 99, background: "#EEF1F6", overflow: "hidden" }}><div style={{ height: "100%", width: `${(s.sale / staffMax) * 100}%`, background: i === 0 ? NAVY : "#6E8BC4" }} /></div>
-                <span style={{ fontFamily: MONO, fontSize: 11.5, fontWeight: 700, color: "#6b7280", whiteSpace: "nowrap" }}>{s.cnt}건 · {s.sale ? ((s.profit / s.sale) * 100).toFixed(1) : "0.0"}%</span>
+                <span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 11.5, fontWeight: 700, color: "#6b7280", whiteSpace: "nowrap" }}>{s.cnt}건 · {s.sale ? ((s.profit / s.sale) * 100).toFixed(1) : "0.0"}%</span>
               </div>
             </div>
           ))}

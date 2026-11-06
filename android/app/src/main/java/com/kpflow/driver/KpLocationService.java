@@ -49,7 +49,7 @@ import java.util.concurrent.Executors;
  * 안드로이드가 웹 화면(WebView)을 멈추거나 느리게 만들어 위치 전송이 끊겼다.
  * 이 서비스는 화면과 상관없이 네이티브(안드로이드)에서 직접 GPS를 받고,
  * Firestore REST API로 drivers/{uid} 문서와 gps_tracks에 바로 기록한다.
- * 상단 알림("KP-Flow 운행 추적 중")이 떠 있는 동안 계속 동작한다.
+ * 상단 알림("LogisWeb 운행 추적 중")이 떠 있는 동안 계속 동작한다.
  */
 public class KpLocationService extends Service {
     private static final String TAG = "KpLocation";
@@ -160,7 +160,7 @@ public class KpLocationService extends Service {
         open.setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP);
         PendingIntent pi = PendingIntent.getActivity(this, 0, open, PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
         return new NotificationCompat.Builder(this, CHANNEL_ID)
-                .setContentTitle("KP-Flow 운행 추적 중")
+                .setContentTitle("LogisWeb 운행 추적 중")
                 .setContentText("위치를 배차 담당자에게 실시간 전송하고 있습니다")
                 .setSmallIcon(getApplicationInfo().icon)
                 .setOngoing(true)

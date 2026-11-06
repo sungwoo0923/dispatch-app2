@@ -1,7 +1,8 @@
 // ======================= src/App.jsx =======================
 
 import React, { useState, useEffect, useRef } from "react";
-import { setTenant, setServerFilter, setPreviewMode } from "./fsTenant";
+import { setTenant, setServerFilter, setPreviewMode, isPreviewMode } from "./fsTenant";
+import { setUsageMeter } from "./usageMeter"; // 💰 2026-11-04 회사별 서버 사용량 표본
 import { setPreviewPlan } from "./plans";
 import { installEscClose } from "./kpDialog";
 installEscClose();
@@ -24,6 +25,7 @@ import {
 } from "./loginSessions";
 import { LoginManagerModal } from "./LoginManager";
 import { PcVerifyGate, isPcMfaPassed } from "./MfaModal";
+import { DRIVER_BUSY_EVENT, isDriverBusy } from "./driver/driverLoginErrors"; // ⭐ 2026-11-05 기사 로그인 확인 중 표시
 import { doc, onSnapshot, addDoc, collection, serverTimestamp, query, orderBy, limit, getDocs, getDoc, deleteDoc } from "firebase/firestore";
 
 // 역할별 대형 화면은 지연 로딩(code-splitting)한다 — 이전에는 전부 하나의 번들로
@@ -60,6 +62,7 @@ const DriverRegister = React.lazy(() => import("./driver/DriverRegister"));
 
 import Login from "./Login";
 import KpLogoMark, { KP_MARK_CSS } from "./KpLogoMark";
+import { LogisWordmark } from "./brand";
 import TransportLogin from "./TransportLogin";
 const Signup = React.lazy(() => import("./Signup"));
 import ShipperLogin from "./shipper/ShipperLogin";
@@ -113,9 +116,8 @@ function isTabletDevice() {
   return isIpad || isAndroidTablet || (isMidScreen && hasTouch);
 }
 
-// 🔷 첫 화면(스플래시) — 네이비 배경, 디지털 로고 마크, 얇은 진행 막대
+// 🔷 첫 화면(스플래시) — 네이비 배경, LogisWeb 마크 + 글자 로고(흰색·하늘색), 얇은 진행 막대
 function KpSplash() {
-  const MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
   // ⭐ 2026-11-03 새 버전 받는 중이면 안내(index.html 첫 화면과 같은 문구) · 아니면 2.5초 넘게 걸릴 때만 "불러오는 중"
   const upd = typeof window !== "undefined" && window.__kpUpdating === true;
   const [slow, setSlow] = React.useState(false);
@@ -129,8 +131,7 @@ function KpSplash() {
       `}</style>
       <div style={{ position: "absolute", left: "50%", top: "50%", width: 360, height: 360, transform: "translate(-50%,-58%)", borderRadius: "50%", background: "radial-gradient(circle, rgba(110,149,232,0.22), transparent 65%)" }} />
       <div style={{ position: "relative", filter: "drop-shadow(0 14px 30px rgba(0,0,0,0.45))" }}><KpLogoMark size={92} /></div>
-      <div style={{ position: "relative", marginTop: 22, color: "#fff", fontFamily: MONO, fontWeight: 900, fontSize: 22, letterSpacing: "0.32em", paddingLeft: "0.32em", animation: "kpSplashUp .45s ease .15s both" }}>KP-FLOW</div>
-      <div style={{ position: "relative", marginTop: 6, color: "rgba(207,224,255,0.45)", fontWeight: 700, fontSize: 10.5, letterSpacing: "0.3em", paddingLeft: "0.3em", animation: "kpSplashUp .45s ease .22s both" }}>LOGISTICS DISPATCH SYSTEM</div>
+      <div style={{ position: "relative", marginTop: 24, animation: "kpSplashUp .45s ease .15s both" }}><LogisWordmark height={20} tag /></div>
       <div style={{ position: "relative", marginTop: 28, width: 120, height: 2, borderRadius: 2, background: "rgba(255,255,255,0.08)", overflow: "hidden", animation: "kpSplashUp .45s ease .3s both" }}>
         <div style={{ width: "40%", height: "100%", borderRadius: 2, background: "linear-gradient(90deg, transparent, #CFE0FF, transparent)", animation: "kpSplashBar 1.1s ease-in-out infinite" }} />
       </div>
@@ -155,7 +156,7 @@ function PreviewApp() {
   const co = (qs.get("co") || "").trim() || "우리 회사";
   const plan = PREVIEW_PLAN_NAME[qs.get("plan")] ? qs.get("plan") : "standard";
   // 개발 중에만 — 부서 화면(경리 test · 인사 hrManager) 미리보기
-  const pvRole = import.meta.env.DEV && ["test", "hrManager", "hrAcct", "user", "viewer"].includes(qs.get("role")) ? qs.get("role") : "admin";
+  const pvRole = import.meta.env.DEV && ["test", "hrManager", "hrAcct", "allMgr", "acctStaff", "hrStaff", "legalMgr", "legalStaff", "devMgr", "devStaff", "user", "viewer"].includes(qs.get("role")) ? qs.get("role") : "admin";
   const pvExec = import.meta.env.DEV && qs.get("role") === "exec";
   setPreviewMode(true); setPreviewPlan(plan); setTenant(co);
   const fakeUser = React.useMemo(() => ({ uid: "preview", email: "preview@kp-flow.app", displayName: "둘러보기" }), []);
@@ -189,6 +190,17 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [approved, setApproved] = useState(false);
   const [userCompany, setUserCompany] = useState("");
+  // ⭐ 2026-11-05 기사 로그인/가입 화면이 계정을 확인하는 동안(잠깐 로그인했다가 이름·회사가 다르면 다시 로그아웃) —
+  //  예전엔 그 사이 users 문서가 먼저 도착해 /driver-home으로 넘겼다가 로그아웃되며 /driver-login이 새로 그려져
+  //  실패 안내가 사라졌다("새로고침되고 아무 말 없이 로그인 화면"). 확인이 끝날 때까지 기사 화면 이동을 멈춘다.
+  const [driverBusy, setDriverBusyState] = useState(() => isDriverBusy());
+  useEffect(() => {
+    const h = (e) => setDriverBusyState(!!e.detail);
+    window.addEventListener(DRIVER_BUSY_EVENT, h);
+    return () => window.removeEventListener(DRIVER_BUSY_EVENT, h);
+  }, []);
+  // ⭐ 2026-11-05 이 계정(uid)의 users 문서를 한 번이라도 받았는지 — 받기 전엔 /driver-home에서 로그인 화면으로 돌려보내지 않는다
+  const [roleFor, setRoleFor] = useState(null);
   // ⭐ 블라인드 오더 노출 판정용 — 렌더 중 바로 반영(하위 화면 첫 렌더 전에 알아야 함)
   setBlindViewerRole(role, user?.email);
   // ⭐ 자동 블라인드 설정 — 최고관리자만 구독(다른 사용자는 읽을 권한도 없음)
@@ -240,7 +252,7 @@ export default function App() {
     const run = async () => {
       // 로그인 화면이 회사코드 등을 확인하는 중(잠깐 로그인했다가 다시 로그아웃할 수 있음)이면 끝날 때까지 기다린다
       for (let i = 0; i < 60; i++) {
-        if (sessionStorage.getItem("transportValidating") !== "true" && sessionStorage.getItem("shipperValidating") !== "true") break;
+        if (sessionStorage.getItem("transportValidating") !== "true" && sessionStorage.getItem("shipperValidating") !== "true" && !isDriverBusy()) break;
         await new Promise((r) => setTimeout(r, 500));
       }
       if (cancelled || auth.currentUser?.uid !== user.uid) return;
@@ -307,11 +319,22 @@ export default function App() {
   // ★ 태블릿 감지 상태
   const [isTablet, setIsTablet] = useState(false);
 
+  // ⭐ 2026-11-04 폴더블·분할화면 — 휴대폰 화면(MobileApp)을 그리는 중이면 "태블릿 viewport(폭 1200 축소 보기)"를 걸지 않는다.
+  //  안드로이드 태블릿 UA(…Android… "Mobile" 없음)는 isSmartPhone()이 참이라 MobileApp이 뜨는데, 동시에 태블릿 판정도 참이어서
+  //  아래 이펙트가 viewport를 width=1200으로 바꿔(분할화면에서는 0.3배 축소) 모바일 화면이 깨알같이/겹쳐 보일 수 있었다.
+  //  또 분할화면에 들어가거나 나와서 화면 폭이 768px을 넘나들면(태블릿·PC UA) 모바일↔PC 화면을 다시 고른다(유튜브처럼).
+  const [, setPhoneLayout] = useState(() => isSmartPhone());
   useEffect(() => {
-    const checkTablet = () => setIsTablet(isTabletDevice());
+    let t = null;
+    const checkTablet = () => setIsTablet(isTabletDevice() && !isSmartPhone());
+    const onResize = () => {
+      clearTimeout(t);
+      // 화면 다시 고르기는 터치 기기(폴더블·태블릿)만 — PC에서 창 크기를 줄여도 작성 중인 화면이 바뀌지 않게
+      t = setTimeout(() => { checkTablet(); if ((navigator.maxTouchPoints || 0) > 1) setPhoneLayout(isSmartPhone()); }, 300);
+    };
     checkTablet();
-    window.addEventListener("resize", checkTablet);
-    return () => window.removeEventListener("resize", checkTablet);
+    window.addEventListener("resize", onResize);
+    return () => { clearTimeout(t); window.removeEventListener("resize", onResize); };
   }, []);
 
   // ★ 스플래시 후 데스크톱 viewport 복원 (index.html 기본값: user-scalable=no)
@@ -660,6 +683,8 @@ export default function App() {
         if (snap.exists()) {
           const data = snap.data();
           if (data.employmentStatus === "퇴사" && !isMasterEmail) {
+            // ⭐ 2026-11-05 기사 로그인 화면이 확인 중이면 그 화면이 "퇴사 처리된 계정" 안내를 직접 띄운다(여기서 alert·로그아웃하면 안내가 사라짐)
+            if (isDriverBusy() && data.role === "driver") { setRole(null); setApproved(false); setRoleFor(u.uid); setLoading(false); return; }
             alert("퇴사 처리된 계정입니다. 관리자에게 문의해주세요.");
             signOut(auth);
             setUser(null);
@@ -702,12 +727,15 @@ export default function App() {
             // 비어 있으면 회사관리·매출관리 등이 어느 회사인지 몰라 "로딩 중"에서 멈췄다.
             const loginCompany = localStorage.getItem("loginCompany") || data.companyName || DEFAULT_COMPANY || "";
             setTenant(loginCompany);
+            setUsageMeter({ enabled: false }); // 최고관리자 사용량은 회사 원가에 넣지 않는다
             setUserCompany(loginCompany);
             safeLocalSet("userCompany", loginCompany);
             safeLocalSet("loginCompany", loginCompany);
           } else {
             // 🏢 운송사 직원·기사만 자기 회사 데이터로 거른다(화주사·배차마당은 다른 화면 구조라 제외)
             setTenant(["shipper", "cafeUser"].includes(dataRole) ? "" : (data.companyName || DEFAULT_COMPANY));
+            // 💰 2026-11-04 회사별 서버 사용량 표본(관리센터 비용·손익) — 승인된 운송사 직원·기사만(화주사·배차마당·둘러보기 제외)
+            setUsageMeter({ company: data.companyName || DEFAULT_COMPANY, enabled: !["shipper", "cafeUser"].includes(dataRole) && data.approved !== false && !isPreviewMode() });
             setUserCompany(data.companyName || "");
             safeLocalSet("userCompany", data.companyName || "");
           }
@@ -733,12 +761,14 @@ export default function App() {
           safeLocalSet("userCompany", loginCompany); safeLocalSet("loginCompany", loginCompany); safeLocalSet("role", "totalMaster");
         } else {
           setTenant("");
+          setUsageMeter({ enabled: false });
           setRole(null);
           setApproved(false);
           setUserCompany("");
         }
+        setRoleFor(u.uid);
         setLoading(false);
-      }, () => { if (auth.currentUser?.uid === u.uid) setLoading(false); });
+      }, () => { if (auth.currentUser?.uid === u.uid) { setRoleFor(u.uid); setLoading(false); } });
       unsubUserRef.current = unsubUser;
     });
     return () => { unsub(); try { unsubUserRef.current?.(); } catch { /* 무시 */ } };
@@ -940,15 +970,15 @@ export default function App() {
 
           <Route
             path="/driver-login"
-            element={user && role === "driver" && approved ? <Navigate to="/driver-home" replace /> : <DriverLogin />}
+            element={user && role === "driver" && approved && !driverBusy ? <Navigate to="/driver-home" replace /> : <DriverLogin />}
           />
           <Route
             path="/driver-register"
-            element={user && role === "driver" && approved ? <Navigate to="/driver-home" replace /> : <DriverRegister />}
+            element={user && role === "driver" && approved && !driverBusy ? <Navigate to="/driver-home" replace /> : <DriverRegister />}
           />
           <Route
             path="/driver-home"
-            element={user && role === "driver" && approved ? <DriverHome /> : <Navigate to="/driver-login" replace />}
+            element={user && role === "driver" && approved ? <DriverHome /> : (user && roleFor !== user.uid ? routeFallback : <Navigate to="/driver-login" replace />)}
           />
 
           <Route
@@ -977,7 +1007,8 @@ export default function App() {
           <Route path="/upload" element={<UploadPage />} />
           <Route path="/driver-upload" element={<DriverSearchPage />} />
           <Route path="/no-access" element={<NoAccess />} />
-          <Route path="/preview" element={<PreviewApp />} />
+          {/* ⭐ 2026-11-04 승인 전 둘러보기 없앰 — 배포 화면에서는 로그인으로 보낸다(개발 서버 점검용으로만 남김) */}
+          <Route path="/preview" element={import.meta.env.DEV ? <PreviewApp /> : <Navigate to="/login" replace />} />
 
           <Route
             path="*"

@@ -12,6 +12,7 @@ import {
 import { doc, getDoc } from "firebase/firestore";
 import { useNavigate, Link } from "react-router-dom";
 import { Loader2 } from "lucide-react";
+import { LogisMark, LogisWordmark, LogisTag } from "../brand"; // 🔷 2026-11-04 LogisWeb 로고
 
 const TOTAL_MASTER_EMAIL = "tjddnqkf@naver.com";
 
@@ -206,7 +207,7 @@ export default function ShipperLogin() {
   const [now, setNow] = useState(() => new Date());
   useEffect(() => { const t = setInterval(() => setNow(new Date()), 1000); return () => clearInterval(t); }, []);
   const pad = (n) => String(n).padStart(2, "0");
-  const MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
+  const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
   const fieldIcon = {
     code: <><rect x="3" y="11" width="18" height="10" rx="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" /></>,
     company: <><path d="M3 21h18" /><path d="M5 21V7l7-4 7 4v14" /><path d="M9 9h1M14 9h1M9 13h1M14 13h1M9 17h1M14 17h1" /></>,
@@ -246,9 +247,9 @@ export default function ShipperLogin() {
         <div className="absolute inset-0 opacity-[0.07]" style={{ backgroundImage: "linear-gradient(#fff 1px, transparent 1px), linear-gradient(90deg, #fff 1px, transparent 1px)", backgroundSize: "44px 44px" }} />
         <div className="absolute -right-40 -top-40 w-[520px] h-[520px] rounded-full" style={{ background: "radial-gradient(circle, rgba(110,149,232,0.22), transparent 65%)" }} />
         <div className="relative flex items-center gap-3">
-          <img src="/icons/sflow-icon.png" alt="" className="w-11 h-11 rounded-[13px] ring-1 ring-white/20" />
+          <LogisMark size={46} />
           <div>
-            <div className="text-[18px] font-black tracking-[0.18em]">KP-FLOW</div>
+            <div className="mb-2"><LogisWordmark height={16} /></div>
             <div className="text-[10.5px] font-bold tracking-[0.3em] text-white/45">SHIPPER PORTAL</div>
           </div>
         </div>
@@ -256,7 +257,7 @@ export default function ShipperLogin() {
           <div className="flex items-center gap-2 text-[11.5px] font-extrabold tracking-[0.28em] text-[#8FB0F0]">
             <span className="w-1.5 h-1.5 rounded-full bg-[#6E95E8] kp-pulse" /> SYSTEM ONLINE
           </div>
-          <div className="mt-4 font-black leading-none tabular-nums" style={{ fontSize: 88, letterSpacing: "-0.02em", fontFamily: MONO }}>
+          <div className="mt-4 font-black leading-none tabular-nums" style={{ fontSize: 88, letterSpacing: "-0.02em", fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>
             {pad(now.getHours())}<span className="kp-pulse text-white/40">:</span>{pad(now.getMinutes())}
             <span className="text-[30px] text-white/35 ml-2">{pad(now.getSeconds())}</span>
           </div>
@@ -267,7 +268,7 @@ export default function ShipperLogin() {
           <div className="mt-3 text-[14px] text-white/50 leading-relaxed">오더 요청 · 배차 현황 · 기사 정보 · 정산을<br />화주사 전용 화면에서 한 번에.</div>
         </div>
         <div className="relative flex items-center gap-6 text-[11px] font-bold tracking-[0.2em] text-white/35">
-          <span>SECURE · TLS</span><span>REAL-TIME SYNC</span><span>© KP-FLOW</span>
+          <span>SECURE · TLS</span><span>REAL-TIME SYNC</span><span>© LogisWeb</span>
         </div>
       </div>
 
@@ -275,8 +276,8 @@ export default function ShipperLogin() {
       <div className="flex-1 min-w-0 flex items-center justify-center px-4 py-10 relative">
         <div className="kp-login-in w-full max-w-[420px]">
           <div className="lg:hidden flex flex-col items-center mb-7">
-            <img src="/icons/sflow-icon.png" alt="" className="w-16 h-16 rounded-[18px] shadow-[0_10px_24px_rgba(15,26,48,0.25)]" />
-            <div className="mt-3 text-[20px] font-black tracking-[0.18em] text-[#0F1A30]">KP-FLOW</div>
+            <LogisMark size={64} style={{ filter: "drop-shadow(0 10px 24px rgba(15,26,48,0.25))" }} />
+            <div className="mt-3 mb-1.5"><LogisTag height={15} chip /></div>
             <div className="text-[10.5px] font-bold tracking-[0.3em] text-[#9AA9C3]">SHIPPER PORTAL</div>
           </div>
 
@@ -286,7 +287,7 @@ export default function ShipperLogin() {
             <p className="text-[13.5px] text-[#7A879C] mt-1 mb-7">승인 후 발급된 회사코드로 로그인하세요</p>
 
             {!isTotalMasterInput && field("code", "회사코드", (
-              <input type="text" name="shipper-code" autoComplete="off" placeholder="승인 후 발급된 코드" value={companyCode} onChange={(e) => setCompanyCode(e.target.value)} onKeyDown={handleKeyDown} className={`${inputCls} ${companyCode ? "tracking-[0.12em] font-mono" : ""}`} />
+              <input type="text" name="shipper-code" autoComplete="off" placeholder="승인 후 발급된 코드" value={companyCode} onChange={(e) => setCompanyCode(e.target.value)} onKeyDown={handleKeyDown} className={`${inputCls} ${companyCode ? "tracking-[0.12em] tabular-nums" : ""}`} />
             ))}
             {!isTotalMasterInput && field("company", "회사명", (
               <input type="text" name="shipper-company" autoComplete="off" placeholder="가입한 회사명" value={companyName} onChange={(e) => setCompanyName(e.target.value)} onKeyDown={handleKeyDown} className={inputCls} />
@@ -333,7 +334,7 @@ export default function ShipperLogin() {
               <Link to="/login" className="h-11 rounded-xl border border-[#E3E8F0] text-[#5B6B85] text-[13.5px] font-bold flex items-center justify-center hover:bg-[#F5F7FB] transition">다른 유형 로그인</Link>
             </div>
           </div>
-          <div className="text-center mt-5 text-[11px] font-bold tracking-[0.2em] text-[#B4BFD0]">KP-FLOW · SHIPPER</div>
+          <div className="flex justify-center mt-5 text-[11px] font-bold tracking-[0.2em] text-[#B4BFD0]"><LogisTag height={7.5} chip text="SHIPPER" /></div>
         </div>
       </div>
 
@@ -348,7 +349,7 @@ export default function ShipperLogin() {
                 <span className="w-1.5 h-1.5 rounded-full bg-[#6E95E8] kp-pulse" /> AUTHENTICATED
               </div>
               <div className="mt-3 text-[24px] font-black tracking-tight">로그인 완료</div>
-              <div className="text-[13px] text-white/55 mt-0.5">{companyName || "KP-FLOW"}</div>
+              <div className="text-[13px] text-white/55 mt-0.5">{companyName || "LogisWeb"}</div>
               <div className="mt-7 flex flex-col items-center">
                 <div className="relative w-[148px] h-[148px]">
                   <svg width="148" height="148" className="-rotate-90">
@@ -359,7 +360,7 @@ export default function ShipperLogin() {
                     <defs><linearGradient id="kpShipRing" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stopColor="#8FB0F0" /><stop offset="100%" stopColor="#ffffff" /></linearGradient></defs>
                   </svg>
                   <div className="absolute inset-0 flex flex-col items-center justify-center">
-                    <div key={countdown} className="kp-login-in font-black tabular-nums leading-none" style={{ fontSize: 60, fontFamily: MONO }}>{pad(countdown)}</div>
+                    <div key={countdown} className="kp-login-in font-black tabular-nums leading-none" style={{ fontSize: 60, fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{pad(countdown)}</div>
                     <div className="text-[10px] font-extrabold tracking-[0.3em] text-white/40 mt-1">SEC</div>
                   </div>
                 </div>

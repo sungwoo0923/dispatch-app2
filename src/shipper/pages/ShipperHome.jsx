@@ -4,6 +4,7 @@ import { collection, query, where, onSnapshot } from "firebase/firestore";
 import { doc, getDoc } from "firebase/firestore";
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Line, ComposedChart, Bar, BarChart, Cell } from "recharts";
 import { HD_MONO as MONO, HD_C as C, HD_CSS, Clock, Panel, Delta, Tile, DarkTip, Gauge, Seg, hdShort as short } from "../../HomeDeck";
+import { LogisTag } from "../../brand"; // 🔷 2026-11-04 LogisWeb 로고
 
 const getTodayKST = () => {
   const now = new Date();
@@ -218,20 +219,20 @@ export default function ShipperHome() {
       <div style={{ position: "relative", display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 20, flexWrap: "wrap", marginBottom: 18 }}>
         <div>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <span style={{ fontFamily: MONO, fontSize: 11.5, fontWeight: 800, letterSpacing: "0.28em", color: C.glow }}>KP-FLOW · SHIPPER DECK</span>
-            <span style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "2px 9px", borderRadius: 99, border: "1px solid rgba(143,176,240,.35)", fontFamily: MONO, fontSize: 10.5, fontWeight: 800, letterSpacing: "0.14em", color: C.hi }}>
+            <span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 11.5, fontWeight: 800, letterSpacing: "0.28em", color: C.glow }}><LogisTag height={8.5} text="SHIPPER DECK" /></span>
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "2px 9px", borderRadius: 99, border: "1px solid rgba(143,176,240,.35)", fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 10.5, fontWeight: 800, letterSpacing: "0.14em", color: C.hi }}>
               <span className="hd-pulse" style={{ width: 6, height: 6, borderRadius: "50%", background: C.hi, boxShadow: `0 0 8px ${C.glow}` }} />LIVE
             </span>
             {company && <span style={{ padding: "2px 10px", borderRadius: 99, background: "rgba(143,176,240,.12)", fontSize: 12, fontWeight: 800, color: C.hi }}>{company}</span>}
           </div>
           <h1 style={{ margin: "8px 0 0", fontSize: 28, fontWeight: 900, letterSpacing: "-0.02em", color: "#fff" }}>{myName ? `${myName}님, ${hello}` : hello}</h1>
           <p style={{ margin: "6px 0 0", fontSize: 15, fontWeight: 600, color: C.sub }}>
-            오늘 상차 <b style={{ color: "#fff", fontFamily: MONO }}>{kpi.당일전체}</b>건 · 배차완료 <b style={{ color: "#fff", fontFamily: MONO }}>{kpi.당일완료}</b>건 · 배차 대기 <b style={{ color: "#fff", fontFamily: MONO }}>{kpi.당일대기}</b>건
+            오늘 상차 <b style={{ color: "#fff", fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{kpi.당일전체}</b>건 · 배차완료 <b style={{ color: "#fff", fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{kpi.당일완료}</b>건 · 배차 대기 <b style={{ color: "#fff", fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{kpi.당일대기}</b>건
           </p>
         </div>
         <div style={{ textAlign: "right" }}>
           <Clock />
-          <div style={{ marginTop: 6, fontFamily: MONO, fontSize: 12, fontWeight: 700, letterSpacing: "0.16em", color: C.dim }}>{dateText} · KST</div>
+          <div style={{ marginTop: 6, fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 12, fontWeight: 700, letterSpacing: "0.16em", color: C.dim }}>{dateText} · KST</div>
         </div>
       </div>
 
@@ -240,13 +241,13 @@ export default function ShipperHome() {
         <Tile primary code="TODAY" label="오늘 상차" value={kpi.당일전체.toLocaleString()} unit="건" spark={sparkC} sparkId="shS1"
           foot={<><Delta cur={t0[1]} prev={t1[1]} /><span>어제 대비</span></>} />
         <Tile code="ASSIGNED" label="오늘 배차완료" value={kpi.당일완료.toLocaleString()} unit="건" spark={sparkD} sparkId="shS2"
-          foot={<span>완료율 <b style={{ fontFamily: MONO, color: C.hi }}>{todayPct}%</b></span>} />
+          foot={<span>완료율 <b style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", color: C.hi }}>{todayPct}%</b></span>} />
         <Tile code="WAITING" label="배차 대기" value={waitingAll.toLocaleString()} unit="건"
-          foot={<span>전체 오더의 <b style={{ fontFamily: MONO, color: C.hi }}>{pct(waitingAll, kpi.전체)}%</b> · 차량 미배정</span>} />
+          foot={<span>전체 오더의 <b style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", color: C.hi }}>{pct(waitingAll, kpi.전체)}%</b> · 차량 미배정</span>} />
         <Tile code="MONTH" label="이번 달 운송료" value={short(mNow[0])} unit="원" spark={sparkS} sparkId="shS3"
           foot={<><Delta cur={mNow[0]} prev={mPrev[0]} /><span>전월 같은 기간 대비</span></>} />
         <Tile code="YEAR" label="올해 운송료" value={short(yNow[0])} unit="원"
-          foot={<span>누적 <b style={{ fontFamily: MONO, color: C.hi }}>{yNow[1].toLocaleString()}</b>건 · 건당 <b style={{ fontFamily: MONO, color: C.hi }}>{short(yNow[1] ? yNow[0] / yNow[1] : 0)}</b></span>} />
+          foot={<span>누적 <b style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", color: C.hi }}>{yNow[1].toLocaleString()}</b>건 · 건당 <b style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", color: C.hi }}>{short(yNow[1] ? yNow[0] / yNow[1] : 0)}</b></span>} />
       </div>
 
       {/* ── 운송료 추이 + 게이지 ── */}
@@ -256,7 +257,7 @@ export default function ShipperHome() {
             {[["기간 운송료", Math.round(trendSum[0]).toLocaleString() + "원"], ["건수", `${trendSum[1].toLocaleString()}건`], ["건당 평균", short(trendSum[1] ? trendSum[0] / trendSum[1] : 0)], ["최고", `${peak.label} · ${short(peak.s)}`]].map(([k, v]) => (
               <div key={k}>
                 <div style={{ fontSize: 12, fontWeight: 700, color: C.dim }}>{k}</div>
-                <div style={{ fontFamily: MONO, fontSize: 16.5, fontWeight: 800, color: "#fff" }}>{v}</div>
+                <div style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 16.5, fontWeight: 800, color: "#fff" }}>{v}</div>
               </div>
             ))}
             <div style={{ marginLeft: "auto", display: "flex", gap: 14, alignItems: "center", fontSize: 12, fontWeight: 700, color: C.sub }}>
@@ -272,9 +273,9 @@ export default function ShipperHome() {
                   <linearGradient id="shBar" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={C.hi} /><stop offset="100%" stopColor="#2D4C82" /></linearGradient>
                 </defs>
                 <CartesianGrid stroke="rgba(143,176,240,.08)" vertical={false} />
-                <XAxis dataKey="label" axisLine={false} tickLine={false} tick={{ fontSize: 11.5, fill: "rgba(207,224,255,.5)", fontFamily: MONO }} interval={range === "30d" ? 3 : 0} dy={6} />
-                <YAxis yAxisId="s" axisLine={false} tickLine={false} width={46} tick={{ fontSize: 11, fill: "rgba(207,224,255,.4)", fontFamily: MONO }} tickFormatter={short} />
-                <YAxis yAxisId="c" orientation="right" axisLine={false} tickLine={false} width={30} allowDecimals={false} tick={{ fontSize: 11, fill: "rgba(207,224,255,.3)", fontFamily: MONO }} />
+                <XAxis dataKey="label" axisLine={false} tickLine={false} tick={{ fontSize: 11.5, fill: "rgba(207,224,255,.5)", fontFamily: MONO, fontVariantNumeric: "tabular-nums" }} interval={range === "30d" ? 3 : 0} dy={6} />
+                <YAxis yAxisId="s" axisLine={false} tickLine={false} width={46} tick={{ fontSize: 11, fill: "rgba(207,224,255,.4)", fontFamily: MONO, fontVariantNumeric: "tabular-nums" }} tickFormatter={short} />
+                <YAxis yAxisId="c" orientation="right" axisLine={false} tickLine={false} width={30} allowDecimals={false} tick={{ fontSize: 11, fill: "rgba(207,224,255,.3)", fontFamily: MONO, fontVariantNumeric: "tabular-nums" }} />
                 <Tooltip content={<DarkTip />} cursor={{ stroke: "rgba(143,176,240,.35)", strokeDasharray: "3 3" }} />
                 {range === "year" ? (
                   <Bar yAxisId="s" dataKey="s" name="운송료" radius={[6, 6, 0, 0]} barSize={22}>
@@ -295,7 +296,7 @@ export default function ShipperHome() {
             {[["오늘 운송료", short(t0[0])], ["이번 달 건수", `${mNow[1].toLocaleString()}건`], ["월 배차완료", `${mNow[2].toLocaleString()}건`], ["누적 오더", `${kpi.전체.toLocaleString()}건`]].map(([k, v]) => (
               <div key={k} style={{ borderRadius: 11, padding: "9px 11px", background: "rgba(255,255,255,.035)", border: `1px solid ${C.line}` }}>
                 <div style={{ fontSize: 12, fontWeight: 700, color: C.dim }}>{k}</div>
-                <div style={{ fontFamily: MONO, fontSize: 16, fontWeight: 800, color: "#fff", marginTop: 2 }}>{v}</div>
+                <div style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 16, fontWeight: 800, color: "#fff", marginTop: 2 }}>{v}</div>
               </div>
             ))}
           </div>
@@ -303,7 +304,7 @@ export default function ShipperHome() {
             <div key={l} style={{ marginTop: 12 }}>
               <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12.5, fontWeight: 700, color: C.sub, marginBottom: 6 }}>
                 <span>{l} 배차 진행</span>
-                <span style={{ fontFamily: MONO, color: "#fff" }}>{a}/{b} · {pct(a, b)}%</span>
+                <span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", color: "#fff" }}>{a}/{b} · {pct(a, b)}%</span>
               </div>
               <div style={{ height: 8, borderRadius: 99, background: "rgba(143,176,240,.12)", overflow: "hidden" }}>
                 <div style={{ width: `${pct(a, b)}%`, height: "100%", borderRadius: 99, background: "linear-gradient(90deg,#2D4C82,#CFE0FF)", boxShadow: `0 0 10px ${C.glow}`, transition: "width .6s" }} />
@@ -315,7 +316,7 @@ export default function ShipperHome() {
 
       {/* ── 아래 줄 — 오늘 오더판 / 주요 노선 / 요일 · 차종 ── */}
       <div style={{ position: "relative", display: "grid", gridTemplateColumns: "minmax(0,1.9fr) minmax(0,1fr) minmax(0,1fr)", gap: 14 }}>
-        <Panel code="BOARD" title="오늘 오더판" right={<span style={{ fontFamily: MONO, fontSize: 12, color: C.dim }}>{today} · {recent.length}건</span>}>
+        <Panel code="BOARD" title="오늘 오더판" right={<span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 12, color: C.dim }}>{today} · {recent.length}건</span>}>
           {recent.length === 0 ? (
             <div style={{ height: 220, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", color: C.dim }}>
               <div style={{ fontSize: 15, fontWeight: 800, color: C.sub }}>오늘 상차 예정 오더가 없습니다</div>
@@ -330,13 +331,13 @@ export default function ShipperHome() {
                 <tbody>
                   {recent.map((o) => (
                     <tr key={o.id}>
-                      <td className="hd-sub" style={{ ...td, fontFamily: MONO }}>{o.상차시간 || "-"}</td>
+                      <td className="hd-sub" style={{ ...td, fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{o.상차시간 || "-"}</td>
                       <td style={{ ...td, textAlign: "left", fontWeight: 800, maxWidth: 240, overflow: "hidden", textOverflow: "ellipsis" }}>{o.상차지명 || "-"} <span style={{ color: C.glow }}>→</span> {o.하차지명 || "-"}</td>
                       <td className="hd-sub" style={td}>{`${o.차량톤수 || o.톤수 || ""} ${o.차량종류 || ""}`.trim() || "-"}</td>
                       <td style={{ ...td, fontWeight: 800 }}>{o.차량번호 || "-"}</td>
                       <td style={td}>{o.이름 || "-"}</td>
-                      <td className="hd-sub" style={{ ...td, fontFamily: MONO }}>{formatPhoneDisplay(o.전화번호)}</td>
-                      <td style={{ ...td, fontFamily: MONO, fontWeight: 800 }}>{fare(o) ? fare(o).toLocaleString() : "-"}</td>
+                      <td className="hd-sub" style={{ ...td, fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{formatPhoneDisplay(o.전화번호)}</td>
+                      <td style={{ ...td, fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontWeight: 800 }}>{fare(o) ? fare(o).toLocaleString() : "-"}</td>
                       <td style={td}>{chip(o)}</td>
                     </tr>
                   ))}
@@ -346,22 +347,22 @@ export default function ShipperHome() {
           )}
         </Panel>
 
-        <Panel code="ROUTES" title="주요 노선" right={<span style={{ fontFamily: MONO, fontSize: 11.5, color: C.dim }}>최근 30일</span>}>
+        <Panel code="ROUTES" title="주요 노선" right={<span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 11.5, color: C.dim }}>최근 30일</span>}>
           {ops.routes.length === 0 ? <div style={{ color: C.dim, fontSize: 13, padding: "30px 0", textAlign: "center" }}>데이터 없음</div> : (
             <div style={{ display: "flex", flexDirection: "column", gap: 11 }}>
               {ops.routes.map((r, i) => (
                 <div key={r.k}>
                   <div style={{ display: "flex", justifyContent: "space-between", gap: 8, fontSize: 13, fontWeight: 700 }}>
                     <span style={{ display: "flex", gap: 8, minWidth: 0 }}>
-                      <span style={{ fontFamily: MONO, color: i === 0 ? C.hi : C.dim }}>{String(i + 1).padStart(2, "0")}</span>
+                      <span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", color: i === 0 ? C.hi : C.dim }}>{String(i + 1).padStart(2, "0")}</span>
                       <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: C.ink }}>{r.k}</span>
                     </span>
-                    <span style={{ fontFamily: MONO, color: "#fff", whiteSpace: "nowrap" }}>{r.cnt}건</span>
+                    <span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", color: "#fff", whiteSpace: "nowrap" }}>{r.cnt}건</span>
                   </div>
                   <div style={{ marginTop: 5, height: 6, borderRadius: 99, background: "rgba(143,176,240,.1)", overflow: "hidden" }}>
                     <div style={{ width: `${(r.cnt / routeMax) * 100}%`, height: "100%", borderRadius: 99, background: i === 0 ? "linear-gradient(90deg,#4B6CB7,#CFE0FF)" : "rgba(110,149,232,.55)" }} />
                   </div>
-                  <div style={{ marginTop: 3, fontFamily: MONO, fontSize: 11.5, color: C.dim }}>{Math.round(r.sale).toLocaleString()}원</div>
+                  <div style={{ marginTop: 3, fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 11.5, color: C.dim }}>{Math.round(r.sale).toLocaleString()}원</div>
                 </div>
               ))}
             </div>
@@ -374,14 +375,14 @@ export default function ShipperHome() {
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={weekdayData} margin={{ top: 14, right: 0, left: 0, bottom: 0 }}>
                   <XAxis dataKey="day" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: "rgba(207,224,255,.55)" }} />
-                  <Bar dataKey="count" radius={[5, 5, 0, 0]} barSize={18} label={{ position: "top", fill: C.hi, fontSize: 11, fontFamily: MONO }} isAnimationActive={false}>
+                  <Bar dataKey="count" radius={[5, 5, 0, 0]} barSize={18} label={{ position: "top", fill: C.hi, fontSize: 11, fontFamily: MONO, fontVariantNumeric: "tabular-nums" }} isAnimationActive={false}>
                     {weekdayData.map((x) => <Cell key={x.day} fill={x.count === maxWd && x.count > 0 ? "#CFE0FF" : "rgba(110,149,232,.45)"} />)}
                   </Bar>
                 </BarChart>
               </ResponsiveContainer>
             </div>
           </Panel>
-          <Panel code="FLEET" title="차종 구성" right={<span style={{ fontFamily: MONO, fontSize: 11.5, color: C.dim }}>30일 · {carTotal}건</span>}>
+          <Panel code="FLEET" title="차종 구성" right={<span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 11.5, color: C.dim }}>30일 · {carTotal}건</span>}>
             <div style={{ display: "flex", height: 10, borderRadius: 99, overflow: "hidden", marginBottom: 10, background: "rgba(143,176,240,.1)" }}>
               {ops.cars.map((c, i) => <div key={c.name} style={{ width: `${(c.v / Math.max(1, carTotal)) * 100}%`, background: CAR_SHADES[i] }} />)}
             </div>
@@ -390,7 +391,7 @@ export default function ShipperHome() {
                 <div key={c.name} style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 12.5, minWidth: 0 }}>
                   <span style={{ width: 8, height: 8, borderRadius: 2, background: CAR_SHADES[i], flexShrink: 0 }} />
                   <span style={{ color: C.sub, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.name}</span>
-                  <span style={{ marginLeft: "auto", fontFamily: MONO, fontWeight: 800, color: "#fff" }}>{c.v}</span>
+                  <span style={{ marginLeft: "auto", fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontWeight: 800, color: "#fff" }}>{c.v}</span>
                 </div>
               ))}
             </div>

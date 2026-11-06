@@ -127,6 +127,7 @@ export const CLIENT_CONTRACT = {
     { k: "갑대표", label: "운송사 대표자", half: true },
     { k: "갑사업자번호", label: "운송사 사업자번호", half: true },
     { k: "갑주소", label: "운송사 주소" },
+    { k: "갑연락처", label: "운송사 연락처", half: true },
     ...PERIOD,
     { k: "운송구간", label: "운송 구간", ph: "화주 평택센터 → 전국 대리점(직배송)" },
     { k: "화물", label: "화물 종류·포장", half: true, ph: "냉장 식품 / 파레트" },
@@ -156,7 +157,7 @@ export const CLIENT_CONTRACT = {
 
 // ═════════ 자율양식 계약서 — 주제를 고르면 조항이 셋팅된다 ═════════
 const GEN_FIELDS = (aLabel = "갑", bLabel = "을", extra = []) => [
-  { k: "갑상호", label: `${aLabel} 상호·성명`, req: true }, { k: "갑대표", label: `${aLabel} 대표자`, half: true }, { k: "갑사업자번호", label: `${aLabel} 사업자번호`, half: true }, { k: "갑주소", label: `${aLabel} 주소` },
+  { k: "갑상호", label: `${aLabel} 상호·성명`, req: true }, { k: "갑대표", label: `${aLabel} 대표자`, half: true }, { k: "갑사업자번호", label: `${aLabel} 사업자번호`, half: true }, { k: "갑주소", label: `${aLabel} 주소` }, { k: "갑연락처", label: `${aLabel} 연락처`, half: true },
   { k: "을상호", label: `${bLabel} 상호·성명`, req: true }, { k: "을대표", label: `${bLabel} 대표자`, half: true }, { k: "을사업자번호", label: `${bLabel} 사업자번호·생년월일`, half: true }, { k: "을주소", label: `${bLabel} 주소` },
   { k: "계약일", label: "계약일", type: "date", half: true, req: true }, { k: "시작일", label: "시작일", type: "date", half: true }, { k: "종료일", label: "종료일", type: "date", half: true },
   ...extra, { k: "특약", label: "특약 사항", type: "textarea" },

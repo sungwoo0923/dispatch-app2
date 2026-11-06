@@ -7,11 +7,13 @@ import { auth, db, FUNCTIONS_BASE } from "../firebase";
 import { fmtPhone } from "../formatInput";
 import { createUserWithEmailAndPassword, signOut } from "firebase/auth";
 import { legacyDriverEmail, scopedDriverEmail, legacyOwnerCompany } from "./driverEmail";
+import { setDriverBusy } from "./driverLoginErrors"; // ⭐ 2026-11-05 확인 중엔 App이 기사 화면으로 넘기지 않게
 import { doc, setDoc, getDoc, deleteDoc, serverTimestamp } from "firebase/firestore";
 import { useNavigate, Link } from "react-router-dom";
 import { addDoc, collection } from "firebase/firestore";
 import { BANK_NAMES, accountLengths, formatAccount, validateAccount, onlyDigits } from "../bankUtil";
 import { compressImage } from "../InternalMail";
+import { LogisMark } from "../brand"; // 🔷 2026-11-04 LogisWeb 로고
 
 // ⭐ 사용자 요청 — 차량종류/톤수/거주지를 가입할 때 드롭다운으로 선택하게 한다
 // (이전엔 "1톤"/"카고"가 뒤섞인 한 줄짜리 목록 하나만 있었음). 차종은 "직접입력"을
@@ -189,9 +191,40 @@ export default function DriverRegister() {
   const [companyName, setCompanyName] = useState("");
   const [coList, setCoList] = useState([]);
   const [coOpen, setCoOpen] = useState(false);
-  useEffect(() => { readPublicCompanies().then(setCoList).catch(() => {}); }, []);
-  const coKey = companyName.replace(/\s+/g, "").toLowerCase();
-  const coMatches = coKey ? coList.filter((c) => c.companyName.replace(/\s+/g, "").toLowerCase().includes(coKey) && c.companyName !== companyName).slice(0, 6) : [];
+  // ⭐ 2026-11-05 운송사 검색 — 목록에서 눌러 고른 운송사(coPicked). 예전엔 "태진"을 끝까지 치면 이름이 똑같은 항목을
+  //  목록에서 빼버려(c.companyName !== companyName) 드롭다운이 사라졌고, 고를 수가 없었다. 이제 똑같아도 계속 보여주고,
+  //  똑같이 친 이름은 자동으로 "선택됨"으로 표시한다. 목록이 안 열리는 경우(목록 없음) 직접 입력으로 신청할 수 있다.
+  const [coListState, setCoListState] = useState("loading"); // loading | ok | fail
+  const [coPicked, setCoPicked] = useState("");
+  const [coManual, setCoManual] = useState(false); // 목록에 없어 입력한 이름 그대로 신청
+  useEffect(() => {
+    readPublicCompanies()
+      .then((l) => { setCoList(l); setCoListState(l.length ? "ok" : "fail"); })
+      .catch(() => setCoListState("fail"));
+  }, []);
+  const coNorm = (v) => String(v || "").replace(/\s+/g, "").toLowerCase();
+  const coKey = coNorm(companyName);
+  const coMatches = coKey
+    ? coList.filter((c) => coNorm(c.companyName).includes(coKey))
+      .sort((a, b) => (coNorm(b.companyName) === coKey) - (coNorm(a.companyName) === coKey) || (coNorm(b.companyName).startsWith(coKey)) - (coNorm(a.companyName).startsWith(coKey)) || a.companyName.localeCompare(b.companyName, "ko"))
+      .slice(0, 8)
+    : [];
+  const coInput = (v) => {
+    setCompanyName(v);
+    setCoOpen(true);
+    setCoManual(false);
+    // 이름을 똑같이 쳤으면(띄어쓰기·대소문자 무시) 자동 선택, 아니면 선택 해제
+    const exact = coList.find((c) => coNorm(c.companyName) === coNorm(v));
+    setCoPicked(exact ? exact.companyName : "");
+  };
+  const coPick = (c) => {
+    setCompanyName(c.companyName);
+    setCoPicked(c.companyName);
+    setCoManual(false);
+    setCoOpen(false);
+    setError("");
+    try { document.activeElement?.blur?.(); } catch { /* 무시 */ } // 키보드 내리기
+  };
   const [carNo, setCarNo] = useState("");
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
@@ -227,7 +260,9 @@ export default function DriverRegister() {
 
   // 확인 — 통과하면 "", 아니면 안내 문구. 필수는 운송사·차량번호·이름·휴대폰번호, 나머지는 입력했을 때만 형식 확인
   const checkBasic = () => {
-    if (!companyName.trim()) return "소속 운송사를 입력해주세요.";
+    if (!companyName.trim()) return "소속된 운송사명을 검색해서 골라주세요.";
+    // ⭐ 2026-11-05 목록이 있으면 목록에서 고른 운송사만(오타로 엉뚱한 회사에 가입 신청되는 것 방지)
+    if (coListState === "ok" && !coPicked && !coManual) return "운송사 목록에서 소속 운송사를 눌러 골라주세요.";
     if (!plateOf(carNo)) return "차량번호를 입력해주세요.";
     if (!name.trim()) return "이름을 입력해주세요.";
     if (!onlyDigits(phone)) return "휴대폰번호를 입력해주세요.";
@@ -251,13 +286,26 @@ export default function DriverRegister() {
     else if (msg.startsWith("사업자")) { setMoreOpen(true); setFold("biz"); }
   };
 
+  // ⭐ 2026-11-05 가입 신청 진행 상황 — 가운데 창에 단계별로 보여준다(0: 없음)
+  const [phase, setPhase] = useState(0);
+  const bgRef = useRef(null); // 화면 전환과 상관없이 끝까지 마쳐야 하는 뒷정리(서류 저장 → 로그아웃)
+  const [leaving, setLeaving] = useState(false);
+  useEffect(() => () => { if (!bgRef.current) setDriverBusy(false); }, []);
+
+  // ⭐ 2026-11-05 [완료가 오래 걸리던 원인 ①] 기사관리 연결 확인 서버(linkDriverSignup)가 잠들어 있으면 첫 호출에
+  //  몇 초씩 깨어나는 시간이 붙었다. 가입 화면에 들어오면 미리 한 번 깨워 둔다(응답은 보지 않음).
+  useEffect(() => {
+    try { fetch(`${FUNCTIONS_BASE}/linkDriverSignup`, { method: "GET", mode: "no-cors", cache: "no-store" }).catch(() => {}); } catch { /* 무시 */ }
+  }, []);
+
   const register = async () => {
     setError("");
     const bad = STEPS.findIndex((_, i) => checkStep(i));
     if (bad !== -1) { const m = checkStep(bad); setStep(bad); showProblem(m); return setError(m); }
+    if (loading) return;
 
     const plate = plateOf(carNo);
-    const co = companyName.trim();
+    const co = (coPicked || companyName).trim();
     let email = legacyDriverEmail(plate);
     const password = plate;
     // vehicleType은 기존 화면들이 "카고 3.5톤" 식 한 줄 문자열로 읽던 필드라 하위호환으로 함께 저장(선택 입력이라 비어 있을 수 있음)
@@ -272,9 +320,27 @@ export default function DriverRegister() {
       사업자번호: onlyDigits(bizNo) || "",
       사업자상호: bizName.trim(),
     };
+    const bizDoc = (uid) => bizImg ? addDoc(collection(db, "driver_documents"), {
+      // ⭐ 2026-11-02 점검 — 필수서류 키(bizReg)로 저장해야 기사 제출 서류/서류 관리에 표시됨
+      driverId: uid, companyName: co, docType: "bizReg", docLabel: "사업자등록증", status: "제출", fileName: "사업자등록증.jpg", fileType: "image/jpeg", dataUrl: bizImg,
+      uploadedAt: { seconds: Math.floor(Date.now() / 1000) }, by: "기사 가입",
+    }).catch(() => {}) : Promise.resolve();
+    // 뒷정리는 화면과 따로 끝까지 — Firestore는 로그아웃하면 아직 안 보낸 쓰기를 버리므로 다 보낸 뒤 로그아웃한다
+    const finishInBackground = (tasks) => {
+      bgRef.current = Promise.allSettled(tasks)
+        .then(() => signOut(auth).catch(() => {}))
+        .finally(() => { setDriverBusy(false); });
+    };
 
+    const t0 = performance.now();
+    const marks = {};
+    const mark = (k) => { marks[k] = Math.round(performance.now() - t0); };
+    let created = null;
     try {
       setLoading(true);
+      setPhase(1);
+      // ⭐ 2026-11-05 확인 중엔 App이 /driver-home으로 넘기지 않게(예전 계정 소속 확인·자동 연결 때 잠깐 로그인됨)
+      setDriverBusy(true);
       let res;
       try {
         res = await createUserWithEmailAndPassword(auth, email, password);
@@ -282,43 +348,46 @@ export default function DriverRegister() {
         // ⭐ 2026-11-01 같은 차량번호가 다른 운송사에 이미 있으면 회사별 계정으로 가입
         if (e?.code !== "auth/email-already-in-use") throw e;
         const owner = await legacyOwnerCompany(auth, db, plate);
-        if (owner === co) throw e;
+        if (owner.replace(/\s+/g, "") === co.replace(/\s+/g, "")) throw e;
         email = scopedDriverEmail(co, plate);
         res = await createUserWithEmailAndPassword(auth, email, password);
       }
+      created = res.user;
       const uid = res.user.uid;
+      mark("계정");
+      setPhase(2);
 
       // ⭐ 2026-11-03 기사관리에 같은 차량번호 + (같은 휴대폰번호 또는 같은 이름) 기사가 있으면 서버가 연결·승인
-      const link = await tryAutoLink(res.user, {
-        companyName: co, carNo: plate, name: name.trim(), phone: phoneStr,
-        차량종류: category, 차량톤수: tonnage, 거주지: residence, 요청사항: requestNote.trim(),
-        hireDate: hireDate || "", ...payInfo,
-        termsAgreed, privacyAgreed, gpsAgreed,
-      });
+      // ⭐ 2026-11-05 [원인 ②] 서버 연결 확인 → 선등록 문서 조회(2건)를 차례로 기다렸다 — 서로 상관없는 일이라 동시에 한다
+      const preKey = coDocKey(co, normPlate);
+      const [link, preSnap0, legacySnap] = await Promise.all([
+        tryAutoLink(res.user, {
+          companyName: co, carNo: plate, name: name.trim(), phone: phoneStr,
+          차량종류: category, 차량톤수: tonnage, 거주지: residence, 요청사항: requestNote.trim(),
+          hireDate: hireDate || "", ...payInfo,
+          termsAgreed, privacyAgreed, gpsAgreed,
+        }),
+        getDoc(doc(db, "drivers", preKey)).catch(() => null),
+        preKey !== normPlate ? getDoc(doc(db, "drivers", normPlate)).catch(() => null) : Promise.resolve(null),
+      ]);
+      mark("연결확인");
       if (link?.linked) {
-        if (bizImg) {
-          await addDoc(collection(db, "driver_documents"), {
-            driverId: uid, companyName: co, docType: "bizReg", docLabel: "사업자등록증", status: "제출", fileName: "사업자등록증.jpg", fileType: "image/jpeg", dataUrl: bizImg,
-            uploadedAt: { seconds: Math.floor(Date.now() / 1000) }, by: "기사 가입",
-          }).catch(() => {});
-        }
+        created = null;
         try { localStorage.setItem(SAVED_LOGIN_KEY, JSON.stringify({ remember: true, autoLogin: false, companyName: co, carNo: plate, name: name.trim() })); } catch { /* 저장 실패 무시 */ }
-        await signOut(auth);
+        // ⭐ 2026-11-05 사진 저장은 완료 화면을 띄운 뒤 뒤에서 마저 한다
+        finishInBackground([bizDoc(uid)]);
+        setPhase(4);
         setSuccess("linked");
-        setTimeout(() => navigate("/driver-login"), 3500);
+        console.info("[기사 가입] 단계별 시간(ms)", marks);
         return;
       }
 
       let preRegistered = null;
       // ⭐ 2026-11-01 PC 선등록 문서 — 회사별 이름(회사__차량번호) 먼저, 없으면 예전 이름(차량번호)
-      const preKey = coDocKey(co, normPlate);
-      let preSnap = await getDoc(doc(db, "drivers", preKey));
-      if (!preSnap.exists() && preKey !== normPlate) {
-        const legacySnap = await getDoc(doc(db, "drivers", normPlate));
-        if (legacySnap.exists() && (legacySnap.data().companyName || "").trim() === co) preSnap = legacySnap;
-      }
-      const preId = preSnap.exists() ? preSnap.id : normPlate;
-      if (preSnap.exists()) {
+      let preSnap = preSnap0;
+      if (!preSnap?.exists() && legacySnap?.exists() && (legacySnap.data().companyName || "").trim() === co) preSnap = legacySnap;
+      const preId = preSnap?.exists() ? preSnap.id : normPlate;
+      if (preSnap?.exists()) {
         const d = preSnap.data();
         const sameName = (d.이름 || d.name || "").trim() === name.trim();
         const sameCompany = (d.companyName || "").trim() === co;
@@ -326,96 +395,118 @@ export default function DriverRegister() {
           preRegistered = d;
         } else {
           await res.user.delete().catch(() => {});
+          created = null;
+          setDriverBusy(false);
           setError("이미 등록된 차량번호인데 이름·회사명이 다릅니다. 관리자에게 문의해주세요.");
           return;
         }
       }
+      setPhase(3);
 
-      await setDoc(doc(db, "users", uid), {
-        uid,
-        email,
-        role: "driver",
-        name: name.trim(),
-        carNo: plate,
-        phone: phoneStr,
-        vehicleType,
-        차량종류: category,
-        차량톤수: tonnage,
-        거주지: residence,
-        요청사항: requestNote.trim(),
-        companyName: co,
-        hireDate: hireDate || "",
-        ...payInfo,
-        approved: false,
-        termsAgreed,
-        privacyAgreed,
-        gpsAgreed,
-        createdAt: serverTimestamp(),
-      });
-      if (hireDate) {
-        await setDoc(doc(db, "userProfiles", uid), { hireDate }, { merge: true }).catch(() => {});
-      }
-
-      // ⭐ 버그수정 — PC 기사관리는 한글 필드(이름/차량번호/전화번호), 모바일 DriverHome은 영문 필드를 읽으므로 양쪽 다 쓴다.
-      await setDoc(doc(db, "drivers", uid), {
-        uid,
-        name: name.trim(),
-        carNo: plate,
-        phone: phoneStr,
-        이름: name.trim(),
-        차량번호: plate,
-        전화번호: phoneStr,
-        vehicleType,
-        차량종류: category,
-        차량톤수: tonnage,
-        거주지: residence,
-        요청사항: requestNote.trim(),
-        companyName: co,
-        ...payInfo,
-        mainStatus: "대기",
-        subStatus: "대기",
-        status: "대기",
-        state: "대기",
-        goStatus: "대기",
-        active: false,
-        totalDistance: 0,
-        approved: false,
-        createdAt: preRegistered?.createdAt || serverTimestamp(),
-        updatedAt: serverTimestamp(),
-        // 관리자가 PC에서 미리 지정해둔 값은 가입 입력값보다 우선해서 이어받는다.
-        ...(preRegistered ? {
-          등급: preRegistered.등급 || "일반",
-          담당자: preRegistered.담당자 || null,
-          근무요일: preRegistered.근무요일 || [],
-          메모: preRegistered.메모 || "",
-          등록자: preRegistered.등록자 || "",
-        } : {}),
-      });
-      if (preRegistered) {
-        await deleteDoc(doc(db, "drivers", preId)).catch(() => {});
-      }
-      if (bizImg) {
-        // ⭐ 2026-11-02 점검 — 필수서류 키(bizReg)로 저장해야 기사 제출 서류/서류 관리에 표시됨
-        await addDoc(collection(db, "driver_documents"), {
-          driverId: uid, companyName: co, docType: "bizReg", docLabel: "사업자등록증", status: "제출", fileName: "사업자등록증.jpg", fileType: "image/jpeg", dataUrl: bizImg,
-          uploadedAt: { seconds: Math.floor(Date.now() / 1000) }, by: "기사 가입",
-        }).catch(() => {});
-      }
-
-      await signOut(auth);
+      // ⭐ 2026-11-05 [원인 ③] users → userProfiles → drivers → 선등록 정리 → 사진(수백 KB)을 하나씩 기다렸다.
+      //  꼭 필요한 users·drivers 두 문서만 동시에 쓰고 바로 완료 화면, 나머지는 뒤에서 마저 쓴다.
+      await Promise.all([
+        setDoc(doc(db, "users", uid), {
+          uid,
+          email,
+          role: "driver",
+          name: name.trim(),
+          carNo: plate,
+          phone: phoneStr,
+          vehicleType,
+          차량종류: category,
+          차량톤수: tonnage,
+          거주지: residence,
+          요청사항: requestNote.trim(),
+          companyName: co,
+          hireDate: hireDate || "",
+          ...payInfo,
+          approved: false,
+          termsAgreed,
+          privacyAgreed,
+          gpsAgreed,
+          createdAt: serverTimestamp(),
+        }),
+        // ⭐ 버그수정 — PC 기사관리는 한글 필드(이름/차량번호/전화번호), 모바일 DriverHome은 영문 필드를 읽으므로 양쪽 다 쓴다.
+        setDoc(doc(db, "drivers", uid), {
+          uid,
+          name: name.trim(),
+          carNo: plate,
+          phone: phoneStr,
+          이름: name.trim(),
+          차량번호: plate,
+          전화번호: phoneStr,
+          vehicleType,
+          차량종류: category,
+          차량톤수: tonnage,
+          거주지: residence,
+          요청사항: requestNote.trim(),
+          companyName: co,
+          ...payInfo,
+          mainStatus: "대기",
+          subStatus: "대기",
+          status: "대기",
+          state: "대기",
+          goStatus: "대기",
+          active: false,
+          totalDistance: 0,
+          approved: false,
+          createdAt: preRegistered?.createdAt || serverTimestamp(),
+          updatedAt: serverTimestamp(),
+          // 관리자가 PC에서 미리 지정해둔 값은 가입 입력값보다 우선해서 이어받는다.
+          ...(preRegistered ? {
+            등급: preRegistered.등급 || "일반",
+            담당자: preRegistered.담당자 || null,
+            근무요일: preRegistered.근무요일 || [],
+            메모: preRegistered.메모 || "",
+            등록자: preRegistered.등록자 || "",
+          } : {}),
+        }),
+      ]);
+      mark("저장");
+      created = null;
+      // 뒤에서 마저 — 입사일(연차 계산용), 선등록 문서 정리(users 문서가 있어야 규칙 통과), 사업자등록증 사진
+      finishInBackground([
+        hireDate ? setDoc(doc(db, "userProfiles", uid), { hireDate }, { merge: true }).catch(() => {}) : null,
+        preRegistered ? deleteDoc(doc(db, "drivers", preId)).catch(() => {}) : null,
+        bizDoc(uid),
+      ].filter(Boolean));
+      setPhase(4);
       setSuccess("pending");
-      setTimeout(() => navigate("/driver-login"), 3500);
+      console.info("[기사 가입] 단계별 시간(ms)", marks);
     } catch (err) {
       console.error(err);
+      // 계정만 만들어지고 저장이 실패했으면 계정을 지워 다시 가입할 수 있게 한다
+      if (created) await created.delete().catch(() => {});
+      await signOut(auth).catch(() => {});
+      setDriverBusy(false);
       if (err.code === "auth/email-already-in-use") {
         setError("이미 등록된 차량번호입니다. 로그인 화면에서 로그인해주세요.");
+      } else if (err.code === "auth/network-request-failed" || err.code === "unavailable") {
+        setError("인터넷 연결이 불안정해 등록하지 못했습니다. 연결을 확인하고 다시 눌러주세요.");
       } else {
         setError("등록에 실패했습니다. 다시 시도해주세요.");
       }
     } finally {
       setLoading(false);
+      setPhase((p) => (p === 4 ? 4 : 0));
     }
   };
+  // 완료 화면 → 로그인 화면: 뒤에서 하던 저장이 끝난 뒤 이동(로그인 화면은 들어오자마자 로그아웃하므로)
+  const goLogin = async () => {
+    if (leavingRef.current) return;
+    leavingRef.current = true;
+    setLeaving(true);
+    if (bgRef.current) await Promise.race([bgRef.current, new Promise((r) => setTimeout(r, 20000))]);
+    navigate("/driver-login");
+  };
+  const leavingRef = useRef(false);
+  useEffect(() => {
+    if (!success) return;
+    const t = setTimeout(goLogin, 3500);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [success]);
 
   // 🏦 PC 운송사 화면(BankAccountInput)과 같은 규칙 — 은행 형식대로 하이픈 자동, 자리수 확인,
   // 다른 은행으로 바꾸면 계좌번호는 비운다(형식이 달라 그대로 두면 틀린 번호가 저장됨).
@@ -523,7 +614,7 @@ export default function DriverRegister() {
           ) : (
             <button type="button" onClick={() => bizFileRef.current?.click()} className="w-full h-24 rounded-2xl border-2 border-dashed border-[#C9D2E0] text-[#5B6B85] text-[15px] font-bold active:bg-[#F5F8FD]">+ 촬영 또는 사진 선택</button>
           )}
-          <input ref={bizFileRef} type="file" accept="image/*" capture="environment" hidden onChange={async (e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) setBizImg(await compressImage(f, 1400, 0.8).catch(() => "")); }} />
+          <input ref={bizFileRef} type="file" accept="image/*" capture="environment" hidden onChange={async (e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) setBizImg(await compressImage(f, 1280, 0.72).catch(() => "")); /* ⭐ 2026-11-05 조금 더 줄여 가입 저장 시간 단축(글자는 충분히 읽힘) */ }} />
         </Field>
       </Fold>
       <Fold title="입사일 · 요청사항" summary={[hireDate, requestNote.trim()].filter(Boolean).join(" · ")} open={fold === "etc"} onToggle={() => toggleFold("etc")}>
@@ -553,29 +644,56 @@ export default function DriverRegister() {
           <p className="mt-2 text-[15.5px] font-bold text-[#5B6B85] leading-relaxed">관리자 승인 대기 중입니다.<br />승인 후 로그인이 가능합니다.</p>
         </>
       )}
-      <button type="button" onClick={() => navigate("/driver-login")} className="mt-6 w-full h-14 rounded-2xl text-white font-black text-[17px]" style={{ background: "linear-gradient(120deg,#0F1A30,#2D4C82)" }}>로그인 화면으로</button>
+      <button type="button" onClick={goLogin} disabled={leaving} className="mt-6 w-full h-14 rounded-2xl text-white font-black text-[17px] disabled:opacity-70" style={{ background: "linear-gradient(120deg,#0F1A30,#2D4C82)" }}>{leaving ? "마무리 중…" : "로그인 화면으로"}</button>
     </div>
   );
   else if (S.key === "basic") body = (
     <div className="space-y-5">
-      <Field label="소속 운송사" req hint="일하시는 운송사 이름을 검색해서 고르세요.">
+      <Field label="소속 운송사" req hint={coPicked ? "" : "소속된 운송사명을 검색해서 목록에서 눌러 고르세요."}>
         <div className="relative">
-          <input value={companyName} autoFocus
-            onChange={(e) => { setCompanyName(e.target.value); setCoOpen(true); }}
-            onFocus={() => setCoOpen(true)} onBlur={() => setTimeout(() => setCoOpen(false), 150)} onKeyDown={onEnter}
-            placeholder="운송사명 검색" className={inputCls} />
-          {coOpen && coMatches.length > 0 && (
-            <div className="absolute z-20 left-0 right-0 top-full mt-1.5 bg-white border border-[#DCE3EE] rounded-2xl shadow-[0_18px_40px_rgba(15,26,48,.18)] overflow-hidden max-h-[260px] overflow-y-auto">
-              {coMatches.map((c) => (
-                <button key={c.companyName} type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => { setCompanyName(c.companyName); setCoOpen(false); }}
-                  className="w-full text-left px-4 py-3.5 active:bg-[#EEF3FC] hover:bg-[#EEF3FC] border-b border-[#EEF1F6] last:border-0">
-                  <div className="text-[16px] font-black text-[#0F1A30]">{c.companyName}</div>
-                  {c.address && <div className="text-[12.5px] text-[#7A89A3] truncate">{c.address}</div>}
-                </button>
-              ))}
+          <input value={companyName} autoFocus data-testid="co-input"
+            onChange={(e) => coInput(e.target.value)}
+            onCompositionEnd={(e) => coInput(e.currentTarget.value)}
+            onFocus={() => setCoOpen(true)} onBlur={() => setTimeout(() => setCoOpen(false), 250)} onKeyDown={(e) => {
+              // 엔터: 검색 결과가 하나뿐이거나 똑같은 이름이 있으면 그걸 고른다
+              if (e.key === "Enter" && !e.nativeEvent.isComposing && coOpen && !coPicked && coMatches.length === 1) { e.preventDefault(); coPick(coMatches[0]); return; }
+              onEnter(e);
+            }}
+            autoComplete="off" autoCorrect="off" spellCheck={false} enterKeyHint="search"
+            placeholder="소속된 운송사명을 검색하세요" className={`${inputCls} ${coPicked ? "pr-28 border-[#2D4C82] bg-[#F5F8FD]" : ""}`} />
+          {coPicked && (
+            <span data-testid="co-picked" className="absolute right-3 top-1/2 -translate-y-1/2 h-9 px-3 rounded-xl bg-[#1B2B4B] text-white text-[14px] font-black grid place-items-center pointer-events-none">✓ 선택됨</span>
+          )}
+          {coOpen && coKey && coListState !== "fail" && (
+            <div data-testid="co-list" className="absolute z-20 left-0 right-0 top-full mt-1.5 bg-white border-2 border-[#C9D6EE] rounded-2xl shadow-[0_18px_40px_rgba(15,26,48,.22)] overflow-hidden max-h-[300px] overflow-y-auto overscroll-contain">
+              {coListState === "loading" && <div className="px-4 py-4 text-[15px] font-bold text-[#7A89A3]">운송사 목록을 불러오는 중…</div>}
+              {coListState === "ok" && coMatches.length === 0 && (
+                <div className="px-4 py-4">
+                  <div className="text-[15.5px] font-black text-[#0F1A30]">'{companyName.trim()}' 운송사를 찾지 못했습니다</div>
+                  <div className="mt-1 text-[13.5px] font-semibold text-[#5B6B85]">글자를 조금만 쳐 보세요(예: 앞 두 글자).</div>
+                  <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => { setCoManual(true); setCoOpen(false); setError(""); }}
+                    className="mt-3 w-full h-12 rounded-xl border-2 border-[#DCE3EE] text-[14.5px] font-black text-[#3A4A66] active:bg-[#F3F6FA]">목록에 없어요 — 입력한 이름 그대로 신청</button>
+                </div>
+              )}
+              {coMatches.map((c) => {
+                const on = coPicked === c.companyName;
+                return (
+                  <button key={c.companyName} type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => coPick(c)}
+                    className={`w-full flex items-center gap-3 text-left px-4 min-h-[60px] py-3 border-b border-[#EEF1F6] last:border-0 ${on ? "bg-[#EEF3FC]" : "active:bg-[#EEF3FC] hover:bg-[#F5F8FD]"}`}>
+                    <span className="flex-1 min-w-0">
+                      <span className="block text-[18px] font-black text-[#0F1A30] truncate">{c.companyName}</span>
+                      {c.address && <span className="block text-[13px] font-semibold text-[#7A89A3] truncate">{c.address}</span>}
+                    </span>
+                    <span className={`shrink-0 h-9 px-3 rounded-xl grid place-items-center text-[14px] font-black ${on ? "bg-[#1B2B4B] text-white" : "border-2 border-[#C9D6EE] text-[#1B2B4B]"}`}>{on ? "✓ 선택됨" : "선택"}</span>
+                  </button>
+                );
+              })}
             </div>
           )}
         </div>
+        {coManual && !coPicked && (
+          <div className="mt-2 rounded-xl bg-[#F5F8FD] border border-[#C9D6EE] px-3.5 py-2.5 text-[13.5px] font-bold text-[#1B2B4B]">입력한 이름 '{companyName.trim()}'(으)로 신청합니다. 운송사 정식 이름과 다르면 승인이 늦어질 수 있습니다.</div>
+        )}
       </Field>
       <Field label="차량번호" req hint="띄어쓰기 없이 저장되며, 로그인할 때도 차량번호를 씁니다.">
         <input value={carNo} onChange={(e) => setCarNo(plateOf(e.target.value))} onKeyDown={onEnter} placeholder="예: 경기97가1234" className={inputCls} />
@@ -644,7 +762,7 @@ export default function DriverRegister() {
               <span className="text-[13px] font-bold text-white/70 tabular-nums" style={{ fontFamily: MONO }}>
                 <span className="text-white">{step + 1}</span> / {STEPS.length}
               </span>
-              <img src="/icons/sflow-icon.png" alt="" className="w-7 h-7 rounded-lg" />
+              <LogisMark size={28} />
             </div>
           </div>
           <div className="mt-2 text-[10px] font-extrabold tracking-[0.22em] text-white/45" style={{ fontFamily: MONO }}>{S.en}</div>
@@ -675,7 +793,7 @@ export default function DriverRegister() {
                 </button>
                 <button type="button" onClick={next} disabled={loading}
                   className="h-14 flex-1 rounded-2xl text-white font-black text-[17px] transition disabled:opacity-60 shadow-[0_12px_26px_rgba(15,26,48,0.28)]" style={{ background: "linear-gradient(120deg,#0F1A30,#2D4C82)" }}>
-                  {loading ? "등록 중..." : last ? "등록하기" : "다음"}
+                  {loading ? "가입 신청 중…" : last ? "등록하기" : "다음"}
                 </button>
               </div>
               {step === 0 && !window.Capacitor?.isNativePlatform?.() && (
@@ -685,6 +803,34 @@ export default function DriverRegister() {
           )}
         </div>
       </div>
+      {/* ⭐ 2026-11-05 가입 신청 중 — 가운데 진행 창(단계 표시). 꼭 필요한 저장이 끝나면 바로 완료 화면으로 바뀐다 */}
+      {loading && phase > 0 && phase < 4 && (
+        <div data-testid="reg-progress" className="fixed inset-0 z-[100050] bg-[#060E1F]/60 flex items-center justify-center p-6">
+          <div className="w-full max-w-[340px] rounded-2xl overflow-hidden bg-white shadow-[0_30px_80px_rgba(6,14,31,.45)]">
+            <div className="px-6 pt-6 pb-5 text-white text-center" style={{ background: "linear-gradient(120deg,#0F1A30 0%,#1B2B4B 55%,#2D4C82 100%)" }}>
+              <div className="mx-auto w-12 h-12 rounded-full border-4 border-white/20 border-t-[#8FB0F0] animate-spin" />
+              <div className="mt-3 text-[20px] font-black">가입 신청 중…</div>
+              <div className="mt-0.5 text-[13.5px] font-semibold text-white/70">화면을 닫지 말고 잠시만 기다려 주세요</div>
+            </div>
+            <div className="px-6 py-5 space-y-3">
+              {["계정 만들기", "등록된 기사 정보 확인", "가입 정보 저장"].map((t, i) => {
+                const n = i + 1;
+                const done = phase > n;
+                const now = phase === n;
+                return (
+                  <div key={t} className="flex items-center gap-3">
+                    <span className={`w-8 h-8 shrink-0 rounded-full grid place-items-center text-[14px] font-black ${done ? "bg-[#1B2B4B] text-white" : now ? "border-[3px] border-[#2D4C82] text-[#2D4C82]" : "border-2 border-[#DCE3EE] text-[#B4BFD0]"}`}>{done ? "✓" : n}</span>
+                    <span className={`text-[16px] font-black ${done ? "text-[#1B2B4B]" : now ? "text-[#0F1A30]" : "text-[#9AA7BD]"}`}>{t}{now ? " …" : ""}</span>
+                  </div>
+                );
+              })}
+              <div className="h-2 rounded-full bg-[#EEF2F8] overflow-hidden mt-1">
+                <div className="h-full rounded-full transition-all duration-500" style={{ width: `${Math.min(100, phase * 30)}%`, background: "linear-gradient(90deg,#2D4C82,#8FB0F0)" }} />
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
       <style>{`@keyframes kpStepIn{from{opacity:0;transform:translateX(14px)}to{opacity:1;transform:none}}.kp-step-in{animation:kpStepIn .22s ease-out}`}</style>
     </div>
   );

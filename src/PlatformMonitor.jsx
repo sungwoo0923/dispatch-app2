@@ -16,6 +16,7 @@ import { PricingEditor, QuoteBuilder, QuoteHistory, useSalesPricing, applyPlanBi
 import { usePlatformLive, mergeCompanies, mergeShippers, StatsStamp, LiveNowPanel, SignupTimeline, PendingPanel, DupeWarning, HealthCard, StaffList, Spark, PLAN_NAMES } from "./PlatformLive";
 import { CustomSelect } from "./CustomSelect";
 import { fmtMoney, parseMoney } from "./formatInput";
+import { LogisTag } from "./brand"; // 🔷 2026-11-04 LogisWeb 로고
 
 // 📱 폰(관리자 관리센터 모바일) — 가로 칸 수를 줄인다
 export function usePhone() {
@@ -24,7 +25,7 @@ export function usePhone() {
   useEffect(() => { const m = window.matchMedia(q); const f = () => setOn(m.matches); m.addEventListener("change", f); return () => m.removeEventListener("change", f); }, []);
   return on;
 }
-const MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
+const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
 const NAVY = "#1B2B4B";
 const DEFAULT_PRICING = { base: 99000, includedSeats: 3, seat: 15000, includedOrders: 1000, perOrder: 50, shipperBase: 0 };
 const won = (n) => `${Math.round(n || 0).toLocaleString()}원`;
@@ -79,11 +80,11 @@ function Tile({ code, label, value, unit, foot, dark, spark, onClick }) {
     <div onClick={onClick} className={dark ? "pm-tile-dark" : "pm-tile"} style={{ borderRadius: 16, padding: "15px 17px 13px", minWidth: 0, position: "relative", overflow: "hidden", cursor: onClick ? "pointer" : undefined }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
         <span style={{ fontSize: 14.5, fontWeight: 800, color: dark ? "rgba(255,255,255,.8)" : "#4b5563", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{label}</span>
-        <span style={{ fontFamily: MONO, fontSize: 11.5, fontWeight: 800, letterSpacing: "0.16em", color: dark ? "rgba(143,176,240,.85)" : "#94A3B8", whiteSpace: "nowrap" }}>{code}</span>
+        <span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 11.5, fontWeight: 800, letterSpacing: "0.16em", color: dark ? "rgba(143,176,240,.85)" : "#94A3B8", whiteSpace: "nowrap" }}>{code}</span>
       </div>
       {spark && <div className="pm-spark" style={{ position: "absolute", right: 14, top: 40, width: "42%", opacity: 0.55, pointerEvents: "none" }}><Spark values={spark} width={120} height={30} stroke={dark ? "#8FB0F0" : "#2D4C82"} /></div>}
       <div style={{ marginTop: 9, display: "flex", alignItems: "baseline", gap: 5, minWidth: 0, position: "relative" }}>
-        <span style={{ fontFamily: MONO, fontSize: 32, fontWeight: 800, color: dark ? "#fff" : "#0F1A30", letterSpacing: "-0.02em", whiteSpace: "nowrap" }}>{value}</span>
+        <span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 32, fontWeight: 800, color: dark ? "#fff" : "#0F1A30", letterSpacing: "-0.02em", whiteSpace: "nowrap" }}>{value}</span>
         {unit && <span style={{ fontSize: 14, fontWeight: 700, color: dark ? "rgba(207,224,255,.55)" : "#9ca3af" }}>{unit}</span>}
       </div>
       {foot && <div style={{ marginTop: 5, fontSize: 13.5, fontWeight: 600, color: dark ? "rgba(207,224,255,.6)" : "#6b7280", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{foot}</div>}
@@ -96,7 +97,7 @@ function Card({ code, title, right, children, style }) {
       <div style={{ padding: "13px 18px", background: "#F7F9FC", borderBottom: "1px solid #E8EDF4", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, rowGap: 8, flexWrap: "wrap" }}>
         <span style={{ display: "inline-flex", alignItems: "center", gap: 9, minWidth: 0, whiteSpace: "nowrap" }}>
           <span style={{ width: 7, height: 7, borderRadius: 2, background: NAVY, transform: "rotate(45deg)" }} />
-          <span style={{ fontFamily: MONO, fontSize: 12.5, fontWeight: 800, letterSpacing: "0.18em", color: "#94A3B8" }}>{code}</span>
+          <span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 12.5, fontWeight: 800, letterSpacing: "0.18em", color: "#94A3B8" }}>{code}</span>
           <span style={{ fontSize: 16.5, fontWeight: 800, color: "#0F1A30", whiteSpace: "nowrap" }}>{title}</span>
         </span>
         {right}
@@ -106,9 +107,9 @@ function Card({ code, title, right, children, style }) {
   );
 }
 function Delta({ cur, prev }) {
-  if (!prev) return <span style={{ fontFamily: MONO, fontSize: 13.5, color: "#9ca3af" }}>—</span>;
+  if (!prev) return <span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 13.5, color: "#9ca3af" }}>—</span>;
   const r = ((cur - prev) / prev) * 100;
-  return <span style={{ fontFamily: MONO, fontSize: 14, fontWeight: 800, color: r >= 0 ? NAVY : "#64748b" }}>{r >= 0 ? "▲" : "▼"} {Math.abs(r).toFixed(1)}%</span>;
+  return <span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 14, fontWeight: 800, color: r >= 0 ? NAVY : "#64748b" }}>{r >= 0 ? "▲" : "▼"} {Math.abs(r).toFixed(1)}%</span>;
 }
 function StatusChip({ s }) {
   const st = {
@@ -134,7 +135,7 @@ function HealthBar({ v }) {
       <div style={{ width: 54, height: 6, borderRadius: 99, background: "#E8EDF4", overflow: "hidden" }}>
         <div style={{ width: `${v}%`, height: "100%", borderRadius: 99, background: v >= 60 ? NAVY : v >= 30 ? "#6E8BC4" : "#B6C2D6" }} />
       </div>
-      <span style={{ fontFamily: MONO, fontSize: 13.5, fontWeight: 800, color: "#0F1A30" }}>{v}</span>
+      <span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 13.5, fontWeight: 800, color: "#0F1A30" }}>{v}</span>
     </div>
   );
 }
@@ -275,7 +276,7 @@ export default function PlatformMonitor({ demoStats = null, tab: tabProp, onTab,
   const headBar = (
     <div className="pm-hero" style={{ borderRadius: phone ? 18 : 22, padding: phone ? "14px 16px" : "20px 24px", marginBottom: phone ? 12 : 16, display: "flex", alignItems: "center", justifyContent: "space-between", gap: phone ? 10 : 16, flexWrap: "wrap", color: "#fff", position: "relative", overflow: "hidden" }}>
       <div style={{ minWidth: 0 }}>
-        <div style={{ fontFamily: MONO, fontSize: 13, fontWeight: 800, letterSpacing: "0.28em", color: "#8FB0F0" }}>{/* ⭐ 2026-11-02 관리자센터2 — 다른 화면처럼 "구역 · 메뉴" 표기 */}{{ companies: "CLIENTS · CARRIERS", shippers: "CLIENTS · SHIPPERS", billing: "BILLING · INVOICE", overview: "DASHBOARD · OVERVIEW" }[tab] || "KP-FLOW · PLATFORM CONTROL"}</div>
+        <div style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 13, fontWeight: 800, letterSpacing: "0.28em", color: "#8FB0F0" }}>{/* ⭐ 2026-11-02 관리자센터2 — 다른 화면처럼 "구역 · 메뉴" 표기 */}{{ companies: "CLIENTS · CARRIERS", shippers: "CLIENTS · SHIPPERS", billing: "BILLING · INVOICE", overview: "DASHBOARD · OVERVIEW" }[tab] || <LogisTag height={9.5} text="PLATFORM CONTROL" />}</div>
         <h1 style={{ margin: "6px 0 0", fontSize: phone ? 19 : 25, fontWeight: 900, letterSpacing: "-0.02em", whiteSpace: "nowrap" }}>{{ companies: "운송사 관제", shippers: "화주사 관제", billing: "요금·청구" }[tab] || "플랫폼 관제센터"}</h1>
         <p style={{ margin: "5px 0 0", fontSize: phone ? 12 : 14, color: "rgba(207,224,255,.72)", fontWeight: 600, whiteSpace: phone ? "normal" : undefined }}>
           <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><span style={{ width: 7, height: 7, borderRadius: 9, background: live?.ready ? "#CFE0FF" : "#64748b", boxShadow: live?.ready ? "0 0 8px #8FB0F0" : "none" }} />계정·접속은 실시간</span>
@@ -347,14 +348,14 @@ export default function PlatformMonitor({ demoStats = null, tab: tabProp, onTab,
           </div>
 
           <div style={{ display: "grid", gridTemplateColumns: phone ? "minmax(0,1fr)" : "repeat(auto-fit, minmax(min(100%, 420px), 1fr))", gap: 14, alignItems: "stretch" }}>
-            <Card code="VOLUME" title="플랫폼 일별 오더 (최근 30일)" style={{ gridColumn: phone ? undefined : "span 1" }} right={<span style={{ fontFamily: MONO, fontSize: 14, fontWeight: 800, color: NAVY }}>{daily.reduce((a, d) => a + d.cnt, 0).toLocaleString()}건</span>}>
+            <Card code="VOLUME" title="플랫폼 일별 오더 (최근 30일)" style={{ gridColumn: phone ? undefined : "span 1" }} right={<span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 14, fontWeight: 800, color: NAVY }}>{daily.reduce((a, d) => a + d.cnt, 0).toLocaleString()}건</span>}>
               <div style={{ height: phone ? 190 : 260 }}>
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={daily} margin={{ top: 6, right: 4, left: 0, bottom: 0 }}>
                     <defs><linearGradient id="pmBar" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#2D4C82" /><stop offset="1" stopColor={NAVY} /></linearGradient></defs>
                     <CartesianGrid stroke="#EEF1F6" vertical={false} />
-                    <XAxis dataKey="label" axisLine={false} tickLine={false} interval={phone ? 6 : 3} tick={{ fontSize: 13, fill: "#6b7280", fontFamily: MONO }} />
-                    <YAxis axisLine={false} tickLine={false} width={34} tick={{ fontSize: 12.5, fill: "#9ca3af", fontFamily: MONO }} allowDecimals={false} />
+                    <XAxis dataKey="label" axisLine={false} tickLine={false} interval={phone ? 6 : 3} tick={{ fontSize: 13, fill: "#6b7280", fontFamily: MONO, fontVariantNumeric: "tabular-nums" }} />
+                    <YAxis axisLine={false} tickLine={false} width={34} tick={{ fontSize: 12.5, fill: "#9ca3af", fontFamily: MONO, fontVariantNumeric: "tabular-nums" }} allowDecimals={false} />
                     <Tooltip cursor={{ fill: "rgba(27,43,75,.05)" }} formatter={(v, n) => [n === "cnt" ? `${v.toLocaleString()}건` : won(v), n === "cnt" ? "오더" : "운송액"]} contentStyle={{ borderRadius: 10, border: "1px solid #E3E8F0", fontSize: 14, fontWeight: 700 }} />
                     <Bar dataKey="cnt" radius={[5, 5, 0, 0]}>{daily.map((d) => <Cell key={d.label} fill={d.on ? NAVY : "url(#pmBar)"} fillOpacity={d.on ? 1 : 0.55} />)}</Bar>
                   </BarChart>
@@ -367,7 +368,7 @@ export default function PlatformMonitor({ demoStats = null, tab: tabProp, onTab,
           <div style={grid3}>
             <PendingPanel go={setTab} />
             <SignupTimeline max={9} onCompany={openCo} />
-            <Card code="STATUS" title="고객사 상태" right={<span style={{ fontFamily: MONO, fontSize: 14, fontWeight: 800, color: NAVY }}>{alerts.length}건 확인</span>}>
+            <Card code="STATUS" title="고객사 상태" right={<span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 14, fontWeight: 800, color: NAVY }}>{alerts.length}건 확인</span>}>
               <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
                 <div style={{ width: 112, height: 112, flexShrink: 0, position: "relative" }}>
                   <ResponsiveContainer width="100%" height="100%">
@@ -378,7 +379,7 @@ export default function PlatformMonitor({ demoStats = null, tab: tabProp, onTab,
                     </PieChart>
                   </ResponsiveContainer>
                   <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", pointerEvents: "none" }}>
-                    <b style={{ fontFamily: MONO, fontSize: 20, color: "#0F1A30" }}>{companies.length}</b><span style={{ fontSize: 11.5, color: "#94A3B8", fontWeight: 800 }}>운송사</span>
+                    <b style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 20, color: "#0F1A30" }}>{companies.length}</b><span style={{ fontSize: 11.5, color: "#94A3B8", fontWeight: 800 }}>운송사</span>
                   </div>
                 </div>
                 <div style={{ flex: 1, minWidth: 0, display: "grid", gap: 6 }}>
@@ -386,7 +387,7 @@ export default function PlatformMonitor({ demoStats = null, tab: tabProp, onTab,
                     <button key={d.k} type="button" onClick={() => { setFilter(d.k === "new" ? "new" : d.k === "active" ? "all" : "dormant"); setTab("companies"); }} style={{ display: "flex", alignItems: "center", gap: 8, border: "none", background: "transparent", padding: 0, cursor: "pointer", textAlign: "left" }}>
                       <span style={{ width: 10, height: 10, borderRadius: 3, background: STATUS_COLORS[d.k], flexShrink: 0 }} />
                       <span style={{ fontSize: 14.5, fontWeight: 700, color: "#374151" }}>{d.name}</span>
-                      <b style={{ marginLeft: "auto", fontFamily: MONO, fontSize: 14.5, color: "#0F1A30" }}>{d.value}</b>
+                      <b style={{ marginLeft: "auto", fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 14.5, color: "#0F1A30" }}>{d.value}</b>
                     </button>
                   ))}
                 </div>
@@ -415,13 +416,13 @@ export default function PlatformMonitor({ demoStats = null, tab: tabProp, onTab,
             <div style={{ display: "grid", gridTemplateColumns: phone ? "minmax(0,1fr)" : "repeat(auto-fill, minmax(290px, 1fr))", gap: 10 }}>
               {[...companies].sort((a, b) => b.m.cnt - a.m.cnt).slice(0, 8).map((c, i) => (
                 <button key={c.name} type="button" onClick={() => openCo(c.name)} style={{ textAlign: "left", cursor: "pointer", display: "grid", gridTemplateColumns: "30px 1fr auto", alignItems: "center", gap: 10, padding: "11px 13px", borderRadius: 12, border: i === 0 ? `1.5px solid ${NAVY}` : "1px solid #E3E8F0", background: i === 0 ? "#F4F7FC" : "#fff" }}>
-                  <span style={{ fontFamily: MONO, fontSize: 14.5, fontWeight: 800, color: i < 3 ? NAVY : "#94A3B8" }}>{String(i + 1).padStart(2, "0")}</span>
+                  <span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 14.5, fontWeight: 800, color: i < 3 ? NAVY : "#94A3B8" }}>{String(i + 1).padStart(2, "0")}</span>
                   <span style={{ minWidth: 0 }}>
                     <span style={{ display: "block", fontSize: 15, fontWeight: 800, color: "#0F1A30", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{c.name}</span>
                     <span style={{ display: "block", fontSize: 13.5, fontWeight: 600, color: "#6b7280", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>직원 {c.staff} · 지금 {c.onlineNow} · 24h {c.online} · {short(c.m.sale)}원</span>
                   </span>
                   <span style={{ textAlign: "right" }}>
-                    <span style={{ display: "block", fontFamily: MONO, fontSize: 17, fontWeight: 800, color: NAVY }}>{c.m.cnt.toLocaleString()}<span style={{ fontSize: 13, color: "#9ca3af" }}>건</span></span>
+                    <span style={{ display: "block", fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 17, fontWeight: 800, color: NAVY }}>{c.m.cnt.toLocaleString()}<span style={{ fontSize: 13, color: "#9ca3af" }}>건</span></span>
                     <Delta cur={c.m.cnt} prev={c.pmSame?.cnt} />
                   </span>
                 </button>
@@ -451,7 +452,7 @@ export default function PlatformMonitor({ demoStats = null, tab: tabProp, onTab,
             <div className="pm-chips" style={{ display: "flex", gap: 6, flexWrap: phone ? "nowrap" : "wrap", overflowX: phone ? "auto" : undefined, marginBottom: 14 }}>
               {FILTERS.map(([k, l, f]) => {
                 const n = companies.filter(f).length; const on = filter === k;
-                return <button key={k} type="button" onClick={() => setFilter(k)} style={{ flexShrink: 0, height: 36, padding: "0 13px", borderRadius: 99, border: `1px solid ${on ? NAVY : "#DCE3EE"}`, background: on ? NAVY : "#fff", color: on ? "#fff" : "#3A4A66", fontSize: 14.5, fontWeight: 800, cursor: "pointer", whiteSpace: "nowrap" }}>{l} <span style={{ fontFamily: MONO, opacity: 0.7 }}>{n}</span></button>;
+                return <button key={k} type="button" onClick={() => setFilter(k)} style={{ flexShrink: 0, height: 36, padding: "0 13px", borderRadius: 99, border: `1px solid ${on ? NAVY : "#DCE3EE"}`, background: on ? NAVY : "#fff", color: on ? "#fff" : "#3A4A66", fontSize: 14.5, fontWeight: 800, cursor: "pointer", whiteSpace: "nowrap" }}>{l} <span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", opacity: 0.7 }}>{n}</span></button>;
               })}
             </div>
             {view === "cards" ? (
@@ -470,20 +471,20 @@ export default function PlatformMonitor({ demoStats = null, tab: tabProp, onTab,
                     <React.Fragment key={c.name}>
                       <div onClick={() => openCo(c.name)} className="pm-row" style={{ ...td, textAlign: "left", cursor: "pointer" }}>
                         <div style={{ fontSize: 15, fontWeight: 800, color: "#0F1A30" }}>{c.name}</div>
-                        <div style={{ fontFamily: MONO, fontSize: 13, color: "#94A3B8" }}>{c.code || "-"} · 가입 {ymdOf(c.appliedAt)}</div>
+                        <div style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 13, color: "#94A3B8" }}>{c.code || "-"} · 가입 {ymdOf(c.appliedAt)}</div>
                       </div>
                       <div style={td}><StatusChip s={c.status} /></div>
                       <div style={{ ...td, display: "flex", justifyContent: "center" }}><HealthBar v={c.health} /></div>
-                      <div style={{ ...td, fontFamily: MONO }}>{c.staff} / {c.drivers}{c.pending ? <span style={{ display: "block", fontSize: 13, color: NAVY }}>대기 {c.pending}</span> : null}</div>
-                      <div style={{ ...td, fontFamily: MONO, fontSize: 15.5, color: c.onlineNow ? NAVY : "#9ca3af" }}>{c.onlineNow || 0}</div>
-                      <div style={{ ...td }}><span style={{ fontFamily: MONO }}>{c.online}</span><span style={{ display: "block", fontSize: 13, color: "#6b7280" }}>PC {c.onlinePc} · 모바일 {c.onlineMobile} · {ago(c.lastSeen)}</span></div>
-                      <div style={{ ...td, fontFamily: MONO, fontSize: 15.5, color: NAVY }}>{c.m.cnt.toLocaleString()}</div>
+                      <div style={{ ...td, fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{c.staff} / {c.drivers}{c.pending ? <span style={{ display: "block", fontSize: 13, color: NAVY }}>대기 {c.pending}</span> : null}</div>
+                      <div style={{ ...td, fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 15.5, color: c.onlineNow ? NAVY : "#9ca3af" }}>{c.onlineNow || 0}</div>
+                      <div style={{ ...td }}><span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{c.online}</span><span style={{ display: "block", fontSize: 13, color: "#6b7280" }}>PC {c.onlinePc} · 모바일 {c.onlineMobile} · {ago(c.lastSeen)}</span></div>
+                      <div style={{ ...td, fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 15.5, color: NAVY }}>{c.m.cnt.toLocaleString()}</div>
                       <div style={td}><Delta cur={c.m.cnt} prev={c.pmSame?.cnt} /></div>
                       <div style={{ ...td, display: "flex", justifyContent: "center" }}><MiniBars daily={c.daily} today={today} /></div>
-                      <div style={{ ...td, fontFamily: MONO }}>{short(c.m.sale)}</div>
-                      <div style={{ ...td, fontFamily: MONO, fontSize: 14 }}>{c.lastOrder ? c.lastOrder.slice(5) : "-"}{c.idle != null && c.idle > 0 ? <span style={{ display: "block", fontSize: 13, color: "#6b7280" }}>{c.idle}일 전</span> : null}</div>
-                      <div style={{ ...td, fontFamily: MONO, fontSize: 14 }}>{c.totalOrders.toLocaleString()}건<span style={{ display: "block", fontSize: 13, color: "#6b7280" }}>거래처 {c.clients} · 하차지 {c.places}</span></div>
-                      <div style={{ ...td, fontFamily: MONO, fontSize: 15, color: NAVY }}>{short(c.bill.total)}원</div>
+                      <div style={{ ...td, fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{short(c.m.sale)}</div>
+                      <div style={{ ...td, fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 14 }}>{c.lastOrder ? c.lastOrder.slice(5) : "-"}{c.idle != null && c.idle > 0 ? <span style={{ display: "block", fontSize: 13, color: "#6b7280" }}>{c.idle}일 전</span> : null}</div>
+                      <div style={{ ...td, fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 14 }}>{c.totalOrders.toLocaleString()}건<span style={{ display: "block", fontSize: 13, color: "#6b7280" }}>거래처 {c.clients} · 하차지 {c.places}</span></div>
+                      <div style={{ ...td, fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 15, color: NAVY }}>{short(c.bill.total)}원</div>
                     </React.Fragment>
                   ))}
                 </div>
@@ -501,14 +502,14 @@ export default function PlatformMonitor({ demoStats = null, tab: tabProp, onTab,
               {["화주사", "가입 상태", "연동 운송사", "연동 상태", "계정", "지금 접속", "접속 24h", "가입일"].map((h) => <div key={h} style={{ ...th, background: "linear-gradient(90deg,#0F1A30,#1B2B4B)" }}>{h}</div>)}
               {[...shippers].sort((a, b) => (b.onlineNow || 0) - (a.onlineNow || 0) || (b.users || 0) - (a.users || 0)).map((s) => (
                 <React.Fragment key={s.name}>
-                  <div style={{ ...td, textAlign: "left" }}><div style={{ fontSize: 15, fontWeight: 800 }}>{s.name}</div><div style={{ fontFamily: MONO, fontSize: 13, color: "#94A3B8" }}>{s.code || "-"}</div></div>
+                  <div style={{ ...td, textAlign: "left" }}><div style={{ fontSize: 15, fontWeight: 800 }}>{s.name}</div><div style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 13, color: "#94A3B8" }}>{s.code || "-"}</div></div>
                   <div style={td}><StatusChip s={s.status === "approved" ? { key: "active", label: "승인" } : { key: "new", label: "대기" }} /></div>
                   <div style={td}>{s.linked || "-"}</div>
                   <div style={td}>{s.linkStatus === "approved" ? "연동됨" : s.linked ? "연동 대기" : "-"}</div>
-                  <div style={{ ...td, fontFamily: MONO }}>{s.users || 0}</div>
-                  <div style={{ ...td, fontFamily: MONO, color: s.onlineNow ? NAVY : "#9ca3af" }}>{s.onlineNow || 0}</div>
-                  <div style={{ ...td, fontFamily: MONO }}>{s.online || 0}<span style={{ display: "block", fontSize: 13, color: "#6b7280", fontFamily: "inherit" }}>{ago(s.lastSeen)}</span></div>
-                  <div style={{ ...td, fontFamily: MONO, fontSize: 14 }}>{ymdOf(s.appliedAt)}</div>
+                  <div style={{ ...td, fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{s.users || 0}</div>
+                  <div style={{ ...td, fontFamily: MONO, fontVariantNumeric: "tabular-nums", color: s.onlineNow ? NAVY : "#9ca3af" }}>{s.onlineNow || 0}</div>
+                  <div style={{ ...td, fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{s.online || 0}<span style={{ display: "block", fontSize: 13, color: "#6b7280", fontFamily: "inherit" }}>{ago(s.lastSeen)}</span></div>
+                  <div style={{ ...td, fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 14 }}>{ymdOf(s.appliedAt)}</div>
                 </React.Fragment>
               ))}
             </div>
@@ -526,7 +527,7 @@ export default function PlatformMonitor({ demoStats = null, tab: tabProp, onTab,
                 <span style={{ fontSize: 14.5, fontWeight: 700, color: "#374151" }}>{l}</span>
                 <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
                   <input inputMode="numeric" value={fmtMoney(pricing[k] ?? "")} onChange={(e) => setPricing({ ...pricing, [k]: parseMoney(e.target.value) || 0 })} onBlur={() => savePricing(pricing)}
-                    style={{ width: 110, height: 34, borderRadius: 8, border: "1px solid #DCE3EF", padding: "0 10px", fontFamily: MONO, fontSize: 15, fontWeight: 800, color: NAVY, textAlign: "right" }} />
+                    style={{ width: 110, height: 34, borderRadius: 8, border: "1px solid #DCE3EF", padding: "0 10px", fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 15, fontWeight: 800, color: NAVY, textAlign: "right" }} />
                   <span style={{ fontSize: 14, color: "#6b7280", width: 18 }}>{u}</span>
                 </span>
               </label>
@@ -546,17 +547,17 @@ export default function PlatformMonitor({ demoStats = null, tab: tabProp, onTab,
                     <React.Fragment key={c.name}>
                       <div style={{ ...td, textAlign: "left", fontWeight: 800 }}>{c.name}</div>
                       <div style={{ ...td, fontWeight: 800, color: c.bill.planName ? NAVY : "#94A3B8" }}>{c.bill.planName || "공통 기준"}</div>
-                      <div style={{ ...td, fontFamily: MONO }}>{c.staff}</div>
-                      <div style={{ ...td, fontFamily: MONO }}>{c.bill.projected.toLocaleString()}</div>
-                      <div style={{ ...td, fontFamily: MONO }}>{c.bill.base.toLocaleString()}</div>
-                      <div style={{ ...td, fontFamily: MONO }}>{c.bill.seats.toLocaleString()}</div>
-                      <div style={{ ...td, fontFamily: MONO }}>{c.bill.orders.toLocaleString()}</div>
-                      <div style={{ ...td, fontFamily: MONO, color: NAVY, fontSize: 15 }}>{c.bill.total.toLocaleString()}</div>
+                      <div style={{ ...td, fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{c.staff}</div>
+                      <div style={{ ...td, fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{c.bill.projected.toLocaleString()}</div>
+                      <div style={{ ...td, fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{c.bill.base.toLocaleString()}</div>
+                      <div style={{ ...td, fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{c.bill.seats.toLocaleString()}</div>
+                      <div style={{ ...td, fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{c.bill.orders.toLocaleString()}</div>
+                      <div style={{ ...td, fontFamily: MONO, fontVariantNumeric: "tabular-nums", color: NAVY, fontSize: 15 }}>{c.bill.total.toLocaleString()}</div>
                     </React.Fragment>
                   ))}
                   <div style={{ ...td, textAlign: "left", fontWeight: 900, background: "#F4F7FC" }}>합계 (VAT 별도)</div>
                   {[0, 1, 2, 3, 4, 5].map((i) => <div key={i} style={{ ...td, background: "#F4F7FC" }} />)}
-                  <div style={{ ...td, fontFamily: MONO, color: NAVY, fontSize: 16, fontWeight: 900, background: "#F4F7FC" }}>{Math.round(T.mrr).toLocaleString()}</div>
+                  <div style={{ ...td, fontFamily: MONO, fontVariantNumeric: "tabular-nums", color: NAVY, fontSize: 16, fontWeight: 900, background: "#F4F7FC" }}>{Math.round(T.mrr).toLocaleString()}</div>
                 </div>
               </div>
             </Card>
@@ -573,14 +574,14 @@ export default function PlatformMonitor({ demoStats = null, tab: tabProp, onTab,
             <div className="pm-hero" style={{ position: "sticky", top: 0, zIndex: 2, padding: phone ? "calc(14px + env(safe-area-inset-top, 0px)) 16px 14px" : "20px 24px", color: "#fff" }}>
               <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontFamily: MONO, fontSize: 12.5, letterSpacing: "0.24em", color: "#8FB0F0", fontWeight: 800 }}>CARRIER · {detail.code || "-"}</div>
+                  <div style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 12.5, letterSpacing: "0.24em", color: "#8FB0F0", fontWeight: 800 }}>CARRIER · {detail.code || "-"}</div>
                   <div style={{ fontSize: phone ? 21 : 24, fontWeight: 900, marginTop: 4, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{detail.name}</div>
                 </div>
                 <button type="button" onClick={() => setDetailName(null)} aria-label="닫기" style={{ width: 40, height: 40, borderRadius: 11, border: "1px solid rgba(255,255,255,.2)", background: "rgba(255,255,255,.08)", color: "#fff", fontSize: 18, cursor: "pointer", flexShrink: 0 }}>✕</button>
               </div>
               <div style={{ marginTop: 8, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
                 <StatusChip s={detail.status} />
-                <span style={{ fontSize: 14, color: "rgba(207,224,255,.8)" }}>건강도 <b style={{ fontFamily: MONO, color: "#fff" }}>{detail.health}</b> · 가입 {ymdOf(detail.appliedAt)} · 대표 {detail.rep || "-"} {detail.phone ? `· ${detail.phone}` : ""}</span>
+                <span style={{ fontSize: 14, color: "rgba(207,224,255,.8)" }}>건강도 <b style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", color: "#fff" }}>{detail.health}</b> · 가입 {ymdOf(detail.appliedAt)} · 대표 {detail.rep || "-"} {detail.phone ? `· ${detail.phone}` : ""}</span>
               </div>
             </div>
             <div style={{ padding: phone ? 12 : 16, display: "flex", flexDirection: "column", gap: 12 }}>
@@ -602,7 +603,7 @@ export default function PlatformMonitor({ demoStats = null, tab: tabProp, onTab,
                   <ResponsiveContainer width="100%" height="100%">
                     <AreaChart data={daily.map((d, i) => { const dd = new Date(`${today}T00:00:00Z`); dd.setUTCDate(dd.getUTCDate() - (29 - i)); return { label: d.label, v: detail.daily?.[dd.toISOString().slice(0, 10)] || 0 }; })} margin={{ top: 6, right: 4, left: 0, bottom: 0 }}>
                       <defs><linearGradient id="pmArea" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor={NAVY} stopOpacity={0.35} /><stop offset="1" stopColor={NAVY} stopOpacity={0} /></linearGradient></defs>
-                      <XAxis dataKey="label" axisLine={false} tickLine={false} interval={5} tick={{ fontSize: 12.5, fill: "#6b7280", fontFamily: MONO }} />
+                      <XAxis dataKey="label" axisLine={false} tickLine={false} interval={5} tick={{ fontSize: 12.5, fill: "#6b7280", fontFamily: MONO, fontVariantNumeric: "tabular-nums" }} />
                       <YAxis hide />
                       <Tooltip formatter={(v) => [`${v}건`, "오더"]} contentStyle={{ borderRadius: 10, fontSize: 14, fontWeight: 700 }} />
                       <Area type="monotone" dataKey="v" stroke={NAVY} strokeWidth={2.4} fill="url(#pmArea)" />
@@ -637,9 +638,9 @@ export default function PlatformMonitor({ demoStats = null, tab: tabProp, onTab,
               </Card>
               <Card code="INVOICE" title="예상 청구 내역">
                 {[["기본료", detail.bill.base], [`계정 추가 (${Math.max(0, detail.staff - pricing.includedSeats)}명)`, detail.bill.seats], [`오더 초과 (${Math.max(0, detail.bill.projected - pricing.includedOrders).toLocaleString()}건)`, detail.bill.orders]].map(([k, v]) => (
-                  <div key={k} style={{ display: "flex", justifyContent: "space-between", padding: "8px 0", borderTop: "1px solid #EEF1F6", fontSize: 14.5 }}><span style={{ color: "#374151", fontWeight: 600 }}>{k}</span><b style={{ fontFamily: MONO }}>{won(v)}</b></div>
+                  <div key={k} style={{ display: "flex", justifyContent: "space-between", padding: "8px 0", borderTop: "1px solid #EEF1F6", fontSize: 14.5 }}><span style={{ color: "#374151", fontWeight: 600 }}>{k}</span><b style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{won(v)}</b></div>
                 ))}
-                <div style={{ display: "flex", justifyContent: "space-between", padding: "10px 0 0", borderTop: `2px solid ${NAVY}`, fontSize: 16 }}><b>합계 (VAT 별도)</b><b style={{ fontFamily: MONO, color: NAVY }}>{won(detail.bill.total)}</b></div>
+                <div style={{ display: "flex", justifyContent: "space-between", padding: "10px 0 0", borderTop: `2px solid ${NAVY}`, fontSize: 16 }}><b>합계 (VAT 별도)</b><b style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", color: NAVY }}>{won(detail.bill.total)}</b></div>
               </Card>
             </div>
           </div>

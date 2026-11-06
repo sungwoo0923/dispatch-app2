@@ -9,10 +9,12 @@ import React from "react";
 import { collection, doc, getDoc, getDocs, onSnapshot, query, setDoc, where, serverTimestamp } from "firebase/firestore";
 import { ResponsiveContainer, ComposedChart, Bar, Line, XAxis, YAxis, Tooltip, CartesianGrid, PieChart, Pie, Cell } from "recharts";
 import { db, auth, DEFAULT_COMPANY } from "./firebase";
+import { useRouteCarrierFilter } from "./routeCarriers"; // ⭐ 2026-11-05
 import { BookHero, BookCard, Chip, Sheet, MONO } from "./OfficeBooks";
 import { isTMUser } from "./staffFilter";
 import { leaveEntitlement, leaveUseOf } from "./approvalForms";
 import { CustomSelect } from "./CustomSelect";
+import CustomDatePicker from "./CustomDatePicker"; // 📅 2026-11-04 날짜 입력은 프로그램 달력으로
 
 const toInt = (v) => parseInt(String(v ?? "0").replace(/[^\d-]/g, ""), 10) || 0;
 const won = (n) => Math.round(Number(n) || 0).toLocaleString("ko-KR");
@@ -29,6 +31,7 @@ const NAVY = ["#0F1A30", "#1B2B4B", "#2D4C82", "#4B6CB7", "#8FB0F0", "#CFE0FF", 
 const yearCache = new Map();
 export function useYearOrders(company, fixedRows = []) {
   const y = new Date().getFullYear();
+  const carrierF = useRouteCarrierFilter(company); // ⭐ 2026-11-05 고정노선 운송업체 설정 — 끈 업체 오더는 회계에서 뺀다
   const key = `${company}|${y}`;
   const [rows, setRows] = React.useState(() => yearCache.get(key) || null);
   React.useEffect(() => {
@@ -44,13 +47,13 @@ export function useYearOrders(company, fixedRows = []) {
       .catch(() => { if (alive) setRows([]); });
     return () => { alive = false; };
   }, [key, company, y]);
-  return React.useMemo(() => (rows ? [...rows, ...(fixedRows || []).map((r) => ({ ...r, 상차일: r.날짜, 배차상태: "배차완료" }))] : null), [rows, fixedRows]);
+  return React.useMemo(() => (rows ? [...carrierF.filter(rows), ...(fixedRows || []).map((r) => ({ ...r, 상차일: r.날짜, 배차상태: "배차완료" }))] : null), [rows, fixedRows, carrierF]);
 }
 
 const Tip = ({ active, payload, label }) => (active && payload?.length ? (
   <div className="rounded-xl border border-[#E3E8F0] bg-white px-3 py-2 text-[12px] shadow-xl">
-    <div className="font-black mb-1" style={{ fontFamily: MONO }}>{label}</div>
-    {payload.map((p) => <div key={p.dataKey} className="flex items-center gap-2"><span className="w-2 h-2 rounded-full" style={{ background: p.color }} />{p.name} <b style={{ fontFamily: MONO }}>{p.dataKey === "margin" ? `${Number(p.value).toFixed(1)}%` : `${won(p.value)}원`}</b></div>)}
+    <div className="font-black mb-1" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{label}</div>
+    {payload.map((p) => <div key={p.dataKey} className="flex items-center gap-2"><span className="w-2 h-2 rounded-full" style={{ background: p.color }} />{p.name} <b style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{p.dataKey === "margin" ? `${Number(p.value).toFixed(1)}%` : `${won(p.value)}원`}</b></div>)}
   </div>
 ) : null);
 
@@ -97,9 +100,9 @@ export function AccountingOverview({ company, orders }) {
           <div className="h-[280px] -ml-2"><ResponsiveContainer width="100%" height="100%">
             <ComposedChart data={chart} margin={{ top: 8, right: 4, left: 0, bottom: 0 }}>
               <CartesianGrid stroke="#EEF2F8" vertical={false} />
-              <XAxis dataKey="k" tick={{ fill: "#7A879C", fontSize: 12, fontFamily: MONO }} axisLine={false} tickLine={false} />
-              <YAxis yAxisId="w" tickFormatter={short} tick={{ fill: "#9AA9C3", fontSize: 11, fontFamily: MONO }} axisLine={false} tickLine={false} width={48} />
-              <YAxis yAxisId="m" orientation="right" tickFormatter={(v) => `${v}%`} tick={{ fill: "#9AA9C3", fontSize: 11, fontFamily: MONO }} axisLine={false} tickLine={false} width={38} />
+              <XAxis dataKey="k" tick={{ fill: "#7A879C", fontSize: 12, fontFamily: MONO, fontVariantNumeric: "tabular-nums" }} axisLine={false} tickLine={false} />
+              <YAxis yAxisId="w" tickFormatter={short} tick={{ fill: "#9AA9C3", fontSize: 11, fontFamily: MONO, fontVariantNumeric: "tabular-nums" }} axisLine={false} tickLine={false} width={48} />
+              <YAxis yAxisId="m" orientation="right" tickFormatter={(v) => `${v}%`} tick={{ fill: "#9AA9C3", fontSize: 11, fontFamily: MONO, fontVariantNumeric: "tabular-nums" }} axisLine={false} tickLine={false} width={38} />
               <Tooltip content={<Tip />} cursor={{ fill: "rgba(27,43,75,.04)" }} />
               <Bar yAxisId="w" dataKey="sale" name="매출" fill="#1B2B4B" radius={[6, 6, 0, 0]} maxBarSize={26} />
               <Bar yAxisId="w" dataKey="buy" name="매입" fill="#9FB2D6" radius={[6, 6, 0, 0]} maxBarSize={26} />
@@ -111,8 +114,8 @@ export function AccountingOverview({ company, orders }) {
           <div className="flex items-center gap-4">
             <div className="w-[150px] h-[150px] shrink-0"><ResponsiveContainer><PieChart><Pie data={aging.map(([n, v]) => ({ n, v }))} dataKey="v" nameKey="n" innerRadius={44} outerRadius={70} paddingAngle={2} stroke="none">{aging.map((_, i) => <Cell key={i} fill={["#8FB0F0", "#4B6CB7", "#1B2B4B", "#B42318"][i]} />)}</Pie></PieChart></ResponsiveContainer></div>
             <div className="flex-1 space-y-2">
-              {aging.map(([l, v], i) => <div key={l} className="flex items-center gap-2 text-[13px]"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: ["#8FB0F0", "#4B6CB7", "#1B2B4B", "#B42318"][i] }} /><span className="font-bold text-[#3A4A66] flex-1">{l}</span><span className="font-black tabular-nums" style={{ fontFamily: MONO }}>{short(v)}원</span></div>)}
-              <div className="pt-2 border-t border-[#EEF2F8] flex justify-between text-[13px]"><span className="font-black">합계</span><span className="font-black tabular-nums" style={{ fontFamily: MONO }}>{won(arSum)}원</span></div>
+              {aging.map(([l, v], i) => <div key={l} className="flex items-center gap-2 text-[13px]"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: ["#8FB0F0", "#4B6CB7", "#1B2B4B", "#B42318"][i] }} /><span className="font-bold text-[#3A4A66] flex-1">{l}</span><span className="font-black tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{short(v)}원</span></div>)}
+              <div className="pt-2 border-t border-[#EEF2F8] flex justify-between text-[13px]"><span className="font-black">합계</span><span className="font-black tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{won(arSum)}원</span></div>
             </div>
           </div>
         </BookCard>
@@ -123,7 +126,7 @@ export function AccountingOverview({ company, orders }) {
             <ComposedChart data={quarters} margin={{ top: 8, right: 4, left: 0, bottom: 0 }}>
               <CartesianGrid stroke="#EEF2F8" vertical={false} />
               <XAxis dataKey="k" tick={{ fill: "#7A879C", fontSize: 12 }} axisLine={false} tickLine={false} />
-              <YAxis tickFormatter={short} tick={{ fill: "#9AA9C3", fontSize: 11, fontFamily: MONO }} axisLine={false} tickLine={false} width={44} />
+              <YAxis tickFormatter={short} tick={{ fill: "#9AA9C3", fontSize: 11, fontFamily: MONO, fontVariantNumeric: "tabular-nums" }} axisLine={false} tickLine={false} width={44} />
               <Tooltip content={<Tip />} />
               <Bar dataKey="sale" name="매출세액" fill="#1B2B4B" radius={[6, 6, 0, 0]} maxBarSize={24} />
               <Bar dataKey="buy" name="매입세액" fill="#9FB2D6" radius={[6, 6, 0, 0]} maxBarSize={24} />
@@ -134,7 +137,7 @@ export function AccountingOverview({ company, orders }) {
         <BookCard en="TOP RECEIVABLES" title="미수금 상위 거래처">
           {!arList.length ? <div className="py-8 text-center text-[13px] font-bold text-[#9AA9C3]">미수금이 없습니다</div> : arList.slice(0, 6).map((x) => (
             <div key={x.c} className="py-1.5">
-              <div className="flex items-center justify-between text-[13px]"><span className="font-bold text-[#0F1A30] truncate">{x.c}</span><span className="font-black tabular-nums" style={{ fontFamily: MONO }}>{short(x.out)}원</span></div>
+              <div className="flex items-center justify-between text-[13px]"><span className="font-bold text-[#0F1A30] truncate">{x.c}</span><span className="font-black tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{short(x.out)}원</span></div>
               <div className="mt-1 h-1.5 rounded-full bg-[#EEF2F8] overflow-hidden"><div className="h-full rounded-full" style={{ width: `${(x.out / arList[0].out) * 100}%`, background: x.age > 90 ? "#B42318" : "#1B2B4B" }} /></div>
             </div>
           ))}
@@ -143,7 +146,7 @@ export function AccountingOverview({ company, orders }) {
           {!accTop.length ? <div className="py-8 text-center text-[13px] font-bold text-[#9AA9C3]">장부 지출이 없습니다</div> : (
             <div className="flex items-center gap-3">
               <div className="w-[120px] h-[120px] shrink-0"><ResponsiveContainer><PieChart><Pie data={accTop.map(([n, v]) => ({ n, v }))} dataKey="v" innerRadius={34} outerRadius={56} stroke="none">{accTop.map((_, i) => <Cell key={i} fill={NAVY[i % NAVY.length]} />)}</Pie></PieChart></ResponsiveContainer></div>
-              <div className="flex-1 min-w-0 space-y-1">{accTop.map(([n, v], i) => <div key={n} className="flex items-center gap-1.5 text-[12px]"><span className="w-2 h-2 rounded-sm shrink-0" style={{ background: NAVY[i % NAVY.length] }} /><span className="truncate flex-1 font-bold text-[#3A4A66]">{n}</span><span className="font-black tabular-nums" style={{ fontFamily: MONO }}>{short(v)}</span></div>)}</div>
+              <div className="flex-1 min-w-0 space-y-1">{accTop.map(([n, v], i) => <div key={n} className="flex items-center gap-1.5 text-[12px]"><span className="w-2 h-2 rounded-sm shrink-0" style={{ background: NAVY[i % NAVY.length] }} /><span className="truncate flex-1 font-bold text-[#3A4A66]">{n}</span><span className="font-black tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{short(v)}</span></div>)}</div>
             </div>
           )}
         </BookCard>
@@ -210,10 +213,10 @@ export function RetireDesk({ company, isViewer = false }) {
                 <span className="w-11 h-11 rounded-2xl bg-[#1B2B4B] text-white grid place-items-center text-[15px] font-black shrink-0">{String(u.name || "?").slice(0, 1)}</span>
                 <span className="flex-1 min-w-0">
                   <span className="flex items-center gap-1.5 flex-wrap"><span className="text-[15px] font-black text-[#0F1A30]">{u.name || u.email}</span><span className="text-[12px] font-bold text-[#7A879C]">{[u.team, u.position].filter(Boolean).join(" · ")}</span>{c.reason && <span className={`text-[10.5px] font-black px-1.5 py-0.5 rounded-md ${INVOLUNTARY.includes(c.reason) ? "bg-[#EEF3FC] text-[#2D4C82]" : "bg-[#F3F6FA] text-[#5B6B85]"}`}>{c.reason}</span>}{late > 0 && <span className="text-[10.5px] font-black px-1.5 py-0.5 rounded-md bg-[#FEF3F2] text-[#B42318]">기한 지남 {late}</span>}</span>
-                  <span className="block text-[12px] text-[#7A879C] mt-0.5" style={{ fontFamily: MONO }}>퇴직일 {lastDay || "미정"}{c.severance ? ` · 퇴직금 ${won(c.severance)}원${c.steps?.severance?.done ? " 지급" : " 미지급"}` : ""}</span>
+                  <span className="block text-[12px] text-[#7A879C] mt-0.5" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>퇴직일 {lastDay || "미정"}{c.severance ? ` · 퇴직금 ${won(c.severance)}원${c.steps?.severance?.done ? " 지급" : " 미지급"}` : ""}</span>
                   <span className="mt-1.5 block h-1.5 rounded-full bg-[#EEF2F8] overflow-hidden max-w-[360px]"><span className="block h-full rounded-full" style={{ width: `${(done / RETIRE_STEPS.length) * 100}%`, background: done === RETIRE_STEPS.length ? "#12B76A" : "#1B2B4B" }} /></span>
                 </span>
-                <span className="text-[17px] font-black tabular-nums" style={{ fontFamily: MONO }}>{done}<span className="text-[11px] text-[#9AA9C3]">/{RETIRE_STEPS.length}</span></span>
+                <span className="text-[17px] font-black tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{done}<span className="text-[11px] text-[#9AA9C3]">/{RETIRE_STEPS.length}</span></span>
               </button>
             ))}
           </div>
@@ -252,29 +255,29 @@ function RetireCaseSheet({ company, u, c, profile, resign, approvals, isViewer, 
     <Sheet side en="RETIREMENT · SETTLEMENT" title={`${u.name || u.email} 퇴직 정산`} onClose={onClose}
       footer={<><button type="button" onClick={onClose} className="h-12 px-5 rounded-xl border border-[#DCE3EE] bg-white text-[14px] font-bold text-[#3A4A66]">닫기</button>{!isViewer && <button type="button" onClick={async () => { await save(); onClose(); }} className="flex-1 h-12 rounded-xl bg-[#0F1A30] text-white text-[15px] font-black">저장</button>}</>}>
       <div className="rounded-2xl p-4 text-white" style={{ background: "linear-gradient(120deg,#0B1428,#1B2B4B 60%,#2D4C82)" }}>
-        <div className="text-[11px] font-extrabold tracking-[0.22em] text-[#8FB0F0]" style={{ fontFamily: MONO }}>ESTIMATE · 계산</div>
+        <div className="text-[11px] font-extrabold tracking-[0.22em] text-[#8FB0F0]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>ESTIMATE · 계산</div>
         <div className="grid grid-cols-2 gap-3 mt-2">
-          <div><div className="text-[12px] text-white/60">퇴직금 {sev.eligible ? "" : "(1년 미만 — 대상 아님)"}</div><div className="text-[24px] font-black tabular-nums" style={{ fontFamily: MONO }}>{won(sev.amount)}원</div><div className="text-[11.5px] text-white/50">재직 {sev.days.toLocaleString()}일</div></div>
-          <div><div className="text-[12px] text-white/60">미사용 연차수당</div><div className="text-[24px] font-black tabular-nums" style={{ fontFamily: MONO }}>{won(leavePay)}원</div><div className="text-[11.5px] text-white/50">{f.unusedLeave || 0}일</div></div>
+          <div><div className="text-[12px] text-white/60">퇴직금 {sev.eligible ? "" : "(1년 미만 — 대상 아님)"}</div><div className="text-[24px] font-black tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{won(sev.amount)}원</div><div className="text-[11.5px] text-white/50">재직 {sev.days.toLocaleString()}일</div></div>
+          <div><div className="text-[12px] text-white/60">미사용 연차수당</div><div className="text-[24px] font-black tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{won(leavePay)}원</div><div className="text-[11.5px] text-white/50">{f.unusedLeave || 0}일</div></div>
         </div>
         <div className={`mt-3 rounded-xl px-3 py-2 text-[12.5px] font-bold ${INVOLUNTARY.includes(f.reason) ? "bg-white/15" : "bg-white/[0.07]"}`}>
           실업급여: {INVOLUNTARY.includes(f.reason) ? "비자발적 이직 — 수급 가능성이 높습니다. 이직확인서를 꼭 제출해 주세요." : "자발적 퇴사 — 원칙적으로 수급 불가(임금체불·통근 곤란 등 예외 사유 확인)."}
         </div>
       </div>
-      {resign && <div className="rounded-2xl bg-white border border-[#E3E8F0] p-4"><div className="text-[12px] font-extrabold tracking-[0.2em] text-[#4B6CB7]" style={{ fontFamily: MONO }}>RESIGNATION</div><div className="text-[14.5px] font-black text-[#0F1A30] mt-1">사직서 {resign.docNo || ""} · 퇴직 희망일 {resign.data?.last || "-"}</div><div className="text-[13px] text-[#5B6B85] mt-1 whitespace-pre-wrap">{resign.data?.reason || ""}</div></div>}
+      {resign && <div className="rounded-2xl bg-white border border-[#E3E8F0] p-4"><div className="text-[12px] font-extrabold tracking-[0.2em] text-[#4B6CB7]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>RESIGNATION</div><div className="text-[14.5px] font-black text-[#0F1A30] mt-1">사직서 {resign.docNo || ""} · 퇴직 희망일 {resign.data?.last || "-"}</div><div className="text-[13px] text-[#5B6B85] mt-1 whitespace-pre-wrap">{resign.data?.reason || ""}</div></div>}
       <div className="rounded-2xl bg-white border border-[#E3E8F0] p-4 space-y-3">
         <div><div className="text-[12.5px] font-black text-[#3A4A66] mb-1.5">퇴직 사유</div><div className="flex flex-wrap gap-1.5">{RETIRE_REASONS.map((r) => <Chip key={r} on={f.reason === r} onClick={() => setF((p) => ({ ...p, reason: r }))}>{r}</Chip>)}</div></div>
         <div className="grid grid-cols-2 gap-2">
           <div><div className="text-[12.5px] font-black text-[#3A4A66] mb-1.5">입사일</div><div className={`${inp} flex items-center bg-[#F5F8FD] tabular-nums`} title="입사일 변경은 인사관리부 › 인사관리 › 직원관리에서">{f.hireDate || "미등록 (인사팀 등록 필요)"}</div></div>
-          <div><div className="text-[12.5px] font-black text-[#3A4A66] mb-1.5">퇴직일(마지막 근무일)</div><input type="date" value={f.lastDay} onChange={(e) => setF((p) => ({ ...p, lastDay: e.target.value }))} className={inp} /></div>
-          <div><div className="text-[12.5px] font-black text-[#3A4A66] mb-1.5">최근 3개월 월평균 임금</div><input inputMode="numeric" value={f.avgMonthly ? won(f.avgMonthly) : ""} onChange={(e) => setF((p) => ({ ...p, avgMonthly: e.target.value.replace(/[^\d]/g, "") }))} className={`${inp} text-right tabular-nums`} style={{ fontFamily: MONO }} placeholder="세전 · 상여 포함" /></div>
+          <div><div className="text-[12.5px] font-black text-[#3A4A66] mb-1.5">퇴직일(마지막 근무일)</div><CustomDatePicker value={f.lastDay} onChange={(e) => setF((p) => ({ ...p, lastDay: e.target.value }))} className={inp} showIcon /></div>
+          <div><div className="text-[12.5px] font-black text-[#3A4A66] mb-1.5">최근 3개월 월평균 임금</div><input inputMode="numeric" value={f.avgMonthly ? won(f.avgMonthly) : ""} onChange={(e) => setF((p) => ({ ...p, avgMonthly: e.target.value.replace(/[^\d]/g, "") }))} className={`${inp} text-right tabular-nums`} style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }} placeholder="세전 · 상여 포함" /></div>
           <div><div className="text-[12.5px] font-black text-[#3A4A66] mb-1.5">미사용 연차(일)</div><input inputMode="decimal" value={f.unusedLeave} onChange={(e) => setF((p) => ({ ...p, unusedLeave: e.target.value.replace(/[^\d.]/g, "") }))} className={`${inp} text-right`} /></div>
           <div><div className="text-[12.5px] font-black text-[#3A4A66] mb-1.5">1일 통상임금(선택)</div><input inputMode="numeric" value={f.dailyOrdinary ? won(f.dailyOrdinary) : ""} onChange={(e) => setF((p) => ({ ...p, dailyOrdinary: e.target.value.replace(/[^\d]/g, "") }))} className={`${inp} text-right`} placeholder="비우면 월급÷209×8" /></div>
           <div><div className="text-[12.5px] font-black text-[#3A4A66] mb-1.5">퇴직연금</div><CustomSelect value={f.pension} onChange={(e) => setF((p) => ({ ...p, pension: e.target.value }))} className={inp}>{["미가입", "DB형", "DC형", "IRP"].map((x) => <option key={x}>{x}</option>)}</CustomSelect></div>
         </div>
       </div>
       <div className="rounded-2xl bg-white border border-[#E3E8F0] p-4">
-        <div className="text-[12px] font-extrabold tracking-[0.2em] text-[#4B6CB7] mb-2" style={{ fontFamily: MONO }}>CHECKLIST · 법정 기한</div>
+        <div className="text-[12px] font-extrabold tracking-[0.2em] text-[#4B6CB7] mb-2" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>CHECKLIST · 법정 기한</div>
         <div className="space-y-2">
           {RETIRE_STEPS.map((s) => {
             const st = f.steps[s.key] || {}; const due = s.due && f.lastDay ? s.due(f.lastDay) : ""; const late = !st.done && due && due < today;
@@ -282,7 +285,7 @@ function RetireCaseSheet({ company, u, c, profile, resign, approvals, isViewer, 
               <button key={s.key} type="button" onClick={() => toggle(s.key)} disabled={isViewer} className={`w-full text-left rounded-xl border px-3 py-2.5 flex items-start gap-3 ${st.done ? "bg-[#ECFDF3] border-[#ABEFC6]" : late ? "bg-[#FEF3F2] border-[#FECDCA]" : "bg-white border-[#E3E8F0]"}`}>
                 <span className={`w-5 h-5 mt-0.5 rounded-md grid place-items-center text-[12px] font-black shrink-0 ${st.done ? "bg-[#12B76A] text-white" : "border-2 border-[#C9D2E0]"}`}>{st.done ? "✓" : ""}</span>
                 <span className="flex-1 min-w-0"><span className="block text-[14px] font-black text-[#0F1A30]">{s.label}{s.money === "severance" && sev.amount ? ` · ${won(sev.amount)}원` : s.money === "leavePay" && leavePay ? ` · ${won(leavePay)}원` : ""}</span><span className="block text-[12px] text-[#7A879C]">{s.desc}</span></span>
-                <span className={`text-[11.5px] font-black whitespace-nowrap ${late ? "text-[#B42318]" : "text-[#5B6B85]"}`} style={{ fontFamily: MONO }}>{st.done ? `완료 ${st.at}` : due ? `기한 ${due}` : ""}</span>
+                <span className={`text-[11.5px] font-black whitespace-nowrap ${late ? "text-[#B42318]" : "text-[#5B6B85]"}`} style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{st.done ? `완료 ${st.at}` : due ? `기한 ${due}` : ""}</span>
               </button>
             );
           })}

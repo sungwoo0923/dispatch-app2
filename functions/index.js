@@ -120,6 +120,25 @@ async function sendPushAndCleanup(tokens, message, label) {
   // 알림 채널의 "중요도"를 최초 생성 시 자체적으로 정하고, 이후엔 사용자가
   // 기기 설정(설정 > 앱 > 알림 > 이 사이트/앱 > 중요도/팝업 표시)에서 직접
   // 올려야 바뀌는 구조라, 코드만으로는 이미 만들어진 채널의 등급을 못 바꾼다.
+  // ⭐ 2026-11-05 기사 APK(안드로이드 네이티브 앱) 푸시 — 네이티브 FCM은 data만 오면 앱이 꺼져 있을 때
+  //  알림창에 아무것도 안 띄운다(Capacitor PushNotifications는 notification 메시지만 시스템이 표시).
+  //  android.notification은 "안드로이드 앱" 토큰에만 적용되고 웹푸시(크롬·아이폰 PWA) 토큰은 계속 webpush(data)로 간다
+  //  → 웹 쪽 중복 알림 문제(위 설명)는 다시 생기지 않는다. 채널 "orders"는 기사앱이 만들고(중요도 높음=화면 위 배너),
+  //  채널이 없는 예전 APK는 FCM 기본 채널로 뜬다.
+  if (notification?.title) {
+    restMessage.android = {
+      priority: "high",
+      ...(restMessage.android || {}),
+      notification: {
+        title: String(notification.title),
+        ...(notification.body ? { body: String(notification.body) } : {}),
+        channelId: "orders",
+        sound: "default",
+        defaultVibrateTimings: true,
+        ...((restMessage.android && restMessage.android.notification) || {}),
+      },
+    };
+  }
   if (!restMessage.webpush) restMessage.webpush = {};
   if (!restMessage.webpush.headers) restMessage.webpush.headers = {};
   if (!restMessage.webpush.headers.Urgency) restMessage.webpush.headers.Urgency = "high";
@@ -510,12 +529,21 @@ exports.notifyDispatchDeleted =
         const driverDoc = plate ? await findDriverByPlate(data["차량번호"], data.companyName) : null;
         if (driverDoc) {
           const body = `담당자가 ${data["거래처명"] || ""} ${data["상차지명"] || "-"} → ${data["하차지명"] || "-"} 오더를 삭제했습니다.`;
-          await db.collection("driver_notifications").add({
+          // ⭐ 2026-11-05 기사앱 "삭제된 오더" 팝업 — PC/모바일 삭제 화면이 같은 id(orderDeleted_{오더id})로 먼저 남긴다.
+          //  예전엔 화면(addDoc)과 서버(add)가 각각 써서 알림함에 같은 취소가 두 줄 쌓였다 → 같은 id로 create(이미 있으면 그대로 둔다:
+          //  기사가 이미 [확인]한 팝업이 다시 뜨지 않게 덮어쓰지 않는다).
+          const pick = (k) => (data[k] == null ? "" : String(data[k]));
+          await db.collection("driver_notifications").doc(`orderDeleted_${context.params.dispatchId}`).create({
             driverId: driverDoc.id,
             type: "canceled",
+            deleted: true,
+            popup: data["기사확인상태"] === "대기" || data["기사확인상태"] === "수락",
+            popupAck: false,
             orderId: context.params.dispatchId,
             title: "배차가 취소되었습니다",
             body,
+            order: Object.fromEntries(["거래처명", "상차지명", "하차지명", "상차일", "상차시간", "하차일", "하차시간", "화물내용", "차량톤수", "기사운임"].map((k) => [k, pick(k)])),
+            ...(data.companyName ? { companyName: data.companyName } : {}),
             createdAt: FieldValue.serverTimestamp(),
             read: false,
           }).catch(() => {});
@@ -732,6 +760,79 @@ exports.notifyDispatcherOrderRejected =
         apns: { payload: { aps: { sound: "default" } } },
       }, "지입기사 오더거절(담당자 알림)");
     });
+
+/* ==============================
+   ⏰ 2026-11-05 기사 출근 알림 — 출근을 자주 잊는(특히 연세 있는) 기사님께 OS 푸시로 알려준다.
+   - 기사앱 설정 › "출근 알림"에서 정한 drivers/{uid}.출근시간("HH:MM", 한국시간) 기준
+     · 10분 전쯤: "출근 10분 전입니다"  · 출근 시간(~30분): "출근 시간입니다"
+   - 보내지 않는 경우: 출근알림:false · 근무요일(관리자 기사관리)이 정해져 있는데 오늘이 아님 · 이미 출근/운행중 ·
+     휴차 · 오늘 최종퇴근 · 기사앱 알림 끔(users.driverPushEnabled:false) · 앱 미가입(uid 없음)
+   - 같은 날 같은 단계는 한 번만: driver_notifications/checkin_{uid}_{날짜}_{단계} 를 create(이미 있으면 건너뜀) —
+     기사앱 알림함(종)에도 그대로 남는다.
+   - 5분마다 실행. 회사가 모두 국내라 한국시간(Asia/Seoul) 하나로 계산한다.
+============================== */
+const CHECKIN_DOW = ["일", "월", "화", "수", "목", "금", "토"];
+function parseHM(v) {
+  const m = /^(\d{1,2}):(\d{2})$/.exec(String(v || "").trim());
+  if (!m) return null;
+  const h = Number(m[1]), mi = Number(m[2]);
+  return h < 24 && mi < 60 ? h * 60 + mi : null;
+}
+// 순수 판정(테스트하기 쉽게 분리) — 보낼 단계("before" | "start") 또는 null
+function checkinReminderStage(d, nowMin, ymd, dow) {
+  if (!d || d.출근알림 === false) return null;
+  const start = parseHM(d.출근시간);
+  if (start == null) return null;
+  if (Array.isArray(d.근무요일) && d.근무요일.length && !d.근무요일.includes(CHECKIN_DOW[dow])) return null;
+  const st = String(d.status || "").trim();
+  if (st && st !== "퇴근" && st !== "대기") return null; // 출근·운행중·휴차는 보내지 않는다
+  if (d.isFinalCheckout && d.workDate === ymd) return null;
+  const diff = nowMin - start;
+  if (diff >= -11 && diff < -3) return "before";
+  if (diff >= 0 && diff < 30) return "start";
+  return null;
+}
+exports.remindDriverCheckin = functions.runWith({ timeoutSeconds: 120, memory: "256MB" }).pubsub
+  .schedule("every 5 minutes").timeZone("Asia/Seoul").onRun(async () => {
+    const k = new Date(Date.now() + 9 * 3600e3);
+    const ymd = k.toISOString().slice(0, 10);
+    const nowMin = k.getUTCHours() * 60 + k.getUTCMinutes();
+    const dow = k.getUTCDay();
+    // 출근시간을 정한 기사만(단일 필드 조건이라 색인 추가 불필요)
+    const snap = await db.collection("drivers").where("출근시간", ">", "").get().catch((e) => { console.warn("출근 알림 조회 실패:", e?.message || e); return null; });
+    if (!snap || snap.empty) return null;
+    let sent = 0;
+    for (const dd of snap.docs) {
+      const d = dd.data();
+      const uid = d.uid || "";
+      if (!uid || uid !== dd.id) continue; // 기사앱에 가입·연결된 문서(drivers/{uid})만
+      const stage = checkinReminderStage(d, nowMin, ymd, dow);
+      if (!stage) continue;
+      const title = stage === "before" ? "출근 10분 전입니다" : "출근 시간입니다";
+      const body = stage === "before"
+        ? `${d.출근시간} 출근 — 도착하시면 기사앱의 [출근] 버튼을 꼭 눌러 주세요.`
+        : "아직 출근 처리가 안 되어 있어요. 기사앱을 열고 [출근] 버튼을 눌러 주세요.";
+      try {
+        await db.collection("driver_notifications").doc(`checkin_${uid}_${ymd}_${stage}`).create({
+          driverId: uid, type: "checkin", title, body, createdAt: FieldValue.serverTimestamp(), read: false,
+          ...(d.companyName ? { companyName: d.companyName } : {}),
+        });
+      } catch (e) { continue; } // 이미 보냄(ALREADY_EXISTS) 또는 저장 실패 — 다시 보내지 않는다
+      const u = await db.collection("users").doc(uid).get().then((x) => (x.exists ? x.data() : null)).catch(() => null);
+      if (!u || u.driverPushEnabled === false) continue;
+      const tokens = userTokens(u);
+      if (!tokens.length) continue;
+      await sendPushAndCleanup(tokens, {
+        notification: { title, body },
+        data: { type: "driver_checkin", tag: `checkin-${ymd}` },
+        android: { priority: "high" },
+        apns: { payload: { aps: { sound: "default" } } },
+      }, `기사 출근알림(${stage})`);
+      sent++;
+    }
+    if (sent) console.log(`⏰ 출근 알림 ${sent}건 발송 (${ymd} ${Math.floor(nowMin / 60)}:${String(nowMin % 60).padStart(2, "0")})`);
+    return null;
+  });
 
 /* ==============================
    ◆ 유가 API Proxy
@@ -1353,6 +1454,7 @@ async function sendGsheetMineBatch(items) {
   const byTab = new Map();
   const skipped = [];
   for (const it of items) {
+    if (!isGsheetDolcaeOrder(it.data)) { skipped.push(it); continue; } // ⭐ 2026-11-06 돌캐 오더만
     const tab = isGsheetCanceled(it.data) ? null : gsheetMonthTabName(it.data.상차일); // ★ 블라인드여도 내 오더는 시트로 보낸다(프로그램에서만 숨김)
     if (!tab) { skipped.push(it); continue; }
     if (!byTab.has(tab)) byTab.set(tab, []);
@@ -1456,6 +1558,15 @@ async function sendGsheetMineBatch(items) {
 const GSHEET_LINK_OFF_MESSAGE = "프로그램과 구글시트 연결이 끊겨 있습니다(시트 수기 작성 중) — 시트를 덮어쓰지 않도록 이 작업은 실행하지 않았습니다.";
 // 이 시트 전용 동기화 대상 회사명 — 다른 회사 데이터가 섞이지 않도록 반드시 필터링한다.
 const GSHEET_TARGET_COMPANY = "돌캐";
+// ⭐ 2026-11-06 돌캐 시트에는 돌캐 오더만 — "내 오더만 보내기"가 작성자 이메일만 보고 회사를 안 봐서,
+//  최고관리자가 다른 운송사(예: 태진)에서 고정노선·배차표 오더를 만들면 그 오더까지 돌캐 시트에 들어갔다.
+//  다른 회사 오더 · 배차표(구글시트 고정노선) 오더 · 지입차관리 고정노선 오더는 전송 대상에서 뺀다.
+function isGsheetDolcaeOrder(d) {
+  if (!d) return false;
+  if ((d.companyName || GSHEET_TARGET_COMPANY) !== GSHEET_TARGET_COMPANY) return false;
+  if (d.배차표Id || d._autoSheet || d.고정노선Id || d.등록기기 === "배차표") return false;
+  return true;
+}
 // "차량번호로 기사명/전화번호 자동매칭"에 쓰이는 기준표 시트 이름(A:기사명, B:차량정보(차량번호), C:전화번호, D:비고).
 const GSHEET_UNIQUE_TAB = "고유값";
 
@@ -3328,12 +3439,19 @@ exports.syncDispatchToGoogleSheet =
           const createdMs = after.createdAt?.toMillis?.() || (typeof after.createdAt === "number" ? after.createdAt : Date.now());
           if (mine?.enabled && mine.email &&
               String(after.작성자 || "").trim().toLowerCase() === String(mine.email).trim().toLowerCase() &&
-              createdMs >= sinceMs && !after.importBatchId && after.source !== "transport_transmit") {
+              createdMs >= sinceMs && !after.importBatchId && after.source !== "transport_transmit" &&
+              isGsheetDolcaeOrder(after)) { // ⭐ 2026-11-06 돌캐 오더만
             await change.after.ref.update({ _gsheetMine: true }).catch(() => {});
           }
           return; // 전송 대기 — [구글시트로 전송] 버튼을 누를 때 들어간다
         }
         if (!isMine) return;
+        // ⭐ 2026-11-06 예전에 잘못 표시된 다른 회사·고정노선 오더 — 시트에 들어간 줄은 지우고 표시를 뗀다(다시 안 들어가게)
+        if (!isGsheetDolcaeOrder(after || before)) {
+          if (sentOf(before) || sentOf(after)) await removeDocFromGsheet(`${col}/${dispatchId}`, before || after).catch((e) => console.warn("다른 회사 오더 시트 줄 정리 실패:", e?.message || e));
+          if (after) await change.after.ref.update({ _gsheetMine: FieldValue.delete(), _gsheetMineSent: FieldValue.delete(), _gsheetSync: FieldValue.delete() }).catch(() => {});
+          return;
+        }
         const wasSent = sentOf(before);
         const isSent = sentOf(after) || wasSent;
         if (!isSent) {
@@ -4598,7 +4716,7 @@ async function requireAdminRole(req, body) {
   const u = await db.collection("users").doc(decoded.uid).get();
   const ud = u.exists ? u.data() : {};
   const isTM = decoded.email === "tjddnqkf@naver.com" || ud.role === "totalMaster";
-  if (!isTM && ud.role !== "admin") throw Object.assign(new Error("관리자만 사용할 수 있습니다."), { status: 403 });
+  if (!isTM && !["admin", "allMgr"].includes(ud.role)) throw Object.assign(new Error("관리자만 사용할 수 있습니다."), { status: 403 });
   const company = isTM ? String(body?.company || ud.companyName || "돌캐") : String(ud.companyName || "돌캐");
   return { decoded, isTM, company, email: decoded.email || "" };
 }
@@ -4825,9 +4943,31 @@ async function generateRecurringOrders(date, { company = null, ids = null, check
   return { created, names };
 }
 
+// ⭐ 2026-11-05 고정노선 운송업체 설정(routeCarrierSettings/{회사}, 화면 src/routeCarriers.js 와 같은 규칙)
+//  끄거나 삭제한 운송업체의 고정노선 오더(배차표Id)는 매출·수익 합계에서 뺀다 — 설정이 없으면 전부 포함
+async function routeCarrierCountable(company) {
+  const key = (s) => String(s ?? "").replace(/\s+/g, "").toLowerCase();
+  let st = null;
+  try { const snap = await db.collection("routeCarrierSettings").doc(String(company)).get(); st = snap.exists ? snap.data() : null; } catch (e) { st = null; }
+  if (!st) return () => true;
+  const off = new Set();
+  (Array.isArray(st.removed) ? st.removed : []).forEach((n) => { const k = key(n); if (k) off.add(k); });
+  (Array.isArray(st.carriers) ? st.carriers : []).forEach((c) => { const k = key(c && c.name); if (!k) return; if (c.on === false) off.add(k); else off.delete(k); });
+  if (!off.size) return () => true;
+  const carrierOf = (o) => {
+    const ex = o && o.추가정보;
+    if (ex && typeof ex === "object") {
+      if (String(ex.운송업체 ?? "").trim()) return String(ex.운송업체).trim();
+      for (const k of Object.keys(ex)) if (/운송업체|운송사/.test(k) && String(ex[k] ?? "").trim()) return String(ex[k]).trim();
+    }
+    return String((o && o.운송업체) ?? "").trim();
+  };
+  return (o) => { if (!o || !o.배차표Id) return true; const c = carrierOf(o); return !c || !off.has(key(c)); };
+}
 // 📊 마감 요약 — 그날(상차일) 오더 건수·배차완료·미배차·매출·수익 + 내일 오더/미배차
 async function buildDailySummary(company, date) {
   const tomorrow = addDaysStr(date, 1);
+  const countable = await routeCarrierCountable(company); // ⭐ 2026-11-05 운송업체 설정
   const rows = { [date]: [], [tomorrow]: [] };
   for (const col of ["orders", "dispatch"]) {
     const snap = await db.collection(col).where("상차일", "in", [date, tomorrow]).get();
@@ -4839,8 +4979,8 @@ async function buildDailySummary(company, date) {
   }
   const num = (v) => Number(String(v ?? "").replace(/[^\d.-]/g, "")) || 0;
   const t = rows[date];
-  const revenue = t.reduce((a, x) => a + num(x.청구운임), 0);
-  const pay = t.reduce((a, x) => a + num(x.기사운임), 0);
+  const revenue = t.filter(countable).reduce((a, x) => a + num(x.청구운임), 0); // ⭐ 2026-11-05 끈 운송업체 오더는 매출·수익에서 뺀다
+  const pay = t.filter(countable).reduce((a, x) => a + num(x.기사운임), 0);
   return {
     company, date, count: t.length,
     done: t.filter((x) => x.배차상태 === "배차완료").length,
@@ -4941,6 +5081,8 @@ exports.notifyApproval = functions.firestore.document("approvals/{id}").onWrite(
     if (a.status === "rejected" && b.status !== "rejected") { const r = (a.line || []).find((x) => x.status === "rejected"); msgs.push([a.drafterUid, `↩ 반려 · ${r?.name || ""}`, `${t}\n사유: ${r?.comment || ""}`]); }
     if (a.status === "cancelled" && b.status !== "cancelled") msgs.push([a.drafterUid, "결재 취소 승인", `${t} 문서가 결재 취소되었습니다.`]);
     if (a.cancel?.status === "rejected" && b.cancel?.status !== "rejected") { const r = (a.cancel.line || []).find((x) => x.status === "rejected"); msgs.push([a.drafterUid, `결재 취소 거부 · ${r?.name || ""}`, `${t}\n${r?.comment || ""}`]); }
+    // ⭐ 2026-11-04 지출결의 지급완료 — 재무·경리가 [지급 완료 처리]를 누르면 기안자에게
+    if (a.status === "approved" && a.paid?.at && !b.paid?.at && a.paid.by !== a.drafterUid) msgs.push([a.drafterUid, "₩ 지급 완료", `[지급 완료] ${t} — ${Math.round(Number(a.amount) || 0).toLocaleString("ko-KR")}원 지급되었습니다${a.paid.date ? ` (${a.paid.date})` : ""}`]);
   }
   // ⭐ 2026-11-02 참조(cc) — 최종 승인되면 기안자가 고른 참조자에게도 알린다(화면 안내대로)
   if (b && a.status === "approved" && b.status !== "approved") {
@@ -5085,7 +5227,7 @@ async function sendPlatformNoticePush(n) {
     if (!isPushTypeEnabled(u.pushPrefs, "공지사항")) return;
     tokens.push(...userTokens(u));
   });
-  const title = `◆ KP-Flow 플랫폼 공지 · ${n.level || "안내"}`;
+  const title = `◆ LogisWeb 플랫폼 공지 · ${n.level || "안내"}`;
   const body = `${n.title || ""}${n.body ? `\n${String(n.body).replace(/\s+/g, " ").slice(0, 80)}` : ""}`;
   const all = [...new Set(tokens)];
   // 한 번에 최대 500개(FCM 멀티캐스트 한도) — 전체 공지는 나눠 보낸다
@@ -5148,7 +5290,7 @@ exports.pushDiag = functions.runWith({ timeoutSeconds: 60, memory: "256MB" }).ht
       const u = (await db.collection("users").doc(String(body.uid || "x")).get()).data();
       const tokens = userTokens(u);
       if (!tokens.length) { res.json({ sent: 0, results: [], note: "등록된 기기가 없습니다." }); return; }
-      const r = await sendPushAndCleanup(tokens, { notification: { title: "◆ KP-Flow 테스트 알림", body: "이 알림이 보이면 푸시가 정상입니다." }, android: { priority: "high" } }, "푸시 점검");
+      const r = await sendPushAndCleanup(tokens, { notification: { title: "◆ LogisWeb 테스트 알림", body: "이 알림이 보이면 푸시가 정상입니다." }, android: { priority: "high" } }, "푸시 점검");
       const results = (r?.responses || []).map((x, i) => ({ device: i + 1, tail: String(tokens[i]).slice(-8), ok: x.success, code: x.error?.code || "", msg: x.error?.message || "" }));
       res.json({ sent: r?.successCount || 0, failed: r?.failureCount || 0, results });
       return;
@@ -5270,7 +5412,7 @@ exports.notifySignup = functions.firestore.document("users/{uid}").onWrite(async
     const a = d.data() || {};
     if (d.id === snap.id || !userTokens(a).length || a.approved === false || a.employmentStatus === "퇴사") return;
     // ⭐ 2026-10-31 관리자·경리·인사관리자도 가입 승인 가능 → 알림도 같이
-    if (([...NOTICE_ADMIN_ROLES, "test", "hrManager", "hrAcct"].includes(a.role) || a.isMaster === true) && isPushTypeEnabled(a.pushPrefs, "가입신청")) tokens.push(...userTokens(a));
+    if (([...NOTICE_ADMIN_ROLES, "test", "hrManager", "hrAcct", "allMgr"].includes(a.role) || a.isMaster === true) && isPushTypeEnabled(a.pushPrefs, "가입신청")) tokens.push(...userTokens(a));
   });
   const isDriver = u.role === "driver";
   const title = isDriver ? "▸ 기사 가입 신청" : "◆ 직원 가입 신청";
@@ -5648,6 +5790,7 @@ exports.sheetOcr = functions.runWith({ timeoutSeconds: 120, memory: "512MB" }).h
         data: { requests: [{ image: { content }, features: [{ type: "DOCUMENT_TEXT_DETECTION" }], imageContext: { languageHints: ["ko", "en"] } }] },
       });
       data = r.data;
+      bumpVisionCount(); // 💰 2026-11-04 비용·손익 — 글자 인식 호출 수(월 1,000건 무료 넘으면 과금)
     } catch (e) {
       const msg = String(e?.response?.data?.error?.message || e?.message || e);
       if (/has not been used|is disabled|SERVICE_DISABLED|PERMISSION_DENIED/i.test(msg)) {
@@ -5701,7 +5844,9 @@ exports.syncRouteBoards = functions.runWith({ timeoutSeconds: 300, memory: "512M
   for (const d of snap.docs) {
     const form = { id: d.id, ...d.data() };
     if (!form.sheetUrl || form.autoSync === false) continue;
-    try { const r = await runRouteBoardSync(form); if (r.created || r.updated || r.gone) console.log(`[배차표 연동] ${form.companyName} ${form.name}`, JSON.stringify(r)); }
+    // 💰 2026-11-04 서버 비용 — 열려 있는 화면이 4분 안에 이미 맞췄으면 이번 5분 차례는 건너뜀(같은 시트·오더를 또 읽지 않게)
+    if (Date.now() - Number(form.syncedAt || 0) < 4 * 60 * 1000) continue;
+    try { const r = await runRouteBoardSync(form); if (r.created || r.updated || r.gone || r.deleted) console.log(`[배차표 연동] ${form.companyName} ${form.name}`, JSON.stringify(r)); }
     catch (e) { console.error(`[배차표 연동 실패] ${form.companyName} ${form.name}:`, e?.message || e); }
   }
   return null;
@@ -5735,6 +5880,8 @@ exports.routeBoardSheet = functions.runWith({ timeoutSeconds: 540, memory: "512M
       const form = { id: fs.id, ...fs.data() };
       if (!me.isTM && form.companyName !== me.company) { res.status(403).json({ error: "다른 회사 양식입니다." }); return; }
       if (parseSpreadsheetId(form.sheetUrl) !== id) { res.status(400).json({ error: "양식에 저장된 시트 주소와 다릅니다." }); return; }
+      // 💰 2026-11-04 서버 비용 — 화면의 30초 자동 맞춤(auto)은 다른 화면·서버가 25초 안에 이미 맞췄으면 건너뜀(직원 수만큼 겹치던 읽기 제거)
+      if (body.auto === true && !body.from && Date.now() - Number(form.syncedAt || 0) < 25 * 1000) { res.json({ skipped: "recent", syncedAt: Number(form.syncedAt || 0) }); return; }
       // ⭐ 2026-11-03 기간 가져오기(입고일=탭 날짜 기준, 최대 120일)
       const okD = (x) => /^\d{4}-\d{2}-\d{2}$/.test(String(x || ""));
       let range = null;
@@ -5976,35 +6123,68 @@ async function computePlatformStats({ full = true } = {}) {
   });
 
   // 4) 오더(이번 달·전월·최근 30일) — 필요한 칸만 읽는다
+  // 💰 2026-11-04 서버 비용 절감 — 회사·날짜별 묶음(건수·매출·이익·고정노선)으로 모은 뒤 더한다(숫자 기준은 예전과 같음).
+  //   새벽 4시 전체 집계(full)가 "그제 이전" 묶음을 siteConfig/platformStatsBase에 저장해 두고,
+  //   낮 시간 매시간 집계는 그 묶음을 다시 쓰고 최근 3일(그제~오늘)+미래 예약 오더만 새로 읽는다.
+  //   예전: 매시간 전월 1일부터 모든 오더를 다시 읽음(하루 19번) → 오더 읽기 약 85~90% 감소.
+  //   (그제 이전 날짜의 오더를 낮에 고치면 다음 날 새벽 4시 집계부터 반영 — [지금 갱신]은 항상 전체 집계)
   const platformDaily = {};
   const dayNo = Number(today.slice(8));
+  const cut = addDaysStr(today, -2);
+  const buckets = {};
+  const addB = (name, day, cnt, sale, profit, fixed) => {
+    const k = String(name || "돌캐").trim() || "돌캐";
+    const b = buckets[k] || (buckets[k] = {});
+    const x = b[day] || (b[day] = [0, 0, 0, 0]);
+    x[0] += cnt; x[1] += sale; x[2] += profit; x[3] += fixed;
+  };
+  const baseRef = db.collection("siteConfig").doc("platformStatsBase");
+  let readFrom = from; let reused = false;
+  if (!full) {
+    const bs = await baseRef.get().catch(() => null);
+    const b = bs && bs.exists ? bs.data() : null;
+    if (b && b.today === today && b.from === from && b.cut === cut && Array.isArray(b.cos)) {
+      b.cos.forEach((c) => Object.entries(c.d || {}).forEach(([day, v]) => addB(c.n, day, Number(v[0]) || 0, Number(v[1]) || 0, Number(v[2]) || 0, Number(v[3]) || 0)));
+      readFrom = cut; reused = true;
+    }
+  }
   for (const col of ["orders", "dispatch"]) {
-    const snap = await db.collection(col).where("상차일", ">=", from).select("companyName", "상차일", "청구운임", "기사운임", "배차상태", "상태", "source", "배차표Id").get();
+    const snap = await db.collection(col).where("상차일", ">=", readFrom).select("companyName", "상차일", "청구운임", "기사운임", "배차상태", "상태", "source", "배차표Id").get();
     snap.docs.forEach((d) => {
       const r = d.data() || {};
       if (r.source === "transport_transmit" || isCanceledOrder(r)) return;
       const day = String(r.상차일 || "").slice(0, 10);
-      if (!day || day > addDaysStr(today, 60)) return;
-      const c = co(r.companyName);
+      if (!day || day > addDaysStr(today, 60) || day < readFrom) return;
       const sale = Number(String(r.청구운임 || 0).replace(/[^\d-]/g, "")) || 0;
       const profit = sale - (Number(String(r.기사운임 || 0).replace(/[^\d-]/g, "")) || 0);
+      addB(r.companyName, day, 1, sale, profit, r.배차표Id ? 1 : 0);
+    });
+  }
+  Object.entries(buckets).forEach(([name, days]) => {
+    const c = co(name);
+    Object.entries(days).forEach(([day, v]) => {
+      const [cnt, sale, profit, fixed] = v;
       if (day.startsWith(month)) {
-        c.m.cnt += 1; c.m.sale += sale; c.m.profit += profit;
+        c.m.cnt += cnt; c.m.sale += sale; c.m.profit += profit;
         // ⭐ 2026-11-03 사용량·한도 — 오늘까지(미래 예약 제외) · 고정노선(구글시트 배차표) 건수 따로
-        if (day <= today) c.m.toDate = (c.m.toDate || 0) + 1;
-        if (r.배차표Id) c.m.fixed = (c.m.fixed || 0) + 1;
+        if (day <= today) c.m.toDate = (c.m.toDate || 0) + cnt;
+        if (fixed) c.m.fixed = (c.m.fixed || 0) + fixed;
       }
       else if (day.startsWith(prevMonth)) {
-        c.pm.cnt += 1; c.pm.sale += sale; c.pm.profit += profit;
-        if (Number(day.slice(8)) <= dayNo) { c.pmSame.cnt += 1; c.pmSame.sale += sale; }
+        c.pm.cnt += cnt; c.pm.sale += sale; c.pm.profit += profit;
+        if (Number(day.slice(8)) <= dayNo) { c.pmSame.cnt += cnt; c.pmSame.sale += sale; }
       }
       if (day >= d30 && day <= today) {
-        c.daily[day] = (c.daily[day] || 0) + 1;
+        c.daily[day] = (c.daily[day] || 0) + cnt;
         const p = platformDaily[day] || (platformDaily[day] = { cnt: 0, sale: 0 });
-        p.cnt += 1; p.sale += sale;
+        p.cnt += cnt; p.sale += sale;
       }
       if (day <= today && day > c.lastOrder) c.lastOrder = day;
     });
+  });
+  if (!reused) {
+    const cos = Object.entries(buckets).map(([n, days]) => ({ n, d: Object.fromEntries(Object.entries(days).filter(([day]) => day < cut)) })).filter((x) => Object.keys(x.d).length);
+    if (JSON.stringify(cos).length < 900000) await baseRef.set({ today, from, cut, cos, at: Date.now() }).catch((e) => console.warn("[플랫폼 관제] 묶음 저장 실패:", e?.message || e));
   }
 
   // 5) 데이터량(문서 수) — 회사별 count 집계(문서 1천 개당 읽기 1회)
@@ -6039,12 +6219,18 @@ async function computePlatformStats({ full = true } = {}) {
   //   첨부 문서의 크기 칸(sizeKB)만 골라 읽고(select), 그 첨부가 달린 오더의 회사로 더한다. 크기 칸이 없는 예전 첨부는 평균으로 계산.
   if (full) {
     try {
-      const owner = {};
-      for (const col of ["orders", "dispatch", "fixedClients"]) {
-        const snap = await db.collection(col).select("companyName").get();
-        snap.docs.forEach((d) => { owner[`${col}/${d.id}`] = String(d.data()?.companyName || "").trim() || "돌캐"; });
-      }
+      // 💰 2026-11-04 서버 비용 절감 — 예전엔 회사를 알려고 오더·배차·고정거래처 "전체"(지금까지 쌓인 모든 문서)를 매일 읽었다.
+      //   이제 첨부가 달린 문서만 골라 회사명 칸만 읽는다(getAll + fieldMask) — 결과는 같고 읽기는 첨부 달린 문서 수만큼.
       const att = await db.collectionGroup("attachments").select("sizeKB").get();
+      const OWN = new Set(["orders", "dispatch", "fixedClients"]);
+      const parents = new Map();
+      att.docs.forEach((d) => { const par = d.ref.parent.parent; if (par && !par.parent.parent && OWN.has(par.parent.id)) parents.set(par.path, par); });
+      const owner = {};
+      const prefs = [...parents.values()];
+      for (let i = 0; i < prefs.length; i += 300) {
+        const got = await db.getAll(...prefs.slice(i, i + 300), { fieldMask: ["companyName"] });
+        got.forEach((x) => { if (x.exists) owner[x.ref.path] = String(x.get("companyName") || "").trim() || "돌캐"; });
+      }
       const per = {}; let knownKB = 0; let knownN = 0; const unknown = {};
       att.docs.forEach((d) => {
         const par = d.ref.parent.parent; if (!par) return;
@@ -6089,6 +6275,139 @@ exports.platformStats = functions.runWith({ timeoutSeconds: 300, memory: "1GB" }
     res.json({ ok: true, ...(await computePlatformStats()) });
   } catch (e) {
     console.error("플랫폼 관제 집계 실패:", e);
+    res.status(e.status || 500).json({ error: e?.message || String(e) });
+  }
+});
+
+// ===================== 💰 플랫폼 서버 사용량(최고관리자 전용, 2026-11-04) =====================
+// 관리센터 › 청구 › 비용·손익 — 구글 클라우드 모니터링(Cloud Monitoring)에서 이 프로젝트의
+// Firestore 읽기·쓰기·삭제, 함수 실행 수, 파일 저장 용량을 1시간마다 가져와 하루 합계로 저장한다.
+//  · platformUsage/{YYYY-MM-DD} { date, month, reads, writes, deletes, fnCalls, ... }  (한국 날짜 기준)
+//  · platformUsage/m_{YYYY-MM}  이달 합계(+ visionCalls: 글자 인식 호출 수)
+//  · platformUsage/_status      { ok, at, error, hint } — 권한이 없으면 화면이 안내문을 띄운다
+//  권한: 함수 서비스 계정(dispatch-app-9b92f@appspot.gserviceaccount.com)에 "모니터링 뷰어(roles/monitoring.viewer)"가 있어야 한다
+//        (보통 '편집자' 역할이 있어 그대로 된다). 모니터링 API 읽기는 월 100만 회까지 무료 — 이 작업은 하루 약 200회.
+let _monClient = null;
+async function monitoringClient() {
+  if (!_monClient) _monClient = await new GoogleAuth({ scopes: ["https://www.googleapis.com/auth/monitoring.read"] }).getClient();
+  return _monClient;
+}
+const projectIdOf = () => process.env.GCLOUD_PROJECT || process.env.GCP_PROJECT || (() => { try { return JSON.parse(process.env.FIREBASE_CONFIG || "{}").projectId; } catch { return ""; } })() || "dispatch-app-9b92f";
+// 지표 하나를 시간 단위로 더해서 { "YYYY-MM-DD"(한국): 값 } 으로
+async function monSeries(metric, { startMs, endMs, aligner = "ALIGN_SUM", reducer = "REDUCE_SUM", period = 3600, pick = "sum" }) {
+  const client = await monitoringClient();
+  const qs = new URLSearchParams({
+    filter: `metric.type="${metric}"`,
+    "interval.startTime": new Date(startMs).toISOString(), "interval.endTime": new Date(endMs).toISOString(),
+    "aggregation.alignmentPeriod": `${period}s`, "aggregation.perSeriesAligner": aligner, "aggregation.crossSeriesReducer": reducer,
+  });
+  const byDay = {}; let token = ""; let pages = 0; let found = false;
+  do {
+    const r = await client.request({ url: `https://monitoring.googleapis.com/v3/projects/${projectIdOf()}/timeSeries?${qs.toString()}${token ? `&pageToken=${encodeURIComponent(token)}` : ""}` });
+    (r.data.timeSeries || []).forEach((ts) => (ts.points || []).forEach((p) => {
+      found = true;
+      const end = Date.parse(p.interval?.endTime || p.interval?.startTime || "");
+      const day = kstDateStr(end - 1000);
+      const v = Number(p.value?.int64Value ?? p.value?.doubleValue ?? 0) || 0;
+      if (pick === "max") byDay[day] = Math.max(byDay[day] || 0, v); else byDay[day] = (byDay[day] || 0) + v;
+    }));
+    token = r.data.nextPageToken || ""; pages += 1;
+  } while (token && pages < 10);
+  return { byDay, found };
+}
+async function collectPlatformUsage({ days = 2 } = {}) {
+  const today = kstDateStr();
+  const firstDay = addDaysStr(today, -(Math.max(1, Math.min(42, days)) - 1));
+  const startMs = Date.parse(`${firstDay}T00:00:00+09:00`);
+  const endMs = Math.floor(Date.now() / 3600e3) * 3600e3 + 3600e3; // 한 시간 단위로 맞춰 한국 자정 경계가 정확히 나뉘게
+  const status = { ok: true, at: Date.now(), atMs: Date.now(), days, errors: {}, metrics: {} };
+  const tryM = async (key, metrics, opt) => {
+    for (const mt of metrics) {
+      try {
+        const r = await monSeries(mt, { startMs, endMs, ...opt });
+        if (r.found) { status.metrics[key] = mt; return r.byDay; }
+      } catch (e) {
+        const code = e?.response?.status || e?.code;
+        const msg = String(e?.response?.data?.error?.message || e?.message || e);
+        status.errors[key] = `${code || ""} ${msg}`.trim().slice(0, 300);
+        if (code === 403 || /PERMISSION_DENIED|has not been used|disabled/i.test(msg)) { status.ok = false; status.permission = true; return null; }
+      }
+    }
+    return {};
+  };
+  const reads = await tryM("reads", ["firestore.googleapis.com/document/read_ops_count", "firestore.googleapis.com/document/read_count"], {});
+  if (status.permission) {
+    status.hint = "함수 서비스 계정에 '모니터링 뷰어' 역할이 없거나 Cloud Monitoring API가 꺼져 있습니다.";
+    await db.collection("platformUsage").doc("_status").set(status);
+    return status;
+  }
+  const writes = await tryM("writes", ["firestore.googleapis.com/document/write_ops_count", "firestore.googleapis.com/document/write_count"], {});
+  const deletes = await tryM("deletes", ["firestore.googleapis.com/document/delete_ops_count", "firestore.googleapis.com/document/delete_count"], {});
+  const fnCalls = await tryM("fnCalls", ["cloudfunctions.googleapis.com/function/execution_count"], {});
+  const runReq = await tryM("runRequests", ["run.googleapis.com/request_count"], {}); // 2세대 함수(Cloud Run)
+  const egress = await tryM("egressBytes", ["storage.googleapis.com/network/sent_bytes_count"], {});
+  const gcsBytes = await tryM("gcsBytes", ["storage.googleapis.com/storage/total_bytes"], { aligner: "ALIGN_MEAN", pick: "max" });
+  const fsBytes = await tryM("fsBytes", ["firestore.googleapis.com/storage/data_and_index_storage_bytes"], { aligner: "ALIGN_MEAN", pick: "max" });
+  const wb = db.batch();
+  for (let d = firstDay; d <= today; d = addDaysStr(d, 1)) {
+    const row = {
+      date: d, month: d.slice(0, 7), source: "monitoring",
+      reads: Math.round(reads?.[d] || 0), writes: Math.round(writes?.[d] || 0), deletes: Math.round(deletes?.[d] || 0),
+      fnCalls: Math.round((fnCalls?.[d] || 0) + (runReq?.[d] || 0)), egressBytes: Math.round(egress?.[d] || 0),
+      updatedAt: FieldValue.serverTimestamp(), updatedAtMs: Date.now(), partial: d === today,
+    };
+    if (gcsBytes?.[d]) row.gcsBytes = Math.round(gcsBytes[d]);
+    if (fsBytes?.[d]) row.fsBytes = Math.round(fsBytes[d]);
+    wb.set(db.collection("platformUsage").doc(d), row, { merge: true });
+  }
+  await wb.commit();
+  // 이달 합계(이달 날짜 문서만 · 31개 이하)
+  const months = [...new Set([today.slice(0, 7), firstDay.slice(0, 7)])];
+  for (const ym of months) {
+    const snap = await db.collection("platformUsage").where("month", "==", ym).get();
+    const sum = { reads: 0, writes: 0, deletes: 0, fnCalls: 0, egressBytes: 0, days: 0, gcsBytes: 0, fsBytes: 0 };
+    snap.docs.forEach((x) => {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(x.id)) return;
+      const v = x.data() || {};
+      ["reads", "writes", "deletes", "fnCalls", "egressBytes"].forEach((k) => { sum[k] += Number(v[k] || 0); });
+      sum.days += 1; sum.gcsBytes = Math.max(sum.gcsBytes, Number(v.gcsBytes || 0)); sum.fsBytes = Math.max(sum.fsBytes, Number(v.fsBytes || 0));
+    });
+    await db.collection("platformUsage").doc(`m_${ym}`).set({ ...sum, backfilled: true, updatedAt: FieldValue.serverTimestamp(), updatedAtMs: Date.now() }, { merge: true });
+  }
+  await db.collection("platformUsage").doc("_status").set(status);
+  return status;
+}
+// 글자 인식(Vision) 호출 수 — 이달 합계 문서에 더한다(비용·손익의 "글자 인식" 항목)
+function bumpVisionCount() {
+  const ym = kstDateStr().slice(0, 7);
+  return db.collection("platformUsage").doc(`m_${ym}`).set({ visionCalls: FieldValue.increment(1) }, { merge: true }).catch(() => {});
+}
+// ⏰ 매시 20분(한국시간) — 오늘·어제(어제 마지막 몇 시간 확정). 이달 합계가 처음이면 이달 1일부터 한 번 채운다
+exports.platformUsageHourly = functions.runWith({ timeoutSeconds: 120, memory: "256MB" }).pubsub.schedule("20 * * * *").timeZone("Asia/Seoul").onRun(async () => {
+  const today = kstDateStr();
+  const m = await db.collection("platformUsage").doc(`m_${today.slice(0, 7)}`).get().catch(() => null);
+  const days = m && m.exists && m.data().backfilled ? 2 : Number(today.slice(8)) + 1;
+  await collectPlatformUsage({ days }).catch((e) => console.error("[서버 사용량] 수집 실패:", e?.message || e));
+  return null;
+});
+//  POST (최고관리자만) { days? } → 지금 다시 가져오기(3분에 1번까지)
+exports.platformUsageNow = functions.runWith({ timeoutSeconds: 120, memory: "256MB" }).https.onRequest(async (req, res) => {
+  res.set("Access-Control-Allow-Origin", "*");
+  res.set("Access-Control-Allow-Methods", "POST, OPTIONS");
+  res.set("Access-Control-Allow-Headers", "Authorization, Content-Type");
+  if (req.method === "OPTIONS") { res.status(204).send(""); return; }
+  if (req.method !== "POST") { res.status(405).json({ error: "POST만 허용됩니다." }); return; }
+  try {
+    const me = await requireAdminRole(req, {});
+    if (!me.isTM) { res.status(403).json({ error: "최고관리자만 사용할 수 있습니다." }); return; }
+    const st = await db.collection("platformUsage").doc("_status").get();
+    const last = st.exists ? Number(st.data().atMs || 0) : 0;
+    if (Date.now() - last < 3 * 60 * 1000) { res.json({ ok: true, skipped: true, nextInSec: Math.ceil((3 * 60 * 1000 - (Date.now() - last)) / 1000) }); return; }
+    let body = req.body; if (typeof body === "string") { try { body = JSON.parse(body); } catch { body = {}; } }
+    const days = Math.max(2, Math.min(42, Number(body?.days) || Number(kstDateStr().slice(8)) + 1));
+    res.json(await collectPlatformUsage({ days }));
+  } catch (e) {
+    console.error("[서버 사용량] 수집 실패:", e);
     res.status(e.status || 500).json({ error: e?.message || String(e) });
   }
 });

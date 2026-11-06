@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>LogisWeb 기사 — 연결 확인</title>
+<!-- ⭐ 2026-11-05 기사 APK 오프라인 안내 — APK는 실제 서비스 주소를 여는데, 인터넷이 끊겨 못 불러오면
+     Capacitor(server.errorPath)가 APK 안의 이 파일을 보여준다. [다시 시도]는 서비스 주소로 다시 들어간다. -->
+<style>
+  html, body { margin: 0; height: 100%; background: #0F1A30; font-family: "Noto Sans KR", "Pretendard", sans-serif; }
+  .wrap { min-height: 100%; display: flex; align-items: center; justify-content: center; padding: 16px; box-sizing: border-box;
+    background: linear-gradient(135deg, #0B1428 0%, #1B2B4B 55%, #2D4C82 100%); }
+  .card { width: 100%; max-width: 420px; background: #fff; border-radius: 24px; padding: 28px 22px 22px; box-sizing: border-box; text-align: center; box-shadow: 0 24px 60px rgba(8,14,28,.5); }
+  .ic { width: 64px; height: 64px; border-radius: 18px; background: #1B2B4B; margin: 0 auto 16px; display: flex; align-items: center; justify-content: center; }
+  h1 { font-size: 24px; color: #0F1A30; margin: 0 0 8px; letter-spacing: -0.5px; }
+  p { font-size: 17px; color: #3A4A66; line-height: 1.55; margin: 0 0 22px; }
+  button { width: 100%; min-height: 68px; border: none; border-radius: 18px; font-size: 24px; font-weight: 900; color: #fff; cursor: pointer;
+    background: linear-gradient(135deg, #0F1A30, #1B2B4B 55%, #2D4C82); box-shadow: 0 12px 26px rgba(27,43,75,.35); font-family: inherit; }
+  .sub { font-size: 16px; color: #5B6B85; margin-top: 14px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="card">
+    <div class="ic"><svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#8FB0F0" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 1l22 22"/><path d="M16.72 11.06A10.94 10.94 0 0 1 19 12.55"/><path d="M5 12.55a10.94 10.94 0 0 1 5.17-2.39"/><path d="M10.71 5.05A16 16 0 0 1 22.58 9"/><path d="M1.42 9a15.91 15.91 0 0 1 4.7-2.88"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/></svg></div>
+    <h1>인터넷 연결을 확인해 주세요</h1>
+    <p>와이파이나 데이터가 꺼져 있으면 기사앱 화면을 불러올 수 없어요.<br />연결한 뒤 아래 버튼을 눌러 주세요.</p>
+    <button type="button" id="retry">다시 시도</button>
+    <div class="sub" id="msg"></div>
+  </div>
+</div>
+<script>
+  var URL_APP = "https://dispatch-app2.vercel.app/driver-login";
+  function go() { document.getElementById("msg").textContent = "연결하는 중…"; location.href = URL_APP; }
+  document.getElementById("retry").addEventListener("click", go);
+  // 연결이 돌아오면 자동으로 다시 들어간다
+  window.addEventListener("online", function () { setTimeout(go, 800); });
+</script>
+</body>
+</html>

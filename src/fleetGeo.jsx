@@ -438,7 +438,7 @@ export function FleetStepper({ order, phase, large = false }) {
             return (
               <div key={g} style={{ flex: 1, display: "flex", alignItems: "center", gap: 5, padding: "0 6px" }}>
                 <span style={{ flex: 1, height: 1.5, background: on ? "#93a4c3" : "#e5e7eb" }} />
-                <span style={{ fontSize: f, fontWeight: 900, color: on ? "#1B2B4B" : "#9ca3af", whiteSpace: "nowrap" }}>{g}</span>
+                <span style={{ fontSize: f, fontWeight: 900, color: on ? "#1B2B4B" : "#5B6B85", whiteSpace: "nowrap" }}>{g}</span>
                 <span style={{ flex: 1, height: 1.5, background: on ? "#93a4c3" : "#e5e7eb" }} />
               </div>
             );
@@ -453,7 +453,7 @@ export function FleetStepper({ order, phase, large = false }) {
             <div key={i} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", position: "relative", minWidth: 0 }}>
               {i > 0 && <div style={{ position: "absolute", top: 6, right: "50%", width: "100%", height: 3, background: i <= cur ? "#1B2B4B" : "#e5e7eb", zIndex: 0 }} />}
               <div style={{ width: now ? 15 : 13, height: now ? 15 : 13, marginTop: now ? -1 : 0, borderRadius: "50%", background: dot, border: "2px solid #fff", zIndex: 1, animation: now ? "kpStepBlink 1.6s ease-in-out infinite" : "none" }} />
-              <div style={{ marginTop: 5, fontSize: f, lineHeight: 1.2, textAlign: "center", whiteSpace: "nowrap", fontWeight: now ? 900 : 700, color: now ? "#2563eb" : done ? "#1B2B4B" : "#9ca3af", animation: now ? "kpStepText 1.6s ease-in-out infinite" : "none" }}>{lb}</div>
+              <div style={{ marginTop: 5, fontSize: f, lineHeight: 1.2, textAlign: "center", whiteSpace: "nowrap", fontWeight: now ? 900 : 700, color: now ? "#2563eb" : done ? "#1B2B4B" : "#5B6B85", animation: now ? "kpStepText 1.6s ease-in-out infinite" : "none" }}>{lb}</div>
             </div>
           );
         })}
