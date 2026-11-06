@@ -2,7 +2,7 @@
 //  기대값은 손으로 계산한 값(2026 기본 요율: 국민연금 4.75% · 건강 3.595% · 장기요양 13.14% · 고용 0.9%)
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";
-import { calcPayslip, presetFor, simplifiedIncomeTax, hoursFromAttendance, leavePeriodOf, promoteSchedule, promoteStageDue, childCreditMonthly, ratesFor } from "../src/payrollCalc.js";
+import { calcPayslip, calcPayslipFull, dailyWorkerTax, FREELANCE, presetFor, simplifiedIncomeTax, hoursFromAttendance, leavePeriodOf, promoteSchedule, promoteStageDue, childCreditMonthly, ratesFor } from "../src/payrollCalc.js";
 
 let n = 0;
 const t = (name, fn) => { fn(); n += 1; console.log(`  ✓ ${name}`); };
@@ -133,6 +133,34 @@ t("서버(functions/leavePromote.js)와 화면 계산이 같은 결과", () => {
     k += 1;
   }
   assert.ok(k > 50);
+});
+
+// ⭐ 2026-11-06 급여형태·고용형태 확장(calcPayslipFull)
+t("일급제 — 일급 ÷ 8 = 시급, 근로일수 × 8시간 → 기본급 = 일급 × 일수", () => {
+  const r = calcPayslipFull({ payType: "daily", dailyWage: 120000, dependents: 1 }, { workDays: 10 }, R);
+  assert.equal(amt(r.earnings, "base"), 1200000);
+  assert.equal(r.earnings.find((x) => x.key === "base").label, "기본급(일급제)");
+  assert.equal(r.ordinaryHourly, 15000);
+});
+t("일용직 원천세 — (일급 − 15만) × 2.7% × 일수, 하루 1,000원 미만 면제", () => {
+  assert.equal(dailyWorkerTax(200000, 10), 13500); // (5만 × 2.7% = 1,350) × 10일
+  assert.equal(dailyWorkerTax(180000, 10), 0); // 하루 810원 → 면제
+  const r = calcPayslipFull({ payType: "daily", dailyWage: 200000, employmentType: "일용직", npExempt: true, hiExempt: true }, { workDays: 10 }, R);
+  assert.equal(amt(r.deductions, "tax"), 13500);
+  assert.equal(amt(r.deductions, "local"), 1350);
+  assert.equal(r.taxBasis, "daily");
+});
+t("프리랜서 3.3% — 4대보험 제외 · 지급액 × 3% + 지방 0.3%", () => {
+  const r = calcPayslipFull({ payType: "monthly", baseMonthly: 2000000, meal: 0, employmentType: FREELANCE }, {}, R);
+  assert.equal(amt(r.deductions, "np") + amt(r.deductions, "hi") + amt(r.deductions, "ei"), 0);
+  assert.equal(amt(r.deductions, "tax"), 60000);
+  assert.equal(amt(r.deductions, "local"), 6000);
+  assert.equal(r.net, 1934000);
+});
+t("calcPayslipFull — 월급 정규직은 calcPayslip와 같은 결과", () => {
+  const e = { payType: "monthly", baseMonthly: 3000000, meal: 200000, dependents: 1 };
+  const a = calcPayslip(e, {}, R); const b = calcPayslipFull(e, {}, R);
+  assert.equal(a.net, b.net); assert.equal(a.totalDeduct, b.totalDeduct);
 });
 
 console.log(`\n급여 계산 테스트 ${n}개 통과`);

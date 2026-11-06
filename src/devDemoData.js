@@ -155,10 +155,11 @@ function demoTracks() {
 // ⭐ 2026-11-06 직원 급여·연차 촉진 화면 점검(URL에 demoPay=1) — 사무직 직원 4명 · 급여 설정 · 이번 달 출근기록 · 발행된 내 명세서 · 촉진 기록
 function demoPayOn() { try { return new URLSearchParams(window.location.search).get("demoPay") === "1"; } catch { return false; } }
 const PAY_STAFF = [
-  { id: "preview", name: "둘러보기", team: "운영팀", position: "대리", hireDate: "2024-03-15", role: "admin", email: "preview@kp-flow.app" },
-  { id: "demo-st-1", name: "김경리", team: "경리팀", position: "과장", hireDate: "2021-02-01", role: "test" },
-  { id: "demo-st-2", name: "이인사", team: "인사팀", position: "대리", hireDate: "2025-12-01", role: "hrManager" },
-  { id: "demo-st-3", name: "박사원", team: "운영팀", position: "사원", hireDate: "2026-05-01", role: "user" },
+  // ⭐ 2026-11-06 급여 계산 화면 자동 채움 점검 — 생년월일 · 연락처 · 급여 계좌(회원 정보)
+  { id: "preview", name: "둘러보기", team: "운영팀", position: "대리", hireDate: "2024-03-15", birthDate: "1992-05-03", phone: "010-2345-6789", bankName: "KB국민", accountNumber: "12345678901234", role: "admin", email: "preview@kp-flow.app" },
+  { id: "demo-st-1", name: "김경리", team: "경리팀", position: "과장", hireDate: "2021-02-01", birthDate: "1986-09-21", phone: "010-3456-7890", bankAccount: "신한 110-123-456789 김경리", role: "test" },
+  { id: "demo-st-2", name: "이인사", team: "인사팀", position: "대리", hireDate: "2025-12-01", phone: "010-4567-8901", role: "hrManager" },
+  { id: "demo-st-3", name: "박사원", team: "운영팀", position: "사원", hireDate: "2026-05-01", birthDate: "1999-01-12", role: "user" },
 ];
 const PAY_EMP = { preview: { payType: "monthly", baseMonthly: 3000000, meal: 200000, dependents: 1 }, "demo-st-1": { payType: "monthly", baseMonthly: 3600000, positionAllow: 300000, meal: 200000, car: 200000, dependents: 3, children: 1 }, "demo-st-2": { payType: "hourly", hourlyWage: 12000, meal: 200000, dependents: 1 } };
 const ymNow = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 7);

@@ -261,6 +261,44 @@ export function calcPayslip(emp = {}, month = {}, rates = presetFor(2026)) {
   };
 }
 
+// ⭐ 2026-11-06 급여형태·고용형태 확장(화면용) — 계산 엔진(calcPayslip)은 그대로 두고 그 위에서 입력만 바꿔 넣는다
+//  · 일급제(payType "daily"): 일급 ÷ 8 = 시급, 정상 근로시간 = 근로일수 × 8시간(연장·야간·휴일 가산은 시급제와 같음)
+//  · 일용직(일급제): 소득세 = (일급 − 15만원) × 6% × (1 − 55%) = 2.7% × 근로일수, 하루 세액 1,000원 미만은 면제(소액부징수)
+//  · 프리랜서(3.3%): 4대보험 제외 · 사업소득세 = 지급액 × 3% · 지방소득세 = 소득세 × 10%(= 0.3%)
+//  · 이번 달 소득세를 직접 입력하면 그 값이 우선
+export const FREELANCE = "프리랜서(3.3%)";
+export function dailyWorkerTax(dailyWage, days) {
+  const per = Math.floor(Math.max(0, num(dailyWage) - 150000) * 0.027);
+  if (per < 1000) return 0;
+  return floorTo(per * Math.max(0, Math.floor(num(days))), 10);
+}
+export function calcPayslipFull(emp = {}, month = {}, rates = presetFor(2026)) {
+  const daily = emp.payType === "daily";
+  const free = emp.employmentType === FREELANCE;
+  const dayWorker = emp.employmentType === "일용직" && daily;
+  const blank = (v) => v === undefined || v === null || v === "";
+  const e = { ...emp }; const m = { ...month };
+  const days = num(month.workDays);
+  if (daily) { e.payType = "hourly"; e.hourlyWage = num(emp.dailyWage) / 8; m.regularHours = days * 8; }
+  if (free) { e.npExempt = true; e.hiExempt = true; e.eiExempt = true; }
+  let r = calcPayslip(e, m, rates);
+  let basis = "";
+  if (free && blank(month.taxOverride)) { basis = "freelance"; r = calcPayslip(e, { ...m, taxOverride: floorTo(r.gross * 0.03, 10) }, rates); }
+  else if (dayWorker && blank(month.taxOverride)) { basis = "daily"; r = calcPayslip(e, { ...m, taxOverride: dailyWorkerTax(emp.dailyWage, days) }, rates); }
+  if (daily) r.earnings = r.earnings.map((x) => (x.key === "base" ? { ...x, label: "기본급(일급제)", calc: `일급 ${wonFmt(emp.dailyWage)}원 × ${days}일` } : x));
+  if (basis) {
+    r.deductions = r.deductions.map((d) => {
+      if (d.key === "tax") return { ...d, label: basis === "freelance" ? "사업소득세" : "소득세(일용근로)", calc: basis === "freelance" ? `지급액 ${wonFmt(r.gross)}원 × 3%` : `(일급 − 15만원) × 2.7% × ${days}일 · 하루 1,000원 미만 면제` };
+      if (d.key === "local" && blank(month.localTaxOverride)) return { ...d, calc: basis === "freelance" ? "사업소득세 × 10% (지급액의 0.3%)" : "소득세 × 10%" };
+      return d;
+    });
+  }
+  r.taxBasis = basis || r.taxMode;
+  r.payType = emp.payType || "monthly";
+  r.employmentType = emp.employmentType || "";
+  return r;
+}
+
 // ── 연차 사용 촉진(근로기준법 61조) 일정 ──
 //  basis: "hire"(입사일 기준) | "fiscal"(회계연도 기준, fiscalStart "MM-DD")
 //  1년 이상(연차): 1차 = 회기 종료 6개월 전 · 2차 = 2개월 전 / 1년 미만(월차): 1차 = 3개월 전 · 2차 = 1개월 전

@@ -5,6 +5,7 @@
 //  · 2차: 회기 종료 2개월 전(월차 1개월 전) — 계획을 안 낸 직원에게 회사가 사용 시기를 지정해 서면 통보
 //  · 매일 아침 서버(functions leavePromotionDaily)가 자동 발송, 이 화면에서 직접 발송·재발송·날짜 지정도 가능
 //  · 모든 발송·제출은 leavePromotions/{회사}_{uid}_{회기 시작일}.log 에 시각과 함께 쌓이고(지울 수 없음 — 보안 규칙), 서면 통보서 인쇄 가능
+//  ⭐ 2026-11-06 화면 다듬기 — 노란 표시 제거(네이비 팔레트) · 글자 14px 이상
 import React from "react";
 import { addDoc, arrayUnion, collection, doc, onSnapshot, query, serverTimestamp, setDoc, updateDoc, where } from "firebase/firestore";
 import { db, auth, DEFAULT_COMPANY } from "./firebase";
@@ -153,16 +154,16 @@ export default function LeavePromotionBoard({ company, canManage = false }) {
       <BookHero en="HR · LEAVE PROMOTION" title="연차 사용 촉진" desc="근로기준법 제61조 — 1차(종료 6개월 전 · 10일 내 계획 제출) · 2차(종료 2개월 전 · 회사가 사용 시기 지정) · 발송 일시가 모두 기록됩니다"
         kpis={[["촉진 대상", `${kpi.due}명`, "1차 시기 진입 · 잔여 있음"], ["1차 발송", `${kpi.n1}명`], ["계획 제출", `${kpi.plan}명`], ["2차 지정 필요", `${kpi.need2}명`, "계획 미제출"]]} />
       {cfg && (
-        <BookCard en="SETTINGS" title="회기 기준 · 자동 발송" right={canManage && <button type="button" disabled={busy} onClick={saveCfg} className="h-9 px-3.5 rounded-lg bg-[#0F1A30] text-white text-[13px] font-black disabled:opacity-50" data-testid="leave-cfg-save">저장</button>}>
+        <BookCard en="SETTINGS" title="회기 기준 · 자동 발송" right={canManage && <button type="button" disabled={busy} onClick={saveCfg} className="h-9 px-3.5 rounded-lg bg-[#0F1A30] text-white text-[14px] font-black disabled:opacity-50" data-testid="leave-cfg-save">저장</button>}>
           <div className="flex flex-wrap items-center gap-2">
             <Chip on={cfg.basis === "hire"} onClick={() => canManage && setCfg((c) => ({ ...c, basis: "hire" }))}>입사일 기준</Chip>
             <Chip on={cfg.basis === "fiscal"} onClick={() => canManage && setCfg((c) => ({ ...c, basis: "fiscal" }))}>회계연도 기준</Chip>
-            {cfg.basis === "fiscal" && <span className="inline-flex items-center gap-1.5 text-[13.5px] font-black text-[#3A4A66]">시작일<input disabled={!canManage} value={cfg.fiscalStart} onChange={(e) => setCfg((c) => ({ ...c, fiscalStart: e.target.value.replace(/[^\d-]/g, "").slice(0, 5) }))} className="h-10 w-[90px] px-2 rounded-xl border border-[#DCE3EE] text-center text-[14.5px] font-black" style={NUMS} placeholder="01-01" /></span>}
+            {cfg.basis === "fiscal" && <span className="inline-flex items-center gap-1.5 text-[14px] font-black text-[#3A4A66]">시작일<input disabled={!canManage} value={cfg.fiscalStart} onChange={(e) => setCfg((c) => ({ ...c, fiscalStart: e.target.value.replace(/[^\d-]/g, "").slice(0, 5) }))} className="h-10 w-[90px] px-2 rounded-xl border border-[#DCE3EE] text-center text-[14.5px] font-black" style={NUMS} placeholder="01-01" /></span>}
             <span className="w-px h-6 bg-[#E3E8F0] mx-1" />
             <Chip on={cfg.autoSend} onClick={() => canManage && setCfg((c) => ({ ...c, autoSend: !c.autoSend }))}>{cfg.autoSend ? "✓ " : ""}매일 아침 자동 발송</Chip>
             <Chip on={cfg.email} onClick={() => canManage && setCfg((c) => ({ ...c, email: !c.email }))}>{cfg.email ? "✓ " : ""}이메일도 보내기</Chip>
           </div>
-          <div className="mt-2 text-[12.5px] text-[#5B6B85] leading-relaxed">입사 1년 미만(월차)은 종료 3개월 전 1차 · 1개월 전 2차. 자동 발송을 끄면 대상자를 인사 담당자에게만 알립니다. 자동 이메일은 회사 PC 프로그램이 켜져 있을 때 예약 메일로 나갑니다.</div>
+          <div className="mt-2 text-[14px] text-[#5B6B85] leading-relaxed">입사 1년 미만(월차)은 종료 3개월 전 1차 · 1개월 전 2차. 자동 발송을 끄면 대상자를 인사 담당자에게만 알립니다. 자동 이메일은 회사 PC 프로그램이 켜져 있을 때 예약 메일로 나갑니다.</div>
         </BookCard>
       )}
       <div className="flex gap-1.5 flex-wrap">{[["due", `촉진 대상 ${kpi.due}`], ["soon", "30일 안 시작"], ["plan", "계획 제출"], ["all", "전체"]].map(([k, l]) => <Chip key={k} on={filter === k} onClick={() => setFilter(k)}>{l}</Chip>)}</div>
@@ -173,26 +174,26 @@ export default function LeavePromotionBoard({ company, canManage = false }) {
           return (
             <div key={r.u.id} className="px-4 py-3.5 flex flex-wrap items-center gap-3" data-testid="promo-row">
               <div className="min-w-[160px] flex-1">
-                <div className="flex items-center gap-1.5"><b className="text-[16px] text-[#0F1A30]">{personName(r.u) || r.u.name}</b><span className="text-[13px] text-[#5B6B85]">{[r.u.team, r.u.position].filter(Boolean).join(" · ")}</span></div>
-                <div className="text-[13px] font-bold text-[#7A879C]" style={NUMS}>{r.period.label} {r.period.from} ~ {r.period.to}</div>
+                <div className="flex items-center gap-1.5"><b className="text-[16px] text-[#0F1A30]">{personName(r.u) || r.u.name}</b><span className="text-[14px] text-[#5B6B85]">{[r.u.team, r.u.position].filter(Boolean).join(" · ")}</span></div>
+                <div className="text-[14px] font-bold text-[#7A879C]" style={NUMS}>{r.period.label} {r.period.from} ~ {r.period.to}</div>
               </div>
-              <div className="text-center min-w-[72px]"><div className="text-[12px] font-bold text-[#7A879C]">잔여</div><div className="text-[22px] font-black text-[#0F1A30] leading-none" style={NUMS}>{r.remain}<span className="text-[13px] text-[#7A879C]">/{r.total}</span></div></div>
+              <div className="text-center min-w-[72px]"><div className="text-[14px] font-bold text-[#7A879C]">잔여</div><div className="text-[22px] font-black text-[#0F1A30] leading-none" style={NUMS}>{r.remain}<span className="text-[14px] text-[#7A879C]">/{r.total}</span></div></div>
               <div className="min-w-[170px]">
-                <div className="text-[13px] font-black text-[#3A4A66]">1차 <span className="font-bold text-[#7A879C]" style={NUMS}>{r.sched.first}</span></div>
-                {n1?.sentAt ? <div className="text-[13px] font-bold text-[#067647]" style={NUMS}>발송 {fmtAt(n1.sentAt)}{n1.auto ? " · 자동" : ""}</div> : <div className={`text-[13px] font-black ${today >= r.sched.first ? "text-[#B42318]" : "text-[#9AA9C3]"}`}>{today >= r.sched.first ? "미발송" : "예정"}</div>}
-                {n1?.due && <div className={`text-[12.5px] font-bold ${overdue ? "text-[#B42318]" : "text-[#5B6B85]"}`} style={NUMS}>계획 기한 {n1.due}{overdue ? " · 지남" : ""}</div>}
+                <div className="text-[14px] font-black text-[#3A4A66]">1차 <span className="font-bold text-[#7A879C]" style={NUMS}>{r.sched.first}</span></div>
+                {n1?.sentAt ? <div className="text-[14px] font-bold text-[#067647]" style={NUMS}>발송 {fmtAt(n1.sentAt)}{n1.auto ? " · 자동" : ""}</div> : <div className={`text-[14px] font-black ${today >= r.sched.first ? "text-[#B42318]" : "text-[#9AA9C3]"}`}>{today >= r.sched.first ? "미발송" : "예정"}</div>}
+                {n1?.due && <div className={`text-[14px] font-bold ${overdue ? "text-[#B42318]" : "text-[#5B6B85]"}`} style={NUMS}>계획 기한 {n1.due}{overdue ? " · 지남" : ""}</div>}
               </div>
               <div className="min-w-[170px]">
-                <div className="text-[13px] font-black text-[#3A4A66]">계획 · 2차 <span className="font-bold text-[#7A879C]" style={NUMS}>{r.sched.second}</span></div>
-                {plan?.submittedAt ? <div className="text-[13px] font-bold text-[#067647]" style={NUMS}>계획 제출 {fmtAt(plan.submittedAt)} · {(plan.dates || []).length}일</div> : null}
-                {n2?.sentAt ? <div className="text-[13px] font-bold text-[#1B2B4B]" style={NUMS}>2차 {fmtAt(n2.sentAt)}{n2.auto ? " · 자동" : ""}</div> : null}
-                {(des?.dates || []).length ? <div className="text-[12.5px] font-bold text-[#1B2B4B]" style={NUMS}>지정일 {des.dates.join(", ")}</div> : (n2?.sentAt && !plan?.submittedAt ? <div className="text-[12.5px] font-black text-[#B54708]">지정일 미정 — 날짜 지정 필요</div> : null)}
-                {!plan?.submittedAt && !n2?.sentAt && <div className="text-[13px] font-bold text-[#9AA9C3]">—</div>}
+                <div className="text-[14px] font-black text-[#3A4A66]">계획 · 2차 <span className="font-bold text-[#7A879C]" style={NUMS}>{r.sched.second}</span></div>
+                {plan?.submittedAt ? <div className="text-[14px] font-bold text-[#067647]" style={NUMS}>계획 제출 {fmtAt(plan.submittedAt)} · {(plan.dates || []).length}일</div> : null}
+                {n2?.sentAt ? <div className="text-[14px] font-bold text-[#1B2B4B]" style={NUMS}>2차 {fmtAt(n2.sentAt)}{n2.auto ? " · 자동" : ""}</div> : null}
+                {(des?.dates || []).length ? <div className="text-[14px] font-bold text-[#1B2B4B]" style={NUMS}>지정일 {des.dates.join(", ")}</div> : (n2?.sentAt && !plan?.submittedAt ? <div className="text-[14px] font-black text-[#2D4C82]">ⓘ 지정일 미정 — 날짜 지정 필요</div> : null)}
+                {!plan?.submittedAt && !n2?.sentAt && <div className="text-[14px] font-bold text-[#9AA9C3]">—</div>}
               </div>
               <div className="flex gap-1.5 flex-wrap ml-auto">
-                {canManage && <button type="button" onClick={() => setAct({ row: r, kind: "n1", email: !!cfg?.email })} className="h-9 px-3 rounded-lg bg-[#0F1A30] text-white text-[13px] font-black" data-testid="promo-send1">{n1?.sentAt ? "1차 재발송" : "1차 발송"}</button>}
-                {canManage && <button type="button" onClick={() => setAct({ row: r, kind: "n2", dates: des?.dates || [], email: !!cfg?.email })} className="h-9 px-3 rounded-lg border border-[#1B2B4B] bg-white text-[#1B2B4B] text-[13px] font-black">2차 · 날짜 지정</button>}
-                <button type="button" onClick={() => setLogOf(r)} className="h-9 px-3 rounded-lg border border-[#DCE3EE] bg-white text-[#3A4A66] text-[13px] font-black">기록 {r.rec?.log?.length || 0}</button>
+                {canManage && <button type="button" onClick={() => setAct({ row: r, kind: "n1", email: !!cfg?.email })} className="h-9 px-3 rounded-lg bg-[#0F1A30] text-white text-[14px] font-black" data-testid="promo-send1">{n1?.sentAt ? "1차 재발송" : "1차 발송"}</button>}
+                {canManage && <button type="button" onClick={() => setAct({ row: r, kind: "n2", dates: des?.dates || [], email: !!cfg?.email })} className="h-9 px-3 rounded-lg border border-[#1B2B4B] bg-white text-[#1B2B4B] text-[14px] font-black">2차 · 날짜 지정</button>}
+                <button type="button" onClick={() => setLogOf(r)} className="h-9 px-3 rounded-lg border border-[#DCE3EE] bg-white text-[#3A4A66] text-[14px] font-black">기록 {r.rec?.log?.length || 0}</button>
               </div>
             </div>
           );
@@ -206,13 +207,13 @@ export default function LeavePromotionBoard({ company, canManage = false }) {
             <div className="rounded-2xl bg-white border border-[#E3E8F0] divide-y divide-[#EEF1F6]">
               {logOf.rec.log.slice().sort((a, b) => (b.at || 0) - (a.at || 0)).map((l, i) => (
                 <div key={i} className="px-4 py-3">
-                  <div className="flex items-center gap-2"><b className="text-[14.5px] text-[#0F1A30]">{{ n1: "1차 촉진 통보", n2: "2차 통보(사용 시기 지정)", plan: "직원 사용 계획 제출", hr: "인사 담당자 안내", overdue: "계획 기한 경과 안내" }[l.type] || l.type}</b><span className="ml-auto text-[13px] font-bold text-[#5B6B85]" style={NUMS}>{fmtAt(l.at)}</span></div>
-                  <div className="text-[13px] text-[#5B6B85]">{l.byName || l.by || (l.auto ? "자동(서버)" : "")}{l.channel ? ` · ${[].concat(l.channel).join(", ")}` : ""}{l.remain !== undefined ? ` · 잔여 ${l.remain}일` : ""}{l.due ? ` · 기한 ${l.due}` : ""}{(l.dates || []).length ? ` · ${l.dates.join(", ")}` : ""}</div>
+                  <div className="flex items-center gap-2"><b className="text-[14.5px] text-[#0F1A30]">{{ n1: "1차 촉진 통보", n2: "2차 통보(사용 시기 지정)", plan: "직원 사용 계획 제출", hr: "인사 담당자 안내", overdue: "계획 기한 경과 안내" }[l.type] || l.type}</b><span className="ml-auto text-[14px] font-bold text-[#5B6B85]" style={NUMS}>{fmtAt(l.at)}</span></div>
+                  <div className="text-[14px] text-[#5B6B85]">{l.byName || l.by || (l.auto ? "자동(서버)" : "")}{l.channel ? ` · ${[].concat(l.channel).join(", ")}` : ""}{l.remain !== undefined ? ` · 잔여 ${l.remain}일` : ""}{l.due ? ` · 기한 ${l.due}` : ""}{(l.dates || []).length ? ` · ${l.dates.join(", ")}` : ""}</div>
                 </div>
               ))}
             </div>
           )}
-          <div className="rounded-xl bg-[#F5F8FD] border border-[#E3E8F0] px-3 py-2 text-[12.5px] text-[#5B6B85]">기록은 지울 수 없습니다(보안 규칙). 분쟁 대비로 통보서를 인쇄해 수령 서명을 받아 두면 더 확실합니다.</div>
+          <div className="rounded-xl bg-[#F5F8FD] border border-[#E3E8F0] px-3 py-2 text-[14px] text-[#5B6B85]">기록은 지울 수 없습니다(보안 규칙). 분쟁 대비로 통보서를 인쇄해 수령 서명을 받아 두면 더 확실합니다.</div>
         </Sheet>
       )}
     </div>
@@ -236,16 +237,16 @@ function SendSheet({ company, act, byName, onClose }) {
       footer={<><button type="button" onClick={onClose} className="h-12 px-5 rounded-xl border border-[#DCE3EE] bg-white text-[14px] font-bold text-[#3A4A66]">취소</button><button type="button" disabled={busy} onClick={go} className="flex-1 h-12 rounded-xl bg-[#0F1A30] text-white text-[15px] font-black disabled:opacity-50" data-testid="promo-send-go">{busy ? "보내는 중…" : "보내기 · 기록 남기기"}</button></>}>
       {kind === "n2" && (
         <BookCard en="DESIGNATE" title={`사용일 지정 (잔여 ${row.remain}일)`}>
-          {row.rec?.plan?.dates?.length ? <div className="mb-2 text-[13px] font-bold text-[#067647]">직원 제출 계획: {row.rec.plan.dates.join(", ")}</div> : null}
+          {row.rec?.plan?.dates?.length ? <div className="mb-2 text-[14px] font-bold text-[#067647]">직원 제출 계획: {row.rec.plan.dates.join(", ")}</div> : null}
           <div className="flex gap-1.5"><div className="flex-1"><CustomDatePicker value={pick} onChange={(e) => setPick(e.target.value)} className={inp} showIcon /></div><button type="button" onClick={() => { if (pick && !dates.includes(pick)) setDates([...dates, pick].sort()); setPick(""); }} className="h-11 px-4 rounded-xl bg-[#0F1A30] text-white text-[14px] font-black">추가</button></div>
-          <div className="mt-2 flex gap-1.5 flex-wrap">{dates.map((d) => <button key={d} type="button" onClick={() => setDates(dates.filter((x) => x !== d))} className="h-9 px-3 rounded-full bg-[#EEF3FC] text-[#1B2B4B] text-[13.5px] font-black" style={NUMS}>{d} ✕</button>)}</div>
+          <div className="mt-2 flex gap-1.5 flex-wrap">{dates.map((d) => <button key={d} type="button" onClick={() => setDates(dates.filter((x) => x !== d))} className="h-9 px-3 rounded-full bg-[#EEF3FC] text-[#1B2B4B] text-[14px] font-black" style={NUMS}>{d} ✕</button>)}</div>
         </BookCard>
       )}
       <BookCard en="PREVIEW" title={t.subject}><div className="text-[14.5px] leading-[1.8] text-[#0F1A30] whitespace-pre-wrap">{t.body}</div></BookCard>
       <div className="flex gap-1.5 flex-wrap items-center">
-        <span className="h-9 px-3 rounded-full bg-[#EEF3FC] text-[#1B2B4B] text-[13px] font-black inline-flex items-center">✓ 앱 알림(팝업)</span>
-        <span className="h-9 px-3 rounded-full bg-[#EEF3FC] text-[#1B2B4B] text-[13px] font-black inline-flex items-center">✓ 사내메일 · 푸시</span>
-        {realEmail(row.u) ? <Chip on={withEmail} onClick={() => setWithEmail(!withEmail)}>{withEmail ? "✓ " : ""}이메일 {realEmail(row.u)}</Chip> : <span className="text-[13px] font-bold text-[#9AA9C3]">이메일 없음</span>}
+        <span className="h-9 px-3 rounded-full bg-[#EEF3FC] text-[#1B2B4B] text-[14px] font-black inline-flex items-center">✓ 앱 알림(팝업)</span>
+        <span className="h-9 px-3 rounded-full bg-[#EEF3FC] text-[#1B2B4B] text-[14px] font-black inline-flex items-center">✓ 사내메일 · 푸시</span>
+        {realEmail(row.u) ? <Chip on={withEmail} onClick={() => setWithEmail(!withEmail)}>{withEmail ? "✓ " : ""}이메일 {realEmail(row.u)}</Chip> : <span className="text-[14px] font-bold text-[#9AA9C3]">이메일 없음</span>}
       </div>
     </Sheet>
   );
@@ -292,14 +293,14 @@ export function MyLeavePlan({ company, uid: uidIn }) {
         return (
           <BookCard key={r.id} en={`${r.label || "연차"} · ${r.periodFrom} ~ ${r.periodTo}`} title={`남은 ${r.label || "연차"} ${r.remain}일`}>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-2 mb-3">
-              <div className="rounded-xl bg-[#F5F8FD] px-3 py-2"><div className="text-[12.5px] font-bold text-[#7A879C]">1차 통보</div><div className="text-[14.5px] font-black text-[#0F1A30]" style={NUMS}>{r.n1?.sentAt ? fmtAt(r.n1.sentAt) : "-"}</div></div>
-              <div className={`rounded-xl px-3 py-2 ${due && today > due && !r.plan?.submittedAt ? "bg-[#FEF3F2]" : "bg-[#F5F8FD]"}`}><div className="text-[12.5px] font-bold text-[#7A879C]">계획 제출 기한</div><div className="text-[14.5px] font-black text-[#0F1A30]" style={NUMS}>{due || "-"}</div></div>
-              <div className="rounded-xl bg-[#F5F8FD] px-3 py-2"><div className="text-[12.5px] font-bold text-[#7A879C]">{r.designated?.dates?.length ? "회사 지정일" : "제출 상태"}</div><div className="text-[14.5px] font-black text-[#0F1A30]" style={NUMS}>{r.designated?.dates?.length ? r.designated.dates.join(", ") : r.plan?.submittedAt ? `제출 ${fmtAt(r.plan.submittedAt)}` : "미제출"}</div></div>
+              <div className="rounded-xl bg-[#F5F8FD] px-3 py-2"><div className="text-[14px] font-bold text-[#7A879C]">1차 통보</div><div className="text-[14.5px] font-black text-[#0F1A30]" style={NUMS}>{r.n1?.sentAt ? fmtAt(r.n1.sentAt) : "-"}</div></div>
+              <div className={`rounded-xl px-3 py-2 ${due && today > due && !r.plan?.submittedAt ? "bg-[#FEF3F2]" : "bg-[#F5F8FD]"}`}><div className="text-[14px] font-bold text-[#7A879C]">계획 제출 기한</div><div className="text-[14.5px] font-black text-[#0F1A30]" style={NUMS}>{due || "-"}</div></div>
+              <div className="rounded-xl bg-[#F5F8FD] px-3 py-2"><div className="text-[14px] font-bold text-[#7A879C]">{r.designated?.dates?.length ? "회사 지정일" : "제출 상태"}</div><div className="text-[14.5px] font-black text-[#0F1A30]" style={NUMS}>{r.designated?.dates?.length ? r.designated.dates.join(", ") : r.plan?.submittedAt ? `제출 ${fmtAt(r.plan.submittedAt)}` : "미제출"}</div></div>
             </div>
-            <div className="text-[13px] font-black text-[#3A4A66] mb-1.5">사용할 날짜</div>
+            <div className="text-[14px] font-black text-[#3A4A66] mb-1.5">사용할 날짜</div>
             <div className="flex gap-1.5"><div className="flex-1"><CustomDatePicker value={pick[r.id] || ""} onChange={(e) => setPick((p) => ({ ...p, [r.id]: e.target.value }))} className={inp} showIcon /></div>
               <button type="button" onClick={() => { const d = pick[r.id]; if (d && !f.dates.includes(d)) setF({ dates: [...f.dates, d].sort() }); setPick((p) => ({ ...p, [r.id]: "" })); }} className="h-11 px-4 rounded-xl bg-[#0F1A30] text-white text-[14px] font-black">추가</button></div>
-            <div className="mt-2 flex gap-1.5 flex-wrap">{f.dates.map((d) => <button key={d} type="button" onClick={() => setF({ dates: f.dates.filter((x) => x !== d) })} className="h-9 px-3 rounded-full bg-[#EEF3FC] text-[#1B2B4B] text-[13.5px] font-black" style={NUMS}>{d} ✕</button>)}{!f.dates.length && <span className="text-[13px] font-bold text-[#9AA9C3]">아직 고른 날짜가 없습니다</span>}</div>
+            <div className="mt-2 flex gap-1.5 flex-wrap">{f.dates.map((d) => <button key={d} type="button" onClick={() => setF({ dates: f.dates.filter((x) => x !== d) })} className="h-9 px-3 rounded-full bg-[#EEF3FC] text-[#1B2B4B] text-[14px] font-black" style={NUMS}>{d} ✕</button>)}{!f.dates.length && <span className="text-[14px] font-bold text-[#9AA9C3]">아직 고른 날짜가 없습니다</span>}</div>
             <input value={f.memo} onChange={(e) => setF({ memo: e.target.value })} className={`${inp} mt-2`} placeholder="메모(선택)" />
             <button type="button" disabled={busy} onClick={() => submit(r)} className="mt-3 w-full h-12 rounded-xl bg-[#0F1A30] text-white text-[15px] font-black disabled:opacity-50" data-testid="plan-submit">{r.plan?.submittedAt ? "사용 계획 다시 제출" : "사용 계획 제출"} · {f.dates.length}일</button>
           </BookCard>
