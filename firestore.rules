@@ -464,6 +464,246 @@ service cloud.firestore {
     }
 
     // ────────────────────────────────────────────────────────────
+    // ⭐ 2026-11-06 로지스웹 허브 콜(차주 · 화주 · 운송사) — 데이터 설명은 cafe-site/src/hub/hubApi.js 맨 위
+    //  · 회원(hubMembers)은 본인 + 관리자만 본다. 허브 가입 회원은 users 문서가 없어 배차 프로그램 데이터에 접근할 수 없다.
+    //  · 기존 로지스웹 계정(운송사 직원 · 소속 기사 · 화주사)은 users 문서와 같은 회사·차량일 때만 바로 "승인" 회원이 된다.
+    //  · 오더(hubOrders)는 승인 회원 전체가 보고, 상세주소·연락처(private/detail)는 등록자 + 10초 확정 후 배차된 회원만.
+    //  · 배차신청은 모집중일 때 먼저 쓴 1명만 성공, 취소는 서버 시각으로 10초 안에만(그 뒤엔 전화로).
+    // ────────────────────────────────────────────────────────────
+    function hubPath(uid) {
+      return /databases/$(database)/documents/hubMembers/$(uid);
+    }
+    function hubMe() {
+      return get(hubPath(request.auth.uid)).data;
+    }
+    // 승인된 허브 회원 — 로지스웹 계정으로 들어온 회원은 로지스웹 계정도 지금 유효해야 한다(퇴사·정지·계약종료 반영)
+    function hubActive() {
+      return isSignedIn() && exists(hubPath(request.auth.uid)) && hubMe().get('status', '') == 'approved'
+        && (hubMe().get('source', '') == 'signup' || isApproved());
+    }
+    function hubCanPost() {
+      return hubActive() && hubMe().get('role', '') in ['shipper', 'carrier'];
+    }
+    function hubCanTake() {
+      return hubActive() && hubMe().get('role', '') in ['driver', 'carrier']
+        && hubMe().get('penalty', {}).get('blocked', false) != true;
+    }
+    // 허브 가입 회원은 users 문서가 없다 — 없는 문서를 get()하면 오류가 나서 "A || 관리자" 전체가 거절되므로 exists()로 먼저 확인
+    function hubAdmin() {
+      return isSignedIn() && (request.auth.token.get('email', '') == "tjddnqkf@naver.com" ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', '') == 'totalMaster'));
+    }
+    // 기존 로지스웹 계정 연결 — users 문서와 회사(기사는 차량번호까지)가 같아야
+    function hubLinkOk(d) {
+      let u = myUser();
+      return isApproved() && d.get('companyName', '') == u.get('companyName', '') && (
+        (d.get('source', '') == 'logisweb-staff' && d.get('role', '') == 'carrier'
+          && !(u.get('role', '') in ['driver', 'shipper', 'cafeUser', 'viewer']) && u.get('companyName', '') != '') ||
+        (d.get('source', '') == 'logisweb-driver' && d.get('role', '') == 'driver'
+          && u.get('role', '') == 'driver' && u.get('approved', false) == true
+          && d.get('vehicle', {}).get('plate', '') == u.get('carNo', u.get('차량번호', ''))) ||
+        (d.get('source', '') == 'logisweb-shipper' && d.get('role', '') == 'shipper' && u.get('role', '') == 'shipper'));
+    }
+    match /hubMembers/{uid} {
+      allow get: if isSignedIn() && (request.auth.uid == uid || hubAdmin());
+      allow list: if hubAdmin();
+      allow create: if isSignedIn() && request.auth.uid == uid
+        && request.resource.data.get('uid', '') == uid
+        && !request.resource.data.keys().hasAny(['verified', 'bizStatus', 'adminNote', 'penalty', 'reviewedAt', 'reviewedBy', 'approvedAt', 'rejectReason', 'isAdmin'])
+        && ((request.resource.data.get('source', '') == 'signup' && request.resource.data.get('status', '') == 'pending'
+             && request.resource.data.get('role', '') in ['driver', 'shipper', 'carrier']
+             && !request.resource.data.keys().hasAny(['docsVerified']))
+          || (request.resource.data.get('status', '') == 'approved' && hubLinkOk(request.resource.data)));
+      allow update: if hubAdmin() || (isSignedIn() && request.auth.uid == uid
+        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['uid', 'role', 'source', 'verified', 'docsVerified', 'bizStatus', 'adminNote', 'penalty', 'reviewedAt', 'reviewedBy', 'approvedAt', 'rejectReason', 'isAdmin'])
+        && (
+          // 승인 후에는 알림설정 · 즐겨찾기 · 기기 번호 · 프로필 사진만(차량·서류를 바꾸려면 다시 심사)
+          (resource.data.get('status', '') == 'approved' && request.resource.data.get('status', '') == 'approved'
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['prefs', 'activeSession', 'lastLoginAt', 'updatedAt', 'photoPath'])) ||
+          // 승인 대기 중 신청서 고치기 · 거절 뒤 다시 제출
+          (resource.data.get('source', '') == 'signup' && resource.data.get('status', '') in ['pending', 'rejected']
+            && request.resource.data.get('status', '') == 'pending') ||
+          // 어떤 상태든 기기 번호(한 계정 한 기기)
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['activeSession', 'lastLoginAt'])));
+      allow delete: if hubAdmin();
+    }
+    // 완료 건수 · 평점 — 서버 함수만 쓴다
+    match /hubStats/{uid} {
+      allow read: if hubActive();
+      allow read: if hubAdmin();
+      allow write: if false;
+    }
+    // 오더 등록 횟수 제한 — 20초 간격 · 하루(UTC) 30건, 시각·날짜는 서버 시각으로 확인
+    match /hubQuota/{uid} {
+      allow get: if isSignedIn() && request.auth.uid == uid;
+      allow create: if isSignedIn() && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly(['uid', 'count', 'day', 'lastPostAt'])
+        && request.resource.data.get('uid', '') == uid
+        && request.resource.data.get('count', 0) == 1
+        && request.resource.data.get('day', null) == request.time.date()
+        && request.resource.data.get('lastPostAt', null) == request.time;
+      allow update: if isSignedIn() && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly(['uid', 'count', 'day', 'lastPostAt'])
+        && request.resource.data.get('uid', '') == uid
+        && request.resource.data.get('lastPostAt', null) == request.time
+        && request.time > resource.data.lastPostAt + duration.value(20, 's')
+        && request.resource.data.get('day', null) == request.time.date()
+        && (resource.data.get('day', null) == request.time.date()
+              ? (request.resource.data.get('count', 0) == resource.data.get('count', 0) + 1 && request.resource.data.get('count', 0) <= 30)
+              : request.resource.data.get('count', 0) == 1);
+      allow delete: if hubAdmin();
+    }
+    function hubEditKeys() {
+      return ['상차시도', '상차시군구', '하차시도', '하차시군구', '상차일', '상차시간', '하차일', '하차시간', '화물내용', '중량', '파레트',
+        '차량종류', '차량톤수', '톤수값', '상차방법', '하차방법', '운임', '수수료', '지급방식', '긴급', '운행유형', '적재', '공개메모', '거리km', 'updatedAt'];
+    }
+    function hubOrd(id) {
+      return get(/databases/$(database)/documents/hubOrders/$(id)).data;
+    }
+    function hubOrdAfter(id) {
+      return getAfter(/databases/$(database)/documents/hubOrders/$(id)).data;
+    }
+    // 비공개 문서 읽기 — 등록자(정산 메모 제외) · 배차된 회원(상세는 10초 확정 후) · 각자 정산 메모
+    function hubPrivReadOk(o, docId) {
+      let me = request.auth.uid;
+      let poster = o.get('posterUid', '') == me;
+      let taker = o.get('takerUid', '') == me;
+      let st = o.get('status', '');
+      return (poster && !docId.matches('settle_.*'))
+        || (taker && docId == 'match')
+        || (taker && docId == 'detail' && (st in ['loaded', 'delivered'] || (st == 'assigned' && o.get('confirmed', false) == true)))
+        || ((poster || taker) && docId == 'settle_' + me);
+    }
+    function hubWindowOver(d) {
+      return d.get('assignedAt', null) != null && request.time >= d.assignedAt + duration.value(10, 's');
+    }
+    function hubRatingOk(r) {
+      return r is map && r.keys().hasOnly(['score', 'comment']) && r.score is int && r.score >= 1 && r.score <= 5
+        && r.get('comment', '') is string && r.get('comment', '').size() <= 200;
+    }
+    // 배차된 회원 정보(등록자에게 보이는 차주 카드)는 본인 회원 문서와 똑같아야 — 인증·차량을 꾸며 넣을 수 없게
+    function hubMatchOk(d) {
+      let me = hubMe();
+      return d.get('takerUid', '') == request.auth.uid
+        && d.get('role', '') == me.get('role', '') && d.get('source', '') == me.get('source', '')
+        && d.get('name', '') == me.get('name', '') && d.get('phone', '') == me.get('phone', '')
+        && d.get('companyName', '') == me.get('companyName', '')
+        && d.get('vehicle', null) == me.get('vehicle', null)
+        && d.get('docsVerified', false) == me.get('docsVerified', false)
+        && d.get('bizStatus', '') == me.get('bizStatus', '')
+        && d.get('photoPath', '') == me.get('photoPath', '');
+    }
+    match /hubOrders/{id} {
+      allow read: if hubActive();
+      allow read: if hubAdmin();
+      allow create: if hubCanPost()
+        && request.resource.data.keys().hasOnly(hubEditKeys().concat(['v', 'posterUid', 'posterRole', 'posterSource', 'posterCompany', 'posterName', 'posterVerified', 'status', 'takerUid', 'takerRole', 'assignedAt', 'cancelCount', 'createdAt']))
+        && request.resource.data.get('v', 0) == 3
+        && request.resource.data.get('posterUid', '') == request.auth.uid
+        && request.resource.data.get('posterRole', '') == hubMe().get('role', '')
+        && request.resource.data.get('posterSource', '') == hubMe().get('source', '')
+        && request.resource.data.get('posterCompany', '') == hubMe().get('companyName', '')
+        && request.resource.data.get('posterName', '') == hubMe().get('name', '')
+        && request.resource.data.get('posterVerified', false) == hubMe().get('docsVerified', false)
+        && request.resource.data.get('status', '') == 'open'
+        && request.resource.data.get('takerUid', null) == null
+        && request.resource.data.get('cancelCount', 0) == 0
+        && request.resource.data.get('운임', 0) is number && request.resource.data.get('운임', 0) >= 0 && request.resource.data.get('운임', 0) <= 50000000
+        && getAfter(/databases/$(database)/documents/hubQuota/$(request.auth.uid)).data.get('lastPostAt', null) == request.time;
+      allow update: if
+        // ① 등록자 — 모집중 수정 · 오더 취소 · 배차 취소 후 재모집 · 운송완료 확인 · 평가
+        (isSignedIn() && resource.data.get('posterUid', '') == request.auth.uid && (
+          (resource.data.status == 'open' && request.resource.data.status == 'open'
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(hubEditKeys())) ||
+          (resource.data.status in ['open', 'assigned'] && request.resource.data.status == 'cancelled'
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'cancelledAt', 'updatedAt'])) ||
+          (resource.data.status == 'assigned' && request.resource.data.status == 'open'
+            && request.resource.data.takerUid == null && request.resource.data.takerRole == null && request.resource.data.assignedAt == null
+            && request.resource.data.get('confirmed', false) == false
+            && request.resource.data.get('releaseCount', 0) == resource.data.get('releaseCount', 0) + 1
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'takerUid', 'takerRole', 'assignedAt', 'confirmed', 'confirmedAt', 'releaseCount', 'lastReleaseReason', 'updatedAt'])) ||
+          (resource.data.status == 'loaded' && request.resource.data.status == 'delivered'
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'deliveredAt', 'updatedAt'])) ||
+          (resource.data.status == 'delivered' && request.resource.data.status == 'delivered'
+            && !('ratingByPoster' in resource.data) && hubRatingOk(request.resource.data.ratingByPoster)
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['ratingByPoster', 'updatedAt'])))) ||
+        // ② 배차신청 — 모집중일 때 먼저 쓴 1명만(두 번째 신청은 이미 assigned라 거절된다 = 중복 배차 방지)
+        (hubCanTake() && resource.data.get('posterUid', '') != request.auth.uid
+          && resource.data.status == 'open' && request.resource.data.status == 'assigned'
+          && request.resource.data.takerUid == request.auth.uid
+          && request.resource.data.takerRole == hubMe().get('role', '')
+          && request.resource.data.assignedAt == request.time
+          && resource.data.get('cancelCount', 0) < 5
+          && request.resource.data.get('confirmed', false) == false
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'takerUid', 'takerRole', 'assignedAt', 'updatedAt'])
+          && getAfter(/databases/$(database)/documents/hubOrders/$(id)/private/match).data.get('takerUid', '') == request.auth.uid) ||
+        // ③ 신청한 회원의 10초 안 취소 — 서버 시각(request.time) 기준, 그 뒤엔 등록자에게 전화로
+        (isSignedIn() && resource.data.status == 'assigned' && resource.data.get('takerUid', '') == request.auth.uid
+          && request.time < resource.data.assignedAt + duration.value(10, 's')
+          && resource.data.get('confirmed', false) != true
+          && request.resource.data.status == 'open' && request.resource.data.takerUid == null
+          && request.resource.data.takerRole == null && request.resource.data.assignedAt == null
+          && request.resource.data.get('cancelCount', 0) == resource.data.get('cancelCount', 0) + 1
+          && request.resource.data.get('lastCancelUid', '') == request.auth.uid
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'takerUid', 'takerRole', 'assignedAt', 'cancelCount', 'lastCancelUid', 'lastCancelAt', 'updatedAt'])) ||
+        // ⑥ 10초가 지나면 배차된 회원 또는 등록자 화면이 "확정" 표시(서버 시각으로 10초 경과 확인) — 상세주소 공개는 이 표시로 판단
+        //    (읽기 규칙에 시각 계산을 넣지 않는다: 확정 여부가 문서에 남아 양쪽 화면·서버 함수가 같은 기준을 본다)
+        (isSignedIn() && (resource.data.get('takerUid', '') == request.auth.uid || resource.data.get('posterUid', '') == request.auth.uid)
+          && resource.data.status == 'assigned' && request.resource.data.status == 'assigned'
+          && resource.data.get('confirmed', false) != true && hubWindowOver(resource.data)
+          && request.resource.data.get('confirmed', false) == true && request.resource.data.get('confirmedAt', null) == request.time
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['confirmed', 'confirmedAt', 'updatedAt'])) ||
+        // ④ 배차된 회원 — 10초 확정 뒤 상차완료 → 운송완료(인수증 사진 경로)
+        (isSignedIn() && resource.data.get('takerUid', '') == request.auth.uid && hubWindowOver(resource.data)
+          && ((resource.data.status == 'assigned' && request.resource.data.status == 'loaded'
+                && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'loadedAt', 'updatedAt'])) ||
+              (resource.data.status == 'loaded' && request.resource.data.status == 'delivered'
+                && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'deliveredAt', 'podPath', 'updatedAt'])))) ||
+        // ⑤ 배차된 회원의 평가(1번)
+        (isSignedIn() && resource.data.get('takerUid', '') == request.auth.uid
+          && resource.data.status == 'delivered' && request.resource.data.status == 'delivered'
+          && !('ratingByTaker' in resource.data) && hubRatingOk(request.resource.data.ratingByTaker)
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['ratingByTaker', 'updatedAt'])) ||
+        hubAdmin();
+      allow delete: if (isSignedIn() && resource.data.get('posterUid', '') == request.auth.uid && resource.data.status in ['open', 'cancelled']) || hubAdmin();
+
+      // detail(상세주소·연락처) · match(배차된 회원 정보) · settle_{uid}(각자 정산 메모)
+      match /private/{docId} {
+        allow read: if isSignedIn() && hubPrivReadOk(hubOrd(id), docId);
+        allow read: if hubAdmin();
+        allow create, update: if isSignedIn() && (
+          (docId == 'detail' && hubOrdAfter(id).get('posterUid', '') == request.auth.uid) ||
+          (docId == 'match' && hubOrdAfter(id).get('takerUid', '') == request.auth.uid
+            && hubOrdAfter(id).get('status', '') == 'assigned' && hubMatchOk(request.resource.data)) ||
+          (docId == 'settle_' + request.auth.uid && request.resource.data.keys().hasOnly(['text', 'updatedAt'])
+            && (hubOrdAfter(id).get('posterUid', '') == request.auth.uid || hubOrdAfter(id).get('takerUid', '') == request.auth.uid)));
+        allow delete: if hubAdmin() || (isSignedIn() && (
+          hubOrd(id).get('posterUid', '') == request.auth.uid ||
+          (docId == 'match' && resource.data.get('takerUid', '') == request.auth.uid)));
+      }
+    }
+    // 허브 알림 — 받는 사람만. 보내기는 승인 회원이 자기 이름으로, 그 오더의 등록자에게 또는 등록자가 보낼 때만(스팸 방지)
+    match /hubNotices/{id} {
+      allow read, delete: if isSignedIn() && resource.data.get('toUid', '') == request.auth.uid;
+      allow update: if isSignedIn() && resource.data.get('toUid', '') == request.auth.uid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read']);
+      allow create: if hubActive()
+        && request.resource.data.get('fromUid', '') == request.auth.uid
+        && request.resource.data.get('toUid', '') is string && request.resource.data.get('toUid', '') != request.auth.uid
+        && request.resource.data.get('read', true) == false
+        && (hubOrd(request.resource.data.get('orderId', '_')).get('posterUid', '') == request.resource.data.get('toUid', '')
+            || hubOrd(request.resource.data.get('orderId', '_')).get('posterUid', '') == request.auth.uid);
+    }
+    // 노쇼 · 허위 등록 신고 — 신고자 + 관리자
+    match /hubReports/{id} {
+      allow create: if hubActive() && request.resource.data.get('reporterUid', '') == request.auth.uid
+        && request.resource.data.get('status', '') == 'open';
+      allow read: if hubAdmin() || (isSignedIn() && resource.data.get('reporterUid', '') == request.auth.uid);
+      allow update, delete: if hubAdmin();
+    }
+
+    // ────────────────────────────────────────────────────────────
     // 프로그램 전역 설정 — 최고관리자만 설정/열람 가능(요청사항).
     // 단 siteConfig/landing(로그인 전 랜딩페이지 커스터마이징)은 그 페이지 자체가
     // 로그인 없이 열리므로 읽기만은 누구나 가능해야 한다 — 그래야 방문자 화면에
@@ -1109,6 +1349,8 @@ service cloud.firestore {
         'textOverrides', 'textOverridesPublic',
         // ⭐ 2026-11-06 오더마켓 — 위에서 따로 정함(예전엔 이 목록에 없어 승인된 직원이면 누구나 게시글을 고칠 수 있었다)
         'cafeOrders', 'marketNotices',
+        // ⭐ 2026-11-06 로지스웹 허브 콜 — 위에서 따로 정함(빠지면 배차 프로그램 직원 누구나 허브 회원·오더를 고칠 수 있다)
+        'hubMembers', 'hubStats', 'hubQuota', 'hubOrders', 'hubNotices', 'hubReports',
         // 💰 2026-11-06 직원 급여 · 연차 촉진 — 위에서 따로 정함
         'payrollSettings', 'payrollEmployees', 'payrollRuns', 'payslips', 'hrNotices', 'leavePromotions',
         // 🤖 2026-11-06 AI 팀 사용 기록 — 위에서 따로 정함

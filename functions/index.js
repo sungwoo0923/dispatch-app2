@@ -6864,6 +6864,19 @@ exports.orderMarketOnTakerOrderWrite = functions.firestore
     } catch (e) { console.error("[오더마켓] 진행 반영 실패:", e); }
   });
 
+/* ==============================
+   ⭐ 2026-11-06 로지스웹 허브 콜(hubOrders) — 평점 · 완료 건수 · 취소 기록 집계(hubStats, 회원은 쓸 수 없음)
+   규칙은 functions/hubCall.js 맨 위 설명
+============================== */
+const _hubCall = require("./hubCall");
+exports.hubOrderOnWrite = functions.firestore
+  .document("hubOrders/{id}")
+  .onWrite(async (change, context) => {
+    try {
+      await _hubCall.onHubOrderWrite(db, FieldValue, context.params.id, change.before.exists ? change.before.data() : null, change.after.exists ? change.after.data() : null);
+    } catch (e) { console.error("[허브 콜] 집계 실패:", e); }
+  });
+
 // 🤖 2026-11-06 AI 팀 — 관리자센터에서 팀별(경리·재무·영업·운영·보안·홍보) Claude 에이전트와 대화.
 //  최고관리자·부관리자(role totalMaster)만. Claude API 키는 Firebase 비밀값 ANTHROPIC_API_KEY.
 //  (등록: firebase functions:secrets:set ANTHROPIC_API_KEY)

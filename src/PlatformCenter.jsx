@@ -30,6 +30,7 @@ import NoticeBoard from "./NoticeBoard";
 import { toBoardNotice } from "./PlatformNoticeBanner";
 import { compressImage } from "./InternalMail";
 const HomepageEditor = React.lazy(() => import("./HomepageEditor")); // ⭐ 2026-11-03 소개 홈페이지 편집기
+const HubMembersAdmin = React.lazy(() => import("./HubMembersAdmin")); // ⭐ 2026-11-06 허브 회원 승인
 const CostPanel = React.lazy(() => import("./CostPanel")); // 💰 2026-11-04 비용 · 손익(최고관리자 전용)
 import { AiTeamHub, AiTeamChat, AI_TEAM_TABS } from "./AiTeamPanel"; // 🤖 2026-11-06 AI 팀
 import { RemoteSupportAdminPanel } from "./RemoteSupport"; // ⭐ 2026-11-02 원격지원 —
@@ -58,6 +59,7 @@ const SECTIONS = [
     { key: "companies", label: "운송사 관제", en: "CARRIERS", icon: "building" },
     { key: "shippers", label: "화주사 관제", en: "SHIPPERS", icon: "link" },
     { key: "applications", label: "가입신청관리", en: "APPLICATIONS", icon: "inbox" },
+    { key: "hubMembers", label: "허브 회원 승인", en: "HUB MEMBERS", icon: "users" }, // ⭐ 2026-11-06 로지스웹 허브(화물 콜) 차주·화주·운송사 가입 심사
     { key: "inquiries", label: "도입 문의", en: "LEADS", icon: "mail" },
   ] },
   { key: "sales", label: "영업", en: "SALES", icon: "trend", items: [
@@ -1098,6 +1100,9 @@ function PlatformCenterInner({ user }) {
   const openCompany = React.useCallback((name) => { if (!name) return; setFocusCompany(name); setTab(MONITOR_TABS.includes(tab) && tab !== "applications" && !tab.startsWith("sales:") && tab !== "billing" ? tab : "companies"); }, [tab, setTab]);
   const clearFocus = React.useCallback(() => setFocusCompany(null), []);
 
+  // ⭐ 2026-11-06 허브 회원 승인 대기 개수(메뉴 배지)
+  const [hubPending, setHubPending] = React.useState(0);
+  React.useEffect(() => onSnapshot(query(collection(db, "hubMembers"), where("status", "==", "pending"), limit(200)), (s) => setHubPending(s.size), () => setHubPending(0)), []);
   // 메뉴 배지(처리 대기 개수)
   const P = live?.pending;
   const badges = {
@@ -1105,6 +1110,7 @@ function PlatformCenterInner({ user }) {
     inquiries: P ? P.inquiries.length : 0,
     payments: P ? P.planReqs.length : 0,
     support: P?.support ? P.support.length : 0, // ⭐ 2026-11-02 원격지원 —
+    hubMembers: hubPending,
   };
   const liveBadge = live?.ready ? live.totals.onlineNow : 0;
   const sectionsView = SECTIONS.map((s) => ({ ...s, items: s.items.map((it) => (it.key === "live" ? { ...it, badge: liveBadge, soft: true } : badges[it.key] ? { ...it, badge: badges[it.key] } : it)) }));
@@ -1127,6 +1133,7 @@ function PlatformCenterInner({ user }) {
   else if (tab === "contract:list") body = <><Hero en="CONTRACTS · STATUS" title="계약 현황" desc="작성 → 서명 요청 → 고객 전자서명 → 체결까지 한 곳에서. 만료 2개월 전부터 갱신 대상으로 표시됩니다." /><ContractList onNew={() => openContract({})} onEdit={(c) => openContract({ initial: c })} /></>;
   else if (tab === "contract:new") body = <><Hero en="CONTRACTS · NEW" title={contractCtx.initial ? "계약서 수정" : "계약서 작성"} desc="견적을 불러오면 요금·기간이 자동으로 채워집니다. 저장하고 서명 요청을 누르면 고객용 서명 링크가 복사됩니다." /><ContractBuilder key={contractCtx.key} initial={contractCtx.initial} fromQuoteDoc={contractCtx.fromQuote} onDone={() => setTab("contract:list")} /></>;
   else if (tab === "contract:templates") body = <><Hero en="CONTRACTS · TEMPLATES" title="계약서 양식" desc="기본 이용계약서를 바탕으로 조항을 자유롭게 고치고, 양식을 여러 개 둘 수 있습니다." /><ContractTemplates /></>;
+  else if (tab === "hubMembers") body = <><Hero en="CLIENTS · HUB MEMBERS" title="허브 회원 승인" desc="로지스웹 허브(화물 콜)에 가입 신청한 차주 · 화주 · 운송사의 신청서와 서류를 확인하고 승인 · 거절합니다. 로지스웹 계정으로 들어온 회원은 자동 승인되어 여기서 정지만 할 수 있습니다." /><React.Suspense fallback={<div className="py-20 text-center text-[#9AA9C3]">불러오는 중…</div>}><HubMembersAdmin me={user} /></React.Suspense></>;
   else if (tab === "payments") body = <PaymentsPanel />;
   else if (tab === "usage") body = <UsagePanel />;
   else if (tab === "cost") body = <React.Suspense fallback={<div className="py-20 text-center text-[#9AA9C3]">불러오는 중…</div>}><CostPanel openUsage={() => setTab("usage")} /></React.Suspense>;

@@ -151,8 +151,8 @@ export default function CafeApp() {
   const unread = notices.filter((n) => !n.read).length;
 
   const selectedOrder = selectedOrderId ? (orders.find(o => o.id === selectedOrderId) || myOrders.find(o => o.id === selectedOrderId) || null) : null;
-  const openOrder = (o) => nav(`/orders/${o.id}`);
-  const closeOrder = () => nav("/");
+  const openOrder = (o) => nav(`/exchange/orders/${o.id}`); // ⭐ 2026-11-06 거래소는 /exchange 아래
+  const closeOrder = () => nav("/exchange");
   const logout = async () => { await signOut(auth); nav("/login", { replace: true }); };
 
   if (authUser === undefined) return <LoadingScreen />;
@@ -160,7 +160,7 @@ export default function CafeApp() {
   if (!profile) return <LoadingScreen />;
 
   const setFilter = (k, v) => setF((p) => ({ ...p, [k]: v }));
-  const go = (k) => { setTab(k); if (selectedOrderId) nav("/"); window.scrollTo({ top: 0 }); };
+  const go = (k) => { setTab(k); if (selectedOrderId) nav("/exchange"); window.scrollTo({ top: 0 }); };
   const newOrder = () => { if (!profile.isCompany) { alert("오더 올리기는 로지스웹 운송사 계정만 할 수 있습니다."); return; } setEditing(null); setFormOpen(true); };
 
   const TABS = [
@@ -346,7 +346,7 @@ export default function CafeApp() {
               <ul className="divide-y divide-[#EEF1F6]">
                 {notices.map((n) => (
                   <li key={n.id}>
-                    <button type="button" onClick={() => { markNoticeRead(n.id); if (n.orderId) nav(`/orders/${n.orderId}`); }} className={`w-full text-left px-5 py-4 flex gap-3.5 hover:bg-[#F7F9FC] ${n.read ? "" : "bg-[#F3F7FE]"}`}>
+                    <button type="button" onClick={() => { markNoticeRead(n.id); if (n.orderId) nav(`/exchange/orders/${n.orderId}`); }} className={`w-full text-left px-5 py-4 flex gap-3.5 hover:bg-[#F7F9FC] ${n.read ? "" : "bg-[#F3F7FE]"}`}>
                       <span className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${n.read ? "bg-[#F2F5FA] text-[#8592A8]" : "bg-[#0F1A30] text-[#8FB0F0]"}`}><Icon name={n.type === "request" ? "inbox" : n.type === "accepted" ? "check" : n.type === "delivered" ? "shield" : n.type === "dispatched" ? "truck" : "bell"} size={18} /></span>
                       <span className="min-w-0 flex-1">
                         <span className="flex items-center gap-2"><span className="text-[15px] font-extrabold text-[#0F1A30]">{n.title}</span>{!n.read && <span className="w-2 h-2 rounded-full bg-[#2D4C82]" />}<span className="ml-auto text-[13px] text-[#A3AEC0] shrink-0">{timeAgo(n.createdAt)}</span></span>
