@@ -9,6 +9,7 @@ installEscClose();
 import { safeLocalSet } from "./safeStorage";
 import UpdateBanner from "./UpdateBanner";
 import VersionCheck from "./VersionCheck";
+import TextOverrideLayer from "./TextOverrideLayer"; // ⭐ 2026-11-06 문구 편집 모드(최고관리자) — 모든 화면의 글자 덮어쓰기
 import {
   BrowserRouter as Router,
   Routes,
@@ -827,6 +828,8 @@ export default function App() {
       {/* 자동 업데이트 배너 (팝업 없이 상단 배너로 표시 후 자동 새로고침). */}
       <UpdateBanner />
       <VersionCheck />
+      {/* ⭐ 2026-11-06 문구 편집 모드 — 최고관리자·부관리자에게만 왼쪽 아래 "✎ 문구" 단추(Ctrl+Shift+E) · 적용은 모든 사용자 */}
+      <TextOverrideLayer role={role} user={user} />
 
       {/* ⭐ 중복 로그인 선택창 */}
       {/* ⭐ 2026-11-02 화면 점검 — 튜토리얼(z 100060)·로딩 화면(z 2147483000)보다 위에 보이도록 최상위 z-index */}
