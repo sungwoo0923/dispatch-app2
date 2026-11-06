@@ -11,6 +11,7 @@ import { useNavigate, Link } from "react-router-dom";
 import { Loader2 } from "lucide-react";
 import { useMfaPrompt, mfaErrorText } from "./MfaModal";
 import { LogisMark, LogisWordmark, LogisTag } from "./brand"; // 🔷 2026-11-04 LogisWeb 로고
+import { MARKET_NAME } from "./orderMarketConfig"; // ⭐ 2026-11-06 허브(예전 배차마당) 이름
 
 const TOTAL_MASTER_EMAIL = "tjddnqkf@naver.com";
 
@@ -203,8 +204,9 @@ export default function TransportLogin() {
 
         const userData = userSnap.data();
 
-        // ⭐ 운송사 로그인은 운송사 직원 계정만 — 화주·기사·배차마당 계정은 각자 로그인 화면에서만 로그인
-        const OTHER_LOGIN = { shipper: "화주사 로그인", driver: "기사앱", cafeUser: "배차마당" };
+        // ⭐ 운송사 로그인은 운송사 직원 계정만 — 화주·기사·허브(예전 배차마당) 열람 계정은 각자 로그인 화면에서만 로그인
+        // ⭐ 2026-11-06 허브 이름은 src/orderMarketConfig.js
+        const OTHER_LOGIN = { shipper: "화주사 로그인", driver: "기사앱", cafeUser: MARKET_NAME };
         if (OTHER_LOGIN[userData.role]) {
           sessionStorage.removeItem("transportValidating");
           await signOut(auth);

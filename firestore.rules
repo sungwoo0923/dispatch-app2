@@ -343,21 +343,124 @@ service cloud.firestore {
     }
 
     // ────────────────────────────────────────────────────────────
-    // 배차마당(카페형 오더 공유 사이트) — 게시글 본문은 로그인 사용자 전체 공개,
-    // 연락처(전화번호)는 별도 서브문서에 두고 "배차완료" 상태에서 당사자(등록자/신청자)만
-    // 읽을 수 있게 제한한다.
+    // ⭐ 2026-11-06 오더마켓(예전 배차마당) — 운송사끼리 오더를 주고받는 거래소
+    //  · 게시글 본문(cafeOrders)은 로그인 회원 전체 열람. 새 글(v 2)은 시/구까지만 담고, 상·하차지명·정확한 주소·연락처는
+    //    private/detail 에 따로 둔다 → 올린 운송사 + 매칭된 운송사만 열람. private/settle(청구 운임·수수료)은 올린 운송사만.
+    //  · 새 글 등록·잡기 요청·수락은 승인된 운송사 직원 계정만(배차마당 가입 계정·기사·화주·조회전용 제외).
+    //  · 예전 글(v 없음)은 예전 규칙(10초 배차신청 · contact/info 연락처)을 그대로 따른다.
     // ────────────────────────────────────────────────────────────
+    function isMarketCompany() {
+      return isApproved() && !(myUser().get('role', '') in ['driver', 'shipper', 'cafeUser', 'viewer'])
+        && myUser().get('companyName', '') != '';
+    }
+    function mkDoc(orderId) {
+      return get(/databases/$(database)/documents/cafeOrders/$(orderId)).data;
+    }
+    function mkPoster(d) {
+      return isSignedIn() && d.get('posterUid', '') == request.auth.uid;
+    }
+    function mkTaker(d) {
+      return isSignedIn() && d.get('takerUid', '') == request.auth.uid && d.get('status', '') in ['matched', 'dispatched', 'delivered'];
+    }
+    function mkV2(d) {
+      return d.get('v', 0) >= 2;
+    }
+    // 요청자 목록은 "내 uid 하나"만 넣고 뺄 수 있다
+    function mkOnlyMyUid() {
+      let before = resource.data.get('requesterUids', []).toSet();
+      let after = request.resource.data.get('requesterUids', []).toSet();
+      return after.difference(before).hasOnly([request.auth.uid]) && before.difference(after).hasOnly([request.auth.uid]);
+    }
     match /cafeOrders/{orderId} {
       allow read: if isSignedIn();
-      allow create, update, delete: if isSignedIn();
+      // 새 글 — 우리 회사 이름으로, 모집중 상태로, 정확한 주소·지명·연락처 없이
+      allow create: if isMarketCompany()
+        && request.resource.data.get('v', 0) == 2
+        && request.resource.data.get('posterUid', '') == request.auth.uid
+        && request.resource.data.get('companyName', '') == myCo()
+        && request.resource.data.get('status', '') == 'open'
+        && request.resource.data.get('takerUid', null) == null
+        && !request.resource.data.keys().hasAny(['상차지명', '상차지주소', '하차지명', '하차지주소', 'posterPhone', '상차지담당자번호', '하차지담당자번호']);
+      allow update: if
+        // ① 올린 운송사 — 회사·작성자는 못 바꾸고, 매칭 상대는 실제로 요청한 운송사만
+        (mkPoster(resource.data)
+          && request.resource.data.get('posterUid', '') == resource.data.get('posterUid', '')
+          && request.resource.data.get('companyName', '') == resource.data.get('companyName', '')
+          && request.resource.data.get('v', 0) == resource.data.get('v', 0)
+          && (!mkV2(resource.data) || !request.resource.data.keys().hasAny(['상차지주소', '하차지주소', 'posterPhone']))
+          && (request.resource.data.get('takerUid', null) == null
+              || request.resource.data.get('takerUid', null) == resource.data.get('takerUid', null)
+              || (resource.data.get('status', '') == 'open'
+                  && exists(/databases/$(database)/documents/cafeOrders/$(orderId)/requests/$(request.resource.data.takerUid))
+                  && get(/databases/$(database)/documents/cafeOrders/$(orderId)/requests/$(request.resource.data.takerUid)).data.get('status', '') == 'pending'))) ||
+        // ② 잡기 요청/철회 — 다른 운송사가 요청자 목록에 자기 uid만 넣고 뺀다
+        (mkV2(resource.data) && isMarketCompany() && !mkPoster(resource.data)
+          && resource.data.get('status', '') == 'open' && resource.data.get('companyName', '') != myCo()
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['requesterUids', 'updatedAt'])
+          && mkOnlyMyUid()) ||
+        // ③ 매칭된 운송사 — 진행 단계(앞으로만)·내 프로그램 오더 번호·평가만
+        (mkV2(resource.data) && mkTaker(resource.data)
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'takerOrderId', 'dispatchedAt', 'deliveredAt', 'driverMasked', 'ratingByTaker', 'updatedAt'])
+          && request.resource.data.get('status', '') in ['matched', 'dispatched', 'delivered']
+          && (request.resource.data.get('takerOrderId', null) == resource.data.get('takerOrderId', null)
+              || request.resource.data.get('takerOrderId', '') == 'mkt_' + orderId)) ||
+        // ④ 예전 글 — 10초 배차신청 흐름(신청·취소·확정)
+        (!mkV2(resource.data) && isSignedIn()
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'applicantUid', 'applicantName', 'applicantNickname', 'applyRequestedAt', 'confirmedAt', 'updatedAt'])
+          && request.resource.data.get('status', '') in ['open', 'applying', 'confirmed']);
+      allow delete: if mkPoster(resource.data);
 
+      // 비공개 상세(detail: 올린 운송사 + 매칭된 운송사) · 정산 메모(settle: 올린 운송사만)
+      match /private/{docId} {
+        allow read: if mkPoster(mkDoc(orderId)) || (docId == 'detail' && mkTaker(mkDoc(orderId)));
+        allow create, update: if docId in ['detail', 'settle'] && isSignedIn()
+          && getAfter(/databases/$(database)/documents/cafeOrders/$(orderId)).data.get('posterUid', '') == request.auth.uid;
+        allow delete: if mkPoster(mkDoc(orderId));
+      }
+
+      // 잡기 요청 — 문서 이름 = 요청한 운송사 계정 uid
+      match /requests/{rid} {
+        allow get: if isSignedIn() && (request.auth.uid == rid || mkPoster(mkDoc(orderId)));
+        allow list: if mkPoster(mkDoc(orderId));
+        allow create: if isMarketCompany() && request.auth.uid == rid
+          && mkV2(mkDoc(orderId)) && mkDoc(orderId).get('status', '') == 'open'
+          && mkDoc(orderId).get('posterUid', '') != rid && mkDoc(orderId).get('companyName', '') != myCo()
+          && request.resource.data.get('takerUid', '') == rid
+          && request.resource.data.get('takerCompany', '') == myCo()
+          && request.resource.data.get('status', '') == 'pending';
+        allow update: if
+          // 요청한 운송사 — 다시 요청(pending) / 철회(withdrawn)
+          (isMarketCompany() && request.auth.uid == rid
+            && request.resource.data.get('takerUid', '') == rid
+            && request.resource.data.get('takerCompany', '') == myCo()
+            && request.resource.data.get('status', '') in ['pending', 'withdrawn']
+            && (request.resource.data.get('status', '') == 'withdrawn' || mkDoc(orderId).get('status', '') == 'open')) ||
+          // 올린 운송사 — 수락/거절/마감/매칭취소 표시만
+          (mkPoster(mkDoc(orderId))
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'decidedAt', 'updatedAt'])
+            && request.resource.data.get('status', '') in ['accepted', 'rejected', 'closed', 'cancelled']);
+        allow delete: if false;
+      }
+
+      // (예전 글) 연락처 — "배차완료" 상태에서 당사자(등록자/신청자)만
       match /contact/{docId} {
         allow read: if isSignedIn() &&
-          get(/databases/$(database)/documents/cafeOrders/$(orderId)).data.status == "confirmed" &&
-          (request.auth.uid == get(/databases/$(database)/documents/cafeOrders/$(orderId)).data.posterUid ||
-           request.auth.uid == get(/databases/$(database)/documents/cafeOrders/$(orderId)).data.applicantUid);
-        allow write: if isSignedIn();
+          mkDoc(orderId).status == "confirmed" &&
+          (request.auth.uid == mkDoc(orderId).posterUid || request.auth.uid == mkDoc(orderId).applicantUid);
+        allow write: if isSignedIn() && !mkV2(getAfter(/databases/$(database)/documents/cafeOrders/$(orderId)).data);
       }
+    }
+    // ⭐ 2026-11-06 오더마켓 알림 — 받는 사람 본인만 읽고 "읽음" 표시. 보내기는 운송사 계정이 자기 이름으로만.
+    match /marketNotices/{id} {
+      allow read: if isSignedIn() && resource.data.get('toUid', '') == request.auth.uid;
+      allow update: if isSignedIn() && resource.data.get('toUid', '') == request.auth.uid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read', 'readAt']);
+      allow create: if isMarketCompany()
+        && request.resource.data.get('fromUid', '') == request.auth.uid
+        && request.resource.data.get('toUid', '') is string && request.resource.data.get('toUid', '') != request.auth.uid
+        && request.resource.data.get('read', true) == false
+        && exists(/databases/$(database)/documents/cafeOrders/$(request.resource.data.get('orderId', '_')));
+      allow delete: if isSignedIn() && resource.data.get('toUid', '') == request.auth.uid;
     }
 
     // ────────────────────────────────────────────────────────────
@@ -897,7 +1000,9 @@ service cloud.firestore {
         // ⭐ 2026-11-05 기사 가입 처리 기록 — 위에서 따로 정함
         'driverSignupLogs',
         // ⭐ 2026-11-06 문구 편집 모드 — 위에서 따로 정함(쓰기는 최고관리자만)
-        'textOverrides', 'textOverridesPublic']);
+        'textOverrides', 'textOverridesPublic',
+        // ⭐ 2026-11-06 오더마켓 — 위에서 따로 정함(예전엔 이 목록에 없어 승인된 직원이면 누구나 게시글을 고칠 수 있었다)
+        'cafeOrders', 'marketNotices']);
     }
   }
 }
