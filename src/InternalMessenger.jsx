@@ -43,6 +43,217 @@ function fmtLastMsg(ts) {
   return `${d.getMonth()+1}/${d.getDate()}`;
 }
 
+// ════════ ⭐ 2026-11-06 배차 사무실 실무 기능 공용 ════════
+//  오더 공유 카드(type "order") · 공지 고정(room.pinned) · @멘션(msg.mentions, room.mentionAt.{uid}) ·
+//  메시지 전달(msg.forwarded) · 자주 쓰는 문구(chat_profiles.quickReplies) · 사진·파일·오더 모아보기
+const kstYmd = (offsetDays = 0) => new Date(Date.now() + 9 * 3600e3 + offsetDays * 86400e3).toISOString().slice(0, 10);
+const won = (v) => { const n = Number(String(v ?? "").replace(/[^\d.-]/g, "")); return n ? `${n.toLocaleString("ko-KR")}원` : ""; };
+const NAVY = "#1B2B4B";
+export const DEFAULT_QUICK_REPLIES = [
+  "배차 완료되었습니다.",
+  "상차 완료 확인 부탁드립니다.",
+  "하차 완료되었습니다. 인수증 사진 부탁드립니다.",
+  "기사님 연락처 전달드립니다.",
+  "운임 확인 부탁드립니다.",
+  "확인했습니다. 바로 처리하겠습니다.",
+  "잠시만 기다려 주세요. 확인 후 다시 연락드리겠습니다.",
+];
+// 오더를 메시지에 담을 때 남기는 항목(문서 전체를 복사하지 않는다 — 크기·개인정보 최소화)
+const ORDER_KEYS = ["상차일", "상차시간", "상차지명", "상차지주소", "하차일", "하차시간", "하차지명", "하차지주소", "거래처명", "화물내용", "차량종류", "차량톤수", "차량번호", "이름", "기사명", "전화번호", "배차상태", "청구운임", "기사운임", "지급방식"];
+export function orderSnapshot(o, col) {
+  const out = { id: String(o?._id || o?.id || ""), col: col || o?.__col || "orders" };
+  ORDER_KEYS.forEach((k) => { const v = o?.[k]; if (v !== undefined && v !== null && v !== "" && typeof v !== "object") out[k] = String(v).slice(0, 120); });
+  return out;
+}
+const orderDriver = (o) => o?.이름 || o?.기사명 || "";
+const orderCar = (o) => [o?.차량톤수, o?.차량종류].filter(Boolean).join(" ");
+export function orderSummary(o = {}) {
+  return [
+    `[오더] ${o.상차일 || ""} ${o.상차시간 || ""}`.trim(),
+    o.거래처명 ? `거래처 ${o.거래처명}` : "",
+    `상차 ${o.상차지명 || "-"} → 하차 ${o.하차지명 || "-"}`,
+    [o.차량번호, orderDriver(o), orderCar(o)].filter(Boolean).join(" · "),
+    o.청구운임 || o.기사운임 ? [o.청구운임 ? `청구 ${won(o.청구운임)}` : "", o.기사운임 ? `기사 ${won(o.기사운임)}` : ""].filter(Boolean).join(" / ") : "",
+  ].filter(Boolean).join("\n");
+}
+// Esc로 닫기(메신저·전역 Esc 처리보다 먼저 받는다)
+function useEscClose(on, close) {
+  const ref = useRef(close); ref.current = close;
+  useEffect(() => {
+    if (!on) return undefined;
+    const k = (e) => { if (e.key === "Escape" && !e.isComposing) { e.preventDefault(); e.stopImmediatePropagation(); ref.current?.(); } };
+    window.addEventListener("keydown", k, true);
+    return () => window.removeEventListener("keydown", k, true);
+  }, [on]);
+}
+const orderLast = (o = {}) => `[오더] ${o.상차지명 || "-"} → ${o.하차지명 || "-"}`;
+const escRe = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+// @이름 부분만 굵게(내 이름이면 더 진하게)
+function MentionText({ text, names = [], myName = "", isMine }) {
+  const list = [...new Set(["전체", ...names.filter(Boolean)])].sort((a, b) => b.length - a.length);
+  if (!text || !text.includes("@") || !list.length) return text || "";
+  const re = new RegExp(`(@(?:${list.map(escRe).join("|")}))`, "g");
+  return String(text).split(re).map((part, i) => {
+    if (i % 2 === 0) return part;
+    const me = part === `@${myName}` || part === "@전체";
+    return <span key={i} data-mention style={{ fontWeight: 800, color: isMine ? "#fff" : NAVY, background: isMine ? "rgba(255,255,255,0.16)" : me ? "#DCE6F7" : "#EEF3FB", borderRadius: 5, padding: "0 3px" }}>{part}</span>;
+  });
+}
+// 오더 공유 카드(말풍선 자리)
+function OrderCard({ o = {}, isMine, onOpen, onCopy }) {
+  const row = (label, value) => value ? (
+    <div style={{ display: "flex", gap: 8, fontSize: 12.5, lineHeight: 1.55 }}>
+      <span style={{ width: 30, flexShrink: 0, color: "#7A879C", fontWeight: 700 }}>{label}</span>
+      <span style={{ flex: 1, minWidth: 0, color: "#0F1A30", fontWeight: 600, wordBreak: "break-all" }}>{value}</span>
+    </div>
+  ) : null;
+  const done = /완료/.test(o.배차상태 || "");
+  return (
+    <div data-order-card style={{ width: 252, borderRadius: 14, overflow: "hidden", background: "#fff", border: "1px solid #DCE3EE", boxShadow: "0 2px 8px rgba(15,26,48,0.10)" }}>
+      <div style={{ background: "linear-gradient(120deg,#0F1A30 0%,#1B2B4B 62%,#2D4C82 100%)", padding: "8px 12px", display: "flex", alignItems: "center", gap: 8 }}>
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#8FB0F0" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><rect x="1" y="6" width="14" height="11" rx="1.5" /><path d="M15 9h4l3 3.5V17h-7" /><circle cx="6" cy="18.5" r="1.8" /><circle cx="18" cy="18.5" r="1.8" /></svg>
+        <span style={{ flex: 1, color: "#fff", fontSize: 13, fontWeight: 800 }}>오더 공유</span>
+        {o.배차상태 && <span style={{ fontSize: 11.5, fontWeight: 800, color: done ? "#0F1A30" : "#fff", background: done ? "#8FB0F0" : "rgba(255,255,255,0.16)", borderRadius: 999, padding: "2px 8px" }}>{o.배차상태}</span>}
+      </div>
+      <div style={{ padding: "10px 12px 8px", display: "flex", flexDirection: "column", gap: 2 }}>
+        <div style={{ fontSize: 12.5, fontWeight: 800, color: "#4B6CB7", marginBottom: 2 }}>{[o.상차일, o.상차시간].filter(Boolean).join(" ")}{o.거래처명 ? ` · ${o.거래처명}` : ""}</div>
+        {row("상차", o.상차지명 || "-")}
+        {row("하차", [o.하차지명 || "-", o.하차일 && o.하차일 !== o.상차일 ? `(${o.하차일.slice(5)})` : ""].filter(Boolean).join(" "))}
+        {row("차량", [o.차량번호, orderDriver(o), orderCar(o)].filter(Boolean).join(" · ") || "미배차")}
+        {row("운임", [o.청구운임 ? `청구 ${won(o.청구운임)}` : "", o.기사운임 ? `기사 ${won(o.기사운임)}` : ""].filter(Boolean).join(" / "))}
+      </div>
+      <div style={{ display: "flex", borderTop: "1px solid #EEF1F6" }}>
+        <button type="button" data-order-open onClick={onOpen} style={{ flex: 1, height: 36, border: "none", background: "#F5F8FD", color: NAVY, fontSize: 13, fontWeight: 900, cursor: "pointer" }}>열기</button>
+        <button type="button" onClick={onCopy} style={{ flex: 1, height: 36, border: "none", borderLeft: "1px solid #EEF1F6", background: "#fff", color: "#3A4A66", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>내용 복사</button>
+      </div>
+
+    </div>
+  );
+}
+// 오더 상세(열기) — 공유한 뒤 바뀐 내용도 보이게 지금 오더를 다시 읽는다(못 읽으면 공유할 때 내용)
+function OrderDetailModal({ order, onClose, mobileMode }) {
+  const [live, setLive] = useState(undefined); // undefined=읽는 중 · null=못 읽음
+  useEscClose(true, onClose);
+  useEffect(() => {
+    let off = false;
+    if (!order?.id) { setLive(null); return undefined; }
+    getDoc(doc(db, order.col || "orders", order.id)).then((s) => { if (!off) setLive(s?.exists?.() ? s.data() : null); }).catch(() => { if (!off) setLive(null); });
+    return () => { off = true; };
+  }, [order?.id, order?.col]);
+  const cur = live ? { ...order, ...orderSnapshot(live, order.col), id: order.id } : order;
+  const changed = (k) => live && order[k] !== undefined && String(live[k] ?? "") !== String(order[k] ?? "");
+  const rows = [
+    ["상차일시", [cur.상차일, cur.상차시간].filter(Boolean).join(" "), "상차일"], ["거래처", cur.거래처명, "거래처명"],
+    ["상차지", [cur.상차지명, cur.상차지주소].filter(Boolean).join(" · "), "상차지명"], ["하차일시", [cur.하차일, cur.하차시간].filter(Boolean).join(" "), "하차일"],
+    ["하차지", [cur.하차지명, cur.하차지주소].filter(Boolean).join(" · "), "하차지명"], ["화물", cur.화물내용, "화물내용"],
+    ["차량", [orderCar(cur), cur.차량번호].filter(Boolean).join(" · "), "차량번호"], ["기사", [orderDriver(cur), cur.전화번호].filter(Boolean).join(" · "), "이름"],
+    ["청구운임", won(cur.청구운임), "청구운임"], ["기사운임", won(cur.기사운임), "기사운임"], ["지급방식", cur.지급방식, "지급방식"], ["배차상태", cur.배차상태, "배차상태"],
+  ].filter(([, v]) => v);
+  const goBoard = () => {
+    try {
+      window.dispatchEvent(new CustomEvent("kp-open-order", { detail: { id: order.id, col: order.col, 상차일: cur.상차일 } }));
+      window.dispatchEvent(new CustomEvent("kp-go-menu", { detail: "배차현황" }));
+    } catch { /* 무시 */ }
+    onClose();
+  };
+  return createPortal(
+    <div data-kp-dialog="1" style={{ position: "fixed", inset: 0, zIndex: 2147483000, background: "rgba(11,20,40,0.55)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16, fontFamily: "'Noto Sans KR', sans-serif" }} onClick={onClose}>
+      <div data-order-detail onClick={(e) => e.stopPropagation()} style={{ width: "min(420px,100%)", maxHeight: "86vh", display: "flex", flexDirection: "column", background: "#fff", borderRadius: 20, overflow: "hidden", boxShadow: "0 24px 60px rgba(11,20,40,0.4)" }}>
+        <div style={{ padding: "14px 18px", background: "linear-gradient(120deg,#0F1A30 0%,#1B2B4B 62%,#2D4C82 100%)", color: "#fff", display: "flex", alignItems: "center", gap: 10 }}>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 10.5, fontWeight: 800, letterSpacing: "0.24em", color: "#8FB0F0" }}>ORDER</div>
+            <div style={{ fontSize: 17, fontWeight: 900 }}>{cur.상차지명 || "-"} → {cur.하차지명 || "-"}</div>
+          </div>
+          <button type="button" onClick={onClose} style={{ background: "none", border: "none", color: "rgba(255,255,255,0.7)", fontSize: 20, cursor: "pointer" }}>✕</button>
+        </div>
+        <div style={{ padding: "12px 18px", overflowY: "auto" }}>
+          {live === undefined && <div style={{ fontSize: 12.5, color: "#7A879C", marginBottom: 8 }}>지금 오더 내용을 확인하는 중…</div>}
+          {live === null && <div style={{ fontSize: 12.5, color: "#7A879C", marginBottom: 8, background: "#F5F8FD", borderRadius: 10, padding: "8px 10px" }}>지금 오더를 불러오지 못해 공유할 때의 내용을 보여 줍니다. (삭제됐거나 권한이 없을 수 있습니다)</div>}
+          {rows.map(([label, v, key]) => (
+            <div key={label} style={{ display: "flex", gap: 12, padding: "8px 0", borderBottom: "1px solid #F1F4F9", fontSize: 13.5 }}>
+              <span style={{ width: 64, flexShrink: 0, color: "#7A879C", fontWeight: 700 }}>{label}</span>
+              <span style={{ flex: 1, color: "#0F1A30", fontWeight: 700, wordBreak: "break-all" }}>{v}{changed(key) && <span style={{ marginLeft: 6, fontSize: 11.5, fontWeight: 800, color: "#4B6CB7", background: "#EEF3FB", borderRadius: 6, padding: "1px 6px" }}>공유 후 바뀜</span>}</span>
+            </div>
+          ))}
+        </div>
+        <div style={{ padding: "12px 18px 16px", display: "flex", gap: 8, borderTop: "1px solid #EEF1F6" }}>
+          <button type="button" onClick={() => { navigator.clipboard?.writeText(orderSummary(cur)).catch(() => {}); }} style={{ flex: 1, height: 42, borderRadius: 12, border: "1px solid #DCE3EE", background: "#fff", color: "#3A4A66", fontSize: 13.5, fontWeight: 800, cursor: "pointer" }}>내용 복사</button>
+          {!mobileMode && <button type="button" data-order-goboard onClick={goBoard} style={{ flex: 1.4, height: 42, borderRadius: 12, border: "none", background: NAVY, color: "#fff", fontSize: 13.5, fontWeight: 900, cursor: "pointer" }}>배차현황에서 보기</button>}
+        </div>
+      </div>
+    </div>, document.body);
+}
+// 오더 고르기(오더 공유) — 상차일 하루치를 실시간으로 읽어 고른다(orders·dispatch 두 곳)
+function OrderPickModal({ onPick, onClose }) {
+  const [date, setDate] = useState(() => kstYmd());
+  useEscClose(true, onClose);
+  const [q, setQ] = useState("");
+  const [rows, setRows] = useState(null);
+  useEffect(() => {
+    setRows(null);
+    const got = { orders: null, dispatch: null };
+    const done = () => {
+      if (!got.orders || !got.dispatch) return;
+      const m = new Map();
+      [...got.orders, ...got.dispatch].forEach((o) => m.set(`${o.__col}/${o._id}`, o));
+      setRows([...m.values()].sort((a, b) => String(a.상차시간 || "").localeCompare(String(b.상차시간 || ""))));
+    };
+    const sub = (col) => onSnapshot(query(collection(db, col), where("상차일", "==", date)), (snap) => {
+      got[col] = snap.docs.map((d) => ({ ...d.data(), _id: d.id, __col: col })).filter((o) => String(o.상차일 || "") === date);
+      done();
+    }, () => { got[col] = []; done(); });
+    const u1 = sub("orders"); const u2 = sub("dispatch");
+    return () => { u1?.(); u2?.(); };
+  }, [date]);
+  const kw = q.trim();
+  const list = (rows || []).filter((o) => !kw || [o.거래처명, o.상차지명, o.하차지명, o.차량번호, o.이름, o.기사명, o.화물내용].some((v) => String(v || "").includes(kw)));
+  const shift = (d) => { const t = new Date(`${date}T00:00:00Z`); t.setUTCDate(t.getUTCDate() + d); setDate(t.toISOString().slice(0, 10)); };
+  const chip = (on) => ({ height: 32, padding: "0 12px", borderRadius: 10, border: `1px solid ${on ? NAVY : "#DCE3EE"}`, background: on ? NAVY : "#fff", color: on ? "#fff" : "#3A4A66", fontSize: 12.5, fontWeight: 800, cursor: "pointer" });
+  return createPortal(
+    <div data-kp-dialog="1" style={{ position: "fixed", inset: 0, zIndex: 2147482990, background: "rgba(11,20,40,0.55)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16, fontFamily: "'Noto Sans KR', sans-serif" }} onClick={onClose}>
+      <div data-order-pick onClick={(e) => e.stopPropagation()} style={{ width: "min(480px,100%)", height: "min(620px,88vh)", display: "flex", flexDirection: "column", background: "#fff", borderRadius: 20, overflow: "hidden", boxShadow: "0 24px 60px rgba(11,20,40,0.4)" }}>
+        <div style={{ padding: "14px 18px", background: "linear-gradient(120deg,#0F1A30 0%,#1B2B4B 62%,#2D4C82 100%)", color: "#fff", display: "flex", alignItems: "center" }}>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 10.5, fontWeight: 800, letterSpacing: "0.24em", color: "#8FB0F0" }}>SHARE ORDER</div>
+            <div style={{ fontSize: 17, fontWeight: 900 }}>오더 공유하기</div>
+          </div>
+          <button type="button" onClick={onClose} style={{ background: "none", border: "none", color: "rgba(255,255,255,0.7)", fontSize: 20, cursor: "pointer" }}>✕</button>
+        </div>
+        <div style={{ padding: "12px 16px", borderBottom: "1px solid #EEF1F6", display: "flex", flexDirection: "column", gap: 8 }}>
+          <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+            <button type="button" onClick={() => shift(-1)} style={chip(false)}>◀</button>
+            <input type="date" value={date} onChange={(e) => e.target.value && setDate(e.target.value)} style={{ height: 32, border: "1px solid #DCE3EE", borderRadius: 10, padding: "0 10px", fontSize: 13, fontWeight: 700, color: "#0F1A30" }} />
+            <button type="button" onClick={() => shift(1)} style={chip(false)}>▶</button>
+            <button type="button" onClick={() => setDate(kstYmd(-1))} style={chip(date === kstYmd(-1))}>어제</button>
+            <button type="button" onClick={() => setDate(kstYmd())} style={chip(date === kstYmd())}>오늘</button>
+            <button type="button" onClick={() => setDate(kstYmd(1))} style={chip(date === kstYmd(1))}>내일</button>
+          </div>
+          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="거래처 · 상차지 · 하차지 · 차량번호 · 기사 검색" ref={imeFocusRef}
+            style={{ height: 36, border: "1px solid #DCE3EE", borderRadius: 10, padding: "0 12px", fontSize: 13, outline: "none", background: "#F8FAFD" }} />
+        </div>
+        <div style={{ flex: 1, overflowY: "auto" }}>
+          {rows === null ? <div style={{ padding: 30, textAlign: "center", fontSize: 13, color: "#7A879C" }}>오더 불러오는 중…</div>
+            : list.length === 0 ? <div style={{ padding: 30, textAlign: "center", fontSize: 13, color: "#7A879C" }}>{kw ? "검색 결과가 없습니다" : `${date} 상차 오더가 없습니다`}</div>
+              : list.map((o) => (
+                <button key={`${o.__col}/${o._id}`} type="button" data-order-pick-row onClick={() => onPick(o)}
+                  style={{ display: "block", width: "100%", textAlign: "left", padding: "10px 16px", border: "none", borderBottom: "1px solid #F1F4F9", background: "#fff", cursor: "pointer" }}
+                  onMouseEnter={(e) => { e.currentTarget.style.background = "#F5F8FD"; }} onMouseLeave={(e) => { e.currentTarget.style.background = "#fff"; }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <span style={{ fontSize: 13, fontWeight: 900, color: "#4B6CB7", minWidth: 42 }}>{o.상차시간 || "--:--"}</span>
+                    <span style={{ flex: 1, minWidth: 0, fontSize: 13.5, fontWeight: 800, color: "#0F1A30", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{o.상차지명 || "-"} → {o.하차지명 || "-"}</span>
+                    {o.배차상태 && <span style={{ fontSize: 11.5, fontWeight: 800, color: /완료/.test(o.배차상태) ? "#fff" : NAVY, background: /완료/.test(o.배차상태) ? NAVY : "#EEF3FB", borderRadius: 999, padding: "2px 8px", flexShrink: 0 }}>{o.배차상태}</span>}
+                  </div>
+                  <div style={{ marginTop: 3, paddingLeft: 50, fontSize: 12.5, color: "#5B6B85", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {[o.거래처명, [o.차량번호, orderDriver(o)].filter(Boolean).join(" "), orderCar(o), o.청구운임 ? won(o.청구운임) : ""].filter(Boolean).join(" · ")}
+                  </div>
+                </button>
+              ))}
+        </div>
+        <div style={{ padding: "10px 16px", borderTop: "1px solid #EEF1F6", fontSize: 12, color: "#7A879C" }}>고른 오더가 카드로 보내집니다. 받은 사람은 [열기]로 지금 상태를 볼 수 있습니다.</div>
+      </div>
+    </div>, document.body);
+}
+
 // ── 아바타 ──
 function Avatar({ name = "", photo = "", size = 36, bgColor = "#1B2B4B" }) {
   const [err, setErr] = useState(false);
@@ -113,7 +324,7 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
     if (!open || mobileMode) return undefined;
     const onKey = (e) => {
       if (e.key !== "Escape" || e.isComposing) return;
-      if (document.querySelector('[data-kp-dialog="1"]')) return;
+      if (document.querySelector('[data-kp-dialog="1"],[data-kp-popup]')) return; // ⭐ 2026-11-06 모아보기·문구·멘션 창이 떠 있으면 그것부터
       e.preventDefault(); e.stopPropagation();
       setOpenRef.current(false);
     };
@@ -159,6 +370,13 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
   const [pendingRoom, setPendingRoom] = useState(null);
   // 답장 기능
   const [replyTo, setReplyTo] = useState(null); // { id, text, senderName }
+  // ⭐ 2026-11-06 오더 공유 · 메시지 전달 팝업
+  const [orderPickOpen, setOrderPickOpen] = useState(false);
+  const [fwdMsg, setFwdMsg] = useState(null);
+  const [fwdSel, setFwdSel] = useState([]);
+  const [fwdSearch, setFwdSearch] = useState("");
+  const [fwdBusy, setFwdBusy] = useState(false);
+  useEscClose(!!fwdMsg, () => setFwdMsg(null));
 
   const msgUnsub = useRef(null);
   const serverMsgsRef = useRef({ roomId: null, list: [] }); // ⭐ 2026-11-03 읽음 처리용 — 지금 방에 받아둔 메시지
@@ -433,7 +651,9 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
         if (notifyEnabled && !alreadyViewing) {
           const senderName = room.memberProfiles?.[room.lastSenderUid]?.name
             || (room.type === "dm" ? getRoomName(room) : (friends.find(f => f.uid === room.lastSenderUid)?.name || getRoomName(room)));
-          setMsgToast({ room, senderName, text: room.lastMsg || "" });
+          // ⭐ 2026-11-06 @멘션 — 이 메시지에서 나를 불렀으면 배너에 표시(멘션 시각 = 마지막 메시지 시각)
+          const mention = (room.mentionAt?.[myUid]?.toMillis?.() || 0) >= ms - 1500;
+          setMsgToast({ room, senderName, text: room.lastMsg || "", mention, roomName: room.type === "group" ? getRoomName(room) : "" });
           playNotifSound();
         }
       }
@@ -664,19 +884,108 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
     }]);
 
     const others = room.members?.filter(uid => uid !== myUid) || [];
+    const mentions = findMentions(text, room); // ⭐ 2026-11-06 @멘션
     addDoc(collection(db, MSGS_COLL), {
       roomId: room.id, text, type: "text",
       senderUid: myUid, senderName, senderPhoto: myProfile?.photo || "",
       createdAt: serverTimestamp(), edited: false,
       readBy: [myUid], totalMembers: room.members?.length || 1, memberUids: room.members || [],
       ...replyData,
+      ...(mentions.length ? { mentions } : {}),
     }).catch(() => {});
     const unreadUpdate = {};
     others.forEach(uid => { unreadUpdate[`unreadCount.${uid}`] = increment(1); });
+    mentions.forEach(uid => { unreadUpdate[`mentionAt.${uid}`] = serverTimestamp(); });
     updateDoc(doc(db, ROOMS_COLL, room.id), {
       lastMsg: text, lastAt: serverTimestamp(), lastSenderUid: myUid,
       [`lastRead.${myUid}`]: serverTimestamp(), ...unreadUpdate,
     }).catch(() => {});
+  };
+
+  // ════════ ⭐ 2026-11-06 실무 기능 — 공용 전송 · @멘션 · 오더 공유 · 공지 고정 · 전달 · 자주 쓰는 문구 ════════
+  // 방이 아직 없으면(1:1 첫 메시지 전) 먼저 만든다
+  const ensureRoom = async () => {
+    if (activeRoom) return activeRoom;
+    if (!pendingRoom) return null;
+    const roomRef = await addDoc(collection(db, ROOMS_COLL), pendingRoom.roomData);
+    const r = { id: roomRef.id, ...pendingRoom.roomData };
+    setActiveRoom(r); setPendingRoom(null);
+    return r;
+  };
+  // 메시지 1건 + 방 목록 갱신(다른 사람 안읽음 +1, 멘션 시각)
+  const postMsg = async (room, fields, lastMsg, mentions = []) => {
+    if (!room?.id) return null;
+    const senderName = myProfile?.name || myEmail.split("@")[0];
+    const ref = await addDoc(collection(db, MSGS_COLL), {
+      roomId: room.id, senderUid: myUid, senderName, senderPhoto: myProfile?.photo || "",
+      createdAt: serverTimestamp(), readBy: [myUid], totalMembers: room.members?.length || 1, memberUids: room.members || [],
+      ...fields, ...(mentions.length ? { mentions } : {}),
+    });
+    const upd = {};
+    (room.members || []).filter(u => u !== myUid).forEach(u => { upd[`unreadCount.${u}`] = increment(1); });
+    mentions.forEach(u => { upd[`mentionAt.${u}`] = serverTimestamp(); });
+    await updateDoc(doc(db, ROOMS_COLL, room.id), {
+      lastMsg: String(lastMsg || "").slice(0, 200), lastAt: serverTimestamp(), lastSenderUid: myUid,
+      [`lastRead.${myUid}`]: serverTimestamp(), ...upd,
+    }).catch(() => {});
+    return ref;
+  };
+  // @멘션 — 방 멤버(나 제외) 이름과 맞으면 그 사람, @전체면 모두
+  const memberNames = (room) => (room?.members || []).filter(u => u !== myUid).map(u => ({ uid: u, name: room.memberProfiles?.[u]?.name || friends.find(f => f.uid === u)?.name || "" })).filter(x => x.name);
+  const findMentions = (text, room) => {
+    if (!text || !text.includes("@") || room?.type !== "group") return [];
+    const list = memberNames(room);
+    if (/@전체(\s|$)/.test(text)) return list.map(x => x.uid);
+    return list.filter(x => text.includes(`@${x.name}`)).map(x => x.uid);
+  };
+  // 오더 공유 카드
+  const shareOrder = async (o) => {
+    setOrderPickOpen(false);
+    try {
+      const room = await ensureRoom(); if (!room) return;
+      const snap = orderSnapshot(o, o.__col);
+      await postMsg(room, { type: "order", text: orderSummary(snap), order: snap }, orderLast(snap));
+    } catch (e) { alert(`오더를 보내지 못했습니다 — ${e?.message || e}`); }
+  };
+  // 공지 고정 — 방마다 1개, 채팅창 위쪽에 계속 보인다
+  const pinMessage = async (msg) => {
+    const room = activeRoom; if (!room?.id || !msg) return;
+    const text = msg.type === "order" ? orderSummary(msg.order || {}) : msg.type === "image" ? "[사진]" : msg.type === "file" ? `[파일] ${msg.fileName || ""}` : String(msg.text || "");
+    await updateDoc(doc(db, ROOMS_COLL, room.id), {
+      pinned: { msgId: msg.id || "", text: text.slice(0, 500), senderName: msg.senderName || "", by: myProfile?.name || myEmail.split("@")[0], at: Date.now() },
+    }).catch((e) => alert(`공지 고정 실패 — ${e?.message || e}`));
+  };
+  const unpinMessage = async () => {
+    if (!activeRoom?.id) return;
+    if (!window.confirm("이 방의 공지 고정을 해제할까요?\n(메시지는 그대로 남습니다)")) return;
+    await updateDoc(doc(db, ROOMS_COLL, activeRoom.id), { pinned: null }).catch(() => {});
+  };
+  // 자주 쓰는 문구 — 내 채팅 프로필에 저장(PC·휴대폰 같이)
+  const quickReplies = Array.isArray(myProfile?.quickReplies) ? myProfile.quickReplies : DEFAULT_QUICK_REPLIES;
+  const saveQuickReplies = async (list) => {
+    if (!myUid) return;
+    const clean = [...new Set((list || []).map(s => String(s || "").trim()).filter(Boolean))].slice(0, 30).map(s => s.slice(0, 300));
+    setMyProfile(p => ({ ...(p || {}), quickReplies: clean }));
+    await setDoc(doc(db, PROFILES_COLL, myUid), { quickReplies: clean }, { merge: true }).catch(() => {});
+  };
+  // 메시지 전달 — 고른 방마다 같은 내용을 "전달됨"으로 보낸다
+  const FWD_KEYS = ["type", "text", "imageUrl", "fileUrl", "fileName", "fileSize", "lat", "lng", "contactName", "contactPhone", "contactPosition", "contactPhoto", "contactUid", "order"];
+  const openForward = (msg) => { setFwdMsg(msg); setFwdSel([]); setFwdSearch(""); };
+  const doForward = async () => {
+    const m = fwdMsg; if (!m || !fwdSel.length) return;
+    const copy = {};
+    FWD_KEYS.forEach(k => { if (m[k] !== undefined) copy[k] = m[k]; });
+    if (!copy.type || copy.type === "notice") copy.type = "text";
+    copy.forwarded = true; copy.fwdFrom = m.senderName || "";
+    const last = { image: "[사진]", file: `[파일] ${m.fileName || ""}`, location: "[위치]", contact: `[연락처] ${m.contactName || ""}`, order: orderLast(m.order || {}) }[copy.type] || `[전달] ${copy.text || ""}`;
+    setFwdBusy(true);
+    try {
+      for (const rid of fwdSel) {
+        const room = rooms.find(r => r.id === rid);
+        if (room) await postMsg(room, copy, last);
+      }
+      setFwdMsg(null);
+    } catch (e) { alert(`전달하지 못했습니다 — ${e?.message || e}`); } finally { setFwdBusy(false); }
   };
 
   // ── 이미지 전송 ──
@@ -828,7 +1137,7 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
     setNoticeInput(""); setShowNoticeInput(false);
     const senderName = myProfile?.name || myEmail.split("@")[0];
     const others = activeRoom.members?.filter(u => u !== myUid) || [];
-    await addDoc(collection(db, MSGS_COLL), {
+    const noticeRef = await addDoc(collection(db, MSGS_COLL), {
       roomId: activeRoom.id, text, type: "notice",
       senderUid: myUid, senderName, senderPhoto: myProfile?.photo || "",
       createdAt: serverTimestamp(), readBy: [myUid],
@@ -839,6 +1148,8 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
     await updateDoc(doc(db, ROOMS_COLL, activeRoom.id), {
       lastMsg: `[공지] ${text}`, lastAt: serverTimestamp(), lastSenderUid: myUid,
       [`lastRead.${myUid}`]: serverTimestamp(), ...upd,
+      // ⭐ 2026-11-06 공지는 보내면서 채팅창 위쪽에 고정
+      pinned: { msgId: noticeRef?.id || "", text: text.slice(0, 500), senderName, by: senderName, at: Date.now() },
     }).catch(() => {});
   };
 
@@ -1052,9 +1363,16 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
     fileUploading, friends, mobileMode, sendingImgs,
     themeHdr, themeMyBubble, themeChatBg,
     replyTo, setReplyTo,
-    onReply: (msg) => setReplyTo({ id: msg.id, text: msg.text, senderName: msg.senderName }),
+    onReply: (msg) => setReplyTo({ id: msg.id, text: msg.type === "order" ? orderLast(msg.order || {}) : msg.text, senderName: msg.senderName }),
     onAddReaction: addReaction,
     onSendToSelf: sendToSelf,
+    // ⭐ 2026-11-06 실무 기능
+    onShareOrder: () => setOrderPickOpen(true),
+    onPin: pinMessage, onUnpin: unpinMessage,
+    onForward: openForward,
+    quickReplies, onSaveQuickReplies: saveQuickReplies,
+    mentionPeople: displayRoom.type === "group" ? memberNames(displayRoom) : [],
+    myName: myProfile?.name || myEmail.split("@")[0] || "",
     // ⭐ 2026-11-03 단체방 메뉴(≡)
     groupPeople: displayRoom.type === "group" ? getGroupPeople(displayRoom) : [],
     onShowMembers: () => activeRoom && setMembersRoom(activeRoom),
@@ -1182,7 +1500,10 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
       <style>{`@keyframes kpfMsgToastIn { from { opacity:0; transform:translate(-50%,-12px); } to { opacity:1; transform:translate(-50%,0); } }`}</style>
       <Avatar name={msgToast.senderName} size={36} />
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 13, fontWeight: 800, color: "#1B2B4B" }}>{msgToast.senderName}</div>
+        <div style={{ fontSize: 13, fontWeight: 800, color: "#1B2B4B", display: "flex", alignItems: "center", gap: 6 }}>
+          <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{msgToast.senderName}{msgToast.roomName ? <span style={{ fontWeight: 600, color: "#7A879C" }}> · {msgToast.roomName}</span> : null}</span>
+          {msgToast.mention && <span data-toast-mention style={{ flexShrink: 0, fontSize: 11.5, fontWeight: 900, color: "#fff", background: "#1B2B4B", borderRadius: 999, padding: "1px 8px" }}>@나를 언급</span>}
+        </div>
         <div style={{ fontSize: 12.5, color: "#4b5563", marginTop: 1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{msgToast.text}</div>
       </div>
       <button
@@ -1373,6 +1694,46 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
     </>
   );
 
+  // ⭐ 2026-11-06 오더 공유 · 메시지 전달 팝업(PC·모바일 공용)
+  const fwdRooms = fwdMsg ? rooms.filter(r => !fwdSearch.trim() || getRoomName(r).includes(fwdSearch.trim())) : [];
+  const extraModalsEl = (
+    <>
+      {orderPickOpen && <OrderPickModal onPick={shareOrder} onClose={() => setOrderPickOpen(false)} />}
+      {fwdMsg && createPortal(
+        <div data-kp-dialog="1" style={{ position: "fixed", inset: 0, zIndex: 2147482990, background: "rgba(11,20,40,0.55)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16, fontFamily: "'Noto Sans KR', sans-serif" }} onClick={() => setFwdMsg(null)}>
+          <div data-msg-forward onClick={e => e.stopPropagation()} style={{ width: "min(380px,100%)", maxHeight: "84vh", display: "flex", flexDirection: "column", background: "#fff", borderRadius: 20, overflow: "hidden", boxShadow: "0 24px 60px rgba(11,20,40,0.4)" }}>
+            <div style={{ padding: "14px 18px", background: DOCK_BG, color: "#fff", display: "flex", alignItems: "center" }}>
+              <span style={{ flex: 1, fontSize: 16, fontWeight: 900 }}>메시지 전달</span>
+              <button type="button" onClick={() => setFwdMsg(null)} style={{ background: "none", border: "none", color: "rgba(255,255,255,0.7)", fontSize: 20, cursor: "pointer" }}>✕</button>
+            </div>
+            <div style={{ margin: "12px 16px 8px", padding: "8px 12px", borderRadius: 12, background: "#F5F8FD", border: "1px solid #E3E8F0", fontSize: 13, color: "#3A4A66", whiteSpace: "pre-wrap", maxHeight: 84, overflow: "hidden" }}>
+              <b style={{ color: NAVY }}>{fwdMsg.senderName}</b> · {fwdMsg.type === "image" ? "[사진]" : fwdMsg.type === "file" ? `[파일] ${fwdMsg.fileName || ""}` : fwdMsg.type === "order" ? orderLast(fwdMsg.order || {}) : (fwdMsg.text || "")}
+            </div>
+            <div style={{ padding: "0 16px" }}>
+              <input value={fwdSearch} onChange={e => setFwdSearch(e.target.value)} placeholder="채팅방 검색"
+                style={{ width: "100%", height: 36, border: "1px solid #E3E8F0", borderRadius: 10, padding: "0 12px", fontSize: 13, outline: "none", boxSizing: "border-box", background: "#F8FAFD" }} />
+            </div>
+            <div style={{ flex: 1, overflowY: "auto", padding: "6px 8px" }}>
+              {fwdRooms.length === 0 ? <div style={{ padding: 20, textAlign: "center", fontSize: 13, color: "#9ca3af" }}>보낼 채팅방이 없습니다</div> : fwdRooms.map(r => {
+                const on = fwdSel.includes(r.id);
+                return (
+                  <label key={r.id} data-fwd-room style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 10px", borderRadius: 12, cursor: "pointer", background: on ? "#EEF3FB" : "transparent" }}>
+                    <input type="checkbox" checked={on} onChange={() => setFwdSel(p => on ? p.filter(x => x !== r.id) : [...p, r.id])} style={{ width: 16, height: 16, accentColor: NAVY }} />
+                    {r.type === "group" ? <GroupAvatar people={getGroupPeople(r)} size={34} /> : <Avatar name={getRoomName(r)} photo={getRoomPhoto(r)} size={34} />}
+                    <span style={{ flex: 1, minWidth: 0, fontSize: 13.5, fontWeight: on ? 800 : 600, color: "#0F1A30", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{getRoomName(r)}{r.type === "group" ? <span style={{ color: "#9ca3af", fontWeight: 600, marginLeft: 4 }}>{r.members?.length || 0}</span> : null}</span>
+                  </label>
+                );
+              })}
+            </div>
+            <div style={{ padding: "10px 16px 16px", display: "flex", gap: 8, borderTop: "1px solid #EEF1F6" }}>
+              <button type="button" onClick={() => setFwdMsg(null)} style={btnGray}>취소</button>
+              <button type="button" data-fwd-send onClick={doForward} disabled={!fwdSel.length || fwdBusy} style={btnNavy(!fwdSel.length || fwdBusy)}>{fwdBusy ? "보내는 중…" : `전달${fwdSel.length ? ` (${fwdSel.length})` : ""}`}</button>
+            </div>
+          </div>
+        </div>, document.body)}
+    </>
+  );
+
   if (mobileMode) {
     return (
       <>
@@ -1423,6 +1784,7 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
           </div>
         )}
         {groupModalsEl}
+        {extraModalsEl}
 
         {/* 연락처 카드 전송 모달 */}
         {contactPickModal && (
@@ -1566,6 +1928,7 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
 
       {/* ─── 단체 채팅방 팝업(만들기·대화상대·초대·이름) ─── */}
       {groupModalsEl}
+      {extraModalsEl}
 
       {/* 연락처 카드 전송 모달 */}
       {contactPickModal && (
@@ -1733,6 +2096,10 @@ function FriendsView({ myProfile, friends, rooms, unreadMap, totalUnread, getRoo
                   </div>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                     <span style={{ fontSize: 12, color: "#6b7280", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 180 }}>{room.lastMsg || ""}</span>
+                    {/* ⭐ 2026-11-06 나를 @멘션한 뒤 아직 안 읽은 방 */}
+                    {(room.mentionAt?.[myUid]?.toMillis?.() || 0) > (room.lastRead?.[myUid]?.toMillis?.() || 0) && (
+                      <span data-room-mention title="나를 언급한 메시지가 있습니다" style={{ marginLeft: "auto", background: "#1B2B4B", color: "#fff", fontSize: 11, fontWeight: 900, borderRadius: 20, height: 18, display: "flex", alignItems: "center", padding: "0 6px", flexShrink: 0 }}>@나</span>
+                    )}
                     {unread > 0 && (
                       <span style={{ background: "#ef4444", color: "#fff", fontSize: 10, fontWeight: 700, borderRadius: 20, minWidth: 18, height: 18, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 5px", flexShrink: 0, marginLeft: 4 }}>
                         {unread > 99 ? "99+" : unread}
@@ -1866,8 +2233,52 @@ function FriendsView({ myProfile, friends, rooms, unreadMap, totalUnread, getRoo
 }
 
 // ════════════════ 채팅 뷰 ════════════════
-function ChatView({ room, roomName, roomPhoto, messages, myUid, myProfile, input, setInput, onSend, onBack, onClose, editMsg, setEditMsg, editText, setEditText, onSaveEdit, onDeleteMsg, msgSearch, setMsgSearch, msgContainerRef, inputRef, onSendImage, onSendFile, onSendLocation, onSendContact, onSendNotice, fileUploading, sendingImgs = [], friends, mobileMode, themeHdr, themeMyBubble, themeChatBg, replyTo, setReplyTo, onReply, onAddReaction, onSendToSelf, groupPeople = [], onShowMembers, onInvite, onRename, onLeave }) {
+function ChatView({ room, roomName, roomPhoto, messages, myUid, myProfile, input, setInput, onSend, onBack, onClose, editMsg, setEditMsg, editText, setEditText, onSaveEdit, onDeleteMsg, msgSearch, setMsgSearch, msgContainerRef, inputRef, onSendImage, onSendFile, onSendLocation, onSendContact, onSendNotice, fileUploading, sendingImgs = [], friends, mobileMode, themeHdr, themeMyBubble, themeChatBg, replyTo, setReplyTo, onReply, onAddReaction, onSendToSelf, groupPeople = [], onShowMembers, onInvite, onRename, onLeave, onShareOrder, onPin, onUnpin, onForward, quickReplies = [], onSaveQuickReplies, mentionPeople = [], myName = "" }) {
   const [showSearch, setShowSearch] = useState(false);
+  // ⭐ 2026-11-06 오더 열기 · 공지 접기 · 자주 쓰는 문구 · @멘션 고르기 · 모아보기
+  const [orderView, setOrderView] = useState(null);
+  const [pinFold, setPinFold] = useState(false);
+  const [pinMore, setPinMore] = useState(false);
+  const [showQuick, setShowQuick] = useState(false);
+  const [quickEdit, setQuickEdit] = useState(false);
+  const [quickDraft, setQuickDraft] = useState("");
+  const [mention, setMention] = useState(null); // { q, start, idx }
+  const [gallery, setGallery] = useState(null); // null | "image" | "file" | "order" | "notice"
+  useEffect(() => { setPinFold(false); setPinMore(false); setGallery(null); setShowQuick(false); setMention(null); }, [room?.id]);
+  const mentionNames = mentionPeople.map((p) => p.name);
+  // 모아보기·문구 창은 Esc로 닫는다(메신저 창 전체가 닫히지 않게 먼저 받는다)
+  useEscClose(!!gallery || showQuick, () => { setGallery(null); setShowQuick(false); setQuickEdit(false); });
+  const mentionHits = mention ? [{ uid: "all", name: "전체" }, ...mentionPeople].filter((p) => !mention.q || p.name.includes(mention.q)).slice(0, 7) : [];
+  // 입력칸에서 커서 앞이 "@글자" 이면 멤버 고르기 창
+  const trackMention = (el) => {
+    if (!mentionPeople.length || !el) { if (mention) setMention(null); return; }
+    const pos = el.selectionStart ?? el.value.length;
+    const m = /(^|\s)@([^\s@]{0,12})$/.exec(el.value.slice(0, pos));
+    if (m) setMention({ q: m[2], start: pos - m[2].length - 1, idx: 0 }); else if (mention) setMention(null);
+  };
+  const pickMention = (p) => {
+    const el = inputRef?.current; if (!mention || !p) return;
+    const pos = el?.selectionStart ?? input.length;
+    const next = `${input.slice(0, mention.start)}@${p.name} ${input.slice(pos)}`;
+    setInput(next); setMention(null);
+    const caret = mention.start + p.name.length + 2;
+    setTimeout(() => { try { el?.focus(); el?.setSelectionRange(caret, caret); } catch { /* 무시 */ } }, 0);
+  };
+  const insertQuick = (t) => {
+    setShowQuick(false);
+    const cur = input.trim() ? `${input.replace(/\s+$/, "")} ${t}` : t;
+    setInput(cur);
+    setTimeout(() => inputRef?.current?.focus?.(), 0);
+  };
+  const scrollToMsg = (id) => {
+    const el = id && document.getElementById(`msg-${id}`);
+    if (!el) return false;
+    el.scrollIntoView({ behavior: "smooth", block: "center" });
+    el.style.transition = "background 0.3s"; el.style.background = "rgba(27,43,75,0.15)";
+    setTimeout(() => { el.style.background = ""; }, 1200);
+    return true;
+  };
+  const copyText = (msg) => (msg.type === "order" ? orderSummary(msg.order || {}) : msg.type === "file" ? (msg.fileUrl || msg.fileName || "") : msg.type === "image" ? (msg.imageUrl || "") : (msg.text || ""));
   const [showRoomMenu, setShowRoomMenu] = useState(false); // ⭐ 2026-11-03 단체방 ≡ 메뉴
   const [showAttachMenu, setShowAttachMenu] = useState(false);
   const [imgPreview, setImgPreview] = useState(null);
@@ -2000,7 +2411,11 @@ function ChatView({ room, roomName, roomPhoto, messages, myUid, myProfile, input
             <div onClick={() => room.id && onShowMembers?.()} style={{ fontSize: 11, color: "rgba(255,255,255,0.5)", cursor: room.id ? "pointer" : "default" }}>{room.members.length}명</div>
           )}
         </div>
-        <button onClick={() => setShowSearch(p => !p)} style={{ background: "none", border: "none", color: showSearch ? "#fff" : "rgba(255,255,255,0.5)", cursor: "pointer", padding: 4 }}>
+        {/* ⭐ 2026-11-06 사진·파일·오더 모아보기 */}
+        <button onClick={() => setGallery(g => g ? null : "image")} title="사진·파일·오더 모아보기" data-msg-gallery-btn style={{ background: "none", border: "none", color: gallery ? "#fff" : "rgba(255,255,255,0.6)", cursor: "pointer", padding: 4, display: "flex", alignItems: "center" }}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5" /><rect x="14" y="3" width="7" height="7" rx="1.5" /><rect x="3" y="14" width="7" height="7" rx="1.5" /><rect x="14" y="14" width="7" height="7" rx="1.5" /></svg>
+        </button>
+        <button onClick={() => setShowSearch(p => !p)} title="이 방 메시지 검색" style={{ background: "none", border: "none", color: showSearch ? "#fff" : "rgba(255,255,255,0.5)", cursor: "pointer", padding: 4 }}>
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
         </button>
         {/* ⭐ 2026-11-03 단체방 메뉴(≡) — 대화상대 · 초대 · 이름 바꾸기 · 나가기 */}
@@ -2033,6 +2448,71 @@ function ChatView({ room, roomName, roomPhoto, messages, myUid, myProfile, input
         )}
         <button onClick={onClose} style={{ background: "none", border: "none", color: "rgba(255,255,255,0.5)", fontSize: 18, cursor: "pointer", lineHeight: 1 }}>✕</button>
       </div>
+
+      {/* ⭐ 2026-11-06 고정 공지 — 방마다 1개, 누르면 그 메시지로 이동 */}
+      {room.pinned?.text && (
+        pinFold ? (
+          <button type="button" onClick={() => setPinFold(false)} data-msg-pin-fold
+            style={{ position: "absolute", top: 62, right: 12, zIndex: 20, height: 30, padding: "0 12px", borderRadius: 999, border: "1px solid #C9D6EE", background: "#fff", color: NAVY, fontSize: 12.5, fontWeight: 900, cursor: "pointer", boxShadow: "0 4px 12px rgba(15,26,48,0.12)", display: "flex", alignItems: "center", gap: 5 }}>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 17v5" /><path d="M9 10.76V6a3 3 0 0 1 6 0v4.76l3 3.24H6z" /></svg>공지
+          </button>
+        ) : (
+          <div data-msg-pin style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: "10px 12px", background: "#EEF3FB", borderBottom: "1px solid #D5E0F2", flexShrink: 0 }}>
+            <div style={{ width: 28, height: 28, borderRadius: 9, background: NAVY, color: "#8FB0F0", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 17v5" /><path d="M9 10.76V6a3 3 0 0 1 6 0v4.76l3 3.24H6z" /></svg>
+            </div>
+            <div style={{ flex: 1, minWidth: 0, cursor: "pointer" }} onClick={() => { if (!scrollToMsg(room.pinned.msgId)) setPinMore(v => !v); }}>
+              <div style={{ fontSize: 12, fontWeight: 900, color: "#4B6CB7" }}>공지 · {room.pinned.by || room.pinned.senderName || ""}</div>
+              <div style={{ fontSize: 13.5, fontWeight: 700, color: "#0F1A30", lineHeight: 1.5, whiteSpace: "pre-wrap", wordBreak: "break-word", ...(pinMore ? {} : { display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }) }}>{room.pinned.text}</div>
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 4, flexShrink: 0 }}>
+              <button type="button" onClick={() => setPinMore(v => !v)} style={{ height: 24, padding: "0 8px", borderRadius: 7, border: "1px solid #C9D6EE", background: "#fff", color: NAVY, fontSize: 11.5, fontWeight: 800, cursor: "pointer" }}>{pinMore ? "줄이기" : "펼치기"}</button>
+              <div style={{ display: "flex", gap: 4 }}>
+                <button type="button" onClick={() => setPinFold(true)} style={{ height: 24, padding: "0 8px", borderRadius: 7, border: "none", background: "transparent", color: "#5B6B85", fontSize: 11.5, fontWeight: 800, cursor: "pointer" }}>접기</button>
+                {room.id && <button type="button" data-msg-unpin onClick={onUnpin} style={{ height: 24, padding: "0 8px", borderRadius: 7, border: "none", background: "transparent", color: "#5B6B85", fontSize: 11.5, fontWeight: 800, cursor: "pointer" }}>해제</button>}
+              </div>
+            </div>
+          </div>
+        )
+      )}
+
+      {/* ⭐ 2026-11-06 사진·파일·오더·공지 모아보기(지금 방에 받아 둔 최근 메시지 기준) */}
+      {gallery && (() => {
+        const pick = { image: (m) => m.type === "image" && m.imageUrl, file: (m) => m.type === "file" && m.fileUrl, order: (m) => m.type === "order" && m.order, notice: (m) => m.type === "notice" };
+        const items = messages.filter((m) => !m._optimistic && pick[gallery](m)).slice().reverse();
+        const tabs = [["image", "사진"], ["file", "파일"], ["order", "오더"], ["notice", "공지"]];
+        return (
+          <div data-msg-gallery data-kp-popup="1" style={{ position: "absolute", left: 0, right: 0, top: 56, bottom: 0, zIndex: 40, background: "#fff", display: "flex", flexDirection: "column" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "10px 12px", borderBottom: "1px solid #EEF1F6" }}>
+              {tabs.map(([k, l]) => {
+                const n = messages.filter((m) => !m._optimistic && pick[k](m)).length;
+                return <button key={k} type="button" onClick={() => setGallery(k)} style={{ height: 32, padding: "0 12px", borderRadius: 10, border: `1px solid ${gallery === k ? NAVY : "#DCE3EE"}`, background: gallery === k ? NAVY : "#fff", color: gallery === k ? "#fff" : "#3A4A66", fontSize: 13, fontWeight: 800, cursor: "pointer" }}>{l} {n}</button>;
+              })}
+              <button type="button" onClick={() => setGallery(null)} style={{ marginLeft: "auto", height: 32, padding: "0 12px", borderRadius: 10, border: "none", background: "#F1F4F9", color: "#3A4A66", fontSize: 13, fontWeight: 800, cursor: "pointer" }}>닫기</button>
+            </div>
+            <div style={{ flex: 1, overflowY: "auto", padding: 12 }}>
+              {items.length === 0 ? <div style={{ padding: 30, textAlign: "center", fontSize: 13, color: "#9ca3af" }}>이 방에 아직 없습니다</div>
+                : gallery === "image" ? (
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(96px,1fr))", gap: 6 }}>
+                    {items.map((m) => <img key={m.id} src={m.imageUrl} alt="" onClick={() => setImgPreview(m.imageUrl)} style={{ width: "100%", aspectRatio: "1 / 1", objectFit: "cover", borderRadius: 10, cursor: "zoom-in", background: "#F1F4F9" }} />)}
+                  </div>
+                ) : items.map((m) => (
+                  <div key={m.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 4px", borderBottom: "1px solid #F1F4F9" }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 13.5, fontWeight: 800, color: "#0F1A30", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: gallery === "notice" ? "pre-wrap" : "nowrap" }}>
+                        {gallery === "file" ? m.fileName : gallery === "order" ? orderLast(m.order) : m.text}
+                      </div>
+                      <div style={{ fontSize: 12, color: "#7A879C", marginTop: 2 }}>{m.senderName} · {fmtDate(m.createdAt)} {fmtTime(m.createdAt)}{gallery === "file" && m.fileSize ? ` · ${(m.fileSize / 1024).toFixed(1)} KB` : ""}</div>
+                    </div>
+                    {gallery === "file" && <a href={m.fileUrl} target="_blank" rel="noopener noreferrer" style={{ height: 32, padding: "0 12px", borderRadius: 10, background: NAVY, color: "#fff", fontSize: 12.5, fontWeight: 800, textDecoration: "none", display: "flex", alignItems: "center" }}>열기</a>}
+                    {gallery === "order" && <button type="button" onClick={() => setOrderView(m.order)} style={{ height: 32, padding: "0 12px", borderRadius: 10, border: "none", background: NAVY, color: "#fff", fontSize: 12.5, fontWeight: 800, cursor: "pointer" }}>열기</button>}
+                    <button type="button" onClick={() => { setGallery(null); setTimeout(() => scrollToMsg(m.id), 50); }} style={{ height: 32, padding: "0 10px", borderRadius: 10, border: "1px solid #DCE3EE", background: "#fff", color: "#3A4A66", fontSize: 12.5, fontWeight: 700, cursor: "pointer" }}>대화로</button>
+                  </div>
+                ))}
+            </div>
+          </div>
+        );
+      })()}
 
       {/* 검색바 */}
       {showSearch && (
@@ -2081,14 +2561,14 @@ function ChatView({ room, roomName, roomPhoto, messages, myUid, myProfile, input
               return (
                 <React.Fragment key={msg.id}>
                   {showDate && (
-                    <div style={{ display: "flex", alignItems: "center", gap: 8, margin: "10px 0 4px" }}>
-                      <div style={{ flex: 1, height: 1, background: "#d1d5db" }} />
-                      <span style={{ fontSize: 11, color: "#6b7280", fontWeight: 600, whiteSpace: "nowrap" }}>{dateStr}</span>
-                      <div style={{ flex: 1, height: 1, background: "#d1d5db" }} />
+                    <div data-msg-date style={{ display: "flex", alignItems: "center", gap: 10, margin: "14px 0 6px" }}>
+                      <div style={{ flex: 1, height: 1, background: "#cbd5e1" }} />
+                      <span style={{ fontSize: 13.5, color: "#334155", fontWeight: 800, whiteSpace: "nowrap", background: "rgba(255,255,255,0.85)", border: "1px solid #DCE3EE", borderRadius: 999, padding: "3px 14px" }}>{dateStr}</span>
+                      <div style={{ flex: 1, height: 1, background: "#cbd5e1" }} />
                     </div>
                   )}
                   <div id={`msg-${msg.id}`} style={{ display: "flex", justifyContent: "center", margin: "8px 0 4px" }}>
-                    <span style={{ fontSize: 11, color: "#4b5563", background: "rgba(15,26,48,0.08)", borderRadius: 12, padding: "4px 12px", maxWidth: "85%", textAlign: "center", lineHeight: 1.5, wordBreak: "keep-all" }}>{msg.text}</span>
+                    <span style={{ fontSize: 12.5, color: "#4b5563", background: "rgba(15,26,48,0.08)", borderRadius: 12, padding: "4px 12px", maxWidth: "85%", textAlign: "center", lineHeight: 1.5, wordBreak: "keep-all" }}>{msg.text}</span>
                   </div>
                 </React.Fragment>
               );
@@ -2096,11 +2576,12 @@ function ChatView({ room, roomName, roomPhoto, messages, myUid, myProfile, input
 
             return (
               <React.Fragment key={msg.id}>
+                {/* ⭐ 2026-11-06 날짜 구분선 크게(13.5px 굵게) */}
                 {showDate && (
-                  <div style={{ display: "flex", alignItems: "center", gap: 8, margin: "10px 0 4px" }}>
-                    <div style={{ flex: 1, height: 1, background: "#d1d5db" }} />
-                    <span style={{ fontSize: 11, color: "#6b7280", fontWeight: 600, whiteSpace: "nowrap" }}>{dateStr}</span>
-                    <div style={{ flex: 1, height: 1, background: "#d1d5db" }} />
+                  <div data-msg-date style={{ display: "flex", alignItems: "center", gap: 10, margin: "14px 0 6px" }}>
+                    <div style={{ flex: 1, height: 1, background: "#cbd5e1" }} />
+                    <span style={{ fontSize: 13.5, color: "#334155", fontWeight: 800, whiteSpace: "nowrap", background: "rgba(255,255,255,0.85)", border: "1px solid #DCE3EE", borderRadius: 999, padding: "3px 14px" }}>{dateStr}</span>
+                    <div style={{ flex: 1, height: 1, background: "#cbd5e1" }} />
                   </div>
                 )}
                 <div id={`msg-${msg.id}`} style={{ display: "flex", justifyContent: isMine ? "flex-end" : "flex-start", alignItems: "flex-end", gap: 6, marginTop: isContinued ? 1 : 8 }}>
@@ -2111,9 +2592,16 @@ function ChatView({ room, roomName, roomPhoto, messages, myUid, myProfile, input
                     </div>
                   )}
 
-                  <div style={{ display: "flex", flexDirection: "column", alignItems: isMine ? "flex-end" : "flex-start", maxWidth: "70%" }}>
+                  <div style={{ display: "flex", flexDirection: "column", alignItems: isMine ? "flex-end" : "flex-start", maxWidth: "74%" }}
+                    onContextMenu={mobileMode || msg.type === "deleted" ? undefined : (e) => handleMsgContextMenu(e, msg)}
+                    onTouchStart={mobileMode && msg.type !== "deleted" ? (e) => startLongPress(e, msg) : undefined}
+                    onTouchEnd={mobileMode ? cancelLongPress : undefined}
+                    onTouchMove={mobileMode ? cancelLongPress : undefined}>
                     {!isContinued && !isMine && (
-                      <span style={{ fontSize: 11, fontWeight: 600, color: "#374151", marginBottom: 3, paddingLeft: 4 }}>{msg.senderName}</span>
+                      <span style={{ fontSize: 12.5, fontWeight: 700, color: "#374151", marginBottom: 3, paddingLeft: 4 }}>{msg.senderName}</span>
+                    )}
+                    {msg.forwarded && msg.type !== "deleted" && (
+                      <span style={{ fontSize: 12, fontWeight: 700, color: "#5B6B85", marginBottom: 2, padding: "0 4px" }}>전달됨{msg.fwdFrom ? ` · ${msg.fwdFrom}` : ""}</span>
                     )}
                     <div style={{ display: "flex", alignItems: "flex-end", gap: 4, flexDirection: isMine ? "row-reverse" : "row" }}>
                       {/* 말풍선 */}
@@ -2170,6 +2658,8 @@ function ChatView({ room, roomName, roomPhoto, messages, myUid, myProfile, input
                             </a>
                           )}
                         </div>
+                      ) : msg.type === "order" ? (
+                        <OrderCard o={msg.order || {}} isMine={isMine} onOpen={() => setOrderView(msg.order || {})} onCopy={() => navigator.clipboard?.writeText(orderSummary(msg.order || {})).catch(() => {})} />
                       ) : editMsg?.id === msg.id ? (
                         <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
                           <input value={editText} onChange={e => setEditText(e.target.value)}
@@ -2180,12 +2670,7 @@ function ChatView({ room, roomName, roomPhoto, messages, myUid, myProfile, input
                           <button onClick={() => setEditMsg(null)} style={{ background: "#e5e7eb", color: "#374151", border: "none", borderRadius: 8, padding: "5px 8px", fontSize: 11, cursor: "pointer" }}>취소</button>
                         </div>
                       ) : (
-                        <div style={{ display: "flex", flexDirection: "column" }}
-                          onContextMenu={mobileMode ? undefined : (e) => handleMsgContextMenu(e, msg)}
-                          onTouchStart={mobileMode ? (e) => startLongPress(e, msg) : undefined}
-                          onTouchEnd={mobileMode ? cancelLongPress : undefined}
-                          onTouchMove={mobileMode ? cancelLongPress : undefined}
-                        >
+                        <div style={{ display: "flex", flexDirection: "column" }}>
                           {/* 답장 인용 */}
                           {msg.replyToText && (
                             <div
@@ -2216,11 +2701,12 @@ function ChatView({ room, roomName, roomPhoto, messages, myUid, myProfile, input
                               borderRadius: isMine ? "14px 14px 4px 14px" : "14px 14px 14px 4px",
                               background: isMine ? themeMyBubble : "#fff",
                               color: isMine ? "#fff" : "#111827",
-                              fontSize: 13, lineHeight: 1.5,
+                              fontSize: 13.5, lineHeight: 1.55,
                               wordBreak: "break-word", whiteSpace: "pre-wrap",
-                              boxShadow: "0 1px 3px rgba(0,0,0,0.08)",
+                              // ⭐ 2026-11-06 나를 부른 메시지(@멘션)는 테두리로 표시
+                              boxShadow: !isMine && (msg.mentions || []).includes(myUid) ? `0 0 0 2px ${NAVY}` : "0 1px 3px rgba(0,0,0,0.08)",
                             }}>
-                            {msg.text}
+                            <MentionText text={msg.text} names={mentionNames.length ? [...mentionNames, myName] : (msg.mentions?.length ? [myName] : [])} myName={myName} isMine={isMine} />
                             {msg.edited && <span style={{ fontSize: 11, opacity: 0.6, marginLeft: 4 }}>(수정됨)</span>}
                           </div>
                           {/* 이모티콘 반응 표시 */}
@@ -2248,12 +2734,13 @@ function ChatView({ room, roomName, roomPhoto, messages, myUid, myProfile, input
                       {/* ⭐ 2026-11-03 안읽음 숫자는 카톡처럼 모든 메시지에(내 것·남의 것), 시간은 묶음 마지막에만 */}
                       {msg.type !== "deleted" && (isLast || unreadNum > 0) && (
                         <div style={{ display: "flex", flexDirection: "column", alignItems: isMine ? "flex-end" : "flex-start", gap: 2, flexShrink: 0 }}>
+                          {/* ⭐ 2026-11-06 안읽음 숫자·시간·읽음 크게(12.5px 이상, 숫자는 굵게) */}
                           {unreadNum > 0 && (
-                            <span style={{ fontSize: 10, color: "#f59e0b", fontWeight: 700, whiteSpace: "nowrap" }}>{unreadNum}</span>
+                            <span data-msg-unread style={{ fontSize: 13, color: "#D97706", fontWeight: 900, whiteSpace: "nowrap", lineHeight: 1.1 }}>{unreadNum}</span>
                           )}
-                          {isLast && <span style={{ fontSize: 11, color: "#9ca3af", whiteSpace: "nowrap" }}>{fmtTime(msg.createdAt)}</span>}
+                          {isLast && <span data-msg-time style={{ fontSize: 12.5, color: "#64748b", fontWeight: 600, whiteSpace: "nowrap" }}>{fmtTime(msg.createdAt)}</span>}
                           {isLast && isMine && unreadNum === 0 && room.type !== "group" && (
-                            <span style={{ fontSize: 11, color: "#6b7280", whiteSpace: "nowrap" }}>읽음</span>
+                            <span data-msg-read style={{ fontSize: 12.5, color: "#1B2B4B", fontWeight: 800, whiteSpace: "nowrap" }}>읽음</span>
                           )}
                         </div>
                       )}
@@ -2271,7 +2758,7 @@ function ChatView({ room, roomName, roomPhoto, messages, myUid, myProfile, input
       {ctxMenu && (() => {
         const { msg, x, y } = ctxMenu;
         const isMine = msg.senderUid === myUid;
-        const menuW = 160, menuH = 220;
+        const menuW = 180, menuH = 330;
         const safeX = Math.min(x, window.innerWidth - menuW - 8);
         const safeY = y + menuH > window.innerHeight ? y - menuH : y;
         return (
@@ -2292,10 +2779,13 @@ function ChatView({ room, roomName, roomPhoto, messages, myUid, myProfile, input
             </div>
             {[
               { label: "답장", action: () => { onReply?.(msg); setCtxMenu(null); } },
-              { label: "나에게 보내기", action: () => { onSendToSelf?.(msg.text); setCtxMenu(null); setSelfSentToast(true); setTimeout(() => setSelfSentToast(false), 2500); } },
-              { label: "복사", action: () => { navigator.clipboard?.writeText(msg.text || ""); setCtxMenu(null); } },
+              // ⭐ 2026-11-06 전달 · 공지로 고정
+              ...(room.id ? [{ label: "전달", action: () => { onForward?.(msg); setCtxMenu(null); } }] : []),
+              ...(room.id && msg.type !== "system" ? [{ label: room.pinned?.msgId === msg.id ? "공지 고정 해제" : "공지로 고정", action: () => { setCtxMenu(null); if (room.pinned?.msgId === msg.id) onUnpin?.(); else onPin?.(msg); } }] : []),
+              { label: "나에게 보내기", action: () => { onSendToSelf?.(copyText(msg)); setCtxMenu(null); setSelfSentToast(true); setTimeout(() => setSelfSentToast(false), 2500); } },
+              { label: "복사", action: () => { navigator.clipboard?.writeText(copyText(msg)); setCtxMenu(null); } },
               ...(isMine ? [
-                { label: "수정", action: () => { setEditMsg(msg); setEditText(msg.text); setCtxMenu(null); } },
+                ...((msg.type || "text") === "text" ? [{ label: "수정", action: () => { setEditMsg(msg); setEditText(msg.text); setCtxMenu(null); } }] : []),
                 { label: "삭제", action: () => { onDeleteMsg(msg.id); setCtxMenu(null); }, danger: true },
               ] : []),
             ].map(({ label, action, danger }) => (
@@ -2338,6 +2828,8 @@ function ChatView({ room, roomName, roomPhoto, messages, myUid, myProfile, input
             { label: "위치", icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>, action: () => { onSendLocation(); setShowAttachMenu(false); } },
             { label: "연락처", icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>, action: () => { onSendContact(); setShowAttachMenu(false); } },
             { label: "공지", icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>, action: () => { onSendNotice(); setShowAttachMenu(false); } },
+            // ⭐ 2026-11-06 오더 공유 카드
+            { label: "오더", icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="1" y="6" width="14" height="11" rx="1.5" /><path d="M15 9h4l3 3.5V17h-7" /><circle cx="6" cy="18.5" r="1.8" /><circle cx="18" cy="18.5" r="1.8" /></svg>, action: () => { onShareOrder?.(); setShowAttachMenu(false); } },
           ].map(item => (
             <button key={item.label} onClick={item.action}
               style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, padding: "10px 14px", background: "#fff", border: "1px solid #e5e7eb", borderRadius: 12, cursor: "pointer", color: "#1B2B4B", minWidth: 60 }}>
@@ -2361,6 +2853,45 @@ function ChatView({ room, roomName, roomPhoto, messages, myUid, myProfile, input
         </div>
       )}
 
+      {/* ⭐ 2026-11-06 @멘션 — 멤버 고르기 */}
+      {mention && mentionHits.length > 0 && (
+        <div data-msg-mention-list data-kp-popup="1" style={{ margin: "0 12px", background: "#fff", border: "1px solid #DCE3EE", borderRadius: 14, boxShadow: "0 -6px 20px rgba(15,26,48,0.12)", overflow: "hidden", flexShrink: 0 }}>
+          <div style={{ padding: "6px 12px", fontSize: 12, fontWeight: 800, color: "#7A879C", background: "#FAFBFD" }}>멘션할 사람 (↑↓ · Enter)</div>
+          {mentionHits.map((p, i) => (
+            <button key={p.uid} type="button" onMouseDown={(e) => { e.preventDefault(); pickMention(p); }}
+              style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", textAlign: "left", padding: "7px 12px", border: "none", background: i === mention.idx ? "#EEF3FB" : "#fff", cursor: "pointer", fontSize: 13.5, fontWeight: 700, color: "#0F1A30" }}>
+              <span style={{ width: 24, height: 24, borderRadius: 8, background: p.uid === "all" ? "#4B6CB7" : NAVY, color: "#fff", fontSize: 12, fontWeight: 900, display: "flex", alignItems: "center", justifyContent: "center" }}>{p.uid === "all" ? "@" : p.name.slice(0, 1)}</span>
+              {p.uid === "all" ? "전체 (모두에게 알림)" : p.name}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* ⭐ 2026-11-06 자주 쓰는 문구 */}
+      {showQuick && (
+        <div data-msg-quick data-kp-popup="1" style={{ margin: "0 12px", background: "#fff", border: "1px solid #DCE3EE", borderRadius: 14, boxShadow: "0 -6px 20px rgba(15,26,48,0.12)", overflow: "hidden", flexShrink: 0, maxHeight: 280, display: "flex", flexDirection: "column" }}>
+          <div style={{ display: "flex", alignItems: "center", padding: "8px 12px", background: "#FAFBFD", borderBottom: "1px solid #EEF1F6" }}>
+            <span style={{ flex: 1, fontSize: 12.5, fontWeight: 900, color: "#0F1A30" }}>자주 쓰는 문구</span>
+            <button type="button" onClick={() => setQuickEdit(v => !v)} style={{ height: 26, padding: "0 10px", borderRadius: 8, border: "1px solid #DCE3EE", background: quickEdit ? NAVY : "#fff", color: quickEdit ? "#fff" : "#3A4A66", fontSize: 12, fontWeight: 800, cursor: "pointer" }}>{quickEdit ? "완료" : "편집"}</button>
+            <button type="button" onClick={() => { setShowQuick(false); setQuickEdit(false); }} style={{ marginLeft: 6, background: "none", border: "none", color: "#9ca3af", fontSize: 15, cursor: "pointer" }}>✕</button>
+          </div>
+          <div style={{ overflowY: "auto" }}>
+            {quickReplies.map((t, i) => (
+              <div key={`${i}-${t}`} style={{ display: "flex", alignItems: "center", borderBottom: "1px solid #F1F4F9" }}>
+                <button type="button" data-msg-quick-item onMouseDown={(e) => e.preventDefault()} onClick={() => !quickEdit && insertQuick(t)} style={{ flex: 1, textAlign: "left", padding: "9px 12px", border: "none", background: "transparent", cursor: quickEdit ? "default" : "pointer", fontSize: 13.5, color: "#0F1A30", fontWeight: 600 }}>{t}</button>
+                {quickEdit && <button type="button" onClick={() => onSaveQuickReplies?.(quickReplies.filter((_, k) => k !== i))} style={{ marginRight: 8, width: 28, height: 28, borderRadius: 8, border: "none", background: "#F1F4F9", color: "#5B6B85", cursor: "pointer" }}>✕</button>}
+              </div>
+            ))}
+          </div>
+          {quickEdit && (
+            <form onSubmit={(e) => { e.preventDefault(); if (quickDraft.trim()) { onSaveQuickReplies?.([...quickReplies, quickDraft.trim()]); setQuickDraft(""); } }} style={{ display: "flex", gap: 6, padding: 8, borderTop: "1px solid #EEF1F6" }}>
+              <input value={quickDraft} onChange={(e) => setQuickDraft(e.target.value)} placeholder="새 문구 입력 후 추가" style={{ flex: 1, height: 32, border: "1px solid #DCE3EE", borderRadius: 8, padding: "0 10px", fontSize: 13, outline: "none" }} />
+              <button type="submit" style={{ height: 32, padding: "0 12px", borderRadius: 8, border: "none", background: NAVY, color: "#fff", fontSize: 12.5, fontWeight: 800, cursor: "pointer" }}>추가</button>
+            </form>
+          )}
+        </div>
+      )}
+
       {sendingImgs.length > 0 && (
         <div data-msg-sending style={{ padding: "6px 12px", background: "#fff", borderTop: "1px solid #e5e7eb", display: "flex", alignItems: "center", gap: 6, flexShrink: 0, overflowX: "auto" }}>
           {sendingImgs.map((x) => <div key={x.id} style={{ position: "relative", width: 44, height: 44, borderRadius: 8, overflow: "hidden", flexShrink: 0, background: "#f1f5f9" }}><img src={x.url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", opacity: 0.55 }} /><div style={{ position: "absolute", inset: 0, display: "grid", placeItems: "center" }}><div className="animate-spin" style={{ width: 18, height: 18, borderRadius: "50%", border: "2.5px solid #fff", borderTopColor: "#1B2B4B" }} /></div></div>)}
@@ -2379,18 +2910,35 @@ function ChatView({ room, roomName, roomPhoto, messages, myUid, myProfile, input
             style={{ width: 32, height: 32, borderRadius: "50%", background: showAttachMenu ? "#1B2B4B" : "none", border: "none", color: showAttachMenu ? "#fff" : "#6b7280", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, transition: "all 0.15s", marginLeft: 2 }}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
           </button>
+          {/* ⭐ 2026-11-06 자주 쓰는 문구 버튼 */}
+          <button type="button" title="자주 쓰는 문구" data-msg-quick-btn
+            onMouseDown={e => e.preventDefault()}
+            onClick={() => { setShowQuick(v => !v); setQuickEdit(false); }}
+            style={{ height: 32, padding: "0 9px", borderRadius: 16, background: showQuick ? NAVY : "#fff", border: "1px solid #DCE3EE", color: showQuick ? "#fff" : NAVY, cursor: "pointer", fontSize: 12.5, fontWeight: 800, flexShrink: 0, whiteSpace: "nowrap" }}>
+            문구
+          </button>
           {(fileUploading) && <span style={{ fontSize: 11, color: "#9ca3af", flexShrink: 0 }}>업로드 중...</span>}
           <textarea
             ref={inputRef}
             value={input}
-            onChange={e => setInput(e.target.value)}
-            onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); onSend(); } }}
-            placeholder="메시지 입력..."
+            onChange={e => { setInput(e.target.value); trackMention(e.target); }}
+            onKeyDown={e => {
+              // ⭐ 2026-11-06 @멘션 고르는 중이면 ↑↓·Enter·Tab·Esc는 목록에 쓴다
+              if (mention && mentionHits.length && !e.nativeEvent.isComposing) {
+                if (e.key === "ArrowDown") { e.preventDefault(); setMention(m => ({ ...m, idx: Math.min(mentionHits.length - 1, (m?.idx || 0) + 1) })); return; }
+                if (e.key === "ArrowUp") { e.preventDefault(); setMention(m => ({ ...m, idx: Math.max(0, (m?.idx || 0) - 1) })); return; }
+                if (e.key === "Enter" || e.key === "Tab") { e.preventDefault(); pickMention(mentionHits[mention.idx] || mentionHits[0]); return; }
+                if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); setMention(null); return; }
+              }
+              if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); setMention(null); setShowQuick(false); onSend(); }
+            }}
+            onClick={e => trackMention(e.target)}
+            placeholder={mentionPeople.length ? "메시지 입력 (@이름으로 멘션)" : "메시지 입력..."}
             rows={1}
             autoComplete="off"
             autoCorrect="off"
             autoCapitalize="sentences"
-            style={{ flex: 1, background: "none", border: "none", outline: "none", resize: "none", fontSize: 13, color: "#111827", maxHeight: 90, overflowY: "auto", lineHeight: 1.5 }}
+            style={{ flex: 1, background: "none", border: "none", outline: "none", resize: "none", fontSize: 13.5, color: "#111827", maxHeight: 90, overflowY: "auto", lineHeight: 1.5 }}
           />
           <button type="button"
             onMouseDown={e => e.preventDefault()}
@@ -2454,6 +3002,8 @@ function ChatView({ room, roomName, roomPhoto, messages, myUid, myProfile, input
           <div style={{ color: "rgba(255,255,255,0.4)", fontSize: 11, marginTop: 12 }}>Ctrl+C 복사 · ESC 닫기</div>
         </div>
       )}
+
+      {orderView && <OrderDetailModal order={orderView} mobileMode={mobileMode} onClose={() => setOrderView(null)} />}
 
       {/* 나에게 보내기 완료 토스트 */}
       {selfSentToast && (

@@ -254,6 +254,16 @@ const pad2 = (n) => String(n).padStart(2, "0");
 const localInput = (d) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}T${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
 const sigKey = (uid) => `kpMailSig:${uid}`;
 const readSig = (uid) => { try { return localStorage.getItem(sigKey(uid)) ?? ""; } catch { return ""; } };
+// ⭐ 2026-11-06 자주 쓰는 메일 양식 — 기본 양식 4개 + 내가 저장한 양식(이 기기에 보관, 서명과 같은 방식)
+const tplKey = (uid) => `kpMailTpl:${uid}`;
+const readTpls = (uid) => { try { const v = JSON.parse(localStorage.getItem(tplKey(uid)) || "[]"); return Array.isArray(v) ? v : []; } catch { return []; } };
+const writeTpls = (uid, list) => { try { localStorage.setItem(tplKey(uid), JSON.stringify(list.slice(0, 30))); } catch { /* 저장 실패 무시 */ } };
+const BUILTIN_TPLS = [
+  { name: "업무 협조 요청", subject: "[협조 요청] ", body: "안녕하세요.\n\n아래 건에 대해 협조 부탁드립니다.\n\n- 내용:\n- 기한:\n- 담당:\n\n감사합니다." },
+  { name: "배차 마감 보고", subject: "[마감 보고] 오늘 배차 마감", body: "오늘 배차 마감 보고드립니다.\n\n- 총 오더: 건\n- 배차 완료: 건\n- 미배차: 건 (사유: )\n- 특이사항:\n\n이상입니다." },
+  { name: "휴가·외근 보고", subject: "[근태] 휴가/외근 보고", body: "안녕하세요.\n\n- 구분: 휴가 / 외근 / 조퇴\n- 일시:\n- 사유:\n- 업무 대행자:\n\n감사합니다." },
+  { name: "회의 안내", subject: "[회의 안내] ", body: "아래와 같이 회의를 진행합니다.\n\n- 일시:\n- 장소:\n- 안건:\n- 준비물:\n\n참석 부탁드립니다." },
+];
 
 // 받는 사람 칸 — 이름 검색으로 바로 추가 + 주소록(부서별)
 function RecipientField({ label, staff, selected, setSelected, excludeUid, autoFocus }) {
@@ -317,7 +327,22 @@ function Composer({ company, myName, staff, uid, init, onClose, onDone }) {
   const [sigEdit, setSigEdit] = React.useState(false);
   const [busy, setBusy] = React.useState("");
   const [msg, setMsg] = React.useState("");
+  const [tplOpen, setTplOpen] = React.useState(false); // ⭐ 2026-11-06 양식
+  const [myTpls, setMyTpls] = React.useState(() => readTpls(uid));
   const fileRef = React.useRef(null);
+  const applyTpl = async (t) => {
+    setTplOpen(false);
+    if ((body.trim() || subject.trim()) && !await kpConfirm(`'${t.name}' 양식으로 제목·내용을 바꿀까요?\n(지금 쓴 내용은 지워집니다)`)) return;
+    setSubject(t.subject || ""); setBody(t.body || "");
+  };
+  const saveTpl = () => {
+    if (!subject.trim() && !body.trim()) { setMsg("양식으로 저장할 제목이나 내용을 먼저 써 주세요."); return; }
+    const name = (window.prompt("양식 이름을 입력하세요", subject.trim().slice(0, 20) || "내 양식") || "").trim();
+    if (!name) return;
+    const next = [{ name: name.slice(0, 30), subject, body }, ...myTpls.filter((t) => t.name !== name)];
+    setMyTpls(next); writeTpls(uid, next); setMsg(`'${name}' 양식을 저장했습니다.`);
+  };
+  const removeTpl = (name) => { const next = myTpls.filter((t) => t.name !== name); setMyTpls(next); writeTpls(uid, next); };
   const meUser = { uid, name: myName || auth.currentUser?.email || "나" };
 
   const quick = (kind) => {
@@ -394,6 +419,36 @@ function Composer({ company, myName, staff, uid, init, onClose, onDone }) {
               <ShellIcon name="flag" size={13} /> 중요
             </button>
           </div>
+        </div>
+
+        {/* ⭐ 2026-11-06 자주 쓰는 양식 — 불러오기 · 지금 내용을 양식으로 저장 */}
+        <div className="relative flex flex-wrap items-center gap-2">
+          <button type="button" data-mail-tpl-btn onClick={() => setTplOpen((v) => !v)} className={`h-9 px-3.5 rounded-xl text-[13px] font-black border inline-flex items-center gap-1.5 ${tplOpen ? "bg-[#0F1A30] text-white border-[#0F1A30]" : "bg-white text-[#0F1A30] border-[#DCE3EE] hover:border-[#4B6CB7]"}`}>
+            <ShellIcon name="file" size={14} /> 양식 불러오기
+          </button>
+          <button type="button" onClick={saveTpl} className="h-9 px-3.5 rounded-xl text-[13px] font-bold border bg-white text-[#3A4A66] border-[#DCE3EE] hover:border-[#4B6CB7]">지금 내용을 양식으로 저장</button>
+          {tplOpen && (
+            <div data-mail-tpl-list className="absolute left-0 top-full mt-1.5 z-30 w-[340px] max-w-full bg-white rounded-2xl border border-[#DCE3EE] shadow-[0_16px_36px_rgba(15,26,48,0.18)] overflow-hidden">
+              <div className="px-4 py-2.5 text-[12px] font-black text-[#7A879C] bg-[#FAFBFD] border-b border-[#EEF1F6]">기본 양식</div>
+              {BUILTIN_TPLS.map((t) => (
+                <button key={t.name} type="button" onClick={() => applyTpl(t)} className="w-full text-left px-4 py-2.5 hover:bg-[#F5F8FD] border-b border-[#F1F4F9]">
+                  <div className="text-[13.5px] font-bold text-[#0F1A30]">{t.name}</div>
+                  <div className="text-[12px] text-[#7A879C] truncate">{t.subject || t.body.split("\n")[0]}</div>
+                </button>
+              ))}
+              <div className="px-4 py-2.5 text-[12px] font-black text-[#7A879C] bg-[#FAFBFD] border-b border-[#EEF1F6]">내 양식 {myTpls.length}개</div>
+              {myTpls.length === 0 ? <div className="px-4 py-3 text-[12.5px] text-[#9AA9C3]">제목·내용을 쓴 뒤 [지금 내용을 양식으로 저장]을 누르면 여기에 생깁니다.</div>
+                : myTpls.map((t) => (
+                  <div key={t.name} className="flex items-center hover:bg-[#F5F8FD] border-b border-[#F1F4F9]">
+                    <button type="button" onClick={() => applyTpl(t)} className="flex-1 min-w-0 text-left px-4 py-2.5">
+                      <div className="text-[13.5px] font-bold text-[#0F1A30] truncate">{t.name}</div>
+                      <div className="text-[12px] text-[#7A879C] truncate">{t.subject || String(t.body || "").split("\n")[0]}</div>
+                    </button>
+                    <button type="button" onClick={() => removeTpl(t.name)} title="양식 지우기" className="mr-2 w-8 h-8 rounded-lg text-[#9AA9C3] hover:text-[#0F1A30] hover:bg-white">✕</button>
+                  </div>
+                ))}
+            </div>
+          )}
         </div>
 
         <div className="bg-white rounded-2xl border border-[#E3E8F0] overflow-hidden">
@@ -513,8 +568,18 @@ export function MailWorkspace({ company, myName, box, setBox, openId, embedded =
   const [chip, setChip] = React.useState("all");
   const [sel, setSel] = React.useState(() => new Set());
   const [limit, setLimit] = React.useState(40);
+  // ⭐ 2026-11-06 상세 검색(찾을 곳·기간) · 단축키 도움말 · Shift+클릭 범위 선택 기준
+  const [field, setField] = React.useState("all"); // all | from | subject | body
+  const [period, setPeriod] = React.useState("all"); // all | today | 7d | 30d | 90d
+  const [showAdv, setShowAdv] = React.useState(false);
+  const [showKeys, setShowKeys] = React.useState(false);
+  const lastPickRef = React.useRef(-1);
+  const rootRef = React.useRef(null);
+  const searchRef = React.useRef(null);
 
-  React.useEffect(() => { setCurId(null); setSel(new Set()); setLimit(40); setChip("all"); }, [box]);
+  React.useEffect(() => { setCurId(null); setSel(new Set()); setLimit(40); setChip("all"); lastPickRef.current = -1; }, [box]);
+  // 검색·필터를 바꾸면 선택을 비운다(안 보이는 메일이 같이 지워지지 않게)
+  React.useEffect(() => { setSel(new Set()); lastPickRef.current = -1; }, [q, chip, field, period]);
   React.useEffect(() => { if (openId) { setBox("inbox"); setCompose(null); setCurId(openId); } }, [openId, setBox]);
   React.useEffect(() => { if (composeTick) setCompose({}); }, [composeTick]);
 
@@ -527,28 +592,61 @@ export function MailWorkspace({ company, myName, box, setBox, openId, embedded =
 
   const base = folders[box] || [];
   const kw = q.trim();
+  // ⭐ 2026-11-06 검색 강화 — 띄어쓰기로 여러 단어(모두 포함), 대소문자 무시, 찾을 곳(보낸사람·제목·본문)·기간
+  const words = kw.toLowerCase().split(/\s+/).filter(Boolean);
+  const sinceMs = (() => {
+    if (period === "all") return 0;
+    const d = new Date(); d.setHours(0, 0, 0, 0);
+    if (period === "today") return d.getTime();
+    return d.getTime() - ({ "7d": 6, "30d": 29, "90d": 89 }[period] || 0) * 86400000;
+  })();
+  const fieldText = (m) => (field === "from" ? [m.fromName, m.fromEmail]
+    : field === "subject" ? [m.subject]
+      : field === "body" ? [m.body]
+        : [m.subject, m.body, m.fromName, m.fromEmail, ...(m.toNames || []), ...(m.ccNames || []), ...(m.pendingToNames || [])]).map((v) => String(v || "")).join("\n").toLowerCase();
   const list = base.filter((m) => {
     if (chip === "unread" && has(m.readBy, uid)) return false;
     if (chip === "attach" && !(m.images || []).length) return false;
     if (chip === "important" && !m.important) return false;
     if (chip === "starred" && !has(m.starredBy, uid)) return false;
-    return !kw || [m.subject, m.body, m.fromName, ...(m.toNames || []), ...(m.ccNames || []), ...(m.pendingToNames || [])].some((v) => String(v || "").includes(kw));
+    if (sinceMs && toMs(statusOf(m) === "scheduled" ? m.scheduledAt : m.at) < sinceMs) return false;
+    if (!words.length) return true;
+    const t = fieldText(m);
+    return words.every((w) => t.includes(w));
   });
   const shown = list.slice(0, limit);
   const isOutbox = ["sent", "self", "scheduled", "drafts"].includes(box);
   const allSel = shown.length > 0 && shown.every((m) => sel.has(m.id));
+  // ⭐ 2026-11-06 선택한 메일 — 지금 목록(list)에 실제로 있는 것만. 예전엔 선택 수와 실제로 처리되는 메일이 어긋날 수 있었다
+  const selected = list.filter((m) => sel.has(m.id));
+  // 체크박스 — Shift+클릭이면 앞에서 누른 곳부터 여기까지 한꺼번에
+  const pick = (m, i, shift) => {
+    const from = lastPickRef.current; // 상태 갱신 함수는 나중에 돌기 때문에 기준 위치를 먼저 잡아 둔다
+    setSel((p) => {
+      const n = new Set(p);
+      const on = !p.has(m.id);
+      if (shift && from >= 0 && from < shown.length) {
+        const [a, b] = [Math.min(from, i), Math.max(from, i)];
+        shown.slice(a, b + 1).forEach((x) => (on ? n.add(x.id) : n.delete(x.id)));
+      } else if (on) n.add(m.id); else n.delete(m.id);
+      return n;
+    });
+    lastPickRef.current = i;
+  };
 
   const upd = (m, data) => updateDoc(doc(db, "internalMails", m.id), data).catch((e) => window.alert("처리 실패: " + e.message));
   const toggleStar = (m) => upd(m, { starredBy: has(m.starredBy, uid) ? arrayRemove(uid) : arrayUnion(uid) });
   const removeMail = async (m) => {
+    // ⭐ 2026-11-06 여러 통을 골라 둔 채로 읽던 메일의 [삭제]를 눌러도 고른 메일이 모두 지워지게(예전엔 지금 연 1통만 지워졌다)
+    if (sel.size > 1 && sel.has(m.id)) { await bulk("delete"); return; }
     if (["drafts", "scheduled"].includes(box) || ["draft", "scheduled"].includes(statusOf(m))) {
       if (!await kpConfirm(statusOf(m) === "scheduled" ? "예약을 취소하고 메일을 지울까요?" : "임시보관 메일을 지울까요?")) return;
       await runDelete({ label: "메일", task: () => deleteDoc(doc(db, "internalMails", m.id)) }).catch(() => {}); // ⭐ 2026-11-05 진행 창
     } else await upd(m, { deletedBy: arrayUnion(uid) });
     if (curId === m.id) setCurId(null);
   };
-  const bulk = async (act) => {
-    const ms = shown.filter((m) => sel.has(m.id));
+  async function bulk(act) {
+    const ms = list.filter((m) => sel.has(m.id));
     if (!ms.length) return;
     if (act === "purge" && !await kpConfirm(`${ms.length}통을 영구 삭제할까요? 되돌릴 수 없습니다.`)) return;
     if (act === "delete" && ["drafts", "scheduled"].includes(box) && !await kpConfirm(`${ms.length}통을 지울까요?`)) return;
@@ -561,6 +659,7 @@ export function MailWorkspace({ company, myName, box, setBox, openId, embedded =
       });
       await runDelete({ count: ms.length, label: "메일", task: (p) => commitDeletes(db, ops, { onProgress: p }) }).catch((e) => window.alert("처리 실패: " + e.message));
       setSel(new Set());
+      if (ms.some((m) => m.id === curId)) setCurId(null);
       return;
     }
     await Promise.all(ms.map((m) => {
@@ -569,11 +668,10 @@ export function MailWorkspace({ company, myName, box, setBox, openId, embedded =
       if (act === "star") return upd(m, { starredBy: arrayUnion(uid) });
       if (act === "restore") return upd(m, { deletedBy: arrayRemove(uid) });
       if (act === "purge") return upd(m, { purgedBy: arrayUnion(uid) });
-      if (act === "delete") return ["draft", "scheduled"].includes(statusOf(m)) ? deleteDoc(doc(db, "internalMails", m.id)).catch(() => {}) : upd(m, { deletedBy: arrayUnion(uid) });
       return null;
     }));
     setSel(new Set());
-  };
+  }
   const emptyTrash = async () => {
     if (!folders.trash.length || !await kpConfirm(`휴지통의 메일 ${folders.trash.length}통을 모두 영구 삭제할까요?`)) return;
     // ⭐ 2026-11-05 한 번에 처리 + 삭제 진행 창
@@ -604,6 +702,60 @@ export function MailWorkspace({ company, myName, box, setBox, openId, embedded =
   const cancelSchedule = (m) => upd(m, { status: "draft", scheduledAt: null });
 
   const counts = { unread: folders.unread.length };
+
+  // ⭐ 2026-11-06 단축키(PC) — 입력칸에 글을 쓰는 중이거나 다른 창이 떠 있으면 동작하지 않는다
+  //   ↑↓(또는 K·J) 이전·다음 메일 · X 선택 · Shift+↑↓ 선택하며 이동 · Ctrl+A 전체 선택 · Delete 삭제
+  //   S 별표 · U 안읽음 · R 답장 · A 전체 답장 · F 전달 · / 검색 · Esc 선택 해제/닫기 · ? 단축키 보기
+  const keyRef = React.useRef(null);
+  keyRef.current = { shown, cur, sel, compose, box, curId };
+  React.useEffect(() => {
+    const onKey = (e) => {
+      const k = keyRef.current; if (!k || k.compose || e.isComposing) return;
+      const t = e.target; const tag = (t?.tagName || "").toLowerCase();
+      if (tag === "input" || tag === "textarea" || tag === "select" || t?.isContentEditable) {
+        if (e.key === "Escape" && t === searchRef.current) t.blur();
+        return;
+      }
+      if (document.querySelector('[data-kp-dialog="1"],[data-kp-delete-progress="1"]')) return;
+      const root = rootRef.current; if (!root || !root.isConnected || root.offsetParent === null) return;
+      // 메일함 팝업이 떠 있으면 그 안의 메일함만 반응(홈 화면 메일함과 겹치지 않게)
+      const pop = document.querySelector("[data-kp-mailcenter]");
+      if (pop && !pop.contains(root)) return;
+      const idx = k.shown.findIndex((m) => m.id === k.curId);
+      const go = (d, extend) => {
+        if (!k.shown.length) return;
+        const ni = idx < 0 ? 0 : Math.max(0, Math.min(k.shown.length - 1, idx + d));
+        const m = k.shown[ni];
+        if (extend) setSel((p) => { const n = new Set(p); if (idx >= 0) n.add(k.shown[idx].id); n.add(m.id); return n; });
+        setCurId(m.id); lastPickRef.current = ni;
+        setTimeout(() => root.querySelector(`[data-mail-row="${m.id}"]`)?.scrollIntoView({ block: "nearest" }), 0);
+      };
+      const key = e.key;
+      const ctrl = e.ctrlKey || e.metaKey;
+      if (ctrl && (key === "a" || key === "A")) { e.preventDefault(); setSel(new Set(k.shown.map((m) => m.id))); return; }
+      if (ctrl || e.altKey) return;
+      if (key === "ArrowDown" || key === "j" || key === "J") { e.preventDefault(); go(1, e.shiftKey); return; }
+      if (key === "ArrowUp" || key === "k" || key === "K") { e.preventDefault(); go(-1, e.shiftKey); return; }
+      if (key === "/") { e.preventDefault(); searchRef.current?.focus(); return; }
+      if (key === "?") { e.preventDefault(); setShowKeys((v) => !v); return; }
+      if (key === "Escape") { if (k.sel.size) setSel(new Set()); else if (k.curId) setCurId(null); setShowKeys(false); return; }
+      if (key === "x" || key === "X") { if (idx >= 0) { e.preventDefault(); pick(k.shown[idx], idx, false); } return; }
+      if (key === "Delete" || key === "#") {
+        e.preventDefault();
+        if (k.sel.size) bulk(k.box === "trash" ? "purge" : "delete");
+        else if (k.cur && !has(k.cur.deletedBy, uid)) removeMail(k.cur);
+        return;
+      }
+      const c = k.cur; if (!c) return;
+      if (key === "s" || key === "S") { e.preventDefault(); toggleStar(c); }
+      else if ((key === "u" || key === "U") && has(c.to, uid)) { e.preventDefault(); upd(c, { readBy: arrayRemove(uid) }); setCurId(null); }
+      else if ((key === "r" || key === "R") && c.fromUid !== uid && statusOf(c) === "sent") { e.preventDefault(); reply(c, false); }
+      else if ((key === "a" || key === "A") && c.fromUid !== uid && statusOf(c) === "sent") { e.preventDefault(); reply(c, true); }
+      else if ((key === "f" || key === "F") && statusOf(c) === "sent") { e.preventDefault(); forward(c); }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }); // eslint-disable-line react-hooks/exhaustive-deps
   const groupOf = (m) => (box === "scheduled" ? "예약" : dayLabel(toMs(m.at)));
   const style = height ? { height } : undefined;
 
@@ -617,7 +769,7 @@ export function MailWorkspace({ company, myName, box, setBox, openId, embedded =
   }
 
   return (
-    <div className={`flex min-h-0 bg-white ${embedded ? "rounded-[20px] overflow-hidden border border-[#E3E8F0] shadow-[0_10px_30px_rgba(15,26,48,0.06)]" : "flex-1"}`} style={style}>
+    <div ref={rootRef} data-kp-mail-ws data-kp-popup={selected.length ? "1" : undefined} className={`flex min-h-0 bg-white ${embedded ? "rounded-[20px] overflow-hidden border border-[#E3E8F0] shadow-[0_10px_30px_rgba(15,26,48,0.06)]" : "flex-1"}`} style={style}>
       {/* 목록 */}
       <section className={`${cur ? "hidden lg:flex" : "flex"} lg:w-[400px] flex-1 lg:flex-none flex-col border-r border-[#E3E8F0] min-w-0`}>
         <div className="px-4 pt-4 pb-3 border-b border-[#EEF1F6] space-y-2.5">
@@ -632,38 +784,67 @@ export function MailWorkspace({ company, myName, box, setBox, openId, embedded =
               {embedded && <button type="button" onClick={() => setCompose({})} className="h-9 px-3.5 rounded-xl bg-[#0F1A30] text-white text-[13px] font-black inline-flex items-center gap-1.5"><ShellIcon name="pen" size={14} />메일 쓰기</button>}
             </div>
           </div>
-          <div className="relative">
-            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="제목·내용·사람 검색" className="w-full h-10 pl-9 pr-3 rounded-xl border border-[#DCE3EE] bg-[#F8FAFD] text-[13.5px] font-semibold outline-none focus:border-[#4B6CB7] focus:bg-white" />
-            <svg className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9AA9C3]" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
+          <div className="flex items-center gap-1.5">
+            <div className="relative flex-1 min-w-0">
+              <input ref={searchRef} data-mail-search value={q} onChange={(e) => setQ(e.target.value)}
+                placeholder={{ all: "제목·내용·사람 검색 ( / )", from: "보낸 사람 이름·주소", subject: "제목에서 찾기", body: "본문에서 찾기" }[field]}
+                className="w-full h-10 pl-9 pr-8 rounded-xl border border-[#DCE3EE] bg-[#F8FAFD] text-[13.5px] font-semibold outline-none focus:border-[#4B6CB7] focus:bg-white" />
+              <svg className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9AA9C3]" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
+              {q && <button type="button" onClick={() => setQ("")} title="검색어 지우기" className="absolute right-2 top-1/2 -translate-y-1/2 w-6 h-6 rounded-md text-[#9AA9C3] hover:text-[#0F1A30] hover:bg-white">✕</button>}
+            </div>
+            <button type="button" data-mail-adv onClick={() => setShowAdv((v) => !v)} title="상세 검색(찾을 곳·기간)"
+              className={`h-10 px-3 rounded-xl text-[12.5px] font-black border shrink-0 ${showAdv || field !== "all" || period !== "all" ? "bg-[#0F1A30] text-white border-[#0F1A30]" : "bg-white text-[#3A4A66] border-[#DCE3EE]"}`}>
+              상세{field !== "all" || period !== "all" ? " ●" : ""}
+            </button>
           </div>
+          {/* ⭐ 2026-11-06 상세 검색 — 찾을 곳 · 기간 */}
+          {showAdv && (
+            <div data-mail-adv-panel className="rounded-xl border border-[#E3E8F0] bg-[#FAFBFD] px-3 py-2.5 space-y-2">
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className="w-12 text-[12px] font-black text-[#7A879C]">찾을 곳</span>
+                {[["all", "전체"], ["from", "보낸 사람"], ["subject", "제목"], ["body", "본문"]].map(([k, l]) => (
+                  <button key={k} type="button" onClick={() => setField(k)} className={`h-7 px-2.5 rounded-lg text-[12px] font-bold border ${field === k ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-[#3A4A66] border-[#DCE3EE]"}`}>{l}</button>
+                ))}
+              </div>
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className="w-12 text-[12px] font-black text-[#7A879C]">기간</span>
+                {[["all", "전체"], ["today", "오늘"], ["7d", "1주"], ["30d", "1개월"], ["90d", "3개월"]].map(([k, l]) => (
+                  <button key={k} type="button" onClick={() => setPeriod(k)} className={`h-7 px-2.5 rounded-lg text-[12px] font-bold border ${period === k ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-[#3A4A66] border-[#DCE3EE]"}`}>{l}</button>
+                ))}
+                {(field !== "all" || period !== "all") && <button type="button" onClick={() => { setField("all"); setPeriod("all"); }} className="ml-auto text-[12px] font-bold text-[#4B6CB7]">초기화</button>}
+              </div>
+            </div>
+          )}
           <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
             {[["all", "전체"], ...(isOutbox ? [] : [["unread", "안읽음"]]), ["attach", "첨부"], ["important", "중요"], ["starred", "별표"]].map(([k, l]) => (
               <button key={k} type="button" onClick={() => setChip(k)} className={`h-7 px-3 rounded-full text-[12px] font-bold shrink-0 border ${chip === k ? "bg-[#0F1A30] text-white border-[#0F1A30]" : "bg-white text-[#5B6B85] border-[#DCE3EE]"}`}>{l}</button>
             ))}
           </div>
         </div>
-        <div className="px-4 h-10 border-b border-[#EEF1F6] flex items-center gap-1.5 bg-[#FAFBFD]">
-          <input type="checkbox" checked={allSel} onChange={() => setSel(allSel ? new Set() : new Set(shown.map((m) => m.id)))} className="w-4 h-4 accent-[#1B2B4B]" title="전체 선택" />
-          {sel.size > 0 ? (
+        <div data-mail-bulkbar className={`px-4 min-h-[44px] py-1.5 border-b border-[#EEF1F6] flex flex-wrap items-center gap-1.5 ${selected.length ? "bg-[#EEF3FB]" : "bg-[#FAFBFD]"}`}>
+          <input type="checkbox" checked={allSel} onChange={() => { setSel(allSel ? new Set() : new Set(shown.map((m) => m.id))); lastPickRef.current = -1; }} className="w-4 h-4 accent-[#1B2B4B]" title="전체 선택 (Ctrl+A)" />
+          {selected.length > 0 ? (
             <>
-              <span className="text-[12px] font-black text-[#0F1A30] mr-1">{sel.size}통</span>
+              <span className="text-[12.5px] font-black text-[#0F1A30] mr-1 tabular-nums">{selected.length}통 선택</span>
               {box === "trash" ? (
                 <>
-                  <button type="button" onClick={() => bulk("restore")} className="h-7 px-2.5 rounded-lg text-[12px] font-bold text-[#1B2B4B] hover:bg-white border border-transparent hover:border-[#DCE3EE]">복원</button>
-                  <button type="button" onClick={() => bulk("purge")} className="h-7 px-2.5 rounded-lg text-[12px] font-bold text-[#1B2B4B] hover:bg-white border border-transparent hover:border-[#DCE3EE]">영구삭제</button>
+                  <button type="button" onClick={() => bulk("restore")} className="h-8 px-3 rounded-lg text-[12.5px] font-bold text-[#1B2B4B] bg-white border border-[#DCE3EE] hover:border-[#4B6CB7]">복원</button>
+                  <button type="button" data-mail-bulk-purge onClick={() => bulk("purge")} className="h-8 px-3.5 rounded-lg text-[12.5px] font-black text-white bg-[#0F1A30] border border-[#0F1A30]">영구삭제 {selected.length}통</button>
                 </>
               ) : (
                 <>
-                  {!isOutbox && <button type="button" onClick={() => bulk("read")} className="h-7 px-2.5 rounded-lg text-[12px] font-bold text-[#1B2B4B] hover:bg-white border border-transparent hover:border-[#DCE3EE]">읽음</button>}
-                  {!isOutbox && <button type="button" onClick={() => bulk("unread")} className="h-7 px-2.5 rounded-lg text-[12px] font-bold text-[#1B2B4B] hover:bg-white border border-transparent hover:border-[#DCE3EE]">안읽음</button>}
-                  {!["drafts", "scheduled"].includes(box) && <button type="button" onClick={() => bulk("star")} className="h-7 px-2.5 rounded-lg text-[12px] font-bold text-[#1B2B4B] hover:bg-white border border-transparent hover:border-[#DCE3EE]">별표</button>}
-                  <button type="button" onClick={() => bulk("delete")} className="h-7 px-2.5 rounded-lg text-[12px] font-bold text-[#1B2B4B] hover:bg-white border border-transparent hover:border-[#DCE3EE]">삭제</button>
+                  {!isOutbox && <button type="button" onClick={() => bulk("read")} className="h-8 px-3 rounded-lg text-[12.5px] font-bold text-[#1B2B4B] bg-white border border-[#DCE3EE] hover:border-[#4B6CB7]">읽음</button>}
+                  {!isOutbox && <button type="button" onClick={() => bulk("unread")} className="h-8 px-3 rounded-lg text-[12.5px] font-bold text-[#1B2B4B] bg-white border border-[#DCE3EE] hover:border-[#4B6CB7]">안읽음</button>}
+                  {!["drafts", "scheduled"].includes(box) && <button type="button" onClick={() => bulk("star")} className="h-8 px-3 rounded-lg text-[12.5px] font-bold text-[#1B2B4B] bg-white border border-[#DCE3EE] hover:border-[#4B6CB7]">별표</button>}
+                  <button type="button" data-mail-bulk-delete onClick={() => bulk("delete")} className="h-8 px-3.5 rounded-lg text-[12.5px] font-black text-white bg-[#0F1A30] border border-[#0F1A30]">삭제 {selected.length}통</button>
                 </>
               )}
             </>
           ) : (
-            <span className="text-[12px] font-bold text-[#9AA9C3]">{box === "inbox" || box === "unread" ? `안 읽은 메일 ${counts.unread}통` : `${list.length}통`}</span>
+            <span className="text-[12px] font-bold text-[#9AA9C3]">{box === "inbox" || box === "unread" ? `안 읽은 메일 ${counts.unread}통` : `${list.length}통`}{kw || field !== "all" || period !== "all" ? ` · 검색 ${list.length}통` : ""}</span>
           )}
+          {selected.length > 0 && <button type="button" onClick={() => setSel(new Set())} className="lg:hidden ml-auto h-8 px-2.5 rounded-lg text-[12px] font-bold text-[#5B6B85] hover:bg-white">선택 해제</button>}
+          {!selected.length && <button type="button" onClick={() => setShowKeys((v) => !v)} title="단축키 ( ? )" className="hidden lg:inline-flex ml-auto h-7 px-2 rounded-lg text-[11.5px] font-bold text-[#7A879C] hover:bg-white items-center">단축키</button>}
         </div>
         <div className="flex-1 overflow-y-auto">
           {loading ? <div className="py-20 text-center text-[13.5px] text-[#9AA9C3]">메일 불러오는 중…</div>
@@ -688,9 +869,14 @@ export function MailWorkspace({ company, myName, box, setBox, openId, embedded =
               return (
                 <React.Fragment key={m.id}>
                   {showG && box !== "scheduled" && <div className="px-4 pt-3 pb-1 text-[11px] font-black tracking-wider text-[#9AA9C3] bg-white">{g}</div>}
-                  <div onClick={() => setCurId(m.id)} className={`group flex gap-2.5 px-4 py-3 border-b border-[#F1F4F9] cursor-pointer transition ${on ? "bg-[#EEF3FB]" : unreadOne ? "bg-white hover:bg-[#F8FAFD]" : "bg-white hover:bg-[#F8FAFD]"}`}>
+                  <div data-mail-row={m.id} onClick={(e) => {
+                    // Shift/Ctrl+클릭 = 선택 · 휴대폰에서 이미 고르는 중이면 눌러서 더 고르기(카톡·지메일처럼)
+                    const narrow = typeof window !== "undefined" && window.matchMedia && !window.matchMedia("(min-width: 1024px)").matches;
+                    if (e.shiftKey || e.ctrlKey || e.metaKey || (narrow && sel.size > 0)) { pick(m, i, e.shiftKey); return; }
+                    setCurId(m.id); lastPickRef.current = i;
+                  }} className={`group flex gap-2.5 px-4 py-3 border-b border-[#F1F4F9] cursor-pointer transition ${on ? "bg-[#EEF3FB]" : sel.has(m.id) ? "bg-[#F3F6FC]" : unreadOne ? "bg-white hover:bg-[#F8FAFD]" : "bg-white hover:bg-[#F8FAFD]"}`}>
                     <div className="flex flex-col items-center gap-1.5 pt-0.5" onClick={(e) => e.stopPropagation()}>
-                      <input type="checkbox" checked={sel.has(m.id)} onChange={() => setSel((p) => { const n = new Set(p); n.has(m.id) ? n.delete(m.id) : n.add(m.id); return n; })} className="w-4 h-4 accent-[#1B2B4B]" />
+                      <input type="checkbox" data-mail-check={m.id} checked={sel.has(m.id)} onChange={() => {}} onClick={(e) => pick(m, i, e.shiftKey)} title="Shift+클릭: 여러 통 한 번에" className="w-4 h-4 accent-[#1B2B4B]" />
                       {!["drafts", "scheduled"].includes(box) && (
                         <button type="button" onClick={() => toggleStar(m)} title="별표" className={star ? "text-[#1B2B4B]" : "text-[#C9D2E0] hover:text-[#7A879C]"}>
                           <svg width="15" height="15" viewBox="0 0 24 24" fill={star ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2" strokeLinejoin="round"><path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2L12 17.3 6.4 20.2l1.1-6.2L3 9.6l6.2-.9z" /></svg>
@@ -717,6 +903,13 @@ export function MailWorkspace({ company, myName, box, setBox, openId, embedded =
                         {box === "sent" && others.length > 0 && <span className={`text-[11px] font-bold shrink-0 ${readN === others.length ? "text-[#1B2B4B]" : "text-[#9AA9C3]"}`}>{readN}/{others.length} 읽음</span>}
                       </div>
                     </div>
+                    {/* ⭐ 2026-11-06 첨부 미리보기 — 첫 사진을 작게(누르면 크게) */}
+                    {(m.images || []).length > 0 && (
+                      <button type="button" onClick={(e) => { e.stopPropagation(); setView(m.images[0]); }} title="첨부 사진 크게 보기" className="relative self-center shrink-0 w-11 h-11 rounded-lg overflow-hidden border border-[#E3E8F0] bg-[#F5F8FD]">
+                        <img src={m.images[0]} alt="" className="w-full h-full object-cover" />
+                        {m.images.length > 1 && <span className="absolute right-0 bottom-0 px-1 rounded-tl-md bg-[#0F1A30]/80 text-white text-[10px] font-black tabular-nums">+{m.images.length - 1}</span>}
+                      </button>
+                    )}
                   </div>
                 </React.Fragment>
               );
@@ -727,7 +920,43 @@ export function MailWorkspace({ company, myName, box, setBox, openId, embedded =
 
       {/* 읽기 */}
       <section className={`${cur ? "flex" : "hidden lg:flex"} flex-1 flex-col min-w-0 bg-[#F4F6FA]`}>
-        {!cur ? (
+        {selected.length >= 2 || (selected.length === 1 && !cur) ? (
+          // ⭐ 2026-11-06 여러 통을 고르면 오른쪽에 "선택한 메일" 창 — 고른 메일 전부에 한 번에 적용
+          <div data-mail-selpanel className="flex-1 flex flex-col items-center justify-center px-6">
+            <div className="w-full max-w-[440px] bg-white rounded-[20px] border border-[#E3E8F0] shadow-[0_14px_36px_rgba(15,26,48,0.08)] overflow-hidden">
+              <div className="px-5 py-4 text-white" style={{ background: "linear-gradient(120deg,#0F1A30 0%,#1B2B4B 62%,#2D4C82 100%)" }}>
+                <div className="text-[10.5px] font-extrabold tracking-[0.24em] text-[#8FB0F0]">SELECTED</div>
+                <div className="text-[19px] font-black tabular-nums">메일 {selected.length}통 선택됨</div>
+              </div>
+              <div className="px-5 py-3 max-h-[220px] overflow-y-auto divide-y divide-[#F1F4F9]">
+                {selected.slice(0, 8).map((m) => (
+                  <div key={m.id} className="py-2 flex items-center gap-2 min-w-0">
+                    <span className="text-[13px] font-bold text-[#3A4A66] shrink-0 max-w-[110px] truncate">{m.fromUid === uid ? `→ ${(m.toNames || m.pendingToNames || [])[0] || "나"}` : m.fromName}</span>
+                    <span className="text-[13px] text-[#0F1A30] truncate">{m.subject || "(제목 없음)"}</span>
+                  </div>
+                ))}
+                {selected.length > 8 && <div className="py-2 text-[12.5px] font-bold text-[#7A879C]">외 {selected.length - 8}통</div>}
+              </div>
+              <div className="px-5 pb-5 pt-2 flex flex-wrap gap-2">
+                {box === "trash" ? (
+                  <>
+                    <button type="button" onClick={() => bulk("restore")} className="h-10 px-4 rounded-xl border border-[#DCE3EE] bg-white text-[#0F1A30] text-[13.5px] font-black">복원</button>
+                    <button type="button" data-mail-sel-purge onClick={() => bulk("purge")} className="h-10 px-4 rounded-xl bg-[#0F1A30] text-white text-[13.5px] font-black">영구삭제 {selected.length}통</button>
+                  </>
+                ) : (
+                  <>
+                    <button type="button" data-mail-sel-delete onClick={() => bulk("delete")} className="h-10 px-4 rounded-xl bg-[#0F1A30] text-white text-[13.5px] font-black">삭제 {selected.length}통</button>
+                    {!isOutbox && <button type="button" onClick={() => bulk("read")} className="h-10 px-4 rounded-xl border border-[#DCE3EE] bg-white text-[#0F1A30] text-[13.5px] font-bold">읽음 표시</button>}
+                    {!isOutbox && <button type="button" onClick={() => bulk("unread")} className="h-10 px-4 rounded-xl border border-[#DCE3EE] bg-white text-[#0F1A30] text-[13.5px] font-bold">안읽음 표시</button>}
+                    {!["drafts", "scheduled"].includes(box) && <button type="button" onClick={() => bulk("star")} className="h-10 px-4 rounded-xl border border-[#DCE3EE] bg-white text-[#0F1A30] text-[13.5px] font-bold">별표</button>}
+                  </>
+                )}
+                <button type="button" onClick={() => setSel(new Set())} className="h-10 px-4 rounded-xl text-[#5B6B85] text-[13.5px] font-bold hover:bg-[#F5F8FD]">선택 해제 (Esc)</button>
+              </div>
+            </div>
+            <div className="mt-3 text-[12px] text-[#9AA9C3]">Shift+클릭으로 범위 선택 · Ctrl+A 전체 선택 · Delete 삭제</div>
+          </div>
+        ) : !cur ? (
           <div className="flex-1 flex flex-col items-center justify-center text-center px-6">
             <div className="w-16 h-16 rounded-[20px] flex items-center justify-center text-white" style={{ background: "linear-gradient(135deg,#0F1A30,#2D4C82)" }}><ShellIcon name="mail" size={28} /></div>
             <div className="mt-4 text-[16px] font-black text-[#0F1A30]">메일을 고르면 여기에서 읽을 수 있습니다</div>
@@ -816,6 +1045,21 @@ export function MailWorkspace({ company, myName, box, setBox, openId, embedded =
         })()}
       </section>
       {view && <ImageViewer src={view} onClose={() => setView(null)} />}
+      {showKeys && createPortal(
+        <div className="fixed inset-0 z-[2000000] bg-[#0F1A30]/45 flex items-center justify-center p-4" onClick={() => setShowKeys(false)}>
+          <div data-mail-keys className="w-[min(420px,100%)] bg-white rounded-[20px] overflow-hidden shadow-[0_24px_60px_rgba(15,26,48,0.35)]" onClick={(e) => e.stopPropagation()}>
+            <div className="px-5 py-4 text-white" style={{ background: "linear-gradient(120deg,#0F1A30 0%,#1B2B4B 62%,#2D4C82 100%)" }}>
+              <div className="text-[10.5px] font-extrabold tracking-[0.24em] text-[#8FB0F0]">SHORTCUTS</div>
+              <div className="text-[18px] font-black">메일함 단축키</div>
+            </div>
+            <div className="px-5 py-3 grid grid-cols-[auto,1fr] gap-x-4 gap-y-2 text-[13.5px]">
+              {[["↑ ↓ / K J", "이전 · 다음 메일"], ["Shift + ↑ ↓", "선택하며 이동"], ["Shift + 클릭", "범위 선택"], ["X", "지금 메일 선택"], ["Ctrl + A", "보이는 메일 모두 선택"], ["Delete", "선택한 메일(없으면 지금 메일) 삭제"], ["S", "별표"], ["U", "안읽음으로"], ["R / A", "답장 / 전체 답장"], ["F", "전달"], ["/", "검색칸으로"], ["Esc", "선택 해제 · 닫기"]].map(([a, b]) => (
+                <React.Fragment key={a}><span className="font-black text-[#0F1A30] whitespace-nowrap">{a}</span><span className="text-[#3A4A66]">{b}</span></React.Fragment>
+              ))}
+            </div>
+            <div className="px-5 pb-4 pt-1"><button type="button" onClick={() => setShowKeys(false)} className="w-full h-10 rounded-xl bg-[#0F1A30] text-white text-[13.5px] font-black">닫기</button></div>
+          </div>
+        </div>, document.body)}
     </div>
   );
 }
@@ -838,7 +1082,7 @@ export function MailCenter({ company, myName, onClose, openId }) {
     );
   };
   return createPortal(
-    <div className="fixed inset-0 z-[1000000] bg-[#0F1A30]/45 flex items-center justify-center p-0 sm:p-5" onClick={onClose}>
+    <div data-kp-mailcenter className="fixed inset-0 z-[1000000] bg-[#0F1A30]/45 flex items-center justify-center p-0 sm:p-5" onClick={onClose}>
       <div className="w-full h-full sm:h-[88vh] max-w-[1320px] bg-[#F4F6FA] sm:rounded-[24px] shadow-[0_24px_60px_rgba(15,26,48,0.35)] flex flex-col sm:flex-row overflow-hidden" onClick={(e) => e.stopPropagation()}>
         <aside className="sm:w-[228px] shrink-0 p-3 sm:p-4 flex sm:flex-col gap-1.5 text-white overflow-x-auto sm:overflow-y-auto no-scrollbar" style={{ background: "linear-gradient(170deg, #0F1A30 0%, #1B2B4B 60%, #2D4C82 100%)" }}>
           <div className="hidden sm:block px-2 pb-3 mb-1 border-b border-white/10">
