@@ -79,6 +79,7 @@ const ChangePassword = React.lazy(() => import("./ChangePassword"));
 const PlatformCenter = React.lazy(() => import("./PlatformCenter"));
 const EntryChooser = React.lazy(() => import("./PlatformCenter").then((m) => ({ default: m.EntryChooser })));
 const ContractSign = React.lazy(() => import("./ContractSign"));
+const DriverGuidePage = React.lazy(() => import("./DriverAppGuide")); // ⭐ 2026-11-06 기사앱 안내 공개 페이지(/driver-guide)
 
 // ⭐ 관리자 겸 개발자 계정 — 배차/화주/모바일 등 프로그램 어디서든, users 문서
 // 상태(role 필드 오타, 퇴사 처리, 문서 자체가 없는 경우 등)와 무관하게 무조건
@@ -793,6 +794,11 @@ export default function App() {
   const signMatch = window.location.pathname.match(/^\/sign\/([A-Za-z0-9_-]+)$/);
   if (signMatch) {
     return <Router><Routes><Route path="*" element={<React.Suspense fallback={null}><ContractSign id={signMatch[1]} /></React.Suspense>} /></Routes></Router>;
+  }
+
+  // ⭐ 2026-11-06 기사앱 설치·사용 안내(/driver-guide) — 로그인 없이 기사님이 문자·카카오톡 링크로 연다
+  if (window.location.pathname === "/driver-guide" || window.location.pathname === "/driver-guide/") {
+    return <Router><Routes><Route path="*" element={<React.Suspense fallback={null}><DriverGuidePage /></React.Suspense>} /></Routes></Router>;
   }
 
   // 로딩/스플래시 — ⭐ 2026-10-28 디지털 리디자인(네이비 + 디지털 로고 마크). index.html의 첫 화면과 똑같이 생겨서

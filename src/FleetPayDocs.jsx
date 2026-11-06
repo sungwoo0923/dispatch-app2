@@ -27,6 +27,7 @@ import { TimeSelect, korTimeLabel, MonthPicker, kstYm } from "./kpInputs";
 import { scanPenaltyImage, parsePenaltyText } from "./penaltyScan";
 import { savePng as savePngA4, savePdf as savePdfA4, printA4 } from "./a4Export";
 import { fmtPhone } from "./formatInput";
+import useNarrow from "./useNarrow"; // ⭐ 2026-11-06 휴대폰 폭 카드 목록
 
 const toInt = (v) => parseInt(String(v ?? "0").replace(/[^\d-]/g, ""), 10) || 0;
 const CANCELED = ["배차취소", "취소", "오더취소", "취소됨"];
@@ -50,6 +51,13 @@ const TH = "px-3 py-3.5 text-left text-[15px] font-black whitespace-nowrap";
 const TD = "px-3 py-3.5 text-[15px] whitespace-nowrap";
 const NUM = "text-[16px] font-black text-[#0B1428]";
 const Chip = ({ children, dark, soft }) => <span className={`inline-flex items-center h-7 px-2.5 rounded-lg text-[14px] font-black whitespace-nowrap ${dark ? "bg-[#0F1A30] text-white" : soft ? "bg-[#F3F6FA] text-[#5B6B85] border border-[#E3E8F0]" : "bg-[#EEF3FC] text-[#1B2B4B] border border-[#C9D6EE]"}`}>{children}</span>;
+// ⭐ 2026-11-06 가입유형(지입/직영/임대 = drivers.등급) 칩 — 지입차관리 차량 관리와 같은 색
+const JOIN_STYLE = { 지입: "bg-[#1B2B4B] text-white border-[#1B2B4B]", 직영: "bg-[#E6F2EF] text-[#0F5F57] border-[#B9DCD5]", 임대: "bg-[#EEF3FB] text-[#2D4C82] border-[#C9D7EE]" };
+export const JoinChip = ({ v, onDark = false }) => {
+  const k = String(v || "").trim();
+  if (!k) return <span className="text-[14px] font-bold text-[#5B6B85]">-</span>;
+  return <span className={`inline-flex items-center h-7 px-2.5 rounded-lg border text-[14px] font-black whitespace-nowrap ${onDark && k === "지입" ? "bg-white text-[#0F1A30] border-white" : JOIN_STYLE[k] || "bg-[#F3F6FA] text-[#3A4A66] border-[#E3E8F0]"}`}>{k}</span>;
+};
 const Label = ({ children, sub }) => <div className="text-[14px] font-black text-[#3A4A66] mb-1.5 whitespace-nowrap">{children}{sub && <span className="ml-1.5 text-[14px] font-semibold text-[#5B6B85]">{sub}</span>}</div>;
 
 function Hero({ en, title, desc, children }) {
@@ -182,7 +190,7 @@ function useStatements({ drivers, dispatchData, co, ym, vatMode, includeEmpty = 
     const bankCheck = d.정산계좌?.acct ? validateAccount(d.정산계좌.bank, d.정산계좌.acct) : { ok: false, level: "error", msg: "계좌 미등록" };
     return {
       key: d.id, d, trips, gross, vat, auto, deductions, deductTotal, extra, penIds: penList.map((p) => p.id), net: gross + vat - deductTotal, bankCheck,
-      st: { companyName: co, driverId: d.appUid || d.id, driverKey: d.id, driverName: name, carNo: plate, phone: d.전화번호 || "", period: ym, from, to, trips, gross, vat, deductions, deductTotal, net: gross + vat - deductTotal, bank: d.정산계좌 || null, bizNo: d.사업자번호 || "", bizName: d.사업자상호 || "" },
+      st: { companyName: co, driverId: d.appUid || d.id, driverKey: d.id, driverName: name, joinType: d.등급 || "", carNo: plate, phone: d.전화번호 || "", period: ym, from, to, trips, gross, vat, deductions, deductTotal, net: gross + vat - deductTotal, bank: d.정산계좌 || null, bizNo: d.사업자번호 || "", bizName: d.사업자상호 || "" },
     };
   }).filter((r) => includeEmpty || r.trips.length || r.deductTotal), [drivers, dispatchData, from, to, ym, vatMode, penalties, edits, JSON.stringify(defDeds), co, includeEmpty]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -273,6 +281,7 @@ export function BatchStatementsPanel({ drivers = [], dispatchData = [], companyN
     setDedEdit(null);
   };
   const cur = preview != null ? shown[preview] : null;
+  const narrow = useNarrow(); // ⭐ 2026-11-06 휴대폰 폭 — 표 대신 카드
 
   return (
     <div>
@@ -287,7 +296,7 @@ export function BatchStatementsPanel({ drivers = [], dispatchData = [], companyN
       </Hero>
 
       <div className={`${card} p-4 mb-3 flex items-center gap-2 flex-wrap`}>
-        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="기사명 · 차량번호 · 전화번호 찾기" className={`${inp} w-64`} />
+        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="기사명 · 차량번호 · 전화번호 찾기" className={`${inp} w-64 max-w-full`} />
         <VatToggle value={vatMode} onChange={setVatMode} />
         <button type="button" onClick={() => setDedEdit({ key: "__common__", title: "공통 공제", sub: "모든 기사님 명세서에 똑같이 들어갑니다", value: defDeds })} className={btnL}>
           공통 공제 {defDeds.length ? `${defDeds.length}건 · ${won(defDeds.reduce((s, d) => s + toInt(d.amount), 0))}원` : "설정"}
@@ -305,12 +314,40 @@ export function BatchStatementsPanel({ drivers = [], dispatchData = [], companyN
         </div>
       </div>
 
-      <div className={`${card} overflow-x-auto`}>
-        <table className="w-full min-w-[1680px]">
+      {narrow && (
+        <div className="flex flex-col gap-2">
+          <label className="flex items-center gap-2 px-1 text-[14px] font-bold text-[#1B2B4B]"><input type="checkbox" className="w-5 h-5" checked={allOn} onChange={() => setSel(allOn ? new Set() : new Set(shown.map((r) => r.key)))} />전체 선택 · {shown.length}명 · 실지급 {won(totals.net)}원</label>
+          {shown.map((r, i) => (
+            <div key={r.key} className={`${card} p-3.5 ${sel.has(r.key) ? "ring-2 ring-[#2D4C82]" : ""}`}>
+              <div className="flex items-center gap-2 flex-wrap">
+                <input type="checkbox" className="w-5 h-5" checked={sel.has(r.key)} onChange={() => toggle(r.key)} />
+                <span className="text-[16px] font-black text-[#0F1A30]">{r.d.이름}</span>
+                <span className="text-[14px] font-bold text-[#3A4A66]">{r.d.차량번호 || "-"}</span>
+                <JoinChip v={r.d.등급} />
+                <span className="ml-auto"><StatusChip s={sent[r.key]} /></span>
+              </div>
+              <div className="mt-1.5 text-[14px] text-[#3A4A66] break-words">{(r.d.전화번호 && (fmtPhone(r.d.전화번호) || r.d.전화번호)) || "-"}{!r.d.appUid ? " · 앱 미가입" : ""} · {r.d.정산계좌?.acct ? acctLine(r.d.정산계좌) : "계좌 미등록"}</div>
+              <div className="mt-2 grid grid-cols-3 gap-1.5 text-center">
+                {[["운행", `${r.trips.length}건`], ["공제", r.deductTotal ? `-${won(r.deductTotal)}` : "0"], ["실지급", won(r.net)]].map(([k, v], j) => (
+                  <div key={k} className={`rounded-lg py-1.5 ${j === 2 ? "bg-[#0F1A30] text-white" : "bg-[#F5F8FD] border border-[#E3E8F0] text-[#0F1A30]"}`}><div className={`text-[14px] font-bold ${j === 2 ? "text-[#8FB0F0]" : "text-[#5B6B85]"}`}>{k}</div><div className="text-[15px] font-black tabular-nums">{v}</div></div>
+                ))}
+              </div>
+              <div className="mt-2 flex gap-1.5 flex-wrap">
+                <button type="button" onClick={() => setDedEdit({ key: r.key, title: `${r.d.이름} 기사님 공제`, sub: "자동 공제(■)와 이번 달 추가 공제를 함께 봅니다", value: r.extra, auto: r.auto, gross: r.gross })} className="h-10 px-3 rounded-lg border border-[#DCE3EE] text-[14px] font-black text-[#1B2B4B]">공제 {r.deductions.length}건</button>
+                <button type="button" onClick={() => setPreview(i)} className="h-10 px-3 rounded-lg border border-[#DCE3EE] text-[14px] font-black text-[#1B2B4B]">보기</button>
+                <button type="button" onClick={() => sendSelected(new Set([r.key]))} className="ml-auto h-10 px-4 rounded-lg bg-[#1B2B4B] text-white text-[14px] font-black">발송</button>
+              </div>
+            </div>
+          ))}
+          {!shown.length && <div className={`${card} py-14 text-center text-[15px] font-bold text-[#5B6B85]`}>{ym} 기간에 운행한 지입·직영·임대 기사님이 없습니다</div>}
+        </div>
+      )}
+      {!narrow && <div className={`${card} overflow-x-auto`}>
+        <table className="w-full min-w-[1780px]">
           <thead>
             <tr className="bg-[#0B1428] text-[#DCE6F7]">
               <th className="w-12 py-3.5"><input type="checkbox" className="w-4 h-4" checked={allOn} onChange={() => setSel(allOn ? new Set() : new Set(shown.map((r) => r.key)))} /></th>
-              {["순번", "차량번호", "기사명", "전화번호", "사업자번호", "사업자명", "정산 계좌", "계좌 확인", "건수", "운임", "부가세", "공제", "실지급액", "상태", ""].map((h, i) => <th key={i} className={`${TH} ${["건수", "운임", "부가세", "공제", "실지급액"].includes(h) ? "text-right" : ""}`}>{h}</th>)}
+              {["순번", "차량번호", "기사명", "가입유형", "전화번호", "사업자번호", "사업자명", "정산 계좌", "계좌 확인", "건수", "운임", "부가세", "공제", "실지급액", "상태", ""].map((h, i) => <th key={i} className={`${TH} ${["건수", "운임", "부가세", "공제", "실지급액"].includes(h) ? "text-right" : ""}`}>{h}</th>)}
             </tr>
           </thead>
           <tbody>
@@ -320,6 +357,7 @@ export function BatchStatementsPanel({ drivers = [], dispatchData = [], companyN
                 <td className={`${TD} text-[#5B6B85] font-bold tabular-nums`} style={{ fontFamily: MONO }}>{i + 1}</td>
                 <td className={`${TD} font-black text-[#0F1A30]`}>{r.d.차량번호 || "-"}</td>
                 <td className={`${TD} font-black text-[#0F1A30]`}>{r.d.이름}{!r.d.appUid && <span className="ml-1.5 text-[14px] font-bold text-[#5B6B85]">앱 미가입</span>}</td>
+                <td className={TD}><JoinChip v={r.d.등급} /></td>{/* ⭐ 2026-11-06 가입유형 칸 */}
                 <td className={`${TD} tabular-nums text-[#3A4A66]`}>{(r.d.전화번호 && (fmtPhone(r.d.전화번호) || r.d.전화번호)) || "-"}</td>
                 <td className={`${TD} tabular-nums text-[#3A4A66]`}>{r.d.사업자번호 ? fmtBiz(r.d.사업자번호) : "-"}</td>
                 <td className={`${TD} text-[#3A4A66]`}>{r.d.사업자상호 || "-"}</td>
@@ -343,12 +381,12 @@ export function BatchStatementsPanel({ drivers = [], dispatchData = [], companyN
                 </td>
               </tr>
             ))}
-            {!shown.length && <tr><td colSpan={16} className="py-20 text-center text-[15px] font-bold text-[#5B6B85]">{ym} 기간에 운행한 지입·직영·임대 기사님이 없습니다</td></tr>}
+            {!shown.length && <tr><td colSpan={17} className="py-20 text-center text-[15px] font-bold text-[#5B6B85]">{ym} 기간에 운행한 지입·직영·임대 기사님이 없습니다</td></tr>}
           </tbody>
           {shown.length > 0 && (
             <tfoot>
               <tr className="bg-[#F3F6FA] font-black text-[#0F1A30] text-[14.5px]">
-                <td /><td colSpan={8} className="px-3 py-3.5">합계 {shown.length}명</td>
+                <td /><td colSpan={9} className="px-3 py-3.5">합계 {shown.length}명</td>
                 <td className="px-3 text-right tabular-nums text-[16px]">{totals.n}</td>
                 <td className="px-3 text-right tabular-nums text-[16px]" style={{ fontFamily: MONO }}>{won(totals.gross)}</td>
                 <td className="px-3 text-right tabular-nums text-[16px]" style={{ fontFamily: MONO }}>{won(totals.vat)}</td>
@@ -358,15 +396,15 @@ export function BatchStatementsPanel({ drivers = [], dispatchData = [], companyN
             </tfoot>
           )}
         </table>
-      </div>
+      </div>}
 
       {dedEdit && <DeductionEditor title={dedEdit.title} sub={dedEdit.sub} value={dedEdit.value} auto={dedEdit.auto || []} gross={dedEdit.gross || 0} onSave={onSaveDed} onClose={() => setDedEdit(null)} />}
 
       {cur && (
         <div className="fixed inset-0 z-[99990] bg-[#0B1428]/55 flex justify-end">
           <div className="w-full max-w-[1000px] h-full bg-[#F3F6FA] flex flex-col shadow-2xl">
-            <div className="px-6 py-4 flex items-center gap-2 text-white" style={{ background: "linear-gradient(120deg,#0B1428,#1B2B4B 70%,#2D4C82)" }}>
-              <div className="min-w-0 flex-1">
+            <div className="px-4 sm:px-6 py-4 flex flex-wrap items-center gap-2 text-white" style={{ background: "linear-gradient(120deg,#0B1428,#1B2B4B 70%,#2D4C82)" }}>
+              <div className="min-w-[180px] flex-1">
                 <div className="text-[14px] font-extrabold tracking-[0.12em] text-[#8FB0F0]" style={{ fontFamily: MONO }}>PREVIEW · {preview + 1} / {shown.length}</div>
                 <div className="text-[20px] font-black truncate">{cur.d.이름} · {cur.d.차량번호}</div>
               </div>
@@ -374,8 +412,8 @@ export function BatchStatementsPanel({ drivers = [], dispatchData = [], companyN
               <button type="button" onClick={() => setPreview((p) => Math.min(shown.length - 1, p + 1))} disabled={preview >= shown.length - 1} className="h-11 w-11 rounded-xl bg-white/10 border border-white/20 text-[20px] font-black disabled:opacity-30">›</button>
               <button type="button" onClick={() => setPreview(null)} className="h-11 px-5 rounded-xl bg-white text-[#0F1A30] text-[14px] font-black">닫기</button>
             </div>
-            <div className="flex-1 overflow-y-auto p-6"><StatementDoc st={cur.st} supplier={supplier} /></div>
-            <div className="px-6 py-4 bg-white border-t border-[#E3E8F0] flex items-center gap-2">
+            <div className="flex-1 overflow-y-auto overflow-x-auto p-3 sm:p-6"><StatementDoc st={cur.st} supplier={supplier} /></div>
+            <div className="px-4 sm:px-6 py-4 bg-white border-t border-[#E3E8F0] flex flex-wrap items-center gap-2">
               <label className="flex items-center gap-2 text-[14px] font-bold text-[#1B2B4B]"><input type="checkbox" className="w-4 h-4" checked={sel.has(cur.key)} onChange={() => toggle(cur.key)} />발송 대상에 포함</label>
               <span className="ml-auto"><StatusChip s={sent[cur.key]} /></span>
               <button type="button" onClick={() => sendSelected(new Set([cur.key]))} className={btnD}>이 기사님에게 발송</button>
@@ -423,6 +461,7 @@ export function SingleStatementPanel({ drivers = [], dispatchData = [], companyN
     XLSX.writeFile(wb, `정산서_${cur.d.이름}_${ym}.xlsx`);
   };
   const doSend = async () => { setBusy(true); await send([cur]); setBusy(false); };
+  const narrow = useNarrow(); // ⭐ 2026-11-06 휴대폰 폭
 
   return (
     <div>
@@ -444,7 +483,7 @@ export function SingleStatementPanel({ drivers = [], dispatchData = [], companyN
                 <button key={r.key} type="button" onClick={() => setSelKey(r.key)} className={`w-full text-left px-4 py-3 border-b border-[#EEF1F6] transition ${on ? "bg-[#0F1A30] text-white" : "hover:bg-[#F5F8FD]"} ${r.trips.length || r.deductTotal ? "" : "opacity-55"}`}>
                   <div className="flex items-center gap-2">
                     <span className="text-[15px] font-black truncate flex-1">{r.d.이름} <span className={`text-[14px] font-bold ${on ? "text-white/85" : "text-[#5B6B85]"}`}>{r.d.차량번호}</span></span>
-                    <span className={`text-[14px] font-black px-1.5 py-0.5 rounded ${on ? "bg-white/15" : "bg-[#EEF3FC] text-[#1B2B4B]"}`}>{r.d.등급 || "지입"}</span>
+                    <JoinChip v={r.d.등급} onDark={on} />
                   </div>
                   <div className={`mt-1 flex items-center justify-between text-[14px] ${on ? "text-white/75" : "text-[#5B6B85]"}`}>
                     <span>{r.trips.length}건 · {sent[r.key] ? (sent[r.key].status === "confirmed" ? "확인 완료" : "발송됨") : "미발송"}</span>
@@ -462,7 +501,9 @@ export function SingleStatementPanel({ drivers = [], dispatchData = [], companyN
               <div className="flex items-start gap-4 flex-wrap">
                 <span className="w-14 h-14 rounded-2xl bg-[#0F1A30] text-white flex items-center justify-center text-[22px] font-black">{String(cur.d.이름).slice(0, 1)}</span>
                 <div className="min-w-0 flex-1">
-                  <div className="text-[22px] font-black text-[#0F1A30]">{cur.d.이름} <span className="text-[15px] font-bold text-[#5B6B85]">{cur.d.차량번호}</span></div>
+                  <div className="text-[22px] font-black text-[#0F1A30] flex items-center gap-2 flex-wrap">{cur.d.이름} <span className="text-[15px] font-bold text-[#5B6B85]">{cur.d.차량번호}</span>
+                    <span className="inline-flex items-center gap-1.5 text-[14px] font-bold text-[#5B6B85]">가입유형 <JoinChip v={cur.d.등급} /></span>{/* ⭐ 2026-11-06 가입유형 */}
+                  </div>
                   <div className="text-[14px] text-[#5B6B85] mt-0.5 flex flex-wrap gap-x-3">
                     <span>{(cur.d.전화번호 && (fmtPhone(cur.d.전화번호) || cur.d.전화번호)) || "-"}</span><span>사업자 {cur.d.사업자번호 ? fmtBiz(cur.d.사업자번호) : "-"}</span><span>{cur.d.사업자상호 || ""}</span>
                     <span>{cur.d.정산계좌?.acct ? acctLine(cur.d.정산계좌) : "계좌 미등록"}</span>
@@ -494,9 +535,21 @@ export function SingleStatementPanel({ drivers = [], dispatchData = [], companyN
             <div className={`${card} overflow-hidden`}>
               <div className="px-4 py-3 border-b border-[#EEF1F6] flex items-center gap-2">
                 <div className="text-[16px] font-black text-[#0F1A30]">운행 내역 <span className="text-[14px] font-bold text-[#5B6B85]">{ym}</span></div>
-                <input value={tq} onChange={(e) => setTq(e.target.value)} placeholder="거래처·상하차지·화물 거르기" className={`${inp} ml-auto w-72`} />
+                <input value={tq} onChange={(e) => setTq(e.target.value)} placeholder="거래처·상하차지·화물 거르기" className={`${inp} ml-auto w-72 max-w-full`} />
               </div>
-              <div className="overflow-x-auto">
+              {narrow && (
+                <div className="divide-y divide-[#EEF1F6]">
+                  {trips.map((t, i) => (
+                    <div key={i} className="px-4 py-3">
+                      <div className="flex items-center gap-2 flex-wrap"><span className="text-[14px] font-bold text-[#5B6B85] tabular-nums">{i + 1}</span><span className="text-[14px] font-bold tabular-nums">{t.date}</span><span className="text-[15px] font-black text-[#0F1A30] break-words">{t.client}</span>{t.route && <span className="text-[14px] font-black px-1.5 py-0.5 rounded bg-[#EEF3FC] text-[#1B2B4B]">고정</span>}<span className="ml-auto text-[15px] font-black tabular-nums">{won(t.fare)}원</span></div>
+                      <div className="mt-1 text-[14px] text-[#3A4A66] break-words">{t.from} → {t.to}{t.via ? ` (경유 ${t.via})` : ""}{t.cargo || t.ton ? ` · ${[t.cargo, t.ton].filter(Boolean).join(" ")}` : ""}</div>
+                    </div>
+                  ))}
+                  {!trips.length && <div className="py-14 text-center text-[14px] font-bold text-[#5B6B85]">{ym} 운행 내역이 없습니다</div>}
+                  {trips.length > 0 && <div className="px-4 py-3 bg-[#F3F6FA] font-black text-[14.5px] flex">합계 {trips.length}건<span className="ml-auto tabular-nums">{won(trips.reduce((s, t) => s + t.fare, 0))}원</span></div>}
+                </div>
+              )}
+              {!narrow && <div className="overflow-x-auto">
                 <table className="w-full min-w-[1100px]">
                   <thead><tr className="bg-[#0B1428] text-[#DCE6F7]">{["순번", "상차일", "거래처", "상차지", "경유", "하차지", "화물", "톤수", "기사운임"].map((h) => <th key={h} className={`${TH} ${h === "기사운임" ? "text-right" : ""}`}>{h}</th>)}</tr></thead>
                   <tbody>
@@ -517,7 +570,7 @@ export function SingleStatementPanel({ drivers = [], dispatchData = [], companyN
                   </tbody>
                   {trips.length > 0 && <tfoot><tr className="bg-[#F3F6FA] font-black text-[14.5px]"><td colSpan={8} className="px-3 py-3">합계 {trips.length}건</td><td className="px-3 text-right tabular-nums" style={{ fontFamily: MONO }}>{won(trips.reduce((s, t) => s + t.fare, 0))}</td></tr></tfoot>}
                 </table>
-              </div>
+              </div>}
             </div>
           </div>
         )}
@@ -526,8 +579,8 @@ export function SingleStatementPanel({ drivers = [], dispatchData = [], companyN
       {preview && cur && (
         <div className="fixed inset-0 z-[99990] bg-[#0B1428]/55 flex justify-end">
           <div className="w-full max-w-[1000px] h-full bg-[#F3F6FA] flex flex-col shadow-2xl">
-            <div className="px-6 py-4 flex items-center gap-2 text-white" style={{ background: "linear-gradient(120deg,#0B1428,#1B2B4B 70%,#2D4C82)" }}>
-              <div className="min-w-0 flex-1">
+            <div className="px-4 sm:px-6 py-4 flex flex-wrap items-center gap-2 text-white" style={{ background: "linear-gradient(120deg,#0B1428,#1B2B4B 70%,#2D4C82)" }}>
+              <div className="min-w-[180px] flex-1">
                 <div className="text-[14px] font-extrabold tracking-[0.12em] text-[#8FB0F0]" style={{ fontFamily: MONO }}>STATEMENT · {ym}</div>
                 <div className="text-[20px] font-black truncate">{cur.d.이름} · {cur.d.차량번호}</div>
               </div>
@@ -536,7 +589,7 @@ export function SingleStatementPanel({ drivers = [], dispatchData = [], companyN
               <button type="button" onClick={savePdf} className="h-11 px-4 rounded-xl bg-white/10 border border-white/20 text-[14px] font-black">PDF 저장</button>
               <button type="button" onClick={() => setPreview(false)} className="h-11 px-5 rounded-xl bg-white text-[#0F1A30] text-[14px] font-black">닫기</button>
             </div>
-            <div className="flex-1 overflow-y-auto p-6"><div ref={docRef} className="bg-white"><StatementDoc st={cur.st} supplier={supplier} /></div></div>
+            <div className="flex-1 overflow-y-auto overflow-x-auto p-3 sm:p-6"><div ref={docRef} className="bg-white"><StatementDoc st={cur.st} supplier={supplier} /></div></div>
           </div>
         </div>
       )}
@@ -672,6 +725,7 @@ const normPlate = (v) => String(v || "").replace(/\s/g, "");
 
 export function PenaltyCenter({ drivers = [], companyName = "", supplier = {} }) {
   const co = String(companyName || "").trim();
+  const narrow = useNarrow(); // ⭐ 2026-11-06 휴대폰 폭
   const [list, setList] = React.useState([]);
   const [form, setForm] = React.useState(null);
   const [dq, setDq] = React.useState("");
@@ -869,7 +923,7 @@ export function PenaltyCenter({ drivers = [], companyName = "", supplier = {} })
         </div>
       </Hero>
       <div className={`${card} p-4 mb-3 flex items-center gap-2 flex-wrap`}>
-        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="기사명 · 차량번호 · 내용 · 장소 · 고지서번호 검색" className={`${inp} w-[340px]`} />
+        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="기사명 · 차량번호 · 내용 · 장소 · 고지서번호 검색" className={`${inp} w-[340px] max-w-full`} />
         <CustomSelect value={fk} onChange={(e) => setFk(e.target.value)} className={`${inp} w-44`}>
           <option value="">구분 전체</option>{PENALTY_KINDS.map((k) => <option key={k} value={k}>{k}</option>)}
         </CustomSelect>
@@ -878,7 +932,30 @@ export function PenaltyCenter({ drivers = [], companyName = "", supplier = {} })
         </CustomSelect>
         <span className="ml-auto text-[14px] font-bold text-[#5B6B85]">{shown.length}건 · <b className="text-[#0B1428] tabular-nums" style={{ fontFamily: MONO }}>{won(sum)}</b>원</span>
       </div>
-      <div className={`${card} overflow-x-auto`}>
+      {/* ⭐ 2026-11-06 휴대폰 폭 — 넓은 표 대신 카드 목록(누르면 상세) */}
+      {narrow && (
+        <div className="flex flex-col gap-2">
+          {shown.map((p, i) => (
+            <button key={p.id} type="button" onClick={() => setView(p)} className={`${card} text-left p-3.5`}>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-[14px] font-bold text-[#5B6B85] tabular-nums">{i + 1}</span>
+                <Chip>{p.kind}</Chip>
+                <span className="text-[15px] font-black text-[#0F1A30]">{p.driverName || "-"}</span>
+                <span className="text-[14px] font-bold text-[#3A4A66]">{p.carNo || "-"}</span>
+                <span className="ml-auto"><Chip dark={p.status === "납부 완료"} soft={p.status === "취소"}>{p.status}</Chip></span>
+              </div>
+              <div className="mt-1.5 text-[14px] font-bold text-[#1B2B4B] break-words">{p.summary || penaltySummary(p)}</div>
+              <div className="mt-1 flex items-center gap-2 flex-wrap text-[14px] text-[#3A4A66]">
+                <span className="tabular-nums">{p.date}{p.time ? ` ${p.time}` : ""}</span>
+                {p.place && <span className="break-words">· {p.place}</span>}
+                <span className="ml-auto font-black text-[#0B1428] tabular-nums">{won(p.amount)}원</span>
+              </div>
+            </button>
+          ))}
+          {!shown.length && <div className={`${card} py-14 text-center text-[15px] font-bold text-[#5B6B85]`}>{list.length ? "조건에 맞는 서류가 없습니다" : "등록된 서류가 없습니다"}</div>}
+        </div>
+      )}
+      {!narrow && <div className={`${card} overflow-x-auto`}>
         <table className="w-full min-w-[2050px]">
           <thead><tr className="bg-[#0B1428] text-[#DCE6F7]">{cols.map((h) => <th key={h} className={`${TH} ${h === "금액" ? "text-right" : ""}`}>{h}</th>)}</tr></thead>
           <tbody>
@@ -905,12 +982,12 @@ export function PenaltyCenter({ drivers = [], companyName = "", supplier = {} })
             {!shown.length && <tr><td colSpan={cols.length} className="py-20 text-center text-[15px] font-bold text-[#5B6B85]">{list.length ? "조건에 맞는 서류가 없습니다" : "등록된 서류가 없습니다 · F4로 바로 작성"}</td></tr>}
           </tbody>
         </table>
-      </div>
+      </div>}
       {view && (
         <div className="fixed inset-0 z-[99990] bg-[#0B1428]/55 flex justify-end">
           <div className="w-full max-w-[1100px] h-full bg-[#F3F6FA] flex flex-col shadow-2xl">
-            <div className="px-6 py-4 flex items-center gap-2 text-white" style={{ background: "linear-gradient(120deg,#0B1428,#1B2B4B 70%,#2D4C82)" }}>
-              <div className="flex-1 min-w-0">
+            <div className="px-4 sm:px-6 py-4 flex flex-wrap items-center gap-2 text-white" style={{ background: "linear-gradient(120deg,#0B1428,#1B2B4B 70%,#2D4C82)" }}>
+              <div className="flex-1 min-w-[200px]">
                 <div className="text-[14px] font-extrabold tracking-[0.12em] text-[#8FB0F0]" style={{ fontFamily: MONO }}>VEHICLE NOTICE · {view.status}</div>
                 <div className="text-[20px] font-black truncate">{view.kind} · {view.driverName} · {view.carNo}</div>
               </div>
@@ -924,7 +1001,7 @@ export function PenaltyCenter({ drivers = [], companyName = "", supplier = {} })
               <button type="button" onClick={() => remove(view)} className="h-11 px-5 rounded-xl bg-white/10 border border-white/20 text-[14px] font-black">삭제</button>
               <button type="button" onClick={() => setView(null)} className="h-11 px-5 rounded-xl bg-white text-[#0F1A30] text-[14px] font-black">닫기</button>
             </div>
-            <div className="flex-1 overflow-y-auto p-6"><div ref={viewDocRef}><PenaltyDoc p={view} supplier={supplier} wide onPhoto={(i) => setViewer({ images: view.photos, index: i })} /></div></div>
+            <div className="flex-1 overflow-y-auto overflow-x-hidden p-3 sm:p-6"><div ref={viewDocRef}><PenaltyDoc p={view} supplier={supplier} wide onPhoto={(i) => setViewer({ images: view.photos, index: i })} /></div></div>
           </div>
         </div>
       )}

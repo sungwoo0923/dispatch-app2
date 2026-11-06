@@ -9,7 +9,8 @@ import React from "react";
 import { addDoc, collection, deleteDoc, doc, onSnapshot, query, serverTimestamp, updateDoc, where, arrayUnion } from "firebase/firestore";
 import { db, auth } from "./firebase";
 import KpSubNav from "./KpSubNav";
-import { BookHero, BookCard, Chip, Sheet, MONO, CashBook } from "./OfficeBooks";
+import { BookHero, BookCard, Chip, Sheet, MONO, CashBook, BookSkeleton } from "./OfficeBooks";
+import { useCompanyRows } from "./companyColStore";
 import CustomDatePicker from "./CustomDatePicker";
 import { CustomSelect } from "./CustomSelect";
 import { formatAccount, onlyDigits } from "./bankUtil";
@@ -24,13 +25,9 @@ export { FUND_KINDS, computeFunds };
 // 대표 직책 — 자금 화면을 볼 수 있는 임원
 export const isCeoPosition = (p) => ["대표", "대표이사", "사장"].includes(String(p || "").trim());
 
+// ⭐ 2026-11-06 속도 — 공용 구독(companyColStore): 자금 현황·장부·대시보드가 같은 구독을 함께 쓰고, 닫아도 3분간 유지
 function useRows(name, company) {
-  const [rows, setRows] = React.useState(null);
-  React.useEffect(() => {
-    if (!company) return undefined;
-    return onSnapshot(query(collection(db, name), where("companyName", "==", company)), (s) => setRows(s.docs.map((d) => ({ id: d.id, ...d.data() }))), () => setRows([]));
-  }, [name, company]);
-  return rows;
+  return useCompanyRows(name, company);
 }
 export function useFundsSummary(company, enabled = true) {
   const funds = useRows("acctFunds", enabled ? company : "");
@@ -189,12 +186,17 @@ export function FundsBoard({ company, canEdit = true }) {
   const S = React.useMemo(() => computeFunds(funds || [], ledger || []), [funds, ledger]);
   const [setup, setSetup] = React.useState(false);
   const [acc, setAcc] = React.useState(null); // {} = 새 계좌
-  const six = [5, 4, 3, 2, 1, 0].map(ymAgo).map((m) => { const r = (ledger || []).filter((x) => String(x.date || "").startsWith(m)); return { m, in: r.filter((x) => x.type === "수입").reduce((s, x) => s + toInt(x.amount), 0), out: r.filter((x) => x.type === "지출").reduce((s, x) => s + toInt(x.amount), 0) }; });
+  // ⭐ 2026-11-06 속도 — 6개월 합계는 장부를 한 번만 훑어서(장부가 바뀔 때만 다시)
+  const six = React.useMemo(() => {
+    const ms = [5, 4, 3, 2, 1, 0].map(ymAgo); const acc = Object.fromEntries(ms.map((m) => [m, { m, in: 0, out: 0 }]));
+    for (const x of ledger || []) { const a = acc[String(x.date || "").slice(0, 7)]; if (!a) continue; if (x.type === "수입") a.in += toInt(x.amount); else if (x.type === "지출") a.out += toInt(x.amount); }
+    return ms.map((m) => acc[m]);
+  }, [ledger]);
   const max = Math.max(1, ...six.flatMap((x) => [x.in, x.out]));
   const assetList = S.list.filter(S.inCash).sort((a, b) => b.balance - a.balance);
   const cards = S.list.filter(isCard);
   const net = S.thisMonth.in - S.thisMonth.out;
-  if (funds === null) return <div className="py-20 text-center text-[13px] font-bold text-[#9AA9C3]">불러오는 중…</div>;
+  if (funds === null) return <BookSkeleton rows={5} />; // ⭐ 2026-11-06 뼈대 화면
   return (
     <div className="space-y-4">
       <BookHero en="FINANCE · TREASURY" title="자금 현황" desc="통장·카드·현금·예금·대출 잔액과 현금 흐름 — 장부에서 통장·카드를 고르면 자동으로 늘고 줄어듭니다"
