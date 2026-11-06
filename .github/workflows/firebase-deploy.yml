@@ -1,0 +1,65 @@
+# ⭐ 2026-11-06 폰에서 Firebase 배포 — GitHub 앱/웹 › Actions › "Firebase 배포" › Run workflow
+# 처음 한 번: 저장소 Settings › Secrets › Actions 에 FIREBASE_SERVICE_ACCOUNT (서비스 계정 JSON 전체) 등록
+name: Firebase 배포
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: "무엇을 올릴까요?"
+        type: choice
+        default: "허브(규칙+색인+저장소+허브알림)"
+        options:
+          - "허브(규칙+색인+저장소+허브알림)"
+          - "규칙+색인+저장소만"
+          - "서버 기능 전체(functions)"
+          - "전부(규칙+색인+저장소+functions)"
+
+concurrency:
+  group: firebase-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: 서비스 계정 확인
+        env:
+          SA: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: |
+          if [ -z "$SA" ]; then
+            echo "::error::FIREBASE_SERVICE_ACCOUNT 비밀값이 없습니다. Settings › Secrets and variables › Actions 에 등록하세요."
+            exit 1
+          fi
+          printf '%s' "$SA" > "$RUNNER_TEMP/sa.json"
+          echo "GOOGLE_APPLICATION_CREDENTIALS=$RUNNER_TEMP/sa.json" >> "$GITHUB_ENV"
+
+      - name: 대상 정하기
+        id: t
+        run: |
+          case "${{ inputs.target }}" in
+            허브*) ONLY="firestore:rules,firestore:indexes,storage,functions:hubOrderOnWrite" ;;
+            규칙*) ONLY="firestore:rules,firestore:indexes,storage" ;;
+            서버*) ONLY="functions" ;;
+            *)     ONLY="firestore:rules,firestore:indexes,storage,functions" ;;
+          esac
+          echo "only=$ONLY" >> "$GITHUB_OUTPUT"
+          echo "배포 대상: $ONLY"
+
+      - name: functions 패키지 설치
+        if: contains(steps.t.outputs.only, 'functions')
+        run: npm ci --prefix functions
+
+      - name: Firebase 배포
+        run: npx -y firebase-tools@13 deploy --only "${{ steps.t.outputs.only }}" --project dispatch-app-9b92f --non-interactive --force
+
+      - name: 정리
+        if: always()
+        run: rm -f "$RUNNER_TEMP/sa.json"
