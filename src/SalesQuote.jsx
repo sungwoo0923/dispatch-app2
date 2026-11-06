@@ -345,6 +345,7 @@ export function PricingEditor() {
   const live = useSalesPricing();
   const [cfg, setCfg] = React.useState(null);
   const [dirty, setDirty] = React.useState(false);
+  const [pi, setPi] = React.useState(0); // ⭐ 2026-11-06 왼쪽에서 고치는 요금제(카드를 눌러 고름)
   const [msg, setMsg] = React.useState("");
   React.useEffect(() => { if (live && !dirty) setCfg(live); }, [live, dirty]);
   if (!cfg) return <div className="py-20 text-center text-[#9AA9C3]">불러오는 중…</div>;
@@ -383,87 +384,126 @@ export function PricingEditor() {
     ["사용량 추가 청구", [["taxInvoiceFee", "전자세금계산서 발행 (1건)", "원"], ["alimtalkFee", "카카오 알림톡 (1건)", "원"], ["smsFee", "문자 SMS (1건)", "원"], ["lmsFee", "장문 문자 LMS (1건)", "원"]]],
     ["1회 비용 · 혜택", [["setupFee", "초기 도입비(요금제 칸이 비었을 때)", "원"], ["waiveSetupMonths", "도입비 면제 약정 기간", "개월"], ["migrationFee", "대량 데이터 이전", "원"], ["trainingFee", "추가 현장 교육 (1회)", "원"], ["routeBoardSetupFee", "구글시트 배차표 연동 세팅 (1양식)", "원"], ["devHourRate", "맞춤 개발 (1시간)", "원"], ["devDayRate", "맞춤 개발 (1일)", "원"], ["annualFreeMonths", "연간 선결제 무료", "개월"], ["minContractMonths", "최소 약정 기간", "개월"], ["semiDiscountRate", "6개월 선결제 할인", "%"], ["semiSetupRate", "단기 약정 도입비 할인", "%"], ["validDays", "견적 유효기간", "일"]]],
   ];
+  // ⭐ 2026-11-06 요금제 관리 다시 꾸밈 — 견적서 작성과 같은 구성: 왼쪽 편집 / 오른쪽 실시간 미리보기(카드·표)
+  const L = ({ children }) => <div className="text-[13px] font-bold text-[#7A879C] mb-1">{children}</div>;
+  const idx = Math.min(pi, cfg.plans.length - 1);
+  const P = cfg.plans[idx] || cfg.plans[0];
+  const addPlan = () => { set({ plans: [...cfg.plans, { id: `p${Date.now()}`, name: "새 요금제", en: "PLAN", price: 0, seats: 1, orders: 500, target: "", features: [] }] }); setPi(cfg.plans.length); };
+  const delPlan = () => { if (cfg.plans.length > 1 && window.confirm(`'${P.name}' 요금제를 지울까요?`)) { set({ plans: cfg.plans.filter((_, k) => k !== idx) }); setPi(0); } };
+  const row = (label, child, hint, key) => (
+    <div key={key || label} className="flex items-center justify-between gap-3 py-2 border-t first:border-t-0 border-[#EEF1F6]">
+      <span className="text-[14px] font-bold text-[#3A4A66]">{label}{hint && <span className="block text-[12.5px] font-semibold text-[#9AA9C3]">{hint}</span>}</span>{child}
+    </div>
+  );
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between gap-3 flex-wrap rounded-[18px] px-5 py-3.5 bg-[#0F1A30] text-white">
-        <div className="text-[13.5px]"><b>요금제는 여기서만 고치면 됩니다.</b> <span className="text-white/60">견적서·요금 안내서가 이 값을 그대로 씁니다. (기존 고객 청구액은 '요금·청구'에서 따로 관리)</span></div>
-        <div className="flex gap-2">
-          <Btn onClick={applyRecommended}>추천 요금표 적용</Btn>
-          <Btn onClick={() => openPrint("LogisWeb 요금 안내", priceSheetHtml(cfg))}>요금 안내서 인쇄</Btn>
-          <Btn onClick={() => { if (window.confirm("저장하지 않은 수정을 버리고 마지막 저장값으로 돌릴까요?")) { setDirty(false); setCfg(live); } }} disabled={!dirty}>되돌리기</Btn>
-          <button type="button" onClick={save} disabled={!dirty} className="h-10 px-5 rounded-xl bg-white text-[#0F1A30] text-[13.5px] font-black disabled:opacity-40">{dirty ? "저장" : "저장됨"}</button>
-        </div>
-      </div>
-      {msg && <div className="rounded-xl border border-[#DCE3EE] bg-white px-4 py-2.5 text-[13px] font-bold text-[#1B2B4B]">{msg}</div>}
+    <div className="grid gap-4 xl:grid-cols-[minmax(0,460px)_minmax(0,1fr)] items-start" data-pricing-editor="1">
+      {/* ── 왼쪽: 편집 ── */}
+      <div className="space-y-4">
+        <Card code="PLANS" title="요금제 고르기" right={<Btn onClick={addPlan}>+ 요금제 추가</Btn>}>
+          <div className="flex gap-1 p-1 rounded-xl bg-[#EEF2F8] flex-wrap">
+            {cfg.plans.map((p, i) => (
+              <button key={p.id} type="button" onClick={() => setPi(i)} className={`flex-1 min-w-[88px] h-9 px-2 rounded-lg text-[14px] font-black whitespace-nowrap ${i === idx ? "bg-[#1B2B4B] text-white" : "text-[#3A4A66]"}`}>{p.name}{p.recommended ? " ★" : ""}</button>
+            ))}
+          </div>
+          <div className="mt-2 text-[13px] text-[#7A879C]">오른쪽 미리보기 카드를 눌러도 고를 수 있습니다.</div>
+        </Card>
 
-      {/* 요금제 표 — 열 = 요금제 */}
-      <Card code="SCOPE" title="요금제별 사용 범위 (실제 메뉴 잠금 기준)" right={<Btn onClick={() => set({ plans: cfg.plans.map((x) => (PLAN_IDS.includes(x.id) ? { ...x, features: planFeatureLines(x.id) } : x)) })}>포함 기능 문구를 이 표로 다시 채우기</Btn>}>
-        <div className="text-[12.5px] text-[#5B6B85] mb-3">✓ 표시는 고객사 프로그램에서 실제로 열리는 범위입니다. 아래 "포함 기능" 칸은 견적서·요금 안내에 찍히는 설명 문구입니다. 회사별 요금제 지정은 청구 › 수납 관리에서 합니다.</div>
-        <PlanMatrix plans={cfg.plans} compact />
-      </Card>
-      <Card code="PLANS" title="요금제" right={<Btn onClick={() => set({ plans: [...cfg.plans, { id: `p${Date.now()}`, name: "새 요금제", en: "PLAN", price: 0, seats: 1, orders: 500, target: "", features: [] }] })}>+ 요금제 추가</Btn>}>
-        <div className="overflow-x-auto -m-5">
-          <table className="w-full border-collapse text-[14px]" style={{ minWidth: 220 + cfg.plans.length * 230 }}>
-            <thead><tr>
-              <th className="bg-[#1B2B4B] text-white text-left px-4 py-2.5 w-[200px]">항목</th>
-              {cfg.plans.map((p, i) => (
-                <th key={p.id} className="bg-[#1B2B4B] text-white px-3 py-2">
-                  <div className="flex items-center justify-between gap-2">
-                    <input value={p.name} onChange={(e) => setPlan(i, { name: e.target.value })} className="h-8 w-full px-2 rounded-md bg-white/10 text-white font-black text-[14px] outline-none" />
-                    <button type="button" title="요금제 삭제" onClick={() => cfg.plans.length > 1 && window.confirm(`'${p.name}' 요금제를 지울까요?`) && set({ plans: cfg.plans.filter((_, k) => k !== i) })} className="text-white/50 hover:text-white">✕</button>
-                  </div>
-                </th>
-              ))}
-            </tr></thead>
-            <tbody>
-              {[
-                ["영문 표기", (p, i) => <input value={p.en || ""} onChange={(e) => setPlan(i, { en: e.target.value.toUpperCase() })} className={`${inpCls} h-9`} style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }} />],
-                ["월 기본료", (p, i) => <NumIn value={p.price} onChange={(v) => setPlan(i, { price: v })} unit="원" />],
-                ["포함 직원 계정", (p, i) => <NumIn value={p.seats} onChange={(v) => setPlan(i, { seats: v })} unit="명" w="w-20" />],
-                ["포함 오더 (월)", (p, i) => <NumIn value={p.orders} onChange={(v) => setPlan(i, { orders: v })} unit="건" w="w-24" />],
-                // ⭐ 2026-11-04 요금제별 포함 지입차(GPS 관리) 대수 · 포함 저장 용량(비우면 공통 기본 용량)
-                ["포함 지입차 (GPS)", (p, i) => <NumIn value={p.fleet || 0} onChange={(v) => setPlan(i, { fleet: v })} unit="대" w="w-20" />],
-                ["포함 저장 용량", (p, i) => <span className="inline-flex flex-col gap-1"><OptNumIn value={p.storageGB} onChange={(v) => setPlan(i, { storageGB: v })} unit="GB" w="w-20" placeholder={String(num(cfg.storageGB))} /><span className="text-[12px] text-[#9AA9C3] font-semibold">비우면 공통 {num(cfg.storageGB)}GB</span></span>],
-                // ⭐ 2026-11-02 관리자센터2 — 요금제별 초기 도입비·기본 프로모션(견적서에서 요금제를 고르면 자동으로 채워짐)
-                ["초기 도입비", (p, i) => <span className="inline-flex flex-col gap-1"><OptNumIn value={p.setupFee} onChange={(v) => setPlan(i, { setupFee: v })} unit="원" placeholder={num(cfg.setupFee).toLocaleString()} /><span className="text-[12px] text-[#9AA9C3] font-semibold">비우면 공통 {won(cfg.setupFee)}</span></span>],
-                ["기본 프로모션", (p, i) => <span className="inline-flex items-center gap-1.5 flex-wrap">첫<NumIn value={p.promoMonths || 0} onChange={(v) => setPlan(i, { promoMonths: v })} unit="개월" w="w-14" /><NumIn value={p.promoRate || 0} onChange={(v) => setPlan(i, { promoRate: Math.min(100, v) })} unit="%" w="w-14" /></span>],
-                ["추천 대상", (p, i) => <input value={p.target || ""} onChange={(e) => setPlan(i, { target: e.target.value })} className={`${inpCls} h-9`} />],
-                ["추천 표시", (p, i) => <label className="inline-flex items-center gap-2 text-[13px] font-bold"><input type="radio" name="rec" checked={!!p.recommended} onChange={() => set({ plans: cfg.plans.map((x, k) => ({ ...x, recommended: k === i })) })} />이 요금제를 추천으로</label>],
-                ["포함 기능 (한 줄에 하나)", (p, i) => <textarea value={(p.features || []).join("\n")} onChange={(e) => setPlan(i, { features: e.target.value.split("\n") })} onBlur={(e) => setPlan(i, { features: e.target.value.split("\n").map((x) => x.trim()).filter(Boolean) })} rows={6} className={`${inpCls} h-auto py-2 leading-relaxed`} />],
-              ].map(([label, cell]) => (
-                <tr key={label} className="border-t border-[#EEF1F6]">
-                  <th className="text-left px-4 py-2.5 bg-[#F7F9FC] text-[13px] font-extrabold text-[#5B6B85] align-top">{label}</th>
-                  {cfg.plans.map((p, i) => <td key={p.id} className="px-3 py-2 align-top">{cell(p, i)}</td>)}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </Card>
+        <Card code={`PLAN · ${P.en || "PLAN"}`} title={`${P.name} 요금제`} right={cfg.plans.length > 1 ? <button type="button" onClick={delPlan} className="h-8 px-3 rounded-lg border border-[#DCE3EE] text-[13px] font-bold text-[#7A879C] hover:text-[#0F1A30]">삭제</button> : null}>
+          <div className="grid grid-cols-2 gap-2.5 mb-2">
+            <div><L>이름</L><input value={P.name} onChange={(e) => setPlan(idx, { name: e.target.value })} className={inpCls} /></div>
+            <div><L>영문 표기</L><input value={P.en || ""} onChange={(e) => setPlan(idx, { en: e.target.value.toUpperCase() })} className={inpCls} /></div>
+          </div>
+          {row("월 기본료", <NumIn value={P.price} onChange={(v) => setPlan(idx, { price: v })} unit="원" />)}
+          {row("포함 직원 계정", <NumIn value={P.seats} onChange={(v) => setPlan(idx, { seats: v })} unit="명" w="w-24" />)}
+          {row("포함 오더 (월)", <NumIn value={P.orders} onChange={(v) => setPlan(idx, { orders: v })} unit="건" w="w-28" />)}
+          {row("포함 지입차 (GPS)", <NumIn value={P.fleet || 0} onChange={(v) => setPlan(idx, { fleet: v })} unit="대" w="w-24" />)}
+          {row("포함 저장 용량", <OptNumIn value={P.storageGB} onChange={(v) => setPlan(idx, { storageGB: v })} unit="GB" w="w-24" placeholder={String(num(cfg.storageGB))} />, `비우면 공통 ${num(cfg.storageGB)}GB`)}
+          {row("초기 도입비", <OptNumIn value={P.setupFee} onChange={(v) => setPlan(idx, { setupFee: v })} unit="원" placeholder={num(cfg.setupFee).toLocaleString()} />, `비우면 공통 ${won(cfg.setupFee)}`)}
+          {row("기본 프로모션", <span className="inline-flex items-center gap-1.5">첫<NumIn value={P.promoMonths || 0} onChange={(v) => setPlan(idx, { promoMonths: v })} unit="개월" w="w-14" /><NumIn value={P.promoRate || 0} onChange={(v) => setPlan(idx, { promoRate: Math.min(100, v) })} unit="%" w="w-14" /></span>)}
+          <div className="pt-2 border-t border-[#EEF1F6] space-y-2.5">
+            <div><L>추천 대상</L><input value={P.target || ""} onChange={(e) => setPlan(idx, { target: e.target.value })} className={inpCls} /></div>
+            <label className="flex items-center gap-2 text-[14px] font-bold text-[#3A4A66]"><input type="checkbox" checked={!!P.recommended} onChange={(e) => set({ plans: cfg.plans.map((x, k) => ({ ...x, recommended: e.target.checked ? k === idx : (k === idx ? false : !!x.recommended) })) })} className="w-[18px] h-[18px] accent-[#1B2B4B]" />이 요금제를 추천으로 표시</label>
+            <div><L>포함 기능 (한 줄에 하나 · 견적서·요금 안내에 찍힘)</L>
+              <textarea value={(P.features || []).join("\n")} onChange={(e) => setPlan(idx, { features: e.target.value.split("\n") })} onBlur={(e) => setPlan(idx, { features: e.target.value.split("\n").map((x) => x.trim()).filter(Boolean) })} rows={6} className={`${inpCls} h-auto py-2 leading-relaxed`} /></div>
+            <button type="button" onClick={() => PLAN_IDS.includes(P.id) && setPlan(idx, { features: planFeatureLines(P.id) })} disabled={!PLAN_IDS.includes(P.id)} className="text-[13px] font-bold text-[#2D4C82] disabled:text-[#C0CAD9]">↺ 실제 메뉴 잠금 기준으로 기능 문구 다시 채우기</button>
+          </div>
+        </Card>
 
-      <div className="grid gap-4 lg:grid-cols-2">
         {OPTS.map(([title, rows]) => (
           <Card key={title} code={title.startsWith("월") ? "OPTIONS" : title.startsWith("사용량") ? "USAGE ADD-ONS" : "ONE-TIME"} title={title}>
-            {rows.map(([k, l, u]) => (
-              <div key={k} className="flex items-center justify-between gap-3 py-2 border-t first:border-t-0 border-[#EEF1F6]">
-                <span className="text-[14px] font-bold text-[#3A4A66]">{l}</span><NumIn value={cfg[k]} onChange={(v) => set({ [k]: v })} unit={u} />
-              </div>
-            ))}
+            {rows.map(([k, l, u]) => row(l, <NumIn value={cfg[k]} onChange={(v) => set({ [k]: v })} unit={u} w="w-28" />, null, k))}
           </Card>
         ))}
         <Card code="SUPPLIER" title="공급자 정보 (견적서에 표시)">
           {[["name", "상호"], ["ceo", "대표"], ["bizNo", "사업자번호"], ["phone", "연락처"], ["email", "이메일"], ["address", "주소"], ["bank", "입금 계좌"]].map(([k, l]) => (
             <div key={k} className="grid grid-cols-[96px_1fr] items-center gap-3 py-1.5">
-              <span className="text-[13.5px] font-bold text-[#5B6B85]">{l}</span>
+              <span className="text-[14px] font-bold text-[#5B6B85]">{l}</span>
               <input value={cfg.supplier[k] || ""} inputMode={k === "phone" ? "tel" : k === "bizNo" ? "numeric" : undefined} placeholder={k === "phone" ? "02-000-0000" : k === "bizNo" ? "000-00-00000" : undefined} onChange={(e) => set({ supplier: { ...cfg.supplier, [k]: k === "phone" ? fmtPhone(e.target.value) : k === "bizNo" ? fmtBizNo(e.target.value) : e.target.value } })} className={`${inpCls} h-9`} />
             </div>
           ))}
         </Card>
         <Card code="TERMS" title="계약 조건 · 안내 문구">
-          <div className="text-[12.5px] text-[#7A879C] mb-2">견적서·요금 안내서 하단에 그대로 들어갑니다. 한 줄에 하나.</div>
+          <div className="text-[13px] text-[#7A879C] mb-2">견적서·요금 안내서 하단에 그대로 들어갑니다. 한 줄에 하나.</div>
           <textarea value={cfg.terms.join("\n")} onChange={(e) => set({ terms: e.target.value.split("\n") })} onBlur={(e) => set({ terms: e.target.value.split("\n").map((x) => x.trim()).filter(Boolean) })} rows={7} className={`${inpCls} h-auto py-2 leading-relaxed`} />
-          <div className="mt-3 text-[12.5px] font-bold text-[#5B6B85]">문자 · 알림톡 안내</div>
+          <div className="mt-3 text-[13px] font-bold text-[#5B6B85]">문자 · 알림톡 안내</div>
           <input value={cfg.messaging} onChange={(e) => set({ messaging: e.target.value })} className={`${inpCls} mt-1`} />
+        </Card>
+      </div>
+
+      {/* ── 오른쪽: 실시간 미리보기 ── */}
+      <div className="space-y-4 xl:sticky xl:top-4">
+        <div className="rounded-[20px] p-5 text-white shadow-[0_16px_34px_rgba(11,20,40,0.3)]" style={{ background: "linear-gradient(rgba(143,176,240,.05) 1px, transparent 1px) 0 0/22px 22px, linear-gradient(90deg, rgba(143,176,240,.05) 1px, transparent 1px) 0 0/22px 22px, linear-gradient(150deg,#0B1428,#16264A)" }}>
+          <div className="flex items-center justify-between gap-3 min-w-0">
+            <div className="text-[11.5px] font-extrabold tracking-[0.26em] text-[#8FB0F0] whitespace-nowrap">PRICING · {cfg.recommendedVersion || "CUSTOM"}</div>
+            <div className={`text-[13px] font-bold whitespace-nowrap ${dirty ? "text-white" : "text-white/55"}`}>{dirty ? "● 저장하지 않은 수정이 있습니다" : "저장됨 · 견적서에 그대로 적용"}</div>
+          </div>
+          <div className="mt-1.5 text-[14px] text-white/70">요금제는 여기서만 고치면 됩니다. 견적서·요금 안내서·고객사 구독 화면이 이 값을 씁니다(기존 고객 청구는 청구 › 수납 관리).</div>
+          <div className="mt-4 flex gap-2 flex-wrap">
+            <button type="button" onClick={save} disabled={!dirty} className="h-10 px-5 rounded-xl bg-white text-[#0F1A30] text-[14px] font-black disabled:opacity-40" data-pricing-save>{dirty ? "저장" : "저장됨"}</button>
+            <button type="button" onClick={() => { if (window.confirm("저장하지 않은 수정을 버리고 마지막 저장값으로 돌릴까요?")) { setDirty(false); setCfg(live); } }} disabled={!dirty} className="h-10 px-4 rounded-xl bg-white/10 ring-1 ring-white/25 text-white text-[14px] font-black disabled:opacity-40">되돌리기</button>
+            <button type="button" onClick={applyRecommended} className="h-10 px-4 rounded-xl bg-white/10 ring-1 ring-white/25 text-white text-[14px] font-black">추천 요금표 적용</button>
+            <button type="button" onClick={() => openPrint("LogisWeb 요금 안내", priceSheetHtml(cfg))} className="h-10 px-4 rounded-xl text-white/75 text-[14px] font-bold hover:text-white">요금 안내서 인쇄</button>
+          </div>
+          {msg && <div className="mt-3 rounded-xl bg-white/10 px-3.5 py-2 text-[14px] font-bold">{msg}</div>}
+        </div>
+
+        <Card code="PREVIEW" title="요금제 카드 (고객에게 보이는 모양)">
+          <div className="grid gap-2.5 grid-cols-1 sm:grid-cols-2 min-[1700px]:grid-cols-4">
+            {cfg.plans.map((p, i) => {
+              const on = i === idx;
+              const feats = (p.features || []).filter(Boolean);
+              return (
+                <button key={p.id} type="button" onClick={() => setPi(i)} data-plan-card={p.id} className={`text-left rounded-xl p-4 border-2 transition flex flex-col ${on ? "border-[#1B2B4B] bg-[#F5F8FD]" : "border-[#E3E8F0] hover:border-[#8FB0F0]"}`}>
+                  <div className="flex items-center justify-between gap-2"><span className="text-[11.5px] font-extrabold tracking-[0.2em] text-[#94A3B8]">{p.en || "PLAN"}</span>{p.recommended && <span className="px-2 py-0.5 rounded-md bg-[#1B2B4B] text-white text-[12px] font-black">추천</span>}</div>
+                  <b className="text-[17px] text-[#0F1A30] mt-0.5">{p.name}</b>
+                  <div className="text-[24px] font-black text-[#1B2B4B] mt-1 whitespace-nowrap tabular-nums">{won(p.price)}<span className="text-[13px] font-bold text-[#7A879C] ml-1">/ 월</span></div>
+                  <div className="text-[13.5px] font-bold text-[#5B6B85] mt-1">직원 {num(p.seats)}명 · 오더 {num(p.orders).toLocaleString()}건 · 지입 {num(p.fleet || 0)}대 · {hasVal(p.storageGB) ? num(p.storageGB) : num(cfg.storageGB)}GB</div>
+                  <div className="text-[13px] text-[#7A879C] mt-0.5">도입비 {won(hasVal(p.setupFee) ? p.setupFee : cfg.setupFee)}{num(p.promoMonths) ? ` · 첫 ${num(p.promoMonths)}개월 ${num(p.promoRate)}%` : ""}</div>
+                  {p.target && <div className="text-[13px] text-[#3A4A66] mt-1.5 font-semibold">{p.target}</div>}
+                  <ul className="mt-2 space-y-0.5">{feats.slice(0, 5).map((f) => <li key={f} className="flex gap-1.5 text-[13px] text-[#3A4A66]"><span className="mt-[7px] w-1 h-1 rotate-45 bg-[#2D4C82] shrink-0" /><span className="truncate">{f}</span></li>)}</ul>
+                  {feats.length > 5 && <div className="text-[12.5px] text-[#9AA9C3] mt-0.5">외 {feats.length - 5}개</div>}
+                </button>
+              );
+            })}
+          </div>
+        </Card>
+
+        <Card code="COMPARE" title="한눈에 비교">
+          <div className="overflow-x-auto -m-5">
+            <table className="w-full text-[14px] border-collapse" style={{ minWidth: 160 + cfg.plans.length * 130 }}>
+              <thead><tr><th className="bg-[#1B2B4B] text-white text-left px-4 py-2.5">항목</th>{cfg.plans.map((p, i) => <th key={p.id} className={`px-3 py-2.5 text-right whitespace-nowrap ${i === idx ? "bg-[#2D4C82]" : "bg-[#1B2B4B]"} text-white`}>{p.name}</th>)}</tr></thead>
+              <tbody>
+                {[["월 기본료", (p) => won(p.price)], ["포함 직원", (p) => `${num(p.seats)}명`], ["포함 오더", (p) => `${num(p.orders).toLocaleString()}건`], ["포함 지입차", (p) => `${num(p.fleet || 0)}대`], ["저장 용량", (p) => `${hasVal(p.storageGB) ? num(p.storageGB) : num(cfg.storageGB)}GB`], ["초기 도입비", (p) => won(hasVal(p.setupFee) ? p.setupFee : cfg.setupFee)], ["직원 1명 추가", () => won(cfg.extraSeat)], ["초과 오더 1건", () => won(cfg.extraOrder)]].map(([l, f]) => (
+                  <tr key={l} className="border-t border-[#EEF1F6]"><td className="px-4 py-2.5 bg-[#F7F9FC] text-[13.5px] font-extrabold text-[#5B6B85] whitespace-nowrap">{l}</td>{cfg.plans.map((p, i) => <td key={p.id} className={`px-3 py-2.5 text-right font-black tabular-nums whitespace-nowrap ${i === idx ? "text-[#0F1A30] bg-[#F5F8FD]" : "text-[#1B2B4B]"}`}>{f(p)}</td>)}</tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+
+        <Card code="SCOPE" title="요금제별 사용 범위 (실제 메뉴 잠금 기준)" right={<Btn onClick={() => set({ plans: cfg.plans.map((x) => (PLAN_IDS.includes(x.id) ? { ...x, features: planFeatureLines(x.id) } : x)) })}>기능 문구를 이 표로 다시 채우기</Btn>}>
+          <div className="text-[13px] text-[#5B6B85] mb-3">✓ 표시는 고객사 프로그램에서 실제로 열리는 범위입니다. 회사별 요금제 지정은 청구 › 수납 관리에서 합니다.</div>
+          <PlanMatrix plans={cfg.plans} compact />
         </Card>
       </div>
     </div>

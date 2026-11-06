@@ -9,7 +9,7 @@ import AdminShell from "./AdminShell";
 import React, { useEffect, useState, useMemo } from "react";
 import { subscribeUsersLive, getUsersLiveList } from "./usersLive"; // ⭐ 2026-11-02 속도 — 직원 명부 구독 공유
 import { auth, db, storage, FUNCTIONS_BASE, DEFAULT_COMPANY } from "./firebase";
-import { getTenant } from "./fsTenant"; // ⭐ 2026-11-02 회사 분리 — 지금 거르는 회사(최고관리자 회사 전환 포함)
+import { getTenant, isPreviewMode } from "./fsTenant"; // ⭐ 2026-11-02 회사 분리 — 지금 거르는 회사(최고관리자 회사 전환 포함)
 import { masterHasHr } from "./hrHandover";
 import { WORK_TIME_OPTIONS } from "./autoAttendance";
 import {
@@ -33,7 +33,6 @@ import { EMPLOYMENT_STATUS_OPTIONS, suggestRole, ROLE_NAME, isExecProfile, useHr
 import { CustomSelect } from "./CustomSelect";
 import RolePermissionsPanel from "./RolePermissionsPanel";
 import { AdminSessionsPanel } from "./LoginManager";
-import CompanyResetPanel from "./CompanyResetPanel";
 import SheetImportPanel from "./SheetImportPanel";
 import GsheetMinePanel from "./GsheetMinePanel";
 import BlindMinePanel from "./BlindMinePanel";
@@ -852,7 +851,6 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
     landingInquiries: "도입 문의",
     loginSessions: "로그인 관리",
     sessionLogs: "접속이력",
-    companyReset: "운송사 초기화",
     sheetImport: "구글시트 가져오기",
     gsheetMine: "구글시트 전송",
     blindMine: "블라인드 모드",
@@ -868,7 +866,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
   const tabGroups = [
     { key: "members", label: "회원 관리", tabs: ["members"] },
     { key: "shipperMgmt", label: "화주사 관리", tabs: ["linked", "transmit", "inquiries", "landingInquiries"] },
-    { key: "ops", label: "운영 관리", tabs: ["loginSessions", "sessionLogs", "forceUpdate", "permissions", "sheetImport", "gsheetMine", "blindMine", "trash", "companyReset"] },
+    { key: "ops", label: "운영 관리", tabs: ["loginSessions", "sessionLogs", "forceUpdate", "permissions", "sheetImport", "gsheetMine", "blindMine", "trash"] }, // ⭐ 2026-11-06 운송사 초기화는 관리자 관리센터(보안·데이터 › 운송사 초기화)로만 옮김
     { key: "settings", label: "환경 설정", tabs: ["billing", "setup", "copyTemplate", "landingEdit", "notifTemplate"] },
   ]
     .map((g) => ({ ...g, tabs: g.tabs.filter((t) => (!REQUIRES_MASTER_TABS.has(t) || isTotalMaster || (t === "permissions" && masterPerms)) && (t !== "billing" || billingAcc.view)) })) // 💳 구독·결제는 경리·재무·임원·대표만(billingAccess.js)
@@ -1459,8 +1457,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
             <AdminSessionsPanel isTotalMaster={isTotalMaster} company={effectiveCompany} roleLabels={roleLabels} />
           )}
 
-          {/* ====== 운송사 초기화 탭 (최고관리자 전용) ====== */}
-          {adminTab === "companyReset" && isTotalMaster && <CompanyResetPanel />}
+          {/* ⭐ 2026-11-06 운송사 초기화 탭 제거 — 관리자 관리센터에서만(계약종료 + 초기화 포함) */}
 
           {/* ====== 구글시트(엑셀) 배차일지 가져오기 (최고관리자 전용) ====== */}
           {adminTab === "sheetImport" && isTotalMaster && <SheetImportPanel />}
@@ -1642,7 +1639,10 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
                 <button onClick={() => setShowMobilePreview(false)} className="text-white/60 hover:text-white text-lg">✕</button>
               </div>
               <div className="p-3">
-                <iframe src="/mobile" title="mobile-preview" className="w-full h-[760px] border border-gray-200 rounded-xl" />
+                {/* ⭐ 2026-11-06 모바일 미리보기 — 예전 주소(/mobile)는 없는 화면이라 로그인 확인 → 로그인 화면 → /app 으로 몇 번 튕겼고,
+                    iframe이 저장소에 남은 다른 계정(최고관리자 등)을 먼저 집어 사무원 계정인데 최고관리자 화면이 보였다.
+                    이제 /app?kpmpv=1 로 바로 열고, iframe은 "지금 이 창에 로그인한 계정"만 받아 쓴다(firebase.js IS_MOBILE_PREVIEW). */}
+                <MobilePreviewFrame />
               </div>
             </div>
           </div>
@@ -2554,6 +2554,24 @@ export function ShipperForceUpdatePanel({ currentVersion }) {
       >
         {sending ? "발송 중..." : "화주사 강제 업데이트 발송"}
       </button>
+    </div>
+  );
+}
+
+
+// ⭐ 2026-11-06 관리자메뉴 › 모바일 미리보기 iframe — 현재 계정(uid)이 바뀌면 새로 연다 · 다 열릴 때까지 로딩 표시
+function MobilePreviewFrame() {
+  const uid = auth.currentUser?.uid || "anon";
+  const [loaded, setLoaded] = useState(false);
+  const src = React.useMemo(() => {
+    if (isPreviewMode()) { const q = new URLSearchParams(window.location.search); q.set("kpmpv", "1"); return `/preview?${q.toString()}`; }
+    return `/app?kpmpv=1&u=${encodeURIComponent(uid.slice(0, 8))}`;
+  }, [uid]);
+  useEffect(() => { setLoaded(false); }, [src]);
+  return (
+    <div className="relative">
+      <iframe key={src} src={src} title="mobile-preview" onLoad={() => setLoaded(true)} className="w-full h-[760px] border border-gray-200 rounded-xl bg-[#0F1A30]" />
+      {!loaded && <div className="absolute inset-0 rounded-xl flex items-center justify-center bg-[#0F1A30] text-[#CFE0FF] text-[14px] font-bold">모바일 화면을 여는 중…</div>}
     </div>
   );
 }

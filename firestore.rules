@@ -20,8 +20,23 @@ service cloud.firestore {
          myUser().get('employmentStatus', '') != '퇴사' &&
          // 배차마당(cafe-site) 가입 계정은 가입과 동시에 approved:true로 저장되므로
          // 배차 프로그램 데이터에는 접근할 수 없게 따로 제외한다(배차마당 컬렉션만 사용).
-         myUser().get('role', '') != 'cafeUser')
+         myUser().get('role', '') != 'cafeUser' &&
+         // ⭐ 2026-11-06 계약종료 — companyPlans/{회사}.status == "ended"인 운송사 사람(직원·기사, 화주는 연동 운송사)은
+         //  데이터가 남아 있어도 아무것도 못 읽고 쓴다. 최고관리자·부관리자(role totalMaster)만 예외.
+         //  문서 1개(get/exists 같은 문서 = 읽기 1회)만 더 본다.
+         (myUser().get('role', '') == 'totalMaster' || !contractEnded(myUser())))
       );
+    }
+    function contractCoOf(u) {
+      return u.get('role', '') == 'shipper'
+        ? (u.get('linkedTransportCompany', null) is map ? u.linkedTransportCompany.get('companyName', '') : '')
+        : u.get('companyName', '돌캐');
+    }
+    function contractEnded(u) {
+      let co = contractCoOf(u);
+      return co is string && co != '' &&
+        exists(/databases/$(database)/documents/companyPlans/$(co)) &&
+        get(/databases/$(database)/documents/companyPlans/$(co)).data.get('status', '') == 'ended';
     }
     // DriverLogin/DriverRegister의 차량번호 정규화와 동일(공백 제거 + 대문자)
     function plateId(carNo) {

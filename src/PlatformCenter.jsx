@@ -10,7 +10,7 @@ import { runDelete } from "./DeleteProgress"; // ⭐ 2026-11-05 삭제 진행 �
 import React from "react";
 import { useNavigate } from "react-router-dom";
 import { signOut } from "firebase/auth";
-import { addDoc, collection, deleteDoc, doc, getDocs, limit, onSnapshot, orderBy, query, serverTimestamp, setDoc, updateDoc, where } from "firebase/firestore";
+import { addDoc, collection, deleteDoc, deleteField, doc, getDocs, limit, onSnapshot, orderBy, query, serverTimestamp, setDoc, updateDoc, where } from "firebase/firestore";
 import { auth, db, FUNCTIONS_BASE } from "./firebase";
 import { pushTenantBypass } from "./fsTenant";
 import KpSubNav from "./KpSubNav";
@@ -24,6 +24,7 @@ import { ContractBuilder, ContractList, ContractTemplates } from "./ContractCent
 import { NotifTemplatePanel, LandingPageEditPanel, ShipperForceUpdatePanel } from "./AdminMenu";
 import { AdminSessionsPanel } from "./LoginManager";
 import CompanyResetPanel from "./CompanyResetPanel";
+import { ContractLifecyclePanel, SubAdminPanel } from "./ContractLifecycle"; // ⭐ 2026-11-06 이용 계약 · 부관리자
 import SheetImportPanel from "./SheetImportPanel";
 import NoticeBoard from "./NoticeBoard";
 import { toBoardNotice } from "./PlatformNoticeBanner";
@@ -63,6 +64,7 @@ const SECTIONS = [
     { key: "sales:history", label: "견적 이력", en: "PIPELINE", icon: "history" },
   ] },
   { key: "contracts", label: "계약", en: "CONTRACTS", icon: "pen", items: [
+    { key: "contract:life", label: "이용 계약·만료", en: "LIFECYCLE", icon: "hourglass" }, // ⭐ 2026-11-06 계약 기간 · 만료 안내 · 계약종료/재개 · 계약종료+초기화
     { key: "contract:list", label: "계약 현황", en: "STATUS", icon: "list" },
     { key: "contract:new", label: "계약서 작성", en: "NEW", icon: "pen" },
     { key: "contract:templates", label: "계약서 양식", en: "TEMPLATES", icon: "file" },
@@ -85,6 +87,7 @@ const SECTIONS = [
     { key: "sessions", label: "로그인 관리", en: "SESSIONS", icon: "key" },
     { key: "sessionLogs", label: "접속 이력", en: "AUDIT LOG", icon: "history" },
     { key: "sheetImport", label: "배차일지 가져오기", en: "IMPORT", icon: "sheet" },
+    { key: "subAdmin", label: "부관리자", en: "SUB ADMIN", icon: "key" }, // ⭐ 2026-11-06 부관리자 목록 · 지정/해제
     { key: "companyReset", label: "운송사 초기화", en: "RESET", icon: "trash" },
   ] },
 ];
@@ -376,7 +379,8 @@ function PaymentsPanel() {
   const setPlan = async (company, planId) => {
     try {
       if (planId) await setDoc(doc(db, "companyPlans", company), { planId, since: ymd(), updatedAt: serverTimestamp() }, { merge: true });
-      else await deleteDoc(doc(db, "companyPlans", company));
+      // ⭐ 2026-11-06 요금제만 빼고 문서는 남긴다(같은 문서에 계약 기간·계약종료 상태가 있다 — 지우면 계약종료가 풀렸다)
+      else await setDoc(doc(db, "companyPlans", company), { planId: deleteField(), since: deleteField(), updatedAt: serverTimestamp() }, { merge: true });
       // 이 회사의 대기 중 요금제 변경 요청은 처리됨으로
       const open = await getDocs(query(collection(db, "planRequests"), where("company", "==", company), where("status", "==", "요청")));
       await Promise.all(open.docs.map((d) => updateDoc(d.ref, { status: "처리", handledAt: serverTimestamp(), appliedPlan: planId || "" })));
@@ -1133,7 +1137,10 @@ function PlatformCenterInner({ user }) {
   else if (tab === "sessionLogs") body = <SessionLogsPanel />;
   else if (tab === "tenancy") body = <TenancyPanel />;
   else if (tab === "sheetImport") body = <><Hero en="DATA · IMPORT" title="배차일지 가져오기" desc="구글시트·엑셀 배차일지를 운송사 데이터로 옮깁니다(초기 세팅용)." /><SheetImportPanel /></>;
-  else if (tab === "companyReset") body = <><Hero en="DATA · RESET" title="운송사 초기화" desc="⚠ 운송사 데이터를 지웁니다 — 백업 후 신중히 사용하세요." /><CompanyResetPanel /></>;
+  // ⭐ 2026-11-06 운송사 초기화는 이제 관리센터에서만(배차 프로그램 관리자메뉴에서 뺐다) — 계약종료 + 초기화는 계약 › 이용 계약·만료
+  else if (tab === "companyReset") body = <><Hero en="DATA · RESET" title="운송사 초기화" desc="운송사 데이터를 모두 지웁니다 — 7일 동안 보관함에서 복원할 수 있습니다. 계약을 끝내며 지우려면 계약 › 이용 계약·만료를 쓰세요." right={<button type="button" onClick={() => setTab("contract:life")} className="h-10 px-4 rounded-xl bg-white/10 ring-1 ring-white/20 text-[14px] font-black whitespace-nowrap">이용 계약·만료 ›</button>} /><CompanyResetPanel /></>;
+  else if (tab === "contract:life") body = <><Hero en="CONTRACTS · LIFECYCLE" title="이용 계약·만료" desc="운송사별 계약 기간을 정하고, 만료 30·7·1일 전 안내를 보냅니다. 계약종료하면 데이터는 남기고 그 회사 사람은 접속할 수 없습니다." right={<Clock />} /><ContractLifecyclePanel openCompany={openCompany} /></>;
+  else if (tab === "subAdmin") body = <><Hero en="SECURITY · SUB ADMIN" title="부관리자" desc="최고관리자와 같은 권한을 가진 부관리자(1명)를 보고 지정·해제합니다." /><SubAdminPanel /></>;
 
   if (phone) return <PlatformMobileShell user={user} sections={sectionsView} section={sectionView} tab={tab} setTab={setTab} toApp={toApp} logout={logout} secBadge={secBadge}>{body}</PlatformMobileShell>;
 

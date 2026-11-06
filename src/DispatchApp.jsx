@@ -2859,6 +2859,7 @@ import { useMobileAlerts } from "./mobile/mobileAlerts";
 import { loadAcctPayments, saveAcctPayments, loadPlManual, savePlManual } from "./acctPayments";
 import { bumpDriverPayout, addClientCollection, removeClientCollections } from "./ledgerAuto";
 import BannerCenter from "./BannerCenter";
+import { ContractExpiryBanner } from "./companyContract"; // ⭐ 2026-11-06 계약 만료 안내 띠
 import NotifyCenter from "./NotifyCenter"; // ⭐ 2026-11-03 알림 통합 — 공지·인사발령·전자결재·인수인계는 화면 가운데 팝업
 import { RemoteSupportHost, openRemoteSupport, SUPPORT_ICON } from "./RemoteSupport"; // ⭐ 2026-11-02 원격지원 —
 import OrderCongratsPopup from "./OrderCongratsPopup";
@@ -8410,6 +8411,8 @@ return (
       {/* ⭐ 2026-11-02 관리자센터2 — 선택한 운송사 대상 공지도 받도록 회사 전달 */}
       {/* ⭐ 2026-11-03 배너를 누르면 펼치지 않고 홈 › 공지사항의 그 글로 바로 이동 */}
       <PlatformNoticeBanner audience="carrier" onOpen={(id) => { window.__kpOpenNotice = `plat:${id}`; setMenu("HOME"); setTimeout(() => window.dispatchEvent(new CustomEvent("kp:openNotice")), 0); }} company={role === "totalMaster" ? (localStorage.getItem("loginCompany") || userCompany || "") : (userCompany || localStorage.getItem("userCompany") || "")} />
+      {/* ⭐ 2026-11-06 이용 계약 만료 안내(30일 전부터) — 대표·임원·경리·마스터에게만 */}
+      <ContractExpiryBanner company={deptCompany} me={myProfileDoc ? { ...myProfileDoc, role: realRole || role } : null} />
       <CopyTemplateHost canEdit={role === "admin" || role === "totalMaster"} />
       <PlanValueSync planId={planId} />
       <PlanLockHost userEmail={user?.email || ""} userName={myRealName || ""} canRequest={role === "totalMaster" || ["test", "hrAcct", "allMgr"].includes(realRole) || /경리|회계/.test(String(myProfileDoc?.team || ""))} />

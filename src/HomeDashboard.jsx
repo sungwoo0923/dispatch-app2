@@ -843,6 +843,11 @@ export default function HomeDashboard({ role, user, userCompany = "", pending, d
           msg = data.msg || "[출근기록부] 새 알림이 있습니다.";
           notifStatus = data.type === "attendance_result" ? data.status : "request";
           if (data.type === "attendance_result") updateDoc(doc(db, "notifications", docId), { read: true, readAt: serverTimestamp() }).catch(() => {});
+        } else if (data.type === "contract_expiry") {
+          // ⭐ 2026-11-06 이용 계약 만료 안내(서버 contractExpiryNotices가 30·7·1일 전에 보냄) — 한 번 보여 주면 읽음
+          msg = data.msg || "[이용 계약] 계약 만료가 다가옵니다.";
+          notifStatus = "request";
+          updateDoc(doc(db, "notifications", docId), { read: true, readAt: serverTimestamp() }).catch(() => {});
         } else if (data.type === "approval_request") {
           msg = `[${data.scheduleType || "일정"}] ${data.fromName || "작성자"}님의 결재 요청이 있습니다.`;
           notifStatus = "request";
