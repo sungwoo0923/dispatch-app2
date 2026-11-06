@@ -75,12 +75,22 @@ const goPersonnelOrder = (targetUid) => {
 //  (firestore.rules › approvals 의 "⭐ 2026-11-04 전자결재 서명" 규칙과 같은 조건)
 const PAY_SKIP_FORMS = ["card"];
 export const isPayDoc = (d) => d?.cat === "expense" && !PAY_SKIP_FORMS.includes(d?.form) && Number(d?.amount) > 0;
-const FIN_ROLES = ["test", "acctStaff", "hrAcct", "allMgr", "admin", "totalMaster"]; // ⭐ 2026-11-05 경리 사무원(acctStaff)도 지급 처리
+// ⭐ 2026-11-07 지급 처리 권한 정리 — 지급은 경리 업무
+//  · 경리(test)·경리사무원(acctStaff)·최고관리자 / 재무·경리·회계·총무 부서
+//  · 통합관리자(allMgr)·통합인사관리자(hrAcct)는 "경리 화면"으로 전환했을 때만(운송·인사 화면에서는 안 됨)
+//  · 운송 관리자(admin)·최종 결재자는 지급 처리 불가(예전엔 가능했음)
+const FIN_ROLES = ["test", "acctStaff", "totalMaster"];
 const FIN_TEAM = /재무|경리|회계|총무/;
-const isFinUser = (me) => FIN_ROLES.includes(me?.role) || FIN_TEAM.test(String(me?.team || ""));
+const MULTI_VIEW = { allMgr: "kpAllMgrView", hrAcct: "kpHrAcctView" };
+const acctViewOn = (role) => {
+  const key = MULTI_VIEW[role];
+  if (!key) return false;
+  try { const v = localStorage.getItem(key); return role === "hrAcct" ? v !== "hr" : v === "acct"; } catch { return false; }
+};
+const isFinUser = (me) => FIN_ROLES.includes(me?.role) || acctViewOn(me?.role) || FIN_TEAM.test(String(me?.team || ""));
 // null(지급 대상 아님) | "wait"(지급 대기) | "paid"(지급완료)
 export const payState = (d) => (!isPayDoc(d) || d.status !== "approved" ? null : d.paid?.at ? "paid" : "wait");
-const canPay = (d, me) => !!payState(d) && d.cancel?.status !== "pending" && (isFinUser(me) || (d.line || [])[(d.line || []).length - 1]?.uid === me?.uid);
+const canPay = (d, me) => !!payState(d) && d.cancel?.status !== "pending" && isFinUser(me);
 
 // 🖼 2026-11-04 첨부 보기·저장 — 첨부는 base64 data URL이라 <a target="_blank">로는 크롬이 새 탭을 막아 아무 일도 안 일어났다.
 //  화면 안 보기(라이트박스)로 열고, 저장은 blob으로 바꿔 내려받는다(휴대폰은 공유 시트 → 사진 저장).
@@ -2275,7 +2285,7 @@ export default function ApprovalCenter({ company, me, page, setPage, openId, onO
       (s) => setCompanyAll(s.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => toMs(b.createdAt) - toMs(a.createdAt))), () => setCompanyAll([]));
   }, [admin, tab, company]);
   // 💸 2026-11-04 지급 대기 — 경리(test)·관리자 역할은 참여하지 않은 지출 문서도 볼 수 있어(규칙상 읽기 허용) 회사 지출 결의를 따로 구독
-  const payReader = ["test", "acctStaff", "hrAcct", "allMgr", "admin", "totalMaster"].includes(me.role);
+  const payReader = isFinUser(me); // ⭐ 2026-11-07 지급 권한과 같은 기준
   const [payPool, setPayPool] = React.useState([]);
   React.useEffect(() => {
     if (!payReader || !company) return undefined;

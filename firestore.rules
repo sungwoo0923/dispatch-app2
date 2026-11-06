@@ -832,16 +832,16 @@ service cloud.firestore {
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['hiddenBy']);
       // ⭐ 2026-11-04 전자결재 서명 — 지출결의 지급완료(paid) 처리·취소
       //  최종 승인된 비용·지출 결의(cat expense)만, 바꿀 수 있는 칸은 paid·history·updatedAt·drafterUnread 뿐.
-      //  누를 수 있는 사람: 같은 회사의 역할 test(경리)·hrAcct·admin·totalMaster, 부서 이름에 재무·경리·회계가 든 직원, 또는 그 문서의 최종 결재자
+      //  누를 수 있는 사람: 같은 회사의 경리(test)·경리사무원·hrAcct·allMgr(경리 화면)·최고관리자, 부서 이름에 재무·경리·회계·총무가 든 직원
       //  (Approval.jsx canPay와 같은 조건 — 결재 취소 진행 중에는 안 됨)
       allow update: if isApproved()
         && resource.data.get('status', '') == 'approved'
         && resource.data.get('cat', '') == 'expense'
         && resource.data.get('cancel', {}).get('status', '') != 'pending'
         && apAff().hasOnly(['paid', 'history', 'updatedAt', 'drafterUnread'])
-        && (((myUser().get('role', '') in ['test', 'acctStaff', 'hrAcct', 'allMgr', 'admin', 'totalMaster'] || myUser().get('team', '').matches('.*(재무|경리|회계|총무).*'))
-              && (myUser().get('companyName', '') == resource.data.get('company', '') || isTotalMasterUser()))
-          || resource.data.line[resource.data.line.size() - 1].uid == request.auth.uid);
+        // ⭐ 2026-11-07 운송 관리자(admin)·최종 결재자는 지급 처리 불가 — 경리 역할·재무 부서만(통합관리자·통합인사관리자는 화면 전환으로 앱에서 한 번 더 막음)
+        && (myUser().get('role', '') in ['test', 'acctStaff', 'hrAcct', 'allMgr', 'totalMaster'] || myUser().get('team', '').matches('.*(재무|경리|회계|총무).*'))
+        && (myUser().get('companyName', '') == resource.data.get('company', '') || isTotalMasterUser());
       allow delete: if false;
     }
 
