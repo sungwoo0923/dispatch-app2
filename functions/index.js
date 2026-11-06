@@ -6863,3 +6863,35 @@ exports.orderMarketOnTakerOrderWrite = functions.firestore
       await _orderMarket.onTakerOrderUpdate(db, FieldValue, context.params.id, change.before.exists ? change.before.data() : null, after);
     } catch (e) { console.error("[오더마켓] 진행 반영 실패:", e); }
   });
+
+// 🤖 2026-11-06 AI 팀 — 관리자센터에서 팀별(경리·재무·영업·운영·보안·홍보) Claude 에이전트와 대화.
+//  최고관리자·부관리자(role totalMaster)만. Claude API 키는 Firebase 비밀값 ANTHROPIC_API_KEY.
+//  (등록: firebase functions:secrets:set ANTHROPIC_API_KEY)
+const aiTeams = require("./aiTeams");
+exports.aiTeamChat = functions.runWith({ secrets: ["ANTHROPIC_API_KEY"], timeoutSeconds: 300, memory: "512MB" }).https.onRequest(async (req, res) => {
+  res.set("Access-Control-Allow-Origin", "*");
+  res.set("Access-Control-Allow-Methods", "POST, OPTIONS");
+  res.set("Access-Control-Allow-Headers", "Authorization, Content-Type");
+  if (req.method === "OPTIONS") { res.status(204).send(""); return; }
+  if (req.method !== "POST") { res.status(405).json({ error: "POST만 허용됩니다." }); return; }
+  const authz = String(req.get("Authorization") || "");
+  const decoded = authz.startsWith("Bearer ") ? await getAuth().verifyIdToken(authz.slice(7)).catch(() => null) : null;
+  if (!(await requireTotalMaster(req))) { res.status(403).json({ error: "최고관리자·부관리자만 사용할 수 있습니다." }); return; }
+  if (!process.env.ANTHROPIC_API_KEY) { res.status(500).json({ error: "Claude API 키가 등록되지 않았습니다. firebase functions:secrets:set ANTHROPIC_API_KEY 후 다시 배포해 주세요." }); return; }
+  let body = req.body; if (typeof body === "string") { try { body = JSON.parse(body); } catch { body = {}; } }
+  const team = String(body?.team || "");
+  try {
+    const out = await aiTeams.runTeamChat({ db, team, history: body?.history, text: body?.text });
+    // 사용 기록(비용 확인용) — 질문·답변 앞부분과 토큰 수만
+    db.collection("aiTeamLogs").add({
+      team, uid: decoded?.uid || "", email: decoded?.email || "",
+      question: String(body?.text || "").slice(0, 500), answer: out.reply.slice(0, 2000),
+      tools: out.used, usage: out.usage, model: out.model, at: FieldValue.serverTimestamp(),
+    }).catch((e) => console.error("[AI 팀] 기록 실패:", e));
+    res.json(out);
+  } catch (e) {
+    const { status, msg } = aiTeams.apiErrorMessage(e);
+    console.error(`[AI 팀] ${team} 실패:`, e);
+    res.status(status).json({ error: msg });
+  }
+});

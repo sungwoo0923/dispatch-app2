@@ -570,6 +570,11 @@ service cloud.firestore {
     match /platformConfig/{docId} {
       allow read, write: if isTotalMasterUser();
     }
+    // 🤖 2026-11-06 AI 팀 사용 기록 — 쓰기는 서버(Cloud Functions)만, 읽기는 최고관리자·부관리자만
+    match /aiTeamLogs/{docId} {
+      allow read: if isTotalMasterUser();
+      allow write: if false;
+    }
     // 서버 사용량(Cloud Monitoring 수집 결과) — 쓰기는 서버(Cloud Functions)만, 읽기는 최고관리자만
     match /platformUsage/{docId} {
       allow read: if isTotalMasterUser();
@@ -1105,7 +1110,9 @@ service cloud.firestore {
         // ⭐ 2026-11-06 오더마켓 — 위에서 따로 정함(예전엔 이 목록에 없어 승인된 직원이면 누구나 게시글을 고칠 수 있었다)
         'cafeOrders', 'marketNotices',
         // 💰 2026-11-06 직원 급여 · 연차 촉진 — 위에서 따로 정함
-        'payrollSettings', 'payrollEmployees', 'payrollRuns', 'payslips', 'hrNotices', 'leavePromotions']);
+        'payrollSettings', 'payrollEmployees', 'payrollRuns', 'payslips', 'hrNotices', 'leavePromotions',
+        // 🤖 2026-11-06 AI 팀 사용 기록 — 위에서 따로 정함
+        'aiTeamLogs']);
     }
   }
 }
