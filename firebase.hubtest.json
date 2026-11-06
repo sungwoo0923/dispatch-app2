@@ -1,0 +1,17 @@
+{
+  "firestore": { "rules": "firestore.rules", "indexes": "firestore.indexes.json" },
+  "storage": { "rules": "storage.rules" },
+  "functions": { "source": "scripts/hubTests/fn" },
+  "emulators": {
+    "auth": { "host": "127.0.0.1", "port": 19099 },
+    "firestore": { "host": "127.0.0.1", "port": 18080, "websocketPort": 19150 },
+    "storage": { "host": "127.0.0.1", "port": 19199 },
+    "functions": { "host": "127.0.0.1", "port": 15001 },
+    "hub": { "host": "127.0.0.1", "port": 14400 },
+    "logging": { "host": "127.0.0.1", "port": 14500 },
+    "eventarc": { "host": "127.0.0.1", "port": 19299 },
+    "tasks": { "host": "127.0.0.1", "port": 19499 },
+    "ui": { "enabled": false },
+    "singleProjectMode": true
+  }
+}
