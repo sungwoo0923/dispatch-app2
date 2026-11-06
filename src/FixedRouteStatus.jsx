@@ -579,7 +579,9 @@ export function RouteCarrierModal({ company, rows = [], disabled = false, onClos
           <div className="min-w-0">
             <div className="text-[10.5px] font-extrabold tracking-[0.28em] text-[#8FB0F0]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>CARRIER · SETTLEMENT</div>
             <div className="text-[17px] font-black mt-0.5">운송업체 설정</div>
-            <div className="text-[12.5px] text-white/75 font-semibold mt-0.5 leading-relaxed whitespace-normal break-keep" data-kp="carrier-desc">체크한 운송업체만 <b className="text-white">화면·정산·매출</b>에 나옵니다. 끄거나 삭제하면 어디에도 보이지 않아요(시트 연동은 유지).</div>{/* ⭐ 2026-11-06 짧게 · 잘리지 않게(줄바꿈 허용) */}
+            <div className="text-[12.5px] text-white/75 font-semibold mt-0.5 leading-relaxed whitespace-normal break-keep" data-kp="carrier-desc">체크한 운송업체만 <b className="text-white">화면·정산·매출</b>에 나옵니다. 끄거나 삭제하면 어디에도 보이지 않아요(시트 연동은 유지).</div>
+            {/* ⭐ 2026-11-06 운송업체 빈칸 오더 — 끈 업체와 똑같이 숨김 */}
+            {(() => { const blank = (rows || []).filter((r) => r?.배차표Id && !carrierOf(r)).length; return blank > 0 ? <div className="mt-1.5 inline-flex items-center gap-1.5 h-7 px-2.5 rounded-lg bg-white/10 text-[12.5px] font-bold text-white/85" data-kp="carrier-blank">운송업체 빈칸 {blank}건 · {setting ? "숨김(정산 제외)" : "설정을 저장하면 숨김"}</div> : null; })()}{/* ⭐ 2026-11-06 짧게 · 잘리지 않게(줄바꿈 허용) */}
           </div>
           <button type="button" onClick={onClose} className="ml-auto shrink-0 h-8 px-3 rounded-lg bg-white/10 hover:bg-white/20 text-[12px] font-bold">닫기 <span className="text-white/50 hidden md:inline">ESC</span></button>
         </div>

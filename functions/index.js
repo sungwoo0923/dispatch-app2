@@ -5220,7 +5220,6 @@ async function routeCarrierCountable(company) {
   const off = new Set();
   (Array.isArray(st.removed) ? st.removed : []).forEach((n) => { const k = key(n); if (k) off.add(k); });
   (Array.isArray(st.carriers) ? st.carriers : []).forEach((c) => { const k = key(c && c.name); if (!k) return; if (c.on === false) off.add(k); else off.delete(k); });
-  if (!off.size) return () => true;
   const carrierOf = (o) => {
     const ex = o && o.추가정보;
     if (ex && typeof ex === "object") {
@@ -5229,7 +5228,8 @@ async function routeCarrierCountable(company) {
     }
     return String((o && o.운송업체) ?? "").trim();
   };
-  return (o) => { if (!o || !o.배차표Id) return true; const c = carrierOf(o); return !c || !off.has(key(c)); };
+  // ⭐ 2026-11-06 운송업체 빈칸 = 끈 업체와 같이 제외(화면과 같은 기준)
+  return (o) => { if (!o || !o.배차표Id) return true; const c = carrierOf(o); return !!c && !off.has(key(c)); };
 }
 // 📊 마감 요약 — 그날(상차일) 오더 건수·배차완료·미배차·매출·수익 + 내일 오더/미배차
 async function buildDailySummary(company, date) {

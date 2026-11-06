@@ -46,13 +46,14 @@ export function excludedKeysOf(setting) {
 
 // 정산·매출에 넣을 오더인지 판단하는 함수 — 뺄 업체가 없으면 null(= 전부 포함)
 export function makeIsCountable(setting) {
-  const keys = excludedKeysOf(setting);
-  if (!keys.length) return null;
-  const off = new Set(keys);
+  // ⭐ 2026-11-06 운송업체 칸이 빈 고정노선 오더 = 끈 업체와 똑같이 숨김·정산 제외(설정을 한 번이라도 저장한 회사만)
+  if (!setting) return null;
+  const off = new Set(excludedKeysOf(setting));
   return (o) => {
     if (!o?.배차표Id) return true; // 일반 오더는 그대로
     const c = carrierOf(o);
-    return !c || !off.has(carrierKey(c));
+    if (!c) return false;
+    return !off.has(carrierKey(c));
   };
 }
 const ALL = () => true;
