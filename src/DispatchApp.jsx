@@ -2877,6 +2877,7 @@ import { useFareRules, FareTypeSelect, FareRuleHint, fareFormChange, farePatchOf
 import { useTableSort, sortRows, SortTh } from "./tableSort";
 import { useCompanyFeatures } from "./companyFeatures";
 import { BRAND, LogisMark, LogisWordmark, LogisTag } from "./brand";
+import { DriverGuideSendModal, GUIDE_BTN, guideSentLabel, isFleetGrade } from "./DriverAppGuide"; // ⭐ 2026-11-06 기사앱 안내 보내기
 
 // 기사전달용 업로드 링크 단축 — /upload?id=...&t=... (길고 낯설어 기사들이 거부감을
 // 느낄 수 있는 형태)를 /u/{code} 형태로 줄인다. code는 토큰에서 파생시켜, 같은
@@ -56393,7 +56394,10 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
 }
 // ===================== DispatchApp.jsx (PART 9/9) — END =====================
 // ===================== DispatchApp.jsx (PART 10/10) — START =====================
-function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, showAlert = (m) => alert(m), userCompany = "", grade = "", onGrade }) {
+function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, showAlert = (m) => alert(m), userCompany = "", grade = "", onGrade, mobile = false }) {
+  // ⭐ 2026-11-06 mobile — 모바일 앱(기사관리)에서: 버튼은 기사등록·기사정리·선택삭제만, 표 대신 카드 목록(누르면 상세 시트)
+  const [guideFor, setGuideFor] = React.useState(null); // ⭐ 2026-11-06 [앱 안내 보내기] 대상 기사 배열
+  const [mSheet, setMSheet] = React.useState(null); // 모바일 카드 상세 시트
   // 이름·차량번호·연락처가 모두 빈 문서(예전 직원 승인 때 잘못 생긴 빈 기사)는 목록에서 뺀다
   // ⭐ 2026-11-05 가입 승인 전 기사(기사앱 가입 문서)는 기사관리 목록에서 뺀다 — 기사 앱 계정 › 가입 승인에서 승인하면 들어온다
   const drivers = React.useMemo(() => (driversRaw || []).filter((r) => !isPendingSignupDriver(r) && (String(r.이름 || r.name || "").trim() || String(r.차량번호 || "").trim() || String(r.전화번호 || r.phone || "").trim())), [driversRaw]);
@@ -56699,10 +56703,10 @@ function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, sho
   }), [drivers]);
 
   return (
-    <div className="p-4">
+    <div className={mobile ? "p-1" : "p-4"}>
 
       {/* ⭐ 2026-10-28 디지털 리디자인 — 숫자 타일(누르면 등급별 보기) + 한 줄 검색바 + 오른쪽 작업 버튼 */}
-      <div className="grid grid-cols-6 gap-3 mb-4">
+      <div className={`grid ${mobile ? "grid-cols-3 gap-2 mb-3" : "grid-cols-6 gap-3 mb-4"}`}>
         {[
           {label:"전체", en:"ALL", val:kpi.전체, key:"전체"},
           {label:"일반", en:"GENERAL", val:kpi.일반, key:"일반"},
@@ -56728,30 +56732,48 @@ function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, sho
       </div>
 
       {/* 검색바 + 작업 버튼 */}
-      <div className="flex flex-wrap items-center gap-2.5 mb-4">
-        <div className="flex items-center h-12 flex-1 min-w-[420px] max-w-[720px] rounded-[16px] bg-white border border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_8px_20px_rgba(16,24,40,0.05)] focus-within:border-[#4B6CB7] focus-within:ring-4 focus-within:ring-[#4B6CB7]/10 overflow-hidden">
-          <CustomSelect className="h-full pl-4 pr-2 bg-transparent text-[13.5px] font-black text-[#0F1A30] outline-none border-r border-[#EEF1F6] cursor-pointer"
+      <div className={`flex flex-wrap items-center ${mobile ? "gap-2 mb-3" : "gap-2.5 mb-4"}`}>
+        <div className={`flex items-center h-12 flex-1 ${mobile ? "w-full min-w-0 basis-full" : "min-w-[420px] max-w-[720px]"} rounded-[16px] bg-white border border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_8px_20px_rgba(16,24,40,0.05)] focus-within:border-[#4B6CB7] focus-within:ring-4 focus-within:ring-[#4B6CB7]/10 overflow-hidden`}>
+          <CustomSelect className={`h-full ${mobile ? "pl-3 pr-1 text-[14px] shrink-0" : "pl-4 pr-2 text-[13.5px]"} bg-transparent font-black text-[#0F1A30] outline-none border-r border-[#EEF1F6] cursor-pointer`}
             value={qField} onChange={e => { setQField(e.target.value); setSearched(false); }}>
             {["전체","차량번호","기사명","연락처"].map(o => <option key={o} value={o}>{o}</option>)}
           </CustomSelect>
-          <svg className="ml-3 shrink-0 text-[#9AA9C3]" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="m21 21-5-5" /></svg>
+          <svg className={`${mobile ? "hidden" : "ml-3"} shrink-0 text-[#9AA9C3]`} width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="m21 21-5-5" /></svg>
           <input autoComplete="off"
             className="flex-1 min-w-0 h-full px-2.5 bg-transparent text-[14.5px] font-bold text-[#0F1A30] outline-none placeholder:text-[#A7B3C6] placeholder:font-medium"
-            placeholder="차량번호 · 기사명 · 연락처로 찾기 (Enter)"
+            placeholder={mobile ? "차량번호·기사명·연락처" : "차량번호 · 기사명 · 연락처로 찾기 (Enter)"}
             value={q}
             onChange={e => { setQ(e.target.value); setSearched(false); }}
             onKeyUp={e => { if (e.key==="Enter") setSearched(true); }}
           />
-          <button onClick={()=>setSearched(true)} className="h-9 mr-1.5 px-5 rounded-[12px] bg-[#0F1A30] text-white text-[13.5px] font-black hover:bg-[#1B2B4B]">검색</button>
+          <button onClick={()=>setSearched(true)} className={`h-9 mr-1.5 ${mobile ? "px-3.5 text-[14px]" : "px-5 text-[13.5px]"} shrink-0 rounded-[12px] bg-[#0F1A30] text-white font-black hover:bg-[#1B2B4B]`}>검색</button>
         </div>
-        <div className="flex items-center gap-1 h-12 px-1.5 rounded-[16px] bg-[#EEF2F8] border border-[#E3E8F0]">
+        {!mobile && <div className="flex items-center gap-1 h-12 px-1.5 rounded-[16px] bg-[#EEF2F8] border border-[#E3E8F0]">
           {["전체","일반","직영","지입","임대","블랙"].map(g => (
             <button key={g} onClick={() => { setGradeFilter(g); if (!(q.trim() && searched)) setShowAll(true); }}
               className={`h-9 px-3.5 rounded-[11px] text-[13px] font-black transition ${gradeFilter===g ? "bg-white text-[#0F1A30] shadow-[0_4px_10px_rgba(15,26,48,0.1)]" : "text-[#5B6B85] hover:text-[#0F1A30]"}`}>{g}</button>
           ))}
-        </div>
-        <span className="text-[13px] font-bold text-[#5B6B85] px-1 whitespace-nowrap">총 <b className="text-[#0F1A30] tabular-nums">{filtered.length}</b>명</span>
-        <div className="ml-auto flex items-center gap-2">
+        </div>}
+        <span className={`${mobile ? "text-[14px]" : "text-[13px]"} font-bold text-[#5B6B85] px-1 whitespace-nowrap`}>총 <b className="text-[#0F1A30] tabular-nums">{filtered.length}</b>명{mobile && selected.size > 0 && <> · 선택 <b className="text-[#2D4C82] tabular-nums">{selected.size}</b></>}</span>
+        {mobile && (
+          <div className="ml-auto flex items-center gap-1.5">
+            <button onClick={() => setShowAddForm(true)} className="h-11 px-3.5 rounded-[13px] text-[14px] font-black text-white whitespace-nowrap" style={{ background: "linear-gradient(120deg,#0F1A30,#2D4C82)" }}>+ 기사등록</button>
+            <button onClick={() => { setCleanupOpen(true); setCleanupQ(""); setCleanupQField("전체"); setCleanupSelected(new Set()); setCleanupDone(false); }} className="h-11 px-3 rounded-[13px] bg-white border border-[#E3E8F0] text-[#0F1A30] text-[14px] font-bold whitespace-nowrap">기사정리</button>
+            <button onClick={removeSelected} className="h-11 px-3 rounded-[13px] bg-white border border-[#0F1A30] text-[#0F1A30] text-[14px] font-black whitespace-nowrap">선택삭제</button>
+          </div>
+        )}
+        {mobile && selected.size > 0 && (
+          <div className="basis-full flex items-center gap-2 rounded-[14px] bg-[#EEF3FC] border border-[#C9D6EE] px-3 py-2">
+            <span className="text-[14px] font-black text-[#1B2B4B]">선택 {selected.size}명</span>
+            <button type="button" onClick={() => setSelected(new Set())} className="h-9 px-3 rounded-lg bg-white border border-[#DCE3EE] text-[14px] font-bold text-[#3A4A66]">선택 해제</button>
+            <button type="button" onClick={() => setGuideFor(drivers.filter((d) => selected.has(d.id)))} className="ml-auto h-9 px-3 rounded-lg bg-[#1B2B4B] text-white text-[14px] font-black">앱 안내 보내기</button>
+          </div>
+        )}
+        {!mobile && <div className="ml-auto flex items-center gap-2">
+          <button type="button" className={GUIDE_BTN} title="선택한 기사님(없으면 지입·직영·임대 전체)에게 기사앱 설치 안내를 보냅니다"
+            onClick={() => { const sel = drivers.filter((d) => selected.has(d.id)); const list = sel.length ? sel : filtered.filter((d) => isFleetGrade(d.등급)); if (!list.length) { showAlert("안내를 보낼 기사님을 선택해 주세요."); return; } setGuideFor(list); }}>
+            앱 안내 보내기{selected.size ? ` (${selected.size})` : ""}
+          </button>
           <button onClick={() => setShowAddForm(true)}
             className="h-11 px-4 rounded-[13px] text-[13.5px] font-black text-white shadow-[0_10px_22px_rgba(15,26,48,0.25)] hover:brightness-110 transition" style={{ background: "linear-gradient(120deg,#0F1A30,#2D4C82)" }}>
             + <EditableText id="driver.toolbar.기사등록" defaultText="기사 등록" />
@@ -56789,18 +56811,18 @@ function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, sho
           <button onClick={removeSelected} className="h-11 px-4 rounded-[13px] bg-white border border-[#0F1A30] text-[#0F1A30] text-[13px] font-black hover:bg-[#0F1A30] hover:text-white transition">
             <EditableText id="driver.toolbar.선택삭제" defaultText="선택 삭제" />
           </button>
-        </div>
+        </div>}
       </div>
 
       {/* 신규 등록 팝업 */}
       {showAddForm && (
         <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/40">
-          <div className="bg-white rounded-2xl shadow-2xl w-[600px] overflow-hidden" onClick={e => e.stopPropagation()}>
+          <div className="bg-white rounded-2xl shadow-2xl w-[600px] max-w-[94vw] max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
             <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between">
               <h3 className="text-white font-bold text-[15px]"><EditableText id="driver.addPopup.title" defaultText="신규 기사 등록" /></h3>
               <button onClick={() => setShowAddForm(false)} className="text-white/60 hover:text-white text-xl leading-none">✕</button>
             </div>
-            <div className="px-6 py-5 grid grid-cols-2 gap-4">
+            <div className={`${mobile ? "px-4 grid-cols-1" : "px-6 grid-cols-2"} py-5 grid gap-4`}>
               {[
                 {label:"차량번호 *", key:"차량번호", placeholder:"예: 서울12가3456", border:"border-[#1B2B4B]"},
                 {label:"이름", key:"이름", placeholder:"기사명"},
@@ -56944,7 +56966,76 @@ function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, sho
               </div>
             </div>
           )}
-          {(showAll || searched) && (
+          {/* ⭐ 2026-11-06 모바일 — 카드 목록(누르면 상세 시트 · 수정·전화·앱 안내·삭제) */}
+          {mobile && (showAll || searched) && (
+            <div className="flex flex-col gap-2">
+              <label className="flex items-center gap-2 px-1 text-[14px] font-bold text-[#3A4A66]">
+                <input type="checkbox" className="w-5 h-5" onChange={toggleAll} checked={filtered.length > 0 && selected.size === filtered.length} />
+                전체 선택
+              </label>
+              {paged.length === 0 && <div className="rounded-[18px] bg-white border border-[#E3E8F0] py-14 text-center text-[14px] font-bold text-[#5B6B85]">{q.trim() ? "검색 결과가 없습니다." : "데이터가 없습니다."}</div>}
+              {paged.map((r) => {
+                const g = r.등급 || "일반";
+                const fleet = g === "지입" || g === "직영" || g === "임대";
+                const on = selected.has(r.id);
+                const sent = guideSentLabel(r);
+                return (
+                  <div key={r.id} role="button" tabIndex={0} onClick={() => setMSheet(r)}
+                    className={`rounded-[18px] bg-white border px-3.5 py-3 ${on ? "border-[#2D4C82] ring-2 ring-[#2D4C82]/20" : g === "블랙" ? "border-gray-300 bg-gray-50" : "border-[#E3E8F0]"}`}>
+                    <div className="flex items-center gap-2.5">
+                      <input type="checkbox" className="w-5 h-5 shrink-0" checked={on} onClick={(e) => e.stopPropagation()} onChange={() => toggleOne(r.id)} />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="text-[16px] font-black text-[#0F1A30] break-all">{r.차량번호 || "-"}</span>
+                          <span className="text-[15px] font-bold text-[#0F1A30] break-all">{r.이름 || "-"}</span>
+                          <span className={`px-2 py-0.5 rounded-lg text-[14px] font-bold ${gradeBadge(g)}`}>{g}</span>
+                        </div>
+                        <div className="mt-0.5 text-[14px] text-[#5B6B85] break-words">
+                          {formatPhone(r.전화번호) || "번호 없음"}{(r.차량톤수 || r.차량종류) ? ` · ${[r.차량톤수, r.차량종류].filter(Boolean).join(" ")}` : ""}{fleet && r.담당자?.name ? ` · 담당 ${r.담당자.name}` : ""}
+                        </div>
+                        {(r.메모 || sent) && <div className="mt-0.5 text-[14px] text-[#3A4A66] break-words">{r.메모 ? `메모 ${r.메모}` : ""}{r.메모 && sent ? " · " : ""}{sent ? `앱 안내 ${sent}` : ""}</div>}
+                      </div>
+                      <svg className="shrink-0 text-[#9AA9C3]" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><path d="m9 6 6 6-6 6" /></svg>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+          {mobile && mSheet && (() => {
+            const r = drivers.find((d) => d.id === mSheet.id) || mSheet;
+            const g = r.등급 || "일반";
+            const fleet = g === "지입" || g === "직영" || g === "임대";
+            const ph = String(r.전화번호 || "").replace(/\D/g, "");
+            const rows = [["차량번호", r.차량번호], ["이름", r.이름], ["전화번호", formatPhone(r.전화번호)], ["등급", g], ["차량", [r.차량톤수, r.차량종류].filter(Boolean).join(" ")], ["등록일", displayRegDate(r)],
+              ...(fleet ? [["담당자", r.담당자?.name], ["거주지", r.거주지], ["근무요일", Array.isArray(r.근무요일) ? r.근무요일.join(",") : ""], ["요청사항", r.요청사항]] : []),
+              ["메모", r.메모], ["메모 팝업", (r.메모 || "").trim() ? (g === "블랙" || r.팝업표시 === true ? "ON" : "OFF") : ""], ["앱 안내", guideSentLabel(r)]].filter(([, v]) => String(v || "").trim());
+            return (
+              <div className="fixed inset-0 z-[99990] bg-[#0B1428]/50 flex items-end" onClick={() => setMSheet(null)}>
+                <div className="w-full max-h-[88vh] overflow-y-auto rounded-t-[22px] bg-white" onClick={(e) => e.stopPropagation()}>
+                  <div className="px-4 py-4 text-white flex items-start gap-3" style={{ background: "linear-gradient(120deg,#0B1428,#1B2B4B 70%,#2D4C82)" }}>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-[13px] font-extrabold tracking-[0.14em] text-[#8FB0F0]">DRIVER</div>
+                      <div className="text-[19px] font-black break-all">{r.차량번호 || "-"} · {r.이름 || "-"}</div>
+                    </div>
+                    <button type="button" onClick={() => setMSheet(null)} className="h-10 px-4 rounded-xl bg-white text-[#0F1A30] text-[14px] font-black shrink-0">닫기</button>
+                  </div>
+                  <div className="px-4 py-3 divide-y divide-[#EEF1F6]">
+                    {rows.map(([k, v]) => (
+                      <div key={k} className="py-2 flex gap-3"><span className="w-[78px] shrink-0 text-[14px] font-bold text-[#5B6B85]">{k}</span><span className="flex-1 min-w-0 text-[15px] font-bold text-[#0F1A30] break-words whitespace-pre-wrap">{v}</span></div>
+                    ))}
+                  </div>
+                  <div className="kp-sheet-grid px-4 pb-24 pt-1 grid grid-cols-2 gap-2">
+                    <button type="button" onClick={() => { setMSheet(null); setEditDriverModal({ ...r }); }} className="h-12 rounded-2xl text-white text-[15px] font-black" style={{ background: "linear-gradient(120deg,#0F1A30,#2D4C82)" }}>수정</button>
+                    <button type="button" onClick={() => { setMSheet(null); setGuideFor([r]); }} className="h-12 rounded-2xl bg-[#EEF3FC] border border-[#C9D6EE] text-[#1B2B4B] text-[15px] font-black">앱 안내 보내기</button>
+                    {ph ? <a href={`tel:${ph}`} className="h-12 rounded-2xl bg-white border border-[#DCE3EE] text-[#0F1A30] text-[15px] font-black flex items-center justify-center">전화</a> : <span className="h-12 rounded-2xl bg-[#F3F6FA] text-[#9AA9C3] text-[15px] font-black flex items-center justify-center">번호 없음</span>}
+                    <button type="button" onClick={async () => { if (!await kpConfirm(`${r.이름 || r.차량번호} 기사님을 삭제할까요?`)) return; setMSheet(null); await removeDriver(r.id); }} className="h-12 rounded-2xl bg-white border border-[#0F1A30] text-[#0F1A30] text-[15px] font-black">삭제</button>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+          {!mobile && (showAll || searched) && (
             <div className="bg-white rounded-[22px] border border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_12px_30px_rgba(16,24,40,0.07)] overflow-hidden">
               <table className="w-full text-[13px]">
                 <thead>
@@ -57023,7 +57114,13 @@ function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, sho
                             </span>
                           )}
                         </td>
-                        <td className="px-3 py-2.5 text-center">
+                        <td className="px-3 py-2.5 text-center whitespace-nowrap">
+                          {/* ⭐ 2026-11-06 지입·직영·임대 기사님 — 기사앱 안내 보내기(보낸 시각은 마우스를 올리면) */}
+                          {(grade==="지입"||grade==="직영"||grade==="임대") && (
+                            <button type="button" title={guideSentLabel(r) ? `지난 안내 ${guideSentLabel(r)}` : "기사앱 설치 안내 보내기"}
+                              className={`mr-1 px-2.5 py-1 rounded-lg text-[12px] font-bold border transition ${guideSentLabel(r) ? "bg-[#EEF3FC] border-[#C9D6EE] text-[#1B2B4B]" : "bg-white border-[#2D4C82] text-[#1B2B4B] hover:bg-[#EEF3FC]"}`}
+                              onClick={(e) => { e.stopPropagation(); setGuideFor([r]); }}>{guideSentLabel(r) ? "안내 보냄" : "앱 안내"}</button>
+                          )}
                           <button
                             className="px-3 py-1 rounded-lg bg-red-600 text-white text-[11px] font-bold hover:bg-red-700 transition"
                             onClick={(e)=>{ e.stopPropagation(); if(window.confirm("삭제하시겠습니까?")) removeDriver(docId); }}>
@@ -57056,6 +57153,7 @@ function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, sho
         </div>
       </div>
 
+      {guideFor && <DriverGuideSendModal drivers={guideFor} company={userCompany} onClose={() => setGuideFor(null)} />}
       {/* ===== 기사 수정 팝업 (더블클릭) ===== */}
       {editDriverModal && (
         <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/40">
@@ -57064,7 +57162,7 @@ function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, sho
               <h3 className="text-white font-bold text-[15px]">기사 수정 — {editDriverModal.차량번호}{(editDriverModal.등급 === "지입" || editDriverModal.등급 === "직영" || editDriverModal.등급 === "임대") ? <span className="ml-2 px-2 py-0.5 rounded-md bg-white/15 text-[11.5px] font-black">{editDriverModal.등급}</span> : null}</h3>
               <button onClick={() => setEditDriverModal(null)} className="text-white/60 hover:text-white text-xl">✕</button>
             </div>
-            <div className="px-6 py-5 grid grid-cols-2 gap-4">
+            <div className={`${mobile ? "px-4 grid-cols-1" : "px-6 grid-cols-2"} py-5 grid gap-4`}>
               <div>
                 <label className="block text-[12px] font-semibold text-gray-500 mb-1">차량번호 *</label>
                 <input autoComplete="off" className="border border-gray-200 rounded-lg px-3 py-2 text-[13px] w-full focus:border-[#1B2B4B] outline-none"
@@ -57206,7 +57304,7 @@ function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, sho
       {/* ===== 기사정리 팝업 ===== */}
       {cleanupOpen && (
         <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/50">
-          <div className="bg-white rounded-2xl shadow-2xl w-[820px] max-h-[85vh] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
+          <div className="bg-white rounded-2xl shadow-2xl w-[820px] max-w-[96vw] max-h-[85vh] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
             {/* 헤더 */}
             <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between shrink-0">
               <div>
@@ -57225,8 +57323,8 @@ function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, sho
               ))}
             </div>
             {/* 검색바 */}
-            <div className="px-5 py-3 border-b border-gray-100 flex items-center gap-2 shrink-0">
-              <div className="flex items-center border-2 border-[#1B2B4B] rounded-lg overflow-hidden h-[34px]">
+            <div className="px-5 py-3 border-b border-gray-100 flex flex-wrap items-center gap-2 shrink-0">
+              <div className="flex items-center border-2 border-[#1B2B4B] rounded-lg overflow-hidden h-[34px] max-w-full">
                 <CustomSelect className="px-2 h-full text-[13px] bg-[#1B2B4B]/5 border-r border-[#1B2B4B]/30 outline-none text-[#1B2B4B] font-semibold"
                   value={cleanupQField} onChange={e => setCleanupQField(e.target.value)}>
                   <option value="전체">전체</option>
@@ -57234,7 +57332,7 @@ function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, sho
                   <option value="기사명">기사명</option>
                   <option value="연락처">연락처</option>
                 </CustomSelect>
-                <input autoComplete="off" className="px-3 h-full text-[13px] w-44 outline-none"
+                <input autoComplete="off" className="px-3 h-full text-[13px] w-44 min-w-0 outline-none"
                   placeholder="검색어 입력..."
                   value={cleanupQ}
                   onChange={e => setCleanupQ(e.target.value)} />
@@ -57587,18 +57685,19 @@ function KpStatTile({ on, en, label, value, onClick }) {
     </button>
   );
 }
-function KpSearchBar({ options, field, onField, value, onChange, onSearch, placeholder }) {
+function KpSearchBar({ options, field, onField, value, onChange, onSearch, placeholder, mobile = false }) {
+  // ⭐ 2026-11-06 mobile — 휴대폰 폭에서는 한 줄 전체(최소 폭 없음) · [검색] 버튼이 항상 보이게
   return (
-    <div className="flex items-center h-12 flex-1 min-w-[380px] max-w-[680px] rounded-[16px] bg-white border border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_8px_20px_rgba(16,24,40,0.05)] focus-within:border-[#4B6CB7] focus-within:ring-4 focus-within:ring-[#4B6CB7]/10 overflow-hidden">
+    <div className={`flex items-center h-12 flex-1 ${mobile ? "w-full min-w-0 basis-full" : "min-w-[380px] max-w-[680px]"} rounded-[16px] bg-white border border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_8px_20px_rgba(16,24,40,0.05)] focus-within:border-[#4B6CB7] focus-within:ring-4 focus-within:ring-[#4B6CB7]/10 overflow-hidden`}>
       {options && (
-        <CustomSelect className="h-full pl-4 pr-2 bg-transparent text-[13.5px] font-black text-[#0F1A30] outline-none border-r border-[#EEF1F6] cursor-pointer" value={field} onChange={(e) => onField(e.target.value)}>
+        <CustomSelect className={`h-full ${mobile ? "pl-3 pr-1 text-[14px] shrink-0" : "pl-4 pr-2 text-[13.5px]"} bg-transparent font-black text-[#0F1A30] outline-none border-r border-[#EEF1F6] cursor-pointer`} value={field} onChange={(e) => onField(e.target.value)}>
           {options.map((o) => <option key={o} value={o}>{o}</option>)}
         </CustomSelect>
       )}
-      <svg className="ml-3 shrink-0 text-[#9AA9C3]" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="m21 21-5-5" /></svg>
+      <svg className={`${mobile ? "hidden" : "ml-3"} shrink-0 text-[#9AA9C3]`} width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="m21 21-5-5" /></svg>
       <input autoComplete="off" className="flex-1 min-w-0 h-full px-2.5 bg-transparent text-[14.5px] font-bold text-[#0F1A30] outline-none placeholder:text-[#A7B3C6] placeholder:font-medium"
         placeholder={placeholder} value={value} onChange={(e) => onChange(e.target.value)} onKeyUp={(e) => { if (e.key === "Enter") onSearch(); }} />
-      <button onClick={onSearch} className="h-9 mr-1.5 px-5 rounded-[12px] bg-[#0F1A30] text-white text-[13.5px] font-black hover:bg-[#1B2B4B]">검색</button>
+      <button onClick={onSearch} className={`h-9 mr-1.5 ${mobile ? "px-3.5 text-[14px]" : "px-5 text-[13.5px]"} shrink-0 rounded-[12px] bg-[#0F1A30] text-white font-black hover:bg-[#1B2B4B]`}>검색</button>
     </div>
   );
 }
@@ -57613,7 +57712,9 @@ function KpEmptySearch({ en, title, sub }) {
   );
 }
 
-function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlace, places: placesProp = [], showAlert = (m) => alert(m), hideTabs = false, initialTab = "하차지", userCompany = "" }) {
+function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlace, places: placesProp = [], showAlert = (m) => alert(m), hideTabs = false, initialTab = "하차지", userCompany = "", mobile = false }) {
+  // ⭐ 2026-11-06 mobile — 모바일 앱 거래처관리: 버튼은 신규등록·거래처정리·선택삭제만, 표 대신 카드(누르면 상세 시트)
+  const [mSheet, setMSheet] = React.useState(null); // { kind: "place"|"client", r }
   const normalizePlaceRow = (d) => {
     const primary = Array.isArray(d.contacts) && d.contacts.length
       ? d.contacts.find(c => c.isPrimary) || d.contacts[0] : null;
@@ -57749,7 +57850,7 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
   // 기본 거래처
   // ═══════════════════════════════════════════════════
   const [q, setQ] = React.useState("");
-  const [showAllClients, setShowAllClients] = React.useState(false);
+  const [showAllClients, setShowAllClients] = React.useState(mobile); // ⭐ 2026-11-06 모바일은 처음부터 전체 목록(전체보기 버튼 없음)
   const [rows, setRows] = React.useState(() => (clients || []).map((c) => ({ ...c })));
   // 사업자등록증 OCR 스캔 팝업 — 열려있는 동안 스캔 대상 이미지를 들고 있는다
   const [ocrScanImage, setOcrScanImage] = React.useState(null);
@@ -58574,25 +58675,25 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
 
           {/* 검색 + 버튼 바 */}
           <div className="flex flex-wrap items-center gap-2">
-            <KpSearchBar options={["업체명", "주소"]} field={placeFilterType} onField={setPlaceFilterType}
+            <KpSearchBar mobile={mobile} options={["업체명", "주소"]} field={placeFilterType} onField={setPlaceFilterType}
               value={placeQ} onChange={(v) => { setPlaceQ(v); setPlaceSearched(false); }} onSearch={() => setPlaceSearched(true)}
-              placeholder="상하차지 업체명 · 주소로 찾기 (Enter)" />
+              placeholder={mobile ? "업체명·주소" : "상하차지 업체명 · 주소로 찾기 (Enter)"} />
             {(placeSearched || placeGradeFilter !== "전체") && (
               <span className="text-[13px] font-bold text-[#5B6B85] px-1 whitespace-nowrap">검색결과 <b className="text-[#0F1A30] tabular-nums">{filteredPlaces.length}</b>건</span>
             )}
             {placeSelInView > 0 && (
               <span className="text-[13px] font-bold text-[#5B6B85] px-1 whitespace-nowrap">선택 <b className="text-[#2D4C82] tabular-nums">{placeSelInView.toLocaleString()}</b>건</span>
             )}
-            <div className="ml-auto flex items-center gap-2">
+            <div className={`ml-auto flex items-center ${mobile ? "gap-1.5" : "gap-2"}`}>
               <button onClick={() => setShowNewPlaceForm(true)}
                 className={KP_BTN_PRIMARY} style={KP_BTN_PRIMARY_BG}>
                 + <EditableText id="client.dropPlace.toolbar.신규등록" defaultText="신규등록" />
               </button>
-              <button type="button" onClick={() => setClientBulkKind("place")} className={`${KP_BTN} cursor-pointer inline-flex items-center`}>
+              {!mobile && <button type="button" onClick={() => setClientBulkKind("place")} className={`${KP_BTN} cursor-pointer inline-flex items-center`}>
                 <EditableText id="client.dropPlace.toolbar.엑셀업로드" defaultText="대용량 업로드" />
-              </button>
-              <button onClick={downloadPlaceExcel}
-                className={KP_BTN}><EditableText id="client.dropPlace.toolbar.다운로드" defaultText="다운로드" /></button>
+              </button>}
+              {!mobile && <button onClick={downloadPlaceExcel}
+                className={KP_BTN}><EditableText id="client.dropPlace.toolbar.다운로드" defaultText="다운로드" /></button>}
               <button onClick={() => { setPlaceDupOpen(true); setPlaceDupDone(false); setPlaceDupSelected(new Set()); }}
                 className={KP_BTN}>
                 <EditableText id="client.dropPlace.toolbar.거래처정리" defaultText="거래처정리" />
@@ -58668,8 +58769,35 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
             <div className="bg-white rounded-xl border text-center py-14 text-gray-500 text-sm">검색 결과가 없습니다</div>
           )}
 
+          {/* ⭐ 2026-11-06 모바일 — 카드 목록(누르면 상세 시트) */}
+          {mobile && filteredPlaces.length > 0 && (
+            <div className="flex flex-col gap-2">
+              <label className="flex items-center gap-2 px-1 text-[14px] font-bold text-[#3A4A66]"><KpCheckbox onChange={togglePlaceAll} checked={placeAllChecked} indeterminate={placeSelInView > 0} />전체 선택 · {filteredPlaces.length.toLocaleString()}건</label>
+              {sortedPlaces.slice(0, placeShowN).map((r, i) => {
+                const id = r.id || r.업체명 || `${i}`;
+                const grade = r.등급 || "일반";
+                return (
+                  <div key={id} role="button" tabIndex={0} onClick={() => setMSheet({ kind: "place", r })}
+                    className={`rounded-[16px] border px-3.5 py-3 ${placeSelected.has(id) ? "bg-[#EAF1FF] border-[#2D4C82]" : grade === "블랙" ? "bg-gray-100 border-gray-300" : grade === "주의" ? "bg-orange-50/60 border-[#E3E8F0]" : grade === "이탈" ? "bg-red-50/40 border-[#E3E8F0]" : "bg-white border-[#E3E8F0]"}`}>
+                    <div className="flex items-start gap-2.5">
+                      <span className="pt-0.5" onClick={(e) => e.stopPropagation()}><KpCheckbox checked={placeSelected.has(id)} onChange={() => togglePlaceOne(id)} /></span>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-1.5 flex-wrap"><span className="text-[15px] font-black text-[#0F1A30] break-words">{r.업체명 || "-"}</span>{grade !== "일반" && <span className={`px-2 py-0.5 rounded text-[14px] font-bold ${등급색상(grade)}`}>{grade}</span>}</div>
+                        <div className="mt-0.5 text-[14px] text-[#3A4A66] break-words">{r.주소 || "주소 없음"}</div>
+                        {(r.담당자 || r.담당자번호) && <div className="mt-0.5 text-[14px] text-[#5B6B85] break-words">{[r.담당자, r.담당자번호].filter(Boolean).join(" · ")}{r._allContacts && r._allContacts.length > 1 ? ` 외 ${r._allContacts.length - 1}명` : ""}</div>}
+                        {(r.메모 || r.오더메모) && <div className="mt-0.5 text-[14px] text-[#5B6B85] break-words">{[r.메모 && `메모 ${r.메모}`, r.오더메모 && `오더메모 ${r.오더메모}`].filter(Boolean).join(" · ")}</div>}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+              {filteredPlaces.length > placeShowN && (
+                <button type="button" onClick={() => setPlaceShowN((n) => n + 300)} className="w-full h-11 rounded-[14px] bg-white border border-[#E3E8F0] text-[14px] font-black text-[#1B2B4B]">더 보기 ({placeShowN.toLocaleString()} / {filteredPlaces.length.toLocaleString()}건)</button>
+              )}
+            </div>
+          )}
           {/* 테이블 */}
-          {filteredPlaces.length > 0 && (
+          {!mobile && filteredPlaces.length > 0 && (
             <div className="bg-white rounded-xl border overflow-hidden shadow-sm">
               <div className="overflow-x-auto">
                 <table className="min-w-[900px] text-sm border-collapse w-full">
@@ -58974,14 +59102,20 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
 
           {/* 툴바 */}
           <div className="flex flex-wrap items-center gap-2">
-            <KpSearchBar value={q} onChange={setQ} onSearch={() => {}} placeholder="거래처명 · 사업자번호 · 담당자로 바로 찾기" />
+            <KpSearchBar mobile={mobile} value={q} onChange={setQ} onSearch={() => {}} placeholder={mobile ? "거래처명·사업자번호·담당자" : "거래처명 · 사업자번호 · 담당자로 바로 찾기"} />
             <span className="text-[13px] font-bold text-[#5B6B85] px-1 whitespace-nowrap"><b className="text-[#0F1A30] tabular-nums">{filtered.length}</b>건{clientSelInView > 0 && <> · 선택 <b className="text-[#2D4C82] tabular-nums">{clientSelInView}</b>건</>}</span>
-            <button
+            {mobile && (
+              <div className="ml-auto flex items-center gap-1.5">
+                <button onClick={() => setShowNewClientModal(true)} className={KP_BTN_PRIMARY} style={KP_BTN_PRIMARY_BG}>+ 신규등록</button>
+                <button onClick={removeSelectedFn} className={KP_BTN_DANGER}>선택삭제{selected.size > 0 && ` (${selected.size})`}</button>
+              </div>
+            )}
+            {!mobile && <button
               onClick={() => { setShowAllClients(v => !v); setQ(""); }}
               className={showAllClients ? "h-11 px-4 rounded-[13px] bg-[#0F1A30] text-white text-[13px] font-bold whitespace-nowrap" : KP_BTN}>
               {showAllClients ? <EditableText id="client.baseClient.toolbar.전체보기닫기" defaultText="전체보기 닫기" /> : <EditableText id="client.baseClient.toolbar.전체보기" defaultText="전체보기" />}
-            </button>
-            <div className="ml-auto flex flex-wrap items-center gap-2">
+            </button>}
+            {!mobile && <div className="ml-auto flex flex-wrap items-center gap-2">
               <button onClick={() => { setShowImportPopup(true); setImportQ(""); setImportSelected([]); }}
                 className={KP_BTN}>
                 <EditableText id="client.baseClient.toolbar.하차지에서불러오기" defaultText="상하차지에서 불러오기" />
@@ -59016,7 +59150,7 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
                 className={KP_BTN_PRIMARY} style={KP_BTN_PRIMARY_BG}>
                 + 신규등록
               </button>
-            </div>
+            </div>}
           </div>
 
           {/* 신규등록 팝업 */}
@@ -59309,8 +59443,32 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
             </div>
           )}
 
+          {/* ⭐ 2026-11-06 모바일 — 기본거래처 카드 목록(누르면 상세 시트) */}
+          {mobile && filtered.length > 0 && (
+            <div className="flex flex-col gap-2">
+              <label className="flex items-center gap-2 px-1 text-[14px] font-bold text-[#3A4A66]"><KpCheckbox onChange={toggleAll} checked={clientAllChecked} indeterminate={clientSelInView > 0} />전체 선택 · {filtered.length.toLocaleString()}건</label>
+              {sortedClients.map((r) => {
+                const id = r.id || r.거래처명;
+                return (
+                  <div key={id} role="button" tabIndex={0} onClick={() => setMSheet({ kind: "client", r })}
+                    className={`rounded-[16px] border px-3.5 py-3 ${selected.has(id) ? "bg-[#EAF1FF] border-[#2D4C82]" : "bg-white border-[#E3E8F0]"}`}>
+                    <div className="flex items-start gap-2.5">
+                      <span className="pt-0.5" onClick={(e) => e.stopPropagation()}><KpCheckbox checked={selected.has(id)} onChange={() => toggleOne(id)} /></span>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-1.5 flex-wrap"><span className="text-[15px] font-black text-[#0F1A30] break-words">{r.거래처명 || "-"}</span>{r.등급 && r.등급 !== "일반" && <span className="px-2 py-0.5 rounded bg-[#F3F6FA] text-[14px] font-bold text-[#0F1A30]">{r.등급}</span>}</div>
+                        <div className="mt-0.5 text-[14px] text-[#3A4A66] break-words">{[r.사업자번호, r.대표자 && `대표 ${r.대표자}`].filter(Boolean).join(" · ") || "사업자 정보 없음"}</div>
+                        {(r.담당자 || r.연락처) && <div className="mt-0.5 text-[14px] text-[#5B6B85] break-words">{[r.담당자, r.연락처].filter(Boolean).join(" · ")}</div>}
+                        {r.주소 && <div className="mt-0.5 text-[14px] text-[#5B6B85] break-words">{r.주소}</div>}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+          {mobile && !filtered.length && <div className="rounded-[16px] bg-white border border-[#E3E8F0] py-14 text-center text-[14px] font-bold text-[#5B6B85]">{q ? "검색 결과가 없습니다" : "등록된 거래처가 없습니다"}</div>}
           {/* 테이블 */}
-          {filtered.length > 0 ? (
+          {mobile ? null : filtered.length > 0 ? (
             <div className="bg-white rounded-xl border shadow-sm overflow-hidden">
               <div className="overflow-x-auto">
                 <table className="min-w-max text-sm border-collapse w-full">
@@ -59417,6 +59575,50 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
         </div>
       )}
 
+      {/* ⭐ 2026-11-06 모바일 상세 시트 — 상하차지·기본거래처 공용(수정·전화·삭제) */}
+      {mobile && mSheet && (() => {
+        const { kind, r } = mSheet;
+        const isPlace = kind === "place";
+        const id = isPlace ? (r.id || r.업체명) : (r.id || r.거래처명);
+        const ph = String((isPlace ? r.담당자번호 : r.연락처) || "").replace(/\D/g, "");
+        const rowsV = isPlace
+          ? [["업체명", r.업체명], ["주소", r.주소], ["담당자", r.담당자], ["담당자번호", r.담당자번호], ["등급", r.등급 || "일반"], ["일반메모", r.메모], ["오더메모", r.오더메모], ["안내사항", _hasRealDriverNotice(r.기사전달주의사항) ? "등록" : "미등록"]]
+          : [["거래처명", r.거래처명], ["사업자번호", r.사업자번호], ["대표자", r.대표자], ["업태", r.업태], ["종목", r.종목], ["주소", r.주소], ["이메일", r.이메일], ["담당자", r.담당자], ["연락처", r.연락처], ["등급", r.등급 || "일반"], ["일반메모", r.메모], ["오더메모", r.오더메모], ["안내사항", _hasRealDriverNotice(r.기사전달주의사항) ? "등록" : "미등록"]];
+        const openEdit = () => {
+          setMSheet(null);
+          if (isPlace) setEditPlaceModal({ ...r, contacts: Array.isArray(r._rawContacts) && r._rawContacts.length ? r._rawContacts : (r.담당자 ? [{ name: r.담당자, phone: r.담당자번호 || "", isPrimary: true }] : []), 기사전달주의사항: (r.기사전달주의사항 || "").trim() ? r.기사전달주의사항 : defaultDriverNoticeTemplate(r.업체명) });
+          else setEditClientModal({ ...r, contacts: Array.isArray(r.contacts) && r.contacts.length ? r.contacts : (r.담당자 ? [{ name: r.담당자, phone: r.연락처 || "", isPrimary: true }] : []), 기사전달주의사항: (r.기사전달주의사항 || "").trim() ? r.기사전달주의사항 : defaultDriverNoticeTemplate(r.거래처명) });
+        };
+        const del = async () => {
+          if (!await kpConfirm(`${isPlace ? r.업체명 : r.거래처명}을(를) 삭제할까요?`)) return;
+          setMSheet(null);
+          if (isPlace) await runDelete({ label: "하차지", task: async () => { await mergePlaceContactsIntoClient(r); await removePlace(id); } });
+          else await removeClient?.([id]);
+        };
+        return (
+          <div className="fixed inset-0 z-[99990] bg-[#0B1428]/50 flex items-end" onClick={() => setMSheet(null)}>
+            <div className="w-full max-h-[88vh] overflow-y-auto rounded-t-[22px] bg-white" onClick={(e) => e.stopPropagation()}>
+              <div className="px-4 py-4 text-white flex items-start gap-3" style={{ background: "linear-gradient(120deg,#0B1428,#1B2B4B 70%,#2D4C82)" }}>
+                <div className="flex-1 min-w-0">
+                  <div className="text-[13px] font-extrabold tracking-[0.14em] text-[#8FB0F0]">{isPlace ? "PLACE" : "CLIENT"}</div>
+                  <div className="text-[19px] font-black break-words">{isPlace ? r.업체명 : r.거래처명}</div>
+                </div>
+                <button type="button" onClick={() => setMSheet(null)} className="h-10 px-4 rounded-xl bg-white text-[#0F1A30] text-[14px] font-black shrink-0">닫기</button>
+              </div>
+              <div className="px-4 py-3 divide-y divide-[#EEF1F6]">
+                {rowsV.filter(([, v]) => String(v || "").trim()).map(([k, v]) => (
+                  <div key={k} className="py-2 flex gap-3"><span className="w-[84px] shrink-0 text-[14px] font-bold text-[#5B6B85]">{k}</span><span className="flex-1 min-w-0 text-[15px] font-bold text-[#0F1A30] break-words whitespace-pre-wrap">{v}</span></div>
+                ))}
+              </div>
+              <div className="kp-sheet-grid px-4 pb-24 pt-1 grid grid-cols-3 gap-2">
+                <button type="button" onClick={openEdit} className="h-12 rounded-2xl text-white text-[15px] font-black" style={{ background: "linear-gradient(120deg,#0F1A30,#2D4C82)" }}>수정</button>
+                {ph ? <a href={`tel:${ph}`} className="h-12 rounded-2xl bg-white border border-[#DCE3EE] text-[#0F1A30] text-[15px] font-black flex items-center justify-center">전화</a> : <span className="h-12 rounded-2xl bg-[#F3F6FA] text-[#9AA9C3] text-[15px] font-black flex items-center justify-center">번호 없음</span>}
+                <button type="button" onClick={del} className="h-12 rounded-2xl bg-white border border-[#0F1A30] text-[#0F1A30] text-[15px] font-black">삭제</button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
       {/* 하차지거래처 수정 팝업 */}
       {editPlaceModal && (
         <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/40">
@@ -62224,7 +62426,7 @@ export function PcDriverMobile({ drivers = [], userCompany = "", role = "", isVi
     if (!ids.length) return;
     return deleteDocsAtomic(db, ids.map((id) => doc(db, COLL.drivers, id)), { label: "기사" });
   }, []);
-  return <DriverManagement drivers={drivers} upsertDriver={isViewer ? _mViewerBlock : upsert} removeDriver={isViewer ? _mViewerBlock : remove} showAlert={(m) => window.alert(m)} userCompany={userCompany} grade={grade} onGrade={setGrade} />;
+  return <DriverManagement mobile drivers={drivers} upsertDriver={isViewer ? _mViewerBlock : upsert} removeDriver={isViewer ? _mViewerBlock : remove} showAlert={(m) => window.alert(m)} userCompany={userCompany} grade={grade} onGrade={setGrade} />;
 }
 export function PcClientMobile({ clients = [], places = [], userCompany = "", role = "", isViewer = false, initialTab = "하차지" }) {
   const upsert = React.useCallback((c) => pcUpsertClient({ role, userCompany, places }, c), [role, userCompany, places]);
@@ -62233,7 +62435,7 @@ export function PcClientMobile({ clients = [], places = [], userCompany = "", ro
     if (!ids.length) return;
     return deleteDocsAtomic(db, ids.map((id) => doc(db, COLL.clients, id)), { label: "거래처" });
   }, []);
-  return <ClientManagement key={initialTab} clients={clients} upsertClient={isViewer ? _mViewerBlock : upsert} removeClient={isViewer ? _mViewerBlock : remove} upsertPlace={isViewer ? _mViewerBlock : upsertPlace}
+  return <ClientManagement mobile key={initialTab} clients={clients} upsertClient={isViewer ? _mViewerBlock : upsert} removeClient={isViewer ? _mViewerBlock : remove} upsertPlace={isViewer ? _mViewerBlock : upsertPlace}
     places={places} showAlert={(m) => window.alert(m)} initialTab={initialTab} hideTabs userCompany={userCompany} />;
 }
 // 📊 경리 › 회계관리 — 회계 개요(시각화) · 회계 장부(미수·지급·부가세·원가) · 퇴직 정산

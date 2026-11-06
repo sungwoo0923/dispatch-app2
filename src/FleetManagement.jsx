@@ -1,5 +1,7 @@
 // ======================= FleetManagement.jsx =======================
 import { subscribeUsersLive } from "./usersLive"; // ⭐ 2026-11-02 속도 — 직원 명부 구독 공유
+import useNarrow from "./useNarrow"; // ⭐ 2026-11-06 휴대폰 폭 카드 목록
+import { DriverGuideSendModal, guideSentLabel } from "./DriverAppGuide"; // ⭐ 2026-11-06 기사앱 안내 보내기
 import React, { useEffect, useState, useMemo, useCallback, useRef } from "react";
 import { kpConfirm } from "./kpDialog";
 import { createPortal } from "react-dom";
@@ -1114,6 +1116,10 @@ function RegistrationTab({ usersMap, myCompanyName, driversRaw = [], myUid = nul
   const [fMgr, setFMgr] = useState("");
   const [fLive, setFLive] = useState("");
   const [folded, setFolded] = useState({});
+  // ⭐ 2026-11-06 [앱 안내 보내기] — 기사별 · 선택한 기사 한꺼번에
+  const [gSel, setGSel] = useState(() => new Set());
+  const [guideFor, setGuideFor] = useState(null);
+  const narrow = useNarrow();
 
   const rawById = useMemo(() => {
     const m = {};
@@ -1228,15 +1234,27 @@ function RegistrationTab({ usersMap, myCompanyName, driversRaw = [], myUid = nul
     }
   };
 
-  const COLS = "52px 1.1fr 1.1fr 1fr 0.8fr 1.2fr 1.2fr 1fr 150px";
+  const COLS = "52px 1.1fr 1.1fr 1fr 0.8fr 1.2fr 1.2fr 1fr 230px";
+  const guideObj = (d) => ({ id: d.uid, 이름: d.이름, 전화번호: d.전화번호, 차량번호: d.차량번호, 등급: d.등급, ...(rawById[d.uid] ? { 앱안내보냄At: rawById[d.uid].앱안내보냄At, 앱안내보냄방법: rawById[d.uid].앱안내보냄방법 } : {}) });
+  const toggleG = (id) => setGSel((p) => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  const guideBtn = (d) => {
+    const sent = guideSentLabel(guideObj(d));
+    return (
+      <button type="button" onClick={(e) => { e.stopPropagation(); setGuideFor([guideObj(d)]); }} title={sent ? `지난 안내 ${sent}` : "기사앱 설치 안내 보내기"}
+        style={{ padding: "5px 10px", borderRadius: 7, border: `1px solid ${sent ? "#C9D6EE" : "#2D4C82"}`, background: sent ? "#EEF3FC" : "#fff", color: NAVY, fontSize: 14, fontWeight: 800, cursor: "pointer", whiteSpace: "nowrap" }}>{sent ? "안내 보냄" : "앱 안내"}</button>
+    );
+  };
   const head = ["", "기사", "차량번호", "차량", "등급", "전화번호", "담당자", "앱 접속", ""];
   const gradeColor = (g) => g === "지입" ? { bg: "#eef1f6", fg: NAVY } : g === "직영" ? { bg: "#ecfdf5", fg: "#047857" } : g === "블랙" ? { bg: "#fef2f2", fg: "#b91c1c" } : { bg: "#f3f4f6", fg: "#374151" };
 
   const DriverRow = ({ d, idx }) => {
     const gc = gradeColor(d.등급);
     return (
-      <div style={{ display: "grid", gridTemplateColumns: COLS, alignItems: "center", gap: 10, padding: "12px 16px", borderTop: "1px solid #eef1f5", background: idx % 2 ? "#fbfcfd" : "#fff" }}>
-        <div style={{ width: 38, height: 38, borderRadius: 10, background: NAVY, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 17, fontWeight: 900 }}>{String(d.이름).slice(0, 1)}</div>
+      <div style={{ display: "grid", gridTemplateColumns: COLS, alignItems: "center", gap: 10, padding: "12px 16px", borderTop: "1px solid #eef1f5", background: gSel.has(d.uid) ? "#EEF3FC" : idx % 2 ? "#fbfcfd" : "#fff" }}>
+        <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }} title="앱 안내 보낼 기사 선택">
+          <input type="checkbox" checked={gSel.has(d.uid)} onChange={() => toggleG(d.uid)} style={{ width: 16, height: 16 }} />
+          <span style={{ width: 26, height: 26, borderRadius: 8, background: NAVY, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, fontWeight: 900 }}>{String(d.이름).slice(0, 1)}</span>
+        </label>
         <div style={{ fontSize: 17, fontWeight: 900, color: "#111827", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{d.이름}</div>
         <div><span style={{ fontSize: 16, fontWeight: 800, color: "#111827", border: "1.5px solid #111827", borderRadius: 5, padding: "2px 8px", whiteSpace: "nowrap" }}>{d.차량번호}</span></div>
         <div style={{ fontSize: 15, fontWeight: 700, color: "#374151" }}>{[d.차량종류, d.차량톤수].filter(v => v && v !== "미입력").join(" ") || "-"}</div>
@@ -1248,7 +1266,7 @@ function RegistrationTab({ usersMap, myCompanyName, driversRaw = [], myUid = nul
             : <span style={{ fontSize: 14, color: "#5B6B85", fontWeight: 700 }}>-</span>}
         </div>
         {d.noApp ? (
-          <div style={{ gridColumn: "span 2", display: "flex", justifyContent: "flex-end" }}><AppStatusBadge d={d.raw || {}} company={myCompanyName} /></div>
+          <div style={{ gridColumn: "span 2", display: "flex", justifyContent: "flex-end", gap: 6, flexWrap: "wrap" }}><AppStatusBadge d={d.raw || {}} company={myCompanyName} />{guideBtn(d)}</div>
         ) : (<>
         <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 14, fontWeight: 700, color: d.online ? NAVY : "#5B6B85" }}>
           <span style={{ width: 8, height: 8, borderRadius: "50%", background: d.online ? "#2D4C82" : "#cbd2dc", flexShrink: 0 }} />
@@ -1256,10 +1274,41 @@ function RegistrationTab({ usersMap, myCompanyName, driversRaw = [], myUid = nul
         </div>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 8 }}>
           <span style={{ fontSize: 14, color: "#5B6B85", fontWeight: 700, whiteSpace: "nowrap" }}>{d.createdAt ? formatDate(d.createdAt) : ""}</span>
+          {guideBtn(d)}
           <button onClick={() => handleApprove(d.uid, false)} disabled={!!approvingId}
             style={{ padding: "5px 10px", borderRadius: 7, border: "1px solid #e5e7eb", background: "#fff", color: "#5B6B85", fontSize: 14, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" }}>승인취소</button>
         </div>
         </>)}
+      </div>
+    );
+  };
+
+  // ⭐ 2026-11-06 휴대폰 폭 — 한 줄 표(9칸) 대신 카드(이름·차량번호 전체 표시)
+  const DriverCard = ({ d }) => {
+    const gc = gradeColor(d.등급);
+    const sent = guideSentLabel(guideObj(d));
+    return (
+      <div style={{ padding: "12px 14px", borderTop: "1px solid #eef1f5", background: gSel.has(d.uid) ? "#EEF3FC" : "#fff" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+          <input type="checkbox" checked={gSel.has(d.uid)} onChange={() => toggleG(d.uid)} style={{ width: 20, height: 20 }} />
+          <span style={{ fontSize: 16, fontWeight: 900, color: "#111827", overflowWrap: "anywhere" }}>{d.이름}</span>
+          <span style={{ fontSize: 15, fontWeight: 800, color: "#111827", border: "1.5px solid #111827", borderRadius: 5, padding: "1px 7px" }}>{d.차량번호}</span>
+          <span style={{ fontSize: 14, fontWeight: 800, color: gc.fg, background: gc.bg, borderRadius: 6, padding: "2px 9px" }}>{d.등급}</span>
+        </div>
+        <div style={{ marginTop: 5, fontSize: 14, fontWeight: 700, color: "#374151", overflowWrap: "anywhere" }}>
+          {[d.전화번호 ? formatPhone(d.전화번호) : "번호 없음", [d.차량종류, d.차량톤수].filter(v => v && v !== "미입력").join(" ")].filter(Boolean).join(" · ")}
+        </div>
+        <div style={{ marginTop: 4, fontSize: 14, fontWeight: 700, color: d.online ? NAVY : "#5B6B85" }}>
+          {d.noApp ? "앱 미가입" : d.online ? "● 앱 접속중" : `앱 접속 ${d.lastSeen ? timeAgo(d.lastSeen) : "기록 없음"}`}{sent ? ` · 안내 ${sent}` : ""}
+        </div>
+        <div style={{ marginTop: 8, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+          {d.hasDriverDoc && <ManagerBadge driver={{ id: d.uid, 이름: d.이름, 담당자: d.담당자 }} staff={staff} canDelegate={canDelegate} onAssign={onAssignManager} big />}
+          <span style={{ marginLeft: "auto", display: "flex", gap: 6, flexWrap: "wrap" }}>
+            {d.noApp && <AppStatusBadge d={d.raw || {}} company={myCompanyName} />}
+            {guideBtn(d)}
+            {!d.noApp && <button onClick={() => handleApprove(d.uid, false)} disabled={!!approvingId} style={{ padding: "5px 10px", borderRadius: 7, border: "1px solid #e5e7eb", background: "#fff", color: "#5B6B85", fontSize: 14, fontWeight: 700, cursor: "pointer" }}>승인취소</button>}
+          </span>
+        </div>
       </div>
     );
   };
@@ -1318,8 +1367,17 @@ function RegistrationTab({ usersMap, myCompanyName, driversRaw = [], myUid = nul
             ))}
           </div>
           {filterOn && <button onClick={resetFilters} style={{ height: 40, padding: "0 12px", borderRadius: 8, border: "none", background: "transparent", color: "#b91c1c", fontSize: 15, fontWeight: 800, cursor: "pointer" }}>필터 초기화</button>}
+          {/* ⭐ 2026-11-06 기사앱 안내 — 선택한 기사(없으면 지금 보이는 목록 전체)에게 */}
+          <div style={{ marginLeft: "auto", display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+            {gSel.size > 0 && <button type="button" onClick={() => setGSel(new Set())} style={{ height: 40, padding: "0 12px", borderRadius: 8, border: "1px solid #d1d5db", background: "#fff", color: "#374151", fontSize: 15, fontWeight: 700, cursor: "pointer" }}>선택 해제</button>}
+            <button type="button" onClick={() => { const list = (gSel.size ? approved.filter((d) => gSel.has(d.uid)) : filtered).map(guideObj); if (!list.length) return; setGuideFor(list); }}
+              style={{ height: 40, padding: "0 14px", borderRadius: 8, border: "none", background: "linear-gradient(135deg,#1B2B4B,#2D4C82)", color: "#fff", fontSize: 15, fontWeight: 800, cursor: "pointer", whiteSpace: "nowrap" }}>
+              앱 안내 보내기 {gSel.size ? `(선택 ${gSel.size}명)` : `(목록 ${filtered.length}명)`}
+            </button>
+          </div>
         </div>
       </div>
+      {guideFor && <DriverGuideSendModal drivers={guideFor} company={myCompanyName} onClose={() => setGuideFor(null)} />}
 
       {/* 목록 — 차량종류 → 톤수 */}
       {base.length === 0 ? (
@@ -1340,9 +1398,15 @@ function RegistrationTab({ usersMap, myCompanyName, driversRaw = [], myUid = nul
               <span style={{ fontSize: 14, transition: "transform .15s", transform: isFold ? "rotate(-90deg)" : "none" }}>▼</span>
               <span style={{ fontSize: 18, fontWeight: 900 }}>{g.type}</span>
               <span style={{ fontSize: 14, fontWeight: 800, background: "rgba(255,255,255,.2)", borderRadius: 99, padding: "1px 10px" }}>{g.count}대</span>
-              <span style={{ marginLeft: 8, fontSize: 14, fontWeight: 600, color: "rgba(255,255,255,.8)" }}>{g.tons.map(t => `${t.ton} ${t.list.length}`).join(" · ")}</span>
+              <span style={{ marginLeft: 8, fontSize: 14, fontWeight: 600, color: "rgba(255,255,255,.8)", overflowWrap: "anywhere", minWidth: 0 }}>{g.tons.map(t => `${t.ton} ${t.list.length}`).join(" · ")}</span>
             </div>
-            {!isFold && (
+            {!isFold && narrow && g.tons.map(t => (
+              <React.Fragment key={t.ton}>
+                <div style={{ padding: "8px 14px", background: "#eef1f6", borderTop: "1px solid #e2e7ef", fontSize: 15, fontWeight: 900, color: NAVY }}>{t.ton} <span style={{ fontWeight: 700, color: "#4b5563" }}>· {t.list.length}대</span></div>
+                {t.list.map((d) => <DriverCard key={d.uid} d={d} />)}
+              </React.Fragment>
+            ))}
+            {!isFold && !narrow && (
               <>
                 <div style={{ display: "grid", gridTemplateColumns: COLS, gap: 10, padding: "9px 16px", background: "#f4f6f9", fontSize: 14, fontWeight: 800, color: "#374151" }}>
                   {head.map((h, i) => <div key={i} style={{ textAlign: i === 8 ? "right" : "left" }}>{i === 8 ? "가입일" : h}</div>)}
@@ -2797,6 +2861,7 @@ function DriverRouteCard({ driver, orders, selectedDate, rangeEndDate, isSingleD
   const activeSeq = useMemo(() => sortActiveOrders(orders), [orders]);
   const displayOrders = useMemo(() => sortRouteOrders(orders), [orders]);
   const [journeyOpen, setJourneyOpen] = useState(false);
+  const narrow = useNarrow(); // ⭐ 2026-11-06 휴대폰 폭 — 오더 표(15칸) 대신 오더 카드
 
   // ⭐ 사용자 요청 — 오더 행 우클릭으로 경로보기/수정/재발송/문자메시지/기사복사를
   // 바로 할 수 있어야 한다.
@@ -2961,7 +3026,53 @@ function DriverRouteCard({ driver, orders, selectedDate, rangeEndDate, isSingleD
         </div>
       ) : (
         <>
-          <div style={{ overflowX: "auto" }}>
+          {narrow && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 8, padding: "10px 10px 4px" }}>
+              {displayOrders.map((r, i) => {
+                const curOrder = pickCurrentOrder(orders);
+                const isCur = r.기사확인상태 === "수락" && curOrder && (curOrder._id ?? curOrder.id) === (r._id ?? r.id);
+                const isWaitingNext = r.기사확인상태 === "수락" && curOrder && !isCur;
+                const fleetMeta = isWaitingNext ? FLEET_WAITING_META : (r.기사확인상태 ? FLEET_CHECK_PROG_META[r.기사확인상태] : null);
+                const meta = fleetMeta || PROG_META[computeOrderProgress(r, r.상차일, todayStr)];
+                const isDone = r.기사확인상태 === "완료";
+                const ck = r.기사확인상태 ? ORDER_CHECK_META[r.기사확인상태] : null;
+                const wrap = { overflowWrap: "anywhere", wordBreak: "keep-all" };
+                return (
+                  <div key={r._id || i} style={{ border: "1px solid #E3E8F0", borderRadius: 12, padding: "10px 12px", background: isDone ? "#f6f7f9" : "#fff" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                      <span style={{ fontSize: 14, fontWeight: 900, color: "#fff", background: NAVY, borderRadius: 6, padding: "0 7px" }}>{i + 1}</span>
+                      <span style={{ width: 7, height: 7, borderRadius: "50%", background: meta.dot }} />
+                      <span style={{ fontSize: 14, fontWeight: 800, color: "#374151" }}>{meta.label === "운송중" ? <TransitPhaseLabel colored order={r} live={live} driverId={driver.id} fallback={meta.label} /> : <PhaseText label={meta.label} />}</span>
+                      <ModBadge order={r} />
+                      {ck && <span title={r.기사확인상태 === "거절" ? (r.기사거절사유 || "사유 없음") : undefined} style={{ fontSize: 14, fontWeight: 800, padding: "2px 8px", borderRadius: 6, background: ck.bg, color: ck.color, border: ck.border }}>{ck.label || r.기사확인상태}</span>}
+                      <span style={{ marginLeft: "auto", fontSize: 15, fontWeight: 900, color: NAVY }}>{r.기사운임 ? `${Number(String(r.기사운임).replace(/[^\d]/g, "")).toLocaleString()}원` : "-"}</span>
+                    </div>
+                    <div style={{ marginTop: 6, fontSize: 15, fontWeight: 900, color: "#0F1A30", ...wrap }}>{r.거래처명 || "-"}</div>
+                    <div style={{ marginTop: 4, fontSize: 14, fontWeight: 700, color: "#111827", ...wrap }}>
+                      <span style={{ color: NAVY, fontWeight: 900 }}>상차</span> {r.상차일 || "-"} {r.상차시간 || "즉시"} · {r.상차지명 || "-"} <span style={{ color: "#4b5563", fontWeight: 600 }}><ShortAddr addr={r.상차지주소} /></span>
+                    </div>
+                    <div style={{ marginTop: 2, fontSize: 14, fontWeight: 700, color: "#111827", ...wrap }}>
+                      <span style={{ color: NAVY, fontWeight: 900 }}>하차</span> {r.하차일 || "-"} {r.하차시간 || "즉시"} · {r.하차지명 || "-"} <span style={{ color: "#4b5563", fontWeight: 600 }}><ShortAddr addr={r.하차지주소} /></span>
+                      {meta.label === "운송중" && <DropEtaText order={r} driverId={driver.id} location={live?.location} style={{ display: "block", fontSize: 14, marginTop: 2 }} />}
+                    </div>
+                    <div style={{ marginTop: 4, fontSize: 14, fontWeight: 700, color: "#374151", display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", ...wrap }}>
+                      <span>{[r.차량종류, r.차량톤수, r.화물내용].filter(Boolean).join(" · ") || "-"}</span>
+                      <RouteDistanceBadge fromAddr={r.상차지주소} toAddr={r.하차지주소} label="구간" empty={null} />
+                      <span style={{ color: "#5B6B85" }}>배차 {creatorLabel(r, staffByEmail)}</span>
+                    </div>
+                    <div style={{ marginTop: 8, display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+                      <button type="button" onClick={() => setEditOrder(r)} style={{ height: 36, padding: "0 12px", borderRadius: 8, border: "none", background: NAVY, color: "#fff", fontSize: 14, fontWeight: 800, cursor: "pointer" }}>수정</button>
+                      <button type="button" onClick={() => setRouteMapOrder(r)} style={{ height: 36, padding: "0 12px", borderRadius: 8, border: "1px solid #DCE3EF", background: "#fff", color: NAVY, fontSize: 14, fontWeight: 800, cursor: "pointer" }}>경로</button>
+                      <button type="button" onClick={(e) => { const b = e.currentTarget.getBoundingClientRect(); setCtxMenu({ x: Math.min(b.left, window.innerWidth - 200), y: b.bottom + 4, order: r }); }} style={{ height: 36, padding: "0 12px", borderRadius: 8, border: "1px solid #DCE3EF", background: "#fff", color: NAVY, fontSize: 14, fontWeight: 800, cursor: "pointer" }}>더보기</button>
+                      <OrderTimelineButton order={r} driverName={driver.이름} />
+                      <FleetAttachButton orderId={r._id} col={r.__col || "orders"} attachCount={r.attachCount || 0} />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+          {!narrow && <div style={{ overflowX: "auto" }}>
             <table style={{ width: "100%", borderCollapse: "collapse" }}>
               <thead>
                 {/* ⭐ 사용자 요청 — 헤더가 너무 밋밋해서(연회색 작은 글씨) 네이비 배경 +
@@ -3100,7 +3211,7 @@ function DriverRouteCard({ driver, orders, selectedDate, rangeEndDate, isSingleD
                 })}
               </tbody>
             </table>
-          </div>
+          </div>}
 
           {/* 요약: 첫 오더 상/하차 예상시간 + (2건 이상이면) 마지막 오더 하차완료 예상 */}
           <div style={{ padding: "9px 16px", background: "#F7F9FC", borderTop: "1px solid #E8EDF4", fontSize: 14, color: "#374151", fontWeight: 600 }}>
@@ -5962,6 +6073,7 @@ function VehicleCareTab({ drivers = [], driversRaw = [], by = "" }) {
   const th = { padding: "12px 12px", fontSize: 14, fontWeight: 800, color: "#fff", whiteSpace: "nowrap", textAlign: "center" };
   const td = { padding: "13px 12px", fontSize: 15, fontWeight: 700, color: "#0F1A30", whiteSpace: "nowrap", borderTop: "1px solid #EEF1F6", textAlign: "center" };
   const showToast = (m) => { setToast(m); setTimeout(() => setToast(""), 2200); };
+  const narrow = useNarrow(); // ⭐ 2026-11-06 휴대폰 — 표 대신 카드 목록, 한 번 누르면 상세
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
       <div style={{ borderRadius: 18, padding: "18px 22px", color: "#fff", background: "linear-gradient(rgba(143,176,240,.06) 1px, transparent 1px) 0 0/22px 22px, linear-gradient(90deg, rgba(143,176,240,.06) 1px, transparent 1px) 0 0/22px 22px, linear-gradient(120deg,#0B1428 0%,#1B2B4B 60%,#2D4C82 100%)", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
@@ -5980,15 +6092,37 @@ function VehicleCareTab({ drivers = [], driversRaw = [], by = "" }) {
           ))}
         </div>
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr)", gap: 14, alignItems: "start", paddingRight: cur ? 700 : 0, transition: "padding .2s" }}>
+      <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr)", gap: 14, alignItems: "start", paddingRight: cur && !narrow ? 700 : 0, transition: "padding .2s" }}>
         <div style={{ background: "#fff", border: "1px solid #E3E8F0", borderRadius: 16, overflow: "hidden" }}>
           {/* ⭐ 2026-11-02 화면 점검 — 좁은 화면에서 제목·검색창 줄바꿈 */}
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap", padding: "12px 16px", background: "#F7F9FC", borderBottom: "1px solid #E8EDF4" }}>
-            <span style={{ fontSize: 16, fontWeight: 900, color: "#0F1A30", wordBreak: "keep-all" }}>차량 {shown.length}대 <span style={{ fontSize: 14, fontWeight: 700, color: "#5B6B85", marginLeft: 6 }}>두 번 누르면 오른쪽에 상세가 열립니다</span></span>
+            <span style={{ fontSize: 16, fontWeight: 900, color: "#0F1A30", wordBreak: "keep-all" }}>차량 {shown.length}대 <span style={{ fontSize: 14, fontWeight: 700, color: "#5B6B85", marginLeft: 6 }}>{narrow ? "누르면 상세가 열립니다" : "두 번 누르면 오른쪽에 상세가 열립니다"}</span></span>
             <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="기사명·차량번호" style={{ height: 34, width: 200, maxWidth: "100%", padding: "0 12px", borderRadius: 9, border: "1px solid #DCE3EF", fontSize: 14 }} />
           </div>
+          {narrow && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 8, padding: 10 }}>
+              {shown.length === 0 && <div style={{ padding: 30, textAlign: "center", color: "#5B6B85", fontSize: 14 }}>해당하는 차량이 없습니다</div>}
+              {shown.map((r) => (
+                <button key={r.id} type="button" onClick={() => setSel(r.id)} style={{ textAlign: "left", background: "#fff", border: `1px solid ${r.cs.over ? "#0F1A30" : "#E3E8F0"}`, borderRadius: 14, padding: "11px 13px", cursor: "pointer" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                    <span style={{ fontSize: 16, fontWeight: 900, color: "#0F1A30" }}>{r.차량번호}</span>
+                    <span style={{ fontSize: 15, fontWeight: 800, color: "#0F1A30" }}>{r.이름 || "-"}</span>
+                    <JoinTypePill v={r.등급 || r.raw?.등급} />
+                    <span style={{ marginLeft: "auto", fontSize: 14, fontWeight: 800, color: "#0F1A30" }}>{r.cs.odometer ? `${r.cs.odometer.toLocaleString()}km` : "-"}</span>
+                  </div>
+                  <div style={{ fontSize: 14, color: "#3A4A66", marginTop: 4, overflowWrap: "anywhere" }}>{[[r.v.톤, r.v.적재함].filter(Boolean).join(" "), [r.v.모델, r.v.연식 && `${r.v.연식}년`].filter(Boolean).join(" · ")].filter(Boolean).join(" · ") || "차종 미입력"}</div>
+                  <div style={{ display: "flex", gap: 6, marginTop: 6, flexWrap: "wrap", alignItems: "center" }}>
+                    {!r.cs.setupDone && <span style={{ padding: "1px 7px", borderRadius: 6, border: "1px solid #DCE3EF", fontSize: 14, fontWeight: 800, color: "#5B6B85" }}>미설정</span>}
+                    {r.cs.over > 0 && <span style={{ padding: "1px 7px", borderRadius: 6, background: "#0F1A30", color: "#fff", fontSize: 14, fontWeight: 800 }}>지남 {r.cs.over}</span>}
+                    {r.cs.soon > 0 && <span style={{ padding: "1px 7px", borderRadius: 6, background: "#DCE6F7", color: "#1B2B4B", fontSize: 14, fontWeight: 800 }}>곧 {r.cs.soon}</span>}
+                    <span style={{ fontSize: 14, color: "#5B6B85", overflowWrap: "anywhere" }}>{r.cs.alerts.slice(0, 3).map((a) => a.label).join(" · ") || (r.cs.setupDone ? "모두 정상" : "기사앱에서 아직 입력 전")}</span>
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
           {/* ⭐ 2026-11-02 화면 점검 — 표는 가로 스크롤(터치 관성) */}
-          <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch", maxWidth: "100%" }}>
+          {!narrow && <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch", maxWidth: "100%" }}>
             <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 900 }}>
               <thead><tr style={{ background: "linear-gradient(90deg,#0F1A30,#1B2B4B)" }}>{["차량번호", "기사", "가입유형", "차종", "모델·연식", "주행거리", "엔진오일", "점검 알림", "설정"].map((h) => <th key={h} style={th}>{h}</th>)}</tr></thead>
               <tbody>
@@ -6013,7 +6147,7 @@ function VehicleCareTab({ drivers = [], driversRaw = [], by = "" }) {
                 })}
               </tbody>
             </table>
-          </div>
+          </div>}
         </div>
         {/* ⭐ 오른쪽 사이드바 — 크게, 바깥을 눌러도 닫히지 않고 [닫기]로만 닫힌다. 목록의 다른 차량을 누르면 그 차량으로 바뀐다 */}
         {cur && createPortal(

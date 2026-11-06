@@ -217,7 +217,7 @@ function OrderSlider({ orders, renderOrder }) {
     <div style={{ marginBottom: 8 }}>
       {n > 1 && (
         <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 7, minWidth: 0 }}>
-          <div style={{ display: "flex", gap: 5, overflowX: "auto", minWidth: 0, flex: 1, scrollbarWidth: "none" }}>
+          <div className="no-scrollbar" style={{ display: "flex", gap: 5, overflowX: "auto", minWidth: 0, flex: 1, scrollbarWidth: "none" }}>
           {[["current", "진행중", curCount], ["next", "진행예정", nextCount], ["done", "완료", doneCount]].filter(([, , c]) => c > 0).map(([k, l, c]) => {
             const on = list[safeIdx]?.kind === k;
             return (
@@ -238,7 +238,7 @@ function OrderSlider({ orders, renderOrder }) {
         </div>
       )}
       <div ref={trackRef} onScroll={onScroll}
-        style={{ display: "flex", overflowX: n > 1 ? "auto" : "hidden", scrollSnapType: "x mandatory", WebkitOverflowScrolling: "touch", scrollbarWidth: "none", borderRadius: 9 }}>
+        className="no-scrollbar" style={{ display: "flex", overflowX: n > 1 ? "auto" : "hidden", scrollSnapType: "x mandatory", WebkitOverflowScrolling: "touch", scrollbarWidth: "none", borderRadius: 9 }}>
         {list.map(({ r, kind }, i) => (
           <div key={r._id || r.id || i} style={{ flex: "0 0 100%", minWidth: 0, scrollSnapAlign: "start" }}>
             {renderOrder(r, kind, SLIDE_KIND_META[kind])}
@@ -614,14 +614,14 @@ function MobileVehicleCare({ drivers = [], driversRaw = [], by = "" }) {
         <button key={r.id} type="button" onClick={() => setSel(r.id)} style={{ textAlign: "left", background: "#fff", border: `1px solid ${r.cs.over ? "#0F1A30" : "#E3E8F0"}`, borderRadius: 14, padding: "11px 13px", cursor: "pointer" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <span style={{ fontSize: 15, fontWeight: 900, color: "#0F1A30", whiteSpace: "nowrap" }}>{r.차량번호}</span>
-            <span style={{ fontSize: 14, color: "#5B6B85", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{r.이름} · {[r.v.톤, r.v.적재함].filter(Boolean).join(" ") || "차종 미입력"}</span>
+            <span style={{ fontSize: 14, color: "#5B6B85", minWidth: 0, overflowWrap: "anywhere" }}>{r.이름} · {[r.v.톤, r.v.적재함].filter(Boolean).join(" ") || "차종 미입력"}</span>
             <span style={{ marginLeft: "auto", fontVariantNumeric: "tabular-nums", fontSize: 14, fontWeight: 800, color: "#0F1A30", whiteSpace: "nowrap" }}>{r.cs.odometer ? `${r.cs.odometer.toLocaleString()}km` : "-"}</span>
           </div>
-          <div style={{ display: "flex", gap: 6, marginTop: 6, alignItems: "center", minWidth: 0 }}>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 6, alignItems: "center", minWidth: 0 }}>
             {!r.cs.setupDone && <span style={{ padding: "1px 7px", borderRadius: 6, border: "1px solid #DCE3EF", fontSize: 14, fontWeight: 800, color: "#5B6B85", whiteSpace: "nowrap" }}>미설정</span>}
             {r.cs.over > 0 && <span style={{ padding: "1px 7px", borderRadius: 6, background: "#0F1A30", color: "#fff", fontSize: 14, fontWeight: 800, whiteSpace: "nowrap" }}>지남 {r.cs.over}</span>}
             {r.cs.soon > 0 && <span style={{ padding: "1px 7px", borderRadius: 6, background: "#DCE6F7", color: "#1B2B4B", fontSize: 14, fontWeight: 800, whiteSpace: "nowrap" }}>곧 {r.cs.soon}</span>}
-            <span style={{ fontSize: 14, color: "#5B6B85", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{r.cs.alerts.slice(0, 3).map((a) => a.label).join(" · ") || (r.cs.setupDone ? "모두 정상" : "기사앱에서 아직 입력 전")}</span>
+            <span style={{ fontSize: 14, color: "#5B6B85", minWidth: 0, overflowWrap: "anywhere" }}>{r.cs.alerts.slice(0, 3).map((a) => a.label).join(" · ") || (r.cs.setupDone ? "모두 정상" : "기사앱에서 아직 입력 전")}</span>
           </div>
         </button>
       ))}
@@ -1071,7 +1071,7 @@ export default function MobileFleetView({ dispatchData = [], userCompany = "", o
       </div>
 
       {/* 섹션 탭 */}
-      <div style={{ display: "flex", margin: "16px 16px 0", background: "#EEF2F8", border: "1px solid #E3E8F0", borderRadius: 14, padding: 4, flexWrap: "nowrap", overflowX: "auto", scrollbarWidth: "none" }}>
+      <div className="no-scrollbar" style={{ display: "flex", margin: "16px 16px 0", background: "#EEF2F8", border: "1px solid #E3E8F0", borderRadius: 14, padding: 4, flexWrap: "nowrap", overflowX: "auto", scrollbarWidth: "none" }}>
         {[["drivers", "기사 목록"], ["map", "지도"], ["vehicle", "차량"], ["feed", "상태 로그"], ["attendance", "출근기록"]].map(([key, label]) => (
           <button key={key} onClick={() => setActiveSection(key)} style={{
             flex: 1, padding: "9px 4px", borderRadius: 10, border: "none",
@@ -1123,7 +1123,7 @@ export default function MobileFleetView({ dispatchData = [], userCompany = "", o
             />
           </div>
           {/* 상태 필터 */}
-          <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 8, marginBottom: 4, scrollbarWidth: "none" }}>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6, paddingBottom: 8, marginBottom: 4 }}>{/* ⭐ 2026-11-06 상태 칩은 줄바꿈 — 옆으로 밀지 않아도 전부 보인다 */}
             {STATUS_OPTS.map(opt => {
               const active = statusFilter === opt;
               return (
@@ -1230,7 +1230,7 @@ export default function MobileFleetView({ dispatchData = [], userCompany = "", o
                           {/* 머리줄 */}
                           <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
                             <span style={{ fontSize: 14, fontWeight: 800, padding: "2px 9px", borderRadius: 6, background: km.bg, color: km.color, flexShrink: 0 }}>{km.label}</span>
-                            <span style={{ fontSize: 15, fontWeight: 800, color: "#0F1A30", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{activeOrder.거래처명 || "-"}</span>
+                            <span style={{ fontSize: 15, fontWeight: 800, color: "#0F1A30", minWidth: 0, flex: 1, overflowWrap: "anywhere", wordBreak: "keep-all" }}>{activeOrder.거래처명 || "-"}</span>{/* ⭐ 2026-11-06 거래처·상하차지명은 잘리지 않고 줄바꿈(전체 이름) */}
                             <ModBadge order={activeOrder} />
                             <span style={{ marginLeft: "auto", fontSize: 14, fontWeight: 800, color: NAVY, flexShrink: 0 }}>{fare ? `${fare.toLocaleString()}원` : ""}</span>
                           </div>
@@ -1245,10 +1245,10 @@ export default function MobileFleetView({ dispatchData = [], userCompany = "", o
                                 <span style={{ position: "absolute", left: -20, top: 3, width: 13, height: 13, borderRadius: "50%", background: st.filled ? line : "#fff", border: `2.5px solid ${line}`, boxSizing: "border-box" }} />
                                 <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                                   <span style={{ fontSize: 14, fontWeight: 900, color: NAVY, background: "#eef1f6", borderRadius: 4, padding: "0 5px", flexShrink: 0 }}>{st.tag}</span>
-                                  <span style={{ fontSize: 15, fontWeight: 800, color: "#0F1A30", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{st.name || "-"}</span>
+                                  <span style={{ fontSize: 15, fontWeight: 800, color: "#0F1A30", minWidth: 0, flex: 1, overflowWrap: "anywhere", wordBreak: "keep-all" }}>{st.name || "-"}</span>
                                   <span style={{ marginLeft: "auto", fontSize: 14, fontWeight: 800, color: "#1F2A44", flexShrink: 0 }}>{st.time}</span>
                                 </div>
-                                <div style={{ fontSize: 14, fontWeight: 600, color: "#3A4A66", marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{st.addr || "-"}</div>
+                                <div style={{ fontSize: 14, fontWeight: 600, color: "#3A4A66", marginTop: 2, overflowWrap: "anywhere" }}>{st.addr || "-"}</div>
                                 {st.ev.length > 0 && <div style={{ fontSize: 14, fontWeight: 800, color: "#0F1A30", marginTop: 1 }}>{st.ev.join(" · ")}</div>}
                               </div>
                             ))}
@@ -1256,7 +1256,7 @@ export default function MobileFleetView({ dispatchData = [], userCompany = "", o
 
                           {/* 차량·화물 / 구간거리 */}
                           <div style={{ marginTop: 10, paddingTop: 9, borderTop: "1px dashed #e2e7ef", display: "flex", alignItems: "center", gap: 8, fontSize: 14, fontWeight: 700, color: "#3A4A66" }}>
-                            <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{[activeOrder.차량종류, activeOrder.차량톤수, activeOrder.화물내용].filter(Boolean).join(" · ") || "-"}</span>
+                            <span style={{ minWidth: 0, flex: 1, overflowWrap: "anywhere" }}>{[activeOrder.차량종류, activeOrder.차량톤수, activeOrder.화물내용].filter(Boolean).join(" · ") || "-"}</span>
                             <span style={{ marginLeft: "auto", flexShrink: 0, display: "inline-flex", alignItems: "center", gap: 4 }}>
                               <span style={{ color: "#5B6B85" }}>구간</span>
                               <RouteDistanceBadge fromAddr={activeOrder.상차지주소} toAddr={activeOrder.하차지주소} />
@@ -1337,40 +1337,26 @@ export default function MobileFleetView({ dispatchData = [], userCompany = "", o
                         {(() => {
                           if (todays.length < 2) return null;
                           return (
-                            <div style={{ overflowX: "auto", marginBottom: 10, borderRadius: 9, border: "1px solid #E3E8F0" }}>
-                              <table style={{ width: "100%", borderCollapse: "collapse" }}>
-                                <thead>
-                                  <tr style={{ background: NAVY }}>
-                                    {["순번", "상차일시", "하차일시", "상차지 → 하차지", "상태"].map(h => (
-                                      <th key={h} style={{ padding: "7px 10px", fontSize: 14, fontWeight: 800, color: "#fff", textAlign: "center", whiteSpace: "nowrap" }}>{h}</th>
-                                    ))}
-                                  </tr>
-                                </thead>
-                                <tbody>
-                                  {todays.map((r, i) => {
-                                    const curO = pickCurrentOrder(todays);
-                                    const smeta = mobileOrderStatusMeta(r, curO ? (curO._id ?? curO.id) : null);
-                                    return (
-                                      <tr
-                                        key={r._id || i}
-                                        onClick={(e) => { e.stopPropagation(); setDetailOrder({ ...r, __currentId: curO ? (curO._id ?? curO.id) : null }); }}
-                                        style={{ borderTop: i > 0 ? "1px solid #EEF2F8" : "none", cursor: "pointer" }}
-                                      >
-                                        <td style={{ padding: "8px 10px", textAlign: "center", fontSize: 14, fontWeight: 700, color: "#5B6B85" }}>{i + 1}</td>
-                                        <td style={{ padding: "8px 10px", textAlign: "center", fontSize: 14, fontWeight: 700, color: "#3A4A66", whiteSpace: "nowrap" }}>{r.상차일 || "-"} {r.상차시간 || "즉시"}</td>
-                                        <td style={{ padding: "8px 10px", textAlign: "center", fontSize: 14, fontWeight: 700, color: "#3A4A66", whiteSpace: "nowrap" }}>{r.하차일 || r.상차일 || "-"} {r.하차시간 || "즉시"}</td>
-                                        <td style={{ padding: "8px 10px", textAlign: "center", fontSize: 14, fontWeight: 700, color: NAVY, whiteSpace: "nowrap" }}>
-                                          {r.상차지명 || "-"}(<ShortAddr addr={r.상차지주소} />) <span style={{ color: "#5B6B85" }}>→</span> {r.하차지명 || "-"}(<ShortAddr addr={r.하차지주소} />)
-                                        </td>
-                                        <td style={{ padding: "8px 10px", textAlign: "center", whiteSpace: "nowrap" }}>
-                                          <span style={{ fontSize: 14, fontWeight: 800, padding: "2px 8px", borderRadius: 99, background: smeta.bg, color: smeta.color }}>{smeta.label}</span>
-                                          <div style={{ marginTop: 3 }}><ModBadge order={r} /></div>
-                                        </td>
-                                      </tr>
-                                    );
-                                  })}
-                                </tbody>
-                              </table>
+                            <div style={{ marginBottom: 10, display: "flex", flexDirection: "column", gap: 6 }}>{/* ⭐ 2026-11-06 모바일 — 가로 표 대신 카드 목록(가로 스크롤 없음) */}
+                              {todays.map((r, i) => {
+                                const curO = pickCurrentOrder(todays);
+                                const smeta = mobileOrderStatusMeta(r, curO ? (curO._id ?? curO.id) : null);
+                                return (
+                                  <div key={r._id || i} role="button" tabIndex={0}
+                                    onClick={(e) => { e.stopPropagation(); setDetailOrder({ ...r, __currentId: curO ? (curO._id ?? curO.id) : null }); }}
+                                    style={{ border: "1px solid #E3E8F0", borderRadius: 10, padding: "8px 10px", cursor: "pointer", background: "#fff" }}>
+                                    <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                                      <span style={{ fontSize: 14, fontWeight: 900, color: "#fff", background: NAVY, borderRadius: 6, padding: "0 7px" }}>{i + 1}</span>
+                                      <span style={{ fontSize: 14, fontWeight: 700, color: "#3A4A66" }}>{r.상차일 || "-"} {r.상차시간 || "즉시"} → {r.하차일 || r.상차일 || "-"} {r.하차시간 || "즉시"}</span>
+                                      <span style={{ marginLeft: "auto", fontSize: 14, fontWeight: 800, padding: "2px 8px", borderRadius: 99, background: smeta.bg, color: smeta.color }}>{smeta.label}</span>
+                                      <ModBadge order={r} />
+                                    </div>
+                                    <div style={{ fontSize: 14, fontWeight: 700, color: NAVY, marginTop: 4, overflowWrap: "anywhere" }}>
+                                      {r.상차지명 || "-"}(<ShortAddr addr={r.상차지주소} />) <span style={{ color: "#5B6B85" }}>→</span> {r.하차지명 || "-"}(<ShortAddr addr={r.하차지주소} />)
+                                    </div>
+                                  </div>
+                                );
+                              })}
                             </div>
                           );
                         })()}
@@ -1424,7 +1410,7 @@ export default function MobileFleetView({ dispatchData = [], userCompany = "", o
       {activeSection === "map" && (
         <div>
           {/* 기사 선택 칩 */}
-          <div style={{ display: "flex", gap: 8, overflowX: "auto", padding: "12px 16px 8px", scrollbarWidth: "none" }}>
+          <div className="no-scrollbar" style={{ display: "flex", gap: 8, overflowX: "auto", padding: "12px 16px 8px", scrollbarWidth: "none" }}>
             {drivers.map(d => {
               const color = STATUS_COLORS[d.상태] || "#9AA9C3";
               const sel = mapSelected?.id === d.id;

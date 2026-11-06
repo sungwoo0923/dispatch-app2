@@ -32,9 +32,9 @@ export function StatementDoc({ st, supplier = {} }) {
         </div>
       </div>
       <div style={{ padding: "18px 24px" }}>
-        {/* 기사님 정보 — 2줄 배치, 줄임표 없이 전부 보이게 */}
+        {/* 기사님 정보 — 2줄 배치, 줄임표 없이 전부 보이게 · ⭐ 2026-11-06 기사 칸에 가입유형(지입/직영/임대) */}
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 16 }}>
-          {[["기사", st.driverName], ["차량번호", st.carNo], ["사업자번호", st.bizNo ? String(st.bizNo).replace(/(\d{3})(\d{2})(\d{5})/, "$1-$2-$3") : "-"], ["입금 계좌", st.bank ? bankText(st.bank) : "미등록"]].map(([k, v]) => (
+          {[["기사", `${st.driverName || "-"}${st.joinType ? ` · ${st.joinType}` : ""}`], ["차량번호", st.carNo], ["사업자번호", st.bizNo ? String(st.bizNo).replace(/(\d{3})(\d{2})(\d{5})/, "$1-$2-$3") : "-"], ["입금 계좌", st.bank ? bankText(st.bank) : "미등록"]].map(([k, v]) => (
             <div key={k} style={{ background: "#F5F8FD", border: "1px solid #DCE3EE", borderRadius: 10, padding: "9px 13px", minWidth: 0 }}>
               <div style={{ fontSize: 12, color: "#5B6B85", fontWeight: 800 }}>{k}</div>
               <div style={{ fontSize: 15, fontWeight: 900, color: "#0B1428", wordBreak: "keep-all", overflowWrap: "anywhere", lineHeight: 1.45, marginTop: 2 }}>{v || "-"}</div>
