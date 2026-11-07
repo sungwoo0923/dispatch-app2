@@ -93,6 +93,7 @@ const AttendanceBoard = lazyView(() => import("./AttendanceBoard"));
 import { todayStr as attendanceTodayStr, isWeekend, findApprovedLeaveForDate, isHoliday, isScheduleApproved, LEAVE_TYPE_LABEL, ATTENDANCE_STATUS_COLOR, approvalLeaveOn, hrLeaveOn } from "./attendanceUtils";
 const FreightRateInquiry = lazyView(() => import("./FreightRateInquiry"));
 import { isNotificationsEnabled, setNotificationsEnabled, useNotificationsEnabled } from "./notificationSettings";
+import { PopupPrefsSection } from "./popupPrefs"; // ⭐ 2026-11-07 팝업 알림 켜고 끄기(계정별)
 import { CustomSelect } from "./CustomSelect";
 import { estimateDistanceFare, geocodeAddress, haversineKm, specialSurcharge } from "./tmapFareCalc";
 import { useCustomRoles, findCustomRole, getMenuAccess, roleScreen, useRoleView, applyRoleMenus, ROLE_LABELS } from "./customRoles";
@@ -9380,6 +9381,9 @@ return (
               로그인 관리 · 비밀번호 변경
             </button>
             {loginMgrOpen && <LoginManagerModal user={user} onClose={() => setLoginMgrOpen(false)} />}
+
+            {/* ⭐ 2026-11-07 팝업 알림 — 가운데 팝업을 종류별로 켜고 끄기(계정에 저장 · 모바일과 같이 바뀜) */}
+            {user?.uid && <PopupPrefsSection uid={user.uid} showBriefing={canBriefing} />}
 
             {/* ⭐ 2026-11-02 원격지원 — 사용이 어려울 때 관리자에게 화면 공유·원격 지원 요청 */}
             {role !== "totalMaster" && (

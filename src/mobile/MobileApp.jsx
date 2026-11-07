@@ -120,6 +120,7 @@ import { MailHeaderButton } from "../InternalMail";
 import BannerCenter from "../BannerCenter";
 import { publishDriverOrderRows, useDriverEventFeeds, useDriverEventCounts, setDriverSeenServer, setDriverToastsMuted, markDriverSeen, focusOrderRow, DriverEventToasts, DriverAckChip } from "../driverEvents"; // ⭐ 2026-11-05 기사앱 수락/거절·서류·긴급 알림(위쪽 배너·빨간 숫자)
 import { ContractExpiryBanner } from "../companyContract"; // ⭐ 2026-11-06 계약 만료 안내 띠
+import { PopupPrefsSection } from "../popupPrefs"; // ⭐ 2026-11-07 팝업 알림 켜고 끄기(계정별)
 import NotifyCenter from "../NotifyCenter"; // ⭐ 2026-11-03 알림 통합 — 가운데 알림 팝업
 import { RemoteSupportHost } from "../RemoteSupport"; // ⭐ 2026-11-02 원격지원 —
 import OrderCongratsPopup from "../OrderCongratsPopup";
@@ -6938,6 +6939,8 @@ setOpenMemo={setOpenMemo}
         {page === "settings" && (
           <MobileSettingsPage
             deptMode={deptMode}
+            canBriefing={canBriefingM}
+            popupUid={user?.uid || ""}
             onBack={() => setPage(deptMode ? "dept" : "list")}
             cardVersionB={cardVersionB}
             setCardVersionB={setCardVersionB}
@@ -22483,7 +22486,7 @@ return (
 );
 }
 
-function MobileSettingsPage({ onBack, cardVersionB, setCardVersionB, alarmEnabled, toggleAlarm, fontScale, setFontScale, appVersion, showSuccess, onLogout, userCompany, role, deptMode = null, currentUser, refreshFromServer }) {
+function MobileSettingsPage({ onBack, cardVersionB, setCardVersionB, alarmEnabled, toggleAlarm, fontScale, setFontScale, appVersion, showSuccess, onLogout, userCompany, role, deptMode = null, currentUser, refreshFromServer, canBriefing = false, popupUid = "" }) {
   const [loginMgrOpen, setLoginMgrOpen] = useState(false); // ★ 로그인 관리(기기 연결 끊기·비밀번호 변경)
   const [manualRefreshing, setManualRefreshing] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
@@ -22697,6 +22700,14 @@ function MobileSettingsPage({ onBack, cardVersionB, setCardVersionB, alarmEnable
             right={go("연결")} />
           <KpmRow label="알림 종류별 설정" sub={`${PUSH_GROUPS.map((g) => g.title).join("·")} · 지금 ${pushOnCount}/${PUSH_PREF_TYPES.length}종 켜짐`} onClick={() => setPushPrefsOpen(true)} right={go("설정")} />
         </KpmCard>
+
+        {/* ⭐ 2026-11-07 팝업 알림 — 가운데 팝업을 종류별로 켜고 끄기(계정에 저장 · PC와 같이 바뀜) */}
+        {(popupUid || currentUser?.uid) && (
+          <KpmCard en="POPUP" title="팝업 알림" flush>
+            <div className="px-4 pt-2.5 pb-2 text-[11.5px] text-[#7A879C] leading-snug border-b border-[#EEF1F6]">끄면 화면 가운데에 뜨지 않아요. 내용은 목록과 메뉴 숫자에 그대로 남아요.</div>
+            <PopupPrefsSection uid={popupUid || currentUser.uid} showBriefing={canBriefing} flush />
+          </KpmCard>
+        )}
 
         <KpmCard en="DATA" title="데이터" flush>
           <KpmRow label="앱 새로고침" sub="서버에서 가장 최신 상태를 다시 불러옵니다"

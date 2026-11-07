@@ -15,6 +15,7 @@ import { useCompanyRows } from "./companyColStore";
 import { loadAcctPayments } from "./acctPayments";
 import { useApprovalCounts } from "./Approval";
 import { pickUnassignedOrders } from "./unassignedRule";
+import { isPopupOn, usePopupPrefs } from "./popupPrefs"; // ⭐ 2026-11-07 팝업 알림 설정
 import { approvalLeaveOn } from "./attendanceUtils";
 import { CARE_DATES } from "./vehicleCare";
 import { isDemoOn } from "./devDemoData";
@@ -762,7 +763,8 @@ export function DailyReportPopupHost({ company, dispatchData = [], drivers = [],
   const dismissKey = `kpBriefDismiss:${uid}:${today}`;
   const laterKey = `kpBriefLater:${uid}:${today}`;
   const [closed, setClosed] = React.useState(false);
-  const eligible = !!uid && pf.ready && profile !== null && allowed && p.channels.popup !== false && (forced || (isReceiveDay(today, p) && now >= p.time && lsGet(dismissKey) !== "1" && pf.raw?.popupDismissed !== today && ssGet(laterKey) !== "1"));
+  const popupOn = isPopupOn(usePopupPrefs(uid), "briefing"); // ⭐ 2026-11-07 팝업 알림 설정(계정별) · 꺼도 메뉴의 보고서는 그대로
+  const eligible = popupOn && !!uid && pf.ready && profile !== null && allowed && p.channels.popup !== false && (forced || (isReceiveDay(today, p) && now >= p.time && lsGet(dismissKey) !== "1" && pf.raw?.popupDismissed !== today && ssGet(laterKey) !== "1"));
   const show = eligible && !closed;
   if (!show) return null;
   return <PopupBody {...{ company, dispatchData, drivers, prefs: p, uid, loadRange, mobile, onOpenReport }} onClose={(mode, noToday) => {
