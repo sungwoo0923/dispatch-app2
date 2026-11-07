@@ -10,7 +10,7 @@ import { runDelete } from "./DeleteProgress"; // ⭐ 2026-11-05 삭제 진행 �
 import React from "react";
 import { useNavigate } from "react-router-dom";
 import { signOut } from "firebase/auth";
-import { addDoc, collection, deleteDoc, doc, getDocs, limit, onSnapshot, orderBy, query, serverTimestamp, setDoc, updateDoc, where } from "firebase/firestore";
+import { addDoc, collection, deleteDoc, deleteField, doc, getDocs, limit, onSnapshot, orderBy, query, serverTimestamp, setDoc, updateDoc, where } from "firebase/firestore";
 import { auth, db, FUNCTIONS_BASE } from "./firebase";
 import { pushTenantBypass } from "./fsTenant";
 import KpSubNav from "./KpSubNav";
@@ -24,12 +24,15 @@ import { ContractBuilder, ContractList, ContractTemplates } from "./ContractCent
 import { NotifTemplatePanel, LandingPageEditPanel, ShipperForceUpdatePanel } from "./AdminMenu";
 import { AdminSessionsPanel } from "./LoginManager";
 import CompanyResetPanel from "./CompanyResetPanel";
+import { ContractLifecyclePanel, SubAdminPanel } from "./ContractLifecycle"; // ⭐ 2026-11-06 이용 계약 · 부관리자
 import SheetImportPanel from "./SheetImportPanel";
 import NoticeBoard from "./NoticeBoard";
 import { toBoardNotice } from "./PlatformNoticeBanner";
 import { compressImage } from "./InternalMail";
 const HomepageEditor = React.lazy(() => import("./HomepageEditor")); // ⭐ 2026-11-03 소개 홈페이지 편집기
+const HubMembersAdmin = React.lazy(() => import("./HubMembersAdmin")); // ⭐ 2026-11-06 허브 회원 승인
 const CostPanel = React.lazy(() => import("./CostPanel")); // 💰 2026-11-04 비용 · 손익(최고관리자 전용)
+import { AiTeamHub, AiTeamChat, AI_TEAM_TABS } from "./AiTeamPanel"; // 🤖 2026-11-06 AI 팀
 import { RemoteSupportAdminPanel } from "./RemoteSupport"; // ⭐ 2026-11-02 원격지원 —
 import { CustomSelect } from "./CustomSelect";
 import { RichTextEditor, htmlToText, textToHtml, sanitizeHtml } from "./richText"; // ⭐ 2026-11-03 공지 글자 꾸미기
@@ -51,10 +54,12 @@ const SECTIONS = [
     { key: "live", label: "실시간 접속", en: "LIVE", icon: "users" }, // ⭐ 2026-11-02 관리자센터
     { key: "support", label: "원격 지원", en: "SUPPORT", icon: "phone" }, // ⭐ 2026-11-02 원격지원 —
   ] },
+  { key: "aiteam", label: "AI 팀", en: "AI TEAMS", icon: "spark", items: AI_TEAM_TABS }, // 🤖 2026-11-06 팀별 Claude 에이전트
   { key: "clients", label: "고객사", en: "CLIENTS", icon: "building", items: [
     { key: "companies", label: "운송사 관제", en: "CARRIERS", icon: "building" },
     { key: "shippers", label: "화주사 관제", en: "SHIPPERS", icon: "link" },
     { key: "applications", label: "가입신청관리", en: "APPLICATIONS", icon: "inbox" },
+    { key: "hubMembers", label: "허브 회원 승인", en: "HUB MEMBERS", icon: "users" }, // ⭐ 2026-11-06 로지스웹 허브(화물 콜) 차주·화주·운송사 가입 심사
     { key: "inquiries", label: "도입 문의", en: "LEADS", icon: "mail" },
   ] },
   { key: "sales", label: "영업", en: "SALES", icon: "trend", items: [
@@ -63,6 +68,7 @@ const SECTIONS = [
     { key: "sales:history", label: "견적 이력", en: "PIPELINE", icon: "history" },
   ] },
   { key: "contracts", label: "계약", en: "CONTRACTS", icon: "pen", items: [
+    { key: "contract:life", label: "이용 계약·만료", en: "LIFECYCLE", icon: "hourglass" }, // ⭐ 2026-11-06 계약 기간 · 만료 안내 · 계약종료/재개 · 계약종료+초기화
     { key: "contract:list", label: "계약 현황", en: "STATUS", icon: "list" },
     { key: "contract:new", label: "계약서 작성", en: "NEW", icon: "pen" },
     { key: "contract:templates", label: "계약서 양식", en: "TEMPLATES", icon: "file" },
@@ -85,6 +91,7 @@ const SECTIONS = [
     { key: "sessions", label: "로그인 관리", en: "SESSIONS", icon: "key" },
     { key: "sessionLogs", label: "접속 이력", en: "AUDIT LOG", icon: "history" },
     { key: "sheetImport", label: "배차일지 가져오기", en: "IMPORT", icon: "sheet" },
+    { key: "subAdmin", label: "부관리자", en: "SUB ADMIN", icon: "key" }, // ⭐ 2026-11-06 부관리자 목록 · 지정/해제
     { key: "companyReset", label: "운송사 초기화", en: "RESET", icon: "trash" },
   ] },
 ];
@@ -376,7 +383,8 @@ function PaymentsPanel() {
   const setPlan = async (company, planId) => {
     try {
       if (planId) await setDoc(doc(db, "companyPlans", company), { planId, since: ymd(), updatedAt: serverTimestamp() }, { merge: true });
-      else await deleteDoc(doc(db, "companyPlans", company));
+      // ⭐ 2026-11-06 요금제만 빼고 문서는 남긴다(같은 문서에 계약 기간·계약종료 상태가 있다 — 지우면 계약종료가 풀렸다)
+      else await setDoc(doc(db, "companyPlans", company), { planId: deleteField(), since: deleteField(), updatedAt: serverTimestamp() }, { merge: true });
       // 이 회사의 대기 중 요금제 변경 요청은 처리됨으로
       const open = await getDocs(query(collection(db, "planRequests"), where("company", "==", company), where("status", "==", "요청")));
       await Promise.all(open.docs.map((d) => updateDoc(d.ref, { status: "처리", handledAt: serverTimestamp(), appliedPlan: planId || "" })));
@@ -1092,6 +1100,9 @@ function PlatformCenterInner({ user }) {
   const openCompany = React.useCallback((name) => { if (!name) return; setFocusCompany(name); setTab(MONITOR_TABS.includes(tab) && tab !== "applications" && !tab.startsWith("sales:") && tab !== "billing" ? tab : "companies"); }, [tab, setTab]);
   const clearFocus = React.useCallback(() => setFocusCompany(null), []);
 
+  // ⭐ 2026-11-06 허브 회원 승인 대기 개수(메뉴 배지)
+  const [hubPending, setHubPending] = React.useState(0);
+  React.useEffect(() => onSnapshot(query(collection(db, "hubMembers"), where("status", "==", "pending"), limit(200)), (s) => setHubPending(s.size), () => setHubPending(0)), []);
   // 메뉴 배지(처리 대기 개수)
   const P = live?.pending;
   const badges = {
@@ -1099,6 +1110,7 @@ function PlatformCenterInner({ user }) {
     inquiries: P ? P.inquiries.length : 0,
     payments: P ? P.planReqs.length : 0,
     support: P?.support ? P.support.length : 0, // ⭐ 2026-11-02 원격지원 —
+    hubMembers: hubPending,
   };
   const liveBadge = live?.ready ? live.totals.onlineNow : 0;
   const sectionsView = SECTIONS.map((s) => ({ ...s, items: s.items.map((it) => (it.key === "live" ? { ...it, badge: liveBadge, soft: true } : badges[it.key] ? { ...it, badge: badges[it.key] } : it)) }));
@@ -1112,13 +1124,16 @@ function PlatformCenterInner({ user }) {
     );
   } else if (tab === "todo") body = <TodayPanel go={setTab} />;
   else if (tab === "live") body = <LiveTab openCompany={openCompany} />;
+  else if (tab === "ai:hub") body = <AiTeamHub go={setTab} />; // 🤖 2026-11-06 AI 팀
+  else if (tab.startsWith("ai:")) body = <AiTeamChat teamKey={tab.slice(3)} />;
   // ⭐ 2026-11-02 원격지원 — 요청 목록 · 승인/거절/완료 · 화면 보기 · 원격 번호
   // ⭐ 2026-11-05 원격 지원 걸기 — 설명에 "먼저 걸기" 추가
-  else if (tab === "support") body = <><Hero en="DASHBOARD · SUPPORT" title="원격 지원" desc="직원이 보낸 원격 지원 요청을 승인하거나, [원격 지원 걸기]로 직원에게 먼저 요청합니다(직원이 수락해야 시작) — 직원 화면을 실시간으로 보거나(화면 공유) 원격 프로그램 번호를 받습니다." right={<Clock />} /><RemoteSupportAdminPanel me={user} /></>;
+  else if (tab === "support") body = <><Hero en="DASHBOARD · SUPPORT" title="원격 지원" desc="직원이 보낸 원격 지원 요청을 승인하거나, [원격 지원 걸기]로 직원에게 먼저 요청합니다(직원이 수락해야 시작). 직원 화면을 실시간으로 보고 제어하거나(화면 공유 · 제어는 직원이 허용할 때만) 원격 프로그램 번호를 받습니다." right={<Clock />} /><RemoteSupportAdminPanel me={user} /></>;
   else if (tab === "inquiries") body = <InquiriesPanel toQuote={(q) => { try { sessionStorage.setItem("kpQuoteSeed", JSON.stringify({ customer: q.companyName || "", contact: q.name || "", phone: q.phone || "" })); } catch { /* 무시 */ } setTab("sales:quote"); }} />;
   else if (tab === "contract:list") body = <><Hero en="CONTRACTS · STATUS" title="계약 현황" desc="작성 → 서명 요청 → 고객 전자서명 → 체결까지 한 곳에서. 만료 2개월 전부터 갱신 대상으로 표시됩니다." /><ContractList onNew={() => openContract({})} onEdit={(c) => openContract({ initial: c })} /></>;
   else if (tab === "contract:new") body = <><Hero en="CONTRACTS · NEW" title={contractCtx.initial ? "계약서 수정" : "계약서 작성"} desc="견적을 불러오면 요금·기간이 자동으로 채워집니다. 저장하고 서명 요청을 누르면 고객용 서명 링크가 복사됩니다." /><ContractBuilder key={contractCtx.key} initial={contractCtx.initial} fromQuoteDoc={contractCtx.fromQuote} onDone={() => setTab("contract:list")} /></>;
   else if (tab === "contract:templates") body = <><Hero en="CONTRACTS · TEMPLATES" title="계약서 양식" desc="기본 이용계약서를 바탕으로 조항을 자유롭게 고치고, 양식을 여러 개 둘 수 있습니다." /><ContractTemplates /></>;
+  else if (tab === "hubMembers") body = <><Hero en="CLIENTS · HUB MEMBERS" title="허브 회원 승인" desc="로지스웹 허브(화물 콜)에 가입 신청한 차주 · 화주 · 운송사의 신청서와 서류를 확인하고 승인 · 거절합니다. 로지스웹 계정으로 들어온 회원은 자동 승인되어 여기서 정지만 할 수 있습니다." /><React.Suspense fallback={<div className="py-20 text-center text-[#9AA9C3]">불러오는 중…</div>}><HubMembersAdmin me={user} /></React.Suspense></>;
   else if (tab === "payments") body = <PaymentsPanel />;
   else if (tab === "usage") body = <UsagePanel />;
   else if (tab === "cost") body = <React.Suspense fallback={<div className="py-20 text-center text-[#9AA9C3]">불러오는 중…</div>}><CostPanel openUsage={() => setTab("usage")} /></React.Suspense>;
@@ -1133,7 +1148,10 @@ function PlatformCenterInner({ user }) {
   else if (tab === "sessionLogs") body = <SessionLogsPanel />;
   else if (tab === "tenancy") body = <TenancyPanel />;
   else if (tab === "sheetImport") body = <><Hero en="DATA · IMPORT" title="배차일지 가져오기" desc="구글시트·엑셀 배차일지를 운송사 데이터로 옮깁니다(초기 세팅용)." /><SheetImportPanel /></>;
-  else if (tab === "companyReset") body = <><Hero en="DATA · RESET" title="운송사 초기화" desc="⚠ 운송사 데이터를 지웁니다 — 백업 후 신중히 사용하세요." /><CompanyResetPanel /></>;
+  // ⭐ 2026-11-06 운송사 초기화는 이제 관리센터에서만(배차 프로그램 관리자메뉴에서 뺐다) — 계약종료 + 초기화는 계약 › 이용 계약·만료
+  else if (tab === "companyReset") body = <><Hero en="DATA · RESET" title="운송사 초기화" desc="운송사 데이터를 모두 지웁니다 — 7일 동안 보관함에서 복원할 수 있습니다. 계약을 끝내며 지우려면 계약 › 이용 계약·만료를 쓰세요." right={<button type="button" onClick={() => setTab("contract:life")} className="h-10 px-4 rounded-xl bg-white/10 ring-1 ring-white/20 text-[14px] font-black whitespace-nowrap">이용 계약·만료 ›</button>} /><CompanyResetPanel /></>;
+  else if (tab === "contract:life") body = <><Hero en="CONTRACTS · LIFECYCLE" title="이용 계약·만료" desc="운송사별 계약 기간을 정하고, 만료 30·7·1일 전 안내를 보냅니다. 계약종료하면 데이터는 남기고 그 회사 사람은 접속할 수 없습니다." right={<Clock />} /><ContractLifecyclePanel openCompany={openCompany} /></>;
+  else if (tab === "subAdmin") body = <><Hero en="SECURITY · SUB ADMIN" title="부관리자" desc="최고관리자와 같은 권한을 가진 부관리자(1명)를 보고 지정·해제합니다." /><SubAdminPanel /></>;
 
   if (phone) return <PlatformMobileShell user={user} sections={sectionsView} section={sectionView} tab={tab} setTab={setTab} toApp={toApp} logout={logout} secBadge={secBadge}>{body}</PlatformMobileShell>;
 

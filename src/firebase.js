@@ -53,7 +53,7 @@ const firebaseConfig = {
 };
 // 🧪 2026-11-02 테스트 전용 — VITE_USE_EMULATOR=1로 띄울 때만 로컬 가상 서버(Firebase 에뮬레이터)에 붙는다.
 //  실제 배포(Vercel)에는 이 값이 없으므로 아무 영향 없다. 가상 회사로 권한별 실제 동작을 시험할 때 쓴다.
-const USE_EMU = import.meta.env.VITE_USE_EMULATOR === "1";
+const USE_EMU = import.meta.env.VITE_USE_EMULATOR === "1"; // (포트는 VITE_EMU_AUTH_PORT·VITE_EMU_FS_PORT로 바꿀 수 있음 — 2026-11-06 테스트용)
 if (USE_EMU) firebaseConfig.projectId = "demo-kpflow";
 // 회사명이 비어있는 옛 문서를 어느 회사 소속으로 볼지
 export const DEFAULT_COMPANY = "돌캐";
@@ -61,8 +61,41 @@ export const FUNCTIONS_BASE = USE_EMU ? "http://127.0.0.1:5001/demo-kpflow/us-ce
 
 const app = initializeApp(firebaseConfig);
 
-export const auth = getAuth(app);
-if (USE_EMU) { try { AUTH.connectAuthEmulator(auth, "http://127.0.0.1:9099", { disableWarnings: true }); } catch { /* 무시 */ } }
+// ⭐ 2026-11-06 관리자메뉴 › 모바일 미리보기 — iframe(/app?kpmpv=1) 안의 앱은 저장소에서 로그인을 따로 찾지 않고
+//  "지금 이 창(부모)에 로그인한 계정"을 그대로 받아 쓴다. 예전엔 iframe이 IndexedDB에 남아 있던 다른 계정
+//  (예: 같은 PC 다른 탭의 최고관리자 — 로그인 유지)을 먼저 집어 사무원 화면에서 최고관리자로 보였고,
+//  로그인 확인 → 로그인 화면 → /app 으로 여러 번 튕겼다. 미리보기 iframe은 메모리 저장만 쓴다(부모 저장소를 건드리지 않음).
+export const IS_MOBILE_PREVIEW = (() => {
+  try {
+    if (typeof window === "undefined" || window.self === window.top) return false;
+    if (new URLSearchParams(window.location.search).get("kpmpv") !== "1") return false;
+    return window.parent.location.origin === window.location.origin; // 같은 주소에서 연 iframe만
+  } catch { return false; }
+})();
+function previewSeedPersistence() {
+  // 부모 창 계정을 직렬화해 담아 두는 메모리 저장소(초기화 때 한 번 읽힌다) — 부모가 미리보기(가짜 계정) 화면이면 비운다
+  let seed = null;
+  try {
+    const pa = window.parent.__kpAuth;
+    const pu = pa?.currentUser;
+    if (pu && !window.parent.__kpPreviewDemo) seed = { key: `firebase:authUser:${firebaseConfig.apiKey}:${app.name}`, value: pu.toJSON() };
+  } catch { seed = null; }
+  class KpPreviewPersistence {
+    static type = "NONE";
+    constructor() { this.type = "NONE"; this.storage = {}; if (seed) this.storage[seed.key] = seed.value; }
+    async _isAvailable() { return true; }
+    async _set(k, v) { this.storage[k] = v; }
+    async _get(k) { return k in this.storage ? this.storage[k] : null; }
+    async _remove(k) { delete this.storage[k]; }
+    _addListener() {}
+    _removeListener() {}
+  }
+  return KpPreviewPersistence;
+}
+export const auth = IS_MOBILE_PREVIEW ? AUTH.initializeAuth(app, { persistence: previewSeedPersistence() }) : getAuth(app);
+// 부모 창(PC)에서 미리보기 iframe이 계정을 받아갈 수 있게 — 같은 주소의 창끼리만 접근 가능
+try { if (typeof window !== "undefined" && !IS_MOBILE_PREVIEW) window.__kpAuth = auth; } catch { /* 무시 */ }
+if (USE_EMU) { try { AUTH.connectAuthEmulator(auth, `http://127.0.0.1:${import.meta.env.VITE_EMU_AUTH_PORT || 9099}`, { disableWarnings: true }); } catch { /* 무시 */ } }
 
 // IndexedDB 영구 캐시 시도 → 실패 시 기본 메모리 캐시로 폴백.
 // ⭐ 한 라운드 persistentMultipleTabManager로 바꿔봤었는데(관리자 화면 "모바일
@@ -81,7 +114,9 @@ if (USE_EMU) { try { AUTH.connectAuthEmulator(auth, "http://127.0.0.1:9099", { d
 // (PC는 탭·관리자 화면의 모바일 미리보기 등 여러 창이 같이 쓰므로 지금처럼 둔다)
 const IS_PHONE = typeof navigator !== "undefined" && /iphone|ipod|android(?!.*tablet)/i.test(navigator.userAgent || "") && !/ipad|tablet/i.test(navigator.userAgent || "");
 function createDb() {
-  if (USE_EMU) { const d = getFirestore(app); try { FS.connectFirestoreEmulator(d, "127.0.0.1", 8080); } catch { /* 무시 */ } return d; }
+  if (USE_EMU) { const d = getFirestore(app); try { FS.connectFirestoreEmulator(d, "127.0.0.1", Number(import.meta.env.VITE_EMU_FS_PORT || 8080)); } catch { /* 무시 */ } return d; }
+  // ⭐ 2026-11-06 모바일 미리보기 iframe은 메모리 캐시만(부모 탭이 저장소 사용권을 쥐고 있어 기다리지 않게)
+  if (IS_MOBILE_PREVIEW) { try { return initializeFirestore(app, { localCache: FS.memoryLocalCache() }); } catch { return getFirestore(app); } }
   try {
     return initializeFirestore(app, {
       localCache: persistentLocalCache({
@@ -160,7 +195,7 @@ export const messagingPromise = isSupported().then((supported) => {
 //  안드로이드·느린 통신에서 몇 초씩 걸렸다. 이제 이 기기에 기억해 둔 토큰으로 "한 번만" 쓴다(서버는 fcmTokensOut에 든 기기는 안 보낸다)
 const FCM_LOCAL_KEY = "kpFcmToken";
 export async function clearFcmToken(uid) {
-  if (!uid) return;
+  if (!uid || IS_MOBILE_PREVIEW) return; // ⭐ 2026-11-06 모바일 미리보기 iframe은 이 PC 알림 등록을 건드리지 않는다
   let mine = "";
   try { mine = localStorage.getItem(FCM_LOCAL_KEY) || ""; } catch { /* 무시 */ }
   if (!mine) return; // 이 기기는 알림 등록을 한 적이 없다(PC 등)
@@ -168,7 +203,7 @@ export async function clearFcmToken(uid) {
 }
 
 export async function saveFcmToken(user) {
-  if (!user) return;
+  if (!user || IS_MOBILE_PREVIEW) return;
   const messaging = await messagingPromise;
   if (!messaging) { console.warn("[FCM] 이 브라우저는 푸시 메시징을 지원하지 않습니다."); return; }
   // ⭐ 아이폰은 버튼을 누를 때만 권한을 물을 수 있다(자동 요청은 무시·거부됨) — 이미 허용이면 바로 진행

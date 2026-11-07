@@ -186,7 +186,7 @@ const CustomDatePicker = React.forwardRef(function CustomDatePicker(
           </div>
           <div className="grid grid-cols-7 gap-1 mb-1">
             {["일", "월", "화", "수", "목", "금", "토"].map((w, i) => (
-              <div key={w} className={`text-center text-[11px] font-bold py-1 ${i === 0 ? "text-red-400" : i === 6 ? "text-blue-400" : "text-gray-400"}`}>{w}</div>
+              <div key={w} className={`text-center text-[13px] font-bold py-1 ${i === 0 ? "text-red-400" : i === 6 ? "text-blue-400" : "text-gray-400"}`}>{w}</div>
             ))}
           </div>
           <div className="grid grid-cols-7 gap-1">
@@ -208,7 +208,7 @@ const CustomDatePicker = React.forwardRef(function CustomDatePicker(
                 <button key={i} type="button"
                   title={holidayName || undefined}
                   onClick={() => { onChange?.({ target: { value: dateStr } }); setOpen(false); }}
-                  className={`h-11 rounded-lg text-[13px] font-semibold transition flex flex-col items-center justify-center leading-none gap-0.5 ${
+                  className={`h-11 rounded-lg text-[14px] font-semibold transition flex flex-col items-center justify-center leading-none gap-0.5 ${
                     isSelected ? "bg-[#1B2B4B]" :
                     isToday ? "border-2 border-[#1B2B4B]" :
                     "hover:bg-gray-100"

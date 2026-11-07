@@ -8,7 +8,7 @@
 //  · onChange(값) — 값은 글자. 빈 글자(또는 noneValue) = 선택 안 함 / 필터는 noneValue="전체"
 import React from "react";
 import { createPortal } from "react-dom";
-import { addCompanyDropdownOption, useCompanyOptionList } from "./companyDropdownOptions";
+import { addCompanyDropdownOption, removeCompanyDropdownOption, useCompanyOptionList } from "./companyDropdownOptions";
 
 const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
 const FONT = "'Pretendard','Noto Sans KR',sans-serif";
@@ -78,6 +78,20 @@ export const CompanyOptionPicker = React.forwardRef(function CompanyOptionPicker
     </>
   );
 });
+
+// ⭐ 2026-11-06 목록 줄 오른쪽 🗑 — 누르면 그 항목 삭제(확인 창) · 줄 고르기와 겹치지 않게 클릭을 막는다
+export function OptTrash({ onClick, title = "삭제", disabled = false, size = 28 }) {
+  return (
+    <button type="button" title={title} aria-label={title} disabled={disabled} data-opt-del="1"
+      onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); }}
+      onClick={(e) => { e.preventDefault(); e.stopPropagation(); onClick?.(); }}
+      style={{ flexShrink: 0, width: size, height: size, borderRadius: 8, border: "none", background: "transparent", color: "#9AA9C3", cursor: "pointer", display: "grid", placeItems: "center", opacity: disabled ? 0.5 : 1 }}
+      onMouseEnter={(e) => { e.currentTarget.style.background = "#FFF1EE"; e.currentTarget.style.color = "#B42318"; }}
+      onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "#9AA9C3"; }}>
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3" /></svg>
+    </button>
+  );
+}
 
 // ─────────────── 떠 있는 목록(열었을 때만 그린다) ───────────────
 function OptionMenu({ anchor, optKey, cur, meta, ttl, noneLabel, allowNone, allowAdd, role, userCompany, align, labelOf, onPick, onClose }) {
@@ -151,6 +165,14 @@ function OptionMenu({ anchor, optKey, cur, meta, ttl, noneLabel, allowNone, allo
     catch (e) { setErr(String(e?.message || "").includes("permission") ? "추가 권한이 없습니다" : (e?.message || "추가하지 못했습니다")); }
     finally { setBusy(false); }
   };
+  // ⭐ 2026-11-06 🗑 항목 삭제(회사 공용) — 확인 후 회사 목록에서 뺀다 · 이미 저장된 오더 값은 그대로
+  const doRemove = async (v) => {
+    if (!window.confirm(`'${v}'을(를) ${ttl} 목록에서 삭제할까요?\n회사의 모든 화면(PC·모바일) 목록에서 빠집니다. 이미 저장된 오더 값은 그대로예요.`)) return;
+    setBusy(true); setErr("");
+    try { await removeCompanyDropdownOption(optKey, v, co.company); }
+    catch (e) { setErr(String(e?.message || "").includes("permission") ? "삭제 권한이 없습니다" : (e?.message || "삭제하지 못했습니다")); setAdding(true); }
+    finally { setBusy(false); }
+  };
   const onKey = (e) => {
     e.stopPropagation();
     if (e.key === "Escape") { e.preventDefault(); onClose(); return; }
@@ -178,6 +200,7 @@ function OptionMenu({ anchor, optKey, cur, meta, ttl, noneLabel, allowNone, allo
           {o.none ? noneLabel : (labelOf ? labelOf(o.v) : o.v)}
         </span>
         {o.legacy ? <span style={{ fontSize: 12, fontWeight: 800, color: "#B54708", whiteSpace: "nowrap" }}>직접 입력값</span> : null}
+        {allowAdd && !o.none && !o.legacy ? <OptTrash title={`${o.v} 삭제`} onClick={() => doRemove(o.v)} disabled={busy} /> : null}
       </div>
     );
   };

@@ -75,12 +75,22 @@ const goPersonnelOrder = (targetUid) => {
 //  (firestore.rules › approvals 의 "⭐ 2026-11-04 전자결재 서명" 규칙과 같은 조건)
 const PAY_SKIP_FORMS = ["card"];
 export const isPayDoc = (d) => d?.cat === "expense" && !PAY_SKIP_FORMS.includes(d?.form) && Number(d?.amount) > 0;
-const FIN_ROLES = ["test", "acctStaff", "hrAcct", "allMgr", "admin", "totalMaster"]; // ⭐ 2026-11-05 경리 사무원(acctStaff)도 지급 처리
+// ⭐ 2026-11-07 지급 처리 권한 정리 — 지급은 경리 업무
+//  · 경리(test)·경리사무원(acctStaff)·최고관리자 / 재무·경리·회계·총무 부서
+//  · 통합관리자(allMgr)·통합인사관리자(hrAcct)는 "경리 화면"으로 전환했을 때만(운송·인사 화면에서는 안 됨)
+//  · 운송 관리자(admin)·최종 결재자는 지급 처리 불가(예전엔 가능했음)
+const FIN_ROLES = ["test", "acctStaff", "totalMaster"];
 const FIN_TEAM = /재무|경리|회계|총무/;
-const isFinUser = (me) => FIN_ROLES.includes(me?.role) || FIN_TEAM.test(String(me?.team || ""));
+const MULTI_VIEW = { allMgr: "kpAllMgrView", hrAcct: "kpHrAcctView" };
+const acctViewOn = (role) => {
+  const key = MULTI_VIEW[role];
+  if (!key) return false;
+  try { const v = localStorage.getItem(key); return role === "hrAcct" ? v !== "hr" : v === "acct"; } catch { return false; }
+};
+const isFinUser = (me) => FIN_ROLES.includes(me?.role) || acctViewOn(me?.role) || FIN_TEAM.test(String(me?.team || ""));
 // null(지급 대상 아님) | "wait"(지급 대기) | "paid"(지급완료)
 export const payState = (d) => (!isPayDoc(d) || d.status !== "approved" ? null : d.paid?.at ? "paid" : "wait");
-const canPay = (d, me) => !!payState(d) && d.cancel?.status !== "pending" && (isFinUser(me) || (d.line || [])[(d.line || []).length - 1]?.uid === me?.uid);
+const canPay = (d, me) => !!payState(d) && d.cancel?.status !== "pending" && isFinUser(me);
 
 // 🖼 2026-11-04 첨부 보기·저장 — 첨부는 base64 data URL이라 <a target="_blank">로는 크롬이 새 탭을 막아 아무 일도 안 일어났다.
 //  화면 안 보기(라이트박스)로 열고, 저장은 blob으로 바꿔 내려받는다(휴대폰은 공유 시트 → 사진 저장).
@@ -1965,6 +1975,8 @@ function Viewer({ d, me, staff, company, onClose, onRedraft, onEdit, inline = fa
 
 // ─────────────────────────── 문서 목록 ───────────────────────────
 function DocList({ docs, onOpen, empty, uid, compact = false }) {
+  const [sortMode, setSortMode] = React.useState(() => { try { return localStorage.getItem("kpApSort") || "status"; } catch { return "status"; } });
+  const pickSort = (m) => { setSortMode(m); try { localStorage.setItem("kpApSort", m); } catch { /* 무시 */ } };
   if (docs === null) return <div className="py-16 text-center text-[14.5px] text-[#5B6B85]">불러오는 중…</div>;
   if (!docs.length) return (
     <div className="py-16 text-center">
@@ -1973,11 +1985,29 @@ function DocList({ docs, onOpen, empty, uid, compact = false }) {
     </div>
   );
   // ⭐ 2026-10-31 날짜별로 묶어서(기안일 기준)
+  // ⭐ 2026-11-07 같은 날짜 안에서는 처리할 것 먼저 — 내 차례 → 진행 중 → 지급 대기 → 결재 완료 → 반려 → 취소·회수 (같은 단계는 최신순)
+  //  위쪽 [진행 중 먼저 | 최신순] 으로 바꿀 수 있고, 고른 값은 이 기기에 기억
   const WD = "일월화수목금토";
+  const rankOf = (d) => {
+    if (myTurn(d, uid)) return 0;
+    if (d.status === "pending" || d.cancel?.status === "pending") return 1;
+    if (d.status === "approved") return payState(d) === "wait" ? 2 : 3;
+    if (d.status === "rejected") return 4;
+    return 5; // cancelled · withdrawn 등
+  };
   const groups = [];
-  docs.forEach((d) => { const k = ymd(toMs(d.createdAt)); const g = groups[groups.length - 1]; if (g && g.k === k) g.list.push(d); else groups.push({ k, list: [d] }); });
+  docs.forEach((d) => { const k = ymd(toMs(d.createdAt)); const g = groups.find((x) => x.k === k); if (g) g.list.push(d); else groups.push({ k, list: [d] }); });
+  groups.sort((a, b) => b.k.localeCompare(a.k));
+  groups.forEach((g) => g.list.sort((a, b) => (sortMode === "status" ? rankOf(a) - rankOf(b) : 0) || toMs(b.createdAt) - toMs(a.createdAt)));
   return (
     <div>
+      <div className="flex items-center justify-end gap-1.5 px-3.5 md:px-5 py-2 border-b border-[#EEF1F6] bg-white" data-ap-sort>
+        <span className="text-[13px] font-bold text-[#5B6B85] mr-1">정렬</span>
+        {[["status", "진행 중 먼저"], ["latest", "최신순"]].map(([k, l]) => (
+          <button key={k} type="button" onClick={() => pickSort(k)}
+            className={`h-8 px-3 rounded-lg text-[13px] font-black border ${sortMode === k ? "bg-[#0F1A30] text-white border-[#0F1A30]" : "bg-white text-[#3A4A66] border-[#DCE3EE] hover:bg-[#F5F8FD]"}`}>{l}</button>
+        ))}
+      </div>
       {groups.map((g) => (
       <div key={g.k}>
       <div className="sticky top-0 z-[1] px-3.5 md:px-5 py-1.5 bg-[#F5F8FD] border-y border-[#EEF1F6] flex items-center gap-2">
@@ -2275,7 +2305,7 @@ export default function ApprovalCenter({ company, me, page, setPage, openId, onO
       (s) => setCompanyAll(s.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => toMs(b.createdAt) - toMs(a.createdAt))), () => setCompanyAll([]));
   }, [admin, tab, company]);
   // 💸 2026-11-04 지급 대기 — 경리(test)·관리자 역할은 참여하지 않은 지출 문서도 볼 수 있어(규칙상 읽기 허용) 회사 지출 결의를 따로 구독
-  const payReader = ["test", "acctStaff", "hrAcct", "allMgr", "admin", "totalMaster"].includes(me.role);
+  const payReader = isFinUser(me); // ⭐ 2026-11-07 지급 권한과 같은 기준
   const [payPool, setPayPool] = React.useState([]);
   React.useEffect(() => {
     if (!payReader || !company) return undefined;

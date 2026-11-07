@@ -10,6 +10,41 @@ service firebase.storage {
     match /kp-planner/{allPaths=**} {
       allow read, write: if request.auth != null;
     }
+
+    // ⭐ 2026-11-06 로지스웹 허브 콜 — 회원 서류 · 프로필 사진 · 인수증 사진
+    //  관리자 = 최고관리자 이메일 또는 users/{uid}.role == "totalMaster"(Firestore 규칙 isTotalMasterUser와 같은 기준)
+    function hubAdmin() {
+      return request.auth != null && (
+        request.auth.token.get('email', '') == "tjddnqkf@naver.com" ||
+        (firestore.exists(/databases/(default)/documents/users/$(request.auth.uid)) &&
+         firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.get('role', '') == 'totalMaster'));
+    }
+    function hubFileOk(maxMb) {
+      return request.resource != null && request.resource.size < maxMb * 1024 * 1024
+        && (request.resource.contentType.matches('image/.*') || request.resource.contentType == 'application/pdf');
+    }
+    // 가입 서류(사업자등록증·자격증·통장사본 등) — 본인과 관리자만. 다른 회원은 볼 수 없다
+    match /hub/members/{uid}/{file} {
+      allow read: if (request.auth != null && request.auth.uid == uid) || hubAdmin();
+      allow create, update: if request.auth != null && request.auth.uid == uid && hubFileOk(10);
+      allow delete: if (request.auth != null && request.auth.uid == uid) || hubAdmin();
+    }
+    // 프로필 사진 — 로그인 회원이 볼 수 있다(배차된 상대에게 보이는 사진)
+    match /hub/photos/{uid}/{file} {
+      allow read: if request.auth != null;
+      allow create, update: if request.auth != null && request.auth.uid == uid && hubFileOk(5) && request.resource.contentType.matches('image/.*');
+      allow delete: if (request.auth != null && request.auth.uid == uid) || hubAdmin();
+    }
+    // 인수증 사진 — 그 오더의 등록자 · 배차된 회원 · 관리자. 올리기는 배차된 회원만
+    match /hub/pod/{orderId}/{file} {
+      allow read: if request.auth != null && (hubAdmin() ||
+        firestore.get(/databases/(default)/documents/hubOrders/$(orderId)).data.get('posterUid', '') == request.auth.uid ||
+        firestore.get(/databases/(default)/documents/hubOrders/$(orderId)).data.get('takerUid', '') == request.auth.uid);
+      allow create: if request.auth != null && hubFileOk(10)
+        && firestore.get(/databases/(default)/documents/hubOrders/$(orderId)).data.get('takerUid', '') == request.auth.uid;
+      allow update, delete: if false;
+    }
+
     match /{allPaths=**} {
       allow read, write: if false;
     }

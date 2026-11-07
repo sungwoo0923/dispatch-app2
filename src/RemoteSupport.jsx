@@ -13,13 +13,19 @@
 //     supportRequests 문서(status "invited", initiatedBy "master")가 생기고, 직원 화면에 "동의" 창이 뜬다.
 //     직원이 [수락]해야만 진행된다(화면 공유는 브라우저가 공유할 화면을 직원에게 직접 고르게 함) — [거절]하면 "declined".
 //     수락 뒤에는 ③/④와 똑같이 흘러간다(approved → in_session → done).
+//  ⑥ ⭐ 2026-11-07 화면 제어(LogisWeb 탭 안에서만) — 관리자가 [제어 시작] → 세션 문서 controlRequested →
+//     직원 화면에 [제어 허용] 창 → 직원이 누르면 controlAllowed(직원만 켤 수 있음, 규칙) → 관리자의 마우스·키보드가
+//     WebRTC 데이터 채널 "control"(안 되면 controlCmds 하위 컬렉션)로 와서 이 탭 안에서 실행된다(src/RemoteControl.jsx).
+//     직원은 위쪽 배너 [제어 끝내기] 또는 Esc 길게 누르기로 바로 끝낸다. 시작·끝은 세션 문서 controlLog에 남는다.
+//     ⚠ 다른 프로그램·파일 선택·비밀번호 입력은 할 수 없다 → 그런 경우는 원격 프로그램(AnyDesk)으로.
 import React from "react";
 import { createPortal } from "react-dom";
-import { addDoc, collection, doc, limit, onSnapshot, orderBy, query, serverTimestamp, setDoc, updateDoc, where } from "firebase/firestore";
+import { addDoc, arrayUnion, collection, doc, limit, onSnapshot, orderBy, query, serverTimestamp, setDoc, updateDoc, where } from "firebase/firestore";
 import { db } from "./firebase";
 import { BannerCard, BannerStyles } from "./BannerCenter";
 import { fmtPhone } from "./formatInput";
 import { usePlatformLive } from "./PlatformLive"; // ⭐ 2026-11-05 원격 지원 걸기 — 운송사·직원 목록(실시간)
+import { attachAdminCapture, createExecutor, describeSurface, getShareStream, RemoteSelectPicker, StaffControlOverlay, surfaceControllable, useEscHold, videoPoint, viewportInfo } from "./RemoteControl"; // ⭐ 2026-11-07 화면 제어
 
 const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
 const ICE = { iceServers: [{ urls: ["stun:stun.l.google.com:19302", "stun:stun1.l.google.com:19302"] }] };
@@ -121,6 +127,14 @@ export function RemoteSupportHost({ user, profile, company = "", mobile = false 
   const [shareState, setShareState] = React.useState(""); // "" | starting | live | connected
   const [err, setErr] = React.useState("");
   const shareRef = React.useRef({ pc: null, stream: null, unsubs: [], sessionId: null, reqId: null });
+  // ⭐ 2026-11-07 화면 제어 — sess: 세션 문서(제어 요청·허용 상태) · granted: 이 탭에서 직원이 [제어 허용]을 눌렀는지
+  const [sess, setSess] = React.useState(null);
+  const [granted, setGranted] = React.useState(false);
+  const [ctrlHint, setCtrlHint] = React.useState("");
+  const [ctrlToast, setCtrlToast] = React.useState("");
+  const [reshareBusy, setReshareBusy] = React.useState(false);
+  const ctrlRef = React.useRef({ live: false, exec: null });
+  const cursorRef = React.useRef(null);
   const role = profile?.role || "";
   const hidden = !uid || ["driver", "shipper", "cafeUser"].includes(role);
 
@@ -159,10 +173,12 @@ export function RemoteSupportHost({ user, profile, company = "", mobile = false 
   const cleanup = React.useCallback(() => {
     const s = shareRef.current;
     s.unsubs.forEach((u) => { try { u(); } catch { /* 무시 */ } });
-    s.stream?.getTracks().forEach((t) => t.stop());
+    s.stream?.getTracks().forEach((t) => { t.onended = null; t.stop(); });
+    try { s.dc?.close(); } catch { /* 무시 */ }
     try { s.pc?.close(); } catch { /* 무시 */ }
     shareRef.current = { pc: null, stream: null, unsubs: [], sessionId: null, reqId: null };
-    setShareState(""); setPointer(null);
+    ctrlRef.current.live = false;
+    setShareState(""); setPointer(null); setSess(null); setGranted(false);
   }, []);
   const endShare = React.useCallback(async (byMe = true) => {
     const { sessionId, reqId } = shareRef.current;
@@ -184,7 +200,7 @@ export function RemoteSupportHost({ user, profile, company = "", mobile = false 
     if (shareRef.current.pc) { preStream?.getTracks().forEach((t) => t.stop()); return; }
     setShareState("starting");
     let stream = preStream;
-    if (!stream) try { stream = await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: { ideal: 12, max: 20 } }, audio: false }); }
+    if (!stream) try { stream = await getShareStream(); } // ⭐ 2026-11-07 이 탭 공유를 먼저 권한다(화면 제어는 이 탭일 때만)
     catch (e) {
       setShareState("");
       setErr(e?.name === "NotAllowedError" ? "화면 공유가 취소되었습니다."
@@ -199,16 +215,21 @@ export function RemoteSupportHost({ user, profile, company = "", mobile = false 
       const track = stream.getVideoTracks()[0];
       stream.getTracks().forEach((t) => pc.addTrack(t, stream));
       track.onended = () => endShare(true); // 브라우저의 "공유 중지"
+      // ⭐ 2026-11-07 화면 제어 통로 — offer 전에 만들어야 SDP에 들어간다
+      const dc = pc.createDataChannel("control", { ordered: true });
+      shareRef.current.dc = dc;
+      dc.onmessage = (ev) => onCtrlRaw(ev.data);
+      dc.onopen = () => sendToAdmin({ t: "vp", ...viewportInfo() });
       const early = []; let ready = false;
       pc.onicecandidate = (e) => { if (!e.candidate) return; const c = e.candidate.toJSON(); if (ready) addDoc(collection(sref, "callerCandidates"), c).catch(() => {}); else early.push(c); };
       pc.onconnectionstatechange = () => { if (pc.connectionState === "connected") setShareState("connected"); if (pc.connectionState === "failed") setErr("연결이 끊겼습니다 — 회사 네트워크에 따라 화면 공유가 막힐 수 있습니다. 원격 프로그램으로 진행해 주세요."); };
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
-      const surface = track.getSettings?.().displaySurface || "";
+      const { surface, self } = describeSurface(track);
       await setDoc(sref, {
         requestId: req.id, requesterUid: uid, requesterName: req.name || "", companyName: req.companyName || "",
-        offer: { type: offer.type, sdp: offer.sdp }, status: "waiting", displaySurface: surface,
-        viewport: { w: window.innerWidth, h: window.innerHeight }, createdAt: serverTimestamp(),
+        offer: { type: offer.type, sdp: offer.sdp }, status: "waiting", displaySurface: surface, surfaceSelf: self,
+        viewport: viewportInfo(), controlRequested: false, controlAllowed: false, createdAt: serverTimestamp(),
       });
       ready = true; early.forEach((c) => addDoc(collection(sref, "callerCandidates"), c).catch(() => {}));
       await updateDoc(doc(db, "supportRequests", req.id), { status: "in_session", sessionId: sref.id, updatedAt: serverTimestamp() });
@@ -217,6 +238,7 @@ export function RemoteSupportHost({ user, profile, company = "", mobile = false 
       let lastPtr = 0;
       shareRef.current.unsubs.push(onSnapshot(sref, (snap) => {
         const d = snap.data(); if (!d) return;
+        setSess(d);
         if (d.answer && !pc.currentRemoteDescription) pc.setRemoteDescription(new RTCSessionDescription(d.answer)).then(() => sink.flush()).catch(() => {});
         if (d.pointer?.at && d.pointer.at !== lastPtr) { lastPtr = d.pointer.at; if (Date.now() - d.pointer.at < 15000) setPointer({ ...d.pointer, key: d.pointer.at }); }
         if (d.status === "ended") endShare(false);
@@ -237,7 +259,7 @@ export function RemoteSupportHost({ user, profile, company = "", mobile = false 
     const mode = invite.mode || invite.method || "screen";
     let stream = null;
     if (mode === "screen" && canShareScreen() && !isPhoneUA()) {
-      try { stream = await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: { ideal: 12, max: 20 } }, audio: false }); }
+      try { stream = await getShareStream(); }
       catch (e) { setInviteBusy(false); setErr(e?.name === "NotAllowedError" ? "화면 공유 창을 닫으셨습니다 — 다시 [수락]을 누르면 공유할 화면을 고를 수 있습니다." : `화면 공유를 시작하지 못했습니다 (${e?.name || e?.message || "오류"})`); return; }
     }
     try {
@@ -257,12 +279,102 @@ export function RemoteSupportHost({ user, profile, company = "", mobile = false 
     setInviteBusy(false);
   };
 
+  // ═══ ⭐ 2026-11-07 화면 제어(직원 쪽) ═══
+  //  실행 조건: 이 탭에서 직원이 [제어 허용]을 눌렀고(granted) + 세션 문서 controlAllowed가 true + 세션이 끝나지 않음.
+  //  그 밖의 메시지는 전부 버린다(통로가 열려 있어도 실행하지 않음).
+  const ctrlLive = !!(granted && sess?.controlAllowed === true && sess?.status !== "ended" && shareRef.current.pc);
+  const sendToAdmin = (m) => { const dc = shareRef.current.dc; if (dc && dc.readyState === "open") { try { dc.send(JSON.stringify(m)); } catch { /* 무시 */ } } };
+  const onCtrlRaw = (raw) => {
+    if (!ctrlRef.current.live || typeof raw !== "string" || raw.length > 20000) return;
+    let m; try { m = JSON.parse(raw); } catch { return; }
+    ctrlRef.current.exec?.exec(m);
+  };
+  const sessRef = () => (shareRef.current.sessionId ? doc(db, "supportSessions", shareRef.current.sessionId) : null);
+  React.useEffect(() => { if (!ctrlToast) return undefined; const t = setTimeout(() => setCtrlToast(""), 3500); return () => clearTimeout(t); }, [ctrlToast]);
+  React.useEffect(() => { if (!ctrlHint) return undefined; const t = setTimeout(() => setCtrlHint(""), 3500); return () => clearTimeout(t); }, [ctrlHint]);
+  // 관리자가 끝냈으면(허용 꺼짐) 내 허용도 끈다
+  React.useEffect(() => {
+    if (granted && sess && sess.controlAllowed === false && sess.controlEndedBy === "master") { setGranted(false); setCtrlToast("관리자가 제어를 끝냈어요"); }
+  }, [granted, sess?.controlAllowed, sess?.controlEndedBy]); // eslint-disable-line react-hooks/exhaustive-deps
+  React.useEffect(() => {
+    const st = ctrlRef.current;
+    st.live = ctrlLive;
+    if (!ctrlLive) { st.exec?.reset(); return undefined; }
+    st.exec = createExecutor({
+      send: sendToAdmin,
+      onHint: (h) => setCtrlHint(h),
+      onCursor: (x, y, pressed) => { const c = cursorRef.current; if (c) c.style.transform = `translate(${Math.round(x) - 4}px,${Math.round(y) - 3}px) scale(${pressed ? 0.88 : 1})`; },
+    });
+    const sid = shareRef.current.sessionId;
+    // 데이터 채널이 안 될 때의 느린 통로 — 최고관리자만 쓸 수 있는 controlCmds(규칙). 처음 받은 묶음(예전 명령)은 버린다
+    let firstCmd = true;
+    const unsubCmd = onSnapshot(query(collection(db, "supportSessions", sid, "controlCmds"), orderBy("at", "desc"), limit(40)), (s) => {
+      const fresh = firstCmd ? [] : s.docChanges().filter((c) => c.type === "added").map((c) => c.doc.data()).sort((x, y) => (x.at || 0) - (y.at || 0));
+      firstCmd = false;
+      fresh.forEach((d) => { if (ctrlRef.current.live) ctrlRef.current.exec?.exec(d?.m); });
+    }, () => {});
+    let vpT = null; let vpLast = "";
+    const pushVp = () => {
+      clearTimeout(vpT);
+      vpT = setTimeout(() => {
+        const v = viewportInfo(); sendToAdmin({ t: "vp", ...v });
+        const k = `${v.w}x${v.h}`;
+        if (k !== vpLast) { vpLast = k; updateDoc(doc(db, "supportSessions", sid), { viewport: v }).catch(() => {}); }
+      }, 250);
+    };
+    pushVp();
+    window.addEventListener("resize", pushVp); window.addEventListener("scroll", pushVp, true);
+    return () => { clearTimeout(vpT); unsubCmd(); window.removeEventListener("resize", pushVp); window.removeEventListener("scroll", pushVp, true); st.exec?.reset(); };
+  }, [ctrlLive]); // eslint-disable-line react-hooks/exhaustive-deps
+  const allowControl = async () => {
+    const r = sessRef(); if (!r) return;
+    try {
+      await updateDoc(r, { controlAllowed: true, controlRequested: false, controlStartedAt: serverTimestamp(), controlEndedBy: "", viewport: viewportInfo(), controlLog: arrayUnion({ t: "start", by: "requester", at: Date.now() }) });
+      setGranted(true); setErr("");
+      setCtrlToast("제어를 허용했어요");
+    } catch (e) { setGranted(false); setErr(`제어를 허용하지 못했어요 (${e?.code || e?.message || "오류"})`); }
+  };
+  const stopControl = React.useCallback(async () => {
+    ctrlRef.current.live = false;
+    setGranted(false);
+    setCtrlToast("제어를 끝냈어요");
+    const sid = shareRef.current.sessionId;
+    if (sid) await updateDoc(doc(db, "supportSessions", sid), { controlAllowed: false, controlRequested: false, controlEndedAt: serverTimestamp(), controlEndedBy: "requester", controlLog: arrayUnion({ t: "stop", by: "requester", at: Date.now() }) }).catch(() => {});
+  }, []);
+  const declineControl = async () => {
+    const r = sessRef(); if (!r) return;
+    await updateDoc(r, { controlRequested: false, controlDeclinedAt: Date.now(), controlLog: arrayUnion({ t: "decline", by: "requester", at: Date.now() }) }).catch(() => {});
+  };
+  // 관리자가 "이 탭 공유"를 부탁 → 직원이 버튼을 눌러 새로 고른 화면으로 영상만 바꾼다(연결은 그대로)
+  const reshare = async () => {
+    const s = shareRef.current; if (!s.pc || reshareBusy) return;
+    setReshareBusy(true); setErr("");
+    try {
+      const stream = await getShareStream();
+      const track = stream.getVideoTracks()[0];
+      const sender = s.pc.getSenders().find((x) => x.track?.kind === "video") || s.pc.getSenders()[0];
+      await sender.replaceTrack(track);
+      s.stream?.getTracks().forEach((t) => { t.onended = null; t.stop(); });
+      s.stream = stream;
+      track.onended = () => endShare(true);
+      const { surface, self } = describeSurface(track);
+      const r = sessRef();
+      if (r) await updateDoc(r, { displaySurface: surface, surfaceSelf: self, viewport: viewportInfo(), reshareDoneAt: Date.now() }).catch(() => {});
+    } catch (e) {
+      if (e?.name !== "NotAllowedError") setErr(`다시 공유하지 못했어요 (${e?.name || e?.message || "오류"})`);
+    }
+    setReshareBusy(false);
+  };
+  useEscHold(ctrlLive, stopControl);
+
   // 포인터 원은 3초 뒤 사라진다
   React.useEffect(() => { if (!pointer) return undefined; const t = setTimeout(() => setPointer(null), 3200); return () => clearTimeout(t); }, [pointer]);
 
   if (hidden) return null;
   const sharingNow = !!shareState && shareState !== "starting";
   const dockBottom = mobile ? 92 : 24;
+  const ctrlAsk = sharingNow && !!sess && sess.controlRequested === true && sess.controlAllowed !== true && sess.status !== "ended";
+  const reshareAsk = sharingNow && !!sess && (sess.reshareRequestedAt || 0) > (sess.reshareDoneAt || 0) && !surfaceControllable(sess);
   return createPortal(
     <>
       <BannerStyles />
@@ -276,6 +388,15 @@ export function RemoteSupportHost({ user, profile, company = "", mobile = false 
           </div>
         </div>
       )}
+      {/* ⭐ 2026-11-07 화면 제어 — 제어 중 배너 · 관리자 커서 · 안내 */}
+      {ctrlLive && <StaffControlOverlay cursorRef={cursorRef} hint={ctrlHint} onStop={stopControl} />}
+      {(ctrlAsk || reshareAsk) && (
+        <ControlConsent ask={ctrlAsk} needTab={!surfaceControllable(sess)} reshareBusy={reshareBusy} err={err}
+          onAllow={allowControl} onDecline={declineControl} onReshare={reshare} />
+      )}
+      {ctrlToast && (
+        <div data-kp-rc-guard="" className="fixed top-16 left-1/2 -translate-x-1/2 z-[2147483003] px-4 py-2.5 rounded-xl bg-[#0F1A30] text-white text-[14.5px] font-black shadow-[0_12px_30px_rgba(11,20,40,0.4)]" data-testid="rc-toast">{ctrlToast}</div>
+      )}
       {/* 결과 배너(승인·거절) */}
       {banners.length > 0 && (
         <div className="fixed right-3 sm:right-6 z-[999991] flex flex-col gap-2.5 items-end pointer-events-none" style={{ bottom: dockBottom + (dockReq ? 84 : 0) }}>
@@ -287,14 +408,14 @@ export function RemoteSupportHost({ user, profile, company = "", mobile = false 
       )}
       {/* 진행 상황 막대 — 요청이 살아있는 동안 늘 보인다 */}
       {dockReq && !open && (
-        <div className={`fixed z-[999989] ${mobile ? "left-3 right-3" : "left-3 right-3 sm:right-auto sm:left-1/2 sm:-translate-x-1/2"}`} style={{ bottom: dockBottom }}>
+        <div data-kp-rc-guard="" className={`fixed z-[999989] ${mobile ? "left-3 right-3" : "left-3 right-3 sm:right-auto sm:left-1/2 sm:-translate-x-1/2"}`} style={{ bottom: dockBottom }}>
           <div className="kp-banner-in sm:w-[440px] rounded-[18px] text-white shadow-[0_18px_44px_rgba(11,20,40,0.38)] ring-1 ring-white/10 overflow-hidden" style={{ background: "linear-gradient(120deg,#0B1428 0%,#1B2B4B 65%,#2D4C82 100%)" }} data-testid="support-dock">
             <div className="flex items-center gap-3 px-4 py-3">
               <span className={`w-10 h-10 rounded-[13px] grid place-items-center shrink-0 ${sharingNow ? "bg-[#8FB0F0] text-[#0B1428] kp-sup-live" : "bg-white/10 text-[#CFE0FF]"}`}><Icon d={SUPPORT_ICON} /></span>
               <button type="button" onClick={() => setOpen(true)} className="flex-1 min-w-0 text-left">
                 <div className="text-[11.5px] font-extrabold tracking-[0.2em] text-[#8FB0F0]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>REMOTE SUPPORT</div>
                 <div className="text-[15px] font-black truncate">
-                  {sharingNow ? (shareState === "connected" ? "화면 공유 중 · 관리자가 보고 있습니다" : "화면 공유 대기 · 관리자 연결 중") : dockReq.status === "pending" ? "원격 지원 요청 · 승인 대기 중" : dockReq.status === "approved" ? "승인됨 — 눌러서 시작하기" : dockReq.status === "in_session" ? "원격 지원 진행 중" : "요청이 거절되었습니다"}
+                  {sharingNow ? (ctrlLive ? "관리자가 화면을 제어하고 있어요" : shareState === "connected" ? "화면 공유 중 · 관리자가 보고 있습니다" : "화면 공유 대기 · 관리자 연결 중") : dockReq.status === "pending" ? "원격 지원 요청 · 승인 대기 중" : dockReq.status === "approved" ? "승인됨 — 눌러서 시작하기" : dockReq.status === "in_session" ? "원격 지원 진행 중" : "요청이 거절되었습니다"}
                 </div>
               </button>
               {sharingNow ? (
@@ -320,12 +441,45 @@ export function RemoteSupportHost({ user, profile, company = "", mobile = false 
     </>, document.body);
 }
 
+// ⭐ 2026-11-07 화면 제어 — 직원 화면의 [제어 허용] 창(위쪽에 떠서 공유 중인 화면을 가리지 않게)
+function ControlConsent({ ask, needTab, reshareBusy, err, onAllow, onDecline, onReshare }) {
+  return (
+    <div data-kp-rc-guard="" className="fixed inset-x-0 top-0 z-[2147483002] flex justify-center px-3 pt-3 pointer-events-none" data-testid="rc-consent">
+      <div className="kp-banner-in pointer-events-auto w-full max-w-[460px] rounded-[20px] bg-[#F4F6FA] overflow-hidden shadow-[0_24px_60px_rgba(11,20,40,0.45)] ring-1 ring-[#1B2B4B]/20">
+        <div className="px-4 py-3 flex items-center gap-3 text-white" style={{ background: "linear-gradient(120deg,#0B1428 0%,#1B2B4B 60%,#2D4C82 100%)" }}>
+          <span className="w-10 h-10 rounded-[13px] grid place-items-center bg-[#8FB0F0] text-[#0B1428] kp-sup-live shrink-0"><Icon d={SUPPORT_ICON} size={19} /></span>
+          <div className="min-w-0">
+            <div className="text-[11px] font-extrabold tracking-[0.26em] text-[#8FB0F0]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>REMOTE CONTROL</div>
+            <div className="text-[17px] font-black leading-tight">{ask ? "관리자가 화면 제어를 요청했어요" : "관리자가 이 탭 공유를 요청했어요"}</div>
+          </div>
+        </div>
+        <div className="p-3.5 space-y-2.5">
+          {err && <div className="px-3.5 py-2.5 rounded-xl bg-white ring-1 ring-[#1B2B4B]/25 text-[13.5px] font-bold text-[#1B2B4B]">{err}</div>}
+          {ask && <div className="text-[14px] text-[#3A4A66] leading-relaxed">허용하면 관리자가 <b className="text-[#0F1A30]">이 탭(LogisWeb) 안에서만</b> 마우스와 키보드로 대신 눌러 드려요. 다른 프로그램, 파일 선택, 비밀번호 칸은 건드릴 수 없어요. 위쪽 [제어 끝내기]나 Esc 길게 누르기로 언제든 멈출 수 있어요.</div>}
+          {needTab && (
+            <div className="flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl bg-white ring-1 ring-[#C9D6EE]" data-testid="rc-consent-need-tab">
+              <span className="flex-1 text-[13.5px] font-bold text-[#1B2B4B] leading-snug">지금은 이 탭이 아닌 화면을 공유하고 있어요. [이 탭 공유]를 먼저 눌러 주세요.</span>
+              <button type="button" onClick={onReshare} disabled={reshareBusy} data-testid="rc-consent-reshare" className="shrink-0 h-10 px-3.5 rounded-xl bg-[#1B2B4B] text-white text-[14px] font-black disabled:opacity-60">{reshareBusy ? "여는 중…" : "이 탭 공유"}</button>
+            </div>
+          )}
+          {ask && (
+            <div className="grid grid-cols-[1fr_1.6fr] gap-2">
+              <button type="button" onClick={onDecline} data-testid="rc-decline" className="h-12 rounded-xl border-[1.5px] border-[#C3CEDF] bg-white text-[#3A4A66] text-[15px] font-black">거절</button>
+              <button type="button" onClick={onAllow} disabled={needTab} data-testid="rc-allow" className="h-12 rounded-xl text-white text-[15.5px] font-black disabled:opacity-50" style={{ background: "linear-gradient(90deg,#0F1A30,#2D4C82)" }}>제어 허용</button>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ⭐ 2026-11-05 원격 지원 걸기 — 직원 화면의 동의 창(닫기 없음: 수락 또는 거절)
 function InviteConsent({ req, busy, err, mobile, onAccept, onDecline }) {
   const mode = req.mode || req.method || "screen";
   const phone = mobile || isPhoneUA();
   return (
-    <div className="fixed inset-0 z-[999993] bg-[#0B1428]/60 flex items-end sm:items-center justify-center sm:p-6" data-testid="support-invite">
+    <div data-kp-rc-guard="" className="fixed inset-0 z-[999993] bg-[#0B1428]/60 flex items-end sm:items-center justify-center sm:p-6" data-testid="support-invite">
       <div className="kp-banner-in w-full sm:max-w-[480px] bg-[#F4F6FA] rounded-t-[24px] sm:rounded-[24px] overflow-hidden shadow-[0_30px_80px_rgba(11,20,40,0.5)]">
         <div className="px-5 sm:px-6 pt-5 pb-4 text-white" style={{ background: "linear-gradient(rgba(143,176,240,.06) 1px, transparent 1px) 0 0/22px 22px, linear-gradient(90deg, rgba(143,176,240,.06) 1px, transparent 1px) 0 0/22px 22px, linear-gradient(120deg,#0B1428 0%,#1B2B4B 60%,#2D4C82 100%)" }}>
           <div className="flex items-center gap-3">
@@ -346,7 +500,7 @@ function InviteConsent({ req, busy, err, mobile, onAccept, onDecline }) {
             {req.message && <div className="text-[15px] text-[#0F1A30] leading-relaxed whitespace-pre-wrap break-words px-3.5 py-3 rounded-xl bg-[#F7F9FC]" data-testid="support-invite-msg">{req.message}</div>}
             <div className="text-[14px] text-[#3A4A66] leading-relaxed">
               {mode === "screen"
-                ? <>[수락]을 누르면 공유할 화면을 고르는 창이 뜹니다 — <b className="text-[#0F1A30]">이 탭</b>(LogisWeb)을 고르면 됩니다. 관리자는 <b className="text-[#0F1A30]">보기만</b> 하고 조작할 수 없으며, 언제든 [공유 종료]로 끝낼 수 있습니다.</>
+                ? <>[수락]을 누르면 공유할 화면을 고르는 창이 뜹니다. <b className="text-[#0F1A30]">이 탭</b>(LogisWeb)을 고르면 됩니다. 관리자가 화면 제어를 요청해도 <b className="text-[#0F1A30]">[제어 허용]</b>을 눌러야만 대신 눌러 드릴 수 있고, 언제든 [공유 종료]로 끝낼 수 있습니다.</>
                 : <>[수락]을 누르면 원격 프로그램(AnyDesk 등) 안내가 열립니다. 원격 번호를 보내 주시면 관리자가 접속합니다.</>}
             </div>
             {mode === "screen" && phone && <div className="text-[13px] text-[#5B6B85]">휴대폰에서는 화면 공유가 어려울 수 있습니다 — PC에서 화면 공유가 가능합니다.</div>}
@@ -402,7 +556,7 @@ function RequesterModal({ uid, user, profile, company, mobile, active, latest, h
   const past = history.filter((r) => !SUPPORT_ACTIVE.includes(r.status)).slice(0, 5);
 
   return (
-    <div className="fixed inset-0 z-[999992] bg-[#0B1428]/55 flex items-end sm:items-center justify-center sm:p-6" onClick={onClose}>
+    <div data-kp-rc-guard="" className="fixed inset-0 z-[999992] bg-[#0B1428]/55 flex items-end sm:items-center justify-center sm:p-6" onClick={onClose}>
       <div onClick={(e) => e.stopPropagation()} data-testid="support-modal"
         className="w-full sm:max-w-[560px] max-h-[92dvh] overflow-y-auto bg-[#F4F6FA] rounded-t-[24px] sm:rounded-[24px] shadow-[0_30px_80px_rgba(11,20,40,0.45)]">
         <div className="relative px-5 sm:px-6 pt-5 pb-4 text-white" style={{ background: "linear-gradient(rgba(143,176,240,.06) 1px, transparent 1px) 0 0/22px 22px, linear-gradient(90deg, rgba(143,176,240,.06) 1px, transparent 1px) 0 0/22px 22px, linear-gradient(120deg,#0B1428 0%,#1B2B4B 60%,#2D4C82 100%)" }}>
@@ -439,7 +593,7 @@ function RequesterModal({ uid, user, profile, company, mobile, active, latest, h
                 <div>
                   <span className="block text-[14px] font-black text-[#0F1A30] mb-1.5">희망 방식</span>
                   <div className="grid grid-cols-2 gap-2">
-                    {[["screen", "화면 공유", "브라우저로 바로 · 보기 전용 · PC"], ["remote", "원격 프로그램", "AnyDesk 등 · 관리자가 직접 조작"]].map(([k, t, d]) => (
+                    {[["screen", "화면 공유", "브라우저로 바로 · 보기·제어 · PC"], ["remote", "원격 프로그램", "AnyDesk 등 · 관리자가 직접 조작"]].map(([k, t, d]) => (
                       <button key={k} type="button" onClick={() => setMethod(k)} data-testid={`support-method-${k}`}
                         className={`text-left px-3.5 py-3 rounded-xl border-[1.5px] transition ${method === k ? "border-[#1B2B4B] bg-[#EEF3FC]" : "border-[#E3E8F0] bg-white hover:border-[#B9C8E4]"}`}>
                         <span className="flex items-center gap-2"><span className={`w-4 h-4 rounded-full border-2 grid place-items-center ${method === k ? "border-[#1B2B4B]" : "border-[#C3CEDF]"}`}>{method === k && <span className="w-2 h-2 rounded-full bg-[#1B2B4B]" />}</span><span className="text-[15px] font-black text-[#0F1A30]">{t}</span></span>
@@ -473,7 +627,7 @@ function RequesterModal({ uid, user, profile, company, mobile, active, latest, h
               {["approved", "in_session"].includes(active.status) && mode === "screen" && (
                 <div className="rounded-2xl p-4 text-white space-y-3" style={{ background: "linear-gradient(120deg,#0B1428,#1B2B4B 65%,#2D4C82)" }}>
                   <div className="text-[16px] font-black">{sharing ? (shareState === "connected" ? "화면 공유 중 — 관리자가 보고 있습니다" : "관리자 연결을 기다리는 중…") : "승인되었습니다 — 화면을 공유해 주세요"}</div>
-                  <div className="text-[13.5px] text-white/70 leading-relaxed">보기 전용입니다 — 관리자는 화면을 보기만 하고 조작할 수 없습니다. 공유 창에서 <b className="text-white">이 탭</b>(LogisWeb)을 고르면 관리자가 가리키는 위치가 가장 정확하게 표시됩니다.</div>
+                  <div className="text-[13.5px] text-white/70 leading-relaxed">공유 창에서 <b className="text-white">이 탭</b>(LogisWeb)을 골라 주세요. 관리자가 화면 제어를 요청하면 [제어 허용]을 눌러야만 대신 눌러 드릴 수 있어요.</div>
                   {!sharing ? (
                     <button type="button" onClick={() => startShare(active)} disabled={shareState === "starting"} data-testid="support-share-start"
                       className="w-full h-12 rounded-xl bg-white text-[#0F1A30] text-[16px] font-black disabled:opacity-60">{shareState === "starting" ? "공유 창 여는 중…" : "화면 공유 시작"}</button>
@@ -532,10 +686,22 @@ function RequesterModal({ uid, user, profile, company, mobile, active, latest, h
 function MasterViewer({ sessionId, onEnd }) {
   const videoRef = React.useRef(null);
   const wrapRef = React.useRef(null);
+  const layerRef = React.useRef(null); // ⭐ 2026-11-07 제어 중 마우스를 받는 투명 막
+  const sinkRef = React.useRef(null); //  키보드·한글 입력·붙여넣기를 받는 숨은 칸
+  const dcRef = React.useRef(null);
+  const msgRef = React.useRef(() => {});
   const [state, setState] = React.useState("connecting");
   const [sess, setSess] = React.useState(null);
   const [size, setSize] = React.useState("");
   const [click, setClick] = React.useState(null);
+  const [dcState, setDcState] = React.useState("none"); // none · open · closed
+  const [ctrlOn, setCtrlOn] = React.useState(false);
+  const [vp, setVp] = React.useState(null);
+  const [picker, setPicker] = React.useState(null);
+  const [note, setNote] = React.useState("");
+  const [compose, setCompose] = React.useState("");
+  const [keyOn, setKeyOn] = React.useState(false);
+  const initRef = React.useRef(false);
   React.useEffect(() => {
     if (!sessionId) return undefined;
     const sref = doc(db, "supportSessions", sessionId);
@@ -546,9 +712,19 @@ function MasterViewer({ sessionId, onEnd }) {
     pc.ontrack = (e) => { const v = videoRef.current; if (v && e.streams[0]) { v.srcObject = e.streams[0]; v.play?.().catch(() => {}); } };
     pc.onicecandidate = (e) => { if (e.candidate) addDoc(collection(sref, "calleeCandidates"), e.candidate.toJSON()).catch(() => {}); };
     pc.onconnectionstatechange = () => { if (!alive) return; setState(pc.connectionState === "connected" ? "live" : pc.connectionState === "failed" ? "failed" : pc.connectionState === "disconnected" ? "unstable" : "connecting"); };
+    // ⭐ 2026-11-07 화면 제어 통로(직원이 만든 데이터 채널)
+    pc.ondatachannel = (e) => {
+      const ch = e.channel; if (ch.label !== "control") return;
+      dcRef.current = ch;
+      ch.onopen = () => alive && setDcState("open");
+      ch.onclose = () => alive && setDcState("closed");
+      ch.onmessage = (ev) => msgRef.current(ev.data);
+      if (ch.readyState === "open") setDcState("open");
+    };
     unsubs.push(onSnapshot(sref, async (snap) => {
       const d = snap.data(); if (!d) return;
       setSess(d);
+      if (!initRef.current) { initRef.current = true; if (d.controlAllowed === true) setCtrlOn(true); }
       if (d.status === "ended") { setState("ended"); return; }
       if (d.offer && !answered) {
         answered = true;
@@ -563,31 +739,82 @@ function MasterViewer({ sessionId, onEnd }) {
     }, () => setState("failed")));
     unsubs.push(onSnapshot(collection(sref, "callerCandidates"), (s) => s.docChanges().forEach((c) => { if (c.type === "added") sink.add(c.doc.data()); }), () => {}));
     const t = setInterval(() => { const v = videoRef.current; if (v && v.videoWidth) setSize(`${v.videoWidth}×${v.videoHeight}`); }, 1000);
-    return () => { alive = false; clearInterval(t); unsubs.forEach((u) => u()); try { pc.close(); } catch { /* 무시 */ } };
+    return () => { alive = false; clearInterval(t); unsubs.forEach((u) => u()); try { dcRef.current?.close(); } catch { /* 무시 */ } dcRef.current = null; try { pc.close(); } catch { /* 무시 */ } };
   }, [sessionId]);
 
-  // 영상 위 클릭 → 실제 영상 영역 기준 비율(object-contain 여백 제외)
+  // ── 화면 제어(관리자 쪽) ──
+  const allowed = sess?.controlAllowed === true;
+  const surfaceOk = surfaceControllable(sess);
+  const capturing = ctrlOn && allowed && surfaceOk && state === "live";
+  const sendCtrl = React.useCallback((m) => {
+    const ch = dcRef.current;
+    if (ch && ch.readyState === "open") { try { ch.send(JSON.stringify(m)); return; } catch { /* 아래 느린 통로 */ } }
+    if (m.t === "m") return; // 느린 통로로는 이동을 보내지 않는다(누름·뗌·키만)
+    addDoc(collection(db, "supportSessions", sessionId, "controlCmds"), { m, at: Date.now(), createdAt: serverTimestamp() }).catch(() => {});
+  }, [sessionId]);
+  msgRef.current = (raw) => {
+    if (typeof raw !== "string" || raw.length > 20000) return;
+    let m; try { m = JSON.parse(raw); } catch { return; }
+    if (m.t === "vp") setVp({ w: m.w | 0, h: m.h | 0, dpr: +m.dpr || 1 });
+    else if (m.t === "so" && Array.isArray(m.o)) setPicker({ i: m.i | 0, o: m.o.map((x) => String(x).slice(0, 40)) });
+    else if (m.t === "cp" && m.s) { const s = String(m.s).slice(0, 5000); navigator.clipboard?.writeText(s).then(() => setNote("직원 화면에서 복사했어요"), () => setNote("복사한 글을 내 클립보드에 넣지 못했어요")); }
+    else if (m.t === "h" && m.s) setNote(String(m.s).slice(0, 80));
+  };
+  // 직원이 끝냈거나 거절하면 내 쪽도 끈다
+  const prevAllowed = React.useRef(false);
+  React.useEffect(() => {
+    if (prevAllowed.current && !allowed && ctrlOn) { setCtrlOn(false); setNote(sess?.controlEndedBy === "requester" ? "직원이 제어를 끝냈어요" : "제어를 끝냈어요"); }
+    prevAllowed.current = allowed;
+  }, [allowed]); // eslint-disable-line react-hooks/exhaustive-deps
+  const declinedAt = sess?.controlDeclinedAt || 0;
+  const askedAtRef = React.useRef(0);
+  React.useEffect(() => { if (ctrlOn && !allowed && declinedAt > askedAtRef.current) { setCtrlOn(false); setNote("직원이 제어를 거절했어요"); } }, [declinedAt]); // eslint-disable-line react-hooks/exhaustive-deps
+  React.useEffect(() => { if (!note) return undefined; const t = setTimeout(() => setNote(""), 4000); return () => clearTimeout(t); }, [note]);
+  React.useEffect(() => {
+    if (!capturing) { setPicker(null); setCompose(""); return undefined; }
+    const off = attachAdminCapture({ layer: layerRef.current, video: videoRef.current, sink: sinkRef.current, send: sendCtrl, canMove: () => dcRef.current?.readyState === "open", onCompose: setCompose });
+    try { sinkRef.current?.focus({ preventScroll: true }); } catch { /* 무시 */ }
+    return off;
+  }, [capturing, sendCtrl]);
+  const toggleCtrl = async () => {
+    const sref = doc(db, "supportSessions", sessionId);
+    if (!ctrlOn) {
+      setCtrlOn(true); setNote(""); askedAtRef.current = Date.now();
+      if (!allowed) await updateDoc(sref, { controlRequested: true, controlRequestedAt: serverTimestamp(), controlLog: arrayUnion({ t: "request", by: "master", at: Date.now() }) }).catch((e) => { setCtrlOn(false); setNote(`제어를 요청하지 못했어요 (${e?.code || ""})`); });
+    } else {
+      setCtrlOn(false);
+      await updateDoc(sref, { controlRequested: false, controlAllowed: false, controlEndedAt: serverTimestamp(), controlEndedBy: "master", controlLog: arrayUnion({ t: "stop", by: "master", at: Date.now() }) }).catch(() => {});
+      setNote("제어를 끝냈어요");
+    }
+  };
+  const askReshare = () => updateDoc(doc(db, "supportSessions", sessionId), { reshareRequestedAt: Date.now() }).then(() => setNote("직원에게 이 탭 공유를 부탁했어요")).catch(() => {});
+
+  // 영상 위 클릭 → 실제 영상 영역 기준 비율(object-contain 여백 제외) — 제어 중이 아닐 때만 포인터
   const onPoint = (e) => {
-    const v = videoRef.current; if (!v || !v.videoWidth) return;
+    if (capturing) return;
+    const v = videoRef.current; if (!v) return;
+    const p = videoPoint(v, e.clientX, e.clientY); if (!p) return;
     const r = v.getBoundingClientRect();
-    const scale = Math.min(r.width / v.videoWidth, r.height / v.videoHeight);
-    const w = v.videoWidth * scale; const h = v.videoHeight * scale;
-    const ox = r.left + (r.width - w) / 2; const oy = r.top + (r.height - h) / 2;
-    const x = (e.clientX - ox) / w; const y = (e.clientY - oy) / h;
-    if (x < 0 || x > 1 || y < 0 || y > 1) return;
     const at = Date.now();
     setClick({ x: e.clientX - r.left, y: e.clientY - r.top, at });
-    updateDoc(doc(db, "supportSessions", sessionId), { pointer: { x, y, at } }).catch(() => {});
+    updateDoc(doc(db, "supportSessions", sessionId), { pointer: { x: p.x, y: p.y, at } }).catch(() => {});
   };
   React.useEffect(() => { if (!click) return undefined; const t = setTimeout(() => setClick(null), 1500); return () => clearTimeout(t); }, [click]);
   const full = () => { const el = wrapRef.current; if (!el) return; if (document.fullscreenElement) document.exitFullscreen?.(); else el.requestFullscreen?.().catch(() => {}); };
   const stLabel = { connecting: "연결 중…", live: "LIVE", unstable: "연결 불안정", failed: "연결 실패", ended: "공유 종료됨" }[state];
   const surface = sess?.displaySurface;
+  const ctrlLabel = capturing ? "제어 중" : ctrlOn && !allowed ? "직원 허용 대기 중" : ctrlOn && !surfaceOk ? "이 탭 공유 대기 중" : "제어 꺼짐";
   return (
     <div className="space-y-2.5">
-      <div ref={wrapRef} className="relative rounded-2xl overflow-hidden bg-[#0B1428] ring-1 ring-[#1B2B4B]" style={{ aspectRatio: "16 / 9", maxHeight: "62vh", minHeight: 220 }}>
+      <div ref={wrapRef} className={`relative rounded-2xl overflow-hidden bg-[#0B1428] ${capturing ? "ring-[3px] ring-[#8FB0F0]" : "ring-1 ring-[#1B2B4B]"}`} style={{ aspectRatio: "16 / 9", maxHeight: "62vh", minHeight: 220 }}>
         <video ref={videoRef} autoPlay playsInline muted onClick={onPoint} data-testid="support-video"
-          className="absolute inset-0 w-full h-full object-contain cursor-crosshair" />
+          className={`absolute inset-0 w-full h-full object-contain ${capturing ? "" : "cursor-crosshair"}`} />
+        {capturing && (
+          <div ref={layerRef} className="absolute inset-0 z-[5] cursor-default select-none" data-testid="rc-layer" onMouseDown={() => { try { sinkRef.current?.focus({ preventScroll: true }); } catch { /* 무시 */ } }} />
+        )}
+        <textarea ref={sinkRef} aria-label="원격 키보드 입력" data-testid="rc-keys" tabIndex={capturing ? 0 : -1}
+          onFocus={() => setKeyOn(true)} onBlur={() => setKeyOn(false)} autoComplete="off" autoCorrect="off" spellCheck={false}
+          className="absolute left-2 bottom-2 w-px h-px opacity-0 pointer-events-none resize-none overflow-hidden" />
         {state !== "live" && (
           <div className="absolute inset-0 grid place-items-center pointer-events-none">
             <div className="text-center text-white/80">
@@ -598,14 +825,37 @@ function MasterViewer({ sessionId, onEnd }) {
           </div>
         )}
         {click && <span className="kp-sup-click absolute pointer-events-none" style={{ left: click.x, top: click.y }} />}
-        <div className="absolute left-3 top-3 flex items-center gap-2 pointer-events-none">
+        <div className="absolute left-3 top-3 z-[6] flex items-center gap-2 pointer-events-none">
           <span className={`h-7 px-2.5 rounded-full text-[12px] font-black inline-flex items-center gap-1.5 ${state === "live" ? "bg-[#8FB0F0] text-[#0B1428]" : "bg-white/15 text-white"}`} style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{state === "live" && <i className="w-2 h-2 rounded-full bg-[#0B1428] kp-sup-wait inline-block" />}{stLabel}</span>
+          {capturing && <span className="h-7 px-2.5 rounded-full text-[12px] font-black bg-white text-[#0F1A30] inline-flex items-center" data-testid="rc-live-chip">제어 중{keyOn ? " · 키보드 연결됨" : ""}</span>}
           {size && <span className="h-7 px-2.5 rounded-full text-[12px] font-bold bg-black/40 text-white/80 inline-flex items-center" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }} data-testid="support-video-size">{size}</span>}
         </div>
-        <button type="button" onClick={full} className="absolute right-3 top-3 h-8 px-3 rounded-lg bg-black/45 text-white text-[12.5px] font-black hover:bg-black/60">전체 화면</button>
+        {compose && <div className="absolute left-3 bottom-3 z-[6] px-3 py-1.5 rounded-lg bg-white text-[#0F1A30] text-[15px] font-bold shadow pointer-events-none">{compose}</div>}
+        {note && <div className="absolute left-1/2 -translate-x-1/2 bottom-3 z-[7] px-3.5 py-2 rounded-xl bg-[#0F1A30]/90 text-white text-[13.5px] font-bold pointer-events-none" data-testid="rc-note">{note}</div>}
+        <RemoteSelectPicker data={capturing ? picker : null} onClose={() => setPicker(null)} onPick={(i) => { sendCtrl({ t: "sel", i }); setPicker(null); try { sinkRef.current?.focus({ preventScroll: true }); } catch { /* 무시 */ } }} />
+        <button type="button" onClick={full} className="absolute right-3 top-3 z-[6] h-8 px-3 rounded-lg bg-black/45 text-white text-[12.5px] font-black hover:bg-black/60">전체 화면</button>
+      </div>
+      {/* ⭐ 2026-11-07 화면 제어 */}
+      <div className="rounded-2xl ring-1 ring-[#C9D6EE] bg-[#F4F7FC] px-3.5 py-3 space-y-2.5" data-testid="rc-panel">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-[14.5px] font-black text-[#0F1A30]">화면 제어</span>
+          <span className={`h-7 px-2.5 rounded-full text-[12.5px] font-black inline-flex items-center ${capturing ? "bg-[#1B2B4B] text-white" : ctrlOn ? "bg-[#8FB0F0] text-[#0B1428]" : "bg-white text-[#5B6B85] ring-1 ring-[#DCE3EE]"}`} data-testid="rc-state">{ctrlLabel}</span>
+          {capturing && <span className="text-[12.5px] font-bold text-[#5B6B85]">{dcState === "open" ? "직접 연결" : "서버 경유(느림)"}{vp ? ` · 직원 화면 ${vp.w}×${vp.h}` : ""}</span>}
+          <button type="button" onClick={toggleCtrl} disabled={state !== "live" && !ctrlOn} data-testid="rc-toggle"
+            className={`ml-auto h-10 px-4 rounded-xl text-[14px] font-black disabled:opacity-50 ${ctrlOn ? "bg-white text-[#0F1A30] border-[1.5px] border-[#1B2B4B]" : "text-white"}`} style={ctrlOn ? undefined : { background: "linear-gradient(90deg,#0F1A30,#2D4C82)" }}>{ctrlOn ? "제어 끝내기" : "제어 시작"}</button>
+        </div>
+        {sess && !surfaceOk && (
+          <div className="flex items-center gap-2 flex-wrap px-3 py-2.5 rounded-xl bg-white ring-1 ring-[#DCE3EE]" data-testid="rc-need-tab">
+            <span className="flex-1 min-w-[200px] text-[13.5px] font-bold text-[#1B2B4B]">제어하려면 직원이 [이 탭]을 공유해야 해요</span>
+            <button type="button" onClick={askReshare} data-testid="rc-reshare" className="shrink-0 h-9 px-3.5 rounded-lg bg-[#1B2B4B] text-white text-[13.5px] font-black">이 탭 공유 요청</button>
+          </div>
+        )}
+        <div className="text-[12.5px] text-[#5B6B85] leading-relaxed">
+          {capturing ? "영상 위에서 누르고 끌고 굴리면 직원 화면에서 그대로 실행돼요. 영상을 한 번 누른 뒤 입력하면 글자가 들어가요." : ctrlOn && !allowed ? "직원 화면에 [제어 허용] 창을 띄웠어요. 직원이 누르면 바로 시작돼요." : "직원이 허용하면 LogisWeb 탭 안에서만 대신 눌러 줄 수 있어요. 다른 프로그램, 파일 선택, 비밀번호 입력은 원격 프로그램으로 진행해 주세요."}
+        </div>
       </div>
       <div className="flex items-center gap-2 flex-wrap">
-        <span className="text-[13.5px] text-[#5B6B85] flex-1 min-w-[200px]">영상을 누르면 직원 화면에 <b className="text-[#0F1A30]">포인터 원</b>이 잠깐 표시됩니다{surface ? ` · 공유 대상: ${surface === "browser" ? "탭(위치 정확)" : surface === "monitor" ? "전체 화면(위치가 어긋날 수 있음)" : surface === "window" ? "창(위치가 어긋날 수 있음)" : surface}` : ""}</span>
+        <span className="text-[13.5px] text-[#5B6B85] flex-1 min-w-[200px]">{capturing ? "제어 중에는 포인터 원 대신 직접 눌러요" : <>영상을 누르면 직원 화면에 <b className="text-[#0F1A30]">포인터 원</b>이 잠깐 표시됩니다</>}{surface ? ` · 공유 대상: ${surface === "browser" ? (sess?.surfaceSelf === false ? "다른 탭" : "탭(위치 정확)") : surface === "monitor" ? "전체 화면(위치가 어긋날 수 있음)" : surface === "window" ? "창(위치가 어긋날 수 있음)" : surface}` : ""}</span>
         <button type="button" onClick={onEnd} className="h-10 px-4 rounded-xl bg-[#0F1A30] text-white text-[14px] font-black" data-testid="support-end-session">세션 종료</button>
       </div>
     </div>
@@ -697,7 +947,7 @@ function InviteBox({ me, busyUids, onSent }) {
         {target && (
           <>
             <div className="grid grid-cols-2 gap-2">
-              {[["screen", "화면 공유", "브라우저 · 보기 전용 · PC"], ["remote", "원격 프로그램", "AnyDesk 등 · 직접 조작"]].map(([k, t, d]) => (
+              {[["screen", "화면 공유", "브라우저 · 보기·제어 · PC"], ["remote", "원격 프로그램", "AnyDesk 등 · 직접 조작"]].map(([k, t, d]) => (
                 <button key={k} type="button" onClick={() => setMode(k)} data-testid={`support-invite-mode-${k}`}
                   className={`text-left px-3 py-2.5 rounded-xl border-[1.5px] ${mode === k ? "border-[#1B2B4B] bg-[#EEF3FC]" : "border-[#E3E8F0] bg-white hover:border-[#B9C8E4]"}`}>
                   <span className="block text-[14.5px] font-black text-[#0F1A30]">{t}</span><span className="block text-[12px] text-[#7A879C] mt-0.5">{d}</span>

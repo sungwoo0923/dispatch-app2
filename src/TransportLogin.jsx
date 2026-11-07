@@ -11,6 +11,7 @@ import { useNavigate, Link } from "react-router-dom";
 import { Loader2 } from "lucide-react";
 import { useMfaPrompt, mfaErrorText } from "./MfaModal";
 import { LogisMark, LogisWordmark, LogisTag } from "./brand"; // 🔷 2026-11-04 LogisWeb 로고
+import { MARKET_NAME } from "./orderMarketConfig"; // ⭐ 2026-11-06 허브(예전 배차마당) 이름
 
 const TOTAL_MASTER_EMAIL = "tjddnqkf@naver.com";
 
@@ -203,8 +204,9 @@ export default function TransportLogin() {
 
         const userData = userSnap.data();
 
-        // ⭐ 운송사 로그인은 운송사 직원 계정만 — 화주·기사·배차마당 계정은 각자 로그인 화면에서만 로그인
-        const OTHER_LOGIN = { shipper: "화주사 로그인", driver: "기사앱", cafeUser: "배차마당" };
+        // ⭐ 운송사 로그인은 운송사 직원 계정만 — 화주·기사·허브(예전 배차마당) 열람 계정은 각자 로그인 화면에서만 로그인
+        // ⭐ 2026-11-06 허브 이름은 src/orderMarketConfig.js
+        const OTHER_LOGIN = { shipper: "화주사 로그인", driver: "기사앱", cafeUser: MARKET_NAME };
         if (OTHER_LOGIN[userData.role]) {
           sessionStorage.removeItem("transportValidating");
           await signOut(auth);
@@ -219,6 +221,17 @@ export default function TransportLogin() {
           await signOut(auth);
           setError("회사명이 일치하지 않습니다. 가입한 회사명을 정확히 입력해주세요.");
           return;
+        }
+
+        // ⭐ 2026-11-06 계약종료된 운송사 — 로그인 단계에서 바로 안내(관리센터 › 이용 계약·만료). 부관리자는 예외
+        if (!isSubAdmin) {
+          const plan = await getDoc(doc(db, "companyPlans", String(userData.companyName || "돌캐").trim() || "돌캐")).catch(() => null);
+          if (plan?.exists() && plan.data()?.status === "ended") {
+            sessionStorage.removeItem("transportValidating");
+            await signOut(auth);
+            setError("계약이 종료되었습니다. 관리자에게 문의해 주세요.");
+            return;
+          }
         }
 
         if (userData.userStatus === "banned") {

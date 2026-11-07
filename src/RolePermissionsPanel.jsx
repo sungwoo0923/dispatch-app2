@@ -38,7 +38,7 @@ const MENU_GROUPS = [
   { title: "운임 · 단가", menus: ["단가표", "운임조회"] },
   { title: "기준 정보", menus: ["기사관리", "거래처관리", "지입차관리"] },
   { title: "매출 · 정산", menus: ["매출관리", "정산관리", "인사이트"] },
-  { title: "경리", menus: ["회계관리", "자금관리", "비품관리"] },
+  { title: "경리", menus: ["회계관리", "자금관리", "비품관리", "급여관리"] },
   { title: "인사 · 일정", menus: ["인사관리부", "증명서발급", "직원일정"] },
   { title: "회사", menus: ["회사관리"] },
 ];
@@ -48,6 +48,7 @@ const MENU_DESC = {
   지입차관리: "지입차 운영", 매출관리: "매출 · 매익 리포트", 정산관리: "청구 · 기사 지급", 회사관리: "회사정보 · 조직도 · 내정보",
   전자결재: "결재함 · 기안 (홈 안에도 있음)", 인사이트: "마진 분석", 회계관리: "회계 개요 · 장부 · 퇴직 정산", 자금관리: "자금 현황 · 수입·지출 장부",
   비품관리: "비품 · 자산 · 입출고", 인사관리부: "인사 기록 · 직원 정보 · 연차 · 규정", 증명서발급: "재직 · 경력증명서", 직원일정: "연차 · 외근 · 출장 달력",
+  급여관리: "직원 급여 계산 · 명세서 발행(본인 명세서는 누구나)", // ⭐ 2026-11-06
 };
 const ROLE_DESC = {
   admin: "운송 업무 전체(배차·정산·관리자메뉴) — 임원 화면 아님", hrManager: "인사 화면 — 인사관리부·증명서·직원 승인", user: "배차 실무 담당",
@@ -423,7 +424,7 @@ export default function RolePermissionsPanel({ users: allUsers = [], roleLabels 
                     <div className="rounded-xl border border-gray-200 px-4 py-3 flex flex-wrap items-center gap-3">
                       <div className="min-w-0">
                         <div className="text-[13.5px] font-black text-[#1B2B4B]">로그인하면 보이는 화면</div>
-                        <div className="text-[11.5px] text-gray-500">임원 화면 = 경영 브리핑·결재함·임원 스케줄·직원 일정 (상단 [전체 메뉴]로 아래 메뉴 권한 화면 전환)</div>
+                        <div className="text-[11.5px] text-gray-500">임원 화면 = 경영 브리핑·일일 경영 보고·결재함·임원 스케줄·직원 일정 (상단 [전체 메뉴]로 아래 메뉴 권한 화면 전환)</div>
                       </div>
                       <div className="ml-auto inline-flex rounded-xl bg-gray-100 p-1">
                         {ROLE_SCREENS.map(([k, l]) => <button key={k || "normal"} onClick={() => setDraft((d) => ({ ...d, screen: k }))} className={`px-3.5 py-1.5 rounded-lg text-[12.5px] font-bold ${(draft.screen || "") === k ? "bg-white text-[#1B2B4B] shadow-sm" : "text-gray-500"}`}>{l}</button>)}

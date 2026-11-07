@@ -3,6 +3,8 @@ import { MENU_FEATURE, planIncludes, openPlanLock, featureOn, useCompanyPlanId, 
 import { kpConfirm } from "./kpDialog";
 import { runDelete, commitDeletes, deleteDocsAtomic } from "./DeleteProgress"; // ⭐ 2026-11-05 삭제 진행 창 + 한 번에 삭제(writeBatch)
 import ProInsight from "./ProInsight";
+import DailyReport, { DailyReportPopupHost } from "./DailyReport"; // 📊 2026-11-06 일일 경영 보고(임원 화면 · 대표·임원 일일 보고서)
+import { canSeeBriefing, BRIEF_MENU, BRIEF_LABEL } from "./dailyReport";
 import BulkUploadChooser, { downloadTemplateXlsx } from "./BulkUploadChooser";
 import { buildCopyText, getCopyTpl, useCopyTemplates } from "./copyTemplates";
 import { CopyTemplateHost, openCopyTemplateEditor } from "./CopyTemplateEditor";
@@ -27,6 +29,9 @@ import { CartesianGrid, Line, LineChart, BarChart, Bar, Cell, LabelList, PieChar
 import * as XLSX from "xlsx";
 import OrderLookupModal from "./OrderLookup"; // ⭐ 2026-11-03 담당자·차량 조회
 import MgrBadge, { setMgrNameMap } from "./MgrBadge";
+import { isUrgentOrder, UrgentBadge, urgentRowStyle } from "./urgentOrder"; // ⭐ 2026-11-06 긴급 오더 강조(모든 현황 공용)
+import { askCopyDates } from "./CopyCountDialog"; // ⭐ 2026-11-06 복사 등록 — 몇 건·건별 날짜
+import { requestRouteSheetPush } from "./routeSheetPush"; // 💰 2026-11-06 고정노선 오더 고치면 바로 시트에
 import { makeClientMatcher } from "./clientMatch"; // ⭐ 2026-11-03 거래처 검색: 정확히 같은 이름이 있으면 그것만
 import DetailFilterButton, { applyDetailFilter, DetailScope } from "./DetailFilter"; // 🔎 2026-11-03 세부검색(최대 3차)
 import { useCompanyBiz, bizOf, BizChip, BizPicker, BizFilter, bizMatch, printInfoForBiz, BizListEditor, BizScope, BizSelect, resolveBiz, rememberBiz, normBizKey, bankForBiz, bizInfoCardBlob } from "./companyBiz"; // ⭐ 2026-11-03 한 회사 · 여러 사업자 // ⭐ 2026-11-03 배차담당자 칸(등록자 + 차량 붙인 사람)
@@ -47,7 +52,7 @@ import { useMyProfile } from "./userNames";
 import { useCompanyStaff, masterHasHr, isHrStaffUser } from "./hrHandover";
 import { AttendanceQuickButton, CheckoutReminderHost } from "./attendanceQuick";
 import { PersonalTodayHost } from "./PersonalSchedule";
-import FixedRouteStatusHost, { FixedRouteCells, fixedHeaderOf, fixedLookOf, useRouteBoardIds, useRouteEditGuard, routeOwnerName, ROUTE_LOCK_MSG } from "./FixedRouteStatus";
+import FixedRouteStatusHost, { FixedRouteCells, fixedHeaderOf, fixedLookOf, useRouteBoardIds, useRouteEditGuard, routeOwnerName, ROUTE_LOCK_MSG, FixedOwnerCell, FixedRouteContextMenu, staffNamesOf } from "./FixedRouteStatus"; // ⭐ 2026-11-06 담당자 칸·전용 오른쪽 클릭 메뉴
 import { carrierOf } from "./routeCarriers"; // ⭐ 2026-11-06 고정노선현황 운송사 검색
 import { useRouteCarrierFilter } from "./routeCarriers"; // ⭐ 2026-11-05 고정노선 운송업체 설정 — 끈 업체 오더는 정산·매출에서 뺀다
 import ColumnStyleHost from "./ColumnStyle"; // 🎨 2026-11-03 컬럼명 오른쪽 클릭 → 색 변경 // ⭐ 2026-11-03 배차현황 › 고정노선현황
@@ -60,6 +65,11 @@ import { AssetManager } from "./OfficeBooks";
 import { FundsWorkspace, FundsBoard, isCeoPosition } from "./FundsBoard";
 import { AccountingOverview, RetireDesk, useYearOrders } from "./AcctSuite";
 import HrHub from "./HrHub";
+import { usePayrollAccess } from "./payrollAccess"; // ⭐ 2026-11-06 직원 급여·연차 촉진 권한
+const PayrollCenterLazy = React.lazy(() => import("./Payroll"));
+const MyPayslipsLazy = React.lazy(() => import("./Payroll").then((m) => ({ default: m.MyPayslips })));
+const LeavePromotionLazy = React.lazy(() => import("./LeavePromotion"));
+const MyLeavePlanLazy = React.lazy(() => import("./LeavePromotion").then((m) => ({ default: m.MyLeavePlan })));
 // ⭐ 2026-11-02 속도 — 메뉴를 눌러야 보이는 큰 화면은 따로 떼어 처음 열 때 받는다(첫 실행 JS 감소) — 사용 안 하던 StandardFare·DispatchFormNew import 제거
 const DriverAccounts = lazyView(() => import("./DriverAccounts"));
 const ClassicResume = lazyView(() => import("./ClassicResume"));
@@ -1743,7 +1753,7 @@ const BULK_EDIT_FIELDS = [
   { key: "청구운임", label: "청구운임", type: "money" },
   { key: "기사운임", label: "기사운임", type: "money" },
   { key: "지급방식", label: "지급방식", type: "select", options: ["계산서", "착불", "선불", "계좌이체"] },
-  { key: "배차방식", label: "배차방식", type: "select", options: ["24시", "인성", "직접배차", "24시(외부업체)"] },
+  { key: "배차방식", label: "배차방식", type: "select", options: ["24시", "인성", "직접배차", "24시(외부업체)", "로지스허브"] },
   { key: "메모", label: "메모", type: "text" },
   { key: "전달사항", label: "전달사항", type: "text" },
 ];
@@ -2707,6 +2717,8 @@ const autoTransmitToShipper = async (savedRecord, shipperApp) => {
 // removeDispatch가 원본의 화주사 사본 id로 착각해 원본 쪽 화주사 사본을 대신 지워버린다.
 // (모듈 최상위 스코프 — RealtimeStatus/DispatchStatus/UnassignedStatus 등 여러 하위
 // 컴포넌트의 "복사 등록" 버튼에서 공통으로 호출되므로 approvedShippers를 인자로 받는다.)
+// ⭐ 2026-11-06 배차 유형 — 혼적·왕복을 고르지 않았으면 독차가 기본(화면 표시·저장 모두 같은 기준)
+const dokchaOn = (p) => p?.독차 === true || (!p?.혼적 && String(p?.운행유형 || "").trim() !== "왕복");
 const submitCopyOrderPC = async (copyTarget, approvedShippers, cargoOverride) => {
   // ⭐ 지난 날짜 오더를 복사 등록하면 오늘 날짜로(하차일도 같은 간격만큼 함께 이동) — 오늘·앞날짜는 그대로
   let _pickup = copyTarget.상차일 || todayStr();
@@ -2727,6 +2739,7 @@ const submitCopyOrderPC = async (copyTarget, approvedShippers, cargoOverride) =>
     _id: newId,
     id: newId, // ★ 2026-10-29: 원본(모바일 등록)의 id가 그대로 복사되면 모바일에서 원본·복사본이 같은 오더로 겹쳐 보였다
     화물내용: cargoOverride ?? (copyTarget.화물내용 || ""),
+    독차: dokchaOn(copyTarget), // ⭐ 2026-11-06 혼적·왕복이 아니면 독차(기본)
     완료회차: 0, // 회전 운행 진행상황은 새 오더에서 처음부터
     // 복사/수정 패널에서 상차일/하차일을 수정했다면 그 값을 그대로 존중한다 — 무조건
     // 오늘 날짜로 덮어쓰면 사용자가 다른 날짜로 바꿔서 등록해도 조용히 오늘로 저장되어
@@ -2773,6 +2786,20 @@ const submitCopyOrderPC = async (copyTarget, approvedShippers, cargoOverride) =>
       }
     })();
   }
+};
+
+// ⭐ 2026-11-06 [복사 등록] — "몇 건 복사?" 창(건마다 상차일·하차일, 처음엔 모두 오늘) → 그 수만큼 submitCopyOrderPC
+//   (지난 날짜 → 오늘, 화주사 전송 포인터 제거 등 submitCopyOrderPC 규칙은 그대로) · 취소/실패면 false, 성공이면 건수
+const submitCopyOrdersPC = async (copyTarget, approvedShippers, cargoOverride) => {
+  const plan = await askCopyDates({ title: "복사 등록", sub: `${copyTarget?.거래처명 || ""} ${copyTarget?.상차지명 ? `· ${copyTarget.상차지명} → ${copyTarget.하차지명 || ""}` : ""}`.trim() || undefined });
+  if (!plan || !plan.length) return false;
+  let n = 0;
+  for (const d of plan) {
+    const ok = await submitCopyOrderPC({ ...copyTarget, 상차일: d.상차일, 하차일: d.하차일 }, approvedShippers, cargoOverride);
+    if (ok === false) return n ? n : false;
+    n += 1;
+  }
+  return n;
 };
 
 /* -------------------------------------------------
@@ -2859,6 +2886,7 @@ import { useMobileAlerts } from "./mobile/mobileAlerts";
 import { loadAcctPayments, saveAcctPayments, loadPlManual, savePlManual } from "./acctPayments";
 import { bumpDriverPayout, addClientCollection, removeClientCollections } from "./ledgerAuto";
 import BannerCenter from "./BannerCenter";
+import { ContractExpiryBanner } from "./companyContract"; // ⭐ 2026-11-06 계약 만료 안내 띠
 import NotifyCenter from "./NotifyCenter"; // ⭐ 2026-11-03 알림 통합 — 공지·인사발령·전자결재·인수인계는 화면 가운데 팝업
 import { RemoteSupportHost, openRemoteSupport, SUPPORT_ICON } from "./RemoteSupport"; // ⭐ 2026-11-02 원격지원 —
 import OrderCongratsPopup from "./OrderCongratsPopup";
@@ -2877,6 +2905,11 @@ import { useFareRules, FareTypeSelect, FareRuleHint, fareFormChange, farePatchOf
 import { useTableSort, sortRows, SortTh } from "./tableSort";
 import { useCompanyFeatures } from "./companyFeatures";
 import { BRAND, LogisMark, LogisWordmark, LogisTag } from "./brand";
+import { DriverGuideSendModal, GUIDE_BTN, guideSentLabel, isFleetGrade } from "./DriverAppGuide"; // ⭐ 2026-11-06 기사앱 안내 보내기
+// ⭐ 2026-11-06 로지스웹 허브(운송사 간 오더 거래소) — [저장 + 허브 등록]
+import { MARKET_SHORT } from "./orderMarketConfig";
+import { shareToOrderMarket } from "./orderMarketShare"; // eslint-disable-line no-unused-vars -- 운송사 거래소(/exchange) 공유용으로 남겨 둠
+import { shareToHub } from "./hubShare"; // ⭐ 2026-11-07 [저장 + 허브 등록] = 로지스웹 허브(화물 콜)에 올리고 이 오더에 연결
 
 // 기사전달용 업로드 링크 단축 — /upload?id=...&t=... (길고 낯설어 기사들이 거부감을
 // 느낄 수 있는 형태)를 /u/{code} 형태로 줄인다. code는 토큰에서 파생시켜, 같은
@@ -3324,7 +3357,7 @@ const DEPT_MENUS = {
   hr: ["HOME", "전자결재", "인사관리부", "증명서발급", "기사관리", "관리자메뉴", "회사관리"],
   // 👔 임원(대표·전무·이사) — 보고·결재·매출 중심
   // 결재는 홈 › 전자결재에 다 있어 상단에서 뺐다(2026-10-31)
-  exec: ["HOME", "자금현황", "스케줄", "매출관리", "인사이트", "관리자메뉴", "회사관리"], // 직원일정은 HOME › 사내 게시판으로(2026-11-01)
+  exec: ["HOME", "일일경영보고", "자금현황", "스케줄", "매출관리", "인사이트", "관리자메뉴", "회사관리"], // 📊 2026-11-06 일일 경영 보고 — 임원 홈(경영 브리핑) 바로 다음 // 직원일정은 HOME › 사내 게시판으로(2026-11-01)
 };
 // 부서 모드 왼쪽 메뉴 묶음
 const DEPT_SIDE_GROUPS = {
@@ -3340,7 +3373,7 @@ const DEPT_SIDE_GROUPS = {
     { label: "관리", items: ["관리자메뉴", "회사관리"] },
   ],
   exec: [
-    { label: "경영", items: ["HOME", "자금현황", "매출관리", "인사이트"] },
+    { label: "경영", items: ["HOME", "일일경영보고", "자금현황", "매출관리", "인사이트"] },
     { label: "일정", items: ["스케줄"] },
     { label: "관리", items: ["관리자메뉴", "회사관리"] },
   ],
@@ -3351,7 +3384,7 @@ const KP_SIDE_ICONS = {
   회사관리: "idcard", 관리자메뉴: "key", 관리센터: "shield", 인사이트: "chart",
   회계관리: "money", 인사관리부: "idcard", 출근기록부: "clock", 직원관리: "users", 기사서류: "file",
   자금관리: "wallet", 비품관리: "list", 연차관리: "flag", 입퇴사관리: "check", 증명서발급: "stamp",
-  결재함: "stamp", 직원일정: "clock", 자금현황: "wallet", 스케줄: "pin", 전자결재: "stamp",
+  결재함: "stamp", 직원일정: "clock", 자금현황: "wallet", 스케줄: "pin", 전자결재: "stamp", 일일경영보고: "chart",
 };
 function KpSideMenu({ open, onOpen, onClose, menuState, active, onSelect, company, email, groups = KP_SIDE_GROUPS }) {
   React.useEffect(() => {
@@ -3416,7 +3449,7 @@ function KpSideMenu({ open, onOpen, onClose, menuState, active, onSelect, compan
                         style={{ opacity: 1 }}
                       >
                         <ShellIcon name={KP_SIDE_ICONS[m]} size={18} className={on ? "text-[#1B2B4B]" : "text-blue-200/80"} />
-                        <span className="flex-1 text-left truncate">{m}</span>
+                        <span className="flex-1 text-left truncate">{m === BRIEF_MENU ? BRIEF_LABEL : m}</span>
                         {st === "locked" && <span className="opacity-60"><LockIcon size={12} /></span>}
                         {on && <span className="w-1.5 h-1.5 rounded-full bg-[#4B6CB7]" />}
                       </button>
@@ -3681,7 +3714,7 @@ function KpMoreRows({ shown, total, onMore }) {
 const makeOrderSortValue = (mgrMap) => (r, key, i) => (key === "배차담당자" ? orderMgrName(mgrMap, r) : orderSortValue(r, key, i));
 
 // ⭐ 오더 검색창 "통합 ▾" 검색 항목 — 배차현황·실시간배차현황 공용(값 → 오더 필드). all = 통합
-const ORDER_SEARCH_FIELD = { client: "거래처명", pickup: "상차지명", drop: "하차지명", car: "차량번호", driver: "이름", pay: "지급방식", dispatch: "배차방식" };
+const ORDER_SEARCH_FIELD = { client: "거래처명", pickup: "상차지명", drop: "하차지명", car: "차량번호", driver: "이름", pay: "지급방식", dispatch: "배차방식", fare: "운임구분" }; // ⭐ 2026-11-06 운임구분
 const orderSortValue = (r, key, i) => {
   switch (key) {
     case "순번": return i; // 원래(기본) 순서
@@ -5052,6 +5085,8 @@ const patchDispatch = async (_id, patch, knownPrev) => {
     _updatePayload.최종수정일시 = serverTimestamp();
   }
   updateDoc(ref, _updatePayload).catch(e => console.error("patchDispatch 저장 오류:", e));
+  // 💰 2026-11-06 고정노선(배차표) 오더 — 서버 자동 맞춤이 "시트가 바뀌었을 때만" 읽게 바뀌어, 프로그램에서 고친 값은 바로 시트에 쓴다(2.5초 묶음)
+  if (prev?.배차표Id) requestRouteSheetPush(prev.배차표Id);
 
   // 운송사가 직접 등록해 "화주사 전송"으로 사본을 만든 오더는, 전송 이후 원본을 수정해도
   // 사본(화주사 화면이 실제로 구독하는 문서)에는 반영되지 않고 전송 시점 값으로 멈춰있던 버그가 있었다.
@@ -7503,6 +7538,7 @@ useEffect(() => {
               body: JSON.stringify({
                 to: data.to, subject: data.subject, html: data.html,
                 attachments: data.attachments || [], fromName: data.fromName || "",
+                replyTo: data.replyTo || "", // ⭐ 2026-11-06 일반 이메일 보내는 사람 이메일(답장 받을 주소)
               }),
             });
             await updateDoc(doc(db, "scheduledEmails", d.id), res.ok
@@ -8081,6 +8117,8 @@ const newVer = useNewVersion(); // ★ 새 버전이 배포되면 버전 표시 
   const toggleExecFull = () => { const v = !execFull; setExecFull(v); try { localStorage.setItem("kpExecFull", v ? "1" : "0"); } catch { /* 무시 */ } setMenu("HOME"); };
   const deptMode = deptModeOf(role, customRole) || (isExec && !execFull ? "exec" : null);
   const deptCompany = (localStorage.getItem("loginCompany") || userCompany || localStorage.getItem("userCompany") || DEFAULT_COMPANY || "").trim();
+  // 📊 2026-11-06 일일 경영 보고 — 임원 화면 역할(isExec: 권한 관리 › "임원 화면")만(src/dailyReport.js canSeeBriefing)
+  const canBriefing = canSeeBriefing({ isExec });
   // 🔢 2026-11-02 상단 메뉴 숫자 — 새로 온 것(결재 차례·안 읽은 메일·공지·인수인계·가입 신청)을 메뉴와 세부 메뉴에 표시
   const apCountsNav = useApprovalCounts();
   const mailCountsNav = useMailCounts();
@@ -8322,6 +8360,8 @@ const newVer = useNewVersion(); // ★ 새 버전이 배포되면 버전 표시 
   // ---------------- 메뉴 UI ----------------
   // 메뉴 보이기 규칙(상단 메뉴·왼쪽 메뉴 공용) — "hidden" | "blocked" | "ok"
   const menuState = (m) => {
+    // 📊 2026-11-06 일일 경영 보고 — 임원 화면 역할만(기존 임원 판정 isExec 그대로)
+    if (m === BRIEF_MENU) return canBriefing ? "ok" : "hidden";
     // 🏢 2026-10-31 부서 모드 — 경리·인사 권한은 배차 메뉴 없이 부서 업무 메뉴만
     // ⚙ 권한 관리에서 경리·인사관리자 메뉴를 숨겼으면 부서 화면에서도 숨긴다
     if (deptMode && deptMode !== "exec") return (DEPT_MENUS[deptMode].includes(m) && !(customRole && getMenuAccess(customRoles, role, m) === "hidden") ? "ok" : "hidden");
@@ -8398,6 +8438,8 @@ return (
         onGo={(it) => {
           if (it.src === "approval") { window.__kpOpenApproval = { id: it.id, page: it.page || "inbox" }; window.dispatchEvent(new Event("kp-open-approval")); return; }
           if (it.src === "handover") { window.__kpOpenHandover = it.id; setMenu("HOME"); setTimeout(() => window.dispatchEvent(new Event("kp-open-handover")), 0); return; }
+          // ⭐ 2026-11-06 인사·급여 알림 — 급여명세서 · 연차 사용 계획(직원) · 연차 사용 촉진(인사)은 회사관리 안의 그 탭으로
+          if (it.src === "hrNotice") { try { sessionStorage.setItem("kpCmTab", { payslip: "급여명세서", leavePlan: "연차 사용 계획", leavePromo: "연차 사용 촉진" }[it.link] || "급여명세서"); } catch { /* 무시 */ } setMenu("회사관리"); setTimeout(() => window.dispatchEvent(new Event("kp-cm-tab")), 0); return; }
           window.__kpOpenNotice = it.openId || it.id; setMenu("HOME"); setTimeout(() => window.dispatchEvent(new CustomEvent("kp:openNotice")), 0);
         }} />
       <DriverEventToasts onView={onDriverEventView} />{/* ⭐ 2026-11-05 기사 수락/거절·서류·긴급 — 오른쪽 아래 토스트(포커스 안 뺏음 · 8초) */}
@@ -8407,9 +8449,13 @@ return (
       <RemoteSupportHost user={user} profile={myProfileDoc} company={userCompany || localStorage.getItem("userCompany") || ""} />
       <OrderCongratsPopup uid={user?.uid} profile={myProfileDoc} />
       <BirthdayPopup uid={user?.uid} profile={myProfileDoc} company={deptCompany} />
+      {/* 📊 2026-11-06 일일 경영 보고 — 받는 시간 이후 그날 첫 접속 때 요약 팝업(임원 화면 역할) */}
+      {canBriefing && <DailyReportPopupHost company={deptCompany} dispatchData={salesDispatchData} drivers={drivers} me={{ uid: user?.uid }} role={realRole || role} isExec={isExec} customRole={customRole} profile={myProfileDoc} onOpenReport={() => handleMenuClick(BRIEF_MENU)} />}
       {/* ⭐ 2026-11-02 관리자센터2 — 선택한 운송사 대상 공지도 받도록 회사 전달 */}
       {/* ⭐ 2026-11-03 배너를 누르면 펼치지 않고 홈 › 공지사항의 그 글로 바로 이동 */}
       <PlatformNoticeBanner audience="carrier" onOpen={(id) => { window.__kpOpenNotice = `plat:${id}`; setMenu("HOME"); setTimeout(() => window.dispatchEvent(new CustomEvent("kp:openNotice")), 0); }} company={role === "totalMaster" ? (localStorage.getItem("loginCompany") || userCompany || "") : (userCompany || localStorage.getItem("userCompany") || "")} />
+      {/* ⭐ 2026-11-06 이용 계약 만료 안내(30일 전부터) — 대표·임원·경리·마스터에게만 */}
+      <ContractExpiryBanner company={deptCompany} me={myProfileDoc ? { ...myProfileDoc, role: realRole || role } : null} />
       <CopyTemplateHost canEdit={role === "admin" || role === "totalMaster"} />
       <PlanValueSync planId={planId} />
       <PlanLockHost userEmail={user?.email || ""} userName={myRealName || ""} canRequest={role === "totalMaster" || ["test", "hrAcct", "allMgr"].includes(realRole) || /경리|회계/.test(String(myProfileDoc?.team || ""))} />
@@ -8540,7 +8586,7 @@ return (
                     }`}
                 >
                   <ShellIcon name={KP_SIDE_ICONS[m] || "dashboard"} size={14} className={`kp-nav-ico shrink-0 ${isActive ? "" : "opacity-70"} ${deptMode && DEPT_MENUS[deptMode].length <= 8 ? "" : "hidden min-[2050px]:inline-block"}`} />
-                  <EditableText id={`nav.${m}`} defaultText={m} />
+                  <EditableText id={`nav.${m}`} defaultText={m === BRIEF_MENU ? BRIEF_LABEL : m} />
                   {navN > 0 && st !== "locked" && <KakaoBadge n={navN} size="sm" className="ml-1 align-middle" title={m === "관리자메뉴" ? `가입 승인 대기 ${navN}명` : m === "실시간배차현황" ? `기사 수락/거절 ${navN}건` : m === "배차현황" ? [drvCounts.orders && `기사 수락/거절 ${drvCounts.orders}건`, (unseenList || unseenUnassigned) && `새 미배차 ${Math.max(unseenList, unseenUnassigned)}건`, unseenFixed && `새 고정노선 미배차 ${unseenFixed}건`].filter(Boolean).join(" · ") : m === "지입차관리" ? `긴급 상황 ${navN}건` : `새 소식 ${navN}건`} />}
                   {st === "locked" && <span className="ml-1 opacity-60"><LockIcon /></span>}
                   {m === "인사이트" && st !== "locked" && <span className="ml-1 px-1 py-px rounded bg-[#8FB0F0]/20 text-[#8FB0F0] text-[9px] font-black tracking-wider align-middle">PRO</span>}
@@ -8782,7 +8828,7 @@ return (
 
       {/* ---------------- 화면 렌더링 ---------------- */}
       <ColumnStyleHost company={userCompany || localStorage.getItem("userCompany") || ""} />
-      <main className={`kp-main ${menu === "HOME" ? "kp-main-bare" : ""} rounded shadow p-4 w-full min-w-0 ${darkMode ? "bg-gray-900 text-gray-100" : "bg-white text-gray-900"}`}>
+      <main className={`kp-main ${menu === "HOME" || menu === BRIEF_MENU ? "kp-main-bare" : ""} rounded shadow p-4 w-full min-w-0 ${darkMode ? "bg-gray-900 text-gray-100" : "bg-white text-gray-900"}`}>
         {!darkMode && <KpPageHeader menu={menu} />}
         {menu === "HOME" && (
           <HomeDashboard
@@ -8831,6 +8877,13 @@ return (
             markEditRequestSeen={markEditRequestSeen}
             approvedShippers={approvedShippers}
           />
+        )}
+
+        {menu === BRIEF_MENU && canBriefing && (
+          <div className="px-0 lg:px-5 pb-7">
+            <DailyReport company={deptCompany} dispatchData={salesDispatchData} drivers={drivers} me={{ uid: user?.uid, email: user?.email, name: myRealName }} role={realRole || role} profile={myProfileDoc} canGo={(m) => m === "결재함" || menuState(m) === "ok"}
+              onGo={(m) => { if (m === "결재함") { window.__kpOpenApproval = { page: "inbox" }; window.dispatchEvent(new Event("kp-open-approval")); return; } if (m === "배차현황") { handleMenuClick("배차현황"); setTimeout(() => emitSubnav("DISPATCH", "미배차현황"), 0); return; } handleMenuClick(m); }} />
+          </div>
         )}
 
         {menu === "인사이트" && (role === "admin" || role === "totalMaster") && planIncludes(planId, "insight") && (
@@ -8920,10 +8973,11 @@ return (
             {/* ⭐ 2026-11-03 고정노선현황 — 배차표 양식(화주사 구글시트) 오더를 배차현황과 같은 화면으로, 열은 시트 순서 · 시트 실시간 연동 */}
             {배차현황Tab === "고정노선현황" && (
               <FixedRouteStatusHost company={userCompany || localStorage.getItem("userCompany") || ""} dispatchData={dispatchDataFiltered} carrierPoolRows={routeCarrierPoolRows} places={places} drivers={drivers} disabled={isViewer}
-                render={(form, rows) => (
+                render={(form, rows, actions) => (
                   <DispatchStatus
                     key={`fr-${form.id}-${viewResetKey}`}
                     fixedForm={form}
+                    fixedActions={actions}
                     role={role}
                     userCompany={userCompany}
                     dispatchData={rows}
@@ -9157,11 +9211,11 @@ return (
         {menu === "스케줄" && menuState("스케줄") === "ok" && <ExecScheduleBoard company={deptCompany} me={{ uid: user?.uid, name: myProfileDoc?.name || user?.displayName || "", position: myProfileDoc?.position || "" }} canWrite />}
         {menu === "전자결재" && menuState("전자결재") === "ok" && <ApprovalWorkspace company={deptCompany} me={{ uid: user?.uid, name: myProfileDoc?.name || user?.displayName || "", team: myProfileDoc?.team || "", position: myProfileDoc?.position || "", role }} />}
         {/* 🏢 2026-10-31 경리·인사 부서 메뉴 */}
-        {menu === "회계관리" && menuState("회계관리") === "ok" && <AccountingWorkspace company={deptCompany} fixedRows={fixedRows} clients={clients} isViewer={isViewer} />}
+        {menu === "회계관리" && menuState("회계관리") === "ok" && <AccountingWorkspace company={deptCompany} fixedRows={fixedRows} clients={clients} isViewer={isViewer} role={realRole || role} />}
         {menu === "자금관리" && menuState("자금관리") === "ok" && <FundsWorkspace company={deptCompany} isViewer={isViewer} />}
         {menu === "비품관리" && menuState("비품관리") === "ok" && <AssetManager company={deptCompany} isViewer={isViewer} />}
         {menu === "인사관리부" && menuState("인사관리부") === "ok" && (
-          <HrHub company={deptCompany} canManage={role === "hrManager" || role === "totalMaster" || ["hrAcct", "allMgr"].includes(realRole) || (/인사/.test(String(myProfileDoc?.team || "")) && role !== "viewer") || masterHrMain || (!!customRole && getMenuAccess(customRoles, role, "인사관리부") === "write")} me={{ uid: user?.uid, name: myProfileDoc?.name || user?.displayName || "" }}
+          <HrHub company={deptCompany} canManage={role === "hrManager" || role === "totalMaster" || ["hrAcct", "allMgr"].includes(realRole) || (/인사/.test(String(myProfileDoc?.team || "")) && role !== "viewer") || masterHrMain || (!!customRole && getMenuAccess(customRoles, role, "인사관리부") === "write")} me={{ uid: user?.uid, name: myProfileDoc?.name || user?.displayName || "" }} role={realRole || role}
             renderRecord={(focusUid) => <HRManagementPage userCompany={deptCompany} role={role} userId={auth?.currentUser?.uid || ""} focusUid={focusUid} />}
             renderAttendance={() => <AttendanceBoard userCompany={deptCompany} role={role} user={user} />} />
         )}
@@ -11179,7 +11233,7 @@ const filterPlaces = (q) => {
       "계산서", "착불", "선불", "손실", "개인", "취소"
     ];
     const DISPATCH_TYPES = (typeof window !== "undefined" && window.RUN25_DISPATCH_TYPES) || dropdownList("배차방식", [
-      "24시", "직접배차", "인성", "고정기사"
+      "24시", "직접배차", "인성", "고정기사", "로지스허브"
     ]);
     const StatusBadge = ({ s }) => {
       const map = {
@@ -13855,7 +13909,7 @@ const _finalCargo = form.화물타입
 
 const rec = {
   ...form,
-  화물내용: _finalCargo,
+  화물내용: _finalCargo, 독차: dokchaOn(form), // ⭐ 2026-11-06 혼적·왕복이 아니면 독차(기본)
   메모중요도: autoPriority,
   운임보정: fareAdjustment,
   ...moneyPatch,
@@ -13958,40 +14012,21 @@ const savePromise = Promise.all(Array.from({ length: saveCount }, (_, i) => {
 // ⭐ 2026-11-03 청구 사업자 기억 — 다음에 같은 거래처·상차지·하차지가 들어오면 이 사업자로 자동 맞춘다
 if (dmBiz.multi) rememberBiz(dmBiz, rec, { clientDefault: bizClientDefault(rec.거래처명) });
 
-// ★ 배차마당(카페사이트) 공유 — "저장 + 배차마당 등록" 버튼으로 저장하면 카페 게시판에도 같은 오더를 올린다.
-// (2026-10-27 — 회사정보의 공유 온/오프 스위치는 없앴다. 이 버튼을 누르는 것 자체가 공유한다는 뜻) 배차마당은 이 프로그램과
-// 완전히 분리된 별도 사이트(별도 저장소/배포)라 코드는 공유하지 않고, 같은
-// Firestore 프로젝트의 cafeOrders 컬렉션에 직접(self-contained) 기록만 한다.
+// ★ 로지스웹 허브(예전 배차마당) 공유 — "저장 + 허브 등록" 버튼으로 저장하면 오더마켓에도 같은 오더를 올린다.
+// (2026-10-27 — 회사정보의 공유 온/오프 스위치는 없앴다. 이 버튼을 누르는 것 자체가 공유한다는 뜻) 오더마켓은 이 프로그램과
+// 완전히 분리된 별도 사이트(cafe-site)라 코드는 공유하지 않고, 같은 Firestore 프로젝트의 cafeOrders 컬렉션에 직접 기록만 한다.
+// ⭐ 2026-11-06 운송사 간 오더 거래 — 정확한 주소·연락처는 비공개 문서로 나눠 저장하고(매칭된 운송사에게만 공개),
+//  저장된 오더 번호를 함께 남겨 상대 운송사의 배차/운송 진행이 이 오더에 반영되게 한다(src/orderMarketShare.js).
 // 실패해도 정작 오더 저장 자체는 이미 끝났으므로 여기서 막지 않고 조용히 넘어간다.
 if (shareToCafe) {
   (async () => {
     try {
-      const printerInfo = await fetchPrinterInfo();
-      const cafeRef = await addDoc(collection(db, "cafeOrders"), {
-        companyName: rec.companyName,
-        posterName: (typeof myRealName !== "undefined" && myRealName) || printerInfo?.name || auth.currentUser?.email?.split("@")[0] || "",
-        posterNickname: rec.companyName,
-        posterUid: auth.currentUser?.uid || "",
-        source: "company",
-        상차지명: rec.상차지명 || "", 상차지주소: rec.상차지주소 || "",
-        하차지명: rec.하차지명 || "", 하차지주소: rec.하차지주소 || "",
-        화물내용: rec.화물내용 || "", 차량톤수: rec.차량톤수 || "", 차량종류: rec.차량종류 || "",
-        지급방식: rec.지급방식 || "", 상차방법: rec.상차방법 || "", 하차방법: rec.하차방법 || "",
-        상차일: rec.상차일 || "", 상차시간: rec.상차시간 || "", 하차일: rec.하차일 || "", 하차시간: rec.하차시간 || "",
-        운임: rec.청구운임 ? String(rec.청구운임) : "",
-        혼적: !!rec.혼적, 운행유형: rec.운행유형 || "편도", 긴급: !!rec.긴급,
-        경유여부: (rec.경유상차목록?.length > 0 || rec.경유하차목록?.length > 0),
-        메모: rec.메모 || "",
-        status: "open",
-        applicantUid: null, applicantName: null, applicantNickname: null,
-        applyRequestedAt: null, confirmedAt: null,
-        createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
-      });
-      await setDoc(doc(db, "cafeOrders", cafeRef.id, "contact", "info"), {
-        posterPhone: printerInfo?.phone || "",
-        posterName: (typeof myRealName !== "undefined" && myRealName) || printerInfo?.name || "",
-      });
-    } catch (e) { console.error("배차마당 등록 실패:", e); }
+      const [printerInfo, savedIds] = await Promise.all([fetchPrinterInfo(), savePromise.catch(() => [])]);
+      // ⭐ 2026-11-07 허브 오더는 서버가 만들고 이 오더(첫 번째 저장 id)에 연결한다 — 배차 확정 · 운송완료가 이 오더에 채워진다
+      const r = await shareToHub(db, { rec, savedIds, uid: auth.currentUser?.uid || "", profile: printerInfo || {} });
+      if (!r.ok) showAlert(`${MARKET_SHORT}에 올리지 못했어요. ${r.reason || ""}`.trim());
+      else if (!r.pending) showAlert(`${MARKET_SHORT}에 올렸어요`);
+    } catch (e) { console.error(`${MARKET_SHORT} 등록 실패:`, e); showAlert(`${MARKET_SHORT}에 올리지 못했어요`); }
   })();
 }
 
@@ -20185,12 +20220,12 @@ setConfirmChange(null);
       </div>
     )}
 
-    {/* 배차마당 등록 — 저장과 동시에 배차마당 카페사이트에도 공유 */}
+    {/* 허브 등록 — 저장과 동시에 로지스웹 허브(운송사 간 오더 거래소)에도 공유 · ⭐ 2026-11-06 이름은 src/orderMarketConfig.js */}
     <button type="button"
       disabled={isSaving}
       className="w-full h-11 rounded-xl border-2 border-[#1B2B4B] bg-white text-[#1B2B4B] hover:bg-[#F4F7FC] font-black text-[14.5px] transition disabled:opacity-50"
       onClick={() => doSave(true)}>
-      {isSaving ? "저장 중..." : "저장 + 배차마당 등록"}
+      {isSaving ? "저장 중..." : `저장 + ${MARKET_SHORT} 등록`}
     </button>
 
   </div>
@@ -23381,6 +23416,100 @@ function NewDriverModal({ data, onClose, onConfirm }) {
 }
 
 // 오전/오후 토글 + 시간 선택 컴포넌트
+// ⭐ 2026-11-06 오더 복사/수정 패널 메모·전달사항 — 등록창(3파트)과 같은 카드형(MEMO · DRIVER NOTE · 중요도 · 고정 · 글자 수)
+const CP_MEMO_FONT = { fontFamily: "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif", fontVariantNumeric: "tabular-nums" };
+function CpMemoNoteCards({ target, setTarget }) {
+  const t = target || {};
+  const set = (k, v) => setTarget((p) => ({ ...p, [k]: v }));
+  const lv = t.메모중요도 || "NORMAL";
+  const card = "relative flex flex-col rounded-2xl border bg-white transition focus-within:border-[#1B2B4B] focus-within:ring-2 focus-within:ring-[#1B2B4B]/15";
+  const ta = "flex-1 w-full min-h-[96px] px-4 pt-3 pb-7 bg-transparent resize-y text-[14px] leading-[1.6] font-semibold text-[#0F1A30] placeholder:text-[#A7B3C6] placeholder:font-medium focus:outline-none";
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 items-stretch" data-kp="cp-memo-cards">
+      <section className={`${card} ${lv === "CRITICAL" ? "border-[#1B2B4B]" : "border-[#E3E8F0]"}`}>
+        {lv !== "NORMAL" && <span className={`absolute left-4 right-4 top-0 h-[2px] rounded-b ${lv === "CRITICAL" ? "bg-[#0F1A30]" : "bg-[#4B6CB7]"}`} />}
+        <header className="flex items-center gap-2 px-4 h-11 border-b border-[#EDF1F7]">
+          <span className="text-[10px] font-extrabold tracking-[0.26em] text-[#4B6CB7]" style={CP_MEMO_FONT}>MEMO</span>
+          <span className="text-[13.5px] font-black text-[#0F1A30] whitespace-nowrap">메모</span>
+          <span className="text-[11.5px] font-semibold text-[#9AA9C3] whitespace-nowrap">내부용</span>
+          <div className="ml-auto inline-flex p-0.5 rounded-xl bg-[#F2F5FA] border border-[#E3E8F0]" role="radiogroup" aria-label="메모 중요도">
+            {[["NORMAL", "일반", 1], ["HIGH", "중요", 2], ["CRITICAL", "긴급", 3]].map(([key, label, bars]) => {
+              const on = lv === key;
+              return (
+                <button key={key} type="button" role="radio" aria-checked={on} onClick={() => set("메모중요도", key)}
+                  className={`inline-flex items-center gap-1.5 h-7 px-2.5 rounded-[10px] text-[11.5px] font-extrabold transition ${on ? (key === "NORMAL" ? "bg-white text-[#0F1A30] shadow-[0_1px_3px_rgba(15,26,48,0.14)]" : "bg-[#0F1A30] text-white shadow-[0_3px_8px_rgba(15,26,48,0.25)]") : "text-[#7A8AA6] hover:text-[#0F1A30]"}`}>
+                  <span className="inline-flex items-end gap-[2px] h-[10px]" aria-hidden="true">
+                    {[1, 2, 3].map((b) => <span key={b} className={`w-[3px] rounded-[1px] ${b === 1 ? "h-[4px]" : b === 2 ? "h-[7px]" : "h-[10px]"} ${b <= bars ? (on ? (key === "CRITICAL" ? "bg-[#FF6B6B]" : key === "HIGH" ? "bg-[#8FB0F0]" : "bg-[#2D4C82]") : "bg-current") : (on && key !== "NORMAL" ? "bg-white/25" : "bg-[#C9D3E3]")}`} />)}
+                  </span>
+                  {label}
+                </button>
+              );
+            })}
+          </div>
+        </header>
+        <textarea className={ta} rows={4} placeholder="내부 메모 입력" value={t.메모 ?? ""} onChange={(e) => set("메모", e.target.value)} />
+        <span className="pointer-events-none absolute right-4 bottom-2.5 text-[10.5px] font-bold text-[#A7B3C6]" style={CP_MEMO_FONT}>{String(t.메모 || "").length}자</span>
+      </section>
+      <section className={`${card} border-[#E3E8F0]`}>
+        <header className="flex items-center gap-2 px-4 h-11 border-b border-[#EDF1F7]">
+          <span className="text-[10px] font-extrabold tracking-[0.26em] text-[#4B6CB7]" style={CP_MEMO_FONT}>DRIVER NOTE</span>
+          <span className="text-[13.5px] font-black text-[#0F1A30] whitespace-nowrap">전달사항</span>
+          <span className="text-[11.5px] font-semibold text-[#9AA9C3] whitespace-nowrap">기사님께</span>
+          <button type="button" aria-pressed={!!t.전달사항고정} onClick={() => set("전달사항고정", !t.전달사항고정)}
+            title="켜 두고 복사 등록하면 새 오더에도 전달사항이 그대로 넘어갑니다"
+            className={`ml-auto inline-flex items-center gap-1.5 h-7 pl-2 pr-1 rounded-[10px] border text-[11.5px] font-extrabold transition ${t.전달사항고정 ? "bg-[#1B2B4B] border-[#1B2B4B] text-white" : "bg-white border-[#DCE3EE] text-[#5B6B85] hover:border-[#2D4C82] hover:text-[#0F1A30]"}`}>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 17v5M9 3h6l-1 7 4 3v2H6v-2l4-3z" /></svg>
+            고정
+            <span className={`relative inline-flex w-7 h-4 rounded-full transition ${t.전달사항고정 ? "bg-[#8FB0F0]" : "bg-[#DCE3EE]"}`}>
+              <span className={`absolute top-0.5 w-3 h-3 rounded-full bg-white shadow transition-all ${t.전달사항고정 ? "left-[14px]" : "left-0.5"}`} />
+            </span>
+          </button>
+        </header>
+        <textarea className={ta} rows={4} placeholder="운송 기사님께 전달 내용을 입력하세요" value={t.전달사항 ?? ""} onChange={(e) => set("전달사항", e.target.value)} />
+        <span className="pointer-events-none absolute right-4 bottom-2.5 text-[10.5px] font-bold text-[#A7B3C6]" style={CP_MEMO_FONT}>{String(t.전달사항 || "").length}자</span>
+      </section>
+    </div>
+  );
+}
+// ⭐ 2026-11-06 오더 복사/수정 패널 — 기사 스마트검색 "?" 도움말(눌러서 열고 닫기)
+function SmartSearchHelp() {
+  const [open, setOpen] = React.useState(false);
+  const ref = React.useRef(null);
+  React.useEffect(() => {
+    if (!open) return undefined;
+    const close = (e) => { if (!ref.current?.contains(e.target)) setOpen(false); };
+    const esc = (e) => { if (e.key === "Escape") setOpen(false); };
+    document.addEventListener("mousedown", close); document.addEventListener("keydown", esc);
+    return () => { document.removeEventListener("mousedown", close); document.removeEventListener("keydown", esc); };
+  }, [open]);
+  return (
+    <span ref={ref} className="relative inline-flex">
+      <button type="button" onClick={() => setOpen((v) => !v)} aria-label="기사 스마트검색 도움말" aria-expanded={open} data-kp="smart-help"
+        className={`ml-0.5 w-[18px] h-[18px] rounded-full inline-flex items-center justify-center text-[11px] font-black border transition ${open ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-[#2D4C82] border-[#9FB2D3] hover:border-[#1B2B4B]"}`}>?</button>
+      {open && (
+        <span role="tooltip" className="absolute left-0 top-[calc(100%+6px)] z-[60] w-[290px] rounded-xl bg-[#0F1A30] text-white px-3.5 py-3 shadow-[0_14px_34px_rgba(6,12,26,.35)] text-[12.5px] font-semibold leading-[1.6] whitespace-normal" data-kp="smart-help-tip">
+          <span className="block">• 등록된 기사는 <b className="text-[#8FB0F0]">이름만</b> 입력해도 찾아요</span>
+          <span className="block">• 차량번호 / 이름 / 휴대폰 중 아무거나 입력 가능</span>
+          <span className="block">• 새 기사는 차량번호·이름·전화번호를 넣으면 <b className="text-[#8FB0F0]">기사관리에 자동 등록</b>돼요</span>
+        </span>
+      )}
+    </span>
+  );
+}
+// ⭐ 2026-11-06 오더 복사/수정 패널 — 상차·하차시간 옆 이전/이후(시간구분) · 등록창(3파트)과 같은 값(상차시간기준/하차시간기준)
+function TimeBasisToggle({ value, onChange, disabled = false }) {
+  return (
+    <div className="inline-flex shrink-0 rounded-lg border border-[#1B2B4B] overflow-hidden" role="group" aria-label="시간 기준" data-kp="time-basis">
+      {["이전", "이후"].map((k, i) => (
+        <button key={k} type="button" disabled={disabled} aria-pressed={value === k}
+          onClick={() => onChange(value === k ? null : k)}
+          className={`h-9 px-2.5 text-[12.5px] font-bold transition ${i ? "border-l border-[#1B2B4B]" : ""} ${value === k ? "bg-[#1B2B4B] text-white" : "bg-white text-[#1B2B4B] hover:bg-[#EEF3FB]"} disabled:opacity-50`}>
+          {k}
+        </button>
+      ))}
+    </div>
+  );
+}
 function TimeAmPmPicker({ value, onChange, selectCls, showError, disabled = false }) {
   const [ampm, setAmpm] = React.useState(() => {
     if (value && value.startsWith("오후")) return "오후";
@@ -24165,9 +24294,8 @@ onDoubleClick={(e) => {
 cursor-pointer select-none transition-[background-color,border-color,opacity] duration-300
 ${isFading ? "opacity-0" : "opacity-100"}
 ${
-  r.긴급 === true &&
-  r.배차상태 === "배차중" &&
-  (!r.차량번호 || String(r.차량번호).trim() === "")
+  /* ⭐ 2026-11-06 긴급 오더는 상태와 상관없이 빨간 막대·바탕(선택 중이면 선택색) */
+  isUrgentOrder(r) && !isSelected
     ? isDark
       ? "bg-red-900/30 border-l-2 border-l-red-500 hover:bg-red-900/50"
       : "bg-red-50 border-l-2 border-l-red-400 hover:bg-red-100"
@@ -24177,7 +24305,7 @@ ${
 }
 ${isHighlighted ? "animate-pulse bg-blue-100" : ""}
 `}
-    style={String(r.운행유형 || "").trim() === "왕복" ? { backgroundColor: "#e8f4fd", borderLeft: "4px solid #1B2B4B" } : {}}
+    style={urgentRowStyle(r, String(r.운행유형 || "").trim() === "왕복" ? { backgroundColor: "#e8f4fd", borderLeft: "4px solid #1B2B4B" } : {}, { tint: !isSelected })}
   >
 
                   <td className={cell}>
@@ -24248,7 +24376,7 @@ ${isHighlighted ? "animate-pulse bg-blue-100" : ""}
   </span>
 </td>
 
-                  <td className={cell}>{bizTag ? <span className="inline-flex items-center whitespace-nowrap"><BizChip name={bizTag} main={bizMain} />{editableInput("거래처명", r.거래처명, r._id)}</span> : editableInput("거래처명", r.거래처명, r._id)}</td>
+                  <td className={cell}>{/* ⭐ 2026-11-06 긴급 알약 */}{bizTag || isUrgentOrder(r) ? <span className="inline-flex items-center gap-1 whitespace-nowrap"><UrgentBadge row={r} />{bizTag && <BizChip name={bizTag} main={bizMain} />}{editableInput("거래처명", r.거래처명, r._id)}</span> : editableInput("거래처명", r.거래처명, r._id)}</td>
                   <td className={cell}>
   <div className="inline-flex items-center gap-1 flex-nowrap whitespace-nowrap">
     <AddressCell text={r.상차지명} max={8} popupTitle="상차지명 전체보기" />
@@ -24461,19 +24589,21 @@ ${isHighlighted ? "animate-pulse bg-blue-100" : ""}
                   </td>
 
                   {/* 수수료 */}
-                  <td className={`${cell} text-right pr-2`}>
-                    <span className={`font-bold ${fee < 0 ? "text-red-600" : "text-blue-600"}`}>
+                  <td className={`${cell} text-right pr-2 whitespace-nowrap`}>
+                    {/* ⭐ 2026-11-06 운임구분 알약을 수수료와 같은 줄에(줄바꿈 금지) */}
+                    {fareRules && !canEdit("청구운임", r._id) && r.운임구분 ? (
+                      <span className="inline-block align-middle mr-1 px-1.5 rounded bg-[#EAF0FB] text-[#2D4C82] text-[11.5px] font-extrabold whitespace-nowrap" data-fare-chip="1">{r.운임구분}</span>
+                    ) : null}
+                    <span className={`font-bold whitespace-nowrap ${fee < 0 ? "text-red-600" : "text-blue-600"}`}>
                       {formatComma(fee)}
                     </span>
                     {/* ⭐ 2026-11-02 운임규칙 — 운임구분(수정모드면 선택, 아니면 작은 표시) */}
-                    {fareRules && (canEdit("청구운임", r._id) ? (
+                    {fareRules && canEdit("청구운임", r._id) ? (
                       <div className="mt-0.5 flex flex-col items-end gap-0.5">
                         <FareTypeSelect compact rules={fareRules} value={editedForRow?.운임구분 ?? r.운임구분 ?? ""} onChange={(v) => handleEditChange(r._id, "운임구분", v)} />
                         <FareRuleHint form={{ ...r, ...(editedForRow || {}) }} rules={fareRules} onReapply={() => handleEditChange(r._id, "__reapply", null)} />
                       </div>
-                    ) : (r.운임구분 ? (
-                      <div className="mt-0.5"><span className="inline-block px-1.5 rounded bg-[#EAF0FB] text-[#2D4C82] text-[11.5px] font-extrabold" data-fare-chip="1">{r.운임구분}</span></div>
-                    ) : null))}
+                    ) : null}
                   </td>
 
                   <td className={cell} style={{maxWidth:120,minWidth:100}}>{editableInput("지급방식", r.지급방식, r._id)}</td>
@@ -24716,12 +24846,15 @@ function scheduledEmailAttachSize(attachments) {
 // 정산관리의 이메일 발송 지점들이 공용으로 쓰는 "예약발송 등록" — 즉시 보내는 대신
 // scheduledEmails 컬렉션에 저장해두면, DispatchApp의 예약 이메일 체커가 예약시각에 맞춰
 // 대신 발송한다(위쪽 useEffect 참고).
-async function scheduleEmailDoc({ companyName, to, subject, html, attachments = [], fromName, sendAt, type = "예약메일", meta = {} }) {
+// ⭐ 2026-11-06 일반 이메일 주소 확인(보내는 사람·받는 사람)
+const GEN_MAIL_RE = /^[^\s@<>(),;:"[\]\\]+@[^\s@<>(),;:"[\]\\]+\.[^\s@<>(),;:"[\]\\]{2,}$/;
+async function scheduleEmailDoc({ companyName, to, subject, html, attachments = [], fromName, replyTo = "", sendAt, type = "예약메일", meta = {} }) {
   await addDoc(collection(db, "scheduledEmails"), {
     companyName: companyName || "",
     to, subject, html,
     attachments,
     fromName: fromName || "",
+    replyTo: replyTo || "", // ⭐ 2026-11-06 보내는 사람 이메일(답장 받을 주소)
     sendAt,
     status: "pending",
     type,
@@ -27850,7 +27983,8 @@ const driverPanelCallbackRef = React.useRef(null);
             get(r.차량번호).includes(key) ||
             get(r.이름).includes(key) ||
             get(r.지급방식).includes(key) ||
-            get(r.배차방식).includes(key)
+            get(r.배차방식).includes(key) ||
+            get(r.운임구분).includes(key) // ⭐ 2026-11-06 통합 검색 — 운임구분(월대·일대)
           );
     }
 
@@ -29803,6 +29937,7 @@ const head = isDark
       <option value="driver">기사명</option>
       <option value="pay">지급방식</option>
       <option value="dispatch">배차방식</option>
+      {fareOn && <option value="fare">운임구분</option>}{/* ⭐ 2026-11-06 운임구분 필터 버튼 대신 검색 항목으로 */}
     </CustomSelect>
     <input autoComplete="off"
       type="text"
@@ -30184,7 +30319,7 @@ const head = isDark
 
     const payload = {
       ...copyTarget,
-      화물내용: finalCargo,
+      화물내용: finalCargo, 독차: dokchaOn(copyTarget), // ⭐ 2026-11-06 혼적·왕복이 아니면 독차(기본)
       updatedAt: Date.now(),
     };
     delete payload.createdAt;
@@ -30241,9 +30376,9 @@ flashRow(savedId);
       return;
     }
     if (!(await cpDrvEdit.finish(copyTarget))) return; // ⭐ 2026-11-05 기사 이름·전화 [수정] 중이면 먼저 변경/별도추가 선택
-    const ok = await submitCopyOrderPC(copyTarget, approvedShippers);
+    const ok = await submitCopyOrdersPC(copyTarget, approvedShippers); // ⭐ 2026-11-06 몇 건·날짜 고르기
     if (ok === false) return;
-    sflowToast("복사 등록 완료", "success");
+    sflowToast(ok > 1 ? `${ok}건 복사 등록 완료` : "복사 등록 완료", "success");
     setCopyPanelOpen(false);
     setDailyCloseIssueCtx(null);
     if (copyTarget.상차지명) savePlaceSmart(copyTarget.상차지명, copyTarget.상차지주소 || "", copyTarget.상차지담당자 || "", copyTarget.상차지담당자번호 || "", null, undefined,
@@ -30299,11 +30434,12 @@ flashRow(savedId);
 <div className="flex items-center gap-2 flex-wrap">
   <span className="text-[13.5px] font-bold text-[#5B6B85] mr-1">오더 유형</span>
   <button type="button"
-    onClick={() => setCopyTarget(p => ({ ...p, 독차: !p.독차, 혼적: p.독차 ? p.혼적 : false }))}
-    className={`px-4 py-1.5 rounded-lg text-[13px] font-bold border transition-all ${copyTarget.독차 ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"}`}
+    onClick={() => setCopyTarget(p => (dokchaOn(p) ? { ...p, 독차: false, 혼적: true } : { ...p, 독차: true, 혼적: false }))} /* ⭐ 2026-11-06 독차 ↔ 혼적(혼적·왕복이 아니면 독차가 기본) */
+    title="혼적·왕복을 고르지 않으면 독차가 기본입니다"
+    className={`px-4 py-1.5 rounded-lg text-[13px] font-bold border transition-all ${dokchaOn(copyTarget) ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"}`}
   ><EditableText id="misc.btn.26993.독차" defaultText="독차" /></button>
   <button type="button"
-    onClick={() => setCopyTarget(p => ({ ...p, 혼적: !p.혼적, 독차: p.혼적 ? p.독차 : false }))}
+    onClick={() => setCopyTarget(p => ({ ...p, 혼적: !p.혼적, 독차: !!p.혼적 }))} /* ⭐ 2026-11-06 혼적을 끄면 독차(기본) */
     className={`px-4 py-1.5 rounded-lg text-[13px] font-bold border transition-all ${copyTarget.혼적 ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"}`}
   ><EditableText id="misc.btn.26997.혼적" defaultText="혼적" /></button>
   <button type="button"
@@ -30482,12 +30618,14 @@ checkWarningStatus(c.거래처명, "거래처");
       </CpField>
 
       <CpField label="상차시간">
-        <TimeAmPmPicker
+        {/* ⭐ 2026-11-06 이전/이후(시간구분) — 등록창(3파트)과 같게 */}
+        <div className="flex items-center gap-2"><div className="min-w-0"><TimeAmPmPicker
         disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
           value={copyTarget?.상차시간 ?? ""}
           onChange={v => setCopyTarget(p=>({...p, 상차시간:v}))}
           selectCls={cpInputStyle}
-        />
+        /></div>
+        <TimeBasisToggle value={copyTarget?.상차시간기준} disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")} onChange={(v) => setCopyTarget(p => ({ ...p, 상차시간기준: v }))} /></div>
       </CpField>
       <CpField label="상차방법">
   <CompanyOptionPicker optKey="상하차방법" title="상차방법" placeholder="선택" noneLabel="선택" disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")} className={cpInputStyle} value={copyTarget?.상차방법 ?? ""} onChange={(__v) => ((e)=>setCopyTarget(p=>({...p, 상차방법:e.target.value})))({ target: { value: __v } })} />
@@ -30666,12 +30804,14 @@ checkWarningStatus(c.거래처명, "거래처");
       </CpField>
 
       <CpField label="하차시간">
-        <TimeAmPmPicker
+        {/* ⭐ 2026-11-06 이전/이후(시간구분) — 등록창(3파트)과 같게 */}
+        <div className="flex items-center gap-2"><div className="min-w-0"><TimeAmPmPicker
         disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
           value={copyTarget?.하차시간 ?? ""}
           onChange={v => setCopyTarget(p=>({...p, 하차시간:v}))}
           selectCls={cpInputStyle}
-        />
+        /></div>
+        <TimeBasisToggle value={copyTarget?.하차시간기준} disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")} onChange={(v) => setCopyTarget(p => ({ ...p, 하차시간기준: v }))} /></div>
       </CpField>
 <CpField label="하차방법">
   <CompanyOptionPicker optKey="상하차방법" title="하차방법" placeholder="선택" noneLabel="선택" disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")} className={cpInputStyle} value={copyTarget?.하차방법 ?? ""} onChange={(__v) => ((e)=>setCopyTarget(p=>({...p, 하차방법:e.target.value})))({ target: { value: __v } })} />
@@ -30841,7 +30981,7 @@ checkWarningStatus(c.거래처명, "거래처");
 </section>
 {/* ===== 스마트 기사 검색 (복사패널) ===== */}
 <section className="bg-white rounded-xl border border-[#E3E8F0] divide-y divide-gray-100 overflow-hidden">
-  <div className="px-5 pt-3.5 pb-0"><h3 className="text-[14px] font-bold text-[#1B2B4B] flex items-center gap-1.5"><span className="w-1 h-3.5 bg-[#1B2B4B] rounded-full inline-block"></span>기사 스마트 검색</h3></div>
+  <div className="px-5 pt-3.5 pb-0"><h3 className="text-[14px] font-bold text-[#1B2B4B] flex items-center gap-1.5"><span className="w-1 h-3.5 bg-[#1B2B4B] rounded-full inline-block"></span>기사 스마트 검색<SmartSearchHelp />{/* ⭐ 2026-11-06 도움말 */}</h3></div>
 <div className="px-4 py-2">
     <div className="relative" style={{overflow: "visible"}}>
       <input autoComplete="off"
@@ -31130,34 +31270,8 @@ value={copyTarget?.화물수량 || ""}
           </div>
         </div>
 {/* ================= 메모 + 전달사항 ================= */}
-  <div className="px-5 pt-3.5 pb-0"><h3 className="text-[14px] font-bold text-[#1B2B4B] flex items-center gap-1.5"><span className="w-1 h-3.5 bg-[#1B2B4B] rounded-full inline-block"></span>메모 / 전달사항</h3></div>
-  <div className="px-5 py-3 grid grid-cols-2 gap-3">
-    <div>
-      <label className="block text-[13.5px] font-bold text-[#5B6B85] mb-1">메모</label>
-      <textarea
-        className="w-full min-h-[96px] px-3 py-2 text-[14px] rounded-lg border border-[#D5DEEC] bg-white resize-y focus:outline-none focus:ring-2 focus:ring-[#1B2B4B]/25 focus:border-[#1B2B4B] placeholder:text-gray-500 transition-all"
-        placeholder="메모를 입력하세요"
-        value={copyTarget?.메모 ?? ""}
-        onChange={(e)=>setCopyTarget(p=>({...p, 메모:e.target.value}))}
-      />
-    </div>
-    <div>
-      <div className="flex items-center justify-between mb-1">
-        <label className="text-[13.5px] font-bold text-[#5B6B85]">전달사항</label>
-        <button type="button"
-          onClick={() => setCopyTarget(p => ({ ...p, 전달사항고정: !p.전달사항고정 }))}
-          className={`px-2 py-0.5 rounded text-xs font-semibold border transition-all ${copyTarget?.전달사항고정 ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"}`}>
-          고정
-        </button>
-      </div>
-      <textarea
-        className="w-full min-h-[96px] px-3 py-2 text-[14px] rounded-lg border border-[#D5DEEC] bg-white resize-y focus:outline-none focus:ring-2 focus:ring-[#1B2B4B]/25 focus:border-[#1B2B4B] placeholder:text-gray-500 transition-all"
-        placeholder="기사에게 전달할 내용"
-        value={copyTarget?.전달사항 ?? ""}
-        onChange={(e)=>setCopyTarget(p=>({...p, 전달사항:e.target.value}))}
-      />
-    </div>
-  </div>
+{/* ⭐ 2026-11-06 등록창(3파트)과 같은 카드형 — 머리글·중요도·고정 토글·글자 수 */}
+  <div className="px-5 pt-3.5 pb-3"><CpMemoNoteCards target={copyTarget} setTarget={setCopyTarget} /></div>
 </section>
 
 {/* ===================== 변경 이력(공용 타임라인) ===================== */}
@@ -35381,6 +35495,7 @@ function DispatchStatus({
   userNameMap = new Map(),
   // ⭐ 2026-11-03 배차현황 › 고정노선현황 — 배차표 양식이 오면 표의 열만 그 양식(구글시트) 순서로(버튼·합계·필터는 그대로)
   fixedForm = null,
+  fixedActions = null, // ⭐ 2026-11-06 고정노선현황 오른쪽 클릭 메뉴(오더 추가·시트 열기·지금 맞추기)
 }) {
 useFleetLivePublish(drivers); // ⭐ 2026-11-05 실시간 관제 색인(같은 배열이면 아무것도 안 함)
 // ⭐ 2026-11-02 운임규칙 — 오더 복사·수정 패널 / 수정 창 / 운임구분 열(규칙 사용 회사만)
@@ -38886,6 +39001,8 @@ const filteredBase = React.useMemo(() => {
           return get(r.지급방식).includes(keyword);
         case "dispatch":
           return get(r.배차방식).includes(keyword);
+        case "fare": // ⭐ 2026-11-06 운임구분(월대·일대 등)
+          return get(r.운임구분).replace(/\s+/g, "").includes(keyword.replace(/\s+/g, ""));
         case "car":
           return get(r.차량번호).replace(/\s+/g, "").includes(keyword.replace(/\s+/g, ""));
         case "driver":
@@ -38904,6 +39021,7 @@ const filteredBase = React.useMemo(() => {
             get(r.이름).includes(keyword) ||
             get(r.지급방식).includes(keyword) ||
             get(r.배차방식).includes(keyword) ||
+            get(r.운임구분).includes(keyword) || // ⭐ 2026-11-06 통합 검색 — 운임구분(월대 → 운임구분이 월대인 오더)
             // ⭐ 2026-11-06 고정노선현황 통합 검색 — 배차담당자·운송사·기사 전화·시군구·묶음·시트 추가 칸까지
             (!!fixedForm && (
               dsStaffOf(r).toLowerCase().includes(keyword) ||
@@ -38974,7 +39092,7 @@ const filteredBase = React.useMemo(() => {
   const dsMgrMap = useOrderStaffName(userNameMap, userCompany); // ⭐ 배차담당자 칸(회사별 기능 꺼지면 null)
   const [lookupOpen, setLookupOpen] = React.useState(false); // ⭐ 2026-11-03 담당자·차량 조회
   const lookupNameOf = React.useCallback((r) => _orderStaffNameRaw(r, userNameMap), [userNameMap]);
-  const filtered = React.useMemo(() => sortRows(filteredBase, dsSort.sort, makeOrderSortValue(dsMgrMap)), [filteredBase, dsSort.sort, dsMgrMap]);
+  const filtered = React.useMemo(() => { const base = makeOrderSortValue(dsMgrMap); const sv = fixedForm ? (r, k, i) => (k === "담당자" ? routeOwnerName(r, userNameMap) : base(r, k, i)) : base; return sortRows(filteredBase, dsSort.sort, sv); }, [filteredBase, dsSort.sort, dsMgrMap, fixedForm, userNameMap]); // ⭐ 2026-11-06 고정노선 담당자 정렬
 
   // ⭐⭐⭐ 페이지 데이터 (정렬된 filtered 기준)
   const pageRows = React.useMemo(() => {
@@ -39741,6 +39859,7 @@ return (
             {fixedForm && <option value="carrier">운송사</option>}
             <option value="pay">지급방식</option>
             <option value="dispatch">배차방식</option>
+            {fareOn && <option value="fare">운임구분</option>}{/* ⭐ 2026-11-06 운임구분 필터 버튼 대신 검색 항목으로 */}
           </CustomSelect>
           <input autoComplete="off" className="px-2 h-full text-[11px] w-24 outline-none" placeholder="검색어"
             ref={qInputRef} defaultValue={qInput}
@@ -39769,11 +39888,7 @@ return (
         <div className="ml-auto flex items-center gap-1 flex-shrink-0 flex-wrap justify-end">
           {/* ⭐ 2026-11-05 실시간 관제 — 예전 세부검색 자리(오른쪽)로 옮김 · 고정노선현황은 위 고정노선 머리띠에 같은 버튼이 있다 */}
           {!fixedForm && <FleetLiveButton rows={filtered} size="md" />}
-          {/* ⭐ 2026-11-02 운임규칙 — 운임구분 필터(규칙 사용 회사만) */}
-          {fareOn && (
-            <span data-fare-filter="1"><FareTypeSelect compact align="right" allowAdd={false} rules={fareR.rules} value={fareTypeFilter} placeholder="운임구분 전체" noneLabel="운임구분 전체"
-              extraOpts={[{ name: "__none", label: "운임구분 미지정" }]} onChange={(v) => { setFareTypeFilter(v); setPage(0); }} /></span>
-          )}
+          {/* ⭐ 2026-11-06 [운임구분 전체] 필터 버튼은 없앴다 — 검색 항목(통합 ▾)의 "운임구분"·세부검색·통합 검색으로 찾는다 */}
           <button onClick={()=>{if(selected.size===0)return showAlert("복사할 항목을 선택하세요.");if(selected.size>1)return showAlert("1개만 선택할 수 있습니다.");setCopyModalOpen(true);}} className="px-2 py-1 rounded-lg bg-gray-800 text-white text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap"><EditableText id="status.toolbar.기사복사" defaultText="기사복사" /></button>
           <button onClick={()=>{
   const selArr=[...selected];
@@ -39886,6 +40001,7 @@ return (
       onKeyDownCapture={fixedEditId === id ? (e) => fixedRowKey(e, id) : undefined}
       data-gstart={i > 0 && (String(pageRows[i - 1]?.배차표묶음 || "") !== String(r.배차표묶음 || "") || String(pageRows[i - 1]?.상차일 || "") !== String(r.상차일 || "")) ? "1" : undefined}
       title={fixedEditId === id ? "수정 중 — ←→ 칸 이동 · ↑↓ 위아래 줄 · Enter 저장하고 끝내기 · Esc 끝내기" : isViewer ? undefined : frLocked ? `🔒 ${ROUTE_LOCK_MSG}${routeOwnerName(row, userNameMap) ? ` (담당: ${routeOwnerName(row, userNameMap)})` : ""}` : "두 번 누르면 이 줄을 수정할 수 있어요"}
+      style={urgentRowStyle(row, {}, { tint: fixedEditId !== id && !selected.has(id) })}
       className={`kp-frs-row transition-colors ${fixedEditId === id ? "bg-[#EEF4FF] outline outline-2 -outline-offset-2 outline-[#2D4C82]" : selected.has(id) ? "bg-blue-50" : !String(row.차량번호 || "").trim() && row.배차상태 !== "배차취소" ? "bg-[#FFFAF2] hover:bg-[#FFF3E0]" : i % 2 === 0 ? "bg-white hover:bg-[#F5F8FD]" : "bg-[#FAFBFD] hover:bg-[#F5F8FD]"}`}>
       <td className="px-3 py-2 text-center border-b border-[#E9EDF4] border-r border-r-[#F1F4F9]"><input autoComplete="off" type="checkbox" checked={selected.has(id)} onChange={() => toggleOne(id)} /></td>
       <td className="px-3 py-2 text-[13.5px] font-bold text-[#5B6B85] text-center border-b border-[#E9EDF4] border-r border-r-[#F1F4F9] tabular-nums">
@@ -39893,6 +40009,7 @@ return (
           ? <button type="button" onClick={(e) => { e.stopPropagation(); setFixedEditId(null); }} className="h-7 px-2 rounded-lg bg-[#1B2B4B] text-white text-[11.5px] font-black whitespace-nowrap">완료</button>
           : <span className="inline-flex items-center gap-1">{(page * pageSize) + i + 1}{frLocked && <svg data-kp="frs-lock" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#9AA9C3" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-label={ROUTE_LOCK_MSG}><rect x="5" y="11" width="14" height="10" rx="2" /><path d="M8 11V7a4 4 0 0 1 8 0v4" /></svg>}</span>}
       </td>
+      <FixedOwnerCell row={row} nameMap={userNameMap} />{/* ⭐ 2026-11-06 순번 다음 담당자 */}
       <FixedRouteCells form={fixedForm} row={row} drivers={drivers} clients={clients} disabled={isViewer || frLocked} editing={fixedEditId === id && !frLocked} onPatch={(patch) => patchDispatch(id, patch)} />
     </tr>
   );
@@ -39939,13 +40056,13 @@ return (
       className={`cursor-pointer select-none transition-[background-color,border-color,opacity] duration-300 ${fadingIds.has(id) ? "opacity-0" : "opacity-100"} ${justMovedIds.has(id) ? "row-highlight" : ""} ${
         selected.has(id)
           ? "bg-blue-50 hover:bg-blue-100"
-          : r.긴급 === true && row.배차상태 === "배차중"
+          : isUrgentOrder(r) // ⭐ 2026-11-06 긴급은 상태와 상관없이
           ? "bg-red-50 border-l-2 border-l-red-400 hover:bg-red-100"
           : i % 2 === 0
           ? "bg-white hover:bg-blue-50"
           : "bg-gray-50 hover:bg-blue-50"
       }`}
-     style={String(row.운행유형||"").trim() === "왕복" ? { backgroundColor: "#e8f4fd", borderLeft: "4px solid #1B2B4B" } : {}}
+     style={urgentRowStyle(r, String(row.운행유형||"").trim() === "왕복" ? { backgroundColor: "#e8f4fd", borderLeft: "4px solid #1B2B4B" } : {}, { tint: !selected.has(id) })}
     >
       <td className="px-3 py-3 text-center border-b border-gray-200 border-r border-r-gray-100 last:border-r-0">
         <input autoComplete="off"
@@ -40106,7 +40223,10 @@ return (
       )}
     </span>
   );
-})() : (
+})() : key === "거래처명" && isUrgentOrder(row) ? (
+  /* ⭐ 2026-11-06 긴급 알약 */
+  <span className="inline-flex items-center gap-1 whitespace-nowrap"><UrgentBadge row={row} />{row[key]}</span>
+) : (
   row[key]
 )}
   </td>
@@ -40203,13 +40323,13 @@ return (
                   </td>
                   {/* ⭐ 2026-11-02 운임규칙 — 운임구분 열(규칙 사용 회사만) */}
                   {fareOn && (
-                    <td className="border text-center px-1" data-fare-cell="1">
+                    <td className="border text-center px-1 whitespace-nowrap" data-fare-cell="1">
                       {editMode && selected.has(id) ? (
                         <div className="flex flex-col items-center gap-0.5">
                           <FareTypeSelect compact rules={fareR.rules} value={row.운임구분 || ""} onChange={(v) => updateEdited(row, "운임구분", v)} />
                           <FareRuleHint form={row} rules={fareR.rules} onReapply={() => updateEdited(row, "__reapply", null)} />
                         </div>
-                      ) : (row.운임구분 ? <span className="inline-block px-1.5 py-[1px] rounded bg-[#EAF0FB] text-[#2D4C82] text-[12.5px] font-extrabold">{row.운임구분}{row.운임수동 ? " ·수동" : ""}</span> : <span className="text-gray-300">-</span>)}
+                      ) : (row.운임구분 ? <span className="inline-block whitespace-nowrap px-1.5 py-[1px] rounded bg-[#EAF0FB] text-[#2D4C82] text-[12.5px] font-extrabold">{row.운임구분}{row.운임수동 ? " ·수동" : ""}</span> : <span className="text-gray-300">-</span>)}
                     </td>
                   )}
 
@@ -41662,7 +41782,7 @@ return (
 
     const payload = {
       ...copyTarget,
-      화물내용: finalCargo,
+      화물내용: finalCargo, 독차: dokchaOn(copyTarget), // ⭐ 2026-11-06 혼적·왕복이 아니면 독차(기본)
       전화번호: String(copyTarget.전화번호 || "").replace(/\D/g, ""),
       updatedAt: Date.now(),
     };
@@ -41723,9 +41843,9 @@ return (
     }
     if (!(await cpDrvEdit.finish(copyTarget))) return; // ⭐ 2026-11-05 기사 이름·전화 [수정] 중이면 먼저 변경/별도추가 선택
 
-    const ok = await submitCopyOrderPC(copyTarget, approvedShippers);
+    const ok = await submitCopyOrdersPC(copyTarget, approvedShippers); // ⭐ 2026-11-06 몇 건·날짜 고르기
     if (ok === false) return;
-    sflowToast("복사 등록 완료", "success");
+    sflowToast(ok > 1 ? `${ok}건 복사 등록 완료` : "복사 등록 완료", "success");
 
     setCopyPanelOpen(false);
     setDailyCloseIssueCtx(null);
@@ -41792,11 +41912,12 @@ return (
 <div className="flex items-center gap-2 flex-wrap bg-white rounded-xl border border-[#E3E8F0] px-5 py-2.5">
   <span className="text-[13.5px] font-bold text-[#5B6B85] mr-1">오더 유형</span>
   <button type="button"
-    onClick={() => setCopyTarget(p => ({ ...p, 독차: !p.독차, 혼적: p.독차 ? p.혼적 : false }))}
-    className={`px-4 py-1.5 rounded-lg text-[13px] font-bold border transition-all ${copyTarget.독차 ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"}`}
+    onClick={() => setCopyTarget(p => (dokchaOn(p) ? { ...p, 독차: false, 혼적: true } : { ...p, 독차: true, 혼적: false }))} /* ⭐ 2026-11-06 독차 ↔ 혼적(혼적·왕복이 아니면 독차가 기본) */
+    title="혼적·왕복을 고르지 않으면 독차가 기본입니다"
+    className={`px-4 py-1.5 rounded-lg text-[13px] font-bold border transition-all ${dokchaOn(copyTarget) ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"}`}
   ><EditableText id="misc.btn.38146.독차" defaultText="독차" /></button>
   <button type="button"
-    onClick={() => setCopyTarget(p => ({ ...p, 혼적: !p.혼적, 독차: p.혼적 ? p.독차 : false }))}
+    onClick={() => setCopyTarget(p => ({ ...p, 혼적: !p.혼적, 독차: !!p.혼적 }))} /* ⭐ 2026-11-06 혼적을 끄면 독차(기본) */
     className={`px-4 py-1.5 rounded-lg text-[13px] font-bold border transition-all ${copyTarget.혼적 ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"}`}
   ><EditableText id="misc.btn.38150.혼적" defaultText="혼적" /></button>
   <button type="button"
@@ -41977,12 +42098,14 @@ setCopyTarget(prev=>({
       </CpField>
 
       <CpField label="상차시간">
-        <TimeAmPmPicker
+        {/* ⭐ 2026-11-06 이전/이후(시간구분) — 등록창(3파트)과 같게 */}
+        <div className="flex items-center gap-2"><div className="min-w-0"><TimeAmPmPicker
         disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
           value={copyTarget?.상차시간 ?? ""}
           onChange={v => setCopyTarget(p=>({...p, 상차시간:v}))}
           selectCls={cpInputStyle}
-        />
+        /></div>
+        <TimeBasisToggle value={copyTarget?.상차시간기준} disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")} onChange={(v) => setCopyTarget(p => ({ ...p, 상차시간기준: v }))} /></div>
       </CpField>
       <CpField label="상차방법">
   <CompanyOptionPicker optKey="상하차방법" title="상차방법" placeholder="선택" noneLabel="선택" disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")} className={cpInputStyle} value={copyTarget?.상차방법 ?? ""} onChange={(__v) => ((e)=>setCopyTarget(p=>({...p, 상차방법:e.target.value})))({ target: { value: __v } })} />
@@ -42144,12 +42267,14 @@ setCopyPlaceOptions(list);
       </CpField>
 
       <CpField label="하차시간">
-        <TimeAmPmPicker
+        {/* ⭐ 2026-11-06 이전/이후(시간구분) — 등록창(3파트)과 같게 */}
+        <div className="flex items-center gap-2"><div className="min-w-0"><TimeAmPmPicker
         disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
           value={copyTarget?.하차시간 ?? ""}
           onChange={v => setCopyTarget(p=>({...p, 하차시간:v}))}
           selectCls={cpInputStyle}
-        />
+        /></div>
+        <TimeBasisToggle value={copyTarget?.하차시간기준} disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")} onChange={(v) => setCopyTarget(p => ({ ...p, 하차시간기준: v }))} /></div>
       </CpField>
 <CpField label="하차방법">
   <CompanyOptionPicker optKey="상하차방법" title="하차방법" placeholder="선택" noneLabel="선택" disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")} className={cpInputStyle} value={copyTarget?.하차방법 ?? ""} onChange={(__v) => ((e)=>setCopyTarget(p=>({...p, 하차방법:e.target.value})))({ target: { value: __v } })} />
@@ -42301,7 +42426,7 @@ setCopyPlaceOptions(list);
 </section>
 {/* ===== 스마트 기사 검색 (복사패널) ===== */}
 <section className="bg-white rounded-xl border border-[#E3E8F0] divide-y divide-gray-100 overflow-hidden">
-  <div className="px-5 pt-3.5 pb-0"><h3 className="text-[14px] font-bold text-[#1B2B4B] flex items-center gap-1.5"><span className="w-1 h-3.5 bg-[#1B2B4B] rounded-full inline-block"></span>기사 스마트 검색</h3></div>
+  <div className="px-5 pt-3.5 pb-0"><h3 className="text-[14px] font-bold text-[#1B2B4B] flex items-center gap-1.5"><span className="w-1 h-3.5 bg-[#1B2B4B] rounded-full inline-block"></span>기사 스마트 검색<SmartSearchHelp />{/* ⭐ 2026-11-06 도움말 */}</h3></div>
   <div className="px-4 py-2">
     <div className="relative">
       <input autoComplete="off"
@@ -42584,34 +42709,8 @@ setCopyPlaceOptions(list);
           </div>
 </div>
 {/* ================= 메모 + 전달사항 ================= */}
-  <div className="px-5 pt-3.5 pb-0"><h3 className="text-[14px] font-bold text-[#1B2B4B] flex items-center gap-1.5"><span className="w-1 h-3.5 bg-[#1B2B4B] rounded-full inline-block"></span>메모 / 전달사항</h3></div>
-  <div className="px-5 py-3 grid grid-cols-2 gap-3">
-    <div>
-      <label className="block text-[13.5px] font-bold text-[#5B6B85] mb-1">메모</label>
-      <textarea
-        className="w-full min-h-[96px] px-3 py-2 text-[14px] rounded-lg border border-[#D5DEEC] bg-white resize-y focus:outline-none focus:ring-2 focus:ring-[#1B2B4B]/25 focus:border-[#1B2B4B] placeholder:text-gray-500 transition-all"
-        placeholder="메모를 입력하세요"
-        value={copyTarget?.메모 ?? ""}
-        onChange={(e)=>setCopyTarget(p=>({...p, 메모:e.target.value}))}
-      />
-    </div>
-    <div>
-      <div className="flex items-center justify-between mb-1">
-        <label className="text-[13.5px] font-bold text-[#5B6B85]">전달사항</label>
-        <button type="button"
-          onClick={() => setCopyTarget(p => ({ ...p, 전달사항고정: !p.전달사항고정 }))}
-          className={`px-2 py-0.5 rounded text-xs font-semibold border transition-all ${copyTarget?.전달사항고정 ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"}`}>
-          고정
-        </button>
-      </div>
-      <textarea
-        className="w-full min-h-[96px] px-3 py-2 text-[14px] rounded-lg border border-[#D5DEEC] bg-white resize-y focus:outline-none focus:ring-2 focus:ring-[#1B2B4B]/25 focus:border-[#1B2B4B] placeholder:text-gray-500 transition-all"
-        placeholder="기사에게 전달할 내용"
-        value={copyTarget?.전달사항 ?? ""}
-        onChange={(e)=>setCopyTarget(p=>({...p, 전달사항:e.target.value}))}
-      />
-    </div>
-  </div>
+{/* ⭐ 2026-11-06 등록창(3파트)과 같은 카드형 — 머리글·중요도·고정 토글·글자 수 */}
+  <div className="px-5 pt-3.5 pb-3"><CpMemoNoteCards target={copyTarget} setTarget={setCopyTarget} /></div>
 </section>
 
 {/* ===================== 변경 이력(공용 타임라인) — 실시간 패널과 같은 모양 ===================== */}
@@ -44325,8 +44424,37 @@ setCopyPlaceOptions(list);
         </div>
       )}
 
+      {/* ⭐ 2026-11-06 고정노선현황 전용 오른쪽 클릭 메뉴 */}
+      {contextMenuDS && fixedForm && (() => {
+        const r = contextMenuDS.row; const _id = getId(r);
+        const ids = selected.has(_id) && selected.size > 1 ? [...selected] : [_id];
+        const rowsOfIds = (dispatchData || []).filter((x) => ids.includes(getId(x)));
+        const close = () => setContextMenuDS(null);
+        const me = auth.currentUser?.email || "";
+        return (
+          <FixedRouteContextMenu x={contextMenuDS.x} y={contextMenuDS.y} row={r} selCount={ids.length} staff={staffNamesOf(userNameMap)}
+            owner={routeOwnerName(r, userNameMap)} locked={!isViewer && !frCanEdit(r)} disabled={isViewer} onClose={close}
+            onAdd={fixedActions?.addOrder || null}
+            onEdit={() => { if (!frCanEdit(r)) { frLockAlert(r); return; } setFixedEditId(_id); }}
+            onAssign={(name) => {
+              const bad = rowsOfIds.find((x) => !frCanEdit(x)); if (bad) { frLockAlert(bad); return; }
+              ids.forEach((x) => patchDispatch(x, { 배차확정자: name || null, 담당자지정자: me, 담당자지정일시: Date.now() }));
+              showAlert(name ? `담당자를 ${name}(으)로 지정했습니다${ids.length > 1 ? ` (${ids.length}건)` : ""}` : "담당자를 비웠습니다");
+            }}
+            onCopyDriver={() => {
+              const rawCargo = String(r.화물내용 || ""); const rawTon = String(r.차량톤수 || ""); const tonMatch = rawTon.match(/([\d.]+)(.*)/);
+              setCopyTarget({ ...r, 화물내용: rawCargo, 화물수량: rawCargo, 화물타입: "", 톤수값: tonMatch ? tonMatch[1] : "", 톤수타입: tonMatch ? tonMatch[2] : "" });
+              setSelected(new Set([_id])); setCopyModalOpen(true);
+            }}
+            onInfo={() => setOrderInfoRow5(r)}
+            onOpenSheet={fixedActions?.sheetUrl ? () => window.open(fixedActions.sheetUrl, "_blank", "noopener") : null}
+            onSync={fixedActions?.syncNow || null}
+            onDelete={() => { const bad = rowsOfIds.find((x) => !frCanEdit(x)); if (bad) { frLockAlert(bad); return; } if (!selected.has(_id)) setSelected(new Set([_id])); setShowDeletePopup(true); }}
+          />
+        );
+      })()}
       {/* 우클릭 컨텍스트 메뉴 (배차현황) */}
-      {contextMenuDS && (
+      {contextMenuDS && !fixedForm && (
         <div
           className="fixed z-[999999] bg-white/95 backdrop-blur border border-[#DCE3EE] rounded-2xl shadow-[0_18px_44px_rgba(11,20,40,0.28)] p-1.5 min-w-[188px] select-none"
           style={(() => {
@@ -49950,6 +50078,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
             <CustomSelect value={filterType} onChange={(e) => setFilterType(e.target.value)} className="border border-gray-200 rounded-lg px-2 py-1.5 text-[13px] focus:outline-none focus:border-[#1B2B4B]">
               <option value="거래처명">거래처명</option>
               <option value="차량종류">차량종류</option>
+              {fareOnU && <option value="운임구분">운임구분</option>}{/* ⭐ 2026-11-06 */}
             </CustomSelect>
             <input autoComplete="off" value={filterValue} onChange={(e) => setFilterValue(e.target.value)} placeholder={`${filterType} 검색`} className="border border-gray-200 rounded-lg px-3 py-1.5 text-[13px] w-40 focus:outline-none focus:border-[#1B2B4B] focus:ring-1 focus:ring-[#1B2B4B]/10" />
           </div>
@@ -50019,8 +50148,8 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                         });
                         setCopyPanelOpen(true);
                       }}
-                      className={`${i % 2 === 0 ? "bg-white" : "bg-gray-50/50"} cursor-pointer hover:bg-blue-50/50 transition`}
-                      style={String(r.운행유형 || "").trim() === "왕복" ? { backgroundColor: "#e8f4fd", borderLeft: "4px solid #1B2B4B" } : {}}
+                      className={`${isUrgentOrder(r) ? "bg-red-50 hover:bg-red-100" : i % 2 === 0 ? "bg-white" : "bg-gray-50/50"} cursor-pointer hover:bg-blue-50/50 transition`}
+                      style={urgentRowStyle(r, String(r.운행유형 || "").trim() === "왕복" ? { backgroundColor: "#e8f4fd", borderLeft: "4px solid #1B2B4B" } : {})}
                     >
                       {deleteMode && (
                         <td className={cellBase}>
@@ -50042,7 +50171,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                       <td className={cellBase} style={isEarly ? { color: "red", fontWeight: 600 } : {}}>{r.상차시간 ? fmtDispatchTime(r.상차시간, r.상차시간기준 || r.상차시간구분) : ""}</td>
                       <td className={cellBase}>{r.하차일 || ""}</td>
                       <td className={cellBase}>{r.하차시간 ? fmtDispatchTime(r.하차시간, r.하차시간기준 || r.하차시간구분) : ""}</td>
-                      <td className={`${cellBase} font-semibold text-gray-800`}>{r.거래처명 || ""}</td>
+                      <td className={`${cellBase} font-semibold text-gray-800`}>{/* ⭐ 2026-11-06 긴급 알약 */}{isUrgentOrder(r) ? <span className="inline-flex items-center gap-1 whitespace-nowrap"><UrgentBadge row={r} />{r.거래처명 || ""}</span> : (r.거래처명 || "")}</td>
                       <td className={`${cellBase} font-medium`}>
                         <div className="inline-flex items-center gap-1 flex-nowrap whitespace-nowrap">
                           <span>{r.상차지명 || ""}</span>
@@ -50406,7 +50535,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                       if (!(await cpDrvEdit.finish(copyTarget))) return; // ⭐ 2026-11-05 기사 이름·전화 [수정] 중이면 먼저 변경/별도추가 선택
                       if (isReversedDateOrder(copyTarget?.상차일, copyTarget?.하차일)) { showToast(REVERSED_DATE_ORDER_MSG, "err"); return; }
                       const finalCargo = copyTarget.화물타입 ? `${copyTarget.화물수량 || ""}${copyTarget.화물타입}` : (copyTarget.화물수량 || "");
-                      const payload = { ...copyTarget, 화물내용: finalCargo, updatedAt: Date.now() };
+                      const payload = { ...copyTarget, 화물내용: finalCargo, 독차: dokchaOn(copyTarget), updatedAt: Date.now() }; // ⭐ 2026-11-06 독차 기본
                       const ok = await patchDispatch(copyTarget._id, payload);
                       if (ok === false) return;
                       showToast("오더 수정 완료");
@@ -50424,9 +50553,9 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                       if (!copyTarget) { showToast("복사할 데이터가 없습니다.", "err"); return; }
                       if (!(await cpDrvEdit.finish(copyTarget))) return; // ⭐ 2026-11-05 기사 이름·전화 [수정] 중이면 먼저 변경/별도추가 선택
                       const finalCargo = copyTarget.화물타입 ? `${copyTarget.화물수량 || ""}${copyTarget.화물타입}` : (copyTarget.화물수량 || "");
-                      const ok = await submitCopyOrderPC(copyTarget, approvedShippers, finalCargo);
+                      const ok = await submitCopyOrdersPC(copyTarget, approvedShippers, finalCargo); // ⭐ 2026-11-06 몇 건·날짜 고르기
                       if (ok === false) return;
-                      showToast("복사 등록 완료");
+                      showToast(ok > 1 ? `${ok}건 복사 등록 완료` : "복사 등록 완료");
                       setCopyPanelOpen(false);
                       if (copyTarget.상차지명) syncPlaceContactSimple(copyTarget.상차지명, copyTarget.상차지주소 || "", copyTarget.상차지담당자 || "", copyTarget.상차지담당자번호 || "");
                       if (copyTarget.하차지명) syncPlaceContactSimple(copyTarget.하차지명, copyTarget.하차지주소 || "", copyTarget.하차지담당자 || "", copyTarget.하차지담당자번호 || "");
@@ -50549,12 +50678,14 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                         />
                       </CpField>
                        <CpField label="상차시간">
-                        <TimeAmPmPicker
+                        {/* ⭐ 2026-11-06 이전/이후(시간구분) — 등록창(3파트)과 같게 */}
+                        <div className="flex items-center gap-2"><div className="min-w-0"><TimeAmPmPicker
                         disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
                           value={copyTarget?.상차시간 ?? ""}
                           onChange={v => setCopyTarget(p => ({...p, 상차시간: v}))}
                           selectCls="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-[#1B2B4B]"
-                        />
+                        /></div>
+                        <TimeBasisToggle value={copyTarget?.상차시간기준} disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")} onChange={(v) => setCopyTarget(p => ({ ...p, 상차시간기준: v }))} /></div>
                        </CpField>
                       <CpField label="상차방법">
                         <CompanyOptionPicker optKey="상하차방법" title="상차방법" placeholder="선택" noneLabel="선택" className={cpInputStyle} value={copyTarget?.상차방법 ?? ""} onChange={(__v) => ((e) => setCopyTarget(p => ({...p, 상차방법: e.target.value})))({ target: { value: __v } })} disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")} />
@@ -50641,12 +50772,14 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                         <CustomDatePicker className={cpInputStyle} value={copyTarget?.하차일 ?? ""} onChange={(e) => setCopyTarget(p => ({...p, 하차일: e.target.value}))} disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")} />
                       </CpField>
                        <CpField label="하차시간">
-                        <TimeAmPmPicker
+                        {/* ⭐ 2026-11-06 이전/이후(시간구분) — 등록창(3파트)과 같게 */}
+                        <div className="flex items-center gap-2"><div className="min-w-0"><TimeAmPmPicker
                         disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
                           value={copyTarget?.하차시간 ?? ""}
                           onChange={v => setCopyTarget(p => ({...p, 하차시간: v}))}
                           selectCls="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-[#1B2B4B]"
-                        />
+                        /></div>
+                        <TimeBasisToggle value={copyTarget?.하차시간기준} disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")} onChange={(v) => setCopyTarget(p => ({ ...p, 하차시간기준: v }))} /></div>
                        </CpField>
                       <CpField label="하차방법">
                         <CompanyOptionPicker optKey="상하차방법" title="하차방법" placeholder="선택" noneLabel="선택" className={cpInputStyle} value={copyTarget?.하차방법 ?? ""} onChange={(__v) => ((e) => setCopyTarget(p => ({...p, 하차방법: e.target.value})))({ target: { value: __v } })} disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")} />
@@ -50737,7 +50870,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                 <div className="px-5 py-3 space-y-1.5">
 
                   {/* 스마트 검색 */}
-                  <CpField label="스마트 검색">
+                  <CpField label={<>스마트 검색<SmartSearchHelp />{/* ⭐ 2026-11-06 도움말 */}</>}>
                     <div className="relative">
                       <textarea
                         ref={smart7Ref}
@@ -50899,13 +51032,13 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                 </div>
               </div>
 
-              {/* 메모 */}
+              {/* 메모 · 전달사항 — ⭐ 2026-11-06 등록창(3파트)과 같은 카드형 */}
               <div className="bg-white rounded-xl border border-[#E3E8F0] overflow-hidden">
                 <div className="bg-[#1B2B4B] px-5 py-2">
-                  <h3 className="text-[14px] font-bold text-white"><EditableText id="copyPanel.section.메모" defaultText="메모" /></h3>
+                  <h3 className="text-[14px] font-bold text-white"><EditableText id="copyPanel.section.메모" defaultText="메모" /> / 전달사항</h3>
                 </div>
                 <div className="px-5 py-3">
-                  <textarea className="w-full min-h-[96px] px-3 py-2 text-[14px] rounded-lg border border-[#D5DEEC] bg-white resize-y focus:outline-none focus:ring-2 focus:ring-[#1B2B4B]/25 focus:border-[#1B2B4B] placeholder:text-gray-500 transition-all" value={copyTarget?.메모 ?? ""} onChange={(e) => setCopyTarget(p => ({...p, 메모: e.target.value}))} />
+                  <CpMemoNoteCards target={copyTarget} setTarget={setCopyTarget} />
                 </div>
               </div>
 
@@ -51838,6 +51971,10 @@ const [generalEmailFiles, setGeneralEmailFiles] = useState([]);
 const [generalEmailAddrOpen, setGeneralEmailAddrOpen] = useState(false);
 const [generalEmailAddrQuery, setGeneralEmailAddrQuery] = useState("");
 const [generalEmailAddrActiveIdx, setGeneralEmailAddrActiveIdx] = useState(0);
+// ⭐ 2026-11-06 일반 이메일 — 보내는 사람(이름·이메일)을 직접 입력. 마지막에 쓴 값을 이 기기에 기억한다
+const [generalEmailFromName, setGeneralEmailFromName] = useState("");
+const [generalEmailFromAddr, setGeneralEmailFromAddr] = useState("");
+const genMailFromKey = `kpGenMailFrom:${auth.currentUser?.uid || "me"}`;
 const [batchSendList, setBatchSendList] = useState([]); // [{name, email, start, end, mapped, totals, clientInfo}]
 const [batchSendOpen, setBatchSendOpen] = useState(false);
 const [batchSending, setBatchSending] = useState(false);
@@ -51893,7 +52030,7 @@ const [includeCardAr, setIncludeCardAr] = useState(true);
     return () => unsub();
   }, []);
 
-  const logEmail = async ({ type, client, to, subject, body, attachmentNames, status, error }) => {
+  const logEmail = async ({ type, client, to, subject, body, attachmentNames, status, error, fromName, replyTo, sentFrom }) => {
     const id = crypto.randomUUID();
     await setDoc(doc(db, "emailLogs", id), {
       id, type, client, to, subject,
@@ -51901,6 +52038,8 @@ const [includeCardAr, setIncludeCardAr] = useState(true);
       attachmentNames: attachmentNames || [],
       status,
       error: error || null,
+      // ⭐ 2026-11-06 보내는 사람 기록(표시 이름 · 답장 받을 주소 · 실제 발송 계정)
+      ...(fromName ? { fromName } : {}), ...(replyTo ? { replyTo } : {}), ...(sentFrom ? { sentFrom } : {}),
       sentAt: Date.now(),
       sentBy: auth.currentUser?.email || "",
     });
@@ -53054,6 +53193,10 @@ const handleBatchSettle = async (targetStatus) => {
                       setGeneralEmailBody(`안녕하세요, ${client ? `${client} 담당자님.` : "담당자님."}\n\n${COMPANY_PRINT.name}입니다.\n\n\n\n감사합니다.\n${COMPANY_PRINT.name}\n${COMPANY_PRINT.contact}`);
                       setGeneralEmailFiles([]);
                       setGeneralEmailScheduleOn(false); setGeneralEmailScheduleAt("");
+                      // ⭐ 2026-11-06 보내는 사람 — 마지막에 쓴 값 → 없으면 "회사명 배차팀" · 내 로그인 이메일
+                      { let saved = null; try { saved = JSON.parse(localStorage.getItem(genMailFromKey) || "null"); } catch { saved = null; }
+                        setGeneralEmailFromName(saved?.name || `${COMPANY_PRINT.name || userCompany || ""} 배차팀`.trim());
+                        setGeneralEmailFromAddr(saved?.email ?? (auth.currentUser?.email || "")); }
                       setGeneralEmailOpen(true);
                     }}
                     className={csBtn}
@@ -53381,6 +53524,21 @@ const handleBatchSettle = async (targetStatus) => {
                   <button className="text-white/60 hover:text-white text-xl" onClick={() => setGeneralEmailOpen(false)}>×</button>
                 </div>
                 <div className="p-6 space-y-4">
+                  {/* ⭐ 2026-11-06 보내는 사람(이름·이메일) 직접 입력 */}
+                  <div data-genmail-from className="rounded-xl border border-[#D5E0F2] bg-[#F5F8FD] p-3.5">
+                    <div className="text-[13px] font-black text-[#0F1A30] mb-2">보내는 사람</div>
+                    <div className="grid grid-cols-[1fr_1.4fr] gap-2">
+                      <input autoComplete="off" data-genmail-from-name className="border-2 border-gray-300 rounded-lg px-3 py-2.5 text-[13px] outline-none focus:border-[#1B2B4B] bg-white"
+                        placeholder="이름 (예: 홍길동 · 배차팀)" maxLength={60} value={generalEmailFromName} onChange={e => setGeneralEmailFromName(e.target.value)} />
+                      <input autoComplete="off" type="email" data-genmail-from-email className={`border-2 rounded-lg px-3 py-2.5 text-[13px] outline-none bg-white ${generalEmailFromAddr.trim() && !GEN_MAIL_RE.test(generalEmailFromAddr.trim()) ? "border-[#B42318]" : "border-gray-300 focus:border-[#1B2B4B]"}`}
+                        placeholder="답장 받을 이메일 (예: me@company.com)" value={generalEmailFromAddr} onChange={e => setGeneralEmailFromAddr(e.target.value)} />
+                    </div>
+                    {generalEmailFromAddr.trim() && !GEN_MAIL_RE.test(generalEmailFromAddr.trim()) && <div className="mt-1.5 text-[12px] font-bold text-[#B42318]">이메일 형식이 올바르지 않습니다.</div>}
+                    <div className="mt-2 text-[12px] leading-relaxed text-[#5B6B85]">
+                      받는 사람에게는 <b className="text-[#0F1A30]">{(generalEmailFromName || "배차팀").trim() || "배차팀"}</b>(으)로 보이고, <b className="text-[#0F1A30]">[답장]을 누르면 {generalEmailFromAddr.trim() || "입력한 이메일"}</b>로 갑니다.
+                      메일 서버 보안 규칙(SPF·DMARC) 때문에 실제 발송 주소는 프로그램 공용 발송 계정으로 나갑니다.
+                    </div>
+                  </div>
                   <div>
                     <label className="text-[13px] font-bold text-gray-700 mb-1 block">수신 이메일</label>
                     <div className="relative">
@@ -53545,18 +53703,25 @@ const handleBatchSettle = async (targetStatus) => {
                   <div className="flex gap-3 pt-2">
                     <button onClick={() => setGeneralEmailOpen(false)} className="flex-1 py-2.5 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold text-[13px]"><EditableText id="misc.btn.49999.취소" defaultText="취소" /></button>
                     <button
+                      data-genmail-send
                       disabled={generalEmailSending || !generalEmailTo.trim() || !generalEmailSubject.trim() || (generalEmailScheduleOn && !generalEmailScheduleAt)}
                       onClick={async () => {
                         if (!generalEmailTo.trim()) return showAlert("수신 이메일을 입력하세요.");
                         if (!generalEmailSubject.trim()) return showAlert("제목을 입력하세요.");
                         if (generalEmailScheduleOn && !generalEmailScheduleAt) return showAlert("예약 발송 시각을 선택하세요.");
                         if (generalEmailScheduleOn && new Date(generalEmailScheduleAt).getTime() <= Date.now()) return showAlert("예약 시각은 현재 시각 이후여야 합니다.");
+                        // ⭐ 2026-11-06 입력 확인 — 받는 주소 · 보내는 사람 이메일 형식
+                        const toBad = generalEmailTo.split(/[,;\n]/).map(s => s.trim()).filter(Boolean).filter(s => !GEN_MAIL_RE.test((/<([^>]+)>/.exec(s) || [null, s])[1].trim()));
+                        if (toBad.length) return showAlert(`수신 이메일 형식을 확인하세요: ${toBad.join(", ")}`);
+                        const fromAddr = generalEmailFromAddr.trim();
+                        if (fromAddr && !GEN_MAIL_RE.test(fromAddr)) return showAlert("보내는 사람 이메일 형식을 확인하세요.");
+                        try { localStorage.setItem(genMailFromKey, JSON.stringify({ name: generalEmailFromName.trim(), email: fromAddr })); } catch { /* 저장 실패 무시 */ }
                         setGeneralEmailSending(true);
                         const bodyLines = (generalEmailBody || "").split("\n").map(l => `<p style="margin:0 0 6px">${l || "&nbsp;"}</p>`).join("");
                         const cardSection = (includeCardGeneral && cardImage) ? `<hr style="border:none;border-top:1px solid #e5e7eb;margin:20px 0"/><img src="${cardImage}" alt="명함" style="width:100%;max-width:500px;border-radius:8px;display:block" onerror="this.style.display='none'"/>` : "";
                         const bodyHtml = `<div style="font-family:sans-serif;font-size:14px;color:#333;line-height:1.8;max-width:600px">${bodyLines}${cardSection}</div>`;
                         const attachments = generalEmailFiles.map(f => ({ filename: f.name, content: f.base64, encoding: "base64" }));
-                        const fromName = `${COMPANY_PRINT.name || userCompany || "배차팀"} 배차팀`;
+                        const fromName = generalEmailFromName.trim() || `${COMPANY_PRINT.name || userCompany || "배차팀"} 배차팀`;
                         try {
                           if (generalEmailScheduleOn) {
                             if (scheduledEmailAttachSize(attachments) > SCHEDULED_EMAIL_ATTACH_LIMIT) {
@@ -53566,7 +53731,7 @@ const handleBatchSettle = async (targetStatus) => {
                             }
                             await scheduleEmailDoc({
                               companyName: userCompany, to: generalEmailTo, subject: generalEmailSubject, html: bodyHtml,
-                              attachments, fromName, sendAt: new Date(generalEmailScheduleAt),
+                              attachments, fromName, replyTo: fromAddr, sendAt: new Date(generalEmailScheduleAt),
                               type: "일반이메일", meta: { client: client || "-", body: generalEmailBody || "" },
                             });
                             showAlert(`${new Date(generalEmailScheduleAt).toLocaleString("ko-KR")}에 발송 예약되었습니다.`);
@@ -53583,18 +53748,23 @@ const handleBatchSettle = async (targetStatus) => {
                               html: bodyHtml,
                               attachments,
                               fromName,
+                              fromEmail: fromAddr, replyTo: fromAddr, // ⭐ 2026-11-06 답장 받을 주소
                             }),
                           });
+                          const logBase = { type: "일반이메일", client: client || "-", to: generalEmailTo, subject: generalEmailSubject, body: generalEmailBody || "", attachmentNames: generalEmailFiles.map(f => f.name), fromName, replyTo: fromAddr };
                           if (res.ok) {
-                            logEmail({ type: "일반이메일", client: client || "-", to: generalEmailTo, subject: generalEmailSubject, body: generalEmailBody || "", attachmentNames: generalEmailFiles.map(f => f.name), status: "success" });
-                            showAlert(`${generalEmailTo} 로 발송 완료`);
+                            let info = {}; try { info = await res.json(); } catch { info = {}; }
+                            logEmail({ ...logBase, status: "success", sentFrom: info.sentFrom || "" }).catch(() => {});
+                            showAlert(`${generalEmailTo} 로 발송 완료${fromAddr ? `\n보낸 사람: ${fromName} · 답장 받을 주소 ${fromAddr}` : ""}`);
                             setGeneralEmailOpen(false);
                           } else {
                             let errMsg = `서버 오류 (${res.status})`;
                             try { const errData = await res.json(); errMsg = errData.error || errMsg; } catch {}
+                            logEmail({ ...logBase, status: "failed", error: errMsg }).catch(() => {}); // ⭐ 2026-11-06 실패도 기록
                             showAlert(`발송 실패: ${errMsg}`);
                           }
                         } catch (e) {
+                          logEmail({ type: "일반이메일", client: client || "-", to: generalEmailTo, subject: generalEmailSubject, body: generalEmailBody || "", attachmentNames: generalEmailFiles.map(f => f.name), fromName, replyTo: fromAddr, status: "failed", error: e.message }).catch(() => {});
                           showAlert(`발송 중 오류: ${e.message}`);
                         } finally {
                           setGeneralEmailSending(false);
@@ -56393,7 +56563,10 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
 }
 // ===================== DispatchApp.jsx (PART 9/9) — END =====================
 // ===================== DispatchApp.jsx (PART 10/10) — START =====================
-function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, showAlert = (m) => alert(m), userCompany = "", grade = "", onGrade }) {
+function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, showAlert = (m) => alert(m), userCompany = "", grade = "", onGrade, mobile = false }) {
+  // ⭐ 2026-11-06 mobile — 모바일 앱(기사관리)에서: 버튼은 기사등록·기사정리·선택삭제만, 표 대신 카드 목록(누르면 상세 시트)
+  const [guideFor, setGuideFor] = React.useState(null); // ⭐ 2026-11-06 [앱 안내 보내기] 대상 기사 배열
+  const [mSheet, setMSheet] = React.useState(null); // 모바일 카드 상세 시트
   // 이름·차량번호·연락처가 모두 빈 문서(예전 직원 승인 때 잘못 생긴 빈 기사)는 목록에서 뺀다
   // ⭐ 2026-11-05 가입 승인 전 기사(기사앱 가입 문서)는 기사관리 목록에서 뺀다 — 기사 앱 계정 › 가입 승인에서 승인하면 들어온다
   const drivers = React.useMemo(() => (driversRaw || []).filter((r) => !isPendingSignupDriver(r) && (String(r.이름 || r.name || "").trim() || String(r.차량번호 || "").trim() || String(r.전화번호 || r.phone || "").trim())), [driversRaw]);
@@ -56699,10 +56872,10 @@ function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, sho
   }), [drivers]);
 
   return (
-    <div className="p-4">
+    <div className={mobile ? "p-1" : "p-4"}>
 
       {/* ⭐ 2026-10-28 디지털 리디자인 — 숫자 타일(누르면 등급별 보기) + 한 줄 검색바 + 오른쪽 작업 버튼 */}
-      <div className="grid grid-cols-6 gap-3 mb-4">
+      <div className={`grid ${mobile ? "grid-cols-3 gap-2 mb-3" : "grid-cols-6 gap-3 mb-4"}`}>
         {[
           {label:"전체", en:"ALL", val:kpi.전체, key:"전체"},
           {label:"일반", en:"GENERAL", val:kpi.일반, key:"일반"},
@@ -56728,30 +56901,48 @@ function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, sho
       </div>
 
       {/* 검색바 + 작업 버튼 */}
-      <div className="flex flex-wrap items-center gap-2.5 mb-4">
-        <div className="flex items-center h-12 flex-1 min-w-[420px] max-w-[720px] rounded-[16px] bg-white border border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_8px_20px_rgba(16,24,40,0.05)] focus-within:border-[#4B6CB7] focus-within:ring-4 focus-within:ring-[#4B6CB7]/10 overflow-hidden">
-          <CustomSelect className="h-full pl-4 pr-2 bg-transparent text-[13.5px] font-black text-[#0F1A30] outline-none border-r border-[#EEF1F6] cursor-pointer"
+      <div className={`flex flex-wrap items-center ${mobile ? "gap-2 mb-3" : "gap-2.5 mb-4"}`}>
+        <div className={`flex items-center h-12 flex-1 ${mobile ? "w-full min-w-0 basis-full" : "min-w-[420px] max-w-[720px]"} rounded-[16px] bg-white border border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_8px_20px_rgba(16,24,40,0.05)] focus-within:border-[#4B6CB7] focus-within:ring-4 focus-within:ring-[#4B6CB7]/10 overflow-hidden`}>
+          <CustomSelect className={`h-full ${mobile ? "pl-3 pr-1 text-[14px] shrink-0" : "pl-4 pr-2 text-[13.5px]"} bg-transparent font-black text-[#0F1A30] outline-none border-r border-[#EEF1F6] cursor-pointer`}
             value={qField} onChange={e => { setQField(e.target.value); setSearched(false); }}>
             {["전체","차량번호","기사명","연락처"].map(o => <option key={o} value={o}>{o}</option>)}
           </CustomSelect>
-          <svg className="ml-3 shrink-0 text-[#9AA9C3]" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="m21 21-5-5" /></svg>
+          <svg className={`${mobile ? "hidden" : "ml-3"} shrink-0 text-[#9AA9C3]`} width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="m21 21-5-5" /></svg>
           <input autoComplete="off"
             className="flex-1 min-w-0 h-full px-2.5 bg-transparent text-[14.5px] font-bold text-[#0F1A30] outline-none placeholder:text-[#A7B3C6] placeholder:font-medium"
-            placeholder="차량번호 · 기사명 · 연락처로 찾기 (Enter)"
+            placeholder={mobile ? "차량번호·기사명·연락처" : "차량번호 · 기사명 · 연락처로 찾기 (Enter)"}
             value={q}
             onChange={e => { setQ(e.target.value); setSearched(false); }}
             onKeyUp={e => { if (e.key==="Enter") setSearched(true); }}
           />
-          <button onClick={()=>setSearched(true)} className="h-9 mr-1.5 px-5 rounded-[12px] bg-[#0F1A30] text-white text-[13.5px] font-black hover:bg-[#1B2B4B]">검색</button>
+          <button onClick={()=>setSearched(true)} className={`h-9 mr-1.5 ${mobile ? "px-3.5 text-[14px]" : "px-5 text-[13.5px]"} shrink-0 rounded-[12px] bg-[#0F1A30] text-white font-black hover:bg-[#1B2B4B]`}>검색</button>
         </div>
-        <div className="flex items-center gap-1 h-12 px-1.5 rounded-[16px] bg-[#EEF2F8] border border-[#E3E8F0]">
+        {!mobile && <div className="flex items-center gap-1 h-12 px-1.5 rounded-[16px] bg-[#EEF2F8] border border-[#E3E8F0]">
           {["전체","일반","직영","지입","임대","블랙"].map(g => (
             <button key={g} onClick={() => { setGradeFilter(g); if (!(q.trim() && searched)) setShowAll(true); }}
               className={`h-9 px-3.5 rounded-[11px] text-[13px] font-black transition ${gradeFilter===g ? "bg-white text-[#0F1A30] shadow-[0_4px_10px_rgba(15,26,48,0.1)]" : "text-[#5B6B85] hover:text-[#0F1A30]"}`}>{g}</button>
           ))}
-        </div>
-        <span className="text-[13px] font-bold text-[#5B6B85] px-1 whitespace-nowrap">총 <b className="text-[#0F1A30] tabular-nums">{filtered.length}</b>명</span>
-        <div className="ml-auto flex items-center gap-2">
+        </div>}
+        <span className={`${mobile ? "text-[14px]" : "text-[13px]"} font-bold text-[#5B6B85] px-1 whitespace-nowrap`}>총 <b className="text-[#0F1A30] tabular-nums">{filtered.length}</b>명{mobile && selected.size > 0 && <> · 선택 <b className="text-[#2D4C82] tabular-nums">{selected.size}</b></>}</span>
+        {mobile && (
+          <div className="ml-auto flex items-center gap-1.5">
+            <button onClick={() => setShowAddForm(true)} className="h-11 px-3.5 rounded-[13px] text-[14px] font-black text-white whitespace-nowrap" style={{ background: "linear-gradient(120deg,#0F1A30,#2D4C82)" }}>+ 기사등록</button>
+            <button onClick={() => { setCleanupOpen(true); setCleanupQ(""); setCleanupQField("전체"); setCleanupSelected(new Set()); setCleanupDone(false); }} className="h-11 px-3 rounded-[13px] bg-white border border-[#E3E8F0] text-[#0F1A30] text-[14px] font-bold whitespace-nowrap">기사정리</button>
+            <button onClick={removeSelected} className="h-11 px-3 rounded-[13px] bg-white border border-[#0F1A30] text-[#0F1A30] text-[14px] font-black whitespace-nowrap">선택삭제</button>
+          </div>
+        )}
+        {mobile && selected.size > 0 && (
+          <div className="basis-full flex items-center gap-2 rounded-[14px] bg-[#EEF3FC] border border-[#C9D6EE] px-3 py-2">
+            <span className="text-[14px] font-black text-[#1B2B4B]">선택 {selected.size}명</span>
+            <button type="button" onClick={() => setSelected(new Set())} className="h-9 px-3 rounded-lg bg-white border border-[#DCE3EE] text-[14px] font-bold text-[#3A4A66]">선택 해제</button>
+            <button type="button" onClick={() => setGuideFor(drivers.filter((d) => selected.has(d.id)))} className="ml-auto h-9 px-3 rounded-lg bg-[#1B2B4B] text-white text-[14px] font-black">앱 안내 보내기</button>
+          </div>
+        )}
+        {!mobile && <div className="ml-auto flex items-center gap-2">
+          <button type="button" className={GUIDE_BTN} title="선택한 기사님(없으면 지입·직영·임대 전체)에게 기사앱 설치 안내를 보냅니다"
+            onClick={() => { const sel = drivers.filter((d) => selected.has(d.id)); const list = sel.length ? sel : filtered.filter((d) => isFleetGrade(d.등급)); if (!list.length) { showAlert("안내를 보낼 기사님을 선택해 주세요."); return; } setGuideFor(list); }}>
+            앱 안내 보내기{selected.size ? ` (${selected.size})` : ""}
+          </button>
           <button onClick={() => setShowAddForm(true)}
             className="h-11 px-4 rounded-[13px] text-[13.5px] font-black text-white shadow-[0_10px_22px_rgba(15,26,48,0.25)] hover:brightness-110 transition" style={{ background: "linear-gradient(120deg,#0F1A30,#2D4C82)" }}>
             + <EditableText id="driver.toolbar.기사등록" defaultText="기사 등록" />
@@ -56789,18 +56980,18 @@ function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, sho
           <button onClick={removeSelected} className="h-11 px-4 rounded-[13px] bg-white border border-[#0F1A30] text-[#0F1A30] text-[13px] font-black hover:bg-[#0F1A30] hover:text-white transition">
             <EditableText id="driver.toolbar.선택삭제" defaultText="선택 삭제" />
           </button>
-        </div>
+        </div>}
       </div>
 
       {/* 신규 등록 팝업 */}
       {showAddForm && (
         <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/40">
-          <div className="bg-white rounded-2xl shadow-2xl w-[600px] overflow-hidden" onClick={e => e.stopPropagation()}>
+          <div className="bg-white rounded-2xl shadow-2xl w-[600px] max-w-[94vw] max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
             <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between">
               <h3 className="text-white font-bold text-[15px]"><EditableText id="driver.addPopup.title" defaultText="신규 기사 등록" /></h3>
               <button onClick={() => setShowAddForm(false)} className="text-white/60 hover:text-white text-xl leading-none">✕</button>
             </div>
-            <div className="px-6 py-5 grid grid-cols-2 gap-4">
+            <div className={`${mobile ? "px-4 grid-cols-1" : "px-6 grid-cols-2"} py-5 grid gap-4`}>
               {[
                 {label:"차량번호 *", key:"차량번호", placeholder:"예: 서울12가3456", border:"border-[#1B2B4B]"},
                 {label:"이름", key:"이름", placeholder:"기사명"},
@@ -56944,7 +57135,76 @@ function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, sho
               </div>
             </div>
           )}
-          {(showAll || searched) && (
+          {/* ⭐ 2026-11-06 모바일 — 카드 목록(누르면 상세 시트 · 수정·전화·앱 안내·삭제) */}
+          {mobile && (showAll || searched) && (
+            <div className="flex flex-col gap-2">
+              <label className="flex items-center gap-2 px-1 text-[14px] font-bold text-[#3A4A66]">
+                <input type="checkbox" className="w-5 h-5" onChange={toggleAll} checked={filtered.length > 0 && selected.size === filtered.length} />
+                전체 선택
+              </label>
+              {paged.length === 0 && <div className="rounded-[18px] bg-white border border-[#E3E8F0] py-14 text-center text-[14px] font-bold text-[#5B6B85]">{q.trim() ? "검색 결과가 없습니다." : "데이터가 없습니다."}</div>}
+              {paged.map((r) => {
+                const g = r.등급 || "일반";
+                const fleet = g === "지입" || g === "직영" || g === "임대";
+                const on = selected.has(r.id);
+                const sent = guideSentLabel(r);
+                return (
+                  <div key={r.id} role="button" tabIndex={0} onClick={() => setMSheet(r)}
+                    className={`rounded-[18px] bg-white border px-3.5 py-3 ${on ? "border-[#2D4C82] ring-2 ring-[#2D4C82]/20" : g === "블랙" ? "border-gray-300 bg-gray-50" : "border-[#E3E8F0]"}`}>
+                    <div className="flex items-center gap-2.5">
+                      <input type="checkbox" className="w-5 h-5 shrink-0" checked={on} onClick={(e) => e.stopPropagation()} onChange={() => toggleOne(r.id)} />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="text-[16px] font-black text-[#0F1A30] break-all">{r.차량번호 || "-"}</span>
+                          <span className="text-[15px] font-bold text-[#0F1A30] break-all">{r.이름 || "-"}</span>
+                          <span className={`px-2 py-0.5 rounded-lg text-[14px] font-bold ${gradeBadge(g)}`}>{g}</span>
+                        </div>
+                        <div className="mt-0.5 text-[14px] text-[#5B6B85] break-words">
+                          {formatPhone(r.전화번호) || "번호 없음"}{(r.차량톤수 || r.차량종류) ? ` · ${[r.차량톤수, r.차량종류].filter(Boolean).join(" ")}` : ""}{fleet && r.담당자?.name ? ` · 담당 ${r.담당자.name}` : ""}
+                        </div>
+                        {(r.메모 || sent) && <div className="mt-0.5 text-[14px] text-[#3A4A66] break-words">{r.메모 ? `메모 ${r.메모}` : ""}{r.메모 && sent ? " · " : ""}{sent ? `앱 안내 ${sent}` : ""}</div>}
+                      </div>
+                      <svg className="shrink-0 text-[#9AA9C3]" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><path d="m9 6 6 6-6 6" /></svg>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+          {mobile && mSheet && (() => {
+            const r = drivers.find((d) => d.id === mSheet.id) || mSheet;
+            const g = r.등급 || "일반";
+            const fleet = g === "지입" || g === "직영" || g === "임대";
+            const ph = String(r.전화번호 || "").replace(/\D/g, "");
+            const rows = [["차량번호", r.차량번호], ["이름", r.이름], ["전화번호", formatPhone(r.전화번호)], ["등급", g], ["차량", [r.차량톤수, r.차량종류].filter(Boolean).join(" ")], ["등록일", displayRegDate(r)],
+              ...(fleet ? [["담당자", r.담당자?.name], ["거주지", r.거주지], ["근무요일", Array.isArray(r.근무요일) ? r.근무요일.join(",") : ""], ["요청사항", r.요청사항]] : []),
+              ["메모", r.메모], ["메모 팝업", (r.메모 || "").trim() ? (g === "블랙" || r.팝업표시 === true ? "ON" : "OFF") : ""], ["앱 안내", guideSentLabel(r)]].filter(([, v]) => String(v || "").trim());
+            return (
+              <div className="fixed inset-0 z-[99990] bg-[#0B1428]/50 flex items-end" onClick={() => setMSheet(null)}>
+                <div className="w-full max-h-[88vh] overflow-y-auto rounded-t-[22px] bg-white" onClick={(e) => e.stopPropagation()}>
+                  <div className="px-4 py-4 text-white flex items-start gap-3" style={{ background: "linear-gradient(120deg,#0B1428,#1B2B4B 70%,#2D4C82)" }}>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-[13px] font-extrabold tracking-[0.14em] text-[#8FB0F0]">DRIVER</div>
+                      <div className="text-[19px] font-black break-all">{r.차량번호 || "-"} · {r.이름 || "-"}</div>
+                    </div>
+                    <button type="button" onClick={() => setMSheet(null)} className="h-10 px-4 rounded-xl bg-white text-[#0F1A30] text-[14px] font-black shrink-0">닫기</button>
+                  </div>
+                  <div className="px-4 py-3 divide-y divide-[#EEF1F6]">
+                    {rows.map(([k, v]) => (
+                      <div key={k} className="py-2 flex gap-3"><span className="w-[78px] shrink-0 text-[14px] font-bold text-[#5B6B85]">{k}</span><span className="flex-1 min-w-0 text-[15px] font-bold text-[#0F1A30] break-words whitespace-pre-wrap">{v}</span></div>
+                    ))}
+                  </div>
+                  <div className="kp-sheet-grid px-4 pb-24 pt-1 grid grid-cols-2 gap-2">
+                    <button type="button" onClick={() => { setMSheet(null); setEditDriverModal({ ...r }); }} className="h-12 rounded-2xl text-white text-[15px] font-black" style={{ background: "linear-gradient(120deg,#0F1A30,#2D4C82)" }}>수정</button>
+                    <button type="button" onClick={() => { setMSheet(null); setGuideFor([r]); }} className="h-12 rounded-2xl bg-[#EEF3FC] border border-[#C9D6EE] text-[#1B2B4B] text-[15px] font-black">앱 안내 보내기</button>
+                    {ph ? <a href={`tel:${ph}`} className="h-12 rounded-2xl bg-white border border-[#DCE3EE] text-[#0F1A30] text-[15px] font-black flex items-center justify-center">전화</a> : <span className="h-12 rounded-2xl bg-[#F3F6FA] text-[#9AA9C3] text-[15px] font-black flex items-center justify-center">번호 없음</span>}
+                    <button type="button" onClick={async () => { if (!await kpConfirm(`${r.이름 || r.차량번호} 기사님을 삭제할까요?`)) return; setMSheet(null); await removeDriver(r.id); }} className="h-12 rounded-2xl bg-white border border-[#0F1A30] text-[#0F1A30] text-[15px] font-black">삭제</button>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+          {!mobile && (showAll || searched) && (
             <div className="bg-white rounded-[22px] border border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_12px_30px_rgba(16,24,40,0.07)] overflow-hidden">
               <table className="w-full text-[13px]">
                 <thead>
@@ -57023,7 +57283,13 @@ function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, sho
                             </span>
                           )}
                         </td>
-                        <td className="px-3 py-2.5 text-center">
+                        <td className="px-3 py-2.5 text-center whitespace-nowrap">
+                          {/* ⭐ 2026-11-06 지입·직영·임대 기사님 — 기사앱 안내 보내기(보낸 시각은 마우스를 올리면) */}
+                          {(grade==="지입"||grade==="직영"||grade==="임대") && (
+                            <button type="button" title={guideSentLabel(r) ? `지난 안내 ${guideSentLabel(r)}` : "기사앱 설치 안내 보내기"}
+                              className={`mr-1 px-2.5 py-1 rounded-lg text-[12px] font-bold border transition ${guideSentLabel(r) ? "bg-[#EEF3FC] border-[#C9D6EE] text-[#1B2B4B]" : "bg-white border-[#2D4C82] text-[#1B2B4B] hover:bg-[#EEF3FC]"}`}
+                              onClick={(e) => { e.stopPropagation(); setGuideFor([r]); }}>{guideSentLabel(r) ? "안내 보냄" : "앱 안내"}</button>
+                          )}
                           <button
                             className="px-3 py-1 rounded-lg bg-red-600 text-white text-[11px] font-bold hover:bg-red-700 transition"
                             onClick={(e)=>{ e.stopPropagation(); if(window.confirm("삭제하시겠습니까?")) removeDriver(docId); }}>
@@ -57056,6 +57322,7 @@ function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, sho
         </div>
       </div>
 
+      {guideFor && <DriverGuideSendModal drivers={guideFor} company={userCompany} onClose={() => setGuideFor(null)} />}
       {/* ===== 기사 수정 팝업 (더블클릭) ===== */}
       {editDriverModal && (
         <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/40">
@@ -57064,7 +57331,7 @@ function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, sho
               <h3 className="text-white font-bold text-[15px]">기사 수정 — {editDriverModal.차량번호}{(editDriverModal.등급 === "지입" || editDriverModal.등급 === "직영" || editDriverModal.등급 === "임대") ? <span className="ml-2 px-2 py-0.5 rounded-md bg-white/15 text-[11.5px] font-black">{editDriverModal.등급}</span> : null}</h3>
               <button onClick={() => setEditDriverModal(null)} className="text-white/60 hover:text-white text-xl">✕</button>
             </div>
-            <div className="px-6 py-5 grid grid-cols-2 gap-4">
+            <div className={`${mobile ? "px-4 grid-cols-1" : "px-6 grid-cols-2"} py-5 grid gap-4`}>
               <div>
                 <label className="block text-[12px] font-semibold text-gray-500 mb-1">차량번호 *</label>
                 <input autoComplete="off" className="border border-gray-200 rounded-lg px-3 py-2 text-[13px] w-full focus:border-[#1B2B4B] outline-none"
@@ -57206,7 +57473,7 @@ function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, sho
       {/* ===== 기사정리 팝업 ===== */}
       {cleanupOpen && (
         <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/50">
-          <div className="bg-white rounded-2xl shadow-2xl w-[820px] max-h-[85vh] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
+          <div className="bg-white rounded-2xl shadow-2xl w-[820px] max-w-[96vw] max-h-[85vh] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
             {/* 헤더 */}
             <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between shrink-0">
               <div>
@@ -57225,8 +57492,8 @@ function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, sho
               ))}
             </div>
             {/* 검색바 */}
-            <div className="px-5 py-3 border-b border-gray-100 flex items-center gap-2 shrink-0">
-              <div className="flex items-center border-2 border-[#1B2B4B] rounded-lg overflow-hidden h-[34px]">
+            <div className="px-5 py-3 border-b border-gray-100 flex flex-wrap items-center gap-2 shrink-0">
+              <div className="flex items-center border-2 border-[#1B2B4B] rounded-lg overflow-hidden h-[34px] max-w-full">
                 <CustomSelect className="px-2 h-full text-[13px] bg-[#1B2B4B]/5 border-r border-[#1B2B4B]/30 outline-none text-[#1B2B4B] font-semibold"
                   value={cleanupQField} onChange={e => setCleanupQField(e.target.value)}>
                   <option value="전체">전체</option>
@@ -57234,7 +57501,7 @@ function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, sho
                   <option value="기사명">기사명</option>
                   <option value="연락처">연락처</option>
                 </CustomSelect>
-                <input autoComplete="off" className="px-3 h-full text-[13px] w-44 outline-none"
+                <input autoComplete="off" className="px-3 h-full text-[13px] w-44 min-w-0 outline-none"
                   placeholder="검색어 입력..."
                   value={cleanupQ}
                   onChange={e => setCleanupQ(e.target.value)} />
@@ -57587,18 +57854,19 @@ function KpStatTile({ on, en, label, value, onClick }) {
     </button>
   );
 }
-function KpSearchBar({ options, field, onField, value, onChange, onSearch, placeholder }) {
+function KpSearchBar({ options, field, onField, value, onChange, onSearch, placeholder, mobile = false }) {
+  // ⭐ 2026-11-06 mobile — 휴대폰 폭에서는 한 줄 전체(최소 폭 없음) · [검색] 버튼이 항상 보이게
   return (
-    <div className="flex items-center h-12 flex-1 min-w-[380px] max-w-[680px] rounded-[16px] bg-white border border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_8px_20px_rgba(16,24,40,0.05)] focus-within:border-[#4B6CB7] focus-within:ring-4 focus-within:ring-[#4B6CB7]/10 overflow-hidden">
+    <div className={`flex items-center h-12 flex-1 ${mobile ? "w-full min-w-0 basis-full" : "min-w-[380px] max-w-[680px]"} rounded-[16px] bg-white border border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_8px_20px_rgba(16,24,40,0.05)] focus-within:border-[#4B6CB7] focus-within:ring-4 focus-within:ring-[#4B6CB7]/10 overflow-hidden`}>
       {options && (
-        <CustomSelect className="h-full pl-4 pr-2 bg-transparent text-[13.5px] font-black text-[#0F1A30] outline-none border-r border-[#EEF1F6] cursor-pointer" value={field} onChange={(e) => onField(e.target.value)}>
+        <CustomSelect className={`h-full ${mobile ? "pl-3 pr-1 text-[14px] shrink-0" : "pl-4 pr-2 text-[13.5px]"} bg-transparent font-black text-[#0F1A30] outline-none border-r border-[#EEF1F6] cursor-pointer`} value={field} onChange={(e) => onField(e.target.value)}>
           {options.map((o) => <option key={o} value={o}>{o}</option>)}
         </CustomSelect>
       )}
-      <svg className="ml-3 shrink-0 text-[#9AA9C3]" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="m21 21-5-5" /></svg>
+      <svg className={`${mobile ? "hidden" : "ml-3"} shrink-0 text-[#9AA9C3]`} width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="m21 21-5-5" /></svg>
       <input autoComplete="off" className="flex-1 min-w-0 h-full px-2.5 bg-transparent text-[14.5px] font-bold text-[#0F1A30] outline-none placeholder:text-[#A7B3C6] placeholder:font-medium"
         placeholder={placeholder} value={value} onChange={(e) => onChange(e.target.value)} onKeyUp={(e) => { if (e.key === "Enter") onSearch(); }} />
-      <button onClick={onSearch} className="h-9 mr-1.5 px-5 rounded-[12px] bg-[#0F1A30] text-white text-[13.5px] font-black hover:bg-[#1B2B4B]">검색</button>
+      <button onClick={onSearch} className={`h-9 mr-1.5 ${mobile ? "px-3.5 text-[14px]" : "px-5 text-[13.5px]"} shrink-0 rounded-[12px] bg-[#0F1A30] text-white font-black hover:bg-[#1B2B4B]`}>검색</button>
     </div>
   );
 }
@@ -57613,7 +57881,9 @@ function KpEmptySearch({ en, title, sub }) {
   );
 }
 
-function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlace, places: placesProp = [], showAlert = (m) => alert(m), hideTabs = false, initialTab = "하차지", userCompany = "" }) {
+function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlace, places: placesProp = [], showAlert = (m) => alert(m), hideTabs = false, initialTab = "하차지", userCompany = "", mobile = false }) {
+  // ⭐ 2026-11-06 mobile — 모바일 앱 거래처관리: 버튼은 신규등록·거래처정리·선택삭제만, 표 대신 카드(누르면 상세 시트)
+  const [mSheet, setMSheet] = React.useState(null); // { kind: "place"|"client", r }
   const normalizePlaceRow = (d) => {
     const primary = Array.isArray(d.contacts) && d.contacts.length
       ? d.contacts.find(c => c.isPrimary) || d.contacts[0] : null;
@@ -57749,7 +58019,7 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
   // 기본 거래처
   // ═══════════════════════════════════════════════════
   const [q, setQ] = React.useState("");
-  const [showAllClients, setShowAllClients] = React.useState(false);
+  const [showAllClients, setShowAllClients] = React.useState(mobile); // ⭐ 2026-11-06 모바일은 처음부터 전체 목록(전체보기 버튼 없음)
   const [rows, setRows] = React.useState(() => (clients || []).map((c) => ({ ...c })));
   // 사업자등록증 OCR 스캔 팝업 — 열려있는 동안 스캔 대상 이미지를 들고 있는다
   const [ocrScanImage, setOcrScanImage] = React.useState(null);
@@ -58574,25 +58844,25 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
 
           {/* 검색 + 버튼 바 */}
           <div className="flex flex-wrap items-center gap-2">
-            <KpSearchBar options={["업체명", "주소"]} field={placeFilterType} onField={setPlaceFilterType}
+            <KpSearchBar mobile={mobile} options={["업체명", "주소"]} field={placeFilterType} onField={setPlaceFilterType}
               value={placeQ} onChange={(v) => { setPlaceQ(v); setPlaceSearched(false); }} onSearch={() => setPlaceSearched(true)}
-              placeholder="상하차지 업체명 · 주소로 찾기 (Enter)" />
+              placeholder={mobile ? "업체명·주소" : "상하차지 업체명 · 주소로 찾기 (Enter)"} />
             {(placeSearched || placeGradeFilter !== "전체") && (
               <span className="text-[13px] font-bold text-[#5B6B85] px-1 whitespace-nowrap">검색결과 <b className="text-[#0F1A30] tabular-nums">{filteredPlaces.length}</b>건</span>
             )}
             {placeSelInView > 0 && (
               <span className="text-[13px] font-bold text-[#5B6B85] px-1 whitespace-nowrap">선택 <b className="text-[#2D4C82] tabular-nums">{placeSelInView.toLocaleString()}</b>건</span>
             )}
-            <div className="ml-auto flex items-center gap-2">
+            <div className={`ml-auto flex items-center ${mobile ? "gap-1.5" : "gap-2"}`}>
               <button onClick={() => setShowNewPlaceForm(true)}
                 className={KP_BTN_PRIMARY} style={KP_BTN_PRIMARY_BG}>
                 + <EditableText id="client.dropPlace.toolbar.신규등록" defaultText="신규등록" />
               </button>
-              <button type="button" onClick={() => setClientBulkKind("place")} className={`${KP_BTN} cursor-pointer inline-flex items-center`}>
+              {!mobile && <button type="button" onClick={() => setClientBulkKind("place")} className={`${KP_BTN} cursor-pointer inline-flex items-center`}>
                 <EditableText id="client.dropPlace.toolbar.엑셀업로드" defaultText="대용량 업로드" />
-              </button>
-              <button onClick={downloadPlaceExcel}
-                className={KP_BTN}><EditableText id="client.dropPlace.toolbar.다운로드" defaultText="다운로드" /></button>
+              </button>}
+              {!mobile && <button onClick={downloadPlaceExcel}
+                className={KP_BTN}><EditableText id="client.dropPlace.toolbar.다운로드" defaultText="다운로드" /></button>}
               <button onClick={() => { setPlaceDupOpen(true); setPlaceDupDone(false); setPlaceDupSelected(new Set()); }}
                 className={KP_BTN}>
                 <EditableText id="client.dropPlace.toolbar.거래처정리" defaultText="거래처정리" />
@@ -58668,8 +58938,35 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
             <div className="bg-white rounded-xl border text-center py-14 text-gray-500 text-sm">검색 결과가 없습니다</div>
           )}
 
+          {/* ⭐ 2026-11-06 모바일 — 카드 목록(누르면 상세 시트) */}
+          {mobile && filteredPlaces.length > 0 && (
+            <div className="flex flex-col gap-2">
+              <label className="flex items-center gap-2 px-1 text-[14px] font-bold text-[#3A4A66]"><KpCheckbox onChange={togglePlaceAll} checked={placeAllChecked} indeterminate={placeSelInView > 0} />전체 선택 · {filteredPlaces.length.toLocaleString()}건</label>
+              {sortedPlaces.slice(0, placeShowN).map((r, i) => {
+                const id = r.id || r.업체명 || `${i}`;
+                const grade = r.등급 || "일반";
+                return (
+                  <div key={id} role="button" tabIndex={0} onClick={() => setMSheet({ kind: "place", r })}
+                    className={`rounded-[16px] border px-3.5 py-3 ${placeSelected.has(id) ? "bg-[#EAF1FF] border-[#2D4C82]" : grade === "블랙" ? "bg-gray-100 border-gray-300" : grade === "주의" ? "bg-orange-50/60 border-[#E3E8F0]" : grade === "이탈" ? "bg-red-50/40 border-[#E3E8F0]" : "bg-white border-[#E3E8F0]"}`}>
+                    <div className="flex items-start gap-2.5">
+                      <span className="pt-0.5" onClick={(e) => e.stopPropagation()}><KpCheckbox checked={placeSelected.has(id)} onChange={() => togglePlaceOne(id)} /></span>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-1.5 flex-wrap"><span className="text-[15px] font-black text-[#0F1A30] break-words">{r.업체명 || "-"}</span>{grade !== "일반" && <span className={`px-2 py-0.5 rounded text-[14px] font-bold ${등급색상(grade)}`}>{grade}</span>}</div>
+                        <div className="mt-0.5 text-[14px] text-[#3A4A66] break-words">{r.주소 || "주소 없음"}</div>
+                        {(r.담당자 || r.담당자번호) && <div className="mt-0.5 text-[14px] text-[#5B6B85] break-words">{[r.담당자, r.담당자번호].filter(Boolean).join(" · ")}{r._allContacts && r._allContacts.length > 1 ? ` 외 ${r._allContacts.length - 1}명` : ""}</div>}
+                        {(r.메모 || r.오더메모) && <div className="mt-0.5 text-[14px] text-[#5B6B85] break-words">{[r.메모 && `메모 ${r.메모}`, r.오더메모 && `오더메모 ${r.오더메모}`].filter(Boolean).join(" · ")}</div>}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+              {filteredPlaces.length > placeShowN && (
+                <button type="button" onClick={() => setPlaceShowN((n) => n + 300)} className="w-full h-11 rounded-[14px] bg-white border border-[#E3E8F0] text-[14px] font-black text-[#1B2B4B]">더 보기 ({placeShowN.toLocaleString()} / {filteredPlaces.length.toLocaleString()}건)</button>
+              )}
+            </div>
+          )}
           {/* 테이블 */}
-          {filteredPlaces.length > 0 && (
+          {!mobile && filteredPlaces.length > 0 && (
             <div className="bg-white rounded-xl border overflow-hidden shadow-sm">
               <div className="overflow-x-auto">
                 <table className="min-w-[900px] text-sm border-collapse w-full">
@@ -58974,14 +59271,20 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
 
           {/* 툴바 */}
           <div className="flex flex-wrap items-center gap-2">
-            <KpSearchBar value={q} onChange={setQ} onSearch={() => {}} placeholder="거래처명 · 사업자번호 · 담당자로 바로 찾기" />
+            <KpSearchBar mobile={mobile} value={q} onChange={setQ} onSearch={() => {}} placeholder={mobile ? "거래처명·사업자번호·담당자" : "거래처명 · 사업자번호 · 담당자로 바로 찾기"} />
             <span className="text-[13px] font-bold text-[#5B6B85] px-1 whitespace-nowrap"><b className="text-[#0F1A30] tabular-nums">{filtered.length}</b>건{clientSelInView > 0 && <> · 선택 <b className="text-[#2D4C82] tabular-nums">{clientSelInView}</b>건</>}</span>
-            <button
+            {mobile && (
+              <div className="ml-auto flex items-center gap-1.5">
+                <button onClick={() => setShowNewClientModal(true)} className={KP_BTN_PRIMARY} style={KP_BTN_PRIMARY_BG}>+ 신규등록</button>
+                <button onClick={removeSelectedFn} className={KP_BTN_DANGER}>선택삭제{selected.size > 0 && ` (${selected.size})`}</button>
+              </div>
+            )}
+            {!mobile && <button
               onClick={() => { setShowAllClients(v => !v); setQ(""); }}
               className={showAllClients ? "h-11 px-4 rounded-[13px] bg-[#0F1A30] text-white text-[13px] font-bold whitespace-nowrap" : KP_BTN}>
               {showAllClients ? <EditableText id="client.baseClient.toolbar.전체보기닫기" defaultText="전체보기 닫기" /> : <EditableText id="client.baseClient.toolbar.전체보기" defaultText="전체보기" />}
-            </button>
-            <div className="ml-auto flex flex-wrap items-center gap-2">
+            </button>}
+            {!mobile && <div className="ml-auto flex flex-wrap items-center gap-2">
               <button onClick={() => { setShowImportPopup(true); setImportQ(""); setImportSelected([]); }}
                 className={KP_BTN}>
                 <EditableText id="client.baseClient.toolbar.하차지에서불러오기" defaultText="상하차지에서 불러오기" />
@@ -59016,7 +59319,7 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
                 className={KP_BTN_PRIMARY} style={KP_BTN_PRIMARY_BG}>
                 + 신규등록
               </button>
-            </div>
+            </div>}
           </div>
 
           {/* 신규등록 팝업 */}
@@ -59309,8 +59612,32 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
             </div>
           )}
 
+          {/* ⭐ 2026-11-06 모바일 — 기본거래처 카드 목록(누르면 상세 시트) */}
+          {mobile && filtered.length > 0 && (
+            <div className="flex flex-col gap-2">
+              <label className="flex items-center gap-2 px-1 text-[14px] font-bold text-[#3A4A66]"><KpCheckbox onChange={toggleAll} checked={clientAllChecked} indeterminate={clientSelInView > 0} />전체 선택 · {filtered.length.toLocaleString()}건</label>
+              {sortedClients.map((r) => {
+                const id = r.id || r.거래처명;
+                return (
+                  <div key={id} role="button" tabIndex={0} onClick={() => setMSheet({ kind: "client", r })}
+                    className={`rounded-[16px] border px-3.5 py-3 ${selected.has(id) ? "bg-[#EAF1FF] border-[#2D4C82]" : "bg-white border-[#E3E8F0]"}`}>
+                    <div className="flex items-start gap-2.5">
+                      <span className="pt-0.5" onClick={(e) => e.stopPropagation()}><KpCheckbox checked={selected.has(id)} onChange={() => toggleOne(id)} /></span>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-1.5 flex-wrap"><span className="text-[15px] font-black text-[#0F1A30] break-words">{r.거래처명 || "-"}</span>{r.등급 && r.등급 !== "일반" && <span className="px-2 py-0.5 rounded bg-[#F3F6FA] text-[14px] font-bold text-[#0F1A30]">{r.등급}</span>}</div>
+                        <div className="mt-0.5 text-[14px] text-[#3A4A66] break-words">{[r.사업자번호, r.대표자 && `대표 ${r.대표자}`].filter(Boolean).join(" · ") || "사업자 정보 없음"}</div>
+                        {(r.담당자 || r.연락처) && <div className="mt-0.5 text-[14px] text-[#5B6B85] break-words">{[r.담당자, r.연락처].filter(Boolean).join(" · ")}</div>}
+                        {r.주소 && <div className="mt-0.5 text-[14px] text-[#5B6B85] break-words">{r.주소}</div>}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+          {mobile && !filtered.length && <div className="rounded-[16px] bg-white border border-[#E3E8F0] py-14 text-center text-[14px] font-bold text-[#5B6B85]">{q ? "검색 결과가 없습니다" : "등록된 거래처가 없습니다"}</div>}
           {/* 테이블 */}
-          {filtered.length > 0 ? (
+          {mobile ? null : filtered.length > 0 ? (
             <div className="bg-white rounded-xl border shadow-sm overflow-hidden">
               <div className="overflow-x-auto">
                 <table className="min-w-max text-sm border-collapse w-full">
@@ -59417,6 +59744,50 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
         </div>
       )}
 
+      {/* ⭐ 2026-11-06 모바일 상세 시트 — 상하차지·기본거래처 공용(수정·전화·삭제) */}
+      {mobile && mSheet && (() => {
+        const { kind, r } = mSheet;
+        const isPlace = kind === "place";
+        const id = isPlace ? (r.id || r.업체명) : (r.id || r.거래처명);
+        const ph = String((isPlace ? r.담당자번호 : r.연락처) || "").replace(/\D/g, "");
+        const rowsV = isPlace
+          ? [["업체명", r.업체명], ["주소", r.주소], ["담당자", r.담당자], ["담당자번호", r.담당자번호], ["등급", r.등급 || "일반"], ["일반메모", r.메모], ["오더메모", r.오더메모], ["안내사항", _hasRealDriverNotice(r.기사전달주의사항) ? "등록" : "미등록"]]
+          : [["거래처명", r.거래처명], ["사업자번호", r.사업자번호], ["대표자", r.대표자], ["업태", r.업태], ["종목", r.종목], ["주소", r.주소], ["이메일", r.이메일], ["담당자", r.담당자], ["연락처", r.연락처], ["등급", r.등급 || "일반"], ["일반메모", r.메모], ["오더메모", r.오더메모], ["안내사항", _hasRealDriverNotice(r.기사전달주의사항) ? "등록" : "미등록"]];
+        const openEdit = () => {
+          setMSheet(null);
+          if (isPlace) setEditPlaceModal({ ...r, contacts: Array.isArray(r._rawContacts) && r._rawContacts.length ? r._rawContacts : (r.담당자 ? [{ name: r.담당자, phone: r.담당자번호 || "", isPrimary: true }] : []), 기사전달주의사항: (r.기사전달주의사항 || "").trim() ? r.기사전달주의사항 : defaultDriverNoticeTemplate(r.업체명) });
+          else setEditClientModal({ ...r, contacts: Array.isArray(r.contacts) && r.contacts.length ? r.contacts : (r.담당자 ? [{ name: r.담당자, phone: r.연락처 || "", isPrimary: true }] : []), 기사전달주의사항: (r.기사전달주의사항 || "").trim() ? r.기사전달주의사항 : defaultDriverNoticeTemplate(r.거래처명) });
+        };
+        const del = async () => {
+          if (!await kpConfirm(`${isPlace ? r.업체명 : r.거래처명}을(를) 삭제할까요?`)) return;
+          setMSheet(null);
+          if (isPlace) await runDelete({ label: "하차지", task: async () => { await mergePlaceContactsIntoClient(r); await removePlace(id); } });
+          else await removeClient?.([id]);
+        };
+        return (
+          <div className="fixed inset-0 z-[99990] bg-[#0B1428]/50 flex items-end" onClick={() => setMSheet(null)}>
+            <div className="w-full max-h-[88vh] overflow-y-auto rounded-t-[22px] bg-white" onClick={(e) => e.stopPropagation()}>
+              <div className="px-4 py-4 text-white flex items-start gap-3" style={{ background: "linear-gradient(120deg,#0B1428,#1B2B4B 70%,#2D4C82)" }}>
+                <div className="flex-1 min-w-0">
+                  <div className="text-[13px] font-extrabold tracking-[0.14em] text-[#8FB0F0]">{isPlace ? "PLACE" : "CLIENT"}</div>
+                  <div className="text-[19px] font-black break-words">{isPlace ? r.업체명 : r.거래처명}</div>
+                </div>
+                <button type="button" onClick={() => setMSheet(null)} className="h-10 px-4 rounded-xl bg-white text-[#0F1A30] text-[14px] font-black shrink-0">닫기</button>
+              </div>
+              <div className="px-4 py-3 divide-y divide-[#EEF1F6]">
+                {rowsV.filter(([, v]) => String(v || "").trim()).map(([k, v]) => (
+                  <div key={k} className="py-2 flex gap-3"><span className="w-[84px] shrink-0 text-[14px] font-bold text-[#5B6B85]">{k}</span><span className="flex-1 min-w-0 text-[15px] font-bold text-[#0F1A30] break-words whitespace-pre-wrap">{v}</span></div>
+                ))}
+              </div>
+              <div className="kp-sheet-grid px-4 pb-24 pt-1 grid grid-cols-3 gap-2">
+                <button type="button" onClick={openEdit} className="h-12 rounded-2xl text-white text-[15px] font-black" style={{ background: "linear-gradient(120deg,#0F1A30,#2D4C82)" }}>수정</button>
+                {ph ? <a href={`tel:${ph}`} className="h-12 rounded-2xl bg-white border border-[#DCE3EE] text-[#0F1A30] text-[15px] font-black flex items-center justify-center">전화</a> : <span className="h-12 rounded-2xl bg-[#F3F6FA] text-[#9AA9C3] text-[15px] font-black flex items-center justify-center">번호 없음</span>}
+                <button type="button" onClick={del} className="h-12 rounded-2xl bg-white border border-[#0F1A30] text-[#0F1A30] text-[15px] font-black">삭제</button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
       {/* 하차지거래처 수정 팝업 */}
       {editPlaceModal && (
         <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/40">
@@ -60353,7 +60724,15 @@ function MyProfilePage({ user, todayStats, myStats, cardImage, setCardImage, car
 
 // ─────────── 회사관리 탭 래퍼 ───────────
 function CompanyManagementWrapper({ userCompany, role, userId, user, todayStats, myStats, cardImage, setCardImage, cardImageUploading, setCardImageUploading, showAlert }) {
-  const [tab, setTab] = React.useState("회사정보");
+  // ⭐ 2026-11-06 알림 팝업 [급여명세서 열기]·[사용 계획 제출] 등 — 다른 화면에서 이 탭으로 바로(kpCmTab)
+  //  (첫 값은 읽기만 하고 지우는 것은 effect에서 — 개발 모드 StrictMode가 초기값 함수를 두 번 불러도 값이 남게)
+  const peekCmTab = () => { try { return sessionStorage.getItem("kpCmTab") || ""; } catch { return ""; } };
+  const [tab, setTab] = React.useState(() => peekCmTab() || "회사정보");
+  React.useEffect(() => {
+    try { sessionStorage.removeItem("kpCmTab"); } catch { /* 무시 */ }
+    const h = () => { const v = peekCmTab(); if (v) { setTab(v); try { sessionStorage.removeItem("kpCmTab"); } catch { /* 무시 */ } } };
+    window.addEventListener("kp-cm-tab", h); return () => window.removeEventListener("kp-cm-tab", h);
+  }, []);
   // ⭐ 2026-10-31 인사관리부는 마스터(회사 첫 가입자)·인사관리자만. 인사관리자는 상단 [인사관리부] 안에 다 있으므로 여기서는 뺀다
   const myDocCM = useMyProfile(user?.uid);
   // ⭐ 2026-11-01 마스터는 인사 담당자(인사관리자·경리+인사·인사 부서)가 없을 때만 인사관리부 — 생기면 자동으로 넘어간다
@@ -60362,10 +60741,15 @@ function CompanyManagementWrapper({ userCompany, role, userId, user, todayStats,
   const tabs0 = role === "hrManager" ? ["회사정보", "조직도", "내정보", "내 이력서"] : canViewHR ? ["회사정보", "조직도", "내정보", "내 이력서", "출근기록부", "인사관리부"] : ["회사정보", "조직도", "내정보", "내 이력서", "출근기록부"];
   // ⭐ 2026-11-02 운임규칙 — 최고관리자가 이 회사에 켜 준 경우에만(관리자센터 › 회사별 맞춤 기능). 회사 직원 누구나 보고 고친다(조회전용은 보기만)
   const fareCM = useFareRules(getTenant() || userCompany);
-  const tabs = !fareCM.feature || role === "driver" || role === "shipper" ? tabs0 : [...tabs0.slice(0, 2), "운임 규칙", ...tabs0.slice(2)];
+  const tabs1 = !fareCM.feature || role === "driver" || role === "shipper" ? tabs0 : [...tabs0.slice(0, 2), "운임 규칙", ...tabs0.slice(2)];
+  // ⭐ 2026-11-06 내 급여명세서·연차 사용 계획(누구나 본인 것) · 급여관리(급여 권한) · 연차 사용 촉진(인사·경리)
+  const payCM = usePayrollAccess(userCompany, user?.uid, role, user?.email || "");
+  const staffCM = role !== "driver" && role !== "shipper";
+  const tabs = [...tabs1, ...(staffCM ? ["급여명세서", "연차 사용 계획"] : []), ...(staffCM && payCM.canView ? ["급여관리"] : []), ...(staffCM && payCM.leaveViewer ? ["연차 사용 촉진"] : [])];
 
   // ⭐ 디자인 개편 — 관리자메뉴와 같은 왼쪽 메뉴바 + 상단 인사 카드(AdminShell 공용 레이아웃)
-  const TAB_ICONS = { 회사정보: "building", 조직도: "users", "운임 규칙": "money", 내정보: "user", "내 이력서": "idcard", 출근기록부: "clock", 인사관리부: "idcard" };
+  const TAB_ICONS = { 회사정보: "building", 조직도: "users", "운임 규칙": "money", 내정보: "user", "내 이력서": "idcard", 출근기록부: "clock", 인사관리부: "idcard", 급여명세서: "receipt", "연차 사용 계획": "flag", 급여관리: "money", "연차 사용 촉진": "bell" };
+  const payFallback = <div className="py-24 text-center text-[14px] font-bold text-[#9AA9C3]">불러오는 중…</div>;
   const won = (n) => `${Math.round(Number(n) || 0).toLocaleString()}원`;
   const myName = user?.displayName || (user?.email || "").split("@")[0] || "";
   return (
@@ -60391,6 +60775,10 @@ function CompanyManagementWrapper({ userCompany, role, userId, user, todayStats,
       {/* ⭐ 2026-11-02 운임규칙 — 회사관리 › 운임 규칙 */}
       {tab === "운임 규칙" && fareCM.feature && <FareRulesSettings company={userCompany} canEdit={role !== "viewer"} myName={myDocCM?.name || myName} />}
       {tab === "내 이력서" && <HRManagementPage userCompany={userCompany} role={role} userId={userId} selfOnly />}
+      {tab === "급여명세서" && <React.Suspense fallback={payFallback}><MyPayslipsLazy company={userCompany} uid={user?.uid} /></React.Suspense>}
+      {tab === "연차 사용 계획" && <React.Suspense fallback={payFallback}><MyLeavePlanLazy company={userCompany} uid={user?.uid} /></React.Suspense>}
+      {tab === "급여관리" && payCM.canView && <React.Suspense fallback={payFallback}><PayrollCenterLazy company={userCompany} role={role} /></React.Suspense>}
+      {tab === "연차 사용 촉진" && payCM.leaveViewer && <React.Suspense fallback={payFallback}><LeavePromotionLazy company={userCompany} canManage={payCM.leaveManager} /></React.Suspense>}
       {tab === "내정보" && (
         <MyProfilePage
           user={user}
@@ -61269,7 +61657,7 @@ function PCERPPage({ userCompany = "", drivers = [], clients = [], places = [], 
   const monthRevenue = monthOrders.reduce((s,o)=>s+Number(o.청구운임||0),0);
   const monthDriverFee = monthOrders.reduce((s,o)=>s+Number(o.기사운임||0),0);
 
-  // ── 급여관리 ──
+  // ── 기사 운임 집계(⭐ 2026-11-06 "급여관리"에서 이름 변경 — 직원 급여 계산과 혼동 방지) ──
   const [payYear, setPayYear] = React.useState(now.getFullYear());
   const [payMonth, setPayMonth] = React.useState(now.getMonth()+1);
   const payMonthStr = `${payYear}-${String(payMonth).padStart(2,"0")}`;
@@ -61398,7 +61786,7 @@ function PCERPPage({ userCompany = "", drivers = [], clients = [], places = [], 
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"/></svg> ERP 목록으로
         </button>
         <div className="flex items-center gap-4 mb-5">
-          <h3 className="text-[17px] font-bold text-gray-900"><EditableText id="hr.erp.payroll.title" defaultText="급여관리" /></h3>
+          <h3 className="text-[17px] font-bold text-gray-900"><EditableText id="hr.erp.payroll.title" defaultText="기사 운임 집계" /></h3>
           <div className="flex items-center gap-1.5">
             <button onClick={()=>{let m=payMonth-1,y=payYear;if(m<1){m=12;y--;}setPayMonth(m);setPayYear(y);}} className="w-7 h-7 border border-gray-200 rounded-lg flex items-center justify-center hover:bg-gray-50">
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#374151" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
@@ -61462,7 +61850,7 @@ function PCERPPage({ userCompany = "", drivers = [], clients = [], places = [], 
         <ERPCard title="직원관리" icon="◆" sub="임직원 현황 및 권한" onClick={()=>setSubPage("직원관리")} />
         <ERPCard title="차량관리" icon="▸" sub={`등록 차량 ${drivers.length}대`} badge={drivers.length} onClick={()=>setSubPage("차량관리")} />
         <ERPCard title="거래처관리" icon="◆" sub={`거래처 ${allClients.length}곳`} badge={allClients.length} onClick={()=>setSubPage("거래처관리")} />
-        <ERPCard title="급여관리" icon="₩" sub="월별 기사 운임 정산" onClick={()=>setSubPage("급여관리")} />
+        <ERPCard title="기사 운임 집계" icon="₩" sub="월별 기사 운임 집계 (직원 급여는 경리 › 급여 계산)" onClick={()=>setSubPage("급여관리")} />
         <ERPCard title="근태관리" icon="▤" sub="준비 중" onClick={()=>{}} />
         <ERPCard title="운행일지" icon="●" sub="준비 중" onClick={()=>{}} />
       </div>
@@ -62224,7 +62612,7 @@ export function PcDriverMobile({ drivers = [], userCompany = "", role = "", isVi
     if (!ids.length) return;
     return deleteDocsAtomic(db, ids.map((id) => doc(db, COLL.drivers, id)), { label: "기사" });
   }, []);
-  return <DriverManagement drivers={drivers} upsertDriver={isViewer ? _mViewerBlock : upsert} removeDriver={isViewer ? _mViewerBlock : remove} showAlert={(m) => window.alert(m)} userCompany={userCompany} grade={grade} onGrade={setGrade} />;
+  return <DriverManagement mobile drivers={drivers} upsertDriver={isViewer ? _mViewerBlock : upsert} removeDriver={isViewer ? _mViewerBlock : remove} showAlert={(m) => window.alert(m)} userCompany={userCompany} grade={grade} onGrade={setGrade} />;
 }
 export function PcClientMobile({ clients = [], places = [], userCompany = "", role = "", isViewer = false, initialTab = "하차지" }) {
   const upsert = React.useCallback((c) => pcUpsertClient({ role, userCompany, places }, c), [role, userCompany, places]);
@@ -62233,16 +62621,19 @@ export function PcClientMobile({ clients = [], places = [], userCompany = "", ro
     if (!ids.length) return;
     return deleteDocsAtomic(db, ids.map((id) => doc(db, COLL.clients, id)), { label: "거래처" });
   }, []);
-  return <ClientManagement key={initialTab} clients={clients} upsertClient={isViewer ? _mViewerBlock : upsert} removeClient={isViewer ? _mViewerBlock : remove} upsertPlace={isViewer ? _mViewerBlock : upsertPlace}
+  return <ClientManagement mobile key={initialTab} clients={clients} upsertClient={isViewer ? _mViewerBlock : upsert} removeClient={isViewer ? _mViewerBlock : remove} upsertPlace={isViewer ? _mViewerBlock : upsertPlace}
     places={places} showAlert={(m) => window.alert(m)} initialTab={initialTab} hideTabs userCompany={userCompany} />;
 }
 // 📊 경리 › 회계관리 — 회계 개요(시각화) · 회계 장부(미수·지급·부가세·원가) · 퇴직 정산
-function AccountingWorkspace({ company, fixedRows = [], clients = [], isViewer = false }) {
+function AccountingWorkspace({ company, fixedRows = [], clients = [], isViewer = false, role = "" }) {
   const [tab, setTab] = React.useState("overview");
   const yearRows = useYearOrders(company, fixedRows);
+  // ⭐ 2026-11-06 직원 급여 계산(급여관리 권한 — payrollAccess.js)
+  const payAcc = usePayrollAccess(company, auth.currentUser?.uid || "preview", role, auth.currentUser?.email || "");
   return (
     <KpSubNav code="ACCOUNTING" title="회계관리" icon="money" active={tab} onSelect={setTab}
-      items={[{ key: "overview", label: "회계 개요", en: "OVERVIEW", icon: "chart" }, { key: "book", label: "회계 장부", en: "LEDGER", icon: "sheet" }, { key: "retire", label: "퇴직 정산", en: "RETIREMENT", icon: "user" }]}>
+      items={[{ key: "overview", label: "회계 개요", en: "OVERVIEW", icon: "chart" }, { key: "book", label: "회계 장부", en: "LEDGER", icon: "sheet" }, ...(payAcc.canView ? [{ key: "payroll", label: "급여 계산", en: "PAYROLL", icon: "money" }] : []), { key: "retire", label: "퇴직 정산", en: "RETIREMENT", icon: "user" }]}>
+      {tab === "payroll" && payAcc.canView && <React.Suspense fallback={<div className="py-24 text-center text-[14px] font-bold text-[#9AA9C3]">급여 화면 불러오는 중…</div>}><PayrollCenterLazy company={company} role={role} /></React.Suspense>}
       {tab === "overview" && <AccountingOverview company={company} orders={yearRows} />}
       {tab === "book" && (yearRows ? <AccountingDashboard dispatchData={yearRows} fixedRows={[]} clients={clients} isViewer={isViewer} /> : <div className="py-24 text-center text-[14px] font-bold text-[#9AA9C3]">올해 운행 내역을 불러오는 중…</div>)}
       {tab === "retire" && <RetireDesk company={company} isViewer={isViewer} />}

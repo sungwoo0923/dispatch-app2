@@ -20,8 +20,23 @@ service cloud.firestore {
          myUser().get('employmentStatus', '') != '퇴사' &&
          // 배차마당(cafe-site) 가입 계정은 가입과 동시에 approved:true로 저장되므로
          // 배차 프로그램 데이터에는 접근할 수 없게 따로 제외한다(배차마당 컬렉션만 사용).
-         myUser().get('role', '') != 'cafeUser')
+         myUser().get('role', '') != 'cafeUser' &&
+         // ⭐ 2026-11-06 계약종료 — companyPlans/{회사}.status == "ended"인 운송사 사람(직원·기사, 화주는 연동 운송사)은
+         //  데이터가 남아 있어도 아무것도 못 읽고 쓴다. 최고관리자·부관리자(role totalMaster)만 예외.
+         //  문서 1개(get/exists 같은 문서 = 읽기 1회)만 더 본다.
+         (myUser().get('role', '') == 'totalMaster' || !contractEnded(myUser())))
       );
+    }
+    function contractCoOf(u) {
+      return u.get('role', '') == 'shipper'
+        ? (u.get('linkedTransportCompany', null) is map ? u.linkedTransportCompany.get('companyName', '') : '')
+        : u.get('companyName', '돌캐');
+    }
+    function contractEnded(u) {
+      let co = contractCoOf(u);
+      return co is string && co != '' &&
+        exists(/databases/$(database)/documents/companyPlans/$(co)) &&
+        get(/databases/$(database)/documents/companyPlans/$(co)).data.get('status', '') == 'ended';
     }
     // DriverLogin/DriverRegister의 차량번호 정규화와 동일(공백 제거 + 대문자)
     function plateId(carNo) {
@@ -328,21 +343,598 @@ service cloud.firestore {
     }
 
     // ────────────────────────────────────────────────────────────
-    // 배차마당(카페형 오더 공유 사이트) — 게시글 본문은 로그인 사용자 전체 공개,
-    // 연락처(전화번호)는 별도 서브문서에 두고 "배차완료" 상태에서 당사자(등록자/신청자)만
-    // 읽을 수 있게 제한한다.
+    // ⭐ 2026-11-06 오더마켓(예전 배차마당) — 운송사끼리 오더를 주고받는 거래소
+    //  · 게시글 본문(cafeOrders)은 로그인 회원 전체 열람. 새 글(v 2)은 시/구까지만 담고, 상·하차지명·정확한 주소·연락처는
+    //    private/detail 에 따로 둔다 → 올린 운송사 + 매칭된 운송사만 열람. private/settle(청구 운임·수수료)은 올린 운송사만.
+    //  · 새 글 등록·잡기 요청·수락은 승인된 운송사 직원 계정만(배차마당 가입 계정·기사·화주·조회전용 제외).
+    //  · 예전 글(v 없음)은 예전 규칙(10초 배차신청 · contact/info 연락처)을 그대로 따른다.
     // ────────────────────────────────────────────────────────────
+    function isMarketCompany() {
+      return isApproved() && !(myUser().get('role', '') in ['driver', 'shipper', 'cafeUser', 'viewer'])
+        && myUser().get('companyName', '') != '';
+    }
+    function mkDoc(orderId) {
+      return get(/databases/$(database)/documents/cafeOrders/$(orderId)).data;
+    }
+    function mkPoster(d) {
+      return isSignedIn() && d.get('posterUid', '') == request.auth.uid;
+    }
+    function mkTaker(d) {
+      return isSignedIn() && d.get('takerUid', '') == request.auth.uid && d.get('status', '') in ['matched', 'dispatched', 'delivered'];
+    }
+    function mkV2(d) {
+      return d.get('v', 0) >= 2;
+    }
+    // 요청자 목록은 "내 uid 하나"만 넣고 뺄 수 있다
+    function mkOnlyMyUid() {
+      let before = resource.data.get('requesterUids', []).toSet();
+      let after = request.resource.data.get('requesterUids', []).toSet();
+      return after.difference(before).hasOnly([request.auth.uid]) && before.difference(after).hasOnly([request.auth.uid]);
+    }
     match /cafeOrders/{orderId} {
       allow read: if isSignedIn();
-      allow create, update, delete: if isSignedIn();
+      // 새 글 — 우리 회사 이름으로, 모집중 상태로, 정확한 주소·지명·연락처 없이
+      allow create: if isMarketCompany()
+        && request.resource.data.get('v', 0) == 2
+        && request.resource.data.get('posterUid', '') == request.auth.uid
+        && request.resource.data.get('companyName', '') == myCo()
+        && request.resource.data.get('status', '') == 'open'
+        && request.resource.data.get('takerUid', null) == null
+        && !request.resource.data.keys().hasAny(['상차지명', '상차지주소', '하차지명', '하차지주소', 'posterPhone', '상차지담당자번호', '하차지담당자번호']);
+      allow update: if
+        // ① 올린 운송사 — 회사·작성자는 못 바꾸고, 매칭 상대는 실제로 요청한 운송사만
+        (mkPoster(resource.data)
+          && request.resource.data.get('posterUid', '') == resource.data.get('posterUid', '')
+          && request.resource.data.get('companyName', '') == resource.data.get('companyName', '')
+          && request.resource.data.get('v', 0) == resource.data.get('v', 0)
+          && (!mkV2(resource.data) || !request.resource.data.keys().hasAny(['상차지주소', '하차지주소', 'posterPhone']))
+          && (request.resource.data.get('takerUid', null) == null
+              || request.resource.data.get('takerUid', null) == resource.data.get('takerUid', null)
+              || (resource.data.get('status', '') == 'open'
+                  && exists(/databases/$(database)/documents/cafeOrders/$(orderId)/requests/$(request.resource.data.takerUid))
+                  && get(/databases/$(database)/documents/cafeOrders/$(orderId)/requests/$(request.resource.data.takerUid)).data.get('status', '') == 'pending'))) ||
+        // ② 잡기 요청/철회 — 다른 운송사가 요청자 목록에 자기 uid만 넣고 뺀다
+        (mkV2(resource.data) && isMarketCompany() && !mkPoster(resource.data)
+          && resource.data.get('status', '') == 'open' && resource.data.get('companyName', '') != myCo()
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['requesterUids', 'updatedAt'])
+          && mkOnlyMyUid()) ||
+        // ③ 매칭된 운송사 — 진행 단계(앞으로만)·내 프로그램 오더 번호·평가만
+        (mkV2(resource.data) && mkTaker(resource.data)
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'takerOrderId', 'dispatchedAt', 'deliveredAt', 'driverMasked', 'ratingByTaker', 'updatedAt'])
+          && request.resource.data.get('status', '') in ['matched', 'dispatched', 'delivered']
+          && (request.resource.data.get('takerOrderId', null) == resource.data.get('takerOrderId', null)
+              || request.resource.data.get('takerOrderId', '') == 'mkt_' + orderId)) ||
+        // ④ 예전 글 — 10초 배차신청 흐름(신청·취소·확정)
+        (!mkV2(resource.data) && isSignedIn()
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'applicantUid', 'applicantName', 'applicantNickname', 'applyRequestedAt', 'confirmedAt', 'updatedAt'])
+          && request.resource.data.get('status', '') in ['open', 'applying', 'confirmed']);
+      allow delete: if mkPoster(resource.data);
 
+      // 비공개 상세(detail: 올린 운송사 + 매칭된 운송사) · 정산 메모(settle: 올린 운송사만)
+      match /private/{docId} {
+        allow read: if mkPoster(mkDoc(orderId)) || (docId == 'detail' && mkTaker(mkDoc(orderId)));
+        allow create, update: if docId in ['detail', 'settle'] && isSignedIn()
+          && getAfter(/databases/$(database)/documents/cafeOrders/$(orderId)).data.get('posterUid', '') == request.auth.uid;
+        allow delete: if mkPoster(mkDoc(orderId));
+      }
+
+      // 잡기 요청 — 문서 이름 = 요청한 운송사 계정 uid
+      match /requests/{rid} {
+        allow get: if isSignedIn() && (request.auth.uid == rid || mkPoster(mkDoc(orderId)));
+        allow list: if mkPoster(mkDoc(orderId));
+        allow create: if isMarketCompany() && request.auth.uid == rid
+          && mkV2(mkDoc(orderId)) && mkDoc(orderId).get('status', '') == 'open'
+          && mkDoc(orderId).get('posterUid', '') != rid && mkDoc(orderId).get('companyName', '') != myCo()
+          && request.resource.data.get('takerUid', '') == rid
+          && request.resource.data.get('takerCompany', '') == myCo()
+          && request.resource.data.get('status', '') == 'pending';
+        allow update: if
+          // 요청한 운송사 — 다시 요청(pending) / 철회(withdrawn)
+          (isMarketCompany() && request.auth.uid == rid
+            && request.resource.data.get('takerUid', '') == rid
+            && request.resource.data.get('takerCompany', '') == myCo()
+            && request.resource.data.get('status', '') in ['pending', 'withdrawn']
+            && (request.resource.data.get('status', '') == 'withdrawn' || mkDoc(orderId).get('status', '') == 'open')) ||
+          // 올린 운송사 — 수락/거절/마감/매칭취소 표시만
+          (mkPoster(mkDoc(orderId))
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'decidedAt', 'updatedAt'])
+            && request.resource.data.get('status', '') in ['accepted', 'rejected', 'closed', 'cancelled']);
+        allow delete: if false;
+      }
+
+      // (예전 글) 연락처 — "배차완료" 상태에서 당사자(등록자/신청자)만
       match /contact/{docId} {
         allow read: if isSignedIn() &&
-          get(/databases/$(database)/documents/cafeOrders/$(orderId)).data.status == "confirmed" &&
-          (request.auth.uid == get(/databases/$(database)/documents/cafeOrders/$(orderId)).data.posterUid ||
-           request.auth.uid == get(/databases/$(database)/documents/cafeOrders/$(orderId)).data.applicantUid);
-        allow write: if isSignedIn();
+          mkDoc(orderId).status == "confirmed" &&
+          (request.auth.uid == mkDoc(orderId).posterUid || request.auth.uid == mkDoc(orderId).applicantUid);
+        allow write: if isSignedIn() && !mkV2(getAfter(/databases/$(database)/documents/cafeOrders/$(orderId)).data);
       }
+    }
+    // ⭐ 2026-11-06 오더마켓 알림 — 받는 사람 본인만 읽고 "읽음" 표시. 보내기는 운송사 계정이 자기 이름으로만.
+    match /marketNotices/{id} {
+      allow read: if isSignedIn() && resource.data.get('toUid', '') == request.auth.uid;
+      allow update: if isSignedIn() && resource.data.get('toUid', '') == request.auth.uid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read', 'readAt']);
+      allow create: if isMarketCompany()
+        && request.resource.data.get('fromUid', '') == request.auth.uid
+        && request.resource.data.get('toUid', '') is string && request.resource.data.get('toUid', '') != request.auth.uid
+        && request.resource.data.get('read', true) == false
+        && exists(/databases/$(database)/documents/cafeOrders/$(request.resource.data.get('orderId', '_')));
+      allow delete: if isSignedIn() && resource.data.get('toUid', '') == request.auth.uid;
+    }
+
+    // ────────────────────────────────────────────────────────────
+    // ⭐ 2026-11-06 로지스웹 허브 콜(차주 · 화주 · 운송사) — 데이터 설명은 cafe-site/src/hub/hubApi.js 맨 위
+    //  · 회원(hubMembers)은 본인 + 관리자만 본다. 허브 가입 회원은 users 문서가 없어 배차 프로그램 데이터에 접근할 수 없다.
+    //  · 기존 로지스웹 계정(운송사 직원 · 소속 기사 · 화주사)은 users 문서와 같은 회사·차량일 때만 바로 "승인" 회원이 된다.
+    //  · 배차신청은 모집중일 때 먼저 쓴 1명만 성공, 취소는 서버 시각으로 10초 안에만(그 뒤엔 전화로).
+    //  ⭐ 2026-11-07 (3차)
+    //  · 회사 사이 데이터 완전 분리 — 회사 키(hubKeyOf: 로지스웹 계정 "lw:회사명" · 허브 가입 "biz:사업자번호" · 관리자가 정한 companyKey)
+    //    가 같은 회원끼리만 오더 기록 · 오더복사 · 고객관리를 나눈다. 다른 회사는 모집중 오더(공개 칸)만 보드에서 본다.
+    //  · 단계: 모집중 → 배차신청(10초) → 확정 = 운송중(위치 공유) → 차주 [운송완료] → 인수증 · 계산서 → 등록자 계산서 확인(지급예정일)
+    //  · 회차: 등록자가 금액을 정해 요청 → 차주가 수락해야 확정 · 배차신청은 실계좌(은행 · 계좌번호 · 예금주)가 있어야
+    // ────────────────────────────────────────────────────────────
+    function hubPath(uid) {
+      return /databases/$(database)/documents/hubMembers/$(uid);
+    }
+    function hubMe() {
+      return get(hubPath(request.auth.uid)).data;
+    }
+    // 회사 키(functions/hubSync.js companyKeyOf와 같은 계산)
+    function hubKeyOf(m, uid) {
+      return m.get('companyKey', '') != '' ? m.get('companyKey', '')
+        : (m.get('source', 'signup') != 'signup' ? 'lw:' + m.get('companyName', '')
+          : (m.get('bizNo', '').replace('[^0-9]', '') != '' ? 'biz:' + m.get('bizNo', '').replace('[^0-9]', '') : 'uid:' + uid));
+    }
+    function hubMyKey() {
+      return hubKeyOf(hubMe(), request.auth.uid);
+    }
+    // 승인된 허브 회원 — 로지스웹 계정으로 들어온 회원은 로지스웹 계정도 지금 유효해야 한다(퇴사·정지·계약종료 반영)
+    function hubActive() {
+      return isSignedIn() && exists(hubPath(request.auth.uid)) && hubMe().get('status', '') == 'approved'
+        && (hubMe().get('source', '') == 'signup' || isApproved());
+    }
+    function hubCanPost() {
+      return hubActive() && hubMe().get('role', '') in ['shipper', 'carrier'];
+    }
+    // ⭐ 2026-11-07 배차신청은 본인 실계좌(은행 · 계좌번호 · 예금주)를 등록해야
+    function hubHasBank() {
+      let b = hubMe().get('bank', null);
+      return b is map && b.get('bank', '') != '' && b.get('number', '').size() >= 6 && b.get('holder', '') != '';
+    }
+    function hubCanTake() {
+      return hubActive() && hubMe().get('role', '') in ['driver', 'carrier']
+        && hubMe().get('penalty', {}).get('blocked', false) != true && hubHasBank();
+    }
+    // 허브 가입 회원은 users 문서가 없다 — 없는 문서를 get()하면 오류가 나서 "A || 관리자" 전체가 거절되므로 exists()로 먼저 확인
+    function hubAdmin() {
+      return isSignedIn() && (request.auth.token.get('email', '') == "tjddnqkf@naver.com" ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', '') == 'totalMaster'));
+    }
+    // 기존 로지스웹 계정 연결 — users 문서와 회사(기사는 차량번호까지)가 같아야
+    function hubLinkOk(d) {
+      let u = myUser();
+      return isApproved() && d.get('companyName', '') == u.get('companyName', '') && (
+        (d.get('source', '') == 'logisweb-staff' && d.get('role', '') == 'carrier'
+          && !(u.get('role', '') in ['driver', 'shipper', 'cafeUser', 'viewer']) && u.get('companyName', '') != '') ||
+        (d.get('source', '') == 'logisweb-driver' && d.get('role', '') == 'driver'
+          && u.get('role', '') == 'driver' && u.get('approved', false) == true
+          && d.get('vehicle', {}).get('plate', '') == u.get('carNo', u.get('차량번호', ''))) ||
+        (d.get('source', '') == 'logisweb-shipper' && d.get('role', '') == 'shipper' && u.get('role', '') == 'shipper'));
+    }
+    match /hubMembers/{uid} {
+      allow get: if isSignedIn() && (request.auth.uid == uid || hubAdmin());
+      allow list: if hubAdmin();
+      // 회사 키(companyKey) · 가상계좌(va)는 관리자만 정한다
+      allow create: if isSignedIn() && request.auth.uid == uid
+        && request.resource.data.get('uid', '') == uid
+        && !request.resource.data.keys().hasAny(['verified', 'bizStatus', 'adminNote', 'penalty', 'reviewedAt', 'reviewedBy', 'approvedAt', 'rejectReason', 'isAdmin', 'companyKey', 'va'])
+        && hubBankOk(request.resource.data.get('bank', null))
+        && ((request.resource.data.get('source', '') == 'signup' && request.resource.data.get('status', '') == 'pending'
+             && request.resource.data.get('role', '') in ['driver', 'shipper', 'carrier']
+             && !request.resource.data.keys().hasAny(['docsVerified']))
+          || (request.resource.data.get('status', '') == 'approved' && hubLinkOk(request.resource.data)));
+      allow update: if hubAdmin() || (isSignedIn() && request.auth.uid == uid
+        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['uid', 'role', 'source', 'verified', 'docsVerified', 'bizStatus', 'adminNote', 'penalty', 'reviewedAt', 'reviewedBy', 'approvedAt', 'rejectReason', 'isAdmin', 'companyKey', 'va'])
+        && (
+          // 승인 후에는 알림 · 오더 설정 · 즐겨찾기 · 기기 번호 · 프로필 사진 · 실계좌만(차량·서류를 바꾸려면 다시 심사)
+          (resource.data.get('status', '') == 'approved' && request.resource.data.get('status', '') == 'approved'
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['prefs', 'activeSession', 'lastLoginAt', 'updatedAt', 'photoPath', 'fcmTokens', 'fcmTokenAt', 'fcmTokensOut', 'bank'])
+            && hubBankOk(request.resource.data.get('bank', null))) ||
+          // 승인 대기 중 신청서 고치기 · 거절 뒤 다시 제출
+          (resource.data.get('source', '') == 'signup' && resource.data.get('status', '') in ['pending', 'rejected']
+            && request.resource.data.get('status', '') == 'pending' && hubBankOk(request.resource.data.get('bank', null))) ||
+          // 어떤 상태든 기기 번호(한 계정 한 기기)
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['activeSession', 'lastLoginAt'])));
+      allow delete: if hubAdmin();
+    }
+    // ⭐ 2026-11-06 정산 계좌(운임 받을 실계좌) — 은행(목록에서 고름) · 계좌번호 · 예금주만
+    function hubBankOk(b) {
+      return b == null || (b is map && b.keys().hasOnly(['bank', 'number', 'holder', 'updatedAt'])
+        && b.get('bank', '') is string && b.get('bank', '').size() <= 30
+        && b.get('number', '') is string && b.get('number', '').size() <= 30
+        && b.get('holder', '') is string && b.get('holder', '').size() <= 40);
+    }
+    // 완료 건수 · 평점 — 서버 함수만 쓴다
+    match /hubStats/{uid} {
+      allow read: if hubActive();
+      allow read: if hubAdmin();
+      allow write: if false;
+    }
+    // 오더 등록 횟수 제한 — 20초 간격 · 하루(UTC) 30건, 시각·날짜는 서버 시각으로 확인
+    match /hubQuota/{uid} {
+      allow get: if isSignedIn() && request.auth.uid == uid;
+      allow create: if isSignedIn() && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly(['uid', 'count', 'day', 'lastPostAt'])
+        && request.resource.data.get('uid', '') == uid
+        && request.resource.data.get('count', 0) == 1
+        && request.resource.data.get('day', null) == request.time.date()
+        && request.resource.data.get('lastPostAt', null) == request.time;
+      allow update: if isSignedIn() && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly(['uid', 'count', 'day', 'lastPostAt'])
+        && request.resource.data.get('uid', '') == uid
+        && request.resource.data.get('lastPostAt', null) == request.time
+        && request.time > resource.data.lastPostAt + duration.value(20, 's')
+        && request.resource.data.get('day', null) == request.time.date()
+        && (resource.data.get('day', null) == request.time.date()
+              ? (request.resource.data.get('count', 0) == resource.data.get('count', 0) + 1 && request.resource.data.get('count', 0) <= 30)
+              : request.resource.data.get('count', 0) == 1);
+      allow delete: if hubAdmin();
+    }
+    function hubEditKeys() {
+      return ['상차시도', '상차시군구', '하차시도', '하차시군구', '상차일', '상차시간', '하차일', '하차시간', '화물내용', '중량', '파레트',
+        '차량종류', '차량톤수', '톤수값', '상차방법', '하차방법', '운임', '수수료', '지급방식', '긴급', '운행유형', '적재', '공개메모', '거리km',
+        '상차지역', '대수', '예약', 'showAt', 'updatedAt'];
+    }
+    function hubOrd(id) {
+      return get(/databases/$(database)/documents/hubOrders/$(id)).data;
+    }
+    // ⭐ 2026-11-06 예치금 결제(인수증 · 예치금) 오더는 등록자 예치금이 운임 이상일 때만 등록 · 배차신청 · 확정
+    //  (잔액은 서버 함수만 쓴다 — functions/hubWallet.js. 실제 보류는 확정 순간 서버가 트랜잭션으로 한 번 더 확인)
+    function hubWalletAvail(uid) {
+      return exists(/databases/$(database)/documents/hubWallets/$(uid))
+        ? get(/databases/$(database)/documents/hubWallets/$(uid)).data.get('available', 0) : 0;
+    }
+    function hubDepositOk(d, uid) {
+      return !(d.get('지급방식', '') in ['인수증', '예치금']) || hubWalletAvail(uid) >= d.get('운임', 0);
+    }
+    // 인수증 · 서류(여러 장) — [{ path, name, type, size, kind, at }]
+    function hubPodOk(list) {
+      return list is list && list.size() <= 30;
+    }
+    function hubInvoiceOk(v) {
+      return v is map && v.keys().hasOnly(['no', 'date', 'amount', 'path', 'name', 'bizNo', 'at'])
+        && v.get('no', '') is string && v.get('no', '').size() >= 4 && v.get('no', '').size() <= 40
+        && v.get('date', '') is string && v.get('amount', 0) is number;
+    }
+    function hubOrdAfter(id) {
+      return getAfter(/databases/$(database)/documents/hubOrders/$(id)).data;
+    }
+    // 같은 회사(등록자와 같은 회사 키) — 오더 기록 · 오더복사 · 상세(주소) 보기
+    function hubSameCo(o) {
+      return o.get('posterCompanyKey', '') != '' && o.get('posterCompanyKey', '') == hubMyKey();
+    }
+    // 비공개 문서 읽기 — 등록자 · 같은 회사(정산 메모 제외) · 배차된 회원(상세는 10초 확정 후) · 각자 정산 메모
+    function hubPrivReadOk(o, docId) {
+      let me = request.auth.uid;
+      let poster = o.get('posterUid', '') == me;
+      let taker = o.get('takerUid', '') == me;
+      let st = o.get('status', '');
+      return (poster && !docId.matches('settle_.*'))
+        || (docId == 'detail' && hubActive() && hubSameCo(o))
+        || (taker && docId == 'match')
+        || (taker && docId == 'detail' && (st in ['loaded', 'delivered'] || (st == 'assigned' && o.get('confirmed', false) == true)))
+        || ((poster || taker) && docId == 'settle_' + me);
+    }
+    function hubWindowOver(d) {
+      return d.get('assignedAt', null) != null && request.time >= d.assignedAt + duration.value(10, 's');
+    }
+    function hubRatingOk(r) {
+      return r is map && r.keys().hasOnly(['score', 'comment']) && r.score is int && r.score >= 1 && r.score <= 5
+        && r.get('comment', '') is string && r.get('comment', '').size() <= 200;
+    }
+    // 배차된 회원 정보(등록자에게 보이는 차주 카드)는 본인 회원 문서와 똑같아야 — 인증·차량을 꾸며 넣을 수 없게
+    function hubMatchOk(d) {
+      let me = hubMe();
+      return d.get('takerUid', '') == request.auth.uid
+        && d.get('role', '') == me.get('role', '') && d.get('source', '') == me.get('source', '')
+        && d.get('name', '') == me.get('name', '') && d.get('phone', '') == me.get('phone', '')
+        && d.get('companyName', '') == me.get('companyName', '')
+        && d.get('vehicle', null) == me.get('vehicle', null)
+        && d.get('docsVerified', false) == me.get('docsVerified', false)
+        && d.get('bizStatus', '') == me.get('bizStatus', '')
+        && d.get('photoPath', '') == me.get('photoPath', '');
+    }
+    // 운송중 = 확정된 배차(예전 상차완료 단계 문서도 같이)
+    function hubMoving(d) {
+      return (d.get('status', '') == 'assigned' && d.get('confirmed', false) == true) || d.get('status', '') == 'loaded';
+    }
+    // 회차 요청(등록자) — 금액은 0원 ~ 운임
+    function hubReturnOk(r, fare) {
+      return r is map && r.keys().hasOnly(['amount', 'reason', 'status', 'at', 'by'])
+        && r.amount is int && r.amount >= 0 && r.amount <= fare
+        && r.get('reason', '') is string && r.get('reason', '').size() <= 100
+        && r.status == 'proposed' && r.at == request.time && r.by == request.auth.uid;
+    }
+    match /hubOrders/{id} {
+      // 다른 회사는 모집중 오더(공개 칸)만. 지난 오더 · 진행 중 오더는 등록자 · 배차된 회원 · 같은 회사만
+      allow read: if hubActive() && (resource.data.get('status', '') == 'open'
+        || resource.data.get('posterUid', '') == request.auth.uid
+        || resource.data.get('takerUid', '') == request.auth.uid
+        || hubSameCo(resource.data));
+      allow read: if hubAdmin();
+      allow create: if hubCanPost()
+        && request.resource.data.keys().hasOnly(hubEditKeys().concat(['v', 'posterUid', 'posterRole', 'posterSource', 'posterCompany', 'posterName', 'posterVerified', 'posterCompanyKey', 'status', 'takerUid', 'takerRole', 'assignedAt', 'cancelCount', 'createdAt']))
+        && request.resource.data.get('v', 0) == 3
+        && request.resource.data.get('posterUid', '') == request.auth.uid
+        && request.resource.data.get('posterRole', '') == hubMe().get('role', '')
+        && request.resource.data.get('posterSource', '') == hubMe().get('source', '')
+        && request.resource.data.get('posterCompany', '') == hubMe().get('companyName', '')
+        && request.resource.data.get('posterName', '') == hubMe().get('name', '')
+        && request.resource.data.get('posterVerified', false) == hubMe().get('docsVerified', false)
+        && request.resource.data.get('posterCompanyKey', '') == hubMyKey()
+        && request.resource.data.get('status', '') == 'open'
+        && request.resource.data.get('takerUid', null) == null
+        && request.resource.data.get('cancelCount', 0) == 0
+        && request.resource.data.get('운임', 0) is number && request.resource.data.get('운임', 0) >= 0 && request.resource.data.get('운임', 0) <= 50000000
+        && hubDepositOk(request.resource.data, request.auth.uid)
+        && getAfter(/databases/$(database)/documents/hubQuota/$(request.auth.uid)).data.get('lastPostAt', null) == request.time;
+      allow update: if
+        // ① 등록자 — 모집중 수정 · 오더 취소(확정 뒤 포함 → 전액 환불) · 배차 취소 후 재모집 · 회차 요청 · 계산서 확인 · 평가
+        (isSignedIn() && resource.data.get('posterUid', '') == request.auth.uid && (
+          (resource.data.status == 'open' && request.resource.data.status == 'open'
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(hubEditKeys())
+            && hubDepositOk(request.resource.data, request.auth.uid)) ||
+          (resource.data.status in ['open', 'assigned'] && request.resource.data.status == 'cancelled'
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'cancelledAt', 'updatedAt'])) ||
+          (resource.data.status == 'assigned' && request.resource.data.status == 'open'
+            && request.resource.data.takerUid == null && request.resource.data.takerRole == null && request.resource.data.assignedAt == null
+            && request.resource.data.get('confirmed', false) == false
+            && request.resource.data.get('releaseCount', 0) == resource.data.get('releaseCount', 0) + 1
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'takerUid', 'takerRole', 'assignedAt', 'confirmed', 'confirmedAt', 'releaseCount', 'lastReleaseReason', 'updatedAt'])) ||
+          // 회차 요청(운송중일 때 · 차주가 수락해야 확정)
+          (hubMoving(resource.data) && request.resource.data.status == resource.data.status
+            && resource.data.get('회차', {}).get('status', '') != 'proposed'
+            && hubReturnOk(request.resource.data.get('회차', null), resource.data.get('운임', 0))
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['회차', 'updatedAt'])) ||
+          // 계산서 확인 + 지급예정일(한 번)
+          (resource.data.status == 'delivered' && request.resource.data.status == 'delivered'
+            && ('invoice' in resource.data) && !('invoiceOk' in resource.data)
+            && request.resource.data.invoiceOk is map && request.resource.data.invoiceOk.keys().hasOnly(['payDate', 'at', 'by'])
+            && request.resource.data.invoiceOk.payDate is string && request.resource.data.invoiceOk.payDate.size() == 10
+            && request.resource.data.invoiceOk.at == request.time && request.resource.data.invoiceOk.by == request.auth.uid
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['invoiceOk', 'updatedAt'])) ||
+          (resource.data.status == 'delivered' && request.resource.data.status == 'delivered'
+            && !('ratingByPoster' in resource.data) && hubRatingOk(request.resource.data.ratingByPoster)
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['ratingByPoster', 'updatedAt'])))) ||
+        // ② 배차신청 — 모집중일 때 먼저 쓴 1명만(두 번째 신청은 이미 assigned라 거절된다 = 중복 배차 방지)
+        (hubCanTake() && resource.data.get('posterUid', '') != request.auth.uid
+          && resource.data.status == 'open' && request.resource.data.status == 'assigned'
+          && request.resource.data.takerUid == request.auth.uid
+          && request.resource.data.takerRole == hubMe().get('role', '')
+          && request.resource.data.assignedAt == request.time
+          && resource.data.get('cancelCount', 0) < 5
+          && hubDepositOk(resource.data, resource.data.get('posterUid', ''))
+          && request.resource.data.get('confirmed', false) == false
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'takerUid', 'takerRole', 'assignedAt', 'updatedAt'])
+          && getAfter(/databases/$(database)/documents/hubOrders/$(id)/private/match).data.get('takerUid', '') == request.auth.uid) ||
+        // ③ 신청한 회원의 10초 안 취소 — 서버 시각(request.time) 기준, 그 뒤엔 등록자에게 전화로
+        (isSignedIn() && resource.data.status == 'assigned' && resource.data.get('takerUid', '') == request.auth.uid
+          && request.time < resource.data.assignedAt + duration.value(10, 's')
+          && resource.data.get('confirmed', false) != true
+          && request.resource.data.status == 'open' && request.resource.data.takerUid == null
+          && request.resource.data.takerRole == null && request.resource.data.assignedAt == null
+          && request.resource.data.get('cancelCount', 0) == resource.data.get('cancelCount', 0) + 1
+          && request.resource.data.get('lastCancelUid', '') == request.auth.uid
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'takerUid', 'takerRole', 'assignedAt', 'cancelCount', 'lastCancelUid', 'lastCancelAt', 'updatedAt'])) ||
+        // ⑥ 10초가 지나면 배차된 회원 또는 등록자 화면이 "확정" 표시(서버 시각으로 10초 경과 확인) — 확정 = 운송중
+        (isSignedIn() && (resource.data.get('takerUid', '') == request.auth.uid || resource.data.get('posterUid', '') == request.auth.uid)
+          && resource.data.status == 'assigned' && request.resource.data.status == 'assigned'
+          && resource.data.get('confirmed', false) != true && hubWindowOver(resource.data)
+          && hubDepositOk(resource.data, resource.data.get('posterUid', ''))
+          && request.resource.data.get('confirmed', false) == true && request.resource.data.get('confirmedAt', null) == request.time
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['confirmed', 'confirmedAt', 'updatedAt'])) ||
+        // ④ 배차된 회원 — 운송중 → [운송완료](인수증은 지금 또는 나중에)
+        (isSignedIn() && resource.data.get('takerUid', '') == request.auth.uid && hubWindowOver(resource.data)
+          && hubMoving(resource.data) && request.resource.data.status == 'delivered'
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'deliveredAt', 'podPath', 'pod', 'podAt', 'updatedAt'])
+          && hubPodOk(request.resource.data.get('pod', []))) ||
+        // ④-2 배차된 회원 — 회차 수락(금액 그대로 · 운송 끝) / 거절
+        (isSignedIn() && resource.data.get('takerUid', '') == request.auth.uid && hubMoving(resource.data)
+          && resource.data.get('회차', {}).get('status', '') == 'proposed'
+          && request.resource.data.get('회차', {}).get('amount', -1) == resource.data.get('회차', {}).get('amount', -2)
+          && request.resource.data.get('회차', {}).keys().hasOnly(['amount', 'reason', 'status', 'at', 'by', 'answeredAt'])
+          && request.resource.data.get('회차', {}).get('answeredAt', null) == request.time
+          && ((request.resource.data.get('회차', {}).get('status', '') == 'accepted' && request.resource.data.status == 'delivered'
+                && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['회차', 'status', 'deliveredAt', 'updatedAt'])) ||
+              (request.resource.data.get('회차', {}).get('status', '') == 'rejected' && request.resource.data.status == resource.data.status
+                && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['회차', 'updatedAt'])))) ||
+        // ⑦ 배차된 회원 — 운송완료 뒤 인수증 · 전표 올리기(늘리기만)
+        (isSignedIn() && resource.data.get('takerUid', '') == request.auth.uid && resource.data.status == 'delivered'
+          && request.resource.data.status == 'delivered'
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['pod', 'podPath', 'podAt', 'updatedAt'])
+          && hubPodOk(request.resource.data.get('pod', []))
+          && request.resource.data.get('pod', []).size() > resource.data.get('pod', []).size()) ||
+        // ⑧ 배차된 회원 — 계산서(세금계산서) 등록(1번) → 등록자가 확인하고 지급예정일을 정한다
+        (isSignedIn() && resource.data.get('takerUid', '') == request.auth.uid && resource.data.status == 'delivered'
+          && request.resource.data.status == 'delivered' && !('invoice' in resource.data)
+          && hubInvoiceOk(request.resource.data.invoice)
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['invoice', 'updatedAt'])) ||
+        // ⑤ 배차된 회원의 평가(1번)
+        (isSignedIn() && resource.data.get('takerUid', '') == request.auth.uid
+          && resource.data.status == 'delivered' && request.resource.data.status == 'delivered'
+          && !('ratingByTaker' in resource.data) && hubRatingOk(request.resource.data.ratingByTaker)
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['ratingByTaker', 'updatedAt'])) ||
+        hubAdmin();
+      allow delete: if (isSignedIn() && resource.data.get('posterUid', '') == request.auth.uid && resource.data.status in ['open', 'cancelled']) || hubAdmin();
+
+      // detail(상세주소·연락처) · match(배차된 회원 정보) · settle_{uid}(각자 정산 메모)
+      match /private/{docId} {
+        allow read: if isSignedIn() && hubPrivReadOk(hubOrd(id), docId);
+        allow read: if hubAdmin();
+        allow create, update: if isSignedIn() && (
+          (docId == 'detail' && hubOrdAfter(id).get('posterUid', '') == request.auth.uid) ||
+          (docId == 'match' && hubOrdAfter(id).get('takerUid', '') == request.auth.uid
+            && hubOrdAfter(id).get('status', '') == 'assigned' && hubMatchOk(request.resource.data)) ||
+          (docId == 'settle_' + request.auth.uid && request.resource.data.keys().hasOnly(['text', 'updatedAt'])
+            && (hubOrdAfter(id).get('posterUid', '') == request.auth.uid || hubOrdAfter(id).get('takerUid', '') == request.auth.uid)));
+        // ⭐ 2026-11-06 최고관리자 — 상세주소 · 연락처까지 고칠 수 있다(관리자 콘솔 오더 편집, 정산 메모는 제외)
+        allow create, update: if hubAdmin() && docId in ['detail', 'match'];
+        allow delete: if hubAdmin() || (isSignedIn() && (
+          hubOrd(id).get('posterUid', '') == request.auth.uid ||
+          (docId == 'match' && resource.data.get('takerUid', '') == request.auth.uid)));
+      }
+    }
+    // ⭐ 2026-11-07 고객관리(허브 전용 회원의 상·하차지) — 같은 회사 키끼리만 읽고 고친다(다른 회사는 절대 못 본다)
+    function hubPlaceOk(d) {
+      return d.keys().hasOnly(['companyKey', 'uid', '이름', '주소', '담당자', '연락처', '시도', '시군구', 'count', 'lastUsedAt', 'updatedAt', 'createdAt'])
+        && d.get('주소', '') is string && d.get('주소', '').size() >= 2 && d.get('주소', '').size() <= 200
+        && d.get('이름', '') is string && d.get('이름', '').size() <= 60;
+    }
+    match /hubPlaces/{id} {
+      allow read, delete: if hubActive() && resource.data.get('companyKey', '') == hubMyKey();
+      allow create: if hubActive() && request.resource.data.get('companyKey', '') == hubMyKey()
+        && request.resource.data.get('uid', '') == request.auth.uid && hubPlaceOk(request.resource.data);
+      allow update: if hubActive() && resource.data.get('companyKey', '') == hubMyKey()
+        && request.resource.data.get('companyKey', '') == resource.data.get('companyKey', '') && hubPlaceOk(request.resource.data);
+      allow read, write: if hubAdmin();
+    }
+    // 허브 알림 — 받는 사람만. 보내기는 승인 회원이 자기 이름으로, 그 오더의 등록자에게 또는 등록자가 보낼 때만(스팸 방지)
+    match /hubNotices/{id} {
+      allow read, delete: if isSignedIn() && resource.data.get('toUid', '') == request.auth.uid;
+      allow update: if isSignedIn() && resource.data.get('toUid', '') == request.auth.uid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read']);
+      allow create: if hubActive()
+        && request.resource.data.get('fromUid', '') == request.auth.uid
+        && request.resource.data.get('toUid', '') is string && request.resource.data.get('toUid', '') != request.auth.uid
+        && request.resource.data.get('read', true) == false
+        && (hubOrd(request.resource.data.get('orderId', '_')).get('posterUid', '') == request.resource.data.get('toUid', '')
+            || hubOrd(request.resource.data.get('orderId', '_')).get('posterUid', '') == request.auth.uid);
+    }
+    // ⭐ 위치관제 — 확정(= 운송중) ~ 운송완료 전까지만 배차된 회원이 쓰고, 등록자(+관리자)만 그동안 본다.
+    //  운송완료 · 회차 · 취소되면 아무도 못 읽는다(서버가 문서도 지운다). 이동 경로는 track 하위 문서.
+    function hubLiveRead(id) {
+      let o = hubOrd(id);
+      return isSignedIn() && hubMoving(o)
+        && (o.get('posterUid', '') == request.auth.uid || o.get('takerUid', '') == request.auth.uid || hubAdmin());
+    }
+    function hubLiveWrite(id) {
+      let o = hubOrd(id);
+      return isSignedIn() && o.get('takerUid', '') == request.auth.uid && hubMoving(o);
+    }
+    match /hubLive/{orderId} {
+      allow read: if hubLiveRead(orderId);
+      allow create, update: if hubLiveWrite(orderId)
+        && request.resource.data.keys().hasOnly(['orderId', 'takerUid', 'posterUid', 'lat', 'lng', 'speed', 'accuracy', 'heading', 'updatedAt', 'plate', 'name', 'phone', 'status', 'source', 'lastTrack', 'lastTrackAt'])
+        && request.resource.data.get('takerUid', '') == request.auth.uid
+        && request.resource.data.get('orderId', '') == orderId
+        && request.resource.data.lat is number && request.resource.data.lng is number
+        && request.resource.data.get('updatedAt', null) == request.time;
+      allow delete: if hubAdmin();
+      match /track/{pid} {
+        allow read: if hubLiveRead(orderId);
+        allow create: if hubLiveWrite(orderId)
+          && request.resource.data.keys().hasOnly(['lat', 'lng', 'speed', 'accuracy', 'timestamp', 'source'])
+          && request.resource.data.lat is number && request.resource.data.lng is number
+          && request.resource.data.get('timestamp', null) == request.time;
+        allow delete: if hubAdmin();
+      }
+    }
+    // ⭐ 2026-11-06 예치금 · 정산 원장 — 잔액 · 원장 · 미정산 · 지급 대기열은 서버 함수만 쓴다(functions/hubWallet.js). 회원 본인만 읽는다
+    match /hubWallets/{uid} {
+      allow get: if isSignedIn() && (request.auth.uid == uid || hubAdmin());
+      allow list: if hubAdmin();
+      allow write: if false;
+    }
+    match /hubLedger/{id} {
+      allow read: if isSignedIn() && (resource.data.get('uid', '') == request.auth.uid || hubAdmin());
+      allow write: if false;
+    }
+    match /hubDebts/{id} {
+      allow read: if isSignedIn() && (resource.data.get('fromUid', '') == request.auth.uid || resource.data.get('toUid', '') == request.auth.uid || hubAdmin());
+      allow write: if false;
+    }
+    // 충전 [입금 확인 요청] — 가상계좌 자동 반영 전까지. 관리자가 [입금 확인] → 서버가 예치금에 넣는다
+    match /hubCharges/{id} {
+      allow read: if isSignedIn() && (resource.data.get('uid', '') == request.auth.uid || hubAdmin());
+      allow create: if hubActive() && request.resource.data.get('uid', '') == request.auth.uid
+        && request.resource.data.keys().hasOnly(['uid', 'name', 'companyName', 'amount', 'depositor', 'status', 'memo', 'createdAt'])
+        && request.resource.data.get('status', '') == 'requested'
+        && request.resource.data.amount is int && request.resource.data.amount >= 10000 && request.resource.data.amount <= 100000000
+        && request.resource.data.get('depositor', '') is string && request.resource.data.get('depositor', '').size() <= 40
+        && request.resource.data.get('createdAt', null) == request.time;
+      allow update: if (hubAdmin() && resource.data.get('status', '') == 'requested'
+          && request.resource.data.get('status', '') in ['confirmed', 'rejected']
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'confirmedAt', 'confirmedBy', 'rejectReason', 'updatedAt'])) ||
+        (isSignedIn() && resource.data.get('uid', '') == request.auth.uid && resource.data.get('status', '') == 'requested'
+          && request.resource.data.get('status', '') == 'cancelled'
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'updatedAt']));
+      allow delete: if false;
+    }
+    // 운송료 지급 — 서버가 만들고(계산서 확인), 지급예정일에 지급 요청. 수동 모드: 관리자 또는 등록자가 이체 후 [지급완료]
+    match /hubPayouts/{id} {
+      allow read: if isSignedIn() && (resource.data.get('toUid', '') == request.auth.uid || resource.data.get('fromUid', '') == request.auth.uid || hubAdmin());
+      allow update: if hubAdmin() && resource.data.get('status', '') != 'paid'
+        && request.resource.data.get('status', '') in ['scheduled', 'queued', 'requested', 'paid', 'failed']
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'paidAt', 'paidBy', 'memo', 'requestedAt', 'requestedBy', 'dueDate', 'updatedAt']);
+      allow update: if isSignedIn() && resource.data.get('fromUid', '') == request.auth.uid
+        && resource.data.get('status', '') in ['scheduled', 'requested']
+        && request.resource.data.get('status', '') == 'paid' && request.resource.data.get('paidAt', null) == request.time
+        && request.resource.data.get('paidBy', '') == request.auth.uid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'paidAt', 'paidBy', 'memo', 'updatedAt']);
+      allow create, delete: if false;
+    }
+    // ⭐ 2026-11-07 출금(사용 가능 예치금 → 본인 실계좌) — 계좌는 회원 문서에 등록한 그 계좌만
+    match /hubWithdrawals/{id} {
+      allow read: if isSignedIn() && (resource.data.get('uid', '') == request.auth.uid || hubAdmin());
+      allow create: if hubActive() && hubHasBank() && request.resource.data.get('uid', '') == request.auth.uid
+        && request.resource.data.keys().hasOnly(['uid', 'name', 'amount', 'bank', 'status', 'createdAt'])
+        && request.resource.data.status == 'requested'
+        && request.resource.data.amount is int && request.resource.data.amount >= 10000
+        && request.resource.data.amount <= hubWalletAvail(request.auth.uid)
+        && request.resource.data.bank == hubMe().bank
+        && request.resource.data.createdAt == request.time;
+      allow update: if hubAdmin() && resource.data.get('status', '') in ['requested', 'processing']
+        && request.resource.data.get('status', '') in ['paid', 'rejected']
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'paidAt', 'paidBy', 'rejectReason', 'updatedAt']);
+      allow delete: if false;
+    }
+    // ⭐ 2026-11-07 배차 프로그램 [저장 + 허브 등록] — 같은 회사 직원이 자기 회사 오더만 요청(서버가 확인하고 허브 오더를 만든다)
+    match /hubPostRequests/{id} {
+      allow read: if isSignedIn() && (resource.data.get('uid', '') == request.auth.uid || hubAdmin());
+      allow create: if isApproved() && request.resource.data.get('uid', '') == request.auth.uid
+        && !(myUser().get('role', '') in ['driver', 'shipper', 'cafeUser', 'viewer'])
+        && (request.resource.data.get('companyName', '') == myUser().get('companyName', '') || isTotalMasterUser())
+        && request.resource.data.get('status', '') == 'requested'
+        && request.resource.data.get('lwOrderId', '') is string && request.resource.data.get('lwOrderId', '').size() > 0
+        && request.resource.data.keys().hasOnly(['uid', 'companyName', 'lwOrderId', 'order', 'status', 'createdAt']);
+      allow update, delete: if false;
+    }
+    // 관리자 예치금 조정(+/−) — 서버가 원장에 반영
+    match /hubAdjustments/{id} {
+      allow read: if hubAdmin();
+      allow create: if hubAdmin()
+        && request.resource.data.keys().hasOnly(['uid', 'amount', 'bucket', 'memo', 'by', 'createdAt'])
+        && request.resource.data.amount is int && request.resource.data.amount != 0
+        && request.resource.data.get('bucket', 'available') in ['available', 'owed'];
+      allow update, delete: if false;
+    }
+    // 허브 설정(기본 수수료 · 입금 계좌 · 차종/톤수/결제/상하차 방법 목록) · 공지 — 읽기는 로그인 회원, 쓰기는 관리자
+    match /hubSettings/{id} {
+      allow read: if isSignedIn();
+      allow write: if hubAdmin();
+    }
+    match /hubAnnouncements/{id} {
+      allow read: if hubActive() || hubAdmin();
+      allow write: if hubAdmin();
+    }
+    // 노쇼 · 허위 등록 신고 — 신고자 + 관리자
+    match /hubReports/{id} {
+      allow create: if hubActive() && request.resource.data.get('reporterUid', '') == request.auth.uid
+        && request.resource.data.get('status', '') == 'open';
+      allow read: if hubAdmin() || (isSignedIn() && resource.data.get('reporterUid', '') == request.auth.uid);
+      allow update, delete: if hubAdmin();
     }
 
     // ────────────────────────────────────────────────────────────
@@ -362,6 +954,17 @@ service cloud.firestore {
     match /siteConfig/labels {
       allow get: if isSignedIn();
       allow list: if false;
+      allow write: if isTotalMasterUser();
+    }
+    // ⭐ 2026-11-06 문구 편집 모드(src/textOverrides.js) — 화면 글자 덮어쓰기 사전.
+    //  읽기: 로그인한 사용자 전체(기사·화주 포함 — 그들 화면에도 반영) · 쓰기: 최고관리자(부관리자 포함)만.
+    //  textOverridesPublic은 로그인 전 화면(로그인·기사 로그인 등)용 사본이라 누구나 읽기만 가능.
+    match /textOverrides/{id} {
+      allow read: if isSignedIn();
+      allow write: if isTotalMasterUser();
+    }
+    match /textOverridesPublic/{id} {
+      allow read: if true;
       allow write: if isTotalMasterUser();
     }
     // 💼 영업 견적(관리센터 › 영업) — 최고관리자만
@@ -440,6 +1043,11 @@ service cloud.firestore {
     // 💰 2026-11-04 플랫폼 비용·손익 — 비용 기준(단가·무료량·고정비)은 최고관리자만. 고객사에는 절대 보이지 않게.
     match /platformConfig/{docId} {
       allow read, write: if isTotalMasterUser();
+    }
+    // 🤖 2026-11-06 AI 팀 사용 기록 — 쓰기는 서버(Cloud Functions)만, 읽기는 최고관리자·부관리자만
+    match /aiTeamLogs/{docId} {
+      allow read: if isTotalMasterUser();
+      allow write: if false;
     }
     // 서버 사용량(Cloud Monitoring 수집 결과) — 쓰기는 서버(Cloud Functions)만, 읽기는 최고관리자만
     match /platformUsage/{docId} {
@@ -698,16 +1306,16 @@ service cloud.firestore {
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['hiddenBy']);
       // ⭐ 2026-11-04 전자결재 서명 — 지출결의 지급완료(paid) 처리·취소
       //  최종 승인된 비용·지출 결의(cat expense)만, 바꿀 수 있는 칸은 paid·history·updatedAt·drafterUnread 뿐.
-      //  누를 수 있는 사람: 같은 회사의 역할 test(경리)·hrAcct·admin·totalMaster, 부서 이름에 재무·경리·회계가 든 직원, 또는 그 문서의 최종 결재자
+      //  누를 수 있는 사람: 같은 회사의 경리(test)·경리사무원·hrAcct·allMgr(경리 화면)·최고관리자, 부서 이름에 재무·경리·회계·총무가 든 직원
       //  (Approval.jsx canPay와 같은 조건 — 결재 취소 진행 중에는 안 됨)
       allow update: if isApproved()
         && resource.data.get('status', '') == 'approved'
         && resource.data.get('cat', '') == 'expense'
         && resource.data.get('cancel', {}).get('status', '') != 'pending'
         && apAff().hasOnly(['paid', 'history', 'updatedAt', 'drafterUnread'])
-        && (((myUser().get('role', '') in ['test', 'acctStaff', 'hrAcct', 'allMgr', 'admin', 'totalMaster'] || myUser().get('team', '').matches('.*(재무|경리|회계|총무).*'))
-              && (myUser().get('companyName', '') == resource.data.get('company', '') || isTotalMasterUser()))
-          || resource.data.line[resource.data.line.size() - 1].uid == request.auth.uid);
+        // ⭐ 2026-11-07 운송 관리자(admin)·최종 결재자는 지급 처리 불가 — 경리 역할·재무 부서만(통합관리자·통합인사관리자는 화면 전환으로 앱에서 한 번 더 막음)
+        && (myUser().get('role', '') in ['test', 'acctStaff', 'hrAcct', 'allMgr', 'totalMaster'] || myUser().get('team', '').matches('.*(재무|경리|회계|총무).*'))
+        && (myUser().get('companyName', '') == resource.data.get('company', '') || isTotalMasterUser());
       allow delete: if false;
     }
 
@@ -847,16 +1455,147 @@ service cloud.firestore {
       allow delete: if isTotalMasterUser();
     }
     //  세션: 요청한 직원(requesterUid)과 최고관리자만. 하위 컬렉션(callerCandidates · calleeCandidates · messages)도 같게.
+    //  ⭐ 2026-11-07 화면 제어 — controlAllowed(제어 허용)는 직원 본인만 켤 수 있다(최고관리자는 끄기만).
+    //   제어 명령(controlCmds, 데이터 채널이 안 될 때의 느린 통로)은 최고관리자만, 직원이 허용한 동안에만 쓸 수 있다.
     match /supportSessions/{sid} {
-      allow create: if isApproved() && request.resource.data.get('requesterUid', '') == request.auth.uid;
+      allow create: if isApproved() && request.resource.data.get('requesterUid', '') == request.auth.uid
+        && request.resource.data.get('controlAllowed', false) != true;
       allow read: if isTotalMasterUser() || (isSignedIn() && resource.data.get('requesterUid', '') == request.auth.uid);
-      allow update: if isTotalMasterUser() || (isSignedIn() && resource.data.get('requesterUid', '') == request.auth.uid
-        && request.resource.data.get('requesterUid', '') == resource.data.get('requesterUid', ''));
+      allow update: if isSignedIn() && resource.data.get('requesterUid', '') == request.auth.uid
+        && request.resource.data.get('requesterUid', '') == resource.data.get('requesterUid', '');
+      allow update: if isTotalMasterUser()
+        && (request.resource.data.get('controlAllowed', false) != true || resource.data.get('controlAllowed', false) == true);
       allow delete: if isTotalMasterUser();
-      match /{sub}/{docId} {
-        allow read, write: if isTotalMasterUser() || (isSignedIn()
+      match /controlCmds/{cid} {
+        allow create: if isTotalMasterUser()
+          && get(/databases/$(database)/documents/supportSessions/$(sid)).data.get('controlAllowed', false) == true;
+        allow read, delete: if isTotalMasterUser() || (isSignedIn()
           && get(/databases/$(database)/documents/supportSessions/$(sid)).data.get('requesterUid', '') == request.auth.uid);
       }
+      match /{sub}/{docId} {
+        allow read, write: if sub != 'controlCmds' && (isTotalMasterUser() || (isSignedIn()
+          && get(/databases/$(database)/documents/supportSessions/$(sid)).data.get('requesterUid', '') == request.auth.uid));
+      }
+    }
+    // ════════════════════════════════════════════════════════════
+    // 💰 ⭐ 2026-11-06 직원 급여(급여 계산·명세서) · 연차 사용 촉진 — 잠금 스위치와 상관없이 항상 회사 검사
+    //  수정: 경리관리자(test)·통합인사관리자(hrAcct)·통합관리자(allMgr)·회사 마스터·최고관리자 + 권한 관리에서 [급여관리] "수정"인 역할
+    //  조회: 인사관리자(기본 조회 — 권한 관리에서 숨김/수정 가능)·대표(직책)·임원 화면 역할 + [급여관리] "조회"인 역할
+    //  직원 본인: 발행된(published) 본인 명세서만 읽고 "읽음(readAt)"만 표시 · 본인 연차 촉진 문서에 사용 계획만 제출
+    //  화면 기준은 src/payrollAccess.js(같은 판단)
+    // ════════════════════════════════════════════════════════════
+    function payRoleMenus() {
+      let r = myUser().get('role', '');
+      let p = /databases/$(database)/documents/customRoles/$(r);
+      let ov = /databases/$(database)/documents/companyRoleOverrides/$(myUser().get('companyName', ''));
+      let g = exists(p) ? get(p).data : {};
+      let o = exists(ov) ? get(ov).data.get('roles', {}).get(r, {}) : {};
+      return ('menus' in o) ? o.get('menus', {}) : g.get('menus', {});
+    }
+    function payFixedRole() {
+      return myUser().get('role', '') in ['admin', 'user', 'viewer', 'hrManager', 'test', 'hrAcct', 'allMgr', 'totalMaster', 'driver', 'shipper', 'cafeUser'];
+    }
+    function payrollEditor() {
+      return isTotalMasterUser() || (isApproved() && (
+        myUser().get('role', '') in ['test', 'hrAcct', 'allMgr'] || myUser().get('isMaster', false) == true
+        || (myUser().get('role', '') == 'hrManager' && payRoleMenus().get('급여관리', 'read') == 'write')
+        || (!payFixedRole() && payRoleMenus().get('급여관리', 'hidden') == 'write')));
+    }
+    function payrollViewer() {
+      return payrollEditor() || (isApproved() && (
+        (myUser().get('role', '') == 'hrManager' && payRoleMenus().get('급여관리', 'read') != 'hidden')
+        || myUser().get('position', '') in ['대표', '대표이사'] || isExecRoleUser()
+        || (!payFixedRole() && payRoleMenus().get('급여관리', 'hidden') == 'read')));
+    }
+    // 연차 촉진 관리(발송·날짜 지정) — 인사팀(isHrStaff) + 회사 마스터
+    function leaveManager() {
+      return isApproved() && (isHrStaff() || myUser().get('isMaster', false) == true);
+    }
+    function payCo(d) {
+      return isTotalMasterUser() || d.get('companyName', '') == myCo();
+    }
+    // 급여·연차 설정(payrollSettings/{회사}) — 요율은 급여 담당, 연차 촉진 설정(leave)은 인사 담당도
+    match /payrollSettings/{co} {
+      allow read: if isTotalMasterUser() || (myCo() == co && (payrollViewer() || leaveManager() || (isApproved() && myUser().get('role', '') in ['test', 'acctStaff'])));
+      allow create, update: if (isTotalMasterUser() || myCo() == co) && request.resource.data.get('companyName', '') == co && (
+        payrollEditor()
+        || (leaveManager() && (resource == null
+          ? request.resource.data.keys().hasOnly(['companyName', 'leave', 'leaveUpdatedAt', 'leaveUpdatedBy'])
+          : request.resource.data.diff(resource.data).affectedKeys().hasOnly(['companyName', 'leave', 'leaveUpdatedAt', 'leaveUpdatedBy']))));
+      allow delete: if isTotalMasterUser();
+    }
+    // 직원별 급여 설정 · 월 급여 처리(확정·발행·지급 기록)
+    match /payrollEmployees/{id} {
+      allow read: if (resource == null && payrollViewer()) || (payrollViewer() && payCo(resource.data));
+      allow create: if payrollEditor() && payCo(request.resource.data);
+      allow update: if payrollEditor() && payCo(resource.data) && request.resource.data.get('companyName', '') == resource.data.get('companyName', '');
+      allow delete: if payrollEditor() && payCo(resource.data);
+    }
+    match /payrollRuns/{id} {
+      allow read: if (resource == null && payrollViewer()) || (payrollViewer() && payCo(resource.data));
+      allow create: if payrollEditor() && payCo(request.resource.data);
+      allow update: if payrollEditor() && payCo(resource.data) && request.resource.data.get('companyName', '') == resource.data.get('companyName', '');
+      allow delete: if isTotalMasterUser();
+    }
+    // 급여명세서 — 확정(confirmed)·지급(paid)된 명세서는 금액을 못 바꾸고 상태(확정 해제·발행·지급)만
+    match /payslips/{id} {
+      allow read: if (resource != null && isSignedIn() && resource.data.get('uid', '') == request.auth.uid && resource.data.get('published', false) == true)
+        || (resource == null && payrollViewer())
+        || (payrollViewer() && payCo(resource.data));
+      allow create: if payrollEditor() && payCo(request.resource.data);
+      allow update: if (payrollEditor() && payCo(resource.data)
+          && request.resource.data.get('companyName', '') == resource.data.get('companyName', '')
+          && request.resource.data.get('uid', '') == resource.data.get('uid', '')
+          && (resource.data.get('status', 'draft') == 'draft'
+            || request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'published', 'publishedAt', 'publishedBy', 'paidAt', 'paidDate', 'updatedAt', 'updatedBy', 'unlockReason'])))
+        || (isSignedIn() && resource.data.get('uid', '') == request.auth.uid && resource.data.get('published', false) == true
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['readAt']));
+      allow delete: if payrollEditor() && payCo(resource.data) && resource.data.get('status', 'draft') == 'draft';
+    }
+    // 인사·급여 알림(명세서 발행 · 연차 촉진) — 받는 사람만 읽고 읽음 표시
+    match /hrNotices/{id} {
+      allow read: if isSignedIn() && resource.data.get('uid', '') == request.auth.uid;
+      allow update: if isSignedIn() && resource.data.get('uid', '') == request.auth.uid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['readAt']);
+      allow create: if isTotalMasterUser() || (isApproved() && request.resource.data.get('companyName', '') == myCo()
+        && request.resource.data.get('uid', '') is string
+        && (request.resource.data.get('kind', '') == 'leavePlan' || payrollEditor() || leaveManager()));
+      allow delete: if isTotalMasterUser();
+    }
+    // 연차 사용 촉진 기록 — log는 덧붙이기만(지우거나 고치지 못함: 법적 증빙)
+    match /leavePromotions/{id} {
+      allow read: if (resource != null && isSignedIn() && resource.data.get('uid', '') == request.auth.uid)
+        || (resource == null && isApproved())
+        || ((leaveManager() || isTotalMasterUser() || (isApproved() && myUser().get('role', '') in ['test', 'acctStaff'])) && payCo(resource.data));
+      allow create: if (leaveManager() || isTotalMasterUser()) && payCo(request.resource.data);
+      allow update: if ((leaveManager() || isTotalMasterUser()) && payCo(resource.data)
+          && request.resource.data.get('companyName', '') == resource.data.get('companyName', '')
+          && request.resource.data.get('log', []).hasAll(resource.data.get('log', [])))
+        || (isSignedIn() && resource.data.get('uid', '') == request.auth.uid
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['plan', 'log', 'updatedAt'])
+          && request.resource.data.get('log', []).size() == resource.data.get('log', []).size() + 1
+          && request.resource.data.get('log', []).hasAll(resource.data.get('log', []))
+          && request.resource.data.log[request.resource.data.log.size() - 1].get('type', '') == 'plan');
+      allow delete: if isTotalMasterUser();
+    }
+    // 📊 2026-11-06 일일 경영 보고(임원 화면 · 대표·임원 일일 보고서) — src/dailyReport.js · functions/dailyReport.js
+    //  받기 설정(사람마다): 본인만 읽고 쓴다(회사는 내 회사로만). 서버 푸시는 관리자 SDK로 읽는다.
+    match /dailyReportPrefs/{uid} {
+      allow read, delete: if isSignedIn() && request.auth.uid == uid;
+      allow create, update: if isApproved() && request.auth.uid == uid && request.resource.data.get('uid', '') == uid
+        && (isTotalMasterUser() || request.resource.data.get('companyName', '') == myCo());
+    }
+    //  회사 설정(받는 사람 recipients{uid:true|false}): 그 회사 직원은 읽고, 최고관리자·회사 관리자(isCompanyAdmin)·마스터·대표 직책만 바꾼다
+    match /dailyReportCompany/{co} {
+      allow read: if isTotalMasterUser() || (isApproved() && myCo() == co);
+      allow create, update: if (isTotalMasterUser() || (isApproved() && myCo() == co && (isCompanyAdmin(co) || myUser().get('isMaster', false) == true
+          || myUser().get('position', '') in ['대표', '대표이사', '사장'])))
+        && request.resource.data.get('companyName', '') == co;
+      allow delete: if isTotalMasterUser();
+    }
+    //  발송 기록(중복 발송 방지) — 서버만
+    match /dailyReportLogs/{id} {
+      allow read, write: if false;
     }
     match /{col}/{rest=**} {
       allow read, write: if isApproved() && !(col in ['adminSecrets', 'resetBackups', 'resetLogs', 'resetJobs', 'loginSessions', 'orderTrash', 'recurringRuns', 'internalMails', 'approvals', 'boardPosts', 'notices', 'handovers', 'salesQuotes', 'contracts', 'platformNotices', 'platformInvoices', 'companyPlans', 'publicPricing', 'planRequests', 'userPrefs', 'companyRoleOverrides', 'customRoles', 'supportRequests', 'supportSessions', 'driverStatements', 'fleetPenalties', 'fixedRoutes', 'routeBoards', 'personalSchedules', 'publicCompanies', 'companyContracts',
@@ -869,7 +1608,23 @@ service cloud.firestore {
         // 💰 2026-11-04 플랫폼 운영 문서 — 위에서 따로 정함(예전엔 siteConfig가 이 목록에 없어 승인된 고객사 직원도 요금·관제 집계를 읽을 수 있었다)
         'siteConfig', 'platformConfig', 'platformUsage', 'usageCounters',
         // ⭐ 2026-11-05 기사 가입 처리 기록 — 위에서 따로 정함
-        'driverSignupLogs']);
+        'driverSignupLogs',
+        // ⭐ 2026-11-06 문구 편집 모드 — 위에서 따로 정함(쓰기는 최고관리자만)
+        'textOverrides', 'textOverridesPublic',
+        // ⭐ 2026-11-06 오더마켓 — 위에서 따로 정함(예전엔 이 목록에 없어 승인된 직원이면 누구나 게시글을 고칠 수 있었다)
+        'cafeOrders', 'marketNotices',
+        // ⭐ 2026-11-06 로지스웹 허브 콜 — 위에서 따로 정함(빠지면 배차 프로그램 직원 누구나 허브 회원·오더를 고칠 수 있다)
+        'hubMembers', 'hubStats', 'hubQuota', 'hubOrders', 'hubNotices', 'hubReports',
+        // ⭐ 2026-11-06 허브 위치관제 · 예치금 원장 · 설정 — 위에서 따로 정함(빠지면 배차 프로그램 직원 누구나 잔액을 쓸 수 있다)
+        'hubLive', 'hubWallets', 'hubLedger', 'hubLedgerKeys', 'hubCharges', 'hubPayouts', 'hubAdjustments', 'hubDebts', 'hubSettings', 'hubAnnouncements',
+        // ⭐ 2026-11-07 허브 고객관리 · 출금 · 배차 프로그램 허브 등록 요청 — 위에서 따로 정함(빠지면 다른 회사 장소 · 출금을 고칠 수 있다)
+        'hubPlaces', 'hubWithdrawals', 'hubPostRequests',
+        // 💰 2026-11-06 직원 급여 · 연차 촉진 — 위에서 따로 정함
+        'payrollSettings', 'payrollEmployees', 'payrollRuns', 'payslips', 'hrNotices', 'leavePromotions',
+        // 🤖 2026-11-06 AI 팀 사용 기록 — 위에서 따로 정함
+        'aiTeamLogs',
+        // 📊 2026-11-06 일일 경영 보고 — 위에서 따로 정함
+        'dailyReportPrefs', 'dailyReportCompany', 'dailyReportLogs']);
     }
   }
 }

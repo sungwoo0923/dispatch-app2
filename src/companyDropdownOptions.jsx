@@ -20,7 +20,7 @@ import { useEditMode } from "./EditMode";
 export const DEFAULT_DROPDOWN_OPTIONS = {
   상하차방법: ["지게차", "수작업", "직접수작업", "수도움", "크레인", "리프트"],
   지급방식: ["계산서", "착불", "선불", "계좌이체", "손실", "개인", "취소"],
-  배차방식: ["24시", "인성", "직접배차", "고정기사", "24시(외부업체)"],
+  배차방식: ["24시", "인성", "직접배차", "고정기사", "24시(외부업체)", "로지스허브"],
   화물타입: ["파레트", "박스", "통"],
   톤수타입: ["톤", "kg"],
 };
@@ -77,11 +77,14 @@ export function subscribeCompanyOptions(co, cb) {
 }
 export const companyOptionsSnapshot = (co) => (co ? getStore(co).state : EMPTY);
 
+// ⭐ 2026-11-07 회사가 목록을 바꿨어도 꼭 있어야 하는 값 — 로지스웹 허브 연동 오더의 배차방식(functions/hubSync.js LW_DISPATCH)
+const ALWAYS_OPTIONS = { 배차방식: ["로지스허브"] };
 // 회사 목록(바꾼 적 없으면 기본 목록) — key별
 export function listFromStored(stored, key, fallback) {
   if (Array.isArray(stored) && stored.length > 0) {
     const out = []; const seen = new Set();
     stored.forEach((v) => { const c = clean(v); if (c && !seen.has(c)) { seen.add(c); out.push(c); } });
+    (ALWAYS_OPTIONS[key] || []).forEach((v) => { if (!seen.has(v)) { seen.add(v); out.push(v); } });
     if (out.length) return out;
   }
   return fallback && fallback.length ? fallback : (DEFAULT_DROPDOWN_OPTIONS[key] || []);
@@ -163,6 +166,31 @@ export async function addCompanyDropdownOption(key, name, company) {
     st.state = { loaded: true, opts: { ...(st.state.opts || {}), [key]: nextList } };
     emit(st);
   }
+  return v;
+}
+
+// ⭐ 2026-11-06 선택 목록의 🗑 삭제 — 회사 목록에서 하나 뺀다(회사 공용 · PC·모바일 모든 화면)
+//  · 회사가 아직 목록을 바꾼 적이 없으면(기본 목록 상태) 기본 목록에서 그 이름만 뺀 목록으로 처음 저장 → 기본 항목도 지울 수 있다
+//  · 마지막 하나는 지우지 않는다(빈 목록이면 기본 목록이 다시 나오기 때문)
+//  · 이미 저장된 오더 값은 그대로(목록에 없으면 "직접 입력값"으로 보인다)
+export async function removeCompanyDropdownOption(key, name, company) {
+  const co = String(company || "").trim() || resolveCompanyKey();
+  const v = clean(name);
+  if (!co) throw new Error("회사 정보를 찾지 못했습니다");
+  if (!v) return null;
+  const ref = doc(db, "companySettings", co);
+  let stored = companyOptionsSnapshot(co).opts?.[key];
+  if (!companyOptionsSnapshot(co).loaded) {
+    try { const snap = await getDoc(ref); stored = snap.exists() ? snap.data()?.dropdownOptions?.[key] : null; } catch { /* 아래에서 기본 목록으로 */ }
+  }
+  const cur = listFromStored(stored, key);
+  const next = cur.filter((x) => x !== v);
+  if (next.length === cur.length) return null;
+  if (!next.length) throw new Error("마지막 항목은 지울 수 없어요");
+  await setDoc(ref, { dropdownOptions: { [key]: next } }, { merge: true });
+  const st = getStore(co);
+  st.state = { loaded: true, opts: { ...(st.state.opts || {}), [key]: next } };
+  emit(st);
   return v;
 }
 

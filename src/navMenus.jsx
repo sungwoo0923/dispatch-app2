@@ -28,12 +28,32 @@ export const MENU_SUBS = {
   관리자메뉴: { code: "ADMIN", items: [["members", "회원 관리"], ["linked", "연동 화주사"], ["loginSessions", "로그인 관리"], ["setup", "초기 설정 · 튜토리얼"]] }, // ⭐ 2026-11-03 구독·결제는 볼 수 있는 사람(경리·재무·임원·대표)만 — 화면을 열면 registerSubnav로 보인다
 };
 
+// ⭐ 2026-11-06 점검 — 없어진 세부 메뉴가 상단 메뉴에 계속 보이던 문제
+//   예전에 한 번 연 화면의 왼쪽 메뉴가 브라우저(localStorage)에 기억돼 있어서, 메뉴를 지운 뒤에도
+//   온도 관제·적재함 카메라·고정거래처관리 등이 마우스를 올리면 그대로 펼쳐졌다.
+//   · REMOVED_SUBS: 지운 세부 메뉴 key — 기억된 목록에서도 항상 뺀다
+//   · 휴대폰 화면(KpSubNav 휴대폰 모드)은 PC와 탭 key·구성이 달라 기억하지 않는다(PC 상단 메뉴가 모바일 목록으로 바뀌던 문제)
+export const REMOVED_SUBS = {
+  "FLEET CONTROL": ["temperature", "cargo-camera", "penalty", "settlement", "temp", "camera"],
+  CLIENTS: ["고정거래처관리", "고정노선관리", "하차지", "기본"],
+  DRIVERS: [],
+};
+const cleanFor = (code, items) => {
+  const rm = new Set(REMOVED_SUBS[code] || []);
+  return (items || []).filter((x) => x && x[0] && x[1] && !rm.has(String(x[0])) && !/온도\s*관제|적재함\s*카메라/.test(String(x[1])));
+};
+// PC 화면이 왼쪽 메뉴를 등록하지 않는 메뉴(지입차관리) — 예전에 휴대폰 화면이 남긴 목록은 쓰지 않고 항상 기본 목록
+const NO_REG = new Set(["FLEET CONTROL"]);
+const isPhoneWidth = () => { try { return window.innerWidth < 768; } catch { return false; } };
+
 // ⭐ 실제 화면의 왼쪽 메뉴를 기억 — 팀·권한마다 보이는 항목이 달라서, 한 번이라도 연 화면은 그 사람이 실제로 보는 항목만 펼친다
 const REG_KEY = (code) => { let r = ""; try { const rr = localStorage.getItem("role") || ""; r = rr + (SWITCH_ROLES[rr] ? `-${readSwitchView(rr)}` : ""); } catch { /* 무시 */ } return `kpSubnavReg:${r}:${code}`; }; // 화면 전환 역할(통합관리자·통합인사관리자)은 화면별로
 const _reg = {};
 export function registerSubnav(code, items) {
   if (!code || !Array.isArray(items) || !items.length) return;
-  const clean = items.filter((x) => x && x[0] && x[1]).map((x) => [String(x[0]), String(x[1])]);
+  if (isPhoneWidth()) return; // ⭐ 2026-11-06 휴대폰 화면 목록은 PC 상단 메뉴에 쓰지 않는다
+  const clean = cleanFor(code, items).map((x) => [String(x[0]), String(x[1])]);
+  if (!clean.length) return;
   const j = JSON.stringify(clean);
   const k = REG_KEY(code);
   if (_reg[k] === j) return;
@@ -41,7 +61,8 @@ export function registerSubnav(code, items) {
   try { localStorage.setItem(k, j); } catch { /* 무시 */ }
 }
 function registeredItems(code) {
-  try { const k = REG_KEY(code); const j = _reg[k] || localStorage.getItem(k); return j ? JSON.parse(j) : null; } catch { return null; }
+  if (NO_REG.has(code)) return null;
+  try { const k = REG_KEY(code); const j = _reg[k] || localStorage.getItem(k); const v = j ? cleanFor(code, JSON.parse(j)) : null; return v && v.length ? v : null; } catch { return null; }
 }
 
 // 세부 메뉴 이동 요청 — 화면이 아직 안 열렸으면 열린 뒤(3초 안) 적용

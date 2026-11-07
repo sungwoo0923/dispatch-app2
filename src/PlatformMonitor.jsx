@@ -306,6 +306,87 @@ export default function PlatformMonitor({ demoStats = null, tab: tabProp, onTab,
   const healthPick = (risky.length ? risky : [...companies].sort((a, b) => b.m.cnt - a.m.cnt)).slice(0, phone ? 4 : 6);
   const openCo = (name) => setDetailName(name);
 
+  const coView = phone ? (view === "table" ? "table" : "cards") : (view === "table" ? "table" : "split");
+  // 목록·상세 화면은 처음에 맨 위 회사를 골라 둔다(오른쪽이 비어 보이지 않게)
+  useEffect(() => { if (tab === "companies" && coView === "split" && !detailName && sorted.length) setDetailName(sorted[0].name); }, [tab, coView, detailName, sorted]);
+  // ⭐ 2026-11-06 운송사 상세(예전 오른쪽 서랍 내용) — 서랍과 운송사 관제의 오른쪽 칸이 같이 쓴다
+  const renderDetail = (inPane = false) => (detail ? (
+    <>
+              <div className="pm-hero" style={{ position: "sticky", top: inPane ? 64 : 0, zIndex: 2, padding: phone ? "calc(14px + env(safe-area-inset-top, 0px)) 16px 14px" : "20px 24px", color: "#fff" }}>
+                <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 12.5, letterSpacing: "0.24em", color: "#8FB0F0", fontWeight: 800 }}>CARRIER · {detail.code || "-"}</div>
+                    <div style={{ fontSize: phone ? 21 : 24, fontWeight: 900, marginTop: 4, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{detail.name}</div>
+                  </div>
+                  {!inPane && <button type="button" onClick={() => setDetailName(null)} aria-label="닫기" style={{ width: 40, height: 40, borderRadius: 11, border: "1px solid rgba(255,255,255,.2)", background: "rgba(255,255,255,.08)", color: "#fff", fontSize: 18, cursor: "pointer", flexShrink: 0 }}>✕</button>}
+                </div>
+                <div style={{ marginTop: 8, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                  <StatusChip s={detail.status} />
+                  <span style={{ fontSize: 14, color: "rgba(207,224,255,.8)" }}>건강도 <b style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", color: "#fff" }}>{detail.health}</b> · 가입 {ymdOf(detail.appliedAt)} · 대표 {detail.rep || "-"} {detail.phone ? `· ${detail.phone}` : ""}</span>
+                </div>
+              </div>
+              <div style={{ padding: phone ? 12 : 16, display: "flex", flexDirection: "column", gap: 12 }}>
+                {(detail.inactiveDays == null || detail.inactiveDays >= 7) && (detail.staff > 0 || detail.m.cnt > 0) && (
+                  <div style={{ borderRadius: 12, background: "#0F1A30", color: "#fff", padding: "10px 14px", fontSize: 14.5, fontWeight: 800 }}>
+                    {detail.inactiveDays == null ? "이 회사는 접속 기록이 없습니다" : `${detail.inactiveDays}일째 아무도 접속하지 않았습니다`} — 연락해 사용 여부를 확인해 보세요.
+                  </div>
+                )}
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0,1fr))", gap: 10 }}>
+                  <Tile dark code="LIVE" label="지금 접속" value={detail.onlineNow || 0} unit="명" foot={`24시간 ${detail.online}명 · PC ${detail.onlinePc} · 모바일 ${detail.onlineMobile}`} />
+                  <Tile code="STAFF" label="직원 계정" value={detail.staff} unit="명" foot={`관리자 ${detail.admins} · 승인 대기 ${detail.pending} · 기사 ${detail.drivers}`} />
+                  <Tile code="ORDERS" label="이번 달 오더" value={detail.m.cnt.toLocaleString()} unit="건" foot={<>전월 같은 기간 <Delta cur={detail.m.cnt} prev={detail.pmSame?.cnt} /></>} />
+                  <Tile code="GMV" label="이번 달 운송액" value={short(detail.m.sale)} unit="원" foot={`매익률 ${detail.m.sale ? ((detail.m.profit / detail.m.sale) * 100).toFixed(1) : "0.0"}%`} />
+                  <Tile code="LAST" label="전월 전체" value={detail.pm.cnt.toLocaleString()} unit="건" foot={`${short(detail.pm.sale)}원`} />
+                  <Tile dark code="BILL" label="예상 청구액" value={short(detail.bill.total)} unit="원" foot={`월말 예상 ${detail.bill.projected.toLocaleString()}건`} />
+                </div>
+                <Card code="DAILY" title="최근 30일 오더">
+                  <div style={{ height: 150 }}>
+                    <ResponsiveContainer width="100%" height="100%">
+                      <AreaChart data={daily.map((d, i) => { const dd = new Date(`${today}T00:00:00Z`); dd.setUTCDate(dd.getUTCDate() - (29 - i)); return { label: d.label, v: detail.daily?.[dd.toISOString().slice(0, 10)] || 0 }; })} margin={{ top: 6, right: 4, left: 0, bottom: 0 }}>
+                        <defs><linearGradient id="pmArea" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor={NAVY} stopOpacity={0.35} /><stop offset="1" stopColor={NAVY} stopOpacity={0} /></linearGradient></defs>
+                        <XAxis dataKey="label" axisLine={false} tickLine={false} interval={5} tick={{ fontSize: 12.5, fill: "#6b7280", fontFamily: MONO, fontVariantNumeric: "tabular-nums" }} />
+                        <YAxis hide />
+                        <Tooltip formatter={(v) => [`${v}건`, "오더"]} contentStyle={{ borderRadius: 10, fontSize: 14, fontWeight: 700 }} />
+                        <Area type="monotone" dataKey="v" stroke={NAVY} strokeWidth={2.4} fill="url(#pmArea)" />
+                      </AreaChart>
+                    </ResponsiveContainer>
+                  </div>
+                </Card>
+                <Card code="STAFF" title={`직원 ${detail.staffList?.length || 0}명`} right={<span style={{ fontSize: 13.5, fontWeight: 700, color: "#6b7280" }}>지금 접속 순 · 실시간</span>}>
+                  <StaffList list={detail.staffList || []} />
+                </Card>
+                {/* ⭐ 2026-11-02 운임규칙 — 회사별 맞춤 기능(최고관리자만 켜고 끔) */}
+                <CompanyFeaturesCard company={detail.name} />
+                <Card code="PLAN" title="요금제 · 청구 상태">
+                  {[
+                    ["요금제", detail.plan?.planId ? `${PLAN_NAMES[detail.plan.planId] || detail.plan.planId}${detail.plan.since ? ` (${detail.plan.since}부터)` : ""}` : "미지정(전체 기능)"],
+                    ["이달 청구 상태", detail.invoice ? `${detail.invoice.status || "미청구"}${detail.invoice.amount ? ` · ${Number(detail.invoice.amount).toLocaleString()}원` : ""}${detail.invoice.paidAt ? ` · 입금 ${detail.invoice.paidAt}` : ""}` : "미청구"],
+                    ["입금 알림", detail.invoice?.payNotice ? `${detail.invoice.payNotice.name || ""} ${detail.invoice.payNotice.date || ""}` : "-"],
+                    ["요금제 변경 요청", detail.planReqs?.length ? detail.planReqs.map((r) => `→ ${PLAN_NAMES[r.to] || r.toName || r.to}`).join(", ") : "없음"],
+                  ].map(([k, v]) => (
+                    <div key={k} style={{ display: "flex", justifyContent: "space-between", gap: 12, padding: "8px 0", borderTop: "1px solid #EEF1F6", fontSize: 14.5 }}>
+                      <span style={{ color: "#6b7280", fontWeight: 600, whiteSpace: "nowrap" }}>{k}</span><b style={{ color: "#0F1A30", textAlign: "right" }}>{v}</b>
+                    </div>
+                  ))}
+                  <button type="button" onClick={() => { setDetailName(null); setTab("payments"); }} style={{ marginTop: 10, width: "100%", height: 42, borderRadius: 11, border: "none", background: NAVY, color: "#fff", fontSize: 14.5, fontWeight: 800, cursor: "pointer" }}>수납 관리에서 요금제·청구 처리 ›</button>
+                </Card>
+                <Card code="USAGE" title="사용 현황">
+                  {[["마지막 접속", detail.lastSeen ? `${ago(detail.lastSeen)} (${new Date(detail.lastSeen).toLocaleString("ko-KR", { hour12: false })})` : "기록 없음"], ["마지막 오더", detail.lastOrder || "-"], ["퇴사 처리 계정", `${detail.quit || 0}명`], ["지입·기사 등록", `${detail.fleet}명`], ["누적 오더", `${detail.totalOrders.toLocaleString()}건`], ["거래처 / 하차지", `${detail.clients} / ${detail.places}`]].map(([k, v]) => (
+                    <div key={k} style={{ display: "flex", justifyContent: "space-between", gap: 12, padding: "8px 0", borderTop: "1px solid #EEF1F6", fontSize: 14.5 }}>
+                      <span style={{ color: "#6b7280", fontWeight: 600, whiteSpace: "nowrap" }}>{k}</span><b style={{ color: "#0F1A30", textAlign: "right" }}>{v}</b>
+                    </div>
+                  ))}
+                </Card>
+                <Card code="INVOICE" title="예상 청구 내역">
+                  {[["기본료", detail.bill.base], [`계정 추가 (${Math.max(0, detail.staff - pricing.includedSeats)}명)`, detail.bill.seats], [`오더 초과 (${Math.max(0, detail.bill.projected - pricing.includedOrders).toLocaleString()}건)`, detail.bill.orders]].map(([k, v]) => (
+                    <div key={k} style={{ display: "flex", justifyContent: "space-between", padding: "8px 0", borderTop: "1px solid #EEF1F6", fontSize: 14.5 }}><span style={{ color: "#374151", fontWeight: 600 }}>{k}</span><b style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{won(v)}</b></div>
+                  ))}
+                  <div style={{ display: "flex", justifyContent: "space-between", padding: "10px 0 0", borderTop: `2px solid ${NAVY}`, fontSize: 16 }}><b>합계 (VAT 별도)</b><b style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", color: NAVY }}>{won(detail.bill.total)}</b></div>
+                </Card>
+              </div>
+    </>
+  ) : null);
+
   return (
     <NavWrap bare={bare} code="PLATFORM" title="관리센터" icon="server" active={tab} onSelect={setTab}
       groups={[
@@ -443,8 +524,8 @@ export default function PlatformMonitor({ demoStats = null, tab: tabProp, onTab,
                 {[["orders", "이번 달 오더순"], ["risk", "주의 필요순"], ["online", "지금 접속순"], ["recent", "최근 접속순"], ["gmv", "운송액순"], ["bill", "청구액순"], ["health", "건강도순"], ["staff", "계정 수순"], ["data", "데이터량순"]].map(([k, l]) => <option key={k} value={k}>{l}</option>)}
               </CustomSelect>
               <div style={{ display: "inline-flex", padding: 3, borderRadius: 11, background: "#EEF2F8" }}>
-                {[["cards", "카드"], ["table", "표"]].map(([k, l]) => (
-                  <button key={k} type="button" onClick={() => setView(k)} style={{ height: 34, padding: "0 14px", borderRadius: 8, border: "none", fontSize: 14.5, fontWeight: 800, cursor: "pointer", background: view === k ? NAVY : "transparent", color: view === k ? "#fff" : "#5B6B85" }}>{l}</button>
+                {(phone ? [["cards", "카드"], ["table", "표"]] : [["split", "목록·상세"], ["table", "표"]]).map(([k, l]) => (
+                  <button key={k} type="button" onClick={() => setView(k)} style={{ height: 34, padding: "0 14px", borderRadius: 8, border: "none", fontSize: 14.5, fontWeight: 800, cursor: "pointer", background: coView === k ? NAVY : "transparent", color: coView === k ? "#fff" : "#5B6B85" }}>{l}</button>
                 ))}
               </div>
             </div>
@@ -455,7 +536,32 @@ export default function PlatformMonitor({ demoStats = null, tab: tabProp, onTab,
                 return <button key={k} type="button" onClick={() => setFilter(k)} style={{ flexShrink: 0, height: 36, padding: "0 13px", borderRadius: 99, border: `1px solid ${on ? NAVY : "#DCE3EE"}`, background: on ? NAVY : "#fff", color: on ? "#fff" : "#3A4A66", fontSize: 14.5, fontWeight: 800, cursor: "pointer", whiteSpace: "nowrap" }}>{l} <span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", opacity: 0.7 }}>{n}</span></button>;
               })}
             </div>
-            {view === "cards" ? (
+            {coView === "split" ? (
+              /* ⭐ 2026-11-06 운송사 관제 — 왼쪽: 회사 목록(검색·필터) / 오른쪽: 고른 회사의 상세(예전 서랍 내용 그대로) */
+              <div className="pm-split" style={{ display: "grid", gridTemplateColumns: "minmax(300px, 380px) minmax(0, 1fr)", gap: 14, alignItems: "start", margin: "0 -4px" }}>
+                <div style={{ border: "1px solid #E3E8F0", borderRadius: 14, overflow: "hidden", background: "#fff", maxHeight: "calc(100vh - 240px)", overflowY: "auto", position: "sticky", top: 84 }} data-co-list="1">
+                  {sorted.length === 0 ? <div style={{ padding: "30px 0", textAlign: "center", color: "#6b7280", fontSize: 14.5 }}>조건에 맞는 운송사가 없습니다</div> : sorted.map((c) => {
+                    const on = detail?.name === c.name;
+                    return (
+                      <button key={c.name} type="button" onClick={() => openCo(c.name)} data-co-item={c.name}
+                        style={{ width: "100%", display: "flex", alignItems: "center", gap: 10, padding: "12px 14px", border: "none", borderBottom: "1px solid #EEF1F6", textAlign: "left", cursor: "pointer",
+                          background: on ? "linear-gradient(90deg,#1B2B4B,#2D4C82)" : "#fff", color: on ? "#fff" : "#0F1A30" }}>
+                        <span style={{ width: 8, height: 8, borderRadius: 9, flexShrink: 0, background: c.onlineNow ? (on ? "#CFE0FF" : NAVY) : (on ? "rgba(255,255,255,.35)" : "#CBD3E1") }} />
+                        <span style={{ flex: 1, minWidth: 0 }}>
+                          <span style={{ display: "block", fontSize: 15, fontWeight: 900, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{c.name}</span>
+                          <span style={{ display: "block", fontSize: 13, fontWeight: 600, color: on ? "rgba(255,255,255,.7)" : "#7A879C", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>직원 {c.staff} · 기사 {c.drivers} · 이번 달 {c.m.cnt.toLocaleString()}건 · {ago(c.lastSeen)}</span>
+                        </span>
+                        {c.pending > 0 && <span style={{ flexShrink: 0, minWidth: 22, height: 22, padding: "0 6px", borderRadius: 11, background: on ? "#fff" : NAVY, color: on ? NAVY : "#fff", fontSize: 12.5, fontWeight: 900, display: "inline-flex", alignItems: "center", justifyContent: "center" }}>{c.pending}</span>}
+                        <span style={{ flexShrink: 0, fontSize: 13, fontWeight: 800, color: on ? "#fff" : NAVY }}>{c.status.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+                <div style={{ border: "1px solid #E3E8F0", borderRadius: 14, overflow: "hidden", background: "#F4F6FA", minWidth: 0 }} data-co-detail="1">
+                  {detail ? renderDetail(true) : <div style={{ padding: "60px 20px", textAlign: "center", color: "#7A879C", fontSize: 15, fontWeight: 700 }}>왼쪽에서 운송사를 고르면 상세가 여기에 보입니다</div>}
+                </div>
+              </div>
+            ) : coView === "cards" ? (
               sorted.length === 0 ? <div style={{ padding: "30px 0", textAlign: "center", color: "#6b7280" }}>조건에 맞는 운송사가 없습니다</div> : (
                 <div style={{ display: "grid", gridTemplateColumns: phone ? "minmax(0,1fr)" : "repeat(auto-fill, minmax(290px, 1fr))", gap: 12 }}>
                   {sorted.map((c) => <HealthCard key={c.name} c={c} today={today} onOpen={() => openCo(c.name)} />)}
@@ -568,81 +674,11 @@ export default function PlatformMonitor({ demoStats = null, tab: tabProp, onTab,
       {tab === "applications" && <CompanyApplications />}
 
       {/* 운송사 상세 — ⭐ 2026-11-02 관리자센터: 폰은 전체 화면, PC는 오른쪽 패널(최대 640px) · 직원 목록(권한·마지막 접속) · 요금제/청구 상태 */}
-      {detail && (
+      {/* ⭐ 2026-11-06 운송사 관제(PC)는 오른쪽 칸에 바로 보여 주므로 서랍은 다른 화면·폰에서만 */}
+      {detail && !(tab === "companies" && coView === "split") && (
         <div onClick={() => setDetailName(null)} style={{ position: "fixed", inset: 0, zIndex: 99990, background: "rgba(15,23,42,.45)", display: "flex", justifyContent: "flex-end" }}>
           <div onClick={(e) => e.stopPropagation()} className="pm-drawer" style={{ width: phone ? "100%" : "min(640px, 94vw)", height: "100%", background: "#F4F6FA", overflowY: "auto", boxShadow: "-20px 0 40px rgba(0,0,0,.2)", display: "flex", flexDirection: "column" }}>
-            <div className="pm-hero" style={{ position: "sticky", top: 0, zIndex: 2, padding: phone ? "calc(14px + env(safe-area-inset-top, 0px)) 16px 14px" : "20px 24px", color: "#fff" }}>
-              <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 12.5, letterSpacing: "0.24em", color: "#8FB0F0", fontWeight: 800 }}>CARRIER · {detail.code || "-"}</div>
-                  <div style={{ fontSize: phone ? 21 : 24, fontWeight: 900, marginTop: 4, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{detail.name}</div>
-                </div>
-                <button type="button" onClick={() => setDetailName(null)} aria-label="닫기" style={{ width: 40, height: 40, borderRadius: 11, border: "1px solid rgba(255,255,255,.2)", background: "rgba(255,255,255,.08)", color: "#fff", fontSize: 18, cursor: "pointer", flexShrink: 0 }}>✕</button>
-              </div>
-              <div style={{ marginTop: 8, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-                <StatusChip s={detail.status} />
-                <span style={{ fontSize: 14, color: "rgba(207,224,255,.8)" }}>건강도 <b style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", color: "#fff" }}>{detail.health}</b> · 가입 {ymdOf(detail.appliedAt)} · 대표 {detail.rep || "-"} {detail.phone ? `· ${detail.phone}` : ""}</span>
-              </div>
-            </div>
-            <div style={{ padding: phone ? 12 : 16, display: "flex", flexDirection: "column", gap: 12 }}>
-              {(detail.inactiveDays == null || detail.inactiveDays >= 7) && (detail.staff > 0 || detail.m.cnt > 0) && (
-                <div style={{ borderRadius: 12, background: "#0F1A30", color: "#fff", padding: "10px 14px", fontSize: 14.5, fontWeight: 800 }}>
-                  {detail.inactiveDays == null ? "이 회사는 접속 기록이 없습니다" : `${detail.inactiveDays}일째 아무도 접속하지 않았습니다`} — 연락해 사용 여부를 확인해 보세요.
-                </div>
-              )}
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0,1fr))", gap: 10 }}>
-                <Tile dark code="LIVE" label="지금 접속" value={detail.onlineNow || 0} unit="명" foot={`24시간 ${detail.online}명 · PC ${detail.onlinePc} · 모바일 ${detail.onlineMobile}`} />
-                <Tile code="STAFF" label="직원 계정" value={detail.staff} unit="명" foot={`관리자 ${detail.admins} · 승인 대기 ${detail.pending} · 기사 ${detail.drivers}`} />
-                <Tile code="ORDERS" label="이번 달 오더" value={detail.m.cnt.toLocaleString()} unit="건" foot={<>전월 같은 기간 <Delta cur={detail.m.cnt} prev={detail.pmSame?.cnt} /></>} />
-                <Tile code="GMV" label="이번 달 운송액" value={short(detail.m.sale)} unit="원" foot={`매익률 ${detail.m.sale ? ((detail.m.profit / detail.m.sale) * 100).toFixed(1) : "0.0"}%`} />
-                <Tile code="LAST" label="전월 전체" value={detail.pm.cnt.toLocaleString()} unit="건" foot={`${short(detail.pm.sale)}원`} />
-                <Tile dark code="BILL" label="예상 청구액" value={short(detail.bill.total)} unit="원" foot={`월말 예상 ${detail.bill.projected.toLocaleString()}건`} />
-              </div>
-              <Card code="DAILY" title="최근 30일 오더">
-                <div style={{ height: 150 }}>
-                  <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={daily.map((d, i) => { const dd = new Date(`${today}T00:00:00Z`); dd.setUTCDate(dd.getUTCDate() - (29 - i)); return { label: d.label, v: detail.daily?.[dd.toISOString().slice(0, 10)] || 0 }; })} margin={{ top: 6, right: 4, left: 0, bottom: 0 }}>
-                      <defs><linearGradient id="pmArea" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor={NAVY} stopOpacity={0.35} /><stop offset="1" stopColor={NAVY} stopOpacity={0} /></linearGradient></defs>
-                      <XAxis dataKey="label" axisLine={false} tickLine={false} interval={5} tick={{ fontSize: 12.5, fill: "#6b7280", fontFamily: MONO, fontVariantNumeric: "tabular-nums" }} />
-                      <YAxis hide />
-                      <Tooltip formatter={(v) => [`${v}건`, "오더"]} contentStyle={{ borderRadius: 10, fontSize: 14, fontWeight: 700 }} />
-                      <Area type="monotone" dataKey="v" stroke={NAVY} strokeWidth={2.4} fill="url(#pmArea)" />
-                    </AreaChart>
-                  </ResponsiveContainer>
-                </div>
-              </Card>
-              <Card code="STAFF" title={`직원 ${detail.staffList?.length || 0}명`} right={<span style={{ fontSize: 13.5, fontWeight: 700, color: "#6b7280" }}>지금 접속 순 · 실시간</span>}>
-                <StaffList list={detail.staffList || []} />
-              </Card>
-              {/* ⭐ 2026-11-02 운임규칙 — 회사별 맞춤 기능(최고관리자만 켜고 끔) */}
-              <CompanyFeaturesCard company={detail.name} />
-              <Card code="PLAN" title="요금제 · 청구 상태">
-                {[
-                  ["요금제", detail.plan?.planId ? `${PLAN_NAMES[detail.plan.planId] || detail.plan.planId}${detail.plan.since ? ` (${detail.plan.since}부터)` : ""}` : "미지정(전체 기능)"],
-                  ["이달 청구 상태", detail.invoice ? `${detail.invoice.status || "미청구"}${detail.invoice.amount ? ` · ${Number(detail.invoice.amount).toLocaleString()}원` : ""}${detail.invoice.paidAt ? ` · 입금 ${detail.invoice.paidAt}` : ""}` : "미청구"],
-                  ["입금 알림", detail.invoice?.payNotice ? `${detail.invoice.payNotice.name || ""} ${detail.invoice.payNotice.date || ""}` : "-"],
-                  ["요금제 변경 요청", detail.planReqs?.length ? detail.planReqs.map((r) => `→ ${PLAN_NAMES[r.to] || r.toName || r.to}`).join(", ") : "없음"],
-                ].map(([k, v]) => (
-                  <div key={k} style={{ display: "flex", justifyContent: "space-between", gap: 12, padding: "8px 0", borderTop: "1px solid #EEF1F6", fontSize: 14.5 }}>
-                    <span style={{ color: "#6b7280", fontWeight: 600, whiteSpace: "nowrap" }}>{k}</span><b style={{ color: "#0F1A30", textAlign: "right" }}>{v}</b>
-                  </div>
-                ))}
-                <button type="button" onClick={() => { setDetailName(null); setTab("payments"); }} style={{ marginTop: 10, width: "100%", height: 42, borderRadius: 11, border: "none", background: NAVY, color: "#fff", fontSize: 14.5, fontWeight: 800, cursor: "pointer" }}>수납 관리에서 요금제·청구 처리 ›</button>
-              </Card>
-              <Card code="USAGE" title="사용 현황">
-                {[["마지막 접속", detail.lastSeen ? `${ago(detail.lastSeen)} (${new Date(detail.lastSeen).toLocaleString("ko-KR", { hour12: false })})` : "기록 없음"], ["마지막 오더", detail.lastOrder || "-"], ["퇴사 처리 계정", `${detail.quit || 0}명`], ["지입·기사 등록", `${detail.fleet}명`], ["누적 오더", `${detail.totalOrders.toLocaleString()}건`], ["거래처 / 하차지", `${detail.clients} / ${detail.places}`]].map(([k, v]) => (
-                  <div key={k} style={{ display: "flex", justifyContent: "space-between", gap: 12, padding: "8px 0", borderTop: "1px solid #EEF1F6", fontSize: 14.5 }}>
-                    <span style={{ color: "#6b7280", fontWeight: 600, whiteSpace: "nowrap" }}>{k}</span><b style={{ color: "#0F1A30", textAlign: "right" }}>{v}</b>
-                  </div>
-                ))}
-              </Card>
-              <Card code="INVOICE" title="예상 청구 내역">
-                {[["기본료", detail.bill.base], [`계정 추가 (${Math.max(0, detail.staff - pricing.includedSeats)}명)`, detail.bill.seats], [`오더 초과 (${Math.max(0, detail.bill.projected - pricing.includedOrders).toLocaleString()}건)`, detail.bill.orders]].map(([k, v]) => (
-                  <div key={k} style={{ display: "flex", justifyContent: "space-between", padding: "8px 0", borderTop: "1px solid #EEF1F6", fontSize: 14.5 }}><span style={{ color: "#374151", fontWeight: 600 }}>{k}</span><b style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{won(v)}</b></div>
-                ))}
-                <div style={{ display: "flex", justifyContent: "space-between", padding: "10px 0 0", borderTop: `2px solid ${NAVY}`, fontSize: 16 }}><b>합계 (VAT 별도)</b><b style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", color: NAVY }}>{won(detail.bill.total)}</b></div>
-              </Card>
-            </div>
+            {renderDetail()}
           </div>
         </div>
       )}

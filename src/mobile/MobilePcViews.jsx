@@ -14,6 +14,7 @@ import HandoverCenter, { useHandoverUnread } from "../HandoverCenter";
 import NoticeBoard, { canSeeNotice } from "../NoticeBoard";
 import { useBoardNoticesWithPlatform } from "../PlatformNoticeBanner";
 import { NoticeWriter, NOTICE_WRITER_ROLES, useNoticePolicy, canWriteNoticeFor, NoticePolicyPicker } from "../HomeWriters";
+import DailyReport from "../DailyReport"; // 📊 2026-11-06 일일 경영 보고
 import { OrderHistoryContext } from "../orderHistory";
 import StaffManager from "../StaffManager";
 import { DriverAccountsPage } from "../DriverAccounts"; // ⭐ 2026-11-05 모바일 기사 앱 계정(가입 승인)
@@ -42,15 +43,24 @@ const PcSettlement = React.lazy(() => import("../DispatchApp").then((m) => ({ de
 // 🏢 경리·인사 모드 — PC 정산관리·회계관리·인사관리 화면
 const PcSettleMobile = React.lazy(() => import("../DispatchApp").then((m) => ({ default: m.PcSettleMobile })));
 const PcAccounting = React.lazy(() => import("../DispatchApp").then((m) => ({ default: m.PcAccounting })));
+// ⭐ 2026-11-06 직원 급여 · 급여명세서 · 연차 사용 촉진
+const PayrollCenter = React.lazy(() => import("../Payroll"));
+const MyPayslips = React.lazy(() => import("../Payroll").then((m) => ({ default: m.MyPayslips })));
+const LeavePromotionBoard = React.lazy(() => import("../LeavePromotion"));
+const MyLeavePlan = React.lazy(() => import("../LeavePromotion").then((m) => ({ default: m.MyLeavePlan })));
 const PcHrPage = React.lazy(() => import("../DispatchApp").then((m) => ({ default: m.PcHrPage })));
 // ⭐ 2026-11-05 PC·모바일 일치 — 기사관리·거래처관리(PC 화면 그대로)
 const PcDriverMobile = React.lazy(() => import("../DispatchApp").then((m) => ({ default: m.PcDriverMobile })));
 const PcClientMobile = React.lazy(() => import("../DispatchApp").then((m) => ({ default: m.PcClientMobile })));
-// 휴대폰 폭 — PC 숫자 타일(6칸)을 3칸으로, 넘치는 검색줄·버튼줄은 옆으로 밀어 보기
-const KP_M_CM_CSS = `.kp-m-cm{overflow-x:auto;-webkit-overflow-scrolling:touch}
-.kp-m-cm .grid:has(> button){grid-template-columns:repeat(3,minmax(0,1fr)) !important;gap:8px !important}
-.kp-m-cm .grid:has(> button) > button{padding:10px 12px !important;border-radius:14px !important;min-width:0}
-.kp-m-cm .grid:has(> button) > button [class*="tracking-"]{letter-spacing:.08em !important;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+// 휴대폰 폭 — PC 숫자 타일(6칸)을 3칸으로
+// ⭐ 2026-11-06 가로로 밀어 보던 화면을 없앰 — 표는 카드 목록(mobile prop)으로 그리고, 팝업은 화면 폭에 맞춰 한 줄 배치
+const KP_M_CM_CSS = `.kp-m-cm{overflow-x:hidden;max-width:100%}
+.kp-m-cm .fixed > .shadow-2xl{max-width:94vw !important;max-height:90vh;overflow-y:auto}
+.kp-m-cm .fixed > .shadow-2xl .grid-cols-2{grid-template-columns:minmax(0,1fr) !important}
+.kp-m-cm .fixed > .shadow-2xl .col-span-2{grid-column:auto !important}
+.kp-m-cm .grid:not(.kp-sheet-grid):has(> button){grid-template-columns:repeat(3,minmax(0,1fr)) !important;gap:8px !important}
+.kp-m-cm .grid:not(.kp-sheet-grid):has(> button) > button{padding:10px 12px !important;border-radius:14px !important;min-width:0}
+.kp-m-cm .grid:not(.kp-sheet-grid):has(> button) > button [class*="tracking-"]{letter-spacing:.08em !important;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .kp-m-cm .grid:has(> button) > button [class*="text-[28px]"]{font-size:20px !important}
 .kp-m-cm > .p-4{padding:8px !important}`;
 function ClientsView({ clients, places, userCompany, role }) {
@@ -64,6 +74,19 @@ function ClientsView({ clients, places, userCompany, role }) {
 }
 
 const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
+
+// ⭐ 2026-11-06 모바일 기사관리 — PC 기사관리처럼 [기사관리 · 과태료·사고 서류] (지입차관리에 있던 과태료 메뉴를 여기로)
+function DriversView({ drivers, userCompany, role, myName, dispatchData }) {
+  const [tab, setTab] = React.useState("drv");
+  return (
+    <KpSubNav code="DRIVERS" title="기사관리" icon="user" active={tab} onSelect={setTab}
+      groups={[{ label: "기사관리", items: [{ key: "drv", label: "기사관리", en: "DRIVERS", icon: "user" }, { key: "penalty", label: "과태료·사고 서류", en: "DOC", icon: "file" }] }]}>
+      {tab === "drv"
+        ? <React.Suspense fallback={<Loading />}><style>{KP_M_CM_CSS}</style><div className="kp-m-pc kp-m-cm"><PcDriverMobile drivers={drivers || []} userCompany={userCompany} role={role} isViewer={role === "viewer"} myName={myName} /></div></React.Suspense>
+        : <div className="kp-m-pc"><FleetManagement dispatchData={dispatchData} role={role} forceTab="penalty" hideChrome /></div>}
+    </KpSubNav>
+  );
+}
 
 function Loading() {
   return (
@@ -99,7 +122,7 @@ const FLEET_MODULES = [
   { key: "attendance", label: "출근기록부", en: "ATT", icon: "clock" },
   // ⭐ 2026-11-05 온도 관제·적재함 카메라 메뉴 삭제
   { key: "vehicle", label: "차량 관리", en: "CARE", icon: "truck" },
-  { key: "penalty", label: "과태료·사고 서류", en: "DOC", icon: "file" },
+  // ⭐ 2026-11-06 과태료·사고 서류는 PC처럼 기사관리 안으로 옮김(모바일 기사관리 › 과태료·사고 서류)
   { key: "registration", label: "기사 등록 관리", en: "REG", icon: "user" },
 ];
 function FleetView({ dispatchData, userCompany, role, onRegisterBack }) {
@@ -250,7 +273,7 @@ export default function MobilePcView({ kind, users = [], dispatchData = [], carr
   );
   else if (kind === "fleet") body = <FleetView dispatchData={dispatchData} userCompany={userCompany} role={role} onRegisterBack={onRegisterBack} />;
   else if (kind === "approval") body = <ApprovalView company={userCompany} me={me} initialPage={initial || "inbox"} />;
-  else if (kind === "drivers") body = <React.Suspense fallback={<Loading />}><style>{KP_M_CM_CSS}</style><div className="px-2 py-2 kp-m-pc kp-m-cm"><PcDriverMobile drivers={drivers || []} userCompany={userCompany} role={role} isViewer={role === "viewer"} myName={me?.name || ""} /></div></React.Suspense>;
+  else if (kind === "drivers") body = <DriversView drivers={drivers} userCompany={userCompany} role={role} myName={me?.name || ""} dispatchData={dispatchData} />;
   else if (kind === "clients") body = <ClientsView clients={clients} places={places} userCompany={userCompany} role={role} />;
   else if (kind === "drvacc") body = <div className="px-3 py-3 kp-m-pc"><DriverAccountsPage company={userCompany} isViewer={role === "viewer"} /></div>; // ⭐ 2026-11-05 기사 가입 승인은 여기서만
   else if (kind === "staff") body = <StaffManager company={userCompany} role={role} myUid={me?.uid} initialTab={initial || "pending"} compact={role === "test" || role === "hrManager"} />;
@@ -263,12 +286,17 @@ export default function MobilePcView({ kind, users = [], dispatchData = [], carr
     if (!k) body = deptMode === "exec"
       ? <div className="px-2 py-2"><DeptDashboard mode="exec" company={userCompany} dispatchData={salesData} onGo={onGo} me={me} /></div>
       : wrap(<DeptDashboard mode={deptMode || (role === "hrManager" ? "hr" : "acct")} company={userCompany} dispatchData={salesData} onGo={onGo} />);
+    else if (k === "briefing") body = <DailyReport company={userCompany} dispatchData={salesData} drivers={drivers || []} me={me} role={role} profile={prof} onGo={(m) => onGo?.(m === "배차현황" ? "실시간배차현황" : m)} />; // 📊 2026-11-06 일일 경영 보고(권한은 MobileApp 메뉴에서)
     else if (k === "approvals") body = <div className="kp-m-pc kp-m-approval"><ExecApprovals company={userCompany} me={me} /></div>;
     else if (k === "schedule") body = wrap(<TeamSchedule company={userCompany} />);
     else if (k === "settle") body = lazy(<DetailScope data={salesData} getters={detGet} title="세부검색 · 정산관리">{(detRows, detBtn) => <><div className="px-3 pt-3 flex justify-end">{detBtn}</div><PcSettleMobile dispatchData={detRows} companyName={userCompany} role={role} isViewer={isViewer} clients={clients} /></>}</DetailScope>);
-    else if (k === "acct") body = lazy(<PcAccounting company={userCompany} fixedRows={fixedRows} clients={clients} isViewer={isViewer} />);
+    else if (k === "acct") body = lazy(<PcAccounting company={userCompany} fixedRows={fixedRows} clients={clients} isViewer={isViewer} role={role} />);
+    else if (k === "payroll") body = <React.Suspense fallback={<Loading />}><div className="px-3 py-3 kp-m-pc"><PayrollCenter company={userCompany} role={role} /></div></React.Suspense>;
+    else if (k === "payslip") body = <React.Suspense fallback={<Loading />}><div className="px-3 py-3 kp-m-pc"><MyPayslips company={userCompany} uid={me?.uid} /></div></React.Suspense>;
+    else if (k === "leaveplan") body = <React.Suspense fallback={<Loading />}><div className="px-3 py-3 kp-m-pc"><MyLeavePlan company={userCompany} uid={me?.uid} /></div></React.Suspense>;
+    else if (k === "leavepromo") body = <React.Suspense fallback={<Loading />}><div className="px-3 py-3 kp-m-pc"><LeavePromotionBoard company={userCompany} canManage={role === "hrManager" || role === "totalMaster" || role === "hrAcct" || role === "allMgr" || role === "hrStaff" || /인사/.test(String(me?.team || "")) || me?.isMaster === true} /></div></React.Suspense>;
     // ⭐ 2026-11-02 점검 — 모바일 인사관리부에도 me 전달(부고 알림 작성자 이름·uid 누락으로 본인 푸시/메일·타인 수정 가능 문제 수정, PC 와 동일)
-    else if (k === "hr") body = <div className="kp-m-pc"><HrHub company={userCompany} me={{ uid: me?.uid, name: me?.name || me?.displayName || "" }} canManage={role === "hrManager" || role === "totalMaster" || role === "hrAcct" || (/인사/.test(String(me?.team || "")) && role !== "viewer")}
+    else if (k === "hr") body = <div className="kp-m-pc"><HrHub company={userCompany} me={{ uid: me?.uid, name: me?.name || me?.displayName || "" }} role={role} canManage={role === "hrManager" || role === "totalMaster" || role === "hrAcct" || (/인사/.test(String(me?.team || "")) && role !== "viewer")}
       renderRecord={(focusUid) => <React.Suspense fallback={<Loading />}><PcHrPage userCompany={userCompany} role={role} userId={me?.uid || ""} focusUid={focusUid} /></React.Suspense>}
       renderAttendance={() => <AttendanceBoard userCompany={userCompany} role={role} user={me} />} /></div>;
     else if (k === "cashbook") body = <div className="kp-m-pc"><FundsWorkspace company={userCompany} isViewer={isViewer} /></div>;

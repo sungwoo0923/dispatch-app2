@@ -68,6 +68,8 @@ function orders(col) {
       메모: i % 4 === 0 ? "상차지 도착 전 담당자에게 꼭 전화 부탁드립니다. 지게차 상차, 하차는 수작업" : "",
       지급방식: ["계산서", "착불", "선불", "손실"][i % 4], 배차방식: ["24시", "직접배차", "인성", "고정"][i % 4],
       등록자명: NAMES[(i + 2) % NAMES.length], 혼적여부: i % 5 === 0 ? "혼적" : "독차",
+      ...(i % 6 === 1 ? { 긴급: true } : {}), // ⭐ 2026-11-06 긴급 오더 강조 점검
+      ...(i % 3 === 0 ? { 운임구분: i % 2 ? "월대" : "일대" } : {}), // ⭐ 2026-11-06 운임구분 알약·검색 점검
       ...(col === "dispatch" ? demoAck(i) : {}),
     }));
   }
@@ -98,6 +100,7 @@ function routeOrders() {
       품목수량: { "0.5L": 6 + i, "2L": 4 }, 추가정보: { 운송업체: ROUTE_CARRIERS[i % 4] }, 차량번호: i % 4 === 3 ? "" : i === 1 ? "경기81바1037" : `경기9${i}바${2000 + i}`,
       배차상태: i % 4 === 3 ? "배차중" : "배차완료", 청구운임: 200000 + i * 10000, 기사운임: 170000 + i * 9000, 지급방식: "계산서", 배차방식: "고정",
       // ⭐ 2026-11-06 담당자 잠금·검색 점검 — 배차된 줄은 기사 이름 · 배차한 사람(김대리=다른 직원 / 둘러보기=나), 나머지는 시트 자동(담당 없음)
+      ...(i === 5 ? { 긴급: true } : {}), // ⭐ 2026-11-06 긴급 점검
       작성자: "배차표 자동", 등록기기: "배차표", ...(i % 4 === 3 ? {} : { 이름: ["박기사", "이영희", "최운전"][i % 3], 전화번호: `010-30${10 + i}-40${10 + i}`, 배차확정자: i % 4 === 2 ? "둘러보기" : "김대리" }),
     }));
   }
@@ -149,7 +152,45 @@ function demoTracks() {
   return out;
 }
 
+// ⭐ 2026-11-06 직원 급여·연차 촉진 화면 점검(URL에 demoPay=1) — 사무직 직원 4명 · 급여 설정 · 이번 달 출근기록 · 발행된 내 명세서 · 촉진 기록
+function demoPayOn() { try { return new URLSearchParams(window.location.search).get("demoPay") === "1"; } catch { return false; } }
+const PAY_STAFF = [
+  // ⭐ 2026-11-06 급여 계산 화면 자동 채움 점검 — 생년월일 · 연락처 · 급여 계좌(회원 정보)
+  { id: "preview", name: "둘러보기", team: "운영팀", position: "대리", hireDate: "2024-03-15", birthDate: "1992-05-03", phone: "010-2345-6789", bankName: "KB국민", accountNumber: "12345678901234", role: "admin", email: "preview@kp-flow.app" },
+  { id: "demo-st-1", name: "김경리", team: "경리팀", position: "과장", hireDate: "2021-02-01", birthDate: "1986-09-21", phone: "010-3456-7890", bankAccount: "신한 110-123-456789 김경리", role: "test" },
+  { id: "demo-st-2", name: "이인사", team: "인사팀", position: "대리", hireDate: "2025-12-01", phone: "010-4567-8901", role: "hrManager" },
+  { id: "demo-st-3", name: "박사원", team: "운영팀", position: "사원", hireDate: "2026-05-01", birthDate: "1999-01-12", role: "user" },
+];
+const PAY_EMP = { preview: { payType: "monthly", baseMonthly: 3000000, meal: 200000, dependents: 1 }, "demo-st-1": { payType: "monthly", baseMonthly: 3600000, positionAllow: 300000, meal: 200000, car: 200000, dependents: 3, children: 1 }, "demo-st-2": { payType: "hourly", hourlyWage: 12000, meal: 200000, dependents: 1 } };
+const ymNow = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 7);
+const ymShift = (n) => { const d = new Date(Date.now() + 9 * 3600e3); d.setUTCDate(1); d.setUTCMonth(d.getUTCMonth() + n); return d.toISOString().slice(0, 7); };
+function demoPayDocs(col) {
+  if (!demoPayOn()) return null;
+  if (col === "payrollEmployees") return Object.entries(PAY_EMP).map(([uid, e]) => fakeDoc(col, `demo_${uid}`, { uid, name: PAY_STAFF.find((u) => u.id === uid)?.name, ...e }));
+  if (col === "attendance") {
+    const ym = ymNow(); const out = [];
+    for (let d = 1; d <= 20; d++) {
+      const ds = `${ym}-${String(d).padStart(2, "0")}`; const w = new Date(`${ds}T00:00:00`).getDay();
+      if (w === 0 || w === 6) continue;
+      PAY_STAFF.forEach((u, i) => out.push(fakeDoc(col, `${ds}_${u.id}`, { uid: u.id, name: u.name, date: ds, month: ym, status: "출근", checkInTime: `${ds}T09:00:00`, checkOutTime: `${ds}T${d % 5 === 0 && i < 2 ? "21:30" : "18:00"}:00` })));
+    }
+    return out;
+  }
+  if (col === "payslips") {
+    const mk = (ym, net) => fakeDoc(col, `demo_${ym}_preview`, { uid: "preview", ym, name: "둘러보기", team: "운영팀", position: "대리", hireDate: "2024-03-15", birthDate: "1992-05-03", status: "paid", published: true, payDate: `${ymShift(1).slice(0, 7)}-10`, paidDate: `${ym}-25`, rates: { otRate: 1.5, nightRate: 0.5, holRate: 1.5, holOverRate: 2 },
+      result: { earnings: [{ key: "base", label: "기본급", amount: 3000000, taxable: true, calc: "월 기본급" }, { key: "ot", label: "연장근로수당", amount: 107670, taxable: true, calc: "통상시급 14,354원 × 1.5 × 5시간" }, { key: "meal", label: "식대", amount: 200000, taxable: false, calc: "비과세(월 200,000원 한도)" }], deductions: [{ key: "np", label: "국민연금", amount: 147610, calc: "기준소득월액 3,107,000원 × 4.75%" }, { key: "hi", label: "건강보험", amount: 111710, calc: "보수월액 × 3.595%" }, { key: "ltc", label: "장기요양보험", amount: 14670, calc: "건강보험료 × 13.14%" }, { key: "ei", label: "고용보험", amount: 27960, calc: "과세급여 × 0.9%" }, { key: "tax", label: "소득세", amount: 66820, calc: "간이세액 근사치 · 공제대상가족 1명" }, { key: "local", label: "지방소득세", amount: 6680, calc: "소득세 × 10%" }],
+        gross: 3307670, taxable: 3107670, nonTaxable: 200000, totalDeduct: 375450, net, ordinaryHourly: 14354, taxMode: "auto", work: { workDays: 21, regularHours: 168, otHours: 5, nightHours: 0, holHours: 0, holOverHours: 0 }, employer: { total: 340000 } } });
+    return [mk(ymShift(-1), 2932220), mk(ymShift(-2), 2932220)];
+  }
+  if (col === "leavePromotions") return [fakeDoc(col, `${String(demoCo || "").replace(/[/\s#?[\]]/g, "_")}_preview_2026-03-15`, { uid: "preview", name: "둘러보기", label: "연차", periodFrom: "2026-03-15", periodTo: "2027-03-14", total: 15, used: 4, remain: 11, n1: { sentAt: Date.now() - 2 * 864e5, by: "auto", byName: "자동(서버)", remain: 11, due: new Date(Date.now() + 8 * 864e5 + 9 * 3600e3).toISOString().slice(0, 10), auto: true }, log: [{ at: Date.now() - 2 * 864e5, type: "n1", by: "auto", byName: "자동(서버)", auto: true, channel: ["앱 알림", "사내메일"], remain: 11 }] })];
+  if (col === "hrNotices") return [fakeDoc(col, "demo_hn_1", { uid: "preview", kind: "leave1", link: "leavePlan", title: "[연차 사용 촉진 1차] 미사용 연차 11일 — 사용 계획을 알려 주세요", body: "둘러보기님, 연차 사용 기간(2026-03-15 ~ 2027-03-14) 중 사용하지 않은 연차가 11일 남아 있습니다.\n\n근로기준법 제61조에 따라 10일 이내에 사용 시기를 정하여 회사에 알려 주시기 바랍니다.", createdAt: demoTs(0.01) })];
+  return null;
+}
+
 export function demoDocsFor(col) {
+  const pay = demoPayDocs(col);
+  if (pay) return pay;
+  if (col === "users" && demoPayOn()) return PAY_STAFF.map((u) => fakeDoc(col, u.id, { uid: u.id, approved: true, employmentStatus: "재직", ...u }));
   if (col === "users") return DEMO_SIGNUPS.map((u) => fakeDoc(col, u.id, { uid: u.id, role: "driver", email: `${u.carNo}@driver.run25.kr`, vehicleType: `${u.차량종류} ${u.차량톤수}`, termsAgreed: true, privacyAgreed: true, gpsAgreed: true, createdAt: demoTs(u.at), ...u, at: undefined }));
   if (col === "driver_documents") return [fakeDoc(col, "demo-dd-0", { driverId: "demo-u-0", docType: "bizReg", docLabel: "사업자등록증", status: "제출", fileName: "사업자등록증.jpg", fileType: "image/svg+xml", dataUrl: BIZ_SVG, uploadedAt: demoTs(2) }),
     // ⭐ 2026-11-05 기사앱 서류 업로드 알림 점검 — 방금(3분 전) · 25분 전에 올라온 검토 대기 서류

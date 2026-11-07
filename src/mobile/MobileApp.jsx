@@ -12,6 +12,7 @@ import { PersonalTodayHost } from "../PersonalSchedule";
 import { makeClientMatcher } from "../clientMatch"; // ⭐ 2026-11-03 거래처 검색
 import { useCompanyBiz, BizPicker, BizChip, bizOf, BizSelect, resolveBiz, rememberBizFor, normBizKey } from "../companyBiz"; // ⭐ 2026-11-03 여러 사업자
 import { useCustomRoles, findCustomRole, getMenuAccess, roleScreen, useRoleView, applyRoleMenus } from "../customRoles";
+import { usePayrollAccess } from "../payrollAccess"; // ⭐ 2026-11-06 직원 급여·연차 촉진
 import { useReadOnlyGuard } from "../readOnlyGuard";
 import { useDriverEditChoice, DriverEditButton, SamePlateChips, pickDriverFor, isRegisteredCombo, saveDriverChoice } from "../DriverEditChoice"; // ⭐ 2026-11-05 매칭된 기사 이름·전화 [수정]
 import { confirmLeave } from "../leaveGuard";
@@ -29,6 +30,8 @@ const MobileIntelView = lazyView(() => import("./MobileIntelView"));
 import InternalMessenger from "../InternalMessenger";
 import { subscribeOrderSync, deleteOrderWithLog, historyStartDate, pcLiveWindowStart } from "../orderHistory";
 import CustomDatePicker from "../CustomDatePicker";
+import { askCopyDates } from "../CopyCountDialog"; // ⭐ 2026-11-06 오더 복사 — 몇 건·건별 날짜
+import { UrgentBadge, URGENT_BAR, URGENT_TINT } from "../urgentOrder"; // ⭐ 2026-11-06 긴급 오더 강조
 import MobileSelect from "./MobileSelect"; // ⭐ 2026-11-02 기본 select → 남색 바텀시트 선택기
 import RouteMapModal from "../RouteMapModal";
 import southKorea from "@svg-maps/south-korea";
@@ -105,7 +108,7 @@ import {
 } from "firebase/firestore";
 import { writeOrderDeletedNotice } from "../driverDeleteNotice"; // ⭐ 2026-11-05 기사앱 삭제 오더 팝업
 import { updateDoc, setDoc } from "../orderWrite"; // ★ 오더 수정시각 자동 기록(여러 사용자 실시간 일치)
-import { db, auth, FUNCTIONS_BASE, DEFAULT_COMPANY, clearFcmToken } from "../firebase";
+import { db, auth, FUNCTIONS_BASE, DEFAULT_COMPANY, clearFcmToken, IS_MOBILE_PREVIEW } from "../firebase";
 import { signOut } from "firebase/auth";
 import { version as APP_VERSION } from "../../package.json";
 import { useNewVersion, openUpdatePopup } from "../VersionCheck";
@@ -116,10 +119,13 @@ const MonthCompareAnalysis = lazyView(() => import("../MonthCompareAnalysis"));
 import { MailHeaderButton } from "../InternalMail";
 import BannerCenter from "../BannerCenter";
 import { publishDriverOrderRows, useDriverEventFeeds, useDriverEventCounts, setDriverSeenServer, setDriverToastsMuted, markDriverSeen, focusOrderRow, DriverEventToasts, DriverAckChip } from "../driverEvents"; // ⭐ 2026-11-05 기사앱 수락/거절·서류·긴급 알림(위쪽 배너·빨간 숫자)
+import { ContractExpiryBanner } from "../companyContract"; // ⭐ 2026-11-06 계약 만료 안내 띠
 import NotifyCenter from "../NotifyCenter"; // ⭐ 2026-11-03 알림 통합 — 가운데 알림 팝업
 import { RemoteSupportHost } from "../RemoteSupport"; // ⭐ 2026-11-02 원격지원 —
 import OrderCongratsPopup from "../OrderCongratsPopup";
 import BirthdayPopup from "../BirthdayPopup";
+import { DailyReportPopupHost } from "../DailyReport"; // 📊 2026-11-06 일일 경영 보고 아침 요약 팝업
+import { canSeeBriefing } from "../dailyReport";
 import { tryAutoCheckIn, tryAutoCheckOut, undoAutoCheckOut } from "../autoAttendance";
 import OrderScanModal, { scanDropDate } from "../OrderScanModal";
 // ⭐ 2026-11-02 운임규칙 — 회사별 운임 규칙(운임구분 → 기사운임·수수료 자동)
@@ -1987,7 +1993,7 @@ const getOrderSortTime = (o = {}) => {
 };
 // 긴급 오더 판단 (PC/모바일 공통)
 const isUrgentOrder = (o = {}) => {
-  return o.긴급 === true;
+  return !!o && (o.긴급 === true || o.긴급 === "true" || o.긴급 === "Y"); // ⭐ 2026-11-06 PC(src/urgentOrder.jsx)와 같은 기준
 };
 const normalizePhone = (p = "") =>
   String(p).replace(/[^\d+]/g, "");
@@ -2162,6 +2168,9 @@ export default function MobileApp({ role: realRole, user, userCompany = "", forc
   const PAGE_MENU_M = { drivers: "기사관리", clients: "거래처관리", list: "배차현황", detail: "배차현황", canceled: "배차현황", form: "배차관리", unassigned: "배차관리", fleet: "지입차관리", sales: "매출관리", ratecard: "단가표", fare: "운임조회", intel: "인사이트", "dept:settle": "정산관리", "dept:acct": "회계관리", "dept:cashbook": "자금관리", "dept:funds": "자금관리", "dept:assets": "비품관리", "dept:hr": "인사관리부", "dept:cert": "증명서발급", "dept:driverdocs": "기사관리" }; // ⭐ 2026-11-03 가입 승인(staff)은 기사관리 조회권한과 별개 — PC처럼 관리자·경리·인사는 승인·거절 가능
   const [execFull, setExecFull] = useState(() => { try { return localStorage.getItem("kpExecFull") === "1"; } catch { return false; } });
   const deptMode = role === "test" ? "acct" : role === "hrManager" ? "hr" : isExecM && !execFull ? "exec" : null;
+  // 📊 2026-11-06 일일 경영 보고 — 기존 임원 판정(isExecM) 그대로(src/dailyReport.js canSeeBriefing)
+  const briefCompanyM = (localStorage.getItem("loginCompany") || userCompany || localStorage.getItem("userCompany") || DEFAULT_COMPANY || "").trim();
+  const canBriefingM = canSeeBriefing({ isExec: isExecM });
   const [page, setPage] = useState(deptMode ? "dept" : "list");
   const pageMenuM = PAGE_MENU_M[page];
   useReadOnlyGuard(!!pageMenuM && (role === "viewer" || (!!customRoleM && getMenuAccess(customRolesM, role, pageMenuM) === "read")));
@@ -2170,7 +2179,7 @@ export default function MobileApp({ role: realRole, user, userCompany = "", forc
   useEffect(() => {
     if (!["list", "detail", "form"].includes(page)) deptListOkRef.current = false;
     if (deptMode && page === "list" && !(deptMode === "acct" && deptListOkRef.current)) setPage("dept");
-    if (!deptMode && (page === "dept" || (String(page).startsWith("dept:") && page !== "dept:execsched" && page !== "dept:settle" && page !== "dept:driverdocs" && page !== "dept:schedule" && page !== "dept:rules" && page !== "dept:board" && page !== "dept:farerules" && page !== "dept:myresume" && !(DEPT_PAGE_MENU[page] && deptOkM(DEPT_PAGE_MENU[page]))))) setPage("list");
+    if (!deptMode && (page === "dept" || (String(page).startsWith("dept:") && page !== "dept:execsched" && page !== "dept:settle" && page !== "dept:driverdocs" && page !== "dept:schedule" && page !== "dept:rules" && page !== "dept:board" && page !== "dept:farerules" && page !== "dept:myresume" && !["dept:payslip", "dept:leaveplan", "dept:payroll", "dept:leavepromo"].includes(page) && !(page === "dept:briefing" && canBriefingM) /* ⭐ 2026-11-06 급여·연차 촉진(화면이 권한 확인) */ && !(DEPT_PAGE_MENU[page] && deptOkM(DEPT_PAGE_MENU[page]))))) setPage("list");
   }, [deptMode, page]);
   const toggleExecFull = () => { const v = !execFull; setExecFull(v); try { localStorage.setItem("kpExecFull", v ? "1" : "0"); } catch { /* 무시 */ } setPage(v ? "list" : "dept"); };
   const listScrollYRef = useRef(0); // 리스트 스크롤 위치 저장
@@ -3817,6 +3826,7 @@ function _todayKSTStr() {
 async function _autoCheckIn(co, uid, name, onSuccess) {
   // ⭐ 최고관리자는 출근하는 직원이 아니라 프로그램 관리 계정 — 출근 기록을 남기지 않는다
   if (localStorage.getItem("role") === "totalMaster" || auth.currentUser?.email === "tjddnqkf@naver.com") return false;
+  if (IS_MOBILE_PREVIEW) return false; // ⭐ 2026-11-06 관리자메뉴 모바일 미리보기 화면은 출근 기록을 남기지 않는다
   await undoAutoCheckOut({ uid }).catch(() => false);
   const r = await tryAutoCheckIn({ uid, name, company: co, source: "auto_mobile_location" });
   if (r.ok && onSuccess) onSuccess(`${r.leave ? `${r.leave} · ` : ""}출근 처리되었습니다 (${new Date().toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })})`);
@@ -3825,6 +3835,7 @@ async function _autoCheckIn(co, uid, name, onSuccess) {
 
 // 자동 퇴근 처리
 async function _autoCheckOut(co, uid, name, onSuccess) {
+  if (IS_MOBILE_PREVIEW) return false; // ⭐ 2026-11-06 미리보기는 퇴근 기록도 안 남김
   const r = await tryAutoCheckOut({ uid });
   if (r.ok && onSuccess) onSuccess(`퇴근 처리되었습니다 (${new Date().toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })})`);
   return r.ok;
@@ -3905,7 +3916,12 @@ useEffect(() => {
       const createdAt = data.createdAt?.toDate ? data.createdAt.toDate() : null;
       if (createdAt && createdAt < since) return;
       let msg, notifStatus;
-      if (data.type === "approval_request") {
+      if (data.type === "contract_expiry") {
+        // ⭐ 2026-11-06 이용 계약 만료 안내(30·7·1일 전) — 한 번 보여 주면 읽음
+        msg = data.msg || "[이용 계약] 계약 만료가 다가옵니다.";
+        notifStatus = "request";
+        updateDoc(doc(db, "notifications", change.doc.id), { read: true }).catch(() => {});
+      } else if (data.type === "approval_request") {
         msg = `[${data.scheduleType || "일정"}] ${data.fromName || "작성자"}님의 결재 요청이 있습니다.`;
         notifStatus = "request";
       } else if (data.type === "re_request") {
@@ -4214,6 +4230,11 @@ base = base.filter((o) => {
     return normalize(o.하차지주소).includes(q);
 if (appliedSearchType === "메모")
   return normalize(o.메모 || o.적요).includes(q);
+  // ⭐ 2026-11-06 운임구분(월대·일대) · 통합(여러 칸 + 운임구분)
+  if (appliedSearchType === "운임구분")
+    return normalize(o.운임구분 || "").includes(q);
+  if (appliedSearchType === "통합")
+    return [o.거래처명, o.기사명, o.이름, o.차량번호, o.상차지명, o.상차지주소, o.하차지명, o.하차지주소, o.메모, o.적요, o.지급방식, o.배차방식, o.운임구분].some((v) => normalize(v || "").includes(q));
   return true;
 });
 
@@ -4888,8 +4909,8 @@ const groupedByDate = useMemo(() => {
     }
   };
   // 📦 오더복사 → 등록창 이동 (오늘 날짜 기준)
-const handleOrderDuplicate = (order) => {
- const today = todayKST();
+const handleOrderDuplicate0 = (order, plan = null) => {
+ const today = plan?.[0]?.상차일 || todayKST(); const todayDrop = plan?.[0]?.하차일 || today; // ⭐ 2026-11-06 복사 건수 창에서 고른 날짜
 
   const _pendingContactItems = [];
   [
@@ -4910,7 +4931,7 @@ const handleOrderDuplicate = (order) => {
     상차일: today,
     상차시간: order.상차시간 || "",
     상차시간기준: order.상차시간기준 || null,
-    하차일: today,
+    하차일: todayDrop,
     하차시간: order.하차시간 || "",
     하차시간기준: order.하차시간기준 || null,
 
@@ -4960,14 +4981,17 @@ const handleOrderDuplicate = (order) => {
     _pendingContactItems,
   });
 
+  // ⭐ 2026-11-06 복사 건수 — 2건 이상이면 등록창의 "수량 + 날짜 개별 설정"으로 그대로 넘긴다(등록을 누르면 그 수만큼)
+  if (plan && plan.length > 1) { setMultiCount(plan.length); setUseSeparateDates(true); setOrderDates(plan.map((x) => x.상차일)); setOrderDropDates(plan.map((x) => x.하차일)); }
+  else { setMultiCount(1); setUseSeparateDates(false); }
   setSelectedOrder(null);
   setPrevPage("list");
   setPage("form");
   window.scrollTo(0, 0);
 };
 
-const handleOrderDuplicateWithDriver = (order) => {
-  const today = todayKST();
+const handleOrderDuplicateWithDriver0 = (order, plan = null) => {
+  const today = plan?.[0]?.상차일 || todayKST(); const todayDrop = plan?.[0]?.하차일 || today; // ⭐ 2026-11-06 복사 건수 창에서 고른 날짜
 
   const _pendingContactItems = [];
   [
@@ -4987,7 +5011,7 @@ const handleOrderDuplicateWithDriver = (order) => {
     상차일: today,
     상차시간: order.상차시간 || "",
     상차시간기준: order.상차시간기준 || null,
-    하차일: today,
+    하차일: todayDrop,
     하차시간: order.하차시간 || "",
     하차시간기준: order.하차시간기준 || null,
     상차지명: order.상차지명 || "",
@@ -5026,11 +5050,18 @@ const handleOrderDuplicateWithDriver = (order) => {
     _returnToDetail: false,
     _pendingContactItems,
   });
+  // ⭐ 2026-11-06 복사 건수 — 2건 이상이면 등록창의 "수량 + 날짜 개별 설정"으로 그대로 넘긴다(등록을 누르면 그 수만큼)
+  if (plan && plan.length > 1) { setMultiCount(plan.length); setUseSeparateDates(true); setOrderDates(plan.map((x) => x.상차일)); setOrderDropDates(plan.map((x) => x.하차일)); }
+  else { setMultiCount(1); setUseSeparateDates(false); }
   setSelectedOrder(null);
   setPrevPage("list");
   setPage("form");
   window.scrollTo(0, 0);
 };
+
+// ⭐ 2026-11-06 오더 복사 — 먼저 "몇 건 복사?" 창(건마다 상차일·하차일 · 처음엔 모두 오늘)
+const handleOrderDuplicate = async (order) => { const plan = await askCopyDates({ mobile: true, title: "오더 복사", sub: "몇 건을 복사할지 고르고 건마다 날짜를 정해 주세요. 등록창에서 확인 후 등록하면 그 수만큼 만들어져요." }); if (plan) handleOrderDuplicate0(order, plan); };
+const handleOrderDuplicateWithDriver = async (order) => { const plan = await askCopyDates({ mobile: true, title: "오더 복사(기사 포함)", sub: "몇 건을 복사할지 고르고 건마다 날짜를 정해 주세요. 등록창에서 확인 후 등록하면 그 수만큼 만들어져요." }); if (plan) handleOrderDuplicateWithDriver0(order, plan); };
 
 // 운송사가 연동 화주사로 전송(자동/수동)한 오더를 삭제할 때, 화주사 화면이 실제로 구독하는
 // 사본 문서도 함께 지운다. 그러지 않으면 원본은 없어져도 화주사 화면에는 "배차중"으로
@@ -5397,7 +5428,7 @@ const title =
   : page === "fixedroute" ? "고정노선현황"
   : page === "perms" ? "권한 관리"
   : page === "dept" ? (deptMode === "exec" ? "경영 브리핑" : deptMode === "hr" ? "인사관리" : "경리·회계")
-  : String(page).startsWith("dept:") ? ({ "dept:settle": "정산관리", "dept:acct": "회계관리", "dept:assets": "비품·자산", "dept:hr": "인사관리부", "dept:leave": "연차 관리", "dept:onboarding": "입·퇴사 관리", "dept:cert": "증명서 발급", "dept:driverdocs": "기사 서류", "dept:approvals": "결재함", "dept:schedule": "직원 일정", "dept:funds": "자금 현황", "dept:execsched": "임원 일정", "dept:rules": "사내 규정", "dept:board": "사내 게시판", "dept:farerules": "운임 규칙", "dept:cashbook": "자금 관리", "dept:myresume": "내 이력서" }[page] || "")
+  : String(page).startsWith("dept:") ? ({ "dept:settle": "정산관리", "dept:acct": "회계관리", "dept:assets": "비품·자산", "dept:hr": "인사관리부", "dept:leave": "연차 관리", "dept:onboarding": "입·퇴사 관리", "dept:cert": "증명서 발급", "dept:driverdocs": "기사 서류", "dept:approvals": "결재함", "dept:schedule": "직원 일정", "dept:funds": "자금 현황", "dept:execsched": "임원 일정", "dept:rules": "사내 규정", "dept:board": "사내 게시판", "dept:farerules": "운임 규칙", "dept:cashbook": "자금 관리", "dept:myresume": "내 이력서", "dept:payroll": "급여 계산", "dept:payslip": "급여명세서", "dept:leaveplan": "연차 사용 계획", "dept:leavepromo": "연차 사용 촉진", "dept:briefing": "일일 경영 보고" }[page] || "")
   : page === "status" ? "배차현황"
   : page === "unassigned" ? "미배차현황"
   : page === "canceled" ? "취소내역"
@@ -5753,8 +5784,15 @@ const title =
           onGo={(it) => {
             if (it.src === "approval") { window.__kpOpenApproval = { id: it.id, page: it.page || "inbox" }; window.dispatchEvent(new Event("kp-open-approval")); return; }
             if (it.src === "handover") { window.__kpOpenHandover = it.id; window.__kpOpenApproval = { page: "handover" }; window.dispatchEvent(new Event("kp-open-approval")); return; }
+            if (it.src === "hrNotice") { setPage({ payslip: "dept:payslip", leavePlan: "dept:leaveplan", leavePromo: "dept:leavepromo" }[it.link] || "dept:payslip"); return; } // ⭐ 2026-11-06 급여명세서·연차 촉진
             window.__kpOpenNotice = it.openId || it.id; setPage("notice"); setTimeout(() => window.dispatchEvent(new CustomEvent("kp:openNotice")), 0);
           }} />
+      )}
+      {/* ⭐ 2026-11-06 이용 계약 만료 안내(30일 전부터) — 대표·임원·경리·마스터에게만(화면 맨 위 띠) */}
+      {!["driver", "shipper"].includes(role) && myProfM && (
+        <div style={{ position: "fixed", left: 0, right: 0, top: "env(safe-area-inset-top, 0px)", zIndex: 9000 }}>
+          <ContractExpiryBanner mobile company={(localStorage.getItem("loginCompany") || userCompany || localStorage.getItem("userCompany") || DEFAULT_COMPANY).trim()} me={{ ...myProfM, role: realRole || role }} />
+        </div>
       )}
       <CheckoutReminderHost uid={user?.uid} role={realRole} email={user?.email} />{/* ⭐ 2026-11-03 퇴근 10분 전 알림 */}
       <PersonalTodayHost uid={user?.uid} mobile />{/* ⭐ 2026-11-03 오늘 개인 일정 — 위쪽 알림줄 */}
@@ -5762,6 +5800,7 @@ const title =
       <RemoteSupportHost user={user} profile={myProfM} company={userCompany || localStorage.getItem("userCompany") || ""} mobile />
       <OrderCongratsPopup uid={user?.uid} profile={myProfM} mobile />
       <BirthdayPopup uid={user?.uid} profile={myProfM} company={myProfM?.companyName || ""} mobile />
+      {canBriefingM && <DailyReportPopupHost company={briefCompanyM} dispatchData={allOrders} drivers={drivers} me={{ uid: user?.uid }} role={realRole || role} isExec={isExecM} customRole={customRoleM} profile={myProfM} loadRange={loadRange} mobile onOpenReport={() => setPage("dept:briefing")} />}
       <MobileHeader
   title={title}
   cardVersionB={cardVersionB}
@@ -5980,6 +6019,7 @@ onGoAttendance={() => {
           roleViewCur={roleView.view}
           onRoleView={(v) => { roleView.setView(v); setPage(v === "dispatch" ? "list" : "dept"); setShowMenu(false); }}
           isCeo={forceExec || ["대표", "대표이사", "사장"].includes(String(myProfM?.position || "").trim())}
+          canBriefing={canBriefingM}
           execFull={execFull}
           onToggleExec={() => { toggleExecFull(); setShowMenu(false); }}
           alertCounts={{ ...alertCounts, drvOrders: drvCounts.orders, drvDocs: drvCounts.docs, drvSos: drvCounts.sos }}
@@ -6782,7 +6822,7 @@ setOpenMemo={setOpenMemo}
         )}
 {(page === "dept" || String(page).startsWith("dept:")) && (
   <React.Suspense fallback={null}>
-    <MobilePcView key={page} kind={page} deptMode={deptMode} dispatchData={allOrders} fixedRows={fixedClientRows} clients={clients} places={places} role={role} userCompany={pcViewCompany} me={pcViewMe} loadRange={loadRange} loadFullHistory={loadFullHistory}
+    <MobilePcView key={page} kind={page} deptMode={deptMode} dispatchData={allOrders} drivers={drivers} fixedRows={fixedClientRows} clients={clients} places={places} role={role} userCompany={pcViewCompany} me={pcViewMe} loadRange={loadRange} loadFullHistory={loadFullHistory}
       onGo={(k) => { const [m0, id] = String(k).split(":"); if (k === "배차현황") deptListOkRef.current = true; if (m0 === "결재함" && id) { try { sessionStorage.setItem("kpExecApOpen", id); } catch { /* 무시 */ } } setPage({ 결재함: "approval", 직원일정: "dept:schedule", 자금현황: "dept:funds", 스케줄: "dept:execsched", 실시간배차현황: "unassigned", 인사이트: "intel", 정산관리: "dept:settle", "정산관리:지급관리": "dept:settle", 회계관리: "dept:acct", 매출관리: "sales", 인사관리부: "dept:hr", 출근기록부: "attendance", 연차관리: "dept:leave", 입퇴사관리: "dept:onboarding", 증명서발급: "dept:cert", 수입지출: "dept:cashbook", 비품관리: "dept:assets", 전자결재: "approval", 배차현황: "list", 관리자메뉴: "staff", 직원관리: "staff", 기사서류: "dept:driverdocs", 기사관리: "dept:driverdocs", 자금관리: "dept:cashbook", "자금관리:book": "dept:cashbook", "인사관리부:leave": "dept:leave", 기사승인: "drvacc" /* ⭐ 2026-11-05 기사 가입 승인 → 기사 앱 계정 */ }[m0 === "결재함" ? "결재함" : k] || "dept"); /* ⭐ 2026-11-02 점검 — 경리·인사 홈 바로가기 키(자금관리·연차·기사승인) 추가 */ }} />
   </React.Suspense>
 )}
@@ -7788,6 +7828,7 @@ function MobileSideMenu({
   roleViewCur = "",
   onRoleView,
   isCeo = false,
+  canBriefing = false,
   execFull = false,
   onToggleExec,
   menuOk = () => true,
@@ -7804,6 +7845,8 @@ function MobileSideMenu({
   }, []);
   const isAdminRole = ["admin", "totalMaster", "superadmin"].includes(role);
   const ok = menuOk;
+  // ⭐ 2026-11-06 직원 급여·연차 촉진 메뉴 — 권한은 users 문서 역할 기준(payrollAccess.js · 보안 규칙과 같음)
+  const payM = usePayrollAccess((localStorage.getItem("loginCompany") || localStorage.getItem("userCompany") || "").trim(), currentUser?.uid, role, currentUser?.email || "");
   const planIdM = useCompanyPlanId((role === "totalMaster" ? (localStorage.getItem("loginCompany") || "") : (localStorage.getItem("userCompany") || localStorage.getItem("loginCompany") || "")).trim()); // ⭐ 2026-11-05 PC와 같은 요금제 잠금
   const canRevenue = ["admin", "totalMaster", "superadmin", "test", "viewer"].includes(role);
   const canAdminMenu = isAdminRole || role === "viewer";
@@ -7924,6 +7967,7 @@ function MobileSideMenu({
               {ok("정산관리") && <MenuItem label="정산관리" icon="receipt" onClick={() => onGo?.("dept:settle")} dark={dark} />}
               {ok("매출관리") && <MenuItem label="매출관리" icon="chart" onClick={onGoSales} dark={dark} />}
               {ok("회계관리") && <MenuItem label="회계관리" icon="money" onClick={() => onGo?.("dept:acct")} dark={dark} />}
+              {payM.canView && <MenuItem label="급여 계산" icon="money" onClick={() => onGo?.("dept:payroll")} dark={dark} />}{/* ⭐ 2026-11-06 직원 급여 */}
               {ok("거래처관리") && <MenuItem label="거래처관리" icon="building" onClick={() => onGo?.("clients")} dark={dark} />}{/* ⭐ 2026-11-05 PC 경리(test)도 거래처관리를 본다 */}
             </MenuSection>
             <MenuSection title="자금 · 총무" en="FINANCE · OFFICE" dark={dark} alwaysOpen>
@@ -7936,12 +7980,15 @@ function MobileSideMenu({
               <MenuItem label="인사 홈" icon="dashboard" onClick={() => onGo?.("dept")} dark={dark} />
               {ok("인사관리부") && <MenuItem label="인사관리부" icon="idcard" onClick={() => onGo?.("dept:hr")} dark={dark} />}
               <MenuItem label="출근기록부" icon="clock" onClick={onGoAttendance} dark={dark} />
+              <MenuItem label="연차 사용 촉진" icon="bell" onClick={() => onGo?.("dept:leavepromo")} dark={dark} />{/* ⭐ 2026-11-06 근로기준법 61조 */}
+              {payM.canView && <MenuItem label={payM.canEdit ? "급여 계산" : "급여 대장(조회)"} icon="money" onClick={() => onGo?.("dept:payroll")} dark={dark} />}
               {ok("증명서발급") && <MenuItem label="증명서 발급" icon="stamp" onClick={() => onGo?.("dept:cert")} dark={dark} />}
             </MenuSection>
           )}
           {deptMode === "exec" && (
             <MenuSection title="경영" en="EXECUTIVE" dark={dark} alwaysOpen>
               <MenuItem label="경영 브리핑" icon="star" onClick={() => onGo?.("dept")} dark={dark} />
+              {canBriefing && <MenuItem label="일일 경영 보고" icon="chart" onClick={() => onGo?.("dept:briefing")} dark={dark} />}{/* 📊 2026-11-06 새 메뉴 — 경영 브리핑 바로 다음 */}
               {isCeo && <MenuItem label="자금 현황" icon="wallet" onClick={() => onGo?.("dept:funds")} dark={dark} />}
               <MenuItem label="임원 스케줄" icon="pin" onClick={() => onGo?.("dept:execsched")} dark={dark} />
               {(canRevenue || isExec) && ok("매출관리") && <MenuItem label="매출관리" icon="chart" onClick={onGoSales} dark={dark} />}
@@ -7981,8 +8028,10 @@ function MobileSideMenu({
             {ok("지입차관리") && <MenuItem label="지입차관리" icon="route" onClick={onGoFleet} badge={alertCounts?.drvSos || null} dark={dark} />}{/* ⭐ 2026-11-03 배차관리 안으로 */}
           </MenuSection>
           )}
-          {!deptMode && ["인사관리부", "회계관리", "자금관리", "비품관리", "증명서발급"].some(deptOk) && (
+          {!deptMode && (["인사관리부", "회계관리", "자금관리", "비품관리", "증명서발급"].some(deptOk) || payM.canView || payM.leaveViewer) && (
             <MenuSection title="부서 업무" en="DEPARTMENT" dark={dark} alwaysOpen>
+              {payM.canView && <MenuItem label={payM.canEdit ? "급여 계산" : "급여 대장(조회)"} icon="money" onClick={() => onGo?.("dept:payroll")} dark={dark} />}{/* ⭐ 2026-11-06 마스터·통합관리자·임원 등 */}
+              {payM.leaveViewer && <MenuItem label="연차 사용 촉진" icon="bell" onClick={() => onGo?.("dept:leavepromo")} dark={dark} />}
               {deptOk("인사관리부") && <MenuItem label="인사관리부" icon="idcard" onClick={() => onGo?.("dept:hr")} dark={dark} />}
               {deptOk("회계관리") && <MenuItem label="회계관리" icon="money" onClick={() => onGo?.("dept:acct")} dark={dark} />}
               {deptOk("자금관리") && <MenuItem label="자금 관리" icon="wallet" onClick={() => onGo?.("dept:cashbook")} dark={dark} />}
@@ -8034,6 +8083,9 @@ function MobileSideMenu({
           <MenuSection title="내 계정" en="ACCOUNT" dark={dark} alwaysOpen={dark}>
             <MenuItem label="내정보" icon="idcard" onClick={onGoMyInfo} dark={dark} />
             <MenuItem label="내 이력서" icon="file" onClick={() => onGo?.("dept:myresume")} dark={dark} />
+            {/* ⭐ 2026-11-06 본인 급여명세서 · 연차 사용 계획(누구나 본인 것) */}
+            <MenuItem label="급여명세서" icon="receipt" onClick={() => onGo?.("dept:payslip")} dark={dark} />
+            <MenuItem label="연차 사용 계획" icon="flag" onClick={() => onGo?.("dept:leaveplan")} dark={dark} />
             <MenuItem label="설정" icon="key" onClick={onGoSettings} dark={dark} />
             {/* ⭐ 2026-11-02 원격지원 — 사용이 어려울 때 관리자에게 요청 */}
             {/* ⭐ 2026-11-03 원격 지원 요청은 PC 전용 */}
@@ -9238,10 +9290,10 @@ const summary = useMemo(() => {
           const dt = cardVersionB
             ? {
                 panel: "kp-b-kpi !rounded-[20px] !py-3.5",
-                label: "text-[#8FB0F0]",
+                label: "text-[#DCE6FA]", // ⭐ 2026-11-06 합계 띠 글자 대비 높이기(흐린 하늘색·번짐 효과 제거)
                 value: "text-white",
-                divider: "border-white/10",
-                glow: "0 0 10px rgba(120,170,255,0.35)",
+                divider: "border-white/20",
+                glow: "none",
               }
             : {
                 // ⭐ A형 — 영수증(티켓) 느낌의 흰 패널, 큰 숫자, 점선 구분
@@ -9278,12 +9330,12 @@ const summary = useMemo(() => {
                 ].map(({ label, en, value }, i) => (
                   <div key={label} className={`flex-1 text-center px-1 ${i > 0 ? `border-l ${dt.divider}` : ""}`}>
                     {cardVersionB ? (
-                      <div className="mb-1 leading-none whitespace-nowrap overflow-hidden"><span className="kp-b-mono text-[8.5px] font-extrabold tracking-[0.2em] text-[#6E8BC4] max-[379px]:hidden">{en} </span><span className="text-[11px] font-bold text-[#CFE0FF]">{label}</span></div>
+                      <div className="mb-1 leading-none whitespace-nowrap overflow-hidden"><span className="kp-b-mono text-[9px] font-extrabold tracking-[0.16em] text-[#A9C1F0] max-[379px]:hidden">{en} </span><span className="text-[12px] font-extrabold text-white">{label}</span></div>
                     ) : (
                       <div className={`text-[9px] font-bold tracking-[0.15em] uppercase mb-1 whitespace-nowrap ${dt.label}`}>{label}</div>
                     )}
                     <div
-                      className={`${cardVersionB ? "kp-b-mono text-[15.5px]" : "text-[14px]"} font-extrabold tabular-nums whitespace-nowrap ${dt.value}`}
+                      className={`${cardVersionB ? "kp-b-mono text-[16.5px] font-black" : "text-[14px] font-extrabold"} tabular-nums whitespace-nowrap ${dt.value}`}
                       style={{ textShadow: dt.glow }}
                     >
                       <DialNumber value={value} />
@@ -9386,6 +9438,7 @@ const summary = useMemo(() => {
                     compact noArrow
                     onChange={(e) => setSearchType(e.target.value)}
                   >
+                    <option value="통합">통합</option>{/* ⭐ 2026-11-06 통합(운임구분 포함) */}
                     <option value="거래처명">거래처명</option>
                     <option value="기사명">기사명</option>
                     <option value="차량번호">차량번호</option>
@@ -9394,6 +9447,7 @@ const summary = useMemo(() => {
                     <option value="하차지명">하차지명</option>
                     <option value="하차지주소">하차지주소</option>
                     <option value="메모">메모</option>
+                    <option value="운임구분">운임구분</option>{/* ⭐ 2026-11-06 */}
                   </MobileSelect>
                   <IconChevronDown className={`w-3 h-3 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none ${icon}`} />
                 </div>
@@ -11191,11 +11245,11 @@ const dropTime = order.하차시간 ? fmtDispatchTimeM(order.하차시간, order
           (statusBlink && !selected ? " card-status-blink" : "")
         }
         ref={offRef}
-        style={{ "--glow-c": statusRing }}
+        style={{ "--glow-c": statusRing, ...(isUrgentOrder(order) && !selected ? { backgroundColor: URGENT_TINT, borderColor: "#FCA5A5" } : {}) }}
         onClick={onSelect}
       >
-        {/* 왼쪽 상태 레일 */}
-        <span className="absolute left-0 top-0 bottom-0 w-[4px]" style={{ background: `linear-gradient(180deg, ${statusDot}, ${statusRing})` }} />
+        {/* 왼쪽 상태 레일 — ⭐ 2026-11-06 긴급 오더는 빨간 레일 */}
+        <span className="absolute left-0 top-0 bottom-0 w-[4px]" style={{ background: isUrgentOrder(order) ? URGENT_BAR : `linear-gradient(180deg, ${statusDot}, ${statusRing})`, ...(isUrgentOrder(order) ? { width: 5 } : {}) }} />
 
         {/* 머리줄 — 날짜·거래처·첨부·뱃지 | 메모·냉장·상태 */}
         <div className="pl-4 pr-3 pt-2.5 pb-2 flex flex-wrap items-center justify-between gap-x-2 gap-y-1 border-b border-[#EEF1F6]" style={{ background: `linear-gradient(90deg, ${statusWash}, rgba(255,255,255,0) 70%)` }}>
@@ -11224,9 +11278,7 @@ const dropTime = order.하차시간 ? fmtDispatchTimeM(order.하차시간, order
                 <span className="w-1.5 h-1.5 rounded-full bg-[#CFE0FF] animate-pulse" />
               )}
             </button>
-            {isUrgentOrder(order) && (
-              <span className="text-[0.68em] font-black text-white bg-[#0F1A30] px-1.5 py-0.5 rounded-md shrink-0">긴급</span>
-            )}
+            {isUrgentOrder(order) && <UrgentBadge className="!text-[0.7em]" />}{/* ⭐ 2026-11-06 긴급 빨간 알약 */}
             {String(order.운행유형 || "").trim() === "왕복" && (
               <span className="text-[0.68em] font-extrabold tracking-wide border border-[#1B2B4B] text-[#1B2B4B] px-1.5 py-0.5 rounded-md shrink-0">왕복</span>
             )}
@@ -11373,7 +11425,7 @@ const dropTime = order.하차시간 ? fmtDispatchTimeM(order.하차시간, order
     (statusBlink && !selected ? " card-status-blink" : "")
   }
   ref={offRef}
-  style={{ "--glow-c": statusRing }}
+  style={{ "--glow-c": statusRing, ...(isUrgentOrder(order) && !selected ? { backgroundColor: URGENT_TINT, borderColor: "#FCA5A5", boxShadow: `inset 5px 0 0 ${URGENT_BAR}` } : {}) }}
   onClick={onSelect}
 >
   {/* ── 윗줄: 거래처 · 메모 / 배지들 ── */}
@@ -11387,9 +11439,7 @@ const dropTime = order.하차시간 ? fmtDispatchTimeM(order.하차시간, order
       )}
     </div>
     <div className="flex flex-wrap items-center justify-end gap-1">
-      {!showUndeliveredOnly && isUrgentOrder(order) && (
-        <span className="h-[19px] px-1.5 inline-flex items-center rounded-md border-[1.5px] border-[#0F1A30] text-[#0F1A30] text-[10px] font-black leading-none">긴급</span>
-      )}
+      {isUrgentOrder(order) && <UrgentBadge className="h-[19px] !text-[10.5px]" />}{/* ⭐ 2026-11-06 긴급 빨간 알약(미전달만 보기에서도) */}
       {(() => {
         if (!order.상차일 || !order.상차시간) return null;
         const now = new Date(Date.now() + 9 * 60 * 60 * 1000);
@@ -16587,7 +16637,7 @@ const pickDrop = (c) => {
               <button type="button" onClick={() => setMultiCount(v => Math.max(1, v - 1))}
                 className="w-6 h-6 rounded bg-white border border-gray-300 text-gray-600 font-bold text-sm flex items-center justify-center active:bg-gray-100">−</button>
               <span className="text-[13px] font-bold text-gray-800 min-w-[20px] text-center">{multiCount}</span>
-              <button type="button" onClick={() => setMultiCount(v => Math.min(10, v + 1))}
+              <button type="button" onClick={() => setMultiCount(v => Math.min(30, v + 1)) /* ⭐ 2026-11-06 복사 30건까지 */}
                 className="w-6 h-6 rounded bg-white border border-gray-300 text-gray-600 font-bold text-sm flex items-center justify-center active:bg-gray-100">+</button>
             </div>
           </div>
@@ -22888,7 +22938,7 @@ function MobileERPPage({ onBack, cardVersionB = false, drivers = [], clients = [
           <button onClick={() => setSubPage(null)} style={{ background: "none", border: "none", color: "rgba(255,255,255,0.8)", padding: 0 }}>
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
           </button>
-          <span style={{ color: "#fff", fontSize: 16, fontWeight: 700 }}>급여관리</span>
+          <span style={{ color: "#fff", fontSize: 16, fontWeight: 700 }}>기사 운임 집계</span>
         </div>
         <div className="flex-1 p-4">
           <ERPPayrollPage drivers={drivers} orders={orders} cardVersionB={cardVersionB} accent={accent} />
@@ -22944,7 +22994,7 @@ function MobileERPPage({ onBack, cardVersionB = false, drivers = [], clients = [
           <SectionCard title="직원관리" sub={`등록 직원 현황`} icon="◆" onClick={() => setSubPage("직원관리")} />
           <SectionCard title="차량관리" sub={`등록 차량 ${drivers.length}대`} icon="▸" badge={drivers.length} onClick={() => setSubPage("차량관리")} />
           <SectionCard title="거래처관리" sub={`거래처 ${allClients.length}곳`} icon="◆" badge={allClients.length} onClick={() => setSubPage("거래처관리")} />
-          <SectionCard title="급여관리" sub="월별 기사 운임 정산" icon="₩" onClick={() => setSubPage("급여관리")} />
+          <SectionCard title="기사 운임 집계" sub="월별 기사 운임 집계" icon="₩" onClick={() => setSubPage("급여관리")} />
           <SectionCard title="근태관리" sub="출퇴근·근무 현황" icon="▤" onClick={() => setSubPage("근태관리")} />
           <SectionCard title="운행일지" sub="차량별 운행 기록" icon="●" onClick={() => setSubPage("운행일지")} />
         </div>

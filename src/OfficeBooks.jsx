@@ -6,6 +6,8 @@
 import React from "react";
 import { runDelete } from "./DeleteProgress"; // ⭐ 2026-11-05 삭제 진행 창 + 한 번에 삭제
 import { addDoc, collection, deleteDoc, doc, onSnapshot, query, serverTimestamp, setDoc, updateDoc, where, arrayUnion } from "firebase/firestore";
+import { useCompanyRows } from "./companyColStore"; // ⭐ 2026-11-06 공용 구독
+import useNarrow from "./useNarrow";
 import { db, auth } from "./firebase";
 import { compressImage } from "./InternalMail";
 import CustomDatePicker from "./CustomDatePicker";
@@ -107,13 +109,21 @@ export function Sheet({ title, en, onClose, children, footer, side = false }) {
     </div>
   );
 }
+// ⭐ 2026-11-06 속도 — 회사 컬렉션은 공용 구독(companyColStore)으로: 자금 현황·장부·대시보드가 한 번만 받아 함께 쓴다
 function useCompanyCol(name, company) {
-  const [rows, setRows] = React.useState(null);
-  React.useEffect(() => {
-    if (!company) return undefined;
-    return onSnapshot(query(collection(db, name), where("companyName", "==", company)), (s) => setRows(s.docs.map((d) => ({ id: d.id, ...d.data() }))), () => setRows([]));
-  }, [name, company]);
-  return rows;
+  return useCompanyRows(name, company);
+}
+// ⭐ 2026-11-06 불러오는 동안 빈 글자 대신 화면 뼈대(스켈레톤)
+export function BookSkeleton({ rows = 6 }) {
+  return (
+    <div className="space-y-4 animate-pulse" aria-busy="true" aria-label="불러오는 중">
+      <div className="rounded-[22px] h-[150px]" style={{ background: "linear-gradient(120deg,#0B1428,#1B2B4B 60%,#2D4C82)" }} />
+      <div className="rounded-[22px] bg-white border border-[#E3E8F0] p-4 space-y-3">
+        {Array.from({ length: rows }, (_, i) => <div key={i} className="h-10 rounded-xl bg-[#EEF2F8]" style={{ width: `${92 - (i % 3) * 9}%` }} />)}
+      </div>
+      <div className="text-center text-[14px] font-bold text-[#5B6B85]">장부를 불러오는 중…</div>
+    </div>
+  );
 }
 
 // ═════════════════════════ 수입·지출 장부 ═════════════════════════
@@ -125,6 +135,7 @@ const METHODS = ["법인카드", "계좌이체", "현금", "개인카드(정산)
 const blankEntry = (type = "지출") => ({ date: kstDay(), type, account: type === "지출" ? "소모품비" : "운송수입", item: "", amount: "", method: type === "지출" ? "법인카드" : "계좌이체", vendor: "", memo: "", evidence: "", receipt: "" });
 
 export function CashBook({ company, isViewer = false }) {
+  const narrow = useNarrow(); // ⭐ 2026-11-06 PC 표·휴대폰 카드 중 하나만 그린다(예전엔 둘 다 그리고 CSS로 숨김 — 영수증 사진도 두 번 그렸다)
   const rowsRaw = useCompanyCol("acctLedger", company);
   // 자동 연동 줄 중 금액이 0이 된 것(지급 취소 등)은 숨긴다
   const rows = React.useMemo(() => (rowsRaw ? rowsRaw.filter((r) => !(r.auto && !toInt(r.amount))) : rowsRaw), [rowsRaw]);
@@ -140,25 +151,37 @@ export function CashBook({ company, isViewer = false }) {
   const [busy, setBusy] = React.useState(false);
   const [approvals, setApprovals] = React.useState([]);
   const fileRef = React.useRef(null);
+  // ⭐ 2026-11-06 속도 — 전자결재 지출결의(가져오기 버튼용)는 장부가 먼저 보인 뒤에 받는다 · 조회전용은 받지 않음
+  const ledgerReady = rows !== null;
   React.useEffect(() => {
-    if (!company) return undefined;
+    if (!company || isViewer || !ledgerReady) return undefined;
     return onSnapshot(query(collection(db, "approvals"), where("company", "==", company), where("cat", "==", "expense")), (s) => setApprovals(s.docs.map((d) => ({ id: d.id, ...d.data() })).filter((a) => a.cat === "expense" && a.status === "approved")), () => setApprovals([]));
-  }, [company]);
+  }, [company, isViewer, ledgerReady]);
   const F = React.useMemo(() => computeFunds(funds || [], rows || []), [funds, rows]);
-  const fundOpts = F.list.filter((f) => f.kind !== "대출");
-  const month = (rows || []).filter((r) => String(r.date || "").startsWith(ym));
-  const income = month.filter((r) => r.type === "수입").reduce((s, r) => s + toInt(r.amount), 0);
-  const expense = month.filter((r) => r.type === "지출").reduce((s, r) => s + toInt(r.amount), 0);
-  const noEvidence = month.filter((r) => r.type === "지출" && !r.receipt && !r.evidence).length;
-  const byAcc = {}; month.filter((r) => r.type === "지출").forEach((r) => { byAcc[r.account || "기타"] = (byAcc[r.account || "기타"] || 0) + toInt(r.amount); });
-  const accTop = Object.entries(byAcc).sort((a, b) => b[1] - a[1]);
+  const fundOpts = React.useMemo(() => F.list.filter((f) => f.kind !== "대출"), [F]);
+  // ⭐ 2026-11-06 속도 — 이 달 계산(합계·계정별·일별·누계)은 장부·달이 바뀔 때만(검색 글자를 칠 때마다 다시 계산하지 않음)
+  const M = React.useMemo(() => {
+    const month = (rows || []).filter((r) => String(r.date || "").startsWith(ym));
+    let income = 0, expense = 0, noEvidence = 0, nIn = 0, nOut = 0;
+    const byAcc = {}; const byDay = {};
+    for (const r of month) {
+      const v = toInt(r.amount);
+      const dd = byDay[r.date] || (byDay[r.date] = { in: 0, out: 0 });
+      if (r.type === "수입") { income += v; nIn++; dd.in += v; }
+      else if (r.type === "지출") { expense += v; nOut++; dd.out += v; byAcc[r.account || "기타"] = (byAcc[r.account || "기타"] || 0) + v; if (!r.receipt && !r.evidence) noEvidence++; }
+    }
+    const dim = new Date(Number(ym.slice(0, 4)), Number(ym.slice(5, 7)), 0).getDate();
+    let cum = 0;
+    const daily = Array.from({ length: dim }, (_, i) => { const x = byDay[`${ym}-${String(i + 1).padStart(2, "0")}`] || { in: 0, out: 0 }; cum += x.in - x.out; return { d: i + 1, in: x.in, out: x.out, cum }; });
+    return { month, income, expense, noEvidence, nIn, nOut, accTop: Object.entries(byAcc).sort((a, b) => b[1] - a[1]), daily };
+  }, [rows, ym]);
+  const { month, income, expense, noEvidence, accTop, daily } = M;
   const kw = q.trim();
-  const list = month.filter((r) => (type === "전체" || r.type === type) && (!kw || [r.item, r.vendor, r.account, r.memo].some((v) => String(v || "").includes(kw))))
-    .sort((a, b) => String(b.date).localeCompare(String(a.date)) || tsMs(b.createdAt) - tsMs(a.createdAt));
+  const list = React.useMemo(() => month.filter((r) => (type === "전체" || r.type === type) && (!kw || [r.item, r.vendor, r.account, r.memo].some((v) => String(v || "").includes(kw))))
+    .sort((a, b) => String(b.date).localeCompare(String(a.date)) || tsMs(b.createdAt) - tsMs(a.createdAt)), [month, type, kw]);
   // 장부 — 날짜 오름차순 + 누계 잔액(이 달 수입 − 지출)
-  const ledgerRows = (() => { let bal = 0; return [...list].sort((a, b) => String(a.date).localeCompare(String(b.date)) || tsMs(a.createdAt) - tsMs(b.createdAt)).map((r) => { bal += (r.type === "수입" ? 1 : -1) * toInt(r.amount); return { ...r, bal }; }); })();
-  const daily = (() => { const dim = new Date(Number(ym.slice(0, 4)), Number(ym.slice(5, 7)), 0).getDate(); let cum = 0; return Array.from({ length: dim }, (_, i) => { const d = `${ym}-${String(i + 1).padStart(2, "0")}`; const l = month.filter((r) => r.date === d); const inn = l.filter((r) => r.type === "수입").reduce((s2, r) => s2 + toInt(r.amount), 0); const out = l.filter((r) => r.type === "지출").reduce((s2, r) => s2 + toInt(r.amount), 0); cum += inn - out; return { d: i + 1, in: inn, out, cum }; }); })();
-  const imported = new Set((rows || []).map((r) => r.sourceId).filter(Boolean));
+  const ledgerRows = React.useMemo(() => { let bal = 0; return [...list].sort((a, b) => String(a.date).localeCompare(String(b.date)) || tsMs(a.createdAt) - tsMs(b.createdAt)).map((r) => { bal += (r.type === "수입" ? 1 : -1) * toInt(r.amount); return { ...r, bal }; }); }, [list]);
+  const imported = React.useMemo(() => new Set((rows || []).map((r) => r.sourceId).filter(Boolean)), [rows]);
   const toImport = approvals.filter((a) => !imported.has(a.id) && Number(a.amount) > 0);
   const recurDone = new Set(month.map((r) => r.recurId).filter(Boolean));
   const recurTodo = (recurring || []).filter((r) => r.active !== false && !recurDone.has(r.id));
@@ -225,6 +248,7 @@ export function CashBook({ company, isViewer = false }) {
     const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob(["﻿" + lines.join("\n")], { type: "text/csv" })); a.download = `수입지출_${ym}.csv`; a.click();
   };
 
+  if (rows === null) return <BookSkeleton rows={8} />; // ⭐ 2026-11-06 첫 불러오기 — 뼈대 화면
   return (
     <div className="space-y-4">
       <BookHero en="ACCOUNTING · CASH BOOK" title="수입·지출 장부" desc="돈이 들어오고 나간 내역을 날짜·계정과목별로 기록하고 증빙(영수증)까지 보관합니다"
@@ -233,7 +257,7 @@ export function CashBook({ company, isViewer = false }) {
           <span className="h-9 px-3 rounded-xl bg-white text-[#0F1A30] text-[14px] font-black grid place-items-center tabular-nums whitespace-nowrap" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{ym.replace("-", ".")}</span>
           <button type="button" onClick={() => shiftYm(1)} className="w-9 h-9 rounded-xl bg-white/10 border border-white/15">›</button>
         </div>}
-        kpis={[["수입", `${won(income)}원`, `${month.filter((r) => r.type === "수입").length}건`], ["지출", `${won(expense)}원`, `${month.filter((r) => r.type === "지출").length}건`], ["수지 차액", `${income - expense >= 0 ? "+" : ""}${won(income - expense)}원`, "수입 − 지출"], ["증빙 없는 지출", `${noEvidence}건`, "영수증·전자결재 미첨부"]]} />
+        kpis={[["수입", `${won(income)}원`, `${M.nIn}건`], ["지출", `${won(expense)}원`, `${M.nOut}건`], ["수지 차액", `${income - expense >= 0 ? "+" : ""}${won(income - expense)}원`, "수입 − 지출"], ["증빙 없는 지출", `${noEvidence}건`, "영수증·전자결재 미첨부"]]} />
 
       {!isViewer && (toImport.length > 0 || recurTodo.length > 0) && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
@@ -272,7 +296,7 @@ export function CashBook({ company, isViewer = false }) {
             : !ledgerRows.length ? <div className="py-16 text-center text-[13.5px] font-bold text-[#9AA9C3]">이 달 내역이 없습니다</div> : (
             <>
               {/* PC — 줄 친 장부 */}
-              <div className="hidden md:block overflow-x-auto">
+              {!narrow && <div className="overflow-x-auto">
                 <table className="w-full text-[13px] border-collapse" style={{ minWidth: 820 }}>
                   <thead>
                     <tr className="bg-[#0F1A30] text-white">
@@ -305,9 +329,9 @@ export function CashBook({ company, isViewer = false }) {
                     </tr>
                   </tfoot>
                 </table>
-              </div>
+              </div>}
               {/* 휴대폰 — 장부 줄 카드 */}
-              <div className="md:hidden divide-y divide-[#EEF2F8]">
+              {narrow && <div className="divide-y divide-[#EEF2F8]">
                 {ledgerRows.map((r) => (
                   <button key={r.id} type="button" onClick={() => !isViewer && setEdit({ ...blankEntry(r.type), ...r, amount: String(r.amount || "") })} className="w-full text-left px-3.5 py-2.5 flex items-center gap-2.5">
                     <span className="w-11 text-center shrink-0"><span className="block text-[13px] font-black text-[#1B2B4B] tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{String(r.date).slice(8)}</span><span className={`block text-[10px] font-black ${r.type === "수입" ? "text-[#2D4C82]" : "text-[#7A879C]"}`}>{r.type}</span></span>
@@ -316,7 +340,7 @@ export function CashBook({ company, isViewer = false }) {
                     <span className="text-right shrink-0"><span className={`block text-[14px] font-black tabular-nums ${r.type === "수입" ? "text-[#2D4C82]" : "text-[#0F1A30]"}`} style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{r.type === "수입" ? "+" : "−"}{won(r.amount)}</span><span className="block text-[10.5px] text-[#9AA9C3] tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>잔 {won(r.bal)}</span></span>
                   </button>
                 ))}
-              </div>
+              </div>}
             </>
           )}
         </BookCard>
