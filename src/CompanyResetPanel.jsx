@@ -7,6 +7,8 @@
 //   {partial:true}로 돌려준다 → 화면이 바로 다시 불러 남은 묶음부터 이어서 한다. 실패하면 "어느 단계"에서 실패했는지 보여 준다.
 //  지운 데이터는 7일 동안 보관함에 남는다 → [복원]하면 초기화 전 상태 그대로 돌아온다(7일 뒤 자동 영구 삭제)
 //  실제 삭제·복원은 서버(functions/index.js companyResetHandler)가 한다.
+//  ⭐ 2026-11-07 보관함 [지금 영구 삭제] · [보관함 모두 비우기] · [이력 지우기]: 서버 companyResetPurge(functions/resetPurge.js)
+//   확인: 회사명(모두면 "영구삭제") 입력 + 초기화 비밀번호. 서버가 8분씩 일하고 {partial:true}면 화면이 바로 이어서 부른다.
 import React from "react";
 import { auth, db, FUNCTIONS_BASE } from "./firebase";
 import { doc, onSnapshot } from "firebase/firestore";
@@ -150,13 +152,15 @@ export function ResetProgressModal({ job, onClose }) {
 }
 
 // ─── 위험 작업 확인창 — 회사명을 그대로 입력 + 초기화 비밀번호(두 겹 확인) ───
-export function DangerConfirm({ title, en = "RESET", company, lines = [], needName = true, needPassword = true, actionLabel, children, onCancel, onRun }) {
+//  word: 회사명 대신 입력받을 확인 문구(예: "영구삭제")
+export function DangerConfirm({ title, en = "RESET", company, word, lines = [], needName = true, needPassword = true, actionLabel, children, onCancel, onRun }) {
   const [name, setName] = React.useState("");
   const [pw, setPw] = React.useState("");
   const [err, setErr] = React.useState("");
-  const ok = (!needName || name.trim() === company) && (!needPassword || pw.length > 0);
+  const expect = word || company;
+  const ok = (!needName || name.trim() === expect) && (!needPassword || pw.length > 0);
   const go = () => {
-    if (needName && name.trim() !== company) return setErr("회사명이 정확히 일치해야 합니다.");
+    if (needName && name.trim() !== expect) return setErr(word ? "확인 문구가 일치하지 않아요." : "회사명이 정확히 일치해야 합니다.");
     if (needPassword && !pw) return setErr("초기화 비밀번호를 입력하세요.");
     onRun({ password: pw, confirmName: name.trim() });
   };
@@ -172,8 +176,10 @@ export function DangerConfirm({ title, en = "RESET", company, lines = [], needNa
           {children}
           {needName && (
             <label className="block">
-              <span className="text-[14px] font-bold text-[#3A4A66]">확인을 위해 회사명 <b className="text-[#0F1A30]">{company}</b> 을(를) 그대로 입력하세요</span>
-              <input autoFocus value={name} onChange={(e) => { setName(e.target.value); setErr(""); }} onKeyDown={(e) => e.key === "Enter" && ok && go()} placeholder={company} data-confirm-name
+              <span className="text-[14px] font-bold text-[#3A4A66]">{word
+                ? <>확인을 위해 <b className="text-[#0F1A30]">{word}</b> 라고 입력하세요</>
+                : <>확인을 위해 회사명 <b className="text-[#0F1A30]">{company}</b> 을(를) 그대로 입력하세요</>}</span>
+              <input autoFocus value={name} onChange={(e) => { setName(e.target.value); setErr(""); }} onKeyDown={(e) => e.key === "Enter" && ok && go()} placeholder={expect} data-confirm-name
                 className="mt-1.5 w-full h-12 rounded-xl border-2 border-[#DCE3EE] px-4 text-[16px] font-bold outline-none focus:border-[#1B2B4B]" />
             </label>
           )}
@@ -187,6 +193,68 @@ export function DangerConfirm({ title, en = "RESET", company, lines = [], needNa
             <button type="button" onClick={onCancel} className="h-12 rounded-xl border border-[#DCE3EE] text-[15px] font-bold text-[#3A4A66]">취소</button>
             <button type="button" onClick={go} disabled={!ok} className="h-12 rounded-xl bg-[#0B1428] text-white text-[15px] font-black disabled:opacity-35">{actionLabel}</button>
           </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── 영구 삭제 · 이력 지우기 진행 창 ───
+//  run = { title, body }  서버가 {partial:true}면 바로 다시 불러 이어서 지운다(지운 개수는 더해서 보여 준다)
+const PURGE_SUM_KEYS = ["backups", "docs", "files", "accounts", "logs", "jobs", "history"];
+function PurgeRunModal({ run, onClose }) {
+  const [sum, setSum] = React.useState(() => Object.fromEntries(PURGE_SUM_KEYS.map((k) => [k, 0])));
+  const [skipped, setSkipped] = React.useState([]);
+  const [done, setDone] = React.useState(false);
+  const [err, setErr] = React.useState("");
+  const [tries, setTries] = React.useState(0);
+  React.useEffect(() => {
+    let dead = false;
+    (async () => {
+      let fails = 0;
+      for (;;) {
+        try {
+          const r = await callReset(run.body, "companyResetPurge");
+          if (dead) return;
+          fails = 0;
+          setSum((p) => Object.fromEntries(PURGE_SUM_KEYS.map((k) => [k, (p[k] || 0) + (r[k] || 0)])));
+          if (r.partial) continue;
+          setSkipped(r.skipped || []);
+          setDone(true);
+          return;
+        } catch (e) {
+          if (dead) return;
+          fails += 1;
+          if ((!e.network && e.status && e.status < 500) || fails >= 4) { setErr(e.message); return; }
+          setTries(fails);
+          await new Promise((ok) => setTimeout(ok, 3000));
+        }
+      }
+    })();
+    return () => { dead = true; };
+  }, [run]);
+  const records = sum.logs + sum.jobs + sum.history;
+  return (
+    <div className="fixed inset-0 z-[99999] bg-[#0B1428]/70 backdrop-blur-[2px] flex items-center justify-center p-4" data-purge-run="1">
+      <div className="w-full max-w-[440px] bg-white rounded-[22px] shadow-2xl overflow-hidden">
+        <div className="px-7 py-5 text-white" style={{ background: "linear-gradient(120deg,#0B1428,#1B2B4B 70%,#2D4C82)" }}>
+          <div className="text-[12px] font-extrabold tracking-[0.24em] text-[#8FB0F0]">PURGE</div>
+          <div className="text-[20px] font-black mt-0.5">{run.title} {done ? "완료" : err ? "멈춤" : "중"}</div>
+        </div>
+        <div className="px-7 py-6 space-y-3">
+          {!done && !err && <div className="text-[15px] font-bold text-[#1B2B4B]">지우고 있어요{tries ? ` (다시 시도 ${tries})` : ""}. 끝날 때까지 창을 열어 두세요.</div>}
+          {err && <div className="rounded-xl border border-[#DCE3EE] bg-[#F5F8FD] px-4 py-3 text-[14px] text-[#1B2B4B] break-all">{err}</div>}
+          <div className="rounded-2xl bg-[#F5F8FD] border border-[#E3E8F0] px-5 py-4 text-[15px] text-[#0F1A30] leading-relaxed tabular-nums">
+            보관 데이터 <b>{sum.docs.toLocaleString()}건</b> · 첨부파일 <b>{sum.files.toLocaleString()}개</b>
+            {sum.accounts ? <> · 계정 <b>{sum.accounts}개</b></> : null}
+            {run.body.mode === "history" && <><br />이력 <b>{records.toLocaleString()}건</b>을 지웠어요</>}
+          </div>
+          {skipped.length > 0 && (
+            <div className="text-[14px] text-[#5B6B85] leading-relaxed">
+              {skipped.map((s) => <div key={s.id}><b className="text-[#1B2B4B]">{s.company || s.id}</b> 건너뜀 · {s.reason}</div>)}
+            </div>
+          )}
+          {(done || err) && <button type="button" onClick={onClose} className="w-full h-12 rounded-xl bg-[#1B2B4B] text-white text-[15px] font-black">확인</button>}
         </div>
       </div>
     </div>
@@ -231,6 +299,7 @@ export default function CompanyResetPanel() {
   const [keepDays, setKeepDays] = React.useState(7);
   const [preview, setPreview] = React.useState(null); // { company, total, subDocs, perCollection, accounts } | { company, loading } | { company, error }
   const [job, setJob] = React.useState(null);
+  const [purgeRun, setPurgeRun] = React.useState(null); // { title, body }
 
   const load = React.useCallback(async () => {
     setLoadErr("");
@@ -255,6 +324,14 @@ export default function CompanyResetPanel() {
     setPreview({ company, loading: true });
     try { const r = await callReset({ action: "preview", company, deleteAccounts }); setPreview({ company, ...r }); }
     catch (e) { setPreview({ company, error: e.message }); }
+  };
+  const needPw = (fn) => (status?.hasPassword ? fn() : alert("먼저 초기화 비밀번호를 설정해 주세요."));
+  const startPurge = ({ password, confirmName }) => {
+    const c = confirm;
+    const body = { mode: c.mode === "history" || c.mode === "historyAll" ? "history" : "purge", password, confirmText: confirmName, ...(c.backup ? { backupId: c.backup.id } : { all: true }) };
+    const title = c.mode === "purge" ? `${c.backup.company} 영구 삭제` : c.mode === "history" ? `${c.backup.company} 이력 지우기` : c.mode === "purgeAll" ? "보관함 비우기" : "이력 모두 지우기";
+    setPurgeRun({ title, body });
+    setConfirm(null);
   };
   const start = ({ password, confirmName }) => {
     const restore = confirm.mode === "restore";
@@ -338,7 +415,7 @@ export default function CompanyResetPanel() {
           </section>
 
           <section className={CARD}>
-            <CardHead code="BACKUP" title="초기화 보관함" desc={`${keepDays}일 동안 보관 · [복원]하면 초기화 전 상태로 돌아옵니다`}
+            <CardHead code="BACKUP" title="초기화 보관함" desc={`${keepDays}일 뒤 자동으로 지워져요 · 그 전에 [복원]하면 초기화 전으로 돌아와요`}
               right={<button onClick={load} className="shrink-0 h-9 px-3 rounded-lg border border-[#DCE3EE] text-[14px] font-bold text-[#3A4A66]">새로고침</button>} />
             <div className="divide-y divide-[#EEF1F6]">
               {backups === null ? <div className="py-10 text-center text-[14px] text-[#7A879C]">불러오는 중…</div>
@@ -348,9 +425,11 @@ export default function CompanyResetPanel() {
                     const left = daysLeft(b.expiresAt);
                     const chip = b.status === "restored" ? `복원됨 · ${fmtTime(b.restoredAt)}`
                       : live ? (b.phase === "done" ? `보관 중 · D-${left}` : "삭제 진행 중")
-                        : b.status === "saving" || b.status === "restoring" ? "처리 중(끊김)" : "영구 삭제됨";
+                        : b.status === "purging" ? "지우다 멈춤" : b.status === "saving" || b.status === "restoring" ? "처리 중(끊김)" : "영구 삭제됨";
+                    const blocked = b.status === "restoring" || (b.status === "kept" && b.phase !== "done");
+                    const canPurge = !blocked && b.status !== "purged";
                     return (
-                      <div key={b.id} className="px-5 py-3.5 flex items-center gap-3">
+                      <div key={b.id} className="px-5 py-3.5 flex items-center gap-3 flex-wrap" data-backup-item={b.id}>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 flex-wrap"><span className="text-[15px] font-black text-[#0F1A30]">{b.company}</span>
                             {b.endContract && <span className="px-2 h-6 inline-flex items-center rounded-full bg-[#0B1428] text-white text-[12px] font-black">계약종료</span>}
@@ -359,10 +438,22 @@ export default function CompanyResetPanel() {
                           {b.lastError && b.phase !== "done" && <div className="text-[13px] text-[#1B2B4B] mt-0.5 break-all">마지막 오류 [{b.lastStep}] {b.lastError}</div>}
                         </div>
                         {live && b.phase === "done" && <button onClick={() => (status?.hasPassword ? setConfirm({ mode: "restore", backup: b }) : alert("먼저 초기화 비밀번호를 설정해 주세요."))} className="shrink-0 h-9 px-3.5 rounded-lg bg-[#1B2B4B] text-white text-[14px] font-bold">복원</button>}
+                        {!blocked && (
+                          <div className="basis-full flex gap-1.5 justify-end">
+                            {canPurge && <button type="button" onClick={() => needPw(() => setConfirm({ mode: "purge", backup: b }))} data-purge-one={b.id} className="h-8 px-3 rounded-lg border border-[#DCE3EE] text-[13px] font-bold text-[#3A4A66] hover:border-[#1B2B4B]">지금 영구 삭제</button>}
+                            <button type="button" onClick={() => needPw(() => setConfirm({ mode: "history", backup: b }))} data-history-one={b.id} className="h-8 px-3 rounded-lg border border-[#DCE3EE] text-[13px] font-bold text-[#3A4A66] hover:border-[#1B2B4B]">이력 지우기</button>
+                          </div>
+                        )}
                       </div>
                     );
                   })}
             </div>
+            {backups?.length > 0 && (
+              <div className="px-5 py-4 border-t border-[#EEF1F6] grid grid-cols-2 gap-2">
+                <button type="button" onClick={() => needPw(() => setConfirm({ mode: "purgeAll" }))} data-purge-all className="h-10 rounded-xl border border-[#1B2B4B] text-[#1B2B4B] text-[14px] font-black">보관함 모두 비우기</button>
+                <button type="button" onClick={() => needPw(() => setConfirm({ mode: "historyAll" }))} data-history-all className="h-10 rounded-xl border border-[#DCE3EE] text-[#3A4A66] text-[14px] font-black">이력 모두 지우기</button>
+              </div>
+            )}
           </section>
         </div>
       </div>
@@ -375,6 +466,32 @@ export default function CompanyResetPanel() {
         <DangerConfirm en="RESTORE" title={`${confirm.backup.company} 복원`} company={confirm.backup.company} needName={false} actionLabel="복원 시작" onCancel={() => setConfirm(null)} onRun={start}
           lines={[`${fmtTime(confirm.backup.at)}에 초기화한 데이터 ${confirm.backup.docCount.toLocaleString()}건을 되돌립니다.`]} />
       )}
+      {confirm?.mode === "purge" && (
+        <DangerConfirm en="PURGE" title={`${confirm.backup.company} 보관함 영구 삭제`} company={confirm.backup.company} actionLabel="영구 삭제" onCancel={() => setConfirm(null)} onRun={startPurge}
+          lines={[
+            `보관한 데이터 ${confirm.backup.docCount.toLocaleString()}건과 첨부파일 ${confirm.backup.fileCount.toLocaleString()}개를 지금 바로 지워요.`,
+            "지우면 다시 복원할 수 없어요.",
+            ...(confirm.backup.status === "kept" && confirm.backup.accounts ? [`사용 중지해 둔 로그인 계정 ${confirm.backup.accounts}개도 함께 지워요.`] : []),
+            "이력은 남아요. 이력까지 없애려면 [이력 지우기]를 눌러 주세요.",
+          ]} />
+      )}
+      {confirm?.mode === "history" && (
+        <DangerConfirm en="CLEAR HISTORY" title={`${confirm.backup.company} 이력 지우기`} company={confirm.backup.company} actionLabel="이력 지우기" onCancel={() => setConfirm(null)} onRun={startPurge}
+          lines={[
+            "이 초기화의 보관함 기록, 진행 기록, 복원 기록을 지워요.",
+            ...(confirm.backup.status !== "purged" ? ["보관한 데이터와 첨부파일도 함께 영구 삭제돼요."] : []),
+            "지우면 되돌릴 수 없어요.",
+          ]} />
+      )}
+      {confirm?.mode === "purgeAll" && (
+        <DangerConfirm en="PURGE ALL" title="보관함 모두 비우기" word="영구삭제" actionLabel="모두 영구 삭제" onCancel={() => setConfirm(null)} onRun={startPurge}
+          lines={["보관 중인 모든 운송사의 데이터와 첨부파일을 지금 바로 지워요.", "지우면 어떤 운송사도 복원할 수 없어요.", "복원 중이거나 초기화가 진행 중인 건은 건너뛰어요.", "이력은 남아요."]} />
+      )}
+      {confirm?.mode === "historyAll" && (
+        <DangerConfirm en="CLEAR ALL" title="이력 모두 지우기" word="영구삭제" actionLabel="모두 지우기" onCancel={() => setConfirm(null)} onRun={startPurge}
+          lines={["보관함과 초기화, 복원 기록을 모두 지워요.", "보관 중인 데이터도 함께 영구 삭제돼요.", "진행 중인 작업과 다른 기능의 기록은 남겨요.", "지우면 되돌릴 수 없어요."]} />
+      )}
+      {purgeRun && <PurgeRunModal run={purgeRun} onClose={() => { setPurgeRun(null); load(); }} />}
       {job && <ResetProgressModal job={job} onClose={() => { setJob(null); load(); }} />}
     </div>
   );
