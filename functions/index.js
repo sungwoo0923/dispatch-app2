@@ -6730,3 +6730,38 @@ exports.payrollPwStatus = payCall(_payrollPw.status);
 exports.payrollPwSet = payCall(_payrollPw.setPw);
 exports.payrollPwVerify = payCall(_payrollPw.verify);
 exports.payrollLock = payCall(_payrollPw.lock);
+
+// 🏛 2026-11-07 공공데이터(국세청 사업자 상태 · 기상청 예보 · 기상특보) + 팝빌 어댑터 — 설명은 functions/publicData.js · functions/popbill.js 맨 위
+//  키: Firebase 비밀값 DATA_GO_KR_KEY(공공데이터포털 일반 인증키, 아직 없으면 "none"으로 두면 화면이 조용히 숨긴다)
+//   등록: firebase functions:secrets:set DATA_GO_KR_KEY
+//  팝빌: functions/.env 에 POPBILL_ENABLED=true 를 넣은 뒤에만 POPBILL_LINK_ID · POPBILL_SECRET_KEY를 묶는다(없으면 비밀값 없이 배포되고 "키 없음"으로 답한다)
+const _publicData = require("./publicData");
+const _popbill = require("./popbill");
+const POPBILL_ON = process.env.POPBILL_ENABLED === "true";
+const _pd = _publicData.makePublicData({ db, fetch, getKey: () => process.env.DATA_GO_KR_KEY || "" });
+const PD_CODES = new Set(["invalid-argument", "failed-precondition", "permission-denied", "unauthenticated", "resource-exhausted", "unavailable", "not-found"]);
+const pdHttpsError = (e) => {
+  if (e instanceof functions.https.HttpsError) return e;
+  if (e && PD_CODES.has(e.code)) return new functions.https.HttpsError(e.code, e.message);
+  console.error("[연동] 오류:", e);
+  return new functions.https.HttpsError("internal", "잠시 뒤 다시 해 주세요");
+};
+const pdCall = (fn, opts = {}) => functions.runWith({ secrets: ["DATA_GO_KR_KEY"], timeoutSeconds: 60, memory: "256MB", ...opts }).https.onCall(async (data, context) => {
+  try { return await fn(data, context.auth); } catch (e) { throw pdHttpsError(e); }
+});
+exports.bizStatusCheck = pdCall(_pd.bizStatusCheck);
+exports.weatherFor = pdCall(_pd.weatherFor, { timeoutSeconds: 120 });
+exports.integrationStatus = pdCall(_pd.integrationStatus);
+exports.weatherRefresh = functions.runWith({ secrets: ["DATA_GO_KR_KEY"], timeoutSeconds: 540, memory: "256MB" })
+  .pubsub.schedule("every 3 hours").timeZone("Asia/Seoul").onRun(async () => {
+    const r = await _pd.weatherRefresh().catch((e) => ({ error: String(e?.message || e) }));
+    console.log("[기상청] 예보 갱신:", JSON.stringify(r));
+    return null;
+  });
+const _popbillAdmin = _popbill.makePopbillAdmin({
+  db, callerOf: _publicData.callerOf,
+  getSecrets: () => (POPBILL_ON ? { linkId: process.env.POPBILL_LINK_ID || "", secretKey: process.env.POPBILL_SECRET_KEY || "" } : {}),
+});
+exports.popbillAdmin = functions.runWith({ ...(POPBILL_ON ? { secrets: ["POPBILL_LINK_ID", "POPBILL_SECRET_KEY"] } : {}), timeoutSeconds: 60, memory: "256MB" }).https.onCall(async (data, context) => {
+  try { return await _popbillAdmin(data, context.auth); } catch (e) { throw pdHttpsError(e); }
+});

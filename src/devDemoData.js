@@ -191,6 +191,8 @@ function demoPayDocs(col) {
 
 // ⭐ 2026-11-07 거래명세서 단계 · 미수금 화면 점검 — 지난 7개월 청구 이력(거래처마다 다른 입금 습관) · 일부입금 · 명세서 단계 · 메모 · 발송 기록
 //  (오더는 지난달 이전 날짜만 넣어 오늘 화면 숫자는 그대로)
+// 🏛 2026-11-07 국세청 상태조회 점검용 — 검증식이 맞는 번호(끝자리로 가짜 상태: 0·7 폐업 · 1 휴업 · 나머지 계속, src/publicDataDemo.js)
+const DEMO_BIZ_NO = ["104-81-12340", "101-81-12341", "108-81-12342", "105-81-12343", "102-81-12344", "103-81-12347", "109-81-12345", "106-81-12346"];
 const AR_PLAN = [
   // [거래처 번호, 안 받은 달(몇 달 전, 1 = 지난달), 결제 조건]
   [0, [1], "익월 말일"],
@@ -280,7 +282,7 @@ export function demoDocsFor(col) {
     ...DEMO_SIGNUPS.filter((u) => !u.approved).map((u) => fakeDoc(col, u.id, { uid: u.id, 이름: u.name, name: u.name, 차량번호: u.carNo, carNo: u.carNo, 전화번호: u.phone, phone: u.phone, 차량종류: u.차량종류, 차량톤수: u.차량톤수, 거주지: u.거주지, approved: false, createdAt: demoTs(u.at) })),
   ];
   if (col === "gps_tracks") return demoTracks();
-  if (col === "clients") return CLIENTS.map((n, i) => fakeDoc(col, `demo-cl-${i}`, { companyName: "", 거래처명: n, 주소: PLACES[i % PLACES.length][1], 담당자: NAMES[i % NAMES.length], 연락처: `02-${300 + i}-${4000 + i}`, ...(AR_PLAN[i] ? { 결제일: AR_PLAN[i][2], 이메일: `billing${i}@client.example`, 사업자번호: `12${i}-8${i}-1234${i}`, 대표자: NAMES[(i + 3) % NAMES.length] } : {}) }));
+  if (col === "clients") return CLIENTS.map((n, i) => fakeDoc(col, `demo-cl-${i}`, { companyName: "", 거래처명: n, 주소: PLACES[i % PLACES.length][1], 담당자: NAMES[i % NAMES.length], 연락처: `02-${300 + i}-${4000 + i}`, ...(AR_PLAN[i] ? { 결제일: AR_PLAN[i][2], 이메일: `billing${i}@client.example`, 사업자번호: DEMO_BIZ_NO[i % DEMO_BIZ_NO.length], 대표자: NAMES[(i + 3) % NAMES.length] } : {}) }));
   // ⭐ 2026-11-05 고정노선 화면 점검용(운행 ON/OFF·목록) — 1개는 ON, 1개는 OFF
   if (col === "fixedRoutes") return [
     { name: "평택→수원 데일리", client: CLIENTS[0], active: true, days: ["월", "화", "수", "목", "금"], startTime: "07:00", startDate: "2026-11-02", endDate: "" },

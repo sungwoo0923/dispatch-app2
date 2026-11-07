@@ -18,6 +18,7 @@ import {
   liveActive, issueInvoice, subscribeLive, proposeReturn, answerReturn, confirmInvoice, posterMarkPaid,
 } from "./hubApi";
 import HubPod from "./HubPod";
+import { HubOrderWeather } from "./hubPublicData"; // 🌦 2026-11-07 상하차 지역 날씨 · 특보
 const HubLiveTrack = lazy(() => import("./HubLiveTrack"));
 const wonF = (n) => `${(Math.round(Number(n) || 0)).toLocaleString("ko-KR")}원`;
 
@@ -284,6 +285,7 @@ export default function HubOrderDetail({ id, me, onClose, toast, onEdit, favorit
             <RouteLine dark big km={km}
               from={`${o.상차시도} ${o.상차시군구 || ""}`} fromSub={`${dayLabel(o.상차일)} ${o.상차시간 || ""} 상차, ${o.상차방법 || "방법 협의"}`}
               to={`${o.하차시도} ${o.하차시군구 || ""}`} toSub={`${dayLabel(o.하차일 || o.상차일)} ${o.하차시간 || ""} 하차, ${o.하차방법 || "방법 협의"}`} />
+            <HubOrderWeather o={o} plain className="mt-3 px-2.5 py-1.5 rounded-xl bg-white/90" />
             <div className="mt-5 pt-4 border-t border-white/10 flex items-end gap-3">
               <div>
                 <div className="text-[13.5px] font-bold text-white/55">운송료</div>

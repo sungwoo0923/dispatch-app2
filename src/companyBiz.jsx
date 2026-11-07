@@ -14,6 +14,7 @@ import { BANK_NAMES, formatAccount } from "./bankUtil";
 import { CustomSelect } from "./CustomSelect";
 import { SubNavTopCtx } from "./KpSubNav";
 import { kpConfirm } from "./kpDialog";
+import { BizCheck, bizGuardMain } from "./publicDataMain"; // 🏛 2026-11-07 국세청 사업자 상태
 
 const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
 const store = new Map(); // 회사 → { list, memory, listeners:Set, unsub }
@@ -315,9 +316,10 @@ export function BizListEditor({ company, canEdit }) {
       window.alert(/permission|insufficient/i.test(String(e?.message || e)) ? "저장 권한이 없습니다. (관리자·경리·인사·마스터만 저장할 수 있어요 — PC에서 firebase deploy --only firestore:rules 를 했는지도 확인해 주세요)" : `저장하지 못했습니다: ${e?.message || e}`);
     } finally { setBusy(false); }
   };
-  const submit = () => {
+  const submit = async () => {
     const v = { ...edit.v, name: String(edit.v.name || "").trim() };
     if (!v.name) { window.alert("상호(사업자 이름)를 입력해 주세요."); return; }
+    if (!(await bizGuardMain(v.bizNo, { label: "사업자" }))) return;
     if (v.name === company || biz.extra.some((b, i) => i !== edit.idx && String(b.name).trim() === v.name)) { window.alert("이미 있는 사업자 이름입니다."); return; }
     const list = [...biz.extra];
     if (edit.idx == null) list.push({ ...v, id: `biz_${Date.now().toString(36)}` }); else list[edit.idx] = { ...list[edit.idx], ...v };
@@ -361,6 +363,7 @@ export function BizListEditor({ company, canEdit }) {
             <span className="px-2 h-6 rounded-md bg-[#1B2B4B] text-white text-[11px] font-black inline-flex items-center">추가</span>
             <span className="text-[14px] font-black text-[#0F1A30]">{b.name}</span>
             <span className="text-[12px] text-[#5B6B85] tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{b.bizNo || "사업자번호 없음"}</span>
+            {b.bizNo && <BizCheck value={b.bizNo} size="sm" />}
             <span className="text-[12px] text-[#7A8AA6]">{[b.ceo && `대표 ${b.ceo}`, b.bankName && `${b.bankName} ${b.bankNo || ""}`].filter(Boolean).join(" · ")}</span>
             {canEdit && <span className="ml-auto flex gap-1.5">
               <button type="button" onClick={() => setEdit({ idx: i, v: { ...EMPTY_BIZ, ...b } })} className="h-8 px-3 rounded-lg border border-[#DCE3EE] text-[12px] font-black text-[#1B2B4B]">수정</button>
@@ -376,7 +379,7 @@ export function BizListEditor({ company, canEdit }) {
             <div className="px-6 py-4 bg-[#1B2B4B] text-white text-[16px] font-black">{edit.idx == null ? "사업자 추가" : "사업자 수정"}</div>
             <div className="p-6 grid grid-cols-2 gap-3">
               <div className="col-span-2">{F("name", "상호(사업자 이름) *", "예) ○○물류")}</div>
-              {F("bizNo", "사업자등록번호", "000-00-00000")}{F("ceo", "대표자")}
+              <div>{F("bizNo", "사업자등록번호", "000-00-00000")}<div className="mt-1.5"><BizCheck value={edit.v.bizNo} size="sm" /></div></div>{F("ceo", "대표자")}
               <div className="col-span-2">{F("addr", "사업장 주소")}</div>
               {F("type", "업태")}{F("item", "종목")}
               {F("phone", "전화")}{F("fax", "팩스")}

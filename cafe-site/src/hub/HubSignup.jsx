@@ -15,6 +15,7 @@ import { HI, Btn, Field, inputCls, selectCls, Chip, FilePick } from "./hubUi";
 import { ROLES, ROLE_DOCS, DOC_TYPES, HUB_VEHICLES, HUB_TONS, SIDO_LIST, sigunguOf, fmtPhone, fmtBizNo, bizNoValid, BANKS } from "./hubConstants";
 import { getMember, submitApplication, uploadMemberFile, claimSession } from "./hubApi";
 import { HubDeviceGate, bindDevice } from "./hubDevice";
+import { HubBizCheck, hubBizVerdict } from "./hubPublicData"; // 🏛 2026-11-07 국세청 사업자 상태(폐업이면 가입 막고 · 휴업이면 한 번 더 확인)
 import { authErrorText, driverAuthErrorText, createHubDriverAccount, verifyHubDriverPhone, isHubDriverEmail, plateOfHubEmail, plateValid, phoneValid, normPlate } from "./hubLink";
 
 const STEPS = ["유형", "계정", "정보", "서류", "확인"];
@@ -102,9 +103,20 @@ export default function HubSignup() {
     if (s === 4 && !(agree.terms && agree.privacy && agree.docs)) return "모든 항목에 동의해 주세요.";
     return "";
   };
+  // 🏛 화주 · 운송사 — 국세청 조회 결과 폐업이면 막고, 휴업이면 한 번 더 눌러야 넘어간다(조회가 안 되면 막지 않는다)
+  const [bizAck, setBizAck] = useState("");
+  const bizGate = async () => {
+    if (role === "driver" || !auth.currentUser) return "";
+    const v = await hubBizVerdict(f.bizNo);
+    if (v.block) return v.block;
+    const d = f.bizNo.replace(/[^\d]/g, "");
+    if (v.warn && bizAck !== d) { setBizAck(d); return `${v.warn} 그래도 신청하려면 한 번 더 눌러 주세요`; }
+    return "";
+  };
   const next = async () => {
     const e = check(step); setErr(e);
     if (e) return;
+    if (step === 2) { const b = await bizGate(); if (b) { setErr(b); return; } }
     // 차주는 [계정] 단계에서 바로 계정을 만든다(로그인되면 위 effect가 [정보] 단계로 넘긴다)
     if (step === 1 && !loggedIn && role === "driver") {
       setBusy("확인하고 있어요");
@@ -133,6 +145,7 @@ export default function HubSignup() {
         const cred = await createUserWithEmailAndPassword(auth, f.email.trim(), f.pw);
         uid = cred.user.uid;
       }
+      { setBusy("사업자 상태를 확인하고 있어요"); const b = await bizGate(); if (b) { setStep(2); throw Object.assign(new Error(b), { hub: true }); } }
       const up = {};
       const keys = [...docs.required, ...docs.optional, ...(needPhoto ? ["photo"] : [])];
       for (const k of keys) {
@@ -231,7 +244,7 @@ export default function HubSignup() {
         <div className="space-y-3.5" data-testid="signup-step-info">
           {role !== "driver" && <Field label="회사명(상호)" required><input className={inputCls} value={f.companyName} onChange={set("companyName")} placeholder="사업자등록증의 상호" data-testid="su-company" /></Field>}
           <div className="grid sm:grid-cols-2 gap-3">
-            <Field label="사업자등록번호" required hint="번호를 자동으로 확인해요"><input className={inputCls} inputMode="numeric" value={f.bizNo} onChange={set("bizNo", fmtBizNo)} placeholder="000-00-00000" data-testid="su-bizno" /></Field>
+            <Field label="사업자등록번호" required hint="번호를 자동으로 확인해요"><input className={inputCls} inputMode="numeric" value={f.bizNo} onChange={set("bizNo", fmtBizNo)} placeholder="000-00-00000" data-testid="su-bizno" />{loggedIn && role !== "driver" && <div className="mt-1.5"><HubBizCheck value={f.bizNo} size="sm" /></div>}</Field>
             <Field label="대표자명"><input className={inputCls} value={f.ceoName} onChange={set("ceoName")} placeholder="사업자등록증의 대표자" data-testid="su-ceo" /></Field>
           </div>
           <div className="grid sm:grid-cols-2 gap-3">

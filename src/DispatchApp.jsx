@@ -39,6 +39,7 @@ import { makeClientMatcher } from "./clientMatch"; // ⭐ 2026-11-03 거래처 �
 import DetailFilterButton, { applyDetailFilter, DetailScope } from "./DetailFilter"; // 🔎 2026-11-03 세부검색(최대 3차)
 import { useCompanyBiz, bizOf, BizChip, BizPicker, BizFilter, bizMatch, printInfoForBiz, BizListEditor, BizScope, BizSelect, resolveBiz, rememberBiz, normBizKey, bankForBiz, bizInfoCardBlob } from "./companyBiz"; // ⭐ 2026-11-03 한 회사 · 여러 사업자 // ⭐ 2026-11-03 배차담당자 칸(등록자 + 차량 붙인 사람)
 import JSZip from "jszip";
+import { OrderWeather, BizCheck, bizGuardMain, ClientBizBulkButton, PopbillMemberCard } from "./publicDataMain"; // 🏛 2026-11-07 국세청 사업자 상태 · 기상청 날씨 · 팝빌 연동회원
 import { sendOrderTo24Proxy as sendOrderTo24 } from "../api/24CallProxy";
 import { useNewVersion, openUpdatePopup } from "./VersionCheck";
 import CustomDatePicker, { KOREAN_HOLIDAYS, shortHolidayLabel } from "./CustomDatePicker"; // ⭐ 2026-11-04 특수운임 제거 — specialDemandInfo·weatherUtil 사용 안 함
@@ -24460,6 +24461,7 @@ ${isHighlighted ? "animate-pulse bg-blue-100" : ""}
   <div className="inline-flex items-center gap-1 flex-nowrap whitespace-nowrap">
     <AddressCell text={r.상차지명} max={8} popupTitle="상차지명 전체보기" />
     {String(r.운행유형 || "").trim() === "왕복" && <RoundTripBadge />}<RotationBadge order={r} />
+    <OrderWeather order={r} side="pickup" />
 
 {r.__pickupStops?.length > 0 && (
   <StopInlineBadge count={r.__pickupStops.length} list={r.__pickupStops} type="pickup"
@@ -24478,6 +24480,7 @@ ${isHighlighted ? "animate-pulse bg-blue-100" : ""}
                                   <td className={cell}>
   <div className="inline-flex items-center gap-1 flex-nowrap whitespace-nowrap">
     <AddressCell text={r.하차지명} max={8} popupTitle="하차지명 전체보기" />
+    <OrderWeather order={r} side="drop" />
 
 {r.__dropStops?.length > 0 && (
   <StopInlineBadge count={r.__dropStops.length} list={r.__dropStops} type="drop"
@@ -40215,6 +40218,7 @@ return (
   <div className="inline-flex items-center gap-1">
     <AddressCell text={row.상차지명} max={8} popupTitle="상차지명 전체보기" />
     {String(row.운행유형 || "").trim() === "왕복" && <RoundTripBadge />}<RotationBadge order={row} />
+    <OrderWeather order={row} side="pickup" />
     {(() => {
       const _s=(v)=>{if(Array.isArray(v)&&v.length>0)return v;if(typeof v==="string"&&v.trim().startsWith("[")){try{const p=JSON.parse(v);if(Array.isArray(p)&&p.length>0)return p;}catch{}}if(v&&typeof v==="object"&&!Array.isArray(v)){const ks=Object.keys(v);if(ks.length>0&&ks.every(k=>/^\d+$/.test(k)))return ks.sort((a,b)=>Number(a)-Number(b)).map(k=>v[k]);if(v.업체명)return[v];}return[];};
       const list=[..._s(row.경유상차목록),..._s(row.경유지_상차)]
@@ -40227,6 +40231,7 @@ return (
 ) : key === "하차지명" ? (
   <div className="inline-flex items-center gap-1">
     <AddressCell text={row.하차지명} max={8} popupTitle="하차지명 전체보기" />
+    <OrderWeather order={row} side="drop" />
     {(() => {
       const _s=(v)=>{if(Array.isArray(v)&&v.length>0)return v;if(typeof v==="string"&&v.trim().startsWith("[")){try{const p=JSON.parse(v);if(Array.isArray(p)&&p.length>0)return p;}catch{}}if(v&&typeof v==="object"&&!Array.isArray(v)){const ks=Object.keys(v);if(ks.length>0&&ks.every(k=>/^\d+$/.test(k)))return ks.sort((a,b)=>Number(a)-Number(b)).map(k=>v[k]);if(v.업체명)return[v];}return[];};
       const list=[..._s(row.경유하차목록),..._s(row.경유지_하차)]
@@ -58466,6 +58471,7 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
   const addNew = async () => {
     const 거래처명 = (newForm.거래처명 || "").trim();
     if (!거래처명) return showAlert("거래처명은 필수입니다.");
+    if (!(await bizGuardMain(newForm.사업자번호, { label: "거래처" }))) return; // 🏛 국세청 조회 결과 휴업 · 폐업이면 한 번 더 묻는다
     await upsertClient?.({ ...newForm, id: 거래처명 });
     setNewForm({ 거래처명: "", 사업자번호: "", 대표자: "", 업태: "", 종목: "", 주소: "", 담당자: "", 연락처: "", 이메일: "", 메모: "", 등급: "일반" });
     setShowNewClientModal(false);
@@ -58558,6 +58564,7 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
     const id = editClientModal.id || editClientModal.거래처명;
     if (!id) return;
     const original = rows.find(r => (r.id || r.거래처명) === id) || {};
+    if (!(await bizGuardMain(editClientModal.사업자번호, { label: "거래처" }))) return; // 🏛 국세청 조회 결과 휴업 · 폐업이면 한 번 더 묻는다
     const { _dragOver, ...data } = editClientModal;
     // 담당자 목록에서 대표(또는 첫 번째) 담당자를 평면 필드(담당자/연락처)에도 반영 —
     // 여러 화면이 아직 이 평면 필드를 폴백으로 읽고 있어 계속 맞춰줘야 한다.
@@ -59559,6 +59566,7 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
               </button>
               <button onClick={downloadClientExcel}
                 className={KP_BTN}><EditableText id="client.baseClient.toolbar.다운로드" defaultText="다운로드" /></button>
+              <ClientBizBulkButton clients={rows} className={KP_BTN} />
               <button onClick={removeSelectedFn}
                 className={KP_BTN_DANGER}>
                 <EditableText id="client.baseClient.toolbar.선택삭제" defaultText="선택삭제" /> {selected.size > 0 && `(${selected.size})`}
@@ -59596,6 +59604,7 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
                       <input autoComplete="off" className="border border-gray-200 rounded-lg px-3 py-2 text-[13px] w-full focus:border-[#1B2B4B] outline-none"
                         value={newForm[key]||""}
                         onChange={(e) => setNewForm(p => ({ ...p, [key]: e.target.value }))} />
+                      {key === "사업자번호" && <div className="mt-1.5"><BizCheck value={newForm.사업자번호} size="sm" /></div>}
                     </div>
                   ))}
                   <div className="col-span-2">
@@ -59654,6 +59663,7 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
                       <input autoComplete="off" className="border border-gray-200 rounded-lg px-3 py-2 text-[13px] w-full focus:border-[#1B2B4B] outline-none"
                         value={editClientModal[key]||""}
                         onChange={(e) => setEditClientModal(p => ({ ...p, [key]: e.target.value }))} />
+                      {key === "사업자번호" && <div className="mt-1.5"><BizCheck value={editClientModal.사업자번호} size="sm" /></div>}
                     </div>
                   ))}
                   <div className="col-span-2">
@@ -62747,6 +62757,7 @@ function CompanyProfile({ userCompany = "", role = "", userId = "" }) {
 
             {/* ⭐ 2026-11-03 한 회사 · 여러 사업자 — 오더마다 청구 사업자를 고른다 */}
             <BizListEditor company={companyName} canEdit={isAcctTeam || isAdmin || role === "hrManager"} />
+            <PopbillMemberCard company={companyName} canEdit={isAdmin || role === "hrManager"} />
             </div>
             </div>
           </>);
@@ -62829,6 +62840,7 @@ function CompanyProfile({ userCompany = "", role = "", userId = "" }) {
                     onChange={e => setEditForm(p => ({ ...p, [key]: e.target.value }))}
                   />
                   )}
+                  {key === "businessNumber" && <div className="mt-1.5"><BizCheck value={editForm.businessNumber} size="sm" /></div>}
                 </div>
               ))}
             </div>
