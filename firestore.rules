@@ -502,8 +502,23 @@ service cloud.firestore {
       let b = hubMe().get('bank', null);
       return b is map && b.get('bank', '') != '' && b.get('number', '').size() >= 6 && b.get('holder', '') != '';
     }
+    // ⭐ 2026-11-07 허브 가입 차주는 등록된 휴대폰(기기)에서만 — hubDevices/{uid}는 서버(functions/hubDriverAuth.js hubBindDevice)만 쓴다.
+    //  규칙은 기기 번호를 볼 수 없어서 "등록된 기기가 있는 계정"까지만 확인한다(기기 비교는 로그인 · 앱 시작 때 서버 함수와 화면이 한다).
+    //  로지스웹 소속 기사(source logisweb-driver)는 로지스웹 기사앱 계정이라 여기서 제외.
+    function hubDeviceOk() {
+      return !(hubMe().get('role', '') == 'driver' && hubMe().get('source', '') == 'signup')
+        || (exists(/databases/$(database)/documents/hubDevices/$(request.auth.uid))
+            && get(/databases/$(database)/documents/hubDevices/$(request.auth.uid)).data.get('id', null) != null);
+    }
+    // 허브 차주 로그인 계정(차량번호@hubdriver.run25.kr) — 차량번호 · 휴대폰번호가 로그인 정보라 본인이 못 바꾼다(관리자 함수 hubAdminSetDriverLogin)
+    function hubPlateLogin() {
+      return request.auth.token.get('email', '').matches('.*@hubdriver[.]run25[.]kr$');
+    }
+    function hubPlateOf(d) {
+      return d.get('vehicle', null) is map ? d.get('vehicle', null).get('plate', '') : '';
+    }
     function hubCanTake() {
-      return hubActive() && hubMe().get('role', '') in ['driver', 'carrier']
+      return hubActive() && hubMe().get('role', '') in ['driver', 'carrier'] && hubDeviceOk()
         && hubMe().get('penalty', {}).get('blocked', false) != true && hubHasBank();
     }
     // 허브 가입 회원은 users 문서가 없다 — 없는 문서를 get()하면 오류가 나서 "A || 관리자" 전체가 거절되므로 exists()로 먼저 확인
@@ -531,12 +546,18 @@ service cloud.firestore {
         && request.resource.data.get('uid', '') == uid
         && !request.resource.data.keys().hasAny(['verified', 'bizStatus', 'adminNote', 'penalty', 'reviewedAt', 'reviewedBy', 'approvedAt', 'rejectReason', 'isAdmin', 'companyKey', 'va'])
         && hubBankOk(request.resource.data.get('bank', null))
+        && !request.resource.data.keys().hasAny(['boundDevice', 'deviceOk'])
+        && (!hubPlateLogin() || (request.resource.data.get('role', '') == 'driver' && request.resource.data.get('source', '') == 'signup'
+             && hubPlateOf(request.resource.data) + '@hubdriver.run25.kr' == request.auth.token.get('email', '')))
         && ((request.resource.data.get('source', '') == 'signup' && request.resource.data.get('status', '') == 'pending'
              && request.resource.data.get('role', '') in ['driver', 'shipper', 'carrier']
              && !request.resource.data.keys().hasAny(['docsVerified']))
           || (request.resource.data.get('status', '') == 'approved' && hubLinkOk(request.resource.data)));
       allow update: if hubAdmin() || (isSignedIn() && request.auth.uid == uid
-        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['uid', 'role', 'source', 'verified', 'docsVerified', 'bizStatus', 'adminNote', 'penalty', 'reviewedAt', 'reviewedBy', 'approvedAt', 'rejectReason', 'isAdmin', 'companyKey', 'va'])
+        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['uid', 'role', 'source', 'verified', 'docsVerified', 'bizStatus', 'adminNote', 'penalty', 'reviewedAt', 'reviewedBy', 'approvedAt', 'rejectReason', 'isAdmin', 'companyKey', 'va', 'boundDevice', 'deviceOk', 'login'])
+        && (!hubPlateLogin() || (request.resource.data.get('phone', '') == resource.data.get('phone', '')
+             && hubPlateOf(request.resource.data) == hubPlateOf(resource.data)
+             && request.resource.data.get('email', '') == resource.data.get('email', '')))
         && (
           // 승인 후에는 알림 · 오더 설정 · 즐겨찾기 · 기기 번호 · 프로필 사진 · 실계좌만(차량·서류를 바꾸려면 다시 심사)
           (resource.data.get('status', '') == 'approved' && request.resource.data.get('status', '') == 'approved'
@@ -736,7 +757,7 @@ service cloud.firestore {
           && request.resource.data.get('confirmed', false) == true && request.resource.data.get('confirmedAt', null) == request.time
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['confirmed', 'confirmedAt', 'updatedAt'])) ||
         // ④ 배차된 회원 — 운송중 → [운송완료](인수증은 지금 또는 나중에)
-        (isSignedIn() && resource.data.get('takerUid', '') == request.auth.uid && hubWindowOver(resource.data)
+        (isSignedIn() && resource.data.get('takerUid', '') == request.auth.uid && hubWindowOver(resource.data) && hubDeviceOk()
           && hubMoving(resource.data) && request.resource.data.status == 'delivered'
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'deliveredAt', 'podPath', 'pod', 'podAt', 'updatedAt'])
           && hubPodOk(request.resource.data.get('pod', []))) ||
@@ -821,7 +842,13 @@ service cloud.firestore {
     }
     function hubLiveWrite(id) {
       let o = hubOrd(id);
-      return isSignedIn() && o.get('takerUid', '') == request.auth.uid && hubMoving(o);
+      return isSignedIn() && o.get('takerUid', '') == request.auth.uid && hubMoving(o) && hubDeviceOk();
+    }
+    // ⭐ 2026-11-07 허브 차주 등록 기기 — 서버 함수만 쓴다. 본인 · 관리자만 읽는다(앱 시작 때 이 기기가 맞는지 화면이 비교)
+    match /hubDevices/{uid} {
+      allow get: if isSignedIn() && (request.auth.uid == uid || hubAdmin());
+      allow list: if hubAdmin();
+      allow write: if false;
     }
     match /hubLive/{orderId} {
       allow read: if hubLiveRead(orderId);

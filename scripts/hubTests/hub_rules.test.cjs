@@ -42,6 +42,10 @@ const matchOf = (m) => ({ takerUid: m.uid, role: m.role, source: m.source, name:
     coA2: member("coA2", "carrier", { bizNo: "1234567891", companyName: "에이물산", docsVerified: true, bank: BANK("coA2") }),
     coB1: member("coB1", "carrier", { bizNo: "220-81-62517", companyName: "비운송", docsVerified: true, bank: BANK("coB1") }),
     drvBlocked: member("drvBlocked", "driver", { penalty: { blocked: true } }),
+    // ⭐ 2026-11-07 등록 휴대폰(hubDevices)이 없는 허브 가입 차주 — 배차신청 · 위치 · 운송완료 막힘
+    drvNoDev: member("drvNoDev", "driver", { vehicle: { plate: "경기12가4444", type: "카고", ton: "5톤", length: "6.2", width: "" }, bank: BANK("drvNoDev") }),
+    // 차량번호 로그인 차주(승인 대기) — 로그인 정보(차량번호 · 휴대폰)는 본인이 못 바꾼다
+    drvPlate: member("drvPlate", "driver", { status: "pending", login: "plate", email: "경기12가5555@hubdriver.run25.kr", phone: "010-5555-1234", vehicle: { plate: "경기12가5555", type: "카고", ton: "5톤", length: "6.2", width: "" } }),
     pendP: member("pendP", "driver", { status: "pending" }),
     carA: member("staffA", "carrier", { source: "logisweb-staff", companyName: "한빛로지스", docsVerified: true }),
     shipPoor: member("shipPoor", "shipper", { docsVerified: true }),
@@ -53,6 +57,7 @@ const matchOf = (m) => ({ takerUid: m.uid, role: m.role, source: m.source, name:
     await setDoc(doc(db, "users/drvL"), { role: "driver", companyName: "한빛로지스", approved: true, carNo: "경기12가3456", name: "박기사" });
     await setDoc(doc(db, "users/admin1"), { role: "totalMaster", companyName: "로지스웹", approved: true });
     for (const [k, m] of Object.entries(M)) await setDoc(doc(db, `hubMembers/${m.uid}`), m);
+    for (const m of Object.values(M)) if (m.role === "driver" && m.uid !== "drvNoDev") await setDoc(doc(db, `hubDevices/${m.uid}`), { uid: m.uid, id: `dev-${m.uid}-0000000000`, label: "iPhone iOS 17, Safari" });
     // ⭐ 2026-11-06 예치금(서버만 씀) — 인수증 · 예치금 결제 오더는 등록자 예치금이 운임+수수료 이상이어야 등록 · 신청 · 확정
     await setDoc(doc(db, "hubWallets/shipS"), { uid: "shipS", available: 10000000, held: 0, pending: 0, owed: 0 });
     await setDoc(doc(db, "hubWallets/staffA"), { uid: "staffA", available: 5000000, held: 0, pending: 0, owed: 0 });
@@ -326,6 +331,23 @@ const matchOf = (m) => ({ takerUid: m.uid, role: m.role, source: m.source, name:
   await t("알림 스팸 — 관계없는 사람에게 보내기 거절", () => assertFails(setDoc(doc(as("drvE"), "hubNotices/n1"), { toUid: "drvD", fromUid: "drvE", orderId: "o1", read: false, title: "x" })));
   await t("알림 — 등록자에게 보내기 성공", () => assertSucceeds(setDoc(doc(as("drvE"), "hubNotices/n2"), { toUid: "shipS", fromUid: "drvE", orderId: "o3", read: false, title: "x" })));
   await t("남의 알림 읽기 거절", () => assertFails(getDoc(doc(as("drvD"), "hubNotices/n2"))));
+
+  // ── ⭐ 2026-11-07 차주 로그인(차량번호 + 휴대폰번호) · 등록 휴대폰
+  const PE = "경기12가5555@hubdriver.run25.kr";
+  await t("[기기] 등록 휴대폰이 없는 허브 차주는 배차신청할 수 없다", () => assertFails(request("drvNoDev", M.drvNoDev, "o2")));
+  await t("[기기] 본인 등록 기기 정보는 본다", () => assertSucceeds(getDoc(doc(as("drvD"), "hubDevices/drvD"))));
+  await t("[기기] 남의 등록 기기 정보는 못 본다", () => assertFails(getDoc(doc(as("drvE"), "hubDevices/drvD"))));
+  await t("[기기] 관리자는 등록 기기 정보를 본다", () => assertSucceeds(getDoc(doc(as("admin1"), "hubDevices/drvD"))));
+  await t("[기기] 회원이 등록 기기를 스스로 쓰기 거절", () => assertFails(setDoc(doc(as("drvNoDev"), "hubDevices/drvNoDev"), { uid: "drvNoDev", id: "my-own-device-0000" })));
+  await t("[기기] 회원이 boundDevice 칸을 넣어 가입 거절", () => assertFails(setDoc(doc(as("newX"), "hubMembers/newX"), { uid: "newX", role: "driver", source: "signup", status: "pending", name: "x", prefs: {}, boundDevice: "abc" })));
+  await t("[차량번호] 차량번호 계정 가입 신청 성공(아이디 = 차량번호)", () => assertSucceeds(setDoc(doc(as("plateA", "서울80바1234@hubdriver.run25.kr"), "hubMembers/plateA"), { uid: "plateA", role: "driver", source: "signup", status: "pending", login: "plate", email: "서울80바1234@hubdriver.run25.kr", name: "차주A", phone: "010-1111-0000", vehicle: { plate: "서울80바1234", type: "카고", ton: "5톤", length: "6.2", width: "" }, prefs: {} })));
+  await t("[차량번호] 아이디와 다른 차량번호로 가입 거절", () => assertFails(setDoc(doc(as("plateB", "서울80바1234@hubdriver.run25.kr"), "hubMembers/plateB"), { uid: "plateB", role: "driver", source: "signup", status: "pending", name: "차주B", vehicle: { plate: "서울80바9999" }, prefs: {} })));
+  await t("[차량번호] 차량번호 계정이 화주로 가입 거절", () => assertFails(setDoc(doc(as("plateC", "서울80바7777@hubdriver.run25.kr"), "hubMembers/plateC"), { uid: "plateC", role: "shipper", source: "signup", status: "pending", name: "x", prefs: {} })));
+  await t("[차량번호] 이메일 없는 계정(진짜 이메일 아님)도 일반 가입 신청은 된다", () => assertSucceeds(setDoc(doc(as("noMail"), "hubMembers/noMail"), { uid: "noMail", role: "shipper", source: "signup", status: "pending", name: "x", prefs: {} })));
+  await t("[차량번호] 신청서 고치기(같은 번호) 성공", () => assertSucceeds(updateDoc(doc(as("drvPlate", PE), "hubMembers/drvPlate"), { name: "새이름", phone: "010-5555-1234" })));
+  await t("[차량번호] 본인이 휴대폰번호(로그인 번호) 바꾸기 거절", () => assertFails(updateDoc(doc(as("drvPlate", PE), "hubMembers/drvPlate"), { phone: "010-9999-0000" })));
+  await t("[차량번호] 본인이 차량번호(아이디) 바꾸기 거절", () => assertFails(updateDoc(doc(as("drvPlate", PE), "hubMembers/drvPlate"), { vehicle: { plate: "경기12가0000", type: "카고", ton: "5톤", length: "6.2", width: "" } })));
+  await t("[차량번호] 관리자는 차주 휴대폰번호를 고친다", () => assertSucceeds(updateDoc(doc(as("admin1"), "hubMembers/drvPlate"), { phone: "010-5555-0000" })));
 
   // ── Storage(서류 · 인수증)
   const png = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 0]);

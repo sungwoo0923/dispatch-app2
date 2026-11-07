@@ -34,6 +34,9 @@ if (USE_EMU) firebaseConfig.projectId = "demo-kpflow"; // (Storage 버킷 이름
 
 const app = initializeApp(firebaseConfig);
 
+// ⭐ 2026-11-07 로그인 유지 — getAuth 기본 저장은 이 기기 IndexedDB(없으면 localStorage, 둘 다 browserLocal 계열)라
+//  앱(브라우저)을 껐다 켜도 로그아웃 전까지 계속 로그인돼 있다. 허브 차주 "한 번 로그인하면 계속" 요구가 이것으로 충족된다.
+//  (세션 저장으로 바꾸지 말 것 — 차주가 매번 로그인해야 하고, 문자 인증 · 기기 등록 흐름도 다시 탄다)
 export const auth = getAuth(app);
 if (USE_EMU) { try { connectAuthEmulator(auth, `http://127.0.0.1:${EMU_AUTH}`, { disableWarnings: true }); } catch { /* 무시 */ } }
 

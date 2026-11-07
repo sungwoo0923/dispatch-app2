@@ -11,8 +11,9 @@ import { ROLES, SOURCE_LABEL, DOC_TYPES, ROLE_DOCS, BIZ_STATUS, ago, tsMs, STATU
 import {
   subscribeAllMembers, subscribeReports, reviewMember, fileUrl, adminUpdateMember, subscribeAllOrders, subscribeAll, adminUpdateOrder, adminForceStatus,
   adminSettle, confirmCharge, rejectCharge, requestPayoutSend, markPayoutPaid, adjustWallet, saveHubConfig, subscribeAnnouncements, saveAnnouncement,
-  deleteAnnouncement, PUBLIC_EDIT_KEYS, subscribeWallet, splitForm, adminMarkWithdraw,
+  deleteAnnouncement, PUBLIC_EDIT_KEYS, subscribeWallet, splitForm, adminMarkWithdraw, callHub, subscribeDevice,
 } from "./hubApi";
+import { isHubDriverEmail, normPlate, phoneDigits, plateValid, phoneValid } from "./hubLink";
 import HubOrderDetail from "./HubOrderDetail";
 import HubOrderCard from "./HubOrderCard";
 import { WalletSummary, wonFull } from "./HubWallet";
@@ -80,6 +81,16 @@ export function MemberReview({ m, admin, onClose, toast }) {
   }));
   useEffect(() => { if (m.photoPath) fileUrl(m.photoPath).then(setPhoto).catch(() => {}); }, [m.photoPath]);
   useEffect(() => subscribeWallet(m.id, setWallet), [m.id]);
+  // ⭐ 2026-11-07 차주 등록 휴대폰(기기) · 차량번호 로그인 계정
+  const plateAcct = m.role === "driver" && (m.login === "plate" || isHubDriverEmail(m.email));
+  const [dev, setDev] = useState(null);
+  useEffect(() => (m.role === "driver" && m.source === "signup" ? subscribeDevice(m.id, (d) => setDev(d || null)) : undefined), [m.id, m.role, m.source]);
+  const resetDevice = async () => {
+    if (!window.confirm("등록 휴대폰을 지울까요? 그 휴대폰은 로그아웃되고, 다음 로그인 때 문자 인증을 해요.")) return;
+    setBusy("dev");
+    try { await callHub("hubAdminResetDevice", { uid: m.id }); toast?.("등록 휴대폰을 지웠어요"); }
+    catch (e) { toast?.(e?.message || "지우지 못했어요"); } finally { setBusy(""); }
+  };
   const act = async (decision) => {
     if ((decision === "rejected" || decision === "suspended") && !reason.trim()) { toast?.("거절, 정지 사유를 적어 주세요"); return; }
     setBusy(decision);
@@ -89,9 +100,15 @@ export function MemberReview({ m, admin, onClose, toast }) {
   const saveEdit = async () => {
     setBusy("edit");
     try {
+      // 차량번호로 로그인하는 차주 — 차량번호 · 휴대폰번호가 로그인 정보라 서버 함수로 같이 바꾼다(Admin SDK)
+      if (plateAcct && (normPlate(ed.plate) !== normPlate(m.vehicle?.plate) || phoneDigits(ed.phone) !== phoneDigits(m.phone))) {
+        if (!plateValid(ed.plate)) throw new Error("차량번호를 전부 입력해 주세요");
+        if (!phoneValid(ed.phone)) throw new Error("휴대폰번호를 정확히 입력해 주세요");
+        await callHub("hubAdminSetDriverLogin", { uid: m.id, plate: normPlate(ed.plate), phone: phoneDigits(ed.phone) });
+      }
       await adminUpdateMember(m.id, {
         name: ed.name.trim(), phone: fmtPhone(ed.phone), companyName: ed.companyName.trim(), bizNo: ed.bizNo.trim(), ceoName: ed.ceoName.trim(), role: ed.role,
-        ...(ed.plate || m.vehicle ? { vehicle: { plate: ed.plate.trim(), type: ed.vtype, ton: ed.vton, length: ed.vlen, width: ed.vwid } } : {}),
+        ...(ed.plate || m.vehicle ? { vehicle: { plate: plateAcct ? normPlate(ed.plate) : ed.plate.trim(), type: ed.vtype, ton: ed.vton, length: ed.vlen, width: ed.vwid } } : {}),
         penalty: { ...(m.penalty || {}), blocked: ed.blocked, by: admin?.email || "", at: Date.now() },
         adminNote: ed.adminNote.slice(0, 500),
         ...(ed.bankNo ? { bank: { bank: ed.bank, number: ed.bankNo.replace(/[^\d-]/g, ""), holder: ed.holder.trim() } } : {}),
@@ -103,7 +120,7 @@ export function MemberReview({ m, admin, onClose, toast }) {
     } catch (e) { toast?.(e?.message || "저장하지 못했어요"); } finally { setBusy(""); }
   };
   const E = (k) => (e) => setEd((p) => ({ ...p, [k]: e.target.value }));
-  const rows = [["유형", ROLES[m.role]?.label], ["출처", SOURCE_LABEL[m.source]], ["이메일", m.email], ["이름", m.name], ["휴대폰", m.phone], ["회사", m.companyName], ["사업자번호", m.bizNo], ["대표자", m.ceoName], ["직책", m.managerTitle], ["허가번호", m.permitNo], ["주소", m.bizAddress],
+  const rows = [["유형", ROLES[m.role]?.label], ["출처", SOURCE_LABEL[m.source]], plateAcct ? ["로그인", `차량번호 ${m.vehicle?.plate || ""} + 휴대폰번호`] : ["이메일", m.email], ["이름", m.name], ["휴대폰", m.phone], ["회사", m.companyName], ["사업자번호", m.bizNo], ["대표자", m.ceoName], ["직책", m.managerTitle], ["허가번호", m.permitNo], ["주소", m.bizAddress],
     ...(m.vehicle ? [["차량", `${m.vehicle.plate}, ${m.vehicle.ton} ${m.vehicle.type}`], ["적재함", `${m.vehicle.length || "-"}m × ${m.vehicle.width || "-"}m`]] : []),
     ...(m.home ? [["거주", `${m.home.sido} ${m.home.sigungu || ""}`]] : []), ["주 운행", (m.regions || []).join(", ")], ["정산 계좌", m.bank?.number ? `${m.bank.bank} ${m.bank.number} (${m.bank.holder})` : ""], ["신청", m.appliedAt ? new Date(tsMs(m.appliedAt)).toLocaleString("ko-KR") : ""]].filter(([, v]) => v);
   return (
@@ -130,12 +147,26 @@ export function MemberReview({ m, admin, onClose, toast }) {
             <input className={`${inputCls} mt-1.5`} value={reason} onChange={(e) => setReason(e.target.value)} placeholder="예: 통장사본 이름이 사업자와 다릅니다" data-testid="admin-reason" />
           </label>
         </Card>
+        {m.role === "driver" && m.source === "signup" && (
+          <Card className="p-4 space-y-2.5" data-testid="admin-device">
+            <div className="text-[16px] font-extrabold text-[#0F1A30] flex items-center gap-2"><HI name="phone" size={18} className="text-[#2D4C82]" />등록 휴대폰</div>
+            {dev?.id ? (
+              <div className="divide-y divide-[#EEF1F6] text-[15px]">
+                <div className="flex py-2"><span className="w-24 shrink-0 font-semibold text-[#8592A8]">기기</span><span className="font-bold text-[#0F1A30]" data-testid="admin-device-label">{dev.label || "알 수 없음"}</span></div>
+                <div className="flex py-2"><span className="w-24 shrink-0 font-semibold text-[#8592A8]">마지막 로그인</span><span className="font-bold text-[#0F1A30]">{dev.lastAt ? new Date(tsMs(dev.lastAt)).toLocaleString("ko-KR") : "-"}</span></div>
+                <div className="flex py-2"><span className="w-24 shrink-0 font-semibold text-[#8592A8]">등록</span><span className="font-bold text-[#0F1A30]">{dev.boundAt ? new Date(tsMs(dev.boundAt)).toLocaleString("ko-KR") : "-"}</span></div>
+              </div>
+            ) : <div className="text-[15px] font-bold text-[#55657F]" data-testid="admin-device-none">{dev?.resetAt ? "지웠어요. 다음 로그인 때 문자 인증을 해요." : "아직 등록된 휴대폰이 없어요"}</div>}
+            {dev?.id && <Btn kind="ghost" className="w-full" disabled={!!busy} onClick={resetDevice} data-testid="admin-device-reset">{busy === "dev" ? "지우고 있어요" : "기기 초기화"}</Btn>}
+            <div className="text-[13.5px] text-[#8592A8]">휴대폰을 잃어버렸으면 기기 초기화를 눌러 주세요. 새 휴대폰에서 문자 인증하면 등록돼요.</div>
+          </Card>
+        )}
         {/* ⭐ 정보 수정(최고관리자는 모든 칸) */}
         <Card className="p-4 space-y-2.5" data-testid="admin-member-edit">
           <div className="text-[16px] font-extrabold text-[#0F1A30] flex items-center gap-2"><HI name="memo" size={18} className="text-[#2D4C82]" />정보 수정</div>
           <div className="grid grid-cols-2 gap-2.5">
             <Field label="이름"><input className={inputCls} value={ed.name} onChange={E("name")} data-testid="am-name" /></Field>
-            <Field label="휴대폰"><input className={inputCls} value={ed.phone} onChange={E("phone")} data-testid="am-phone" /></Field>
+            <Field label="휴대폰" hint={plateAcct ? "로그인 번호도 같이 바뀌어요" : undefined}><input className={inputCls} value={ed.phone} onChange={E("phone")} data-testid="am-phone" /></Field>
             <Field label="회사"><input className={inputCls} value={ed.companyName} onChange={E("companyName")} /></Field>
             <Field label="사업자번호"><input className={inputCls} value={ed.bizNo} onChange={E("bizNo")} /></Field>
             <Field label="대표자"><input className={inputCls} value={ed.ceoName} onChange={E("ceoName")} /></Field>
@@ -143,7 +174,7 @@ export function MemberReview({ m, admin, onClose, toast }) {
           </div>
           {(ed.role === "driver" || m.vehicle) && (
             <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5">
-              <Field label="차량번호" className="col-span-2"><input className={inputCls} value={ed.plate} onChange={E("plate")} /></Field>
+              <Field label="차량번호" className="col-span-2" hint={plateAcct ? "아이디도 같이 바뀌어요" : undefined}><input className={inputCls} value={ed.plate} onChange={E("plate")} data-testid="am-plate" /></Field>
               <Field label="차종"><select className={selectCls} value={ed.vtype} onChange={E("vtype")}><option value="">-</option>{HUB_VEHICLES.map((v) => <option key={v}>{v}</option>)}</select></Field>
               <Field label="톤수"><select className={selectCls} value={ed.vton} onChange={E("vton")}><option value="">-</option>{HUB_TONS.map((v) => <option key={v}>{v}</option>)}</select></Field>
               <Field label="길이(m)"><input className={inputCls} value={ed.vlen} onChange={E("vlen")} /></Field>

@@ -5,7 +5,7 @@
 //  ④ 실계좌 없으면 배차신청 막힘 · 고객관리 자동 저장 · 자동완성 · 로지스웹 상하차지거래처 자동완성 · 새 장소 자동 등록 · 지역 보드(내 위치 + 3곳) · 오더복사(같은 회사만)
 //  실행 순서(포트는 firebase.hubtest.json):
 //   1) firebase emulators:start --only auth,firestore,storage,functions --project demo-kpflow --config firebase.hubtest.json
-//   2) cd cafe-site && VITE_USE_EMULATOR=1 VITE_EMU_AUTH_PORT=19099 VITE_EMU_FS_PORT=18080 VITE_EMU_STORAGE_PORT=19199 npx vite --port 5361
+//   2) cd cafe-site && VITE_USE_EMULATOR=1 VITE_EMU_AUTH_PORT=19099 VITE_EMU_FS_PORT=18080 VITE_EMU_STORAGE_PORT=19199 VITE_EMU_FN_PORT=15001 npx vite --port 5361
 //   3) (선택) 배차 프로그램 화면: VITE_USE_EMULATOR=1 VITE_EMU_AUTH_PORT=19099 VITE_EMU_FS_PORT=18080 npx vite --port 5362
 //   4) node scripts/hubTests/e2e_hub3.cjs   (화면 저장: HUB_SHOTS 폴더)
 const path = require("path");
@@ -73,11 +73,26 @@ const shot = async (p, name, full = false) => { await sleep(500); try { await p.
 async function hubLogin(p, role, mode, f) {
   await p.goto(`${HUB}/login?role=${role}&mode=${mode}`);
   await p.waitForSelector('[data-testid="login-submit"]');
+  // ⭐ 2026-11-07 허브 차주는 차량번호 + 휴대폰번호가 기본 — 이메일로 가입한 시험 차주는 [이메일로 가입했어요]
+  if (role === "driver" && mode === "hub" && f.email) await p.click('[data-testid="driver-email-link"]');
   if (f.company) await p.fill('[data-testid="lw-company"]', f.company);
   if (f.code) await p.fill('[data-testid="lw-code"]', f.code);
   if (f.email) await p.fill('[data-testid="login-email"]', f.email);
   if (f.pw) await p.fill('[data-testid="login-password"]', f.pw);
   await p.click('[data-testid="login-submit"]');
+  // ⭐ 2026-11-07 차주는 본인 휴대폰 확인(문자 인증 → 기기 등록) — 에뮬레이터 인증번호로 통과
+  if (role === "driver" && mode === "hub") {
+    const gate = await p.waitForSelector('[data-testid="device-gate"], [data-testid="region-bar"], [data-testid="board-list"], [data-testid="tab-my"]', { timeout: 30000 });
+    if ((await gate.getAttribute("data-testid")) === "device-gate") {
+      const VC = `http://127.0.0.1:${P.auth}/emulator/v1/projects/demo-kpflow/verificationCodes`;
+      const n0 = ((await fetch(VC).then((x) => x.json())).verificationCodes || []).length;
+      await p.click('[data-testid="sms-send"]');
+      await p.waitForSelector('[data-testid="sms-code"]', { timeout: 20000 });
+      const code = await until(async () => { const l = (await fetch(VC).then((x) => x.json())).verificationCodes || []; return l.length > n0 ? l[l.length - 1].code : ""; });
+      await p.fill('[data-testid="sms-code"]', code);
+      await p.click('[data-testid="sms-confirm"]');
+    }
+  }
   await p.waitForSelector('[data-testid="region-bar"], [data-testid="board-list"], [data-testid="stat-open"]', { timeout: 30000 });
 }
 const nav = async (p, k) => { if (p.kind === "pc") await p.click(`[data-testid="nav-${k}"]`); else if (k === "notices") await p.click('[data-testid="btn-bell-m"]'); else await p.click(`[data-testid="tab-${k}"]`); await sleep(600); };
@@ -140,7 +155,9 @@ async function seed() {
   const mem = async (email, data) => { const uid = await mk(email, "test12345", data.name); await db.doc(`hubMembers/${uid}`).set({ uid, source: "signup", status: "approved", docsVerified: true, bizStatus: "계속사업자", email, prefs: {}, createdAt: FV.serverTimestamp(), ...data }); return uid; };
   const BK = (h) => ({ bank: "국민", number: "123456-01-234567", holder: h });
   const d1 = await mem("drv1@hub.test", { role: "driver", name: "김차주", phone: "010-1234-5678", companyName: "김차주운송", bizNo: "1018204964", vehicle: { plate: "경남80바1234", type: "윙바디", ton: "11톤", length: "9.6", width: "2.35" }, home: { sido: "경기", sigungu: "평택시" }, bank: BK("김차주"), fcmTokens: ["fake-token-driver1"] });
+  // ⭐ 2026-11-07 화면으로 로그인하지 않는 차주(SDK로만 배차신청)는 등록 휴대폰을 미리 넣어 둔다(규칙 hubDeviceOk)
   const d2 = await mem("drv2@hub.test", { role: "driver", name: "이현금", phone: "010-2222-1111", companyName: "이현금화물", bizNo: "2118123456", vehicle: { plate: "경기90사5678", type: "카고", ton: "11톤", length: "9.1", width: "2.3" }, bank: BK("이현금") });
+  await db.doc(`hubDevices/${d2}`).set({ uid: d2, id: "seed-device-d2-00000000", label: "시험 기기" });
   const d3 = await mem("drv3@hub.test", { role: "driver", name: "박무계좌", phone: "010-5555-6666", companyName: "박무계좌", vehicle: { plate: "경기70아7777", type: "카고", ton: "5톤", length: "6.2", width: "" } });
   const s1 = await mem("ship1@hub.test", { role: "shipper", name: "박화주", phone: "010-7777-8888", companyName: "서해유통", bizNo: "1348101238", bank: BK("서해유통"), fcmTokens: ["fake-token-shipper"] });
   const s1b = await mem("ship1b@hub.test", { role: "shipper", name: "최동료", phone: "010-7777-9999", companyName: "서해유통", bizNo: "134-81-01238" });

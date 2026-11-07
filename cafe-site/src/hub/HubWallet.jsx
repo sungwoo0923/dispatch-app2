@@ -8,6 +8,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { HI, Btn, Badge, Card, Field, inputCls, selectCls, NUMS, NAVY_BG, Empty } from "./hubUi";
 import { LEDGER_LABEL, BANKS, canTake, ago, tsMs, ROLES, SOURCE_LABEL, hasBank } from "./hubConstants";
+import { isHubDriverEmail } from "./hubLink";
 import {
   subscribeWallet, subscribeLedger, subscribeMyCharges, subscribeMyPayouts, subscribeMyDebts, requestCharge, cancelCharge, saveBank,
   requestWithdraw, subscribeMyWithdrawals, markRead,
@@ -95,7 +96,9 @@ export default function HubWallet({ me, cfg, toast, jobs = [], posts = [], notic
     saveBank(me.uid, bank).then(() => { toast?.("계좌를 저장했어요"); setBankOpen(false); }).catch(() => toast?.("저장하지 못했어요"));
   };
   const infoRows = [["유형", `${ROLES[me.role]?.label || ""} ${SOURCE_LABEL[me.source] ? `(${SOURCE_LABEL[me.source]})` : ""}`], ["이름", me.name], ["휴대폰", me.phone], ["회사", me.companyName], ["사업자번호", me.bizNo], ["사업자 상태", me.bizStatus],
-    ...(me.vehicle ? [["차량", `${me.vehicle.plate} ${me.vehicle.ton} ${me.vehicle.type}`]] : []), ["이메일", me.email]].filter(([, v]) => v && String(v).trim());
+    ...(me.vehicle ? [["차량", `${me.vehicle.plate} ${me.vehicle.ton} ${me.vehicle.type}`]] : []),
+    // ⭐ 2026-11-07 차량번호로 로그인하는 차주는 가짜 이메일 대신 로그인 방법 · 휴대폰번호 변경 안내(로그인 정보라 관리자가 바꾼다)
+    isHubDriverEmail(me.email) ? ["로그인", "차량번호 + 휴대폰번호. 번호가 바뀌면 관리자에게 알려 주세요"] : ["이메일", me.email]].filter(([, v]) => v && String(v).trim());
 
   return (
     <div className="grid lg:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)] gap-4 max-w-[1180px]" data-testid="wallet-view">

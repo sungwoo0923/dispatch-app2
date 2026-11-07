@@ -79,6 +79,17 @@ export async function claimSession(uid) {
   await updateDoc(memberRef(uid), { activeSession: sid, lastLoginAt: serverTimestamp() }).catch(() => {});
   return sid;
 }
+// ⭐ 2026-11-07 서버 함수(callable) — 차주 기기 등록 · 관리자 로그인 정보 변경 · 기기 초기화(functions/hubDriverAuth.js)
+let fnInst = null;
+export async function callHub(name, data) {
+  const { getFunctions, httpsCallable, connectFunctionsEmulator } = await import("firebase/functions");
+  if (!fnInst) {
+    fnInst = getFunctions(getApp());
+    if (import.meta.env.VITE_USE_EMULATOR === "1") connectFunctionsEmulator(fnInst, "127.0.0.1", Number(import.meta.env.VITE_EMU_FN_PORT || 5001));
+  }
+  return (await httpsCallable(fnInst, name)(data)).data;
+}
+export const subscribeDevice = (uid, cb) => onSnapshot(doc(db, "hubDevices", uid), (s) => cb(s.exists() ? s.data() : null), () => cb(undefined));
 export const updatePrefs = (uid, prefs) => updateDoc(memberRef(uid), { prefs, updatedAt: serverTimestamp() });
 
 // ───────────────────────── 신뢰도(완료·평점) ─────────────────────────

@@ -6,6 +6,7 @@ const functions = require("firebase-functions/v1");
 const { initializeApp } = require("firebase-admin/app");
 const { getFirestore, FieldValue } = require("firebase-admin/firestore");
 const { getStorage } = require("firebase-admin/storage");
+const { getAuth } = require("firebase-admin/auth");
 
 initializeApp();
 const db = getFirestore();
@@ -21,4 +22,4 @@ async function sendPushAndCleanup(tokens, message, label) {
   return { successCount: tokens.length, failureCount: 0, responses: [] };
 }
 
-Object.assign(exports, require("../../../functions/hubTriggers").register({ functions, db, FieldValue, sendPushAndCleanup, userTokens, getStorage }));
+Object.assign(exports, require("../../../functions/hubTriggers").register({ functions, db, FieldValue, sendPushAndCleanup, userTokens, getStorage, getAuth }));

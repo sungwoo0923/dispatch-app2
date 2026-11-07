@@ -6873,6 +6873,7 @@ exports.orderMarketOnTakerOrderWrite = functions.firestore
 Object.assign(exports, require("./hubTriggers").register({
   functions, db, FieldValue, sendPushAndCleanup, userTokens,
   getStorage: () => require("firebase-admin/storage").getStorage(),
+  getAuth,
 }));
 
 // 🤖 2026-11-06 AI 팀 — 관리자센터에서 팀별(경리·재무·영업·운영·보안·홍보) Claude 에이전트와 대화.
