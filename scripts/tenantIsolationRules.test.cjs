@@ -179,6 +179,8 @@ const A_CO = "에이운송", B_CO = "비운송";
   await t("arPayments: 다른 회사 입금 거절", () => assertFails(getDocs(query(collection(AB, "arPayments"), where("company", "==", A_CO)))));
   await t("arPayments: 우리 회사 입금", () => assertSucceeds(getDocs(query(collection(AA, "arPayments"), where("company", "==", A_CO)))));
   await t("multiRateSheets: 다른 회사 단가표 거절", () => assertFails(getDoc(doc(AB, "multiRateSheets/mA"))));
+  await t("sheetRegistry: 직원이 시트 주인 기록 쓰기 거절(서버만)", () => assertFails(setDoc(doc(AA, "sheetRegistry/sheet123"), { companyName: A_CO })));
+  await t("sheetRegistry: 직원 읽기 거절", () => assertFails(getDoc(doc(AA, "sheetRegistry/sheet123"))));
   await t("hubDevices: 운송사 직원 기기 쓰기 거절", () => assertFails(setDoc(doc(AA, "hubDevices/someone"), { id: "dev" })));
   await t("공용 규칙: 모르는 컬렉션 다른 회사 문서 읽기 거절", () => assertFails(getDoc(doc(AB, "fooUnknown/fA"))));
   await t("공용 규칙: 모르는 컬렉션 우리 회사 문서 읽기", () => assertSucceeds(getDoc(doc(AA, "fooUnknown/fA"))));

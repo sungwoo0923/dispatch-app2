@@ -2049,8 +2049,8 @@ service cloud.firestore {
         'routeCarrierSettings', 'colStyles', 'transportApplications', 'driverSignupLogs',
         'driver_logs', 'gps_tracks', 'driver_photo_logs', 'driver_notifications', 'location_change_requests', 'emergency_alerts',
         'collision_alerts', 'cargo_temp', 'cargo_camera', 'deliverySignatureHistory', 'attendance', 'holidays', 'fleet_settings', 'importBatches',
-        //  서버(Cloud Functions)만 쓰는 기록
-        'closeReports', 'contractNoticeLogs', 'fleet_late_alerts', 'geo_cache', 'dailyReportLogs'];
+        //  서버(Cloud Functions)만 쓰는 기록 · sheetRegistry(구글시트 주인 회사 — functions/sheetGuard.js, 화면이 쓰면 남의 시트를 가로챌 수 있다)
+        'closeReports', 'contractNoticeLogs', 'fleet_late_alerts', 'geo_cache', 'dailyReportLogs', 'sheetRegistry'];
     }
   }
 }
