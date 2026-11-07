@@ -5439,7 +5439,7 @@ const title =
   : page === "fixedroute" ? "고정노선현황"
   : page === "perms" ? "권한 관리"
   : page === "dept" ? (deptMode === "exec" ? "경영 브리핑" : deptMode === "hr" ? "인사관리" : "경리·회계")
-  : String(page).startsWith("dept:") ? ({ "dept:settle": "정산관리", "dept:acct": "회계관리", "dept:assets": "비품·자산", "dept:hr": "인사관리부", "dept:leave": "연차 관리", "dept:onboarding": "입·퇴사 관리", "dept:cert": "증명서 발급", "dept:driverdocs": "기사 서류", "dept:approvals": "결재함", "dept:schedule": "직원 일정", "dept:funds": "자금 현황", "dept:execsched": "임원 일정", "dept:rules": "사내 규정", "dept:board": "사내 게시판", "dept:farerules": "운임 규칙", "dept:cashbook": "자금 관리", "dept:myresume": "내 이력서", "dept:payroll": "급여 계산", "dept:payslip": "급여명세서", "dept:leaveplan": "연차 사용 계획", "dept:leavepromo": "연차 관리", "dept:briefing": "일일 경영 보고" }[page] || "")
+  : String(page).startsWith("dept:") ? ({ "dept:settle": "정산관리", "dept:acct": "회계관리", "dept:assets": "비품·자산", "dept:hr": "인사관리부", "dept:leave": "연차 관리", "dept:onboarding": "입·퇴사 관리", "dept:cert": "증명서 발급", "dept:driverdocs": "기사 서류", "dept:approvals": "결재함", "dept:schedule": "직원 일정", "dept:funds": "자금 현황", "dept:execsched": "임원 일정", "dept:rules": "사내 규정", "dept:board": "사내 게시판", "dept:farerules": "운임 규칙", "dept:cashbook": "자금 관리", "dept:myresume": "내 이력서", "dept:payroll": "급여 계산", "dept:payslip": "급여명세서", "dept:leaveplan": "연차 사용 계획", "dept:leavepromo": "연차 관리", "dept:briefing": "일일 경영 보고" , "dept:analysis": "경영 분석", "dept:apqueue": "결재 대기", "dept:staffinfo": "직원 정보"}[page] || "")
   : page === "status" ? "배차현황"
   : page === "unassigned" ? "미배차현황"
   : page === "canceled" ? "취소내역"
@@ -8044,6 +8044,10 @@ function MobileSideMenu({
             <MenuSection title="경영" en="EXECUTIVE" dark={dark} alwaysOpen>
               <MenuItem label="경영 브리핑" icon="star" onClick={() => onGo?.("dept")} dark={dark} />
               {canBriefing && <MenuItem label="일일 경영 보고" icon="chart" onClick={() => onGo?.("dept:briefing")} dark={dark} />}{/* 📊 2026-11-06 새 메뉴 — 경영 브리핑 바로 다음 */}
+              {/* 📈 2026-11-08 경영 분석 · 결재 대기 · 직원 정보(임원 화면만) */}
+              <MenuItem label="경영 분석" icon="trend" onClick={() => onGo?.("dept:analysis")} dark={dark} />
+              <MenuItem label="결재 대기" icon="stamp" onClick={() => onGo?.("dept:apqueue")} dark={dark} />
+              <MenuItem label="직원 정보" icon="users" onClick={() => onGo?.("dept:staffinfo")} dark={dark} />
               {isCeo && <MenuItem label="자금 현황" icon="wallet" onClick={() => onGo?.("dept:funds")} dark={dark} />}
               <MenuItem label="임원 스케줄" icon="pin" onClick={() => onGo?.("dept:execsched")} dark={dark} />
               {(canRevenue || isExec) && ok("매출관리") && <MenuItem label="매출관리" icon="chart" onClick={onGoSales} dark={dark} />}

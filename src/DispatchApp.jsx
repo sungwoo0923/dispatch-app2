@@ -5,6 +5,7 @@ import { runDelete, commitDeletes, deleteDocsAtomic } from "./DeleteProgress"; /
 import ProInsight from "./ProInsight";
 import DailyReport, { DailyReportPopupHost } from "./DailyReport"; // 📊 2026-11-06 일일 경영 보고(임원 화면 · 대표·임원 일일 보고서)
 import { canSeeBriefing, BRIEF_MENU, BRIEF_LABEL } from "./dailyReport";
+import { EXEC_MENUS, execMenuLabel } from "./execMenus"; // 📈 2026-11-08 임원 화면 · 경영 분석 · 결재 대기 · 직원 정보
 import BulkUploadChooser, { downloadTemplateXlsx } from "./BulkUploadChooser";
 import { buildCopyText, getCopyTpl, useCopyTemplates } from "./copyTemplates";
 import { CopyTemplateHost, openCopyTemplateEditor } from "./CopyTemplateEditor";
@@ -3351,6 +3352,10 @@ const KP_SIDE_GROUPS = [
   { label: "부서 업무", items: ["전자결재", "회계관리", "자금관리", "비품관리", "인사관리부", "증명서발급"] },
   { label: "관리", items: ["회사관리", "관리자메뉴", "관리센터"] },
 ];
+// 📈 2026-11-08 임원 화면 · 경영 분석 · 결재 대기 · 직원 정보(처음 열 때 받는다)
+const ExecAnalysis = React.lazy(() => import("./ExecAnalytics"));
+const ExecApprovalQueue = React.lazy(() => import("./ExecAnalytics").then((m) => ({ default: m.ExecApprovalQueue })));
+const ExecStaffInfo = React.lazy(() => import("./ExecStaffInfo"));
 // 🏢 부서 모드 메뉴 — 경리·회계(test) / 인사관리자(hrManager)
 const DEPT_MENUS = {
   // 경리: 돈(정산·회계·자금) + 확인용 배차현황 — 배차관리·실시간배차현황은 빼고
@@ -3360,7 +3365,7 @@ const DEPT_MENUS = {
   hr: ["HOME", "전자결재", "인사관리부", "증명서발급", "기사관리", "관리자메뉴", "회사관리"],
   // 👔 임원(대표·전무·이사) — 보고·결재·매출 중심
   // 결재는 홈 › 전자결재에 다 있어 상단에서 뺐다(2026-10-31)
-  exec: ["HOME", "일일경영보고", "자금현황", "스케줄", "매출관리", "인사이트", "관리자메뉴", "회사관리"], // 📊 2026-11-06 일일 경영 보고 — 임원 홈(경영 브리핑) 바로 다음 // 직원일정은 HOME › 사내 게시판으로(2026-11-01)
+  exec: ["HOME", "일일경영보고", "경영분석", "결재대기", "직원정보", "자금현황", "스케줄", "매출관리", "인사이트", "관리자메뉴", "회사관리"], // 📊 2026-11-06 일일 경영 보고 — 임원 홈(경영 브리핑) 바로 다음 // 직원일정은 HOME › 사내 게시판으로(2026-11-01)
 };
 // 부서 모드 왼쪽 메뉴 묶음
 const DEPT_SIDE_GROUPS = {
@@ -3376,7 +3381,7 @@ const DEPT_SIDE_GROUPS = {
     { label: "관리", items: ["관리자메뉴", "회사관리"] },
   ],
   exec: [
-    { label: "경영", items: ["HOME", "일일경영보고", "자금현황", "매출관리", "인사이트"] },
+    { label: "경영", items: ["HOME", "일일경영보고", "경영분석", "결재대기", "직원정보", "자금현황", "매출관리", "인사이트"] },
     { label: "일정", items: ["스케줄"] },
     { label: "관리", items: ["관리자메뉴", "회사관리"] },
   ],
@@ -3387,7 +3392,7 @@ const KP_SIDE_ICONS = {
   회사관리: "idcard", 관리자메뉴: "key", 관리센터: "shield", 인사이트: "chart",
   회계관리: "money", 인사관리부: "idcard", 출근기록부: "clock", 직원관리: "users", 기사서류: "file",
   자금관리: "wallet", 비품관리: "list", 연차관리: "flag", 입퇴사관리: "check", 증명서발급: "stamp",
-  결재함: "stamp", 직원일정: "clock", 자금현황: "wallet", 스케줄: "pin", 전자결재: "stamp", 일일경영보고: "chart",
+  결재함: "stamp", 직원일정: "clock", 자금현황: "wallet", 스케줄: "pin", 전자결재: "stamp", 일일경영보고: "chart", 경영분석: "chart", 결재대기: "stamp", 직원정보: "users",
 };
 function KpSideMenu({ open, onOpen, onClose, menuState, active, onSelect, company, email, groups = KP_SIDE_GROUPS }) {
   React.useEffect(() => {
@@ -3452,7 +3457,7 @@ function KpSideMenu({ open, onOpen, onClose, menuState, active, onSelect, compan
                         style={{ opacity: 1 }}
                       >
                         <ShellIcon name={KP_SIDE_ICONS[m]} size={18} className={on ? "text-[#1B2B4B]" : "text-blue-200/80"} />
-                        <span className="flex-1 text-left truncate">{uiMenuLabel("pc", m, m === BRIEF_MENU ? BRIEF_LABEL : m)}</span>
+                        <span className="flex-1 text-left truncate">{uiMenuLabel("pc", m, m === BRIEF_MENU ? BRIEF_LABEL : execMenuLabel(m))}</span>
                         {st === "locked" && <span className="opacity-60"><LockIcon size={12} /></span>}
                         {on && <span className="w-1.5 h-1.5 rounded-full bg-[#4B6CB7]" />}
                       </button>
@@ -8394,6 +8399,7 @@ const newVer = useNewVersion(); // ★ 새 버전이 배포되면 버전 표시 
   const menuState = (m) => {
     // 📊 2026-11-06 일일 경영 보고 — 임원 화면 역할만(기존 임원 판정 isExec 그대로)
     if (m === BRIEF_MENU) return canBriefing ? "ok" : "hidden";
+    if (EXEC_MENUS.includes(m)) return deptMode === "exec" ? "ok" : "hidden"; // 📈 2026-11-08 임원 화면만
     // 🏢 2026-10-31 부서 모드 — 경리·인사 권한은 배차 메뉴 없이 부서 업무 메뉴만
     // ⚙ 권한 관리에서 경리·인사관리자 메뉴를 숨겼으면 부서 화면에서도 숨긴다
     if (deptMode && deptMode !== "exec") return (DEPT_MENUS[deptMode].includes(m) && !(customRole && getMenuAccess(customRoles, role, m) === "hidden") ? "ok" : "hidden");
@@ -8622,7 +8628,7 @@ return (
                     }`}
                 >
                   <ShellIcon name={KP_SIDE_ICONS[m] || "dashboard"} size={14} className={`kp-nav-ico shrink-0 ${isActive ? "" : "opacity-70"} ${deptMode && DEPT_MENUS[deptMode].length <= 8 ? "" : "hidden min-[2050px]:inline-block"}`} />
-                  <EditableText id={`nav.${m}`} defaultText={uiMenuLabel("pc", m, m === BRIEF_MENU ? BRIEF_LABEL : m)} />
+                  <EditableText id={`nav.${m}`} defaultText={uiMenuLabel("pc", m, m === BRIEF_MENU ? BRIEF_LABEL : execMenuLabel(m))} />
                   {navN > 0 && st !== "locked" && <KakaoBadge n={navN} size="sm" className="ml-1 align-middle" title={m === "관리자메뉴" ? `가입 승인 대기 ${navN}명` : m === "실시간배차현황" ? `기사 수락/거절 ${navN}건` : m === "배차현황" ? [drvCounts.orders && `기사 수락/거절 ${drvCounts.orders}건`, (unseenList || unseenUnassigned) && `새 미배차 ${Math.max(unseenList, unseenUnassigned)}건`, unseenFixed && `새 고정노선 미배차 ${unseenFixed}건`].filter(Boolean).join(" · ") : m === "지입차관리" ? `긴급 상황 ${navN}건` : `새 소식 ${navN}건`} />}
                   {st === "locked" && <span className="ml-1 opacity-60"><LockIcon /></span>}
                   {m === "인사이트" && st !== "locked" && <span className="ml-1 px-1 py-px rounded bg-[#8FB0F0]/20 text-[#8FB0F0] text-[9px] font-black tracking-wider align-middle">PRO</span>}
@@ -8864,7 +8870,7 @@ return (
 
       {/* ---------------- 화면 렌더링 ---------------- */}
       <ColumnStyleHost company={userCompany || localStorage.getItem("userCompany") || ""} />
-      <main className={`kp-main ${menu === "HOME" || menu === BRIEF_MENU ? "kp-main-bare" : ""} rounded shadow p-4 w-full min-w-0 ${darkMode ? "bg-gray-900 text-gray-100" : "bg-white text-gray-900"}`}>
+      <main className={`kp-main ${menu === "HOME" || menu === BRIEF_MENU || EXEC_MENUS.includes(menu) ? "kp-main-bare" : ""} rounded shadow p-4 w-full min-w-0 ${darkMode ? "bg-gray-900 text-gray-100" : "bg-white text-gray-900"}`}>
         {!darkMode && <KpPageHeader menu={menu} />}
         {menu === "HOME" && (
           <HomeDashboard
@@ -8919,6 +8925,16 @@ return (
           <div className="px-0 lg:px-5 pb-7">
             <DailyReport company={deptCompany} dispatchData={salesDispatchData} drivers={drivers} me={{ uid: user?.uid, email: user?.email, name: myRealName }} role={realRole || role} profile={myProfileDoc} canGo={(m) => m === "결재함" || menuState(m) === "ok"}
               onGo={(m) => { if (m === "결재함") { window.__kpOpenApproval = { page: "inbox" }; window.dispatchEvent(new Event("kp-open-approval")); return; } if (m === "배차현황") { handleMenuClick("배차현황"); setTimeout(() => emitSubnav("DISPATCH", "미배차현황"), 0); return; } handleMenuClick(m); }} />
+          </div>
+        )}
+
+        {EXEC_MENUS.includes(menu) && deptMode === "exec" && (
+          <div className="px-0 lg:px-5 pb-7">
+            <React.Suspense fallback={<div className="py-20 text-center text-[16px] text-[#667085]">불러오는 중</div>}>
+              {menu === "경영분석" && <ExecAnalysis company={deptCompany} dispatchData={salesDispatchData} drivers={drivers} />}
+              {menu === "결재대기" && <ExecApprovalQueue company={deptCompany} me={{ uid: user?.uid, name: myRealName }} />}
+              {menu === "직원정보" && <ExecStaffInfo company={deptCompany} />}
+            </React.Suspense>
           </div>
         )}
 
