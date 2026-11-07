@@ -3,6 +3,7 @@
 import React from "react";
 import { HI, Badge, RouteLine, NUMS } from "./hubUi";
 import { manwon, fareFitness, dayLabel, ago, stageOf, STAGE_LABEL, kstYmd } from "./hubConstants";
+import { HubOrderWeather } from "./hubPublicData"; // 🌦 2026-11-07 상하차 지역 날씨 · 특보
 
 // 당상 = 오늘 상차, 당착 = 상차한 날 하차
 export const sameDayLoad = (o) => !!o.상차일 && o.상차일 === kstYmd();
@@ -36,6 +37,7 @@ export default function HubOrderCard({ o, onOpen, mine, fav, fresh, extraKm, com
         <div className="mt-3">
           <RouteLine from={`${o.상차시도} ${o.상차시군구 || ""}`} to={`${o.하차시도} ${o.하차시군구 || ""}`} km={km}
             fromSub={`${dayLabel(o.상차일)} ${o.상차시간 || ""} 상차`} toSub={`${dayLabel(o.하차일 || o.상차일)} ${o.하차시간 || ""} 하차`} />
+          <HubOrderWeather o={o} className="mt-2" />
         </div>
         <div className="mt-3 flex items-center gap-x-2 gap-y-1 flex-wrap text-[15px] font-bold text-[#1B2B4B]">
           <span className="inline-flex items-center gap-1"><HI name="truck" size={16} className="text-[#2D4C82]" />{o.차량톤수} {o.차량종류}{o.대수 && o.대수 !== "1대" ? ` ${o.대수}` : ""}</span>

@@ -14,6 +14,7 @@
 import React from "react";
 import { doc, onSnapshot, collection, query, where } from "firebase/firestore";
 import { db } from "./firebase";
+import { OrdersWeatherStrip } from "./publicDataMain"; // 🌦 2026-11-07 운행 지역 날씨 · 특보
 import { useOrderHistory } from "./orderHistory";
 import { useCompanyBiz, bizOf } from "./companyBiz";
 import { useCompanyRows } from "./companyColStore";
@@ -724,6 +725,8 @@ export default function DailyReport({ company, dispatchData = [], drivers: drive
       {W > 0 && <>
         <main style={{ ...inner, paddingTop: compact ? 16 : 28, paddingBottom: 24, display: "grid", gap: g }}>
           {kpis}
+          {/* 🌦 2026-11-07 오늘 운행 지역 날씨 · 기상특보(키 없거나 자료 없으면 안 보임) */}
+          <OrdersWeatherStrip orders={dispatchData} title="오늘 운행 지역 날씨 · 특보" large={!compact} />
           {weeklyBlock}
           {row("minmax(0,1.5fr) minmax(0,1fr)", chart30, mtdCard)}
           {row("minmax(0,1.2fr) minmax(0,1fr)", staffCard, clientsCard)}

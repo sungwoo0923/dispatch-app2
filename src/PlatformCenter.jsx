@@ -31,7 +31,8 @@ import { toBoardNotice } from "./PlatformNoticeBanner";
 import { compressImage } from "./InternalMail";
 const HomepageEditor = React.lazy(() => import("./HomepageEditor")); // ⭐ 2026-11-03 소개 홈페이지 편집기
 const HubMembersAdmin = React.lazy(() => import("./HubMembersAdmin")); // ⭐ 2026-11-06 허브 회원 승인
-const CostPanel = React.lazy(() => import("./CostPanel")); // 💰 2026-11-04 비용 · 손익(최고관리자 전용)
+const CostPanel = React.lazy(() => import("./CostPanel"));
+const IntegrationSettings = React.lazy(() => import("./IntegrationSettings")); // 🔌 2026-11-07 연동 설정 // 💰 2026-11-04 비용 · 손익(최고관리자 전용)
 import { AiTeamHub, AiTeamChat, AI_TEAM_TABS } from "./AiTeamPanel"; // 🤖 2026-11-06 AI 팀
 import { RemoteSupportAdminPanel } from "./RemoteSupport"; // ⭐ 2026-11-02 원격지원 —
 import { CustomSelect } from "./CustomSelect";
@@ -85,6 +86,7 @@ const SECTIONS = [
     { key: "forceUpdate", label: "화주사 강제 업데이트", en: "UPDATE", icon: "refresh" },
     { key: "homepage", label: "홈페이지", en: "HOMEPAGE", icon: "globe" }, // ⭐ 2026-11-03 소개 홈페이지 전체 편집기
     { key: "landingEdit", label: "랜딩페이지 편집", en: "LANDING", icon: "globe" },
+    { key: "integrations", label: "연동 설정", en: "INTEGRATIONS", icon: "link" }, // 🔌 2026-11-07 국세청 · 기상청 · 팝빌
   ] },
   { key: "data", label: "보안·데이터", en: "SECURITY", icon: "shield", items: [
     { key: "tenancy", label: "운송사 분리", en: "ISOLATION", icon: "shield" },
@@ -1143,6 +1145,7 @@ function PlatformCenterInner({ user }) {
   else if (tab === "homepage") body = phone
     ? <><Hero en="OPERATIONS · HOMEPAGE" title="홈페이지" desc="" /><div className="rounded-2xl bg-white border border-[#E3E8F0] p-5 text-[14px] text-[#3A4A66] leading-relaxed">홈페이지 편집은 PC 화면에서 해 주세요. 사진·글자 위치를 끌어서 옮기는 편집이라 넓은 화면이 필요합니다.<br /><a className="font-black text-[#2D5BD8]" href="https://www.logisweb.co.kr/" target="_blank" rel="noopener noreferrer">지금 홈페이지 보기 ↗</a></div></>
     : <React.Suspense fallback={<div className="p-6 text-[13px] text-[#7A879C]">편집기를 여는 중…</div>}><HomepageEditor /></React.Suspense>;
+  else if (tab === "integrations") body = <><Hero en="OPERATIONS · INTEGRATIONS" title="연동 설정" desc="국세청 · 기상청 · 팝빌 연동 상태를 보고 시험해요. 키는 Firebase 비밀값에만 두고 화면에는 보이지 않아요." /><React.Suspense fallback={<div className="py-20 text-center text-[#9AA9C3]">불러오는 중</div>}><IntegrationSettings /></React.Suspense></>;
   else if (tab === "landingEdit") body = <><Hero en="OPERATIONS · LANDING" title="랜딩페이지 편집" desc="로그인 전 홈페이지 문구·이미지를 바꿉니다." /><LandingPageEditPanel /></>;
   else if (tab === "sessions") body = <><Hero en="SECURITY · SESSIONS" title="로그인 관리" desc="지금 로그인 중인 모든 기기를 보고, 필요하면 강제로 내보냅니다." /><AdminSessionsPanel isTotalMaster company="" /></>;
   else if (tab === "sessionLogs") body = <SessionLogsPanel />;

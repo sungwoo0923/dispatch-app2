@@ -1,3 +1,4 @@
+import { OrdersWeatherStrip } from "./publicDataMain"; // 🌦 2026-11-07 오늘 운행 지역 날씨 · 특보
 import NoticeBoard, { canSeeNotice } from "./NoticeBoard";
 import { runDelete } from "./DeleteProgress"; // ⭐ 2026-11-05 삭제 진행 창 + 한 번에 삭제
 import { useBoardNoticesWithPlatform } from "./PlatformNoticeBanner";
@@ -985,6 +986,8 @@ export default function HomeDashboard({ role, user, userCompany = "", pending, d
         );
       })()}
 
+      {/* 🌦 2026-11-07 오늘 오더가 있는 지역 날씨 · 기상특보(키가 없거나 자료가 없으면 안 보임) */}
+      {boardTab === "대시보드" && !dept && <OrdersWeatherStrip orders={dispatchData} />}
       {/* ===== 관제 데크 — 오늘 실적 · 매출 추이 · 매익률 · 담당자 순위 · 거래처 Top (2026-10-28 리디자인, 미배차 현황은 뺌) ===== */}
       {boardTab === "대시보드" && !dept && <HomeDeck
         dispatchData={dispatchData}

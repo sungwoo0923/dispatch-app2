@@ -1707,6 +1707,29 @@ service cloud.firestore {
     match /aiAssistantUsage/{id} {
       allow read, write: if false;
     }
+    // 🏛 2026-11-07 국세청 사업자 상태 · 기상청 예보 · 팝빌 — 서버(functions/publicData.js · popbill.js)만 쓴다
+    //  bizStatusCache(번호별 24시간) · bizStatusUsage · weatherUsage(하루 횟수) · companyPopbill(운송사 연동회원) · integrationConfig(연동 스위치)
+    match /bizStatusCache/{id} {
+      allow read, write: if false;
+    }
+    match /bizStatusUsage/{id} {
+      allow read, write: if false;
+    }
+    match /weatherUsage/{id} {
+      allow read, write: if false;
+    }
+    //  예보 · 특보는 회사 데이터가 아니라 공용(지역 키) — 승인된 직원 · 허브 회원이 읽는다
+    match /weatherCache/{id} {
+      allow read: if isApproved() || hubActive();
+      allow write: if false;
+    }
+    match /companyPopbill/{co} {
+      allow read, write: if false;
+    }
+    match /integrationConfig/{id} {
+      allow read: if isTotalMasterUser();
+      allow write: if false;
+    }
     match /{col}/{rest=**} {
       allow read, write: if isApproved() && !(col in ['adminSecrets', 'resetBackups', 'resetLogs', 'resetJobs', 'resetLocks', 'loginSessions', 'orderTrash', 'recurringRuns', 'internalMails', 'approvals', 'boardPosts', 'notices', 'handovers', 'salesQuotes', 'contracts', 'platformNotices', 'platformInvoices', 'companyPlans', 'publicPricing', 'planRequests', 'userPrefs', 'companyRoleOverrides', 'customRoles', 'supportRequests', 'supportSessions', 'driverStatements', 'fleetPenalties', 'fixedRoutes', 'routeBoards', 'personalSchedules', 'publicCompanies', 'companyContracts',
         // 🔒 회사별로 잠근 컬렉션(위에서 따로 정함)
@@ -1746,7 +1769,9 @@ service cloud.firestore {
         // 🔗 2026-11-07 구글시트 연동 시트 프로필 — 위에서 따로 정함(빠지면 승인된 직원 누구나 다른 회사 시트 주소·칸 설정을 읽는다)
         'sheetProfiles',
         // 🧾 2026-11-07 거래명세서 단계 · 미수금 메모(arDesk) — 위 회사 데이터 규칙(companyName)에서 따로 정함
-        'arDesk']);
+        'arDesk',
+        // 🏛 2026-11-07 국세청 · 기상청 · 팝빌 연동 — 위에서 따로 정함(서버만 쓴다)
+        'bizStatusCache', 'bizStatusUsage', 'weatherUsage', 'weatherCache', 'companyPopbill', 'integrationConfig']);
     }
   }
 }

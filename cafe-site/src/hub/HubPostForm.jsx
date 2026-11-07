@@ -16,6 +16,7 @@ import { postOrder, updateOrder, subscribeHubPlaces, fetchLwPlaces, fetchCopySou
 import { scanToHub, hubToScan } from "./hubScan";
 import { hubScanAi } from "./hubScanAi"; // 🧠 2026-11-07 오더 스캔 정밀 인식(서버 글자 인식 · AI 칸 정리 · 회사별 학습)
 import { AddressInput, PlaceInput } from "./hubAddress";
+import { HubBizCheck, hubBizVerdict } from "./hubPublicData"; // 🏛 2026-11-07 의뢰자 사업자 상태(국세청)
 const OrderScanModal = lazy(() => import("../../../src/OrderScanModal"));
 
 const HOURS = Array.from({ length: 24 }, (_, h) => [`${String(h).padStart(2, "0")}:00`, `${String(h).padStart(2, "0")}:30`]).flat();
@@ -198,6 +199,7 @@ export default function HubPostForm({ me, editing, onClose, toast, onDone, cfg =
     if (f.의뢰자구분 === "운수사" && !biz) return setErr("운수사는 사업자번호를 넣어 주세요");
     if (biz && !bizNoValid(biz)) return setErr("사업자번호를 다시 확인해 주세요");
     if (biz && biz === String(me.bizNo || "").replace(/[^\d]/g, "")) return setErr("내 사업자번호는 의뢰자로 쓸 수 없어요");
+    if (biz && (await hubBizVerdict(biz)).block) return setErr("폐업한 사업자예요. 의뢰자 사업자번호를 확인해 주세요");
     if (fareN && fareN < 10000) return setErr("운송료는 원 단위로 넣어 주세요");
     if (f.표시 === "later" && !f.showAt) return setErr("차주앱에 보일 시각을 골라 주세요");
     if (short) return setErr(`잔액이 부족해요. 운송료 ${fareN.toLocaleString()}원이 필요해요`);
@@ -284,7 +286,7 @@ export default function HubPostForm({ me, editing, onClose, toast, onDone, cfg =
         <Section icon="building" title="의뢰자">
           <div className="grid grid-cols-2 gap-2.5">
             <Field label="의뢰자구분" required><Sel value={f.의뢰자구분} onChange={(v) => set("의뢰자구분", v)} options={REQUESTER_TYPES} none="선택" testid="pf-req-type" /></Field>
-            <Field label={`사업자번호${f.의뢰자구분 === "운수사" ? "" : "(선택)"}`} required={f.의뢰자구분 === "운수사"}><input className={inputCls} inputMode="numeric" value={f.의뢰자사업자번호} onChange={inp("의뢰자사업자번호", fmtBizNo)} placeholder="000-00-00000" data-testid="pf-req-biz" /></Field>
+            <Field label={`사업자번호${f.의뢰자구분 === "운수사" ? "" : "(선택)"}`} required={f.의뢰자구분 === "운수사"}><input className={inputCls} inputMode="numeric" value={f.의뢰자사업자번호} onChange={inp("의뢰자사업자번호", fmtBizNo)} placeholder="000-00-00000" data-testid="pf-req-biz" /><div className="mt-1.5"><HubBizCheck value={f.의뢰자사업자번호} size="sm" /></div></Field>
             <Field label="의뢰자명" className="col-span-2"><input className={inputCls} value={f.의뢰자명} onChange={inp("의뢰자명")} placeholder="선택 사항" data-testid="pf-req-name" /></Field>
           </div>
         </Section>
