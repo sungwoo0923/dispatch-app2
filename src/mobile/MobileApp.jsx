@@ -17,7 +17,7 @@ import { usePayrollAccess } from "../payrollAccess"; // ⭐ 2026-11-06 직원 �
 import { useReadOnlyGuard } from "../readOnlyGuard";
 import { useDriverEditChoice, DriverEditButton, SamePlateChips, pickDriverFor, isRegisteredCombo, saveDriverChoice } from "../DriverEditChoice"; // ⭐ 2026-11-05 매칭된 기사 이름·전화 [수정]
 import { confirmLeave } from "../leaveGuard";
-import { hideBlind, isBlindHidden, canSeeBlind, autoBlindNew } from "../blind";
+import { hideBlind, isBlindHidden, canSeeBlind } from "../blind";
 import { cleanMgrRows, mgrName } from "../mgrPlaceholder";
 import { imeFocusRef } from "../imeFocus";
 import { checkHolidayDispatch, findRestConflict, confirmRestDispatch, restAckKey } from "../holidayConfirm";
@@ -65,7 +65,6 @@ const resyncCheckingStore = createMiniStore(false);
 const bootStageStore = createMiniStore({ server: 0, apply: 0, applyCount: 0, ready: 0 });
 import { createPortal } from "react-dom";
 import "./mobileTheme.css";
-const BlindMinePanel = lazyView(() => import("../BlindMinePanel"));
 const GsheetMinePanel = lazyView(() => import("../GsheetMinePanel"));
 import { OrderTimeline } from "../OrderTimeline"; // ★ 모바일 A/B 디자인 + 알록달록 금지(남색 계열)
 import KpBootScreen from "../KpBootScreen";
@@ -4657,7 +4656,7 @@ const groupedByDate = useMemo(() => {
       혼적여부: form.혼적여부 || "독차",
       혼적: form.혼적여부 === "혼적",   // ← PC boolean 호환
       긴급: form.긴급 === true,          // ← PC 긴급 버튼과 동일 필드
-      ...(canSeeBlind() ? { 블라인드: form.블라인드 === true || (!form._editId && autoBlindNew()) } : {}), // ★ 최고관리자 전용 블라인드(블라인드 모드면 새 오더 자동)
+      ...(canSeeBlind() ? { 블라인드: form.블라인드 === true } : {}), // ★ 최고관리자 전용 블라인드
       운행유형: form.운행유형 || "",     // ← PC 왕복/편도 버튼과 동일 필드
       회전수: form.운행유형 === "왕복" ? Math.max(1, Number(form.회전수) || 1) : 1, // ★ 회전 운행(왕복일 때만)
       적요: form.적요 || "",
@@ -4870,7 +4869,6 @@ const groupedByDate = useMemo(() => {
           // ⭐ 기사 정보까지 채워서 등록과 동시에 배차완료 상태로 저장되는 경우, PC의
           // "배차한시간" 툴팁이 읽는 배차확정일시도 같이 남겨야 한다(없으면 항상 "-").
           ...(rowData.배차상태 === "배차완료" && !rowData.배차확정일시 ? { 배차확정일시: serverTimestamp(), 배차확정자: dispatcherName } : {}),
-          ...(autoBlindNew() ? { 블라인드: true } : {}), // ★ 블라인드 모드 → 새 오더 자동 블라인드
         };
         const writePromise = setDoc(doc(db, collName, newId), finalData);
 
@@ -5452,7 +5450,6 @@ const title =
   : page === "fleet" ? "지입차관리"
   : page === "intel" ? "경영인텔리전스"
   : page === "gsheet" ? "구글시트 전송"
-  : page === "blind" ? "블라인드 모드"
   : "상세보기";
 
   // 🤖 2026-11-07 AI 비서(모바일) — 저장은 모바일의 원래 방식 그대로
@@ -5882,7 +5879,7 @@ const title =
         }
     : String(page).startsWith("dept:")
       ? () => setPage("dept")
-    : page === "notice" || page === "schedule" || page === "unassigned" || page === "canceled" || page === "handover" || page === "attendance" || page === "ratecard" || page === "myinfo" || page === "settings" || page === "fleet" || page === "intel" || page === "national-fare" || page === "gsheet" || page === "blind" || page === "company-fare" || page === "sales" || page === "approval" || page === "staff" || page === "drvacc" || page === "drivers" || page === "clients" || page === "fixedroute" || page === "perms"
+    : page === "notice" || page === "schedule" || page === "unassigned" || page === "canceled" || page === "handover" || page === "attendance" || page === "ratecard" || page === "myinfo" || page === "settings" || page === "fleet" || page === "intel" || page === "national-fare" || page === "gsheet" || page === "company-fare" || page === "sales" || page === "approval" || page === "staff" || page === "drvacc" || page === "drivers" || page === "clients" || page === "fixedroute" || page === "perms"
       ? () => setPage("list")
       : page === "fare"
       ? () => setPage(prevPage || "list")
@@ -6067,7 +6064,6 @@ onGoAttendance={() => {
           onGoFleet={() => { setPage("fleet"); setShowMenu(false); }}
           onGoIntel={() => { setPage("intel"); setShowMenu(false); }}
           onGoGsheet={() => { setPage("gsheet"); setShowMenu(false); }}
-          onGoBlind={() => { setPage("blind"); setShowMenu(false); }}
           onGo={(p) => { if (p === "list") deptListOkRef.current = true; setPage(p); setShowMenu(false); }}
           deptMode={deptMode}
           isExec={isExecM}
@@ -7024,7 +7020,6 @@ setOpenMemo={setOpenMemo}
         {page === "intel" && <MobileIntelView dispatchData={allOrders} cardVersionB={cardVersionB} />}
         {/* ⭐ 구글시트 전송(최고관리자) — PC 관리자메뉴와 같은 화면 */}
         {page === "gsheet" && role === "totalMaster" && <div className="px-3 py-3"><GsheetMinePanel /></div>}
-        {page === "blind" && role === "totalMaster" && <div className="px-3 py-3"><BlindMinePanel /></div>}
 
         {page === "unassigned" && (
   <MobileUnassignedList
@@ -7878,7 +7873,6 @@ function MobileSideMenu({
   onGoFleet,
   onGoIntel,
   onGoGsheet,
-  onGoBlind,
   onGo,
   alertCounts,
   unassignedCount = 0,
@@ -8137,7 +8131,6 @@ function MobileSideMenu({
               {/* PC 상단 "관리센터 ↗"와 같은 역할 — 플랫폼 운영 화면(/platform)으로 전환 */}
               <MenuItem label="관리자 관리센터로 전환 ↗" icon="shield" onClick={() => { try { sessionStorage.setItem("kpEntry", "platform"); } catch { /* 무시 */ } window.location.assign("/platform"); }} dark={dark} />
               <MenuItem label="구글시트 전송" icon="sheet" onClick={onGoGsheet} dark={dark} />
-              <MenuItem label="블라인드 모드" icon="eye" onClick={onGoBlind} dark={dark} />
               <MenuItem label="회사코드조회" icon="key" onClick={openCodeLookup} dark={dark} />
             </MenuSection>
           )}

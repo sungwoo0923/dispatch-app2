@@ -201,6 +201,15 @@ service cloud.firestore {
       allow read, update, delete: if isOfficeStaff() && coMatch(resource.data);
       allow create: if isOfficeStaff() && coCreate();
     }
+    // 🔗 2026-11-07 구글시트 연동 시트 프로필(sheetProfiles/{id} = { companyName, sheetUrl, columns, … }) — 회사별로 잠금 스위치와 상관없이 분리
+    //  읽기: 그 회사 사무 직원(기사·화주 제외) · 만들기/고치기/지우기: 그 회사 관리자급(isCompanyAdmin) · 회사는 못 바꾼다
+    //  동기화 상태(lastExport·lastError)는 서버(관리자 SDK)가 쓴다
+    match /sheetProfiles/{id} {
+      allow read: if isOfficeStaff() && (isTotalMasterUser() || resource.data.get('companyName', '') == myCo());
+      allow create: if isTotalMasterUser() || (isOfficeStaff() && isCompanyAdmin(myCo()) && request.resource.data.get('companyName', '') == myCo());
+      allow update: if isTotalMasterUser() || (isOfficeStaff() && isCompanyAdmin(myCo()) && resource.data.get('companyName', '') == myCo() && request.resource.data.get('companyName', '') == myCo());
+      allow delete: if isTotalMasterUser() || (isOfficeStaff() && isCompanyAdmin(myCo()) && resource.data.get('companyName', '') == myCo());
+    }
     // ⭐ 2026-11-05 고정노선현황 › 운송업체 설정(routeCarrierSettings/{회사} = { companyName, carriers:[{name,on}], removed:[이름] })
     //  끈·삭제한 운송업체의 고정노선 오더는 정산·매출에서 빠진다 — 그 회사 직원(기사·화주 제외)은 읽고, 관리자급(isCompanyAdmin·test)만 바꾼다.
     //  문서 이름 = 회사명이라 잠금 스위치와 상관없이 다른 회사는 못 본다.
@@ -1733,7 +1742,9 @@ service cloud.firestore {
         // 🧠 2026-11-07 오더 스캔 회사별 학습 · 사용 횟수 — 위에서 따로 정함(빠지면 승인된 직원 누구나 다른 회사 학습 기록을 읽는다)
         'scanLearn', 'scanUsage',
         // 🤖 2026-11-07 배차 AI 비서 사용 기록 · 횟수 — 위에서 따로 정함
-        'aiAssistantLogs', 'aiAssistantUsage']);
+        'aiAssistantLogs', 'aiAssistantUsage',
+        // 🔗 2026-11-07 구글시트 연동 시트 프로필 — 위에서 따로 정함(빠지면 승인된 직원 누구나 다른 회사 시트 주소·칸 설정을 읽는다)
+        'sheetProfiles']);
     }
   }
 }

@@ -12,7 +12,7 @@ import OnboardingHost from "./Onboarding";
 import PlatformNoticeBanner from "./PlatformNoticeBanner";
 import { loadTmap } from "./tmapLoader";
 import { imeFocusRef } from "./imeFocus";
-import { hideBlind, isBlindHidden, canSeeBlind, autoBlindNew } from "./blind";
+import { hideBlind, isBlindHidden, canSeeBlind } from "./blind";
 import { cleanMgrRows, mgrName } from "./mgrPlaceholder";
 import { checkHolidayDispatch, findRestConflict, confirmRestDispatch, restAckKey } from "./holidayConfirm";
 import { drawTmapTrafficRoute, TRAFFIC_LEGEND } from "./mapStyle";
@@ -4657,7 +4657,6 @@ const addDispatch = async (recordIn) => {
     // ⭐ 등록일 hover 툴팁에서 "PC로 등록/모바일로 등록"을 보여주기 위한 등록기기 —
     // 이미 값이 있으면(예: 복사 등록으로 원본 값을 이어받은 경우) 덮어쓰지 않는다.
     등록기기: record?.등록기기 || "PC",
-    ...(autoBlindNew() ? { 블라인드: true } : {}), // ★ 블라인드 모드 켜짐 → 새 오더 전부 블라인드
     // 등록과 동시에 차량번호까지 포함되어 생성되는 경우(기사 정보 포함 등록 등)에도 완료시각을 남긴다
     ...(String(record?.차량번호 || "").trim() && !record?.배차완료일시 ? { 배차완료일시: Date.now() } : {}),
     // ⭐ "배차한시간"(등록일 hover 툴팁)이 표시하는 필드는 배차완료일시가 아니라

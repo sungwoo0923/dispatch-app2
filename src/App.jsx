@@ -20,7 +20,7 @@ import { onAuthStateChanged, signOut } from "firebase/auth";
 import { publishCompany, backfillPublicCompanies } from "./publicCompanies";
 import { auth, db, DEFAULT_COMPANY, IS_MOBILE_PREVIEW } from "./firebase";
 import { ContractEndedScreen, useContractStatusFor } from "./companyContract"; // ⭐ 2026-11-06 계약종료 — 회사 전체 접속 차단 화면
-import { setBlindViewerRole, setAutoBlind } from "./blind";
+import { setBlindViewerRole } from "./blind";
 import {
   checkLoginSession, replaceAndCreate, watchMySession, startHeartbeat, installEndOnSignOut,
   KIND_LABEL, END_REASON_LABEL, sessionLastMs, timeAgo,
@@ -210,13 +210,7 @@ export default function App() {
   const [roleFor, setRoleFor] = useState(null);
   // ⭐ 블라인드 오더 노출 판정용 — 렌더 중 바로 반영(하위 화면 첫 렌더 전에 알아야 함)
   setBlindViewerRole(role, user?.email);
-  // ⭐ 자동 블라인드 설정 — 최고관리자만 구독(다른 사용자는 읽을 권한도 없음)
-  const isTmForBlind = role === "totalMaster" || user?.email === "tjddnqkf@naver.com";
-  useEffect(() => {
-    if (!isTmForBlind) { setAutoBlind(false); return; }
-    const unsub = onSnapshot(doc(db, "siteConfig", "blindMine"), (snap) => setAutoBlind(snap.exists() && snap.data().enabled === true), () => {});
-    return () => { unsub(); setAutoBlind(false); };
-  }, [isTmForBlind]);
+  // 🗑 2026-11-07 자동 블라인드(블라인드 모드) 구독 삭제 — 관리자메뉴에서 블라인드 모드를 뺐다(오더별 블라인드 체크는 그대로)
   // ⭐ 로그인 선택 화면의 "최근 로그인" — 실제로 로그인에 성공한 계정 종류를 이 기기에 기억한다
   useEffect(() => {
     if (!user || !role) return;
