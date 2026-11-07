@@ -9,6 +9,10 @@
 //  실제 삭제·복원은 서버(functions/index.js companyResetHandler)가 한다.
 //  ⭐ 2026-11-07 보관함 [지금 영구 삭제] · [보관함 모두 비우기] · [이력 지우기]: 서버 companyResetPurge(functions/resetPurge.js)
 //   확인: 회사명(모두면 "영구삭제") 입력 + 초기화 비밀번호. 서버가 8분씩 일하고 {partial:true}면 화면이 바로 이어서 부른다.
+//  ⭐ 2026-11-07 보관 단계 멈춤(돌캐 57%) 수정 — 서버 엔진은 functions/resetJob.js
+//   - 회사당 작업 하나: 같은 회사의 끝나지 않은 작업이 있으면 서버가 {redirect}로 그 작업ID를 돌려줌 → 진행 창이 그 작업을 이어서 지켜봄
+//   - 보관함의 끝나지 않은 작업: "처리 중"(지금 돌고 있음) / "멈춤 · n분째 신호 없음" + [이어서 진행] · [취소하고 정리](삭제 시작 전만)
+//   - 진행 창: 서버 신호가 90초 넘게 없으면 "잠시 멈춰서 다시 이어가고 있어요" + 자동으로 다시 부름
 import React from "react";
 import { auth, db, FUNCTIONS_BASE } from "./firebase";
 import { doc, onSnapshot } from "firebase/firestore";
@@ -57,13 +61,19 @@ function CardHead({ code, title, desc, right }) {
 // ─── 진행률 창(초기화·복원·계약종료+초기화 공용) ───
 //  job = { id, action: "reset"|"restore", company, body, endContract }
 //  서버가 {partial:true}면 바로 다시 부르고, 신호(heartbeatAt)가 90초 넘게 끊기면 자동으로 이어서 부른다.
+//  ⭐ 2026-11-07 서버는 일이 실제로 진행될 때만 신호를 남긴다(멈춘 실행은 신호가 끊김 → 이 창이 다시 부르면 서버가 이어받음).
+//   {redirect}: 같은 회사의 끝나지 않은 작업이 이미 있어 그 작업을 이어서 한다 → 그 작업ID로 바꿔서 지켜본다.
 export function ResetProgressModal({ job, onClose }) {
+  const [jid, setJid] = React.useState(job.id);
+  const bodyRef = React.useRef({ ...job.body });
   const [state, setState] = React.useState({ pct: 0, step: "시작하는 중…", status: "running" });
   const [result, setResult] = React.useState(null);
   const [hardError, setHardError] = React.useState("");
+  const [notice, setNotice] = React.useState("");
   const [elapsed, setElapsed] = React.useState(0);
   const [now, setNow] = React.useState(Date.now());
   const [calls, setCalls] = React.useState(0);
+  const [revived, setRevived] = React.useState(0); // 신호가 끊겨 다시 부른 횟수
   const lastCallRef = React.useRef(Date.now());
   const inFlight = React.useRef(false);
   const deadRef = React.useRef(false);
@@ -74,33 +84,47 @@ export function ResetProgressModal({ job, onClose }) {
     lastCallRef.current = Date.now();
     setCalls((n) => n + 1);
     try {
-      const r = await callReset(job.body, "companyResetJob");
+      const r = await callReset(bodyRef.current, "companyResetJob");
       if (deadRef.current) return;
-      if (r.partial) { inFlight.current = false; setTimeout(attempt, 1500); return; } // 45분 일하고 멈춤 → 바로 이어서
+      if (r.partial) { inFlight.current = false; setTimeout(attempt, 1500); return; } // 한 번 실행 시간을 다 씀 → 바로 이어서
+      if (r.redirect && r.redirect !== bodyRef.current.jobId) {
+        bodyRef.current = { ...bodyRef.current, jobId: r.redirect, ...(r.deleteAccounts !== undefined ? { deleteAccounts: r.deleteAccounts } : {}), ...(r.endContract ? { endContract: true, confirmName: bodyRef.current.company } : {}) };
+        setNotice("이 운송사의 끝나지 않은 초기화가 있어 새로 만들지 않고 그 작업을 이어서 진행해요.");
+        setState({ pct: 0, step: "이어서 진행하는 중…", status: "running" });
+        inFlight.current = false;
+        setJid(r.redirect); // 아래 effect가 새 작업을 지켜보고 다시 부른다
+        return;
+      }
+      if (r.cancelled) { setHardError("취소된 작업입니다. 보관함에서 정리 상태를 확인해 주세요."); return; }
       if (!r.busy) setResult(r);
     } catch (e) {
       // 4xx(비밀번호 틀림·확인 이름 불일치 등)는 사람이 고쳐야 하므로 멈춘다. 연결 끊김·5xx는 아래 감시가 다시 부른다.
       if (!e.network && e.status && e.status < 500) setHardError(e.message);
     } finally { inFlight.current = false; }
-  }, [job.body]);
+  }, []);
 
   React.useEffect(() => {
     deadRef.current = false;
-    const unsub = onSnapshot(doc(db, "resetJobs", job.id), (snap) => { if (snap.exists()) setState((p) => ({ ...p, ...snap.data() })); }, () => {});
+    const unsub = onSnapshot(doc(db, "resetJobs", jid), (snap) => { if (snap.exists()) setState((p) => ({ ...p, ...snap.data() })); }, () => {});
+    attempt();
+    return () => { unsub(); };
+  }, [jid]); // eslint-disable-line react-hooks/exhaustive-deps
+  React.useEffect(() => {
     const t0 = Date.now();
     const t = setInterval(() => { setElapsed(Math.floor((Date.now() - t0) / 1000)); setNow(Date.now()); }, 1000);
-    attempt();
-    return () => { deadRef.current = true; unsub(); clearInterval(t); };
-  }, [job.id]); // eslint-disable-line react-hooks/exhaustive-deps
+    return () => { deadRef.current = true; clearInterval(t); };
+  }, []);
 
-  const hbMs = state.heartbeatAt?.toMillis ? state.heartbeatAt.toMillis() : 0;
+  const hbMs = Math.max(state.heartbeatAt?.toMillis ? state.heartbeatAt.toMillis() : 0, state.updatedAt?.toMillis ? state.updatedAt.toMillis() : 0);
   const silentFor = Math.round((now - Math.max(hbMs, lastCallRef.current)) / 1000);
   const done = !!result || state.status === "done";
   const tooMany = state.status === "error" && (state.errorCount || 0) >= MAX_AUTO_RETRY;
-  const fatal = !!hardError || (state.status === "error" && state.fatal) || tooMany;
+  const fatal = !!hardError || (state.status === "error" && state.fatal) || tooMany || state.status === "cancelled";
+  const quiet = state.status === "running" && silentFor > 90; // 서버 신호가 끊김(멈춘 실행) → 다시 불러 이어받게
   const stalled = !done && !fatal && !inFlight.current && (
-    (state.status === "running" && silentFor > 90) || (state.status === "error" && silentFor > 20) || (state.status === "paused" && silentFor > 30) || (!hbMs && silentFor > 150));
-  React.useEffect(() => { if (stalled) attempt(); }, [stalled, attempt]);
+    quiet || (state.status === "error" && silentFor > 20) || (state.status === "paused" && silentFor > 30) || (!hbMs && silentFor > 150));
+  React.useEffect(() => { if (stalled) { if (quiet) setRevived((n) => n + 1); attempt(); } }, [stalled, attempt]); // eslint-disable-line react-hooks/exhaustive-deps
+  const reviving = !done && !fatal && (quiet || (revived > 0 && silentFor > 60));
 
   const r = result || state.result || {};
   const isRestore = job.action === "restore";
@@ -111,7 +135,7 @@ export function ResetProgressModal({ job, onClose }) {
     <div className="fixed inset-0 z-[99999] bg-[#0B1428]/70 backdrop-blur-[2px] flex items-center justify-center p-4" data-reset-progress="1">
       <div className="w-full max-w-[480px] bg-white rounded-[22px] shadow-2xl overflow-hidden">
         <div className="px-7 py-5 text-white" style={{ background: "linear-gradient(120deg,#0B1428,#1B2B4B 70%,#2D4C82)" }}>
-          <div className="text-[12px] font-extrabold tracking-[0.24em] text-[#8FB0F0]">{isRestore ? "RESTORE" : "RESET"} · {job.id.slice(-6)}</div>
+          <div className="text-[12px] font-extrabold tracking-[0.24em] text-[#8FB0F0]">{isRestore ? "RESTORE" : "RESET"} · {jid.slice(-6)}</div>
           <div className="text-[20px] font-black mt-0.5">{job.company} {title}{done ? " 완료" : fatal ? " 멈춤" : " 진행 중"}</div>
         </div>
         <div className="px-7 py-6">
@@ -123,8 +147,10 @@ export function ResetProgressModal({ job, onClose }) {
             <div className={`h-full rounded-full transition-all duration-700 ${done ? "bg-[#2D4C82]" : fatal ? "bg-[#94A3B8]" : "bg-[#1B2B4B]"}`} style={{ width: `${Math.max(3, pct)}%` }} />
           </div>
           <div className="mt-3 text-[15px] font-bold text-[#1B2B4B]">
-            {fatal ? "자동 진행을 멈췄습니다" : state.status === "error" ? "일시적인 오류 — 곧 자동으로 이어서 진행합니다" : state.status === "paused" ? "한 번 실행 시간을 다 써서 이어서 진행합니다…" : state.step}
+            {fatal ? (state.status === "cancelled" ? "취소된 작업입니다" : "자동 진행을 멈췄습니다") : reviving ? "잠시 멈춰서 다시 이어가고 있어요" : state.status === "error" ? "일시적인 오류 — 곧 자동으로 이어서 진행합니다" : state.status === "paused" ? "한 번 실행 시간을 다 써서 이어서 진행합니다…" : state.step}
           </div>
+          {reviving && <div className="mt-1 text-[13.5px] text-[#5B6B85]">서버 신호가 {silentFor}초째 없어요. 멈춘 실행의 차례가 끝나면(최대 몇 분) 끝난 묶음은 건너뛰고 이어서 합니다.{state.step ? ` 마지막: ${state.step}` : ""}</div>}
+          {notice && <div className="mt-2 rounded-xl border border-[#DCE3EE] bg-[#F5F8FD] px-4 py-2.5 text-[13.5px] text-[#1B2B4B]">{notice}</div>}
           {(state.status === "error" || hardError) && (
             <div className="mt-3 rounded-xl border border-[#DCE3EE] bg-[#F5F8FD] px-4 py-3 text-[14px] leading-relaxed text-[#1B2B4B]">
               {state.failedStep && <div><span className="font-black">실패한 단계</span> · {state.failedStep}</div>}
@@ -137,7 +163,8 @@ export function ResetProgressModal({ job, onClose }) {
               {isRestore
                 ? <>데이터 <b>{(r.restoredDocs || 0).toLocaleString()}건</b>, 첨부파일 <b>{(r.restoredFiles || 0).toLocaleString()}개</b>{r.restoredAccounts ? <>, 계정 <b>{r.restoredAccounts}개</b></> : null}가 초기화 전 상태로 돌아왔습니다.</>
                 : <>데이터 <b>{(r.savedDocs || r.deletedDocs || 0).toLocaleString()}건</b>, 첨부파일 <b>{(r.deletedFiles || 0).toLocaleString()}개</b>{r.deletedAccounts ? <>, 계정 <b>{r.deletedAccounts}개(사용 중지)</b></> : null}를 지웠습니다.{job.endContract ? <> 계약종료 상태라 이 회사 사람은 접속할 수 없습니다.</> : null}<br />
-                  <span className="text-[#5B6B85] text-[14px]">{fmtTime(r.expiresAt)}까지 보관함에서 복원할 수 있습니다.</span></>}
+                  <span className="text-[#5B6B85] text-[14px]">{fmtTime(r.expiresAt)}까지 보관함에서 복원할 수 있습니다.</span>
+                  {(r.skippedDocs || r.skippedFiles) ? <><br /><span className="text-[#1B2B4B] text-[14px] font-bold">보관하지 못한 문서 {(r.skippedDocs || 0).toLocaleString()}건 · 파일 {(r.skippedFiles || 0).toLocaleString()}개는 지우지 않고 그대로 남겼어요.</span></> : null}</>}
             </div>
           )}
           {!done && !fatal && <div className="mt-4 text-[14px] text-[#5B6B85]">이 창을 닫아도 서버 작업은 계속되지만, 멈춘 작업을 이어서 부르는 것은 이 창이 합니다. 끝날 때까지 열어 두세요.</div>}
@@ -261,6 +288,69 @@ function PurgeRunModal({ run, onClose }) {
   );
 }
 
+// ─── [취소하고 정리] 진행 창 — 삭제가 시작되기 전 작업의 보관 복사본만 지운다 ───
+//  서버가 {partial:true}면 바로, {busy:true}(그 작업이 아직 돌고 있음 — 멈춤 요청을 받고 곧 멈춘다)면 4초 뒤 다시 부른다
+function CancelRunModal({ run, onClose }) {
+  const [sum, setSum] = React.useState({ docs: 0, files: 0 });
+  const [done, setDone] = React.useState(false);
+  const [err, setErr] = React.useState("");
+  const [waiting, setWaiting] = React.useState(false);
+  React.useEffect(() => {
+    let dead = false;
+    (async () => {
+      let fails = 0, waits = 0;
+      for (;;) {
+        try {
+          const r = await callReset(run.body, "companyResetJob");
+          if (dead) return;
+          fails = 0;
+          setSum((p) => ({ docs: p.docs + (r.docs || 0), files: p.files + (r.files || 0) }));
+          if (r.busy) {
+            waits += 1; setWaiting(true);
+            if (waits > 120) { setErr("작업이 멈추지 않아요. 몇 분 뒤 다시 시도해 주세요."); return; }
+            await new Promise((ok) => setTimeout(ok, 4000));
+            continue;
+          }
+          setWaiting(false);
+          if (r.partial) continue;
+          setDone(true);
+          return;
+        } catch (e) {
+          if (dead) return;
+          fails += 1;
+          if ((!e.network && e.status && e.status < 500) || fails >= 4) { setErr(e.message); return; }
+          await new Promise((ok) => setTimeout(ok, 3000));
+        }
+      }
+    })();
+    return () => { dead = true; };
+  }, [run]);
+  return (
+    <div className="fixed inset-0 z-[99999] bg-[#0B1428]/70 backdrop-blur-[2px] flex items-center justify-center p-4" data-cancel-run="1">
+      <div className="w-full max-w-[440px] bg-white rounded-[22px] shadow-2xl overflow-hidden">
+        <div className="px-7 py-5 text-white" style={{ background: "linear-gradient(120deg,#0B1428,#1B2B4B 70%,#2D4C82)" }}>
+          <div className="text-[12px] font-extrabold tracking-[0.24em] text-[#8FB0F0]">CANCEL</div>
+          <div className="text-[20px] font-black mt-0.5">{run.title} {done ? "완료" : err ? "멈춤" : "중"}</div>
+        </div>
+        <div className="px-7 py-6 space-y-3">
+          {!done && !err && <div className="text-[15px] font-bold text-[#1B2B4B]">{waiting ? "돌고 있던 실행에 멈춤을 요청했어요. 멈추면 바로 정리합니다…" : "보관함에 복사해 둔 것만 지우고 있어요. 운영 데이터는 건드리지 않아요."}</div>}
+          {err && <div className="rounded-xl border border-[#DCE3EE] bg-[#F5F8FD] px-4 py-3 text-[14px] text-[#1B2B4B] break-all">{err}</div>}
+          <div className="rounded-2xl bg-[#F5F8FD] border border-[#E3E8F0] px-5 py-4 text-[15px] text-[#0F1A30] leading-relaxed tabular-nums">
+            보관 복사본 <b>{sum.docs.toLocaleString()}건</b> · 보관 파일 <b>{sum.files.toLocaleString()}개</b>를 지웠어요
+          </div>
+          {(done || err) && <button type="button" onClick={onClose} className="w-full h-12 rounded-xl bg-[#1B2B4B] text-white text-[15px] font-black">확인</button>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const agoText = (ms) => {
+  if (!ms) return "신호 없음";
+  const m = Math.max(0, Math.round((Date.now() - ms) / 60000));
+  return m < 1 ? "방금 신호" : m < 60 ? `${m}분째 신호 없음` : m < 1440 ? `${Math.floor(m / 60)}시간째 신호 없음` : `${Math.floor(m / 1440)}일째 신호 없음`;
+};
+
 // 운송사 목록(검색) — 서버 목록 + 계정 수
 function CompanyPicker({ companies, value, onChange }) {
   const [q, setQ] = React.useState("");
@@ -300,6 +390,7 @@ export default function CompanyResetPanel() {
   const [preview, setPreview] = React.useState(null); // { company, total, subDocs, perCollection, accounts } | { company, loading } | { company, error }
   const [job, setJob] = React.useState(null);
   const [purgeRun, setPurgeRun] = React.useState(null); // { title, body }
+  const [cancelRun, setCancelRun] = React.useState(null); // { title, body }
 
   const load = React.useCallback(async () => {
     setLoadErr("");
@@ -331,6 +422,18 @@ export default function CompanyResetPanel() {
     const body = { mode: c.mode === "history" || c.mode === "historyAll" ? "history" : "purge", password, confirmText: confirmName, ...(c.backup ? { backupId: c.backup.id } : { all: true }) };
     const title = c.mode === "purge" ? `${c.backup.company} 영구 삭제` : c.mode === "history" ? `${c.backup.company} 이력 지우기` : c.mode === "purgeAll" ? "보관함 비우기" : "이력 모두 지우기";
     setPurgeRun({ title, body });
+    setConfirm(null);
+  };
+  // 멈춘 작업 [이어서 진행] — 같은 작업ID로 다시 부른다(끝난 묶음은 건너뜀)
+  const resume = ({ password }) => {
+    const b = confirm.backup;
+    setJob({ id: b.id, action: "reset", company: b.company, endContract: b.endContract,
+      body: { action: "execute", company: b.company, deleteAccounts: b.deleteAccounts, endContract: b.endContract, password, confirmName: b.company, jobId: b.id } });
+    setConfirm(null);
+  };
+  const startCancel = ({ password, confirmName }) => {
+    const b = confirm.backup;
+    setCancelRun({ title: `${b.company} 초기화 취소하고 정리`, body: { action: "cancel", backupId: b.id, password, confirmName } });
     setConfirm(null);
   };
   const start = ({ password, confirmName }) => {
@@ -424,10 +527,12 @@ export default function CompanyResetPanel() {
                     const live = b.status === "kept" && b.expiresAt > Date.now();
                     const left = daysLeft(b.expiresAt);
                     const chip = b.status === "restored" ? `복원됨 · ${fmtTime(b.restoredAt)}`
-                      : live ? (b.phase === "done" ? `보관 중 · D-${left}` : "삭제 진행 중")
-                        : b.status === "purging" ? "지우다 멈춤" : b.status === "saving" || b.status === "restoring" ? "처리 중(끊김)" : "영구 삭제됨";
-                    const blocked = b.status === "restoring" || (b.status === "kept" && b.phase !== "done");
-                    const canPurge = !blocked && b.status !== "purged";
+                      : b.status === "cancelled" ? `취소하고 정리함${b.cancelledAt ? ` · ${fmtTime(b.cancelledAt)}` : ""}`
+                        : b.unfinished ? (b.cancelling ? "취소 정리 중" : b.alive ? "처리 중" : `멈춤 · ${agoText(b.lastBeat)}`)
+                          : live ? (b.phase === "done" ? `보관 중 · D-${left}` : "삭제 진행 중")
+                            : b.status === "purging" ? "지우다 멈춤" : b.status === "saving" || b.status === "restoring" ? "처리 중(끊김)" : "영구 삭제됨";
+                    const blocked = b.unfinished || b.status === "restoring" || (b.status === "kept" && b.phase !== "done");
+                    const canPurge = !blocked && b.status !== "purged" && b.status !== "cancelled";
                     return (
                       <div key={b.id} className="px-5 py-3.5 flex items-center gap-3 flex-wrap" data-backup-item={b.id}>
                         <div className="flex-1 min-w-0">
@@ -435,8 +540,22 @@ export default function CompanyResetPanel() {
                             {b.endContract && <span className="px-2 h-6 inline-flex items-center rounded-full bg-[#0B1428] text-white text-[12px] font-black">계약종료</span>}
                             <span className="px-2 h-6 inline-flex items-center rounded-full bg-[#EEF2F8] text-[#1B2B4B] text-[12.5px] font-bold">{chip}</span></div>
                           <div className="text-[13.5px] text-[#5B6B85] mt-0.5">{fmtTime(b.at)} · {b.by} · {b.docCount.toLocaleString()}건 · 파일 {b.fileCount.toLocaleString()}{b.deleteAccounts ? ` · 계정 ${b.accounts}` : ""}</div>
-                          {b.lastError && b.phase !== "done" && <div className="text-[13px] text-[#1B2B4B] mt-0.5 break-all">마지막 오류 [{b.lastStep}] {b.lastError}</div>}
+                          {b.lastError && b.phase !== "done" && b.status !== "cancelled" && <div className="text-[13px] text-[#1B2B4B] mt-0.5 break-all">마지막 오류 [{b.lastStep}] {b.lastError}</div>}
+                          {b.unfinished && (
+                            <div className="text-[13px] text-[#5B6B85] mt-0.5">
+                              {b.jobStep ? `${b.jobPct ? `${b.jobPct}% · ` : ""}${b.jobStep}` : ""}
+                              {b.legacy ? " · 예전 방식으로 시작된 작업이라 이어서 하면 보관을 처음부터 다시 해요" : ""}
+                              {b.deleteStarted ? " · 삭제가 시작돼 취소할 수 없어요. 이어서 끝내 주세요" : ""}
+                            </div>
+                          )}
+                          {b.phase === "done" && (b.skippedDocs > 0 || b.skippedFiles > 0) && <div className="text-[13px] text-[#1B2B4B] mt-0.5">보관 못 해 남긴 문서 {b.skippedDocs}건 · 파일 {b.skippedFiles}개</div>}
                         </div>
+                        {b.unfinished && (
+                          <div className="basis-full flex gap-1.5 justify-end">
+                            {b.canResume && <button type="button" onClick={() => needPw(() => setConfirm({ mode: "resume", backup: b }))} data-resume-one={b.id} className="h-8 px-3 rounded-lg bg-[#1B2B4B] text-white text-[13px] font-bold">이어서 진행</button>}
+                            {b.canCancel && <button type="button" onClick={() => needPw(() => setConfirm({ mode: "cancelJob", backup: b }))} data-cancel-one={b.id} className="h-8 px-3 rounded-lg border border-[#DCE3EE] text-[13px] font-bold text-[#3A4A66] hover:border-[#1B2B4B]">{b.cancelling ? "정리 계속하기" : "취소하고 정리"}</button>}
+                          </div>
+                        )}
                         {live && b.phase === "done" && <button onClick={() => (status?.hasPassword ? setConfirm({ mode: "restore", backup: b }) : alert("먼저 초기화 비밀번호를 설정해 주세요."))} className="shrink-0 h-9 px-3.5 rounded-lg bg-[#1B2B4B] text-white text-[14px] font-bold">복원</button>}
                         {!blocked && (
                           <div className="basis-full flex gap-1.5 justify-end">
@@ -460,7 +579,24 @@ export default function CompanyResetPanel() {
 
       {confirm?.mode === "reset" && (
         <DangerConfirm title={`${company} 초기화`} company={company} actionLabel="초기화 시작" onCancel={() => setConfirm(null)} onRun={start}
-          lines={[`${company}의 오더·거래처·기사·설정·첨부파일을 모두 지웁니다.`, deleteAccounts ? "직원·기사 로그인 계정도 사용 중지 후 7일 뒤 삭제됩니다." : "로그인 계정은 남깁니다.", `${keepDays}일 동안 보관함에서 복원할 수 있습니다.`]} />
+          lines={[...((backups || []).some((b) => b.unfinished && b.company === company) ? [`${company}의 끝나지 않은 초기화가 보관함에 있어요. 새로 만들지 않고 그 작업을 이어서 합니다(멈춘 작업을 지우려면 보관함에서 [취소하고 정리]).`] : []), `${company}의 오더·거래처·기사·설정·첨부파일을 모두 지웁니다.`, deleteAccounts ? "직원·기사 로그인 계정도 사용 중지 후 7일 뒤 삭제됩니다." : "로그인 계정은 남깁니다.", `${keepDays}일 동안 보관함에서 복원할 수 있습니다.`]} />
+      )}
+      {confirm?.mode === "resume" && (
+        <DangerConfirm en="RESUME" title={`${confirm.backup.company} 초기화 이어서 진행`} company={confirm.backup.company} needName={false} actionLabel="이어서 진행" onCancel={() => setConfirm(null)} onRun={resume}
+          lines={[
+            `${fmtTime(confirm.backup.at)}에 시작한 초기화를 끝난 묶음 다음부터 이어서 합니다.`,
+            ...(confirm.backup.legacy ? ["예전 방식으로 시작된 작업이라 보관함에 반쯤 복사된 것을 지우고 보관부터 다시 합니다(운영 데이터는 보관이 끝난 뒤에만 지워요)."] : []),
+            "같은 운송사 작업은 한 번에 하나만 돌아요. 다른 창에서 돌고 있으면 그 작업을 지켜봅니다.",
+          ]} />
+      )}
+      {confirm?.mode === "cancelJob" && (
+        <DangerConfirm en="CANCEL" title={`${confirm.backup.company} 초기화 취소하고 정리`} company={confirm.backup.company} actionLabel="취소하고 정리" onCancel={() => setConfirm(null)} onRun={startCancel}
+          lines={[
+            "보관함에 복사해 둔 것(문서·첨부파일 사본)만 지우고 작업을 끝냅니다.",
+            "운영 데이터는 아직 지우지 않은 단계라 그대로 남아요.",
+            ...(confirm.backup.alive ? ["지금 돌고 있는 실행에는 멈춤을 요청하고, 멈추면 정리합니다."] : []),
+            ...(confirm.backup.endContract ? ["계약종료 표시는 그대로 남아요. 다시 열려면 이용 계약에서 [이용 재개]를 눌러 주세요."] : []),
+          ]} />
       )}
       {confirm?.mode === "restore" && (
         <DangerConfirm en="RESTORE" title={`${confirm.backup.company} 복원`} company={confirm.backup.company} needName={false} actionLabel="복원 시작" onCancel={() => setConfirm(null)} onRun={start}
@@ -492,6 +628,7 @@ export default function CompanyResetPanel() {
           lines={["보관함과 초기화, 복원 기록을 모두 지워요.", "보관 중인 데이터도 함께 영구 삭제돼요.", "진행 중인 작업과 다른 기능의 기록은 남겨요.", "지우면 되돌릴 수 없어요."]} />
       )}
       {purgeRun && <PurgeRunModal run={purgeRun} onClose={() => { setPurgeRun(null); load(); }} />}
+      {cancelRun && <CancelRunModal run={cancelRun} onClose={() => { setCancelRun(null); load(); }} />}
       {job && <ResetProgressModal job={job} onClose={() => { setJob(null); load(); }} />}
     </div>
   );
