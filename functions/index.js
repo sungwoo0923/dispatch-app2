@@ -5509,7 +5509,7 @@ exports.leavePromotionDaily = functions.runWith({ timeoutSeconds: 300, memory: "
         total += 1;
       }
       if (!sent.length && !overdue.length) continue;
-      const hr = list.filter((u) => ["hrManager", "hrAcct", "allMgr", "hrStaff", "test"].includes(u.role) || /인사/.test(String(u.team || "")));
+      const hr = list.filter((u) => ["hrManager", "hrAcct", "allMgr", "hrStaff"] /* ⭐ 2026-11-07 촉진 화면이 인사관리부 › 연차 관리 안으로 — 경리(test)는 뺌 */.includes(u.role) || /인사/.test(String(u.team || "")));
       const managers = (hr.length ? hr : list.filter((u) => u.isMaster === true)).slice(0, 30);
       if (!managers.length) continue;
       const lines = [
@@ -5517,7 +5517,7 @@ exports.leavePromotionDaily = functions.runWith({ timeoutSeconds: 300, memory: "
         ...overdue.map((x) => `· ${x.name} — 사용 계획 제출 기한(${x.due}) 지남 · 잔여 ${x.remain}일 → 2차 때 회사가 날짜 지정`),
       ];
       const title = `연차 사용 촉진 — 오늘 ${sent.length}명${overdue.length ? ` · 계획 미제출 ${overdue.length}명` : ""}`;
-      const body = `${lines.join("\n")}\n\n인사관리부 › 근태 › 연차 사용 촉진에서 발송 기록 확인 · 재발송 · 2차 사용일 지정을 할 수 있습니다.`;
+      const body = `${lines.join("\n")}\n\n인사관리부 › 연차 관리 › 연차 사용 촉진에서 발송 기록 확인 · 재발송 · 2차 사용일 지정을 할 수 있습니다.`;
       for (const m of managers) await db.collection("hrNotices").add({ companyName: co, uid: m.id, kind: "leaveHr", link: "leavePromo", title, body, createdAt: FieldValue.serverTimestamp(), createdBy: "auto" });
       await db.collection("internalMails").add({ company: co, fromUid: "system", fromEmail: "", fromName: "인사관리부(자동)", subject: `[연차 사용 촉진] ${title}`, body, images: [], kind: "hr", important: false, status: "sent", at: FieldValue.serverTimestamp(), readBy: [], deletedBy: [], starredBy: [], to: managers.map((m) => m.id), toNames: managers.map((m) => m.name || ""), cc: [], ccNames: [] });
     } catch (e) { console.error("연차 촉진 실패:", co, e); }
@@ -6680,3 +6680,21 @@ exports.dailyReportPush = functions.runWith({ timeoutSeconds: 300, memory: "512M
   .schedule("every 30 minutes")
   .timeZone("Asia/Seoul")
   .onRun(async () => { await _dailyReport.run(); return null; });
+
+/* ==================================================================
+   💰 2026-11-07 급여관리 비밀번호(한 번 더 확인) — 설명은 functions/payrollPw.js 맨 위
+   호출형 4개: payrollPwStatus · payrollPwSet · payrollPwVerify · payrollLock
+   비밀번호는 payrollSecrets(서버만) · 잠금 해제는 payrollUnlocks/{uid}(30분) — firestore.rules가 급여 문서마다 확인
+================================================================== */
+const _payrollPw = require("./payrollPw").makePayrollPw({ db, FieldValue, Timestamp, HttpsError: functions.https.HttpsError });
+const payCall = (fn) => functions.runWith({ timeoutSeconds: 30, memory: "256MB" }).https.onCall(async (data, context) => {
+  try { return await fn(data || {}, context); } catch (e) {
+    if (e instanceof functions.https.HttpsError) throw e;
+    console.error("[급여 비밀번호] 실패:", e);
+    throw new functions.https.HttpsError("internal", "잠시 후 다시 해 주세요");
+  }
+});
+exports.payrollPwStatus = payCall(_payrollPw.status);
+exports.payrollPwSet = payCall(_payrollPw.setPw);
+exports.payrollPwVerify = payCall(_payrollPw.verify);
+exports.payrollLock = payCall(_payrollPw.lock);

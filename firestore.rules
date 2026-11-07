@@ -1537,33 +1537,30 @@ service cloud.firestore {
     }
     // ════════════════════════════════════════════════════════════
     // 💰 ⭐ 2026-11-06 직원 급여(급여 계산·명세서) · 연차 사용 촉진 — 잠금 스위치와 상관없이 항상 회사 검사
-    //  수정: 경리관리자(test)·통합인사관리자(hrAcct)·통합관리자(allMgr)·회사 마스터·최고관리자 + 권한 관리에서 [급여관리] "수정"인 역할
-    //  조회: 인사관리자(기본 조회 — 권한 관리에서 숨김/수정 가능)·대표(직책)·임원 화면 역할 + [급여관리] "조회"인 역할
-    //  직원 본인: 발행된(published) 본인 명세서만 읽고 "읽음(readAt)"만 표시 · 본인 연차 촉진 문서에 사용 계획만 제출
-    //  화면 기준은 src/payrollAccess.js(같은 판단)
+    // ⭐ 2026-11-07 급여는 경리 업무 — 급여 담당만 + 급여 비밀번호로 잠금 해제(30분)한 동안만
+    //  급여 담당(payrollStaff): 경리관리자(test)·경리사무원(acctStaff)·통합인사관리자(hrAcct)·통합관리자(allMgr)
+    //    · 재무/경리/회계/총무 부서 · 최고관리자. 인사관리자·대표·임원·회사 마스터는 경리가 아니면 못 본다(예전 조회 권한 없앰)
+    //  잠금 해제(payUnlocked): payrollUnlocks/{uid}(서버 함수 payrollPwVerify가 만든다)의 회사가 같고 만료 전
+    //  직원 본인: 발행된(published) 본인 명세서만 읽고 "읽음(readAt)"만 표시(비밀번호 없이) · 본인 연차 촉진 문서에 사용 계획만 제출
+    //  화면 기준은 src/payrollAccess.js · 서버는 functions/payrollPw.js(같은 판단)
     // ════════════════════════════════════════════════════════════
-    function payRoleMenus() {
-      let r = myUser().get('role', '');
-      let p = /databases/$(database)/documents/customRoles/$(r);
-      let ov = /databases/$(database)/documents/companyRoleOverrides/$(myUser().get('companyName', ''));
-      let g = exists(p) ? get(p).data : {};
-      let o = exists(ov) ? get(ov).data.get('roles', {}).get(r, {}) : {};
-      return ('menus' in o) ? o.get('menus', {}) : g.get('menus', {});
+    function payrollStaff() {
+      return isTotalMasterUser() || (isApproved()
+        && !(myUser().get('role', '') in ['driver', 'shipper', 'cafeUser'])
+        && (myUser().get('role', '') in ['test', 'acctStaff', 'hrAcct', 'allMgr']
+          || myUser().get('team', '').matches('.*(재무|경리|회계|총무).*')));
     }
-    function payFixedRole() {
-      return myUser().get('role', '') in ['admin', 'user', 'viewer', 'hrManager', 'test', 'hrAcct', 'allMgr', 'totalMaster', 'driver', 'shipper', 'cafeUser'];
+    function payUnlocked(co) {
+      let p = /databases/$(database)/documents/payrollUnlocks/$(request.auth.uid);
+      return isSignedIn() && exists(p) && get(p).data.get('companyName', '') == co && get(p).data.expiresAt > request.time;
     }
+    // 이 회사 급여 문서를 지금 다룰 수 있는가(급여 담당 + 같은 회사 + 잠금 해제)
+    function payOk(d) {
+      return payrollStaff() && payCo(d) && payUnlocked(d.get('companyName', ''));
+    }
+    // 예전 이름 — 급여 담당 + 내 회사 잠금 해제
     function payrollEditor() {
-      return isTotalMasterUser() || (isApproved() && (
-        myUser().get('role', '') in ['test', 'hrAcct', 'allMgr'] || myUser().get('isMaster', false) == true
-        || (myUser().get('role', '') == 'hrManager' && payRoleMenus().get('급여관리', 'read') == 'write')
-        || (!payFixedRole() && payRoleMenus().get('급여관리', 'hidden') == 'write')));
-    }
-    function payrollViewer() {
-      return payrollEditor() || (isApproved() && (
-        (myUser().get('role', '') == 'hrManager' && payRoleMenus().get('급여관리', 'read') != 'hidden')
-        || myUser().get('position', '') in ['대표', '대표이사'] || isExecRoleUser()
-        || (!payFixedRole() && payRoleMenus().get('급여관리', 'hidden') == 'read')));
+      return payrollStaff() && payUnlocked(myCo());
     }
     // 연차 촉진 관리(발송·날짜 지정) — 인사팀(isHrStaff) + 회사 마스터
     function leaveManager() {
@@ -1572,11 +1569,23 @@ service cloud.firestore {
     function payCo(d) {
       return isTotalMasterUser() || d.get('companyName', '') == myCo();
     }
-    // 급여·연차 설정(payrollSettings/{회사}) — 요율은 급여 담당, 연차 촉진 설정(leave)은 인사 담당도
+    // 급여 비밀번호(해시) · 틀린 횟수 — 서버만. 잠금 해제 문서는 본인만 읽는다(남은 시간 표시)
+    match /payrollSecrets/{co} {
+      allow read, write: if false;
+    }
+    match /payrollPwAttempts/{id} {
+      allow read, write: if false;
+    }
+    match /payrollUnlocks/{uid} {
+      allow read: if isSignedIn() && request.auth.uid == uid;
+      allow write: if false;
+    }
+    // 급여·연차 설정(payrollSettings/{회사}) — 요율·지급일만 있고 사람별 급여는 없다(연차 촉진 화면도 읽어야 해서 읽기는 잠금 해제 없이)
+    //  요율 저장은 급여 담당 + 잠금 해제 · 연차 촉진 설정(leave)은 인사 담당도
     match /payrollSettings/{co} {
-      allow read: if isTotalMasterUser() || (myCo() == co && (payrollViewer() || leaveManager() || (isApproved() && myUser().get('role', '') in ['test', 'acctStaff'])));
+      allow read: if isTotalMasterUser() || (myCo() == co && isApproved() && (payrollStaff() || leaveManager()));
       allow create, update: if (isTotalMasterUser() || myCo() == co) && request.resource.data.get('companyName', '') == co && (
-        payrollEditor()
+        (payrollStaff() && payUnlocked(co))
         || (leaveManager() && (resource == null
           ? request.resource.data.keys().hasOnly(['companyName', 'leave', 'leaveUpdatedAt', 'leaveUpdatedBy'])
           : request.resource.data.diff(resource.data).affectedKeys().hasOnly(['companyName', 'leave', 'leaveUpdatedAt', 'leaveUpdatedBy']))));
@@ -1584,31 +1593,31 @@ service cloud.firestore {
     }
     // 직원별 급여 설정 · 월 급여 처리(확정·발행·지급 기록)
     match /payrollEmployees/{id} {
-      allow read: if (resource == null && payrollViewer()) || (payrollViewer() && payCo(resource.data));
-      allow create: if payrollEditor() && payCo(request.resource.data);
-      allow update: if payrollEditor() && payCo(resource.data) && request.resource.data.get('companyName', '') == resource.data.get('companyName', '');
-      allow delete: if payrollEditor() && payCo(resource.data);
+      allow read: if (resource == null && payrollEditor()) || (resource != null && payOk(resource.data));
+      allow create: if payOk(request.resource.data);
+      allow update: if payOk(resource.data) && request.resource.data.get('companyName', '') == resource.data.get('companyName', '');
+      allow delete: if payOk(resource.data);
     }
     match /payrollRuns/{id} {
-      allow read: if (resource == null && payrollViewer()) || (payrollViewer() && payCo(resource.data));
-      allow create: if payrollEditor() && payCo(request.resource.data);
-      allow update: if payrollEditor() && payCo(resource.data) && request.resource.data.get('companyName', '') == resource.data.get('companyName', '');
+      allow read: if (resource == null && payrollEditor()) || (resource != null && payOk(resource.data));
+      allow create: if payOk(request.resource.data);
+      allow update: if payOk(resource.data) && request.resource.data.get('companyName', '') == resource.data.get('companyName', '');
       allow delete: if isTotalMasterUser();
     }
     // 급여명세서 — 확정(confirmed)·지급(paid)된 명세서는 금액을 못 바꾸고 상태(확정 해제·발행·지급)만
     match /payslips/{id} {
       allow read: if (resource != null && isSignedIn() && resource.data.get('uid', '') == request.auth.uid && resource.data.get('published', false) == true)
-        || (resource == null && payrollViewer())
-        || (payrollViewer() && payCo(resource.data));
-      allow create: if payrollEditor() && payCo(request.resource.data);
-      allow update: if (payrollEditor() && payCo(resource.data)
+        || (resource == null && payrollEditor())
+        || (resource != null && payOk(resource.data));
+      allow create: if payOk(request.resource.data);
+      allow update: if (payOk(resource.data)
           && request.resource.data.get('companyName', '') == resource.data.get('companyName', '')
           && request.resource.data.get('uid', '') == resource.data.get('uid', '')
           && (resource.data.get('status', 'draft') == 'draft'
             || request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'published', 'publishedAt', 'publishedBy', 'paidAt', 'paidDate', 'updatedAt', 'updatedBy', 'unlockReason'])))
         || (isSignedIn() && resource.data.get('uid', '') == request.auth.uid && resource.data.get('published', false) == true
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['readAt']));
-      allow delete: if payrollEditor() && payCo(resource.data) && resource.data.get('status', 'draft') == 'draft';
+      allow delete: if payOk(resource.data) && resource.data.get('status', 'draft') == 'draft';
     }
     // 인사·급여 알림(명세서 발행 · 연차 촉진) — 받는 사람만 읽고 읽음 표시
     match /hrNotices/{id} {
@@ -1715,6 +1724,8 @@ service cloud.firestore {
         'hubPlaces', 'hubWithdrawals', 'hubPostRequests',
         // 💰 2026-11-06 직원 급여 · 연차 촉진 — 위에서 따로 정함
         'payrollSettings', 'payrollEmployees', 'payrollRuns', 'payslips', 'hrNotices', 'leavePromotions',
+        // 🔐 2026-11-07 급여 비밀번호 · 잠금 해제 · 틀린 횟수 — 위에서 따로 정함(서버만 쓴다)
+        'payrollSecrets', 'payrollUnlocks', 'payrollPwAttempts',
         // 🤖 2026-11-06 AI 팀 사용 기록 — 위에서 따로 정함
         'aiTeamLogs',
         // 📊 2026-11-06 일일 경영 보고 — 위에서 따로 정함

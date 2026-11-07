@@ -55,6 +55,34 @@ service firebase.storage {
       allow delete: if hubAdmin();
     }
 
+    // ⭐ 2026-11-07 직원 근로계약서 등 급여 서류 — payrollDocs/{회사 키}/{직원 uid}/{파일}
+    //  급여 담당(firestore.rules payrollStaff와 같은 기준) + 급여 비밀번호 잠금 해제(payrollUnlocks/{uid}, 30분) 동안만
+    //  회사 키 = 회사명에서 / 공백 # ? [ ] 를 _로 바꾼 값(src/Payroll.jsx safeId) · PDF·이미지 15MB 미만
+    function payUser() {
+      return firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data;
+    }
+    function payStaffSt() {
+      return request.auth != null && (hubAdmin() || (
+        firestore.exists(/databases/(default)/documents/users/$(request.auth.uid))
+        && payUser().get('approved', true) != false
+        && payUser().get('employmentStatus', '') != '퇴사'
+        && (payUser().get('role', '') in ['test', 'acctStaff', 'hrAcct', 'allMgr']
+          || (!(payUser().get('role', '') in ['driver', 'shipper', 'cafeUser']) && payUser().get('team', '').matches('.*(재무|경리|회계|총무).*')))));
+    }
+    function payUnlockedSt(coKey) {
+      let p = /databases/(default)/documents/payrollUnlocks/$(request.auth.uid);
+      return request.auth != null && firestore.exists(p)
+        && firestore.get(p).data.get('companyName', '').replace('[/\\s#?\\[\\]]', '_') == coKey
+        && firestore.get(p).data.expiresAt > request.time
+        && (hubAdmin() || payUser().get('companyName', '').replace('[/\\s#?\\[\\]]', '_') == coKey);
+    }
+    match /payrollDocs/{coKey}/{uid}/{file} {
+      allow read, delete: if payStaffSt() && payUnlockedSt(coKey);
+      allow create: if payStaffSt() && payUnlockedSt(coKey) && request.resource != null && request.resource.size < 15 * 1024 * 1024
+        && (request.resource.contentType.matches('image/(png|jpeg|webp)') || request.resource.contentType == 'application/pdf');
+      allow update: if false;
+    }
+
     match /{allPaths=**} {
       allow read, write: if false;
     }

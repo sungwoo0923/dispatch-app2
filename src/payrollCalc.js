@@ -272,7 +272,28 @@ export function dailyWorkerTax(dailyWage, days) {
   if (per < 1000) return 0;
   return floorTo(per * Math.max(0, Math.floor(num(days))), 10);
 }
+// ⭐ 2026-11-07 연봉제(payType "annual") — 월 급여 = 연봉 ÷ 12(퇴직금 포함 연봉이면 ÷ 13, 13분의 1은 퇴직금 몫으로 따로 둔다)
+//  · annualMealIncluded: 연봉에 식대·자가운전보조금이 들어 있으면 월 기본급 = 월 급여 − 식대 − 자가운전보조금(월 받는 돈 합계는 연봉 ÷ 12 그대로)
+//  · 월 기본급은 원 단위 반올림 · 통상임금·연장근로 계산은 월급제와 같다
+export function annualBreakdown(emp = {}) {
+  const annual = Math.max(0, num(emp.annualSalary));
+  const sev = !!emp.annualSeverance;
+  const divisor = sev ? 13 : 12;
+  const monthlyTotal = Math.round(annual / divisor);
+  const fixedIn = emp.annualMealIncluded ? num(emp.meal) + num(emp.car) : 0;
+  const base = Math.max(0, monthlyTotal - fixedIn);
+  return { annual, divisor, severance: sev, monthlyTotal, fixedIn, base, severanceYear: sev ? annual - monthlyTotal * 12 : 0 };
+}
 export function calcPayslipFull(emp = {}, month = {}, rates = presetFor(2026)) {
+  if (emp.payType === "annual") {
+    const a = annualBreakdown(emp);
+    const r0 = calcPayslipFull({ ...emp, payType: "monthly", baseMonthly: a.base }, month, rates);
+    const calc = `연봉 ${wonFmt(a.annual)}원 ÷ ${a.divisor}${a.fixedIn ? ` − 식대 등 ${wonFmt(a.fixedIn)}원` : ""}`;
+    r0.earnings = r0.earnings.map((x) => (x.key === "base" ? { ...x, label: "기본급(연봉제)", calc } : x));
+    r0.payType = "annual";
+    r0.annual = a;
+    return r0;
+  }
   const daily = emp.payType === "daily";
   const free = emp.employmentType === FREELANCE;
   const dayWorker = emp.employmentType === "일용직" && daily;
@@ -349,4 +370,68 @@ export function promoteStageDue(period, today, rec = {}, remain = 0) {
   if (!rec?.n2?.sentAt && today >= s.second && !(rec?.plan?.submittedAt && (rec.plan.dates || []).length)) return "second";
   if (!rec?.n1?.sentAt && today >= s.second) return "second"; // 1차를 놓친 경우(기능 도입 전 등) — 2차부터(1차 누락은 HR 화면에 경고)
   return null;
+}
+
+// ═════════ ⭐ 2026-11-07 경리 도구(신고·이체 탭) — 명세서 목록만으로 계산(화면 없이 테스트) ═════════
+const dAmt = (r, keys) => (r?.deductions || []).filter((d) => keys.includes(d.key)).reduce((s, d) => s + (Number(d.amount) || 0), 0);
+// 원천세 신고 요약(원천징수이행상황신고서 코드 기준) — 근로(간이세액 A01) · 일용근로(A03) · 사업소득(A25)
+export function withholdingSummary(slips = []) {
+  const kinds = { A01: { code: "A01", label: "근로소득 간이세액", n: 0, pay: 0, tax: 0, local: 0 }, A03: { code: "A03", label: "일용근로소득", n: 0, pay: 0, tax: 0, local: 0 }, A25: { code: "A25", label: "사업소득(3.3%)", n: 0, pay: 0, tax: 0, local: 0 } };
+  (slips || []).forEach((s) => {
+    const r = s?.result; if (!r) return;
+    const k = r.taxBasis === "freelance" || s.employmentType === FREELANCE ? "A25" : r.taxBasis === "daily" ? "A03" : "A01";
+    const x = kinds[k];
+    x.n += 1; x.pay += k === "A01" ? Number(r.taxable) || 0 : Number(r.gross) || 0; x.tax += dAmt(r, ["tax"]); x.local += dAmt(r, ["local"]);
+  });
+  const rows = Object.values(kinds).filter((x) => x.n);
+  return { rows, tax: rows.reduce((s, x) => s + x.tax, 0), local: rows.reduce((s, x) => s + x.local, 0), nonTaxable: (slips || []).reduce((s, x) => s + (Number(x?.result?.nonTaxable) || 0), 0) };
+}
+// 4대보험 합계(근로자 + 회사) — 공단 고지액과 비교용
+export function insuranceSummary(slips = []) {
+  const keys = [["np", "국민연금"], ["hi", "건강보험"], ["ltc", "장기요양"], ["ei", "고용보험"], ["ia", "산재보험"]];
+  return keys.map(([k, label]) => {
+    const emp = (slips || []).reduce((s, x) => s + (k === "ia" ? 0 : dAmt(x?.result, [k])), 0);
+    const er = (slips || []).reduce((s, x) => s + (Number(x?.result?.employer?.[k]) || 0), 0);
+    return { key: k, label, emp, er, total: emp + er };
+  });
+}
+// 전월 대비 — 실지급이 rate(기본 10%) 넘게 바뀐 사람 · 새로 생긴/빠진 사람
+export function compareMonths(cur = [], prev = [], rate = 0.1) {
+  const pm = new Map((prev || []).map((s) => [s.uid, s]));
+  const cm = new Map((cur || []).map((s) => [s.uid, s]));
+  const out = [];
+  (cur || []).forEach((s) => {
+    const p = pm.get(s.uid);
+    const net = Number(s?.result?.net) || 0; const gross = Number(s?.result?.gross) || 0;
+    if (!p) { out.push({ uid: s.uid, name: s.name, kind: "new", net, prevNet: 0, diff: net, pct: null, gross, prevGross: 0 }); return; }
+    const pn = Number(p?.result?.net) || 0; const pg = Number(p?.result?.gross) || 0;
+    const diff = net - pn; const pct = pn ? diff / pn : null;
+    out.push({ uid: s.uid, name: s.name, kind: pct !== null && Math.abs(pct) >= rate ? (diff > 0 ? "up" : "down") : "same", net, prevNet: pn, diff, pct, gross, prevGross: pg });
+  });
+  (prev || []).forEach((p) => { if (!cm.has(p.uid)) out.push({ uid: p.uid, name: p.name, kind: "gone", net: 0, prevNet: Number(p?.result?.net) || 0, diff: -(Number(p?.result?.net) || 0), pct: null, gross: 0, prevGross: Number(p?.result?.gross) || 0 }); });
+  return out;
+}
+// 은행 대량이체 줄 — 계좌 없는 사람은 missing으로
+export function transferRows(slips = []) {
+  const ok = []; const missing = [];
+  (slips || []).forEach((s) => {
+    const a = s?.payAccount; const amt = Math.round(Number(s?.result?.net) || 0);
+    if (!amt) return;
+    if (a && a.bank && a.acct) ok.push({ uid: s.uid, name: s.name, bank: a.bank, acct: String(a.acct).replace(/\D/g, ""), holder: a.holder || s.name || "", amount: amt });
+    else missing.push({ uid: s.uid, name: s.name, amount: amt });
+  });
+  return { ok, missing, total: ok.reduce((x, r) => x + r.amount, 0) };
+}
+// 올해 누계(연말정산 대비) — 사람별 과세·비과세·소득세·지방세·4대보험
+export function yearToDate(slips = [], year) {
+  const y = String(year);
+  const m = new Map();
+  (slips || []).filter((s) => String(s?.ym || "").startsWith(y) && s?.result).forEach((s) => {
+    const r = s.result; const x = m.get(s.uid) || { uid: s.uid, name: s.name, months: 0, gross: 0, taxable: 0, nonTaxable: 0, tax: 0, local: 0, ins: 0, net: 0 };
+    x.months += 1; x.gross += Number(r.gross) || 0; x.taxable += Number(r.taxable) || 0; x.nonTaxable += Number(r.nonTaxable) || 0;
+    x.tax += dAmt(r, ["tax"]); x.local += dAmt(r, ["local"]); x.ins += dAmt(r, ["np", "hi", "ltc", "ei"]); x.net += Number(r.net) || 0;
+    if (s.name) x.name = s.name;
+    m.set(s.uid, x);
+  });
+  return [...m.values()].sort((a, b) => String(a.name || "").localeCompare(String(b.name || ""), "ko"));
 }

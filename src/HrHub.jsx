@@ -12,7 +12,7 @@ import { BookHero, BookCard, Chip, Sheet, MONO, HERO_BG } from "./OfficeBooks";
 import { useHrOptions, isExecProfile, suggestRole, ROLE_NAME, EXEC_TEAM, TEAM_OPTIONS, POSITION_OPTIONS, EXEC_POSITION_OPTIONS } from "./hrConstants";
 import { isTMUser } from "./staffFilter";
 import { RETIRE_REASONS } from "./AcctSuite";
-import { LeaveLedger } from "./HrTools";
+// (연차 현황 LeaveLedger는 LeaveArea가 불러온다)
 import ObituaryWriter from "./ObituaryWriter";
 import { WORK_TIME_OPTIONS } from "./autoAttendance";
 import { useRoleOptions } from "./customRoles";
@@ -20,9 +20,10 @@ import { RULE_CATS, RULE_TEMPLATES, fillCompany } from "./companyRuleTemplates";
 import { fmtPhone } from "./formatInput";
 import { CustomSelect } from "./CustomSelect";
 import CustomDatePicker from "./CustomDatePicker"; // 📅 2026-11-04 날짜 입력은 프로그램 달력으로
-import { usePayrollAccess } from "./payrollAccess"; // ⭐ 2026-11-06 급여 대장(조회)·연차 사용 촉진
-const PayrollCenter = React.lazy(() => import("./Payroll"));
-const LeavePromotionBoard = React.lazy(() => import("./LeavePromotion"));
+import { usePayrollAccess } from "./payrollAccess"; // ⭐ 2026-11-06 연차 사용 촉진 권한
+// ⭐ 2026-11-07 급여 대장은 인사관리부에서 뺐다 — 급여는 돈을 내보내는 경리 업무(회계관리 › 급여 계산 · 비밀번호 잠금)라
+//  인사는 근태·연차까지만 본다. 연차 사용 촉진은 연차 관리 안의 탭(LeaveArea)으로 합쳤다
+import LeaveArea from "./LeaveArea";
 
 const kstDay = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
 const inp = "h-11 w-full px-3 rounded-xl border border-[#DCE3EE] bg-white text-[14px] font-semibold text-[#0F1A30] outline-none focus:border-[#2D4C82]";
@@ -619,8 +620,14 @@ const REC_VIEWS = [
 ];
 const REC_FIRST = `rec:${REC_VIEWS[0].view}`;
 export default function HrHub({ company, canManage, renderRecord, renderAttendance, me = {}, role = "" }) {
-  const [tab, setTabRaw] = React.useState(() => { try { const v = sessionStorage.getItem("kpHrTab"); sessionStorage.removeItem("kpHrTab"); return !v || v === "record" ? REC_FIRST : v; } catch { return REC_FIRST; } });
-  const setTab = (k) => setTabRaw(k === "record" ? REC_FIRST : k);
+  // 예전 키 leavepromo(연차 사용 촉진) · payroll(급여 대장)은 연차 관리로
+  const hrKey = (v) => { if (v === "leavepromo") { try { sessionStorage.setItem("kpLeaveTab", "promo"); } catch { /* 무시 */ } return "leave"; } return !v || v === "record" || v === "payroll" ? REC_FIRST : v; };
+  const [tab, setTabRaw] = React.useState(() => { try { const v = sessionStorage.getItem("kpHrTab"); sessionStorage.removeItem("kpHrTab"); return hrKey(v); } catch { return REC_FIRST; } });
+  const setTab = (k) => setTabRaw(hrKey(k));
+  React.useEffect(() => {
+    const h = () => { try { const v = sessionStorage.getItem("kpHrTab"); if (v) { sessionStorage.removeItem("kpHrTab"); setTabRaw(hrKey(v)); } } catch { /* 무시 */ } };
+    window.addEventListener("kp-hr-tab", h); return () => window.removeEventListener("kp-hr-tab", h);
+  }, []);
   const recView = tab.startsWith("rec:") ? tab.slice(4) : null;
   // 🗂 2026-11-04 전자결재(인사발령 품의)에서 넘어오면 그 대상자를 골라 둔다
   const [focusUid, setFocusUid] = React.useState(() => { try { const v = sessionStorage.getItem("kpHrFocus"); sessionStorage.removeItem("kpHrFocus"); return v || null; } catch { return null; } });
@@ -642,10 +649,8 @@ export default function HrHub({ company, canManage, renderRecord, renderAttendan
         ] },
         { label: "근태", items: [
           { key: "attendance", label: "출근기록부", en: "ATTENDANCE", icon: "clock" },
-          { key: "leave", label: "연차 관리", en: "ANNUAL LEAVE", icon: "flag" },
-          { key: "leavepromo", label: "연차 사용 촉진", en: "LEAVE PROMOTION", icon: "bell" }, // ⭐ 2026-11-06 근로기준법 61조
+          { key: "leave", label: "연차 관리", en: "ANNUAL LEAVE", icon: "flag" }, // ⭐ 2026-11-07 연차 현황 + 연차 사용 촉진(근로기준법 61조) 탭
         ] },
-        ...(payAcc.canView ? [{ label: "급여", items: [{ key: "payroll", label: payAcc.canEdit ? "급여 계산" : "급여 대장(조회)", en: "PAYROLL", icon: "money" }] }] : []),
         { label: "설정 · 규정", items: [
           { key: "settings", label: "직책·부서 설정", en: "SETTINGS", icon: "key" },
           { key: "rules", label: "사내 규정", en: "RULES", icon: "list" },
@@ -655,10 +660,8 @@ export default function HrHub({ company, canManage, renderRecord, renderAttendan
       {recView && (() => { const el = renderRecord?.(focusUid, recView); return React.isValidElement(el) ? React.cloneElement(el, { view: recView }) : el; })()}
       {tab === "register" && <StaffRegister company={company} onDone={(id) => { setFocusUid(id); setTab("record"); }} />}
       {(tab === "edit" || tab === "resign") && <StaffInfoBoard company={company} canManage={canManage} />}
-      {tab === "leave" && <LeaveLedger company={company} canManage={canManage} />}
+      {tab === "leave" && <LeaveArea company={company} canManage={canManage} promoManage={canManage || payAcc.leaveManager} showPromo={canManage || payAcc.leaveViewer} />}
       {tab === "attendance" && renderAttendance?.()}
-      {tab === "leavepromo" && <React.Suspense fallback={<div className="py-24 text-center text-[14px] font-bold text-[#9AA9C3]">불러오는 중…</div>}><LeavePromotionBoard company={company} canManage={canManage || payAcc.leaveManager} /></React.Suspense>}
-      {tab === "payroll" && payAcc.canView && <React.Suspense fallback={<div className="py-24 text-center text-[14px] font-bold text-[#9AA9C3]">불러오는 중…</div>}><PayrollCenter company={company} role={role} /></React.Suspense>}
       {tab === "settings" && <HrSettingsPanel company={company} canManage={canManage} />}
       {tab === "rules" && <CompanyRules company={company} canEdit={canManage} />}
       {tab === "obit" && <ObituaryWriter company={company} me={me} onCancel={() => setTab("record")} onSaved={() => { alert("공지사항에 부고를 올렸습니다."); setTab("record"); }} />}

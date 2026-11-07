@@ -12,36 +12,30 @@
 //  · 고를 수 있는 칸은 전부 드롭다운(달·부서·직책·재직상태·급여형태·고용형태·수당/공제 종류·부양가족·세액 비율·4대보험·은행·지급 계좌)
 //  · 노란색 표시 전부 제거 → 프로그램 네이비 팔레트(#0B1428/#0F1A30/#1B2B4B/#2D4C82, 강조 #8FB0F0), 빨강은 오류만
 //  · 직원별 최근 12개월 · 올해 누계 · 차인지급액 내역 · 회사 부담 · 점검 메시지 · 일괄(전체 계산·선택 확정·선택 발행) · Enter = 다음 칸
+// ⭐ 2026-11-07 개편 — 경리 전용 + 급여 비밀번호(PayrollGate) · 화면 꽉 채움(넓은 화면은 직원 목록 | 입력 | 명세서 3칸) · 연봉제 ·
+//  직원 급여 설정 2칸(왼쪽 목록·필터 / 오른쪽 상세 + 근로계약서) · 요율 카드 단순화 · 새 급여명세서(payslipDoc.js) · 신고·이체 탭(PayrollReports.jsx) ·
+//  발행하면 앱 알림(hrNotices 팝업) + 사내메일(푸시) · 전월 대비 변동 표시 · 직원은 내정보 › 급여명세서(MyPayslipsSection)
 import React from "react";
 import { arrayUnion, collection, doc, onSnapshot, query, serverTimestamp, setDoc, updateDoc, where, writeBatch } from "firebase/firestore";
 import { db, auth, DEFAULT_COMPANY } from "./firebase";
-import { BookHero, BookCard, Chip, Sheet, MONO } from "./OfficeBooks";
+import { BookHero, BookCard, Chip } from "./OfficeBooks";
 import { isTMUser } from "./staffFilter";
 import { personName } from "./userNames";
-import { calcPayslipFull, hoursFromAttendance, ratesFor, presetFor, RATE_FIELDS, wonFmt, FREELANCE } from "./payrollCalc";
+import { calcPayslipFull, hoursFromAttendance, ratesFor, presetFor, RATE_FIELDS, wonFmt, FREELANCE, annualBreakdown } from "./payrollCalc";
 import { isWeekend, isHoliday } from "./attendanceUtils";
 import { upsertAutoEntry } from "./ledgerAuto";
 import { usePayrollAccess } from "./payrollAccess";
 import { BANK_NAMES, formatAccount, onlyDigits, parseBankText } from "./bankUtil";
 import { useHrOptions, EMPLOYMENT_STATUS_OPTIONS } from "./hrConstants";
+import { sendInternalMail } from "./InternalMail";
+import CustomDatePicker from "./CustomDatePicker";
+import PayrollGate from "./PayrollGate";
+import { payslipHtml, PAYSLIP_CSS, printPayslips, TAX_NOTE } from "./payslipDoc";
+import { kstDay, kstYm, shiftYm, lastDayOf, safeId, slipId, runId, empId, toNum, ymLabel, blank, uniq, inp, numInp, NUMS, sec, Label, Note, H, Sel, Money, Seg, enterNext, useMedia, useCol, useDocData } from "./payrollUi";
 
-const kstDay = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
-const kstYm = () => kstDay().slice(0, 7);
-const shiftYm = (ym, n) => { const [y, m] = ym.split("-").map(Number); const d = new Date(Date.UTC(y, m - 1 + n, 1)); return d.toISOString().slice(0, 7); };
-const lastDayOf = (ym) => { const [y, m] = ym.split("-").map(Number); return new Date(Date.UTC(y, m, 0)).toISOString().slice(0, 10); };
-export const safeId = (s) => String(s || "").replace(/[/\s#?[\]]/g, "_").slice(0, 80);
-export const slipId = (co, ym, uid) => `${safeId(co)}_${ym}_${uid}`;
-export const runId = (co, ym) => `${safeId(co)}_${ym}`;
-export const empId = (co, uid) => `${safeId(co)}__${uid}`;
-const toNum = (v) => { const n = Number(String(v ?? "").replace(/[^\d.-]/g, "")); return Number.isFinite(n) ? n : 0; };
-const esc = (s) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-const ymLabel = (ym) => `${ym.slice(0, 4)}년 ${Number(ym.slice(5, 7))}월`;
-const blank = (v) => v === undefined || v === null || v === "";
-// ⭐ 2026-11-06 글자 14px 이상 · 숫자는 굵게 + 자리 맞춤(tabular-nums) · 고정폭 글꼴 쓰지 않음
-const inp = "h-11 w-full px-3 rounded-xl border border-[#DCE3EE] bg-white text-[15px] font-semibold text-[#0F1A30] outline-none focus:border-[#2D4C82] focus:ring-2 focus:ring-[#8FB0F0]/40 disabled:bg-[#F5F7FB] disabled:text-[#7A879C]";
-const numInp = `${inp} text-right tabular-nums font-black`;
-const NUMS = { fontFamily: MONO, fontVariantNumeric: "tabular-nums" };
-const Label = ({ children, hint }) => <div className="mb-1.5 flex items-baseline gap-1.5 min-w-0"><span className="text-[14px] font-black text-[#3A4A66] whitespace-nowrap shrink-0">{children}</span>{hint && <span className="text-[14px] font-bold text-[#7A879C] truncate min-w-0" title={typeof hint === "string" ? hint : undefined}>{hint}</span>}</div>;
+const PayrollReports = React.lazy(() => import("./PayrollReports"));
+const PayrollContracts = React.lazy(() => import("./PayrollContracts"));
+export { payslipHtml, PAYSLIP_CSS, printPayslips, TAX_NOTE, safeId, slipId, runId, empId };
 const STATUS = {
   none: ["작성 전", "#5B6B85", "#F2F4F7"], draft: ["작성 중", "#2D4C82", "#EEF3FC"], confirmed: ["확정(잠금)", "#FFFFFF", "#1B2B4B"], paid: ["지급 완료", "#8FB0F0", "#0B1428"],
 };
@@ -51,16 +45,18 @@ const ROW_ST = {
   none: ["미입력", "#5B6B85", "#F2F4F7"], calc: ["계산됨", "#2D4C82", "#EEF3FC"], confirmed: ["확정", "#FFFFFF", "#2D4C82"], published: ["발행", "#FFFFFF", "#1B2B4B"], paid: ["지급", "#8FB0F0", "#0B1428"],
 };
 const rowStatus = (r) => (!r.result ? "none" : r.slip?.status === "paid" ? "paid" : r.slip?.published ? "published" : r.slip?.status === "confirmed" ? "confirmed" : "calc");
-const RowChip = ({ st, unsaved }) => { const s = ROW_ST[st] || ROW_ST.none; return <span className="h-7 px-2.5 rounded-lg text-[14px] font-black inline-flex items-center whitespace-nowrap" style={{ color: s[1], background: s[2] }} title={unsaved ? "아직 저장 전(자동 계산 값)" : ""}>{s[0]}{unsaved && st === "calc" ? " · 저장 전" : ""}</span>; };
-export const TAX_NOTE = "간이세액 근사치 — 확정은 세무사/간이세액표 확인";
-// 안내 상자 — info(네이비/회색) · error(빨강, 오류만)
-const Note = ({ kind = "info", children }) => (
-  <div className={`rounded-xl px-3.5 py-2.5 text-[14px] font-bold leading-relaxed border ${kind === "error" ? "bg-[#FEF3F2] border-[#FECDCA] text-[#B42318]" : "bg-[#F5F8FD] border-[#DCE3EE] text-[#1B2B4B]"}`}>{kind === "error" ? "⚠ " : "ⓘ "}{children}</div>
-);
+const RowChip = ({ st, unsaved, compact = false }) => { const s = ROW_ST[st] || ROW_ST.none; return <span className="h-7 px-2.5 rounded-lg text-[14px] font-black inline-flex items-center gap-1 whitespace-nowrap" style={{ color: s[1], background: s[2] }} title={unsaved ? "아직 저장 전(자동 계산 값)" : ""}>{s[0]}{unsaved && st === "calc" ? (compact ? <span className="w-1.5 h-1.5 rounded-full bg-current opacity-70" aria-label="저장 전" /> : " · 저장 전") : ""}</span>; };
+// 전월 대비 실지급 변동(10% 이상) 표시
+const DiffTag = ({ cur, prev }) => {
+  if (!cur || !prev) return null;
+  const d = cur - prev; const p = prev ? d / prev : 0;
+  if (Math.abs(p) < 0.1) return null;
+  return <span className={`h-6 px-1.5 rounded-md text-[13px] font-black inline-flex items-center whitespace-nowrap ${d > 0 ? "bg-[#EEF3FC] text-[#2D4C82]" : "bg-[#FEF3F2] text-[#B42318]"}`} title={`전월 ${wonFmt(prev)}원 → ${wonFmt(cur)}원`} style={NUMS}>{d > 0 ? "▲" : "▼"} {Math.abs(Math.round(p * 100))}%</span>;
+};
 
 // ── 고르기 목록(드롭다운) ──
 // ⭐ 2026-11-06 급여형태 · 고용형태 · 수당/공제 종류 · 부양가족 · 세액 비율 · 4대보험 적용
-export const PAY_TYPES = [["monthly", "월급"], ["hourly", "시급"], ["daily", "일급"]];
+export const PAY_TYPES = [["monthly", "월급"], ["annual", "연봉"], ["hourly", "시급"], ["daily", "일급"]];
 const payTypeLabel = (k) => (PAY_TYPES.find((x) => x[0] === k) || PAY_TYPES[0])[1];
 export const EMP_TYPES = ["정규직", "계약직", "일용직", FREELANCE];
 const FIXED_ONLY = ["직책수당", "식대", "자가운전보조금"];
@@ -75,49 +71,6 @@ export const PAY_KINDS = [
 export const DEDUCT_KINDS = ["가불금", "기숙사비", "경조회비", "사우회비", "식대 공제", "사내대출 상환", "연말정산 소득세", "연말정산 지방소득세", "건강보험 정산", "기타"];
 const N0_10 = Array.from({ length: 11 }, (_, i) => i);
 const TAX_RATES = [80, 100, 120];
-const uniq = (a) => a.filter((x, i) => x && a.indexOf(x) === i);
-
-// 기본 드롭다운(브라우저 기본 select — 키보드·모바일 선택창 그대로) · options: [값, 이름] 또는 문자열 · groups: [[머리말, options]]
-function Sel({ value, onChange, options = [], groups = null, disabled, className = "", placeholder, testid, dark = false, ariaLabel }) {
-  const opt = (o) => (Array.isArray(o) ? <option key={String(o[0])} value={o[0]}>{o[1]}</option> : <option key={o} value={o}>{o}</option>);
-  return (
-    <div className={`relative ${className}`}>
-      <select aria-label={ariaLabel} data-testid={testid} disabled={disabled} value={value ?? ""} onChange={(e) => onChange(e.target.value)}
-        className={dark ? "h-11 w-full pl-3 pr-9 rounded-xl appearance-none bg-white/10 border border-white/25 text-white text-[15px] font-black outline-none focus:border-[#8FB0F0] [&>option]:text-[#0F1A30] [&>optgroup]:text-[#0F1A30]" : `${inp} appearance-none pr-9 cursor-pointer`}>
-        {placeholder !== undefined && <option value="">{placeholder}</option>}
-        {groups ? groups.filter(([, os]) => os.length).map(([g, os]) => <optgroup key={g} label={g}>{os.map(opt)}</optgroup>) : options.map(opt)}
-      </select>
-      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.5" className={`absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none ${dark ? "text-[#8FB0F0]" : "text-[#5B6B85]"}`}><path d="M6 9l6 6 6-6" /></svg>
-    </div>
-  );
-}
-// 금액 칸(천 단위 쉼표)
-const Money = ({ value, onChange, disabled, placeholder = "0", className = "", testid }) => (
-  <input disabled={disabled} inputMode="numeric" data-testid={testid} value={toNum(value) ? wonFmt(value) : ""} onChange={(e) => onChange(toNum(e.target.value))} onFocus={(e) => e.target.select()} className={`${numInp} ${className}`} style={NUMS} placeholder={placeholder} />
-);
-// Enter = 다음 칸(Tab과 같은 순서) — 한글 조합 중에는 넘기지 않는다
-function enterNext(e) {
-  if (e.key !== "Enter" || e.nativeEvent?.isComposing) return;
-  const t = e.target;
-  if (!((t.tagName === "INPUT" && !["checkbox", "radio", "button"].includes(t.type)) || t.tagName === "SELECT")) return;
-  const els = [...e.currentTarget.querySelectorAll("input:not([disabled]):not([type=checkbox]):not([type=hidden]),select:not([disabled])")].filter((el) => el.offsetParent !== null);
-  const i = els.indexOf(t);
-  if (i < 0) return;
-  e.preventDefault();
-  const n = els[i + 1];
-  if (n) { n.focus(); if (n.select) try { n.select(); } catch { /* date 칸 */ } }
-}
-function useMedia(q) {
-  const get = () => (typeof window !== "undefined" && window.matchMedia ? window.matchMedia(q).matches : false);
-  const [v, setV] = React.useState(get);
-  React.useEffect(() => {
-    if (!window.matchMedia) return undefined;
-    const m = window.matchMedia(q); const h = () => setV(m.matches);
-    m.addEventListener ? m.addEventListener("change", h) : m.addListener(h);
-    return () => (m.removeEventListener ? m.removeEventListener("change", h) : m.removeListener(h));
-  }, [q]);
-  return v;
-}
 
 // ── 지급 계좌 ── { bank, acct(숫자만), holder }
 export const acctText = (a) => (a && a.bank && a.acct ? `${a.bank} ${formatAccount(a.bank, a.acct)}${a.holder ? ` (${a.holder})` : ""}` : "");
@@ -147,24 +100,6 @@ function useStaff(company) {
   }, [company]);
   return rows;
 }
-function useCol(name, company, extra = null, key = "") {
-  const [rows, setRows] = React.useState(null);
-  React.useEffect(() => {
-    if (!company) return undefined;
-    const cons = [where("companyName", "==", company), ...(extra ? [where(extra[0], "==", extra[1])] : [])];
-    return onSnapshot(query(collection(db, name), ...cons), (s) => setRows(s.docs.map((d) => ({ id: d.id, ...d.data() }))), () => setRows([]));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [name, company, key]);
-  return rows;
-}
-function useDocData(path, id) {
-  const [v, setV] = React.useState(undefined);
-  React.useEffect(() => {
-    if (!id) return undefined;
-    return onSnapshot(doc(db, path, id), (s) => setV(s.exists() ? { id: s.id, ...s.data() } : null), () => setV(null));
-  }, [path, id]);
-  return v;
-}
 export const usePayrollSettings = (company) => useDocData("payrollSettings", company);
 // 수당·공제 종류 드롭다운 — 기본 목록 + 회사 항목(요율·설정) + 이미 쓰고 있는 항목 이름
 function useItemKinds(settings, emps, slips) {
@@ -184,86 +119,51 @@ function useItemKinds(settings, emps, slips) {
   }, [settings, emps, slips]);
 }
 
-// ═════════════════ 급여명세서(화면·인쇄 공용 HTML) ═════════════════
-export function payslipHtml(slip, company) {
-  const r = slip?.result || {};
-  const w = r.work || {};
-  const row = (l, a, c) => `<tr><td class="l">${esc(l)}</td><td class="a">${wonFmt(a)}</td><td class="c">${esc(c || "")}</td></tr>`;
-  const earn = (r.earnings || []).map((e) => row(`${e.label}${e.taxable === false ? " (비과세)" : ""}`, e.amount, e.calc)).join("");
-  const ded = (r.deductions || []).filter((d) => d.amount || ["np", "hi", "ltc", "ei", "tax", "local"].includes(d.key)).map((d) => row(d.label, d.amount, d.calc)).join("");
-  // ⭐ 2026-11-06 고용형태 · 지급 계좌 줄 추가
-  const info = [["성명", slip.name], ["생년월일", slip.birthDate || "-"], ["소속", [slip.team, slip.position].filter(Boolean).join(" · ") || "-"], ["입사일", slip.hireDate || "-"], ["귀속 월", ymLabel(slip.ym || "0000-00")], ["지급일", slip.paidDate || slip.payDate || "-"],
-    ["고용형태", [slip.employmentType || "", slip.payType ? `${payTypeLabel(slip.payType)}제` : ""].filter(Boolean).join(" · ") || "-"], ["지급 계좌", acctText(slip.payAccount) || "-"]];
-  const workCells = [["근로일수", `${w.workDays || 0}일`], ["소정(정상) 근로", `${w.regularHours || 0}시간`], ["연장근로", `${w.otHours || 0}시간`], ["야간근로", `${w.nightHours || 0}시간`], ["휴일근로", `${(w.holHours || 0) + (w.holOverHours || 0)}시간`]];
-  return `<div class="ps">
-<div class="hd"><div><div class="en">PAYSLIP · ${esc(slip.ym || "")}</div><div class="tt">급 여 명 세 서</div></div><div class="co">${esc(company || slip.companyName || "")}</div></div>
-<table class="info">${[0, 2, 4, 6].map((i) => `<tr><th>${info[i][0]}</th><td>${esc(info[i][1])}</td><th>${info[i + 1][0]}</th><td>${esc(info[i + 1][1])}</td></tr>`).join("")}</table>
-<table class="work"><tr>${workCells.map(([k]) => `<th>${k}</th>`).join("")}</tr><tr>${workCells.map(([, v]) => `<td>${v}</td>`).join("")}</tr></table>
-<div class="two">
-<div><div class="st">지급 내역</div><table class="it"><tr><th>항목</th><th>금액(원)</th><th>계산 방법</th></tr>${earn}<tr class="sum"><td class="l">지급 총액</td><td class="a">${wonFmt(r.gross)}</td><td class="c">과세 ${wonFmt(r.taxable)} · 비과세 ${wonFmt(r.nonTaxable)}</td></tr></table></div>
-<div><div class="st">공제 내역</div><table class="it"><tr><th>항목</th><th>금액(원)</th><th>계산 방법</th></tr>${ded}<tr class="sum"><td class="l">공제 총액</td><td class="a">${wonFmt(r.totalDeduct)}</td><td class="c"></td></tr></table></div>
-</div>
-<div class="net"><span>실수령액 <small>(차인지급액 = 지급 총액 − 공제 총액)</small></span><b>${wonFmt(r.net)}원</b></div>
-<div class="nt">통상시급 ${wonFmt(r.ordinaryHourly)}원 (통상임금 ÷ 월 소정근로시간) · 연장 ${r.small ? "1.0" : esc(slip.rates?.otRate ?? 1.5)}배 · 야간 가산 ${r.small ? "0" : esc(slip.rates?.nightRate ?? 0.5)}배 · 휴일 ${r.small ? "1.0" : esc(slip.rates?.holRate ?? 1.5)}배(8시간 초과 ${r.small ? "1.0" : esc(slip.rates?.holOverRate ?? 2)}배)${r.small ? " · 상시 5인 미만 사업장(가산수당 미적용)" : ""}<br/>
-${r.taxMode === "auto" ? `소득세: ${TAX_NOTE}<br/>` : ""}${slip.input?.memo ? `비고: ${esc(slip.input.memo)}<br/>` : ""}본 명세서는 근로기준법 제48조 제2항에 따라 교부합니다.</div>
-</div>`;
-}
-export const PAYSLIP_CSS = `.ps{font-family:'Noto Sans KR','Malgun Gothic',sans-serif;color:#0F1A30;background:#fff;max-width:860px;margin:0 auto;font-variant-numeric:tabular-nums}
-.ps .hd{display:flex;justify-content:space-between;align-items:flex-end;padding:18px 22px;border-radius:14px;color:#fff;background:linear-gradient(120deg,#0B1428,#1B2B4B 60%,#2D4C82);-webkit-print-color-adjust:exact;print-color-adjust:exact}
-.ps .en{font-size:12px;font-weight:800;letter-spacing:.24em;color:#8FB0F0}.ps .tt{font-size:24px;font-weight:900;letter-spacing:.3em;margin-top:2px}.ps .co{font-size:15px;font-weight:800}
-.ps table{width:100%;min-width:0 !important;border-collapse:collapse;font-size:14px;table-layout:fixed}.ps th,.ps td{border:1px solid #DCE3EE;padding:8px 10px;overflow-wrap:anywhere;word-break:keep-all;white-space:normal !important}.ps .it .a{white-space:nowrap !important}
-.ps .info{margin-top:12px}.ps .info th{width:16%;background:#F5F8FD;color:#3A4A66;text-align:left;font-weight:800}.ps .info td{font-weight:700}
-.ps .work{margin-top:10px}.ps .work th{background:#F5F8FD;color:#3A4A66;font-weight:800}.ps .work td{text-align:center;font-weight:900;font-size:15px}
-.ps .two{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px;margin-top:12px}.ps .it th:nth-child(1){width:30%}.ps .it th:nth-child(2){width:27%}.ps .st{font-size:14px;font-weight:900;margin-bottom:6px;border-left:4px solid #1B2B4B;padding-left:8px}
-.ps .it th{background:#1B2B4B;color:#fff;font-weight:800;-webkit-print-color-adjust:exact;print-color-adjust:exact}.ps .it .l{font-weight:700}.ps .it .a{text-align:right;font-weight:900;white-space:nowrap}.ps .it .c{font-size:13px;color:#5B6B85}
-.ps .it .sum td{background:#EEF3FC;font-weight:900;-webkit-print-color-adjust:exact;print-color-adjust:exact}
-.ps .net{margin-top:12px;display:flex;justify-content:space-between;align-items:center;gap:10px;padding:14px 20px;border-radius:12px;border:2px solid #1B2B4B}.ps .net span{font-size:16px;font-weight:900}.ps .net small{font-size:13px;font-weight:700;color:#5B6B85}.ps .net b{font-size:26px;font-weight:900;white-space:nowrap}
-.ps .nt{margin-top:10px;font-size:13px;line-height:1.7;color:#5B6B85}
-@media (max-width:1100px){.ps .two{grid-template-columns:minmax(0,1fr)}}@media (max-width:640px){.ps table{font-size:14px !important}.ps th,.ps td{padding:6px 6px}.ps .info th{width:24%}.ps .net{flex-wrap:wrap}.ps .net b{font-size:22px}.ps .tt{font-size:19px}.ps .work th,.ps .work td{font-size:13px;padding:6px 3px}}
-.kp-payslip-pane .ps .two{grid-template-columns:minmax(0,1fr)}`;
-export function printPayslips(slips, company) {
-  const w = window.open("", "_blank"); if (!w) return;
-  w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>급여명세서</title><style>@page{size:A4;margin:14mm}body{margin:0}${PAYSLIP_CSS}.pg{page-break-after:always;padding:4px}.pg:last-child{page-break-after:auto}</style></head><body>${(slips || []).map((s) => `<div class="pg">${payslipHtml(s, company)}</div>`).join("")}<script>setTimeout(()=>print(),300)</script></body></html>`);
-  w.document.close();
-}
+// ═════════════════ 급여명세서(화면) — 내용은 payslipDoc.js(인쇄와 같은 HTML) ═════════════════
 export function PayslipView({ slip, company }) {
   return <div className="kp-payslip"><style>{PAYSLIP_CSS}</style><div dangerouslySetInnerHTML={{ __html: payslipHtml(slip, company) }} /></div>;
 }
 
-// ═════════════════ 급여관리(경리·인사·마스터) ═════════════════
+// ═════════════════ 급여관리(경리 전용 · 비밀번호 잠금) ═════════════════
+const PAY_TABS = [["run", "월 급여 계산"], ["emp", "직원 급여 설정"], ["report", "신고 · 이체"], ["rates", "요율 · 설정"]];
 export default function PayrollCenter({ company, role = "" }) {
   const uid = auth.currentUser?.uid || "preview";
   const acc = usePayrollAccess(company, uid, role, auth.currentUser?.email || "");
   const [tab, setTab] = React.useState("run");
-  if (!acc.loading && !acc.canView) return <div className="rounded-2xl bg-white border border-[#E3E8F0] py-16 text-center text-[15px] font-bold text-[#5B6B85]">급여 정보는 경리·인사 담당자만 볼 수 있습니다 · 본인 명세서는 회사관리 › 급여명세서에서</div>;
-  const ro = !acc.canEdit;
+  if (acc.loading) return <div className="py-24 text-center text-[15px] font-bold text-[#7A879C]">확인 중…</div>;
+  if (!acc.canView) return <div className="rounded-2xl bg-white border border-[#E3E8F0] py-16 px-4 text-center text-[15px] font-bold text-[#5B6B85]">급여는 경리·회계팀만 볼 수 있어요. 본인 급여명세서는 내정보 › 급여명세서에서 볼 수 있어요.</div>;
+  const fallback = <div className="py-20 text-center text-[15px] font-bold text-[#7A879C]">불러오는 중…</div>;
   return (
-    <div className="space-y-3" data-testid="payroll-center">
-      <div className="flex items-center gap-1.5 flex-wrap">
-        {[["run", "월 급여 계산"], ["emp", "직원 급여 설정"], ["rates", "요율 · 설정"]].map(([k, l]) => <Chip key={k} on={tab === k} onClick={() => setTab(k)}>{l}</Chip>)}
-        {ro && <span className="ml-auto h-8 px-3 rounded-lg bg-[#F2F4F7] text-[#3A4A66] text-[14px] font-black inline-flex items-center">조회 전용 — 수정은 경리 담당자</span>}
-      </div>
-      {tab === "run" && <PayrollRun company={company} ro={ro} />}
-      {tab === "emp" && <PayEmployees company={company} ro={ro} />}
-      {tab === "rates" && <PayRates company={company} ro={ro} />}
+    <div className="w-full max-w-none min-w-0" data-testid="payroll-center">
+      <PayrollGate company={company} canAdmin={acc.canAdmin}>
+        <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar -mx-1 px-1 [&>*]:shrink-0" role="tablist">
+          {PAY_TABS.map(([k, l]) => <Chip key={k} on={tab === k} onClick={() => setTab(k)}>{l}</Chip>)}
+        </div>
+        {tab === "run" && <PayrollRun company={company} ro={false} />}
+        {tab === "emp" && <PayEmployees company={company} ro={false} />}
+        {tab === "report" && <React.Suspense fallback={fallback}><PayrollReports company={company} /></React.Suspense>}
+        {tab === "rates" && <PayRates company={company} ro={false} />}
+      </PayrollGate>
     </div>
   );
 }
 
 // ── 월 급여 계산(좌: 직원 목록 + 입력 / 우: 급여명세서 미리보기) ──
-const EMP_BLANK = { payType: "monthly", employmentType: "정규직", baseMonthly: 0, hourlyWage: 0, dailyWage: 0, meal: 200000, car: 0, positionAllow: 0, allowances: [], dependents: 1, children: 0, taxRatePct: 100, taxFixed: "", npBase: "", hiBase: "", npExempt: false, hiExempt: false, eiExempt: false, mealOrdinary: false, birthDate: "", payAccount: null, memo: "" };
+const EMP_BLANK = { payType: "monthly", employmentType: "정규직", baseMonthly: 0, annualSalary: 0, annualSeverance: false, annualMealIncluded: false, hourlyWage: 0, dailyWage: 0, meal: 200000, car: 0, positionAllow: 0, allowances: [], dependents: 1, children: 0, taxRatePct: 100, taxFixed: "", npBase: "", hiBase: "", npExempt: false, hiExempt: false, eiExempt: false, mealOrdinary: false, birthDate: "", payAccount: null, memo: "" };
 // 직원 급여 설정 문서 정리(저장용)
 function cleanEmp(f) {
   const clean = {
-    ...f, baseMonthly: toNum(f.baseMonthly), hourlyWage: toNum(f.hourlyWage), dailyWage: toNum(f.dailyWage), meal: toNum(f.meal), car: toNum(f.car), positionAllow: toNum(f.positionAllow),
+    ...f, baseMonthly: toNum(f.baseMonthly), annualSalary: toNum(f.annualSalary), annualSeverance: !!f.annualSeverance, annualMealIncluded: !!f.annualMealIncluded, hourlyWage: toNum(f.hourlyWage), dailyWage: toNum(f.dailyWage), meal: toNum(f.meal), car: toNum(f.car), positionAllow: toNum(f.positionAllow),
     dependents: Math.max(1, toNum(f.dependents) || 1), children: toNum(f.children), taxRatePct: toNum(f.taxRatePct) || 100,
     allowances: (f.allowances || []).filter((x) => x.label || toNum(x.amount)).map((x) => ({ label: x.label || "기타수당", amount: toNum(x.amount), taxable: x.taxable !== false, ordinary: x.ordinary !== false })),
     payAccount: f.payAccount && f.payAccount.bank && f.payAccount.acct ? { bank: f.payAccount.bank, acct: onlyDigits(f.payAccount.acct), holder: f.payAccount.holder || "" } : null,
   };
-  delete clean.id; delete clean.updatedAt;
+  delete clean.id; delete clean.updatedAt; delete clean.contractFiles; // 계약서 파일 목록은 따로(arrayUnion)
   return clean;
 }
-const empReady = (e) => !!e && ((e.payType === "hourly" && toNum(e.hourlyWage)) || (e.payType === "daily" && toNum(e.dailyWage)) || ((e.payType || "monthly") === "monthly" && toNum(e.baseMonthly)));
+const empReady = (e) => !!e && ((e.payType === "hourly" && toNum(e.hourlyWage)) || (e.payType === "daily" && toNum(e.dailyWage)) || (e.payType === "annual" && toNum(e.annualSalary)) || ((e.payType || "monthly") === "monthly" && toNum(e.baseMonthly)));
+const needMsg = (t) => (t === "hourly" ? "시급을 입력해 주세요" : t === "daily" ? "일급을 입력해 주세요" : t === "annual" ? "연봉을 입력해 주세요" : "월 기본급을 입력해 주세요");
+const payText = (e) => (!e ? "" : e.payType === "hourly" ? `시급 ${wonFmt(e.hourlyWage)}` : e.payType === "daily" ? `일급 ${wonFmt(e.dailyWage)}` : e.payType === "annual" ? `연봉 ${wonFmt(e.annualSalary)}` : wonFmt(e.baseMonthly));
 // 출근기록 값 + 이번 달 직접 수정 → 계산 엔진 입력
 function monthOf(input = {}, a = {}) {
   const pick = (k) => (!blank(input[k]) ? toNum(input[k]) : toNum(a[k]));
@@ -276,6 +176,7 @@ function monthOf(input = {}, a = {}) {
 
 function PayrollRun({ company, ro }) {
   const wide = useMedia("(min-width: 1280px)");
+  const xwide = useMedia("(min-width: 1600px)"); // ⭐ 2026-11-07 넓은 화면은 직원 목록 | 입력 | 명세서 3칸
   const [ym, setYm] = React.useState(kstYm);
   const staff = useStaff(company);
   const emps = useCol("payrollEmployees", company);
@@ -297,6 +198,7 @@ function PayrollRun({ company, ro }) {
   const curRates = ratesFor(settings || {}, year);
   const empMap = React.useMemo(() => Object.fromEntries((emps || []).map((e) => [e.uid, e])), [emps]);
   const slipMap = React.useMemo(() => Object.fromEntries((slips || []).map((s) => [s.uid, s])), [slips]);
+  const prevMap = React.useMemo(() => Object.fromEntries((allSlips || []).filter((x) => x.ym === shiftYm(ym, -1)).map((s) => [s.uid, s])), [allSlips, ym]);
   const isOff = React.useCallback((d) => isWeekend(d) || isHoliday(d, hols || []), [hols]);
   const monthStart = `${ym}-01`; const monthEnd = lastDayOf(ym);
   const people = (staff || []).filter((u) => {
@@ -398,7 +300,8 @@ function PayrollRun({ company, ro }) {
     if (ro) return Promise.resolve(false);
     if (!todo.length) { alert("발행할 명세서가 없습니다(이미 발행됨)."); return Promise.resolve(false); }
     const nNew = todo.filter((r) => !r.locked).length;
-    if (!window.confirm(`${ymLabel(ym)} 급여명세서 ${todo.length}건을 발행할까요?${nNew ? `\n· 확정 전 ${nNew}명은 확정(잠금)과 함께 발행됩니다` : ""}\n· 직원은 회사관리 › 급여명세서에서 본인 것만 볼 수 있습니다\n· 직원에게 알림이 갑니다`)) return Promise.resolve(false);
+    if (!window.confirm(`${ymLabel(ym)} 급여명세서 ${todo.length}건을 발행할까요?${nNew ? `\n· 확정 전 ${nNew}명은 확정(잠금)과 함께 발행됩니다` : ""}\n· 직원은 내정보 › 급여명세서에서 본인 것만 볼 수 있습니다\n· 직원에게 앱 알림 · 사내메일(푸시)이 갑니다`)) return Promise.resolve(false);
+    const notes = todo.map((r) => ({ uid: r.u.id, name: personName(r.u) || r.u.name || "", team: r.u.team || "", position: r.u.position || "", net: r.result?.net, pd: r.input?.payDate || r.slip?.payDate || run?.payDate || payDateDefault() }));
     return commit((b) => {
       const now = Date.now();
       todo.forEach((r) => {
@@ -407,13 +310,17 @@ function PayrollRun({ company, ro }) {
         else b.update(doc(db, "payslips", id), { published: true, publishedAt: now, publishedBy: byName, updatedAt: serverTimestamp() });
         const nm = personName(r.u) || r.u.name || "";
         const pd = r.input?.payDate || r.slip?.payDate || run?.payDate || payDateDefault();
-        b.set(doc(collection(db, "hrNotices")), { companyName: company, uid: r.u.id, kind: "payslip", link: "payslip", refId: id, title: `${ymLabel(ym)} 급여명세서가 발행되었습니다`, body: `${nm}님, ${ymLabel(ym)}분 급여명세서가 발행되었습니다.\n실수령액 ${wonFmt(r.result?.net)}원 · 지급일 ${pd}\n\n회사관리 › 급여명세서에서 확인·인쇄할 수 있습니다.`, createdAt: serverTimestamp(), createdBy: byName });
+        b.set(doc(collection(db, "hrNotices")), { companyName: company, uid: r.u.id, kind: "payslip", link: "payslip", refId: id, title: `${ymLabel(ym)} 급여명세서가 발행되었습니다`, body: `${nm}님, ${ymLabel(ym)}분 급여명세서가 발행되었습니다.\n실수령액 ${wonFmt(r.result?.net)}원 · 지급일 ${pd}\n\n내정보 › 급여명세서에서 확인·인쇄할 수 있습니다.`, createdAt: serverTimestamp(), createdBy: byName });
       });
       const after = merged(todo, () => ({ locked: true, slip: { status: "confirmed", published: true } }));
       const status = runStatusAfter(after);
       const allPub = after.every((r) => r.slip?.published);
-      b.set(doc(db, "payrollRuns", runId(company, ym)), { ...runPatch(after, { status }), published: allPub, ...(allPub ? { publishedAt: now, publishedBy: byName } : {}), log: arrayUnion(logEntry("명세서 발행", `${todo.length}건 · 직원 알림`)) }, { merge: true });
-    }, "발행 실패");
+      b.set(doc(db, "payrollRuns", runId(company, ym)), { ...runPatch(after, { status }), published: allPub, ...(allPub ? { publishedAt: now, publishedBy: byName } : {}), log: arrayUnion(logEntry("명세서 발행", `${todo.length}건 · 앱 알림 · 사내메일`)) }, { merge: true });
+    }, "발행 실패").then(async (ok) => {
+      // ⭐ 2026-11-07 사내메일(받는 사람 휴대폰 푸시는 서버 notifyInternalMail이 보낸다) — 금액은 메일에 넣지 않는다(알림 미리보기 노출 방지)
+      if (ok) await Promise.all(notes.map((x) => sendInternalMail({ company, to: [{ uid: x.uid, name: x.name, team: x.team, position: x.position }], subject: `${ymLabel(ym)} 급여명세서가 발행되었습니다`, body: `${x.name}님, ${ymLabel(ym)}분 급여명세서가 발행되었습니다.\n지급일 ${x.pd}\n\n내정보 › 급여명세서에서 확인·인쇄할 수 있습니다.`, kind: "hr", fromName: "경리팀", important: true }).catch(() => null)));
+      return ok;
+    });
   };
   const unlockRows = (list) => {
     const todo = list.filter((r) => r.slip && r.slip.status === "confirmed");
@@ -458,12 +365,12 @@ function PayrollRun({ company, ro }) {
       right={<span className="text-[14px] font-bold text-[#5B6B85]">확정 <b className="text-[#0F1A30]" style={NUMS}>{nConfirmed}</b> · 발행 <b className="text-[#0F1A30]" style={NUMS}>{nPublished}</b> / {ready.length}명</span>}>
       <div className="px-4 pb-3 space-y-2">
         <EmpCombo rows={rows} q={flt.q} setQ={(q) => setFlt((f) => ({ ...f, q }))} onPick={(id) => { setSelId(id); setPane("edit"); }} />
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+        <div className={`grid grid-cols-2 ${xwide ? "" : "md:grid-cols-3"} gap-2`}>
           <Sel ariaLabel="부서" value={flt.team} onChange={(v) => setFlt((f) => ({ ...f, team: v }))} placeholder="부서 전체" options={teamOpts} testid="flt-team" />
           <Sel ariaLabel="직책" value={flt.position} onChange={(v) => setFlt((f) => ({ ...f, position: v }))} placeholder="직책 전체" options={posOpts} />
           <Sel ariaLabel="재직상태" value={flt.emp} onChange={(v) => setFlt((f) => ({ ...f, emp: v }))} placeholder="재직상태 전체" options={statusOpts} />
           <Sel ariaLabel="급여형태" value={flt.payType} onChange={(v) => setFlt((f) => ({ ...f, payType: v }))} placeholder="급여형태 전체" options={[...PAY_TYPES.map(([k, l]) => [k, `${l}제`]), ["none", "설정 필요"]]} />
-          <Sel ariaLabel="처리 상태" value={flt.st} onChange={(v) => setFlt((f) => ({ ...f, st: v }))} placeholder="상태 전체" options={Object.entries(ROW_ST).map(([k, v]) => [k, v[0]])} className="col-span-2" />
+          <Sel ariaLabel="처리 상태" value={flt.st} onChange={(v) => setFlt((f) => ({ ...f, st: v }))} placeholder="상태 전체" options={Object.entries(ROW_ST).map(([k, v]) => [k, v[0]])} className={xwide ? "col-span-2" : "col-span-2 md:col-span-1"} />
         </div>
       </div>
       <div className="border-t border-[#EEF1F6]">
@@ -472,7 +379,7 @@ function PayrollRun({ company, ro }) {
           보이는 직원 전체 선택 {checked.size > 0 && <span className="text-[#2D4C82]">· {checked.size}명 선택</span>}
           <span className="ml-auto text-[14px] font-bold text-[#7A879C]">실지급(원)</span>
         </label>
-        <div className={`divide-y divide-[#EEF1F6] overflow-y-auto ${wide ? "max-h-[360px]" : "max-h-[300px]"}`} data-testid="pay-emp-list">
+        <div className={`divide-y divide-[#EEF1F6] overflow-y-auto ${xwide ? "max-h-[calc(100vh-520px)] min-h-[320px]" : wide ? "max-h-[360px]" : "max-h-[300px]"}`} data-testid="pay-emp-list">
           {loading ? <div className="py-10 text-center text-[14px] font-bold text-[#7A879C]">불러오는 중…</div> : !shown.length ? <div className="py-10 text-center text-[14px] font-bold text-[#7A879C]">조건에 맞는 직원이 없습니다</div> : shown.map((r) => {
             const on = cur?.u.id === r.u.id;
             return (
@@ -484,8 +391,8 @@ function PayrollRun({ company, ro }) {
                     <span className="block text-[15px] font-black text-[#0F1A30] truncate">{personName(r.u) || r.u.name}</span>
                     <span className="block text-[14px] font-bold text-[#5B6B85] truncate">{[r.u.team, r.u.position, r.emp ? `${payTypeLabel(r.emp.payType)}제` : ""].filter(Boolean).join(" · ") || "-"}</span>
                   </span>
-                  <RowChip st={rowStatus(r)} unsaved={!r.slip} />
-                  <span className="w-[104px] text-right text-[15px] font-black text-[#0F1A30] shrink-0" style={NUMS}>{r.result ? wonFmt(r.result.net) : "-"}</span>
+                  <RowChip st={rowStatus(r)} unsaved={!r.slip} compact={xwide} />
+                  <span className="w-[104px] text-right shrink-0"><span className="block text-[15px] font-black text-[#0F1A30]" style={NUMS}>{r.result ? wonFmt(r.result.net) : "-"}</span><DiffTag cur={r.result?.net} prev={prevMap[r.u.id]?.result?.net} /></span>
                 </button>
               </div>
             );
@@ -510,11 +417,12 @@ function PayrollRun({ company, ro }) {
       <div className="rounded-2xl bg-white border border-[#E3E8F0] px-4 py-3 flex items-center gap-2 flex-wrap">
         <StatusPill st={st} published={run?.published} />
         <span className="text-[14px] font-bold text-[#5B6B85]">지급일 <b className="text-[#0F1A30]" style={NUMS}>{run?.payDate || payDateDefault()}</b></span>
-        <span className="text-[14px] font-bold text-[#5B6B85] hidden md:inline">{curRates.year}년 요율 · 국민연금 {curRates.npEmp}% · 건강 {curRates.hiEmp}% · 장기요양 {curRates.ltcRatio}% · 고용 {curRates.eiEmp}%{curRates.small ? " · 5인 미만(가산 없음)" : ""}</span>
+        <span className="text-[14px] font-bold text-[#5B6B85] hidden 2xl:inline">{curRates.year}년 요율 · 국민연금 {curRates.npEmp}% · 건강 {curRates.hiEmp}% · 장기요양 {curRates.ltcRatio}% · 고용 {curRates.eiEmp}%{curRates.small ? " · 5인 미만(가산 없음)" : ""}</span>
         <span className="flex-1" />
         {!ro && st !== "paid" && <button type="button" disabled={busy || !ready.some((r) => !r.locked)} onClick={() => saveDraft(ready, "전체 계산")} className={btnLine} data-testid="pay-calc-all">전체 계산 · 저장</button>}
         {!ro && st !== "paid" && <button type="button" disabled={busy || !checkedRows.some((r) => r.result && !r.locked)} onClick={() => confirmRows(checkedRows)} className={btnLine} data-testid="payroll-confirm">선택 확정{checked.size ? ` ${checkedRows.filter((r) => r.result && !r.locked).length}` : ""}</button>}
         {!ro && st !== "paid" && <button type="button" disabled={busy || !checkedRows.some((r) => r.result && !r.slip?.published)} onClick={() => publishRows(checkedRows)} className={`${btn} bg-[#2D4C82] text-white`} data-testid="payroll-publish">선택 발행{checked.size ? ` ${checkedRows.filter((r) => r.result && !r.slip?.published).length}` : ""}</button>}
+        {!ro && st !== "paid" && <button type="button" disabled={busy || !ready.some((r) => !r.slip?.published && r.slip?.status !== "paid")} onClick={() => publishRows(ready)} className={btnDark} data-testid="payroll-publish-all">전체 확정 · 발행</button>}
         {!ro && st === "confirmed" && <button type="button" disabled={busy} onClick={() => unlockRows(rows)} className={`${btn} border border-[#DCE3EE] bg-white text-[#3A4A66]`}>전체 확정 해제</button>}
         {!ro && st === "confirmed" && <button type="button" disabled={busy} onClick={pay} className={btnDark}>지급 처리</button>}
         {!ro && st === "paid" && <button type="button" disabled={busy} onClick={unpay} className={`${btn} border border-[#DCE3EE] bg-white text-[#3A4A66]`}>지급 취소</button>}
@@ -531,7 +439,7 @@ function PayrollRun({ company, ro }) {
       {loading ? <div className="py-16 text-center text-[15px] font-bold text-[#7A879C]">불러오는 중…</div> : !rows.length ? (
         <div className="rounded-2xl bg-white border border-[#E3E8F0] py-16 text-center text-[15px] font-bold text-[#5B6B85]">이 달 대상 직원이 없습니다</div>
       ) : (
-        <Workspace key={`${cur?.u.id}_${ym}`} company={company} ym={ym} row={cur} ro={ro} busy={busy} wide={wide} pane={pane} listNode={listNode}
+        <Workspace key={`${cur?.u.id}_${ym}`} company={company} ym={ym} row={cur} ro={ro} busy={busy} wide={wide} xwide={xwide} pane={pane} listNode={listNode}
           kinds={kinds} history={history} rates={cur?.rates || curRates} runPayDate={run?.payDate || payDateDefault()}
           slipDoc={slipDoc} onSave={(r) => saveDraft([r])} onConfirm={(r) => confirmRows([r])} onPublish={(r) => publishRows([r])} onUnlock={(r) => unlockRows([r])}
           onPrev={() => { const i = shown.findIndex((r) => r.u.id === cur?.u.id); if (i > 0) setSelId(shown[i - 1].u.id); }}
@@ -605,9 +513,26 @@ function composeState(s) {
   return { emp, input };
 }
 
-const H = ({ en, children, right }) => <div className="px-4 pt-3.5 pb-2.5 flex items-center gap-2 flex-wrap"><div className="min-w-0"><div className="text-[11px] font-extrabold tracking-[0.22em] text-[#4B6CB7]" style={NUMS}>{en}</div><div className="text-[16px] font-black text-[#0F1A30]">{children}</div></div>{right && <div className="ml-auto flex items-center gap-1.5 flex-wrap">{right}</div>}</div>;
 
-function Workspace({ company, ym, row, ro: roIn, busy, wide, pane, listNode, kinds, history, rates, runPayDate, slipDoc, onSave, onConfirm, onPublish, onUnlock, onPrev, onNext }) {
+// ⭐ 2026-11-07 연봉제 — 퇴직금 포함 여부 · 식대 포함 여부 + 월 급여 계산 내역
+function AnnualBox({ emp, ro, setEmp, className = "col-span-2 md:col-span-3" }) {
+  const a = annualBreakdown(emp);
+  return (
+    <div className={`${className} rounded-xl bg-[#F5F8FD] border border-[#E3E8F0] p-3 space-y-2.5`} data-testid="annual-box">
+      <div className="grid grid-cols-2 gap-2">
+        <div><Label hint="13분의 1은 퇴직금 몫">퇴직금</Label><Sel disabled={ro} value={emp.annualSeverance ? "y" : "n"} onChange={(v) => setEmp("annualSeverance", v === "y")} options={[["n", "연봉에 없음(÷ 12)"], ["y", "연봉에 포함(÷ 13)"]]} testid="ed-annual-sev" /></div>
+        <div><Label hint="식대·자가운전보조금">수당</Label><Sel disabled={ro} value={emp.annualMealIncluded ? "y" : "n"} onChange={(v) => setEmp("annualMealIncluded", v === "y")} options={[["n", "연봉과 별도"], ["y", "연봉에 포함"]]} testid="ed-annual-meal" /></div>
+      </div>
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[14px] font-bold text-[#3A4A66]" style={NUMS}>
+        <span>연봉 <b className="text-[#0F1A30]">{wonFmt(a.annual)}</b></span><span>÷ {a.divisor}</span><span>= 월 <b className="text-[#0F1A30]">{wonFmt(a.monthlyTotal)}</b></span>
+        {a.fixedIn > 0 && <><span>− 식대 등 {wonFmt(a.fixedIn)}</span><span>= 기본급 <b className="text-[#0F1A30]">{wonFmt(a.base)}</b></span></>}
+        {a.severance && <span className="text-[#2D4C82]">· 퇴직금 몫 연 {wonFmt(a.severanceYear)}</span>}
+      </div>
+    </div>
+  );
+}
+
+function Workspace({ company, ym, row, ro: roIn, busy, wide, xwide = false, pane, listNode, kinds, history, rates, runPayDate, slipDoc, onSave, onConfirm, onPublish, onUnlock, onPrev, onNext }) {
   const u = row.u;
   const init = React.useMemo(() => {
     const emp = { ...EMP_BLANK, ...(row.emp || {}) };
@@ -655,7 +580,7 @@ function Workspace({ company, ym, row, ro: roIn, busy, wide, pane, listNode, kin
   // ── 점검 메시지 ──
   const checks = [];
   (result?.warnings || []).filter((w) => /최저/.test(w)).forEach((w) => checks.push(["error", `최저임금 미달 — ${w}`]));
-  if (!locked && !empReady(emp)) checks.push(["error", payType === "hourly" ? "시급을 입력해 주세요" : payType === "daily" ? "일급을 입력해 주세요" : "월 기본급을 입력해 주세요"]);
+  if (!locked && !empReady(emp)) checks.push(["error", needMsg(payType)]);
   Object.entries(NONTAX_KINDS).forEach(([k, rk]) => { const amt = k === "식대" ? toNum(emp.meal) : toNum(emp.car); const cap = toNum(rates[rk]); if (cap && amt > cap) checks.push(["info", `비과세 한도 초과 — ${k} ${wonFmt(amt)}원 중 월 한도 ${wonFmt(cap)}원 초과분 ${wonFmt(amt - cap)}원은 과세로 계산됩니다`]); });
   const care = s.payRows.filter((r) => r.kind === "출산·보육수당" && r.taxable === false).reduce((x, r) => x + toNum(r.amount), 0);
   if (care > 200000) checks.push(["info", `비과세 한도 초과 — 출산·보육수당 비과세는 월 20만원까지입니다(${wonFmt(care - 200000)}원 초과). 초과분은 "과세"로 나눠 입력해 주세요`]);
@@ -702,7 +627,7 @@ function Workspace({ company, ym, row, ro: roIn, busy, wide, pane, listNode, kin
         <div className="mt-3 grid grid-cols-2 md:grid-cols-4 gap-2">
           {[["입사일", u.hireDate || "-"], ["연락처", u.phone || u.mobile || "-"], ["이메일", u.email || "-"]].map(([k, v]) => <div key={k} className="rounded-xl bg-[#F5F8FD] px-3 py-2 min-w-0"><div className="text-[14px] font-bold text-[#5B6B85]">{k}</div><div className="text-[14px] font-black text-[#0F1A30] truncate" style={NUMS}>{v}</div></div>)}
           <div className="rounded-xl bg-[#F5F8FD] px-3 py-2 min-w-0"><div className="text-[14px] font-bold text-[#5B6B85]">생년월일</div>
-            {u.birthDate ? <div className="text-[14px] font-black text-[#0F1A30]" style={NUMS}>{u.birthDate}</div> : <input type="date" disabled={ro} value={emp.birthDate || ""} onChange={(e) => setEmp("birthDate", e.target.value)} className="w-full h-7 bg-transparent text-[14px] font-black text-[#0F1A30] outline-none" data-testid="emp-birth" />}</div>
+            {u.birthDate ? <div className="text-[14px] font-black text-[#0F1A30]" style={NUMS}>{u.birthDate}</div> : <CustomDatePicker disabled={ro} value={emp.birthDate || ""} onChange={(e) => setEmp("birthDate", e.target.value)} placeholder="입력" className="w-full h-7 bg-transparent text-[14px] font-black text-[#0F1A30] outline-none text-left" />}</div>
         </div>
       </div>
 
@@ -715,9 +640,11 @@ function Workspace({ company, ym, row, ro: roIn, busy, wide, pane, listNode, kin
           <div className="col-span-2 md:col-span-1">
             {payType === "hourly" ? <><Label hint={`최저 ${wonFmt(rates.minWage)}원`}>시급</Label><Money disabled={ro} value={emp.hourlyWage} onChange={(v) => setEmp("hourlyWage", v)} testid="ed-base" /></>
               : payType === "daily" ? <><Label hint={`최저 ${wonFmt(rates.minWage * 8)}원(8h)`}>일급</Label><Money disabled={ro} value={emp.dailyWage} onChange={(v) => setEmp("dailyWage", v)} testid="ed-base" /></>
-                : <><Label hint="월 소정근로 기준">월 기본급</Label><Money disabled={ro} value={emp.baseMonthly} onChange={(v) => setEmp("baseMonthly", v)} testid="ed-base" /></>}
+                : payType === "annual" ? <><Label hint="1년 총액">연봉</Label><Money disabled={ro} value={emp.annualSalary} onChange={(v) => setEmp("annualSalary", v)} testid="ed-base" /></>
+                  : <><Label hint="월 소정근로 기준">월 기본급</Label><Money disabled={ro} value={emp.baseMonthly} onChange={(v) => setEmp("baseMonthly", v)} testid="ed-base" /></>}
           </div>
-          <div><Label hint={`기본 ${runPayDate}`}>지급일</Label><input type="date" disabled={ro} value={input.payDate || runPayDate} onChange={(e) => setIn("payDate", e.target.value)} className={inp} style={NUMS} data-testid="ed-paydate" /></div>
+          {payType === "annual" && <AnnualBox emp={emp} ro={ro} setEmp={setEmp} />}
+          <div><Label hint={`기본 ${runPayDate}`}>지급일</Label><CustomDatePicker disabled={ro} value={input.payDate || runPayDate} onChange={(e) => setIn("payDate", e.target.value)} className={`${inp} text-left`} showIcon /></div>
           <div className="col-span-1 md:col-span-2"><Label hint={accounts.length ? `저장된 계좌 ${accounts.length}개` : "저장된 계좌 없음"}>지급 계좌</Label>
             <Sel disabled={ro} value={acctNew ? "__new" : acctKey(curAcct)} onChange={pickAcct} placeholder="계좌 선택 안 함" options={[...accounts.map((x) => [acctKey(x), acctText(x)]), ["__new", "+ 새 계좌 직접 입력"]]} testid="ed-account" /></div>
           {(acctNew || (curAcct && !accounts.some((y) => acctKey(y) === acctKey(curAcct)))) && !ro && (
@@ -885,13 +812,16 @@ function Workspace({ company, ym, row, ro: roIn, busy, wide, pane, listNode, kin
       </div>
     </div>
   );
+  if (xwide) return <div className="grid grid-cols-[minmax(330px,0.8fr)_minmax(0,1.25fr)_minmax(0,1.15fr)] gap-3 items-start"><div className="min-w-0 sticky top-0 self-start">{listNode}</div><div className="min-w-0">{editor}</div><div className="min-w-0 sticky top-0 self-start">{preview}</div></div>;
   if (wide) return <div className="grid grid-cols-2 gap-3 items-start"><div className="space-y-3 min-w-0">{listNode}{editor}</div><div className="min-w-0 sticky top-0 self-start">{preview}</div></div>;
   return pane === "preview" ? preview : <div className="space-y-3">{listNode}{editor}<div className="sticky bottom-2 z-10 rounded-2xl bg-white/95 backdrop-blur border border-[#E3E8F0] shadow-[0_10px_30px_rgba(15,26,48,0.16)] px-3 py-2.5 flex items-center gap-2 flex-wrap"><span className="text-[14px] font-bold text-[#5B6B85]">실지급 <b className="text-[17px] text-[#0F1A30]" style={NUMS}>{result ? wonFmt(result.net) : "-"}원</b></span><span className="flex-1" />{actions}</div></div>;
 }
 
 // ── 직원 급여 설정 ──
-// ⭐ 2026-11-06 고를 수 있는 칸은 드롭다운(급여형태·고용형태·수당 종류·부양가족·자녀·세액 비율·4대보험·은행) · 노란 표시 제거
+// ⭐ 2026-11-07 2칸 화면 — 왼쪽: 검색 + 필터(부서·직책·재직·급여형태·상태) 목록 / 오른쪽: 고른 직원 상세(기본 급여 · 수당 · 소득세 · 4대보험 · 계좌 · 근로계약서)
+//  모바일·좁은 화면: 목록 → 고르면 상세(뒤로)
 function PayEmployees({ company, ro }) {
+  const wide = useMedia("(min-width: 1100px)");
   const staff = useStaff(company);
   const emps = useCol("payrollEmployees", company);
   const settings = usePayrollSettings(company);
@@ -899,131 +829,195 @@ function PayEmployees({ company, ro }) {
   const kinds = useItemKinds(settings, emps, null);
   const rates = ratesFor(settings || {}, Number(kstYm().slice(0, 4)));
   const map = Object.fromEntries((emps || []).map((e) => [e.uid, e]));
-  const [sel, setSel] = React.useState(null);
+  const [selId, setSelId] = React.useState(null);
   const [f, setF] = React.useState(null);
-  const [flt, setFlt] = React.useState({ q: "", team: "", payType: "" });
+  const [base, setBase] = React.useState(null);
+  const [flt, setFlt] = React.useState({ q: "", team: "", position: "", emp: "재직", payType: "", st: "" });
   const [busy, setBusy] = React.useState(false);
+  const [paneTab, setPaneTab] = React.useState("pay");
   const all = (staff || []).filter((u) => u.employmentStatus !== "퇴사" || map[u.id]);
-  const list = all.filter((u) => !flt.q.trim() || [u.name, u.team, u.position, u.phone].some((v) => String(v || "").includes(flt.q.trim())))
+  const q = flt.q.trim();
+  const list = all.filter((u) => !q || [personName(u), u.name, u.team, u.position, u.phone].some((v) => String(v || "").includes(q)))
     .filter((u) => !flt.team || u.team === flt.team)
-    .filter((u) => !flt.payType || (flt.payType === "none" ? !map[u.id] : (map[u.id]?.payType || "monthly") === flt.payType && map[u.id]))
-    .sort((a, b) => String(a.name || "").localeCompare(String(b.name || ""), "ko"));
-  const open = (u) => { setSel(u); const e = { ...EMP_BLANK, ...(map[u.id] || {}) }; if (!e.payAccount) e.payAccount = userAccounts(u)[0] || null; setF(e); };
+    .filter((u) => !flt.position || u.position === flt.position)
+    .filter((u) => !flt.emp || (u.employmentStatus || "재직") === flt.emp)
+    .filter((u) => !flt.payType || (map[u.id] && (map[u.id].payType || "monthly") === flt.payType))
+    .filter((u) => !flt.st || (flt.st === "done" ? empReady(map[u.id]) : !empReady(map[u.id])))
+    .sort((a, b) => String(a.team || "").localeCompare(String(b.team || ""), "ko") || String(a.name || "").localeCompare(String(b.name || ""), "ko"));
+  const sel = all.find((u) => u.id === selId) || null;
+  const open = (u) => { setSelId(u.id); const e = { ...EMP_BLANK, ...(map[u.id] || {}) }; if (!e.payAccount) e.payAccount = userAccounts(u)[0] || null; setF(e); setBase(JSON.stringify(cleanEmp(e))); setPaneTab("pay"); };
+  // 넓은 화면은 첫 직원을 바로 연다
+  React.useEffect(() => { if (wide && !selId && list[0] && emps) open(list[0]); }); // eslint-disable-line react-hooks/exhaustive-deps
+  // 다른 곳(근로계약서 올리기)에서 바뀐 파일 목록 반영
+  React.useEffect(() => { if (selId && f && map[selId]?.contractFiles !== f.contractFiles) setF((p) => (p ? { ...p, contractFiles: map[selId]?.contractFiles } : p)); }, [emps]); // eslint-disable-line react-hooks/exhaustive-deps
   const set = (k, v) => setF((p) => ({ ...p, [k]: v }));
+  const dirty = !!f && base !== JSON.stringify(cleanEmp(f));
   const save = async () => {
-    if (!empReady(f)) return alert(f.payType === "hourly" ? "시급을 입력해 주세요." : f.payType === "daily" ? "일급을 입력해 주세요." : "월 기본급을 입력해 주세요.");
+    if (!empReady(f)) return alert(`${needMsg(f.payType)}.`);
     setBusy(true);
     try {
       await setDoc(doc(db, "payrollEmployees", empId(company, sel.id)), { ...cleanEmp(f), companyName: company, uid: sel.id, name: personName(sel) || sel.name || "", updatedAt: serverTimestamp(), updatedBy: auth.currentUser?.email || "" }, { merge: true });
-      setSel(null);
+      setBase(JSON.stringify(cleanEmp(f)));
     } catch (e) { alert(`저장 실패: ${e.message}`); } finally { setBusy(false); }
   };
   const preview = f && empReady(f) ? calcPayslipFull(f, { regularHours: f.payType === "hourly" ? rates.monthlyHours : 0, workDays: f.payType === "daily" ? 22 : 0 }, rates) : null;
-  const money = (k, label, hint) => <div><Label hint={hint}>{label}</Label><Money disabled={ro} value={f[k]} onChange={(v) => set(k, v)} /></div>;
+  const money = (k, label, hint) => <div><Label hint={hint}>{label}</Label><Money disabled={ro} value={f[k]} onChange={(v) => set(k, v)} testid={`emp-${k}`} /></div>;
   const yn = (k, label) => <div><Label>{label}</Label><Sel disabled={ro} value={f[k] ? "n" : "y"} onChange={(v) => set(k, v === "n")} options={[["y", "적용"], ["n", "제외"]]} /></div>;
   const acct = f?.payAccount || { bank: "", acct: "", holder: "" };
   const setAcct = (patch) => set("payAccount", { ...acct, ...patch });
   const teamOpts = uniq([...(hr.teams || []), ...all.map((u) => u.team)]);
-  return (
-    <div className="space-y-3">
-      <BookHero en="PAYROLL · EMPLOYEES" title="직원 급여 설정" desc="월급·시급·일급제 · 고용형태 · 비과세 수당 · 부양가족(소득세) · 4대보험 · 지급 계좌 — 한 번 정해 두면 매달 그대로 계산합니다"
-        kpis={[["직원", `${all.length}명`], ["설정 완료", `${all.filter((u) => map[u.id]).length}명`], ["설정 필요", `${all.filter((u) => !map[u.id]).length}명`]]} />
-      <div className="grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_200px_200px] gap-2">
-        <input value={flt.q} onChange={(e) => setFlt((x) => ({ ...x, q: e.target.value }))} placeholder="이름 · 부서 · 직책 · 연락처 검색" className={inp} />
-        <Sel value={flt.team} onChange={(v) => setFlt((x) => ({ ...x, team: v }))} placeholder="부서 전체" options={teamOpts} ariaLabel="부서" />
-        <Sel value={flt.payType} onChange={(v) => setFlt((x) => ({ ...x, payType: v }))} placeholder="급여형태 전체" options={[...PAY_TYPES.map(([k, l]) => [k, `${l}제`]), ["none", "설정 필요"]]} ariaLabel="급여형태" />
+  const posOpts = uniq([...(hr.exec || []), ...(hr.normal || []), ...all.map((u) => u.position)]);
+  const statusOpts = uniq([...EMPLOYMENT_STATUS_OPTIONS, ...all.map((u) => u.employmentStatus)]);
+  const nDone = all.filter((u) => empReady(map[u.id])).length;
+
+  const listNode = (
+    <div className={`${sec} overflow-hidden min-w-0 ${wide ? "sticky top-0 self-start" : ""}`} data-testid="payemp-list">
+      <div className="p-3.5 space-y-2 border-b border-[#EEF1F6]">
+        <div className="relative">
+          <input value={flt.q} onChange={(e) => setFlt((x) => ({ ...x, q: e.target.value }))} placeholder="이름 · 부서 · 직책 · 연락처" className={`${inp} pl-10`} aria-label="직원 검색" data-testid="payemp-search" />
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#5B6B85" strokeWidth="2.6" className="absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none"><circle cx="11" cy="11" r="7" /><path d="M20 20l-3.5-3.5" /></svg>
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          <Sel value={flt.team} onChange={(v) => setFlt((x) => ({ ...x, team: v }))} placeholder="부서 전체" options={teamOpts} ariaLabel="부서" />
+          <Sel value={flt.position} onChange={(v) => setFlt((x) => ({ ...x, position: v }))} placeholder="직책 전체" options={posOpts} ariaLabel="직책" />
+          <Sel value={flt.emp} onChange={(v) => setFlt((x) => ({ ...x, emp: v }))} placeholder="재직상태 전체" options={statusOpts} ariaLabel="재직상태" />
+          <Sel value={flt.payType} onChange={(v) => setFlt((x) => ({ ...x, payType: v }))} placeholder="급여형태 전체" options={PAY_TYPES.map(([k, l]) => [k, `${l}제`])} ariaLabel="급여형태" testid="payemp-flt-pay" />
+        </div>
+        <Seg value={flt.st} onChange={(v) => setFlt((x) => ({ ...x, st: v }))} options={[["", `전체 ${all.length}`], ["done", `완료 ${nDone}`], ["need", `필요 ${all.length - nDone}`]]} className="w-full [&>button]:flex-1" />
       </div>
-      <div className="rounded-[20px] bg-white border border-[#E3E8F0] divide-y divide-[#EEF1F6] overflow-hidden">
-        {staff === null ? <div className="py-12 text-center text-[15px] font-bold text-[#7A879C]">불러오는 중…</div> : !list.length ? <div className="py-12 text-center text-[15px] font-bold text-[#7A879C]">직원이 없습니다</div> : list.map((u) => {
-          const e = map[u.id];
-          const pay = e ? (e.payType === "hourly" ? `시급 ${wonFmt(e.hourlyWage)}` : e.payType === "daily" ? `일급 ${wonFmt(e.dailyWage)}` : wonFmt(e.baseMonthly)) : "";
+      <div className={`divide-y divide-[#EEF1F6] overflow-y-auto ${wide ? "max-h-[calc(100vh-430px)] min-h-[300px]" : ""}`}>
+        {staff === null || emps === null ? <div className="py-12 text-center text-[15px] font-bold text-[#7A879C]">불러오는 중…</div> : !list.length ? <div className="py-12 text-center text-[15px] font-bold text-[#7A879C]">조건에 맞는 직원이 없어요</div> : list.map((u) => {
+          const e = map[u.id]; const on = sel?.id === u.id;
           return (
-            <button key={u.id} type="button" onClick={() => open(u)} className="w-full text-left px-4 py-3 flex items-center gap-3 hover:bg-[#F8FAFD]" data-testid="payemp-row">
-              <span className="w-10 h-10 rounded-xl bg-[#1B2B4B] text-white grid place-items-center text-[15px] font-black shrink-0">{String(u.name || "?").slice(0, 1)}</span>
-              <span className="flex-1 min-w-0"><span className="block text-[15.5px] font-black text-[#0F1A30] truncate">{personName(u) || u.name}</span><span className="block text-[14px] text-[#5B6B85] truncate">{[u.team, u.position, e?.employmentType].filter(Boolean).join(" · ") || "-"}</span></span>
-              {e ? <span className="text-right"><span className="block text-[16px] font-black text-[#0F1A30]" style={NUMS}>{pay}원</span><span className="block text-[14px] font-bold text-[#5B6B85]">부양 {e.dependents || 1}명{e.children ? ` · 자녀 ${e.children}` : ""}{e.taxFixed !== "" && e.taxFixed !== undefined ? " · 고정 세액" : ""}{e.payAccount?.bank ? ` · ${e.payAccount.bank}` : ""}</span></span>
-                : <span className="h-8 px-3 rounded-lg bg-[#F2F4F7] text-[#3A4A66] border border-[#DCE3EE] text-[14px] font-black inline-flex items-center">설정 필요</span>}
+            <button key={u.id} type="button" onClick={() => open(u)} className={`w-full text-left px-3.5 py-2.5 flex items-center gap-2.5 ${on ? "bg-[#EEF3FC] shadow-[inset_4px_0_0_#1B2B4B]" : "hover:bg-[#F8FAFD]"}`} data-testid="payemp-row">
+              <span className="w-9 h-9 rounded-xl bg-[#1B2B4B] text-white grid place-items-center text-[15px] font-black shrink-0">{String(u.name || "?").slice(0, 1)}</span>
+              <span className="flex-1 min-w-0"><span className="block text-[15px] font-black text-[#0F1A30] truncate">{personName(u) || u.name}</span><span className="block text-[14px] font-bold text-[#5B6B85] truncate">{[u.team, u.position, e ? `${payTypeLabel(e.payType)}제` : ""].filter(Boolean).join(" · ") || "-"}</span></span>
+              {empReady(e) ? <span className="text-right text-[14.5px] font-black text-[#0F1A30] whitespace-nowrap" style={NUMS}>{payText(e)}</span>
+                : <span className="h-7 px-2.5 rounded-lg bg-[#F2F4F7] text-[#3A4A66] text-[14px] font-black inline-flex items-center whitespace-nowrap">설정 필요</span>}
             </button>
           );
         })}
       </div>
-      {sel && f && (
-        <Sheet side en="PAYROLL · EMPLOYEE" title={`${personName(sel) || sel.name} 급여 설정`} onClose={() => setSel(null)}
-          footer={<><button type="button" onClick={() => setSel(null)} className="h-12 px-5 rounded-xl border border-[#DCE3EE] bg-white text-[14px] font-bold text-[#3A4A66]">닫기</button>{!ro && <button type="button" disabled={busy} onClick={save} className="flex-1 h-12 rounded-xl bg-[#0F1A30] text-white text-[15px] font-black disabled:opacity-50" data-testid="payemp-save">{busy ? "저장 중…" : "저장"}</button>}</>}>
-          <div onKeyDown={enterNext} className="space-y-4">
-            <BookCard en="BASE PAY" title="기본 급여">
-              <div className="grid grid-cols-2 gap-2.5">
-                <div><Label>급여형태</Label><Sel disabled={ro} value={f.payType || "monthly"} onChange={(v) => set("payType", v)} options={PAY_TYPES.map(([k, l]) => [k, `${l}제`])} testid="emp-paytype" /></div>
-                <div><Label>고용형태</Label><Sel disabled={ro} value={f.employmentType || "정규직"} onChange={(v) => set("employmentType", v)} options={EMP_TYPES} /></div>
-                {f.payType === "hourly" ? money("hourlyWage", "시급", `최저 ${wonFmt(rates.minWage)}원`) : f.payType === "daily" ? money("dailyWage", "일급", `8h 최저 ${wonFmt(rates.minWage * 8)}원`) : money("baseMonthly", "월 기본급")}
-                {money("positionAllow", "직책수당", "통상임금 포함")}
-                {money("meal", "식대", `비과세 월 ${wonFmt(rates.mealExempt)}원까지`)}
-                {money("car", "자가운전보조금", `비과세 월 ${wonFmt(rates.carExempt)}원까지`)}
-                <div><Label hint="통상시급 계산">식대 통상임금</Label><Sel disabled={ro} value={f.mealOrdinary ? "y" : "n"} onChange={(v) => set("mealOrdinary", v === "y")} options={[["n", "제외"], ["y", "포함"]]} /></div>
-                <div><Label hint={sel.birthDate ? "회원 정보" : "명세서 필수"}>생년월일</Label><input type="date" disabled={ro || !!sel.birthDate} value={sel.birthDate || f.birthDate || ""} onChange={(e) => set("birthDate", e.target.value)} className={inp} style={NUMS} /></div>
-              </div>
-              {(toNum(f.meal) > toNum(rates.mealExempt) || toNum(f.car) > toNum(rates.carExempt)) && <div className="mt-2.5"><Note>비과세 한도를 넘는 금액은 과세로 계산됩니다.</Note></div>}
-            </BookCard>
-            <BookCard en="ALLOWANCES" title="기타 고정 수당 (매월)">
-              {(f.allowances || []).map((x, i) => {
-                const known = kinds.pay.flatMap(([, l]) => l);
-                const kindVal = known.includes(x.label) ? x.label : x.label ? "__custom" : "";
-                return (
-                  <div key={i} className="grid grid-cols-2 md:grid-cols-[minmax(0,1fr)_130px_96px_120px_44px] gap-1.5 mb-1.5">
-                    <div className="col-span-2 md:col-span-1 space-y-1.5">
-                      <Sel disabled={ro} value={kindVal} onChange={(v) => set("allowances", f.allowances.map((y, j) => (j === i ? { ...y, label: v === "__custom" || v === "기타" ? "" : v, custom: v === "__custom" || v === "기타", taxable: v && v !== "__custom" ? kinds.taxableOf(v) : y.taxable } : y)))}
-                        placeholder="수당 종류 선택" groups={[...kinds.pay.map(([g, l]) => [g, l.filter((k) => !FIXED_ONLY.includes(k) && !MONTH_ONLY.includes(k))]), ["직접 입력", [["__custom", x.label && !known.includes(x.label) ? `${x.label}(직접 입력)` : "직접 입력…"]]]]} />
-                      {(kindVal === "__custom" || x.custom) && <input disabled={ro} value={x.label || ""} onChange={(e) => set("allowances", f.allowances.map((y, j) => (j === i ? { ...y, label: e.target.value } : y)))} className={inp} placeholder="수당 이름(예: 자격수당)" />}
-                    </div>
-                    <Money disabled={ro} value={x.amount} onChange={(v) => set("allowances", f.allowances.map((y, j) => (j === i ? { ...y, amount: v } : y)))} />
-                    <Sel disabled={ro} value={x.taxable === false ? "n" : "y"} onChange={(v) => set("allowances", f.allowances.map((y, j) => (j === i ? { ...y, taxable: v === "y" } : y)))} options={[["y", "과세"], ["n", "비과세"]]} />
-                    <Sel disabled={ro} value={x.ordinary === false ? "n" : "y"} onChange={(v) => set("allowances", f.allowances.map((y, j) => (j === i ? { ...y, ordinary: v === "y" } : y)))} options={[["y", "통상임금 포함"], ["n", "통상임금 제외"]]} />
-                    {!ro && <button type="button" onClick={() => set("allowances", f.allowances.filter((_, j) => j !== i))} aria-label="줄 삭제" className="h-11 w-11 rounded-xl border border-[#DCE3EE] bg-white text-[#5B6B85] hover:text-[#B42318]">✕</button>}
+    </div>
+  );
+
+  const detail = sel && f ? (
+    <div className="space-y-3 min-w-0" onKeyDown={enterNext} data-testid="payemp-detail">
+      <div className={`${sec} px-4 py-3.5`}>
+        <div className="flex items-center gap-3 flex-wrap">
+          {!wide && <button type="button" onClick={() => setSelId(null)} className="w-10 h-10 rounded-xl border border-[#DCE3EE] bg-white text-[16px] font-black text-[#1B2B4B]" aria-label="목록으로">‹</button>}
+          <span className="w-12 h-12 rounded-2xl bg-[#0F1A30] text-white grid place-items-center text-[19px] font-black shrink-0">{String(sel.name || "?").slice(0, 1)}</span>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2 flex-wrap"><b className="text-[19px] text-[#0F1A30]">{personName(sel) || sel.name}</b>{dirty && <span className="h-7 px-2.5 rounded-lg text-[14px] font-black inline-flex items-center border border-[#2D4C82] text-[#2D4C82]">수정 중 · 저장 안 됨</span>}</div>
+            <div className="text-[14px] font-bold text-[#5B6B85] truncate">{[sel.team, sel.position, sel.employmentStatus || "재직", sel.hireDate ? `입사 ${sel.hireDate}` : ""].filter(Boolean).join(" · ")}</div>
+          </div>
+          <Seg value={paneTab} onChange={setPaneTab} options={[["pay", "급여 설정"], ["contract", "근로계약서"]]} testid="payemp-tabs" />
+          {!ro && paneTab === "pay" && <button type="button" disabled={busy || !dirty} onClick={save} className="h-11 px-5 rounded-xl bg-[#0F1A30] text-white text-[15px] font-black disabled:opacity-40" data-testid="payemp-save">{busy ? "저장 중…" : "저장"}</button>}
+        </div>
+        {preview && paneTab === "pay" && (
+          <div className="mt-3 rounded-2xl bg-[#0F1A30] text-white px-4 py-3 flex items-center gap-x-4 gap-y-1 flex-wrap" style={NUMS}>
+            <span className="text-[14px] font-bold text-white/70">추가 근무 없는 달{f.payType === "daily" ? "(22일)" : ""}</span>
+            <span className="text-[14px] font-bold">지급 <b>{wonFmt(preview.gross)}</b> − 공제 <b>{wonFmt(preview.totalDeduct)}</b></span>
+            <span className="text-[14px] font-bold text-white/70">통상시급 {wonFmt(preview.ordinaryHourly)}</span>
+            <span className="ml-auto text-[19px] font-black">실지급 {wonFmt(preview.net)}원</span>
+          </div>
+        )}
+      </div>
+      {paneTab === "contract" ? (
+        <React.Suspense fallback={<div className="py-16 text-center text-[15px] font-bold text-[#7A879C]">불러오는 중…</div>}>
+          <PayrollContracts company={company} u={sel} emp={f} settings={settings} canEdit={!ro} docId={empId(company, sel.id)} />
+        </React.Suspense>
+      ) : (
+        <div className="grid grid-cols-1 2xl:grid-cols-2 gap-3 items-start">
+          <BookCard en="BASE PAY" title="기본 급여">
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-2.5">
+              <div><Label>급여형태</Label><Sel disabled={ro} value={f.payType || "monthly"} onChange={(v) => set("payType", v)} options={PAY_TYPES.map(([k, l]) => [k, `${l}제`])} testid="emp-paytype" /></div>
+              <div><Label>고용형태</Label><Sel disabled={ro} value={f.employmentType || "정규직"} onChange={(v) => set("employmentType", v)} options={EMP_TYPES} /></div>
+              {f.payType === "hourly" ? money("hourlyWage", "시급", `최저 ${wonFmt(rates.minWage)}원`) : f.payType === "daily" ? money("dailyWage", "일급", `8h 최저 ${wonFmt(rates.minWage * 8)}원`) : f.payType === "annual" ? money("annualSalary", "연봉", "1년 총액") : money("baseMonthly", "월 기본급")}
+              {f.payType === "annual" && <AnnualBox emp={f} ro={ro} setEmp={set} />}
+              {money("positionAllow", "직책수당", "통상임금 포함")}
+              {money("meal", "식대", `비과세 월 ${wonFmt(rates.mealExempt)}원까지`)}
+              {money("car", "자가운전보조금", `비과세 월 ${wonFmt(rates.carExempt)}원까지`)}
+              <div><Label hint="통상시급 계산">식대 통상임금</Label><Sel disabled={ro} value={f.mealOrdinary ? "y" : "n"} onChange={(v) => set("mealOrdinary", v === "y")} options={[["n", "제외"], ["y", "포함"]]} /></div>
+              <div className="col-span-2 md:col-span-1"><Label hint={sel.birthDate ? "회원 정보" : "명세서 필수"}>생년월일</Label>{sel.birthDate ? <div className={`${inp} flex items-center bg-[#F5F7FB]`} style={NUMS}>{sel.birthDate}</div> : <CustomDatePicker disabled={ro} value={f.birthDate || ""} onChange={(e) => set("birthDate", e.target.value)} className={`${inp} text-left`} showIcon />}</div>
+            </div>
+            {(toNum(f.meal) > toNum(rates.mealExempt) || toNum(f.car) > toNum(rates.carExempt)) && <div className="mt-2.5"><Note>비과세 한도를 넘는 금액은 과세로 계산됩니다.</Note></div>}
+          </BookCard>
+          <BookCard en="ALLOWANCES" title="기타 고정 수당 (매월)">
+            {(f.allowances || []).map((x, i) => {
+              const known = kinds.pay.flatMap(([, l]) => l);
+              const kindVal = known.includes(x.label) ? x.label : x.label ? "__custom" : "";
+              return (
+                <div key={i} className="grid grid-cols-2 md:grid-cols-[minmax(0,1fr)_130px_96px_130px_44px] gap-1.5 mb-1.5">
+                  <div className="col-span-2 md:col-span-1 space-y-1.5">
+                    <Sel disabled={ro} value={kindVal} onChange={(v) => set("allowances", f.allowances.map((y, j) => (j === i ? { ...y, label: v === "__custom" || v === "기타" ? "" : v, custom: v === "__custom" || v === "기타", taxable: v && v !== "__custom" ? kinds.taxableOf(v) : y.taxable } : y)))}
+                      placeholder="수당 종류 선택" groups={[...kinds.pay.map(([g, l]) => [g, l.filter((k) => !FIXED_ONLY.includes(k) && !MONTH_ONLY.includes(k))]), ["직접 입력", [["__custom", x.label && !known.includes(x.label) ? `${x.label}(직접 입력)` : "직접 입력…"]]]]} />
+                    {(kindVal === "__custom" || x.custom) && <input disabled={ro} value={x.label || ""} onChange={(e) => set("allowances", f.allowances.map((y, j) => (j === i ? { ...y, label: e.target.value } : y)))} className={inp} placeholder="수당 이름(예: 자격수당)" />}
                   </div>
-                );
-              })}
-              {!ro && <button type="button" onClick={() => set("allowances", [...(f.allowances || []), { label: "", amount: 0, taxable: true, ordinary: true }])} className="h-10 px-3.5 rounded-lg border border-dashed border-[#5B6B85] text-[14px] font-black text-[#1B2B4B]">+ 수당 추가</button>}
-            </BookCard>
-            <BookCard en="INCOME TAX" title="소득세(간이세액)">
-              <div className="grid grid-cols-3 gap-2.5">
-                <div><Label hint="본인 제외">부양가족</Label><Sel disabled={ro} value={String(Math.max(0, (toNum(f.dependents) || 1) - 1))} onChange={(v) => set("dependents", toNum(v) + 1)} options={N0_10.map((n) => [String(n), `${n}명`])} /></div>
-                <div><Label hint="8~20세">자녀</Label><Sel disabled={ro} value={String(toNum(f.children))} onChange={(v) => set("children", toNum(v))} options={N0_10.map((n) => [String(n), `${n}명`])} /></div>
-                <div><Label>세액 비율</Label><Sel disabled={ro} value={String(toNum(f.taxRatePct) || 100)} onChange={(v) => set("taxRatePct", toNum(v))} options={TAX_RATES.map((p) => [String(p), `${p}%`])} /></div>
-              </div>
-              <div className="mt-2.5"><Label hint="간이세액표 금액을 직접 넣으면 그 값으로">고정 세액(월)</Label><input disabled={ro} inputMode="numeric" value={f.taxFixed ?? ""} onChange={(e) => set("taxFixed", e.target.value.replace(/[^\d]/g, ""))} placeholder="비우면 자동 계산(근사치)" className={numInp} style={NUMS} /></div>
-              <div className="mt-2.5"><Note>{TAX_NOTE}{f.employmentType === FREELANCE ? " · 프리랜서는 사업소득세 3% + 지방 0.3%로 계산" : f.employmentType === "일용직" ? " · 일용직(일급제)은 일용근로소득 2.7%로 계산" : ""}</Note></div>
-            </BookCard>
-            <BookCard en="SOCIAL INSURANCE" title="4대보험">
-              <div className="grid grid-cols-3 gap-2.5">{yn("npExempt", "국민연금")}{yn("hiExempt", "건강·장기요양")}{yn("eiExempt", "고용보험")}</div>
-              <div className="mt-2.5 grid grid-cols-2 gap-2.5">
-                <div><Label hint="비우면 과세급여">국민연금 기준소득월액</Label><Money disabled={ro} value={f.npBase} onChange={(v) => set("npBase", v || "")} placeholder="자동" /></div>
-                <div><Label hint="비우면 과세급여">건강보험 보수월액</Label><Money disabled={ro} value={f.hiBase} onChange={(v) => set("hiBase", v || "")} placeholder="자동" /></div>
-              </div>
-              <div className="mt-2 text-[14px] font-bold text-[#5B6B85]">국민연금 제외: 만 60세 이상 등 · 고용보험 제외: 만 65세 이후 신규 등{f.employmentType === FREELANCE ? " · 프리랜서는 모두 제외로 계산" : ""}</div>
-            </BookCard>
+                  <Money disabled={ro} value={x.amount} onChange={(v) => set("allowances", f.allowances.map((y, j) => (j === i ? { ...y, amount: v } : y)))} />
+                  <Sel disabled={ro} value={x.taxable === false ? "n" : "y"} onChange={(v) => set("allowances", f.allowances.map((y, j) => (j === i ? { ...y, taxable: v === "y" } : y)))} options={[["y", "과세"], ["n", "비과세"]]} />
+                  <Sel disabled={ro} value={x.ordinary === false ? "n" : "y"} onChange={(v) => set("allowances", f.allowances.map((y, j) => (j === i ? { ...y, ordinary: v === "y" } : y)))} options={[["y", "통상임금 포함"], ["n", "통상임금 제외"]]} />
+                  {!ro && <button type="button" onClick={() => set("allowances", f.allowances.filter((_, j) => j !== i))} aria-label="줄 삭제" className="h-11 w-11 rounded-xl border border-[#DCE3EE] bg-white text-[#5B6B85] hover:text-[#B42318]">✕</button>}
+                </div>
+              );
+            })}
+            {!(f.allowances || []).length && <div className="mb-2 text-[14px] font-bold text-[#7A879C]">매월 고정으로 주는 수당이 있으면 추가하세요</div>}
+            {!ro && <button type="button" onClick={() => set("allowances", [...(f.allowances || []), { label: "", amount: 0, taxable: true, ordinary: true }])} className="h-10 px-3.5 rounded-lg border border-dashed border-[#5B6B85] text-[14px] font-black text-[#1B2B4B]">+ 수당 추가</button>}
+          </BookCard>
+          <BookCard en="INCOME TAX" title="소득세(간이세액)">
+            <div className="grid grid-cols-3 gap-2.5">
+              <div><Label hint="본인 제외">부양가족</Label><Sel disabled={ro} value={String(Math.max(0, (toNum(f.dependents) || 1) - 1))} onChange={(v) => set("dependents", toNum(v) + 1)} options={N0_10.map((n) => [String(n), `${n}명`])} /></div>
+              <div><Label hint="8~20세">자녀</Label><Sel disabled={ro} value={String(toNum(f.children))} onChange={(v) => set("children", toNum(v))} options={N0_10.map((n) => [String(n), `${n}명`])} /></div>
+              <div><Label>세액 비율</Label><Sel disabled={ro} value={String(toNum(f.taxRatePct) || 100)} onChange={(v) => set("taxRatePct", toNum(v))} options={TAX_RATES.map((p) => [String(p), `${p}%`])} /></div>
+            </div>
+            <div className="mt-2.5"><Label hint="간이세액표 금액을 넣으면 그 값으로">고정 세액(월)</Label><input disabled={ro} inputMode="numeric" value={f.taxFixed ?? ""} onChange={(e) => set("taxFixed", e.target.value.replace(/[^\d]/g, ""))} placeholder="비우면 자동 계산(근사치)" className={numInp} style={NUMS} /></div>
+            <div className="mt-2.5"><Note>{TAX_NOTE}{f.employmentType === FREELANCE ? " · 프리랜서는 사업소득세 3% + 지방 0.3%로 계산" : f.employmentType === "일용직" ? " · 일용직(일급제)은 일용근로소득 2.7%로 계산" : ""}</Note></div>
+          </BookCard>
+          <BookCard en="SOCIAL INSURANCE" title="4대보험">
+            <div className="grid grid-cols-3 gap-2.5">{yn("npExempt", "국민연금")}{yn("hiExempt", "건강·장기요양")}{yn("eiExempt", "고용보험")}</div>
+            <div className="mt-2.5 grid grid-cols-2 gap-2.5">
+              <div><Label hint="비우면 과세급여">국민연금 기준소득월액</Label><Money disabled={ro} value={f.npBase} onChange={(v) => set("npBase", v || "")} placeholder="자동" /></div>
+              <div><Label hint="비우면 과세급여">건강보험 보수월액</Label><Money disabled={ro} value={f.hiBase} onChange={(v) => set("hiBase", v || "")} placeholder="자동" /></div>
+            </div>
+            <div className="mt-2 text-[14px] font-bold text-[#5B6B85]">국민연금 제외: 만 60세 이상 등 · 고용보험 제외: 만 65세 이후 신규 등{f.employmentType === FREELANCE ? " · 프리랜서는 모두 제외로 계산" : ""}</div>
+          </BookCard>
+          <div className="2xl:col-span-2">
             <BookCard en="PAY ACCOUNT" title="급여 지급 계좌">
               {userAccounts(sel).length > 0 && <div className="mb-2"><Sel disabled={ro} value="" onChange={(k) => { const x = userAccounts(sel).find((y) => acctKey(y) === k); if (x) set("payAccount", x); }} placeholder="회원 정보의 계좌 불러오기" options={userAccounts(sel).map((x) => [acctKey(x), acctText(x)])} /></div>}
-              <div className="grid grid-cols-2 md:grid-cols-[170px_minmax(0,1fr)_130px] gap-2">
+              <div className="grid grid-cols-2 md:grid-cols-[200px_minmax(0,1fr)_160px] gap-2">
                 <Sel disabled={ro} value={acct.bank || ""} onChange={(v) => setAcct({ bank: v })} placeholder="은행 선택" options={BANK_NAMES} testid="emp-bank" />
                 <input disabled={ro} inputMode="numeric" value={acct.acct ? formatAccount(acct.bank, acct.acct) : ""} onChange={(e) => setAcct({ acct: onlyDigits(e.target.value) })} placeholder="계좌번호" className={`${inp} col-span-2 md:col-span-1 order-3 md:order-none`} style={NUMS} />
                 <input disabled={ro} value={acct.holder || ""} onChange={(e) => setAcct({ holder: e.target.value })} placeholder="예금주" className={inp} />
               </div>
             </BookCard>
-            {preview && <div className="rounded-2xl bg-[#0F1A30] text-white px-4 py-3 flex items-center gap-3 flex-wrap"><span className="text-[14px] font-bold text-white/70">추가 근무 없는 달 기준{f.payType === "daily" ? "(22일)" : ""}</span><span className="text-[14px] font-bold">지급 <b style={NUMS}>{wonFmt(preview.gross)}</b> − 공제 <b style={NUMS}>{wonFmt(preview.totalDeduct)}</b></span><span className="ml-auto text-[19px] font-black" style={NUMS}>실지급 {wonFmt(preview.net)}원</span></div>}
           </div>
-        </Sheet>
+        </div>
       )}
+    </div>
+  ) : (
+    <div className={`${sec} py-24 text-center text-[15px] font-bold text-[#7A879C]`}>왼쪽에서 직원을 고르세요</div>
+  );
+
+  return (
+    <div className="space-y-3" data-testid="payroll-emps">
+      <BookHero en="PAYROLL · EMPLOYEES" title="직원 급여 설정" desc="월급 · 연봉 · 시급 · 일급, 수당, 부양가족, 4대보험, 지급 계좌, 근로계약서. 한 번 정해 두면 매달 그대로 계산해요"
+        kpis={[["직원", `${all.length}명`], ["설정 완료", `${nDone}명`], ["설정 필요", `${all.length - nDone}명`], ["연봉제", `${all.filter((u) => map[u.id]?.payType === "annual").length}명`]]} />
+      {wide ? <div className="grid grid-cols-[minmax(320px,380px)_minmax(0,1fr)] gap-3 items-start">{listNode}{detail}</div> : sel ? detail : listNode}
     </div>
   );
 }
 
 // ── 요율 · 설정 ──
+// ⭐ 2026-11-07 단순하게 — 근로자 4대보험 요율 4개를 큰 카드로 + [2026 기준값] · 나머지(회사 부담·상하한·비과세 한도·가산율·최저시급)는 "자세한 요율"에 접어 둠
+const MAIN_RATES = [["npEmp", "국민연금", "근로자 부담"], ["hiEmp", "건강보험", "근로자 부담"], ["ltcRatio", "장기요양", "건강보험료 대비"], ["eiEmp", "고용보험", "근로자 부담"]];
 function PayRates({ company, ro }) {
   const settings = usePayrollSettings(company);
   const [year, setYear] = React.useState(() => Number(kstYm().slice(0, 4)));
   const [f, setF] = React.useState(null);
   const [opt, setOpt] = React.useState(null);
   const [busy, setBusy] = React.useState(false);
+  const [adv, setAdv] = React.useState(false);
+  const [saved, setSaved] = React.useState("");
   React.useEffect(() => {
     if (settings !== undefined) {
       setF(ratesFor(settings || {}, year));
@@ -1033,7 +1027,7 @@ function PayRates({ company, ro }) {
   }, [settings, year]);
   if (!f || !opt) return <div className="py-16 text-center text-[15px] font-bold text-[#7A879C]">불러오는 중…</div>;
   const save = async () => {
-    setBusy(true);
+    setBusy(true); setSaved("");
     try {
       const vals = Object.fromEntries(RATE_FIELDS.map(([k]) => [k, toNum(f[k])]));
       await setDoc(doc(db, "payrollSettings", company), {
@@ -1042,78 +1036,104 @@ function PayRates({ company, ro }) {
         customDeductItems: uniq(opt.customDeductItems.map((x) => String(x || "").trim())),
         updatedAt: serverTimestamp(), updatedBy: auth.currentUser?.email || "",
       }, { merge: true });
-      alert("저장했습니다.");
+      setSaved("저장했어요");
     } catch (e) { alert(`저장 실패: ${e.message}`); } finally { setBusy(false); }
   };
   const p = presetFor(year);
   const yearOpts = uniq([2025, year - 1, year, year + 1, Number(kstYm().slice(0, 4)) + 1]).filter((y) => y >= 2025).sort();
+  const changed = RATE_FIELDS.filter(([k]) => String(p[k]) !== String(f[k])).length;
+  const field = ([k, label, unit, hint]) => (
+    <div key={k}>
+      <Label hint={hint}>{label}</Label>
+      <div className="relative"><input disabled={ro} inputMode="decimal" value={unit === "원" ? (toNum(f[k]) ? wonFmt(f[k]) : "") : (f[k] ?? "")} onChange={(e) => setF((x) => ({ ...x, [k]: unit === "원" ? toNum(e.target.value) : e.target.value.replace(/[^\d.]/g, "") }))} className={`${numInp} pr-12`} style={NUMS} data-testid={`rate-${k}`} />
+        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[14px] font-black text-[#7A879C]">{unit}</span></div>
+      {String(p[k]) !== String(f[k]) && <div className="mt-1 text-[14px] font-bold text-[#2D4C82]">기준값 {unit === "원" ? wonFmt(p[k]) : p[k]}{unit}</div>}
+    </div>
+  );
   return (
-    <div className="space-y-3" onKeyDown={enterNext}>
-      <BookHero en={`PAYROLL · RATES · ${year}`} title="요율 · 급여 설정" desc="4대보험 요율·상하한·비과세 한도·가산율은 연도별로 저장됩니다 — 처음 값은 그 해 법정 요율"
+    <div className="space-y-3" onKeyDown={enterNext} data-testid="payroll-rates">
+      <BookHero en={`PAYROLL · RATES · ${year}`} title="요율 · 급여 설정" desc="처음 값은 그 해 법정 요율이에요. 고시가 바뀌면 여기서 고치면 되고, 확정한 달은 그때 요율이 그대로 남아요"
         right={<Sel dark ariaLabel="연도" value={String(year)} onChange={(v) => setYear(Number(v))} options={yearOpts.map((y) => [String(y), `${y}년 요율`])} className="w-[160px]" />} />
-      <BookCard en="RATES" title={`${year}년 요율`} right={!ro && <button type="button" onClick={() => setF({ ...presetFor(year) })} className="h-10 px-3.5 rounded-lg border border-[#DCE3EE] bg-white text-[14px] font-black text-[#1B2B4B]">법정 기본값으로</button>}>
-        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-2.5">
-          {RATE_FIELDS.map(([k, label, unit, hint]) => (
-            <div key={k}>
-              <Label hint={hint}>{label}</Label>
-              <div className="relative"><input disabled={ro} inputMode="decimal" value={unit === "원" ? (toNum(f[k]) ? wonFmt(f[k]) : "") : (f[k] ?? "")} onChange={(e) => setF((x) => ({ ...x, [k]: unit === "원" ? toNum(e.target.value) : e.target.value.replace(/[^\d.]/g, "") }))} className={`${numInp} pr-12`} style={NUMS} data-testid={`rate-${k}`} />
-                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[14px] font-black text-[#7A879C]">{unit}</span></div>
-              {String(p[k]) !== String(f[k]) && <div className="mt-1 text-[14px] font-bold text-[#2D4C82]">법정 기본 {unit === "원" ? wonFmt(p[k]) : p[k]}{unit}</div>}
-            </div>
+      <div className={`${sec} p-4`}>
+        <div className="flex items-center gap-2 flex-wrap mb-3">
+          <div className="min-w-0"><div className="text-[11px] font-extrabold tracking-[0.22em] text-[#4B6CB7]" style={NUMS}>SOCIAL INSURANCE</div><div className="text-[17px] font-black text-[#0F1A30]">{year}년 4대보험 요율 <span className="text-[14px] font-bold text-[#5B6B85]">· 근로자 부담</span></div></div>
+          <span className="flex-1" />
+          {changed > 0 && <span className="text-[14px] font-bold text-[#2D4C82]">기준값과 다른 칸 {changed}개</span>}
+          {!ro && <button type="button" onClick={() => setF({ ...presetFor(year) })} className="h-10 px-3.5 rounded-xl border border-[#1B2B4B] bg-white text-[14px] font-black text-[#1B2B4B]" data-testid="rates-reset">{year} 기준값으로</button>}
+        </div>
+        <div className="grid grid-cols-2 xl:grid-cols-4 gap-2.5">
+          {MAIN_RATES.map(([k, label, sub]) => (
+            <label key={k} className="rounded-2xl bg-[#F5F8FD] border border-[#E3E8F0] px-4 py-3 block cursor-text">
+              <div className="flex items-baseline justify-between gap-2"><span className="text-[15px] font-black text-[#0F1A30]">{label}</span><span className="text-[14px] font-bold text-[#7A879C]">{sub}</span></div>
+              <div className="mt-1 flex items-baseline gap-1">
+                <input disabled={ro} inputMode="decimal" value={f[k] ?? ""} onChange={(e) => setF((x) => ({ ...x, [k]: e.target.value.replace(/[^\d.]/g, "") }))} className="min-w-0 bg-transparent font-black text-[#0F1A30] outline-none border-b-2 border-transparent focus:border-[#2D4C82]" style={{ ...NUMS, fontSize: 30, lineHeight: 1.15, width: `${Math.max(3, String(f[k] ?? "").length + 0.6)}ch` }} data-testid={`rate-${k}`} aria-label={`${label} 요율`} />
+                <span className="text-[18px] font-black text-[#5B6B85]">%</span>
+              </div>
+              <div className={`text-[14px] font-bold ${String(p[k]) !== String(f[k]) ? "text-[#2D4C82]" : "text-[#7A879C]"}`}>{String(p[k]) !== String(f[k]) ? `기준값 ${p[k]}%` : "기준값 그대로"}</div>
+            </label>
           ))}
         </div>
-        <div className="mt-3 rounded-xl bg-[#F5F8FD] border border-[#E3E8F0] px-3.5 py-2.5 text-[14px] text-[#3A4A66] leading-relaxed">
-          2026년 처음 값: 국민연금 9.5%(근로자 4.75% — 연금개혁으로 2026년부터 매년 0.5%p 인상) · 건강보험 7.19%(근로자 3.595%) · 장기요양 = 건강보험료 × 13.14% · 고용보험 근로자 0.9% · 최저시급 10,320원.
-          고시가 바뀌면 여기서 고치면 됩니다(확정된 달은 확정할 때의 요율이 그대로 남습니다).
-        </div>
-      </BookCard>
-      <BookCard en="OPTIONS" title="급여 설정">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          <div><Label>급여 지급일</Label><div className="grid grid-cols-2 gap-2">
-            <Sel disabled={ro} value={opt.payNextMonth ? "next" : "same"} onChange={(v) => setOpt((o) => ({ ...o, payNextMonth: v === "next" }))} options={[["next", "다음 달"], ["same", "그 달"]]} ariaLabel="지급 월" />
-            <Sel disabled={ro} value={String(toNum(opt.payDay) || 10)} onChange={(v) => setOpt((o) => ({ ...o, payDay: toNum(v) }))} options={Array.from({ length: 28 }, (_, i) => [String(i + 1), `${i + 1}일`])} ariaLabel="지급일" testid="opt-payday" />
-          </div></div>
-          <div><Label>사업장 규모</Label><Sel disabled={ro} value={opt.small ? "small" : "normal"} onChange={(v) => setOpt((o) => ({ ...o, small: v === "small" }))} options={[["normal", "상시 5인 이상"], ["small", "5인 미만(가산수당 없음)"]]} /></div>
-          <div className="md:col-span-2"><Label>장부 연동</Label><Sel disabled={ro} value={opt.ledgerOn ? "y" : "n"} onChange={(v) => setOpt((o) => ({ ...o, ledgerOn: v === "y" }))} options={[["y", "지급 처리하면 수입·지출 장부에 \"급여·상여\" 지출 자동 기록"], ["n", "장부에 기록하지 않음"]]} /></div>
-        </div>
-      </BookCard>
-      {/* ⭐ 2026-11-06 회사 수당·공제 항목 — 급여 계산의 수당/공제 종류 드롭다운에 함께 나온다 */}
-      <BookCard en="CUSTOM ITEMS" title="회사 수당 · 공제 항목">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <Label hint="수당 종류 드롭다운에 추가">회사 수당 항목</Label>
-            <div className="space-y-1.5">
-              {opt.customPayItems.map((x, i) => (
-                <div key={i} className="grid grid-cols-[minmax(0,1fr)_110px_44px] gap-1.5">
-                  <input disabled={ro} value={x.label} onChange={(e) => setOpt((o) => ({ ...o, customPayItems: o.customPayItems.map((y, j) => (j === i ? { ...y, label: e.target.value } : y)) }))} className={inp} placeholder="예: 안전운행수당" />
-                  <Sel disabled={ro} value={x.taxable === false ? "n" : "y"} onChange={(v) => setOpt((o) => ({ ...o, customPayItems: o.customPayItems.map((y, j) => (j === i ? { ...y, taxable: v === "y" } : y)) }))} options={[["y", "과세"], ["n", "비과세"]]} />
-                  {!ro && <button type="button" onClick={() => setOpt((o) => ({ ...o, customPayItems: o.customPayItems.filter((_, j) => j !== i) }))} aria-label="삭제" className="h-11 w-11 rounded-xl border border-[#DCE3EE] bg-white text-[#5B6B85]">✕</button>}
-                </div>
-              ))}
-              {!ro && <button type="button" onClick={() => setOpt((o) => ({ ...o, customPayItems: [...o.customPayItems, { label: "", taxable: true }] }))} className="h-10 px-3.5 rounded-lg border border-dashed border-[#5B6B85] text-[14px] font-black text-[#1B2B4B]">+ 수당 항목</button>}
+        <div className="mt-3 text-[14px] font-bold text-[#5B6B85] leading-relaxed">{year === 2026 ? "2026년: 국민연금 4.75% · 건강보험 3.595% · 장기요양 = 건강보험료 × 13.14% · 고용보험 0.9% · 최저시급 10,320원" : `${year}년 기준값은 ${presetFor(year).year}년 법정 요율이에요`}</div>
+        <button type="button" onClick={() => setAdv((v) => !v)} className="mt-3 h-11 w-full rounded-xl border border-[#DCE3EE] bg-white text-[14px] font-black text-[#1B2B4B] flex items-center justify-center gap-2" aria-expanded={adv} data-testid="rates-adv">
+          자세한 요율 {adv ? "접기" : "펼치기"} <span className="font-bold text-[#7A879C]">회사 부담 · 상하한 · 비과세 한도 · 가산율 · 최저시급</span>
+        </button>
+        {adv && <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-2.5">{RATE_FIELDS.filter(([k]) => !MAIN_RATES.some((m) => m[0] === k)).map(field)}</div>}
+      </div>
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-3 items-start">
+        <BookCard en="OPTIONS" title="급여 설정">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div><Label>급여 지급일</Label><div className="grid grid-cols-2 gap-2">
+              <Sel disabled={ro} value={opt.payNextMonth ? "next" : "same"} onChange={(v) => setOpt((o) => ({ ...o, payNextMonth: v === "next" }))} options={[["next", "다음 달"], ["same", "그 달"]]} ariaLabel="지급 월" />
+              <Sel disabled={ro} value={String(toNum(opt.payDay) || 10)} onChange={(v) => setOpt((o) => ({ ...o, payDay: toNum(v) }))} options={Array.from({ length: 28 }, (_, i) => [String(i + 1), `${i + 1}일`])} ariaLabel="지급일" testid="opt-payday" />
+            </div></div>
+            <div><Label>사업장 규모</Label><Sel disabled={ro} value={opt.small ? "small" : "normal"} onChange={(v) => setOpt((o) => ({ ...o, small: v === "small" }))} options={[["normal", "상시 5인 이상"], ["small", "5인 미만(가산수당 없음)"]]} /></div>
+            <div className="md:col-span-2"><Label>장부 연동</Label><Sel disabled={ro} value={opt.ledgerOn ? "y" : "n"} onChange={(v) => setOpt((o) => ({ ...o, ledgerOn: v === "y" }))} options={[["y", "지급 처리하면 수입·지출 장부에 \"급여·상여\" 지출 자동 기록"], ["n", "장부에 기록하지 않음"]]} /></div>
+          </div>
+        </BookCard>
+        {/* 회사 수당·공제 항목 — 급여 계산의 수당/공제 종류 드롭다운에 함께 나온다 */}
+        <BookCard en="CUSTOM ITEMS" title="회사 수당 · 공제 항목">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <Label hint="수당 종류에 추가">회사 수당 항목</Label>
+              <div className="space-y-1.5">
+                {opt.customPayItems.map((x, i) => (
+                  <div key={i} className="grid grid-cols-[minmax(0,1fr)_100px_44px] gap-1.5">
+                    <input disabled={ro} value={x.label} onChange={(e) => setOpt((o) => ({ ...o, customPayItems: o.customPayItems.map((y, j) => (j === i ? { ...y, label: e.target.value } : y)) }))} className={inp} placeholder="예: 안전운행수당" />
+                    <Sel disabled={ro} value={x.taxable === false ? "n" : "y"} onChange={(v) => setOpt((o) => ({ ...o, customPayItems: o.customPayItems.map((y, j) => (j === i ? { ...y, taxable: v === "y" } : y)) }))} options={[["y", "과세"], ["n", "비과세"]]} />
+                    {!ro && <button type="button" onClick={() => setOpt((o) => ({ ...o, customPayItems: o.customPayItems.filter((_, j) => j !== i) }))} aria-label="삭제" className="h-11 w-11 rounded-xl border border-[#DCE3EE] bg-white text-[#5B6B85]">✕</button>}
+                  </div>
+                ))}
+                {!ro && <button type="button" onClick={() => setOpt((o) => ({ ...o, customPayItems: [...o.customPayItems, { label: "", taxable: true }] }))} className="h-10 px-3.5 rounded-lg border border-dashed border-[#5B6B85] text-[14px] font-black text-[#1B2B4B]">+ 수당 항목</button>}
+              </div>
+            </div>
+            <div>
+              <Label hint="공제 종류에 추가">회사 공제 항목</Label>
+              <div className="space-y-1.5">
+                {opt.customDeductItems.map((x, i) => (
+                  <div key={i} className="grid grid-cols-[minmax(0,1fr)_44px] gap-1.5">
+                    <input disabled={ro} value={x} onChange={(e) => setOpt((o) => ({ ...o, customDeductItems: o.customDeductItems.map((y, j) => (j === i ? e.target.value : y)) }))} className={inp} placeholder="예: 노조비" />
+                    {!ro && <button type="button" onClick={() => setOpt((o) => ({ ...o, customDeductItems: o.customDeductItems.filter((_, j) => j !== i) }))} aria-label="삭제" className="h-11 w-11 rounded-xl border border-[#DCE3EE] bg-white text-[#5B6B85]">✕</button>}
+                  </div>
+                ))}
+                {!ro && <button type="button" onClick={() => setOpt((o) => ({ ...o, customDeductItems: [...o.customDeductItems, ""] }))} className="h-10 px-3.5 rounded-lg border border-dashed border-[#5B6B85] text-[14px] font-black text-[#1B2B4B]">+ 공제 항목</button>}
+              </div>
             </div>
           </div>
-          <div>
-            <Label hint="공제 종류 드롭다운에 추가">회사 공제 항목</Label>
-            <div className="space-y-1.5">
-              {opt.customDeductItems.map((x, i) => (
-                <div key={i} className="grid grid-cols-[minmax(0,1fr)_44px] gap-1.5">
-                  <input disabled={ro} value={x} onChange={(e) => setOpt((o) => ({ ...o, customDeductItems: o.customDeductItems.map((y, j) => (j === i ? e.target.value : y)) }))} className={inp} placeholder="예: 노조비" />
-                  {!ro && <button type="button" onClick={() => setOpt((o) => ({ ...o, customDeductItems: o.customDeductItems.filter((_, j) => j !== i) }))} aria-label="삭제" className="h-11 w-11 rounded-xl border border-[#DCE3EE] bg-white text-[#5B6B85]">✕</button>}
-                </div>
-              ))}
-              {!ro && <button type="button" onClick={() => setOpt((o) => ({ ...o, customDeductItems: [...o.customDeductItems, ""] }))} className="h-10 px-3.5 rounded-lg border border-dashed border-[#5B6B85] text-[14px] font-black text-[#1B2B4B]">+ 공제 항목</button>}
-            </div>
-          </div>
+        </BookCard>
+      </div>
+      {!ro && (
+        <div className="sticky bottom-2 z-10 flex items-center gap-3">
+          <button type="button" disabled={busy} onClick={save} className="flex-1 h-12 rounded-xl bg-[#0F1A30] text-white text-[15px] font-black disabled:opacity-50 shadow-[0_10px_24px_rgba(15,26,48,0.25)]" data-testid="rates-save">{busy ? "저장 중…" : `${year}년 요율 · 설정 저장`}</button>
+          {saved && <span className="text-[14px] font-black text-[#2D4C82]" role="status">{saved}</span>}
         </div>
-      </BookCard>
-      {!ro && <button type="button" disabled={busy} onClick={save} className="w-full h-12 rounded-xl bg-[#0F1A30] text-white text-[15px] font-black disabled:opacity-50" data-testid="rates-save">{busy ? "저장 중…" : `${year}년 요율 · 설정 저장`}</button>}
+      )}
     </div>
   );
 }
 
 // ═════════════════ 내 급여명세서(직원 본인 — 발행된 것만) ═════════════════
-export function MyPayslips({ company, uid: uidIn }) {
+// ⭐ 2026-11-07 내정보 › 급여명세서 탭(MyPayslipsSection) · 모바일 내정보도 같은 것 · 명세서는 새 디자인(payslipDoc.js)
+export function MyPayslips({ company, uid: uidIn, compact = false }) {
   const uid = uidIn || auth.currentUser?.uid || "";
   const [rows, setRows] = React.useState(null);
   const [sel, setSel] = React.useState(null);
@@ -1125,30 +1145,44 @@ export function MyPayslips({ company, uid: uidIn }) {
   React.useEffect(() => { if (cur && !cur.readAt && uid && cur.uid === uid) updateDoc(doc(db, "payslips", cur.id), { readAt: Date.now() }).catch(() => {}); }, [cur, uid]);
   const year = cur?.ym?.slice(0, 4);
   const yearRows = (rows || []).filter((r) => r.ym?.startsWith(year || ""));
+  const years = uniq((rows || []).map((r) => r.ym?.slice(0, 4)));
+  const kpis = cur ? [["최근 실수령액", `${wonFmt(cur.result?.net)}원`, ymLabel(cur.ym)], [`${year}년 지급 총액`, `${wonFmt(yearRows.reduce((s, r) => s + (r.result?.gross || 0), 0))}원`, `${yearRows.length}개월`], [`${year}년 실수령 합계`, `${wonFmt(yearRows.reduce((s, r) => s + (r.result?.net || 0), 0))}원`]] : [];
   return (
-    <div className="space-y-3" data-testid="my-payslips">
-      <BookHero en="MY · PAYSLIP" title="급여명세서" desc="회사가 발행한 본인 급여명세서만 보입니다 · 인쇄하거나 PDF로 저장할 수 있습니다"
-        kpis={cur ? [["최근 실수령액", `${wonFmt(cur.result?.net)}원`, ymLabel(cur.ym)], [`${year}년 지급 총액`, `${wonFmt(yearRows.reduce((s, r) => s + (r.result?.gross || 0), 0))}원`], [`${year}년 실수령 합계`, `${wonFmt(yearRows.reduce((s, r) => s + (r.result?.net || 0), 0))}원`]] : []} />
-      {rows === null ? <div className="py-16 text-center text-[14px] font-bold text-[#9AA9C3]">불러오는 중…</div> : !rows.length ? (
-        <div className="rounded-2xl bg-white border border-[#E3E8F0] py-16 text-center text-[15px] font-bold text-[#7A879C]">아직 발행된 급여명세서가 없습니다</div>
+    <div className="space-y-3 min-w-0" data-testid="my-payslips">
+      {compact ? (
+        cur && <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">{kpis.map(([k, v, sub]) => <div key={k} className="rounded-2xl bg-white border border-[#E3E8F0] px-4 py-3"><div className="text-[14px] font-bold text-[#5B6B85]">{k}</div><div className="text-[19px] font-black text-[#0F1A30]" style={NUMS}>{v}</div>{sub && <div className="text-[14px] font-bold text-[#7A879C]">{sub}</div>}</div>)}</div>
       ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-[260px_minmax(0,1fr)] gap-3 items-start">
-          <div className="rounded-[20px] bg-white border border-[#E3E8F0] overflow-hidden flex lg:block overflow-x-auto">
-            {rows.map((r) => (
-              <button key={r.id} type="button" onClick={() => setSel(r.id)} className={`shrink-0 lg:w-full text-left px-4 py-3 border-b border-[#EEF1F6] ${cur?.id === r.id ? "bg-[#F2F6FD] shadow-[inset_3px_0_0_#1B2B4B]" : ""}`}>
-                <div className="text-[15px] font-black text-[#0F1A30] whitespace-nowrap">{ymLabel(r.ym)}{!r.readAt && <span className="ml-1.5 text-[11px] font-black px-1.5 py-0.5 rounded bg-[#FF3B30] text-white">N</span>}</div>
-                <div className="text-[14px] font-black text-[#2D4C82] whitespace-nowrap" style={NUMS}>{wonFmt(r.result?.net)}원</div>
-              </button>
+        <BookHero en="MY · PAYSLIP" title="급여명세서" desc="회사가 발행한 본인 급여명세서만 보여요. 인쇄하거나 PDF로 저장할 수 있어요" kpis={kpis} />
+      )}
+      {rows === null ? <div className="py-16 text-center text-[15px] font-bold text-[#7A879C]">불러오는 중…</div> : !rows.length ? (
+        <div className="rounded-2xl bg-white border border-[#E3E8F0] py-16 text-center text-[15px] font-bold text-[#7A879C]">아직 발행된 급여명세서가 없어요</div>
+      ) : (
+        <div className="grid grid-cols-1 lg:grid-cols-[240px_minmax(0,1fr)] gap-3 items-start">
+          <div className="rounded-[20px] bg-white border border-[#E3E8F0] overflow-hidden flex lg:block overflow-x-auto no-scrollbar" role="tablist" aria-label="귀속 월">
+            {years.map((y) => (
+              <React.Fragment key={y}>
+                <div className="hidden lg:block px-4 pt-3 pb-1 text-[14px] font-black text-[#7A879C]" style={NUMS}>{y}년</div>
+                {rows.filter((r) => r.ym?.startsWith(y)).map((r) => (
+                  <button key={r.id} type="button" role="tab" aria-selected={cur?.id === r.id} onClick={() => setSel(r.id)} className={`shrink-0 lg:w-full text-left px-4 py-2.5 lg:border-t border-[#EEF1F6] ${cur?.id === r.id ? "bg-[#EEF3FC] shadow-[inset_3px_0_0_#1B2B4B]" : "hover:bg-[#F8FAFD]"}`} data-testid="my-slip-row">
+                    <div className="text-[15px] font-black text-[#0F1A30] whitespace-nowrap">{Number(r.ym.slice(5, 7))}월<span className="lg:hidden text-[14px] font-bold text-[#7A879C]"> · {r.ym.slice(0, 4)}</span>{!r.readAt && <span className="ml-1.5 text-[14px] font-black px-1.5 rounded bg-[#2D4C82] text-white align-middle">새 명세서</span>}</div>
+                    <div className="text-[14px] font-black text-[#2D4C82] whitespace-nowrap" style={NUMS}>{wonFmt(r.result?.net)}원</div>
+                  </button>
+                ))}
+              </React.Fragment>
             ))}
           </div>
           {cur && (
             <div className="space-y-2 min-w-0">
-              <div className="flex justify-end"><button type="button" onClick={() => printPayslips([cur], company || cur.companyName)} className="h-10 px-4 rounded-xl bg-[#0F1A30] text-white text-[14px] font-black">인쇄 · PDF 저장</button></div>
-              <div className="rounded-[20px] bg-white border border-[#E3E8F0] p-3 md:p-5 overflow-x-auto"><PayslipView slip={cur} company={company || cur.companyName} /></div>
+              <div className="flex items-center justify-between gap-2 flex-wrap"><span className="text-[14px] font-bold text-[#5B6B85]">{ymLabel(cur.ym)} · {cur.status === "paid" ? `지급 완료 ${cur.paidDate || ""}` : "지급 예정"}</span><button type="button" onClick={() => printPayslips([cur], company || cur.companyName)} className="h-11 px-4 rounded-xl bg-[#0F1A30] text-white text-[14px] font-black" data-testid="my-slip-print">인쇄 · PDF 저장</button></div>
+              <div className="rounded-[20px] bg-white border border-[#E3E8F0] p-3 md:p-5"><PayslipView slip={cur} company={company || cur.companyName} /></div>
             </div>
           )}
         </div>
       )}
     </div>
   );
+}
+// 내정보 화면 안 탭 — 머리 카드 없이
+export function MyPayslipsSection(props) {
+  return <MyPayslips {...props} compact />;
 }

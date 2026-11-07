@@ -46,7 +46,7 @@ const PcAccounting = React.lazy(() => import("../DispatchApp").then((m) => ({ de
 // ⭐ 2026-11-06 직원 급여 · 급여명세서 · 연차 사용 촉진
 const PayrollCenter = React.lazy(() => import("../Payroll"));
 const MyPayslips = React.lazy(() => import("../Payroll").then((m) => ({ default: m.MyPayslips })));
-const LeavePromotionBoard = React.lazy(() => import("../LeavePromotion"));
+import LeaveArea from "../LeaveArea"; // ⭐ 2026-11-07 연차 현황 + 연차 사용 촉진 한 화면
 const MyLeavePlan = React.lazy(() => import("../LeavePromotion").then((m) => ({ default: m.MyLeavePlan })));
 const PcHrPage = React.lazy(() => import("../DispatchApp").then((m) => ({ default: m.PcHrPage })));
 // ⭐ 2026-11-05 PC·모바일 일치 — 기사관리·거래처관리(PC 화면 그대로)
@@ -294,7 +294,7 @@ export default function MobilePcView({ kind, users = [], dispatchData = [], carr
     else if (k === "payroll") body = <React.Suspense fallback={<Loading />}><div className="px-3 py-3 kp-m-pc"><PayrollCenter company={userCompany} role={role} /></div></React.Suspense>;
     else if (k === "payslip") body = <React.Suspense fallback={<Loading />}><div className="px-3 py-3 kp-m-pc"><MyPayslips company={userCompany} uid={me?.uid} /></div></React.Suspense>;
     else if (k === "leaveplan") body = <React.Suspense fallback={<Loading />}><div className="px-3 py-3 kp-m-pc"><MyLeavePlan company={userCompany} uid={me?.uid} /></div></React.Suspense>;
-    else if (k === "leavepromo") body = <React.Suspense fallback={<Loading />}><div className="px-3 py-3 kp-m-pc"><LeavePromotionBoard company={userCompany} canManage={role === "hrManager" || role === "totalMaster" || role === "hrAcct" || role === "allMgr" || role === "hrStaff" || /인사/.test(String(me?.team || "")) || me?.isMaster === true} /></div></React.Suspense>;
+    else if (k === "leavepromo") body = wrap(<LeaveArea company={userCompany} isViewer={isViewer} initial="promo" canManage={role === "hrManager" || role === "totalMaster"} promoManage={role === "hrManager" || role === "totalMaster" || role === "hrAcct" || role === "allMgr" || role === "hrStaff" || /인사/.test(String(me?.team || "")) || me?.isMaster === true} />);
     // ⭐ 2026-11-02 점검 — 모바일 인사관리부에도 me 전달(부고 알림 작성자 이름·uid 누락으로 본인 푸시/메일·타인 수정 가능 문제 수정, PC 와 동일)
     else if (k === "hr") body = <div className="kp-m-pc"><HrHub company={userCompany} me={{ uid: me?.uid, name: me?.name || me?.displayName || "" }} role={role} canManage={role === "hrManager" || role === "totalMaster" || role === "hrAcct" || (/인사/.test(String(me?.team || "")) && role !== "viewer")}
       renderRecord={(focusUid) => <React.Suspense fallback={<Loading />}><PcHrPage userCompany={userCompany} role={role} userId={me?.uid || ""} focusUid={focusUid} /></React.Suspense>}
@@ -307,7 +307,7 @@ export default function MobilePcView({ kind, users = [], dispatchData = [], carr
     else if (k === "funds") body = wrap(<FundsBoard company={userCompany} canEdit={false} />);
     else if (k === "execsched") body = <div className="px-2 py-2"><ExecScheduleBoard company={userCompany} me={me} canWrite={canWriteExecSchedule({ dept: deptMode, role, team: me?.team })} /></div>;
     else if (k === "assets") body = wrap(<AssetManager company={userCompany} isViewer={isViewer} />);
-    else if (k === "leave") body = wrap(<LeaveLedger company={userCompany} isViewer={isViewer} canManage={role === "hrManager" || role === "totalMaster"} />);
+    else if (k === "leave") body = wrap(<LeaveArea company={userCompany} isViewer={isViewer} canManage={role === "hrManager" || role === "totalMaster"} promoManage={role === "hrManager" || role === "totalMaster" || role === "hrAcct" || role === "allMgr" || role === "hrStaff" || /인사/.test(String(me?.team || "")) || me?.isMaster === true} />);
     else if (k === "onboarding") body = wrap(<OnboardingBoard company={userCompany} isViewer={isViewer} />);
     else if (k === "cert") body = wrap(<CertIssuer company={userCompany} isViewer={isViewer} />);
     else if (k === "driverdocs") body = wrap(<DriverDocsReview company={userCompany} isViewer={isViewer} />);

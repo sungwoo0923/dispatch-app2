@@ -2,7 +2,7 @@
 //  기대값은 손으로 계산한 값(2026 기본 요율: 국민연금 4.75% · 건강 3.595% · 장기요양 13.14% · 고용 0.9%)
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";
-import { calcPayslip, calcPayslipFull, dailyWorkerTax, FREELANCE, presetFor, simplifiedIncomeTax, hoursFromAttendance, leavePeriodOf, promoteSchedule, promoteStageDue, childCreditMonthly, ratesFor } from "../src/payrollCalc.js";
+import { calcPayslip, calcPayslipFull, annualBreakdown, withholdingSummary, insuranceSummary, compareMonths, transferRows, yearToDate, dailyWorkerTax, FREELANCE, presetFor, simplifiedIncomeTax, hoursFromAttendance, leavePeriodOf, promoteSchedule, promoteStageDue, childCreditMonthly, ratesFor } from "../src/payrollCalc.js";
 
 let n = 0;
 const t = (name, fn) => { fn(); n += 1; console.log(`  ✓ ${name}`); };
@@ -161,6 +161,77 @@ t("calcPayslipFull — 월급 정규직은 calcPayslip와 같은 결과", () => 
   const e = { payType: "monthly", baseMonthly: 3000000, meal: 200000, dependents: 1 };
   const a = calcPayslip(e, {}, R); const b = calcPayslipFull(e, {}, R);
   assert.equal(a.net, b.net); assert.equal(a.totalDeduct, b.totalDeduct);
+});
+
+// ⭐ 2026-11-07 연봉제
+t("연봉제 — 연봉 3,600만 ÷ 12 = 월 300만(월급제 300만과 같은 결과)", () => {
+  const a = annualBreakdown({ annualSalary: 36000000 });
+  assert.equal(a.divisor, 12); assert.equal(a.monthlyTotal, 3000000); assert.equal(a.base, 3000000);
+  const r = calcPayslipFull({ payType: "annual", annualSalary: 36000000, meal: 200000, dependents: 1 }, {}, R);
+  const m = calcPayslipFull({ payType: "monthly", baseMonthly: 3000000, meal: 200000, dependents: 1 }, {}, R);
+  assert.equal(amt(r.earnings, "base"), 3000000);
+  assert.equal(r.earnings.find((x) => x.key === "base").label, "기본급(연봉제)");
+  assert.match(r.earnings.find((x) => x.key === "base").calc, /÷ 12/);
+  assert.equal(r.net, m.net); assert.equal(r.payType, "annual"); assert.equal(r.annual.annual, 36000000);
+});
+t("연봉제 — 퇴직금 포함 연봉 3,900만 ÷ 13 = 월 300만 · 퇴직금 몫 300만", () => {
+  const a = annualBreakdown({ annualSalary: 39000000, annualSeverance: true });
+  assert.equal(a.divisor, 13); assert.equal(a.monthlyTotal, 3000000); assert.equal(a.severanceYear, 3000000);
+  const r = calcPayslipFull({ payType: "annual", annualSalary: 39000000, annualSeverance: true }, {}, R);
+  assert.equal(amt(r.earnings, "base"), 3000000);
+  assert.match(r.earnings.find((x) => x.key === "base").calc, /÷ 13/);
+});
+t("연봉제 — 식대 포함 연봉: 월 급여 합계는 연봉 ÷ 12, 기본급 = 월 급여 − 식대", () => {
+  const r = calcPayslipFull({ payType: "annual", annualSalary: 36000000, meal: 200000, annualMealIncluded: true }, {}, R);
+  assert.equal(amt(r.earnings, "base"), 2800000);
+  assert.equal(r.gross, 3000000);
+  assert.equal(r.nonTaxable, 200000);
+});
+t("연봉제 — 반올림 · 연장근로 통상시급(기본급 ÷ 209)", () => {
+  const r = calcPayslipFull({ payType: "annual", annualSalary: 40000000 }, { otHours: 10 }, R);
+  assert.equal(amt(r.earnings, "base"), 3333333);
+  assert.equal(r.ordinaryHourly, 15949); // 3,333,333 ÷ 209 = 15,948.96
+  assert.equal(amt(r.earnings, "ot"), 239235);
+});
+
+// ⭐ 2026-11-07 경리 도구
+const mkSlip = (uid, name, emp, month = {}, extra = {}) => ({ uid, name, ym: "2026-10", result: calcPayslipFull(emp, month, R), employmentType: emp.employmentType || "", ...extra });
+t("원천세 요약 — 근로(A01) · 일용(A03) · 사업소득(A25) 나눠 합계", () => {
+  const s = [
+    mkSlip("a", "가", { payType: "monthly", baseMonthly: 3000000, meal: 200000, dependents: 1 }),
+    mkSlip("b", "나", { payType: "daily", dailyWage: 200000, employmentType: "일용직", npExempt: true, hiExempt: true }, { workDays: 10 }),
+    mkSlip("c", "다", { payType: "monthly", baseMonthly: 2000000, employmentType: FREELANCE }),
+  ];
+  const w = withholdingSummary(s);
+  assert.deepEqual(w.rows.map((x) => x.code), ["A01", "A03", "A25"]);
+  assert.equal(w.rows[0].pay, 3000000); assert.equal(w.rows[0].tax, 59080);
+  assert.equal(w.rows[1].tax, 13500); assert.equal(w.rows[2].tax, 60000); assert.equal(w.rows[2].pay, 2000000);
+  assert.equal(w.tax, 59080 + 13500 + 60000); assert.equal(w.local, 5900 + 1350 + 6000);
+});
+t("4대보험 합계 — 근로자 + 회사", () => {
+  const s = [mkSlip("a", "가", { payType: "monthly", baseMonthly: 3000000, meal: 200000 })];
+  const ins = insuranceSummary(s);
+  const np = ins.find((x) => x.key === "np");
+  assert.equal(np.emp, 142500); assert.equal(np.er, 142500); assert.equal(np.total, 285000);
+  assert.equal(ins.find((x) => x.key === "ia").emp, 0); assert.equal(ins.find((x) => x.key === "ia").er, 30000);
+});
+t("전월 대비 — 10% 넘게 바뀐 사람 · 신규 · 빠진 사람", () => {
+  const prev = [{ uid: "a", name: "가", result: { net: 2000000 } }, { uid: "b", name: "나", result: { net: 2000000 } }, { uid: "z", name: "퇴", result: { net: 1000000 } }];
+  const cur = [{ uid: "a", name: "가", result: { net: 2300000 } }, { uid: "b", name: "나", result: { net: 2050000 } }, { uid: "n", name: "신", result: { net: 1500000 } }];
+  const c = Object.fromEntries(compareMonths(cur, prev).map((x) => [x.uid, x]));
+  assert.equal(c.a.kind, "up"); assert.equal(c.a.diff, 300000);
+  assert.equal(c.b.kind, "same"); assert.equal(c.n.kind, "new"); assert.equal(c.z.kind, "gone");
+});
+t("이체 줄 — 계좌 있는 사람만 · 없는 사람은 따로", () => {
+  const t1 = transferRows([{ uid: "a", name: "가", payAccount: { bank: "신한", acct: "110-123-456", holder: "가" }, result: { net: 1000000 } }, { uid: "b", name: "나", result: { net: 500000 } }, { uid: "c", name: "다", result: { net: 0 } }]);
+  assert.equal(t1.ok.length, 1); assert.equal(t1.ok[0].acct, "110123456"); assert.equal(t1.missing.length, 1); assert.equal(t1.total, 1000000);
+});
+t("올해 누계 — 사람별 합계, 다른 해는 빼고", () => {
+  const s = [{ uid: "a", name: "가", ym: "2026-01", result: { gross: 100, taxable: 80, nonTaxable: 20, net: 90, deductions: [{ key: "tax", amount: 5 }, { key: "np", amount: 3 }] } },
+    { uid: "a", name: "가", ym: "2026-02", result: { gross: 100, taxable: 80, nonTaxable: 20, net: 90, deductions: [{ key: "tax", amount: 5 }] } },
+    { uid: "a", name: "가", ym: "2025-12", result: { gross: 999 } }];
+  const y = yearToDate(s, 2026);
+  assert.equal(y.length, 1); assert.equal(y[0].months, 2); assert.equal(y[0].gross, 200); assert.equal(y[0].tax, 10); assert.equal(y[0].ins, 3);
 });
 
 console.log(`\n급여 계산 테스트 ${n}개 통과`);

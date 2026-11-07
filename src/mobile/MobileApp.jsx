@@ -139,6 +139,7 @@ import { LogisMark, LogisWordmark, LogisTag, LogisLockup } from "../brand"; // �
 import AiAssistant from "../AiAssistant"; // 🤖 2026-11-07 AI 비서
 import { LiveDriverChip, FleetLiveButton, useFleetLivePublish } from "../liveFleet"; // ⭐ 2026-11-05 배차완료 지입·직영·임대 기사 실시간 관제
 import { useUiScreen, uiMenuItem, useUiConfigVersion } from "../uiConfig"; // ⭐ 2026-11-07 화면 편집 모드 — 메뉴 이름·순서·숨기기(권한은 그대로)
+import MyInfoTabs from "../MyInfoTabs"; // ⭐ 2026-11-07 내정보 안 탭(급여명세서 · 연차 사용 계획)
 
 
 
@@ -2181,6 +2182,12 @@ export default function MobileApp({ role: realRole, user, userCompany = "", forc
   useReadOnlyGuard(!!pageMenuM && (role === "viewer" || (!!customRoleM && getMenuAccess(customRolesM, role, pageMenuM) === "read")));
   // 경리는 메뉴의 [배차현황]으로만 오더 목록(등록내역)을 볼 수 있다 — 그 밖에 목록으로 돌아오면 부서 홈으로
   const deptListOkRef = useRef(false);
+  // ⭐ 2026-11-07 급여명세서 · 연차 사용 계획은 내정보 안 탭으로 — 예전 주소(dept:payslip · dept:leaveplan)는 내정보로 돌린다
+  useEffect(() => {
+    if (page !== "dept:payslip" && page !== "dept:leaveplan") return;
+    try { sessionStorage.setItem("kpMyInfoTab", page === "dept:payslip" ? "급여명세서" : "연차 사용 계획"); } catch { /* 무시 */ }
+    setPage("myinfo"); setTimeout(() => window.dispatchEvent(new Event("kp-myinfo-tab")), 0);
+  }, [page]);
   useEffect(() => {
     if (!["list", "detail", "form"].includes(page)) deptListOkRef.current = false;
     if (deptMode && page === "list" && !(deptMode === "acct" && deptListOkRef.current)) setPage("dept");
@@ -5433,7 +5440,7 @@ const title =
   : page === "fixedroute" ? "고정노선현황"
   : page === "perms" ? "권한 관리"
   : page === "dept" ? (deptMode === "exec" ? "경영 브리핑" : deptMode === "hr" ? "인사관리" : "경리·회계")
-  : String(page).startsWith("dept:") ? ({ "dept:settle": "정산관리", "dept:acct": "회계관리", "dept:assets": "비품·자산", "dept:hr": "인사관리부", "dept:leave": "연차 관리", "dept:onboarding": "입·퇴사 관리", "dept:cert": "증명서 발급", "dept:driverdocs": "기사 서류", "dept:approvals": "결재함", "dept:schedule": "직원 일정", "dept:funds": "자금 현황", "dept:execsched": "임원 일정", "dept:rules": "사내 규정", "dept:board": "사내 게시판", "dept:farerules": "운임 규칙", "dept:cashbook": "자금 관리", "dept:myresume": "내 이력서", "dept:payroll": "급여 계산", "dept:payslip": "급여명세서", "dept:leaveplan": "연차 사용 계획", "dept:leavepromo": "연차 사용 촉진", "dept:briefing": "일일 경영 보고" }[page] || "")
+  : String(page).startsWith("dept:") ? ({ "dept:settle": "정산관리", "dept:acct": "회계관리", "dept:assets": "비품·자산", "dept:hr": "인사관리부", "dept:leave": "연차 관리", "dept:onboarding": "입·퇴사 관리", "dept:cert": "증명서 발급", "dept:driverdocs": "기사 서류", "dept:approvals": "결재함", "dept:schedule": "직원 일정", "dept:funds": "자금 현황", "dept:execsched": "임원 일정", "dept:rules": "사내 규정", "dept:board": "사내 게시판", "dept:farerules": "운임 규칙", "dept:cashbook": "자금 관리", "dept:myresume": "내 이력서", "dept:payroll": "급여 계산", "dept:payslip": "급여명세서", "dept:leaveplan": "연차 사용 계획", "dept:leavepromo": "연차 관리", "dept:briefing": "일일 경영 보고" }[page] || "")
   : page === "status" ? "배차현황"
   : page === "unassigned" ? "미배차현황"
   : page === "canceled" ? "취소내역"
@@ -5829,7 +5836,7 @@ const title =
           onGo={(it) => {
             if (it.src === "approval") { window.__kpOpenApproval = { id: it.id, page: it.page || "inbox" }; window.dispatchEvent(new Event("kp-open-approval")); return; }
             if (it.src === "handover") { window.__kpOpenHandover = it.id; window.__kpOpenApproval = { page: "handover" }; window.dispatchEvent(new Event("kp-open-approval")); return; }
-            if (it.src === "hrNotice") { setPage({ payslip: "dept:payslip", leavePlan: "dept:leaveplan", leavePromo: "dept:leavepromo" }[it.link] || "dept:payslip"); return; } // ⭐ 2026-11-06 급여명세서·연차 촉진
+            if (it.src === "hrNotice") { setPage({ payslip: "dept:payslip", leavePlan: "dept:leaveplan", leavePromo: "dept:leavepromo" }[it.link] || "dept:payslip"); return; } // ⭐ 2026-11-06 급여명세서·연차 촉진(⭐ 2026-11-07 명세서·계획은 내정보 탭으로 다시 돌린다 · 촉진은 연차 관리)
             window.__kpOpenNotice = it.openId || it.id; setPage("notice"); setTimeout(() => window.dispatchEvent(new CustomEvent("kp:openNotice")), 0);
           }} />
       )}
@@ -6974,6 +6981,7 @@ setOpenMemo={setOpenMemo}
           </React.Suspense>
         )}
         {page === "myinfo" && (
+          <MyInfoTabs mobile company={userCompany || localStorage.getItem("userCompany") || ""} uid={currentUser?.uid} enabled={!["driver", "shipper"].includes(role)}>
           <MobileMyInfo
             currentUser={currentUser}
             mobileUsers={mobileUsers}
@@ -6983,6 +6991,7 @@ setOpenMemo={setOpenMemo}
             onBack={() => setPage("list")}
             cardVersionB={cardVersionB}
           />
+          </MyInfoTabs>
         )}
         {page === "settings" && (
           <MobileSettingsPage
@@ -8019,7 +8028,7 @@ function MobileSideMenu({
               {ok("정산관리") && <MenuItem label="정산관리" icon="receipt" onClick={() => onGo?.("dept:settle")} dark={dark} />}
               {ok("매출관리") && <MenuItem label="매출관리" icon="chart" onClick={onGoSales} dark={dark} />}
               {ok("회계관리") && <MenuItem label="회계관리" icon="money" onClick={() => onGo?.("dept:acct")} dark={dark} />}
-              {payM.canView && <MenuItem label="급여 계산" icon="money" onClick={() => onGo?.("dept:payroll")} dark={dark} />}{/* ⭐ 2026-11-06 직원 급여 */}
+              {payM.canView && <MenuItem label="급여 계산" icon="money" onClick={() => onGo?.("dept:payroll")} dark={dark} />}{/* ⭐ 2026-11-06 직원 급여(⭐ 2026-11-07 경리만 · 비밀번호 잠금) */}
               {ok("거래처관리") && <MenuItem label="거래처관리" icon="building" onClick={() => onGo?.("clients")} dark={dark} />}{/* ⭐ 2026-11-05 PC 경리(test)도 거래처관리를 본다 */}
             </MenuSection>
             <MenuSection title="자금 · 총무" en="FINANCE · OFFICE" dark={dark} alwaysOpen>
@@ -8032,8 +8041,7 @@ function MobileSideMenu({
               <MenuItem label="인사 홈" icon="dashboard" onClick={() => onGo?.("dept")} dark={dark} />
               {ok("인사관리부") && <MenuItem label="인사관리부" icon="idcard" onClick={() => onGo?.("dept:hr")} dark={dark} />}
               <MenuItem label="출근기록부" icon="clock" onClick={onGoAttendance} dark={dark} />
-              <MenuItem label="연차 사용 촉진" icon="bell" onClick={() => onGo?.("dept:leavepromo")} dark={dark} />{/* ⭐ 2026-11-06 근로기준법 61조 */}
-              {payM.canView && <MenuItem label={payM.canEdit ? "급여 계산" : "급여 대장(조회)"} icon="money" onClick={() => onGo?.("dept:payroll")} dark={dark} />}
+              <MenuItem label="연차 관리" icon="flag" onClick={() => onGo?.("dept:leave")} dark={dark} />{/* ⭐ 2026-11-07 연차 현황 + 연차 사용 촉진(근로기준법 61조) 한 화면 · 급여 대장은 경리만 */}
               {ok("증명서발급") && <MenuItem label="증명서 발급" icon="stamp" onClick={() => onGo?.("dept:cert")} dark={dark} />}
             </MenuSection>
           )}
@@ -8082,8 +8090,8 @@ function MobileSideMenu({
           )}
           {!deptMode && (["인사관리부", "회계관리", "자금관리", "비품관리", "증명서발급"].some(deptOk) || payM.canView || payM.leaveViewer) && (
             <MenuSection title="부서 업무" en="DEPARTMENT" dark={dark} alwaysOpen>
-              {payM.canView && <MenuItem label={payM.canEdit ? "급여 계산" : "급여 대장(조회)"} icon="money" onClick={() => onGo?.("dept:payroll")} dark={dark} />}{/* ⭐ 2026-11-06 마스터·통합관리자·임원 등 */}
-              {payM.leaveViewer && <MenuItem label="연차 사용 촉진" icon="bell" onClick={() => onGo?.("dept:leavepromo")} dark={dark} />}
+              {payM.canView && <MenuItem label="급여 계산" icon="money" onClick={() => onGo?.("dept:payroll")} dark={dark} />}{/* ⭐ 2026-11-07 경리·회계 부서만 */}
+              {payM.leaveViewer && <MenuItem label="연차 관리" icon="flag" onClick={() => onGo?.("dept:leavepromo")} dark={dark} />}
               {deptOk("인사관리부") && <MenuItem label="인사관리부" icon="idcard" onClick={() => onGo?.("dept:hr")} dark={dark} />}
               {deptOk("회계관리") && <MenuItem label="회계관리" icon="money" onClick={() => onGo?.("dept:acct")} dark={dark} />}
               {deptOk("자금관리") && <MenuItem label="자금 관리" icon="wallet" onClick={() => onGo?.("dept:cashbook")} dark={dark} />}
@@ -8135,9 +8143,7 @@ function MobileSideMenu({
           <MenuSection title="내 계정" en="ACCOUNT" dark={dark} alwaysOpen={dark}>
             <MenuItem label="내정보" icon="idcard" onClick={onGoMyInfo} dark={dark} />
             <MenuItem label="내 이력서" icon="file" onClick={() => onGo?.("dept:myresume")} dark={dark} />
-            {/* ⭐ 2026-11-06 본인 급여명세서 · 연차 사용 계획(누구나 본인 것) */}
-            <MenuItem label="급여명세서" icon="receipt" onClick={() => onGo?.("dept:payslip")} dark={dark} />
-            <MenuItem label="연차 사용 계획" icon="flag" onClick={() => onGo?.("dept:leaveplan")} dark={dark} />
+            {/* ⭐ 2026-11-07 본인 급여명세서 · 연차 사용 계획은 내정보 안 탭으로 옮김 */}
             <MenuItem label="설정" icon="key" onClick={onGoSettings} dark={dark} />
             {/* ⭐ 2026-11-02 원격지원 — 사용이 어려울 때 관리자에게 요청 */}
             {/* ⭐ 2026-11-03 원격 지원 요청은 PC 전용 */}

@@ -30,7 +30,7 @@ const realEmail = (u) => { const e = String(u?.email || "").trim(); return e && 
 export function promoteText(kind, { name, label = "연차", from, to, remain, due, dates = [], company }) {
   if (kind === "n1") return {
     subject: `[연차 사용 촉진 1차] 미사용 ${label} ${remain}일 — ${due}까지 사용 계획을 알려 주세요`,
-    body: `${name}님, ${label} 사용 기간(${from} ~ ${to}) 중 사용하지 않은 ${label}가 ${remain}일 남아 있습니다.\n\n근로기준법 제61조에 따라 이 통보를 받은 날부터 10일 이내(${due}까지) 남은 ${label}의 사용 시기를 정하여 회사에 알려 주시기 바랍니다.\n앱 알림의 [사용 계획 제출] 또는 회사관리 › 연차 사용 계획에서 날짜를 골라 제출할 수 있습니다.\n\n기한까지 사용 시기를 알리지 않으면 회사가 사용 시기를 정하여 서면으로 통보(2차)하며, 이 절차에 따라 사용하지 않은 ${label}에 대해서는 미사용 수당 지급 의무가 없을 수 있습니다.\n\n${company} 인사관리부`,
+    body: `${name}님, ${label} 사용 기간(${from} ~ ${to}) 중 사용하지 않은 ${label}가 ${remain}일 남아 있습니다.\n\n근로기준법 제61조에 따라 이 통보를 받은 날부터 10일 이내(${due}까지) 남은 ${label}의 사용 시기를 정하여 회사에 알려 주시기 바랍니다.\n앱 알림의 [사용 계획 제출] 또는 내정보 › 연차 사용 계획에서 날짜를 골라 제출할 수 있습니다.\n\n기한까지 사용 시기를 알리지 않으면 회사가 사용 시기를 정하여 서면으로 통보(2차)하며, 이 절차에 따라 사용하지 않은 ${label}에 대해서는 미사용 수당 지급 의무가 없을 수 있습니다.\n\n${company} 인사관리부`,
   };
   return {
     subject: `[연차 사용 촉진 2차] 미사용 ${label} ${remain}일 사용 시기 ${dates.length ? "지정 통보" : "지정 예정 안내"}`,
