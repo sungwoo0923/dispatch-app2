@@ -5939,6 +5939,7 @@ const title =
 )}
       {showMenu && (
         <MobileSideMenu
+  staffSignupOk={!["acctStaff", "hrStaff"].includes(realRole)}
   onClose={() => setShowMenu(false)}
   currentUser={currentUser}
   mobileUsers={mobileUsers}
@@ -7890,6 +7891,7 @@ function MobileSideMenu({
   onToggleExec,
   menuOk = () => true,
   deptOk = () => false,
+  staffSignupOk = true, // ⭐ 2026-11-08 QA — 경리사무원·인사사무원은 PC처럼 가입 승인·기사 서류 메뉴 없음
 }) {
   const fareMenu = useFareRules(); // ⭐ 2026-11-02 운임규칙 — 최고관리자가 켜 준 회사만 메뉴 표시
   // ⭐ 2026-11-04 메뉴를 닫았다 다시 열어도(내정보 등 들어갔다 와도) 보던 위치 그대로 — 맨 위로 튀지 않게
@@ -8067,12 +8069,12 @@ function MobileSideMenu({
               <MenuItem label={execFull ? "임원 화면으로" : "전체 메뉴 보기(배차·정산)"} icon="refresh" onClick={onToggleExec} dark={dark} />
             </MenuSection>
           )}
-          {(deptMode === "acct" || deptMode === "hr") && (
+          {(deptMode === "acct" || deptMode === "hr") && (staffSignupOk || ok("기사관리")) && (
             <MenuSection title="직원 · 기사" en="PEOPLE" dark={dark} alwaysOpen>
               {/* ⭐ 2026-11-05 직원 가입 승인과 기사 가입 승인(기사 앱 계정)을 나눔 — 숫자도 각각 */}
-              <MenuItem label="직원 가입 승인" icon="users" onClick={() => onGo?.("staff")} badge={alertCounts?.signupStaff || null} dark={dark} />
-              <MenuItem label="기사 앱 계정 · 가입 승인" icon="truck" onClick={() => onGo?.("drvacc")} badge={alertCounts?.signupDriver || null} dark={dark} />
-              <MenuItem label="기사 서류" icon="file" onClick={() => onGo?.("dept:driverdocs")} badge={alertCounts?.drvDocs || null} dark={dark} />
+              {staffSignupOk && <MenuItem label="직원 가입 승인" icon="users" onClick={() => onGo?.("staff")} badge={alertCounts?.signupStaff || null} dark={dark} />}
+              {staffSignupOk && <MenuItem label="기사 앱 계정 · 가입 승인" icon="truck" onClick={() => onGo?.("drvacc")} badge={alertCounts?.signupDriver || null} dark={dark} />}
+              {staffSignupOk && <MenuItem label="기사 서류" icon="file" onClick={() => onGo?.("dept:driverdocs")} badge={alertCounts?.drvDocs || null} dark={dark} />}
               {ok("기사관리") && <MenuItem label="기사관리" icon="user" onClick={() => onGo?.("drivers")} dark={dark} />}{/* ⭐ 2026-11-05 PC 경리·인사도 기사관리를 본다 */}
             </MenuSection>
           )}
