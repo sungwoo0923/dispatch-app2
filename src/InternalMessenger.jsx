@@ -2809,7 +2809,7 @@ function ChatView({ room, roomName, roomPhoto, messages, myUid, myProfile, input
             <div style={{ display: "flex", gap: 2, padding: "8px 10px", borderBottom: "1px solid #f3f4f6", justifyContent: "space-between" }}>
               {EMOJI_LIST.map(em => (
                 <button key={em} onClick={() => { onAddReaction?.(msg.id, em); setCtxMenu(null); }}
-                  style={{ background: "none", border: "none", fontSize: 20, cursor: "pointer", padding: "2px 3px", borderRadius: 6,
+                  style={{ border: "none", fontSize: 20, cursor: "pointer", padding: "2px 3px", borderRadius: 6,
                     background: (msg.reactions?.[em] || []).includes(myUid) ? "#dbeafe" : "transparent" }}>
                   {em}
                 </button>

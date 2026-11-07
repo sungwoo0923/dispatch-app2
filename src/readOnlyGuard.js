@@ -6,8 +6,8 @@
 //  · 특정 버튼을 예외로 두려면 그 버튼(또는 감싼 요소)에 data-ro-allow 를 붙인다.
 import React from "react";
 
-const EDIT_RX = /(저장|수정|삭제|등록|확정|적용|업로드|올리기|추가|변경|승인|반려|일괄|배차하기|배차 완료|배차완료|취소 처리|복사해 등록|붙여넣기|불러와 등록|전송|발송|보내기|교체|되돌리기|복구|초기화|정산 처리|마감|완료 처리|^\+\s)/;
-const SAFE_RX = /(조회|검색|닫기|취소$|보기|다운|엑셀|CSV|인쇄|이전|다음|새로고침|필터|정렬|전체|오늘|최적화|로그아웃|메뉴|접기|펼치기|확인$|복사$|내역)/;
+const EDIT_RX = /(저장|수정|삭제|등록|확정|적용|업로드|올리기|추가|변경|승인|반려|일괄|배차하기|배차 완료|배차완료|취소 처리|복사해 등록|붙여넣기|불러와 등록|전송|발송|보내기|교체|되돌리기|복구|초기화|정산 처리|마감|완료 처리|정규화|정리|발행|요청|^\+\s)/; // ⭐ 2026-11-08 QA — 기사정리·거래처정리(정규화·중복 삭제)·계산서 발행/요청도 막음
+const SAFE_RX = /(조회|검색|닫기|취소$|보기|다운|엑셀|CSV|인쇄|이전|다음|새로고침|필터|정렬|전체|오늘|최적화|로그아웃|메뉴|접기|펼치기|확인$|복사$|내역|이력)/; // 발행 이력 등 보기 탭은 그대로
 const isNavArea = (el) => !!el.closest(".kp-topnav, nav, aside, [data-ro-allow], .kp-side, [role=navigation]");
 
 export function useReadOnlyGuard(active, notify) {
@@ -21,7 +21,7 @@ export function useReadOnlyGuard(active, notify) {
       if (!el || isNavArea(el)) return;
       const text = String(el.innerText || el.value || el.getAttribute("aria-label") || el.title || "").replace(/\s+/g, " ").trim();
       if (!text || text.length > 16) return;
-      if (SAFE_RX.test(text) && !/(수정|삭제|저장|등록)/.test(text)) return;
+      if (SAFE_RX.test(text) && !/(수정|삭제|저장|등록|정규화)/.test(text)) return; // "전체 정규화"는 막음
       if (!EDIT_RX.test(text)) return;
       e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation?.();
       say();

@@ -2917,7 +2917,7 @@ function DriverRouteCard({ driver, orders, selectedDate, rangeEndDate, isSingleD
             border: "1px solid #DCE3EF", borderLeft: `5px solid ${driver.등급 === "직영" ? "#0f766e" : NAVY}`, borderRadius: 12,
             background: "#fff", boxShadow: "0 2px 8px rgba(27,43,75,0.08)",
           }}>
-            <div style={{ width: 46, height: 46, borderRadius: 12, flexShrink: 0, background: "linear-gradient(135deg,#2D4C82 0%,#0F1A30 100%)", boxShadow: "inset 0 0 0 1px rgba(207,224,255,.25), 0 4px 10px rgba(15,26,48,.25)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, fontWeight: 900, flexShrink: 0 }}>
+            <div style={{ width: 46, height: 46, borderRadius: 12, flexShrink: 0, background: "linear-gradient(135deg,#2D4C82 0%,#0F1A30 100%)", boxShadow: "inset 0 0 0 1px rgba(207,224,255,.25), 0 4px 10px rgba(15,26,48,.25)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, fontWeight: 900 }}>
               {String(driver.이름 || "?").slice(0, 1)}
             </div>
             <div style={{ minWidth: 0 }}>
