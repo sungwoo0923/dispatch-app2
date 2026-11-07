@@ -17,6 +17,7 @@ import { BookHero, BookCard, Chip, Sheet, MONO } from "./OfficeBooks";
 import { sendInternalMail, compressImage } from "./InternalMail";
 import { html2canvas } from "./lazyLoad"; // ⭐ 2026-11-02 속도 — 캡처 라이브러리는 처음 캡처할 때 받는다
 import { printA4 } from "./a4Export";
+import { kpConfirm } from "./kpDialog";
 
 const kstDay = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
 const tsMs = (v) => (v?.toMillis ? v.toMillis() : v?.seconds ? v.seconds * 1000 : 0);
@@ -111,7 +112,7 @@ export function LeaveLedger({ company, isViewer = false, canManage = false }) {
     const days = Number(adj?.days);
     if (!days || !isFinite(days)) return alert("조정 일수를 입력해 주세요. (예: 1, -0.5)");
     if (!String(adj.reason || "").trim() || adj.reason.trim().length < 4) return alert("조정 사유를 4자 이상 적어 주세요.");
-    if (!window.confirm(`${nm(cur.u)}님 연차를 ${days > 0 ? "+" : ""}${days}일 조정할까요?\n· 조정 기록은 지울 수 없습니다\n· ${nm(cur.u)}님에게 사내메일로 바로 알려집니다`)) return;
+    if (!(await kpConfirm(`${nm(cur.u)}님 연차를 ${days > 0 ? "+" : ""}${days}일 조정할까요?\n· 조정 기록은 지울 수 없습니다\n· ${nm(cur.u)}님에게 사내메일로 바로 알려집니다`))) return;
     setBusy(true);
     try {
       const entry = { days, reason: adj.reason.trim(), period: cur.ent.from, at: Date.now(), date: today, by: me?.email || "", byName: personName(staff.find((x) => x.id === me?.uid)) || me?.email || "" };
@@ -121,7 +122,7 @@ export function LeaveLedger({ company, isViewer = false, canManage = false }) {
     } finally { setBusy(false); }
   };
   const sendPromote = async (r) => {
-    if (!window.confirm(`${nm(r.u)}님에게 연차 사용 촉진 안내를 사내메일로 보낼까요? (잔여 ${r.remain}일)`)) return;
+    if (!(await kpConfirm(`${nm(r.u)}님에게 연차 사용 촉진 안내를 사내메일로 보낼까요? (잔여 ${r.remain}일)`))) return;
     await sendInternalMail({ company, to: [{ uid: r.u.id, name: nm(r.u), team: r.u.team || "", position: r.u.position || "" }], subject: `[연차 사용 촉진] 잔여 연차 ${r.remain}일 사용 계획을 알려 주세요`, body: `${nm(r.u)}님, 회기(${r.ent.from} ~ ${r.ent.to}) 잔여 연차가 ${r.remain}일 남았습니다.\n근로기준법 제61조에 따라 10일 안에 사용 시기를 정해 전자결재로 신청해 주세요.\n기한 내 정하지 않으면 회사가 사용 시기를 지정할 수 있습니다.`, kind: "hr", fromName: "인사관리부" }).catch(() => {});
     await setDoc(doc(db, "userProfiles", r.u.id), { leavePromote: arrayUnion({ at: Date.now(), date: today, remain: r.remain, period: r.ent.from }) }, { merge: true });
     alert("보냈습니다.");

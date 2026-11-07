@@ -8,6 +8,7 @@ import { db, auth, DEFAULT_COMPANY } from "./firebase";
 import { DRIVER_REQUIRED_DOCS, useCompanyDriverDocs, docState, TONE, docProblems } from "./driverRequiredDocs";
 import { ImageViewer } from "./driverDocs";
 import { compressImage } from "./InternalMail";
+import { kpPrompt } from "./kpDialog";
 
 const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
 const HERO = "linear-gradient(rgba(143,176,240,.07) 1px, transparent 1px) 0 0/22px 22px, linear-gradient(90deg, rgba(143,176,240,.07) 1px, transparent 1px) 0 0/22px 22px, linear-gradient(120deg,#0B1428 0%,#1B2B4B 60%,#2D4C82 100%)";
@@ -81,7 +82,7 @@ export default function DriverDocsReview({ company, isViewer = false }) {
   const review = async (docu, status) => {
     if (isViewer || !docu) return;
     let reason = "";
-    if (status === "반려") { reason = window.prompt("반려 사유를 적어 주세요(기사앱에 보입니다)", "글씨가 잘 안 보입니다. 다시 찍어 주세요") || ""; if (!reason) return; }
+    if (status === "반려") { reason = (await kpPrompt("반려 사유를 적어 주세요(기사앱에 보입니다)", "글씨가 잘 안 보입니다. 다시 찍어 주세요")) || ""; if (!reason) return; }
     setBusy(docu.id);
     try { await updateDoc(doc(db, "driver_documents", docu.id), { status, reviewedAt: serverTimestamp(), reviewedBy: auth.currentUser?.email || "", ...(status === "반려" ? { rejectReason: reason } : { rejectReason: "" }) }); }
     // ⭐ 2026-11-02 점검 — 확인/반려 저장 실패 시 안내 없이 끝나던 문제: catch 추가
@@ -95,7 +96,7 @@ export default function DriverDocsReview({ company, isViewer = false }) {
       const dataUrl = f.type.startsWith("image/") ? await compressImage(f, 1600, 0.82) : await new Promise((res) => { const r = new FileReader(); r.onload = () => res(r.result); r.readAsDataURL(f); });
       // ⭐ 2026-11-02 점검 — Firestore 1MiB 한도 초과(큰 PDF 등) 시 조용히 실패하던 문제: 크기 확인 후 안내
       if (dataUrl.length > 900_000) { alert("파일이 너무 큽니다(PDF는 약 650KB 이하로 올려 주세요)."); return; }
-      const exp = t.def.expiry ? (window.prompt(`${t.def.label} 만료일(YYYY-MM-DD, 없으면 비움)`, "") || "") : "";
+      const exp = t.def.expiry ? ((await kpPrompt(`${t.def.label} 만료일(YYYY-MM-DD, 없으면 비움)`, "")) || "") : "";
       await addDoc(collection(db, "driver_documents"), { driverId: t.uid, companyName: company, docType: t.def.key, docLabel: t.def.label, fileName: `${t.def.label}.jpg`, fileType: f.type.includes("pdf") ? "application/pdf" : "image/jpeg", dataUrl, ...(exp ? { 만료일: exp } : {}), status: "확인", uploadedAt: { seconds: Math.floor(Date.now() / 1000) }, by: `${auth.currentUser?.email || ""}(대신 등록)`, reviewedAt: serverTimestamp() });
     } catch (err) {
       // ⭐ 2026-11-02 점검 — 업로드 실패 시 안내 없이 버튼만 원래대로 돌아오던 문제: 오류 안내

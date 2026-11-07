@@ -160,8 +160,8 @@ export default function RolePermissionsPanel({ users: allUsers = [], roleLabels 
   const dirty = !!draft && JSON.stringify(draft) !== baseline;
   const flash = (t) => { setToast(t); setTimeout(() => setToast(""), 2200); };
 
-  const pick = (key) => {
-    if (dirty && !window.confirm("저장하지 않은 변경이 있습니다. 버리고 다른 역할로 이동할까요?")) return;
+  const pick = async (key) => {
+    if (dirty && !(await kpConfirm("저장하지 않은 변경이 있습니다. 버리고 다른 역할로 이동할까요?", { okText: "버리고 이동" }))) return;
     setSelectedKey(key); setTab("menus");
   };
   const setMenu = (m, v) => setDraft((d) => ({ ...d, menus: { ...d.menus, [m]: v } }));

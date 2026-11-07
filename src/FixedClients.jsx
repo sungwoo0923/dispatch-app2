@@ -11,6 +11,7 @@ import { CustomSelect } from "./CustomSelect";
 import { deleteDocsAtomic } from "./DeleteProgress"; // ⭐ 2026-11-05 삭제 진행 창 + 한 번에 삭제
 import CustomDatePicker from "./CustomDatePicker"; // 📅 2026-11-04 날짜 입력은 프로그램 달력으로
 import { CompanyOptionPicker } from "./companyOptionPicker"; // 🧾 2026-11-02 지급방식·배차방식·상/하차방법 공용 선택기(＋ 추가)
+import { kpConfirm } from "./kpDialog";
 
 const fmt = (n) => (n ? Number(n).toLocaleString() : "0");
 
@@ -587,7 +588,7 @@ export default function FixedClients({ drivers = [], upsertDriver, userCompany =
     if (isViewer) { _viewerAlert(); return; }
     if (!selected.length) return alert("정산처리할 항목을 선택하세요.");
     const targets = rows.filter(r => selected.includes(r.id));
-    if (!window.confirm(`${targets.length}건의 정산상태를 변경하시겠습니까?`)) return;
+    if (!(await kpConfirm(`${targets.length}건의 정산상태를 변경하시겠습니까?`))) return;
     for (const r of targets) await saveRow({ ...r, 정산완료: !r.정산완료 });
     setSelected([]);
   };
@@ -705,12 +706,10 @@ export default function FixedClients({ drivers = [], upsertDriver, userCompany =
     const thisYear = new Date().getFullYear().toString();
     const thisYearCount = rows.filter(r => (r.날짜 || "").startsWith(thisYear)).length;
     const prevYearCount = rows.length - thisYearCount;
-    if (!window.confirm(
-      `전체 ${rows.length}건을 업데이트합니다.\n` +
+    if (!(await kpConfirm(`전체 ${rows.length}건을 업데이트합니다.\n` +
       `• 올해(${thisYear}) ${thisYearCount}건: 기사단가 5,091원 / 수수료단가 909원 / 지급방식 착불\n` +
       `• 이전 연도 ${prevYearCount}건: 지급방식 착불만 변경 (기사단가·수수료단가 유지)\n\n` +
-      `이 작업은 되돌릴 수 없습니다.`
-    )) return;
+      `이 작업은 되돌릴 수 없습니다.`))) return;
     for (const r of rows) {
       const isThisYear = (r.날짜 || "").startsWith(thisYear);
       const patch = isThisYear

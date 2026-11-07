@@ -7,6 +7,7 @@ import {
 } from "firebase/firestore";
 import { fmtPhone } from "./formatInput";
 import { CustomSelect } from "./CustomSelect";
+import { kpConfirm } from "./kpDialog";
 
 // 전화번호 하이픈 자동 포맷 (DispatchApp.jsx formatPhone과 동일 규칙)
 // 전화번호 하이픈 — 공용 규칙(src/formatInput.js: 02·031·010·1588 등, 입력 중에도 적용)
@@ -404,7 +405,7 @@ export default function DeliverySignaturePage() {
   }
 
   async function handleDeleteHistory(id) {
-    if (!confirm("이 데이터를 삭제하시겠습니까?")) return;
+    if (!(await kpConfirm("이 데이터를 삭제하시겠습니까?"))) return;
     await runDelete({ label: "데이터", task: () => deleteDoc(doc(db, "deliverySignatureHistory", id)) }); // ⭐ 2026-11-05 삭제 진행 창
     await loadHistory();
   }

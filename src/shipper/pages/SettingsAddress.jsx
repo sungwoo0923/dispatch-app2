@@ -2,6 +2,7 @@ import { useEffect, useState, useRef } from "react";
 import { db, auth } from "../../firebase";
 import { runDelete } from "../../DeleteProgress"; // ⭐ 2026-11-05 삭제 진행 창
 import { getDoc, collection, query, where, getDocs, doc, deleteDoc, addDoc, updateDoc, serverTimestamp } from "firebase/firestore";
+import { kpConfirm } from "../../kpDialog";
 
 const EMPTY_FORM = { name: "", address: "", 담당자명: "", 담당자번호: "", 메모: "" };
 
@@ -85,7 +86,7 @@ export default function SettingsAddress() {
   }, [userData]);
 
   const handleDelete = async (id) => {
-    if (!window.confirm("삭제하시겠습니까?")) return;
+    if (!(await kpConfirm("삭제하시겠습니까?"))) return;
     await runDelete({ label: "주소", task: () => deleteDoc(doc(db, "places", id)) }); // ⭐ 2026-11-05 삭제 진행 창
     loadAddress();
   };

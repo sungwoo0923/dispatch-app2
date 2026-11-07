@@ -1,6 +1,6 @@
 // ===================== DispatchApp.jsx (PART 1/8) — START =====================
 import { MENU_FEATURE, planIncludes, openPlanLock, featureOn, useCompanyPlanId, PlanValueProvider, PlanValueSync, PlanLockHost, LockIcon } from "./plans";
-import { kpConfirm } from "./kpDialog";
+import { kpConfirm, kpPrompt } from "./kpDialog";
 import { runDelete, commitDeletes, deleteDocsAtomic } from "./DeleteProgress"; // ⭐ 2026-11-05 삭제 진행 창 + 한 번에 삭제(writeBatch)
 import ProInsight from "./ProInsight";
 import DailyReport, { DailyReportPopupHost } from "./DailyReport"; // 📊 2026-11-06 일일 경영 보고(임원 화면 · 대표·임원 일일 보고서)
@@ -14918,7 +14918,7 @@ setCopyOpen(false);
         await navigator.clipboard.writeText(text);
        showAlert("공유 문구가 클립보드에 복사되었습니다. (카톡/메신저에 붙여넣기)");
       } catch {
-        prompt("아래 내용을 복사하세요.", text);
+        (await kpPrompt("아래 내용을 복사하세요.", text));
       }
     };
     // =========================================================
@@ -27602,10 +27602,10 @@ const handleUrgentSnooze = (minutes) => {
     );
     if (!ok) return;
 
-    const 이름 = prompt("신규 기사 이름을 입력하세요");
+    const 이름 = (await kpPrompt("신규 기사 이름을 입력하세요"));
     if (!이름) return;
 
-    const 전화번호 = prompt("전화번호를 입력하세요");
+    const 전화번호 = (await kpPrompt("전화번호를 입력하세요"));
     if (!전화번호) return;
 
     // Firestore 신규 기사 저장
@@ -38479,7 +38479,7 @@ if (mode === "driver") {
 
       const _dates = mapped.map((m) => m.상차일).filter(Boolean).sort();
       const _matched = mapped.filter((m) => m.배차상태 === "배차완료").length;
-      if (!confirm(`${mapped.length}건을 업로드하시겠습니까?\n\n· 상차일: ${_dates.length ? `${_dates[0]} ~ ${_dates[_dates.length - 1]}` : "없음(오늘 날짜로 등록)"}\n· 배차완료 ${_matched}건 / 배차중 ${mapped.length - _matched}건\n· 청구운임 합계: ${mapped.reduce((a, m) => a + (m.청구운임 || 0), 0).toLocaleString()}원`)) return;
+      if (!(await kpConfirm(`${mapped.length}건을 업로드하시겠습니까?\n\n· 상차일: ${_dates.length ? `${_dates[0]} ~ ${_dates[_dates.length - 1]}` : "없음(오늘 날짜로 등록)"}\n· 배차완료 ${_matched}건 / 배차중 ${mapped.length - _matched}건\n· 청구운임 합계: ${mapped.reduce((a, m) => a + (m.청구운임 || 0), 0).toLocaleString()}원`))) return;
 
       try {
         // ⭐ 새 오더는 addDispatch로 "생성"해야 한다 — 예전엔 patchDispatch(기존 문서 수정)를 써서
@@ -38796,7 +38796,7 @@ if (first) {
       return showAlert("변경된 내용이 없습니다.");
     }
 
-    if (!confirm("수정된 내용을 저장하시겠습니까?")) return;
+    if (!(await kpConfirm("수정된 내용을 저장하시겠습니까?"))) return;
 
     // 🚫 역순 날짜(하차일 < 상차일) 검사 — 하나라도 있으면 전체 저장을 막는다.
     const reversedId = ids.find(id => {
@@ -58667,7 +58667,7 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
 
   const removeSelectedFn = async () => {
     if (!selected.size) return showAlert("선택된 항목이 없습니다.");
-    if (!confirm(`${selected.size}건 삭제하시겠습니까?`)) return;
+    if (!(await kpConfirm(`${selected.size}건 삭제하시겠습니까?`))) return;
     await removeClient?.([...selected]); // ⭐ 2026-11-05 한 번에 삭제 + 진행 창
     setSelected(new Set());
     showAlert("삭제 완료");
@@ -58931,7 +58931,7 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
 
   const removeSelectedPlaces = async () => {
     if (!placeSelected.size) return showAlert("선택된 항목이 없습니다.");
-    if (!confirm(`${placeSelected.size}건 삭제할까요?`)) return;
+    if (!(await kpConfirm(`${placeSelected.size}건 삭제할까요?`))) return;
     // ⭐ 2026-11-05 담당자 병합(예전과 같음)을 먼저 끝내고, 삭제는 한 번에(진행 창) — 줄이 하나씩 사라지지 않게
     const ids = [...placeSelected];
     await runDelete({ count: ids.length, label: "하차지", task: async () => {
@@ -59272,7 +59272,7 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
                           </td>
                           <td className="px-2 py-2.5 text-center" onClick={e => e.stopPropagation()}>
                             <button onClick={async () => {
-                              if (!confirm("삭제하시겠습니까?")) return;
+                              if (!(await kpConfirm("삭제하시겠습니까?"))) return;
                               await runDelete({ label: "하차지", task: async () => { await mergePlaceContactsIntoClient(r); await removePlace(id); } }); // ⭐ 2026-11-05 진행 창
                             }}
                               className="px-2.5 py-1 bg-red-500 text-white rounded text-xs font-semibold hover:bg-red-600 transition"><EditableText id="misc.btn.54619.삭제" defaultText="삭제" /></button>

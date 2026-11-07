@@ -6,7 +6,7 @@
 //  ⭐ 알록달록 금지 — 네이비 계열만.
 import React from "react";
 import { runDelete } from "./DeleteProgress"; // ⭐ 2026-11-05 삭제 진행 창 + 한 번에 삭제
-import { kpConfirm } from "./kpDialog";
+import { kpConfirm, kpPrompt } from "./kpDialog";
 import { collection, deleteDoc, doc, onSnapshot, orderBy, query, serverTimestamp, setDoc, updateDoc } from "firebase/firestore";
 import { db } from "./firebase";
 import { useSalesPricing } from "./SalesQuote";
@@ -197,7 +197,7 @@ export function ContractList({ onNew, onEdit }) {
   const soon = list.filter((c) => c.status === "서명완료" && c.vars?.종료일 && c.vars.종료일 >= today && c.vars.종료일 <= addMonths(today, 2));
   const signedMRR = list.filter((c) => c.status === "서명완료" && (!c.vars?.종료일 || c.vars.종료일 >= today)).reduce((a, c) => a + (Number(c.monthly) || 0), 0);
   const shown = list.filter((c) => filter === "전체" || (filter === "만료 임박" ? soon.includes(c) : c.status === filter));
-  const copy = async (c) => { try { await navigator.clipboard.writeText(signUrlOf(c.id)); setCopied(c.id); setTimeout(() => setCopied(""), 1600); } catch { window.prompt("서명 링크를 복사하세요", signUrlOf(c.id)); } };
+  const copy = async (c) => { try { await navigator.clipboard.writeText(signUrlOf(c.id)); setCopied(c.id); setTimeout(() => setCopied(""), 1600); } catch { (await kpPrompt("서명 링크를 복사하세요", signUrlOf(c.id))); } };
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
@@ -232,8 +232,8 @@ export function ContractList({ onNew, onEdit }) {
                     {c.status === "작성" && <button type="button" onClick={async () => { if (await kpConfirm(`${c.vars?.고객사} 계약서를 서명 요청 상태로 바꿀까요?\n링크를 고객에게 보내면 로그인 없이 서명할 수 있습니다.`)) { await updateDoc(doc(db, "contracts", c.id), { status: "발송", sentAt: serverTimestamp() }); copy(c); } }} className="h-8 px-3 rounded-lg border border-[#1B2B4B] text-[12.5px] font-black text-[#1B2B4B] mr-1">서명 요청</button>}
                     {c.status === "발송" && <button type="button" onClick={() => copy(c)} className="h-8 px-3 rounded-lg border border-[#1B2B4B] text-[12.5px] font-black text-[#1B2B4B] mr-1">{copied === c.id ? "복사됨 ✓" : "서명 링크 복사"}</button>}
                     <button type="button" onClick={() => printContract(c)} className="h-8 px-3 rounded-lg border border-[#DCE3EE] text-[12.5px] font-black text-[#1B2B4B] mr-1">보기·인쇄</button>
-                    {c.status !== "서명완료" && c.status !== "취소" && <button type="button" onClick={() => window.confirm("이 계약서를 취소할까요? 서명 링크도 더 이상 쓸 수 없습니다.") && updateDoc(doc(db, "contracts", c.id), { status: "취소" })} className="h-8 px-3 rounded-lg border border-[#DCE3EE] text-[12.5px] font-bold text-[#7A879C] mr-1">취소</button>}
-                    {c.status !== "서명완료" && <button type="button" onClick={() => window.confirm("계약서를 완전히 삭제할까요?") && runDelete({ label: "계약서", task: () => deleteDoc(doc(db, "contracts", c.id)) }).catch(() => {})} /* ⭐ 2026-11-05 삭제 진행 창 */ className="h-8 px-3 rounded-lg border border-[#DCE3EE] text-[12.5px] font-bold text-[#7A879C]">삭제</button>}
+                    {c.status !== "서명완료" && c.status !== "취소" && <button type="button" onClick={async () => (await kpConfirm("이 계약서를 취소할까요? 서명 링크도 더 이상 쓸 수 없습니다.")) && updateDoc(doc(db, "contracts", c.id), { status: "취소" })} className="h-8 px-3 rounded-lg border border-[#DCE3EE] text-[12.5px] font-bold text-[#7A879C] mr-1">취소</button>}
+                    {c.status !== "서명완료" && <button type="button" onClick={async () => (await kpConfirm("계약서를 완전히 삭제할까요?")) && runDelete({ label: "계약서", task: () => deleteDoc(doc(db, "contracts", c.id)) }).catch(() => {})} /* ⭐ 2026-11-05 삭제 진행 창 */ className="h-8 px-3 rounded-lg border border-[#DCE3EE] text-[12.5px] font-bold text-[#7A879C]">삭제</button>}
                   </td>
                 </tr>))}
               </tbody>
@@ -305,7 +305,7 @@ export function ContractBuilder({ initial, fromQuoteDoc, onDone }) {
       await setDoc(doc(db, "contracts", id), data, { merge: true });
       if (send) {
         try { await navigator.clipboard.writeText(signUrlOf(id)); window.alert(`서명 요청 링크를 복사했습니다.\n고객에게 문자·메일로 보내 주세요.\n\n${signUrlOf(id)}`); }
-        catch { window.prompt("서명 링크를 복사해 고객에게 보내 주세요", signUrlOf(id)); }
+        catch { (await kpPrompt("서명 링크를 복사해 고객에게 보내 주세요", signUrlOf(id))); }
       }
       onDone?.();
     } catch (e) { window.alert(`저장 실패: ${e.message}`); } finally { setBusy(false); }
@@ -412,7 +412,7 @@ export function ContractTemplates() {
         <div className="text-[13.5px]"><b>계약서 양식은 언제든 고칠 수 있습니다.</b> <span className="text-white/60">이미 서명된 계약서는 서명 당시 내용 그대로 보관됩니다.</span></div>
         <div className="flex gap-2">
           <button type="button" onClick={() => { const id = `t${Date.now()}`; setSt((s) => ({ ...s, templates: [...s.templates, { id, name: `${t.name} (복사본)`, body: t.body }] })); setCur(st.templates.length); setDirty(true); }} className="h-10 px-4 rounded-xl bg-white/10 ring-1 ring-white/25 text-[13px] font-black">복제</button>
-          <button type="button" onClick={() => { if (window.confirm("이 양식을 기본 문구로 되돌릴까요?")) upd({ body: DEFAULT_TEMPLATE_BODY }); }} className="h-10 px-4 rounded-xl bg-white/10 ring-1 ring-white/25 text-[13px] font-black">기본 문구로</button>
+          <button type="button" onClick={async () => { if ((await kpConfirm("이 양식을 기본 문구로 되돌릴까요?"))) upd({ body: DEFAULT_TEMPLATE_BODY }); }} className="h-10 px-4 rounded-xl bg-white/10 ring-1 ring-white/25 text-[13px] font-black">기본 문구로</button>
           <button type="button" onClick={save} disabled={!dirty} className="h-10 px-5 rounded-xl bg-white text-[#0F1A30] text-[13.5px] font-black disabled:opacity-40">{dirty ? "저장" : "저장됨"}</button>
         </div>
       </div>
@@ -421,7 +421,7 @@ export function ContractTemplates() {
           {st.templates.map((x, i) => (
             <div key={x.id} className={`flex items-center gap-1 rounded-xl ${i === cur ? "bg-[#1B2B4B] text-white" : "hover:bg-[#F5F8FD] text-[#0F1A30]"}`}>
               <button type="button" onClick={() => setCur(i)} className="flex-1 text-left px-3 py-2.5 text-[13.5px] font-black truncate">{x.name}</button>
-              {st.templates.length > 1 && <button type="button" title="삭제" onClick={() => { if (window.confirm(`'${x.name}' 양식을 지울까요?`)) { setSt((s) => ({ ...s, templates: s.templates.filter((y) => y.id !== x.id) })); setCur(0); setDirty(true); } }} className={`px-2 ${i === cur ? "text-white/60" : "text-[#9AA9C3]"}`}>✕</button>}
+              {st.templates.length > 1 && <button type="button" title="삭제" onClick={async () => { if ((await kpConfirm(`'${x.name}' 양식을 지울까요?`))) { setSt((s) => ({ ...s, templates: s.templates.filter((y) => y.id !== x.id) })); setCur(0); setDirty(true); } }} className={`px-2 ${i === cur ? "text-white/60" : "text-[#9AA9C3]"}`}>✕</button>}
             </div>
           ))}
           <div className="mt-3 px-2 pb-2">

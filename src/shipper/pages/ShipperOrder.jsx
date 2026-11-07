@@ -18,6 +18,7 @@ import {
 import { updateDoc } from "../../orderWrite"; // ★ 오더 수정시각 자동 기록(여러 사용자 실시간 일치)
 import { useNavigate, useSearchParams } from "react-router-dom";
 import CustomDatePicker from "../../CustomDatePicker"; // 📅 2026-11-07 날짜는 프로그램 달력으로
+import { kpConfirm } from "../../kpDialog";
 
 // 운송사 프로그램(DispatchApp.jsx)의 등록일 컬럼은 별도 문자열 필드 "등록일"(YYYY-MM-DD)을
 // 참조하는데, 화주사 등록 시 createdAt(serverTimestamp)만 기록하고 이 필드를 채우지 않아
@@ -792,7 +793,7 @@ export default function ShipperOrder({ editData, onClose }) {
             <div className="text-[10px] font-extrabold tracking-[0.26em] text-[#8FB0F0]" style={{ fontFamily: ORDER_MONO, fontVariantNumeric: "tabular-nums" }}>ORDER CONSOLE</div>
             <h2 className="text-[18px] font-black tracking-tight">{editId || editData ? "오더 수정" : "일반배차 등록"}</h2>
           </div>
-          <button onClick={() => { if (window.confirm("입력값을 초기화하시겠습니까?")) resetForm(); }}
+          <button onClick={async () => { if ((await kpConfirm("입력값을 초기화하시겠습니까?"))) resetForm(); }}
             className="relative px-4 h-9 text-[13px] bg-white/10 hover:bg-white/20 ring-1 ring-white/25 text-white font-extrabold rounded-[10px]">
             초기화
           </button>
@@ -1161,13 +1162,13 @@ export default function ShipperOrder({ editData, onClose }) {
             onClick={async () => {
               if (!validate()) return;
               if (!form.상차지주소 || !form.하차지주소) {
-                if (window.confirm("주소가 없어 경로 미리보기 없이 등록합니다. 계속하시겠습니까?")) await submit();
+                if ((await kpConfirm("주소가 없어 경로 미리보기 없이 등록합니다. 계속하시겠습니까?"))) await submit();
                 return;
               }
               const start = await getCoords(form.상차지주소);
               const end = await getCoords(form.하차지주소);
               if (!start || !end) {
-                if (window.confirm("좌표 변환 실패. 미리보기 없이 등록하시겠습니까?")) await submit();
+                if ((await kpConfirm("좌표 변환 실패. 미리보기 없이 등록하시겠습니까?"))) await submit();
                 return;
               }
               setCoords({ start, end });

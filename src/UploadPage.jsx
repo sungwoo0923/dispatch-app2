@@ -20,6 +20,7 @@ import {
   serverTimestamp,
 } from "firebase/firestore";
 import CustomDatePicker from "./CustomDatePicker"; // 📅 2026-11-07 날짜는 프로그램 달력으로
+import { kpConfirm } from "./kpDialog";
 
 
 // ────────────────────────────────────────
@@ -612,7 +613,7 @@ export default function UploadPage() {
                   {f.docId && !isManual && (
                     <button
                       onClick={async () => {
-                        if (!window.confirm("이 사진을 삭제하시겠습니까?")) return;
+                        if (!(await kpConfirm("이 사진을 삭제하시겠습니까?"))) return;
                         try {
                           const col = order?._col || "orders";
                           // ⭐ 2026-11-05 삭제 진행 창 + 사진 삭제·첨부 수를 한 묶음으로

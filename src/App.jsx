@@ -4,8 +4,9 @@ import React, { useState, useEffect, useRef } from "react";
 import { setTenant, setServerFilter, setPreviewMode, isPreviewMode } from "./fsTenant";
 import { setUsageMeter } from "./usageMeter"; // 💰 2026-11-04 회사별 서버 사용량 표본
 import { setPreviewPlan } from "./plans";
-import { installEscClose } from "./kpDialog";
+import { installEscClose, installAlertShim } from "./kpDialog";
 installEscClose();
+installAlertShim(); // 브라우저 기본 알림창 대신 프로그램 디자인 알림창
 import { safeLocalSet } from "./safeStorage";
 import UpdateBanner from "./UpdateBanner";
 import VersionCheck from "./VersionCheck";

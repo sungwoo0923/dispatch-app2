@@ -6,7 +6,7 @@
 //     → 메일 트리거가 휴대폰 푸시, 접속 중인 사람은 화면 오른쪽 아래 배너.
 import React from "react";
 import { createPortal } from "react-dom";
-import { kpConfirm } from "./kpDialog";
+import { kpConfirm, kpPrompt } from "./kpDialog";
 import { html2canvas } from "./lazyLoad"; // ⭐ 2026-11-02 속도 — 캡처 라이브러리는 처음 캡처할 때 받는다
 import { db, auth } from "./firebase";
 import { addDoc, collection, doc, increment, onSnapshot, query, serverTimestamp, setDoc, updateDoc, where } from "firebase/firestore";
@@ -424,7 +424,7 @@ export function OrderNoticeHistory({ company, target, myName, isSelf, canManage 
   const cancelOrder = async (n) => {
     const o = n.hrOrder || {};
     const oRows = hrOrderRows(o);
-    const reason = window.prompt(`「${n.title}」 발령을 취소합니다.${oRows.length > 1 ? `\n(이 공문의 대상자 ${oRows.length}명 모두 함께 취소됩니다)` : ""}\n취소 사유를 적어 주세요(공지·메일에 함께 나갑니다).`, "공문 오기재");
+    const reason = (await kpPrompt(`「${n.title}」 발령을 취소합니다.${oRows.length > 1 ? `\n(이 공문의 대상자 ${oRows.length}명 모두 함께 취소됩니다)` : ""}\n취소 사유를 적어 주세요(공지·메일에 함께 나갑니다).`, "공문 오기재"));
     if (reason === null) return;
     const lines = oRows.map((r) => `· ${r.name || "-"} → 발령 전(${r.from?.team || "미배정"} ${r.from?.position || "-"} · ${ro.label(r.from?.role)})`).join("\n");
     if (!await kpConfirm(`아래 ${oRows.length}명을 발령 전으로 되돌리고\n공지사항을 [취소]로 바꾼 뒤 전 직원에게 알릴까요?\n\n${lines}`)) return;

@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { doc, updateDoc } from "firebase/firestore";
 import { db } from "../../firebase";
 import { auth } from "../../firebase";
+import { kpConfirm } from "../../kpDialog";
 
 // 전화번호 하이픈 자동 포맷 (DispatchApp.jsx formatPhone과 동일 규칙)
 const formatPhone = (phone) => {
@@ -98,7 +99,7 @@ const approve = async () => {
 
 // 기존 reject 그대로 유지
 const reject = async () => {
-  if (!window.confirm("가입을 거절하시겠습니까?")) return;
+  if (!(await kpConfirm("가입을 거절하시겠습니까?"))) return;
 
   await updateDoc(doc(db, "users", user.uid), {
     approved: false,
@@ -127,7 +128,7 @@ await updateDoc(doc(db, "users", user.uid), {
   }
 };
 const removeUser = async () => {
-  if (!window.confirm("정말 삭제하시겠습니까?")) return;
+  if (!(await kpConfirm("정말 삭제하시겠습니까?"))) return;
 
   try {
     await updateDoc(doc(db, "users", user.uid), {
@@ -243,7 +244,7 @@ if (!open) return null;
 
 <button
   onClick={async () => {
-    if (!window.confirm("승인하시겠습니까?")) return;
+    if (!(await kpConfirm("승인하시겠습니까?"))) return;
     await approve();
   }}
   className="px-5 py-2 bg-[#1B2B4B] text-white rounded-lg text-sm font-bold hover:opacity-90"
@@ -290,7 +291,7 @@ if (mode === "reApprove") {
 
           <button
             onClick={async () => {
-              if (!window.confirm("정말 재승인 하시겠습니까?")) return;
+              if (!(await kpConfirm("정말 재승인 하시겠습니까?"))) return;
 
               await updateDoc(doc(db, "users", user.uid), {
                 approved: true,

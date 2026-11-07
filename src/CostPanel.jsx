@@ -16,6 +16,7 @@ import { estimateBill } from "./PlatformMonitor";
 import { useSalesPricing, applyPlanBill, itemsTotal, monthlyOf } from "./SalesQuote";
 import { PLAN_IDS, planIncludes } from "./plans";
 import { COST_DEFAULT, CLAUDE_TIERS, VERCEL_PLANS, mergeCost, fixedCosts, variableCosts, estimateDaily, estimateMonth, breakEvenCurve, daysInMonth } from "./costModel";
+import { kpConfirm } from "./kpDialog";
 
 const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
 const NAVY = "#1B2B4B", INK = "#0F1A30", MID = "#4B6CB7", SOFT = "#8FB0F0", RED = "#B42318";
@@ -537,7 +538,7 @@ function ServerView({ d, model, saved, onRefresh, busy }) {
     const kr = d.avgDay.reads / est.r, kw = d.avgDay.writes / Math.max(1, est.w);
     const c = model.coef;
     const coef = { ...c, readsPerOrder: Math.round(c.readsPerOrder * kr), readsPerStaffDay: Math.round(c.readsPerStaffDay * kr), readsPerFleetDay: Math.round(c.readsPerFleetDay * kr), writesPerOrder: Math.max(1, Math.round(c.writesPerOrder * kw * 10) / 10), writesPerStaffDay: Math.round(c.writesPerStaffDay * kw), writesPerFleetDay: Math.round(c.writesPerFleetDay * kw) };
-    if (!window.confirm(`최근 7일 실측 평균(읽기 ${cnt(d.avgDay.reads)} · 쓰기 ${cnt(d.avgDay.writes)}/일)에 맞춰 환산 계수를 바꿀까요?\n읽기 ×${kr.toFixed(2)} · 쓰기 ×${kw.toFixed(2)}\n(시뮬레이터·요금제별 마진·운송사별 배분이 이 계수를 씁니다)`)) return;
+    if (!(await kpConfirm(`최근 7일 실측 평균(읽기 ${cnt(d.avgDay.reads)} · 쓰기 ${cnt(d.avgDay.writes)}/일)에 맞춰 환산 계수를 바꿀까요?\n읽기 ×${kr.toFixed(2)} · 쓰기 ×${kw.toFixed(2)}\n(시뮬레이터·요금제별 마진·운송사별 배분이 이 계수를 씁니다)`))) return;
     try { await setDoc(doc(db, "platformConfig", "costModel"), { ...(saved || {}), coef, updatedAt: serverTimestamp() }, { merge: true }); setCmsg("계수를 실측에 맞췄습니다."); } catch (e) { setCmsg(`저장 실패: ${e.message}`); }
   };
   const noData = !days.length;
@@ -709,7 +710,7 @@ function SettingsModal({ model, onClose }) {
           <div className="text-[11.5px] text-[#7A879C] leading-relaxed">출처: {m.source}</div>
         </div>
         <div className="px-5 py-3 bg-white border-t border-[#E3E8F0] flex justify-between gap-2 flex-wrap">
-          <Btn onClick={() => window.confirm("모든 값을 기본값(추정치)으로 되돌릴까요? (저장을 눌러야 적용)") && setM(mergeCost({ ...COST_DEFAULT, coef: m.coef }))}>기본 단가로 되돌리기(계수 유지)</Btn>
+          <Btn onClick={async () => (await kpConfirm("모든 값을 기본값(추정치)으로 되돌릴까요? (저장을 눌러야 적용)")) && setM(mergeCost({ ...COST_DEFAULT, coef: m.coef }))}>기본 단가로 되돌리기(계수 유지)</Btn>
           <div className="flex gap-2"><Btn onClick={onClose}>취소</Btn><Btn dark onClick={save} disabled={saving}>{saving ? "저장 중…" : "저장"}</Btn></div>
         </div>
       </div>

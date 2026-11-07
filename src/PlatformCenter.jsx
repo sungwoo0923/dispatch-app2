@@ -41,6 +41,7 @@ import { TimeSelect, MonthPicker } from "./kpInputs"; // 📅 2026-11-07 월 선
 import "./pcTheme.css";
 import { fmtPhone } from "./formatInput";
 import { LogisMark, LogisWordmark, LogisTag } from "./brand"; // 🔷 2026-11-04 LogisWeb 로고
+import { kpConfirm, kpPrompt } from "./kpDialog";
 
 const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
 const pad = (n) => String(n).padStart(2, "0");
@@ -817,7 +818,7 @@ function NoticesPanel() {
                     <button type="button" onClick={() => setDiag(n)} className="h-9 px-3.5 rounded-lg border border-[#DCE3EE] text-[13.5px] font-black text-[#2D4C82]">푸시 확인</button>
                     <button type="button" onClick={() => updateDoc(doc(db, "platformNotices", n.id), { active: n.active === false })} className="h-9 px-3.5 rounded-lg border border-[#DCE3EE] text-[13.5px] font-black text-[#1B2B4B]">{n.active === false ? "다시 게시" : "내리기"}</button>
                     <button type="button" onClick={() => { setEditId(n.id); setF({ ...blank, ...n, targetCompanies: tc, bodyHtml: n.bodyHtml || textToHtml(n.body || ""), schedule: (n.publishAt || 0) > Date.now(), ...((n.publishAt || 0) > 0 ? kstParts(n.publishAt) : {}) }); setWriting(true); }} className="h-9 px-3.5 rounded-lg bg-[#0F1A30] text-white text-[13.5px] font-black">수정</button>
-                    <button type="button" onClick={() => window.confirm("공지를 삭제할까요?\n대상 회사 공지사항 목록에서도 함께 사라집니다.") && runDelete({ label: "공지", task: () => deleteDoc(doc(db, "platformNotices", n.id)) }).catch(() => {})} /* ⭐ 2026-11-05 삭제 진행 창 */ className="h-9 px-3.5 rounded-lg border border-[#DCE3EE] text-[13.5px] font-bold text-[#7A879C]">삭제</button>
+                    <button type="button" onClick={async () => (await kpConfirm("공지를 삭제할까요?\n대상 회사 공지사항 목록에서도 함께 사라집니다.")) && runDelete({ label: "공지", task: () => deleteDoc(doc(db, "platformNotices", n.id)) }).catch(() => {})} /* ⭐ 2026-11-05 삭제 진행 창 */ className="h-9 px-3.5 rounded-lg border border-[#DCE3EE] text-[13.5px] font-bold text-[#7A879C]">삭제</button>
                   </div>
                 </div>
               );
@@ -873,8 +874,8 @@ function EmptyCompanyCheck() {
   };
   const purge = async (col) => {
     const r = res[col];
-    if (!window.confirm(`[${EMPTY_CO_LABEL[col]}] 회사명이 없는 데이터 중 ${before} 이전(날짜 없는 것 포함) 것을 지웁니다.\n오더면 달린 사진·파일도 같이 지워지고 되돌릴 수 없습니다.\n\n지금 회사명 없는 것: ${r?.empty?.toLocaleString() || 0}건\n진행할까요?`)) return;
-    if (window.prompt("확인을 위해 '삭제'라고 입력해 주세요") !== "삭제") return;
+    if (!(await kpConfirm(`[${EMPTY_CO_LABEL[col]}] 회사명이 없는 데이터 중 ${before} 이전(날짜 없는 것 포함) 것을 지웁니다.\n오더면 달린 사진·파일도 같이 지워지고 되돌릴 수 없습니다.\n\n지금 회사명 없는 것: ${r?.empty?.toLocaleString() || 0}건\n진행할까요?`))) return;
+    if ((await kpPrompt("확인을 위해 '삭제'라고 입력해 주세요")) !== "삭제") return;
     setBusy(col);
     try { const pr = await call(col, "purge", { before }); await call(col, "scan"); setRes((p) => ({ ...p, [col]: { ...p[col], removed: pr.removed } })); } catch (e) { window.alert(e.message || e); } finally { setBusy(""); }
   };
@@ -921,7 +922,7 @@ function TenancyPanel() {
   const [msg, setMsg] = React.useState("");
   React.useEffect(() => onSnapshot(doc(db, "systemConfig", "tenancy"), (s) => setCfg(s.exists() ? s.data() : {}), () => setCfg({})), []);
   const run = async () => {
-    if (!window.confirm("회사명이 빈칸인 예전 문서에 운송사를 적습니다.\n· 화주사가 보낸 오더 → 받은 운송사\n· 나머지 → 돌캐(운송사 칸이 생기기 전부터 쓰던 운송사)\n이미 회사명이 있는 문서는 건드리지 않습니다.\n오래 걸릴 수 있으니 창을 닫지 마세요. 진행할까요?")) return;
+    if (!(await kpConfirm("회사명이 빈칸인 예전 문서에 운송사를 적습니다.\n· 화주사가 보낸 오더 → 받은 운송사\n· 나머지 → 돌캐(운송사 칸이 생기기 전부터 쓰던 운송사)\n이미 회사명이 있는 문서는 건드리지 않습니다.\n오래 걸릴 수 있으니 창을 닫지 마세요. 진행할까요?"))) return;
     setBusy(true); setMsg("");
     try {
       const token = await auth.currentUser?.getIdToken();
@@ -943,7 +944,7 @@ function TenancyPanel() {
   };
   const toggle = async (on) => {
     if (on && !cfg?.backfilledAt) { window.alert("먼저 1단계(예전 데이터 정리)를 끝내야 합니다."); return; }
-    if (!window.confirm(on ? "서버 분리를 켭니다. 모든 화면이 우리 회사 조건으로 조회합니다.\n켠 뒤 PC에서 규칙을 배포하면 서버가 다른 운송사 조회를 거부합니다." : "서버 분리를 끕니다(규칙을 배포한 뒤라면 끄면 안 됩니다).")) return;
+    if (!(await kpConfirm(on ? "서버 분리를 켭니다. 모든 화면이 우리 회사 조건으로 조회합니다.\n켠 뒤 PC에서 규칙을 배포하면 서버가 다른 운송사 조회를 거부합니다." : "서버 분리를 끕니다(규칙을 배포한 뒤라면 끄면 안 됩니다)."))) return;
     await setDoc(doc(db, "systemConfig", "tenancy"), { serverFilter: on, serverFilterAt: serverTimestamp() }, { merge: true });
   };
   const step = (n, title, done, children) => (
@@ -1094,7 +1095,7 @@ function PlatformCenterInner({ user }) {
   const phone = usePhone();
   React.useEffect(() => { document.title = "LogisWeb 관리자 관리센터"; }, []);
   const toApp = () => { try { sessionStorage.setItem("kpEntry", "app"); } catch { /* 무시 */ } navigate("/app"); };
-  const logout = async () => { if (!window.confirm("로그아웃할까요?")) return; try { sessionStorage.removeItem("kpEntry"); } catch { /* 무시 */ } await signOut(auth).catch(() => {}); navigate("/login"); };
+  const logout = async () => { if (!(await kpConfirm("로그아웃할까요?"))) return; try { sessionStorage.removeItem("kpEntry"); } catch { /* 무시 */ } await signOut(auth).catch(() => {}); navigate("/login"); };
   const openContract = (patch) => { setContractCtx((c) => ({ initial: null, fromQuote: null, ...patch, key: c.key + 1 })); setTab("contract:new"); };
   // 회사 이름을 누르면 → 운송사 관제의 상세 패널(이미 관제 화면이면 그 자리에서)
   const openCompany = React.useCallback((name) => { if (!name) return; setFocusCompany(name); setTab(MONITOR_TABS.includes(tab) && tab !== "applications" && !tab.startsWith("sales:") && tab !== "billing" ? tab : "companies"); }, [tab, setTab]);

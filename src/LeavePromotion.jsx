@@ -17,6 +17,7 @@ import { leavePeriodOf, promoteSchedule, promoteStageDue, addDaysStr, dayDiffStr
 import { leaveManagerOf } from "./payrollAccess";
 import { sendInternalMail } from "./InternalMail";
 import CustomDatePicker from "./CustomDatePicker";
+import { kpConfirm } from "./kpDialog";
 
 const safeId = (s) => String(s || "").replace(/[/\s#?[\]]/g, "_").slice(0, 80); // Payroll.jsx와 같은 규칙
 const kstDay = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
@@ -228,7 +229,7 @@ function SendSheet({ company, act, byName, onClose }) {
   const [busy, setBusy] = React.useState(false);
   const t = promoteText(kind, { name: personName(row.u) || row.u.name, label: row.period.label, from: row.period.from, to: row.period.to, remain: row.remain, due: addDaysStr(kstDay(), 10), dates, company });
   const go = async () => {
-    if (kind === "n2" && !dates.length && !window.confirm("지정일 없이 2차 안내만 보낼까요? (법적 2차 통보는 사용 시기를 지정해야 합니다)")) return;
+    if (kind === "n2" && !dates.length && !(await kpConfirm("지정일 없이 2차 안내만 보낼까요? (법적 2차 통보는 사용 시기를 지정해야 합니다)"))) return;
     setBusy(true);
     try { await sendPromote({ company, u: row.u, row, kind, dates, withEmail, byName }); onClose(); } catch (e) { alert(`발송 실패: ${e.message}`); } finally { setBusy(false); }
   };

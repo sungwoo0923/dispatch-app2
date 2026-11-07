@@ -12,6 +12,7 @@ import { PlanMatrix, PLAN_DEFAULTS, PLAN_IDS, PLAN_MATRIX_CSS, RECOMMENDED_PLAN_
 import { fmtBizNo, fmtPhone } from "./formatInput";
 import { CustomSelect } from "./CustomSelect";
 import { logisWordmarkSvg } from "./brand"; // 🔷 2026-11-04 LogisWeb 글자 로고(인쇄 문서 머리)
+import { kpConfirm } from "./kpDialog";
 
 const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
 const NAVY = "#1B2B4B";
@@ -460,7 +461,7 @@ export function PricingEditor() {
           <div className="mt-1.5 text-[14px] text-white/70">요금제는 여기서만 고치면 됩니다. 견적서·요금 안내서·고객사 구독 화면이 이 값을 씁니다(기존 고객 청구는 청구 › 수납 관리).</div>
           <div className="mt-4 flex gap-2 flex-wrap">
             <button type="button" onClick={save} disabled={!dirty} className="h-10 px-5 rounded-xl bg-white text-[#0F1A30] text-[14px] font-black disabled:opacity-40" data-pricing-save>{dirty ? "저장" : "저장됨"}</button>
-            <button type="button" onClick={() => { if (window.confirm("저장하지 않은 수정을 버리고 마지막 저장값으로 돌릴까요?")) { setDirty(false); setCfg(live); } }} disabled={!dirty} className="h-10 px-4 rounded-xl bg-white/10 ring-1 ring-white/25 text-white text-[14px] font-black disabled:opacity-40">되돌리기</button>
+            <button type="button" onClick={async () => { if ((await kpConfirm("저장하지 않은 수정을 버리고 마지막 저장값으로 돌릴까요?"))) { setDirty(false); setCfg(live); } }} disabled={!dirty} className="h-10 px-4 rounded-xl bg-white/10 ring-1 ring-white/25 text-white text-[14px] font-black disabled:opacity-40">되돌리기</button>
             <button type="button" onClick={applyRecommended} className="h-10 px-4 rounded-xl bg-white/10 ring-1 ring-white/25 text-white text-[14px] font-black">추천 요금표 적용</button>
             <button type="button" onClick={() => openPrint("LogisWeb 요금 안내", priceSheetHtml(cfg))} className="h-10 px-4 rounded-xl text-white/75 text-[14px] font-bold hover:text-white">요금 안내서 인쇄</button>
           </div>
@@ -714,7 +715,7 @@ export function QuoteHistory({ onOpen, onContract }) {
                       <button type="button" onClick={() => onOpen?.(x)} className="h-8 px-3 rounded-lg bg-[#0F1A30] text-white text-[12.5px] font-black mr-1">열기</button>
                       {onContract && <button type="button" onClick={() => onContract(x)} className="h-8 px-3 rounded-lg border border-[#1B2B4B] text-[12.5px] font-black text-[#1B2B4B] mr-1">계약서 만들기</button>}
                       <button type="button" onClick={() => { const c = x.pricing ? mergeDefaults(x.pricing) : cfg; if (!c) return; const inp = { ...BLANK_INPUT, ...x.input }; const q = quoteOf(c, inp); q && openPrint(`견적서_${x.customer}`, quoteHtml(c, inp, q, x.no)); }} className="h-8 px-3 rounded-lg border border-[#DCE3EE] text-[12.5px] font-black text-[#1B2B4B] mr-1">인쇄</button>
-                      <button type="button" onClick={() => window.confirm(`${x.customer} 견적(${x.no})을 삭제할까요?`) && runDelete({ label: "견적", task: () => deleteDoc(doc(db, "salesQuotes", x.id)) }).catch(() => {})} /* ⭐ 2026-11-05 삭제 진행 창 */ className="h-8 px-3 rounded-lg border border-[#DCE3EE] text-[12.5px] font-bold text-[#7A879C]">삭제</button>
+                      <button type="button" onClick={async () => (await kpConfirm(`${x.customer} 견적(${x.no})을 삭제할까요?`)) && runDelete({ label: "견적", task: () => deleteDoc(doc(db, "salesQuotes", x.id)) }).catch(() => {})} /* ⭐ 2026-11-05 삭제 진행 창 */ className="h-8 px-3 rounded-lg border border-[#DCE3EE] text-[12.5px] font-bold text-[#7A879C]">삭제</button>
                     </td>
                   </tr>
                 ))}

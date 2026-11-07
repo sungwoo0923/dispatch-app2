@@ -17,7 +17,7 @@
 import { defaultFundId } from "./ledgerAuto";
 import { runDelete } from "./DeleteProgress"; // ⭐ 2026-11-05 삭제 진행 창 + 한 번에 삭제
 import React from "react";
-import { kpConfirm } from "./kpDialog";
+import { kpConfirm, kpPrompt } from "./kpDialog";
 import BankAccountInput, { ReasonTemplates } from "./BankAccountInput";
 import { createPortal } from "react-dom";
 import { html2canvas } from "./lazyLoad"; // ⭐ 2026-11-02 속도 — 캡처 라이브러리는 처음 캡처할 때 받는다
@@ -1191,7 +1191,7 @@ function LineEditor({ line, setLine, cc, setCc, staff, me, company, cat }) {
   };
   const save = async () => {
     if (!line.length) return;
-    const name = window.prompt("결재선 이름", `${catOf(cat).label} 결재선`);
+    const name = (await kpPrompt("결재선 이름", `${catOf(cat).label} 결재선`));
     if (!name) return;
     await addDoc(collection(db, "approvalLines"), { company, name, ownerUid: me.uid, ownerName: me.name, shared: false, cats: [cat], steps: line.map(({ uid, name: n, position, kind }) => ({ uid, name: n, position, kind })), cc, createdAt: serverTimestamp() }).catch((e) => window.alert(e.message));
   };
@@ -2164,7 +2164,7 @@ function LinesPage({ company, me, staff }) {
                 {(t.ownerUid === me.uid || admin) && (
                   <>
                     <button type="button" onClick={() => setEdit({ ...t, cats: t.cats || [], cc: t.cc || [] })} className="h-8 px-3 rounded-lg border border-[#DCE3EE] text-[13px] font-bold text-[#3A4A66]">수정</button>
-                    <button type="button" onClick={() => window.confirm("이 결재선을 지울까요?") && runDelete({ label: "결재선", task: () => deleteDoc(doc(db, "approvalLines", t.id)) }).catch(() => {})} /* ⭐ 2026-11-05 삭제 진행 창 */ className="h-8 px-3 rounded-lg border border-[#DCE3EE] text-[13px] font-bold text-[#5B6B85]">삭제</button>
+                    <button type="button" onClick={async () => (await kpConfirm("이 결재선을 지울까요?")) && runDelete({ label: "결재선", task: () => deleteDoc(doc(db, "approvalLines", t.id)) }).catch(() => {})} /* ⭐ 2026-11-05 삭제 진행 창 */ className="h-8 px-3 rounded-lg border border-[#DCE3EE] text-[13px] font-bold text-[#5B6B85]">삭제</button>
                   </>
                 )}
               </div>

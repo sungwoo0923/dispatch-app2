@@ -8,6 +8,7 @@ import { auth, db, FUNCTIONS_BASE, DEFAULT_COMPANY } from "./firebase";
 import { collection, doc, getDoc, getDocs, query, where, writeBatch, setDoc, serverTimestamp } from "firebase/firestore";
 import { coDocKey } from "./coKey";
 import { parsePlacesFromGrid, dedupePlaces, parseDriversFromGrid, dedupeDrivers, normKey, normPlate, wordsToLines, parsePlacesFromOcrLines, cleanPlaces, dedupeCleaned, placeKeyOf } from "./placeDriverParse";
+import { kpConfirm } from "./kpDialog";
 
 // ⭐ 2026-11-03 .xlsx 속 그림(캡처해서 붙인 표) 꺼내기 — 탭 이름까지(시트 → 그림판 → 그림 연결 파일을 따라감). 같은 그림은 1장만.
 async function extractXlsxImages(buf) {
@@ -195,7 +196,7 @@ export default function SheetPlaceDriverImport({ companies = [], url: initUrl = 
     const list = what === "places" ? placesToSave : driversToSave;
     if (!list.length) return;
     const label = what === "places" ? "상하차지" : "기사";
-    if (!window.confirm(`${company}에 ${label} ${list.length.toLocaleString()}건을 등록할까요?\n(나중에 아래 가져오기 기록의 [가져오기 취소]로 한 번에 지울 수 있습니다)`)) return;
+    if (!(await kpConfirm(`${company}에 ${label} ${list.length.toLocaleString()}건을 등록할까요?\n(나중에 아래 가져오기 기록의 [가져오기 취소]로 한 번에 지울 수 있습니다)`))) return;
     const batchId = `imp_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
     const me = auth.currentUser?.email || "";
     setBusy("save");
