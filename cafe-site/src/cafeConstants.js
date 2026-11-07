@@ -9,7 +9,7 @@ export const MARKET_NAME = "로지스웹 허브"; // ⭐ 2026-11-06 대표님 �
 export const MARKET_NAME_EN = "LogisWeb Hub";
 export const MARKET_SHORT = "허브"; // 버튼/짧은 문구용("저장 + 허브 등록")
 export const MARKET_TAGLINE = "운송사끼리 오더를 주고받는 실시간 오더 거래소";
-export const PROGRAM_URL = "https://dispatch-app2.vercel.app/login"; // 로지스웹 운송 프로그램
+export const PROGRAM_URL = "https://app.logisweb.co.kr/login"; // 로지스웹 운송 프로그램
 
 export const VEHICLE_TYPES = ["라보", "다마스", "오토바이", "윙바디", "탑", "카고", "냉장윙", "냉동윙", "냉장탑", "냉동탑", "냉장/냉동탑", "냉장/냉동윙"];
 export const PAY_TYPES = ["계산서", "착불", "선불", "계좌이체"];

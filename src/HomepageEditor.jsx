@@ -15,7 +15,7 @@ import { kpConfirm } from "./kpDialog";
 
 const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
 const LOCAL = typeof location !== "undefined" && /^(localhost|127\.0\.0\.1)$/.test(location.hostname);
-const DEFAULT_URL = LOCAL ? "http://127.0.0.1:5500/" : "https://dispatch-app2-vskk.vercel.app/";
+const DEFAULT_URL = LOCAL ? "http://127.0.0.1:5500/" : "https://www.logisweb.co.kr/";
 const EMPTY = { v: 1, page: {}, ops: [], els: {} };
 const DEVICES = [["pc", "PC", 1440], ["tablet", "태블릿", 820], ["mobile", "모바일", 390]];
 const ANCHORS = [["#flow", "업무 흐름"], ["#control", "실시간 관제"], ["#dispatch", "배차"], ["#erp", "정산 · ERP"], ["#approval", "전자결재"], ["#mobile", "모바일 · 기사앱"], ["#groupware", "그룹웨어·보안"], ["#download", "다운로드"], ["#steps", "도입 절차"], ["#inquiry-form", "무료 체험 신청"], ["login.html", "로그인 안내 페이지"]];
