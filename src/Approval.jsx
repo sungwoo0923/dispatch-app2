@@ -71,7 +71,7 @@ const goPersonnelOrder = (targetUid) => {
 
 // 💸 2026-11-04 지급완료 — 최종 승인된 비용·지출 결의(금액 있는 문서)를 재무·경리가 "지급 완료"로 표시한다.
 //  대상: cat=="expense" && 금액>0 (법인카드 사용보고는 이미 카드로 결제된 건이라 제외)
-//  누를 수 있는 사람: 역할 test(경리)·hrAcct·admin·totalMaster, 소속 부서 이름에 재무·경리·회계가 들어간 직원, 그 문서의 최종 결재자
+//  누를 수 있는 사람: 아래 FIN_ROLES·재무 부서(2026-11-07 정리 — 운송 관리자(admin)·최종 결재자는 이제 못 누른다)
 //  (firestore.rules › approvals 의 "⭐ 2026-11-04 전자결재 서명" 규칙과 같은 조건)
 const PAY_SKIP_FORMS = ["card"];
 export const isPayDoc = (d) => d?.cat === "expense" && !PAY_SKIP_FORMS.includes(d?.form) && Number(d?.amount) > 0;

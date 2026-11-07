@@ -718,14 +718,14 @@ export default function MobileFleetView({ dispatchData = [], userCompany = "", o
   const selectedPath = useMemo(() => {
     // 출근 시각: driver.workStartAt 또는 오늘 "출근" 로그
     const checkInLog = selectedDriverLogs.find(l =>
-      l.status === "출근" && resolveTs(l.timestamp)?.toISOString().slice(0, 10) === selectedDate
+      l.status === "출근" && (() => { const t = resolveTs(l.timestamp); return t && kstDateStrLocal(t) === selectedDate; })() // ⭐ 2026-11-07 한국 날짜로 비교(예전엔 UTC라 오전 9시 전 출근이 전날로 잡혔다)
     );
     const checkInTime = checkInLog
       ? resolveTs(checkInLog.timestamp)?.getTime()
       : (mapSelected?.workStartAt ? resolveTs(mapSelected.workStartAt)?.getTime() : null);
     // 최종퇴근 시각
     const checkOutLog = [...selectedDriverLogs].find(l =>
-      l.status === "최종퇴근" && resolveTs(l.timestamp)?.toISOString().slice(0, 10) === selectedDate
+      l.status === "최종퇴근" && (() => { const t = resolveTs(l.timestamp); return t && kstDateStrLocal(t) === selectedDate; })()
     );
     const checkOutTime = checkOutLog ? resolveTs(checkOutLog.timestamp)?.getTime() : null;
 
@@ -924,7 +924,7 @@ export default function MobileFleetView({ dispatchData = [], userCompany = "", o
     activityLogs.filter(l => {
       if (!driversMap[l.uid]) return false;
       const t = resolveTs(l.timestamp);
-      return t && t.toISOString().slice(0, 10) === selectedDate;
+      return t && kstDateStrLocal(t) === selectedDate; // ⭐ 2026-11-07 한국 날짜 기준
     }),
     [activityLogs, driversMap, selectedDate]
   );

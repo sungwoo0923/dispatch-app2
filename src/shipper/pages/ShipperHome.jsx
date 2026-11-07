@@ -58,8 +58,8 @@ export default function ShipperHome() {
 
   const toYMD = (d) => {
     if (!d) return "";
-    if (d?.toDate) return d.toDate().toISOString().slice(0, 10);
-    if (d instanceof Date) return d.toISOString().slice(0, 10);
+    if (d?.toDate) return new Date(d.toDate().getTime() + 9 * 3600e3).toISOString().slice(0, 10); // ⭐ 2026-11-07 한국 날짜
+    if (d instanceof Date) return new Date(d.getTime() + 9 * 3600e3).toISOString().slice(0, 10);
     return String(d).slice(0, 10);
   };
 

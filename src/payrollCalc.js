@@ -322,7 +322,8 @@ export function calcPayslipFull(emp = {}, month = {}, rates = presetFor(2026)) {
 
 // ── 연차 사용 촉진(근로기준법 61조) 일정 ──
 //  basis: "hire"(입사일 기준) | "fiscal"(회계연도 기준, fiscalStart "MM-DD")
-//  1년 이상(연차): 1차 = 회기 종료 6개월 전 · 2차 = 2개월 전 / 1년 미만(월차): 1차 = 3개월 전 · 2차 = 1개월 전
+//  1년 이상(연차): 1차 = 회기 종료 6개월 전 · 2차 기한 = 2개월 전 / 1년 미만(월차): 1차 = 3개월 전 · 2차 기한 = 1개월 전
+//  2차는 1차 계획 제출 기한(1차 + 10일)이 지나면 바로 대상이 되고, 늦어도 2차 기한까지 회사가 사용 시기를 지정한다
 //  계획 제출 기한 = 1차 통보일 + 10일
 const pad2 = (n) => String(n).padStart(2, "0");
 const ymd = (d) => `${d.getUTCFullYear()}-${pad2(d.getUTCMonth() + 1)}-${pad2(d.getUTCDate())}`;
@@ -367,7 +368,10 @@ export function promoteStageDue(period, today, rec = {}, remain = 0) {
   const s = promoteSchedule(period);
   if (!s || remain <= 0 || today > period.to) return null;
   if (!rec?.n1?.sentAt && today >= s.first && today < s.second) return "first";
-  if (!rec?.n2?.sentAt && today >= s.second && !(rec?.plan?.submittedAt && (rec.plan.dates || []).length)) return "second";
+  // ⭐ 2026-11-07 규칙 점검 — 61조: 2차(회사가 사용 시기 지정)는 "종료 2개월(월차 1개월) 전까지" 해야 한다.
+  //   예전엔 그 기한 당일부터 2차가 떠서 지정할 시간이 없었다 → 1차 계획 제출 기한(10일)이 지나면 바로 2차 대상(기한일까지)
+  const planned = !!(rec?.plan?.submittedAt && (rec.plan.dates || []).length);
+  if (!rec?.n2?.sentAt && !planned && (today >= s.second || (rec?.n1?.sentAt && rec?.n1?.due && today > rec.n1.due))) return "second";
   if (!rec?.n1?.sentAt && today >= s.second) return "second"; // 1차를 놓친 경우(기능 도입 전 등) — 2차부터(1차 누락은 HR 화면에 경고)
   return null;
 }

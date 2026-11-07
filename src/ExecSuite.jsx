@@ -325,6 +325,8 @@ export function ExecDashboard({ company, dispatchData = [], onGo, pastCache, liv
             </div>
           ))}
         </div>
+        {/* ⭐ 2026-11-07 규칙 점검 — 매출관리(배차완료만)와 숫자가 다른 이유를 화면에 적어 둔다 */}
+        <div className="-mt-1 text-[12.5px] font-bold text-white/40" data-kp="exec-basis">매출 기준: 취소·운송사 전송을 뺀 전체 오더(배차중·승인대기 포함) · 매출관리는 배차완료 오더만 집계해 숫자가 다를 수 있습니다</div>
 
         {/* ── 💰 자금(대표만) ── */}
         {isCeo && (
