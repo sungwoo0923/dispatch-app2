@@ -52,7 +52,10 @@ const t = async (name, fn) => { await fn(); n += 1; console.log(`  ✓ ${name}`)
     assert.ok(pwProblem("12345")); assert.ok(pwProblem("111111")); assert.equal(pwProblem("pay2026!"), "");
   });
   await t("처음: 비밀번호 없음 · 경리사원은 못 정함 · 인사는 담당 아님", async () => {
-    const s = await api.status({}, ctx("clerk")); assert.equal(s.hasPassword, false); assert.equal(s.admin, false);
+    const s = await api.status({}, ctx("clerk")); assert.equal(s.usingDefault, true); assert.equal(s.admin, false);
+    // 처음 비밀번호 000000 — 맞으면 열리고 바꾸라고 알린다, 다른 값은 틀림
+    const v0 = await api.verify({ password: "000000" }, ctx("clerk")); assert.equal(v0.ok, true); assert.equal(v0.mustChange, true);
+    const v1 = await api.verify({ password: "123123" }, ctx("clerk")); assert.equal(v1.ok, false);
     await assert.rejects(api.setPw({ newPassword: "pay2026!" }, ctx("clerk")), /경리 관리자/);
     assert.equal((await api.status({}, ctx("hr"))).staff, false);
     await assert.rejects(api.verify({ password: "x" }, ctx("ceo")), /경리 담당자/);
@@ -89,7 +92,7 @@ const t = async (name, fn) => { await fn(); n += 1; console.log(`  ✓ ${name}`)
   });
   await t("다른 회사 이름을 보내도 내 회사 기준(최고관리자만 회사 지정)", async () => {
     user("other", { role: "test", companyName: "다른운송" });
-    const s = await api.status({ company: CO }, ctx("other")); assert.equal(s.company, "다른운송"); assert.equal(s.hasPassword, false);
+    const s = await api.status({ company: CO }, ctx("other")); assert.equal(s.company, "다른운송"); assert.equal(s.usingDefault, true);
   });
   console.log(`\n급여 비밀번호 테스트 ${n}개 통과`);
 })().catch((e) => { console.error(e); process.exit(1); });

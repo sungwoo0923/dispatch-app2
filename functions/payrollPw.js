@@ -30,6 +30,7 @@ function isPayrollAdmin(u = {}, email = "") {
   if (!isPayrollStaff(u, email)) return false;
   return ["test", "hrAcct", "allMgr"].includes(role) || (FIN_TEAM.test(String(u.team || "")) && (role === "admin" || u.isMaster === true));
 }
+const DEFAULT_PW = "000000"; // ⭐ 2026-11-08 처음 비밀번호(정한 비밀번호가 없을 때만 통함)
 function pwProblem(pw) {
   const s = String(pw ?? "");
   if (s.length < PW_MIN) return `비밀번호는 ${PW_MIN}자 이상으로 정해 주세요`;
@@ -83,7 +84,7 @@ function makePayrollPw({ db, FieldValue, Timestamp, HttpsError }) {
     const ex = un.exists ? un.data().expiresAt?.toMillis?.() || 0 : 0;
     const unlockedUntil = un.exists && un.data().companyName === w.company && ex > Date.now() ? ex : 0;
     const lockUntil = at.exists ? Number(at.data().lockUntil) || 0 : 0;
-    return { staff: true, admin: w.admin, company: w.company, hasPassword: sec.exists && !!sec.data().hash, updatedAt: sec.exists ? sec.data().updatedAtMs || 0 : 0, updatedByName: sec.exists ? sec.data().updatedByName || "" : "", unlockedUntil, lockUntil: lockUntil > Date.now() ? lockUntil : 0 };
+    return { staff: true, admin: w.admin, company: w.company, hasPassword: true, usingDefault: !(sec.exists && !!sec.data().hash), updatedAt: sec.exists ? sec.data().updatedAtMs || 0 : 0, updatedByName: sec.exists ? sec.data().updatedByName || "" : "", unlockedUntil, lockUntil: lockUntil > Date.now() ? lockUntil : 0 };
   }
 
   async function setPw(data, context) {
@@ -109,12 +110,13 @@ function makePayrollPw({ db, FieldValue, Timestamp, HttpsError }) {
     const w = await who(context, data);
     if (!w.staff) throw err("permission-denied", "급여관리는 경리 담당자만 열 수 있어요");
     const sec = await secretRef(w.key).get();
-    if (!sec.exists || !sec.data().hash) throw err("failed-precondition", "아직 급여 비밀번호가 없어요");
+    // ⭐ 2026-11-08 처음 비밀번호(DEFAULT_PW) — 아직 정한 비밀번호가 없으면 000000으로 열고, 경리 관리자는 바로 바꾸게 한다
+    const noPw = !sec.exists || !sec.data().hash;
     const aRef = attemptRef(w.key, w.uid);
     const a = (await aRef.get()).data() || {};
     const now = Date.now();
     if ((Number(a.lockUntil) || 0) > now) return { ok: false, lockUntil: Number(a.lockUntil), left: 0 };
-    if (!checkPw(data?.password, sec.data())) {
+    if (noPw ? String(data?.password ?? "") !== DEFAULT_PW : !checkPw(data?.password, sec.data())) {
       const fails = (Number(a.fails) || 0) + 1;
       if (fails >= MAX_FAILS) {
         const locks = Number(a.locks) || 0;
@@ -127,7 +129,7 @@ function makePayrollPw({ db, FieldValue, Timestamp, HttpsError }) {
     }
     await aRef.delete().catch(() => {});
     const expiresAt = await issueUnlock(w);
-    return { ok: true, expiresAt };
+    return { ok: true, expiresAt, mustChange: noPw };
   }
 
   async function lock(data, context) {
@@ -139,4 +141,4 @@ function makePayrollPw({ db, FieldValue, Timestamp, HttpsError }) {
   return { status, setPw, verify, lock };
 }
 
-module.exports = { makePayrollPw, isPayrollStaff, isPayrollAdmin, pwProblem, hashPw, checkPw, lockMinutesFor, UNLOCK_MS, MAX_FAILS };
+module.exports = { DEFAULT_PW, makePayrollPw, isPayrollStaff, isPayrollAdmin, pwProblem, hashPw, checkPw, lockMinutesFor, UNLOCK_MS, MAX_FAILS };

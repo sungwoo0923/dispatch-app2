@@ -24,9 +24,9 @@ async function call(name, data) {
 // 둘러보기용 가짜 서버(이 탭 안에서만)
 const DK = "kpDemoPayPw";
 const demoApi = {
-  status: () => { let pw = ""; let until = 0; try { pw = sessionStorage.getItem(DK) || ""; until = Number(sessionStorage.getItem(`${DK}:until`)) || 0; } catch { /* 무시 */ } return { staff: true, admin: true, hasPassword: !!pw, unlockedUntil: until > Date.now() ? until : 0, lockUntil: 0 }; },
+  status: () => { let pw = ""; let until = 0; try { pw = sessionStorage.getItem(DK) || ""; until = Number(sessionStorage.getItem(`${DK}:until`)) || 0; } catch { /* 무시 */ } return { staff: true, admin: true, hasPassword: true, usingDefault: !pw, unlockedUntil: until > Date.now() ? until : 0, lockUntil: 0 }; },
   set: ({ newPassword, currentPassword }) => { const cur = sessionStorage.getItem(DK); if (cur && cur !== currentPassword) throw new Error("지금 비밀번호가 맞지 않아요"); if (String(newPassword).length < 6) throw new Error("비밀번호는 6자 이상으로 정해 주세요"); sessionStorage.setItem(DK, newPassword); const until = Date.now() + 30 * 60000; sessionStorage.setItem(`${DK}:until`, String(until)); return { ok: true, expiresAt: until, changed: !!cur }; },
-  verify: ({ password }) => { const ok = sessionStorage.getItem(DK) === password; if (!ok) return { ok: false, left: 4 }; const until = Date.now() + 30 * 60000; sessionStorage.setItem(`${DK}:until`, String(until)); return { ok: true, expiresAt: until }; },
+  verify: ({ password }) => { const cur = sessionStorage.getItem(DK) || ""; const ok = cur ? cur === password : password === "000000"; if (!ok) return { ok: false, left: 4 }; const until = Date.now() + 30 * 60000; sessionStorage.setItem(`${DK}:until`, String(until)); return { ok: true, expiresAt: until, mustChange: !cur }; },
   lock: () => { sessionStorage.removeItem(`${DK}:until`); return { ok: true }; },
 };
 const api = {
@@ -128,7 +128,7 @@ export default function PayrollGate({ company, canAdmin = false, children }) {
     setBusy(true); setMsg("");
     try {
       const r = await api.verify(company, pw);
-      if (r.ok) { lastAct.current = Date.now(); setNow(Date.now()); setUntil(r.expiresAt); setPw(""); }
+      if (r.ok) { lastAct.current = Date.now(); setNow(Date.now()); setUntil(r.expiresAt); setPw(""); if (r.mustChange) { setSt((s) => ({ ...s, usingDefault: true })); setChanging(true); } }
       else if (r.lockUntil) setMsg(`여러 번 틀려서 ${new Date(r.lockUntil).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })}까지 잠겼어요`);
       else setMsg(`비밀번호가 맞지 않아요 · ${r.left}번 더 틀리면 잠깐 잠겨요`);
     } catch (er) { setMsg(er.message || "확인하지 못했어요"); } finally { setBusy(false); }
@@ -149,7 +149,7 @@ export default function PayrollGate({ company, canAdmin = false, children }) {
           <input type="password" autoComplete="current-password" autoFocus value={pw} onChange={(e) => setPw(e.target.value)} placeholder="급여 비밀번호" className={inp} data-testid="payroll-pw" aria-label="급여 비밀번호" />
           {msg && <div className={`rounded-xl px-3.5 py-2.5 text-[14px] font-bold border ${/틀|잠겼어요|맞지/.test(msg) && !/다시 잠갔/.test(msg) ? "bg-[#FEF3F2] border-[#FECDCA] text-[#B42318]" : "bg-[#F5F8FD] border-[#DCE3EE] text-[#1B2B4B]"}`} role="status">{msg}</div>}
           <button type="submit" disabled={busy || !pw} className="w-full h-12 rounded-xl bg-[#0F1A30] text-white text-[15px] font-black disabled:opacity-40" data-testid="payroll-unlock">{busy ? "확인 중…" : "잠금 해제"}</button>
-          <div className="text-[14px] font-bold text-[#7A879C] leading-relaxed">비밀번호를 잊었으면 경리 관리자에게 바꿔 달라고 하세요.</div>
+          <div className="text-[14px] font-bold text-[#7A879C] leading-relaxed">{st.usingDefault ? "처음 비밀번호는 000000이에요. 들어가면 바로 새 비밀번호로 바꿔 주세요." : "비밀번호를 잊었으면 경리 관리자에게 바꿔 달라고 하세요."}</div>
         </form>
       </GateCard>
     );
@@ -166,10 +166,15 @@ export default function PayrollGate({ company, canAdmin = false, children }) {
         <button type="button" onClick={() => lockNow("잠갔어요")} className="h-9 px-3 rounded-lg bg-[#0F1A30] text-white text-[14px] font-black" data-testid="payroll-lock">지금 잠그기</button>
       </div>
       {changing && (
-        <div className="fixed inset-0 z-[100000] bg-[#0F1A30]/45 grid place-items-center px-3" onClick={() => setChanging(false)}>
+        <div className="fixed inset-0 z-[100000] bg-[#0F1A30]/45 grid place-items-center px-3" onClick={() => { if (!(st.usingDefault && (st.admin || canAdmin))) setChanging(false); }}>
           <div className="w-full max-w-[440px] rounded-[24px] bg-white shadow-[0_24px_60px_rgba(15,26,48,0.3)] overflow-hidden" onClick={(e) => e.stopPropagation()}>
             <div className="px-6 pt-5 pb-4 text-white" style={{ background: "linear-gradient(120deg,#0B1428,#1B2B4B 60%,#2D4C82)" }}><div className="text-[12px] font-extrabold tracking-[0.26em] text-[#8FB0F0]">PAYROLL · PASSWORD</div><div className="text-[19px] font-black">급여 비밀번호 변경</div><div className="text-[14px] font-bold text-white/75">바꾸면 다른 담당자는 새 비밀번호로 다시 열어야 해요</div></div>
-            <div className="px-6 py-5"><PwForm company={company} mode="change" onCancel={() => setChanging(false)} onDone={(r) => { setChanging(false); setUntil(r.expiresAt); }} /></div>
+            <div className="px-6 py-5">
+              {st.usingDefault && <div className="mb-3 rounded-xl bg-[#EEF3FC] border border-[#C9D6EE] px-3.5 py-2.5 text-[14px] font-bold text-[#1B2B4B]">처음 비밀번호(000000)를 쓰고 있어요. 새 비밀번호로 바꿔 주세요.</div>}
+              {(st.admin || canAdmin)
+                ? <PwForm company={company} mode={st.usingDefault ? "set" : "change"} onCancel={st.usingDefault ? undefined : () => setChanging(false)} onDone={(r) => { setChanging(false); setSt((s) => ({ ...s, usingDefault: false })); setUntil(r.expiresAt); }} />
+                : <div className="space-y-3"><div className="text-[14px] font-bold text-[#3A4A66]">비밀번호는 경리 관리자만 바꿀 수 있어요. 관리자에게 바꿔 달라고 해 주세요.</div><button type="button" onClick={() => setChanging(false)} className="w-full h-12 rounded-xl bg-[#0F1A30] text-white text-[15px] font-black">확인</button></div>}
+            </div>
           </div>
         </div>
       )}
