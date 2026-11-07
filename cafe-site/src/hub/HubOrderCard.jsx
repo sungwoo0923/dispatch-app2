@@ -55,7 +55,7 @@ export default function HubOrderCard({ o, onOpen, mine, fav, fresh, extraKm, com
           </div>
         </div>
         {fit && <Badge tone={TONE[fit.tone]} className="ml-auto">{fit.label}</Badge>}
-        <span className={`${fit ? "" : "ml-auto"} w-11 h-11 rounded-2xl inline-flex items-center justify-center text-white shrink-0 group-hover:translate-x-0.5 transition`} style={{ background: "linear-gradient(120deg,#1B2B4B,#2D4C82)" }}><HI name="chevron" size={20} /></span>
+        <span data-testid="card-cta" className={`${fit ? "" : "ml-auto"} h-11 px-4 rounded-2xl inline-flex items-center justify-center text-white text-[15px] font-extrabold whitespace-nowrap shrink-0 transition`} style={{ background: "linear-gradient(120deg,#1B2B4B,#2D4C82)" }}>{mine ? "내 오더" : stg === "open" ? "배차요청" : "보기"}</span>
       </div>
       <div className="px-4 sm:px-5 py-2.5 flex items-center gap-2 text-[14px] text-[#55657F] border-t border-[#EEF1F6]">
         <HI name="building" size={15} className="text-[#8592A8] shrink-0" />
