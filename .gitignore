@@ -33,3 +33,4 @@ android/app/build/
 android/build/
 android/local.properties
 android/capacitor-cordova-android-plugins/build/
+scripts/hubTests/fn/.env
