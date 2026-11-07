@@ -19,6 +19,7 @@ import {
   setDoc,
   serverTimestamp,
 } from "firebase/firestore";
+import CustomDatePicker from "./CustomDatePicker"; // 📅 2026-11-07 날짜는 프로그램 달력으로
 
 
 // ────────────────────────────────────────
@@ -719,7 +720,9 @@ export default function UploadPage() {
                 ].map(([label, type, val, set, ph, hint]) => (
                   <label key={label} style={{ display: "block", marginTop: 12 }}>
                     <span style={{ fontSize: 13, fontWeight: 800, color: "#334155" }}>{label}{hint && <span style={{ fontSize: 11.5, color: "#4B6CB7", marginLeft: 6 }}>{hint}</span>}</span>
-                    <input type={type} value={val} onChange={e => set(e.target.value)} placeholder={ph} className="kpu-input" />
+                    {type === "date"
+                      ? <CustomDatePicker showIcon value={val} onChange={e => set(e.target.value)} className="kpu-input" style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }} />
+                      : <input type={type} value={val} onChange={e => set(e.target.value)} placeholder={ph} className="kpu-input" />}
                   </label>
                 ))}
               </div>
@@ -1073,7 +1076,7 @@ export default function UploadPage() {
                 <>
                   <div style={{ fontSize: 13, color: "#64748b", marginTop: 4 }}>계산서 발행일을 고르면 입금 예정일을 알려드립니다.</div>
                   <label style={{ display: "block", marginTop: 14, fontSize: 13, fontWeight: 800, color: "#334155" }}>계산서 발행일
-                    <input type="date" value={invoiceDate} onChange={e => setInvoiceDate(e.target.value)} className="kpu-input" />
+                    <CustomDatePicker showIcon value={invoiceDate} onChange={e => setInvoiceDate(e.target.value)} className="kpu-input" style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }} />
                   </label>
                   {invoiceDate && (() => {
                     const calc = calcPaymentDate(invoiceDate);

@@ -1,3 +1,4 @@
+import CustomDatePicker from "../../CustomDatePicker"; // 📅 2026-11-07 날짜는 프로그램 달력으로
 import { useState, useEffect, useMemo } from "react";
 import { DeckStrip, SegTabs } from "../ShipUi";
 import { db, auth } from "../../firebase";
@@ -321,9 +322,9 @@ export default function ShipperSettlement() {
       {/* 필터 */}
       <div className="bg-white rounded-[20px] border border-[#E3E8F0] px-5 py-4 shadow-[0_1px_2px_rgba(16,24,40,0.04),0_10px_28px_rgba(16,24,40,0.06)] flex items-center gap-3 flex-wrap">
         <div className="flex items-center gap-2"><span className="w-1.5 h-1.5 rotate-45 bg-[#2D4C82]" /><span className="text-[10px] font-extrabold tracking-[0.22em] text-[#9AA9C3]" style={{ fontFamily: "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif", fontVariantNumeric: "tabular-nums" }}>PERIOD</span><span className="font-black text-[#0F1A30]">정산 기간</span></div>
-        <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="border border-[#D5DEEC] rounded-[11px] px-3 h-10 text-sm font-semibold text-[#0F1A30]" />
+        <CustomDatePicker showIcon value={startDate} onChange={e => setStartDate(e.target.value)} className="border border-[#D5DEEC] rounded-[11px] px-3 h-10 text-sm font-semibold text-[#0F1A30]" />
         <span className="text-gray-400">~</span>
-        <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="border border-[#D5DEEC] rounded-[11px] px-3 h-10 text-sm font-semibold text-[#0F1A30]" />
+        <CustomDatePicker showIcon value={endDate} onChange={e => setEndDate(e.target.value)} className="border border-[#D5DEEC] rounded-[11px] px-3 h-10 text-sm font-semibold text-[#0F1A30]" />
 
         <div className="flex gap-2">
           {[

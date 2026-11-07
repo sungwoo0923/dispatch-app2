@@ -16,6 +16,7 @@ import { createPortal } from "react-dom";
 import { db, auth } from "./firebase";
 import { collection, doc, onSnapshot, query, where, addDoc, updateDoc, deleteDoc, arrayUnion, arrayRemove, serverTimestamp, Timestamp } from "firebase/firestore";
 import { ShellIcon } from "./AdminShell";
+import { DateTimeSelect } from "./kpTimePick"; // ⏱ 2026-11-07 예약 발송 날짜·시간은 프로그램 달력·시간 선택으로
 import { isTMUser } from "./staffFilter";
 
 const toMs = (v) => (v?.toMillis ? v.toMillis() : typeof v === "number" ? v : 0);
@@ -476,8 +477,9 @@ function Composer({ company, myName, staff, uid, init, onClose, onDone }) {
               <input type="checkbox" checked={schedOn} onChange={(e) => setSchedOn(e.target.checked)} className="w-4 h-4 accent-[#4B6CB7]" />
               <ShellIcon name="clock" size={14} /> 예약 발송
             </label>
-            <input type="datetime-local" value={schedAt} onChange={(e) => { setSchedAt(e.target.value); setSchedOn(true); }}
-              className={`mt-2.5 w-full h-9 px-3 rounded-lg text-[13px] font-bold outline-none border ${schedOn ? "bg-white/10 border-white/20 text-white [color-scheme:dark]" : "bg-[#F5F8FD] border-[#E3E8F0] text-[#0F1A30]"}`} />
+            <DateTimeSelect value={schedAt} onChange={(e) => { setSchedAt(e.target.value); setSchedOn(true); }} className="mt-2.5"
+              dateClassName={`w-full h-10 px-3 rounded-lg text-[14px] font-bold outline-none border ${schedOn ? "bg-white/10 border-white/20 text-white" : "bg-[#F5F8FD] border-[#E3E8F0] text-[#0F1A30]"}`}
+              timeClassName={`w-full h-10 px-3 rounded-lg text-[14px] font-bold outline-none border ${schedOn ? "bg-white/10 border-white/20 text-white" : "bg-[#F5F8FD] border-[#E3E8F0] text-[#0F1A30]"}`} />
             <div className="mt-2 flex flex-wrap gap-1.5">
               {[["1h", "1시간 뒤"], ["tom9", "내일 오전 9시"], ["tom13", "내일 오후 1시"], ["mon9", "월요일 9시"]].map(([k, l]) => (
                 <button key={k} type="button" onClick={() => quick(k)} className={`h-7 px-2.5 rounded-lg text-[11.5px] font-bold border ${schedOn ? "border-white/25 text-white/85 hover:bg-white/10" : "border-[#DCE3EE] text-[#3A4A66] hover:bg-[#F5F8FD]"}`}>{l}</button>

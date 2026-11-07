@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { db, auth } from "../../firebase";
 import { collection, query, where, getDocs } from "firebase/firestore";
+import CustomDatePicker from "../../CustomDatePicker"; // 📅 2026-11-07 날짜는 프로그램 달력으로
 
 const getDate = (offset = 0) => {
   const d = new Date();
@@ -84,9 +85,9 @@ useEffect(() => {
 
         {/* 검색 */}
         <div className="bg-white p-4 rounded-xl border shadow-sm flex gap-3 items-center">
-          <input type="date" value={startDate} onChange={e=>setStartDate(e.target.value)} className="input"/>
+          <CustomDatePicker showIcon value={startDate} onChange={e=>setStartDate(e.target.value)} className="input"/>
           <span>~</span>
-          <input type="date" value={endDate} onChange={e=>setEndDate(e.target.value)} className="input"/>
+          <CustomDatePicker showIcon value={endDate} onChange={e=>setEndDate(e.target.value)} className="input"/>
 
           <input
             value={keyword}

@@ -7,6 +7,7 @@
 import React from "react";
 import { auth, db, FUNCTIONS_BASE } from "./firebase";
 import { collection, query, where, onSnapshot } from "firebase/firestore";
+import CustomDatePicker from "./CustomDatePicker"; // 📅 2026-11-07 날짜는 프로그램 달력으로
 
 const SERVICE_EMAIL = "dispatch-app-9b92f@appspot.gserviceaccount.com";
 
@@ -186,10 +187,10 @@ export default function GsheetMinePanel() {
               <div className="text-[12.5px] text-[#5B6B85] mt-0.5">고른 날짜의 내 오더를 프로그램 내용 그대로 시트에 다시 씁니다(있는 줄은 덮어쓰기, 지워진 줄은 다시 넣기). 직접 적은 줄은 건드리지 않습니다.</div>
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              <input type="date" value={rsFrom} onChange={(e) => { setRsFrom(e.target.value); if (!rsTo || rsTo < e.target.value) setRsTo(e.target.value); }}
+              <CustomDatePicker showIcon value={rsFrom} onChange={(e) => { setRsFrom(e.target.value); if (!rsTo || rsTo < e.target.value) setRsTo(e.target.value); }}
                 className="h-10 px-3 rounded-xl border border-[#DCE3EE] text-[14px] font-semibold text-[#0F1A30] outline-none focus:border-[#4B6CB7]" />
               <span className="text-[13px] font-bold text-[#7A879C]">~</span>
-              <input type="date" value={rsTo} min={rsFrom || undefined} onChange={(e) => setRsTo(e.target.value)}
+              <CustomDatePicker showIcon value={rsTo} min={rsFrom || undefined} onChange={(e) => setRsTo(e.target.value)}
                 className="h-10 px-3 rounded-xl border border-[#DCE3EE] text-[14px] font-semibold text-[#0F1A30] outline-none focus:border-[#4B6CB7]" />
               <button
                 onClick={() => { if (window.confirm(`${rsFrom}${rsTo && rsTo !== rsFrom ? ` ~ ${rsTo}` : ""} 내 오더를 시트에 다시 보낼까요?\n시트에서 직접 고친 내용은 프로그램 내용으로 덮어써집니다.`)) run("resend"); }}

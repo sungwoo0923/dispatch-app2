@@ -10,6 +10,7 @@ import {
 import { db, auth, storage } from "./firebase";
 import { ref as storageRef, uploadBytes, getDownloadURL } from "firebase/storage";
 import { fmtPhone } from "./formatInput";
+import CustomDatePicker from "./CustomDatePicker"; // 📅 2026-11-07 날짜는 프로그램 달력으로
 
 // 전화번호 하이픈 자동 포맷 (DispatchApp.jsx formatPhone과 동일 규칙)
 // 전화번호 하이픈 — 공용 규칙(src/formatInput.js: 02·031·010·1588 등, 입력 중에도 적용)
@@ -231,7 +232,7 @@ function OrderPickModal({ onPick, onClose }) {
         <div style={{ padding: "12px 16px", borderBottom: "1px solid #EEF1F6", display: "flex", flexDirection: "column", gap: 8 }}>
           <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
             <button type="button" onClick={() => shift(-1)} style={chip(false)}>◀</button>
-            <input type="date" value={date} onChange={(e) => e.target.value && setDate(e.target.value)} style={{ height: 32, border: "1px solid #DCE3EE", borderRadius: 10, padding: "0 10px", fontSize: 13, fontWeight: 700, color: "#0F1A30" }} />
+            <CustomDatePicker showIcon value={date} onChange={(e) => e.target.value && setDate(e.target.value)} style={{ height: 32, border: "1px solid #DCE3EE", borderRadius: 10, padding: "0 10px", fontSize: 13, fontWeight: 700, color: "#0F1A30" }} />
             <button type="button" onClick={() => shift(1)} style={chip(false)}>▶</button>
             <button type="button" onClick={() => setDate(kstYmd(-1))} style={chip(date === kstYmd(-1))}>어제</button>
             <button type="button" onClick={() => setDate(kstYmd())} style={chip(date === kstYmd())}>오늘</button>

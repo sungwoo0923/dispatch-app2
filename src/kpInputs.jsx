@@ -53,12 +53,13 @@ export function MultiDateSelect({ value = [], onChange, className = "", placehol
 
 // 📅 월 선택 — 프로그램 달력 모양(연도 ‹ › + 12개월) · 옆에 [당월][전월] 바로가기
 export const kstYm = (offset = 0) => { const d = new Date(Date.now() + 9 * 3600e3); d.setUTCDate(1); d.setUTCMonth(d.getUTCMonth() + offset); return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}`; };
-export function MonthPicker({ value, onChange, dark = false, quick = true, className = "" }) {
+// ⭐ 2026-11-07 type="month" 대체용 옵션 — disabled · min/max("YYYY-MM", 밖의 달은 못 고름) · placeholder · triggerClassName(버튼 모양 덮어쓰기) · clearable([지우기])
+export function MonthPicker({ value, onChange, dark = false, quick = true, className = "", disabled = false, min = "", max = "", placeholder = "월 선택", triggerClassName = "", clearable = false }) {
   const [open, setOpen] = React.useState(false);
   const [year, setYear] = React.useState(Number(String(value || kstYm()).slice(0, 4)));
   const btnRef = React.useRef(null);
   const [rect, setRect] = React.useState(null);
-  const toggle = () => { if (!open && btnRef.current) { const r = btnRef.current.getBoundingClientRect(); setRect({ left: Math.min(r.left, window.innerWidth - 300), top: r.bottom + 6 }); setYear(Number(String(value || kstYm()).slice(0, 4))); } setOpen((v) => !v); };
+  const toggle = () => { if (disabled) return; if (!open && btnRef.current) { const r = btnRef.current.getBoundingClientRect(); setRect({ left: Math.min(r.left, window.innerWidth - 300), top: r.bottom + 6 }); setYear(Number(String(value || kstYm()).slice(0, 4))); } setOpen((v) => !v); };
   React.useEffect(() => {
     if (!open) return undefined;
     const close = (e) => { if (!e.target.closest?.("[data-kp-monthpop]") && !btnRef.current?.contains(e.target)) setOpen(false); };
@@ -75,10 +76,10 @@ export function MonthPicker({ value, onChange, dark = false, quick = true, class
   );
   return (
     <div className={`inline-flex items-center gap-1.5 ${className}`}>
-      <button ref={btnRef} type="button" onClick={toggle}
-        className={`h-10 pl-3.5 pr-3 rounded-xl inline-flex items-center gap-2 text-[15px] font-black whitespace-nowrap ${dark ? "bg-white/10 border border-white/25 text-white" : "bg-white border border-[#DCE3EE] text-[#0F1A30]"}`}>
+      <button ref={btnRef} type="button" onClick={toggle} disabled={disabled}
+        className={triggerClassName ? `inline-flex items-center gap-2 whitespace-nowrap disabled:opacity-60 disabled:cursor-not-allowed ${triggerClassName}` : `h-10 pl-3.5 pr-3 rounded-xl inline-flex items-center gap-2 text-[15px] font-black whitespace-nowrap disabled:opacity-60 disabled:cursor-not-allowed ${dark ? "bg-white/10 border border-white/25 text-white" : "bg-white border border-[#DCE3EE] text-[#0F1A30]"}`}>
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><rect x="3" y="5" width="18" height="16" rx="3" /><path d="M3 10h18M8 3v4M16 3v4" /></svg>
-        {y ? `${y}년 ${Number(m)}월` : "월 선택"}
+        {y ? `${y}년 ${Number(m)}월` : placeholder}
         <span className="opacity-60 text-[11px]">▾</span>
       </button>
       {quick && chip("당월", cur)}
@@ -94,10 +95,12 @@ export function MonthPicker({ value, onChange, dark = false, quick = true, class
           <div className="grid grid-cols-4 gap-1.5 p-3">
             {Array.from({ length: 12 }, (_, i) => {
               const ym = `${year}-${pad(i + 1)}`; const on = ym === value; const isCur = ym === cur;
-              return <button key={ym} type="button" onClick={() => { onChange(ym); setOpen(false); }}
-                className={`h-11 rounded-xl text-[14px] font-black transition ${on ? "bg-[#0F1A30] text-white" : isCur ? "border-2 border-[#2D4C82] text-[#0F1A30]" : "text-[#3A4A66] hover:bg-[#EEF3FC]"}`}>{i + 1}월</button>;
+              const off = (!!min && ym < min) || (!!max && ym > max);
+              return <button key={ym} type="button" disabled={off} onClick={() => { if (off) return; onChange(ym); setOpen(false); }}
+                className={`h-11 rounded-xl text-[14px] font-black transition disabled:opacity-25 disabled:cursor-not-allowed ${on ? "bg-[#0F1A30] text-white" : isCur ? "border-2 border-[#2D4C82] text-[#0F1A30]" : "text-[#3A4A66] hover:bg-[#EEF3FC]"}`}>{i + 1}월</button>;
             })}
           </div>
+          {clearable && value && <div className="px-3 pb-3 -mt-1 text-right"><button type="button" onClick={() => { onChange(""); setOpen(false); }} className="text-[12.5px] font-bold text-[#7A879C] hover:underline">지우기</button></div>}
         </div>,
         document.body,
       )}

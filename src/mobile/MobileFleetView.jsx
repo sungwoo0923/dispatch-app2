@@ -16,6 +16,7 @@ import { LeafletTrack, MapLegend } from "../mapLeaflet";
 import { modificationStatus } from "../orderChange";
 import VehicleCarePanel from "../VehicleCarePanel";
 import { careSummary, vehicleDefaults } from "../vehicleCare";
+import CustomDatePicker from "../CustomDatePicker"; // 📅 2026-11-07 날짜는 프로그램 달력으로
 
 const NAVY = "#1B2B4B";
 // 전화번호 하이픈 자동 포맷 (DispatchApp.jsx formatPhone과 동일 규칙)
@@ -1053,8 +1054,7 @@ export default function MobileFleetView({ dispatchData = [], userCompany = "", o
       {/* 날짜 선택 */}
       <div style={{ display:"flex", alignItems:"center", gap:8, padding:"12px 16px 0" }}>
         <span style={{ fontSize:14, fontWeight:700, color:"#5B6B85", whiteSpace:"nowrap" }}>조회 날짜</span>
-        <input
-          type="date"
+        <CustomDatePicker showIcon
           value={selectedDate}
           max={today}
           onChange={e => setSelectedDate(e.target.value)}

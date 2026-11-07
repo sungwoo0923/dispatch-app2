@@ -6,6 +6,8 @@
 import React from "react";
 import { createPortal } from "react-dom";
 import { CustomSelect } from "./CustomSelect";
+import CustomDatePicker from "./CustomDatePicker"; // 📅 2026-11-07 날짜·월은 프로그램 달력으로
+import { MonthPicker } from "./kpInputs";
 
 const INP = "w-full h-11 border border-[#DCE3EE] rounded-xl px-3 text-[14.5px] font-semibold text-[#0F1A30] bg-white focus:outline-none focus:border-[#4B6CB7] focus:ring-4 focus:ring-[#4B6CB7]/10";
 
@@ -34,9 +36,9 @@ export function PeriodPicker({ value, onChange, ongoingLabel = "재직중", clas
   const set = (patch) => onChange(formatPeriod({ ...p, ...patch }, ongoingLabel));
   return (
     <div className={`flex flex-wrap items-center gap-1.5 ${className}`}>
-      <input type="month" value={p.start} max={p.end || undefined} onChange={(e) => set({ start: e.target.value })} className={`${INP} !w-[150px] tabular-nums`} title="시작 월" />
+      <MonthPicker quick={false} clearable value={p.start} max={p.end || ""} onChange={(v) => set({ start: v })} placeholder="시작 월" triggerClassName={`${INP} !w-[150px] tabular-nums justify-between`} />
       <span className="text-[#9AA9C3] font-black">~</span>
-      <input type="month" value={p.end} min={p.start || undefined} disabled={p.ongoing} onChange={(e) => set({ end: e.target.value })} className={`${INP} !w-[150px] tabular-nums disabled:bg-[#F5F8FD] disabled:text-[#9AA9C3]`} title="끝 월" />
+      <MonthPicker quick={false} clearable value={p.end} min={p.start || ""} disabled={p.ongoing} onChange={(v) => set({ end: v })} placeholder="끝 월" triggerClassName={`${INP} !w-[150px] tabular-nums justify-between disabled:bg-[#F5F8FD] disabled:text-[#9AA9C3]`} />
       <label className="inline-flex items-center gap-1.5 h-11 px-2.5 rounded-xl border border-[#E3E8F0] text-[13px] font-bold text-[#3A4A66] cursor-pointer select-none whitespace-nowrap">
         <input type="checkbox" checked={p.ongoing} onChange={(e) => set({ ongoing: e.target.checked, end: e.target.checked ? "" : p.end })} className="w-4 h-4 accent-[#1B2B4B]" />{ongoingLabel}
       </label>
@@ -48,7 +50,7 @@ export function PeriodPicker({ value, onChange, ongoingLabel = "재직중", clas
 export function DateField({ value, onChange, className = "", placeholder = "" }) {
   const v = String(value || "");
   const iso = /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : (() => { const m = v.match(/(\d{4})\D{0,3}(\d{1,2})\D{0,3}(\d{1,2})/); return m ? `${m[1]}-${m[2].padStart(2, "0")}-${m[3].padStart(2, "0")}` : ""; })();
-  return <input type="date" value={iso} max="2100-12-31" onChange={(e) => onChange(e.target.value)} title={placeholder} className={`${INP} tabular-nums ${className}`} />;
+  return <CustomDatePicker showIcon value={iso} max="2100-12-31" yearFrom={1940} onChange={(e) => onChange(e.target.value)} placeholder={placeholder || "날짜 선택"} className={`${INP} tabular-nums ${className}`} />;
 }
 
 export function SelectField({ value, onChange, options = [], placeholder = "선택", className = "" }) {

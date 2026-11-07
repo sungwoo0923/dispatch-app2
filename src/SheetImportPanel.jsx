@@ -5,6 +5,7 @@
 //  4) 검사(날짜·거래처 누락, 이미 있는 오더 중복) → 5) 가져오기(진행률) 순서로 진행한다.
 // 가져온 오더·자동 등록된 거래처/상하차지/기사에는 importBatchId를 남겨 [가져오기 취소]로 한 번에 지울 수 있다.
 // 시트 읽기와 취소는 서버(functions/index.js sheetImport), 저장은 이 화면이 직접 한다.
+import CustomDatePicker from "./CustomDatePicker"; // 📅 2026-11-07 날짜는 프로그램 달력으로
 import React from "react";
 import * as XLSX from "xlsx";
 import { useFareRules, findFareRule, applyFareRule } from "./fareRules";
@@ -496,9 +497,9 @@ export default function SheetImportPanel() {
           {/* 상차일 기간 */}
           <div className="mb-4 flex flex-wrap items-center gap-3 rounded-2xl border border-[#E3E8F0] bg-white px-4 py-3">
             <span className="text-[14px] font-extrabold text-[#0F1A30]">상차일 기간</span>
-            <input type="date" value={opts.from} onChange={(e) => setOpts((o) => ({ ...o, from: e.target.value }))} className="h-10 px-3 rounded-xl border border-[#DCE3EE] text-[14px] font-semibold text-[#0F1A30]" />
+            <CustomDatePicker showIcon value={opts.from} onChange={(e) => setOpts((o) => ({ ...o, from: e.target.value }))} className="h-10 px-3 rounded-xl border border-[#DCE3EE] text-[14px] font-semibold text-[#0F1A30]" />
             <span className="text-[#9AA9C3]">~</span>
-            <input type="date" value={opts.to} onChange={(e) => setOpts((o) => ({ ...o, to: e.target.value }))} className="h-10 px-3 rounded-xl border border-[#DCE3EE] text-[14px] font-semibold text-[#0F1A30]" />
+            <CustomDatePicker showIcon value={opts.to} onChange={(e) => setOpts((o) => ({ ...o, to: e.target.value }))} className="h-10 px-3 rounded-xl border border-[#DCE3EE] text-[14px] font-semibold text-[#0F1A30]" />
             {(opts.from || opts.to) && <button onClick={() => setOpts((o) => ({ ...o, from: "", to: "" }))} className="h-9 px-3 rounded-xl border border-[#E3E8F0] text-[13px] font-bold text-[#5B6B85]">전체</button>}
             <span className="text-[13px] text-[#7A879C]">비우면 전체 · 예) 2026-10-27 부터만 가져오려면 앞칸만 입력</span>
           </div>

@@ -744,7 +744,7 @@ export default function AttendanceBoard({ userCompany, role, user }) {
 
       {/* 오늘 내 출퇴근 + 거절된 요청 */}
       {(isCurMonth && myEmp) || myRejectedChange.length > 0 ? (
-        <section className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+        <section className={`grid gap-3 ${isCurMonth && myEmp && myRejectedChange.length > 0 ? "lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]" : ""}`}>
           {isCurMonth && myEmp && (
             <div className="bg-white rounded-2xl border border-[#E3E8F0] px-5 py-4 flex flex-wrap items-center gap-4">
               <div className="min-w-0">
@@ -842,7 +842,7 @@ export default function AttendanceBoard({ userCompany, role, user }) {
                   );
                 })}
                 {[["출근", "WORK"], ["지각", "LATE"], ["휴가", "LEAVE"]].map(([l, k], i) => (
-                  <th key={k} className={`sticky top-0 z-[2] bg-[#F8FAFD] px-1.5 py-2 text-center border-b border-[#E3E8F0] min-w-[50px] ${i === 0 ? "border-l" : ""}`}>
+                  <th key={k} className={`sticky top-0 z-[3] bg-[#F8FAFD] px-1.5 py-2 text-center border-b border-[#E3E8F0] w-[52px] min-w-[52px] ${["right-[104px]", "right-[52px]", "right-0"][i]} ${i === 0 ? "border-l shadow-[-6px_0_10px_-6px_rgba(15,26,48,0.18)]" : ""}`}>
                     <div className="text-[9.5px] font-extrabold tracking-[0.16em] text-[#8A97AD]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{k}</div>
                     <div className="text-[12.5px] font-black text-[#0F1A30]">{l}</div>
                   </th>
@@ -922,9 +922,9 @@ export default function AttendanceBoard({ userCompany, role, user }) {
                         </td>
                       );
                     })}
-                    <td className="px-1.5 text-center border-b border-l border-[#EEF1F6] text-[14px] font-black text-[#0F1A30] tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{agg.work}</td>
-                    <td className={`px-1.5 text-center border-b border-[#EEF1F6] text-[14px] font-black tabular-nums ${agg.lateCount ? "text-[#E5484D]" : "text-[#C3CAD6]"}`} style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{agg.lateCount}</td>
-                    <td className={`px-1.5 text-center border-b border-[#EEF1F6] text-[14px] font-black tabular-nums ${agg.leave ? "text-[#7C5CC4]" : "text-[#C3CAD6]"}`} style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{agg.leave}</td>
+                    <td className="sticky right-[104px] z-[1] bg-white w-[52px] min-w-[52px] px-1.5 text-center border-b border-l border-[#EEF1F6] text-[14px] font-black text-[#0F1A30] tabular-nums shadow-[-6px_0_10px_-6px_rgba(15,26,48,0.18)]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{agg.work}</td>
+                    <td className={`sticky right-[52px] z-[1] bg-white w-[52px] min-w-[52px] px-1.5 text-center border-b border-[#EEF1F6] text-[14px] font-black tabular-nums ${agg.lateCount ? "text-[#E5484D]" : "text-[#C3CAD6]"}`} style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{agg.lateCount}</td>
+                    <td className={`sticky right-0 z-[1] bg-white w-[52px] min-w-[52px] px-1.5 text-center border-b border-[#EEF1F6] text-[14px] font-black tabular-nums ${agg.leave ? "text-[#7C5CC4]" : "text-[#C3CAD6]"}`} style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{agg.leave}</td>
                   </tr>
                 );
               })}
