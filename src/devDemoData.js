@@ -213,7 +213,9 @@ export function demoDocsFor(col) {
     { name: "인천 야간 셔틀", client: CLIENTS[1], active: false, days: ["월", "수", "금"], startTime: "21:30", startDate: "2026-10-01", endDate: "2026-12-31" },
   ].map((r, i) => fakeDoc(col, `demo-fr-${i}`, { companyName: "", color: "#2D4C82", autoDispatch: true, autoAccept: true, skipDates: [], driverName: NAMES[i], carNo: `경기${80 + i}바${1000 + i * 37}`, tonnage: "5톤", vehicleType: "윙바디", fareClient: "180000", fareDriver: "150000", payMethod: "계산서",
     stops: [{ type: "상차", name: PLACES[i][0], addr: PLACES[i][1], time: "07:00" }, { type: "경유", name: PLACES[i + 1][0], addr: PLACES[i + 1][1], time: "" }, { type: "하차", name: PLACES[i + 2][0], addr: PLACES[i + 2][1], time: "" }], ...r }));
-  if (col === "notices") return [0, 1, 2].map((i) => fakeDoc(col, `demo-nt-${i}`, { companyName: "", title: ["11월 배차 운영 안내 — 연말 물량 증가에 따른 야간 배차 인력 보강", "차량 점검 일정", "신규 거래처 등록 절차 변경"][i], content: "내용입니다.", createdAt: new Date(Date.now() - i * 86400000), author: NAMES[i], readBy: ["preview"] }));
+  if (col === "notices") return [0, 1, 2].map((i) => fakeDoc(col, `demo-nt-${i}`, { companyName: "", title: ["11월 배차 운영 안내 — 연말 물량 증가에 따른 야간 배차 인력 보강", "차량 점검 일정", "신규 거래처 등록 절차 변경"][i], content: "내용입니다.", createdAt: new Date(Date.now() - i * 86400000), author: NAMES[i], readBy: ["preview"] }))
+    // ⭐ 2026-11-07 팝업 알림 설정 점검 — notifyDemo=1 이면 안 읽은 공지 1건(가운데 팝업이 뜨는지 확인)
+    .concat(new URLSearchParams(window.location.search).get("notifyDemo") === "1" ? [fakeDoc(col, "demo-nt-new", { title: "연말 배차 운영 안내", content: "12월 한 달 동안 야간 배차 담당을 2명으로 늘립니다.", category: "공지사항", createdAt: new Date(Date.now() - 3600000), author: NAMES[3], readBy: [] })] : []);
   return null;
 }
 
