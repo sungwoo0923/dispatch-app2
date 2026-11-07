@@ -84,36 +84,30 @@ export default function SettingsUsers() {
     };
     useEffect(() => {
   if (!auth.currentUser) return;
+  // 🔒 2026-11-07 보안 점검 — 예전엔 users 전체(모든 회사)를 받아 화면에서 우리 회사만 골랐다.
+  //  서버 규칙이 다른 회사 명부를 막으므로 내 문서로 회사명을 먼저 알고, 그 회사 사람만 조회한다.
+  let unsub = () => {};
+  let alive = true;
+  let lastCo = null;
+  const unMe = onSnapshot(doc(db, "users", auth.currentUser.uid), (meSnap) => {
+    if (!meSnap.exists()) { console.log("✕ 내 계정 못찾음"); return; }
+    const me = { uid: meSnap.id, ...meSnap.data() };
+    setMe(me);
+    if (me.companyName === lastCo) return; // 회사가 그대로면 목록 구독도 그대로
+    lastCo = me.companyName;
+    try { unsub(); } catch { /* 무시 */ }
+    if (!alive || !me.companyName) return;
+    unsub = onSnapshot(query(collection(db, "users"), where("companyName", "==", me.companyName)), (snap) => {
+      const arr = snap.docs.map(d => ({
+        uid: d.id,   // 핵심: uid = 문서ID로 강제
+        ...d.data()
+      }));
+      setUsers(arr.filter(u => !u.rejected && !u.deleted));
+      setRejectedList(arr.filter(u => u.rejected || u.deleted));
+    }, () => { setUsers([]); setRejectedList([]); });
+  }, () => {});
 
-  const unsub = onSnapshot(collection(db, "users"), (snap) => {
-const arr = snap.docs.map(d => ({
-  uid: d.id,   // 핵심: uid = 문서ID로 강제
-  ...d.data()
-}));
-
-const me = arr.find(u => u.uid === auth.currentUser.uid);
-
-if (!me) {
-  console.log("✕ 내 계정 못찾음");
-  return;
-}
-setMe(me);
-const filtered = arr.filter(
-  u =>
-    u.companyName === me.companyName &&
-    !u.rejected &&
-    !u.deleted
-);
-const rejectedList = arr.filter(
-  u =>
-    u.companyName === me.companyName &&
-    (u.rejected || u.deleted)
-);
-setUsers(filtered);
-setRejectedList(rejectedList);
-  });
-
-  return () => unsub();
+  return () => { alive = false; unMe(); try { unsub(); } catch { /* 무시 */ } };
 }, []);
   return (
     <div className="bg-white rounded-[22px] border border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_10px_28px_rgba(16,24,40,0.06)] px-7 py-6">

@@ -662,6 +662,8 @@ exports.notifyFleetDriverNewOrder =
           if (stillHasTrace) {
             await db.collection("driver_notifications").add({
               driverId: cDriverDoc.id, type: "canceled", orderId: context.params.dispatchId,
+              // 🔒 2026-11-07 회사명도 기록 — 잠금 뒤 운송사 화면은 회사 조건으로 조회한다(없으면 기사 본인만 보임)
+              companyName: String(before?.companyName || after.companyName || cDriverDoc.data()?.companyName || "").trim() || "돌캐",
               title: "배차가 취소되었습니다", body, createdAt: FieldValue.serverTimestamp(), read: false,
             }).catch(() => {});
           }
@@ -1018,6 +1020,7 @@ exports.notifyFleetOrderModified =
 
       await db.collection("driver_notifications").add({
         driverId: driverDoc.id, type: "order_modified", orderId: dispatchId,
+        companyName: String(after.companyName || driverDoc.data()?.companyName || "").trim() || "돌캐", // 🔒 2026-11-07 회사명
         title, body, changed: labels, createdAt: FieldValue.serverTimestamp(), read: false,
       }).catch(() => {});
 
@@ -1204,6 +1207,7 @@ exports.notifyFleetLateArrival = functions.pubsub
             }, `지입 ${c.label}지연(기사)`);
             await db.collection("driver_notifications").add({
               driverId: driverDoc.id, type: `late_${c.kind}`, orderId: docSnap.id,
+              companyName: String(o.companyName || drv?.companyName || "").trim() || "돌캐", // 🔒 2026-11-07 회사명
               title: `${c.label}시간 알림 (${t24})`,
               body: `${c.label}지 [${place}] 도착이 늦어지고 있습니다. ${distText}.`,
               createdAt: FieldValue.serverTimestamp(), read: false,

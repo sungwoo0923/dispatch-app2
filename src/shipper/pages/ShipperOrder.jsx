@@ -2,6 +2,7 @@ import { loadTmap } from "../../tmapLoader";
 import { drawTmapTrafficRoute } from "../../mapStyle";
 import { useState, useEffect, useRef, useMemo } from "react";
 import { db, auth } from "../../firebase";
+import { readTransportListForShipper } from "../../publicCompanies"; // 🔒 2026-11-07 운송사 목록은 공개 목록 + 연동 운송사 코드만
 import {
   addDoc,
   collection,
@@ -304,20 +305,8 @@ export default function ShipperOrder({ editData, onClose }) {
   }, [user]);
 
   useEffect(() => {
-    getDocs(query(
-      collection(db, "transportApplications"),
-      where("type", "==", "신규"),
-      where("status", "==", "approved"),
-    )).then(snap => {
-      const seen = new Map();
-      snap.docs.forEach(d => {
-        const data = d.data();
-        if (data.companyName && !seen.has(data.companyName)) {
-          seen.set(data.companyName, { name: data.companyName, code: data.companyCode || "" });
-        }
-      });
-      setTransportList(Array.from(seen.values()));
-    }).catch(() => setTransportList([]));
+    // 🔒 2026-11-07 보안 점검 — 모든 운송사 신청서(회사 코드 포함) 대신 공개 목록 + 연동 운송사 코드만
+    readTransportListForShipper(auth.currentUser?.uid).then((l) => setTransportList(l)).catch(() => setTransportList([]));
   }, []);
 
   useEffect(() => {

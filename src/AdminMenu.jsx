@@ -212,14 +212,16 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
   }, [managingLinkedApp?.userId]);
 
   // 화주사 문의 구독
+  // 🔒 2026-11-07 보안 점검 — 운송사는 우리 회사로 들어온 문의(transportCompany)만 조회(서버 규칙도 같은 조건 · 예전엔 모든 회사 문의)
   useEffect(() => {
-    const unsub = onSnapshot(collection(db, "inquiries"), (snap) => {
+    const src = isTotalMaster ? collection(db, "inquiries") : query(collection(db, "inquiries"), where("transportCompany", "==", effectiveCompany));
+    const unsub = onSnapshot(src, (snap) => {
       const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
       list.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
       setAllInquiries(list);
-    });
+    }, () => setAllInquiries([]));
     return () => unsub();
-  }, []);
+  }, [isTotalMaster, effectiveCompany]);
 
   // 도입 문의(홈페이지 랜딩페이지 도입문의 폼) 구독 — 최고관리자만
   useEffect(() => {

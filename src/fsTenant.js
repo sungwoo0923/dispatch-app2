@@ -35,8 +35,20 @@ const LOOSE = new Set([
   "location_change_requests", "emergency_alerts", "collision_alerts", "cargo_temp", "cargo_camera",
   "deliverySignatureHistory", "attendance", "holidays", "driver_uploads", "fleet_settings", "importBatches",
 ]);
-// 서버 조회에 회사 조건을 붙일 컬렉션(직원 목록은 화주사 연동 때문에 화면에서만 거름)
+// 서버 조회에 회사 조건을 붙일 컬렉션(직원 목록은 아래 SCOPED에서 — 잠금 스위치와 상관없이 항상)
 const INJECT = new Set([...STRICT].filter((c) => c !== "users"));
+// 🔒 2026-11-07 보안 점검 — 서버 규칙이 잠금 스위치와 상관없이 "항상" 회사 조건을 요구하는 컬렉션
+//  (예전엔 승인된 누구나 모든 회사 것을 읽었다 — firestore.rules "보안 점검" 묶음). 목록 조회에 "칸 == 지금 회사"를 붙인다.
+//  · users: 같은 회사 직원·기사(연동 화주는 usersLive.js가 linkedTransportCompany 조건으로 따로 받는다)
+//  · transportApplications: 우리 회사 가입 신청서(회사 정보·직인) · companyApplications: 우리 회사에 연동 신청한 화주사
+//  최고관리자(setTenantRole("totalMaster"))와 회사가 정해지지 않은 화면(화주사·로그인 전)은 붙이지 않는다.
+const SCOPED = { users: "companyName", transportApplications: "companyName", companyApplications: "linkedTransportCompany.companyName" };
+let scopeAll = false;   // 최고관리자 — 전체 조회 허용(규칙도 허용)
+let driverRole = false; // 기사 — 기사 기록(LOOSE)은 본인 조건(driverId·uid)으로 조회하므로 회사 조건을 붙이지 않는다
+export function setTenantRole(role) { scopeAll = role === "totalMaster"; driverRole = role === "driver"; }
+// 회사 조건을 붙이지 말아야 하는 조회(이미 다른 회사 범위 조건이 있는 조회 — 예: 연동 화주 목록)
+const noScopeRefs = new WeakSet();
+export function noScope(q) { try { if (q && typeof q === "object") noScopeRefs.add(q); } catch { /* 무시 */ } return q; }
 // 쓸 때 회사명을 붙일 컬렉션(users는 가입·승인에서 따로 정하므로 제외)
 const STAMP = new Set([...STRICT, ...LOOSE].filter((c) => c !== "users"));
 
@@ -138,9 +150,16 @@ function wrapSnap(snap, keep) {
 // 회사 조건을 붙인 조회 — 색인이 아직 없으면(failed-precondition) 조건 없이 다시 해서 화면이 비지 않게 한다
 function injected(ref) {
   const t = getTenant();
-  if (!serverFilter || !t) return null;
+  if (!t) return null;
   const col = topCollectionId(ref);
-  if (!INJECT.has(col) || noIndex.has(shapeOf(ref))) return null;
+  if (SCOPED[col]) {
+    if (scopeAll || noScopeRefs.has(ref)) return null;
+    try { return base.query(ref, base.where(SCOPED[col], "==", t)); } catch { return null; }
+  }
+  if (!serverFilter) return null;
+  // 🔒 2026-11-07 잠금 뒤에는 기사 기록(LOOSE)도 서버 규칙이 회사 조건을 요구한다(기사 본인 조회는 제외)
+  const loose = LOOSE.has(col) && !driverRole && !scopeAll;
+  if (!(INJECT.has(col) || loose) || noIndex.has(shapeOf(ref))) return null;
   try { return base.query(ref, base.where("companyName", "==", t)); } catch { return null; }
 }
 const noIndex = new Set(); // 색인이 없어 실패했던 조회 모양 — 이번 실행 동안은 바로 조건 없이(서버 왕복 2번 방지)
@@ -212,7 +231,7 @@ export function runTransaction(...a) { return preview ? previewBlocked() : base.
 export function onSnapshot(ref, ...args) {
   if (preview) return previewSnapshot(ref, args);
   const col = topCollectionId(ref);
-  if (!col || !(STRICT.has(col) || LOOSE.has(col))) return baseOnSnapshot(ref, ...args);
+  if (!col || !(STRICT.has(col) || LOOSE.has(col) || SCOPED[col])) return baseOnSnapshot(ref, ...args);
   const wrapFn = (fn) => (typeof fn === "function" ? (snap) => fn(wrapSnap(snap, keeper(col))) : fn);
   // onSnapshot(ref, cb, err) / (ref, options, cb, err) / (ref, { next, error }) / (ref, options, { next })
   const fi = args.findIndex((a) => typeof a === "function");

@@ -238,8 +238,11 @@ export function AdminSessionsPanel({ isTotalMaster, company, roleLabels = {} }) 
   const [busy, setBusy] = React.useState(null);
   const [page, setPage] = React.useState(1);
   React.useEffect(() => { setPage(1); }, [q]);
-  React.useEffect(() => onSnapshot(query(collection(db, SESSIONS_COLL), where("active", "==", true)),
-    (snap) => setList(snap.docs.map((d) => ({ id: d.id, ...d.data() }))), () => setList([])), []);
+  // 🔒 2026-11-07 보안 점검 — 회사 관리자는 우리 회사 로그인만 조회(서버 규칙도 같은 조건 · 예전엔 모든 회사 기록을 받았다)
+  React.useEffect(() => onSnapshot(isTotalMaster
+    ? query(collection(db, SESSIONS_COLL), where("active", "==", true))
+    : query(collection(db, SESSIONS_COLL), where("active", "==", true), where("companyName", "==", company || DEFAULT_COMPANY)),
+    (snap) => setList(snap.docs.map((d) => ({ id: d.id, ...d.data() }))), () => setList([])), [isTotalMaster, company]);
   const myId = getMySessionId();
   const rows = (list || [])
     .filter((s) => isTotalMaster || (s.companyName || DEFAULT_COMPANY) === company)

@@ -1,7 +1,7 @@
 // ======================= src/App.jsx =======================
 
 import React, { useState, useEffect, useRef } from "react";
-import { setTenant, setServerFilter, setPreviewMode, isPreviewMode } from "./fsTenant";
+import { setTenant, setTenantRole, setServerFilter, setPreviewMode, isPreviewMode } from "./fsTenant";
 import { setUsageMeter } from "./usageMeter"; // 💰 2026-11-04 회사별 서버 사용량 표본
 import { setPreviewPlan } from "./plans";
 import { installEscClose } from "./kpDialog";
@@ -672,6 +672,8 @@ export default function App() {
           }).then(pruneSessionLogs).catch(() => {});
         }
         sessionLogRef.current = { uid: null, info: null };
+        // 🔒 2026-11-07 로그아웃하면 회사 범위도 비운다(다음 계정이 이전 회사 조건으로 조회하지 않게)
+        setTenant(""); setTenantRole(null);
         setUser(null);
         setRole(null);
         setApproved(false);
@@ -734,6 +736,7 @@ export default function App() {
             // ⭐ 저장된 회사명이 지워졌으면(캐시 정리 등) 본인 문서의 회사 → 기본 회사 순으로 채운다 —
             // 비어 있으면 회사관리·매출관리 등이 어느 회사인지 몰라 "로딩 중"에서 멈췄다.
             const loginCompany = localStorage.getItem("loginCompany") || data.companyName || DEFAULT_COMPANY || "";
+            setTenantRole("totalMaster");
             setTenant(loginCompany);
             setUsageMeter({ enabled: false }); // 최고관리자 사용량은 회사 원가에 넣지 않는다
             setUserCompany(loginCompany);
@@ -741,6 +744,7 @@ export default function App() {
             safeLocalSet("loginCompany", loginCompany);
           } else {
             // 🏢 운송사 직원·기사만 자기 회사 데이터로 거른다(화주사·배차마당은 다른 화면 구조라 제외)
+            setTenantRole(dataRole);
             setTenant(["shipper", "cafeUser"].includes(dataRole) ? "" : (data.companyName || DEFAULT_COMPANY));
             // 💰 2026-11-04 회사별 서버 사용량 표본(관리센터 비용·손익) — 승인된 운송사 직원·기사만(화주사·배차마당·둘러보기 제외)
             setUsageMeter({ company: data.companyName || DEFAULT_COMPANY, enabled: !["shipper", "cafeUser"].includes(dataRole) && data.approved !== false && !isPreviewMode() });
@@ -764,11 +768,12 @@ export default function App() {
           setRole("totalMaster");
           setApproved(true);
           const loginCompany = localStorage.getItem("loginCompany") || DEFAULT_COMPANY || "";
+          setTenantRole("totalMaster");
           setTenant(loginCompany);
           setUserCompany(loginCompany);
           safeLocalSet("userCompany", loginCompany); safeLocalSet("loginCompany", loginCompany); safeLocalSet("role", "totalMaster");
         } else {
-          setTenant("");
+          setTenant(""); setTenantRole(null);
           setUsageMeter({ enabled: false });
           setRole(null);
           setApproved(false);

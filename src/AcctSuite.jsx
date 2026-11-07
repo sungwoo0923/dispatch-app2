@@ -4,6 +4,7 @@
 //  · 퇴직 정산(경리 전용): 퇴직금(평균임금×30×재직일/365) · 미사용 연차수당 · 4대보험 상실 · 이직확인서(실업급여) ·
 //    퇴직소득 원천징수 · 원천징수영수증 · 퇴직연금 — 법정 기한(D-day)과 처리 상태를 사람별로
 import { loadAcctPayments } from "./acctPayments";
+import { useUserProfiles } from "./userProfilesLive"; // 🔒 2026-11-07 인사 프로필은 우리 회사 직원 한 건씩
 import { upsertAutoEntry } from "./ledgerAuto";
 import React from "react";
 import { collection, doc, getDoc, getDocs, onSnapshot, query, setDoc, where, serverTimestamp } from "firebase/firestore";
@@ -185,7 +186,8 @@ export function RetireDesk({ company, isViewer = false }) {
   React.useEffect(() => { if (!company) return undefined; return onSnapshot(query(collection(db, "users"), where("companyName", "==", company)), (s) => setUsers(s.docs.map((d) => ({ id: d.id, ...d.data() }))), () => setUsers([])); }, [company]);
   React.useEffect(() => { if (!company) return undefined; return onSnapshot(query(collection(db, "retireCases"), where("companyName", "==", company)), (s) => setCases(s.docs.map((d) => ({ id: d.id, ...d.data() }))), () => setCases([])); }, [company]);
   React.useEffect(() => { if (!company) return undefined; return onSnapshot(query(collection(db, "approvals"), where("company", "==", company), where("cat", "in", ["leave", "report"])), (s) => setApprovals(s.docs.map((d) => ({ id: d.id, ...d.data() })).filter((a) => a.cat === "leave" || (a.form === "resign"))), () => setApprovals([])); }, [company]);
-  React.useEffect(() => onSnapshot(collection(db, "userProfiles"), (s) => { const m = {}; s.docs.forEach((d) => { m[d.id] = d.data(); }); setProfiles(m); }, () => {}), []);
+  const userProfiles = useUserProfiles(React.useMemo(() => (users || []).map((u) => u.id), [users])); // 🔒 2026-11-07 우리 회사 직원 한 건씩(예전엔 전체 회사)
+  React.useEffect(() => { setProfiles(userProfiles); }, [userProfiles]);
   const today = kstDay();
   const byId = Object.fromEntries((cases || []).map((c) => [c.id, c]));
   // 퇴사(또는 사직서 승인)한 직원 = 정산 대상

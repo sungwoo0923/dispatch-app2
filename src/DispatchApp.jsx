@@ -45,6 +45,7 @@ import CustomDatePicker, { KOREAN_HOLIDAYS, shortHolidayLabel } from "./CustomDa
 import { DateTimeSelect } from "./kpTimePick"; // ⏱ 2026-11-04 예약발송 날짜·시간 — 프로그램 달력 + 시간 드롭다운
 // ⭐ 2026-11-02 속도 — 관리자메뉴(엑셀 가져오기 등 포함)는 열 때 받는다. 직원 명부 구독은 usersLive 하나를 공유
 import { subscribeUsersLive } from "./usersLive";
+import { useUserProfiles } from "./userProfilesLive"; // 🔒 2026-11-07 인사 프로필은 우리 회사 직원 한 건씩
 const AdminMenu = lazyView(() => import("./AdminMenu"));
 import FleetExtraFields from "./FleetDriverExtra";
 import { useFixedRouteAutoDispatch, FixedRouteEditNotice } from "./FixedRoutes";
@@ -61201,14 +61202,9 @@ function HRManagementPage({ userCompany, role, userId, focusUid = null, selfOnly
     return () => unsub();
   }, [company]);
 
-  React.useEffect(() => {
-    const unsub = onSnapshot(collection(db, "userProfiles"), snap => {
-      const m = {};
-      snap.docs.forEach(d => { m[d.id] = d.data(); });
-      setProfiles(m);
-    }, () => {});
-    return () => unsub();
-  }, []);
+  // 🔒 2026-11-07 보안 점검 — 예전엔 userProfiles 전체(모든 회사)를 구독했다 → 우리 회사 직원 한 건씩
+  const memberProfiles = useUserProfiles(React.useMemo(() => members.map((m) => m.uid), [members]));
+  React.useEffect(() => { setProfiles(memberProfiles); }, [memberProfiles]);
 
   React.useEffect(() => {
     if (!company) return;

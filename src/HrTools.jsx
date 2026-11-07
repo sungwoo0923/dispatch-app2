@@ -6,6 +6,7 @@
 //    법정 기한(4대보험 다음 달 15일, 퇴직금 14일)을 함께 보여주고, 사람마다 체크 상태를 userProfiles에 저장
 //  · 증명서 발급: 재직증명서·경력증명서 — 회사 정보·직인(회사정보에 등록된 것)으로 바로 인쇄, 발급 대장 남김
 import { useLeaveGuard, draftStore } from "./leaveGuard";
+import { useUserProfiles } from "./userProfilesLive"; // 🔒 2026-11-07 인사 프로필은 우리 회사 직원 한 건씩
 import React from "react";
 import CustomDatePicker from "./CustomDatePicker"; // 📅 2026-11-04 날짜 입력은 프로그램 달력으로
 import { collection, doc, onSnapshot, query, setDoc, where, arrayUnion, getDocs, getDoc } from "firebase/firestore";
@@ -34,7 +35,8 @@ function useStaff(company) {
     if (!company) return undefined;
     return onSnapshot(query(collection(db, "users"), where("companyName", "==", company)), (s) => setUsers(s.docs.map((d) => ({ id: d.id, ...d.data() }))), () => setUsers([]));
   }, [company]);
-  React.useEffect(() => onSnapshot(collection(db, "userProfiles"), (s) => { const m = {}; s.docs.forEach((d) => { m[d.id] = d.data(); }); setProfiles(m); }, () => setProfiles({})), []);
+  const userProfiles = useUserProfiles(React.useMemo(() => (users || []).map((u) => u.id), [users])); // 🔒 2026-11-07 우리 회사 직원 한 건씩(예전엔 전체 회사)
+  React.useEffect(() => { setProfiles(userProfiles); }, [userProfiles]);
   const staff = (users || []).filter((u) => (u.companyName || DEFAULT_COMPANY) === company && !["driver", "shipper", "cafeUser", "totalMaster"].includes(u.role) && !isTMUser(u) && u.approved !== false);
   return { loading: users === null, staff, profiles };
 }
