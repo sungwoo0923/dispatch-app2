@@ -6,6 +6,7 @@
 //   - children: sub와 같은 뜻(⭐ 2026-11-01 접이식 하위메뉴) — 부모를 누르면 아래로 부드럽게 펼쳐지고(첫 하위 화면으로), 한 번 더 누르면 접힌다
 //  actions: [{ key, label, icon, onClick }] — 화면 전환 대신 팝업을 여는 버튼(예: 월 비교 분석)
 import React, { useState } from "react";
+import { createPortal } from "react-dom";
 import { ShellIcon } from "./AdminShell";
 import { confirmLeave } from "./leaveGuard";
 import { useSubnavTarget } from "./navMenus";
@@ -17,6 +18,25 @@ const kidsOf = (it) => (Array.isArray(it.children) && it.children.length ? it.ch
 const goSel = (fn, k, act) => { if (k === act) { fn?.(k); return; } confirmLeave().then((ok) => { if (ok) fn?.(k); }); };
 
 const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
+
+// ⭐ 2026-11-07 윗줄(사업자 고르기 · 세부검색 · 화면 탭) — 왼쪽 메뉴 머리와 같은 높이의 한 줄로 맞춘다
+//  · SubNavTopCtx: 바깥(BizScope 등)에서 { left, right, claim } 을 내려 주면 이 메뉴의 윗줄에 그린다(바깥은 따로 그리지 않음)
+//  · SubNavBar: 메뉴 안쪽 화면이 윗줄에 버튼·탭을 올린다(side: "left" | "right", order: 같은 쪽 안 순서)
+export const SubNavTopCtx = React.createContext(null);
+const SubNavSlotCtx = React.createContext(null);
+export const SUBNAV_HEAD_H = 76;
+export function SubNavBar({ side = "right", order = 0, children, fallbackClass = "mb-3 flex items-center justify-end gap-2" }) {
+  const slots = React.useContext(SubNavSlotCtx);
+  if (!slots) return <div className={fallbackClass}>{children}</div>;
+  const el = side === "left" ? slots.left : slots.right;
+  return el ? createPortal(<div className="kp-subnav-bar-item flex items-center gap-2 min-w-0" style={{ order }}>{children}</div>, el) : null;
+}
+function useTopSlots() {
+  const [left, setLeft] = useState(null);
+  const [right, setRight] = useState(null);
+  const slots = React.useMemo(() => ({ left, right }), [left, right]);
+  return [slots, setLeft, setRight];
+}
 
 // 📱 휴대폰 폭(모바일 앱에서 PC 화면을 그대로 쓸 때) — 왼쪽 메뉴 대신 위쪽 가로 탭으로 보여준다
 export function useIsPhone() {
@@ -30,7 +50,8 @@ export function useIsPhone() {
   return phone;
 }
 
-function PhoneSubNav({ code, title, icon, groups, actions, active, onSelect, children }) {
+function PhoneSubNav({ code, title, icon, groups, actions, active, onSelect, children, top }) {
+  const [slots, setLeft, setRight] = useTopSlots();
   const flat = [];
   groups.forEach((g) => g.items.forEach((it) => { const ks = kidsOf(it); if (ks) ks.forEach((x) => flat.push({ ...x, en: x.en || it.en })); else flat.push(it); }));
   const cur = flat.find((it) => it.key === active);
@@ -69,14 +90,26 @@ function PhoneSubNav({ code, title, icon, groups, actions, active, onSelect, chi
             </button>
           ))}
         </div>
+        {/* ⭐ 2026-11-07 윗줄(사업자 · 세부검색 · 화면 탭) — 휴대폰에서는 가로 탭 아래 한 줄 */}
+        <div className={`kp-subnav-top kp-subnav-top--phone px-3 pb-2.5 flex items-center gap-2 flex-wrap ${top?.left || top?.right ? "" : "kp-subnav-top--slotonly"}`}>
+          {top?.left}
+          <div ref={setLeft} className="kp-subnav-slot flex items-center gap-2 flex-wrap min-w-0" />
+          <div ref={setRight} className="kp-subnav-slot ml-auto flex items-center gap-2 flex-wrap" />
+          {top?.right}
+        </div>
       </div>
-      <main className="kp-phone-body px-3 py-3 min-w-0">{children}</main>
+      <SubNavSlotCtx.Provider value={slots}><SubNavTopCtx.Provider value={null}>
+        <main className="kp-phone-body px-3 py-3 min-w-0">{children}</main>
+      </SubNavTopCtx.Provider></SubNavSlotCtx.Provider>
     </div>
   );
 }
 
 export default function KpSubNav({ code = "MENU", title, icon = "dashboard", items, groups, actions = [], actionsLabel = "도구", active, onSelect, children, bodyClass = "px-6 py-5", noBleed = false }) {
   const phone = useIsPhone();
+  const top = React.useContext(SubNavTopCtx);
+  React.useLayoutEffect(() => { top?.claim?.(); }, [top?.claim]); // eslint-disable-line react-hooks/exhaustive-deps
+  const [slots, setLeft, setRight] = useTopSlots();
   const [collapsed, setCollapsed] = useState(() => { try { return localStorage.getItem("kpSubNavCollapsed") === "1"; } catch { return false; } });
   const toggle = () => setCollapsed((v) => { try { localStorage.setItem("kpSubNavCollapsed", v ? "0" : "1"); } catch { /* 저장 실패 무시 */ } return !v; });
   const gs = groups || [{ label: "", items: items || [] }];
@@ -127,14 +160,14 @@ export default function KpSubNav({ code = "MENU", title, icon = "dashboard", ite
     </button>
   );
 
-  if (phone) return <PhoneSubNav code={code} title={title} icon={icon} groups={gs} actions={actions} active={active} onSelect={onSelect}>{children}</PhoneSubNav>;
+  if (phone) return <PhoneSubNav code={code} title={title} icon={icon} groups={gs} actions={actions} active={active} onSelect={onSelect} top={top}>{children}</PhoneSubNav>;
   return (
     <div className={`flex bg-[#F4F6FA] overflow-hidden ${noBleed ? "rounded-[20px]" : "-m-4"}`} style={{ height: noBleed ? "calc(100vh - 88px)" : "calc(100vh - 80px)" }}>
       <aside
         className="kp-subnav-aside shrink-0 h-full flex flex-col text-white transition-[width] duration-200"
         style={{ width: collapsed ? 72 : 228, background: "linear-gradient(180deg, #16264A 0%, #1B2B4B 55%, #14213D 100%)" }}
       >
-        <div className={`pt-5 pb-4 border-b border-white/10 flex items-center gap-3 ${collapsed ? "px-0 justify-center" : "px-4"}`}>
+        <div className={`shrink-0 border-b border-white/10 flex items-center gap-3 ${collapsed ? "px-0 justify-center" : "px-4"}`} style={{ height: SUBNAV_HEAD_H }}>
           <button type="button" onClick={collapsed ? toggle : undefined} title={collapsed ? "메뉴 펼치기" : undefined} className={`w-10 h-10 rounded-xl bg-white/10 ring-1 ring-white/15 flex items-center justify-center shrink-0 ${collapsed ? "cursor-pointer hover:bg-white/20" : "cursor-default"}`}>
             <ShellIcon name={icon} size={19} />
           </button>
@@ -193,7 +226,19 @@ export default function KpSubNav({ code = "MENU", title, icon = "dashboard", ite
           {collapsed ? "펼치기" : "메뉴 접기"}
         </button>
       </aside>
-      <main className={`flex-1 min-w-0 h-full overflow-y-auto ${bodyClass}`}>{children}</main>
+      <div className="flex-1 min-w-0 h-full flex flex-col">
+        {/* ⭐ 2026-11-07 윗줄 — 왼쪽 메뉴 머리(SUBNAV_HEAD_H)와 높이·아래 선을 맞춘 남색 한 줄. 올릴 것이 없으면 숨긴다 */}
+        <div className={`kp-subnav-top shrink-0 flex items-center gap-3 px-6 text-white border-b border-white/10 ${top?.left || top?.right ? "" : "kp-subnav-top--slotonly"}`}
+          style={{ height: SUBNAV_HEAD_H, background: "linear-gradient(120deg, #16264A 0%, #1B2B4B 60%, #24406E 100%)" }}>
+          {top?.left}
+          <div ref={setLeft} className="kp-subnav-slot flex items-center gap-3 min-w-0" />
+          <div ref={setRight} className="kp-subnav-slot ml-auto flex items-center gap-2 shrink-0" />
+          {top?.right}
+        </div>
+        <SubNavSlotCtx.Provider value={slots}><SubNavTopCtx.Provider value={null}>
+          <main className={`flex-1 min-w-0 min-h-0 overflow-y-auto ${bodyClass}`}>{children}</main>
+        </SubNavTopCtx.Provider></SubNavSlotCtx.Provider>
+      </div>
     </div>
   );
 }
