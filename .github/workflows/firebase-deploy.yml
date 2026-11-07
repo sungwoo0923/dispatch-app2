@@ -48,9 +48,16 @@ jobs:
 
       - name: 대상 정하기
         id: t
+        # ⭐ 2026-11-07 보안 점검 — 입력값을 스크립트에 직접 끼워 넣지 않고 환경 변수로 받는다(명령 끼워 넣기 방지) · 대상 이름은 영문·숫자·:,_- 만
+        env:
+          CUSTOM: ${{ inputs.custom }}
+          TARGET: ${{ inputs.target }}
         run: |
-          CUSTOM="${{ inputs.custom }}"
-          case "${{ inputs.target }}" in
+          if [ -n "$CUSTOM" ] && ! printf '%s' "$CUSTOM" | grep -Eq '^[A-Za-z0-9:,_-]+$'; then
+            echo "::error::직접 입력 대상에는 영문·숫자·콜론·쉼표·밑줄·하이픈만 쓸 수 있습니다."
+            exit 1
+          fi
+          case "$TARGET" in
             허브*) ONLY="firestore:rules,firestore:indexes,storage,functions:hubOrderOnWrite" ;;
             규칙*) ONLY="firestore:rules,firestore:indexes,storage" ;;
             서버*) ONLY="functions" ;;

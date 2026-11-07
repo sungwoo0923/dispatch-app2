@@ -22693,9 +22693,11 @@ function MobileSettingsPage({ onBack, cardVersionB, setCardVersionB, alarmEnable
     setPushSending(true);
     setPushResult("");
     try {
+      // 🔒 2026-11-07 서버가 최고관리자 로그인 토큰을 확인한다
+      const idToken = await auth.currentUser?.getIdToken?.().catch(() => "");
       const res = await fetch(`${FUNCTIONS_BASE}/sendPushNotification`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}) },
         body: JSON.stringify({ key: "kpflow-push-2026", title: pushTitle.trim(), body: pushBody.trim() }),
       });
       setPushResult(await res.text());

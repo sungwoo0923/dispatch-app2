@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useRef } from "react";
 import { setTenant, setTenantRole, setServerFilter, setPreviewMode, isPreviewMode } from "./fsTenant";
+import { purgeOnSignOut, noteSignedInUid } from "./sessionPurge"; // 🔒 2026-11-07 계정 바꿀 때 앞 사람(다른 회사) 데이터 정리
 import { setUsageMeter } from "./usageMeter"; // 💰 2026-11-04 회사별 서버 사용량 표본
 import { setPreviewPlan } from "./plans";
 import { installEscClose } from "./kpDialog";
@@ -671,9 +672,16 @@ export default function App() {
             at: serverTimestamp(),
           }).then(pruneSessionLogs).catch(() => {});
         }
+        const wasSignedIn = !!sessionLogRef.current.uid;
         sessionLogRef.current = { uid: null, info: null };
         // 🔒 2026-11-07 로그아웃하면 회사 범위도 비운다(다음 계정이 이전 회사 조건으로 조회하지 않게)
         setTenant(""); setTenantRole(null);
+        //  실제 로그아웃(로그인 확인 중 잠깐 나갔다 들어오는 경우 제외)이면 기기에 남은 회사 데이터·저장본을 지우고 새로 고친다
+        let validating = false;
+        try { validating = sessionStorage.getItem("transportValidating") === "true" || sessionStorage.getItem("shipperValidating") === "true"; } catch { /* 무시 */ }
+        if (wasSignedIn && !IS_MOBILE_PREVIEW && !isDriverBusy() && !validating && !isPreviewMode()) {
+          setTimeout(() => { purgeOnSignOut(db).catch(() => {}); }, 400); // 로그아웃 기록(sessionLogs)을 먼저 보낸다
+        }
         setUser(null);
         setRole(null);
         setApproved(false);
@@ -707,6 +715,8 @@ export default function App() {
           setMasterPcPhone(data.pcVerifyPhone || "");
           // 스냅샷은 프로필이 바뀔 때마다 재발화될 수 있어, 이 uid로 로그인 기록을 아직
           // 남기지 않았을 때만(세션당 1회) 기록한다.
+          // 🔒 2026-11-07 지난번과 다른 계정이면 앞 계정의 브라우저 저장값을 먼저 지운다
+          if (!IS_MOBILE_PREVIEW && !isDriverBusy()) noteSignedInUid(u.uid);
           if (sessionLogRef.current.uid !== u.uid && !IS_MOBILE_PREVIEW) {
             const loginInfo = {
               uid: u.uid,
