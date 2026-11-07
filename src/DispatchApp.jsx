@@ -68,7 +68,7 @@ import HrHub from "./HrHub";
 import { usePayrollAccess } from "./payrollAccess"; // ⭐ 2026-11-06 직원 급여·연차 촉진 권한
 const PayrollCenterLazy = React.lazy(() => import("./Payroll"));
 // ⭐ 2026-11-07 급여명세서 · 연차 사용 계획은 내정보 안 탭(MyInfoTabs) · 연차 사용 촉진은 인사관리부 › 연차 관리 안(LeaveArea)
-import MyInfoTabs from "./MyInfoTabs";
+import { myInfoExtraTabs, initialMyInfoTab, useMyInfoTabLink } from "./MyInfoTabs";
 import LeaveArea from "./LeaveArea";
 // ⭐ 2026-11-02 속도 — 메뉴를 눌러야 보이는 큰 화면은 따로 떼어 처음 열 때 받는다(첫 실행 JS 감소) — 사용 안 하던 StandardFare·DispatchFormNew import 제거
 const DriverAccounts = lazyView(() => import("./DriverAccounts"));
@@ -60370,7 +60370,8 @@ const ProfilePanel = ({ eyebrow, title: t, desc, right, children, className = ""
 );
 
 function MyProfilePage({ user, todayStats, myStats, cardImage, setCardImage, cardImageUploading, setCardImageUploading, showAlert, userCompany, role, extraTabs = [] }) {
-  const [myTab, setMyTab] = React.useState("내 정보"); // ⭐ 2026-11-07 오른쪽 탭
+  const [myTab, setMyTab] = React.useState(() => initialMyInfoTab()); // ⭐ 2026-11-07 오른쪽 탭(알림 [급여명세서 열기]로 바로 — MyInfoTabs.jsx)
+  useMyInfoTabLink(setMyTab);
   const [loginMgrOpen, setLoginMgrOpen] = React.useState(false); // ★ 로그인 관리 창
   const co = role === "totalMaster"
     ? (localStorage.getItem("loginCompany") || userCompany || "")
@@ -60710,7 +60711,7 @@ function MyProfilePage({ user, todayStats, myStats, cardImage, setCardImage, car
           </div>
           </div>
         </ProfilePanel>) },
-    // { key: "급여명세서", render: () => <MyPayslipsSection company={co} uid={user?.uid} /> },
+    // 급여명세서 · 연차 사용 계획 — 회사관리에서 extraTabs(myInfoExtraTabs)로 넘긴다
     ...extraTabs,
   ];
   const activeTab = myTabs.find((t) => t.key === myTab) || myTabs[0];
@@ -60849,8 +60850,8 @@ function CompanyManagementWrapper({ payrollInAcct = false, userCompany, role, us
       {tab === "운임 규칙" && fareCM.feature && <FareRulesSettings company={userCompany} canEdit={role !== "viewer"} myName={myDocCM?.name || myName} />}
       {tab === "내 이력서" && <HRManagementPage userCompany={userCompany} role={role} userId={userId} selfOnly />}
       {tab === "내정보" && (
-        <MyInfoTabs company={userCompany} uid={user?.uid} enabled={staffCM}>
         <MyProfilePage
+          extraTabs={staffCM ? myInfoExtraTabs(userCompany, user?.uid) : []}
           user={user}
           todayStats={todayStats}
           myStats={myStats}
@@ -60862,7 +60863,6 @@ function CompanyManagementWrapper({ payrollInAcct = false, userCompany, role, us
           userCompany={userCompany}
           role={role}
         />
-        </MyInfoTabs>
       )}
       {(tab === "출근기록부" || tab === "인사관리부") && (
       <div className="bg-white rounded-[20px] border border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_10px_28px_rgba(16,24,40,0.06)] overflow-hidden">

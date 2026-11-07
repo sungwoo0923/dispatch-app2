@@ -1,5 +1,5 @@
 // ======================= src/MyInfoTabs.jsx =======================
-// ⭐ 2026-11-07 내정보 안 탭 — [내 정보](기존 화면 그대로) · [급여명세서](MyPayslipsSection) · [연차 사용 계획](MyLeavePlan)
+// ⭐ 2026-11-07 내정보 안 탭(모바일 MobileMyInfo 겉 탭 · PC는 MyProfilePage extraTabs로 myInfoExtraTabs) — [내 정보](기존 화면 그대로) · [급여명세서](MyPayslipsSection) · [연차 사용 계획](MyLeavePlan)
 //  예전엔 회사관리 › 급여명세서 · 연차 사용 계획이 따로 메뉴였다 → 본인 것이라 내정보 안으로(PC 회사관리 › 내정보 · 모바일 내정보 같음)
 //  내정보 화면 자체(MyProfilePage · MobileMyInfo)는 건드리지 않고 겉에서 탭만 씌운다
 //  다른 화면에서 바로 열기: sessionStorage kpMyInfoTab = "급여명세서" | "연차 사용 계획" + window 이벤트 "kp-myinfo-tab"
@@ -9,14 +9,27 @@ const MyPayslipsSection = React.lazy(() => import("./Payroll").then((m) => ({ de
 const MyLeavePlan = React.lazy(() => import("./LeavePromotion").then((m) => ({ default: m.MyLeavePlan })));
 export const MY_INFO_TABS = ["내 정보", "급여명세서", "연차 사용 계획"];
 const peek = () => { try { return sessionStorage.getItem("kpMyInfoTab") || ""; } catch { return ""; } };
-
-export default function MyInfoTabs({ company, uid, children, mobile = false, enabled = true }) {
-  const [tab, setTab] = React.useState(() => (MY_INFO_TABS.includes(peek()) ? peek() : "내 정보"));
+const fb = <div className="py-20 text-center text-[14px] font-bold text-[#7A879C]">불러오는 중…</div>;
+// PC 내정보(MyProfilePage)의 extraTabs로 넘기는 탭 2개 — 내정보 화면이 탭 줄을 직접 그린다
+export function myInfoExtraTabs(company, uid) {
+  return [
+    { key: "급여명세서", render: () => <React.Suspense fallback={fb}><MyPayslipsSection company={company} uid={uid} /></React.Suspense> },
+    { key: "연차 사용 계획", render: () => <React.Suspense fallback={fb}><MyLeavePlan company={company} uid={uid} /></React.Suspense> },
+  ];
+}
+// 다른 화면(알림 [급여명세서 열기])에서 정한 탭을 받는다 — useState 초기값 + 이벤트
+export const initialMyInfoTab = (fallback = "내 정보") => (MY_INFO_TABS.includes(peek()) ? peek() : fallback);
+export function useMyInfoTabLink(setTab) {
   React.useEffect(() => {
     try { sessionStorage.removeItem("kpMyInfoTab"); } catch { /* 무시 */ }
     const h = () => { const v = peek(); if (MY_INFO_TABS.includes(v)) { setTab(v); try { sessionStorage.removeItem("kpMyInfoTab"); } catch { /* 무시 */ } } };
     window.addEventListener("kp-myinfo-tab", h); return () => window.removeEventListener("kp-myinfo-tab", h);
-  }, []);
+  }, [setTab]);
+}
+
+export default function MyInfoTabs({ company, uid, children, mobile = false, enabled = true }) {
+  const [tab, setTab] = React.useState(() => initialMyInfoTab());
+  useMyInfoTabLink(setTab);
   if (!enabled) return children;
   const fallback = <div className="py-20 text-center text-[14px] font-bold text-[#7A879C]">불러오는 중…</div>;
   return (

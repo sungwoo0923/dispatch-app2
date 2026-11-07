@@ -911,8 +911,10 @@ function PayEmployees({ company, ro }) {
             <div className="flex items-center gap-2 flex-wrap"><b className="text-[19px] text-[#0F1A30]">{personName(sel) || sel.name}</b>{dirty && <span className="h-7 px-2.5 rounded-lg text-[14px] font-black inline-flex items-center border border-[#2D4C82] text-[#2D4C82]">수정 중 · 저장 안 됨</span>}</div>
             <div className="text-[14px] font-bold text-[#5B6B85] truncate">{[sel.team, sel.position, sel.employmentStatus || "재직", sel.hireDate ? `입사 ${sel.hireDate}` : ""].filter(Boolean).join(" · ")}</div>
           </div>
-          <Seg value={paneTab} onChange={setPaneTab} options={[["pay", "급여 설정"], ["contract", "근로계약서"]]} testid="payemp-tabs" />
-          {!ro && paneTab === "pay" && <button type="button" disabled={busy || !dirty} onClick={save} className="h-11 px-5 rounded-xl bg-[#0F1A30] text-white text-[15px] font-black disabled:opacity-40" data-testid="payemp-save">{busy ? "저장 중…" : "저장"}</button>}
+          <div className={`flex items-center gap-2 ${wide ? "" : "w-full"}`}>
+            <Seg value={paneTab} onChange={setPaneTab} options={[["pay", "급여 설정"], ["contract", "근로계약서"]]} testid="payemp-tabs" className={wide ? "" : "flex-1 [&>button]:flex-1"} />
+            {!ro && paneTab === "pay" && <button type="button" disabled={busy || !dirty} onClick={save} className="h-11 px-5 rounded-xl bg-[#0F1A30] text-white text-[15px] font-black disabled:opacity-40" data-testid="payemp-save">{busy ? "저장 중…" : "저장"}</button>}
+          </div>
         </div>
         {preview && paneTab === "pay" && (
           <div className="mt-3 rounded-2xl bg-[#0F1A30] text-white px-4 py-3 flex items-center gap-x-4 gap-y-1 flex-wrap" style={NUMS}>
@@ -1009,6 +1011,8 @@ function PayEmployees({ company, ro }) {
 
 // ── 요율 · 설정 ──
 // ⭐ 2026-11-07 단순하게 — 근로자 4대보험 요율 4개를 큰 카드로 + [2026 기준값] · 나머지(회사 부담·상하한·비과세 한도·가산율·최저시급)는 "자세한 요율"에 접어 둠
+// 데스크톱 입력칸 글자는 index.css가 14px !important로 고정 → 큰 요율 칸만 important로 덮어쓴다
+const bigInput = (el) => { if (el) el.style.setProperty("font-size", "30px", "important"); };
 const MAIN_RATES = [["npEmp", "국민연금", "근로자 부담"], ["hiEmp", "건강보험", "근로자 부담"], ["ltcRatio", "장기요양", "건강보험료 대비"], ["eiEmp", "고용보험", "근로자 부담"]];
 function PayRates({ company, ro }) {
   const settings = usePayrollSettings(company);
@@ -1066,7 +1070,7 @@ function PayRates({ company, ro }) {
             <label key={k} className="rounded-2xl bg-[#F5F8FD] border border-[#E3E8F0] px-4 py-3 block cursor-text">
               <div className="flex items-baseline justify-between gap-2"><span className="text-[15px] font-black text-[#0F1A30]">{label}</span><span className="text-[14px] font-bold text-[#7A879C]">{sub}</span></div>
               <div className="mt-1 flex items-baseline gap-1">
-                <input disabled={ro} inputMode="decimal" value={f[k] ?? ""} onChange={(e) => setF((x) => ({ ...x, [k]: e.target.value.replace(/[^\d.]/g, "") }))} className="min-w-0 bg-transparent font-black text-[#0F1A30] outline-none border-b-2 border-transparent focus:border-[#2D4C82]" style={{ ...NUMS, fontSize: 30, lineHeight: 1.15, width: `${Math.max(3, String(f[k] ?? "").length + 0.6)}ch` }} data-testid={`rate-${k}`} aria-label={`${label} 요율`} />
+                <input disabled={ro} inputMode="decimal" value={f[k] ?? ""} onChange={(e) => setF((x) => ({ ...x, [k]: e.target.value.replace(/[^\d.]/g, "") }))} className="min-w-0 bg-transparent font-black text-[#0F1A30] outline-none border-b-2 border-transparent focus:border-[#2D4C82]" ref={bigInput} style={{ ...NUMS, lineHeight: 1.15, width: `${Math.max(3, String(f[k] ?? "").length + 0.6)}ch` }} data-testid={`rate-${k}`} aria-label={`${label} 요율`} />
                 <span className="text-[18px] font-black text-[#5B6B85]">%</span>
               </div>
               <div className={`text-[14px] font-bold ${String(p[k]) !== String(f[k]) ? "text-[#2D4C82]" : "text-[#7A879C]"}`}>{String(p[k]) !== String(f[k]) ? `기준값 ${p[k]}%` : "기준값 그대로"}</div>
