@@ -1,6 +1,8 @@
 import { useState, useEffect } from "react";
 import { auth, db } from "../../firebase";
 import { doc, getDoc, updateDoc } from "firebase/firestore";
+import BankAccountInput from "../../BankAccountInput"; // ⭐ 2026-11-07 은행정보 — 은행 고르기 + 계좌번호 자동 하이픈(저장은 예전처럼 글자 한 줄)
+import { bankText, parseBankText } from "../../bankUtil";
 
 const inputCls = "w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm text-gray-900 bg-white focus:ring-2 focus:ring-[#1B2B4B]/40 focus:border-[#1B2B4B] outline-none";
 const labelCls = "block text-xs font-bold text-gray-600 mb-1";
@@ -123,11 +125,15 @@ function EditModal({ data, setData, onClose }) {
   });
 
   const update = (k, v) => setForm((prev) => ({ ...prev, [k]: v }));
+  // 은행정보는 고르는 동안 은행·계좌·예금주를 따로 들고 있다가 저장할 때 한 줄 글자로 합친다(예전 저장 모양 그대로)
+  const [bankObj, setBankObj] = useState(() => parseBankText(data.bank || ""));
+  const bankChanged = bankText(bankObj) !== bankText(parseBankText(data.bank || ""));
 
   const handleSave = async () => {
     const user = auth.currentUser;
-    await updateDoc(doc(db, "users", user.uid), form);
-    setData((prev) => ({ ...prev, ...form }));
+    const next = { ...form, bank: bankChanged ? bankText(bankObj) : form.bank };
+    await updateDoc(doc(db, "users", user.uid), next);
+    setData((prev) => ({ ...prev, ...next }));
     onClose();
   };
 
@@ -147,7 +153,7 @@ function EditModal({ data, setData, onClose }) {
             <div><label className={labelCls}>업종</label><input className={inputCls} value={form.bizItem} onChange={(e) => update("bizItem", e.target.value)} /></div>
           </div>
           <div><label className={labelCls}>사업자번호</label><input className={inputCls} value={form.bizNo} onChange={(e) => update("bizNo", e.target.value)} /></div>
-          <div><label className={labelCls}>은행정보</label><input className={inputCls} value={form.bank} onChange={(e) => update("bank", e.target.value)} /></div>
+          <div><label className={labelCls}>은행정보</label><BankAccountInput value={bankObj} onChange={setBankObj} noFav stacked /></div>
           <div><label className={labelCls}>전화번호</label><input className={inputCls} value={form.tel} onChange={(e) => update("tel", formatPhone(e.target.value))} /></div>
           <div><label className={labelCls}>팩스</label><input className={inputCls} value={form.fax} onChange={(e) => update("fax", formatPhone(e.target.value))} /></div>
         </div>

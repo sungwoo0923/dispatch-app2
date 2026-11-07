@@ -12,6 +12,7 @@ import { ref as storageRef, uploadBytes, getDownloadURL } from "firebase/storage
 import { fmtPhone } from "./formatInput";
 import CustomDatePicker from "./CustomDatePicker"; // 📅 2026-11-07 날짜는 프로그램 달력으로
 import { kpConfirm } from "./kpDialog";
+import { ALL_POSITION_OPTIONS } from "./hrConstants";
 
 // 전화번호 하이픈 자동 포맷 (DispatchApp.jsx formatPhone과 동일 규칙)
 // 전화번호 하이픈 — 공용 규칙(src/formatInput.js: 02·031·010·1588 등, 입력 중에도 적용)
@@ -3091,7 +3092,9 @@ function ProfileView({ myProfile, editingProfile, editName, editStatusMsg, editP
               <input value={editStatusMsg} onChange={e => setEditStatusMsg(e.target.value)}
                 placeholder="상태 메시지..."
                 style={{ textAlign: "center", background: "rgba(255,255,255,0.1)", border: "1px solid rgba(255,255,255,0.2)", borderRadius: 10, padding: "5px 12px", color: "rgba(255,255,255,0.8)", fontSize: 13, outline: "none", width: "80%" }} />
-              <input value={editPosition} onChange={e => setEditPosition(e.target.value)}
+              {/* ⭐ 2026-11-07 직책 — 인사관리 직책 목록에서 고르기(목록에 없는 직책도 그대로 입력 가능) */}
+              <datalist id="kp-msg-position-list">{ALL_POSITION_OPTIONS.map((p) => <option key={p} value={p} />)}</datalist>
+              <input value={editPosition} onChange={e => setEditPosition(e.target.value)} list="kp-msg-position-list" autoComplete="off"
                 placeholder="직책 (예: 팀장, 과장...)"
                 style={{ textAlign: "center", background: "rgba(255,255,255,0.1)", border: "1px solid rgba(255,255,255,0.2)", borderRadius: 10, padding: "5px 12px", color: "rgba(255,255,255,0.8)", fontSize: 13, outline: "none", width: "80%" }} />
               <input value={editPhone} onChange={e => setEditPhone(formatPhone(e.target.value))}
@@ -3105,7 +3108,7 @@ function ProfileView({ myProfile, editingProfile, editName, editStatusMsg, editP
           ) : (
             <>
               <div style={{ fontSize: 18, fontWeight: 800, color: "#fff", marginBottom: 4 }}>{myProfile?.name || "이름 없음"}</div>
-              {myProfile?.position && <div style={{ fontSize: 12, color: "rgba(255,255,255,0.5)", marginBottom: 4 }}>{myProfile.position}</div>}
+              {myProfile?.position && <div style={{ fontSize: 13, color: "rgba(255,255,255,0.72)", marginBottom: 4 }}>{myProfile.position}</div>}
               <div style={{ fontSize: 13, color: "rgba(255,255,255,0.6)", minHeight: 18 }}>{myProfile?.statusMsg || "상태 메시지를 입력해보세요"}</div>
               <button onClick={onEdit}
                 style={{ marginTop: 12, background: "rgba(255,255,255,0.15)", color: "#fff", border: "none", borderRadius: 20, padding: "6px 20px", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>

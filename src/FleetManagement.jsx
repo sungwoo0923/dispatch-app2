@@ -3236,7 +3236,7 @@ function DriverRouteCard({ driver, orders, selectedDate, rangeEndDate, isSingleD
           onClose={() => setRouteMapOrder(null)}
         />
       )}
-      {editOrder && <FleetOrderPanel order={editOrder} onClose={() => setEditOrder(null)} onCopy={() => { const o = editOrder; setEditOrder(null); setCopyOrder(o); }} />}
+      {editOrder && <FleetOrderPanel order={editOrder} pastOrders={dispatchData} onClose={() => setEditOrder(null)} onCopy={() => { const o = editOrder; setEditOrder(null); setCopyOrder(o); }} />}
       {copyOrder && <OrderCopyModal order={copyOrder} driver={driver} onClose={() => setCopyOrder(null)} />}
       {journeyOpen && <DriverJourneyPanel driver={driver} orders={displayOrders} live={live} dispatchData={dispatchData} onClose={() => setJourneyOpen(false)} />}
     </div>

@@ -88,7 +88,27 @@ const initForm = (o) => {
   return f;
 };
 
-export default function FleetOrderPanel({ order, onClose, onCopy, companyName = "" }) {
+// ⭐ 2026-11-07 입력 도우미 — 지난 오더에서 거래처명·상/하차지·차량번호·기사명·톤수를 모아 목록으로 보여준다(<datalist>).
+//  목록에 없는 값도 그대로 입력할 수 있고, 차량번호·상하차지명을 목록에서 고르면 비어 있던(또는 처음 값 그대로인) 이어지는 칸을 채운다.
+const SUGGEST_MAX = 400;
+const TON_SUGGEST = ["1톤", "1.4톤", "2.5톤", "3.5톤", "5톤", "5톤축", "8톤", "9.5톤", "11톤", "14톤", "18톤", "25톤"];
+function buildSuggest(rows) {
+  const by = { client: new Map(), place: new Map(), car: new Map(), name: new Map(), ton: new Map() };
+  const put = (m, k, rec) => { const key = String(k || "").trim(); if (!key || key.length > 60) return; const cur = m.get(key); m.set(key, { n: (cur?.n || 0) + 1, rec: cur?.rec || rec }); };
+  (Array.isArray(rows) ? rows : []).slice(-6000).reverse().forEach((r) => {
+    if (!r) return;
+    put(by.client, r.거래처명, r);
+    put(by.place, r.상차지명, { 주소: r.상차지주소, 담당자: r.상차지담당자, 번호: r.상차지담당자번호 });
+    put(by.place, r.하차지명, { 주소: r.하차지주소, 담당자: r.하차지담당자, 번호: r.하차지담당자번호 });
+    put(by.car, r.차량번호, { 이름: r.이름, 전화번호: r.전화번호 });
+    put(by.name, r.이름, r);
+    put(by.ton, r.차량톤수, r);
+  });
+  const top = (m) => [...m.entries()].sort((a, b) => b[1].n - a[1].n).slice(0, SUGGEST_MAX).map(([k]) => k);
+  return { client: top(by.client), place: top(by.place), car: top(by.car), name: top(by.name), ton: [...new Set([...TON_SUGGEST, ...top(by.ton)])], placeMap: by.place, carMap: by.car };
+}
+
+export default function FleetOrderPanel({ order, onClose, onCopy, companyName = "", pastOrders = [] }) {
   const co = String(getTenant() || companyName || "").trim();
   const fareR = useFareRules(co);
   const fareOn = !!fareR.on;
@@ -99,6 +119,34 @@ export default function FleetOrderPanel({ order, onClose, onCopy, companyName = 
   React.useEffect(() => { const t = requestAnimationFrame(() => setShown(true)); return () => cancelAnimationFrame(t); }, []);
   const dirty = React.useMemo(() => Object.keys(form).some((k) => String(form[k] ?? "") !== String(base.current[k] ?? "")), [form]);
   const set = (k) => (v) => setForm((p) => ({ ...p, [k]: v && v.target ? v.target.value : v }));
+  const sg = React.useMemo(() => buildSuggest(pastOrders), [pastOrders]);
+  // 목록에서 고른 값이면 이어지는 칸 채우기 — 비어 있거나 처음 열었을 때 값 그대로인 칸만(손으로 고친 칸은 그대로)
+  const untouched = (p, k) => !String(p[k] ?? "").trim() || String(p[k] ?? "") === String(base.current[k] ?? "");
+  const setPlace = (kind) => (e) => {
+    const v = e.target.value;
+    setForm((p) => {
+      const next = { ...p, [`${kind}지명`]: v };
+      const hit = sg.placeMap.get(String(v).trim())?.rec;
+      if (hit && v !== base.current[`${kind}지명`]) {
+        if (hit.주소 && untouched(p, `${kind}지주소`)) next[`${kind}지주소`] = hit.주소;
+        if (hit.담당자 && untouched(p, `${kind}지담당자`)) next[`${kind}지담당자`] = hit.담당자;
+        if (hit.번호 && untouched(p, `${kind}지담당자번호`)) next[`${kind}지담당자번호`] = hit.번호;
+      }
+      return next;
+    });
+  };
+  const setCar = (e) => {
+    const v = e.target.value;
+    setForm((p) => {
+      const next = { ...p, 차량번호: v };
+      const hit = sg.carMap.get(String(v).trim())?.rec;
+      if (hit && v !== base.current.차량번호) {
+        if (hit.이름 && untouched(p, "이름")) next.이름 = hit.이름;
+        if (hit.전화번호 && untouched(p, "전화번호")) next.전화번호 = hit.전화번호;
+      }
+      return next;
+    });
+  };
   const setFare = (k, v) => setForm((p) => (fareOn ? fareFormChange(p, k, v, fareR.rules, { withFee: false }) : { ...p, [k]: v }));
   const fee = toNum(form.청구운임) - toNum(form.기사운임);
   const shipper = order?.source === "shipper" || order?.source === "shipper_mobile";
@@ -166,7 +214,7 @@ export default function FleetOrderPanel({ order, onClose, onCopy, companyName = 
         <CpField label={`${p}방법`}>
           <CompanyOptionPicker optKey="상하차방법" title={`${p}방법`} placeholder="선택" noneLabel="선택" className={cpInputStyle} value={form[`${p}방법`]} onChange={(v) => set(`${p}방법`)({ target: { value: v } })} />
         </CpField>
-        <CpField label={`${p}지명`}><input autoComplete="off" className={cpInputStyle} value={form[`${p}지명`]} onChange={set(`${p}지명`)} /></CpField>
+        <CpField label={`${p}지명`}><input autoComplete="off" list="kp-fop-place" placeholder="지난 오더에서 고르거나 입력" className={cpInputStyle} value={form[`${p}지명`]} onChange={setPlace(p)} /></CpField>
         <CpField label={`${p}지주소`}><input autoComplete="off" className={cpInputStyle} value={form[`${p}지주소`]} onChange={set(`${p}지주소`)} title={form[`${p}지주소`]} /></CpField>
         <CpField label={`${p}지 담당자명`}><input autoComplete="off" className={cpInputStyle} value={form[`${p}지담당자`]} onChange={set(`${p}지담당자`)} /></CpField>
         <CpField label={`${p}지 연락처`}><input autoComplete="off" inputMode="tel" className={cpInputStyle} value={form[`${p}지담당자번호`]} onChange={(e) => set(`${p}지담당자번호`)(fmtPhone(e.target.value))} /></CpField>
@@ -182,6 +230,11 @@ export default function FleetOrderPanel({ order, onClose, onCopy, companyName = 
         className="absolute top-0 right-0 h-full w-[min(1180px,96vw)] bg-[#F4F6FA] shadow-2xl border-l border-[#DCE3EE] overflow-y-auto"
         style={{ transform: shown ? "translateX(0)" : "translateX(100%)", transition: "transform .26s cubic-bezier(.2,.8,.2,1)", fontFamily: "'Pretendard','Noto Sans KR',sans-serif" }}>
         <div className="px-5 pb-5 space-y-4 text-[14px]">
+          <datalist id="kp-fop-client">{sg.client.map((v) => <option key={v} value={v} />)}</datalist>
+          <datalist id="kp-fop-place">{sg.place.map((v) => <option key={v} value={v} />)}</datalist>
+          <datalist id="kp-fop-car">{sg.car.map((v) => <option key={v} value={v} />)}</datalist>
+          <datalist id="kp-fop-name">{sg.name.map((v) => <option key={v} value={v} />)}</datalist>
+          <datalist id="kp-fop-ton">{sg.ton.map((v) => <option key={v} value={v} />)}</datalist>
           {/* HEADER */}
           <div className="sticky top-0 z-20 -mx-5 mb-1 flex justify-between items-center gap-3 px-5 py-2.5 text-white shadow-[0_6px_18px_rgba(11,20,40,0.25)]"
             style={{ background: "linear-gradient(120deg,#0B1428 0%,#1B2B4B 60%,#2D4C82 100%)" }}>
@@ -203,7 +256,7 @@ export default function FleetOrderPanel({ order, onClose, onCopy, companyName = 
           <section className="bg-white rounded-xl border border-[#E3E8F0] overflow-hidden">
             <div className="bg-[#1B2B4B] px-5 py-2"><h3 className="text-[14px] font-bold text-white">거래처 정보</h3></div>
             <div className="px-5 py-3 grid grid-cols-1 lg:grid-cols-3 gap-x-6 gap-y-1.5">
-              <CpField label="거래처명"><input autoComplete="off" className={cpInputStyle} value={form.거래처명} onChange={set("거래처명")} /></CpField>
+              <CpField label="거래처명"><input autoComplete="off" list="kp-fop-client" placeholder="지난 오더에서 고르거나 입력" className={cpInputStyle} value={form.거래처명} onChange={set("거래처명")} /></CpField>
               <CpField label="거래처 담당자"><input autoComplete="off" className={cpInputStyle} value={form.거래처담당자} onChange={set("거래처담당자")} /></CpField>
               <CpField label="거래처 연락처"><input autoComplete="off" inputMode="tel" className={cpInputStyle} value={form.거래처전화번호} onChange={(e) => set("거래처전화번호")(fmtPhone(e.target.value))} /></CpField>
             </div>
@@ -219,15 +272,15 @@ export default function FleetOrderPanel({ order, onClose, onCopy, companyName = 
           <section className="bg-white rounded-xl border border-[#E3E8F0] overflow-hidden">
             <SecHead sub="바꾸면 이 오더가 다른 기사님 노선으로 옮겨집니다">기사정보</SecHead>
             <div className="px-5 py-3 grid grid-cols-1 lg:grid-cols-3 gap-x-6 gap-y-1.5">
-              <CpField label="차량번호"><input autoComplete="off" className={cpInputStyle} value={form.차량번호} onChange={set("차량번호")} /></CpField>
-              <CpField label="기사명"><input autoComplete="off" className={cpInputStyle} value={form.이름} onChange={set("이름")} /></CpField>
+              <CpField label="차량번호"><input autoComplete="off" list="kp-fop-car" className={cpInputStyle} value={form.차량번호} onChange={setCar} /></CpField>
+              <CpField label="기사명"><input autoComplete="off" list="kp-fop-name" className={cpInputStyle} value={form.이름} onChange={set("이름")} /></CpField>
               <CpField label="전화번호"><input autoComplete="off" inputMode="tel" className={cpInputStyle} value={form.전화번호} onChange={(e) => set("전화번호")(fmtPhone(e.target.value))} /></CpField>
             </div>
             <div className="mx-5 border-t border-dashed border-[#E3E8F0]" />
             <SecHead>화물정보</SecHead>
             <div className="px-5 py-3 grid grid-cols-1 lg:grid-cols-3 gap-x-6 gap-y-1.5">
               <CpField label="차량종류"><VehicleTypePicker className={cpInputStyle} company={co} value={form.차량종류} placeholder="선택" noneLabel="선택 안 함" onChange={set("차량종류")} /></CpField>
-              <CpField label="차량톤수"><input autoComplete="off" className={cpInputStyle} value={form.차량톤수} onChange={set("차량톤수")} placeholder="예: 5톤" /></CpField>
+              <CpField label="차량톤수"><input autoComplete="off" list="kp-fop-ton" className={cpInputStyle} value={form.차량톤수} onChange={set("차량톤수")} placeholder="예: 5톤" /></CpField>
               <CpField label="화물내용"><input autoComplete="off" className={cpInputStyle} value={form.화물내용} onChange={set("화물내용")} /></CpField>
             </div>
             <div className="mx-5 border-t border-dashed border-[#E3E8F0]" />

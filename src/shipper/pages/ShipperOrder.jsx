@@ -1452,7 +1452,9 @@ function ViaStopModal({ type, list, onSave, onClose, orderDate = "" }) {
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <input className={inputCls} placeholder="화물내용 (예: 2파레트)" value={stop.화물내용} onChange={e => update(idx, "화물내용", e.target.value)} />
-                <input className={inputCls} placeholder="톤수 (예: 1톤)" value={stop.차량톤수} onChange={e => update(idx, "차량톤수", e.target.value)} />
+                {/* ⭐ 2026-11-07 톤수 — 자주 쓰는 톤수에서 고르기(직접 입력도 그대로) */}
+                <datalist id="kp-shp-ton-list">{["1톤", "1.4톤", "2.5톤", "3.5톤", "5톤", "5톤축", "8톤", "11톤", "14톤", "18톤", "25톤"].map((t) => <option key={t} value={t} />)}</datalist>
+                <input className={inputCls} placeholder="톤수 (예: 1톤)" list="kp-shp-ton-list" autoComplete="off" value={stop.차량톤수} onChange={e => update(idx, "차량톤수", e.target.value)} />
               </div>
               {/* 경유지 자체 날짜 — 오더 본 상차일/하차일은 전체 구간 날짜라, 당일상차→당일하차→
                   익일상차→익일하차처럼 경유지마다 날짜가 갈리는 경우를 표현 못 하던 문제 */}

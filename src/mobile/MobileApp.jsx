@@ -780,7 +780,7 @@ function SwipeableRow({ children, onDelete, onCopyOrder, onCopyDriver, disabled 
             <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
             <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/>
           </svg>
-          <span style={{ color: "white", fontSize: 11, fontWeight: 600 }}>오더복사</span>
+          <span style={{ color: "white", fontSize: 12, fontWeight: 700 }}>오더복사</span>
         </button>
         <button
           className="flex-1 flex flex-col items-center justify-center gap-1"
@@ -793,11 +793,11 @@ function SwipeableRow({ children, onDelete, onCopyOrder, onCopyDriver, disabled 
             <path d="M3 21v-2a4 4 0 014-4h4a4 4 0 014 4v2"/>
             <path d="M19 8v6M22 11h-6"/>
           </svg>
-          <span style={{ color: "white", fontSize: 11, fontWeight: 600 }}>기사복사</span>
+          <span style={{ color: "white", fontSize: 12, fontWeight: 700 }}>기사복사</span>
         </button>
         <button
           className="flex-1 flex flex-col items-center justify-center gap-1"
-          style={{ background: "#EF4444" }}
+          style={{ background: "#D92D20" }}
           onMouseDown={e => e.stopPropagation()}
           onClick={e => { e.stopPropagation(); doClose(); onDelete?.(); }}
         >
@@ -807,7 +807,7 @@ function SwipeableRow({ children, onDelete, onCopyOrder, onCopyDriver, disabled 
             <path d="M10 11v6M14 11v6"/>
             <path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2"/>
           </svg>
-          <span style={{ color: "white", fontSize: 11, fontWeight: 600 }}>취소</span>
+          <span style={{ color: "white", fontSize: 12, fontWeight: 700 }}>취소</span>
         </button>
       </div>
 
@@ -1738,7 +1738,7 @@ function TransportStatusBadge({ order, className = "", onClick, flat = false, co
   return (
     <span
       onClick={clickable ? onClick : undefined}
-      className={`inline-flex items-center ${compact ? "gap-1 px-1.5 py-0.5 text-[0.68em]" : "gap-1.5 px-2 py-0.5 text-[11px]"} rounded-full font-bold tracking-wide whitespace-nowrap ${clickable ? "cursor-pointer active:scale-95 transition-transform" : ""} ${className}`}
+      className={`inline-flex items-center ${compact ? "gap-1 px-1.5 py-0.5 text-[0.75em]" : "gap-1.5 px-2 py-0.5 text-[11px]"} rounded-full font-bold tracking-wide whitespace-nowrap ${clickable ? "cursor-pointer active:scale-95 transition-transform" : ""} ${className}`}
       style={{
         background: label === "배차중" ? "#EEF2F8" : "linear-gradient(135deg,#1B2B4B,#0F1A30)",
         color: label === "배차중" ? "#3A4A66" : text,
@@ -7003,6 +7003,8 @@ setOpenMemo={setOpenMemo}
             toggleAlarm={toggleAlarm}
             fontScale={fontScale}
             setFontScale={setFontScale}
+            uiScale={uiScale}
+            setUiScale={setUiScale}
             appVersion={appVersion}
             showSuccess={showSuccess}
             onLogout={logout}
@@ -8172,7 +8174,7 @@ function MobileSideMenu({
 
           {/* 카드 스타일 */}
           <div className={`px-5 py-3 ${dark ? "border-t border-white/10" : "border-t border-blue-50"}`}>
-            <div className={`text-[11px] font-semibold tracking-wider mb-2 ${dark ? "text-white/50" : "text-blue-500"}`}>카드 스타일</div>
+            <div className={`text-[11px] font-semibold tracking-wider mb-2 ${dark ? "text-white/50" : "text-blue-500"}`}>디자인 테마</div>
             <div className="flex gap-1.5">
               {[{ v: false, label: "A형 (기본)" }, { v: true, label: "B형 (심플)" }].map(({ v, label }) => (
                 <button key={String(v)} onClick={() => onToggleCardVersion(v)}
@@ -8363,7 +8365,7 @@ function KpmDrawerControls({ alarmEnabled, toggleAlarm, uiScale, setUiScale, car
           <KpmScaleSeg uiScale={uiScale} setUiScale={setUiScale} dark />
         </div>
         <div className={row}>
-          <span className="text-[13.5px] font-bold text-white/85">카드 스타일</span>
+          <span className="text-[13.5px] font-bold text-white/85">디자인 테마</span>
           <div className="flex p-0.5 rounded-xl bg-white/[0.06] ring-1 ring-white/10">
             {[{ v: false, l: "A형" }, { v: true, l: "B형" }].map(({ v, l }) => (
               <button key={String(v)} type="button" onClick={() => onToggleCardVersion(v)} className={`h-8 px-3 rounded-[10px] text-[12px] font-black transition ${cardVersionB === v ? "bg-white text-[#0F1A30]" : "text-white/55"}`}>{l}</button>
@@ -11284,8 +11286,8 @@ const dropTime = order.하차시간 ? fmtDispatchTimeM(order.하차시간, order
           <div className="flex items-center justify-between gap-2">
             <span className="text-[1.02em] font-extrabold text-[#0F1A30] truncate leading-tight">{name}</span>
             <span className="flex items-center gap-1 shrink-0">
-              <span className="text-[0.74em] font-bold text-[#1B2B4B] bg-[#EEF3FB] px-1.5 py-0.5 rounded-md tabular-nums" style={{ fontFamily: MONO_B, fontVariantNumeric: "tabular-nums" }}>{time}</span>
-              {day && <span className={`text-[0.68em] px-1 py-0.5 rounded border tabular-nums font-semibold ${dayBadgeClass(day)}`}>{day}</span>}
+              <span className="text-[0.8em] font-bold text-[#1B2B4B] bg-[#EEF3FB] px-1.5 py-0.5 rounded-md tabular-nums" style={{ fontFamily: MONO_B, fontVariantNumeric: "tabular-nums" }}>{time}</span>
+              {day && <span className={`text-[0.75em] px-1 py-0.5 rounded border tabular-nums font-semibold ${dayBadgeClass(day)}`}>{day}</span>}
             </span>
           </div>
           {addr && <div className="text-[0.76em] text-[#64748B] mt-0.5 truncate">{addr}</div>}
@@ -11315,14 +11317,14 @@ const dropTime = order.하차시간 ? fmtDispatchTimeM(order.하차시간, order
         {/* 머리줄 — 날짜·거래처·첨부·뱃지 | 메모·냉장·상태 */}
         <div className="pl-4 pr-3 pt-2.5 pb-2 flex flex-wrap items-center justify-between gap-x-2 gap-y-1 border-b border-[#EEF1F6]" style={{ background: `linear-gradient(90deg, ${statusWash}, rgba(255,255,255,0) 70%)` }}>
           <div className="flex flex-wrap items-center gap-1.5 min-w-0">
-            <span className="text-[0.7em] font-extrabold text-white bg-[#1B2B4B] px-1.5 py-0.5 rounded-md tabular-nums shrink-0" style={{ fontFamily: MONO_B, fontVariantNumeric: "tabular-nums" }}>{String(order.상차일 || "").slice(5) || "--"}</span>
+            <span className="text-[0.76em] font-extrabold text-white bg-[#1B2B4B] px-1.5 py-0.5 rounded-md tabular-nums shrink-0" style={{ fontFamily: MONO_B, fontVariantNumeric: "tabular-nums" }}>{String(order.상차일 || "").slice(5) || "--"}</span>
             {order.거래처명 && (
               <span className="text-[0.8em] font-extrabold text-[#1B2B4B] truncate max-w-[150px] inline-flex items-center">{cBiz.multi && <BizChip name={bizOf(order, cBiz.defaultName)} main={bizOf(order, cBiz.defaultName) === cBiz.defaultName} />}{order.거래처명}</span>
             )}
             <button
               style={{ touchAction: "manipulation" }}
               onClick={e => { e.stopPropagation(); onOpenAttach?.(order); }}
-              className={`flex items-center gap-0.5 text-[0.68em] font-bold tabular-nums shrink-0 px-1.5 py-0.5 rounded-md border ${
+              className={`flex items-center gap-0.5 text-[0.75em] font-bold tabular-nums shrink-0 px-1.5 py-0.5 rounded-md border ${
                 order.attachViewed
                   ? "text-[#1B2B4B] border-[#C9D3E4] bg-white"
                   : order.attachCount > 0
@@ -11339,17 +11341,17 @@ const dropTime = order.하차시간 ? fmtDispatchTimeM(order.하차시간, order
                 <span className="w-1.5 h-1.5 rounded-full bg-[#CFE0FF] animate-pulse" />
               )}
             </button>
-            {isUrgentOrder(order) && <UrgentBadge className="!text-[0.7em]" />}{/* ⭐ 2026-11-06 긴급 빨간 알약 */}
+            {isUrgentOrder(order) && <UrgentBadge className="!text-[0.75em]" />}{/* ⭐ 2026-11-06 긴급 빨간 알약 */}
             {String(order.운행유형 || "").trim() === "왕복" && (
-              <span className="text-[0.68em] font-extrabold tracking-wide border border-[#1B2B4B] text-[#1B2B4B] px-1.5 py-0.5 rounded-md shrink-0">왕복</span>
+              <span className="text-[0.75em] font-extrabold tracking-wide border border-[#1B2B4B] text-[#1B2B4B] px-1.5 py-0.5 rounded-md shrink-0">왕복</span>
             )}
-            <RotationBadge order={order} className="!ml-0 shrink-0 !text-[0.68em] !px-1.5 !py-0.5 !rounded" />
+            <RotationBadge order={order} className="!ml-0 shrink-0 !text-[0.75em] !px-1.5 !py-0.5 !rounded" />
           </div>
           <div className="flex flex-wrap items-center justify-end gap-1.5 ml-auto">
             {activeRequestType && (
               <button
                 onClick={openRequestModal}
-                className="text-[0.7em] font-black px-1.5 py-0.5 rounded-md bg-[#0F1A30] text-white"
+                className="text-[0.76em] font-black px-1.5 py-0.5 rounded-md bg-[#0F1A30] text-white"
                 style={{ animation: "dispatchingPulse 1.8s ease-in-out infinite" }}
               >
                 요청
@@ -11358,13 +11360,13 @@ const dropTime = order.하차시간 ? fmtDispatchTimeM(order.하차시간, order
             {(order.메모 || order.적요) && (
               <button
                 onClick={(e) => { e.stopPropagation(); onOpenMemo(order); }}
-                className="memo-blink text-[0.7em] text-[#1B2B4B] font-extrabold px-1.5 py-0.5 rounded-md border border-[#C9D3E4] bg-white"
+                className="memo-blink text-[0.76em] text-[#1B2B4B] font-extrabold px-1.5 py-0.5 rounded-md border border-[#C9D3E4] bg-white"
               >
                 메모
               </button>
             )}
             {isCold && (
-              <span className="inline-flex items-center gap-0.5 text-[0.68em] text-[#1B2B4B] font-bold bg-[#EEF3FB] border border-[#C9D3E4] px-1.5 py-0.5 rounded-md">
+              <span className="inline-flex items-center gap-0.5 text-[0.75em] text-[#1B2B4B] font-bold bg-[#EEF3FB] border border-[#C9D3E4] px-1.5 py-0.5 rounded-md">
                 <Snowflake className="w-2.5 h-2.5" />
                 {(() => {
                   const vt = String(order.차량종류 || order.차종 || "");
@@ -11421,11 +11423,11 @@ const dropTime = order.하차시간 ? fmtDispatchTimeM(order.하차시간, order
             </div>
             <div className="flex min-[380px]:flex-col justify-between min-[380px]:justify-center gap-x-4 gap-y-0.5 shrink-0 px-3 py-1.5 rounded-xl text-white" style={{ background: "linear-gradient(135deg,#0F1A30,#1B2B4B 60%,#2D4C82)" }}>
               <span className="flex items-baseline justify-between gap-2">
-                <span className="text-[0.6em] text-[#8FB0F0] font-black tracking-[0.12em] whitespace-nowrap shrink-0">청구</span>
+                <span className="text-[0.72em] text-[#8FB0F0] font-black tracking-[0.12em] whitespace-nowrap shrink-0">청구</span>
                 <span className="text-[0.86em] font-extrabold tabular-nums" style={{ fontFamily: MONO_B, fontVariantNumeric: "tabular-nums" }}>{fmtMoney(claim)}</span>
               </span>
               <span className="flex items-baseline justify-between gap-2">
-                <span className="text-[0.6em] text-[#8FB0F0] font-black tracking-[0.12em] whitespace-nowrap shrink-0">기사</span>
+                <span className="text-[0.72em] text-[#8FB0F0] font-black tracking-[0.12em] whitespace-nowrap shrink-0">기사</span>
                 <span className="text-[0.86em] font-bold tabular-nums text-[#CFE0FF]" style={{ fontFamily: MONO_B, fontVariantNumeric: "tabular-nums" }}>{fmtMoney(fee)}</span>
               </span>
             </div>
@@ -11434,7 +11436,7 @@ const dropTime = order.하차시간 ? fmtDispatchTimeM(order.하차시간, order
           {/* 배차완료 시 기사 연락 */}
           {state === "배차완료" && (order.이름 || order.차량번호) && (
             <div className="flex items-center gap-2 mt-2.5 pt-2.5 border-t border-dashed border-[#E3E8F0]">
-              {order.차량번호 && <span className="text-[0.74em] font-extrabold text-[#0F1A30] px-1.5 py-0.5 rounded-md border-[1.5px] border-[#0F1A30] shrink-0" style={{ fontFamily: MONO_B, fontVariantNumeric: "tabular-nums" }}>{order.차량번호}</span>}
+              {order.차량번호 && <span className="text-[0.8em] font-extrabold text-[#0F1A30] px-1.5 py-0.5 rounded-md border-[1.5px] border-[#0F1A30] shrink-0" style={{ fontFamily: MONO_B, fontVariantNumeric: "tabular-nums" }}>{order.차량번호}</span>}
               <span className="text-[0.8em] font-bold text-[#334155] truncate flex-1">
                 {[order.이름, order.전화번호 ? formatPhone(order.전화번호) : ""].filter(Boolean).join(" · ")}
               </span>
@@ -22545,7 +22547,7 @@ return (
 );
 }
 
-function MobileSettingsPage({ onBack, cardVersionB, setCardVersionB, alarmEnabled, toggleAlarm, fontScale, setFontScale, appVersion, showSuccess, onLogout, userCompany, role, deptMode = null, currentUser, refreshFromServer, canBriefing = false, popupUid = "" }) {
+function MobileSettingsPage({ onBack, cardVersionB, setCardVersionB, alarmEnabled, toggleAlarm, fontScale, setFontScale, uiScale = 1, setUiScale, appVersion, showSuccess, onLogout, userCompany, role, deptMode = null, currentUser, refreshFromServer, canBriefing = false, popupUid = "" }) {
   const [loginMgrOpen, setLoginMgrOpen] = useState(false); // ★ 로그인 관리(기기 연결 끊기·비밀번호 변경)
   const [manualRefreshing, setManualRefreshing] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
@@ -22738,7 +22740,10 @@ function MobileSettingsPage({ onBack, cardVersionB, setCardVersionB, alarmEnable
         <KpmCard en="DISPLAY" title="화면" flush>
           <KpmRow label="디자인 테마" sub={cardVersionB ? "B형 · 다크 네이비 헤더" : "A형 · 라이트"}
             right={<KpmSeg value={cardVersionB} options={[{ v: false, l: "A형" }, { v: true, l: "B형" }]} onPick={(v) => { setCardVersionB(v); localStorage.setItem("cardVersionV2", v ? "B" : "A"); localStorage.setItem("cardVersion", v ? "B" : "A"); }} />} />
-          <KpmRow label="글자 크기" sub="목록·상세 텍스트"
+          {/* 🔁 2026-11-07 중복 정리 — 메뉴 서랍의 빠른 설정(화면 크기 · 디자인 테마)과 같은 값. 화면 설정은 모두 여기서 한 번에 */}
+          {setUiScale && <KpmRow label="화면 크기" sub="등록내역 목록·카드 크기"
+            right={<KpmScaleSeg uiScale={uiScale} setUiScale={setUiScale} />} />}
+          <KpmRow label="글자 크기" sub="앱 전체 글자"
             right={<KpmSeg value={fontScale} options={[{ v: 1, l: "기본" }, { v: 1.1, l: "크게" }, { v: 1.2, l: "아주" }]} onPick={(v) => { setFontScale(v); localStorage.setItem("fontScale", String(v)); }} />} />
         </KpmCard>
 

@@ -7,7 +7,7 @@
 //   · 설정 — 기본 수수료(정액 · %) · 플랫폼 수수료 · 입금 계좌 · 차종/톤수/결제/상하차 방법/지역 목록 · 공지 · 신고
 import React, { useEffect, useMemo, useState } from "react";
 import { HI, Btn, Badge, Card, Drawer, Seg, inputCls, selectCls, Empty, Field, NUMS, Confirm } from "./hubUi";
-import { ROLES, SOURCE_LABEL, DOC_TYPES, ROLE_DOCS, BIZ_STATUS, ago, tsMs, STATUS, routeText, BANKS, HUB_VEHICLES, HUB_TONS, PAY_METHODS, LOAD_METHODS, SIDO_LIST, defaultLists, SETTLE_LABEL, LEDGER_LABEL, payKind, fmtPhone, companyKeyOf } from "./hubConstants";
+import { ROLES, SOURCE_LABEL, DOC_TYPES, ROLE_DOCS, BIZ_STATUS, ago, tsMs, STATUS, routeText, BANKS, HUB_VEHICLES, HUB_TONS, PAY_METHODS, LOAD_METHODS, SIDO_LIST, sigunguOf, defaultLists, SETTLE_LABEL, LEDGER_LABEL, payKind, fmtPhone, companyKeyOf } from "./hubConstants";
 import {
   subscribeAllMembers, subscribeReports, reviewMember, fileUrl, adminUpdateMember, subscribeAllOrders, subscribeAll, adminUpdateOrder, adminForceStatus,
   adminSettle, confirmCharge, rejectCharge, requestPayoutSend, markPayoutPaid, adjustWallet, saveHubConfig, subscribeAnnouncements, saveAnnouncement,
@@ -18,6 +18,7 @@ import HubOrderDetail from "./HubOrderDetail";
 import HubOrderCard from "./HubOrderCard";
 import { WalletSummary, wonFull } from "./HubWallet";
 import { kpConfirm } from "../../../src/kpDialog";
+const HOURS = Array.from({ length: 24 }, (_, h) => [`${String(h).padStart(2, "0")}:00`, `${String(h).padStart(2, "0")}:30`]).flat(); // 오더 올리기(HubPostForm)와 같은 시간 목록
 
 const ST = { pending: "승인 대기", approved: "승인", rejected: "거절", suspended: "정지" };
 const money = (v) => { const d = String(v).replace(/[^\d-]/g, "").slice(0, 11); return d && d !== "-" ? Number(d).toLocaleString() : d; };
@@ -130,9 +131,9 @@ export function MemberReview({ m, admin, onClose, toast }) {
         <Card className="p-4">
           <div className="flex items-center gap-3 mb-2">
             {photo ? <img src={photo} alt="" className="w-16 h-16 rounded-2xl object-cover" /> : <span className="w-16 h-16 rounded-2xl bg-[#EAF0FA] text-[#1B2B4B] inline-flex items-center justify-center text-[24px] font-extrabold">{(m.name || "?")[0]}</span>}
-            <div><div className="text-[19px] font-extrabold text-[#0F1A30]">{m.name}</div><div className="text-[14.5px] text-[#8592A8]">{m.companyName}</div></div>
+            <div><div className="text-[19px] font-extrabold text-[#0F1A30]">{m.name}</div><div className="text-[14.5px] text-[#5F6E87]">{m.companyName}</div></div>
           </div>
-          <div className="divide-y divide-[#EEF1F6]">{rows.map(([k, v]) => <div key={k} className="flex py-2 text-[15px]"><span className="w-24 shrink-0 font-semibold text-[#8592A8]">{k}</span><span className="font-bold text-[#0F1A30] break-all">{v}</span></div>)}</div>
+          <div className="divide-y divide-[#EEF1F6]">{rows.map(([k, v]) => <div key={k} className="flex py-2 text-[15px]"><span className="w-24 shrink-0 font-semibold text-[#5F6E87]">{k}</span><span className="font-bold text-[#0F1A30] break-all">{v}</span></div>)}</div>
         </Card>
         {m.source === "signup" && (
           <div className="grid sm:grid-cols-2 gap-2.5">
@@ -153,13 +154,13 @@ export function MemberReview({ m, admin, onClose, toast }) {
             <div className="text-[16px] font-extrabold text-[#0F1A30] flex items-center gap-2"><HI name="phone" size={18} className="text-[#2D4C82]" />등록 휴대폰</div>
             {dev?.id ? (
               <div className="divide-y divide-[#EEF1F6] text-[15px]">
-                <div className="flex py-2"><span className="w-24 shrink-0 font-semibold text-[#8592A8]">기기</span><span className="font-bold text-[#0F1A30]" data-testid="admin-device-label">{dev.label || "알 수 없음"}</span></div>
-                <div className="flex py-2"><span className="w-24 shrink-0 font-semibold text-[#8592A8]">마지막 로그인</span><span className="font-bold text-[#0F1A30]">{dev.lastAt ? new Date(tsMs(dev.lastAt)).toLocaleString("ko-KR") : "-"}</span></div>
-                <div className="flex py-2"><span className="w-24 shrink-0 font-semibold text-[#8592A8]">등록</span><span className="font-bold text-[#0F1A30]">{dev.boundAt ? new Date(tsMs(dev.boundAt)).toLocaleString("ko-KR") : "-"}</span></div>
+                <div className="flex py-2"><span className="w-24 shrink-0 font-semibold text-[#5F6E87]">기기</span><span className="font-bold text-[#0F1A30]" data-testid="admin-device-label">{dev.label || "알 수 없음"}</span></div>
+                <div className="flex py-2"><span className="w-24 shrink-0 font-semibold text-[#5F6E87]">마지막 로그인</span><span className="font-bold text-[#0F1A30]">{dev.lastAt ? new Date(tsMs(dev.lastAt)).toLocaleString("ko-KR") : "-"}</span></div>
+                <div className="flex py-2"><span className="w-24 shrink-0 font-semibold text-[#5F6E87]">등록</span><span className="font-bold text-[#0F1A30]">{dev.boundAt ? new Date(tsMs(dev.boundAt)).toLocaleString("ko-KR") : "-"}</span></div>
               </div>
             ) : <div className="text-[15px] font-bold text-[#55657F]" data-testid="admin-device-none">{dev?.resetAt ? "지웠어요. 다음 로그인 때 문자 인증을 해요." : "아직 등록된 휴대폰이 없어요"}</div>}
             {dev?.id && <Btn kind="ghost" className="w-full" disabled={!!busy} onClick={resetDevice} data-testid="admin-device-reset">{busy === "dev" ? "지우고 있어요" : "기기 초기화"}</Btn>}
-            <div className="text-[13.5px] text-[#8592A8]">휴대폰을 잃어버렸으면 기기 초기화를 눌러 주세요. 새 휴대폰에서 문자 인증하면 등록돼요.</div>
+            <div className="text-[13.5px] text-[#5F6E87]">휴대폰을 잃어버렸으면 기기 초기화를 눌러 주세요. 새 휴대폰에서 문자 인증하면 등록돼요.</div>
           </Card>
         )}
         {/* ⭐ 정보 수정(최고관리자는 모든 칸) */}
@@ -219,18 +220,28 @@ function AdminOrderPanel({ o, detail, admin, toast }) {
   const S = (k) => (e) => setF((p) => ({ ...p, [k]: e.target.value }));
   const run = async (label, fn, ok) => { setBusy(label); try { await fn(); toast?.(ok); } catch (e) { toast?.(e?.message || "처리하지 못했어요"); } finally { setBusy(""); setAsk(null); } };
   const save = () => run("save", () => { const { pub, detail: d } = splitForm({ ...o, ...f }); return adminUpdateOrder(o.id, pub, d); }, "오더를 수정했어요");
-  const TXT = [["상차일", "date"], ["상차시간"], ["하차일", "date"], ["하차시간"], ["화물내용"], ["중량"], ["파레트"], ["공개메모"]];
+  const TXT = [["상차일", "date"], ["상차시간", "hour"], ["하차일", "date"], ["하차시간", "hour"], ["화물내용"], ["중량"], ["파레트"], ["공개메모"]];
+  // ⭐ 2026-11-07 시·군·구 · 시간 — 오더 올리기 화면과 같은 목록에서 고르기(목록에 없는 예전 값도 그대로 보이고 저장)
+  const withCur = (list, cur) => (cur && !list.includes(cur) ? [cur, ...list] : list);
+  const sggSel = (side) => (
+    <select className={selectCls} value={f[`${side}시군구`] || ""} onChange={S(`${side}시군구`)}>
+      <option value="">선택</option>
+      {withCur(sigunguOf(f[`${side}시도`]), f[`${side}시군구`]).map((g) => <option key={g}>{g}</option>)}
+    </select>
+  );
   return (
     <Card className="p-4 space-y-3 ring-2 ring-[#0F1A30]" data-testid="admin-order-panel">
       <div className="flex items-center gap-2"><HI name="shield" size={18} className="text-[#2D4C82]" /><span className="text-[16px] font-extrabold text-[#0F1A30]">관리자, 오더 편집</span>{o.lwOrderId && <Badge tone="sky">로지스웹 연동 {o.lwOrderId}</Badge>}</div>
       <div className="grid grid-cols-2 gap-2.5">
-        <Field label="상차 시·도"><select className={selectCls} value={f.상차시도} onChange={S("상차시도")}>{SIDO_LIST.map((s) => <option key={s}>{s}</option>)}</select></Field>
-        <Field label="상차 시·군·구"><input className={inputCls} value={f.상차시군구} onChange={S("상차시군구")} /></Field>
-        <Field label="하차 시·도"><select className={selectCls} value={f.하차시도} onChange={S("하차시도")}>{SIDO_LIST.map((s) => <option key={s}>{s}</option>)}</select></Field>
-        <Field label="하차 시·군·구"><input className={inputCls} value={f.하차시군구} onChange={S("하차시군구")} /></Field>
+        <Field label="상차 시·도"><select className={selectCls} value={f.상차시도} onChange={(e) => setF((p) => ({ ...p, 상차시도: e.target.value, 상차시군구: sigunguOf(e.target.value).includes(p.상차시군구) ? p.상차시군구 : "" }))}>{SIDO_LIST.map((s) => <option key={s}>{s}</option>)}</select></Field>
+        <Field label="상차 시·군·구">{sggSel("상차")}</Field>
+        <Field label="하차 시·도"><select className={selectCls} value={f.하차시도} onChange={(e) => setF((p) => ({ ...p, 하차시도: e.target.value, 하차시군구: sigunguOf(e.target.value).includes(p.하차시군구) ? p.하차시군구 : "" }))}>{SIDO_LIST.map((s) => <option key={s}>{s}</option>)}</select></Field>
+        <Field label="하차 시·군·구">{sggSel("하차")}</Field>
         <Field label="상차 상세주소" className="col-span-2"><input className={inputCls} value={f.상차지주소 || ""} onChange={S("상차지주소")} /></Field>
         <Field label="하차 상세주소" className="col-span-2"><input className={inputCls} value={f.하차지주소 || ""} onChange={S("하차지주소")} /></Field>
-        {TXT.map(([k, t]) => <Field key={k} label={k}><input type={t || "text"} className={inputCls} value={f[k] ?? ""} onChange={S(k)} /></Field>)}
+        {TXT.map(([k, t]) => <Field key={k} label={k}>{t === "hour" ? (
+          <select className={selectCls} value={f[k] ?? ""} onChange={S(k)}><option value="">협의</option>{withCur(["즉시", ...HOURS], f[k] ?? "").map((h) => <option key={h}>{h}</option>)}</select>
+        ) : <input type={t || "text"} className={inputCls} value={f[k] ?? ""} onChange={S(k)} />}</Field>)}
         <Field label="차종"><select className={selectCls} value={f.차량종류} onChange={S("차량종류")}>{HUB_VEHICLES.map((v) => <option key={v}>{v}</option>)}</select></Field>
         <Field label="톤수"><select className={selectCls} value={f.차량톤수} onChange={S("차량톤수")}>{HUB_TONS.map((v) => <option key={v}>{v}</option>)}</select></Field>
         <Field label="상차 방법"><select className={selectCls} value={f.상차방법} onChange={S("상차방법")}>{LOAD_METHODS.map((v) => <option key={v}>{v}</option>)}</select></Field>
@@ -244,7 +255,7 @@ function AdminOrderPanel({ o, detail, admin, toast }) {
       <label className="flex items-center gap-2 text-[15px] font-bold"><input type="checkbox" checked={!!f.긴급} onChange={(e) => setF((p) => ({ ...p, 긴급: e.target.checked }))} className="w-5 h-5 accent-[#1B2B4B]" />긴급</label>
       <Btn className="w-full" disabled={!!busy} onClick={save} data-testid="ao-save">{busy === "save" ? "저장하고 있어요" : "수정 저장"}</Btn>
       <div className="pt-3 border-t border-[#EEF1F6]">
-        <div className="text-[14.5px] font-bold text-[#3A4A66] mb-2">단계 강제 변경 <span className="text-[#8592A8] font-semibold">(지금: {STATUS[o.status]?.label})</span></div>
+        <div className="text-[14.5px] font-bold text-[#3A4A66] mb-2">단계 강제 변경 <span className="text-[#5F6E87] font-semibold">(지금: {STATUS[o.status]?.label})</span></div>
         <div className="flex gap-1.5 flex-wrap">{Object.entries(STATUS).map(([k, s]) => <button key={k} type="button" disabled={k === o.status || !!busy || (["assigned", "loaded", "delivered"].includes(k) && !o.takerUid)} onClick={() => setAsk({ k })} className={`h-10 px-3.5 rounded-full text-[14px] font-bold ring-1 ring-inset disabled:opacity-35 ${k === o.status ? "bg-[#0F1A30] text-white ring-[#0F1A30]" : "bg-white text-[#1B2B4B] ring-[#D6DEEA]"}`} data-testid={`ao-status-${k}`}>{s.label}</button>)}</div>
       </div>
       {payKind(o.지급방식) === "deposit" && o.status === "delivered" && o.settle?.status !== "settled" && (
@@ -286,7 +297,7 @@ function MoneyAdmin({ members, admin, toast }) {
   return (
     <div className="space-y-3.5" data-testid="admin-money">
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5">
-        {[["예치금 합계", tot.available], ["보류 합계", tot.held], ["지급 예정 합계", tot.pending], ["미정산 합계", tot.owed]].map(([l, v]) => <div key={l} className="rounded-[20px] bg-white ring-1 ring-inset ring-[#E2E7EF] px-4 py-3"><div className="text-[13.5px] font-bold text-[#8592A8]">{l}</div><div className="text-[20px] font-extrabold text-[#0F1A30]" style={NUMS}>{wonFull(v)}</div></div>)}
+        {[["예치금 합계", tot.available], ["보류 합계", tot.held], ["지급 예정 합계", tot.pending], ["미정산 합계", tot.owed]].map(([l, v]) => <div key={l} className="rounded-[20px] bg-white ring-1 ring-inset ring-[#E2E7EF] px-4 py-3"><div className="text-[13.5px] font-bold text-[#5F6E87]">{l}</div><div className="text-[20px] font-extrabold text-[#0F1A30]" style={NUMS}>{wonFull(v)}</div></div>)}
       </div>
       <div className="flex gap-1.5 overflow-x-auto hub-scroll -mx-1 px-1">{SUBS.map(([k, l]) => <button key={k} type="button" onClick={() => setSub(k)} className={`shrink-0 h-11 px-4 rounded-full text-[15px] font-bold ${sub === k ? "bg-[#0F1A30] text-white" : "bg-white ring-1 ring-inset ring-[#E2E7EF] text-[#1B2B4B]"}`} data-testid={`money-${k}`}>{l}</button>)}</div>
       {sub === "charges" && (charges.length === 0 ? <Empty icon="wallet" title="충전 요청이 없어요" /> : (
@@ -311,7 +322,7 @@ function MoneyAdmin({ members, admin, toast }) {
                   <Badge tone={p.status === "paid" ? "navy" : p.status === "queued" ? "accent" : "sky"}>{PO[p.status] || p.status}</Badge>
                   <span className="text-[16px] font-extrabold text-[#0F1A30]" style={NUMS}>{wonFull(p.amount)}</span>
                   <span className="min-w-0 flex-1 text-[14.5px] text-[#55657F] truncate">{p.toName || name(p.toUid)} {p.route} {p.dueDate ? `${p.dueDate} 지급` : ""} {p.bank?.number ? `${p.bank.bank} ${p.bank.number} (${p.bank.holder})` : "계좌 미등록"}</span>
-                  {p.adapter?.message && p.status !== "paid" && <span className="w-full text-[13px] text-[#8592A8]">지급대행: {p.adapter.message}</span>}
+                  {p.adapter?.message && p.status !== "paid" && <span className="w-full text-[13px] text-[#5F6E87]">지급대행: {p.adapter.message}</span>}
                   {p.status !== "paid" && <span className="ml-auto flex gap-1.5">{["queued", "scheduled"].includes(p.status) && <Btn kind="ghost" size="md" onClick={() => requestPayoutSend(p.id, admin).then(() => toast?.("지급 요청, 지급대행 연결 결과를 확인하세요")).catch(() => {})} data-testid="admin-payout-request">지급 요청</Btn>}<Btn size="md" onClick={() => setPaid(p)} data-testid="admin-payout-paid">지급완료</Btn></span>}
                 </Row>
               ))}
@@ -346,9 +357,9 @@ function MoneyAdmin({ members, admin, toast }) {
       {sub === "ledger" && (
         <Card className="divide-y divide-[#EEF1F6]">
           {ledger.sort((a, b) => tsMs(b.at) - tsMs(a.at)).slice(0, 200).map((l) => (
-            <div key={l.id} className="px-4 py-2.5 flex items-center gap-2 text-[14.5px]"><Badge>{l.label || LEDGER_LABEL[l.type]}</Badge><span className="font-bold text-[#0F1A30] truncate min-w-0 flex-1">{name(l.uid)}, {l.route || l.memo}</span><span className="font-extrabold shrink-0" style={NUMS}>{wonFull(l.amount)}</span><span className="text-[12.5px] text-[#8592A8] shrink-0">{ago(l.at)}</span></div>
+            <div key={l.id} className="px-4 py-2.5 flex items-center gap-2 text-[14.5px]"><Badge>{l.label || LEDGER_LABEL[l.type]}</Badge><span className="font-bold text-[#0F1A30] truncate min-w-0 flex-1">{name(l.uid)}, {l.route || l.memo}</span><span className="font-extrabold shrink-0" style={NUMS}>{wonFull(l.amount)}</span><span className="text-[13px] text-[#5F6E87] shrink-0">{ago(l.at)}</span></div>
           ))}
-          {ledger.length === 0 && <div className="p-8 text-center text-[#8592A8]">원장이 비어 있어요.</div>}
+          {ledger.length === 0 && <div className="p-8 text-center text-[#5F6E87]">원장이 비어 있어요.</div>}
         </Card>
       )}
       {rej && <Confirm title="충전 요청 반려" body={`${name(rej.uid)}, ${wonFull(rej.amount)}\n입금이 확인되지 않은 요청을 반려해요.`} okText="반려" onCancel={() => setRej(null)} onOk={() => rejectCharge(rej.id, "입금 미확인").then(() => { toast?.("반려했어요"); setRej(null); })} />}
@@ -398,7 +409,7 @@ function SettingsAdmin({ cfg, admin, toast }) {
         {[["vehicles", "차종"], ["tons", "톤수"], ["payMethods", "결제 방식"], ["loadMethods", "상·하차 방법"], ["regions", "지역(시·도)"]].map(([k, l]) => (
           <Field key={k} label={l}><textarea rows={2} className={`${inputCls} h-auto py-2.5`} value={v[k]} onChange={S(k)} data-testid={`set-list-${k}`} /></Field>
         ))}
-        <div className="text-[13px] text-[#8592A8]">인수증, 예치금은 예치금으로, 선불, 착불은 현금으로 정산해요.</div>
+        <div className="text-[13px] text-[#5F6E87]">인수증, 예치금은 예치금으로, 선불, 착불은 현금으로 정산해요.</div>
       </Card>
       <Btn size="lg" className="lg:col-span-2" onClick={save} data-testid="set-save">설정 저장</Btn>
     </div>
@@ -458,7 +469,7 @@ export default function HubAdmin({ admin, toast, me, cfg }) {
         {SECS.map(([k, l, ic, n]) => (
           <button key={k} type="button" onClick={() => setSec(k)} data-testid={`admin-sec-${k}`} aria-selected={sec === k}
             className={`shrink-0 h-12 px-4 rounded-2xl inline-flex items-center gap-2 text-[15.5px] font-bold transition ${sec === k ? "bg-[#0F1A30] text-white" : "bg-white ring-1 ring-inset ring-[#E2E7EF] text-[#1B2B4B]"}`}>
-            <HI name={ic} size={17} className={sec === k ? "text-[#8FB0F0]" : "text-[#2D4C82]"} />{l}{n > 0 && <span className={`min-w-[22px] h-[22px] px-1.5 rounded-full text-[12px] font-extrabold inline-flex items-center justify-center ${sec === k ? "bg-[#8FB0F0] text-[#0B1428]" : "bg-[#0F1A30] text-white"}`}>{n}</span>}
+            <HI name={ic} size={17} className={sec === k ? "text-[#8FB0F0]" : "text-[#2D4C82]"} />{l}{n > 0 && <span className={`min-w-[22px] h-[22px] px-1.5 rounded-full text-[13px] font-extrabold inline-flex items-center justify-center ${sec === k ? "bg-[#8FB0F0] text-[#0B1428]" : "bg-[#0F1A30] text-white"}`}>{n}</span>}
           </button>
         ))}
       </div>
@@ -468,7 +479,7 @@ export default function HubAdmin({ admin, toast, me, cfg }) {
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5">
             {Object.entries(ST).map(([k, l]) => (
               <button key={k} type="button" onClick={() => setTab(k)} className={`text-left rounded-[20px] px-4 py-3.5 transition ${tab === k ? "bg-[#0F1A30] text-white" : "bg-white ring-1 ring-inset ring-[#E2E7EF]"}`}>
-                <div className={`text-[14px] font-bold ${tab === k ? "text-white/65" : "text-[#8592A8]"}`}>{l}</div>
+                <div className={`text-[14px] font-bold ${tab === k ? "text-white/65" : "text-[#5F6E87]"}`}>{l}</div>
                 <div className="text-[28px] font-extrabold leading-tight">{counts[k] || 0}</div>
               </button>
             ))}
@@ -483,7 +494,7 @@ export default function HubAdmin({ admin, toast, me, cfg }) {
                     <span className="flex items-center gap-1.5"><span className="text-[16.5px] font-extrabold text-[#0F1A30] truncate">{m.name || m.email}</span><Badge>{ROLES[m.role]?.label}</Badge>{m.source !== "signup" && <Badge tone="sky">로지스웹</Badge>}{m.penalty?.blocked && <Badge tone="line">신청 막힘</Badge>}</span>
                     <span className="block text-[14.5px] text-[#55657F] truncate">{[m.companyName, m.vehicle ? `${m.vehicle.plate} ${m.vehicle.ton} ${m.vehicle.type}` : "", m.phone].filter(Boolean).join(", ")}</span>
                   </span>
-                  <span className="text-[13.5px] text-[#8592A8] shrink-0">{ago(m.appliedAt || m.createdAt)}</span>
+                  <span className="text-[13.5px] text-[#5F6E87] shrink-0">{ago(m.appliedAt || m.createdAt)}</span>
                 </button>
               ))}
             </div>
@@ -504,8 +515,8 @@ export default function HubAdmin({ admin, toast, me, cfg }) {
       {sec === "reports" && (
         <Card className="p-4">
           <div className="text-[16px] font-extrabold text-[#0F1A30] mb-2">신고, 노쇼 기록 {reports.length ? `(${reports.length})` : ""}</div>
-          {reports.length === 0 ? <div className="text-[15px] text-[#8592A8]">접수된 신고가 없어요.</div> : reports.slice(0, 60).map((r) => (
-            <div key={r.id} className="py-2 border-t border-[#EEF1F6] text-[15px] flex gap-2 items-center"><Badge>{r.type === "noshow" ? "노쇼" : r.type}</Badge><button type="button" onClick={() => { setSel(r.targetUid); setSec("members"); }} className="font-bold text-[#0F1A30] underline-offset-2 hover:underline">{rows.find((m) => m.id === r.targetUid)?.name || r.targetUid.slice(0, 6)}</button><span className="text-[#55657F] truncate">{r.reporterName}, {r.text}</span><span className="ml-auto text-[#8592A8] shrink-0">{ago(r.createdAt)}</span></div>
+          {reports.length === 0 ? <div className="text-[15px] text-[#5F6E87]">접수된 신고가 없어요.</div> : reports.slice(0, 60).map((r) => (
+            <div key={r.id} className="py-2 border-t border-[#EEF1F6] text-[15px] flex gap-2 items-center"><Badge>{r.type === "noshow" ? "노쇼" : r.type}</Badge><button type="button" onClick={() => { setSel(r.targetUid); setSec("members"); }} className="font-bold text-[#0F1A30] underline-offset-2 hover:underline">{rows.find((m) => m.id === r.targetUid)?.name || r.targetUid.slice(0, 6)}</button><span className="text-[#55657F] truncate">{r.reporterName}, {r.text}</span><span className="ml-auto text-[#5F6E87] shrink-0">{ago(r.createdAt)}</span></div>
           ))}
         </Card>
       )}

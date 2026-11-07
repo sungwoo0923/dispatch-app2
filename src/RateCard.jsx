@@ -882,11 +882,7 @@ ${sheet.note ? `<div class="notice">${esc(sheet.note)}</div>` : ""}
         <div className="flex items-center gap-2 flex-wrap">
           {pageMode === "노선별" ? (
             <>
-              <button onClick={() => setHistoryModal(true)} className="h-10 px-4 inline-flex items-center gap-2 rounded-xl bg-white border border-[#DCE3EF] text-[#1B2B4B] text-[13px] font-bold hover:bg-[#F5F8FD] transition">
-                발행 이력
-                {printHistory.length > 0 && <span style={{ fontFamily: RC_MONO, fontVariantNumeric: "tabular-nums" }} className="min-w-[20px] h-5 px-1.5 rounded-full bg-[#EEF3FB] text-[#1B2B4B] text-[11px] font-extrabold inline-flex items-center justify-center">{printHistory.length}</span>}
-              </button>
-              <button onClick={openManualModal} className="h-10 px-4 rounded-xl bg-white border border-[#1B2B4B] text-[#1B2B4B] text-[13px] font-bold hover:bg-[#F5F8FD] transition">직접 작성</button>
+              {/* 🔁 2026-11-07 중복 정리 — [발행 이력] · [직접 작성]은 왼쪽 메뉴 "도구"(휴대폰은 위쪽 탭 줄 · 상단 메뉴 펼침에도 있음)와 같은 버튼이라 여기서는 뺐다 */}
               <button onClick={handlePrint} disabled={!result || resultRows.length === 0} className="h-10 px-5 inline-flex items-center gap-2 rounded-xl bg-[#1B2B4B] text-white text-[13px] font-bold hover:bg-[#2D4C82] transition disabled:opacity-40 disabled:cursor-not-allowed">
                 <PrintIcon />인쇄 / PDF 저장
               </button>

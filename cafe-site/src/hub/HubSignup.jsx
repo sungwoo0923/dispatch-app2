@@ -176,7 +176,7 @@ export default function HubSignup() {
       {STEPS.map((s, i) => (
         <li key={s} className="flex-1 min-w-0">
           <div className={`h-1.5 rounded-full ${i <= step ? "bg-[#2D4C82]" : "bg-[#E2E7EF]"}`} />
-          <div className={`mt-1.5 text-[13.5px] font-bold text-center ${i === step ? "text-[#0F1A30]" : i < step ? "text-[#2D4C82]" : "text-[#A3AEC0]"}`}>{s}</div>
+          <div className={`mt-1.5 text-[13.5px] font-bold text-center ${i === step ? "text-[#0F1A30]" : i < step ? "text-[#2D4C82]" : "text-[#66758E]"}`}>{s}</div>
         </li>
       ))}
     </ol>
@@ -197,7 +197,7 @@ export default function HubSignup() {
             <button key={k} type="button" data-testid={`signup-role-${k}`} onClick={() => { setRole(k); setStep(loggedIn ? 2 : 1); }}
               className={`w-full p-4 rounded-2xl flex items-center gap-4 text-left transition ring-1 ring-inset ${role === k ? "bg-[#0F1A30] text-white ring-[#0F1A30]" : "bg-white ring-[#D6DEEA] hover:ring-[#2D4C82]"}`}>
               <span className={`w-14 h-14 rounded-2xl inline-flex items-center justify-center ${role === k ? "bg-white/10 text-[#8FB0F0]" : "bg-[#EAF0FA] text-[#1B2B4B]"}`}><HI name={r.icon} size={26} /></span>
-              <span className="flex-1 min-w-0"><span className="block text-[18px] font-extrabold">{r.label}</span><span className={`block text-[15px] ${role === k ? "text-white/65" : "text-[#8592A8]"}`}>{r.desc}</span></span>
+              <span className="flex-1 min-w-0"><span className="block text-[18px] font-extrabold">{r.label}</span><span className={`block text-[15px] ${role === k ? "text-white/65" : "text-[#5F6E87]"}`}>{r.desc}</span></span>
               <HI name="chevron" size={20} />
             </button>
           ))}
@@ -295,7 +295,7 @@ export default function HubSignup() {
             {[["유형", ROLES[role].label], ["이름", f.name], ["휴대폰", f.phone], ["회사", f.companyName || "-"], ["사업자번호", f.bizNo],
               ...(role === "driver" ? [["차량", `${f.plate}, ${f.vton} ${f.vtype}`], ["적재함", `${f.vlen || "-"}m × ${f.vwid || "-"}m`], ["주 운행", f.regions.join(", ") || "-"]] : []),
               ["서류", `${Object.keys(files).filter((k) => k !== "photo").length}개`]].map(([k, v]) => (
-              <div key={k} className="flex px-4 py-3 text-[15.5px]"><span className="w-24 shrink-0 font-semibold text-[#8592A8]">{k}</span><span className="font-bold text-[#0F1A30] min-w-0 break-all">{v}</span></div>
+              <div key={k} className="flex px-4 py-3 text-[15.5px]"><span className="w-24 shrink-0 font-semibold text-[#5F6E87]">{k}</span><span className="font-bold text-[#0F1A30] min-w-0 break-all">{v}</span></div>
             ))}
           </div>
           {[["terms", "이용약관에 동의해요(허위 정보, 서류 위조 시 이용 정지 및 법적 책임)."], ["privacy", "개인정보 수집과 이용에 동의해요(연락처는 배차가 확정된 상대에게만 공개)."], ["docs", "제출한 서류가 본인(본사) 것이며 유효함을 확인해요."]].map(([k, t]) => (
