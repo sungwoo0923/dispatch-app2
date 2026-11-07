@@ -58,7 +58,7 @@ export default function HubLogin() {
   const lwTitle = { driver: "로지스웹 소속 기사", shipper: "로지스웹 화주사", carrier: "로지스웹 운송사 직원" }[role];
   return (
     <HubAuthLayout sub={lw ? "가입 없이 기존 계정으로" : "로지스웹 허브"} title={lw ? `${lwTitle} 로그인` : "로그인"}
-      footer={<Link to={`/signup?role=${role}`} className="text-[15px] font-semibold text-[#55657F] hover:text-[#0F1A30]">처음이신가요? <b className="text-[#1B2B4B]">{ROLES[role].label} 회원가입 →</b></Link>}>
+      footer={<Link to={`/signup?role=${role}`} className="text-[15px] font-semibold text-[#55657F] hover:text-[#0F1A30]">처음이신가요? <b className="text-[#1B2B4B]">{ROLES[role].label} 회원가입</b></Link>}>
       <div className="grid grid-cols-3 gap-2" role="tablist" aria-label="회원 유형">
         {Object.entries(ROLES).map(([k, r]) => (
           <button key={k} type="button" role="tab" aria-selected={role === k} data-testid={`role-${k}`} onClick={() => go(k, mode)}
@@ -106,7 +106,7 @@ export default function HubLogin() {
         {!lw && (
           <div className="flex items-center justify-between">
             <button type="button" onClick={reset} className="h-11 text-[15px] font-semibold text-[#55657F]">비밀번호 찾기</button>
-            <Link to={`/signup?role=${role}`} className="h-11 inline-flex items-center text-[15px] font-bold text-[#1B2B4B]">회원가입 →</Link>
+            <Link to={`/signup?role=${role}`} className="h-11 inline-flex items-center text-[15px] font-bold text-[#1B2B4B]">회원가입</Link>
           </div>
         )}
       </form>

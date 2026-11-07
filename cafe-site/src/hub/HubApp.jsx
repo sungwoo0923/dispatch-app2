@@ -146,7 +146,8 @@ function BoardSettings({ me, auto, onClose, toast }) {
 
 // ── 등록내역(24시콜 등록내역 구조 참고) — 기간 · 단계 · 결제 · 화물번호/차주전화 검색 · 내꺼보기
 const PST = [["all", "전체"], ["open", "접수"], ["done", "배차완료"], ["cancelled", "화물취소"]];
-const PPAY = [["all", "전체"], ["deposit", "인수증"], ["cash", "선착불"]];
+const PPAY = [["all", "전체"], ["card", "카드"], ["deposit", "인수증"], ["cash", "선착불"]];
+const ppayOf = (m) => (m === "카드" ? "card" : payKind(m));
 function PostsView({ me, posts, openOrder, onPost }) {
   const [from, setFrom] = useState(kstYmd(-30));
   const [to, setTo] = useState(kstYmd(1));
@@ -170,7 +171,7 @@ function PostsView({ me, posts, openOrder, onPost }) {
     if (to && day > to) return false;
     const sg = stageOf(o);
     if (!st.includes("all") && !st.some((k) => (k === "open" ? sg === "open" : k === "cancelled" ? sg === "cancelled" : !["open", "cancelled"].includes(sg)))) return false;
-    if (!pay.includes("all") && !pay.includes(payKind(o.지급방식))) return false;
+    if (!pay.includes("all") && !pay.includes(ppayOf(o.지급방식))) return false;
     if (q.trim()) {
       const k = q.trim().toLowerCase();
       const hit = o.id.toLowerCase().includes(k) || (digits.length >= 4 && String(phones[o.id] || "").replace(/[^\d]/g, "").includes(digits));
@@ -190,7 +191,7 @@ function PostsView({ me, posts, openOrder, onPost }) {
           <Box on={mine} onClick={() => setMine((v) => !v)} testid="pv-mine">내꺼보기</Box>
         </div>
       </Card>
-      <div className="flex items-center px-1"><span className="text-[14.5px] font-bold text-[#55657F]">{rows.length}건</span>{onPost && <Btn size="md" className="ml-auto" onClick={onPost}><HI name="plus" size={16} />화물등록</Btn>}</div>
+      <div className="flex items-center px-1"><span className="text-[14.5px] font-bold text-[#55657F]">{rows.length}건</span>{onPost && <Btn size="md" className="ml-auto hidden lg:inline-flex" onClick={onPost}><HI name="plus" size={16} />화물등록</Btn>}</div>
       {rows.length === 0 ? <Empty icon="list" title="등록한 화물이 없어요" /> : <div className="space-y-2" data-testid="posts-rows">{rows.map((o) => <HubOrderRow key={o.id} o={o} onOpen={() => openOrder(o)} takerPhone={digits.length >= 4 ? phones[o.id] : ""} />)}</div>}
     </div>
   );

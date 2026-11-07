@@ -366,7 +366,7 @@ function SettingsAdmin({ cfg, admin, toast }) {
         {[["vehicles", "차종"], ["tons", "톤수"], ["payMethods", "결제 방식"], ["loadMethods", "상·하차 방법"], ["regions", "지역(시·도)"]].map(([k, l]) => (
           <Field key={k} label={l}><textarea rows={2} className={`${inputCls} h-auto py-2.5`} value={v[k]} onChange={S(k)} data-testid={`set-list-${k}`} /></Field>
         ))}
-        <div className="text-[13px] text-[#8592A8]">결제 방식 중 인수증, 예치금은 예치금 결제, 선불, 착불은 현금(차주 수수료 정산)으로 처리돼요. 지역은 시·도 이름만 쓸 수 있어요.</div>
+        <div className="text-[13px] text-[#8592A8]">인수증, 예치금은 예치금으로, 선불, 착불은 현금으로 정산해요.</div>
       </Card>
       <Btn size="lg" className="lg:col-span-2" onClick={save} data-testid="set-save">설정 저장</Btn>
     </div>

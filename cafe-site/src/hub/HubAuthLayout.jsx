@@ -21,7 +21,7 @@ export default function HubAuthLayout({ title, sub, children, footer, wide = fal
         <div className="relative">
           <div className="text-[15px] font-bold text-[#8FB0F0]">LogisWeb Hub, Freight Call</div>
           <h1 className="text-[42px] font-extrabold leading-[1.22] tracking-[-0.03em] mt-2">화주, 운송사, 차주를<br />한 화면에서 잇는 화물 콜</h1>
-          <p className="text-[16.5px] text-white/65 mt-4 leading-relaxed max-w-[520px]">오더를 올리면 인증된 차주에게 바로 뜨고, 가장 먼저 배차신청한 차량이 배정돼요. 로지스웹 계정이면 가입 없이 바로 로그인하세요.</p>
+          <p className="text-[16.5px] text-white/65 mt-4 leading-relaxed max-w-[520px]">오더를 올리면 차주에게 바로 떠요. 로지스웹 계정은 가입 없이 쓸 수 있어요.</p>
           <div className="grid grid-cols-2 gap-3 mt-8 max-w-[560px]">
             {FEATURES.map(([ic, t, d]) => (
               <div key={t} className="rounded-2xl bg-white/[0.06] ring-1 ring-inset ring-white/10 p-4">

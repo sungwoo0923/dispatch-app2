@@ -73,15 +73,19 @@ export function HubOrderRow({ o, onOpen, takerPhone }) {
   const tone = { open: "bg-[#EAF0FA] text-[#1B2B4B]", pending: "bg-[#2D4C82] text-white", moving: "bg-[#2D4C82] text-white", delivered: "bg-[#0F1A30] text-white", returned: "bg-[#0F1A30] text-white", cancelled: "bg-[#F2F5FA] text-[#8592A8]" }[stg];
   const t = o.createdAt?.toMillis ? new Date(o.createdAt.toMillis()) : null;
   return (
-    <button type="button" onClick={onOpen} data-testid="post-row" data-order-id={o.id} className="w-full text-left bg-white rounded-[18px] ring-1 ring-inset ring-[#E2E7EF] px-4 py-3 hover:ring-[#2D4C82] grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-1">
-      <div className="min-w-0 flex items-center gap-1.5 text-[16px] font-extrabold text-[#0F1A30]">
-        <span className="truncate" title={`${o.상차시도} ${o.상차시군구 || ""}`}>{o.상차시군구 || o.상차시도}</span>{sameDayLoad(o) && <span className="shrink-0 h-5 px-1.5 rounded bg-[#EAF0FA] text-[12px] font-bold text-[#1B2B4B] inline-flex items-center">당상</span>}
-        <HI name="arrow" size={14} className="shrink-0 text-[#8592A8]" />
-        <span className="truncate" title={`${o.하차시도} ${o.하차시군구 || ""}`}>{o.하차시군구 || o.하차시도}</span>{sameDayDrop(o) && <span className="shrink-0 h-5 px-1.5 rounded bg-[#EAF0FA] text-[12px] font-bold text-[#1B2B4B] inline-flex items-center">당착</span>}
+    <button type="button" onClick={onOpen} data-testid="post-row" data-order-id={o.id} className="w-full text-left bg-white rounded-[18px] ring-1 ring-inset ring-[#E2E7EF] px-4 py-3 hover:ring-[#2D4C82] flex flex-col gap-1">
+      <div className="w-full flex items-center gap-3">
+        <div className="min-w-0 flex-1 flex items-center gap-1.5 text-[16px] font-extrabold text-[#0F1A30]">
+          <span className="truncate" title={`${o.상차시도} ${o.상차시군구 || ""}`}>{o.상차시군구 || o.상차시도}</span>{sameDayLoad(o) && <span className="shrink-0 h-5 px-1.5 rounded bg-[#EAF0FA] text-[12px] font-bold text-[#1B2B4B] inline-flex items-center">당상</span>}
+          <HI name="arrow" size={14} className="shrink-0 text-[#8592A8]" />
+          <span className="truncate" title={`${o.하차시도} ${o.하차시군구 || ""}`}>{o.하차시군구 || o.하차시도}</span>{sameDayDrop(o) && <span className="shrink-0 h-5 px-1.5 rounded bg-[#EAF0FA] text-[12px] font-bold text-[#1B2B4B] inline-flex items-center">당착</span>}
+        </div>
+        <div className="shrink-0 text-right text-[17px] font-extrabold text-[#0F1A30]" style={NUMS}>{manwon(o.운임)}</div>
       </div>
-      <div className="text-right text-[17px] font-extrabold text-[#0F1A30]" style={NUMS}>{manwon(o.운임)}</div>
-      <div className="min-w-0 text-[13.5px] text-[#55657F] truncate"><b className="text-[#1B2B4B]">{o.적재 === "혼적" ? "혼적" : "독차"}</b> {o.지급방식} {o.차량톤수} {o.차량종류}{takerPhone ? `  ${takerPhone}` : ""}</div>
-      <div className="flex items-center gap-1.5 justify-end"><span className="text-[12.5px] text-[#A3AEC0]" style={NUMS}>{t ? `${t.getMonth() + 1}/${t.getDate()} ${String(t.getHours()).padStart(2, "0")}:${String(t.getMinutes()).padStart(2, "0")}` : ""}</span><span className={`h-6 px-2 rounded-full text-[12.5px] font-bold inline-flex items-center ${tone}`} data-testid="post-row-status">{STAGE_LABEL[stg]}</span></div>
+      <div className="w-full flex items-center gap-3">
+        <div className="min-w-0 flex-1 text-[13.5px] text-[#55657F] truncate"><b className="text-[#1B2B4B]">{o.적재 === "혼적" ? "혼적" : "독차"}</b> {o.지급방식} {o.차량톤수} {o.차량종류}{takerPhone ? `  ${takerPhone}` : ""}</div>
+        <div className="shrink-0 flex items-center gap-1.5"><span className="text-[12.5px] text-[#A3AEC0]" style={NUMS}>{t ? `${t.getMonth() + 1}/${t.getDate()} ${String(t.getHours()).padStart(2, "0")}:${String(t.getMinutes()).padStart(2, "0")}` : ""}</span><span className={`h-6 px-2 rounded-full text-[12.5px] font-bold inline-flex items-center ${tone}`} data-testid="post-row-status">{STAGE_LABEL[stg]}</span></div>
+      </div>
     </button>
   );
 }
