@@ -2208,7 +2208,8 @@ export default function MobileApp({ role: realRole, user, userCompany = "", forc
   const [page, setPage] = useState(deptMode ? "dept" : "list");
   useUiScreen(page, deptMode); // ⭐ 2026-11-07 화면 편집 — 지금 화면("이 화면만")·부서(역할별 보이기)
   const pageMenuM = PAGE_MENU_M[page];
-  useReadOnlyGuard(!!pageMenuM && (role === "viewer" || (!!customRoleM && getMenuAccess(customRolesM, role, pageMenuM) === "read")));
+  // ⭐ 2026-11-08 QA — 조회전용(viewer)은 직원 관리·기사 앱 계정(가입 승인)·고정노선현황에서도 막는다(PC 관리자메뉴·배차현황과 같게)
+  useReadOnlyGuard((!!pageMenuM && (role === "viewer" || (!!customRoleM && getMenuAccess(customRolesM, role, pageMenuM) === "read"))) || (role === "viewer" && ["staff", "drvacc", "fixedroute"].includes(page)));
   // 경리는 메뉴의 [배차현황]으로만 오더 목록(등록내역)을 볼 수 있다 — 그 밖에 목록으로 돌아오면 부서 홈으로
   const deptListOkRef = useRef(false);
   // ⭐ 2026-11-07 급여명세서 · 연차 사용 계획은 내정보 안 탭으로 — 예전 주소(dept:payslip · dept:leaveplan)는 내정보로 돌린다
@@ -5968,6 +5969,7 @@ const title =
 )}
       {showMenu && (
         <MobileSideMenu
+  staffSignupOk={!["acctStaff", "hrStaff"].includes(realRole)}
   onClose={() => setShowMenu(false)}
   currentUser={currentUser}
   mobileUsers={mobileUsers}
@@ -7921,6 +7923,7 @@ function MobileSideMenu({
   onToggleExec,
   menuOk = () => true,
   deptOk = () => false,
+  staffSignupOk = true, // ⭐ 2026-11-08 QA — 경리사무원·인사사무원은 PC처럼 가입 승인·기사 서류 메뉴 없음
 }) {
   const fareMenu = useFareRules(); // ⭐ 2026-11-02 운임규칙 — 최고관리자가 켜 준 회사만 메뉴 표시
   // ⭐ 2026-11-04 메뉴를 닫았다 다시 열어도(내정보 등 들어갔다 와도) 보던 위치 그대로 — 맨 위로 튀지 않게
@@ -8098,12 +8101,12 @@ function MobileSideMenu({
               <MenuItem label={execFull ? "임원 화면으로" : "전체 메뉴 보기(배차·정산)"} icon="refresh" onClick={onToggleExec} dark={dark} />
             </MenuSection>
           )}
-          {(deptMode === "acct" || deptMode === "hr") && (
+          {(deptMode === "acct" || deptMode === "hr") && (staffSignupOk || ok("기사관리")) && (
             <MenuSection title="직원 · 기사" en="PEOPLE" dark={dark} alwaysOpen>
               {/* ⭐ 2026-11-05 직원 가입 승인과 기사 가입 승인(기사 앱 계정)을 나눔 — 숫자도 각각 */}
-              <MenuItem label="직원 가입 승인" icon="users" onClick={() => onGo?.("staff")} badge={alertCounts?.signupStaff || null} dark={dark} />
-              <MenuItem label="기사 앱 계정 · 가입 승인" icon="truck" onClick={() => onGo?.("drvacc")} badge={alertCounts?.signupDriver || null} dark={dark} />
-              <MenuItem label="기사 서류" icon="file" onClick={() => onGo?.("dept:driverdocs")} badge={alertCounts?.drvDocs || null} dark={dark} />
+              {staffSignupOk && <MenuItem label="직원 가입 승인" icon="users" onClick={() => onGo?.("staff")} badge={alertCounts?.signupStaff || null} dark={dark} />}
+              {staffSignupOk && <MenuItem label="기사 앱 계정 · 가입 승인" icon="truck" onClick={() => onGo?.("drvacc")} badge={alertCounts?.signupDriver || null} dark={dark} />}
+              {staffSignupOk && <MenuItem label="기사 서류" icon="file" onClick={() => onGo?.("dept:driverdocs")} badge={alertCounts?.drvDocs || null} dark={dark} />}
               {ok("기사관리") && <MenuItem label="기사관리" icon="user" onClick={() => onGo?.("drivers")} dark={dark} />}{/* ⭐ 2026-11-05 PC 경리·인사도 기사관리를 본다 */}
             </MenuSection>
           )}

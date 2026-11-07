@@ -75,7 +75,7 @@ function PhoneSubNav({ code, title, icon, groups, actions, active, onSelect, chi
           {flat.map((it) => {
             const on = it.key === active;
             return (
-              <button key={it.key} type="button" data-on={on ? "1" : "0"} onClick={() => goSel(onSelect, it.key, active)}
+              <button key={it.key} type="button" data-ro-allow data-on={on ? "1" : "0"} onClick={() => goSel(onSelect, it.key, active)}
                 className={`relative shrink-0 h-8 px-3 rounded-full text-[12.5px] font-black whitespace-nowrap flex items-center gap-1.5 transition ${on ? "bg-white text-[#0F1A30] shadow-[0_4px_12px_rgba(0,0,0,0.25)]" : "bg-white/[0.08] text-white/75 ring-1 ring-white/10"}`}>
                 <ShellIcon name={it.icon} size={13} className={on ? "text-[#2D4C82]" : "text-[#8FB0F0]"} />
                 {it.label}
