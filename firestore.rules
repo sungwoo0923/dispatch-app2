@@ -264,22 +264,22 @@ service cloud.firestore {
         && request.resource.data.get('companyName', '') == co;
       allow delete: if fareRulesStaff(co) && isCompanyAdmin(co);
     }
-    // 🔒 회사 데이터(거래처·하차지·정기오더·삭제기록·알림·일정·메일·인사·근태신청·회계·결재선)
+    // 🔒 회사 데이터(거래처·하차지·정기오더·삭제기록·알림·일정·메일·인사·근태신청·회계·결재선 · 2026-11-07 arDesk 거래명세서 단계·미수금 메모)
     // ⭐ 2026-11-02 점검 — approvalSettings(결재 설정)는 아래 전자결재 쪽 전용 규칙으로 옮김(누구나 임원 자동 승인을 켜던 문제)
     match /{tcol}/{id} {
       allow read: if tcol in ['clients', 'places', 'recurringOrders', 'deletedOrders', 'driver_completed_archive', 'notifications',
-          'schedules', 'scheduledEmails', 'emailLogs', 'hrResumes', 'attendanceRequests', 'attendanceChangeRequests', 'acctPayments', 'approvalLines', 'acctLedger', 'acctRecurring', 'officeAssets', 'execSchedules', 'companyRules', 'hrSettings', 'retireCases', 'vehicleLedger', 'vehicleLedgerFiles', 'vehicleTypes']
+          'schedules', 'scheduledEmails', 'emailLogs', 'hrResumes', 'attendanceRequests', 'attendanceChangeRequests', 'acctPayments', 'approvalLines', 'acctLedger', 'acctRecurring', 'officeAssets', 'execSchedules', 'companyRules', 'hrSettings', 'retireCases', 'vehicleLedger', 'vehicleLedgerFiles', 'vehicleTypes', 'arDesk']
         // ⭐ 2026-11-02 점검 — 없는 문서를 getDoc하면 resource가 null이라 coMatch(resource.data)가 오류 → 거부되던 문제
         //  (ledgerAuto.js 자동 장부의 "새 줄인지" 확인). 없는 문서는 승인된 계정이면 "없음"만 알 수 있게 허용
         && ((resource == null && isApproved()) || coMatch(resource.data));
       allow create: if tcol in ['clients', 'places', 'recurringOrders', 'deletedOrders', 'driver_completed_archive', 'notifications',
-          'schedules', 'scheduledEmails', 'emailLogs', 'hrResumes', 'attendanceRequests', 'attendanceChangeRequests', 'acctPayments', 'approvalLines', 'acctLedger', 'acctRecurring', 'officeAssets', 'execSchedules', 'companyRules', 'hrSettings', 'retireCases', 'vehicleLedger', 'vehicleLedgerFiles', 'vehicleTypes']
+          'schedules', 'scheduledEmails', 'emailLogs', 'hrResumes', 'attendanceRequests', 'attendanceChangeRequests', 'acctPayments', 'approvalLines', 'acctLedger', 'acctRecurring', 'officeAssets', 'execSchedules', 'companyRules', 'hrSettings', 'retireCases', 'vehicleLedger', 'vehicleLedgerFiles', 'vehicleTypes', 'arDesk']
         && coCreate();
       allow update: if tcol in ['clients', 'places', 'recurringOrders', 'deletedOrders', 'driver_completed_archive', 'notifications',
-          'schedules', 'scheduledEmails', 'emailLogs', 'hrResumes', 'attendanceRequests', 'attendanceChangeRequests', 'acctPayments', 'approvalLines', 'acctLedger', 'acctRecurring', 'officeAssets', 'execSchedules', 'companyRules', 'hrSettings', 'retireCases', 'vehicleLedger', 'vehicleLedgerFiles', 'vehicleTypes']
+          'schedules', 'scheduledEmails', 'emailLogs', 'hrResumes', 'attendanceRequests', 'attendanceChangeRequests', 'acctPayments', 'approvalLines', 'acctLedger', 'acctRecurring', 'officeAssets', 'execSchedules', 'companyRules', 'hrSettings', 'retireCases', 'vehicleLedger', 'vehicleLedgerFiles', 'vehicleTypes', 'arDesk']
         && coMatch(resource.data) && coKeep();
       allow delete: if tcol in ['clients', 'places', 'recurringOrders', 'deletedOrders', 'driver_completed_archive', 'notifications',
-          'schedules', 'scheduledEmails', 'emailLogs', 'hrResumes', 'attendanceRequests', 'attendanceChangeRequests', 'acctPayments', 'approvalLines', 'acctLedger', 'acctRecurring', 'officeAssets', 'execSchedules', 'companyRules', 'hrSettings', 'retireCases', 'vehicleLedger', 'vehicleLedgerFiles', 'vehicleTypes']
+          'schedules', 'scheduledEmails', 'emailLogs', 'hrResumes', 'attendanceRequests', 'attendanceChangeRequests', 'acctPayments', 'approvalLines', 'acctLedger', 'acctRecurring', 'officeAssets', 'execSchedules', 'companyRules', 'hrSettings', 'retireCases', 'vehicleLedger', 'vehicleLedgerFiles', 'vehicleTypes', 'arDesk']
         && coMatch(resource.data);
     }
     // 💰 자금(통장·현금 잔액) — 경리(test)·관리자(대표 등)만. 화면에서는 경리 + 대표 직책만 보이게 한다
@@ -1744,7 +1744,9 @@ service cloud.firestore {
         // 🤖 2026-11-07 배차 AI 비서 사용 기록 · 횟수 — 위에서 따로 정함
         'aiAssistantLogs', 'aiAssistantUsage',
         // 🔗 2026-11-07 구글시트 연동 시트 프로필 — 위에서 따로 정함(빠지면 승인된 직원 누구나 다른 회사 시트 주소·칸 설정을 읽는다)
-        'sheetProfiles']);
+        'sheetProfiles',
+        // 🧾 2026-11-07 거래명세서 단계 · 미수금 메모(arDesk) — 위 회사 데이터 규칙(companyName)에서 따로 정함
+        'arDesk']);
     }
   }
 }

@@ -22,6 +22,8 @@ import { html2canvas, loadJsPDF, lazyView, prefetchWhenIdle } from "./lazyLoad";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { VehicleTypePicker, VehicleTypeAddButton, useVehicleTypes, withCustomVehicleTypes, VT_DEFAULTS } from "./vehicleTypes"; // ⭐ 2026-11-02 회사 공용 차량종류
 import { withCo, getTenant } from "./fsTenant";
+// 🧪 개발 전용 — /preview?demo=1 둘러보기 점검에서는 매출관리 비밀번호 화면을 건너뛴다(배포 빌드에서는 항상 false)
+const DEV_DEMO_REVENUE = import.meta.env.DEV && (() => { try { return window.location.pathname === "/preview" && new URLSearchParams(window.location.search).get("demo") === "1"; } catch { return false; } })();
 import { coDocKey } from "./coKey";
 import { createPortal } from "react-dom";
 import { useDriverEditChoice, DriverEditButton, SamePlateChips, driversOfPlate, pickDriverFor, isRegisteredCombo, saveDriverChoice } from "./DriverEditChoice"; // ⭐ 2026-11-05 매칭된 기사 이름·전화 [수정]
@@ -2898,7 +2900,8 @@ import { tryAutoCheckIn } from "./autoAttendance";
 import PersonnelOrder, { OrderNoticeHistory } from "./PersonnelOrder";
 import OrderScanModal, { looksLikeOrder, scanDropDate } from "./OrderScanModal";
 import { mainScanAi } from "./orderScanApi"; // 🧠 2026-11-07 오더 스캔 정밀 인식(서버 글자 인식 · AI 칸 정리 · 회사별 학습)
-import KpSubNav from "./KpSubNav";
+import KpSubNav, { SubNavBar, useIsPhone } from "./KpSubNav";
+import { useArDesk, arDeskId, stageIdx, stageLabel, AGING, agingKey, StatementBoard, StatementLineGrid, StatementHistory, StageStepper, StageRecordModal, StageBadge, KpModal, ArOverview, ArClientList, ArAccrualMap, ArDetail, AR_STATUS, sdBtn, sdBtnPri, sdInp, Ico, IC } from "./SettleDesk"; // 🧾 2026-11-07 거래명세서 단계 보드 · 미수금 데스크
 import RevenueDashboard from "./RevenueDashboard";
 import { TargetPage, ClientsPage, TrendPage, YearlyPage, QueryPage } from "./RevenuePages";
 import { RecurringManagerModal, CloseReportModal } from "./AutomationPanels";
@@ -9124,7 +9127,7 @@ return (
         )}
 
         {menu === "매출관리" && (role === "admin" || role === "totalMaster" || role === "test" || isViewer || !!customRole) && (
-          revenueUnlocked ? (
+          (revenueUnlocked || DEV_DEMO_REVENUE) ? (
             <DetailScope data={salesDispatchData} getters={mainDetailGet} title="세부검색 · 매출관리">{(detRows, detBtn) => (
             <BizScope company={getTenant() || userCompany || localStorage.getItem("userCompany") || ""} data={detRows} extra={detBtn}>{(bizRows, bizSel) => (
             <Settlement
@@ -9216,7 +9219,8 @@ return (
             items={[{ key: "거래처정산", label: "거래처정산", en: "BILLING", icon: "receipt" }, { key: "지급관리", label: "용차지급관리", en: "PAYOUT", icon: "wallet" }, { key: "지입정산관리", label: "지입정산관리", en: "FLEET PAY", icon: "wallet" }]}>
           <DetailScope data={salesDispatchData} getters={mainDetailGet} title="세부검색 · 정산관리">{(settleRows, settleBtn) => (<>
           {/* 🔎 2026-11-03 세부검색 — 거래처정산·용차지급·지입정산 모두 이 조건으로 */}
-          <div className="mb-3 flex items-center justify-end">{settleBtn}</div>
+          {/* ⭐ 2026-11-07 세부검색 버튼은 왼쪽 메뉴 윗줄(오른쪽 끝)로 — 머리 높이·왼쪽 끝 정렬 */}
+          <SubNavBar side="right" order={9}>{settleBtn}</SubNavBar>
           {/* 거래명세서 검색/선택 상태 유지를 위해 지급관리 탭으로 전환해도 언마운트하지 않고 숨기기만 한다 */}
           <div style={{ display: 정산관리Tab === "거래처정산" ? undefined : "none" }}>
             <ClientSettlement
@@ -51403,8 +51407,11 @@ const patchMonthOnDoc = async (id, yyyymm, status, dateStr) => {
 
   // ★ 조회결과 중 명세서에 포함할 오더만 선택 (기본값: 전체 선택)
   const [selectedInvoiceIds, setSelectedInvoiceIds] = useState(new Set());
+  // ⭐ 2026-11-07 단계 보드에서 연 명세서는 작성 때 뺀 오더를 기억해 두었다가 다시 뺀다
+  const stmtExRef = React.useRef([]);
   useEffect(() => {
-    setSelectedInvoiceIds(new Set(rowsInvoice.map(r => r._id)));
+    const ex = new Set(stmtExRef.current || []);
+    setSelectedInvoiceIds(new Set(rowsInvoice.filter(r => !ex.has(r._id)).map(r => r._id)));
   }, [rowsInvoice]);
 
   const selectedRowsInvoice = rowsInvoice.filter(r => selectedInvoiceIds.has(r._id));
@@ -51413,7 +51420,8 @@ const patchMonthOnDoc = async (id, yyyymm, status, dateStr) => {
   const excludeInvoiceRow = (id) => setSelectedInvoiceIds(prev => { const next = new Set(prev); next.delete(id); return next; });
   const restoreInvoiceRow = (id) => setSelectedInvoiceIds(prev => new Set([...prev, id]));
 
-  const mapped = selectedRowsInvoice.map((r, i) => {
+  // ⭐ 2026-11-07 명세서 줄 만들기 — 편집 화면 · 일괄 발송이 같은 함수를 쓴다(예전 계산 그대로)
+  const mapInvoiceRows = (list) => list.map((r, i) => {
     const viaLists = [r.경유상차목록, r.경유지_상차, r.경유하차목록, r.경유지_하차];
     return {
       idx: i + 1,
@@ -51430,6 +51438,7 @@ const patchMonthOnDoc = async (id, yyyymm, status, dateStr) => {
       차량종류: r.차량종류 || "",
     };
   });
+  const mapped = mapInvoiceRows(selectedRowsInvoice);
 
   const 합계공급가 = mapped.reduce((a, b) => a + b.공급가액, 0);
   const 합계세액 = mapped.reduce((a, b) => a + b.세액, 0);
@@ -51732,7 +51741,7 @@ const patchMonthOnDoc = async (id, yyyymm, status, dateStr) => {
     return Array.from(set).sort((a, b) => a.localeCompare(b, "ko"));
   }, [clients, dispatchData]);
 
-  const [selClient, setSelClient] = useState("");
+  const [selClient, setSelClient] = useState(AR_ALL); // ⭐ 2026-11-07 미수금 데스크 — 처음부터 전체 거래처
   const [yearFrom,  setYearFrom]  = useState(String(THIS_YEAR));
   const [monthFrom, setMonthFrom] = useState("01");
   const [yearTo,    setYearTo]    = useState(String(THIS_YEAR));
@@ -51822,7 +51831,8 @@ const patchMonthOnDoc = async (id, yyyymm, status, dateStr) => {
   );
   const clearSel = () => setSelectedMonths(new Set());
 
-const monthRowsRaw = useMemo(() => {
+  // ⭐ 2026-11-07 같은 계산을 "고른 거래처"와 "전체 거래처(미수금 데스크 목록)" 두 곳에 쓴다 — 식은 예전 그대로
+  const buildMonthRows = (selClient) => {
     if (!selClient) return [];
     const list = Array.isArray(dispatchData) ? dispatchData : [];
     const isAll = selClient === AR_ALL;
@@ -51863,7 +51873,9 @@ const monthRowsRaw = useMemo(() => {
       if (status !== "정산완료" && paid > 0) status = "일부입금";
       return { k, yyyymm, mm, year: yyyymm.slice(0,4), 거래처명: client, 건수: rows.length, 총청구금액: total, 정산상태: status, 정산일: dates.at(-1)||"", _rows: rows, 입금누계: paid, 잔액: Math.max(0, due - paid) };
     }).filter(Boolean));
-  }, [dispatchData, selClient, yearFrom, monthFrom, yearTo, monthTo, arPaidMap, csBizCur, csBiz.multi]); // eslint-disable-line react-hooks/exhaustive-deps
+  };
+  const monthRowsRaw = useMemo(() => buildMonthRows(selClient), [dispatchData, selClient, yearFrom, monthFrom, yearTo, monthTo, arPaidMap, csBizCur, csBiz.multi]); // eslint-disable-line react-hooks/exhaustive-deps
+  const arAllRows = useMemo(() => (selClient === AR_ALL ? monthRowsRaw : buildMonthRows(AR_ALL)), [dispatchData, selClient, monthRowsRaw, yearFrom, monthFrom, yearTo, monthTo, arPaidMap, csBizCur, csBiz.multi]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const monthRows = useMemo(() => {
     let rows = [...monthRowsRaw];
@@ -52482,7 +52494,7 @@ if (total === 0) return `<td class="zero">-</td>`;
 </head>
 <body>
 <div class="toolbar" id="toolbar">
-  <span class="toolbar-title">미수금 현황 보고서 — ${periodLabel}</span>
+  <span class="toolbar-title">미수금 현황 보고서 · ${periodLabel}</span>
   <span class="orient-label">용지 방향</span>
   <button class="tb-btn orient" id="orientBtn" onclick="toggleOrient()">가로형 (현재)</button>
   <div class="divider"></div>
@@ -52692,6 +52704,43 @@ const handleBatchSettle = async (targetStatus) => {
     setBatchModalOpen(false);
     setBatchClients(new Set());
   };
+  // ⭐ 2026-11-07 입금 배분 규칙(입금 엑셀 자동 매칭 · 미수금 데스크 "입금 처리" 공용) — 식은 예전 그대로 옮겼다
+  //  조회 기간의 미정산 달을 거래처별로 모으고(buildArMonths), 금액이 딱 맞는 달 → 없으면 오래된 달부터 채운다(allocArDeposit)
+  const buildArMonths = () => {
+      const isAllMonth = (ym) => ym >= `${yearFrom}-${monthFrom}` && ym <= `${yearTo}-${monthTo}`;
+      const book = new Map(); // client -> [{ k, yyyymm, rows, total, due, paid }]
+      (Array.isArray(dispatchData) ? dispatchData : []).forEach(r => {
+        if ((r.배차상태 || "") !== "배차완료" || !r.거래처명) return;
+        const ym = String(r.상차일 || "").slice(0, 7);
+        if (!isAllMonth(ym) || r.정산상태?.[ym] === "정산완료") return;
+        if (!book.has(r.거래처명)) book.set(r.거래처명, new Map());
+        const mm = book.get(r.거래처명);
+        if (!mm.has(ym)) mm.set(ym, { k: `${r.거래처명}|${ym}`, client: r.거래처명, yyyymm: ym, rows: [], total: 0 });
+        const e = mm.get(ym); e.rows.push(r); e.total += toInt(r.청구운임);
+      });
+      const months = new Map(); // client -> sorted list
+      book.forEach((mm, client) => months.set(client, [...mm.values()].filter(e => e.total > 0).map(e => {
+        const paid = arPaidMap.get(e.k) || 0;
+        return { ...e, paid, due: Math.round(e.total * 1.1), remain: Math.max(0, Math.round(e.total * 1.1) - paid) };
+      }).sort((a, b) => a.yyyymm.localeCompare(b.yyyymm))));
+      return months;
+  };
+  const allocArDeposit = (list, amount, remainOf, TOL = 10) => {
+          const exact = list.find(e => Math.abs(amount - remainOf(e)) <= TOL || (e.paid === 0 && amount === e.total));
+          let alloc = [];
+          if (exact) alloc = [{ e: exact, amount, full: true }];
+          else {
+            let left = amount;
+            for (const e of list) {
+              if (left <= 0) break;
+              const r = remainOf(e);
+              if (left + TOL >= r) { alloc.push({ e, amount: Math.min(left, r), full: true }); left -= r; }
+              else { alloc.push({ e, amount: left, full: false }); left = 0; }
+            }
+            if (left > TOL) alloc.over = left;
+          }
+          return { alloc, exact };
+  };
   const handleBankExcelUpload = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -52732,22 +52781,7 @@ const handleBatchSettle = async (targetStatus) => {
       //  ① 입금자명으로 거래처를 찾고 ② 그 거래처의 미정산 달 중 금액이 딱 맞는 달 → 정산완료
       //  ③ 딱 맞는 달이 없으면 오래된 달부터 채움 — 다 채운 달은 정산완료, 모자란 달은 일부입금, 남으면 초과입금
       //  ④ 입금자명이 어느 거래처와도 안 맞으면 금액이 딱 맞는 달이 하나뿐일 때만 "이름 확인" 제안
-      const isAllMonth = (ym) => ym >= `${yearFrom}-${monthFrom}` && ym <= `${yearTo}-${monthTo}`;
-      const book = new Map(); // client -> [{ k, yyyymm, rows, total, due, paid }]
-      (Array.isArray(dispatchData) ? dispatchData : []).forEach(r => {
-        if ((r.배차상태 || "") !== "배차완료" || !r.거래처명) return;
-        const ym = String(r.상차일 || "").slice(0, 7);
-        if (!isAllMonth(ym) || r.정산상태?.[ym] === "정산완료") return;
-        if (!book.has(r.거래처명)) book.set(r.거래처명, new Map());
-        const mm = book.get(r.거래처명);
-        if (!mm.has(ym)) mm.set(ym, { k: `${r.거래처명}|${ym}`, client: r.거래처명, yyyymm: ym, rows: [], total: 0 });
-        const e = mm.get(ym); e.rows.push(r); e.total += toInt(r.청구운임);
-      });
-      const months = new Map(); // client -> sorted list
-      book.forEach((mm, client) => months.set(client, [...mm.values()].filter(e => e.total > 0).map(e => {
-        const paid = arPaidMap.get(e.k) || 0;
-        return { ...e, paid, due: Math.round(e.total * 1.1), remain: Math.max(0, Math.round(e.total * 1.1) - paid) };
-      }).sort((a, b) => a.yyyymm.localeCompare(b.yyyymm))));
+      const months = buildArMonths(); // client -> sorted list
       const nm = (x) => normalizeForMatch(x);
       const findClient = (depName) => {
         const d = nm(depName); if (!d || d.length < 2) return null;
@@ -52766,21 +52800,9 @@ const handleBatchSettle = async (targetStatus) => {
         const client = findClient(dep.name);
         if (client) {
           const list = months.get(client).filter(e => remainOf(e) > 0);
-          const exact = list.find(e => Math.abs(dep.amount - remainOf(e)) <= TOL || (e.paid === 0 && dep.amount === e.total));
-          let alloc = [];
-          if (exact) alloc = [{ e: exact, amount: dep.amount, full: true }];
-          else {
-            let left = dep.amount;
-            for (const e of list) {
-              if (left <= 0) break;
-              const r = remainOf(e);
-              if (left + TOL >= r) { alloc.push({ e, amount: Math.min(left, r), full: true }); left -= r; }
-              else { alloc.push({ e, amount: left, full: false }); left = 0; }
-            }
-            if (left > TOL) alloc.over = left;
-          }
+          const { alloc, exact } = allocArDeposit(list, dep.amount, remainOf);
           alloc.forEach(a => used.set(a.e.k, (used.get(a.e.k) || 0) + a.amount));
-          if (!alloc.length) { unmatched.push({ ...dep, reason: `${client} — 남은 미정산이 없습니다` }); return; }
+          if (!alloc.length) { unmatched.push({ ...dep, reason: `${client} · 남은 미정산이 없습니다` }); return; }
           const fulls = alloc.filter(a => a.full).length;
           const kind = alloc.over ? "초과입금" : exact ? "정산완료" : alloc.some(a => !a.full) ? (fulls ? "정산+일부입금" : "일부입금") : "여러 달 정산";
           matches.push({ deposit: dep, client, alloc: alloc.map(a => ({ k: a.e.k, yyyymm: a.e.yyyymm, amount: a.amount, full: a.full, due: a.e.due, rows: a.e.rows })), over: alloc.over || 0, kind, confidence: "이름일치" });
@@ -52793,7 +52815,7 @@ const handleBatchSettle = async (targetStatus) => {
           const e = cands[0];
           used.set(e.k, (used.get(e.k) || 0) + dep.amount);
           matches.push({ deposit: dep, client: e.client, alloc: [{ k: e.k, yyyymm: e.yyyymm, amount: dep.amount, full: true, due: e.due, rows: e.rows }], over: 0, kind: "정산완료", confidence: "금액만 일치" });
-        } else unmatched.push({ ...dep, reason: cands.length ? `금액이 같은 달이 ${cands.length}곳 — 직접 확인` : "맞는 거래처·금액 없음" });
+        } else unmatched.push({ ...dep, reason: cands.length ? `금액이 같은 달이 ${cands.length}곳 · 직접 확인` : "맞는 거래처·금액 없음" });
       });
       setBankMatchResult({ matches, unmatched, deposits });
     };
@@ -52837,7 +52859,7 @@ const handleBatchSettle = async (targetStatus) => {
   const applyBankMatch = async (m) => {
     await applyOneMatch(m);
     setBankMatchResult(prev => ({ ...prev, matches: prev.matches.filter(x => x !== m) }));
-    sflowToast(`${m.client} ${m.deposit.amount.toLocaleString()}원 반영 — ${m.kind}`, "success");
+    sflowToast(`${m.client} ${m.deposit.amount.toLocaleString()}원 반영 · ${m.kind}`, "success");
   };
   // 이름까지 맞은 것만 한꺼번에(금액만 맞은 건 사람이 확인)
   const applyAllBankMatches = async () => {
@@ -52868,6 +52890,236 @@ const handleBatchSettle = async (targetStatus) => {
     logs.sort((a, b) => mailSort === "newest" ? (b.sentAt || 0) - (a.sentAt || 0) : (a.sentAt || 0) - (b.sentAt || 0));
     return logs;
   }, [emailLogs, mailTypeFilter, mailSearch, mailSort]);
+
+  // ══════════ ⭐ 2026-11-07 거래명세서 단계 보드 · 미수금 데스크 ══════════
+  //  금액은 위의 식(거래명세서 mapInvoiceRows · 미수금 buildMonthRows · 입금 배분 allocArDeposit)을 그대로 쓴다
+  const desk = useArDesk(arCompany);
+  const csPhone = useIsPhone();
+  const kstYm = (n = 0) => { const d = new Date(Date.now() + 9 * 3600e3); d.setUTCDate(1); d.setUTCMonth(d.getUTCMonth() + n); return d.toISOString().slice(0, 7); };
+  const [pipeMonth, setPipeMonth] = useState(() => kstYm(-1));
+  const [invView, setInvView] = useState("board"); // board(단계 보드) | edit(명세서 편집)
+  const [manualOpen, setManualOpen] = useState(false); // 직접 조회 팝업
+  const [stageAsk, setStageAsk] = useState(null); // { stage, groups }
+  const [pendingSend, setPendingSend] = useState(false);
+  useLoadOrderRange(monthStart(kstYm(-5) < pipeMonth ? kstYm(-5) : pipeMonth), monthEnd(pipeMonth > kstYm(0) ? pipeMonth : kstYm(0)));
+  const stmtKey = (c, ym) => `${csBizCur}|${c}|${ym}`;
+  const stmtDocOf = (c, ym) => desk.stmts.get(stmtKey(c, ym)) || null;
+  const stmtDocId = (c, ym) => stmtDocOf(c, ym)?.id || arDeskId(arCompany, "stmt", csBizCur, c, ym);
+  const clientOf = (name) => (clients || []).find((c) => c.거래처명 === name) || null;
+  const emailOf = (name) => { const c = clientOf(name); return c?.연락처이메일 || c?.이메일 || ""; };
+  // 청구할 오더(거래명세서 조회와 같은 조건: 배차완료 · 청구운임 > 0 · 고른 청구 사업자)
+  const billRows = useMemo(() => (Array.isArray(dispatchData) ? dispatchData : []).filter(r => (r.배차상태 || "") === "배차완료" && toInt(r.청구운임) > 0 && r.거래처명 && csBizOk(r)), [dispatchData, csBizCur, csBiz.multi]); // eslint-disable-line react-hooks/exhaustive-deps
+  const groupsOfMonth = (ym) => {
+    const m = new Map();
+    billRows.forEach(r => { if (String(r.상차일 || "").slice(0, 7) !== ym) return; if (!m.has(r.거래처명)) m.set(r.거래처명, []); m.get(r.거래처명).push(r); });
+    return [...m.entries()].map(([c, rows]) => {
+      const d = stmtDocOf(c, ym);
+      const ex = new Set(d?.excludedIds || []);
+      const inc = rows.filter(r => !ex.has(r._id)).sort((a, b) => (a.상차일 || "").localeCompare(b.상차일 || ""));
+      const supply = inc.reduce((a, r) => a + toInt(r.청구운임), 0);
+      const vat = inc.reduce((a, r) => a + Math.round(toInt(r.청구운임) * 0.1), 0);
+      const hist = d?.history || [];
+      const lastAt = hist.length ? Math.max(...hist.map(h => (typeof h.at === "number" ? h.at : h.at?.seconds ? h.at.seconds * 1000 : 0))) : 0;
+      return { key: `${c}|${ym}`, client: c, yyyymm: ym, rows: inc, count: inc.length, supply, vat, total: supply + vat, stage: d?.stage || "미작성", doc: d, lastAt, email: emailOf(c), settled: rows.every(r => r.정산상태?.[ym] === "정산완료") };
+    });
+  };
+  const pipeGroups = useMemo(() => groupsOfMonth(pipeMonth), [billRows, pipeMonth, desk.stmts, clients]); // eslint-disable-line react-hooks/exhaustive-deps
+  const pipeRecent = useMemo(() => Array.from({ length: 6 }, (_, i) => kstYm(i - 5)).map(ym => ({ ym, open: groupsOfMonth(ym).filter(g => g.stage !== "마감").length })), [billRows, desk.stmts]); // eslint-disable-line react-hooks/exhaustive-deps
+  const stmtSnap = (g) => ({ count: g.count, supply: g.supply, vat: g.vat });
+  const setStmtStage = async (c, ym, stage, { note = "", date = "", extra = null } = {}) => {
+    const cur = stmtDocOf(c, ym);
+    const at = date && date !== todayStr8() ? new Date(`${date}T12:00:00+09:00`).getTime() : Date.now();
+    const history = [...(cur?.history || []), { stage, at, by: auth.currentUser?.email || "", ...(note ? { note } : {}) }].slice(-40);
+    await desk.save(stmtDocId(c, ym), { kind: "stmt", client: c, yyyymm: ym, biz: csBizCur, stage, history, ...(extra || {}) });
+  };
+  // 메일을 보낸 뒤 — 한 달짜리 명세서면 "발송"으로(이미 더 간 단계면 그대로)
+  const markStmtSent = (c, s0, e0) => {
+    const ym = String(s0 || "").slice(0, 7);
+    if (!c || !ym || ym !== String(e0 || "").slice(0, 7)) return;
+    if (stageIdx(stmtDocOf(c, ym)?.stage) >= 2) return;
+    setStmtStage(c, ym, "발송").catch(() => {});
+  };
+  const openStmt = (c, ym, { send = false } = {}) => {
+    const d = stmtDocOf(c, ym);
+    stmtExRef.current = d?.excludedIds || [];
+    setSearchType("거래처명"); setSearchInput(c); setClient(c);
+    setStart(monthStart(ym)); setEnd(monthEnd(ym)); setSearched(true); setDropdownOpen(false);
+    setInvView("edit");
+    if (send) setPendingSend(true);
+  };
+  // 편집 중인 명세서가 한 달 · 한 거래처면 단계 기록 대상
+  const stmtYm = searchType === "거래처명" && client && start && end && start.slice(0, 7) === end.slice(0, 7) && start === monthStart(start.slice(0, 7)) && end === monthEnd(start.slice(0, 7)) ? start.slice(0, 7) : "";
+  const stmtCur = stmtYm ? stmtDocOf(client, stmtYm) : null;
+  const stmtStage = stmtCur?.stage || "미작성";
+  const stmtLogs = useMemo(() => (emailLogs || []).filter(l => l.client === client && String(l.type || "").startsWith("거래명세서") && (!stmtYm || String(l.subject || "").includes(stmtYm))), [emailLogs, client, stmtYm]);
+  const exNow = excludedRowsInvoice.map(r => r._id).sort().join(",");
+  const exSaved = [...(stmtCur?.excludedIds || [])].sort().join(",");
+  const saveStmtDraft = async () => {
+    if (!stmtYm) return;
+    const extra = { count: mapped.length, supply: 합계공급가, vat: 합계세액, excludedIds: excludedRowsInvoice.map(r => r._id) };
+    if (stageIdx(stmtStage) >= 1) { await desk.save(stmtDocId(client, stmtYm), { kind: "stmt", client, yyyymm: stmtYm, biz: csBizCur, ...extra }); sflowToast("포함 오더를 저장했어요", "success"); return; }
+    await setStmtStage(client, stmtYm, "작성", { extra });
+    sflowToast(`${client} ${Number(stmtYm.slice(5))}월 명세서 작성 완료`, "success");
+  };
+  // 거래명세서 메일 창 열기(예전 "명세서 발송" 버튼과 같은 내용)
+  const openInvoiceEmail = () => {
+    if (!searched || !rowsInvoice.length) return showAlert("먼저 조회를 실행하세요.");
+    setEmailTo(emailOf(client));
+    setEmailBody(`안녕하세요, ${client} 담당자님.\n\n${COMPANY_PRINT.name}입니다.\n\n${start||""}~${end||""} 기간 거래명세서를 발송드립니다.\n\n총 ${mapped.length}건\n공급가액: ${won(합계공급가)}원\n부가세: ${won(합계세액)}원\n합계: ${won(합계공급가+합계세액)}원\n\n입금계좌: ${COMPANY_PRINT.bank}\n마감문의: ${COMPANY_PRINT.phone || "-"}\n\n확인 부탁드립니다.\n감사합니다.\n\n${COMPANY_PRINT.name}\n${COMPANY_PRINT.contact}`);
+    setEmailScheduleOn(false); setEmailScheduleAt("");
+    setEmailModalOpen(true);
+  };
+  useEffect(() => {
+    if (!pendingSend || invView !== "edit" || !rowsInvoice.length) return;
+    setPendingSend(false);
+    setTimeout(() => openInvoiceEmail(), 60);
+  }, [pendingSend, invView, rowsInvoice.length]); // eslint-disable-line react-hooks/exhaustive-deps
+  const onStmtStage = (g, stage) => {
+    if (stage === "작성") { setStmtStage(g.client, g.yyyymm, "작성", { extra: { ...stmtSnap(g), excludedIds: g.doc?.excludedIds || [] } }); sflowToast(`${g.client} 작성 완료`, "success"); return; }
+    if (stage === "발송") { openStmt(g.client, g.yyyymm, { send: true }); return; }
+    setStageAsk({ stage, groups: [g] });
+  };
+  const onStmtBulk = async (action, groups) => {
+    if (action === "작성") {
+      const todo = groups.filter(g => g.stage === "미작성");
+      for (const g of todo) await setStmtStage(g.client, g.yyyymm, "작성", { extra: { ...stmtSnap(g), excludedIds: [] } });
+      sflowToast(todo.length ? `${todo.length}곳 작성 완료` : "이미 모두 작성했어요", "success");
+      return;
+    }
+    if (action === "발송") {
+      const items = groups.map(g => ({ name: g.client, email: g.email, start: monthStart(g.yyyymm), end: monthEnd(g.yyyymm), mapped: mapInvoiceRows(g.rows), totals: { 공급가: g.supply, 세액: g.vat }, clientInfo: clientOf(g.client) || {} }));
+      setBatchSendList(prev => [...prev.filter(x => !items.some(y => y.name === x.name && y.start === x.start)), ...items]);
+      setBatchSendOpen(true);
+      return;
+    }
+    setStageAsk({ stage: action, groups });
+  };
+  const saveStageAsk = async ({ date, note }) => {
+    const t = stageAsk; if (!t) return;
+    setStageAsk(null);
+    for (const g of t.groups) await setStmtStage(g.client, g.yyyymm, t.stage, { date, note, extra: stageIdx(g.stage) === 0 ? { ...stmtSnap(g), excludedIds: [] } : null });
+    sflowToast(`${t.groups.length > 1 ? `${t.groups.length}곳 ` : ""}${stageLabel(t.stage)} 기록`, "success");
+  };
+  const pipeNav = useMemo(() => [...pipeGroups].sort((a, b) => stageIdx(a.stage) - stageIdx(b.stage) || b.total - a.total), [pipeGroups]);
+  const navIdx = stmtYm === pipeMonth ? pipeNav.findIndex(g => g.client === client) : -1;
+
+  // ── 미수금 데스크 ──
+  const [arSel, setArSel] = useState("");
+  const [arQ, setArQ] = useState("");
+  const [arBucket, setArBucket] = useState("");
+  const [arStatusF, setArStatusF] = useState("");
+  const [arView, setArView] = useState("list"); // list | map | ledger
+  const [arSortBy, setArSortBy] = useState({ k: "out", d: -1 });
+  const pickArClient = (c) => { setArSel(c); setArInput(c || ""); setSelClient(c || AR_ALL); clearSel(); };
+  const arOverDays = (ym, rule) => { const due = arDueDate(ym, rule) || monthEnd(ym); return Math.floor((Date.now() - new Date(`${due}T23:59:59+09:00`).getTime()) / 86400000); };
+  const arMonthsInRange = useMemo(() => { const out = []; let y = parseInt(yearFrom, 10), m = parseInt(monthFrom, 10); const yT = parseInt(yearTo, 10), mT = parseInt(monthTo, 10); while (y < yT || (y === yT && m <= mT)) { out.push(`${y}-${String(m).padStart(2, "0")}`); m++; if (m > 12) { m = 1; y++; } if (out.length > 36) break; } return out; }, [yearFrom, monthFrom, yearTo, monthTo]);
+  const arTrendMonths = useMemo(() => arMonthsInRange.filter(m => m < kstYm(0)).slice(-12), [arMonthsInRange]); // eslint-disable-line react-hooks/exhaustive-deps
+  const arClientsAll = useMemo(() => {
+    const pays = new Map(); arPayments.forEach(p => { if (!pays.has(p.client)) pays.set(p.client, []); pays.get(p.client).push(p); });
+    const by = new Map(); arAllRows.forEach(r => { if (!by.has(r.거래처명)) by.set(r.거래처명, []); by.get(r.거래처명).push(r); });
+    return [...by.entries()].map(([c, rows]) => {
+      const ci = clientOf(c) || {};
+      const rule = ci.결제일 || "";
+      let out = 0, supplyOut = 0, oldest = "", over = null;
+      const aging = {}; const openList = []; const cells = {};
+      rows.forEach(r => {
+        const 청구VAT = Math.round((r.총청구금액 || 0) * 1.1);
+        const open = r.정산상태 === "미정산" || r.정산상태 === "일부입금";
+        const od = open ? arOverDays(r.yyyymm, rule) : null;
+        cells[r.yyyymm] = { st: r.정산상태, amt: open ? r.잔액 : 청구VAT, over: od };
+        if (!open) return;
+        out += r.잔액; // 표의 "잔액"과 같은 값(VAT 포함 − 입금 누계)
+        supplyOut += r.정산상태 === "일부입금" ? Math.max(0, r.총청구금액 - Math.round((r.입금누계 || 0) / 1.1)) : r.총청구금액; // KPI "미정산금"과 같은 식
+        if (!oldest || r.yyyymm < oldest) oldest = r.yyyymm;
+        if (over == null || od > over) over = od;
+        const k = agingKey(od); aging[k] = (aging[k] || 0) + r.잔액;
+        openList.push({ k: r.k, yyyymm: r.yyyymm, remain: r.잔액 });
+      });
+      // 월말 미수 잔액 — 그 달 말까지 청구됐는데 그때까지 정산 안 된 금액(정산일 기준, 아직 안 받은 달은 지금 남은 금액)
+      const trend = arTrendMonths.map(m => rows.reduce((a, r) => {
+        if (r.yyyymm > m || r.정산상태 === "진행중") return a;
+        if (r.정산상태 === "정산완료") return r.정산일 && r.정산일 <= monthEnd(m) ? a : a + Math.round(r.총청구금액 * 1.1);
+        return a + r.잔액;
+      }, 0));
+      const ps = (pays.get(c) || []).map(p => (p.depositDate ? new Date(`${p.depositDate}T12:00:00+09:00`).getTime() : p.at?.seconds ? p.at.seconds * 1000 : 0));
+      const settledDays = rows.filter(r => r.정산상태 === "정산완료" && r.정산일).map(r => new Date(`${r.정산일}T12:00:00+09:00`).getTime());
+      const lastPay = Math.max(0, ...ps, ...settledDays);
+      const note = desk.notes.get(`${csBizCur}|${c}`) || null;
+      const autoStatus = over == null || over <= 0 ? "정상" : over <= 30 ? "주의" : over <= 90 ? "연체" : "추심";
+      return { client: c, out, supplyOut, oldest, over: over ?? 0, openMonths: openList.length, openList: openList.sort((a, b) => a.yyyymm.localeCompare(b.yyyymm)), aging, cells, trend, lastPay, note, rule,
+        status: note?.status || autoStatus, autoStatus, manual: !!note?.status, nextAction: note?.nextAction || "", nextDate: note?.nextDate || "",
+        contact: ci.담당자 || "", phone: ci.연락처 || "", email: ci.이메일 || ci.연락처이메일 || "" };
+    });
+  }, [arAllRows, arPayments, clients, desk.notes, arTrendMonths, csBizCur]); // eslint-disable-line react-hooks/exhaustive-deps
+  const arOpenClients = useMemo(() => arClientsAll.filter(r => r.out > 0), [arClientsAll]);
+  const arKpi = useMemo(() => {
+    const aging = {}; AGING.forEach(a => { aging[a.k] = { amt: 0, n: 0 }; });
+    arOpenClients.forEach(r => AGING.forEach(a => { if (r.aging[a.k]) { aging[a.k].amt += r.aging[a.k]; aging[a.k].n += 1; } }));
+    const total = arOpenClients.reduce((a, r) => a + r.out, 0);
+    let wsum = 0; arOpenClients.forEach(r => r.openList.forEach(m => { wsum += m.remain * Math.max(0, arOverDays(m.yyyymm, r.rule)); }));
+    const trend = arTrendMonths.map((_, i) => arClientsAll.reduce((a, r) => a + (r.trend[i] || 0), 0));
+    return { total, supplyTotal: arOpenClients.reduce((a, r) => a + r.supplyOut, 0), overdue: total - aging.due.amt, clientCount: arOpenClients.length, avgDays: total ? Math.round(wsum / total) : 0, aging, trend, months: arTrendMonths };
+  }, [arOpenClients, arClientsAll, arTrendMonths]); // eslint-disable-line react-hooks/exhaustive-deps
+  const arShown = useMemo(() => {
+    const nq = arQ.trim().toLowerCase().replace(/\s+/g, "");
+    const list = arOpenClients.filter(r => (!arBucket || (r.aging[arBucket] || 0) > 0) && (!arStatusF || r.status === arStatusF) && (!nq || r.client.toLowerCase().replace(/\s+/g, "").includes(nq)));
+    const { k, d } = arSortBy;
+    const v = (r) => (k === "client" ? r.client : k === "oldest" ? r.oldest : k === "last" ? r.lastPay : k === "over" ? r.over : r.out);
+    return [...list].sort((a, b) => { const x = v(a), y = v(b); return (typeof x === "string" ? x.localeCompare(y, "ko") : x - y) * d; });
+  }, [arOpenClients, arQ, arBucket, arStatusF, arSortBy]);
+  const arStatusCounts = useMemo(() => { const c = {}; arOpenClients.forEach(r => { c[r.status] = (c[r.status] || 0) + 1; }); return c; }, [arOpenClients]);
+  const arCur = arSel ? arClientsAll.find(r => r.client === arSel) || { client: arSel, out: 0, openList: [], cells: {}, trend: [], status: "정상", autoStatus: "정상", over: 0, note: desk.notes.get(`${csBizCur}|${arSel}`) || null } : null;
+  const arTimeline = useMemo(() => {
+    if (!arCur) return [];
+    const c = arCur.client; const out = [];
+    const ms = (t) => (typeof t === "number" ? t : t?.seconds ? t.seconds * 1000 : t ? new Date(t).getTime() || 0 : 0);
+    const day = (t) => { const d = new Date(t + 9 * 3600e3); return `${d.getUTCFullYear()}.${String(d.getUTCMonth() + 1).padStart(2, "0")}.${String(d.getUTCDate()).padStart(2, "0")}`; };
+    arAllRows.filter(r => r.거래처명 === c && r.정산상태 !== "진행중").forEach(r => {
+      out.push({ t: new Date(`${monthEnd(r.yyyymm)}T12:00:00+09:00`).getTime(), title: `${Number(r.yyyymm.slice(5))}월 청구`, body: `${r.건수}건 · ${r.정산상태}`, amt: won(Math.round(r.총청구금액 * 1.1)), color: "#C9D3E3" });
+      if (r.정산상태 === "정산완료" && r.정산일) out.push({ t: new Date(`${r.정산일}T12:00:00+09:00`).getTime(), title: `${Number(r.yyyymm.slice(5))}월 정산완료`, body: "", amt: null, color: "#2E9466" });
+    });
+    arPayments.filter(p => p.client === c).forEach(p => out.push({ t: p.depositDate ? new Date(`${p.depositDate}T12:00:00+09:00`).getTime() : ms(p.at), title: p.full ? "입금(완납)" : "일부 입금", body: `${Number(String(p.yyyymm).slice(5))}월분${p.depositName ? ` · ${p.depositName}` : ""}`, amt: `+${won(p.amount)}`, amtColor: "#1E6B4A", color: "#2E9466" }));
+    (emailLogs || []).filter(l => l.client === c).forEach(l => out.push({ t: ms(l.sentAt), title: String(l.type || "").startsWith("미수금") ? "독촉 메일" : "명세서 메일", body: `${l.to || ""}${l.status === "failed" ? " · 실패" : ""}`, amt: null, color: l.status === "failed" ? "#C93131" : "#8FB0F0" }));
+    [...desk.stmts.values()].filter(d => d.client === c && (d.biz || csBizCur) === csBizCur).forEach(d => (d.history || []).forEach(h => { if (h.stage === "작성") return; out.push({ t: ms(h.at), title: `${Number(String(d.yyyymm).slice(5))}월 명세서 · ${stageLabel(h.stage)}`, body: h.note || "", amt: null, color: "#2D4C82" }); }));
+    (arCur.note?.log || []).forEach(l => out.push({ t: ms(l.at), title: l.type === "call" ? "통화" : l.type === "promise" ? "입금 약속" : "메모", body: l.text, amt: null, color: "#D49B1E" }));
+    return out.filter(x => x.t).sort((a, b) => b.t - a.t).map(x => ({ ...x, date: day(x.t) }));
+  }, [arCur?.client, arAllRows, arPayments, emailLogs, desk.stmts, arCur?.note]); // eslint-disable-line react-hooks/exhaustive-deps
+  const arQuickPlan = (amount) => {
+    if (!arCur) return null;
+    const months = buildArMonths();
+    const list = (months.get(arCur.client) || []).filter(e => e.remain > 0);
+    const { alloc, exact } = allocArDeposit(list, amount, (e) => e.remain);
+    const fulls = alloc.filter(a => a.full).length;
+    const kind = alloc.over ? "초과입금" : exact ? "정산완료" : alloc.some(a => !a.full) ? (fulls ? "정산+일부입금" : "일부입금") : "여러 달 정산";
+    return { alloc: alloc.map(a => ({ k: a.e.k, yyyymm: a.e.yyyymm, amount: a.amount, full: a.full, due: a.e.due, rows: a.e.rows })), over: alloc.over || 0, kind };
+  };
+  const arQuickPay = async (amount, date, name) => {
+    if (isViewer) return showAlert("조회전용 권한으로는 입금 처리를 할 수 없습니다.");
+    const plan = arQuickPlan(amount); if (!plan?.alloc?.length) return;
+    await applyOneMatch({ deposit: { amount, name: name || arCur.client, date: date || todayStr8() }, client: arCur.client, alloc: plan.alloc, over: plan.over, kind: plan.kind, confidence: "직접 입력" });
+    sflowToast(`${arCur.client} ${won(amount)}원 반영 · ${plan.kind}`, "success");
+  };
+  const arSaveNote = async ({ patch, addLog }) => {
+    if (!arCur || isViewer) return;
+    const cur = arCur.note; const id = cur?.id || arDeskId(arCompany, "client", csBizCur, arCur.client);
+    const base = { kind: "client", client: arCur.client, biz: csBizCur };
+    if (patch) { await desk.save(id, { ...base, ...patch }); sflowToast("저장했어요", "success"); }
+    if (addLog) await desk.save(id, { ...base, log: [...(cur?.log || []), { ...addLog, at: Date.now(), by: auth.currentUser?.email || "" }].slice(-80) });
+  };
+  // 미수금 메일 창 열기(예전 "이메일발송" 버튼과 같은 내용)
+  const openArEmail = () => {
+    if (!selClient || selClient === AR_ALL) return showAlert("거래처를 먼저 고르세요.");
+    const found = (clients||[]).find(c => c.거래처명 === selClient);
+    setEmailTo(found?.이메일 || found?.연락처이메일 || "");
+    setArEmailFromMM(monthFrom || "01");
+    setArEmailToMM(monthTo || "12");
+    const unpaid = monthRows.filter(r => r.정산상태 === "미정산");
+    const unpaidAmt = unpaid.reduce((s,r) => s + r.총청구금액, 0);
+    setEmailBody(`안녕하세요, ${selClient} 담당자님.\n\n${COMPANY_PRINT.name}입니다.\n\n${THIS_YEAR}년 미수금 현황을 안내드립니다.\n\n미정산 월수: ${unpaid.length}개월\n미정산 금액: ${unpaidAmt.toLocaleString()}원\n\n${unpaid.map(r => `  - ${r.yyyymm} : ${r.총청구금액.toLocaleString()}원`).join("\n")}\n\n입금계좌: ${COMPANY_PRINT.bank}\n\n정산 부탁드립니다.\n감사합니다.\n\n${COMPANY_PRINT.name}\n${COMPANY_PRINT.contact}`);
+    setEmailScheduleOn(false); setEmailScheduleAt("");
+    setArEmailOpen(true);
+  };
+  const openArReport = () => { setArFromYear(yearFrom); setArFromMM(monthFrom); setArToYear(yearTo); setArToMM(monthTo); setArReportOpen(true); };
 
   // ⭐ 2026-11-03 거래처정산 리디자인 — 공통 스타일(남색 단색·모노 라벨·정렬된 버튼)
   // ⭐ 2026-11-05 거래처정산 가독성 — 입력·라벨·버튼 글씨를 키우고(입력 15px·라벨 13px·버튼 14px), 조회 버튼은 다른 도구 버튼과 같은 h-10 크기로
@@ -52923,185 +53175,128 @@ const handleBatchSettle = async (targetStatus) => {
   return (
     <>
     {/* ⭐ 2026-11-05 kp-settle — 정산 화면 글씨 크게(index.css: 표 14.5px · 금액 15.5px 굵게 · 작은 글씨 한 단계씩) */}
-    <div className="kp-settle p-4 min-w-0">
-      {/* ⭐ 2026-11-03 리디자인 — 머리(다크·그리드): 화면 제목 + 탭 + 청구 사업자 */}
-      <div className="relative overflow-hidden rounded-2xl px-5 py-4 mb-4 text-white" style={{ background: "radial-gradient(900px 300px at 85% -30%, rgba(110,149,232,.28), transparent 60%), linear-gradient(120deg,#060C1A 0%,#0F1A30 45%,#1B2B4B 100%)" }}>
-        <div className="absolute inset-0 pointer-events-none" style={{ background: csGrid }} />
-        <div className="relative flex items-center gap-4 flex-wrap">
-          <div className="w-10 h-10 rounded-2xl flex items-center justify-center shrink-0" style={{ background: "linear-gradient(135deg,#2D4C82,#0B1428)", border: "1px solid rgba(207,224,255,.3)", boxShadow: "0 0 0 4px rgba(143,176,240,.08), 0 0 24px rgba(110,149,232,.25)" }}>
-            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#CFE0FF" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2z" /><path d="M9 8h6M9 12h6M9 16h3" /></svg>
-          </div>
-          <div className="min-w-0">
-            <div className="text-[10.5px] font-extrabold tracking-[0.32em] text-[#8FB0F0]" style={{ fontFamily: KP_MONO, fontVariantNumeric: "tabular-nums" }}>CLIENT SETTLEMENT · {tab === "invoice" ? "STATEMENT" : tab === "unsettledMonth" ? "RECEIVABLES" : "OUTBOX"}</div>
-            <div className="text-[19px] font-black mt-0.5 tracking-tight">{tab === "invoice" ? "거래명세서" : tab === "unsettledMonth" ? "미수금관리" : "보낸메일함"}</div>
-          </div>
-          <div className="ml-auto flex items-center gap-2 flex-wrap">
-            {/* ⭐ 2026-11-03 여러 사업자 — 이 화면의 거래명세서·미수금은 고른 사업자 것만, 공급자 정보도 그 사업자로 */}
-            {csBiz.multi && (
-              <div className="flex items-center gap-2" title={`거래명세서·미수금·메일이 ${csBizCur} 이름·사업자번호·계좌·직인으로 나갑니다`}>
-                <span className="text-[9.5px] font-extrabold tracking-[0.24em] text-white/45" style={{ fontFamily: KP_MONO, fontVariantNumeric: "tabular-nums" }}>BILLING ENTITY</span>
-                <div className="inline-flex p-1 rounded-xl bg-white/[0.06] border border-white/15">
-                  {csBiz.names.map((n) => (
-                    <button key={n} type="button" onClick={() => setCsBizSel(n === csBiz.defaultName ? "" : n)} className={`h-8 px-3 rounded-lg text-[12.5px] font-black transition ${csBizCur === n ? "bg-[#CFE0FF] text-[#0F1A30]" : "text-white/70 hover:text-white"}`}>{n}</button>
-                  ))}
-                </div>
-              </div>
-            )}
-            <div className="inline-flex p-1 rounded-xl bg-white/[0.06] border border-white/15">
-              {[["invoice", "거래명세서", 0], ["unsettledMonth", "미수금관리", unsettledBadge], ["sentmails", "보낸메일함", emailLogs.length]].map(([key, label, badge]) => (
-                <button key={key} type="button" onClick={() => setTab(key)}
-                  className={`h-8 px-3.5 rounded-lg text-[12.5px] font-black transition inline-flex items-center gap-1.5 ${tab === key ? "bg-white text-[#0F1A30] shadow-sm" : "text-white/70 hover:text-white"}`}>
-                  {label}
-                  {badge > 0 && (
-                    <span className={`min-w-[18px] h-[18px] px-1 rounded-md text-[10px] font-black inline-flex items-center justify-center tabular-nums ${tab === key ? "bg-[#0F1A30] text-white" : "bg-white/15 text-white"}`} style={{ fontFamily: KP_MONO, fontVariantNumeric: "tabular-nums" }}>
-                      {key === "unsettledMonth" ? (badge > 9 ? "9+" : badge) : (badge > 99 ? "99+" : badge)}
-                    </span>
-                  )}
-                </button>
+    <div className="kp-settle min-w-0">
+      {/* ⭐ 2026-11-07 머리 — 화면 제목 · 탭은 왼쪽 메뉴 윗줄 왼쪽, 청구 사업자는 오른쪽(왼쪽 메뉴 머리와 높이·왼쪽 끝 정렬) */}
+      <SubNavBar side="left" order={0} fallbackClass="mb-3 flex items-center gap-3 flex-wrap rounded-2xl px-4 py-2.5 text-white bg-[#1B2B4B]">
+        <div className="leading-tight shrink-0 hidden sm:block">
+          <div className="text-[11px] font-extrabold tracking-[0.24em] text-[#8FB0F0]" style={{ fontVariantNumeric: "tabular-nums" }}>{tab === "invoice" ? "STATEMENT" : tab === "unsettledMonth" ? "RECEIVABLES" : "OUTBOX"}</div>
+          <div className="text-[16px] font-black text-white">{tab === "invoice" ? "거래명세서" : tab === "unsettledMonth" ? "미수금관리" : "보낸메일함"}</div>
+        </div>
+        <div className="inline-flex p-1 rounded-xl bg-white/[0.08] border border-white/15 overflow-x-auto" style={{ scrollbarWidth: "none" }}>
+          {[["invoice", "거래명세서", pipeRecent.find(r => r.ym === pipeMonth)?.open || 0], ["unsettledMonth", "미수금관리", arOpenClients.length], ["sentmails", "보낸메일함", 0]].map(([key, label, badge]) => (
+            <button key={key} type="button" onClick={() => setTab(key)}
+              className={`h-8 px-3.5 rounded-lg text-[14px] font-black transition inline-flex items-center gap-1.5 whitespace-nowrap ${tab === key ? "bg-white text-[#0F1A30] shadow-sm" : "text-white/70 hover:text-white"}`}>
+              {label}
+              {badge > 0 && <span className={`min-w-[20px] h-5 px-1 rounded-md text-[12px] font-black inline-flex items-center justify-center tabular-nums ${tab === key ? "bg-[#0F1A30] text-white" : "bg-white/15 text-white"}`}>{badge > 99 ? "99+" : badge}</span>}
+            </button>
+          ))}
+        </div>
+      </SubNavBar>
+      {csBiz.multi && (
+        <SubNavBar side="right" order={0}>
+          <div className="flex items-center gap-2" title={`거래명세서 · 미수금 · 메일이 ${csBizCur} 이름 · 사업자번호 · 계좌 · 직인으로 나가요`}>
+            <div className="leading-tight text-right hidden lg:block">
+              <div className="text-[11px] font-extrabold tracking-[0.24em] text-[#8FB0F0]">BILLING</div>
+              <div className="text-[13px] font-black text-white/80">청구 사업자</div>
+            </div>
+            <div className="inline-flex p-1 rounded-xl bg-white/[0.08] border border-white/15">
+              {csBiz.names.map((n) => (
+                <button key={n} type="button" onClick={() => setCsBizSel(n === csBiz.defaultName ? "" : n)} className={`h-8 px-3 rounded-lg text-[14px] font-black whitespace-nowrap transition ${csBizCur === n ? "bg-white text-[#0F1A30] shadow-sm" : "text-white/70 hover:text-white"}`}>{n}</button>
               ))}
             </div>
           </div>
-        </div>
-        {csBiz.multi && (
-          <div className="relative mt-2.5 text-[11.5px] text-white/55">거래명세서·미수금·메일이 <b className="text-white">{csBizCur}</b> 이름·사업자번호·계좌·직인으로 나갑니다</div>
-        )}
-      </div>
+        </SubNavBar>
+      )}
 
       {/* ══════════════ 거래명세서 탭 ══════════════ */}
+      {/* ⭐ 2026-11-07 리디자인 — ① 단계 보드(거래처 × 청구월: 미작성 → 작성 → 발송 → 거래처 확인 → 계산서 요청 → 계산서 발행 → 마감)
+           ② 명세서 편집(줄 편집 그리드 + A4 미리보기 나란히 · 한 번에 발송) — 인쇄 · PDF · 엑셀 · 메일 첨부는 예전 #invoiceArea 그대로 */}
       {tab === "invoice" && (
         <>
-          <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,43fr)_minmax(0,57fr)] gap-4 items-start">
-            {/* ── 왼쪽: 조회 · 합계 · 포함할 오더 · 발송 ── */}
-            <div className="space-y-3 min-w-0">
-              {/* 조회 조건 */}
-              <div className={`${csCard} p-4`}>
-                {csHead("QUERY", "조회 조건", (
-                  <div className={csSeg}>
-                    {["거래처명", "기사명"].map((t) => (
-                      <button key={t} type="button" className={csSegBtn(searchType === t)}
-                        onClick={() => { if (searchType === t) return; setSearchType(t); setSearchInput(""); setClient(""); setSearched(false); setDropdownOpen(false); }}>{t}</button>
-                    ))}
-                  </div>
-                ))}
-                {/* ★ 검색 입력 + 자동완성 드롭다운 */}
-                <label className={csLab}>{searchType}</label>
-                <div className="relative" ref={dropdownRef}>
-                  <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#9AA9C3] pointer-events-none" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="M20 20l-3.5-3.5" /></svg>
-                  <input autoComplete="off"
-                    ref={inputRef}
-                    className={`${csInp} pl-8`}
-                    placeholder={`${searchType} 입력 (자동완성)`}
-                    value={searchInput}
-                    onChange={e => {
-                      setSearchInput(e.target.value);
-                      setDropdownOpen(true);
-                      setDropdownIdx(0);
-                    }}
-                    onFocus={() => {
-                      if (searchInput.trim()) { setDropdownOpen(true); setDropdownIdx(0); }
-                    }}
-                    onKeyDown={handleInputKeyDown}
-                  />
-                  {dropdownOpen && dropdownOptions.length > 0 && (
-                    <div className="absolute z-50 left-0 right-0 mt-1 bg-white border border-[#DCE3EE] rounded-xl shadow-[0_12px_32px_rgba(15,26,48,0.16)] max-h-[260px] overflow-y-auto py-1">
-                      {dropdownOptions.map((name, i) => (
-                        <div
-                          key={name + i}
-                          ref={el => dropdownItemRefs.current[i] = el}
-                          className={`px-3.5 py-2 text-[13px] cursor-pointer transition ${
-                            i === dropdownIdx ? "bg-[#EEF2F8] text-[#0F1A30] font-bold" : "text-[#3A4A66] hover:bg-[#F4F6FA]"
-                          }`}
-                          onMouseEnter={() => setDropdownIdx(i)}
-                          onMouseDown={e => { e.preventDefault(); selectDropdownItem(name); }}
-                        >
-                          {(() => {
-                            const q = searchInput.trim();
-                            if (!q) return name;
-                            const idx = name.toLowerCase().indexOf(q.toLowerCase());
-                            if (idx < 0) return name;
-                            return (
-                              <>
-                                {name.slice(0, idx)}
-                                <span className="text-[#0F1A30] font-black underline decoration-[#8FB0F0] decoration-2 underline-offset-2">{name.slice(idx, idx + q.length)}</span>
-                                {name.slice(idx + q.length)}
-                              </>
-                            );
-                          })()}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
+          {invView === "board" && (
+            <StatementBoard month={pipeMonth} setMonth={setPipeMonth} recentMonths={pipeRecent} groups={pipeGroups}
+              onOpen={(g) => openStmt(g.client, g.yyyymm)} onAdvance={onStmtStage} onBulk={onStmtBulk} onManual={() => setManualOpen(true)}
+              bizLabel={csBiz.multi ? csBizCur : ""}
+              tools={<>
+                <button type="button" disabled={!batchSendList.length} onClick={() => setBatchSendOpen(true)} className={sdBtn} title="발송 목록">
+                  <Ico d={IC.list} size={15} />발송 목록<span className="min-w-[20px] h-5 px-1 rounded-md bg-[#EEF2F8] text-[#0F1A30] text-[12px] font-black inline-flex items-center justify-center tabular-nums">{batchSendList.length}</span>
+                </button>
+                <button type="button" onClick={() => setScheduledEmailListOpen(true)} className={sdBtn}>
+                  <Ico d={IC.clock} size={15} />예약메일{csPendingScheduled > 0 && <span className="min-w-[20px] h-5 px-1 rounded-md bg-[#0F1A30] text-white text-[12px] font-black inline-flex items-center justify-center tabular-nums">{csPendingScheduled}</span>}
+                </button>
+              </>} />
+          )}
 
-                {/* ★ 기간 + 퀵셀렉트 */}
-                <div className="mt-3 flex items-center justify-between gap-2">
-                  <label className={`${csLab} mb-0`}>기간 (상차일)</label>
-                  <div className={csSeg}>
-                    <button type="button" onClick={setThisMonth} className={csSegBtn(false)}><EditableText id="misc.btn.49310.이번달" defaultText="이번달" /></button>
-                    <button type="button" onClick={setLastMonth} className={csSegBtn(false)}><EditableText id="misc.btn.49311.지난달" defaultText="지난달" /></button>
-                    <button type="button" onClick={setThisYear} className={csSegBtn(false)}><EditableText id="misc.btn.49312.올해전체" defaultText="올해전체" /></button>
+          {invView === "edit" && (
+            <div className="space-y-3">
+              {/* 편집 머리 — 돌아가기 · 거래처 · 기간 · 이전/다음 · 작성 저장 · 발송 */}
+              <div className={`${csCard} px-4 py-3 flex items-center gap-3 flex-wrap`}>
+                <button type="button" onClick={() => { setInvView("board"); if (stmtYm) setPipeMonth(stmtYm); }} className={sdBtn}><Ico d={IC.back} size={15} w={2.4} />단계 보드</button>
+                <div className="min-w-0 mr-auto">
+                  <div className="text-[13px] font-bold text-[#5B6B85] tabular-nums">{stmtYm ? `${stmtYm.slice(0, 4)}년 ${Number(stmtYm.slice(5))}월 청구` : searched ? `${start || "처음"} ~ ${end || "끝"}` : "조회 전"}{searchType === "기사명" ? " · 기사명 조회" : ""}</div>
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="text-[19px] font-black text-[#0F1A30] truncate">{client || "거래처를 고르세요"}</span>
+                    {stmtYm && <StageBadge stage={stmtStage} />}
                   </div>
                 </div>
-                <div className="mt-1.5 grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-1.5">
-                  <CustomDatePicker className={`${csInp} text-left tabular-nums`} placeholder="시작일" value={start} onChange={e => setStart(e.target.value)} />
-                  <span className="text-[#9AA9C3] font-bold">~</span>
-                  <CustomDatePicker className={`${csInp} text-left tabular-nums`} placeholder="종료일" value={end} onChange={e => setEnd(e.target.value)} />
-                </div>
-
-                {/* ⭐ 2026-11-05 조회 버튼이 줄 전체를 차지해 너무 컸다 → 오른쪽 정렬 · 다른 도구 버튼과 같은 h-10 크기 */}
-                <div className="mt-3 flex items-center justify-end gap-2">
-                  <button type="button" className={csBtn}
-                    onClick={() => { setSearchInput(""); setClient(""); setStart(""); setEnd(""); setSearched(false); setDropdownOpen(false); }}>
-                    초기화
-                  </button>
-                  <button type="button" className={csBtnPri}
-                    onClick={() => {
-                      if (!searchInput.trim()) return showAlert("검색어를 입력하세요.");
-                      setClient(searchInput.trim());
-                      setSearched(true);
-                      setDropdownOpen(false);
-                    }}>
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="M20 20l-3.5-3.5" /></svg>
-                    조회
-                  </button>
-                </div>
+                {navIdx >= 0 && pipeNav.length > 1 && (
+                  <div className="flex items-center gap-1">
+                    <button type="button" disabled={navIdx <= 0} onClick={() => openStmt(pipeNav[navIdx - 1].client, pipeMonth)} className="w-10 h-10 rounded-xl border border-[#D5DDEA] text-[#1B2B4B] flex items-center justify-center disabled:opacity-30" aria-label="이전 거래처"><Ico d={IC.back} /></button>
+                    <span className="text-[13px] font-bold text-[#5B6B85] tabular-nums w-12 text-center">{navIdx + 1}/{pipeNav.length}</span>
+                    <button type="button" disabled={navIdx >= pipeNav.length - 1} onClick={() => openStmt(pipeNav[navIdx + 1].client, pipeMonth)} className="w-10 h-10 rounded-xl border border-[#D5DDEA] text-[#1B2B4B] flex items-center justify-center disabled:opacity-30" aria-label="다음 거래처"><Ico d={IC.next} /></button>
+                  </div>
+                )}
+                <button type="button" onClick={() => setManualOpen(true)} className={sdBtn}><Ico d={IC.search} size={15} />다른 조회</button>
+                {stmtYm && (stageIdx(stmtStage) === 0 || exNow !== exSaved) && (
+                  <button type="button" disabled={isViewer || !rowsInvoice.length} onClick={saveStmtDraft} className={sdBtn}><Ico d={IC.check} size={15} w={2.6} />{stageIdx(stmtStage) === 0 ? "작성 완료" : "포함 오더 저장"}</button>
+                )}
+                <button type="button" disabled={!searched || !rowsInvoice.length} onClick={openInvoiceEmail} className={sdBtnPri}><Ico d={IC.send} size={15} />발송</button>
               </div>
 
-              {/* 미조회 상태 */}
-              {!searched && (
-                <div className={`${csCard} px-5 py-8 text-center`}>
-                  <div className="text-[9.5px] font-extrabold tracking-[0.28em] text-[#9AA9C3]" style={{ fontFamily: KP_MONO, fontVariantNumeric: "tabular-nums" }}>READY</div>
-                  <div className="text-[14px] font-black text-[#0F1A30] mt-1.5">거래처명 또는 기사명을 입력 후 조회하세요.</div>
-                  <div className="text-[12px] mt-1 text-[#9AA9C3]">검색창에 입력하면 자동완성 목록이 표시됩니다</div>
+              {/* 단계 — 한 달 · 한 거래처로 연 명세서만 */}
+              {stmtYm ? (
+                <div className={`${csCard} px-4 py-3`}>
+                  <StageStepper stage={stmtStage} history={stmtCur?.history || []} disabled={isViewer}
+                    sentHint={stmtLogs[0]?.sentAt ? `${new Date(stmtLogs[0].sentAt + 9 * 3600e3).getUTCMonth() + 1}/${new Date(stmtLogs[0].sentAt + 9 * 3600e3).getUTCDate()}` : ""}
+                    onSet={(k) => {
+                      const g = { client, yyyymm: stmtYm, stage: stmtStage, count: mapped.length, supply: 합계공급가, vat: 합계세액, doc: stmtCur };
+                      if (k === "작성") { saveStmtDraft(); return; }
+                      if (k === "발송" && stageIdx(stmtStage) < 2) { openInvoiceEmail(); return; }
+                      setStageAsk({ stage: k, groups: [g] });
+                    }} />
                 </div>
-              )}
+              ) : searched ? (
+                <div className="rounded-2xl border border-dashed border-[#C9D3E3] bg-white px-4 py-3 text-[14px] text-[#5B6B85]">거래처 한 곳 · 한 달(1일~말일)로 열면 발송 · 확인 · 계산서 · 마감 단계를 기록할 수 있어요</div>
+              ) : null}
 
-              {/* 조회 결과 합계 — 디지털 계기판 */}
-              {searched && (
-                <div className="relative overflow-hidden rounded-2xl p-4 text-white" style={{ background: "linear-gradient(120deg,#0B1428 0%,#1B2B4B 100%)" }}>
-                  <div className="absolute inset-0 pointer-events-none" style={{ background: csGrid }} />
-                  <div className="relative flex items-center gap-2">
-                    <span className="text-[9.5px] font-extrabold tracking-[0.24em] text-[#8FB0F0]" style={{ fontFamily: KP_MONO, fontVariantNumeric: "tabular-nums" }}>TOTAL · 청구 합계</span>
-                    <span className="ml-auto text-[11px] font-bold text-white/60 tabular-nums" style={{ fontFamily: KP_MONO, fontVariantNumeric: "tabular-nums" }}>조회 {rowsInvoice.length}건 중 <b className="text-white">{mapped.length}건 선택</b></span>
-                  </div>
-                  <div className="relative mt-1 text-[26px] font-black tabular-nums leading-tight" style={{ fontFamily: KP_MONO, fontVariantNumeric: "tabular-nums" }}>
-                    {won(합계공급가 + 합계세액)}<span className="ml-1 text-[13px] font-bold text-white/45">원</span>
-                  </div>
-                  <div className="relative mt-3 grid grid-cols-3 gap-2">
-                    {[["SUPPLY", "공급가액", won(합계공급가), "원"], ["VAT", "세액", won(합계세액), "원"], ["ORDERS", "명세 건수", mapped.length.toLocaleString(), "건"]].map(([en, k, v, u]) => (
-                      <div key={en} className="rounded-xl px-3 py-2 bg-white/[0.05] border border-white/[0.12] min-w-0">
-                        <div className="flex items-center gap-1.5"><span className="text-[9px] font-extrabold tracking-[0.2em] text-white/40" style={{ fontFamily: KP_MONO, fontVariantNumeric: "tabular-nums" }}>{en}</span><span className="text-[10.5px] font-bold text-white/60 truncate">{k}</span></div>
-                        <div className="text-[14.5px] font-black tabular-nums text-[#CFE0FF] truncate" style={{ fontFamily: KP_MONO, fontVariantNumeric: "tabular-nums" }}>{v}<span className="ml-0.5 text-[10px] font-bold text-white/40">{u}</span></div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-              {/* ⭐ 2026-11-02 운임규칙 — 선택 기간·거래처의 운임구분별 합계(규칙 사용 회사만) */}
-              {searched && fareRC.on && selectedRowsInvoice.length > 0 && <FareTypeBreakdown rows={selectedRowsInvoice} title="운임구분별 합계 (선택한 오더)" />}
-
+              <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,44fr)_minmax(0,56fr)] gap-3 items-start">
+                <div className="space-y-3 min-w-0">
+                  {!searched ? (
+                    <div className={`${csCard} px-5 py-10 text-center`}>
+                      <div className="text-[16px] font-black text-[#0F1A30]">거래처를 조회해 주세요</div>
+                      <div className="text-[14px] mt-1 text-[#9AA9C3]">단계 보드에서 거래처를 열거나, 다른 조회로 기사명 · 기간을 직접 고를 수 있어요</div>
+                      <button type="button" onClick={() => setManualOpen(true)} className={`${sdBtnPri} mt-4`}><Ico d={IC.search} size={15} />조회하기</button>
+                    </div>
+                  ) : rowsInvoice.length === 0 ? (
+                    <div className={`${csCard} px-5 py-10 text-center`}>
+                      <div className="text-[16px] font-black text-[#0F1A30]">조회된 오더가 없어요</div>
+                      <div className="text-[14px] mt-1 text-[#9AA9C3]">배차완료 · 청구운임이 있는 오더만 명세서에 들어가요</div>
+                    </div>
+                  ) : (
+                    <StatementLineGrid rows={rowsInvoice} included={selectedInvoiceIds} readOnly={isViewer}
+                      onToggle={(id, on) => (on ? restoreInvoiceRow(id) : excludeInvoiceRow(id))}
+                      onToggleAll={(on) => setSelectedInvoiceIds(on ? new Set(rowsInvoice.map(r => r._id)) : new Set())}
+                      onOpenOrder={openOrderPopup}
+                      onAmount={async (r, v) => {
+                        if (isViewer) return showAlert("조회전용 권한으로는 수정할 수 없습니다.");
+                        if (!r._id || typeof patchDispatch !== "function") return;
+                        await patchDispatch(r._id, { 청구운임: v });
+                        if (typeof setDispatchData === "function") setDispatchData(prev => prev.map(d => (d._id === r._id ? { ...d, 청구운임: v } : d)));
+                      }} />
+                  )}
+                  {searched && fareRC.on && selectedRowsInvoice.length > 0 && <FareTypeBreakdown rows={selectedRowsInvoice} title="운임구분별 합계 (선택한 오더)" />}
               {/* ★ 월별 소계 */}
-              {searched && monthlySubtotals.size > 0 && (
+              {searched && monthlySubtotals.size > 1 && (
                 <div className={`${csCard} p-4`}>
                   {csHead("MONTHLY", "월별 소계")}
                   <div className="rounded-xl border border-[#E3E8F0] overflow-hidden">
@@ -53131,93 +53326,19 @@ const handleBatchSettle = async (targetStatus) => {
                 </div>
               )}
 
-              {/* ⭐ 명세서에 넣을 오더 — 체크를 끄면 명세서에서 빠진다(예전 미리보기 안 "편집" 모드를 이 목록으로 옮김) */}
-              {searched && (
-                <div className={`${csCard} p-4`}>
-                  {csHead("LINES", "명세서 포함 오더", (
-                    <>
-                      <span className="text-[11.5px] font-bold text-[#5B6B85] tabular-nums" style={{ fontFamily: KP_MONO, fontVariantNumeric: "tabular-nums" }}>{mapped.length}/{rowsInvoice.length}</span>
-                      {excludedRowsInvoice.length > 0 && (
-                        <button type="button" onClick={() => setSelectedInvoiceIds(new Set(rowsInvoice.map(r => r._id)))}
-                          className="h-7 px-2.5 rounded-lg border border-[#D5DDEA] text-[#1B2B4B] text-[11.5px] font-bold hover:bg-[#F4F6FA]">모두 되돌리기 ({excludedRowsInvoice.length}건)</button>
-                      )}
-                    </>
-                  ))}
-                  {rowsInvoice.length === 0 ? (
-                    <div className="rounded-xl border border-dashed border-[#DCE3EE] py-8 text-center text-[12.5px] text-[#9AA9C3]">조회 결과가 없습니다. (청구운임 0원인 오더는 제외됩니다)</div>
-                  ) : (
-                    <div className="rounded-xl border border-[#E3E8F0] overflow-hidden">
-                      <div className="max-h-[420px] overflow-y-auto">
-                        <table className="w-full text-[12.5px]" style={{ tableLayout: "fixed" }}>
-                          <colgroup>
-                            <col style={{ width: 34 }} />
-                            <col style={{ width: 84 }} />
-                            <col />
-                            <col style={{ width: 64 }} />
-                            <col style={{ width: 92 }} />
-                          </colgroup>
-                          <thead>
-                            <tr className="text-[#5B6B85]">
-                              <th className="sticky top-0 z-10 bg-[#F4F6FA] px-2 py-1.5 text-center">
-                                <input type="checkbox" className="accent-[#0F1A30] cursor-pointer"
-                                  checked={rowsInvoice.length > 0 && excludedRowsInvoice.length === 0}
-                                  onChange={() => { if (excludedRowsInvoice.length) setSelectedInvoiceIds(new Set(rowsInvoice.map(r => r._id))); }}
-                                  title="모두 포함" />
-                              </th>
-                              <th className="sticky top-0 z-10 bg-[#F4F6FA] px-2 py-1.5 text-left font-black">날짜</th>
-                              <th className="sticky top-0 z-10 bg-[#F4F6FA] px-2 py-1.5 text-left font-black">상차지 → 하차지</th>
-                              <th className="sticky top-0 z-10 bg-[#F4F6FA] px-2 py-1.5 text-left font-black">기사</th>
-                              <th className="sticky top-0 z-10 bg-[#F4F6FA] px-2 py-1.5 text-right font-black">청구운임</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {rowsInvoice.map((r) => {
-                              const on = selectedInvoiceIds.has(r._id);
-                              return (
-                                <tr key={r._id} className={`border-t border-[#EEF2F8] cursor-pointer transition ${on ? "hover:bg-[#F4F6FA]" : "bg-[#FAFBFD] text-[#9AA9C3] hover:bg-[#F4F6FA]"}`}
-                                  onClick={() => openOrderPopup(r)} title="클릭하여 상세보기">
-                                  <td className="px-2 py-1.5 text-center" onClick={(e) => e.stopPropagation()}>
-                                    <input type="checkbox" className="accent-[#0F1A30] cursor-pointer" checked={on}
-                                      onChange={() => (on ? excludeInvoiceRow(r._id) : restoreInvoiceRow(r._id))}
-                                      title={on ? "이 명세서에서 빼기" : "되돌리기"} />
-                                  </td>
-                                  <td className={`px-2 py-1.5 tabular-nums whitespace-nowrap ${on ? "text-[#3A4A66]" : "line-through"}`} style={{ fontFamily: KP_MONO, fontVariantNumeric: "tabular-nums", fontSize: 11.5 }}>{(r.상차일 || "").slice(2)}</td>
-                                  <td className={`px-2 py-1.5 truncate ${on ? "text-[#0F1A30] font-semibold" : "line-through"}`} title={`${r.상차지명 || r.상차지 || ""} → ${r.하차지명 || r.하차지 || ""}`}>
-                                    {r.상차지명 || r.상차지 || "-"} <span className="text-[#9AA9C3]">→</span> {r.하차지명 || r.하차지 || "-"}
-                                  </td>
-                                  <td className="px-2 py-1.5 truncate">{r.이름 || r.기사명 || ""}</td>
-                                  <td className={`px-2 py-1.5 text-right tabular-nums font-bold ${on ? "text-[#0F1A30]" : "line-through"}`} style={{ fontFamily: KP_MONO, fontVariantNumeric: "tabular-nums", fontSize: 11.5 }}>{won(toInt(r.청구운임))}</td>
-                                </tr>
-                              );
-                            })}
-                          </tbody>
-                        </table>
+                  {stmtYm && (
+                    <div className={`${csCard} p-4`}>
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="text-[15px] font-black text-[#0F1A30]">이력</div>
+                        <span className="text-[13px] text-[#9AA9C3]">단계 기록 · 보낸 메일</span>
                       </div>
+                      <StatementHistory history={stmtCur?.history || []} logs={stmtLogs} />
                     </div>
                   )}
-                  <div className="mt-2 text-[11px] text-[#9AA9C3]">체크를 끄면 명세서에서 빠집니다 · 줄을 누르면 오더 상세</div>
-                </div>
-              )}
-
               {/* 발송 */}
               <div className={`${csCard} p-4`}>
                 {csHead("DELIVERY", "메일 발송")}
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (!searched || !rowsInvoice.length) return showAlert("먼저 조회를 실행하세요.");
-                    const found = (clients||[]).find(c=>c.거래처명===client);
-                    setEmailTo(found?.연락처이메일 || found?.이메일 || "");
-                    setEmailBody(`안녕하세요, ${client} 담당자님.\n\n${COMPANY_PRINT.name}입니다.\n\n${start||""}~${end||""} 기간 거래명세서를 발송드립니다.\n\n총 ${mapped.length}건\n공급가액: ${won(합계공급가)}원\n부가세: ${won(합계세액)}원\n합계: ${won(합계공급가+합계세액)}원\n\n입금계좌: ${COMPANY_PRINT.bank}\n마감문의: ${COMPANY_PRINT.phone || "-"}\n\n확인 부탁드립니다.\n감사합니다.\n\n${COMPANY_PRINT.name}\n${COMPANY_PRINT.contact}`);
-                    setEmailScheduleOn(false); setEmailScheduleAt("");
-                    setEmailModalOpen(true);
-                  }}
-                  className={`${csBtnPri} w-full`}
-                >
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 2L11 13" /><path d="M22 2l-7 20-4-9-9-4z" /></svg>
-                  명세서 발송
-                </button>
-                <div className="mt-2 grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                   <button
                     type="button"
                     onClick={() => {
@@ -53274,8 +53395,7 @@ const handleBatchSettle = async (targetStatus) => {
                   </button>
                 </div>
               </div>
-            </div>
-
+                </div>
             {/* ── 오른쪽: 명세서 미리보기(인쇄·PDF·엑셀·메일 첨부와 같은 모양) ── */}
             <div className="min-w-0 xl:sticky xl:top-3">
               <div className={`${csCard} overflow-hidden flex flex-col xl:max-h-[calc(100vh-24px)]`}>
@@ -53286,7 +53406,7 @@ const handleBatchSettle = async (targetStatus) => {
                   </div>
                   <button type="button" onClick={() => { setEditInfo({ ...cInfo }); setShowEdit(true); }} className={csBtn}><EditableText id="misc.btn.49404.거래처 정보" defaultText="거래처 정보" /></button>
                   <span className="w-px h-5 bg-[#E3E8F0]" />
-                  <button type="button" disabled={!searched} onClick={downloadInvoiceExcel} className={csBtn}><EditableText id="misc.btn.49332.엑셀다운로드" defaultText="엑셀 다운로드" /></button>
+                  <button type="button" disabled={!searched} onClick={downloadInvoiceExcel} className={csBtn}><EditableText id="misc.btn.49332.엑셀다운로드" defaultText="엑셀" /></button>
                   <button type="button" disabled={!searched} onClick={savePDF} className={csBtn}>PDF</button>
                   <button type="button" disabled={!searched} onClick={handlePrint} className={csBtnPri}>
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9V3h12v6" /><rect x="4" y="9" width="16" height="8" rx="2" /><path d="M7 14h10v7H7z" /></svg>
@@ -53491,19 +53611,110 @@ const handleBatchSettle = async (targetStatus) => {
                 </div>
               </div>
             </div>
-          </div>
+              </div>
+            </div>
+          )}
+
+          {/* 직접 조회(기사명 · 여러 달 · 직접 기간) */}
+          <KpModal open={manualOpen} onClose={() => setManualOpen(false)} en="QUERY" title="직접 조회" sub="거래처명 · 기사명과 기간으로 명세서를 만들어요" width={520} bodyClass="p-5 min-h-[420px]"
+            footer={<>
+              <button type="button" className={sdBtn} onClick={() => { setSearchInput(""); setClient(""); setStart(""); setEnd(""); setSearched(false); setDropdownOpen(false); }}>초기화</button>
+              <button type="button" className={sdBtnPri} onClick={() => {
+                if (!searchInput.trim()) return showAlert("검색어를 입력하세요.");
+                stmtExRef.current = [];
+                setClient(searchInput.trim()); setSearched(true); setDropdownOpen(false); setManualOpen(false); setInvView("edit");
+              }}><Ico d={IC.search} size={15} />조회</button>
+            </>}>
+              {/* 조회 조건 */}
+              <div>
+                {csHead("QUERY", "조회 조건", (
+                  <div className={csSeg}>
+                    {["거래처명", "기사명"].map((t) => (
+                      <button key={t} type="button" className={csSegBtn(searchType === t)}
+                        onClick={() => { if (searchType === t) return; setSearchType(t); setSearchInput(""); setClient(""); setSearched(false); setDropdownOpen(false); }}>{t}</button>
+                    ))}
+                  </div>
+                ))}
+                {/* ★ 검색 입력 + 자동완성 드롭다운 */}
+                <label className={csLab}>{searchType}</label>
+                <div className="relative" ref={dropdownRef}>
+                  <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#9AA9C3] pointer-events-none" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="M20 20l-3.5-3.5" /></svg>
+                  <input autoComplete="off"
+                    ref={inputRef}
+                    className={`${csInp} pl-8`}
+                    placeholder={`${searchType} 입력 (자동완성)`}
+                    value={searchInput}
+                    onChange={e => {
+                      setSearchInput(e.target.value);
+                      setDropdownOpen(true);
+                      setDropdownIdx(0);
+                    }}
+                    onFocus={() => {
+                      if (searchInput.trim()) { setDropdownOpen(true); setDropdownIdx(0); }
+                    }}
+                    onKeyDown={handleInputKeyDown}
+                  />
+                  {dropdownOpen && dropdownOptions.length > 0 && (
+                    <div className="absolute z-50 left-0 right-0 mt-1 bg-white border border-[#DCE3EE] rounded-xl shadow-[0_12px_32px_rgba(15,26,48,0.16)] max-h-[260px] overflow-y-auto py-1">
+                      {dropdownOptions.map((name, i) => (
+                        <div
+                          key={name + i}
+                          ref={el => dropdownItemRefs.current[i] = el}
+                          className={`px-3.5 py-2 text-[13px] cursor-pointer transition ${
+                            i === dropdownIdx ? "bg-[#EEF2F8] text-[#0F1A30] font-bold" : "text-[#3A4A66] hover:bg-[#F4F6FA]"
+                          }`}
+                          onMouseEnter={() => setDropdownIdx(i)}
+                          onMouseDown={e => { e.preventDefault(); selectDropdownItem(name); }}
+                        >
+                          {(() => {
+                            const q = searchInput.trim();
+                            if (!q) return name;
+                            const idx = name.toLowerCase().indexOf(q.toLowerCase());
+                            if (idx < 0) return name;
+                            return (
+                              <>
+                                {name.slice(0, idx)}
+                                <span className="text-[#0F1A30] font-black underline decoration-[#8FB0F0] decoration-2 underline-offset-2">{name.slice(idx, idx + q.length)}</span>
+                                {name.slice(idx + q.length)}
+                              </>
+                            );
+                          })()}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* ★ 기간 + 퀵셀렉트 */}
+                <div className="mt-3 flex items-center justify-between gap-2">
+                  <label className={`${csLab} mb-0`}>기간 (상차일)</label>
+                  <div className={csSeg}>
+                    <button type="button" onClick={setThisMonth} className={csSegBtn(false)}><EditableText id="misc.btn.49310.이번달" defaultText="이번달" /></button>
+                    <button type="button" onClick={setLastMonth} className={csSegBtn(false)}><EditableText id="misc.btn.49311.지난달" defaultText="지난달" /></button>
+                    <button type="button" onClick={setThisYear} className={csSegBtn(false)}><EditableText id="misc.btn.49312.올해전체" defaultText="올해전체" /></button>
+                  </div>
+                </div>
+                <div className="mt-1.5 grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-1.5">
+                  <CustomDatePicker className={`${csInp} text-left tabular-nums`} placeholder="시작일" value={start} onChange={e => setStart(e.target.value)} />
+                  <span className="text-[#9AA9C3] font-bold">~</span>
+                  <CustomDatePicker className={`${csInp} text-left tabular-nums`} placeholder="종료일" value={end} onChange={e => setEnd(e.target.value)} />
+                </div>
+
+              </div>
+          </KpModal>
+
           {/* ★ 오더 상세 팝업 */}
           {orderPopup && (
-            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]">
-              <div className="bg-white rounded-2xl shadow-2xl w-[560px] max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+            <div className="kp-modal fixed inset-0 bg-[#0B1428]/55 backdrop-blur-[2px] flex items-end sm:items-center justify-center sm:p-4 z-[99999]">
+              <div className="kp-modal-panel bg-white rounded-t-[22px] sm:rounded-[22px] shadow-[0_24px_64px_rgba(11,20,40,0.35)] w-full max-w-[560px] max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
                 {/* 헤더 */}
-                <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between rounded-t-2xl">
-                  <h3 className="text-white font-bold text-[15px]"><EditableText id="popup.title.오더 상세" defaultText="오더 상세" /></h3>
-                  <button className="text-white/60 hover:text-white text-lg" onClick={() => setOrderPopup(null)}>✕</button>
+                <div className="kp-modal-head px-6 py-4 flex items-center justify-between shrink-0">
+                  <h3 className="text-white font-black text-[18px]"><EditableText id="popup.title.오더 상세" defaultText="오더 상세" /></h3>
+                  <button aria-label="닫기" className="kp-modal-x shrink-0 w-9 h-9 rounded-xl bg-white/10 hover:bg-white/20 text-white text-[20px] leading-none flex items-center justify-center" onClick={() => setOrderPopup(null)}>✕</button>
                 </div>
 
                 {/* 오더 요약 (읽기전용) */}
-                <div className="px-6 py-3 bg-gray-50 border-b text-[13px] text-gray-600">
+                <div className="px-6 py-3 bg-[#F8FAFD] border-b text-[13px] text-[#5B6B85]">
                   <span className="font-bold text-[#1B2B4B]">{orderPopup.상차일 || ""}</span>
                   <span className="mx-2">|</span>
                   <span>{orderPopup.거래처명 || ""}</span>
@@ -53526,9 +53737,9 @@ const handleBatchSettle = async (targetStatus) => {
                     { key: "비고", label: "비고" },
                   ].map(({ key, label }) => (
                     <div key={key}>
-                      <label className="text-[12px] font-semibold text-gray-500 mb-1 block">{label}</label>
+                      <label className="text-[12px] font-semibold text-[#7A89A3] mb-1 block">{label}</label>
                       <input autoComplete="off"
-                        className="border-2 border-gray-200 rounded-lg px-3 py-2 w-full text-[13px] focus:border-[#1B2B4B] outline-none"
+                        className="border border-[#D5DDEA] rounded-xl px-3 py-2 w-full text-[13px] focus:border-[#1B2B4B] outline-none"
                         value={orderPopupEdit[key] || ""}
                         onChange={e => setOrderPopupEdit(prev => ({ ...prev, [key]: e.target.value }))}
                       />
@@ -53537,9 +53748,9 @@ const handleBatchSettle = async (targetStatus) => {
                 </div>
 
                 {/* 하단 버튼 */}
-                <div className="px-6 pb-5 flex gap-3">
+                <div className="kp-modal-foot px-6 py-4 flex gap-3">
                   <button
-                    className="flex-1 py-2.5 rounded-xl bg-gray-100 text-gray-700 font-semibold hover:bg-gray-200 transition"
+                    className="flex-1 py-2.5 rounded-xl bg-white border border-[#D5DDEA] text-[#1B2B4B] font-semibold hover:bg-[#F4F6FA] transition"
                     onClick={() => setOrderPopup(null)}
                   >
                     <EditableText id="orderPopup.닫기" defaultText="닫기" />
@@ -53577,23 +53788,23 @@ const handleBatchSettle = async (targetStatus) => {
           )}
 {/* ── 일반 이메일 발송 모달 ── */}
           {generalEmailOpen && (
-            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]">
-              <div className="bg-white rounded-2xl shadow-2xl w-[560px] max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-                <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between rounded-t-2xl">
+            <div className="kp-modal fixed inset-0 bg-[#0B1428]/55 backdrop-blur-[2px] flex items-end sm:items-center justify-center sm:p-4 z-[99999]">
+              <div className="kp-modal-panel bg-white rounded-t-[22px] sm:rounded-[22px] shadow-[0_24px_64px_rgba(11,20,40,0.35)] w-full max-w-[560px] max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+                <div className="kp-modal-head px-6 py-4 flex items-center justify-between shrink-0">
                   <div>
-                    <div className="text-white font-bold text-[15px]">일반 이메일 발송</div>
-                    <div className="text-white/60 text-[11px] mt-0.5">거래명세서·미수금과 무관한 자유 형식 이메일</div>
+                    <div className="text-white font-black text-[18px]">일반 이메일 발송</div>
+                    <div className="text-white/70 text-[14px] mt-0.5">거래명세서·미수금과 무관한 자유 형식 이메일</div>
                   </div>
-                  <button className="text-white/60 hover:text-white text-xl" onClick={() => setGeneralEmailOpen(false)}>×</button>
+                  <button aria-label="닫기" className="kp-modal-x shrink-0 w-9 h-9 rounded-xl bg-white/10 hover:bg-white/20 text-white text-[20px] leading-none flex items-center justify-center" onClick={() => setGeneralEmailOpen(false)}>×</button>
                 </div>
                 <div className="p-6 space-y-4">
                   {/* ⭐ 2026-11-06 보내는 사람(이름·이메일) 직접 입력 */}
                   <div data-genmail-from className="rounded-xl border border-[#D5E0F2] bg-[#F5F8FD] p-3.5">
                     <div className="text-[13px] font-black text-[#0F1A30] mb-2">보내는 사람</div>
                     <div className="grid grid-cols-[1fr_1.4fr] gap-2">
-                      <input autoComplete="off" data-genmail-from-name className="border-2 border-gray-300 rounded-lg px-3 py-2.5 text-[13px] outline-none focus:border-[#1B2B4B] bg-white"
+                      <input autoComplete="off" data-genmail-from-name className="border border-[#D5DDEA] rounded-xl px-3 py-2.5 text-[13px] outline-none focus:border-[#1B2B4B] bg-white"
                         placeholder="이름 (예: 홍길동 · 배차팀)" maxLength={60} value={generalEmailFromName} onChange={e => setGeneralEmailFromName(e.target.value)} />
-                      <input autoComplete="off" type="email" data-genmail-from-email className={`border-2 rounded-lg px-3 py-2.5 text-[13px] outline-none bg-white ${generalEmailFromAddr.trim() && !GEN_MAIL_RE.test(generalEmailFromAddr.trim()) ? "border-[#B42318]" : "border-gray-300 focus:border-[#1B2B4B]"}`}
+                      <input autoComplete="off" type="email" data-genmail-from-email className={`border-2 rounded-lg px-3 py-2.5 text-[13px] outline-none bg-white ${generalEmailFromAddr.trim() && !GEN_MAIL_RE.test(generalEmailFromAddr.trim()) ? "border-[#B42318]" : "border-[#D5DDEA] focus:border-[#1B2B4B]"}`}
                         placeholder="답장 받을 이메일 (예: me@company.com)" value={generalEmailFromAddr} onChange={e => setGeneralEmailFromAddr(e.target.value)} />
                     </div>
                     {generalEmailFromAddr.trim() && !GEN_MAIL_RE.test(generalEmailFromAddr.trim()) && <div className="mt-1.5 text-[12px] font-bold text-[#B42318]">이메일 형식이 올바르지 않습니다.</div>}
@@ -53603,10 +53814,10 @@ const handleBatchSettle = async (targetStatus) => {
                     </div>
                   </div>
                   <div>
-                    <label className="text-[13px] font-bold text-gray-700 mb-1 block">수신 이메일</label>
+                    <label className="text-[13px] font-bold text-[#3A4A66] mb-1 block">수신 이메일</label>
                     <div className="relative">
                       <div className="flex gap-2">
-                        <input autoComplete="off" className="flex-1 border-2 border-gray-300 rounded-lg px-3 py-2.5 text-[13px] outline-none focus:border-[#1B2B4B]"
+                        <input autoComplete="off" className="flex-1 border border-[#D5DDEA] rounded-xl px-3 py-2.5 text-[13px] outline-none focus:border-[#1B2B4B]"
                           placeholder="이메일 주소 (여러 명: 쉼표로 구분)" value={generalEmailTo} onChange={e => setGeneralEmailTo(e.target.value)} />
                         <button type="button"
                           onClick={() => { setGeneralEmailAddrOpen(p => !p); setGeneralEmailAddrQuery(""); }}
@@ -53615,9 +53826,9 @@ const handleBatchSettle = async (targetStatus) => {
                         </button>
                       </div>
                       {generalEmailAddrOpen && (
-                        <div className="absolute z-[200] top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-xl max-h-60 overflow-y-auto">
-                          <div className="p-2 border-b border-gray-100 sticky top-0 bg-white">
-                            <input autoComplete="off" className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-[12px] outline-none"
+                        <div className="absolute z-[200] top-full left-0 right-0 mt-1 bg-white border border-[#E3E8F0] rounded-xl shadow-xl max-h-60 overflow-y-auto">
+                          <div className="p-2 border-b border-[#EEF2F8] sticky top-0 bg-white">
+                            <input autoComplete="off" className="w-full border border-[#E3E8F0] rounded-lg px-3 py-1.5 text-[12px] outline-none"
                               placeholder="거래처명으로 검색" value={generalEmailAddrQuery}
                               onChange={e => { setGeneralEmailAddrQuery(e.target.value); setGeneralEmailAddrActiveIdx(0); }}
                               onKeyDown={e => {
@@ -53639,7 +53850,7 @@ const handleBatchSettle = async (targetStatus) => {
                               ref={imeFocusRef} />
                           </div>
                           {(clients || []).filter(c => c.이메일 && (!generalEmailAddrQuery || (c.거래처명||"").includes(generalEmailAddrQuery))).length === 0 ? (
-                            <div className="px-4 py-6 text-center text-[13px] text-gray-500">
+                            <div className="px-4 py-6 text-center text-[13px] text-[#7A89A3]">
                               {generalEmailAddrQuery ? "검색 결과 없음" : "등록된 이메일 없음 (거래처관리에서 이메일 등록)"}
                             </div>
                           ) : (clients || []).filter(c => c.이메일 && (!generalEmailAddrQuery || (c.거래처명||"").includes(generalEmailAddrQuery))).map((c, i) => (
@@ -53655,7 +53866,7 @@ const handleBatchSettle = async (targetStatus) => {
                                 setGeneralEmailAddrOpen(false);
                               }}>
                               <span className="font-semibold text-[#1B2B4B]">{c.거래처명}</span>
-                              <span className="text-gray-500 text-[12px]">{c.이메일}</span>
+                              <span className="text-[#7A89A3] text-[12px]">{c.이메일}</span>
                             </div>
                           ))}
                         </div>
@@ -53663,21 +53874,21 @@ const handleBatchSettle = async (targetStatus) => {
                     </div>
                   </div>
                   <div>
-                    <label className="text-[13px] font-bold text-gray-700 mb-1 block">제목</label>
-                    <input autoComplete="off" className="w-full border-2 border-gray-300 rounded-lg px-3 py-2.5 text-[13px] outline-none focus:border-[#1B2B4B]"
+                    <label className="text-[13px] font-bold text-[#3A4A66] mb-1 block">제목</label>
+                    <input autoComplete="off" className="w-full border border-[#D5DDEA] rounded-xl px-3 py-2.5 text-[13px] outline-none focus:border-[#1B2B4B]"
                       placeholder="이메일 제목 입력" value={generalEmailSubject} onChange={e => setGeneralEmailSubject(e.target.value)} />
                   </div>
                   <div>
                     <div className="flex items-center justify-between mb-1">
-                      <label className="text-[13px] font-bold text-gray-700">본문</label>
+                      <label className="text-[13px] font-bold text-[#3A4A66]">본문</label>
                       <span className="text-[11px] text-[#1B2B4B]">직접 작성</span>
                     </div>
-                    <textarea className="w-full border-2 border-gray-300 rounded-lg px-4 py-3 text-[13px] leading-relaxed resize-none outline-none focus:border-[#1B2B4B]"
+                    <textarea className="w-full border border-[#D5DDEA] rounded-xl px-4 py-3 text-[13px] leading-relaxed resize-none outline-none focus:border-[#1B2B4B]"
                       rows={10} value={generalEmailBody} onChange={e => setGeneralEmailBody(e.target.value)} />
                   </div>
                   <div>
-                    <label className="text-[13px] font-bold text-gray-700 mb-1 block">파일 첨부 (선택)</label>
-                    <div className="border-2 border-dashed border-gray-300 rounded-xl p-3">
+                    <label className="text-[13px] font-bold text-[#3A4A66] mb-1 block">파일 첨부 (선택)</label>
+                    <div className="border-2 border-dashed border-[#D5DDEA] rounded-xl p-3">
                       <label className="flex items-center gap-2 cursor-pointer text-[13px] text-[#1B2B4B] hover:text-[#1B2B4B]">
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
                         파일 선택 (이미지, PDF, Excel 등)
@@ -53723,13 +53934,13 @@ const handleBatchSettle = async (targetStatus) => {
                       {generalEmailFiles.length > 0 && (
                         <div className="mt-2 space-y-1">
                           {generalEmailFiles.map((f, i) => (
-                            <div key={i} className="flex items-center justify-between text-[12px] bg-gray-50 rounded px-2 py-1">
-                              <span className="truncate text-gray-700">{f.name}</span>
-                              <span className="text-gray-500 ml-2 shrink-0">{f.size > 1024*1024 ? `${(f.size/1024/1024).toFixed(1)}MB` : `${Math.round(f.size/1024)}KB`}</span>
+                            <div key={i} className="flex items-center justify-between text-[12px] bg-[#F8FAFD] rounded px-2 py-1">
+                              <span className="truncate text-[#3A4A66]">{f.name}</span>
+                              <span className="text-[#7A89A3] ml-2 shrink-0">{f.size > 1024*1024 ? `${(f.size/1024/1024).toFixed(1)}MB` : `${Math.round(f.size/1024)}KB`}</span>
                               <button onClick={() => setGeneralEmailFiles(prev => prev.filter((_, j) => j !== i))} className="text-[#0B1428] hover:text-[#0B1428] ml-2 shrink-0">×</button>
                             </div>
                           ))}
-                          <div className="text-[11px] text-gray-500 text-right pt-1">
+                          <div className="text-[11px] text-[#7A89A3] text-right pt-1">
                             총 {(generalEmailFiles.reduce((s,f)=>s+(f.size||0),0)/1024/1024).toFixed(1)}MB (권장 4MB 이하)
                           </div>
                         </div>
@@ -53737,34 +53948,34 @@ const handleBatchSettle = async (targetStatus) => {
                     </div>
                   </div>
                   {/* 명함 포함 토글 */}
-                  <div className="flex items-center justify-between bg-gray-50 rounded-xl px-4 py-3 border border-gray-200">
+                  <div className="flex items-center justify-between bg-[#F8FAFD] rounded-xl px-4 py-3 border border-[#E3E8F0]">
                     <div>
-                      <div className="text-[13px] font-bold text-gray-700">명함 이미지 포함</div>
-                      <div className="text-[11px] text-gray-500">{cardImage ? "내 정보에서 등록한 명함이 첨부됩니다" : "명함 미등록 (내 정보에서 업로드)"}</div>
+                      <div className="text-[13px] font-bold text-[#3A4A66]">명함 이미지 포함</div>
+                      <div className="text-[11px] text-[#7A89A3]">{cardImage ? "내 정보에서 등록한 명함이 첨부됩니다" : "명함 미등록 (내 정보에서 업로드)"}</div>
                     </div>
                     <button onClick={() => setIncludeCardGeneral(v => !v)} disabled={!cardImage}
-                      className={`relative w-11 h-6 rounded-full transition-colors duration-200 ${includeCardGeneral && cardImage ? "bg-[#1B2B4B]" : "bg-gray-300"} ${!cardImage ? "opacity-40 cursor-not-allowed" : "cursor-pointer"}`}>
+                      className={`relative w-11 h-6 rounded-full transition-colors duration-200 ${includeCardGeneral && cardImage ? "bg-[#1B2B4B]" : "bg-[#C9D3E3]"} ${!cardImage ? "opacity-40 cursor-not-allowed" : "cursor-pointer"}`}>
                       <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform duration-200 ${includeCardGeneral && cardImage ? "translate-x-5" : "translate-x-0"}`} />
                     </button>
                   </div>
 
                   {/* 예약발송 */}
-                  <div className="bg-gray-50 rounded-xl px-4 py-3 border border-gray-200">
+                  <div className="bg-[#F8FAFD] rounded-xl px-4 py-3 border border-[#E3E8F0]">
                     <label className="flex items-center gap-2 cursor-pointer">
                       <input type="checkbox" className="w-4 h-4 accent-[#1B2B4B]"
                         checked={generalEmailScheduleOn}
                         onChange={(e) => setGeneralEmailScheduleOn(e.target.checked)} />
-                      <span className="text-[13px] font-bold text-gray-700">예약발송</span>
+                      <span className="text-[13px] font-bold text-[#3A4A66]">예약발송</span>
                     </label>
                     {generalEmailScheduleOn && (
-                      <DateTimeSelect className="mt-2" dateClassName="w-full h-10 border border-gray-200 rounded-lg px-3 text-[13px] bg-white focus:outline-none focus:border-[#1B2B4B]" timeClassName="w-full h-10 border border-gray-200 rounded-lg px-3 text-[13px] bg-white"
+                      <DateTimeSelect className="mt-2" dateClassName="w-full h-10 border border-[#E3E8F0] rounded-lg px-3 text-[13px] bg-white focus:outline-none focus:border-[#1B2B4B]" timeClassName="w-full h-10 border border-[#E3E8F0] rounded-lg px-3 text-[13px] bg-white"
                         value={generalEmailScheduleAt}
                         onChange={(e) => setGeneralEmailScheduleAt(e.target.value)} />
                     )}
                   </div>
 
                   <div className="flex gap-3 pt-2">
-                    <button onClick={() => setGeneralEmailOpen(false)} className="flex-1 py-2.5 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold text-[13px]"><EditableText id="misc.btn.49999.취소" defaultText="취소" /></button>
+                    <button onClick={() => setGeneralEmailOpen(false)} className="flex-1 py-2.5 rounded-xl bg-[#F4F6FA] hover:bg-white border border-[#D5DDEA] text-[#1B2B4B] font-semibold text-[13px]"><EditableText id="misc.btn.49999.취소" defaultText="취소" /></button>
                     <button
                       data-genmail-send
                       disabled={generalEmailSending || !generalEmailTo.trim() || !generalEmailSubject.trim() || (generalEmailScheduleOn && !generalEmailScheduleAt)}
@@ -53845,32 +54056,32 @@ const handleBatchSettle = async (targetStatus) => {
 
 {/* 일괄 발송 목록 모달 */}
 {batchSendOpen && (
-  <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]">
-    <div className="bg-white rounded-2xl shadow-2xl w-[600px] max-h-[85vh] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
-      <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between rounded-t-2xl">
+  <div className="kp-modal fixed inset-0 bg-[#0B1428]/55 backdrop-blur-[2px] flex items-end sm:items-center justify-center sm:p-4 z-[99999]">
+    <div className="kp-modal-panel bg-white rounded-t-[22px] sm:rounded-[22px] shadow-[0_24px_64px_rgba(11,20,40,0.35)] w-full max-w-[600px] max-h-[85vh] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
+      <div className="kp-modal-head px-6 py-4 flex items-center justify-between shrink-0">
         <div>
-          <div className="text-white font-bold text-[15px]">여러 업체 일괄 발송</div>
-          <div className="text-white/60 text-[11px] mt-0.5">업체별 거래명세서 + 엑셀이 각 이메일로 개별 발송됩니다</div>
+          <div className="text-white font-black text-[18px]">여러 업체 일괄 발송</div>
+          <div className="text-white/70 text-[14px] mt-0.5">업체별 거래명세서 + 엑셀이 각 이메일로 개별 발송됩니다</div>
         </div>
-        <button className="text-white/60 hover:text-white text-xl" onClick={() => { if (!batchSending) setBatchSendOpen(false); }}>×</button>
+        <button aria-label="닫기" className="kp-modal-x shrink-0 w-9 h-9 rounded-xl bg-white/10 hover:bg-white/20 text-white text-[20px] leading-none flex items-center justify-center" onClick={() => { if (!batchSending) setBatchSendOpen(false); }}>×</button>
       </div>
       <div className="flex-1 overflow-y-auto p-5 space-y-3">
         {batchSendList.map((item, i) => (
-          <div key={i} className="bg-gray-50 rounded-xl border border-gray-200 px-4 py-3">
+          <div key={i} className="bg-[#F8FAFD] rounded-xl border border-[#E3E8F0] px-4 py-3">
             <div className="flex items-center justify-between mb-2">
               <div>
                 <span className="text-[13px] font-bold text-[#1B2B4B]">{item.name}</span>
-                <span className="ml-2 text-[11px] text-gray-500">{item.start}~{item.end} · {item.mapped?.length||0}건</span>
+                <span className="ml-2 text-[11px] text-[#7A89A3]">{item.start}~{item.end} · {item.mapped?.length||0}건</span>
               </div>
               {!batchSending && (
                 <button onClick={() => setBatchSendList(prev => prev.filter((_, j) => j !== i))} className="text-[#0B1428] hover:text-[#0B1428] text-[13px] font-bold px-2 py-1"><EditableText id="misc.btn.50086.삭제" defaultText="삭제" /></button>
               )}
             </div>
-            <div className="text-[11px] text-gray-500 mb-1.5">
+            <div className="text-[11px] text-[#7A89A3] mb-1.5">
               공급가: {(item.totals?.공급가||0).toLocaleString()}원 / 세액: {(item.totals?.세액||0).toLocaleString()}원 / 합계: {((item.totals?.공급가||0)+(item.totals?.세액||0)).toLocaleString()}원
             </div>
             <input autoComplete="off"
-              className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-[12px] focus:outline-none focus:border-[#1B2B4B]"
+              className="w-full border border-[#D5DDEA] rounded-lg px-3 py-1.5 text-[12px] focus:outline-none focus:border-[#1B2B4B]"
               placeholder="수신 이메일"
               value={item.email}
               disabled={batchSending}
@@ -53879,7 +54090,7 @@ const handleBatchSettle = async (targetStatus) => {
           </div>
         ))}
         {batchSendList.length === 0 && (
-          <div className="text-center py-8 text-[13px] text-gray-500">목록이 비어있습니다</div>
+          <div className="text-center py-8 text-[13px] text-[#7A89A3]">목록이 비어있습니다</div>
         )}
         {batchSending && batchSendProgress.total > 0 && (
           <div className="bg-[#EEF3FC] rounded-xl border border-[#C9D6EE] px-4 py-3 text-[13px]">
@@ -53894,11 +54105,11 @@ const handleBatchSettle = async (targetStatus) => {
           </div>
         )}
       </div>
-      <div className="p-5 border-t border-gray-100 rounded-b-2xl flex gap-3">
+      <div className="p-5 border-t border-[#EEF2F8] rounded-b-2xl flex gap-3">
         <button
           disabled={batchSending}
           onClick={() => { if (!batchSending) setBatchSendOpen(false); }}
-          className="flex-1 py-2.5 rounded-xl bg-gray-100 text-gray-700 font-semibold text-[13px] hover:bg-gray-200 disabled:opacity-50"
+          className="flex-1 py-2.5 rounded-xl bg-white border border-[#D5DDEA] text-[#1B2B4B] font-semibold text-[13px] hover:bg-[#F4F6FA] disabled:opacity-50"
         ><EditableText id="misc.btn.50122.취소" defaultText="취소" /></button>
         <button
           disabled={batchSending || !batchSendList.length}
@@ -53960,6 +54171,7 @@ const handleBatchSettle = async (targetStatus) => {
                 });
                 if (res.ok) {
                   logEmail({ type:"거래명세서", client: item.name, to: item.email, subject, body: bodyText, attachmentNames: attachments.map(a=>a.filename), status:"success" });
+                  markStmtSent(item.name, item.start, item.end); // ⭐ 2026-11-07 단계 보드 — 발송
                 } else {
                   let reason = `서버 오류 (${res.status})`;
                   try { const errData = await res.json(); reason = errData.error || reason; } catch {}
@@ -53996,32 +54208,32 @@ const handleBatchSettle = async (targetStatus) => {
 {/* 이메일 발송 모달 */}
           {/* 예약메일함 */}
           {scheduledEmailListOpen && (
-            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]">
-              <div className="bg-white rounded-2xl shadow-2xl w-[560px] max-h-[80vh] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
-                <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between shrink-0">
+            <div className="kp-modal fixed inset-0 bg-[#0B1428]/55 backdrop-blur-[2px] flex items-end sm:items-center justify-center sm:p-4 z-[99999]">
+              <div className="kp-modal-panel bg-white rounded-t-[22px] sm:rounded-[22px] shadow-[0_24px_64px_rgba(11,20,40,0.35)] w-full max-w-[560px] max-h-[80vh] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
+                <div className="kp-modal-head px-6 py-4 flex items-center justify-between shrink-0">
                   <div>
-                    <div className="text-white font-bold text-[15px]">예약메일함</div>
+                    <div className="text-white font-black text-[18px]">예약메일함</div>
                     <div className="text-white/60 text-[12px] mt-0.5">프로그램을 열어둔 계정이 있을 때 예약시각에 자동 발송됩니다</div>
                   </div>
-                  <button className="text-white/60 hover:text-white text-xl" onClick={() => setScheduledEmailListOpen(false)}>×</button>
+                  <button aria-label="닫기" className="kp-modal-x shrink-0 w-9 h-9 rounded-xl bg-white/10 hover:bg-white/20 text-white text-[20px] leading-none flex items-center justify-center" onClick={() => setScheduledEmailListOpen(false)}>×</button>
                 </div>
                 <div className="flex-1 overflow-y-auto">
                   {scheduledEmailList.length === 0 ? (
-                    <div className="py-16 text-center text-[13px] text-gray-500">예약된 메일이 없습니다.</div>
+                    <div className="py-16 text-center text-[13px] text-[#7A89A3]">예약된 메일이 없습니다.</div>
                   ) : (
                     <div className="divide-y divide-gray-100">
                       {scheduledEmailList.map((s) => {
                         const sendAtMs = s.sendAt?.toMillis ? s.sendAt.toMillis() : new Date(s.sendAt || 0).getTime();
                         const statusLabel = { pending: "대기중", sending: "발송 중", sent: "발송완료", failed: "발송실패" }[s.status] || s.status;
-                        const statusCls = { pending: "text-[#2D4C82] bg-[#F3F6FA]", sending: "text-[#1B2B4B] bg-[#EEF3FC]", sent: "text-[#0F1A30] bg-[#EEF3FC]", failed: "text-[#0B1428] bg-[#F3F6FA]" }[s.status] || "text-gray-500 bg-gray-50";
+                        const statusCls = { pending: "text-[#2D4C82] bg-[#F3F6FA]", sending: "text-[#1B2B4B] bg-[#EEF3FC]", sent: "text-[#0F1A30] bg-[#EEF3FC]", failed: "text-[#0B1428] bg-[#F3F6FA]" }[s.status] || "text-[#7A89A3] bg-[#F8FAFD]";
                         return (
                           <div key={s.id} className="px-6 py-3 flex items-center gap-3">
                             <div className="min-w-0 flex-1">
                               <div className="flex items-center gap-2 flex-wrap">
                                 <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${statusCls} shrink-0`}>{statusLabel}</span>
-                                <span className="font-bold text-[13px] text-gray-900 truncate">{s.type || "예약메일"} · {s.meta?.client || s.to}</span>
+                                <span className="font-bold text-[13px] text-[#0F1A30] truncate">{s.type || "예약메일"} · {s.meta?.client || s.to}</span>
                               </div>
-                              <div className="text-[11px] text-gray-500 mt-0.5 truncate">
+                              <div className="text-[11px] text-[#7A89A3] mt-0.5 truncate">
                                 {s.to} · {sendAtMs ? new Date(sendAtMs).toLocaleString("ko-KR") : "-"}
                                 {s.status === "failed" && s.error && <span className="text-[#0B1428]"> · {s.error}</span>}
                               </div>
@@ -54029,7 +54241,7 @@ const handleBatchSettle = async (targetStatus) => {
                             {s.status === "pending" && (
                               <button
                                 onClick={() => deleteDoc(doc(db, "scheduledEmails", s.id)).catch(() => {})}
-                                className="px-3 py-1.5 rounded-lg border border-gray-200 text-[11px] font-semibold text-gray-500 hover:bg-[#F3F6FA] hover:text-[#0B1428] hover:border-[#C9D6EE] transition shrink-0"
+                                className="px-3 py-1.5 rounded-lg border border-[#E3E8F0] text-[11px] font-semibold text-[#7A89A3] hover:bg-[#F3F6FA] hover:text-[#0B1428] hover:border-[#C9D6EE] transition shrink-0"
                               >
                                 예약취소
                               </button>
@@ -54040,41 +54252,41 @@ const handleBatchSettle = async (targetStatus) => {
                     </div>
                   )}
                 </div>
-                <div className="px-6 py-4 border-t border-gray-100 shrink-0">
-                  <button onClick={() => setScheduledEmailListOpen(false)} className="w-full py-2.5 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold text-[13px] transition"><EditableText id="misc.btn.50264.닫기" defaultText="닫기" /></button>
+                <div className="px-6 py-4 border-t border-[#EEF2F8] shrink-0">
+                  <button onClick={() => setScheduledEmailListOpen(false)} className="w-full py-2.5 rounded-xl bg-[#F4F6FA] hover:bg-white border border-[#D5DDEA] text-[#1B2B4B] font-semibold text-[13px] transition"><EditableText id="misc.btn.50264.닫기" defaultText="닫기" /></button>
                 </div>
               </div>
             </div>
           )}
 
           {emailModalOpen && (
-            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]">
-              <div className="bg-white rounded-2xl shadow-2xl w-[560px] max-h-[90vh] overflow-y-auto"
+            <div className="kp-modal fixed inset-0 bg-[#0B1428]/55 backdrop-blur-[2px] flex items-end sm:items-center justify-center sm:p-4 z-[99999]">
+              <div className="kp-modal-panel bg-white rounded-t-[22px] sm:rounded-[22px] shadow-[0_24px_64px_rgba(11,20,40,0.35)] w-full max-w-[560px] max-h-[90vh] overflow-y-auto"
                 onClick={e => e.stopPropagation()}>
 
                 {/* 헤더 */}
-                <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between">
+                <div className="kp-modal-head px-6 py-4 flex items-center justify-between shrink-0">
                   <div>
-                    <div className="text-white font-bold text-[15px]">거래명세서 이메일 발송</div>
-                    <div className="text-white/70 text-[12px] mt-0.5">{client} — {mapped.length}건 / {won(합계공급가+합계세액)}원</div>
+                    <div className="text-white font-black text-[18px]">거래명세서 이메일 발송</div>
+                    <div className="text-white/70 text-[14px] mt-0.5">{client} · {mapped.length}건 · {won(합계공급가+합계세액)}원</div>
                   </div>
-                  <button className="text-white/60 hover:text-white text-xl" onClick={() => setEmailModalOpen(false)}>×</button>
+                  <button aria-label="닫기" className="kp-modal-x shrink-0 w-9 h-9 rounded-xl bg-white/10 hover:bg-white/20 text-white text-[20px] leading-none flex items-center justify-center" onClick={() => setEmailModalOpen(false)}>×</button>
                 </div>
 
                 <div className="p-6 space-y-4">
                   {/* 발신 계정 */}
                   <div>
-                    <label className="text-[13px] font-bold text-gray-700 mb-1 block">발신 계정</label>
-                    <div className="flex items-center gap-2 px-3 py-2.5 bg-gray-100 border border-gray-300 rounded-lg text-[13px] text-gray-800 font-medium">
+                    <label className="text-[13px] font-bold text-[#3A4A66] mb-1 block">발신 계정</label>
+                    <div className="flex items-center gap-2 px-3 py-2.5 bg-[#F4F6FA] border border-[#D5DDEA] rounded-lg text-[13px] text-[#0F1A30] font-medium">
                       r15332525@daum.net
                     </div>
                   </div>
 
                   {/* 수신 이메일 */}
                   <div>
-                    <label className="text-[13px] font-bold text-gray-700 mb-1 block">수신 이메일</label>
+                    <label className="text-[13px] font-bold text-[#3A4A66] mb-1 block">수신 이메일</label>
                     <input autoComplete="off"
-                      className="w-full border-2 border-gray-300 rounded-lg px-3 py-2.5 text-[13px] text-gray-900 outline-none focus:border-[#1B2B4B]"
+                      className="w-full border border-[#D5DDEA] rounded-xl px-3 py-2.5 text-[13px] text-[#0F1A30] outline-none focus:border-[#1B2B4B]"
                       placeholder="거래처 이메일 입력"
                       value={emailTo}
                       onChange={e => setEmailTo(e.target.value)}
@@ -54084,11 +54296,11 @@ const handleBatchSettle = async (targetStatus) => {
                   {/* 발송 내용 미리보기 — 편집 가능 */}
                   <div>
                     <div className="flex items-center justify-between mb-1">
-                      <label className="text-[13px] font-bold text-gray-700">발송 내용 미리보기 (직접 수정 가능)</label>
+                      <label className="text-[13px] font-bold text-[#3A4A66]">발송 내용 미리보기 (직접 수정 가능)</label>
                       <span className="text-[11px] text-[#1B2B4B] font-semibold">편집 가능</span>
                     </div>
                     <textarea
-                      className="w-full border-2 border-gray-300 rounded-lg px-4 py-3 text-[13px] text-gray-900 leading-relaxed resize-none outline-none focus:border-[#1B2B4B] bg-white"
+                      className="w-full border border-[#D5DDEA] rounded-xl px-4 py-3 text-[13px] text-[#0F1A30] leading-relaxed resize-none outline-none focus:border-[#1B2B4B] bg-white"
                       rows={10}
                       value={emailBody}
                       onChange={e => setEmailBody(e.target.value)}
@@ -54096,13 +54308,13 @@ const handleBatchSettle = async (targetStatus) => {
                   </div>
 
                   {/* 명함 포함 토글 */}
-                  <div className="flex items-center justify-between bg-gray-50 rounded-xl px-4 py-3 border border-gray-200">
+                  <div className="flex items-center justify-between bg-[#F8FAFD] rounded-xl px-4 py-3 border border-[#E3E8F0]">
                     <div>
-                      <div className="text-[13px] font-bold text-gray-700">명함 이미지 포함</div>
-                      <div className="text-[11px] text-gray-500">{cardImage ? "내 정보에서 등록한 명함이 첨부됩니다" : "명함 미등록 (내 정보에서 업로드)"}</div>
+                      <div className="text-[13px] font-bold text-[#3A4A66]">명함 이미지 포함</div>
+                      <div className="text-[11px] text-[#7A89A3]">{cardImage ? "내 정보에서 등록한 명함이 첨부됩니다" : "명함 미등록 (내 정보에서 업로드)"}</div>
                     </div>
                     <button onClick={() => setIncludeCardInvoice(v => !v)} disabled={!cardImage}
-                      className={`relative w-11 h-6 rounded-full transition-colors duration-200 ${includeCardInvoice && cardImage ? "bg-[#1B2B4B]" : "bg-gray-300"} ${!cardImage ? "opacity-40 cursor-not-allowed" : "cursor-pointer"}`}>
+                      className={`relative w-11 h-6 rounded-full transition-colors duration-200 ${includeCardInvoice && cardImage ? "bg-[#1B2B4B]" : "bg-[#C9D3E3]"} ${!cardImage ? "opacity-40 cursor-not-allowed" : "cursor-pointer"}`}>
                       <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform duration-200 ${includeCardInvoice && cardImage ? "translate-x-5" : "translate-x-0"}`} />
                     </button>
                   </div>
@@ -54113,15 +54325,15 @@ const handleBatchSettle = async (targetStatus) => {
                   </div>
 
                   {/* 예약발송 */}
-                  <div className="bg-gray-50 rounded-xl px-4 py-3 border border-gray-200">
+                  <div className="bg-[#F8FAFD] rounded-xl px-4 py-3 border border-[#E3E8F0]">
                     <label className="flex items-center gap-2 cursor-pointer">
                       <input type="checkbox" className="w-4 h-4 accent-[#1B2B4B]"
                         checked={emailScheduleOn}
                         onChange={(e) => setEmailScheduleOn(e.target.checked)} />
-                      <span className="text-[13px] font-bold text-gray-700">예약발송</span>
+                      <span className="text-[13px] font-bold text-[#3A4A66]">예약발송</span>
                     </label>
                     {emailScheduleOn && (
-                      <DateTimeSelect className="mt-2" dateClassName="w-full h-10 border border-gray-200 rounded-lg px-3 text-[13px] bg-white focus:outline-none focus:border-[#1B2B4B]" timeClassName="w-full h-10 border border-gray-200 rounded-lg px-3 text-[13px] bg-white"
+                      <DateTimeSelect className="mt-2" dateClassName="w-full h-10 border border-[#E3E8F0] rounded-lg px-3 text-[13px] bg-white focus:outline-none focus:border-[#1B2B4B]" timeClassName="w-full h-10 border border-[#E3E8F0] rounded-lg px-3 text-[13px] bg-white"
                         value={emailScheduleAt}
                         onChange={(e) => setEmailScheduleAt(e.target.value)} />
                     )}
@@ -54129,9 +54341,9 @@ const handleBatchSettle = async (targetStatus) => {
                 </div>
 
                 {/* 버튼 */}
-                <div className="px-6 pb-6 flex gap-3">
+                <div className="kp-modal-foot px-6 py-4 flex gap-3">
                 <button
-                    className="flex-1 py-2.5 rounded-xl bg-gray-100 text-gray-800 font-semibold text-[13px] hover:bg-gray-200 transition"
+                    className="flex-1 py-2.5 rounded-xl bg-white border border-[#D5DDEA] text-[#1B2B4B] font-semibold text-[13px] hover:bg-[#F4F6FA] transition"
                     onClick={() => setEmailModalOpen(false)}><EditableText id="misc.btn.50356.취소" defaultText="취소" /></button>
                   <button
                     className="px-4 py-2.5 rounded-xl bg-[#1B2B4B]/10 text-[#1B2B4B] font-semibold text-[13px] hover:bg-[#1B2B4B]/20 transition"
@@ -54139,14 +54351,14 @@ const handleBatchSettle = async (targetStatus) => {
                     발송이력 {emailLogs.filter(l=>l.client===client).length > 0 && `(${emailLogs.filter(l=>l.client===client).length})`}
                   </button>
                   <button
-                    className="flex-1 py-2.5 rounded-xl bg-gray-200 text-gray-800 font-semibold text-[13px] hover:bg-gray-300 transition"
+                    className="flex-1 py-2.5 rounded-xl bg-white border border-[#D5DDEA] text-[#1B2B4B] font-semibold text-[13px] hover:bg-[#F4F6FA] transition"
                     onClick={() => {
                       navigator.clipboard.writeText(emailBody);
                       showAlert("내용이 클립보드에 복사되었습니다.");
                     }}><EditableText id="misc.btn.50367.내용 복사" defaultText="내용 복사" /></button>
                   <button
                     disabled={!emailTo.trim() || emailSending || (emailScheduleOn && !emailScheduleAt)}
-                    className={`flex-1 py-2.5 rounded-xl font-bold text-[13px] transition ${emailTo.trim() && !emailSending ? "bg-sky-600 hover:bg-sky-700 text-white" : "bg-gray-200 text-gray-500 cursor-not-allowed"}`}
+                    className={`flex-1 py-2.5 rounded-xl font-bold text-[13px] transition ${emailTo.trim() && !emailSending ? "bg-[#0F1A30] hover:bg-[#1B2B4B] text-white" : "bg-gray-200 text-[#7A89A3] cursor-not-allowed"}`}
                     onClick={async () => {
                       if (!emailTo.trim()) return;
                       if (emailScheduleOn && !emailScheduleAt) return showAlert("예약 발송 시각을 선택하세요.");
@@ -54215,6 +54427,7 @@ const handleBatchSettle = async (targetStatus) => {
                             type: "거래명세서", meta: { client, body: emailBody },
                           });
                           logEmail({ type:"거래명세서(예약)", client, to: emailTo, subject, body: emailBody, attachmentNames: fileAttachments.map(f=>f.filename), status:"success" });
+                          markStmtSent(client, start, end); // ⭐ 2026-11-07 단계 보드 — 예약도 발송으로
                           showAlert(`${new Date(emailScheduleAt).toLocaleString("ko-KR")}에 발송 예약되었습니다.`);
                           setEmailModalOpen(false);
                           setEmailSending(false);
@@ -54253,6 +54466,7 @@ const handleBatchSettle = async (targetStatus) => {
                         });
                         if (res.ok) {
                           logEmail({ type:"거래명세서", client, to: emailTo, subject, body: emailBody, attachmentNames: fileAttachments.map(f=>f.filename), status:"success" });
+                          markStmtSent(client, start, end); // ⭐ 2026-11-07 단계 보드 — 발송
                           showAlert(`${emailTo} 로 발송 완료`);
                           setEmailModalOpen(false);
                         } else {
@@ -54272,10 +54486,10 @@ const handleBatchSettle = async (targetStatus) => {
                 </div>
               {/* 발송 이력 */}
               {showEmailHistory && (
-                <div className="border-t border-gray-100 px-6 py-4">
+                <div className="border-t border-[#EEF2F8] px-6 py-4">
                   <div className="text-[13px] font-bold text-[#1B2B4B] mb-3">발송 이력</div>
                   {emailLogs.filter(l => l.client === client).length === 0 ? (
-                    <div className="text-[12px] text-gray-500 text-center py-4">발송 이력이 없습니다</div>
+                    <div className="text-[12px] text-[#7A89A3] text-center py-4">발송 이력이 없습니다</div>
                   ) : (
                     <div className="space-y-2 max-h-[320px] overflow-y-auto">
                       {emailLogs.filter(l => l.client === client).map(log => (
@@ -54290,17 +54504,17 @@ const handleBatchSettle = async (targetStatus) => {
           )}
           {/* 거래처 정보 수정 팝업 */}
           {showEdit && (
-            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]">
-              <div className="bg-white rounded-2xl shadow-2xl w-[460px] overflow-hidden">
-                <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between">
-                  <h3 className="text-white font-bold text-[15px]"><EditableText id="popup.title.거래처 정보 수정" defaultText="거래처 정보 수정" /></h3>
-                  <button className="text-white/60 hover:text-white text-lg" onClick={()=>setShowEdit(false)}>✕</button>
+            <div className="kp-modal fixed inset-0 bg-[#0B1428]/55 backdrop-blur-[2px] flex items-end sm:items-center justify-center sm:p-4 z-[99999]">
+              <div className="kp-modal-panel bg-white rounded-t-[22px] sm:rounded-[22px] shadow-[0_24px_64px_rgba(11,20,40,0.35)] w-full max-w-[460px] overflow-hidden">
+                <div className="kp-modal-head px-6 py-4 flex items-center justify-between shrink-0">
+                  <h3 className="text-white font-black text-[18px]"><EditableText id="popup.title.거래처 정보 수정" defaultText="거래처 정보 수정" /></h3>
+                  <button aria-label="닫기" className="kp-modal-x shrink-0 w-9 h-9 rounded-xl bg-white/10 hover:bg-white/20 text-white text-[20px] leading-none flex items-center justify-center" onClick={()=>setShowEdit(false)}>✕</button>
                 </div>
                 <div className="p-6 space-y-3">
                   {/* 거래처명 - 자동완성 드롭다운 */}
                   <div className="relative">
-                    <label className="text-[12px] font-semibold text-gray-500 mb-1 block">거래처명 (검색하면 정보 자동 입력)</label>
-                    <input autoComplete="off" className="border-2 border-gray-200 rounded-lg px-3 py-2 w-full text-[13px] focus:border-[#1B2B4B] outline-none"
+                    <label className="text-[12px] font-semibold text-[#7A89A3] mb-1 block">거래처명 (검색하면 정보 자동 입력)</label>
+                    <input autoComplete="off" className="border border-[#D5DDEA] rounded-xl px-3 py-2 w-full text-[13px] focus:border-[#1B2B4B] outline-none"
                       value={editInfo["거래처명"]||""}
                       onChange={e => { setEditInfo(p=>({...p, 거래처명: e.target.value})); setEditInfoClientDropOpen(true); setEditInfoClientActiveIdx(0); }}
                       onFocus={() => setEditInfoClientDropOpen(true)}
@@ -54328,7 +54542,7 @@ const handleBatchSettle = async (targetStatus) => {
                       placeholder="거래처명 입력 또는 검색"
                     />
                     {editInfoClientDropOpen && (clients||[]).filter(c => (c.거래처명||"").toLowerCase().includes((editInfo["거래처명"]||"").toLowerCase())).length > 0 && (
-                      <div className="absolute z-[300] left-0 right-0 top-full mt-1 bg-white border border-gray-200 rounded-xl shadow-xl max-h-48 overflow-y-auto">
+                      <div className="absolute z-[300] left-0 right-0 top-full mt-1 bg-white border border-[#E3E8F0] rounded-xl shadow-xl max-h-48 overflow-y-auto">
                         {(clients||[]).filter(c => (c.거래처명||"").toLowerCase().includes((editInfo["거래처명"]||"").toLowerCase())).slice(0, 12).map((c, i) => (
                           <div key={i}
                             className={`px-4 py-2.5 text-[13px] cursor-pointer flex items-center justify-between border-b border-gray-50 ${i===editInfoClientActiveIdx?"bg-[#EEF3FC]":"hover:bg-[#EEF3FC]"}`}
@@ -54339,7 +54553,7 @@ const handleBatchSettle = async (targetStatus) => {
                               setEditInfoClientDropOpen(false);
                             }}>
                             <span className="font-semibold text-[#1B2B4B]">{c.거래처명}</span>
-                            {c.이메일 && <span className="text-gray-500 text-[11px]">{c.이메일}</span>}
+                            {c.이메일 && <span className="text-[#7A89A3] text-[11px]">{c.이메일}</span>}
                           </div>
                         ))}
                       </div>
@@ -54348,14 +54562,14 @@ const handleBatchSettle = async (targetStatus) => {
                   {/* 나머지 필드 */}
                   {["사업자번호","대표자","업태","종목","주소","담당자","연락처","이메일"].map(k=>(
                     <div key={k}>
-                      <label className="text-[12px] font-semibold text-gray-500 mb-1 block">{k}</label>
-                      <input autoComplete="off" className="border-2 border-gray-200 rounded-lg px-3 py-2 w-full text-[13px] focus:border-[#1B2B4B] outline-none"
+                      <label className="text-[12px] font-semibold text-[#7A89A3] mb-1 block">{k}</label>
+                      <input autoComplete="off" className="border border-[#D5DDEA] rounded-xl px-3 py-2 w-full text-[13px] focus:border-[#1B2B4B] outline-none"
                         value={editInfo[k]||""} onChange={e=>setEditInfo({...editInfo,[k]:e.target.value})} />
                     </div>
                   ))}
                 </div>
-                <div className="px-6 pb-5 flex gap-3">
-                  <button className="flex-1 py-2.5 rounded-xl bg-gray-100 text-gray-700 font-semibold" onClick={()=>setShowEdit(false)}><EditableText id="misc.btn.50579.취소" defaultText="취소" /></button>
+                <div className="kp-modal-foot px-6 py-4 flex gap-3">
+                  <button className="flex-1 py-2.5 rounded-xl bg-white border border-[#D5DDEA] text-[#1B2B4B] font-semibold" onClick={()=>setShowEdit(false)}><EditableText id="misc.btn.50579.취소" defaultText="취소" /></button>
                   <button className="flex-1 py-2.5 rounded-xl bg-[#1B2B4B] text-white font-bold" onClick={saveEdit}><EditableText id="misc.btn.50580.저장" defaultText="저장" /></button>
                 </div>
               </div>
@@ -54365,265 +54579,74 @@ const handleBatchSettle = async (targetStatus) => {
       )}
 
       {/* ══════════════ 미수금관리 탭 ══════════════ */}
+      {/* ⭐ 2026-11-07 리디자인 — 미수금 데스크: 위 요약(총 미수 · 연령 막대 · 월말 잔액 추이) → 왼쪽 거래처 목록 / 발생 지도 / 월별 원장 → 오른쪽 상세(입금 처리 · 할 일 · 타임라인)
+           숫자는 예전 월별 원장(buildMonthRows)과 같은 값이다 */}
       {tab === "unsettledMonth" && (
-        <div>
-          <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,38fr)_minmax(0,62fr)] gap-4 items-start">
-            {/* ── 왼쪽: 조회 · 요약 · 거래처 정보 · 입금/보고/발송 ── */}
-            <div className="space-y-3 min-w-0">
-              <div className={`${csCard} p-4`}>
-                {csHead("QUERY", "조회 조건", (
-                  <button type="button" className={`${csBtn} h-7 px-2.5 text-[11.5px]`}
-                    onClick={()=>{setSelClient("");setArInput("");setYearFrom(String(THIS_YEAR));setMonthFrom("01");setYearTo(String(THIS_YEAR));setMonthTo("12");setStatusFilter("전체");clearSel();setArDropOpen(false);}}>
-                    초기화
-                  </button>
-                ))}
-                {/* ★ 거래처 드롭다운 검색 */}
-                <label className={csLab}>거래처</label>
-                <div className="relative" ref={arDropRef}>
-                  <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#9AA9C3] pointer-events-none" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="M20 20l-3.5-3.5" /></svg>
-                  <input autoComplete="off"
-                    ref={arInputRef}
-                    className={`${csInp} pl-8`}
-                    placeholder="거래처 검색"
-                    value={arInput}
-                    onChange={e => { setArInput(e.target.value); setArDropOpen(true); setArDropIdx(0); }}
-                    onFocus={() => { setArDropOpen(true); setArDropIdx(0); }}
-                    onKeyDown={handleArKeyDown}
-                  />
-                  {arDropOpen && arOptions.length > 0 && (
-                    <div className="absolute z-50 left-0 right-0 mt-1 bg-white border border-[#DCE3EE] rounded-xl shadow-[0_12px_32px_rgba(15,26,48,0.16)] max-h-[240px] overflow-y-auto py-1">
-                      {arOptions.map((name, i) => (
-                        <div
-                          key={name + i}
-                          ref={el => arItemRefs.current[i] = el}
-                          className={`px-3.5 py-2 text-[13px] cursor-pointer transition ${
-                            i === arDropIdx ? "bg-[#EEF2F8] text-[#0F1A30] font-bold" : "text-[#3A4A66] hover:bg-[#F4F6FA]"
-                          } ${name === AR_ALL ? "border-b border-[#EEF2F8] font-black" : ""}`}
-                          onMouseEnter={() => setArDropIdx(i)}
-                          onMouseDown={e => { e.preventDefault(); selectArClient(name); }}
-                        >
-                          {name}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                <label className={`${csLab} mt-3`}>기간 (청구월)</label>
-                <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_34px] gap-1.5 items-center">
-                  <CustomSelect className={csInp} value={yearFrom} onChange={e=>{ setYearFrom(e.target.value); clearSel(); }}>
-                    {Array.from({length:3},(_,i)=>String(THIS_YEAR - 1 + i)).map(y=>(
-                      <option key={y} value={y}>{y}년</option>
-                    ))}
-                  </CustomSelect>
-                  <CustomSelect className={csInp} value={monthFrom} onChange={e=>{ setMonthFrom(e.target.value); clearSel(); }}>
-                    {Array.from({length:12},(_,i)=>String(i+1).padStart(2,"0")).map(mm=>(
-                      <option key={mm} value={mm}>{parseInt(mm,10)}월</option>
-                    ))}
-                  </CustomSelect>
-                  <span className="text-[12px] font-bold text-[#5B6B85]">부터</span>
-                  <CustomSelect className={csInp} value={yearTo} onChange={e=>{ setYearTo(e.target.value); clearSel(); }}>
-                    {Array.from({length:3},(_,i)=>String(THIS_YEAR - 1 + i)).map(y=>(
-                      <option key={y} value={y}>{y}년</option>
-                    ))}
-                  </CustomSelect>
-                  <CustomSelect className={csInp} value={monthTo} onChange={e=>{ setMonthTo(e.target.value); clearSel(); }}>
-                    {Array.from({length:12},(_,i)=>String(i+1).padStart(2,"0")).map(mm=>(
-                      <option key={mm} value={mm}>{parseInt(mm,10)}월</option>
-                    ))}
-                  </CustomSelect>
-                  <span className="text-[12px] font-bold text-[#5B6B85]">까지</span>
-                </div>
-
-                <div className="mt-3 flex items-center justify-between gap-2">
-                  <label className={`${csLab} mb-0`}>정산상태</label>
-                  <div className={csSeg}>
-                    {["전체", "미정산", "정산완료"].map((s) => (
-                      <button key={s} type="button" onClick={() => setStatusFilter(s)} className={csSegBtn(statusFilter === s)}>{s}</button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              {/* KPI — 디지털 계기판 */}
-              {selClient && (
-                <div className="relative overflow-hidden rounded-2xl p-4 text-white" style={{ background: "linear-gradient(120deg,#0B1428 0%,#1B2B4B 100%)" }}>
-                  <div className="absolute inset-0 pointer-events-none" style={{ background: csGrid }} />
-                  <div className="relative flex items-center gap-2">
-                    <span className="text-[9.5px] font-extrabold tracking-[0.24em] text-[#8FB0F0]" style={{ fontFamily: KP_MONO, fontVariantNumeric: "tabular-nums" }}>RECEIVABLE · 미정산 금액</span>
-                    <span className="ml-auto text-[11px] font-bold text-white/60 tabular-nums" style={{ fontFamily: KP_MONO, fontVariantNumeric: "tabular-nums" }}>OPEN <b className="text-white">{kpi.미정산월}</b>개월</span>
-                  </div>
-                  <div className="relative mt-1 text-[26px] font-black tabular-nums leading-tight" style={{ fontFamily: KP_MONO, fontVariantNumeric: "tabular-nums" }}>
-                    {won(kpi.미정산금)}<span className="ml-1 text-[13px] font-bold text-white/45">원</span>
-                  </div>
-                  {kpi.총청구 > 0 && (
-                    <div className="relative mt-2.5 h-1.5 rounded-full bg-white/10 overflow-hidden" title={`정산완료 ${Math.round((kpi.완료금 / kpi.총청구) * 100)}%`}>
-                      <div className="h-full rounded-full" style={{ width: `${Math.min(100, (kpi.완료금 / kpi.총청구) * 100)}%`, background: "linear-gradient(90deg,#4B6CB7,#8FB0F0)" }} />
-                    </div>
-                  )}
-                  <div className="relative mt-3 grid grid-cols-3 gap-2">
-                    {[["ORDERS", "총 오더건수", kpi.전체건수.toLocaleString(), "건"], ["BILLED", "총 청구금액", won(kpi.총청구), "원"], ["COLLECTED", "정산완료 금액", won(kpi.완료금), "원"]].map(([en, k, v, u]) => (
-                      <div key={en} className="rounded-xl px-3 py-2 bg-white/[0.05] border border-white/[0.12] min-w-0">
-                        <div className="text-[9px] font-extrabold tracking-[0.2em] text-white/40" style={{ fontFamily: KP_MONO, fontVariantNumeric: "tabular-nums" }}>{en}</div>
-                        <div className="text-[10.5px] font-bold text-white/60 truncate">{k}</div>
-                        <div className="text-[14px] font-black tabular-nums text-[#CFE0FF] truncate" style={{ fontFamily: KP_MONO, fontVariantNumeric: "tabular-nums" }}>{v}<span className="ml-0.5 text-[10px] font-bold text-white/40">{u}</span></div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* 🏢 거래처 정보 + 결제 조건 */}
-              {selClient && selClient !== AR_ALL && <ArClientInfo client={(clients || []).find((c) => c.거래처명 === selClient)} name={selClient} upsertClient={upsertClient} isViewer={isViewer} />}
-
-              {/* 입금 반영 · 보고 · 발송 */}
-              <div className={`${csCard} p-4`}>
-                {csHead("TOOLS", "입금 반영 · 보고 · 발송")}
-                <div className="text-[10.5px] font-black text-[#9AA9C3] mb-1.5">입금 반영</div>
-                <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
-                  <button type="button" onClick={() => setBankBulkOpen(true)} className={csBtnPri}>
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 16V4M6 10l6-6 6 6" /><path d="M4 20h16" /></svg>
-                    입금내역 대용량 업로드
-                  </button>
-                  <button type="button" onClick={() => setDepositGuideOpen(true)} className={csBtn}>양식 안내</button>
-                </div>
-                <div className="text-[10.5px] font-black text-[#9AA9C3] mt-3 mb-1.5">보고 · 발송</div>
-                <div className="grid grid-cols-3 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => { setArFromYear(yearFrom); setArFromMM(monthFrom); setArToYear(yearTo); setArToMM(monthTo); setArReportOpen(true); }}
-                    className={csBtn}
-                  >
-                    미수금보고서
-                  </button>
-                  <button
-                    type="button"
-                    disabled={!selClient}
-                    onClick={() => {
-                      const found = (clients||[]).find(c => c.거래처명 === selClient);
-                      setEmailTo(found?.이메일 || found?.연락처이메일 || "");
-                      setArEmailFromMM(monthFrom || "01");
-                      setArEmailToMM(monthTo || "12");
-                      const unpaid = monthRows.filter(r => r.정산상태 === "미정산");
-                      const unpaidAmt = unpaid.reduce((s,r) => s + r.총청구금액, 0);
-                      setEmailBody(`안녕하세요, ${selClient} 담당자님.\n\n${COMPANY_PRINT.name}입니다.\n\n${THIS_YEAR}년 미수금 현황을 안내드립니다.\n\n미정산 월수: ${unpaid.length}개월\n미정산 금액: ${unpaidAmt.toLocaleString()}원\n\n${unpaid.map(r => `  - ${r.yyyymm} : ${r.총청구금액.toLocaleString()}원`).join("\n")}\n\n입금계좌: ${COMPANY_PRINT.bank}\n\n정산 부탁드립니다.\n감사합니다.\n\n${COMPANY_PRINT.name}\n${COMPANY_PRINT.contact}`);
-                      setEmailScheduleOn(false); setEmailScheduleAt("");
-                      setArEmailOpen(true);
-                    }}
-                    className={csBtn}
-                  >
-                    이메일발송
-                  </button>
-                  <button type="button" onClick={downloadMonthExcel} className={csBtn}><EditableText id="misc.btn.50682.엑셀다운로드" defaultText="엑셀 다운로드" /></button>
-                </div>
-                {bankBulkOpen && createPortal(
-                  <BulkUploadChooser
-                    title="입금 내역 대용량 업로드"
-                    subtitle="은행 거래내역 엑셀을 올리면 미정산 월과 자동으로 맞춰 입금 처리합니다."
-                    templateDesc="거래일·적요(입금자명)·입금액·잔액·비고 열이 있는 양식을 받습니다. 은행에서 받은 거래내역 엑셀을 그대로 올려도 됩니다."
-                    templateTips={["입금자명이 거래처명과 같거나 포함되면 자동 매칭", "부가세 포함 금액 기준"]}
-                    uploadDesc="엑셀을 고르면 매칭 결과를 먼저 보여드리고, 확인 후 정산완료·일부입금으로 반영합니다."
-                    uploadTips={["입금액이 모자라면 일부입금으로", "매칭 안 된 입금은 따로 표시"]}
-                    onClose={() => setBankBulkOpen(false)}
-                    onTemplate={() => {
-                      const ws = XLSX.utils.aoa_to_sheet([["거래일", "적요(입금자명)", "입금액", "잔액", "비고"], ["2026-10-05", "(주)예시물류", 1100000, 5100000, "9월 운송료"], ["2026-10-06", "홍길동상사", 550000, 5650000, ""]]);
-                      ws["!cols"] = [{ wch: 12 }, { wch: 22 }, { wch: 14 }, { wch: 14 }, { wch: 18 }];
-                      const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "입금내역");
-                      XLSX.writeFile(wb, "입금확인_양식.xlsx");
-                    }}
-                    onFile={(e) => { const f = e.target.files?.[0]; setBankBulkOpen(false); if (f) handleBankExcelUpload({ target: { files: [f], value: "" } }); }}
-                  />, document.body)}
-                {depositGuideOpen && createPortal(
-                  <div className="fixed inset-0 z-[1000000] bg-[#0F1A30]/45 flex items-center justify-center p-4" onClick={() => setDepositGuideOpen(false)}>
-                    <div className="w-full max-w-[760px] max-h-[88vh] overflow-y-auto bg-white rounded-[22px] shadow-[0_24px_60px_rgba(15,26,48,0.35)]" onClick={(e) => e.stopPropagation()}>
-                      <div className="sticky top-0 px-6 py-4 bg-gradient-to-r from-[#0F1A30] via-[#1B2B4B] to-[#2D4C82] text-white flex items-center justify-between">
-                        <div><div className="text-[11px] font-extrabold tracking-[0.22em] text-white/60">GUIDE</div><div className="text-[17px] font-black">입금확인 엑셀 양식 안내</div></div>
-                        <button onClick={() => setDepositGuideOpen(false)} className="w-8 h-8 rounded-lg bg-white/10">✕</button>
-                      </div>
-<div className="p-6">
-            
-            <p className="mb-4 text-[14px] text-gray-600 leading-relaxed">
-              아래와 같은 형식의 <b className="text-[#1B2B4B]">기업은행 거래내역 엑셀</b> 파일을 업로드하면 자동으로 미정산 건과 매칭합니다.
-            </p>
-
-            {/* 예시 테이블 */}
-            <div className="overflow-x-auto mb-5">
-              <table className="w-full border-2 border-gray-300 text-center text-[14px]">
-                <thead className="bg-[#1B2B4B] text-white">
-                  <tr>
-                    <th className="border border-[#2d4a7a] px-4 py-3 font-bold"><EditableText id="settlement.bankSample.header.거래일" defaultText="거래일" /></th>
-                    <th className="border border-[#2d4a7a] px-4 py-3 font-bold"><EditableText id="settlement.bankSample.header.적요" defaultText="적요(입금자명)" /></th>
-                    <th className="border border-[#2d4a7a] px-4 py-3 font-bold"><EditableText id="settlement.bankSample.header.입금액" defaultText="입금액" /></th>
-                    <th className="border border-[#2d4a7a] px-4 py-3 font-bold"><EditableText id="settlement.bankSample.header.잔액" defaultText="잔액" /></th>
-                    <th className="border border-[#2d4a7a] px-4 py-3 font-bold"><EditableText id="settlement.bankSample.header.비고" defaultText="비고" /></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr className="bg-white">
-                    <td className="border border-gray-200 px-4 py-3 font-medium text-gray-700">2026-04-25</td>
-                    <td className="border border-gray-200 px-4 py-3 font-bold text-[#1B2B4B]">거해</td>
-                    <td className="border border-gray-200 px-4 py-3 font-extrabold text-[#0F1A30]">3,234,000</td>
-                    <td className="border border-gray-200 px-4 py-3 text-gray-500">15,420,000</td>
-                    <td className="border border-gray-200 px-4 py-3 text-gray-500"></td>
-                  </tr>
-                  <tr className="bg-gray-50/80">
-                    <td className="border border-gray-200 px-4 py-3 font-medium text-gray-700">2026-04-28</td>
-                    <td className="border border-gray-200 px-4 py-3 font-bold text-[#1B2B4B]">㈜대한물류</td>
-                    <td className="border border-gray-200 px-4 py-3 font-extrabold text-[#0F1A30]">5,500,000</td>
-                    <td className="border border-gray-200 px-4 py-3 text-gray-500">20,920,000</td>
-                    <td className="border border-gray-200 px-4 py-3 text-gray-500"></td>
-                  </tr>
-                </tbody>
-              </table>
+        <div className="space-y-3">
+          {/* 도구 줄 — 기간 · 상태 · 검색 · 보기 · 입금/보고 */}
+          <div className={`${csCard} px-4 py-3 flex items-center gap-2 flex-wrap`}>
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <span className="text-[14px] font-black text-[#3A4A66] mr-0.5">청구월</span>
+              <CustomSelect className={`${sdInp} !w-[92px]`} value={yearFrom} onChange={e => { setYearFrom(e.target.value); clearSel(); }}>
+                {Array.from({ length: 3 }, (_, i) => String(THIS_YEAR - 1 + i)).map(y => <option key={y} value={y}>{y}년</option>)}
+              </CustomSelect>
+              <CustomSelect className={`${sdInp} !w-[78px]`} value={monthFrom} onChange={e => { setMonthFrom(e.target.value); clearSel(); }}>
+                {Array.from({ length: 12 }, (_, i) => String(i + 1).padStart(2, "0")).map(mm => <option key={mm} value={mm}>{parseInt(mm, 10)}월</option>)}
+              </CustomSelect>
+              <span className="text-[14px] font-bold text-[#9AA9C3]">~</span>
+              <CustomSelect className={`${sdInp} !w-[92px]`} value={yearTo} onChange={e => { setYearTo(e.target.value); clearSel(); }}>
+                {Array.from({ length: 3 }, (_, i) => String(THIS_YEAR - 1 + i)).map(y => <option key={y} value={y}>{y}년</option>)}
+              </CustomSelect>
+              <CustomSelect className={`${sdInp} !w-[78px]`} value={monthTo} onChange={e => { setMonthTo(e.target.value); clearSel(); }}>
+                {Array.from({ length: 12 }, (_, i) => String(i + 1).padStart(2, "0")).map(mm => <option key={mm} value={mm}>{parseInt(mm, 10)}월</option>)}
+              </CustomSelect>
             </div>
-
-            {/* 사용 방법 */}
-            <div className="space-y-2.5 mb-5">
-              <div className="flex items-start gap-3 bg-white border border-gray-200 rounded-xl px-4 py-3">
-                <span className="w-7 h-7 rounded-full bg-[#1B2B4B] text-white text-[13px] font-bold flex items-center justify-center shrink-0 mt-0.5">1</span>
-                <span className="text-[14px] text-gray-700 font-medium">
-                  기업은행 인터넷뱅킹 → <b className="text-[#1B2B4B]">조회</b> → <b className="text-[#1B2B4B]">거래내역조회</b> → 기간 설정 후 <b className="text-[#1B2B4B]">엑셀저장</b>
-                </span>
-              </div>
-              <div className="flex items-start gap-3 bg-white border border-gray-200 rounded-xl px-4 py-3">
-                <span className="w-7 h-7 rounded-full bg-[#1B2B4B] text-white text-[13px] font-bold flex items-center justify-center shrink-0 mt-0.5">2</span>
-                <span className="text-[14px] text-gray-700 font-medium">
-                  위 <b className="text-[#1B2B4B] bg-[#1B2B4B]/10 px-1.5 py-0.5 rounded">입금확인 (엑셀)</b> 버튼 클릭 → 저장한 파일 선택
-                </span>
-              </div>
-              <div className="flex items-start gap-3 bg-white border border-gray-200 rounded-xl px-4 py-3">
-                <span className="w-7 h-7 rounded-full bg-[#1B2B4B] text-white text-[13px] font-bold flex items-center justify-center shrink-0 mt-0.5">3</span>
-                <span className="text-[14px] text-gray-700 font-medium">
-                  <b className="text-[#0F1A30]">입금액</b>과 미정산 월 청구금액(세액포함)이 일치하면 <b className="text-[#0F1A30]">자동 매칭</b>됩니다
-                </span>
-              </div>
-              <div className="flex items-start gap-3 bg-white border border-gray-200 rounded-xl px-4 py-3">
-                <span className="w-7 h-7 rounded-full bg-[#1B2B4B] text-white text-[13px] font-bold flex items-center justify-center shrink-0 mt-0.5">4</span>
-                <span className="text-[14px] text-gray-700 font-medium">
-                  <b className="text-[#1B2B4B]">적요(입금자명)</b>와 거래처명이 유사하면 신뢰도 <b className="text-[#0F1A30]">"높음"</b>으로 표시됩니다
-                </span>
-              </div>
+            <div className="flex items-center gap-1 flex-wrap">
+              <button type="button" onClick={() => { const d = new Date(Date.now() + 9 * 3600e3); d.setUTCMonth(d.getUTCMonth() - 11); setYearFrom(String(d.getUTCFullYear())); setMonthFrom(String(d.getUTCMonth() + 1).padStart(2, "0")); setYearTo(String(THIS_YEAR)); setMonthTo("12"); clearSel(); }} className="h-8 px-2.5 rounded-lg bg-[#F4F6FA] text-[13px] font-black text-[#3A4A66] hover:bg-[#EEF2F8]">최근 12개월</button>
+              <button type="button" onClick={() => { setYearFrom(String(THIS_YEAR)); setMonthFrom("01"); setYearTo(String(THIS_YEAR)); setMonthTo("12"); clearSel(); }} className="h-8 px-2.5 rounded-lg bg-[#F4F6FA] text-[13px] font-black text-[#3A4A66] hover:bg-[#EEF2F8]">올해</button>
             </div>
-
-            {/* 매칭 기준 요약 */}
-            <div className="p-4 bg-[#1B2B4B]/5 border border-[#1B2B4B]/20 rounded-xl">
-              <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-[13px] text-[#1B2B4B] font-semibold">
-                <span>※ <b>매칭 기준:</b> 입금액 = 월 총청구금액 × 1.1 (세액포함) ±10원 허용</span>
-                <span className="text-gray-400">|</span>
-                <span><b>지원 파일:</b> .xlsx, .xls, .csv</span>
-                <span className="text-gray-400">|</span>
-                <span><b>필수 컬럼:</b> 입금액 + 적요(또는 입금자명)</span>
-              </div>
+            <div className="ml-auto flex items-center gap-1.5 flex-wrap">
+              <button type="button" onClick={() => setBankBulkOpen(true)} className={sdBtnPri}><Ico d={IC.upload} size={15} />입금내역 올리기</button>
+              <button type="button" onClick={() => setDepositGuideOpen(true)} className={sdBtn}>양식 안내</button>
+              <button type="button" onClick={openArReport} className={sdBtn}><Ico d={IC.doc} size={15} />보고서</button>
+              <button type="button" onClick={downloadMonthExcel} className={sdBtn}><Ico d={IC.excel} size={15} />엑셀</button>
+              <button type="button" onClick={() => { setBatchModalOpen(true); setBatchClients(new Set()); setBatchClientQ(""); }} className={sdBtn}>일괄 정산</button>
             </div>
           </div>
-                    </div>
-                  </div>, document.body)}
-              </div>
-            </div>
 
+          <ArOverview total={arKpi.total} supplyTotal={arKpi.supplyTotal} overdue={arKpi.overdue} clientCount={arKpi.clientCount} avgDays={arKpi.avgDays}
+            aging={arKpi.aging} trend={arKpi.trend} months={arKpi.months} bucket={arBucket} setBucket={setArBucket} />
+
+          <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_440px] gap-3 items-start">
+            <div className={`${csCard} overflow-hidden min-w-0`}>
+              <div className="flex items-center gap-2 px-4 py-3 border-b border-[#E3E8F0] flex-wrap">
+                <div className="inline-flex p-1 rounded-xl bg-[#F4F6FA] border border-[#E3E8F0]">
+                  {[["list", "거래처별"], ["map", "발생 지도"], ["ledger", "월별 원장"]].map(([k, l]) => (
+                    <button key={k} type="button" onClick={() => setArView(k)} className={`h-8 px-3 rounded-lg text-[14px] font-black whitespace-nowrap ${arView === k ? "bg-[#0F1A30] text-white shadow-sm" : "text-[#5B6B85] hover:text-[#0F1A30]"}`}>{l}</button>
+                  ))}
+                </div>
+                {arView !== "ledger" && (
+                  <div className="flex items-center gap-1 flex-wrap">
+                    <button type="button" onClick={() => setArStatusF("")} className={`h-8 px-2.5 rounded-lg text-[13px] font-black ${!arStatusF ? "bg-[#EEF3FB] text-[#0F1A30]" : "text-[#5B6B85] hover:bg-[#F4F6FA]"}`}>전체 {arOpenClients.length}</button>
+                    {Object.keys(AR_STATUS).map(st => (
+                      <button key={st} type="button" onClick={() => setArStatusF(arStatusF === st ? "" : st)} className={`h-8 px-2.5 rounded-lg text-[13px] font-black inline-flex items-center gap-1.5 ${arStatusF === st ? "bg-[#EEF3FB] text-[#0F1A30]" : "text-[#5B6B85] hover:bg-[#F4F6FA]"}`}>
+                        <span className="w-2 h-2 rounded-full" style={{ background: AR_STATUS[st].dot }} />{st} {arStatusCounts[st] || 0}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                <div className="relative ml-auto w-full sm:w-[220px]">
+                  <Ico d={IC.search} size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9AA9C3] pointer-events-none" />
+                  <input autoComplete="off" value={arQ} onChange={(e) => setArQ(e.target.value)} placeholder="거래처 검색" className={`${sdInp} pl-9`} />
+                </div>
+              </div>
+              {arView === "list" && <ArClientList rows={arShown} sel={arSel} onSel={(c) => pickArClient(c === arSel ? "" : c)} sort={arSortBy} setSort={setArSortBy} />}
+              {arView === "map" && <div className="p-3"><ArAccrualMap rows={arShown} months={arMonthsInRange} sel={arSel} onSel={(c) => pickArClient(c === arSel ? "" : c)} /></div>}
+              {arView === "ledger" && (
+                <div>
             {/* ── 오른쪽: 월별 정산 원장 ── */}
-            <div className="min-w-0 xl:sticky xl:top-3">
-              <div className={`${csCard} overflow-hidden flex flex-col xl:max-h-[calc(100vh-24px)]`}>
+            <div className="min-w-0">
+              <div className={`overflow-hidden flex flex-col max-h-[calc(100vh-420px)] min-h-[300px]`}>
                 <div className="flex items-center gap-3 px-4 py-2.5 border-b border-[#E3E8F0] bg-white flex-wrap">
                   <div className="min-w-0 mr-auto">
                     <div className="text-[9.5px] font-extrabold tracking-[0.24em] text-[#9AA9C3] leading-none" style={{ fontFamily: KP_MONO, fontVariantNumeric: "tabular-nums" }}>LEDGER · MONTHLY · {yearFrom}.{monthFrom} – {yearTo}.{monthTo}</div>
@@ -54752,29 +54775,180 @@ const handleBatchSettle = async (targetStatus) => {
                 <div className="px-4 py-2 border-t border-[#E3E8F0] bg-[#F8FAFD] text-[11px] text-[#9AA9C3]">· 정산상태 클릭 시 해당 월 전체 오더에 정산상태/정산일이 저장됩니다.</div>
               </div>
             </div>
+                </div>
+              )}
+            </div>
+            {/* 오른쪽 상세 — 휴대폰에서는 아래에서 올라오는 화면 */}
+            {(() => {
+              const detail = (
+                <ArDetail data={arCur ? { ...arCur, timeline: arTimeline } : null} note={arCur?.note} isViewer={isViewer}
+                  onClose={csPhone ? () => pickArClient("") : undefined}
+                  onSaveNote={arSaveNote} onQuickPay={arQuickPay} quickPreview={arQuickPlan} onRemind={openArEmail} onReport={openArReport}
+                  info={arCur ? <ArClientInfo client={(clients || []).find((c) => c.거래처명 === arCur.client)} name={arCur.client} upsertClient={upsertClient} isViewer={isViewer} /> : null}
+                  ledger={arCur ? (
+                    <div>
+                      <div className="flex items-center gap-2 mb-2">
+                        <span className="text-[13px] text-[#9AA9C3]">상태를 누르면 그 달 전체 오더가 바뀌어요</span>
+                        <button type="button" onClick={settleSelected} disabled={!selectedMonths.size || isViewer} className={`${sdBtnPri} ml-auto h-9`}>선택 정산완료{selectedMonths.size ? ` (${selectedMonths.size})` : ""}</button>
+                      </div>
+                      <div className="rounded-xl border border-[#E3E8F0] overflow-hidden">
+                        <table className="kp-sd w-full" style={{ tableLayout: "fixed" }}>
+                          <colgroup><col style={{ width: 34 }} /><col style={{ width: 70 }} /><col /><col /><col style={{ width: 88 }} /></colgroup>
+                          <thead><tr className="bg-[#F4F6FA] text-[13px] text-[#5B6B85]"><th className="px-2 py-2" /><th className="px-2 py-2 text-left font-black">청구월</th><th className="px-2 py-2 text-right font-black">청구(VAT)</th><th className="px-2 py-2 text-right font-black">잔액</th><th className="px-2 py-2 text-center font-black">상태</th></tr></thead>
+                          <tbody>
+                            {monthRows.filter(r => r.거래처명 === arCur.client).map(r => {
+                              const 청구VAT = Math.round((r.총청구금액 || 0) * 1.1);
+                              const 잔 = r.정산상태 === "정산완료" ? 0 : r.잔액;
+                              return (
+                                <tr key={r.k} className={`border-t border-[#EEF2F8] ${selectedMonths.has(r.k) ? "bg-[#EEF3FB]" : ""}`}>
+                                  <td className="px-2 py-2 text-center"><input type="checkbox" aria-label={`${r.yyyymm} 선택`} className="w-4 h-4 accent-[#0F1A30]" checked={selectedMonths.has(r.k)} onChange={() => toggleMonthSelect(r.k)} /></td>
+                                  <td className="px-2 py-2 text-[14px] font-black text-[#0F1A30] tabular-nums">{r.yyyymm.slice(2).replace("-", ".")}</td>
+                                  <td className="px-2 py-2 text-right text-[14px] text-[#3A4A66] tabular-nums">{won(청구VAT)}</td>
+                                  <td className={`px-2 py-2 text-right text-[14px] tabular-nums ${잔 ? "font-black text-[#0F1A30]" : "text-[#9AA9C3]"}`}>{won(잔)}</td>
+                                  <td className="px-2 py-2 text-center">
+                                    <button type="button" disabled={isViewer || r.정산상태 === "진행중"} onClick={() => toggleMonthStatus(r)} title="눌러서 정산완료 ↔ 미정산"
+                                      className={`h-7 px-2 rounded-lg text-[13px] font-black whitespace-nowrap ${r.정산상태 === "정산완료" ? "bg-[#0F1A30] text-white" : r.정산상태 === "일부입금" ? "bg-[#2D4C82] text-white" : r.정산상태 === "진행중" ? "bg-[#F4F6FA] text-[#9AA9C3]" : "bg-white text-[#1B2B4B] border border-[#8FB0F0]"}`}>{r.정산상태}</button>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  ) : null} />
+              );
+              if (csPhone) return arCur ? createPortal(<div className="fixed inset-0 z-[9000] bg-[#F4F6FA] overflow-y-auto p-3 pb-24">{detail}</div>, document.body) : null;
+              return <div className="min-w-0 xl:sticky xl:top-3">{detail}</div>;
+            })()}
           </div>
+                {bankBulkOpen && createPortal(
+                  <BulkUploadChooser
+                    title="입금 내역 대용량 업로드"
+                    subtitle="은행 거래내역 엑셀을 올리면 미정산 월과 자동으로 맞춰 입금 처리합니다."
+                    templateDesc="거래일·적요(입금자명)·입금액·잔액·비고 열이 있는 양식을 받습니다. 은행에서 받은 거래내역 엑셀을 그대로 올려도 됩니다."
+                    templateTips={["입금자명이 거래처명과 같거나 포함되면 자동 매칭", "부가세 포함 금액 기준"]}
+                    uploadDesc="엑셀을 고르면 매칭 결과를 먼저 보여드리고, 확인 후 정산완료·일부입금으로 반영합니다."
+                    uploadTips={["입금액이 모자라면 일부입금으로", "매칭 안 된 입금은 따로 표시"]}
+                    onClose={() => setBankBulkOpen(false)}
+                    onTemplate={() => {
+                      const ws = XLSX.utils.aoa_to_sheet([["거래일", "적요(입금자명)", "입금액", "잔액", "비고"], ["2026-10-05", "(주)예시물류", 1100000, 5100000, "9월 운송료"], ["2026-10-06", "홍길동상사", 550000, 5650000, ""]]);
+                      ws["!cols"] = [{ wch: 12 }, { wch: 22 }, { wch: 14 }, { wch: 14 }, { wch: 18 }];
+                      const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "입금내역");
+                      XLSX.writeFile(wb, "입금확인_양식.xlsx");
+                    }}
+                    onFile={(e) => { const f = e.target.files?.[0]; setBankBulkOpen(false); if (f) handleBankExcelUpload({ target: { files: [f], value: "" } }); }}
+                  />, document.body)}
+                {depositGuideOpen && createPortal(
+                  <div className="kp-modal fixed inset-0 z-[1000000] bg-[#0B1428]/55 backdrop-blur-[2px] flex items-end sm:items-center justify-center sm:p-4" onClick={() => setDepositGuideOpen(false)}>
+                    <div className="w-full max-w-[760px] max-h-[88vh] overflow-y-auto bg-white rounded-[22px] shadow-[0_24px_60px_rgba(15,26,48,0.35)]" onClick={(e) => e.stopPropagation()}>
+                      <div className="sticky top-0 px-6 py-4 bg-gradient-to-r from-[#0F1A30] via-[#1B2B4B] to-[#2D4C82] text-white flex items-center justify-between">
+                        <div><div className="text-[11px] font-extrabold tracking-[0.22em] text-white/60">GUIDE</div><div className="text-[17px] font-black">입금확인 엑셀 양식 안내</div></div>
+                        <button onClick={() => setDepositGuideOpen(false)} className="w-8 h-8 rounded-lg bg-white/10">✕</button>
+                      </div>
+<div className="p-6">
+            
+            <p className="mb-4 text-[14px] text-[#5B6B85] leading-relaxed">
+              아래와 같은 형식의 <b className="text-[#1B2B4B]">기업은행 거래내역 엑셀</b> 파일을 업로드하면 자동으로 미정산 건과 매칭합니다.
+            </p>
 
+            {/* 예시 테이블 */}
+            <div className="overflow-x-auto mb-5">
+              <table className="w-full border-2 border-[#D5DDEA] text-center text-[14px]">
+                <thead className="bg-[#1B2B4B] text-white">
+                  <tr>
+                    <th className="border border-[#2d4a7a] px-4 py-3 font-bold"><EditableText id="settlement.bankSample.header.거래일" defaultText="거래일" /></th>
+                    <th className="border border-[#2d4a7a] px-4 py-3 font-bold"><EditableText id="settlement.bankSample.header.적요" defaultText="적요(입금자명)" /></th>
+                    <th className="border border-[#2d4a7a] px-4 py-3 font-bold"><EditableText id="settlement.bankSample.header.입금액" defaultText="입금액" /></th>
+                    <th className="border border-[#2d4a7a] px-4 py-3 font-bold"><EditableText id="settlement.bankSample.header.잔액" defaultText="잔액" /></th>
+                    <th className="border border-[#2d4a7a] px-4 py-3 font-bold"><EditableText id="settlement.bankSample.header.비고" defaultText="비고" /></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr className="bg-white">
+                    <td className="border border-[#E3E8F0] px-4 py-3 font-medium text-[#3A4A66]">2026-04-25</td>
+                    <td className="border border-[#E3E8F0] px-4 py-3 font-bold text-[#1B2B4B]">거해</td>
+                    <td className="border border-[#E3E8F0] px-4 py-3 font-extrabold text-[#0F1A30]">3,234,000</td>
+                    <td className="border border-[#E3E8F0] px-4 py-3 text-[#7A89A3]">15,420,000</td>
+                    <td className="border border-[#E3E8F0] px-4 py-3 text-[#7A89A3]"></td>
+                  </tr>
+                  <tr className="bg-[#F8FAFD]/80">
+                    <td className="border border-[#E3E8F0] px-4 py-3 font-medium text-[#3A4A66]">2026-04-28</td>
+                    <td className="border border-[#E3E8F0] px-4 py-3 font-bold text-[#1B2B4B]">㈜대한물류</td>
+                    <td className="border border-[#E3E8F0] px-4 py-3 font-extrabold text-[#0F1A30]">5,500,000</td>
+                    <td className="border border-[#E3E8F0] px-4 py-3 text-[#7A89A3]">20,920,000</td>
+                    <td className="border border-[#E3E8F0] px-4 py-3 text-[#7A89A3]"></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            {/* 사용 방법 */}
+            <div className="space-y-2.5 mb-5">
+              <div className="flex items-start gap-3 bg-white border border-[#E3E8F0] rounded-xl px-4 py-3">
+                <span className="w-7 h-7 rounded-full bg-[#1B2B4B] text-white text-[13px] font-bold flex items-center justify-center shrink-0 mt-0.5">1</span>
+                <span className="text-[14px] text-[#3A4A66] font-medium">
+                  기업은행 인터넷뱅킹 → <b className="text-[#1B2B4B]">조회</b> → <b className="text-[#1B2B4B]">거래내역조회</b> → 기간 설정 후 <b className="text-[#1B2B4B]">엑셀저장</b>
+                </span>
+              </div>
+              <div className="flex items-start gap-3 bg-white border border-[#E3E8F0] rounded-xl px-4 py-3">
+                <span className="w-7 h-7 rounded-full bg-[#1B2B4B] text-white text-[13px] font-bold flex items-center justify-center shrink-0 mt-0.5">2</span>
+                <span className="text-[14px] text-[#3A4A66] font-medium">
+                  위 <b className="text-[#1B2B4B] bg-[#1B2B4B]/10 px-1.5 py-0.5 rounded">입금확인 (엑셀)</b> 버튼 클릭 → 저장한 파일 선택
+                </span>
+              </div>
+              <div className="flex items-start gap-3 bg-white border border-[#E3E8F0] rounded-xl px-4 py-3">
+                <span className="w-7 h-7 rounded-full bg-[#1B2B4B] text-white text-[13px] font-bold flex items-center justify-center shrink-0 mt-0.5">3</span>
+                <span className="text-[14px] text-[#3A4A66] font-medium">
+                  <b className="text-[#0F1A30]">입금액</b>과 미정산 월 청구금액(세액포함)이 일치하면 <b className="text-[#0F1A30]">자동 매칭</b>됩니다
+                </span>
+              </div>
+              <div className="flex items-start gap-3 bg-white border border-[#E3E8F0] rounded-xl px-4 py-3">
+                <span className="w-7 h-7 rounded-full bg-[#1B2B4B] text-white text-[13px] font-bold flex items-center justify-center shrink-0 mt-0.5">4</span>
+                <span className="text-[14px] text-[#3A4A66] font-medium">
+                  <b className="text-[#1B2B4B]">적요(입금자명)</b>와 거래처명이 유사하면 신뢰도 <b className="text-[#0F1A30]">"높음"</b>으로 표시됩니다
+                </span>
+              </div>
+            </div>
+
+            {/* 매칭 기준 요약 */}
+            <div className="p-4 bg-[#1B2B4B]/5 border border-[#1B2B4B]/20 rounded-xl">
+              <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-[13px] text-[#1B2B4B] font-semibold">
+                <span>※ <b>매칭 기준:</b> 입금액 = 월 총청구금액 × 1.1 (세액포함) ±10원 허용</span>
+                <span className="text-[#9AA9C3]">|</span>
+                <span><b>지원 파일:</b> .xlsx, .xls, .csv</span>
+                <span className="text-[#9AA9C3]">|</span>
+                <span><b>필수 컬럼:</b> 입금액 + 적요(또는 입금자명)</span>
+              </div>
+            </div>
+          </div>
+                    </div>
+                  </div>, document.body)}
+        </div>
+      )}
+      {tab === "unsettledMonth" && (
+        <div>
 
           {/* 미수금 보고서 기간 + 거래처 선택 */}
 {arReportOpen && (
-  <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]"
+  <div className="kp-modal fixed inset-0 bg-[#0B1428]/55 backdrop-blur-[2px] flex items-end sm:items-center justify-center sm:p-4 z-[99999]"
     onClick={() => setArReportOpen(false)}>
-    <div className="bg-white rounded-2xl shadow-2xl w-[580px] max-h-[85vh] flex flex-col overflow-hidden"
+    <div className="kp-modal-panel bg-white rounded-t-[22px] sm:rounded-[22px] shadow-[0_24px_64px_rgba(11,20,40,0.35)] w-full max-w-[580px] max-h-[85vh] flex flex-col overflow-hidden"
       onClick={e => e.stopPropagation()}>
 
       {/* 헤더 */}
-      <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between shrink-0">
+      <div className="kp-modal-head px-6 py-4 flex items-center justify-between shrink-0">
         <div>
-          <div className="text-white font-bold text-[15px]">미수금 보고서 출력</div>
+          <div className="text-white font-black text-[18px]">미수금 보고서 출력</div>
           <div className="text-white/50 text-[12px] mt-0.5">기간과 거래처를 선택하고 출력하세요</div>
         </div>
-        <button className="text-white/60 hover:text-white text-xl"
+        <button aria-label="닫기" className="kp-modal-x shrink-0 w-9 h-9 rounded-xl bg-white/10 hover:bg-white/20 text-white text-[20px] leading-none flex items-center justify-center"
           onClick={() => setArReportOpen(false)}>×</button>
       </div>
 
       {/* 기간 선택 */}
-      <div className="px-6 pt-4 pb-3 border-b border-gray-100 shrink-0">
-        <div className="text-[12px] font-bold text-gray-500 mb-2">조회 기간</div>
+      <div className="px-6 pt-4 pb-3 border-b border-[#EEF2F8] shrink-0">
+        <div className="text-[12px] font-bold text-[#7A89A3] mb-2">조회 기간</div>
         <div className="flex items-center gap-2">
           <CustomSelect className="border-2 border-[#1B2B4B] rounded-lg px-2 py-2 text-[13px] font-bold text-[#1B2B4B] outline-none"
             value={arFromYear} onChange={e => setArFromYear(e.target.value)}>
@@ -54788,7 +54962,7 @@ const handleBatchSettle = async (targetStatus) => {
               <option key={mm} value={mm}>{parseInt(mm,10)}월</option>
             ))}
           </CustomSelect>
-          <span className="text-gray-500 font-semibold">부터</span>
+          <span className="text-[#7A89A3] font-semibold">부터</span>
           <CustomSelect className="border-2 border-[#1B2B4B] rounded-lg px-2 py-2 text-[13px] font-bold text-[#1B2B4B] outline-none"
             value={arToYear} onChange={e => setArToYear(e.target.value)}>
             {Array.from({length:3},(_,i)=>String(THIS_YEAR - 1 + i)).map(y=>(
@@ -54801,19 +54975,19 @@ const handleBatchSettle = async (targetStatus) => {
               <option key={mm} value={mm}>{parseInt(mm,10)}월</option>
             ))}
           </CustomSelect>
-          <span className="text-gray-500 font-semibold">까지</span>
+          <span className="text-[#7A89A3] font-semibold">까지</span>
         </div>
       </div>
 
       {/* ★ 거래처 범위 선택 */}
-      <div className="px-6 pt-4 pb-3 border-b border-gray-100 shrink-0">
-        <div className="text-[12px] font-bold text-gray-500 mb-2">거래처 범위</div>
+      <div className="px-6 pt-4 pb-3 border-b border-[#EEF2F8] shrink-0">
+        <div className="text-[12px] font-bold text-[#7A89A3] mb-2">거래처 범위</div>
         <div className="flex gap-2 mb-3">
           <button
             className={`flex-1 py-2 rounded-lg text-[13px] font-bold transition ${
               arReportMode === "all"
                 ? "bg-[#1B2B4B] text-white"
-                : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                : "bg-[#F4F6FA] text-[#5B6B85] hover:bg-[#F4F6FA]"
             }`}
             onClick={() => { setArReportMode("all"); setArReportClients(new Set()); }}
           >
@@ -54823,7 +54997,7 @@ const handleBatchSettle = async (targetStatus) => {
             className={`flex-1 py-2 rounded-lg text-[13px] font-bold transition ${
               arReportMode === "selected"
                 ? "bg-[#1B2B4B] text-white"
-                : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                : "bg-[#F4F6FA] text-[#5B6B85] hover:bg-[#F4F6FA]"
             }`}
             onClick={() => setArReportMode("selected")}
           >
@@ -54835,7 +55009,7 @@ const handleBatchSettle = async (targetStatus) => {
           <>
             <div className="flex items-center gap-2 mb-2">
               <input autoComplete="off"
-                className="flex-1 border-2 border-gray-200 rounded-lg px-3 py-2 text-[13px] outline-none focus:border-[#1B2B4B]"
+                className="flex-1 border border-[#D5DDEA] rounded-xl px-3 py-2 text-[13px] outline-none focus:border-[#1B2B4B]"
                 placeholder="거래처명 검색..."
                 value={arReportClientQ}
                 onChange={e => setArReportClientQ(e.target.value)}
@@ -54853,7 +55027,7 @@ const handleBatchSettle = async (targetStatus) => {
                 {arReportClients.size > 0 ? "전체해제" : "전체선택"}
               </button>
             </div>
-            <div className="max-h-[180px] overflow-y-auto border border-gray-200 rounded-xl p-2 space-y-1">
+            <div className="max-h-[180px] overflow-y-auto border border-[#E3E8F0] rounded-xl p-2 space-y-1">
               {clientOptions8
                 .filter(name => !arReportClientQ.trim() || name.toLowerCase().includes(arReportClientQ.toLowerCase()))
                 .map(name => {
@@ -54861,7 +55035,7 @@ const handleBatchSettle = async (targetStatus) => {
                   return (
                     <div key={name}
                       className={`flex items-center gap-3 px-3 py-2 rounded-lg cursor-pointer transition select-none ${
-                        checked ? "bg-[#1B2B4B]/5 border border-[#1B2B4B]/30" : "hover:bg-gray-50"
+                        checked ? "bg-[#1B2B4B]/5 border border-[#1B2B4B]/30" : "hover:bg-[#F8FAFD]"
                       }`}
                       onClick={() => setArReportClients(prev => {
                         const n = new Set(prev);
@@ -54870,11 +55044,11 @@ const handleBatchSettle = async (targetStatus) => {
                       })}
                     >
                       <div className={`w-4 h-4 rounded border-2 flex items-center justify-center shrink-0 transition ${
-                        checked ? "border-[#1B2B4B] bg-[#1B2B4B]" : "border-gray-300"
+                        checked ? "border-[#1B2B4B] bg-[#1B2B4B]" : "border-[#D5DDEA]"
                       }`}>
                         {checked && <svg className="w-2.5 h-2.5 text-white" fill="none" stroke="currentColor" strokeWidth="3" viewBox="0 0 12 12"><path d="M1 6l3.5 3.5L11 2"/></svg>}
                       </div>
-                      <span className="text-[13px] font-medium text-gray-800">{name}</span>
+                      <span className="text-[13px] font-medium text-[#0F1A30]">{name}</span>
                     </div>
                   );
                 })}
@@ -54892,22 +55066,22 @@ const handleBatchSettle = async (targetStatus) => {
       <div className="px-6 pt-3 pb-4 shrink-0 space-y-3">
         <div
           className={`flex items-center gap-3 px-4 py-3 rounded-xl border-2 cursor-pointer transition select-none ${
-            arOnlyUnsettled ? "border-[#1B2B4B] bg-[#1B2B4B]/5" : "border-gray-200 bg-gray-50"
+            arOnlyUnsettled ? "border-[#1B2B4B] bg-[#1B2B4B]/5" : "border-[#E3E8F0] bg-[#F8FAFD]"
           }`}
           onClick={() => setArOnlyUnsettled(p => !p)}
         >
           <div className={`w-4 h-4 rounded border-2 flex items-center justify-center shrink-0 transition ${
-            arOnlyUnsettled ? "border-[#1B2B4B] bg-[#1B2B4B]" : "border-gray-300"
+            arOnlyUnsettled ? "border-[#1B2B4B] bg-[#1B2B4B]" : "border-[#D5DDEA]"
           }`}>
             {arOnlyUnsettled && <svg className="w-2.5 h-2.5 text-white" fill="none" stroke="currentColor" strokeWidth="3" viewBox="0 0 12 12"><path d="M1 6l3.5 3.5L11 2"/></svg>}
           </div>
           <div>
-            <div className="text-[13px] font-bold text-gray-700">미수금 있는 거래처만 출력</div>
-            <div className="text-[11px] text-gray-500 mt-0.5">정산완료된 거래처는 보고서에서 제외됩니다</div>
+            <div className="text-[13px] font-bold text-[#3A4A66]">미수금 있는 거래처만 출력</div>
+            <div className="text-[11px] text-[#7A89A3] mt-0.5">정산완료된 거래처는 보고서에서 제외됩니다</div>
           </div>
         </div>
 
-        <div className="text-[12px] text-gray-500 bg-gray-50 rounded-lg px-4 py-3">
+        <div className="text-[12px] text-[#7A89A3] bg-[#F8FAFD] rounded-lg px-4 py-3">
           {arReportMode === "all"
             ? <>거래처 <b className="text-[#1B2B4B]">{clientOptions8.length}개사</b> 전체 대상</>
             : <>선택된 <b className="text-[#1B2B4B]">{arReportClients.size}개사</b> 대상</>
@@ -54917,15 +55091,15 @@ const handleBatchSettle = async (targetStatus) => {
       </div>
 
       {/* 하단 버튼 */}
-      <div className="px-6 pb-5 flex gap-3 shrink-0">
-        <button className="flex-1 py-2.5 rounded-xl bg-gray-100 text-gray-700 font-semibold text-[13px] hover:bg-gray-200 transition"
+      <div className="kp-modal-foot px-6 py-4 flex gap-3 shrink-0">
+        <button className="flex-1 py-2.5 rounded-xl bg-white border border-[#D5DDEA] text-[#1B2B4B] font-semibold text-[13px] hover:bg-[#F4F6FA] transition"
           onClick={() => setArReportOpen(false)}><EditableText id="misc.btn.51069.취소" defaultText="취소" /></button>
         <button
           disabled={arReportMode === "selected" && arReportClients.size === 0}
           className={`flex-1 py-2.5 rounded-xl font-bold text-[13px] transition ${
             arReportMode === "all" || arReportClients.size > 0
               ? "bg-violet-600 text-white hover:bg-violet-700"
-              : "bg-gray-200 text-gray-500 cursor-not-allowed"
+              : "bg-gray-200 text-[#7A89A3] cursor-not-allowed"
           }`}
           onClick={handleARReport}
         >
@@ -54938,11 +55112,11 @@ const handleBatchSettle = async (targetStatus) => {
 
 {/* 일괄 정산 로딩 */}
           {batchLoading && (
-            <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[999999]">
+            <div className="kp-modal fixed inset-0 bg-[#0B1428]/55 backdrop-blur-[2px] flex items-end sm:items-center justify-center sm:p-4 z-[999999]">
               <div className="bg-white rounded-2xl shadow-2xl px-10 py-8 flex flex-col items-center gap-4 min-w-[260px]">
                 <div className="w-12 h-12 border-4 border-[#1B2B4B]/20 border-t-[#1B2B4B] rounded-full animate-spin" />
                 <div className="text-[15px] font-bold text-[#1B2B4B]">정산 처리 중...</div>
-                <div className="text-[12px] text-gray-500 text-center">
+                <div className="text-[12px] text-[#7A89A3] text-center">
                   데이터 양에 따라 시간이 걸릴 수 있습니다.<br />잠시만 기다려 주세요.
                 </div>
               </div>
@@ -54950,13 +55124,13 @@ const handleBatchSettle = async (targetStatus) => {
           )}
 {/* ══ 일괄 정산 모달 ══ */}
           {batchModalOpen && (
-            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]"
+            <div className="kp-modal fixed inset-0 bg-[#0B1428]/55 backdrop-blur-[2px] flex items-end sm:items-center justify-center sm:p-4 z-[99999]"
               onClick={() => setBatchModalOpen(false)}>
-              <div className="bg-white rounded-2xl shadow-2xl w-[680px] max-h-[85vh] flex flex-col overflow-hidden"
+              <div className="kp-modal-panel bg-white rounded-t-[22px] sm:rounded-[22px] shadow-[0_24px_64px_rgba(11,20,40,0.35)] w-full max-w-[680px] max-h-[85vh] flex flex-col overflow-hidden"
                 onClick={e => e.stopPropagation()}>
 
                 {/* 헤더 */}
-                <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between shrink-0">
+                <div className="kp-modal-head px-6 py-4 flex items-center justify-between shrink-0">
                   <div>
                     <div className="text-white font-bold text-[16px]">일괄 정산처리</div>
                     <div className="text-white/50 text-[12px] mt-0.5">
@@ -54968,8 +55142,8 @@ const handleBatchSettle = async (targetStatus) => {
                 </div>
 
                 {/* 기간 선택 */}
-                <div className="px-6 py-4 border-b border-gray-100 shrink-0">
-                  <div className="text-[12px] font-bold text-gray-500 mb-2">기간 선택</div>
+                <div className="px-6 py-4 border-b border-[#EEF2F8] shrink-0">
+                  <div className="text-[12px] font-bold text-[#7A89A3] mb-2">기간 선택</div>
                   <div className="flex items-center gap-2 flex-wrap">
                     <CustomSelect className="border-2 border-[#1B2B4B] rounded-lg px-2 py-2 text-[13px] font-bold text-[#1B2B4B] outline-none"
                       value={batchFromYear} onChange={e => setBatchFromYear(e.target.value)}>
@@ -54983,7 +55157,7 @@ const handleBatchSettle = async (targetStatus) => {
                         <option key={mm} value={mm}>{parseInt(mm,10)}월</option>
                       ))}
                     </CustomSelect>
-                    <span className="text-gray-500 font-semibold">부터</span>
+                    <span className="text-[#7A89A3] font-semibold">부터</span>
                     <CustomSelect className="border-2 border-[#1B2B4B] rounded-lg px-2 py-2 text-[13px] font-bold text-[#1B2B4B] outline-none"
                       value={batchToYear} onChange={e => setBatchToYear(e.target.value)}>
                       {Array.from({length:3},(_,i)=>String(THIS_YEAR - 1 + i)).map(y=>(
@@ -54996,17 +55170,17 @@ const handleBatchSettle = async (targetStatus) => {
                         <option key={mm} value={mm}>{parseInt(mm,10)}월</option>
                       ))}
                     </CustomSelect>
-                    <span className="text-gray-500 font-semibold">까지</span>
+                    <span className="text-[#7A89A3] font-semibold">까지</span>
                   </div>
                 </div>
 
                 {/* 거래처 검색 + 전체선택 */}
                 <div className="px-6 pt-4 shrink-0">
                   <div className="flex items-center gap-3 mb-3">
-                    <div className="text-[12px] font-bold text-gray-500">
+                    <div className="text-[12px] font-bold text-[#7A89A3]">
                       거래처 선택
                       <span className="ml-2 text-[#1B2B4B]">({batchClients.size}/{batchEligibleClients.length})</span>
-                      <span className="ml-1 text-gray-500 font-normal">(미수금 있는 업체만)</span>
+                      <span className="ml-1 text-[#7A89A3] font-normal">(미수금 있는 업체만)</span>
                     </div>
                     <button
                       className="ml-auto px-3 py-1 rounded-lg border border-[#1B2B4B] text-[#1B2B4B] text-[12px] font-bold hover:bg-[#1B2B4B] hover:text-white transition"
@@ -55018,7 +55192,7 @@ const handleBatchSettle = async (targetStatus) => {
                     </button>
                   </div>
                   <input autoComplete="off"
-                    className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-[13px] outline-none focus:border-[#1B2B4B] mb-2"
+                    className="w-full border border-[#D5DDEA] rounded-xl px-3 py-2 text-[13px] outline-none focus:border-[#1B2B4B] mb-2"
                     placeholder="거래처명 검색..."
                     value={batchClientQ}
                     onChange={e => setBatchClientQ(e.target.value)}
@@ -55038,7 +55212,7 @@ const handleBatchSettle = async (targetStatus) => {
                             className={`flex items-center gap-3 px-4 py-3 rounded-xl border-2 cursor-pointer transition select-none ${
                               checked
                                 ? "border-[#1B2B4B] bg-[#1B2B4B]/5"
-                                : "border-gray-200 hover:border-gray-300 bg-white"
+                                : "border-[#E3E8F0] hover:border-[#D5DDEA] bg-white"
                             }`}
                             onClick={() => setBatchClients(prev => {
                               const n = new Set(prev);
@@ -55046,12 +55220,12 @@ const handleBatchSettle = async (targetStatus) => {
                               return n;
                             })}>
                             <div className={`w-4 h-4 rounded border-2 flex items-center justify-center shrink-0 transition ${
-                              checked ? "border-[#1B2B4B] bg-[#1B2B4B]" : "border-gray-300"
+                              checked ? "border-[#1B2B4B] bg-[#1B2B4B]" : "border-[#D5DDEA]"
                             }`}>
                               {checked && <svg className="w-2.5 h-2.5 text-white" fill="none" stroke="currentColor" strokeWidth="3" viewBox="0 0 12 12"><path d="M1 6l3.5 3.5L11 2"/></svg>}
                             </div>
                             <div className="flex-1 min-w-0">
-                              <div className="text-[13px] font-bold text-gray-800 truncate">{name}</div>
+                              <div className="text-[13px] font-bold text-[#0F1A30] truncate">{name}</div>
                             </div>
                             {unsettledCount > 0 && (
                               <span className="shrink-0 px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#F3F6FA] text-[#2D4C82]">
@@ -55062,21 +55236,21 @@ const handleBatchSettle = async (targetStatus) => {
                         );
                       })}
                     {batchEligibleClients.filter(name => !batchClientQ.trim() || name.toLowerCase().includes(batchClientQ.toLowerCase())).length === 0 && (
-                      <div className="col-span-2 text-center text-gray-500 text-[13px] py-8">검색 결과가 없습니다</div>
+                      <div className="col-span-2 text-center text-[#7A89A3] text-[13px] py-8">검색 결과가 없습니다</div>
                     )}
                   </div>
                 </div>
 
                 {/* 하단 버튼 */}
-                <div className="px-6 py-4 border-t border-gray-100 bg-gray-50 shrink-0">
+                <div className="px-6 py-4 border-t border-[#EEF2F8] bg-[#F8FAFD] shrink-0">
                   <div className="flex items-center gap-3">
-                    <div className="text-[12px] text-gray-500 font-semibold mr-auto">
+                    <div className="text-[12px] text-[#7A89A3] font-semibold mr-auto">
                       {batchClients.size > 0
                         ? `${batchClients.size}개 거래처 × ${batchFromYear}년 ${parseInt(batchFromMM,10)}월~${batchToYear}년 ${parseInt(batchToMM,10)}월 (전체 ${batchEligibleClients.length}개 중)`
                         : "거래처를 선택하세요"}
                     </div>
                     <button
-                      className="px-5 py-2.5 rounded-xl bg-white border border-gray-300 text-gray-600 font-semibold text-[13px] hover:bg-gray-100 transition"
+                      className="px-5 py-2.5 rounded-xl bg-white border border-[#D5DDEA] text-[#5B6B85] font-semibold text-[13px] hover:bg-[#F4F6FA] transition"
                       onClick={() => setBatchModalOpen(false)}>
                       취소
                     </button>
@@ -55085,7 +55259,7 @@ const handleBatchSettle = async (targetStatus) => {
                       className={`px-5 py-2.5 rounded-xl font-bold text-[13px] transition ${
                         batchClients.size
                           ? "bg-[#2D4C82] hover:bg-[#1B2B4B] text-white"
-                          : "bg-gray-200 text-gray-500 cursor-not-allowed"
+                          : "bg-gray-200 text-[#7A89A3] cursor-not-allowed"
                       }`}
                       onClick={() => handleBatchSettle("미정산")}>
                       미정산으로 변경
@@ -55095,7 +55269,7 @@ const handleBatchSettle = async (targetStatus) => {
                       className={`px-5 py-2.5 rounded-xl font-bold text-[13px] transition ${
                         batchClients.size
                           ? "bg-[#0F1A30] hover:bg-[#1B2B4B] text-white"
-                          : "bg-gray-200 text-gray-500 cursor-not-allowed"
+                          : "bg-gray-200 text-[#7A89A3] cursor-not-allowed"
                       }`}
                       onClick={() => handleBatchSettle("정산완료")}>
                       정산완료로 변경
@@ -55112,7 +55286,7 @@ const handleBatchSettle = async (targetStatus) => {
             const autoCount = ms.filter(m => m.confidence === "이름일치").length;
             const KIND = { "정산완료": "bg-[#0F1A30] text-white", "여러 달 정산": "bg-[#0F1A30] text-white", "정산+일부입금": "bg-[#2D4C82] text-white", "일부입금": "bg-[#EEF3FB] text-[#1B2B4B]", "초과입금": "border border-[#0F1A30] text-[#0F1A30]" };
             return (
-            <div className="fixed inset-0 bg-[#0F1A30]/45 flex items-center justify-center z-[99999] p-4" onClick={() => setBankMatchResult(null)}>
+            <div className="kp-modal fixed inset-0 bg-[#0B1428]/55 backdrop-blur-[2px] flex items-end sm:items-center justify-center sm:p-4 z-[99999]" onClick={() => setBankMatchResult(null)}>
               <div className="bg-[#F7F9FC] rounded-[22px] shadow-[0_24px_60px_rgba(15,26,48,0.35)] w-full max-w-[760px] max-h-[88vh] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
                 <div className="px-6 py-5 bg-gradient-to-r from-[#0F1A30] via-[#1B2B4B] to-[#2D4C82] text-white flex items-start justify-between gap-3 shrink-0">
                   <div>
@@ -55161,7 +55335,7 @@ const handleBatchSettle = async (targetStatus) => {
                             <span className="font-bold text-[#0F1A30] tabular-nums">{d.amount.toLocaleString()}원</span>
                             <span>{d.name || "-"}</span>
                             <span className="text-[#9AA9C3]">{d.date}</span>
-                            <span className="text-[#7A879C]">— {d.reason}</span>
+                            <span className="text-[#7A879C]">· {d.reason}</span>
                           </div>
                         ))}
                       </div>
@@ -55176,23 +55350,23 @@ const handleBatchSettle = async (targetStatus) => {
 
           {/* ══ 미수금 이메일 발송 모달 ══ */}
           {arEmailOpen && (
-            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]">
-              <div className="bg-white rounded-2xl shadow-2xl w-[580px] max-h-[92vh] overflow-y-auto">
+            <div className="kp-modal fixed inset-0 bg-[#0B1428]/55 backdrop-blur-[2px] flex items-end sm:items-center justify-center sm:p-4 z-[99999]">
+              <div className="kp-modal-panel bg-white rounded-t-[22px] sm:rounded-[22px] shadow-[0_24px_64px_rgba(11,20,40,0.35)] w-full max-w-[580px] max-h-[92vh] overflow-y-auto">
 
                 {/* 헤더 */}
-                <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between rounded-t-2xl">
+                <div className="kp-modal-head px-6 py-4 flex items-center justify-between shrink-0">
                   <div>
-                    <div className="text-white font-bold text-[15px]">미수금 이메일 발송</div>
-                    <div className="text-white/70 text-[12px] mt-0.5">{selClient} — {THIS_YEAR}년 미수금 현황</div>
+                    <div className="text-white font-black text-[18px]">미수금 이메일 발송</div>
+                    <div className="text-white/70 text-[14px] mt-0.5">{selClient} · {THIS_YEAR}년 미수금 현황</div>
                   </div>
-                  <button className="text-white/60 hover:text-white text-xl" onClick={() => { setArEmailOpen(false); setShowEmailHistory(false); }}>×</button>
+                  <button aria-label="닫기" className="kp-modal-x shrink-0 w-9 h-9 rounded-xl bg-white/10 hover:bg-white/20 text-white text-[20px] leading-none flex items-center justify-center" onClick={() => { setArEmailOpen(false); setShowEmailHistory(false); }}>×</button>
                 </div>
 
                 <div className="p-6 space-y-4">
 
                   {/* 월 범위 선택 — 이미지1 스타일 */}
                   <div>
-                    <label className="text-[13px] font-bold text-gray-700 mb-2 block">기간 선택 ({THIS_YEAR}년)</label>
+                    <label className="text-[13px] font-bold text-[#3A4A66] mb-2 block">기간 선택 ({THIS_YEAR}년)</label>
                     <div className="flex items-center gap-2">
                       <CustomSelect
                         className="border-2 border-[#1B2B4B] rounded-lg px-3 py-2 text-[13px] font-bold text-[#1B2B4B] outline-none"
@@ -55210,7 +55384,7 @@ const handleBatchSettle = async (targetStatus) => {
                           <option key={mm} value={mm}>{parseInt(mm,10)}월</option>
                         ))}
                       </CustomSelect>
-                      <span className="text-[13px] font-semibold text-gray-600">부터</span>
+                      <span className="text-[13px] font-semibold text-[#5B6B85]">부터</span>
                       <CustomSelect
                         className="border-2 border-[#1B2B4B] rounded-lg px-3 py-2 text-[13px] font-bold text-[#1B2B4B] outline-none"
                         value={arEmailToMM}
@@ -55227,12 +55401,12 @@ const handleBatchSettle = async (targetStatus) => {
                           <option key={mm} value={mm}>{parseInt(mm,10)}월</option>
                         ))}
                       </CustomSelect>
-                      <span className="text-[13px] font-semibold text-gray-600">까지</span>
+                      <span className="text-[13px] font-semibold text-[#5B6B85]">까지</span>
                     </div>
                     <div className="mt-2 flex gap-2">
                       {[["상반기","01","06"],["하반기","07","12"],["전체","01","12"]].map(([label,f,t])=>(
                         <button key={label}
-                          className="flex-1 py-1.5 rounded-lg bg-gray-100 text-gray-700 text-[12px] font-semibold hover:bg-[#1B2B4B] hover:text-white transition"
+                          className="flex-1 py-1.5 rounded-lg bg-white border border-[#D5DDEA] text-[#1B2B4B] text-[12px] font-semibold hover:bg-[#1B2B4B] hover:text-white transition"
                           onClick={() => {
                             setArEmailFromMM(f); setArEmailToMM(t);
                             const from2=parseInt(f,10), to2=parseInt(t,10);
@@ -55262,17 +55436,17 @@ const handleBatchSettle = async (targetStatus) => {
 
                   {/* 발신 계정 */}
                   <div>
-                    <label className="text-[13px] font-bold text-gray-700 mb-1 block">발신 계정</label>
-                    <div className="px-3 py-2.5 bg-gray-100 border border-gray-300 rounded-lg text-[13px] text-gray-800 font-medium">
+                    <label className="text-[13px] font-bold text-[#3A4A66] mb-1 block">발신 계정</label>
+                    <div className="px-3 py-2.5 bg-[#F4F6FA] border border-[#D5DDEA] rounded-lg text-[13px] text-[#0F1A30] font-medium">
                       r15332525@daum.net
                     </div>
                   </div>
 
                   {/* 수신 이메일 */}
                   <div>
-                    <label className="text-[13px] font-bold text-gray-700 mb-1 block">수신 이메일</label>
+                    <label className="text-[13px] font-bold text-[#3A4A66] mb-1 block">수신 이메일</label>
                     <input autoComplete="off"
-                      className="w-full border-2 border-gray-300 rounded-lg px-3 py-2.5 text-[13px] text-gray-900 outline-none focus:border-[#1B2B4B]"
+                      className="w-full border border-[#D5DDEA] rounded-xl px-3 py-2.5 text-[13px] text-[#0F1A30] outline-none focus:border-[#1B2B4B]"
                       placeholder="거래처 이메일 입력"
                       value={emailTo}
                       onChange={e => setEmailTo(e.target.value)}
@@ -55282,11 +55456,11 @@ const handleBatchSettle = async (targetStatus) => {
                   {/* 발송 내용 */}
                   <div>
                     <div className="flex items-center justify-between mb-1">
-                      <label className="text-[13px] font-bold text-gray-700">발송 내용 (직접 수정 가능)</label>
+                      <label className="text-[13px] font-bold text-[#3A4A66]">발송 내용 (직접 수정 가능)</label>
                       <span className="text-[11px] text-[#1B2B4B] font-semibold">편집 가능</span>
                     </div>
                     <textarea
-                      className="w-full border-2 border-gray-300 rounded-lg px-4 py-3 text-[13px] text-gray-900 font-medium leading-relaxed resize-none outline-none focus:border-[#1B2B4B] bg-white"
+                      className="w-full border border-[#D5DDEA] rounded-xl px-4 py-3 text-[13px] text-[#0F1A30] font-medium leading-relaxed resize-none outline-none focus:border-[#1B2B4B] bg-white"
                       rows={10}
                       value={emailBody}
                       onChange={e => setEmailBody(e.target.value)}
@@ -55294,13 +55468,13 @@ const handleBatchSettle = async (targetStatus) => {
                   </div>
 
                   {/* 명함 포함 토글 */}
-                  <div className="flex items-center justify-between bg-gray-50 rounded-xl px-4 py-3 border border-gray-200">
+                  <div className="flex items-center justify-between bg-[#F8FAFD] rounded-xl px-4 py-3 border border-[#E3E8F0]">
                     <div>
-                      <div className="text-[13px] font-bold text-gray-700">명함 이미지 포함</div>
-                      <div className="text-[11px] text-gray-500">{cardImage ? "내 정보에서 등록한 명함이 첨부됩니다" : "명함 미등록 (내 정보에서 업로드)"}</div>
+                      <div className="text-[13px] font-bold text-[#3A4A66]">명함 이미지 포함</div>
+                      <div className="text-[11px] text-[#7A89A3]">{cardImage ? "내 정보에서 등록한 명함이 첨부됩니다" : "명함 미등록 (내 정보에서 업로드)"}</div>
                     </div>
                     <button onClick={() => setIncludeCardAr(v => !v)} disabled={!cardImage}
-                      className={`relative w-11 h-6 rounded-full transition-colors duration-200 ${includeCardAr && cardImage ? "bg-[#1B2B4B]" : "bg-gray-300"} ${!cardImage ? "opacity-40 cursor-not-allowed" : "cursor-pointer"}`}>
+                      className={`relative w-11 h-6 rounded-full transition-colors duration-200 ${includeCardAr && cardImage ? "bg-[#1B2B4B]" : "bg-[#C9D3E3]"} ${!cardImage ? "opacity-40 cursor-not-allowed" : "cursor-pointer"}`}>
                       <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform duration-200 ${includeCardAr && cardImage ? "translate-x-5" : "translate-x-0"}`} />
                     </button>
                   </div>
@@ -55311,15 +55485,15 @@ const handleBatchSettle = async (targetStatus) => {
                   </div>
 
                   {/* 예약발송 */}
-                  <div className="bg-gray-50 rounded-xl px-4 py-3 border border-gray-200">
+                  <div className="bg-[#F8FAFD] rounded-xl px-4 py-3 border border-[#E3E8F0]">
                     <label className="flex items-center gap-2 cursor-pointer">
                       <input type="checkbox" className="w-4 h-4 accent-[#1B2B4B]"
                         checked={emailScheduleOn}
                         onChange={(e) => setEmailScheduleOn(e.target.checked)} />
-                      <span className="text-[13px] font-bold text-gray-700">예약발송</span>
+                      <span className="text-[13px] font-bold text-[#3A4A66]">예약발송</span>
                     </label>
                     {emailScheduleOn && (
-                      <DateTimeSelect className="mt-2" dateClassName="w-full h-10 border border-gray-200 rounded-lg px-3 text-[13px] bg-white focus:outline-none focus:border-[#1B2B4B]" timeClassName="w-full h-10 border border-gray-200 rounded-lg px-3 text-[13px] bg-white"
+                      <DateTimeSelect className="mt-2" dateClassName="w-full h-10 border border-[#E3E8F0] rounded-lg px-3 text-[13px] bg-white focus:outline-none focus:border-[#1B2B4B]" timeClassName="w-full h-10 border border-[#E3E8F0] rounded-lg px-3 text-[13px] bg-white"
                         value={emailScheduleAt}
                         onChange={(e) => setEmailScheduleAt(e.target.value)} />
                     )}
@@ -55328,17 +55502,17 @@ const handleBatchSettle = async (targetStatus) => {
 
                 {/* 버튼 */}
                 <div className="px-6 pb-4 flex gap-3">
-                  <button className="flex-1 py-2.5 rounded-xl bg-gray-100 text-gray-800 font-semibold text-[13px] hover:bg-gray-200 transition"
+                  <button className="flex-1 py-2.5 rounded-xl bg-white border border-[#D5DDEA] text-[#1B2B4B] font-semibold text-[13px] hover:bg-[#F4F6FA] transition"
                     onClick={() => { setArEmailOpen(false); setShowEmailHistory(false); }}><EditableText id="misc.btn.51501.취소" defaultText="취소" /></button>
                   <button className="px-4 py-2.5 rounded-xl bg-[#1B2B4B]/10 text-[#1B2B4B] font-semibold text-[13px] hover:bg-[#1B2B4B]/20 transition"
                     onClick={() => setShowEmailHistory(v => !v)}>
                     발송이력{emailLogs.filter(l=>l.client===selClient).length>0 ? ` (${emailLogs.filter(l=>l.client===selClient).length})` : ""}
                   </button>
-                  <button className="flex-1 py-2.5 rounded-xl bg-gray-200 text-gray-800 font-semibold text-[13px] hover:bg-gray-300 transition"
+                  <button className="flex-1 py-2.5 rounded-xl bg-white border border-[#D5DDEA] text-[#1B2B4B] font-semibold text-[13px] hover:bg-[#F4F6FA] transition"
                     onClick={() => { navigator.clipboard.writeText(emailBody); showAlert("복사되었습니다."); }}><EditableText id="misc.btn.51507.내용 복사" defaultText="내용 복사" /></button>
                   <button
                     disabled={!emailTo.trim() || emailSending || (emailScheduleOn && !emailScheduleAt)}
-                    className={`flex-1 py-2.5 rounded-xl font-bold text-[13px] transition ${emailTo.trim()&&!emailSending ? "bg-sky-600 hover:bg-sky-700 text-white" : "bg-gray-200 text-gray-500 cursor-not-allowed"}`}
+                    className={`flex-1 py-2.5 rounded-xl font-bold text-[13px] transition ${emailTo.trim()&&!emailSending ? "bg-[#0F1A30] hover:bg-[#1B2B4B] text-white" : "bg-gray-200 text-[#7A89A3] cursor-not-allowed"}`}
                     onClick={async () => {
                       if (!emailTo.trim()) return;
                       if (emailScheduleOn && !emailScheduleAt) return showAlert("예약 발송 시각을 선택하세요.");
@@ -55484,12 +55658,12 @@ const handleBatchSettle = async (targetStatus) => {
 
                 {/* 발송 이력 */}
                 {showEmailHistory && (
-                  <div className="border-t border-gray-100 px-6 py-4">
+                  <div className="border-t border-[#EEF2F8] px-6 py-4">
                     <div className="text-[13px] font-bold text-[#1B2B4B] mb-3">
-                      발송 이력 — {selClient}
+                      발송 이력 · {selClient}
                     </div>
                     {emailLogs.filter(l=>l.client===selClient).length === 0 ? (
-                      <div className="text-[12px] text-gray-500 text-center py-4">발송 이력이 없습니다</div>
+                      <div className="text-[12px] text-[#7A89A3] text-center py-4">발송 이력이 없습니다</div>
                     ) : (
                       <div className="space-y-2 max-h-[320px] overflow-y-auto">
                         {emailLogs.filter(l=>l.client===selClient).map(log => (
@@ -55509,13 +55683,13 @@ const handleBatchSettle = async (targetStatus) => {
       {tab === "sentmails" && (
         <div>
           {/* 상단 툴바 */}
-          <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 mb-4">
+          <div className="bg-white rounded-xl border border-[#E3E8F0] shadow-sm p-4 mb-4">
             <div className="flex flex-wrap items-center gap-3">
               {/* 제목 + 통계 */}
               <div className="flex items-center gap-3 mr-auto">
                 <div>
                   <div className="text-[15px] font-extrabold text-[#1B2B4B]">보낸메일함</div>
-                  <div className="text-[11px] text-gray-500 mt-0.5">총 {emailLogs.length}건 · 성공 {emailLogs.filter(l=>l.status==="success").length}건 · 실패 {emailLogs.filter(l=>l.status==="failed").length}건</div>
+                  <div className="text-[11px] text-[#7A89A3] mt-0.5">총 {emailLogs.length}건 · 성공 {emailLogs.filter(l=>l.status==="success").length}건 · 실패 {emailLogs.filter(l=>l.status==="failed").length}건</div>
                 </div>
                 {/* 유형별 카운트 배지 */}
                 <div className="hidden sm:flex items-center gap-1.5 flex-wrap">
@@ -55524,7 +55698,7 @@ const handleBatchSettle = async (targetStatus) => {
                     return cnt > 0 ? (
                       <button key={t}
                         onClick={() => setMailTypeFilter(mailTypeFilter === t ? "전체" : t)}
-                        className={`text-[11px] px-2.5 py-0.5 rounded-full font-semibold border transition ${mailTypeFilter === t ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "text-gray-500 border-gray-300 hover:border-[#1B2B4B] hover:text-[#1B2B4B]"}`}
+                        className={`text-[11px] px-2.5 py-0.5 rounded-full font-semibold border transition ${mailTypeFilter === t ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "text-[#7A89A3] border-[#D5DDEA] hover:border-[#1B2B4B] hover:text-[#1B2B4B]"}`}
                       >{t} {cnt}</button>
                     ) : null;
                   })}
@@ -55533,16 +55707,16 @@ const handleBatchSettle = async (targetStatus) => {
               {/* 검색 */}
               <div className="relative">
                 <input autoComplete="off"
-                  className="border-2 border-gray-200 rounded-lg pl-8 pr-3 py-2 text-[13px] outline-none focus:border-[#1B2B4B] min-w-[220px]"
+                  className="border border-[#D5DDEA] rounded-xl pl-8 pr-3 py-2 text-[13px] outline-none focus:border-[#1B2B4B] min-w-[220px]"
                   placeholder="제목, 본문, 받는사람, 거래처 검색..."
                   value={mailSearch}
                   onChange={e => { setMailSearch(e.target.value); setSelectedMails(new Set()); }}
                 />
-                <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-500" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+                <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#7A89A3]" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
               </div>
               {/* 정렬 */}
               <CustomSelect
-                className="border-2 border-gray-200 rounded-lg px-3 py-2 text-[13px] outline-none focus:border-[#1B2B4B]"
+                className="border border-[#D5DDEA] rounded-xl px-3 py-2 text-[13px] outline-none focus:border-[#1B2B4B]"
                 value={mailSort}
                 onChange={e => setMailSort(e.target.value)}
               >
@@ -55563,15 +55737,15 @@ const handleBatchSettle = async (targetStatus) => {
             </div>
             {/* 선택/삭제 액션 바 */}
             {selectedMails.size > 0 && (
-              <div className="flex items-center gap-3 mt-3 pt-3 border-t border-gray-100">
+              <div className="flex items-center gap-3 mt-3 pt-3 border-t border-[#EEF2F8]">
                 <span className="text-[13px] font-semibold text-[#1B2B4B]">{selectedMails.size}건 선택됨</span>
                 <button
                   onClick={() => setSelectedMails(new Set(filteredMails.map(l=>l.id)))}
-                  className="text-[12px] text-gray-500 hover:text-[#1B2B4B] underline"
+                  className="text-[12px] text-[#7A89A3] hover:text-[#1B2B4B] underline"
                 >전체선택 ({filteredMails.length})</button>
                 <button
                   onClick={() => setSelectedMails(new Set())}
-                  className="text-[12px] text-gray-500 hover:text-gray-700 underline"
+                  className="text-[12px] text-[#7A89A3] hover:text-[#3A4A66] underline"
                 ><EditableText id="misc.btn.51744.선택해제" defaultText="선택해제" /></button>
                 <button
                   onClick={() => setBulkDeleteConfirm(true)}
@@ -55584,7 +55758,7 @@ const handleBatchSettle = async (targetStatus) => {
           {/* 메일 클라이언트 레이아웃 */}
           <div className="flex gap-4" style={{minHeight:"560px"}}>
             {/* 왼쪽: 메일 목록 */}
-            <div className="w-[320px] shrink-0 bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden flex flex-col">
+            <div className="w-[320px] shrink-0 bg-white rounded-xl border border-[#E3E8F0] shadow-sm overflow-hidden flex flex-col">
               <div className="bg-[#1B2B4B] px-4 py-2.5 text-white font-bold text-[13px] flex items-center gap-2">
                 <input autoComplete="off"
                   type="checkbox"
@@ -55606,19 +55780,19 @@ const handleBatchSettle = async (targetStatus) => {
               </div>
               <div className="overflow-y-auto flex-1">
                 {filteredMails.length === 0 ? (
-                  <div className="text-center text-gray-500 py-16 text-[13px]">
+                  <div className="text-center text-[#7A89A3] py-16 text-[13px]">
                     {mailSearch || mailTypeFilter !== "전체" ? "검색 결과가 없습니다" : "발송된 메일이 없습니다"}
                   </div>
                 ) : (
                   filteredMails.map(log => (
                     <div
                       key={log.id}
-                      className={`flex items-start px-3 py-3 border-b border-gray-100 cursor-pointer transition group ${
+                      className={`flex items-start px-3 py-3 border-b border-[#EEF2F8] cursor-pointer transition group ${
                         selectedMail?.id === log.id
                           ? "bg-[#e8edf5] border-l-4 border-l-[#1B2B4B]"
                           : selectedMails.has(log.id)
                           ? "bg-[#EEF3FC] border-l-4 border-l-[#2D4C82]"
-                          : "hover:bg-gray-50 border-l-4 border-l-transparent"
+                          : "hover:bg-[#F8FAFD] border-l-4 border-l-transparent"
                       }`}
                     >
                       <input autoComplete="off"
@@ -55640,10 +55814,10 @@ const handleBatchSettle = async (targetStatus) => {
                           <span className={`text-[11px] font-bold px-1.5 py-0.5 rounded ${log.status === "success" ? "bg-[#1B2B4B] text-white" : "bg-[#0B1428] text-white"}`}>
                             {log.type || "메일"}
                           </span>
-                          <span className="text-[12px] text-gray-500 shrink-0 ml-1">{log.sentAt ? new Date(log.sentAt).toLocaleDateString("ko-KR", {month:"2-digit",day:"2-digit"}) : ""}</span>
+                          <span className="text-[12px] text-[#7A89A3] shrink-0 ml-1">{log.sentAt ? new Date(log.sentAt).toLocaleDateString("ko-KR", {month:"2-digit",day:"2-digit"}) : ""}</span>
                         </div>
-                        <div className="text-[13px] font-semibold text-gray-800 truncate">{log.subject || "(제목없음)"}</div>
-                        <div className="text-[12px] text-gray-500 truncate">{log.to || "-"}</div>
+                        <div className="text-[13px] font-semibold text-[#0F1A30] truncate">{log.subject || "(제목없음)"}</div>
+                        <div className="text-[12px] text-[#7A89A3] truncate">{log.to || "-"}</div>
                         {log.client && log.client !== "-" && (
                           <div className="text-[11px] text-[#1B2B4B]/60 truncate">{log.client}</div>
                         )}
@@ -55655,19 +55829,19 @@ const handleBatchSettle = async (targetStatus) => {
             </div>
 
             {/* 오른쪽: 메일 상세 */}
-            <div className="flex-1 bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden flex flex-col min-w-0">
+            <div className="flex-1 bg-white rounded-xl border border-[#E3E8F0] shadow-sm overflow-hidden flex flex-col min-w-0">
               {!selectedMail ? (
-                <div className="flex-1 flex flex-col items-center justify-center text-gray-500">
+                <div className="flex-1 flex flex-col items-center justify-center text-[#7A89A3]">
                   <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" className="mb-3 opacity-30"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>
                   <div className="text-[14px]">왼쪽 목록에서 메일을 선택하세요</div>
                   {selectedMails.size > 0 && (
-                    <div className="mt-2 text-[12px] text-[#1B2B4B] font-semibold">{selectedMails.size}건 선택됨 — 상단 선택삭제 버튼으로 삭제</div>
+                    <div className="mt-2 text-[12px] text-[#1B2B4B] font-semibold">{selectedMails.size}건 선택됨 · 위의 선택삭제 버튼으로 삭제</div>
                   )}
                 </div>
               ) : (
                 <>
                   {/* 메일 헤더 */}
-                  <div className="bg-[#f4f6f9] border-b border-gray-200 px-6 py-4 shrink-0">
+                  <div className="bg-[#f4f6f9] border-b border-[#E3E8F0] px-6 py-4 shrink-0">
                     <div className="flex items-start justify-between mb-3">
                       <div className="text-[16px] font-extrabold text-[#1B2B4B] leading-tight flex-1 pr-4">
                         {selectedMail.subject || "(제목없음)"}
@@ -55676,23 +55850,23 @@ const handleBatchSettle = async (targetStatus) => {
                         <span className={`text-[11px] font-bold px-2.5 py-1 rounded-full ${selectedMail.status === "success" ? "bg-[#EEF3FC] text-[#0F1A30]" : "bg-[#F3F6FA] text-[#0B1428]"}`}>
                           {selectedMail.status === "success" ? "발송완료" : "발송실패"}
                         </span>
-                        <button onClick={() => setSelectedMail(null)} className="text-gray-500 hover:text-gray-600 text-xl leading-none w-7 h-7 flex items-center justify-center hover:bg-gray-200 rounded transition">×</button>
+                        <button onClick={() => setSelectedMail(null)} className="text-[#7A89A3] hover:text-[#5B6B85] text-xl leading-none w-7 h-7 flex items-center justify-center hover:bg-[#F4F6FA] rounded transition">×</button>
                       </div>
                     </div>
                     <div className="grid grid-cols-2 gap-x-8 gap-y-1.5 text-[12px] mb-2">
-                      <div className="flex gap-2"><span className="text-gray-500 font-semibold w-12 shrink-0">발신</span><span className="text-gray-700 truncate">{selectedMail.sentBy || "-"}</span></div>
-                      <div className="flex gap-2"><span className="text-gray-500 font-semibold w-12 shrink-0">수신</span><span className="text-gray-700 break-all">{selectedMail.to || "-"}</span></div>
-                      <div className="flex gap-2"><span className="text-gray-500 font-semibold w-12 shrink-0">유형</span><span className="text-gray-700">{selectedMail.type || "-"}</span></div>
-                      <div className="flex gap-2"><span className="text-gray-500 font-semibold w-12 shrink-0">발송일</span><span className="text-gray-700">{selectedMail.sentAt ? new Date(selectedMail.sentAt).toLocaleString("ko-KR") : "-"}</span></div>
+                      <div className="flex gap-2"><span className="text-[#7A89A3] font-semibold w-12 shrink-0">발신</span><span className="text-[#3A4A66] truncate">{selectedMail.sentBy || "-"}</span></div>
+                      <div className="flex gap-2"><span className="text-[#7A89A3] font-semibold w-12 shrink-0">수신</span><span className="text-[#3A4A66] break-all">{selectedMail.to || "-"}</span></div>
+                      <div className="flex gap-2"><span className="text-[#7A89A3] font-semibold w-12 shrink-0">유형</span><span className="text-[#3A4A66]">{selectedMail.type || "-"}</span></div>
+                      <div className="flex gap-2"><span className="text-[#7A89A3] font-semibold w-12 shrink-0">발송일</span><span className="text-[#3A4A66]">{selectedMail.sentAt ? new Date(selectedMail.sentAt).toLocaleString("ko-KR") : "-"}</span></div>
                       {selectedMail.client && selectedMail.client !== "-" && (
-                        <div className="flex gap-2"><span className="text-gray-500 font-semibold w-12 shrink-0">거래처</span><span className="text-gray-700">{selectedMail.client}</span></div>
+                        <div className="flex gap-2"><span className="text-[#7A89A3] font-semibold w-12 shrink-0">거래처</span><span className="text-[#3A4A66]">{selectedMail.client}</span></div>
                       )}
                     </div>
                     {selectedMail.attachmentNames?.length > 0 && (
                       <div className="flex items-center gap-2 flex-wrap mt-1">
-                        <span className="text-[11px] text-gray-500 font-semibold">첨부파일</span>
+                        <span className="text-[11px] text-[#7A89A3] font-semibold">첨부파일</span>
                         {selectedMail.attachmentNames.map((n, i) => (
-                          <span key={i} className="text-[11px] bg-gray-200 text-gray-600 px-2 py-0.5 rounded-full">{n}</span>
+                          <span key={i} className="text-[11px] bg-gray-200 text-[#5B6B85] px-2 py-0.5 rounded-full">{n}</span>
                         ))}
                       </div>
                     )}
@@ -55704,19 +55878,19 @@ const handleBatchSettle = async (targetStatus) => {
                   </div>
                   {/* 메일 본문 */}
                   <div className="flex-1 overflow-y-auto px-6 py-5">
-                    <div className="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-3 flex items-center gap-2">
+                    <div className="text-[11px] font-bold text-[#7A89A3] uppercase tracking-wider mb-3 flex items-center gap-2">
                       <span>본문</span>
-                      {!selectedMail.body && <span className="font-normal normal-case text-gray-400">이 메일 이전 발송분은 본문이 저장되지 않았습니다</span>}
+                      {!selectedMail.body && <span className="font-normal normal-case text-[#9AA9C3]">이 메일 이전 발송분은 본문이 저장되지 않았습니다</span>}
                     </div>
                     {selectedMail.body ? (
-                      <div className="text-[14px] text-gray-700 whitespace-pre-wrap leading-relaxed">{selectedMail.body}</div>
+                      <div className="text-[14px] text-[#3A4A66] whitespace-pre-wrap leading-relaxed">{selectedMail.body}</div>
                     ) : (
-                      <div className="text-gray-500 text-[13px] italic">저장된 본문 내용이 없습니다</div>
+                      <div className="text-[#7A89A3] text-[13px] italic">저장된 본문 내용이 없습니다</div>
                     )}
                   </div>
                   {/* 하단 액션 */}
-                  <div className="border-t border-gray-100 px-6 py-3 flex items-center justify-between shrink-0">
-                    <div className="text-[11px] text-gray-500">
+                  <div className="border-t border-[#EEF2F8] px-6 py-3 flex items-center justify-between shrink-0">
+                    <div className="text-[11px] text-[#7A89A3]">
                       {selectedMail.sentAt ? `발송: ${new Date(selectedMail.sentAt).toLocaleString("ko-KR")}` : ""}
                     </div>
                     <button
@@ -55733,22 +55907,22 @@ const handleBatchSettle = async (targetStatus) => {
     </div>
     {/* 보낸메일함 일괄 삭제 확인 팝업 */}
     {bulkDeleteConfirm && (
-      <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[999999]">
-        <div className="bg-white rounded-2xl shadow-2xl w-[380px] overflow-hidden" onClick={e => e.stopPropagation()}>
+      <div className="kp-modal fixed inset-0 bg-[#0B1428]/55 backdrop-blur-[2px] flex items-end sm:items-center justify-center sm:p-4 z-[999999]">
+        <div className="kp-modal-panel bg-white rounded-t-[22px] sm:rounded-[22px] shadow-[0_24px_64px_rgba(11,20,40,0.35)] w-full max-w-[380px] overflow-hidden" onClick={e => e.stopPropagation()}>
           <div className="bg-[#0B1428] px-6 py-4 flex items-center gap-3">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M9 6V4h6v2"/></svg>
-            <div className="text-white font-bold text-[15px]">
+            <div className="text-white font-black text-[18px]">
               {selectedMails.size > 0 ? `${selectedMails.size}건 선택 삭제` : "전체 삭제"}
             </div>
           </div>
-          <div className="px-6 py-5 text-[14px] text-gray-700">
+          <div className="px-6 py-5 text-[14px] text-[#3A4A66]">
             {selectedMails.size > 0
               ? `선택한 ${selectedMails.size}건의 발송이력을 삭제하시겠습니까?`
               : `발송이력 전체 ${emailLogs.length}건을 삭제하시겠습니까?`}
             <div className="mt-1 text-[12px] text-[#0B1428]">삭제 후 복구할 수 없습니다.</div>
           </div>
-          <div className="px-6 pb-5 flex gap-3">
-            <button className="flex-1 py-2.5 rounded-xl bg-gray-100 text-gray-700 font-semibold text-[13px] hover:bg-gray-200 transition"
+          <div className="kp-modal-foot px-6 py-4 flex gap-3">
+            <button className="flex-1 py-2.5 rounded-xl bg-white border border-[#D5DDEA] text-[#1B2B4B] font-semibold text-[13px] hover:bg-[#F4F6FA] transition"
               onClick={() => setBulkDeleteConfirm(false)}><EditableText id="misc.btn.51921.취소" defaultText="취소" /></button>
             <button className="flex-1 py-2.5 rounded-xl bg-[#0B1428] text-white font-bold text-[13px] hover:bg-[#1B2B4B] transition"
               onClick={async () => {
@@ -55766,15 +55940,15 @@ const handleBatchSettle = async (targetStatus) => {
     )}
     {/* 발송이력 삭제 확인 팝업 */}
     {deleteLogConfirm && (
-      <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[999999]">
-        <div className="bg-white rounded-2xl shadow-2xl w-[360px] overflow-hidden" onClick={e => e.stopPropagation()}>
-          <div className="bg-[#1B2B4B] px-6 py-4 flex items-center gap-3">
+      <div className="kp-modal fixed inset-0 bg-[#0B1428]/55 backdrop-blur-[2px] flex items-end sm:items-center justify-center sm:p-4 z-[999999]">
+        <div className="kp-modal-panel bg-white rounded-t-[22px] sm:rounded-[22px] shadow-[0_24px_64px_rgba(11,20,40,0.35)] w-full max-w-[360px] overflow-hidden" onClick={e => e.stopPropagation()}>
+          <div className="kp-modal-head px-6 py-4 flex items-center gap-3 shrink-0">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="opacity-70"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M9 6V4h6v2"/></svg>
-            <div className="text-white font-bold text-[15px]">발송이력 삭제</div>
+            <div className="text-white font-black text-[18px]">발송이력 삭제</div>
           </div>
-          <div className="px-6 py-5 text-[14px] text-gray-700">이 발송이력을 삭제하시겠습니까?</div>
-          <div className="px-6 pb-5 flex gap-3">
-            <button className="flex-1 py-2.5 rounded-xl bg-gray-100 text-gray-700 font-semibold text-[13px] hover:bg-gray-200 transition"
+          <div className="px-6 py-5 text-[14px] text-[#3A4A66]">이 발송이력을 삭제하시겠습니까?</div>
+          <div className="kp-modal-foot px-6 py-4 flex gap-3">
+            <button className="flex-1 py-2.5 rounded-xl bg-white border border-[#D5DDEA] text-[#1B2B4B] font-semibold text-[13px] hover:bg-[#F4F6FA] transition"
               onClick={() => setDeleteLogConfirm(null)}><EditableText id="misc.btn.51945.취소" defaultText="취소" /></button>
             <button className="flex-1 py-2.5 rounded-xl bg-[#1B2B4B] text-white font-bold text-[13px] hover:bg-[#243a60] transition"
               onClick={async () => {
@@ -55787,6 +55961,8 @@ const handleBatchSettle = async (targetStatus) => {
         </div>
       </div>
     )}
+    {/* ⭐ 2026-11-07 명세서 단계 기록(날짜 · 메모) — 보드 · 편집 화면 공용 */}
+    <StageRecordModal open={!!stageAsk} target={stageAsk} onClose={() => setStageAsk(null)} onSave={saveStageAsk} />
     </>
   );
 }

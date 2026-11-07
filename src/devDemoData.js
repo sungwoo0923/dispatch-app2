@@ -187,6 +187,76 @@ function demoPayDocs(col) {
   return null;
 }
 
+
+// ⭐ 2026-11-07 거래명세서 단계 · 미수금 화면 점검 — 지난 7개월 청구 이력(거래처마다 다른 입금 습관) · 일부입금 · 명세서 단계 · 메모 · 발송 기록
+//  (오더는 지난달 이전 날짜만 넣어 오늘 화면 숫자는 그대로)
+const AR_PLAN = [
+  // [거래처 번호, 안 받은 달(몇 달 전, 1 = 지난달), 결제 조건]
+  [0, [1], "익월 말일"],
+  [1, [1, 2, 3], "익월 10일"],
+  [2, [1, 2, 3, 4, 5], "30일"],
+  [3, [1], "익월 말일"],
+  [4, [1, 2], "익월 25일"],
+  [5, [], "익월 말일"],
+];
+function arHistoryOrders() {
+  const out = [];
+  AR_PLAN.forEach(([ci, open]) => {
+    for (let k = 1; k <= 7; k++) {
+      const ym = ymShift(-k);
+      const n = 2 + ((ci + k) % 3);
+      for (let j = 0; j < n; j++) {
+        const paid = !open.includes(k);
+        const day = String(3 + j * 7 + ci).padStart(2, "0");
+        const [pn] = PLACES[(ci + j) % PLACES.length]; const [dn] = PLACES[(ci + j + 3) % PLACES.length];
+        out.push(fakeDoc("dispatch", `demo-ar-${ci}-${k}-${j}`, {
+          상차일: `${ym}-${day}`, 하차일: `${ym}-${day}`, 등록일: `${ym}-${day}`, 상차시간: "08:00", 하차시간: "당일",
+          거래처명: CLIENTS[ci], 상차지명: pn, 하차지명: dn, 화물내용: CARGO[(ci + j) % CARGO.length], 차량종류: CARS[j % CARS.length][0], 차량톤수: CARS[j % CARS.length][1],
+          차량번호: `경기${80 + j}바${1000 + j * 37}`, 이름: NAMES[(ci + j) % NAMES.length], 배차상태: "배차완료",
+          청구운임: 180000 + ((ci * 7 + j * 3 + k) % 9) * 40000, 기사운임: 150000 + ((ci + j) % 5) * 30000, 지급방식: "계산서", 배차방식: "직접배차",
+          ...(paid ? { 정산상태: { [ym]: "정산완료" }, 정산일: { [ym]: `${ymShift(-k + 1)}-${String(8 + ci).padStart(2, "0")}` } } : {}),
+        }));
+      }
+    }
+  });
+  return out;
+}
+const arTs = (daysAgo) => Date.now() - daysAgo * 86400000;
+function arDeskDocs() {
+  const ym = ymShift(-1); const by = "preview@kp-flow.app";
+  const st = (ci, stage, hist) => fakeDoc("arDesk", `demo-st-${ci}`, { kind: "stmt", client: CLIENTS[ci], yyyymm: ym, biz: demoCo, stage, history: hist.map(([s, d]) => ({ stage: s, at: arTs(d), by })) });
+  return [
+    st(0, "발송", [["작성", 6], ["발송", 5]]),
+    st(3, "계산서요청", [["작성", 6], ["발송", 6], ["확인", 4], ["계산서요청", 2]]),
+    st(4, "확인", [["작성", 5], ["발송", 5], ["확인", 1]]),
+    st(5, "마감", [["작성", 7], ["발송", 7], ["확인", 6], ["계산서요청", 6], ["계산서발행", 5], ["마감", 3]]),
+    st(1, "작성", [["작성", 1]]),
+    fakeDoc("arDesk", "demo-cn-2", { kind: "client", biz: demoCo, client: CLIENTS[2], status: "추심", memo: "자재팀 결재 지연, 담당 과장 통화함", expectDate: ymd(9), nextAction: "독촉 메일 2차", nextDate: ymd(2),
+      log: [{ type: "call", text: "담당 과장 통화 · 이번 달 말 처리 약속", at: arTs(12), by }, { type: "memo", text: "결재 라인 바뀜(본부장 승인 필요)", at: arTs(4), by }] }),
+    fakeDoc("arDesk", "demo-cn-1", { kind: "client", biz: demoCo, client: CLIENTS[1], memo: "분할 입금 중", expectDate: ymd(5), nextAction: "잔액 확인 전화", nextDate: ymd(1), log: [{ type: "promise", text: "11월 15일 잔액 입금 약속", at: arTs(6), by }] }),
+  ];
+}
+function arPaymentDocs() {
+  return [fakeDoc("arPayments", "demo-ap-1", { company: demoCo, client: CLIENTS[1], yyyymm: ymShift(-3), amount: 500000, full: false, depositName: "대한통운평택", depositDate: ymd(-20), at: { seconds: Math.floor(arTs(20) / 1000), nanoseconds: 0 } })];
+}
+function arEmailLogs() {
+  return [
+    fakeDoc("emailLogs", "demo-el-1", { type: "거래명세서", client: CLIENTS[0], to: "billing@hanbit.example", subject: `[거래명세서] ${CLIENTS[0]} ${ymShift(-1)}`, status: "success", sentAt: arTs(5), sentBy: "preview@kp-flow.app" }),
+    fakeDoc("emailLogs", "demo-el-2", { type: "미수금", client: CLIENTS[2], to: "ap@samsung.example", subject: `[미수금현황] ${CLIENTS[2]}`, status: "success", sentAt: arTs(15), sentBy: "preview@kp-flow.app" }),
+    fakeDoc("emailLogs", "demo-el-3", { type: "미수금", client: CLIENTS[1], to: "ap@cj.example", subject: `[미수금현황] ${CLIENTS[1]}`, status: "success", sentAt: arTs(8), sentBy: "preview@kp-flow.app" }),
+  ];
+}
+// 여러 사업자 점검(URL에 demoBiz=1) — companySettings/{회사}.bizList
+function demoBizOn() { try { return new URLSearchParams(window.location.search).get("demoBiz") === "1"; } catch { return false; } }
+export function demoDocSnap(ref, co) {
+  const path = String(ref?.path || "");
+  if (demoBizOn() && path === `companySettings/${co}`) {
+    const data = { bizList: [{ id: "demo-b1", name: `${co}사`, bizNo: "1234567890", ceo: "홍대표" }, { id: "demo-b2", name: "테스트", bizNo: "2345678901", ceo: "김대표" }] };
+    return { id: ref.id, ref, exists: () => true, data: () => ({ ...data }), get: (k) => data[k], metadata: { fromCache: false, hasPendingWrites: false } };
+  }
+  return null;
+}
+
 export function demoDocsFor(col) {
   const pay = demoPayDocs(col);
   if (pay) return pay;
@@ -198,7 +268,10 @@ export function demoDocsFor(col) {
     fakeDoc(col, "demo-dd-2", { driverId: "demo-u-3", docType: "carInsurance", docLabel: "자동차보험 증권", status: "제출", fileName: "보험.jpg", fileType: "image/svg+xml", dataUrl: BIZ_SVG, uploadedAt: demoTs(25 / 1440), by: "기사앱" })];
   // ⭐ 2026-11-05 긴급상황 알림 점검 — 미처리 1건
   if (col === "emergency_alerts") return [fakeDoc(col, "demo-sos-0", { uid: "demo-drv-1", driverName: NAMES[1], carNo: "경기81바1037", location: { lat: 36.812, lng: 127.147 }, timestamp: demoTs(6 / 1440), resolved: false })];
-  if (col === "dispatch") return demoRouteOn() ? [...orders("dispatch"), ...routeOrders()] : orders("dispatch");
+  if (col === "dispatch") return [...(demoRouteOn() ? [...orders("dispatch"), ...routeOrders()] : orders("dispatch")), ...arHistoryOrders()];
+  if (col === "arDesk") return arDeskDocs();
+  if (col === "arPayments") return arPaymentDocs();
+  if (col === "emailLogs") return arEmailLogs();
   if (col === "routeBoards" && demoRouteOn()) return [routeBoard()];
   if (col === "drivers") return [
     ...NAMES.map((n, i) => fakeDoc(col, `demo-drv-${i}`, { companyName: "", 이름: n, 차량번호: `경기${80 + i}바${1000 + i * 37}`, 전화번호: `010-${2000 + i * 11}-${3000 + i * 7}`, 차량종류: CARS[i][0], 차량톤수: CARS[i][1], ...demoLive(i), ...(i === 0 ? { 등급: "직영", 담당자: { name: "최서연" }, 등록자: "정우성", 거주지: "", createdAt: demoTs(120) } : {}) })),
@@ -206,7 +279,7 @@ export function demoDocsFor(col) {
     ...DEMO_SIGNUPS.filter((u) => !u.approved).map((u) => fakeDoc(col, u.id, { uid: u.id, 이름: u.name, name: u.name, 차량번호: u.carNo, carNo: u.carNo, 전화번호: u.phone, phone: u.phone, 차량종류: u.차량종류, 차량톤수: u.차량톤수, 거주지: u.거주지, approved: false, createdAt: demoTs(u.at) })),
   ];
   if (col === "gps_tracks") return demoTracks();
-  if (col === "clients") return CLIENTS.map((n, i) => fakeDoc(col, `demo-cl-${i}`, { companyName: "", 거래처명: n, 주소: PLACES[i % PLACES.length][1], 담당자: NAMES[i % NAMES.length], 연락처: `02-${300 + i}-${4000 + i}` }));
+  if (col === "clients") return CLIENTS.map((n, i) => fakeDoc(col, `demo-cl-${i}`, { companyName: "", 거래처명: n, 주소: PLACES[i % PLACES.length][1], 담당자: NAMES[i % NAMES.length], 연락처: `02-${300 + i}-${4000 + i}`, ...(AR_PLAN[i] ? { 결제일: AR_PLAN[i][2], 이메일: `billing${i}@client.example`, 사업자번호: `12${i}-8${i}-1234${i}`, 대표자: NAMES[(i + 3) % NAMES.length] } : {}) }));
   // ⭐ 2026-11-05 고정노선 화면 점검용(운행 ON/OFF·목록) — 1개는 ON, 1개는 OFF
   if (col === "fixedRoutes") return [
     { name: "평택→수원 데일리", client: CLIENTS[0], active: true, days: ["월", "화", "수", "목", "금"], startTime: "07:00", startDate: "2026-11-02", endDate: "" },

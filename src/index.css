@@ -281,3 +281,18 @@ table tbody tr.kp-row-hit:hover td {
 /* ⭐ 2026-11-05 글꼴 통일 — 예전 디지털(고정폭) 글꼴(JetBrains Mono 등)이 흐릿해 보여 머리말 메뉴와 같은 기본 글꼴로 바꿨다.
    남은 font-mono(다른 작업 파일)도 같은 글꼴 · 숫자는 칸 맞춤(tabular-nums) 유지 */
 .font-mono { font-family: "Noto Sans KR", "Apple SD Gothic Neo", "맑은 고딕", Malgun Gothic, sans-serif !important; font-variant-numeric: tabular-nums; }
+
+/* ⭐ 2026-11-07 왼쪽 메뉴(KpSubNav) 윗줄 — 올린 것(사업자 고르기 · 세부검색 · 화면 탭)이 없으면 숨김 */
+.kp-subnav-top--slotonly:not(:has(.kp-subnav-bar-item)) { display: none !important; }
+/* ⭐ 2026-11-07 정산 화면 팝업 공용 모양(거래명세서 · 미수금 · 메일) — 남색 머리 · 아래 버튼 줄 · 휴대폰은 아래에서 올라오는 시트 */
+.kp-modal-head { background: linear-gradient(120deg, #0B1428 0%, #1B2B4B 60%, #2D4C82 100%) !important; }
+.kp-modal-foot { border-top: 1px solid #E3E8F0; background: #F8FAFD; margin-top: 4px; }
+.kp-modal-panel { max-height: 92vh; }
+.kp-modal-panel input, .kp-modal-panel textarea { font-size: 15px; }
+@media (max-width: 639px) { .kp-modal-panel { max-height: 94vh; } }
+/* ⭐ 2026-11-07 거래명세서 보드 · 미수금 데스크 표 — 전역 표 모양(세로선 · 줄무늬)을 끄고 줄 선택 색이 보이게 */
+table.kp-sd tbody tr { height: auto; border-bottom: none; }
+table.kp-sd tbody td { border-right: none !important; }
+table.kp-sd tbody td:not([class*="bg-"]) { background-color: transparent !important; }
+table.kp-sd tbody tr:hover td:not([class*="bg-"]) { background-color: transparent !important; }
+table.kp-sd thead th { border-right: none; height: auto; }

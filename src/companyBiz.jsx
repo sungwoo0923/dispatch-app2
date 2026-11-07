@@ -12,6 +12,7 @@ import { doc, onSnapshot, setDoc, serverTimestamp, deleteField } from "firebase/
 import { fmtBizNo, fmtPhone } from "./formatInput";
 import { BANK_NAMES, formatAccount } from "./bankUtil";
 import { CustomSelect } from "./CustomSelect";
+import { SubNavTopCtx } from "./KpSubNav";
 
 const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
 const store = new Map(); // 회사 → { list, memory, listeners:Set, unsub }
@@ -404,26 +405,38 @@ export function BizListEditor({ company, canEdit }) {
 }
 
 // 사업자별로 보기(매출관리 등) — 위쪽에 사업자 고르기 줄, 아래 화면에는 고른 사업자 오더만 넘긴다
+// ⭐ 2026-11-07 정렬 — 아래 화면이 왼쪽 메뉴(KpSubNav)를 쓰면 고르기 줄을 그 메뉴의 윗줄(왼쪽 메뉴 머리와 같은 높이)에 그린다.
+//  예전엔 이 줄이 메뉴 바깥 위에 따로 있고, 메뉴는 -m-4로 당겨져 있어 왼쪽 끝·높이가 어긋났다.
 export function BizScope({ company, data, children, label = "매출 사업자", extra = null }) {
   const biz = useCompanyBiz(company);
   const [sel, setSel] = React.useState("");
+  const [claimed, setClaimed] = React.useState(false);
+  const claim = React.useCallback(() => setClaimed(true), []);
   const rows = React.useMemo(() => (!biz.multi || !sel ? data || [] : (data || []).filter((r) => bizOf(r, biz.defaultName) === sel)), [data, sel, biz]);
+  const seg = biz.multi ? (
+    <div className="flex items-center gap-3 min-w-0">
+      <div className="leading-tight shrink-0">
+        <div className="text-[11px] font-extrabold tracking-[0.24em] text-[#8FB0F0]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>BUSINESS</div>
+        <div className="text-[14px] font-black text-white">{label}</div>
+      </div>
+      <div className="inline-flex p-1 rounded-xl bg-white/10 border border-white/15 overflow-x-auto max-w-full" style={{ scrollbarWidth: "none" }}>
+        {["", ...biz.names].map((n) => (
+          <button key={n || "all"} type="button" onClick={() => setSel(n)} className={`h-8 px-3.5 rounded-lg text-[14px] font-black whitespace-nowrap transition ${sel === n ? "bg-white text-[#0F1A30] shadow-sm" : "text-white/75 hover:text-white"}`}>{n || "전체"}</button>
+        ))}
+      </div>
+    </div>
+  ) : null;
+  const top = React.useMemo(() => (seg || extra ? { left: seg, right: extra, claim } : null), [seg, extra, claim]);
   return (
-    <>
-      {biz.multi && (
+    <SubNavTopCtx.Provider value={top}>
+      {!claimed && biz.multi && (
         <div className="mb-3 flex items-center gap-3 flex-wrap rounded-2xl px-4 py-2.5 text-white" style={{ background: "linear-gradient(120deg,#0B1428 0%,#1B2B4B 60%,#2D4C82 100%)" }}>
-          <span className="text-[10.5px] font-extrabold tracking-[0.28em] text-[#8FB0F0]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>BUSINESS</span>
-          <span className="text-[12.5px] font-black text-white/80">{label}</span>
-          <div className="inline-flex p-0.5 rounded-xl bg-white/10 border border-white/15 overflow-x-auto">
-            {["", ...biz.names].map((n) => (
-              <button key={n || "all"} type="button" onClick={() => setSel(n)} className={`h-8 px-3.5 rounded-lg text-[12.5px] font-black whitespace-nowrap transition ${sel === n ? "bg-white text-[#0F1A30]" : "text-white/75 hover:text-white"}`}>{n || "전체"}</button>
-            ))}
-          </div>
+          {seg}
           {extra && <div className="ml-auto">{extra}</div>}
         </div>
       )}
-      {!biz.multi && extra && <div className="mb-3 flex justify-end">{extra}</div>}
+      {!claimed && !biz.multi && extra && <div className="mb-3 flex justify-end">{extra}</div>}
       {children(rows, sel)}
-    </>
+    </SubNavTopCtx.Provider>
   );
 }
