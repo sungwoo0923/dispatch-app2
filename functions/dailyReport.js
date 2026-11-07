@@ -2,6 +2,7 @@
 // 📊 2026-11-06 일일 경영 보고(DAILY REPORT) — 아침 푸시(·요약 메일)
 //  · index.js의 dailyReportPush(30분마다, Asia/Seoul)가 부른다. 받는 시간(dailyReportPrefs/{uid}.time, 기본 07:30)이 된 사람에게
 //    "오늘의 일일 경영 보고 · 11.05(목)" + 매출·수익률·월 누계 숫자를 FCM으로 보낸다(sendPushAndCleanup 그대로).
+//    ⭐ 2026-11-08 "주의가 필요한 일"을 보고서에서 뺀 데 맞춰 푸시 문구의 미배차 안내도 뺐다.
 //  · 받는 사람 = 임원 화면 역할(customRoles roleScreen "exec" — 화면 isExec · 규칙 isExecRoleUser와 같은 기준)
 //    · dailyReportCompany/{회사}.recipients[uid] === false 면 보내지 않음 · 받는 요일(기본 월~금, 공휴일 제외)
 //  · 계산은 src/dailyReportCore.js와 같은 규칙(CommonJS 복사본): 기준 = 직전 영업일 ~ 어제(월요일 → 금·토·일)
@@ -78,11 +79,10 @@ module.exports = function makeDailyReport({ db, FieldValue, sendPushAndCleanup, 
       const snap = await q.get().catch((e) => { console.warn(`일일 경영 보고 ${co} ${col} 조회 실패:`, e?.message || e); return { docs: [] }; });
       snap.docs.forEach((d) => { const r = d.data() || {}; if ((r.companyName || defaultCompany) === co) rows.push(r); });
     }
-    const byDay = {}; let unassigned = 0;
+    const byDay = {};
     rows.forEach((r) => {
       if (r.source === "transport_transmit" || isCancelled(r) || !countable(r)) return;
       const d = dateOf(r); if (!d) return;
-      if (d <= today && (r.배차상태 || "배차중") === "배차중" && !String(r.차량번호 || "").trim()) unassigned += 1;
       const e = byDay[d] || (byDay[d] = [0, 0, 0]); const s = toWon(r.청구운임); e[0] += s; e[1] += s - toWon(r.기사운임); e[2] += 1;
     });
     const sum = (days) => days.reduce((a, d) => { const v = byDay[d]; return v ? [a[0] + v[0], a[1] + v[1], a[2] + v[2]] : a; }, [0, 0, 0]);
@@ -90,15 +90,15 @@ module.exports = function makeDailyReport({ db, FieldValue, sendPushAndCleanup, 
     const mtd = range(`${ym}-01`, b.end).reduce((s, d) => s + (byDay[d]?.[0] || 0), 0);
     const cs = (await db.collection("companySettings").doc(co).get().catch(() => null))?.data() || {};
     const target = (Number(cs?.매출목표?.순수매출목표) || 0) / 12;
-    return { b, cur, p7, mtd, target, unassigned };
+    return { b, cur, p7, mtd, target };
   }
   function message(co, today, n) {
-    const { b, cur, p7, mtd, target, unassigned } = n;
+    const { b, cur, p7, mtd, target } = n;
     const lbl = b.multi ? `${md(b.start)}~${md(b.end)} ${b.days.length}일` : `${md(b.start)}(${DOW[dowOf(b.start)]})`;
     const d7 = p7[0] ? ((cur[0] - p7[0]) / Math.abs(p7[0])) * 100 : null;
     const margin = cur[0] ? (cur[1] / cur[0]) * 100 : 0;
     const title = `오늘의 일일 경영 보고 · ${lbl}`;
-    const body = `매출 ${fmt(man(cur[0]))}만원${d7 == null ? "" : ` (${d7 >= 0 ? "▲" : "▼"}${Math.abs(d7).toFixed(1)}% 전주비)`} · 수익률 ${margin.toFixed(1)}% · 월 누계 ${fmt(man(mtd))}만원${target > 0 ? ` (목표 ${((mtd / target) * 100).toFixed(1)}%)` : ""}${unassigned ? `. 미배차 ${unassigned}건 확인 필요` : ""}`;
+    const body = `매출 ${fmt(man(cur[0]))}만원${d7 == null ? "" : ` (${d7 >= 0 ? "▲" : "▼"}${Math.abs(d7).toFixed(1)}% 전주비)`} · 수익률 ${margin.toFixed(1)}% · 월 누계 ${fmt(man(mtd))}만원${target > 0 ? ` (목표 ${((mtd / target) * 100).toFixed(1)}%)` : ""}`;
     return { title, body, lbl };
   }
 
