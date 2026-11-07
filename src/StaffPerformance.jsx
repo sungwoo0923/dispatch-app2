@@ -62,32 +62,36 @@ export default function StaffPerformance({ rows = [], isExcluded = () => false, 
   const SORTS = [["profit", "수익순"], ["sale", "매출순"], ["cnt", "건수순"], ["rate", "수익률순"], ["low", "저마진 많은순"]];
 
   return (
-    <div style={{ position: "fixed", inset: 0, zIndex: 99990, background: "rgba(15,23,42,.45)", display: "flex", alignItems: "center", justifyContent: "center", padding: 12, fontFamily: "'Noto Sans KR','Malgun Gothic',sans-serif", wordBreak: "keep-all" }} onClick={onClose}>
-      <div onClick={(e) => e.stopPropagation()} style={{ background: "#f4f6f9", width: "min(1500px, 100%)", height: "min(95vh, 1200px)", borderRadius: 18, display: "flex", flexDirection: "column", overflow: "hidden", boxShadow: "0 20px 60px rgba(0,0,0,.3)" }}>
-        <div style={{ background: NAVY, padding: "16px 22px", display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-          <div style={{ color: "#fff", fontSize: 19, fontWeight: 900, flex: 1 }}>배차담당자별 실적 <span style={{ fontSize: 12, fontWeight: 700, color: "rgba(255,255,255,.7)", marginLeft: 6 }}>관리자 전용</span></div>
-          <CustomSelect value={month} onChange={(e) => setMonth(e.target.value)} style={{ height: 36, borderRadius: 8, border: "none", padding: "0 26px 0 10px", fontSize: 15, fontWeight: 800, background: "#fff", color: "#0F1A30" }}>
+    <div style={{ position: "fixed", inset: 0, zIndex: 99990, background: "rgba(11,20,40,.55)", backdropFilter: "blur(2px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 12, fontFamily: "'Noto Sans KR','Malgun Gothic',sans-serif", wordBreak: "keep-all" }} onClick={onClose}>
+      <div onClick={(e) => e.stopPropagation()} style={{ background: "#F4F7FB", width: "min(1500px, 100%)", height: "min(95vh, 1200px)", borderRadius: 22, display: "flex", flexDirection: "column", overflow: "hidden", boxShadow: "0 30px 80px rgba(11,20,40,.45)" }}>
+        <div style={{ background: "linear-gradient(120deg,#0B1428 0%,#1B2B4B 65%,#2D4C82 100%)", padding: "18px 24px", display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+          {/* ⭐ 2026-11-07 디자인 통일 — 다른 경영 창과 같은 남색 그라데이션 머리말 · 영어 머리표 */}
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontFamily: "'Noto Sans KR',sans-serif", fontSize: 11, fontWeight: 800, letterSpacing: "0.24em", textTransform: "uppercase", color: "#8FB0F0" }}>Revenue · Staff Performance</div>
+            <div style={{ color: "#fff", fontSize: 20, fontWeight: 900, marginTop: 2 }}>배차담당자별 실적 <span style={{ fontSize: 13, fontWeight: 800, color: "#C9D6EE", marginLeft: 6, border: "1px solid rgba(143,176,240,.4)", borderRadius: 99, padding: "1px 9px", verticalAlign: "middle" }}>관리자 전용</span></div>
+          </div>
+          <CustomSelect value={month} onChange={(e) => setMonth(e.target.value)} style={{ height: 38, borderRadius: 11, border: "none", padding: "0 26px 0 10px", fontSize: 15, fontWeight: 800, background: "#fff", color: "#0F1A30" }}>
             {(months.length ? months : [month]).map((m) => <option key={m} value={m}>{m.slice(0, 4)}년 {Number(m.slice(5))}월</option>)}
           </CustomSelect>
           {hasExcluded && (
-            <div style={{ display: "flex", gap: 4, background: "rgba(255,255,255,.12)", borderRadius: 9, padding: 3 }}>
+            <div style={{ display: "flex", gap: 4, background: "rgba(255,255,255,.1)", borderRadius: 12, padding: 4 }}>
               {[["pure", "순수 운송"], ["all", "전체"]].map(([k, l]) => (
                 <button key={k} onClick={() => setScope(k)} style={{ height: 30, padding: "0 12px", borderRadius: 7, border: "none", background: scope === k ? "#fff" : "transparent", color: scope === k ? NAVY : "#fff", fontSize: 14, fontWeight: 800, cursor: "pointer" }}>{l}</button>
               ))}
             </div>
           )}
-          <button onClick={onClose} style={{ border: "none", background: "transparent", color: "rgba(255,255,255,.85)", fontSize: 24, cursor: "pointer" }}>✕</button>
+          <button onClick={onClose} aria-label="닫기" title="닫기" style={{ width: 38, height: 38, borderRadius: 11, border: "1px solid rgba(143,176,240,.35)", background: "rgba(255,255,255,.06)", color: "#fff", cursor: "pointer", display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg></button>
         </div>
-        <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: 18, display: "flex", flexDirection: "column", gap: 14 }}>
+        <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: 20, display: "flex", flexDirection: "column", gap: 14 }}>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 10, flexShrink: 0 }}>
             {[["담당자 수", `${list.length}명`], ["총 건수", `${tot.cnt.toLocaleString()}건`], ["총 매출", man(tot.sale)], ["총 수익", man(tot.profit)], ["평균 수익률", pct(totRate)], ["저마진·0원 이하", `${(tot.low + tot.neg).toLocaleString()}건`]].map(([l, v]) => (
-              <div key={l} style={{ background: "#fff", border: "1px solid #e2e7ef", borderRadius: 12, padding: "12px 14px", textAlign: "center" }}>
-                <div style={{ fontSize: 13, fontWeight: 800, color: "#4b5563" }}>{l}</div>
-                <div style={{ fontSize: 21, fontWeight: 900, color: "#111827", marginTop: 3 }}>{v}</div>
+              <div key={l} style={{ background: "#fff", border: "1px solid #E3E8F0", borderRadius: 16, padding: "14px 16px", textAlign: "left", boxShadow: "0 1px 2px rgba(15,26,48,.04)" }}>
+                <div style={{ fontSize: 13.5, fontWeight: 800, color: "#5B6B86" }}>{l}</div>
+                <div style={{ fontSize: 23, fontWeight: 900, color: "#0F1A30", marginTop: 3, fontVariantNumeric: "tabular-nums" }}>{v}</div>
               </div>
             ))}
           </div>
-          <div style={{ background: "#fff", border: "1px solid #e2e7ef", borderRadius: 14, padding: 16, flexShrink: 0 }}>
+          <div style={{ background: "#fff", border: "1px solid #E3E8F0", borderRadius: 16, padding: 20, flexShrink: 0, boxShadow: "0 1px 2px rgba(15,26,48,.04)" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", marginBottom: 12 }}>
               <span style={{ fontSize: 17, fontWeight: 900, color: NAVY, marginRight: 8 }}>{Number(month.slice(5))}월 담당자별 실적</span>
               {SORTS.map(([k, l]) => (
@@ -117,16 +121,16 @@ export default function StaffPerformance({ rows = [], isExcluded = () => false, 
                         <td style={td}>{man(g.driver)}</td>
                         <td style={{ ...td, fontWeight: 900 }}>
                           {man(g.profit)}
-                          <div style={{ height: 5, background: "#eef1f6", borderRadius: 3, marginTop: 4 }}><div style={{ width: `${Math.round((Math.abs(g.profit) / maxProfit) * 100)}%`, height: "100%", background: g.profit >= 0 ? NAVY : "#dc2626", borderRadius: 3 }} /></div>
+                          <div style={{ height: 5, background: "#eef1f6", borderRadius: 3, marginTop: 4 }}><div style={{ width: `${Math.round((Math.abs(g.profit) / maxProfit) * 100)}%`, height: "100%", background: g.profit >= 0 ? NAVY : "#D92D20", borderRadius: 3 }} /></div>
                         </td>
-                        <td style={{ ...td, fontWeight: 900, color: lowRate ? "#b91c1c" : "#111827" }}>{pct(g.rate)}</td>
+                        <td style={{ ...td, fontWeight: 900, color: lowRate ? "#D92D20" : "#0F1A30" }}>{pct(g.rate)}</td>
                         <td style={td}>{Math.round(g.avgProfit).toLocaleString()}원</td>
-                        <td style={{ ...td, color: g.low ? "#92400e" : "#9ca3af" }}>{g.low}건</td>
-                        <td style={{ ...td, color: g.neg ? "#b91c1c" : "#9ca3af" }}>{g.neg}건</td>
+                        <td style={{ ...td, color: g.low ? "#2D4C82" : "#9AA8C2" }}>{g.low}건</td>
+                        <td style={{ ...td, color: g.neg ? "#D92D20" : "#9AA8C2" }}>{g.neg}건</td>
                         <td style={td}>{g.clients.size}</td>
-                        <td style={{ ...td, color: dP >= 0 ? "#047857" : "#b91c1c", fontWeight: 900 }}>
-                          {g.prevCnt ? `${dP >= 0 ? "+" : "−"}${man(Math.abs(dP))}` : "신규"}
-                          {g.prevRate != null && <div style={{ fontSize: 12, fontWeight: 700, color: "#4b5563" }}>수익률 {pct(g.prevRate)} → {pct(g.rate)}</div>}
+                        <td style={{ ...td, color: !g.prevCnt ? "#2D4C82" : dP > 0 ? "#D92D20" : dP < 0 ? "#1E5BD8" : "#6B7588", fontWeight: 900, fontVariantNumeric: "tabular-nums" }}>
+                          {g.prevCnt ? `${dP > 0 ? "▲ +" : dP < 0 ? "▼ −" : ""}${man(Math.abs(dP))}` : "신규"}
+                          {g.prevRate != null && <div style={{ fontSize: 13, fontWeight: 700, color: "#5B6B86" }}>수익률 {pct(g.prevRate)} → {pct(g.rate)}</div>}
                         </td>
                       </tr>
                     );
