@@ -22,7 +22,9 @@ import CustomDatePicker from "./CustomDatePicker";
 import { CustomSelect } from "./CustomSelect"; // ⭐ 2026-11-03 프로그램 공용 선택 목록(기본 select 대신)
 import { kpConfirm, kpAlert } from "./kpDialog";
 import { profileToBoardColumns } from "../functions/sheetProfileCore.mjs"; // 🔗 2026-11-07 시트 프로필 → 배차표 칸
-import { useSheetProfiles } from "./sheetConnectApi";
+import { useSheetProfiles, isOfficeFileError, sheetDemo } from "./sheetConnectApi";
+import { boardTabFor, boardRowsFor, profileToBoardForm, monthPatternOf, sheetDayOf, isMonthBoard } from "../functions/routeBoardMonth.mjs"; // 📅 2026-11-07 월별 탭 · 한 탭 양식
+import OfficeSheetCard from "./OfficeSheetCard"; // 📗 2026-11-07 엑셀(xlsx) 파일 안내
 const SheetConnectWizard = React.lazy(() => import("./SheetConnectWizard"));
 
 const DAYS = ["일", "월", "화", "수", "목", "금", "토"];
@@ -47,7 +49,7 @@ const parseHM = (v) => {
 const korTime = (hm) => { if (!hm) return ""; const [h, m] = hm.split(":").map(Number); return `${h < 12 ? "오전" : "오후"} ${h % 12 || 12}:${String(m).padStart(2, "0")}`; };
 
 // 칸 종류
-const KINDS = [["field", "프로그램 칸"], ["qty", "수량"], ["sum", "합계(자동)"], ["extra", "참고(보관)"], ["no", "순번(자동)"]];
+const KINDS = [["field", "프로그램 칸"], ["qty", "수량"], ["sum", "합계(자동)"], ["extra", "참고(보관)"], ["no", "순번(자동)"], ["date", "날짜(월별 탭)"]];
 const FIELDS = ["하차지명", "하차지주소", "차량번호", "이름", "전화번호", "상차시간", "하차시간", "메모", "거래처명", "청구운임", "기사운임", "화물내용", "차량톤수", "차량종류"];
 const TIME_FIELDS = new Set(["상차시간", "하차시간"]);
 const MONEY_FIELDS = new Set(["청구운임", "기사운임"]);
@@ -68,6 +70,11 @@ export function guessKind(label) {
 const col = (label, kind, field) => ({ id: rid(), label, kind, ...(field ? { field } : {}) });
 // 예시 양식(태진 삼다수 시트 모양)
 
+// 🔗 2026-11-07 시트 프로필(연결 마법사 결과) → 새 배차표 양식(칸 · 날짜 칸 · 월별 탭/한 탭)
+export const boardFromProfile = (p) => {
+  const bf = profileToBoardForm(p, profileToBoardColumns(p, rid));
+  return { ...BLANK(), name: p.name || "", sheetUrl: p.sheetUrl || "", sheetProfileId: p.id || "", dropOffset: 0, autoSync: false, columns: bf.columns, tabMode: bf.tabMode, tabPattern: bf.tabPattern, sheetTab: bf.sheetTab };
+};
 const BLANK = () => ({ name: "", client: "", dropOffset: 1, payMethod: "", groups: [{ name: "기본", 상차지명: "", 상차지주소: "", defaults: [] }], columns: [col("도착지", "field", "하차지명"), col("시군구", "field", "하차지주소"), col("차량번호", "field", "차량번호"), col("성명", "field", "이름"), col("휴대전화", "field", "전화번호"), col("비고", "field", "메모")] });
 
 const card = "rounded-[18px] bg-white border border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_8px_20px_rgba(16,24,40,0.05)]";
@@ -214,6 +221,7 @@ const placeSub = (p) => [p.주소, p.담당자 || (p.contacts || [])[0]?.name].f
 // ── 구글시트 읽기(서버 routeBoardSheet) ──────────────────────
 const SERVICE_EMAIL = "dispatch-app-9b92f@appspot.gserviceaccount.com";
 export async function sheetApi(body) {
+  if (import.meta.env.DEV && sheetDemo()) { const { routeBoardFixture } = await import("./devSheetFixture.js"); await new Promise((r) => setTimeout(r, 200)); return routeBoardFixture(body); }
   const token = await auth.currentUser?.getIdToken();
   let res;
   try {
@@ -221,8 +229,18 @@ export async function sheetApi(body) {
   } catch { throw new Error("서버 응답을 받지 못했습니다. 서버 배포 여부를 확인하거나 잠시 후 다시 시도해 주세요."); }
   let data = {};
   try { data = await res.json(); } catch { /* 무시 */ }
-  if (!res.ok) throw new Error(data.error || `요청 실패 (${res.status})`);
+  if (!res.ok) throw Object.assign(new Error(data.error || `요청 실패 (${res.status})`), { code: data.code || "", help: data.help || "" });
   return data;
+}
+// 📗 2026-11-07 엑셀(xlsx) 파일 → 구글 시트로 변환(서버가 같은 폴더에 사본 · 원본 그대로). boardId면 양식 주소도 서버가 바꾼다
+export const convertBoardSheet = (url, boardId = "") => sheetApi({ action: "convert", url, ...(boardId ? { boardId } : {}) });
+// 그날 읽을 탭 — 월별 탭/한 탭 양식이면 routeBoardMonth 규칙, 아니면 날짜 이름 탭
+export function boardTabOf(form, tabs, date) {
+  if (form.fixedTab) return tabs.includes(form.fixedTab) ? form.fixedTab : "";
+  const m = boardTabFor(form, tabs, date);
+  if (m != null) return m;
+  const y = +date.slice(0, 4);
+  return tabs.find((t) => tabDate(t, y) === date) || tabs.find((t) => tabDate(t, y) === addDays(date, toInt(form.dropOffset))) || "";
 }
 const ShareNote = () => (
   <div className="text-[12.5px] text-[#7A8AA6] mt-1.5">시트 <b>공유</b>에 <code className="px-1.5 py-0.5 rounded bg-[#F3F6FA] text-[#1B2B4B]">{SERVICE_EMAIL}</code> 을(를) <b>뷰어</b>로 추가해 주세요.
@@ -238,17 +256,16 @@ function SheetLoad({ form, date, onApply, onClose }) {
   React.useEffect(() => {
     sheetApi({ action: "tabs", url: form.sheetUrl }).then((d) => {
       setTabs(d.tabs);
-      const y = +date.slice(0, 4);
-      const hit = (form.fixedTab && d.tabs.includes(form.fixedTab) ? form.fixedTab : "") || d.tabs.find((t) => tabDate(t, y) === date) || d.tabs.find((t) => tabDate(t, y) === addDays(date, toInt(form.dropOffset)));
-      setTab(hit || d.tabs[d.tabs.length - 1] || "");
+      setTab(boardTabOf(form, d.tabs, date) || d.tabs[d.tabs.length - 1] || "");
     }).catch((e) => setErr(e.message)).finally(() => setBusy(""));
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const read = async () => {
     setBusy("read"); setErr(""); setRes(null);
     try {
       const d = await sheetApi({ action: "read", url: form.sheetUrl, tab });
-      const p = parseBoardTab(form, d.rows);
+      const p = parseBoardTab(form, boardRowsFor(form, d.rows, date, tab)); // 월별 탭이면 그날 줄만
       if (!p.headers) throw new Error("이 탭에서 양식의 제목줄(칸 이름)을 찾지 못했습니다. 양식 칸 이름이 시트 제목과 같은지 확인해 주세요.");
+      if (isMonthBoard(form)) p.date = date;
       setRes(p);
     } catch (e) { setErr(e.message); } finally { setBusy(""); }
   };
@@ -267,7 +284,8 @@ function SheetLoad({ form, date, onApply, onClose }) {
           </div>
         )}
         {busy === "tabs" && <div className="text-[13.5px] text-[#7A8AA6]">탭 목록을 읽는 중…</div>}
-        {err && <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-[13.5px] font-semibold text-red-700 mb-3">{err}{/공유|열 수 없/.test(err) && <ShareNote />}</div>}
+        {err && (isOfficeFileError(err) ? <OfficeSheetCard className="mb-3" onConvert={() => convertBoardSheet(form.sheetUrl, form.id)} />
+          : <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-[13.5px] font-semibold text-red-700 mb-3">{err}{/공유|열 수 없/.test(err) && <ShareNote />}</div>)}
         {res && (
           <div className="rounded-xl border border-[#E3E8F0] bg-[#F8FAFD] p-4 text-[13.5px] text-[#3A4A66] space-y-1.5">
             <div>찾은 표 <b>{res.headers}</b>개 · 차량 <b>{total}</b>줄</div>
@@ -297,16 +315,16 @@ function SheetSend({ form, date, rows, onClose, onDone }) {
   React.useEffect(() => {
     sheetApi({ action: "tabs", url: form.sheetUrl }).then((d) => {
       setTabs(d.tabs);
-      const y = +date.slice(0, 4);
-      setTab((form.fixedTab && d.tabs.includes(form.fixedTab) ? form.fixedTab : "") || d.tabs.find((t) => tabDate(t, y) === date) || d.tabs.find((t) => tabDate(t, y) === addDays(date, toInt(form.dropOffset))) || d.tabs[d.tabs.length - 1] || "");
-    }).catch((e) => setErr(e.message)).finally(() => setBusy(""));
+      if (d.office) setErr(Object.assign(new Error("office"), { code: "office-file" })); // 📗 엑셀 파일은 쓸 수 없음 → 안내 카드
+      setTab(boardTabOf(form, d.tabs, date) || d.tabs[d.tabs.length - 1] || "");
+    }).catch((e) => setErr(e)).finally(() => setBusy(""));
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const preview = async () => {
     setBusy("read"); setErr(""); setPlan(null);
     try {
       const d = await sheetApi({ action: "read", url: form.sheetUrl, tab });
       const board = {}; Object.entries(rows).forEach(([g, arr]) => { board[g] = arr.map((r) => r.v); });
-      const p = planSheetWrite(form, d.rows, board);
+      const p = planSheetWrite(form, boardRowsFor(form, d.rows, date, tab), board);
       if (!p.headers) throw new Error("이 탭에서 양식의 제목줄(칸 이름)을 찾지 못했습니다.");
       setPlan(p);
     } catch (e) { setErr(e.message); } finally { setBusy(""); }
@@ -315,7 +333,7 @@ function SheetSend({ form, date, rows, onClose, onDone }) {
     if (!(await kpConfirm(`'${tab}' 탭에 ${plan.updates.length}칸을 씁니다. 진행할까요?`))) return;
     setBusy("write"); setErr("");
     try { const r = await sheetApi({ action: "write", url: form.sheetUrl, tab, updates: plan.updates.map(({ a1, value }) => ({ a1, value })) }); onDone(`시트 '${tab}' 탭에 ${r.updated}칸을 썼습니다.`); }
-    catch (e) { setErr(e.message); setBusy(""); }
+    catch (e) { setErr(isOfficeFileError(e) ? e : e.message); setBusy(""); }
   };
   return (
     <div className="fixed inset-0 z-[90] bg-black/40 flex items-start justify-center overflow-auto p-4" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
@@ -329,7 +347,8 @@ function SheetSend({ form, date, rows, onClose, onDone }) {
           </div>
         )}
         {busy === "tabs" && <div className="text-[13.5px] text-[#7A8AA6]">탭 목록을 읽는 중…</div>}
-        {err && <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-[13.5px] font-semibold text-red-700 mb-3">{err}</div>}
+        {err && (isOfficeFileError(err) ? <OfficeSheetCard className="mb-3" onConvert={() => convertBoardSheet(form.sheetUrl, form.id)} />
+          : <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-[13.5px] font-semibold text-red-700 mb-3">{err?.message || String(err)}</div>)}
         {plan && (
           <div className="rounded-xl border border-[#E3E8F0] bg-[#F8FAFD] p-4 text-[13px] text-[#3A4A66]">
             <div className="font-black text-[#0F1A30] mb-2">바뀔 칸 {plan.updates.length}개</div>
@@ -408,23 +427,33 @@ const isMasterUserRB = () => { try { return localStorage.getItem("role") === "to
 function FormEditor({ init, onClose, onSaved, co, clients = [], places = [] }) {
   const [f, setF] = React.useState(() => JSON.parse(JSON.stringify(init)));
   const [busy, setBusy] = React.useState(false);
-  const [sheet, setSheet] = React.useState({ tabs: null, tab: "", busy: "", err: "" }); // ⭐ 시트 제목줄로 칸 만들기
-  const loadTabs = async () => {
-    if (!String(f.sheetUrl || "").trim()) return kpAlert("구글시트 주소를 붙여넣어 주세요.");
+  const [sheet, setSheet] = React.useState({ tabs: null, tab: "", busy: "", err: "", office: false }); // ⭐ 시트 제목줄로 칸 만들기
+  const loadTabs = async (url = f.sheetUrl) => {
+    if (!String(url || "").trim()) return kpAlert("구글시트 주소를 붙여넣어 주세요.");
     setSheet((s) => ({ ...s, busy: "tabs", err: "" }));
-    try { const d = await sheetApi({ action: "tabs", url: f.sheetUrl.trim() }); setSheet({ tabs: d.tabs, tab: d.tabs[d.tabs.length - 1] || "", busy: "", err: "" }); }
-    catch (e) { setSheet((s) => ({ ...s, busy: "", err: e.message })); }
+    try {
+      const d = await sheetApi({ action: "tabs", url: url.trim() });
+      const pick = (f.tabMode === "single" && d.tabs.includes(f.sheetTab) ? f.sheetTab : "") || d.tabs[d.tabs.length - 1] || "";
+      setSheet({ tabs: d.tabs, tab: pick, busy: "", err: "", office: !!d.office, fileName: d.fileName || "" });
+      if (f.tabMode === "monthly" && !f.tabPattern) { const pt = monthPatternOf(d.tabs); if (pt) setF((p) => ({ ...p, tabPattern: pt })); }
+    } catch (e) { setSheet((s) => ({ ...s, busy: "", err: e.message, office: isOfficeFileError(e) })); }
   };
+  // 📗 엑셀(xlsx) 파일 → 구글 시트로 변환 후 새 주소로(저장된 양식이면 서버가 양식 주소도 바꾼다)
+  const onConverted = (r) => { if (!r?.url) return; setF((p) => ({ ...p, sheetUrl: r.url })); setSheet({ tabs: null, tab: "", busy: "", err: "", office: false }); setTimeout(() => loadTabs(r.url), 0); };
   const colsFromSheet = async () => {
     if (f.columns.length && !(await kpConfirm("지금 칸 설정을 시트 제목줄로 바꿀까요?"))) return;
     setSheet((s) => ({ ...s, busy: "read", err: "" }));
     try {
       const d = await sheetApi({ action: "read", url: f.sheetUrl.trim(), tab: sheet.tab });
       const g = sheetToForm(d.rows, guessKind);
+      // 📅 월별 탭 시트(25년1월)면 날짜 칸을 날짜(월별 탭)로
+      const mp = monthPatternOf(sheet.tabs || []);
+      if (g && mp) { const dc = g.columns.find((c) => /^(날짜|일자|상차일|배차일|운행일|작업일)$/.test(String(c.label).replace(/\s/g, ""))); if (dc) Object.assign(dc, { kind: "date", role: "상차일", field: undefined }); }
       if (!g) throw new Error("이 탭에서 제목줄을 찾지 못했습니다.");
-      setF((p) => ({ ...p, columns: g.columns, groups: g.groups.map((x) => p.groups.find((y) => y.name === x.name) || x) }));
+      setF((p) => ({ ...p, columns: g.columns, groups: g.groups.map((x) => p.groups.find((y) => y.name === x.name) || x),
+        ...(mp && g.columns.some((c) => c.kind === "date") ? { tabMode: "monthly", tabPattern: mp } : {}) }));
       setSheet((s) => ({ ...s, busy: "" }));
-    } catch (e) { setSheet((s) => ({ ...s, busy: "", err: e.message })); }
+    } catch (e) { setSheet((s) => ({ ...s, busy: "", err: e.message, office: s.office || isOfficeFileError(e) })); }
   };
   // 🔗 2026-11-07 시트 프로필(구글시트 연동)로 칸 만들기 — 시트 순서 · 이름 그대로, 프로그램 칸은 프로필 연결대로(만든 뒤 고칠 수 있음)
   const sheetProfiles = useSheetProfiles(co) || [];
@@ -432,9 +461,9 @@ function FormEditor({ init, onClose, onSaved, co, clients = [], places = [] }) {
   const colsFromProfile = async (p) => {
     if (!p) return;
     if (f.columns.length && !(await kpConfirm(`지금 칸 설정을 '${p.name}' 칸으로 바꿀까요?`))) return;
-    const columns = profileToBoardColumns(p, rid);
-    if (!columns.some((c) => c.field === "하차지명")) kpAlert("이 시트에는 하차지명 칸이 없어요. 칸 하나를 하차지명으로 정해 주세요.");
-    setF((x) => ({ ...x, columns, sheetUrl: x.sheetUrl || p.sheetUrl || "", sheetProfileId: p.id || "" }));
+    const bf = profileToBoardForm(p, profileToBoardColumns(p, rid)); // 📅 날짜 칸 · 월별 탭(25년1월) · 한 탭
+    if (!bf.columns.some((c) => c.field === "하차지명")) kpAlert("이 시트에는 하차지명 칸이 없어요. 칸 하나를 하차지명으로 정해 주세요.");
+    setF((x) => ({ ...x, columns: bf.columns, tabMode: bf.tabMode, tabPattern: bf.tabPattern, sheetTab: bf.sheetTab, name: x.name || p.name || "", sheetUrl: p.sheetUrl || x.sheetUrl || "", sheetProfileId: p.id || "" }));
   };
   const setCol = (i, patch) => setF((p) => ({ ...p, columns: p.columns.map((c, j) => (j === i ? { ...c, ...patch } : c)) }));
   const moveCol = (i, d) => setF((p) => { const a = [...p.columns]; const j = i + d; if (j < 0 || j >= a.length) return p; [a[i], a[j]] = [a[j], a[i]]; return { ...p, columns: a }; });
@@ -449,9 +478,11 @@ function FormEditor({ init, onClose, onSaved, co, clients = [], places = [] }) {
     if (labels.some((l) => !l)) return kpAlert("칸 이름이 빈 곳이 있습니다.");
     if (labels.some((l, i) => labels.indexOf(l) !== i)) return kpAlert("같은 칸 이름이 두 번 있습니다.");
     if (!f.groups.length || f.groups.some((g) => !g.name.trim())) return kpAlert("묶음(상차지) 이름을 입력해 주세요.");
+    if ((f.tabMode === "monthly" || f.tabMode === "single") && !f.columns.some((c) => c.kind === "date")) return kpAlert("월별 탭 · 한 탭 시트는 날짜 칸이 있어야 해요. 날짜 칸 종류를 '날짜(월별 탭)'로 바꿔 주세요.");
+    if (f.columns.filter((c) => c.kind === "date").length > 1) return kpAlert("날짜 칸은 하나만 정해 주세요.");
     setBusy(true);
     try {
-      const data = { ...f, sheetUrl: String(f.sheetUrl || "").trim(), companyName: co, columns: f.columns.map((c) => ({ ...c, label: c.label.trim() })), updatedAt: serverTimestamp(), updatedBy: auth.currentUser?.email || "" };
+      const data = { ...f, sheetUrl: String(f.sheetUrl || "").trim(), companyName: co, columns: f.columns.map((c) => JSON.parse(JSON.stringify({ ...c, label: c.label.trim() }))), updatedAt: serverTimestamp(), updatedBy: auth.currentUser?.email || "" };
       delete data.id;
       let id = f.id;
       if (id) await updateDoc(doc(db, "routeBoards", id), data);
@@ -482,15 +513,16 @@ function FormEditor({ init, onClose, onSaved, co, clients = [], places = [] }) {
         <div className="rounded-xl border border-[#E3E8F0] bg-[#F8FAFD] p-3 mb-6">
           <div className="text-[13px] font-black text-[#3A4A66] mb-1.5">화주사 구글시트(선택) — 넣어 두면 배차표에서 [시트 불러오기]로 날짜 탭을 바로 가져옵니다</div>
           <div className="flex flex-wrap gap-2">
-            <input value={f.sheetUrl || ""} onChange={(e) => { setF({ ...f, sheetUrl: e.target.value }); setSheet({ tabs: null, tab: "", busy: "", err: "" }); }} className={`${inp} flex-1 min-w-[240px]`} placeholder="https://docs.google.com/spreadsheets/d/…" />
-            {!sheet.tabs ? <button type="button" onClick={loadTabs} disabled={!!sheet.busy} className={`${btn} border border-[#DCE3EE] text-[#2D4C82]`}>{sheet.busy === "tabs" ? "여는 중…" : "시트 열기"}</button> : (
+            <input value={f.sheetUrl || ""} onChange={(e) => { setF({ ...f, sheetUrl: e.target.value }); setSheet({ tabs: null, tab: "", busy: "", err: "", office: false }); }} className={`${inp} flex-1 min-w-[240px]`} placeholder="https://docs.google.com/spreadsheets/d/…" />
+            {!sheet.tabs ? <button type="button" onClick={() => loadTabs()} disabled={!!sheet.busy} className={`${btn} border border-[#DCE3EE] text-[#2D4C82]`}>{sheet.busy === "tabs" ? "여는 중…" : "시트 열기"}</button> : (
               <>
                 <CustomSelect value={sheet.tab} onChange={(e) => setSheet((s) => ({ ...s, tab: e.target.value }))} className={`${inp} w-[160px]`}>{[...sheet.tabs].reverse().map((t) => <option key={t}>{t}</option>)}</CustomSelect>
                 <button type="button" onClick={colsFromSheet} disabled={!!sheet.busy} className={`${btn} bg-[#2D4C82] text-white`}>{sheet.busy === "read" ? "읽는 중…" : "이 탭 제목줄로 칸 만들기"}</button>
               </>
             )}
           </div>
-          {sheet.err && <div className="mt-2 text-[13px] font-semibold text-red-600">{sheet.err}</div>}
+          {sheet.office ? <OfficeSheetCard className="mt-2.5" compact fileName={sheet.fileName} onConvert={() => convertBoardSheet(f.sheetUrl.trim(), f.id || "")} onConverted={onConverted} />
+            : sheet.err && <div className="mt-2 text-[13px] font-semibold text-red-600">{sheet.err}</div>}
           <div className="mt-2.5 flex flex-wrap items-center gap-2">
             <span className="text-[13px] font-black text-[#3A4A66]">시트 프로필로 칸 만들기</span>
             {sheetProfiles.filter((p) => p.engine !== "legacy-dolcae").length > 0 && (
@@ -512,6 +544,21 @@ function FormEditor({ init, onClose, onSaved, co, clients = [], places = [] }) {
               </span>
             </label>
           )}
+          {/* 📅 2026-11-07 탭 구조 — 날짜 칸(종류: 날짜)이 있으면 월별 탭(25년1월) · 탭 하나 시트도 날짜별로 */}
+          {f.columns.some((c) => c.kind === "date") && (
+            <div className="mt-2.5 flex flex-wrap items-center gap-2" data-testid="board-tabmode">
+              <span className="text-[13px] font-black text-[#3A4A66]">탭 구조</span>
+              <CustomSelect value={f.tabMode || ""} onChange={(e) => { const v = e.target.value; setF((p) => ({ ...p, tabMode: v, tabPattern: v === "monthly" ? (p.tabPattern || monthPatternOf(sheet.tabs || [])) : null, sheetTab: v === "single" ? (p.sheetTab || sheet.tab || "") : "" })); }} className={`${inp} w-[200px] h-9`}>
+                <option value="">날짜 탭(26-11-03)</option>
+                <option value="monthly">월별 탭(25년1월)</option>
+                <option value="single">탭 하나</option>
+              </CustomSelect>
+              {f.tabMode === "single" && (sheet.tabs
+                ? <CustomSelect value={f.sheetTab || ""} onChange={(e) => setF((p) => ({ ...p, sheetTab: e.target.value }))} className={`${inp} w-[160px] h-9`}>{[...sheet.tabs].reverse().map((t) => <option key={t}>{t}</option>)}</CustomSelect>
+                : <span className="text-[13px] font-bold text-[#2D4C82]">{f.sheetTab || "시트를 열어 탭을 골라 주세요"}</span>)}
+              <span className="text-[12.5px] text-[#7A8AA6]">날짜 칸이 그날인 줄만 그날 배차표로 가져와요</span>
+            </div>
+          )}
           {String(f.sheetUrl || "").trim() && (
             <label className="mt-2.5 flex items-start gap-2 cursor-pointer">
               <input type="checkbox" checked={f.autoSync !== false} onChange={(e) => setF((p) => ({ ...p, autoSync: e.target.checked }))} className="mt-0.5 w-[18px] h-[18px] accent-[#1B2B4B]" />
@@ -528,12 +575,18 @@ function FormEditor({ init, onClose, onSaved, co, clients = [], places = [] }) {
             <div key={c.id} className="flex flex-wrap items-center gap-2">
               <span className="w-6 text-[12px] font-black text-[#9AA9C3] text-right">{i + 1}</span>
               <input value={c.label} onChange={(e) => { const g = guessKind(e.target.value); setCol(i, c.label ? { label: e.target.value } : { label: e.target.value, ...g }); }} className={`${fieldInp} w-[150px]`} placeholder="칸 이름" />
-              <CustomSelect value={c.kind} onChange={(e) => setCol(i, { kind: e.target.value, field: e.target.value === "field" ? (c.field || guessKind(c.label).field || "메모") : undefined })} className={`${fieldInp} w-[130px]`}>
+              <CustomSelect value={c.kind} onChange={(e) => setCol(i, { kind: e.target.value, field: e.target.value === "field" ? (c.field || guessKind(c.label).field || "메모") : undefined, role: e.target.value === "date" ? (c.role || "상차일") : undefined })} className={`${fieldInp} w-[130px]`}>
                 {KINDS.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
               </CustomSelect>
               {c.kind === "field" && (
                 <CustomSelect value={c.field || ""} onChange={(e) => setCol(i, { field: e.target.value })} className={`${fieldInp} w-[130px]`}>
                   {FIELDS.map((x) => <option key={x}>{x}</option>)}
+                </CustomSelect>
+              )}
+              {c.kind === "date" && (
+                <CustomSelect value={c.role || "상차일"} onChange={(e) => setCol(i, { role: e.target.value })} className={`${fieldInp} w-[118px]`} title="이 날짜는 상차일인가요 하차일인가요">
+                  <option value="상차일">상차일</option>
+                  <option value="하차일">하차일</option>
                 </CustomSelect>
               )}
               {["field", "qty", "extra"].includes(c.kind) && (
@@ -584,7 +637,7 @@ function FormEditor({ init, onClose, onSaved, co, clients = [], places = [] }) {
 
 // ── 배차표 화면 ────────────────────────────────────────────
 export default function RouteBoard({ companyName = "" }) {
-  const co = String(companyName || "").trim();
+  const co = String(companyName || "").trim() || (sheetDemo() ? (new URLSearchParams(window.location.search).get("co") || "") : ""); // 개발 둘러보기(demo=1)는 주소의 co
   const [forms, setForms] = React.useState([]);
   const [formId, setFormId] = React.useState(() => { try { return localStorage.getItem("routeBoard:last") || ""; } catch { return ""; } });
   const [date, setDate] = React.useState(kst());
@@ -603,6 +656,7 @@ export default function RouteBoard({ companyName = "" }) {
   const [pending, setPending] = React.useState(null); // { date, res } — 시트에서 읽은 줄(그 날짜 오더를 읽은 뒤 넣는다)
   // ⭐ 2026-11-03 구글시트 연동 — 시트에서 지워진 줄(gone: 줄 key) · 시트에 새로 생긴 줄(added: 묶음 → [값]) · 확인 시각·탭
   const [sheetDiff, setSheetDiff] = React.useState(null);
+  const [sheetWiz, setSheetWiz] = React.useState(false); // 🔗 구글시트에서 양식 만들기
   const [keepKeys, setKeepKeys] = React.useState(() => new Set()); // [유지]를 누른 줄(이번 화면 동안 다시 묻지 않음)
   const tabsRef = React.useRef({ url: "", at: 0, tabs: [] });
   const form = forms.find((f) => f.id === formId) || null;
@@ -781,18 +835,17 @@ export default function RouteBoard({ companyName = "" }) {
     const t = tabsRef.current;
     if (t.url !== form.sheetUrl || Date.now() - t.at > 300000) {
       const d = await sheetApi({ action: "tabs", url: form.sheetUrl });
-      tabsRef.current = { url: form.sheetUrl, at: Date.now(), tabs: d.tabs || [] };
+      tabsRef.current = { url: form.sheetUrl, at: Date.now(), tabs: d.tabs || [], office: !!d.office };
     }
-    const y = +date.slice(0, 4); const tabs = tabsRef.current.tabs;
-    if (form.fixedTab) return tabs.includes(form.fixedTab) ? form.fixedTab : ""; // ⭐ 양식에서 고정한 탭(테스트용)
-    return tabs.find((x) => tabDate(x, y) === date) || tabs.find((x) => tabDate(x, y) === addDays(date, toInt(form.dropOffset))) || "";
+    return boardTabOf(form, tabsRef.current.tabs, date); // ⭐ 고정한 탭(테스트용) · 월별 탭 · 날짜 탭
   };
   const boardValues = (rs) => { const b = {}; Object.entries(rs).forEach(([g, arr]) => { b[g] = arr.filter((r) => !rowEmpty(form, r)).map((r) => r.v); }); return b; };
   const autoWriteSheet = async (rs) => {
     const tab = await resolveTab();
     if (!tab) return { noTab: true };
     const d = await sheetApi({ action: "read", url: form.sheetUrl, tab });
-    const plan = planSheetWrite(form, d.rows, boardValues(rs));
+    if (d.office) return { tab, updated: 0, office: true }; // 📗 엑셀 파일은 쓸 수 없음(안내 카드)
+    const plan = planSheetWrite(form, boardRowsFor(form, d.rows, date, tab), boardValues(rs));
     if (!plan.updates.length) return { tab, updated: 0, notFound: plan.notFound.length };
     const w = await sheetApi({ action: "write", url: form.sheetUrl, tab, updates: plan.updates.map(({ a1, value }) => ({ a1, value })) });
     return { tab, updated: w.updated || 0, notFound: plan.notFound.length };
@@ -807,16 +860,17 @@ export default function RouteBoard({ companyName = "" }) {
     checkingRef.current = true;
     try {
       const tab = await resolveTab();
-      if (!tab) { setSheetDiff({ tab: "", at: Date.now(), gone: new Set(), added: {} }); return; }
+      if (!tab) { setSheetDiff({ tab: "", at: Date.now(), gone: new Set(), added: {}, office: !!tabsRef.current.office }); return; }
       // 💰 2026-11-06 1분 확인은 "시트가 바뀌었을 때만" 값을 읽는다(서버가 Drive 수정시각으로 비교 · 같으면 unchanged)
       const mtKey = `${form.sheetUrl}|${tab}`;
       const cached = sheetMtRef.current[mtKey];
       let d = await sheetApi({ action: "read", url: form.sheetUrl, tab, ...(!force ? { ifChanged: cached?.mt || "-" } : {}) });
-      if (d.unchanged && cached?.rows) d = { rows: cached.rows }; // 시트 그대로 → 지난번 값으로 비교(표에서 바뀐 것만 반영)
-      else if (d.modifiedTime) sheetMtRef.current[mtKey] = { mt: d.modifiedTime, rows: d.rows };
-      const p = parseBoardTab(form, d.rows);
+      if (d.unchanged && cached?.rows) d = { rows: cached.rows, office: cached.office }; // 시트 그대로 → 지난번 값으로 비교(표에서 바뀐 것만 반영)
+      else if (d.modifiedTime) sheetMtRef.current[mtKey] = { mt: d.modifiedTime, rows: d.rows, office: !!d.office };
+      const office = !!d.office; // 📗 엑셀(xlsx) 파일 — 읽기는 되고 쓰기는 안 됨
+      const p = parseBoardTab(form, boardRowsFor(form, d.rows, date, tab));
       const cN = colOf("하차지명");
-      if (!cN || !p.headers) { setSheetDiff({ tab, at: Date.now(), gone: new Set(), added: {}, bad: true }); return; }
+      if (!cN || !p.headers) { setSheetDiff({ tab, at: Date.now(), gone: new Set(), added: {}, bad: true, office }); return; }
       const gone = new Set(); const added = {};
       form.groups.forEach((g) => {
         const sheetCnt = {}; (p.groups[g.name] || []).forEach((v) => { const k = sheetNm(v[cN.id]); if (k) sheetCnt[k] = (sheetCnt[k] || 0) + 1; });
@@ -833,7 +887,7 @@ export default function RouteBoard({ companyName = "" }) {
           if (used[k] > (boardCnt[k] || 0)) (added[g.name] = added[g.name] || []).push(v);
         });
       });
-      setSheetDiff({ tab, at: Date.now(), gone, added });
+      setSheetDiff({ tab, at: Date.now(), gone, added, office });
     } catch (e) { setSheetDiff((x) => ({ ...(x || { gone: new Set(), added: {} }), at: Date.now(), error: e?.message || String(e) })); }
     finally { checkingRef.current = false; }
   };
@@ -928,6 +982,7 @@ export default function RouteBoard({ companyName = "" }) {
       if (form.sheetUrl) {
         const r = await autoWriteSheet(rows).catch((e) => ({ error: e?.message || String(e) }));
         if (r?.error) setMsg(`${base} · 시트에는 못 썼습니다: ${r.error}`);
+        else if (r?.office) setMsg(`${base} · 엑셀(xlsx) 파일이라 시트에는 쓰지 않았어요. 구글 시트로 바꾸면 써져요.`);
         else if (r?.noTab) setMsg(`${base} · 시트에 이 날짜 탭이 없어 시트에는 쓰지 않았습니다.`);
         else if (r) setMsg(`${base} · 시트 '${r.tab}' 탭에 ${r.updated}칸 반영${r.notFound ? ` (시트에 없는 도착지 ${r.notFound}건)` : ""}.`);
         checkSheet(true);
@@ -979,6 +1034,7 @@ export default function RouteBoard({ companyName = "" }) {
           {forms.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
         </CustomSelect>
         <button onClick={() => setEdit(BLANK())} className={`${btn} border border-[#DCE3EE] text-[#2D4C82]`}>＋ 새 양식</button>
+        <button onClick={() => setSheetWiz(true)} className={`${btn} border border-[#2D4C82] text-[#2D4C82]`} data-testid="board-from-sheet">구글시트에서 양식 만들기</button>
         {form && <button onClick={() => setEdit(form)} className={`${btn} border border-[#DCE3EE] text-[#3A4A66]`}>양식 수정</button>}
         {form && <button onClick={delForm} className={`${btn} text-red-500`}>양식 삭제</button>}
         {form && isMasterUser() && <button onClick={moveForm} disabled={!!busy} className={`${btn} border border-[#F7C97A] text-[#B54708]`} title="최고관리자 — 다른 회사로 잘못 만들어진 양식과 그 오더를 옮깁니다">{busy === "move" ? "옮기는 중…" : "다른 회사로 옮기기"}</button>}
@@ -1002,7 +1058,10 @@ export default function RouteBoard({ companyName = "" }) {
         <div className={`${card} p-10 text-center`}>
           <div className="text-[16px] font-black text-[#0F1A30]">배차표 양식이 없습니다</div>
           <div className="text-[13.5px] text-[#7A8AA6] mt-1.5 mb-4">화주사가 주는 시트 모양(칸 이름·순서)대로 양식을 한 번 만들면, 날짜마다 그 모양으로 입력합니다.</div>
-          <button onClick={() => setEdit(BLANK())} className={`${btn} bg-[#0F1A30] text-white px-6`}>양식 만들기</button>
+          <div className="flex flex-wrap justify-center gap-2">
+            <button onClick={() => setSheetWiz(true)} className={`${btn} bg-[#0F1A30] text-white px-6`}>구글시트에서 양식 만들기</button>
+            <button onClick={() => setEdit(BLANK())} className={`${btn} border border-[#DCE3EE] text-[#3A4A66] px-6`}>직접 만들기</button>
+          </div>
         </div>
       ) : orders === null ? (
         <div className={`${card} p-10 text-center text-[14px] text-[#7A8AA6]`}>불러오는 중…</div>
@@ -1011,11 +1070,16 @@ export default function RouteBoard({ companyName = "" }) {
           {form.sheetUrl && sheetDiff && (
             <div className={`rounded-xl border px-4 py-2.5 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[13px] ${goneCount ? "bg-[#FFF8E6] border-[#F7D58A]" : "bg-[#F5F8FD] border-[#E3E8F0]"}`}>
               <span className="font-black text-[#0F1A30]">구글시트 연동</span>
-              <span className="text-[#5B6B85]">{sheetDiff.error ? `확인 실패 — ${sheetDiff.error}` : !sheetDiff.tab ? "이 날짜 탭이 시트에 없습니다" : sheetDiff.bad ? `'${sheetDiff.tab}' 탭에서 제목줄을 못 찾았습니다` : `'${sheetDiff.tab}' 탭 · ${new Date(sheetDiff.at).toLocaleTimeString("ko-KR", { timeZone: "Asia/Seoul", hour: "2-digit", minute: "2-digit" })} 확인 · ${form.autoSync === false ? "자동 연동 꺼짐" : "새 줄·새 날짜 탭은 자동으로 오더 생성"} · 저장하면 차량·운송업체·단가·입차시간이 시트에 입력`}</span>
+              <span className="text-[#5B6B85]">{sheetDiff.error ? (isOfficeFileError(sheetDiff.error) ? "엑셀(xlsx) 파일이라 아직 읽기만 돼요" : `확인 실패 — ${sheetDiff.error}`) : !sheetDiff.tab ? (isMonthBoard(form) ? `${form.tabMode === "single" ? "연결한 탭" : `${sheetDayOf(form, date).slice(2, 4)}년${+sheetDayOf(form, date).slice(5, 7)}월 탭`}이 시트에 없습니다` : "이 날짜 탭이 시트에 없습니다") : sheetDiff.bad ? `'${sheetDiff.tab}' 탭에서 제목줄을 못 찾았습니다` : `'${sheetDiff.tab}' 탭 · ${new Date(sheetDiff.at).toLocaleTimeString("ko-KR", { timeZone: "Asia/Seoul", hour: "2-digit", minute: "2-digit" })} 확인 · ${form.autoSync === false ? "자동 연동 꺼짐" : "새 줄·새 날짜 탭은 자동으로 오더 생성"} · 저장하면 차량·운송업체·단가·입차시간이 시트에 입력`}</span>
               {goneCount > 0 && <span className="font-black text-red-600">시트에서 지운 줄 {goneCount}개 — 프로그램에서도 자동으로 삭제합니다{form.autoSync === false ? "(자동 연동이 꺼져 있어 [지금 맞추기]를 눌러 주세요)" : ""}</span>}
               {/* ⭐ 2026-11-03 "새로 생긴 줄 지금 가져오기" 제거 — 자동 연동·[지금 맞추기]·고정노선현황 [기간 가져오기]로 들어온다 */}
               <button type="button" onClick={() => syncNow(false)} disabled={busy === "sync"} className="ml-auto h-8 px-3 rounded-lg border border-[#DCE3EE] text-[12.5px] font-bold text-[#3A4A66] disabled:opacity-50">{busy === "sync" ? "맞추는 중…" : "지금 맞추기"}</button>
             </div>
+          )}
+          {/* 📗 2026-11-07 엑셀(xlsx) 파일 — 읽기는 되고, 시트에 쓰려면 구글 시트로 변환 */}
+          {form.sheetUrl && sheetDiff && (sheetDiff.office || isOfficeFileError(sheetDiff.error)) && (
+            <OfficeSheetCard key={form.sheetUrl} onConvert={() => convertBoardSheet(form.sheetUrl, form.id)}
+              onConverted={() => { tabsRef.current = { url: "", at: 0, tabs: [] }; setMsg("구글 시트로 바꿨어요. 원래 엑셀 파일은 그대로 있어요."); }} />
           )}
           {!orders.length && !dirty && <div className="text-[13px] text-[#7A8AA6] px-1">이 날짜는 아직 저장된 배차표가 없습니다{form.groups.some((g) => (g.defaults || []).length) ? " — 기본 도착지를 채워 두었습니다." : "."}</div>}
           {form.groups.map((g) => {
@@ -1045,6 +1109,7 @@ export default function RouteBoard({ companyName = "" }) {
                           {form.columns.map((c, ci) => (
                             <td key={c.id} className="border border-[#E3E8F0] p-0.5">
                               {c.kind === "no" ? <div className="text-center text-[#7A8AA6] font-bold">{i + 1}</div>
+                                : c.kind === "date" ? <div className="text-center text-[#7A8AA6] font-bold text-[12.5px] whitespace-nowrap">{dLabel(sheetDayOf(form, date))}</div>
                                 : c.kind === "sum" ? <div className="text-center font-black text-[#0F1A30]">{rowSum(form, r) || ""}</div>
                                   : ["하차지명", "차량번호", "이름", "전화번호"].includes(c.field) ? (
                                     <BoardSuggest value={r.v[c.id] ?? ""} onChange={(v) => setCell(g.name, i, c, v)} onBlur={() => onLeave(g.name, i, c)} onKeyDown={onKey}
@@ -1112,6 +1177,9 @@ export default function RouteBoard({ companyName = "" }) {
 
       {sendOpen && form && <SheetSend form={form} date={date} rows={rows} onClose={() => setSendOpen(false)} onDone={(m) => { setSendOpen(false); setMsg(m); }} />}
       {sheetOpen && form && <SheetLoad form={form} date={date} onApply={applySheet} onClose={() => setSheetOpen(false)} />}
+      {/* 🔗 2026-11-07 구글시트에서 양식 만들기 — 연결 마법사(머리줄 · 칸 맞추기 · 월별 탭) → 그 칸 그대로 새 양식 편집기 */}
+      {sheetWiz && <React.Suspense fallback={null}><SheetConnectWizard company={co} title="구글시트에서 배차표 양식 만들기" onClose={() => setSheetWiz(false)}
+        onSaved={(p) => { setSheetWiz(false); setEdit(boardFromProfile(p)); }} /></React.Suspense>}
       {edit && <FormEditor init={edit} co={co} clients={clients} places={places} onClose={() => setEdit(null)} onSaved={(id) => { setEdit(null); setFormId(id); setMsg("양식을 저장했습니다."); }} />}
     </div>
   );

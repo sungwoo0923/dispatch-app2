@@ -9,6 +9,8 @@
 //   aiMap   { columns[] }          → 헷갈리는 칸만 Claude에게(ANTHROPIC_API_KEY · 키 없으면 빈 답)
 //   export  { profileId, from, to, dryRun } → 프로그램 오더를 시트로(가져오기·보내기 칸만 · 수식 칸 절대 안 씀)
 //   cancelImport { batchId }       → 이 회사가 가져온 묶음 되돌리기
+//   convert { url, profileId? }    → 📗 엑셀(xlsx) 파일을 구글 시트로 복사 변환(원본 그대로) · profileId면 그 연결 주소도 새 시트로
+//  📗 엑셀 파일(드라이브에 올린 .xlsx)은 functions/officeSheet.js가 읽기를 흉내 낸다(tabs · sample · read 그대로) · 보내기(쓰기)는 code "office-file"
 //  ⚠️ 서버는 시트 프로필의 칸 설정을 믿지 않고, 쓰기 직전에 그 칸의 지금 수식을 다시 읽어 수식이 든 칸은 건너뛴다.
 
 const { isProfileOwnOrder } = require("./gsheetLegacy");
@@ -24,7 +26,7 @@ const colIdx = (l) => { let n = 0; for (const ch of String(l)) n = n * 26 + (ch.
 const AI_MODEL = "claude-haiku-5-5"; // functions/orderScan.js와 같은 모델
 
 function makeSheetConnect(deps) {
-  const { db, FieldValue, sheetsApiFor, parseSpreadsheetId, quoteTab, requireStaff, requireAdminRole, sheetModifiedTime, makeAnthropic, setBulkMode, bumpDataVersion } = deps;
+  const { db, FieldValue, sheetsApiFor, officeSheets = null, parseSpreadsheetId, quoteTab, requireStaff, requireAdminRole, sheetModifiedTime, makeAnthropic, setBulkMode, bumpDataVersion } = deps;
 
   async function tabsAction(sid) {
     const meta = await sheetsApiFor(sid, "GET", "?fields=properties.title,sheets.properties(sheetId,title,index,hidden,gridProperties(rowCount,columnCount))");
@@ -42,7 +44,7 @@ function makeSheetConnect(deps) {
       const cols = m ? colIdx(m[3] || m[1]) + 1 : 0;
       return { title: t.title, index: t.index, hidden: !!t.hidden, rows: Math.min(rows, t.gridProperties?.rowCount || rows), cols, gridRows: t.gridProperties?.rowCount || 0 };
     });
-    return { title: meta.properties?.title || "", spreadsheetId: sid, tabs: out, modifiedTime: await sheetModifiedTime(sid) };
+    return { title: meta.properties?.title || "", spreadsheetId: sid, tabs: out, modifiedTime: await sheetModifiedTime(sid), ...(officeSheets?.officeInfo(sid) || {}) };
   }
 
   async function mergesOf(sid, tabs) {
@@ -141,6 +143,7 @@ function makeSheetConnect(deps) {
     orders.sort((a, b) => String(a.data.상차일).localeCompare(String(b.data.상차일)) || (+a.data.createdAt?.toMillis?.() || 0) - (+b.data.createdAt?.toMillis?.() || 0));
     const meta = await sheetsApiFor(sid, "GET", "?fields=sheets.properties(sheetId,title,index,gridProperties)");
     const sheets = (meta.sheets || []).map((s) => s.properties);
+    if (!dryRun && officeSheets?.isOffice(sid)) throw Object.assign(new Error("엑셀(xlsx) 파일이라 시트에 쓸 수 없어요. [구글 시트로 변환]을 눌러 구글 시트로 바꿔 주세요."), { status: 409, code: "office-file" });
     const sheetMt = Date.parse(await sheetModifiedTime(sid)) || 0;
     const byTab = new Map();
     const missingTabs = new Set();
@@ -314,6 +317,21 @@ function makeSheetConnect(deps) {
       const sid = parseSpreadsheetId(body.url);
       if (!sid) { res.status(400).json({ error: "구글시트 주소가 올바르지 않아요." }); return; }
       if (a === "tabs") { res.json(await tabsAction(sid)); return; }
+      if (a === "convert") {
+        if (!officeSheets) { res.status(400).json({ error: "변환을 쓸 수 없어요." }); return; }
+        const out = await officeSheets.convert(sid, { shareWith: me.email || "" });
+        if (body.profileId && !out.already) {
+          const ref = db.collection("sheetProfiles").doc(String(body.profileId));
+          const ps = await ref.get();
+          if (ps.exists && (me.isTM || ps.data().companyName === me.company) && (ps.data().spreadsheetId || parseSpreadsheetId(ps.data().sheetUrl)) === sid) {
+            await ref.set({ sheetUrl: out.url, spreadsheetId: out.spreadsheetId, 원본엑셀Url: ps.data().sheetUrl || "", convertedAt: FieldValue.serverTimestamp(), lastError: "" }, { merge: true });
+            out.profileUpdated = true;
+          }
+        }
+        console.log(`[시트 연결 엑셀 변환] ${me.company} ${me.email} ${sid} → ${out.spreadsheetId}`);
+        res.json(out);
+        return;
+      }
       if (a === "sample") {
         const tab = String(body.tab || "");
         const [rows, formulas, m] = await Promise.all([readTab(sid, tab, "FORMATTED_VALUE", 60), readTab(sid, tab, "FORMULA", 60), mergesOf(sid, [tab])]);
@@ -333,7 +351,7 @@ function makeSheetConnect(deps) {
       res.status(400).json({ error: "알 수 없는 요청이에요." });
     } catch (e) {
       console.error("[시트 연결] 오류:", e?.message || e);
-      res.status(e.status || 500).json({ error: e?.message || String(e) });
+      res.status(e.status || 500).json({ error: e?.message || String(e), ...(e.code === "office-file" || e.code === "convert-denied" ? { code: e.code, help: e.help || "" } : {}) });
     }
   };
 }

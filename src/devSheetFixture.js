@@ -73,9 +73,29 @@ export const LEGACY_SAMPLE_ROWS = [
 
 export function fixtureFormulas(tab) { return tabFormulas(FIXTURE_TABS[tab] || []); }
 // 서버(sheetConnect) 응답 흉내
+// 📗 2026-11-07 주소에 "xlsx"가 들어 있으면 드라이브에 올린 엑셀 파일 흉내(읽기는 되고 쓰기 · 보내기는 code "office-file")
+export const DEMO_XLSX_URL = "https://docs.google.com/spreadsheets/d/demo-xlsx-file/edit";
+const isXlsx = (b) => /xlsx/i.test(String(b?.url || ""));
+const officeErr = () => Object.assign(new Error("엑셀(xlsx) 파일이라 프로그램에서 시트에 쓸 수 없어요. [구글 시트로 변환]을 눌러 구글 시트로 바꿔 주세요."), { code: "office-file" });
+const officeOf = (b) => (isXlsx(b) ? { office: true, fileName: "배차현황_2025.xlsx", mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" } : {});
+const convertDemo = (b) => (/denied/.test(String(b?.url || ""))
+  ? Promise.reject(Object.assign(new Error("변환 권한이 없어요."), { code: "convert-denied" }))
+  : { spreadsheetId: "demo-sheet-converted", url: "https://docs.google.com/spreadsheets/d/demo-sheet-converted/edit", name: "배차현황_2025 (LogisWeb)" });
+// 배차표(routeBoardSheet) 응답 흉내 — 월별 탭 시트
+export function routeBoardFixture(body) {
+  const titles = Object.keys(FIXTURE_TABS);
+  if (body.action === "convert") return convertDemo(body);
+  if (body.action === "tabs") return { title: FIXTURE_TITLE, tabs: titles, ...officeOf(body) };
+  if (body.action === "read") return { title: FIXTURE_TITLE, tab: body.tab, rows: FIXTURE_TABS[body.tab] || [], modifiedTime: "2025-11-20T09:00:00Z", ...officeOf(body) };
+  if (body.action === "write") { if (isXlsx(body)) throw officeErr(); return { updated: (body.updates || []).length }; }
+  if (body.action === "sync") return { tabs: 1, created: 0, updated: 0, gone: 0, ...officeOf(body) };
+  return { ok: true };
+}
 export function fixtureResponse(body) {
   const titles = Object.keys(FIXTURE_TABS);
-  if (body.action === "tabs") return { title: FIXTURE_TITLE, spreadsheetId: "demo-sheet", tabs: titles.map((t, index) => ({ title: t, index, rows: FIXTURE_TABS[t].length, cols: Math.max(...FIXTURE_TABS[t].map((r) => r.length)) })), modifiedTime: "2025-11-20T09:00:00Z" };
+  if (body.action === "convert") return convertDemo(body);
+  if (body.action === "export" && isXlsx(body)) throw officeErr();
+  if (body.action === "tabs") return { title: FIXTURE_TITLE, spreadsheetId: "demo-sheet", tabs: titles.map((t, index) => ({ title: t, index, rows: FIXTURE_TABS[t].length, cols: Math.max(...FIXTURE_TABS[t].map((r) => r.length)) })), modifiedTime: "2025-11-20T09:00:00Z", ...officeOf(body) };
   if (body.action === "sample") {
     const t = body.tab;
     return { tab: t, rows: (FIXTURE_TABS[t] || []).slice(0, 60), formulas: fixtureFormulas(t).slice(0, 60), merges: t.startsWith("2025") ? [{ startRowIndex: 0, endRowIndex: 1, startColumnIndex: 0, endColumnIndex: 10 }] : [] };

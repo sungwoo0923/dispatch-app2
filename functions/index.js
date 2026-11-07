@@ -5834,6 +5834,18 @@ async function sheetModifiedTime(sid) {
     return "";
   }
 }
+// 📗 2026-11-07 엑셀(xlsx) 파일 시트 — Sheets API가 거절하는 Office 파일은 Drive에서 받아 SheetJS로 읽는다(functions/officeSheet.js)
+//  · 읽기는 그대로(값 · 수식 · 병합 칸 · 탭) · 쓰기는 code "office-file" 오류 · [구글 시트로 변환] = Drive files.copy
+const { makeOfficeSheets } = require("./officeSheet");
+let _driveRwClient = null;
+const officeSheets = makeOfficeSheets({
+  sheetsApiFor,
+  driveRequest: async (opts) => {
+    if (!_driveRwClient) _driveRwClient = await new GoogleAuth({ scopes: ["https://www.googleapis.com/auth/drive"] }).getClient();
+    return _driveRwClient.request(opts);
+  },
+});
+const sheetsApiAny = officeSheets.sheetsApi; // 구글 시트면 Sheets API · 엑셀 파일이면 흉내(읽기만)
 // 이번에 시트 값을 읽어야 하나? → { need, mt, reason }
 const fs0Ref = (boardId) => db.collection("routeBoards").doc(String(boardId));
 async function routeBoardNeedsSync(form, sid) {
@@ -5862,17 +5874,17 @@ async function runRouteBoardSyncRaw(form, sid, { force = false, range = null } =
   const tabIds = {};
   return _syncBoard({
     db, FieldValue, form: force ? { ...form, syncHash: {} } : form, range,
-    readTabs: async () => { const sh = ((await sheetsApiFor(sid, "GET", "?fields=sheets.properties(sheetId,title,index)")).sheets || []).map((x) => x.properties); sh.forEach((t) => { tabIds[t.title] = t.sheetId; }); return sh.map((t) => t.title); },
+    readTabs: async () => { const sh = ((await sheetsApiAny(sid, "GET", "?fields=sheets.properties(sheetId,title,index)")).sheets || []).map((x) => x.properties); sh.forEach((t) => { tabIds[t.title] = t.sheetId; }); return sh.map((t) => t.title); },
     // ⭐ 2026-11-03 프로그램에서 추가한 오더 → 그 묶음 표 아래에 새 줄 끼워 넣기(서식은 윗줄 따라감)
     insertRows: async (tab, at, n) => {
       if (tabIds[tab] == null) throw new Error("탭 번호를 찾지 못했습니다.");
-      await sheetsApiFor(sid, "POST", ":batchUpdate", { data: { requests: [{ insertDimension: { range: { sheetId: tabIds[tab], dimension: "ROWS", startIndex: at, endIndex: at + n }, inheritFromBefore: true } }] } });
+      await sheetsApiAny(sid, "POST", ":batchUpdate", { data: { requests: [{ insertDimension: { range: { sheetId: tabIds[tab], dimension: "ROWS", startIndex: at, endIndex: at + n }, inheritFromBefore: true } }] } });
     },
-    readTab: async (tab) => (await sheetsApiFor(sid, "GET", `/values/${encodeURIComponent(`${quoteTab(tab)}!A1:AZ3000`)}?valueRenderOption=FORMATTED_VALUE`)).values || [],
+    readTab: async (tab) => (await sheetsApiAny(sid, "GET", `/values/${encodeURIComponent(`${quoteTab(tab)}!A1:AZ3000`)}?valueRenderOption=FORMATTED_VALUE`)).values || [],
     // ⭐ 양방향 — 프로그램에서 바뀐 칸을 시트에 써 준다(시트를 '편집자'로 공유해야 함 · 못 쓰면 기록만)
     writeCells: async (tab, ups) => {
       try {
-        await sheetsApiFor(sid, "POST", "/values:batchUpdate", { data: { valueInputOption: "USER_ENTERED", data: ups.slice(0, 2000).map((u) => ({ range: `${quoteTab(tab)}!${u.a1}`, values: [[String(u.value ?? "")]] })) } });
+        await sheetsApiAny(sid, "POST", "/values:batchUpdate", { data: { valueInputOption: "USER_ENTERED", data: ups.slice(0, 2000).map((u) => ({ range: `${quoteTab(tab)}!${u.a1}`, values: [[String(u.value ?? "")]] })) } });
       } catch (e) { console.warn(`[배차표 연동] 시트 쓰기 실패(편집자 공유 확인) ${form.name} ${tab}:`, e?.message || e); }
     },
   });
@@ -5920,7 +5932,7 @@ exports.routeBoardSheet = functions.runWith({ timeoutSeconds: 540, memory: "512M
     if (!id) { res.status(400).json({ error: "구글시트 주소가 올바르지 않습니다." }); return; }
     // 💰 2026-11-06 시트 정보(탭 목록)는 필요한 작업에서만 읽는다 — 예전엔 30초 자동 맞춤(건너뛰는 경우 포함)마다 Sheets API를 1번씩 불렀다
     let _meta = null;
-    const getMeta = async () => (_meta || (_meta = await sheetsApiFor(id, "GET", "?fields=properties.title,sheets.properties(title,index)")));
+    const getMeta = async () => (_meta || (_meta = await sheetsApiAny(id, "GET", "?fields=properties.title,sheets.properties(title,index)")));
     const tabsOf = (m) => (m.sheets || []).map((x) => x.properties).sort((a, b) => a.index - b.index).map((t) => t.title);
     // 💰 2026-11-06 read + ifChanged(지난번 modifiedTime) — 시트가 그대로면 값을 읽지 않고 unchanged만 돌려준다(배차표 화면 1분 확인)
     if (body.action === "read" && body.ifChanged) {
@@ -5928,7 +5940,22 @@ exports.routeBoardSheet = functions.runWith({ timeoutSeconds: 540, memory: "512M
       if (mt && mt === String(body.ifChanged)) { res.json({ unchanged: true, modifiedTime: mt }); return; }
       body._mt = mt;
     }
-    if (body.action === "tabs") { const meta = await getMeta(); res.json({ title: meta.properties?.title || "", tabs: tabsOf(meta) }); return; }
+    // 📗 2026-11-07 엑셀(xlsx) 파일 → 구글 시트로 변환(원본은 그대로) · boardId가 있으면 양식 주소도 새 시트로
+    if (body.action === "convert") {
+      const out = await officeSheets.convert(id, { shareWith: me.email || "" });
+      if (body.boardId && !out.already) {
+        const ref = db.collection("routeBoards").doc(String(body.boardId));
+        const fs1 = await ref.get();
+        if (fs1.exists && (me.isTM || fs1.data().companyName === me.company) && parseSpreadsheetId(fs1.data().sheetUrl) === id) {
+          await ref.set({ sheetUrl: out.url, 원본엑셀Url: fs1.data().sheetUrl || "", sheetModifiedTime: "", syncHash: {}, convertedAt: Date.now(), convertedBy: me.email || "" }, { merge: true });
+          out.boardUpdated = true;
+        }
+      }
+      console.log(`[배차표 엑셀 변환] ${me.company} ${me.email} ${id} → ${out.spreadsheetId}`);
+      res.json(out);
+      return;
+    }
+    if (body.action === "tabs") { const meta = await getMeta(); res.json({ title: meta.properties?.title || "", tabs: tabsOf(meta), ...(officeSheets.officeInfo(id) || {}) }); return; }
     // ⭐ 2026-11-03 sync: 이 양식의 시트를 지금 바로 맞춤(새 줄·새 날짜 탭 → 오더 생성, 화주 칸 반영, 지워진 줄 표시)
     if (body.action === "sync") {
       let form = syncForm;
@@ -5946,7 +5973,7 @@ exports.routeBoardSheet = functions.runWith({ timeoutSeconds: 540, memory: "512M
         if (Date.now() - Number(form.syncCheckedAt || 0) < 25 * 1000 && Number(form.syncCheckedAt || 0) > Number(form.pushWantedAt || 0)) { res.json({ skipped: "unchanged", checkedAt: Number(form.syncCheckedAt || 0) }); return; }
         const chk = await routeBoardNeedsSync(form, id);
         if (!chk.need) { await fs0Ref(form.id).set({ syncCheckedAt: Date.now() }, { merge: true }).catch(() => {}); res.json({ skipped: "unchanged", checkedAt: Date.now() }); return; }
-        res.json({ ...(await runRouteBoardSync(form, { mt: chk.mt })), reason: chk.reason });
+        res.json({ ...(await runRouteBoardSync(form, { mt: chk.mt })), reason: chk.reason, ...(officeSheets.officeInfo(id) || {}) });
         return;
       }
       // ⭐ 2026-11-03 기간 가져오기(입고일=탭 날짜 기준, 최대 120일)
@@ -5957,16 +5984,16 @@ exports.routeBoardSheet = functions.runWith({ timeoutSeconds: 540, memory: "512M
         if ((Date.parse(b) - Date.parse(a)) / 864e5 > 120) { res.status(400).json({ error: "기간은 120일까지 한 번에 가져올 수 있습니다." }); return; }
         range = { from: a, to: b };
       }
-      res.json(await runRouteBoardSync(form, { force: true, range }));
+      res.json({ ...(await runRouteBoardSync(form, { force: true, range })), ...(officeSheets.officeInfo(id) || {}) });
       return;
     }
     if (body.action === "read") {
       const tab = String(body.tab || "");
       const meta = await getMeta(); const tabs = tabsOf(meta);
       if (!tabs.includes(tab)) { res.status(400).json({ error: "탭을 찾을 수 없습니다." }); return; }
-      const got = await sheetsApiFor(id, "GET", `/values/${encodeURIComponent(`${quoteTab(tab)}!A1:AZ3000`)}?valueRenderOption=FORMATTED_VALUE&dateTimeRenderOption=FORMATTED_STRING`);
+      const got = await sheetsApiAny(id, "GET", `/values/${encodeURIComponent(`${quoteTab(tab)}!A1:AZ3000`)}?valueRenderOption=FORMATTED_VALUE&dateTimeRenderOption=FORMATTED_STRING`);
       console.log(`[배차표 시트] ${me.company} ${me.email} ${id} ${tab}`);
-      res.json({ title: meta.properties?.title || "", tab, rows: got.values || [], ...(body._mt ? { modifiedTime: body._mt } : {}) }); // ⭐ 2026-11-06 다음 확인 때 ifChanged로
+      res.json({ title: meta.properties?.title || "", tab, rows: got.values || [], ...(body._mt ? { modifiedTime: body._mt } : {}), ...(officeSheets.officeInfo(id) || {}) }); // ⭐ 2026-11-06 다음 확인 때 ifChanged로
       return;
     }
     // ⭐ write: 배차표 → 시트(화면이 정한 칸만 — 차량·기사·수량·운송업체·시간·비고). 도착지·시군구·합계 칸은 화면에서 빼고 보낸다.
@@ -5977,11 +6004,12 @@ exports.routeBoardSheet = functions.runWith({ timeoutSeconds: 540, memory: "512M
       const ups = (Array.isArray(body.updates) ? body.updates : []).filter((u) => /^[A-Z]{1,3}\d{1,5}$/.test(String(u?.a1 || ""))).slice(0, 3000);
       if (!ups.length) { res.json({ updated: 0 }); return; }
       try {
-        await sheetsApiFor(id, "POST", "/values:batchUpdate", { data: {
+        await sheetsApiAny(id, "POST", "/values:batchUpdate", { data: {
           valueInputOption: "USER_ENTERED",
           data: ups.map((u) => ({ range: `${quoteTab(tab)}!${u.a1}`, values: [[String(u.value ?? "")]] })),
         } });
       } catch (e) {
+        if (e.code === "office-file") throw e;
         if (e.status === 400) throw Object.assign(new Error("시트에 쓸 수 없습니다. 시트 공유에 dispatch-app-9b92f@appspot.gserviceaccount.com 을(를) '편집자'로 추가했는지 확인해 주세요."), { status: 400 });
         throw e;
       }
@@ -5991,14 +6019,14 @@ exports.routeBoardSheet = functions.runWith({ timeoutSeconds: 540, memory: "512M
     }
     res.status(400).json({ error: "알 수 없는 요청입니다." });
   } catch (e) {
-    res.status(e.status || 500).json({ error: e?.message || String(e) });
+    res.status(e.status || 500).json({ error: e?.message || String(e), ...(e.code === "office-file" || e.code === "convert-denied" ? { code: e.code, help: e.help || "" } : {}) });
   }
 });
 
 // 🔗 2026-11-07 구글시트 연동(시트 프로필) — 설명은 functions/sheetConnect.js 맨 위 · 규칙은 functions/sheetProfileCore.mjs(화면과 같은 파일)
 const { makeSheetConnect } = require("./sheetConnect");
 exports.sheetConnect = functions.runWith({ secrets: ["ANTHROPIC_API_KEY"], timeoutSeconds: 540, memory: "1GB" }).https.onRequest(makeSheetConnect({
-  db, FieldValue, sheetsApiFor, parseSpreadsheetId, quoteTab, requireStaff, requireAdminRole, sheetModifiedTime, setBulkMode, bumpDataVersion,
+  db, FieldValue, sheetsApiFor: sheetsApiAny, officeSheets, parseSpreadsheetId, quoteTab, requireStaff, requireAdminRole, sheetModifiedTime, setBulkMode, bumpDataVersion,
   makeAnthropic: () => (process.env.ANTHROPIC_API_KEY ? new (_orderScan.Anthropic)({ apiKey: process.env.ANTHROPIC_API_KEY, timeout: 30000, maxRetries: 1 }) : null),
 }));
 
