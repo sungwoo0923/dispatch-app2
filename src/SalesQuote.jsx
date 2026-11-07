@@ -369,10 +369,10 @@ export function PricingEditor() {
     catch (e) { setMsg(`저장 실패: ${e.message}`); }
   };
   // ⭐ 2026-11-04 추천 요금표(docs/pricing-2026-11.md) — 화면에만 채우고, [저장]을 눌러야 실제로 바뀐다(저장한 가격을 몰래 덮어쓰지 않음)
-  const applyRecommended = () => {
+  const applyRecommended = async () => {
     const cur = cfg.plans.filter((p) => PLAN_IDS.includes(p.id)).map((p) => `${p.name} ${num(p.price).toLocaleString()}원`).join(" · ");
     const nxt = PLAN_DEFAULTS.map((p) => `${p.name} ${p.price.toLocaleString()}원`).join(" · ");
-    if (!window.confirm(`추천 요금표(${RECOMMENDED_PLAN_VERSION})를 화면에 채울까요?\n\n지금: ${cur}\n추천: ${nxt}\n\n· 포함 직원·오더·지입차·저장 용량, 요금제별 도입비, 추가 청구 단가도 함께 채웁니다.\n· 화면에만 채워지고 [저장]을 눌러야 적용됩니다. 기존 고객의 지정 요금제(회사별)는 그대로입니다.\n· 직접 만든 요금제·포함 기능 문구·공급자 정보·계약 문구는 그대로 둡니다.`)) return;
+    if (!await kpConfirm(`추천 요금표(${RECOMMENDED_PLAN_VERSION})를 화면에 채울까요?\n\n지금: ${cur}\n추천: ${nxt}\n\n· 포함 직원·오더·지입차·저장 용량, 요금제별 도입비, 추가 청구 단가도 함께 채웁니다.\n· 화면에만 채워지고 [저장]을 눌러야 적용됩니다. 기존 고객의 지정 요금제(회사별)는 그대로입니다.\n· 직접 만든 요금제·포함 기능 문구·공급자 정보·계약 문구는 그대로 둡니다.`)) return;
     const keepExtra = cfg.plans.filter((p) => !PLAN_IDS.includes(p.id));
     const plans = PLAN_DEFAULTS.map((d) => { const old = cfg.plans.find((p) => p.id === d.id) || {}; return { ...old, ...d, promoMonths: old.promoMonths || 0, promoRate: old.promoRate || 0, features: old.features?.length ? old.features : planFeatureLines(d.id) }; });
     const pick = ["extraSeat", "extraOrder", "fleetPerVehicle", "setupFee", "migrationFee", "trainingFee", "storageGB", "storagePerGB", "devDayRate", "devHourRate", "taxInvoiceFee", "alimtalkFee", "smsFee", "lmsFee", "extraBizFee", "routeBoardSetupFee", "annualFreeMonths", "semiDiscountRate", "waiveSetupMonths"];
@@ -390,7 +390,7 @@ export function PricingEditor() {
   const idx = Math.min(pi, cfg.plans.length - 1);
   const P = cfg.plans[idx] || cfg.plans[0];
   const addPlan = () => { set({ plans: [...cfg.plans, { id: `p${Date.now()}`, name: "새 요금제", en: "PLAN", price: 0, seats: 1, orders: 500, target: "", features: [] }] }); setPi(cfg.plans.length); };
-  const delPlan = () => { if (cfg.plans.length > 1 && window.confirm(`'${P.name}' 요금제를 지울까요?`)) { set({ plans: cfg.plans.filter((_, k) => k !== idx) }); setPi(0); } };
+  const delPlan = async () => { if (cfg.plans.length > 1 && (await kpConfirm(`'${P.name}' 요금제를 지울까요?`, { okText: "지우기", danger: true }))) { set({ plans: cfg.plans.filter((_, k) => k !== idx) }); setPi(0); } };
   const row = (label, child, hint, key) => (
     <div key={key || label} className="flex items-center justify-between gap-3 py-2 border-t first:border-t-0 border-[#EEF1F6]">
       <span className="text-[14px] font-bold text-[#3A4A66]">{label}{hint && <span className="block text-[12.5px] font-semibold text-[#9AA9C3]">{hint}</span>}</span>{child}

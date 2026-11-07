@@ -57531,7 +57531,7 @@ function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, sho
                           )}
                           <button
                             className="px-3 py-1 rounded-lg bg-red-600 text-white text-[11px] font-bold hover:bg-red-700 transition"
-                            onClick={(e)=>{ e.stopPropagation(); if(window.confirm("삭제하시겠습니까?")) removeDriver(docId); }}>
+                            onClick={async (e)=>{ e.stopPropagation(); if (await kpConfirm("이 기사를 삭제할까요?", { title: "기사 삭제", okText: "삭제", danger: true })) removeDriver(docId); }}>
                             삭제
                           </button>
                         </td>
