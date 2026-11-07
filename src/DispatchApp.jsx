@@ -8934,7 +8934,7 @@ return (
         {EXEC_MENUS.includes(menu) && deptMode === "exec" && (
           <div className="px-0 lg:px-5 pb-7">
             <React.Suspense fallback={<div className="py-20 text-center text-[16px] text-[#667085]">불러오는 중</div>}>
-              {menu === "경영분석" && <ExecAnalysis company={deptCompany} dispatchData={salesDispatchData} drivers={drivers} />}
+              {menu === "경영분석" && <ExecAnalysis company={deptCompany} dispatchData={salesDispatchData} drivers={drivers} canCash={!!(forceExec || isCeoPosition(myProfileDoc?.position))} />}
               {menu === "결재대기" && <ExecApprovalQueue company={deptCompany} me={{ uid: user?.uid, name: myRealName }} />}
               {menu === "직원정보" && <ExecStaffInfo company={deptCompany} />}
             </React.Suspense>

@@ -159,19 +159,22 @@ function useExecData({ company, dispatchData, drivers, loadRange: lrProp, months
 
 // ─────────────────────────── 경영 분석(탭) ───────────────────────────
 export const ANALYSIS_TABS = [["pl", "손익"], ["client", "거래처"], ["fleet", "기사·차량"], ["price", "단가"], ["cash", "현금흐름"], ["sales", "영업"]];
-export default function ExecAnalysis({ company, dispatchData = [], drivers = [], loadRange, initialTab }) {
-  const [tab, setTab] = React.useState(() => { try { return initialTab || sessionStorage.getItem("kpExecAnaTab") || "pl"; } catch { return initialTab || "pl"; } });
+export default function ExecAnalysis({ company, dispatchData = [], drivers = [], loadRange, initialTab, canCash = false }) {
+  // ⭐ 2026-11-08 현금흐름(자금 잔액)은 대표 직책만 — 자금현황 메뉴와 같은 기준
+  const tabs = canCash ? ANALYSIS_TABS : ANALYSIS_TABS.filter(([k]) => k !== "cash");
+  const [tab0, setTab] = React.useState(() => { try { return initialTab || sessionStorage.getItem("kpExecAnaTab") || "pl"; } catch { return initialTab || "pl"; } });
+  const tab = tabs.some(([k]) => k === tab0) ? tab0 : "pl";
   const go = (k) => { setTab(k); try { sessionStorage.setItem("kpExecAnaTab", k); } catch { /* 무시 */ } };
-  const data = useExecData({ company, dispatchData, drivers, loadRange, cash: true });
+  const data = useExecData({ company, dispatchData, drivers, loadRange, cash: canCash });
   return (
     <ExecShell testId="exec-analysis" en="MANAGEMENT ANALYTICS" title="경영 분석" sub={`${company || ""} · 오더·장부·자금 기준 · ${mdDow(data.today)} 현재`}
-      right={<div data-testid="exa-tabs"><Seg dark value={tab} onChange={go} items={ANALYSIS_TABS} /></div>}>
+      right={<div data-testid="exa-tabs"><Seg dark value={tab} onChange={go} items={tabs} /></div>}>
       {(v) => (
         tab === "pl" ? <PlTab {...data} {...v} />
           : tab === "client" ? <ClientTab {...data} {...v} />
             : tab === "fleet" ? <FleetTab {...data} {...v} />
               : tab === "price" ? <PriceTab {...data} {...v} />
-                : tab === "cash" ? <CashTab {...data} {...v} />
+                : tab === "cash" && canCash ? <CashTab {...data} {...v} />
                   : <SalesTab {...data} {...v} />
       )}
     </ExecShell>

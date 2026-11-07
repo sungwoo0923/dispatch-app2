@@ -25,7 +25,7 @@ import { ROLE_LABELS } from "../customRoles";
 import DeptDashboard from "../DeptDashboard";
 import DriverDocsReview from "../DriverDocsReview";
 import { AssetManager } from "../OfficeBooks";
-import { FundsWorkspace, FundsBoard } from "../FundsBoard";
+import { FundsWorkspace, FundsBoard, isCeoPosition } from "../FundsBoard";
 import { LeaveLedger, OnboardingBoard, CertIssuer } from "../HrTools";
 import { ExecApprovals, TeamSchedule, ExecScheduleBoard, canWriteExecSchedule } from "../ExecSuite";
 import HrHub, { CompanyRules } from "../HrHub";
@@ -290,7 +290,7 @@ export default function MobilePcView({ kind, users = [], dispatchData = [], carr
       ? <div className="px-2 py-2"><DeptDashboard mode="exec" company={userCompany} dispatchData={salesData} onGo={onGo} me={me} /></div>
       : wrap(<DeptDashboard mode={deptMode || (role === "hrManager" ? "hr" : "acct")} company={userCompany} dispatchData={salesData} onGo={onGo} />);
     else if (k === "briefing") body = <DailyReport company={userCompany} dispatchData={salesData} drivers={drivers || []} me={me} role={role} profile={prof} onGo={(m) => onGo?.(m === "배차현황" ? "실시간배차현황" : m)} />; // 📊 2026-11-06 일일 경영 보고(권한은 MobileApp 메뉴에서)
-    else if (deptMode === "exec" && ["analysis", "apqueue", "staffinfo"].includes(k)) body = <React.Suspense fallback={<Loading />}>{k === "analysis" ? <ExecAnalysis company={userCompany} dispatchData={salesData} drivers={drivers || []} loadRange={loadRange} /> : k === "apqueue" ? <ExecApprovalQueue company={userCompany} me={me} /> : <ExecStaffInfo company={userCompany} />}</React.Suspense>; // 📈 2026-11-08 임원 화면만(메뉴도 임원 화면에만)
+    else if (deptMode === "exec" && ["analysis", "apqueue", "staffinfo"].includes(k)) body = <React.Suspense fallback={<Loading />}>{k === "analysis" ? <ExecAnalysis company={userCompany} dispatchData={salesData} drivers={drivers || []} loadRange={loadRange} canCash={isCeoPosition(me?.position || prof?.position)} /> : k === "apqueue" ? <ExecApprovalQueue company={userCompany} me={me} /> : <ExecStaffInfo company={userCompany} />}</React.Suspense>; // 📈 2026-11-08 임원 화면만(메뉴도 임원 화면에만)
     else if (k === "approvals") body = <div className="kp-m-pc kp-m-approval"><ExecApprovals company={userCompany} me={me} /></div>;
     else if (k === "schedule") body = wrap(<TeamSchedule company={userCompany} />);
     else if (k === "settle") body = lazy(<DetailScope data={salesData} getters={detGet} title="세부검색 · 정산관리">{(detRows, detBtn) => <><div className="px-3 pt-3 flex justify-end">{detBtn}</div><PcSettleMobile dispatchData={detRows} companyName={userCompany} role={role} isViewer={isViewer} clients={clients} /></>}</DetailScope>);
