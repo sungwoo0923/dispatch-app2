@@ -6907,6 +6907,45 @@ exports.aiTeamChat = functions.runWith({ secrets: ["ANTHROPIC_API_KEY"], timeout
   }
 });
 
+// 🧠 2026-11-07 오더 스캔 정밀 인식 — 설명은 functions/orderScan.js 맨 위
+//  orderScanOcr: Google Cloud Vision 글자 인식(줄 위치 포함) · orderScanExtract: Claude(Haiku)로 배차 등록 칸 정리
+//  둘 다 호출형(callable) · 로그인 + 승인된 사람만 · 사람마다 하루 횟수 제한(scanUsage) · 실패하면 화면이 예전 방식으로 넘어간다
+const _orderScan = require("./orderScan");
+let _scanVisionClient = null;
+const scanHttpsError = (e) => {
+  if (e instanceof _orderScan.ScanError) return new functions.https.HttpsError(e.code, e.message);
+  console.error("[오더 스캔] 오류:", e);
+  return new functions.https.HttpsError("internal", "정밀 인식에 실패했어요");
+};
+function bumpScanUsage(patch) {
+  const ym = kstDateStr().slice(0, 7);
+  const inc = {};
+  Object.entries(patch).forEach(([k, v]) => { if (v) inc[k] = FieldValue.increment(v); });
+  return db.collection("platformUsage").doc(`m_${ym}`).set(inc, { merge: true }).catch(() => {});
+}
+exports.orderScanOcr = functions.runWith({ timeoutSeconds: 60, memory: "512MB" }).https.onCall(async (data, context) => {
+  try {
+    return await _orderScan.runOcr({
+      db, auth: context.auth, data,
+      getVisionClient: async () => {
+        if (!_scanVisionClient) _scanVisionClient = await new GoogleAuth({ scopes: ["https://www.googleapis.com/auth/cloud-platform"] }).getClient();
+        return _scanVisionClient;
+      },
+      bumpVision: () => { bumpVisionCount(); bumpScanUsage({ scanOcrCalls: 1 }); }, // 💰 visionCalls(월 1,000건 무료) + 오더 스캔 몫
+    });
+  } catch (e) { throw scanHttpsError(e); }
+});
+exports.orderScanExtract = functions.runWith({ secrets: ["ANTHROPIC_API_KEY"], timeoutSeconds: 60, memory: "256MB" }).https.onCall(async (data, context) => {
+  try {
+    return await _orderScan.runExtract({
+      db, auth: context.auth, data,
+      makeAnthropic: () => (process.env.ANTHROPIC_API_KEY ? new (_orderScan.Anthropic)({ apiKey: process.env.ANTHROPIC_API_KEY, timeout: 30000, maxRetries: 1 }) : null),
+      // 💰 비용·손익 — 호출 수와 토큰(입력·출력·캐시 읽기·캐시 쓰기)
+      bumpUsage: (u) => bumpScanUsage({ scanAiCalls: 1, scanAiInTok: u.input, scanAiOutTok: u.output, scanAiCacheReadTok: u.cacheRead, scanAiCacheWriteTok: u.cacheWrite }),
+    });
+  } catch (e) { throw scanHttpsError(e); }
+});
+
 /* ==================================================================
    📊 2026-11-06 일일 경영 보고(DAILY REPORT) — 임원 화면 역할에게 아침 푸시(·요약 메일)
    30분마다(06:00~10:00 사이에만 일함) 받는 시간이 된 사람에게 보낸다. 계산·대상은 functions/dailyReport.js.

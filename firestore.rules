@@ -1597,6 +1597,32 @@ service cloud.firestore {
     match /dailyReportLogs/{id} {
       allow read, write: if false;
     }
+    // 🧠 2026-11-07 오더 스캔 회사별 학습 — scanLearn/{회사 키}/items/{id} (src/orderScanClient.js)
+    //  회사 키: 배차 프로그램 계정 "lw:" + 내 회사명(myCo) · 허브 회원은 허브 회사 키(hubMyKey) — 같은 회사만 읽고 쓴다
+    //  (로지스웹 계정으로 들어온 허브 회원은 키가 "lw:회사명"이라 배차 프로그램과 같은 기록을 쓴다)
+    function scanKeyOk(key) {
+      return (isApproved() && key == 'lw:' + myCo()) || (hubActive() && key == hubMyKey());
+    }
+    function scanLearnOk(d, key) {
+      return d.keys().hasOnly(['fp', 'labels', 'head', 'text', 'fields', 'changed', 'aliases', 'labelMap', 'companyKey', 'uid', 'updatedAtMs', 'updatedAt'])
+        && d.get('companyKey', '') == key && d.get('uid', '') == request.auth.uid
+        && d.get('fp', '') is string && d.get('fp', '').size() <= 16
+        && d.get('text', '') is string && d.get('text', '').size() <= 3000
+        && d.get('fields', {}) is map && d.get('fields', {}).size() <= 40
+        && d.get('labelMap', {}) is map && d.get('labelMap', {}).size() <= 40
+        && d.get('aliases', []) is list && d.get('aliases', []).size() <= 10;
+    }
+    match /scanLearn/{key} {
+      allow read, write: if false;
+      match /items/{id} {
+        allow read, delete: if scanKeyOk(key);
+        allow create, update: if scanKeyOk(key) && scanLearnOk(request.resource.data, key);
+      }
+    }
+    //  정밀 인식 하루 사용 횟수 — 서버(orderScanOcr · orderScanExtract)만
+    match /scanUsage/{id} {
+      allow read, write: if false;
+    }
     match /{col}/{rest=**} {
       allow read, write: if isApproved() && !(col in ['adminSecrets', 'resetBackups', 'resetLogs', 'resetJobs', 'loginSessions', 'orderTrash', 'recurringRuns', 'internalMails', 'approvals', 'boardPosts', 'notices', 'handovers', 'salesQuotes', 'contracts', 'platformNotices', 'platformInvoices', 'companyPlans', 'publicPricing', 'planRequests', 'userPrefs', 'companyRoleOverrides', 'customRoles', 'supportRequests', 'supportSessions', 'driverStatements', 'fleetPenalties', 'fixedRoutes', 'routeBoards', 'personalSchedules', 'publicCompanies', 'companyContracts',
         // 🔒 회사별로 잠근 컬렉션(위에서 따로 정함)
@@ -1624,7 +1650,9 @@ service cloud.firestore {
         // 🤖 2026-11-06 AI 팀 사용 기록 — 위에서 따로 정함
         'aiTeamLogs',
         // 📊 2026-11-06 일일 경영 보고 — 위에서 따로 정함
-        'dailyReportPrefs', 'dailyReportCompany', 'dailyReportLogs']);
+        'dailyReportPrefs', 'dailyReportCompany', 'dailyReportLogs',
+        // 🧠 2026-11-07 오더 스캔 회사별 학습 · 사용 횟수 — 위에서 따로 정함(빠지면 승인된 직원 누구나 다른 회사 학습 기록을 읽는다)
+        'scanLearn', 'scanUsage']);
     }
   }
 }

@@ -13,7 +13,8 @@ import {
   fareFitness, manwon, kstYmd, fmtPhone, fmtBizNo, bizNoValid, payKind, PAY_HINT, defaultFee, isLinked, regionFromAddress, matchListValue, tsMs, dayLabel,
 } from "./hubConstants";
 import { postOrder, updateOrder, subscribeHubPlaces, fetchLwPlaces, fetchCopySources, fetchCopyDetail, updatePrefs } from "./hubApi";
-import { scanToHub } from "./hubScan";
+import { scanToHub, hubToScan } from "./hubScan";
+import { hubScanAi } from "./hubScanAi"; // 🧠 2026-11-07 오더 스캔 정밀 인식(서버 글자 인식 · AI 칸 정리 · 회사별 학습)
 import { AddressInput, PlaceInput } from "./hubAddress";
 const OrderScanModal = lazy(() => import("../../../src/OrderScanModal"));
 
@@ -146,6 +147,7 @@ export default function HubPostForm({ me, editing, onClose, toast, onDone, cfg =
   const [feeTouched, setFeeTouched] = useState(!!editing);
   const [places, setPlaces] = useState([]);
   const linked = isLinked(me);
+  const scanAi = useMemo(() => hubScanAi(me), [me]);
   useEffect(() => {
     if (linked) { let on = true; fetchLwPlaces(me).then((r) => on && setPlaces(r)); return () => { on = false; }; }
     return subscribeHubPlaces(me, setPlaces);
@@ -203,7 +205,7 @@ export default function HubPostForm({ me, editing, onClose, toast, onDone, cfg =
     try {
       const ff = { ...f, 수수료: feeShown, 중량: f.중량 ? `${weightNum(f.중량)}톤` : "", showAt: f.표시 === "later" ? `${f.showAt}:00+09:00` : "", 예약: f.예약 || f.표시 === "later" };
       if (editing) { await updateOrder(editing.id, ff); toast?.("수정했어요"); }
-      else { const id = await postOrder(me, ff); toast?.("등록했어요"); onDone?.(id); }
+      else { const id = await postOrder(me, ff); toast?.("등록했어요"); onDone?.(id); scanAi?.commit(hubToScan(f)).catch(() => {}); }
       onClose();
     } catch (e) {
       setErr(String(e?.code || "").includes("permission") ? "지금은 등록할 수 없어요. 20초 뒤에 다시 눌러 주세요" : e?.message || "저장하지 못했어요");
@@ -298,7 +300,7 @@ export default function HubPostForm({ me, editing, onClose, toast, onDone, cfg =
         <Btn kind="ghost" onClick={onClose}>취소</Btn>
         <Btn size="lg" onClick={save} disabled={busy} data-testid="pf-submit">{busy ? "저장하고 있어요" : editing ? "수정" : `배차등록${fareN ? ` ${manwon(total)}` : ""}`}</Btn>
       </div>
-      {scan && <Suspense fallback={null}><OrderScanModal onClose={() => setScan(false)} onApply={applyScan} applyLabel="허브 오더에 적용" /></Suspense>}
+      {scan && <Suspense fallback={null}><OrderScanModal onClose={() => setScan(false)} onApply={applyScan} applyLabel="허브 오더에 적용" ai={scanAi} /></Suspense>}
       {copy && <CopyModal me={me} onClose={() => setCopy(false)} onPick={applyCopy} />}
       {settings && <PostSettings me={me} onClose={() => setSettings(false)} toast={toast} />}
     </Drawer>

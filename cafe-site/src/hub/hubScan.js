@@ -7,6 +7,9 @@
 //   · 담당자 · 연락처 · 상·하차 일시 · 방법 · 톤수 · 차종 · 화물(파레트 수) · 운임(청구운임) · 혼적 · 긴급 · 왕복
 //   · 결제 방식(인수증 · 선불 · 착불 · 계좌이체 · 계산서 · 예치금) · 수수료는 원문 글에서 찾는다
 //   · 거래처명 · 전달사항 · 인식 못한 줄(선택) → 배차된 차주에게만 보이는 메모
+//  ⭐ 2026-11-07 정밀 인식(서버 글자 인식 · AI 칸 정리)이 정리한 칸(meta.structured)을 먼저 쓴다
+//   · 결제 방식 · 화물 중량(kg → 톤) · 파레트 수 · 주소가 지명 칸에 들어온 경우 → 지역 + 상세주소, 지명은 비공개 장소명
+//  hubToScan: 허브 등록 칸 → 배차 등록 칸 이름(오더를 저장할 때 회사별 학습 기록에 쓴다)
 import { regionFromAddress, matchListValue, HUB_TONS, HUB_VEHICLES, LOAD_METHODS, PAY_METHODS, tonValue, fmtPhone } from "./hubConstants.js";
 
 const money = (n) => (Number(n) ? Number(n).toLocaleString() : "");
@@ -50,12 +53,23 @@ export function findFee(text) {
 }
 
 // patch: OrderScanModal onApply 첫 인자(배차 등록 칸) · memo: 둘째 인자 · meta.text: 스캔한 원문
+// 지명 칸에 주소가 통째로 들어온 경우(시·도/시·군·구 + 도로명·번지) — 주소로 옮긴다
+const looksAddr = (s) => /\d/.test(s) && regionFromAddress(s).sido && /(?:로|길|번길|대로|동|리|읍|면)\s*\d/.test(s);
+export function hubWeight(v) {
+  const m = String(v || "").replace(/,/g, "").match(/(\d+(?:\.\d+)?)\s*(kg|키로|킬로|톤|t)?/i);
+  if (!m) return "";
+  const n = Number(m[1]);
+  const ton = /톤|t/i.test(m[2] || "") ? n : /kg|키로|킬로/i.test(m[2] || "") || n > 50 ? n / 1000 : n;
+  return ton > 0 && ton <= 50 ? String(Math.round(ton * 100) / 100) : "";
+}
 export function scanToHub(patch = {}, memo = "", meta = {}) {
   const out = {};
   const notes = [];
+  const sv = meta.structured || {};
   for (const P of ["상차", "하차"]) {
-    const addr = String(patch[`${P}지주소`] || "").trim();
-    const name = String(patch[`${P}지명`] || "").trim();
+    let addr = String(patch[`${P}지주소`] || "").trim();
+    let name = String(patch[`${P}지명`] || "").trim();
+    if (!addr && name && looksAddr(name)) { addr = name; name = ""; }
     const reg = regionFromAddress(addr) ;
     const reg2 = reg.sido ? reg : regionFromAddress(name);
     if (reg2.sido) { out[`${P}시도`] = reg2.sido; out[`${P}시군구`] = reg2.sigungu || ""; }
@@ -79,16 +93,41 @@ export function scanToHub(patch = {}, memo = "", meta = {}) {
     const pal = String(patch.화물내용).match(/(\d{1,3})\s*(파레트|파렛트|PLT|plt|팔레트)/);
     if (pal) out.파레트 = pal[1];
   }
+  if (!out.파레트 && /^\d{1,3}$/.test(String(sv.화물수량 || "")) && (!sv.화물단위 || sv.화물단위 === "파레트")) out.파레트 = String(sv.화물수량);
+  const w = hubWeight(sv.중량);
+  if (w) out.중량 = w;
   if (patch.청구운임) out.운임 = money(String(patch.청구운임).replace(/[^\d]/g, ""));
   if (patch.혼적 === true) out.적재 = "혼적";
   if (patch.긴급 === true) out.긴급 = true;
   if (patch.운행유형 === "왕복") out.운행유형 = "왕복";
   const text = meta.text || "";
-  const pay = findPay(text);
+  const pay = PAY_METHODS.includes(sv.지급방식) ? sv.지급방식 : findPay(text);
   if (pay) out.지급방식 = pay;
   const fee = findFee(text);
   if (fee) out.수수료 = money(fee);
   const memoParts = [patch.거래처명 ? `거래처: ${patch.거래처명}` : "", patch.전달사항 || "", memo || "", ...notes].filter(Boolean);
   if (memoParts.length) out.메모 = memoParts.join(" / ").slice(0, 500);
+  return out;
+}
+
+// 허브 등록 칸 → 배차 등록 칸 이름(학습 기록용 — 스캔 직후 값과 같은 모양으로)
+const amPm = (t) => { const m = String(t || "").match(/^(\d{1,2}):(\d{2})$/); if (!m) return String(t || ""); const h = Number(m[1]); return `${h < 12 ? "오전" : "오후"} ${h % 12 === 0 ? 12 : h % 12}시${Number(m[2]) >= 30 ? " 30분" : ""}`; };
+export function hubToScan(f = {}) {
+  const out = {};
+  for (const P of ["상차", "하차"]) {
+    out[`${P}지명`] = f[`${P}지명`] || "";
+    out[`${P}지주소`] = f[`${P}지주소`] || "";
+    out[`${P}지담당자`] = f[`${P}담당자`] || "";
+    out[`${P}지담당자번호`] = f[`${P}연락처`] || "";
+    out[`${P}시간`] = amPm(f[`${P}시간`]);
+    out[`${P}방법`] = f[`${P}방법`] || "";
+  }
+  out.차량톤수 = f.차량톤수 || "";
+  out.차량종류 = f.차량종류 || "";
+  out.화물내용 = f.화물내용 || "";
+  if (f.파레트) out.화물수량 = String(f.파레트);
+  const fare = String(f.운임 || "").replace(/[^\d]/g, "");
+  if (fare) out.청구운임 = fare;
+  if (f.지급방식) out.지급방식 = f.지급방식;
   return out;
 }
