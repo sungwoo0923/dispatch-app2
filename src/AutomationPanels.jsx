@@ -11,6 +11,7 @@ import { callFn, kstToday, addDays, won } from "./kpApi";
 import { isTMUser } from "./staffFilter";
 import { CustomSelect } from "./CustomSelect";
 import CustomDatePicker from "./CustomDatePicker"; // 📅 2026-11-07 날짜는 프로그램 달력으로
+import { kpConfirm } from "./kpDialog";
 
 const DAYS = ["일", "월", "화", "수", "목", "금", "토"];
 const WEEKDAYS = [1, 2, 3, 4, 5];
@@ -196,7 +197,7 @@ export function RecurringManagerModal({ form, onClose }) {
                 <div className="flex items-center gap-1.5 shrink-0">
                   <span className="text-[12px] font-bold text-[#7A879C] mr-1">{t.active ? (next ? `다음 ${next.slice(5).replace("-", "/")}(${DAYS[dowOf(next)]})` : "") : "멈춤"}</span>
                   <button onClick={() => patch(t.id, { active: !t.active })} className={`h-8 px-3 rounded-lg text-[12px] font-black border ${t.active ? "border-[#E3E8F0] text-[#0F1A30]" : "bg-[#0F1A30] text-white border-[#0F1A30]"}`}>{t.active ? "멈추기" : "다시 켜기"}</button>
-                  <button onClick={() => { if (window.confirm(`"${t.name}" 정기오더를 지울까요?\n(이미 만들어진 오더는 그대로 남습니다)`)) runDelete({ label: "정기오더", task: () => deleteDoc(doc(db, "recurringOrders", t.id)) }).catch(() => {}); /* ⭐ 2026-11-05 삭제 진행 창 */ }} className="h-8 px-3 rounded-lg text-[12px] font-black border border-[#E3E8F0] text-[#7A879C]">삭제</button>
+                  <button onClick={async () => { if ((await kpConfirm(`"${t.name}" 정기오더를 지울까요?\n(이미 만들어진 오더는 그대로 남습니다)`))) runDelete({ label: "정기오더", task: () => deleteDoc(doc(db, "recurringOrders", t.id)) }).catch(() => {}); /* ⭐ 2026-11-05 삭제 진행 창 */ }} className="h-8 px-3 rounded-lg text-[12px] font-black border border-[#E3E8F0] text-[#7A879C]">삭제</button>
                 </div>
               </div>
               <ScheduleFields sm days={t.days || []} setDays={(d) => d.length && patch(t.id, { days: d })}

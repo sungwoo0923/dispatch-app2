@@ -10,7 +10,7 @@
 //    일괄 처리·인쇄·서명. 추가 필드: status(sent|draft|scheduled), pendingTo/pendingToNames/pendingCc/pendingCcNames,
 //    scheduledAt, cc/ccNames, important, starredBy, purgedBy, recalledFor
 import React from "react";
-import { kpConfirm } from "./kpDialog";
+import { kpConfirm, kpPrompt } from "./kpDialog";
 import { runDelete, commitDeletes } from "./DeleteProgress"; // ⭐ 2026-11-05 삭제 진행 창 + 한 번에 처리
 import { createPortal } from "react-dom";
 import { db, auth } from "./firebase";
@@ -336,9 +336,9 @@ function Composer({ company, myName, staff, uid, init, onClose, onDone }) {
     if ((body.trim() || subject.trim()) && !await kpConfirm(`'${t.name}' 양식으로 제목·내용을 바꿀까요?\n(지금 쓴 내용은 지워집니다)`)) return;
     setSubject(t.subject || ""); setBody(t.body || "");
   };
-  const saveTpl = () => {
+  const saveTpl = async () => {
     if (!subject.trim() && !body.trim()) { setMsg("양식으로 저장할 제목이나 내용을 먼저 써 주세요."); return; }
-    const name = (window.prompt("양식 이름을 입력하세요", subject.trim().slice(0, 20) || "내 양식") || "").trim();
+    const name = ((await kpPrompt("양식 이름을 입력하세요", subject.trim().slice(0, 20) || "내 양식", { title: "양식으로 저장", okText: "저장" })) || "").trim();
     if (!name) return;
     const next = [{ name: name.slice(0, 30), subject, body }, ...myTpls.filter((t) => t.name !== name)];
     setMyTpls(next); writeTpls(uid, next); setMsg(`'${name}' 양식을 저장했습니다.`);

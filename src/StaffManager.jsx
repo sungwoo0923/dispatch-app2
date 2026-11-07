@@ -8,6 +8,7 @@ import { db, DEFAULT_COMPANY } from "./firebase";
 import KpSubNav from "./KpSubNav";
 import { Sheet } from "./OfficeBooks";
 import { useRoleOptions } from "./customRoles";
+import { kpConfirm } from "./kpDialog";
 
 const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
 function Loading() {
@@ -71,7 +72,7 @@ export default function StaffManager({ company, role, myUid, initialTab = "pendi
     if (isViewer) return alert("조회전용 권한으로는 수정할 수 없습니다.");
     const next = !u.approved;
     const who = u.name || u.이름 || u.email;
-    if (!window.confirm(next ? `"${who}"님을 승인할까요?` : `"${who}"님의 승인을 해제할까요?\n해제하면 로그인이 막힙니다.`)) return;
+    if (!(await kpConfirm(next ? `"${who}"님을 승인할까요?` : `"${who}"님의 승인을 해제할까요?\n해제하면 로그인이 막힙니다.`))) return;
     setBusy(u.id);
     try {
       await setDoc(doc(db, "users", u.id), { approved: next }, { merge: true });
@@ -86,7 +87,7 @@ export default function StaffManager({ company, role, myUid, initialTab = "pendi
   };
   const reject = async (u) => {
     if (isViewer) return;
-    if (!window.confirm(`"${u.name || u.email}"님의 가입 신청을 거절할까요?\n신청 정보가 삭제됩니다.`)) return;
+    if (!(await kpConfirm(`"${u.name || u.email}"님의 가입 신청을 거절할까요?\n신청 정보가 삭제됩니다.`))) return;
     setBusy(u.id);
     try {
       await deleteDoc(doc(db, "users", u.id));

@@ -23,6 +23,7 @@ import { doc, setDoc, deleteField } from "firebase/firestore";
 import { auth as mainAuth, db } from "./firebase";
 import { fmtPhone } from "./formatInput";
 import { LogisMark } from "./brand"; // 🔷 2026-11-04 LogisWeb 로고
+import { kpConfirm } from "./kpDialog";
 
 export const MASTER_EMAIL = "tjddnqkf@naver.com";
 
@@ -244,7 +245,7 @@ export function MfaEnrollSection({ user: userProp }) {
   };
   const unenroll = async (f) => {
     if (!pw) return setMsg({ type: "err", text: "해제하려면 현재 비밀번호를 먼저 입력해 주세요." });
-    if (!window.confirm(`${maskPhone(f.phoneNumber)} 2차 인증을 해제할까요? 해제하면 비밀번호만으로 로그인됩니다.`)) return;
+    if (!(await kpConfirm(`${maskPhone(f.phoneNumber)} 2차 인증을 해제할까요? 해제하면 비밀번호만으로 로그인됩니다.`))) return;
     setBusy("un"); setMsg({ type: "", text: "" });
     try {
       await reauth(user, pw, askMfa);
@@ -433,7 +434,7 @@ export function PcVerifySection({ user: userProp, phone }) {
   };
   const remove = async () => {
     if (!pw) return setMsg({ type: "err", text: "해제하려면 현재 비밀번호를 입력해 주세요." });
-    if (!window.confirm("PC 2차 인증을 해제할까요? 해제하면 PC에서도 비밀번호만으로 로그인됩니다.")) return;
+    if (!(await kpConfirm("PC 2차 인증을 해제할까요? 해제하면 PC에서도 비밀번호만으로 로그인됩니다."))) return;
     setBusy("rm"); setMsg({ type: "", text: "" });
     try {
       await reauth(user, pw, askMfa);

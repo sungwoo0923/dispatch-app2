@@ -15,6 +15,7 @@ import CustomDatePicker from "./CustomDatePicker";
 import { CustomSelect } from "./CustomSelect";
 import { formatAccount, onlyDigits } from "./bankUtil";
 import { FUND_KINDS, CARD_COMPANIES, BANK_OPTIONS, computeFunds, toInt, isCard, isCredit, fundBadge, formatCardNo, last4 } from "./fundsCalc";
+import { kpConfirm } from "./kpDialog";
 
 const won = (n) => Math.round(Number(n) || 0).toLocaleString("ko-KR");
 const short = (n) => { const a = Math.abs(n || 0); if (a >= 1e8) return `${(n / 1e8).toFixed(1)}억`; if (a >= 1e4) return `${Math.round(n / 1e4).toLocaleString()}만`; return Math.round(n || 0).toLocaleString(); };
@@ -141,7 +142,7 @@ function AccountPanel({ company, acc, funds = [], onClose }) {
   };
   return (
     <Sheet side en={`FUNDS · ${acc ? "ACCOUNT" : "NEW ACCOUNT"}`} title={acc ? acc.name : "통장·카드·현금 등록"} onClose={onClose}
-      footer={<>{acc && <button type="button" onClick={async () => { if (window.confirm("이 계좌를 목록에서 뺄까요? (기록은 남습니다)")) { await updateDoc(doc(db, "acctFunds", acc.id), { active: false }); onClose(); } }} className="h-12 px-4 rounded-xl border border-[#DCE3EE] bg-white text-[14px] font-bold text-[#B42318]">목록에서 빼기</button>}<button type="button" onClick={onClose} className="h-12 px-5 rounded-xl border border-[#DCE3EE] bg-white text-[14px] font-bold text-[#3A4A66]">닫기</button><button type="button" onClick={save} className="flex-1 h-12 rounded-xl bg-[#0F1A30] text-white text-[15px] font-black">저장</button></>}>
+      footer={<>{acc && <button type="button" onClick={async () => { if ((await kpConfirm("이 계좌를 목록에서 뺄까요? (기록은 남습니다)"))) { await updateDoc(doc(db, "acctFunds", acc.id), { active: false }); onClose(); } }} className="h-12 px-4 rounded-xl border border-[#DCE3EE] bg-white text-[14px] font-bold text-[#B42318]">목록에서 빼기</button>}<button type="button" onClick={onClose} className="h-12 px-5 rounded-xl border border-[#DCE3EE] bg-white text-[14px] font-bold text-[#3A4A66]">닫기</button><button type="button" onClick={save} className="flex-1 h-12 rounded-xl bg-[#0F1A30] text-white text-[15px] font-black">저장</button></>}>
       {acc && !isCredit(acc) && !(isCard(acc) && acc.linkFundId) && (
         <div className="rounded-2xl p-4 text-white" style={{ background: "linear-gradient(120deg,#0B1428,#1B2B4B 60%,#2D4C82)" }}>
           <div className="text-[11px] font-extrabold tracking-[0.22em] text-[#8FB0F0]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>RECONCILE · 잔액 맞추기</div>

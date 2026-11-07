@@ -7,6 +7,7 @@ import React from "react";
 import { collection, limit, onSnapshot, orderBy, query } from "firebase/firestore";
 import { auth, db, FUNCTIONS_BASE } from "./firebase";
 import { ShellIcon } from "./AdminShell";
+import { kpConfirm } from "./kpDialog";
 
 const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
 const NUM = { fontFamily: MONO, fontVariantNumeric: "tabular-nums" };
@@ -195,7 +196,7 @@ export function AiTeamChat({ teamKey }) {
       setErr(e?.message || String(e));
     } finally { setBusy(false); setTimeout(() => inputRef.current?.focus(), 0); }
   };
-  const reset = () => { if (chat.items.length && !window.confirm("이 팀과의 대화를 지우고 새로 시작할까요?")) return; const v = { items: [], history: [], usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 } }; setChat(v); saveChat(team.key, v); setErr(""); };
+  const reset = async () => { if (chat.items.length && !(await kpConfirm("이 팀과의 대화를 지우고 새로 시작할까요?", { okText: "새로 시작" }))) return; const v = { items: [], history: [], usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 } }; setChat(v); saveChat(team.key, v); setErr(""); };
   const copy = (t) => { try { navigator.clipboard.writeText(t); } catch { /* 무시 */ } };
 
   const sessionCost = costOf(chat.usage);

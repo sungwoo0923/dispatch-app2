@@ -15,6 +15,7 @@ import { CustomSelect } from "./CustomSelect";
 import { computeFunds, isCard, isCredit, last4, fundBadge } from "./fundsCalc";
 import { upsertAutoEntry } from "./ledgerAuto";
 import { ResponsiveContainer, ComposedChart, Bar, Line, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts";
+import { kpConfirm } from "./kpDialog";
 
 export const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
 export const HERO_BG = "linear-gradient(rgba(143,176,240,.07) 1px, transparent 1px) 0 0/22px 22px, linear-gradient(90deg, rgba(143,176,240,.07) 1px, transparent 1px) 0 0/22px 22px, linear-gradient(120deg,#0B1428 0%,#1B2B4B 60%,#2D4C82 100%)";
@@ -199,10 +200,10 @@ export function CashBook({ company, isViewer = false }) {
       setEdit(null);
     } catch (err) { alert(`저장 실패: ${err.message}`); } finally { setBusy(false); }
   };
-  const remove = async (e) => { if (!window.confirm("이 내역을 삭제할까요?")) return; await runDelete({ label: "내역", task: () => deleteDoc(doc(db, "acctLedger", e.id)) }); setEdit(null); }; // ⭐ 2026-11-05 삭제 진행 창
+  const remove = async (e) => { if (!(await kpConfirm("이 내역을 삭제할까요?"))) return; await runDelete({ label: "내역", task: () => deleteDoc(doc(db, "acctLedger", e.id)) }); setEdit(null); }; // ⭐ 2026-11-05 삭제 진행 창
   const importApprovals = async () => {
     if (!toImport.length) return;
-    if (!window.confirm(`전자결재로 승인된 지출결의 ${toImport.length}건을 장부에 넣을까요?`)) return;
+    if (!(await kpConfirm(`전자결재로 승인된 지출결의 ${toImport.length}건을 장부에 넣을까요?`))) return;
     setBusy(true);
     try {
       // ⭐ 2026-11-01 결제수단에 맞는 통장·카드가 하나뿐이면 자동 지정(자금 잔액에 바로 반영) — 여러 개면 장부에서 골라 주세요
@@ -236,7 +237,7 @@ export function CashBook({ company, isViewer = false }) {
   }, [rows, recurring, ym, isViewer]); // eslint-disable-line react-hooks/exhaustive-deps
   const applyRecurring = async () => {
     if (!recurTodo.length) return;
-    if (!window.confirm(`${ym.replace("-", "년 ")}월 고정비 ${recurTodo.length}건을 장부에 넣을까요?`)) return;
+    if (!(await kpConfirm(`${ym.replace("-", "년 ")}월 고정비 ${recurTodo.length}건을 장부에 넣을까요?`))) return;
     setBusy(true);
     try {
       await writeRecur(recurTodo, ym);
@@ -516,7 +517,7 @@ function RecurringEditor({ company, rows, ledger = [], funds = [], onClose }) {
             {funds.length > 0 && <CustomSelect value={r.fundId || ""} onChange={(e) => updateDoc(doc(db, "acctRecurring", r.id), { fundId: e.target.value })} className="mt-1 h-8 px-2 rounded-lg border border-[#DCE3EE] bg-white text-[12px] font-bold text-[#1B2B4B] max-w-full"><option value="">통장·카드 지정 안 함</option>{funds.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}</CustomSelect>}</div>
           <span className="text-[13.5px] font-black tabular-nums whitespace-nowrap" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{won(r.amount)}</span>
           <button type="button" onClick={() => updateDoc(doc(db, "acctRecurring", r.id), { active: r.active === false })} className={`h-8 px-2.5 rounded-lg text-[12px] font-black whitespace-nowrap ${r.active === false ? "border border-[#DCE3EE] text-[#9AA9C3]" : "bg-[#EEF3FC] text-[#1B2B4B]"}`}>{r.active === false ? "꺼짐" : "켜짐"}</button>
-          <button type="button" onClick={() => window.confirm("삭제할까요?") && runDelete({ label: "고정비", task: () => deleteDoc(doc(db, "acctRecurring", r.id)) }).catch(() => {})} /* ⭐ 2026-11-05 삭제 진행 창 */ className="w-8 h-8 rounded-lg text-[#9AA9C3]">✕</button>
+          <button type="button" onClick={async () => (await kpConfirm("삭제할까요?")) && runDelete({ label: "고정비", task: () => deleteDoc(doc(db, "acctRecurring", r.id)) }).catch(() => {})} /* ⭐ 2026-11-05 삭제 진행 창 */ className="w-8 h-8 rounded-lg text-[#9AA9C3]">✕</button>
         </div>
       ))}
     </Sheet>
@@ -610,7 +611,7 @@ export function AssetManager({ company, isViewer = false }) {
 
       {edit && (
         <Sheet side en={`ASSET · ${edit.id ? "EDIT" : "NEW"}`} title={edit.id ? "비품 수정" : "비품 등록"} onClose={() => setEdit(null)}
-          footer={<>{edit.id && <button type="button" onClick={async () => { if (window.confirm("삭제할까요? (폐기 처리는 상태를 '폐기'로)")) { const _id = edit.id; /* ⭐ 2026-11-05 삭제 진행 창 */ await runDelete({ label: "비품", task: async () => { await deleteDoc(doc(db, "officeAssets", _id)); /* ⭐ 2026-11-02 점검 — 비품 삭제 시 '비품 구입' 자동 지출 줄도 함께 삭제(amount 0 → 줄 제거) */ await upsertAutoEntry(db, _id, { company, amount: 0, auto: "asset" }).catch(() => {}); } }); setEdit(null); } }} className="h-12 px-5 rounded-xl border border-[#DCE3EE] bg-white text-[14px] font-bold text-[#B42318]">삭제</button>}<button type="button" onClick={() => setEdit(null)} className="h-12 px-5 rounded-xl border border-[#DCE3EE] bg-white text-[14px] font-bold text-[#3A4A66]">취소</button><button type="button" disabled={busy} onClick={save} className="flex-1 h-12 rounded-xl bg-[#0F1A30] text-white text-[15px] font-black disabled:opacity-50">{busy ? "저장 중…" : "저장"}</button></>}>
+          footer={<>{edit.id && <button type="button" onClick={async () => { if ((await kpConfirm("삭제할까요? (폐기 처리는 상태를 '폐기'로)"))) { const _id = edit.id; /* ⭐ 2026-11-05 삭제 진행 창 */ await runDelete({ label: "비품", task: async () => { await deleteDoc(doc(db, "officeAssets", _id)); /* ⭐ 2026-11-02 점검 — 비품 삭제 시 '비품 구입' 자동 지출 줄도 함께 삭제(amount 0 → 줄 제거) */ await upsertAutoEntry(db, _id, { company, amount: 0, auto: "asset" }).catch(() => {}); } }); setEdit(null); } }} className="h-12 px-5 rounded-xl border border-[#DCE3EE] bg-white text-[14px] font-bold text-[#B42318]">삭제</button>}<button type="button" onClick={() => setEdit(null)} className="h-12 px-5 rounded-xl border border-[#DCE3EE] bg-white text-[14px] font-bold text-[#3A4A66]">취소</button><button type="button" disabled={busy} onClick={save} className="flex-1 h-12 rounded-xl bg-[#0F1A30] text-white text-[15px] font-black disabled:opacity-50">{busy ? "저장 중…" : "저장"}</button></>}>
           <div><Label>분류</Label><div className="flex flex-wrap gap-1.5">{ASSET_CATS.map((c) => <Chip key={c} on={edit.category === c} onClick={() => setEdit((p) => ({ ...p, category: c, unit: c === "소모품" ? (p.unit === "개" ? "개" : p.unit) : p.unit }))}>{c}</Chip>)}</div></div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
             <div><Label>품목 이름</Label><input value={edit.name} onChange={(e) => setEdit((p) => ({ ...p, name: e.target.value }))} className={inp} placeholder="예: 노트북, A4용지, 복합기" /></div>

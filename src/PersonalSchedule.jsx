@@ -14,6 +14,7 @@ import CustomDatePicker from "./CustomDatePicker";
 import { CustomSelect } from "./CustomSelect";
 import { TimeSelect } from "./kpInputs";
 import { getNationalHolidayLabel } from "./attendanceUtils";
+import { kpConfirm } from "./kpDialog";
 
 const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
 const DOW = ["일", "월", "화", "수", "목", "금", "토"];
@@ -135,7 +136,7 @@ export function PersonalSchedule({ company, modeSwitch, staff = [] }) {
       setEdit(null);
     } catch (err) { alert(`저장하지 못했습니다: ${err?.message || err}`); } finally { setBusy(false); }
   };
-  const remove = async (e) => { if (!window.confirm("이 일정을 지울까요?")) return; await runDelete({ label: "일정", task: () => deleteDoc(doc(db, "personalSchedules", e.id)) }).catch((err) => alert(err.message)); setEdit(null); }; // ⭐ 2026-11-05 삭제 진행 창
+  const remove = async (e) => { if (!(await kpConfirm("이 일정을 지울까요?"))) return; await runDelete({ label: "일정", task: () => deleteDoc(doc(db, "personalSchedules", e.id)) }).catch((err) => alert(err.message)); setEdit(null); }; // ⭐ 2026-11-05 삭제 진행 창
   const dayList = by[pick] || [];
   const dayBirth = birthdaysOn(staff, pick);
   const inp = "h-11 w-full px-3.5 rounded-xl border border-[#DCE3EE] bg-white text-[14.5px] font-semibold text-[#0F1A30] outline-none focus:border-[#2D4C82]";

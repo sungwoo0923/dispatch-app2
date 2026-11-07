@@ -12,6 +12,7 @@ import { PlanMatrix, PLAN_DEFAULTS, PLAN_IDS, PLAN_MATRIX_CSS, RECOMMENDED_PLAN_
 import { fmtBizNo, fmtPhone } from "./formatInput";
 import { CustomSelect } from "./CustomSelect";
 import { logisWordmarkSvg } from "./brand"; // 🔷 2026-11-04 LogisWeb 글자 로고(인쇄 문서 머리)
+import { kpConfirm } from "./kpDialog";
 
 const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
 const NAVY = "#1B2B4B";
@@ -368,10 +369,10 @@ export function PricingEditor() {
     catch (e) { setMsg(`저장 실패: ${e.message}`); }
   };
   // ⭐ 2026-11-04 추천 요금표(docs/pricing-2026-11.md) — 화면에만 채우고, [저장]을 눌러야 실제로 바뀐다(저장한 가격을 몰래 덮어쓰지 않음)
-  const applyRecommended = () => {
+  const applyRecommended = async () => {
     const cur = cfg.plans.filter((p) => PLAN_IDS.includes(p.id)).map((p) => `${p.name} ${num(p.price).toLocaleString()}원`).join(" · ");
     const nxt = PLAN_DEFAULTS.map((p) => `${p.name} ${p.price.toLocaleString()}원`).join(" · ");
-    if (!window.confirm(`추천 요금표(${RECOMMENDED_PLAN_VERSION})를 화면에 채울까요?\n\n지금: ${cur}\n추천: ${nxt}\n\n· 포함 직원·오더·지입차·저장 용량, 요금제별 도입비, 추가 청구 단가도 함께 채웁니다.\n· 화면에만 채워지고 [저장]을 눌러야 적용됩니다. 기존 고객의 지정 요금제(회사별)는 그대로입니다.\n· 직접 만든 요금제·포함 기능 문구·공급자 정보·계약 문구는 그대로 둡니다.`)) return;
+    if (!await kpConfirm(`추천 요금표(${RECOMMENDED_PLAN_VERSION})를 화면에 채울까요?\n\n지금: ${cur}\n추천: ${nxt}\n\n· 포함 직원·오더·지입차·저장 용량, 요금제별 도입비, 추가 청구 단가도 함께 채웁니다.\n· 화면에만 채워지고 [저장]을 눌러야 적용됩니다. 기존 고객의 지정 요금제(회사별)는 그대로입니다.\n· 직접 만든 요금제·포함 기능 문구·공급자 정보·계약 문구는 그대로 둡니다.`)) return;
     const keepExtra = cfg.plans.filter((p) => !PLAN_IDS.includes(p.id));
     const plans = PLAN_DEFAULTS.map((d) => { const old = cfg.plans.find((p) => p.id === d.id) || {}; return { ...old, ...d, promoMonths: old.promoMonths || 0, promoRate: old.promoRate || 0, features: old.features?.length ? old.features : planFeatureLines(d.id) }; });
     const pick = ["extraSeat", "extraOrder", "fleetPerVehicle", "setupFee", "migrationFee", "trainingFee", "storageGB", "storagePerGB", "devDayRate", "devHourRate", "taxInvoiceFee", "alimtalkFee", "smsFee", "lmsFee", "extraBizFee", "routeBoardSetupFee", "annualFreeMonths", "semiDiscountRate", "waiveSetupMonths"];
@@ -389,7 +390,7 @@ export function PricingEditor() {
   const idx = Math.min(pi, cfg.plans.length - 1);
   const P = cfg.plans[idx] || cfg.plans[0];
   const addPlan = () => { set({ plans: [...cfg.plans, { id: `p${Date.now()}`, name: "새 요금제", en: "PLAN", price: 0, seats: 1, orders: 500, target: "", features: [] }] }); setPi(cfg.plans.length); };
-  const delPlan = () => { if (cfg.plans.length > 1 && window.confirm(`'${P.name}' 요금제를 지울까요?`)) { set({ plans: cfg.plans.filter((_, k) => k !== idx) }); setPi(0); } };
+  const delPlan = async () => { if (cfg.plans.length > 1 && (await kpConfirm(`'${P.name}' 요금제를 지울까요?`, { okText: "지우기", danger: true }))) { set({ plans: cfg.plans.filter((_, k) => k !== idx) }); setPi(0); } };
   const row = (label, child, hint, key) => (
     <div key={key || label} className="flex items-center justify-between gap-3 py-2 border-t first:border-t-0 border-[#EEF1F6]">
       <span className="text-[14px] font-bold text-[#3A4A66]">{label}{hint && <span className="block text-[12.5px] font-semibold text-[#9AA9C3]">{hint}</span>}</span>{child}
@@ -460,7 +461,7 @@ export function PricingEditor() {
           <div className="mt-1.5 text-[14px] text-white/70">요금제는 여기서만 고치면 됩니다. 견적서·요금 안내서·고객사 구독 화면이 이 값을 씁니다(기존 고객 청구는 청구 › 수납 관리).</div>
           <div className="mt-4 flex gap-2 flex-wrap">
             <button type="button" onClick={save} disabled={!dirty} className="h-10 px-5 rounded-xl bg-white text-[#0F1A30] text-[14px] font-black disabled:opacity-40" data-pricing-save>{dirty ? "저장" : "저장됨"}</button>
-            <button type="button" onClick={() => { if (window.confirm("저장하지 않은 수정을 버리고 마지막 저장값으로 돌릴까요?")) { setDirty(false); setCfg(live); } }} disabled={!dirty} className="h-10 px-4 rounded-xl bg-white/10 ring-1 ring-white/25 text-white text-[14px] font-black disabled:opacity-40">되돌리기</button>
+            <button type="button" onClick={async () => { if ((await kpConfirm("저장하지 않은 수정을 버리고 마지막 저장값으로 돌릴까요?"))) { setDirty(false); setCfg(live); } }} disabled={!dirty} className="h-10 px-4 rounded-xl bg-white/10 ring-1 ring-white/25 text-white text-[14px] font-black disabled:opacity-40">되돌리기</button>
             <button type="button" onClick={applyRecommended} className="h-10 px-4 rounded-xl bg-white/10 ring-1 ring-white/25 text-white text-[14px] font-black">추천 요금표 적용</button>
             <button type="button" onClick={() => openPrint("LogisWeb 요금 안내", priceSheetHtml(cfg))} className="h-10 px-4 rounded-xl text-white/75 text-[14px] font-bold hover:text-white">요금 안내서 인쇄</button>
           </div>
@@ -714,7 +715,7 @@ export function QuoteHistory({ onOpen, onContract }) {
                       <button type="button" onClick={() => onOpen?.(x)} className="h-8 px-3 rounded-lg bg-[#0F1A30] text-white text-[12.5px] font-black mr-1">열기</button>
                       {onContract && <button type="button" onClick={() => onContract(x)} className="h-8 px-3 rounded-lg border border-[#1B2B4B] text-[12.5px] font-black text-[#1B2B4B] mr-1">계약서 만들기</button>}
                       <button type="button" onClick={() => { const c = x.pricing ? mergeDefaults(x.pricing) : cfg; if (!c) return; const inp = { ...BLANK_INPUT, ...x.input }; const q = quoteOf(c, inp); q && openPrint(`견적서_${x.customer}`, quoteHtml(c, inp, q, x.no)); }} className="h-8 px-3 rounded-lg border border-[#DCE3EE] text-[12.5px] font-black text-[#1B2B4B] mr-1">인쇄</button>
-                      <button type="button" onClick={() => window.confirm(`${x.customer} 견적(${x.no})을 삭제할까요?`) && runDelete({ label: "견적", task: () => deleteDoc(doc(db, "salesQuotes", x.id)) }).catch(() => {})} /* ⭐ 2026-11-05 삭제 진행 창 */ className="h-8 px-3 rounded-lg border border-[#DCE3EE] text-[12.5px] font-bold text-[#7A879C]">삭제</button>
+                      <button type="button" onClick={async () => (await kpConfirm(`${x.customer} 견적(${x.no})을 삭제할까요?`)) && runDelete({ label: "견적", task: () => deleteDoc(doc(db, "salesQuotes", x.id)) }).catch(() => {})} /* ⭐ 2026-11-05 삭제 진행 창 */ className="h-8 px-3 rounded-lg border border-[#DCE3EE] text-[12.5px] font-bold text-[#7A879C]">삭제</button>
                     </td>
                   </tr>
                 ))}

@@ -9,6 +9,7 @@ import CustomDatePicker from "./CustomDatePicker";
 import { CustomSelect } from "./CustomSelect";
 import { useVehicleTypes } from "./vehicleTypes"; // 🚚 2026-11-02 회사 공용 차량종류
 import { CARE_DATES, CLASS_LABEL, FUELS, GEARS, TONS, VEHICLE_KINDS, careSummary, dateStatus, itemStatus, itemsFor, specFor, tonClass, today, vehicleDefaults, searchTruckModels, TRUCK_MODELS } from "./vehicleCare";
+import { kpConfirm } from "./kpDialog";
 
 const NAVY = "#1B2B4B";
 const INK = "#0F1A30";
@@ -138,10 +139,10 @@ function Summary({ driverId, by, vehicle, care, sum, odo, logs, busy, run, setTa
   const fuel = fuelStats(logs);
   const month = today().slice(0, 7);
   const monthCost = logs.filter((l) => (l.date || "").startsWith(month)).reduce((a, l) => a + (Number(l.cost) || 0), 0);
-  const submit = () => {
+  const submit = async () => {
     const v = num(km);
     if (!v) return;
-    if (odo && v < odo && !window.confirm(`지금 기록(${odo.toLocaleString()}km)보다 작습니다. 그래도 저장할까요?`)) return;
+    if (odo && v < odo && !(await kpConfirm(`지금 기록(${odo.toLocaleString()}km)보다 작습니다. 그래도 저장할까요?`, { okText: "저장" }))) return;
     run(async () => { await save(driverId, by, { care: { odometer: v, odometerAt: today() } }, { kind: "주행거리", date: today(), km: v }); setKm(""); });
   };
   return (

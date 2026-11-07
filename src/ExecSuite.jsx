@@ -27,6 +27,7 @@ import { AttendanceQuickButton } from "./attendanceQuick";
 import { getNationalHolidayLabel } from "./attendanceUtils";
 import AttendanceApprovalInbox from "./AttendanceApprovalInbox";
 import { PersonalSchedule, PersonalModeSwitch, usePersonalMode, birthdaysOn, BirthChip } from "./PersonalSchedule"; // ⭐ 2026-11-03 개인일정·생일
+import { kpConfirm } from "./kpDialog";
 
 const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
 const GOLD = "#D7BC82";
@@ -788,7 +789,7 @@ function ExecScheduleCompany({ company, me = {}, canWrite = false, modeSwitch })
       setEdit(null);
     } finally { setBusy(false); }
   };
-  const remove = async (e) => { if (!window.confirm("이 일정을 지울까요?")) return; const { doc: fdoc, deleteDoc } = await import("firebase/firestore"); await runDelete({ label: "일정", task: () => deleteDoc(fdoc(db, "execSchedules", e.id)) }); setEdit(null); }; // ⭐ 2026-11-05 삭제 진행 창
+  const remove = async (e) => { if (!(await kpConfirm("이 일정을 지울까요?"))) return; const { doc: fdoc, deleteDoc } = await import("firebase/firestore"); await runDelete({ label: "일정", task: () => deleteDoc(fdoc(db, "execSchedules", e.id)) }); setEdit(null); }; // ⭐ 2026-11-05 삭제 진행 창
   const dayList = by[pick] || [];
   const inpD = "h-12 w-full px-3.5 rounded-xl bg-white/[0.06] border border-white/15 text-white text-[15px] font-bold outline-none focus:border-[#D7BC82] placeholder:text-white/30 [color-scheme:dark]";
   return (

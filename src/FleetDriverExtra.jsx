@@ -10,6 +10,7 @@ import CustomDatePicker from "./CustomDatePicker"; // 📅 2026-11-04 날짜 입
 import BankAccountInput from "./BankAccountInput";
 import { onlyDigits } from "./bankUtil";
 import { VehicleSetupWizard } from "./VehicleCarePanel";
+import { kpPrompt } from "./kpDialog";
 
 export const DRIVER_APK_URL = "https://github.com/sungwoo0923/dispatch-app2/releases/download/driver-apk-latest/app-debug.apk"; // ⭐ 2026-11-03 누르면 바로 APK 파일 다운로드(예전: 릴리즈 페이지에서 파일을 찾아 눌러야 했음)
 const lab = "block text-[14px] font-semibold text-[#5B6B85] mb-1";
@@ -34,7 +35,7 @@ export function AppStatusBadge({ d, company, big = false }) {
   const copy = async (e) => {
     e.stopPropagation();
     const t = appInviteText(company, d);
-    try { await navigator.clipboard.writeText(t); setCopied(true); setTimeout(() => setCopied(false), 1800); } catch { window.prompt("아래 내용을 복사해 기사에게 보내 주세요", t); }
+    try { await navigator.clipboard.writeText(t); setCopied(true); setTimeout(() => setCopied(false), 1800); } catch { (await kpPrompt("아래 내용을 복사해 기사에게 보내 주세요", t)); }
   };
   const tone = s.key === "active" ? "bg-[#0F1A30] text-white" : s.key === "idle" ? "bg-[#EEF3FC] text-[#1B2B4B] border border-[#C9D6EE]" : "bg-white text-[#5B6B85] border border-[#DCE3EE]";
   return (

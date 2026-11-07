@@ -4,6 +4,7 @@ import { db } from "./firebase";
 import { collection, onSnapshot, query, where, getDocs } from "firebase/firestore";
 import { KOREAN_HOLIDAYS } from "./CustomDatePicker"; // ⭐ 2026-11-04 특수운임 제거
 import { CustomSelect } from "./CustomSelect";
+import { kpConfirm } from "./kpDialog";
 
 const VEHICLE_TYPES = [
   "전체","다마스","라보","라보/다마스","카고","윙/카고","윙바디",
@@ -964,11 +965,9 @@ export default function StandardFare({ embedded = false, defaultTab = "표준운
       if (reverse.length > 0) {
         const fromLabel = pickup || resolvePlaceName(pickupAddr) || pickupAddr;
         const toLabel = drop || resolvePlaceName(dropAddr) || dropAddr;
-        const ok = window.confirm(
-          `"${fromLabel} → ${toLabel}" 노선의 이력은 없습니다.\n\n` +
+        const ok = (await kpConfirm(`"${fromLabel} → ${toLabel}" 노선의 이력은 없습니다.\n\n` +
           `반대 노선 "${toLabel} → ${fromLabel}"의 운임 이력이 ${reverse.length}건 있습니다.\n` +
-          `반대 노선으로 조회할까요?`
-        );
+          `반대 노선으로 조회할까요?`));
         if (ok) {
           setPickup(drop); setDrop(pickup);
           setPickupAddr(dropAddr); setDropAddr(pickupAddr);

@@ -32,6 +32,7 @@ import CustomDatePicker from "./CustomDatePicker";
 import PayrollGate from "./PayrollGate";
 import { payslipHtml, PAYSLIP_CSS, printPayslips, TAX_NOTE } from "./payslipDoc";
 import { kstDay, kstYm, shiftYm, lastDayOf, safeId, slipId, runId, empId, toNum, ymLabel, blank, uniq, inp, numInp, NUMS, sec, Label, Note, H, Sel, Money, Seg, enterNext, useMedia, useCol, useDocData } from "./payrollUi";
+import { kpPrompt, kpConfirm } from "./kpDialog";
 
 const PayrollReports = React.lazy(() => import("./PayrollReports"));
 const PayrollContracts = React.lazy(() => import("./PayrollContracts"));
@@ -282,11 +283,11 @@ function PayrollRun({ company, ro }) {
       b.set(doc(db, "payrollRuns", runId(company, ym)), { ...runPatch(after, { status: "draft" }), log: arrayUnion(logEntry(label, `${todo.length}명`)) }, { merge: true });
     }, "저장 실패");
   };
-  const confirmRows = (list, ask = true) => {
+  const confirmRows = async (list, ask = true) => {
     const todo = list.filter((r) => r.result && !r.locked);
     if (ro) return Promise.resolve(false);
     if (!todo.length) { alert("확정할 직원이 없습니다(급여 설정이 없거나 이미 확정됨)."); return Promise.resolve(false); }
-    if (ask && !window.confirm(`${ymLabel(ym)} 급여 ${todo.length}명을 확정할까요?\n확정하면 잠겨서 수정할 수 없습니다(확정 해제는 사유 기록).`)) return Promise.resolve(false);
+    if (ask && !(await kpConfirm(`${ymLabel(ym)} 급여 ${todo.length}명을 확정할까요?\n확정하면 잠겨서 수정할 수 없습니다(확정 해제는 사유 기록).`, { title: "급여 확정", okText: "확정" }))) return false;
     return commit((b) => {
       todo.forEach((r) => { saveEmpIn(b, r); b.set(doc(db, "payslips", slipId(company, ym, r.u.id)), slipDoc(r, { status: "confirmed", published: false, confirmedAt: Date.now(), confirmedBy: byName }), { merge: true }); });
       const after = merged(todo, () => ({ locked: true }));
@@ -295,12 +296,12 @@ function PayrollRun({ company, ro }) {
     }, "확정 실패");
   };
   // 발행 — 확정 안 된 사람은 확정과 함께 발행(직원 알림)
-  const publishRows = (list) => {
+  const publishRows = async (list) => {
     const todo = list.filter((r) => r.result && !r.slip?.published && r.slip?.status !== "paid");
     if (ro) return Promise.resolve(false);
     if (!todo.length) { alert("발행할 명세서가 없습니다(이미 발행됨)."); return Promise.resolve(false); }
     const nNew = todo.filter((r) => !r.locked).length;
-    if (!window.confirm(`${ymLabel(ym)} 급여명세서 ${todo.length}건을 발행할까요?${nNew ? `\n· 확정 전 ${nNew}명은 확정(잠금)과 함께 발행됩니다` : ""}\n· 직원은 내정보 › 급여명세서에서 본인 것만 볼 수 있습니다\n· 직원에게 앱 알림 · 사내메일(푸시)이 갑니다`)) return Promise.resolve(false);
+    if (!(await kpConfirm(`${ymLabel(ym)} 급여명세서 ${todo.length}건을 발행할까요?${nNew ? `\n· 확정 전 ${nNew}명은 확정(잠금)과 함께 발행됩니다` : ""}\n· 직원은 내정보 › 급여명세서에서 본인 것만 볼 수 있습니다\n· 직원에게 앱 알림 · 사내메일(푸시)이 갑니다`, { title: "급여명세서 발행", okText: "발행" }))) return false;
     const notes = todo.map((r) => ({ uid: r.u.id, name: personName(r.u) || r.u.name || "", team: r.u.team || "", position: r.u.position || "", net: r.result?.net, pd: r.input?.payDate || r.slip?.payDate || run?.payDate || payDateDefault() }));
     return commit((b) => {
       const now = Date.now();
@@ -322,10 +323,10 @@ function PayrollRun({ company, ro }) {
       return ok;
     });
   };
-  const unlockRows = (list) => {
+  const unlockRows = async (list) => {
     const todo = list.filter((r) => r.slip && r.slip.status === "confirmed");
     if (!todo.length) return Promise.resolve(false);
-    const reason = window.prompt(`확정을 풀고 다시 수정합니다(${todo.length}명). 사유를 적어 주세요(기록이 남고, 발행된 명세서는 직원 화면에서 내려갑니다).`);
+    const reason = await kpPrompt(`확정을 풀고 다시 수정합니다(${todo.length}명). 사유를 적어 주세요(기록이 남고, 발행된 명세서는 직원 화면에서 내려갑니다).`);
     if (!reason || reason.trim().length < 2) return Promise.resolve(false);
     return commit((b) => {
       todo.forEach((r) => b.update(doc(db, "payslips", r.slip.id), { status: "draft", published: false, updatedAt: serverTimestamp(), updatedBy: byName, unlockReason: reason.trim() }));
@@ -333,7 +334,7 @@ function PayrollRun({ company, ro }) {
     }, "실패");
   };
   const pay = async () => {
-    const d = window.prompt("지급일(YYYY-MM-DD)", run?.payDate || payDateDefault());
+    const d = (await kpPrompt("지급일(YYYY-MM-DD)", run?.payDate || payDateDefault()));
     if (!d || !/^\d{4}-\d{2}-\d{2}$/.test(d.trim())) return;
     const ok = await commit((b) => {
       (slips || []).forEach((s) => b.update(doc(db, "payslips", s.id), { status: "paid", paidDate: d.trim(), paidAt: Date.now(), updatedAt: serverTimestamp() }));
@@ -345,7 +346,7 @@ function PayrollRun({ company, ro }) {
     }
   };
   const unpay = async () => {
-    if (!window.confirm("지급 처리를 취소할까요? 장부의 급여 지급 줄도 지워집니다.")) return;
+    if (!(await kpConfirm("지급 처리를 취소할까요? 장부의 급여 지급 줄도 지워집니다."))) return;
     const ok = await commit((b) => {
       (slips || []).forEach((s) => b.update(doc(db, "payslips", s.id), { status: "confirmed", paidDate: "", updatedAt: serverTimestamp() }));
       b.set(doc(db, "payrollRuns", runId(company, ym)), { status: "confirmed", paidAt: null, log: arrayUnion(logEntry("지급 취소")) }, { merge: true });

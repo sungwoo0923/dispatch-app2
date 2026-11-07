@@ -26,6 +26,7 @@ import { BannerCard, BannerStyles } from "./BannerCenter";
 import { fmtPhone } from "./formatInput";
 import { usePlatformLive } from "./PlatformLive"; // ⭐ 2026-11-05 원격 지원 걸기 — 운송사·직원 목록(실시간)
 import { attachAdminCapture, createExecutor, describeSurface, getShareStream, RemoteSelectPicker, StaffControlOverlay, surfaceControllable, useEscHold, videoPoint, viewportInfo } from "./RemoteControl"; // ⭐ 2026-11-07 화면 제어
+import { kpConfirm } from "./kpDialog";
 
 const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
 const ICE = { iceServers: [{ urls: ["stun:stun.l.google.com:19302", "stun:stun1.l.google.com:19302"] }] };
@@ -542,7 +543,7 @@ function RequesterModal({ uid, user, profile, company, mobile, active, latest, h
     setBusy(false);
   };
   const cancel = async () => {
-    if (!active || !window.confirm("원격 지원 요청을 취소할까요?")) return;
+    if (!active || !(await kpConfirm("원격 지원 요청을 취소할까요?"))) return;
     if (shareState) endShare();
     await updateDoc(doc(db, "supportRequests", active.id), { status: "cancelled", cancelledAt: serverTimestamp(), updatedAt: serverTimestamp() }).catch((e) => setErr(`취소하지 못했습니다 (${e?.code || ""})`));
   };
@@ -992,7 +993,7 @@ export function RemoteSupportAdminPanel({ me }) {
     if (sel.sessionId) await updateDoc(doc(db, "supportSessions", sel.sessionId), { status: "ended", endedAt: serverTimestamp(), endedBy: "master" }).catch(() => {});
     await patch({ status: "done", endedAt: serverTimestamp(), doneBy: by });
   };
-  const done = async () => { if (!window.confirm("이 원격 지원을 완료 처리할까요?")) return; await endSession(); };
+  const done = async () => { if (!(await kpConfirm("이 원격 지원을 완료 처리할까요?"))) return; await endSession(); };
   const copy = async (t) => { try { await navigator.clipboard.writeText(t); } catch { const ta = document.createElement("textarea"); ta.value = t; document.body.appendChild(ta); ta.select(); document.execCommand("copy"); ta.remove(); } setCopied(true); setTimeout(() => setCopied(false), 1500); };
   const mode = sel?.mode || sel?.method || "screen";
 

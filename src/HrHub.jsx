@@ -24,6 +24,7 @@ import { usePayrollAccess } from "./payrollAccess"; // ⭐ 2026-11-06 연차 사
 // ⭐ 2026-11-07 급여 대장은 인사관리부에서 뺐다 — 급여는 돈을 내보내는 경리 업무(회계관리 › 급여 계산 · 비밀번호 잠금)라
 //  인사는 근태·연차까지만 본다. 연차 사용 촉진은 연차 관리 안의 탭(LeaveArea)으로 합쳤다
 import LeaveArea from "./LeaveArea";
+import { kpConfirm } from "./kpDialog";
 
 const kstDay = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
 const inp = "h-11 w-full px-3 rounded-xl border border-[#DCE3EE] bg-white text-[14px] font-semibold text-[#0F1A30] outline-none focus:border-[#2D4C82]";
@@ -224,7 +225,7 @@ export function StaffInfoBoard({ company, canManage }) {
   const applyResign = async (now) => {
     if (!r.reason.trim()) return alert("사유를 적어 주세요.");
     const go = now || r.date <= kstDay();
-    if (!window.confirm(go ? `${sel.name}님을 ${r.type}(퇴사) 처리할까요?\n퇴사 처리하면 이 계정은 바로 로그인할 수 없고, 경리 › 퇴직 정산에 올라갑니다.` : `${sel.name}님 ${r.type} 예정(${r.date})으로 등록할까요?\n예정 상태에서는 로그인이 되고, 그날 [퇴사 확정]을 누르면 막힙니다.`)) return;
+    if (!(await kpConfirm(go ? `${sel.name}님을 ${r.type}(퇴사) 처리할까요?\n퇴사 처리하면 이 계정은 바로 로그인할 수 없고, 경리 › 퇴직 정산에 올라갑니다.` : `${sel.name}님 ${r.type} 예정(${r.date})으로 등록할까요?\n예정 상태에서는 로그인이 되고, 그날 [퇴사 확정]을 누르면 막힙니다.`))) return;
     setBusy(true);
     try {
       if (go) {
@@ -236,10 +237,10 @@ export function StaffInfoBoard({ company, canManage }) {
       setSel(null);
     } catch (e) { alert(`처리 실패: ${e.message}`); } finally { setBusy(false); }
   };
-  const cancelPlan = async (u) => { if (window.confirm(`${u.name}님 퇴사 예정을 취소할까요?`)) await updateDoc(doc(db, "users", u.id), { resignPlan: null, personnelHistory: arrayUnion({ date: kstDay(), type: "퇴사 예정 취소", detail: "" }) }); };
+  const cancelPlan = async (u) => { if ((await kpConfirm(`${u.name}님 퇴사 예정을 취소할까요?`))) await updateDoc(doc(db, "users", u.id), { resignPlan: null, personnelHistory: arrayUnion({ date: kstDay(), type: "퇴사 예정 취소", detail: "" }) }); };
   // ⭐ 2026-11-02 점검 — 복직 시 퇴사 사유 필드와 retireCases 문서도 정리(경리 › 퇴직 정산에 계속 남던 문제)
   const reinstate = async (u) => {
-    if (!window.confirm(`${u.name}님을 복직 처리할까요? (다시 로그인할 수 있게 됩니다)`)) return;
+    if (!(await kpConfirm(`${u.name}님을 복직 처리할까요? (다시 로그인할 수 있게 됩니다)`))) return;
     await updateDoc(doc(db, "users", u.id), { employmentStatus: "재직", resignedAt: null, resignType: null, resignReason: null, personnelHistory: arrayUnion({ date: kstDay(), type: "복직", detail: "" }) });
     await deleteDoc(doc(db, "retireCases", u.id)).catch(() => {});
   };
@@ -503,8 +504,8 @@ export function HrSettingsPanel({ company, canManage }) {
   const save = (patch) => setDoc(doc(db, "hrSettings", company), { companyName: company, ...patch, updatedAt: serverTimestamp() }, { merge: true });
   const addTeam = async () => { const v = t.trim(); if (!v) return; if (hr.teams.includes(v)) return alert("이미 있는 부서입니다."); await save({ teams: [...(cfg.teams || []), v], hiddenTeams: (cfg.hiddenTeams || []).filter((x) => x !== v) }); setT(""); };
   const addPos = async () => { const v = p.trim(); if (!v) return; const key = pe ? "execPositions" : "positions"; await save({ [key]: [...new Set([...(cfg[key] || []), v])], hiddenPositions: (cfg.hiddenPositions || []).filter((x) => x !== v) }); setP(""); };
-  const removeTeam = async (v) => { if (!window.confirm(`부서 「${v}」를 목록에서 뺄까요? (이미 지정된 직원 정보는 그대로)`)) return; if ((cfg.teams || []).includes(v)) await save({ teams: cfg.teams.filter((x) => x !== v) }); else await save({ hiddenTeams: [...new Set([...(cfg.hiddenTeams || []), v])] }); };
-  const removePos = async (v) => { if (!window.confirm(`직책 「${v}」를 목록에서 뺄까요?`)) return; const k = (cfg.positions || []).includes(v) ? "positions" : (cfg.execPositions || []).includes(v) ? "execPositions" : null; if (k) await save({ [k]: cfg[k].filter((x) => x !== v) }); else await save({ hiddenPositions: [...new Set([...(cfg.hiddenPositions || []), v])] }); };
+  const removeTeam = async (v) => { if (!(await kpConfirm(`부서 「${v}」를 목록에서 뺄까요? (이미 지정된 직원 정보는 그대로)`))) return; if ((cfg.teams || []).includes(v)) await save({ teams: cfg.teams.filter((x) => x !== v) }); else await save({ hiddenTeams: [...new Set([...(cfg.hiddenTeams || []), v])] }); };
+  const removePos = async (v) => { if (!(await kpConfirm(`직책 「${v}」를 목록에서 뺄까요?`))) return; const k = (cfg.positions || []).includes(v) ? "positions" : (cfg.execPositions || []).includes(v) ? "execPositions" : null; if (k) await save({ [k]: cfg[k].filter((x) => x !== v) }); else await save({ hiddenPositions: [...new Set([...(cfg.hiddenPositions || []), v])] }); };
   const Pill = ({ v, onX, base }) => <span className="inline-flex items-center gap-1.5 h-9 pl-3.5 pr-1.5 rounded-full bg-white border border-[#DCE3EE] text-[13.5px] font-black text-[#0F1A30]">{v}{base && <span className="text-[10px] font-bold text-[#9AA9C3]">기본</span>}{canManage && onX && <button type="button" onClick={onX} className="w-6 h-6 rounded-full hover:bg-[#FEF3F2] text-[#9AA9C3] hover:text-[#B42318]">✕</button>}</span>;
   return (
     <div className="space-y-4">
@@ -548,7 +549,7 @@ export function CompanyRules({ company, canEdit = false }) {
   const list = [...(rows || []), ...(rows === null ? [] : tpls)].filter((r) => cat === "전체" || r.category === cat).sort((a, b) => RULE_CATS.indexOf(a.category) - RULE_CATS.indexOf(b.category) || String(a.title).localeCompare(String(b.title)));
   const [busyAll, setBusyAll] = React.useState(false);
   const registerAll = async () => {
-    if (!tpls.length || !window.confirm(`표준안 ${tpls.length}건을 우리 회사 규정으로 한 번에 등록할까요?\n(등록 후에도 각각 고칠 수 있습니다)`)) return;
+    if (!tpls.length || !(await kpConfirm(`표준안 ${tpls.length}건을 우리 회사 규정으로 한 번에 등록할까요?\n(등록 후에도 각각 고칠 수 있습니다)`))) return;
     setBusyAll(true);
     try { for (const t of tpls) await addDoc(collection(db, "companyRules"), { companyName: company, title: t.title, category: t.category, body: t.body, effectiveDate: kstDay(), version: 1, createdAt: serverTimestamp(), updatedAt: serverTimestamp(), updatedBy: auth.currentUser?.email || "" }); } finally { setBusyAll(false); }
   };
@@ -600,7 +601,7 @@ export function CompanyRules({ company, canEdit = false }) {
       )}
       {edit && (
         <Sheet side en="RULES · EDIT" title={edit.id ? "규정 수정" : "규정 등록"} onClose={() => setEdit(null)}
-          footer={<>{edit.id && <button type="button" onClick={async () => { if (window.confirm("이 규정을 삭제할까요?")) { const _id = edit.id; await runDelete({ label: "규정", task: () => deleteDoc(doc(db, "companyRules", _id)) }); setEdit(null); setOpen(null); } /* ⭐ 2026-11-05 삭제 진행 창 */ }} className="h-12 px-4 rounded-xl border border-[#DCE3EE] bg-white text-[14px] font-bold text-[#B42318]">삭제</button>}<button type="button" onClick={() => setEdit(null)} className="h-12 px-5 rounded-xl border border-[#DCE3EE] bg-white text-[14px] font-bold text-[#3A4A66]">취소</button><button type="button" onClick={save} className="flex-1 h-12 rounded-xl bg-[#0F1A30] text-white text-[15px] font-black">저장</button></>}>
+          footer={<>{edit.id && <button type="button" onClick={async () => { if ((await kpConfirm("이 규정을 삭제할까요?"))) { const _id = edit.id; await runDelete({ label: "규정", task: () => deleteDoc(doc(db, "companyRules", _id)) }); setEdit(null); setOpen(null); } /* ⭐ 2026-11-05 삭제 진행 창 */ }} className="h-12 px-4 rounded-xl border border-[#DCE3EE] bg-white text-[14px] font-bold text-[#B42318]">삭제</button>}<button type="button" onClick={() => setEdit(null)} className="h-12 px-5 rounded-xl border border-[#DCE3EE] bg-white text-[14px] font-bold text-[#3A4A66]">취소</button><button type="button" onClick={save} className="flex-1 h-12 rounded-xl bg-[#0F1A30] text-white text-[15px] font-black">저장</button></>}>
           <div><Label>분류</Label><div className="flex flex-wrap gap-1.5">{RULE_CATS.map((c) => <Chip key={c} on={edit.category === c} onClick={() => setEdit((p) => ({ ...p, category: c, title: p.title || c, body: p.body || fillCompany(RULE_TEMPLATES[c], company) || "" }))}>{c}</Chip>)}</div></div>
           <div className="grid grid-cols-[1fr_170px] gap-2"><div><Label>제목</Label><input value={edit.title} onChange={(e) => setEdit((p) => ({ ...p, title: e.target.value }))} className={inp} /></div><div><Label>시행일</Label><CustomDatePicker value={edit.effectiveDate} onChange={(e) => setEdit((p) => ({ ...p, effectiveDate: e.target.value }))} className={inp} showIcon /></div></div>
           <div><Label>내용 {RULE_TEMPLATES[edit.category] && !edit.body && <button type="button" onClick={() => setEdit((p) => ({ ...p, body: fillCompany(RULE_TEMPLATES[p.category], company) }))} className="ml-2 text-[12px] font-black text-[#2D4C82]">표준 양식 불러오기</button>}</Label><textarea value={edit.body} onChange={(e) => setEdit((p) => ({ ...p, body: e.target.value }))} rows={22} className="w-full rounded-xl border border-[#DCE3EE] bg-white px-4 py-3 text-[14.5px] leading-[1.85] outline-none focus:border-[#2D4C82]" /></div>

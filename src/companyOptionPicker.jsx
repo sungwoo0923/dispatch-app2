@@ -10,6 +10,7 @@ import React from "react";
 import { createPortal } from "react-dom";
 import { addCompanyDropdownOption, removeCompanyDropdownOption, useCompanyOptionList } from "./companyDropdownOptions";
 import { uiOptionLabel, useUiConfigVersion } from "./uiConfig"; // ⭐ 2026-11-07 화면 편집 — 보이는 이름만 바꾸기(저장값 그대로)
+import { kpConfirm } from "./kpDialog";
 
 const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
 const FONT = "'Pretendard','Noto Sans KR',sans-serif";
@@ -170,7 +171,7 @@ function OptionMenu({ anchor, optKey, cur, meta, ttl, noneLabel, allowNone, allo
   };
   // ⭐ 2026-11-06 🗑 항목 삭제(회사 공용) — 확인 후 회사 목록에서 뺀다 · 이미 저장된 오더 값은 그대로
   const doRemove = async (v) => {
-    if (!window.confirm(`'${v}'을(를) ${ttl} 목록에서 삭제할까요?\n회사의 모든 화면(PC·모바일) 목록에서 빠집니다. 이미 저장된 오더 값은 그대로예요.`)) return;
+    if (!(await kpConfirm(`'${v}'을(를) ${ttl} 목록에서 삭제할까요?\n회사의 모든 화면(PC·모바일) 목록에서 빠집니다. 이미 저장된 오더 값은 그대로예요.`))) return;
     setBusy(true); setErr("");
     try { await removeCompanyDropdownOption(optKey, v, co.company); }
     catch (e) { setErr(String(e?.message || "").includes("permission") ? "삭제 권한이 없습니다" : (e?.message || "삭제하지 못했습니다")); setAdding(true); }

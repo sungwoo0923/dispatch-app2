@@ -53,6 +53,7 @@ export function useRouteEditGuard(role) {
   }, [r0, prof?.isMaster, uid, email, name]);
 }
 import { LiveDriverChip, FleetLiveButton, useFleetLivePublish } from "./liveFleet"; // ⭐ 2026-11-05 배차완료 지입·직영·임대 기사 실시간 관제
+import { kpConfirm } from "./kpDialog";
 const toInt = (v) => parseInt(String(v ?? "").replace(/[^\d-]/g, ""), 10) || 0;
 const normPlate = (s = "") => String(s).replace(/\s+/g, "").toUpperCase();
 const pad = (n) => String(n).padStart(2, "0");
@@ -557,7 +558,7 @@ export function RouteCarrierModal({ company, rows = [], disabled = false, onClos
   const setAll = (on) => persist(base().map((c) => ({ ...c, on })), removedOf(), on ? "모두 보이게 했습니다" : "모두 숨겼습니다");
   const remove = async (name) => {
     const n = countOf.get(carrierKey(name)) || 0;
-    if (!window.confirm(`'${name}'을(를) 목록에서 삭제할까요?${n ? `\n이 업체 고정노선 오더 ${n}건은 프로그램 어디에도 보이지 않고 정산·매출에서도 빠집니다(시트 연동은 그대로).` : ""}\n같은 이름으로 다시 추가하면 되살아납니다.`)) return;
+    if (!(await kpConfirm(`'${name}'을(를) 목록에서 삭제할까요?${n ? `\n이 업체 고정노선 오더 ${n}건은 프로그램 어디에도 보이지 않고 정산·매출에서도 빠집니다(시트 연동은 그대로).` : ""}\n같은 이름으로 다시 추가하면 되살아납니다.`))) return;
     persist(base().filter((c) => c.name !== name), [...removedOf(), name], `'${name}' 삭제했습니다`);
   };
   const add = async () => {
@@ -652,7 +653,7 @@ function ForeignOrdersCard({ list, disabled }) {
   const [busy, setBusy] = React.useState(false);
   if (!list.length || !isMasterOnly()) return null; // 최고관리자만
   const clean = async () => {
-    if (!window.confirm(`다른 운송사 배차표(구글시트)에서 잘못 들어온 오더 ${list.length}건을 이 회사에서 지울까요?\n원래 운송사의 오더·시트에는 아무 영향이 없습니다.`)) return;
+    if (!(await kpConfirm(`다른 운송사 배차표(구글시트)에서 잘못 들어온 오더 ${list.length}건을 이 회사에서 지울까요?\n원래 운송사의 오더·시트에는 아무 영향이 없습니다.`))) return;
     setBusy(true);
     try {
       // ⭐ 2026-11-05 묶음을 차례로 기다리면 400줄씩 끊겨 사라졌다 — 모두 동시에 커밋 + 삭제 진행 창

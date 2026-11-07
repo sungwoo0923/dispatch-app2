@@ -13,6 +13,7 @@ import { ResponsiveContainer, ComposedChart, BarChart, Bar, Area, Line, XAxis, Y
 import { db } from "./firebase";
 import { PlanMatrix, PLAN_DEFAULTS, PLAN_IDS, planFeatureLines, planIncludes, usePlan, usePublicPricing } from "./plans";
 import { kstToday, monthEnd, monthStart, useLoadOrderRange } from "./orderHistory";
+import { kpConfirm, kpPrompt } from "./kpDialog";
 
 const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
 const num = (v) => Number(String(v ?? 0).replace(/[^\d.-]/g, "")) || 0;
@@ -166,7 +167,7 @@ export default function BillingCenter({ userEmail = "", userName = "", canEdit =
 
   const request = async (p) => {
     if (!canEdit) return;
-    if (!window.confirm(`${p.name} 요금제(월 ${won(p.price)}원)로 변경을 요청할까요?\n확인 후 담당자가 적용해 드립니다.`)) return;
+    if (!(await kpConfirm(`${p.name} 요금제(월 ${won(p.price)}원)로 변경을 요청할까요?\n확인 후 담당자가 적용해 드립니다.`))) return;
     try {
       await addDoc(collection(db, "planRequests"), { company, from: planId || "", to: p.id, toName: p.name, feature: "", by: userEmail, byName: userName, status: "요청", createdAt: serverTimestamp() });
       setMsg(`${p.name} 요금제로 변경을 요청했습니다. 확인 후 바로 적용해 드립니다.`);
@@ -174,7 +175,7 @@ export default function BillingCenter({ userEmail = "", userName = "", canEdit =
   };
   const notifyPaid = async (v) => {
     if (!canEdit) return;
-    const name = window.prompt("입금자명을 입력해 주세요", company);
+    const name = (await kpPrompt("입금자명을 입력해 주세요", company));
     if (name == null) return;
     const d = new Date();
     try {

@@ -17,6 +17,7 @@ import { isHubDriverEmail, normPlate, phoneDigits, plateValid, phoneValid } from
 import HubOrderDetail from "./HubOrderDetail";
 import HubOrderCard from "./HubOrderCard";
 import { WalletSummary, wonFull } from "./HubWallet";
+import { kpConfirm } from "../../../src/kpDialog";
 
 const ST = { pending: "승인 대기", approved: "승인", rejected: "거절", suspended: "정지" };
 const money = (v) => { const d = String(v).replace(/[^\d-]/g, "").slice(0, 11); return d && d !== "-" ? Number(d).toLocaleString() : d; };
@@ -86,7 +87,7 @@ export function MemberReview({ m, admin, onClose, toast }) {
   const [dev, setDev] = useState(null);
   useEffect(() => (m.role === "driver" && m.source === "signup" ? subscribeDevice(m.id, (d) => setDev(d || null)) : undefined), [m.id, m.role, m.source]);
   const resetDevice = async () => {
-    if (!window.confirm("등록 휴대폰을 지울까요? 그 휴대폰은 로그아웃되고, 다음 로그인 때 문자 인증을 해요.")) return;
+    if (!(await kpConfirm("등록 휴대폰을 지울까요?\n그 휴대폰은 로그아웃되고, 다음 로그인 때 문자 인증을 해요.", { title: "등록 휴대폰 지우기", okText: "지우기", danger: true }))) return;
     setBusy("dev");
     try { await callHub("hubAdminResetDevice", { uid: m.id }); toast?.("등록 휴대폰을 지웠어요"); }
     catch (e) { toast?.(e?.message || "지우지 못했어요"); } finally { setBusy(""); }

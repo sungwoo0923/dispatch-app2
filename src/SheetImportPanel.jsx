@@ -15,6 +15,7 @@ import {
 } from "firebase/firestore";
 import { CustomSelect } from "./CustomSelect";
 import SheetPlaceDriverImport from "./SheetPlaceDriverImport"; // ⭐ 2026-11-02 상하차지·기사 가져오기
+import { kpConfirm } from "./kpDialog";
 
 const SERVICE_EMAIL = "dispatch-app-9b92f@appspot.gserviceaccount.com";
 const ORDER_COLL = "orders";
@@ -284,7 +285,7 @@ export default function SheetImportPanel() {
   // 3) 저장
   const runImport = async () => {
     if (!toImport.length) return;
-    if (!window.confirm(`${company}에 오더 ${toImport.length.toLocaleString()}건을 가져올까요?\n(알림은 보내지 않으며, 나중에 [가져오기 취소]로 한 번에 지울 수 있습니다)`)) return;
+    if (!(await kpConfirm(`${company}에 오더 ${toImport.length.toLocaleString()}건을 가져올까요?\n(알림은 보내지 않으며, 나중에 [가져오기 취소]로 한 번에 지울 수 있습니다)`))) return;
     const batchId = `imp_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
     const me = auth.currentUser?.email || "";
     setProgress({ pct: 1, step: "준비 중" });
@@ -365,7 +366,7 @@ export default function SheetImportPanel() {
     } catch (e) { alert(e.message); } finally { setBusy(""); }
   };
   const cancelBatch = async (b) => {
-    if (!window.confirm(`${fmtTime(b.at)}에 가져온 ${b.companyName} 오더 ${(b.count || 0).toLocaleString()}건(자동 등록된 거래처·상하차지·기사 포함)을 모두 지울까요?`)) return;
+    if (!(await kpConfirm(`${fmtTime(b.at)}에 가져온 ${b.companyName} 오더 ${(b.count || 0).toLocaleString()}건(자동 등록된 거래처·상하차지·기사 포함)을 모두 지울까요?`))) return;
     setBusy(`cancel_${b.id}`);
     try { const r = await callApi("sheetImport", { action: "cancel", batchId: b.id }); alert(`${r.removed.toLocaleString()}건을 지웠습니다.`); } catch (e) { alert(e.message); } finally { setBusy(""); }
   };

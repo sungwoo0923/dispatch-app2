@@ -18,6 +18,7 @@ import {
 import { DEFAULT_DROPDOWN_OPTIONS } from "./companyDropdownOptions";
 import { VT_DEFAULTS } from "./vehicleTypes";
 import { BANK_NAMES } from "./bankUtil";
+import { kpConfirm } from "./kpDialog";
 
 const C = { navy: "#0F1A30", navy2: "#1B2B4B", blue: "#2D4C82", line: "#DCE3EE", soft: "#F5F7FB", mute: "#8A97AD", red: "#B42318" };
 const TABS = [["text", "문구"], ["style", "모양"], ["show", "보이기"], ["img", "이미지"], ["menu", "메뉴"], ["list", "목록"], ["theme", "테마"]];
@@ -617,7 +618,7 @@ export default function UiEditorPanel({ sel, onSelect, onRetarget, onClose, say,
   const dirty = hasDraftChanges();
   const nDirty = dirty ? changeRows().filter((r) => r.dirty).length + (getPublished().theme && !getEffective().theme ? 1 : 0) + Object.keys(getPublished().els).filter((id) => !getEffective().els[id]).length : 0;
   const save = async () => {
-    if (draftConflict() && !window.confirm("다른 곳에서 먼저 저장했어요. 지금 내용으로 덮어쓸까요?")) return;
+    if (draftConflict() && !(await kpConfirm("다른 곳에서 먼저 저장했어요. 지금 내용으로 덮어쓸까요?"))) return;
     setBusy(true);
     try { const r = await publishDraft(); beginDraft(); say(`저장했어요 · 모두에게 적용돼요(${r.n}개)`); } catch (e) { say("저장하지 못했어요: " + (e?.message || e)); } finally { setBusy(false); }
   };
@@ -639,7 +640,7 @@ export default function UiEditorPanel({ sel, onSelect, onRetarget, onClose, say,
           <button type="button" disabled={!canUndo()} onClick={undo} title="되돌리기(Ctrl+Z)" className="h-7 px-2 rounded-lg bg-white/10 hover:bg-white/20 text-[11.5px] font-bold disabled:opacity-30" data-kp="undo">↶ 되돌리기</button>
           <button type="button" disabled={!canRedo()} onClick={redo} title="다시 하기(Ctrl+Shift+Z)" className="h-7 px-2 rounded-lg bg-white/10 hover:bg-white/20 text-[11.5px] font-bold disabled:opacity-30" data-kp="redo">↷ 다시</button>
           {VIEWS.map(([k, l]) => <button key={k} type="button" onClick={() => setView(view === k ? "tabs" : k)} className={`h-7 px-2 rounded-lg text-[11.5px] font-bold ${view === k ? "bg-white text-[#0F1A30]" : "bg-white/10 hover:bg-white/20"}`} data-kp={`view-${k}`}>{l}</button>)}
-          <button type="button" onClick={() => { if (window.confirm("이 창에서 화면 편집 내용을 모두 끄고 원래 화면으로 볼까요? 다시 켜기 전까지 유지돼요")) setUiBypass(true); }} className="h-7 px-2 rounded-lg bg-[#B42318]/80 hover:bg-[#B42318] text-[11.5px] font-bold" data-kp="bypass">모두 끄기</button>
+          <button type="button" onClick={async () => { if ((await kpConfirm("이 창에서 화면 편집 내용을 모두 끄고 원래 화면으로 볼까요? 다시 켜기 전까지 유지돼요"))) setUiBypass(true); }} className="h-7 px-2 rounded-lg bg-[#B42318]/80 hover:bg-[#B42318] text-[11.5px] font-bold" data-kp="bypass">모두 끄기</button>
         </div>
         {pv && <div className="mt-2 text-[11.5px] font-bold text-[#FFE7A3]">미리보기 중 · {[pv.role && ROLE_GROUPS.find(([k]) => k === pv.role)?.[1], pv.dev && (pv.dev === "m" ? "모바일" : "PC")].filter(Boolean).join(" · ")}</div>}
       </div>
@@ -696,7 +697,7 @@ export default function UiEditorPanel({ sel, onSelect, onRetarget, onClose, say,
 
       <div className="px-3 py-2.5 border-t border-[#E9EDF4] flex items-center gap-2 bg-[#FAFBFD]" style={{ paddingBottom: isPhone ? "max(env(safe-area-inset-bottom,0px),10px)" : undefined }}>
         <div className="flex-1 min-w-0 text-[12px] font-bold text-[#3A4A66] truncate" data-kp="dirty-count">{dirty ? `저장 안 한 변경 ${Math.max(1, nDirty)}개` : "모두 저장됐어요"}{draftConflict() && <span className="text-[#B42318]"> · 다른 곳에서 저장됨</span>}</div>
-        <button type="button" disabled={!dirty || busy} onClick={() => { if (window.confirm("저장하지 않은 변경을 모두 버릴까요?")) { discardDraft(); beginDraft(); say("변경을 버렸어요"); } }} className={btn} data-kp="discard">버리기</button>
+        <button type="button" disabled={!dirty || busy} onClick={async () => { if ((await kpConfirm("저장하지 않은 변경을 모두 버릴까요?"))) { discardDraft(); beginDraft(); say("변경을 버렸어요"); } }} className={btn} data-kp="discard">버리기</button>
         <button type="button" disabled={!dirty || busy} onClick={save} className="h-9 px-4 rounded-xl bg-[#1B2B4B] text-white text-[13px] font-black disabled:opacity-40" data-kp="publish">{busy ? "저장 중…" : "저장"}</button>
       </div>
     </div>

@@ -8,6 +8,7 @@ import React from "react";
 import { auth, db, FUNCTIONS_BASE } from "./firebase";
 import { collection, query, where, onSnapshot } from "firebase/firestore";
 import CustomDatePicker from "./CustomDatePicker"; // 📅 2026-11-07 날짜는 프로그램 달력으로
+import { kpConfirm } from "./kpDialog";
 
 const SERVICE_EMAIL = "dispatch-app-9b92f@appspot.gserviceaccount.com";
 
@@ -118,7 +119,7 @@ export default function GsheetMinePanel() {
                 {busy === "enable" ? "처리 중…" : "지금부터 모으기 켜기"}
               </button>
             ) : (
-              <button onClick={() => { if (window.confirm("모으기를 끌까요?\n이미 전송된 오더는 계속 수정·삭제가 시트에 반영되고, 아직 전송 안 한 대기 오더는 그대로 남습니다.")) run("disable"); }} disabled={!!busy}
+              <button onClick={async () => { if ((await kpConfirm("모으기를 끌까요?\n이미 전송된 오더는 계속 수정·삭제가 시트에 반영되고, 아직 전송 안 한 대기 오더는 그대로 남습니다."))) run("disable"); }} disabled={!!busy}
                 className="flex-1 h-12 rounded-2xl border border-[#E3E8F0] text-[#0F1A30] text-[15px] font-black disabled:opacity-50">
                 {busy === "disable" ? "처리 중…" : "모으기 끄기"}
               </button>
@@ -136,7 +137,7 @@ export default function GsheetMinePanel() {
             <div className="text-[18px] font-black text-[#0F1A30]">전송 대기 <span className="tabular-nums">{pending.length}</span>건 <span className="text-[13px] font-bold text-[#7A879C]">· 전송 완료 {sentCount}건</span></div>
           </div>
           <button
-            onClick={() => { if (window.confirm(`대기 중인 오더 ${pending.length}건을 구글시트로 보낼까요?\n(각 날짜 칸 맨 위에 들어가고 그날 순번이 다시 매겨집니다)`)) run("send"); }}
+            onClick={async () => { if ((await kpConfirm(`대기 중인 오더 ${pending.length}건을 구글시트로 보낼까요?\n(각 날짜 칸 맨 위에 들어가고 그날 순번이 다시 매겨집니다)`))) run("send"); }}
             disabled={!!busy || pending.length === 0}
             className="h-12 px-6 w-full sm:w-auto rounded-2xl bg-[#0F1A30] text-white text-[15px] font-black disabled:opacity-40 shadow-[0_8px_18px_rgba(15,26,48,0.25)]">
             {busy === "send" ? "전송 중…" : `구글시트로 전송 (${pending.length}건)`}
@@ -193,7 +194,7 @@ export default function GsheetMinePanel() {
               <CustomDatePicker showIcon value={rsTo} min={rsFrom || undefined} onChange={(e) => setRsTo(e.target.value)}
                 className="h-10 px-3 rounded-xl border border-[#DCE3EE] text-[14px] font-semibold text-[#0F1A30] outline-none focus:border-[#4B6CB7]" />
               <button
-                onClick={() => { if (window.confirm(`${rsFrom}${rsTo && rsTo !== rsFrom ? ` ~ ${rsTo}` : ""} 내 오더를 시트에 다시 보낼까요?\n시트에서 직접 고친 내용은 프로그램 내용으로 덮어써집니다.`)) run("resend"); }}
+                onClick={async () => { if ((await kpConfirm(`${rsFrom}${rsTo && rsTo !== rsFrom ? ` ~ ${rsTo}` : ""} 내 오더를 시트에 다시 보낼까요?\n시트에서 직접 고친 내용은 프로그램 내용으로 덮어써집니다.`))) run("resend"); }}
                 disabled={!!busy || !rsFrom}
                 className="h-10 px-5 rounded-xl bg-[#0F1A30] text-white text-[14px] font-black disabled:opacity-50">
                 {busy === "resend" ? "재전송 중…" : "재전송"}
@@ -201,7 +202,7 @@ export default function GsheetMinePanel() {
             </div>
           </div>
           <button
-            onClick={() => { if (window.confirm("시트 정리를 할까요?\n이번 달·지난달 탭에서, 프로그램에서 이미 지운 오더의 줄만 찾아 지웁니다.\n(직접 적은 줄은 건드리지 않습니다)")) run("cleanup"); }}
+            onClick={async () => { if ((await kpConfirm("시트 정리를 할까요?\n이번 달·지난달 탭에서, 프로그램에서 이미 지운 오더의 줄만 찾아 지웁니다.\n(직접 적은 줄은 건드리지 않습니다)"))) run("cleanup"); }}
             disabled={!!busy}
             className="mt-4 h-11 px-5 w-full sm:w-auto rounded-xl border border-[#E3E8F0] text-[#0F1A30] text-[14px] font-black disabled:opacity-50">
             {busy === "cleanup" ? "정리 중…" : "시트 정리 (지운 오더 줄 삭제)"}

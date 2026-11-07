@@ -15,6 +15,7 @@ import { doc as fsDoc } from "firebase/firestore";
 import {
   SESSIONS_COLL, KIND_LABEL, END_REASON_LABEL, getMySessionId, endSessions, sessionLastMs, timeAgo, getDeviceLabel, isTotalMasterRole,
 } from "./loginSessions";
+import { kpConfirm } from "./kpDialog";
 
 const tsMs = (t) => (t?.toMillis ? t.toMillis() : t?.seconds ? t.seconds * 1000 : 0);
 const fmt = (ms) => (ms ? new Date(ms).toLocaleString("ko-KR", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "-");
@@ -131,7 +132,7 @@ export default function LoginManager({ user }) {
 
   const kick = async (ids) => {
     if (!ids.length) return;
-    if (!window.confirm(ids.length > 1 ? `다른 기기 ${ids.length}대를 모두 로그아웃할까요?` : "이 기기의 로그인을 끊을까요?")) return;
+    if (!(await kpConfirm(ids.length > 1 ? `다른 기기 ${ids.length}대를 모두 로그아웃할까요?` : "이 기기의 로그인을 끊을까요?"))) return;
     setBusyId(ids.length > 1 ? "all" : ids[0]);
     try { await endSessions(ids, "kicked", getDeviceLabel()); } catch (e) { alert(`연결 끊기 실패: ${e?.message || e}`); } finally { setBusyId(null); }
   };
@@ -254,7 +255,7 @@ export function AdminSessionsPanel({ isTotalMaster, company, roleLabels = {} }) 
   const isMasterSession = (s) => isTotalMasterRole(s.role, s.email);
   const kick = async (s) => {
     if (isMasterSession(s) && !isTotalMaster) return;
-    if (!window.confirm(`${s.name || s.email}님의 ${KIND_LABEL[s.kind]}(${s.device}) 로그인을 끊을까요?`)) return;
+    if (!(await kpConfirm(`${s.name || s.email}님의 ${KIND_LABEL[s.kind]}(${s.device}) 로그인을 끊을까요?`))) return;
     setBusy(s.id);
     try { await endSessions([s.id], "admin", auth.currentUser?.email || ""); } catch (e) { alert(`실패: ${e?.message || e}`); } finally { setBusy(null); }
   };

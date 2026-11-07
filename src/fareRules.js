@@ -14,6 +14,7 @@ import { doc, onSnapshot, setDoc, serverTimestamp, arrayUnion } from "firebase/f
 import { db, auth } from "./firebase";
 import { getTenant } from "./fsTenant";
 import { useCompanyFeatures } from "./companyFeatures";
+import { kpConfirm } from "./kpDialog";
 
 const resolveCompany = (company) => {
   const c = String(company || "").trim();
@@ -268,7 +269,7 @@ export function FareTypeSelect({ value, onChange, rules = [], className = "", di
     } finally { setAddBusy(false); }
   };
   const delRule = async (o) => {
-    if (!window.confirm(`운임구분 '${o.name}'을(를) 삭제할까요?\n회사관리 › 운임 규칙에서도 빠집니다(회사 공용). 이미 저장된 오더 값은 그대로예요.`)) return;
+    if (!(await kpConfirm(`운임구분 '${o.name}'을(를) 삭제할까요?\n회사관리 › 운임 규칙에서도 빠집니다(회사 공용). 이미 저장된 오더 값은 그대로예요.`))) return;
     try { await removeFareRuleQuick(company, o); if (String(value || "") === String(o.name)) onChange?.(""); }
     catch (e) { setAdding(true); setAddErr(e?.code === "permission-denied" ? "삭제 권한이 없습니다" : (e?.message || "삭제하지 못했습니다")); }
   };

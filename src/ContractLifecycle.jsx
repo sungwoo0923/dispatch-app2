@@ -12,6 +12,7 @@ import { CONTRACT_TERMS, addMonthsYmd, contractStateOf, kstToday } from "./compa
 import { DangerConfirm, ResetProgressModal, newJobId, callReset } from "./CompanyResetPanel";
 import { ROLE_LABELS } from "./customRoles";
 import CustomDatePicker from "./CustomDatePicker"; // 📅 2026-11-07 날짜는 프로그램 달력으로
+import { kpConfirm } from "./kpDialog";
 
 const SUPER_EMAIL = "tjddnqkf@naver.com";
 const CARD = "bg-white rounded-[18px] border border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_10px_26px_rgba(16,24,40,0.05)] min-w-0";
@@ -238,7 +239,7 @@ export function ContractLifecyclePanel({ openCompany }) {
 
           <section className={CARD}>
             <Head code="NOTICE" title="만료 안내" desc="매일 오전 9시 12분(한국 시간) 서버가 30·7·1일 전 회사에 알림(대표·임원·경리·마스터)과 메일을 보냅니다. 같은 안내는 한 번만."
-              right={<div className="flex gap-1.5 shrink-0"><button type="button" onClick={() => runNotice(true)} className="h-9 px-3 rounded-lg border border-[#DCE3EE] text-[14px] font-bold text-[#1B2B4B]">미리 확인</button><button type="button" onClick={() => window.confirm("지금 보낼 차례인 안내를 바로 보낼까요?") && runNotice(false)} className="h-9 px-3 rounded-lg bg-[#1B2B4B] text-white text-[14px] font-bold">지금 보내기</button></div>} />
+              right={<div className="flex gap-1.5 shrink-0"><button type="button" onClick={() => runNotice(true)} className="h-9 px-3 rounded-lg border border-[#DCE3EE] text-[14px] font-bold text-[#1B2B4B]">미리 확인</button><button type="button" onClick={async () => (await kpConfirm("지금 보낼 차례인 안내를 바로 보낼까요?")) && runNotice(false)} className="h-9 px-3 rounded-lg bg-[#1B2B4B] text-white text-[14px] font-bold">지금 보내기</button></div>} />
             <div className="p-5 space-y-3">
               {upcoming.length === 0 ? <div className="text-[14px] text-[#7A879C]">30일 안에 끝나는 계약이 없습니다.</div> : (
                 <div className="space-y-1.5">{upcoming.slice(0, 8).map((r) => (
@@ -314,7 +315,7 @@ export function SubAdminPanel() {
   const assign = async (u) => {
     if (!isSuper) return alert("부관리자는 최고관리자 본 계정만 지정할 수 있습니다.");
     if (active.length) return alert(`부관리자는 1명만 둘 수 있습니다.\n먼저 「${active[0].name || active[0].email}」님을 해제해 주세요.`);
-    if (!window.confirm(`"${u.name || u.email}"(${u.company})님을 부관리자로 지정할까요?\n최고관리자와 같은 권한(모든 운송사·관리센터·요금·삭제)을 갖습니다.`)) return;
+    if (!(await kpConfirm(`"${u.name || u.email}"(${u.company})님을 부관리자로 지정할까요?\n최고관리자와 같은 권한(모든 운송사·관리센터·요금·삭제)을 갖습니다.`))) return;
     setBusy(u.uid); setMsg("");
     try {
       await setDoc(doc(db, "users", u.uid), { subAdmin: true, subAdminPrevRole: u.role || "admin", role: "totalMaster", approved: true,
@@ -325,7 +326,7 @@ export function SubAdminPanel() {
   const unassign = async (u) => {
     if (!isSuper) return alert("부관리자는 최고관리자 본 계정만 해제할 수 있습니다.");
     const back = u.subAdminPrevRole && u.subAdminPrevRole !== "totalMaster" ? u.subAdminPrevRole : "admin";
-    if (!window.confirm(`"${u.name || u.email}"님의 부관리자를 해제할까요?\n예전 권한(${ROLE_LABELS[back] || back})으로 돌아갑니다.`)) return;
+    if (!(await kpConfirm(`"${u.name || u.email}"님의 부관리자를 해제할까요?\n예전 권한(${ROLE_LABELS[back] || back})으로 돌아갑니다.`))) return;
     setBusy(u.id); setMsg("");
     try {
       await setDoc(doc(db, "users", u.id), { subAdmin: false, role: back,

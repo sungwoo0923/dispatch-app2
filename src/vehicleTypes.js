@@ -11,6 +11,7 @@ import { arrayRemove, arrayUnion, doc, onSnapshot, setDoc } from "firebase/fires
 import { auth, db } from "./firebase";
 import { getTenant } from "./fsTenant";
 import { uiOptionList, uiOptionLabel, useUiConfigVersion } from "./uiConfig"; // ⭐ 2026-11-07 화면 편집 — 차량종류 기본 목록 · 보이는 이름
+import { kpConfirm } from "./kpDialog";
 
 // 프로그램 공통 기본 목록(화면에서 base를 따로 안 주면 이걸 쓴다)
 export const VT_DEFAULTS = ["라보/다마스", "카고", "윙/카고", "윙바디", "리프트", "탑차", "냉장탑", "냉동탑", "냉장윙", "냉동윙", "냉장/냉동탑", "냉장/냉동윙", "오토바이"];
@@ -183,7 +184,7 @@ export function VehicleTypePicker({ value, onChange, base = VT_DEFAULTS, company
     try { await addVehicleType(vt.company, v); pick(v); setNewName(""); } catch (e) { setErr(e?.message?.includes("permission") ? "추가 권한이 없습니다" : (e?.message || "추가하지 못했습니다")); } finally { setBusy(false); }
   };
   const doRemove = async (v) => {
-    if (!window.confirm(`'${v}' 차량종류를 회사 목록에서 삭제할까요?\n회사의 모든 화면(PC·모바일) 목록에서 빠집니다. 이미 저장된 오더·기사 정보는 그대로예요.`)) return;
+    if (!(await kpConfirm(`'${v}' 차량종류를 회사 목록에서 삭제할까요?\n회사의 모든 화면(PC·모바일) 목록에서 빠집니다. 이미 저장된 오더·기사 정보는 그대로예요.`))) return;
     setBusy(true); setErr("");
     try { await removeVehicleType(vt.company, v, base); } catch (e) { setErr(e?.message?.includes("permission") ? "삭제 권한이 없습니다" : (e?.message || "삭제하지 못했습니다")); setAdding(true); } finally { setBusy(false); }
   };
@@ -312,7 +313,7 @@ function VehicleTypeDialog({ company, initial = "", onAdded, onClose }) {
     try { await addVehicleType(vt.company, v); setName(""); onAdded?.(v); onClose(); } catch (e) { setErr(e?.message?.includes("permission") ? "추가 권한이 없습니다" : (e?.message || "추가하지 못했습니다")); } finally { setBusy(false); }
   };
   const del = async (v) => {
-    if (!window.confirm(`"${v}" 차량종류를 회사 목록에서 뺄까요?\n(이미 저장된 오더·기사 정보는 그대로입니다)`)) return;
+    if (!(await kpConfirm(`"${v}" 차량종류를 회사 목록에서 뺄까요?\n(이미 저장된 오더·기사 정보는 그대로입니다)`))) return;
     try { await removeVehicleType(vt.company, v, VT_DEFAULTS); } catch (e) { setErr(e?.message || "삭제하지 못했습니다"); }
   };
   return h("div", {

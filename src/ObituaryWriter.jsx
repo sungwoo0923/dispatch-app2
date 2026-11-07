@@ -9,6 +9,7 @@ import { compressImage, sendInternalMail, useCompanyStaff } from "./InternalMail
 import CustomDatePicker from "./CustomDatePicker";
 import { fmtPhone } from "./formatInput";
 import { CustomSelect } from "./CustomSelect";
+import { kpConfirm } from "./kpDialog";
 
 const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
 const inp = "h-11 w-full px-3 rounded-xl border border-[#DCE3EE] bg-white text-[14px] font-semibold text-[#0F1A30] outline-none focus:border-[#2D4C82]";
@@ -87,9 +88,9 @@ export default function ObituaryWriter({ company, me = {}, onCancel, onSaved, in
   const post = async () => {
     if (!f.deceased.trim()) return alert("고인 성함을 입력해 주세요.");
     if (!f.hall.trim()) return alert("빈소(장례식장)를 입력해 주세요.");
-    if (!window.confirm(editing
+    if (!(await kpConfirm(editing
       ? `「${title}」 부고를 수정할까요?\n같은 공지사항이 고친 내용으로 바뀌고 "수정됨" 표시가 붙습니다.${mail ? "\n전 직원에게 [정정] 사내메일도 보냅니다." : ""}`
-      : `「${title}」 부고를 공지사항에 올릴까요?${mail ? "\n전 직원에게 사내메일도 보냅니다." : ""}`)) return;
+      : `「${title}」 부고를 공지사항에 올릴까요?${mail ? "\n전 직원에게 사내메일도 보냅니다." : ""}`))) return;
     setBusy("부고장 만드는 중…");
     try {
       const canvas = await html2canvas(paperRef.current, { scale: 2, backgroundColor: "#ffffff", useCORS: true });

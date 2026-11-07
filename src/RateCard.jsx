@@ -1604,7 +1604,7 @@ ${sheet.note ? `<div class="notice">${esc(sheet.note)}</div>` : ""}
                   }} className="px-3 py-1.5 text-[12px] text-gray-600 border border-[#DCE3EE] rounded-lg hover:bg-gray-50 transition">선택 삭제 ({historySelected.size})</button>
                 )}
                 {printHistory.length > 0 && (
-                  <button onClick={() => { if(window.confirm("전체 이력을 삭제할까요?")) { localStorage.removeItem("rateCardHistory"); setPrintHistory([]); setHistorySelected(new Set()); }}} className="px-3 py-1.5 text-[12px] text-gray-500 border border-gray-200 rounded-lg hover:bg-gray-50 transition">전체 삭제</button>
+                  <button onClick={async () => { if((await kpConfirm("전체 이력을 삭제할까요?"))) { localStorage.removeItem("rateCardHistory"); setPrintHistory([]); setHistorySelected(new Set()); }}} className="px-3 py-1.5 text-[12px] text-gray-500 border border-gray-200 rounded-lg hover:bg-gray-50 transition">전체 삭제</button>
                 )}
                 <button onClick={() => { setHistoryModal(false); setHistorySelected(new Set()); }} className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 text-gray-500 text-[18px] transition">×</button>
               </div>

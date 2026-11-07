@@ -3185,8 +3185,8 @@ function DriverRouteCard({ driver, orders, selectedDate, rangeEndDate, isSingleD
                             {/* ⭐ 사용자 요청 — 거절 내역을 확인했으면 지울 수 있는 버튼 */}
                             {r.기사확인상태 === "거절" && (
                               <button
-                                onClick={() => {
-                                  if (!window.confirm("거절 내역을 삭제할까요?")) return;
+                                onClick={async () => {
+                                  if (!(await kpConfirm("거절 내역을 삭제할까요?"))) return;
                                   updateDoc(doc(db, "orders", r._id), {
                                     기사확인상태: null, 기사거절사유: null, 기사확인일시: null,
                                   }).catch(() => {});

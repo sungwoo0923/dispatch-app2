@@ -28,6 +28,7 @@ import { runDelete } from "../DeleteProgress"; // ⭐ 2026-11-05 삭제 진행 �
 import "../kpNavyTheme.css";
 import MobileSelect from "./MobileSelect"; // ⭐ 2026-11-02 기본 select → 남색 바텀시트 선택기
 import { LogisWordmark, LogisTag } from "../brand"; // 🔷 2026-11-04 LogisWeb 로고
+import { kpConfirm } from "../kpDialog";
 
 // ======================================================================
 // 유틸
@@ -315,13 +316,13 @@ async function shipperDeleteOrRequestCancel(order, user) {
       alert("이미 배차취소를 요청했습니다.\n운송사의 승인을 기다리고 있습니다.");
       return false;
     }
-    if (!window.confirm("이미 배차완료된 오더입니다.\n배차취소를 요청하시겠습니까?\n(운송사 승인 후 삭제됩니다)")) return false;
+    if (!(await kpConfirm("이미 배차완료된 오더입니다.\n배차취소를 요청하시겠습니까?\n(운송사 승인 후 삭제됩니다)"))) return false;
     const patch = { 취소요청: true, 취소요청일시: serverTimestamp(), 취소요청자: user?.email || "" };
     await updateDoc(doc(db, "orders", order.id), patch);
     await propagateToOrigin(order, patch);
     return true;
   }
-  if (!window.confirm("이 오더를 삭제하시겠습니까?\n삭제 후 복구가 불가능합니다.")) return false;
+  if (!(await kpConfirm("이 오더를 삭제하시겠습니까?\n삭제 후 복구가 불가능합니다."))) return false;
   await runDelete({ label: "오더", task: () => deleteOrderWithLog("orders", order.id) }); // ⭐ 2026-11-05 삭제 진행 창
   await propagateDeleteToOrigin(order);
   return true;
@@ -334,7 +335,7 @@ async function shipperRequestDriverSwap(order, user) {
     alert("이미 기사변경을 요청했습니다.\n운송사의 승인을 기다리고 있습니다.");
     return false;
   }
-  if (!window.confirm(`배정된 기사(${order.이름 || order.차량번호 || "-"})를 취소하고 다시 배차해달라고 요청하시겠습니까?`)) return false;
+  if (!(await kpConfirm(`배정된 기사(${order.이름 || order.차량번호 || "-"})를 취소하고 다시 배차해달라고 요청하시겠습니까?`))) return false;
   await updateDoc(doc(db, "orders", order.id), {
     기사취소요청: true, 기사취소요청일시: serverTimestamp(), 기사취소요청자: user?.email || "",
   });
@@ -389,7 +390,7 @@ function RequestHoldActions({ order, onDeleted }) {
   const removeOrder = async (e) => {
     e?.stopPropagation();
     if (busy) return;
-    if (!window.confirm("이 오더를 삭제하시겠습니까?\n삭제 후 복구가 불가능합니다.")) return;
+    if (!(await kpConfirm("이 오더를 삭제하시겠습니까?\n삭제 후 복구가 불가능합니다."))) return;
     setBusy(true);
     try {
       await runDelete({ label: "오더", task: () => deleteOrderWithLog("orders", order.id) }); // ⭐ 2026-11-05 삭제 진행 창
@@ -680,7 +681,7 @@ export default function ShipperMobileApp() {
   }), [orders]);
 
   const logout = async () => {
-    if (!window.confirm("로그아웃 하시겠습니까?")) return;
+    if (!(await kpConfirm("로그아웃 하시겠습니까?"))) return;
     await signOut(auth);
     window.location.replace("/shipper-login");
   };

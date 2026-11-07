@@ -10,6 +10,7 @@ import { savePdf } from "./a4Export";
 import { ShellIcon } from "./AdminShell";
 import { HandoverWriter, handoverReceivers } from "./HomeWriters";
 import { useUserNames } from "./userNames";
+import { kpConfirm } from "./kpDialog";
 
 const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
 const HERO_BG = "linear-gradient(rgba(143,176,240,.07) 1px, transparent 1px) 0 0/22px 22px, linear-gradient(90deg, rgba(143,176,240,.07) 1px, transparent 1px) 0 0/22px 22px, linear-gradient(120deg,#0B1428 0%,#1B2B4B 60%,#2D4C82 100%)";
@@ -75,7 +76,7 @@ export default function HandoverCenter({ company, me, isViewer = false }) {
     return () => window.removeEventListener("kp-open-handover", take);
   }, [list, uid]); // eslint-disable-line react-hooks/exhaustive-deps
   const remove = async (h) => {
-    if (!window.confirm("인수인계를 삭제하시겠습니까?")) return;
+    if (!(await kpConfirm("인수인계를 삭제하시겠습니까?"))) return;
     await runDelete({ label: "인수인계", task: () => deleteDoc(doc(db, "handovers", h.id)) }).catch((e) => window.alert(e.message)); // ⭐ 2026-11-05 삭제 진행 창
     setOpen(null);
   };

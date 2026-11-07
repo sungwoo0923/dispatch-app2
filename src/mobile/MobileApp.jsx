@@ -140,6 +140,7 @@ import AiAssistant from "../AiAssistant"; // 🤖 2026-11-07 AI 비서
 import { LiveDriverChip, FleetLiveButton, useFleetLivePublish } from "../liveFleet"; // ⭐ 2026-11-05 배차완료 지입·직영·임대 기사 실시간 관제
 import { useUiScreen, uiMenuItem, useUiConfigVersion } from "../uiConfig"; // ⭐ 2026-11-07 화면 편집 모드 — 메뉴 이름·순서·숨기기(권한은 그대로)
 import MyInfoTabs from "../MyInfoTabs"; // ⭐ 2026-11-07 내정보 안 탭(급여명세서 · 연차 사용 계획)
+import { kpConfirm } from "../kpDialog";
 
 
 
@@ -5122,7 +5123,7 @@ const deleteSingleOrder = async (order) => {
   // ⭐ 버그수정 — 지입 기사에게 배차된 오더는 한 번 더 확인받는다
   // (목록 화면의 "취소하기" 경로에는 이 확인이 빠져 있었다).
   const fleetMsg = fleetDeleteConfirmMsgMobile(order);
-  if (fleetMsg && !window.confirm(fleetMsg)) return;
+  if (fleetMsg && !(await kpConfirm(fleetMsg))) return;
   const col = order.__col || collName;
   const id = order.id || order._id;
   if (!col || !id) return;
@@ -5300,7 +5301,7 @@ const deleteSingleOrder = async (order) => {
     // ⭐ 사용자 요청 — 이미 "운송완료"된 오더에서 기사를 취소하려는 경우, 완료된
     // 운행 기록이 사라진다는 걸 한번 더 확인받는다(그 외 상태는 기존과 동일).
     if (selectedOrder.기사확인상태 === "완료") {
-      if (!window.confirm("운송이 완료된 오더입니다. 기사를 취소하시겠습니까?")) return;
+      if (!(await kpConfirm("운송이 완료된 오더입니다. 기사를 취소하시겠습니까?"))) return;
       archiveCompletedOrderMobile(selectedOrder, selectedOrder.id || selectedOrder._id, "기사취소");
     } else if (selectedOrder.기사확인상태 === "수락") {
       // 기사님이 수락한 뒤 기사만 빠짐 → 기사 운행기록에 "배차취소"
@@ -5357,7 +5358,7 @@ const deleteSingleOrder = async (order) => {
     // ⭐ 이미 "운송완료"된 오더는 한 번 더 확인받는다. 삭제된 오더는 기사 운행일지에서도
     // 빠져야 하므로(사용자 요청) 운행일지용 스냅샷은 남기지 않는다.
     const fleetMsgD = fleetDeleteConfirmMsgMobile(deleteConfirmMobile);
-    if (fleetMsgD && !window.confirm(fleetMsgD)) return;
+    if (fleetMsgD && !(await kpConfirm(fleetMsgD))) return;
     notifyFleetCancelMobile(deleteConfirmMobile, deleteConfirmMobile.id);
     // 기사님이 수락(또는 완료)한 오더가 삭제되면 기사 운행기록에 "오더취소"
     if (["수락", "완료"].includes(deleteConfirmMobile.기사확인상태) && deleteConfirmMobile.차량번호) {
@@ -5389,11 +5390,11 @@ const deleteSingleOrder = async (order) => {
       alert("화주사가 등록한 오더는 운송사에서 임의로 삭제할 수 없습니다. 화주사가 배차취소를 요청한 건만 승인 후 삭제할 수 있습니다.");
       return;
     }
-    if (!window.confirm(`선택한 ${selectedOrders.length}개 오더를 삭제하시겠습니까?\n삭제하면 모든 화면에서 사라집니다.`)) return;
+    if (!(await kpConfirm(`선택한 ${selectedOrders.length}개 오더를 삭제하시겠습니까?\n삭제하면 모든 화면에서 사라집니다.`))) return;
     const completedCount = selectedOrders.filter(o => o.기사확인상태 === "완료").length;
-    if (completedCount > 0 && !window.confirm(`운송이 완료된 오더가 ${completedCount}건 포함되어 있습니다. 오더를 삭제하시겠습니까?`)) return;
+    if (completedCount > 0 && !(await kpConfirm(`운송이 완료된 오더가 ${completedCount}건 포함되어 있습니다. 오더를 삭제하시겠습니까?`))) return;
     const fleetCount = selectedOrders.filter(o => o.기사확인상태 === "대기" || o.기사확인상태 === "수락").length;
-    if (fleetCount > 0 && !window.confirm(`지입 기사에게 배차된 오더가 ${fleetCount}건 포함되어 있습니다.\n삭제하면 기사앱에서도 오더가 사라집니다. 삭제하시겠습니까?`)) return;
+    if (fleetCount > 0 && !(await kpConfirm(`지입 기사에게 배차된 오더가 ${fleetCount}건 포함되어 있습니다.\n삭제하면 기사앱에서도 오더가 사라집니다. 삭제하시겠습니까?`))) return;
     try {
       // ⭐ 2026-11-05 한 건씩 보내던 삭제를 한 번에(writeBatch) + 삭제 진행 창 — 목록이 한 줄씩 사라지지 않게
       const _targets = [];
@@ -7955,7 +7956,7 @@ function MobileSideMenu({
   };
 
   const logout = async () => {
-    if (!window.confirm("로그아웃 하시겠습니까?")) return;
+    if (!(await kpConfirm("로그아웃 하시겠습니까?"))) return;
     // ⭐ 2026-11-02 로그아웃 지연 방지 — 알림 해제는 최대 1.2초만 기다린다(통신이 느려도 바로 로그아웃)
     await Promise.race([clearFcmToken(auth.currentUser?.uid).catch(() => {}), new Promise((r) => setTimeout(r, 1200))]);
     try {
@@ -11183,7 +11184,7 @@ const MobileOrderCard = React.memo(function MobileOrderCard({
     setShowRequestModal(true);
   };
   const approveCancelDelete = async () => {
-    if (!window.confirm("화주사가 배차취소를 요청했습니다.\n승인하고 취소 처리하시겠습니까?")) return;
+    if (!(await kpConfirm("화주사가 배차취소를 요청했습니다.\n승인하고 취소 처리하시겠습니까?"))) return;
     try {
       // 연동 화주사에게 전송된 사본이 있으면(운송사가 등록/전송한 오더), 취소 상태를
       // 화주사의 "배차취소" 목록에도 남긴다.
@@ -12411,7 +12412,7 @@ function MobileOrderDetail({
   const activeRequestType = isCancelRequested ? "cancel" : isSwapRequested ? "swap" : isEditRequested ? "edit" : null;
   const [showRequestModal, setShowRequestModal] = useState(false);
   const approveCancelDelete = async () => {
-    if (!window.confirm("화주사가 배차취소를 요청했습니다.\n승인하고 취소 처리하시겠습니까?")) return;
+    if (!(await kpConfirm("화주사가 배차취소를 요청했습니다.\n승인하고 취소 처리하시겠습니까?"))) return;
     try {
       // 연동 화주사에게 전송된 사본이 있으면(운송사가 등록/전송한 오더), 취소 상태를
       // 화주사의 "배차취소" 목록에도 남긴다.
@@ -15865,6 +15866,7 @@ const pickDrop = (c) => {
         <div className="relative">
           <input autoComplete="off"
             ref={pickupNameInputRef}
+            placeholder="상차지명 검색"
             className={`w-full border-0 border-b-2 rounded-none px-1 py-1.5 text-[13px] font-semibold text-gray-900 bg-transparent focus:outline-none transition ${
               requiredErrors.has("상차지명") ? "border-red-500 ring-2 ring-red-300 animate-pulse" : "border-gray-300 focus:border-[var(--reg-accent)]"
             }`}
@@ -16035,6 +16037,7 @@ const pickDrop = (c) => {
         <div className="relative">
           <input autoComplete="off"
             ref={dropNameInputRef}
+            placeholder="하차지명 검색"
             className={`w-full border-0 border-b-2 rounded-none px-1 py-1.5 text-[13px] font-semibold text-gray-900 bg-transparent focus:outline-none transition ${
               requiredErrors.has("하차지명") ? "border-red-500 ring-2 ring-red-300 animate-pulse" : "border-gray-300 focus:border-[var(--reg-accent)]"
             }`}
@@ -22689,7 +22692,7 @@ function MobileSettingsPage({ onBack, cardVersionB, setCardVersionB, alarmEnable
   const [pushResult, setPushResult] = useState("");
   const sendBroadcastPush = async () => {
     if (!pushTitle.trim() && !pushBody.trim()) { alert("제목 또는 내용을 입력해주세요."); return; }
-    if (!window.confirm("앱을 설치한 모든 사람에게 푸시 알림을 보냅니다. 계속할까요?")) return;
+    if (!(await kpConfirm("앱을 설치한 모든 사람에게 푸시 알림을 보냅니다. 계속할까요?"))) return;
     setPushSending(true);
     setPushResult("");
     try {

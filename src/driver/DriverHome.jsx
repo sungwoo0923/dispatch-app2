@@ -2162,7 +2162,7 @@ export default function DriverHome() {
               <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
                 {notifications.length > 0 && (
                   <button
-                    onClick={() => { if (window.confirm("알림을 전체 삭제할까요?")) deleteAllNotifications(); }}
+                    onClick={async () => { if ((await kpConfirm("알림을 전체 삭제할까요?"))) deleteAllNotifications(); }}
                     style={{ border: "none", background: "transparent", fontSize: 12, fontWeight: 700, color: "#9AA9C3", cursor: "pointer" }}
                   >
                     전체삭제
@@ -3608,8 +3608,8 @@ export default function DriverHome() {
                 </label>
                 {/* 건너뛰기 (경고 포함) */}
                 <button
-                  onClick={() => {
-                    if (window.confirm("사진을 업로드하지 않으면 기록이 남지 않습니다.\n정말 건너뛰시겠습니까?")) {
+                  onClick={async () => {
+                    if ((await kpConfirm("사진을 업로드하지 않으면 기록이 남지 않습니다.\n정말 건너뛰시겠습니까?"))) {
                       updateStatus(photoModal.nextStatus);
                       setPhotoModal(null);
                     }

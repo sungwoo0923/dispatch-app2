@@ -11,6 +11,7 @@ import { db, auth, storage } from "./firebase";
 import { ref as storageRef, uploadBytes, getDownloadURL } from "firebase/storage";
 import { fmtPhone } from "./formatInput";
 import CustomDatePicker from "./CustomDatePicker"; // 📅 2026-11-07 날짜는 프로그램 달력으로
+import { kpConfirm } from "./kpDialog";
 
 // 전화번호 하이픈 자동 포맷 (DispatchApp.jsx formatPhone과 동일 규칙)
 // 전화번호 하이픈 — 공용 규칙(src/formatInput.js: 02·031·010·1588 등, 입력 중에도 적용)
@@ -967,7 +968,7 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
   };
   const unpinMessage = async () => {
     if (!activeRoom?.id) return;
-    if (!window.confirm("이 방의 공지 고정을 해제할까요?\n(메시지는 그대로 남습니다)")) return;
+    if (!(await kpConfirm("이 방의 공지 고정을 해제할까요?\n(메시지는 그대로 남습니다)"))) return;
     await updateDoc(doc(db, ROOMS_COLL, activeRoom.id), { pinned: null }).catch(() => {});
   };
   // 자주 쓰는 문구 — 내 채팅 프로필에 저장(PC·휴대폰 같이)
@@ -1205,7 +1206,7 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
   // ── 채팅방 나가기 ──
   // ⭐ 2026-11-03 단체방은 "○○○님이 나갔습니다." 안내를 남기고 나감 — 남은 사람들 대화는 그대로(마지막 1명이 나가도 삭제 안 함)
   const leaveRoom = async (roomId) => {
-    if (!window.confirm("채팅방에서 나가시겠습니까?\n나가면 내 채팅 목록에서 이 방이 사라집니다.")) return;
+    if (!(await kpConfirm("채팅방에서 나가시겠습니까?\n나가면 내 채팅 목록에서 이 방이 사라집니다."))) return;
     const room = rooms.find(r => r.id === roomId) || (activeRoom?.id === roomId ? activeRoom : null);
     if (room?.type === "group") {
       const me = myProfile?.name || myEmail.split("@")[0];
@@ -1229,7 +1230,7 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
     setEditMsg(null); setEditText("");
   };
   const deleteMessage = async (msgId) => {
-    if (!window.confirm("메시지를 삭제하시겠습니까?")) return;
+    if (!(await kpConfirm("메시지를 삭제하시겠습니까?"))) return;
     await updateDoc(doc(db, MSGS_COLL, msgId), { text: "(삭제된 메시지)", type: "deleted" });
   };
 

@@ -12,6 +12,7 @@ import { LABOR_KINDS, fillVars } from "./contractTemplates";
 import { useCompanyRegInfo } from "./companyRegInfo";
 import { wonFmt, annualBreakdown } from "./payrollCalc";
 import { personName } from "./userNames";
+import { kpConfirm } from "./kpDialog";
 
 const safeId = (s) => String(s || "").replace(/[/\s#?[\]]/g, "_").slice(0, 80);
 const esc = (s) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -119,7 +120,7 @@ export default function PayrollContracts({ company, u, emp = {}, settings = null
     } catch (e) { setMsg(e.code === "storage/unauthorized" ? "올릴 권한이 없어요. 급여 잠금을 다시 풀어 주세요" : `올리지 못했어요: ${e.message}`); } finally { setBusy(false); if (fileRef.current) fileRef.current.value = ""; }
   };
   const remove = async (f) => {
-    if (!window.confirm(`「${f.name}」을 지울까요?`)) return;
+    if (!(await kpConfirm(`「${f.name}」을 지울까요?`))) return;
     setBusy(true);
     try {
       await deleteObject(sRef(storage, f.path)).catch((e) => { if (e.code !== "storage/object-not-found") throw e; });

@@ -23,6 +23,7 @@ import HubOrderDetail from "./HubOrderDetail";
 import HubPostForm from "./HubPostForm";
 import HubAdmin from "./HubAdmin";
 import HubPlaces from "./HubPlaces";
+import { kpAlert } from "../../../src/kpDialog"; // 브라우저 기본 알림창 대신 프로그램 디자인 알림창
 
 const TOTAL_MASTER_EMAIL = "tjddnqkf@naver.com";
 const readLS = (k, d) => { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch { return d; } };
@@ -239,7 +240,7 @@ export default function HubApp() {
   useEffect(() => {
     if (!me?.activeSession) return;
     const mine = localSession();
-    if (mine && me.activeSession !== mine) { signOut(auth).then(() => { alert("다른 기기에서 로그인해서 이 기기는 로그아웃했어요."); nav("/login", { replace: true }); }); }
+    if (mine && me.activeSession !== mine) { signOut(auth).then(() => { kpAlert("다른 기기에서 로그인해서 이 기기는 로그아웃했어요.", { title: "로그아웃했어요" }); nav("/login", { replace: true }); }); }
   }, [me?.activeSession]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ⭐ 2026-11-07 허브 가입 차주는 등록 휴대폰에서만 — 앱이 켜질 때(로그인 유지 상태 포함) · 다른 휴대폰으로 옮겨질 때 확인

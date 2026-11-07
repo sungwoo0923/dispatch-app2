@@ -296,3 +296,41 @@ table.kp-sd tbody td { border-right: none !important; }
 table.kp-sd tbody td:not([class*="bg-"]) { background-color: transparent !important; }
 table.kp-sd tbody tr:hover td:not([class*="bg-"]) { background-color: transparent !important; }
 table.kp-sd thead th { border-right: none; height: auto; }
+
+/* ⭐ 2026-11-07 디자인 통일 — 브라우저 기본 체크박스·라디오(회색 네모·파란 점) 대신 남색 모양
+   · :where() 로 감싸 우선순위 0 — 화면에서 따로 준 크기(w-4 h-4 등)·여백은 그대로 따른다
+   · 이미 직접 꾸민 것(appearance-none · sr-only · 숨김 peer · 투명 덮개)은 건드리지 않는다 */
+:where(input[type="checkbox"], input[type="radio"]):where(:not(.sr-only):not(.peer):not([class*="appearance-none"]):not([class*="opacity-0"])) {
+  -webkit-appearance: none; appearance: none;
+  width: 18px; height: 18px; margin: 0; flex-shrink: 0;
+  display: inline-block; vertical-align: middle;
+  border: 1.5px solid #B3C0D6; background: #fff center / 72% no-repeat;
+  cursor: pointer; transition: background-color .12s, border-color .12s, box-shadow .12s;
+}
+:where(input[type="checkbox"]):where(:not(.sr-only):not(.peer):not([class*="appearance-none"]):not([class*="opacity-0"])) { border-radius: 5px; }
+:where(input[type="radio"]):where(:not(.sr-only):not(.peer):not([class*="appearance-none"]):not([class*="opacity-0"])) { border-radius: 999px; }
+:where(input[type="checkbox"], input[type="radio"]):where(:not(.sr-only):not(.peer):not([class*="appearance-none"]):not([class*="opacity-0"])):where(:hover:not(:disabled)) { border-color: #2D4C82; }
+:where(input[type="checkbox"]):where(:not(.sr-only):not(.peer):not([class*="appearance-none"]):not([class*="opacity-0"])):where(:checked) {
+  background-color: #1B2B4B; border-color: #1B2B4B;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='white' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3.5 8.4l3 3 6-6.6'/%3E%3C/svg%3E");
+}
+:where(input[type="checkbox"]):where(:not(.sr-only):not(.peer):not([class*="appearance-none"]):not([class*="opacity-0"])):where(:indeterminate) {
+  background-color: #1B2B4B; border-color: #1B2B4B;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='white' stroke-width='2.4' stroke-linecap='round'%3E%3Cpath d='M4 8h8'/%3E%3C/svg%3E");
+}
+:where(input[type="radio"]):where(:not(.sr-only):not(.peer):not([class*="appearance-none"]):not([class*="opacity-0"])):where(:checked) {
+  border-color: #1B2B4B; background-color: #1B2B4B; box-shadow: inset 0 0 0 3.5px #fff;
+}
+:where(input[type="checkbox"], input[type="radio"]):where(:not(.sr-only):not(.peer):not([class*="appearance-none"]):not([class*="opacity-0"])):where(:focus-visible) { outline: 2px solid #2D4C82; outline-offset: 2px; }
+:where(input[type="checkbox"], input[type="radio"]):where(:not(.sr-only):not(.peer):not([class*="appearance-none"]):not([class*="opacity-0"])):where(:disabled) { opacity: .45; cursor: not-allowed; }
+/* 파일 고르기 기본 버튼(회색 "파일 선택")도 같은 모양 */
+input[type="file"]::file-selector-button {
+  height: 36px; padding: 0 14px; margin-right: 10px; border-radius: 10px; border: 1px solid #DCE3EE;
+  background: #fff; color: #1B2B4B; font-weight: 800; font-size: 13.5px; font-family: inherit; cursor: pointer;
+}
+input[type="file"]::file-selector-button:hover { border-color: #2D4C82; background: #F5F8FD; }
+/* 남색 머리줄(표 thead 등) 안에서 체크하면 남색 위 남색이 안 보여서 — 흰 바탕 + 남색 체크 */
+:where([class*="bg-[#1B2B4B]"], [class*="bg-[#0F1A30]"], [class*="bg-[#0B1428]"], [class*="bg-[#17253F]"]) :where(input[type="checkbox"]):where(:not(.sr-only):not(.peer):not([class*="appearance-none"]):not([class*="opacity-0"])):where(:checked, :indeterminate) {
+  background-color: #fff; border-color: #fff;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%231B2B4B' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3.5 8.4l3 3 6-6.6'/%3E%3C/svg%3E");
+}

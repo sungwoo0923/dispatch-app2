@@ -13,6 +13,7 @@ import { fmtBizNo, fmtPhone } from "./formatInput";
 import { BANK_NAMES, formatAccount } from "./bankUtil";
 import { CustomSelect } from "./CustomSelect";
 import { SubNavTopCtx } from "./KpSubNav";
+import { kpConfirm } from "./kpDialog";
 
 const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
 const store = new Map(); // 회사 → { list, memory, listeners:Set, unsub }
@@ -322,8 +323,8 @@ export function BizListEditor({ company, canEdit }) {
     if (edit.idx == null) list.push({ ...v, id: `biz_${Date.now().toString(36)}` }); else list[edit.idx] = { ...list[edit.idx], ...v };
     save(list);
   };
-  const remove = (i) => {
-    if (!window.confirm(`'${biz.extra[i].name}' 사업자를 목록에서 뺄까요?\n이미 이 사업자로 등록한 오더는 그대로 남고, 새 오더에서만 고를 수 없게 됩니다.`)) return;
+  const remove = async (i) => {
+    if (!(await kpConfirm(`'${biz.extra[i].name}' 사업자를 목록에서 뺄까요?\n이미 이 사업자로 등록한 오더는 그대로 남고, 새 오더에서만 고를 수 없게 됩니다.`, { title: "사업자 빼기", okText: "빼기", danger: true }))) return;
     save(biz.extra.filter((_, j) => j !== i));
   };
   const onSeal = (file) => {
