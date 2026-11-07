@@ -926,3 +926,6 @@ function PopupBody({ company, dispatchData, prefs, loadRange, mobile, onClose })
     </div>
   );
 }
+
+// 📈 2026-11-08 경영 분석·결재 대기·직원 정보(ExecAnalytics.jsx · ExecStaffInfo.jsx)가 같은 부품·글자 크기·색을 쓴다
+export { Delta, Chg, ManDiff, Card, Measure, Svg, Seg, Legend, useWidth, CSS as EBX_CSS, useQueryRows as useEbxQuery };
