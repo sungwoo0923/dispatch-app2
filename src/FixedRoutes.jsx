@@ -46,7 +46,7 @@ const kst = (offsetDays = 0) => new Date(Date.now() + 9 * 3600e3 + offsetDays * 
 const dayOf = (ymd) => DAYS[(new Date(`${ymd}T00:00:00Z`).getUTCDay() + 6) % 7];
 const korTime = (hm) => { if (!hm) return ""; const [h, m] = hm.split(":").map(Number); return `${h < 12 ? "오전" : "오후"} ${h % 12 || 12}:${String(m).padStart(2, "0")}`; };
 const card = "rounded-[18px] bg-white border border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_8px_20px_rgba(16,24,40,0.05)]";
-const inp = "h-11 w-full px-3 rounded-xl border border-[#DCE3EE] bg-white text-[14px] font-semibold text-[#0F1A30] outline-none focus:border-[#2D4C82] focus:ring-2 focus:ring-[#2D4C82]/15";
+const inp = "h-12 w-full px-3.5 rounded-xl border border-[#DCE3EE] bg-white text-[15px] font-semibold text-[#0F1A30] outline-none focus:border-[#2D4C82] focus:ring-2 focus:ring-[#2D4C82]/15";
 const lab = "flex items-center gap-1.5 text-[14px] font-black text-[#3A4A66] mb-1.5 whitespace-nowrap"; // ⭐ 2026-11-05 라벨 14px
 const norm = (v) => String(v || "").toLowerCase().replace(/\(주\)|㈜/g, "").replace(/\s+/g, "");
 const placeKey = (name) => norm(name).replace(/[^\uAC00-\uD7A3a-z0-9]/gi, "");
@@ -208,6 +208,10 @@ export const VEHICLE_TYPES_FR = ["라보", "다마스", "오토바이", "윙바�
 const cargoText = (s) => (s.cargo ? `${s.cargo}${s.cargoType || ""}` : "");
 // ⭐ 2026-11-05 3파트처럼 — 단위 "없음"이면 적은 글자 그대로(예: 5톤·소형), 단위가 있으면 숫자+단위
 const tonText = (s) => (s.tonVal ? `${s.tonVal}${s.tonType || ""}` : "");
+// ⭐ 2026-11-07 차량톤수 = 기본 화물(첫 정류지)의 톤수 · 없으면 예전 노선의 기사/차량 톤수(r.tonnage) — 생성 오더·상세·확인 화면이 모두 이 값
+//  (예전엔 오더 차량톤수를 기사/차량 칸(r.tonnage)에서만 읽어, 기본 화물에만 톤수를 넣으면 배차현황 톤수가 비었다)
+export const routeTon = (r) => { const s = ((r?.stops || []).filter((x) => x && (x.name || x.addr))[0]) || {}; return tonText(s) || String(r?.tonnage || "").trim(); };
+export const routeCargoText = (r) => { const s = (r?.stops || []).filter((x) => x && (x.name || x.addr)).find((x) => x.cargo); return s ? cargoText(s) : ""; };
 // ⭐ 2026-11-01 정류지별 운임·지급방식 — 운임 모델을 하나로 정리
 //  · "정류지별 운임" : 첫 정류지(상차)를 뺀 곳 중 한 곳이라도 청구·기사운임이 있으면. 노선 1회 운임 = 정류지 운임의 합계
 //    (기본 청구·기사운임 칸은 잠기고 합계를 보여준다 · 저장할 때 fareMode:"stop", fareClient/fareDriver = 합계)
@@ -280,6 +284,9 @@ export const toForm = (r) => {
   const stops = (Array.isArray(f.stops) && f.stops.length ? f.stops : blankRoute().stops).map((s) => ({ ...blankStop(s?.type || "하차"), ...s }));
   const { first, last } = endsOf(stops);
   const src = [stops[first], stops[last]].find((s) => s && (s.cargo || s.tonVal)) || {};
+  const cargo0 = pickCargo(src);
+  // ⭐ 2026-11-07 예전 노선 — 기사/차량 칸에만 톤수가 있으면 기본 화물 톤수로 옮겨 연다(다음 저장 때 정리)
+  if (!cargo0.tonVal && String(f.tonnage || "").trim()) Object.assign(cargo0, { tonVal: String(f.tonnage).trim(), tonType: "" });
   const rc = routeClient(f);
   const t = routeTotals({ ...f, stops });
   let mode = t.perStop ? "seg" : "route";
@@ -290,7 +297,7 @@ export const toForm = (r) => {
     mode = "route";
   }
   return {
-    ...f, _cargo: pickCargo(src), _fareMode: mode,
+    ...f, _cargo: cargo0, _fareMode: mode,
     stops: stops.map((s) => ({ ...s, _more: !!(s.manager || s.contact || s.memo), _payer: !!(String(s.client || "").trim() && norm(s.client) !== norm(rc)) })),
   };
 };
@@ -306,7 +313,8 @@ export const toRoute = (form) => {
     else if (!_payer) x.client = "";
     return x;
   });
-  const out = { ...rest, stops };
+  // ⭐ 2026-11-07 기사/차량 톤수 칸 없앰 — tonnage는 기본 화물 톤수를 그대로 비춰 둔다(예전 화면·다른 화면 호환)
+  const out = { ...rest, stops, tonnage: tonText(_cargo) };
   if (!seg) out.fareMode = "base";
   else if (rest.fareMode === "stop") Object.assign(out, { fareClient: "", fareDriver: "" }); // 저장 때 합계로 채운다
   return out;
@@ -356,6 +364,7 @@ export function routeOrdersFor(r, date) {
     const pickVia = mid.filter((s) => s.type === "상차").map((s) => wp(s, "상차일", "상차시간"));
     const dropVia = mid.filter((s) => s.type !== "상차").map((s) => wp(s, "하차일", "하차시간"));
     const mainCargo = own.find((s) => s.cargo) || {};
+    const tonV = routeTon(r); // ⭐ 2026-11-07 기본 화물 톤수 우선 · 없으면 예전 r.tonnage
     const rows = G.segs.map(fareRow);
     // ⭐ 2026-11-02 운임규칙 — 오더 운임구분 = 이 묶음 정류지의 운임구분(모두 같을 때) · 아니면 노선 기본
     const ftList = [...new Set(G.segs.map((g) => g.운임구분).filter(Boolean))];
@@ -372,7 +381,7 @@ export function routeOrdersFor(r, date) {
       하차지명: last.name || "", 하차지주소: last.addr || "", 하차지담당자: last.manager || "", 하차지담당자번호: last.contact || "",
       // 배차관리 등록폼과 같은 모양(목록 화면이 늘 배열이 있다고 본다)
       경유지_상차: pickVia, 경유상차목록: pickVia, 경유지_하차: dropVia, 경유하차목록: dropVia, 근무일자목록: [],
-      차량톤수: r.tonnage || "", 톤수: r.tonnage || "", 차량종류: r.vehicleType || "",
+      차량톤수: tonV, 톤수: tonV, 차량종류: r.vehicleType || "",
       화물내용: cargoText(mainCargo), 화물타입: mainCargo.cargoType || "",
       상차방법: first.method || "", 하차방법: last.method || "", // ⭐ 2026-11-05 상차지·하차지 상/하차방법(배차관리 등록폼과 같은 칸)
       청구운임: G.client, 기사운임: G.driver, 수수료: String(G.client - G.driver),
@@ -454,6 +463,8 @@ async function ensureRouteDate(r, date, tick) {
       }
       // 자동 수락 노선인데 서버가 "승인대기"로 바꿔 둔 예전 오더는 바로잡는다
       const d = ex.data() || {};
+      // ⭐ 2026-11-07 예전 버그로 차량톤수가 빈 채 만들어진 오더 — 운행 전이면 노선 톤수로 채운다
+      if (o.차량톤수 && !String(d.차량톤수 || "").trim() && !started(d)) await updateDoc(ref, { 차량톤수: o.차량톤수, 톤수: o.톤수, _lastModified: Date.now() }).catch(() => {});
       if (o.기사확인상태 === "수락" && d.기사확인상태 === "대기" && d.차량번호 === o.차량번호 && d.배차상태 !== "배차취소") {
         await updateDoc(ref, { 기사확인상태: "수락", 기사확인일시: Date.now(), 자동수락: "고정노선", 배차상태: "배차완료", 상태: "배차완료" }).catch(() => {});
       }
@@ -524,7 +535,9 @@ export async function syncFutureRouteOrders(oldR, newR) {
     if (!routeRunsOn(oldR, date)) continue; // 예전 노선이 만들지 않은 날
     const befores = routeOrdersFor(oldR, date);
     const afters = routeRunsOn(newR, date) ? routeOrdersFor(newR, date) : [];
-    const untouchedBy = (d, before) => !!before && ROUTE_KEYS.every((k) => String(d[k] ?? "") === String(before[k] ?? ""));
+    // ⭐ 2026-11-07 차량톤수는 예전 생성 규칙(기사/차량 톤수 칸 r.tonnage)으로 만든 값도 "손대지 않음"으로 본다 — 톤수가 빈 오더도 새 값으로 고쳐진다
+    const legacyTon = String(oldR?.tonnage || "");
+    const untouchedBy = (d, before) => !!before && ROUTE_KEYS.every((k) => String(d[k] ?? "") === String(before[k] ?? "") || (k === "차량톤수" && String(d[k] ?? "") === legacyTon));
     for (const after of afters) {
       const ref = doc(db, "orders", after._id);
       try {
@@ -660,6 +673,235 @@ function StopFareBadge({ r, on = false }) {
   );
 }
 
+// ─── ⭐ 2026-11-07 고정노선 화면 공용 조각(목록·상세·등록폼) — 큰 글씨 · 숫자 고정폭 · 남색 톤 ───
+const CHIP_TONE = {
+  navy: "bg-[#0F1A30] text-white border border-[#0F1A30]",
+  blue: "bg-[#EAF1FF] text-[#2D4C82] border border-[#C9D6EE]",
+  green: "bg-[#E8F6EF] text-[#1F7A4D] border border-[#BFE3CF]",
+  gray: "bg-[#F1F4F8] text-[#5B6B85] border border-[#E3E8F0]",
+  amber: "bg-[#FFF4DC] text-[#7A5300] border border-[#F0D59A]",
+  red: "bg-[#FFF0F0] text-[#C4262C] border border-[#F3C4C6]",
+  glass: "bg-white/10 text-white border border-white/20",
+};
+export function FrChip({ tone = "gray", dot = false, children, className = "", title }) {
+  return (
+    <span title={title} className={`inline-flex items-center gap-1.5 h-7 px-2.5 rounded-lg text-[14px] font-black whitespace-nowrap ${CHIP_TONE[tone] || CHIP_TONE.gray} ${className}`}>
+      {dot && <span className="w-1.5 h-1.5 rounded-full bg-current" />}{children}
+    </span>
+  );
+}
+const isWeekend = (d) => d === "토" || d === "일";
+// 요일 알약 한 줄 — 운행 요일은 진한 남색
+export function DayPills({ days = [], size = "md" }) {
+  const S = size === "sm" ? "w-7 h-7 rounded-lg text-[13px]" : "flex-1 max-w-[46px] h-11 rounded-xl text-[15px]";
+  return (
+    <div className={`flex items-center ${size === "sm" ? "gap-1" : "gap-1.5"}`} data-fr-pills="1">
+      {DAYS.map((d) => {
+        const on = days.includes(d);
+        return <span key={d} className={`${S} inline-flex items-center justify-center font-black ${on ? "bg-[#0F1A30] text-white shadow-[0_2px_6px_rgba(15,26,48,.22)]" : `bg-[#F3F6FA] border border-[#E3E8F0] ${isWeekend(d) ? "text-[#C4262C]/50" : "text-[#A3AFC2]"}`}`}>{d}</span>;
+      })}
+    </div>
+  );
+}
+// 패널 머리(목록·상세 같은 높이) — 왼쪽·오른쪽 머리줄이 나란히 맞는다
+function PanelHead({ en, title, right, sub }) {
+  return (
+    <div className="shrink-0 h-[84px] px-5 flex items-center gap-3 text-white" style={{ background: "linear-gradient(rgba(143,176,240,.06) 1px, transparent 1px) 0 0/22px 22px, linear-gradient(90deg, rgba(143,176,240,.06) 1px, transparent 1px) 0 0/22px 22px, linear-gradient(120deg,#0B1428 0%,#1B2B4B 62%,#2D4C82 100%)" }}>
+      <div className="min-w-0 flex-1">
+        <div className="text-[13px] font-extrabold tracking-[0.16em] text-[#8FB0F0] truncate">{en}</div>
+        <div className="flex items-baseline gap-2 min-w-0"><span className="text-[20px] font-black leading-tight truncate">{title}</span>{sub && <span className="text-[14px] font-bold text-white/70 whitespace-nowrap">{sub}</span>}</div>
+      </div>
+      {right && <div className="shrink-0 flex items-center gap-2">{right}</div>}
+    </div>
+  );
+}
+// 숫자 타일(KPI)
+function Kpi({ label, value, unit, sub, dark = false, accent = false }) {
+  return (
+    <div className={`min-w-0 rounded-2xl px-4 py-3 ${dark ? "bg-white/[0.07] border border-white/10" : accent ? "bg-[#0F1A30] text-white" : "bg-[#F7F9FC] border border-[#E3E8F0]"}`}>
+      <div className={`text-[14px] font-bold whitespace-nowrap ${dark || accent ? "text-[#AFC4EA]" : "text-[#5B6B85]"}`}>{label}</div>
+      <div className={`mt-0.5 text-[20px] md:text-[22px] font-black tabular-nums leading-tight truncate ${dark || accent ? "text-white" : "text-[#0F1A30]"}`}>{value}{unit && <span className={`ml-0.5 text-[14px] font-bold ${dark || accent ? "text-white/70" : "text-[#5B6B85]"}`}>{unit}</span>}</div>
+      {sub && <div className={`text-[13px] font-bold truncate ${dark || accent ? "text-white/60" : "text-[#7A88A0]"}`}>{sub}</div>}
+    </div>
+  );
+}
+// 정보 카드 머리
+function CardHead({ en, title, right }) {
+  return (
+    <div className="flex items-center gap-2.5 mb-4 min-w-0">
+      <span className="h-7 px-2.5 inline-flex items-center rounded-lg bg-[#0F1A30] text-[#8FB0F0] text-[12.5px] font-extrabold tracking-[0.16em] shrink-0">{en}</span>
+      <span className="text-[17px] font-black text-[#0F1A30] whitespace-nowrap">{title}</span>
+      {right && <div className="ml-auto min-w-0">{right}</div>}
+    </div>
+  );
+}
+// 경로 타임라인(상차 → 경유·거점 → 하차)
+function StopTimeline({ r }) {
+  const st = (r.stops || []).filter((s) => s && (s.name || s.addr));
+  if (!st.length) return <div className="py-6 text-center text-[14px] font-bold text-[#5B6B85]">정류지가 없습니다</div>;
+  const rc = routeClient(r);
+  return (
+    <ol className="relative" data-fr-timeline="1">
+      {st.map((s, i) => {
+        const end = i === 0 || i === st.length - 1;
+        const last = i === st.length - 1;
+        const meta = [s.method, i === 0 && cargoText(s) ? `화물 ${cargoText(s)}` : "", i === 0 && tonText(s) ? `차량톤수 ${tonText(s)}` : "", i > 0 && cargoText(s) ? `화물 ${cargoText(s)}` : "", [s.manager, s.contact].filter(Boolean).join(" "), s.memo].filter(Boolean);
+        return (
+          <li key={i} className="relative flex gap-3.5 pb-5 last:pb-0">
+            {!last && <span className="absolute left-[17px] top-10 bottom-1 w-[2px] rounded bg-gradient-to-b from-[#2D4C82] to-[#C9D6EE]" />}
+            <span className={`relative z-[1] shrink-0 w-9 h-9 rounded-full flex items-center justify-center text-[14px] font-black tabular-nums ${end ? "bg-[#0F1A30] text-white shadow-[0_3px_10px_rgba(15,26,48,.25)]" : "bg-white border-2 border-[#2D4C82] text-[#2D4C82]"}`}>{String(i + 1).padStart(2, "0")}</span>
+            <div className="flex-1 min-w-0 pt-0.5">
+              <div className="flex items-center gap-2 min-w-0">
+                <FrChip tone={s.type === "상차" ? "navy" : s.type === "하차" ? "blue" : "gray"}>{STOP_LABEL[s.type] || s.type}</FrChip>
+                <span className="ml-auto shrink-0 text-[15px] font-black tabular-nums text-[#1B2B4B]">{korTimeLabel(s.time || (i === 0 ? r.startTime : ""))}</span>
+              </div>
+              <div className="mt-1 text-[16px] font-black text-[#0F1A30] leading-snug break-keep" title={s.name}>{s.name || "-"}</div>
+              {s.addr && <div className="mt-1 text-[14px] font-medium text-[#5B6B85] leading-snug">{s.addr}</div>}
+              {meta.length > 0 && <div className="mt-1 text-[14px] font-bold text-[#3A4A66]">{meta.join(" · ")}</div>}
+              {i > 0 && stopPaid(s) && (() => {
+                const pc = payerOf(r, { 거래처: String(s.client || "").trim() });
+                return (
+                  <div className="mt-1.5 flex items-center gap-1.5 flex-wrap">
+                    <FrChip tone={pc !== rc ? "amber" : "gray"} title="거래처(청구처)">{pc || "-"}</FrChip>
+                    <FrChip tone="navy">{s.payMethod || r.payMethod || "계산서"}</FrChip>
+                    <span className="text-[14px] font-black tabular-nums text-[#1B2B4B]">청구 {won(s.fareClient)} · 기사 {won(s.fareDriver)}</span>
+                  </div>
+                );
+              })()}
+            </div>
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+// 다가오는 운행 달력(이번 주 월요일부터 N주) — 배차 생성됨 / 운행 예정 / 쉬는 날 / 오늘
+function RunCalendar({ r, orders = [], weeks = 5 }) {
+  const today = kst();
+  const dow = (new Date(`${today}T00:00:00Z`).getUTCDay() + 6) % 7;
+  const start = ymdAdd(today, -dow);
+  const made = new Set(orders.map((o) => String(o.상차일 || "")));
+  const skip = new Set(r.skipDates || []);
+  const cells = Array.from({ length: weeks * 7 }, (_, i) => ymdAdd(start, i));
+  const md = (d) => `${Number(d.slice(5, 7))}/${Number(d.slice(8))}`;
+  const lg = [["bg-[#1B2B4B]", "배차 생성"], ["bg-[#DCE6F7] border border-[#B9CBEA]", "운행 예정"], ["bg-[#FFF0F0] border border-[#F3C4C6]", "쉬는 날"]];
+  return (
+    <div data-fr-cal="1">
+      <div className="flex items-center justify-between mb-2 text-[14px] font-bold text-[#5B6B85] tabular-nums"><span>{md(cells[0])} ~ {md(cells[cells.length - 1])}</span><span className="text-[#1B2B4B] font-black">{weeks}주</span></div>
+      <div className="grid grid-cols-7 gap-1.5 mb-1.5">{DAYS.map((d) => <div key={d} className={`text-center text-[13px] font-black ${isWeekend(d) ? "text-[#C4262C]/70" : "text-[#5B6B85]"}`}>{d}</div>)}</div>
+      <div className="grid grid-cols-7 gap-1.5">
+        {cells.map((d) => {
+          const run = routeRunsOn(r, d);
+          const off = r.active === false;
+          const isSkip = skip.has(d) && (r.days || []).includes(dayOf(d));
+          const past = d < today;
+          const has = made.has(d);
+          const first = d.slice(8) === "01";
+          let cls = "bg-[#F6F8FB] text-[#B0BACB]";
+          if (has) cls = past ? "bg-[#3A527D] text-white/90" : "bg-[#1B2B4B] text-white";
+          else if (isSkip) cls = "bg-[#FFF0F0] text-[#C4262C] border border-[#F3C4C6]";
+          else if (run && !off) cls = past ? "bg-[#EEF2F8] text-[#7A88A0]" : "bg-[#DCE6F7] text-[#0F1A30] border border-[#B9CBEA]";
+          return (
+            <div key={d} title={`${d}(${dayOf(d)}) ${has ? "배차 생성됨" : isSkip ? "쉬는 날" : run && !off ? "운행 예정" : "운행 없음"}`}
+              className={`relative h-10 rounded-lg flex items-center justify-center text-[14px] font-black tabular-nums ${cls} ${d === today ? "ring-2 ring-[#2D4C82] ring-offset-2" : ""}`}>
+              {first ? <span className="text-[12px] mr-0.5 opacity-80">{Number(d.slice(5, 7))}/</span> : null}{Number(d.slice(8))}
+            </div>
+          );
+        })}
+      </div>
+      <div className="mt-3 flex items-center gap-3 flex-wrap text-[13.5px] font-bold text-[#5B6B85]">
+        {lg.map(([c, t]) => <span key={t} className="inline-flex items-center gap-1.5"><span className={`w-3.5 h-3.5 rounded ${c}`} />{t}</span>)}
+        <span className="inline-flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded ring-2 ring-[#2D4C82]" />오늘</span>
+      </div>
+    </div>
+  );
+}
+// 등록폼 단계 카드(01 기본 정보 · 02 경로 · 03 화물 · 04 기사/차량 · 05 운임/정산 · 06 스케줄)
+function StepCard({ n, title, sub, right, children, anchor, done, ...rest }) {
+  return (
+    <section id={`fr-step-${anchor}`} className={`${card} p-4 md:p-6 scroll-mt-24 min-w-0`} {...rest}>
+      <header className="flex items-center gap-3 mb-5 flex-wrap">
+        <span className={`shrink-0 w-10 h-10 rounded-xl flex items-center justify-center text-[15px] font-black tabular-nums ${done ? "bg-[#0F1A30] text-[#8FB0F0]" : "bg-[#EEF2F8] text-[#2D4C82] border border-[#D5DEEC]"}`}>{String(n).padStart(2, "0")}</span>
+        <div className="min-w-0 flex-1">
+          <div className="text-[18px] font-black text-[#0F1A30] leading-tight">{title}</div>
+          {sub && <div className="text-[14px] font-semibold text-[#5B6B85] mt-0.5">{sub}</div>}
+        </div>
+        {right && <div className="ml-auto">{right}</div>}
+      </header>
+      {children}
+    </section>
+  );
+}
+// 켜고 끄는 줄(배차 자동 등록 · 기사님 자동 수락)
+function ToggleRow({ title, desc, checked, onChange }) {
+  return (
+    <label className="flex items-center justify-between gap-3 rounded-xl border border-[#E3E8F0] bg-white px-4 py-3 cursor-pointer hover:bg-[#F8FAFD] min-w-0">
+      <span className="min-w-0"><span className="block text-[15px] font-black text-[#0F1A30]">{title}</span><span className="block text-[14px] text-[#5B6B85]">{desc}</span></span>
+      <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} className="w-5 h-5 shrink-0 accent-[#0F1A30]" />
+    </label>
+  );
+}
+const frMd = (ymd) => (ymd ? `${Number(String(ymd).slice(5, 7))}/${Number(String(ymd).slice(8, 10))}` : "");
+// 생성될 배차 미리보기(등록폼 오른쪽) — 실제 생성기(routeOrdersFor)가 만드는 오더 그대로
+function OrderPreview({ orders, date, count = 0 }) {
+  const o = orders[0];
+  if (!o) return (
+    <div className={`${card} p-5 text-center`} data-fr-preview="1">
+      <div className="text-[15px] font-black text-[#0F1A30]">배차 미리보기</div>
+      <div className="mt-1 text-[14px] text-[#5B6B85]">정류지와 운행 요일을 넣으면 만들어질 배차가 보입니다</div>
+    </div>
+  );
+  const tonV = String(o.차량톤수 || "").trim();
+  const sumC = orders.reduce((a, x) => a + toInt(x.청구운임), 0);
+  const sumD = orders.reduce((a, x) => a + toInt(x.기사운임), 0);
+  const via = (o.경유지_상차 || []).length + (o.경유지_하차 || []).length;
+  const Row = ({ k, v, strong }) => <div className="flex items-center justify-between gap-3 py-2 border-b border-[#EEF1F6] last:border-0"><span className="text-[14px] font-bold text-[#5B6B85] whitespace-nowrap">{k}</span><span className={`min-w-0 truncate text-right tabular-nums ${strong ? "text-[16px] font-black text-[#0F1A30]" : "text-[15px] font-black text-[#1B2B4B]"}`}>{v}</span></div>;
+  return (
+    <div className={`${card} overflow-hidden`} data-fr-preview="1">
+      <div className="px-5 py-4 text-white" style={{ background: "linear-gradient(120deg,#0B1428 0%,#1B2B4B 62%,#2D4C82 100%)" }}>
+        <div className="flex items-center gap-2">
+          <span className="text-[13px] font-extrabold tracking-[0.16em] text-[#8FB0F0]">ORDER PREVIEW</span>
+          <span className="ml-auto"><FrChip tone="glass">{o.배차상태}</FrChip></span>
+        </div>
+        <div className="mt-1 text-[18px] font-black">배차 미리보기</div>
+        <div className="text-[14px] font-bold text-white/75 tabular-nums">첫 운행 {frMd(date)}({dayOf(date)}) {o.상차시간 || "즉시"}{orders.length > 1 ? ` · 하루 ${orders.length}건으로 나뉨` : ""}{count ? ` · 저장 시 ${count}건` : ""}</div>
+      </div>
+      <div className="px-5 pt-4">
+        <div className="rounded-2xl border border-[#E3E8F0] bg-[#F7F9FC] p-3.5">
+          <div className="flex items-start gap-2.5">
+            <span className="mt-0.5 shrink-0 w-7 h-7 rounded-full bg-[#0F1A30] text-white text-[13px] font-black flex items-center justify-center">상</span>
+            <div className="min-w-0"><div className="text-[15px] font-black text-[#0F1A30] truncate">{o.상차지명 || "상차지"}</div><div className="text-[13.5px] font-bold text-[#5B6B85] truncate">{o.상차지주소 || "주소 없음"}</div></div>
+          </div>
+          <div className="ml-[13px] my-1 h-4 border-l-2 border-dashed border-[#B9CBEA] pl-3 text-[13px] font-bold text-[#5B6B85] leading-4">{via ? `경유·거점 ${via}곳` : ""}</div>
+          <div className="flex items-start gap-2.5">
+            <span className="mt-0.5 shrink-0 w-7 h-7 rounded-full bg-white border-2 border-[#2D4C82] text-[#2D4C82] text-[13px] font-black flex items-center justify-center">하</span>
+            <div className="min-w-0"><div className="text-[15px] font-black text-[#0F1A30] truncate">{o.하차지명 || "하차지"}</div><div className="text-[13.5px] font-bold text-[#5B6B85] truncate">{o.하차지주소 || "주소 없음"}</div></div>
+          </div>
+        </div>
+        <div className="mt-3 grid grid-cols-2 gap-2">
+          <div className={`rounded-2xl px-3.5 py-2.5 ${tonV ? "bg-[#0F1A30] text-white" : "bg-[#FFF0F0] border border-[#F3C4C6]"}`}>
+            <div className={`text-[13.5px] font-bold ${tonV ? "text-[#AFC4EA]" : "text-[#C4262C]"}`}>차량톤수</div>
+            <div className={`text-[19px] font-black tabular-nums truncate ${tonV ? "" : "text-[#C4262C]"}`} data-fr-preview-ton="1">{tonV || "미입력"}</div>
+          </div>
+          <div className="rounded-2xl px-3.5 py-2.5 bg-[#F7F9FC] border border-[#E3E8F0]">
+            <div className="text-[13.5px] font-bold text-[#5B6B85]">차량종류</div>
+            <div className="text-[19px] font-black text-[#0F1A30] truncate">{o.차량종류 || "-"}</div>
+          </div>
+        </div>
+      </div>
+      <div className="px-5 pb-4 pt-2">
+        <Row k="화물내용" v={o.화물내용 || "-"} />
+        <Row k="기사" v={o.이름 ? `${o.이름} · ${o.차량번호}` : "미배정"} />
+        <Row k="청구운임" v={`${won(sumC)}원`} strong />
+        <Row k="기사운임" v={`${won(sumD)}원`} />
+        <Row k="수수료" v={`${won(sumC - sumD)}원`} />
+        <Row k="지급방식" v={orders.map((x) => x.지급방식).join(" · ")} />
+        <Row k="배차방식" v={o.배차방식} />
+      </div>
+    </div>
+  );
+}
+
 export default function FixedRoutes({ drivers = [], companyName = "", dispatchData = [] }) {
   // ⭐ 2026-11-02 지금 보고 있는 회사(getTenant) 우선 — 통합관리자가 다른 회사를 볼 때·회원 문서에 회사명이 없는 예전 계정(기본 회사)에서
   //  회사가 비거나 달라서 거래처·상하차지·노선 목록이 통째로 비던 문제(자동완성이 안 뜨던 원인)
@@ -670,6 +912,7 @@ export default function FixedRoutes({ drivers = [], companyName = "", dispatchDa
   const [form, setForm] = React.useState(null);
   const [busy, setBusy] = React.useState(false);
   const [q, setQ] = React.useState("");
+  const [flt, setFlt] = React.useState("all"); // ⭐ 2026-11-07 목록 필터(전체·운행 중·OFF·오늘)
   const [msg, setMsg] = React.useState("");
   const [clients, setClients] = React.useState([]);
   const [places, setPlaces] = React.useState([]);
@@ -745,7 +988,9 @@ export default function FixedRoutes({ drivers = [], companyName = "", dispatchDa
     return n;
   }) }));
   const moveStop = (i, d) => setForm((p) => { const a = [...p.stops]; const j = i + d; if (j < 0 || j >= a.length) return p; [a[i], a[j]] = [a[j], a[i]]; return { ...p, stops: a }; });
-  const pickDriver = (key) => { const d = drivers.find((x) => x.id === key); setForm((p) => ({ ...p, driverKey: key, driverName: d?.이름 || "", carNo: d?.차량번호 && d.차량번호 !== "-" ? d.차량번호 : "", phone: d?.전화번호 && d.전화번호 !== "-" ? d.전화번호 : "", tonnage: d?.차량톤수 || p.tonnage || "", vehicleType: d?.차량종류 || p.vehicleType || "" })); };
+  const pickDriver = (key) => { const d = drivers.find((x) => x.id === key); setForm((p) => ({ ...p, driverKey: key, driverName: d?.이름 || "", carNo: d?.차량번호 && d.차량번호 !== "-" ? d.차량번호 : "", phone: d?.전화번호 && d.전화번호 !== "-" ? d.전화번호 : "", vehicleType: d?.차량종류 || p.vehicleType || "",
+    // ⭐ 2026-11-07 기사/차량 톤수 칸 없앰 — 기본 화물 차량톤수가 비어 있을 때만 기사님 차량톤수로 채운다
+    ...(!String(p._cargo?.tonVal || "").trim() && d?.차량톤수 ? { _cargo: { ...(p._cargo || {}), tonVal: String(d.차량톤수), tonType: "" } } : {}) })); };
   const [review, setReview] = React.useState(false);
   const askSave = () => {
     if (!form.name.trim()) return kpAlert("노선 이름을 입력해 주세요.");
@@ -842,6 +1087,27 @@ export default function FixedRoutes({ drivers = [], companyName = "", dispatchDa
     const t = setInterval(upd, 1000);
     return () => { ro?.disconnect(); window.removeEventListener("resize", upd); clearInterval(t); };
   }, [formOpen]);
+  // ⭐ 2026-11-07 등록폼 오른쪽 미리보기 — 스크롤해도 화면 위에 따라오게(본문 overflow 때문에 sticky 대신 fixed로)
+  const pvRef = React.useRef(null);
+  const [pvStyle, setPvStyle] = React.useState(null);
+  React.useEffect(() => {
+    if (!formOpen) { setPvStyle(null); return undefined; }
+    const TOP = 76;
+    const upd = () => {
+      const el = pvRef.current; const col = el?.parentElement;
+      if (!el || !col || window.innerWidth < 1024) { setPvStyle((s) => (s ? null : s)); return; }
+      const c = col.getBoundingClientRect();
+      if (c.top >= TOP) { setPvStyle((s) => (s ? null : s)); return; }
+      const maxH = window.innerHeight - TOP - 112;
+      const h = Math.min(el.scrollHeight, maxH);
+      const top = Math.round(Math.min(TOP, c.bottom - h));
+      setPvStyle((s) => (s && s.top === top && s.left === c.left && s.width === c.width ? s : { position: "fixed", top, left: c.left, width: c.width, maxHeight: maxH, overflowY: "auto", zIndex: 5 }));
+    };
+    upd();
+    window.addEventListener("scroll", upd, true); window.addEventListener("resize", upd);
+    const t = setInterval(upd, 700);
+    return () => { window.removeEventListener("scroll", upd, true); window.removeEventListener("resize", upd); clearInterval(t); };
+  }, [formOpen]);
   const runGen = async (list, opts = {}) => {
     setProg({ done: 0, total: 0, made: 0 });
     try { return await ensureFixedRouteOrders(list, { force: true, ...opts, onProgress: (p) => setProg({ ...p }) }); }
@@ -869,11 +1135,9 @@ export default function FixedRoutes({ drivers = [], companyName = "", dispatchDa
   const ordersOf = (r) => (dispatchData || []).filter((o) => o.고정노선Id === r.id).sort((a, b) => String(b.상차일).localeCompare(String(a.상차일))).slice(0, 8);
 
   // ───────────── 편집 화면 ─────────────
-  // ⭐ 2026-11-05 등록폼 전면 개편(팀장님 요청)
-  //  · 맨 위 머리 카드 = 노선 이름 · 거래처(청구처, 한 곳에서만) · 운행 ON/OFF · 취소/저장
-  //  · 왼쪽 ROUTE 경로 = 정류지 순서(상차 → 경유·거점 → 하차) + 그 곳의 상차/하차방법 · 담당자·연락처·메모는 접어 둠
-  //  · 오른쪽 CARGO 화물(기본 1장 + 경유·거점마다 1장) → FARE 운임(노선 전체 / 구간별) → DRIVER 기사·차량 → SCHEDULE 운행 일정
-  //  · 맨 아래 고정 저장줄 = 요일 · 기간 · 청구 합계 + [고정노선 저장] (휴대폰은 같은 순서 한 줄)
+  // ⭐ 2026-11-07 등록폼 단계형 개편 — 01 기본 정보 · 02 경로 · 03 화물 · 04 기사/차량 · 05 운임/정산 · 06 스케줄
+  //  · 오른쪽 = 만들어질 배차 미리보기(실제 생성기 routeOrdersFor 결과) + 단계 진행 + 다가오는 운행 달력 (PC는 스크롤해도 따라온다)
+  //  · 차량톤수는 03 화물(기본 화물)에서 한 번만 — 기사/차량 칸의 톤수는 없앴다(예전 노선 값은 화물 톤수로 옮겨 연다)
   if (form) {
     const stops = form.stops || [];
     const R = toRoute(form);
@@ -893,6 +1157,20 @@ export default function FixedRoutes({ drivers = [], companyName = "", dispatchDa
     const setCargo = (patch) => setForm((p) => ({ ...p, _cargo: { ...(p._cargo || {}), ...patch } }));
     const stopName = (s) => s?.name || s?.addr || STOP_LABEL[s?.type] || s?.type || "";
     const methodLabel = (t) => (t === "상차" ? "상차방법" : "하차방법");
+    const tonNow = tonText(form._cargo || {});
+    // 미리보기 — 시작일(또는 오늘) 이후 첫 운행일의 배차
+    const pvDate = (() => { let d = [today0, form.startDate || ""].sort().pop(); for (let i = 0; i < 120; i += 1, d = ymdAdd(d, 1)) if (routeRunsOn(RT, d)) return d; return ""; })();
+    const PV = pvDate && namedStops(RT).length ? routeOrdersFor({ ...RT, id: form.id || "new" }, pvDate) : [];
+    const named = namedIdx(stops);
+    const steps = [
+      ["info", "기본 정보", !!(form.name.trim() && form.client.trim())],
+      ["route", "경로", named.length >= 2],
+      ["cargo", "화물", !!(tonNow || (form._cargo || {}).cargo)],
+      ["driver", "기사/차량", !!(form.carNo || form.vehicleType)],
+      ["fare", "운임/정산", T.client > 0 && !fareMiss.length && !fp.legacy],
+      ["schedule", "스케줄", !!((form.days || []).length && form.startDate)],
+    ];
+    const goStep = (k) => document.getElementById(`fr-step-${k}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
     // 운임 방식 바꾸기 — 금액이 사라지지 않게 옮긴다(노선 전체 → 마지막 구간 / 구간별 → 합계)
     const setFareMode = async (m) => {
       if (form._fareMode === m) return;
@@ -910,37 +1188,29 @@ export default function FixedRoutes({ drivers = [], companyName = "", dispatchDa
         return { ...p, _fareMode: "route", fareMode: "base", fareClient: t.client ? String(t.client) : "", fareDriver: t.driver ? String(t.driver) : "", payMethod: lastPay || p.payMethod || "" };
       });
     };
-    const Sec = ({ en, ko, sub, right }) => (
-      <div className="flex items-center gap-2.5 mb-4 flex-wrap">
-        <span className="h-7 px-2.5 inline-flex items-center rounded-lg bg-[#0F1A30] text-[#8FB0F0] text-[14px] font-extrabold tracking-[0.2em]" style={{ fontFamily: MONO }}>{en}</span>
-        <span className="text-[17px] font-black text-[#0F1A30] whitespace-nowrap">{ko}</span>
-        {sub && <span className="text-[14px] font-semibold text-[#5B6B85] min-w-0">{sub}</span>}
-        {right && <div className="ml-auto">{right}</div>}
-      </div>
-    );
-    const TypeBadge = ({ t }) => <span className={`h-6 px-2 inline-flex items-center rounded-md text-[13px] font-black whitespace-nowrap ${t === "상차" || t === "하차" ? "bg-[#0F1A30] text-white" : "bg-[#EEF3FC] text-[#2D4C82] border border-[#C9D6EE]"}`}>{STOP_LABEL[t] || t}</span>;
-    const Num = ({ n, solid }) => <span className={`shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-[13px] font-black ${solid ? "bg-[#0F1A30] text-white" : "bg-white border-2 border-[#2D4C82] text-[#2D4C82]"}`} style={{ fontFamily: MONO }}>{String(n).padStart(2, "0")}</span>;
+    const TypeBadge = ({ t }) => <span className={`h-7 px-2.5 inline-flex items-center rounded-lg text-[14px] font-black whitespace-nowrap ${t === "상차" || t === "하차" ? "bg-[#0F1A30] text-white" : "bg-[#EEF3FC] text-[#2D4C82] border border-[#C9D6EE]"}`}>{STOP_LABEL[t] || t}</span>;
+    const Num = ({ n, solid }) => <span className={`shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-[14px] font-black tabular-nums ${solid ? "bg-[#0F1A30] text-white" : "bg-white border-2 border-[#2D4C82] text-[#2D4C82]"}`}>{String(n).padStart(2, "0")}</span>;
     const money = (v, on, ph, err) => (
       <input inputMode="numeric" value={v ? won(v) : ""} onChange={(e) => on(e.target.value.replace(/[^\d]/g, ""))} placeholder={ph}
-        className={`${inp} text-right tabular-nums ${err ? "!border-[#E5484D]" : ""}`} style={{ fontFamily: MONO }} />
+        className={`${inp} text-right tabular-nums !text-[16px] !font-black ${err ? "!border-[#E5484D]" : ""}`} />
     );
-    // 화물내용·수량 + 단위 / 톤수·중량 + 단위 — 지금과 같은 단위 목록(회사 공용)
-    const cargoFields = (v, on) => (
+    // 화물내용·수량 + 단위 / 톤수 + 단위 — 지금과 같은 단위 목록(회사 공용) · main = 기본 화물(톤수 = 배차 차량톤수)
+    const cargoFields = (v, on, main = false) => (
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div className="min-w-0">
           <label className={lab}>화물내용 · 수량</label>
           <div className="flex min-w-0">
             <input value={v.cargo || ""} onChange={(e) => on({ cargo: v.cargoType ? e.target.value.replace(/[^\d.]/g, "") : e.target.value })} placeholder={v.cargoType ? "수량" : "예: 2 또는 변압기"} className={`${inp} !rounded-r-none min-w-0`} />
-            <CustomSelect value={v.cargoType || ""} onChange={(e) => on({ cargoType: e.target.value, cargo: e.target.value ? String(v.cargo || "").replace(/[^\d.]/g, "") : v.cargo })} className="h-11 w-[84px] shrink-0 px-2 rounded-r-xl bg-[#1B2B4B] text-white text-[14px] font-black">
+            <CustomSelect value={v.cargoType || ""} onChange={(e) => on({ cargoType: e.target.value, cargo: e.target.value ? String(v.cargo || "").replace(/[^\d.]/g, "") : v.cargo })} className="h-12 w-[88px] shrink-0 px-2 rounded-r-xl bg-[#1B2B4B] text-white text-[14px] font-black">
               <option value="">없음</option>{cargoTypes.map((x) => <option key={x} value={x}>{x}</option>)}
             </CustomSelect>
           </div>
         </div>
         <div className="min-w-0">
-          <label className={lab}>톤수 · 중량</label>
-          <div className="flex min-w-0">
-            <input value={v.tonVal || ""} onChange={(e) => on({ tonVal: v.tonType ? e.target.value.replace(/[^\d.]/g, "") : e.target.value })} placeholder={v.tonType ? "예: 1" : "예: 5톤 또는 소형"} inputMode={v.tonType ? "decimal" : "text"} className={`${inp} !rounded-r-none min-w-0`} />
-            <CustomSelect value={v.tonType || ""} onChange={(e) => on({ tonType: e.target.value, tonVal: e.target.value ? String(v.tonVal || "").replace(/[^\d.]/g, "") : v.tonVal })} className="h-11 w-[84px] shrink-0 px-2 rounded-r-xl bg-[#1B2B4B] text-white text-[14px] font-black">
+          <label className={lab}>{main ? <>차량톤수 <span className="text-[13px] font-bold text-[#2D4C82]">배차 톤수로 들어갑니다</span></> : "톤수 · 중량"}</label>
+          <div className="flex min-w-0" {...(main ? { "data-fr-main-ton": "1" } : {})}>
+            <input value={v.tonVal || ""} onChange={(e) => on({ tonVal: v.tonType ? e.target.value.replace(/[^\d.]/g, "") : e.target.value })} placeholder={v.tonType ? "예: 1" : "예: 5톤 또는 1톤 탑"} inputMode={v.tonType ? "decimal" : "text"} className={`${inp} !rounded-r-none min-w-0`} />
+            <CustomSelect value={v.tonType || ""} onChange={(e) => on({ tonType: e.target.value, tonVal: e.target.value ? String(v.tonVal || "").replace(/[^\d.]/g, "") : v.tonVal })} className="h-12 w-[88px] shrink-0 px-2 rounded-r-xl bg-[#1B2B4B] text-white text-[14px] font-black">
               <option value="">없음</option>{tonTypes.map((x) => <option key={x} value={x}>{x}</option>)}
             </CustomSelect>
           </div>
@@ -951,23 +1221,25 @@ export default function FixedRoutes({ drivers = [], companyName = "", dispatchDa
       if (!fareR.on) return null;
       const rule = findFareRule(fareR.rules, ft || (placeholder ? form.fareType : ""));
       return (
-        <div className="mt-2.5 flex items-center gap-2 flex-wrap">
+        <div className="mt-3 flex items-center gap-2 flex-wrap">
           <span className="text-[14px] font-black text-[#3A4A66]">운임구분</span>
           <FareTypeSelect compact rules={fareR.rules} value={ft || ""} placeholder={placeholder} onChange={onFt} />
           {rule && <span className={`text-[14px] font-extrabold ${manual ? "text-amber-700" : "text-[#2D4C82]"}`}>{manual ? "기사운임 직접 입력" : fareRuleHint(rule)}</span>}
-          {manual && <button type="button" onClick={() => onFt(ft || "")} className="h-6 px-2 rounded bg-[#1B2B4B] text-white text-[13px] font-extrabold">↺ 규칙대로</button>}
+          {manual && <button type="button" onClick={() => onFt(ft || "")} className="h-7 px-2.5 rounded-lg bg-[#1B2B4B] text-white text-[13.5px] font-extrabold">규칙대로</button>}
         </div>
       );
     };
+    const doneN = steps.filter((s) => s[2]).length;
     return (
-      <div className="min-w-0">
-        {/* ── 머리 카드: 노선 정보 ── */}
+      <div className="min-w-0" data-fr-form="1">
+        {/* ── 머리: 제목 · 운행 ON/OFF · 취소/저장 ── */}
         <div className={`${card} overflow-hidden mb-4`} data-fr-head="1">
-          <div className="px-4 py-4 md:px-6 text-white flex items-center gap-3 flex-wrap"
+          <div className="px-4 py-4 md:px-6 md:py-5 text-white flex items-center gap-3 flex-wrap"
             style={{ background: "linear-gradient(rgba(143,176,240,.07) 1px, transparent 1px) 0 0/22px 22px, linear-gradient(90deg, rgba(143,176,240,.07) 1px, transparent 1px) 0 0/22px 22px, linear-gradient(120deg,#0B1428 0%,#1B2B4B 60%,#2D4C82 100%)" }}>
             <div className="min-w-0">
-              <div className="text-[14px] font-extrabold tracking-[0.12em] text-[#8FB0F0]" style={{ fontFamily: MONO }}>FIXED ROUTE · {form.id ? "EDIT" : "NEW"}</div>
-              <div className="text-[22px] md:text-[24px] font-black leading-tight">{form.id ? "고정노선 수정" : "고정노선 만들기"}</div>
+              <div className="text-[13px] font-extrabold tracking-[0.16em] text-[#8FB0F0]">FIXED ROUTE · {form.id ? "EDIT" : "NEW"}</div>
+              <div className="text-[22px] md:text-[26px] font-black leading-tight">{form.id ? "고정노선 수정" : "고정노선 만들기"}</div>
+              <div className="text-[14px] font-bold text-white/70 tabular-nums">6단계 중 {doneN}단계 완료</div>
             </div>
             <div className="ml-auto flex items-center gap-2">
               <div className="h-11 pl-3.5 pr-2 rounded-xl bg-white/10 border border-white/15 flex items-center gap-2.5">
@@ -975,135 +1247,116 @@ export default function FixedRoutes({ drivers = [], companyName = "", dispatchDa
                 <OnOffSwitch dark on={form.active !== false} onChange={(v) => set("active", v)} />
               </div>
               <button type="button" tabIndex={-1} onClick={() => setForm(null)} className="h-11 px-4 rounded-xl bg-white/10 border border-white/20 text-[14px] font-bold whitespace-nowrap">취소</button>
-              <button type="button" tabIndex={-1} onClick={askSave} disabled={busy} className="hidden md:inline-flex items-center h-11 px-5 rounded-xl bg-white text-[#0F1A30] text-[14.5px] font-black disabled:opacity-50 whitespace-nowrap">저장</button>
+              <button type="button" tabIndex={-1} onClick={askSave} disabled={busy} className="hidden md:inline-flex items-center h-11 px-5 rounded-xl bg-white text-[#0F1A30] text-[15px] font-black disabled:opacity-50 whitespace-nowrap">저장</button>
             </div>
           </div>
-          <div className="p-4 md:px-6 md:py-5 grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4">
-            <div className="min-w-0"><label className={lab}>노선 이름 <span className="text-[#E5484D]">*</span></label><input value={form.name} onChange={(e) => set("name", e.target.value)} placeholder="예: 평택 물류센터 → 수원 3곳" className={inp} /></div>
-            <div className="min-w-0">
-              <label className={lab}>거래처(청구처) {clientNew && <NewTag />}<span className="ml-auto text-[14px] font-semibold text-[#5B6B85]">운임을 청구하는 곳 · 한 번만 입력</span></label>
-              <div className="flex gap-1.5 min-w-0">
-                <Suggest value={form.client} onChange={(v) => set("client", v)} items={clients} k="거래처명" sub={clientSub} title="기본거래처" placeholder="거래처명 검색" onPick={(c) => set("client", c.거래처명 || c.id)} />
-                <button type="button" tabIndex={-1} onClick={() => setNewClient({ name: form.client.trim(), addr: "", manager: "", phone: "", email: "", memo: "", grade: "일반" })} className="h-11 px-3 rounded-xl border border-[#DCE3EE] bg-white text-[14px] font-black text-[#1B2B4B] whitespace-nowrap hover:bg-[#F5F8FD]">+ 신규</button>
-              </div>
-            </div>
+          {/* 단계 바로가기(모든 화면) */}
+          <div className="px-3 md:px-5 py-2.5 flex gap-1.5 overflow-x-auto" data-fr-steps="1">
+            {steps.map(([k, l, ok], i) => (
+              <button key={k} type="button" tabIndex={-1} onClick={() => goStep(k)} className={`shrink-0 h-10 pl-1.5 pr-3 rounded-xl inline-flex items-center gap-2 text-[14px] font-black border transition ${ok ? "bg-[#EEF3FC] border-[#C9D6EE] text-[#0F1A30]" : "bg-white border-[#E3E8F0] text-[#5B6B85] hover:bg-[#F7F9FC]"}`}>
+                <span className={`w-7 h-7 rounded-lg inline-flex items-center justify-center text-[13px] tabular-nums ${ok ? "bg-[#0F1A30] text-[#8FB0F0]" : "bg-[#F1F4F8] text-[#7A88A0]"}`}>{ok ? "✓" : String(i + 1).padStart(2, "0")}</span>{l}
+              </button>
+            ))}
           </div>
         </div>
 
-        <div className="grid gap-4 lg:grid-cols-[minmax(0,0.82fr)_minmax(0,1fr)] items-start">
-          {/* ── 왼쪽: 운행 일정 → ROUTE 경로 ── */}
-          <div className="space-y-4 min-w-0">
-            {/* ⭐ 2026-11-05 SCHEDULE · 운행 일정 — 왼쪽 경로 위로 */}
-            <div className={`${card} p-4 md:p-5`} data-fr-days="1">
-              <Sec en="SCHEDULE" ko="운행 일정" />
-              <div className="grid grid-cols-7 gap-1.5 mb-2.5">
-                {DAYS.map((d) => { const on = (form.days || []).includes(d); return <button tabIndex={-1} key={d} type="button" onClick={() => set("days", on ? form.days.filter((x) => x !== d) : DAYS.filter((x) => x === d || (form.days || []).includes(x)))} className={`h-11 md:h-12 rounded-xl text-[15px] font-black transition ${on ? "bg-[#0F1A30] text-white shadow" : "bg-white border border-[#DCE3EE] text-[#5B6B85]"} ${d === "토" || d === "일" ? (on ? "" : "!text-[#C4262C]/70") : ""}`}>{d}</button>; })}
-              </div>
-              <div className="flex flex-wrap gap-1.5 mb-4">
-                {[["평일", ["월", "화", "수", "목", "금"]], ["월~토", ["월", "화", "수", "목", "금", "토"]], ["매일", DAYS], ["월수금", ["월", "수", "금"]], ["화목", ["화", "목"]]].map(([l, ds]) => <button tabIndex={-1} key={l} type="button" onClick={() => set("days", ds)} className="h-9 px-3.5 rounded-lg bg-[#F3F6FA] text-[14px] font-bold text-[#3A4A66] hover:bg-[#EAF0F8]">{l}</button>)}
-              </div>
-              <div className="grid grid-cols-2 sm:grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)] gap-2.5">
-                <div className="col-span-2 sm:col-span-1 min-w-0"><label className={lab}>출발(상차) 시간</label><TimeSelect value={form.startTime} onChange={(v) => set("startTime", v)} /></div>
-                <div className="min-w-0"><label className={lab}>시작일</label><CustomDatePicker value={form.startDate} onChange={(e) => set("startDate", e.target.value)} className={inp} showIcon /></div>
-                <div className="min-w-0"><label className={lab}>종료일(선택)</label><CustomDatePicker value={form.endDate} onChange={(e) => set("endDate", e.target.value)} className={inp} showIcon placeholder="계속" /></div>
-              </div>
-              <div className="mt-3 rounded-xl bg-[#F5F8FD] border border-[#E3E8F0] px-3.5 py-2.5 text-[14px] text-[#3A4A66] leading-relaxed" data-fr-horizon="1">
-                {form.active === false
-                  ? <><b className="text-[#0F1A30]">운행 OFF</b> — 저장해도 새 배차를 만들지 않습니다(이미 만든 배차는 그대로)</>
-                  : <>저장하면 <b className="text-[#0F1A30] tabular-nums">{md(hFrom)} ~ {md(hTo)} 운행일 {hN}건</b>을 먼저 만들고, {form.endDate && form.endDate <= hTo ? "종료일까지면 끝납니다" : "그 뒤는 매달(새 달에 앱을 열 때) 이어서 만듭니다"}</>}
-              </div>
-              <div className="mt-3">
-                <label className={lab}>쉬는 날 <span className="font-semibold text-[14px] text-[#5B6B85]">달력에서 여러 날을 눌러 고르세요</span></label>
-                <MultiDateSelect value={form.skipDates || []} onChange={(v) => set("skipDates", v)} className={inp} placeholder="쉬는 날 고르기" />
-                {(form.skipDates || []).length > 0 && (
-                  <div className="flex flex-wrap gap-1.5 mt-2">
-                    {form.skipDates.map((d) => <button tabIndex={-1} key={d} type="button" onClick={() => set("skipDates", form.skipDates.filter((x) => x !== d))} className="h-8 px-2.5 rounded-lg bg-[#EEF3FC] border border-[#C9D6EE] text-[14px] font-bold text-[#1B2B4B] tabular-nums" style={{ fontFamily: MONO }}>{d.slice(5).replace("-", ".")}({dayOf(d)}) ✕</button>)}
+        <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_360px] xl:grid-cols-[minmax(0,1fr)_400px]">
+          <div className="space-y-5 min-w-0">
+            {/* 01 기본 정보 */}
+            <StepCard n={1} anchor="info" title="기본 정보" sub="노선 이름과 운임을 청구할 거래처" done={steps[0][2]}>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="min-w-0"><label className={lab}>노선 이름 <span className="text-[#E5484D]">*</span></label><input data-fr-name="1" value={form.name} onChange={(e) => set("name", e.target.value)} placeholder="예: 평택 물류센터 → 수원 3곳" className={inp} /></div>
+                <div className="min-w-0">
+                  <label className={lab}>거래처(청구처) {clientNew && <NewTag />}</label>
+                  <div className="flex gap-1.5 min-w-0">
+                    <Suggest value={form.client} onChange={(v) => set("client", v)} items={clients} k="거래처명" sub={clientSub} title="기본거래처" placeholder="거래처명 검색" onPick={(c) => set("client", c.거래처명 || c.id)} />
+                    <button type="button" tabIndex={-1} onClick={() => setNewClient({ name: form.client.trim(), addr: "", manager: "", phone: "", email: "", memo: "", grade: "일반" })} className="h-12 px-3.5 rounded-xl border border-[#DCE3EE] bg-white text-[14px] font-black text-[#1B2B4B] whitespace-nowrap hover:bg-[#F5F8FD]">+ 신규</button>
                   </div>
-                )}
+                </div>
+                <div className="md:col-span-2 min-w-0">
+                  <label className={lab}>노선 메모 <span className="font-semibold text-[14px] text-[#5B6B85]">기사님 전달사항에도 들어갑니다</span></label>
+                  <textarea value={form.memo} onChange={(e) => set("memo", e.target.value)} rows={2} placeholder="예: 정문 출입 시 사전 연락" className={`${inp} !h-auto py-3`} />
+                </div>
               </div>
-            </div>
-          <div className={`${card} p-4 md:p-5 min-w-0`} data-fr-left="1">
-            <Sec en="ROUTE" ko="경로" sub="상차지 → 경유·거점 → 하차지" />
-            <div className="relative">
-              <div className="absolute left-[13px] top-5 bottom-8 w-[2px] bg-gradient-to-b from-[#0F1A30] via-[#C9D6EE] to-[#0F1A30]" />
-              {stops.map((s, i) => {
-                const isNew = (s.name || "").trim() && !knownPlace(s.name);
-                const ends = i === 0 || i === stops.length - 1;
-                return (
-                  <div key={i} className="relative flex gap-2.5 md:gap-3 mb-3" data-fr-stop={i}>
-                    <span className="relative z-[1] mt-3"><Num n={i + 1} solid={ends} /></span>
-                    <div className={`flex-1 min-w-0 rounded-2xl border p-3 md:p-3.5 ${ends ? "border-[#D5DEEC] bg-[#F8FAFD]" : "border-[#C9D6EE] bg-[#F4F8FF]"}`}>
-                      <div className="flex items-center gap-1.5 mb-2.5 flex-wrap">
-                        <div className="inline-flex p-0.5 rounded-lg bg-white border border-[#E3E8F0]" title="정류지 구분 — 바꾸면 오른쪽 화물·운임이 같이 바뀝니다">
-                          {STOP_TYPES.map((t) => <button tabIndex={-1} key={t} type="button" onClick={() => setStop(i, { type: t })} className={`h-7 px-2 sm:px-2.5 rounded-md text-[14px] font-black ${s.type === t ? "bg-[#0F1A30] text-white" : "text-[#5B6B85] hover:bg-[#F3F6FA]"}`}>{t}</button>)}
-                        </div>
-                        {isNew && <span className="hidden sm:inline-flex"><NewTag /></span>}
-                        <div className="ml-auto flex items-center">
-                          <button type="button" tabIndex={-1} onClick={() => moveStop(i, -1)} disabled={i === 0} className="w-7 sm:w-8 h-8 rounded-lg text-[14px] text-[#5B6B85] hover:bg-white disabled:opacity-25" aria-label="위로">↑</button>
-                          <button type="button" tabIndex={-1} onClick={() => moveStop(i, 1)} disabled={i === stops.length - 1} className="w-7 sm:w-8 h-8 rounded-lg text-[14px] text-[#5B6B85] hover:bg-white disabled:opacity-25" aria-label="아래로">↓</button>
-                          <button type="button" tabIndex={-1} onClick={() => setForm((p) => ({ ...p, stops: p.stops.filter((_, j) => j !== i) }))} disabled={stops.length <= 1} className="w-7 sm:w-8 h-8 rounded-lg text-[#5B6B85] hover:bg-white hover:text-[#E5484D] disabled:opacity-25" aria-label="정류지 삭제" title="이 정류지 빼기">✕</button>
-                        </div>
-                      </div>
-                      <div className="flex flex-col sm:flex-row gap-2 min-w-0">
-                        <Suggest value={s.name} onChange={(v) => setStop(i, { name: v, manager: "" })} items={placePool} k="업체명" sub={placeSub} tag={(x) => x._src} title={`${STOP_LABEL[s.type] || s.type} · 거래처관리`} placeholder={`${STOP_LABEL[s.type] || s.type} 검색 (업체·장소명)`}
-                          onPick={(p) => setStop(i, { name: p.업체명 || "", addr: p.주소 || s.addr, manager: p.담당자 || "", contact: p.담당자번호 ? fmtPhone(p.담당자번호) : s.contact, memo: s.memo || p.메모 || "", _more: s._more || !!(p.담당자 || p.담당자번호) })} />
-                        <div className="shrink-0 flex items-center gap-2" title={`${s.type} 시간 · 비우면 즉시`}><TimeSelect value={s.time} onChange={(v) => setStop(i, { time: v })} />{isNew && <span className="sm:hidden"><NewTag /></span>}</div>
-                      </div>
-                      <input value={s.addr} onChange={(e) => setStop(i, { addr: e.target.value })} placeholder="주소" className={`${inp} mt-2`} />
-                      <div className="mt-2 flex items-center gap-2 min-w-0" data-fr-method={i}>
-                        <span className="shrink-0 w-[62px] text-[14px] font-black text-[#3A4A66]">{methodLabel(s.type)}</span>
-                        <div className="flex-1 min-w-0">
-                          <CompanyOptionPicker optKey="상하차방법" title={methodLabel(s.type)} placeholder="선택" noneLabel="선택 안 함" className={`${inp} ${s.method ? "" : "!text-[#5B6B85]"}`} value={s.method || ""} onChange={(v) => setStop(i, { method: v })} />
-                        </div>
-                      </div>
-                      <button type="button" tabIndex={-1} onClick={() => setStop(i, { _more: !s._more })} className="mt-2 h-8 px-1 inline-flex items-center gap-1.5 text-[14px] font-black text-[#2D4C82]" aria-expanded={!!s._more}>
-                        <span className={`inline-block transition-transform ${s._more ? "rotate-90" : ""}`}>›</span>담당자 · 연락처 · 메모
-                        {!s._more && (s.manager || s.contact || s.memo) && <span className="text-[14px] font-semibold text-[#5B6B85] truncate max-w-[180px]">{[s.manager, s.contact].filter(Boolean).join(" ") || "메모 있음"}</span>}
-                      </button>
-                      {s._more && (
-                        <div className="mt-1 grid grid-cols-1 sm:grid-cols-2 gap-2">
-                          <input value={s.manager || ""} onChange={(e) => setStop(i, { manager: e.target.value })} placeholder="담당자" className={inp} />
-                          <input value={s.contact} inputMode="tel" onChange={(e) => setStop(i, { contact: fmtPhone(e.target.value) })} placeholder="연락처" className={inp} />
-                          <input value={s.memo} onChange={(e) => setStop(i, { memo: e.target.value })} placeholder="메모(출입·하역 안내 등)" className={`${inp} sm:col-span-2`} />
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-            {/* ⭐ 2026-11-05 + 상차지 추가 없앰 — 경유·거점만(하차지 바로 앞에) · 상차를 더 넣으려면 정류지 구분을 "상차"로 */}
-            <div className="mt-1 pl-[38px] md:pl-[40px] grid grid-cols-2 gap-2" data-fr-add="1">
-              {[["경유", "경유지"], ["거점", "거점지"]].map(([t, l]) => (
-                <button tabIndex={-1} key={t} type="button" data-fr-add-type={t} onClick={() => setForm((p) => { const a = [...p.stops]; a.splice(Math.max(0, a.length - 1), 0, blankStop(t)); return { ...p, stops: a }; })}
-                  className="h-11 rounded-xl border-2 border-dashed border-[#C9D6EE] bg-white text-[14px] font-black text-[#2D4C82] hover:bg-[#F3F7FE] hover:border-[#8FB0F0] whitespace-nowrap">+ {l} 추가</button>
-              ))}
-            </div>
-            <div className="text-[14px] text-[#5B6B85] mt-3 leading-relaxed">시간을 비우면 <b className="text-[#1B2B4B]">즉시</b> · 경유·거점은 하차지 바로 앞에 들어갑니다(↑↓로 순서 변경) · <NewTag /> 표시된 곳은 저장할 때 거래처관리에 함께 등록됩니다</div>
-          </div>
-          </div>
+            </StepCard>
 
-          {/* ── 오른쪽: 화물 → 운임 → 기사·차량 ── */}
-          <div className="space-y-4 min-w-0">
-            {/* CARGO · 화물 — 기본 1장(노선 전체) + 경유·거점마다 1장 */}
-            <div className={`${card} p-4 md:p-5`} data-fr-right="cargo">
-              <Sec en="CARGO" ko="화물" sub={midIdx.length ? `기본 화물 + 경유·거점 ${midIdx.length}곳` : "이 노선에 싣는 화물"} />
+            {/* 02 경로 */}
+            <StepCard n={2} anchor="route" title="경로" sub="상차지 → 경유·거점 → 하차지" done={steps[1][2]} data-fr-left="1">
+              <div className="relative">
+                <div className="absolute left-[15px] top-5 bottom-8 w-[2px] bg-gradient-to-b from-[#0F1A30] via-[#C9D6EE] to-[#0F1A30]" />
+                {stops.map((s, i) => {
+                  const isNew = (s.name || "").trim() && !knownPlace(s.name);
+                  const ends = i === 0 || i === stops.length - 1;
+                  return (
+                    <div key={i} className="relative flex gap-2.5 md:gap-3 mb-3" data-fr-stop={i}>
+                      <span className="relative z-[1] mt-3"><Num n={i + 1} solid={ends} /></span>
+                      <div className={`flex-1 min-w-0 rounded-2xl border p-3 md:p-4 ${ends ? "border-[#D5DEEC] bg-[#F8FAFD]" : "border-[#C9D6EE] bg-[#F4F8FF]"}`}>
+                        <div className="flex items-center gap-1.5 mb-3 flex-wrap">
+                          <div className="inline-flex p-0.5 rounded-lg bg-white border border-[#E3E8F0]" title="정류지 구분">
+                            {STOP_TYPES.map((t) => <button tabIndex={-1} key={t} type="button" onClick={() => setStop(i, { type: t })} className={`h-8 px-2.5 sm:px-3 rounded-md text-[14px] font-black ${s.type === t ? "bg-[#0F1A30] text-white" : "text-[#5B6B85] hover:bg-[#F3F6FA]"}`}>{t}</button>)}
+                          </div>
+                          {isNew && <span className="hidden sm:inline-flex"><NewTag /></span>}
+                          <div className="ml-auto flex items-center">
+                            <button type="button" tabIndex={-1} onClick={() => moveStop(i, -1)} disabled={i === 0} className="w-8 h-8 rounded-lg text-[15px] text-[#5B6B85] hover:bg-white disabled:opacity-25" aria-label="위로">↑</button>
+                            <button type="button" tabIndex={-1} onClick={() => moveStop(i, 1)} disabled={i === stops.length - 1} className="w-8 h-8 rounded-lg text-[15px] text-[#5B6B85] hover:bg-white disabled:opacity-25" aria-label="아래로">↓</button>
+                            <button type="button" tabIndex={-1} onClick={() => setForm((p) => ({ ...p, stops: p.stops.filter((_, j) => j !== i) }))} disabled={stops.length <= 1} className="w-8 h-8 rounded-lg text-[#5B6B85] hover:bg-white hover:text-[#E5484D] disabled:opacity-25" aria-label="정류지 삭제" title="이 정류지 빼기">✕</button>
+                          </div>
+                        </div>
+                        <div className="flex flex-col sm:flex-row gap-2 min-w-0">
+                          <Suggest value={s.name} onChange={(v) => setStop(i, { name: v, manager: "" })} items={placePool} k="업체명" sub={placeSub} tag={(x) => x._src} title={`${STOP_LABEL[s.type] || s.type} · 거래처관리`} placeholder={`${STOP_LABEL[s.type] || s.type} 검색 (업체·장소명)`}
+                            onPick={(p) => setStop(i, { name: p.업체명 || "", addr: p.주소 || s.addr, manager: p.담당자 || "", contact: p.담당자번호 ? fmtPhone(p.담당자번호) : s.contact, memo: s.memo || p.메모 || "", _more: s._more || !!(p.담당자 || p.담당자번호) })} />
+                          <div className="shrink-0 flex items-center gap-2" title={`${s.type} 시간 · 비우면 즉시`}><TimeSelect value={s.time} onChange={(v) => setStop(i, { time: v })} />{isNew && <span className="sm:hidden"><NewTag /></span>}</div>
+                        </div>
+                        <input value={s.addr} onChange={(e) => setStop(i, { addr: e.target.value })} placeholder="주소" className={`${inp} mt-2`} />
+                        <div className="mt-2 flex items-center gap-2 min-w-0" data-fr-method={i}>
+                          <span className="shrink-0 w-[68px] text-[14px] font-black text-[#3A4A66]">{methodLabel(s.type)}</span>
+                          <div className="flex-1 min-w-0">
+                            <CompanyOptionPicker optKey="상하차방법" title={methodLabel(s.type)} placeholder="선택" noneLabel="선택 안 함" className={`${inp} ${s.method ? "" : "!text-[#5B6B85]"}`} value={s.method || ""} onChange={(v) => setStop(i, { method: v })} />
+                          </div>
+                        </div>
+                        <button type="button" tabIndex={-1} onClick={() => setStop(i, { _more: !s._more })} className="mt-2 h-9 px-1 inline-flex items-center gap-1.5 text-[14px] font-black text-[#2D4C82]" aria-expanded={!!s._more}>
+                          <span className={`inline-block transition-transform ${s._more ? "rotate-90" : ""}`}>›</span>담당자 · 연락처 · 메모
+                          {!s._more && (s.manager || s.contact || s.memo) && <span className="text-[14px] font-semibold text-[#5B6B85] truncate max-w-[180px]">{[s.manager, s.contact].filter(Boolean).join(" ") || "메모 있음"}</span>}
+                        </button>
+                        {s._more && (
+                          <div className="mt-1 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                            <input value={s.manager || ""} onChange={(e) => setStop(i, { manager: e.target.value })} placeholder="담당자" className={inp} />
+                            <input value={s.contact} inputMode="tel" onChange={(e) => setStop(i, { contact: fmtPhone(e.target.value) })} placeholder="연락처" className={inp} />
+                            <input value={s.memo} onChange={(e) => setStop(i, { memo: e.target.value })} placeholder="메모(출입·하역 안내 등)" className={`${inp} sm:col-span-2`} />
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="mt-1 pl-[42px] grid grid-cols-2 gap-2" data-fr-add="1">
+                {[["경유", "경유지"], ["거점", "거점지"]].map(([t, l]) => (
+                  <button tabIndex={-1} key={t} type="button" data-fr-add-type={t} onClick={() => setForm((p) => { const a = [...p.stops]; a.splice(Math.max(0, a.length - 1), 0, blankStop(t)); return { ...p, stops: a }; })}
+                    className="h-12 rounded-xl border-2 border-dashed border-[#C9D6EE] bg-white text-[14.5px] font-black text-[#2D4C82] hover:bg-[#F3F7FE] hover:border-[#8FB0F0] whitespace-nowrap">+ {l} 추가</button>
+                ))}
+              </div>
+              <div className="text-[14px] text-[#5B6B85] mt-3 leading-relaxed">시간을 비우면 <b className="text-[#1B2B4B]">즉시</b>. 경유·거점은 하차지 바로 앞에 들어갑니다. <NewTag /> 표시된 곳은 저장할 때 거래처관리에 등록됩니다.</div>
+            </StepCard>
+
+            {/* 03 화물 — 기본 화물(차량톤수·화물내용) + 경유·거점마다 */}
+            <StepCard n={3} anchor="cargo" title="화물" sub="차량톤수와 화물내용은 여기서 한 번만" done={steps[2][2]} data-fr-right="cargo">
               <div className="space-y-3">
-                <div className="rounded-2xl border border-[#D5DEEC] bg-[#F8FAFD] p-3.5" data-fr-cargo="main">
+                <div className="rounded-2xl border border-[#D5DEEC] bg-[#F8FAFD] p-4" data-fr-cargo="main">
                   <div className="flex items-center gap-2 mb-3 min-w-0">
-                    <span className="text-[15px] font-black text-[#0F1A30] whitespace-nowrap">기본 화물</span>
+                    <span className="text-[16px] font-black text-[#0F1A30] whitespace-nowrap">기본 화물</span>
                     <span className="min-w-0 truncate text-[14px] font-bold text-[#5B6B85]">{stopName(stops[0]) || "상차지"} → {stopName(stops[stops.length - 1]) || "하차지"}</span>
                   </div>
-                  {cargoFields(form._cargo || {}, setCargo)}
+                  {cargoFields(form._cargo || {}, setCargo, true)}
                 </div>
                 {midIdx.map((i) => {
                   const s = stops[i];
                   return (
-                    <div key={i} className="rounded-2xl border border-[#C9D6EE] bg-[#F4F8FF] p-3.5" data-fr-cargo={i}>
+                    <div key={i} className="rounded-2xl border border-[#C9D6EE] bg-[#F4F8FF] p-4" data-fr-cargo={i}>
                       <div className="flex items-center gap-2 mb-3 min-w-0">
                         <Num n={i + 1} />
                         <TypeBadge t={s.type} />
-                        <span className={`min-w-0 truncate text-[15px] font-black ${s.name ? "text-[#0F1A30]" : "text-[#5B6B85]"}`}>{s.name || "왼쪽 경로에서 업체를 입력하세요"}</span>
+                        <span className={`min-w-0 truncate text-[15px] font-black ${s.name ? "text-[#0F1A30]" : "text-[#5B6B85]"}`}>{s.name || "경로에서 업체를 입력하세요"}</span>
                         <span className="ml-auto shrink-0 text-[14px] font-semibold text-[#5B6B85] hidden sm:inline">이 곳 화물 · 없으면 비움</span>
                       </div>
                       {cargoFields(s, (patch) => setStop(i, patch))}
@@ -1111,18 +1364,36 @@ export default function FixedRoutes({ drivers = [], companyName = "", dispatchDa
                   );
                 })}
               </div>
-            </div>
+            </StepCard>
 
-            {/* FARE · 운임 — 노선 전체 한 번에 / 구간별로 따로 */}
-            <div className={`${card} p-4 md:p-5`} data-fr-right="fare">
-              <Sec en="FARE" ko="운임" sub={form.client.trim() ? `청구처 ${form.client.trim()}` : "청구처 — 위 노선 정보에서 거래처 입력"} />
-              <div className="grid grid-cols-2 gap-1 p-1 rounded-2xl bg-[#F3F6FA] border border-[#E3E8F0] mb-3.5" data-fr-fare-mode={form._fareMode}>
+            {/* 04 기사/차량 — 톤수 칸 없음(03 화물의 차량톤수) */}
+            <StepCard n={4} anchor="driver" title="기사 · 차량" sub="비워 두면 배차중으로 만들어집니다" done={steps[3][2]} data-fr-right="driver">
+              <label className={lab}>배정 기사님(지입·직영)</label>
+              <CustomSelect value={form.driverKey} onChange={(e) => pickDriver(e.target.value)} className={inp}>
+                <option value="">미배정(배차중으로 생성)</option>
+                {drivers.map((d) => <option key={d.id} value={d.id}>{d.이름} · {d.차량번호}{d.차량톤수 ? ` · ${d.차량톤수}` : ""}</option>)}
+              </CustomSelect>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-4">
+                <div className="min-w-0"><label className={lab}>차량종류</label><VehicleTypePicker className={inp} value={form.vehicleType} base={VEHICLE_TYPES_FR} placeholder="선택" noneLabel="선택 안 함" onChange={(v) => set("vehicleType", v)} /></div>
+                <div className="min-w-0"><label className={lab}>배차방식</label><CompanyOptionPicker optKey="배차방식" placeholder="고정기사" noneLabel="선택 안 함(고정기사)" className={inp} value={form.dispatchType || ""} onChange={(v) => set("dispatchType", v)} /></div>
+              </div>
+              <button type="button" tabIndex={-1} onClick={() => goStep("cargo")} className="mt-3 w-full flex items-center gap-3 rounded-xl border border-[#E3E8F0] bg-[#F7F9FC] px-4 py-3 text-left hover:bg-[#EEF3FC]" data-fr-driver-ton="1">
+                <span className="text-[14px] font-bold text-[#5B6B85] whitespace-nowrap">차량톤수</span>
+                <span className={`text-[16px] font-black tabular-nums ${tonNow ? "text-[#0F1A30]" : "text-[#C4262C]"}`}>{tonNow || "미입력"}</span>
+                <span className="ml-auto text-[14px] font-bold text-[#2D4C82] whitespace-nowrap">03 화물에서 입력 ›</span>
+              </button>
+              <div className="mt-3"><ToggleRow title="기사님 자동 수락" desc="매번 수락 없이 '수락' 상태로" checked={form.autoAccept !== false} onChange={(v) => set("autoAccept", v)} /></div>
+            </StepCard>
+
+            {/* 05 운임/정산 — 노선 전체 한 번에 / 구간별로 따로 */}
+            <StepCard n={5} anchor="fare" title="운임 · 정산" sub={form.client.trim() ? `청구처 ${form.client.trim()}` : "청구처는 01 기본 정보에서 입력"} done={steps[4][2]} data-fr-right="fare">
+              <div className="grid grid-cols-2 gap-1 p-1 rounded-2xl bg-[#F3F6FA] border border-[#E3E8F0] mb-4" data-fr-fare-mode={form._fareMode}>
                 {[["route", "노선 전체 한 번에", "운임 1개 · 지급방식 1개"], ["seg", "구간별로 따로", midIdx.length || segMode ? "구간마다 운임·지급방식" : "경유·거점이 있을 때"]].map(([m, t, d]) => {
                   const on = form._fareMode === m; const dis = m === "seg" && !midIdx.length && !segMode;
                   return (
                     <button key={m} type="button" tabIndex={-1} disabled={dis} onClick={() => setFareMode(m)} data-fr-mode={m}
-                      className={`min-w-0 rounded-xl px-2 py-2 text-center transition ${on ? "bg-[#0F1A30] text-white shadow" : "text-[#3A4A66] hover:bg-white"} disabled:opacity-45 disabled:hover:bg-transparent`}>
-                      <span className="block text-[14px] font-black truncate">{t}</span>
+                      className={`min-w-0 rounded-xl px-2 py-2.5 text-center transition ${on ? "bg-[#0F1A30] text-white shadow" : "text-[#3A4A66] hover:bg-white"} disabled:opacity-45 disabled:hover:bg-transparent`}>
+                      <span className="block text-[15px] font-black truncate">{t}</span>
                       <span className={`block text-[14px] font-semibold truncate ${on ? "text-[#8FB0F0]" : "text-[#5B6B85]"}`}>{d}</span>
                     </button>
                   );
@@ -1130,7 +1401,7 @@ export default function FixedRoutes({ drivers = [], companyName = "", dispatchDa
               </div>
               {!segMode ? (
                 <div data-fr-fare-route="1">
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                     <div className="min-w-0"><label className={lab}>청구운임(1회)</label>{money(form.fareClient, (v) => set("fareClient", v), "0")}</div>
                     <div className="min-w-0"><label className={lab}>기사운임(1회)</label>{money(form.fareDriver, (v) => set("fareDriver", v), "0")}</div>
                     <div className="col-span-2 sm:col-span-1 min-w-0"><label className={lab}>지급방식 {(toInt(form.fareClient) || toInt(form.fareDriver)) ? <span className="text-[#E5484D]">*</span> : null}</label>
@@ -1140,7 +1411,7 @@ export default function FixedRoutes({ drivers = [], companyName = "", dispatchDa
                   <div data-fr-fare-type="1">{ruleRow(form.fareType, (v) => set("fareType", v), form.fareManual, "")}</div>
                 </div>
               ) : (
-                <div className="space-y-2.5" data-fr-fare-seg="1">
+                <div className="space-y-3" data-fr-fare-seg="1">
                   {stops.map((s, i) => {
                     if (i === 0) return null;
                     const prev = stops[i - 1];
@@ -1148,26 +1419,26 @@ export default function FixedRoutes({ drivers = [], companyName = "", dispatchDa
                     const sc = String(s.client || "").trim();
                     const other = s._payer && sc && norm(sc) !== norm(routeClient(form));
                     return (
-                      <div key={i} className={`rounded-2xl border p-3 md:p-3.5 ${err ? "border-[#E5484D] bg-[#FFF6F6]" : "border-[#E3E8F0] bg-[#FBFCFE]"}`} data-fr-seg={i}>
-                        <div className="flex items-center gap-1.5 mb-2.5 min-w-0">
-                          <span className="shrink-0 text-[14px] font-extrabold text-[#2D4C82] tabular-nums" style={{ fontFamily: MONO }}>{String(i).padStart(2, "0")}→{String(i + 1).padStart(2, "0")}</span>
-                          <span className="min-w-0 truncate text-[14px] font-black text-[#0F1A30]">{stopName(prev)} <span className="text-[#8FB0F0]">→</span> {stopName(s)}</span>
+                      <div key={i} className={`rounded-2xl border p-3.5 md:p-4 ${err ? "border-[#E5484D] bg-[#FFF6F6]" : "border-[#E3E8F0] bg-[#FBFCFE]"}`} data-fr-seg={i}>
+                        <div className="flex items-center gap-2 mb-3 min-w-0">
+                          <span className="shrink-0 text-[14px] font-extrabold text-[#2D4C82] tabular-nums">{String(i).padStart(2, "0")}→{String(i + 1).padStart(2, "0")}</span>
+                          <span className="min-w-0 truncate text-[15px] font-black text-[#0F1A30]">{stopName(prev)} <span className="text-[#8FB0F0]">→</span> {stopName(s)}</span>
                           <TypeBadge t={s.type} />
-                          <span className="ml-auto shrink-0 text-[14px] font-black text-[#5B6B85] tabular-nums" style={{ fontFamily: MONO }}>수수료 {won(toInt(s.fareClient) - toInt(s.fareDriver))}</span>
+                          <span className="ml-auto shrink-0 text-[14px] font-black text-[#5B6B85] tabular-nums">수수료 {won(toInt(s.fareClient) - toInt(s.fareDriver))}</span>
                         </div>
-                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                          <div className="min-w-0"><label className={`${lab} !text-[14px] !mb-1`}>청구운임</label>{money(s.fareClient, (v) => setStop(i, { fareClient: v }), "0")}</div>
-                          <div className="min-w-0"><label className={`${lab} !text-[14px] !mb-1`}>기사운임</label>{money(s.fareDriver, (v) => setStop(i, { fareDriver: v }), "0")}</div>
-                          <div className="col-span-2 sm:col-span-1 min-w-0"><label className={`${lab} !text-[14px] !mb-1`}>지급방식</label><PaySelect id={`fr-pay-${i}`} value={s.payMethod} onChange={(v) => setStop(i, { payMethod: v })} options={payTypes} error={err} /></div>
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+                          <div className="min-w-0"><label className={`${lab} !mb-1`}>청구운임</label>{money(s.fareClient, (v) => setStop(i, { fareClient: v }), "0")}</div>
+                          <div className="min-w-0"><label className={`${lab} !mb-1`}>기사운임</label>{money(s.fareDriver, (v) => setStop(i, { fareDriver: v }), "0")}</div>
+                          <div className="col-span-2 sm:col-span-1 min-w-0"><label className={`${lab} !mb-1`}>지급방식</label><PaySelect id={`fr-pay-${i}`} value={s.payMethod} onChange={(v) => setStop(i, { payMethod: v })} options={payTypes} error={err} /></div>
                         </div>
                         {ruleRow(s.fareType, (v) => setStop(i, { fareType: v }), s.fareManual, form.fareType ? `노선 기본(${form.fareType})` : "운임구분")}
-                        <div className="mt-2.5 flex items-center gap-2 flex-wrap min-w-0">
+                        <div className="mt-3 flex items-center gap-2 flex-wrap min-w-0">
                           <label className="inline-flex items-center gap-2 cursor-pointer select-none">
                             <input type="checkbox" checked={!!s._payer} onChange={(e) => setStop(i, e.target.checked ? { _payer: true, client: sc || form.client || "" } : { _payer: false, client: "" })} className="w-4 h-4 accent-[#0F1A30]" />
                             <span className="text-[14px] font-black text-[#3A4A66]">청구처 다르게</span>
                           </label>
                           {!s._payer && <span className="text-[14px] font-semibold text-[#5B6B85]">{form.client.trim() || "노선 거래처"}에 청구</span>}
-                          {other && <span className="h-5 px-1.5 inline-flex items-center rounded-md bg-[#FFF3D6] text-[#7A5300] text-[13px] font-black">다른 거래처</span>}
+                          {other && <FrChip tone="amber">다른 거래처</FrChip>}
                         </div>
                         {s._payer && (
                           <div className="mt-2 flex items-center gap-1.5 min-w-0">
@@ -1179,76 +1450,89 @@ export default function FixedRoutes({ drivers = [], companyName = "", dispatchDa
                     );
                   })}
                   {fp.legacy && (
-                    <div id="fr-legacy" className={`rounded-xl border px-3.5 py-3 ${tried ? "border-[#E5484D] bg-[#FFF6F6]" : "border-[#F0C36D] bg-[#FFFAEE]"}`}>
+                    <div id="fr-legacy" className={`rounded-xl border px-4 py-3 ${tried ? "border-[#E5484D] bg-[#FFF6F6]" : "border-[#F0C36D] bg-[#FFFAEE]"}`}>
                       <div className="text-[14px] font-black text-[#0F1A30]">예전 기본 운임(청구 {won(form.fareClient)} · 기사 {won(form.fareDriver)})이 구간 운임과 따로 들어 있습니다</div>
-                      <div className="text-[14px] text-[#5B6B85] mt-0.5">한 가지로 정리해 주세요 — 구간별이면 1회 운임은 구간 금액의 합계입니다.</div>
+                      <div className="text-[14px] text-[#5B6B85] mt-0.5">한 가지로 정리해 주세요. 구간별이면 1회 운임은 구간 금액의 합계입니다.</div>
                       <div className="flex gap-1.5 mt-2 flex-wrap">
-                        <button type="button" onClick={() => resolveLegacy(true)} className="h-9 px-3 rounded-lg bg-[#0F1A30] text-white text-[14px] font-black">하차지 운임에 합치기</button>
-                        <button type="button" onClick={() => resolveLegacy(false)} className="h-9 px-3 rounded-lg border border-[#DCE3EE] bg-white text-[14px] font-black text-[#1B2B4B]">기본 운임 지우기</button>
+                        <button type="button" onClick={() => resolveLegacy(true)} className="h-10 px-3.5 rounded-lg bg-[#0F1A30] text-white text-[14px] font-black">하차지 운임에 합치기</button>
+                        <button type="button" onClick={() => resolveLegacy(false)} className="h-10 px-3.5 rounded-lg border border-[#DCE3EE] bg-white text-[14px] font-black text-[#1B2B4B]">기본 운임 지우기</button>
                       </div>
                     </div>
                   )}
                   {fareR.on && <div className="flex items-center gap-2 flex-wrap" data-fr-fare-type="1"><span className="text-[14px] font-black text-[#3A4A66]">노선 기본 운임구분</span><FareTypeSelect compact rules={fareR.rules} value={form.fareType || ""} onChange={(v) => set("fareType", v)} /></div>}
                 </div>
               )}
-              {/* 실시간 합계 */}
-              <div className="mt-3.5 grid grid-cols-3 rounded-2xl overflow-hidden bg-[#0F1A30] text-white" data-fr-total="1">
+              <div className="mt-4 grid grid-cols-3 rounded-2xl overflow-hidden bg-[#0F1A30] text-white" data-fr-total="1">
                 {[["청구 합계", T.client], ["기사 합계", T.driver], ["수수료", T.client - T.driver]].map(([k, v], j) => (
-                  <div key={k} className={`px-3 py-2.5 min-w-0 ${j ? "border-l border-white/10" : ""}`}>
+                  <div key={k} className={`px-3.5 py-3 min-w-0 ${j ? "border-l border-white/10" : ""}`}>
                     <div className="text-[14px] font-bold text-[#8FB0F0] whitespace-nowrap">{k}</div>
-                    <div className="text-[16px] md:text-[17px] font-black tabular-nums truncate" style={{ fontFamily: MONO }}>{won(v)}<span className="text-[14px] font-bold text-white/85 ml-0.5">원</span></div>
+                    <div className="text-[17px] md:text-[19px] font-black tabular-nums truncate">{won(v)}<span className="text-[14px] font-bold text-white/80 ml-0.5">원</span></div>
                   </div>
                 ))}
               </div>
               {groups.length > 1 && (
-                <div className="mt-2 rounded-xl bg-[#FFFAEE] border border-[#F0C36D] px-3.5 py-2.5 text-[14px] text-[#3A4A66] leading-relaxed">
-                  <b className="text-[#0F1A30]">거래처·지급방식이 달라 배차가 하루 {groups.length}건으로 나뉩니다</b> — {groups.map((G) => `${G.payer || "-"} ${G.pay} ${won(G.client)}원`).join(" / ")} (같은 차량·같은 운행)
+                <div className="mt-2 rounded-xl bg-[#FFFAEE] border border-[#F0C36D] px-4 py-3 text-[14px] text-[#3A4A66] leading-relaxed">
+                  <b className="text-[#0F1A30]">거래처·지급방식이 달라 배차가 하루 {groups.length}건으로 나뉩니다.</b> {groups.map((G) => `${G.payer || "-"} ${G.pay} ${won(G.client)}원`).join(" / ")} (같은 차량·같은 운행)
                 </div>
               )}
-            </div>
+            </StepCard>
 
-            {/* DRIVER · 기사·차량 */}
-            <div className={`${card} p-4 md:p-5`} data-fr-right="driver">
-              <Sec en="DRIVER" ko="기사 · 차량" />
-              <label className={lab}>배정 기사님(지입·직영)</label>
-              <CustomSelect value={form.driverKey} onChange={(e) => pickDriver(e.target.value)} className={inp}>
-                <option value="">미배정(배차중으로 생성)</option>
-                {drivers.map((d) => <option key={d.id} value={d.id}>{d.이름} · {d.차량번호}{d.차량톤수 ? ` · ${d.차량톤수}` : ""}</option>)}
-              </CustomSelect>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 mt-3">
-                {/* 🚚 2026-11-02 회사 공용 차량종류(＋ 추가 포함) */}
-                <div className="min-w-0"><label className={lab}>차량종류</label><VehicleTypePicker className={inp} value={form.vehicleType} base={VEHICLE_TYPES_FR} placeholder="선택" noneLabel="선택 안 함" onChange={(v) => set("vehicleType", v)} /></div>
-                <div className="min-w-0"><label className={lab}>차량톤수</label><input value={form.tonnage} onChange={(e) => set("tonnage", e.target.value)} placeholder="예: 5톤" className={inp} /></div>
-                <div className="col-span-2 sm:col-span-1 min-w-0"><label className={lab}>배차방식</label><CompanyOptionPicker optKey="배차방식" placeholder="고정기사" noneLabel="선택 안 함(고정기사)" className={inp} value={form.dispatchType || ""} onChange={(v) => set("dispatchType", v)} /></div>
+            {/* 06 스케줄 */}
+            <StepCard n={6} anchor="schedule" title="스케줄" sub="운행 요일 · 출발 시간 · 기간" done={steps[5][2]} data-fr-days="1">
+              <div className="grid grid-cols-7 gap-1.5 mb-3">
+                {DAYS.map((d) => { const on = (form.days || []).includes(d); return <button tabIndex={-1} key={d} type="button" onClick={() => set("days", on ? form.days.filter((x) => x !== d) : DAYS.filter((x) => x === d || (form.days || []).includes(x)))} className={`h-12 rounded-xl text-[16px] font-black transition ${on ? "bg-[#0F1A30] text-white shadow" : "bg-white border border-[#DCE3EE] text-[#5B6B85]"} ${isWeekend(d) ? (on ? "" : "!text-[#C4262C]/70") : ""}`}>{d}</button>; })}
               </div>
-              <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-2">
-                {[["autoDispatch", "배차 자동 등록", "요일마다 배차가 미리 생깁니다"], ["autoAccept", "기사님 자동 수락", "매번 수락 없이 '수락' 상태로"]].map(([k, t, d]) => (
-                  <label key={k} className="flex items-center justify-between gap-3 rounded-xl border border-[#E3E8F0] px-3.5 py-2.5 cursor-pointer hover:bg-[#F8FAFD] min-w-0">
-                    <span className="min-w-0"><span className="block text-[14px] font-black text-[#0F1A30]">{t}</span><span className="block text-[14px] text-[#5B6B85] truncate">{d}</span></span>
-                    <input type="checkbox" checked={form[k] !== false} onChange={(e) => set(k, e.target.checked)} className="w-5 h-5 shrink-0 accent-[#0F1A30]" />
-                  </label>
-                ))}
+              <div className="flex flex-wrap gap-1.5 mb-4">
+                {[["평일", ["월", "화", "수", "목", "금"]], ["월~토", ["월", "화", "수", "목", "금", "토"]], ["매일", DAYS], ["월수금", ["월", "수", "금"]], ["화목", ["화", "목"]]].map(([l, ds]) => <button tabIndex={-1} key={l} type="button" onClick={() => set("days", ds)} className="h-10 px-4 rounded-lg bg-[#F3F6FA] text-[14px] font-bold text-[#3A4A66] hover:bg-[#EAF0F8]">{l}</button>)}
               </div>
-              <label className={`${lab} mt-3`}>노선 메모 <span className="font-semibold text-[14px] text-[#5B6B85]">기사님 전달사항으로도 들어갑니다</span></label>
-              <textarea value={form.memo} onChange={(e) => set("memo", e.target.value)} rows={2} placeholder="예: 정문 출입 시 사전 연락" className={`${inp} !h-auto py-2.5`} />
-            </div>
-
+              <div className="grid grid-cols-2 sm:grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)] gap-3">
+                <div className="col-span-2 sm:col-span-1 min-w-0"><label className={lab}>출발(상차) 시간</label><TimeSelect value={form.startTime} onChange={(v) => set("startTime", v)} /></div>
+                <div className="min-w-0"><label className={lab}>시작일</label><CustomDatePicker value={form.startDate} onChange={(e) => set("startDate", e.target.value)} className={inp} showIcon /></div>
+                <div className="min-w-0"><label className={lab}>종료일(선택)</label><CustomDatePicker value={form.endDate} onChange={(e) => set("endDate", e.target.value)} className={inp} showIcon placeholder="계속" /></div>
+              </div>
+              <div className="mt-4">
+                <label className={lab}>쉬는 날 <span className="font-semibold text-[14px] text-[#5B6B85]">달력에서 여러 날을 고르세요</span></label>
+                <MultiDateSelect value={form.skipDates || []} onChange={(v) => set("skipDates", v)} className={inp} placeholder="쉬는 날 고르기" />
+                {(form.skipDates || []).length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 mt-2">
+                    {form.skipDates.map((d) => <button tabIndex={-1} key={d} type="button" onClick={() => set("skipDates", form.skipDates.filter((x) => x !== d))} className="h-9 px-3 rounded-lg bg-[#EEF3FC] border border-[#C9D6EE] text-[14px] font-bold text-[#1B2B4B] tabular-nums">{d.slice(5).replace("-", ".")}({dayOf(d)}) ✕</button>)}
+                  </div>
+                )}
+              </div>
+              <div className="mt-4"><ToggleRow title="배차 자동 등록" desc="요일마다 배차가 미리 생깁니다" checked={form.autoDispatch !== false} onChange={(v) => set("autoDispatch", v)} /></div>
+              <div className="mt-4 rounded-2xl border border-[#E3E8F0] p-4" data-fr-form-cal="1">
+                <CardHead en="CALENDAR" title="다가오는 운행" right={<span className="text-[14px] font-black text-[#1B2B4B] tabular-nums whitespace-nowrap">{hN}건 예정</span>} />
+                <RunCalendar r={{ ...RT, active: form.active }} orders={form.id ? (dispatchData || []).filter((o) => o.고정노선Id === form.id) : []} weeks={5} />
+              </div>
+              <div className="mt-3 rounded-xl bg-[#F5F8FD] border border-[#E3E8F0] px-4 py-3 text-[14px] text-[#3A4A66] leading-relaxed" data-fr-horizon="1">
+                {form.active === false
+                  ? <><b className="text-[#0F1A30]">운행 OFF</b>. 저장해도 새 배차를 만들지 않습니다(이미 만든 배차는 그대로)</>
+                  : <>저장하면 <b className="text-[#0F1A30] tabular-nums">{md(hFrom)} ~ {md(hTo)} 운행일 {hN}건</b>을 먼저 만들고, {form.endDate && form.endDate <= hTo ? "종료일까지면 끝납니다" : "그 뒤는 매달 이어서 만듭니다"}</>}
+              </div>
+            </StepCard>
           </div>
+
+          {/* ── 오른쪽: 배차 미리보기 · 다가오는 운행 ── */}
+          <aside className="min-w-0 relative">
+            <div ref={pvRef} style={pvStyle || undefined} className="space-y-4">
+              <OrderPreview orders={PV} date={pvDate} count={hN} />
+            </div>
+          </aside>
         </div>
-        {/* ⭐ 2026-11-05 아래 고정 저장줄 — 요일 · 기간 · 청구 합계 한 줄 + [고정노선 저장] */}
+        {/* 아래 고정 저장줄 — 요일 · 기간 · 톤수 · 청구 합계 + [고정노선 저장] */}
         <div ref={barRef} className="mt-4 h-[84px] md:h-[88px]" aria-hidden="true" />
         <div className="fixed bottom-0 z-[60] pt-2" style={{ left: barBox ? barBox.l : 12, width: barBox ? barBox.w : "calc(100% - 24px)", paddingBottom: "max(env(safe-area-inset-bottom, 0px), 10px)" }} data-fr-bar="1">
           <div className="rounded-2xl bg-white/95 backdrop-blur border border-[#D5DEEC] shadow-[0_-4px_24px_rgba(16,24,40,0.10)] px-3 py-2.5 md:px-5 md:py-3 flex items-center gap-2.5 md:gap-4">
             <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-1.5 text-[14px] font-extrabold tracking-[0.12em] text-[#2D4C82]" style={{ fontFamily: MONO }}>
+              <div className="flex items-center gap-1.5 text-[13px] font-extrabold tracking-[0.14em] text-[#2D4C82]">
                 <span className={`w-1.5 h-1.5 rounded-full ${form.active === false ? "bg-[#CBD5E3]" : "bg-[#2D4C82]"}`} />{form.active === false ? "OFF" : "SUMMARY"}
               </div>
-              <div className="text-[14px] md:text-[14.5px] font-black text-[#0F1A30] min-w-0 sm:truncate">
-                <span className="block sm:inline truncate">{daysLabel} · {md(form.startDate) || "오늘"} ~ {form.endDate ? md(form.endDate) : "계속"}</span>
+              <div className="text-[14px] md:text-[15px] font-black text-[#0F1A30] min-w-0 sm:truncate">
+                <span className="block sm:inline truncate">{daysLabel} · {md(form.startDate) || "오늘"} ~ {form.endDate ? md(form.endDate) : "계속"}{tonNow ? ` · ${tonNow}` : ""}</span>
                 <span className="hidden sm:inline"> · </span><span className="block sm:inline tabular-nums truncate">청구 {won(T.client)}원{T.client ? <span className="text-[#5B6B85] font-bold"> · 수수료 {won(T.client - T.driver)}</span> : null}</span>
               </div>
             </div>
-            <button type="button" tabIndex={-1} onClick={() => setForm(null)} className="hidden md:inline-flex items-center h-12 px-5 rounded-xl border border-[#DCE3EE] bg-white text-[14.5px] font-bold text-[#3A4A66] whitespace-nowrap">취소</button>
+            <button type="button" tabIndex={-1} onClick={() => setForm(null)} className="hidden md:inline-flex items-center h-12 px-5 rounded-xl border border-[#DCE3EE] bg-white text-[15px] font-bold text-[#3A4A66] whitespace-nowrap">취소</button>
             <button type="button" tabIndex={-1} onClick={askSave} disabled={busy} data-fr-save="1" className="shrink-0 h-12 px-5 md:px-8 rounded-xl bg-[#0F1A30] text-white text-[15px] font-black disabled:opacity-50 whitespace-nowrap">{form.id ? "수정 저장" : "고정노선 저장"}</button>
           </div>
         </div>
@@ -1269,7 +1553,7 @@ export default function FixedRoutes({ drivers = [], companyName = "", dispatchDa
                       <div className="text-[14px] font-extrabold tracking-[0.3em] text-[#8FB0F0]" style={{ fontFamily: MONO }}>FIXED ROUTE · CONFIRM</div>
                       <div className="text-[20px] md:text-[24px] font-black mt-0.5 truncate">{form.name}</div>
                       <div className="flex flex-wrap gap-1.5 mt-2">
-                        {[form.client, (form.days || []).join(" "), korTimeLabel(form.startTime), `${form.startDate || ""} ~ ${form.endDate || "계속"}`, form.driverName ? `${form.driverName} ${form.carNo}` : "기사 미배정", [form.tonnage, form.vehicleType].filter(Boolean).join(" ")].filter(Boolean).map((x, i) => <span key={i} className="px-2.5 py-1 rounded-lg bg-white/10 border border-white/15 text-[14px] font-bold">{x}</span>)}
+                        {[form.client, (form.days || []).join(" "), korTimeLabel(form.startTime), `${form.startDate || ""} ~ ${form.endDate || "계속"}`, form.driverName ? `${form.driverName} ${form.carNo}` : "기사 미배정", [routeTon(R), form.vehicleType].filter(Boolean).join(" ")].filter(Boolean).map((x, i) => <span key={i} className="px-2.5 py-1 rounded-lg bg-white/10 border border-white/15 text-[14px] font-bold">{x}</span>)}
                       </div>
                     </div>
                     <button tabIndex={-1} type="button" onClick={() => setReview(false)} className="h-10 px-4 rounded-xl bg-white/10 border border-white/20 text-[14px] font-black shrink-0 whitespace-nowrap">닫기</button>
@@ -1342,122 +1626,182 @@ export default function FixedRoutes({ drivers = [], companyName = "", dispatchDa
     );
   }
   // ───────────── 목록 · 상세 ─────────────
+  // ⭐ 2026-11-07 두 패널 같은 높이 · 같은 머리줄 · 큰 글씨 — 상세는 KPI · 경로 타임라인 · 요일 · 운행 달력 · 최근 배차
+  const monthEnd = monthEndOf(today);
+  const monthRuns = (r) => (r.active && r.autoDispatch ? routeDatesBetween(r, today, monthEnd).length : 0);
+  const filtered = shown.filter((r) => (flt === "on" ? r.active : flt === "off" ? !r.active : flt === "today" ? todayRuns.includes(r) : true));
+  const pick = (id) => { setSelId(id); if (typeof window !== "undefined" && window.innerWidth < 1280) setTimeout(() => document.querySelector("[data-fr-detail]")?.scrollIntoView({ behavior: "smooth", block: "start" }), 60); };
+  const selOrders = sel ? (dispatchData || []).filter((o) => o.고정노선Id === sel.id) : [];
+  const selT = sel ? routeTotals(sel) : null;
+  const selGroups = sel ? routePayGroups(sel) : [];
   return (
-    <div>
-      <div className="relative overflow-hidden rounded-[22px] px-6 py-5 text-white flex items-center justify-between gap-4 flex-wrap mb-4"
+    <div data-fr-list="1">
+      <div className="relative overflow-hidden rounded-[22px] px-5 md:px-6 py-5 text-white mb-4"
         style={{ background: "linear-gradient(rgba(143,176,240,.07) 1px, transparent 1px) 0 0/22px 22px, linear-gradient(90deg, rgba(143,176,240,.07) 1px, transparent 1px) 0 0/22px 22px, linear-gradient(120deg,#0B1428 0%,#1B2B4B 60%,#2D4C82 100%)" }}>
-        <div>
-          <div className="text-[14px] font-extrabold tracking-[0.12em] text-[#8FB0F0]" style={{ fontFamily: MONO }}>FIXED ROUTES</div>
-          <div className="text-[22px] font-black">고정노선</div>
-          <div className="text-[14px] text-white/85">정해진 요일·시간에 같은 기사님이 가는 노선 — 배차가 자동으로 만들어집니다</div>
+        <div className="flex items-start gap-4 flex-wrap">
+          <div className="min-w-0">
+            <div className="text-[13px] font-extrabold tracking-[0.16em] text-[#8FB0F0]">FIXED ROUTES</div>
+            <div className="text-[24px] font-black leading-tight">고정노선</div>
+            <div className="text-[14px] text-white/80 mt-0.5">정해진 요일·시간에 같은 기사님이 가는 노선. 배차가 자동으로 만들어집니다</div>
+          </div>
+          <div className="ml-auto flex items-center gap-2 flex-wrap">
+            <button type="button" onClick={genNow} className="h-11 px-4 rounded-xl bg-white/10 border border-white/20 text-[14.5px] font-black">배차 미리 만들기</button>
+            <button type="button" onClick={() => setForm(toForm(blankRoute()))} className="h-11 px-5 rounded-xl bg-white text-[#0F1A30] text-[14.5px] font-black">+ 노선 만들기</button>
+          </div>
         </div>
-        <div className="flex items-center gap-2 flex-wrap">
-          {[["전체 노선", `${routes.length}개`], ["운행 중", `${routes.filter((r) => r.active).length}개`], [`오늘(${todayDay})`, `${todayRuns.length}개`]].map(([k, v]) => (
-            <div key={k} className="px-3.5 py-1.5 rounded-xl bg-white/[0.07] border border-white/10"><div className="text-[14px] font-bold text-white/85">{k}</div><div className="text-[16px] font-black tabular-nums" style={{ fontFamily: MONO }}>{v}</div></div>
-          ))}
-          <button type="button" onClick={genNow} className="h-11 px-4 rounded-xl bg-white/10 border border-white/20 text-[14px] font-black">배차 미리 만들기</button>
-          <button type="button" onClick={() => setForm(toForm(blankRoute()))} className="h-11 px-5 rounded-xl bg-white text-[#0F1A30] text-[14px] font-black">+ 노선 만들기</button>
+        <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-2">
+          <Kpi dark label="전체 노선" value={routes.length} unit="개" />
+          <Kpi dark label="운행 중" value={routes.filter((r) => r.active).length} unit="개" sub={`OFF ${routes.filter((r) => !r.active).length}개`} />
+          <Kpi dark label={`오늘(${todayDay}) 운행`} value={todayRuns.length} unit="개" />
+          <Kpi dark label="이번 달 남은 배차" value={routes.reduce((a, r) => a + monthRuns(r), 0)} unit="건" sub={`~${frMd(monthEnd)}`} />
         </div>
       </div>
-      {msg && <div className="mb-3 rounded-xl bg-[#0F1A30] text-white px-4 py-2.5 text-[14px] font-bold">{msg}</div>}
+      {msg && <div className="mb-3 rounded-xl bg-[#0F1A30] text-white px-4 py-3 text-[14.5px] font-bold">{msg}</div>}
       <GenProgressModal p={prog} />
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)]">
-        <div className={`${card} overflow-hidden`}>
-          <div className="px-4 py-3 border-b border-[#EEF1F6]"><input value={q} onChange={(e) => setQ(e.target.value)} placeholder="노선·거래처·기사 검색" className={`${inp} bg-[#F8FAFD]`} /></div>
-          {!shown.length && <div className="py-16 text-center text-[14px] font-bold text-[#5B6B85]">{routes.length ? "검색 결과가 없습니다" : "첫 고정노선을 만들어 보세요"}</div>}
-          {shown.map((r) => {
-            const on = r.id === selId;
-            return (
-              // ⭐ 2026-11-05 줄마다 운행 ON/OFF 스위치(줄 안에 버튼을 넣으려고 줄은 div)
-              <div key={r.id} role="button" tabIndex={0} data-fr-row={r.id} onClick={() => setSelId(r.id)} onDoubleClick={() => setForm(toForm(r))} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setSelId(r.id); } }}
-                className={`w-full text-left px-4 py-3 border-b border-[#EEF1F6] transition cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-[#8FB0F0] ${on ? "bg-[#0F1A30] text-white" : "hover:bg-[#F5F8FD]"}`}>
-                <div className="flex items-center gap-2">
-                  <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: on ? "#8FB0F0" : r.color || "#2D4C82" }} />
-                  <span className={`text-[14.5px] font-black truncate flex-1 ${r.active ? "" : "opacity-55"}`}>{r.name}</span>
-                  {(r.days || []).includes(todayDay) && r.active && <span className={`text-[14px] font-black px-1.5 rounded ${on ? "bg-[#8FB0F0] text-[#0B1428]" : "bg-[#0F1A30] text-white"}`}>오늘</span>}
-                  <OnOffSwitch on={!!r.active} dark={on} onChange={(v) => toggleActive(r, v)} />
-                </div>
-                <div className={r.active ? "" : "opacity-55"}>
-                {/* ⭐ 2026-11-01 정류지별 운임 노선은 목록에서 바로 보이게(마우스를 올리면 정류지별 금액·지급방식) */}
-                {routeTotals(r).perStop && <div className="mt-1 flex items-center gap-1.5 flex-wrap"><StopFareBadge r={r} on={on} /><span className={`text-[14px] font-bold tabular-nums ${on ? "text-white/75" : "text-[#5B6B85]"}`} style={{ fontFamily: MONO }}>청구 {won(routeTotals(r).client)} · 기사 {won(routeTotals(r).driver)}</span></div>}
-                <div className={`mt-1 text-[14px] truncate ${on ? "text-white/85" : "text-[#5B6B85]"}`}>
-                  {(r.stops || []).map((s) => s.name || s.addr).filter(Boolean).join(" → ")}
-                </div>
-                <div className="mt-1.5 flex items-center gap-1 flex-wrap">
-                  {DAYS.map((d) => <span key={d} className={`w-5 h-5 rounded text-[13px] font-black flex items-center justify-center ${(r.days || []).includes(d) ? (on ? "bg-white text-[#0F1A30]" : "bg-[#1B2B4B] text-white") : (on ? "text-white/85" : "text-[#8A98B0]")}`}>{d}</span>)}
-                  <span className={`ml-1.5 text-[14px] font-bold ${on ? "text-white/80" : "text-[#3A4A66]"}`}>{korTimeLabel(r.startTime)} · {r.driverName || "기사님 미배정"}{r.carNo ? ` (${r.carNo})` : ""}</span>
-                </div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-        <div>
-          {!sel ? (
-            <div className={`${card} py-24 text-center`}>
-              <div className="text-[15px] font-black text-[#0F1A30]">노선을 고르세요</div>
-              <div className="text-[14px] text-[#5B6B85] mt-1">왼쪽 목록을 누르면 경로·일정·최근 배차가 보입니다 · 두 번 누르면 수정</div>
+      <div className="grid gap-4 xl:grid-cols-[400px_minmax(0,1fr)] xl:h-[calc(100vh-150px)] xl:min-h-[640px]">
+        {/* 왼쪽: 노선 목록 */}
+        <section className={`${card} overflow-hidden flex flex-col min-h-0`} data-fr-listpanel="1">
+          <PanelHead en="ROUTE LIST" title="노선 목록" sub={`${filtered.length}개`} />
+          <div className="shrink-0 p-3 border-b border-[#EEF1F6] space-y-2">
+            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="노선·거래처·기사 검색" className={`${inp} bg-[#F8FAFD]`} />
+            <div className="grid grid-cols-4 gap-1 p-1 rounded-xl bg-[#F3F6FA]">
+              {[["all", "전체"], ["on", "운행 중"], ["off", "OFF"], ["today", "오늘"]].map(([k, l]) => (
+                <button key={k} type="button" onClick={() => setFlt(k)} className={`h-9 rounded-lg text-[14px] font-black ${flt === k ? "bg-white text-[#0F1A30] shadow-sm" : "text-[#5B6B85]"}`}>{l}</button>
+              ))}
             </div>
-          ) : (
-            <div className={`${card} overflow-hidden`}>
-              <div className="px-5 py-4 text-white flex items-center gap-2" style={{ background: "linear-gradient(120deg,#0B1428,#1B2B4B 70%,#2D4C82)" }}>
-                <div className="flex-1 min-w-0">
-                  <div className="text-[14px] font-extrabold tracking-[0.12em] text-[#8FB0F0]" style={{ fontFamily: MONO }}>ROUTE · {sel.client || "-"}</div>
-                  <div className="text-[19px] font-black truncate">{sel.name}</div>
+          </div>
+          <div className="flex-1 min-h-0 xl:overflow-y-auto">
+            {!filtered.length && <div className="py-16 text-center text-[15px] font-bold text-[#5B6B85]">{routes.length ? "조건에 맞는 노선이 없습니다" : "첫 고정노선을 만들어 보세요"}</div>}
+            {filtered.map((r) => {
+              const on = r.id === selId;
+              const st = (r.stops || []).filter((s) => s.name || s.addr);
+              const tt = routeTotals(r);
+              const isToday = todayRuns.includes(r);
+              return (
+                <div key={r.id} role="button" tabIndex={0} data-fr-row={r.id} onClick={() => pick(r.id)} onDoubleClick={() => setForm(toForm(r))} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); pick(r.id); } }}
+                  className={`relative w-full text-left px-4 py-4 border-b border-[#EEF1F6] transition cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#8FB0F0] ${on ? "bg-[#EEF3FC]" : "hover:bg-[#F8FAFD]"}`}>
+                  {on && <span className="absolute left-0 top-0 bottom-0 w-[4px] bg-[#2D4C82]" />}
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: r.color || "#2D4C82" }} />
+                    <span className={`text-[16px] font-black text-[#0F1A30] truncate flex-1 ${r.active ? "" : "opacity-55"}`}>{r.name}</span>
+                    {isToday && <FrChip tone="navy">오늘</FrChip>}
+                    <OnOffSwitch on={!!r.active} onChange={(v) => toggleActive(r, v)} />
+                  </div>
+                  <div className={r.active ? "" : "opacity-55"}>
+                    <div className="mt-1.5 text-[14px] font-semibold text-[#3A4A66] truncate">{st.length ? `${st[0].name || st[0].addr}${st.length > 2 ? ` → 경유 ${st.length - 2}곳` : ""} → ${st[st.length - 1].name || st[st.length - 1].addr}` : "정류지 없음"}</div>
+                    <div className="mt-2 flex items-center gap-2 flex-wrap">
+                      <DayPills days={r.days || []} size="sm" />
+                      <span className="text-[14px] font-black text-[#1B2B4B] tabular-nums">{korTimeLabel(r.startTime)}</span>
+                    </div>
+                    <div className="mt-1.5 flex items-center gap-2 min-w-0 text-[14px]">
+                      <span className="font-bold text-[#5B6B85] truncate">{r.driverName ? `${r.driverName}${r.carNo ? ` · ${r.carNo}` : ""}` : "기사 미배정"}{routeTon(r) ? ` · ${routeTon(r)}` : ""}</span>
+                      <span className="ml-auto shrink-0 font-black tabular-nums text-[#0F1A30]">{won(tt.client)}<span className="text-[#5B6B85] font-bold">원</span></span>
+                    </div>
+                    {tt.perStop && <div className="mt-1.5"><StopFareBadge r={r} /></div>}
+                  </div>
                 </div>
-                <span className="flex items-center gap-1.5 text-[14px] font-black text-white/80">운행<OnOffSwitch on={!!sel.active} dark onChange={(v) => toggleActive(sel, v)} /></span>
-                <button type="button" onClick={() => setForm(toForm(sel))} className="h-9 px-3 rounded-xl bg-white text-[#0F1A30] text-[14px] font-black">수정</button>
-                <button type="button" onClick={() => remove(sel)} className="h-9 px-3 rounded-xl bg-white/10 border border-white/20 text-[14px] font-black">삭제</button>
+              );
+            })}
+          </div>
+        </section>
+        {/* 오른쪽: 노선 상세 */}
+        <section className={`${card} overflow-hidden flex flex-col min-h-0`} data-fr-detail="1">
+          {!sel ? (
+            <>
+              <PanelHead en="ROUTE DETAIL" title="노선을 고르세요" />
+              <div className="flex-1 flex flex-col items-center justify-center py-24 text-center px-6">
+                <div className="w-14 h-14 rounded-2xl bg-[#EEF3FC] border border-[#C9D6EE] flex items-center justify-center text-[#2D4C82] text-[22px] font-black">›</div>
+                <div className="mt-3 text-[17px] font-black text-[#0F1A30]">왼쪽 목록에서 노선을 고르세요</div>
+                <div className="text-[14.5px] text-[#5B6B85] mt-1">경로 · 일정 · 최근 배차가 보입니다. 두 번 누르면 수정</div>
               </div>
-              <div className="p-5 grid gap-4 md:grid-cols-2">
-                <div>
-                  <div className="text-[14px] font-black text-[#5B6B85] mb-2">경로 {(sel.stops || []).length}곳</div>
-                  <div className="relative pl-6">
-                    <div className="absolute left-[9px] top-2 bottom-2 w-[2px] bg-[#DCE3EE]" />
-                    {(sel.stops || []).map((s, i) => (
-                      <div key={i} className="relative pb-3">
-                        <span className={`absolute -left-[22px] top-0.5 w-5 h-5 rounded-full text-[13px] font-black flex items-center justify-center ${i === 0 || i === sel.stops.length - 1 ? "bg-[#0F1A30] text-white" : "bg-white border-2 border-[#2D4C82] text-[#2D4C82]"}`}>{i + 1}</span>
-                        <div className="text-[14px] font-black text-[#0F1A30]">{s.name || "-"} <span className="text-[14px] font-black px-1.5 py-0.5 rounded bg-[#EEF3FC] text-[#1B2B4B] ml-1">{s.type}</span><span className="ml-1 text-[14px] font-bold text-[#5B6B85]">{korTimeLabel(s.time)}</span></div>
-                        <div className="text-[14px] text-[#5B6B85]">{s.addr}</div>
-                        {s.memo && <div className="text-[14px] text-[#5B6B85]">{s.memo}</div>}
-                        {i > 0 && stopPaid(s) && <div className="mt-0.5 flex items-center gap-1.5 text-[14px] flex-wrap">{(() => { const pc = payerOf(sel, { 거래처: String(s.client || "").trim() }); const other = pc !== routeClient(sel); return <span className={`h-5 px-1.5 inline-flex items-center rounded font-black ${other ? "bg-[#FFF3D6] text-[#7A5300]" : "bg-[#EEF2F8] text-[#1B2B4B]"}`} title="거래처(청구처)">{pc || "-"}</span>; })()}<span className="h-5 px-1.5 inline-flex items-center rounded bg-[#0F1A30] text-white font-black">{s.payMethod || sel.payMethod || "계산서"}</span><span className="font-bold text-[#1B2B4B] tabular-nums" style={{ fontFamily: MONO }}>청구 {won(s.fareClient)} · 기사 {won(s.fareDriver)}</span></div>}
+            </>
+          ) : (
+            <>
+              <PanelHead en={`ROUTE · ${sel.client || "-"}`} title={sel.name}
+                right={<>
+                  <span className="hidden sm:flex items-center gap-1.5 text-[14px] font-black text-white/80">운행<OnOffSwitch on={!!sel.active} dark onChange={(v) => toggleActive(sel, v)} /></span>
+                  <button type="button" onClick={() => setForm(toForm(sel))} className="h-10 px-4 rounded-xl bg-white text-[#0F1A30] text-[14.5px] font-black">수정</button>
+                  <button type="button" onClick={() => remove(sel)} className="h-10 px-3.5 rounded-xl bg-white/10 border border-white/20 text-[14.5px] font-black">삭제</button>
+                </>} />
+              <div className="flex-1 min-h-0 xl:overflow-y-auto p-4 md:p-5 space-y-4 bg-[#FAFBFD]">
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <FrChip tone={sel.active ? "green" : "gray"} dot>{sel.active ? "운행 중" : "운행 OFF"}</FrChip>
+                  {todayRuns.includes(sel) && <FrChip tone="navy">오늘 운행</FrChip>}
+                  <FrChip tone={sel.autoDispatch ? "blue" : "gray"}>{sel.autoDispatch ? "자동 배차" : "자동 배차 꺼짐"}</FrChip>
+                  <FrChip tone="blue">{sel.autoAccept === false ? "매번 수락" : "자동 수락"}</FrChip>
+                  {selGroups.length > 1 && <FrChip tone="amber">하루 {selGroups.length}건 분리</FrChip>}
+                  <span className="sm:hidden ml-auto flex items-center gap-1.5 text-[14px] font-black text-[#3A4A66]">운행<OnOffSwitch on={!!sel.active} onChange={(v) => toggleActive(sel, v)} /></span>
+                </div>
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
+                  <Kpi accent label="1회 청구" value={won(selT.client)} unit="원" sub={selT.perStop ? `정류지별 합계 ${selT.seg.length}곳` : "단일 운임"} />
+                  <Kpi label="1회 기사" value={won(selT.driver)} unit="원" />
+                  <Kpi label="수수료" value={won(selT.client - selT.driver)} unit="원" sub={selT.client ? `마진 ${Math.round(((selT.client - selT.driver) / selT.client) * 1000) / 10}%` : ""} />
+                  <Kpi label="이번 달 남은 운행" value={monthRuns(sel)} unit="일" sub={sel.genThrough ? `${frMd(sel.genThrough)}까지 생성` : "아직 생성 전"} />
+                </div>
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className={`${card} p-4 md:p-5 min-w-0`}>
+                    <CardHead en="ROUTE" title="경로" right={<span className="text-[14px] font-black text-[#5B6B85] tabular-nums">{(sel.stops || []).filter((s) => s.name || s.addr).length}곳</span>} />
+                    <StopTimeline r={sel} />
+                  </div>
+                  <div className={`${card} p-4 md:p-5 min-w-0`}>
+                    <CardHead en="SCHEDULE" title="운행 일정" />
+                    <DayPills days={sel.days || []} />
+                    <div className="mt-3 grid grid-cols-2 gap-2">
+                      <div className="rounded-xl bg-[#F7F9FC] border border-[#E3E8F0] px-3.5 py-2.5"><div className="text-[14px] font-bold text-[#5B6B85]">출발</div><div className="text-[17px] font-black text-[#0F1A30] tabular-nums">{korTimeLabel(sel.startTime)}</div></div>
+                      <div className="rounded-xl bg-[#F7F9FC] border border-[#E3E8F0] px-3.5 py-2.5 min-w-0"><div className="text-[14px] font-bold text-[#5B6B85]">기간</div><div className="text-[17px] font-black text-[#0F1A30] tabular-nums truncate">{frMd(sel.startDate) || "-"} ~ {sel.endDate ? frMd(sel.endDate) : "계속"}</div></div>
+                    </div>
+                    <div className="mt-4"><RunCalendar r={sel} orders={selOrders} weeks={5} /></div>
+                  </div>
+                </div>
+                <div className={`${card} p-4 md:p-5`}>
+                  <CardHead en="VEHICLE" title="기사 · 차량 · 정산" />
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6">
+                    {[["기사", sel.driverName ? `${sel.driverName} · ${sel.carNo}` : "미배정"], ["연락처", sel.phone || "-"], ["차량톤수", routeTon(sel) || "-"], ["차량종류", sel.vehicleType || "-"], ["화물내용", routeCargoText(sel) || "-"], ["배차방식", sel.dispatchType || "고정기사"], ["지급방식", selGroups.length > 1 ? `${selGroups.map((G) => groupLabel(sel, G)).join(" · ")}` : selGroups[0]?.pay || "-"], ["자동 배차", sel.autoDispatch ? `켜짐${sel.genThrough ? ` · ${sel.genThrough}까지` : ""}` : "꺼짐"]].map(([k, v]) => (
+                      <div key={k} className="flex items-center justify-between gap-3 py-2.5 border-b border-[#EEF1F6]" data-fr-kv={k}>
+                        <span className="text-[14px] font-bold text-[#5B6B85] whitespace-nowrap">{k}</span>
+                        <span className="min-w-0 truncate text-right text-[15.5px] font-black text-[#0F1A30] tabular-nums" title={String(v)}>{v}</span>
                       </div>
                     ))}
                   </div>
                 </div>
-                <div className="space-y-2">
-                  {[["요일", (sel.days || []).join(" ") || "-"], ["출발", korTimeLabel(sel.startTime)], ["기간", `${sel.startDate || "-"} ~ ${sel.endDate || "계속"}`], ["기사", sel.driverName ? `${sel.driverName} · ${sel.carNo}` : "미배정"], ["차량", [sel.tonnage, sel.vehicleType].filter(Boolean).join(" ") || "-"], ["운임", (() => { const t = routeTotals(sel); return `${t.perStop ? "정류지별 합계 · " : ""}청구 ${won(t.client)} · 기사 ${won(t.driver)}`; })()], ["지급방식", (() => { const gs = routePayGroups(sel); return gs.length > 1 ? `${gs.map((G) => groupLabel(sel, G)).join(" · ")} (분리 ${gs.length}건)` : gs[0].pay; })()], ["운행", sel.active ? "ON" : "OFF(새 배차 안 만듦)"], ["자동 배차", sel.autoDispatch ? `켜짐${sel.genThrough ? ` · ${sel.genThrough}까지 만듦` : ""}` : "꺼짐"], ["기사님 수락", sel.autoAccept === false ? "매번 수락" : "자동 수락"]].map(([k, v]) => (
-                    <div key={k} className="flex justify-between gap-2 rounded-lg bg-[#F5F8FD] px-3 py-2"><span className="text-[14px] font-bold text-[#5B6B85]">{k}</span><span className="text-[14px] font-black text-[#0F1A30] text-right">{v}</span></div>
-                  ))}
-                </div>
-                {routeTotals(sel).perStop && (
-                  <div className="md:col-span-2">
-                    <div className="flex items-center gap-2 mb-2"><span className="text-[14px] font-extrabold tracking-[0.12em] text-[#2D4C82]" style={{ fontFamily: MONO }}>FARE · PER STOP</span><span className="text-[14px] font-black text-[#5B6B85]">정류지별 운임</span><StopFareBadge r={sel} /></div>
+                {selT.perStop && (
+                  <div className={`${card} p-4 md:p-5`}>
+                    <CardHead en="FARE" title="정류지별 운임" right={<StopFareBadge r={sel} />} />
                     <FareTable r={sel} />
                   </div>
                 )}
-                <div className="md:col-span-2">
-                  <div className="text-[14px] font-black text-[#5B6B85] mb-2">최근 배차</div>
-                  {ordersOf(sel).length ? ordersOf(sel).map((o) => (
-                    <div key={o._id} className="flex items-center gap-3 px-3 py-2 border-b border-[#EEF1F6] text-[14px]">
-                      <span className="tabular-nums font-bold text-[#0F1A30] w-24" style={{ fontFamily: MONO }}>{o.상차일}</span>
-                      <span className="flex-1 truncate text-[#3A4A66]">{o.상차지명} → {o.하차지명}</span>
-                      {/* ⭐ 2026-11-01 오더별 지급방식·청구운임(지급방식 분리 오더도 한눈에) */}
-                      <span className="hidden sm:inline-flex items-center gap-1 shrink-0">
-                        {o.지급방식분리 && <span className="px-1.5 py-0.5 rounded bg-[#FFF3D6] text-[#7A5300] text-[14px] font-black">분리 {o.지급방식분리.순번}/{o.지급방식분리.전체}</span>}
-                        <span className={`max-w-[120px] truncate px-1.5 py-0.5 rounded text-[14px] font-black ${o.거래처명 && norm(o.거래처명) !== norm(routeClient(sel)) ? "bg-[#FFF3D6] text-[#7A5300]" : "bg-[#EEF2F8] text-[#1B2B4B]"}`} title="거래처(청구처)">{o.거래처명 || "-"}</span>
-                        <span className="px-1.5 py-0.5 rounded bg-[#0F1A30] text-white text-[14px] font-black">{o.지급방식 || "-"}</span>
-                        <span className="tabular-nums font-bold text-[#1B2B4B]" style={{ fontFamily: MONO }}>{won(o.청구운임)}</span>
-                      </span>
-                      <span className="font-bold text-[#1B2B4B]">{o.이름 || "미배정"}</span>
-                      <span className="px-2 py-0.5 rounded-md bg-[#EEF3FC] text-[#1B2B4B] text-[14px] font-black">{o.배차상태}</span>
+                <div className={`${card} p-4 md:p-5`}>
+                  <CardHead en="ORDERS" title="최근 배차" right={<span className="text-[14px] font-black text-[#5B6B85] tabular-nums">전체 {selOrders.length}건</span>} />
+                  {ordersOf(sel).length ? (
+                    <div className="divide-y divide-[#EEF1F6]">
+                      {ordersOf(sel).map((o) => (
+                        <div key={o._id} className="py-3 flex items-center gap-3 min-w-0">
+                          <div className="shrink-0 w-[62px] text-center rounded-xl bg-[#F3F6FA] border border-[#E3E8F0] py-1.5">
+                            <div className="text-[16px] font-black text-[#0F1A30] tabular-nums leading-tight">{frMd(o.상차일)}</div>
+                            <div className="text-[13px] font-bold text-[#5B6B85]">{o.상차일 ? dayOf(o.상차일) : ""}</div>
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <div className="text-[15px] font-black text-[#0F1A30] truncate">{o.상차지명} → {o.하차지명}</div>
+                            <div className="mt-1 flex items-center gap-1.5 flex-wrap text-[14px]">
+                              {o.차량톤수 ? <FrChip tone="gray">{o.차량톤수}</FrChip> : <FrChip tone="red">톤수 없음</FrChip>}
+                              {o.지급방식분리 && <FrChip tone="amber">분리 {o.지급방식분리.순번}/{o.지급방식분리.전체}</FrChip>}
+                              <FrChip tone="navy">{o.지급방식 || "-"}</FrChip>
+                              <span className="font-bold text-[#5B6B85] truncate">{o.이름 || "미배정"}</span>
+                            </div>
+                          </div>
+                          <div className="shrink-0 text-right">
+                            <div className="text-[15.5px] font-black tabular-nums text-[#0F1A30]">{won(o.청구운임)}</div>
+                            <FrChip tone={o.배차상태 === "배차완료" ? "green" : o.배차상태 === "배차취소" ? "red" : "blue"} className="mt-1">{o.배차상태 || "-"}</FrChip>
+                          </div>
+                        </div>
+                      ))}
                     </div>
-                  )) : <div className="text-[14px] text-[#5B6B85]">아직 만들어진 배차가 없습니다 · 위의 [배차 미리 만들기]</div>}
+                  ) : <div className="py-6 text-center text-[14.5px] font-bold text-[#5B6B85]">아직 만들어진 배차가 없습니다. 위의 [배차 미리 만들기]를 누르세요</div>}
                 </div>
               </div>
-            </div>
+            </>
           )}
-        </div>
+        </section>
       </div>
     </div>
   );
