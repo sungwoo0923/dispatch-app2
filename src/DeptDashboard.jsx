@@ -5,6 +5,7 @@
 //   경리: 보유 자금 · 이번 달 매출/매입(기사운임)/수익 · 6개월 추이 · 미수금 · 용차 지급(예정·완료) · 통장 잔액 · 지출결의 결재 · 세무 일정
 //   인사: 재직·휴직·퇴사 예정 · 오늘 출근 현황 · 이번 달 연차 사용 · 이번 주 부재 · 생일·입사 기념·수습 종료 · 부서·근속 분포
 import React from "react";
+import { useUserProfiles } from "./userProfilesLive"; // 🔒 2026-11-07 인사 프로필은 우리 회사 직원 한 건씩
 import { collection, onSnapshot, query, where, getDocs } from "firebase/firestore";
 import { ResponsiveContainer, ComposedChart, Bar, Line, XAxis, YAxis, Tooltip, CartesianGrid, BarChart, Cell } from "recharts";
 import { db, auth, DEFAULT_COMPANY } from "./firebase";
@@ -614,7 +615,8 @@ const ON_LEAVE = ["휴직", "육아휴직", "출산휴가"];
 const TONE = { ok: { bg: "rgba(143,176,240,.16)", c: C.hi, b: "rgba(143,176,240,.4)" }, bad: { bg: "rgba(247,185,85,.12)", c: WARN, b: "rgba(247,185,85,.45)" }, soft: { bg: "rgba(75,108,183,.2)", c: "#AFC4F0", b: "rgba(110,149,232,.35)" }, none: { bg: "rgba(255,255,255,.03)", c: C.dim, b: C.line } };
 function HrDashboard({ company, onGo, me, att }) {
   const users = useCol("users", company, (u) => (u.companyName || DEFAULT_COMPANY) === company);
-  const profiles = useCol("userProfiles", company);
+  const profileMap = useUserProfiles(React.useMemo(() => (users || []).map((u) => u.id), [users])); // 🔒 2026-11-07 우리 회사 직원 한 건씩(예전엔 전체 회사)
+  const profiles = React.useMemo(() => Object.entries(profileMap).map(([id, p]) => ({ id, ...p })), [profileMap]);
   const resumes = useCompanyRows("hrResumes", company);
   const today = kst(0); const ym = ymAgo(0);
   const attendance = useCol("attendance", company, (a) => a.date === today);

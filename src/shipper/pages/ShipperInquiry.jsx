@@ -40,6 +40,8 @@ export default function ShipperInquiry() {
         content: form.content,
         userId: user.uid,
         company: userData?.company || "",
+        // 🔒 2026-11-07 문의를 받는 연동 운송사 — 그 운송사 직원만 볼 수 있다(서버 규칙)
+        transportCompany: userData?.linkedTransportCompany?.companyName || "",
         name: userData?.name || user.email,
         status: "접수중",
         createdAt: serverTimestamp(),

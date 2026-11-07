@@ -7,8 +7,13 @@ service firebase.storage {
   match /b/{bucket}/o {
     // KP-Planner 영수증 사진 — 로그인한 사용자만 자신의 kp-planner/ 경로에
     // 읽고 쓸 수 있다(배차프로그램 파일 경로와는 분리).
+    // ⭐ 2026-11-07 보안 점검 — 올리기는 20MB 미만 이미지·PDF만(예전엔 크기·종류 제한 없이 아무 파일).
+    //  ⚠ 경로에 사용자 칸이 없어 로그인한 누구나 서로의 파일을 읽을 수 있다 — KP-Planner 앱이 kp-planner/{uid}/… 로 올리게 바꾼 뒤
+    //    "request.auth.uid == 경로의 uid" 로 좁혀야 한다(그 앱 코드가 이 저장소에 없어 지금은 경로를 바꾸지 않음).
     match /kp-planner/{allPaths=**} {
-      allow read, write: if request.auth != null;
+      allow read, delete: if request.auth != null;
+      allow create, update: if request.auth != null && request.resource.size < 20 * 1024 * 1024
+        && (request.resource.contentType.matches('image/.*') || request.resource.contentType == 'application/pdf');
     }
 
     // ⭐ 2026-11-06 로지스웹 허브 콜 — 회원 서류 · 프로필 사진 · 인수증 사진

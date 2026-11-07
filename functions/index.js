@@ -662,6 +662,8 @@ exports.notifyFleetDriverNewOrder =
           if (stillHasTrace) {
             await db.collection("driver_notifications").add({
               driverId: cDriverDoc.id, type: "canceled", orderId: context.params.dispatchId,
+              // 🔒 2026-11-07 회사명도 기록 — 잠금 뒤 운송사 화면은 회사 조건으로 조회한다(없으면 기사 본인만 보임)
+              companyName: String(before?.companyName || after.companyName || cDriverDoc.data()?.companyName || "").trim() || "돌캐",
               title: "배차가 취소되었습니다", body, createdAt: FieldValue.serverTimestamp(), read: false,
             }).catch(() => {});
           }
@@ -1018,6 +1020,7 @@ exports.notifyFleetOrderModified =
 
       await db.collection("driver_notifications").add({
         driverId: driverDoc.id, type: "order_modified", orderId: dispatchId,
+        companyName: String(after.companyName || driverDoc.data()?.companyName || "").trim() || "돌캐", // 🔒 2026-11-07 회사명
         title, body, changed: labels, createdAt: FieldValue.serverTimestamp(), read: false,
       }).catch(() => {});
 
@@ -1204,6 +1207,7 @@ exports.notifyFleetLateArrival = functions.pubsub
             }, `지입 ${c.label}지연(기사)`);
             await db.collection("driver_notifications").add({
               driverId: driverDoc.id, type: `late_${c.kind}`, orderId: docSnap.id,
+              companyName: String(o.companyName || drv?.companyName || "").trim() || "돌캐", // 🔒 2026-11-07 회사명
               title: `${c.label}시간 알림 (${t24})`,
               body: `${c.label}지 [${place}] 도착이 늦어지고 있습니다. ${distText}.`,
               createdAt: FieldValue.serverTimestamp(), read: false,
@@ -1316,7 +1320,7 @@ const PUSH_SEND_KEY = "kpflow-push-2026";
 exports.sendPushNotification = functions.https.onRequest(async (req, res) => {
   res.set("Access-Control-Allow-Origin", "*");
   res.set("Access-Control-Allow-Methods", "POST, OPTIONS");
-  res.set("Access-Control-Allow-Headers", "Content-Type");
+  res.set("Access-Control-Allow-Headers", "Authorization, Content-Type");
   if (req.method === "OPTIONS") { res.status(204).send(""); return; }
   if (req.method !== "POST") { res.status(405).send("POST만 허용됩니다."); return; }
 
@@ -1324,7 +1328,9 @@ exports.sendPushNotification = functions.https.onRequest(async (req, res) => {
   if (typeof body === "string") { try { body = JSON.parse(body); } catch { body = {}; } }
   body = body || {};
 
-  if (body.key !== PUSH_SEND_KEY) { res.status(403).send("forbidden"); return; }
+  // 🔒 2026-11-07 보안 점검 — 예전엔 화면 코드에 그대로 들어 있는 키(PUSH_SEND_KEY)만 맞으면 누구나 모든 회사·모든 사람에게
+  //  푸시를 보낼 수 있었다(사칭 알림). 이제 최고관리자 로그인 토큰이 있어야 한다(키는 예전 화면 호환용으로 같이 확인).
+  if (body.key !== PUSH_SEND_KEY || !(await isTotalMasterReq(req))) { res.status(403).send("forbidden"); return; }
 
   const title = String(body.title || "").trim();
   const text = String(body.body || "").trim();
@@ -3586,7 +3592,8 @@ function _docDay(x) {
   return "";
 }
 const _emptyCo = (x) => !(typeof x?.companyName === "string" && x.companyName.trim()) && !(typeof x?.company === "string" && x.company.trim()) && !(typeof x?.운송사명 === "string" && x.운송사명.trim());
-async function requireTotalMaster(req) {
+// ⭐ 2026-11-07 이름 정리 — 아래(운송사 초기화)의 requireTotalMaster(오류를 던짐)와 이름이 같아 이 함수는 덮여 쓰이지 않았다(true/false 판단용)
+async function isTotalMasterReq(req) {
   const authz = String(req.get("Authorization") || "");
   const token = authz.startsWith("Bearer ") ? authz.slice(7) : "";
   if (!token) return false;
@@ -3601,7 +3608,7 @@ exports.tenantMigrate = functions.runWith({ timeoutSeconds: 300, memory: "512MB"
   res.set("Access-Control-Allow-Methods", "POST, OPTIONS");
   res.set("Access-Control-Allow-Headers", "Authorization, Content-Type");
   if (req.method === "OPTIONS") { res.status(204).send(""); return; }
-  if (!(await requireTotalMaster(req))) { res.status(403).json({ error: "FORBIDDEN" }); return; }
+  if (!(await isTotalMasterReq(req))) { res.status(403).json({ error: "FORBIDDEN" }); return; }
   const col = String(req.body?.col || "");
   const mode = String(req.body?.mode || "fill"); // fill(돌캐로 채우기) | scan(점검만) | purge(기준일 이전 삭제)
   if (!(mode === "fill" ? TENANT_COLS : TENANT_ALL_COLS).includes(col)) { res.status(400).json({ error: "BAD_COL", cols: TENANT_ALL_COLS }); return; }
@@ -4562,6 +4569,38 @@ exports.contractNoticeRun = functions.https.onRequest(async (req, res) => {
    - cancel:  가져온 묶음(importBatchId) 전체 삭제(오더·자동 등록된 거래처/상하차지/기사)
    호출: POST .../sheetImport (Authorization: Bearer <ID 토큰>)
 ================================================================== */
+// 🔒 2026-11-07 구글시트 주인 회사 확인(functions/sheetGuard.js) — 배차표·시트 연결이 다른 회사 시트를 열지 못하게
+const sheetGuard = require("./sheetGuard").makeSheetGuard({
+  db, FieldValue, parseSpreadsheetId: (u) => parseSpreadsheetId(u),
+  fixedOwners: { "1Md09eYeoXVvXm155kCVE_jz1aZ1aedsmsvOQuPoiMxU": "돌캐" }, // 돌캐 기존 배차현황 시트(GSHEET_SPREADSHEET_ID)
+});
+// 시트 연결(sheetConnect.js)용 — 그 파일을 고치지 않고, 요청한 사람(회사)을 기억해 두었다가 시트 API를 부르기 직전에 주인 회사를 확인한다.
+//  (한 요청 = 한 함수 실행이라 AsyncLocalStorage로 요청마다 따로 기억)
+const { AsyncLocalStorage } = require("async_hooks");
+const sheetCaller = new AsyncLocalStorage();
+async function guardedRequireStaff(req, body) {
+  const me = await requireStaff(req, body);
+  const st = sheetCaller.getStore(); if (st) st.me = me;
+  return me;
+}
+async function guardedRequireAdminRole(req, body) {
+  const me = await requireAdminRole(req, body);
+  const st = sheetCaller.getStore(); if (st) st.me = me;
+  return me;
+}
+async function guardSheetOwnerNow(spreadsheetId) {
+  const st = sheetCaller.getStore();
+  const me = st?.me;
+  if (!me) throw Object.assign(new Error("로그인이 필요합니다."), { status: 401 });
+  if (!st.ok?.has(spreadsheetId)) {
+    await sheetGuard.assertSheetOwner(spreadsheetId, me.company, { isTM: me.isTM, by: me.email });
+    (st.ok || (st.ok = new Set())).add(spreadsheetId);
+  }
+}
+async function guardedSheetsApiFor(spreadsheetId, method, path, opts) {
+  await guardSheetOwnerNow(spreadsheetId);
+  return sheetsApiAny(spreadsheetId, method, path, opts); // 엑셀 파일도 읽기(officeSheets)
+}
 function parseSpreadsheetId(url) {
   const m = String(url || "").match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
   if (m) return m[1];
@@ -4623,6 +4662,8 @@ async function requireAdminRole(req, body) {
   const u = await db.collection("users").doc(decoded.uid).get();
   const ud = u.exists ? u.data() : {};
   const isTM = decoded.email === "tjddnqkf@naver.com" || ud.role === "totalMaster";
+  // 🔒 2026-11-07 승인 전·퇴사 계정은 거절(예전엔 가입만 하고 승인 안 된 "관리자" 계정도 다른 회사 이름으로 관리자 기능을 부를 수 있었다)
+  if (!isTM && (!u.exists || ud.approved === false || ud.employmentStatus === "퇴사")) throw Object.assign(new Error("사용 권한이 없습니다."), { status: 403 });
   if (!isTM && !["admin", "allMgr"].includes(ud.role)) throw Object.assign(new Error("관리자만 사용할 수 있습니다."), { status: 403 });
   const company = isTM ? String(body?.company || ud.companyName || "돌캐") : String(ud.companyName || "돌캐");
   return { decoded, isTM, company, email: decoded.email || "" };
@@ -4637,7 +4678,7 @@ async function requireStaff(req, body) {
   const u = await db.collection("users").doc(decoded.uid).get();
   const ud = u.exists ? u.data() : {};
   const isTM = decoded.email === "tjddnqkf@naver.com" || ud.role === "totalMaster";
-  if (!isTM && (ud.approved === false || ["driver", "shipper"].includes(ud.role) || !u.exists)) throw Object.assign(new Error("사용 권한이 없습니다."), { status: 403 });
+  if (!isTM && (ud.approved === false || ["driver", "shipper", "cafeUser"].includes(ud.role) || !u.exists || ud.employmentStatus === "퇴사")) throw Object.assign(new Error("사용 권한이 없습니다."), { status: 403 }); // 🔒 2026-11-07 퇴사·배차마당 계정 제외
   const company = isTM ? String(body?.company || ud.companyName || "돌캐") : String(ud.companyName || "돌캐");
   return { decoded, isTM, company, email: decoded.email || "", name: ud.name || "" };
 }
@@ -5863,6 +5904,8 @@ async function routeBoardNeedsSync(form, sid) {
 async function runRouteBoardSync(form, { force = false, range = null, mt: mt0 = null } = {}) {
   const sid = parseSpreadsheetId(form.sheetUrl);
   if (!sid) return { skipped: "no-sheet" };
+  // 🔒 2026-11-07 이 양식의 회사가 주인인 시트만(다른 회사 시트 주소를 넣은 양식은 가져오지 않는다 — functions/sheetGuard.js)
+  await sheetGuard.assertSheetOwner(sid, form.companyName || "돌캐", { by: `routeBoard:${form.id || ""}` });
   const before = mt0 != null ? mt0 : await sheetModifiedTime(sid);
   const r = await runRouteBoardSyncRaw(form, sid, { force, range });
   // 우리가 시트에 쓴 경우(칸 쓰기·줄 끼우기)엔 modifiedTime이 바뀌었으니 다시 받아 둔다(다음 확인이 "바뀜"으로 헛돌지 않게)
@@ -5930,6 +5973,8 @@ exports.routeBoardSheet = functions.runWith({ timeoutSeconds: 540, memory: "512M
     }
     const id = parseSpreadsheetId(body.url);
     if (!id) { res.status(400).json({ error: "구글시트 주소가 올바르지 않습니다." }); return; }
+    // 🔒 2026-11-07 다른 회사 시트는 읽지도 쓰지도 않는다(시트마다 주인 회사 — functions/sheetGuard.js)
+    await sheetGuard.assertSheetOwner(id, me.company, { isTM: me.isTM, by: me.email });
     // 💰 2026-11-06 시트 정보(탭 목록)는 필요한 작업에서만 읽는다 — 예전엔 30초 자동 맞춤(건너뛰는 경우 포함)마다 Sheets API를 1번씩 불렀다
     let _meta = null;
     const getMeta = async () => (_meta || (_meta = await sheetsApiAny(id, "GET", "?fields=properties.title,sheets.properties(title,index)")));
@@ -6025,10 +6070,16 @@ exports.routeBoardSheet = functions.runWith({ timeoutSeconds: 540, memory: "512M
 
 // 🔗 2026-11-07 구글시트 연동(시트 프로필) — 설명은 functions/sheetConnect.js 맨 위 · 규칙은 functions/sheetProfileCore.mjs(화면과 같은 파일)
 const { makeSheetConnect } = require("./sheetConnect");
-exports.sheetConnect = functions.runWith({ secrets: ["ANTHROPIC_API_KEY"], timeoutSeconds: 540, memory: "1GB" }).https.onRequest(makeSheetConnect({
-  db, FieldValue, sheetsApiFor: sheetsApiAny, officeSheets, parseSpreadsheetId, quoteTab, requireStaff, requireAdminRole, sheetModifiedTime, setBulkMode, bumpDataVersion,
+// 🔒 2026-11-08 시트 주인 확인(sheetGuard)을 구글 시트 · 엑셀 파일(officeSheets) 모두에 건다
+const guardedOfficeSheets = {
+  ...officeSheets,
+  convert: async (sid, opts) => { await guardSheetOwnerNow(sid); return officeSheets.convert(sid, opts); },
+};
+const _sheetConnectHandler = makeSheetConnect({
+  db, FieldValue, sheetsApiFor: guardedSheetsApiFor, officeSheets: guardedOfficeSheets, parseSpreadsheetId, quoteTab, requireStaff: guardedRequireStaff, requireAdminRole: guardedRequireAdminRole, sheetModifiedTime, setBulkMode, bumpDataVersion,
   makeAnthropic: () => (process.env.ANTHROPIC_API_KEY ? new (_orderScan.Anthropic)({ apiKey: process.env.ANTHROPIC_API_KEY, timeout: 30000, maxRetries: 1 }) : null),
-}));
+});
+exports.sheetConnect = functions.runWith({ secrets: ["ANTHROPIC_API_KEY"], timeoutSeconds: 540, memory: "1GB" }).https.onRequest((req, res) => sheetCaller.run({}, () => _sheetConnectHandler(req, res)));
 
 exports.sheetImport = functions
   .runWith({ timeoutSeconds: 540, memory: "1GB" })
@@ -6563,7 +6614,7 @@ exports.aiTeamChat = functions.runWith({ secrets: ["ANTHROPIC_API_KEY"], timeout
   if (req.method !== "POST") { res.status(405).json({ error: "POST만 허용됩니다." }); return; }
   const authz = String(req.get("Authorization") || "");
   const decoded = authz.startsWith("Bearer ") ? await getAuth().verifyIdToken(authz.slice(7)).catch(() => null) : null;
-  if (!(await requireTotalMaster(req))) { res.status(403).json({ error: "최고관리자·부관리자만 사용할 수 있습니다." }); return; }
+  if (!(await isTotalMasterReq(req))) { res.status(403).json({ error: "최고관리자·부관리자만 사용할 수 있습니다." }); return; } // ⭐ 2026-11-07 true/false 판단(던지는 requireTotalMaster 대신)
   if (!process.env.ANTHROPIC_API_KEY) { res.status(500).json({ error: "Claude API 키가 등록되지 않았습니다. firebase functions:secrets:set ANTHROPIC_API_KEY 후 다시 배포해 주세요." }); return; }
   let body = req.body; if (typeof body === "string") { try { body = JSON.parse(body); } catch { body = {}; } }
   const team = String(body?.team || "");

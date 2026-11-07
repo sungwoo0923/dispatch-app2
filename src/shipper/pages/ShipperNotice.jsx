@@ -16,7 +16,7 @@ export default function ShipperNotice() {
         const linkedCompanyName = userSnap.exists() ? userSnap.data()?.linkedTransportCompany?.companyName : null;
         if (!linkedCompanyName) { setNotices([]); setLoading(false); return; }
 
-        const snap = await getDocs(query(collection(db, "notices"), where("audience", "==", "shipper")));
+        const snap = await getDocs(query(collection(db, "notices"), where("audience", "==", "shipper"), where("companyName", "==", linkedCompanyName))); // 🔒 2026-11-07 연동 운송사 공지만(서버 규칙도 같은 조건)
         const list = snap.docs
           .map(d => ({ id: d.id, ...d.data() }))
           .filter(n => n.companyName === linkedCompanyName && !((Number(n.publishAt) || 0) > Date.now())) // ⭐ 2026-11-03 예약 게시 전 글은 숨김

@@ -3,6 +3,7 @@ import CustomDatePicker from "../CustomDatePicker"; // 📅 2026-11-07 날짜는
 import React, { useState, useEffect, useMemo, useRef } from "react";
 import { signOut, updatePassword, EmailAuthProvider, reauthenticateWithCredential } from "firebase/auth";
 import { auth, db } from "../firebase";
+import { readTransportListForShipper } from "../publicCompanies"; // 🔒 2026-11-07 운송사 목록은 공개 목록 + 연동 운송사 코드만
 import {
   collection,
   query,
@@ -1087,20 +1088,8 @@ function ShipperOrderM({ user, userData, orders = [], showToast, onDone, onBack,
 
   // 운송사 리스트 — PC(ShipperOrder.jsx)와 동일하게 승인된 운송사 목록에서 회사코드까지 가져온다.
   useEffect(() => {
-    getDocs(query(
-      collection(db, "transportApplications"),
-      where("type", "==", "신규"),
-      where("status", "==", "approved"),
-    )).then(snap => {
-      const seen = new Map();
-      snap.docs.forEach(d => {
-        const data = d.data();
-        if (data.companyName && !seen.has(data.companyName)) {
-          seen.set(data.companyName, { name: data.companyName, code: data.companyCode || "" });
-        }
-      });
-      setTransportList(Array.from(seen.values()));
-    }).catch(() => setTransportList([]));
+    // 🔒 2026-11-07 보안 점검 — 모든 운송사 신청서(회사 코드 포함) 대신 공개 목록 + 연동 운송사 코드만
+    readTransportListForShipper(auth.currentUser?.uid).then((l) => setTransportList(l)).catch(() => setTransportList([]));
     const fixed = localStorage.getItem("fixedTransport");
     if (fixed) {
       try {
@@ -2158,7 +2147,7 @@ function ShipperNoticeM({ onBack }) {
         const userSnap = await getDoc(doc(db, "users", user.uid));
         const linkedCompanyName = userSnap.exists() ? userSnap.data()?.linkedTransportCompany?.companyName : null;
         if (!linkedCompanyName) { setNotices([]); setLoading(false); return; }
-        const snap = await getDocs(query(collection(db, "notices"), where("audience", "==", "shipper")));
+        const snap = await getDocs(query(collection(db, "notices"), where("audience", "==", "shipper"), where("companyName", "==", linkedCompanyName))); // 🔒 2026-11-07 연동 운송사 공지만(서버 규칙도 같은 조건)
         const list = snap.docs
           .map(d => ({ id: d.id, ...d.data() }))
           .filter(n => n.companyName === linkedCompanyName && !((Number(n.publishAt) || 0) > Date.now())) // ⭐ 2026-11-03 예약 게시 전 글은 숨김
@@ -2251,6 +2240,8 @@ function ShipperInquiryM({ user, userData, onBack, showToast }) {
         content: form.content,
         userId: user.uid,
         company: userData?.companyName || "",
+        // 🔒 2026-11-07 문의를 받는 연동 운송사 — 그 운송사 직원만 볼 수 있다(서버 규칙)
+        transportCompany: userData?.linkedTransportCompany?.companyName || "",
         name: userData?.name || user.email,
         status: "접수중",
         createdAt: serverTimestamp(),

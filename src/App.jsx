@@ -1,7 +1,8 @@
 // ======================= src/App.jsx =======================
 
 import React, { useState, useEffect, useRef } from "react";
-import { setTenant, setServerFilter, setPreviewMode, isPreviewMode } from "./fsTenant";
+import { setTenant, setTenantRole, setServerFilter, setPreviewMode, isPreviewMode } from "./fsTenant";
+import { purgeOnSignOut, noteSignedInUid } from "./sessionPurge"; // 🔒 2026-11-07 계정 바꿀 때 앞 사람(다른 회사) 데이터 정리
 import { setUsageMeter } from "./usageMeter"; // 💰 2026-11-04 회사별 서버 사용량 표본
 import { setPreviewPlan } from "./plans";
 import { installEscClose } from "./kpDialog";
@@ -671,7 +672,16 @@ export default function App() {
             at: serverTimestamp(),
           }).then(pruneSessionLogs).catch(() => {});
         }
+        const wasSignedIn = !!sessionLogRef.current.uid;
         sessionLogRef.current = { uid: null, info: null };
+        // 🔒 2026-11-07 로그아웃하면 회사 범위도 비운다(다음 계정이 이전 회사 조건으로 조회하지 않게)
+        setTenant(""); setTenantRole(null);
+        //  실제 로그아웃(로그인 확인 중 잠깐 나갔다 들어오는 경우 제외)이면 기기에 남은 회사 데이터·저장본을 지우고 새로 고친다
+        let validating = false;
+        try { validating = sessionStorage.getItem("transportValidating") === "true" || sessionStorage.getItem("shipperValidating") === "true"; } catch { /* 무시 */ }
+        if (wasSignedIn && !IS_MOBILE_PREVIEW && !isDriverBusy() && !validating && !isPreviewMode()) {
+          setTimeout(() => { purgeOnSignOut(db).catch(() => {}); }, 400); // 로그아웃 기록(sessionLogs)을 먼저 보낸다
+        }
         setUser(null);
         setRole(null);
         setApproved(false);
@@ -705,6 +715,8 @@ export default function App() {
           setMasterPcPhone(data.pcVerifyPhone || "");
           // 스냅샷은 프로필이 바뀔 때마다 재발화될 수 있어, 이 uid로 로그인 기록을 아직
           // 남기지 않았을 때만(세션당 1회) 기록한다.
+          // 🔒 2026-11-07 지난번과 다른 계정이면 앞 계정의 브라우저 저장값을 먼저 지운다
+          if (!IS_MOBILE_PREVIEW && !isDriverBusy()) noteSignedInUid(u.uid);
           if (sessionLogRef.current.uid !== u.uid && !IS_MOBILE_PREVIEW) {
             const loginInfo = {
               uid: u.uid,
@@ -734,6 +746,7 @@ export default function App() {
             // ⭐ 저장된 회사명이 지워졌으면(캐시 정리 등) 본인 문서의 회사 → 기본 회사 순으로 채운다 —
             // 비어 있으면 회사관리·매출관리 등이 어느 회사인지 몰라 "로딩 중"에서 멈췄다.
             const loginCompany = localStorage.getItem("loginCompany") || data.companyName || DEFAULT_COMPANY || "";
+            setTenantRole("totalMaster");
             setTenant(loginCompany);
             setUsageMeter({ enabled: false }); // 최고관리자 사용량은 회사 원가에 넣지 않는다
             setUserCompany(loginCompany);
@@ -741,6 +754,7 @@ export default function App() {
             safeLocalSet("loginCompany", loginCompany);
           } else {
             // 🏢 운송사 직원·기사만 자기 회사 데이터로 거른다(화주사·배차마당은 다른 화면 구조라 제외)
+            setTenantRole(dataRole);
             setTenant(["shipper", "cafeUser"].includes(dataRole) ? "" : (data.companyName || DEFAULT_COMPANY));
             // 💰 2026-11-04 회사별 서버 사용량 표본(관리센터 비용·손익) — 승인된 운송사 직원·기사만(화주사·배차마당·둘러보기 제외)
             setUsageMeter({ company: data.companyName || DEFAULT_COMPANY, enabled: !["shipper", "cafeUser"].includes(dataRole) && data.approved !== false && !isPreviewMode() });
@@ -764,11 +778,12 @@ export default function App() {
           setRole("totalMaster");
           setApproved(true);
           const loginCompany = localStorage.getItem("loginCompany") || DEFAULT_COMPANY || "";
+          setTenantRole("totalMaster");
           setTenant(loginCompany);
           setUserCompany(loginCompany);
           safeLocalSet("userCompany", loginCompany); safeLocalSet("loginCompany", loginCompany); safeLocalSet("role", "totalMaster");
         } else {
-          setTenant("");
+          setTenant(""); setTenantRole(null);
           setUsageMeter({ enabled: false });
           setRole(null);
           setApproved(false);

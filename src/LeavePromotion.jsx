@@ -7,6 +7,7 @@
 //  · 모든 발송·제출은 leavePromotions/{회사}_{uid}_{회기 시작일}.log 에 시각과 함께 쌓이고(지울 수 없음 — 보안 규칙), 서면 통보서 인쇄 가능
 //  ⭐ 2026-11-06 화면 다듬기 — 노란 표시 제거(네이비 팔레트) · 글자 14px 이상
 import React from "react";
+import { useUserProfiles } from "./userProfilesLive"; // 🔒 2026-11-07 인사 프로필은 우리 회사 직원 한 건씩
 import { addDoc, arrayUnion, collection, doc, onSnapshot, query, serverTimestamp, setDoc, updateDoc, where } from "firebase/firestore";
 import { db, auth, DEFAULT_COMPANY } from "./firebase";
 import { BookHero, BookCard, Chip, Sheet, MONO } from "./OfficeBooks";
@@ -106,7 +107,8 @@ export default function LeavePromotionBoard({ company, canManage = false }) {
   const [logOf, setLogOf] = React.useState(null);
   const [busy, setBusy] = React.useState(false);
   const [cfg, setCfg] = React.useState(null);
-  React.useEffect(() => onSnapshot(collection(db, "userProfiles"), (s) => { const m = {}; s.docs.forEach((d) => { m[d.id] = d.data(); }); setProfiles(m); }, () => setProfiles({})), []);
+  const userProfiles = useUserProfiles(React.useMemo(() => (users || []).map((u) => u.id), [users])); // 🔒 2026-11-07 우리 회사 직원 한 건씩(예전엔 전체 회사)
+  React.useEffect(() => { setProfiles(userProfiles); }, [userProfiles]);
   React.useEffect(() => {
     if (!company) return undefined;
     return onSnapshot(query(collection(db, "approvals"), where("company", "==", company)), (s) => setApprs(s.docs.map((d) => ({ id: d.id, ...d.data() })).filter((d) => d.cat === "leave" && d.status === "approved")), () => setApprs([]));
