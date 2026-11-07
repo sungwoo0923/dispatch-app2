@@ -93,6 +93,7 @@ const AttendanceBoard = lazyView(() => import("./AttendanceBoard"));
 import { todayStr as attendanceTodayStr, isWeekend, findApprovedLeaveForDate, isHoliday, isScheduleApproved, LEAVE_TYPE_LABEL, ATTENDANCE_STATUS_COLOR, approvalLeaveOn, hrLeaveOn } from "./attendanceUtils";
 const FreightRateInquiry = lazyView(() => import("./FreightRateInquiry"));
 import { isNotificationsEnabled, setNotificationsEnabled, useNotificationsEnabled } from "./notificationSettings";
+import { PopupPrefsSection } from "./popupPrefs"; // ⭐ 2026-11-07 팝업 알림 켜고 끄기(계정별)
 import { CustomSelect } from "./CustomSelect";
 import { estimateDistanceFare, geocodeAddress, haversineKm, specialSurcharge } from "./tmapFareCalc";
 import { useCustomRoles, findCustomRole, getMenuAccess, roleScreen, useRoleView, applyRoleMenus, ROLE_LABELS } from "./customRoles";
@@ -9230,6 +9231,7 @@ return (
 
         {menu === "회사관리" && (
           <CompanyManagementWrapper
+            payrollInAcct={menuState("회계관리") === "ok"}
             userCompany={(localStorage.getItem("loginCompany") || userCompany || localStorage.getItem("userCompany") || DEFAULT_COMPANY || "").trim()}
             role={role}
             userId={auth?.currentUser?.uid || localStorage.getItem("uid") || ""}
@@ -9380,6 +9382,9 @@ return (
               로그인 관리 · 비밀번호 변경
             </button>
             {loginMgrOpen && <LoginManagerModal user={user} onClose={() => setLoginMgrOpen(false)} />}
+
+            {/* ⭐ 2026-11-07 팝업 알림 — 가운데 팝업을 종류별로 켜고 끄기(계정에 저장 · 모바일과 같이 바뀜) */}
+            {user?.uid && <PopupPrefsSection uid={user.uid} showBriefing={canBriefing} />}
 
             {/* ⭐ 2026-11-02 원격지원 — 사용이 어려울 때 관리자에게 화면 공유·원격 지원 요청 */}
             {role !== "totalMaster" && (
@@ -60726,7 +60731,7 @@ function MyProfilePage({ user, todayStats, myStats, cardImage, setCardImage, car
 }
 
 // ─────────── 회사관리 탭 래퍼 ───────────
-function CompanyManagementWrapper({ userCompany, role, userId, user, todayStats, myStats, cardImage, setCardImage, cardImageUploading, setCardImageUploading, showAlert }) {
+function CompanyManagementWrapper({ payrollInAcct = false, userCompany, role, userId, user, todayStats, myStats, cardImage, setCardImage, cardImageUploading, setCardImageUploading, showAlert }) {
   // ⭐ 2026-11-06 알림 팝업 [급여명세서 열기]·[사용 계획 제출] 등 — 다른 화면에서 이 탭으로 바로(kpCmTab)
   //  (첫 값은 읽기만 하고 지우는 것은 effect에서 — 개발 모드 StrictMode가 초기값 함수를 두 번 불러도 값이 남게)
   const peekCmTab = () => { try { return sessionStorage.getItem("kpCmTab") || ""; } catch { return ""; } };
@@ -60748,7 +60753,7 @@ function CompanyManagementWrapper({ userCompany, role, userId, user, todayStats,
   // ⭐ 2026-11-06 내 급여명세서·연차 사용 계획(누구나 본인 것) · 급여관리(급여 권한) · 연차 사용 촉진(인사·경리)
   const payCM = usePayrollAccess(userCompany, user?.uid, role, user?.email || "");
   const staffCM = role !== "driver" && role !== "shipper";
-  const tabs = [...tabs1, ...(staffCM ? ["급여명세서", "연차 사용 계획"] : []), ...(staffCM && payCM.canView ? ["급여관리"] : []), ...(staffCM && payCM.leaveViewer ? ["연차 사용 촉진"] : [])];
+  const tabs = [...tabs1, ...(staffCM ? ["급여명세서", "연차 사용 계획"] : []), ...(staffCM && payCM.canView && !payrollInAcct ? ["급여관리"] : []) /* ⭐ 2026-11-07 경리(회계관리)를 쓸 수 있으면 급여는 회계관리 › 급여 계산에서만 */, ...(staffCM && payCM.leaveViewer ? ["연차 사용 촉진"] : [])];
 
   // ⭐ 디자인 개편 — 관리자메뉴와 같은 왼쪽 메뉴바 + 상단 인사 카드(AdminShell 공용 레이아웃)
   const TAB_ICONS = { 회사정보: "building", 조직도: "users", "운임 규칙": "money", 내정보: "user", "내 이력서": "idcard", 출근기록부: "clock", 인사관리부: "idcard", 급여명세서: "receipt", "연차 사용 계획": "flag", 급여관리: "money", "연차 사용 촉진": "bell" };
@@ -60780,7 +60785,7 @@ function CompanyManagementWrapper({ userCompany, role, userId, user, todayStats,
       {tab === "내 이력서" && <HRManagementPage userCompany={userCompany} role={role} userId={userId} selfOnly />}
       {tab === "급여명세서" && <React.Suspense fallback={payFallback}><MyPayslipsLazy company={userCompany} uid={user?.uid} /></React.Suspense>}
       {tab === "연차 사용 계획" && <React.Suspense fallback={payFallback}><MyLeavePlanLazy company={userCompany} uid={user?.uid} /></React.Suspense>}
-      {tab === "급여관리" && payCM.canView && <React.Suspense fallback={payFallback}><PayrollCenterLazy company={userCompany} role={role} /></React.Suspense>}
+      {tab === "급여관리" && payCM.canView && !payrollInAcct && <React.Suspense fallback={payFallback}><PayrollCenterLazy company={userCompany} role={role} /></React.Suspense>}
       {tab === "연차 사용 촉진" && payCM.leaveViewer && <React.Suspense fallback={payFallback}><LeavePromotionLazy company={userCompany} canManage={payCM.leaveManager} /></React.Suspense>}
       {tab === "내정보" && (
         <MyProfilePage

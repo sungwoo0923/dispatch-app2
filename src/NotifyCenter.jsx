@@ -17,6 +17,7 @@ import { canSeeNotice } from "./NoticeBoard";
 import { usePlatformNotices, usePlatformRead, markPlatformNoticeRead, PlatformBadge, hidePlatformNoticeForever, closePlatformNoticeForSession, platformSessionClosed } from "./PlatformNoticeBanner";
 import { RichHtml } from "./richText";
 import { DAY_MS, isNoticeUnread, noticeAtMs, toMs, useMinuteTick } from "./notifyCore";
+import { isPopupOn, popupCatOfNotify, usePopupPrefs } from "./popupPrefs";
 
 const ApprovalDocPreview = React.lazy(() => import("./Approval").then((m) => ({ default: m.ApprovalDocPreview })));
 
@@ -275,7 +276,10 @@ export function NotifyModal({ item, index = 1, total = 1, company = "", mobile =
 
 // 앱에 한 번 — onGo(item): { src, kind, id, openId, page } 받아서 그 메뉴로 이동
 export default function NotifyCenter({ uid, role, team = "", company = "", mobile = false, onGo }) {
-  const { queue, ready, bumpLocal } = useNotifyQueue({ uid, role, team, company });
+  const { queue: queueAll, ready, bumpLocal } = useNotifyQueue({ uid, role, team, company });
+  // ⭐ 2026-11-07 팝업 알림 설정(계정별) — 꺼 둔 종류는 가운데에 띄우지 않는다(읽음 처리도 안 해서 목록·메뉴 숫자에는 남는다)
+  const popupPrefs = usePopupPrefs(uid);
+  const queue = queueAll.filter((x) => isPopupOn(popupPrefs, popupCatOfNotify(x)));
   const [done, setDone] = React.useState(() => new Set()); // 방금 닫은 것(서버 기록이 돌아오기 전에도 바로 사라지게)
   const [curKey, setCurKey] = React.useState(null);
   const [armed, setArmed] = React.useState(false); // 켜자마자(로딩 화면 위로) 뜨지 않게 잠깐 기다린다

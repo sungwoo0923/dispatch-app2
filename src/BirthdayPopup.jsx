@@ -8,6 +8,7 @@ import React from "react";
 import { doc, setDoc } from "firebase/firestore";
 import { db } from "./firebase";
 import { useCompanyStaff } from "./InternalMail";
+import { isPopupOn, usePopupPrefs } from "./popupPrefs";
 
 const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
 const GOLD = "#E9C46A";
@@ -35,15 +36,16 @@ export default function BirthdayPopup({ uid, profile, company, mobile = false })
   const d3 = md(new Date(now.getTime() + 3 * 86400e3));
   const myMd = mdOf(profile?.birthDate);
   const [closed, setClosed] = React.useState(false);
+  const popupOn = isPopupOn(usePopupPrefs(uid), "etc"); // ⭐ 2026-11-07 팝업 알림 설정 · 기타 시스템 안내
   const selfKey = `kpBirthday:${uid}:${year}`;
-  const showSelf = !!(uid && myMd && myMd === today && Number(profile?.birthdayPopupYear || 0) !== year && ls.get(selfKey) !== "1" && !closed);
+  const showSelf = !!(popupOn && uid && myMd && myMd === today && Number(profile?.birthdayPopupYear || 0) !== year && ls.get(selfKey) !== "1" && !closed);
 
   // 동료 3일 전 안내
   const staff = useCompanyStaff(company || profile?.companyName || "");
   const upcoming = React.useMemo(() => (staff || []).filter((u) => u.uid !== uid && mdOf(u.birthDate) === d3), [staff, uid, d3]);
   const remindKey = `kpBirthdayD3:${uid}:${year}:${d3}`;
   const [remClosed, setRemClosed] = React.useState(false);
-  const showRemind = !!(uid && !showSelf && upcoming.length && ls.get(remindKey) !== "1" && !remClosed);
+  const showRemind = !!(popupOn && uid && !showSelf && upcoming.length && ls.get(remindKey) !== "1" && !remClosed);
 
   const closeSelf = React.useCallback(() => {
     setClosed(true); ls.set(selfKey, "1");

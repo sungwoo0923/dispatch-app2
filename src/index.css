@@ -6,6 +6,12 @@
 @tailwind components;
 @tailwind utilities;
 
+/* 🖨 2026-11-07 인쇄·PDF(html2canvas) 글자 내려앉음 수정 — html2canvas는 body 바로 아래 div에 1×1 GIF <img>를 넣어
+   글꼴 기준선(baseline)을 잰다. Tailwind preflight의 img{display:block} 때문에 그 그림이 다음 줄로 밀려
+   기준선이 한 줄만큼 아래로 잡히고, 캡처한 모든 글자가 칸 아래로 처지거나(도장·결재란 날짜 잘림) 테두리를 뚫었다.
+   측정용 그림만 원래대로 inline으로 되돌린다(화면 다른 그림에는 영향 없음). */
+body > div > img[src^="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP"] { display: inline !important; }
+
 @keyframes successBannerIn {
   0%   { opacity: 0; transform: scale(0.85) translateY(8px); }
   100% { opacity: 1; transform: scale(1) translateY(0); }
