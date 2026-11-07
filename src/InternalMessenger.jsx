@@ -49,15 +49,24 @@ function fmtLastMsg(ts) {
 const kstYmd = (offsetDays = 0) => new Date(Date.now() + 9 * 3600e3 + offsetDays * 86400e3).toISOString().slice(0, 10);
 const won = (v) => { const n = Number(String(v ?? "").replace(/[^\d.-]/g, "")); return n ? `${n.toLocaleString("ko-KR")}원` : ""; };
 const NAVY = "#1B2B4B";
+// ⭐ 2026-11-07 메신저 창 위치 — 끌어서 옮긴 자리를 기억(닫았다 열어도 그 자리). 프로그램을 다시 켜면 오른쪽 아래로
+let MSG_WIN_POS = null;
 export const DEFAULT_QUICK_REPLIES = [
-  "배차 완료되었습니다.",
-  "상차 완료 확인 부탁드립니다.",
-  "하차 완료되었습니다. 인수증 사진 부탁드립니다.",
-  "기사님 연락처 전달드립니다.",
+  "확인했습니다.",
+  "네 알겠습니다. 바로 처리하겠습니다.",
+  "잠시만요. 확인하고 말씀드릴게요.",
+  "지금 통화 중이라 끝나고 연락드릴게요.",
+  "배차 넣었습니다. 확인 부탁드려요.",
+  "기사님 배정 완료했습니다.",
+  "차량 아직 못 잡았습니다. 계속 찾고 있어요.",
+  "거래처 확인 부탁드립니다.",
   "운임 확인 부탁드립니다.",
-  "확인했습니다. 바로 처리하겠습니다.",
-  "잠시만 기다려 주세요. 확인 후 다시 연락드리겠습니다.",
-];
+  "결재 올렸습니다. 확인 부탁드려요.",
+  "자리 비웠다가 금방 들어오겠습니다.",
+  "회의 중입니다. 끝나고 연락드릴게요.",
+  "점심 다녀오겠습니다.",
+  "수고하셨습니다.",
+]
 // 오더를 메시지에 담을 때 남기는 항목(문서 전체를 복사하지 않는다 — 크기·개인정보 최소화)
 const ORDER_KEYS = ["상차일", "상차시간", "상차지명", "상차지주소", "하차일", "하차시간", "하차지명", "하차지주소", "거래처명", "화물내용", "차량종류", "차량톤수", "차량번호", "이름", "기사명", "전화번호", "배차상태", "청구운임", "기사운임", "지급방식"];
 export function orderSnapshot(o, col) {
@@ -1300,6 +1309,25 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
     setPanelW(cw); setPanelH(ch); setWinPreset(k);
     try { localStorage.setItem("kpWin:messenger", JSON.stringify({ w: cw, h: ch, p: k })); } catch { /* 무시 */ }
   };
+  // ⭐ 2026-11-07 창 끌어서 옮기기
+  const [winPos, setWinPos] = useState(MSG_WIN_POS);
+  const startMovePanelDrag = (e) => {
+    if (mobileMode || e.button !== 0) return;
+    e.preventDefault();
+    const box = e.currentTarget.closest("[data-msg-win]")?.getBoundingClientRect();
+    if (!box) return;
+    const offX = e.clientX - box.left, offY = e.clientY - box.top;
+    const onMove = (ev) => {
+      const left = Math.max(0, Math.min(window.innerWidth - 120, ev.clientX - offX));
+      const top = Math.max(40, Math.min(window.innerHeight - 60, ev.clientY - offY));
+      MSG_WIN_POS = { left, top };
+      setWinPos(MSG_WIN_POS);
+    };
+    const onUp = () => { document.removeEventListener("mousemove", onMove); document.removeEventListener("mouseup", onUp); document.body.style.userSelect = ""; };
+    document.body.style.userSelect = "none";
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+  };
   const resizingRef = useRef(null);
   const startResizePanelDrag = (e) => {
     e.preventDefault();
@@ -1307,6 +1335,7 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
     const startY = e.clientY;
     const startW = panelW;
     const startH = panelH;
+    const startPos = MSG_WIN_POS;
     resizingRef.current = true;
     const onMove = (ev) => {
       if (!resizingRef.current) return;
@@ -1315,6 +1344,8 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
       const nw = Math.max(500, Math.min(window.innerWidth - 120, startW + dx));
       const nh = Math.max(400, Math.min(window.innerHeight - 60, startH + dy));
       setPanelW(nw); setPanelH(nh); setWinPreset("");
+      // 옮긴 창은 오른쪽 아래 모서리를 고정한 채 왼쪽 위로 늘어나게
+      if (startPos) { MSG_WIN_POS = { left: Math.max(0, startPos.left - (nw - startW)), top: Math.max(40, startPos.top - (nh - startH)) }; setWinPos(MSG_WIN_POS); }
       try { localStorage.setItem("kpWin:messenger", JSON.stringify({ w: nw, h: nh, p: "" })); } catch { /* 무시 */ }
     };
     const onUp = () => {
@@ -1849,11 +1880,17 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
 
       {/* 메신저 패널 */}
       {open && (
-        <div data-ro-allow style={{
-          position: "fixed", bottom: 24, right: 92,
+        <div data-ro-allow data-msg-win style={{
+          position: "fixed", ...(winPos && !mobileMode ? { left: winPos.left, top: winPos.top } : { bottom: 24, right: 92 }),
           width: panelW, height: panelH, zIndex: 99997, borderRadius: 22, boxShadow: "0 24px 60px rgba(15,26,48,0.35)",
         }}>
           {/* 크기 버튼(작게·보통·크게) — 창 위쪽 오른편 */}
+          {!mobileMode && (
+            <div data-msg-move onMouseDown={startMovePanelDrag} title="끌어서 옮기기" style={{ position: "absolute", top: -34, left: 0, height: 30, display: "flex", alignItems: "center", gap: 6, padding: "0 12px", borderRadius: 12, background: "#0F1A30", color: "#C9D7F2", boxShadow: "0 8px 20px rgba(15,26,48,0.3)", cursor: "move", userSelect: "none", fontSize: 12, fontWeight: 800, fontFamily: "'Noto Sans KR','Malgun Gothic',sans-serif" }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2v20M2 12h20M12 2l-3 3M12 2l3 3M12 22l-3-3M12 22l3-3M2 12l3-3M2 12l3 3M22 12l-3-3M22 12l-3 3" /></svg>
+              끌어서 옮기기
+            </div>
+          )}
           <div style={{ position: "absolute", top: -34, right: 0, display: "flex", alignItems: "center", gap: 6, padding: "3px 4px 3px 10px", borderRadius: 12, background: "#0F1A30", boxShadow: "0 8px 20px rgba(15,26,48,0.3)" }}>
             <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: "0.22em", color: "#8FB0F0", fontFamily: "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif", fontVariantNumeric: "tabular-nums" }}>SIZE</span>
             <SizeButtons preset={winPreset} onPick={pickWin} />
