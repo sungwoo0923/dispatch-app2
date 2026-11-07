@@ -59,7 +59,7 @@ export default function HubPod({ o, canAdd, toast }) {
       <div className="flex items-center gap-2 mb-3 flex-wrap">
         <HI name="file" size={18} className="text-[#2D4C82]" />
         <span className="text-[16px] font-extrabold text-[#0F1A30] whitespace-nowrap">인수증과 전표</span>
-        <span className="text-[14px] font-bold text-[#8592A8] whitespace-nowrap" data-testid="pod-count">{list.length}장</span>
+        <span className="text-[14px] font-bold text-[#5F6E87] whitespace-nowrap" data-testid="pod-count">{list.length}장</span>
         {items.length > 0 && (
           <span className="ml-auto flex gap-1.5">
             <button type="button" onClick={() => shareFiles(items, title, toast)} className="h-10 px-3 rounded-xl bg-[#EAF0FA] text-[14px] font-bold text-[#1B2B4B] inline-flex items-center gap-1.5 whitespace-nowrap" data-testid="pod-share-all"><HI name="link" size={15} />공유</button>
@@ -74,8 +74,8 @@ export default function HubPod({ o, canAdd, toast }) {
             return (
               <div key={p.path} className="relative rounded-2xl overflow-hidden ring-1 ring-inset ring-[#E2E7EF] bg-[#F2F5FA] aspect-square">
                 {u && isImg(p) ? <button type="button" className="w-full h-full" onClick={() => setBig({ ...p, url: u, name: fileName(o, p, i) })}><img src={u} alt={`인수증 ${i + 1}`} className="w-full h-full object-cover" data-testid="pod-img" /></button>
-                  : <a href={u || "#"} target="_blank" rel="noreferrer" className="w-full h-full flex flex-col items-center justify-center gap-1 text-[#2D4C82]"><HI name="file" size={26} /><span className="text-[12px] font-bold px-1 truncate max-w-full">{p.name || "PDF"}</span></a>}
-                <span className="absolute left-1.5 top-1.5 h-6 px-2 rounded-full bg-[#0F1A30]/80 text-white text-[11.5px] font-bold inline-flex items-center">{p.kind || "인수증"} {i + 1}</span>
+                  : <a href={u || "#"} target="_blank" rel="noreferrer" className="w-full h-full flex flex-col items-center justify-center gap-1 text-[#2D4C82]"><HI name="file" size={26} /><span className="text-[13px] font-bold px-1 truncate max-w-full">{p.name || "PDF"}</span></a>}
+                <span className="absolute left-1.5 top-1.5 h-6 px-2 rounded-full bg-[#0F1A30]/80 text-white text-[13px] font-bold inline-flex items-center">{p.kind || "인수증"} {i + 1}</span>
               </div>
             );
           })}

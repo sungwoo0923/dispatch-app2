@@ -118,7 +118,7 @@ export default function HubWallet({ me, cfg, toast, jobs = [], posts = [], notic
         <Sec icon="wallet" title="가상계좌 정보" testid="wallet-charge">
           {va ? (
             <div className="rounded-2xl bg-[#F5F8FD] ring-1 ring-inset ring-[#DCE3EE] p-4" data-testid="va-account">
-              <div className="text-[13.5px] font-bold text-[#8592A8]">내 충전 계좌</div>
+              <div className="text-[13.5px] font-bold text-[#5F6E87]">내 충전 계좌</div>
               <div className="text-[19px] font-extrabold text-[#0F1A30] mt-0.5" style={NUMS}>{va.bank} {va.number}</div>
               <div className="text-[14.5px] font-bold text-[#3A4A66]">예금주 {va.holder || me.companyName || me.name}</div>
               <div className="text-[13.5px] text-[#55657F] mt-1.5">이 계좌로 보내면 바로 충전돼요.</div>
@@ -127,7 +127,7 @@ export default function HubWallet({ me, cfg, toast, jobs = [], posts = [], notic
           ) : (
             <>
               <div className="rounded-2xl bg-[#F5F8FD] ring-1 ring-inset ring-[#DCE3EE] p-4" data-testid="deposit-account">
-                <div className="text-[13.5px] font-bold text-[#8592A8]">입금 계좌</div>
+                <div className="text-[13.5px] font-bold text-[#5F6E87]">입금 계좌</div>
                 {acct.number ? (
                   <>
                     <div className="text-[19px] font-extrabold text-[#0F1A30] mt-0.5" style={NUMS}>{acct.bank} {acct.number}</div>
@@ -151,7 +151,7 @@ export default function HubWallet({ me, cfg, toast, jobs = [], posts = [], notic
                 <div key={c.id} className="flex items-center gap-2 py-2.5 text-[14.5px]">
                   <Badge tone={CH_ST[c.status]?.[1]}>{CH_ST[c.status]?.[0] || c.status}</Badge>
                   <span className="font-extrabold text-[#0F1A30]" style={NUMS}>{wonFull(c.amount)}</span>
-                  <span className="text-[#8592A8] truncate">{c.source === "va" ? "가상계좌" : c.depositor} {ago(c.createdAt)}</span>
+                  <span className="text-[#5F6E87] truncate">{c.source === "va" ? "가상계좌" : c.depositor} {ago(c.createdAt)}</span>
                   {c.status === "requested" && <button type="button" onClick={() => cancelCharge(c.id).catch(() => {})} className="ml-auto h-9 px-3 rounded-xl text-[13.5px] font-bold text-[#55657F] hover:bg-[#F2F5FA] shrink-0">취소</button>}
                 </div>
               ))}
@@ -174,17 +174,17 @@ export default function HubWallet({ me, cfg, toast, jobs = [], posts = [], notic
           )}
         </Sec>
         <Sec icon="arrow" title="출금" id="my-withdraw" testid="wallet-withdraw">
-          <div className="flex items-baseline gap-2 mb-2"><span className="text-[14.5px] font-bold text-[#8592A8]">출금가능금액</span><span className="text-[20px] font-extrabold text-[#0F1A30]" style={NUMS} data-testid="withdrawable">{wonFull(w?.available)}</span></div>
+          <div className="flex items-baseline gap-2 mb-2"><span className="text-[14.5px] font-bold text-[#5F6E87]">출금가능금액</span><span className="text-[20px] font-extrabold text-[#0F1A30]" style={NUMS} data-testid="withdrawable">{wonFull(w?.available)}</span></div>
           <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
             <input className={`${inputCls} text-right font-extrabold`} inputMode="numeric" value={wamt} onChange={(e) => setWamt(money(e.target.value))} placeholder="출금할 금액" style={NUMS} data-testid="withdraw-amount" />
             <Btn onClick={withdraw} disabled={!!busy || !wamt || !me.bank?.number} data-testid="withdraw-submit">{busy === "wd" ? "신청하고 있어요" : "출금"}</Btn>
           </div>
-          <div className="text-[13.5px] text-[#8592A8] mt-1.5">{me.bank?.number ? `${me.bank.bank} ${mask(me.bank.number)}로 보내드려요` : "출금계좌를 먼저 등록해 주세요"}</div>
-          {wds.length > 0 && <div className="mt-2 divide-y divide-[#EEF1F6]" data-testid="withdraw-list">{wds.slice(0, 6).map((x) => <div key={x.id} className="flex items-center gap-2 py-2 text-[14.5px]"><Badge tone={WD_ST[x.status]?.[1]}>{WD_ST[x.status]?.[0] || x.status}</Badge><span className="font-extrabold" style={NUMS}>{wonFull(x.amount)}</span><span className="text-[#8592A8] ml-auto">{ago(x.createdAt)}</span></div>)}</div>}
+          <div className="text-[13.5px] text-[#5F6E87] mt-1.5">{me.bank?.number ? `${me.bank.bank} ${mask(me.bank.number)}로 보내드려요` : "출금계좌를 먼저 등록해 주세요"}</div>
+          {wds.length > 0 && <div className="mt-2 divide-y divide-[#EEF1F6]" data-testid="withdraw-list">{wds.slice(0, 6).map((x) => <div key={x.id} className="flex items-center gap-2 py-2 text-[14.5px]"><Badge tone={WD_ST[x.status]?.[1]}>{WD_ST[x.status]?.[0] || x.status}</Badge><span className="font-extrabold" style={NUMS}>{wonFull(x.amount)}</span><span className="text-[#5F6E87] ml-auto">{ago(x.createdAt)}</span></div>)}</div>}
         </Sec>
         {(payouts.length > 0 || canTake(me)) && (
           <Sec icon="truck" title="운송료 지급" testid="wallet-payouts">
-            {payouts.length === 0 ? <div className="text-[14.5px] text-[#8592A8]">계산서를 올리고 등록자가 확인하면 지급일이 정해져요.</div> : payouts.slice(0, 20).map((p) => (
+            {payouts.length === 0 ? <div className="text-[14.5px] text-[#5F6E87]">계산서를 올리고 등록자가 확인하면 지급일이 정해져요.</div> : payouts.slice(0, 20).map((p) => (
               <div key={p.id} className="flex items-center gap-2 py-2.5 border-t border-[#EEF1F6] first:border-0 text-[14.5px]" data-testid="payout-row">
                 <Badge tone={PO_ST[p.status]?.[1]}>{PO_ST[p.status]?.[0] || p.status}</Badge>
                 <span className="min-w-0 flex-1 truncate font-bold text-[#1B2B4B]">{p.route}{p.dueDate ? ` ${p.dueDate}` : ""}</span>
@@ -207,7 +207,7 @@ export default function HubWallet({ me, cfg, toast, jobs = [], posts = [], notic
                     <div className="min-w-0 flex-1">
                       <div className="text-[15.5px] font-extrabold text-[#0F1A30]">{LEDGER_LABEL[l.type] || l.label || l.type}</div>
                       <div className="text-[13.5px] text-[#55657F] truncate">{[l.route, l.memo].filter(Boolean).join("  ") || "-"}</div>
-                      <div className="text-[12.5px] text-[#A3AEC0]" style={NUMS}>{fmtT(l.at)}  잔액 {wonFull(l.availableAfter)}</div>
+                      <div className="text-[13px] text-[#66758E]" style={NUMS}>{fmtT(l.at)}  잔액 {wonFull(l.availableAfter)}</div>
                     </div>
                     <span className={`text-[16px] font-extrabold shrink-0 ${plus ? "text-[#0F1A30]" : "text-[#55657F]"}`} style={NUMS}>{plus ? "+" : "-"}{wonFull(Math.abs(l.amount))}</span>
                   </div>
@@ -217,7 +217,7 @@ export default function HubWallet({ me, cfg, toast, jobs = [], posts = [], notic
           )}
         </Sec>
         <Sec icon="receipt" title="전자세금계산서" testid="my-invoices" right={<div className="flex gap-1">{[["out", "발행내역"], ["in", "수신내역"]].map(([k, l]) => <button key={k} type="button" onClick={() => setInv(k)} className={`h-9 px-3 rounded-full text-[13.5px] font-bold ${inv === k ? "bg-[#0F1A30] text-white" : "bg-[#F2F5FA] text-[#55657F]"}`} data-testid={`inv-tab-${k}`}>{l}</button>)}</div>}>
-          {(inv === "out" ? issued : received).length === 0 ? <div className="text-[14.5px] text-[#8592A8]">{inv === "out" ? "발행한 계산서가 없어요" : "받은 계산서가 없어요"}</div> : (inv === "out" ? issued : received).slice(0, 30).map((o) => (
+          {(inv === "out" ? issued : received).length === 0 ? <div className="text-[14.5px] text-[#5F6E87]">{inv === "out" ? "발행한 계산서가 없어요" : "받은 계산서가 없어요"}</div> : (inv === "out" ? issued : received).slice(0, 30).map((o) => (
             <button key={o.id} type="button" onClick={() => openOrder?.(o)} className="w-full text-left flex items-center gap-2 py-2.5 border-t border-[#EEF1F6] first:border-0 text-[14.5px]" data-testid="invoice-row">
               <Badge tone={o.invoiceOk ? "navy" : "sky"}>{o.invoiceOk ? "확인됨" : "확인 전"}</Badge>
               <span className="min-w-0 flex-1 truncate font-bold text-[#1B2B4B]">{o.상차시군구 || o.상차시도} → {o.하차시군구 || o.하차시도}  {o.invoice.no}</span>
@@ -226,11 +226,11 @@ export default function HubWallet({ me, cfg, toast, jobs = [], posts = [], notic
           ))}
         </Sec>
         <Sec icon="bell" title="쪽지와 알림" testid="my-notices">
-          {notices.length === 0 ? <div className="text-[14.5px] text-[#8592A8]">새 알림이 없어요</div> : notices.slice(0, 8).map((n) => (
+          {notices.length === 0 ? <div className="text-[14.5px] text-[#5F6E87]">새 알림이 없어요</div> : notices.slice(0, 8).map((n) => (
             <button key={n.id} type="button" onClick={() => { markRead(n.id); if (n.orderId) openOrder?.({ id: n.orderId }); }} className={`w-full text-left py-2.5 border-t border-[#EEF1F6] first:border-0 flex gap-2 ${n.read ? "" : "font-bold"}`}>
               {!n.read && <span className="mt-2 w-2 h-2 rounded-full bg-[#2D4C82] shrink-0" />}
               <span className="min-w-0 flex-1"><span className="block text-[15px] text-[#0F1A30] truncate">{n.title}</span><span className="block text-[13.5px] text-[#55657F] truncate font-normal">{n.body}</span></span>
-              <span className="text-[12.5px] text-[#A3AEC0] shrink-0 font-normal">{ago(n.createdAt)}</span>
+              <span className="text-[13px] text-[#66758E] shrink-0 font-normal">{ago(n.createdAt)}</span>
             </button>
           ))}
         </Sec>
@@ -240,13 +240,13 @@ export default function HubWallet({ me, cfg, toast, jobs = [], posts = [], notic
           ))}
         </Sec>
         <Sec icon="user" title="내정보" testid="me-view">
-          <div className="divide-y divide-[#EEF1F6]">{infoRows.map(([k, v]) => <div key={k} className="flex py-2.5 text-[15px]"><span className="w-24 shrink-0 font-semibold text-[#8592A8]">{k}</span><span className="font-bold text-[#0F1A30] break-all">{v}</span></div>)}</div>
-          <div className="mt-2 text-[13.5px] text-[#8592A8]">{me.source === "signup" ? "차량과 서류를 바꾸려면 고객센터로 연락해 주세요" : "정보는 로지스웹 프로그램에서 바꿔 주세요"}</div>
+          <div className="divide-y divide-[#EEF1F6]">{infoRows.map(([k, v]) => <div key={k} className="flex py-2.5 text-[15px]"><span className="w-24 shrink-0 font-semibold text-[#5F6E87]">{k}</span><span className="font-bold text-[#0F1A30] break-all">{v}</span></div>)}</div>
+          <div className="mt-2 text-[13.5px] text-[#5F6E87]">{me.source === "signup" ? "차량과 서류를 바꾸려면 고객센터로 연락해 주세요" : "정보는 로지스웹 프로그램에서 바꿔 주세요"}</div>
           {children}
           {isAdmin && <a href="/admin" className="mt-3 h-12 px-4 rounded-2xl bg-[#F5F7FB] flex items-center gap-2 text-[16px] font-bold text-[#1B2B4B]" data-testid="me-admin"><HI name="shield" size={18} />허브 관리자<HI name="chevron" size={18} className="ml-auto" /></a>}
           {logout && <Btn kind="ghost" className="w-full mt-3" onClick={logout} data-testid="btn-logout"><HI name="logout" size={18} />로그아웃</Btn>}
         </Sec>
-        <div className="text-[13px] text-[#8592A8] px-1">문의 {cfg?.supportPhone || "고객센터"}</div>
+        <div className="text-[13px] text-[#5F6E87] px-1">문의 {cfg?.supportPhone || "고객센터"}</div>
       </div>
     </div>
   );

@@ -39,11 +39,11 @@ function SettleCard({ o, isPoster, isTaker, me, run, busy }) {
       </div>
       <div className="text-[14px] text-[#55657F] leading-relaxed">{PAY_HINT[kind]}</div>
       <div className="mt-2 grid grid-cols-3 gap-2 text-center">
-        {[[ret ? "회차비" : "운송료", ret ? A : F], ["수수료", ret ? 0 : C], ["총합계", ret ? A : F + C]].map(([l, v]) => <div key={l} className="rounded-2xl bg-[#F5F8FD] px-2 py-2"><div className="text-[12.5px] font-bold text-[#8592A8]">{l}</div><div className="text-[15.5px] font-extrabold text-[#0F1A30]" style={NUMS}>{wonF(v)}</div></div>)}
+        {[[ret ? "회차비" : "운송료", ret ? A : F], ["수수료", ret ? 0 : C], ["총합계", ret ? A : F + C]].map(([l, v]) => <div key={l} className="rounded-2xl bg-[#F5F8FD] px-2 py-2"><div className="text-[13px] font-bold text-[#5F6E87]">{l}</div><div className="text-[15.5px] font-extrabold text-[#0F1A30]" style={NUMS}>{wonF(v)}</div></div>)}
       </div>
       {steps.length > 0 && (
         <ol className="mt-3 space-y-1.5">
-          {steps.map(([t, done], i) => <li key={t} className="flex items-center gap-2 text-[14.5px]"><span className={`w-6 h-6 rounded-full inline-flex items-center justify-center text-[12px] font-extrabold ${done ? "bg-[#0F1A30] text-[#8FB0F0]" : "bg-[#EEF2F8] text-[#8592A8]"}`}>{done ? <HI name="check" size={13} /> : i + 1}</span><span className={`font-bold ${done ? "text-[#0F1A30]" : "text-[#8592A8]"}`}>{t}</span></li>)}
+          {steps.map(([t, done], i) => <li key={t} className="flex items-center gap-2 text-[14.5px]"><span className={`w-6 h-6 rounded-full inline-flex items-center justify-center text-[13px] font-extrabold ${done ? "bg-[#0F1A30] text-[#8FB0F0]" : "bg-[#EEF2F8] text-[#5F6E87]"}`}>{done ? <HI name="check" size={13} /> : i + 1}</span><span className={`font-bold ${done ? "text-[#0F1A30]" : "text-[#5F6E87]"}`}>{t}</span></li>)}
         </ol>
       )}
       {s.status === "hold_failed" && isPoster && <div className="mt-2 rounded-2xl bg-[#F3F7FE] ring-1 ring-inset ring-[#C7D3E8] px-3 py-2.5 text-[14px] font-bold text-[#0F1A30]">잔액이 부족해요. {wonF(s.need)}이 필요해요.</div>}
@@ -108,7 +108,7 @@ function Row({ k, v, strong }) {
   if (v === undefined || v === null || v === "") return null;
   return (
     <div className="flex items-start gap-3 py-2.5">
-      <span className="w-[88px] shrink-0 text-[15px] font-semibold text-[#8592A8]">{k}</span>
+      <span className="w-[88px] shrink-0 text-[15px] font-semibold text-[#5F6E87]">{k}</span>
       <span className={`min-w-0 flex-1 text-[15.5px] ${strong ? "font-extrabold text-[#0F1A30]" : "font-bold text-[#1B2B4B]"} break-words`}>{v}</span>
     </div>
   );
@@ -191,7 +191,7 @@ export default function HubOrderDetail({ id, me, onClose, toast, onEdit, favorit
     } finally { setBusy(""); setAsk(null); }
   };
 
-  if (o === undefined) return <Drawer onClose={onClose} title="오더 상세"><div className="p-10 text-center text-[#8592A8]">불러오고 있어요</div></Drawer>;
+  if (o === undefined) return <Drawer onClose={onClose} title="오더 상세"><div className="p-10 text-center text-[#5F6E87]">불러오고 있어요</div></Drawer>;
   if (o === null) return <Drawer onClose={onClose} title="오더 상세"><div className="p-10 text-center text-[16px] font-bold text-[#55657F]">볼 수 없는 오더예요</div></Drawer>;
 
   const km = o.거리km || 0;
@@ -328,7 +328,7 @@ export default function HubOrderDetail({ id, me, onClose, toast, onEdit, favorit
                   </div>
                   <div className="mt-1"><TrustLine uid={o.takerUid} /></div>
                 </div>
-                <button type="button" aria-label="즐겨찾기" onClick={() => toggleFav(o.takerUid, match.name)} className={`w-11 h-11 rounded-2xl inline-flex items-center justify-center ${favorites.some((f) => f.uid === o.takerUid) ? "text-[#2D4C82] bg-[#EAF0FA]" : "text-[#A3AEC0] bg-[#F5F7FB]"}`}><HI name="heart" size={20} fill={favorites.some((f) => f.uid === o.takerUid) ? "currentColor" : "none"} /></button>
+                <button type="button" aria-label="즐겨찾기" onClick={() => toggleFav(o.takerUid, match.name)} className={`w-11 h-11 rounded-2xl inline-flex items-center justify-center ${favorites.some((f) => f.uid === o.takerUid) ? "text-[#2D4C82] bg-[#EAF0FA]" : "text-[#66758E] bg-[#F5F7FB]"}`}><HI name="heart" size={20} fill={favorites.some((f) => f.uid === o.takerUid) ? "currentColor" : "none"} /></button>
               </div>
               <div className="mt-3 divide-y divide-[#EEF1F6]">
                 <Row k="차량번호" v={match.vehicle?.plate} strong />
@@ -391,7 +391,7 @@ export default function HubOrderDetail({ id, me, onClose, toast, onEdit, favorit
                 <div className="flex items-center gap-2 flex-wrap"><span className="text-[17px] font-extrabold text-[#0F1A30] truncate">{o.posterCompany || maskName(o.posterName)}</span><Badge>{o.posterRole === "carrier" ? "운송사" : "화주"}</Badge>{o.posterVerified && <Badge tone="navy"><HI name="shield" size={13} />인증</Badge>}</div>
                 <div className="mt-0.5"><TrustLine uid={o.posterUid} /></div>
               </div>
-              {!isPoster && <button type="button" aria-label="즐겨찾는 등록자" onClick={() => toggleFav(o.posterUid, o.posterCompany || o.posterName)} className={`w-11 h-11 rounded-2xl inline-flex items-center justify-center ${favPoster ? "text-[#2D4C82] bg-[#EAF0FA]" : "text-[#A3AEC0] bg-[#F5F7FB]"}`} data-testid="btn-fav-poster"><HI name="heart" size={20} fill={favPoster ? "currentColor" : "none"} /></button>}
+              {!isPoster && <button type="button" aria-label="즐겨찾는 등록자" onClick={() => toggleFav(o.posterUid, o.posterCompany || o.posterName)} className={`w-11 h-11 rounded-2xl inline-flex items-center justify-center ${favPoster ? "text-[#2D4C82] bg-[#EAF0FA]" : "text-[#66758E] bg-[#F5F7FB]"}`} data-testid="btn-fav-poster"><HI name="heart" size={20} fill={favPoster ? "currentColor" : "none"} /></button>}
             </div>
           </Card>
 
@@ -419,7 +419,7 @@ export default function HubOrderDetail({ id, me, onClose, toast, onEdit, favorit
 
           {(isPoster || isTaker) && o.status !== "open" && (
             <Card className="p-4">
-              <div className="text-[16px] font-extrabold text-[#0F1A30] flex items-center gap-2"><HI name="memo" size={18} className="text-[#2D4C82]" />메모 <span className="text-[13.5px] font-semibold text-[#8592A8]">나만 봐요</span></div>
+              <div className="text-[16px] font-extrabold text-[#0F1A30] flex items-center gap-2"><HI name="memo" size={18} className="text-[#2D4C82]" />메모 <span className="text-[13.5px] font-semibold text-[#5F6E87]">나만 봐요</span></div>
               <textarea rows={2} value={note} onChange={(e) => { setNote(e.target.value); setNoteSaved(false); }} placeholder="입금 예정일, 추가 비용" className="mt-2 w-full px-4 py-3 rounded-2xl border border-[#D6DEEA] text-[16px] outline-none focus:border-[#2D4C82]" data-testid="settle-note" />
               <Btn kind="soft" size="md" className="mt-2" onClick={() => saveSettleNote(o.id, me.uid, note).then(() => setNoteSaved(true)).catch(() => toast?.("저장하지 못했어요"))}>{noteSaved ? "저장했어요" : "메모 저장"}</Btn>
             </Card>
@@ -431,7 +431,7 @@ export default function HubOrderDetail({ id, me, onClose, toast, onEdit, favorit
               <Btn kind="ghost" className={o.status === "open" ? "" : "col-span-2"} onClick={() => setAsk({ k: "cancelOrder" })} data-testid="btn-cancel-order">화물 취소</Btn>
             </div>
           )}
-          {o.status === "open" && isPoster && (o.cancelCount || 0) > 0 && <div className="text-[14px] text-[#8592A8] text-center">10초 안 취소 {o.cancelCount}번. 5번이 되면 신청을 더 받지 않아요</div>}
+          {o.status === "open" && isPoster && (o.cancelCount || 0) > 0 && <div className="text-[14px] text-[#5F6E87] text-center">10초 안 취소 {o.cancelCount}번. 5번이 되면 신청을 더 받지 않아요</div>}
         </div>
       </div>
       {action && <div className="shrink-0 p-4 lg:p-5 bg-white border-t border-[#E2E7EF] pb-[max(16px,env(safe-area-inset-bottom))]">{action}</div>}

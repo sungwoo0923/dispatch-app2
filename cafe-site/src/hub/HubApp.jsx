@@ -94,7 +94,7 @@ function Gate({ m, logout }) {
         <Card className="p-5">
           <ol className="space-y-3">
             {[["신청서 제출", true], ["서류 확인", !pending], [rejected ? "반려" : m.status === "suspended" ? "정지" : "승인", false]].map(([t, done], i) => (
-              <li key={t} className="flex items-center gap-3"><span className={`w-9 h-9 rounded-full inline-flex items-center justify-center text-[15px] font-extrabold ${done ? "bg-[#2D4C82] text-white" : i === 1 && pending ? "bg-[#0F1A30] text-[#8FB0F0] animate-pulse" : "bg-[#EEF2F8] text-[#8592A8]"}`}>{done ? <HI name="check" size={17} /> : i + 1}</span><span className="text-[16px] font-bold text-[#0F1A30]">{t}</span></li>
+              <li key={t} className="flex items-center gap-3"><span className={`w-9 h-9 rounded-full inline-flex items-center justify-center text-[15px] font-extrabold ${done ? "bg-[#2D4C82] text-white" : i === 1 && pending ? "bg-[#0F1A30] text-[#8FB0F0] animate-pulse" : "bg-[#EEF2F8] text-[#5F6E87]"}`}>{done ? <HI name="check" size={17} /> : i + 1}</span><span className="text-[16px] font-bold text-[#0F1A30]">{t}</span></li>
             ))}
           </ol>
         </Card>
@@ -136,7 +136,7 @@ function BoardSettings({ me, auto, onClose, toast }) {
           <Field label="범위"><Seg value={level} onChange={setLevel} options={[["sgg", "시·군·구"], ["sido", "시·도 전체"]]} /></Field>
         </Card>
         <Card className="p-4 space-y-3">
-          <div className="text-[16px] font-extrabold text-[#0F1A30]">상차 지역 더 보기 <span className="text-[14px] font-bold text-[#8592A8]">최대 3곳</span></div>
+          <div className="text-[16px] font-extrabold text-[#0F1A30]">상차 지역 더 보기 <span className="text-[14px] font-bold text-[#5F6E87]">최대 3곳</span></div>
           {extra.map((r, i) => <RegionPick key={i} v={r} onSido={(s) => setEx(i, "sido", s)} onSgg={(g) => setEx(i, "sigungu", g)} testid={`bs-ex${i}`} />)}
         </Card>
       </div>
@@ -184,11 +184,11 @@ function PostsView({ me, posts, openOrder, onPost }) {
   return (
     <div className="space-y-3 max-w-[1100px]" data-testid="list-posts">
       <Card className="p-4 space-y-3" data-testid="posts-filter">
-        <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2"><input type="date" className={inputCls} value={from} onChange={(e) => setFrom(e.target.value)} data-testid="pv-from" /><span className="text-[#8592A8] font-bold">~</span><input type="date" className={inputCls} value={to} onChange={(e) => setTo(e.target.value)} data-testid="pv-to" /></div>
-        <div className="flex flex-wrap gap-1.5 items-center"><span className="w-10 text-[14px] font-bold text-[#8592A8]">상태</span>{PST.map(([k, l]) => <Box key={k} on={st.includes(k)} onClick={() => tog(st, setSt, k)} testid={`pv-st-${k}`}>{l}</Box>)}</div>
-        <div className="flex flex-wrap gap-1.5 items-center"><span className="w-10 text-[14px] font-bold text-[#8592A8]">결제</span>{PPAY.map(([k, l]) => <Box key={k} on={pay.includes(k)} onClick={() => tog(pay, setPay, k)} testid={`pv-pay-${k}`}>{l}</Box>)}</div>
+        <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2"><input type="date" className={inputCls} value={from} onChange={(e) => setFrom(e.target.value)} data-testid="pv-from" /><span className="text-[#5F6E87] font-bold">~</span><input type="date" className={inputCls} value={to} onChange={(e) => setTo(e.target.value)} data-testid="pv-to" /></div>
+        <div className="flex flex-wrap gap-1.5 items-center"><span className="w-10 text-[14px] font-bold text-[#5F6E87]">상태</span>{PST.map(([k, l]) => <Box key={k} on={st.includes(k)} onClick={() => tog(st, setSt, k)} testid={`pv-st-${k}`}>{l}</Box>)}</div>
+        <div className="flex flex-wrap gap-1.5 items-center"><span className="w-10 text-[14px] font-bold text-[#5F6E87]">결제</span>{PPAY.map(([k, l]) => <Box key={k} on={pay.includes(k)} onClick={() => tog(pay, setPay, k)} testid={`pv-pay-${k}`}>{l}</Box>)}</div>
         <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
-          <div className="relative"><HI name="search" size={18} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#8592A8]" /><input className={`${inputCls} pl-10`} value={q} onChange={(e) => setQ(e.target.value)} placeholder="화물번호 또는 차주 전화" data-testid="pv-q" /></div>
+          <div className="relative"><HI name="search" size={18} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#5F6E87]" /><input className={`${inputCls} pl-10`} value={q} onChange={(e) => setQ(e.target.value)} placeholder="화물번호 또는 차주 전화" data-testid="pv-q" /></div>
           <Box on={mine} onClick={() => setMine((v) => !v)} testid="pv-mine">내꺼보기</Box>
         </div>
       </Card>
@@ -425,7 +425,7 @@ export default function HubApp() {
   const RegionBar = takerish && (
     <button type="button" onClick={() => setBoardSet(true)} className="w-full rounded-2xl bg-white ring-1 ring-inset ring-[#DCE3EE] px-4 py-3 flex items-center gap-2.5 text-left" data-testid="region-bar">
       <span className="w-9 h-9 rounded-xl bg-[#0F1A30] text-[#8FB0F0] inline-flex items-center justify-center shrink-0"><HI name="gps" size={17} /></span>
-      <span className="min-w-0 flex-1"><span className="block text-[13px] font-bold text-[#8592A8]">상차 지역</span><span className="block text-[15.5px] font-extrabold text-[#0F1A30] truncate" data-testid="region-keys">{regionLabel}</span></span>
+      <span className="min-w-0 flex-1"><span className="block text-[13px] font-bold text-[#5F6E87]">상차 지역</span><span className="block text-[15.5px] font-extrabold text-[#0F1A30] truncate" data-testid="region-keys">{regionLabel}</span></span>
       <span className="h-9 px-3 rounded-xl bg-[#EAF0FA] text-[14px] font-bold text-[#1B2B4B] inline-flex items-center shrink-0" data-testid="btn-board-settings">오더 설정</span>
     </button>
   );
@@ -465,22 +465,22 @@ export default function HubApp() {
             <button type="button" onClick={() => openOrder(liveShare.job)} className="w-full rounded-2xl bg-white ring-1 ring-inset ring-[#DCE3EE] px-4 py-3 flex items-center gap-2.5 text-left" data-testid="live-share-bar">
               <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${liveShare.on ? "bg-[#34D399] animate-pulse" : "bg-[#A3AEC0]"}`} />
               <span className="text-[14.5px] font-bold text-[#1B2B4B] truncate">{liveShare.denied ? "위치 권한을 켜 주세요" : `운송중 ${routeText(liveShare.job)}`}</span>
-              <HI name="chevron" size={18} className="ml-auto text-[#8592A8] shrink-0" />
+              <HI name="chevron" size={18} className="ml-auto text-[#5F6E87] shrink-0" />
             </button>
           )}
           {RegionBar}
           <div className="grid grid-cols-3 gap-2.5">
             {[["모집중", filtered.length, "건"], ["긴급", urgentN, "건"], [takerish ? "내 배차" : "내 화물 배차", takerish ? activeJobs : postsWaiting, "건"]].map(([l, v, u]) => (
               <div key={l} className="rounded-[18px] lg:rounded-[20px] bg-white ring-1 ring-inset ring-[#E2E7EF] px-3.5 py-2.5 lg:px-4 lg:py-3">
-                <div className="text-[13.5px] lg:text-[14px] font-bold text-[#8592A8] truncate">{l}</div>
-                <div className="flex items-baseline gap-1 mt-0.5"><span className="text-[22px] lg:text-[26px] font-extrabold text-[#0F1A30] leading-none" style={NUMS} data-testid={l === "모집중" ? "stat-open" : undefined}>{v}</span><span className="text-[14px] font-bold text-[#A3AEC0]">{u}</span></div>
+                <div className="text-[13.5px] lg:text-[14px] font-bold text-[#5F6E87] truncate">{l}</div>
+                <div className="flex items-baseline gap-1 mt-0.5"><span className="text-[22px] lg:text-[26px] font-extrabold text-[#0F1A30] leading-none" style={NUMS} data-testid={l === "모집중" ? "stat-open" : undefined}>{v}</span><span className="text-[14px] font-bold text-[#66758E]">{u}</span></div>
               </div>
             ))}
           </div>
           {SortBar}
           {takerish && returns.length > 0 && (
             <Card className="p-4" data-testid="return-trips">
-              <div className="flex items-center gap-2 mb-3"><span className="w-9 h-9 rounded-xl bg-[#0F1A30] text-[#8FB0F0] inline-flex items-center justify-center"><HI name="return" size={18} /></span><div className="min-w-0"><div className="text-[16px] font-extrabold text-[#0F1A30]">귀로 추천</div><div className="text-[14px] text-[#8592A8] truncate">{activeJob.하차시도} {activeJob.하차시군구} 하차 뒤 실을 수 있어요</div></div></div>
+              <div className="flex items-center gap-2 mb-3"><span className="w-9 h-9 rounded-xl bg-[#0F1A30] text-[#8FB0F0] inline-flex items-center justify-center"><HI name="return" size={18} /></span><div className="min-w-0"><div className="text-[16px] font-extrabold text-[#0F1A30]">귀로 추천</div><div className="text-[14px] text-[#5F6E87] truncate">{activeJob.하차시도} {activeJob.하차시군구} 하차 뒤 실을 수 있어요</div></div></div>
               <div className="flex gap-2.5 overflow-x-auto hub-scroll -mx-1 px-1 pb-1">
                 {returns.map((o) => (
                   <button key={o.id} type="button" onClick={() => openOrder(o)} className="shrink-0 w-[230px] text-left rounded-2xl bg-[#F5F8FD] ring-1 ring-inset ring-[#DCE3EE] p-3.5 hover:ring-[#2D4C82]">
@@ -507,7 +507,7 @@ export default function HubApp() {
       <div className="space-y-6" data-testid="list-jobs">
         {groups.filter(([, g]) => g.length).map(([t, g]) => (
           <section key={t}>
-            <div className="text-[16px] font-extrabold text-[#0F1A30] mb-2.5">{t} <span className="text-[#8592A8]">{g.length}</span></div>
+            <div className="text-[16px] font-extrabold text-[#0F1A30] mb-2.5">{t} <span className="text-[#5F6E87]">{g.length}</span></div>
             <div className="grid xl:grid-cols-2 gap-3.5">{g.map((o) => <HubOrderCard key={o.id} o={o} onOpen={() => openOrder(o)} compact />)}</div>
           </section>
         ))}
@@ -517,11 +517,11 @@ export default function HubApp() {
 
   const NoticesView = (
     <Card className="overflow-hidden" data-testid="notices">
-      {notices.length === 0 ? <div className="p-10 text-center text-[15.5px] text-[#8592A8]">새 알림이 없어요</div> : notices.map((n) => (
+      {notices.length === 0 ? <div className="p-10 text-center text-[15.5px] text-[#5F6E87]">새 알림이 없어요</div> : notices.map((n) => (
         <button key={n.id} type="button" onClick={() => { markRead(n.id); if (n.orderId) nav(`/order/${n.orderId}`); }} className={`w-full text-left px-5 py-4 flex gap-3.5 border-b border-[#EEF1F6] last:border-0 ${n.read ? "" : "bg-[#F3F7FE]"}`}>
-          <span className={`w-11 h-11 rounded-2xl inline-flex items-center justify-center shrink-0 ${n.read ? "bg-[#F2F5FA] text-[#8592A8]" : "bg-[#0F1A30] text-[#8FB0F0]"}`}><HI name={{ assigned: "bolt", confirmed: "check", quickCancel: "clock", released: "alert", cancelled: "close", delivered: "flag", pod: "file", invoice: "receipt", settle: "won", wallet: "wallet", return: "return" }[n.type] || "bell"} size={19} /></span>
+          <span className={`w-11 h-11 rounded-2xl inline-flex items-center justify-center shrink-0 ${n.read ? "bg-[#F2F5FA] text-[#5F6E87]" : "bg-[#0F1A30] text-[#8FB0F0]"}`}><HI name={{ assigned: "bolt", confirmed: "check", quickCancel: "clock", released: "alert", cancelled: "close", delivered: "flag", pod: "file", invoice: "receipt", settle: "won", wallet: "wallet", return: "return" }[n.type] || "bell"} size={19} /></span>
           <span className="min-w-0 flex-1"><span className="block text-[16px] font-extrabold text-[#0F1A30]">{n.title}</span><span className="block text-[15px] text-[#55657F] leading-snug mt-0.5">{n.body}</span></span>
-          <span className="text-[13.5px] text-[#8592A8] shrink-0">{ago(n.createdAt)}</span>
+          <span className="text-[13.5px] text-[#5F6E87] shrink-0">{ago(n.createdAt)}</span>
         </button>
       ))}
     </Card>
@@ -549,7 +549,7 @@ export default function HubApp() {
   const editOrder = async (o) => { const detail = await fetchPrivate(o.id, "detail"); setForm({ editing: { id: o.id, pub: o, detail } }); };
   const Balance = ({ dark }) => (
     <button type="button" onClick={() => go("my")} data-testid={dark ? "balance-m" : "balance"} className={`h-11 px-3 rounded-2xl inline-flex items-center gap-1.5 shrink-0 ${dark ? "bg-white/10 text-white" : "bg-white ring-1 ring-inset ring-[#E2E7EF] text-[#0F1A30]"}`}>
-      <span className={`text-[12.5px] font-bold ${dark ? "text-white/60" : "text-[#8592A8]"}`}>잔액</span><span className="text-[15px] font-extrabold" style={NUMS}>{wonFull(wallet?.available)}</span>
+      <span className={`text-[13px] font-bold ${dark ? "text-white/60" : "text-[#5F6E87]"}`}>잔액</span><span className="text-[15px] font-extrabold" style={NUMS}>{wonFull(wallet?.available)}</span>
     </button>
   );
 
@@ -581,7 +581,7 @@ export default function HubApp() {
             <img src="/brand/logisweb-mark-square.svg" alt="" className="w-9 h-9 rounded-[10px]" />
             <div className="min-w-0 flex-1"><div className="text-[18px] font-extrabold leading-tight truncate">{titles[tab]}</div><div className="text-[13px] font-semibold text-white/55 truncate">{ROLES[me.role]?.label} {me.name}</div></div>
             <Balance dark />
-            <button type="button" onClick={() => go("notices")} aria-label="알림" data-testid="btn-bell-m" className={`relative w-11 h-11 rounded-2xl inline-flex items-center justify-center shrink-0 ${tab === "notices" ? "bg-[#8FB0F0] text-[#0B1428]" : "bg-white/10"}`}><HI name="bell" size={19} />{unread > 0 && <span className="absolute -top-1 -right-1 min-w-[20px] h-5 px-1 rounded-full bg-[#8FB0F0] text-[#0B1428] text-[12px] font-extrabold inline-flex items-center justify-center" data-testid="bell-count">{unread}</span>}</button>
+            <button type="button" onClick={() => go("notices")} aria-label="알림" data-testid="btn-bell-m" className={`relative w-11 h-11 rounded-2xl inline-flex items-center justify-center shrink-0 ${tab === "notices" ? "bg-[#8FB0F0] text-[#0B1428]" : "bg-white/10"}`}><HI name="bell" size={19} />{unread > 0 && <span className="absolute -top-1 -right-1 min-w-[20px] h-5 px-1 rounded-full bg-[#8FB0F0] text-[#0B1428] text-[13px] font-extrabold inline-flex items-center justify-center" data-testid="bell-count">{unread}</span>}</button>
           </div>
         </div>
         <div className="hidden lg:flex h-[72px] items-center gap-3 px-8">
@@ -591,7 +591,7 @@ export default function HubApp() {
             <Balance />
             {taker && <Btn kind={alertOn ? "primary" : "ghost"} size="md" onClick={() => setAlertOpen(true)} data-testid="btn-alert"><HI name="volume" size={17} />콜 알림 {alertOn ? "켜짐" : "꺼짐"}</Btn>}
             <Btn kind="ghost" size="md" onClick={doRefresh} data-testid="btn-refresh"><HI name="refresh" size={17} className={refreshing ? "animate-spin" : ""} />새로고침</Btn>
-            <button type="button" onClick={() => go("notices")} aria-label="알림" className="relative w-11 h-11 rounded-2xl bg-white ring-1 ring-inset ring-[#E2E7EF] inline-flex items-center justify-center text-[#1B2B4B]"><HI name="bell" size={19} />{unread > 0 && <span className="absolute -top-1 -right-1 min-w-[20px] h-5 px-1 rounded-full bg-[#0F1A30] text-white text-[12px] font-extrabold inline-flex items-center justify-center">{unread}</span>}</button>
+            <button type="button" onClick={() => go("notices")} aria-label="알림" className="relative w-11 h-11 rounded-2xl bg-white ring-1 ring-inset ring-[#E2E7EF] inline-flex items-center justify-center text-[#1B2B4B]"><HI name="bell" size={19} />{unread > 0 && <span className="absolute -top-1 -right-1 min-w-[20px] h-5 px-1 rounded-full bg-[#0F1A30] text-white text-[13px] font-extrabold inline-flex items-center justify-center">{unread}</span>}</button>
           </div>
         </div>
       </header>
@@ -601,9 +601,9 @@ export default function HubApp() {
       <nav className="lg:hidden fixed bottom-0 inset-x-0 z-40 bg-white/95 backdrop-blur-md border-t border-[#E2E7EF] pb-[env(safe-area-inset-bottom)]">
         <div className="grid" style={{ gridTemplateColumns: `repeat(${MTABS.length}, minmax(0,1fr))` }}>
           {MTABS.map(([k, l, ic, n]) => (
-            <button key={k} type="button" onClick={() => go(k)} data-testid={`tab-${k}`} aria-current={tab === k ? "page" : undefined} className={`relative h-[64px] flex flex-col items-center justify-center gap-1 text-[13px] font-bold ${tab === k ? "text-[#0F1A30]" : "text-[#8592A8]"}`}>
+            <button key={k} type="button" onClick={() => go(k)} data-testid={`tab-${k}`} aria-current={tab === k ? "page" : undefined} className={`relative h-[64px] flex flex-col items-center justify-center gap-1 text-[13px] font-bold ${tab === k ? "text-[#0F1A30]" : "text-[#5F6E87]"}`}>
               <span className={`w-12 h-8 rounded-full inline-flex items-center justify-center transition ${tab === k ? "bg-[#0F1A30] text-[#8FB0F0]" : ""}`}><HI name={ic} size={20} /></span>{l}
-              {n > 0 && <span className="absolute top-1.5 left-1/2 ml-2 min-w-[18px] h-[18px] px-1 rounded-full bg-[#2D4C82] text-white text-[11.5px] font-extrabold inline-flex items-center justify-center">{n}</span>}
+              {n > 0 && <span className="absolute top-1.5 left-1/2 ml-2 min-w-[18px] h-[18px] px-1 rounded-full bg-[#2D4C82] text-white text-[13px] font-extrabold inline-flex items-center justify-center">{n}</span>}
             </button>
           ))}
         </div>
@@ -651,7 +651,7 @@ function AlertSettings({ me, onClose, toast }) {
           <span className="text-[16px] font-bold text-[#0F1A30]">경로와 운임 읽어주기</span>
           <button type="button" onClick={(e) => { e.preventDefault(); unlockAudio(); beep(); speak("경기 화성시 출발, 부산 강서구 도착. 11톤 윙바디. 운임 68만원."); }} className="ml-auto h-10 px-3 rounded-xl bg-[#EAF0FA] text-[14px] font-bold text-[#1B2B4B]">미리 듣기</button>
         </label>
-        <div><div className="text-[15px] font-extrabold text-[#0F1A30] mb-2">상차 지역 <span className="text-[#8592A8] font-semibold">(비우면 전국)</span></div><div className="flex flex-wrap gap-1.5">{SIDO_LIST.map((s) => <Chip key={s} on={a.regions.includes(s)} onClick={() => tog("regions", s)} className="h-10 px-3.5">{s}</Chip>)}</div></div>
+        <div><div className="text-[15px] font-extrabold text-[#0F1A30] mb-2">상차 지역 <span className="text-[#5F6E87] font-semibold">(비우면 전국)</span></div><div className="flex flex-wrap gap-1.5">{SIDO_LIST.map((s) => <Chip key={s} on={a.regions.includes(s)} onClick={() => tog("regions", s)} className="h-10 px-3.5">{s}</Chip>)}</div></div>
         <div><div className="text-[15px] font-extrabold text-[#0F1A30] mb-2">차종</div><div className="flex flex-wrap gap-1.5">{HUB_VEHICLES.map((s) => <Chip key={s} on={a.vehicles.includes(s)} onClick={() => tog("vehicles", s)} className="h-10 px-3.5">{s}</Chip>)}</div></div>
         <div className="grid grid-cols-3 gap-2.5">
           <Field label="최소 톤"><select className={selectCls} value={a.tonMin} onChange={(e) => setA((p) => ({ ...p, tonMin: e.target.value }))}><option value="">-</option>{HUB_TONS.map((t) => <option key={t} value={tonValue(t)}>{t}</option>)}</select></Field>

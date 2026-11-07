@@ -149,7 +149,7 @@ export default function KpSubNav({ code = "MENU", title, icon = "dashboard", ite
         <>
           <span className="flex-1 min-w-0 text-left">
             <span className="block truncate">{it.label}</span>
-            {it.en && <span className="block truncate" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 9.5, fontWeight: 800, letterSpacing: "0.18em", opacity: on ? 0.55 : 0.45 }}>{it.en}</span>}
+            {it.en && <span className="block truncate" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 9.5, fontWeight: 800, letterSpacing: "0.18em", opacity: on ? 0.75 : 0.72 }}>{it.en}</span>}
           </span>
           {hasBadge(it.badge) && (
             <span title={it.badgeTitle} style={redStyle(it)} className={`min-w-[20px] h-5 px-1.5 rounded-full text-[11px] font-extrabold flex items-center justify-center tabular-nums ${typeof it.badge === "string" ? "tracking-wider " : ""}${on ? "bg-[#1B2B4B] text-white" : it.soft ? "bg-white/15 text-white" : "bg-[#FF3B30] text-white"}`}>{badgeTxt(it.badge)}</span>
@@ -181,7 +181,7 @@ export default function KpSubNav({ code = "MENU", title, icon = "dashboard", ite
         <nav className={`flex-1 overflow-y-auto py-4 space-y-5 no-scrollbar ${collapsed ? "px-2" : "px-3"}`}>
           {gs.map((g, gi) => (
             <div key={g.label || gi}>
-              {g.label && !collapsed && <div className="px-3 mb-1.5 text-[11px] font-bold text-blue-200/45">{g.label}</div>}
+              {g.label && !collapsed && <div className="px-3 mb-1.5 text-[11px] font-bold text-blue-200/75">{g.label}</div>}
               <div className="space-y-1">
                 {g.items.map((it) => {
                   const kids = kidsOf(it);
@@ -214,7 +214,7 @@ export default function KpSubNav({ code = "MENU", title, icon = "dashboard", ite
           ))}
           {actions.length > 0 && (
             <div>
-              {!collapsed && <div className="px-3 mb-1.5 text-[11px] font-bold text-blue-200/45">{actionsLabel}</div>}
+              {!collapsed && <div className="px-3 mb-1.5 text-[11px] font-bold text-blue-200/75">{actionsLabel}</div>}
               <div className="space-y-1">
                 {actions.map((a) => <Btn key={a.key} it={a} on={false} onClick={a.onClick} />)}
               </div>

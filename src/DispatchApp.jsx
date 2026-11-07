@@ -3442,7 +3442,7 @@ function KpSideMenu({ open, onOpen, onClose, menuState, active, onSelect, compan
             if (!items.length) return null;
             return (
               <div key={g.label}>
-                <div className="px-3 mb-1.5 text-[11px] font-bold text-blue-200/45">{g.label}</div>
+                <div className="px-3 mb-1.5 text-[11px] font-bold text-blue-200/75">{g.label}</div>
                 <div className="space-y-1">
                   {items.map(({ m, st }) => {
                     const on = m === active;
@@ -9453,6 +9453,15 @@ return (
               </button>
             )}
 
+            {/* 🔁 2026-11-07 중복 정리 — 명함 이미지 · 나의 통계는 회사관리 › 내정보 화면(내 정보 · 내 명함 탭)과 같은 기능이라
+                 그 화면을 쓸 수 있으면 그쪽으로 보내고(한 곳에서 관리), 회사관리 메뉴가 없는 권한만 여기 예전 칸을 그대로 둔다 */}
+            {menuState("회사관리") === "ok" ? (
+              <button type="button" data-testid="myinfo-go-profile"
+                onClick={() => { setShowMyInfo(false); handleMenuClick("회사관리"); setTimeout(() => emitSubnav("COMPANY", "내정보"), 0); }}
+                className="w-full py-3 rounded-xl border border-[#DCE3EE] bg-[#F5F8FD] text-[#1B2B4B] text-[14px] font-bold hover:bg-[#EEF3FC] transition flex items-center justify-between px-4">
+                <span>명함 · 나의 통계 보기</span><span className="text-[13px] text-[#5B6B85]">회사관리 › 내정보</span>
+              </button>
+            ) : (<>
             {/* 명함 이미지 */}
             <div>
               <p className="text-[12px] font-semibold text-gray-500 mb-2">명함 이미지</p>
@@ -9530,6 +9539,7 @@ return (
                 ))}
               </div>
             </div>
+            </>)}
           </div>
         </div>
       </div>
@@ -57125,7 +57135,7 @@ function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, sho
         ].map(({label,en,val,key}) => {
           const on = gradeFilter===key && (showAll || searched);
           return (
-            <button key={key} onClick={() => { setGradeFilter(key); setShowAll(true); }}
+            <button key={key} onClick={() => { setGradeFilter(key); if (!(q.trim() && searched)) setShowAll(true); }}
               className={`relative overflow-hidden rounded-[20px] px-5 py-4 text-left transition ${on ? "text-white shadow-[0_14px_30px_rgba(15,26,48,0.28)]" : "bg-white border border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_8px_20px_rgba(16,24,40,0.05)] hover:border-[#4B6CB7]"}`}
               style={on ? { background: "linear-gradient(125deg,#0B1428,#0F1A30 45%,#1B2B4B 80%,#2D4C82)" } : undefined}>
               {on && <span className="absolute inset-0 opacity-[0.08]" style={{ backgroundImage: "linear-gradient(#fff 1px,transparent 1px),linear-gradient(90deg,#fff 1px,transparent 1px)", backgroundSize: "18px 18px" }} />}
@@ -57156,12 +57166,8 @@ function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, sho
           />
           <button onClick={()=>setSearched(true)} className={`h-9 mr-1.5 ${mobile ? "px-3.5 text-[14px]" : "px-5 text-[13.5px]"} shrink-0 rounded-[12px] bg-[#0F1A30] text-white font-black hover:bg-[#1B2B4B]`}>검색</button>
         </div>
-        {!mobile && <div className="flex items-center gap-1 h-12 px-1.5 rounded-[16px] bg-[#EEF2F8] border border-[#E3E8F0]">
-          {["전체","일반","직영","지입","임대","블랙"].map(g => (
-            <button key={g} onClick={() => { setGradeFilter(g); if (!(q.trim() && searched)) setShowAll(true); }}
-              className={`h-9 px-3.5 rounded-[11px] text-[13px] font-black transition ${gradeFilter===g ? "bg-white text-[#0F1A30] shadow-[0_4px_10px_rgba(15,26,48,0.1)]" : "text-[#5B6B85] hover:text-[#0F1A30]"}`}>{g}</button>
-          ))}
-        </div>}
+        {/* 🔁 2026-11-07 중복 정리 — 검색줄 옆 등급 버튼(전체·일반·직영·지입·임대·블랙)은 바로 위 숫자 타일 · 왼쪽 메뉴와 같은 거르기라 뺐다.
+             숫자 타일이 검색 중에는 검색 결과 안에서만 거르도록(예전 등급 버튼 동작) 맞췄다 */}
         <span className={`${mobile ? "text-[14px]" : "text-[13px]"} font-bold text-[#5B6B85] px-1 whitespace-nowrap`}>총 <b className="text-[#0F1A30] tabular-nums">{filtered.length}</b>명{mobile && selected.size > 0 && <> · 선택 <b className="text-[#2D4C82] tabular-nums">{selected.size}</b></>}</span>
         {mobile && (
           <div className="ml-auto flex items-center gap-1.5">

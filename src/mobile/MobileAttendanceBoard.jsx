@@ -522,7 +522,7 @@ export default function MobileAttendanceBoard({ userCompany, role, currentUser, 
 
         <div className="grid grid-cols-7 gap-1 mb-1">
           {["일", "월", "화", "수", "목", "금", "토"].map((w, i) => (
-            <div key={w} className={`text-center text-[11px] font-bold py-1 ${i === 0 ? "text-red-400" : i === 6 ? "text-blue-400" : "text-gray-400"}`}>{w}</div>
+            <div key={w} className={`text-center text-[11px] font-bold py-1 ${i === 0 ? "text-red-600" : i === 6 ? "text-blue-600" : "text-gray-500"}`}>{w}</div>
           ))}
         </div>
 

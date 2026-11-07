@@ -42,10 +42,10 @@ export default function HubPlaces({ me, toast }) {
   return (
     <div className="space-y-3 max-w-[1100px]" data-testid="places-view">
       <div className="flex gap-2">
-        <div className="relative flex-1"><HI name="search" size={18} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#8592A8]" /><input className={`${inputCls} pl-10`} value={q} onChange={(e) => setQ(e.target.value)} placeholder="이름, 주소, 담당자" data-testid="pl-q" /></div>
+        <div className="relative flex-1"><HI name="search" size={18} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#5F6E87]" /><input className={`${inputCls} pl-10`} value={q} onChange={(e) => setQ(e.target.value)} placeholder="이름, 주소, 담당자" data-testid="pl-q" /></div>
         <Btn onClick={() => setEd({})} data-testid="pl-add"><HI name="plus" size={17} />추가</Btn>
       </div>
-      <div className="text-[13.5px] text-[#8592A8] px-1">화물을 등록하면 상차지와 하차지가 여기 저장돼요. {rows ? `${rows.length}곳` : ""}</div>
+      <div className="text-[13.5px] text-[#5F6E87] px-1">화물을 등록하면 상차지와 하차지가 여기 저장돼요. {rows ? `${rows.length}곳` : ""}</div>
       {rows && shown.length === 0 ? <Empty icon="pin" title={q ? "찾는 곳이 없어요" : "저장한 곳이 없어요"} /> : (
         <div className="grid lg:grid-cols-2 gap-2.5" data-testid="places-list">
           {shown.map((p) => (
@@ -54,7 +54,7 @@ export default function HubPlaces({ me, toast }) {
               <div className="min-w-0 flex-1">
                 <div className="text-[16px] font-extrabold text-[#0F1A30] truncate">{p.이름 || p.주소}</div>
                 {p.이름 && <div className="text-[14px] text-[#55657F] truncate">{p.주소}</div>}
-                <div className="text-[13.5px] text-[#8592A8] truncate">{[p.담당자, p.연락처].filter(Boolean).join(" ") || "담당자 없음"}{p.count ? `  ${p.count}번 사용` : ""}{p.lastUsedAt ? `  ${ago(p.lastUsedAt)}` : ""}</div>
+                <div className="text-[13.5px] text-[#5F6E87] truncate">{[p.담당자, p.연락처].filter(Boolean).join(" ") || "담당자 없음"}{p.count ? `  ${p.count}번 사용` : ""}{p.lastUsedAt ? `  ${ago(p.lastUsedAt)}` : ""}</div>
               </div>
               <div className="flex flex-col gap-1 shrink-0"><Btn kind="ghost" size="md" onClick={() => setEd(p)} data-testid="pl-edit">고치기</Btn><Btn kind="ghost" size="md" onClick={() => setDel(p)} data-testid="pl-del">지우기</Btn></div>
             </Card>

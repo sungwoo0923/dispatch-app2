@@ -38,7 +38,7 @@ const weightNum = (v) => String(v || "").replace(/[^\d.]/g, "");
 function Section({ icon, title, children, sub, right }) {
   return (
     <section className="bg-white rounded-[22px] ring-1 ring-inset ring-[#E2E7EF] p-4 sm:p-5">
-      <div className="flex items-center gap-2 mb-3.5"><span className="w-9 h-9 rounded-xl bg-[#EAF0FA] text-[#1B2B4B] inline-flex items-center justify-center"><HI name={icon} size={18} /></span><span className="text-[17px] font-extrabold text-[#0F1A30]">{title}</span>{sub && <span className="text-[13.5px] font-semibold text-[#8592A8]">{sub}</span>}{right && <span className="ml-auto">{right}</span>}</div>
+      <div className="flex items-center gap-2 mb-3.5"><span className="w-9 h-9 rounded-xl bg-[#EAF0FA] text-[#1B2B4B] inline-flex items-center justify-center"><HI name={icon} size={18} /></span><span className="text-[17px] font-extrabold text-[#0F1A30]">{title}</span>{sub && <span className="text-[13.5px] font-semibold text-[#5F6E87]">{sub}</span>}{right && <span className="ml-auto">{right}</span>}</div>
       <div className="space-y-3">{children}</div>
     </section>
   );
@@ -90,19 +90,19 @@ export function CopyModal({ me, onClose, onPick }) {
   return (
     <Drawer onClose={onClose} title="오더복사" sub="고른 오더의 내용을 그대로 가져와요" width={600} testid="copy-modal">
       <div className="p-4 bg-white border-b border-[#E2E7EF]">
-        <div className="relative"><HI name="search" size={18} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#8592A8]" />
+        <div className="relative"><HI name="search" size={18} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#5F6E87]" />
           <input className={`${inputCls} pl-10`} value={q} onChange={(e) => setQ(e.target.value)} placeholder="상하차지명, 주소, 날짜, 화물번호" data-testid="copy-q" /></div>
       </div>
       <div className="flex-1 overflow-y-auto hub-scroll p-4 space-y-2.5" data-testid="copy-list">
-        {rows === null && <div className="p-8 text-center text-[15px] text-[#8592A8]">불러오고 있어요</div>}
-        {rows && shown.length === 0 && <div className="p-8 text-center text-[15px] text-[#8592A8]">{q ? "찾는 오더가 없어요" : "복사할 오더가 없어요"}</div>}
+        {rows === null && <div className="p-8 text-center text-[15px] text-[#5F6E87]">불러오고 있어요</div>}
+        {rows && shown.length === 0 && <div className="p-8 text-center text-[15px] text-[#5F6E87]">{q ? "찾는 오더가 없어요" : "복사할 오더가 없어요"}</div>}
         {shown.map((r) => {
           const from = r.src === "lw" ? (r.상차지명 || r.상차지주소) : `${r.상차시도} ${r.상차시군구 || ""}`;
           const to = r.src === "lw" ? (r.하차지명 || r.하차지주소) : `${r.하차시도} ${r.하차시군구 || ""}`;
           const fare = r.src === "lw" ? numOf(r.기사운임) || numOf(r.청구운임) : Number(r.운임) || 0;
           return (
             <button key={`${r.src}-${r.id}`} type="button" disabled={!!busy} onClick={() => choose(r)} className="w-full text-left bg-white rounded-[18px] ring-1 ring-inset ring-[#E2E7EF] p-3.5 hover:ring-[#2D4C82]" data-testid="copy-row" data-src={r.src}>
-              <div className="flex items-center gap-1.5 mb-1"><span className={`h-6 px-2 rounded-md text-[12.5px] font-bold inline-flex items-center ${r.src === "lw" ? "bg-[#0F1A30] text-white" : "bg-[#EAF0FA] text-[#1B2B4B]"}`}>{r.src === "lw" ? "로지스웹" : "허브"}</span><span className="text-[13.5px] font-bold text-[#8592A8]">{r.상차일 ? dayLabel(r.상차일) : ""}</span><span className="ml-auto text-[13px] text-[#A3AEC0]">{String(r.id).slice(0, 8)}</span></div>
+              <div className="flex items-center gap-1.5 mb-1"><span className={`h-6 px-2 rounded-md text-[13px] font-bold inline-flex items-center ${r.src === "lw" ? "bg-[#0F1A30] text-white" : "bg-[#EAF0FA] text-[#1B2B4B]"}`}>{r.src === "lw" ? "로지스웹" : "허브"}</span><span className="text-[13.5px] font-bold text-[#5F6E87]">{r.상차일 ? dayLabel(r.상차일) : ""}</span><span className="ml-auto text-[13px] text-[#66758E]">{String(r.id).slice(0, 8)}</span></div>
               <div className="text-[16px] font-extrabold text-[#0F1A30] truncate">{from} → {to}</div>
               <div className="text-[14px] text-[#55657F] truncate">{[r.차량톤수, r.차량종류, r.화물내용].filter(Boolean).join(" ")}{fare ? `  ${manwon(fare)}` : ""}</div>
             </button>
@@ -213,7 +213,7 @@ export default function HubPostForm({ me, editing, onClose, toast, onDone, cfg =
   };
 
   const Place = (side, label) => (
-    <Section icon="pin" title={`${label}지`} right={<span className="text-[13px] font-bold text-[#8592A8]">{f[`${side}시도`] ? `${f[`${side}시도`]} ${f[`${side}시군구`] || ""}` : ""}</span>}>
+    <Section icon="pin" title={`${label}지`} right={<span className="text-[13px] font-bold text-[#5F6E87]">{f[`${side}시도`] ? `${f[`${side}시도`]} ${f[`${side}시군구`] || ""}` : ""}</span>}>
       <Field label={`${label}지명`}><PlaceInput value={f[`${side}지명`]} onChange={(v) => set(`${side}지명`, v)} places={places} onPick={pickPlace(side)} source={linked ? "로지스웹 상하차지거래처" : "고객관리"} testid={`pf-${side}-name`} /></Field>
       <Field label="주소" required><AddressInput value={f[`${side}지주소`]} onChange={(v) => set(`${side}지주소`, v)} onPick={pickAddr(side)} testid={`pf-${side}-addr`} /></Field>
       <div className="grid grid-cols-2 gap-2.5">
@@ -252,7 +252,7 @@ export default function HubPostForm({ me, editing, onClose, toast, onDone, cfg =
             <Field label="상차방법"><Sel value={f.상차방법} onChange={(v) => set("상차방법", v)} options={LOAD_METHODS} none="협의" testid="pf-load" /></Field>
             <Field label="하차방법"><Sel value={f.하차방법} onChange={(v) => set("하차방법", v)} options={LOAD_METHODS} none="협의" testid="pf-unload" /></Field>
             <Field label="대수"><Sel value={f.대수} onChange={(v) => set("대수", v)} options={COUNT_OPTIONS} testid="pf-count" /></Field>
-            <Field label="화물중량"><div className="relative"><input className={`${inputCls} pr-[72px] text-right`} inputMode="decimal" value={f.중량} onChange={inp("중량", (v) => weightNum(v).slice(0, 5))} placeholder="0" data-testid="pf-weight" /><span className="absolute right-4 top-1/2 -translate-y-1/2 text-[14.5px] font-bold text-[#8592A8]">톤 이하</span></div></Field>
+            <Field label="화물중량"><div className="relative"><input className={`${inputCls} pr-[72px] text-right`} inputMode="decimal" value={f.중량} onChange={inp("중량", (v) => weightNum(v).slice(0, 5))} placeholder="0" data-testid="pf-weight" /><span className="absolute right-4 top-1/2 -translate-y-1/2 text-[14.5px] font-bold text-[#5F6E87]">톤 이하</span></div></Field>
             <Field label="화물" required className="col-span-2"><input className={inputCls} value={f.화물내용} onChange={inp("화물내용")} placeholder="예: 전자부품 박스" data-testid="pf-cargo" /></Field>
             <Field label="파레트"><input className={inputCls} inputMode="numeric" value={f.파레트} onChange={inp("파레트", (v) => v.replace(/[^\d]/g, "").slice(0, 3))} placeholder="0" data-testid="pf-pallet" /></Field>
           </div>

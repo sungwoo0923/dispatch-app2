@@ -174,7 +174,7 @@ body:has(.kp-m input:focus, .kp-m textarea:focus) .kp-m-toast { display: none; }
 .kp-m .text-blue-100{color:#DCE4F1}
 .kp-m .text-blue-200{color:#C9D6EE}
 .kp-m .text-blue-300{color:#9FB3D9}
-.kp-m .text-blue-400{color:#6B7FA6}
+.kp-m .text-blue-400{color:#5A6D94}
 .kp-m .text-blue-500{color:#2D4C82}
 .kp-m .text-blue-600{color:#1B2B4B}
 .kp-m .text-blue-700{color:#1B2B4B}
@@ -270,7 +270,7 @@ body:has(.kp-m input:focus, .kp-m textarea:focus) .kp-m-toast { display: none; }
 .kp-m .bg-orange-600{background-color:#1B2B4B}
 .kp-m .bg-orange-700{background-color:#16243F}
 .kp-m .text-orange-300{color:#9FB3D9}
-.kp-m .text-orange-400{color:#6B7FA6}
+.kp-m .text-orange-400{color:#5A6D94}
 .kp-m .text-orange-500{color:#2D4C82}
 .kp-m .text-orange-600{color:#1B2B4B}
 .kp-m .text-orange-700{color:#1B2B4B}
@@ -289,7 +289,7 @@ body:has(.kp-m input:focus, .kp-m textarea:focus) .kp-m-toast { display: none; }
 .kp-m .bg-red-900{background-color:#0F1A30}
 .kp-m .text-red-200{color:#C9D6EE}
 .kp-m .text-red-300{color:#9FB3D9}
-.kp-m .text-red-400{color:#6B7FA6}
+.kp-m .text-red-400{color:#5A6D94}
 .kp-m .text-red-500{color:#2D4C82}
 .kp-m .text-red-600{color:#1B2B4B}
 .kp-m .text-red-700{color:#1B2B4B}

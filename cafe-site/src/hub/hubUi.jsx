@@ -89,7 +89,7 @@ export function Btn({ kind = "primary", size = "lg", className = "", children, .
     </button>
   );
 }
-export const inputCls = "w-full h-12 px-4 rounded-2xl border border-[#D6DEEA] bg-white text-[16px] font-medium text-[#0F1A30] outline-none transition focus:border-[#2D4C82] focus:ring-4 focus:ring-[#2D4C82]/10 placeholder:text-[#A3AEC0]";
+export const inputCls = "w-full h-12 px-4 rounded-2xl border border-[#D6DEEA] bg-white text-[16px] font-medium text-[#0F1A30] outline-none transition focus:border-[#2D4C82] focus:ring-4 focus:ring-[#2D4C82]/10 placeholder:text-[#66758E]";
 export const selectCls = `${inputCls} hub-select appearance-none pr-10 bg-no-repeat bg-[right_14px_center] bg-[length:16px] bg-[url('data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%2355657F%22 stroke-width=%222.4%22><path d=%22m6 9 6 6 6-6%22/></svg>')]`;
 
 export function Field({ label, hint, required, children, className = "" }) {
@@ -97,7 +97,7 @@ export function Field({ label, hint, required, children, className = "" }) {
     <label className={`block ${className}`}>
       <span className="text-[15px] font-bold text-[#3A4A66]">{label}{required && <span className="text-[#2D4C82] ml-0.5">*</span>}</span>
       <div className="mt-1.5">{children}</div>
-      {hint && <div className="mt-1 text-[14px] text-[#8592A8] leading-snug">{hint}</div>}
+      {hint && <div className="mt-1 text-[14px] text-[#5F6E87] leading-snug">{hint}</div>}
     </label>
   );
 }
@@ -151,7 +151,7 @@ export function Stars({ value = 0, onChange, size = 20 }) {
 // 상·하차 경로 — 점 두 개를 잇는 세로 선(카드·상세 공용)
 export function RouteLine({ from, to, fromSub, toSub, km, dark = false, big = false }) {
   const t = dark ? "text-white" : "text-[#0F1A30]";
-  const s = dark ? "text-white/55" : "text-[#8592A8]";
+  const s = dark ? "text-white/55" : "text-[#5F6E87]";
   return (
     <div className="flex gap-3">
       <div className="flex flex-col items-center pt-[7px] shrink-0">
@@ -191,7 +191,7 @@ export function Drawer({ onClose, children, width = 560, title, sub, closeOnBack
             <button type="button" onClick={onClose} aria-label="닫기" className="w-12 h-12 -ml-1 rounded-2xl inline-flex items-center justify-center text-[#0F1A30] hover:bg-[#F2F5FA]"><HI name="back" size={22} /></button>
             <div className="min-w-0 flex-1">
               <div className="text-[18px] font-extrabold text-[#0F1A30] truncate">{title}</div>
-              {sub && <div className="text-[13.5px] font-semibold text-[#8592A8] truncate">{sub}</div>}
+              {sub && <div className="text-[13.5px] font-semibold text-[#5F6E87] truncate">{sub}</div>}
             </div>
           </div>
         )}
@@ -257,9 +257,9 @@ export function Ring({ ms, total = 10000, size = 76 }) {
 export function Empty({ icon = "inbox", title, desc, action }) {
   return (
     <div className="py-14 px-6 text-center bg-white rounded-[22px] ring-1 ring-inset ring-[#E2E7EF]">
-      <div className="w-16 h-16 mx-auto rounded-2xl bg-[#F2F5FA] flex items-center justify-center text-[#8592A8]"><HI name={icon} size={26} /></div>
+      <div className="w-16 h-16 mx-auto rounded-2xl bg-[#F2F5FA] flex items-center justify-center text-[#5F6E87]"><HI name={icon} size={26} /></div>
       <div className="mt-4 text-[17px] font-extrabold text-[#0F1A30]">{title}</div>
-      {desc && <div className="mt-1.5 text-[15px] text-[#8592A8] leading-relaxed">{desc}</div>}
+      {desc && <div className="mt-1.5 text-[15px] text-[#5F6E87] leading-relaxed">{desc}</div>}
       {action && <div className="mt-5">{action}</div>}
     </div>
   );
@@ -274,9 +274,9 @@ export function HubMark({ size = 36, dark = true, label = true }) {
         <span className="flex flex-col leading-none gap-1">
           <span className="flex items-center gap-1.5">
             <span aria-label="LogisWeb" role="img" className="block" style={{ height: Math.round(size * 0.36), width: Math.round(size * 0.36) * (13085.8 / 1490), backgroundColor: dark ? "#fff" : "#0F1A30", WebkitMask: "url(/brand/logisweb-wordmark.svg) no-repeat center / contain", mask: "url(/brand/logisweb-wordmark.svg) no-repeat center / contain" }} />
-            <span className="font-extrabold rounded-md px-1.5 h-[18px] text-[12px] inline-flex items-center" style={{ background: dark ? "#8FB0F0" : "#1B2B4B", color: dark ? "#0B1428" : "#fff", letterSpacing: "0.06em" }}>HUB</span>
+            <span className="font-extrabold rounded-md px-1.5 h-[18px] text-[13px] inline-flex items-center" style={{ background: dark ? "#8FB0F0" : "#1B2B4B", color: dark ? "#0B1428" : "#fff", letterSpacing: "0.06em" }}>HUB</span>
           </span>
-          <span className={`text-[12.5px] font-semibold ${dark ? "text-white/55" : "text-[#8592A8]"}`}>로지스웹 허브, 화물 콜</span>
+          <span className={`text-[13px] font-semibold ${dark ? "text-white/55" : "text-[#5F6E87]"}`}>로지스웹 허브, 화물 콜</span>
         </span>
       )}
     </span>
@@ -293,12 +293,12 @@ export function FilePick({ label, required, value, onPick, accept = "image/*,app
   const done = !!(value?.file || value?.path);
   return (
     <label className={`flex items-center gap-3 p-3 rounded-2xl ring-1 ring-inset cursor-pointer transition ${done ? "bg-[#F3F7FE] ring-[#B9CBEB]" : "bg-white ring-[#D6DEEA] hover:ring-[#2D4C82]"}`}>
-      <span className={`w-12 h-12 rounded-xl overflow-hidden shrink-0 inline-flex items-center justify-center ${done ? "bg-[#2D4C82] text-white" : "bg-[#F2F5FA] text-[#8592A8]"}`}>
+      <span className={`w-12 h-12 rounded-xl overflow-hidden shrink-0 inline-flex items-center justify-center ${done ? "bg-[#2D4C82] text-white" : "bg-[#F2F5FA] text-[#5F6E87]"}`}>
         {preview ? <img src={preview} alt="" className="w-full h-full object-cover" /> : <HI name={done ? "check" : "upload"} size={20} />}
       </span>
       <span className="min-w-0 flex-1">
         <span className="block text-[15.5px] font-bold text-[#0F1A30]">{label}{required && <span className="text-[#2D4C82] ml-0.5">*</span>}</span>
-        <span className="block text-[13.5px] text-[#8592A8] truncate">{busy ? "올리고 있어요" : value?.file?.name || value?.name || (required ? "사진 또는 PDF (10MB 이하)" : "선택, 사진 또는 PDF")}</span>
+        <span className="block text-[13.5px] text-[#5F6E87] truncate">{busy ? "올리고 있어요" : value?.file?.name || value?.name || (required ? "사진 또는 PDF (10MB 이하)" : "선택, 사진 또는 PDF")}</span>
       </span>
       <span className="text-[14px] font-bold text-[#2D4C82] shrink-0">{done ? "바꾸기" : "올리기"}</span>
       <input type="file" accept={accept} className="sr-only" data-testid={testid} onChange={(e) => { const f = e.target.files?.[0]; if (f) onPick(f); e.target.value = ""; }} />

@@ -31,7 +31,7 @@ export default function HubOrderCard({ o, onOpen, mine, fav, fresh, extraKm, com
           {o.지급방식 && <Badge>{o.지급방식}</Badge>}
           {mine && <Badge tone="sky">내 오더</Badge>}
           {fav && <Badge tone="sky"><HI name="heart" size={12} fill="currentColor" />즐겨찾기</Badge>}
-          <span className="ml-auto text-[13.5px] font-semibold text-[#8592A8] shrink-0">{ago(o.createdAt)}</span>
+          <span className="ml-auto text-[13.5px] font-semibold text-[#5F6E87] shrink-0">{ago(o.createdAt)}</span>
         </div>
         <div className="mt-3">
           <RouteLine from={`${o.상차시도} ${o.상차시군구 || ""}`} to={`${o.하차시도} ${o.하차시군구 || ""}`} km={km}
@@ -58,9 +58,9 @@ export default function HubOrderCard({ o, onOpen, mine, fav, fresh, extraKm, com
         <span data-testid="card-cta" className={`${fit ? "" : "ml-auto"} h-11 px-4 rounded-2xl inline-flex items-center justify-center text-white text-[15px] font-extrabold whitespace-nowrap shrink-0 transition`} style={{ background: "linear-gradient(120deg,#1B2B4B,#2D4C82)" }}>{mine ? "내 오더" : stg === "open" ? "배차요청" : "보기"}</span>
       </div>
       <div className="px-4 sm:px-5 py-2.5 flex items-center gap-2 text-[14px] text-[#55657F] border-t border-[#EEF1F6]">
-        <HI name="building" size={15} className="text-[#8592A8] shrink-0" />
+        <HI name="building" size={15} className="text-[#5F6E87] shrink-0" />
         <span className="font-bold text-[#3A4A66] truncate">{o.posterCompany || o.posterName || "등록자"}</span>
-        <span className="text-[#A3AEC0] shrink-0">{o.posterRole === "carrier" ? "운송사" : "화주"}</span>
+        <span className="text-[#66758E] shrink-0">{o.posterRole === "carrier" ? "운송사" : "화주"}</span>
         {o.posterVerified && <span className="ml-auto inline-flex items-center gap-1 text-[13.5px] font-bold text-[#2D4C82] shrink-0"><HI name="shield" size={15} />서류 인증</span>}
       </div>
     </button>
@@ -70,21 +70,21 @@ export default function HubOrderCard({ o, onOpen, mine, fav, fresh, extraKm, com
 // ⭐ 2026-11-07 등록내역 한 줄(24시콜 등록내역 구조 참고) — 상차 지역(당상) · 하차 지역(당착) · 운임 · 독차/혼적 + 결제/톤/차종 · 시각 · 단계
 export function HubOrderRow({ o, onOpen, takerPhone }) {
   const stg = stageOf(o);
-  const tone = { open: "bg-[#EAF0FA] text-[#1B2B4B]", pending: "bg-[#2D4C82] text-white", moving: "bg-[#2D4C82] text-white", delivered: "bg-[#0F1A30] text-white", returned: "bg-[#0F1A30] text-white", cancelled: "bg-[#F2F5FA] text-[#8592A8]" }[stg];
+  const tone = { open: "bg-[#EAF0FA] text-[#1B2B4B]", pending: "bg-[#2D4C82] text-white", moving: "bg-[#2D4C82] text-white", delivered: "bg-[#0F1A30] text-white", returned: "bg-[#0F1A30] text-white", cancelled: "bg-[#F2F5FA] text-[#5F6E87]" }[stg];
   const t = o.createdAt?.toMillis ? new Date(o.createdAt.toMillis()) : null;
   return (
     <button type="button" onClick={onOpen} data-testid="post-row" data-order-id={o.id} className="w-full text-left bg-white rounded-[18px] ring-1 ring-inset ring-[#E2E7EF] px-4 py-3 hover:ring-[#2D4C82] flex flex-col gap-1">
       <div className="w-full flex items-center gap-3">
         <div className="min-w-0 flex-1 flex items-center gap-1.5 text-[16px] font-extrabold text-[#0F1A30]">
-          <span className="truncate" title={`${o.상차시도} ${o.상차시군구 || ""}`}>{o.상차시군구 || o.상차시도}</span>{sameDayLoad(o) && <span className="shrink-0 h-5 px-1.5 rounded bg-[#EAF0FA] text-[12px] font-bold text-[#1B2B4B] inline-flex items-center">당상</span>}
-          <HI name="arrow" size={14} className="shrink-0 text-[#8592A8]" />
-          <span className="truncate" title={`${o.하차시도} ${o.하차시군구 || ""}`}>{o.하차시군구 || o.하차시도}</span>{sameDayDrop(o) && <span className="shrink-0 h-5 px-1.5 rounded bg-[#EAF0FA] text-[12px] font-bold text-[#1B2B4B] inline-flex items-center">당착</span>}
+          <span className="truncate" title={`${o.상차시도} ${o.상차시군구 || ""}`}>{o.상차시군구 || o.상차시도}</span>{sameDayLoad(o) && <span className="shrink-0 h-5 px-1.5 rounded bg-[#EAF0FA] text-[13px] font-bold text-[#1B2B4B] inline-flex items-center">당상</span>}
+          <HI name="arrow" size={14} className="shrink-0 text-[#5F6E87]" />
+          <span className="truncate" title={`${o.하차시도} ${o.하차시군구 || ""}`}>{o.하차시군구 || o.하차시도}</span>{sameDayDrop(o) && <span className="shrink-0 h-5 px-1.5 rounded bg-[#EAF0FA] text-[13px] font-bold text-[#1B2B4B] inline-flex items-center">당착</span>}
         </div>
         <div className="shrink-0 text-right text-[17px] font-extrabold text-[#0F1A30]" style={NUMS}>{manwon(o.운임)}</div>
       </div>
       <div className="w-full flex items-center gap-3">
         <div className="min-w-0 flex-1 text-[13.5px] text-[#55657F] truncate"><b className="text-[#1B2B4B]">{o.적재 === "혼적" ? "혼적" : "독차"}</b> {o.지급방식} {o.차량톤수} {o.차량종류}{takerPhone ? `  ${takerPhone}` : ""}</div>
-        <div className="shrink-0 flex items-center gap-1.5"><span className="text-[12.5px] text-[#A3AEC0]" style={NUMS}>{t ? `${t.getMonth() + 1}/${t.getDate()} ${String(t.getHours()).padStart(2, "0")}:${String(t.getMinutes()).padStart(2, "0")}` : ""}</span><span className={`h-6 px-2 rounded-full text-[12.5px] font-bold inline-flex items-center ${tone}`} data-testid="post-row-status">{STAGE_LABEL[stg]}</span></div>
+        <div className="shrink-0 flex items-center gap-1.5"><span className="text-[13px] text-[#66758E]" style={NUMS}>{t ? `${t.getMonth() + 1}/${t.getDate()} ${String(t.getHours()).padStart(2, "0")}:${String(t.getMinutes()).padStart(2, "0")}` : ""}</span><span className={`h-6 px-2 rounded-full text-[13px] font-bold inline-flex items-center ${tone}`} data-testid="post-row-status">{STAGE_LABEL[stg]}</span></div>
       </div>
     </button>
   );

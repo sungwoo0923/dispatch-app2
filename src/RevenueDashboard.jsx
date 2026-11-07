@@ -22,9 +22,9 @@ const statOf = (list) => {
 };
 
 function Delta({ cur, prev, suffix = "", dark = false }) {
-  if (!prev) return <span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 12.5, color: dark ? "rgba(207,224,255,.6)" : "#9ca3af" }}>비교 없음</span>;
+  if (!prev) return <span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 13.5, color: dark ? "rgba(207,224,255,.6)" : "#607089" }}>비교 없음</span>;
   const r = ((cur - prev) / Math.abs(prev)) * 100;
-  return <span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 12.5, fontWeight: 800, color: dark ? (r >= 0 ? "#CFE0FF" : "rgba(207,224,255,.7)") : (r >= 0 ? NAVY : "#64748b") }}>{r >= 0 ? "▲" : "▼"} {Math.abs(r).toFixed(1)}%{suffix}</span>;
+  return <span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 13.5, fontWeight: 800, color: dark ? (r >= 0 ? "#CFE0FF" : "rgba(207,224,255,.7)") : (r >= 0 ? NAVY : "#64748b") }}>{r >= 0 ? "▲" : "▼"} {Math.abs(r).toFixed(1)}%{suffix}</span>;
 }
 
 function Tile({ code, label, value, unit, foot, dark }) {
@@ -37,13 +37,13 @@ function Tile({ code, label, value, unit, foot, dark }) {
     }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "2px 8px", flexWrap: "wrap" }}>
         <span style={{ fontSize: 14, fontWeight: 800, color: dark ? "rgba(255,255,255,.82)" : "#4b5563", whiteSpace: "nowrap" }}>{label}</span>
-        <span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 10.5, fontWeight: 800, letterSpacing: "0.16em", color: dark ? "rgba(143,176,240,.9)" : "#94A3B8", whiteSpace: "nowrap" }}>{code}</span>
+        <span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 10.5, fontWeight: 800, letterSpacing: "0.16em", color: dark ? "rgba(143,176,240,.9)" : "#607089", whiteSpace: "nowrap" }}>{code}</span>
       </div>
       <div style={{ marginTop: 9, display: "flex", alignItems: "baseline", gap: 5 }}>
         <span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 27, fontWeight: 800, color: dark ? "#fff" : "#0F1A30", letterSpacing: "-0.02em", whiteSpace: "nowrap" }}>{value}</span>
-        {unit && <span style={{ fontSize: 13, fontWeight: 700, color: dark ? "rgba(207,224,255,.55)" : "#9ca3af" }}>{unit}</span>}
+        {unit && <span style={{ fontSize: 13, fontWeight: 700, color: dark ? "rgba(207,224,255,.55)" : "#607089" }}>{unit}</span>}
       </div>
-      {foot && <div style={{ marginTop: 5, fontSize: 12.5, fontWeight: 600, color: dark ? "rgba(207,224,255,.65)" : "#6b7280", display: "flex", gap: 6, alignItems: "center", whiteSpace: "nowrap" }}>{foot}</div>}
+      {foot && <div style={{ marginTop: 5, fontSize: 13.5, fontWeight: 600, color: dark ? "rgba(207,224,255,.65)" : "#5B6B85", display: "flex", gap: 6, alignItems: "center", whiteSpace: "nowrap" }}>{foot}</div>}
     </div>
   );
 }
@@ -54,7 +54,7 @@ export function RvCard({ code, title, right, children, style, bodyStyle }) {
       <div style={{ padding: "12px 18px", background: "#F7F9FC", borderBottom: "1px solid #E8EDF4", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap", rowGap: 6 }}>
         <span style={{ display: "inline-flex", alignItems: "center", gap: 9, minWidth: 0 }}>
           <span style={{ width: 7, height: 7, borderRadius: 2, background: NAVY, transform: "rotate(45deg)" }} />
-          {code && <span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 11, fontWeight: 800, letterSpacing: "0.18em", color: "#94A3B8", whiteSpace: "nowrap" }}>{code}</span>}
+          {code && <span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 11, fontWeight: 800, letterSpacing: "0.18em", color: "#607089", whiteSpace: "nowrap" }}>{code}</span>}
           <span style={{ fontSize: 16.5, fontWeight: 800, color: "#0F1A30", whiteSpace: "nowrap" }}>{title}</span>
         </span>
         {right}
@@ -74,7 +74,7 @@ function Ring({ pct, label, sub }) {
       <circle cx="75" cy="75" r={R} fill="none" stroke="url(#rvRing)" strokeWidth="13" strokeLinecap="round" strokeDasharray={`${C * p} ${C}`} transform="rotate(-90 75 75)" />
       {Array.from({ length: 40 }, (_, i) => { const a = (i / 40) * Math.PI * 2; return <line key={i} x1={75 + 44 * Math.cos(a)} y1={75 + 44 * Math.sin(a)} x2={75 + 47 * Math.cos(a)} y2={75 + 47 * Math.sin(a)} stroke="#D5DCE8" strokeWidth="1" />; })}
       <text x="75" y="76" textAnchor="middle" fontFamily={MONO} fontSize="24" fontWeight="800" fill="#0F1A30">{label}</text>
-      <text x="75" y="96" textAnchor="middle" fontSize="11" fontWeight="700" fill="#6b7280">{sub}</text>
+      <text x="75" y="96" textAnchor="middle" fontSize="11" fontWeight="700" fill="#5B6B85">{sub}</text>
     </svg>
   );
 }
@@ -86,7 +86,7 @@ const tipStyle = { borderRadius: 10, border: "1px solid #E3E8F0", boxShadow: "0 
 function TargetEditButton({ onClick, hasTarget }) {
   return (
     <button type="button" onClick={onClick}
-      style={{ height: 28, padding: "0 11px", borderRadius: 8, border: `1px solid ${hasTarget ? "#C9D4E6" : NAVY}`, background: hasTarget ? "#fff" : NAVY, color: hasTarget ? NAVY : "#fff", fontSize: 12.5, fontWeight: 800, cursor: "pointer", whiteSpace: "nowrap" }}>
+      style={{ height: 28, padding: "0 11px", borderRadius: 8, border: `1px solid ${hasTarget ? "#C9D4E6" : NAVY}`, background: hasTarget ? "#fff" : NAVY, color: hasTarget ? NAVY : "#fff", fontSize: 13.5, fontWeight: 800, cursor: "pointer", whiteSpace: "nowrap" }}>
       {hasTarget ? "목표 수정" : "목표 설정"}
     </button>
   );
@@ -109,33 +109,33 @@ function TargetEditor({ config, hasExcluded, lastYearSale = 0, year, onSave, onC
   };
   return (
     <form onSubmit={(e) => { e.preventDefault(); save(); }} style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-      <label style={{ fontSize: 12.5, fontWeight: 800, color: "#4b5563" }}>
+      <label style={{ fontSize: 13.5, fontWeight: 800, color: "#4b5563" }}>
         {year}년 {hasExcluded ? "순수 운송료" : "운송 매출"} 목표
         <div style={{ position: "relative", marginTop: 5 }}>
           <input autoFocus inputMode="numeric" value={n ? n.toLocaleString() : ""} placeholder="0" onChange={(e) => setAmount(e.target.value)} style={{ ...inputSt, paddingRight: 30 }} />
-          <span style={{ position: "absolute", right: 11, top: 11, fontSize: 13, fontWeight: 700, color: "#6b7280" }}>원</span>
+          <span style={{ position: "absolute", right: 11, top: 11, fontSize: 13, fontWeight: 700, color: "#5B6B85" }}>원</span>
         </div>
-        <div style={{ marginTop: 4, fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 12, color: "#6b7280", textAlign: "right" }}>{n ? `≈ ${short(n)}원 · 월 ${short(n / 12)}원` : "0원이면 '미설정'으로 표시됩니다"}</div>
+        <div style={{ marginTop: 4, fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 13, color: "#5B6B85", textAlign: "right" }}>{n ? `≈ ${short(n)}원 · 월 ${short(n / 12)}원` : "0원이면 '미설정'으로 표시됩니다"}</div>
       </label>
       {presets.length > 0 && (
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
           {presets.map(([l, v]) => (
             <button key={l} type="button" onClick={() => setAmount(String(v))}
-              style={{ height: 28, padding: "0 10px", borderRadius: 8, border: `1px solid ${v === n ? NAVY : "#D5DEEC"}`, background: v === n ? NAVY : "#fff", color: v === n ? "#fff" : "#3A4A66", fontSize: 12, fontWeight: 800, cursor: "pointer" }}>{l}</button>
+              style={{ height: 28, padding: "0 10px", borderRadius: 8, border: `1px solid ${v === n ? NAVY : "#D5DEEC"}`, background: v === n ? NAVY : "#fff", color: v === n ? "#fff" : "#3A4A66", fontSize: 13, fontWeight: 800, cursor: "pointer" }}>{l}</button>
           ))}
-          <span style={{ fontSize: 11.5, color: "#94A3B8", alignSelf: "center" }}>전년 실적 {short(lastYearSale)}원 기준</span>
+          <span style={{ fontSize: 13, color: "#607089", alignSelf: "center" }}>전년 실적 {short(lastYearSale)}원 기준</span>
         </div>
       )}
       {hasExcluded && (
-        <label style={{ fontSize: 12.5, fontWeight: 800, color: "#4b5563" }}>
+        <label style={{ fontSize: 13.5, fontWeight: 800, color: "#4b5563" }}>
           제외 거래처 매출 성장률(전년 대비)
           <div style={{ position: "relative", marginTop: 5 }}>
             <input inputMode="decimal" value={growth} onChange={(e) => setGrowth(e.target.value.replace(/[^\d.-]/g, ""))} style={{ ...inputSt, paddingRight: 30 }} />
-            <span style={{ position: "absolute", right: 11, top: 11, fontSize: 13, fontWeight: 700, color: "#6b7280" }}>%</span>
+            <span style={{ position: "absolute", right: 11, top: 11, fontSize: 13, fontWeight: 700, color: "#5B6B85" }}>%</span>
           </div>
         </label>
       )}
-      {err && <div style={{ fontSize: 12, fontWeight: 700, color: NAVY }}>{err}</div>}
+      {err && <div style={{ fontSize: 13, fontWeight: 700, color: NAVY }}>{err}</div>}
       <div style={{ display: "flex", gap: 8 }}>
         <button type="button" onClick={onCancel} style={{ flex: 1, height: 38, borderRadius: 10, border: "1px solid #D5DEEC", background: "#fff", color: "#3A4A66", fontWeight: 800, fontSize: 13.5, cursor: "pointer" }}>취소</button>
         <button type="submit" disabled={saving} style={{ flex: 2, height: 38, borderRadius: 10, border: "none", background: NAVY, color: "#fff", fontWeight: 800, fontSize: 13.5, cursor: "pointer", opacity: saving ? 0.6 : 1 }}>{saving ? "저장 중…" : "목표 저장"}</button>
@@ -234,7 +234,7 @@ export default function RevenueDashboard({ rows = [], targetMonth, forecast, yea
       {/* 누적 레이스 + 목표 */}
       <div className="kp-rv-stack" style={{ display: "grid", gridTemplateColumns: "minmax(0,2.2fr) minmax(0,1fr)", gap: 14 }}>
         <RvCard code="DAILY" title={`${M}월 일별 매출 · 누적 비교`} right={
-          <div style={{ display: "flex", gap: 14, fontSize: 12.5, fontWeight: 700, color: "#4b5563" }}>
+          <div style={{ display: "flex", gap: 14, fontSize: 13.5, fontWeight: 700, color: "#4b5563" }}>
             <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><span style={{ width: 10, height: 10, borderRadius: 2, background: "#9FB2D6" }} />일 매출</span>
             <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><span style={{ width: 14, height: 3, borderRadius: 2, background: NAVY }} />이번 달 누적</span>
             <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><span style={{ width: 14, borderTop: "2px dashed #94A3B8" }} />전월 누적</span>
@@ -244,14 +244,14 @@ export default function RevenueDashboard({ rows = [], targetMonth, forecast, yea
             <ResponsiveContainer width="100%" height="100%">
               <ComposedChart data={daily} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
                 <CartesianGrid stroke="#EEF1F6" vertical={false} />
-                <XAxis dataKey="day" axisLine={false} tickLine={false} interval={1} tick={{ fontSize: 11, fill: "#6b7280", fontFamily: MONO, fontVariantNumeric: "tabular-nums" }} />
-                <YAxis yAxisId="d" axisLine={false} tickLine={false} width={52} tick={{ fontSize: 11, fill: "#9ca3af", fontFamily: MONO, fontVariantNumeric: "tabular-nums" }} tickFormatter={short} />
-                <YAxis yAxisId="c" orientation="right" axisLine={false} tickLine={false} width={58} tick={{ fontSize: 11, fill: "#9ca3af", fontFamily: MONO, fontVariantNumeric: "tabular-nums" }} tickFormatter={short} />
+                <XAxis dataKey="day" axisLine={false} tickLine={false} interval={1} tick={{ fontSize: 12.5, fill: "#5B6B85", fontFamily: MONO, fontVariantNumeric: "tabular-nums" }} />
+                <YAxis yAxisId="d" axisLine={false} tickLine={false} width={52} tick={{ fontSize: 12.5, fill: "#607089", fontFamily: MONO, fontVariantNumeric: "tabular-nums" }} tickFormatter={short} />
+                <YAxis yAxisId="c" orientation="right" axisLine={false} tickLine={false} width={58} tick={{ fontSize: 12.5, fill: "#607089", fontFamily: MONO, fontVariantNumeric: "tabular-nums" }} tickFormatter={short} />
                 <Tooltip contentStyle={tipStyle} formatter={(v, n) => [v == null ? "-" : `${Number(v).toLocaleString()}원`, { sale: "일 매출", cum: "이번 달 누적", prevCum: "전월 누적", profit: "일 수익" }[n] || n]} labelFormatter={(l) => `${M}월 ${l}일`} />
                 <Bar yAxisId="d" dataKey="sale" radius={[4, 4, 0, 0]} barSize={12}>
                   {daily.map((d) => <Cell key={d.day} fill={d.wkend ? "#C9D3E4" : "#9FB2D6"} />)}
                 </Bar>
-                <Line yAxisId="c" type="monotone" dataKey="prevCum" stroke="#94A3B8" strokeWidth={1.8} strokeDasharray="5 4" dot={false} />
+                <Line yAxisId="c" type="monotone" dataKey="prevCum" stroke="#607089" strokeWidth={1.8} strokeDasharray="5 4" dot={false} />
                 <Line yAxisId="c" type="monotone" dataKey="cum" stroke={NAVY} strokeWidth={3} dot={false} activeDot={{ r: 5, fill: "#fff", stroke: NAVY, strokeWidth: 3 }} connectNulls={false} />
               </ComposedChart>
             </ResponsiveContainer>
@@ -268,7 +268,7 @@ export default function RevenueDashboard({ rows = [], targetMonth, forecast, yea
             <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 9 }}>
               {[[hasExcluded ? "순수 운송 매출" : "운송 매출", `${short(yearPureSale)}원`], ["연간 목표", yearTarget > 0 ? `${short(yearTarget)}원` : (onSaveTarget ? "오른쪽 위 '목표 설정'" : "관리자에게 설정 요청")], ["남은 금액", yearTarget > 0 ? `${short(Math.max(0, yearTarget - yearPureSale))}원` : "-"]].map(([k, v]) => (
                 <div key={k}>
-                  <div style={{ fontSize: 12, fontWeight: 700, color: "#6b7280" }}>{k}</div>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: "#5B6B85" }}>{k}</div>
                   <div style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 16, fontWeight: 800, color: "#0F1A30" }}>{v}</div>
                 </div>
               ))}
@@ -282,7 +282,7 @@ export default function RevenueDashboard({ rows = [], targetMonth, forecast, yea
             const perMonth = monthsLeft > 0 ? Math.max(0, yearTarget - yearPureSale) / monthsLeft : 0;
             return (
               <div style={{ marginTop: 12 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12.5, fontWeight: 700, color: "#4b5563", marginBottom: 5 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13.5, fontWeight: 700, color: "#4b5563", marginBottom: 5 }}>
                   <span>연도 진행 <b style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{(elapsedYear * 100).toFixed(0)}%</b></span>
                   <span style={{ color: achieve >= elapsedYear ? NAVY : "#64748b" }}>{achieve >= elapsedYear ? "목표 페이스 이상" : "목표 페이스 미달"}</span>
                 </div>
@@ -293,7 +293,7 @@ export default function RevenueDashboard({ rows = [], targetMonth, forecast, yea
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 10 }}>
                   {[["페이스 대비", `${gap >= 0 ? "+" : "−"}${short(Math.abs(gap))}원`], [monthsLeft > 0 ? `남은 ${monthsLeft}개월 월평균 필요` : "월평균 필요", monthsLeft > 0 ? `${short(perMonth)}원` : "-"]].map(([k, v]) => (
                     <div key={k} style={{ borderRadius: 10, padding: "8px 10px", background: "#F5F8FD", border: "1px solid #E3E8F0" }}>
-                      <div style={{ fontSize: 11.5, fontWeight: 700, color: "#6b7280" }}>{k}</div>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: "#5B6B85" }}>{k}</div>
                       <div style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 14.5, fontWeight: 800, color: "#0F1A30", marginTop: 1 }}>{v}</div>
                     </div>
                   ))}
@@ -313,9 +313,9 @@ export default function RevenueDashboard({ rows = [], targetMonth, forecast, yea
               <ComposedChart data={monthly} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
                 <defs><linearGradient id="rvBar" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#2D4C82" /><stop offset="1" stopColor={NAVY} /></linearGradient></defs>
                 <CartesianGrid stroke="#EEF1F6" vertical={false} />
-                <XAxis dataKey="label" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: "#4b5563", fontWeight: 700 }} />
-                <YAxis yAxisId="s" axisLine={false} tickLine={false} width={60} tick={{ fontSize: 11, fill: "#9ca3af", fontFamily: MONO, fontVariantNumeric: "tabular-nums" }} tickFormatter={short} />
-                <YAxis yAxisId="r" orientation="right" axisLine={false} tickLine={false} width={36} tick={{ fontSize: 11, fill: "#9ca3af", fontFamily: MONO, fontVariantNumeric: "tabular-nums" }} tickFormatter={(v) => `${v}%`} />
+                <XAxis dataKey="label" axisLine={false} tickLine={false} tick={{ fontSize: 13, fill: "#4b5563", fontWeight: 700 }} />
+                <YAxis yAxisId="s" axisLine={false} tickLine={false} width={60} tick={{ fontSize: 12.5, fill: "#607089", fontFamily: MONO, fontVariantNumeric: "tabular-nums" }} tickFormatter={short} />
+                <YAxis yAxisId="r" orientation="right" axisLine={false} tickLine={false} width={36} tick={{ fontSize: 12.5, fill: "#607089", fontFamily: MONO, fontVariantNumeric: "tabular-nums" }} tickFormatter={(v) => `${v}%`} />
                 <Tooltip contentStyle={tipStyle} formatter={(v, n) => (n === "rate" ? [`${v}%`, "매익률"] : [`${Number(v).toLocaleString()}원`, "매출"])} />
                 <Bar yAxisId="s" dataKey="sale" radius={[6, 6, 0, 0]} barSize={26}>
                   {monthly.map((d) => <Cell key={d.label} fill={d.on ? NAVY : "#9FB2D6"} />)}
@@ -325,11 +325,11 @@ export default function RevenueDashboard({ rows = [], targetMonth, forecast, yea
             </ResponsiveContainer>
           </div>
         </RvCard>
-        <RvCard code="WEEKDAY" title="요일별 평균 매출" right={<span style={{ fontSize: 12.5, fontWeight: 700, color: "#6b7280" }}>최고 <b style={{ color: NAVY }}>{bestWd.label}요일</b></span>}>
+        <RvCard code="WEEKDAY" title="요일별 평균 매출" right={<span style={{ fontSize: 13.5, fontWeight: 700, color: "#5B6B85" }}>최고 <b style={{ color: NAVY }}>{bestWd.label}요일</b></span>}>
           <div style={{ height: 230 }}>
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={weekday} margin={{ top: 8, right: 4, left: 0, bottom: 0 }}>
-                <XAxis dataKey="label" axisLine={false} tickLine={false} tick={{ fontSize: 12.5, fill: "#4b5563", fontWeight: 700 }} />
+                <XAxis dataKey="label" axisLine={false} tickLine={false} tick={{ fontSize: 13.5, fill: "#4b5563", fontWeight: 700 }} />
                 <YAxis hide />
                 <Tooltip contentStyle={tipStyle} formatter={(v) => [`${Number(v).toLocaleString()}원`, "하루 평균"]} />
                 <Bar dataKey="avg" radius={[6, 6, 0, 0]} barSize={22}>
@@ -343,19 +343,19 @@ export default function RevenueDashboard({ rows = [], targetMonth, forecast, yea
 
       {/* 거래처 · 증감 · 담당자 */}
       <div className="kp-rv-stack" style={{ display: "grid", gridTemplateColumns: "minmax(0,1.35fr) minmax(0,1fr) minmax(0,1fr)", gap: 14 }}>
-        <RvCard code="TOP 10" title={`${M}월 거래처 매출 순위`} right={<span style={{ fontSize: 12.5, fontWeight: 700, color: "#6b7280" }}>신규 거래처 <b style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", color: NAVY }}>{clients.newCnt}</b>곳</span>}>
-          {clients.top.length === 0 ? <div style={{ padding: "30px 0", textAlign: "center", color: "#9ca3af" }}>이 달 매출이 없습니다</div> : (
+        <RvCard code="TOP 10" title={`${M}월 거래처 매출 순위`} right={<span style={{ fontSize: 13.5, fontWeight: 700, color: "#5B6B85" }}>신규 거래처 <b style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", color: NAVY }}>{clients.newCnt}</b>곳</span>}>
+          {clients.top.length === 0 ? <div style={{ padding: "30px 0", textAlign: "center", color: "#607089" }}>이 달 매출이 없습니다</div> : (
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
               {clients.top.map((c, i) => (
                 <button key={c.name} type="button" onClick={() => onOpenClient?.(c.name)} style={{ display: "grid", gridTemplateColumns: "26px minmax(0,1fr) 84px 66px", alignItems: "center", gap: 8, border: "none", background: "transparent", padding: 0, cursor: onOpenClient ? "pointer" : "default", textAlign: "left" }}>
-                  <span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 13, fontWeight: 800, color: i < 3 ? NAVY : "#94A3B8" }}>{String(i + 1).padStart(2, "0")}</span>
+                  <span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 13, fontWeight: 800, color: i < 3 ? NAVY : "#607089" }}>{String(i + 1).padStart(2, "0")}</span>
                   <span style={{ minWidth: 0 }}>
                     <span style={{ display: "block", fontSize: 14.5, fontWeight: 800, color: "#0F1A30", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{c.name}</span>
                     <span style={{ display: "block", height: 5, borderRadius: 99, background: "#EEF1F6", marginTop: 4, overflow: "hidden" }}>
                       <span style={{ display: "block", height: "100%", width: `${(c.v / clients.top[0].v) * 100}%`, background: i === 0 ? NAVY : "#6E8BC4", borderRadius: 99 }} />
                     </span>
                   </span>
-                  <span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 14, fontWeight: 800, color: "#0F1A30", textAlign: "right" }}>{short(c.v)}<span style={{ display: "block", fontSize: 11, color: "#9ca3af", fontWeight: 700 }}>{clients.total ? ((c.v / clients.total) * 100).toFixed(1) : 0}%</span></span>
+                  <span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 14, fontWeight: 800, color: "#0F1A30", textAlign: "right" }}>{short(c.v)}<span style={{ display: "block", fontSize: 12.5, color: "#607089", fontWeight: 700 }}>{clients.total ? ((c.v / clients.total) * 100).toFixed(1) : 0}%</span></span>
                   <span style={{ textAlign: "right" }}><Delta cur={c.v} prev={c.p} /></span>
                 </button>
               ))}
@@ -366,8 +366,8 @@ export default function RevenueDashboard({ rows = [], targetMonth, forecast, yea
         <RvCard code="MOVERS" title="전월 대비 증감 거래처">
           {[["늘어난 곳", clients.up], ["줄어든 곳", clients.down]].map(([t, list]) => (
             <div key={t} style={{ marginBottom: 10 }}>
-              <div style={{ fontSize: 12.5, fontWeight: 800, color: "#6b7280", marginBottom: 6 }}>{t}</div>
-              {list.length === 0 ? <div style={{ fontSize: 13, color: "#9ca3af", padding: "4px 0 8px" }}>없음</div> : list.map((x) => (
+              <div style={{ fontSize: 13.5, fontWeight: 800, color: "#5B6B85", marginBottom: 6 }}>{t}</div>
+              {list.length === 0 ? <div style={{ fontSize: 13, color: "#607089", padding: "4px 0 8px" }}>없음</div> : list.map((x) => (
                 <div key={x.name} style={{ display: "flex", justifyContent: "space-between", gap: 8, padding: "6px 0", borderTop: "1px solid #EEF1F6" }}>
                   <span style={{ fontSize: 14, fontWeight: 700, color: "#0F1A30", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{x.name}</span>
                   <span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 13.5, fontWeight: 800, color: x.d >= 0 ? NAVY : "#64748b", whiteSpace: "nowrap" }}>{x.d >= 0 ? "+" : "−"}{short(Math.abs(x.d))}</span>
@@ -375,19 +375,19 @@ export default function RevenueDashboard({ rows = [], targetMonth, forecast, yea
               ))}
             </div>
           ))}
-          <div style={{ fontSize: 11.5, color: "#9ca3af" }}>※ 전월 같은 기간(1일~{cutDay}일) 기준</div>
+          <div style={{ fontSize: 13, color: "#607089" }}>※ 전월 같은 기간(1일~{cutDay}일) 기준</div>
         </RvCard>
 
         <RvCard code="STAFF" title="담당자별 매출">
-          {staff.length === 0 ? <div style={{ padding: "30px 0", textAlign: "center", color: "#9ca3af" }}>데이터 없음</div> : staff.map((s, i) => (
+          {staff.length === 0 ? <div style={{ padding: "30px 0", textAlign: "center", color: "#607089" }}>데이터 없음</div> : staff.map((s, i) => (
             <div key={s.name} style={{ padding: "6px 0", borderTop: i ? "1px solid #EEF1F6" : "none" }}>
               <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
-                <span style={{ fontSize: 14, fontWeight: 800, color: "#0F1A30" }}><span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", color: i < 3 ? NAVY : "#94A3B8", marginRight: 7 }}>{String(i + 1).padStart(2, "0")}</span>{s.name}</span>
+                <span style={{ fontSize: 14, fontWeight: 800, color: "#0F1A30" }}><span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", color: i < 3 ? NAVY : "#607089", marginRight: 7 }}>{String(i + 1).padStart(2, "0")}</span>{s.name}</span>
                 <span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 13.5, fontWeight: 800, color: "#0F1A30" }}>{short(s.sale)}</span>
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 4 }}>
                 <div style={{ flex: 1, height: 5, borderRadius: 99, background: "#EEF1F6", overflow: "hidden" }}><div style={{ height: "100%", width: `${(s.sale / staffMax) * 100}%`, background: i === 0 ? NAVY : "#6E8BC4" }} /></div>
-                <span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 11.5, fontWeight: 700, color: "#6b7280", whiteSpace: "nowrap" }}>{s.cnt}건 · {s.sale ? ((s.profit / s.sale) * 100).toFixed(1) : "0.0"}%</span>
+                <span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 13, fontWeight: 700, color: "#5B6B85", whiteSpace: "nowrap" }}>{s.cnt}건 · {s.sale ? ((s.profit / s.sale) * 100).toFixed(1) : "0.0"}%</span>
               </div>
             </div>
           ))}
