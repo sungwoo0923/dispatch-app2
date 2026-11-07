@@ -6,9 +6,15 @@
 //  · 주소는 지도(T맵)로 실제 있는 주소인지 확인, 등록된 하차지거래처와 맞춰 이름·주소·담당자를 채운다
 //  · 한 번에 여러 건이 붙어오면 오더별 탭으로 나눠 하나씩 적용
 //  · 결과는 칸마다 바로 고칠 수 있고, [배차관리에 적용]을 눌러야 등록폼에 들어간다(바로 저장되지 않음)
+//  ⭐ 2026-11-07 정밀 인식(ai 연결을 넘겨받았을 때 — src/orderScanApi.js · cafe-site/src/hub/hubScanAi.js)
+//  · 캡처 이미지는 서버 Google Vision으로 먼저 읽고(줄 위치 포함), 실패·오프라인이면 예전처럼 브라우저 글자 인식(tesseract)
+//  · 글은 규칙 인식기로 바로 보여 준 뒤, 서버 AI(Claude)가 칸을 정리하면 합친다 — 애매한 칸은 노란색(확인이 필요한 칸)
+//  · 회사별 학습: [적용] 뒤 오더를 저장하면 고친 칸을 기억했다가, 비슷한 양식이 오면 예시 · 라벨 바꾸기 · 이름 바꾸기로 쓴다
+//  · AI 키가 없거나 실패하면 아무 말 없이 규칙 인식 결과 그대로
 import React from "react";
 import { createPortal } from "react-dom";
 import { parseOrderScan, splitOrders } from "./orderScanParser";
+import { normalizeAiFields, mergeAiInto, applyAliases, applyLabelRemaps, needsCheck, kstToday, reconcileRoles } from "./orderScanAi";
 import { verifyAddress } from "./tmapFareCalc";
 import { fmtPhone } from "./formatInput";
 
@@ -25,33 +31,86 @@ const BOX_COLOR = { 상차: "#0F1A30", 하차: "#4B6CB7", 경로: "#2D4C82", 미
 const GROUPS = [
   { title: "상차", en: "PICKUP", keys: [["상차지명", "상차지명"], ["상차지주소", "주소"], ["상차지담당자", "담당자"], ["상차지담당자번호", "연락처"], ["상차시간", "상차시간"], ["상차방법", "상차방법"]] },
   { title: "하차", en: "DROP", keys: [["하차지명", "하차지명"], ["하차지주소", "주소"], ["하차지담당자", "담당자"], ["하차지담당자번호", "연락처"], ["하차시간", "하차시간"], ["하차방법", "하차방법"]] },
-  { title: "운송", en: "FREIGHT", keys: [["상차일", "상차일"], ["하차일", "하차일"], ["차량톤수", "톤수"], ["차량종류", "차량종류"], ["화물내용", "화물내용"], ["청구운임", "청구운임"], ["거래처명", "거래처"]] },
+  { title: "운송", en: "FREIGHT", keys: [["상차일", "상차일"], ["하차일", "하차일"], ["차량톤수", "톤수"], ["차량종류", "차량종류"], ["화물내용", "화물내용"], ["중량", "중량"], ["청구운임", "청구운임"], ["기사운임", "기사운임"], ["지급방식", "지급방식"], ["거래처명", "거래처"]] },
 ];
+const MONEY_KEYS = ["청구운임", "기사운임"];
+const MAIN_PAY = ["계산서", "착불", "선불", "계좌이체"];
+const OCR_MAX = 2000; // 서버 글자 인식에 보낼 긴 변(px)
 
-// 캡처 이미지 → 글자 인식이 잘 되게 키우고(작은 캡처 2배) 흑백·대비를 높인다
+// 밝기 막대(히스토그램) 양 끝 1%를 잘라 0~255로 펴는 자동 대비 — 흐린 캡처 · 회색 배경에 효과
+export function autoContrast(gray) {
+  const hist = new Uint32Array(256);
+  for (let i = 0; i < gray.length; i += 1) hist[gray[i]] += 1;
+  const cut = gray.length * 0.01;
+  let lo = 0, hi = 255, acc = 0;
+  while (lo < 254 && acc + hist[lo] <= cut) { acc += hist[lo]; lo += 1; }
+  acc = 0;
+  while (hi > lo + 1 && acc + hist[hi] <= cut) { acc += hist[hi]; hi -= 1; }
+  const span = Math.max(24, hi - lo);
+  for (let i = 0; i < gray.length; i += 1) gray[i] = Math.max(0, Math.min(255, Math.round(((gray[i] - lo) * 255) / span)));
+  return { lo, hi };
+}
+// 바깥 여백(배경과 같은 색) 잘라낼 범위 — 글자 쪽만 남긴다(사방 12px은 남김)
+export function trimBox(gray, w, h, thr = 40) {
+  const bg = gray[0];
+  let x0 = w, y0 = h, x1 = -1, y1 = -1;
+  for (let y = 0; y < h; y += 2) {
+    for (let x = 0; x < w; x += 2) {
+      if (Math.abs(gray[y * w + x] - bg) > thr) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+    }
+  }
+  if (x1 < 0) return { x: 0, y: 0, w, h };
+  const m = 12;
+  const x = Math.max(0, x0 - m), y = Math.max(0, y0 - m);
+  return { x, y, w: Math.min(w, x1 + m) - x, h: Math.min(h, y1 + m) - y };
+}
+
+// 캡처 이미지 → 글자 인식이 잘 되게 키우고(작은 캡처 2배) 흑백 · 자동 대비 · 바깥 여백 자르기
+//  돌려주는 값: canvas(인식용) · scale(원본 → canvas 배율) · ox/oy(잘라낸 왼쪽 위, 원본 px) · w/h(원본 크기)
+//  인식 결과 위치를 원본으로 되돌릴 때: 원본 x = canvas x / scale + ox
 export async function prepImage(dataUrl) {
   const img = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = dataUrl; });
-  const scale = img.width < 1000 ? 2 : img.width > 2600 ? 2600 / img.width : 1;
+  // 1) 원본 크기 흑백으로 여백 범위 찾기
+  const c0 = document.createElement("canvas");
+  c0.width = img.width; c0.height = img.height;
+  const g0 = c0.getContext("2d");
+  g0.drawImage(img, 0, 0);
+  const d0 = g0.getImageData(0, 0, c0.width, c0.height).data;
+  const gray0 = new Uint8ClampedArray(c0.width * c0.height);
+  for (let i = 0, j = 0; i < d0.length; i += 4, j += 1) gray0[j] = d0[i] * 0.299 + d0[i + 1] * 0.587 + d0[i + 2] * 0.114;
+  const box = trimBox(gray0, c0.width, c0.height);
+  // 2) 잘라서 키우기/줄이기
+  const scale = box.w < 1000 ? 2 : box.w > 2600 ? 2600 / box.w : 1;
   const c = document.createElement("canvas");
-  c.width = Math.round(img.width * scale); c.height = Math.round(img.height * scale);
+  c.width = Math.max(1, Math.round(box.w * scale)); c.height = Math.max(1, Math.round(box.h * scale));
   const g = c.getContext("2d");
   g.imageSmoothingQuality = "high";
-  g.drawImage(img, 0, 0, c.width, c.height);
+  g.drawImage(img, box.x, box.y, box.w, box.h, 0, 0, c.width, c.height);
   const d = g.getImageData(0, 0, c.width, c.height);
   const px = d.data;
-  // 밝기 → 대비 늘리기(어두운 배경 캡처(카톡 다크모드)는 반전)
+  // 3) 흑백 → (어두운 배경 캡처(카톡 다크모드)는 반전) → 자동 대비
+  const gray = new Uint8ClampedArray(c.width * c.height);
   let sum = 0;
-  for (let i = 0; i < px.length; i += 4) sum += px[i] * 0.299 + px[i + 1] * 0.587 + px[i + 2] * 0.114;
-  const dark = sum / (px.length / 4) < 110;
-  for (let i = 0; i < px.length; i += 4) {
-    let y = px[i] * 0.299 + px[i + 1] * 0.587 + px[i + 2] * 0.114;
-    if (dark) y = 255 - y;
-    y = Math.max(0, Math.min(255, (y - 128) * 1.45 + 128));
-    px[i] = px[i + 1] = px[i + 2] = y;
-  }
+  for (let i = 0, j = 0; i < px.length; i += 4, j += 1) { gray[j] = px[i] * 0.299 + px[i + 1] * 0.587 + px[i + 2] * 0.114; sum += gray[j]; }
+  const dark = sum / gray.length < 110;
+  if (dark) for (let j = 0; j < gray.length; j += 1) gray[j] = 255 - gray[j];
+  autoContrast(gray);
+  for (let i = 0, j = 0; i < px.length; i += 4, j += 1) { px[i] = px[i + 1] = px[i + 2] = gray[j]; }
   g.putImageData(d, 0, 0);
-  return { canvas: c, scale, w: img.width, h: img.height };
+  return { canvas: c, scale, ox: box.x, oy: box.y, w: img.width, h: img.height };
 }
+
+// 서버 글자 인식에 보낼 JPEG(긴 변 2000px 이하) — { b64, k: canvas → 보낸 그림 배율 }
+function toUploadJpeg(canvas) {
+  const k = Math.min(1, OCR_MAX / Math.max(canvas.width, canvas.height));
+  const c = document.createElement("canvas");
+  c.width = Math.max(1, Math.round(canvas.width * k)); c.height = Math.max(1, Math.round(canvas.height * k));
+  const g = c.getContext("2d");
+  g.imageSmoothingQuality = "high";
+  g.drawImage(canvas, 0, 0, c.width, c.height);
+  return { b64: c.toDataURL("image/jpeg", 0.85).replace(/^data:[^,]+,/, ""), k };
+}
+const withTimeout = (pr, ms, msg) => Promise.race([pr, new Promise((_, rej) => setTimeout(() => rej(new Error(msg)), ms))]);
 
 // 등록 업체 목록을 인식기가 쓰는 모양으로(PC 하차지거래처 { 업체명 } / 모바일 { 거래처명, contacts } 모두)
 function normPlaces(list) {
@@ -76,7 +135,7 @@ export function scanDropDate(patch, info, formPickDate) {
   return { 하차일: shiftDay(formPickDate, info.dropRel) };
 }
 
-export default function OrderScanModal({ onClose, onApply, places: placesRaw = [], clients = [], initial = null, applyLabel = "배차관리에 적용" }) {
+export default function OrderScanModal({ onClose, onApply, places: placesRaw = [], clients = [], initial = null, applyLabel = "배차관리에 적용", ai = null }) {
   const places = React.useMemo(() => normPlaces(placesRaw), [placesRaw]);
   const [stage, setStage] = React.useState("input"); // input | scanning | result
   const [src, setSrc] = React.useState(null); // { type: "text", text } | { type: "image", url, w, h }
@@ -91,30 +150,83 @@ export default function OrderScanModal({ onClose, onApply, places: placesRaw = [
   const [addrCheck, setAddrCheck] = React.useState({});
   const [unknownToMemo, setUnknownToMemo] = React.useState(false);
   const [err, setErr] = React.useState("");
+  // 정밀 인식 — ocr: 이미지를 읽은 방법(vision | tesseract) · busy: AI 정리 중 · used: AI 정리 결과를 합쳤는지
+  const [engine, setEngine] = React.useState({ ocr: "", busy: false, used: false });
   const fileRef = React.useRef(null);
   const today = React.useMemo(() => new Date(), []);
+  const aiByBlock = React.useRef({}); // 오더 블록 번호 → AI 정리 결과(맞춘 값)
+  const hintsRef = React.useRef(null); // 회사 학습 { examples, remaps }
+  const touched = React.useRef(new Set()); // 사용자가 직접 고친 칸(AI 결과가 늦게 와도 덮지 않는다)
+  const scannedRef = React.useRef({}); // 스캔 직후 값(학습 기록에서 "무엇을 고쳤나" 비교용)
+  const scanSeq = React.useRef(0); // 새로 스캔하면 늦게 온 예전 응답은 버린다
+  const biRef = React.useRef(0); // 지금 보고 있는 오더 블록(늦게 온 AI 결과를 그 블록에만 합친다)
 
-  // ── 결과 계산(오더 블록 단위) ──
+  // ── 결과 계산(오더 블록 단위) ── 배운 라벨 바꾸기 → 규칙 인식 → (AI 결과 합치기 · 배운 이름 바꾸기) → 등록 업체 맞추기
+  const parseBlock = React.useCallback((bl, i) => {
+    const remaps = hintsRef.current?.remaps;
+    const aiNorm = aiByBlock.current[i] || null;
+    const txt = applyLabelRemaps(bl[i], remaps?.labelMap);
+    const r = parseOrderScan(txt, { places, clients, today, aiMerge: (F) => { if (aiNorm) mergeAiInto(F, aiNorm); applyAliases(F, remaps?.aliases); } });
+    return reconcileRoles(r, bl[i]);
+  }, [places, clients, today]);
+  const showParsed = React.useCallback((r, keepTouched) => {
+    setResult(r);
+    const v = {};
+    Object.entries(r.fields).forEach(([k, f]) => { v[k] = f.value; });
+    scannedRef.current = { ...v };
+    setVals((p) => {
+      if (!keepTouched) return v;
+      const out = { ...v };
+      touched.current.forEach((k) => { out[k] = p[k]; });
+      return out;
+    });
+  }, []);
   const runParse = React.useCallback((text, idx = 0) => {
     const bl = splitOrders(text);
     setBlocks(bl);
     const i = Math.min(idx, bl.length - 1);
-    setBi(i);
-    const r = parseOrderScan(bl[i], { places, clients, today });
-    setResult(r);
-    const v = {};
-    Object.entries(r.fields).forEach(([k, f]) => { v[k] = f.value; });
-    setVals(v);
+    setBi(i); biRef.current = i;
+    const r = parseBlock(bl, i);
+    touched.current = new Set();
+    showParsed(r, false);
     setAddrCheck({});
-    return r;
-  }, [places, clients, today]);
+    return { r, bl, i };
+  }, [parseBlock, showParsed]);
+
+  // ── 정밀 인식(AI 칸 정리 + 회사 학습) — 규칙 결과를 먼저 보여 주고 뒤에서 합친다. 실패하면 조용히 규칙 결과 그대로 ──
+  const refine = React.useCallback(async (bl, i, seq) => {
+    if (!ai || !bl[i]) return;
+    setEngine((e) => ({ ...e, busy: true }));
+    try {
+      if (!hintsRef.current) {
+        hintsRef.current = await withTimeout(ai.hintsFor(bl[i]), 6000, "hints").catch(() => ({ examples: [], remaps: null }));
+        if (seq !== scanSeq.current) return;
+        if (hintsRef.current?.remaps && (Object.keys(hintsRef.current.remaps.labelMap || {}).length || hintsRef.current.remaps.aliases?.length)) showParsed(parseBlock(bl, i), true);
+      }
+      if (!aiByBlock.current[i]) {
+        const txt = applyLabelRemaps(bl[i], hintsRef.current?.remaps?.labelMap);
+        const r = await ai.extract(txt, hintsRef.current?.examples || []);
+        if (seq !== scanSeq.current) return;
+        aiByBlock.current[i] = normalizeAiFields(r?.fields, { today: kstToday() });
+      }
+      if (biRef.current === i) showParsed(parseBlock(bl, i), true);
+      setEngine((e) => ({ ...e, used: true }));
+    } catch (e) {
+      console.warn("[오더 스캔] 정밀 인식을 쓰지 못해 기본 인식으로 보여 줘요:", e?.message || e);
+    } finally {
+      if (seq === scanSeq.current) setEngine((e) => ({ ...e, busy: false }));
+    }
+  }, [ai, parseBlock, showParsed]);
+  const newScan = () => { scanSeq.current += 1; aiByBlock.current = {}; hintsRef.current = null; touched.current = new Set(); setEngine({ ocr: "", busy: false, used: false }); return scanSeq.current; };
 
   // ── 텍스트 스캔(빛줄 애니메이션 → 결과) ──
   const startText = React.useCallback((text) => {
     const t = String(text || "").trim();
     if (!t) return;
-    setErr(""); setSrc({ type: "text", text: t }); setStage("scanning"); setScanPos(0);
-    runParse(t, 0);
+    const seq = newScan();
+    setErr(""); setSrc({ type: "text", text: t }); setStage("scanning"); setScanPos(0); setOcrLines([]);
+    const { bl, i } = runParse(t, 0);
+    refine(bl, i, seq);
     const lines = t.split("\n").length;
     const dur = Math.min(2200, 700 + lines * 90);
     const st = performance.now();
@@ -124,12 +236,51 @@ export default function OrderScanModal({ onClose, onApply, places: placesRaw = [
       if (k < 1) requestAnimationFrame(tick); else setStage("result");
     };
     requestAnimationFrame(tick);
-  }, [runParse]);
+  }, [runParse, refine]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // 브라우저 글자 인식(tesseract) — 서버 인식이 안 될 때
+  const tesseractRead = async (prep) => {
+    const { createWorker } = await import("tesseract.js");
+    setOcr({ status: "한글 인식 모델을 준비하고 있어요(처음 한 번은 조금 걸려요)", pct: 0 });
+    // 인식 모델을 못 받으면(인터넷 차단 등) 무한정 기다리지 않게 60초 제한
+    const worker = await withTimeout(createWorker("kor+eng", 1, {
+      logger: (m) => {
+        if (m.status === "recognizing text") setOcr({ status: "글자를 읽고 있어요", pct: Math.round((m.progress || 0) * 100) });
+        else if (/load|initializ/.test(m.status || "")) setOcr((o) => ({ ...o, status: "한글 인식 모델을 준비하고 있어요(처음 한 번은 조금 걸려요)" }));
+      },
+      errorHandler: () => {},
+    }), 60000, "이미지 인식 모델을 불러오지 못했어요. 인터넷 연결을 확인하거나 글로 붙여넣어 주세요");
+    await worker.setParameters({ preserve_interword_spaces: "1" }).catch(() => {});
+    const { data } = await withTimeout(worker.recognize(prep.canvas, {}, { text: true, blocks: true }), 90000, "이미지가 커서 오래 걸려요. 오더 부분만 잘라서 다시 붙여넣어 주세요");
+    worker.terminate().catch(() => {});
+    const lines = [];
+    const back = (x, o) => x / prep.scale + o;
+    (data.blocks || []).forEach((b) => (b.paragraphs || []).forEach((p) => (p.lines || []).forEach((l) => {
+      const tx = String(l.text || "").replace(/\n/g, " ").trim();
+      if (tx) lines.push({ text: tx, bbox: { x0: back(l.bbox.x0, prep.ox), y0: back(l.bbox.y0, prep.oy), x1: back(l.bbox.x1, prep.ox), y1: back(l.bbox.y1, prep.oy) } });
+    })));
+    return { lines, text: lines.length ? lines.map((l) => l.text).join("\n") : String(data.text || "").trim() };
+  };
+  // 서버 글자 인식(Google Vision) — 줄 위치를 원본 그림 기준으로 되돌린다
+  const visionRead = async (prep) => {
+    const up = toUploadJpeg(prep.canvas);
+    setOcr({ status: "글자를 읽고 있어요", pct: 0 });
+    const r = await ai.ocr(up.b64);
+    const f = prep.scale * up.k;
+    const lines = (r?.lines || []).filter((l) => l?.text && l.bbox).map((l) => ({
+      text: String(l.text).trim(),
+      bbox: { x0: l.bbox.x0 / f + prep.ox, y0: l.bbox.y0 / f + prep.oy, x1: l.bbox.x1 / f + prep.ox, y1: l.bbox.y1 / f + prep.oy },
+    }));
+    const text = lines.length ? lines.map((l) => l.text).join("\n") : String(r?.text || "").trim();
+    if (!text) throw new Error("서버 인식 결과가 비었어요");
+    return { lines, text };
+  };
 
   // ── 이미지 스캔(글자 인식 OCR) ──
   const startImage = React.useCallback(async (dataUrl) => {
+    const seq = newScan();
     setErr(""); setStage("scanning"); setScanPos(0); setOcrLines([]); setResult(null);
-    setOcr({ status: "이미지 준비 중", pct: 0 });
+    setOcr({ status: "이미지를 준비하고 있어요", pct: 0 });
     let raf = 0; let alive = true;
     const st = performance.now();
     const loop = (now) => { if (!alive) return; setScanPos(((now - st) / 1600) % 1); raf = requestAnimationFrame(loop); };
@@ -137,30 +288,18 @@ export default function OrderScanModal({ onClose, onApply, places: placesRaw = [
     try {
       const prep = await prepImage(dataUrl);
       setSrc({ type: "image", url: dataUrl, w: prep.w, h: prep.h });
-      const { createWorker } = await import("tesseract.js");
-      setOcr({ status: "한글 인식 모델 준비 중(처음 한 번은 조금 걸려요)", pct: 0 });
-      // 인식 모델을 못 받으면(인터넷 차단 등) 무한정 기다리지 않게 60초 제한
-      const withTimeout = (pr, ms, msg) => Promise.race([pr, new Promise((_, rej) => setTimeout(() => rej(new Error(msg)), ms))]);
-      const worker = await withTimeout(createWorker("kor+eng", 1, {
-        logger: (m) => {
-          if (m.status === "recognizing text") setOcr({ status: "글자 읽는 중", pct: Math.round((m.progress || 0) * 100) });
-          else if (/load|initializ/.test(m.status || "")) setOcr((o) => ({ ...o, status: "한글 인식 모델 준비 중(처음 한 번은 조금 걸려요)" }));
-        },
-        errorHandler: () => {},
-      }), 60000, "이미지 인식 모델을 불러오지 못했습니다 — 인터넷 연결을 확인하거나 글로 붙여넣어 주세요");
-      await worker.setParameters({ preserve_interword_spaces: "1" }).catch(() => {});
-      const { data } = await withTimeout(worker.recognize(prep.canvas, {}, { text: true, blocks: true }), 90000, "이미지가 너무 커서 시간이 오래 걸립니다 — 오더 부분만 잘라서 다시 붙여넣어 주세요");
-      worker.terminate().catch(() => {});
-      const lines = [];
-      (data.blocks || []).forEach((b) => (b.paragraphs || []).forEach((p) => (p.lines || []).forEach((l) => {
-        const tx = String(l.text || "").replace(/\n/g, " ").trim();
-        if (tx) lines.push({ text: tx, bbox: { x0: l.bbox.x0 / prep.scale, y0: l.bbox.y0 / prep.scale, x1: l.bbox.x1 / prep.scale, y1: l.bbox.y1 / prep.scale } });
-      })));
-      const text = lines.length ? lines.map((l) => l.text).join("\n") : String(data.text || "").trim();
-      if (!text) throw new Error("이미지에서 글자를 찾지 못했습니다");
-      setOcrLines(lines.map((l, i) => ({ ...l, i })));
-      setTyped(text);
-      runParse(text, 0);
+      let read = null; let how = "tesseract";
+      if (ai && (typeof navigator === "undefined" || navigator.onLine !== false)) {
+        try { read = await visionRead(prep); how = "vision"; } catch (e) { console.warn("[오더 스캔] 서버 글자 인식 실패, 브라우저 인식으로 읽어요:", e?.message || e); }
+      }
+      if (!read) read = await tesseractRead(prep);
+      if (seq !== scanSeq.current) return;
+      if (!read.text) throw new Error("이미지에서 글자를 찾지 못했어요");
+      setEngine((e) => ({ ...e, ocr: how }));
+      setOcrLines(read.lines.map((l, i) => ({ ...l, i })));
+      setTyped(read.text);
+      const { bl, i } = runParse(read.text, 0);
+      refine(bl, i, seq);
       // 마지막으로 한 번 끝까지 훑고 결과
       alive = false; cancelAnimationFrame(raf);
       const st2 = performance.now();
@@ -168,10 +307,10 @@ export default function OrderScanModal({ onClose, onApply, places: placesRaw = [
       requestAnimationFrame(fin);
     } catch (e) {
       alive = false; cancelAnimationFrame(raf);
-      setErr(/importScripts|fetch|network|Failed/i.test(e?.message || "") ? "이미지 인식 모델을 불러오지 못했습니다 — 인터넷 연결을 확인하거나 글로 붙여넣어 주세요" : (e?.message || "이미지 인식에 실패했습니다"));
+      setErr(/importScripts|fetch|network|Failed/i.test(e?.message || "") ? "이미지 인식 모델을 불러오지 못했어요. 인터넷 연결을 확인하거나 글로 붙여넣어 주세요" : (e?.message || "이미지 인식에 실패했어요"));
       setStage("input");
     }
-  }, [runParse]);
+  }, [runParse, refine, ai]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const readFile = (file) => {
     if (!file || !/^image\//.test(file.type)) return;
@@ -222,7 +361,7 @@ export default function OrderScanModal({ onClose, onApply, places: placesRaw = [
     return () => { off = true; };
   }, [stage, vals.상차지주소, vals.하차지주소]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const switchBlock = (i) => { const full = src?.type === "text" ? src.text : typed; runParse(full, i); };
+  const switchBlock = (i) => { const full = src?.type === "text" ? src.text : typed; const { bl } = runParse(full, i); refine(bl, i, scanSeq.current); };
 
   const apply = () => {
     const v = vals;
@@ -236,6 +375,9 @@ export default function OrderScanModal({ onClose, onApply, places: placesRaw = [
     const dropRel = dF ? (dF.rel ?? null) : (v.하차일 ? null : 0);
     if (v.상차일 && dropRel != null && (!dF || v.하차일 === dF.value)) patch.하차일 = shiftDay(v.상차일, dropRel);
     if (v.청구운임) patch.청구운임 = String(v.청구운임).replace(/[^\d]/g, "");
+    if (v.기사운임) patch.기사운임 = String(v.기사운임).replace(/[^\d]/g, "");
+    if (MAIN_PAY.includes(v.지급방식)) patch.지급방식 = v.지급방식;
+    if (v.화물수량 && /^\d+$/.test(String(v.화물수량))) patch.화물수량 = String(v.화물수량);
     if (v.화물내용) {
       const unit = v.화물단위 || (/(파레트|박스|통)$/.exec(v.화물내용) || [])[1] || "";
       patch.화물내용 = v.화물내용;
@@ -244,7 +386,9 @@ export default function OrderScanModal({ onClose, onApply, places: placesRaw = [
     if (v.혼적 === true) patch.혼적 = true;
     if (v.긴급 === true) patch.긴급 = true;
     if (v.전달사항) patch.전달사항 = v.전달사항;
-    const memo = [v.메모추가, unknownToMemo && result?.unknown?.length ? result.unknown.join(" / ") : ""].filter(Boolean).join(" / ");
+    const memo = [v.메모추가, v.중량 && v.중량 !== v.차량톤수 ? `중량 ${v.중량}` : "", unknownToMemo && result?.unknown?.length ? result.unknown.join(" / ") : ""].filter(Boolean).join(" / ");
+    // 회사별 학습 — 오더를 저장할 때(화면이 ai.commit을 부른다) 스캔 직후 값과 비교해 고친 칸만 기억한다
+    ai?.setPending?.({ text: blocks[bi] || typed || "", scanned: scannedRef.current, applied: { ...v, ...patch } });
     // 등록 업체로 맞춘 경우 그 업체(담당자 여러 명이면 화면에서 담당자 선택창을 띄우게)
     const placeOf = (P) => places.find((p) => p.업체명 === v[`${P}명`]) || null;
     onApply(patch, memo, {
@@ -253,6 +397,8 @@ export default function OrderScanModal({ onClose, onApply, places: placesRaw = [
       dropMgrScanned: result?.fields?.하차지담당자 && !result.fields.하차지담당자.via,
       dropRel, // 상차일이 스캔에 없을 때 화면의 상차일 기준으로 하차일을 맞추는 데 쓴다
       text: blocks[bi] || typed || "", // ⭐ 2026-11-06 스캔 원문(로지스웹 허브가 결제 방식 · 수수료를 원문에서 찾는다)
+      structured: { ...v }, // ⭐ 2026-11-07 정리된 칸 전부(허브가 지급방식 · 중량 · 파레트 수를 쓴다)
+      engine: { ocr: engine.ocr, ai: engine.used },
     });
   };
 
@@ -260,11 +406,20 @@ export default function OrderScanModal({ onClose, onApply, places: placesRaw = [
   const issues = result ? [...result.issues] : [];
   ["상차지", "하차지"].forEach((P) => {
     const c = addrCheck[P];
-    if (c?.st === "fail") issues.unshift({ field: `${P}주소`, level: "error", msg: `${P} 주소를 인식할 수 없습니다 — 지도에 없는 주소예요(오타·잘못된 주소 확인)` });
-    if (c?.st === "approx") issues.unshift({ field: `${P}주소`, level: "warn", msg: `${P} 주소는 ${c.area || "동네"}까지만 확인됩니다 — 번지·건물번호를 확인하세요` });
-    if (c?.st === "error") issues.push({ field: `${P}주소확인`, level: "info", msg: `${P} 주소를 지도로 확인하지 못했습니다(통신) — 저장 시 다시 확인됩니다` });
+    if (c?.st === "fail") issues.unshift({ field: `${P}주소`, level: "error", msg: `${P} 주소를 인식할 수 없습니다. 지도에 없는 주소예요(오타·잘못된 주소 확인)` });
+    if (c?.st === "approx") issues.unshift({ field: `${P}주소`, level: "warn", msg: `${P} 주소는 ${c.area || "동네"}까지만 확인됩니다. 번지·건물번호를 확인하세요` });
+    if (c?.st === "error") issues.push({ field: `${P}주소확인`, level: "info", msg: `${P} 주소를 지도로 확인하지 못했습니다(통신). 저장 시 다시 확인됩니다` });
   });
   const issueOf = (k) => issues.find((x) => x.field === k && x.level !== "info");
+  // 노란 칸 — AI · 규칙 인식이 서로 다르거나 자신 없는 칸(사용자가 고치면 사라진다)
+  const checkOf = (k) => !!result && needsCheck(result.fields[k]) && !touched.current.has(k) && vals[k] !== undefined && vals[k] !== "";
+  const checkN = result ? GROUPS.reduce((n, g) => n + g.keys.filter(([k]) => checkOf(k)).length, 0) : 0;
+  if (checkN > 0) issues.push({ field: "_check", level: "info", msg: `노란 칸 ${checkN}개는 확인이 필요한 칸이에요` });
+  const editVal = (k, raw) => {
+    touched.current.add(k);
+    setVals((p) => ({ ...p, [k]: MONEY_KEYS.includes(k) ? raw.replace(/[^\d]/g, "") : /(담당자번호|연락처)$/.test(k) ? fmtPhone(raw) : raw }));
+  };
+  const precise = engine.used || engine.ocr === "vision";
   const errN = issues.filter((x) => x.level === "error").length;
   const warnN = issues.filter((x) => x.level === "warn").length;
   const srcLines = src?.type === "text" ? src.text.split("\n") : [];
@@ -399,6 +554,13 @@ export default function OrderScanModal({ onClose, onApply, places: placesRaw = [
                 <div className="flex items-center gap-2">
                   <span className="text-[10.5px] font-extrabold tracking-[0.26em] text-[#4B6CB7]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>RESULT</span>
                   <span className="text-[13.5px] font-black text-[#0F1A30]">인식 결과</span>
+                  {!scanning && engine.busy && (
+                    <span className="flex items-center gap-1 text-[11px] font-bold text-[#5B6B85]" data-testid="os-refining"><span className="w-1.5 h-1.5 rounded-full bg-[#4B6CB7]" style={{ animation: "osPulse 1s infinite" }} />내용을 정리하고 있어요</span>
+                  )}
+                  {!scanning && !engine.busy && precise && (
+                    <span title={`글자 읽기: ${engine.ocr === "vision" ? "정밀 글자 인식" : engine.ocr === "tesseract" ? "기본 글자 인식" : "붙여넣은 글"} · 칸 정리: ${engine.used ? "AI 정리" : "기본 규칙"}`}
+                      className="px-1.5 h-[18px] inline-flex items-center rounded-[5px] bg-[#EEF3FF] text-[#2D4C82] text-[10px] font-black" data-testid="os-precise">정밀 인식</span>
+                  )}
                   {result && !scanning && (
                     <span className="ml-auto flex items-center gap-1.5 text-[11.5px] font-black" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>
                       <span className="px-2 h-6 inline-flex items-center rounded-full bg-[#0F1A30] text-white">✓ {result.recognized}</span>
@@ -420,7 +582,7 @@ export default function OrderScanModal({ onClose, onApply, places: placesRaw = [
                 {scanning && !result ? (
                   <div className="h-full flex flex-col items-center justify-center text-center text-[#5B6B85]">
                     <div className="w-12 h-12 rounded-full border-[3px] border-[#E3E8F0] border-t-[#0F1A30] animate-spin" />
-                    <div className="mt-4 text-[13.5px] font-bold">{ocr.status || "읽는 중"}</div>
+                    <div className="mt-4 text-[13.5px] font-bold">{ocr.status || "글자를 읽고 있어요"}</div>
                     {ocr.pct > 0 && <div className="mt-2 w-48 h-1.5 rounded-full bg-[#EEF1F6] overflow-hidden"><div className="h-full bg-[#0F1A30] transition-all" style={{ width: `${ocr.pct}%` }} /></div>}
                   </div>
                 ) : result && (
@@ -456,30 +618,44 @@ export default function OrderScanModal({ onClose, onApply, places: placesRaw = [
                             const has = vals[k] !== undefined && vals[k] !== "";
                             const iss = issueOf(k);
                             const st = !has ? "none" : f?.conf === "high" && !f?.via ? "ok" : "guess";
+                            const chk = checkOf(k);
                             return (
-                              <div key={k}>
+                              <div key={k} className={chk ? "bg-[#FFF6D5]" : ""} data-check={chk ? "1" : undefined}>
                               <div className="flex items-center gap-2.5 px-3 py-1.5">
                                 <span className={`w-5 h-5 shrink-0 rounded-full flex items-center justify-center text-[10px] font-black ${iss ? (iss.level === "error" ? "bg-[#0F1A30] text-white" : "bg-[#4B6CB7] text-white") : st === "ok" ? "bg-[#0F1A30] text-white" : st === "guess" ? "bg-white text-[#0F1A30] ring-1 ring-[#0F1A30]" : "bg-[#F1F4F9] text-[#B4BFD0]"}`}>
                                   {iss ? (iss.level === "error" ? "✕" : "!") : st === "none" ? "–" : "✓"}
                                 </span>
                                 <span className="w-[66px] shrink-0 text-[12px] font-bold text-[#5B6B85] whitespace-nowrap">{label}</span>
-                                <input value={k === "청구운임" && vals[k] ? Number(String(vals[k]).replace(/[^\d]/g, "") || 0).toLocaleString() : (vals[k] ?? "")}
-                                  onChange={(e) => setVals((p) => ({ ...p, [k]: k === "청구운임" ? e.target.value.replace(/[^\d]/g, "") : /(담당자번호|연락처)$/.test(k) ? fmtPhone(e.target.value) : e.target.value }))}
+                                <input value={MONEY_KEYS.includes(k) && vals[k] ? Number(String(vals[k]).replace(/[^\d]/g, "") || 0).toLocaleString() : (vals[k] === true ? "예" : vals[k] ?? "")}
+                                  onChange={(e) => editVal(k, e.target.value)}
                                   placeholder={has ? "" : "인식 못함"}
-                                  className={`flex-1 min-w-0 h-8 px-2 rounded-[8px] text-[13px] font-bold outline-none focus:bg-[#F2F6FC] ${has ? "text-[#0F1A30]" : "placeholder:text-[#C2CBD9] placeholder:font-semibold"}`} />
-                                {f?.via ? <span className="shrink-0 text-[10px] font-bold text-[#4B6CB7] whitespace-nowrap hidden sm:inline">{f.via}</span> : st === "guess" ? <span className="shrink-0 text-[10px] font-bold text-[#9AA9C3]">추정</span> : null}
+                                  className={`flex-1 min-w-0 h-8 px-2 rounded-[8px] text-[13px] font-bold outline-none ${chk ? "bg-white/70 ring-1 ring-[#F2C94C] focus:bg-white" : "focus:bg-[#F2F6FC]"} ${has ? "text-[#0F1A30]" : "placeholder:text-[#C2CBD9] placeholder:font-semibold"}`} />
+                                {chk ? <span className="shrink-0 text-[10px] font-black text-[#9A6B00] whitespace-nowrap">확인 필요</span>
+                                  : f?.via ? <span className="shrink-0 text-[10px] font-bold text-[#4B6CB7] whitespace-nowrap hidden sm:inline">{f.via}</span> : st === "guess" ? <span className="shrink-0 text-[10px] font-bold text-[#9AA9C3]">추정</span> : null}
                               </div>
                               {/* 스캔한 글자와 다른 등록 업체로 맞춘 경우 — 원래 글자로 되돌리기 */}
                               {f?.scanned && vals[k] !== f.scanned && (
                                 <div className="flex items-center gap-2 pl-[38px] pr-3 pb-2 -mt-0.5 text-[11px]">
                                   <span className="text-[#9AA9C3] truncate">스캔: {f.scanned}</span>
-                                  <button onClick={() => setVals((p) => ({ ...p, [k]: f.scanned }))} className="shrink-0 font-bold text-[#4B6CB7] underline underline-offset-2">스캔한 그대로 쓰기</button>
+                                  <button onClick={() => { touched.current.add(k); setVals((p) => ({ ...p, [k]: f.scanned })); }} className="shrink-0 font-bold text-[#4B6CB7] underline underline-offset-2">스캔한 그대로 쓰기</button>
                                 </div>
                               )}
                               {f?.scanned && vals[k] === f.scanned && f.value && (
                                 <div className="flex items-center gap-2 pl-[38px] pr-3 pb-2 -mt-0.5 text-[11px]">
                                   <span className="text-[#9AA9C3] truncate">등록 업체: {f.value}</span>
-                                  <button onClick={() => setVals((p) => ({ ...p, [k]: f.value }))} className="shrink-0 font-bold text-[#4B6CB7] underline underline-offset-2">등록 업체로 되돌리기</button>
+                                  <button onClick={() => { touched.current.add(k); setVals((p) => ({ ...p, [k]: f.value })); }} className="shrink-0 font-bold text-[#4B6CB7] underline underline-offset-2">등록 업체로 되돌리기</button>
+                                </div>
+                              )}
+                              {chk && f?.alt !== undefined && f.alt !== "" && String(f.alt) !== String(vals[k]) && (
+                                <div className="flex items-center gap-2 pl-[38px] pr-3 pb-2 -mt-0.5 text-[11px]">
+                                  <span className="text-[#7A6A3A] truncate">다르게 읽은 값: {MONEY_KEYS.includes(k) ? Number(f.alt || 0).toLocaleString() : f.alt === true ? "예" : String(f.alt)}</span>
+                                  <button onClick={() => { touched.current.add(k); setVals((p) => ({ ...p, [k]: f.alt })); }} className="shrink-0 font-bold text-[#4B6CB7] underline underline-offset-2">이 값으로</button>
+                                </div>
+                              )}
+                              {chk && f?.prev !== undefined && f.prev !== "" && String(f.prev) !== String(vals[k]) && (
+                                <div className="flex items-center gap-2 pl-[38px] pr-3 pb-2 -mt-0.5 text-[11px]">
+                                  <span className="text-[#7A6A3A] truncate">다르게 읽은 값: {MONEY_KEYS.includes(k) ? Number(f.prev || 0).toLocaleString() : String(f.prev)}</span>
+                                  <button onClick={() => { touched.current.add(k); setVals((p) => ({ ...p, [k]: f.prev })); }} className="shrink-0 font-bold text-[#4B6CB7] underline underline-offset-2">이 값으로</button>
                                 </div>
                               )}
                               {f?.suggest && vals[k] !== f.suggest.업체명 && (
