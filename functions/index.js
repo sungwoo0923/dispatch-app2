@@ -4401,19 +4401,9 @@ function resetBucket() {
   return getStorage().bucket();
 }
 
-// 보관함 비우기 — 보관한 문서·목록·파일 삭제, (계정까지 지운 초기화였고 복원 안 했으면) 사용 중지해둔 계정 완전 삭제
-async function purgeResetBackup(ref) {
-  const snap = await ref.get();
-  if (!snap.exists) return;
-  const b = snap.data();
-  await db.recursiveDelete(ref.collection("docs")).catch((e) => console.warn("보관 문서 삭제 실패", e?.message));
-  await db.recursiveDelete(ref.collection("manifest")).catch(() => {});
-  await resetBucket().deleteFiles({ prefix: `resetBackups/${ref.id}/` }).catch(() => {});
-  if (b.status === "kept" && Array.isArray(b.accountUids) && b.accountUids.length) {
-    for (let i = 0; i < b.accountUids.length; i += 1000) await getAuth().deleteUsers(b.accountUids.slice(i, i + 1000)).catch(() => {});
-  }
-  await ref.set({ status: "purged", purgedAt: FieldValue.serverTimestamp() }, { merge: true });
-}
+// 보관함 비우기 · 이력 지우기 — functions/resetPurge.js (400개씩 묶어서, 시간이 다 되면 멈췄다가 이어서)
+//  보관한 문서·목록·파일 삭제, (계정까지 지운 초기화였고 복원 안 했으면) 사용 중지해둔 계정 완전 삭제
+const resetPurge = require("./resetPurge").makeResetPurge({ db, FieldValue, getBucket: () => resetBucket(), getAuth });
 
 // 계약종료 표시(초기화와 함께 쓰는 경우 — 삭제 전에 먼저 막는다)
 async function markContractEnded(company, by, reason) {
@@ -4504,7 +4494,7 @@ async function companyResetHandler(req, res) {
       }
 
       if (action === "restore") {
-        prog = makeResetProgress(body.jobId, { action: "restore", by: me.email || me.uid });
+        prog = makeResetProgress(body.jobId, { action: "restore", by: me.email || me.uid, backupId: String(body.backupId || "") });
         const cur = await prog.current();
         if (cur?.status === "done") { res.json(cur.result || { ok: true }); return; }
         await verifyResetPassword(body.password);
@@ -4516,7 +4506,7 @@ async function companyResetHandler(req, res) {
         if (!snap.exists) throw Object.assign(new Error("보관된 초기화 기록을 찾을 수 없습니다."), { status: 404 });
         const b = snap.data();
         if (b.status !== "kept" && b.status !== "restoring") {
-          throw Object.assign(new Error(b.status === "restored" ? "이미 복원된 기록입니다." : "보관 기간이 지나 복원할 수 없습니다."), { status: 400 });
+          throw Object.assign(new Error(b.status === "restored" ? "이미 복원된 기록입니다." : b.purgeManual ? "영구 삭제한 기록이라 복원할 수 없습니다." : "보관 기간이 지나 복원할 수 없습니다."), { status: 400 });
         }
         await ref.set({ status: "restoring" }, { merge: true });
         bulkCompany = b.company;
@@ -4605,6 +4595,10 @@ async function companyResetHandler(req, res) {
         const bucket = resetBucket();
         const backupRef = db.collection("resetBackups").doc(jobId);
         let b = (await backupRef.get()).data() || null;
+        // 보관함을 영구 삭제한 작업은 이어서 하지 않는다(보관본 없이 삭제 단계로 넘어가면 복원할 수 없게 된다)
+        if (b && (b.status === "purging" || b.status === "purged")) {
+          throw Object.assign(new Error("보관함을 영구 삭제한 작업이라 이어서 할 수 없습니다. 새로 초기화해 주세요."), { status: 409 });
+        }
         const saveB = async (patch) => { await backupRef.set(patch, { merge: true }); b = { ...b, ...patch }; };
         let worked = false; // 이번 실행에서 한 묶음이라도 끝냈는지(아무것도 못 하고 멈추는 일이 없게)
         const pauseIfNeeded = async (label) => {
@@ -4791,18 +4785,65 @@ exports.companyResetJob = onRequestV2(
 );
 
 // ⏰ 매일 새벽 — 보관 기간(7일)이 지난 초기화 보관함을 비운다
-exports.purgeExpiredResetBackups = functions.pubsub
-  .schedule("every day 04:10")
+//  2026-11-07 기본 60초 제한에 큰 보관함(recursiveDelete)이 끊기던 문제 → 9분 제한 + 8분 동안 400개씩 지우고, 남으면 다음 날 이어서
+exports.purgeExpiredResetBackups = functions
+  .runWith({ timeoutSeconds: 540, memory: "1GB" })
+  .pubsub.schedule("every day 04:10")
   .timeZone("Asia/Seoul")
   .onRun(async () => {
-    const snap = await db.collection("resetBackups").where("expiresAt", "<=", new Date()).get();
-    for (const d of snap.docs) {
-      if (d.data().status === "purged") continue;
-      await purgeResetBackup(d.ref).catch((e) => console.warn("보관함 비우기 실패", d.id, e?.message));
-    }
-    console.log(`✕ 만료된 초기화 보관함 정리 ${snap.size}건 확인`);
+    const t0 = Date.now();
+    const r = await resetPurge.purgeExpired({ deadline: () => Date.now() - t0 > 8 * 60000 });
+    console.log(`✕ 만료된 초기화 보관함 정리 — 확인 ${r.checked}건, 비움 ${r.purged}건, 남음 ${r.pending}건`);
     return null;
   });
+
+// ⭐ 2026-11-07 보관함 지금 영구 삭제 · 이력 지우기 (최고관리자 + 초기화 비밀번호 + 확인 문구)
+//  POST .../companyResetPurge  (Authorization: Bearer <ID 토큰>)
+//   { mode: "purge" | "history", backupId?: 보관함ID, all?: true, password, confirmText }
+//   - confirmText: 하나면 그 운송사 회사명, 모두면 "영구삭제"
+//   - 8분 일하고 { partial: true, ...이번에 지운 개수 }로 돌려준다 → 화면이 바로 다시 불러 이어서(몇 번 불러도 안전)
+//   - 운영 중인 회사 데이터는 건드리지 않는다(resetBackups·resetLogs·resetJobs, Storage resetBackups/{id}/만)
+const RESET_PURGE_WORD = "영구삭제";
+async function companyResetPurgeHandler(req, res) {
+  res.set("Access-Control-Allow-Origin", "*");
+  res.set("Access-Control-Allow-Methods", "POST, OPTIONS");
+  res.set("Access-Control-Allow-Headers", "Authorization, Content-Type");
+  if (req.method === "OPTIONS") { res.status(204).send(""); return; }
+  if (req.method !== "POST") { res.status(405).json({ error: "POST만 허용됩니다." }); return; }
+  let body = req.body;
+  if (typeof body === "string") { try { body = JSON.parse(body); } catch { body = {}; } }
+  body = body || {};
+  try {
+    const me = await requireTotalMaster(req);
+    const mode = body.mode === "history" ? "history" : body.mode === "purge" ? "purge" : "";
+    if (!mode) { res.status(400).json({ error: "알 수 없는 요청입니다." }); return; }
+    const all = body.all === true;
+    const backupId = String(body.backupId || "").replace(/[^\w-]/g, "").slice(0, 60);
+    if (!all && !backupId) { res.status(400).json({ error: "지울 보관함을 고르세요." }); return; }
+    const confirmText = String(body.confirmText || "").trim();
+    if (all) {
+      if (confirmText !== RESET_PURGE_WORD) throw Object.assign(new Error(`확인 문구 "${RESET_PURGE_WORD}"를 그대로 입력해 주세요.`), { status: 400 });
+    } else {
+      const snap = await db.collection("resetBackups").doc(backupId).get();
+      const company = snap.exists ? String(snap.data().company || "") : "";
+      if (confirmText !== RESET_PURGE_WORD && (!company || confirmText !== company)) {
+        throw Object.assign(new Error("확인용 회사명이 일치하지 않습니다."), { status: 400 });
+      }
+    }
+    await verifyResetPassword(body.password);
+    const t0 = Date.now();
+    const r = await resetPurge.run({ mode, backupId, all, by: me.email || me.uid, deadline: () => Date.now() - t0 > 8 * 60000 });
+    console.log(`✕ 초기화 ${mode === "history" ? "이력 지우기" : "보관함 영구 삭제"}${all ? "(모두)" : ` ${backupId}`} — 보관함 ${r.backups}, 문서 ${r.docs}, 파일 ${r.files}, 계정 ${r.accounts}, 기록 ${r.logs + r.jobs + r.history}${r.done ? "" : " (이어서)"} (by ${me.email})`);
+    res.json({ ...r, partial: !r.done });
+  } catch (e) {
+    console.error("초기화 보관함 영구 삭제 오류:", e);
+    res.status(e.status || 500).json({ error: e?.message || String(e) });
+  }
+}
+exports.companyResetPurge = onRequestV2(
+  { region: "us-central1", timeoutSeconds: 540, memory: "1GiB", invoker: "public" },
+  companyResetPurgeHandler,
+);
 
 /* ==================================================================
    ⭐ 2026-11-06 이용 계약 만료 안내 — 매일 아침(KST 09:12) companyPlans/{회사}.contractEnd를 보고
