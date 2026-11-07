@@ -96,7 +96,7 @@ export function dailyReportDemo(company = "테스트운송") {
   const inv = {};
   rows.forEach((o) => { if (o.배차상태 === "배차완료" && o.상차일 < today && o.상차일.slice(0, 4) === today.slice(0, 4)) inv[o.거래처명] = (inv[o.거래처명] || 0) + o.청구운임; });
   const OWE = { 오성철강: 31500000, 해든리테일: 9800000, 대성로지스: 7500000 };
-  Object.entries(inv).forEach(([c, v]) => { const owe = OWE[c] ?? Math.round(v * (0.08 + r() * 0.1)); arPayments[c] = Math.max(0, v - owe); });
+  Object.entries(inv).forEach(([c, v]) => { const owe = OWE[c] ?? Math.round(v * (0.08 + r() * 0.1)); arPayments[c] = Math.max(0, Math.round(v * 1.1) - owe); }); // 수금 기록은 부가세 포함 입금액
   cache = { today, company, rows, drivers, people, attendance, funds, ledger, recurring, arPayments, approvalsTodo: 4, yearlyTarget: 26000 * 1e4 * 12 };
   return cache;
 }

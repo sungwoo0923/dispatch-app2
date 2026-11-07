@@ -1306,6 +1306,8 @@ service cloud.firestore {
     function apCancelReqOk() {
       return resource.data.get('status', '') == 'approved'
         && resource.data.get('cancel', {}).get('status', '') != 'pending'
+        // ⭐ 2026-11-07 지급완료(paid.at)된 지출결의는 결재 취소 요청 불가 — 경리가 지급완료를 먼저 취소(Approval.jsx cancelBlockedByPaid)
+        && !(resource.data.get('cat', '') == 'expense' && resource.data.get('paid', null) != null && resource.data.paid.get('at', null) != null)
         && request.resource.data.cancel.get('status', '') == 'pending'
         && request.resource.data.cancel.get('step', -1) == 0
         && request.resource.data.cancel.line.size() == resource.data.line.size()

@@ -294,7 +294,7 @@ export default function MobilePcView({ kind, users = [], dispatchData = [], carr
     else if (k === "approvals") body = <div className="kp-m-pc kp-m-approval"><ExecApprovals company={userCompany} me={me} /></div>;
     else if (k === "schedule") body = wrap(<TeamSchedule company={userCompany} />);
     else if (k === "settle") body = lazy(<DetailScope data={salesData} getters={detGet} title="세부검색 · 정산관리">{(detRows, detBtn) => <><div className="px-3 pt-3 flex justify-end">{detBtn}</div><PcSettleMobile dispatchData={detRows} companyName={userCompany} role={role} isViewer={isViewer} clients={clients} /></>}</DetailScope>);
-    else if (k === "acct") body = lazy(<PcAccounting company={userCompany} fixedRows={fixedRows} clients={clients} isViewer={isViewer} role={role} />);
+    else if (k === "acct") body = lazy(<PcAccounting company={userCompany} fixedRows={fixedRows} clients={clients} drivers={drivers || []} isViewer={isViewer} role={role} />);
     else if (k === "payroll") body = <React.Suspense fallback={<Loading />}><div className="px-3 py-3 kp-m-pc"><PayrollCenter company={userCompany} role={role} /></div></React.Suspense>;
     else if (k === "payslip") body = <React.Suspense fallback={<Loading />}><div className="px-3 py-3 kp-m-pc"><MyPayslips company={userCompany} uid={me?.uid} /></div></React.Suspense>;
     else if (k === "leaveplan") body = <React.Suspense fallback={<Loading />}><div className="px-3 py-3 kp-m-pc"><MyLeavePlan company={userCompany} uid={me?.uid} /></div></React.Suspense>;

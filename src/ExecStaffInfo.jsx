@@ -6,6 +6,7 @@
 //           userProfiles/{uid}(입사일 · 연차 조정 · 입사 서류 체크 onboarding — 선택한 사람만) · hrResumes/{uid}(자격·면허만)
 //           attendance(이번 달 출근 기록) · approvals(회사 연차 결재: cat == "leave")
 import React from "react";
+import { isLateAt } from "./lateRule"; // ⏰ 2026-11-07 지각 기준 공용
 import { collection, doc, getDoc, onSnapshot, query, where } from "firebase/firestore";
 import { db, DEFAULT_COMPANY } from "./firebase";
 import { isDemoOn } from "./devDemoData";
@@ -27,7 +28,7 @@ const WORK = new Set(["출근", "외근", "조퇴"]);
 const LEAVE = new Set(["연차", "오전반차", "오후반차", "병가", "경조사", "휴가"]);
 const hmOf = (iso) => { const m = String(iso || "").match(/T(\d{2}):(\d{2})/); return m ? `${m[1]}:${m[2]}` : ""; };
 const toMin = (hm) => { const m = String(hm || "").match(/^(\d{1,2}):(\d{2})/); return m ? Number(m[1]) * 60 + Number(m[2]) : null; };
-const isLate = (rec, u) => { if (!rec?.checkInTime || rec.status !== "출근") return false; const a = toMin(hmOf(rec.checkInTime)); const b = toMin(u?.workStartTime || "09:00"); return a != null && b != null && a > b; };
+const isLate = (rec, u) => (!!rec?.checkInTime && rec.status === "출근" && isLateAt(hmOf(rec.checkInTime), u)); // ⏰ 2026-11-07 src/lateRule.js 공용
 const tenure = (h, today) => { if (!/^\d{4}-\d{2}-\d{2}/.test(String(h || ""))) return ""; const m = Math.max(0, Math.floor(dayDiff(h, today) / 30.44)); return m < 1 ? "1개월 미만" : `${Math.floor(m / 12) ? `${Math.floor(m / 12)}년 ` : ""}${m % 12 ? `${m % 12}개월` : ""}`.trim(); };
 const dot = (d) => String(d || "").replace(/-/g, ".");
 const statusOf = (u) => u.employmentStatus || "재직";

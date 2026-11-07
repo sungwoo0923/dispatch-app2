@@ -143,6 +143,7 @@ function useExecData({ company, dispatchData, drivers, loadRange: lrProp, months
   const ledgerLive = useCompanyRows("acctLedger", co);
   const recurLive = useCompanyRows("acctRecurring", co);
   const fundsLive = useCompanyRows("acctFunds", cash ? co : "");
+  const fixedLive = useCompanyRows("fixedClients", co); // ⭐ 2026-11-07 고정거래처도 미수금에(회계관리와 같게)
   const [arPay, setArPay] = React.useState(null);
   React.useEffect(() => {
     if (demo) { setArPay(demo.arPayments); return undefined; }
@@ -154,7 +155,7 @@ function useExecData({ company, dispatchData, drivers, loadRange: lrProp, months
   const rows = React.useMemo(() => liveRows(demo ? demo.rows : dispatchData), [demo, dispatchData]);
   const drv = demo ? demo.drivers : drivers;
   const fleet = React.useMemo(() => fleetIndex(drv), [drv]);
-  return { demo, today, rows, fleet, ledger: demo ? demo.ledger : ledgerLive || [], recurring: demo ? demo.recurring : recurLive || [], funds: demo ? demo.funds : fundsLive || [], arPay };
+  return { demo, today, rows, fleet, ledger: demo ? demo.ledger : ledgerLive || [], recurring: demo ? demo.recurring : recurLive || [], funds: demo ? demo.funds : fundsLive || [], arPay, fixedRows: demo ? [] : fixedLive || [] };
 }
 
 // ─────────────────────────── 경영 분석(탭) ───────────────────────────
@@ -232,11 +233,11 @@ function PlTab({ rows, fleet, ledger, recurring, today, compact, wide }) {
 const PERIODS = [["30", "최근 30일"], ["90", "최근 3개월"], ["365", "최근 12개월"]];
 function periodOf(today, k) { const n = Number(k); const to = today; const from = addDay(today, -(n - 1)); return { from, to, pFrom: addDay(from, -n), pTo: addDay(from, -1), n }; }
 const RiskTag = ({ v }) => <span className={`exa-tag ${v === "높음" ? "hi" : v === "주의" ? "mid" : ""}`}>{v}</span>;
-function ClientTab({ rows, arPay, today, compact, W }) {
+function ClientTab({ rows, arPay, today, compact, W, fixedRows = [] }) {
   const wide = W >= 1600; // 표가 넓어 옆 칸은 1600px 이상에서만
   const [pk, setPk] = React.useState("90");
   const P = periodOf(today, pk);
-  const rec = React.useMemo(() => receivables(rows, arPay, today), [rows, arPay, today]);
+  const rec = React.useMemo(() => receivables(rows, arPay, today, fixedRows), [rows, arPay, today, fixedRows]);
   const list = React.useMemo(() => clientTable(rows, P.from, P.to, P.pFrom, P.pTo, rec), [rows, P.from, P.to, P.pFrom, P.pTo, rec]);
   const [sort, setSort] = React.useState({ k: "sale", dir: "desc" });
   const [sel, setSel] = React.useState(null);
@@ -260,7 +261,7 @@ function ClientTab({ rows, arPay, today, compact, W }) {
     <Stats compact={compact} items={[
       { l: "거래처", v: fmt(list.length), u: "곳", sub: `상위 5곳 비중 ${tot.sale ? ((top5 / tot.sale) * 100).toFixed(0) : 0}%` },
       { l: "매출", v: fmt(man(tot.sale)), u: "만원", sub: `이익률 ${pct(tot.sale ? (tot.profit / tot.sale) * 100 : 0)}` },
-      { l: "미수금", v: fmt(man(tot.out)), u: "만원", sub: arPay ? "올해 청구 − 수금" : "수금 기록 없음" },
+      { l: "미수금", v: fmt(man(tot.out)), u: "만원", sub: arPay ? "올해 청구(부가세 포함) − 수금" : "수금 기록 없음" },
       { l: "30일 넘은 미수", v: fmt(man(tot.o30)), u: "만원", tone: tot.o30 ? C.err : undefined, sub: `위험 높음 ${list.filter((c) => c.risk === "높음").length}곳` },
     ]} />
     <div style={{ display: "grid", gridTemplateColumns: wide && cur ? "minmax(0,1.7fr) minmax(360px,1fr)" : "1fr", gap: compact ? 14 : 20, alignItems: "start" }}>
@@ -398,10 +399,10 @@ function PriceTab({ rows, today, compact, W }) {
 }
 
 // ── 현금흐름 ──
-function CashTab({ rows, ledger, recurring, funds, arPay, today, compact, wide }) {
+function CashTab({ rows, ledger, recurring, funds, arPay, today, compact, wide, fixedRows = [] }) {
   const [weeks, setWeeks] = React.useState(8);
   const F = React.useMemo(() => (funds.length ? computeFunds(funds, ledger) : null), [funds, ledger]);
-  const rec = React.useMemo(() => receivables(rows, arPay, today), [rows, arPay, today]);
+  const rec = React.useMemo(() => receivables(rows, arPay, today, fixedRows), [rows, arPay, today, fixedRows]);
   const dso = React.useMemo(() => dsoOf(rows, rec, today), [rows, rec, today]);
   const fc = React.useMemo(() => {
     const cash = F ? F.cash : 0;

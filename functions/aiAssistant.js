@@ -212,6 +212,10 @@ async function takeTurn(db, uid, now = Date.now()) {
   });
 }
 
+// 💰 2026-11-07 미수금 공용 계산(화면과 같은 파일) — ESM이라 처음 쓸 때 import()
+let _arCore = null;
+const arCore = async () => _arCore || (_arCore = await import("./arCore.mjs"));
+
 // ─────────────────────────── 회사 데이터 읽기(우리 회사만) ───────────────────────────
 const coOf = (r) => String(r?.companyName || DEFAULT_CO).trim();
 const isCancelled = (r) => r?.배차상태 === "배차취소" || ["취소", "배차취소", "오더취소", "취소됨"].includes(r?.상태);
@@ -367,20 +371,22 @@ const TOOLS = {
     },
   },
   receivables: {
-    description: "미수금(올해 배차완료 청구액 − 수금 기록) 거래처별. 회계관리 › 미수금 현황과 같은 계산.",
+    description: "미수금(올해 배차완료 + 고정거래처 청구액(부가세 포함) − 수금 기록) 거래처별. 회계관리 › 미수금 현황과 같은 계산.",
     input_schema: { type: "object", properties: { client: { type: "string" } } },
     async run(ctx, a) {
       need(ctx, "receivables", "미수금 조회");
       const yr = ctx.today.slice(0, 4);
-      const rows = (await loadOrders(ctx, `${yr}-01-01`, ctx.today)).filter((r) => !isCancelled(r) && String(r.배차상태 || "").trim() === "배차완료"); // ⭐ 2026-11-07 회계관리와 같은 기준(차량번호만 있는 승인대기 오더는 빼고 배차완료만)
+      // ⭐ 2026-11-07 회계관리와 같은 계산(functions/arCore.mjs 공용) — 배차완료만 · 고정거래처 포함 · 청구액 부가세 포함(수금 기록은 실제 입금액)
+      const { receivablesOf } = await arCore();
+      const orders = await loadOrders(ctx, `${yr}-01-01`, `${yr}-12-31`);
+      const fixedRows = (await loadCompanyCol(ctx, "fixedClients", 5000)).filter((r) => String(r.날짜 || "").startsWith(yr));
       const pay = await ctx.db.collection("acctPayments").doc(`${ctx.co}__${yr}`).get().catch(() => null);
       const paid = pay?.exists ? pay.data()?.ar || {} : {};
-      const m = {}; rows.forEach((r) => { const c = r.거래처명 || r.상차지명 || "미분류"; const e = m[c] || (m[c] = { inv: 0, oldest: "" }); e.inv += won(r.청구운임); if (!e.oldest || r.상차일 < e.oldest) e.oldest = r.상차일; });
-      const paidOf = (c) => { const v = paid[c]; return typeof v === "number" ? v : won(v?.amount ?? v?.paid ?? v); };
-      let list = Object.entries(m).map(([c, v]) => ({ 거래처: c, 청구액: v.inv, 수금액: paidOf(c), 미수금: Math.max(0, v.inv - paidOf(c)), 가장오래된오더: v.oldest })).filter((x) => x.미수금 > 0);
+      let list = receivablesOf({ orders, fixedRows, paid, today: ctx.today, year: yr })
+        .filter((x) => x.outstanding > 0)
+        .map((x) => ({ 거래처: x.client, 청구액: x.billed, 공급가: x.supply, 수금액: x.paid, 미수금: x.outstanding, 가장오래된미수일수: x.oldest }));
       if (a.client) list = list.filter((x) => has(x.거래처, a.client));
-      list.sort((x, y) => y.미수금 - x.미수금);
-      return { 기준: `${yr}년 배차완료 오더`, 미수금합계: list.reduce((s, x) => s + x.미수금, 0), 거래처: list.slice(0, 50) };
+      return { 기준: `${yr}년 배차완료 오더 + 고정거래처 · 청구액 부가세 포함`, 미수금합계: list.reduce((s, x) => s + x.미수금, 0), 거래처: list.slice(0, 50) };
     },
   },
   search_drivers: {

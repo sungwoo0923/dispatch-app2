@@ -16,6 +16,7 @@ export const APPROVAL_CATS = [
 ];
 
 import { isWeekend, isHoliday } from "./attendanceUtils";
+import { leavePeriodOf } from "./payrollCalc"; // ⭐ 2026-11-07 회계연도 기준 연차 회기
 
 const won = (n) => `${Math.round(Number(n) || 0).toLocaleString("ko-KR")}원`;
 export const fmtWon = won;
@@ -43,7 +44,15 @@ export { itemsTotal, costsTotal, dayDiff };
 
 // 📅 연차·월차 발생(근로기준법 기준) — 입사일 기준 회기
 //  1년 미만: 1개월 개근마다 1일(최대 11일, "월차") / 1년 이상: 15일 + 3년차부터 2년마다 1일(최대 25일)
-export function leaveEntitlement(hireDate, now = new Date()) {
+//  ⭐ 2026-11-07 opts.basis "fiscal"(회계연도 기준 · fiscalStart "MM-DD")이면 1년 이후 회기를 회계연도로(payrollCalc.leavePeriodOf · 연차 촉진과 같은 식)
+//   회사 설정: 인사관리부 › 연차 촉진(payrollSettings.leave → hrSettings.leaveBasis로도 저장 · src/leaveBasis.js)
+export function leaveEntitlement(hireDate, now = new Date(), opts = null) {
+  const ent = leaveEntitlementHire(hireDate, now);
+  if (!ent || opts?.basis !== "fiscal" || ent.label !== "연차") return ent;
+  const p = leavePeriodOf(hireDate, dstr(now), { basis: "fiscal", fiscalStart: opts.fiscalStart || "01-01" });
+  return p && !p.firstYear ? { ...ent, total: p.total, from: p.from, to: p.to, basis: "fiscal" } : ent;
+}
+function leaveEntitlementHire(hireDate, now = new Date()) {
   if (!hireDate) return null;
   const hire = new Date(`${hireDate}T00:00:00`);
   if (isNaN(hire)) return null;

@@ -258,7 +258,8 @@ export function onSnapshot(ref, ...args) {
 }
 
 const wrapGet = (fn, billed = true) => async (ref, ...rest) => {
-  if (preview) return emptyQuerySnap(ref);
+  // 🧪 개발 전용 — /preview?demo=1 이면 한 번 읽기(getDocs)도 onSnapshot과 같은 가짜 데이터(회계관리 올해 오더 등 화면 점검)
+  if (preview) return (import.meta.env.DEV && isDemoOn() && !isDocRef(ref) && demoQuerySnap(ref, topCollectionId(ref), tenant)) || emptyQuerySnap(ref);
   const q = injected(ref);
   let snap;
   if (q) {

@@ -45,6 +45,8 @@ import { useMobileAlerts } from "./mobileAlerts";
 import { useRouteBoardIds } from "../routeBoardIds"; // ⭐ 2026-11-05 고정노선 미배차 메뉴 숫자
 import { useRouteCarrierFilter } from "../routeCarriers"; // ⭐ 2026-11-06 운송업체 설정 — 숨긴 업체 오더는 모바일 어디에도 안 보이게
 import { useMobileDetailGetters } from "../detailGetters"; // ⭐ 2026-11-05 PC·모바일 일치 — 세부검색 배차담당자·청구사업자 값
+import { dispatchStatusOf, payTypeStatusPatch, isPayCancel } from "../dispatchStatus"; // 🚚 2026-11-07 배차상태 공용 규칙(PC와 같음)
+import { requestRouteSheetPush } from "../routeSheetPush"; // 🚚 2026-11-07 고정노선 오더 고치면 바로 시트에(PC와 같음)
 import { pickUnassignedOrders } from "../unassignedRule"; // ⭐ 2026-11-05 PC·모바일 일치 — 미배차 기준 공용
 import { useBadgeSeenSync, useUnseenItems, useMarkSeenOnView, unionCount } from "../seenBadges"; // ⭐ 2026-11-06 메뉴 숫자 = 계정별 안 본 것
 import { planIncludes, useCompanyPlanId } from "../plans"; // ⭐ 2026-11-05 인사이트 메뉴 요금제(PC와 같게)
@@ -113,6 +115,7 @@ import { signOut } from "firebase/auth";
 import { version as APP_VERSION } from "../../package.json";
 import { useNewVersion, openUpdatePopup } from "../VersionCheck";
 import { calcLeaveBalance } from "../leaveUtils";
+import { useMyLeaveExtras } from "../leaveBasis"; // ⭐ 2026-11-07 내정보 연차 = 전자결재 연차 현황
 import { RotationPicker, RotationBadge, expandRotation, rotationNotice } from "../rotation";
 import { isWeekend, findApprovedLeaveForDate, isHoliday } from "../attendanceUtils";
 const MonthCompareAnalysis = lazyView(() => import("../MonthCompareAnalysis"));
@@ -555,6 +558,30 @@ const findShipperMirrorIdMobile = async (order) => {
   const snap = await getDocs(q);
   return snap.empty ? null : snap.docs[0].id;
 };
+// 🚚 2026-11-07 PC와 같게 — 지급방식을 "취소"로 바꾸면 배차상태 배차취소(배차현황에서 빠짐), 취소를 풀면 차량번호 기준으로 되돌림
+//  · 수정이력(지급방식·배차상태)과 고정노선 시트 반영도 PC 저장(patchDispatch)과 같이 남긴다 · patch를 직접 고친다
+function applyPayTypeRuleMobile(order, patch) {
+  if (!("지급방식" in patch)) return patch;
+  if (isPayCancel(patch.지급방식)) {
+    if ("배차상태" in patch || String(order?.배차상태 || "").trim() !== "배차취소") patch.배차상태 = "배차취소";
+    return patch;
+  }
+  const sp = payTypeStatusPatch(order || {}, patch.지급방식, patch);
+  if (sp.배차상태) {
+    patch.배차상태 = sp.배차상태;
+    if (sp.배차상태 !== "배차취소") patch.상태 = sp.배차상태;
+  }
+  return patch;
+}
+function payTypeHistoryMobile(order, patch, userEmail) {
+  const out = [];
+  ["지급방식", "배차상태"].forEach((f) => {
+    if (!(f in patch)) return;
+    const before = order?.[f] ?? "", after = patch[f] ?? "";
+    if (String(before) !== String(after)) out.push({ at: Date.now(), user: userEmail || "unknown", field: f, before, after });
+  });
+  return out;
+}
 const syncShipperMirrorMobile = async (order, patch) => {
   if (order?.source) return; // 화주사가 등록한 오더는 사본 동기화 대상이 아님
   const mirrorPatch = {};
@@ -1639,6 +1666,7 @@ const HISTORY_TRACKED_FIELDS = [
   "상차방법", "하차방법", "지급방식", "배차방식", "혼적여부",
   "상차일", "상차시간", "하차일", "하차시간",
   "차량번호", "기사명", "전화번호", "청구운임", "기사운임", "산재보험료",
+  "배차상태", // 🚚 2026-11-07 지급방식 취소 → 배차취소도 이력에(PC와 같음)
 ];
 function buildHistoryEntries(prev, next, userEmail) {
   const entries = [];
@@ -4686,8 +4714,8 @@ const groupedByDate = useMemo(() => {
       // ⭐ 2026-11-02 운임규칙 — 운임구분을 고른 적이 있거나(규칙 사용 회사) 원래 있던 오더만
       ...(form.운임구분 !== undefined ? { 운임구분: form.운임구분 || "", 운임수동: !!form.운임수동 } : {}),
 
-      // 상태 PC/모바일 동일
-      배차상태: (form.차량번호 || "").trim() ? "배차완료" : "배차중",
+      // 상태 PC/모바일 동일 — 🚚 2026-11-07 지급방식 "취소"면 배차취소(PC와 같음 · 상태 칸은 PC처럼 그대로)
+      배차상태: dispatchStatusOf({ 지급방식: form.지급방식, 차량번호: form.차량번호 }),
       상태: (form.차량번호 || "").trim() ? "배차완료" : "배차중",
 
       경유상차목록: validStops(form.경유상차목록),
@@ -4718,7 +4746,7 @@ const groupedByDate = useMemo(() => {
       const normPlateM3 = (s = "") => String(s).replace(/\s+/g, "").toUpperCase();
       const prevPlateM3 = normPlateM3(form._editId ? (selectedOrder?.차량번호 || "") : "");
       const nextPlateM3 = normPlateM3(docData.차량번호 || "");
-      if (nextPlateM3 && nextPlateM3 !== prevPlateM3) {
+      if (nextPlateM3 && nextPlateM3 !== prevPlateM3 && docData.배차상태 !== "배차취소") {
         const assignedDriverM3 = (drivers || []).find(d => normPlateM3(d.차량번호) === nextPlateM3);
         if (assignedDriverM3?.등급 === "지입" && !!assignedDriverM3.uid) { // ⭐ 2026-11-02 기사앱 가입한 지입 기사만 승인대기
           docData.기사확인상태 = "대기";
@@ -4782,6 +4810,7 @@ const groupedByDate = useMemo(() => {
       // 이 수정폼(전체 편집) 저장 시에는 반영되지 않아, 상차일 등을 여기서 고쳐도
       // 화주사 화면(사본)에는 예전 값이 그대로 남아있던 버그가 있었다.
       syncShipperMirrorMobile(selectedOrder, docData).catch(() => {});
+      if (selectedOrder?.배차표Id) requestRouteSheetPush(selectedOrder.배차표Id); // 🚚 2026-11-07 고정노선 시트(PC와 같음)
 
       // ★ PC 거래처관리(places) 동기화 — 오더 자체 저장과는 무관한 주소록 동기화라서
       // 화주사 사본 동기화(바로 위)와 동일하게 기다리지 않고 백그라운드로 돌린다.
@@ -10865,7 +10894,7 @@ function QuickEditModal({ order, drivers, cardVersionB, onClose, onSuccess, disp
         // ⭐ 사용자 요청 — 이 모바일 저장 화면도 지입 기사에게 새로 차량번호를
         // 배정하면 기사 앱 오더수락/거절 플로우가 떠야 한다(PC patchDispatch와
         // 별도 경로라 직접 반영).
-        if (nd(carNo) !== nd(order.차량번호 || "")) {
+        if (nd(carNo) !== nd(order.차량번호 || "") && !(!isShipperOrder && isPayCancel(payType))) {
           const assignedDriverM2 = (drivers || []).find(d => nd(d.차량번호) === nd(carNo));
           if (assignedDriverM2?.등급 === "지입" && !!assignedDriverM2.uid) { // ⭐ 2026-11-02 기사앱 가입한 지입 기사만 승인대기
             patch.기사확인상태 = "대기";
@@ -10885,6 +10914,10 @@ function QuickEditModal({ order, drivers, cardVersionB, onClose, onSuccess, disp
           }
         }
       }
+      // 🚚 2026-11-07 지급방식 "취소" → 배차취소(PC와 같음) · 이력 · 고정노선 시트
+      applyPayTypeRuleMobile(order, patch);
+      { const h = payTypeHistoryMobile(order, patch, auth.currentUser?.email); if (h.length) patch.history = arrayUnion(...h); }
+      if (order?.배차표Id) requestRouteSheetPush(order.배차표Id);
       // ⭐ 속도개선(2026-10-28) — 예전엔 서버가 "저장됐다"고 답할 때까지(await) 기다려서, LTE가 약하면
       //   "저장 중…"이 몇 초씩 걸렸다. Firestore는 폰 화면에 먼저 바로 반영하고 서버 전송은 뒤에서
       //   알아서 끝내므로, 기다리지 않고 바로 닫는다. 서버 저장이 실패하면 그때 알림으로 알려준다.
@@ -11926,9 +11959,12 @@ function QuickEditSheet({ order, onClose, onSaved, cardVersionB, clients = [], b
     try {
       const id = order.id || order._id;
       // ⭐ 속도개선 — 서버 응답을 기다리지 않는다(폰 화면엔 즉시 반영, 실패 시에만 알림)
-      updateDoc(doc(db, order.__col || "dispatch", id), { ...changed, updatedAt: serverTimestamp(), _lastModified: Date.now() })
+      applyPayTypeRuleMobile(order, changed); // 🚚 2026-11-07 지급방식 "취소" → 배차취소(PC와 같음)
+      const _h = payTypeHistoryMobile(order, changed, auth.currentUser?.email);
+      updateDoc(doc(db, order.__col || "dispatch", id), { ...changed, ...(_h.length ? { history: arrayUnion(..._h) } : {}), updatedAt: serverTimestamp(), _lastModified: Date.now() })
         .catch((err) => alert("저장 실패: " + (err?.message || err)));
       syncShipperMirrorMobile(order, changed).catch(() => {});
+      if (order?.배차표Id) requestRouteSheetPush(order.배차표Id);
       onSaved(id, changed);
     } catch (e) {
       alert("저장 실패: " + (e?.message || e));
@@ -19111,7 +19147,9 @@ function MobileMyInfo({ currentUser, mobileUsers, loginTime, orders = [], userCo
 
   // ⭐ 2026-11-01 입사일 직접 수정 막음(인사팀 전용) — 저장 함수 없음
 
-  const leave = calcLeaveBalance(hireDate, mySchedules, currentUser?.uid, myName, []);
+  // ⭐ 2026-11-07 전자결재 연차 현황과 같은 계산(PC 내정보와 같음) — 승인된 전자결재 연차·반차 + 예전 게시판 · 연차 조정 · 회사 회기 기준
+  const myLeaveX = useMyLeaveExtras(currentUser?.uid, myCompany);
+  const leave = calcLeaveBalance(hireDate, mySchedules, currentUser?.uid, myName, [], new Date(), myLeaveX);
 
   const hireParts = hireDate ? hireDate.split("-").map(Number) : [null, null, null];
   const [hireY, hireM, hireD] = hireParts;

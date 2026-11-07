@@ -15,6 +15,7 @@ import { personName } from "./userNames";
 import { leaveUseOf } from "./approvalForms";
 import { leavePeriodOf, promoteSchedule, promoteStageDue, addDaysStr, dayDiffStr } from "./payrollCalc";
 import { leaveManagerOf } from "./payrollAccess";
+import { mirrorLeaveBasis } from "./leaveBasis"; // ⭐ 2026-11-07 회기 기준 공용
 import { sendInternalMail } from "./InternalMail";
 import CustomDatePicker from "./CustomDatePicker";
 
@@ -116,6 +117,8 @@ export default function LeavePromotionBoard({ company, canManage = false }) {
     return onSnapshot(query(collection(db, "leavePromotions"), where("companyName", "==", company)), (s) => setRecs(s.docs.map((d) => ({ id: d.id, ...d.data() }))), () => setRecs([]));
   }, [company]);
   React.useEffect(() => { if (setting !== undefined) setCfg({ basis: setting.basis || "hire", fiscalStart: setting.fiscalStart || "01-01", autoSend: setting.autoSend !== false, email: setting.email !== false }); }, [setting]);
+  // ⭐ 2026-11-07 회기 기준을 직원이 읽는 곳(hrSettings.leaveBasis)에도 — 내정보 · 전자결재 연차 현황이 같은 회기로 계산
+  React.useEffect(() => { if (setting !== undefined && canManage) mirrorLeaveBasis(company, setting); }, [setting, canManage, company]); // eslint-disable-line react-hooks/exhaustive-deps
   const today = kstDay();
   const basisOpt = { basis: setting?.basis || "hire", fiscalStart: setting?.fiscalStart || "01-01" };
   const recMap = Object.fromEntries((recs || []).map((r) => [r.id, r]));
@@ -147,7 +150,7 @@ export default function LeavePromotionBoard({ company, canManage = false }) {
   const byName = personName(myDoc) || auth.currentUser?.email || "인사관리부";
   const saveCfg = async () => {
     setBusy(true);
-    try { await setDoc(doc(db, "payrollSettings", company), { companyName: company, leave: { ...cfg }, leaveUpdatedAt: serverTimestamp(), leaveUpdatedBy: auth.currentUser?.email || "" }, { merge: true }); alert("저장했습니다."); } catch (e) { alert(`저장 실패: ${e.message}`); } finally { setBusy(false); }
+    try { await setDoc(doc(db, "payrollSettings", company), { companyName: company, leave: { ...cfg }, leaveUpdatedAt: serverTimestamp(), leaveUpdatedBy: auth.currentUser?.email || "" }, { merge: true }); await mirrorLeaveBasis(company, cfg); alert("저장했습니다."); } catch (e) { alert(`저장 실패: ${e.message}`); } finally { setBusy(false); }
   };
   return (
     <div className="space-y-3" data-testid="leave-promo">

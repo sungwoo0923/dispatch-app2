@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
+import { isLateAt } from "./lateRule"; // ⏰ 2026-11-07 지각 기준 공용(출근시간 없으면 09:00)
 import { runDelete } from "./DeleteProgress"; // ⭐ 2026-11-05 삭제 진행 창 + 한 번에 삭제
 import { workWindow } from "./autoAttendance";
 import { collection, deleteDoc, doc, onSnapshot, query, setDoc, where, addDoc, arrayUnion, getDocs } from "firebase/firestore";
@@ -413,13 +414,10 @@ export default function AttendanceBoard({ userCompany, role, user }) {
     return { status: null, rec: null };
   };
 
+  // ⭐ 2026-11-07 출근시간을 정하지 않은 직원도 09:00 기준(src/lateRule.js 공용 · 오전반차는 +4시간)
   const isLate = (rec, emp) => {
-    if (!rec?.checkInTime || !emp?.workStartTime) return false;
-    const checkInMin = timeToMinutes(fmtTime(rec.checkInTime));
-    // ⭐ 2026-11-02 오전반차는 출근시간 +4시간이 출근 기준
-    const startMin = (rec.status === "오전반차" || rec.halfDay === "오전반차") ? workWindow(emp, "오전반차").start : timeToMinutes(emp.workStartTime);
-    if (checkInMin == null || startMin == null) return false;
-    return checkInMin > startMin;
+    if (!rec?.checkInTime) return false;
+    return isLateAt(fmtTime(rec.checkInTime), emp, (rec.status === "오전반차" || rec.halfDay === "오전반차") ? "오전반차" : "");
   };
 
   // 오늘 현재 사용자 출근 레코드

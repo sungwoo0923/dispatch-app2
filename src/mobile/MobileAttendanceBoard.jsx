@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
+import { isLateAt } from "../lateRule"; // ⏰ 2026-11-07 지각 기준 공용(출근시간 없으면 09:00)
 import { collection, doc, onSnapshot, query, setDoc, where } from "firebase/firestore";
 import { db, DEFAULT_COMPANY } from "../firebase";
 import { HourMinuteSelect } from "../kpTimePick"; // ⏱ 2026-11-07 시간은 프로그램 시·분 선택으로
@@ -268,13 +269,10 @@ export default function MobileAttendanceBoard({ userCompany, role, currentUser, 
     return { status: null, rec: null };
   };
 
+  // ⭐ 2026-11-07 출근시간을 정하지 않은 직원도 09:00 기준(src/lateRule.js 공용 · PC와 같음 · 오전반차는 +4시간)
   const isLate = (rec) => {
-    if (!rec?.checkInTime || !myUserDoc?.workStartTime) return false;
-    const [ch, cm] = fmtTime(rec.checkInTime).split(":").map(Number);
-    const [sh, sm] = myUserDoc.workStartTime.split(":").map(Number);
-    // ⭐ 2026-11-02 오전반차는 출근시간 +4시간이 출근 기준
-    if (rec.status === "오전반차" || rec.halfDay === "오전반차") return ch * 60 + cm > workWindow(myUserDoc, "오전반차").start;
-    return ch * 60 + cm > sh * 60 + sm;
+    if (!rec?.checkInTime) return false;
+    return isLateAt(fmtTime(rec.checkInTime), myUserDoc, (rec.status === "오전반차" || rec.halfDay === "오전반차") ? "오전반차" : "");
   };
 
   // ⭐ 2026-11-02 직접 누르는 출근 요청·퇴근은 출근지 반경 안에서만(출근지가 설정된 회사)

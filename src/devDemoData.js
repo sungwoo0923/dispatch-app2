@@ -214,7 +214,7 @@ function arHistoryOrders() {
           상차일: `${ym}-${day}`, 하차일: `${ym}-${day}`, 등록일: `${ym}-${day}`, 상차시간: "08:00", 하차시간: "당일",
           거래처명: CLIENTS[ci], 상차지명: pn, 하차지명: dn, 화물내용: CARGO[(ci + j) % CARGO.length], 차량종류: CARS[j % CARS.length][0], 차량톤수: CARS[j % CARS.length][1],
           차량번호: `경기${80 + j}바${1000 + j * 37}`, 이름: NAMES[(ci + j) % NAMES.length], 배차상태: "배차완료",
-          청구운임: 180000 + ((ci * 7 + j * 3 + k) % 9) * 40000, 기사운임: 150000 + ((ci + j) % 5) * 30000, 지급방식: "계산서", 배차방식: "직접배차",
+          청구운임: 180000 + ((ci * 7 + j * 3 + k) % 9) * 40000, 기사운임: 150000 + ((ci + j) % 5) * 30000, 지급방식: (ci + j + k) % 5 === 0 ? (k % 2 ? "착불" : "선불") : "계산서", 배차방식: "직접배차", // ⭐ 2026-11-07 선불·착불 섞음(거래명세서 포함 스위치 둘러보기)
           ...(paid ? { 정산상태: { [ym]: "정산완료" }, 정산일: { [ym]: `${ymShift(-k + 1)}-${String(8 + ci).padStart(2, "0")}` } } : {}),
         }));
       }
@@ -275,7 +275,7 @@ export function demoDocsFor(col) {
   if (col === "emailLogs") return arEmailLogs();
   if (col === "routeBoards" && demoRouteOn()) return [routeBoard()];
   if (col === "drivers") return [
-    ...NAMES.map((n, i) => fakeDoc(col, `demo-drv-${i}`, { companyName: "", 이름: n, 차량번호: `경기${80 + i}바${1000 + i * 37}`, 전화번호: `010-${2000 + i * 11}-${3000 + i * 7}`, 차량종류: CARS[i][0], 차량톤수: CARS[i][1], ...demoLive(i), ...(i === 0 ? { 등급: "직영", 담당자: { name: "최서연" }, 등록자: "정우성", 거주지: "", createdAt: demoTs(120) } : {}) })),
+    ...NAMES.map((n, i) => fakeDoc(col, `demo-drv-${i}`, { companyName: "", 이름: n, 차량번호: `경기${80 + i}바${1000 + i * 37}`, 전화번호: `010-${2000 + i * 11}-${3000 + i * 7}`, 차량종류: CARS[i][0], 차량톤수: CARS[i][1], ...demoLive(i), ...(i === 0 ? { 등급: "직영", 담당자: { name: "최서연" }, 등록자: "정우성", 거주지: "", createdAt: demoTs(120) } : {}), ...(i === 1 || i === 3 ? { 세금계산서발행: true } : {}) })), // ⭐ 2026-11-07 세금계산서 발행 기사(예상 부가세 매입세액)
     fakeDoc(col, "demo-drv-old", { 이름: "이영희", 차량번호: "경기70바7777", 전화번호: "010-2011-3007", 차량종류: "카고", 차량톤수: "5톤", 등급: "임대", 등록자: "김철수", createdAt: demoTs(400) }),
     ...DEMO_SIGNUPS.filter((u) => !u.approved).map((u) => fakeDoc(col, u.id, { uid: u.id, 이름: u.name, name: u.name, 차량번호: u.carNo, carNo: u.carNo, 전화번호: u.phone, phone: u.phone, 차량종류: u.차량종류, 차량톤수: u.차량톤수, 거주지: u.거주지, approved: false, createdAt: demoTs(u.at) })),
   ];
