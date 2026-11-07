@@ -16,6 +16,7 @@
 // 순차적으로 적용하고 있다 — 아직 안 감싼 글자는 지금 당장은 편집이 안 된다.
 import React, { createContext, useContext, useEffect, useState, useCallback } from "react";
 import { auth, db, doc, onSnapshot, setDoc, DEFAULT_COMPANY } from "./firebase";
+import { uiLabel, useUiConfigVersion } from "./uiConfig"; // ⭐ 2026-11-07 화면 편집 모드 — 입력칸·메뉴 이름표(프로그램 전체)
 
 const TOTAL_MASTER_EMAIL = "tjddnqkf@naver.com";
 
@@ -127,7 +128,8 @@ export function useEditMode() {
 // defaultText: 편집한 적 없을 때 보여줄 원래 글자.
 export function EditableText({ id, defaultText, as: Tag = "span", className = "", style }) {
   const { editMode, labels, setLabel } = useEditMode();
-  const savedText = labels?.[id] ?? defaultText;
+  useUiConfigVersion();
+  const savedText = labels?.[id] ?? uiLabel(id, defaultText); // 회사가 직접 바꾼 이름 → 화면 편집 이름 → 원래
   const [draft, setDraft] = useState(savedText);
   const [focused, setFocused] = useState(false);
 
@@ -138,7 +140,7 @@ export function EditableText({ id, defaultText, as: Tag = "span", className = ""
   }, [savedText, focused]);
 
   if (!editMode) {
-    return <Tag className={className} style={style}>{savedText}</Tag>;
+    return <Tag className={className} style={style} data-et={id}>{savedText}</Tag>;
   }
 
   const commit = () => {

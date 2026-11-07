@@ -137,6 +137,7 @@ import { useFixedRouteAutoDispatch } from "../FixedRoutes"; // ⭐ 2026-11-05 �
 import { VehicleTypePicker, currentCustomVehicleTypes, useVehicleTypes } from "../vehicleTypes"; // 🚚 2026-11-02 회사 공용 차량종류
 import { LogisMark, LogisWordmark, LogisTag, LogisLockup } from "../brand"; // 🔷 2026-11-04 LogisWeb 로고
 import { LiveDriverChip, FleetLiveButton, useFleetLivePublish } from "../liveFleet"; // ⭐ 2026-11-05 배차완료 지입·직영·임대 기사 실시간 관제
+import { useUiScreen, uiMenuItem, useUiConfigVersion } from "../uiConfig"; // ⭐ 2026-11-07 화면 편집 모드 — 메뉴 이름·순서·숨기기(권한은 그대로)
 
 
 
@@ -2174,6 +2175,7 @@ export default function MobileApp({ role: realRole, user, userCompany = "", forc
   const briefCompanyM = (localStorage.getItem("loginCompany") || userCompany || localStorage.getItem("userCompany") || DEFAULT_COMPANY || "").trim();
   const canBriefingM = canSeeBriefing({ isExec: isExecM });
   const [page, setPage] = useState(deptMode ? "dept" : "list");
+  useUiScreen(page, deptMode); // ⭐ 2026-11-07 화면 편집 — 지금 화면("이 화면만")·부서(역할별 보이기)
   const pageMenuM = PAGE_MENU_M[page];
   useReadOnlyGuard(!!pageMenuM && (role === "viewer" || (!!customRoleM && getMenuAccess(customRolesM, role, pageMenuM) === "read")));
   // 경리는 메뉴의 [배차현황]으로만 오더 목록(등록내역)을 볼 수 있다 — 그 밖에 목록으로 돌아오면 부서 홈으로
@@ -8369,12 +8371,16 @@ function MenuSection({ title, en, children, dark, alwaysOpen = false }) {
 
 // ✋ 작성 중인 문서가 있으면 이동 전에 저장할지 묻는다
 function MenuItem({ onClick, ...rest }) {
-  return <MenuItemBase {...rest} onClick={onClick ? () => { confirmLeave().then((ok) => { if (ok) onClick(); }); } : onClick} />;
+  // ⭐ 2026-11-07 화면 편집 — 최고관리자가 정한 이름·순서·숨기기(이 줄이 보일 권한이 있을 때만 그려지므로 권한은 그대로)
+  useUiConfigVersion();
+  const ui = uiMenuItem("m", rest.label, rest.label);
+  if (ui.hidden) return null;
+  return <MenuItemBase {...rest} label={ui.label} uiKey={rest.label} uiStyle={ui.order !== undefined || ui.dim ? { order: ui.order, opacity: ui.dim ? 0.45 : undefined } : undefined} onClick={onClick ? () => { confirmLeave().then((ok) => { if (ok) onClick(); }); } : onClick} />;
 }
-function MenuItemBase({ label, onClick, badge, dark, icon }) {
+function MenuItemBase({ label, onClick, badge, dark, icon, uiKey, uiStyle }) {
   if (dark) {
     return (
-      <button type="button" onClick={onClick}
+      <button type="button" onClick={onClick} data-kp-menu={uiKey} style={uiStyle}
         className="kp-m-drawer-item w-full flex items-center gap-3 px-2.5 h-[46px] rounded-xl text-left transition-colors hover:bg-white/[0.07] active:bg-white/[0.12]">
         <span className="w-8 h-8 rounded-[10px] shrink-0 grid place-items-center bg-gradient-to-br from-[#2D4C82]/70 to-[#16264A] ring-1 ring-white/10 text-[#CFE0FF]">
           <ShellIcon name={icon || "dashboard"} size={15} />
@@ -8389,7 +8395,7 @@ function MenuItemBase({ label, onClick, badge, dark, icon }) {
     );
   }
   return (
-    <button
+    <button data-kp-menu={uiKey} style={uiStyle}
       className={`kp-m-drawer-item w-full flex items-center justify-between px-5 py-2.5 text-[14px] font-semibold transition-colors ${
         dark ? "text-white/90 hover:bg-white/10 active:bg-white/[0.16]" : "text-[#1F2A44] hover:bg-[#F1F4F9] active:bg-[#E8EDF5]"
       }`}

@@ -7,6 +7,7 @@ import { kpConfirm } from "./kpDialog";
 import { doc, onSnapshot, setDoc } from "firebase/firestore";
 import { auth, db } from "./firebase";
 import { BANK_NAMES, formatAccount, onlyDigits, parseBankText, validateAccount } from "./bankUtil";
+import { uiOptionList, uiOptionLabel, useUiConfigVersion } from "./uiConfig"; // ⭐ 2026-11-07 화면 편집 — 은행 목록(더하기·숨기기·순서·보이는 이름)
 import { CustomSelect } from "./CustomSelect";
 
 const inp = "h-10 w-full px-3 rounded-xl border border-[#DCE3EE] bg-white text-[14px] font-semibold text-[#0F1A30] outline-none focus:border-[#2D4C82]";
@@ -26,6 +27,7 @@ export function useFavAccounts() {
 }
 
 export default function BankAccountInput({ value, onChange, compact = false, stacked = false, noFav = false }) {
+  useUiConfigVersion();
   const v = typeof value === "string" ? parseBankText(value) : (value || { bank: "", acct: "", holder: "" });
   const set = (patch) => onChange({ ...v, ...patch });
   const [favs, saveFavs] = useFavAccounts();
@@ -78,7 +80,7 @@ export default function BankAccountInput({ value, onChange, compact = false, sta
       <div className={`grid gap-1.5 ${compact ? "grid-cols-1" : stacked ? "grid-cols-[minmax(0,1fr)_minmax(0,1fr)]" : "grid-cols-[130px_minmax(0,1fr)_110px]"}`}>
         <CustomSelect value={v.bank || ""} onChange={(e) => set({ bank: e.target.value, acct: e.target.value === v.bank ? v.acct : "" })} className={`${inp} ${stacked ? "order-1" : ""}`}>
           <option value="">은행 선택</option>
-          {BANK_NAMES.map((b) => <option key={b} value={b}>{b}</option>)}
+          {[...uiOptionList("은행", BANK_NAMES), ...(v.bank && !uiOptionList("은행", BANK_NAMES).includes(v.bank) ? [v.bank] : [])].map((b) => <option key={b} value={b}>{uiOptionLabel("은행", b)}</option>)}
         </CustomSelect>
         <input inputMode="numeric" value={formatAccount(v.bank, v.acct)} onChange={(e) => set({ acct: onlyDigits(e.target.value) })}
           placeholder={v.bank ? "계좌번호 — 숫자만 입력하면 하이픈 자동" : "은행을 먼저 고르세요"} className={`${inp} tabular-nums tracking-wide ${stacked ? "order-3 col-span-2" : ""}`} />

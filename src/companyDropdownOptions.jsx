@@ -13,6 +13,7 @@ import { db, doc, onSnapshot, setDoc, getDoc, DEFAULT_COMPANY } from "./firebase
 import { arrayUnion } from "firebase/firestore";
 import { getTenant } from "./fsTenant";
 import { useEditMode } from "./EditMode";
+import { uiOptionList, useUiConfigVersion } from "./uiConfig"; // ⭐ 2026-11-07 화면 편집 — 프로그램 기본 목록(회사가 바꾼 적 없을 때) 더하기·숨기기·순서
 
 // ⭐ 기존 하드코딩 값 그대로 + 사용자가 요청한 "리프트" 추가(상/하차방법만)
 // ⭐ 2026-11-02 화면마다 조금씩 달랐던 목록(등록폼: 계좌이체 / 표·수정창: 손실·개인·취소 / 실시간: 고정기사)을
@@ -87,7 +88,7 @@ export function listFromStored(stored, key, fallback) {
     (ALWAYS_OPTIONS[key] || []).forEach((v) => { if (!seen.has(v)) { seen.add(v); out.push(v); } });
     if (out.length) return out;
   }
-  return fallback && fallback.length ? fallback : (DEFAULT_DROPDOWN_OPTIONS[key] || []);
+  return fallback && fallback.length ? fallback : uiOptionList(key, DEFAULT_DROPDOWN_OPTIONS[key] || []);
 }
 
 // 훅 — { company, loaded, list, customized }
@@ -97,11 +98,12 @@ export function useCompanyOptionList(key, role, userCompany) {
   const getSnap = React.useCallback(() => companyOptionsSnapshot(co), [co]);
   const st = React.useSyncExternalStore(subscribe, getSnap, getSnap);
   const stored = st.opts?.[key];
+  const uv = useUiConfigVersion();
   return React.useMemo(() => ({
     company: co, loaded: st.loaded,
     list: listFromStored(stored, key),
     customized: Array.isArray(stored) && stored.length > 0,
-  }), [co, st.loaded, stored, key]);
+  }), [co, st.loaded, stored, key, uv]); // eslint-disable-line react-hooks/exhaustive-deps
 }
 
 /**

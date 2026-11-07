@@ -10,6 +10,7 @@ import { createPortal } from "react-dom";
 import { arrayRemove, arrayUnion, doc, onSnapshot, setDoc } from "firebase/firestore";
 import { auth, db } from "./firebase";
 import { getTenant } from "./fsTenant";
+import { uiOptionList, uiOptionLabel, useUiConfigVersion } from "./uiConfig"; // ⭐ 2026-11-07 화면 편집 — 차량종류 기본 목록 · 보이는 이름
 
 // 프로그램 공통 기본 목록(화면에서 base를 따로 안 주면 이걸 쓴다)
 export const VT_DEFAULTS = ["라보/다마스", "카고", "윙/카고", "윙바디", "리프트", "탑차", "냉장탑", "냉동탑", "냉장윙", "냉동윙", "냉장/냉동탑", "냉장/냉동윙", "오토바이"];
@@ -59,7 +60,7 @@ function subscribeCo(co, cb) {
 // ⭐ 2026-11-06 hidden: 회사가 🗑로 지운 기본 차량종류(목록에서만 빠짐 · 저장된 값은 그대로)
 export function mergeVehicleTypes(base = VT_DEFAULTS, custom = [], hidden = []) {
   const out = []; const seen = new Set(); const hid = new Set((hidden || []).map(clean));
-  for (const v of [...(base || []), ...(custom || [])]) { const c = clean(v); if (c && !seen.has(c) && !hid.has(c)) { seen.add(c); out.push(c); } }
+  for (const v of [...uiOptionList("차량종류", base || []), ...(custom || [])]) { const c = clean(v); if (c && !seen.has(c) && !hid.has(c)) { seen.add(c); out.push(c); } }
   return out;
 }
 export function currentHiddenVehicleTypes(company) {
@@ -81,7 +82,8 @@ export function useVehicleTypes(company, base = VT_DEFAULTS) {
   const getSnap = React.useCallback(() => (co ? getStore(co).state : EMPTY), [co]);
   const st = React.useSyncExternalStore(subscribe, getSnap, getSnap);
   const baseKey = (base || []).join("|");
-  return React.useMemo(() => ({ loaded: st.loaded, custom: st.custom, hidden: st.hidden || [], all: mergeVehicleTypes(base, st.custom, st.hidden), company: co }), [st, baseKey, co]); // eslint-disable-line react-hooks/exhaustive-deps
+  const uv = useUiConfigVersion();
+  return React.useMemo(() => ({ loaded: st.loaded, custom: st.custom, hidden: st.hidden || [], all: mergeVehicleTypes(base, st.custom, st.hidden), company: co }), [st, baseKey, co, uv]); // eslint-disable-line react-hooks/exhaustive-deps
 }
 
 export async function addVehicleType(company, name) {
@@ -218,7 +220,7 @@ export function VehicleTypePicker({ value, onChange, base = VT_DEFAULTS, company
     }
   };
 
-  const label = cur || placeholder;
+  const label = cur ? uiOptionLabel("차량종류", cur) : placeholder;
   const btnEl = h("button", {
     ...buttonProps,
     id, ref: btn, type: "button", disabled,
@@ -240,7 +242,7 @@ export function VehicleTypePicker({ value, onChange, base = VT_DEFAULTS, company
       style: { display: "flex", alignItems: "center", gap: 10, height: 38, margin: "0 6px", padding: "0 10px", borderRadius: 10, cursor: "pointer", userSelect: "none", background: i === act ? "#EEF3FC" : "transparent" },
     },
     h("span", { style: { width: 15, height: 15, borderRadius: 999, flexShrink: 0, display: "grid", placeItems: "center", border: `2px solid ${sel ? "#1B2B4B" : "#C9D5EA"}`, background: sel ? "#1B2B4B" : "#fff" } }, sel ? h("span", { style: { width: 5, height: 5, borderRadius: 999, background: "#fff" } }) : null),
-    h("span", { style: { flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: 14.5, fontWeight: o.none ? 700 : 800, color: o.none ? "#8E9BB2" : "#0F1A30" } }, o.none ? (noneLabel || "선택 안 함") : o.v),
+    h("span", { style: { flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: 14.5, fontWeight: o.none ? 700 : 800, color: o.none ? "#8E9BB2" : "#0F1A30" } }, o.none ? (noneLabel || "선택 안 함") : uiOptionLabel("차량종류", o.v)),
     // ⭐ 2026-11-02 "회사"만 작게 써 있어 안 보인다는 의견 — 일반 글꼴·큰 글씨로 "회사 추가"
     o.custom ? h("span", { title: "우리 회사에서 추가한 차량종류", style: { flexShrink: 0, fontSize: 12, fontWeight: 800, lineHeight: "20px", padding: "0 8px", borderRadius: 999, background: "#EEF3FC", border: "1px solid #C9D5EA", color: "#1B2B4B", whiteSpace: "nowrap" } }, "회사 추가") : null,
     o.legacy ? h("span", { style: { fontSize: 12, fontWeight: 800, color: "#B54708" } }, "직접 입력값") : null,
