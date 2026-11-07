@@ -37,7 +37,7 @@ import { RemoteSupportAdminPanel } from "./RemoteSupport"; // ⭐ 2026-11-02 원
 import { CustomSelect } from "./CustomSelect";
 import { RichTextEditor, htmlToText, textToHtml, sanitizeHtml } from "./richText"; // ⭐ 2026-11-03 공지 글자 꾸미기
 import CustomDatePicker from "./CustomDatePicker";
-import { TimeSelect } from "./kpInputs";
+import { TimeSelect, MonthPicker } from "./kpInputs"; // 📅 2026-11-07 월 선택은 프로그램 달력으로
 import "./pcTheme.css";
 import { fmtPhone } from "./formatInput";
 import { LogisMark, LogisWordmark, LogisTag } from "./brand"; // 🔷 2026-11-04 LogisWeb 로고
@@ -409,7 +409,7 @@ function PaymentsPanel() {
   return (
     <div className="space-y-4">
       <Hero en="BILLING · COLLECTION" title="수납 관리" desc="가입사별 이달 청구액을 확정하고 청구·입금 상태를 기록합니다. (금액은 요금·청구 기준 예상액 — 칸에서 바로 고칠 수 있습니다)"
-        right={<input type="month" value={month} onChange={(e) => setMonth(e.target.value)} className="h-10 px-3 rounded-xl bg-white/10 ring-1 ring-white/25 text-white font-black" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", colorScheme: "dark" }} />} />
+        right={<MonthPicker dark quick={false} value={month} onChange={(v) => setMonth(v)} />} />
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         {PAY_STATUS.map((st, i) => (
           <div key={st} className={`rounded-[16px] px-4 py-3.5 border ${i === 2 ? "bg-[#0F1A30] text-white border-[#0F1A30]" : "bg-white border-[#E3E8F0]"}`}>

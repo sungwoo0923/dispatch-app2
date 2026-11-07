@@ -11,6 +11,7 @@ import { usePlatformLive, PLAN_NAMES } from "./PlatformLive";
 import { CONTRACT_TERMS, addMonthsYmd, contractStateOf, kstToday } from "./companyContract";
 import { DangerConfirm, ResetProgressModal, newJobId, callReset } from "./CompanyResetPanel";
 import { ROLE_LABELS } from "./customRoles";
+import CustomDatePicker from "./CustomDatePicker"; // 📅 2026-11-07 날짜는 프로그램 달력으로
 
 const SUPER_EMAIL = "tjddnqkf@naver.com";
 const CARD = "bg-white rounded-[18px] border border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_10px_26px_rgba(16,24,40,0.05)] min-w-0";
@@ -195,14 +196,14 @@ export function ContractLifecyclePanel({ openCompany }) {
                 <div className="p-5 space-y-3.5">
                   <div className="grid grid-cols-2 gap-2.5">
                     <label className="block"><span className="text-[13.5px] font-bold text-[#3A4A66]">계약 시작일</span>
-                      <input type="date" value={form.start} onChange={(e) => setStart(e.target.value)} className={`${INPUT} mt-1`} data-contract-start /></label>
+                      <CustomDatePicker showIcon value={form.start} onChange={(e) => setStart(e.target.value)} className={`${INPUT} mt-1`} data-contract-start /></label>
                     <label className="block"><span className="text-[13.5px] font-bold text-[#3A4A66]">계약 기간</span>
                       <select value={form.term} onChange={(e) => setTerm(Number(e.target.value))} className={`${INPUT} mt-1`} data-contract-term>
                         {CONTRACT_TERMS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
                       </select></label>
                   </div>
                   <label className="block"><span className="text-[13.5px] font-bold text-[#3A4A66]">계약 종료일 {form.term ? <span className="font-medium text-[#7A879C]">(시작일 + 기간으로 자동 — 바꿔도 됩니다)</span> : null}</span>
-                    <input type="date" value={form.end} onChange={(e) => setForm({ ...form, end: e.target.value })} className={`${INPUT} mt-1`} data-contract-end /></label>
+                    <CustomDatePicker showIcon value={form.end} onChange={(e) => setForm({ ...form, end: e.target.value })} className={`${INPUT} mt-1`} data-contract-end /></label>
                   <label className="block"><span className="text-[13.5px] font-bold text-[#3A4A66]">청구·안내 메일 <span className="font-medium text-[#7A879C]">(만료 안내를 함께 받을 회사 메일)</span></span>
                     <input value={form.billingEmail} onChange={(e) => setForm({ ...form, billingEmail: e.target.value })} placeholder="billing@회사.co.kr" className={`${INPUT} mt-1`} /></label>
                   <label className="block"><span className="text-[13.5px] font-bold text-[#3A4A66]">메모</span>

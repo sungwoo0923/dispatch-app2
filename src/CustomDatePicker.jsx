@@ -80,6 +80,9 @@ const CustomDatePicker = React.forwardRef(function CustomDatePicker(
     // ⭐ 2026-10-29 키보드 입력 — Tab으로 이 칸에 들어오면 달력이 바로 열린다(마우스 클릭 포커스는 제외).
     //    끄고 싶은 곳만 openOnFocus={false}.
     openOnFocus = true,
+    // ⭐ 2026-11-07 브라우저 기본 달력(type="date")을 모두 이 달력으로 바꾸면서 — min/max(YYYY-MM-DD, 밖의 날짜는 못 고름) ·
+    //    style(트리거 버튼) · yearFrom/yearTo(연도 목록 범위, 생년월일처럼 먼 과거가 필요한 곳)
+    min = "", max = "", style, yearFrom, yearTo,
   },
   ref
 ) {
@@ -148,7 +151,9 @@ const CustomDatePicker = React.forwardRef(function CustomDatePicker(
   for (let d = 1; d <= daysInMonth; d++) cells.push(d);
 
   const yearOptions = [];
-  for (let y = now.getFullYear() - 6; y <= now.getFullYear() + 3; y++) yearOptions.push(y);
+  const yFrom = Math.min(yearFrom ?? now.getFullYear() - 6, viewYear), yTo = Math.max(yearTo ?? now.getFullYear() + 3, viewYear);
+  for (let y = yFrom; y <= yTo; y++) yearOptions.push(y);
+  const outOfRange = (ds) => (!!min && ds < min) || (!!max && ds > max);
 
   // 커서를 n일 옮긴다(달이 바뀌면 보이는 달도 따라감)
   const moveCursor = (days) => {
@@ -169,6 +174,7 @@ const CustomDatePicker = React.forwardRef(function CustomDatePicker(
     setCursor(fmt(d.getFullYear(), d.getMonth(), d.getDate())); setViewYear(d.getFullYear()); setViewMonth(d.getMonth());
   };
   const commit = (dateStr) => {
+    if (outOfRange(dateStr)) return;
     if (multiActive) { onToggleWorkDate?.(dateStr); return; }
     onChange?.({ target: { value: dateStr } }); setOpen(false);
   };
@@ -223,6 +229,7 @@ const CustomDatePicker = React.forwardRef(function CustomDatePicker(
         onKeyDown={onKeyDown}
         onClick={() => { if (disabled) return; setOpen((v) => !v); }}
         className={`${className} text-left ${showIcon ? "flex items-center justify-between gap-1.5" : ""}`}
+        style={style}
       >
         <span>{displayOverride || value || <span className="text-gray-400">{placeholder}</span>}</span>
         {showIcon && (
@@ -282,11 +289,13 @@ const CustomDatePicker = React.forwardRef(function CustomDatePicker(
               return (
                 <button key={i} type="button"
                   title={holidayName || undefined}
+                  disabled={outOfRange(dateStr)}
                   onClick={() => {
+                    if (outOfRange(dateStr)) return;
                     if (multiActive) { onToggleWorkDate?.(dateStr); return; }
                     onChange?.({ target: { value: dateStr } }); setOpen(false);
                   }}
-                  className={`h-11 rounded-lg text-[13px] font-semibold transition flex flex-col items-center justify-center leading-none gap-0.5 ${
+                  className={`h-11 rounded-lg text-[13px] font-semibold transition flex flex-col items-center justify-center leading-none gap-0.5 disabled:opacity-25 disabled:cursor-not-allowed ${
                     isSelected ? (multiActive ? "bg-black" : "bg-[#1B2B4B]") :
                     isCursor ? "ring-2 ring-[#4B6CB7] bg-[#EEF3FB]" :
                     isToday ? "border-2 border-[#1B2B4B]" :
@@ -307,11 +316,13 @@ const CustomDatePicker = React.forwardRef(function CustomDatePicker(
           <div className="flex justify-between items-center mt-2 pt-2 border-t border-gray-100">
             <div className="flex items-center gap-3">
               <button type="button"
+                disabled={outOfRange(todayStr)}
                 onClick={() => {
+                  if (outOfRange(todayStr)) return;
                   if (multiActive) { onToggleWorkDate?.(todayStr); return; }
                   onChange?.({ target: { value: todayStr } }); setOpen(false);
                 }}
-                className="text-[12px] font-bold text-[#1B2B4B] hover:underline">오늘</button>
+                className="text-[12px] font-bold text-[#1B2B4B] hover:underline disabled:opacity-30 disabled:no-underline">오늘</button>
               {/* ⭐ 복수근무일(묶음) — "오늘" 버튼과 동일한 스타일(이모지 없이 텍스트만),
                   다중선택 모드가 켜져 있으면 배경 pill로 활성 상태를 표시한다. */}
               {multiSelect && (

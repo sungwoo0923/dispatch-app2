@@ -10,6 +10,7 @@ import { auth, db } from "./firebase";
 import { collection, doc, getDoc, getDocs, onSnapshot, query, setDoc, where, writeBatch } from "firebase/firestore";
 import { useCompanyStaff } from "./InternalMail";
 import { CustomSelect } from "./CustomSelect";
+import CustomDatePicker from "./CustomDatePicker"; // 📅 2026-11-07 날짜는 프로그램 달력으로
 
 const CARD = "bg-white rounded-[20px] border border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_10px_28px_rgba(16,24,40,0.06)]";
 const CFG = () => doc(db, "siteConfig", "blindMine");
@@ -154,10 +155,10 @@ export default function BlindMinePanel() {
           <div className="text-[14.5px] font-black text-[#0F1A30]">이미 등록한 오더 일괄 처리</div>
           <div className="flex flex-wrap items-center gap-3">
             <label className="text-[13px] font-bold text-[#7A879C]">상차일</label>
-            <input type="date" value={from} onChange={(e) => setFrom(e.target.value)}
+            <CustomDatePicker showIcon value={from} onChange={(e) => setFrom(e.target.value)}
               className="h-10 px-3 rounded-xl border border-[#DCE3EE] text-[14px] font-semibold text-[#0F1A30] outline-none focus:border-[#4B6CB7]" />
             <span className="text-[13px] font-bold text-[#7A879C]">부터</span>
-            <input type="date" value={to} min={from || undefined} onChange={(e) => setTo(e.target.value)}
+            <CustomDatePicker showIcon value={to} min={from || undefined} onChange={(e) => setTo(e.target.value)}
               className="h-10 px-3 rounded-xl border border-[#DCE3EE] text-[14px] font-semibold text-[#0F1A30] outline-none focus:border-[#4B6CB7]" />
             <span className="text-[13px] font-bold text-[#7A879C]">까지{to ? "" : "(비우면 끝까지)"}</span>
             <label className="inline-flex items-center gap-1.5 text-[13px] font-bold text-[#0F1A30]">
@@ -194,7 +195,7 @@ export default function BlindMinePanel() {
               ))}
             </CustomSelect>
             <label className="text-[13px] font-bold text-[#7A879C]">등록일</label>
-            <input type="date" value={regDay} onChange={(e) => { setRegDay(e.target.value); setFound(null); }}
+            <CustomDatePicker showIcon value={regDay} onChange={(e) => { setRegDay(e.target.value); setFound(null); }}
               className="h-10 px-3 rounded-xl border border-[#DCE3EE] text-[14px] font-semibold text-[#0F1A30] outline-none focus:border-[#4B6CB7]" />
             <button onClick={findOrders} disabled={!!busy || !fromEmail}
               className="h-10 px-5 rounded-xl bg-[#0F1A30] text-white text-[14px] font-black disabled:opacity-50">{busy === "find" ? "찾는 중…" : "오더 찾기"}</button>

@@ -1,4 +1,5 @@
 // ======================= src/mobile/ShipperMobileApp.jsx =======================
+import CustomDatePicker from "../CustomDatePicker"; // 📅 2026-11-07 날짜는 프로그램 달력으로
 import React, { useState, useEffect, useMemo, useRef } from "react";
 import { signOut, updatePassword, EmailAuthProvider, reauthenticateWithCredential } from "firebase/auth";
 import { auth, db } from "../firebase";
@@ -995,7 +996,7 @@ function ShipperHomeM({ kpi, orders, onSelect, onGoOrder, onEdit, user }) {
       <div>
         {/* 날짜 조회 */}
         <div className="flex gap-2 mb-2">
-          <input type="date" value={viewDate} onChange={(e) => setViewDate(e.target.value)}
+          <CustomDatePicker showIcon value={viewDate} onChange={(e) => setViewDate(e.target.value)}
             className="flex-1 border border-[#D5DEEC] bg-white rounded-[11px] px-3 h-10 text-sm font-semibold text-[#0F1A30]" />
           <button onClick={() => setQueriedDate(viewDate)}
             className="px-4 h-10 text-xs font-extrabold text-white rounded-[11px] shrink-0"
@@ -1354,7 +1355,7 @@ function ShipperOrderM({ user, userData, orders = [], showToast, onDone, onBack,
         <MRow label="담당자번호"><input className="input-m" inputMode="tel" value={form.상차지담당자번호} onChange={(e) => update("상차지담당자번호", formatPhoneLive(e.target.value))} placeholder="010-0000-0000" /></MRow>
         <MRow label="상차일">
           <div className="flex gap-2">
-            <input type="date" className="input-m flex-1" value={form.상차일} onChange={(e) => update("상차일", e.target.value)} />
+            <CustomDatePicker showIcon className="input-m flex-1" value={form.상차일} onChange={(e) => update("상차일", e.target.value)} />
             <button onClick={() => update("상차일", getDate(0))} className={`px-2 py-1 rounded text-xs border shrink-0 ${form.상차일 === getDate(0) ? "text-white border-blue-600" : "bg-white"}`} style={form.상차일 === getDate(0) ? { background: NAVY } : {}}>당일</button>
             <button onClick={() => update("상차일", getDate(1))} className={`px-2 py-1 rounded text-xs border shrink-0 ${form.상차일 === getDate(1) ? "text-white border-blue-600" : "bg-white"}`} style={form.상차일 === getDate(1) ? { background: NAVY } : {}}>내일</button>
           </div>
@@ -1403,7 +1404,7 @@ function ShipperOrderM({ user, userData, orders = [], showToast, onDone, onBack,
         <MRow label="담당자번호"><input className="input-m" inputMode="tel" value={form.하차지담당자번호} onChange={(e) => update("하차지담당자번호", formatPhoneLive(e.target.value))} placeholder="010-0000-0000" /></MRow>
         <MRow label="하차일">
           <div className="flex gap-2">
-            <input type="date" className="input-m flex-1" value={form.하차일} onChange={(e) => update("하차일", e.target.value)} />
+            <CustomDatePicker showIcon className="input-m flex-1" value={form.하차일} onChange={(e) => update("하차일", e.target.value)} />
             <button onClick={() => update("하차일", getDate(0))} className={`px-2 py-1 rounded text-xs border shrink-0 ${form.하차일 === getDate(0) ? "text-white border-blue-600" : "bg-white"}`} style={form.하차일 === getDate(0) ? { background: NAVY } : {}}>당일</button>
             <button onClick={() => update("하차일", getDate(1))} className={`px-2 py-1 rounded text-xs border shrink-0 ${form.하차일 === getDate(1) ? "text-white border-blue-600" : "bg-white"}`} style={form.하차일 === getDate(1) ? { background: NAVY } : {}}>내일</button>
           </div>
@@ -2554,10 +2555,10 @@ function ShipperSettlementM({ orders = [], user, userData, onBack }) {
 
       <div className="bg-white border border-gray-200 rounded-xl p-3 space-y-2">
         <div className="flex gap-2">
-          <input type="date" className="flex-1 min-w-0 w-0 border border-[#D5DEEC] rounded-[11px] px-2 h-10 text-sm font-semibold"
+          <CustomDatePicker showIcon className="flex-1 min-w-0 w-0 border border-[#D5DEEC] rounded-[11px] px-2 h-10 text-sm font-semibold"
             value={startDate} onChange={(e) => setStartDate(e.target.value)} />
           <span className="text-gray-400 self-center text-sm">~</span>
-          <input type="date" className="flex-1 min-w-0 w-0 border border-[#D5DEEC] rounded-[11px] px-2 h-10 text-sm font-semibold"
+          <CustomDatePicker showIcon className="flex-1 min-w-0 w-0 border border-[#D5DEEC] rounded-[11px] px-2 h-10 text-sm font-semibold"
             value={endDate} onChange={(e) => setEndDate(e.target.value)} />
         </div>
         <div className="flex gap-2">

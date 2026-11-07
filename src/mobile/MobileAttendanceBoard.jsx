@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { collection, doc, onSnapshot, query, setDoc, where } from "firebase/firestore";
 import { db, DEFAULT_COMPANY } from "../firebase";
+import { HourMinuteSelect } from "../kpTimePick"; // ⏱ 2026-11-07 시간은 프로그램 시·분 선택으로
 import MobileSelect from "./MobileSelect"; // ⭐ 2026-11-02 기본 select → 남색 바텀시트 선택기
 import { ATTENDANCE_STATUS_COLOR, isWeekend, isHoliday, findApprovedLeaveForDate } from "../attendanceUtils";
 import { RadiusEditor, officeRadii, DEFAULT_IN_RADIUS, DEFAULT_OUT_RADIUS } from "../attendanceQuick";
@@ -592,8 +593,8 @@ export default function MobileAttendanceBoard({ userCompany, role, currentUser, 
             <div className="text-[12px] text-gray-500 mb-4">실제 출근한 시간을 입력하세요. {myApproverLabel} 승인 후 출근 처리됩니다.</div>
             <div className="mb-4">
               <div className="text-[12px] font-semibold text-gray-600 mb-1">출근 시간</div>
-              <input type="time" value={requestCheckInTime} onChange={e => setRequestCheckInTime(e.target.value)}
-                className="w-full px-3 py-2.5 rounded-xl border-2 border-gray-200 text-[15px] font-bold text-[var(--attn-accent)] outline-none focus:border-[var(--attn-accent)]" />
+              <HourMinuteSelect value={requestCheckInTime} onChange={e => setRequestCheckInTime(e.target.value)}
+                className="w-full h-11 px-3 rounded-xl border-2 border-gray-200 bg-white text-[15px] font-bold text-[var(--attn-accent)]" />
             </div>
             <div className="flex gap-2">
               <button onClick={() => setShowCheckInRequestModal(false)}
@@ -650,13 +651,13 @@ export default function MobileAttendanceBoard({ userCompany, role, currentUser, 
               <>
                 <div>
                   <div className="text-[12px] font-semibold text-gray-600 mb-1">출근 시간</div>
-                  <input type="time" value={mobileChangeReqTime} onChange={e => setMobileChangeReqTime(e.target.value)}
-                    className="w-full px-3 py-2.5 rounded-xl border-2 border-gray-200 text-[15px] font-bold text-[var(--attn-accent)] outline-none focus:border-[var(--attn-accent)]" />
+                  <HourMinuteSelect value={mobileChangeReqTime} onChange={e => setMobileChangeReqTime(e.target.value)}
+                    className="w-full h-11 px-3 rounded-xl border-2 border-gray-200 bg-white text-[15px] font-bold text-[var(--attn-accent)]" />
                 </div>
                 <div>
                   <div className="text-[12px] font-semibold text-gray-600 mb-1">퇴근 시간 (선택)</div>
-                  <input type="time" value={mobileChangeReqCheckOut} onChange={e => setMobileChangeReqCheckOut(e.target.value)}
-                    className="w-full px-3 py-2.5 rounded-xl border-2 border-gray-200 text-[15px] font-bold text-[var(--attn-accent)] outline-none focus:border-[var(--attn-accent)]" />
+                  <HourMinuteSelect value={mobileChangeReqCheckOut} onChange={e => setMobileChangeReqCheckOut(e.target.value)}
+                    className="w-full h-11 px-3 rounded-xl border-2 border-gray-200 bg-white text-[15px] font-bold text-[var(--attn-accent)]" />
                 </div>
               </>
             )}
@@ -703,13 +704,13 @@ export default function MobileAttendanceBoard({ userCompany, role, currentUser, 
               <>
                 <div>
                   <div className="text-[12px] font-semibold text-gray-600 mb-1">출근 시간</div>
-                  <input type="time" value={mobileEditTime} onChange={e => setMobileEditTime(e.target.value)}
-                    className="w-full px-3 py-2.5 rounded-xl border-2 border-gray-200 text-[15px] font-bold text-[var(--attn-accent)] outline-none focus:border-[var(--attn-accent)]" />
+                  <HourMinuteSelect value={mobileEditTime} onChange={e => setMobileEditTime(e.target.value)}
+                    className="w-full h-11 px-3 rounded-xl border-2 border-gray-200 bg-white text-[15px] font-bold text-[var(--attn-accent)]" />
                 </div>
                 <div>
                   <div className="text-[12px] font-semibold text-gray-600 mb-1">퇴근 시간 (선택)</div>
-                  <input type="time" value={mobileEditCheckOut} onChange={e => setMobileEditCheckOut(e.target.value)}
-                    className="w-full px-3 py-2.5 rounded-xl border-2 border-gray-200 text-[15px] font-bold text-[var(--attn-accent)] outline-none focus:border-[var(--attn-accent)]" />
+                  <HourMinuteSelect value={mobileEditCheckOut} onChange={e => setMobileEditCheckOut(e.target.value)}
+                    className="w-full h-11 px-3 rounded-xl border-2 border-gray-200 bg-white text-[15px] font-bold text-[var(--attn-accent)]" />
                 </div>
                 {(() => {
                   const [sh, sm] = (myUserDoc?.workStartTime || "09:00").split(":").map(Number);

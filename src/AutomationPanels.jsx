@@ -10,6 +10,7 @@ import { collection, doc, onSnapshot, query, where, addDoc, updateDoc, deleteDoc
 import { callFn, kstToday, addDays, won } from "./kpApi";
 import { isTMUser } from "./staffFilter";
 import { CustomSelect } from "./CustomSelect";
+import CustomDatePicker from "./CustomDatePicker"; // 📅 2026-11-07 날짜는 프로그램 달력으로
 
 const DAYS = ["일", "월", "화", "수", "목", "금", "토"];
 const WEEKDAYS = [1, 2, 3, 4, 5];
@@ -172,7 +173,7 @@ export function RecurringManagerModal({ form, onClose }) {
 
       <Box title={`등록된 정기오더 ${list ? list.length : ""}`} right={
         <div className="flex items-center gap-1.5">
-          <input type="date" value={runDate} onChange={(e) => setRunDate(e.target.value)} className={sel} />
+          <CustomDatePicker showIcon value={runDate} onChange={(e) => setRunDate(e.target.value)} className={sel} />
           <button onClick={run} disabled={!!busy} className="h-9 px-3.5 rounded-xl border border-[#0F1A30] text-[#0F1A30] text-[12.5px] font-black disabled:opacity-50">
             {busy === "run" ? "만드는 중…" : "이 날짜로 지금 만들기"}
           </button>

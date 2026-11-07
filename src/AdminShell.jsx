@@ -141,7 +141,7 @@ export default function AdminShell({
 
       {/* ── 본문 ── */}
       <main className="flex-1 min-w-0 h-full overflow-y-auto px-7 py-6">
-        <div className="max-w-[1480px] mx-auto">
+        <div className="w-full max-w-[2200px] mx-auto">
           {!hideHero && (
             <section
               className="relative overflow-hidden rounded-[26px] px-8 py-7 text-white mb-6 shadow-[0_14px_34px_rgba(27,43,75,0.25)]"

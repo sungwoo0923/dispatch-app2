@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect, useRef } from "react";
 import { fmtPhone } from "./formatInput";
+import CustomDatePicker from "./CustomDatePicker"; // 📅 2026-11-07 날짜는 프로그램 달력으로
 // ✅ 서버 카카오 경로 계산 (컴포넌트 밖!)
 const calcRouteByServer = async (fromAddr, toAddr) => {
   const res = await fetch("/api/route-calc", {
@@ -521,7 +522,7 @@ useEffect(() => {
                   ))}
                 </div>
               </div>
-              <input type="date" className={lineInput} value={form.상차일 || ""} onChange={e => { onChange("상차일", e.target.value); setPickupQuick(null); }}/>
+              <CustomDatePicker showIcon className={lineInput} value={form.상차일 || ""} onChange={e => { onChange("상차일", e.target.value); setPickupQuick(null); }}/>
             </div>
             <div>
               <div className="flex items-center justify-between mb-1">
@@ -533,7 +534,7 @@ useEffect(() => {
                   ))}
                 </div>
               </div>
-              <input type="date" className={lineInput} value={form.하차일 || ""} onChange={e => { onChange("하차일", e.target.value); setDropQuick(null); }}/>
+              <CustomDatePicker showIcon className={lineInput} value={form.하차일 || ""} onChange={e => { onChange("하차일", e.target.value); setDropQuick(null); }}/>
             </div>
           </div>
         </section>
