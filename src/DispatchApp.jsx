@@ -8192,6 +8192,35 @@ const newVer = useNewVersion(); // ★ 새 버전이 배포되면 버전 표시 
       updateDoc(doc(db, r.__col || "orders", r._id), { 기사확인상태: null, 배차상태: "배차완료", 상태: "배차완료" }).catch(() => fixedAwaitRef.current.delete(key));
     });
   }, [isViewer, drivers, dispatchData]);
+  // 🤖 2026-11-07 AI 비서 저장 연결 — 손으로 고칠 때와 같은 함수(patchDispatch · addDispatch · removeDispatch)를 그대로 쓴다
+  //  (수정 기록 · 화주사 사본 · 구글시트 · 허브 동기화 · 지입 기사 알림 · 수수료 계산이 똑같이 동작)
+  //  권한: 지금 보고 있는 메뉴가 아니라 "배차관리" 쓰기 권한으로 판단(조회전용이면 카드의 적용 버튼이 막힌다)
+  const aiCanWrite = role !== "viewer" && !(customRole && getMenuAccess(customRoles, role, "배차관리") !== "write");
+  const aiOrderApi = {
+    canWrite: aiCanWrite,
+    update: (id, patch, row) => (aiCanWrite ? patchDispatch(id, patch, row) : _viewerBlock()),
+    remove: (ids) => (aiCanWrite ? removeDispatch(ids) : _viewerBlock()),
+    create: async (recIn) => {
+      if (!aiCanWrite) { _viewerBlock(); return false; }
+      const rec = { ...recIn };
+      // 등록 화면(doSave)과 같이 — 차량번호가 있으면 기사관리에서 이름·전화를 채우고, 기사앱 가입한 지입 기사면 승인대기 + 기사앱 알림
+      if (String(rec.차량번호 || "").trim()) {
+        const dv = drivers.find((d) => normalizePlate(d.차량번호) === normalizePlate(rec.차량번호));
+        if (dv) { rec.이름 = rec.이름 || dv.이름 || ""; rec.전화번호 = rec.전화번호 || dv.전화번호 || ""; }
+        if (dv?.등급 === "지입" && !!dv.uid) {
+          rec.기사확인상태 = "대기"; rec.배차상태 = "승인대기";
+          addDoc(collection(db, "driver_notifications"), { driverId: dv.id, type: "new_order", orderId: null, title: "배차오더가 도착했습니다", body: `${rec.거래처명 || ""} ${rec.상차지명 || "-"} → ${rec.하차지명 || "-"}`, createdAt: serverTimestamp(), read: false }).catch(() => {});
+        }
+      }
+      const now = Date.now();
+      return addDispatch({
+        ...rec, 독차: dokchaOn(rec), createdAt: now, updatedAt: now,
+        createdByUid: auth.currentUser?.uid || null, createdByEmail: auth.currentUser?.email || null,
+        createdByName: myRealName || auth.currentUser?.displayName || auth.currentUser?.email || null,
+        companyName: userCompany || localStorage.getItem("userCompany") || DEFAULT_COMPANY,
+      });
+    },
+  };
   const approveEditRequestSafe = isViewer ? _viewerBlock : approveEditRequestPC;
   const rejectEditRequestSafe = isViewer ? _viewerBlock : rejectEditRequestPC;
   const upsertDriverSafe = isViewer ? _viewerBlock : upsertDriver;
@@ -9479,13 +9508,18 @@ return (
           </div>
         </div>
       </div>
-    {/* AI 비서 */}
+    {/* AI 비서 — ⭐ 2026-11-07 Claude 비서(말로 오더 수정·등록·조회). 저장은 아래 aiOrderApi = 화면의 원래 저장 함수 */}
 <AiAssistant
   dispatches={salesRawDispatchData}
   clients={clients}
+  places={places}
+  drivers={drivers}
   mode={deptMode}
   company={deptCompany}
   uid={user?.uid || ""}
+  userName={myRealName || ""}
+  screen={menu}
+  orderApi={aiOrderApi}
   controlledOpen={activeTool === "ai"}
   onOpenChange={v => setActiveTool(v ? "ai" : "none")}
 />

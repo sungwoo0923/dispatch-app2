@@ -136,6 +136,7 @@ import DetailFilterButton, { applyDetailFilter } from "../DetailFilter"; // 🔎
 import { useFixedRouteAutoDispatch } from "../FixedRoutes"; // ⭐ 2026-11-05 고정노선 배차 이어서 만들기
 import { VehicleTypePicker, currentCustomVehicleTypes, useVehicleTypes } from "../vehicleTypes"; // 🚚 2026-11-02 회사 공용 차량종류
 import { LogisMark, LogisWordmark, LogisTag, LogisLockup } from "../brand"; // 🔷 2026-11-04 LogisWeb 로고
+import AiAssistant from "../AiAssistant"; // 🤖 2026-11-07 AI 비서
 import { LiveDriverChip, FleetLiveButton, useFleetLivePublish } from "../liveFleet"; // ⭐ 2026-11-05 배차완료 지입·직영·임대 기사 실시간 관제
 
 
@@ -5444,6 +5445,46 @@ const title =
   : page === "blind" ? "블라인드 모드"
   : "상세보기";
 
+  // 🤖 2026-11-07 AI 비서(모바일) — 저장은 모바일의 원래 방식 그대로
+  //  수정: 모바일 상세보기의 빠른 수정과 같은 길(updateDoc(orderWrite) + 화주사 사본 동기화 + 지입 기사 알림)
+  //  등록: 모바일 등록 화면에 값을 채워 넣고(오더복사와 같은 길) 사용자가 [등록]을 누른다
+  const aiCanWriteM = role !== "viewer" && !(customRoleM && getMenuAccess(customRolesM, role, "배차관리") !== "write");
+  const aiOrderApiM = {
+    canWrite: aiCanWriteM,
+    update: async (id, patch0, row) => {
+      if (!aiCanWriteM) { alert("조회전용 권한으로는 수정/등록/삭제를 할 수 없습니다."); return false; }
+      const order = row || allOrders.find((o) => (o.id || o._id) === id);
+      if (!order) throw new Error("오더를 찾지 못했어요");
+      const col = order.__col || collName;
+      const patch = { ...patch0 };
+      if ("차량번호" in patch) {
+        const nd = (v = "") => String(v).replace(/[\s-]/g, "").toLowerCase();
+        const car = String(patch.차량번호 || "").trim();
+        if (!car) Object.assign(patch, { 이름: "", 기사명: "", 전화번호: "", 배차상태: "배차중", 기사확인상태: null, 기사거절사유: null, 기사확인일시: null, 기사완료일시: null });
+        else if (nd(car) !== nd(order.차량번호 || "")) {
+          const dv = (drivers || []).find((d) => nd(d.차량번호) === nd(car));
+          if (dv && !patch.이름) { patch.이름 = dv.이름 || ""; patch.전화번호 = dv.전화번호 || ""; }
+          if (patch.이름) patch.기사명 = patch.이름;
+          if (dv?.등급 === "지입" && !!dv.uid) {
+            Object.assign(patch, { 기사확인상태: "대기", 기사거절사유: null, 기사확인일시: null, 기사완료일시: null, 배차상태: "승인대기" });
+            addDoc(collection(db, "driver_notifications"), { driverId: dv.id, type: "new_order", orderId: id, title: "배차오더가 도착했습니다", body: `${order.거래처명 || ""} ${order.상차지명 || "-"} → ${order.하차지명 || "-"}`, createdAt: serverTimestamp(), read: false }).catch(() => {});
+          } else if (!patch.배차상태) patch.배차상태 = "배차완료";
+        }
+      }
+      await updateDoc(doc(db, col, id), patch);
+      syncShipperMirrorMobile(order, patch).catch(() => {});
+      return true;
+    },
+    remove: (ids) => deleteSelectedOrders(ids.map((id) => allOrders.find((o) => (o.id || o._id) === id)).filter(Boolean)),
+    create: async (rec) => {
+      if (!aiCanWriteM) { alert("조회전용 권한으로는 수정/등록/삭제를 할 수 없습니다."); return false; }
+      handleOrderDuplicate0({ ...rec, 톤수: rec.차량톤수, 차종: rec.차량종류 }, [{ 상차일: rec.상차일, 하차일: rec.하차일 }]);
+      setForm((p) => ({ ...p, 기사운임: Number(rec.기사운임) || 0, 수수료: (Number(rec.청구운임) || 0) - (Number(rec.기사운임) || 0), 적요: rec.메모 || "", 차량번호: rec.차량번호 || "", 기사명: rec.이름 || "", 전화번호: rec.전화번호 || "", 긴급: !!rec.긴급 }));
+      return "opened";
+    },
+  };
+  const aiGoMenuM = (m) => setPage({ 배차관리: "form", 매출관리: "sales", 지입차관리: "fleet", HOME: "list" }[m] || "list");
+
   // ------------------------------------------------------------------
   // 렌더링
   // ------------------------------------------------------------------
@@ -5882,6 +5923,11 @@ const title =
     onUnreadChange={setMessengerUnread}
   />
 </div>
+)}
+{/* 🤖 2026-11-07 AI 비서 — 등록 화면에서는 버튼을 숨긴다(등록 버튼을 가리지 않게) */}
+{!deptMode && page !== "form" && (
+  <AiAssistant variant="mobile" dispatches={allOrders} clients={clients} places={places} drivers={drivers} company={userCompany || localStorage.getItem("userCompany") || ""}
+    uid={user?.uid || ""} userName={myRealName || ""} screen={page} orderApi={aiOrderApiM} onNavigate={aiGoMenuM} />
 )}
       {showMenu && (
         <MobileSideMenu

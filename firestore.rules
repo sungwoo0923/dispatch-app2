@@ -1654,6 +1654,14 @@ service cloud.firestore {
     match /scanUsage/{id} {
       allow read, write: if false;
     }
+    // 🤖 2026-11-07 배차 AI 비서 — 사용 기록(질문 앞부분 · 도구 이름 · 토큰 수)은 서버만 쓰고 최고관리자만 본다 · 하루 질문 수는 서버만
+    match /aiAssistantLogs/{id} {
+      allow read: if isTotalMasterUser();
+      allow write: if false;
+    }
+    match /aiAssistantUsage/{id} {
+      allow read, write: if false;
+    }
     match /{col}/{rest=**} {
       allow read, write: if isApproved() && !(col in ['adminSecrets', 'resetBackups', 'resetLogs', 'resetJobs', 'resetLocks', 'loginSessions', 'orderTrash', 'recurringRuns', 'internalMails', 'approvals', 'boardPosts', 'notices', 'handovers', 'salesQuotes', 'contracts', 'platformNotices', 'platformInvoices', 'companyPlans', 'publicPricing', 'planRequests', 'userPrefs', 'companyRoleOverrides', 'customRoles', 'supportRequests', 'supportSessions', 'driverStatements', 'fleetPenalties', 'fixedRoutes', 'routeBoards', 'personalSchedules', 'publicCompanies', 'companyContracts',
         // 🔒 회사별로 잠근 컬렉션(위에서 따로 정함)
@@ -1683,7 +1691,9 @@ service cloud.firestore {
         // 📊 2026-11-06 일일 경영 보고 — 위에서 따로 정함
         'dailyReportPrefs', 'dailyReportCompany', 'dailyReportLogs',
         // 🧠 2026-11-07 오더 스캔 회사별 학습 · 사용 횟수 — 위에서 따로 정함(빠지면 승인된 직원 누구나 다른 회사 학습 기록을 읽는다)
-        'scanLearn', 'scanUsage']);
+        'scanLearn', 'scanUsage',
+        // 🤖 2026-11-07 배차 AI 비서 사용 기록 · 횟수 — 위에서 따로 정함
+        'aiAssistantLogs', 'aiAssistantUsage']);
     }
   }
 }

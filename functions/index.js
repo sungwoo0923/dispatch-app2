@@ -6641,6 +6641,30 @@ exports.orderScanExtract = functions.runWith({ secrets: ["ANTHROPIC_API_KEY"], t
   } catch (e) { throw scanHttpsError(e); }
 });
 
+// 🤖 2026-11-07 배차 AI 비서 — 설명은 functions/aiAssistant.js 맨 위
+//  호출형(callable) · 배차 프로그램 직원(승인·재직)만 · 회사 범위·메뉴 권한은 도구마다 서버가 확인
+//  서버는 아무것도 저장하지 않고 "제안"만 돌려준다(화면이 확인 카드 → [적용] → 원래 저장 함수로 저장)
+//  사람마다 하루 질문 수 제한(aiAssistantUsage) · 사용 기록(aiAssistantLogs, 회사별 · 비밀값 없음)
+//  Claude API 키: Firebase 비밀값 ANTHROPIC_API_KEY(AI 팀 · 오더 스캔과 같은 키)
+const _aiAssistant = require("./aiAssistant");
+exports.aiAssistantChat = functions.runWith({ secrets: ["ANTHROPIC_API_KEY"], timeoutSeconds: 300, memory: "512MB" }).https.onCall(async (data, context) => {
+  try {
+    return await _aiAssistant.runAssistantChat({
+      db, auth: context.auth, data,
+      makeAnthropic: () => (process.env.ANTHROPIC_API_KEY ? new (_aiAssistant.Anthropic)({ apiKey: process.env.ANTHROPIC_API_KEY, timeout: 120000, maxRetries: 2 }) : null),
+      log: (row) => {
+        db.collection("aiAssistantLogs").add({ ...row, at: FieldValue.serverTimestamp() }).catch((e) => console.error("[AI 비서] 기록 실패:", e));
+        const u = row.usage || {};
+        bumpScanUsage({ aiChatTurns: 1, aiChatCalls: u.calls, aiChatInTok: u.input, aiChatOutTok: u.output, aiChatCacheReadTok: u.cacheRead, aiChatCacheWriteTok: u.cacheWrite });
+      },
+    });
+  } catch (e) {
+    const { code, msg } = _aiAssistant.errorOf(e);
+    if (code === "internal" || code === "unavailable") console.error("[AI 비서] 실패:", e);
+    throw new functions.https.HttpsError(code, msg);
+  }
+});
+
 /* ==================================================================
    📊 2026-11-06 일일 경영 보고(DAILY REPORT) — 임원 화면 역할에게 아침 푸시(·요약 메일)
    30분마다(06:00~10:00 사이에만 일함) 받는 시간이 된 사람에게 보낸다. 계산·대상은 functions/dailyReport.js.
