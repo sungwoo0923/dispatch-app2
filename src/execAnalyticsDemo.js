@@ -84,7 +84,7 @@ export function execAnalyticsDemo(company = "테스트운송") {
   rows.forEach((o) => { if (o.배차상태 !== "배차완료" || o.상차일 >= today || o.상차일.slice(0, 4) !== yr) return; inv[o.거래처명] = (inv[o.거래처명] || 0) + o.청구운임; });
   const LAG = { 오성철강: 78, 코리아팩: 64, 새한건자재: 52, 동방제지: 48, 해든리테일: 41 };
   rows.forEach((o) => { if (o.배차상태 !== "배차완료" || o.상차일 >= today || o.상차일.slice(0, 4) !== yr) return; const lag = LAG[o.거래처명] ?? 32; if (o.상차일 > addDay(today, -lag)) late[o.거래처명] = (late[o.거래처명] || 0) + o.청구운임; });
-  const arPayments = Object.fromEntries(Object.entries(inv).map(([c, v]) => [c, Math.max(0, v - (late[c] || 0))]));
+  const arPayments = Object.fromEntries(Object.entries(inv).map(([c, v]) => [c, Math.max(0, Math.round(v * 1.1) - (late[c] || 0))]));
   // 결재 — 내 차례 4건 · 다른 결재자 대기 4건
   const ts = (h) => ({ seconds: Math.floor((Date.now() - h * 3600e3) / 1000) });
   const P = base.people;

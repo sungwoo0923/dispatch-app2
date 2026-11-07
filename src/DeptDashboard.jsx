@@ -6,6 +6,7 @@
 //   인사: 재직·휴직·퇴사 예정 · 오늘 출근 현황 · 이번 달 연차 사용 · 이번 주 부재 · 생일·입사 기념·수습 종료 · 부서·근속 분포
 import React from "react";
 import { useUserProfiles } from "./userProfilesLive"; // 🔒 2026-11-07 인사 프로필은 우리 회사 직원 한 건씩
+import { isLateAt } from "./lateRule"; // ⏰ 2026-11-07 지각 기준 공용
 import { collection, onSnapshot, query, where, getDocs } from "firebase/firestore";
 import { ResponsiveContainer, ComposedChart, Bar, Line, XAxis, YAxis, Tooltip, CartesianGrid, BarChart, Cell } from "recharts";
 import { db, auth, DEFAULT_COMPANY } from "./firebase";
@@ -646,7 +647,7 @@ function HrDashboard({ company, onGo, me, att }) {
     if (ON_LEAVE.includes(u.employmentStatus)) return { s: u.employmentStatus, t: "", tone: "soft", k: "leave" };
     if (a?.status && a.status !== "출근") return { s: a.status, t, tone: /지각/.test(a.status) ? "bad" : "soft", k: /지각/.test(a.status) ? "late" : "away" };
     // ⭐ 2026-11-02 점검 — 지각 상태는 기록되지 않으므로 출근시각(t)과 정규 출근시각(workStartTime)을 비교해 지각 판정
-    if (a && (a.status === "출근" || a.checkInTime)) { const late = !!u.workStartTime && !!t && t > u.workStartTime; return { s: late ? "지각" : "출근", t, tone: late ? "bad" : "ok", k: late ? "late" : "in" }; }
+    if (a && (a.status === "출근" || a.checkInTime)) { const late = !!t && isLateAt(t, u); /* ⏰ 2026-11-07 출근시간 없으면 09:00(src/lateRule.js) */ return { s: late ? "지각" : "출근", t, tone: late ? "bad" : "ok", k: late ? "late" : "in" }; }
     if (awayMap[u.id]) return { s: awayMap[u.id].label, t: awayMap[u.id].status !== "approved" ? "결재 중" : "", tone: "soft", k: "away" };
     return { s: "미출근", t: "", tone: "none", k: "none" };
   };

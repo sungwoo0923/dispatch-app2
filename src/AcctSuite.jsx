@@ -4,8 +4,8 @@
 //  · 퇴직 정산(경리 전용): 퇴직금(평균임금×30×재직일/365) · 미사용 연차수당 · 4대보험 상실 · 이직확인서(실업급여) ·
 //    퇴직소득 원천징수 · 원천징수영수증 · 퇴직연금 — 법정 기한(D-day)과 처리 상태를 사람별로
 import { loadAcctPayments } from "./acctPayments";
-import { agingOf } from "./arAging"; // ⭐ 2026-11-07 미수 연령 공용 계산
 import { useUserProfiles } from "./userProfilesLive"; // 🔒 2026-11-07 인사 프로필은 우리 회사 직원 한 건씩
+import { receivablesOf, vatEstimate } from "./arAging"; // ⭐ 2026-11-07 미수금(부가세 포함) · 예상 부가세 공용 계산
 import { upsertAutoEntry } from "./ledgerAuto";
 import React from "react";
 import { collection, doc, getDoc, getDocs, onSnapshot, query, setDoc, where, serverTimestamp } from "firebase/firestore";
@@ -60,7 +60,7 @@ const Tip = ({ active, payload, label }) => (active && payload?.length ? (
 ) : null);
 
 // ═════════════════════════ 회계 개요 ═════════════════════════
-export function AccountingOverview({ company, orders }) {
+export function AccountingOverview({ company, orders, drivers = [] }) {
   const y = new Date().getFullYear();
   const [pay, setPay] = React.useState({ ar: {}, ap: {} });
   const [ledger, setLedger] = React.useState([]);
@@ -70,35 +70,36 @@ export function AccountingOverview({ company, orders }) {
   const today = kstDay();
   const months = Array.from({ length: 12 }, (_, i) => String(i + 1).padStart(2, "0"));
   const mon = Object.fromEntries(months.map((m) => [m, { sale: 0, buy: 0 }]));
-  const ar = {}; const ap = {};
+  const ap = {};
   const settled = {}; // ⭐ 2026-11-02 점검 — 지급관리 [지급완료] 오더 기사운임 합계(미지급 탭 apByDriver와 동일 기준)
   orders.forEach((r) => {
     const m = String(r.상차일 || "").slice(5, 7); const s = toInt(r.청구운임); const b = toInt(r.기사운임);
     if (mon[m]) { mon[m].sale += s; mon[m].buy += b; }
-    const c = r.거래처명 || r.상차지명 || "미분류"; ar[c] = ar[c] || { inv: 0, list: [] }; ar[c].inv += s; if (r.상차일) ar[c].list.push({ d: String(r.상차일).slice(0, 10), amt: s });
     const d = r.이름 || "미지정"; ap[d] = (ap[d] || 0) + b;
     if ((r.지급상태 || "") === "지급완료") settled[d] = (settled[d] || 0) + b; // ⭐ 2026-11-02 점검 — [지급완료] 처리분을 지급액으로 반영
   });
   const sale = Object.values(mon).reduce((a, x) => a + x.sale, 0);
   const buy = Object.values(mon).reduce((a, x) => a + x.buy, 0);
-  // ⭐ 2026-11-07 규칙 점검 — 미수 연령은 "오래된 청구부터 수금된 것으로 보고 남은 청구의 경과일"(일일 경영 보고·경영 분석과 같은 방식).
-  //   예전엔 미수 전액을 그 거래처의 올해 첫 오더 날짜로 나눠, 1월분을 다 받은 거래처의 이번 달 미수도 "90일 초과"로 보였다.
-  const arList = Object.entries(ar).map(([c, v]) => { const ag = agingOf(v.list, toInt(pay.ar[c]), today); return { c, out: Math.max(0, v.inv - toInt(pay.ar[c])), age: ag.oldest, ag }; }).filter((x) => x.out > 0).sort((a, b) => b.out - a.out);
+  // ⭐ 2026-11-07 미수금 = 청구액(부가세 포함 · 거래처정산과 같은 식) − 수금 기록(실제 입금액) · 나이는 오래된 청구부터 수금된 것으로 봄
+  //   일일 경영 보고 · 경영 분석 · AI 비서와 같은 계산(functions/arCore.mjs) · 고정거래처 포함(orders에 이미 들어 있음)
+  const arList = receivablesOf({ orders, paid: pay.ar, today }).map((x) => ({ c: x.client, out: x.outstanding, age: x.oldest, ag: x.aging })).filter((x) => x.out > 0);
   const arSum = arList.reduce((a, x) => a + x.out, 0);
   // ⭐ 2026-11-02 점검 — 미지급 = 운임 − max(지급등록액, [지급완료] 합계) : 회계관리 미지급 탭과 숫자 일치
   const apSum = Object.entries(ap).reduce((a, [d, v]) => a + Math.max(0, v - Math.max(toInt(pay.ap[d]), settled[d] || 0)), 0);
-  const vat = Math.round((sale - buy) * 0.1);
+  // ⭐ 2026-11-07 예상 부가세 = 계산서 매출 × 10% − 세금계산서 발행 기사(기사관리) 기사운임 × 10%
+  const vatE = vatEstimate(orders, drivers);
+  const vat = vatE.vat;
   const curM = today.slice(5, 7);
   const chart = months.filter((m) => m <= curM).map((m) => ({ k: `${Number(m)}월`, sale: mon[m].sale, buy: mon[m].buy, margin: mon[m].sale ? ((mon[m].sale - mon[m].buy) / mon[m].sale) * 100 : 0 }));
   const aging = [["30일 이내", 0], ["31~60일", 0], ["61~90일", 0], ["90일 초과", 0]];
   arList.forEach((x) => { aging[0][1] += x.ag.b30; aging[1][1] += x.ag.b60; aging[2][1] += x.ag.b90; aging[3][1] += x.ag.over; });
-  const quarters = [[1, 2, 3], [4, 5, 6], [7, 8, 9], [10, 11, 12]].map((ms, i) => { const s = ms.reduce((a, m) => a + mon[String(m).padStart(2, "0")].sale, 0); const b = ms.reduce((a, m) => a + mon[String(m).padStart(2, "0")].buy, 0); return { k: `${i + 1}분기`, sale: s * 0.1, buy: b * 0.1 }; });
+  const quarters = [[1, 2, 3], [4, 5, 6], [7, 8, 9], [10, 11, 12]].map((ms, i) => { const q = vatEstimate(orders.filter((r) => ms.includes(Number(String(r.상차일 || "").slice(5, 7)))), drivers); return { k: `${i + 1}분기`, sale: q.saleVat, buy: q.buyVat }; });
   const acc = {}; ledger.filter((r) => r.type === "지출" && String(r.date || "").startsWith(String(y))).forEach((r) => { acc[r.account || "기타"] = (acc[r.account || "기타"] || 0) + toInt(r.amount); });
   const accList = Object.entries(acc).sort((a, b) => b[1] - a[1]); const accTop = accList.slice(0, 6); const accRest = accList.slice(6).reduce((a, [, v]) => a + v, 0); if (accRest) accTop.push(["기타", accRest]);
   return (
     <div className="space-y-4">
       <BookHero en={`ACCOUNTING · ${y}`} title="회계 개요" desc="배차완료 기준 매출·매입과 미수·미지급·부가세를 한 화면에서"
-        kpis={[["올해 매출(공급가)", `${short(sale)}원`, `${orders.length.toLocaleString()}건`], ["매출총이익", `${short(sale - buy)}원`, `이익률 ${sale ? (((sale - buy) / sale) * 100).toFixed(1) : 0}%`], ["미수금 / 미지급", `${short(arSum)} / ${short(apSum)}`, "입금·지급 처리 기준"], ["예상 부가세", `${short(vat)}원`, "매출세액 − 매입세액(추정)"]]} />
+        kpis={[["올해 매출(공급가)", `${short(sale)}원`, `${orders.length.toLocaleString()}건`], ["매출총이익", `${short(sale - buy)}원`, `이익률 ${sale ? (((sale - buy) / sale) * 100).toFixed(1) : 0}%`], ["미수금 / 미지급", `${short(arSum)} / ${short(apSum)}`, "미수금은 부가세 포함"], ["예상 부가세(추정)", `${short(vat)}원`, `매출세액 ${short(vatE.saleVat)} − 매입세액 ${short(vatE.buyVat)}`]]} />
       <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)] gap-4">
         <BookCard en="MONTHLY" title="월별 매출 · 매입 · 이익률">
           <div className="h-[280px] -ml-2"><ResponsiveContainer width="100%" height="100%">
@@ -125,7 +126,7 @@ export function AccountingOverview({ company, orders }) {
         </BookCard>
       </div>
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <BookCard en="VAT · QUARTERLY" title="분기별 매출·매입 세액(추정)">
+        <BookCard en="VAT · QUARTERLY" title="예상 부가세(추정)">
           <div className="h-[200px] -ml-2"><ResponsiveContainer width="100%" height="100%">
             <ComposedChart data={quarters} margin={{ top: 8, right: 4, left: 0, bottom: 0 }}>
               <CartesianGrid stroke="#EEF2F8" vertical={false} />
@@ -136,7 +137,12 @@ export function AccountingOverview({ company, orders }) {
               <Bar dataKey="buy" name="매입세액" fill="#9FB2D6" radius={[6, 6, 0, 0]} maxBarSize={24} />
             </ComposedChart>
           </ResponsiveContainer></div>
-          <div className="text-[11.5px] text-[#9AA9C3]">기사운임 매입세액은 세금계산서 수취분만 공제됩니다 — 참고용</div>
+          <div data-testid="acct-vat-breakdown" className="mt-1 rounded-xl bg-[#F4F6FA] px-3 py-2.5 space-y-1 text-[12.5px]">
+            <div className="flex justify-between"><span className="font-bold text-[#3A4A66]">매출세액 · 계산서 {vatE.saleCount.toLocaleString()}건</span><span className="font-black tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{won(vatE.saleVat)}원</span></div>
+            <div className="flex justify-between"><span className="font-bold text-[#3A4A66]">매입세액 · 계산서 받는 기사 {vatE.buyCount.toLocaleString()}건</span><span className="font-black tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>−{won(vatE.buyVat)}원</span></div>
+            <div className="flex justify-between pt-1 border-t border-[#E3E8F0]"><span className="font-black text-[#0F1A30]">예상 부가세</span><span className="font-black tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{won(vatE.vat)}원</span></div>
+          </div>
+          <div className="text-[11.5px] text-[#9AA9C3] mt-1.5">매출세액은 지급방식 계산서 오더만, 매입세액은 기사관리에서 세금계산서 발행 기사로 켠 기사 운임만 셉니다. 추정치예요</div>
         </BookCard>
         <BookCard en="TOP RECEIVABLES" title="미수금 상위 거래처">
           {!arList.length ? <div className="py-8 text-center text-[13px] font-bold text-[#9AA9C3]">미수금이 없습니다</div> : arList.slice(0, 6).map((x) => (

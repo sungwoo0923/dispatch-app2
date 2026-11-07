@@ -12,6 +12,9 @@ import CustomDatePicker from "./CustomDatePicker"; // 📅 2026-11-04 날짜 입
 import { collection, doc, onSnapshot, query, setDoc, where, arrayUnion, getDocs, getDoc } from "firebase/firestore";
 import { db, auth, DEFAULT_COMPANY } from "./firebase";
 import { leaveEntitlement, leaveUseOf } from "./approvalForms";
+import { leaveStatusOf } from "./leaveUtils"; // ⭐ 2026-11-07 연차 현황 공용 계산
+import { useLeaveBasis } from "./leaveBasis";
+import { useCompanyRows } from "./companyColStore";
 import { isTMUser } from "./staffFilter";
 import { personName } from "./userNames";
 import { BookHero, BookCard, Chip, Sheet, MONO } from "./OfficeBooks";
@@ -71,6 +74,8 @@ const csv = (name, rows) => {
 export function LeaveLedger({ company, isViewer = false, canManage = false }) {
   const { loading, staff, profiles } = useStaff(company);
   const apprs = useLeaveApprovals(company);
+  const basis = useLeaveBasis(company); // ⭐ 2026-11-07 회사 회기 기준
+  const oldBoard = useCompanyRows("schedules", company); // 예전 휴가 게시판(전자결재 연차 현황과 같게 센다)
   const [team, setTeam] = React.useState("전체");
   const [filter, setFilter] = React.useState("all");
   const [q, setQ] = React.useState("");
@@ -82,15 +87,16 @@ export function LeaveLedger({ company, isViewer = false, canManage = false }) {
   React.useEffect(() => { setHPage(1); }, [sel]);
   const today = kstDay();
   const active = staff.filter((u) => u.employmentStatus !== "퇴사");
+  // ⭐ 2026-11-07 내정보 · 전자결재 연차 현황과 같은 계산(leaveUtils.leaveStatusOf) — 회사 회기 기준 · 승인된 것만 사용 · 예전 휴가 게시판 포함
   const rows = active.map((u) => {
     const hire = hireOf(u, profiles);
-    const ent = leaveEntitlement(hire);
     const mine = apprs.filter((a) => a.drafterUid === u.id);
-    const inPeriod = (a) => { const x = leaveUseOf(a); return x && ent && x.date >= ent.from && x.date <= ent.to ? x : null; };
-    const used = mine.filter((a) => a.status === "approved" && inPeriod(a)).reduce((s, a) => s + inPeriod(a).days, 0);
-    const wait = mine.filter((a) => a.status === "pending" && inPeriod(a)).reduce((s, a) => s + inPeriod(a).days, 0);
-    const adjList = ent ? (profiles[u.id]?.leaveAdjust || []).filter((x) => x.period === ent.from) : [];
-    const adjSum = adjList.reduce((s, x) => s + (Number(x.days) || 0), 0);
+    const st = leaveStatusOf({ hireDate: hire, uid: u.id, name: u.name || "", approvals: mine, schedules: (oldBoard || []).filter((x) => x.authorUid === u.id), adjust: profiles[u.id]?.leaveAdjust || [], basis });
+    const ent = st ? { ...st.ent, total: st.base } : null;
+    const used = st?.used || 0;
+    const wait = st?.pending || 0;
+    const adjList = st?.adj || [];
+    const adjSum = st?.adjSum || 0;
     const total = (ent?.total || 0) + adjSum;
     const remain = total - used;
     const left = ent ? dayGap(today, ent.to) : 0;

@@ -19,6 +19,7 @@ import HandoverCenter, { useHandoverUnread } from "./HandoverCenter";
 import { buildPastStats } from "./HomeDeck";
 import { useRouteCarrierFilter } from "./routeCarriers"; // ⭐ 2026-11-05 고정노선 운송업체 설정(끈 업체 오더는 매출에서 뺌)
 import { pcLiveWindowStart, pcPrevDay } from "./orderHistory";
+import { isUnassignedOrder } from "./unassignedRule"; // ⭐ 2026-11-07 미배차 공용 기준
 import { isTMUser } from "./staffFilter";
 import { personName } from "./userNames";
 import { useCompanyDriverDocs, docProblems } from "./driverRequiredDocs";
@@ -233,7 +234,9 @@ export function ExecDashboard({ company, dispatchData = [], onGo, pastCache, liv
 
   // 오늘의 현장
   const todayRows = (dispatchData || []).filter((r) => dateOf(r) === today && !isCancelled(r) && r.source !== "transport_transmit");
-  const unassigned = todayRows.filter((r) => (r.배차상태 || "") !== "배차완료");
+  // ⭐ 2026-11-07 배차 완료 = 배차상태 "배차완료"만(승인대기 등은 빼고) · 미배차 = 배차현황과 같은 공용 기준
+  const doneToday = todayRows.filter((r) => String(r.배차상태 || "").trim() === "배차완료");
+  const unassigned = todayRows.filter(isUnassignedOrder);
   const todaySale = (days[today] || [0])[0];
 
   // 결재
@@ -417,7 +420,7 @@ export function ExecDashboard({ company, dispatchData = [], onGo, pastCache, liv
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-4">
           <Panel en="LOGISTICS · TODAY" title="물류운송현황" >
             <div className="grid grid-cols-2 gap-2">
-              {[["오늘 오더", `${todayRows.length}`, "건"], ["배차 완료", `${todayRows.length - unassigned.length}`, "건"], ["미배차", `${unassigned.length}`, "건", unassigned.length > 0], ["오늘 매출", short(todaySale), "원"]].map(([l, v, u, bad]) => (
+              {[["오늘 오더", `${todayRows.length}`, "건"], ["배차 완료", `${doneToday.length}`, "건"], ["미배차", `${unassigned.length}`, "건", unassigned.length > 0], ["오늘 매출", short(todaySale), "원"]].map(([l, v, u, bad]) => (
                 <div key={l} className="rounded-2xl bg-white/[0.05] border border-white/[0.06] px-3 py-2.5">
                   <div className="text-[12.5px] font-bold text-white/50 whitespace-nowrap">{l}</div>
                   <div className={`text-[26px] font-black tabular-nums leading-tight ${bad ? "text-[#FFB4A8]" : ""}`} style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{v}<span className="text-[13.5px] text-white/40 ml-0.5">{u}</span></div>
@@ -425,8 +428,8 @@ export function ExecDashboard({ company, dispatchData = [], onGo, pastCache, liv
               ))}
             </div>
             <div className="mt-2.5">
-              <div className="flex justify-between text-[12.5px] font-bold text-white/50 mb-1"><span>배차율</span><span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{todayRows.length ? Math.round(((todayRows.length - unassigned.length) / todayRows.length) * 100) : 0}%</span></div>
-              <div className="h-1.5 rounded-full bg-white/[0.08] overflow-hidden"><div className="h-full rounded-full" style={{ width: `${todayRows.length ? ((todayRows.length - unassigned.length) / todayRows.length) * 100 : 0}%`, background: `linear-gradient(90deg, ${ICE}, #CFE0FF)` }} /></div>
+              <div className="flex justify-between text-[12.5px] font-bold text-white/50 mb-1"><span>배차율</span><span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{todayRows.length ? Math.round((doneToday.length / todayRows.length) * 100) : 0}%</span></div>
+              <div className="h-1.5 rounded-full bg-white/[0.08] overflow-hidden"><div className="h-full rounded-full" style={{ width: `${todayRows.length ? (doneToday.length / todayRows.length) * 100 : 0}%`, background: `linear-gradient(90deg, ${ICE}, #CFE0FF)` }} /></div>
             </div>
           </Panel>
 

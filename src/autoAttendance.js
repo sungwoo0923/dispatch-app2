@@ -8,11 +8,11 @@
 //  · 연차·병가 등 하루 휴가는 출근 기록 없이 그 휴가로 표시
 import { collection, doc, getDoc, getDocs, query, setDoc, where } from "firebase/firestore";
 import { db } from "./firebase";
+import { workWindow } from "./lateRule";
 import { approvalLeaveOn, findApprovedLeaveForDate, isHoliday, isWeekend } from "./attendanceUtils";
 
 export const HALF_LEAVES = ["오전반차", "오후반차"];
 const NOT_LEAVE = ["외근", "조퇴"]; // 출근은 하는 날
-const hm = (s, d) => { const m = String(s || d).match(/^(\d{1,2}):(\d{2})/); return m ? Number(m[1]) * 60 + Number(m[2]) : hm(d, "09:00"); };
 export const kstToday = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
 export const kstNowMin = () => { const d = new Date(Date.now() + 9 * 3600e3); return d.getUTCHours() * 60 + d.getUTCMinutes(); };
 export const minToHm = (m) => `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
@@ -20,16 +20,8 @@ export const minToHm = (m) => `${String(Math.floor(m / 60)).padStart(2, "0")}:${
 // 출근·퇴근 시간 선택지(30분 단위) — 직원관리·가입 승인 드롭다운
 export const WORK_TIME_OPTIONS = Array.from({ length: 48 }, (_, i) => minToHm(i * 30));
 
-// 그날의 근무 기준 시간(분) — 반차 반영
-export function workWindow(emp, leave) {
-  const s = hm(emp?.workStartTime, "09:00");
-  let e = hm(emp?.workEndTime, "18:00");
-  if (e <= s) e = s + 9 * 60;
-  let start = s; let end = e;
-  if (leave === "오전반차") start = Math.min(e - 60, s + 4 * 60);
-  if (leave === "오후반차") end = Math.max(s + 60, s + 4 * 60);
-  return { start, end, inFrom: Math.max(0, start - 180), inUntil: end, outFrom: Math.max(start, end - 60) };
-}
+// 그날의 근무 기준 시간(분) — 반차 반영 · ⭐ 2026-11-07 src/lateRule.js 공용(출근시간 없으면 09:00)
+export { workWindow };
 
 // 오늘 승인된 휴가·외근(구 일정 + 전자결재) 그대로 — "외근"·"조퇴"도 돌려준다
 export async function todayLeaveRaw(uid, name, today = kstToday()) {

@@ -34,6 +34,7 @@ import OrderLookupModal from "./OrderLookup"; // ⭐ 2026-11-03 담당자·차�
 import MgrBadge, { setMgrNameMap } from "./MgrBadge";
 import { isUrgentOrder, UrgentBadge, urgentRowStyle } from "./urgentOrder"; // ⭐ 2026-11-06 긴급 오더 강조(모든 현황 공용)
 import { askCopyDates } from "./CopyCountDialog"; // ⭐ 2026-11-06 복사 등록 — 몇 건·건별 날짜
+import { dispatchStatusOf, payTypeStatusPatch } from "./dispatchStatus"; // 🚚 2026-11-07 배차상태 공용 규칙
 import { requestRouteSheetPush } from "./routeSheetPush"; // 💰 2026-11-06 고정노선 오더 고치면 바로 시트에
 import { makeClientMatcher } from "./clientMatch"; // ⭐ 2026-11-03 거래처 검색: 정확히 같은 이름이 있으면 그것만
 import DetailFilterButton, { applyDetailFilter, DetailScope } from "./DetailFilter"; // 🔎 2026-11-03 세부검색(최대 3차)
@@ -94,7 +95,8 @@ const RateCard = lazyView(() => import("./RateCard"));
 import AiAssistant from "./AiAssistant";
 import InternalMessenger from "./InternalMessenger";
 import { calcLeaveBalance } from "./leaveUtils";
-import { agingOf } from "./arAging"; // ⭐ 2026-11-07 미수 연령 공용 계산
+import { useMyLeaveExtras, useLeaveBasis } from "./leaveBasis"; // ⭐ 2026-11-07 내정보 연차 = 전자결재 연차 현황
+import { receivablesOf, invoiceDriverPlates, isTaxInvoiceSale, statementRowsOf, stmtIncludePrepaidOf, isPrepaidPay } from "./arAging"; // ⭐ 2026-11-07 미수금(부가세 포함) · 예상 부가세 공용 계산
 import { TEAM_OPTIONS, POSITION_OPTIONS, TEAM_BADGE_CLASS, TEAM_BADGE_CLASS_UNASSIGNED } from "./hrConstants";
 const AttendanceBoard = lazyView(() => import("./AttendanceBoard"));
 import { todayStr as attendanceTodayStr, isWeekend, findApprovedLeaveForDate, isHoliday, isScheduleApproved, LEAVE_TYPE_LABEL, ATTENDANCE_STATUS_COLOR, approvalLeaveOn, hrLeaveOn } from "./attendanceUtils";
@@ -2904,7 +2906,7 @@ import PersonnelOrder, { OrderNoticeHistory } from "./PersonnelOrder";
 import OrderScanModal, { looksLikeOrder, scanDropDate } from "./OrderScanModal";
 import { mainScanAi } from "./orderScanApi"; // 🧠 2026-11-07 오더 스캔 정밀 인식(서버 글자 인식 · AI 칸 정리 · 회사별 학습)
 import KpSubNav, { SubNavBar, useIsPhone } from "./KpSubNav";
-import { useArDesk, arDeskId, stageIdx, stageLabel, AGING, agingKey, StatementBoard, StatementLineGrid, StatementHistory, StageStepper, StageRecordModal, StageBadge, KpModal, ArOverview, ArClientList, ArAccrualMap, ArDetail, AR_STATUS, sdBtn, sdBtnPri, sdInp, Ico, IC } from "./SettleDesk"; // 🧾 2026-11-07 거래명세서 단계 보드 · 미수금 데스크
+import { useArDesk, PrepaidToggle, arDeskId, stageIdx, stageLabel, AGING, agingKey, StatementBoard, StatementLineGrid, StatementHistory, StageStepper, StageRecordModal, StageBadge, KpModal, ArOverview, ArClientList, ArAccrualMap, ArDetail, AR_STATUS, sdBtn, sdBtnPri, sdInp, Ico, IC } from "./SettleDesk"; // 🧾 2026-11-07 거래명세서 단계 보드 · 미수금 데스크
 import RevenueDashboard from "./RevenueDashboard";
 import { TargetPage, ClientsPage, TrendPage, YearlyPage, QueryPage } from "./RevenuePages";
 import { RecurringManagerModal, CloseReportModal } from "./AutomationPanels";
@@ -9270,7 +9272,7 @@ return (
         {menu === "스케줄" && menuState("스케줄") === "ok" && <ExecScheduleBoard company={deptCompany} me={{ uid: user?.uid, name: myProfileDoc?.name || user?.displayName || "", position: myProfileDoc?.position || "" }} canWrite />}
         {menu === "전자결재" && menuState("전자결재") === "ok" && <ApprovalWorkspace company={deptCompany} me={{ uid: user?.uid, name: myProfileDoc?.name || user?.displayName || "", team: myProfileDoc?.team || "", position: myProfileDoc?.position || "", role }} />}
         {/* 🏢 2026-10-31 경리·인사 부서 메뉴 */}
-        {menu === "회계관리" && menuState("회계관리") === "ok" && <AccountingWorkspace company={deptCompany} fixedRows={fixedRows} clients={clients} isViewer={isViewer} role={realRole || role} />}
+        {menu === "회계관리" && menuState("회계관리") === "ok" && <AccountingWorkspace company={deptCompany} fixedRows={fixedRows} clients={clients} drivers={drivers} isViewer={isViewer} role={realRole || role} />}
         {menu === "자금관리" && menuState("자금관리") === "ok" && <FundsWorkspace company={deptCompany} isViewer={isViewer} />}
         {menu === "비품관리" && menuState("비품관리") === "ok" && <AssetManager company={deptCompany} isViewer={isViewer} />}
         {menu === "인사관리부" && menuState("인사관리부") === "ok" && (
@@ -13934,11 +13936,8 @@ showAlert(
     if (!proceed) { setIsSaving(false); return; }
   }
 
-const status = form.지급방식 === "취소"
-    ? "배차취소"
-    : form.차량번호 && (form.이름 || form.전화번호)
-    ? "배차완료"
-    : "배차중";
+// 🚚 2026-11-07 배차완료 = 차량번호만 있으면(모바일·여러 건 등록과 같음 · 기사 이름은 기사관리에서 채움)
+const status = dispatchStatusOf({ 지급방식: form.지급방식, 차량번호: form.차량번호 });
 
   const moneyPatch = canMoney ? {} : {
     청구운임: "0",
@@ -18088,11 +18087,7 @@ className={`
    <CompanyOptionPicker optKey="지급방식" placeholder="선택" noneLabel="선택" ref={payTypeRef} className={`${inputCls}${requiredErrors.has("지급방식") ? " border-red-500 ring-2 ring-red-300 animate-pulse" : ""}`} value={form.지급방식} onChange={(__v) => ((e) => {
   const v = e.target.value;
   onChange("지급방식", v);
- if (v === "취소") {
-  onChange("배차상태", "배차취소");
-} else if (form.배차상태 === "배차취소") {
-  onChange("배차상태", form.차량번호 && (form.이름 || form.전화번호) ? "배차완료" : "배차중");
-}
+ { const sp = payTypeStatusPatch(form, v); if (sp.배차상태) onChange("배차상태", sp.배차상태); }
 })({ target: { value: __v } })} />
   </div>
 
@@ -19942,13 +19937,7 @@ className={`
               // "변경" 버튼을 눌렀을 때 느껴지던 지연의 유력한 원인이었다.
               const row = (dispatchData || []).find(r => r._id === confirmChange.rowId);
 if (confirmChange.key === "지급방식") {
-  if (confirmChange.after === "취소") {
-    patch.배차상태 = "배차취소";
-  } else {
-    if (row?.배차상태 === "배차취소") {
-      patch.배차상태 = row?.차량번호 && (row?.이름 || row?.전화번호) ? "배차완료" : "배차중";
-    }
-  }
+  Object.assign(patch, payTypeStatusPatch(row || {}, confirmChange.after)); // 🚚 2026-11-07 공용 규칙(모바일과 같음)
 }
 patchDispatch(confirmChange.rowId, patch, row).catch(console.error);
 setConfirmChange(null);
@@ -34522,13 +34511,7 @@ if (editTarget.하차지명) savePlaceSmart(editTarget.하차지명, editTarget.
                       patch.__system = true;
                     }
 if (confirmChange.key === "지급방식") {
-  if (confirmChange.after === "취소") {
-    patch.배차상태 = "배차취소";
-  } else {
-    if (row?.배차상태 === "배차취소") {
-      patch.배차상태 = row?.차량번호 && (row?.이름 || row?.전화번호) ? "배차완료" : "배차중";
-    }
-  }
+  Object.assign(patch, payTypeStatusPatch(row || {}, confirmChange.after)); // 🚚 2026-11-07 공용 규칙(모바일과 같음)
 }
 // ⭐ 이 화면의 grid는 dispatchData가 아니라 별도 로컬 rows 상태(마운트 시점
 // 스냅샷)를 그대로 filtered로 파생해서 그리는데, patchDispatch는 공용
@@ -38482,7 +38465,7 @@ if (mode === "driver") {
           }
         }
         // 차량번호 + (기사명 또는 전화번호)가 있으면 배차완료, 없으면 배차중
-        mappedRow.배차상태 = cleanCar && (mappedRow.이름 || mappedRow.전화번호) ? "배차완료" : "배차중";
+        mappedRow.배차상태 = dispatchStatusOf({ 지급방식: mappedRow.지급방식, 차량번호: cleanCar }); // 🚚 2026-11-07 차량번호만 있어도 배차완료
 
         return mappedRow;
       });
@@ -43974,8 +43957,8 @@ setCopyPlaceOptions(list);
                 patch.업체전달방법 = confirmChange.after === "전달완료" ? "수동" : null;
                 patch.__system = true;
               }
-              if (confirmChange.field === "지급방식" && confirmChange.after === "취소") {
-                patch.배차상태 = "배차취소";
+              if (confirmChange.field === "지급방식") {
+                Object.assign(patch, payTypeStatusPatch((dispatchData || []).find(r => r._id === confirmChange.id) || {}, confirmChange.after));
               }
               await patchDispatch(confirmChange.id, patch);
               setConfirmChange(null);
@@ -44010,8 +43993,8 @@ setCopyPlaceOptions(list);
                     patch.업체전달방법 = confirmChange.after === "전달완료" ? "수동" : null;
                     patch.__system = true;
                   }
-                  if (confirmChange.field === "지급방식" && confirmChange.after === "취소") {
-                    patch.배차상태 = "배차취소";
+                  if (confirmChange.field === "지급방식") {
+                    Object.assign(patch, payTypeStatusPatch((dispatchData || []).find(r => r._id === confirmChange.id) || {}, confirmChange.after));
                   }
                   // 저장을 기다리지 않고 즉시 팝업을 닫아 끊김 없이 반응하게 한다.
                   patchDispatch(confirmChange.id, patch).catch(console.error);
@@ -46385,7 +46368,7 @@ function ProfitLossReport({ dispatchData = [], fixedRows = [], clients = [], pla
 }
 
 // ===================== 회계자료 컴포넌트 =====================
-function AccountingDashboard({ dispatchData = [], fixedRows = [], clients = [], isViewer = false }) {
+function AccountingDashboard({ dispatchData = [], fixedRows = [], clients = [], drivers = [], isViewer = false }) {
   const currentYear = new Date().getFullYear();
   const [subTab, setSubTab] = React.useState("ar");
   const [year, setYear] = React.useState(currentYear);
@@ -46420,25 +46403,13 @@ function AccountingDashboard({ dispatchData = [], fixedRows = [], clients = [], 
     return all.filter(r => (r.상차일 || "").slice(0, 4) === String(year));
   }, [dispatchData, fixedRows, year]);
 
+  // ⭐ 2026-11-07 청구액 = 부가세 포함(거래처정산 미수금과 같은 식 · 수금 기록은 실제 입금액) — 회계 개요·일일 경영 보고·경영 분석·AI 비서와 같은 계산
+  //   연체 구분 = 아직 못 받은 청구 중 가장 오래된 것의 경과일(오래된 청구부터 수금된 것으로 봄)
   const arByClient = React.useMemo(() => {
-    const map = {};
-    yearOrders.forEach(r => {
-      const c = r.거래처명 || r.상차지명 || "미분류";
-      if (!map[c]) map[c] = { invoiced: 0, list: [] };
-      map[c].invoiced += toInt(r.청구운임);
-      const d = r.상차일;
-      if (d) map[c].list.push({ d: String(d).slice(0, 10), amt: toInt(r.청구운임) });
-    });
     const todayK = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
-    return Object.entries(map).map(([c, v]) => {
-      const paid = arPayments[c] || 0;
-      const outstanding = Math.max(0, v.invoiced - paid);
-      // ⭐ 2026-11-07 규칙 점검 — 연체 구분 = 아직 못 받은 청구 중 가장 오래된 것의 경과일(오래된 청구부터 수금된 것으로 봄 ·
-      //   일일 경영 보고·회계 개요와 같은 방식). 예전엔 올해 첫 오더 날짜라 1월분을 다 받은 거래처도 "90일+"로 보였다.
-      const ageDays = agingOf(v.list, paid, todayK).oldest;
-      return { client: c, invoiced: v.invoiced, paid, outstanding, ageDays };
-    }).sort((a, b) => b.outstanding - a.outstanding);
-  }, [yearOrders, arPayments]);
+    return receivablesOf({ orders: yearOrders, paid: arPayments, today: todayK, year: String(year) })
+      .map((x) => ({ client: x.client, invoiced: x.billed, paid: x.paid, outstanding: x.outstanding, ageDays: x.oldest }));
+  }, [yearOrders, arPayments, year]);
 
   const apByDriver = React.useMemo(() => {
     const map = {};
@@ -46458,9 +46429,13 @@ function AccountingDashboard({ dispatchData = [], fixedRows = [], clients = [], 
   const vatData = React.useMemo(() => {
     const m = {};
     MONTHS.forEach(mo => { m[mo] = { sales: 0, costs: 0 }; });
+    // ⭐ 2026-11-07 예상 부가세 — 매출 = 지급방식 계산서 오더 · 매입 = 세금계산서 발행 기사(기사관리) 운임(회계 개요와 같은 계산)
+    const invPlates = invoiceDriverPlates(drivers);
     yearOrders.forEach(r => {
       const mo = (r.상차일 || "").slice(5, 7);
-      if (m[mo]) { m[mo].sales += toInt(r.청구운임); m[mo].costs += toInt(r.기사운임); }
+      if (!m[mo]) return;
+      if (isTaxInvoiceSale(r)) m[mo].sales += toInt(r.청구운임);
+      if (invPlates.has(String(r.차량번호 || "").replace(/\s+/g, "").toUpperCase())) m[mo].costs += toInt(r.기사운임);
     });
     const quarters = { Q1: [0,1,2], Q2: [3,4,5], Q3: [6,7,8], Q4: [9,10,11] };
     const qData = {};
@@ -46473,7 +46448,7 @@ function AccountingDashboard({ dispatchData = [], fixedRows = [], clients = [], 
       };
     });
     return { monthly: m, quarters: qData };
-  }, [yearOrders]);
+  }, [yearOrders, drivers]);
 
   const costByType = React.useMemo(() => {
     const map = {};
@@ -46631,7 +46606,7 @@ function AccountingDashboard({ dispatchData = [], fixedRows = [], clients = [], 
       {subTab === "ar" && (
         <div className="space-y-5">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <KpiCard label="총 청구액" value={`${won(totalInvoiced)}원`} />
+            <KpiCard label="총 청구액" value={`${won(totalInvoiced)}원`} sub="부가세 포함 · 고정거래처 포함" />
             <KpiCard label="수금 완료" value={`${won(totalArPaid)}원`} highlight="ok" />
             <KpiCard label="미수금 잔액" value={`${won(totalAr)}원`} highlight={totalAr > 0 ? "danger" : "ok"} />
             <KpiCard label="미수금 비율" value={totalInvoiced > 0 ? `${(totalAr / totalInvoiced * 100).toFixed(1)}%` : "–"} sub="미수금 / 청구액" />
@@ -46757,11 +46732,11 @@ function AccountingDashboard({ dispatchData = [], fixedRows = [], clients = [], 
 
           {/* 분기 요약 */}
           <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-            <KpiCard label="공급가액 (매출)" value={`${currentQData.sales.toLocaleString()}원`} />
+            <KpiCard label="계산서 매출 공급가액" value={`${currentQData.sales.toLocaleString()}원`} />
             <KpiCard label="매출세액 (10%)" value={`${vatOutput.toLocaleString()}원`} />
-            <KpiCard label="매입공급가액" value={`${currentQData.costs.toLocaleString()}원`} />
+            <KpiCard label="계산서 받는 기사 운임" value={`${currentQData.costs.toLocaleString()}원`} sub="기사관리 세금계산서 발행 기사" />
             <KpiCard label="매입세액 (10%)" value={`${vatInput.toLocaleString()}원`} />
-            <KpiCard label="납부세액" value={`${vatNet.toLocaleString()}원`} highlight={vatNet > 0 ? "danger" : "ok"} sub="매출세액 – 매입세액" />
+            <KpiCard label="예상 납부세액" value={`${vatNet.toLocaleString()}원`} highlight={vatNet > 0 ? "danger" : "ok"} sub="매출세액 − 매입세액(추정)" />
             <KpiCard label="과세 기준" value="일반과세" sub="10% 부가가치세 적용" />
           </div>
 
@@ -46770,7 +46745,7 @@ function AccountingDashboard({ dispatchData = [], fixedRows = [], clients = [], 
             <table className="min-w-full border-collapse">
               <thead>
                 <tr>
-                  {["월","공급가액(매출)","매출세액","매입공급가액","매입세액","납부세액"].map((h, i) => (
+                  {["월","계산서 매출","매출세액","기사 운임(계산서)","매입세액","납부세액"].map((h, i) => (
                     <th key={i} style={{ ...thStyle, textAlign: i === 0 ? "left" : "right" }}><EditableText id={`settlement.vatMonthly.header.${h}`} defaultText={h} /></th>
                   ))}
                 </tr>
@@ -46807,7 +46782,7 @@ function AccountingDashboard({ dispatchData = [], fixedRows = [], clients = [], 
               </tbody>
             </table>
           </div>
-          <p className="text-[11px] text-gray-500">* 배차완료 청구운임을 과세표준(공급가액)으로, 기사운임을 매입가액으로 산정합니다. 실제 신고 시 세무사 확인을 권장합니다.</p>
+          <p className="text-[11px] text-gray-500">* 매출세액은 지급방식 계산서 오더 청구운임, 매입세액은 기사관리에서 세금계산서 발행 기사로 켠 기사의 운임으로 셉니다. 실제 신고는 세무사 확인을 권장합니다.</p>
         </div>
       )}
 
@@ -51418,8 +51393,18 @@ const patchMonthOnDoc = async (id, yyyymm, status, dateStr) => {
     });
   }, [found, client]);
 
+  // ⭐ 2026-11-07 거래명세서 선불·착불 포함 여부 — 회사 기본(arDesk 설정 · 처음엔 빼기) · 명세서마다 따로(단계 기록에 저장)
+  //  미수금(미수금관리 · 회계관리 등)은 지금처럼 선불·착불도 넣는다. 명세서 줄 · 합계 · 세액 · 인쇄/PDF · 메일만 이 선택을 따른다
+  const desk = useArDesk((localStorage.getItem("loginCompany") || userCompany || localStorage.getItem("userCompany") || DEFAULT_COMPANY).trim());
+  const prepaidDefault = desk.config?.stmtIncludePrepaid === true;
+  const invYmEarly = searchType === "거래처명" && client && start && end && start.slice(0, 7) === end.slice(0, 7) && start === monthStart(start.slice(0, 7)) && end === monthEnd(start.slice(0, 7)) ? start.slice(0, 7) : "";
+  const invStmtDocEarly = invYmEarly ? desk.stmts.get(`${csBizCur}|${client}|${invYmEarly}`) || null : null;
+  const [invPrepaidLocal, setInvPrepaidLocal] = useState(null);
+  useEffect(() => { setInvPrepaidLocal(null); }, [client, start, end, searchType]);
+  const invIncPrepaid = invPrepaidLocal ?? stmtIncludePrepaidOf(invStmtDocEarly, prepaidDefault);
+
   // ★ 청구운임 0 제외 필터 추가
-  const rowsInvoice = useMemo(() => {
+  const rowsInvoiceAll = useMemo(() => {
     if (!searched) return [];
     let list = Array.isArray(dispatchData) ? dispatchData : [];
     list = list.filter(r => (r.배차상태 || "") === "배차완료");
@@ -51432,6 +51417,8 @@ const patchMonthOnDoc = async (id, yyyymm, status, dateStr) => {
     list = list.filter(csBizOk); // ⭐ 청구 사업자
     return list.sort((a, b) => (a.상차일 || "").localeCompare(b.상차일 || ""));
   }, [dispatchData, client, start, end, searched, searchType, csBizCur, csBiz.multi]); // eslint-disable-line react-hooks/exhaustive-deps
+  const rowsInvoice = useMemo(() => statementRowsOf(rowsInvoiceAll, invIncPrepaid).rows, [rowsInvoiceAll, invIncPrepaid]);
+  const invPrepaidOut = rowsInvoiceAll.length - rowsInvoice.length; // 선불·착불이라 뺀 건수
 
   // ★ 조회결과 중 명세서에 포함할 오더만 선택 (기본값: 전체 선택)
   const [selectedInvoiceIds, setSelectedInvoiceIds] = useState(new Set());
@@ -52922,7 +52909,7 @@ const handleBatchSettle = async (targetStatus) => {
 
   // ══════════ ⭐ 2026-11-07 거래명세서 단계 보드 · 미수금 데스크 ══════════
   //  금액은 위의 식(거래명세서 mapInvoiceRows · 미수금 buildMonthRows · 입금 배분 allocArDeposit)을 그대로 쓴다
-  const desk = useArDesk(arCompany);
+  // (desk = 회사 arDesk 구독 — 위 거래명세서 조회에서 이미 만들었다)
   const csPhone = useIsPhone();
   const kstYm = (n = 0) => { const d = new Date(Date.now() + 9 * 3600e3); d.setUTCDate(1); d.setUTCMonth(d.getUTCMonth() + n); return d.toISOString().slice(0, 7); };
   const [pipeMonth, setPipeMonth] = useState(() => kstYm(-1));
@@ -52944,16 +52931,17 @@ const handleBatchSettle = async (targetStatus) => {
     return [...m.entries()].map(([c, rows]) => {
       const d = stmtDocOf(c, ym);
       const ex = new Set(d?.excludedIds || []);
-      const inc = rows.filter(r => !ex.has(r._id)).sort((a, b) => (a.상차일 || "").localeCompare(b.상차일 || ""));
+      const pp = statementRowsOf(rows, stmtIncludePrepaidOf(d, prepaidDefault)); // ⭐ 2026-11-07 선불·착불 포함 여부(명세서마다 · 없으면 회사 기본)
+      const inc = pp.rows.filter(r => !ex.has(r._id)).sort((a, b) => (a.상차일 || "").localeCompare(b.상차일 || ""));
       const supply = inc.reduce((a, r) => a + toInt(r.청구운임), 0);
       const vat = inc.reduce((a, r) => a + Math.round(toInt(r.청구운임) * 0.1), 0);
       const hist = d?.history || [];
       const lastAt = hist.length ? Math.max(...hist.map(h => (typeof h.at === "number" ? h.at : h.at?.seconds ? h.at.seconds * 1000 : 0))) : 0;
-      return { key: `${c}|${ym}`, client: c, yyyymm: ym, rows: inc, count: inc.length, supply, vat, total: supply + vat, stage: d?.stage || "미작성", doc: d, lastAt, email: emailOf(c), settled: rows.every(r => r.정산상태?.[ym] === "정산완료") };
+      return { key: `${c}|${ym}`, client: c, yyyymm: ym, rows: inc, count: inc.length, supply, vat, total: supply + vat, prepaidOut: pp.excluded.length, stage: d?.stage || "미작성", doc: d, lastAt, email: emailOf(c), settled: rows.every(r => r.정산상태?.[ym] === "정산완료") };
     });
   };
-  const pipeGroups = useMemo(() => groupsOfMonth(pipeMonth), [billRows, pipeMonth, desk.stmts, clients]); // eslint-disable-line react-hooks/exhaustive-deps
-  const pipeRecent = useMemo(() => Array.from({ length: 6 }, (_, i) => kstYm(i - 5)).map(ym => ({ ym, open: groupsOfMonth(ym).filter(g => g.stage !== "마감").length })), [billRows, desk.stmts]); // eslint-disable-line react-hooks/exhaustive-deps
+  const pipeGroups = useMemo(() => groupsOfMonth(pipeMonth), [billRows, pipeMonth, desk.stmts, clients, prepaidDefault]); // eslint-disable-line react-hooks/exhaustive-deps
+  const pipeRecent = useMemo(() => Array.from({ length: 6 }, (_, i) => kstYm(i - 5)).map(ym => ({ ym, open: groupsOfMonth(ym).filter(g => g.stage !== "마감").length })), [billRows, desk.stmts, prepaidDefault]); // eslint-disable-line react-hooks/exhaustive-deps
   const stmtSnap = (g) => ({ count: g.count, supply: g.supply, vat: g.vat });
   const setStmtStage = async (c, ym, stage, { note = "", date = "", extra = null } = {}) => {
     const cur = stmtDocOf(c, ym);
@@ -52985,11 +52973,17 @@ const handleBatchSettle = async (targetStatus) => {
   const exSaved = [...(stmtCur?.excludedIds || [])].sort().join(",");
   const saveStmtDraft = async () => {
     if (!stmtYm) return;
-    const extra = { count: mapped.length, supply: 합계공급가, vat: 합계세액, excludedIds: excludedRowsInvoice.map(r => r._id) };
+    const extra = { count: mapped.length, supply: 합계공급가, vat: 합계세액, excludedIds: excludedRowsInvoice.map(r => r._id), includePrepaid: invIncPrepaid };
     if (stageIdx(stmtStage) >= 1) { await desk.save(stmtDocId(client, stmtYm), { kind: "stmt", client, yyyymm: stmtYm, biz: csBizCur, ...extra }); sflowToast("포함 오더를 저장했어요", "success"); return; }
     await setStmtStage(client, stmtYm, "작성", { extra });
     sflowToast(`${client} ${Number(stmtYm.slice(5))}월 명세서 작성 완료`, "success");
   };
+  // ⭐ 2026-11-07 선불·착불 포함 — 이 명세서만(한 달 · 한 거래처면 단계 기록에 저장) / 회사 기본
+  const toggleInvPrepaid = (on) => {
+    setInvPrepaidLocal(on);
+    if (stmtYm && !isViewer) desk.save(stmtDocId(client, stmtYm), { kind: "stmt", client, yyyymm: stmtYm, biz: csBizCur, includePrepaid: on, ...(stmtCur ? {} : { stage: "미작성" }) }).catch(() => {});
+  };
+  const savePrepaidDefault = (on) => { if (!isViewer) desk.saveConfig({ stmtIncludePrepaid: on }).catch(() => {}); };
   // 거래명세서 메일 창 열기(예전 "명세서 발송" 버튼과 같은 내용)
   const openInvoiceEmail = () => {
     if (!searched || !rowsInvoice.length) return showAlert("먼저 조회를 실행하세요.");
@@ -53253,6 +53247,9 @@ const handleBatchSettle = async (targetStatus) => {
                 <button type="button" onClick={() => setScheduledEmailListOpen(true)} className={sdBtn}>
                   <Ico d={IC.clock} size={15} />예약메일{csPendingScheduled > 0 && <span className="min-w-[20px] h-5 px-1 rounded-md bg-[#0F1A30] text-white text-[12px] font-black inline-flex items-center justify-center tabular-nums">{csPendingScheduled}</span>}
                 </button>
+                <div className="h-10 px-3 rounded-xl border border-[#D5DDEA] bg-white inline-flex items-center" title="새 명세서에 선불·착불 오더를 넣을지 정해요. 명세서마다 따로 바꿀 수 있어요">
+                  <PrepaidToggle compact on={prepaidDefault} onChange={savePrepaidDefault} disabled={isViewer} label="선불·착불 포함(기본)" testId="stmt-prepaid-default" />
+                </div>
               </>} />
           )}
 
@@ -53300,6 +53297,10 @@ const handleBatchSettle = async (targetStatus) => {
 
               <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,44fr)_minmax(0,56fr)] gap-3 items-start">
                 <div className="space-y-3 min-w-0">
+                  {searched && (
+                    <PrepaidToggle on={invIncPrepaid} onChange={toggleInvPrepaid} excluded={invPrepaidOut} disabled={isViewer}
+                      hint={invIncPrepaid ? `선불·착불 ${rowsInvoiceAll.filter(isPrepaidPay).length.toLocaleString()}건 포함` : "이 명세서엔 선불·착불이 없어요"} />
+                  )}
                   {!searched ? (
                     <div className={`${csCard} px-5 py-10 text-center`}>
                       <div className="text-[16px] font-black text-[#0F1A30]">거래처를 조회해 주세요</div>
@@ -57692,6 +57693,18 @@ function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, sho
                   <FleetExtraFields value={editDriverModal} onChange={setEditDriverModal} company={userCompany} />
                 </>
               )}
+              {/* ⭐ 2026-11-07 세금계산서 발행 기사 — 켜면 이 기사 운임의 10%를 회계관리 예상 부가세의 매입세액으로 뺀다 */}
+              <div className="col-span-2 flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2.5">
+                <div>
+                  <div className="text-[13px] font-semibold text-gray-700">세금계산서 발행 기사</div>
+                  <div className="text-[11px] text-gray-500 mt-0.5">운임을 줄 때 세금계산서를 받는 기사예요. 회계관리 예상 부가세의 매입세액에 들어가요</div>
+                </div>
+                <button type="button" role="switch" aria-checked={editDriverModal.세금계산서발행 === true} data-testid="driver-tax-invoice"
+                  onClick={() => setEditDriverModal(p => ({ ...p, 세금계산서발행: p.세금계산서발행 !== true }))}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors shrink-0 ${editDriverModal.세금계산서발행 === true ? "bg-[#1B2B4B]" : "bg-gray-300"}`}>
+                  <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${editDriverModal.세금계산서발행 === true ? "translate-x-6" : "translate-x-1"}`} />
+                </button>
+              </div>
               <div className="col-span-2">
                 <label className="block text-[12px] font-semibold text-gray-500 mb-1">메모</label>
                 <input autoComplete="off" className="border border-gray-200 rounded-lg px-3 py-2 text-[13px] w-full focus:border-[#1B2B4B] outline-none"
@@ -60631,7 +60644,9 @@ function MyProfilePage({ user, todayStats, myStats, cardImage, setCardImage, car
   }, [user?.uid, co]);
 
 
-  const leave = calcLeaveBalance(hireDate, mySchedules, user?.uid, myName || user?.displayName, []);
+  // ⭐ 2026-11-07 전자결재 연차 현황과 같은 계산 — 승인된 전자결재 연차·반차 + 예전 게시판 · 연차 조정 · 회사 회기 기준
+  const myLeaveX = useMyLeaveExtras(user?.uid, co);
+  const leave = calcLeaveBalance(hireDate, mySchedules, user?.uid, myName || user?.displayName, [], new Date(), myLeaveX);
 
   const yearsOfService = useMemo(() => {
     if (!hireDate) return null;
@@ -61205,6 +61220,7 @@ function HRManagementPage({ userCompany, role, userId, focusUid = null, selfOnly
   const [records, setRecords] = React.useState([]);
   const [resumes, setResumes] = React.useState({}); // uid -> resume data
   const [selectedUid, setSelectedUid] = React.useState(null);
+  const hrLeaveBasis = useLeaveBasis(company); // ⭐ 2026-11-07 회사 연차 회기 기준
   // 🔗 2026-11-01 전자결재 근태 승인분(연차·반차·병가·외근·육아휴직 등) → 근태/근속 현황
   const [leaveAprs, setLeaveAprs] = React.useState([]);
   React.useEffect(() => {
@@ -61278,7 +61294,8 @@ function HRManagementPage({ userCompany, role, userId, focusUid = null, selfOnly
     // ⭐ 2026-11-01 내 이력서(selfOnly) — 본인 기록만
     return members.filter((m) => !selfOnly || m.uid === userId).map(m => {
       const hireDate = profiles[m.uid]?.hireDate || "";
-      const leave = hireDate ? calcLeaveBalance(hireDate, schedules, m.uid, m.name, holidays) : null;
+      // ⭐ 2026-11-07 전자결재 연차 현황 · 내정보와 같은 계산(승인된 전자결재 연차·반차 + 예전 게시판 · 연차 조정 · 회사 회기 기준)
+      const leave = hireDate ? calcLeaveBalance(hireDate, schedules, m.uid, m.name, holidays, new Date(), { approvals: leaveAprs, adjust: profiles[m.uid]?.leaveAdjust || [], basis: hrLeaveBasis }) : null;
       let workDays = 0, leaveDays = 0, sickDays = 0, lateDays = 0, fieldM = 0;
       // ⭐ 2026-11-01 근태 — 날짜별 상태(달력 시각화) + 지각(출근 시각 > 근무 시작, 기준 없으면 09:00)
       const startHm = m.workStartTime || "09:00";
@@ -61319,7 +61336,7 @@ function HRManagementPage({ userCompany, role, userId, focusUid = null, selfOnly
       }
       return { ...m, hireDate, tenureLabel, leave, workDays, leaveDays, sickDays, lateDays, fieldM, days, lates, startHm, pendingApprovals, team: m.team || "미배정" };
     }).sort((a, b) => (a.name || "").localeCompare(b.name || ""));
-  }, [members, profiles, schedules, holidays, records, monthStr, numDaysSoFar, selfOnly, userId, leaveAprs]);
+  }, [members, profiles, schedules, holidays, records, monthStr, numDaysSoFar, selfOnly, userId, leaveAprs, hrLeaveBasis]);
 
   const filteredRows = React.useMemo(() => {
     return rows.filter(r => {
@@ -62929,7 +62946,7 @@ export function PcClientMobile({ clients = [], places = [], userCompany = "", ro
     places={places} showAlert={(m) => window.alert(m)} initialTab={initialTab} hideTabs userCompany={userCompany} />;
 }
 // 📊 경리 › 회계관리 — 회계 개요(시각화) · 회계 장부(미수·지급·부가세·원가) · 퇴직 정산
-function AccountingWorkspace({ company, fixedRows = [], clients = [], isViewer = false, role = "" }) {
+function AccountingWorkspace({ company, fixedRows = [], clients = [], drivers = [], isViewer = false, role = "" }) {
   const [tab, setTab] = React.useState("overview");
   const yearRows = useYearOrders(company, fixedRows);
   // ⭐ 2026-11-06 직원 급여 계산(급여관리 권한 — payrollAccess.js)
@@ -62938,8 +62955,8 @@ function AccountingWorkspace({ company, fixedRows = [], clients = [], isViewer =
     <KpSubNav code="ACCOUNTING" title="회계관리" icon="money" active={tab} onSelect={setTab}
       items={[{ key: "overview", label: "회계 개요", en: "OVERVIEW", icon: "chart" }, { key: "book", label: "회계 장부", en: "LEDGER", icon: "sheet" }, ...(payAcc.canView ? [{ key: "payroll", label: "급여 계산", en: "PAYROLL", icon: "money" }] : []), { key: "retire", label: "퇴직 정산", en: "RETIREMENT", icon: "user" }]}>
       {tab === "payroll" && payAcc.canView && <React.Suspense fallback={<div className="py-24 text-center text-[14px] font-bold text-[#9AA9C3]">급여 화면 불러오는 중…</div>}><PayrollCenterLazy company={company} role={role} /></React.Suspense>}
-      {tab === "overview" && <AccountingOverview company={company} orders={yearRows} />}
-      {tab === "book" && (yearRows ? <AccountingDashboard dispatchData={yearRows} fixedRows={[]} clients={clients} isViewer={isViewer} /> : <div className="py-24 text-center text-[14px] font-bold text-[#9AA9C3]">올해 운행 내역을 불러오는 중…</div>)}
+      {tab === "overview" && <AccountingOverview company={company} orders={yearRows} drivers={drivers} />}
+      {tab === "book" && (yearRows ? <AccountingDashboard dispatchData={yearRows} fixedRows={[]} clients={clients} drivers={drivers} isViewer={isViewer} /> : <div className="py-24 text-center text-[14px] font-bold text-[#9AA9C3]">올해 운행 내역을 불러오는 중…</div>)}
       {tab === "retire" && <RetireDesk company={company} isViewer={isViewer} />}
     </KpSubNav>
   );

@@ -39,6 +39,8 @@ import {
   blankSpendRow, spendRowTotal, spendLinesOf, spendTotals, wonKorean,
 } from "./approvalForms";
 import { bankText } from "./bankUtil";
+import { leaveStatusOf } from "./leaveUtils"; // ⭐ 2026-11-07 연차 현황 공용 계산
+import { useLeaveBasis } from "./leaveBasis";
 
 const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
 const toMs = (v) => (v?.toMillis ? v.toMillis() : typeof v === "number" ? v : v?.seconds ? v.seconds * 1000 : 0);
@@ -90,6 +92,9 @@ const acctViewOn = (role) => {
 const isFinUser = (me) => FIN_ROLES.includes(me?.role) || acctViewOn(me?.role) || FIN_TEAM.test(String(me?.team || ""));
 // null(지급 대상 아님) | "wait"(지급 대기) | "paid"(지급완료)
 export const payState = (d) => (!isPayDoc(d) || d.status !== "approved" ? null : d.paid?.at ? "paid" : "wait");
+// ⭐ 2026-11-07 지급완료된 지출결의는 결재 취소 요청을 막는다(경리가 지급완료를 먼저 취소) — firestore.rules apCancelReqOk와 같은 조건
+export const PAID_CANCEL_MSG = "지급완료를 먼저 취소해 주세요";
+export const cancelBlockedByPaid = (d) => payState(d) === "paid";
 const canPay = (d, me) => !!payState(d) && d.cancel?.status !== "pending" && isFinUser(me);
 
 // 🖼 2026-11-04 첨부 보기·저장 — 첨부는 base64 data URL이라 <a target="_blank">로는 크롬이 새 탭을 막아 아무 일도 안 일어났다.
@@ -1246,36 +1251,23 @@ function LineEditor({ line, setLine, cc, setCc, staff, me, company, cat }) {
 // ─────────────────────────── 내 연차 현황 ───────────────────────────
 //  입사일(userProfiles.hireDate) 기준 회기 동안 — 전자결재 연차·반차(승인=사용, 진행 중=대기)
 //  + 예전 휴가/외근 게시판에 올린 휴가·반차(2026년부터, 반려 제외)도 사용으로 센다.
-function useLeaveStatus(me, list) {
+function useLeaveStatus(me, list, company) {
   const [hireDate, setHireDate] = React.useState(null);
   const [adjust, setAdjust] = React.useState([]); // 인사관리자 연차 조정 이력(본인에게도 보인다)
   const [olds, setOlds] = React.useState([]);
+  const basis = useLeaveBasis(company); // ⭐ 2026-11-07 회사 회기 기준(입사일 / 회계연도)
   React.useEffect(() => {
     if (!me.uid) return undefined;
     const a = onSnapshot(doc(db, "userProfiles", me.uid), (s) => { setHireDate((s.exists() && s.data().hireDate) || ""); setAdjust((s.exists() && s.data().leaveAdjust) || []); }, () => setHireDate(""));
     const b = onSnapshot(query(collection(db, "schedules"), where("authorUid", "==", me.uid)), (s) => setOlds(s.docs.map((d) => d.data())), () => setOlds([]));
     return () => { a(); b(); };
   }, [me.uid]);
+  // ⭐ 2026-11-07 내정보 · 인사관리부와 같은 계산(leaveUtils.leaveStatusOf) — 승인된 것만 사용 · 진행 중은 대기
   return React.useMemo(() => {
-    const ent = leaveEntitlement(hireDate || "");
-    if (!ent) return { ent: null, hireDate, loading: hireDate === null };
-    const inPeriod = (dt) => dt && dt >= ent.from && dt <= ent.to;
-    let used = 0; let pending = 0;
-    (list || []).filter((d) => d.drafterUid === me.uid).forEach((d) => {
-      const u = leaveUseOf(d);
-      if (!u || !inPeriod(u.date)) return;
-      if (d.status === "approved") used += u.days;
-      else if (d.status === "pending") pending += u.days;
-    });
-    olds.forEach((x) => {
-      if ((x.approvers || []).some((a) => a.status === "rejected") || !x.start || x.start < "2026-01-01" || !inPeriod(x.start)) return;
-      if (x.type === "휴가") used += bizDays({ start: x.start, end: x.end || x.start });
-      else if (x.type === "오전반차" || x.type === "오후반차") used += 0.5;
-    });
-    const adj = (adjust || []).filter((x) => x.period === ent.from);
-    const adjSum = adj.reduce((s2, x) => s2 + (Number(x.days) || 0), 0);
-    return { ent: { ...ent, total: ent.total + adjSum }, hireDate, used, pending, remain: ent.total + adjSum - used, adj, adjSum };
-  }, [hireDate, olds, list, me.uid, adjust]);
+    const st = leaveStatusOf({ hireDate: hireDate || "", uid: me.uid, name: me.name, approvals: list || [], schedules: olds, adjust, basis });
+    if (!st) return { ent: null, hireDate, loading: hireDate === null };
+    return { ent: st.ent, hireDate, used: st.used, pending: st.pending, remain: st.remain, adj: st.adj, adjSum: st.adjSum };
+  }, [hireDate, olds, list, me.uid, me.name, adjust, basis]);
 }
 
 function LeaveCard({ leave, thisDays }) {
@@ -1673,6 +1665,7 @@ function Viewer({ d, me, staff, company, onClose, onRedraft, onEdit, inline = fa
     const isCancelFlow = kind.startsWith("c-");
     if ((kind === "reject" || kind === "c-reject") && !comment.trim()) { window.alert("반려 사유를 적어 주세요."); return; }
     if (kind === "cancel-req" && !comment.trim()) { window.alert("취소 사유를 적어 주세요."); return; }
+    if (kind === "cancel-req" && cancelBlockedByPaid(d)) { window.alert(PAID_CANCEL_MSG); return; } // ⭐ 2026-11-07 지급완료 문서
     const signMark = me.markMode === "sign" && !!me.sign;
     const ask = { approve: `승인할까요?\n결재란 표시: ${signMark ? (me.rawMode === "image" ? "내 도장 이미지" : "내 서명") : "도장"} (내 서명 설정에서 바꿀 수 있습니다)`, reject: "반려할까요?", withdraw: "결재를 회수할까요?", comment: "의견을 남길까요?", "cancel-req": "승인된 문서의 결재 취소를 요청할까요? 결재자들이 다시 승인하면 취소됩니다.", "c-approve": "결재 취소를 승인할까요?", "c-reject": "결재 취소 요청을 반려할까요?" }[kind];
     if (!await kpConfirm(ask)) return;
@@ -1946,7 +1939,10 @@ function Viewer({ d, me, staff, company, onClose, onRedraft, onEdit, inline = fa
             <div className="flex flex-wrap gap-1.5">
               {canEdit(d, me.uid) && <button type="button" onClick={() => onEdit(d)} className="h-9 px-3.5 rounded-lg bg-[#0F1A30] text-white text-[13.5px] font-black">수정</button>}
               {mine && d.status === "pending" && !anyApproved && <button type="button" disabled={busy} onClick={() => act("withdraw")} className="h-9 px-3.5 rounded-lg border border-[#DCE3EE] text-[13.5px] font-black text-[#3A4A66]">회수</button>}
-              {mine && d.status === "approved" && d.cancel?.status !== "pending" && !cancelAsk && <button type="button" onClick={() => { setCancelAsk(true); setComment(""); }} className="h-9 px-3.5 rounded-lg border border-[#0F1A30] text-[13.5px] font-black text-[#0F1A30]">결재 취소 요청</button>}
+              {/* ⭐ 2026-11-07 지급완료된 지출결의는 결재 취소 요청 불가 — 경리가 지급완료를 먼저 취소해야 한다(규칙에서도 막음) */}
+              {mine && d.status === "approved" && d.cancel?.status !== "pending" && !cancelAsk && (cancelBlockedByPaid(d)
+                ? <span className="inline-flex flex-col"><button type="button" disabled aria-disabled="true" data-testid="ap-cancel-req-blocked" title={PAID_CANCEL_MSG} className="h-9 px-3.5 rounded-lg border border-[#DCE3EE] text-[13.5px] font-black text-[#9AA9C3] cursor-not-allowed">결재 취소 요청</button><span className="mt-1 text-[12px] font-bold text-[#B42318]">{PAID_CANCEL_MSG}</span></span>
+                : <button type="button" onClick={() => { setCancelAsk(true); setComment(""); }} className="h-9 px-3.5 rounded-lg border border-[#0F1A30] text-[13.5px] font-black text-[#0F1A30]">결재 취소 요청</button>)}
               {mine && ["rejected", "withdrawn"].includes(d.status) && <button type="button" onClick={() => onRedraft(d)} className="h-9 px-3.5 rounded-lg bg-[#0F1A30] text-white text-[13.5px] font-black">재기안</button>}
               {mine && ["approved", "cancelled"].includes(d.status) && <button type="button" onClick={() => onRedraft({ ...d, id: null })} className="h-9 px-3.5 rounded-lg border border-[#DCE3EE] text-[13.5px] font-black text-[#3A4A66]">복사해서 새로 쓰기</button>}
               {(() => {
@@ -2341,7 +2337,7 @@ export default function ApprovalCenter({ company, me, page, setPage, openId, onO
   React.useEffect(() => { setOpen(null); }, [page]);
   // 배너를 눌러 들어오면 그 문서를 바로 연다
   React.useEffect(() => { if (openId) { setOpen(openId); onOpened?.(); } }, [openId]); // eslint-disable-line react-hooks/exhaustive-deps
-  const leave = useLeaveStatus(meFull, list);
+  const leave = useLeaveStatus(meFull, list, company);
 
   const uid = me.uid;
   const isHidden = (d) => (d.hiddenBy || []).includes(uid);

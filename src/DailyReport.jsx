@@ -19,6 +19,8 @@ import { useOrderHistory } from "./orderHistory";
 import { useCompanyBiz, bizOf } from "./companyBiz";
 import { useCompanyRows } from "./companyColStore";
 import { loadAcctPayments } from "./acctPayments";
+import { isLateAt } from "./lateRule";
+import { receivablesOf } from "./arAging"; // ⭐ 2026-11-07 미수금 공용 계산(부가세 포함 · 고정거래처 포함)
 import { pickUnassignedOrders } from "./unassignedRule";
 import { isPopupOn, usePopupPrefs } from "./popupPrefs"; // ⭐ 2026-11-07 팝업 알림 설정
 import { approvalLeaveOn } from "./attendanceUtils";
@@ -27,9 +29,9 @@ import { dailyReportDemo } from "./dailyReportDemo";
 import { orderStaffNameRaw, useUserNameMap, ORDER_MGR_FIXED } from "./detailGetters";
 import { computeFunds, isCard, isCredit, last4 } from "./fundsCalc";
 import {
-  addDay, dowOf, isBizDay, kstToday, kstHm, md, mdDow, dotDate, DOW, rangeDays, dayDiff, reportBasis, buildReport, weeklySummary,
-  marginOf, pctChange, man, fmt, eok, normPlate, isReceiveDay, mergePrefs, BRIEF_SECTIONS, SECTION_KEYS, BRIEF_TIMES, saleOf, isDone, dateOf, isCancelledOrder,
-  staffRanking, monthSpans, clientMoves, agingOf,
+  addDay, dowOf, isBizDay, kstToday, kstHm, md, mdDow, dotDate, DOW, rangeDays, reportBasis, buildReport, weeklySummary,
+  marginOf, pctChange, man, fmt, eok, normPlate, isReceiveDay, mergePrefs, BRIEF_SECTIONS, SECTION_KEYS, BRIEF_TIMES, dateOf, isCancelledOrder,
+  staffRanking, monthSpans, clientMoves,
 } from "./dailyReportCore";
 import { C, spark, revMargin, cumChart, donut, weekBars, netFlowBars, trendLine } from "./dailyReportCharts";
 import { useBriefingPrefs, saveBriefingPrefs, useBriefingCompany, saveBriefingRecipients, useCompanyPeople, canSeeBriefing, isBriefDemo, BRIEF_LABEL, BRIEF_EN } from "./dailyReport";
@@ -42,7 +44,7 @@ const LEAVE = new Set(["연차", "오전반차", "오후반차", "병가", "경�
 const STAFF_OUT = ["driver", "shipper", "cafeUser", "totalMaster"];
 const hmOf = (iso) => { const m = String(iso || "").match(/T(\d{2}):(\d{2})/); if (m) return `${m[1]}:${m[2]}`; try { const d = new Date(iso); if (!Number.isNaN(d.getTime())) return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; } catch { /* 무시 */ } return ""; };
 const toMin = (hm) => { const m = String(hm || "").match(/^(\d{1,2}):(\d{2})/); return m ? Number(m[1]) * 60 + Number(m[2]) : null; };
-const isLateRec = (rec, emp) => { if (!rec?.checkInTime || !emp?.workStartTime || rec.status !== "출근") return false; const a = toMin(hmOf(rec.checkInTime)); const b = toMin(emp.workStartTime); return a != null && b != null && a > b; };
+const isLateRec = (rec, emp) => (!!rec?.checkInTime && rec.status === "출근" && isLateAt(hmOf(rec.checkInTime), emp)); // ⏰ 2026-11-07 출근시간 없으면 09:00(src/lateRule.js)
 const daysLabel = (days) => days.map((d) => DOW[d]).join("");
 const toInt = (v) => Number(String(v ?? 0).replace(/[^\d-]/g, "")) || 0;
 const pctStr = (a, b, dp = 1) => (b ? `${((a / b) * 100).toFixed(dp)}%` : "–");
@@ -263,13 +265,15 @@ export default function DailyReport({ company, dispatchData = [], drivers: drive
   const bizSpan = React.useMemo(() => { const out = []; let d = lastBiz; for (let i = 0; i < 40 && out.length < 10; i++) { if (isBizDay(d)) out.unshift(d); d = addDay(d, -1); } return out; }, [lastBiz]);
   const bizSpan14 = React.useMemo(() => { const out = []; let d = lastBiz; for (let i = 0; i < 60 && out.length < 14; i++) { if (isBizDay(d)) out.unshift(d); d = addDay(d, -1); } return out; }, [lastBiz]);
 
-  // 미수금(회계관리 › 미수금 현황과 같은 계산: 올해 배차완료 청구액 − 수금 기록) + 나이(오래된 청구부터 수금된 것으로 보고)
+  // 미수금(회계관리 › 미수금 현황과 같은 계산: 올해 배차완료 + 고정거래처 청구액(부가세 포함) − 수금 기록) + 나이(오래된 청구부터 수금된 것으로 보고)
+  //  ⭐ 2026-11-07 functions/arCore.mjs 공용(회계관리 · 경영 분석 · AI 비서와 같은 숫자)
+  const fixedLive = useCompanyRows("fixedClients", cashCo);
   const ar = React.useMemo(() => {
     if (!arPay) return [];
-    const yr = today.slice(0, 4); const m = {};
-    rows.forEach((r) => { if (!isDone(r) || isCancelledOrder(r) || dateOf(r).slice(0, 4) !== yr) return; const c = r.거래처명 || r.상차지명 || "미분류"; const e = m[c] || (m[c] = { inv: 0, oldest: "", list: [] }); const s = saleOf(r); e.inv += s; e.list.push({ d: dateOf(r), amt: s }); if (!e.oldest || dateOf(r) < e.oldest) e.oldest = dateOf(r); });
-    return Object.entries(m).map(([c, v]) => ({ client: c, outstanding: Math.max(0, v.inv - (arPay[c] || 0)), age: v.oldest ? dayDiff(v.oldest, today) : 0, aging: agingOf(v.list, arPay[c] || 0, today) })).filter((x) => x.outstanding > 0).sort((a, b) => b.outstanding - a.outstanding);
-  }, [rows, arPay, today]);
+    return receivablesOf({ orders: rows, fixedRows: demo ? [] : fixedLive || [], paid: arPay, today })
+      .filter((x) => x.outstanding > 0)
+      .map((x) => ({ client: x.client, outstanding: x.outstanding, age: x.oldest, aging: x.aging }));
+  }, [rows, arPay, today, fixedLive, demo]);
 
   // 담당자별 매출 — 등록 직원(고정노선 오더는 배차확정자)
   const nameMap = useUserNameMap();
@@ -657,7 +661,7 @@ export default function DailyReport({ company, dispatchData = [], drivers: drive
         {statBox(`${basis.multi ? "기간" : "전일"} 입금`, fmt(man(fl.in)), basis.multi ? (compact ? `${basis.days.length}일 합산` : basis.label) : mdDow(basis.start))}
         {statBox(`${basis.multi ? "기간" : "전일"} 출금`, fmt(man(fl.out)), basis.multi ? (compact ? `${basis.days.length}일 합산` : basis.label) : mdDow(basis.start))}
         {statBox("순유입", `${net > 0 ? "+" : net < 0 ? "−" : ""}${fmt(Math.abs(man(net)))}`, "입금 − 출금", net > 0 ? C.up : net < 0 ? C.down : C.t1)}
-        {statBox("미수금", fmt(man(arTotal)), ar30 > 0 ? `30일 넘은 미수 ${fmt(man(ar30))}만` : "올해 청구 기준")}
+        {statBox("미수금", fmt(man(arTotal)), ar30 > 0 ? `30일 넘은 미수 ${fmt(man(ar30))}만` : "올해 청구 · 부가세 포함")}
       </div>
       <div style={{ display: "grid", gridTemplateColumns: cashCols, gap: compact ? 26 : 32, marginTop: 26, alignItems: "start" }}>
         {/* 1) 계좌별 잔액 · 월별 입출금 */}

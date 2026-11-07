@@ -2,7 +2,7 @@
 // 🧾 2026-11-07 정산관리 › 거래처정산 리디자인 — 거래명세서 단계 보드 · 명세서 편집 그리드 · 미수금 데스크 · 공용 팝업 틀
 //  · 화면 조각만 모았다. 금액 계산(청구운임 · 세액 · 미정산 · 입금 배분)은 DispatchApp.jsx의 ClientSettlement가 지금처럼 하고
 //    이 파일은 받은 숫자를 그리기만 한다(회계관리 · AI 비서가 쓰는 미수금 숫자는 건드리지 않음).
-//  · 단계 기록: arDesk 컬렉션(회사별) — kind "stmt"(거래처·청구월 명세서 단계) / kind "client"(미수금 메모 · 다음 할 일 · 상태)
+//  · 단계 기록: arDesk 컬렉션(회사별) — kind "stmt"(거래처·청구월 명세서 단계 · includePrepaid) / kind "client"(미수금 메모 · 다음 할 일 · 상태) / kind "config"(stmtIncludePrepaid)
 import React from "react";
 import { createPortal } from "react-dom";
 import { db } from "./firebase";
@@ -106,7 +106,11 @@ export function useArDesk(company) {
     setLocal((l) => ({ ...l, [id]: { ...(l[id] || {}), ...patch } }));
     try { await setDoc(doc(db, "arDesk", id), { ...patch, companyName: co, updatedAt: serverTimestamp() }, { merge: true }); } catch (e) { console.warn("arDesk 저장 실패", e); }
   }, [co]);
-  return { stmts, notes, save, company: co };
+  // ⭐ 2026-11-07 회사 설정(kind "config") — 거래명세서 선불·착불 포함 기본값(stmtIncludePrepaid · 처음엔 빼기)
+  const configId = arDeskId(co, "config");
+  const config = React.useMemo(() => all.find((d) => d.id === configId) || null, [all, configId]);
+  const saveConfig = React.useCallback((patch) => save(configId, { kind: "config", ...patch }), [save, configId]);
+  return { stmts, notes, save, config, saveConfig, company: co };
 }
 
 // ───────────────────────── 단계 표시 ─────────────────────────
@@ -163,6 +167,22 @@ export function StageStepper({ stage, history = [], onSet, disabled, sentHint })
 
 // ───────────────────────── 거래명세서 단계 보드 ─────────────────────────
 // groups: [{ key, client, yyyymm, count, supply, vat, total, stage, settled, lastAt, email, hasDoc }]
+// ⭐ 2026-11-07 거래명세서 "선불·착불 포함" 스위치 — 명세서 편집(이 명세서만) · 단계 보드(회사 기본)
+export function PrepaidToggle({ on, onChange, excluded = 0, label = "선불·착불 포함", hint = "", disabled = false, testId = "stmt-prepaid-toggle", compact = false }) {
+  return (
+    <div className={`flex items-center gap-2.5 ${compact ? "" : "rounded-2xl border border-[#E3E8F0] bg-white px-4 py-3"}`}>
+      <button type="button" role="switch" aria-checked={!!on} aria-label={label} data-testid={testId} disabled={disabled} onClick={() => onChange?.(!on)}
+        className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors disabled:opacity-40 ${on ? "bg-[#1B2B4B]" : "bg-[#C9D2E0]"}`}>
+        <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${on ? "translate-x-6" : "translate-x-1"}`} />
+      </button>
+      <div className="min-w-0">
+        <div className="text-[14px] font-black text-[#0F1A30] whitespace-nowrap">{label}</div>
+        {(hint || (!on && excluded > 0)) && <div className="text-[12.5px] font-bold text-[#5B6B85] truncate" data-testid={`${testId}-note`}>{!on && excluded > 0 ? `선불·착불 ${excluded.toLocaleString()}건 제외` : hint}</div>}
+      </div>
+    </div>
+  );
+}
+
 export function StatementBoard({ month, setMonth, recentMonths = [], groups, onOpen, onAdvance, onBulk, onManual, bizLabel, tools = null }) {
   const [stageF, setStageF] = React.useState("");
   const [q, setQ] = React.useState("");
@@ -302,7 +322,7 @@ export function StatementBoard({ month, setMonth, recentMonths = [], groups, onO
                           <span className="block truncate text-[13px] text-[#9AA9C3]">{g.email || "이메일 없음"}{g.settled ? " · 입금 완료" : ""}{g.lastAt ? ` · ${fmtDay(g.lastAt)} 기록` : ""}</span>
                         </button>
                       </td>
-                      <td className="px-2 py-3 text-right text-[14px] text-[#3A4A66]" style={NUM}>{g.count}건</td>
+                      <td className="px-2 py-3 text-right text-[14px] text-[#3A4A66]" style={NUM}>{g.count}건{g.prepaidOut > 0 && <div className="text-[11.5px] font-bold text-[#9AA9C3] whitespace-nowrap" title="선불·착불은 명세서에서 뺐어요(미수금에는 들어가요)">선불·착불 {g.prepaidOut}건 제외</div>}</td>
                       <td className="px-2 py-3 text-right text-[15px] font-black text-[#0F1A30]" style={NUM}>{won(g.total)}</td>
                       <td className="px-2 py-3"><StageDots stage={g.stage} /></td>
                       <td className="px-2 py-3"><StageBadge stage={g.stage} /></td>

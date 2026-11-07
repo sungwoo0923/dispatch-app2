@@ -4,7 +4,8 @@
 //  · 매입 구분: 소속 차량(drivers 등급 지입·직영·임대)의 차량번호면 "기사 운임", 아니면 "용차"
 //  · 판관비: 수입·지출 장부(acctLedger) 지출 중 운송 원가(기사운송료·운반비·용차 등 — 오더 기사운임과 겹침)를 뺀 계정
 //    장부가 없는 달은 고정비(acctRecurring 지출)로 대신 채우고 "추정"으로 표시
-//  · 미수: 올해 배차완료 청구액 − 수금 기록(acctPayments) · 오래된 청구부터 수금된 것으로 본다(dailyReportCore.agingOf와 같은 방식)
+//  · 미수: 올해 배차완료 + 고정거래처 청구액(부가세 포함) − 수금 기록(acctPayments) · 오래된 청구부터 수금된 것으로 본다(src/arAging.js 공용)
+import { receivablesOf } from "./arAging"; // ⭐ 2026-11-07 미수금 공용 계산
 import { addDay, dayDiff, rangeDays, isBizDay, toWon, dateOf, isCancelledOrder, isDone, normPlate, prevYm } from "./dailyReportCore";
 
 export const FLEET_TYPES = ["지입", "직영", "임대"];
@@ -87,20 +88,14 @@ export function plMonthly({ rows, fleet, ledger, recurring, months }) {
 }
 
 // ── 미수(거래처별) — 남은 청구의 경과일 · 평균 미수일(금액 가중) · 30일 넘은 금액 ──
-export function receivables(rows, arPay, today) {
+// ⭐ 2026-11-07 청구액 부가세 포함 · 고정거래처 포함(회계관리 · 일일 경영 보고 · AI 비서와 같은 계산 — functions/arCore.mjs)
+export function receivables(rows, arPay, today, fixedRows = []) {
   if (!arPay) return {};
-  const yr = today.slice(0, 4); const m = {};
-  rows.forEach((r) => { if (!isDone(r) || dateOf(r).slice(0, 4) !== yr) return; const c = clientOf(r); (m[c] = m[c] || []).push({ d: dateOf(r), amt: toWon(r.청구운임) }); });
   const res = {};
-  Object.entries(m).forEach(([c, list]) => {
-    let left = Math.max(0, arPay[c] || 0);
-    let out = 0, wsum = 0, over30 = 0, oldest = 0; const open = [];
-    list.sort((a, b) => a.d.localeCompare(b.d)).forEach(({ d, amt }) => {
-      const use = Math.min(left, amt); left -= use; const rest = amt - use; if (rest <= 0) return;
-      const age = Math.max(0, dayDiff(d, today)); out += rest; wsum += rest * age; oldest = Math.max(oldest, age);
-      if (age > 30) over30 += rest; open.push({ d, amt: rest, age });
-    });
-    res[c] = { outstanding: out, avgAge: out ? wsum / out : 0, over30, oldest, open };
+  receivablesOf({ orders: rows, fixedRows, paid: arPay, today }).forEach((x) => {
+    const out = x.open.reduce((s, o) => s + o.amt, 0);
+    const wsum = x.open.reduce((s, o) => s + o.amt * o.age, 0);
+    res[x.client] = { outstanding: x.outstanding, avgAge: out ? wsum / out : 0, over30: x.open.filter((o) => o.age > 30).reduce((s, o) => s + o.amt, 0), oldest: x.oldest, open: x.open };
   });
   return res;
 }
