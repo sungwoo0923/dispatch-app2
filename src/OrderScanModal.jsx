@@ -101,7 +101,7 @@ export async function prepImage(dataUrl) {
 }
 
 // 서버 글자 인식에 보낼 JPEG(긴 변 2000px 이하) — { b64, k: canvas → 보낸 그림 배율 }
-function toUploadJpeg(canvas) {
+export function toUploadJpeg(canvas) {
   const k = Math.min(1, OCR_MAX / Math.max(canvas.width, canvas.height));
   const c = document.createElement("canvas");
   c.width = Math.max(1, Math.round(canvas.width * k)); c.height = Math.max(1, Math.round(canvas.height * k));
@@ -113,7 +113,7 @@ function toUploadJpeg(canvas) {
 const withTimeout = (pr, ms, msg) => Promise.race([pr, new Promise((_, rej) => setTimeout(() => rej(new Error(msg)), ms))]);
 
 // 등록 업체 목록을 인식기가 쓰는 모양으로(PC 하차지거래처 { 업체명 } / 모바일 { 거래처명, contacts } 모두)
-function normPlaces(list) {
+export function normPlaces(list) {
   return (list || []).map((p) => {
     const cs = (Array.isArray(p.contacts) ? p.contacts : []).filter((c) => c && (String(c.name || "").trim() || String(c.phone || "").trim()));
     const pri = cs.find((c) => c.isPrimary) || cs[0];
