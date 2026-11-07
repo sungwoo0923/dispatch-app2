@@ -4,4 +4,4 @@
 export const MARKET_NAME = "로지스웹 허브"; // ⭐ 2026-11-06 대표님 확정 이름
 export const MARKET_NAME_EN = "LogisWeb Hub";
 export const MARKET_SHORT = "허브"; // 버튼 문구 "저장 + 허브 등록"
-export const MARKET_URL = "https://baecha-madang.vercel.app/";
+export const MARKET_URL = "https://hub.logisweb.co.kr/";

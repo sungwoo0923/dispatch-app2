@@ -9,7 +9,7 @@ import { createPortal } from "react-dom";
 import { doc, updateDoc, serverTimestamp } from "firebase/firestore";
 import { db, auth } from "./firebase";
 
-export const SITE = "https://dispatch-app2.vercel.app";
+export const SITE = "https://app.logisweb.co.kr";
 export const APK_URL = "https://github.com/sungwoo0923/dispatch-app2/releases/download/driver-apk-latest/app-debug.apk";
 export const IPHONE_URL = `${SITE}/driver-login`;
 export const GUIDE_URL = `${SITE}/driver-guide`;

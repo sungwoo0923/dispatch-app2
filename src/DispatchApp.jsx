@@ -8478,7 +8478,7 @@ return (
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.2" strokeLinecap="round"><path d="M4 7h16M4 12h16M4 17h16" /></svg>
                 </button>
                 {/* ⭐ 2026-11-03 로고·LogisWeb을 누르면 회사 홈페이지로 (2026-11-04 LogisWeb 마크 + 글자 로고) */}
-                <a href="https://dispatch-app2-vskk.vercel.app/" title="LogisWeb 홈페이지로" className="flex items-center gap-2.5 shrink-0 rounded-xl hover:opacity-90 transition">
+                <a href="https://www.logisweb.co.kr/" title="LogisWeb 홈페이지로" className="flex items-center gap-2.5 shrink-0 rounded-xl hover:opacity-90 transition">
                   <LogisMark size={32} style={{ filter: "drop-shadow(0 4px 12px rgba(0,0,0,0.25))" }} />
                   <LogisWordmark height={12} sub="dispatch" />
                 </a>
