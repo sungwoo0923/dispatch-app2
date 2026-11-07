@@ -1564,17 +1564,8 @@ async function sendGsheetMineBatch(items) {
   return { sent, skipped: skipped.length };
 }
 const GSHEET_LINK_OFF_MESSAGE = "프로그램과 구글시트 연결이 끊겨 있습니다(시트 수기 작성 중) — 시트를 덮어쓰지 않도록 이 작업은 실행하지 않았습니다.";
-// 이 시트 전용 동기화 대상 회사명 — 다른 회사 데이터가 섞이지 않도록 반드시 필터링한다.
-const GSHEET_TARGET_COMPANY = "돌캐";
-// ⭐ 2026-11-06 돌캐 시트에는 돌캐 오더만 — "내 오더만 보내기"가 작성자 이메일만 보고 회사를 안 봐서,
-//  최고관리자가 다른 운송사(예: 태진)에서 고정노선·배차표 오더를 만들면 그 오더까지 돌캐 시트에 들어갔다.
-//  다른 회사 오더 · 배차표(구글시트 고정노선) 오더 · 지입차관리 고정노선 오더는 전송 대상에서 뺀다.
-function isGsheetDolcaeOrder(d) {
-  if (!d) return false;
-  if ((d.companyName || GSHEET_TARGET_COMPANY) !== GSHEET_TARGET_COMPANY) return false;
-  if (d.배차표Id || d._autoSheet || d.고정노선Id || d.등록기기 === "배차표") return false;
-  return true;
-}
+// ⭐ 2026-11-07 돌캐 시트 고정 설정은 functions/gsheetLegacy.js로 옮김(동작 같음 · 시트 프로필 "legacy_dolcae"가 같은 값을 보여 준다)
+const { GSHEET_TARGET_COMPANY, isGsheetDolcaeOrder, GSHEET_FIELD_HEADER_CANDIDATES, GSHEET_MONTH_HEADER_COLUMNS } = require("./gsheetLegacy");
 // "차량번호로 기사명/전화번호 자동매칭"에 쓰이는 기준표 시트 이름(A:기사명, B:차량정보(차량번호), C:전화번호, D:비고).
 const GSHEET_UNIQUE_TAB = "고유값";
 
@@ -1601,52 +1592,7 @@ const GSHEET_CANCELED_STATUS_LIST = ["취소", "배차취소", "오더취소", "
 // 내부 필드명 → 시트에 실제로 쓰여있을 수 있는 헤더 텍스트 후보(오탈자/동의어 포함,
 // 실제 여러 달 탭을 확인해보니 "상하지주소"(상차지주소의 오타로 보임), "기사님요금"
 // (기사운임), "선/착불"(지급방식) 같은 표기가 섞여 있었다). 앞에 있는 후보를 우선한다.
-const GSHEET_FIELD_HEADER_CANDIDATES = {
-  순번: ["순번"],
-  등록일: ["등록일"],
-  상차일: ["상차일"],
-  상차시간: ["상차시간"],
-  하차일: ["하차일"],
-  하차시간: ["하차시간"],
-  거래처명: ["거래처명"],
-  상차지: ["상차지명", "상차지"],
-  경유지: ["경유지"],
-  상차지주소: ["상차지주소", "상하지주소"],
-  하차지: ["하차지명", "하차지"],
-  하차지주소: ["하차지주소"],
-  화물정보: ["화물내용", "화물정보"],
-  차량종류: ["차량종류"],
-  차량톤수: ["차량톤수"],
-  혼적: ["혼적"],
-  차량번호: ["차량번호"],
-  기사명: ["이름", "기사명"],
-  전화번호: ["전화번호"],
-  배차상태: ["배차상태"],
-  청구운임: ["청구운임"],
-  기사운임: ["기사운임", "기사님요금"],
-  수수료: ["수수료"],
-  매익율: ["매익율"],
-  지급방식: ["지급방식", "선/착불"],
-  프로그램: ["배차방식", "프로그램"],
-  메모: ["메모"],
-  // ⭐ 2026-10-20 — 시트 행 ↔ 프로그램 오더를 1:1로 정확히 잇는 열(숨김). 이 열이 없던 예전엔
-  // "몇 번째 줄" 번호(_gsheetSync.row)만으로 찾아서, 번호가 어긋나면 엉뚱한 줄을 고치거나
-  // 지우지 못해 시트에 오더가 더 많이 남는 일이 있었다.
-  오더ID: ["오더ID"],
-};
-
-// ⭐ 사용자 요청 — 매번 시트에 헤더를 손으로 직접 쳐넣지 않아도 되도록, 백필이
-// 이 순서/이름 그대로 헤더 행 자체를 매번 다시 써준다(거래처 백필과 동일한
-// 방식). 순서를 바꾸고 싶으면 이 배열 순서를 바꾸면 된다 — 실제 값 배치는
-// 어차피 헤더 텍스트(GSHEET_FIELD_HEADER_CANDIDATES)로 찾으므로, 이 배열
-// 순서를 바꿔도 다른 로직은 안 건드려도 된다.
-const GSHEET_MONTH_HEADER_COLUMNS = [
-  "순번", "등록일", "상차일", "상차시간", "하차일", "하차시간",
-  "거래처명", "상차지명", "상차지주소", "하차지명", "하차지주소",
-  "화물내용", "차량종류", "차량톤수", "혼적", "차량번호",
-  "이름", "전화번호", "배차상태", "청구운임", "기사운임",
-  "수수료", "지급방식", "배차방식", "메모", "오더ID",
-];
+// GSHEET_FIELD_HEADER_CANDIDATES · GSHEET_MONTH_HEADER_COLUMNS → functions/gsheetLegacy.js
 
 // 0-based 열 인덱스 → 시트 열 문자(0→A, 25→Z, 26→AA, ...).
 function gsheetColLetter(idx) {
@@ -6048,6 +5994,13 @@ exports.routeBoardSheet = functions.runWith({ timeoutSeconds: 540, memory: "512M
     res.status(e.status || 500).json({ error: e?.message || String(e) });
   }
 });
+
+// 🔗 2026-11-07 구글시트 연동(시트 프로필) — 설명은 functions/sheetConnect.js 맨 위 · 규칙은 functions/sheetProfileCore.mjs(화면과 같은 파일)
+const { makeSheetConnect } = require("./sheetConnect");
+exports.sheetConnect = functions.runWith({ secrets: ["ANTHROPIC_API_KEY"], timeoutSeconds: 540, memory: "1GB" }).https.onRequest(makeSheetConnect({
+  db, FieldValue, sheetsApiFor, parseSpreadsheetId, quoteTab, requireStaff, requireAdminRole, sheetModifiedTime, setBulkMode, bumpDataVersion,
+  makeAnthropic: () => (process.env.ANTHROPIC_API_KEY ? new (_orderScan.Anthropic)({ apiKey: process.env.ANTHROPIC_API_KEY, timeout: 30000, maxRetries: 1 }) : null),
+}));
 
 exports.sheetImport = functions
   .runWith({ timeoutSeconds: 540, memory: "1GB" })

@@ -21,6 +21,9 @@ import { deleteOrderWithLog } from "./orderHistory";
 import CustomDatePicker from "./CustomDatePicker";
 import { CustomSelect } from "./CustomSelect"; // ⭐ 2026-11-03 프로그램 공용 선택 목록(기본 select 대신)
 import { kpConfirm, kpAlert } from "./kpDialog";
+import { profileToBoardColumns } from "../functions/sheetProfileCore.mjs"; // 🔗 2026-11-07 시트 프로필 → 배차표 칸
+import { useSheetProfiles } from "./sheetConnectApi";
+const SheetConnectWizard = React.lazy(() => import("./SheetConnectWizard"));
 
 const DAYS = ["일", "월", "화", "수", "목", "금", "토"];
 const kst = (offsetDays = 0) => new Date(Date.now() + 9 * 3600e3 + offsetDays * 86400e3).toISOString().slice(0, 10);
@@ -423,6 +426,16 @@ function FormEditor({ init, onClose, onSaved, co, clients = [], places = [] }) {
       setSheet((s) => ({ ...s, busy: "" }));
     } catch (e) { setSheet((s) => ({ ...s, busy: "", err: e.message })); }
   };
+  // 🔗 2026-11-07 시트 프로필(구글시트 연동)로 칸 만들기 — 시트 순서 · 이름 그대로, 프로그램 칸은 프로필 연결대로(만든 뒤 고칠 수 있음)
+  const sheetProfiles = useSheetProfiles(co) || [];
+  const [wiz, setWiz] = React.useState(false);
+  const colsFromProfile = async (p) => {
+    if (!p) return;
+    if (f.columns.length && !(await kpConfirm(`지금 칸 설정을 '${p.name}' 칸으로 바꿀까요?`))) return;
+    const columns = profileToBoardColumns(p, rid);
+    if (!columns.some((c) => c.field === "하차지명")) kpAlert("이 시트에는 하차지명 칸이 없어요. 칸 하나를 하차지명으로 정해 주세요.");
+    setF((x) => ({ ...x, columns, sheetUrl: x.sheetUrl || p.sheetUrl || "", sheetProfileId: p.id || "" }));
+  };
   const setCol = (i, patch) => setF((p) => ({ ...p, columns: p.columns.map((c, j) => (j === i ? { ...c, ...patch } : c)) }));
   const moveCol = (i, d) => setF((p) => { const a = [...p.columns]; const j = i + d; if (j < 0 || j >= a.length) return p; [a[i], a[j]] = [a[j], a[i]]; return { ...p, columns: a }; });
   const setGroup = (i, patch) => setF((p) => ({ ...p, groups: p.groups.map((g, j) => (j === i ? { ...g, ...patch } : g)) }));
@@ -478,6 +491,17 @@ function FormEditor({ init, onClose, onSaved, co, clients = [], places = [] }) {
             )}
           </div>
           {sheet.err && <div className="mt-2 text-[13px] font-semibold text-red-600">{sheet.err}</div>}
+          <div className="mt-2.5 flex flex-wrap items-center gap-2">
+            <span className="text-[13px] font-black text-[#3A4A66]">시트 프로필로 칸 만들기</span>
+            {sheetProfiles.filter((p) => p.engine !== "legacy-dolcae").length > 0 && (
+              <CustomSelect value="" onChange={(e) => colsFromProfile(sheetProfiles.find((p) => p.id === e.target.value))} className={`${inp} w-[220px] h-9`}>
+                <option value="">연결된 시트 고르기</option>
+                {sheetProfiles.filter((p) => p.engine !== "legacy-dolcae").map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+              </CustomSelect>
+            )}
+            <button type="button" onClick={() => setWiz(true)} className={`${btn} h-9 border border-[#DCE3EE] text-[#2D4C82]`}>구글시트 연결 마법사</button>
+          </div>
+          {wiz && <React.Suspense fallback={null}><SheetConnectWizard company={co} title="배차표 양식용 시트 연결" onClose={() => setWiz(false)} onSaved={(p) => { setWiz(false); colsFromProfile(p); }} /></React.Suspense>}
           <ShareNote />
           {/* ⭐ 2026-11-03 연결할 탭 — 보통은 날짜 이름 탭(26-11-03)을 날짜별로 자동, 테스트할 땐 고른 탭 하나만 */}
           {String(f.sheetUrl || "").trim() && (sheet.tabs || f.fixedTab) && isMasterUserRB() && ( /* ⭐ 테스트용 탭 고정은 최고관리자만 */
