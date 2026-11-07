@@ -15866,6 +15866,7 @@ const pickDrop = (c) => {
         <div className="relative">
           <input autoComplete="off"
             ref={pickupNameInputRef}
+            placeholder="상차지명 검색"
             className={`w-full border-0 border-b-2 rounded-none px-1 py-1.5 text-[13px] font-semibold text-gray-900 bg-transparent focus:outline-none transition ${
               requiredErrors.has("상차지명") ? "border-red-500 ring-2 ring-red-300 animate-pulse" : "border-gray-300 focus:border-[var(--reg-accent)]"
             }`}
@@ -16036,6 +16037,7 @@ const pickDrop = (c) => {
         <div className="relative">
           <input autoComplete="off"
             ref={dropNameInputRef}
+            placeholder="하차지명 검색"
             className={`w-full border-0 border-b-2 rounded-none px-1 py-1.5 text-[13px] font-semibold text-gray-900 bg-transparent focus:outline-none transition ${
               requiredErrors.has("하차지명") ? "border-red-500 ring-2 ring-red-300 animate-pulse" : "border-gray-300 focus:border-[var(--reg-accent)]"
             }`}

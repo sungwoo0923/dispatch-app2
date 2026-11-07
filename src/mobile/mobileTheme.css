@@ -450,3 +450,18 @@ body:has(.kp-m input:focus, .kp-m textarea:focus) .kp-m-toast { display: none; }
 .kp-msel { -webkit-tap-highlight-color: transparent; cursor: pointer; }
 .kp-msel:active:not(:disabled) { filter: brightness(0.97); }
 .kp-msel:disabled { cursor: default; opacity: .65; }
+/* ⭐ 2026-11-07 디자인 통일 — 화물등록의 밑줄 입력칸(옛 모양)을 날짜·시간 칸과 같은 둥근 상자로
+   (입력칸 · 고르기 버튼 · 톤수처럼 입력+단위가 붙은 묶음 모두) */
+.kp-m-form .kp-m-form-card [class~="border-0"][class~="border-b-2"] {
+  border: 1px solid #DCE3EE !important; border-radius: 12px !important;
+  background-color: #fff !important; min-height: 44px;
+  transition: border-color .12s, box-shadow .12s;
+}
+.kp-m-form .kp-m-form-card :is(input, textarea, button)[class~="border-0"][class~="border-b-2"] { padding: 10px 12px !important; }
+.kp-m-form .kp-m-form-card div[class~="border-0"][class~="border-b-2"] { overflow: hidden; }
+.kp-m-form .kp-m-form-card div[class~="border-0"][class~="border-b-2"] > input { padding-left: 12px !important; background: transparent; }
+.kp-m-form .kp-m-form-card [class~="border-0"][class~="border-b-2"]:is(:focus, :focus-within) {
+  border-color: #2D4C82 !important; box-shadow: 0 0 0 3px rgba(143,176,240,.28);
+}
+.kp-m-form .kp-m-form-card [class~="border-0"][class~="border-b-2"][class~="border-red-500"] { border-color: #D92D20 !important; }
+.kp-m-form .kp-m-form-card .space-y-1 > :not([hidden]) ~ :not([hidden]) { margin-top: 8px; }
