@@ -2894,6 +2894,7 @@ import BirthdayPopup from "./BirthdayPopup";
 import { tryAutoCheckIn } from "./autoAttendance";
 import PersonnelOrder, { OrderNoticeHistory } from "./PersonnelOrder";
 import OrderScanModal, { looksLikeOrder, scanDropDate } from "./OrderScanModal";
+import { mainScanAi } from "./orderScanApi"; // 🧠 2026-11-07 오더 스캔 정밀 인식(서버 글자 인식 · AI 칸 정리 · 회사별 학습)
 import KpSubNav from "./KpSubNav";
 import RevenueDashboard from "./RevenueDashboard";
 import { TargetPage, ClientsPage, TrendPage, YearlyPage, QueryPage } from "./RevenuePages";
@@ -14038,6 +14039,7 @@ const reset = {
   ...(canMoney ? {} : { 청구운임: "", 기사운임: "", 수수료: "" }),
 };
 setForm(reset);
+mainScanAi.commit(rec).catch(() => {}); // 🧠 오더 스캔 뒤 고친 칸을 회사별로 기억(스캔으로 연 등록일 때만 기록이 있다)
 setVehicleQuery("");
 setClientQuery("");
 setAutoPickMatched(false);
@@ -15657,6 +15659,7 @@ title="상차지 ↔ 하차지 교체"
     places={placeList}
     clients={clients}
     initial={orderScanInit}
+    ai={mainScanAi}
     onClose={() => { setShowOrderParser(false); setOrderScanInit(null); }}
     onApply={(patch, memo, info = {}) => {
       setForm((p) => ({ ...p, ...patch, ...scanDropDate(patch, info, p.상차일), ...(memo ? { 메모: [p.메모, memo].filter(Boolean).join("\n") } : {}) }));

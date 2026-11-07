@@ -424,7 +424,8 @@ export function splitOrders(text) {
 }
 
 // ── 메인 ──
-export function parseOrderScan(text, { places = [], clients = [], today = new Date() } = {}) {
+// ⭐ 2026-11-07 aiMerge(F): 등록 업체 맞추기 직전에 부르는 고리 — 정밀 인식(AI 칸 정리 · 회사별 학습)을 여기서 합친다(src/orderScanAi.js)
+export function parseOrderScan(text, { places = [], clients = [], today = new Date(), aiMerge = null } = {}) {
   const rawLines = String(text || "").replace(/\r/g, "").split("\n");
   // 줄 목록(원문 줄 번호 유지) + 한 줄 여러 라벨 분리
   const lines = [];
@@ -628,6 +629,8 @@ export function parseOrderScan(text, { places = [], clients = [], today = new Da
   // 기사님께 전달할 안내(입고 프로세스 등) → 전달사항
   if (noticeLines.length) F.전달사항 = { value: noticeLines.map((x) => x.replace(/^->\s*/, "→ ").replace(/\s+/g, " ")).join("\n"), conf: "high", line: -1 };
 
+  if (typeof aiMerge === "function") { try { aiMerge(F); } catch (e) { console.warn("[오더 스캔] 정밀 인식 합치기 실패:", e); } }
+
   // ── 등록된 하차지거래처와 맞추기 ──
   const issues = [];
   const matched = {};
@@ -650,10 +653,10 @@ export function parseOrderScan(text, { places = [], clients = [], today = new Da
       else if (byAddr) {
         // 주소는 같은데 이름이 전혀 다름 → 자동으로 바꾸지 않고 제안만
         if (F[`${P}명`]) F[`${P}명`].suggest = byAddr;
-        issues.push({ field: `${P}명`, level: "info", msg: `같은 주소로 등록된 '${byAddr.업체명}'이(가) 있습니다 — 같은 곳이면 [등록 업체로 바꾸기]를 누르세요` });
+        issues.push({ field: `${P}명`, level: "info", msg: `같은 주소로 등록된 '${byAddr.업체명}'이(가) 있습니다. 같은 곳이면 [등록 업체로 바꾸기]를 누르세요` });
       } else if (byName && addr && byName.주소 && !sameAddr(addr, byName.주소)) {
         if (F[`${P}명`]) F[`${P}명`].suggest = byName;
-        issues.push({ field: `${P}명`, level: "info", msg: `이름이 비슷한 '${byName.업체명}'이(가) 등록돼 있지만 주소가 다릅니다 — 같은 곳인지 확인하세요` });
+        issues.push({ field: `${P}명`, level: "info", msg: `이름이 비슷한 '${byName.업체명}'이(가) 등록돼 있지만 주소가 다릅니다. 같은 곳인지 확인하세요` });
       }
     }
     if (place) {
@@ -667,12 +670,12 @@ export function parseOrderScan(text, { places = [], clients = [], today = new Da
     const finalName = F[`${P}명`]?.value;
     const finalAddr = F[`${P}주소`]?.value;
     if (!finalName && !finalAddr) issues.push({ field: `${P}명`, level: "error", msg: `${P}를 찾지 못했습니다` });
-    else if (!finalName) issues.push({ field: `${P}명`, level: "warn", msg: `${P}명을 인식할 수 없습니다 — 주소만 있습니다` });
-    if (finalName && !finalAddr) issues.push({ field: `${P}주소`, level: "warn", msg: `${P} 주소가 없습니다${place ? "" : " — 등록되지 않은 업체"}` });
+    else if (!finalName) issues.push({ field: `${P}명`, level: "warn", msg: `${P}명을 인식할 수 없습니다. 주소만 있습니다` });
+    if (finalName && !finalAddr) issues.push({ field: `${P}주소`, level: "warn", msg: `${P} 주소가 없습니다${place ? "" : ". 등록되지 않은 업체"}` });
     if (finalAddr) {
       const q = addressQuality(finalAddr);
       if (q === "partial") issues.push({ field: `${P}주소`, level: "warn", msg: `${P} 주소에 번지(건물번호)가 없습니다` });
-      if (q === "weak") issues.push({ field: `${P}주소`, level: "error", msg: `${P} 주소를 인식할 수 없습니다 — 형식이 주소가 아닙니다` });
+      if (q === "weak") issues.push({ field: `${P}주소`, level: "error", msg: `${P} 주소를 인식할 수 없습니다. 형식이 주소가 아닙니다` });
     }
     if (sec[P === "상차지" ? "pickup" : "drop"].inferred) issues.push({ field: `${P}명`, level: "info", msg: `라벨이 없어 주소 순서로 ${P}를 추정했습니다` });
   }
@@ -702,6 +705,6 @@ export function parseOrderScan(text, { places = [], clients = [], today = new Da
   });
 
   const fields = Object.fromEntries(Object.entries(F).map(([k, v]) => [k, v]));
-  const recognized = Object.keys(fields).filter((k) => !["화물단위", "메모추가", "차량원문"].includes(k)).length;
+  const recognized = Object.keys(fields).filter((k) => !["화물단위", "메모추가", "차량원문", "상차시간기준", "하차시간기준"].includes(k)).length;
   return { fields, issues, unknown, roles, matched, recognized };
 }

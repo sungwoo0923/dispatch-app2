@@ -16,9 +16,11 @@
 const _hubCall = require("./hubCall");
 const _hubWallet = require("./hubWallet");
 const _hubSync = require("./hubSync");
+const _hubDriverAuth = require("./hubDriverAuth");
 
-function register({ functions, db, FieldValue, sendPushAndCleanup, userTokens, getStorage }) {
-  const out = {};
+function register({ functions, db, FieldValue, sendPushAndCleanup, userTokens, getStorage, getAuth }) {
+  // ⭐ 2026-11-07 차주 로그인(차량번호 + 휴대폰번호) · 등록 기기 — hubBindDevice · hubAdminResetDevice · hubAdminSetDriverLogin(functions/hubDriverAuth.js)
+  const out = { ..._hubDriverAuth.register({ functions, db, FieldValue, getAuth }) };
   out.hubOrderOnWrite = functions.firestore
     .document("hubOrders/{id}")
     .onWrite(async (change, context) => {

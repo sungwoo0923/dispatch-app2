@@ -13,7 +13,8 @@ import { doc, getDoc } from "firebase/firestore";
 import { auth, db } from "../firebase";
 import { HI, Btn, Chip, Badge, Card, Empty, Seg, HubMark, NAVY_BG, HUB_CSS, NUMS, useToast, Avatar, selectCls, inputCls, Drawer, Field } from "./hubUi";
 import { ROLES, canPost, canTake, SIDO_LIST, sigunguOf, HUB_VEHICLES, HUB_TONS, tonValue, regionLL, kmBetweenLL, nearestRegion, ago, ACTIVE, speakText, routeText, manwon, kstYmd, tsMs, DOC_TYPES, isLinked, stageOf, payKind } from "./hubConstants";
-import { subscribeMember, subscribeBoard, refreshBoard, subscribeMine, subscribeCompanyPosts, subscribeNotices, markRead, updatePrefs, localSession, subscribeHubConfig, subscribeWallet, subscribeAnnouncements, enableHubPush, pushEnabledHere, disableHubPush, fetchPrivate } from "./hubApi";
+import { subscribeMember, subscribeBoard, refreshBoard, subscribeMine, subscribeCompanyPosts, subscribeNotices, markRead, updatePrefs, localSession, subscribeHubConfig, subscribeWallet, subscribeAnnouncements, enableHubPush, pushEnabledHere, disableHubPush, fetchPrivate, subscribeDevice } from "./hubApi";
+import { getDeviceId, isMobileDevice, DriverPcBlock } from "./hubDevice";
 import { applyHubLists } from "./hubConstants";
 import HubWallet, { wonFull } from "./HubWallet";
 import { useHubLocationShare } from "./hubLiveShare";
@@ -241,6 +242,25 @@ export default function HubApp() {
     if (mine && me.activeSession !== mine) { signOut(auth).then(() => { alert("다른 기기에서 로그인해서 이 기기는 로그아웃했어요."); nav("/login", { replace: true }); }); }
   }, [me?.activeSession]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // ⭐ 2026-11-07 허브 가입 차주는 등록 휴대폰에서만 — 앱이 켜질 때(로그인 유지 상태 포함) · 다른 휴대폰으로 옮겨질 때 확인
+  const devCheck = !!me && me.role === "driver" && me.source === "signup";
+  const [devOk, setDevOk] = useState(undefined);
+  useEffect(() => {
+    if (!devCheck || !authUser) { setDevOk(undefined); return undefined; }
+    let alive = true, unsub = () => {};
+    getDeviceId().then((mine) => {
+      if (!alive) return;
+      unsub = subscribeDevice(authUser.uid, (d) => {
+        if (d === undefined) return; // 읽기 실패(잠깐 끊김)는 그대로 둔다
+        if (d?.id && d.id === mine) { setDevOk(true); return; }
+        setDevOk(false);
+        try { sessionStorage.setItem("hubLoginNotice", d?.id ? "다른 휴대폰에서 로그인해서 이 휴대폰은 로그아웃했어요" : "본인 휴대폰 확인이 필요해요. 다시 로그인해 주세요"); } catch { /* 무시 */ }
+        signOut(auth).then(() => nav("/login?role=driver&mode=hub", { replace: true }));
+      });
+    });
+    return () => { alive = false; unsub(); };
+  }, [devCheck, authUser?.uid]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const approved = me?.status === "approved";
   const takerish = !!me && approved && (me.role === "driver" || me.role === "carrier");
   useEffect(() => { if (!authUser) return undefined; return subscribeHubConfig((c) => { applyHubLists(c?.lists); setCfg(c || {}); }); }, [authUser]);
@@ -339,6 +359,9 @@ export default function HubApp() {
   if (me === null && !adminChecked) return <Loading />;
   if (me === null && isAdmin) return <AdminOnly admin={{ uid: authUser.uid, email: authUser.email }} cfg={cfg} logout={logout} />;
   if (me === null) return <Navigate to="/signup" replace />;
+  // 차주 화면은 휴대폰에서만(화주 · 운송사는 PC도)
+  if (me.role === "driver" && !isMobileDevice()) return <DriverPcBlock onLogout={logout} />;
+  if (devCheck && devOk !== true) return <Loading />;
   if (!approved) return <Gate m={me} logout={logout} />;
 
   const poster = canPost(me);

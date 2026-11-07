@@ -128,6 +128,7 @@ import { DailyReportPopupHost } from "../DailyReport"; // 📊 2026-11-06 일일
 import { canSeeBriefing } from "../dailyReport";
 import { tryAutoCheckIn, tryAutoCheckOut, undoAutoCheckOut } from "../autoAttendance";
 import OrderScanModal, { scanDropDate } from "../OrderScanModal";
+import { mainScanAi } from "../orderScanApi"; // 🧠 2026-11-07 오더 스캔 정밀 인식(서버 글자 인식 · AI 칸 정리 · 회사별 학습)
 // ⭐ 2026-11-02 운임규칙 — 회사별 운임 규칙(운임구분 → 기사운임·수수료 자동)
 import { useFareRules, FareTypeSelect, FareRuleHint, fareFormChange } from "../fareRules";
 import DetailFilterButton, { applyDetailFilter } from "../DetailFilter"; // 🔎 2026-11-03 세부검색(최대 3차)
@@ -16712,6 +16713,8 @@ const pickDrop = (c) => {
             if (showNewDriver && (form.차량번호 || "").trim()) {
               upsertDriver({ 차량번호: form.차량번호, 이름: form.기사명 || "", 전화번호: form.전화번호 || "" });
             }
+            // 🧠 오더 스캔 뒤 고친 칸을 회사별로 기억(스캔으로 채운 등록일 때만 기록이 있다)
+            mainScanAi.commit({ ...form, 차량톤수: form.톤수 ?? form.차량톤수, 차량종류: form.차종 ?? form.차량종류 }).catch(() => {});
             onSave();
           }}
           className={`w-full h-[52px] rounded-2xl text-white text-[16px] font-black tracking-tight shadow-[0_10px_24px_rgba(15,26,48,0.25)] active:scale-[0.99] transition ${
@@ -18223,6 +18226,7 @@ const pickDrop = (c) => {
         <OrderScanModal
           places={clients || []}
           clients={clients || []}
+          ai={mainScanAi}
           onClose={() => setShowSmartParser(false)}
           onApply={(patch, memo, info = {}) => {
             const m = { ...patch };
