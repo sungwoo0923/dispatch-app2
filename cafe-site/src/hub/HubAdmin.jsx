@@ -47,17 +47,17 @@ function AdjustBox({ uid, admin, toast }) {
   const go = async (sign) => {
     const n = Math.abs(numOf(v.amount)) * sign;
     if (!n) { toast?.("금액을 입력해 주세요"); return; }
-    if (!v.memo.trim()) { toast?.("조정 사유를 적어 주세요(원장에 남습니다)"); return; }
+    if (!v.memo.trim()) { toast?.("조정 사유를 적어 주세요(원장에 남아요)"); return; }
     setBusy(true);
-    try { await adjustWallet(uid, n, v.bucket, v.memo, admin); toast?.("조정을 요청했습니다 · 곧 잔액에 반영됩니다"); setV({ amount: "", bucket: v.bucket, memo: "" }); }
-    catch (e) { toast?.(e?.message || "조정하지 못했습니다"); } finally { setBusy(false); }
+    try { await adjustWallet(uid, n, v.bucket, v.memo, admin); toast?.("조정을 요청했어요, 곧 잔액에 반영돼요"); setV({ amount: "", bucket: v.bucket, memo: "" }); }
+    catch (e) { toast?.(e?.message || "조정하지 못했어요"); } finally { setBusy(false); }
   };
   return (
     <div className="space-y-2.5" data-testid="admin-adjust">
       <Seg value={v.bucket} onChange={(b) => setV((p) => ({ ...p, bucket: b }))} options={[["available", "사용 가능 예치금"], ["owed", "미정산(갚을 돈)"]]} />
       <div className="grid grid-cols-2 gap-2.5">
         <Field label="금액(원)"><input className={`${inputCls} text-right font-extrabold`} inputMode="numeric" value={v.amount} onChange={(e) => setV((p) => ({ ...p, amount: money(e.target.value.replace("-", "")) }))} style={NUMS} data-testid="adj-amount" /></Field>
-        <Field label="사유"><input className={inputCls} value={v.memo} onChange={(e) => setV((p) => ({ ...p, memo: e.target.value.slice(0, 200) }))} placeholder="예: 환불 · 오입금 정정" data-testid="adj-memo" /></Field>
+        <Field label="사유"><input className={inputCls} value={v.memo} onChange={(e) => setV((p) => ({ ...p, memo: e.target.value.slice(0, 200) }))} placeholder="예: 환불, 오입금 정정" data-testid="adj-memo" /></Field>
       </div>
       <div className="grid grid-cols-2 gap-2"><Btn kind="ghost" disabled={busy} onClick={() => go(-1)} data-testid="adj-minus">− 빼기</Btn><Btn disabled={busy} onClick={() => go(1)} data-testid="adj-plus">+ 더하기</Btn></div>
     </div>
@@ -81,10 +81,10 @@ export function MemberReview({ m, admin, onClose, toast }) {
   useEffect(() => { if (m.photoPath) fileUrl(m.photoPath).then(setPhoto).catch(() => {}); }, [m.photoPath]);
   useEffect(() => subscribeWallet(m.id, setWallet), [m.id]);
   const act = async (decision) => {
-    if ((decision === "rejected" || decision === "suspended") && !reason.trim()) { toast?.("거절 · 정지 사유를 적어 주세요"); return; }
+    if ((decision === "rejected" || decision === "suspended") && !reason.trim()) { toast?.("거절, 정지 사유를 적어 주세요"); return; }
     setBusy(decision);
-    try { await reviewMember(m.id, admin, decision, { reason, verified, bizStatus: biz }); toast?.(`${ST[decision]} 처리했습니다`); onClose(); }
-    catch (e) { toast?.(e?.message || "처리하지 못했습니다"); } finally { setBusy(""); }
+    try { await reviewMember(m.id, admin, decision, { reason, verified, bizStatus: biz }); toast?.(`${ST[decision]} 처리했어요`); onClose(); }
+    catch (e) { toast?.(e?.message || "처리하지 못했어요"); } finally { setBusy(""); }
   };
   const saveEdit = async () => {
     setBusy("edit");
@@ -99,15 +99,15 @@ export function MemberReview({ m, admin, onClose, toast }) {
         ...(ed.companyKey.trim() ? { companyKey: ed.companyKey.trim() } : {}),
         ...(ed.vaNo.trim() ? { va: { bank: ed.vaBank, number: ed.vaNo.trim(), numberDigits: ed.vaNo.replace(/[^\d]/g, ""), holder: ed.vaHolder.trim(), at: Date.now() } } : {}),
       });
-      toast?.("회원 정보를 저장했습니다");
-    } catch (e) { toast?.(e?.message || "저장하지 못했습니다"); } finally { setBusy(""); }
+      toast?.("회원 정보를 저장했어요");
+    } catch (e) { toast?.(e?.message || "저장하지 못했어요"); } finally { setBusy(""); }
   };
   const E = (k) => (e) => setEd((p) => ({ ...p, [k]: e.target.value }));
   const rows = [["유형", ROLES[m.role]?.label], ["출처", SOURCE_LABEL[m.source]], ["이메일", m.email], ["이름", m.name], ["휴대폰", m.phone], ["회사", m.companyName], ["사업자번호", m.bizNo], ["대표자", m.ceoName], ["직책", m.managerTitle], ["허가번호", m.permitNo], ["주소", m.bizAddress],
-    ...(m.vehicle ? [["차량", `${m.vehicle.plate} · ${m.vehicle.ton} ${m.vehicle.type}`], ["적재함", `${m.vehicle.length || "-"}m × ${m.vehicle.width || "-"}m`]] : []),
+    ...(m.vehicle ? [["차량", `${m.vehicle.plate}, ${m.vehicle.ton} ${m.vehicle.type}`], ["적재함", `${m.vehicle.length || "-"}m × ${m.vehicle.width || "-"}m`]] : []),
     ...(m.home ? [["거주", `${m.home.sido} ${m.home.sigungu || ""}`]] : []), ["주 운행", (m.regions || []).join(", ")], ["정산 계좌", m.bank?.number ? `${m.bank.bank} ${m.bank.number} (${m.bank.holder})` : ""], ["신청", m.appliedAt ? new Date(tsMs(m.appliedAt)).toLocaleString("ko-KR") : ""]].filter(([, v]) => v);
   return (
-    <Drawer onClose={onClose} title={`${m.name || m.email} · ${ROLES[m.role]?.label || ""}`} sub={`${ST[m.status] || m.status}${m.rejectReason ? ` · ${m.rejectReason}` : ""}`} width={720} testid="member-review">
+    <Drawer onClose={onClose} title={`${m.name || m.email}, ${ROLES[m.role]?.label || ""}`} sub={`${ST[m.status] || m.status}${m.rejectReason ? `, ${m.rejectReason}` : ""}`} width={720} testid="member-review">
       <div className="flex-1 overflow-y-auto hub-scroll p-4 lg:p-5 space-y-3.5">
         <Card className="p-4">
           <div className="flex items-center gap-3 mb-2">
@@ -125,8 +125,8 @@ export function MemberReview({ m, admin, onClose, toast }) {
           <label className="block"><span className="text-[15px] font-bold text-[#3A4A66]">사업자 상태(국세청 조회 결과)</span>
             <select className={`${selectCls} mt-1.5`} value={biz} onChange={(e) => setBiz(e.target.value)} data-testid="admin-biz">{BIZ_STATUS.map((s) => <option key={s}>{s}</option>)}</select>
           </label>
-          <a href="https://teht.hometax.go.kr/websquare/websquare.html?w2xPath=/ui/ab/a/a/UTEABAAA13.xml" target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 text-[14.5px] font-bold text-[#2D4C82]"><HI name="link" size={15} />홈택스 사업자 상태 조회 열기 ↗</a>
-          <label className="block"><span className="text-[15px] font-bold text-[#3A4A66]">거절 · 정지 사유</span>
+          <a href="https://teht.hometax.go.kr/websquare/websquare.html?w2xPath=/ui/ab/a/a/UTEABAAA13.xml" target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 text-[14.5px] font-bold text-[#2D4C82]"><HI name="link" size={15} />홈택스 사업자 상태 조회 열기</a>
+          <label className="block"><span className="text-[15px] font-bold text-[#3A4A66]">거절, 정지 사유</span>
             <input className={`${inputCls} mt-1.5`} value={reason} onChange={(e) => setReason(e.target.value)} placeholder="예: 통장사본 이름이 사업자와 다릅니다" data-testid="admin-reason" />
           </label>
         </Card>
@@ -161,8 +161,8 @@ export function MemberReview({ m, admin, onClose, toast }) {
           </div>
           <Field label="회사 키" hint={`비우면 자동: ${companyKeyOf({ ...m, companyKey: "" })}`}><input className={inputCls} value={ed.companyKey} onChange={E("companyKey")} placeholder={companyKeyOf({ ...m, companyKey: "" })} data-testid="am-ckey" /></Field>
           <Field label="관리자 메모(회원에게 안 보임)"><input className={inputCls} value={ed.adminNote} onChange={E("adminNote")} /></Field>
-          <label className="flex items-center gap-2.5 text-[15px] font-bold text-[#0F1A30]"><input type="checkbox" checked={ed.blocked} onChange={(e) => setEd((p) => ({ ...p, blocked: e.target.checked }))} className="w-5 h-5 accent-[#1B2B4B]" data-testid="am-blocked" />배차신청 막기(노쇼 · 반복 취소 패널티)</label>
-          <Btn kind="soft" className="w-full" disabled={!!busy} onClick={saveEdit} data-testid="am-save">{busy === "edit" ? "저장 중…" : "정보 저장"}</Btn>
+          <label className="flex items-center gap-2.5 text-[15px] font-bold text-[#0F1A30]"><input type="checkbox" checked={ed.blocked} onChange={(e) => setEd((p) => ({ ...p, blocked: e.target.checked }))} className="w-5 h-5 accent-[#1B2B4B]" data-testid="am-blocked" />배차신청 막기(노쇼, 반복 취소 패널티)</label>
+          <Btn kind="soft" className="w-full" disabled={!!busy} onClick={saveEdit} data-testid="am-save">{busy === "edit" ? "저장하고 있어요" : "정보 저장"}</Btn>
         </Card>
         <Card className="p-4 space-y-3" data-testid="admin-member-wallet">
           <div className="text-[16px] font-extrabold text-[#0F1A30] flex items-center gap-2"><HI name="wallet" size={18} className="text-[#2D4C82]" />예치금</div>
@@ -185,12 +185,12 @@ function AdminOrderPanel({ o, detail, admin, toast }) {
   const [busy, setBusy] = useState("");
   const [ask, setAsk] = useState(null);
   const S = (k) => (e) => setF((p) => ({ ...p, [k]: e.target.value }));
-  const run = async (label, fn, ok) => { setBusy(label); try { await fn(); toast?.(ok); } catch (e) { toast?.(e?.message || "처리하지 못했습니다"); } finally { setBusy(""); setAsk(null); } };
-  const save = () => run("save", () => { const { pub, detail: d } = splitForm({ ...o, ...f }); return adminUpdateOrder(o.id, pub, d); }, "오더를 수정했습니다");
+  const run = async (label, fn, ok) => { setBusy(label); try { await fn(); toast?.(ok); } catch (e) { toast?.(e?.message || "처리하지 못했어요"); } finally { setBusy(""); setAsk(null); } };
+  const save = () => run("save", () => { const { pub, detail: d } = splitForm({ ...o, ...f }); return adminUpdateOrder(o.id, pub, d); }, "오더를 수정했어요");
   const TXT = [["상차일", "date"], ["상차시간"], ["하차일", "date"], ["하차시간"], ["화물내용"], ["중량"], ["파레트"], ["공개메모"]];
   return (
     <Card className="p-4 space-y-3 ring-2 ring-[#0F1A30]" data-testid="admin-order-panel">
-      <div className="flex items-center gap-2"><HI name="shield" size={18} className="text-[#2D4C82]" /><span className="text-[16px] font-extrabold text-[#0F1A30]">관리자 · 오더 편집</span>{o.lwOrderId && <Badge tone="sky">로지스웹 연동 {o.lwOrderId}</Badge>}</div>
+      <div className="flex items-center gap-2"><HI name="shield" size={18} className="text-[#2D4C82]" /><span className="text-[16px] font-extrabold text-[#0F1A30]">관리자, 오더 편집</span>{o.lwOrderId && <Badge tone="sky">로지스웹 연동 {o.lwOrderId}</Badge>}</div>
       <div className="grid grid-cols-2 gap-2.5">
         <Field label="상차 시·도"><select className={selectCls} value={f.상차시도} onChange={S("상차시도")}>{SIDO_LIST.map((s) => <option key={s}>{s}</option>)}</select></Field>
         <Field label="상차 시·군·구"><input className={inputCls} value={f.상차시군구} onChange={S("상차시군구")} /></Field>
@@ -210,16 +210,16 @@ function AdminOrderPanel({ o, detail, admin, toast }) {
         <Field label="메모(차주만)" className="col-span-2"><input className={inputCls} value={f.메모 || ""} onChange={S("메모")} /></Field>
       </div>
       <label className="flex items-center gap-2 text-[15px] font-bold"><input type="checkbox" checked={!!f.긴급} onChange={(e) => setF((p) => ({ ...p, 긴급: e.target.checked }))} className="w-5 h-5 accent-[#1B2B4B]" />긴급</label>
-      <Btn className="w-full" disabled={!!busy} onClick={save} data-testid="ao-save">{busy === "save" ? "저장 중…" : "수정 저장"}</Btn>
+      <Btn className="w-full" disabled={!!busy} onClick={save} data-testid="ao-save">{busy === "save" ? "저장하고 있어요" : "수정 저장"}</Btn>
       <div className="pt-3 border-t border-[#EEF1F6]">
         <div className="text-[14.5px] font-bold text-[#3A4A66] mb-2">단계 강제 변경 <span className="text-[#8592A8] font-semibold">(지금: {STATUS[o.status]?.label})</span></div>
         <div className="flex gap-1.5 flex-wrap">{Object.entries(STATUS).map(([k, s]) => <button key={k} type="button" disabled={k === o.status || !!busy || (["assigned", "loaded", "delivered"].includes(k) && !o.takerUid)} onClick={() => setAsk({ k })} className={`h-10 px-3.5 rounded-full text-[14px] font-bold ring-1 ring-inset disabled:opacity-35 ${k === o.status ? "bg-[#0F1A30] text-white ring-[#0F1A30]" : "bg-white text-[#1B2B4B] ring-[#D6DEEA]"}`} data-testid={`ao-status-${k}`}>{s.label}</button>)}</div>
       </div>
       {payKind(o.지급방식) === "deposit" && o.status === "delivered" && o.settle?.status !== "settled" && (
-        <Btn kind="soft" className="w-full" disabled={!!busy} onClick={() => run("settle", () => adminSettle(o.id, admin), "정산 처리를 요청했습니다(계산서 없이)")} data-testid="ao-settle">계산서 없이 정산 처리</Btn>
+        <Btn kind="soft" className="w-full" disabled={!!busy} onClick={() => run("settle", () => adminSettle(o.id, admin), "정산 처리를 요청했어요(계산서 없이)")} data-testid="ao-settle">계산서 없이 정산 처리</Btn>
       )}
-      {o.settle && <div className="text-[13.5px] text-[#55657F]">정산: {SETTLE_LABEL[o.settle.status] || o.settle.status}{o.settle.holdAmount ? ` · 보류 ${wonFull(o.settle.holdAmount)}` : ""}{o.settle.payoutStatus ? ` · 지급 ${o.settle.payoutStatus}` : ""}</div>}
-      {ask && <Confirm title={`${STATUS[ask.k]?.label}(으)로 바꿀까요?`} body={ask.k === "open" ? "배차된 회원을 빼고 다시 모집합니다(보류 예치금은 풀립니다)." : ask.k === "cancelled" ? "오더를 취소합니다(양쪽에 알림 · 보류 해제)." : "관리자 강제 변경입니다. 알림 · 정산이 그 단계에 맞게 처리됩니다."} okText="바꾸기" onCancel={() => setAsk(null)} onOk={() => run("st", () => adminForceStatus(o, ask.k), "단계를 바꿨습니다")} />}
+      {o.settle && <div className="text-[13.5px] text-[#55657F]">정산: {SETTLE_LABEL[o.settle.status] || o.settle.status}{o.settle.holdAmount ? `, 보류 ${wonFull(o.settle.holdAmount)}` : ""}{o.settle.payoutStatus ? `, 지급 ${o.settle.payoutStatus}` : ""}</div>}
+      {ask && <Confirm title={`${STATUS[ask.k]?.label}(으)로 바꿀까요?`} body={ask.k === "open" ? "배차된 회원을 빼고 다시 모집해요(보류 예치금은 풀려요)." : ask.k === "cancelled" ? "오더를 취소해요(양쪽에 알림, 보류 해제)." : "관리자 강제 변경이에요. 알림, 정산이 그 단계에 맞게 처리돼요."} okText="바꾸기" onCancel={() => setAsk(null)} onOk={() => run("st", () => adminForceStatus(o, ask.k), "단계를 바꿨어요")} />}
     </Card>
   );
 }
@@ -244,7 +244,7 @@ function MoneyAdmin({ members, admin, toast }) {
   useEffect(() => subscribeAll("hubWallets", setWallets), []);
   useEffect(() => subscribeAll("hubDebts", setDebts), []);
   useEffect(() => (sub === "ledger" ? subscribeAll("hubLedger", setLedger, 400) : undefined), [sub]);
-  const name = (uid) => { const m = members.find((x) => x.id === uid); return m ? `${m.name}${m.companyName && m.companyName !== m.name ? ` · ${m.companyName}` : ""}` : uid === "__platform__" ? "플랫폼(로지스웹)" : String(uid || "").slice(0, 8); };
+  const name = (uid) => { const m = members.find((x) => x.id === uid); return m ? `${m.name}${m.companyName && m.companyName !== m.name ? `, ${m.companyName}` : ""}` : uid === "__platform__" ? "플랫폼(로지스웹)" : String(uid || "").slice(0, 8); };
   const reqCh = charges.filter((c) => c.status === "requested").sort((a, b) => tsMs(a.createdAt) - tsMs(b.createdAt));
   const openPo = payouts.filter((p) => p.status !== "paid").sort((a, b) => tsMs(a.createdAt) - tsMs(b.createdAt));
   const tot = wallets.reduce((a, w) => ({ available: a.available + (w.uid === "__platform__" ? 0 : w.available || 0), held: a.held + (w.held || 0), pending: a.pending + (w.pending || 0), owed: a.owed + (w.owed || 0) }), { available: 0, held: 0, pending: 0, owed: 0 });
@@ -257,14 +257,14 @@ function MoneyAdmin({ members, admin, toast }) {
         {[["예치금 합계", tot.available], ["보류 합계", tot.held], ["지급 예정 합계", tot.pending], ["미정산 합계", tot.owed]].map(([l, v]) => <div key={l} className="rounded-[20px] bg-white ring-1 ring-inset ring-[#E2E7EF] px-4 py-3"><div className="text-[13.5px] font-bold text-[#8592A8]">{l}</div><div className="text-[20px] font-extrabold text-[#0F1A30]" style={NUMS}>{wonFull(v)}</div></div>)}
       </div>
       <div className="flex gap-1.5 overflow-x-auto hub-scroll -mx-1 px-1">{SUBS.map(([k, l]) => <button key={k} type="button" onClick={() => setSub(k)} className={`shrink-0 h-11 px-4 rounded-full text-[15px] font-bold ${sub === k ? "bg-[#0F1A30] text-white" : "bg-white ring-1 ring-inset ring-[#E2E7EF] text-[#1B2B4B]"}`} data-testid={`money-${k}`}>{l}</button>)}</div>
-      {sub === "charges" && (charges.length === 0 ? <Empty icon="wallet" title="충전 요청이 없습니다" /> : (
+      {sub === "charges" && (charges.length === 0 ? <Empty icon="wallet" title="충전 요청이 없어요" /> : (
         <div className="space-y-2">
           {[...reqCh, ...charges.filter((c) => c.status !== "requested").sort((a, b) => tsMs(b.createdAt) - tsMs(a.createdAt)).slice(0, 40)].map((c) => (
             <Row key={c.id} data-testid="admin-charge-row">
               <Badge tone={c.status === "requested" ? "accent" : c.status === "confirmed" ? "navy" : "line"}>{CH[c.status] || c.status}</Badge>
               <span className="text-[16px] font-extrabold text-[#0F1A30]" style={NUMS}>{wonFull(c.amount)}</span>
-              <span className="text-[14.5px] text-[#55657F] min-w-0 truncate">{name(c.uid)} · 입금자 <b className="text-[#0F1A30]">{c.depositor}</b> · {ago(c.createdAt)}</span>
-              {c.status === "requested" && <span className="ml-auto flex gap-1.5"><Btn kind="ghost" size="md" onClick={() => setRej(c)}>반려</Btn><Btn size="md" onClick={() => confirmCharge(c.id, admin).then(() => toast?.("입금 확인 · 예치금에 넣습니다")).catch((e) => toast?.(e?.message || "실패"))} data-testid="admin-charge-confirm">입금 확인</Btn></span>}
+              <span className="text-[14.5px] text-[#55657F] min-w-0 truncate">{name(c.uid)}, 입금자 <b className="text-[#0F1A30]">{c.depositor}</b>, {ago(c.createdAt)}</span>
+              {c.status === "requested" && <span className="ml-auto flex gap-1.5"><Btn kind="ghost" size="md" onClick={() => setRej(c)}>반려</Btn><Btn size="md" onClick={() => confirmCharge(c.id, admin).then(() => toast?.("입금 확인, 예치금에 넣습니다")).catch((e) => toast?.(e?.message || "실패"))} data-testid="admin-charge-confirm">입금 확인</Btn></span>}
             </Row>
           ))}
         </div>
@@ -272,7 +272,7 @@ function MoneyAdmin({ members, admin, toast }) {
       {sub === "payouts" && (
         <>
           <div className="rounded-2xl bg-[#F5F8FD] ring-1 ring-inset ring-[#DCE3EE] px-4 py-3 text-[14px] text-[#3A4A66] leading-relaxed">지급일이 되면 지급 요청으로 바뀌어요. 지급대행 연결 전에는 직접 보낸 뒤 <b>지급완료</b>를 눌러 주세요.</div>
-          {payouts.length === 0 ? <Empty icon="truck" title="지급할 운임이 없습니다" /> : (
+          {payouts.length === 0 ? <Empty icon="truck" title="지급할 운임이 없어요" /> : (
             <div className="space-y-2">
               {[...openPo, ...payouts.filter((p) => p.status === "paid").sort((a, b) => tsMs(b.paidAt) - tsMs(a.paidAt)).slice(0, 30)].map((p) => (
                 <Row key={p.id} data-testid="admin-payout-row">
@@ -280,7 +280,7 @@ function MoneyAdmin({ members, admin, toast }) {
                   <span className="text-[16px] font-extrabold text-[#0F1A30]" style={NUMS}>{wonFull(p.amount)}</span>
                   <span className="min-w-0 flex-1 text-[14.5px] text-[#55657F] truncate">{p.toName || name(p.toUid)} {p.route} {p.dueDate ? `${p.dueDate} 지급` : ""} {p.bank?.number ? `${p.bank.bank} ${p.bank.number} (${p.bank.holder})` : "계좌 미등록"}</span>
                   {p.adapter?.message && p.status !== "paid" && <span className="w-full text-[13px] text-[#8592A8]">지급대행: {p.adapter.message}</span>}
-                  {p.status !== "paid" && <span className="ml-auto flex gap-1.5">{["queued", "scheduled"].includes(p.status) && <Btn kind="ghost" size="md" onClick={() => requestPayoutSend(p.id, admin).then(() => toast?.("지급 요청 — 지급대행 연결 결과를 확인하세요")).catch(() => {})} data-testid="admin-payout-request">지급 요청</Btn>}<Btn size="md" onClick={() => setPaid(p)} data-testid="admin-payout-paid">지급완료</Btn></span>}
+                  {p.status !== "paid" && <span className="ml-auto flex gap-1.5">{["queued", "scheduled"].includes(p.status) && <Btn kind="ghost" size="md" onClick={() => requestPayoutSend(p.id, admin).then(() => toast?.("지급 요청, 지급대행 연결 결과를 확인하세요")).catch(() => {})} data-testid="admin-payout-request">지급 요청</Btn>}<Btn size="md" onClick={() => setPaid(p)} data-testid="admin-payout-paid">지급완료</Btn></span>}
                 </Row>
               ))}
             </div>
@@ -303,24 +303,24 @@ function MoneyAdmin({ members, admin, toast }) {
         <div className="space-y-2">
           {wallets.sort((a, b) => (b.available || 0) - (a.available || 0)).map((w) => (
             <Row key={w.id}><span className="min-w-0 flex-1 text-[15.5px] font-extrabold text-[#0F1A30] truncate">{name(w.id)}</span>
-              <span className="text-[14px] text-[#55657F]" style={NUMS}>가능 <b className="text-[#0F1A30]">{wonFull(w.available)}</b> · 보류 {wonFull(w.held)} · 지급예정 {wonFull(w.pending)} · 미정산 {wonFull(w.owed)}</span></Row>
+              <span className="text-[14px] text-[#55657F]" style={NUMS}>가능 <b className="text-[#0F1A30]">{wonFull(w.available)}</b>, 보류 {wonFull(w.held)}, 지급예정 {wonFull(w.pending)}, 미정산 {wonFull(w.owed)}</span></Row>
           ))}
-          {wallets.length === 0 && <Empty icon="wallet" title="예치금이 있는 회원이 없습니다" />}
+          {wallets.length === 0 && <Empty icon="wallet" title="예치금이 있는 회원이 없어요" />}
         </div>
       )}
-      {sub === "debts" && (debts.length === 0 ? <Empty title="미정산이 없습니다" /> : (
-        <div className="space-y-2">{debts.sort((a, b) => tsMs(b.createdAt) - tsMs(a.createdAt)).map((d) => <Row key={d.id}><Badge tone={d.status === "open" ? "accent" : "navy"}>{d.status === "open" ? "미정산" : "상환"}</Badge><span className="text-[15.5px] font-extrabold" style={NUMS}>{wonFull(d.amount)}</span><span className="min-w-0 flex-1 text-[14.5px] text-[#55657F] truncate">{name(d.fromUid)} → {name(d.toUid)} · {d.route}</span></Row>)}</div>
+      {sub === "debts" && (debts.length === 0 ? <Empty title="미정산이 없어요" /> : (
+        <div className="space-y-2">{debts.sort((a, b) => tsMs(b.createdAt) - tsMs(a.createdAt)).map((d) => <Row key={d.id}><Badge tone={d.status === "open" ? "accent" : "navy"}>{d.status === "open" ? "미정산" : "상환"}</Badge><span className="text-[15.5px] font-extrabold" style={NUMS}>{wonFull(d.amount)}</span><span className="min-w-0 flex-1 text-[14.5px] text-[#55657F] truncate">{name(d.fromUid)} → {name(d.toUid)}, {d.route}</span></Row>)}</div>
       ))}
       {sub === "ledger" && (
         <Card className="divide-y divide-[#EEF1F6]">
           {ledger.sort((a, b) => tsMs(b.at) - tsMs(a.at)).slice(0, 200).map((l) => (
-            <div key={l.id} className="px-4 py-2.5 flex items-center gap-2 text-[14.5px]"><Badge>{l.label || LEDGER_LABEL[l.type]}</Badge><span className="font-bold text-[#0F1A30] truncate min-w-0 flex-1">{name(l.uid)} · {l.route || l.memo}</span><span className="font-extrabold shrink-0" style={NUMS}>{wonFull(l.amount)}</span><span className="text-[12.5px] text-[#8592A8] shrink-0">{ago(l.at)}</span></div>
+            <div key={l.id} className="px-4 py-2.5 flex items-center gap-2 text-[14.5px]"><Badge>{l.label || LEDGER_LABEL[l.type]}</Badge><span className="font-bold text-[#0F1A30] truncate min-w-0 flex-1">{name(l.uid)}, {l.route || l.memo}</span><span className="font-extrabold shrink-0" style={NUMS}>{wonFull(l.amount)}</span><span className="text-[12.5px] text-[#8592A8] shrink-0">{ago(l.at)}</span></div>
           ))}
-          {ledger.length === 0 && <div className="p-8 text-center text-[#8592A8]">원장이 비어 있습니다.</div>}
+          {ledger.length === 0 && <div className="p-8 text-center text-[#8592A8]">원장이 비어 있어요.</div>}
         </Card>
       )}
-      {rej && <Confirm title="충전 요청 반려" body={`${name(rej.uid)} · ${wonFull(rej.amount)}\n입금이 확인되지 않은 요청을 반려합니다.`} okText="반려" onCancel={() => setRej(null)} onOk={() => rejectCharge(rej.id, "입금 미확인").then(() => { toast?.("반려했습니다"); setRej(null); })} />}
-      {paid && <Confirm title="지급완료로 처리할까요?" body={`${paid.toName || name(paid.toUid)} · ${wonFull(paid.amount)}\n${paid.bank?.number ? `${paid.bank.bank} ${paid.bank.number} (${paid.bank.holder})` : "계좌 미등록"}\n회사 계좌에서 이체를 마쳤을 때만 눌러 주세요.`} okText="지급완료" onCancel={() => setPaid(null)} onOk={() => markPayoutPaid(paid.id, admin, "수동 이체").then(() => { toast?.("지급완료 처리했습니다"); setPaid(null); })} />}
+      {rej && <Confirm title="충전 요청 반려" body={`${name(rej.uid)}, ${wonFull(rej.amount)}\n입금이 확인되지 않은 요청을 반려해요.`} okText="반려" onCancel={() => setRej(null)} onOk={() => rejectCharge(rej.id, "입금 미확인").then(() => { toast?.("반려했어요"); setRej(null); })} />}
+      {paid && <Confirm title="지급완료로 처리할까요?" body={`${paid.toName || name(paid.toUid)}, ${wonFull(paid.amount)}\n${paid.bank?.number ? `${paid.bank.bank} ${paid.bank.number} (${paid.bank.holder})` : "계좌 미등록"}\n회사 계좌에서 이체를 마쳤을 때만 눌러 주세요.`} okText="지급완료" onCancel={() => setPaid(null)} onOk={() => markPayoutPaid(paid.id, admin, "수동 이체").then(() => { toast?.("지급완료 처리했어요"); setPaid(null); })} />}
     </div>
   );
 }
@@ -341,7 +341,7 @@ function SettingsAdmin({ cfg, admin, toast }) {
     fee: { mode: v.feeMode, value: Number(String(v.feeValue).replace(/[^\d.]/g, "")) || 0, platformRate: Math.max(0, Math.min(100, Number(v.platformRate) || 0)) },
     depositAccount: { bank: v.bank, number: v.number.trim(), holder: v.holder.trim() }, supportPhone: v.supportPhone.trim(),
     lists: { vehicles: arr(v.vehicles), tons: arr(v.tons), payMethods: arr(v.payMethods), loadMethods: arr(v.loadMethods), regions: arr(v.regions) },
-  }, admin).then(() => toast?.("설정을 저장했습니다 · 모든 화면에 바로 반영됩니다")).catch((e) => toast?.(e?.message || "저장하지 못했습니다"));
+  }, admin).then(() => toast?.("설정을 저장했어요, 모든 화면에 바로 반영돼요")).catch((e) => toast?.(e?.message || "저장하지 못했어요"));
   return (
     <div className="grid lg:grid-cols-2 gap-3.5" data-testid="admin-settings">
       <Card className="p-4 space-y-3">
@@ -366,7 +366,7 @@ function SettingsAdmin({ cfg, admin, toast }) {
         {[["vehicles", "차종"], ["tons", "톤수"], ["payMethods", "결제 방식"], ["loadMethods", "상·하차 방법"], ["regions", "지역(시·도)"]].map(([k, l]) => (
           <Field key={k} label={l}><textarea rows={2} className={`${inputCls} h-auto py-2.5`} value={v[k]} onChange={S(k)} data-testid={`set-list-${k}`} /></Field>
         ))}
-        <div className="text-[13px] text-[#8592A8]">결제 방식 중 인수증 · 예치금은 예치금 결제, 선불 · 착불은 현금(차주 수수료 정산)으로 처리됩니다. 지역은 시·도 이름만 쓸 수 있습니다.</div>
+        <div className="text-[13px] text-[#8592A8]">결제 방식 중 인수증, 예치금은 예치금 결제, 선불, 착불은 현금(차주 수수료 정산)으로 처리돼요. 지역은 시·도 이름만 쓸 수 있어요.</div>
       </Card>
       <Btn size="lg" className="lg:col-span-2" onClick={save} data-testid="set-save">설정 저장</Btn>
     </div>
@@ -376,7 +376,7 @@ function AnnounceAdmin({ admin, toast }) {
   const [rows, setRows] = useState([]);
   const [ed, setEd] = useState(null);
   useEffect(() => subscribeAnnouncements(setRows), []);
-  const save = () => saveAnnouncement(ed.id, { title: ed.title.trim(), body: ed.body.trim(), pinned: !!ed.pinned, active: ed.active !== false }, admin).then(() => { toast?.("공지를 저장했습니다"); setEd(null); }).catch((e) => toast?.(e?.message || "저장하지 못했습니다"));
+  const save = () => saveAnnouncement(ed.id, { title: ed.title.trim(), body: ed.body.trim(), pinned: !!ed.pinned, active: ed.active !== false }, admin).then(() => { toast?.("공지를 저장했어요"); setEd(null); }).catch((e) => toast?.(e?.message || "저장하지 못했어요"));
   return (
     <div className="space-y-3" data-testid="admin-announce">
       <Btn onClick={() => setEd({ title: "", body: "", pinned: false, active: true })} data-testid="ann-new"><HI name="plus" size={17} />새 공지</Btn>
@@ -392,7 +392,7 @@ function AnnounceAdmin({ admin, toast }) {
         <Card key={a.id} className="p-4 flex items-start gap-3">
           <HI name="megaphone" size={20} className="text-[#2D4C82] shrink-0 mt-0.5" />
           <div className="min-w-0 flex-1"><div className="flex items-center gap-2"><span className="text-[16px] font-extrabold text-[#0F1A30]">{a.title}</span>{a.pinned && <Badge tone="navy">고정</Badge>}{a.active === false && <Badge>숨김</Badge>}</div><div className="text-[14.5px] text-[#55657F] whitespace-pre-line mt-0.5">{a.body}</div></div>
-          <div className="flex gap-1 shrink-0"><Btn kind="ghost" size="md" onClick={() => setEd({ ...a })}>수정</Btn><Btn kind="ghost" size="md" onClick={() => deleteAnnouncement(a.id).then(() => toast?.("삭제했습니다"))}>삭제</Btn></div>
+          <div className="flex gap-1 shrink-0"><Btn kind="ghost" size="md" onClick={() => setEd({ ...a })}>수정</Btn><Btn kind="ghost" size="md" onClick={() => deleteAnnouncement(a.id).then(() => toast?.("삭제했어요"))}>삭제</Btn></div>
         </Card>
       ))}
     </div>
@@ -441,15 +441,15 @@ export default function HubAdmin({ admin, toast, me, cfg }) {
               </button>
             ))}
           </div>
-          <input className={inputCls} value={q} onChange={(e) => setQ(e.target.value)} placeholder="이름 · 회사 · 이메일 · 차량번호 검색" />
-          {list.length === 0 ? <Empty title={`${ST[tab]} 회원이 없습니다`} /> : (
+          <input className={inputCls} value={q} onChange={(e) => setQ(e.target.value)} placeholder="이름, 회사, 이메일, 차량번호 검색" />
+          {list.length === 0 ? <Empty title={`${ST[tab]} 회원이 없어요`} /> : (
             <div className="grid lg:grid-cols-2 gap-2.5">
               {list.map((m) => (
                 <button key={m.id} type="button" onClick={() => setSel(m.id)} data-testid="admin-member-row" className="text-left bg-white rounded-[20px] ring-1 ring-inset ring-[#E2E7EF] p-4 hover:ring-[#2D4C82] flex items-center gap-3">
                   <span className="w-12 h-12 rounded-2xl bg-[#EAF0FA] text-[#1B2B4B] inline-flex items-center justify-center shrink-0"><HI name={ROLES[m.role]?.icon || "user"} size={22} /></span>
                   <span className="min-w-0 flex-1">
                     <span className="flex items-center gap-1.5"><span className="text-[16.5px] font-extrabold text-[#0F1A30] truncate">{m.name || m.email}</span><Badge>{ROLES[m.role]?.label}</Badge>{m.source !== "signup" && <Badge tone="sky">로지스웹</Badge>}{m.penalty?.blocked && <Badge tone="line">신청 막힘</Badge>}</span>
-                    <span className="block text-[14.5px] text-[#55657F] truncate">{[m.companyName, m.vehicle ? `${m.vehicle.plate} ${m.vehicle.ton} ${m.vehicle.type}` : "", m.phone].filter(Boolean).join(" · ")}</span>
+                    <span className="block text-[14.5px] text-[#55657F] truncate">{[m.companyName, m.vehicle ? `${m.vehicle.plate} ${m.vehicle.ton} ${m.vehicle.type}` : "", m.phone].filter(Boolean).join(", ")}</span>
                   </span>
                   <span className="text-[13.5px] text-[#8592A8] shrink-0">{ago(m.appliedAt || m.createdAt)}</span>
                 </button>
@@ -462,8 +462,8 @@ export default function HubAdmin({ admin, toast, me, cfg }) {
       {sec === "orders" && (
         <div className="space-y-3" data-testid="admin-orders">
           <div className="flex gap-1.5 overflow-x-auto hub-scroll -mx-1 px-1">{[["all", `전체 ${orders.length}`], ...Object.entries(STATUS).map(([k, s]) => [k, `${s.label} ${orders.filter((o) => o.status === k).length}`])].map(([k, l]) => <button key={k} type="button" onClick={() => setOst(k)} className={`shrink-0 h-10 px-3.5 rounded-full text-[14px] font-bold ${ost === k ? "bg-[#0F1A30] text-white" : "bg-white ring-1 ring-inset ring-[#E2E7EF] text-[#1B2B4B]"}`}>{l}</button>)}</div>
-          <input className={inputCls} value={oq} onChange={(e) => setOq(e.target.value)} placeholder="지역 · 등록자 · 화물 · 오더번호 검색" data-testid="admin-order-q" />
-          {olist.length === 0 ? <Empty icon="board" title="오더가 없습니다" /> : <div className="grid xl:grid-cols-2 gap-3">{olist.slice(0, 200).map((o) => <div key={o.id} data-testid="admin-order-row"><HubOrderCard o={o} onOpen={() => setSelO(o.id)} compact /></div>)}</div>}
+          <input className={inputCls} value={oq} onChange={(e) => setOq(e.target.value)} placeholder="지역, 등록자, 화물, 오더번호 검색" data-testid="admin-order-q" />
+          {olist.length === 0 ? <Empty icon="board" title="오더가 없어요" /> : <div className="grid xl:grid-cols-2 gap-3">{olist.slice(0, 200).map((o) => <div key={o.id} data-testid="admin-order-row"><HubOrderCard o={o} onOpen={() => setSelO(o.id)} compact /></div>)}</div>}
         </div>
       )}
       {sec === "money" && <MoneyAdmin members={rows} admin={admin} toast={toast} />}
@@ -471,9 +471,9 @@ export default function HubAdmin({ admin, toast, me, cfg }) {
       {sec === "announce" && <AnnounceAdmin admin={admin} toast={toast} />}
       {sec === "reports" && (
         <Card className="p-4">
-          <div className="text-[16px] font-extrabold text-[#0F1A30] mb-2">신고 · 노쇼 기록 {reports.length ? `(${reports.length})` : ""}</div>
-          {reports.length === 0 ? <div className="text-[15px] text-[#8592A8]">접수된 신고가 없습니다.</div> : reports.slice(0, 60).map((r) => (
-            <div key={r.id} className="py-2 border-t border-[#EEF1F6] text-[15px] flex gap-2 items-center"><Badge>{r.type === "noshow" ? "노쇼" : r.type}</Badge><button type="button" onClick={() => { setSel(r.targetUid); setSec("members"); }} className="font-bold text-[#0F1A30] underline-offset-2 hover:underline">{rows.find((m) => m.id === r.targetUid)?.name || r.targetUid.slice(0, 6)}</button><span className="text-[#55657F] truncate">{r.reporterName} · {r.text}</span><span className="ml-auto text-[#8592A8] shrink-0">{ago(r.createdAt)}</span></div>
+          <div className="text-[16px] font-extrabold text-[#0F1A30] mb-2">신고, 노쇼 기록 {reports.length ? `(${reports.length})` : ""}</div>
+          {reports.length === 0 ? <div className="text-[15px] text-[#8592A8]">접수된 신고가 없어요.</div> : reports.slice(0, 60).map((r) => (
+            <div key={r.id} className="py-2 border-t border-[#EEF1F6] text-[15px] flex gap-2 items-center"><Badge>{r.type === "noshow" ? "노쇼" : r.type}</Badge><button type="button" onClick={() => { setSel(r.targetUid); setSec("members"); }} className="font-bold text-[#0F1A30] underline-offset-2 hover:underline">{rows.find((m) => m.id === r.targetUid)?.name || r.targetUid.slice(0, 6)}</button><span className="text-[#55657F] truncate">{r.reporterName}, {r.text}</span><span className="ml-auto text-[#8592A8] shrink-0">{ago(r.createdAt)}</span></div>
           ))}
         </Card>
       )}

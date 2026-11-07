@@ -90,7 +90,7 @@ export function Btn({ kind = "primary", size = "lg", className = "", children, .
   );
 }
 export const inputCls = "w-full h-12 px-4 rounded-2xl border border-[#D6DEEA] bg-white text-[16px] font-medium text-[#0F1A30] outline-none transition focus:border-[#2D4C82] focus:ring-4 focus:ring-[#2D4C82]/10 placeholder:text-[#A3AEC0]";
-export const selectCls = `${inputCls} appearance-none pr-10 bg-no-repeat bg-[right_14px_center] bg-[length:16px] bg-[url('data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%2355657F%22 stroke-width=%222.4%22><path d=%22m6 9 6 6 6-6%22/></svg>')]`;
+export const selectCls = `${inputCls} hub-select appearance-none pr-10 bg-no-repeat bg-[right_14px_center] bg-[length:16px] bg-[url('data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%2355657F%22 stroke-width=%222.4%22><path d=%22m6 9 6 6 6-6%22/></svg>')]`;
 
 export function Field({ label, hint, required, children, className = "" }) {
   return (
@@ -276,7 +276,7 @@ export function HubMark({ size = 36, dark = true, label = true }) {
             <span aria-label="LogisWeb" role="img" className="block" style={{ height: Math.round(size * 0.36), width: Math.round(size * 0.36) * (13085.8 / 1490), backgroundColor: dark ? "#fff" : "#0F1A30", WebkitMask: "url(/brand/logisweb-wordmark.svg) no-repeat center / contain", mask: "url(/brand/logisweb-wordmark.svg) no-repeat center / contain" }} />
             <span className="font-extrabold rounded-md px-1.5 h-[18px] text-[12px] inline-flex items-center" style={{ background: dark ? "#8FB0F0" : "#1B2B4B", color: dark ? "#0B1428" : "#fff", letterSpacing: "0.06em" }}>HUB</span>
           </span>
-          <span className={`text-[12.5px] font-semibold ${dark ? "text-white/55" : "text-[#8592A8]"}`}>로지스웹 허브 · 화물 콜</span>
+          <span className={`text-[12.5px] font-semibold ${dark ? "text-white/55" : "text-[#8592A8]"}`}>로지스웹 허브, 화물 콜</span>
         </span>
       )}
     </span>
@@ -298,7 +298,7 @@ export function FilePick({ label, required, value, onPick, accept = "image/*,app
       </span>
       <span className="min-w-0 flex-1">
         <span className="block text-[15.5px] font-bold text-[#0F1A30]">{label}{required && <span className="text-[#2D4C82] ml-0.5">*</span>}</span>
-        <span className="block text-[13.5px] text-[#8592A8] truncate">{busy ? "올리는 중…" : value?.file?.name || value?.name || (required ? "사진 또는 PDF (10MB 이하)" : "선택 · 사진 또는 PDF")}</span>
+        <span className="block text-[13.5px] text-[#8592A8] truncate">{busy ? "올리고 있어요" : value?.file?.name || value?.name || (required ? "사진 또는 PDF (10MB 이하)" : "선택, 사진 또는 PDF")}</span>
       </span>
       <span className="text-[14px] font-bold text-[#2D4C82] shrink-0">{done ? "바꾸기" : "올리기"}</span>
       <input type="file" accept={accept} className="sr-only" data-testid={testid} onChange={(e) => { const f = e.target.files?.[0]; if (f) onPick(f); e.target.value = ""; }} />
@@ -318,4 +318,6 @@ export const HUB_CSS = `
 @media (min-width:1024px){.hub-drawer{animation:hubSide .24s cubic-bezier(.2,.8,.2,1)}}
 .hub-new{animation:hubNew 1.2s ease-out 2}
 .hub-scroll::-webkit-scrollbar{display:none}.hub-scroll{scrollbar-width:none}
+.hub-select{background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2355657F' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'><path d='m6 9 6 6 6-6'/></svg>");background-repeat:no-repeat;background-position:right 14px center;background-size:16px}
+.hub-select:disabled{opacity:.55}
 `;

@@ -51,7 +51,7 @@ export default function HubLogin() {
   const reset = async () => {
     setErr(""); setMsg("");
     if (!f.email.trim()) return setErr("비밀번호를 재설정할 이메일을 입력해 주세요.");
-    try { await sendPasswordResetEmail(auth, f.email.trim()); setMsg("재설정 메일을 보냈습니다. 메일함을 확인해 주세요."); } catch { setErr("재설정 메일을 보내지 못했습니다."); }
+    try { await sendPasswordResetEmail(auth, f.email.trim()); setMsg("재설정 메일을 보냈어요. 메일함을 확인해 주세요."); } catch { setErr("재설정 메일을 보내지 못했어요."); }
   };
 
   const lw = mode === "logisweb";
@@ -102,7 +102,7 @@ export default function HubLogin() {
         {err && <div role="alert" data-testid="login-error" className="rounded-2xl bg-[#F5F8FD] ring-1 ring-inset ring-[#C7D3E8] px-4 py-3 text-[15px] font-bold text-[#0F1A30] flex gap-2"><HI name="alert" size={18} className="shrink-0 mt-0.5 text-[#2D4C82]" />{err}</div>}
         {msg && <div className="rounded-2xl bg-[#EAF0FA] px-4 py-3 text-[15px] font-bold text-[#1B2B4B]">{msg}</div>}
 
-        <Btn type="submit" size="xl" className="w-full" disabled={busy} data-testid="login-submit">{busy ? "확인 중…" : "로그인"}</Btn>
+        <Btn type="submit" size="xl" className="w-full" disabled={busy} data-testid="login-submit">{busy ? "확인하고 있어요" : "로그인"}</Btn>
         {!lw && (
           <div className="flex items-center justify-between">
             <button type="button" onClick={reset} className="h-11 text-[15px] font-semibold text-[#55657F]">비밀번호 찾기</button>
@@ -117,14 +117,14 @@ export default function HubLogin() {
           <img src="/brand/logisweb-mark-square.svg" alt="" className="w-11 h-11 rounded-xl" />
           <span className="min-w-0 flex-1">
             <span className="block text-[16px] font-extrabold">로지스웹 계정으로 로그인</span>
-            <span className="block text-[14px] text-white/65">운송사 직원 · 소속 기사 · 화주사는 가입 없이 바로</span>
+            <span className="block text-[14px] text-white/65">운송사 직원, 소속 기사, 화주사는 가입 없이 바로</span>
           </span>
           <HI name="chevron" size={20} className="text-[#8FB0F0]" />
         </button>
       ) : (
         <div className="mt-5 pt-4 border-t border-[#EEF1F6] text-[14.5px] text-[#55657F] leading-relaxed">
-          로지스웹에 등록된 정보(회사 · 차량 · 연락처)가 그대로 허브 회원 정보가 됩니다. 정보 변경은 로지스웹 프로그램에서 해 주세요.
-          {role === "driver" && " 소속 기사는 허브에서 \"차주\"로, 운송사 직원은 \"운송사\"로 이용합니다."}
+          로지스웹에 등록된 정보(회사, 차량, 연락처)가 그대로 허브 회원 정보가 돼요. 정보 변경은 로지스웹 프로그램에서 해 주세요.
+          {role === "driver" && " 소속 기사는 허브에서 \"차주\"로, 운송사 직원은 \"운송사\"로 이용해요."}
         </div>
       )}
     </HubAuthLayout>

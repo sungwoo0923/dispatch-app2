@@ -60,7 +60,7 @@ function lwToForm(r) {
     상차시간: r.상차시간 || "", 하차시간: r.하차시간 || "", 화물내용: r.화물내용 || "",
     차량종류: matchListValue(HUB_VEHICLES, r.차량종류) || r.차량종류 || "", 차량톤수: matchListValue(HUB_TONS, r.차량톤수) || r.차량톤수 || "",
     상차방법: r.상차방법 || "", 하차방법: r.하차방법 || "", 지급방식: pay, 운임: money(String(Number(String(r.기사운임 || r.청구운임 || "").replace(/[^\d]/g, "")) || "")),
-    수수료: pay === "인수증" ? "" : money(String(Math.max(0, (Number(String(r.청구운임 || "").replace(/[^\d]/g, "")) || 0) - (Number(String(r.기사운임 || "").replace(/[^\d]/g, "")) || 0)) || "")),
+    수수료: pay === "인수증" || !numOf(r.기사운임) ? "" : money(String(Math.max(0, (Number(String(r.청구운임 || "").replace(/[^\d]/g, "")) || 0) - (Number(String(r.기사운임 || "").replace(/[^\d]/g, "")) || 0)) || "")),
     운행유형: r.운행유형 === "왕복" ? "왕복" : "편도", 적재: r.혼적 ? "혼적" : "독차", 긴급: !!r.긴급, 의뢰자명: r.거래처명 || "", 메모: "",
   };
 }
@@ -237,7 +237,7 @@ export default function HubPostForm({ me, editing, onClose, toast, onDone, cfg =
         )}
         {Place("상차", "상차")}
         {Place("하차", "하차")}
-        <Section icon="box" title="화물 · 차량">
+        <Section icon="box" title="화물과 차량">
           <div className="flex gap-2 flex-wrap" data-testid="pf-flags">
             <Chip on={f.적재 === "혼적"} onClick={() => set("적재", f.적재 === "혼적" ? "독차" : "혼적")} data-testid="pf-mixed">혼적</Chip>
             <Chip on={f.운행유형 === "왕복"} onClick={() => set("운행유형", f.운행유형 === "왕복" ? "편도" : "왕복")} data-testid="pf-round">왕복</Chip>
@@ -266,7 +266,7 @@ export default function HubPostForm({ me, editing, onClose, toast, onDone, cfg =
           </Field>
           {km > 0 && (
             <div className="rounded-2xl bg-[#F5F8FD] ring-1 ring-inset ring-[#DCE3EE] px-4 py-3 text-[14.5px] text-[#3A4A66] flex items-center gap-2 flex-wrap" data-testid="pf-fare-hint">
-              <HI name="route" size={16} className="text-[#2D4C82]" />약 <b style={NUMS}>{km}km</b>, 참고 운임 <b style={NUMS}>{manwon(ref)}</b>{fit && <span className="font-extrabold text-[#1B2B4B]">{fit.label}</span>}
+              <HI name="route" size={16} className="text-[#2D4C82]" /><span style={NUMS}>약 <b>{km}km</b>, 참고 운임 <b>{manwon(ref)}</b></span>{fit && <span className="font-extrabold text-[#1B2B4B]">{fit.label}</span>}
               <button type="button" onClick={() => set("운임", money(String(Math.round(ref / 5000) * 5000)))} className="ml-auto h-9 px-3 rounded-xl bg-white ring-1 ring-inset ring-[#D6DEEA] text-[13.5px] font-bold text-[#1B2B4B]" data-testid="pf-fare-ref">참고 운임 불러오기</button>
             </div>
           )}
@@ -296,7 +296,7 @@ export default function HubPostForm({ me, editing, onClose, toast, onDone, cfg =
       </div>
       <div className="shrink-0 p-4 lg:p-5 bg-white border-t border-[#E2E7EF] pb-[max(16px,env(safe-area-inset-bottom))] grid grid-cols-[auto_1fr] gap-2.5">
         <Btn kind="ghost" onClick={onClose}>취소</Btn>
-        <Btn size="lg" onClick={save} disabled={busy} data-testid="pf-submit">{busy ? "저장하고 있어요" : editing ? "수정" : `배차등록${total ? ` ${manwon(total)}` : ""}`}</Btn>
+        <Btn size="lg" onClick={save} disabled={busy} data-testid="pf-submit">{busy ? "저장하고 있어요" : editing ? "수정" : `배차등록${fareN ? ` ${manwon(total)}` : ""}`}</Btn>
       </div>
       {scan && <Suspense fallback={null}><OrderScanModal onClose={() => setScan(false)} onApply={applyScan} applyLabel="허브 오더에 적용" /></Suspense>}
       {copy && <CopyModal me={me} onClose={() => setCopy(false)} onPick={applyCopy} />}

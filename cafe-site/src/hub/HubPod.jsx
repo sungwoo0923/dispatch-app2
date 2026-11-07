@@ -56,14 +56,14 @@ export default function HubPod({ o, canAdd, toast }) {
   };
   return (
     <Card className="p-4" data-testid="pod-card">
-      <div className="flex items-center gap-2 mb-3">
+      <div className="flex items-center gap-2 mb-3 flex-wrap">
         <HI name="file" size={18} className="text-[#2D4C82]" />
-        <span className="text-[16px] font-extrabold text-[#0F1A30]">인수증과 전표</span>
-        <span className="text-[14px] font-bold text-[#8592A8]" data-testid="pod-count">{list.length}장</span>
+        <span className="text-[16px] font-extrabold text-[#0F1A30] whitespace-nowrap">인수증과 전표</span>
+        <span className="text-[14px] font-bold text-[#8592A8] whitespace-nowrap" data-testid="pod-count">{list.length}장</span>
         {items.length > 0 && (
           <span className="ml-auto flex gap-1.5">
-            <button type="button" onClick={() => shareFiles(items, title, toast)} className="h-10 px-3 rounded-xl bg-[#EAF0FA] text-[14px] font-bold text-[#1B2B4B] inline-flex items-center gap-1.5" data-testid="pod-share-all"><HI name="link" size={15} />공유</button>
-            <button type="button" onClick={() => items.forEach((x, i) => setTimeout(() => downloadFile(x.url, x.name), i * 400))} className="h-10 px-3 rounded-xl bg-[#0F1A30] text-white text-[14px] font-bold inline-flex items-center gap-1.5" data-testid="pod-save-all"><HI name="down" size={15} />모두 저장</button>
+            <button type="button" onClick={() => shareFiles(items, title, toast)} className="h-10 px-3 rounded-xl bg-[#EAF0FA] text-[14px] font-bold text-[#1B2B4B] inline-flex items-center gap-1.5 whitespace-nowrap" data-testid="pod-share-all"><HI name="link" size={15} />공유</button>
+            <button type="button" onClick={() => items.forEach((x, i) => setTimeout(() => downloadFile(x.url, x.name), i * 400))} className="h-10 px-3 rounded-xl bg-[#0F1A30] text-white text-[14px] font-bold inline-flex items-center gap-1.5 whitespace-nowrap" data-testid="pod-save-all"><HI name="down" size={15} />모두 저장</button>
           </span>
         )}
       </div>

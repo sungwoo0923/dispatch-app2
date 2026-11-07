@@ -179,8 +179,8 @@ export async function postOrder(member, form) {
     const today = new Date(); // 서버 규칙이 날짜를 다시 확인한다(요청 시각 기준)
     const prev = q.exists() ? q.data() : null;
     const sameDay = prev?.day && tsMs(prev.day) === Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate());
-    if (prev?.lastPostAt && Date.now() - tsMs(prev.lastPostAt) < 20000) throw new Error("오더는 20초에 한 건씩 등록할 수 있습니다. 잠시 후 다시 눌러 주세요.");
-    if (sameDay && (prev.count || 0) >= 30) throw new Error("하루 등록 한도(30건)를 넘었습니다. 관리자에게 문의해 주세요.");
+    if (prev?.lastPostAt && Date.now() - tsMs(prev.lastPostAt) < 20000) throw new Error("오더는 20초에 한 건씩 등록할 수 있어요. 잠시 후 다시 눌러 주세요.");
+    if (sameDay && (prev.count || 0) >= 30) throw new Error("하루 등록 한도(30건)를 넘었어요. 관리자에게 문의해 주세요.");
     tx.set(qref, { uid: member.uid, count: sameDay ? (prev.count || 0) + 1 : 1, day: Timestamp.fromMillis(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate())), lastPostAt: serverTimestamp() });
     tx.set(ref, {
       ...pub,
@@ -228,13 +228,13 @@ export function matchSnapshot(m) {
 }
 // 먼저 신청한 1명만 성공(트랜잭션 + 서버 규칙: 모집중일 때만) → { at: 성공한 순간(내 기기 시각) }
 export async function requestDispatch(order, member) {
-  if (order.posterUid === member.uid) throw new Error("내가 올린 오더는 신청할 수 없습니다.");
+  if (order.posterUid === member.uid) throw new Error("내가 올린 오더는 신청할 수 없어요.");
   await runTransaction(db, async (tx) => {
     const s = await tx.get(oref(order.id));
-    if (!s.exists()) throw new Error("삭제된 오더입니다.");
+    if (!s.exists()) throw new Error("삭제된 오더이에요.");
     const d = s.data();
-    if (d.status !== "open") throw new Error("이미 다른 차량이 배차되었습니다.");
-    if ((d.cancelCount || 0) >= 5) throw new Error("취소가 반복된 오더라 더 이상 신청할 수 없습니다. 등록자에게 전화해 주세요.");
+    if (d.status !== "open") throw new Error("이미 다른 차량이 배차됐어요.");
+    if ((d.cancelCount || 0) >= 5) throw new Error("취소가 반복된 오더라 더 이상 신청할 수 없어요. 등록자에게 전화해 주세요.");
     tx.update(oref(order.id), { status: "assigned", takerUid: member.uid, takerRole: member.role, assignedAt: serverTimestamp(), updatedAt: serverTimestamp() });
     tx.set(pref(order.id, "match"), matchSnapshot(member));
   });
@@ -299,7 +299,7 @@ export const podList = (o) => (Array.isArray(o?.pod) && o.pod.length ? o.pod : o
 // 계산서(세금계산서) 발행 등록 — 승인번호 · 발행일 · 금액 · (선택) 계산서 파일. 예치금 결제 오더면 서버가 정산한다
 export async function issueInvoice(order, { no, date, amount, bizNo = "", file = null }) {
   const n = String(no || "").replace(/\s+/g, "").trim();
-  if (n.length < 4) throw new Error("국세청 승인번호를 입력해 주세요(홈택스 · 발행 프로그램에 나온 번호).");
+  if (n.length < 4) throw new Error("국세청 승인번호를 입력해 주세요(홈택스, 발행 프로그램에 나온 번호).");
   const up = file ? await uploadPod(order.id, file, "invoice") : null;
   await updateDoc(oref(order.id), {
     invoice: { no: n.slice(0, 40), date: String(date || "").slice(0, 10), amount: Number(String(amount || "").replace(/[^\d]/g, "")) || 0, bizNo: String(bizNo || "").slice(0, 20), ...(up ? { path: up.path, name: up.name } : {}), at: serverTimestamp() },
@@ -406,8 +406,8 @@ export function subscribeMyDebts(uid, cb) {
 }
 export async function requestCharge(me, amount, depositor) {
   const n = Math.round(Number(String(amount).replace(/[^\d]/g, "")) || 0);
-  if (n < 10000) throw new Error("충전은 1만원부터 신청할 수 있습니다.");
-  if (n > 100000000) throw new Error("한 번에 1억원까지 신청할 수 있습니다.");
+  if (n < 10000) throw new Error("충전은 1만원부터 신청할 수 있어요.");
+  if (n > 100000000) throw new Error("한 번에 1억원까지 신청할 수 있어요.");
   const ref = await addDoc(collection(db, "hubCharges"), { uid: me.uid, name: me.name || "", companyName: me.companyName || "", amount: n, depositor: String(depositor || me.name || "").trim().slice(0, 40), status: "requested", createdAt: serverTimestamp() });
   return ref.id;
 }
@@ -449,15 +449,15 @@ const PUSH_LOCAL = "hubFcmToken";
 export async function enableHubPush(member) {
   const { isSupported, getMessaging, getToken } = await import("firebase/messaging");
 
-  if (!(await isSupported().catch(() => false))) throw new Error("이 브라우저는 푸시 알림을 지원하지 않습니다(아이폰은 홈 화면에 추가한 앱에서 켜 주세요).");
+  if (!(await isSupported().catch(() => false))) throw new Error("이 브라우저는 푸시 알림을 지원하지 않아요(아이폰은 홈 화면에 추가한 앱에서 켜 주세요).");
   const perm = Notification.permission === "granted" ? "granted" : await Notification.requestPermission().catch(() => "default");
-  if (perm !== "granted") throw new Error("알림 권한이 꺼져 있습니다. 브라우저 · 기기 설정에서 허용해 주세요.");
+  if (perm !== "granted") throw new Error("알림 권한이 꺼져 있어요. 브라우저, 기기 설정에서 허용해 주세요.");
   const vapidKey = import.meta.env.VITE_FCM_VAPID_KEY;
-  if (!vapidKey) throw new Error("푸시 키(VITE_FCM_VAPID_KEY)가 설정되지 않았습니다 — 관리자에게 알려 주세요.");
+  if (!vapidKey) throw new Error("푸시 키(VITE_FCM_VAPID_KEY)가 설정되지 않았어요, 관리자에게 알려 주세요.");
   const reg = await navigator.serviceWorker.register("/hub-sw.js");
   await navigator.serviceWorker.ready;
   const token = await getToken(getMessaging(getApp()), { vapidKey, serviceWorkerRegistration: reg });
-  if (!token) throw new Error("기기 알림 토큰을 받지 못했습니다.");
+  if (!token) throw new Error("기기 알림 토큰을 받지 못했어요.");
   const list = [token, ...(member.fcmTokens || []).filter((t) => t && t !== token)].slice(0, 5);
   await updateDoc(memberRef(member.uid), { fcmTokens: list, fcmTokenAt: Date.now() });
   try { localStorage.setItem(PUSH_LOCAL, token); } catch { /* 무시 */ }
@@ -533,13 +533,13 @@ export async function fetchCopySources(member) {
   try {
     const s = await getDocs(query(collection(db, O), where("posterCompanyKey", "==", key), limit(300)));
     s.docs.forEach((d) => out.push({ src: "hub", id: d.id, ...d.data() }));
-  } catch { /* 규칙 · 색인 */ }
+  } catch { /* 규칙, 색인 */ }
   if (member.source === "logisweb-staff" && member.companyName) {
     try {
       const from = kstYmd(-90);
       const s = await getDocs(query(collection(db, "orders"), where("companyName", "==", member.companyName), where("상차일", ">=", from), limit(500)));
       s.docs.forEach((d) => out.push({ src: "lw", id: d.id, ...d.data() }));
-    } catch { /* 배차 프로그램 규칙 · 색인 */ }
+    } catch { /* 배차 프로그램 규칙, 색인 */ }
   }
   return out.sort((a, b) => String(b.상차일 || "").localeCompare(String(a.상차일 || "")) || tsMs(b.createdAt) - tsMs(a.createdAt));
 }

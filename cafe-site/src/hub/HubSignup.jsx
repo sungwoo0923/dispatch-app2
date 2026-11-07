@@ -34,7 +34,7 @@ export default function HubSignup() {
   useEffect(() => {
     if (!user) return;
     getMember(user.uid).then((m) => {
-      if (!m) return; // 계정만 만들고 신청서가 없는 경우 — 이어서 작성
+      if (!m) return; // 계정만 만들고 신청서가 없는 경우, 이어서 작성
       if (m.source !== "signup" || m.status === "approved") { nav("/", { replace: true }); return; }
       setExisting(m);
       setRole(m.role);
@@ -62,7 +62,7 @@ export default function HubSignup() {
       if (!f.name.trim()) return role === "driver" ? "이름을 입력해 주세요." : "담당자 이름을 입력해 주세요.";
       if (f.phone.replace(/\D/g, "").length < 10) return "휴대폰 번호를 정확히 입력해 주세요.";
       if (role !== "driver" && !f.companyName.trim()) return "회사명을 입력해 주세요.";
-      if (!bizNoValid(f.bizNo)) return "사업자등록번호가 올바르지 않습니다(10자리 · 국세청 검증식).";
+      if (!bizNoValid(f.bizNo)) return "사업자등록번호가 올바르지 않아요(10자리, 국세청 검증식).";
       if (role === "driver") {
         if (f.plate.replace(/\s/g, "").length < 7) return "차량번호를 정확히 입력해 주세요.";
         if (!f.vtype || !f.vton) return "차종과 톤수를 골라 주세요.";
@@ -75,7 +75,7 @@ export default function HubSignup() {
     if (s === 3) {
       const miss = docs.required.filter((k) => !files[k]);
       if (miss.length) return `필수 서류를 올려 주세요: ${miss.map((k) => DOC_TYPES[k]).join(", ")}`;
-      if (needPhoto && !files.photo) return "프로필 사진을 올려 주세요(배차된 화주에게 보입니다).";
+      if (needPhoto && !files.photo) return "프로필 사진을 올려 주세요(배차된 화주에게 보이에요).";
     }
     if (s === 4 && !(agree.terms && agree.privacy && agree.docs)) return "모든 항목에 동의해 주세요.";
     return "";
@@ -89,7 +89,7 @@ export default function HubSignup() {
     try {
       let uid = user?.uid;
       if (!uid) {
-        setBusy("계정을 만드는 중…");
+        setBusy("계정을 만들고 있어요");
         const cred = await createUserWithEmailAndPassword(auth, f.email.trim(), f.pw);
         uid = cred.user.uid;
       }
@@ -98,11 +98,11 @@ export default function HubSignup() {
       for (const k of keys) {
         const v = files[k];
         if (!v) continue;
-        if (v.file) { setBusy(`${k === "photo" ? "프로필 사진" : DOC_TYPES[k]} 올리는 중…`); up[k] = await uploadMemberFile(uid, k, v.file); }
+        if (v.file) { setBusy(`${k === "photo" ? "프로필 사진" : DOC_TYPES[k]} 올리고 있어요`); up[k] = await uploadMemberFile(uid, k, v.file); }
         else if (v.path) up[k] = { path: v.path, name: v.name || "", type: v.type || "", size: v.size || 0 };
       }
       const { photo, ...docMap } = up;
-      setBusy("신청서를 보내는 중…");
+      setBusy("신청서를 보내고 있어요");
       await submitApplication(uid, {
         role,
         email: user?.email || f.email.trim(),
@@ -147,7 +147,7 @@ export default function HubSignup() {
       footer={<Link to={`/login?role=${role}`} className="text-[15px] font-semibold text-[#55657F] hover:text-[#0F1A30]">이미 계정이 있나요? <b className="text-[#1B2B4B]">로그인</b></Link>}>
       {Steps}
       {existing?.status === "rejected" && existing.rejectReason && (
-        <div className="mb-4 rounded-2xl bg-[#0F1A30] text-white px-4 py-3.5 text-[15px]"><b className="text-[#8FB0F0]">거절 사유</b> · {existing.rejectReason}</div>
+        <div className="mb-4 rounded-2xl bg-[#0F1A30] text-white px-4 py-3.5 text-[15px]"><b className="text-[#8FB0F0]">거절 사유</b>, {existing.rejectReason}</div>
       )}
 
       {step === 0 && (
@@ -160,7 +160,7 @@ export default function HubSignup() {
               <HI name="chevron" size={20} />
             </button>
           ))}
-          <div className="pt-2 text-[14.5px] text-[#55657F] leading-relaxed">로지스웹 운송사 직원 · 소속 기사 · 화주사는 가입하지 말고 <Link to="/login?mode=logisweb" className="font-bold text-[#1B2B4B] underline">로지스웹 계정으로 로그인</Link>하세요.</div>
+          <div className="pt-2 text-[14.5px] text-[#55657F] leading-relaxed">로지스웹 운송사 직원, 소속 기사, 화주사는 가입하지 말고 <Link to="/login?mode=logisweb" className="font-bold text-[#1B2B4B] underline">로지스웹 계정으로 로그인</Link>하세요.</div>
         </div>
       )}
 
@@ -178,7 +178,7 @@ export default function HubSignup() {
         <div className="space-y-3.5" data-testid="signup-step-info">
           {role !== "driver" && <Field label="회사명(상호)" required><input className={inputCls} value={f.companyName} onChange={set("companyName")} placeholder="사업자등록증의 상호" data-testid="su-company" /></Field>}
           <div className="grid sm:grid-cols-2 gap-3">
-            <Field label="사업자등록번호" required hint="오타·가짜 번호는 자동으로 걸러집니다"><input className={inputCls} inputMode="numeric" value={f.bizNo} onChange={set("bizNo", fmtBizNo)} placeholder="000-00-00000" data-testid="su-bizno" /></Field>
+            <Field label="사업자등록번호" required hint="번호를 자동으로 확인해요"><input className={inputCls} inputMode="numeric" value={f.bizNo} onChange={set("bizNo", fmtBizNo)} placeholder="000-00-00000" data-testid="su-bizno" /></Field>
             <Field label="대표자명"><input className={inputCls} value={f.ceoName} onChange={set("ceoName")} placeholder="사업자등록증의 대표자" data-testid="su-ceo" /></Field>
           </div>
           <div className="grid sm:grid-cols-2 gap-3">
@@ -204,7 +204,7 @@ export default function HubSignup() {
               <Field label="거주(차고지) 시·도" required><select className={selectCls} value={f.homeSido} onChange={(e) => setF((p) => ({ ...p, homeSido: e.target.value, homeSgg: "" }))} data-testid="su-home-sido"><option value="">선택</option>{SIDO_LIST.map((s) => <option key={s}>{s}</option>)}</select></Field>
               <Field label="시·군·구"><select className={selectCls} value={f.homeSgg} onChange={set("homeSgg")} disabled={!f.homeSido} data-testid="su-home-sgg"><option value="">선택</option>{sggs.map((s) => <option key={s}>{s}</option>)}</select></Field>
             </div>
-            <Field label="주 운행 지역" hint="콜 알림·추천에 씁니다(여러 개)">
+            <Field label="주 운행 지역" hint="콜 알림에 써요(여러 개)">
               <div className="flex flex-wrap gap-2">
                 {SIDO_LIST.map((s) => <Chip key={s} on={f.regions.includes(s)} onClick={() => setF((p) => ({ ...p, regions: p.regions.includes(s) ? p.regions.filter((x) => x !== s) : [...p.regions, s] }))}>{s}</Chip>)}
               </div>
@@ -225,7 +225,7 @@ export default function HubSignup() {
 
       {step === 3 && (
         <div className="space-y-2.5" data-testid="signup-step-docs">
-          <div className="rounded-2xl bg-[#F5F8FD] ring-1 ring-inset ring-[#DCE3EE] px-4 py-3 text-[14.5px] text-[#3A4A66] leading-relaxed">서류는 <b>관리자만</b> 확인하고 다른 회원에게는 보이지 않습니다. 글자가 잘 보이게 찍어 주세요.</div>
+          <div className="rounded-2xl bg-[#F5F8FD] ring-1 ring-inset ring-[#DCE3EE] px-4 py-3 text-[14.5px] text-[#3A4A66] leading-relaxed">서류는 <b>관리자만</b> 확인하고 다른 회원에게는 보이지 않아요. 글자가 잘 보이게 찍어 주세요.</div>
           {needPhoto && <FilePick label="프로필 사진" required value={files.photo} accept="image/*" testid="doc-photo" onPick={(file) => setFiles((p) => ({ ...p, photo: { file } }))} />}
           {docs.required.map((k) => <FilePick key={k} label={DOC_TYPES[k]} required value={files[k]} testid={`doc-${k}`} onPick={(file) => setFiles((p) => ({ ...p, [k]: { file } }))} />)}
           {docs.optional.map((k) => <FilePick key={k} label={DOC_TYPES[k]} value={files[k]} testid={`doc-${k}`} onPick={(file) => setFiles((p) => ({ ...p, [k]: { file } }))} />)}
@@ -236,12 +236,12 @@ export default function HubSignup() {
         <div className="space-y-3" data-testid="signup-step-review">
           <div className="rounded-2xl ring-1 ring-inset ring-[#E2E7EF] divide-y divide-[#EEF1F6]">
             {[["유형", ROLES[role].label], ["이름", f.name], ["휴대폰", f.phone], ["회사", f.companyName || "-"], ["사업자번호", f.bizNo],
-              ...(role === "driver" ? [["차량", `${f.plate} · ${f.vton} ${f.vtype}`], ["적재함", `${f.vlen || "-"}m × ${f.vwid || "-"}m`], ["주 운행", f.regions.join(", ") || "-"]] : []),
+              ...(role === "driver" ? [["차량", `${f.plate}, ${f.vton} ${f.vtype}`], ["적재함", `${f.vlen || "-"}m × ${f.vwid || "-"}m`], ["주 운행", f.regions.join(", ") || "-"]] : []),
               ["서류", `${Object.keys(files).filter((k) => k !== "photo").length}개`]].map(([k, v]) => (
               <div key={k} className="flex px-4 py-3 text-[15.5px]"><span className="w-24 shrink-0 font-semibold text-[#8592A8]">{k}</span><span className="font-bold text-[#0F1A30] min-w-0 break-all">{v}</span></div>
             ))}
           </div>
-          {[["terms", "이용약관에 동의합니다(허위 정보 · 서류 위조 시 이용 정지 및 법적 책임)."], ["privacy", "개인정보 수집·이용에 동의합니다(연락처는 배차가 확정된 상대에게만 공개)."], ["docs", "제출한 서류가 본인(본사) 것이며 유효함을 확인합니다."]].map(([k, t]) => (
+          {[["terms", "이용약관에 동의해요(허위 정보, 서류 위조 시 이용 정지 및 법적 책임)."], ["privacy", "개인정보 수집과 이용에 동의해요(연락처는 배차가 확정된 상대에게만 공개)."], ["docs", "제출한 서류가 본인(본사) 것이며 유효함을 확인해요."]].map(([k, t]) => (
             <label key={k} className="flex items-start gap-3 p-3.5 rounded-2xl bg-[#F5F7FB] cursor-pointer">
               <input type="checkbox" checked={agree[k]} onChange={(e) => setAgree((p) => ({ ...p, [k]: e.target.checked }))} className="mt-0.5 w-5 h-5 accent-[#1B2B4B] shrink-0" data-testid={`agree-${k}`} />
               <span className="text-[15px] text-[#3A4A66] leading-relaxed">{t}</span>

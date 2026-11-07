@@ -7,7 +7,7 @@
 //  허브 운임 = 기사운임(없으면 청구운임) · 지불방식 = 선불/착불은 그대로, 그 밖은 인수증(허브 잔액에서 운임 보류)
 //  주소 → 허브 지역(시·도 / 시·군·구)은 여기서 계산해 보낸다(오더마켓 공유 src/orderMarketShare.js toRegion과 같은 규칙).
 import { collection, addDoc, doc, onSnapshot, serverTimestamp } from "firebase/firestore";
-import { toRegion } from "./orderMarketShare";
+import { toRegion } from "./orderMarketShare.js";
 
 const num = (v) => Number(String(v ?? "").replace(/[^\d.-]/g, "")) || 0;
 const sggOf = (r) => String(r.sigungu || "").split(" ")[0];
@@ -17,7 +17,7 @@ export function hubOrderFromRec(rec) {
   const up = toRegion(rec.상차지주소), dn = toRegion(rec.하차지주소);
   const fare = num(rec.기사운임) || num(rec.청구운임);
   const pay = PAY(rec.지급방식);
-  const fee = pay === "인수증" ? 0 : Math.max(0, num(rec.청구운임) - num(rec.기사운임));
+  const fee = pay === "인수증" || !num(rec.기사운임) ? 0 : Math.max(0, num(rec.청구운임) - num(rec.기사운임));
   return {
     상차시도: up.sido, 상차시군구: up.sido === "세종" ? "세종시" : sggOf(up), 하차시도: dn.sido, 하차시군구: dn.sido === "세종" ? "세종시" : sggOf(dn),
     상차일: rec.상차일 || "", 상차시간: rec.상차시간 || "", 하차일: rec.하차일 || "", 하차시간: rec.하차시간 || "",

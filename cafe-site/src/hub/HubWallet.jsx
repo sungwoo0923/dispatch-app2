@@ -102,8 +102,8 @@ export default function HubWallet({ me, cfg, toast, jobs = [], posts = [], notic
       <div className="space-y-4 min-w-0">
         <WalletSummary w={w} />
         <div className="grid grid-cols-3 gap-2" data-testid="wallet-actions">
-          <Btn kind="ghost" size="md" onClick={() => { setBankOpen(true); setTimeout(() => go("my-bank"), 50); }} data-testid="btn-bank-change">출금계좌 변경</Btn>
-          <Btn kind="ghost" size="md" onClick={() => go("my-ledger")} data-testid="btn-ledger">입출금내역</Btn>
+          <Btn kind="ghost" size="md" className="!px-2 !text-[14px] whitespace-nowrap" onClick={() => { setBankOpen(true); setTimeout(() => go("my-bank"), 50); }} data-testid="btn-bank-change">출금계좌 변경</Btn>
+          <Btn kind="ghost" size="md" className="!px-2 !text-[14px] whitespace-nowrap" onClick={() => go("my-ledger")} data-testid="btn-ledger">입출금내역</Btn>
           <Btn size="md" onClick={() => go("my-withdraw")} data-testid="btn-withdraw">출금</Btn>
         </div>
         {openDebts.length > 0 && (

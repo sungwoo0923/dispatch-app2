@@ -88,7 +88,7 @@ function InvoiceCheck({ o, me, busy, run }) {
   );
 }
 
-const myReqAt = new Map(); // 내가 신청한 순간(이 기기 시각) — 카운트다운 기준
+const myReqAt = new Map(); // 내가 신청한 순간(이 기기 시각), 카운트다운 기준
 const telHref = (p) => `tel:${String(p || "").replace(/[^\d+]/g, "")}`;
 
 function TrustLine({ uid, dark }) {
@@ -98,7 +98,7 @@ function TrustLine({ uid, dark }) {
   return (
     <span className={`inline-flex items-center gap-2 text-[14.5px] font-bold ${dark ? "text-white/75" : "text-[#55657F]"}`} data-testid="trust-line">
       <span className="inline-flex items-center gap-1"><HI name="star" size={15} fill="currentColor" className={dark ? "text-[#8FB0F0]" : "text-[#2D4C82]"} />{avg ? avg.toFixed(1) : "-"}<span className="font-semibold opacity-70">({st?.ratingCount || 0})</span></span>
-      <span className="opacity-40">·</span>
+      <span className="w-px h-3.5 bg-current opacity-25" aria-hidden="true" />
       <span>완료 {st?.completed || 0}건</span>
     </span>
   );
