@@ -294,7 +294,7 @@
           "order": "ASCENDING"
         },
         {
-          "fieldPath": "상차지역",
+          "fieldPath": "`상차지역`",
           "arrayConfig": "CONTAINS"
         },
         {
