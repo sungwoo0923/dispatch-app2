@@ -2179,7 +2179,8 @@ export default function MobileApp({ role: realRole, user, userCompany = "", forc
   const [page, setPage] = useState(deptMode ? "dept" : "list");
   useUiScreen(page, deptMode); // ⭐ 2026-11-07 화면 편집 — 지금 화면("이 화면만")·부서(역할별 보이기)
   const pageMenuM = PAGE_MENU_M[page];
-  useReadOnlyGuard(!!pageMenuM && (role === "viewer" || (!!customRoleM && getMenuAccess(customRolesM, role, pageMenuM) === "read")));
+  // ⭐ 2026-11-08 QA — 조회전용(viewer)은 직원 관리·기사 앱 계정(가입 승인)·고정노선현황에서도 막는다(PC 관리자메뉴·배차현황과 같게)
+  useReadOnlyGuard((!!pageMenuM && (role === "viewer" || (!!customRoleM && getMenuAccess(customRolesM, role, pageMenuM) === "read"))) || (role === "viewer" && ["staff", "drvacc", "fixedroute"].includes(page)));
   // 경리는 메뉴의 [배차현황]으로만 오더 목록(등록내역)을 볼 수 있다 — 그 밖에 목록으로 돌아오면 부서 홈으로
   const deptListOkRef = useRef(false);
   // ⭐ 2026-11-07 급여명세서 · 연차 사용 계획은 내정보 안 탭으로 — 예전 주소(dept:payslip · dept:leaveplan)는 내정보로 돌린다

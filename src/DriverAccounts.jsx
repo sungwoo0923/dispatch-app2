@@ -87,7 +87,7 @@ export default function DriverAccounts({ company, isViewer = false, tab = "pendi
       <BookHero en="DRIVERS · APP ACCOUNTS" title={tab === "pending" ? "기사 가입 승인" : "승인된 기사"} desc="기사앱으로 가입한 기사님 — 차량·연락처·제출 서류를 보고 승인합니다"
         kpis={[["가입 대기", `${pending.length}명`], ["승인된 기사", `${approved.length}명`], ["필수 서류 완비", `${fullDocs}명`, `${approved.length ? Math.round((fullDocs / approved.length) * 100) : 0}%`], ["이번 달 가입", `${drivers.filter((u) => tsDay(u.createdAt).startsWith(new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 7))).length}명`]]} />
       <div className="flex flex-wrap items-center gap-2">
-        <div className="inline-flex p-1 rounded-xl bg-white border border-[#E3E8F0]">
+        <div data-ro-allow className="inline-flex p-1 rounded-xl bg-white border border-[#E3E8F0]">{/* 탭 이동은 조회전용도 가능(readOnlyGuard) */}
           {[["pending", `가입 승인 ${pending.length}`], ["drivers", `승인된 기사 ${approved.length}`]].map(([k, l]) => <button key={k} type="button" onClick={() => onTab?.(k)} className={`h-9 px-4 rounded-lg text-[13.5px] font-black ${tab === k ? "bg-[#0F1A30] text-white" : "text-[#5B6B85]"}`}>{l}</button>)}
         </div>
         <div className="flex gap-1.5 overflow-x-auto">{kinds.map((k) => <Chip key={k} on={kind === k} onClick={() => setKind(k)}>{k}</Chip>)}</div>
