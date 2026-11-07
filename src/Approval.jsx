@@ -581,7 +581,7 @@ function SpendLinesPaper({ label, rows, last, compact: c }) {
             {list.map((r, i) => (
               <React.Fragment key={i}>
                 <div className={`${td} border-b border-r text-center font-bold`}>{rows.length ? i + 1 : ""}</div>
-                <div className={`${td} border-b border-r text-center tabular-nums !px-1 text-[12px] !whitespace-nowrap ![overflow-wrap:normal]`}>{r.date || ""}</div>
+                <div className={`${td} border-b border-r text-center tabular-nums !px-1 text-[12.5px] !whitespace-nowrap ![overflow-wrap:normal]`}>{r.date || ""}</div>
                 <div className={`${td} border-b border-r font-bold`}>{r.vendor || ""}</div>
                 <div className={`${td} border-b border-r whitespace-pre-wrap`}>{r.memo || ""}</div>
                 <div className={`${td} border-b border-r text-right tabular-nums`}>{n0(r.supply)}</div>
@@ -602,16 +602,22 @@ function SpendLinesPaper({ label, rows, last, compact: c }) {
   );
 }
 
-// 💸 2026-11-04 지급완료 도장 — 문서 위에 비스듬히 찍힌 붉은 인장(인쇄·PDF에도 그대로)
+// 💸 2026-11-04 지급완료 도장 — 붉은 인장(인쇄·PDF에도 그대로)
+// 🖨 2026-11-07 인쇄·PDF 정렬 수정 — 예전엔 문서 위 절대 위치(top 176px)라 기안자·소속·참조 표 글자를 덮었고,
+//    이중 테두리를 inset box-shadow로 그려 html2canvas 캡처에서 안쪽 테두리가 회전과 어긋났다.
+//    → 총액 줄(지급 금액 옆)에 흐름 배치(글자와 겹치지 않음) + 안쪽 테두리는 실제 border + 줄마다 flex 가운데·고정 line-height
 function PaidSeal({ paid, compact: c }) {
   if (!paid?.at) return null;
   const date = String(paid.date || ymd(paid.at)).replace(/-/g, ".");
+  const row = "flex items-center justify-center whitespace-nowrap";
   return (
-    <div className="pointer-events-none select-none absolute z-[2]" style={{ top: c ? 236 : 176, right: c ? 12 : 44, transform: "rotate(-13deg)", opacity: 0.9 }} data-paid-seal aria-label={`지급완료 ${date}`}>
-      <div className={`rounded-[16px] border-[3.5px] border-[#B42318] text-[#B42318] text-center ${c ? "px-3 py-1.5" : "px-5 py-2.5"}`} style={{ boxShadow: "inset 0 0 0 2.5px #fff, inset 0 0 0 4px #B42318" }}>
-        <div className={`${c ? "text-[8.5px]" : "text-[10px]"} font-extrabold tracking-[0.42em] pl-[0.42em]`} style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>PAID · 지급</div>
-        <div className={`${c ? "text-[21px]" : "text-[32px]"} font-black tracking-[0.16em] pl-[0.16em] leading-[1.05]`}>지급완료</div>
-        <div className={`${c ? "text-[10px]" : "text-[12.5px]"} font-black tabular-nums tracking-[0.08em] border-t-2 border-[#B42318] mt-1 pt-0.5`} style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{date}{paid.byName ? ` · ${String(paid.byName).slice(0, 6)}` : ""}</div>
+    <div className="pointer-events-none select-none shrink-0" style={{ transform: "rotate(-6deg)", opacity: 0.92 }} data-paid-seal aria-label={`지급완료 ${date}`}>
+      <div className="rounded-[14px] border-[3px] border-[#B42318] p-[3px] bg-white">
+        <div className={`rounded-[10px] border-[1.5px] border-[#B42318] text-[#B42318] flex flex-col items-stretch ${c ? "px-2.5 py-1" : "px-3.5 py-1"}`}>
+          <div className={`${row} ${c ? "text-[8.5px] h-[12px]" : "text-[9.5px] h-[13px]"} font-extrabold tracking-[0.3em] pl-[0.3em]`} style={{ lineHeight: 1, fontFamily: MONO }}>PAID · 지급</div>
+          <div className={`${row} ${c ? "text-[21px] h-[26px]" : "text-[26px] h-[32px]"} font-black tracking-[0.12em] pl-[0.12em]`} style={{ lineHeight: 1 }}>지급완료</div>
+          <div className={`${row} ${c ? "text-[10px] h-[15px]" : "text-[11.5px] h-[17px]"} font-black tabular-nums tracking-[0.04em] border-t-2 border-[#B42318] mt-0.5`} style={{ lineHeight: 1, fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{date}{paid.byName ? ` · ${String(paid.byName).slice(0, 6)}` : ""}</div>
+        </div>
       </div>
     </div>
   );
@@ -626,9 +632,10 @@ export function ApprovalPaper({ form, data, title, line, cc, drafter, docNo, cre
   const lw = c ? "w-[84px] px-2.5 text-[13px]" : "w-[118px] px-3 text-[14px]";
   const lw2 = c ? "w-[84px] px-2.5 text-[13px]" : "w-[96px] px-3 text-[14px]";
   const iw = c ? "w-[50px] !px-1.5" : "w-[90px]";
+  // 🖨 2026-11-07 --font-scale 1 — 사용자 글씨 크기 설정(전역 text-[12px]·[13px] 확대)이 종이 양식에 섞이면 칸마다 글자 크기가 달라져
+  //    인쇄·PDF 표가 어긋났다. 결재 문서는 누가 찍어도 같은 종이 모양으로.
   return (
-    <div ref={paperRef} className={`mx-auto bg-white w-full max-w-[780px] ${c ? "px-4 py-5" : "px-10 py-10"} shadow-[0_10px_30px_rgba(15,26,48,0.12)] relative`} style={{ fontFamily: "'Pretendard','Noto Sans KR',sans-serif", minHeight: c ? 0 : 1000 }}>
-      {status === "approved" && <PaidSeal paid={paid} compact={c} />}
+    <div ref={paperRef} className={`mx-auto bg-white w-full max-w-[780px] ${c ? "px-4 py-5" : "px-10 py-10"} shadow-[0_10px_30px_rgba(15,26,48,0.12)] relative`} style={{ fontFamily: "'Pretendard','Noto Sans KR',sans-serif", minHeight: c ? 0 : 1000, "--font-scale": 1 }} data-ap-paper>
       <div className={c ? "flex flex-col gap-4" : "flex items-start justify-between gap-6"}>
         <div className={`${c ? "" : "pt-4"} min-w-0`}>
           <div className="text-[12.5px] font-extrabold tracking-[0.3em] text-[#4B6CB7]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{catOf(form.cat).en} · {form.code}</div>
@@ -700,15 +707,17 @@ export function ApprovalPaper({ form, data, title, line, cc, drafter, docNo, cre
       {(() => {
         const amt = form.amount ? form.amount(data || {}) : 0;
         const days = form.days ? form.days(data || {}) : 0;
-        if (!amt && !days) return null;
+        const seal = status === "approved" && paid?.at;
+        if (!amt && !days && !seal) return null;
         return (
-          <div className="mt-4 flex justify-end gap-2">
+          <div className={`mt-4 flex justify-end ${seal ? "items-center gap-4" : "gap-2"}`}>
+            {seal && <PaidSeal paid={paid} compact={c} />}
             {days > 0 && <div className="px-4 py-2 border-2 border-[#0F1A30] text-[14px] font-black">사용 일수 {days}일</div>}
             {amt > 0 && <div className="px-4 py-2 bg-[#0F1A30] text-white text-[15px] font-black">총액 {fmtWon(amt)}</div>}
           </div>
         );
       })()}
-      <div className="text-center mt-12 text-[15px] text-[#1F2A44]">위와 같이 {form.cat === "expense" ? "결의" : form.cat === "draft" ? "기안" : form.cat === "report" ? (form.key === "resign" ? "제출" : "보고") : "신청"}하오니 재가하여 주시기 바랍니다.</div>
+      <div className={`text-center ${status === "approved" && paid?.at ? "mt-8" : "mt-12"} text-[15px] text-[#1F2A44]`}>위와 같이 {form.cat === "expense" ? "결의" : form.cat === "draft" ? "기안" : form.cat === "report" ? (form.key === "resign" ? "제출" : "보고") : "신청"}하오니 재가하여 주시기 바랍니다.</div>
       <div className="text-center mt-6 text-[14.5px] text-[#3A4A66]">{korDate(createdMs)}</div>
       <div className="text-center mt-3 text-[17px] font-black text-[#0F1A30] tracking-[0.1em]">{form.cat === "draft" ? "기안자" : "신청인"} {drafter?.name || ""} <span className="text-[14px] font-bold text-[#5B6B85]">(인)</span></div>
     </div>

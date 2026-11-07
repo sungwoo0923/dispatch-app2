@@ -7,13 +7,14 @@
 export async function capture(el, scale = 2) {
   try { await document.fonts?.ready; } catch { /* 무시 */ }
   const { default: h2c } = await import("html2canvas");
-  return h2c(el, { scale, backgroundColor: "#ffffff", useCORS: true, logging: false, windowWidth: Math.max(el.scrollWidth, 900) });
+  // 🖨 2026-11-07 화면용 종이 그림자(box-shadow)는 인쇄·PDF 가장자리에 회색 띠로 찍혀서 복제본에서만 뺀다
+  return h2c(el, { scale, backgroundColor: "#ffffff", useCORS: true, logging: false, windowWidth: Math.max(el.scrollWidth, 900), onclone: (_d, c) => { if (c?.style) c.style.boxShadow = "none"; } });
 }
 
 // 캔버스를 A4 비율 조각으로 — 경계 근처(위로 최대 22%)에서 하얀 줄을 찾아 자른다
-export function sliceA4(canvas, marginRatio = 0) {
+export function sliceA4(canvas, marginRatio = 0, aspect = 297 / 210) {
   const W = canvas.width;
-  const pageH = Math.floor(W * (297 / 210) * (1 - marginRatio));
+  const pageH = Math.floor(W * aspect * (1 - marginRatio));
   if (canvas.height <= pageH) return [canvas];
   const ctx = canvas.getContext("2d");
   const isBlankRow = (y) => {
@@ -43,7 +44,9 @@ export function sliceA4(canvas, marginRatio = 0) {
 async function pagesOf(el) {
   const pages = el.querySelectorAll?.(".kp-a4page");
   if (pages && pages.length) { const list = []; for (const p of pages) list.push(await capture(p)); return list; }
-  return sliceA4(await capture(el), 0.06);
+  // 🖨 2026-11-07 조각 높이를 실제 인쇄 영역(A4 − 사방 8mm = 194×281mm, 여유 4mm)에 맞춤 — 예전 0.06 감산은 너무 보수적이라
+  //    한 장에 들어갈 결재 문서도 서명 줄 한 줄만 다음 장으로 넘어갔다
+  return sliceA4(await capture(el), 0, 277 / 194);
 }
 
 export async function savePng(el, name) {
