@@ -16,6 +16,11 @@
 //   hubWallets/{uid} · hubLedger     예치금 잔액 · 원장(서버 함수만 씀 — functions/hubWallet.js)
 //   hubCharges/{id}                  충전 요청(회원) → 관리자 입금 확인 · hubPayouts/{id} 지급 대기열 · hubDebts 미정산 · hubAdjustments 관리자 조정
 //   hubSettings/config · hubAnnouncements  수수료 · 입금 계좌 · 목록 설정 · 공지(관리자)
+//  ⭐ 2026-11-07 (3차)
+//   hubPlaces/{id}                   고객관리(허브 전용 회원의 상·하차지) — 같은 회사 키(companyKey)끼리만
+//   hubWithdrawals/{id}              출금 신청(사용 가능 예치금 → 본인 실계좌) · hubPostRequests 배차 프로그램 [저장 + 허브 등록]
+//   회사 키(companyKeyOf) — 같은 회사끼리만 오더 기록 · 오더복사 · 고객관리를 나눈다(규칙 hubKeyOf가 막는다)
+//   로지스웹 계정: 상하차지 자동완성 = 회사의 상하차지거래처(places), 오더복사 = 허브 기록 + 회사의 배차 오더(orders)
 //  Storage: hub/members/{uid}/…(서류: 본인+관리자) · hub/photos/{uid}/…(프로필: 로그인 회원) · hub/pod/{orderId}/…(인수증 · 계산서: 당사자)
 import {
   collection, doc, getDoc, getDocFromServer, getDocs, getDocsFromServer, onSnapshot, query, where, orderBy, limit,
@@ -24,7 +29,7 @@ import {
 import { ref as sref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { getApp } from "firebase/app";
 import { db, storage } from "../firebase";
-import { tonValue, estimateKm, ROLE_DOCS, CANCEL_WINDOW_MS, tsMs } from "./hubConstants";
+import { tonValue, estimateKm, ROLE_DOCS, CANCEL_WINDOW_MS, tsMs, companyKeyOf, regionKeysOf, kstYmd } from "./hubConstants";
 
 export const M = "hubMembers";
 export const O = "hubOrders";
@@ -101,10 +106,13 @@ export function subscribeStats(uid, cb) {
 export const ratingAvg = (st) => (st?.ratingCount ? st.ratingSum / st.ratingCount : 0);
 
 // ───────────────────────── 오더 보드 ─────────────────────────
-const boardQuery = () => query(collection(db, O), where("status", "==", "open"), orderBy("createdAt", "desc"), limit(300));
-export function subscribeBoard(cb, onAdded) {
+// ⭐ 2026-11-07 상차 지역(내 위치 + 오더 설정 3곳)으로 서버에서 걸러 받는다 — 상차지역 배열 array-contains-any(최대 30)
+const boardQuery = (keys) => (keys && keys.length
+  ? query(collection(db, O), where("status", "==", "open"), where("상차지역", "array-contains-any", keys.slice(0, 30)), orderBy("createdAt", "desc"), limit(300))
+  : query(collection(db, O), where("status", "==", "open"), orderBy("createdAt", "desc"), limit(300)));
+export function subscribeBoard(cb, onAdded, keys = null) {
   let first = true;
-  return onSnapshot(boardQuery(), (snap) => {
+  return onSnapshot(boardQuery(keys), (snap) => {
     const rows = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
     if (!first && onAdded) {
       snap.docChanges().filter((c) => c.type === "added" && !c.doc.metadata.hasPendingWrites).forEach((c) => onAdded({ id: c.doc.id, ...c.doc.data() }));
@@ -113,13 +121,21 @@ export function subscribeBoard(cb, onAdded) {
     cb(rows);
   }, () => cb([]));
 }
-export async function refreshBoard() {
-  const s = await getDocsFromServer(boardQuery());
+export async function refreshBoard(keys = null) {
+  const s = await getDocsFromServer(boardQuery(keys));
   return s.docs.map((d) => ({ id: d.id, ...d.data() }));
 }
 export function subscribeMine(uid, field, cb) {
   return onSnapshot(query(collection(db, O), where(field, "==", uid), limit(300)), (snap) => {
     cb(snap.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => tsMs(b.updatedAt) - tsMs(a.updatedAt)));
+  }, () => cb([]));
+}
+// 같은 회사가 올린 오더(로지스웹 운송사 직원끼리 · 같은 사업자 회원끼리) — 규칙이 회사 키로 막는다
+export function subscribeCompanyPosts(member, cb) {
+  const key = companyKeyOf(member);
+  if (!key) return () => {};
+  return onSnapshot(query(collection(db, O), where("posterCompanyKey", "==", key), limit(400)), (snap) => {
+    cb(snap.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => tsMs(b.createdAt) - tsMs(a.createdAt)));
   }, () => cb([]));
 }
 export function subscribeOrder(id, cb) {
@@ -133,8 +149,8 @@ export function subscribePrivate(id, key, cb) {
 }
 
 // ───────────────────────── 오더 등록 ─────────────────────────
-export const PUBLIC_EDIT_KEYS = ["상차시도", "상차시군구", "하차시도", "하차시군구", "상차일", "상차시간", "하차일", "하차시간", "화물내용", "중량", "파레트", "차량종류", "차량톤수", "톤수값", "상차방법", "하차방법", "운임", "수수료", "지급방식", "긴급", "운행유형", "적재", "공개메모", "거리km"];
-const DETAIL_KEYS = ["상차지명", "상차지주소", "상차담당자", "상차연락처", "하차지명", "하차지주소", "하차담당자", "하차연락처", "메모"];
+export const PUBLIC_EDIT_KEYS = ["상차시도", "상차시군구", "하차시도", "하차시군구", "상차일", "상차시간", "하차일", "하차시간", "화물내용", "중량", "파레트", "차량종류", "차량톤수", "톤수값", "상차방법", "하차방법", "운임", "수수료", "지급방식", "긴급", "운행유형", "적재", "공개메모", "거리km", "상차지역", "대수", "예약", "showAt"];
+const DETAIL_KEYS = ["상차지명", "상차지주소", "상차담당자", "상차연락처", "하차지명", "하차지주소", "하차담당자", "하차연락처", "메모", "의뢰자구분", "의뢰자사업자번호", "의뢰자명"];
 
 export function splitForm(f) {
   const pub = {};
@@ -145,6 +161,10 @@ export function splitForm(f) {
   pub.톤수값 = tonValue(f.차량톤수);
   pub.거리km = estimateKm(f.상차시도, f.상차시군구, f.하차시도, f.하차시군구);
   pub.긴급 = !!f.긴급;
+  pub.상차지역 = regionKeysOf(f.상차시도, f.상차시군구);
+  pub.대수 = String(f.대수 || "1대");
+  pub.예약 = !!f.예약;
+  pub.showAt = f.예약 && f.showAt ? Number(new Date(f.showAt).getTime()) || null : null;
   const detail = {};
   DETAIL_KEYS.forEach((k) => { detail[k] = String(f[k] || "").trim(); });
   return { pub, detail };
@@ -171,6 +191,7 @@ export async function postOrder(member, form) {
       posterCompany: member.companyName || "",
       posterName: member.name || "",
       posterVerified: member.docsVerified === true,
+      posterCompanyKey: companyKeyOf(member),
       status: "open",
       takerUid: null, takerRole: null, assignedAt: null,
       cancelCount: 0,
@@ -255,10 +276,8 @@ export async function uploadPod(orderId, file, prefix = "pod") {
   await uploadBytes(sref(storage, path), file, { contentType: file.type || "image/jpeg" });
   return { path, name: String(file.name || `${prefix}.${ext}`).slice(0, 120), type: file.type || "image/jpeg", size: file.size || 0, kind: prefix === "invoice" ? "계산서" : "인수증", at: Date.now() };
 }
-export async function markLoaded(order, member) {
-  await updateDoc(oref(order.id), { status: "loaded", loadedAt: serverTimestamp(), updatedAt: serverTimestamp() });
-}
-// 운송완료 + 인수증 · 서류 여러 장(사진 · PDF) — 첫 장은 예전 화면용 podPath에도
+// ⭐ 2026-11-07 (3차) 상차완료 단계 없음 — 운송중(확정)에서 [운송완료]만 누른다. 인수증 · 전표는 운송완료 뒤에 올린다
+// 운송완료(+ 고른 인수증이 있으면 같이) — 첫 장은 예전 화면용 podPath에도
 export async function markDelivered(order, member, podFiles) {
   const files = Array.isArray(podFiles) ? podFiles : podFiles ? [podFiles] : [];
   const pods = order.takerUid === member.uid ? await Promise.all(files.slice(0, 30).map((f) => uploadPod(order.id, f))) : [];
@@ -287,6 +306,18 @@ export async function issueInvoice(order, { no, date, amount, bizNo = "", file =
     updatedAt: serverTimestamp(),
   });
 }
+// 회차 — 등록자가 금액을 정해 요청 → 차주가 수락해야 확정(양쪽 합의). 수락하면 운송이 끝나고 회차비만 정산
+export async function proposeReturn(order, me, amount, reason = "") {
+  const n = Math.round(Number(String(amount).replace(/[^\d]/g, "")) || 0);
+  if (n > (Number(order.운임) || 0)) throw new Error("회차비는 운임보다 클 수 없어요");
+  await updateDoc(oref(order.id), { 회차: { amount: n, reason: String(reason || "").slice(0, 100), status: "proposed", at: serverTimestamp(), by: me.uid }, updatedAt: serverTimestamp() });
+}
+export async function answerReturn(order, accept) {
+  const r = { ...(order.회차 || {}), status: accept ? "accepted" : "rejected", answeredAt: serverTimestamp() };
+  await updateDoc(oref(order.id), { 회차: r, ...(accept ? { status: "delivered", deliveredAt: serverTimestamp() } : {}), updatedAt: serverTimestamp() });
+}
+// 등록자 — 계산서 확인 + 지급예정일 → 서버가 정산(운임 차감 · 차주 운송료 지급 예정)
+export const confirmInvoice = (order, me, payDate) => updateDoc(oref(order.id), { invoiceOk: { payDate: String(payDate).slice(0, 10), at: serverTimestamp(), by: me.uid }, updatedAt: serverTimestamp() });
 export async function rateOrder(order, asPoster, score, comment = "") {
   await updateDoc(oref(order.id), { [asPoster ? "ratingByPoster" : "ratingByTaker"]: { score: Math.max(1, Math.min(5, Math.round(score))), comment: String(comment).trim().slice(0, 200) }, updatedAt: serverTimestamp() });
 }
@@ -335,7 +366,7 @@ export async function writeLive(order, me, p) {
   await setDoc(liveRef(order.id), {
     orderId: order.id, takerUid: me.uid, posterUid: order.posterUid,
     lat: p.lat, lng: p.lng, speed: p.speed ? Math.round(p.speed * 3.6) : 0, accuracy: Math.round(p.accuracy || 0),
-    plate: me.vehicle?.plate || "", name: me.name || "", phone: me.phone || "", status: order.status === "loaded" ? "운송중" : "상차이동", source: "hub",
+    plate: me.vehicle?.plate || "", name: me.name || "", phone: me.phone || "", status: "운송중", source: "hub",
     updatedAt: serverTimestamp(),
   }, { merge: true });
 }
@@ -381,6 +412,21 @@ export async function requestCharge(me, amount, depositor) {
   return ref.id;
 }
 export const cancelCharge = (id) => updateDoc(doc(db, "hubCharges", id), { status: "cancelled", updatedAt: serverTimestamp() });
+// 출금(사용 가능 예치금 → 등록한 실계좌)
+export async function requestWithdraw(me, amount) {
+  const n = Math.round(Number(String(amount).replace(/[^\d]/g, "")) || 0);
+  if (n < 10000) throw new Error("1만원부터 출금할 수 있어요");
+  if (!me.bank?.number) throw new Error("출금 계좌를 먼저 등록해 주세요");
+  await addDoc(collection(db, "hubWithdrawals"), { uid: me.uid, name: me.name || "", amount: n, bank: me.bank, status: "requested", createdAt: serverTimestamp() });
+}
+export function subscribeMyWithdrawals(uid, cb) {
+  return onSnapshot(query(collection(db, "hubWithdrawals"), where("uid", "==", uid), limit(100)), (s) => cb(s.docs.map((d) => ({ id: d.id, ...d.data() })).sort(byNew("createdAt"))), () => cb([]));
+}
+export function subscribeMyPostedPayouts(uid, cb) {
+  return onSnapshot(query(collection(db, "hubPayouts"), where("fromUid", "==", uid), limit(200)), (s) => cb(s.docs.map((d) => ({ id: d.id, ...d.data() })).sort(byNew("createdAt"))), () => cb([]));
+}
+// 수동 지급 모드 — 등록자가 직접 이체한 뒤 [지급완료]
+export const posterMarkPaid = (id, me) => updateDoc(doc(db, "hubPayouts", id), { status: "paid", paidAt: serverTimestamp(), paidBy: me.uid, memo: "등록자 직접 이체", updatedAt: serverTimestamp() });
 export const saveBank = (uid, bank) => updateDoc(memberRef(uid), { bank: { bank: String(bank.bank || "").slice(0, 30), number: String(bank.number || "").replace(/[^\d-]/g, "").slice(0, 30), holder: String(bank.holder || "").trim().slice(0, 40) }, updatedAt: serverTimestamp() });
 
 // ───────────────────────── ⭐ 2026-11-06 설정 · 공지 ─────────────────────────
@@ -431,6 +477,7 @@ export function subscribeAll(col, cb, n = 500) {
   return onSnapshot(query(collection(db, col), limit(n)), (s) => cb(s.docs.map((d) => ({ id: d.id, ...d.data() }))), () => cb([]));
 }
 export const adminUpdateMember = (uid, patch) => updateDoc(memberRef(uid), { ...patch, updatedAt: serverTimestamp() });
+export const adminMarkWithdraw = (id, admin, status, reason = "") => updateDoc(doc(db, "hubWithdrawals", id), { status, ...(status === "paid" ? { paidAt: serverTimestamp(), paidBy: admin?.email || "" } : { rejectReason: String(reason).slice(0, 200) }), updatedAt: serverTimestamp() });
 export async function adminUpdateOrder(id, pubPatch, detailPatch) {
   const b = writeBatch(db);
   if (pubPatch && Object.keys(pubPatch).length) b.update(oref(id), { ...pubPatch, adminEditedAt: serverTimestamp(), updatedAt: serverTimestamp() });
@@ -442,7 +489,6 @@ export async function adminForceStatus(o, status) {
   const patch = { status, adminForcedAt: serverTimestamp(), updatedAt: serverTimestamp() };
   if (status === "open") Object.assign(patch, { takerUid: null, takerRole: null, assignedAt: null, confirmed: false, confirmedAt: null, ...(o.takerUid ? { releaseCount: increment(1), lastReleaseReason: "관리자 변경" } : {}) });
   if (status === "assigned" && o.takerUid) Object.assign(patch, { confirmed: true, confirmedAt: serverTimestamp() });
-  if (status === "loaded") patch.loadedAt = serverTimestamp();
   if (status === "delivered") patch.deliveredAt = serverTimestamp();
   if (status === "cancelled") patch.cancelledAt = serverTimestamp();
   await updateDoc(oref(o.id), patch);
@@ -454,3 +500,50 @@ export const rejectCharge = (id, reason) => updateDoc(doc(db, "hubCharges", id),
 export const requestPayoutSend = (id, admin) => updateDoc(doc(db, "hubPayouts", id), { status: "requested", requestedAt: serverTimestamp(), requestedBy: admin?.email || "", updatedAt: serverTimestamp() });
 export const markPayoutPaid = (id, admin, memo = "") => updateDoc(doc(db, "hubPayouts", id), { status: "paid", paidAt: serverTimestamp(), paidBy: admin?.email || admin?.uid || "", memo: String(memo).slice(0, 200), updatedAt: serverTimestamp() });
 export const adjustWallet = (uid, amount, bucket, memo, admin) => addDoc(collection(db, "hubAdjustments"), { uid, amount: Math.round(Number(amount) || 0), bucket: bucket === "owed" ? "owed" : "available", memo: String(memo || "").slice(0, 200), by: admin?.email || admin?.uid || "", createdAt: serverTimestamp() });
+
+// ───────────────────────── ⭐ 2026-11-07 고객관리 · 상하차지 자동완성 · 오더복사 ─────────────────────────
+//  허브 전용 회원: 고객관리(hubPlaces, 같은 회사 키) — 오더를 올릴 때마다 서버가 상·하차지를 자동 저장(functions/hubSync.js)
+//  로지스웹 계정: 회사의 상하차지거래처(places) — 허브에서 새로 쓴 곳은 서버가 거기에 만든다
+export function subscribeHubPlaces(member, cb) {
+  const key = companyKeyOf(member);
+  if (!key) return () => {};
+  return onSnapshot(query(collection(db, "hubPlaces"), where("companyKey", "==", key), limit(1000)), (s) => cb(s.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => tsMs(b.lastUsedAt) - tsMs(a.lastUsedAt))), () => cb([]));
+}
+export async function saveHubPlace(member, id, p) {
+  const data = { 이름: String(p.이름 || "").trim().slice(0, 60), 주소: String(p.주소 || "").trim().slice(0, 200), 담당자: String(p.담당자 || "").trim().slice(0, 40), 연락처: String(p.연락처 || "").trim().slice(0, 20), 시도: p.시도 || "", 시군구: p.시군구 || "", updatedAt: serverTimestamp() };
+  if (data.주소.length < 2) throw new Error("주소를 입력해 주세요");
+  if (id) await updateDoc(doc(db, "hubPlaces", id), data);
+  else await addDoc(collection(db, "hubPlaces"), { ...data, companyKey: companyKeyOf(member), uid: member.uid, count: 0, createdAt: serverTimestamp(), lastUsedAt: serverTimestamp() });
+}
+export const deleteHubPlace = (id) => deleteDoc(doc(db, "hubPlaces", id));
+// 로지스웹 상하차지거래처(places) → 자동완성 모양 { 이름, 주소, 담당자, 연락처 }
+export async function fetchLwPlaces(member) {
+  try {
+    const q = member.source === "logisweb-shipper"
+      ? query(collection(db, "places"), where("userId", "==", member.uid), limit(2000))
+      : query(collection(db, "places"), where("companyName", "==", member.companyName || "_"), limit(3000));
+    const s = await getDocs(q);
+    return s.docs.map((d) => { const x = d.data(); return { id: d.id, 이름: x.업체명 || "", 주소: x.주소 || "", 담당자: x.담당자 || "", 연락처: x.담당자번호 || "", lw: true }; }).filter((x) => x.이름 || x.주소);
+  } catch { return []; }
+}
+// 오더복사 후보 — 같은 회사 허브 오더(+ 로지스웹 계정이면 회사의 배차 오더 최근 90일)
+export async function fetchCopySources(member) {
+  const key = companyKeyOf(member);
+  const out = [];
+  try {
+    const s = await getDocs(query(collection(db, O), where("posterCompanyKey", "==", key), limit(300)));
+    s.docs.forEach((d) => out.push({ src: "hub", id: d.id, ...d.data() }));
+  } catch { /* 규칙 · 색인 */ }
+  if (member.source === "logisweb-staff" && member.companyName) {
+    try {
+      const from = kstYmd(-90);
+      const s = await getDocs(query(collection(db, "orders"), where("companyName", "==", member.companyName), where("상차일", ">=", from), limit(500)));
+      s.docs.forEach((d) => out.push({ src: "lw", id: d.id, ...d.data() }));
+    } catch { /* 배차 프로그램 규칙 · 색인 */ }
+  }
+  return out.sort((a, b) => String(b.상차일 || "").localeCompare(String(a.상차일 || "")) || tsMs(b.createdAt) - tsMs(a.createdAt));
+}
+// 허브 오더 → 상세(같은 회사만 규칙이 열어 준다)
+export const fetchCopyDetail = (id) => fetchPrivate(id, "detail");
+// 배차 프로그램 [저장 + 허브 등록] 결과 보기(관리 · 시험용)
+export function subscribePostRequest(id, cb) { return onSnapshot(doc(db, "hubPostRequests", id), (s) => cb(s.exists() ? s.data() : null), () => cb(null)); }

@@ -10,7 +10,7 @@ const fileName = (o, p, i) => `${o.상차일 || ""}_${o.상차시군구 || o.상
 
 async function blobOf(url) {
   const r = await fetch(url);
-  if (!r.ok) throw new Error("파일을 받지 못했습니다");
+  if (!r.ok) throw new Error("파일을 받지 못했어요");
   return r.blob();
 }
 export async function downloadFile(url, name) {
@@ -30,8 +30,8 @@ async function shareFiles(items, title, toast) {
     }
     if (navigator.share) { await navigator.share({ title, text: `${title}\n${items.map((x) => x.url).join("\n")}` }); return; }
     await navigator.clipboard.writeText(items.map((x) => x.url).join("\n"));
-    toast?.("링크를 복사했습니다 — 카톡 · 문자에 붙여넣으세요");
-  } catch (e) { if (e?.name !== "AbortError") { try { await navigator.clipboard.writeText(items.map((x) => x.url).join("\n")); toast?.("링크를 복사했습니다"); } catch { toast?.("공유하지 못했습니다"); } } }
+    toast?.("링크를 복사했어요");
+  } catch (e) { if (e?.name !== "AbortError") { try { await navigator.clipboard.writeText(items.map((x) => x.url).join("\n")); toast?.("링크를 복사했어요"); } catch { toast?.("공유하지 못했어요"); } } }
 }
 
 export default function HubPod({ o, canAdd, toast }) {
@@ -48,17 +48,17 @@ export default function HubPod({ o, canAdd, toast }) {
   }, [key]); // eslint-disable-line react-hooks/exhaustive-deps
   if (!list.length && !canAdd) return null;
   const items = list.map((p, i) => ({ ...p, url: urls[p.path], name: fileName(o, p, i) })).filter((x) => x.url);
-  const title = `인수증 · ${o.상차시도} ${o.상차시군구 || ""} → ${o.하차시도} ${o.하차시군구 || ""}`;
+  const title = `인수증 ${o.상차시도} ${o.상차시군구 || ""} → ${o.하차시도} ${o.하차시군구 || ""}`;
   const add = async (files) => {
     if (!files?.length) return;
     setBusy(true);
-    try { const n = await addPods(o, files); toast?.(`인수증 ${n}장을 올렸습니다 · 등록자에게 알림이 갑니다`); } catch (e) { toast?.(e?.message || "올리지 못했습니다"); } finally { setBusy(false); }
+    try { const n = await addPods(o, files); toast?.(`인수증 ${n}장을 올렸어요`); } catch (e) { toast?.(e?.message || "올리지 못했어요"); } finally { setBusy(false); }
   };
   return (
     <Card className="p-4" data-testid="pod-card">
       <div className="flex items-center gap-2 mb-3">
         <HI name="file" size={18} className="text-[#2D4C82]" />
-        <span className="text-[16px] font-extrabold text-[#0F1A30]">인수증 · 서류</span>
+        <span className="text-[16px] font-extrabold text-[#0F1A30]">인수증과 전표</span>
         <span className="text-[14px] font-bold text-[#8592A8]" data-testid="pod-count">{list.length}장</span>
         {items.length > 0 && (
           <span className="ml-auto flex gap-1.5">
@@ -84,7 +84,7 @@ export default function HubPod({ o, canAdd, toast }) {
       {canAdd && (
         <>
           <button type="button" disabled={busy} onClick={() => input.current?.click()} className="mt-3 w-full h-12 rounded-2xl bg-white ring-1 ring-inset ring-[#D6DEEA] text-[15px] font-bold text-[#1B2B4B] inline-flex items-center justify-center gap-2" data-testid="pod-add">
-            <HI name="camera" size={18} />{busy ? "올리는 중…" : list.length ? "인수증 · 서류 더 올리기" : "인수증 · 서류 올리기"}
+            <HI name="camera" size={18} />{busy ? "올리고 있어요" : list.length ? "더 올리기" : "인수증·전표 올리기"}
           </button>
           <input ref={input} type="file" accept="image/*,application/pdf" multiple className="sr-only" data-testid="pod-add-input" onChange={(e) => { add([...(e.target.files || [])]); e.target.value = ""; }} />
         </>

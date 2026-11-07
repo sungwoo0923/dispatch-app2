@@ -1,30 +1,34 @@
 // ======================= cafe-site/src/hub/HubApp.jsx =======================
 // ⭐ 2026-11-06 로지스웹 허브 — 화물 콜 앱(차주 · 화주 · 운송사). 휴대폰과 PC가 같은 화면(반응형).
-//  휴대폰: 위 앱바 + 아래 탭바 + 오더 등록 버튼(화주·운송사) · 끌어내려 새로고침
+//  휴대폰: 위 앱바(잔액) + 아래 탭바 + 화물등록 버튼(화주 · 운송사) · 끌어내려 새로고침
 //  PC: 왼쪽 메뉴 + 필터 패널 + 카드 2열 + 오른쪽 상세 서랍 · [새로고침] 버튼
-//  탭: 오더(보드) · 내 배차(차주·운송사) · 내 오더(화주·운송사) · 알림 · 내 정보 · 회원 승인(관리자)
-//  실시간: onSnapshot. 새 콜 알림(소리 · 진동 · 읽어주기)은 내 알림 조건(지역 · 차종 · 톤수 · 최소 운임)에 맞을 때만.
+// ⭐ 2026-11-07 (3차)
+//  · 오더 보드(차주 · 운송사) = 상차 지역이 "내 위치 지역 + 오더 설정의 상차 지역 3곳"인 오더만(서버에서 걸러 받음)
+//  · 탭: 오더 · 내 배차 · 등록내역(기간 · 단계 · 결제 · 검색 · 내꺼보기) · 고객관리(허브 전용 회원) · 마이페이지 · 알림 · 관리자
+//  · 위 앱바에 잔액(사용 가능 예치금)
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Navigate, useNavigate, useParams, useLocation } from "react-router-dom";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
 import { auth, db } from "../firebase";
 import { HI, Btn, Chip, Badge, Card, Empty, Seg, HubMark, NAVY_BG, HUB_CSS, NUMS, useToast, Avatar, selectCls, inputCls, Drawer, Field } from "./hubUi";
-import { ROLES, SOURCE_LABEL, canPost, canTake, SIDO_LIST, HUB_VEHICLES, HUB_TONS, tonValue, regionLL, kmBetweenLL, nearestRegion, ago, STATUS, ACTIVE, speakText, routeText, manwon, kstYmd, tsMs, fareFitness, DOC_TYPES } from "./hubConstants";
-import { subscribeMember, subscribeBoard, refreshBoard, subscribeMine, subscribeNotices, markRead, updatePrefs, localSession, subscribeStats, ratingAvg, fetchPrivate, subscribeHubConfig, subscribeWallet, subscribeAnnouncements, enableHubPush, pushEnabledHere, disableHubPush } from "./hubApi";
+import { ROLES, canPost, canTake, SIDO_LIST, sigunguOf, HUB_VEHICLES, HUB_TONS, tonValue, regionLL, kmBetweenLL, nearestRegion, ago, ACTIVE, speakText, routeText, manwon, kstYmd, tsMs, DOC_TYPES, isLinked, stageOf, payKind } from "./hubConstants";
+import { subscribeMember, subscribeBoard, refreshBoard, subscribeMine, subscribeCompanyPosts, subscribeNotices, markRead, updatePrefs, localSession, subscribeHubConfig, subscribeWallet, subscribeAnnouncements, enableHubPush, pushEnabledHere, disableHubPush, fetchPrivate } from "./hubApi";
 import { applyHubLists } from "./hubConstants";
 import HubWallet, { wonFull } from "./HubWallet";
 import { useHubLocationShare } from "./hubLiveShare";
-import HubOrderCard from "./HubOrderCard";
+import HubOrderCard, { HubOrderRow } from "./HubOrderCard";
 import HubOrderDetail from "./HubOrderDetail";
 import HubPostForm from "./HubPostForm";
 import HubAdmin from "./HubAdmin";
+import HubPlaces from "./HubPlaces";
 
 const TOTAL_MASTER_EMAIL = "tjddnqkf@naver.com";
 const readLS = (k, d) => { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch { return d; } };
 const writeLS = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* 무시 */ } };
 const DEFAULT_F = { from: [], to: [], vehicle: "", ton: "", day: "", urgent: false, fav: false, sort: "new" };
 const TON_RANGES = [["", "전체 톤수"], ["s", "1.4톤 이하", 0, 1.4], ["m", "2.5~3.5톤", 2.5, 3.5], ["l", "5톤(축)", 4.5, 6], ["xl", "8~11톤", 8, 11], ["xxl", "14톤 이상", 14, 99]];
+const TAB_ALIAS = { wallet: "my", me: "my" };
 
 // ── 새 콜 알림음(짧은 두 번) · 진동 · 읽어주기
 let audioCtx = null;
@@ -46,6 +50,7 @@ function speak(text) {
 }
 export function alertMatches(o, a, me) {
   if (!a?.on || o.posterUid === me.uid) return false;
+  if (o.showAt && o.showAt > Date.now()) return false;
   if (a.regions?.length && !a.regions.includes(o.상차시도)) return false;
   if (a.vehicles?.length && !a.vehicles.some((v) => String(o.차량종류 || "").includes(v))) return false;
   const t = o.톤수값 || tonValue(o.차량톤수);
@@ -54,6 +59,8 @@ export function alertMatches(o, a, me) {
   if (a.minFare && (Number(o.운임) || 0) < Number(a.minFare) * 10000) return false;
   return true;
 }
+// 보드 지역 키 — 시·도만이면 "경기", 시·군·구까지면 "경기 화성시"
+const keyOf = (r, level = "sgg") => (r?.sido ? (level === "sido" || !r.sigungu ? r.sido : `${r.sido} ${r.sigungu}`) : "");
 
 function Loading() {
   return (
@@ -78,8 +85,8 @@ function Gate({ m, logout }) {
         <div className="max-w-[560px] mx-auto flex items-center justify-between"><HubMark size={38} /><button type="button" onClick={logout} className="h-11 px-4 rounded-2xl bg-white/10 text-[15px] font-bold">로그아웃</button></div>
         <div className="max-w-[560px] mx-auto mt-8">
           <div className="text-[15px] font-bold text-[#8FB0F0]">{ROLES[m.role]?.label} 가입 신청</div>
-          <div className="text-[28px] font-extrabold mt-1 tracking-[-0.02em]">{pending ? "관리자가 서류를 확인하고 있어요" : rejected ? "가입 신청이 반려되었습니다" : "이용이 정지된 계정입니다"}</div>
-          <div className="text-[15.5px] text-white/65 mt-2 leading-relaxed">{pending ? "보통 영업일 기준 하루 안에 승인됩니다. 승인되면 바로 오더 보드가 열립니다." : m.rejectReason ? `사유: ${m.rejectReason}` : "관리자에게 문의해 주세요."}</div>
+          <div className="text-[28px] font-extrabold mt-1 tracking-[-0.02em]">{pending ? "서류를 확인하고 있어요" : rejected ? "가입 신청이 반려됐어요" : "이용이 멈춘 계정이에요"}</div>
+          <div className="text-[15.5px] text-white/65 mt-2 leading-relaxed">{pending ? "보통 하루 안에 승인돼요." : m.rejectReason ? `사유: ${m.rejectReason}` : "고객센터로 연락해 주세요."}</div>
         </div>
       </div>
       <div className="max-w-[560px] mx-auto px-4 -mt-9 space-y-3 pb-10">
@@ -92,10 +99,99 @@ function Gate({ m, logout }) {
         </Card>
         <Card className="p-5">
           <div className="text-[16px] font-extrabold text-[#0F1A30] mb-2">제출한 정보</div>
-          <div className="text-[15.5px] text-[#3A4A66] leading-relaxed">{m.name} · {m.phone}<br />{m.companyName}{m.vehicle ? ` · ${m.vehicle.plate} ${m.vehicle.ton} ${m.vehicle.type}` : ""}<br />서류 {docs.length}개: {docs.map((k) => DOC_TYPES[k]).join(", ")}</div>
+          <div className="text-[15.5px] text-[#3A4A66] leading-relaxed">{m.name}, {m.phone}<br />{m.companyName}{m.vehicle ? `, ${m.vehicle.plate} ${m.vehicle.ton} ${m.vehicle.type}` : ""}<br />서류 {docs.length}개: {docs.map((k) => DOC_TYPES[k]).join(", ")}</div>
         </Card>
         {(pending || rejected) && m.source === "signup" && <Btn size="xl" className="w-full" onClick={() => nav("/signup?edit=1")} data-testid="gate-edit">{rejected ? "고쳐서 다시 신청하기" : "신청서 고치기"}</Btn>}
       </div>
+    </div>
+  );
+}
+
+// ── 오더 설정(차주 · 운송사) — 내 위치 지역(GPS 자동 · 직접 고르기) + 상차 지역 3곳
+function BoardSettings({ me, auto, onClose, toast }) {
+  const cur = me.prefs?.board || {};
+  const [my, setMy] = useState(cur.my || auto || { sido: "", sigungu: "" });
+  const [manual, setManual] = useState(!!cur.my);
+  const [level, setLevel] = useState(cur.level || "sgg");
+  const [extra, setExtra] = useState(() => [0, 1, 2].map((i) => cur.extra?.[i] || { sido: "", sigungu: "" }));
+  const setEx = (i, k, v) => setExtra((p) => p.map((r, j) => (j === i ? { ...r, [k]: v, ...(k === "sido" ? { sigungu: "" } : {}) } : r)));
+  const save = () => {
+    const board = { my: manual && my.sido ? my : null, level, extra: extra.filter((r) => r.sido) };
+    updatePrefs(me.uid, { ...(me.prefs || {}), board }).then(() => { toast?.("오더 설정을 저장했어요"); onClose(); }).catch(() => toast?.("저장하지 못했어요"));
+  };
+  const RegionPick = ({ v, onSido, onSgg, testid, disabled }) => (
+    <div className="grid grid-cols-2 gap-2">
+      <select className={selectCls} value={v.sido} disabled={disabled} onChange={(e) => onSido(e.target.value)} data-testid={`${testid}-sido`}><option value="">시·도</option>{SIDO_LIST.map((s) => <option key={s}>{s}</option>)}</select>
+      <select className={selectCls} value={v.sigungu} disabled={disabled || !v.sido} onChange={(e) => onSgg(e.target.value)} data-testid={`${testid}-sgg`}><option value="">전체</option>{sigunguOf(v.sido).map((s) => <option key={s}>{s}</option>)}</select>
+    </div>
+  );
+  return (
+    <Drawer onClose={onClose} title="오더 설정" sub="이 지역에서 상차하는 오더만 보여요" testid="board-settings">
+      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+        <Card className="p-4 space-y-3">
+          <div className="flex items-center gap-2"><HI name="gps" size={18} className="text-[#2D4C82]" /><span className="text-[16px] font-extrabold text-[#0F1A30]">내 위치</span><span className="ml-auto text-[14px] font-bold text-[#55657F]" data-testid="bs-auto">{auto ? `${auto.sido} ${auto.sigungu || ""}` : "위치를 찾고 있어요"}</span></div>
+          <Seg value={manual ? "manual" : "gps"} onChange={(v) => { setManual(v === "manual"); if (v === "gps" && auto) setMy(auto); }} options={[["gps", "자동(GPS)"], ["manual", "직접 고르기"]]} />
+          <RegionPick v={manual ? my : auto || my} disabled={!manual} onSido={(s) => setMy({ sido: s, sigungu: "" })} onSgg={(g) => setMy((p) => ({ ...p, sigungu: g }))} testid="bs-my" />
+          <Field label="범위"><Seg value={level} onChange={setLevel} options={[["sgg", "시·군·구"], ["sido", "시·도 전체"]]} /></Field>
+        </Card>
+        <Card className="p-4 space-y-3">
+          <div className="text-[16px] font-extrabold text-[#0F1A30]">상차 지역 더 보기 <span className="text-[14px] font-bold text-[#8592A8]">최대 3곳</span></div>
+          {extra.map((r, i) => <RegionPick key={i} v={r} onSido={(s) => setEx(i, "sido", s)} onSgg={(g) => setEx(i, "sigungu", g)} testid={`bs-ex${i}`} />)}
+        </Card>
+      </div>
+      <div className="p-4 bg-white border-t border-[#E2E7EF] pb-[max(16px,env(safe-area-inset-bottom))]"><Btn size="xl" className="w-full" onClick={save} data-testid="bs-save">저장</Btn></div>
+    </Drawer>
+  );
+}
+
+// ── 등록내역(24시콜 등록내역 구조 참고) — 기간 · 단계 · 결제 · 화물번호/차주전화 검색 · 내꺼보기
+const PST = [["all", "전체"], ["open", "접수"], ["done", "배차완료"], ["cancelled", "화물취소"]];
+const PPAY = [["all", "전체"], ["deposit", "인수증"], ["cash", "선착불"]];
+function PostsView({ me, posts, openOrder, onPost }) {
+  const [from, setFrom] = useState(kstYmd(-30));
+  const [to, setTo] = useState(kstYmd(1));
+  const [st, setSt] = useState(["all"]);
+  const [pay, setPay] = useState(["all"]);
+  const [q, setQ] = useState("");
+  const [mine, setMine] = useState(true);
+  const [co, setCo] = useState([]);
+  const [phones, setPhones] = useState({});
+  useEffect(() => (mine ? undefined : subscribeCompanyPosts(me, setCo)), [mine, me.uid]); // eslint-disable-line react-hooks/exhaustive-deps
+  const src = mine ? posts : co;
+  const digits = q.replace(/[^\d]/g, "");
+  useEffect(() => {
+    if (digits.length < 4) return;
+    src.filter((o) => o.takerUid && o.posterUid === me.uid && phones[o.id] === undefined).slice(0, 80).forEach((o) => fetchPrivate(o.id, "match").then((m) => setPhones((p) => ({ ...p, [o.id]: m?.phone || "" }))));
+  }, [digits.length >= 4, src.length]); // eslint-disable-line react-hooks/exhaustive-deps
+  const tog = (arr, setArr, k) => setArr(k === "all" ? ["all"] : ((x) => (x.length ? x : ["all"]))([...arr.filter((v) => v !== "all" && v !== k), ...(arr.includes(k) ? [] : [k])]));
+  const rows = useMemo(() => src.filter((o) => {
+    const day = tsMs(o.createdAt) ? new Date(tsMs(o.createdAt) + 9 * 3600e3).toISOString().slice(0, 10) : o.상차일 || "";
+    if (from && day < from) return false;
+    if (to && day > to) return false;
+    const sg = stageOf(o);
+    if (!st.includes("all") && !st.some((k) => (k === "open" ? sg === "open" : k === "cancelled" ? sg === "cancelled" : !["open", "cancelled"].includes(sg)))) return false;
+    if (!pay.includes("all") && !pay.includes(payKind(o.지급방식))) return false;
+    if (q.trim()) {
+      const k = q.trim().toLowerCase();
+      const hit = o.id.toLowerCase().includes(k) || (digits.length >= 4 && String(phones[o.id] || "").replace(/[^\d]/g, "").includes(digits));
+      if (!hit) return false;
+    }
+    return true;
+  }), [src, from, to, st, pay, q, phones, digits]);
+  const Box = ({ on, onClick, children, testid }) => <button type="button" onClick={onClick} aria-pressed={on} data-testid={testid} className={`h-10 px-3 rounded-xl text-[14.5px] font-bold inline-flex items-center gap-1.5 ${on ? "bg-[#0F1A30] text-white" : "bg-white text-[#3A4A66] ring-1 ring-inset ring-[#D6DEEA]"}`}><span className={`w-4 h-4 rounded-[5px] inline-flex items-center justify-center ${on ? "bg-[#8FB0F0] text-[#0B1428]" : "ring-1 ring-inset ring-[#C7D3E8]"}`}>{on && <HI name="check" size={11} stroke={3} />}</span>{children}</button>;
+  return (
+    <div className="space-y-3 max-w-[1100px]" data-testid="list-posts">
+      <Card className="p-4 space-y-3" data-testid="posts-filter">
+        <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2"><input type="date" className={inputCls} value={from} onChange={(e) => setFrom(e.target.value)} data-testid="pv-from" /><span className="text-[#8592A8] font-bold">~</span><input type="date" className={inputCls} value={to} onChange={(e) => setTo(e.target.value)} data-testid="pv-to" /></div>
+        <div className="flex flex-wrap gap-1.5 items-center"><span className="w-10 text-[14px] font-bold text-[#8592A8]">상태</span>{PST.map(([k, l]) => <Box key={k} on={st.includes(k)} onClick={() => tog(st, setSt, k)} testid={`pv-st-${k}`}>{l}</Box>)}</div>
+        <div className="flex flex-wrap gap-1.5 items-center"><span className="w-10 text-[14px] font-bold text-[#8592A8]">결제</span>{PPAY.map(([k, l]) => <Box key={k} on={pay.includes(k)} onClick={() => tog(pay, setPay, k)} testid={`pv-pay-${k}`}>{l}</Box>)}</div>
+        <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
+          <div className="relative"><HI name="search" size={18} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#8592A8]" /><input className={`${inputCls} pl-10`} value={q} onChange={(e) => setQ(e.target.value)} placeholder="화물번호 또는 차주 전화" data-testid="pv-q" /></div>
+          <Box on={mine} onClick={() => setMine((v) => !v)} testid="pv-mine">내꺼보기</Box>
+        </div>
+      </Card>
+      <div className="flex items-center px-1"><span className="text-[14.5px] font-bold text-[#55657F]">{rows.length}건</span>{onPost && <Btn size="md" className="ml-auto" onClick={onPost}><HI name="plus" size={16} />화물등록</Btn>}</div>
+      {rows.length === 0 ? <Empty icon="list" title="등록한 화물이 없어요" /> : <div className="space-y-2" data-testid="posts-rows">{rows.map((o) => <HubOrderRow key={o.id} o={o} onOpen={() => openOrder(o)} takerPhone={digits.length >= 4 ? phones[o.id] : ""} />)}</div>}
     </div>
   );
 }
@@ -113,12 +209,14 @@ export default function HubApp() {
   const [jobs, setJobs] = useState([]);
   const [notices, setNotices] = useState([]);
   const [fresh, setFresh] = useState(() => new Set());
-  const [tab, setTab] = useState(() => readLS("hubTab", "board"));
+  const [tab, setTab] = useState(() => { const t = readLS("hubTab", "board"); return TAB_ALIAS[t] || t; });
   const [f, setF] = useState(() => ({ ...DEFAULT_F, ...readLS("hubBoardF", {}) }));
   const [filterOpen, setFilterOpen] = useState(false);
   const [alertOpen, setAlertOpen] = useState(false);
+  const [boardSet, setBoardSet] = useState(false);
   const [form, setForm] = useState(null); // { editing? }
   const [myPos, setMyPos] = useState(null);
+  const [gpsRegion, setGpsRegion] = useState(() => readLS("hubGpsRegion", null));
   const [pull, setPull] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
   const [lastSync, setLastSync] = useState(Date.now());
@@ -139,14 +237,30 @@ export default function HubApp() {
   useEffect(() => {
     if (!me?.activeSession) return;
     const mine = localSession();
-    if (mine && me.activeSession !== mine) { signOut(auth).then(() => { alert("다른 기기에서 같은 계정으로 로그인해 이 기기는 로그아웃되었습니다."); nav("/login", { replace: true }); }); }
+    if (mine && me.activeSession !== mine) { signOut(auth).then(() => { alert("다른 기기에서 로그인해서 이 기기는 로그아웃했어요."); nav("/login", { replace: true }); }); }
   }, [me?.activeSession]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const approved = me?.status === "approved";
-  // ⭐ 2026-11-06 관리자 설정(수수료 · 입금 계좌 · 목록) — 목록은 hubConstants 배열을 그 자리에서 바꿔 모든 화면이 따라간다
+  const takerish = !!me && approved && (me.role === "driver" || me.role === "carrier");
   useEffect(() => { if (!authUser) return undefined; return subscribeHubConfig((c) => { applyHubLists(c?.lists); setCfg(c || {}); }); }, [authUser]);
   useEffect(() => { if (!approved) return undefined; return subscribeWallet(me.uid, setWallet); }, [approved, me?.uid]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (!approved && !isAdmin) return undefined; return subscribeAnnouncements(setAnns); }, [approved, isAdmin]);
+  // 내 위치 지역(GPS) — 오더 보드 기본 지역
+  useEffect(() => {
+    if (!takerish || typeof navigator === "undefined" || !navigator.geolocation) return;
+    navigator.geolocation.getCurrentPosition((p) => {
+      const r = nearestRegion(p.coords.latitude, p.coords.longitude);
+      if (r) { const v = { sido: r.sido, sigungu: r.sigungu || "" }; setGpsRegion(v); writeLS("hubGpsRegion", v); setMyPos({ ...r, ll: [p.coords.latitude, p.coords.longitude] }); }
+    }, () => {}, { enableHighAccuracy: false, timeout: 8000, maximumAge: 600000 });
+  }, [takerish]);
+  const bset = me?.prefs?.board || {};
+  const myRegion = bset.my || gpsRegion || (me?.home?.sido ? { sido: me.home.sido, sigungu: me.home.sigungu || "" } : null);
+  const boardKeys = useMemo(() => {
+    if (!takerish) return null;
+    const ks = [keyOf(myRegion, bset.level), ...(bset.extra || []).map((r) => keyOf(r))].filter(Boolean);
+    return ks.length ? [...new Set(ks)] : null;
+  }, [takerish, myRegion?.sido, myRegion?.sigungu, bset.level, JSON.stringify(bset.extra || [])]); // eslint-disable-line react-hooks/exhaustive-deps
+  const keysStr = boardKeys ? boardKeys.join("|") : "";
   const onAdded = useCallback((o) => {
     const m = meRef.current;
     if (!m) return;
@@ -156,12 +270,12 @@ export default function HubApp() {
       beep();
       try { navigator.vibrate?.([220, 120, 220]); } catch { /* 무시 */ }
       if (a.tts) speak(speakText(o));
-      toast(`새 콜 · ${routeText(o)} · ${manwon(o.운임)}`, 4000);
+      toast(`새 콜 ${routeText(o)} ${manwon(o.운임)}`, 4000);
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => { if (!approved) return; return subscribeBoard((rows) => { setBoard(rows); setLastSync(Date.now()); }, onAdded); }, [approved, onAdded]);
+  useEffect(() => { if (!approved) return; return subscribeBoard((rows) => { setBoard(rows); setLastSync(Date.now()); }, onAdded, boardKeys); }, [approved, onAdded, keysStr]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (!approved || !canPost(me)) return; return subscribeMine(me.uid, "posterUid", setPosts); }, [approved, me?.uid, me?.role]); // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => { if (!approved || !canTake(me)) return; return subscribeMine(me.uid, "takerUid", setJobs); }, [approved, me?.uid, me?.role]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (!approved || !(me.role === "driver" || me.role === "carrier")) return; return subscribeMine(me.uid, "takerUid", setJobs); }, [approved, me?.uid, me?.role]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (!approved) return; return subscribeNotices(me.uid, setNotices); }, [approved, me?.uid]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => writeLS("hubBoardF", f), [f]);
   useEffect(() => writeLS("hubTab", tab), [tab]);
@@ -169,10 +283,9 @@ export default function HubApp() {
 
   const doRefresh = async () => {
     setRefreshing(true);
-    try { const rows = await refreshBoard(); setBoard(rows); setLastSync(Date.now()); toast(`새로고침 · 모집중 ${rows.length}건`); } catch { toast("새로고침하지 못했습니다"); }
+    try { const rows = await refreshBoard(boardKeys); setBoard(rows); setLastSync(Date.now()); toast(`모집중 ${rows.length}건`); } catch { toast("새로고침하지 못했어요"); }
     finally { setRefreshing(false); setPull(0); }
   };
-  // 휴대폰 끌어내려 새로고침
   const touch = useRef(null);
   const onTouchStart = (e) => { touch.current = window.scrollY <= 0 ? e.touches[0].clientY : null; };
   const onTouchMove = (e) => { if (touch.current == null) return; const d = e.touches[0].clientY - touch.current; setPull(d > 0 ? Math.min(110, d * 0.55) : 0); };
@@ -181,13 +294,14 @@ export default function HubApp() {
   const favorites = me?.prefs?.favorites || [];
   const favSet = useMemo(() => new Set(favorites.map((x) => x.uid)), [favorites]);
   const activeJob = jobs.find((j) => ACTIVE.includes(j.status));
-  // ⭐ 위치관제 — 확정된 배차 · 상차완료 동안 이 기기 위치를 등록자에게(운송완료 · 취소되면 멈춤)
   const liveShare = useHubLocationShare(approved ? me : null, jobs);
 
   const filtered = useMemo(() => {
     const today = kstYmd(), tom = kstYmd(1);
     const rng = TON_RANGES.find((r) => r[0] === f.ton);
+    const now = Date.now();
     const list = board.filter((o) => {
+      if (o.showAt && o.showAt > now && o.posterUid !== me?.uid) return false; // 차주앱 표시 예약
       if (f.from.length && !f.from.includes(o.상차시도)) return false;
       if (f.to.length && !f.to.includes(o.하차시도)) return false;
       if (f.vehicle && !String(o.차량종류 || "").includes(f.vehicle)) return false;
@@ -207,9 +321,8 @@ export default function HubApp() {
       near: (a, b) => (a.near || 9999) - (b.near || 9999),
     }[f.sort] || (() => 0);
     return list.sort(s);
-  }, [board, f, favSet, myPos]);
+  }, [board, f, favSet, myPos, me?.uid]);
 
-  // 귀로(돌아오는 길) 추천 — 진행 중 배차의 하차 지역에서 출발하는 오더, 내 출발지(차고지)로 돌아가면 위로
   const returns = useMemo(() => {
     if (!activeJob) return [];
     const home = me?.home?.sido || activeJob.상차시도;
@@ -223,61 +336,52 @@ export default function HubApp() {
   if (authUser === null) return <Navigate to="/login" replace />;
   const logout = async () => { await signOut(auth); nav("/login", { replace: true }); };
   if (me === null && !adminChecked) return <Loading />;
-  // ⭐ 2026-11-06 허브 회원 정보가 없는 최고관리자 — 관리자 콘솔만(휴대폰 · PC)
   if (me === null && isAdmin) return <AdminOnly admin={{ uid: authUser.uid, email: authUser.email }} cfg={cfg} logout={logout} />;
-  if (me === null) {
-    // 로그인했지만 허브 회원 정보가 없다 — 가입 이어서 작성
-    return <Navigate to="/signup" replace />;
-  }
+  if (me === null) return <Navigate to="/signup" replace />;
   if (!approved) return <Gate m={me} logout={logout} />;
 
   const poster = canPost(me);
   const taker = canTake(me);
+  const linked = isLinked(me);
   const unread = notices.filter((n) => !n.read).length;
   const activeJobs = jobs.filter((j) => ACTIVE.includes(j.status)).length;
   const postsWaiting = posts.filter((p) => p.status === "assigned").length;
   const TABS = [
     ["board", "오더", "board", 0],
-    ...(taker ? [["jobs", "내 배차", "truck", activeJobs]] : []),
-    ...(poster ? [["posts", "내 오더", "list", postsWaiting]] : []),
-    ["wallet", "정산", "wallet", 0],
+    ...(takerish ? [["jobs", "내 배차", "truck", activeJobs]] : []),
+    ...(poster ? [["posts", "등록내역", "list", postsWaiting]] : []),
+    ...(poster && !linked ? [["places", "고객관리", "pin", 0]] : []),
+    ["my", "마이페이지", "user", 0],
     ["notices", "알림", "bell", unread],
-    ["me", "내 정보", "user", 0],
     ...(isAdmin ? [["admin", "관리자", "shield", 0]] : []),
   ];
-  // 휴대폰 아래 탭은 5칸 — 알림은 위 앱바 종 아이콘으로
-  const MTABS = TABS.filter(([k]) => k !== "notices").slice(0, 5);
+  const MTABS = TABS.filter(([k]) => k !== "notices" && k !== "admin").slice(0, 5);
   const go = (k) => { setTab(k); if (openId || loc.pathname === "/admin") nav("/"); window.scrollTo({ top: 0 }); };
   const openOrder = (o) => nav(`/order/${o.id}`);
   const closeOrder = () => nav(tab === "admin" ? "/admin" : "/");
   const setFilter = (k, v) => setF((p) => ({ ...p, [k]: v }));
   const toggleIn = (k, v) => setF((p) => ({ ...p, [k]: p[k].includes(v) ? p[k].filter((x) => x !== v) : [...p[k], v] }));
   const askNear = () => {
-    if (!navigator.geolocation) { toast("이 기기는 위치를 쓸 수 없습니다"); return; }
-    navigator.geolocation.getCurrentPosition((p) => { const r = nearestRegion(p.coords.latitude, p.coords.longitude); setMyPos({ ...r, ll: [p.coords.latitude, p.coords.longitude] }); setFilter("sort", "near"); toast(`내 위치 · ${r.sido} ${r.sigungu || ""} 근처 순`); },
-      () => toast("위치 권한을 허용하면 가까운 오더부터 보여드립니다"), { enableHighAccuracy: false, timeout: 8000, maximumAge: 300000 });
-  };
-  const routes = me.prefs?.routes || [];
-  const saveRoute = () => {
-    if (!f.from.length && !f.to.length) { toast("상차 · 하차 지역을 먼저 고르세요"); return; }
-    const r = { from: f.from.slice(0, 3), to: f.to.slice(0, 3) };
-    const list = [r, ...routes.filter((x) => JSON.stringify(x) !== JSON.stringify(r))].slice(0, 8);
-    updatePrefs(me.uid, { ...(me.prefs || {}), routes: list }).then(() => toast("관심 노선에 저장했습니다")).catch(() => toast("저장하지 못했습니다"));
+    if (!navigator.geolocation) { toast("이 기기는 위치를 쓸 수 없어요"); return; }
+    navigator.geolocation.getCurrentPosition((p) => { const r = nearestRegion(p.coords.latitude, p.coords.longitude); setMyPos({ ...r, ll: [p.coords.latitude, p.coords.longitude] }); setFilter("sort", "near"); toast(`${r.sido} ${r.sigungu || ""} 가까운 순`); },
+      () => toast("위치 권한을 켜면 가까운 순으로 보여 드려요"), { enableHighAccuracy: false, timeout: 8000, maximumAge: 300000 });
   };
   const activeN = f.from.length + f.to.length + (f.vehicle ? 1 : 0) + (f.ton ? 1 : 0) + (f.day ? 1 : 0) + (f.urgent ? 1 : 0) + (f.fav ? 1 : 0);
   const alertOn = !!me.prefs?.alert?.on;
+  const regionLabel = boardKeys ? boardKeys.join(", ") : "전국";
 
-  // ── 필터 패널(PC 왼쪽 · 휴대폰 시트)
   const FilterBody = (
     <div className="space-y-5">
-      <div>
-        <div className="text-[15px] font-extrabold text-[#0F1A30] mb-2">상차 지역</div>
-        <div className="flex flex-wrap gap-1.5">{SIDO_LIST.map((s) => <Chip key={s} on={f.from.includes(s)} onClick={() => toggleIn("from", s)} className="h-10 px-3.5" data-testid={`f-from-${s}`}>{s}</Chip>)}</div>
-      </div>
       <div>
         <div className="text-[15px] font-extrabold text-[#0F1A30] mb-2">하차 지역</div>
         <div className="flex flex-wrap gap-1.5">{SIDO_LIST.map((s) => <Chip key={s} on={f.to.includes(s)} onClick={() => toggleIn("to", s)} className="h-10 px-3.5">{s}</Chip>)}</div>
       </div>
+      {!takerish && (
+        <div>
+          <div className="text-[15px] font-extrabold text-[#0F1A30] mb-2">상차 지역</div>
+          <div className="flex flex-wrap gap-1.5">{SIDO_LIST.map((s) => <Chip key={s} on={f.from.includes(s)} onClick={() => toggleIn("from", s)} className="h-10 px-3.5" data-testid={`f-from-${s}`}>{s}</Chip>)}</div>
+        </div>
+      )}
       <div className="grid grid-cols-2 gap-2.5">
         <Field label="차종"><select className={selectCls} value={f.vehicle} onChange={(e) => setFilter("vehicle", e.target.value)}><option value="">전체 차종</option>{HUB_VEHICLES.map((v) => <option key={v}>{v}</option>)}</select></Field>
         <Field label="톤수"><select className={selectCls} value={f.ton} onChange={(e) => setFilter("ton", e.target.value)}>{TON_RANGES.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select></Field>
@@ -290,23 +394,27 @@ export default function HubApp() {
         <Chip on={f.urgent} onClick={() => setFilter("urgent", !f.urgent)}><HI name="bolt" size={15} />긴급만</Chip>
         <Chip on={f.fav} onClick={() => setFilter("fav", !f.fav)}><HI name="heart" size={15} />즐겨찾는 등록자</Chip>
       </div>
-      <div className="flex gap-2">
-        <Btn kind="soft" size="md" className="flex-1" onClick={saveRoute}><HI name="star" size={16} />관심 노선 저장</Btn>
-        <Btn kind="ghost" size="md" onClick={() => setF({ ...DEFAULT_F, sort: f.sort })}>초기화</Btn>
-      </div>
+      <Btn kind="ghost" size="md" className="w-full" onClick={() => setF({ ...DEFAULT_F, sort: f.sort })}>초기화</Btn>
     </div>
+  );
+
+  const RegionBar = takerish && (
+    <button type="button" onClick={() => setBoardSet(true)} className="w-full rounded-2xl bg-white ring-1 ring-inset ring-[#DCE3EE] px-4 py-3 flex items-center gap-2.5 text-left" data-testid="region-bar">
+      <span className="w-9 h-9 rounded-xl bg-[#0F1A30] text-[#8FB0F0] inline-flex items-center justify-center shrink-0"><HI name="gps" size={17} /></span>
+      <span className="min-w-0 flex-1"><span className="block text-[13px] font-bold text-[#8592A8]">상차 지역</span><span className="block text-[15.5px] font-extrabold text-[#0F1A30] truncate" data-testid="region-keys">{regionLabel}</span></span>
+      <span className="h-9 px-3 rounded-xl bg-[#EAF0FA] text-[14px] font-bold text-[#1B2B4B] inline-flex items-center shrink-0" data-testid="btn-board-settings">오더 설정</span>
+    </button>
   );
 
   const SortBar = (
     <div className="flex items-center gap-2 overflow-x-auto hub-scroll -mx-4 px-4 lg:mx-0 lg:px-0 pb-1">
       <button type="button" onClick={() => setFilterOpen(true)} className="lg:hidden h-11 px-4 rounded-full bg-[#0F1A30] text-white text-[15px] font-bold inline-flex items-center gap-1.5 shrink-0" data-testid="btn-filter"><HI name="sliders" size={16} />필터{activeN ? ` ${activeN}` : ""}</button>
       {[["new", "최신순"], ["fare", "운임 높은순"], ["perkm", "km당 운임"], ["time", "상차 빠른순"]].map(([k, l]) => <Chip key={k} on={f.sort === k} onClick={() => setFilter("sort", k)}>{l}</Chip>)}
-      <Chip on={f.sort === "near"} onClick={askNear} data-testid="btn-near"><HI name="gps" size={15} />내 주변</Chip>
-      {routes.map((r, i) => <Chip key={i} on={JSON.stringify(f.from) === JSON.stringify(r.from) && JSON.stringify(f.to) === JSON.stringify(r.to)} onClick={() => setF((p) => ({ ...p, from: r.from, to: r.to }))}><HI name="route" size={15} />{(r.from.join("·") || "전국")}→{(r.to.join("·") || "전국")}</Chip>)}
+      <Chip on={f.sort === "near"} onClick={askNear} data-testid="btn-near"><HI name="gps" size={15} />가까운 순</Chip>
     </div>
   );
 
-  const urgentN = board.filter((o) => o.긴급).length;
+  const urgentN = filtered.filter(({ o }) => o.긴급).length;
   const shownAnns = anns.filter((a) => a.active !== false && a.pinned);
   const BoardView = (
     <div onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd}>
@@ -332,12 +440,13 @@ export default function HubApp() {
           {liveShare?.job && (
             <button type="button" onClick={() => openOrder(liveShare.job)} className="w-full rounded-2xl bg-white ring-1 ring-inset ring-[#DCE3EE] px-4 py-3 flex items-center gap-2.5 text-left" data-testid="live-share-bar">
               <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${liveShare.on ? "bg-[#34D399] animate-pulse" : "bg-[#A3AEC0]"}`} />
-              <span className="text-[14.5px] font-bold text-[#1B2B4B] truncate">{liveShare.denied ? "위치 권한을 허용해야 등록자가 차량 위치를 볼 수 있습니다" : `위치 공유 중 · ${routeText(liveShare.job)}`}</span>
+              <span className="text-[14.5px] font-bold text-[#1B2B4B] truncate">{liveShare.denied ? "위치 권한을 켜 주세요" : `운송중 ${routeText(liveShare.job)}`}</span>
               <HI name="chevron" size={18} className="ml-auto text-[#8592A8] shrink-0" />
             </button>
           )}
+          {RegionBar}
           <div className="grid grid-cols-3 gap-2.5">
-            {[["모집중", board.length, "건"], ["긴급", urgentN, "건"], [taker ? "내 배차 진행" : "내 오더 배차", taker ? activeJobs : postsWaiting, "건"]].map(([l, v, u]) => (
+            {[["모집중", filtered.length, "건"], ["긴급", urgentN, "건"], [takerish ? "내 배차" : "내 화물 배차", takerish ? activeJobs : postsWaiting, "건"]].map(([l, v, u]) => (
               <div key={l} className="rounded-[18px] lg:rounded-[20px] bg-white ring-1 ring-inset ring-[#E2E7EF] px-3.5 py-2.5 lg:px-4 lg:py-3">
                 <div className="text-[13.5px] lg:text-[14px] font-bold text-[#8592A8] truncate">{l}</div>
                 <div className="flex items-baseline gap-1 mt-0.5"><span className="text-[22px] lg:text-[26px] font-extrabold text-[#0F1A30] leading-none" style={NUMS} data-testid={l === "모집중" ? "stat-open" : undefined}>{v}</span><span className="text-[14px] font-bold text-[#A3AEC0]">{u}</span></div>
@@ -345,14 +454,14 @@ export default function HubApp() {
             ))}
           </div>
           {SortBar}
-          {taker && returns.length > 0 && (
+          {takerish && returns.length > 0 && (
             <Card className="p-4" data-testid="return-trips">
-              <div className="flex items-center gap-2 mb-3"><span className="w-9 h-9 rounded-xl bg-[#0F1A30] text-[#8FB0F0] inline-flex items-center justify-center"><HI name="return" size={18} /></span><div className="min-w-0"><div className="text-[16px] font-extrabold text-[#0F1A30]">귀로 추천</div><div className="text-[14px] text-[#8592A8] truncate">{activeJob.하차시도} {activeJob.하차시군구} 하차 후 바로 실을 수 있는 오더</div></div></div>
+              <div className="flex items-center gap-2 mb-3"><span className="w-9 h-9 rounded-xl bg-[#0F1A30] text-[#8FB0F0] inline-flex items-center justify-center"><HI name="return" size={18} /></span><div className="min-w-0"><div className="text-[16px] font-extrabold text-[#0F1A30]">귀로 추천</div><div className="text-[14px] text-[#8592A8] truncate">{activeJob.하차시도} {activeJob.하차시군구} 하차 뒤 실을 수 있어요</div></div></div>
               <div className="flex gap-2.5 overflow-x-auto hub-scroll -mx-1 px-1 pb-1">
                 {returns.map((o) => (
                   <button key={o.id} type="button" onClick={() => openOrder(o)} className="shrink-0 w-[230px] text-left rounded-2xl bg-[#F5F8FD] ring-1 ring-inset ring-[#DCE3EE] p-3.5 hover:ring-[#2D4C82]">
                     <div className="text-[15.5px] font-extrabold text-[#0F1A30] truncate">{o.상차시군구 || o.상차시도} → {o.하차시도} {o.하차시군구}</div>
-                    <div className="text-[14px] text-[#55657F] mt-0.5 truncate">{o.차량톤수} {o.차량종류} · {o.상차일 === kstYmd() ? "오늘" : o.상차일}</div>
+                    <div className="text-[14px] text-[#55657F] mt-0.5 truncate">{o.차량톤수} {o.차량종류} {o.상차일 === kstYmd() ? "오늘" : o.상차일}</div>
                     <div className="text-[19px] font-extrabold text-[#1B2B4B] mt-1.5" style={NUMS}>{manwon(o.운임)}</div>
                   </button>
                 ))}
@@ -360,24 +469,22 @@ export default function HubApp() {
             </Card>
           )}
           {filtered.length === 0
-            ? <Empty icon="board" title={board.length ? "조건에 맞는 오더가 없습니다" : "지금 모집중인 오더가 없습니다"} desc={board.length ? "필터를 줄여 보세요." : "새 오더가 올라오면 바로 여기 나타납니다."} action={activeN ? <Btn kind="ghost" onClick={() => setF({ ...DEFAULT_F })}>필터 초기화</Btn> : null} />
+            ? <Empty icon="board" title={board.length ? "조건에 맞는 오더가 없어요" : takerish ? "이 지역에 모집중인 오더가 없어요" : "모집중인 오더가 없어요"} desc={takerish ? "오더 설정에서 상차 지역을 더해 보세요" : "새 오더가 올라오면 바로 보여요"} action={takerish ? <Btn kind="ghost" onClick={() => setBoardSet(true)}>오더 설정</Btn> : activeN ? <Btn kind="ghost" onClick={() => setF({ ...DEFAULT_F })}>필터 초기화</Btn> : null} />
             : <div className="grid xl:grid-cols-2 gap-3.5" data-testid="board-list">{filtered.map(({ o, near }) => <HubOrderCard key={o.id} o={o} onOpen={() => openOrder(o)} mine={o.posterUid === me.uid} fav={favSet.has(o.posterUid)} fresh={fresh.has(o.id)} extraKm={f.sort === "near" ? near : 0} />)}</div>}
         </div>
       </div>
     </div>
   );
 
-  const ListView = ({ rows, kind }) => {
-    const groups = kind === "jobs"
-      ? [["진행 중", rows.filter((o) => ACTIVE.includes(o.status))], ["완료", rows.filter((o) => o.status === "delivered")], ["취소", rows.filter((o) => o.status === "cancelled")]]
-      : [["배차 대기", rows.filter((o) => o.status === "open")], ["진행 중", rows.filter((o) => ACTIVE.includes(o.status))], ["완료", rows.filter((o) => o.status === "delivered")], ["취소", rows.filter((o) => o.status === "cancelled")]];
-    if (!rows.length) return <Empty icon={kind === "jobs" ? "truck" : "list"} title={kind === "jobs" ? "배차받은 오더가 없습니다" : "올린 오더가 없습니다"} desc={kind === "jobs" ? "오더 보드에서 [배차신청]을 눌러 보세요." : "[오더 등록]으로 첫 오더를 올려 보세요."} action={kind === "posts" ? <Btn onClick={() => setForm({})}><HI name="plus" size={18} />오더 등록</Btn> : null} />;
+  const JobsView = () => {
+    const groups = [["운송중", jobs.filter((o) => ACTIVE.includes(o.status))], ["운송완료", jobs.filter((o) => o.status === "delivered")], ["취소", jobs.filter((o) => o.status === "cancelled")]];
+    if (!jobs.length) return <Empty icon="truck" title="배차받은 오더가 없어요" desc="오더에서 배차신청을 눌러 보세요" />;
     return (
-      <div className="space-y-6" data-testid={`list-${kind}`}>
+      <div className="space-y-6" data-testid="list-jobs">
         {groups.filter(([, g]) => g.length).map(([t, g]) => (
           <section key={t}>
             <div className="text-[16px] font-extrabold text-[#0F1A30] mb-2.5">{t} <span className="text-[#8592A8]">{g.length}</span></div>
-            <div className="grid xl:grid-cols-2 gap-3.5">{g.map((o) => <HubOrderCard key={o.id} o={o} onOpen={() => openOrder(o)} mine={o.posterUid === me.uid} compact />)}</div>
+            <div className="grid xl:grid-cols-2 gap-3.5">{g.map((o) => <HubOrderCard key={o.id} o={o} onOpen={() => openOrder(o)} compact />)}</div>
           </section>
         ))}
       </div>
@@ -386,9 +493,9 @@ export default function HubApp() {
 
   const NoticesView = (
     <Card className="overflow-hidden" data-testid="notices">
-      {notices.length === 0 ? <div className="p-10 text-center text-[15.5px] text-[#8592A8]">새 알림이 없습니다.</div> : notices.map((n) => (
+      {notices.length === 0 ? <div className="p-10 text-center text-[15.5px] text-[#8592A8]">새 알림이 없어요</div> : notices.map((n) => (
         <button key={n.id} type="button" onClick={() => { markRead(n.id); if (n.orderId) nav(`/order/${n.orderId}`); }} className={`w-full text-left px-5 py-4 flex gap-3.5 border-b border-[#EEF1F6] last:border-0 ${n.read ? "" : "bg-[#F3F7FE]"}`}>
-          <span className={`w-11 h-11 rounded-2xl inline-flex items-center justify-center shrink-0 ${n.read ? "bg-[#F2F5FA] text-[#8592A8]" : "bg-[#0F1A30] text-[#8FB0F0]"}`}><HI name={{ assigned: "bolt", confirmed: "check", quickCancel: "clock", released: "alert", cancelled: "close", loaded: "box", delivered: "flag", pod: "file", invoice: "receipt", settle: "won", wallet: "wallet" }[n.type] || "bell"} size={19} /></span>
+          <span className={`w-11 h-11 rounded-2xl inline-flex items-center justify-center shrink-0 ${n.read ? "bg-[#F2F5FA] text-[#8592A8]" : "bg-[#0F1A30] text-[#8FB0F0]"}`}><HI name={{ assigned: "bolt", confirmed: "check", quickCancel: "clock", released: "alert", cancelled: "close", delivered: "flag", pod: "file", invoice: "receipt", settle: "won", wallet: "wallet", return: "return" }[n.type] || "bell"} size={19} /></span>
           <span className="min-w-0 flex-1"><span className="block text-[16px] font-extrabold text-[#0F1A30]">{n.title}</span><span className="block text-[15px] text-[#55657F] leading-snug mt-0.5">{n.body}</span></span>
           <span className="text-[13.5px] text-[#8592A8] shrink-0">{ago(n.createdAt)}</span>
         </button>
@@ -396,26 +503,38 @@ export default function HubApp() {
     </Card>
   );
 
-  const titles = { board: "실시간 오더", jobs: "내 배차", posts: "내 오더", wallet: "예치금 · 정산", notices: "알림", me: "내 정보", admin: "허브 관리자" };
+  const titles = { board: "실시간 오더", jobs: "내 배차", posts: "등록내역", places: "고객관리", my: "마이페이지", notices: "알림", admin: "허브 관리자" };
   let body = null;
   if (tab === "board") body = BoardView;
-  else if (tab === "jobs" && taker) body = ListView({ rows: jobs, kind: "jobs" });
-  else if (tab === "posts" && poster) body = ListView({ rows: posts, kind: "posts" });
+  else if (tab === "jobs" && takerish) body = <JobsView />;
+  else if (tab === "posts" && poster) body = <PostsView me={me} posts={posts} openOrder={openOrder} onPost={() => setForm({})} />;
+  else if (tab === "places" && poster && !linked) body = <HubPlaces me={me} toast={toast} />;
   else if (tab === "notices") body = NoticesView;
-  else if (tab === "wallet") body = <HubWallet me={me} cfg={cfg} toast={toast} />;
-  else if (tab === "me") body = <MeView me={me} isAdmin={isAdmin} logout={logout} openAlert={() => setAlertOpen(true)} favorites={favorites} toast={toast} wallet={wallet} openWallet={() => go("wallet")} />;
+  else if (tab === "my") body = (
+    <HubWallet me={me} cfg={cfg} toast={toast} jobs={jobs} posts={posts} notices={notices} openOrder={openOrder} logout={logout} isAdmin={isAdmin}>
+      <div className="mt-3 space-y-2">
+        <PushCard me={me} toast={toast} />
+        {takerish && <AlertCard me={me} onOpen={() => setAlertOpen(true)} light />}
+        {me.source === "logisweb-staff" && <a href="/exchange" className="h-12 px-4 rounded-2xl bg-[#F5F7FB] flex items-center gap-2 text-[16px] font-bold text-[#1B2B4B]"><HI name="swap" size={18} />운송사 거래소<HI name="chevron" size={18} className="ml-auto" /></a>}
+      </div>
+    </HubWallet>
+  );
   else if (tab === "admin" && isAdmin) body = <HubAdmin admin={{ uid: me.uid, email: authUser.email }} me={me} cfg={cfg} toast={toast} />;
   else body = BoardView;
 
   const editOrder = async (o) => { const detail = await fetchPrivate(o.id, "detail"); setForm({ editing: { id: o.id, pub: o, detail } }); };
+  const Balance = ({ dark }) => (
+    <button type="button" onClick={() => go("my")} data-testid={dark ? "balance-m" : "balance"} className={`h-11 px-3 rounded-2xl inline-flex items-center gap-1.5 shrink-0 ${dark ? "bg-white/10 text-white" : "bg-white ring-1 ring-inset ring-[#E2E7EF] text-[#0F1A30]"}`}>
+      <span className={`text-[12.5px] font-bold ${dark ? "text-white/60" : "text-[#8592A8]"}`}>잔액</span><span className="text-[15px] font-extrabold" style={NUMS}>{wonFull(wallet?.available)}</span>
+    </button>
+  );
 
   return (
     <div className="min-h-screen bg-[#EEF1F6] lg:pl-[272px]">
       <style>{HUB_CSS}</style>
-      {/* PC 왼쪽 메뉴 */}
       <aside className="hidden lg:flex fixed inset-y-0 left-0 w-[272px] flex-col text-white z-40" style={NAVY_BG}>
         <div className="px-5 h-[76px] flex items-center"><HubMark size={38} /></div>
-        {poster && <div className="px-4"><Btn kind="accent" size="lg" className="w-full" onClick={() => setForm({})} data-testid="btn-post"><HI name="plus" size={19} />오더 등록</Btn></div>}
+        {poster && <div className="px-4"><Btn kind="accent" size="lg" className="w-full" onClick={() => setForm({})} data-testid="btn-post"><HI name="plus" size={19} />화물등록</Btn></div>}
         <nav className="mt-4 px-3 space-y-1 flex-1">
           {TABS.map(([k, l, ic, n]) => (
             <button key={k} type="button" onClick={() => go(k)} data-testid={`nav-${k}`} aria-current={tab === k ? "page" : undefined}
@@ -424,30 +543,28 @@ export default function HubApp() {
               {n > 0 && <span className={`ml-auto min-w-[24px] h-6 px-2 rounded-full text-[13px] font-extrabold inline-flex items-center justify-center ${tab === k ? "bg-[#0F1A30] text-white" : "bg-[#8FB0F0] text-[#0B1428]"}`}>{n}</span>}
             </button>
           ))}
-          {me.source === "logisweb-staff" && <a href="/exchange" className="w-full h-12 px-3.5 rounded-2xl flex items-center gap-3 text-[16px] font-bold text-white/60 hover:bg-white/[0.08]"><HI name="swap" size={19} className="text-[#8FB0F0]" />운송사 거래소</a>}
         </nav>
         <div className="m-3 p-3.5 rounded-2xl bg-white/[0.06] ring-1 ring-inset ring-white/10 flex items-center gap-3">
           <Avatar path={me.photoPath} name={me.name} size={42} dark />
-          <div className="min-w-0 flex-1"><div className="text-[15px] font-extrabold truncate">{me.name}</div><div className="text-[13px] text-white/55 truncate">{ROLES[me.role]?.label} · {me.companyName}</div></div>
+          <div className="min-w-0 flex-1"><div className="text-[15px] font-extrabold truncate">{me.name}</div><div className="text-[13px] text-white/55 truncate">{ROLES[me.role]?.label} {me.companyName}</div></div>
           <button type="button" onClick={logout} aria-label="로그아웃" className="w-10 h-10 rounded-xl hover:bg-white/10 inline-flex items-center justify-center text-white/70"><HI name="logout" size={18} /></button>
         </div>
       </aside>
 
-      {/* 위 앱바 */}
       <header className="sticky top-0 z-30 bg-[#EEF1F6]/90 backdrop-blur-md border-b border-[#E2E7EF] lg:bg-[#EEF1F6]/80">
         <div className="lg:hidden text-white px-4 pt-[env(safe-area-inset-top)]" style={NAVY_BG}>
           <div className="h-[60px] flex items-center gap-2">
             <img src="/brand/logisweb-mark-square.svg" alt="" className="w-9 h-9 rounded-[10px]" />
-            <div className="min-w-0 flex-1"><div className="text-[18px] font-extrabold leading-tight truncate">{titles[tab]}</div><div className="text-[13px] font-semibold text-white/55 truncate">{ROLES[me.role]?.label} · {me.name}</div></div>
-            {taker && <button type="button" onClick={() => setAlertOpen(true)} aria-label="콜 알림 설정" data-testid="btn-alert-m" className={`w-11 h-11 rounded-2xl inline-flex items-center justify-center ${alertOn ? "bg-[#8FB0F0] text-[#0B1428]" : "bg-white/10"}`}><HI name="volume" size={19} /></button>}
-            <button type="button" onClick={() => go("notices")} aria-label="알림" data-testid="btn-bell-m" className={`relative w-11 h-11 rounded-2xl inline-flex items-center justify-center ${tab === "notices" ? "bg-[#8FB0F0] text-[#0B1428]" : "bg-white/10"}`}><HI name="bell" size={19} />{unread > 0 && <span className="absolute -top-1 -right-1 min-w-[20px] h-5 px-1 rounded-full bg-[#8FB0F0] text-[#0B1428] text-[12px] font-extrabold inline-flex items-center justify-center" data-testid="bell-count">{unread}</span>}</button>
-            <button type="button" onClick={doRefresh} aria-label="새로고침" className="w-11 h-11 rounded-2xl bg-white/10 inline-flex items-center justify-center"><HI name="refresh" size={19} className={refreshing ? "animate-spin" : ""} /></button>
+            <div className="min-w-0 flex-1"><div className="text-[18px] font-extrabold leading-tight truncate">{titles[tab]}</div><div className="text-[13px] font-semibold text-white/55 truncate">{ROLES[me.role]?.label} {me.name}</div></div>
+            <Balance dark />
+            <button type="button" onClick={() => go("notices")} aria-label="알림" data-testid="btn-bell-m" className={`relative w-11 h-11 rounded-2xl inline-flex items-center justify-center shrink-0 ${tab === "notices" ? "bg-[#8FB0F0] text-[#0B1428]" : "bg-white/10"}`}><HI name="bell" size={19} />{unread > 0 && <span className="absolute -top-1 -right-1 min-w-[20px] h-5 px-1 rounded-full bg-[#8FB0F0] text-[#0B1428] text-[12px] font-extrabold inline-flex items-center justify-center" data-testid="bell-count">{unread}</span>}</button>
           </div>
         </div>
         <div className="hidden lg:flex h-[72px] items-center gap-3 px-8">
           <div className="min-w-0"><div className="text-[24px] font-extrabold text-[#0F1A30] tracking-[-0.02em]">{titles[tab]}</div></div>
-          <span className="inline-flex items-center gap-1.5 h-8 px-3 rounded-full bg-white ring-1 ring-inset ring-[#E2E7EF] text-[13.5px] font-bold text-[#1B2B4B]"><span className="w-2 h-2 rounded-full bg-[#2D4C82] animate-pulse" />실시간 · {new Date(lastSync).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}</span>
+          <span className="inline-flex items-center gap-1.5 h-8 px-3 rounded-full bg-white ring-1 ring-inset ring-[#E2E7EF] text-[13.5px] font-bold text-[#1B2B4B]"><span className="w-2 h-2 rounded-full bg-[#2D4C82] animate-pulse" />실시간 {new Date(lastSync).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}</span>
           <div className="ml-auto flex items-center gap-2">
+            <Balance />
             {taker && <Btn kind={alertOn ? "primary" : "ghost"} size="md" onClick={() => setAlertOpen(true)} data-testid="btn-alert"><HI name="volume" size={17} />콜 알림 {alertOn ? "켜짐" : "꺼짐"}</Btn>}
             <Btn kind="ghost" size="md" onClick={doRefresh} data-testid="btn-refresh"><HI name="refresh" size={17} className={refreshing ? "animate-spin" : ""} />새로고침</Btn>
             <button type="button" onClick={() => go("notices")} aria-label="알림" className="relative w-11 h-11 rounded-2xl bg-white ring-1 ring-inset ring-[#E2E7EF] inline-flex items-center justify-center text-[#1B2B4B]"><HI name="bell" size={19} />{unread > 0 && <span className="absolute -top-1 -right-1 min-w-[20px] h-5 px-1 rounded-full bg-[#0F1A30] text-white text-[12px] font-extrabold inline-flex items-center justify-center">{unread}</span>}</button>
@@ -457,58 +574,57 @@ export default function HubApp() {
 
       <main className="px-4 lg:px-8 py-4 lg:py-6 pb-[calc(110px+env(safe-area-inset-bottom))] lg:pb-10 max-w-[1440px]">{body}</main>
 
-      {/* 휴대폰 아래 탭바 */}
       <nav className="lg:hidden fixed bottom-0 inset-x-0 z-40 bg-white/95 backdrop-blur-md border-t border-[#E2E7EF] pb-[env(safe-area-inset-bottom)]">
         <div className="grid" style={{ gridTemplateColumns: `repeat(${MTABS.length}, minmax(0,1fr))` }}>
           {MTABS.map(([k, l, ic, n]) => (
-            <button key={k} type="button" onClick={() => go(k)} data-testid={`tab-${k}`} aria-current={tab === k ? "page" : undefined} className={`relative h-[64px] flex flex-col items-center justify-center gap-1 text-[13.5px] font-bold ${tab === k ? "text-[#0F1A30]" : "text-[#8592A8]"}`}>
+            <button key={k} type="button" onClick={() => go(k)} data-testid={`tab-${k}`} aria-current={tab === k ? "page" : undefined} className={`relative h-[64px] flex flex-col items-center justify-center gap-1 text-[13px] font-bold ${tab === k ? "text-[#0F1A30]" : "text-[#8592A8]"}`}>
               <span className={`w-12 h-8 rounded-full inline-flex items-center justify-center transition ${tab === k ? "bg-[#0F1A30] text-[#8FB0F0]" : ""}`}><HI name={ic} size={20} /></span>{l}
               {n > 0 && <span className="absolute top-1.5 left-1/2 ml-2 min-w-[18px] h-[18px] px-1 rounded-full bg-[#2D4C82] text-white text-[11.5px] font-extrabold inline-flex items-center justify-center">{n}</span>}
             </button>
           ))}
         </div>
       </nav>
-      {poster && tab !== "admin" && tab !== "me" && (
+      {poster && ["board", "posts"].includes(tab) && (
         <button type="button" onClick={() => setForm({})} data-testid="fab-post" className="lg:hidden fixed right-4 bottom-[calc(80px+env(safe-area-inset-bottom))] z-40 h-14 pl-4 pr-5 rounded-full text-white text-[16px] font-extrabold inline-flex items-center gap-2 shadow-[0_16px_36px_rgba(11,20,40,.4)]" style={{ background: "linear-gradient(120deg,#0F1A30,#2D4C82)" }}>
-          <HI name="plus" size={22} />오더 등록
+          <HI name="plus" size={22} />화물등록
         </button>
       )}
 
-      {filterOpen && <Drawer onClose={() => setFilterOpen(false)} title="필터" sub={`조건에 맞는 오더 ${filtered.length}건`}><div className="flex-1 overflow-y-auto p-4">{FilterBody}</div><div className="p-4 bg-white border-t border-[#E2E7EF] pb-[max(16px,env(safe-area-inset-bottom))]"><Btn size="xl" className="w-full" onClick={() => setFilterOpen(false)}>{filtered.length}건 보기</Btn></div></Drawer>}
+      {filterOpen && <Drawer onClose={() => setFilterOpen(false)} title="필터" sub={`${filtered.length}건`}><div className="flex-1 overflow-y-auto p-4">{FilterBody}</div><div className="p-4 bg-white border-t border-[#E2E7EF] pb-[max(16px,env(safe-area-inset-bottom))]"><Btn size="xl" className="w-full" onClick={() => setFilterOpen(false)}>{filtered.length}건 보기</Btn></div></Drawer>}
       {alertOpen && <AlertSettings me={me} onClose={() => setAlertOpen(false)} toast={toast} />}
-      {openId && <HubOrderDetail key={openId} id={openId} me={me} onClose={closeOrder} toast={toast} favorites={favorites} isAdmin={isAdmin} liveShare={liveShare} onEdit={(o) => { closeOrder(); editOrder(o); }} />}
-      {form && <HubPostForm me={me} editing={form.editing} cfg={cfg} wallet={wallet} openWallet={() => { setForm(null); go("wallet"); }} onClose={() => setForm(null)} toast={toast} onDone={() => { if (tab !== "board") setTab("posts"); }} />}
+      {boardSet && <BoardSettings me={me} auto={gpsRegion} onClose={() => setBoardSet(false)} toast={toast} />}
+      {openId && <HubOrderDetail key={openId} id={openId} me={me} onClose={closeOrder} toast={toast} favorites={favorites} isAdmin={isAdmin} liveShare={liveShare} onNeedBank={() => { closeOrder(); go("my"); setTimeout(() => document.getElementById("my-bank")?.scrollIntoView({ block: "start" }), 300); }} onEdit={(o) => { closeOrder(); editOrder(o); }} />}
+      {form && <HubPostForm me={me} editing={form.editing} cfg={cfg} wallet={wallet} openWallet={() => { setForm(null); go("my"); }} onClose={() => setForm(null)} toast={toast} onDone={() => { if (tab !== "board") setTab("posts"); }} />}
       {toastNode}
     </div>
   );
 }
 
-function AlertCard({ me, onOpen }) {
+function AlertCard({ me, onOpen, light }) {
   const a = me.prefs?.alert;
   return (
-    <button type="button" onClick={onOpen} className="w-full text-left rounded-[22px] p-4 text-white" style={NAVY_BG}>
-      <div className="flex items-center gap-2"><HI name="volume" size={18} className="text-[#8FB0F0]" /><span className="text-[16px] font-extrabold">콜 알림</span><Badge tone={a?.on ? "accent" : "line"} className="ml-auto">{a?.on ? "켜짐" : "꺼짐"}</Badge></div>
-      <div className="text-[14.5px] text-white/65 mt-2 leading-relaxed">{a?.on ? `${a.regions?.length ? a.regions.join("·") : "전국"} 상차 · ${a.vehicles?.length ? a.vehicles.join("·") : "모든 차종"}${a.tts ? " · 읽어주기" : ""}` : "내 차에 맞는 새 콜이 오면 소리·진동·음성으로 알려드립니다."}</div>
+    <button type="button" onClick={onOpen} className={`w-full text-left rounded-[22px] p-4 ${light ? "bg-[#F5F7FB] text-[#0F1A30]" : "text-white"}`} style={light ? undefined : NAVY_BG} data-testid="alert-card">
+      <div className="flex items-center gap-2"><HI name="volume" size={18} className={light ? "text-[#2D4C82]" : "text-[#8FB0F0]"} /><span className="text-[16px] font-extrabold">콜 알림</span><Badge tone={a?.on ? "accent" : "line"} className="ml-auto">{a?.on ? "켜짐" : "꺼짐"}</Badge></div>
+      <div className={`text-[14.5px] mt-2 leading-relaxed ${light ? "text-[#55657F]" : "text-white/65"}`}>{a?.on ? `${a.regions?.length ? a.regions.join(", ") : "전국"} 상차, ${a.vehicles?.length ? a.vehicles.join(", ") : "모든 차종"}${a.tts ? ", 읽어주기" : ""}` : "내 차에 맞는 새 콜을 소리로 알려 드려요"}</div>
     </button>
   );
 }
 
-// 콜 알림 설정 — 지역 · 차종 · 톤수 · 최소 운임 · 읽어주기
 function AlertSettings({ me, onClose, toast }) {
   const cur = me.prefs?.alert || {};
   const [a, setA] = useState({ on: cur.on ?? false, tts: cur.tts ?? true, regions: cur.regions ?? (me.regions || []), vehicles: cur.vehicles ?? (me.vehicle?.type ? [me.vehicle.type] : []), tonMin: cur.tonMin ?? "", tonMax: cur.tonMax ?? (tonValue(me.vehicle?.ton) || ""), minFare: cur.minFare ?? "" });
   const tog = (k, v) => setA((p) => ({ ...p, [k]: p[k].includes(v) ? p[k].filter((x) => x !== v) : [...p[k], v] }));
-  const save = () => { unlockAudio(); updatePrefs(me.uid, { ...(me.prefs || {}), alert: a }).then(() => { toast(a.on ? "콜 알림을 켰습니다" : "콜 알림을 껐습니다"); onClose(); }).catch(() => toast("저장하지 못했습니다")); };
+  const save = () => { unlockAudio(); updatePrefs(me.uid, { ...(me.prefs || {}), alert: a }).then(() => { toast(a.on ? "콜 알림을 켰어요" : "콜 알림을 껐어요"); onClose(); }).catch(() => toast("저장하지 못했어요")); };
   return (
-    <Drawer onClose={onClose} title="콜 알림 설정" sub="조건에 맞는 새 오더만 울립니다" testid="alert-settings">
+    <Drawer onClose={onClose} title="콜 알림" sub="조건에 맞는 새 오더만 울려요" testid="alert-settings">
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
         <label className="flex items-center gap-3 p-4 rounded-2xl text-white cursor-pointer" style={NAVY_BG}>
           <input type="checkbox" checked={a.on} onChange={(e) => { unlockAudio(); setA((p) => ({ ...p, on: e.target.checked })); }} className="w-6 h-6 accent-[#8FB0F0]" data-testid="alert-on" />
-          <span className="text-[17px] font-extrabold">새 콜 알림 받기</span><span className="ml-auto text-[14px] text-white/60">소리 · 진동</span>
+          <span className="text-[17px] font-extrabold">새 콜 알림 받기</span><span className="ml-auto text-[14px] text-white/60">소리와 진동</span>
         </label>
         <label className="flex items-center gap-3 p-4 rounded-2xl bg-white ring-1 ring-inset ring-[#E2E7EF] cursor-pointer">
           <input type="checkbox" checked={a.tts} onChange={(e) => setA((p) => ({ ...p, tts: e.target.checked }))} className="w-5 h-5 accent-[#1B2B4B]" />
-          <span className="text-[16px] font-bold text-[#0F1A30]">경로 · 운임 읽어주기(음성)</span>
+          <span className="text-[16px] font-bold text-[#0F1A30]">경로와 운임 읽어주기</span>
           <button type="button" onClick={(e) => { e.preventDefault(); unlockAudio(); beep(); speak("경기 화성시 출발, 부산 강서구 도착. 11톤 윙바디. 운임 68만원."); }} className="ml-auto h-10 px-3 rounded-xl bg-[#EAF0FA] text-[14px] font-bold text-[#1B2B4B]">미리 듣기</button>
         </label>
         <div><div className="text-[15px] font-extrabold text-[#0F1A30] mb-2">상차 지역 <span className="text-[#8592A8] font-semibold">(비우면 전국)</span></div><div className="flex flex-wrap gap-1.5">{SIDO_LIST.map((s) => <Chip key={s} on={a.regions.includes(s)} onClick={() => tog("regions", s)} className="h-10 px-3.5">{s}</Chip>)}</div></div>
@@ -518,84 +634,31 @@ function AlertSettings({ me, onClose, toast }) {
           <Field label="최대 톤"><select className={selectCls} value={a.tonMax} onChange={(e) => setA((p) => ({ ...p, tonMax: e.target.value }))}><option value="">-</option>{HUB_TONS.map((t) => <option key={t} value={tonValue(t)}>{t}</option>)}</select></Field>
           <Field label="최소 운임(만원)"><input className={inputCls} inputMode="numeric" value={a.minFare} onChange={(e) => setA((p) => ({ ...p, minFare: e.target.value.replace(/[^\d]/g, "").slice(0, 4) }))} placeholder="0" /></Field>
         </div>
-        <div className="text-[14px] text-[#8592A8] leading-relaxed">화면이 켜져 있을 때 울립니다. 휴대폰을 잠가 두어도 받으려면 앱 알림(푸시) 연결이 필요합니다.</div>
       </div>
       <div className="p-4 bg-white border-t border-[#E2E7EF] pb-[max(16px,env(safe-area-inset-bottom))]"><Btn size="xl" className="w-full" onClick={save} data-testid="alert-save">저장</Btn></div>
     </Drawer>
   );
 }
 
-// ⭐ 2026-11-06 이 기기 푸시 알림 켜기/끄기(배차 · 확정 · 취소 · 상하차 · 인수증 · 정산 알림이 앱을 닫아도 온다)
 function PushCard({ me, toast }) {
   const [on, setOn] = useState(() => pushEnabledHere(me));
   const [busy, setBusy] = useState(false);
   const toggle = async () => {
     setBusy(true);
     try {
-      if (on) { await disableHubPush(me); setOn(false); toast("이 기기 푸시 알림을 껐습니다"); }
-      else { await enableHubPush(me); setOn(true); toast("이 기기 푸시 알림을 켰습니다"); }
-    } catch (e) { toast(e?.message || "푸시 알림을 켜지 못했습니다", 4200); } finally { setBusy(false); }
+      if (on) { await disableHubPush(me); setOn(false); toast("푸시 알림을 껐어요"); }
+      else { await enableHubPush(me); setOn(true); toast("푸시 알림을 켰어요"); }
+    } catch (e) { toast(e?.message || "푸시 알림을 켜지 못했어요", 4200); } finally { setBusy(false); }
   };
   return (
-    <Card className="p-4 flex items-center gap-3" data-testid="push-card">
-      <span className={`w-11 h-11 rounded-2xl inline-flex items-center justify-center shrink-0 ${on ? "bg-[#0F1A30] text-[#8FB0F0]" : "bg-[#F2F5FA] text-[#55657F]"}`}><HI name="bell" size={19} /></span>
-      <div className="min-w-0 flex-1"><div className="text-[16px] font-extrabold text-[#0F1A30]">푸시 알림 {on ? "켜짐" : "꺼짐"}</div><div className="text-[14px] text-[#55657F] leading-snug">배차신청 · 확정 · 취소 · 상하차 · 인수증 · 정산을 앱을 닫아도 알려 드립니다.</div></div>
-      <Btn kind={on ? "ghost" : "primary"} size="md" disabled={busy} onClick={toggle} data-testid="push-toggle">{busy ? "…" : on ? "끄기" : "켜기"}</Btn>
-    </Card>
-  );
-}
-
-function MeView({ me, isAdmin, logout, openAlert, favorites, toast, wallet, openWallet }) {
-  const [st, setSt] = useState(null);
-  useEffect(() => subscribeStats(me.uid, setSt), [me.uid]);
-  const avg = ratingAvg(st);
-  const removeFav = (uid) => updatePrefs(me.uid, { ...(me.prefs || {}), favorites: favorites.filter((x) => x.uid !== uid) }).then(() => toast("즐겨찾기에서 뺐습니다"));
-  const rows = [["유형", `${ROLES[me.role]?.label} · ${SOURCE_LABEL[me.source] || ""}`], ["이름", me.name], ["휴대폰", me.phone], ["회사", me.companyName], ["사업자번호", me.bizNo], ["사업자 상태", me.bizStatus],
-    ...(me.vehicle ? [["차량", `${me.vehicle.plate} · ${me.vehicle.ton} ${me.vehicle.type}`], ["적재함", me.vehicle.length ? `${me.vehicle.length}m × ${me.vehicle.width || "-"}m` : ""]] : []), ["이메일", me.email]].filter(([, v]) => v);
-  return (
-    <div className="grid lg:grid-cols-2 gap-4 max-w-[1100px]" data-testid="me-view">
-      <div className="space-y-4">
-        <div className="rounded-[24px] p-5 text-white" style={NAVY_BG}>
-          <div className="flex items-center gap-4">
-            <Avatar path={me.photoPath} name={me.name} size={68} dark />
-            <div className="min-w-0"><div className="text-[22px] font-extrabold truncate">{me.name}</div><div className="text-[15px] text-white/60 truncate">{me.companyName}</div>
-              <div className="mt-1.5 flex gap-1.5 flex-wrap"><Badge tone="accent">{ROLES[me.role]?.label}</Badge>{me.docsVerified && <Badge tone="out"><HI name="shield" size={13} />서류 인증</Badge>}</div></div>
-          </div>
-          <div className="grid grid-cols-3 gap-2 mt-5">
-            {[["평점", avg ? avg.toFixed(1) : "-"], ["평가", st?.ratingCount || 0], [me.role === "shipper" ? "등록" : "완료", me.role === "shipper" ? st?.posted || 0 : st?.completed || 0]].map(([l, v]) => (
-              <div key={l} className="rounded-2xl bg-white/[0.07] ring-1 ring-inset ring-white/10 px-3 py-2.5"><div className="text-[13.5px] text-white/55 font-bold">{l}</div><div className="text-[22px] font-extrabold" style={NUMS}>{v}</div></div>
-            ))}
-          </div>
-        </div>
-        <Card className="p-4"><div className="divide-y divide-[#EEF1F6]">{rows.map(([k, v]) => <div key={k} className="flex py-2.5 text-[15.5px]"><span className="w-24 shrink-0 font-semibold text-[#8592A8]">{k}</span><span className="font-bold text-[#0F1A30] break-all">{v}</span></div>)}</div>
-          <div className="mt-2 text-[14px] text-[#8592A8] leading-relaxed">{me.source === "signup" ? "차량 · 서류 변경은 관리자 재심사가 필요합니다. 고객센터로 문의해 주세요." : "정보 변경은 로지스웹 프로그램에서 해 주세요."}</div>
-        </Card>
-      </div>
-      <div className="space-y-4">
-        <button type="button" onClick={openWallet} className="w-full text-left rounded-[22px] p-4 bg-white ring-1 ring-inset ring-[#E2E7EF] flex items-center gap-3" data-testid="me-wallet">
-          <span className="w-11 h-11 rounded-2xl bg-[#0F1A30] text-[#8FB0F0] inline-flex items-center justify-center shrink-0"><HI name="wallet" size={19} /></span>
-          <span className="min-w-0 flex-1"><span className="block text-[14px] font-bold text-[#8592A8]">예치금 · 정산</span><span className="block text-[20px] font-extrabold text-[#0F1A30]" style={NUMS}>{wonFull(wallet?.available)}</span><span className="block text-[13.5px] text-[#55657F] truncate">보류 {wonFull(wallet?.held)} · 지급 예정 {wonFull(wallet?.pending)}{wallet?.owed ? ` · 미정산 ${wonFull(wallet.owed)}` : ""}{me.bank?.number ? ` · 정산 계좌 ${me.bank.bank} ${String(me.bank.number).slice(-4).padStart(8, "*")}` : ""}</span></span>
-          <HI name="chevron" size={18} className="text-[#8592A8]" />
-        </button>
-        <PushCard me={me} toast={toast} />
-        {canTake(me) && <AlertCard me={me} onOpen={openAlert} />}
-        <Card className="p-4">
-          <div className="text-[16px] font-extrabold text-[#0F1A30] mb-2 flex items-center gap-2"><HI name="heart" size={18} className="text-[#2D4C82]" />즐겨찾기 {favorites.length ? favorites.length : ""}</div>
-          {favorites.length === 0 ? <div className="text-[15px] text-[#8592A8]">오더 상세에서 하트를 누르면 여기에 모입니다.</div> : favorites.map((x) => (
-            <div key={x.uid} className="flex items-center gap-2 py-2 border-t border-[#EEF1F6]"><span className="text-[15.5px] font-bold text-[#0F1A30] flex-1 truncate">{x.name}</span><button type="button" onClick={() => removeFav(x.uid)} className="h-10 px-3 rounded-xl text-[14px] font-bold text-[#55657F] hover:bg-[#F2F5FA]">빼기</button></div>
-          ))}
-        </Card>
-        <Card className="p-4 space-y-2">
-          {me.source === "logisweb-staff" && <a href="/exchange" className="h-12 px-4 rounded-2xl bg-[#F5F7FB] flex items-center gap-2 text-[16px] font-bold text-[#1B2B4B]"><HI name="swap" size={18} />운송사 간 오더 거래소 <HI name="chevron" size={18} className="ml-auto" /></a>}
-          {isAdmin && <a href="/admin" className="h-12 px-4 rounded-2xl bg-[#F5F7FB] flex items-center gap-2 text-[16px] font-bold text-[#1B2B4B]" data-testid="me-admin"><HI name="shield" size={18} />허브 관리자 콘솔 <HI name="chevron" size={18} className="ml-auto" /></a>}
-          <Btn kind="ghost" className="w-full" onClick={logout} data-testid="btn-logout"><HI name="logout" size={18} />로그아웃</Btn>
-        </Card>
-      </div>
+    <div className="rounded-[18px] bg-[#F5F7FB] p-3.5 flex items-center gap-3" data-testid="push-card">
+      <span className={`w-10 h-10 rounded-2xl inline-flex items-center justify-center shrink-0 ${on ? "bg-[#0F1A30] text-[#8FB0F0]" : "bg-white text-[#55657F]"}`}><HI name="bell" size={18} /></span>
+      <div className="min-w-0 flex-1"><div className="text-[15.5px] font-extrabold text-[#0F1A30]">푸시 알림 {on ? "켜짐" : "꺼짐"}</div><div className="text-[13.5px] text-[#55657F]">앱을 닫아도 알려 드려요</div></div>
+      <Btn kind={on ? "ghost" : "primary"} size="md" disabled={busy} onClick={toggle} data-testid="push-toggle">{on ? "끄기" : "켜기"}</Btn>
     </div>
   );
 }
 
-// ⭐ 2026-11-06 허브 회원 문서가 없는 최고관리자(관리센터에서만 쓰던 계정) — 관리자 콘솔만 보여준다(휴대폰 · PC)
 function AdminOnly({ admin, cfg, logout }) {
   const [toastNode, toast] = useToast();
   return (

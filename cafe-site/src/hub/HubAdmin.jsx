@@ -7,11 +7,11 @@
 //   · 설정 — 기본 수수료(정액 · %) · 플랫폼 수수료 · 입금 계좌 · 차종/톤수/결제/상하차 방법/지역 목록 · 공지 · 신고
 import React, { useEffect, useMemo, useState } from "react";
 import { HI, Btn, Badge, Card, Drawer, Seg, inputCls, selectCls, Empty, Field, NUMS, Confirm } from "./hubUi";
-import { ROLES, SOURCE_LABEL, DOC_TYPES, ROLE_DOCS, BIZ_STATUS, ago, tsMs, STATUS, routeText, BANKS, HUB_VEHICLES, HUB_TONS, PAY_METHODS, LOAD_METHODS, SIDO_LIST, defaultLists, SETTLE_LABEL, LEDGER_LABEL, payKind, fmtPhone } from "./hubConstants";
+import { ROLES, SOURCE_LABEL, DOC_TYPES, ROLE_DOCS, BIZ_STATUS, ago, tsMs, STATUS, routeText, BANKS, HUB_VEHICLES, HUB_TONS, PAY_METHODS, LOAD_METHODS, SIDO_LIST, defaultLists, SETTLE_LABEL, LEDGER_LABEL, payKind, fmtPhone, companyKeyOf } from "./hubConstants";
 import {
   subscribeAllMembers, subscribeReports, reviewMember, fileUrl, adminUpdateMember, subscribeAllOrders, subscribeAll, adminUpdateOrder, adminForceStatus,
   adminSettle, confirmCharge, rejectCharge, requestPayoutSend, markPayoutPaid, adjustWallet, saveHubConfig, subscribeAnnouncements, saveAnnouncement,
-  deleteAnnouncement, PUBLIC_EDIT_KEYS, subscribeWallet, splitForm,
+  deleteAnnouncement, PUBLIC_EDIT_KEYS, subscribeWallet, splitForm, adminMarkWithdraw,
 } from "./hubApi";
 import HubOrderDetail from "./HubOrderDetail";
 import HubOrderCard from "./HubOrderCard";
@@ -76,6 +76,7 @@ export function MemberReview({ m, admin, onClose, toast }) {
     name: m.name || "", phone: m.phone || "", companyName: m.companyName || "", bizNo: m.bizNo || "", ceoName: m.ceoName || "", role: m.role || "driver",
     plate: m.vehicle?.plate || "", vtype: m.vehicle?.type || "", vton: m.vehicle?.ton || "", vlen: m.vehicle?.length || "", vwid: m.vehicle?.width || "",
     blocked: !!m.penalty?.blocked, adminNote: m.adminNote || "", bank: m.bank?.bank || "", bankNo: m.bank?.number || "", holder: m.bank?.holder || "",
+    companyKey: m.companyKey || "", vaBank: m.va?.bank || "", vaNo: m.va?.number || "", vaHolder: m.va?.holder || "",
   }));
   useEffect(() => { if (m.photoPath) fileUrl(m.photoPath).then(setPhoto).catch(() => {}); }, [m.photoPath]);
   useEffect(() => subscribeWallet(m.id, setWallet), [m.id]);
@@ -94,6 +95,9 @@ export function MemberReview({ m, admin, onClose, toast }) {
         penalty: { ...(m.penalty || {}), blocked: ed.blocked, by: admin?.email || "", at: Date.now() },
         adminNote: ed.adminNote.slice(0, 500),
         ...(ed.bankNo ? { bank: { bank: ed.bank, number: ed.bankNo.replace(/[^\d-]/g, ""), holder: ed.holder.trim() } } : {}),
+        // ⭐ 2026-11-07 회사 키(같은 회사끼리만 기록 · 고객관리 공유) · 가상계좌(충전 계좌, PG 연동 전에는 관리자가 넣는다)
+        ...(ed.companyKey.trim() ? { companyKey: ed.companyKey.trim() } : {}),
+        ...(ed.vaNo.trim() ? { va: { bank: ed.vaBank, number: ed.vaNo.trim(), numberDigits: ed.vaNo.replace(/[^\d]/g, ""), holder: ed.vaHolder.trim(), at: Date.now() } } : {}),
       });
       toast?.("회원 정보를 저장했습니다");
     } catch (e) { toast?.(e?.message || "저장하지 못했습니다"); } finally { setBusy(""); }
@@ -150,6 +154,12 @@ export function MemberReview({ m, admin, onClose, toast }) {
             <Field label="정산 계좌"><input className={inputCls} value={ed.bankNo} onChange={E("bankNo")} /></Field>
             <Field label="예금주"><input className={inputCls} value={ed.holder} onChange={E("holder")} /></Field>
           </div>
+          <div className="grid grid-cols-[minmax(0,.8fr)_minmax(0,1.2fr)_minmax(0,1fr)] gap-2.5" data-testid="am-va">
+            <Field label="가상계좌 은행"><select className={selectCls} value={ed.vaBank} onChange={E("vaBank")} data-testid="am-va-bank"><option value="">-</option>{BANKS.map((b) => <option key={b}>{b}</option>)}</select></Field>
+            <Field label="가상계좌"><input className={inputCls} value={ed.vaNo} onChange={E("vaNo")} data-testid="am-va-no" /></Field>
+            <Field label="예금주"><input className={inputCls} value={ed.vaHolder} onChange={E("vaHolder")} /></Field>
+          </div>
+          <Field label="회사 키" hint={`비우면 자동: ${companyKeyOf({ ...m, companyKey: "" })}`}><input className={inputCls} value={ed.companyKey} onChange={E("companyKey")} placeholder={companyKeyOf({ ...m, companyKey: "" })} data-testid="am-ckey" /></Field>
           <Field label="관리자 메모(회원에게 안 보임)"><input className={inputCls} value={ed.adminNote} onChange={E("adminNote")} /></Field>
           <label className="flex items-center gap-2.5 text-[15px] font-bold text-[#0F1A30]"><input type="checkbox" checked={ed.blocked} onChange={(e) => setEd((p) => ({ ...p, blocked: e.target.checked }))} className="w-5 h-5 accent-[#1B2B4B]" data-testid="am-blocked" />배차신청 막기(노쇼 · 반복 취소 패널티)</label>
           <Btn kind="soft" className="w-full" disabled={!!busy} onClick={saveEdit} data-testid="am-save">{busy === "edit" ? "저장 중…" : "정보 저장"}</Btn>
@@ -216,7 +226,8 @@ function AdminOrderPanel({ o, detail, admin, toast }) {
 
 // ── 정산 관리
 const CH = { requested: "입금 확인 대기", confirmed: "충전 완료", rejected: "반려", cancelled: "취소" };
-const PO = { queued: "지급 대기", requested: "지급 요청됨", processing: "처리 중", paid: "지급 완료", failed: "실패" };
+const PO = { scheduled: "지급 예정", queued: "지급 대기", requested: "지급 요청", processing: "처리 중", paid: "지급 완료", failed: "실패" };
+const WD = { requested: "신청", processing: "보낼 차례", paid: "출금 완료", rejected: "반려", failed: "실패" };
 function MoneyAdmin({ members, admin, toast }) {
   const [sub, setSub] = useState("charges");
   const [charges, setCharges] = useState([]);
@@ -226,6 +237,8 @@ function MoneyAdmin({ members, admin, toast }) {
   const [ledger, setLedger] = useState([]);
   const [rej, setRej] = useState(null);
   const [paid, setPaid] = useState(null);
+  const [wds, setWds] = useState([]);
+  useEffect(() => subscribeAll("hubWithdrawals", setWds), []);
   useEffect(() => subscribeAll("hubCharges", setCharges), []);
   useEffect(() => subscribeAll("hubPayouts", setPayouts), []);
   useEffect(() => subscribeAll("hubWallets", setWallets), []);
@@ -235,7 +248,8 @@ function MoneyAdmin({ members, admin, toast }) {
   const reqCh = charges.filter((c) => c.status === "requested").sort((a, b) => tsMs(a.createdAt) - tsMs(b.createdAt));
   const openPo = payouts.filter((p) => p.status !== "paid").sort((a, b) => tsMs(a.createdAt) - tsMs(b.createdAt));
   const tot = wallets.reduce((a, w) => ({ available: a.available + (w.uid === "__platform__" ? 0 : w.available || 0), held: a.held + (w.held || 0), pending: a.pending + (w.pending || 0), owed: a.owed + (w.owed || 0) }), { available: 0, held: 0, pending: 0, owed: 0 });
-  const SUBS = [["charges", `충전 요청 ${reqCh.length || ""}`], ["payouts", `지급 대기 ${openPo.length || ""}`], ["wallets", "회원 잔액"], ["debts", `미정산 ${debts.filter((d) => d.status === "open").length || ""}`], ["ledger", "원장"]];
+  const openWd = wds.filter((w) => ["requested", "processing"].includes(w.status));
+  const SUBS = [["charges", `입금 확인 ${reqCh.length || ""}`], ["payouts", `운송료 지급 ${openPo.length || ""}`], ["withdraws", `출금 ${openWd.length || ""}`], ["wallets", "회원 잔액"], ["debts", `미정산 ${debts.filter((d) => d.status === "open").length || ""}`], ["ledger", "원장"]];
   const Row = ({ children, ...p }) => <div className="bg-white rounded-[20px] ring-1 ring-inset ring-[#E2E7EF] p-4 flex flex-wrap items-center gap-x-3 gap-y-2" {...p}>{children}</div>;
   return (
     <div className="space-y-3.5" data-testid="admin-money">
@@ -257,22 +271,34 @@ function MoneyAdmin({ members, admin, toast }) {
       ))}
       {sub === "payouts" && (
         <>
-          <div className="rounded-2xl bg-[#F5F8FD] ring-1 ring-inset ring-[#DCE3EE] px-4 py-3 text-[14px] text-[#3A4A66] leading-relaxed">지급대행(PG) 계약 전이라 <b>[지급 요청]</b>은 연결 자리(requestPayout)만 확인합니다. 회사 계좌에서 직접 이체한 뒤 <b>[지급완료]</b>를 눌러 장부를 맞춰 주세요.</div>
+          <div className="rounded-2xl bg-[#F5F8FD] ring-1 ring-inset ring-[#DCE3EE] px-4 py-3 text-[14px] text-[#3A4A66] leading-relaxed">지급일이 되면 지급 요청으로 바뀌어요. 지급대행 연결 전에는 직접 보낸 뒤 <b>지급완료</b>를 눌러 주세요.</div>
           {payouts.length === 0 ? <Empty icon="truck" title="지급할 운임이 없습니다" /> : (
             <div className="space-y-2">
               {[...openPo, ...payouts.filter((p) => p.status === "paid").sort((a, b) => tsMs(b.paidAt) - tsMs(a.paidAt)).slice(0, 30)].map((p) => (
                 <Row key={p.id} data-testid="admin-payout-row">
                   <Badge tone={p.status === "paid" ? "navy" : p.status === "queued" ? "accent" : "sky"}>{PO[p.status] || p.status}</Badge>
                   <span className="text-[16px] font-extrabold text-[#0F1A30]" style={NUMS}>{wonFull(p.amount)}</span>
-                  <span className="min-w-0 flex-1 text-[14.5px] text-[#55657F] truncate">{p.toName || name(p.toUid)} · {p.route} · {p.bank?.number ? `${p.bank.bank} ${p.bank.number} (${p.bank.holder})` : "계좌 미등록"}</span>
+                  <span className="min-w-0 flex-1 text-[14.5px] text-[#55657F] truncate">{p.toName || name(p.toUid)} {p.route} {p.dueDate ? `${p.dueDate} 지급` : ""} {p.bank?.number ? `${p.bank.bank} ${p.bank.number} (${p.bank.holder})` : "계좌 미등록"}</span>
                   {p.adapter?.message && p.status !== "paid" && <span className="w-full text-[13px] text-[#8592A8]">지급대행: {p.adapter.message}</span>}
-                  {p.status !== "paid" && <span className="ml-auto flex gap-1.5">{p.status === "queued" && <Btn kind="ghost" size="md" onClick={() => requestPayoutSend(p.id, admin).then(() => toast?.("지급 요청 — 지급대행 연결 결과를 확인하세요")).catch(() => {})} data-testid="admin-payout-request">지급 요청</Btn>}<Btn size="md" onClick={() => setPaid(p)} data-testid="admin-payout-paid">지급완료</Btn></span>}
+                  {p.status !== "paid" && <span className="ml-auto flex gap-1.5">{["queued", "scheduled"].includes(p.status) && <Btn kind="ghost" size="md" onClick={() => requestPayoutSend(p.id, admin).then(() => toast?.("지급 요청 — 지급대행 연결 결과를 확인하세요")).catch(() => {})} data-testid="admin-payout-request">지급 요청</Btn>}<Btn size="md" onClick={() => setPaid(p)} data-testid="admin-payout-paid">지급완료</Btn></span>}
                 </Row>
               ))}
             </div>
           )}
         </>
       )}
+      {sub === "withdraws" && (wds.length === 0 ? <Empty icon="wallet" title="출금 신청이 없어요" /> : (
+        <div className="space-y-2">
+          {[...openWd, ...wds.filter((w) => !["requested", "processing"].includes(w.status)).slice(0, 30)].map((w) => (
+            <Row key={w.id} data-testid="admin-wd-row">
+              <Badge tone={w.status === "paid" ? "navy" : "accent"}>{WD[w.status] || w.status}</Badge>
+              <span className="text-[16px] font-extrabold text-[#0F1A30]" style={NUMS}>{wonFull(w.amount)}</span>
+              <span className="min-w-0 flex-1 text-[14.5px] text-[#55657F] truncate">{name(w.uid)} {w.bank ? `${w.bank.bank} ${w.bank.number} (${w.bank.holder})` : ""}</span>
+              {["requested", "processing"].includes(w.status) && <span className="ml-auto flex gap-1.5"><Btn kind="ghost" size="md" onClick={() => adminMarkWithdraw(w.id, admin, "rejected", "관리자 반려").then(() => toast?.("반려했어요"))}>반려</Btn><Btn size="md" onClick={() => adminMarkWithdraw(w.id, admin, "paid").then(() => toast?.("출금 완료로 바꿨어요"))} data-testid="admin-wd-paid">출금 완료</Btn></span>}
+            </Row>
+          ))}
+        </div>
+      ))}
       {sub === "wallets" && (
         <div className="space-y-2">
           {wallets.sort((a, b) => (b.available || 0) - (a.available || 0)).map((w) => (

@@ -69,6 +69,8 @@ export default function HubSignup() {
         if (!f.vlen) return "적재함 길이를 입력해 주세요.";
         if (!f.homeSido) return "거주(차고지) 지역을 골라 주세요.";
       }
+      // ⭐ 2026-11-07 오더를 받는 회원(차주 · 운송사)은 운송료 받을 본인 실계좌가 꼭 있어야 한다(배차신청 규칙도 같은 기준)
+      if (role !== "shipper" && (!f.bank || f.bankNo.replace(/[^\d]/g, "").length < 6)) return "운송료 받을 계좌를 넣어 주세요";
     }
     if (s === 3) {
       const miss = docs.required.filter((k) => !files[k]);
@@ -210,12 +212,12 @@ export default function HubSignup() {
           </>}
           {role !== "shipper" && (
             <div className="rounded-2xl bg-[#F5F8FD] ring-1 ring-inset ring-[#DCE3EE] p-4 space-y-3" data-testid="su-bank-box">
-              <div className="text-[15.5px] font-extrabold text-[#0F1A30]">정산 계좌 <span className="text-[13.5px] font-semibold text-[#8592A8]">운임 받을 계좌 · 나중에 [정산]에서도 등록</span></div>
+              <div className="text-[15.5px] font-extrabold text-[#0F1A30]">운송료 받을 계좌 <span className="text-[#2D4C82]">*</span></div>
               <div className="grid grid-cols-2 gap-3">
                 <Field label="은행"><select className={selectCls} value={f.bank} onChange={set("bank")} data-testid="su-bank"><option value="">선택</option>{BANKS.map((b) => <option key={b}>{b}</option>)}</select></Field>
                 <Field label="계좌번호"><input className={inputCls} inputMode="numeric" value={f.bankNo} onChange={set("bankNo")} placeholder="숫자만" data-testid="su-bank-no" /></Field>
               </div>
-              <Field label="예금주" hint="사업자 · 본인 이름과 같아야 지급됩니다"><input className={inputCls} value={f.bankHolder} onChange={set("bankHolder")} placeholder={f.name || "예금주"} data-testid="su-bank-holder" /></Field>
+              <Field label="예금주" hint="사업자나 본인 이름과 같아야 해요"><input className={inputCls} value={f.bankHolder} onChange={set("bankHolder")} placeholder={f.name || "예금주"} data-testid="su-bank-holder" /></Field>
             </div>
           )}
         </div>

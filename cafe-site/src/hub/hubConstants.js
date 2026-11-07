@@ -3,15 +3,15 @@
 //  역할: driver(차주) · shipper(화주) · carrier(운송사)
 //  회원 출처(source): signup(허브 가입 · 관리자 승인) · logisweb-staff(로지스웹 운송사 직원) ·
 //                     logisweb-driver(로지스웹 소속 기사) · logisweb-shipper(로지스웹 화주사)
-//  오더(hubOrders) 단계: open(모집중) → assigned(배차됨) → loaded(상차완료) → delivered(운송완료) | cancelled(취소)
+//  오더(hubOrders) 단계: open(모집중) → assigned(10초 뒤 confirmed = 운송중) → delivered(운송완료 · 회차) | cancelled(취소)
 
 export const CANCEL_WINDOW_MS = 10000; // 배차신청 후 취소 가능 시간(서버 규칙도 10초)
 export const MAX_QUICK_CANCELS = 5; // 한 오더에서 10초 내 취소가 이만큼 쌓이면 더 이상 배차신청 불가(창 악용 방지)
 
 export const ROLES = {
-  driver: { label: "차주", en: "DRIVER", desc: "화물차 운전 · 오더 배차신청", icon: "truck" },
-  shipper: { label: "화주", en: "SHIPPER", desc: "화물 오더 등록 · 차량 수배", icon: "building" },
-  carrier: { label: "운송사", en: "CARRIER", desc: "오더 등록 + 배차신청", icon: "swap" },
+  driver: { label: "차주", en: "DRIVER", desc: "오더를 받아 운송해요", icon: "truck" },
+  shipper: { label: "화주", en: "SHIPPER", desc: "화물을 올리고 차를 찾아요", icon: "building" },
+  carrier: { label: "운송사", en: "CARRIER", desc: "오더를 올리고 받아요", icon: "swap" },
 };
 export const SOURCE_LABEL = {
   signup: "허브 가입",
@@ -21,6 +21,8 @@ export const SOURCE_LABEL = {
 };
 export const canPost = (m) => !!m && m.status === "approved" && (m.role === "shipper" || m.role === "carrier");
 export const canTake = (m) => !!m && m.status === "approved" && (m.role === "driver" || m.role === "carrier") && !m.penalty?.blocked;
+// 배차신청은 본인 실계좌가 있어야(규칙 hubHasBank와 같은 기준)
+export const hasBank = (m) => !!(m?.bank?.bank && String(m.bank.number || "").replace(/[^\d]/g, "").length >= 6 && String(m.bank.holder || "").trim());
 
 // 가입 서류 — 역할별 필수/선택
 export const DOC_TYPES = {
@@ -40,28 +42,35 @@ export const ROLE_DOCS = {
 };
 export const BIZ_STATUS = ["확인 전", "계속사업자", "휴업자", "폐업자"];
 
-export const HUB_VEHICLES = ["카고", "윙바디", "탑", "냉장탑", "냉동탑", "냉장윙", "냉동윙", "리프트", "라보", "다마스", "츄레라", "로브이", "덤프", "기타"];
-export const HUB_TONS = ["0.5톤", "1톤", "1.4톤", "2.5톤", "3.5톤", "5톤", "5톤축", "8톤", "11톤", "14톤", "18톤", "25톤"];
-export const PAY_METHODS = ["인수증", "예치금", "선불", "착불", "계좌이체", "계산서"];
-export const LOAD_METHODS = ["지게차", "수작업", "호이스트", "크레인", "컨베이어", "기사 수작업"];
-// ⭐ 2026-11-06 예치금 · 정산(서버 functions/hubWallet.js와 같은 기준)
-//  예치금 결제: 확정 때 등록자 예치금에서 운임+수수료 보류 → 계산서 발행 시 차감 · 차주 지급 예정 · 수수료는 등록자에게
-//  현금(선불·착불): 차주가 화주에게 직접 받음 → 운송완료 때 차주 예치금에서 수수료를 등록자에게(모자라면 미정산)
-//  그 밖(계좌이체·계산서): 당사자끼리 직접 정산(원장에 남기지 않음)
+// ⭐ 2026-11-07 (3차) 목록은 로지스웹 배차 프로그램과 같은 값(배차 오더로 옮길 때 그대로 맞도록)
+//  차종 = src/vehicleTypes.js VT_DEFAULTS (+ 허브에서 쓰던 츄레라 · 덤프 · 기타) · 상하차방법 = src/companyDropdownOptions.jsx 상하차방법
+export const HUB_VEHICLES = ["라보/다마스", "카고", "윙/카고", "윙바디", "리프트", "탑차", "냉장탑", "냉동탑", "냉장윙", "냉동윙", "냉장/냉동탑", "냉장/냉동윙", "오토바이", "츄레라", "덤프", "기타"];
+export const HUB_TONS = ["0.5톤", "1톤", "1.4톤", "2.5톤", "3.5톤", "5톤", "5톤축", "8톤", "9.5톤", "11톤", "14톤", "18톤", "25톤"];
+export const PAY_METHODS = ["인수증", "선불", "착불"];
+export const LOAD_METHODS = ["지게차", "수작업", "직접수작업", "수도움", "크레인", "리프트"];
+export const COUNT_OPTIONS = ["1대", "2대", "3대", "4대", "5대", "6대", "7대", "8대", "9대", "10대"];
+export const REQUESTER_TYPES = ["화주", "운수사", "주선사"];
+export const PAY_TERM_OPTIONS = [["days:0", "확인한 날"], ["days:3", "3일 뒤"], ["days:7", "7일 뒤"], ["days:15", "15일 뒤"], ["days:30", "30일 뒤"], ["next:5", "다음 달 5일"], ["next:10", "다음 달 10일"], ["next:15", "다음 달 15일"], ["next:25", "다음 달 25일"], ["next:31", "다음 달 말일"]];
+// 배차 프로그램 지급방식으로 옮길 값(functions/hubSync.js lwPay와 같은 기준)
+export const lwPayOf = (p) => (p === "선불" || p === "착불" ? p : p === "계좌이체" ? "계좌이체" : "계산서");
+// 예치금 · 정산(서버 functions/hubWallet.js와 같은 기준)
+//  인수증: 확정 때 등록자 잔액에서 운임을 보류 → 계산서 확인 → 지급예정일에 차주 실계좌로
+//  선불 · 착불: 차주가 화주에게 직접 받고, 수수료는 운송완료 때 차주 잔액에서 등록자에게
 export const DEPOSIT_PAY = ["인수증", "예치금"];
 export const CASH_PAY = ["선불", "착불"];
 export const payKind = (m) => (DEPOSIT_PAY.includes(m) ? "deposit" : CASH_PAY.includes(m) ? "cash" : "direct");
 export const PAY_HINT = {
-  deposit: "예치금 결제 — 배차 확정 때 운임+수수료를 예치금에서 보류하고, 계산서 발행 후 차주에게 지급합니다.",
-  cash: "현금 결제 — 차주가 화주에게 직접 받고, 수수료는 운송완료 때 차주 예치금에서 등록자에게 정산됩니다.",
-  direct: "직접 정산 — 등록자와 차주가 직접 주고받습니다(허브 예치금과 무관).",
+  deposit: "확정되면 운임이 잔액에서 빠지고, 계산서 확인 뒤 지급일에 보내드려요.",
+  cash: "차주가 화주에게 직접 받아요. 수수료는 차주 잔액에서 들어와요.",
+  direct: "등록자와 차주가 직접 주고받아요.",
 };
 export const LEDGER_LABEL = {
-  charge: "충전", hold: "보류", release: "보류 해제", deduct: "차감", fee_income: "수수료 입금", payout_scheduled: "지급 예정",
-  payout_done: "지급 완료", fee_paid: "수수료 납부", fee_owed: "미정산 발생", debt_paid: "미정산 상환", adjust: "관리자 조정", platform_fee: "플랫폼 수수료",
+  charge: "충전", hold: "배차 확정", release: "환불", return_refund: "회차 환불", deduct: "운임 정산", fee_income: "수수료 입금", payout_scheduled: "운송료 지급 예정",
+  payout_done: "운송료 지급", fee_paid: "수수료 납부", fee_owed: "미정산 발생", debt_paid: "미정산 상환", adjust: "관리자 조정", platform_fee: "플랫폼 수수료",
+  withdraw_req: "출금 신청", withdraw_done: "출금 완료", withdraw_cancel: "출금 취소",
 };
 export const SETTLE_LABEL = {
-  held: "예치금 보류 중", hold_failed: "예치금 부족", released: "보류 해제", settled: "정산 완료", fee_paid: "수수료 정산 완료", fee_owed: "수수료 미정산",
+  held: "운임 보류 중", hold_failed: "잔액 부족", released: "환불 완료", settled: "정산 완료", fee_paid: "수수료 정산 완료", fee_owed: "수수료 미정산",
 };
 export const BANKS = ["국민", "신한", "우리", "하나", "농협", "기업", "SC제일", "씨티", "카카오뱅크", "토스뱅크", "케이뱅크", "새마을금고", "신협", "우체국", "수협", "부산", "대구", "경남", "광주", "전북", "제주", "산업"];
 
@@ -221,6 +230,7 @@ export function fareFitness(fare, ton, km, roundTrip = false) {
 }
 
 export const won = (n) => (Number(n) ? `${Number(n).toLocaleString()}원` : "협의");
+export const wonPlain = (n) => `${(Math.round(Number(n) || 0)).toLocaleString("ko-KR")}원`;
 export const manwon = (n) => {
   const v = Number(n) || 0;
   if (!v) return "협의";
@@ -251,14 +261,50 @@ export function bizNoValid(v) {
 }
 export const maskName = (n) => { const s = String(n || ""); return s.length <= 1 ? s : s.length === 2 ? `${s[0]}*` : `${s[0]}${"*".repeat(s.length - 2)}${s.slice(-1)}`; };
 
+// ⭐ 2026-11-07 (3차) 단계: 모집중 → 확정 대기(10초) → 운송중(확정, 위치 공유) → 운송완료 | 회차 | 취소. 상차완료 단계 없음
 export const STATUS = {
   open: { label: "모집중", step: 0 },
-  assigned: { label: "배차완료", step: 1 },
-  loaded: { label: "상차완료", step: 2 },
-  delivered: { label: "운송완료", step: 3 },
-  cancelled: { label: "취소됨", step: -1 },
+  assigned: { label: "운송중", step: 1 },
+  delivered: { label: "운송완료", step: 2 },
+  cancelled: { label: "취소", step: -1 },
 };
 export const ACTIVE = ["assigned", "loaded"];
+export function stageOf(o) {
+  if (!o) return "open";
+  if (o.status === "cancelled") return "cancelled";
+  if (o.status === "delivered") return o.회차?.status === "accepted" ? "returned" : "delivered";
+  if (o.status === "loaded") return "moving";
+  if (o.status === "assigned") return o.confirmed ? "moving" : "pending";
+  return "open";
+}
+export const STAGE_LABEL = { open: "모집중", pending: "확정 대기", moving: "운송중", delivered: "운송완료", returned: "회차", cancelled: "취소" };
+export const stageLabel = (o) => STAGE_LABEL[stageOf(o)];
+// 회차 합의가 되면 회차비, 아니면 운임
+export const payAmountOf = (o) => (o?.회차?.status === "accepted" ? Number(o.회차.amount) || 0 : Number(o?.운임) || 0);
+// 회사 키(규칙 hubKeyOf · functions/hubSync.js companyKeyOf와 같은 계산) — 같은 회사끼리만 기록 · 오더복사 · 고객관리를 나눈다
+export function companyKeyOf(m) {
+  if (!m) return "";
+  if (m.companyKey) return m.companyKey;
+  if (m.source && m.source !== "signup") return `lw:${m.companyName || ""}`;
+  const d = String(m.bizNo || "").replace(/[^\d]/g, "");
+  return d ? `biz:${d}` : `uid:${m.uid || m.id || ""}`;
+}
+export const isLinked = (m) => !!m && m.source && m.source !== "signup";
+// 상차 지역 키 — 보드 검색(시·도 또는 "시·도 시·군·구")
+export const regionKeysOf = (sido, sgg) => [sido, sgg ? `${sido} ${sgg}` : ""].filter(Boolean);
+export const regionKeyLabel = (k) => String(k || "");
+// 지급예정일 — "days:7"(7일 뒤) · "next:10"(다음 달 10일, 31이면 말일)
+export function payDateFrom(term, base = kstYmd()) {
+  const [mode, nRaw] = String(term || "days:7").split(":");
+  const n = Number(nRaw) || 0;
+  const d = new Date(`${base}T00:00:00Z`);
+  if (mode === "next") {
+    const y = d.getUTCFullYear(), m = d.getUTCMonth() + 1;
+    const last = new Date(Date.UTC(y, m + 1, 0)).getUTCDate();
+    return new Date(Date.UTC(y, m, Math.min(n, last))).toISOString().slice(0, 10);
+  }
+  return new Date(d.getTime() + n * 86400e3).toISOString().slice(0, 10);
+}
 
 export const kstYmd = (offsetDays = 0) => new Date(Date.now() + 9 * 3600e3 + offsetDays * 86400e3).toISOString().slice(0, 10);
 export function dayLabel(ymd) {

@@ -7,9 +7,15 @@
 //   hubAdjustOnCreate  — 관리자 예치금 조정
 //   hubNoticeOnCreate  — 허브 알림 → 받는 사람 기기 푸시(허브 앱 토큰 hubMembers.fcmTokens + 로지스웹 계정이면 users 토큰)
 //   hubDriverLocMirror — 로지스웹 소속 기사앱(백그라운드 GPS)의 drivers/{uid} 위치 → 진행 중 허브 오더 관제(hubLive)
+//   ⭐ 2026-11-07 (3차)
+//   hubPostRequestOnCreate — 배차 프로그램 [저장 + 허브 등록] → 허브 오더를 만들고 원래 오더에 연결(functions/hubSync.js)
+//   hubWithdrawOnWrite     — 출금 신청 → 잔액 묶기 · 지급 요청 자리 · [출금 완료] · 반려 시 돌려주기
+//   hubPayoutDaily         — 매일 아침 지급예정일이 된 운송료를 지급 요청으로
+//   hubVaDeposit           — 가상계좌 입금 알림(PG 웹훅 자리, 비밀값 HUB_VA_WEBHOOK_SECRET 이 있을 때만 받는다)
 //  회원은 잔액(hubWallets) · 원장(hubLedger)을 쓸 수 없다(규칙 write false) — 이 트리거만 트랜잭션으로 쓴다.
 const _hubCall = require("./hubCall");
 const _hubWallet = require("./hubWallet");
+const _hubSync = require("./hubSync");
 
 function register({ functions, db, FieldValue, sendPushAndCleanup, userTokens, getStorage }) {
   const out = {};
@@ -52,6 +58,26 @@ function register({ functions, db, FieldValue, sendPushAndCleanup, userTokens, g
     const a = change.after.data();
     if (!a?.hubActiveOrderId) return;
     try { await _hubCall.mirrorDriverLocation(db, FieldValue, context.params.uid, change.before.data(), a); } catch (e) { console.error("[허브 관제] 기사앱 위치 넘기기 실패:", e); }
+  });
+  out.hubPostRequestOnCreate = functions.firestore.document("hubPostRequests/{id}").onCreate(async (snap, context) => {
+    try { await _hubSync.handlePostRequest(db, FieldValue, context.params.id, snap.data()); }
+    catch (e) { console.error("[허브 등록 요청] 실패:", e); await snap.ref.update({ status: "failed", reason: "잠시 뒤 다시 시도해 주세요" }).catch(() => {}); }
+  });
+  out.hubWithdrawOnWrite = functions.firestore.document("hubWithdrawals/{id}").onWrite(async (change, context) => {
+    try { await _hubWallet.onWithdrawWrite(db, FieldValue, context.params.id, change.before.exists ? change.before.data() : null, change.after.exists ? change.after.data() : null); } catch (e) { console.error("[허브 출금] 처리 실패:", e); }
+  });
+  out.hubPayoutDaily = functions.pubsub.schedule("7 9 * * *").timeZone("Asia/Seoul").onRun(async () => {
+    try { const n = await _hubWallet.runDuePayouts(db, FieldValue); console.log(`[허브 지급] 오늘 지급 요청 ${n}건`); } catch (e) { console.error("[허브 지급] 예정일 처리 실패:", e); }
+  });
+  out.hubVaDeposit = functions.https.onRequest(async (req, res) => {
+    const secret = process.env.HUB_VA_WEBHOOK_SECRET || "";
+    if (!secret) { res.status(503).json({ ok: false, reason: "not_configured" }); return; }
+    if (req.method !== "POST" || String(req.get("x-hub-secret") || "") !== secret) { res.status(403).json({ ok: false }); return; }
+    try {
+      const b = req.body || {};
+      const r = await _hubWallet.vaDeposit(db, FieldValue, { account: b.account, amount: b.amount, depositor: b.depositor, txId: b.txId });
+      res.status(r.ok ? 200 : 400).json(r);
+    } catch (e) { console.error("[허브 가상계좌] 입금 반영 실패:", e); res.status(500).json({ ok: false }); }
   });
   return out;
 }

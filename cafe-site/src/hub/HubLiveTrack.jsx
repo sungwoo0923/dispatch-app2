@@ -62,7 +62,7 @@ export default function HubLiveTrack({ order, detail, match, mobile, onClose }) 
     return {
       id: order.takerUid, lat: Number(live.lat), lng: Number(live.lng), speed: Math.max(0, Math.round(Number(live.speed) || 0)),
       plate: live.plate || match?.vehicle?.plate || "", name: live.name || match?.name || "", phone: live.phone || match?.phone || "",
-      grade: match?.role === "carrier" ? "운송사" : "차주", status: order.status === "loaded" ? "운송중" : "상차이동",
+      grade: match?.role === "carrier" ? "운송사" : "차주", status: "운송중",
       updatedMs: liveTsMs(live.updatedAt) || Date.now(),
     };
   }, [live, match, order.status, order.takerUid]);
@@ -70,13 +70,14 @@ export default function HubLiveTrack({ order, detail, match, mobile, onClose }) 
   const loc = entry ? { lat: entry.lat, lng: entry.lng } : null;
   const step = useMemo(() => {
     if (!loc) return -1;
-    const loaded = order.status === "loaded";
+    // ⭐ 2026-11-07 상차완료 버튼이 없어졌다 — 이동 경로가 상차지 1km 안에 한 번이라도 들어왔으면 상차한 것으로 본다
+    const loaded = order.status === "loaded" || (!!pickupGeo && (track || []).some((p) => haversineKm(p.lat, p.lng, pickupGeo.lat, pickupGeo.lng) <= 1));
     const t = loaded ? dropGeo : pickupGeo;
     const base = loaded ? 3 : 0;
     if (!t) return base;
     const d = haversineKm(loc.lat, loc.lng, t.lat, t.lng);
     return base + (d <= 1 ? 2 : d <= 3 ? 1 : 0);
-  }, [loc?.lat, loc?.lng, order.status, pickupGeo, dropGeo]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [loc?.lat, loc?.lng, order.status, pickupGeo, dropGeo, track]); // eslint-disable-line react-hooks/exhaustive-deps
   const target = step >= 3 ? (step === 5 ? null : dropGeo) : step === 2 ? dropGeo : pickupGeo;
   const remain = useRemain(loc, target, step >= 2 ? "하차지까지" : "상차지까지");
   const lwOrder = {
@@ -89,7 +90,7 @@ export default function HubLiveTrack({ order, detail, match, mobile, onClose }) 
       <LiveTrackView order={lwOrder} entry={active ? entry : null} track={track} pickupGeo={pickupGeo} dropGeo={dropGeo}
         phase={entry ? STEP_PHASE[Math.max(0, step)] : null} step={step} remain={remain ? { km: remain.km, min: remain.min, label: remain.label } : null}
         mobile={mobile} onClose={onClose}
-        emptyText={!active ? "운송이 끝나 위치관제를 종료했습니다(운송완료 · 취소 후에는 위치를 볼 수 없습니다)." : live === undefined ? "위치 정보를 불러오는 중입니다…" : "차주 앱에서 아직 위치를 보내지 않았습니다. 차주가 허브 앱(또는 로지스웹 기사앱)을 열면 바로 보입니다."} />
+        emptyText={!active ? "운송이 끝나서 위치 보기를 마쳤어요" : live === undefined ? "위치를 불러오고 있어요" : "차주 위치를 기다리고 있어요"} />
     </div>
   );
 }

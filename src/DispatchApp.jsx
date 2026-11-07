@@ -1753,7 +1753,7 @@ const BULK_EDIT_FIELDS = [
   { key: "청구운임", label: "청구운임", type: "money" },
   { key: "기사운임", label: "기사운임", type: "money" },
   { key: "지급방식", label: "지급방식", type: "select", options: ["계산서", "착불", "선불", "계좌이체"] },
-  { key: "배차방식", label: "배차방식", type: "select", options: ["24시", "인성", "직접배차", "24시(외부업체)"] },
+  { key: "배차방식", label: "배차방식", type: "select", options: ["24시", "인성", "직접배차", "24시(외부업체)", "로지스허브"] },
   { key: "메모", label: "메모", type: "text" },
   { key: "전달사항", label: "전달사항", type: "text" },
 ];
@@ -2908,7 +2908,8 @@ import { BRAND, LogisMark, LogisWordmark, LogisTag } from "./brand";
 import { DriverGuideSendModal, GUIDE_BTN, guideSentLabel, isFleetGrade } from "./DriverAppGuide"; // ⭐ 2026-11-06 기사앱 안내 보내기
 // ⭐ 2026-11-06 로지스웹 허브(운송사 간 오더 거래소) — [저장 + 허브 등록]
 import { MARKET_SHORT } from "./orderMarketConfig";
-import { shareToOrderMarket } from "./orderMarketShare";
+import { shareToOrderMarket } from "./orderMarketShare"; // eslint-disable-line no-unused-vars -- 운송사 거래소(/exchange) 공유용으로 남겨 둠
+import { shareToHub } from "./hubShare"; // ⭐ 2026-11-07 [저장 + 허브 등록] = 로지스웹 허브(화물 콜)에 올리고 이 오더에 연결
 
 // 기사전달용 업로드 링크 단축 — /upload?id=...&t=... (길고 낯설어 기사들이 거부감을
 // 느낄 수 있는 형태)를 /u/{code} 형태로 줄인다. code는 토큰에서 파생시켜, 같은
@@ -11232,7 +11233,7 @@ const filterPlaces = (q) => {
       "계산서", "착불", "선불", "손실", "개인", "취소"
     ];
     const DISPATCH_TYPES = (typeof window !== "undefined" && window.RUN25_DISPATCH_TYPES) || dropdownList("배차방식", [
-      "24시", "직접배차", "인성", "고정기사"
+      "24시", "직접배차", "인성", "고정기사", "로지스허브"
     ]);
     const StatusBadge = ({ s }) => {
       const map = {
@@ -14021,14 +14022,11 @@ if (shareToCafe) {
   (async () => {
     try {
       const [printerInfo, savedIds] = await Promise.all([fetchPrinterInfo(), savePromise.catch(() => [])]);
-      await shareToOrderMarket(db, {
-        rec,
-        savedIds,
-        uid: auth.currentUser?.uid || "",
-        profile: printerInfo || {},
-        posterName: (typeof myRealName !== "undefined" && myRealName) || printerInfo?.name || auth.currentUser?.email?.split("@")[0] || "",
-      });
-    } catch (e) { console.error(`${MARKET_SHORT} 등록 실패:`, e); }
+      // ⭐ 2026-11-07 허브 오더는 서버가 만들고 이 오더(첫 번째 저장 id)에 연결한다 — 배차 확정 · 운송완료가 이 오더에 채워진다
+      const r = await shareToHub(db, { rec, savedIds, uid: auth.currentUser?.uid || "", profile: printerInfo || {} });
+      if (!r.ok) showAlert(`${MARKET_SHORT}에 올리지 못했어요. ${r.reason || ""}`.trim());
+      else if (!r.pending) showAlert(`${MARKET_SHORT}에 올렸어요`);
+    } catch (e) { console.error(`${MARKET_SHORT} 등록 실패:`, e); showAlert(`${MARKET_SHORT}에 올리지 못했어요`); }
   })();
 }
 

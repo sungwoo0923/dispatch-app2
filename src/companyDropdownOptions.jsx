@@ -20,7 +20,7 @@ import { useEditMode } from "./EditMode";
 export const DEFAULT_DROPDOWN_OPTIONS = {
   상하차방법: ["지게차", "수작업", "직접수작업", "수도움", "크레인", "리프트"],
   지급방식: ["계산서", "착불", "선불", "계좌이체", "손실", "개인", "취소"],
-  배차방식: ["24시", "인성", "직접배차", "고정기사", "24시(외부업체)"],
+  배차방식: ["24시", "인성", "직접배차", "고정기사", "24시(외부업체)", "로지스허브"],
   화물타입: ["파레트", "박스", "통"],
   톤수타입: ["톤", "kg"],
 };
@@ -77,11 +77,14 @@ export function subscribeCompanyOptions(co, cb) {
 }
 export const companyOptionsSnapshot = (co) => (co ? getStore(co).state : EMPTY);
 
+// ⭐ 2026-11-07 회사가 목록을 바꿨어도 꼭 있어야 하는 값 — 로지스웹 허브 연동 오더의 배차방식(functions/hubSync.js LW_DISPATCH)
+const ALWAYS_OPTIONS = { 배차방식: ["로지스허브"] };
 // 회사 목록(바꾼 적 없으면 기본 목록) — key별
 export function listFromStored(stored, key, fallback) {
   if (Array.isArray(stored) && stored.length > 0) {
     const out = []; const seen = new Set();
     stored.forEach((v) => { const c = clean(v); if (c && !seen.has(c)) { seen.add(c); out.push(c); } });
+    (ALWAYS_OPTIONS[key] || []).forEach((v) => { if (!seen.has(v)) { seen.add(v); out.push(v); } });
     if (out.length) return out;
   }
   return fallback && fallback.length ? fallback : (DEFAULT_DROPDOWN_OPTIONS[key] || []);
