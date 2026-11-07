@@ -17,6 +17,7 @@ import {
 } from "firebase/firestore";
 import { updateDoc } from "../../orderWrite"; // ★ 오더 수정시각 자동 기록(여러 사용자 실시간 일치)
 import { useNavigate, useSearchParams } from "react-router-dom";
+import CustomDatePicker from "../../CustomDatePicker"; // 📅 2026-11-07 날짜는 프로그램 달력으로
 
 // 운송사 프로그램(DispatchApp.jsx)의 등록일 컬럼은 별도 문자열 필드 "등록일"(YYYY-MM-DD)을
 // 참조하는데, 화주사 등록 시 createdAt(serverTimestamp)만 기록하고 이 필드를 채우지 않아
@@ -891,7 +892,7 @@ export default function ShipperOrder({ editData, onClose }) {
             <div>
               <label className={labelCls}>상차</label>
               <div className="flex gap-2 items-center flex-wrap">
-                <input type="date" className={inputCls + " flex-1"} value={form.상차일} onChange={e => onChange("상차일", e.target.value)} />
+                <CustomDatePicker showIcon className={inputCls + " flex-1"} value={form.상차일} onChange={e => onChange("상차일", e.target.value)} />
                 <select className={inputCls + " flex-1"} value={form.상차시간} onChange={e => onChange("상차시간", e.target.value)}>
                   {timeOptions.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
                 </select>
@@ -920,7 +921,7 @@ export default function ShipperOrder({ editData, onClose }) {
             <div>
               <label className={labelCls}>하차</label>
               <div className="flex gap-2 items-center flex-wrap">
-                <input type="date" className={inputCls + " flex-1"} value={form.하차일} onChange={e => onChange("하차일", e.target.value)} />
+                <CustomDatePicker showIcon className={inputCls + " flex-1"} value={form.하차일} onChange={e => onChange("하차일", e.target.value)} />
                 <select className={inputCls + " flex-1"} value={form.하차시간} onChange={e => onChange("하차시간", e.target.value)}>
                   {timeOptions.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
                 </select>
@@ -1465,7 +1466,7 @@ function ViaStopModal({ type, list, onSave, onClose, orderDate = "" }) {
               </div>
               {/* 경유지 자체 날짜 — 오더 본 상차일/하차일은 전체 구간 날짜라, 당일상차→당일하차→
                   익일상차→익일하차처럼 경유지마다 날짜가 갈리는 경우를 표현 못 하던 문제 */}
-              <input type="date" className={inputCls} value={stop[dateKey] || ""} onChange={e => update(idx, dateKey, e.target.value)} />
+              <CustomDatePicker showIcon className={inputCls} value={stop[dateKey] || ""} onChange={e => update(idx, dateKey, e.target.value)} />
               <div className="grid grid-cols-2 gap-2">
                 <select className={inputCls} value={stop[timeKey]} onChange={e => update(idx, timeKey, e.target.value)}>
                   <option value="">{type}시간 선택</option>

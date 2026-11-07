@@ -5,6 +5,7 @@
 //  ③ 이상 운임 감지: 같은 노선·차종 평균보다 청구운임이 크게 벗어난 오더(입력 실수·덤핑 의심)
 //  ④ 노선 Top: 수익이 큰 노선과 평균 운임
 //  ⑤ 화주 월간 운송 리포트: 거래처를 고르면 화주에게 그대로 보낼 수 있는 리포트(PDF 인쇄) — 마진 등 내부 정보는 빠진다
+import { MonthPicker } from "./kpInputs"; // 📅 2026-11-07 월 선택은 프로그램 달력으로
 import React from "react";
 import { CustomSelect } from "./CustomSelect";
 
@@ -203,7 +204,7 @@ export default function ProInsight({ data = [], companyName = "", onOpenOrder })
               <div className="text-[12.5px] text-[#5B6B85]">거래처(화주)에게 그대로 보낼 수 있는 월간 리포트를 만듭니다. 마진·기사운임 같은 내부 정보는 들어가지 않습니다.</div>
               <div className="grid grid-cols-[1fr_150px] gap-2">
                 <CustomSelect value={reportClient} onChange={(e) => setReportClient(e.target.value)} className="h-11 px-3 rounded-xl border border-[#DCE3EE] text-[14px] font-bold"><option value="">거래처 선택</option>{allClients.map((c) => <option key={c}>{c}</option>)}</CustomSelect>
-                <input type="month" value={reportMonth} onChange={(e) => setReportMonth(e.target.value)} className="h-11 px-3 rounded-xl border border-[#DCE3EE] text-[14px] font-bold" />
+                <MonthPicker quick={false} value={reportMonth} onChange={(v) => setReportMonth(v)} triggerClassName="h-11 px-3 rounded-xl border border-[#DCE3EE] bg-white text-[14px] font-bold text-[#0F1A30] tabular-nums" />
               </div>
               <button type="button" onClick={printReport} className="w-full h-11 rounded-xl bg-[#0F1A30] text-white text-[14px] font-black hover:bg-[#1B2B4B]">리포트 만들기 · PDF 저장</button>
             </div>

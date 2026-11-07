@@ -5,6 +5,7 @@
 import React from "react";
 import { imeFocusRef } from "./imeFocus";
 import { callFn, KP_CARD, KpCardHead, kstToday, addDays, won } from "./kpApi";
+import CustomDatePicker from "./CustomDatePicker"; // 📅 2026-11-07 날짜는 프로그램 달력으로
 
 const fmtAt = (ms) => new Date(ms).toLocaleString("ko-KR", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" });
 
@@ -79,9 +80,9 @@ export default function TrashPanel({ company = "" }) {
       <div className="px-5 sm:px-6 py-5 space-y-4">
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-[13px] font-bold text-[#7A879C]">지운 날</span>
-          <input type="date" value={from} onChange={(e) => { setFrom(e.target.value); if (to < e.target.value) setTo(e.target.value); }} className={input} />
+          <CustomDatePicker showIcon value={from} onChange={(e) => { setFrom(e.target.value); if (to < e.target.value) setTo(e.target.value); }} className={input} />
           <span className="text-[13px] font-bold text-[#7A879C]">~</span>
-          <input type="date" value={to} min={from} onChange={(e) => setTo(e.target.value)} className={input} />
+          <CustomDatePicker showIcon value={to} min={from} onChange={(e) => setTo(e.target.value)} className={input} />
           <button onClick={load} disabled={!!busy} className="h-10 px-5 rounded-xl bg-[#0F1A30] text-white text-[14px] font-black disabled:opacity-50">
             {busy === "list" ? "찾는 중…" : "조회"}
           </button>

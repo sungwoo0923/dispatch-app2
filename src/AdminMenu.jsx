@@ -1,4 +1,5 @@
 // src/AdminMenu.jsx
+import { MonthPicker } from "./kpInputs"; // 📅 2026-11-07 월 선택은 프로그램 달력으로
 import BillingCenter from "./BillingCenter";
 import { runDelete, commitDeletes } from "./DeleteProgress"; // ⭐ 2026-11-05 삭제 진행 창 + 한 번에 삭제
 import { billingAccess } from "./billingAccess";
@@ -82,6 +83,9 @@ const DotBadge = ({ active, label, activeLabel, inactiveLabel }) => (
 // ⭐ 2026-11-02 속도 — 구현은 usersLive.js로 옮겨 앱 전체가 같은 구독 하나를 나눠 쓴다(기존 import 호환용으로 다시 내보냄)
 export { subscribeUsersLive };
 
+// ⭐ 2026-11-07 회원 상태(목록 배지와 같은 기준) — 퇴사 · 승인(예전 계정은 approved 없음 = 승인) · 대기
+const memberStatusOf = (u) => (u.employmentStatus === "퇴사" ? "퇴사" : u.approved !== false ? "승인" : "대기");
+
 export default function AdminMenu({ parentRole = "", parentCompany = "", isViewer = false, dispatchData = [], places = [], deptMode = null }) {
   const [adminTab, setAdminTab] = useState("members");
   const [sessionLogs, setSessionLogs] = useState([]);
@@ -92,6 +96,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
   const [allShipperApps, setAllShipperApps] = useState([]);
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState("all");
+  const [memberStatus, setMemberStatus] = useState("all"); // ⭐ 2026-11-07 회원 목록 상태 필터(전체·승인·대기·퇴사)
   const [manageUser, setManageUser] = useState(null);
   const [editName, setEditName] = useState("");
   const [editPhone, setEditPhone] = useState("");
@@ -378,14 +383,15 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
           ? true
           : [u.email, u.name, u.phone, u.role, u.companyName].join(" ").toLowerCase().includes(q);
         const matchRole = roleFilter === "all" ? true : u.role === roleFilter;
-        return matchSearch && matchRole;
+        const matchStatus = memberStatus === "all" ? true : memberStatusOf(u) === memberStatus;
+        return matchSearch && matchRole && matchStatus;
       })
       .sort((a, b) => {
         const ia = ROLE_ORDER.indexOf(a.role || "user");
         const ib = ROLE_ORDER.indexOf(b.role || "user");
         return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
       });
-  }, [search, visibleUsers, roleFilter]);
+  }, [search, visibleUsers, roleFilter, memberStatus]);
 
   // 연동운송사 탭 데이터
   const linkedShipperApps = useMemo(() => {
@@ -922,9 +928,9 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
             const initials = (u) => String(u.name || u.email || "?").trim().slice(0, u.name ? 1 : 2).toUpperCase();
             const CARD = "bg-white rounded-[20px] border border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_10px_28px_rgba(16,24,40,0.06)]";
             return (
-            <div className="flex gap-5" style={{ minHeight: 600 }}>
+            <div className="grid grid-cols-1 lg:grid-cols-[340px_minmax(0,1fr)] 2xl:grid-cols-[380px_minmax(0,1fr)] gap-5 items-start" style={{ minHeight: 600 }}>
               {/* 좌측 회원 목록 */}
-              <div className={`w-[340px] flex-shrink-0 flex flex-col overflow-hidden ${CARD}`} style={{ maxHeight: 760 }}>
+              <div className={`min-w-0 flex flex-col overflow-hidden lg:sticky lg:top-2 ${CARD}`} style={{ maxHeight: "max(600px, calc(100vh - 120px))" }}>
                 <div className="px-4 pt-4 pb-3 border-b border-[#EEF1F6] space-y-2.5">
                   <div className="flex items-center justify-between">
                     <div>
@@ -936,7 +942,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
                   <div className="flex items-center gap-2 h-10 px-3 rounded-xl border border-[#DCE3EE] bg-white focus-within:border-[#4B6CB7] focus-within:ring-4 focus-within:ring-[#4B6CB7]/10 transition">
                     <svg className="w-4 h-4 text-[#9AA9C3] shrink-0" fill="none" stroke="currentColor" strokeWidth="2.2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
                     <input value={search} onChange={e => setSearch(e.target.value)} placeholder="이름 · 이메일 · 회사명 검색"
-                      className="flex-1 min-w-0 text-[13px] font-semibold text-[#0F1A30] outline-none bg-transparent placeholder:text-[#A7B3C6]" />
+                      className="flex-1 min-w-0 text-[14px] font-semibold text-[#0F1A30] outline-none bg-transparent placeholder:text-[#A7B3C6]" />
                   </div>
                   <CustomSelect
                     value={roleFilter}
@@ -949,6 +955,17 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
                       <option key={r} value={r}>{roleLabels[r] || r}</option>
                     ))}
                   </CustomSelect>
+                  <div className="grid grid-cols-4 gap-1 p-1 rounded-xl bg-[#F2F5FA]">
+                    {[["all", "전체"], ["승인", "승인"], ["대기", "대기"], ["퇴사", "퇴사"]].map(([k, l]) => {
+                      const n = k === "all" ? visibleUsers.length : visibleUsers.filter((u) => memberStatusOf(u) === k).length;
+                      return (
+                        <button key={k} type="button" onClick={() => setMemberStatus(k)}
+                          className={`h-9 rounded-lg text-[13px] font-bold transition inline-flex items-center justify-center gap-1 ${memberStatus === k ? "bg-white text-[#0F1A30] shadow-[0_1px_2px_rgba(16,24,40,0.08),0_4px_10px_rgba(16,24,40,0.06)]" : "text-[#5B6B85] hover:text-[#0F1A30]"}`}>
+                          {l}<span className={`text-[12px] tabular-nums ${memberStatus === k ? "text-[#4B6CB7]" : "text-[#9AA9C3]"}`}>{n}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
                 <div className="overflow-y-auto flex-1 p-2">
                   {filtered.length === 0 ? (
@@ -1334,13 +1351,13 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
                   </div>
                   <div>
                     <div className="text-[11px] text-gray-500 mb-1">시작월</div>
-                    <input type="month" value={transmitFromMonth} onChange={e => { setTransmitFromMonth(e.target.value); setTransmitSearched(false); setTransmitResult(null); }}
-                      className="border border-[#DCE3EE] rounded-lg px-3 py-2 text-[13px] outline-none focus:border-[#1B2B4B]" />
+                    <MonthPicker quick={false} value={transmitFromMonth} onChange={v => { setTransmitFromMonth(v); setTransmitSearched(false); setTransmitResult(null); }}
+                      triggerClassName="h-10 px-3 border border-[#DCE3EE] rounded-lg bg-white text-[14px] font-semibold text-[#0F1A30] tabular-nums" />
                   </div>
                   <div>
                     <div className="text-[11px] text-gray-500 mb-1">종료월</div>
-                    <input type="month" value={transmitToMonth} onChange={e => { setTransmitToMonth(e.target.value); setTransmitSearched(false); setTransmitResult(null); }}
-                      className="border border-[#DCE3EE] rounded-lg px-3 py-2 text-[13px] outline-none focus:border-[#1B2B4B]" />
+                    <MonthPicker quick={false} value={transmitToMonth} onChange={v => { setTransmitToMonth(v); setTransmitSearched(false); setTransmitResult(null); }}
+                      triggerClassName="h-10 px-3 border border-[#DCE3EE] rounded-lg bg-white text-[14px] font-semibold text-[#0F1A30] tabular-nums" />
                   </div>
                   <button
                     onClick={() => { setTransmitSearched(true); setTransmitResult(null); }}

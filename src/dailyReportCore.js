@@ -25,9 +25,10 @@ export const rangeDays = (a, b) => { const out = []; for (let d = a; d <= b && o
 
 // ── 받기 설정 기본값 ──
 export const BRIEF_SECTIONS = [
-  ["kpi", "핵심 지표 6개"], ["headline", "헤드라인 요약"], ["chart30", "30일 매출·수익률 차트"], ["mtd", "월 누계 vs 전월"],
-  ["clients", "거래처 TOP 8"], ["ops", "운영 현황 (차량·기사·노선)"], ["hr", "인력 현황"], ["cash", "자금·정산"], ["actions", "주의가 필요한 일"],
+  ["kpi", "핵심 지표"], ["headline", "세 줄 요약"], ["chart30", "최근 30일 매출·수익률"], ["mtd", "월 목표 진척 · 누계"],
+  ["staff", "담당자별 매출"], ["clients", "거래처 TOP 8 · 증감"], ["ops", "운영 현황 · 가동률 추이"], ["hr", "인력 현황"], ["cash", "자금 현황"],
 ];
+export const SECTION_KEYS = BRIEF_SECTIONS.map(([k]) => k);
 export const BRIEF_TIMES = (() => { const t = []; for (let h = 6; h <= 10; h++) { t.push(`${String(h).padStart(2, "0")}:00`); if (h < 10) t.push(`${String(h).padStart(2, "0")}:30`); } return t; })();
 export const DEFAULT_PREFS = {
   time: "07:30", days: [1, 2, 3, 4, 5], weekend: false,
@@ -43,7 +44,7 @@ export function mergePrefs(p) {
     days: Array.isArray(x.days) ? x.days.filter((n) => n >= 0 && n <= 6) : DEFAULT_PREFS.days,
     monday: { ...DEFAULT_PREFS.monday, ...(x.monday || {}) },
     channels: { ...DEFAULT_PREFS.channels, ...(x.channels || {}) },
-    sections: { ...DEFAULT_PREFS.sections, ...(x.sections || {}) },
+    sections: Object.fromEntries(SECTION_KEYS.map((k) => [k, (x.sections || {})[k] !== false])), // 없어진 항목(예전 "주의가 필요한 일")은 버린다
   };
 }
 // 오늘이 받는 요일인지(공휴일은 건너뜀)
@@ -173,7 +174,7 @@ export function buildReport({ rows, basis, monthlyTarget = 0 }) {
     const s = saleOf(r); if (s > 0 && (profitOf(r) / s) * 100 < 5) lowOrders.push(r);
   });
   return {
-    basis, cur, p1, p7, spanDays, byDay,
+    basis, cur, p1, p7, spanDays, byDay, byClientDay,
     spark: { sale: spark((v) => v.sale), profit: spark((v) => v.profit), margin: spark(marginOf), orders: spark((v) => v.all) },
     d30, weekdayAvg,
     month: { ym, pym, cumCur, cumPrev, elapsed, totalBiz, mtd, mtdProfit, prevSame, forecast, target: monthlyTarget, d: pctChange(mtd, prevSame) },
@@ -181,6 +182,59 @@ export function buildReport({ rows, basis, monthlyTarget = 0 }) {
     routes: Object.entries(routes).sort((a, b) => b[1] - a[1]).slice(0, 5),
     plates, lowOrders, basisRows,
   };
+}
+
+// ── 담당자별 매출(매출관리·홈 담당자 순위와 같은 오더 기준: 취소·운송사 전송 제외, 청구운임 = 매출, 청구운임 − 기사운임 = 수익) ──
+//  staffOf(r) → 담당자 이름(등록한 직원 · src/detailGetters.js orderStaffNameRaw). 빈 값은 "미지정".
+export function staffStats(rows, days, staffOf) {
+  const set = new Set(days); const seen = new Set(); const m = {};
+  for (const r of rows || []) {
+    const d = dateOf(r); if (!set.has(d)) continue;
+    const k = r._id ? `${r.__col || ""}/${r._id}` : null;
+    if (k) { if (seen.has(k)) continue; seen.add(k); }
+    if (r.source === "transport_transmit" || isCancelledOrder(r)) continue;
+    const n = String(staffOf(r) || "").trim() || "미지정";
+    const e = m[n] || (m[n] = { n, sale: 0, profit: 0, cnt: 0 });
+    e.sale += saleOf(r); e.profit += profitOf(r); e.cnt += 1;
+  }
+  return m;
+}
+// 지금 기간 vs 전 기간 → 순위 목록(매출 순)
+export function staffRanking(rows, curDays, prevDays, staffOf, hide = () => false) {
+  const a = staffStats(rows, curDays, staffOf); const b = staffStats(rows, prevDays, staffOf);
+  const list = Object.values(a).filter((x) => !hide(x.n)).map((x) => ({ ...x, margin: x.sale ? (x.profit / x.sale) * 100 : 0, prev: b[x.n]?.sale || 0, d: pctChange(x.sale, b[x.n]?.sale || 0) })).sort((p, q) => q.sale - p.sale);
+  const total = list.reduce((s, x) => s + x.sale, 0);
+  const prevTotal = Object.values(b).filter((x) => !hide(x.n)).reduce((s, x) => s + x.sale, 0);
+  return { list, total, prevTotal };
+}
+// 이번 달 같은 기간 vs 전월 같은 기간(달력 날짜 1일~오늘 날짜) — 거래처 증감·담당자 월 비교용
+export function monthSpans(end) {
+  const ym = end.slice(0, 7); const pym = prevYm(ym);
+  const day = Number(end.slice(8, 10));
+  const pLast = new Date(Date.UTC(Number(pym.slice(0, 4)), Number(pym.slice(5, 7)), 0)).getUTCDate();
+  return { cur: rangeDays(`${ym}-01`, end), prev: rangeDays(`${pym}-01`, `${pym}-${String(Math.min(day, pLast)).padStart(2, "0")}`) };
+}
+// 거래처 증감 — 이번 달 누계 vs 전월 같은 기간(금액 차이 순 · 늘어난 곳 / 줄어든 곳)
+export function clientMoves(byClientDay, curDays, prevDays, n = 4) {
+  const sum = (days) => { const m = {}; days.forEach((d) => Object.entries(byClientDay[d] || {}).forEach(([c, v]) => { m[c] = (m[c] || 0) + v[0]; })); return m; };
+  const a = sum(curDays); const b = sum(prevDays);
+  const all = [...new Set([...Object.keys(a), ...Object.keys(b)])].map((c) => ({ n: c, cur: a[c] || 0, prev: b[c] || 0, diff: (a[c] || 0) - (b[c] || 0), d: pctChange(a[c] || 0, b[c] || 0) }));
+  return {
+    up: all.filter((x) => x.diff > 0).sort((p, q) => q.diff - p.diff).slice(0, n),
+    down: all.filter((x) => x.diff < 0).sort((p, q) => p.diff - q.diff).slice(0, n),
+  };
+}
+// 미수금 나이(오래된 청구부터 수금된 것으로 보고 남은 청구를 경과일로 나눈다)
+//  invoices: [{ d, amt }] · paid: 수금 합계 · 결과 { b30, b60, b90, over, oldest }
+export function agingOf(invoices, paid, today) {
+  let left = Math.max(0, paid || 0);
+  const out = { b30: 0, b60: 0, b90: 0, over: 0, oldest: 0 };
+  [...invoices].sort((x, y) => x.d.localeCompare(y.d)).forEach(({ d, amt }) => {
+    const use = Math.min(left, amt); left -= use; const rest = amt - use; if (rest <= 0) return;
+    const age = dayDiff(d, today); out.oldest = Math.max(out.oldest, age);
+    if (age <= 30) out.b30 += rest; else if (age <= 60) out.b60 += rest; else if (age <= 90) out.b90 += rest; else out.over += rest;
+  });
+  return out;
 }
 
 // 지난주 주간 요약(월요일) — 지난주 월~일 vs 그 전주

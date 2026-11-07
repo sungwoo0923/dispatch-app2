@@ -39,6 +39,7 @@ import { LogisTag } from "../brand"; // 🔷 2026-11-04 LogisWeb 로고
 // ⭐ 2026-11-05 출근 안내·새 오더 승인/거절·삭제 오더 안내 팝업, 빨간 숫자 배지, 알림 켜기 안내, 긴급 연락처(차량 담당자)
 import DriverUpdateBanner from "./DriverUpdateBanner"; // ⭐ 2026-11-05 웹·APK 업데이트 안내
 import { CheckinPrompt, shouldPromptCheckin, WorkStartSetting, NewOrderPopup, DeletedOrdersPopup, PushSetupCard, RedBadge, useEmergencyContact, KP_RED } from "./DriverPopups";
+import CustomDatePicker from "../CustomDatePicker"; // 📅 2026-11-07 날짜는 프로그램 달력으로
 
 // ⭐ 오더 타임라인 — 기사 행동(수락/거절/수정확인/상차지도착/상차완료/운송완료 등)을
 // 오더 문서의 기사타임라인 배열에 "덮어쓰지 않고" 계속 쌓는다(관리자 지입차관리 타임라인).
@@ -3276,16 +3277,14 @@ export default function DriverHome() {
           <div style={{ background: "white", borderRadius: 16, padding: "16px", boxShadow: "0 1px 6px rgba(0,0,0,0.06)", border: "1px solid #E3E8F0", marginBottom: 12 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 12, paddingLeft: 4 }}><span style={{ width: 6, height: 6, background: "#2D4C82", transform: "rotate(45deg)" }} /><span style={{ fontSize: 9.5, fontWeight: 800, color: "#9AA9C3", letterSpacing: "0.22em", fontFamily: DRV_MONO }}>PERIOD</span><span style={{ fontSize: 13.5, fontWeight: 900, color: "#0F1A30" }}>날짜 조회</span></div>
             <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-              <input
-                type="date"
+              <CustomDatePicker showIcon
                 value={logFrom}
                 max={todayStr}
                 onChange={e => setLogFrom(e.target.value)}
                 style={{ flex: 1, minWidth: 120, padding: "9px 10px", border: "1px solid #E3E8F0", borderRadius: 10, fontSize: 14, color: "#1B2B4B", background: "#F5F8FD", outline: "none" }}
               />
               <span style={{ fontSize: 13, color: "#9AA9C3", flexShrink: 0 }}>~</span>
-              <input
-                type="date"
+              <CustomDatePicker showIcon
                 value={logTo}
                 max={todayStr}
                 onChange={e => setLogTo(e.target.value)}

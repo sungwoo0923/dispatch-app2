@@ -11,6 +11,7 @@ import {
 } from "firebase/firestore";
 import { EditableText } from "./EditMode";
 import { fmtBizNo, fmtPhone } from "./formatInput";
+import CustomDatePicker from "./CustomDatePicker"; // 📅 2026-11-07 날짜는 프로그램 달력으로
 
 // 전화번호 하이픈 자동 포맷 (DispatchApp.jsx formatPhone과 동일 규칙)
 // 전화번호 하이픈 — 공용 규칙(src/formatInput.js: 02·031·010·1588 등, 입력 중에도 적용)
@@ -1099,7 +1100,7 @@ export default function CompanyApplications() {
                       )}
                     </div>
                     <div className="flex items-center gap-2">
-                      <input type="date" value={viewLimitDraft} onChange={(e) => setViewLimitDraft(e.target.value)}
+                      <CustomDatePicker showIcon value={viewLimitDraft} onChange={(e) => setViewLimitDraft(e.target.value)}
                         className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-[13px]" />
                       <button onClick={() => saveViewLimitUnlock(viewLimitDraft)} disabled={processing || !viewLimitDraft}
                         className="px-3 py-2 rounded-lg bg-[#1B2B4B] text-white text-[12px] font-semibold hover:bg-[#243a60] transition disabled:opacity-50 whitespace-nowrap">

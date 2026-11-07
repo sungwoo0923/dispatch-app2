@@ -1,4 +1,5 @@
 // ======================= src/mobile/MobileApp.jsx (PART 1/3) =======================
+import { MonthPicker } from "../kpInputs"; // 📅 2026-11-07 월 선택은 프로그램 달력으로
 import { subscribeUsersLive } from "../usersLive"; // ⭐ 2026-11-02 속도 — 직원 명부 구독 공유
 import { runDelete, deleteOrdersWithLogAtomic } from "../DeleteProgress"; // ⭐ 2026-11-05 삭제 진행 창 + 한 번에 삭제
 import { RichHtml } from "../richText"; // ⭐ 2026-11-03 공지 꾸민 글 보여주기
@@ -7342,8 +7343,8 @@ function MobileSalesPage({ data = [], fixedData = [], onBack, cardVersionB = fal
             <div className="text-white/40 text-[11px]">{monthLabel} 실적</div>
           </div>
           <div className="ml-auto">
-            <input autoComplete="off" type="month" value={month} onChange={e=>setMonth(e.target.value)}
-              className="bg-white/10 text-white text-[12px] border border-white/20 rounded-lg px-2 py-1 outline-none" />
+            <MonthPicker dark quick={false} value={month} onChange={v=>setMonth(v)}
+              triggerClassName="h-9 px-2.5 bg-white/10 text-white text-[14px] font-bold border border-white/20 rounded-lg tabular-nums" />
           </div>
         </div>
         {/* 헤더 내 핵심 지표 요약 */}

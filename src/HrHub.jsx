@@ -142,8 +142,8 @@ const Field = ({ label, hint, children, wide = false }) => (
     {hint && <span className="block text-[12px] leading-snug text-[#7A879C] mt-1.5">{hint}</span>}
   </label>
 );
-const Section = ({ no, en, title, right, children }) => (
-  <section className="rounded-2xl bg-white border border-[#E6EBF2] p-5">
+const Section = ({ no, en, title, right, children, className = "" }) => (
+  <section className={`rounded-2xl bg-white border border-[#E6EBF2] p-5 min-w-0 ${className}`}>
     <div className="flex items-center gap-3 mb-4">
       <span className="text-[11px] font-extrabold text-[#2D4C82] tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{no}</span>
       <div className="min-w-0">
@@ -319,7 +319,7 @@ export function StaffInfoBoard({ company, canManage }) {
       )}
 
       {/* ⭐ 2026-11-01 왼쪽 직원 목록 / 오른쪽 선택한 직원 정보 */}
-      <div className="grid grid-cols-1 lg:grid-cols-[minmax(360px,440px)_minmax(0,1fr)] gap-5 items-start">
+      <div className="grid grid-cols-1 lg:grid-cols-[minmax(320px,380px)_minmax(0,1fr)] 2xl:grid-cols-[minmax(360px,420px)_minmax(0,1fr)] gap-5 items-start">
         {/* ── 디렉터리 ── */}
         <div className="lg:sticky lg:top-0 min-w-0 rounded-[22px] bg-white border border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_12px_28px_rgba(16,24,40,0.06)] overflow-hidden flex flex-col lg:max-h-[calc(100vh-250px)]">
           <div className="px-5 pt-4 pb-3 border-b border-[#EEF1F6] shrink-0">
@@ -396,13 +396,13 @@ export function StaffInfoBoard({ company, canManage }) {
               </div>
             </div>
             <div className="px-6 pt-4 shrink-0">
-              <div className="grid grid-cols-2 gap-1 p-1 rounded-xl bg-white border border-[#E3E8F0]">
-                {[["info", "정보 수정", "EDIT"], ["resign", "퇴사 · 권고사직", "RESIGN"]].map(([k, l, en]) => <button key={k} type="button" onClick={() => setMode(k)} disabled={sel.isMaster && k === "resign"} className={`h-11 rounded-lg text-[14.5px] font-black transition flex items-center justify-center gap-2 disabled:opacity-30 ${mode === k ? (k === "resign" ? "bg-[#B42318] text-white shadow-[0_6px_14px_rgba(180,35,24,0.25)]" : "bg-[#0F1A30] text-white shadow-[0_6px_14px_rgba(15,26,48,0.25)]") : "text-[#5B6B85] hover:text-[#0F1A30]"}`}><span className={`text-[9.5px] tracking-[0.2em] ${mode === k ? "text-white/55" : "text-[#A3AFC2]"}`} style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{en}</span>{l}</button>)}
+              <div className="grid grid-cols-2 gap-1 p-1 rounded-xl bg-white border border-[#E3E8F0] w-full sm:w-[400px]">
+                {[["info", "정보 수정", "EDIT"], ["resign", "퇴사 · 권고사직", "RESIGN"]].map(([k, l, en]) => <button key={k} type="button" onClick={() => setMode(k)} disabled={sel.isMaster && k === "resign"} className={`h-10 rounded-lg text-[14px] font-black transition flex items-center justify-center gap-2 disabled:opacity-30 ${mode === k ? (k === "resign" ? "bg-[#B42318] text-white shadow-[0_6px_14px_rgba(180,35,24,0.25)]" : "bg-[#0F1A30] text-white shadow-[0_6px_14px_rgba(15,26,48,0.25)]") : "text-[#5B6B85] hover:text-[#0F1A30]"}`}><span className={`text-[9.5px] tracking-[0.2em] ${mode === k ? "text-white/55" : "text-[#A3AFC2]"}`} style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{en}</span>{l}</button>)}
               </div>
             </div>
             <fieldset disabled={!canManage} className="px-6 py-4 space-y-3.5 min-w-0">
             {mode === "info" ? (
-              <>
+              <div className="grid grid-cols-1 2xl:grid-cols-2 gap-3.5 items-stretch">
                 <Section no="01" en="Basic" title="기본 정보">
                   <div className="grid grid-cols-2 gap-4">
                     <Field label="이름"><input value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} className={fi} /></Field>
@@ -433,7 +433,7 @@ export function StaffInfoBoard({ company, canManage }) {
                     </Field>
                   </div>
                 </Section>
-                <Section no="05" en="Status" title="재직 상태">
+                <Section no="05" en="Status" title="재직 상태" className="2xl:col-span-2">
                   <div className="flex flex-wrap items-center gap-2">
                     {STATUS_OPTIONS.map((k) => <button key={k} type="button" onClick={() => setF({ ...f, employmentStatus: k })} className={`h-10 px-4 rounded-xl text-[14px] font-black border transition ${f.employmentStatus === k ? "bg-[#0F1A30] text-white border-[#0F1A30] shadow-[0_4px_12px_rgba(15,26,48,0.2)]" : "bg-white text-[#3A4A66] border-[#DCE3EE] hover:border-[#2D4C82]"}`}>{k}</button>)}
                     <span className="w-px h-7 bg-[#E3E8F0] mx-1" />
@@ -454,8 +454,8 @@ export function StaffInfoBoard({ company, canManage }) {
                     </div>
                   )}
                 </Section>
-                <div className="px-1 text-[12.5px] text-[#7A879C]">변경 내역은 인사 이력에 남습니다. 공문(인사발령)을 남기려면 인사관리 › 인사발령을 쓰세요.</div>
-              </>
+                <div className="px-1 text-[13px] text-[#7A879C] 2xl:col-span-2">변경 내역은 인사 이력에 남아요. 공문(인사발령)이 필요하면 인사관리 › 인사발령을 쓰세요.</div>
+              </div>
             ) : (
               <>
                 <Section no="01" en="Type" title="퇴사 구분">
@@ -476,9 +476,9 @@ export function StaffInfoBoard({ company, canManage }) {
               </>
             )}
             </fieldset>
-            {canManage && <div className="sticky bottom-0 z-[2] shrink-0 px-6 py-4 bg-white/95 backdrop-blur border-t border-[#E3E8F0] rounded-b-[21px] flex gap-2 shadow-[0_-8px_20px_rgba(15,26,48,0.06)]">{mode === "info"
-              ? <><button type="button" onClick={() => setSel(null)} className="h-12 px-5 rounded-xl border border-[#DCE3EE] bg-white text-[14.5px] font-bold text-[#3A4A66] hover:bg-[#F5F7FB]">취소</button><button type="button" disabled={busy} onClick={saveInfo} className="flex-1 h-12 rounded-xl bg-[#0F1A30] hover:bg-[#1B2B4B] text-white text-[15px] font-black disabled:opacity-50 shadow-[0_8px_18px_rgba(15,26,48,0.22)]">{busy ? "저장 중…" : "바로 저장 (공문 없음)"}</button></>
-              : <><button type="button" onClick={() => setSel(null)} className="h-12 px-5 rounded-xl border border-[#DCE3EE] bg-white text-[14.5px] font-bold text-[#3A4A66] hover:bg-[#F5F7FB]">취소</button>{r.date > kstDay() && <button type="button" disabled={busy} onClick={() => applyResign(false)} className="h-12 px-4 rounded-xl border border-[#0F1A30] bg-white text-[14.5px] font-black text-[#0F1A30]">예정 등록</button>}<button type="button" disabled={busy} onClick={() => applyResign(true)} className="flex-1 h-12 rounded-xl bg-[#B42318] hover:bg-[#9A1C13] text-white text-[15px] font-black disabled:opacity-50 shadow-[0_8px_18px_rgba(180,35,24,0.25)]">지금 퇴사 확정</button></>}</div>}
+            {canManage && <div className="sticky bottom-0 z-[2] shrink-0 px-6 py-4 bg-white/95 backdrop-blur border-t border-[#E3E8F0] rounded-b-[21px] flex justify-end gap-2 shadow-[0_-8px_20px_rgba(15,26,48,0.06)]">{mode === "info"
+              ? <><button type="button" onClick={() => setSel(null)} className="h-11 px-5 rounded-xl border border-[#DCE3EE] bg-white text-[14.5px] font-bold text-[#3A4A66] hover:bg-[#F5F7FB]">취소</button><button type="button" disabled={busy} onClick={saveInfo} className="h-11 px-6 min-w-[180px] rounded-xl bg-[#0F1A30] hover:bg-[#1B2B4B] text-white text-[14.5px] font-black disabled:opacity-50 shadow-[0_8px_18px_rgba(15,26,48,0.22)]">{busy ? "저장 중…" : "바로 저장 (공문 없음)"}</button></>
+              : <><button type="button" onClick={() => setSel(null)} className="h-11 px-5 rounded-xl border border-[#DCE3EE] bg-white text-[14.5px] font-bold text-[#3A4A66] hover:bg-[#F5F7FB]">취소</button>{r.date > kstDay() && <button type="button" disabled={busy} onClick={() => applyResign(false)} className="h-11 px-4 rounded-xl border border-[#0F1A30] bg-white text-[14.5px] font-black text-[#0F1A30]">예정 등록</button>}<button type="button" disabled={busy} onClick={() => applyResign(true)} className="h-11 px-6 min-w-[160px] rounded-xl bg-[#B42318] hover:bg-[#9A1C13] text-white text-[15px] font-black disabled:opacity-50 shadow-[0_8px_18px_rgba(180,35,24,0.25)]">지금 퇴사 확정</button></>}</div>}
           </div>
         ) : (
           <div className="rounded-[22px] border border-[#E3E8F0] bg-white py-24 px-8 text-center shadow-[0_1px_2px_rgba(16,24,40,0.04)]" style={{ backgroundImage: "radial-gradient(#E3E8F0 1px, transparent 1px)", backgroundSize: "18px 18px" }}>

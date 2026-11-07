@@ -35,6 +35,7 @@ import ContractStudio from "./ContractStudio";
 import BoardPage, { BOARDS, canSeeBoard, useBoardLatest } from "./BoardPosts";
 import { NoticeWriter, HandoverWriter, NOTICE_WRITER_ROLES, handoverReceivers, useNoticePolicy, canWriteNoticeFor, NoticePolicyPicker } from "./HomeWriters";
 import { CustomSelect } from "./CustomSelect";
+import CustomDatePicker from "./CustomDatePicker"; // 📅 2026-11-07 날짜는 프로그램 달력으로
 
 /* ===== 공통 Modal ===== */
 function Modal({ title, onClose, children }) {
@@ -1234,8 +1235,8 @@ export default function HomeDashboard({ role, user, userCompany = "", pending, d
               <option>휴가</option><option>외근</option><option>오전반차</option><option>오후반차</option><option>병가</option><option>경조사</option><option>조퇴</option>
             </CustomSelect>
             <div className="flex gap-2">
-              <input type="date" className={formInput} value={scheduleForm.start} onChange={e => setScheduleForm({ ...scheduleForm, start: e.target.value })} />
-              <input type="date" className={formInput} value={scheduleForm.end} onChange={e => setScheduleForm({ ...scheduleForm, end: e.target.value })} />
+              <CustomDatePicker showIcon className={formInput} value={scheduleForm.start} onChange={e => setScheduleForm({ ...scheduleForm, start: e.target.value })} />
+              <CustomDatePicker showIcon className={formInput} value={scheduleForm.end} onChange={e => setScheduleForm({ ...scheduleForm, end: e.target.value })} />
             </div>
             <textarea placeholder="메모 (선택)" rows={3} className={formInput} value={scheduleForm.memo} onChange={e => setScheduleForm({ ...scheduleForm, memo: e.target.value })} />
             <div className="space-y-2">
@@ -1467,7 +1468,7 @@ export default function HomeDashboard({ role, user, userCompany = "", pending, d
                 <option value="">받는 사람 선택</option>
                 {users.filter(u => u.role !== "totalMaster").map(u => <option key={u.id} value={u.name}>{u.name}</option>)}
               </CustomSelect>
-              <input type="date" className={formInput} value={handoverForm.date} onChange={e => setHandoverForm({ ...handoverForm, date: e.target.value })} />
+              <CustomDatePicker showIcon className={formInput} value={handoverForm.date} onChange={e => setHandoverForm({ ...handoverForm, date: e.target.value })} />
               <textarea rows={4} className={formInput} value={handoverForm.text} onChange={e => setHandoverForm({ ...handoverForm, text: e.target.value })} />
               <div className="flex gap-2">
                 <button className="flex-1 py-2 rounded-lg bg-gray-100 text-gray-600 text-[13px] font-semibold" onClick={() => setHandoverEditMode(false)}><EditableText id="home.handover.취소" defaultText="취소" /></button>

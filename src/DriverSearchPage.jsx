@@ -2,6 +2,7 @@
 // 공개 통합 업로드 링크 — 로그인 불필요, 날짜+차량번호+이름으로 오더 검색
 // 사용: /driver-upload
 
+import CustomDatePicker from "./CustomDatePicker";
 import React, { useState, useEffect } from "react";
 import { db, FUNCTIONS_BASE } from "./firebase";
 import { collection, query, where, getDocs } from "firebase/firestore";
@@ -39,6 +40,11 @@ function InputField({ label, type = "text", value, onChange, placeholder, onKeyD
       <label style={{ fontSize: 11, fontWeight: 600, color: "#94a3b8", display: "block", marginBottom: 6, letterSpacing: "0.3px" }}>
         {label}
       </label>
+      {type === "date" ? (
+        // 📅 2026-11-07 날짜는 프로그램 달력으로(값 YYYY-MM-DD 그대로)
+        <CustomDatePicker showIcon value={value} onChange={onChange} placeholder={placeholder || "날짜 선택"}
+          style={{ width: "100%", padding: "11px 14px", borderRadius: 10, border: "1.5px solid #e2e8f0", fontSize: 14, fontWeight: 500, boxSizing: "border-box", outline: "none", background: "#f8fafc", color: "#1e293b", display: "flex", alignItems: "center", justifyContent: "space-between" }} />
+      ) : (
       <input
         type={type}
         value={value}
@@ -61,6 +67,7 @@ function InputField({ label, type = "text", value, onChange, placeholder, onKeyD
         onFocus={e => { e.target.style.borderColor = "#1B2B4B"; e.target.style.background = "white"; }}
         onBlur={e => { e.target.style.borderColor = "#e2e8f0"; e.target.style.background = "#f8fafc"; }}
       />
+      )}
     </div>
   );
 }

@@ -8,6 +8,7 @@ import { compressImage } from "../InternalMail";
 import { DRIVER_REQUIRED_DOCS, useDriverDocs, docState, TONE, docProblems } from "../driverRequiredDocs";
 import { ImageViewer, MONO } from "../driverDocs";
 import { kpAlert } from "../kpDialog";
+import CustomDatePicker from "../CustomDatePicker"; // 📅 2026-11-07 날짜는 프로그램 달력으로
 
 // ⭐ 2026-11-05 사장님 요청 — 기사앱 서류함에서 운전면허증 만료일 고르기는 뺀다(사진만 올리면 된다).
 //  (관리자 서류 확인 화면의 만료일 입력은 그대로 — 필요하면 회사에서 넣는다)
@@ -98,7 +99,7 @@ export default function DriverSubmitDocs({ uid, companyName = "" }) {
             {askExpiry(def) && (
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8, paddingTop: 8, borderTop: "1px dashed #E3E8F0" }}>
                 <span style={{ fontSize: 12, fontWeight: 800, color: "#3A4A66", whiteSpace: "nowrap" }}>만료일</span>
-                <input type="date" value={expiry[def.key] ?? d?.만료일 ?? ""} onChange={(e) => setExpiry((p) => ({ ...p, [def.key]: e.target.value }))}
+                <CustomDatePicker showIcon value={expiry[def.key] ?? d?.만료일 ?? ""} onChange={(e) => setExpiry((p) => ({ ...p, [def.key]: e.target.value }))}
                   style={{ flex: 1, minWidth: 0, height: 36, padding: "0 10px", border: "1px solid #DCE3EE", borderRadius: 10, fontSize: 13.5, fontWeight: 700, color: "#0F1A30", background: "#fff" }} />
               </div>
             )}

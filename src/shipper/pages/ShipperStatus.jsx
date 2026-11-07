@@ -1,3 +1,4 @@
+import CustomDatePicker from "../../CustomDatePicker"; // 📅 2026-11-07 날짜는 프로그램 달력으로
 import { loadTmap } from "../../tmapLoader";
 import { imeFocusRef } from "../../imeFocus";
 import { useEffect, useMemo, useState, useRef, useCallback } from "react";
@@ -959,9 +960,9 @@ export default function ShipperStatus() {
 
             {/* 검색 영역 */}
             <div className="flex gap-2 items-center flex-wrap">
-              <input type="date" value={startDate} min={minAllowedDate} onChange={(e) => handleStartDateChange(e.target.value)} className="border border-[#D5DEEC] rounded-[11px] px-3 h-10 text-sm font-semibold text-[#0F1A30]" style={{ fontFamily: "var(--kp-mono, inherit)" }} />
+              <CustomDatePicker showIcon value={startDate} min={minAllowedDate} onChange={(e) => handleStartDateChange(e.target.value)} className="border border-[#D5DEEC] rounded-[11px] px-3 h-10 text-sm font-semibold text-[#0F1A30]" style={{ fontFamily: "var(--kp-mono, inherit)" }} />
               <span>~</span>
-              <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="border border-[#D5DEEC] rounded-[11px] px-3 h-10 text-sm font-semibold text-[#0F1A30]" style={{ fontFamily: "var(--kp-mono, inherit)" }} />
+              <CustomDatePicker showIcon value={endDate} onChange={(e) => setEndDate(e.target.value)} className="border border-[#D5DEEC] rounded-[11px] px-3 h-10 text-sm font-semibold text-[#0F1A30]" style={{ fontFamily: "var(--kp-mono, inherit)" }} />
               {viewLimitActive && (
                 <span className="text-[11px] text-gray-400">※ 최근 6개월까지 조회 가능</span>
               )}
