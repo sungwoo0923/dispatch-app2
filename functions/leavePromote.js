@@ -43,7 +43,10 @@ function promoteStageDue(period, today, rec = {}, remain = 0) {
   const s = promoteSchedule(period);
   if (!s || remain <= 0 || today > period.to) return null;
   if (!rec?.n1?.sentAt && today >= s.first && today < s.second) return "first";
-  if (!rec?.n2?.sentAt && today >= s.second && !(rec?.plan?.submittedAt && (rec.plan.dates || []).length)) return "second";
+  // ⭐ 2026-11-07 규칙 점검 — 61조: 2차(회사가 사용 시기 지정)는 "종료 2개월(월차 1개월) 전까지" 해야 한다.
+  //   예전엔 그 기한 당일부터 2차가 떠서 지정할 시간이 없었다 → 1차 계획 제출 기한(10일)이 지나면 바로 2차 대상(기한일까지)
+  const planned = !!(rec?.plan?.submittedAt && (rec.plan.dates || []).length);
+  if (!rec?.n2?.sentAt && !planned && (today >= s.second || (rec?.n1?.sentAt && rec?.n1?.due && today > rec.n1.due))) return "second";
   if (!rec?.n1?.sentAt && today >= s.second) return "second";
   return null;
 }

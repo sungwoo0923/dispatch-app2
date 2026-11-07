@@ -372,7 +372,7 @@ const TOOLS = {
     async run(ctx, a) {
       need(ctx, "receivables", "미수금 조회");
       const yr = ctx.today.slice(0, 4);
-      const rows = (await loadOrders(ctx, `${yr}-01-01`, ctx.today)).filter((r) => !isCancelled(r) && String(r.차량번호 || "").trim());
+      const rows = (await loadOrders(ctx, `${yr}-01-01`, ctx.today)).filter((r) => !isCancelled(r) && String(r.배차상태 || "").trim() === "배차완료"); // ⭐ 2026-11-07 회계관리와 같은 기준(차량번호만 있는 승인대기 오더는 빼고 배차완료만)
       const pay = await ctx.db.collection("acctPayments").doc(`${ctx.co}__${yr}`).get().catch(() => null);
       const paid = pay?.exists ? pay.data()?.ar || {} : {};
       const m = {}; rows.forEach((r) => { const c = r.거래처명 || r.상차지명 || "미분류"; const e = m[c] || (m[c] = { inv: 0, oldest: "" }); e.inv += won(r.청구운임); if (!e.oldest || r.상차일 < e.oldest) e.oldest = r.상차일; });

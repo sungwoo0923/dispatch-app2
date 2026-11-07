@@ -2,7 +2,7 @@
 // ⭐ 2026-11-06 연차 사용 촉진(근로기준법 제61조) — 인사 화면(촉진 대상 · 1차/2차 발송 · 사용 계획 · 날짜 지정 · 발송 기록) + 직원 본인 [사용 계획 제출]
 //  · 회기: 입사일 기준 또는 회계연도 기준(payrollSettings/{회사}.leave = { basis: "hire"|"fiscal", fiscalStart: "MM-DD", autoSend, email })
 //  · 1차: 회기 종료 6개월 전(1년 미만 월차는 3개월 전) — 직원은 10일 안에 사용 계획 제출
-//  · 2차: 회기 종료 2개월 전(월차 1개월 전) — 계획을 안 낸 직원에게 회사가 사용 시기를 지정해 서면 통보
+//  · 2차: 1차 계획 제출 기한(10일)이 지나면 ~ 회기 종료 2개월 전(월차 1개월 전)까지 — 계획을 안 낸 직원에게 회사가 사용 시기를 지정해 서면 통보
 //  · 매일 아침 서버(functions leavePromotionDaily)가 자동 발송, 이 화면에서 직접 발송·재발송·날짜 지정도 가능
 //  · 모든 발송·제출은 leavePromotions/{회사}_{uid}_{회기 시작일}.log 에 시각과 함께 쌓이고(지울 수 없음 — 보안 규칙), 서면 통보서 인쇄 가능
 //  ⭐ 2026-11-06 화면 다듬기 — 노란 표시 제거(네이비 팔레트) · 글자 14px 이상
@@ -141,7 +141,7 @@ export default function LeavePromotionBoard({ company, canManage = false }) {
     due: withP.filter((r) => r.inWindow).length,
     n1: withP.filter((r) => r.rec?.n1?.sentAt).length,
     plan: withP.filter((r) => r.rec?.plan?.submittedAt).length,
-    need2: withP.filter((r) => r.inWindow && today >= r.sched.second && !(r.rec?.plan?.submittedAt) && !(r.rec?.designated?.dates || []).length).length,
+    need2: withP.filter((r) => r.inWindow && (today >= r.sched.second || (r.rec?.n1?.due && today > r.rec.n1.due)) && !(r.rec?.plan?.submittedAt) && !(r.rec?.designated?.dates || []).length).length,
   };
   const myDoc = (users || []).find((u) => u.id === auth.currentUser?.uid);
   const byName = personName(myDoc) || auth.currentUser?.email || "인사관리부";
@@ -151,7 +151,7 @@ export default function LeavePromotionBoard({ company, canManage = false }) {
   };
   return (
     <div className="space-y-3" data-testid="leave-promo">
-      <BookHero en="HR · LEAVE PROMOTION" title="연차 사용 촉진" desc="근로기준법 제61조 — 1차(종료 6개월 전 · 10일 내 계획 제출) · 2차(종료 2개월 전 · 회사가 사용 시기 지정) · 발송 일시가 모두 기록됩니다"
+      <BookHero en="HR · LEAVE PROMOTION" title="연차 사용 촉진" desc="근로기준법 제61조 — 1차(종료 6개월 전 · 10일 내 계획 제출) · 2차(계획 기한 지나면 · 종료 2개월 전까지 회사가 사용 시기 지정) · 발송 일시가 모두 기록됩니다"
         kpis={[["촉진 대상", `${kpi.due}명`, "1차 시기 진입 · 잔여 있음"], ["1차 발송", `${kpi.n1}명`], ["계획 제출", `${kpi.plan}명`], ["2차 지정 필요", `${kpi.need2}명`, "계획 미제출"]]} />
       {cfg && (
         <BookCard en="SETTINGS" title="회기 기준 · 자동 발송" right={canManage && <button type="button" disabled={busy} onClick={saveCfg} className="h-9 px-3.5 rounded-lg bg-[#0F1A30] text-white text-[14px] font-black disabled:opacity-50" data-testid="leave-cfg-save">저장</button>}>
@@ -163,7 +163,7 @@ export default function LeavePromotionBoard({ company, canManage = false }) {
             <Chip on={cfg.autoSend} onClick={() => canManage && setCfg((c) => ({ ...c, autoSend: !c.autoSend }))}>{cfg.autoSend ? "✓ " : ""}매일 아침 자동 발송</Chip>
             <Chip on={cfg.email} onClick={() => canManage && setCfg((c) => ({ ...c, email: !c.email }))}>{cfg.email ? "✓ " : ""}이메일도 보내기</Chip>
           </div>
-          <div className="mt-2 text-[14px] text-[#5B6B85] leading-relaxed">입사 1년 미만(월차)은 종료 3개월 전 1차 · 1개월 전 2차. 자동 발송을 끄면 대상자를 인사 담당자에게만 알립니다. 자동 이메일은 회사 PC 프로그램이 켜져 있을 때 예약 메일로 나갑니다.</div>
+          <div className="mt-2 text-[14px] text-[#5B6B85] leading-relaxed">입사 1년 미만(월차)은 종료 3개월 전 1차 · 1개월 전까지 2차. 자동 발송을 끄면 대상자를 인사 담당자에게만 알립니다. 자동 이메일은 회사 PC 프로그램이 켜져 있을 때 예약 메일로 나갑니다.</div>
         </BookCard>
       )}
       <div className="flex gap-1.5 flex-wrap">{[["due", `촉진 대상 ${kpi.due}`], ["soon", "30일 안 시작"], ["plan", "계획 제출"], ["all", "전체"]].map(([k, l]) => <Chip key={k} on={filter === k} onClick={() => setFilter(k)}>{l}</Chip>)}</div>
@@ -184,7 +184,7 @@ export default function LeavePromotionBoard({ company, canManage = false }) {
                 {n1?.due && <div className={`text-[14px] font-bold ${overdue ? "text-[#B42318]" : "text-[#5B6B85]"}`} style={NUMS}>계획 기한 {n1.due}{overdue ? " · 지남" : ""}</div>}
               </div>
               <div className="min-w-[170px]">
-                <div className="text-[14px] font-black text-[#3A4A66]">계획 · 2차 <span className="font-bold text-[#7A879C]" style={NUMS}>{r.sched.second}</span></div>
+                <div className="text-[14px] font-black text-[#3A4A66]">계획 · 2차 기한 <span className="font-bold text-[#7A879C]" style={NUMS}>{r.sched.second}</span></div>
                 {plan?.submittedAt ? <div className="text-[14px] font-bold text-[#067647]" style={NUMS}>계획 제출 {fmtAt(plan.submittedAt)} · {(plan.dates || []).length}일</div> : null}
                 {n2?.sentAt ? <div className="text-[14px] font-bold text-[#1B2B4B]" style={NUMS}>2차 {fmtAt(n2.sentAt)}{n2.auto ? " · 자동" : ""}</div> : null}
                 {(des?.dates || []).length ? <div className="text-[14px] font-bold text-[#1B2B4B]" style={NUMS}>지정일 {des.dates.join(", ")}</div> : (n2?.sentAt && !plan?.submittedAt ? <div className="text-[14px] font-black text-[#2D4C82]">ⓘ 지정일 미정 — 날짜 지정 필요</div> : null)}

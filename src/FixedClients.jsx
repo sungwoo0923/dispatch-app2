@@ -142,7 +142,7 @@ function calcRow(row) {
 }
 
 const thisMonthStart = () => { const now = new Date(); return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`; };
-const thisMonthEnd = () => { const now = new Date(); return new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().slice(0, 10); };
+const thisMonthEnd = () => { const k = new Date(Date.now() + 9 * 3600e3); return new Date(Date.UTC(k.getUTCFullYear(), k.getUTCMonth() + 1, 0)).toISOString().slice(0, 10); }; // ⭐ 2026-11-07 예전엔 지역 자정 → UTC로 말일 하루 전(30일)이 됐다
 
 function DriverSearchInput({ value, onChange, onSelect, drivers, placeholder = "차량번호 또는 이름 검색", className = "" }) {
   const [open, setOpen] = useState(false);

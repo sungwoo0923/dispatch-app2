@@ -23,7 +23,7 @@ const tsMs = (v) => (v?.toMillis ? v.toMillis() : v?.seconds ? v.seconds * 1000 
 const inp = "h-11 w-full px-3 rounded-xl border border-[#DCE3EE] bg-white text-[14px] font-semibold text-[#0F1A30] outline-none focus:border-[#2D4C82]";
 const nm = (u) => personName(u) || u?.email || "이름 없음";
 const dayGap = (a, b) => Math.round((new Date(`${b}T00:00:00`) - new Date(`${a}T00:00:00`)) / 864e5);
-const addDays = (d, n) => { const x = new Date(`${d}T00:00:00`); x.setDate(x.getDate() + n); return x.toISOString().slice(0, 10); };
+const addDays = (d, n) => { const x = new Date(`${d}T00:00:00Z`); x.setUTCDate(x.getUTCDate() + n); return x.toISOString().slice(0, 10); }; // ⭐ 2026-11-07 UTC로 통일(예전엔 한국 PC에서 하루 일찍 — 퇴직금 기한 14일이 13일로)
 const next15 = (d) => { if (!d) return ""; const x = new Date(`${d}T00:00:00`); x.setMonth(x.getMonth() + 1, 15); return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, "0")}-15`; };
 
 // 회사 직원 + 인사 정보(userProfiles) 함께

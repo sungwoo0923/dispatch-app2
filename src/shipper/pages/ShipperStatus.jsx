@@ -144,8 +144,8 @@ function ShipperViaBadge({ count, label, onOpen }) {
 
 const fmtDate = (ts) => {
   if (!ts) return "-";
-  if (ts?.toDate) return ts.toDate().toISOString().slice(0, 10);
-  if (ts instanceof Date) return ts.toISOString().slice(0, 10);
+  if (ts?.toDate) return new Date(ts.toDate().getTime() + 9 * 3600e3).toISOString().slice(0, 10); // ⭐ 2026-11-07 한국 날짜
+  if (ts instanceof Date) return new Date(ts.getTime() + 9 * 3600e3).toISOString().slice(0, 10);
   return String(ts).slice(0, 10);
 };
 
@@ -626,8 +626,8 @@ export default function ShipperStatus() {
 
   const toYMD = (d) => {
     if (!d) return "";
-    if (d?.toDate) return d.toDate().toISOString().slice(0, 10);
-    if (d instanceof Date) return d.toISOString().slice(0, 10);
+    if (d?.toDate) return new Date(d.toDate().getTime() + 9 * 3600e3).toISOString().slice(0, 10); // ⭐ 2026-11-07 한국 날짜
+    if (d instanceof Date) return new Date(d.getTime() + 9 * 3600e3).toISOString().slice(0, 10);
     return String(d).slice(0, 10);
   };
 

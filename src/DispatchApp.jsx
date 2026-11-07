@@ -92,6 +92,7 @@ const RateCard = lazyView(() => import("./RateCard"));
 import AiAssistant from "./AiAssistant";
 import InternalMessenger from "./InternalMessenger";
 import { calcLeaveBalance } from "./leaveUtils";
+import { agingOf } from "./arAging"; // ⭐ 2026-11-07 미수 연령 공용 계산
 import { TEAM_OPTIONS, POSITION_OPTIONS, TEAM_BADGE_CLASS, TEAM_BADGE_CLASS_UNASSIGNED } from "./hrConstants";
 const AttendanceBoard = lazyView(() => import("./AttendanceBoard"));
 import { todayStr as attendanceTodayStr, isWeekend, findApprovedLeaveForDate, isHoliday, isScheduleApproved, LEAVE_TYPE_LABEL, ATTENDANCE_STATUS_COLOR, approvalLeaveOn, hrLeaveOn } from "./attendanceUtils";
@@ -45832,7 +45833,11 @@ function ProfitLossReport({ dispatchData = [], fixedRows = [], clients = [], pla
       }
 
       // ── 매출원가(기사운임) 분류 ──
-      if (bm === "인성") {
+      // ⭐ 2026-11-07 규칙 점검 — 선불·착불은 화주가 기사에게 운임을 직접 주고 회사 매출은 수수료(청구−기사)만 잡는다.
+      //   예전엔 매출은 수수료만 넣고 기사운임은 운반비(원가)에 그대로 더해 매출총이익이 기사운임만큼 줄어 보였다.
+      if (!isExcludedFast(client) && (pay === "선불" || pay === "착불")) {
+        // 원가 없음(매출 쪽에 이미 순수수료로 반영)
+      } else if (bm === "인성") {
         addRow("cost_auto", month, 0, cost);
       } else if (isExcludedFast(client)) {
         addRow("cost_fresh", month, 0, cost);
@@ -46403,15 +46408,18 @@ function AccountingDashboard({ dispatchData = [], fixedRows = [], clients = [], 
     const map = {};
     yearOrders.forEach(r => {
       const c = r.거래처명 || r.상차지명 || "미분류";
-      if (!map[c]) map[c] = { invoiced: 0, oldest: null };
+      if (!map[c]) map[c] = { invoiced: 0, list: [] };
       map[c].invoiced += toInt(r.청구운임);
       const d = r.상차일;
-      if (d && (!map[c].oldest || d < map[c].oldest)) map[c].oldest = d;
+      if (d) map[c].list.push({ d: String(d).slice(0, 10), amt: toInt(r.청구운임) });
     });
+    const todayK = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
     return Object.entries(map).map(([c, v]) => {
       const paid = arPayments[c] || 0;
       const outstanding = Math.max(0, v.invoiced - paid);
-      const ageDays = v.oldest ? Math.floor((Date.now() - new Date(v.oldest)) / 86400000) : 0;
+      // ⭐ 2026-11-07 규칙 점검 — 연체 구분 = 아직 못 받은 청구 중 가장 오래된 것의 경과일(오래된 청구부터 수금된 것으로 봄 ·
+      //   일일 경영 보고·회계 개요와 같은 방식). 예전엔 올해 첫 오더 날짜라 1월분을 다 받은 거래처도 "90일+"로 보였다.
+      const ageDays = agingOf(v.list, paid, todayK).oldest;
       return { client: c, invoiced: v.invoiced, paid, outstanding, ageDays };
     }).sort((a, b) => b.outstanding - a.outstanding);
   }, [yearOrders, arPayments]);
@@ -48281,14 +48289,15 @@ function Settlement({ dispatchData, fixedRows = [], clients = [], places = [], i
     aggressive: Math.round(baseYearSale * (1 + growth2026.aggressive)),
   };
 
-  const todayDate = new Date();
   const todayKey2 = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10); // 한국 날짜
   const prevMonthSameDay = (() => {
-    const y = todayDate.getFullYear();
-    const mo = todayDate.getMonth();
-    const dd = todayDate.getDate();
-    const lastDay = new Date(y, mo, 0).getDate();
-    return new Date(y, mo - 1, Math.min(dd, lastDay)).toISOString().slice(0, 10);
+    // ⭐ 2026-11-07 한국 날짜 문자열로 계산(예전엔 지역 자정 → toISOString(UTC)이라 하루 앞 날짜와 비교됐다)
+    const y = Number(todayKey2.slice(0, 4));
+    const mo = Number(todayKey2.slice(5, 7)); // 1~12
+    const dd = Number(todayKey2.slice(8, 10));
+    const p = new Date(Date.UTC(y, mo - 2, 1));
+    const lastDay = new Date(Date.UTC(y, mo - 1, 0)).getUTCDate();
+    return `${p.toISOString().slice(0, 7)}-${String(Math.min(dd, lastDay)).padStart(2, "0")}`;
   })();
 
   const groupByClientDay = (list) => {
@@ -48364,6 +48373,8 @@ function Settlement({ dispatchData, fixedRows = [], clients = [], places = [], i
         <div>
           <div style={{ fontFamily: "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif", fontVariantNumeric: "tabular-nums" }} className="text-[11px] font-extrabold tracking-[0.24em] text-[#4B6CB7]">REVENUE · {RV_PAGES[rvPage].en}</div>
           <h1 className="text-[22px] font-black text-[#0F1A30] tracking-tight mt-0.5">{RV_PAGES[rvPage].label}</h1>
+          {/* ⭐ 2026-11-07 규칙 점검 — 경영 브리핑·일일 경영 보고(취소 제외 전체 오더)와 기준이 달라 숫자가 다를 수 있음을 적어 둔다 */}
+          <div className="text-[12.5px] font-bold text-[#7A879C] mt-0.5" data-kp="rv-basis">배차완료 오더 + 고정거래처 기준(배차중·승인대기·취소 제외) · 경영 브리핑·일일 경영 보고는 취소만 뺀 전체 오더 기준</div>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           {rvPage === "yearly" ? (
@@ -48375,8 +48386,9 @@ function Settlement({ dispatchData, fixedRows = [], clients = [], places = [], i
           ) : (
             <CustomSelect className="h-9 bg-white border border-[#DCE3EF] text-[#1B2B4B] rounded-[10px] px-3 text-[14px] font-bold focus:outline-none" value={targetMonth} onChange={(e) => setTargetMonth(e.target.value)}>
               {Array.from({ length: 12 }, (_, i) => {
-                const dd = new Date();
-                dd.setMonth(dd.getMonth() - i);
+                // ⭐ 2026-11-07 한국 날짜 기준 · 매달 1일로 계산(예전엔 31일에 setMonth가 넘쳐 같은 달이 두 번 나오거나 빠졌고, 1일 새벽엔 지난달이 맨 위였다)
+                const k = new Date(Date.now() + 9 * 3600e3);
+                const dd = new Date(Date.UTC(k.getUTCFullYear(), k.getUTCMonth() - i, 1));
                 return <option key={i}>{dd.toISOString().slice(0, 7)}</option>;
               })}
             </CustomSelect>
@@ -51466,11 +51478,12 @@ const patchMonthOnDoc = async (id, yyyymm, status, dateStr) => {
     setEnd(`${ym}-${lastDay}`);
   };
   const setLastMonth = () => {
-    const d = new Date();
-    d.setMonth(d.getMonth() - 1);
+    // ⭐ 2026-11-07 한국 날짜 · 1일 기준(예전엔 3월 31일에 setMonth가 넘쳐 "지난달"이 3월로 잡혔다)
+    const k = new Date(Date.now() + 9 * 3600e3);
+    const d = new Date(Date.UTC(k.getUTCFullYear(), k.getUTCMonth() - 1, 1));
     const ym = d.toISOString().slice(0, 7);
     setStart(`${ym}-01`);
-    const lastDay = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+    const lastDay = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0)).getUTCDate();
     setEnd(`${ym}-${lastDay}`);
   };
   const setThisYear = () => {
@@ -55975,9 +55988,9 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
 
   const todayStr9 = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
   const thisMonthStr = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 7);
-  const lastMonthStr = () => {
-    const d = new Date(); d.setMonth(d.getMonth() - 1);
-    return d.toISOString().slice(0, 7);
+  const lastMonthStr = () => { // ⭐ 2026-11-07 한국 날짜 · 1일 기준(31일 넘침 방지)
+    const k = new Date(Date.now() + 9 * 3600e3);
+    return new Date(Date.UTC(k.getUTCFullYear(), k.getUTCMonth() - 1, 1)).toISOString().slice(0, 7);
   };
   const toInt = (v) => { const n = parseInt(String(v ?? "0").replace(/[^\d-]/g, ""), 10); return isNaN(n) ? 0 : n; };
   const won = (n) => toInt(n).toLocaleString();

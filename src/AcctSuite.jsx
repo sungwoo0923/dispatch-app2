@@ -4,6 +4,7 @@
 //  · 퇴직 정산(경리 전용): 퇴직금(평균임금×30×재직일/365) · 미사용 연차수당 · 4대보험 상실 · 이직확인서(실업급여) ·
 //    퇴직소득 원천징수 · 원천징수영수증 · 퇴직연금 — 법정 기한(D-day)과 처리 상태를 사람별로
 import { loadAcctPayments } from "./acctPayments";
+import { agingOf } from "./arAging"; // ⭐ 2026-11-07 미수 연령 공용 계산
 import { upsertAutoEntry } from "./ledgerAuto";
 import React from "react";
 import { collection, doc, getDoc, getDocs, onSnapshot, query, setDoc, where, serverTimestamp } from "firebase/firestore";
@@ -73,13 +74,15 @@ export function AccountingOverview({ company, orders }) {
   orders.forEach((r) => {
     const m = String(r.상차일 || "").slice(5, 7); const s = toInt(r.청구운임); const b = toInt(r.기사운임);
     if (mon[m]) { mon[m].sale += s; mon[m].buy += b; }
-    const c = r.거래처명 || r.상차지명 || "미분류"; ar[c] = ar[c] || { inv: 0, oldest: r.상차일 }; ar[c].inv += s; if (r.상차일 < ar[c].oldest) ar[c].oldest = r.상차일;
+    const c = r.거래처명 || r.상차지명 || "미분류"; ar[c] = ar[c] || { inv: 0, list: [] }; ar[c].inv += s; if (r.상차일) ar[c].list.push({ d: String(r.상차일).slice(0, 10), amt: s });
     const d = r.이름 || "미지정"; ap[d] = (ap[d] || 0) + b;
     if ((r.지급상태 || "") === "지급완료") settled[d] = (settled[d] || 0) + b; // ⭐ 2026-11-02 점검 — [지급완료] 처리분을 지급액으로 반영
   });
   const sale = Object.values(mon).reduce((a, x) => a + x.sale, 0);
   const buy = Object.values(mon).reduce((a, x) => a + x.buy, 0);
-  const arList = Object.entries(ar).map(([c, v]) => ({ c, out: Math.max(0, v.inv - toInt(pay.ar[c])), age: dayGap(v.oldest || today, today) })).filter((x) => x.out > 0).sort((a, b) => b.out - a.out);
+  // ⭐ 2026-11-07 규칙 점검 — 미수 연령은 "오래된 청구부터 수금된 것으로 보고 남은 청구의 경과일"(일일 경영 보고·경영 분석과 같은 방식).
+  //   예전엔 미수 전액을 그 거래처의 올해 첫 오더 날짜로 나눠, 1월분을 다 받은 거래처의 이번 달 미수도 "90일 초과"로 보였다.
+  const arList = Object.entries(ar).map(([c, v]) => { const ag = agingOf(v.list, toInt(pay.ar[c]), today); return { c, out: Math.max(0, v.inv - toInt(pay.ar[c])), age: ag.oldest, ag }; }).filter((x) => x.out > 0).sort((a, b) => b.out - a.out);
   const arSum = arList.reduce((a, x) => a + x.out, 0);
   // ⭐ 2026-11-02 점검 — 미지급 = 운임 − max(지급등록액, [지급완료] 합계) : 회계관리 미지급 탭과 숫자 일치
   const apSum = Object.entries(ap).reduce((a, [d, v]) => a + Math.max(0, v - Math.max(toInt(pay.ap[d]), settled[d] || 0)), 0);
@@ -87,7 +90,7 @@ export function AccountingOverview({ company, orders }) {
   const curM = today.slice(5, 7);
   const chart = months.filter((m) => m <= curM).map((m) => ({ k: `${Number(m)}월`, sale: mon[m].sale, buy: mon[m].buy, margin: mon[m].sale ? ((mon[m].sale - mon[m].buy) / mon[m].sale) * 100 : 0 }));
   const aging = [["30일 이내", 0], ["31~60일", 0], ["61~90일", 0], ["90일 초과", 0]];
-  arList.forEach((x) => { aging[x.age <= 30 ? 0 : x.age <= 60 ? 1 : x.age <= 90 ? 2 : 3][1] += x.out; });
+  arList.forEach((x) => { aging[0][1] += x.ag.b30; aging[1][1] += x.ag.b60; aging[2][1] += x.ag.b90; aging[3][1] += x.ag.over; });
   const quarters = [[1, 2, 3], [4, 5, 6], [7, 8, 9], [10, 11, 12]].map((ms, i) => { const s = ms.reduce((a, m) => a + mon[String(m).padStart(2, "0")].sale, 0); const b = ms.reduce((a, m) => a + mon[String(m).padStart(2, "0")].buy, 0); return { k: `${i + 1}분기`, sale: s * 0.1, buy: b * 0.1 }; });
   const acc = {}; ledger.filter((r) => r.type === "지출" && String(r.date || "").startsWith(String(y))).forEach((r) => { acc[r.account || "기타"] = (acc[r.account || "기타"] || 0) + toInt(r.amount); });
   const accList = Object.entries(acc).sort((a, b) => b[1] - a[1]); const accTop = accList.slice(0, 6); const accRest = accList.slice(6).reduce((a, [, v]) => a + v, 0); if (accRest) accTop.push(["기타", accRest]);

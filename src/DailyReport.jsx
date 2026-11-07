@@ -711,7 +711,7 @@ export default function DailyReport({ company, dispatchData = [], drivers: drive
 
   const footer = (
     <div style={{ ...inner, paddingTop: 10, paddingBottom: compact ? 36 : 52, display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 8, fontSize: 14, color: C.t2 }}>
-      <span>데이터 기준 {dotDate(today)} {kstHm()} · 배차·정산·인사 데이터 자동 집계{bizSel ? ` · 청구 사업자 ${bizSel}` : ""}</span><span>LogisWeb 자동 생성 보고서</span>
+      <span>데이터 기준 {dotDate(today)} {kstHm()} · 배차·정산·인사 데이터 자동 집계 · 매출 = 취소 제외 전체 오더(배차중 포함 · 매출관리는 배차완료만){bizSel ? ` · 청구 사업자 ${bizSel}` : ""}</span><span>LogisWeb 자동 생성 보고서</span>
     </div>
   );
 

@@ -3,9 +3,9 @@ import { db, auth } from "../../firebase";
 import { collection, query, where, getDocs } from "firebase/firestore";
 import CustomDatePicker from "../../CustomDatePicker"; // 📅 2026-11-07 날짜는 프로그램 달력으로
 
-const getDate = (offset = 0) => {
-  const d = new Date();
-  d.setDate(d.getDate() + offset);
+const getDate = (offset = 0) => { // ⭐ 2026-11-07 한국 날짜(예전엔 UTC라 오전 9시 전에 열면 어제 날짜가 기본값)
+  const d = new Date(Date.now() + 9 * 3600e3);
+  d.setUTCDate(d.getUTCDate() + offset);
   return d.toISOString().slice(0, 10);
 };
 

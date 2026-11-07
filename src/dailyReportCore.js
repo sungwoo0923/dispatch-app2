@@ -75,8 +75,10 @@ export function reportBasis(today, prefs) {
   };
 }
 
-// ── 오더 판정(매출관리와 같은 기준) ──
+// ── 오더 판정(경영 브리핑과 같은 기준) ──
 // (ExecSuite.isCancelled · HomeDeck.dateOf와 같은 판정)
+// ⚠️ 매출관리(DispatchApp Settlement)는 배차완료(isDone) 오더 + 고정거래처만 매출로 센다 — 여기 매출은 취소만 뺀 전체 오더라
+//    두 화면 숫자가 다를 수 있다(화면마다 기준 문구를 적어 둠). 미수금(회계관리·이 보고서)은 둘 다 배차완료 기준.
 export const isCancelledOrder = (r) => r?.배차상태 === "배차취소" || ["취소", "배차취소", "오더취소", "취소됨"].includes(r?.상태);
 export const dateOf = (r) => String(r?.상차일자 || r?.상차일 || r?.상차 || "").slice(0, 10);
 export const saleOf = (r) => toWon(r?.청구운임);
@@ -224,18 +226,8 @@ export function clientMoves(byClientDay, curDays, prevDays, n = 4) {
     down: all.filter((x) => x.diff < 0).sort((p, q) => p.diff - q.diff).slice(0, n),
   };
 }
-// 미수금 나이(오래된 청구부터 수금된 것으로 보고 남은 청구를 경과일로 나눈다)
-//  invoices: [{ d, amt }] · paid: 수금 합계 · 결과 { b30, b60, b90, over, oldest }
-export function agingOf(invoices, paid, today) {
-  let left = Math.max(0, paid || 0);
-  const out = { b30: 0, b60: 0, b90: 0, over: 0, oldest: 0 };
-  [...invoices].sort((x, y) => x.d.localeCompare(y.d)).forEach(({ d, amt }) => {
-    const use = Math.min(left, amt); left -= use; const rest = amt - use; if (rest <= 0) return;
-    const age = dayDiff(d, today); out.oldest = Math.max(out.oldest, age);
-    if (age <= 30) out.b30 += rest; else if (age <= 60) out.b60 += rest; else if (age <= 90) out.b90 += rest; else out.over += rest;
-  });
-  return out;
-}
+// 미수금 나이(오래된 청구부터 수금된 것으로 보고 남은 청구를 경과일로 나눈다) — src/arAging.js 공용(회계관리와 같은 계산)
+export { agingOf } from "./arAging";
 
 // 지난주 주간 요약(월요일) — 지난주 월~일 vs 그 전주
 export function weeklySummary(rows, today) {

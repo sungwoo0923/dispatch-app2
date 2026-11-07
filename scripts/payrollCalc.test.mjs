@@ -104,6 +104,12 @@ t("연차 회기(입사일 기준·회계연도 기준·1년 미만) + 촉진 �
   assert.equal(promoteStageDue(p, "2027-01-15", { n1: { sentAt: 1 } }, 10), "second");
   assert.equal(promoteStageDue(p, "2027-01-15", { n1: { sentAt: 1 }, plan: { submittedAt: 1, dates: ["2027-02-01"] } }, 10), null);
   assert.equal(promoteStageDue(p, "2026-11-06", {}, 0), null); // 잔여 없음
+  // ⭐ 2026-11-07 — 1차 계획 제출 기한(10일)이 지나면 바로 2차 대상(종료 2개월 전 "까지" 지정해야 하므로 기한 당일까지 기다리지 않는다)
+  const n1 = { sentAt: 1, due: "2026-09-25" };
+  assert.equal(promoteStageDue(p, "2026-09-25", { n1 }, 10), null); // 기한 당일은 아직 직원 몫
+  assert.equal(promoteStageDue(p, "2026-09-26", { n1 }, 10), "second");
+  assert.equal(promoteStageDue(p, "2026-09-26", { n1, plan: { submittedAt: 1, dates: ["2026-12-01"] } }, 10), null);
+  assert.equal(promoteStageDue(p, "2026-10-01", { n1, n2: { sentAt: 2 } }, 10), null); // 2차 보낸 뒤
   const f = leavePeriodOf("2024-03-15", "2026-11-06", { basis: "fiscal", fiscalStart: "01-01" });
   assert.deepEqual([f.from, f.to, f.total], ["2026-01-01", "2026-12-31", 15]);
   assert.deepEqual(Object.values(promoteSchedule(f)).slice(0, 2), ["2026-07-01", "2026-11-01"]);
@@ -129,7 +135,7 @@ t("서버(functions/leavePromote.js)와 화면 계산이 같은 결과", () => {
     const a = leavePeriodOf(h, d, o); const b = LP.leavePeriodOf(h, d, o);
     assert.deepEqual(a, b, `${h} ${d} ${JSON.stringify(o)}`);
     assert.deepEqual(promoteSchedule(a), LP.promoteSchedule(b));
-    for (const rec of [{}, { n1: { sentAt: 1 } }]) assert.equal(promoteStageDue(a, d, rec, 5), LP.promoteStageDue(b, d, rec, 5));
+    for (const rec of [{}, { n1: { sentAt: 1 } }, { n1: { sentAt: 1, due: "2026-07-05" } }]) assert.equal(promoteStageDue(a, d, rec, 5), LP.promoteStageDue(b, d, rec, 5));
     k += 1;
   }
   assert.ok(k > 50);
