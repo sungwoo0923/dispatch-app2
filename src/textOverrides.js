@@ -5,7 +5,8 @@
 //  툴팁(title)을 "원래 문구 → 새 문구" 사전으로 바꿔 보여준다. 로직에서 쓰는 값은 그대로이고 보이는 글자만 바뀐다.
 //
 //  저장 위치(Firestore)
-//   textOverrides/global            프로그램 전체 { t: {원래:새}, a: {"placeholder::원래":새, "title::원래":새} }
+//   textOverrides/global            프로그램 전체 { t: {원래:새}, a: {"placeholder::원래":새, "title::원래":새}, s: {원래:{ff,fw,fs,c,bg,u,i,st}} }
+//                                   s(2026-11-07) = 글자 모양(글씨체 키·두께·크기px·글자색·배경색·밑줄·기울임·취소선). 값은 저장·적용 때 모두 화이트리스트 검사
 //   textOverrides/r~pc~~app 등      이 화면만(기기 + 주소별) — 같은 모양
 //   textOverridesPublic/(같은 id)   로그인 전 화면(로그인·기사 로그인 등)용 사본 — 누구나 읽기
 //  읽기: 로그인한 사용자 전체 · 쓰기: 최고관리자만(firestore.rules)
@@ -57,10 +58,56 @@ export function isEligibleText(s) {
   return digits <= 2 && letters >= 2 && digits / t.replace(/\s/g, "").length < 0.3;
 }
 
+// ───────────────────────── 글자 모양(스타일) ─────────────────────────
+// 글씨체는 키만 저장하고 CSS 글꼴 목록은 여기서만 만든다(CSS 주입 방지). 모두 기기 기본 글꼴로 대체되는 목록.
+export const FONTS = {
+  noto: { label: "Noto Sans KR", css: "'Noto Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif" },
+  nanum: { label: "나눔고딕", css: "'Nanum Gothic', NanumGothic, '나눔고딕', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif" },
+  gothica1: { label: "고딕 A1", css: "'Gothic A1', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif" },
+  malgun: { label: "맑은 고딕", css: "'Malgun Gothic', '맑은 고딕', 'Apple SD Gothic Neo', 'Noto Sans KR', sans-serif" },
+  gulim: { label: "굴림", css: "Gulim, '굴림', 'Apple SD Gothic Neo', 'Noto Sans KR', sans-serif" },
+  serif: { label: "바탕(명조)", css: "Batang, '바탕', AppleMyungjo, 'Noto Serif KR', serif" },
+  mono: { label: "고정폭", css: "'JetBrains Mono', ui-monospace, Menlo, Consolas, monospace" },
+};
+export const WEIGHTS = [400, 500, 700, 900];
+export const SIZE_MIN = 8; export const SIZE_MAX = 48;
+const HEX = /^#[0-9a-fA-F]{6}$/;
+const STYLE_KEYS = ["ff", "fw", "fs", "c", "bg", "u", "i", "st"];
+
+// 허용된 값만 남긴다(나머지는 버림) — 비면 null
+export function cleanStyle(x) {
+  if (!x || typeof x !== "object" || Array.isArray(x)) return null;
+  const o = {};
+  if (typeof x.ff === "string" && Object.prototype.hasOwnProperty.call(FONTS, x.ff)) o.ff = x.ff;
+  const fw = Number(x.fw); if (WEIGHTS.includes(fw)) o.fw = fw;
+  const fs = Number(x.fs); if (Number.isInteger(fs) && fs >= SIZE_MIN && fs <= SIZE_MAX) o.fs = fs;
+  if (typeof x.c === "string" && HEX.test(x.c)) o.c = x.c.toUpperCase();
+  if (typeof x.bg === "string" && HEX.test(x.bg)) o.bg = x.bg.toUpperCase();
+  for (const k of ["u", "i", "st"]) if (x[k] === true) o[k] = true;
+  return Object.keys(o).length ? o : null;
+}
+export const sameStyle = (a, b) => JSON.stringify(cleanStyle(a)) === JSON.stringify(cleanStyle(b));
+// 검사한 값으로만 CSS 속성 목록을 만든다
+export function cssFor(st0) {
+  const st = cleanStyle(st0);
+  if (!st) return null;
+  const css = {};
+  if (st.ff) css["font-family"] = FONTS[st.ff].css;
+  if (st.fw) css["font-weight"] = String(st.fw);
+  if (st.fs) css["font-size"] = st.fs + "px";
+  if (st.c) css.color = st.c;
+  if (st.bg) css["background-color"] = st.bg;
+  if (st.i) css["font-style"] = "italic";
+  if (st.u || st.st) css["text-decoration-line"] = [st.u && "underline", st.st && "line-through"].filter(Boolean).join(" ");
+  return css;
+}
+
 // ───────────────────────── 사전 상태 ─────────────────────────
 let docs = {}; // { docId: { t: {}, a: {} } }
 let textMap = new Map(); // 지금 화면에 적용 중(전체 + 이 화면)
 let attrMap = new Map(); // "placeholder::원래" → 새
+let styleMap = new Map(); // 원래 → 글자 모양
+const preview = { t: new Map(), s: new Map() }; // 편집 창에서 고르는 중인 값(저장 전 미리 보기)
 let activeRoute = "";
 const listeners = new Set();
 export function subscribe(fn) { listeners.add(fn); return () => listeners.delete(fn); }
@@ -68,21 +115,40 @@ const emit = () => { listeners.forEach((fn) => { try { fn(); } catch { /* 무시
 export const getDocsSnapshot = () => docs;
 
 function cleanDoc(d) {
-  const out = { t: {}, a: {} };
-  if (d && typeof d.t === "object") for (const [k, v] of Object.entries(d.t)) if (typeof v === "string" && v.trim() && k.trim()) out.t[k] = v;
-  if (d && typeof d.a === "object") for (const [k, v] of Object.entries(d.a)) if (typeof v === "string" && k.includes("::")) out.a[k] = v;
+  const out = { t: {}, a: {}, s: {} };
+  if (d && d.t && typeof d.t === "object") for (const [k, v] of Object.entries(d.t)) if (typeof v === "string" && v.trim() && k.trim()) out.t[k] = v;
+  if (d && d.a && typeof d.a === "object") for (const [k, v] of Object.entries(d.a)) if (typeof v === "string" && k.includes("::")) out.a[k] = v;
+  if (d && d.s && typeof d.s === "object") for (const [k, v] of Object.entries(d.s)) { const c = k.trim() ? cleanStyle(v) : null; if (c) out.s[k] = c; }
   return out;
 }
+const EMPTY = { t: {}, a: {}, s: {} };
 
 function rebuildMaps(force = false) {
   const rk = currentRouteKey();
   if (!force && rk === activeRoute) return false;
   activeRoute = rk;
-  const g = docs.global || { t: {}, a: {} };
-  const r = docs[routeDocId(rk)] || { t: {}, a: {} };
-  textMap = new Map([...Object.entries(g.t), ...Object.entries(r.t)]);
-  attrMap = new Map([...Object.entries(g.a), ...Object.entries(r.a)]);
+  const g = docs.global || EMPTY;
+  const r = docs[routeDocId(rk)] || EMPTY;
+  textMap = new Map([...Object.entries(g.t || {}), ...Object.entries(r.t || {})]);
+  attrMap = new Map([...Object.entries(g.a || {}), ...Object.entries(r.a || {})]);
+  styleMap = new Map([...Object.entries(g.s || {}), ...Object.entries(r.s || {})]);
+  for (const [k, v] of preview.t) { if (v === null) textMap.delete(k); else textMap.set(k, v); }
+  for (const [k, v] of preview.s) { if (v === null) styleMap.delete(k); else styleMap.set(k, v); }
   return true;
+}
+
+// 편집 창 미리 보기 — orig 글자에 고르는 중인 문구·모양을 바로 보여준다(저장 안 함). clearPreview로 끝낸다
+export function setPreview(orig, { text, style } = {}) {
+  const o = String(orig || "").trim();
+  if (!o) return;
+  if (text !== undefined) preview.t.set(o, text && text.trim() ? text : null);
+  if (style !== undefined) preview.s.set(o, cleanStyle(style));
+  rebuildMaps(true); reapplyAll();
+}
+export function clearPreview() {
+  if (!preview.t.size && !preview.s.size) return;
+  preview.t.clear(); preview.s.clear();
+  rebuildMaps(true); reapplyAll();
 }
 
 // 이 글자에 바꿀 문구가 있으면 그 문구(없으면 그대로) — alert·confirm 같은 곳에서도 쓴다
@@ -119,16 +185,123 @@ function applyText(node) {
     if (base === node[APPLIED]) base = node[ORIG]; // 우리가 바꿔둔 그대로 — 원래 글자 기준으로 다시 판단
     else { node[APPLIED] = undefined; node[ORIG] = undefined; tracked.delete(node); } // React가 새 글자로 바꿈
   }
-  if (!base || base.length > MAX_LEN + 40) return;
+  if (!base || base.length > MAX_LEN + 40) { if (node[SREC]) unstyle(node); return; }
   const t = base.trim();
   const v = t ? textMap.get(t) : undefined;
   if (v === undefined) {
     if (node[APPLIED] !== undefined) { node[APPLIED] = undefined; node.nodeValue = node[ORIG]; node[ORIG] = undefined; tracked.delete(node); }
-    return;
+  } else {
+    const next = base.replace(t, v);
+    node[ORIG] = base; node[APPLIED] = next; tracked.add(node);
+    if (node.nodeValue !== next) { node.nodeValue = next; stats.replaced++; }
   }
-  const next = base.replace(t, v);
-  node[ORIG] = base; node[APPLIED] = next; tracked.add(node);
-  if (node.nodeValue !== next) { node.nodeValue = next; stats.replaced++; }
+  const st = t && styleMap.size ? styleMap.get(t) : undefined;
+  if (st) styleNode(node, st); else if (node[SREC]) unstyle(node);
+}
+
+// ── 글자 모양 적용 ──
+//  ① 글자의 부모 요소에 그 글자 하나만 있으면(공백 제외) 부모에 인라인 스타일(원래 값은 기억해 두었다가 되돌림)
+//  ② 다른 글자·아이콘과 섞여 있으면 <span data-kp-txs>로 감싸 그 span에만 — React가 이 글자 노드를
+//     지우거나 옮길 때 깨지지 않도록 removeChild·insertBefore·appendChild를 감싼 span 기준으로 바꿔준다(installDomGuard)
+const SREC = "__kpTxStyle"; // 텍스트 노드: { mode, el, sig }
+const SORIG = "__kpTxSOrig"; // 요소: { 속성: [원래 값, 원래 우선순위, 넣은 값] }
+const styled = new Set(); // 모양을 넣어둔 텍스트 노드
+const isWrap = (el) => !!el && el.nodeType === 1 && el.hasAttribute("data-kp-txs");
+
+function soleText(p, node) {
+  for (const c of p.childNodes) {
+    if (c === node || c.nodeType === 8) continue; // 자신 · 주석
+    if (c.nodeType === 3 && !c.nodeValue.trim()) continue;
+    return false;
+  }
+  return true;
+}
+function setCss(el, css) {
+  const o = el[SORIG] || (el[SORIG] = {});
+  for (const [k, v] of Object.entries(css)) {
+    if (!o[k]) o[k] = [el.style.getPropertyValue(k), el.style.getPropertyPriority(k), v];
+    else o[k][2] = v;
+    el.style.setProperty(k, v, "important");
+  }
+}
+function unsetCss(el) {
+  const o = el[SORIG];
+  if (!o) return;
+  el[SORIG] = undefined;
+  for (const [k, [ov, op]] of Object.entries(o)) {
+    if (el.style.getPropertyPriority(k) !== "important") continue; // React가 그새 새 값을 넣었으면 그 값을 둔다
+    if (ov) el.style.setProperty(k, ov, op); else el.style.removeProperty(k);
+  }
+  if (el.getAttribute("style") === "") el.removeAttribute("style");
+}
+function styleNode(node, st) {
+  const css = cssFor(st);
+  if (!css) { if (node[SREC]) unstyle(node); return; }
+  const sig = JSON.stringify(css);
+  const rec = node[SREC];
+  const p = node.parentNode;
+  if (rec && rec.sig === sig && rec.el === p && (rec.mode === "wrap" || soleText(p, node))) return; // 그대로
+  if (rec) unstyle(node);
+  const p2 = node.parentNode;
+  if (!p2 || p2.nodeType !== 1 || p2 === document.body || p2 === document.documentElement) return;
+  if (soleText(p2, node)) {
+    setCss(p2, css);
+    node[SREC] = { mode: "parent", el: p2, sig };
+  } else {
+    installDomGuard();
+    const w = document.createElement("span");
+    w.setAttribute("data-kp-txs", "");
+    p2.insertBefore(w, node);
+    w.appendChild(node);
+    setCss(w, css["background-color"] ? { ...css, "border-radius": "3px" } : css);
+    node[SREC] = { mode: "wrap", el: w, sig };
+  }
+  styled.add(node);
+}
+function unstyle(node) {
+  const rec = node[SREC];
+  node[SREC] = undefined; styled.delete(node);
+  if (!rec) return;
+  if (rec.mode === "parent") { unsetCss(rec.el); return; }
+  const w = rec.el;
+  const p = w.parentNode;
+  if (p && node.parentNode === w) p.insertBefore(node, w); // 원래 자리로
+  if (p && !w.firstChild) p.removeChild(w);
+}
+
+// React는 글자 노드의 부모를 원래 요소로 기억한다 — 감싼 span 안에 있는 글자를 원래 부모 기준으로
+//  지우거나(removeChild), 그 앞에 끼우거나(insertBefore), 옮길 때(appendChild) span 기준으로 바꿔 처리한다.
+//  (구글 번역이 React 화면을 깨뜨리는 것과 같은 문제를 막는 흔한 방법) — 처음 감쌀 때 한 번만 설치
+let guardOn = false;
+function installDomGuard() {
+  if (guardOn || typeof Node === "undefined") return;
+  guardOn = true;
+  const P = Node.prototype;
+  const oRemove = P.removeChild; const oInsert = P.insertBefore; const oAppend = P.appendChild;
+  const wrapOf = (n) => (n && n[SREC]?.mode === "wrap" && n.parentNode === n[SREC].el ? n[SREC].el : null);
+  P.removeChild = function (child) {
+    if (child && child.parentNode !== this) {
+      const w = child.parentNode;
+      if (isWrap(w) && w.parentNode === this) {
+        oRemove.call(this, w); oRemove.call(w, child);
+        child[SREC] = undefined; styled.delete(child);
+        return child;
+      }
+    }
+    return oRemove.call(this, child);
+  };
+  P.insertBefore = function (newNode, ref) {
+    let r = ref;
+    if (r && r.parentNode !== this && isWrap(r.parentNode) && r.parentNode.parentNode === this) r = r.parentNode;
+    const w = wrapOf(newNode);
+    if (w && w !== r) { oInsert.call(this, w, r); return newNode; } // 감싼 글자를 옮기면 span째 옮긴다
+    return oInsert.call(this, newNode, r);
+  };
+  P.appendChild = function (child) {
+    const w = wrapOf(child);
+    if (w) { oAppend.call(this, w); return child; }
+    return oAppend.call(this, child);
+  };
 }
 
 function applyAttrs(el) {
@@ -156,7 +329,7 @@ function scan(root) {
   if (!root) return;
   if (root.nodeType === 3) { applyText(root); return; }
   if (root.nodeType !== 1 && root.nodeType !== 11) return;
-  const wantText = textMap.size > 0; const wantAttr = attrMap.size > 0;
+  const wantText = textMap.size > 0 || styleMap.size > 0; const wantAttr = attrMap.size > 0;
   if (root.nodeType === 1) {
     if (isSkipElement(root)) { if (wantAttr && root.tagName === "TEXTAREA") applyAttrs(root); return; }
     if (wantAttr) applyAttrs(root);
@@ -193,11 +366,11 @@ function onMutations(records) {
     if (r.type === "childList") {
       if (!r.addedNodes.length) continue;
       if (inSkipZone(r.target)) continue;
-      for (const n of r.addedNodes) scan(n);
+      for (const n of r.addedNodes) { if (isWrap(n)) continue; scan(n); } // 우리가 만든 span은 건너뜀
     } else if (r.type === "characterData") {
       const n = r.target;
       if (n[APPLIED] !== undefined && n.nodeValue === n[APPLIED]) continue; // 우리가 쓴 것
-      if (!textMap.size && n[APPLIED] === undefined) continue;
+      if (!textMap.size && !styleMap.size && n[APPLIED] === undefined && !n[SREC]) continue;
       if (inSkipZone(n)) continue;
       applyText(n);
     } else if (r.type === "attributes") {
@@ -222,6 +395,8 @@ function restoreAll() {
     }
   }
   tracked.clear();
+  for (const n of [...styled]) unstyle(n);
+  styled.clear();
 }
 
 // 사전이 바뀌었을 때 — 되돌린 뒤 화면 전체를 한 번 다시 본다(드문 일)
@@ -229,7 +404,7 @@ function reapplyAll() {
   if (typeof document === "undefined" || !document.body) return;
   observer?.takeRecords();
   restoreAll();
-  const any = textMap.size > 0 || attrMap.size > 0;
+  const any = textMap.size > 0 || attrMap.size > 0 || styleMap.size > 0;
   if (any) {
     if (!observer) observer = new MutationObserver(onMutations);
     observer.disconnect();
@@ -260,8 +435,15 @@ function setDocs(next, { cache = true } = {}) {
   emit();
 }
 
+// 예전(모양 없는) 캐시도 그대로 읽고, 읽을 때 한 번 더 검사한다(손댄 localStorage로 CSS가 들어가지 않게)
 function readCache(key) {
-  try { const j = JSON.parse(localStorage.getItem(key) || "null"); return j && typeof j.docs === "object" ? j.docs : null; } catch { return null; }
+  try {
+    const j = JSON.parse(localStorage.getItem(key) || "null");
+    if (!j || !j.docs || typeof j.docs !== "object") return null;
+    const out = {};
+    for (const [id, d] of Object.entries(j.docs)) if (/^(global|r~[^/]+)$/.test(id)) out[id] = cleanDoc(d);
+    return out;
+  } catch { return null; }
 }
 
 let loadedFor = null;
@@ -290,10 +472,29 @@ export async function saveOverride({ docId, kind, orig, value }) {
   const field = kind === "text" ? "t" : "a";
   const key = kind === "text" ? o : `${kind}::${o}`;
   const v = value == null ? null : String(value);
-  const next = { ...docs, [docId]: { t: { ...(docs[docId]?.t || {}) }, a: { ...(docs[docId]?.a || {}) } } };
+  const next = { ...docs, [docId]: { t: { ...(docs[docId]?.t || {}) }, a: { ...(docs[docId]?.a || {}) }, s: { ...(docs[docId]?.s || {}) } } };
   if (v === null || v.trim() === "") delete next[docId][field][key]; else next[docId][field][key] = v;
   if (isDemo()) { setDocs(next); return; }
   const payload = { [field]: { [key]: v === null || v.trim() === "" ? deleteField() : v }, updatedAt: serverTimestamp(), by: auth.currentUser?.email || "" };
+  await setDoc(doc(db, "textOverrides", docId), payload, { merge: true });
+  if (isPublicDoc(docId)) await setDoc(doc(db, "textOverridesPublic", docId), payload, { merge: true }).catch((e) => console.warn("[문구] 로그인 전 화면용 사본 저장 실패", e));
+  setDocs(next);
+}
+
+// 글자 모양 저장/지우기 — style이 비면(null·모두 기본값) 지움. 문서에는 검사한 값만 들어가고,
+//  merge 저장이라 빠진 속성은 deleteField로 지워 "통째로 바꾸기"가 되게 한다
+export async function saveStyle({ docId, orig, style }) {
+  const o = String(orig || "").trim();
+  if (!o || o.length > MAX_LEN || !isEligibleText(o)) throw new Error("이 글자에는 모양을 넣을 수 없어요");
+  if (!/^(global|r~[^/]+)$/.test(docId)) throw new Error("범위가 잘못됐어요");
+  const st = cleanStyle(style);
+  const next = { ...docs, [docId]: { t: { ...(docs[docId]?.t || {}) }, a: { ...(docs[docId]?.a || {}) }, s: { ...(docs[docId]?.s || {}) } } };
+  if (st) next[docId].s[o] = st; else delete next[docId].s[o];
+  if (isDemo()) { setDocs(next); return; }
+  let val;
+  if (!st) val = deleteField();
+  else { val = {}; for (const k of STYLE_KEYS) val[k] = st[k] !== undefined ? st[k] : deleteField(); }
+  const payload = { s: { [o]: val }, updatedAt: serverTimestamp(), by: auth.currentUser?.email || "" };
   await setDoc(doc(db, "textOverrides", docId), payload, { merge: true });
   if (isPublicDoc(docId)) await setDoc(doc(db, "textOverridesPublic", docId), payload, { merge: true }).catch((e) => console.warn("[문구] 로그인 전 화면용 사본 저장 실패", e));
   setDocs(next);
@@ -306,18 +507,18 @@ export async function importOverrides(data) {
   for (const [docId, d0] of Object.entries(data || {})) {
     if (!/^(global|r~[^/]+)$/.test(docId)) continue;
     const d = cleanDoc(d0);
-    next[docId] = { t: { ...(next[docId]?.t || {}), ...d.t }, a: { ...(next[docId]?.a || {}), ...d.a } };
-    if (Object.keys(d.t).length || Object.keys(d.a).length) writes.push([docId, d]);
+    next[docId] = { t: { ...(next[docId]?.t || {}), ...d.t }, a: { ...(next[docId]?.a || {}), ...d.a }, s: { ...(next[docId]?.s || {}), ...d.s } };
+    if (Object.keys(d.t).length || Object.keys(d.a).length || Object.keys(d.s).length) writes.push([docId, d]);
   }
   if (!isDemo()) {
     for (const [docId, d] of writes) {
-      const payload = { t: d.t, a: d.a, updatedAt: serverTimestamp(), by: auth.currentUser?.email || "" };
+      const payload = { t: d.t, a: d.a, ...(Object.keys(d.s).length ? { s: d.s } : {}), updatedAt: serverTimestamp(), by: auth.currentUser?.email || "" };
       await setDoc(doc(db, "textOverrides", docId), payload, { merge: true });
       if (isPublicDoc(docId)) await setDoc(doc(db, "textOverridesPublic", docId), payload, { merge: true }).catch(() => {});
     }
   }
   setDocs(next);
-  return writes.reduce((n, [, d]) => n + Object.keys(d.t).length + Object.keys(d.a).length, 0);
+  return writes.reduce((n, [, d]) => n + Object.keys(d.t).length + Object.keys(d.a).length + Object.keys(d.s).length, 0);
 }
 
 export function exportOverrides() { return JSON.parse(JSON.stringify(docs)); }
@@ -345,8 +546,11 @@ export function initTextOverrides() {
     window[m] = function (msg, ...rest) { return orig.call(this, typeof msg === "string" ? translate(msg) : msg, ...rest); };
   }
   // 바꿔둔 노드 중 화면에서 사라진 것 정리(메모리)
-  setInterval(() => { if (tracked.size > 300) for (const n of tracked) if (!n.isConnected) tracked.delete(n); }, 30000);
+  setInterval(() => {
+    if (tracked.size > 300) for (const n of tracked) if (!n.isConnected) tracked.delete(n);
+    if (styled.size > 300) for (const n of styled) if (!n.isConnected) { n[SREC] = undefined; styled.delete(n); }
+  }, 30000);
   // 로그인 상태가 정해지면 서버에서 한 번 받는다
   try { auth.onAuthStateChanged(() => { loadFromServer(); }); } catch { /* 무시 */ }
-  if (import.meta.env.DEV) window.__kpTx = { stats, translate, get docs() { return docs; }, reapplyAll, setDocs: (d) => setDocs(d, { cache: false }) }; // 🧪 개발 점검용
+  if (import.meta.env.DEV) window.__kpTx = { stats, translate, get styled() { return styled.size; }, get docs() { return docs; }, reapplyAll, setDocs: (d) => setDocs(d, { cache: false }) }; // 🧪 개발 점검용
 }

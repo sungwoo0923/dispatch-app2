@@ -5,12 +5,14 @@
 //  · 버튼 글자·제목·설명·입력칸 안내문구(placeholder)·툴팁(title)·알림 글자까지 모두 같은 사전으로 바뀐다.
 //  · 표 본문(오더·기사 목록 등 데이터)은 바꾸지 않는다.
 //  · "목록"에서 전체 검색·수정·삭제·직접 추가(토스트처럼 금방 사라지는 글자)·JSON 내보내기/가져오기.
+//  · 2026-11-07 글자 모양: 글씨체·두께·크기·글자색·배경색·굵게/기울임/밑줄/취소선 — 고르는 동안 화면에 바로 미리 보기.
 //  PC·모바일·기사앱·화주사 화면 모두 App.jsx 맨 위에서 이 컴포넌트 하나로 붙는다. 저장·적용 엔진은 ./textOverrides.js
 import React from "react";
 import { createPortal } from "react-dom";
 import {
   initTextOverrides, subscribe, getDocsSnapshot, saveOverride, importOverrides, exportOverrides,
   currentRouteKey, routeDocId, routeLabel, isEligibleText, originalTextOf, originalAttrOf, SKIP_SELECTOR, ATTRS,
+  saveStyle, cleanStyle, sameStyle, cssFor, setPreview, clearPreview, FONTS, WEIGHTS,
 } from "./textOverrides";
 
 initTextOverrides();
@@ -74,6 +76,20 @@ function itemsOf(el) {
   }
   return items;
 }
+
+// 이 글자의 저장된 모양(이 화면만 → 프로그램 전체 순)
+function lookupStyle(docs, orig) {
+  const rid = routeDocId(currentRouteKey());
+  if (docs[rid]?.s?.[orig]) return { scope: "route", style: docs[rid].s[orig] };
+  if (docs.global?.s?.[orig]) return { scope: "global", style: docs.global.s[orig] };
+  return null;
+}
+// 검사한 CSS → React style 객체(목록의 미리 보기용)
+const reactCss = (st) => Object.fromEntries(Object.entries(cssFor(st) || {}).map(([k, v]) => [k.replace(/-([a-z])/g, (_, c) => c.toUpperCase()), v]));
+
+const PALETTE = [["#0F1A30", "남색"], ["#2563EB", "파랑"], ["#DC2626", "빨강"], ["#16A34A", "초록"], ["#EA580C", "주황"], ["#6B7280", "회색"], ["#000000", "검정"], ["#FFFFFF", "흰색"]];
+const HILITE = [["#FFF3B0", "노랑"], ["#DBEAFE", "하늘"], ["#DCFCE7", "연두"], ["#FFE4E6", "분홍"], ["#FFEDD5", "살구"], ["#E5E7EB", "회색"]];
+const SIZES = Array.from({ length: 22 }, (_, i) => 11 + i);
 
 function lookup(docs, kind, orig) {
   const field = kind === "text" ? "t" : "a";
@@ -205,7 +221,13 @@ function EditorPopover({ editor, onClose, say, isPhone, onList }) {
   const docs = getDocsSnapshot();
   const [scope, setScope] = React.useState(() => editor.items.map((it) => lookup(docs, it.kind, it.orig)).find(Boolean)?.scope || "global");
   const [vals, setVals] = React.useState(() => editor.items.map((it) => lookup(docs, it.kind, it.orig)?.value ?? it.orig));
+  const [styles, setStyles] = React.useState(() => editor.items.map((it) => (it.kind === "text" ? { ...(lookupStyle(docs, it.orig)?.style || {}) } : null)));
   const [busy, setBusy] = React.useState(false);
+  // 고르는 중인 문구·모양을 화면에 바로 보여준다(닫으면 저장된 값으로 돌아감)
+  React.useEffect(() => {
+    editor.items.forEach((it, i) => { if (it.kind === "text") setPreview(it.orig, { text: vals[i] ?? "", style: styles[i] }); });
+  }, [editor.items, vals, styles]);
+  React.useEffect(() => () => clearPreview(), []);
   const firstRef = React.useRef(null);
   React.useEffect(() => { setTimeout(() => { firstRef.current?.focus(); firstRef.current?.select?.(); }, 0); }, []);
 
@@ -230,6 +252,18 @@ function EditorPopover({ editor, onClose, say, isPhone, onList }) {
         if (ex && ex.scope !== scope) await saveOverride({ docId: docIdFor(otherOf(scope)), kind: it.kind, orig: it.orig, value: null });
         n++;
       }
+      // 글자 모양 — 기본값이면 지우고, 범위를 바꿨으면 다른 범위 것은 지운다
+      for (let i = 0; i < editor.items.length; i++) {
+        const it = editor.items[i];
+        if (it.kind !== "text") continue;
+        const want = cleanStyle(styles[i]);
+        const ex = lookupStyle(getDocsSnapshot(), it.orig);
+        if (!want) { if (ex) { await saveStyle({ docId: docIdFor(ex.scope), orig: it.orig, style: null }); n++; } continue; }
+        if (ex && ex.scope === scope && sameStyle(ex.style, want)) continue;
+        await saveStyle({ docId: docIdFor(scope), orig: it.orig, style: want });
+        if (ex && ex.scope !== scope) await saveStyle({ docId: docIdFor(otherOf(scope)), orig: it.orig, style: null });
+        n++;
+      }
       say(n ? `저장했어요${scope === "global" ? " · 프로그램 전체" : " · 이 화면만"} — 다른 사용자는 다음 접속부터 보입니다` : "바뀐 내용이 없어요");
       onClose();
     } catch (e) { say("저장 실패: " + (e?.message || e)); } finally { setBusy(false); }
@@ -241,22 +275,23 @@ function EditorPopover({ editor, onClose, say, isPhone, onList }) {
         const d = getDocsSnapshot()[docIdFor(s)];
         const key = it.kind === "text" ? it.orig : `${it.kind}::${it.orig}`;
         if (d?.[it.kind === "text" ? "t" : "a"]?.[key] !== undefined) await saveOverride({ docId: docIdFor(s), kind: it.kind, orig: it.orig, value: null });
+        if (it.kind === "text" && d?.s?.[it.orig]) await saveStyle({ docId: docIdFor(s), orig: it.orig, style: null });
       }
-      say("원래 문구로 되돌렸어요"); onClose();
+      say("원래 문구와 모양으로 되돌렸어요"); onClose();
     } catch (e) { say("되돌리기 실패: " + (e?.message || e)); } finally { setBusy(false); }
   };
 
-  const W = 380;
+  const W = 400;
   const r = editor.rect;
   const style = isPhone
     ? { position: "fixed", left: 8, right: 8, bottom: 8 }
     : (() => {
       const left = Math.max(8, Math.min(r.left, window.innerWidth - W - 8));
-      const below = r.bottom + 8; const estH = 140 + editor.items.length * 110;
+      const below = r.bottom + 8; const estH = 150 + editor.items.reduce((h, it) => h + (it.kind === "text" ? 230 : 100), 0);
       const top = below + estH < window.innerHeight ? below : Math.max(8, r.top - estH - 8);
       return { position: "fixed", left, top, width: W };
     })();
-  const hasAny = editor.items.some((it) => lookup(docs, it.kind, it.orig));
+  const hasAny = editor.items.some((it) => lookup(docs, it.kind, it.orig) || (it.kind === "text" && lookupStyle(docs, it.orig)));
 
   return (
     <>
@@ -276,6 +311,7 @@ function EditorPopover({ editor, onClose, say, isPhone, onList }) {
               {it.orig.length > 40
                 ? <textarea ref={i === 0 ? firstRef : null} value={vals[i]} rows={3} onChange={(e) => setVals((p) => p.map((x, j) => (j === i ? e.target.value : x)))} className="w-full px-3 py-2 rounded-xl border border-[#DCE3EE] text-[13.5px] font-semibold text-[#0F1A30] outline-none focus:border-[#2D4C82]" />
                 : <input ref={i === 0 ? firstRef : null} value={vals[i]} onChange={(e) => setVals((p) => p.map((x, j) => (j === i ? e.target.value : x)))} className="w-full h-10 px-3 rounded-xl border border-[#DCE3EE] text-[13.5px] font-semibold text-[#0F1A30] outline-none focus:border-[#2D4C82]" />}
+              {it.kind === "text" && <StyleBar value={styles[i]} onChange={(st) => setStyles((p) => p.map((x, j) => (j === i ? st : x)))} />}
             </div>
           ))}
           <div className="flex gap-1.5">
@@ -294,11 +330,58 @@ function EditorPopover({ editor, onClose, say, isPhone, onList }) {
   );
 }
 
+// ───────────────────────── 글자 모양 도구 ─────────────────────────
+function StyleBar({ value, onChange }) {
+  const st = value || {};
+  const set = (k, v) => { const n = { ...st }; if (v === undefined || v === "" || v === false || v === null) delete n[k]; else n[k] = v; onChange(n); };
+  const sel = "h-8 px-1.5 rounded-lg border border-[#DCE3EE] bg-white text-[12px] font-bold text-[#1B2B4B] outline-none focus:border-[#2D4C82]";
+  const tog = (on) => `h-8 w-8 rounded-lg border text-[13px] ${on ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-[#3A4A66] border-[#DCE3EE]"}`;
+  const sw = (on) => `h-6 w-6 rounded-md border shrink-0 ${on ? "ring-2 ring-offset-1 ring-[#2D4C82] border-[#2D4C82]" : "border-[#CBD5E1]"}`;
+  const empty = !cleanStyle(st);
+  return (
+    <div className="mt-1.5 rounded-xl bg-[#F5F7FB] p-2 space-y-1.5" data-kp="text-style-bar">
+      <div className="flex gap-1.5">
+        <select aria-label="글씨체" value={st.ff || ""} onChange={(e) => set("ff", e.target.value)} className={`${sel} flex-1 min-w-0`}>
+          <option value="">글씨체 기본</option>
+          {Object.entries(FONTS).map(([k, f]) => <option key={k} value={k}>{f.label}</option>)}
+        </select>
+        <select aria-label="두께" value={st.fw || ""} onChange={(e) => set("fw", e.target.value ? Number(e.target.value) : "")} className={`${sel} w-[92px]`}>
+          <option value="">두께 기본</option>
+          {WEIGHTS.map((w) => <option key={w} value={w}>{{ 400: "보통", 500: "중간", 700: "굵게", 900: "아주 굵게" }[w]}</option>)}
+        </select>
+        <select aria-label="크기" value={st.fs || ""} onChange={(e) => set("fs", e.target.value ? Number(e.target.value) : "")} className={`${sel} w-[78px]`}>
+          <option value="">크기 기본</option>
+          {SIZES.map((n) => <option key={n} value={n}>{n}px</option>)}
+        </select>
+      </div>
+      <div className="flex items-center gap-1.5">
+        <button type="button" title="굵게" aria-pressed={(st.fw || 0) >= 700} onClick={() => set("fw", (st.fw || 0) >= 700 ? "" : 700)} className={`${tog((st.fw || 0) >= 700)} font-black`}>B</button>
+        <button type="button" title="기울임" aria-pressed={!!st.i} onClick={() => set("i", !st.i)} className={`${tog(st.i)} italic font-bold`} style={{ fontFamily: "serif" }}>I</button>
+        <button type="button" title="밑줄" aria-pressed={!!st.u} onClick={() => set("u", !st.u)} className={`${tog(st.u)} underline font-bold`}>U</button>
+        <button type="button" title="취소선" aria-pressed={!!st.st} onClick={() => set("st", !st.st)} className={`${tog(st.st)} line-through font-bold`}>S</button>
+        <button type="button" disabled={empty} onClick={() => onChange({})} className="ml-auto h-8 px-2.5 rounded-lg border border-[#DCE3EE] bg-white text-[11.5px] font-bold text-[#3A4A66] disabled:opacity-40">기본값으로</button>
+      </div>
+      <div className="flex items-center gap-1">
+        <span className="text-[11px] font-extrabold text-[#5B6B86] w-[38px] shrink-0 whitespace-nowrap">글자색</span>
+        <button type="button" title="기본 색" onClick={() => set("c", "")} className={`${sw(!st.c)} bg-white text-[10px] font-black text-[#8A97AD]`}>×</button>
+        {PALETTE.map(([c, l]) => <button key={c} type="button" title={l} aria-label={`글자색 ${l}`} onClick={() => set("c", c)} className={sw(st.c === c)} style={{ background: c }} />)}
+        <input type="color" aria-label="글자색 직접 고르기" title="직접 고르기" value={st.c || "#0F1A30"} onChange={(e) => set("c", e.target.value.toUpperCase())} className="h-6 w-7 p-0 border-0 bg-transparent cursor-pointer shrink-0" />
+      </div>
+      <div className="flex items-center gap-1">
+        <span className="text-[11px] font-extrabold text-[#5B6B86] w-[38px] shrink-0 whitespace-nowrap">배경</span>
+        <button type="button" title="배경 없음" onClick={() => set("bg", "")} className={`${sw(!st.bg)} bg-white text-[10px] font-black text-[#8A97AD]`}>×</button>
+        {HILITE.map(([c, l]) => <button key={c} type="button" title={l} aria-label={`배경 ${l}`} onClick={() => set("bg", c)} className={sw(st.bg === c)} style={{ background: c }} />)}
+        <input type="color" aria-label="배경색 직접 고르기" title="직접 고르기" value={st.bg || "#FFF3B0"} onChange={(e) => set("bg", e.target.value.toUpperCase())} className="h-6 w-7 p-0 border-0 bg-transparent cursor-pointer shrink-0" />
+      </div>
+    </div>
+  );
+}
+
 // ───────────────────────── 전체 목록 ─────────────────────────
 function flatten(docs) {
   const rows = [];
   for (const [docId, d] of Object.entries(docs)) {
-    for (const [o, v] of Object.entries(d.t || {})) rows.push({ docId, kind: "text", orig: o, value: v });
+    for (const o of new Set([...Object.keys(d.t || {}), ...Object.keys(d.s || {})])) rows.push({ docId, kind: "text", orig: o, value: d.t?.[o] ?? "", style: d.s?.[o] || null });
     for (const [k, v] of Object.entries(d.a || {})) { const i = k.indexOf("::"); rows.push({ docId, kind: k.slice(0, i), orig: k.slice(i + 2), value: v }); }
   }
   return rows.sort((a, b) => (a.docId === b.docId ? a.orig.localeCompare(b.orig, "ko") : a.docId === "global" ? -1 : b.docId === "global" ? 1 : a.docId.localeCompare(b.docId)));
@@ -312,6 +395,7 @@ function OverrideListModal({ onClose, say }) {
   const fileRef = React.useRef(null);
   const ql = q.trim().toLowerCase();
   const shown = ql ? rows.filter((r) => (r.orig + "\n" + r.value + "\n" + routeLabel(r.docId)).toLowerCase().includes(ql)) : rows;
+  const styledN = rows.filter((r) => r.style).length;
 
   const run = async (fn, okMsg) => { try { await fn(); if (okMsg) say(okMsg); } catch (e) { say("실패: " + (e?.message || e)); } };
   const doExport = () => {
@@ -340,7 +424,7 @@ function OverrideListModal({ onClose, say }) {
         <div className="px-5 py-3.5 text-white flex items-start gap-3" style={{ background: `linear-gradient(120deg,${C.navy},${C.navy2} 60%,${C.blue})` }}>
           <div className="min-w-0">
             <div className="text-[16px] font-black">바꾼 문구 목록</div>
-            <div className="text-[12px] text-white/65 font-semibold mt-0.5">전체 {rows.length}개 · 저장하면 다른 사용자는 다음 접속부터 보입니다</div>
+            <div className="text-[12px] text-white/65 font-semibold mt-0.5">전체 {rows.length}개{styledN ? ` · 모양 ${styledN}개` : ""} · 저장하면 다른 사용자는 다음 접속부터 보입니다</div>
           </div>
           <button type="button" onClick={onClose} className="ml-auto shrink-0 h-8 px-3 rounded-lg bg-white/10 hover:bg-white/20 text-[12px] font-bold">닫기</button>
         </div>
@@ -364,11 +448,11 @@ function OverrideListModal({ onClose, say }) {
         <div className="overflow-auto flex-1">
           <table className="w-full text-[12.5px]" data-kp-no-text>
             <thead className="sticky top-0 bg-[#F5F7FB] text-[#5B6B86]">
-              <tr><th className="text-left px-3 py-2 font-extrabold w-[120px]">범위</th><th className="text-left px-3 py-2 font-extrabold w-[90px]">종류</th><th className="text-left px-3 py-2 font-extrabold">원래 문구</th><th className="text-left px-3 py-2 font-extrabold">새 문구</th><th className="w-[60px]" /></tr>
+              <tr><th className="text-left px-3 py-2 font-extrabold w-[120px]">범위</th><th className="text-left px-3 py-2 font-extrabold w-[90px]">종류</th><th className="text-left px-3 py-2 font-extrabold">원래 문구</th><th className="text-left px-3 py-2 font-extrabold">새 문구</th><th className="text-left px-3 py-2 font-extrabold w-[110px]">모양</th><th className="w-[60px]" /></tr>
             </thead>
             <tbody>
               {shown.map((r) => <OverrideRow key={r.docId + r.kind + r.orig} r={r} run={run} />)}
-              {!shown.length && <tr><td colSpan={5} className="px-3 py-10 text-center text-[#8A97AD] font-semibold">{rows.length ? "찾는 문구가 없어요" : "아직 바꾼 문구가 없어요 — 편집 모드에서 글자를 눌러 바꿔보세요"}</td></tr>}
+              {!shown.length && <tr><td colSpan={6} className="px-3 py-10 text-center text-[#8A97AD] font-semibold">{rows.length ? "찾는 문구가 없어요" : "아직 바꾼 문구가 없어요 — 편집 모드에서 글자를 눌러 바꿔보세요"}</td></tr>}
             </tbody>
           </table>
         </div>
@@ -380,14 +464,31 @@ function OverrideListModal({ onClose, say }) {
 function OverrideRow({ r, run }) {
   const [v, setV] = React.useState(r.value);
   React.useEffect(() => setV(r.value), [r.value]);
-  const commit = () => { const t = v.trim(); if (t && t !== r.value) run(() => saveOverride({ docId: r.docId, kind: r.kind, orig: r.orig, value: t }), "고쳤어요"); else setV(r.value); };
+  const commit = () => {
+    const t = v.trim();
+    if (t && t !== r.value) run(() => saveOverride({ docId: r.docId, kind: r.kind, orig: r.orig, value: t }), "고쳤어요");
+    else if (!t && r.value && r.style) run(() => saveOverride({ docId: r.docId, kind: r.kind, orig: r.orig, value: null }), "문구는 원래대로, 모양만 남겼어요");
+    else setV(r.value);
+  };
+  const remove = () => run(async () => {
+    if (r.value) await saveOverride({ docId: r.docId, kind: r.kind, orig: r.orig, value: null });
+    if (r.style) await saveStyle({ docId: r.docId, orig: r.orig, style: null });
+  }, "지웠어요");
   return (
     <tr className="border-t border-[#EEF1F6] align-top">
       <td className="px-3 py-2 text-[#3A4A66] font-bold whitespace-nowrap">{routeLabel(r.docId)}</td>
       <td className="px-3 py-2 text-[#5B6B86]">{KIND_LABEL[r.kind]?.replace(/\(.*\)/, "") || r.kind}</td>
       <td className="px-3 py-2 text-[#5B6B86] break-all">{r.orig}</td>
-      <td className="px-3 py-1.5"><input value={v} onChange={(e) => setV(e.target.value)} onBlur={commit} onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); if (e.key === "Escape") { setV(r.value); e.stopPropagation(); } }} className="w-full h-8 px-2 rounded-lg border border-[#DCE3EE] text-[12.5px] font-semibold text-[#0F1A30] outline-none focus:border-[#2D4C82]" /></td>
-      <td className="px-2 py-1.5 text-right"><button type="button" onClick={() => run(() => saveOverride({ docId: r.docId, kind: r.kind, orig: r.orig, value: null }), "지웠어요")} className="h-8 px-2.5 rounded-lg text-[#B42318] hover:bg-[#FFF1EE] text-[12px] font-bold">삭제</button></td>
+      <td className="px-3 py-1.5"><input value={v} placeholder={r.style ? "문구 그대로" : ""} onChange={(e) => setV(e.target.value)} onBlur={commit} onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); if (e.key === "Escape") { setV(r.value); e.stopPropagation(); } }} className="w-full h-8 px-2 rounded-lg border border-[#DCE3EE] text-[12.5px] font-semibold text-[#0F1A30] outline-none focus:border-[#2D4C82]" /></td>
+      <td className="px-3 py-1.5">
+        {r.style
+          ? <span className="inline-flex items-center gap-1 h-8 pl-2 pr-1 rounded-lg bg-[#F5F7FB] border border-[#E2E8F0]" data-kp="style-badge">
+            <span className="text-[13px] leading-none px-0.5 rounded" style={reactCss(r.style)}>가나</span>
+            <button type="button" title="모양 지우기" onClick={() => run(() => saveStyle({ docId: r.docId, orig: r.orig, style: null }), "모양을 지웠어요")} className="h-6 px-1.5 rounded-md text-[11px] font-bold text-[#5B6B86] hover:bg-white">지우기</button>
+          </span>
+          : <span className="text-[11.5px] text-[#B0BACB]">기본</span>}
+      </td>
+      <td className="px-2 py-1.5 text-right"><button type="button" onClick={remove} className="h-8 px-2.5 rounded-lg text-[#B42318] hover:bg-[#FFF1EE] text-[12px] font-bold">삭제</button></td>
     </tr>
   );
 }
