@@ -7,7 +7,9 @@ import React from "react";
 import { auth, db } from "./firebase";
 import { collection, doc, getDoc, getDocs, query, where, writeBatch, setDoc, addDoc, serverTimestamp } from "firebase/firestore";
 import { applyMerges, buildImportPreview, previewToCsv, tabsToRead, importedFields, fieldsHash, legacyDolcaeProfile, profileToBoardColumns } from "../functions/sheetProfileCore.mjs";
-import { sheetConnectApi, useSheetProfiles, patchSheetProfile, removeSheetProfile, sheetDemo } from "./sheetConnectApi";
+import { sheetConnectApi, useSheetProfiles, patchSheetProfile, removeSheetProfile, sheetDemo, isOfficeFileError } from "./sheetConnectApi";
+import { profileToBoardForm } from "../functions/routeBoardMonth.mjs"; // 📅 날짜 칸 · 월별 탭 배차표
+import OfficeSheetCard from "./OfficeSheetCard"; // 📗 엑셀(xlsx) 파일 안내
 import SheetConnectWizard from "./SheetConnectWizard";
 import SheetImportPanel from "./SheetImportPanel";
 import GsheetMinePanel from "./GsheetMinePanel";
@@ -165,11 +167,12 @@ function ExportRunner({ profile, company, onClose }) {
   const [res, setRes] = React.useState(null);
   const [busy, setBusy] = React.useState("");
   const [msg, setMsg] = React.useState("");
+  const [office, setOffice] = React.useState(false); // 📗 엑셀(xlsx) 파일이면 보내기 대신 변환 안내
   const run = async (dryRun) => {
     if (!dryRun && !(await kpConfirm("연결한 칸만 시트에 써요. 수식 칸과 연결 안 한 칸은 그대로 둬요. 보낼까요?"))) return;
     setBusy(dryRun ? "dry" : "go"); setMsg("");
     try { setRes(await sheetConnectApi({ action: "export", profileId: profile.id, from: range.from, to: range.to, dryRun, company })); }
-    catch (e) { setMsg(e.message); } finally { setBusy(""); }
+    catch (e) { if (isOfficeFileError(e)) setOffice(true); else setMsg(e.message); } finally { setBusy(""); }
   };
   return (
     <div className="fixed inset-0 z-[95] bg-black/40 flex items-start justify-center overflow-auto p-4" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
@@ -190,6 +193,7 @@ function ExportRunner({ profile, company, onClose }) {
           <li>시트에서 더 나중에 고친 줄은 건드리지 않아요. 가져오기로 받아 주세요.</li>
         </ul>
         {msg && <div className="mb-3 px-4 py-3 rounded-xl bg-[#FDECEC] text-[#C2352B] text-[14px] font-bold">{msg}</div>}
+        {office && <OfficeSheetCard className="mb-3" onConvert={() => sheetConnectApi({ action: "convert", url: profile.sheetUrl, profileId: profile.id, company })} />}
         {res && (
           <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-4">
             {[[res.dryRun ? "고칠 줄" : "고친 줄", res.written], [res.dryRun ? "새로 넣을 줄" : "새로 넣은 줄", res.appended], ["보호해서 건너뛴 칸", res.protectedSkipped || 0], ["시트가 더 최근", res.sheetNewer || 0]].map(([l, v]) => (
@@ -233,10 +237,10 @@ export default function SheetConnectHub({ company, isTotalMaster }) {
   // 📋 배차표 양식 만들기 — 시트 칸 순서 · 이름 그대로(고정노선 › 배차표에서 고칠 수 있음). 시트 자동 연동은 꺼 둔다(배차일지 시트는 날짜 탭이 아니라서)
   const [board, setBoard] = React.useState(null); // { profile, columns }
   const makeBoard = async () => {
-    const { profile: p, columns } = board;
+    const { profile: p, columns, tabMode = "", tabPattern = null, sheetTab = "" } = board;
     if (!columns.some((c) => c.field === "하차지명")) return kpAlert("하차지명 칸이 없어 배차표를 만들 수 없어요. 매핑 수정에서 하차지명을 연결해 주세요.");
     try {
-      if (!sheetDemo()) await addDoc(collection(db, "routeBoards"), { companyName: company, name: p.name, client: "", dropOffset: 0, payMethod: "", sheetUrl: p.sheetUrl || "", sheetProfileId: p.id, autoSync: false, groups: [{ name: "기본", 상차지명: "", 상차지주소: "", defaults: [] }], columns, createdAt: serverTimestamp(), updatedAt: serverTimestamp(), updatedBy: auth.currentUser?.email || "" });
+      if (!sheetDemo()) await addDoc(collection(db, "routeBoards"), { companyName: company, name: p.name, client: "", dropOffset: 0, payMethod: "", sheetUrl: p.sheetUrl || "", sheetProfileId: p.id, autoSync: false, groups: [{ name: "기본", 상차지명: "", 상차지주소: "", defaults: [] }], columns: JSON.parse(JSON.stringify(columns)), tabMode, tabPattern, sheetTab, createdAt: serverTimestamp(), updatedAt: serverTimestamp(), updatedBy: auth.currentUser?.email || "" });
       setBoard(null);
       kpAlert(`'${p.name}' 배차표 양식을 만들었어요. 지입차관리 › 고정노선 › 배차표에서 고칠 수 있어요.`);
     } catch (e) { kpAlert(`만들기 실패: ${e.message}`); }
@@ -295,7 +299,7 @@ export default function SheetConnectHub({ company, isTotalMaster }) {
                                 <button onClick={() => setRun({ kind: "import", profile: p })} className={`${btn} h-9 bg-[#0F1A30] text-white`}>가져오기</button>
                                 <button onClick={() => setRun({ kind: "export", profile: p })} className={`${btn} h-9 border border-[#DCE3EE] text-[#2D4C82]`}>보내기</button>
                                 <button onClick={() => setWizard({ initial: p })} className={`${btn} h-9 border border-[#DCE3EE] text-[#3A4A66]`}>매핑 수정</button>
-                                <button onClick={() => setBoard({ profile: p, columns: profileToBoardColumns(p) })} className={`${btn} h-9 border border-[#DCE3EE] text-[#3A4A66]`}>배차표 양식</button>
+                                <button onClick={() => setBoard({ profile: p, ...profileToBoardForm(p, profileToBoardColumns(p)) })} className={`${btn} h-9 border border-[#DCE3EE] text-[#3A4A66]`}>배차표 양식</button>
                                 <button onClick={() => del(p)} className={`${btn} h-9 text-[#C2352B]`}>삭제</button>
                               </>
                             )}
@@ -335,7 +339,7 @@ export default function SheetConnectHub({ company, isTotalMaster }) {
                 <thead className="sticky top-0 bg-[#F7F9FC] text-[#5B6B85] text-[13px]"><tr><th className="px-3 py-2.5 text-left w-12">#</th><th className="px-3 text-left">칸 이름</th><th className="px-3 text-left">종류</th><th className="px-3 text-left">프로그램 칸</th></tr></thead>
                 <tbody>
                   {board.columns.map((c, i) => (
-                    <tr key={c.id} className="border-t border-[#EEF1F6]"><td className="px-3 py-2 text-[#9AA4B5] font-black">{i + 1}</td><td className="px-3 font-black text-[#0F1A30]">{c.label}</td><td className="px-3">{{ field: "프로그램 칸", no: "순번(자동)", extra: "참고(보관)" }[c.kind] || c.kind}</td><td className="px-3 text-[#2D4C82] font-bold">{c.field ? (FIELD_LABEL[c.field] || c.field) : "-"}</td></tr>
+                    <tr key={c.id} className="border-t border-[#EEF1F6]"><td className="px-3 py-2 text-[#9AA4B5] font-black">{i + 1}</td><td className="px-3 font-black text-[#0F1A30]">{c.label}</td><td className="px-3">{{ field: "프로그램 칸", no: "순번(자동)", extra: "참고(보관)", date: "날짜(월별 탭)" }[c.kind] || c.kind}</td><td className="px-3 text-[#2D4C82] font-bold">{c.field ? (FIELD_LABEL[c.field] || c.field) : "-"}</td></tr>
                   ))}
                 </tbody>
               </table>

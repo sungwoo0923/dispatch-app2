@@ -9,7 +9,8 @@ import {
   applyMerges, detectHeader, autoMapColumns, ambiguousColumns, applyAiSuggestions, missingRequired, duplicateFields,
   detectMonthlyTabs, suggestDedupe, buildProfile, distinctValues, colLetter, norm, mapEnum, combineHeader,
 } from "../functions/sheetProfileCore.mjs";
-import { sheetConnectApi, saveSheetProfile, SERVICE_EMAIL, sheetDemo } from "./sheetConnectApi";
+import { sheetConnectApi, saveSheetProfile, SERVICE_EMAIL, sheetDemo, isOfficeFileError } from "./sheetConnectApi";
+import OfficeSheetCard from "./OfficeSheetCard"; // 📗 2026-11-07 엑셀(xlsx) 파일 안내
 import { CustomSelect } from "./CustomSelect";
 
 const card = "rounded-[18px] bg-white border border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_8px_20px_rgba(16,24,40,0.05)]";
@@ -44,6 +45,7 @@ export default function SheetConnectWizard({ company, initial = null, onClose, o
   const [name, setName] = React.useState(initial?.name || "");
   const [busy, setBusy] = React.useState("");
   const [err, setErr] = React.useState("");
+  const [office, setOffice] = React.useState(null); // 📗 엑셀(xlsx) 파일이면 { fileName }
   const [aiNote, setAiNote] = React.useState("");
 
   const monthly = React.useMemo(() => (book ? detectMonthlyTabs(book.tabs.map((t) => t.title)) : null), [book]);
@@ -61,19 +63,24 @@ export default function SheetConnectWizard({ company, initial = null, onClose, o
     })();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const openSheet = async () => {
-    if (!url.trim()) return setErr("구글시트 주소를 붙여넣어 주세요.");
-    setErr(""); setBusy("tabs");
+  const openSheet = async (u = url) => {
+    if (!String(u || "").trim()) return setErr("구글시트 주소를 붙여넣어 주세요.");
+    setErr(""); setBusy("tabs"); setOffice(null);
     try {
-      const d = await sheetConnectApi({ action: "tabs", url: url.trim() });
+      const d = await sheetConnectApi({ action: "tabs", url: u.trim() });
       setBook(d);
+      setOffice(d.office ? { fileName: d.fileName || "" } : null);
       if (!name) setName(d.title || "");
       const m = detectMonthlyTabs(d.tabs.map((t) => t.title));
       if (m) { setTabMode("monthly"); setPicked(m.tabs.map((t) => t.title)); setSampleTab(m.tabs[m.tabs.length - 1].title); }
       else { const big = [...d.tabs].sort((a, b) => b.rows - a.rows)[0]; setTabMode("single"); setPicked(big ? [big.title] : []); setSampleTab(big?.title || ""); }
       setStep(1);
-    } catch (e) { setErr(e.message); } finally { setBusy(""); }
+    } catch (e) { if (isOfficeFileError(e)) setOffice({ fileName: "" }); else setErr(e.message); } finally { setBusy(""); }
   };
+  // 📗 엑셀 파일 → 구글 시트로 변환(같은 폴더 사본 · 원본 그대로) → 새 주소로 다시 열기(수정 중인 연결이면 서버가 주소도 바꾼다)
+  const convertOffice = () => sheetConnectApi({ action: "convert", url: url.trim() || initial?.sheetUrl, ...(initial?.id ? { profileId: initial.id } : {}) });
+  const onConverted = (r) => { if (!r?.url) return; setUrl(r.url); setTimeout(() => openSheet(r.url), 0); };
+  const officeCard = office && <OfficeSheetCard key={url} className="mb-4" fileName={office.fileName} onConvert={convertOffice} onConverted={onConverted} />;
 
   const loadSample = async (tab, auto = true) => {
     setBusy("sample"); setErr("");
@@ -180,10 +187,11 @@ export default function SheetConnectWizard({ company, initial = null, onClose, o
 
         {step === 0 && (
           <div className="max-w-[760px]">
+            {officeCard}
             <div className="text-[15px] font-black text-[#0F1A30] mb-2">배차일지 구글시트 주소</div>
             <div className="flex gap-2">
               <input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://docs.google.com/spreadsheets/d/…" className={inp} data-testid="sheet-url" />
-              <button onClick={openSheet} disabled={busy === "tabs"} className={`${btn} bg-[#0F1A30] text-white`}>{busy === "tabs" ? "여는 중…" : "시트 열기"}</button>
+              <button onClick={() => openSheet()} disabled={busy === "tabs"} className={`${btn} bg-[#0F1A30] text-white`}>{busy === "tabs" ? "여는 중…" : "시트 열기"}</button>
             </div>
             <div className="mt-3 rounded-xl bg-[#F5F8FD] border border-[#E3E8F0] px-4 py-3 text-[13.5px] text-[#3A4A66] leading-relaxed">
               시트 <b>공유</b>에 아래 주소를 추가해 주세요. 가져오기만 하면 <b>뷰어</b>, 보내기도 하면 <b>편집자</b>예요.
@@ -197,6 +205,7 @@ export default function SheetConnectWizard({ company, initial = null, onClose, o
 
         {step === 1 && book && (
           <div>
+            {officeCard}
             <div className="text-[15px] font-black text-[#0F1A30] mb-1">{book.title} <span className="text-[#7A8AA6] font-bold">· 탭 {book.tabs.length}개</span></div>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3 my-4">
               {[["single", "탭 하나", "한 탭에 모든 오더를 적어요"], ["monthly", "월별 탭 자동", monthly ? `${monthly.tabs.map((t) => t.title).slice(-3).join(" · ")} 처럼 달마다 탭. 상차일로 탭을 골라요` : "달 이름 탭을 못 찾았어요"], ["all", "전체 탭 합치기", "고른 탭을 모두 읽어 한 번에 가져와요"]].map(([k, l, d]) => (

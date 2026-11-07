@@ -182,7 +182,11 @@ async function syncBoard({ db, FieldValue, form, readTabs, readTab, writeCells, 
   const y = +today.slice(0, 4);
   // ⭐ 2026-11-03 양식에서 탭 하나를 고정했으면(테스트용) 그 탭만, 아니면 날짜 이름 탭(최근~2주 뒤)
   const allTabs = await readTabs();
+  // 📅 2026-11-07 월별 탭(25년1월) · 한 탭 양식(시트 프로필로 만든 양식) — 탭 안의 날짜 칸으로 날짜를 나눈다(functions/routeBoardMonth.mjs)
+  const M = await import("./routeBoardMonth.mjs");
+  const monthMode = M.isMonthBoard(form);
   const tabs = form.fixedTab ? allTabs.filter((t) => t === form.fixedTab)
+    : monthMode ? M.boardTabsInRange(form, allTabs, from, to)
     : allTabs.filter((t) => { const d = tabDate(t, y) || tabDate(t, y + 1); return d && d >= from && d <= to; }); // 탭 이름 날짜 = 입고일
   const co = form.companyName;
   let places = null; let drivers = null;
@@ -193,16 +197,20 @@ async function syncBoard({ db, FieldValue, form, readTabs, readTab, writeCells, 
   };
   const sum = { tabs: 0, created: 0, updated: 0, gone: 0, dates: [] };
   const hashes = { ...(form.syncHash || {}) };
-  for (const tab of tabs) {
-    const rows = await readTab(tab);
-    const hash = require("crypto").createHash("md5").update(JSON.stringify(rows)).digest("hex");
+  // 탭 하나(월별 탭이면 그 탭의 하루치) 맞추기 → { inserted }
+  const runUnit = async (tab, rows, hash, mDate) => {
     const p = parseBoardTab(form, rows);
-    if (!p.headers) continue;
-    const tabD = tabDate(tab, y, !!form.fixedTab) || tabDate(tab, y + 1, !!form.fixedTab);
-    const inDate = p.date2 || tabD || ""; // 입고일(하차일)
-    const date = p.date || (tabD ? addDays(tabD, -toInt(form.dropOffset)) : ""); // 발주일(상차일)
-    const chk = inDate || date;
-    if (!date || (!form.fixedTab && (chk < from || chk > to))) continue;
+    if (!p.headers) return {};
+    let inDate; let date;
+    if (mDate) { date = mDate; inDate = addDays(mDate, toInt(form.dropOffset)); }
+    else {
+      const tabD = tabDate(tab, y, !!form.fixedTab) || tabDate(tab, y + 1, !!form.fixedTab);
+      inDate = p.date2 || tabD || ""; // 입고일(하차일)
+      date = p.date || (tabD ? addDays(tabD, -toInt(form.dropOffset)) : ""); // 발주일(상차일)
+      const chk = inDate || date;
+      if (!date || (!form.fixedTab && (chk < from || chk > to))) return {};
+    }
+    let inserted = false;
     sum.tabs += 1;
     // ⭐ 2026-11-03 운송사 분리 — 이 양식 회사의 오더만(다른 회사에 남은 같은 양식 오더는 절대 건드리지 않음)
     const ex = await db.collection("orders").where("배차표Id", "==", form.id).where("상차일", "==", date).where("companyName", "==", co).get();
@@ -238,7 +246,7 @@ async function syncBoard({ db, FieldValue, form, readTabs, readTab, writeCells, 
           const base0 = o.시트기준값 || null; const nextBase = {}; const patch = {};
           const qtyNow = { ...(o.품목수량 || {}) }; let qtyChanged = false; let plateChanged = false;
           for (const c of form.columns) {
-            if (c.kind === "no" || c.kind === "sum" || (c.kind === "field" && c.field === "하차지명")) continue;
+            if (c.kind === "no" || c.kind === "sum" || c.kind === "date" || (c.kind === "field" && c.field === "하차지명")) continue;
             const pos = v.__pos; const ci = pos?.idx?.[c.id]; if (ci == null) continue;
             const sv = cell(v[c.id]); const pv = sheetForm(c, o);
             const sheetChanged = base0 ? !same(c, sv, base0[c.id] ?? "") : null;
@@ -302,7 +310,7 @@ async function syncBoard({ db, FieldValue, form, readTabs, readTab, writeCells, 
             상차지명: g.상차지명 || g.name || "", 상차지주소: g.상차지주소 || "", ...(form.payMethod ? { 지급방식: form.payMethod } : {}),
             배차상태: rec.차량번호 ? "배차완료" : "배차중", 배차표Id: form.id, 배차표명: form.name || "", 배차표묶음: g.name, 배차표순번: seq,
             companyName: co, _id: id, 등록일: kstToday(), 작성자: "배차표 자동", 등록기기: "배차표", _autoSheet: true, 시트동기화: Date.now(), 시트줄: v.__pos?.ri ?? null,
-            시트기준값: Object.fromEntries(form.columns.filter((x) => !["no", "sum"].includes(x.kind) && !(x.kind === "field" && x.field === "하차지명") && v.__pos?.idx?.[x.id] != null).map((x) => [x.id, cell(v[x.id])])),
+            시트기준값: Object.fromEntries(form.columns.filter((x) => !["no", "sum", "date"].includes(x.kind) && !(x.kind === "field" && x.field === "하차지명") && v.__pos?.idx?.[x.id] != null).map((x) => [x.id, cell(v[x.id])])),
             경유지_상차: [], 경유상차목록: [], 경유지_하차: [], 경유하차목록: [], 근무일자목록: [], 운행유형: "편도", 혼적여부: "독차",
             createdAt: FieldValue.serverTimestamp(), _lastModified: Date.now(),
           });
@@ -324,10 +332,12 @@ async function syncBoard({ db, FieldValue, form, readTabs, readTab, writeCells, 
             let v = "";
             if (c.kind === "no") { if (no) { no += 1; v = String(no); } }
             else if (c.kind === "sum") v = total ? String(total) : "";
+            else if (c.kind === "date") v = M.sheetDayOf(form, date); // 월별 탭: 날짜 칸
+
             else if (c.kind === "field" && c.field === "하차지명") v = cell(o.하차지명);
             else v = o.시트추가값?.[c.id] != null ? cell(o.시트추가값[c.id]) : sheetForm(c, o);
             if (v) vals.push({ ci, value: v });
-            if (c.kind !== "no" && c.kind !== "sum" && !(c.kind === "field" && c.field === "하차지명")) base[c.id] = v;
+            if (c.kind !== "no" && c.kind !== "sum" && c.kind !== "date" && !(c.kind === "field" && c.field === "하차지명")) base[c.id] = v;
           });
           appends.push({ g: g.name, afterRi: mt.lastRi, vals, base, ref: o.ref });
         });
@@ -370,8 +380,18 @@ async function syncBoard({ db, FieldValue, form, readTabs, readTab, writeCells, 
         const b2 = db.batch();
         done.forEach((a) => b2.update(a.ref, { 시트추가대기: false, 시트기준값: a.base, 시트동기화: Date.now(), 시트줄: a.afterRi + 1 }));
         await b2.commit();
-        sum.appended = (sum.appended || 0) + done.length; hashes[tab] = "";
+        sum.appended = (sum.appended || 0) + done.length; hashes[tab] = ""; inserted = true;
       }
+    }
+    return { inserted };
+  };
+  for (const tab of tabs) {
+    let rows = await readTab(tab);
+    const hash = require("crypto").createHash("md5").update(JSON.stringify(rows)).digest("hex");
+    if (!monthMode) { await runUnit(tab, rows, hash, null); continue; }
+    for (const d of M.boardDatesIn(form, rows, tab, from, to)) {
+      const r = await runUnit(tab, M.boardRowsFor(form, rows, d, tab), hash, d);
+      if (r.inserted) rows = await readTab(tab); // 줄을 끼워 넣었으면 줄 번호가 밀렸으니 다시 읽는다
     }
   }
   await db.collection("routeBoards").doc(form.id).set({ syncHash: hashes, syncedAt: Date.now() }, { merge: true });

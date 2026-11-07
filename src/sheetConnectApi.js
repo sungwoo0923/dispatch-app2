@@ -22,9 +22,11 @@ export async function sheetConnectApi(body) {
   } catch { throw new Error("서버에 연결하지 못했어요. 잠시 후 다시 시도해 주세요."); }
   let data = {};
   try { data = await res.json(); } catch { /* 무시 */ }
-  if (!res.ok) throw new Error(data.error || `요청 실패(${res.status})`);
+  if (!res.ok) throw Object.assign(new Error(data.error || `요청 실패(${res.status})`), { code: data.code || "", help: data.help || "" });
   return data;
 }
+// 📗 2026-11-07 엑셀(xlsx) 파일 오류인가(새 서버: code "office-file" · 예전 서버: Sheets API 영어 문구)
+export const isOfficeFileError = (e) => e?.code === "office-file" || /must not be an Office file|not supported for this document/i.test(String(e?.message || e || ""));
 
 // 데모(가짜 시트)에서 저장한 프로필 — 화면 안에서만
 let demoStore = [];

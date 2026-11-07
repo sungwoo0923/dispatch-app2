@@ -78,10 +78,11 @@ function orders(col) {
 
 // ⭐ 2026-11-05 고정노선현황(구글시트 배차표) 점검 — URL에 demoRoute=1 이 있을 때만 배차표 양식 1개 + 그 오더 12건(운송업체 칸 포함)
 const demoRouteOn = () => { try { return new URLSearchParams(window.location.search).get("demoRoute") === "1"; } catch { return false; } };
+const demoXlsxOn = () => { try { return new URLSearchParams(window.location.search).get("demoXlsx") === "1"; } catch { return false; } };
 const ROUTE_CARRIERS = ["태진물류", "대성운수", "한길로지스", ""];
 function routeBoard() {
   return fakeDoc("routeBoards", "demo-rb-1", {
-    name: "삼다수 배차표", client: "(주)태진", dropOffset: 1, sheetUrl: "",
+    name: "삼다수 배차표", client: "(주)태진", dropOffset: 1, sheetUrl: demoXlsxOn() ? "https://docs.google.com/spreadsheets/d/demo-xlsx-file/edit" : "", // 📗 demoXlsx=1: 드라이브에 올린 엑셀 파일 흉내
     groups: [{ name: "1센터", 상차지명: "1센터", 상차지주소: "" }, { name: "2센터", 상차지명: "2센터", 상차지주소: "" }],
     columns: [
       { id: "c1", label: "도착지", kind: "field", field: "하차지명" }, { id: "c2", label: "시군구", kind: "field", field: "하차지주소" },
