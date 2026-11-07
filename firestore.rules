@@ -1455,15 +1455,26 @@ service cloud.firestore {
       allow delete: if isTotalMasterUser();
     }
     //  세션: 요청한 직원(requesterUid)과 최고관리자만. 하위 컬렉션(callerCandidates · calleeCandidates · messages)도 같게.
+    //  ⭐ 2026-11-07 화면 제어 — controlAllowed(제어 허용)는 직원 본인만 켤 수 있다(최고관리자는 끄기만).
+    //   제어 명령(controlCmds, 데이터 채널이 안 될 때의 느린 통로)은 최고관리자만, 직원이 허용한 동안에만 쓸 수 있다.
     match /supportSessions/{sid} {
-      allow create: if isApproved() && request.resource.data.get('requesterUid', '') == request.auth.uid;
+      allow create: if isApproved() && request.resource.data.get('requesterUid', '') == request.auth.uid
+        && request.resource.data.get('controlAllowed', false) != true;
       allow read: if isTotalMasterUser() || (isSignedIn() && resource.data.get('requesterUid', '') == request.auth.uid);
-      allow update: if isTotalMasterUser() || (isSignedIn() && resource.data.get('requesterUid', '') == request.auth.uid
-        && request.resource.data.get('requesterUid', '') == resource.data.get('requesterUid', ''));
+      allow update: if isSignedIn() && resource.data.get('requesterUid', '') == request.auth.uid
+        && request.resource.data.get('requesterUid', '') == resource.data.get('requesterUid', '');
+      allow update: if isTotalMasterUser()
+        && (request.resource.data.get('controlAllowed', false) != true || resource.data.get('controlAllowed', false) == true);
       allow delete: if isTotalMasterUser();
-      match /{sub}/{docId} {
-        allow read, write: if isTotalMasterUser() || (isSignedIn()
+      match /controlCmds/{cid} {
+        allow create: if isTotalMasterUser()
+          && get(/databases/$(database)/documents/supportSessions/$(sid)).data.get('controlAllowed', false) == true;
+        allow read, delete: if isTotalMasterUser() || (isSignedIn()
           && get(/databases/$(database)/documents/supportSessions/$(sid)).data.get('requesterUid', '') == request.auth.uid);
+      }
+      match /{sub}/{docId} {
+        allow read, write: if sub != 'controlCmds' && (isTotalMasterUser() || (isSignedIn()
+          && get(/databases/$(database)/documents/supportSessions/$(sid)).data.get('requesterUid', '') == request.auth.uid));
       }
     }
     // ════════════════════════════════════════════════════════════
