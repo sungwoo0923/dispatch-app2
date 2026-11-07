@@ -9,6 +9,7 @@
 import React from "react";
 import { createPortal } from "react-dom";
 import { addCompanyDropdownOption, removeCompanyDropdownOption, useCompanyOptionList } from "./companyDropdownOptions";
+import { uiOptionLabel, useUiConfigVersion } from "./uiConfig"; // ⭐ 2026-11-07 화면 편집 — 보이는 이름만 바꾸기(저장값 그대로)
 
 const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
 const FONT = "'Pretendard','Noto Sans KR',sans-serif";
@@ -35,8 +36,10 @@ const isTouch = () => { try { return window.matchMedia("(pointer: coarse)").matc
 export const CompanyOptionPicker = React.forwardRef(function CompanyOptionPicker({
   optKey, value, onChange, className = "", style, disabled = false,
   placeholder = "선택", noneLabel, noneValue = "", allowNone = true, allowAdd = true,
-  title, role, userCompany, compact = false, align = "left", id, buttonProps = {}, labelOf,
+  title, role, userCompany, compact = false, align = "left", id, buttonProps = {}, labelOf: labelOf0,
 }, ref) {
+  useUiConfigVersion();
+  const labelOf = labelOf0 || ((v) => uiOptionLabel(optKey, v));
   const [open, setOpen] = React.useState(false);
   const btn = React.useRef(null);
   React.useImperativeHandle(ref, () => ({

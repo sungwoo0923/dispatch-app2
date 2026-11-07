@@ -45,6 +45,16 @@ service firebase.storage {
       allow update, delete: if false;
     }
 
+    // ⭐ 2026-11-07 화면 편집 모드 — 바꾼 로고·배너·안내 이미지(src/uiConfig.js uploadImage)
+    //  읽기: 누구나(로그인 전 화면에도 보이는 로고) · 올리기·지우기: 최고관리자만 · PNG/JPG/WEBP/GIF 3MB 미만(SVG는 받지 않음)
+    match /uiAssets/{file} {
+      allow read: if true;
+      allow create: if hubAdmin() && request.resource != null && request.resource.size < 3 * 1024 * 1024
+        && request.resource.contentType.matches('image/(png|jpeg|webp|gif)');
+      allow update: if false;
+      allow delete: if hubAdmin();
+    }
+
     match /{allPaths=**} {
       allow read, write: if false;
     }

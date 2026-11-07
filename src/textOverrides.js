@@ -20,6 +20,7 @@
 import { db, auth } from "./firebase";
 import { doc, setDoc, getDocs, collection, serverTimestamp, deleteField } from "firebase/firestore";
 import { isPreviewMode } from "./fsTenant";
+import { uiBypassed } from "./uiBypass"; // ⭐ 2026-11-07 ?noui=1 — 화면 편집 모두 끄기
 
 export const ATTRS = ["placeholder", "title"];
 const CACHE_KEY = "kpTextOverrides:v1";
@@ -134,6 +135,7 @@ function rebuildMaps(force = false) {
   styleMap = new Map([...Object.entries(g.s || {}), ...Object.entries(r.s || {})]);
   for (const [k, v] of preview.t) { if (v === null) textMap.delete(k); else textMap.set(k, v); }
   for (const [k, v] of preview.s) { if (v === null) styleMap.delete(k); else styleMap.set(k, v); }
+  if (uiBypassed()) { textMap = new Map(); attrMap = new Map(); styleMap = new Map(); } // 모두 끄기 — 원래 글자로
   return true;
 }
 

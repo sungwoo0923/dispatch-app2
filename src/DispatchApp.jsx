@@ -82,6 +82,7 @@ const FleetManagement = lazyView(() => import("./FleetManagement"));
 import { FleetSettlementMenu } from "./FleetPayDocs";
 import HomeDashboard from "./HomeDashboard";
 import { EditModeProvider, EditableText, EditModeToggleButton } from "./EditMode";
+import { useUiScreen, uiMenuList, uiMenuLabel, uiFormDefaults } from "./uiConfig"; // ⭐ 2026-11-07 화면 편집 모드 — 메뉴 이름·순서·숨기기(권한은 그대로) · 배차등록 기본값
 import { useCompanyDropdownOptions, DropdownOptionsManageButton, useCompanyDropdownSync, dropdownList } from "./companyDropdownOptions";
 import { CompanyOptionPicker } from "./companyOptionPicker"; // 🧾 2026-11-02 지급방식·배차방식·상/하차방법 공용 선택기(＋ 추가)
 const RateCard = lazyView(() => import("./RateCard"));
@@ -3429,7 +3430,7 @@ function KpSideMenu({ open, onOpen, onClose, menuState, active, onSelect, compan
         </div>
         <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-5 no-scrollbar">
           {groups.map((g) => {
-            const items = g.items.map((m) => ({ m, st: menuState(m) })).filter(({ st }) => st !== "hidden");
+            const items = uiMenuList("pc", g.items).map((m) => ({ m, st: menuState(m) })).filter(({ st }) => st !== "hidden");
             if (!items.length) return null;
             return (
               <div key={g.label}>
@@ -3451,7 +3452,7 @@ function KpSideMenu({ open, onOpen, onClose, menuState, active, onSelect, compan
                         style={{ opacity: 1 }}
                       >
                         <ShellIcon name={KP_SIDE_ICONS[m]} size={18} className={on ? "text-[#1B2B4B]" : "text-blue-200/80"} />
-                        <span className="flex-1 text-left truncate">{m === BRIEF_MENU ? BRIEF_LABEL : m}</span>
+                        <span className="flex-1 text-left truncate">{uiMenuLabel("pc", m, m === BRIEF_MENU ? BRIEF_LABEL : m)}</span>
                         {st === "locked" && <span className="opacity-60"><LockIcon size={12} /></span>}
                         {on && <span className="w-1.5 h-1.5 rounded-full bg-[#4B6CB7]" />}
                       </button>
@@ -8118,6 +8119,7 @@ const newVer = useNewVersion(); // ★ 새 버전이 배포되면 버전 표시 
   const [execFull, setExecFull] = React.useState(() => { try { return localStorage.getItem("kpExecFull") === "1"; } catch { return false; } });
   const toggleExecFull = () => { const v = !execFull; setExecFull(v); try { localStorage.setItem("kpExecFull", v ? "1" : "0"); } catch { /* 무시 */ } setMenu("HOME"); };
   const deptMode = deptModeOf(role, customRole) || (isExec && !execFull ? "exec" : null);
+  useUiScreen(menu, deptMode); // ⭐ 2026-11-07 화면 편집 — 지금 메뉴("이 화면만")·부서(역할별 보이기)
   const deptCompany = (localStorage.getItem("loginCompany") || userCompany || localStorage.getItem("userCompany") || DEFAULT_COMPANY || "").trim();
   // 📊 2026-11-06 일일 경영 보고 — 임원 화면 역할(isExec: 권한 관리 › "임원 화면")만(src/dailyReport.js canSeeBriefing)
   const canBriefing = canSeeBriefing({ isExec });
@@ -8555,7 +8557,7 @@ return (
             }}
           >
             <div className="kp-nav-track inline-flex items-center gap-0.5 min-[2050px]:gap-1 p-1 rounded-[14px] shrink-0">
-            {(deptMode ? DEPT_MENUS[deptMode] : [
+            {uiMenuList("pc", deptMode ? DEPT_MENUS[deptMode] : [
               "HOME",
               "배차관리",
               "실시간배차현황",
@@ -8617,7 +8619,7 @@ return (
                     }`}
                 >
                   <ShellIcon name={KP_SIDE_ICONS[m] || "dashboard"} size={14} className={`kp-nav-ico shrink-0 ${isActive ? "" : "opacity-70"} ${deptMode && DEPT_MENUS[deptMode].length <= 8 ? "" : "hidden min-[2050px]:inline-block"}`} />
-                  <EditableText id={`nav.${m}`} defaultText={m === BRIEF_MENU ? BRIEF_LABEL : m} />
+                  <EditableText id={`nav.${m}`} defaultText={uiMenuLabel("pc", m, m === BRIEF_MENU ? BRIEF_LABEL : m)} />
                   {navN > 0 && st !== "locked" && <KakaoBadge n={navN} size="sm" className="ml-1 align-middle" title={m === "관리자메뉴" ? `가입 승인 대기 ${navN}명` : m === "실시간배차현황" ? `기사 수락/거절 ${navN}건` : m === "배차현황" ? [drvCounts.orders && `기사 수락/거절 ${drvCounts.orders}건`, (unseenList || unseenUnassigned) && `새 미배차 ${Math.max(unseenList, unseenUnassigned)}건`, unseenFixed && `새 고정노선 미배차 ${unseenFixed}건`].filter(Boolean).join(" · ") : m === "지입차관리" ? `긴급 상황 ${navN}건` : `새 소식 ${navN}건`} />}
                   {st === "locked" && <span className="ml-1 opacity-60"><LockIcon /></span>}
                   {m === "인사이트" && st !== "locked" && <span className="ml-1 px-1 py-px rounded bg-[#8FB0F0]/20 text-[#8FB0F0] text-[9px] font-black tracking-wider align-middle">PRO</span>}
@@ -11312,7 +11314,7 @@ const filterPlaces = (q) => {
       return v;
     };
 
-    const emptyForm = {
+    const emptyForm = uiFormDefaults("dispatch", { // ⭐ 2026-11-07 화면 편집 — 최고관리자가 정한 기본값(상/하차방법·지급방식 등)
       _id: crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`,
       청구사업자: "", // ⭐ 2026-11-03 여러 사업자(비면 기본 = 회사)
       순번: "",
@@ -11363,7 +11365,7 @@ const filterPlaces = (q) => {
       운임보정: null,
       복수근무일: false,     // ★ 묶음 오더 — 연속 기간이 아니라 특정 날짜들만 골라 하나의
       근무일자목록: [],      // 오더로 등록(예: 9/2,4,5,7~11,14~18). 상차일=최소값, 하차일=최대값으로 자동 연동.
-    };
+    });
     const cargoInputRef = React.useRef(null);
     const cargoTypeTabbedRef = React.useRef(false); // 화물타입 "없음" 선택이 Tab으로 확정됐는지 추적(아래 참고)
     const tonInputRef = React.useRef(null);

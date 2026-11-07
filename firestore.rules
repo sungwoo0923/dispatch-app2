@@ -994,6 +994,33 @@ service cloud.firestore {
       allow read: if true;
       allow write: if isTotalMasterUser();
     }
+    // ⭐ 2026-11-07 화면 편집 모드(src/uiConfig.js) — 숨기기·모양·이미지·안내 상자·메뉴·목록·입력칸·테마 한 묶음.
+    //  읽기: 누구나(로그인 전 화면의 로고·안내도 바꿀 수 있게 · 비밀 정보 없음) · 쓰기: 최고관리자만 + 모양 검사(값 자체는 앱이 화이트리스트로 다시 검사)
+    function uiConfigOk(d) {
+      return d.keys().hasOnly(['v', 'els', 'blocks', 'menus', 'opts', 'fields', 'theme', 'rev', 'updatedAt', 'by', 'byUid'])
+        && d.get('v', 1) is int
+        && d.get('els', {}) is map && d.get('els', {}).size() <= 400
+        && d.get('blocks', {}) is map && d.get('blocks', {}).size() <= 100
+        && d.get('menus', {}) is map && d.get('menus', {}).size() <= 300
+        && d.get('opts', {}) is map && d.get('opts', {}).size() <= 10
+        && d.get('fields', {}) is map && d.get('fields', {}).size() <= 300
+        && (d.get('theme', null) == null || d.get('theme', null) is map)
+        && d.get('rev', 0) is int
+        && d.get('by', '') is string && d.get('by', '').size() <= 120
+        && d.get('byUid', '') == request.auth.uid;
+    }
+    match /uiConfig/{id} {
+      allow read: if true;
+      allow create, update: if isTotalMasterUser() && id == 'main' && uiConfigOk(request.resource.data);
+      allow delete: if isTotalMasterUser();
+    }
+    //  저장할 때마다 남기는 사본(최근 20개 · 되살리기용) — 최고관리자만
+    match /uiConfigHistory/{id} {
+      allow read, delete: if isTotalMasterUser();
+      allow create: if isTotalMasterUser() && request.resource.data.keys().hasOnly(['cfg', 'by', 'byUid', 'at', 'atMs', 'rev', 'note', 'n'])
+        && request.resource.data.cfg is map && request.resource.data.byUid == request.auth.uid;
+      allow update: if false;
+    }
     // 💼 영업 견적(관리센터 › 영업) — 최고관리자만
     match /salesQuotes/{id} {
       allow read, write: if isTotalMasterUser();
@@ -1676,6 +1703,8 @@ service cloud.firestore {
         'driverSignupLogs',
         // ⭐ 2026-11-06 문구 편집 모드 — 위에서 따로 정함(쓰기는 최고관리자만)
         'textOverrides', 'textOverridesPublic',
+        // ⭐ 2026-11-07 화면 편집 모드 — 위에서 따로 정함(빠지면 승인된 직원 누구나 화면 설정을 고칠 수 있다)
+        'uiConfig', 'uiConfigHistory',
         // ⭐ 2026-11-06 오더마켓 — 위에서 따로 정함(예전엔 이 목록에 없어 승인된 직원이면 누구나 게시글을 고칠 수 있었다)
         'cafeOrders', 'marketNotices',
         // ⭐ 2026-11-06 로지스웹 허브 콜 — 위에서 따로 정함(빠지면 배차 프로그램 직원 누구나 허브 회원·오더를 고칠 수 있다)
