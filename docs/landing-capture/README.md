@@ -26,3 +26,19 @@ python3 tojpg.py c-board.png:real-board
 - 기사앱 로그인: 운송사 `한결로지스` · 차량번호 `경기82아7712` · 이름 `이민수`
 - 지도 타일(OpenStreetMap)이 막힌 환경에서는 `tiles.mjs`가 `geo/`의 통계청(KOSTAT 2013, 자유 이용) 행정경계로 타일을 그려 넣습니다.
 - 에뮬레이터는 한 번에 1만 건 넘게 조회하면 실패하므로 `history.mjs`의 오더 수를 너무 늘리지 마세요.
+
+## 사내메신저 · 출퇴근기록 · 사내메일 영상 (홈페이지 #office)
+
+밤에 찍으면 메시지 시각이 "오전 12:40"처럼 보이므로 에뮬레이터 · 시드 · 캡처를 모두 `faketime -f "+34h"`(평일 오전이 되게 조정) 아래에서 돌립니다.
+
+```bash
+faketime -f "+34h" npx firebase-tools emulators:start --only auth,firestore --project demo-kpflow --config firebase.emulators.json
+VITE_USE_EMULATOR=1 npx vite --port 5214 --host 127.0.0.1
+cd docs/landing-capture
+for s in seed fix1 drivers gw-seed; do faketime -f "+34h" node $s.mjs; done
+export GW_CLOCK_NOW=1 GW_CHROME=/opt/pw-browsers/chromium-1243/chrome-linux64/chrome
+faketime -f "+34h" node gw-msg.mjs pc   # out/messenger.*
+faketime -f "+34h" node gw-mail.mjs     # out/mail.*
+faketime -f "+34h" node gw-att.mjs      # out/attendance.* (브라우저 시계는 11/9 05:50 → 08:52로 고정)
+# webm: ffmpeg -i out/X.mp4 -an -c:v libvpx-vp9 -b:v 0 -crf 42 out/X.webm → landing-site/video/gw-X.*
+```

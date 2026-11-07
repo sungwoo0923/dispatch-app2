@@ -392,3 +392,6 @@ footer { background: #08101F; color: rgba(255,255,255,.5); padding: 48px 0; font
   .dock a { width: 50px; height: 50px; border-radius: 15px; }
   .dock a:not(.pri) { display: none; }
 }
+
+/* 2026-11-07 사내메신저 · 출퇴근기록 · 사내메일(#office) — PC 상단 메뉴는 자리가 꽉 차서 휴대폰 메뉴 · 하단 링크에만 */
+@media (min-width: 1081px) { .nav a.nav-office { display: none; } }
