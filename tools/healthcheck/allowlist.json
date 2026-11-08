@@ -1,0 +1,18 @@
+{
+  "_설명": "실제 오류가 아닌 것만 넣는다. 값은 정규식(문자열 또는 {pattern, note}). offline 항목은 HC_OFFLINE=1(외부 인터넷이 막힌 샌드박스)에서만 적용된다.",
+  "externalHosts": [
+    { "pattern": "^127\\.0\\.0\\.1:(8080|9099|9199|5001)$", "note": "localhost에서 홈페이지·허브가 Firebase 에뮬레이터를 찾음 — 점검에선 에뮬레이터를 띄우지 않는다" },
+    { "pattern": "^localhost:(8080|9099|9199|5001)$", "note": "위와 같음" }
+  ],
+  "console": [],
+  "pageerror": [],
+  "overflow": [],
+  "loading": [
+    { "pattern": "^내 인사 정보를 불러오는 중입니다$", "note": "미리보기 가짜 계정(uid=preview)은 인사 기록이 없어 '내 이력서' 빈 상태 문구가 이 문장으로 계속 보임 — 로딩 멈춤이 아님" }
+  ],
+  "offline": {
+    "externalHosts": [
+      { "pattern": "(^|\\.)(googleapis\\.com|gstatic\\.com|google\\.com|firebaseio\\.com|firebaseapp\\.com|jsdelivr\\.net|sk\\.com|kakao\\.com|daumcdn\\.net|naver\\.com|naver\\.net|pstatic\\.net|opinet\\.co\\.kr|logisweb\\.co\\.kr|kp-flow\\.app|tile\\.openstreetmap\\.org|unpkg\\.com|cloudflare\\.com|qrserver\\.com)$", "note": "샌드박스 프록시가 막는 외부 주소" }
+    ]
+  }
+}
