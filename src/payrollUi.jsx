@@ -84,21 +84,31 @@ export function useMedia(q) {
   }, [q]);
   return v;
 }
+// ⭐ 2026-11-09 급여관리 바로 열기 — 한 번 받은 목록은 이 화면(메모리)에 기억해 두고, 다시 들어오면 먼저 보여 준 뒤 실시간으로 갱신
+//  (브라우저 저장소에는 안 남김 · 새로고침/로그아웃하면 사라짐 · 권한 오류면 빈 목록으로 바뀜)
+const _memo = new Map();
+const MEMO_MAX = 40;
+const memoSet = (k, v) => { _memo.delete(k); _memo.set(k, v); if (_memo.size > MEMO_MAX) _memo.delete(_memo.keys().next().value); };
 export function useCol(name, company, extra = null, key = "") {
-  const [rows, setRows] = React.useState(null);
+  const mk = `c|${name}|${company}|${extra ? `${extra[0]}=${extra[1]}` : ""}`;
+  const [rows, setRows] = React.useState(() => (company && _memo.has(mk) ? _memo.get(mk) : null));
   React.useEffect(() => {
     if (!company) return undefined;
+    setRows(_memo.has(mk) ? _memo.get(mk) : null);
     const cons = [where("companyName", "==", company), ...(extra ? [where(extra[0], "==", extra[1])] : [])];
-    return onSnapshot(query(collection(db, name), ...cons), (s) => setRows(s.docs.map((d) => ({ id: d.id, ...d.data() }))), () => setRows([]));
+    return onSnapshot(query(collection(db, name), ...cons), (s) => { const v = s.docs.map((d) => ({ id: d.id, ...d.data() })); memoSet(mk, v); setRows(v); }, () => { _memo.delete(mk); setRows([]); });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [name, company, key]);
   return rows;
 }
 export function useDocData(path, id) {
-  const [v, setV] = React.useState(undefined);
+  const mk = `d|${path}|${id}`;
+  const [v, setV] = React.useState(() => (id && _memo.has(mk) ? _memo.get(mk) : undefined));
   React.useEffect(() => {
     if (!id) return undefined;
-    return onSnapshot(doc(db, path, id), (s) => setV(s.exists() ? { id: s.id, ...s.data() } : null), () => setV(null));
+    setV(_memo.has(mk) ? _memo.get(mk) : undefined);
+    return onSnapshot(doc(db, path, id), (s) => { const x = s.exists() ? { id: s.id, ...s.data() } : null; memoSet(mk, x); setV(x); }, () => { _memo.delete(mk); setV(null); });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [path, id]);
   return v;
 }

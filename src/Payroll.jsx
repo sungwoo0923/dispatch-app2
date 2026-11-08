@@ -29,7 +29,7 @@ import { BANK_NAMES, formatAccount, onlyDigits, parseBankText } from "./bankUtil
 import { useHrOptions, EMPLOYMENT_STATUS_OPTIONS } from "./hrConstants";
 import { sendInternalMail } from "./InternalMail";
 import CustomDatePicker from "./CustomDatePicker";
-import PayrollGate from "./PayrollGate";
+import PayrollGate, { prefetchPayrollStatus } from "./PayrollGate";
 import { payslipHtml, PAYSLIP_CSS, printPayslips, TAX_NOTE } from "./payslipDoc";
 import { kstDay, kstYm, shiftYm, lastDayOf, safeId, slipId, runId, empId, toNum, ymLabel, blank, uniq, inp, numInp, NUMS, sec, Label, Note, H, Sel, Money, Seg, enterNext, useMedia, useCol, useDocData } from "./payrollUi";
 import { kpPrompt, kpConfirm } from "./kpDialog";
@@ -93,14 +93,18 @@ function userAccounts(u = {}) {
 
 // ── 데이터 구독 ──
 const isStaff = (u, company) => (u.companyName || DEFAULT_COMPANY) === company && !["driver", "shipper", "cafeUser", "totalMaster"].includes(u.role) && !isTMUser(u) && u.approved !== false;
+const _staffMemo = new Map(); // ⭐ 2026-11-09 다시 들어오면 지난 직원 목록을 먼저 보여 준다(메모리만)
 function useStaff(company) {
-  const [rows, setRows] = React.useState(null);
+  const [rows, setRows] = React.useState(() => _staffMemo.get(company) || null);
   React.useEffect(() => {
     if (!company) return undefined;
-    return onSnapshot(query(collection(db, "users"), where("companyName", "==", company)), (s) => setRows(s.docs.map((d) => ({ id: d.id, ...d.data() })).filter((u) => isStaff(u, company))), () => setRows([]));
+    setRows(_staffMemo.get(company) || null);
+    return onSnapshot(query(collection(db, "users"), where("companyName", "==", company)), (s) => { const v = s.docs.map((d) => ({ id: d.id, ...d.data() })).filter((u) => isStaff(u, company)); _staffMemo.set(company, v); setRows(v); }, () => setRows([]));
   }, [company]);
   return rows;
 }
+// ⭐ 2026-11-09 회계관리에 들어오면 급여 화면 묶음 + 잠금 상태(서버)를 미리 받아 둔다 → [급여 계산] 누르면 바로 열림
+export function prefetchPayroll(company) { return prefetchPayrollStatus(company).catch(() => null); }
 export const usePayrollSettings = (company) => useDocData("payrollSettings", company);
 // 수당·공제 종류 드롭다운 — 기본 목록 + 회사 항목(요율·설정) + 이미 쓰고 있는 항목 이름
 function useItemKinds(settings, emps, slips) {

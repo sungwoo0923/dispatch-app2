@@ -62877,6 +62877,13 @@ function AccountingWorkspace({ company, fixedRows = [], clients = [], drivers = 
   const yearRows = useYearOrders(company, fixedRows);
   // ⭐ 2026-11-06 직원 급여 계산(급여관리 권한 — payrollAccess.js)
   const payAcc = usePayrollAccess(company, auth.currentUser?.uid || "preview", role, auth.currentUser?.email || "");
+  // ⭐ 2026-11-09 급여 계산 바로 열기 — 급여 화면 묶음과 잠금 상태를 미리 받아 둔다(화면이 한가할 때)
+  React.useEffect(() => {
+    if (!payAcc.canView || !company) return undefined;
+    const go = () => { import("./Payroll").then((m) => m.prefetchPayroll?.(company)).catch(() => {}); };
+    const id = typeof window.requestIdleCallback === "function" ? window.requestIdleCallback(go, { timeout: 1500 }) : setTimeout(go, 300);
+    return () => { if (typeof window.cancelIdleCallback === "function") window.cancelIdleCallback(id); else clearTimeout(id); };
+  }, [payAcc.canView, company]);
   return (
     <KpSubNav code="ACCOUNTING" title="회계관리" icon="money" active={tab} onSelect={setTab}
       items={[{ key: "overview", label: "회계 개요", en: "OVERVIEW", icon: "chart" }, { key: "book", label: "회계 장부", en: "LEDGER", icon: "sheet" }, ...(payAcc.canView ? [{ key: "payroll", label: "급여 계산", en: "PAYROLL", icon: "money" }] : []), { key: "retire", label: "퇴직 정산", en: "RETIREMENT", icon: "user" }]}>

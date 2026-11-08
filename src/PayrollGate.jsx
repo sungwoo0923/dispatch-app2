@@ -36,6 +36,25 @@ const api = {
   lock: (company) => (demo() ? Promise.resolve(demoApi.lock()) : call("payrollLock", { company })),
 };
 
+// ⭐ 2026-11-09 급여관리 바로 열기 — 잠금 상태(서버 함수) 응답을 기다리지 않게
+//  · 지난번 상태를 이 탭(sessionStorage)에 기억해 두고 먼저 보여 준다(비밀번호 여부·관리자 여부만 — 급여 데이터는 저장 안 함)
+//  · 같은 회사 상태 요청은 한 번만(회계관리 화면에 들어오면 미리 요청 — prefetchPayrollStatus)
+//  · 이미 잠금 해제된 상태(payrollUnlocks 문서가 살아 있음)면 서버 응답 전에도 바로 급여 화면을 연다
+const stKey = (company) => `kpPayGateSt:${company}:${auth.currentUser?.uid || ""}`;
+const readSt = (company) => { try { const v = JSON.parse(sessionStorage.getItem(stKey(company)) || "null"); return v && typeof v === "object" ? v : null; } catch { return null; } };
+const writeSt = (company, r) => { try { const { unlockedUntil, lockUntil, ...keep } = r || {}; void unlockedUntil; void lockUntil; sessionStorage.setItem(stKey(company), JSON.stringify(keep)); } catch { /* 무시 */ } };
+const stPending = new Map(); // 회사 → { at, p }
+export function prefetchPayrollStatus(company, { force = false } = {}) {
+  if (!company) return Promise.resolve(null);
+  const key = `${company}:${auth.currentUser?.uid || ""}`;
+  const hit = stPending.get(key);
+  if (!force && hit && Date.now() - hit.at < 60000) return hit.p;
+  const p = api.status(company).then((r) => { writeSt(company, r); return r; });
+  p.catch(() => stPending.delete(key));
+  stPending.set(key, { at: Date.now(), p });
+  return p;
+}
+
 const mmss = (ms) => { const s = Math.max(0, Math.round(ms / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`; };
 const inp = "h-12 w-full px-4 rounded-xl border border-[#DCE3EE] bg-white text-[16px] font-bold text-[#0F1A30] outline-none focus:border-[#2D4C82] focus:ring-2 focus:ring-[#8FB0F0]/40 tracking-[0.12em]";
 const LockIcon = ({ open = false, size = 26 }) => (
@@ -92,20 +111,21 @@ function GateCard({ title, desc, children }) {
 
 export default function PayrollGate({ company, canAdmin = false, children }) {
   const uid = auth.currentUser?.uid || "";
-  const [st, setSt] = React.useState(null); // 서버 상태
+  const [st, setSt] = React.useState(() => readSt(company)); // 서버 상태(지난번 값 먼저)
   const [until, setUntil] = React.useState(0);
+  const [snapReady, setSnapReady] = React.useState(() => demo() || !uid); // 잠금 해제 문서를 한 번 받았는지
   const [pw, setPw] = React.useState("");
   const [msg, setMsg] = React.useState("");
   const [busy, setBusy] = React.useState(false);
   const [changing, setChanging] = React.useState(false);
   const [now, setNow] = React.useState(Date.now());
   const lastAct = React.useRef(Date.now());
-  const load = React.useCallback(() => api.status(company).then((r) => { setSt(r); setUntil(r.unlockedUntil || 0); }).catch((e) => setSt({ error: e.message })), [company]);
+  const load = React.useCallback((force = false) => prefetchPayrollStatus(company, { force }).then((r) => { setSt(r); if (demo() || !uid) setUntil(r.unlockedUntil || 0); }).catch((e) => setSt({ error: e.message })), [company, uid]);
   React.useEffect(() => { load(); }, [load]);
   // 서버 잠금 해제 문서(다른 탭에서 잠그거나 비밀번호가 바뀌면 바로 잠김)
   React.useEffect(() => {
     if (demo() || !uid) return undefined;
-    return onSnapshot(doc(db, "payrollUnlocks", uid), (s) => { const d = s.exists() ? s.data() : null; const ex = d && d.companyName === company ? d.expiresAt?.toMillis?.() || 0 : 0; setUntil(ex > Date.now() ? ex : 0); }, () => {});
+    return onSnapshot(doc(db, "payrollUnlocks", uid), (s) => { const d = s.exists() ? s.data() : null; const ex = d && d.companyName === company ? d.expiresAt?.toMillis?.() || 0 : 0; setUntil(ex > Date.now() ? ex : 0); setSnapReady(true); }, () => setSnapReady(true));
   }, [uid, company]);
   const open = until > now;
   // 시계 · 손대지 않으면 잠금
@@ -117,7 +137,7 @@ export default function PayrollGate({ company, canAdmin = false, children }) {
     const t = setInterval(() => setNow(Date.now()), 1000);
     return () => { evs.forEach((e) => window.removeEventListener(e, act)); clearInterval(t); };
   }, [open]);
-  const lockNow = React.useCallback(async (why = "") => { setUntil(0); setPw(""); setMsg(why); setChanging(false); await api.lock(company).catch(() => {}); }, [company]);
+  const lockNow = React.useCallback(async (why = "") => { setUntil(0); setPw(""); setMsg(why); setChanging(false); stPending.clear(); await api.lock(company).catch(() => {}); }, [company]);
   React.useEffect(() => { if (open && now - lastAct.current > IDLE_MS) lockNow("10분 동안 쓰지 않아 다시 잠갔어요"); }, [now, open, lockNow]);
   React.useEffect(() => { if (!open && until && now >= until) setMsg("30분이 지나 다시 잠갔어요"); }, [now, open, until]);
   React.useEffect(() => { const t = setInterval(() => setNow(Date.now()), 15000); return () => clearInterval(t); }, []);
@@ -134,10 +154,12 @@ export default function PayrollGate({ company, canAdmin = false, children }) {
     } catch (er) { setMsg(er.message || "확인하지 못했어요"); } finally { setBusy(false); }
   };
 
-  if (!st) return <div className="py-24 text-center text-[15px] font-bold text-[#7A879C]">확인 중…</div>;
-  if (st.error) return <GateCard title="잠금 상태를 확인하지 못했어요" desc={st.error}><button type="button" onClick={load} className="w-full h-12 rounded-xl bg-[#0F1A30] text-white text-[15px] font-black">다시 시도</button></GateCard>;
-  if (st.staff === false) return <GateCard title="경리 담당자만 열 수 있어요" desc="급여는 경리·회계팀이 관리합니다. 본인 급여명세서는 내정보에서 볼 수 있어요." />;
-  if (!st.hasPassword) {
+  // 이미 열려 있으면(잠금 해제 문서가 살아 있음) 서버 응답을 기다리지 않고 바로 연다
+  if (!st && !open) return <div className="py-24 text-center text-[15px] font-bold text-[#7A879C]">확인 중…</div>;
+  if (st?.error && !open) return <GateCard title="잠금 상태를 확인하지 못했어요" desc={st.error}><button type="button" onClick={() => load(true)} className="w-full h-12 rounded-xl bg-[#0F1A30] text-white text-[15px] font-black">다시 시도</button></GateCard>;
+  if (!open && !snapReady) return <div className="py-24 text-center text-[15px] font-bold text-[#7A879C]">확인 중…</div>;
+  if (!open && st.staff === false) return <GateCard title="경리 담당자만 열 수 있어요" desc="급여는 경리·회계팀이 관리합니다. 본인 급여명세서는 내정보에서 볼 수 있어요." />;
+  if (!open && !st.hasPassword) {
     return (st.admin || canAdmin)
       ? <GateCard title="급여 비밀번호를 정해 주세요" desc="급여관리를 열 때마다 한 번 더 확인합니다. 경리 담당자에게만 알려 주세요."><PwForm company={company} mode="set" onDone={(r) => { lastAct.current = Date.now(); setSt((s) => ({ ...s, hasPassword: true })); setNow(Date.now()); setUntil(r.expiresAt); }} /></GateCard>
       : <GateCard title="아직 급여 비밀번호가 없어요" desc="경리 관리자가 먼저 비밀번호를 정하면 열 수 있어요." />;
@@ -162,17 +184,17 @@ export default function PayrollGate({ company, canAdmin = false, children }) {
         <span className="text-[14px] font-black text-[#0F1A30]">잠금 해제됨</span>
         <span className="text-[14px] font-bold text-[#5B6B85]"><b className="text-[#0F1A30]" style={NUMS}>{mmss(left)}</b> 뒤 잠김 · 10분 쉬면 자동 잠금</span>
         <span className="flex-1" />
-        {(st.admin || canAdmin) && <button type="button" onClick={() => setChanging(true)} className="h-9 px-3 rounded-lg border border-[#DCE3EE] bg-white text-[14px] font-black text-[#1B2B4B]" data-testid="pw-change">비밀번호 변경</button>}
+        {(st?.admin || canAdmin) && <button type="button" onClick={() => setChanging(true)} className="h-9 px-3 rounded-lg border border-[#DCE3EE] bg-white text-[14px] font-black text-[#1B2B4B]" data-testid="pw-change">비밀번호 변경</button>}
         <button type="button" onClick={() => lockNow("잠갔어요")} className="h-9 px-3 rounded-lg bg-[#0F1A30] text-white text-[14px] font-black" data-testid="payroll-lock">지금 잠그기</button>
       </div>
       {changing && (
-        <div className="fixed inset-0 z-[100000] bg-[#0F1A30]/45 grid place-items-center px-3" onClick={() => { if (!(st.usingDefault && (st.admin || canAdmin))) setChanging(false); }}>
+        <div className="fixed inset-0 z-[100000] bg-[#0F1A30]/45 grid place-items-center px-3" onClick={() => { if (!(st?.usingDefault && (st?.admin || canAdmin))) setChanging(false); }}>
           <div className="w-full max-w-[440px] rounded-[24px] bg-white shadow-[0_24px_60px_rgba(15,26,48,0.3)] overflow-hidden" onClick={(e) => e.stopPropagation()}>
             <div className="px-6 pt-5 pb-4 text-white" style={{ background: "linear-gradient(120deg,#0B1428,#1B2B4B 60%,#2D4C82)" }}><div className="text-[12px] font-extrabold tracking-[0.26em] text-[#8FB0F0]">PAYROLL · PASSWORD</div><div className="text-[19px] font-black">급여 비밀번호 변경</div><div className="text-[14px] font-bold text-white/75">바꾸면 다른 담당자는 새 비밀번호로 다시 열어야 해요</div></div>
             <div className="px-6 py-5">
-              {st.usingDefault && <div className="mb-3 rounded-xl bg-[#EEF3FC] border border-[#C9D6EE] px-3.5 py-2.5 text-[14px] font-bold text-[#1B2B4B]">처음 비밀번호(000000)를 쓰고 있어요. 새 비밀번호로 바꿔 주세요.</div>}
-              {(st.admin || canAdmin)
-                ? <PwForm company={company} mode={st.usingDefault ? "set" : "change"} onCancel={st.usingDefault ? undefined : () => setChanging(false)} onDone={(r) => { setChanging(false); setSt((s) => ({ ...s, usingDefault: false })); setUntil(r.expiresAt); }} />
+              {st?.usingDefault && <div className="mb-3 rounded-xl bg-[#EEF3FC] border border-[#C9D6EE] px-3.5 py-2.5 text-[14px] font-bold text-[#1B2B4B]">처음 비밀번호(000000)를 쓰고 있어요. 새 비밀번호로 바꿔 주세요.</div>}
+              {(st?.admin || canAdmin)
+                ? <PwForm company={company} mode={st?.usingDefault ? "set" : "change"} onCancel={st?.usingDefault ? undefined : () => setChanging(false)} onDone={(r) => { setChanging(false); setSt((s) => ({ ...s, usingDefault: false })); setUntil(r.expiresAt); }} />
                 : <div className="space-y-3"><div className="text-[14px] font-bold text-[#3A4A66]">비밀번호는 경리 관리자만 바꿀 수 있어요. 관리자에게 바꿔 달라고 해 주세요.</div><button type="button" onClick={() => setChanging(false)} className="w-full h-12 rounded-xl bg-[#0F1A30] text-white text-[15px] font-black">확인</button></div>}
             </div>
           </div>
