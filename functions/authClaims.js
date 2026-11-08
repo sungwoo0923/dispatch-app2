@@ -217,7 +217,7 @@ function makeClaimsService({ db, getAuth, FieldValue }) {
   return { recompute, recomputeMany, uidsWhere };
 }
 
-function register({ functions, db, getAuth, FieldValue }) {
+function register({ functions, db, getAuth, FieldValue, callOpts = {} }) {
   const svc = makeClaimsService({ db, getAuth, FieldValue });
   const HttpsError = functions.https.HttpsError;
   const out = {};
@@ -270,7 +270,7 @@ function register({ functions, db, getAuth, FieldValue }) {
   });
 
   // 화면 → 내 토큰 권한 다시 계산(로그인 직후 토큰에 값이 없을 때 · 문제 해결용). 결과를 받은 뒤 getIdToken(true)
-  out.refreshMyClaims = functions.runWith({ timeoutSeconds: 30, memory: "256MB" }).https.onCall(async (data, context) => {
+  out.refreshMyClaims = functions.runWith({ timeoutSeconds: 30, memory: "256MB", ...callOpts }).https.onCall(async (data, context) => {
     if (!context.auth) throw new HttpsError("unauthenticated", "로그인해 주세요");
     const r = await svc.recompute(context.auth.uid, { force: data?.force === true });
     return { ok: true, changed: !!r.changed, v: r.v || 0, reason: r.reason || r.skipped || "" };
@@ -278,7 +278,7 @@ function register({ functions, db, getAuth, FieldValue }) {
 
   // 최고관리자 — 기존 사용자 전체 토큰 권한 채우기(한 번에 limit명, 이어서 하기: 받은 next를 cursor로 다시 호출)
   //  phase 'users'(users 문서 순서) → 'hub'(users 문서가 없는 허브 회원) → done
-  out.backfillClaims = functions.runWith({ timeoutSeconds: 540, memory: "512MB" }).https.onCall(async (data, context) => {
+  out.backfillClaims = functions.runWith({ timeoutSeconds: 540, memory: "512MB", ...callOpts }).https.onCall(async (data, context) => {
     if (!context.auth) throw new HttpsError("unauthenticated", "로그인해 주세요");
     const isMaster = context.auth.token?.email === MASTER
       || ((await db.collection("users").doc(context.auth.uid).get()).data()?.role === "totalMaster");
