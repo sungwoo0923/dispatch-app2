@@ -16,6 +16,10 @@ import { mainScanAi } from "./orderScanApi";
 import { parseOrderScan, splitOrders } from "./orderScanParser";
 import { normalizeAiFields, mergeAiInto, applyAliases, applyLabelRemaps, reconcileRoles, kstToday, needsCheck } from "./orderScanAi";
 import OrderScanModal, { normPlaces, prepImage, toUploadJpeg } from "./OrderScanModal";
+import CustomDatePicker from "./CustomDatePicker"; // ⭐ 2026-11-09 등록 카드 — 배차관리 등록 폼과 같은 달력·선택 목록
+import { CustomSelect } from "./CustomSelect";
+import { VehicleTypePicker } from "./vehicleTypes";
+import { dropdownList } from "./companyDropdownOptions";
 import { remindAtOf } from "./PersonalSchedule";
 import {
   buildUpdate, buildCreateRecord, scanValsToFields, splitPasted, looksLikeOrderText, intentOf, pickerRows, localEditProposal, localAnswer,
@@ -189,57 +193,165 @@ function BulkCard({ msg, rowOf, canWrite, onApply, onUndo, onCancel }) {
 }
 
 // ── 등록 카드(여러 건 · 칸 고치기) ──
-function CreateCard({ msg, canWrite, onChange, onCreate, onUndo, onCancel, mobile }) {
+// ⭐ 2026-11-09 칸마다 배차관리 등록 폼과 같은 입력 — 거래처 자동완성 · 프로그램 달력 · 시간/톤수/지급·배차방식 선택 · 차량종류(회사 공용 목록)
+// 등록 폼(TimeAmPmPicker)과 같은 "오전 9시 · 오후 3시 30분" 형식, 30분 간격
+const TIME_OPTS = Array.from({ length: 48 }, (_, i) => { const h = Math.floor(i / 2); const h12 = h % 12 === 0 ? 12 : h % 12; return `${h >= 12 ? "오후" : "오전"} ${h12}시${i % 2 ? " 30분" : ""}`; });
+const TON_OPTS = [...new Set(["0.5톤", "1톤", "1.4톤", "2.5톤", "3.5톤", "4.5톤", "5톤", "5톤축", "8톤", "9.5톤", "11톤", "14톤", "18톤", "25톤", ...Array.from({ length: 25 }, (_, i) => `${i + 1}톤`)])];
+const DATE_KEYS = new Set(["상차일", "하차일"]);
+const TIME_KEYS = new Set(["상차시간", "하차시간"]);
+const MONEY_KEYS = new Set(["청구운임", "기사운임"]);
+const commaNum = (v) => { const d = String(v ?? "").replace(/[^\d]/g, ""); return d ? Number(d).toLocaleString("ko-KR") : ""; };
+const fieldBox = (warn, mob) => ({ height: mob ? 40 : 34, width: "100%", boxSizing: "border-box", borderRadius: 9, border: `1px solid ${warn ? "#E9C46A" : LINE}`, background: warn ? "#FFFBEB" : "#fff", padding: "0 10px", fontSize: mob ? 16 : 13.5, color: "#0F1A30", fontWeight: 650, outline: "none" }); // 모바일 16px = 아이폰 입력 확대(화면 튐) 방지
+const fieldCls = (warn, mob) => `${mob ? "h-[40px] text-[16px]" : "h-[34px] text-[13.5px]"} w-full rounded-[9px] border px-2.5 font-semibold text-[#0F1A30] text-left ${warn ? "border-[#E9C46A] bg-[#FFFBEB]" : "border-[#E3E8F0] bg-white"}`;
+const selectOpts = (list, cur) => { const c = String(cur ?? "").trim(); return c && !list.includes(c) ? [c, ...list] : list; };
+const nk = (x) => String(x || "").toLowerCase().replace(/\s/g, "");
+
+function ClientNameInput({ value, onChange, clients, warn, mob }) {
+  const [open, setOpen] = useState(false);
+  const [act, setAct] = useState(0);
+  const names = React.useMemo(() => [...new Set((clients || []).map((c) => (typeof c === "string" ? c : c?.거래처명 || c?.name || "")).map((x) => String(x).trim()).filter(Boolean))], [clients]);
+  const q = nk(value);
+  const list = React.useMemo(() => {
+    if (!q) return names.slice(0, 8);
+    return names.filter((n) => nk(n).includes(q)).sort((a, b) => (nk(a).startsWith(q) ? 0 : 1) - (nk(b).startsWith(q) ? 0 : 1) || a.length - b.length).slice(0, 8);
+  }, [names, q]);
+  const exact = names.some((n) => n === String(value || "").trim());
+  const pick = (n) => { onChange(n); setOpen(false); };
+  return (
+    <div style={{ position: "relative" }}>
+      <input data-testid="ai-field-거래처명" value={value ?? ""} autoComplete="off" placeholder="거래처 검색"
+        onChange={(e) => { onChange(e.target.value); setOpen(true); setAct(0); }}
+        onFocus={() => setOpen(true)} onBlur={() => setTimeout(() => setOpen(false), 150)}
+        onKeyDown={(e) => {
+          if (!open || !list.length) return;
+          if (e.key === "ArrowDown") { e.preventDefault(); setAct((a) => Math.min(list.length - 1, a + 1)); }
+          else if (e.key === "ArrowUp") { e.preventDefault(); setAct((a) => Math.max(0, a - 1)); }
+          else if (e.key === "Enter") { e.preventDefault(); pick(list[act]); }
+          else if (e.key === "Escape") setOpen(false);
+        }}
+        style={{ ...fieldBox(warn, mob), paddingRight: exact ? 52 : 10 }} />
+      {exact && <span style={{ position: "absolute", right: 8, top: 8, height: 18, padding: "0 6px", borderRadius: 5, background: "#EEF2F8", color: NAVY, fontSize: 10.5, fontWeight: 900, display: "inline-flex", alignItems: "center" }}>등록됨</span>}
+      {open && list.length > 0 && !(exact && list.length === 1) && (
+        <div data-testid="ai-client-list" style={{ position: "absolute", left: 0, right: 0, top: mob ? 43 : 37, zIndex: 50, background: "#fff", border: `1px solid ${LINE}`, borderRadius: 10, boxShadow: "0 12px 28px rgba(15,26,48,0.16)", maxHeight: 240, overflowY: "auto" }}>
+          <div style={{ padding: "6px 10px", fontSize: 10.5, fontWeight: 900, letterSpacing: "0.14em", color: "#7A89A3", borderBottom: "1px solid #EEF1F6" }}>CLIENTS · 등록된 거래처</div>
+          {list.map((n, i) => (
+            <button key={n} type="button" onMouseDown={(e) => { e.preventDefault(); pick(n); }} onMouseEnter={() => setAct(i)}
+              style={{ all: "unset", boxSizing: "border-box", display: "block", width: "100%", padding: "8px 10px", fontSize: 13.5, fontWeight: 700, color: "#0F1A30", cursor: "pointer", background: i === act ? "#F2F5FA" : "#fff", borderLeft: `3px solid ${i === act ? NAVY : "transparent"}` }}>{n}</button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function CreateField({ k, value, onChange, warn, clients, company, mob }) {
+  if (k === "거래처명") return <ClientNameInput value={value} onChange={onChange} clients={clients} warn={warn} mob={mob} />;
+  if (DATE_KEYS.has(k)) return <CustomDatePicker value={value || ""} onChange={(e) => onChange(e?.target ? e.target.value : e)} className={fieldCls(warn, mob)} placeholder="날짜 선택" />;
+  if (TIME_KEYS.has(k) || k === "차량톤수") {
+    const opts = k === "차량톤수" ? TON_OPTS : TIME_OPTS; const ph = k === "차량톤수" ? "톤수 선택" : "시간 선택";
+    return (
+      <CustomSelect value={value || ""} onChange={(e) => onChange(e.target.value)} className={fieldCls(warn, mob)} placeholder={ph}>
+        <option value="">{ph}</option>
+        {selectOpts(opts, value).map((t) => <option key={t} value={t}>{t}</option>)}
+      </CustomSelect>
+    );
+  }
+  if (k === "차량종류") return <VehicleTypePicker value={value || ""} onChange={(v) => onChange(v)} company={company} className={fieldCls(warn, mob)} placeholder="차량종류 선택" />;
+  if (k === "지급방식" || k === "배차방식") {
+    const list = dropdownList(k, [], value);
+    return (
+      <CustomSelect value={value || ""} onChange={(e) => onChange(e.target.value)} className={fieldCls(warn, mob)} placeholder={`${k} 선택`}>
+        <option value="">{k} 선택</option>
+        {selectOpts(list, value).map((t) => <option key={t} value={t}>{t}</option>)}
+      </CustomSelect>
+    );
+  }
+  if (MONEY_KEYS.has(k)) return (
+    <div style={{ position: "relative" }}>
+      <input data-testid={`ai-field-${k}`} inputMode="numeric" value={commaNum(value)} onChange={(e) => onChange(e.target.value.replace(/[^\d]/g, ""))}
+        style={{ ...fieldBox(warn, mob), textAlign: "right", paddingRight: 28, fontVariantNumeric: "tabular-nums" }} />
+      <span style={{ position: "absolute", right: 10, top: mob ? 11 : 8, fontSize: 12, color: "#7A89A3", fontWeight: 700 }}>원</span>
+    </div>
+  );
+  return <input data-testid={`ai-field-${k}`} value={value ?? ""} onChange={(e) => onChange(e.target.value)} style={fieldBox(warn, mob)} />;
+}
+
+function CreateCard({ msg, canWrite, onChange, onCreate, onUndo, onCancel, mobile, clients = [], company = "" }) {
   const orders = msg.data.orders || [];
   const [open, setOpen] = useState(() => (orders.length === 1 ? 0 : -1));
   const states = msg.result?.states || [];
   const pendingN = orders.filter((_, i) => !states[i]).length;
+  const md = (d) => String(d || "").slice(5).replace("-", ".");
+  const NUM = { fontVariantNumeric: "tabular-nums" };
+  const cap = { fontSize: 10, fontWeight: 900, letterSpacing: "0.16em", color: "#7A89A3" };
+  const ell = { fontSize: 13.5, fontWeight: 800, color: "#0F1A30", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" };
   return (
-    <div style={cardBox} data-testid="ai-create-card">
-      <div style={{ fontSize: 14.5, fontWeight: 900 }}>{orders.length > 1 ? `오더 ${orders.length}건을 등록할까요?` : "이 오더를 등록할까요?"}</div>
-      <div style={{ fontSize: 12, color: SUB, marginTop: 2 }}>{msg.data.source === "scan" ? `붙여넣은 글에서 찾았어요${msg.data.ai ? " (정밀 인식)" : ""}. 노란 칸은 확인이 필요해요.` : "칸을 눌러 고칠 수 있어요."}</div>
-      <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 8 }}>
+    <div data-testid="ai-create-card" style={{ background: "#fff", border: `1px solid ${LINE}`, borderRadius: 16, overflow: "hidden", boxShadow: "0 8px 24px rgba(15,26,48,0.08)" }}>
+      <div style={{ background: "#0F1A30", color: "#fff", padding: "12px 14px" }}>
+        <div style={{ fontSize: 10, fontWeight: 900, letterSpacing: "0.24em", color: "#8FB0F0" }}>NEW ORDER · CONFIRM</div>
+        <div style={{ fontSize: 15.5, fontWeight: 900, marginTop: 2 }}>{orders.length > 1 ? `오더 ${orders.length}건을 등록할까요?` : "이 오더를 등록할까요?"}</div>
+        <div style={{ fontSize: 12, color: "rgba(255,255,255,0.62)", marginTop: 2 }}>{msg.data.source === "scan" ? `붙여넣은 글에서 찾았어요${msg.data.ai ? " · 정밀 인식" : ""} · 테두리가 노란 칸은 확인해 주세요` : "카드를 눌러 칸을 고칠 수 있어요"}</div>
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 8, padding: 10, background: "#F7F9FC" }}>
         {orders.map((o, i) => {
           const f = o.fields; const miss = missingOf(f); const st = states[i];
+          const sale = Number(String(f.청구운임 || "").replace(/[^\d]/g, "")) || 0, cost = Number(String(f.기사운임 || "").replace(/[^\d]/g, "")) || 0;
+          const off = !canWrite || msg.busy || miss.includes("상차지") || miss.includes("하차지");
           return (
-            <div key={i} style={{ border: `1px solid ${st ? "#ABEFC6" : LINE}`, borderRadius: 12, padding: 10, background: st ? "#F6FEF9" : "#FBFCFE" }}>
-              <button type="button" onClick={() => setOpen(open === i ? -1 : i)} style={{ all: "unset", cursor: "pointer", display: "block", width: "100%" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", gap: 6, fontSize: 12, color: SUB, fontWeight: 700 }}>
-                  <span>{orders.length > 1 ? `${i + 1}. ` : ""}{String(f.상차일 || "").slice(5).replace("-", "/")} {f.상차시간 || ""} · {f.거래처명 || "거래처 없음"}</span>
-                  <span>{st ? <span style={tagStyle("#067647")}>{st === "opened" ? "등록 화면" : "등록됨"}</span> : miss.length ? <span style={tagStyle("#B54708")}>{miss.join("·")} 확인</span> : <span style={tagStyle()}>{open === i ? "접기" : "고치기"}</span>}</span>
+            <div key={i} style={{ border: `1px solid ${open === i ? BLUE : LINE}`, borderRadius: 12, background: "#fff" }}>
+              <button type="button" onClick={() => setOpen(open === i ? -1 : i)} style={{ all: "unset", cursor: "pointer", display: "block", width: "100%", boxSizing: "border-box", padding: "10px 12px" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 6 }}>
+                  <span style={{ ...ell, fontSize: 13, fontWeight: 900, minWidth: 0 }}>{orders.length > 1 && <span style={{ ...NUM, color: "#7A89A3", marginRight: 6 }}>{String(i + 1).padStart(2, "0")}</span>}{f.거래처명 || <span style={{ color: "#B54708" }}>거래처 미입력</span>}</span>
+                  <span style={{ flexShrink: 0 }}>{st ? <span style={tagStyle(NAVY)}>{st === "opened" ? "등록 화면" : "✓ 등록됨"}</span> : miss.length ? <span style={tagStyle("#B54708")}>{miss.join("·")} 확인</span> : <span style={tagStyle()}>{open === i ? "접기 ▲" : "고치기 ▼"}</span>}</span>
                 </div>
-                <div style={{ fontSize: 14, fontWeight: 800, marginTop: 2 }}>{f.상차지명 || f.상차지주소 || "-"} → {f.하차지명 || f.하차지주소 || "-"}</div>
-                <div style={{ fontSize: 12, color: SUB, marginTop: 2 }}>{[f.화물내용, [f.차량톤수, f.차량종류].filter(Boolean).join(" "), f.청구운임 && won(f.청구운임), f.지급방식].filter(Boolean).join(" · ")}</div>
+                <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) auto minmax(0,1fr)", alignItems: "center", gap: 8, marginTop: 8 }}>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={cap}>PICKUP · 상차</div>
+                    <div style={ell}>{f.상차지명 || f.상차지주소 || "-"}</div>
+                    <div style={{ ...NUM, fontSize: 12, color: SUB, fontWeight: 700 }}>{md(f.상차일)} {f.상차시간 || ""}</div>
+                  </div>
+                  <span style={{ color: "#9AA9C3", fontWeight: 900 }}>→</span>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={cap}>DROP · 하차</div>
+                    <div style={ell}>{f.하차지명 || f.하차지주소 || "-"}</div>
+                    <div style={{ ...NUM, fontSize: 12, color: SUB, fontWeight: 700 }}>{md(f.하차일 || f.상차일)} {f.하차시간 || ""}</div>
+                  </div>
+                </div>
+                <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "4px 10px", marginTop: 8, paddingTop: 8, borderTop: "1px dashed #E3E8F0", fontSize: 12, color: SUB, fontWeight: 700 }}>
+                  {[f.화물내용, [f.차량톤수, f.차량종류].filter(Boolean).join(" "), f.지급방식, f.배차방식].filter(Boolean).map((x, j) => <span key={j}>{x}</span>)}
+                  <span style={{ marginLeft: "auto", ...NUM, color: "#0F1A30", fontWeight: 900, fontSize: 13.5 }}>{sale ? won(sale) : "운임 미정"}{cost ? <span style={{ color: "#7A89A3", fontWeight: 700, fontSize: 11.5 }}> · 기사 {won(cost)}</span> : null}</span>
+                </div>
               </button>
               {open === i && !st && (
-                <div style={{ display: "grid", gridTemplateColumns: mobile ? "1fr" : "1fr 1fr", gap: 6, marginTop: 8 }}>
+                <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) minmax(0,1fr)", gap: 8, padding: "2px 12px 12px", borderTop: "1px solid #EEF1F6", paddingTop: 10 }}>
                   {CREATE_FIELDS.map((k) => (
-                    <label key={k} style={{ display: "flex", flexDirection: "column", gap: 2, fontSize: 11.5, color: SUB, fontWeight: 800 }}>
+                    <label key={k} style={{ display: "flex", flexDirection: "column", gap: 3, fontSize: 11.5, color: SUB, fontWeight: 800, gridColumn: /주소|메모|화물내용|거래처명/.test(k) ? "1 / -1" : undefined, minWidth: 0 }}>
                       {labelOf(k)}
-                      <input data-testid={`ai-field-${k}`} value={f[k] ?? ""} onChange={(e) => onChange(i, k, e.target.value)}
-                        style={{ height: 32, borderRadius: 8, border: `1px solid ${o.checks?.includes(k) ? "#FEC84B" : LINE}`, background: o.checks?.includes(k) ? "#FFFAEB" : "#fff", padding: "0 8px", fontSize: 13, color: "#0F1A30", fontWeight: 600 }} />
+                      <CreateField k={k} value={f[k]} onChange={(v) => onChange(i, k, v)} warn={o.checks?.includes(k)} clients={clients} company={company} mob={mobile} />
                     </label>
                   ))}
                 </div>
               )}
               {!st && (!msg.status || msg.status === "pending") && (
-                <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
-                  <button type="button" data-testid="ai-create" disabled={!canWrite || msg.busy || miss.includes("상차지") || miss.includes("하차지")} onClick={() => onCreate([i])} style={btn("primary", !canWrite || msg.busy || miss.includes("상차지") || miss.includes("하차지"))}>{mobile ? "등록 화면에 넣기" : "등록"}</button>
+                <div style={{ display: "flex", gap: 6, padding: "0 12px 12px" }}>
+                  <button type="button" data-testid="ai-create" disabled={off} onClick={() => onCreate([i])} style={{ ...btn("primary", off), flex: 1, height: 38 }}>{mobile ? "등록 화면에 넣기" : "이 오더 등록"}</button>
                 </div>
               )}
             </div>
           );
         })}
       </div>
-      {(!msg.status || msg.status === "pending") && (
-        <div style={{ display: "flex", gap: 6, marginTop: 10 }}>
-          {orders.length > 1 && pendingN > 0 && !mobile && <button type="button" data-testid="ai-create-all" disabled={!canWrite || msg.busy} onClick={() => onCreate(orders.map((_, i) => i).filter((i) => !states[i]))} style={btn("primary", !canWrite || msg.busy)}>{msg.busy ? "등록 중" : `남은 ${pendingN}건 모두 등록`}</button>}
-          <button type="button" onClick={onCancel} style={btn("ghost")}>{states.some(Boolean) ? "닫기" : "취소"}</button>
-        </div>
-      )}
-      {!canWrite && <div style={{ fontSize: 12, color: "#B54708", marginTop: 6 }}>조회 전용 권한이라 등록할 수 없어요.</div>}
-      <StatusLine status={msg.status} note={msg.note} />
-      {msg.result?.ids?.length > 0 && msg.status !== "undone" && !mobile && <button type="button" data-testid="ai-undo" onClick={onUndo} disabled={msg.busy} style={{ ...btn("ghost", msg.busy), marginTop: 6 }}>등록 되돌리기(삭제)</button>}
+      <div style={{ padding: "10px 12px", borderTop: `1px solid ${LINE}` }}>
+        {(!msg.status || msg.status === "pending") && (
+          <div style={{ display: "flex", gap: 6 }}>
+            <button type="button" onClick={onCancel} style={{ ...btn("ghost"), height: 38 }}>{states.some(Boolean) ? "닫기" : "취소"}</button>
+            {orders.length > 1 && pendingN > 0 && !mobile && <button type="button" data-testid="ai-create-all" disabled={!canWrite || msg.busy} onClick={() => onCreate(orders.map((_, i) => i).filter((i) => !states[i]))} style={{ ...btn("primary", !canWrite || msg.busy), flex: 1, height: 38 }}>{msg.busy ? "등록 중…" : `남은 ${pendingN}건 모두 등록`}</button>}
+          </div>
+        )}
+        {!canWrite && <div style={{ fontSize: 12, color: "#B54708", marginTop: 6 }}>조회 전용 권한이라 등록할 수 없어요.</div>}
+        <StatusLine status={msg.status} note={msg.note} />
+        {msg.result?.ids?.length > 0 && msg.status !== "undone" && !mobile && <button type="button" data-testid="ai-undo" onClick={onUndo} disabled={msg.busy} style={{ ...btn("ghost", msg.busy), marginTop: 6 }}>등록 되돌리기(삭제)</button>}
+      </div>
     </div>
   );
 }
@@ -331,7 +443,24 @@ export default function AiAssistant({ dispatches = [], clients = [], places = []
     if (skipSave.current) { skipSave.current = false; return; }
     try { localStorage.setItem(storeKey, serializeChat({ messages, history })); } catch { /* 무시 */ }
   }, [messages, history, storeKey]);
-  useEffect(() => { if (open) setTimeout(() => endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" }), 30); }, [messages, busy, open]);
+  // ⭐ 2026-11-09 화면 튐 수정 — 예전엔 메시지 "내용"이 바뀔 때마다(등록 카드 칸 한 글자 고칠 때도) scrollIntoView로 맨 아래로 끌어내렸고,
+  //  scrollIntoView는 바깥 페이지(모바일 전체 화면)까지 같이 움직였다. 이제 메시지 "개수"가 늘거나 답변 대기가 바뀔 때만,
+  //  대화 목록 상자 안에서만 맨 아래로 내린다.
+  const msgListRef = useRef(null);
+  const msgCount = messages.length;
+  useEffect(() => {
+    if (!open) return undefined;
+    const t = setTimeout(() => { const el = msgListRef.current; if (el) el.scrollTo({ top: el.scrollHeight, behavior: "smooth" }); }, 30);
+    return () => clearTimeout(t);
+  }, [msgCount, busy, open]);
+  // 모바일 전체 화면으로 열려 있는 동안 뒤 페이지가 같이 스크롤·이동하지 않게 잠근다
+  useEffect(() => {
+    if (!open || variant !== "mobile") return undefined;
+    const b = document.body, h = document.documentElement, y = window.scrollY;
+    const prev = { bo: b.style.overflow, bp: b.style.position, bt: b.style.top, bw: b.style.width, ho: h.style.overflow };
+    b.style.overflow = "hidden"; b.style.position = "fixed"; b.style.top = `-${y}px`; b.style.width = "100%"; h.style.overflow = "hidden";
+    return () => { b.style.overflow = prev.bo; b.style.position = prev.bp; b.style.top = prev.bt; b.style.width = prev.bw; h.style.overflow = prev.ho; window.scrollTo(0, y); };
+  }, [open, variant]);
   useEffect(() => { if (open) setTimeout(() => inputRef.current?.focus(), 60); }, [open]);
 
   const rowById = useCallback((id) => dispatches.find((d) => rid(d) === id) || null, [dispatches]);
@@ -604,7 +733,7 @@ export default function AiAssistant({ dispatches = [], clients = [], places = []
     if (m.kind === "picker") return wrap(<OrderPicker msg={m} rows={dispatches} onPick={pickRow} today={today} />);
     if (m.kind === "update") return wrap(<UpdateCard msg={m} row={rowById(m.data.id)} canWrite={canWrite} onApply={() => applyUpdate(m)} onUndo={() => undoUpdate(m)} onCancel={() => cancelCard(m)} />);
     if (m.kind === "bulk") return wrap(<BulkCard msg={m} rowOf={rowById} canWrite={canWrite} onApply={() => applyBulk(m)} onUndo={() => undoBulk(m)} onCancel={() => cancelCard(m)} />);
-    if (m.kind === "create") return wrap(<CreateCard msg={m} canWrite={canWrite} mobile={mobile} onChange={(i, k, v) => editCreate(m, i, k, v)} onCreate={(idxs) => doCreate(m, idxs)} onUndo={() => undoCreate(m)} onCancel={() => cancelCard(m)} />);
+    if (m.kind === "create") return wrap(<CreateCard msg={m} canWrite={canWrite} mobile={mobile} clients={clients} company={company} onChange={(i, k, v) => editCreate(m, i, k, v)} onCreate={(idxs) => doCreate(m, idxs)} onUndo={() => undoCreate(m)} onCancel={() => cancelCard(m)} />);
     if (m.kind === "delete") return wrap(<DeleteCard msg={m} rowOf={rowById} canWrite={canWrite} onDelete={() => doDelete(m)} onCancel={() => cancelCard(m)} />);
     if (m.kind === "schedule") return wrap(<ScheduleCard msg={m} onSave={() => saveSchedule(m)} onCancel={() => cancelCard(m)} />);
     if (m.kind === "navigate") return <button type="button" onClick={() => goMenu(m.data.menu)} style={{ ...btn("primary"), alignSelf: "flex-start" }}>{m.data.label || `${m.data.menu} 열기`}</button>;
@@ -632,6 +761,8 @@ export default function AiAssistant({ dispatches = [], clients = [], places = []
 
   return (
     <>
+      {/* ⭐ 2026-11-09 모바일 전체 화면 비서 위로 달력·선택 목록(본문에 띄우는 창)이 보이게 */}
+      {mobile && open && <style>{`[class~="z-[999999]"]{z-index:2147481000 !important}`}</style>}
       {mobile ? (
         !open && <button type="button" data-testid="ai-fab" onClick={() => setOpen(true)} aria-label="AI 비서" style={{ position: "fixed", right: 24, bottom: "calc(94px + env(safe-area-inset-bottom, 0px))", width: 56, height: 56, borderRadius: 18, border: "none", zIndex: 9990, color: "#fff", background: "linear-gradient(145deg,#0B1428,#1B2B4B 55%,#2D4C82)", boxShadow: "0 10px 24px rgba(15,26,48,0.35)", display: "flex", alignItems: "center", justifyContent: "center" }}>{sparkle}</button>
       ) : (
@@ -645,7 +776,7 @@ export default function AiAssistant({ dispatches = [], clients = [], places = []
           <WinHeader code="AI · ASSISTANT" title={M ? M.title : "배차 AI 비서"} sub={aiState === "off" ? "기본 모드" : aiState === "on" ? "Claude 연결됨" : M ? M.sub : "말로 시키는 배차"} preset={mobile ? undefined : win.preset} onPreset={mobile ? undefined : win.setPreset} onClose={() => setOpen(false)}
             right={<button type="button" data-testid="ai-new" onClick={newChat} style={{ height: 26, padding: "0 9px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.2)", background: "rgba(255,255,255,0.08)", color: "#fff", fontSize: 11.5, fontWeight: 800, cursor: "pointer" }}>새 대화</button>} />
 
-          <div style={{ flex: 1, overflowY: "auto", padding: 14, background: "#F4F6FA", display: "flex", flexDirection: "column", gap: 10, position: "relative" }} data-testid="ai-messages">
+          <div ref={msgListRef} style={{ flex: 1, overflowY: "auto", overscrollBehavior: "contain", WebkitOverflowScrolling: "touch", padding: 14, background: "#F4F6FA", display: "flex", flexDirection: "column", gap: 10, position: "relative" }} data-testid="ai-messages">
             {messages.map((m) => <div key={m.id} style={{ flexShrink: 0, display: "flex", flexDirection: "column" }}>{renderMsg(m)}</div>)}
             {showChips && (
               <div style={{ display: "flex", gap: 6, flexWrap: "wrap", flexShrink: 0 }}>
@@ -677,8 +808,8 @@ export default function AiAssistant({ dispatches = [], clients = [], places = []
               <input ref={fileRef} type="file" accept="image/*,.txt,text/plain" style={{ display: "none" }} onChange={(e) => { readFile(e.target.files?.[0]); e.target.value = ""; }} />
               <textarea ref={inputRef} data-testid="ai-input" value={input} rows={1} onChange={(e) => setInput(e.target.value)} onPaste={onPaste}
                 onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); send(); } }}
-                placeholder={focusRow ? "바꿀 내용을 말씀해 주세요" : "무엇이든 물어보세요 · 캡처 붙여넣기 가능"}
-                style={{ flex: 1, minHeight: 38, maxHeight: 120, resize: "none", borderRadius: 12, border: `1px solid ${LINE}`, padding: "9px 12px", fontSize: 14, lineHeight: "20px", outline: "none", fontFamily: "inherit" }} />
+                placeholder={focusRow ? "바꿀 내용을 말씀해 주세요" : mobile ? "물어보기 · 오더 글 붙여넣기" : "무엇이든 물어보세요 · 캡처 붙여넣기 가능"}
+                style={{ flex: 1, minHeight: 38, maxHeight: 120, resize: "none", borderRadius: 12, border: `1px solid ${LINE}`, padding: "9px 12px", fontSize: mobile ? 16 : 14, lineHeight: "20px", outline: "none", fontFamily: "inherit" }} />
               <button type="button" data-testid="ai-send" onClick={() => send()} disabled={!!busy || !input.trim()} style={{ ...btn("primary", !!busy || !input.trim()), height: 38, flexShrink: 0 }}>보내기</button>
             </div>
           </div>
