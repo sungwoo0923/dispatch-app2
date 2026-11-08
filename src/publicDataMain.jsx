@@ -126,20 +126,20 @@ export function PopbillMemberCard({ company, canEdit }) {
   };
   const inp = "h-10 w-full px-3 rounded-xl border border-[#DCE3EE] bg-white text-[13.5px] font-semibold text-[#0F1A30] outline-none focus:border-[#2D4C82]";
   return (
-    <div className="mt-6 rounded-[20px] border border-[#E3E8F0] bg-white overflow-hidden" data-testid="popbill-card">
-      <div className="px-5 py-4 flex items-center gap-3 flex-wrap text-white" style={{ background: "linear-gradient(120deg,#0B1428 0%,#1B2B4B 60%,#2D4C82 100%)" }}>
+    <div className="rounded-[20px] border border-[#E3E8F0] bg-white overflow-hidden shadow-[0_1px_2px_rgba(16,24,40,0.04)]" data-testid="popbill-card">
+      <div className="px-5 py-3 flex items-center gap-3 flex-wrap border-b border-[#EEF1F6]">
         <div>
-          <div className="text-[10.5px] font-extrabold tracking-[0.28em] text-[#8FB0F0]">POPBILL · E-TAX</div>
-          <div className="text-[17px] font-black">팝빌 연동회원 <span className="text-[12px] font-bold text-white/55 ml-1">세금계산서 · 알림톡 · 계좌조회</span></div>
+          <div className="text-[10px] font-extrabold tracking-[0.22em] text-[#4B6CB7]">POPBILL · E-TAX</div>
+          <div className="text-[15px] font-black text-[#0F1A30]">팝빌 연동회원 <span className="text-[12px] font-bold text-[#8A96AB] ml-1">세금계산서 · 알림톡 · 계좌조회</span></div>
         </div>
         <span className="ml-auto"><PopbillStatusChip status={m?.status} /></span>
       </div>
       <div className="p-4 space-y-3">
         {state === "unavailable" ? <div className="text-[14px] text-[#5B6B85]">팝빌 연동을 준비하고 있어요. 열리면 여기서 사업자번호를 등록해요.</div> : <>
-          <div className="text-[14px] text-[#3A4A66] leading-relaxed">전자세금계산서 발행 · 알림톡 · 계좌 거래내역을 쓰려면 우리 회사 사업자번호로 팝빌 연동회원 등록이 필요해요.</div>
+          <div className="text-[12.5px] text-[#7A879C]">세금계산서 · 알림톡 · 계좌조회를 쓰려면 우리 회사 사업자번호로 연동회원 등록이 필요해요.</div>
           {!form ? (
-            <div className="flex items-center gap-3 flex-wrap rounded-xl border border-[#E3E8F0] bg-[#F7F9FC] px-4 py-3">
-              <span className="text-[14px] font-black text-[#0F1A30] tabular-nums">{m?.corpNum ? fmtCorp(m.corpNum) : "등록 전"}</span>
+            <div className="flex items-center gap-3 flex-wrap rounded-xl border border-[#E8EDF4] bg-[#F7F9FC] px-4 py-2">
+              <span className={`text-[13.5px] font-black tabular-nums ${m?.corpNum ? "text-[#0F1A30]" : "text-[#9AA9C3]"}`}>{m?.corpNum ? fmtCorp(m.corpNum) : "등록 전"}</span>
               {m?.corpName && <span className="text-[13.5px] text-[#5B6B85]">{[m.corpName, m.ceo && `대표 ${m.ceo}`].filter(Boolean).join(" · ")}</span>}
               {m?.corpNum && <BizCheck value={m.corpNum} size="sm" />}
               {canEdit && <span className="ml-auto flex gap-1.5">

@@ -343,23 +343,23 @@ export function BizListEditor({ company, canEdit }) {
         onChange={(e) => { const raw = e.target.value; const v = fmtOf[k] ? fmtOf[k](raw) : k === "bankNo" ? formatAccount(edit.v.bankName, raw) : raw; setEdit((x) => ({ ...x, v: { ...x.v, [k]: v } })); }} /></label>
   );
   return (
-    <div className="mt-6 rounded-[20px] border border-[#E3E8F0] bg-white overflow-hidden">
-      <div className="px-5 py-4 flex items-center gap-3 flex-wrap text-white" style={{ background: "linear-gradient(120deg,#0B1428 0%,#1B2B4B 60%,#2D4C82 100%)" }}>
+    <div className="rounded-[20px] border border-[#E3E8F0] bg-white overflow-hidden shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
+      <div className="px-5 py-3 flex items-center gap-3 flex-wrap border-b border-[#EEF1F6]">
         <div>
-          <div className="text-[10.5px] font-extrabold tracking-[0.28em] text-[#8FB0F0]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>BUSINESS ENTITIES</div>
-          <div className="text-[17px] font-black">사업자 관리 <span className="text-[12px] font-bold text-white/55 ml-1">한 회사 · 여러 사업자로 청구</span></div>
+          <div className="text-[10px] font-extrabold tracking-[0.22em] text-[#4B6CB7]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>BUSINESS ENTITIES</div>
+          <div className="text-[15px] font-black text-[#0F1A30]">사업자 관리 <span className="text-[12px] font-bold text-[#8A96AB] ml-1">한 회사 · 여러 사업자로 청구</span></div>
         </div>
-        {canEdit && <button type="button" onClick={() => setEdit({ idx: null, v: { ...EMPTY_BIZ } })} className="ml-auto h-9 px-4 rounded-xl bg-white text-[#0F1A30] text-[13px] font-black">＋ 사업자 추가</button>}
+        {canEdit && <button type="button" onClick={() => setEdit({ idx: null, v: { ...EMPTY_BIZ } })} className="ml-auto h-8 px-3.5 rounded-lg bg-[#0F1A30] text-white text-[12.5px] font-black hover:bg-[#1B2B4B]">＋ 사업자 추가</button>}
       </div>
       <div className="p-4 space-y-2">
-        <div className="text-[15px] text-[#3A4A66] leading-relaxed font-semibold">사업자를 추가하면 오더 등록 화면에 <b>청구 사업자</b> 고르기가 생기고, 실시간·배차현황에 사업자 표시와 필터가, 거래명세서·미수금·매출에 사업자별 조회가 생깁니다. 거래처마다 기본 사업자를 정해 두면 거래처를 고를 때 자동으로 맞춰집니다.</div>
-        <div className="flex items-center gap-3 rounded-xl border border-[#E3E8F0] bg-[#F7F9FC] px-4 py-3">
+        <div className="text-[12.5px] text-[#7A879C]" title="실시간·배차현황에 사업자 표시와 필터가, 거래명세서·미수금·매출에 사업자별 조회가 생깁니다. 거래처마다 기본 사업자를 정해 두면 거래처를 고를 때 자동으로 맞춰집니다.">사업자를 추가하면 오더 등록 때 <b className="text-[#3A4A66]">청구 사업자</b>를 고를 수 있고, 명세서·미수금·매출을 사업자별로 볼 수 있어요.</div>
+        <div className="flex items-center gap-3 rounded-xl border border-[#E8EDF4] bg-[#F7F9FC] px-4 py-2">
           <span className="px-2 h-6 rounded-md bg-[#EEF2F8] border border-[#DCE3EE] text-[11px] font-black text-[#5B6B85] inline-flex items-center">기본</span>
           <span className="text-[14px] font-black text-[#0F1A30]">{company}</span>
-          <span className="text-[13.5px] text-[#5B6B85]">위 회사정보(사업자번호·계좌·직인)를 그대로 씁니다</span>
+          <span className="text-[12.5px] text-[#7A879C] truncate">회사정보(사업자번호·계좌·직인) 그대로</span>
         </div>
         {biz.extra.map((b, i) => (
-          <div key={b.id || b.name} className="flex items-center gap-3 rounded-xl border border-[#E3E8F0] px-4 py-3 flex-wrap">
+          <div key={b.id || b.name} className="flex items-center gap-3 rounded-xl border border-[#E8EDF4] px-4 py-2 flex-wrap">
             <span className="px-2 h-6 rounded-md bg-[#1B2B4B] text-white text-[11px] font-black inline-flex items-center">추가</span>
             <span className="text-[14px] font-black text-[#0F1A30]">{b.name}</span>
             <span className="text-[12px] text-[#5B6B85] tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{b.bizNo || "사업자번호 없음"}</span>
@@ -371,7 +371,7 @@ export function BizListEditor({ company, canEdit }) {
             </span>}
           </div>
         ))}
-        {!biz.extra.length && <div className="text-[14px] text-[#7A8AA6] px-1">추가 사업자가 없습니다 — 지금은 모든 오더가 {company}(으)로 청구됩니다.</div>}
+        {!biz.extra.length && <div className="text-[12.5px] text-[#9AA9C3] px-1">추가 사업자가 없습니다 — 지금은 모든 오더가 {company}(으)로 청구됩니다.</div>}
       </div>
       {edit && (
         <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-[#0F1A30]/45 p-4" onMouseDown={(e) => { if (e.target === e.currentTarget && !busy) setEdit(null); }}>

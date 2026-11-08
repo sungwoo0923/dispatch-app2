@@ -38,10 +38,10 @@ const ago = (ms) => { if (!ms) return ""; const m = Math.round((Date.now() - ms)
 
 function CardHead({ en, title, sub, right }) {
   return (
-    <div className="px-5 py-4 flex items-center gap-3 flex-wrap text-white" style={{ background: "linear-gradient(120deg,#0B1428 0%,#1B2B4B 60%,#2D4C82 100%)" }}>
+    <div className="px-5 py-3 flex items-center gap-3 flex-wrap border-b border-[#EEF1F6]">
       <div className="min-w-0">
-        <div className="text-[10.5px] font-extrabold tracking-[0.28em] text-[#8FB0F0]">{en}</div>
-        <div className="text-[17px] font-black">{title} {sub && <span className="text-[12px] font-bold text-white/55 ml-1">{sub}</span>}</div>
+        <div className="text-[10px] font-extrabold tracking-[0.22em] text-[#4B6CB7]">{en}</div>
+        <div className="text-[15px] font-black text-[#0F1A30]">{title} {sub && <span className="text-[12px] font-bold text-[#8A96AB] ml-1">{sub}</span>}</div>
       </div>
       <span className="ml-auto">{right}</span>
     </div>
@@ -55,8 +55,8 @@ function OffNotice({ link }) {
   const l = popbillLinkLabel(link);
   if (l.tone === "ok" || !link) return null;
   return (
-    <div className="rounded-xl border border-[#E8EDF4] bg-[#F7F9FC] px-4 py-3 text-[13.5px] text-[#3A4A66] leading-relaxed" data-testid="popbill-off">
-      <b className="font-black text-[#0F1A30]">{l.label}</b> · {l.detail || "팝빌이 연결되면 바로 동작해요"}. 지금 설정해 두면 연결되는 순간부터 그대로 써요.
+    <div className="rounded-lg bg-[#F7F9FC] px-3 py-2 text-[12.5px] text-[#5B6B85]" data-testid="popbill-off">
+      <b className="font-black text-[#0F1A30]">{l.label}</b> · {l.detail || "팝빌이 연결되면 바로 동작해요"}
     </div>
   );
 }
@@ -86,7 +86,7 @@ export function AlimtalkSettingsCard({ company, canEdit, defaultPhone = "" }) {
     ["driver", "toDriver", "기사에게", "배차 안내 · 상하차지 주소, 담당자 연락처, 일시"],
   ];
   return (
-    <div className="mt-6 rounded-[20px] border border-[#E3E8F0] bg-white overflow-hidden" data-testid="alimtalk-settings">
+    <div className="rounded-[20px] border border-[#E3E8F0] bg-white overflow-hidden shadow-[0_1px_2px_rgba(16,24,40,0.04)]" data-testid="alimtalk-settings">
       <CardHead en="KAKAO · ALIMTALK" title="카카오 알림톡 배차 알림" sub="배차완료되면 자동으로" right={<LinkChip link={link} />} />
       <div className="p-4 space-y-4">
         <OffNotice link={link} />
@@ -194,15 +194,15 @@ export function BankAccountsCard({ company, canEdit }) {
     return <Chip tone="info">첫 조회 대기</Chip>;
   };
   return (
-    <div className="mt-6 rounded-[20px] border border-[#E3E8F0] bg-white overflow-hidden" data-testid="bank-accounts">
+    <div className="rounded-[20px] border border-[#E3E8F0] bg-white overflow-hidden shadow-[0_1px_2px_rgba(16,24,40,0.04)]" data-testid="bank-accounts">
       <CardHead en="POPBILL · BANK" title="입금 자동 조회" sub="미수금 자동 매칭" right={<LinkChip link={link} />} />
       <div className="p-4 space-y-3">
         <OffNotice link={link} />
-        <div className="text-[14px] text-[#3A4A66] leading-relaxed">등록한 계좌의 새 입금을 매시간(오전 8시 ~ 오후 8시) 가져와 미수금과 맞춰요. 입금자명과 금액이 딱 맞으면 바로 입금 처리하고, 애매하면 미수금 화면의 "입금 확인 필요"에 모아 둬요.</div>
+        <div className="text-[12.5px] text-[#7A879C]" title={'입금자명과 금액이 딱 맞으면 바로 입금 처리하고, 애매하면 미수금 화면의 "입금 확인 필요"에 모아 둬요.'}>등록한 계좌의 새 입금을 매시간(오전 8시 ~ 오후 8시) 가져와 미수금과 자동으로 맞춰요.</div>
         <div className="rounded-xl border border-[#E8EDF4] overflow-hidden">
-          {!accounts.length && <div className="px-4 py-4 text-[13.5px] text-[#7A879C]">아직 등록한 계좌가 없어요</div>}
+          {!accounts.length && <div className="px-4 py-2.5 text-[13px] text-[#9AA9C3]">아직 등록한 계좌가 없어요</div>}
           {accounts.map((a) => (
-            <div key={a.id} className="flex items-center gap-3 px-4 py-3 border-b last:border-b-0 border-[#F0F3F8] flex-wrap" data-testid="bank-account-row">
+            <div key={a.id} className="flex items-center gap-3 px-4 py-2.5 border-b last:border-b-0 border-[#F0F3F8] flex-wrap" data-testid="bank-account-row">
               <span className="text-[14px] font-black text-[#0F1A30]">{a.bankName || bankNameOf(a.bankCode)}</span>
               <span className="tabular-nums text-[13.5px] text-[#3A4A66]">{maskAccount(a.accountNumber)}</span>
               <span className="text-[13px] text-[#7A879C]">{a.holder}</span>

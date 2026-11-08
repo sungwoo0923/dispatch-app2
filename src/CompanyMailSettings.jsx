@@ -9,10 +9,10 @@ import {
   mailSettingsApi, useCompanyMailSettings, openMailSettings, canEditMail,
 } from "./companyMail";
 
-const inp = "h-11 w-full px-3.5 rounded-xl border border-[#DCE3EE] bg-white text-[14px] font-semibold text-[#0F1A30] outline-none focus:border-[#2D4C82] focus:ring-2 focus:ring-[#8FB0F0]/30 disabled:bg-[#F7F9FC] disabled:text-[#7A879C]";
-const lbl = "block text-[12.5px] font-black text-[#3A4A66] mb-1.5";
-const btn = "h-10 px-4 rounded-xl border border-[#DCE3EE] bg-white text-[13.5px] font-black text-[#1B2B4B] hover:bg-[#F5F8FD] disabled:opacity-50 whitespace-nowrap";
-const btnPri = "h-10 px-5 rounded-xl bg-[#0F1A30] hover:bg-[#1B2B4B] text-white text-[13.5px] font-black disabled:opacity-50 whitespace-nowrap";
+const inp = "h-10 w-full px-3 rounded-xl border border-[#DCE3EE] bg-white text-[14px] font-semibold text-[#0F1A30] outline-none focus:border-[#2D4C82] focus:ring-2 focus:ring-[#8FB0F0]/30 disabled:bg-[#F7F9FC] disabled:text-[#7A879C]";
+const lbl = "block text-[12px] font-black text-[#5B6B85] mb-1";
+const btn = "h-9 px-3.5 rounded-lg border border-[#DCE3EE] bg-white text-[13.5px] font-black text-[#1B2B4B] hover:bg-[#F5F8FD] disabled:opacity-50 whitespace-nowrap";
+const btnPri = "h-9 px-5 rounded-lg bg-[#0F1A30] hover:bg-[#1B2B4B] text-white text-[13.5px] font-black disabled:opacity-50 whitespace-nowrap";
 const ymd = (ms) => { if (!ms) return ""; const d = new Date(ms); const p = (n) => String(n).padStart(2, "0"); return `${d.getFullYear()}.${p(d.getMonth() + 1)}.${p(d.getDate())}`; };
 const ymdhm = (ms) => { if (!ms) return ""; const d = new Date(ms); const p = (n) => String(n).padStart(2, "0"); return `${ymd(ms)} ${p(d.getHours())}:${p(d.getMinutes())}`; };
 
@@ -86,23 +86,22 @@ export function CompanyMailSettingsCard({ company, role, isMaster = false, myEma
 
   const dis = !canEdit || !!busy || s === undefined;
   return (
-    <div ref={ref} id="company-mail-settings" className="mt-6 rounded-[20px] border border-[#E3E8F0] bg-white overflow-hidden scroll-mt-24" data-testid="company-mail-settings">
-      <div className="px-5 py-4 flex items-center gap-3 flex-wrap text-white" style={{ background: "linear-gradient(120deg,#0B1428 0%,#1B2B4B 60%,#2D4C82 100%)" }}>
-        <span className="w-10 h-10 rounded-xl bg-white/10 grid place-items-center text-[#8FB0F0]"><MailIcon /></span>
+    <div ref={ref} id="company-mail-settings" className="rounded-[20px] border border-[#E3E8F0] bg-white overflow-hidden shadow-[0_1px_2px_rgba(16,24,40,0.04)] scroll-mt-24" data-testid="company-mail-settings">
+      <div className="px-5 py-3 flex items-center gap-3 flex-wrap border-b border-[#EEF1F6]">
+        <span className="w-8 h-8 rounded-lg bg-[#F1F4F9] grid place-items-center text-[#2D4C82]"><MailIcon size={16} /></span>
         <div className="min-w-0">
-          <div className="text-[10.5px] font-extrabold tracking-[0.28em] text-[#8FB0F0]">MAIL · SENDER</div>
-          <div className="text-[17px] font-black">메일 설정 <span className="text-[12px] font-bold text-white/55 ml-1">우리 회사 메일 계정으로 보내기</span></div>
+          <div className="text-[10px] font-extrabold tracking-[0.22em] text-[#4B6CB7]">MAIL · SENDER</div>
+          <div className="text-[15px] font-black text-[#0F1A30]">메일 설정 <span className="text-[12px] font-bold text-[#8A96AB] ml-1">우리 회사 메일 계정으로 보내기</span></div>
         </div>
         <span className="ml-auto"><StatusChip s={s} /></span>
       </div>
-      <div className="p-5 space-y-5">
-        <div className="rounded-xl bg-[#F7F9FC] border border-[#E8EDF4] px-4 py-3 text-[13.5px] text-[#3A4A66] leading-relaxed">
-          거래명세서 · 미수금 안내 · 일반 메일 · 연차 안내 메일이 <b className="text-[#0F1A30]">여기 등록한 우리 회사 메일</b>에서 나가요.
-          받는 분 화면에도 이 주소가 보이고, 답장도 이 주소(또는 회신 주소)로 와요.
-          {!canEdit && <div className="mt-1 text-[#7A879C]">메일 설정은 회사 관리자 · 경리 관리자가 바꿀 수 있어요.</div>}
+      <div className="p-4 space-y-3.5">
+        <div className="text-[12.5px] text-[#7A879C]" title="받는 분 화면에도 이 주소가 보이고, 답장도 이 주소(또는 회신 주소)로 와요.">
+          거래명세서 · 미수금 · 일반 · 연차 안내 메일이 <b className="text-[#3A4A66]">여기 등록한 우리 회사 메일</b>로 나가요.
+          {!canEdit && <span className="ml-1">(회사 관리자 · 경리 관리자만 바꿀 수 있어요)</span>}
         </div>
 
-        <div className="grid sm:grid-cols-2 gap-4">
+        <div className="grid sm:grid-cols-2 gap-x-4 gap-y-3">
           <label className="block sm:col-span-2"><span className={lbl}>메일 서비스</span>
             <select className={inp} value={v.preset} disabled={dis} data-testid="mail-preset" onChange={(e) => { const p = presetByKey(e.target.value); set({ preset: e.target.value, ...(p && p.key !== "custom" ? { host: p.host, port: p.port, security: p.security } : {}) }); }}>
               {MAIL_PRESETS.map((p) => <option key={p.key} value={p.key}>{p.label}{p.key !== "custom" ? ` (${p.host} · ${p.port} ${p.security === "ssl" ? "SSL" : "STARTTLS"})` : ""}</option>)}
@@ -118,8 +117,8 @@ export function CompanyMailSettingsCard({ company, role, isMaster = false, myEma
           <label className="block"><span className={lbl}>앱 비밀번호</span>
             <input className={inp} type="password" autoComplete="new-password" value={v.password} disabled={dis} data-testid="mail-password"
               placeholder={s?.hasPassword ? "바꿀 때만 새로 입력" : "메일 계정에서 만든 앱 비밀번호"} onChange={(e) => set({ password: e.target.value })} />
-            <span className="mt-1.5 block text-[12.5px] font-bold" style={{ color: s?.hasPassword ? "#1F7A4D" : "#7A879C" }}>
-              {s?.hasPassword ? `저장됨 · 마지막 변경 ${ymd(s.passwordUpdatedAt)}` : "저장된 비밀번호가 없어요"} <span className="font-semibold text-[#7A879C]">(저장한 비밀번호는 다시 보여 주지 않아요)</span>
+            <span className="mt-1 block text-[12px] font-bold" style={{ color: s?.hasPassword ? "#1F7A4D" : "#9AA9C3" }}>
+              {s?.hasPassword ? `저장됨 · 마지막 변경 ${ymd(s.passwordUpdatedAt)}` : "저장된 비밀번호가 없어요"}
             </span>
           </label>
           <label className="block"><span className={lbl}>회신 주소 <span className="font-bold text-[#7A879C]">(선택)</span></span>
@@ -138,9 +137,9 @@ export function CompanyMailSettingsCard({ company, role, isMaster = false, myEma
           )}
         </div>
 
-        <div className="rounded-xl border border-[#E3E8F0]">
-          <button type="button" className="w-full px-4 py-3 flex items-center gap-2 text-left" onClick={() => setGuideOpen(!guideOpen)} aria-expanded={guideOpen}>
-            <span className="text-[14px] font-black text-[#0F1A30]">{preset.label} 앱 비밀번호 만드는 법</span>
+        <div className="rounded-xl border border-[#E8EDF4] bg-[#FAFBFD]">
+          <button type="button" className="w-full px-4 py-2 flex items-center gap-2 text-left" onClick={() => setGuideOpen(!guideOpen)} aria-expanded={guideOpen}>
+            <span className="text-[13px] font-bold text-[#3A4A66]">{preset.label} 앱 비밀번호 만드는 법</span>
             <span className="ml-auto text-[13px] font-bold text-[#4B6CB7]">{guideOpen ? "접기" : "보기"}</span>
           </button>
           {guideOpen && (

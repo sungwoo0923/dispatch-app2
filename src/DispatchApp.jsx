@@ -62470,31 +62470,31 @@ function CompanyProfile({ userCompany = "", role = "", userId = "" }) {
             <div className="grid grid-cols-1 xl:grid-cols-[340px_minmax(0,1fr)] 2xl:grid-cols-[380px_minmax(0,1fr)] gap-5 items-start">
             <aside className="space-y-5 min-w-0 xl:sticky xl:top-2">
             {/* 회사 명패 */}
-            <section className="relative overflow-hidden rounded-[24px] text-white shadow-[0_18px_40px_rgba(15,26,48,0.25)]" style={{ background: "linear-gradient(150deg,#0B1428 0%,#0F1A30 40%,#1B2B4B 75%,#2D4C82 100%)" }}>
+            <section className="relative overflow-hidden rounded-[20px] text-white shadow-[0_8px_22px_rgba(15,26,48,0.18)]" style={{ background: "linear-gradient(150deg,#0B1428 0%,#0F1A30 40%,#1B2B4B 75%,#2D4C82 100%)" }}>
               <div className="absolute inset-0 opacity-[0.07]" style={{ backgroundImage: "linear-gradient(#fff 1px,transparent 1px),linear-gradient(90deg,#fff 1px,transparent 1px)", backgroundSize: "32px 32px" }} />
-              <div className="relative p-5 md:p-6">
-                <div className="flex items-center gap-4 min-w-0">
-                  <div className="w-16 h-16 rounded-[20px] ring-1 ring-white/25 grid place-items-center text-[28px] font-black shrink-0" style={{ background: "linear-gradient(160deg,rgba(255,255,255,0.22),rgba(255,255,255,0.06))" }}>{(appData?.companyName || companyName || "?").slice(0, 1)}</div>
+              <div className="relative p-4">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="w-12 h-12 rounded-2xl ring-1 ring-white/25 grid place-items-center text-[22px] font-black shrink-0" style={{ background: "linear-gradient(160deg,rgba(255,255,255,0.22),rgba(255,255,255,0.06))" }}>{(appData?.companyName || companyName || "?").slice(0, 1)}</div>
                   <div className="min-w-0">
-                    <div className="text-[10.5px] font-extrabold tracking-[0.26em] text-[#8FB0F0]">COMPANY PROFILE</div>
-                    <div className="text-[24px] font-black tracking-tight leading-tight truncate">{appData?.companyName || companyName}</div>
+                    <div className="text-[10px] font-extrabold tracking-[0.24em] text-[#8FB0F0]">COMPANY PROFILE</div>
+                    <div className="text-[20px] font-black tracking-tight leading-tight truncate">{appData?.companyName || companyName}</div>
                   </div>
                 </div>
-                <div className="mt-3 flex flex-wrap gap-1.5 text-[12.5px]">
-                  {v.ceo && <span className="px-2 h-6 inline-flex items-center rounded-md bg-white/10 ring-1 ring-white/15 font-bold">대표 {v.ceo}</span>}
-                  {approvedDay && <span className="px-2 h-6 inline-flex items-center rounded-md bg-white/10 ring-1 ring-white/15 font-bold">가입 {approvedDay}</span>}
-                  <span className={`px-2 h-6 inline-flex items-center rounded-md font-black ${pct === 100 ? "bg-[#8FB0F0] text-[#0B1428]" : "bg-white/10 ring-1 ring-white/15"}`}>등록 {pct}%</span>
+                <div className="mt-2.5 flex flex-wrap gap-1.5 text-[12px]">
+                  {v.ceo && <span className="px-2 h-[22px] inline-flex items-center rounded-md bg-white/10 ring-1 ring-white/15 font-bold">대표 {v.ceo}</span>}
+                  {approvedDay && <span className="px-2 h-[22px] inline-flex items-center rounded-md bg-white/10 ring-1 ring-white/15 font-bold">가입 {approvedDay}</span>}
+                  <span className={`px-2 h-[22px] inline-flex items-center rounded-md font-black ${pct === 100 ? "bg-[#8FB0F0] text-[#0B1428]" : "bg-white/10 ring-1 ring-white/15"}`}>등록 {pct}%</span>
                 </div>
                 {(appData?.companyCode || (isAdmin && appData)) && (
-                  <div className="mt-5 pt-5 border-t border-white/10 grid gap-2">
+                  <div className="mt-3 pt-3 border-t border-white/10 grid gap-2">
                     {appData?.companyCode && (
-                      <button onClick={() => copy(appData.companyCode, "회사코드")} className="text-left rounded-xl bg-white/10 ring-1 ring-white/20 px-4 py-2.5 hover:bg-white/15 transition" title="눌러서 복사">
-                        <div className="text-[11.5px] font-bold tracking-[0.08em] text-blue-200/80">회사코드 · 눌러서 복사</div>
-                        <div className="text-[19px] font-black tabular-nums tracking-wider">{appData.companyCode}</div>
+                      <button onClick={() => copy(appData.companyCode, "회사코드")} className="text-left rounded-xl bg-white/10 ring-1 ring-white/20 px-3.5 py-2 hover:bg-white/15 transition flex items-center gap-3" title="눌러서 복사">
+                        <div className="text-[11px] font-bold text-blue-200/80 shrink-0">회사코드</div>
+                        <div className="text-[16px] font-black tabular-nums tracking-wider truncate">{appData.companyCode}</div><span className="ml-auto text-[11px] font-bold text-blue-200/70 shrink-0">복사</span>
                       </button>
                     )}
                     {isAdmin && appData && (
-                      <button onClick={openEditModal} className="h-11 px-5 rounded-xl bg-white text-[#1B2B4B] text-[14px] font-black hover:bg-blue-50 transition whitespace-nowrap">정보 수정 요청</button>
+                      <button onClick={openEditModal} className="h-9 px-4 rounded-xl bg-white text-[#1B2B4B] text-[13px] font-black hover:bg-blue-50 transition whitespace-nowrap">정보 수정 요청</button>
                     )}
                   </div>
                 )}
@@ -62503,23 +62503,23 @@ function CompanyProfile({ userCompany = "", role = "", userId = "" }) {
             </section>
 
             {/* 등록 현황 */}
-            <section className={`${KP_CARD} p-5`}>
+            <section className={`${KP_CARD} p-4`}>
               <div className="flex items-end justify-between gap-3">
                 <div>
-                  <div className="text-[11px] font-extrabold tracking-[0.22em] text-[#4B6CB7]">CHECKLIST</div>
-                  <div className="mt-0.5 text-[17px] font-black text-[#0F1A30]">등록 현황</div>
+                  <div className="text-[10px] font-extrabold tracking-[0.22em] text-[#4B6CB7]">CHECKLIST</div>
+                  <div className="mt-0.5 text-[15px] font-black text-[#0F1A30]">등록 현황</div>
                 </div>
-                <div className="text-[26px] font-black text-[#1B2B4B] tabular-nums leading-none">{pct}<span className="text-[15px] ml-0.5">%</span></div>
+                <div className="text-[20px] font-black text-[#1B2B4B] tabular-nums leading-none">{pct}<span className="text-[13px] ml-0.5">%</span></div>
               </div>
-              <div className="mt-3 h-2.5 rounded-full bg-[#EEF2F8] overflow-hidden"><div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, background: "linear-gradient(90deg,#1B2B4B,#4B6CB7)" }} /></div>
-              <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-1 gap-2">
+              <div className="mt-2.5 h-1.5 rounded-full bg-[#EEF2F8] overflow-hidden"><div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, background: "linear-gradient(90deg,#1B2B4B,#4B6CB7)" }} /></div>
+              <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-1 gap-1.5">
                 {steps.map((st) => (
-                  <div key={st.k} className={`flex items-center gap-3 px-3.5 py-3 rounded-2xl border ${st.done ? "bg-[#F5F8FD] border-[#DCE6F7]" : "bg-white border-dashed border-[#C9D2E0]"}`}>
-                    <span className={`w-8 h-8 rounded-xl grid place-items-center shrink-0 ${st.done ? "bg-[#0F1A30] text-white" : "bg-[#F1F4F9] text-[#9AA9C3]"}`}>
-                      {st.done ? <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12.5 10 17.5 19 7" /></svg> : <span className="text-[13px] font-black">!</span>}
+                  <div key={st.k} className={`flex items-center gap-2.5 px-3 py-2 rounded-xl border ${st.done ? "bg-[#F5F8FD] border-[#DCE6F7]" : "bg-white border-[#E8EDF4]"}`}>
+                    <span className={`w-6 h-6 rounded-lg grid place-items-center shrink-0 ${st.done ? "bg-[#0F1A30] text-white" : "bg-[#F1F4F9] text-[#9AA9C3]"}`}>
+                      {st.done ? <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12.5 10 17.5 19 7" /></svg> : <span className="text-[11px] font-black">!</span>}
                     </span>
-                    <div className="min-w-0 flex-1"><div className="text-[14px] font-black text-[#0F1A30] truncate">{st.k}</div><div className="text-[12.5px] text-[#7A879C] truncate">{st.sub}</div></div>
-                    <span className={`shrink-0 h-6 px-2 inline-flex items-center rounded-md text-[11.5px] font-black ${st.done ? "bg-[#0F1A30] text-white" : "bg-[#F1F4F9] text-[#7A879C]"}`}>{st.done ? "완료" : "미등록"}</span>
+                    <div className="min-w-0 flex-1 flex items-baseline gap-2"><span className="text-[13px] font-black text-[#0F1A30] whitespace-nowrap">{st.k}</span><span className="text-[11.5px] text-[#9AA9C3] truncate">{st.sub}</span></div>
+                    <span className={`shrink-0 h-5 px-1.5 inline-flex items-center rounded-md text-[11px] font-black ${st.done ? "bg-[#0F1A30] text-white" : "bg-[#F1F4F9] text-[#7A879C]"}`}>{st.done ? "완료" : "미등록"}</span>
                   </div>
                 ))}
               </div>
@@ -62528,20 +62528,20 @@ function CompanyProfile({ userCompany = "", role = "", userId = "" }) {
 
             <div className="space-y-5 min-w-0">
             {/* 기본 정보 */}
-              <section className={`${KP_CARD} p-4 sm:p-6 min-w-0`}>
-                <div className="flex items-start gap-3 pb-4 mb-4 border-b border-[#EEF1F6]">
+              <section className={`${KP_CARD} p-4 sm:p-5 min-w-0`}>
+                <div className="flex items-start gap-3 pb-3 mb-3.5 border-b border-[#EEF1F6]">
                   <div className="flex-1 min-w-0">
-                    <div className="text-[11px] font-extrabold tracking-[0.22em] text-[#4B6CB7]">INFORMATION</div>
-                    <div className="mt-0.5 text-[18px] font-black text-[#0F1A30] tracking-tight">기본 정보</div>
-                    <div className="text-[13px] text-gray-500 mt-1">거래명세서·명함 등에 쓰이는 회사 정보 · 눌러서 복사</div>
+                    <div className="text-[10px] font-extrabold tracking-[0.22em] text-[#4B6CB7]">INFORMATION</div>
+                    <div className="mt-0.5 text-[15px] font-black text-[#0F1A30] tracking-tight">기본 정보</div>
+                    <div className="text-[12.5px] text-[#7A879C] mt-0.5">거래명세서·명함 등에 쓰이는 회사 정보 · 눌러서 복사</div>
                   </div>
                 </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 2xl:grid-cols-3 gap-2.5">
+                <div className="grid grid-cols-1 sm:grid-cols-2 2xl:grid-cols-3 gap-2">
                   {rows.map(([k, val, ic, wide]) => (
                     <button key={k} type="button" disabled={!val} onClick={() => copy(val, k)} title={val ? "눌러서 복사" : ""}
-                      className={`group text-left flex items-center gap-3 px-3.5 py-3 rounded-2xl bg-[#F5F8FD] border border-[#EDF1F7] min-w-0 hover:border-[#C9D6EE] disabled:hover:border-[#EDF1F7] transition ${wide ? "sm:col-span-2 2xl:col-span-3" : ""}`}>
-                      <span className="w-9 h-9 rounded-xl bg-white border border-[#E3E8F0] text-[#2D4C82] grid place-items-center shrink-0"><I d={ic} /></span>
-                      <div className="min-w-0 flex-1"><div className="text-[12.5px] font-bold text-[#7A879C]">{k}</div><div className={`text-[15px] font-extrabold truncate ${val ? "text-[#0F1A30]" : "text-[#B4BFD0]"}`}>{val || "미등록"}</div></div>
+                      className={`group text-left flex items-center gap-2.5 px-3 py-2 rounded-xl bg-[#F7F9FC] border border-[#EDF1F7] min-w-0 hover:border-[#C9D6EE] disabled:hover:border-[#EDF1F7] transition ${wide ? "sm:col-span-2 2xl:col-span-3" : ""}`}>
+                      <span className="w-7 h-7 rounded-lg bg-white border border-[#E3E8F0] text-[#2D4C82] grid place-items-center shrink-0"><I d={ic} /></span>
+                      <div className="min-w-0 flex-1"><div className="text-[11.5px] font-bold text-[#7A879C]">{k}</div><div className={`text-[14px] font-extrabold truncate ${val ? "text-[#0F1A30]" : "text-[#B4BFD0]"}`}>{val || "미등록"}</div></div>
                       {val && <span className="text-[11px] font-black text-[#9AA9C3] opacity-0 group-hover:opacity-100 transition shrink-0">복사</span>}
                     </button>
                   ))}
@@ -62550,15 +62550,15 @@ function CompanyProfile({ userCompany = "", role = "", userId = "" }) {
 
             <div className="grid grid-cols-1 2xl:grid-cols-[minmax(0,1fr)_minmax(0,460px)] gap-5 items-start">
             {/* 회사 서류 */}
-            <section className={`${KP_CARD} p-4 sm:p-6 min-w-0`}>
-              <div className="pb-4 mb-4 border-b border-[#EEF1F6]">
-                <div className="text-[11px] font-extrabold tracking-[0.22em] text-[#4B6CB7]">DOCUMENTS</div>
-                <div className="mt-0.5 text-[18px] font-black text-[#0F1A30] tracking-tight">회사 서류</div>
-                <div className="text-[13.5px] text-gray-500 mt-1">사업자등록증과 직인은 명세서·보고서에 자동으로 쓰여요. 파일을 끌어다 놓아도 돼요.</div>
+            <section className={`${KP_CARD} p-4 sm:p-5 min-w-0`}>
+              <div className="pb-3 mb-3.5 border-b border-[#EEF1F6]">
+                <div className="text-[10px] font-extrabold tracking-[0.22em] text-[#4B6CB7]">DOCUMENTS</div>
+                <div className="mt-0.5 text-[15px] font-black text-[#0F1A30] tracking-tight">회사 서류</div>
+                <div className="text-[12.5px] text-[#7A879C] mt-0.5">명세서·보고서에 자동으로 쓰여요 · 끌어다 놓기 가능</div>
               </div>
             <input autoComplete="off" ref={fileRef} type="file" accept="image/*,application/pdf" className="hidden" onChange={e => handleFileUpload(e.target.files?.[0])} />
             <input autoComplete="off" ref={sealFileRef} type="file" accept="image/*" className="hidden" onChange={e => handleSealUpload(e.target.files?.[0])} />
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-1 gap-3">
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-1 gap-2">
               {[
                 {
                   key: "biz", title: "사업자등록증", done: !!filePreviewSrc, sub: filePreviewSrc ? (appData.사업자등록증파일명 || "등록된 파일") : "JPG·PNG·PDF / 최대 600KB(사진은 자동 축소)",
@@ -62583,31 +62583,31 @@ function CompanyProfile({ userCompany = "", role = "", userId = "" }) {
                   onDragOver={(e) => { e.preventDefault(); setDragOver(d.key); }}
                   onDragLeave={() => setDragOver(false)}
                   onDrop={(e) => { e.preventDefault(); setDragOver(false); if (canEditDocs) d.onDrop(e.dataTransfer.files?.[0]); }}
-                  className={`flex flex-wrap items-center gap-4 px-5 py-4 rounded-2xl border transition ${dragOver === d.key ? "border-[#1B2B4B] bg-[#F5F8FD]" : "border-[#E3E8F0] bg-white"}`}>
-                  <span className={`w-11 h-11 rounded-[14px] flex items-center justify-center shrink-0 ${d.done ? "bg-[#0F1A30] text-white" : "bg-[#F1F4F9] text-[#9AA9C3]"}`}>
+                  className={`flex flex-wrap items-center gap-3 px-3.5 py-2.5 rounded-xl border transition ${dragOver === d.key ? "border-[#1B2B4B] bg-[#F5F8FD]" : "border-[#E3E8F0] bg-white"}`}>
+                  <span className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${d.done ? "bg-[#0F1A30] text-white" : "bg-[#F1F4F9] text-[#9AA9C3]"}`}>
                     {d.done
-                      ? <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12.5 10 17.5 19 7" /></svg>
-                      : <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg>}
+                      ? <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12.5 10 17.5 19 7" /></svg>
+                      : <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg>}
                   </span>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
-                      <span className="text-[15px] font-black text-[#0F1A30] whitespace-nowrap">{d.title}</span>
+                      <span className="text-[14px] font-black text-[#0F1A30] whitespace-nowrap">{d.title}</span>
                       <span className={`whitespace-nowrap text-[11.5px] font-extrabold px-2 py-0.5 rounded-full ${d.done ? "bg-[#0F1A30] text-white" : "border border-[#C9D2E0] text-[#7A879C]"}`}>{d.done ? "등록됨" : "미등록"}</span>
                     </div>
-                    <div className="text-[12.5px] text-[#7A879C] truncate mt-0.5">{d.sub}</div>
+                    <div className="text-[12px] text-[#9AA9C3] truncate">{d.sub}</div>
                   </div>
                   <div className="flex gap-1.5 shrink-0">
                     {d.actions.map((a) => (
                       <button key={a.label} onClick={a.on}
-                        className={`h-9 px-3.5 rounded-lg text-[12.5px] font-bold transition ${a.primary ? "bg-[#1B2B4B] text-white hover:bg-[#243a60]" : "border border-[#D9E0EA] text-[#1B2B4B] hover:bg-[#F5F8FD]"}`}>{a.label}</button>
+                        className={`h-8 px-3 rounded-lg text-[12.5px] font-bold transition ${a.primary ? "bg-[#1B2B4B] text-white hover:bg-[#243a60]" : "border border-[#D9E0EA] text-[#1B2B4B] hover:bg-[#F5F8FD]"}`}>{a.label}</button>
                     ))}
                     {canEditDocs ? (
                       <button onClick={d.onUpload} disabled={!!d.busy}
-                        className="h-9 px-3.5 rounded-lg text-[12.5px] font-bold border border-[#1B2B4B]/40 text-[#1B2B4B] hover:bg-[#1B2B4B]/5 disabled:opacity-40">
+                        className="h-8 px-3 rounded-lg text-[12.5px] font-bold border border-[#1B2B4B]/40 text-[#1B2B4B] hover:bg-[#1B2B4B]/5 disabled:opacity-40">
                         {d.busy || (d.done ? "다시 올리기" : "등록하기")}
                       </button>
                     ) : !d.done ? (
-                      <span className="h-9 px-3 inline-flex items-center rounded-lg text-[12px] font-bold text-[#7A879C] bg-[#F1F4F9]">경리·인사팀 등록</span>
+                      <span className="h-8 px-3 inline-flex items-center rounded-lg text-[12px] font-bold text-[#7A879C] bg-[#F1F4F9]">경리·인사팀 등록</span>
                     ) : null}
                   </div>
                 </div>
@@ -62616,26 +62616,26 @@ function CompanyProfile({ userCompany = "", role = "", userId = "" }) {
             </section>
 
             {/* 정산 계좌 */}
-              <section className={`${KP_CARD} p-4 sm:p-6 min-w-0`}>
-                <div className="flex items-start pb-4 mb-5 border-b border-[#EEF1F6]">
+              <section className={`${KP_CARD} p-4 sm:p-5 min-w-0`}>
+                <div className="flex items-start pb-3 mb-3.5 border-b border-[#EEF1F6]">
                   <div>
-                    <div className="text-[11px] font-extrabold tracking-[0.22em] text-[#4B6CB7]">BANK ACCOUNT</div>
-                    <div className="mt-0.5 text-[18px] font-black text-[#0F1A30] tracking-tight">정산 계좌</div>
-                    <div className="text-[13.5px] text-gray-500 mt-1">청구서·거래명세서에 표시되는 입금 계좌</div>
+                    <div className="text-[10px] font-extrabold tracking-[0.22em] text-[#4B6CB7]">BANK ACCOUNT</div>
+                    <div className="mt-0.5 text-[15px] font-black text-[#0F1A30] tracking-tight">정산 계좌</div>
+                    <div className="text-[12.5px] text-[#7A879C] mt-0.5">청구서·거래명세서에 표시되는 입금 계좌</div>
                   </div>
-                  {canEditBank && appData?.계좌은행 && !bankEditOpen && <button onClick={() => setBankEditOpen(true)} className="ml-auto px-3.5 py-1.5 rounded-lg border border-[#D9E0EA] text-[13px] font-bold text-gray-700 hover:bg-gray-50">수정</button>}
+                  {canEditBank && appData?.계좌은행 && !bankEditOpen && <button onClick={() => setBankEditOpen(true)} className="ml-auto h-8 px-3 rounded-lg border border-[#D9E0EA] text-[12.5px] font-bold text-gray-700 hover:bg-gray-50">수정</button>}
                 </div>
                 {!canEditBank && !appData?.계좌은행 ? (
-                  <div className="rounded-2xl border border-dashed border-[#C9D2E0] bg-[#F7F9FC] px-5 py-8 text-center">
+                  <div className="rounded-xl border border-dashed border-[#C9D2E0] bg-[#F7F9FC] px-4 py-5 text-center">
                     <div className="text-[14px] font-bold text-[#1B2B4B]">등록된 정산 계좌가 없습니다</div>
                     <div className="text-[12.5px] text-[#7A879C] mt-1">정산 계좌는 경리팀만 입력·수정할 수 있습니다</div>
                   </div>
                 ) : (appData?.계좌은행 && (!bankEditOpen || !canEditBank)) ? (
-                  <div className="relative overflow-hidden rounded-2xl text-white px-5 py-5 min-h-[170px] w-full max-w-[440px]" style={{ aspectRatio: "1.6 / 1", background: "linear-gradient(135deg, #1B2B4B 0%, #2D4C82 100%)" }}>
+                  <div className="relative overflow-hidden rounded-2xl text-white px-4 py-4 min-h-[128px] w-full max-w-[420px]" style={{ background: "linear-gradient(135deg, #1B2B4B 0%, #2D4C82 100%)" }}>
                     <div className="absolute -right-10 -bottom-12 w-40 h-40 rounded-full bg-white/[0.07]" />
                     <div className="relative h-full flex flex-col">
                       <div className="flex items-center"><div className="text-[16px] font-black">{appData.계좌은행}</div><div className="ml-auto w-9 h-6 rounded-md bg-gradient-to-br from-amber-200 to-amber-400 opacity-90" /></div>
-                      <div className="mt-auto text-[22px] font-black tabular-nums tracking-wider">{appData.계좌번호}</div>
+                      <div className="mt-auto pt-4 text-[20px] font-black tabular-nums tracking-wider">{appData.계좌번호}</div>
                       <div className="mt-1.5 flex flex-wrap items-center gap-2">
                         <div className="text-[14px] font-semibold text-blue-50/90">예금주 {appData.예금주 || "-"}</div>
                         <button onClick={() => { const t = `${appData.계좌은행} ${appData.계좌번호} ${appData.예금주 || ""}`.trim(); navigator.clipboard?.writeText(t).then(() => showMsg("계좌번호를 복사했습니다.")).catch(() => showMsg("복사에 실패했습니다.")); }}
@@ -62651,7 +62651,7 @@ function CompanyProfile({ userCompany = "", role = "", userId = "" }) {
                   <div>
                     <label className="block text-[12px] font-semibold text-gray-500 mb-1.5"><EditableText id="companyProfile.bankForm.label.은행" defaultText="은행" /></label>
                     <CustomSelect
-                      className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B] bg-white"
+                      className="w-full border border-gray-200 rounded-xl px-3 py-2 text-[13.5px] focus:outline-none focus:border-[#1B2B4B] bg-white"
                       value={bankForm.bank}
                       onChange={e => setBankForm(p => ({ ...p, bank: e.target.value }))}
                     >
@@ -62664,7 +62664,7 @@ function CompanyProfile({ userCompany = "", role = "", userId = "" }) {
                   <div>
                     <label className="block text-[12px] font-semibold text-gray-500 mb-1.5"><EditableText id="companyProfile.bankForm.label.예금주" defaultText="예금주" /></label>
                     <input autoComplete="off"
-                      className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B]"
+                      className="w-full border border-gray-200 rounded-xl px-3 py-2 text-[13.5px] focus:outline-none focus:border-[#1B2B4B]"
                       placeholder="예금주 이름"
                       value={bankForm.accountHolder}
                       onChange={e => setBankForm(p => ({ ...p, accountHolder: e.target.value }))}
@@ -62674,16 +62674,16 @@ function CompanyProfile({ userCompany = "", role = "", userId = "" }) {
                 <div>
                   <label className="block text-[12px] font-semibold text-gray-500 mb-1.5"><EditableText id="companyProfile.bankForm.label.계좌번호" defaultText="계좌번호" /></label>
                   <input autoComplete="off"
-                    className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B]"
+                    className="w-full border border-gray-200 rounded-xl px-3 py-2 text-[13.5px] focus:outline-none focus:border-[#1B2B4B]"
                     placeholder="숫자만 입력 (하이픈 제외)"
                     value={bankForm.accountNumber}
                     onChange={e => setBankForm(p => ({ ...p, accountNumber: e.target.value.replace(/[^\d-]/g, "") }))}
                   />
                 </div>
                     <div className="flex justify-end gap-2">
-                      {appData?.계좌은행 && <button onClick={() => setBankEditOpen(false)} className="h-11 px-4 rounded-xl border border-gray-300 text-[13px] font-bold text-gray-600">취소</button>}
+                      {appData?.계좌은행 && <button onClick={() => setBankEditOpen(false)} className="h-10 px-4 rounded-xl border border-gray-300 text-[13px] font-bold text-gray-600">취소</button>}
                       <button
-                        className="ml-auto h-11 px-6 rounded-xl bg-[#1B2B4B] hover:bg-[#243a60] text-white text-[14px] font-bold transition disabled:opacity-40"
+                        className="ml-auto h-10 px-6 rounded-xl bg-[#1B2B4B] hover:bg-[#243a60] text-white text-[14px] font-bold transition disabled:opacity-40"
                         disabled={!bankForm.bank || !bankForm.accountNumber || !bankForm.accountHolder}
                         onClick={() => { if (!bankForm.bank || !bankForm.accountNumber || !bankForm.accountHolder) return; setBankConfirmOpen(true); }}
                       >계좌 저장</button>
@@ -62695,10 +62695,12 @@ function CompanyProfile({ userCompany = "", role = "", userId = "" }) {
 
             {/* ⭐ 2026-11-03 한 회사 · 여러 사업자 — 오더마다 청구 사업자를 고른다 */}
             <BizListEditor company={companyName} canEdit={isAcctTeam || isAdmin || role === "hrManager"} />
-            <PopbillMemberCard company={companyName} canEdit={isAdmin || role === "hrManager"} />
+            <div className="grid grid-cols-1 2xl:grid-cols-2 gap-5 items-start">
+              <PopbillMemberCard company={companyName} canEdit={isAdmin || role === "hrManager"} />
+              <BankAccountsCard company={companyName} canEdit={isAdmin || role === "hrManager"} />
+            </div>
             {/* ✉️ 2026-11-08 발신 메일 — 회사마다 자기 메일 계정으로(앱 비밀번호는 서버에만 · 암호화) */}
             <CompanyMailSettingsCard company={companyName} role={role} isMaster={myDocMailCP?.isMaster === true} myEmail={auth?.currentUser?.email || ""} />
-            <BankAccountsCard company={companyName} canEdit={isAdmin || role === "hrManager"} />
             </div>
             </div>
           </>);
