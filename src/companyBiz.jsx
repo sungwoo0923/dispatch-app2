@@ -83,6 +83,31 @@ export function BizChip({ name, main = false, className = "" }) {
   );
 }
 
+// ⭐ 2026-11-09 거래처명 앞 뱃지 대신 — 순번 칸 왼쪽 얇은 색 막대(추가 사업자만) + 마우스 올리면 사업자명 + 상단 범례
+const BIZ_COLORS = ["#2F6FED", "#0EA5A4", "#E8833A", "#8B5CF6", "#D9468F", "#5E9E2F", "#C9A227", "#64748B"];
+export const bizColorOf = (biz, name) => {
+  const n = String(name || "").trim();
+  if (!biz?.multi || !n || n === biz.defaultName) return null;
+  const i = biz.names.indexOf(n);
+  return i > 0 ? BIZ_COLORS[(i - 1) % BIZ_COLORS.length] : "#94A3B8";
+};
+// 순번 칸에 붙이는 속성 — 기본 사업자는 아무 표시 없음
+export const bizStripeProps = (color, name) => (color ? { style: { boxShadow: `inset 3px 0 0 ${color}` }, title: `청구 사업자: ${name}` } : {});
+export function BizLegend({ biz, className = "" }) {
+  if (!biz?.multi) return null;
+  const extras = biz.names.filter((n) => n !== biz.defaultName);
+  if (!extras.length) return null;
+  return (
+    <span className={`inline-flex items-center gap-2 flex-wrap text-[11px] font-bold text-[#5B6B85] ${className}`} title="순번 칸 왼쪽 색 막대 = 청구 사업자 (표시 없으면 기본 사업자)">
+      {extras.map((n) => (
+        <span key={n} className="inline-flex items-center gap-1 whitespace-nowrap">
+          <span className="inline-block w-[3px] h-3 rounded-sm" style={{ background: bizColorOf(biz, n) }} />{n}
+        </span>
+      ))}
+    </span>
+  );
+}
+
 // 청구 사업자 고르기(오더 등록·수정)
 export function BizPicker({ biz, value, onChange, size = "md", label = "청구 사업자" }) {
   if (!biz?.multi) return null;

@@ -38,7 +38,7 @@ import { dispatchStatusOf, payTypeStatusPatch } from "./dispatchStatus"; // 🚚
 import { requestRouteSheetPush } from "./routeSheetPush"; // 💰 2026-11-06 고정노선 오더 고치면 바로 시트에
 import { makeClientMatcher } from "./clientMatch"; // ⭐ 2026-11-03 거래처 검색: 정확히 같은 이름이 있으면 그것만
 import DetailFilterButton, { applyDetailFilter, DetailScope } from "./DetailFilter"; // 🔎 2026-11-03 세부검색(최대 3차)
-import { useCompanyBiz, bizOf, BizChip, BizPicker, BizFilter, bizMatch, printInfoForBiz, BizListEditor, BizScope, BizSelect, resolveBiz, rememberBiz, normBizKey, bankForBiz, bizInfoCardBlob } from "./companyBiz"; // ⭐ 2026-11-03 한 회사 · 여러 사업자 // ⭐ 2026-11-03 배차담당자 칸(등록자 + 차량 붙인 사람)
+import { useCompanyBiz, bizOf, BizPicker, BizFilter, bizMatch, printInfoForBiz, BizListEditor, BizScope, BizSelect, bizColorOf, bizStripeProps, BizLegend, resolveBiz, rememberBiz, normBizKey, bankForBiz, bizInfoCardBlob } from "./companyBiz"; // ⭐ 2026-11-03 한 회사 · 여러 사업자 // ⭐ 2026-11-03 배차담당자 칸(등록자 + 차량 붙인 사람)
 import JSZip from "jszip";
 import { OrderWeather, BizCheck, bizGuardMain, ClientBizBulkButton, PopbillMemberCard } from "./publicDataMain"; // 🏛 2026-11-07 국세청 사업자 상태 · 기상청 날씨 · 팝빌 연동회원
 import { BankAccountsCard, BankReviewQueue } from "./PopbillAuto"; // 🏦 2026-11-08 은행 입금 자동 매칭
@@ -12180,11 +12180,13 @@ const makeMultiRegGroup = () => ({
   거래처명: "", 상차지명: "", 상차지주소: "", 상차지담당자: "", 상차지담당자번호: "",
   경유상차목록: [],
   query: "", count: 1,
+  청구사업자: "", _bizPicked: false, // ⭐ 2026-11-09 다중등록 — 청구 사업자를 먼저 고른다(안 고르면 자동 맞춤)
 });
 const [multiRegGroups, setMultiRegGroups] = React.useState(() => [makeMultiRegGroup()]);
 const [multiRegSlots, setMultiRegSlots] = React.useState([]);
 const [multiRegIdx, setMultiRegIdx] = React.useState(0);
 const [multiRegDropQuery, setMultiRegDropQuery] = React.useState("");
+const [multiRegPickQuery, setMultiRegPickQuery] = React.useState(""); // ⭐ 2026-11-09 상차지는 오더(2단계)에서 입력
 const [multiRegVehicleQuery, setMultiRegVehicleQuery] = React.useState("");
 const [multiRegSaving, setMultiRegSaving] = React.useState(false);
 // ⭐ 팝업을 마우스로 끌어 옮길 수 있게(요청사항) — 헤더를 누른 채 드래그하면
@@ -12217,7 +12219,7 @@ const startMultiRegDrag = (e) => {
 const [multiRegOrderMemoPopup, setMultiRegOrderMemoPopup] = React.useState(null);
 const openMultiRegOrderMemoEditor = (type, groupKey) => {
   const name = (type === "pickup"
-    ? multiRegGroups.find(g => g.key === groupKey)?.상차지명
+    ? currentMultiSlot?.상차지명 || ""
     : currentMultiSlot?.하차지명 || "").trim();
   if (!name) { showAlert(`${type === "pickup" ? "상차지명" : "하차지명"}을 먼저 입력하세요.`); return; }
   const found = mergedClients.find(c => normalizeKey(c.업체명 || "") === normalizeKey(name));
@@ -12230,7 +12232,7 @@ const openMultiRegOrderMemoEditor = (type, groupKey) => {
 };
 const hasMultiRegOrderMemoFor = (type, groupKey) => {
   const name = (type === "pickup"
-    ? multiRegGroups.find(g => g.key === groupKey)?.상차지명
+    ? currentMultiSlot?.상차지명 || ""
     : currentMultiSlot?.하차지명 || "").trim();
   if (!name) return false;
   const found = mergedClients.find(c => normalizeKey(c.업체명 || "") === normalizeKey(name));
@@ -12256,6 +12258,7 @@ const saveMultiRegOrderMemo = (memo, popupShow, notice) => {
 // 남아있으면 안 되므로 매번 비운다.
 React.useEffect(() => {
   setMultiRegDropQuery("");
+  setMultiRegPickQuery("");
   setMultiRegVehicleQuery("");
 }, [multiRegIdx]);
 
@@ -12481,28 +12484,17 @@ const openMultiRegister = () => {
 };
 
 const applyMultiRegGroupClient = (groupKey, clientRec) => {
+  // ⭐ 2026-11-09 거래처명은 거래처명에만 — 상차지는 다음 단계에서 오더마다 따로 입력한다
   setMultiRegGroups(prev => prev.map(g => g.key === groupKey ? {
     ...g,
     거래처명: clientRec.업체명,
-    상차지명: clientRec.업체명,
-    상차지주소: clientRec.주소 || "",
-    상차지담당자: clientRec.담당자 || "",
-    상차지담당자번호: clientRec.담당자번호 || "",
     query: clientRec.업체명,
   } : g));
-
-  // ⭐ 3파트 등록폼과 동일하게: 담당자가 여러 명이면 선택 팝업을, 등급(블랙/주의/
-  // 이탈)·메모가 있으면 안내 팝업을 띄우고, 전부 끝나면 하차지 입력창으로
-  // 포커스를 옮긴다(closeContactPopup/showClientAlertChain을 그대로 재사용).
+  // 등급(블랙/주의/이탈)·메모 안내 팝업은 그대로 띄운다
   const alertTarget = getAlertTargetForSelectedPlace(clientRec);
-  const contacts = (clientRec.contacts || []).filter(c => c.name?.trim());
-  const uniqueContacts = [...new Map(contacts.map(c => [c.name.trim(), c])).values()];
-  const contactItems = uniqueContacts.length > 1
-    ? [{ type: "pickup", place: clientRec, contacts: uniqueContacts, __multiReg: "group", __multiRegKey: groupKey }]
-    : [];
   showClientAlertChain(
     alertTarget ? [{ ...alertTarget, 업체명: alertTarget.업체명 || alertTarget.거래처명 || clientRec.업체명 }] : [],
-    { contactItems, finalFocusId: "mr-drop-input" }
+    { contactItems: [], finalFocusId: null }
   );
 };
 
@@ -12525,6 +12517,7 @@ const makeMultiRegSlot = (group) => ({
   메모: "",
   긴급: false,
   _groupKey: group.key, _groupLabel: group.거래처명,
+  청구사업자: group.청구사업자 || "", _bizPicked: !!group._bizPicked,
 });
 
 const startMultiRegisterFill = () => {
@@ -12559,6 +12552,9 @@ const updateMultiSlot = (key, value) => {
     if (key === "하차지명" && value.trim() === "") {
       return { ...s, 하차지명: "", 하차지주소: "", 하차지담당자: "", 하차지담당자번호: "" };
     }
+    if (key === "상차지명" && value.trim() === "") {
+      return { ...s, 상차지명: "", 상차지주소: "", 상차지담당자: "", 상차지담당자번호: "" };
+    }
     // ⭐ 3파트 등록폼과 동일: 청구운임/기사운임을 입력할 때마다 수수료(차액)를
     // 자동으로 다시 계산한다.
     // ⭐ 2026-11-02 운임규칙 — 다중등록도 운임구분 → 기사운임·수수료 자동
@@ -12574,6 +12570,25 @@ const updateMultiSlot = (key, value) => {
     }
     return { ...s, [key]: value };
   }));
+};
+
+// ⭐ 2026-11-09 다중등록 상차지(오더마다) — 하차지와 같은 방식
+const applyMultiSlotPickup = (place) => {
+  setMultiRegSlots(prev => prev.map((s, i) => i === multiRegIdx ? {
+    ...s,
+    상차지명: place.업체명, 상차지주소: place.주소 || "",
+    상차지담당자: primaryContactOf(place)?.name || "", 상차지담당자번호: primaryContactOf(place)?.phone || "",
+  } : s));
+  const alertTarget = getAlertTargetForSelectedPlace(place);
+  const contacts = (place.contacts || []).filter(c => c.name?.trim());
+  const uniqueContacts = [...new Map(contacts.map(c => [c.name.trim(), c])).values()];
+  const contactItems = uniqueContacts.length > 1
+    ? [{ type: "pickup", place, contacts: uniqueContacts, __multiReg: "pickup" }]
+    : [];
+  showClientAlertChain(
+    alertTarget ? [{ ...alertTarget, 업체명: alertTarget.업체명 || alertTarget.거래처명 || place.업체명 }] : [],
+    { contactItems, finalFocusId: "mr-drop-input" }
+  );
 };
 
 const applyMultiSlotDrop = (place) => {
@@ -12602,9 +12617,19 @@ const currentMultiSlot = multiRegSlots[multiRegIdx] || null;
 const goMultiRegNext = async () => {
   if (!(await mrDrvEdit.finish(currentMultiSlot || {}))) return; // ⭐ 2026-11-05 [수정] 중이면 먼저 변경/별도추가 선택
   const slot = multiRegSlots[multiRegIdx];
+  if (!slot?.상차지명?.trim()) { showAlert("상차지를 입력하세요."); return; }
   if (!slot?.하차지명?.trim()) { showAlert("하차지를 입력하세요."); return; }
   if (isReversedDateOrder(slot.상차일, slot.하차일 || slot.상차일)) { showAlert(REVERSED_DATE_ORDER_MSG); return; }
-  if (multiRegIdx < multiRegSlots.length - 1) setMultiRegIdx(i => i + 1);
+  if (multiRegIdx < multiRegSlots.length - 1) {
+    // ⭐ 2026-11-09 같은 거래처의 다음 오더는 상차지가 비어 있으면 방금 입력한 상차지를 그대로 이어 쓴다(수정 가능)
+    const ni = multiRegIdx + 1;
+    setMultiRegSlots(prev => prev.map((x, i) => (i === ni && x._groupKey === slot._groupKey && !String(x.상차지명 || "").trim()) ? {
+      ...x,
+      상차지명: slot.상차지명, 상차지주소: slot.상차지주소, 상차지담당자: slot.상차지담당자, 상차지담당자번호: slot.상차지담당자번호,
+      경유상차목록: slot.경유상차목록 || [],
+    } : x));
+    setMultiRegIdx(ni);
+  }
 };
 const goMultiRegPrev = async () => { if (!(await mrDrvEdit.finish(currentMultiSlot || {}))) return; if (multiRegIdx > 0) setMultiRegIdx(i => i - 1); }; // ⭐ 2026-11-05
 
@@ -12612,6 +12637,7 @@ const submitMultiRegister = async () => {
   if (!(await mrDrvEdit.finish(currentMultiSlot || {}))) return; // ⭐ 2026-11-05 [수정] 중이면 먼저 변경/별도추가 선택
   const slot = multiRegSlots[multiRegIdx];
   if (!slot?.하차지명?.trim()) { showAlert("하차지를 입력하세요."); return; }
+  { const mi = multiRegSlots.findIndex(x => !String(x.상차지명 || "").trim()); if (mi >= 0) { setMultiRegIdx(mi); showAlert(`${mi + 1}번째 오더의 상차지를 입력하세요.`); return; } }
   for (const s of multiRegSlots) {
     if (isReversedDateOrder(s.상차일, s.하차일 || s.상차일)) { showAlert(REVERSED_DATE_ORDER_MSG); return; }
   }
@@ -12658,7 +12684,8 @@ const submitMultiRegister = async () => {
       // undefined (reading 'map')" 에러가 난다.
       return addDispatch({
         ...emptyForm,
-        ...(dmBiz.multi ? (() => { const bc = (clients || []).find((c) => normBizKey(c.거래처명 || "") === normBizKey(s.거래처명 || "")); const r = resolveBiz(dmBiz, { client: s.거래처명, pickup: s.상차지명, drop: s.하차지명, clientDefault: bc?.기본사업자 || "" }); return r.name !== dmBiz.defaultName ? { 청구사업자: r.name } : {}; })() : {}), // ⭐ 2026-11-03 청구 사업자 — 같은 구간 기억 → 거래처 기억 → 거래처 기본 사업자
+        ...(dmBiz.multi && s._bizPicked ? (s.청구사업자 && s.청구사업자 !== dmBiz.defaultName ? { 청구사업자: s.청구사업자 } : {}) : {}), // ⭐ 2026-11-09 1단계에서 고른 청구 사업자 우선
+        ...(dmBiz.multi && !s._bizPicked ? (() => { const bc = (clients || []).find((c) => normBizKey(c.거래처명 || "") === normBizKey(s.거래처명 || "")); const r = resolveBiz(dmBiz, { client: s.거래처명, pickup: s.상차지명, drop: s.하차지명, clientDefault: bc?.기본사업자 || "" }); return r.name !== dmBiz.defaultName ? { 청구사업자: r.name } : {}; })() : {}), // ⭐ 2026-11-03 청구 사업자 — 같은 구간 기억 → 거래처 기억 → 거래처 기본 사업자
         거래처명: s.거래처명, 상차지명: s.상차지명, 상차지주소: s.상차지주소,
         상차지담당자: s.상차지담당자, 상차지담당자번호: s.상차지담당자번호,
         경유상차목록: s.경유상차목록 || [], 경유지_상차: s.경유상차목록 || [],
@@ -12887,44 +12914,17 @@ function applyClientSelect(name) {
     x => norm(x.업체명 || "") === norm(name)
   );
   // ⭐ 2026-11-03 여러 사업자 — 청구 사업자는 아래 자동 맞춤(useEffect)이 거래처·상차지·하차지를 보고 정한다
-  // ✅ 거래처 → 상차지 자동 적용
-  if (p) {
-    setForm(prev => ({
-      ...prev,
-      거래처명: p.업체명,
-
-      // 🔥 상차지 자동 세팅
-      상차지명: p.업체명,
-      상차지주소: p.주소 || "",
-      상차지담당자: primaryContactOf(p)?.name || "",
-상차지담당자번호: primaryContactOf(p)?.phone || "",
-
-    }));
-  } else {
-    // 🔹 placeList에 없을 경우 (신규 입력)
-    setForm(prev => ({
-      ...prev,
-      거래처명: name,
-      상차지명: name,   // 이름만이라도 넣어줌
-    }));
-  }
+  // ⭐ 2026-11-09 거래처명은 거래처명에만 입력 — 상차지명/주소/담당자로 자동 복사하지 않는다
+  setForm(prev => ({ ...prev, 거래처명: p ? p.업체명 : name }));
 
   setClientQuery(name);
   setIsClientOpen(false);
  // 자동매칭 뱃지 상태 초기화
-  setAutoPickMatched(!!p);
 
   // 거래처명에 입력/선택한 뒤에는 뜬 팝업(메모/등급 안내, 담당자 선택)이 있든 없든
   // 항상 상차지명으로 포커스가 돌아온다(하차지로 건너뛰지 않음).
   const alertTarget = findClientAlertTarget(name);
-  const contactItems = [];
-  if (p) {
-    const contacts = (p.contacts || []).filter(c => c.name?.trim());
-    const uniqueContacts = [...new Map(contacts.map(c => [c.name.trim(), c])).values()];
-    if (uniqueContacts.length > 1) {
-      contactItems.push({ type: "pickup", place: p, contacts: uniqueContacts });
-    }
-  }
+  const contactItems = []; // ⭐ 2026-11-09 상차지 자동입력을 없앴으므로 상차 담당자 선택 팝업도 띄우지 않는다
   showClientAlertChain(
     alertTarget ? [{ ...alertTarget, 업체명: alertTarget.업체명 || alertTarget.거래처명 || name }] : [],
     { contactItems, finalFocusId: "pickup-place-input", alwaysFocus: true }
@@ -13352,7 +13352,9 @@ const closeContactPopup = (selectedContact) => {
     // ⭐ 다중등록 팝업에서 연 담당자선택이면 form이 아니라 다중등록 쪽 상태에
     // 반영한다 — 팝업 자체(검색/키보드 이동/편집)는 완전히 같은 것을 그대로
     // 재사용하고, 선택 결과를 어디에 쓸지만 갈라준다.
-    if (contactPopup.__multiReg === "group") {
+    if (contactPopup.__multiReg === "pickup") {
+      setMultiRegSlots(prev => prev.map((s, i) => i === multiRegIdx ? { ...s, 상차지담당자: selectedContact.name || "", 상차지담당자번호: selectedContact.phone || "" } : s));
+    } else if (contactPopup.__multiReg === "group") {
       const gk = contactPopup.__multiRegKey;
       setMultiRegGroups(prev => prev.map(g => g.key === gk ? { ...g, 상차지담당자: selectedContact.name || "", 상차지담당자번호: selectedContact.phone || "" } : g));
     } else if (contactPopup.__multiReg === "drop") {
@@ -15388,16 +15390,7 @@ React.useEffect(() => {
       <DmIcon name="fare" />운임조회
     </button>
 
-    {/* 단가표 — 지금 입력한 하차지명/주소가 단가표 메뉴에 등록되어 있으면 천천히 깜빡인다 */}
-    <button
-      type="button"
-      onClick={() => setRateSheetLookupOpen(true)}
-      className={`${DM_BTN_SECONDARY} relative ${rateSheetMatches.length > 0 ? "!border-[#2D4C82] !bg-[#EEF3FC] animate-pulse" : ""}`}
-      title={rateSheetMatches.length > 0 ? "등록된 단가표에 일치하는 하차지가 있습니다" : "단가표 확인"}
-    >
-      <DmIcon name="table" />단가표
-      {rateSheetMatches.length > 0 && <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-[#4B6CB7] ring-2 ring-white" />}
-    </button>
+    {/* ⭐ 2026-11-09 단가표 버튼 제거 (단가표 메뉴는 그대로) */}
 
     {/* ⭐ 정기오더 — 지금 입력한 오더를 요일·시각마다 자동 등록 */}
     <button
@@ -15422,14 +15415,10 @@ React.useEffect(() => {
   <span className="hidden md:block w-px h-6 bg-[#DCE3EE]" />
   <div className="flex items-center gap-2 flex-wrap">
 
-  {/* 독차 */}
-<button type="button" onClick={() => onChange("독차", !form.독차)}
-  aria-pressed={!!form.독차} className={dmToggleCls(!!form.독차)}>
-  <DmDot on={!!form.독차} />독차
-</button>
+  {/* ⭐ 2026-11-09 독차 버튼 제거 — 혼적·왕복이 아니면 자동으로 독차 */}
 
 {/* 혼적 */}
-<button type="button" onClick={() => onChange("혼적", !form.혼적)}
+<button type="button" onClick={() => setForm((p) => ({ ...p, 혼적: !p.혼적, 독차: !!p.혼적 }))} /* ⭐ 2026-11-09 혼적을 끄면 독차 */
   aria-pressed={!!form.혼적} className={dmToggleCls(!!form.혼적)}>
   <DmDot on={!!form.혼적} />혼적
 </button>
@@ -15845,7 +15834,7 @@ shadow-[0_1px_2px_rgba(16,24,40,0.04),0_12px_30px_rgba(16,24,40,0.07)]
           <h3 className="text-white font-bold text-[16px]"><EditableText id="orderForm.multi.title" defaultText="다중등록" /></h3>
           <p className="text-white/60 text-[12px] mt-0.5">
             {multiRegStep === "setup"
-              ? "거래처별로 상차지를 고정하고, 등록할 건수를 정하세요"
+              ? (dmBiz.multi ? "청구 사업자 → 거래처 → 건수 순서로 정하고 [다음]을 누르세요" : "거래처와 등록할 건수를 정하고 [다음]을 누르세요")
               : `${currentMultiSlot?._groupLabel || ""} · ${multiRegIdx + 1} / ${multiRegSlots.length}건`}
           </p>
         </div>
@@ -15863,44 +15852,30 @@ shadow-[0_1px_2px_rgba(16,24,40,0.04),0_12px_30px_rgba(16,24,40,0.07)]
                     onClick={() => setMultiRegGroups(prev => prev.filter(x => x.key !== g.key))}
                     className="absolute top-3 right-3 text-gray-400 hover:text-red-500 text-[12px] font-bold"><EditableText id="misc.btn.13388.삭제" defaultText="삭제" /></button>
                 )}
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <div className="flex items-center h-[20px] overflow-visible justify-between mb-1">
-                      <label className={`${mrLabelCls} mb-0`}><EditableText id="orderForm.multi.label.거래처명상차지" defaultText="거래처명 (=상차지)" /></label>
-                      <div className="flex items-center gap-1">
-                        <OrderMemoIconButton onClick={() => openMultiRegOrderMemoEditor("pickup", g.key)} title="상차지 오더메모" hasMemo={hasMultiRegOrderMemoFor("pickup", g.key)} size={18} />
-                        {g.거래처명 && <ContactPickerIconButton onClick={() => {
-                          const place = mergedClients.find(c => normalizeKey(c.업체명 || "") === normalizeKey(g.거래처명));
-                          const contacts = (place?.contacts || []).filter(c => c.name?.trim());
-                          const uniqueContacts = [...new Map(contacts.map(c => [c.name.trim(), c])).values()];
-                          if (!uniqueContacts.length) return showAlert("등록된 담당자가 없습니다.");
-                          openContactPopup([{ type: "pickup", place, contacts: uniqueContacts, __multiReg: "group", __multiRegKey: g.key }]);
-                        }} title="상차지 담당자 선택" />}
-                      </div>
+                {/* ⭐ 2026-11-09 순서: 청구 사업자 → 거래처명 → 건수 (상차지는 다음 단계에서 오더마다 입력) */}
+                <div className={`grid gap-4 ${dmBiz.multi ? "grid-cols-[minmax(0,0.9fr)_minmax(0,1.4fr)_auto]" : "grid-cols-[minmax(0,1fr)_auto]"}`}>
+                  {dmBiz.multi && (
+                    <div className="min-w-0">
+                      <label className={mrLabelCls}><EditableText id="orderForm.multi.label.청구사업자" defaultText="청구 사업자" /></label>
+                      <BizSelect biz={dmBiz} value={g._bizPicked ? (g.청구사업자 || "") : null}
+                        onChange={(v) => setMultiRegGroups(prev => prev.map(x => x.key === g.key ? { ...x, 청구사업자: v || "", _bizPicked: true } : x))}
+                        className={mrInputCls} />
+                      {!g._bizPicked && <div className="text-[11px] text-gray-400 mt-1">안 고르면 거래처 기준으로 자동</div>}
                     </div>
+                  )}
+                  <div className="min-w-0">
+                    <label className={mrLabelCls}><EditableText id="orderForm.multi.label.거래처명" defaultText="거래처명" /> {reqStar}</label>
                     <MultiRegCombo
                       className={mrInputCls}
                       placeholder="거래처 검색/입력"
                       value={g.query}
                       onChange={(v) => {
-                        setMultiRegGroups(prev => prev.map(x => x.key === g.key ? { ...x, query: v, ...(v.trim() === "" ? { 거래처명: "", 상차지명: "", 상차지주소: "", 상차지담당자: "", 상차지담당자번호: "" } : {}) } : x));
+                        // ⭐ 2026-11-09 직접 입력한 이름도 거래처명으로 그대로 쓴다(상차지와는 연결하지 않음)
+                        setMultiRegGroups(prev => prev.map(x => x.key === g.key ? { ...x, query: v, 거래처명: v.trim() } : x));
                       }}
                       items={filterMultiRegClients(g.query).map((c, i) => ({ key: i, label: c.업체명, sub: c.주소, raw: c }))}
                       renderItem={(it) => (<><div className="font-medium">{it.label}</div>{it.sub && <div className="text-[11px] text-gray-500">{it.sub}</div>}</>)}
                       onSelect={(it) => applyMultiRegGroupClient(g.key, it.raw)}
-                    />
-                    {g.거래처명 && (
-                      <div className="text-[11px] text-emerald-600 font-semibold mt-1">
-                        ✓ 상차지 고정: {g.상차지주소 || g.상차지명}{g.상차지담당자 ? ` · ${g.상차지담당자}${g.상차지담당자번호 ? ` (${g.상차지담당자번호})` : ""}` : ""}
-                      </div>
-                    )}
-                    <WaypointSection
-                      stops={g.경유상차목록 || []}
-                      type="pickup"
-                      onSave={(list) => setMultiRegGroups(prev => prev.map(x => x.key === g.key ? { ...x, 경유상차목록: list } : x))}
-                      placeRows={mergedClients}
-                      timeOptions={timeOptions}
-                      className="mt-1.5"
                     />
                   </div>
                   <div>
@@ -15931,12 +15906,59 @@ shadow-[0_1px_2px_rgba(16,24,40,0.04),0_12px_30px_rgba(16,24,40,0.07)]
         ) : currentMultiSlot ? (
           <div className="space-y-4">
             <div className="bg-gray-50 rounded-xl px-4 py-3 flex flex-wrap items-center gap-2 text-[13px]">
-              <span className="px-2 py-0.5 rounded bg-[#1B2B4B] text-white text-[11px] font-bold shrink-0">고정</span>
+              <span className="px-2 py-0.5 rounded bg-[#1B2B4B] text-white text-[11px] font-bold shrink-0">거래처</span>
               <span className="font-bold text-[#1B2B4B]">{currentMultiSlot.거래처명}</span>
-              {currentMultiSlot.상차지주소 && (<><span className="text-gray-400">·</span><span className="text-gray-600">{currentMultiSlot.상차지주소}</span></>)}
+              {dmBiz.multi && (<><span className="text-gray-400">·</span><span className="text-gray-600">청구 {currentMultiSlot._bizPicked ? (currentMultiSlot.청구사업자 || dmBiz.defaultName) : "자동"}</span></>)}
             </div>
 
             <div className="grid grid-cols-2 gap-x-6 gap-y-4">
+              {/* ⭐ 2026-11-09 상차지부터 입력(상차지 → 상차일/시간 → 하차지 …) */}
+              <div>
+                <div className="flex items-center h-[20px] overflow-visible justify-between mb-1">
+                  <label className={`${mrLabelCls} mb-0`}><EditableText id="orderForm.multi.label.상차지" defaultText="상차지" /> {reqStar}</label>
+                  <div className="flex items-center gap-1">
+                    <OrderMemoIconButton onClick={() => openMultiRegOrderMemoEditor("pickup")} title="상차지 오더메모" hasMemo={hasMultiRegOrderMemoFor("pickup")} size={18} />
+                    {currentMultiSlot.상차지명 && <ContactPickerIconButton onClick={() => {
+                      const place = filterPlaces(currentMultiSlot.상차지명)[0] || mergedClients.find(c => normalizeKey(c.업체명 || "") === normalizeKey(currentMultiSlot.상차지명));
+                      const contacts = (place?.contacts || []).filter(c => c.name?.trim());
+                      const uniqueContacts = [...new Map(contacts.map(c => [c.name.trim(), c])).values()];
+                      if (!uniqueContacts.length) return showAlert("등록된 담당자가 없습니다.");
+                      openContactPopup([{ type: "pickup", place, contacts: uniqueContacts, __multiReg: "pickup" }]);
+                    }} title="상차지 담당자 선택" />}
+                  </div>
+                </div>
+                <MultiRegCombo
+                  id="mr-pickup-input"
+                  className={mrInputCls}
+                  placeholder="상차지 검색/입력"
+                  value={multiRegPickQuery || currentMultiSlot.상차지명}
+                  onChange={(v) => { setMultiRegPickQuery(v); updateMultiSlot("상차지명", v); }}
+                  items={filterPlaces(multiRegPickQuery || currentMultiSlot.상차지명).map((p, i) => ({ key: i, label: p.업체명, sub: p.주소, raw: p }))}
+                  renderItem={(it) => (<><div className="font-medium">{it.label}</div>{it.sub && <div className="text-[11px] text-gray-500">{it.sub}</div>}</>)}
+                  onSelect={(it) => { applyMultiSlotPickup(it.raw); setMultiRegPickQuery(it.raw.업체명); }}
+                />
+                <WaypointSection
+                  stops={currentMultiSlot.경유상차목록 || []}
+                  type="pickup"
+                  onSave={(list) => updateMultiSlot("경유상차목록", list)}
+                  placeRows={mergedClients}
+                  timeOptions={timeOptions}
+                  className="mt-1.5"
+                />
+              </div>
+              <div>
+                <label className={mrLabelCls}><EditableText id="orderForm.multi.label.상차지주소" defaultText="상차지주소" /></label>
+                <input autoComplete="off" className={mrInputCls} value={currentMultiSlot.상차지주소 || ""} onChange={e => updateMultiSlot("상차지주소", e.target.value)} />
+              </div>
+              <div>
+                <label className={mrLabelCls}><EditableText id="orderForm.multi.label.상차지담당자" defaultText="상차지 담당자" /></label>
+                <input autoComplete="off" className={mrInputCls} placeholder="담당자명" value={currentMultiSlot.상차지담당자 || ""} onChange={e => updateMultiSlot("상차지담당자", e.target.value)} />
+              </div>
+              <div>
+                <label className={mrLabelCls}><EditableText id="orderForm.multi.label.상차지담당자연락처" defaultText="상차지 담당자 연락처" /></label>
+                <input autoComplete="off" className={mrInputCls} placeholder="연락처" value={currentMultiSlot.상차지담당자번호 || ""} onChange={e => updateMultiSlot("상차지담당자번호", formatPhone(e.target.value))} />
+              </div>
+
               <div>
                 <label className={mrLabelCls}><EditableText id="orderForm.multi.label.상차일" defaultText="상차일" /></label>
                 <CustomDatePicker
@@ -24303,7 +24325,7 @@ function StickyHScrollbar({ targetRef }) {
 // 그 값 자체가 outer state(예: r._id 자체, edited 등)에 의존하지 않는 "그 행 전용" 클로저라
 // 이 행이 실제로 다시 렌더링될 때 항상 최신 값으로 갱신되므로 안전하다.
 function RealtimeRowBase({
-  r, idx, mgrName = null, bizTag = null, bizMain = false,
+  r, idx, mgrName = null, bizTag = null, bizMain = false, bizColor = null,
   isSelected, isFading, isHighlighted, isDark, selectedEditMode,
   editedForRow,
   toInt, formatComma, formatPhone, getCreatedMs, getUpdatedMs, getDispatchConfirmedMs, formatKstDateTime, getCreatorLabel,
@@ -24408,7 +24430,7 @@ ${isHighlighted ? "animate-pulse bg-blue-100" : ""}
                   </td>
 
                   {/* ⚡ 순번은 CSS 카운터로(.kp-rt-body) — 정렬로 줄 순서가 바뀌어도 줄 전체를 다시 그리지 않게 */}
-                  <td className={`${cell} kp-rt-no`} />
+                  <td className={`${cell} kp-rt-no`} {...bizStripeProps(bizMain ? null : bizColor, bizTag)} />
                   {mgrName != null && (
                     <td className={cell}><MgrBadge row={r} name={mgrName} empty={ORDER_MGR_EMPTY} /></td>
                   )}
@@ -24467,7 +24489,7 @@ ${isHighlighted ? "animate-pulse bg-blue-100" : ""}
   </span>
 </td>
 
-                  <td className={cell}>{/* ⭐ 2026-11-06 긴급 알약 */}{bizTag || isUrgentOrder(r) ? <span className="inline-flex items-center gap-1 whitespace-nowrap"><UrgentBadge row={r} />{bizTag && <BizChip name={bizTag} main={bizMain} />}{editableInput("거래처명", r.거래처명, r._id)}</span> : editableInput("거래처명", r.거래처명, r._id)}</td>
+                  <td className={cell}>{/* ⭐ 2026-11-06 긴급 알약 · 2026-11-09 사업자 뱃지는 순번 칸 색 막대로 */}{isUrgentOrder(r) ? <span className="inline-flex items-center gap-1 whitespace-nowrap"><UrgentBadge row={r} />{editableInput("거래처명", r.거래처명, r._id)}</span> : editableInput("거래처명", r.거래처명, r._id)}</td>
                   <td className={cell}>
   <div className="inline-flex items-center gap-1 flex-nowrap whitespace-nowrap">
     <AddressCell text={r.상차지명} max={8} popupTitle="상차지명 전체보기" />
@@ -24778,6 +24800,7 @@ function realtimeRowPropsEqual(prev, next) {
     prev.isSelected === next.isSelected &&
     prev.mgrName === next.mgrName &&
     prev.bizTag === next.bizTag &&
+    prev.bizColor === next.bizColor &&
     prev.isFading === next.isFading &&
     prev.isHighlighted === next.isHighlighted &&
     prev.isDark === next.isDark &&
@@ -30043,6 +30066,7 @@ const head = isDark
     <button onClick={() => setQ(qInputRef.current?.value ?? "")} className="h-full px-2 bg-[#1B2B4B] text-white text-[11px] font-bold hover:bg-[#243a60] transition"><EditableText id="misc.btn.26528.조회" defaultText="조회" /></button>
   </div>
   <DetailFilterButton rows={rtDayRows} value={rtDetail} onApply={setRtDetail} withDate={false} getters={rtDetailGet} title="세부검색 · 실시간" />
+  <BizLegend biz={rtBiz} className="ml-1" />{/* ⭐ 2026-11-09 청구 사업자 색 범례 */}
   <button onClick={() => setLookupOpen(true)} title="기간 + 배차담당자 + 차량번호·기사명으로 찾기" className="px-2 py-1 rounded-lg bg-white text-[#1B2B4B] border-2 border-[#1B2B4B] text-[11px] font-black whitespace-nowrap flex-shrink-0 hover:bg-[#EEF2F8]">담당자·차량 조회</button>
   <OrderLookupModal open={lookupOpen} onClose={() => setLookupOpen(false)} rows={lookupOpen ? (historyDispatchData || []).filter((r) => !r?.배차표Id) : []} nameOf={lookupNameOf} />{/* ⭐ 2026-11-06 실시간 조회에도 고정노선(배차표) 오더는 빼기 */}
   {/* ⭐ 2026-11-05 실시간 관제 — 지금 목록의 배차완료 지입·직영·임대 기사 전체 지도 */}
@@ -30188,7 +30212,7 @@ const head = isDark
                 r={r}
                 idx={idx}
                 mgrName={rtMgrMap ? orderMgrName(rtMgrMap, r) : null}
-                bizTag={rtBiz.multi ? bizOf(r, rtBiz.defaultName) : null} bizMain={bizOf(r, rtBiz.defaultName) === rtBiz.defaultName}
+                bizTag={rtBiz.multi ? bizOf(r, rtBiz.defaultName) : null} bizMain={bizOf(r, rtBiz.defaultName) === rtBiz.defaultName} bizColor={rtBiz.multi ? bizColorOf(rtBiz, bizOf(r, rtBiz.defaultName)) : null}
                 isSelected={selected.includes(r._id)}
                 isFading={fadingIds.has(r._id)}
                 isHighlighted={highlightIds.has(r._id)}
@@ -30526,11 +30550,7 @@ flashRow(savedId);
 {/* ================= 오더 유형 버튼 ================= */}
 <div className="flex items-center gap-2 flex-wrap">
   <span className="text-[13.5px] font-bold text-[#5B6B85] mr-1">오더 유형</span>
-  <button type="button"
-    onClick={() => setCopyTarget(p => (dokchaOn(p) ? { ...p, 독차: false, 혼적: true } : { ...p, 독차: true, 혼적: false }))} /* ⭐ 2026-11-06 독차 ↔ 혼적(혼적·왕복이 아니면 독차가 기본) */
-    title="혼적·왕복을 고르지 않으면 독차가 기본입니다"
-    className={`px-4 py-1.5 rounded-lg text-[13px] font-bold border transition-all ${dokchaOn(copyTarget) ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"}`}
-  ><EditableText id="misc.btn.26993.독차" defaultText="독차" /></button>
+  {/* ⭐ 2026-11-09 독차 버튼 제거 — 혼적·왕복이 아니면 자동으로 독차 */}
   <button type="button"
     onClick={() => setCopyTarget(p => ({ ...p, 혼적: !p.혼적, 독차: !!p.혼적 }))} /* ⭐ 2026-11-06 혼적을 끄면 독차(기본) */
     className={`px-4 py-1.5 rounded-lg text-[13px] font-bold border transition-all ${copyTarget.혼적 ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"}`}
@@ -32206,7 +32226,7 @@ value={copyTarget?.화물수량 || ""}
               )}
               <button
                 type="button"
-                onClick={() => setEditTarget((p) => ({ ...p, 혼적: !p.혼적, 독차: p.혼적 ? p.독차 : false }))}
+                onClick={() => setEditTarget((p) => ({ ...p, 혼적: !p.혼적, 독차: !!p.혼적 }))} /* ⭐ 2026-11-09 혼적을 끄면 독차 */
                 className={`px-3 py-1.5 rounded-lg text-[12px] font-semibold border transition-all ${editTarget.혼적 ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"}`}
               >
                 혼적
@@ -32219,18 +32239,6 @@ value={copyTarget?.화물수량 || ""}
                 업체전달
               </button>
               <div className="ml-auto flex gap-1.5">
-                <button
-                  type="button"
-                  onClick={() => setRateSheetLookupOpen4(true)}
-                  className={`px-3 py-1.5 rounded-lg text-[12px] font-semibold border transition ${
-                    rateSheetMatches4.length > 0
-                      ? "bg-[#1B2B4B]/10 text-[#1B2B4B] border-[#1B2B4B] animate-pulse"
-                      : "bg-white text-gray-500 border-gray-200 hover:bg-gray-50"
-                  }`}
-                  title={rateSheetMatches4.length > 0 ? "등록된 단가표에 일치하는 하차지가 있습니다" : "단가표 확인"}
-                >
-                  단가표
-                </button>
                 <button
                   onClick={handleFareSearch}
                   className="px-3 py-1.5 rounded-lg text-[12px] font-semibold border border-[#1B2B4B]/40 text-[#1B2B4B] hover:bg-[#1B2B4B]/10 transition"
@@ -32295,10 +32303,6 @@ value={copyTarget?.화물수량 || ""}
                       거래처주소: c.주소 || prev.거래처주소,
                       거래처담당자: c.담당자 || prev.거래처담당자,
                       거래처연락처: c.연락처 || prev.거래처연락처,
-
-                      // 🔥 핵심 추가: 거래처 선택 = 상차지 자동 세팅
-                      상차지명: c.거래처명,
-                      상차지주소: c.주소 || prev.상차지주소,
                     }));
                     setShowEditClientDropdown(false);
                     checkWarningStatus(c.거래처명, "거래처");
@@ -32313,8 +32317,7 @@ value={copyTarget?.화물수량 || ""}
                         거래처주소: c.주소 || prev.거래처주소,
                         거래처담당자: c.담당자 || prev.거래처담당자,
                         거래처연락처: c.연락처 || prev.거래처연락처,
-                        상차지명: c.거래처명,
-                        상차지주소: c.주소 || prev.상차지주소,
+
                       }));
                       setShowEditClientDropdown(false);
                       checkWarningStatus(c.거래처명, "거래처");
@@ -32346,10 +32349,6 @@ value={copyTarget?.화물수량 || ""}
                             거래처주소: c.주소 || prev.거래처주소,
                             거래처담당자: c.담당자 || prev.거래처담당자,
                             거래처연락처: c.연락처 || prev.거래처연락처,
-
-                            // 🔥 여기
-                            상차지명: c.거래처명,
-                            상차지주소: c.주소 || prev.상차지주소,
                           }));
                           setShowEditClientDropdown(false);
                           checkWarningStatus(c.거래처명, "거래처");
@@ -39906,6 +39905,7 @@ return (
         </CustomSelect>
         {/* ⭐ 2026-11-05 세부검색 — 오른쪽 끝에서 상태 필터(전체/미배차/미전달) 바로 옆으로 옮김 */}
         <DetailFilterButton rows={dispatchData} value={dsDetail} onApply={applyDsDetail} getters={dsDetailGet} dateOf={dsDateOf} dateLabel={fixedForm ? "입고일 기준" : "상차일 기준"} title={fixedForm ? "세부검색 · 고정노선현황" : "세부검색 · 배차현황"} />
+        <BizLegend biz={dsBiz} className="ml-1" />{/* ⭐ 2026-11-09 청구 사업자 색 범례 */}
       </div>
 
       {/* ===== 페이지+검색+날짜+버튼 한 줄 ===== */}
@@ -40159,7 +40159,8 @@ return (
         />
       </td>
 
-      <td className="px-3 py-3 text-[14px] font-medium text-gray-800 text-center border-b border-gray-200 border-r border-r-gray-100 whitespace-nowrap">
+      <td className="px-3 py-3 text-[14px] font-medium text-gray-800 text-center border-b border-gray-200 border-r border-r-gray-100 whitespace-nowrap"
+        {...(dsBiz.multi ? bizStripeProps(bizColorOf(dsBiz, bizOf(row, dsBiz.defaultName)), bizOf(row, dsBiz.defaultName)) : {})}>{/* ⭐ 2026-11-09 청구 사업자 = 왼쪽 색 막대 */}
         {(page * pageSize) + i + 1}
       </td>
       {dsMgrMap && (() => { const mn = orderMgrName(dsMgrMap, row); return (
@@ -40217,8 +40218,6 @@ return (
         />
       </div>
 
-   ) : key === "거래처명" && dsBiz.multi ? (
-  <span className="inline-flex items-center whitespace-nowrap"><BizChip name={bizOf(row, dsBiz.defaultName)} main={bizOf(row, dsBiz.defaultName) === dsBiz.defaultName} />{row.거래처명}</span>
    ) : key === "상차지명" ? (
   <div className="inline-flex items-center gap-1">
     <AddressCell text={row.상차지명} max={8} popupTitle="상차지명 전체보기" />
@@ -40598,7 +40597,7 @@ return (
                   onChange={(c) => setEditTarget((p) => ({ ...p, 회전수: c, 메모: withRotationMemo(p.메모, c) }))} />
               )}
               <button type="button"
-                onClick={() => setEditTarget((p) => ({ ...p, 혼적: !p.혼적, 독차: p.혼적 ? p.독차 : false }))}
+                onClick={() => setEditTarget((p) => ({ ...p, 혼적: !p.혼적, 독차: !!p.혼적 }))} /* ⭐ 2026-11-09 혼적을 끄면 독차 */
                 className={`px-3 py-1.5 rounded-lg text-[12px] font-semibold border transition-all ${editTarget.혼적 ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"}`}>
                 혼적
               </button>
@@ -40614,18 +40613,6 @@ return (
                 업체전달
               </button>
               <div className="ml-auto flex gap-1.5">
-                <button
-                  type="button"
-                  onClick={() => setRateSheetLookupOpen5(true)}
-                  className={`px-3 py-1.5 rounded-lg text-[12px] font-semibold border transition ${
-                    rateSheetMatches5.length > 0
-                      ? "bg-[#1B2B4B]/10 text-[#1B2B4B] border-[#1B2B4B] animate-pulse"
-                      : "bg-white text-gray-500 border-gray-200 hover:bg-gray-50"
-                  }`}
-                  title={rateSheetMatches5.length > 0 ? "등록된 단가표에 일치하는 하차지가 있습니다" : "단가표 확인"}
-                >
-                  단가표
-                </button>
                 <button type="button" onClick={handleFareSearch} className="px-3 py-1.5 rounded-lg text-[12px] font-semibold border border-[#1B2B4B]/40 text-[#1B2B4B] hover:bg-[#1B2B4B]/10 transition">
                   운임조회
                 </button>
@@ -40677,8 +40664,7 @@ return (
                     setEditTarget((prev) => ({
                       ...prev,
                       거래처명: c.거래처명,
-                      상차지명: c.거래처명,
-                      상차지주소: c.주소 || prev.상차지주소,
+
                     }));
                     checkWarningStatus(c.거래처명, "거래처");
                     setShowClientDropdown(false);
@@ -40690,8 +40676,7 @@ return (
                       setEditTarget((prev) => ({
                         ...prev,
                         거래처명: c.거래처명,
-                        상차지명: c.거래처명,
-                        상차지주소: c.주소 || prev.상차지주소,
+
                       }));
                       checkWarningStatus(c.거래처명, "거래처");
                       setShowClientDropdown(false);
@@ -40716,8 +40701,7 @@ return (
                         setEditTarget((prev) => ({
                           ...prev,
                           거래처명: c.거래처명,
-                          상차지명: c.거래처명,
-                          상차지주소: c.주소 || prev.상차지주소,
+
                         }));
                         checkWarningStatus(c.거래처명, "거래처");
                         setShowClientDropdown(false);
@@ -42000,11 +41984,7 @@ return (
 {/* ================= 오더 유형 버튼 ================= */}
 <div className="flex items-center gap-2 flex-wrap bg-white rounded-xl border border-[#E3E8F0] px-5 py-2.5">
   <span className="text-[13.5px] font-bold text-[#5B6B85] mr-1">오더 유형</span>
-  <button type="button"
-    onClick={() => setCopyTarget(p => (dokchaOn(p) ? { ...p, 독차: false, 혼적: true } : { ...p, 독차: true, 혼적: false }))} /* ⭐ 2026-11-06 독차 ↔ 혼적(혼적·왕복이 아니면 독차가 기본) */
-    title="혼적·왕복을 고르지 않으면 독차가 기본입니다"
-    className={`px-4 py-1.5 rounded-lg text-[13px] font-bold border transition-all ${dokchaOn(copyTarget) ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"}`}
-  ><EditableText id="misc.btn.38146.독차" defaultText="독차" /></button>
+  {/* ⭐ 2026-11-09 독차 버튼 제거 — 혼적·왕복이 아니면 자동으로 독차 */}
   <button type="button"
     onClick={() => setCopyTarget(p => ({ ...p, 혼적: !p.혼적, 독차: !!p.혼적 }))} /* ⭐ 2026-11-06 혼적을 끄면 독차(기본) */
     className={`px-4 py-1.5 rounded-lg text-[13px] font-bold border transition-all ${copyTarget.혼적 ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"}`}
@@ -45363,6 +45343,7 @@ function NewOrderPopup({
     try {
       const ok = await addDispatch({
         ...newOrder,
+        독차: dokchaOn(newOrder), // ⭐ 2026-11-09 독차 버튼 제거 — 혼적·왕복이 아니면 독차
         차량톤수: toTonUnit(newOrder.차량톤수),
         메모중요도: "일반",
         운행유형: newOrder.운행유형 || "편도",
@@ -45446,14 +45427,6 @@ function NewOrderPopup({
 {newOrder.운행유형 === "왕복" && (
   <RotationPicker size="sm" allowSplit={false} count={newOrder.회전수 || 1} onChange={(c) => handleChange("회전수", c)} />
 )}
-            <label className="flex items-center gap-2">
-              <input autoComplete="off"
-                type="checkbox"
-                checked={newOrder.독차}
-                onChange={(e) => handleChange("독차", e.target.checked)}
-              />
-              독차
-            </label>
           </div>
 
           {/* 거래처명 */}

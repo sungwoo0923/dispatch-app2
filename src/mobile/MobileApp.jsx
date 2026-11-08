@@ -11,7 +11,7 @@ import { CompanyOptionPicker } from "../companyOptionPicker"; // 🧾 2026-11-02
 import { AttendanceQuickButton, officeRadii, CheckoutReminderHost } from "../attendanceQuick";
 import { PersonalTodayHost } from "../PersonalSchedule";
 import { makeClientMatcher } from "../clientMatch"; // ⭐ 2026-11-03 거래처 검색
-import { useCompanyBiz, BizPicker, BizChip, bizOf, BizSelect, resolveBiz, rememberBizFor, normBizKey } from "../companyBiz"; // ⭐ 2026-11-03 여러 사업자
+import { useCompanyBiz, BizPicker, bizColorOf, bizOf, BizSelect, resolveBiz, rememberBizFor, normBizKey } from "../companyBiz"; // ⭐ 2026-11-03 여러 사업자
 import { useCustomRoles, findCustomRole, getMenuAccess, roleScreen, useRoleView, applyRoleMenus } from "../customRoles";
 import { usePayrollAccess } from "../payrollAccess"; // ⭐ 2026-11-06 직원 급여·연차 촉진
 import { useReadOnlyGuard } from "../readOnlyGuard";
@@ -11360,7 +11360,7 @@ const dropTime = order.하차시간 ? fmtDispatchTimeM(order.하차시간, order
           <div className="flex flex-wrap items-center gap-1.5 min-w-0">
             <span className="text-[0.76em] font-extrabold text-white bg-[#1B2B4B] px-1.5 py-0.5 rounded-md tabular-nums shrink-0" style={{ fontFamily: MONO_B, fontVariantNumeric: "tabular-nums" }}>{String(order.상차일 || "").slice(5) || "--"}</span>
             {order.거래처명 && (
-              <span className="text-[0.8em] font-extrabold text-[#1B2B4B] truncate max-w-[150px] inline-flex items-center">{cBiz.multi && <BizChip name={bizOf(order, cBiz.defaultName)} main={bizOf(order, cBiz.defaultName) === cBiz.defaultName} />}{order.거래처명}</span>
+              <span className="text-[0.8em] font-extrabold text-[#1B2B4B] truncate max-w-[150px] inline-flex items-center">{/* ⭐ 2026-11-09 사업자 뱃지 대신 작은 색 막대(추가 사업자만) */}{cBiz.multi && bizColorOf(cBiz, bizOf(order, cBiz.defaultName)) && <span title={`청구 사업자: ${bizOf(order, cBiz.defaultName)}`} className="inline-block w-[3px] h-[0.9em] rounded-sm mr-1 shrink-0" style={{ background: bizColorOf(cBiz, bizOf(order, cBiz.defaultName)) }} />}{order.거래처명}</span>
             )}
             <button
               style={{ touchAction: "manipulation" }}
@@ -14764,7 +14764,8 @@ const chooseClient = (c) => {
   // ⭐ 2026-11-03 여러 사업자 — 거래처의 기본 청구 사업자로
   // (청구 사업자는 위 자동 맞춤이 거래처·상차지·하차지를 보고 정한다)
   setSelectedClient(c);
-  showAlertThen(findClientAlertTarget(c.거래처명), () => setShowClientApplyModal(true));
+  // ⭐ 2026-11-09 거래처명은 거래처명에만 — 상차/하차 적용 팝업을 띄우지 않는다
+  showAlertThen(findClientAlertTarget(c.거래처명), () => {});
 };
 
 const [showNewDriver, setShowNewDriver] = useState(false);
@@ -16396,29 +16397,17 @@ const pickDrop = (c) => {
         />
         <fieldset disabled={isLockedShipperEdit} style={{ display: "contents" }}>
         <RowLabelInput
-          label="혼적/독차"
+          label="혼적"
           input={
-            <div className="flex gap-4 items-center text-sm">
-              <label className="flex items-center gap-1">
-                <input autoComplete="off"
-                  type="radio"
-                  name="mix"
-                  value="혼적"
-                  checked={form.혼적여부 === "혼적"}
-                  onChange={(e) => update("혼적여부", e.target.value)}
-                />
+            /* ⭐ 2026-11-09 독차 버튼 제거 — 혼적을 켜지 않으면(또는 다시 끄면) 자동으로 독차 */
+            <div className="flex gap-2 items-center text-sm">
+              <button type="button"
+                onClick={() => update("혼적여부", form.혼적여부 === "혼적" ? "독차" : "혼적")}
+                aria-pressed={form.혼적여부 === "혼적"}
+                className={`px-3 py-1.5 rounded-lg text-[12.5px] font-bold border transition ${form.혼적여부 === "혼적" ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-600 border-gray-300"}`}>
                 혼적
-              </label>
-              <label className="flex items-center gap-1">
-                <input autoComplete="off"
-                  type="radio"
-                  name="mix"
-                  value="독차"
-                  checked={form.혼적여부 !== "혼적"}
-                  onChange={(e) => update("혼적여부", e.target.value)}
-                />
-                독차
-              </label>
+              </button>
+              <span className="text-[11px] text-gray-400">안 누르면 독차</span>
             </div>
           }
         />
