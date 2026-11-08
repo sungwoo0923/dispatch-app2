@@ -9,16 +9,16 @@ import { addDoc, collection, doc, onSnapshot, serverTimestamp } from "firebase/f
 import { db } from "./firebase";
 
 export const PLAN_IDS = ["lite", "basic", "standard", "pro"];
-// ⭐ 2026-11-04 요금표 재설정(비용·손익 분석 기준) — 가격 사다리: 59,000 / 129,000 / 249,000 / 449,000 (VAT 별도)
+// ⭐ 2026-11-08 요금표 재설정(대표 확정안) — 가격 사다리: 105,000 / 230,000 / 349,000 / 590,000 (VAT 별도)
 //  · seats 직원 계정 · orders 월 오더 · fleet 포함 지입차(GPS 관리) 대수 · storageGB 포함 저장 용량 · setupFee 초기 도입비(12개월 약정 시 면제)
 //  · 이미 저장된 요금(요금제 관리)은 그대로 둔다 — 관리센터 › 영업 › 요금제 관리 [추천 요금표 적용]을 눌러야 바뀐다(RECOMMENDED_PLAN_VERSION)
 //  · 이 값이 기본값으로 쓰이는 곳: 저장된 요금이 아직 없을 때(신규 설치) · 공개 요금(publicPricing) 문서가 없을 때
-export const RECOMMENDED_PLAN_VERSION = "2026-11";
+export const RECOMMENDED_PLAN_VERSION = "2026-11-08";
 export const PLAN_DEFAULTS = [
-  { id: "lite", name: "라이트", en: "LITE", price: 59000, seats: 2, orders: 600, fleet: 0, storageGB: 5, setupFee: 0, target: "1인 주선 · 개인 운송 (일 20건 안팎)" },
-  { id: "basic", name: "베이직", en: "BASIC", price: 129000, seats: 5, orders: 2000, fleet: 0, storageGB: 10, setupFee: 200000, target: "소규모 운송사 · 2~5인 (일 50~70건)" },
-  { id: "standard", name: "스탠다드", en: "STANDARD", price: 249000, seats: 12, orders: 4500, fleet: 10, storageGB: 30, setupFee: 400000, target: "일반 운송사 · 6~12인 (일 100~150건)", recommended: true },
-  { id: "pro", name: "프로", en: "PRO", price: 449000, seats: 25, orders: 10000, fleet: 30, storageGB: 100, setupFee: 700000, target: "중견 운송사 · 13인 이상 (일 200~330건)" },
+  { id: "lite", name: "라이트", en: "LITE", price: 105000, seats: 2, orders: 600, fleet: 0, storageGB: 5, setupFee: 0, target: "1인 주선 · 개인 운송 (일 20건 안팎)" },
+  { id: "basic", name: "베이직", en: "BASIC", price: 230000, seats: 5, orders: 1500, fleet: 0, storageGB: 10, setupFee: 200000, target: "소규모 운송사 · 2~5인 (일 50건 안팎)" },
+  { id: "standard", name: "스탠다드", en: "STANDARD", price: 349000, seats: 12, orders: 2500, fleet: 15, storageGB: 30, setupFee: 400000, target: "일반 운송사 · 6~10인 (일 80건 안팎)", recommended: true },
+  { id: "pro", name: "프로", en: "PRO", price: 590000, seats: 25, orders: 10000, fleet: 40, storageGB: 100, setupFee: 700000, target: "중견 운송사 · 13인 이상 (일 200~330건)" },
 ];
 
 // 기능표 — min: 이 요금제부터 사용 가능
