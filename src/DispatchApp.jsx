@@ -58,6 +58,8 @@ import { isMasterKey } from "./monthCompare"; // ⭐ 2026-11-03 최고관리자 
 import { deptModeOf } from "./DeptDashboard";
 import { ExecApprovals, TeamSchedule, ApprovalWorkspace, ExecScheduleBoard } from "./ExecSuite";
 import { useMyProfile } from "./userNames";
+import { sendCompanyMail, isMailSetupNeeded } from "./companyMail"; // ✉️ 2026-11-08 운송사별 발신 메일(예전 /api/send-email 대신)
+import { CompanyMailSettingsCard, MailSenderLine, MailSetupHost } from "./CompanyMailSettings";
 import { useCompanyStaff, masterHasHr, isHrStaffUser } from "./hrHandover";
 import { AttendanceQuickButton, CheckoutReminderHost } from "./attendanceQuick";
 import { PersonalTodayHost } from "./PersonalSchedule";
@@ -7563,18 +7565,16 @@ useEffect(() => {
             await updateDoc(doc(db, "scheduledEmails", d.id), { status: "sending" });
           } catch { continue; }
           try {
-            const res = await fetch("/api/send-email", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                to: data.to, subject: data.subject, html: data.html,
-                attachments: data.attachments || [], fromName: data.fromName || "",
-                replyTo: data.replyTo || "", // ⭐ 2026-11-06 일반 이메일 보내는 사람 이메일(답장 받을 주소)
-              }),
+            // ✉️ 2026-11-08 회사 메일 계정으로(서버 함수 sendCompanyMail · 회사정보 › 메일 설정)
+            const r = await sendCompanyMail({
+              to: data.to, subject: data.subject, html: data.html,
+              attachments: data.attachments || [], fromName: data.fromName || "",
+              replyTo: data.replyTo || "", // ⭐ 2026-11-06 일반 이메일 보내는 사람 이메일(답장 받을 주소)
+              log: { type: `${data.type || "예약메일"}(예약 발송)`, client: data.meta?.client || "-", body: data.meta?.body || "" },
             });
-            await updateDoc(doc(db, "scheduledEmails", d.id), res.ok
-              ? { status: "sent", sentAt: serverTimestamp() }
-              : { status: "failed", error: `서버 오류(${res.status})` });
+            await updateDoc(doc(db, "scheduledEmails", d.id), r.ok
+              ? { status: "sent", sentAt: serverTimestamp(), sentFrom: r.sentFrom || "" }
+              : { status: "failed", error: r.error || "보내지 못했어요", ...(r.code ? { errorCode: r.code } : {}) });
           } catch (e) {
             await updateDoc(doc(db, "scheduledEmails", d.id), { status: "failed", error: e?.message || "네트워크 오류" }).catch(() => {});
           }
@@ -8034,6 +8034,12 @@ useEffect(() => {
    const h = () => setMenu("HOME");
    window.addEventListener("kp-open-approval", h);
    return () => window.removeEventListener("kp-open-approval", h);
+ }, []);
+ // ✉️ 2026-11-08 [메일 설정 열기] — 회사관리 › 회사정보 › 메일 설정(src/companyMail.js openMailSettings)
+ useEffect(() => {
+   const h = () => { setMenu("회사관리"); setTimeout(() => { window.dispatchEvent(new Event("kp-cm-tab")); window.dispatchEvent(new Event("kp-mail-focus")); }, 0); };
+   window.addEventListener("kp:open-mail-settings", h);
+   return () => window.removeEventListener("kp:open-mail-settings", h);
  }, []);
   // 정산관리(거래명세서 검색/선택 상태)는 다른 메뉴로 이동했다 돌아와도 유지되도록,
   // 한 번 방문하면 언마운트하지 않고 CSS로만 숨긴다.
@@ -8495,6 +8501,8 @@ return (
         groups={deptMode ? DEPT_SIDE_GROUPS[deptMode] : KP_SIDE_GROUPS}
       />
       <BannerCenter />
+      {/* ✉️ 2026-11-08 발신 메일 — 보내다가 "설정 없음"이면 안내 창 · 예전 공용 계정을 쓰던 회사 관리자에게 등록 안내 */}
+      <MailSetupHost company={userCompany || localStorage.getItem("userCompany") || ""} role={realRole || role} isMaster={myProfileDoc?.isMaster === true} />
       {/* ⭐ 2026-11-03 알림 통합 — 새 공지·인사발령·결재 요청/결과·인수인계는 가운데 팝업(하나씩 · 최신 것부터) · [바로 가기]는 그 메뉴로 */}
       <NotifyCenter uid={user?.uid} role={realRole || role} team={myProfileDoc?.team || ""} company={deptCompany}
         onGo={(it) => {
@@ -53372,9 +53380,9 @@ const handleBatchSettle = async (targetStatus) => {
                       setGeneralEmailBody(`안녕하세요, ${client ? `${client} 담당자님.` : "담당자님."}\n\n${COMPANY_PRINT.name}입니다.\n\n\n\n감사합니다.\n${COMPANY_PRINT.name}\n${COMPANY_PRINT.contact}`);
                       setGeneralEmailFiles([]);
                       setGeneralEmailScheduleOn(false); setGeneralEmailScheduleAt("");
-                      // ⭐ 2026-11-06 보내는 사람 — 마지막에 쓴 값 → 없으면 "회사명 배차팀" · 내 로그인 이메일
+                      // ⭐ 2026-11-06 보내는 사람 — 마지막에 쓴 값 → 없으면 메일 설정 이름 · 내 로그인 이메일
                       { let saved = null; try { saved = JSON.parse(localStorage.getItem(genMailFromKey) || "null"); } catch { saved = null; }
-                        setGeneralEmailFromName(saved?.name || `${COMPANY_PRINT.name || userCompany || ""} 배차팀`.trim());
+                        setGeneralEmailFromName(saved?.name || ""); // ✉️ 2026-11-08 비우면 회사 메일 설정의 보내는 사람 이름
                         setGeneralEmailFromAddr(saved?.email ?? (auth.currentUser?.email || "")); }
                       setGeneralEmailOpen(true);
                     }}
@@ -53798,15 +53806,16 @@ const handleBatchSettle = async (targetStatus) => {
                     <div className="text-[13px] font-black text-[#0F1A30] mb-2">보내는 사람</div>
                     <div className="grid grid-cols-[1fr_1.4fr] gap-2">
                       <input autoComplete="off" data-genmail-from-name className="border border-[#D5DDEA] rounded-xl px-3 py-2.5 text-[13px] outline-none focus:border-[#1B2B4B] bg-white"
-                        placeholder="이름 (예: 홍길동 · 배차팀)" maxLength={60} value={generalEmailFromName} onChange={e => setGeneralEmailFromName(e.target.value)} />
+                        placeholder="이름 (비우면 메일 설정 이름)" maxLength={60} value={generalEmailFromName} onChange={e => setGeneralEmailFromName(e.target.value)} />
                       <input autoComplete="off" type="email" data-genmail-from-email className={`border-2 rounded-lg px-3 py-2.5 text-[13px] outline-none bg-white ${generalEmailFromAddr.trim() && !GEN_MAIL_RE.test(generalEmailFromAddr.trim()) ? "border-[#B42318]" : "border-[#D5DDEA] focus:border-[#1B2B4B]"}`}
                         placeholder="답장 받을 이메일 (예: me@company.com)" value={generalEmailFromAddr} onChange={e => setGeneralEmailFromAddr(e.target.value)} />
                     </div>
                     {generalEmailFromAddr.trim() && !GEN_MAIL_RE.test(generalEmailFromAddr.trim()) && <div className="mt-1.5 text-[12px] font-bold text-[#B42318]">이메일 형식이 올바르지 않습니다.</div>}
                     <div className="mt-2 text-[12px] leading-relaxed text-[#5B6B85]">
-                      받는 사람에게는 <b className="text-[#0F1A30]">{(generalEmailFromName || "배차팀").trim() || "배차팀"}</b>(으)로 보이고, <b className="text-[#0F1A30]">[답장]을 누르면 {generalEmailFromAddr.trim() || "입력한 이메일"}</b>로 갑니다.
-                      메일 서버 보안 규칙(SPF·DMARC) 때문에 실제 발송 주소는 프로그램 공용 발송 계정으로 나갑니다.
+                      이름을 비우면 메일 설정의 보내는 사람 이름으로, 이메일을 비우면 메일 설정의 회신 주소로 답장이 와요.
+                      실제 발송 주소는 회사정보 › 메일 설정에 등록한 우리 회사 메일이에요.
                     </div>
+                    <MailSenderLine company={userCompany} className="mt-2" />
                   </div>
                   <div>
                     <label className="text-[13px] font-bold text-[#3A4A66] mb-1 block">수신 이메일</label>
@@ -53920,7 +53929,7 @@ const handleBatchSettle = async (targetStatus) => {
                               setGeneralEmailFiles(prev => {
                                 const next = [...prev, ...arr];
                                 const totalKB = Math.round(next.reduce((s, x) => s + (x.base64?.length || 0), 0) * 0.75 / 1024);
-                                if (totalKB > 3800) alert(`총 첨부 용량이 약 ${(totalKB/1024).toFixed(1)}MB입니다. Vercel 제한(4MB) 초과 시 발송 실패할 수 있습니다. 파일을 줄여주세요.`);
+                                if (totalKB > 6000) alert(`총 첨부 용량이 약 ${(totalKB/1024).toFixed(1)}MB예요. 6MB를 넘으면 보내지 못할 수 있어요. 파일을 줄여 주세요.`);
                                 return next;
                               });
                             });
@@ -53936,7 +53945,7 @@ const handleBatchSettle = async (targetStatus) => {
                             </div>
                           ))}
                           <div className="text-[11px] text-[#7A89A3] text-right pt-1">
-                            총 {(generalEmailFiles.reduce((s,f)=>s+(f.size||0),0)/1024/1024).toFixed(1)}MB (권장 4MB 이하)
+                            총 {(generalEmailFiles.reduce((s,f)=>s+(f.size||0),0)/1024/1024).toFixed(1)}MB (6MB까지)
                           </div>
                         </div>
                       )}
@@ -53990,7 +53999,7 @@ const handleBatchSettle = async (targetStatus) => {
                         const cardSection = (includeCardGeneral && cardImage) ? `<hr style="border:none;border-top:1px solid #e5e7eb;margin:20px 0"/><img src="${cardImage}" alt="명함" style="width:100%;max-width:500px;border-radius:8px;display:block" onerror="this.style.display='none'"/>` : "";
                         const bodyHtml = `<div style="font-family:sans-serif;font-size:14px;color:#333;line-height:1.8;max-width:600px">${bodyLines}${cardSection}</div>`;
                         const attachments = generalEmailFiles.map(f => ({ filename: f.name, content: f.base64, encoding: "base64" }));
-                        const fromName = generalEmailFromName.trim() || `${COMPANY_PRINT.name || userCompany || "배차팀"} 배차팀`;
+                        const fromName = generalEmailFromName.trim(); // ✉️ 2026-11-08 비우면 회사 메일 설정의 보내는 사람 이름
                         try {
                           if (generalEmailScheduleOn) {
                             if (scheduledEmailAttachSize(attachments) > SCHEDULED_EMAIL_ATTACH_LIMIT) {
@@ -54008,29 +54017,24 @@ const handleBatchSettle = async (targetStatus) => {
                             setGeneralEmailSending(false);
                             return;
                           }
-                          const res = await fetch("/api/send-email", {
-                            method: "POST",
-                            headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({
-                              to: generalEmailTo,
-                              subject: generalEmailSubject,
-                              html: bodyHtml,
-                              attachments,
-                              fromName,
-                              fromEmail: fromAddr, replyTo: fromAddr, // ⭐ 2026-11-06 답장 받을 주소
-                            }),
+                          // ✉️ 2026-11-08 회사 메일 계정으로 — 기록(emailLogs)은 서버가 남긴다
+                          const r = await sendCompanyMail({
+                            to: generalEmailTo,
+                            subject: generalEmailSubject,
+                            html: bodyHtml,
+                            attachments,
+                            fromName,
+                            replyTo: fromAddr, // ⭐ 2026-11-06 답장 받을 주소
+                            log: { type: "일반이메일", client: client || "-", body: generalEmailBody || "" },
                           });
                           const logBase = { type: "일반이메일", client: client || "-", to: generalEmailTo, subject: generalEmailSubject, body: generalEmailBody || "", attachmentNames: generalEmailFiles.map(f => f.name), fromName, replyTo: fromAddr };
-                          if (res.ok) {
-                            let info = {}; try { info = await res.json(); } catch { info = {}; }
-                            logEmail({ ...logBase, status: "success", sentFrom: info.sentFrom || "" }).catch(() => {});
-                            showAlert(`${generalEmailTo} 로 발송 완료${fromAddr ? `\n보낸 사람: ${fromName} · 답장 받을 주소 ${fromAddr}` : ""}`);
+                          if (r.ok) {
+                            if (!r.logged) logEmail({ ...logBase, status: "success", sentFrom: r.sentFrom || "" }).catch(() => {});
+                            showAlert(`${generalEmailTo} 로 발송 완료${r.sentFrom ? `\n보낸 주소: ${r.sentFrom}` : ""}${fromAddr ? ` · 답장 받을 주소 ${fromAddr}` : ""}`);
                             setGeneralEmailOpen(false);
-                          } else {
-                            let errMsg = `서버 오류 (${res.status})`;
-                            try { const errData = await res.json(); errMsg = errData.error || errMsg; } catch {}
-                            logEmail({ ...logBase, status: "failed", error: errMsg }).catch(() => {}); // ⭐ 2026-11-06 실패도 기록
-                            showAlert(`발송 실패: ${errMsg}`);
+                          } else if (!isMailSetupNeeded(r)) {
+                            if (!r.logged) logEmail({ ...logBase, status: "failed", error: r.error }).catch(() => {}); // ⭐ 2026-11-06 실패도 기록
+                            showAlert(`발송 실패: ${r.error}`);
                           }
                         } catch (e) {
                           logEmail({ type: "일반이메일", client: client || "-", to: generalEmailTo, subject: generalEmailSubject, body: generalEmailBody || "", attachmentNames: generalEmailFiles.map(f => f.name), fromName, replyTo: fromAddr, status: "failed", error: e.message }).catch(() => {});
@@ -54112,6 +54116,7 @@ const handleBatchSettle = async (targetStatus) => {
             setBatchSending(true);
             setBatchSendProgress({ done: 0, total: batchSendList.length, failed: [] });
             const failed = [];
+            let mailSetupNeeded = false; // ✉️ 발신 메일 설정이 없으면 멈추고 안내 창만
             for (let idx = 0; idx < batchSendList.length; idx++) {
               const item = batchSendList[idx];
               if (!item.email) {
@@ -54159,19 +54164,16 @@ const handleBatchSettle = async (targetStatus) => {
                 const totalAmt = (item.totals?.공급가||0)+(item.totals?.세액||0);
                 const bodyText = `안녕하세요, ${item.name} 담당자님.\n\n${COMPANY_PRINT.name}입니다.\n\n${item.start}~${item.end} 기간 거래명세서를 발송드립니다.\n\n총 ${item.mapped?.length||0}건\n공급가액: ${(item.totals?.공급가||0).toLocaleString()}원\n부가세: ${(item.totals?.세액||0).toLocaleString()}원\n합계: ${totalAmt.toLocaleString()}원\n\n입금계좌: ${COMPANY_PRINT.bank}\n마감문의: ${COMPANY_PRINT.phone || "-"}\n\n확인 부탁드립니다.\n감사합니다.\n\n${COMPANY_PRINT.name}\n${COMPANY_PRINT.contact}`;
                 const bodyHtml = `<div style="font-family:sans-serif;font-size:14px;color:#333;line-height:1.8;max-width:600px">${bodyText.split("\n").map(l=>`<p style="margin:0 0 4px 0">${l||"&nbsp;"}</p>`).join("")}</div>`;
-                const res = await fetch("/api/send-email", {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ to: item.email, subject, html: bodyHtml, attachments, fromName: `${COMPANY_PRINT.name || userCompany || "배차팀"} 배차팀` }),
-                });
-                if (res.ok) {
-                  logEmail({ type:"거래명세서", client: item.name, to: item.email, subject, body: bodyText, attachmentNames: attachments.map(a=>a.filename), status:"success" });
+                // ✉️ 2026-11-08 회사 메일 계정으로(보내는 사람 이름은 메일 설정 값) — 기록은 서버가 남긴다
+                const r = await sendCompanyMail({ to: item.email, subject, html: bodyHtml, attachments, log: { type: "거래명세서", client: item.name, body: bodyText } });
+                if (r.ok) {
+                  if (!r.logged) logEmail({ type:"거래명세서", client: item.name, to: item.email, subject, body: bodyText, attachmentNames: attachments.map(a=>a.filename), status:"success" });
                   markStmtSent(item.name, item.start, item.end); // ⭐ 2026-11-07 단계 보드 — 발송
                 } else {
-                  let reason = `서버 오류 (${res.status})`;
-                  try { const errData = await res.json(); reason = errData.error || reason; } catch {}
+                  const reason = r.error || "보내지 못했어요";
                   failed.push({ name: item.name, reason });
-                  logEmail({ type:"거래명세서", client: item.name, to: item.email, subject, body: bodyText, attachmentNames: attachments.map(a=>a.filename), status:"failed", error: reason });
+                  if (!r.logged && !isMailSetupNeeded(r)) logEmail({ type:"거래명세서", client: item.name, to: item.email, subject, body: bodyText, attachmentNames: attachments.map(a=>a.filename), status:"failed", error: reason });
+                  if (isMailSetupNeeded(r)) { mailSetupNeeded = true; break; } // 설정이 없으면 나머지도 못 보낸다(안내 창이 뜬다)
                 }
               } catch(e) {
                 const reason = e.message || "네트워크 오류";
@@ -54180,6 +54182,7 @@ const handleBatchSettle = async (targetStatus) => {
               setBatchSendProgress(p => ({ ...p, done: p.done+1, failed }));
             }
             setBatchSending(false);
+            if (mailSetupNeeded) return;
             if (failed.length === 0) {
               showAlert(`${batchSendList.length}개 업체 발송 완료`);
               setBatchSendList([]);
@@ -54272,9 +54275,7 @@ const handleBatchSettle = async (targetStatus) => {
                   {/* 발신 계정 */}
                   <div>
                     <label className="text-[13px] font-bold text-[#3A4A66] mb-1 block">발신 계정</label>
-                    <div className="flex items-center gap-2 px-3 py-2.5 bg-[#F4F6FA] border border-[#D5DDEA] rounded-lg text-[13px] text-[#0F1A30] font-medium">
-                      r15332525@daum.net
-                    </div>
+                    <MailSenderLine company={userCompany} />{/* ✉️ 2026-11-08 회사 메일 설정 값(예전엔 한 운송사 주소가 고정으로 적혀 있었다) */}
                   </div>
 
                   {/* 수신 이메일 */}
@@ -54408,7 +54409,6 @@ const handleBatchSettle = async (targetStatus) => {
                       const cardSectionInvoice = (includeCardInvoice && cardImage) ? `<hr style="border:none;border-top:1px solid #e5e7eb;margin:20px 0"/><img src="${cardImage}" alt="명함" style="width:100%;max-width:500px;border-radius:8px;display:block" onerror="this.style.display='none'"/>` : "";
                       const bodyHtml = `<div style="font-family:sans-serif;font-size:14px;color:#333;line-height:1.8;max-width:600px">${bodyLines}${cardSectionInvoice}</div>`;
 
-                      const fromNameInvoice = `${COMPANY_PRINT.name || userCompany || "배차팀"} 배차팀`;
                       try {
                         if (emailScheduleOn) {
                           if (scheduledEmailAttachSize(fileAttachments) > SCHEDULED_EMAIL_ATTACH_LIMIT) {
@@ -54418,7 +54418,7 @@ const handleBatchSettle = async (targetStatus) => {
                           }
                           await scheduleEmailDoc({
                             companyName: userCompany, to: emailTo, subject, html: bodyHtml,
-                            attachments: fileAttachments, fromName: fromNameInvoice, sendAt: new Date(emailScheduleAt),
+                            attachments: fileAttachments, fromName: "", // ✉️ 보내는 사람 이름은 회사 메일 설정 값 sendAt: new Date(emailScheduleAt),
                             type: "거래명세서", meta: { client, body: emailBody },
                           });
                           logEmail({ type:"거래명세서(예약)", client, to: emailTo, subject, body: emailBody, attachmentNames: fileAttachments.map(f=>f.filename), status:"success" });
@@ -54428,47 +54428,23 @@ const handleBatchSettle = async (targetStatus) => {
                           setEmailSending(false);
                           return;
                         }
-                        const res = await fetch("/api/send-email", {
-                          method: "POST",
-                          headers: { "Content-Type": "application/json" },
-                          body: JSON.stringify({
-                            to: emailTo,
-                            subject,
-                            html: bodyHtml,
-                            fromName: fromNameInvoice,
-                            attachments: fileAttachments, // PDF
-                            excelData: {                  // ★ 엑셀은 서버에서 생성
-                              client,
-                              start: start || "",
-                              end: end || "",
-                              rows: mapped.map(m => ({
-                                idx: m.idx || "",
-                                상차일: m.상차일 || "",
-                                상차지: m.상차지 || "",
-                                하차지: m.하차지 || "",
-                                경유지: m.경유지 || "",
-                                화물명: m.화물명 || "",
-                                기사명: m.기사명 || "",
-                                차량번호: m.차량번호 || "",
-                                공급가액: m.공급가액 || 0,
-                                세액: m.세액 || 0,
-                              })),
-                              totals: { 공급가액: 합계공급가, 세액: 합계세액 },
-                              clientInfo: (clients||[]).find(c => c.거래처명 === client) || {},
-                              companyInfo: COMPANY_PRINT,
-                            },
-                          }),
+                        // ✉️ 2026-11-08 회사 메일 계정으로(서버 함수 sendCompanyMail) — 기록은 서버가 남긴다
+                        //  (예전 excelData는 예전 서버도 쓰지 않던 값이라 뺐다 · 첨부는 PDF/엑셀 파일 그대로)
+                        const r = await sendCompanyMail({
+                          to: emailTo,
+                          subject,
+                          html: bodyHtml,
+                          attachments: fileAttachments, // PDF
+                          log: { type: "거래명세서", client, body: emailBody },
                         });
-                        if (res.ok) {
-                          logEmail({ type:"거래명세서", client, to: emailTo, subject, body: emailBody, attachmentNames: fileAttachments.map(f=>f.filename), status:"success" });
+                        if (r.ok) {
+                          if (!r.logged) logEmail({ type:"거래명세서", client, to: emailTo, subject, body: emailBody, attachmentNames: fileAttachments.map(f=>f.filename), status:"success" });
                           markStmtSent(client, start, end); // ⭐ 2026-11-07 단계 보드 — 발송
                           showAlert(`${emailTo} 로 발송 완료`);
                           setEmailModalOpen(false);
-                        } else {
-                          let errMsg = `서버 오류 (${res.status})`; let errCode = "";
-                          try { const errData = await res.json(); errMsg = errData.error || errMsg; errCode = errData.code || ""; } catch {}
-                          logEmail({ type:"거래명세서", client, to: emailTo, subject, body: emailBody, status:"failed", error: errMsg });
-                          showAlert(`발송 실패: ${errMsg}${errCode ? "\n코드: "+errCode : ""}`);
+                        } else if (!isMailSetupNeeded(r)) {
+                          if (!r.logged) logEmail({ type:"거래명세서", client, to: emailTo, subject, body: emailBody, status:"failed", error: r.error });
+                          showAlert(`발송 실패: ${r.error}`);
                         }
                       } catch (e) {
                         showAlert("네트워크 오류로 발송 실패");
@@ -55435,9 +55411,7 @@ const handleBatchSettle = async (targetStatus) => {
                   {/* 발신 계정 */}
                   <div>
                     <label className="text-[13px] font-bold text-[#3A4A66] mb-1 block">발신 계정</label>
-                    <div className="px-3 py-2.5 bg-[#F4F6FA] border border-[#D5DDEA] rounded-lg text-[13px] text-[#0F1A30] font-medium">
-                      r15332525@daum.net
-                    </div>
+                    <MailSenderLine company={userCompany} />{/* ✉️ 2026-11-08 회사 메일 설정 값 */}
                   </div>
 
                   {/* 수신 이메일 */}
@@ -55609,7 +55583,6 @@ const handleBatchSettle = async (targetStatus) => {
                       const bodyLines = emailBody.split("\n").map(l=>`<p style="margin:0 0 4px 0">${l||"&nbsp;"}</p>`).join("");
                       const cardSectionAr = (includeCardAr && cardImage) ? `<hr style="border:none;border-top:1px solid #e5e7eb;margin:20px 0"/><img src="${cardImage}" alt="명함" style="width:100%;max-width:500px;border-radius:8px;display:block" onerror="this.style.display='none'"/>` : "";
                       const bodyHtml = `<div style="font-family:sans-serif;font-size:14px;color:#333;line-height:1.8;max-width:600px">${bodyLines}${cardSectionAr}</div>`;
-                      const fromNameAr = `${COMPANY_PRINT.name || userCompany || "배차팀"} 배차팀`;
                       try {
                         if (emailScheduleOn) {
                           if (scheduledEmailAttachSize(fileAttachments) > SCHEDULED_EMAIL_ATTACH_LIMIT) {
@@ -55619,7 +55592,7 @@ const handleBatchSettle = async (targetStatus) => {
                           }
                           await scheduleEmailDoc({
                             companyName: userCompany, to: emailTo, subject, html: bodyHtml,
-                            attachments: fileAttachments, fromName: fromNameAr, sendAt: new Date(emailScheduleAt),
+                            attachments: fileAttachments, fromName: "", // ✉️ 보내는 사람 이름은 회사 메일 설정 값 sendAt: new Date(emailScheduleAt),
                             type: "미수금", meta: { client: selClient, body: emailBody },
                           });
                           logEmail({ type:"미수금(예약)", client:selClient, to:emailTo, subject, body: emailBody, status:"success" });
@@ -55629,20 +55602,16 @@ const handleBatchSettle = async (targetStatus) => {
                           setEmailSending(false);
                           return;
                         }
-                        const res = await fetch("/api/send-email", {
-                          method:"POST",
-                          headers:{"Content-Type":"application/json"},
-                          body: JSON.stringify({ to: emailTo, subject, html: bodyHtml, attachments: fileAttachments, fromName: fromNameAr }),
-                        });
-                        if (res.ok) {
-                          logEmail({ type:"미수금", client:selClient, to:emailTo, subject, body: emailBody, status:"success" });
+                        // ✉️ 2026-11-08 회사 메일 계정으로 — 기록은 서버가 남긴다
+                        const r = await sendCompanyMail({ to: emailTo, subject, html: bodyHtml, attachments: fileAttachments, log: { type: "미수금", client: selClient, body: emailBody } });
+                        if (r.ok) {
+                          if (!r.logged) logEmail({ type:"미수금", client:selClient, to:emailTo, subject, body: emailBody, status:"success" });
                           showAlert(`${emailTo} 로 발송 완료`);
                           setArEmailOpen(false);
                           setShowEmailHistory(false);
-                        } else {
-                          const err = await res.json();
-                          logEmail({ type:"미수금", client:selClient, to:emailTo, subject, body: emailBody, status:"failed", error: err.error });
-                          showAlert(`발송 실패: ${err.error||"오류"}\n코드: ${err.code||""}`);
+                        } else if (!isMailSetupNeeded(r)) {
+                          if (!r.logged) logEmail({ type:"미수금", client:selClient, to:emailTo, subject, body: emailBody, status:"failed", error: r.error });
+                          showAlert(`발송 실패: ${r.error || "오류"}`);
                         }
                       } catch(e) {
                         logEmail({ type:"미수금", client:selClient, to:emailTo, subject, body: emailBody, status:"failed", error: e.message });
@@ -62171,6 +62140,7 @@ function CompanyProfile({ userCompany = "", role = "", userId = "" }) {
   const isAcctTeam = ["test", "hrAcct", "allMgr", "acctStaff", "totalMaster"].includes(role) || /경리|회계/.test(myTeamCP);
   const canEditDocs = isAcctTeam || role === "hrManager" || /인사/.test(myTeamCP);
   const canEditBank = isAcctTeam;
+  const myDocMailCP = useMyProfile(currentUserId); // ✉️ 메일 설정 — 회사 마스터도 바꿀 수 있게
 
   const [appData, setAppData] = React.useState(null);
   const [altAddr, setAltAddr] = React.useState("");
@@ -62745,6 +62715,8 @@ function CompanyProfile({ userCompany = "", role = "", userId = "" }) {
             <PopbillMemberCard company={companyName} canEdit={isAdmin || role === "hrManager"} />
             {/* 💬🏦 2026-11-08 팝빌 자동화 — 알림톡 배차 알림 · 은행 입금 자동 조회(팝빌 연결 전에도 미리 설정) */}
             <AlimtalkSettingsCard company={companyName} canEdit={isAdmin || role === "hrManager"} defaultPhone={appData?.phone || appData?.연락처 || ""} />
+            {/* ✉️ 2026-11-08 발신 메일 — 회사마다 자기 메일 계정으로(앱 비밀번호는 서버에만 · 암호화) */}
+            <CompanyMailSettingsCard company={companyName} role={role} isMaster={myDocMailCP?.isMaster === true} myEmail={auth?.currentUser?.email || ""} />
             <BankAccountsCard company={companyName} canEdit={isAdmin || role === "hrManager"} />
             </div>
             </div>

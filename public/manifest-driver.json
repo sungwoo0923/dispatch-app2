@@ -2,7 +2,7 @@
   "id": "/driver-login",
   "name": "LogisWeb 기사",
   "short_name": "LogisWeb 기사",
-  "start_url": "/driver-login",
+  "start_url": "/driver-login?src=driverapp",
   "scope": "/",
   "display": "standalone",
   "background_color": "#0F1A30",

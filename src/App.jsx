@@ -33,6 +33,9 @@ import {
 import { LoginManagerModal } from "./LoginManager";
 import { PcVerifyGate, isPcMfaPassed } from "./MfaModal";
 import { DRIVER_BUSY_EVENT, isDriverBusy } from "./driver/driverLoginErrors"; // ⭐ 2026-11-05 기사 로그인 확인 중 표시
+import { initDriverAppContext, markDriverAppOnlyKick } from "./driver/driverAppContext"; // ⭐ 2026-11-08 기사앱(APK·홈 화면 기사앱)은 기사 계정만
+// ⭐ 2026-11-08 기사앱 안인지 — 안드로이드 APK 또는 기사 화면에서 "홈 화면에 추가"한 기사앱(실행 중 standalone). 열릴 때 한 번 정한다
+const DRIVER_APP = !IS_MOBILE_PREVIEW && initDriverAppContext();
 import { doc, onSnapshot, addDoc, collection, serverTimestamp, query, orderBy, limit, getDocs, getDoc, deleteDoc } from "firebase/firestore";
 
 // 역할별 대형 화면은 지연 로딩(code-splitting)한다 — 이전에는 전부 하나의 번들로
@@ -48,7 +51,7 @@ const ShipperMobileApp = React.lazy(() => import("./mobile/ShipperMobileApp"));
 // 두 대기 시간이 그대로 더해졌다. 첫 화면을 여는 순간 바로 미리 받기 시작해 겹치게 한다.
 (function prefetchMainApp() {
   try {
-    if (typeof window === "undefined" || window.Capacitor?.isNativePlatform?.()) return;
+    if (typeof window === "undefined" || window.Capacitor?.isNativePlatform?.() || initDriverAppContext()) return;
     const p = window.location.pathname;
     if (!(p === "/" || p.startsWith("/app") || p === "/login" || p === "/transport-login")) return;
     const ua = navigator.userAgent.toLowerCase();
@@ -213,6 +216,14 @@ export default function App() {
   }, []);
   // ⭐ 2026-11-05 이 계정(uid)의 users 문서를 한 번이라도 받았는지 — 받기 전엔 /driver-home에서 로그인 화면으로 돌려보내지 않는다
   const [roleFor, setRoleFor] = useState(null);
+  // ⭐ 2026-11-08 기사앱 안에서 기사 아닌 계정(직원·관리자·화주·임원 등)이 로그인돼 있으면 바로 로그아웃하고 기사 로그인 화면에 안내한다
+  //  (새로 로그인한 경우·예전 로그인이 남아 있던 경우 모두. 기사 로그인 화면이 확인 중일 때는 그 화면이 직접 처리한다)
+  useEffect(() => {
+    if (!DRIVER_APP || !user || driverBusy || roleFor !== user.uid || role === "driver") return;
+    markDriverAppOnlyKick();
+    try { localStorage.removeItem("role"); localStorage.removeItem("uid"); } catch { /* 무시 */ }
+    signOut(auth).catch(() => {});
+  }, [user, role, roleFor, driverBusy]);
   // ⭐ 블라인드 오더 노출 판정용 — 렌더 중 바로 반영(하위 화면 첫 렌더 전에 알아야 함)
   setBlindViewerRole(role, user?.email);
   // 🗑 2026-11-07 자동 블라인드(블라인드 모드) 구독 삭제 — 관리자메뉴에서 블라인드 모드를 뺐다(오더별 블라인드 체크는 그대로)
@@ -247,6 +258,8 @@ export default function App() {
   };
   useEffect(() => {
     if (IS_MOBILE_PREVIEW) return;
+    // ⭐ 2026-11-08 기사앱 안에서 기사 아닌 계정은 곧바로 로그아웃시키므로 로그인 세션을 기록·확인하지 않는다(중복 로그인 창이 뜨지 않게)
+    if (DRIVER_APP && user && role !== "driver") return;
     if (!user || !role || role === "cafeUser") {
       if (!user) {
         sessionGateRef.current.stop?.();
@@ -835,9 +848,13 @@ export default function App() {
 
   const isMobile = isSmartPhone();
 
+  // ⭐ 2026-11-08 기사앱 안 — 기사 계정이 아니면(역할 확인 전 포함) 어떤 화면도 그리지 않는다(사무실 화면이 잠깐도 보이지 않게).
+  //  위 효과가 로그아웃하면 기사 로그인 화면이 "기사 전용 앱이에요" 안내와 함께 열린다.
+  const driverAppBlocked = DRIVER_APP && !!user && !driverBusy && role !== "driver";
+
   // ⭐ 2026-11-06 계약종료 — 데이터는 그대로 두고 그 회사 사람(직원·기사·화주)은 어떤 화면도 못 쓰게 막는다.
   //  최고관리자·부관리자(role totalMaster)는 예외. 서버 규칙(isApproved)도 같은 기준으로 막는다.
-  if (user && contractEnded && role && role !== "totalMaster" && user.email !== TOTAL_MASTER_EMAIL) {
+  if (!driverAppBlocked && user && contractEnded && role && role !== "totalMaster" && user.email !== TOTAL_MASTER_EMAIL) {
     return <ContractEndedScreen company={contractCo} info={contractInfo} onLogout={() => signOut(auth).catch(() => {})} />;
   }
   // ⭐ 2026-11-06 모바일 미리보기 iframe — 부모 창과 다른 계정이면 절대 보여 주지 않는다(다른 계정 화면이 섞이는 일 방지)
@@ -865,9 +882,10 @@ export default function App() {
     </div>
   );
 
-  // 📱 기사앱(APK)은 기사 전용 — 운송사·화주사 선택 없이 바로 기사 로그인
-  const isDriverApk = typeof window !== "undefined" && !!window.Capacitor?.isNativePlatform?.();
+  // 📱 기사앱(APK·홈 화면 기사앱)은 기사 전용 — 운송사·화주사 선택 없이 바로 기사 로그인
+  const isDriverApk = DRIVER_APP;
   const rootRedirect = isDriverApk ? "/driver-login" : "/login";
+  if (driverAppBlocked) return routeFallback;
 
   return (
     <>
@@ -948,6 +966,24 @@ export default function App() {
 
       <Router>
         <React.Suspense fallback={routeFallback}>
+        {DRIVER_APP ? (
+          // ⭐ 2026-11-08 기사앱 안 — 기사 화면 3개만. 나머지 주소(/login·/app·/signup·/preview·관리 화면 등)는 모두 기사 화면으로 돌려보낸다
+          <Routes>
+            <Route
+              path="/driver-login"
+              element={user && role === "driver" && approved && !driverBusy ? <Navigate to="/driver-home" replace /> : <DriverLogin />}
+            />
+            <Route
+              path="/driver-register"
+              element={user && role === "driver" && approved && !driverBusy ? <Navigate to="/driver-home" replace /> : <DriverRegister />}
+            />
+            <Route
+              path="/driver-home"
+              element={user && role === "driver" && approved ? <DriverHome /> : (user && roleFor !== user.uid ? routeFallback : <Navigate to="/driver-login" replace />)}
+            />
+            <Route path="*" element={<Navigate to={user && role === "driver" && approved ? "/driver-home" : "/driver-login"} replace />} />
+          </Routes>
+        ) : (
         <Routes>
           <Route path="/" element={<Navigate to={rootRedirect} replace />} />
 
@@ -1072,6 +1108,7 @@ export default function App() {
             }
           />
         </Routes>
+        )}
         </React.Suspense>
       </Router>
     </>

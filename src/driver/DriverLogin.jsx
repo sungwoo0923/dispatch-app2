@@ -7,6 +7,7 @@ import { useNavigate } from "react-router-dom";
 import BigCheck from "../components/BigCheck";
 import { LogisMark, LogisWordmark, LogisTag } from "../brand"; // 🔷 2026-11-04 LogisWeb 로고
 import { legacyDriverEmail, scopedDriverEmail, signInDriver } from "./driverEmail";
+import { isDriverAppContext, peekDriverAppOnlyKick, clearDriverAppOnlyKick, DRIVER_APP_ONLY_ERROR } from "./driverAppContext"; // ⭐ 2026-11-08 기사앱은 기사 계정만
 import { checkDriverUserDoc, describeDriverLoginError, driverLoginError, keepDriverLoginError, takeDriverLoginError, setDriverBusy } from "./driverLoginErrors"; // ⭐ 2026-11-05 실패 사유 안내
 
 // ⭐ 사용자 요청 — 한 번 로그인한 폰에서는 소속회사명/차량번호/이름을 기억하고(정보 저장),
@@ -35,9 +36,12 @@ export default function DriverLogin() {
   const [rememberInfo, setRememberInfo] = useState(saved ? saved.remember !== false : true);
   const [autoLogin, setAutoLogin] = useState(saved ? saved.autoLogin === true : false);
   // ⭐ 2026-11-05 실패 안내 — { title, message, hint, tone }. 화면이 다시 그려져도 남도록 sessionStorage에도 둔다
-  const [error, setErrorState] = useState(() => takeDriverLoginError());
-  const [errorPopup, setErrorPopup] = useState(() => !!error);
-  const setError = (info) => { setErrorState(info || null); setErrorPopup(!!info); keepDriverLoginError(info || null); };
+  //  기사앱 안에서 사무실 계정이 로그아웃된 경우(App.jsx)엔 "기사 전용 앱이에요" 안내를 띄운다(새로고침돼도 2분 동안 남음)
+  const [error, setErrorState] = useState(() => takeDriverLoginError() || peekDriverAppOnlyKick());
+  const [errorPopup, setErrorPopupState] = useState(() => !!error);
+  const setErrorPopup = (v) => { if (!v) clearDriverAppOnlyKick(); setErrorPopupState(v); };
+  const setError = (info) => { clearDriverAppOnlyKick(); setErrorState(info || null); setErrorPopupState(!!info); keepDriverLoginError(info || null); };
+  const driverApp = isDriverAppContext();
   const [loggingIn, setLoggingIn] = useState(false);
   const busyRef = useRef(false);
   const restoredErrRef = useRef(!!error); // 재마운트 전에 떠 있던 실패 안내가 있었는지
@@ -174,7 +178,8 @@ export default function DriverLogin() {
       navigate("/driver-home", { replace: true });
     } catch (err) {
       console.error("[기사 로그인 실패]", err?.code || "", err);
-      setError(describeDriverLoginError(err, ctx));
+      // ⭐ 2026-11-08 기사앱 안에서는 기사 아닌 계정 안내를 "기사 전용 앱"으로
+      setError(driverApp && err?.code === "driver/not-driver" ? { ...DRIVER_APP_ONLY_ERROR } : describeDriverLoginError(err, ctx));
       await signOut(auth).catch(() => {});
     } finally {
       if (!ok) setDriverBusy(false);
@@ -301,10 +306,10 @@ export default function DriverLogin() {
 
             <div className="flex items-center gap-3 my-4 sm:my-6"><span className="flex-1 h-px bg-[#EEF1F6]" /><span className="text-[13.5px] font-bold tracking-[0.2em] text-[#C2CBD9]">OR</span><span className="flex-1 h-px bg-[#EEF1F6]" /></div>
 
-            <div className={`grid ${window.Capacitor?.isNativePlatform?.() ? "grid-cols-1" : "grid-cols-2"} gap-2.5`}>
+            <div className={`grid ${driverApp ? "grid-cols-1" : "grid-cols-2"} gap-2.5`}>
               <button onClick={() => navigate("/driver-register")} className="h-11 rounded-xl border border-[#0F1A30] text-[#0F1A30] text-[15.5px] font-black flex items-center justify-center hover:bg-[#0F1A30] hover:text-white transition">기사 등록하기</button>
-              {/* 기사앱(APK)에서는 기사 전용이라 다른 유형 로그인을 숨긴다 */}
-              {!window.Capacitor?.isNativePlatform?.() && <button onClick={() => navigate("/login")} className="h-11 rounded-xl border border-[#E3E8F0] text-[#5B6B85] text-[15.5px] font-bold flex items-center justify-center hover:bg-[#F5F7FB] transition">다른 유형 로그인</button>}
+              {/* 기사앱(APK·홈 화면 기사앱)에서는 기사 전용이라 다른 유형 로그인을 숨긴다 */}
+              {!driverApp && <button onClick={() => navigate("/login")} className="h-11 rounded-xl border border-[#E3E8F0] text-[#5B6B85] text-[15.5px] font-bold flex items-center justify-center hover:bg-[#F5F7FB] transition">다른 유형 로그인</button>}
             </div>
           </div>
           <div className="flex justify-center mt-4 text-[13.5px] font-bold tracking-[0.2em] text-[#B4BFD0]"><LogisTag height={7.5} chip text="DRIVER" /></div>

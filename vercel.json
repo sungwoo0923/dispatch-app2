@@ -59,6 +59,10 @@
       "dest": "/manifest.json"
     },
     {
+      "src": "/manifest-driver.json",
+      "dest": "/manifest-driver.json"
+    },
+    {
       "src": "/favicon.ico",
       "dest": "/favicon.ico"
     },
@@ -72,6 +76,13 @@
     },
     {
       "handle": "filesystem"
+    },
+    {
+      "src": "/driver-(login|register|home|signup)(.*)",
+      "headers": {
+        "cache-control": "no-store, must-revalidate"
+      },
+      "dest": "/driver.html"
     },
     {
       "src": "/(.*)",

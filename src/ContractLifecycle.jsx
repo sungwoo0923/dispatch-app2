@@ -260,8 +260,10 @@ export function ContractLifecyclePanel({ openCompany }) {
                 <label className="flex items-center gap-2 text-[14px] font-bold text-[#1B2B4B]">
                   <input type="checkbox" checked={mailCfg?.mailEnabled !== false} onChange={(e) => saveMailCfg({ mailEnabled: e.target.checked })} className="w-[18px] h-[18px] accent-[#1B2B4B]" /> 만료 안내 메일 보내기
                 </label>
-                <label className="block"><span className="text-[13.5px] font-bold text-[#5B6B85]">메일 발송 주소(배차 프로그램 /api/send-email)</span>
-                  <input defaultValue={mailCfg?.sendEmailUrl || ""} key={mailCfg?.sendEmailUrl || "x"} onBlur={(e) => e.target.value.trim() !== (mailCfg?.sendEmailUrl || "") && saveMailCfg({ sendEmailUrl: e.target.value.trim() })} placeholder="https://(배차 프로그램 주소)/api/send-email" className={`${INPUT} mt-1`} /></label>
+                {/* ✉️ 2026-11-08 플랫폼 메일 — 예전 "메일 발송 주소(/api/send-email)"는 닫았다. 서버 비밀값으로 보낸다 */}
+                <div className="text-[13.5px] text-[#5B6B85] leading-relaxed">
+                  LogisWeb 운영 메일 계정으로 보내요. 계정은 서버 비밀값 <b className="text-[#1B2B4B]">PLATFORM_SMTP_USER · PLATFORM_SMTP_PASS</b>로 정하고, 없으면 메일은 건너뛰고 알림만 보내요.
+                </div>
               </div>
             </div>
           </section>

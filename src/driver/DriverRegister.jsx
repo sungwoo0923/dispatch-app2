@@ -7,6 +7,7 @@ import { fmtPhone } from "../formatInput";
 import { createUserWithEmailAndPassword, signOut } from "firebase/auth";
 import { legacyDriverEmail, scopedDriverEmail, legacyOwnerCompany } from "./driverEmail";
 import { setDriverBusy } from "./driverLoginErrors"; // ⭐ 2026-11-05 확인 중엔 App이 기사 화면으로 넘기지 않게
+import { isDriverAppContext } from "./driverAppContext"; // ⭐ 2026-11-08 기사앱(APK·홈 화면 기사앱)에선 다른 유형 로그인 숨김
 import { doc, setDoc, serverTimestamp } from "firebase/firestore";
 import { useNavigate, Link } from "react-router-dom";
 import { addDoc, collection } from "firebase/firestore";
@@ -772,7 +773,7 @@ export default function DriverRegister() {
                   {loading ? "가입 신청 중…" : last ? "등록하기" : "다음"}
                 </button>
               </div>
-              {step === 0 && !window.Capacitor?.isNativePlatform?.() && (
+              {step === 0 && !isDriverAppContext() && (
                 <div className="mt-2.5 text-center"><Link to="/login" className="text-[14.5px] text-[#7A89A3] hover:underline">다른 유형으로 로그인</Link></div>
               )}
             </div>

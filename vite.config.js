@@ -114,6 +114,14 @@ export default defineConfig({
           fs.writeFileSync(swPath, content);
           console.log("✅ sw.js VERSION updated:", buildId);
         }
+        // ⭐ 2026-11-08 기사앱 홈 화면 추가(아이폰) — 사파리는 처음 받은 HTML의 manifest·제목을 쓰므로
+        //  /driver-* 주소에는 처음부터 기사용 manifest가 박힌 driver.html을 준다(vercel.json routes)
+        if (fs.existsSync("./dist/index.html")) {
+          let html = fs.readFileSync("./dist/index.html", "utf-8");
+          html = html.replace('href="/manifest.json"', 'href="/manifest-driver.json"')
+            .replace('<meta name="apple-mobile-web-app-title" content="LogisWeb" />', '<meta name="apple-mobile-web-app-title" content="LogisWeb 기사" />');
+          fs.writeFileSync("./dist/driver.html", html);
+        }
         // ⭐ 접속 버전 확인용 — 화면(VersionCheck)이 이 파일과 자기 빌드 시각을 비교한다
         if (fs.existsSync("./dist")) {
           fs.writeFileSync("./dist/version.json", JSON.stringify({ version: getAppVersion(), build: BUILD_TIME }));
