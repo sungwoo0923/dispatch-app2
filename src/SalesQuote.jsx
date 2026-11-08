@@ -8,7 +8,9 @@ import React from "react";
 import { runDelete } from "./DeleteProgress"; // ⭐ 2026-11-05 삭제 진행 창 + 한 번에 삭제
 import { addDoc, collection, deleteDoc, doc, onSnapshot, orderBy, query, serverTimestamp, setDoc, updateDoc } from "firebase/firestore";
 import { db } from "./firebase";
-import { PlanMatrix, PLAN_DEFAULTS, PLAN_IDS, PLAN_MATRIX_CSS, RECOMMENDED_PLAN_VERSION, planFeatureLines, planMatrixHtml } from "./plans";
+import { PlanMatrix, PLAN_DEFAULTS, PLAN_IDS, PLAN_MATRIX_CSS, RECOMMENDED_PLAN_VERSION, planFeatureLines, planMatrixHtml, planIncludes, PLAN_RATES } from "./plans";
+// ⭐ 2026-11-09 지입차 포함 대수 표시 — 지입차관리 메뉴가 없는 요금제(라이트·베이직)는 "0대"가 아니라 "미포함"
+const fleetText = (p) => (PLAN_IDS.includes(p?.id) && !planIncludes(p.id, "fleet") ? "미포함" : `${num(p?.fleet || 0)}대`);
 import { fmtBizNo, fmtPhone } from "./formatInput";
 import { CustomSelect } from "./CustomSelect";
 import { logisWordmarkSvg } from "./brand"; // 🔷 2026-11-04 LogisWeb 글자 로고(인쇄 문서 머리)
@@ -28,28 +30,28 @@ export const SALES_DEFAULT = {
   // ⭐ 2026-10-30 4단 요금제(라이트·베이직·스탠다드·프로) — 기능 범위는 plans.jsx의 FEATURE_ROWS 한 곳에서 정한다
   planVersion: 2,
   plans: PLAN_DEFAULTS.map((p) => ({ ...p, features: planFeatureLines(p.id) })),
-  extraSeat: 15000,          // 추가 직원 계정 1명/월
-  extraOrder: 40,            // 포함량 초과 오더 1건 (⭐ 2026-11-04 추천 요금표: 50 → 40원, 대신 요금제 포함량을 늘림)
-  fleetPerVehicle: 5000,     // 지입차 관리(GPS·운행기록·사진) — 요금제 포함 대수(plan.fleet)를 넘는 1대/월
-  setupFee: 300000,          // 초기 도입비(세팅·기본 데이터 이전·교육 1회) — 요금제별 금액(plan.setupFee)이 있으면 그 값
-  migrationFee: 300000,      // 대량 데이터 이전(기존 프로그램 이관)
-  trainingFee: 200000,       // 추가 현장 교육 1회
+  extraSeat: PLAN_RATES.extraSeat,          // 추가 직원 계정 1명/월 (⭐ 2026-11-09 15,000 → 20,000 · 포함 인원을 넘는 가입은 추가 계정을 사야 승인됨)
+  extraOrder: PLAN_RATES.extraOrder,            // 포함량 초과 오더 1건 (⭐ 2026-11-04 추천 요금표: 50 → 40원, 대신 요금제 포함량을 늘림)
+  fleetPerVehicle: PLAN_RATES.fleetPerVehicle,     // 지입차 관리(GPS·운행기록·사진) — 요금제 포함 대수(plan.fleet)를 넘는 1대/월
+  setupFee: 500000,          // 초기 도입비(세팅·기본 데이터 이전·교육 1회) — 요금제별 금액(plan.setupFee)이 있으면 그 값
+  migrationFee: 500000,      // 대량 데이터 이전(기존 프로그램 이관)
+  trainingFee: 300000,       // 추가 현장 교육 1회
   // ⭐ 2026-11-04 추가 청구(애드온) — 관리센터 › 청구 › 수납 관리에서 회사별 "추가 항목"으로 청구서에 붙인다
   taxInvoiceFee: 300,        // 전자세금계산서 발행 1건(ASP 원가 + 마진)
   alimtalkFee: 15,           // 카카오 알림톡 1건
   smsFee: 30,                // 문자(SMS) 1건
   lmsFee: 80,                // 장문 문자(LMS) 1건
-  extraBizFee: 30000,        // 추가 사업자(법인·지점) 1곳/월 — 다중 사업자 운영
-  routeBoardSetupFee: 100000, // 고정노선 구글시트 배차표 연동 세팅 1양식(1회)
-  devHourRate: 70000,        // 맞춤 기능 개발 1시간
+  extraBizFee: 50000,        // 추가 사업자(법인·지점) 1곳/월 — 다중 사업자 운영
+  routeBoardSetupFee: 200000, // 고정노선 구글시트 배차표 연동 세팅 1양식(1회)
+  devHourRate: 100000,       // 맞춤 기능 개발 1시간
   waiveSetupMonths: 12,      // 이 기간 이상 약정 시 도입비 면제
   annualFreeMonths: 2,       // 연간 선결제 시 무료 개월
   semiDiscountRate: 5,       // 6개월 선결제 할인율(%) — 단기(6개월) 고객용
   semiSetupRate: 50,         // 6개월 약정 시 초기 도입비 할인율(%)
   minContractMonths: 6,      // 최소 약정 기간
   storageGB: 10,             // 사진·파일 기본 제공 용량
-  storagePerGB: 3000,        // 초과 1GB/월
-  devDayRate: 500000,        // 맞춤 개발 1일 단가(8시간 묶음 할인)
+  storagePerGB: PLAN_RATES.storagePerGB,        // 초과 1GB/월
+  devDayRate: 700000,        // 맞춤 개발 1일 단가(8시간 묶음 할인)
   validDays: 30,             // 견적 유효기간
   messaging: "문자 · 알림톡은 발송 건수만큼 실비 청구",
   supplier: { name: "LogisWeb", ceo: "", bizNo: "", phone: "", email: "", address: "", bank: "" },
@@ -478,7 +480,7 @@ export function PricingEditor() {
                   <div className="flex items-center justify-between gap-2"><span className="text-[11.5px] font-extrabold tracking-[0.2em] text-[#94A3B8]">{p.en || "PLAN"}</span>{p.recommended && <span className="px-2 py-0.5 rounded-md bg-[#1B2B4B] text-white text-[12px] font-black">추천</span>}</div>
                   <b className="text-[17px] text-[#0F1A30] mt-0.5">{p.name}</b>
                   <div className="text-[24px] font-black text-[#1B2B4B] mt-1 whitespace-nowrap tabular-nums">{won(p.price)}<span className="text-[13px] font-bold text-[#7A879C] ml-1">/ 월</span></div>
-                  <div className="text-[13.5px] font-bold text-[#5B6B85] mt-1">직원 {num(p.seats)}명 · 오더 {num(p.orders).toLocaleString()}건 · 지입 {num(p.fleet || 0)}대 · {hasVal(p.storageGB) ? num(p.storageGB) : num(cfg.storageGB)}GB</div>
+                  <div className="text-[13.5px] font-bold text-[#5B6B85] mt-1">직원 {num(p.seats)}명 · 오더 {num(p.orders).toLocaleString()}건 · 지입 {fleetText(p)} · {hasVal(p.storageGB) ? num(p.storageGB) : num(cfg.storageGB)}GB</div>
                   <div className="text-[13px] text-[#7A879C] mt-0.5">도입비 {won(hasVal(p.setupFee) ? p.setupFee : cfg.setupFee)}{num(p.promoMonths) ? ` · 첫 ${num(p.promoMonths)}개월 ${num(p.promoRate)}%` : ""}</div>
                   {p.target && <div className="text-[13px] text-[#3A4A66] mt-1.5 font-semibold">{p.target}</div>}
                   <ul className="mt-2 space-y-0.5">{feats.slice(0, 5).map((f) => <li key={f} className="flex gap-1.5 text-[13px] text-[#3A4A66]"><span className="mt-[7px] w-1 h-1 rotate-45 bg-[#2D4C82] shrink-0" /><span className="truncate">{f}</span></li>)}</ul>
@@ -494,7 +496,7 @@ export function PricingEditor() {
             <table className="w-full text-[14px] border-collapse" style={{ minWidth: 160 + cfg.plans.length * 130 }}>
               <thead><tr><th className="bg-[#1B2B4B] text-white text-left px-4 py-2.5">항목</th>{cfg.plans.map((p, i) => <th key={p.id} className={`px-3 py-2.5 text-right whitespace-nowrap ${i === idx ? "bg-[#2D4C82]" : "bg-[#1B2B4B]"} text-white`}>{p.name}</th>)}</tr></thead>
               <tbody>
-                {[["월 기본료", (p) => won(p.price)], ["포함 직원", (p) => `${num(p.seats)}명`], ["포함 오더", (p) => `${num(p.orders).toLocaleString()}건`], ["포함 지입차", (p) => `${num(p.fleet || 0)}대`], ["저장 용량", (p) => `${hasVal(p.storageGB) ? num(p.storageGB) : num(cfg.storageGB)}GB`], ["초기 도입비", (p) => won(hasVal(p.setupFee) ? p.setupFee : cfg.setupFee)], ["직원 1명 추가", () => won(cfg.extraSeat)], ["초과 오더 1건", () => won(cfg.extraOrder)]].map(([l, f]) => (
+                {[["월 기본료", (p) => won(p.price)], ["포함 직원", (p) => `${num(p.seats)}명`], ["포함 오더", (p) => `${num(p.orders).toLocaleString()}건`], ["포함 지입차", (p) => fleetText(p)], ["저장 용량", (p) => `${hasVal(p.storageGB) ? num(p.storageGB) : num(cfg.storageGB)}GB`], ["초기 도입비", (p) => won(hasVal(p.setupFee) ? p.setupFee : cfg.setupFee)], ["직원 1명 추가", () => won(cfg.extraSeat)], ["초과 오더 1건", () => won(cfg.extraOrder)]].map(([l, f]) => (
                   <tr key={l} className="border-t border-[#EEF1F6]"><td className="px-4 py-2.5 bg-[#F7F9FC] text-[13.5px] font-extrabold text-[#5B6B85] whitespace-nowrap">{l}</td>{cfg.plans.map((p, i) => <td key={p.id} className={`px-3 py-2.5 text-right font-black tabular-nums whitespace-nowrap ${i === idx ? "text-[#0F1A30] bg-[#F5F8FD]" : "text-[#1B2B4B]"}`}>{f(p)}</td>)}</tr>
                 ))}
               </tbody>

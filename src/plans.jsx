@@ -5,53 +5,14 @@
 //  - ⭐ 요금제를 지정하지 않은 회사(기존 고객사)는 모든 기능이 열린다 → 지정하기 전까지 아무 변화 없음
 //  - 공개 요금(이름·가격·포함량·입금 계좌): publicPricing/current — 요금제 관리에서 저장할 때 같이 갱신
 import React from "react";
-import { addDoc, collection, doc, onSnapshot, serverTimestamp } from "firebase/firestore";
+import { addDoc, collection, doc, getDoc, getDocs, onSnapshot, query, serverTimestamp, where } from "firebase/firestore";
+import { kpAlert, kpConfirm } from "./kpDialog";
 import { db } from "./firebase";
 
-export const PLAN_IDS = ["lite", "basic", "standard", "pro"];
-// ⭐ 2026-11-04 요금표 재설정(비용·손익 분석 기준) — 가격 사다리: 59,000 / 129,000 / 249,000 / 449,000 (VAT 별도)
-//  · seats 직원 계정 · orders 월 오더 · fleet 포함 지입차(GPS 관리) 대수 · storageGB 포함 저장 용량 · setupFee 초기 도입비(12개월 약정 시 면제)
-//  · 이미 저장된 요금(요금제 관리)은 그대로 둔다 — 관리센터 › 영업 › 요금제 관리 [추천 요금표 적용]을 눌러야 바뀐다(RECOMMENDED_PLAN_VERSION)
-//  · 이 값이 기본값으로 쓰이는 곳: 저장된 요금이 아직 없을 때(신규 설치) · 공개 요금(publicPricing) 문서가 없을 때
-export const RECOMMENDED_PLAN_VERSION = "2026-11";
-export const PLAN_DEFAULTS = [
-  { id: "lite", name: "라이트", en: "LITE", price: 59000, seats: 2, orders: 600, fleet: 0, storageGB: 5, setupFee: 0, target: "1인 주선 · 개인 운송 (일 20건 안팎)" },
-  { id: "basic", name: "베이직", en: "BASIC", price: 129000, seats: 5, orders: 2000, fleet: 0, storageGB: 10, setupFee: 200000, target: "소규모 운송사 · 2~5인 (일 50~70건)" },
-  { id: "standard", name: "스탠다드", en: "STANDARD", price: 249000, seats: 12, orders: 4500, fleet: 10, storageGB: 30, setupFee: 400000, target: "일반 운송사 · 6~12인 (일 100~150건)", recommended: true },
-  { id: "pro", name: "프로", en: "PRO", price: 449000, seats: 25, orders: 10000, fleet: 30, storageGB: 100, setupFee: 700000, target: "중견 운송사 · 13인 이상 (일 200~330건)" },
-];
-
-// 기능표 — min: 이 요금제부터 사용 가능
-export const FEATURE_ROWS = [
-  { key: "dispatch", label: "배차관리 · 실시간배차현황 · 배차현황", min: "lite" },
-  { key: "master", label: "거래처 · 하차지 · 기사 관리", min: "lite" },
-  { key: "fare", label: "단가표 · 전국 운임조회", min: "lite" },
-  { key: "driverApp", label: "기사앱 · 업로드링크 · 기사복사", min: "lite" },
-  { key: "settlement", label: "매출관리 · 정산관리 · 지급관리", min: "lite" },
-  { key: "shipperPortal", label: "화주사 전용 포털 연동", min: "basic" },
-  { key: "groupware", label: "전자결재 · 사내메일 · 게시판 · 인수인계", min: "basic" },
-  { key: "hr", label: "인사 · 근태 · 회사관리", min: "basic" },
-  { key: "fleet", label: "지입차관리 (GPS · 운행기록 · 사진)", min: "standard" },
-  { key: "export", label: "데이터 추출 · 맞춤 리포트", min: "standard" },
-  { key: "insight", label: "수익성 인사이트 (거래처·노선 마진 · 저마진 경고 · 이상 운임 감지)", min: "pro", star: true },
-  { key: "shipperReport", label: "화주 월간 운송 리포트 (화주에게 보내는 원클릭 PDF)", min: "pro", star: true },
-  { key: "call24", label: "화물정보망(24시콜) 오더 자동 전송", min: "pro", star: true },
-  { key: "support", label: "우선 기술지원 · 분기별 운영 점검 미팅", min: "pro" },
-];
-export const FEATURE_BY_KEY = Object.fromEntries(FEATURE_ROWS.map((f) => [f.key, f]));
-
-// 상단 메뉴 → 기능 (여기 없는 메뉴는 모든 요금제에서 사용)
-export const MENU_FEATURE = { 지입차관리: "fleet", 회사관리: "hr", 인사이트: "insight", 전자결재: "groupware", 결재함: "groupware" };
-// 홈 왼쪽 사이드바 항목 → 기능
-export const homeItemFeature = (key) => (/^(ap:|mail|board:)/.test(String(key)) || key === "인수인계" ? "groupware" : null);
-
+// ⭐ 2026-11-09 요금제 데이터·잠금 규칙은 planCore.js(순수 JS — 가상 테스트 scripts/planGateTest.mjs가 그대로 읽는다)
+import { PLAN_IDS, RECOMMENDED_PLAN_VERSION, PLAN_DEFAULTS, PLAN_RATES, FEATURE_ROWS, FEATURE_BY_KEY, MENU_FEATURE, homeItemFeature, planIncludes, countsAsSeat, seatCheck } from "./planCore.js";
+export { PLAN_IDS, RECOMMENDED_PLAN_VERSION, PLAN_DEFAULTS, PLAN_RATES, FEATURE_ROWS, FEATURE_BY_KEY, MENU_FEATURE, homeItemFeature, planIncludes, countsAsSeat, seatCheck };
 const rank = (id) => PLAN_IDS.indexOf(id);
-export const planIncludes = (planId, featureKey) => {
-  if (!planId) return true; // 요금제 미지정(기존 고객) → 전부 사용
-  const f = FEATURE_BY_KEY[featureKey];
-  if (!f) return true;
-  return rank(planId) >= rank(f.min);
-};
 // 플랜별 "새로 추가되는 기능" 목록(견적서·요금 안내의 카드 설명용)
 export function planFeatureLines(planId) {
   const i = rank(planId);
@@ -258,3 +219,36 @@ export function PlanValueProvider({ planId, company, children }) {
 let _currentPlanId = null;
 export const featureOn = (key) => planIncludes(_currentPlanId, key);
 export function PlanValueSync({ planId }) { _currentPlanId = planId || null; return null; }
+
+// ─── 👥 2026-11-09 직원 계정 한도 — 요금제 포함 인원 + 추가 구매 계정(companyPlans/{회사}.extraSeats)을 넘는 승인은 막는다 ───
+//  · 세는 사람: 승인된 직원 계정(기사·화주·최고관리자·퇴사자·계정 없는 인사 기록(noAccount) 제외)
+//  · 요금제 미지정 회사(기존 고객)는 제한 없음
+//  · 추가 계정 요금은 수납 관리의 "직원 계정 초과분 × 추가 직원 계정 단가"로 자동 청구된다
+export async function seatStatus(company) {
+  const co = String(company || "").trim();
+  if (!co) return { ok: true, unlimited: true };
+  const ps = await getDoc(doc(db, "companyPlans", co)).catch(() => null);
+  const pd = ps?.exists() ? ps.data() || {} : {};
+  if (!pd.planId) return { ok: true, unlimited: true };
+  let plans = PLAN_DEFAULTS;
+  try { const pub = await getDoc(doc(db, "publicPricing", "current")); if (pub.exists() && pub.data()?.plans?.length) plans = pub.data().plans; } catch { /* 기본값 */ }
+  const p = plans.find((x) => x.id === pd.planId) || PLAN_DEFAULTS.find((x) => x.id === pd.planId) || {};
+  const us = await getDocs(query(collection(db, "users"), where("companyName", "==", co)));
+  return { ...seatCheck(p, pd.extraSeats, us.docs.map((d) => ({ id: d.id, ...d.data() }))), planId: pd.planId, planName: p.name || pd.planId };
+}
+// 직원 승인 직전에 부른다 — true면 승인 진행. 최고관리자는 확인 후 초과 승인 가능(초과분은 추가 계정 요금으로 청구)
+export async function guardSeat(company, { isSuper = false, by = "", byName = "", extraSeatFee = 20000 } = {}) {
+  let st;
+  try { st = await seatStatus(company); } catch { return true; } // 조회 실패로 업무를 막지는 않는다
+  if (st.ok) return true;
+  const head = `${st.planName} 요금제 직원 계정 ${st.base}명${st.extra ? ` + 추가 ${st.extra}명` : ""} = ${st.limit}명이 모두 찼습니다. (지금 ${st.used}명)`;
+  if (isSuper) return kpConfirm(`${head}\n\n최고관리자 권한으로 초과 승인할까요?\n초과 인원은 추가 직원 계정 요금으로 청구됩니다.\n(관리센터 › 청구 › 수납 관리에서 이 회사의 '추가 계정' 수를 늘려 두면 회사가 직접 승인할 수 있습니다)`);
+  const want = await kpConfirm(`${head}\n\n더 승인하려면 추가 직원 계정이 필요합니다(1명당 월 ${Number(extraSeatFee).toLocaleString()}원, VAT 별도).\n· 퇴사한 직원을 '퇴사' 처리하면 자리가 생깁니다.\n· 인원이 많이 늘었다면 상위 요금제가 더 저렴할 수 있습니다.\n\n추가 직원 계정 1명을 LogisWeb에 신청할까요?`);
+  if (want) {
+    try {
+      await addDoc(collection(db, "planRequests"), { company: String(company).trim(), kind: "extraSeat", from: st.planId, to: st.planId, toName: "추가 직원 계정 +1명", qty: 1, by, byName, status: "요청", createdAt: serverTimestamp() });
+      await kpAlert("추가 직원 계정을 신청했습니다. 처리되면 바로 승인할 수 있습니다.");
+    } catch { await kpAlert("신청은 경리 담당자(요금·결제 권한)만 할 수 있습니다. 경리팀에 말씀해 주세요."); }
+  }
+  return false;
+}

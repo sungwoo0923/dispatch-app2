@@ -1,5 +1,6 @@
 // src/CompanyApplications.jsx
 import { useRoleOptions } from "./customRoles";
+import { guardSeat } from "./plans"; // 👥 2026-11-09 직원 계정 한도
 import { runDelete } from "./DeleteProgress"; // ⭐ 2026-11-05 삭제 진행 창 + 한 번에 삭제
 import { publishCompany } from "./publicCompanies";
 import React, { useState, useEffect, useMemo } from "react";
@@ -369,6 +370,8 @@ export default function CompanyApplications() {
   const [approvePlan, setApprovePlan] = useState("");
   useEffect(() => { setApprovePlan(""); }, [managingApp?.id]);
   const approveTransport = async (app) => {
+    // 👥 2026-11-09 기존 회사 직원 가입 — 요금제 직원 계정 한도가 다 찼으면 확인
+    if (app.type === "기존" && app.companyName && !(await guardSeat(app.companyName, { isSuper: true }))) return;
     setProcessing(true);
     try {
       publishCompany(app.companyName, app.type === "신규" ? app.address : "").catch(() => {});

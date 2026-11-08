@@ -50,7 +50,7 @@ import { dispatchStatusOf, payTypeStatusPatch, isPayCancel } from "../dispatchSt
 import { requestRouteSheetPush } from "../routeSheetPush"; // 🚚 2026-11-07 고정노선 오더 고치면 바로 시트에(PC와 같음)
 import { pickUnassignedOrders } from "../unassignedRule"; // ⭐ 2026-11-05 PC·모바일 일치 — 미배차 기준 공용
 import { useBadgeSeenSync, useUnseenItems, useMarkSeenOnView, unionCount } from "../seenBadges"; // ⭐ 2026-11-06 메뉴 숫자 = 계정별 안 본 것
-import { planIncludes, useCompanyPlanId } from "../plans"; // ⭐ 2026-11-05 인사이트 메뉴 요금제(PC와 같게)
+import { planIncludes, useCompanyPlanId, MENU_FEATURE } from "../plans"; // ⭐ 2026-11-05 인사이트 메뉴 요금제(PC와 같게)
 import { ShellIcon } from "../AdminShell";
 // ⭐ 작은 표시 전용 저장소 — "최신 정보 확인 중"·첫 진입 진행률이 바뀔 때 화면 전체(오더 목록)를
 // 다시 그리지 않고 그 표시만 바꾼다(저사양 폰에서 스크롤 끊김 방지)
@@ -7927,7 +7927,7 @@ function MobileSideMenu({
   execFull = false,
   onToggleExec,
   menuOk = () => true,
-  deptOk = () => false,
+  deptOk: deptOkRaw = () => false,
   staffSignupOk = true, // ⭐ 2026-11-08 QA — 경리사무원·인사사무원은 PC처럼 가입 승인·기사 서류 메뉴 없음
 }) {
   const fareMenu = useFareRules(); // ⭐ 2026-11-02 운임규칙 — 최고관리자가 켜 준 회사만 메뉴 표시
@@ -7940,10 +7940,12 @@ function MobileSideMenu({
     return () => cancelAnimationFrame(r);
   }, []);
   const isAdminRole = ["admin", "totalMaster", "superadmin"].includes(role);
-  const ok = menuOk;
   // ⭐ 2026-11-06 직원 급여·연차 촉진 메뉴 — 권한은 users 문서 역할 기준(payrollAccess.js · 보안 규칙과 같음)
   const payM = usePayrollAccess((localStorage.getItem("loginCompany") || localStorage.getItem("userCompany") || "").trim(), currentUser?.uid, role, currentUser?.email || "");
   const planIdM = useCompanyPlanId((role === "totalMaster" ? (localStorage.getItem("loginCompany") || "") : (localStorage.getItem("userCompany") || localStorage.getItem("loginCompany") || "")).trim()); // ⭐ 2026-11-05 PC와 같은 요금제 잠금
+  // ⭐ 2026-11-09 요금제에 없는 메뉴(지입차관리·전자결재·인사·회계 등)는 모바일에서도 숨김 — PC MENU_FEATURE와 같은 기준
+  const ok = (m) => menuOk(m) && (!MENU_FEATURE[m] || planIncludes(planIdM, MENU_FEATURE[m]));
+  const deptOk = (m) => (!MENU_FEATURE[m] || planIncludes(planIdM, MENU_FEATURE[m])) && deptOkRaw(m);
   const canRevenue = ["admin", "totalMaster", "superadmin", "test", "viewer"].includes(role);
   const canAdminMenu = isAdminRole || role === "viewer";
   // ⭐ 2026-11-04 권한 관리 — 최고관리자가 켠 회사의 마스터만(자기 회사 것만)

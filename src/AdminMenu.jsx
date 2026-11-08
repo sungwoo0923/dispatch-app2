@@ -4,6 +4,7 @@ import BillingCenter from "./BillingCenter";
 import { runDelete, commitDeletes } from "./DeleteProgress"; // ⭐ 2026-11-05 삭제 진행 창 + 한 번에 삭제
 import { billingAccess } from "./billingAccess";
 import { kpConfirm } from "./kpDialog";
+import { guardSeat } from "./plans"; // 👥 2026-11-09 직원 계정 한도
 import { CopyTemplateEditor } from "./CopyTemplateEditor";
 import { openSetupWizard, openTutorial } from "./Onboarding";
 import AdminShell from "./AdminShell";
@@ -630,6 +631,8 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
     if (isViewer) return _viewerAlert();
     if (!isTotalMaster && (u.companyName || DEFAULT_COMPANY) !== effectiveCompany) return;
     const status = !u.approved;
+    // 👥 2026-11-09 요금제 직원 계정 한도 — 다 찼으면 승인 막고 추가 계정 신청 안내(최고관리자는 확인 후 초과 승인)
+    if (status && !["driver", "shipper"].includes(u.role) && !(await guardSeat(u.companyName || DEFAULT_COMPANY, { isSuper: isTotalMaster, by: auth.currentUser?.email || "", byName: auth.currentUser?.displayName || "" }))) return false;
     const updateData = { approved: status };
     if (u.role === "shipper" && status === true) {
       updateData.isMaster = true;
@@ -1200,7 +1203,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
                           onSave={async () => { await saveEdit(); setMemberModal(false); }}
                           onApprove={async () => {
                             if (!await kpConfirm(`"${u.name || u.email}"님을 승인할까요?\n입력한 직책·부서·권한으로 저장되고 바로 로그인할 수 있습니다.`)) return;
-                            await saveEdit(); await toggleApprove({ ...u, approved: false }); setMemberModal(false);
+                            await saveEdit(); if ((await toggleApprove({ ...u, approved: false })) === false) return; setMemberModal(false);
                           }}
                           onUnapprove={async () => { if (await kpConfirm(`"${u.name || u.email}"님의 승인을 해제할까요?\n해제하면 로그인이 막힙니다.`)) await toggleApprove({ ...u, approved: true }); }}
                           onReject={async () => { if (await removeUser(u)) setMemberModal(false); }}

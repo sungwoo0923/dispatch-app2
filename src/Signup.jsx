@@ -1,5 +1,6 @@
 // src/Signup.jsx  —  운송사 회원가입
 import { EXEC_TEAM, isExecPosition, suggestRole } from "./hrConstants";
+import { PLAN_DEFAULTS } from "./plans";
 import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { checkEmailAvailable, warmSignupFunctions } from "./emailCheck";
@@ -538,7 +539,7 @@ function SignupForm({ signupType, onBack }) {
           {signupType === "신규" && (
             <Field label="요금제" required full>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                {[["lite", "라이트", "월 4.9만"], ["basic", "베이직", "월 9.9만"], ["standard", "스탠다드", "월 15만"], ["pro", "프로", "월 34.9만"]].map(([id, nm, pr]) => (
+                {PLAN_DEFAULTS.map((p) => [p.id, p.name, `월 ${(p.price / 10000).toLocaleString()}만 · ${p.seats}명`]).map(([id, nm, pr]) => ( /* ⭐ 2026-11-09 가격은 plans.jsx 한 곳에서 */
                   <button key={id} type="button" onClick={() => setPlanId(id)}
                     className={`rounded-xl border px-3.5 py-3 text-left transition ${planId === id ? "border-[#1B2B4B] bg-[#1B2B4B] text-white" : "border-[#DCE3EE] text-[#1B2B4B] hover:border-[#2D4C82]"}`}>
                     <div className="text-[14px] font-black whitespace-nowrap">{nm}</div>

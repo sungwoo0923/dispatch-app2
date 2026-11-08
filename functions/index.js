@@ -6279,9 +6279,10 @@ async function computePlatformStats({ full = true } = {}) {
     const c = co(u.companyName);
     if (u.role === "driver") { c.drivers += 1; return; }
     if (u.employmentStatus === "퇴사") { c.quit += 1; return; } // ⭐ 2026-11-02 관리자센터 — 퇴사자는 직원 수에서 뺀다
+    if (u.noAccount) return; // 👥 2026-11-09 계정 없는 인사 기록은 직원 계정(요금제 인원·추가 계정 요금)에 안 센다
+    if (u.approved === false) { c.pending += 1; return; } // 👥 2026-11-09 승인 대기는 아직 계정이 아니다(예전엔 대기자도 인원·초과 요금에 들어갔다)
     c.staff += 1;
     if (u.role === "admin") c.admins += 1;
-    if (u.approved === false) c.pending += 1;
   });
 
   // 3) 접속(로그인 세션)

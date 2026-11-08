@@ -435,6 +435,15 @@ function PaymentsPanel() {
                     <option value="">미지정(전체 기능)</option>
                     {(sales?.plans || []).filter((p) => ["lite", "basic", "standard", "pro"].includes(p.id)).map((p) => <option key={p.id} value={p.id}>{p.name} · {Number(p.price || 0).toLocaleString()}</option>)}
                   </CustomSelect>
+                  {/* 👥 2026-11-09 추가 직원 계정 — 요금제 포함 인원을 넘어 승인할 수 있는 수(초과분은 추가 직원 계정 단가로 청구) */}
+                  {plans[c.name]?.planId && (
+                    <label className="mt-1 flex items-center justify-center gap-1 text-[11px] font-bold text-[#5B6B85]" title="요금제 포함 인원에 더해 이 회사가 직접 승인할 수 있는 직원 수">
+                      추가 계정
+                      <input type="number" min={0} defaultValue={Number(plans[c.name]?.extraSeats || 0)} key={`${c.name}_xs_${plans[c.name]?.extraSeats || 0}`}
+                        onBlur={(e) => { const v = Math.max(0, Math.floor(Number(e.target.value) || 0)); if (v === Number(plans[c.name]?.extraSeats || 0)) return; setDoc(doc(db, "companyPlans", c.name), { extraSeats: v, updatedAt: serverTimestamp() }, { merge: true }).catch((er) => window.alert(er.message)); }}
+                        className="w-12 h-7 px-1 rounded-md border border-[#DCE3EE] text-center tabular-nums" />명
+                    </label>
+                  )}
                 </td>
                 <td className="px-3 py-2 text-right">
                   <input defaultValue={amountOf(c).toLocaleString()} key={`${key(c)}_${amountOf(c)}`} onBlur={(e) => { const v = Number(e.target.value.replace(/[^\d]/g, "")) || 0; if (v === amountOf(c) && rows[key(c)]) return; save(c, { amount: v, amountManual: v !== autoOf(c) }); }} className="w-36 h-9 px-2 rounded-lg border border-[#DCE3EE] text-right font-black" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }} />

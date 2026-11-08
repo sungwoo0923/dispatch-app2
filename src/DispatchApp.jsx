@@ -1,5 +1,5 @@
 // ===================== DispatchApp.jsx (PART 1/8) — START =====================
-import { MENU_FEATURE, planIncludes, openPlanLock, featureOn, useCompanyPlanId, PlanValueProvider, PlanValueSync, PlanLockHost, LockIcon } from "./plans";
+import { MENU_FEATURE, planIncludes, openPlanLock, featureOn, useCompanyPlanId, PlanValueProvider, PlanValueSync, PlanLockHost, LockIcon, usePlan } from "./plans";
 import { kpConfirm, kpPrompt } from "./kpDialog";
 import { runDelete, commitDeletes, deleteDocsAtomic } from "./DeleteProgress"; // ⭐ 2026-11-05 삭제 진행 창 + 한 번에 삭제(writeBatch)
 import ProInsight from "./ProInsight";
@@ -8423,6 +8423,8 @@ const newVer = useNewVersion(); // ★ 새 버전이 배포되면 버전 표시 
   // ---------------- 메뉴 UI ----------------
   // 메뉴 보이기 규칙(상단 메뉴·왼쪽 메뉴 공용) — "hidden" | "blocked" | "ok"
   const menuState = (m) => {
+    // 💳 2026-11-09 요금제 잠금을 맨 먼저 — 예전엔 부서 메뉴(인사관리부·회계관리 등)·임원 메뉴가 아래에서 먼저 "ok"로 끝나 요금제와 상관없이 열렸다
+    if (MENU_FEATURE[m] && !planIncludes(planId, MENU_FEATURE[m])) return "locked";
     // 📊 2026-11-06 일일 경영 보고 — 임원 화면 역할만(기존 임원 판정 isExec 그대로)
     if (m === BRIEF_MENU) return canBriefing ? "ok" : "hidden";
     if (EXEC_MENUS.includes(m)) return deptMode === "exec" ? "ok" : "hidden"; // 📈 2026-11-08 임원 화면만
@@ -60949,7 +60951,9 @@ function CompanyManagementWrapper({ payrollInAcct = false, userCompany, role, us
   //  연차 사용 촉진은 인사관리부 › 연차 관리 안. (payrollInAcct는 예전 호출 호환용으로만 남김)
   void payrollInAcct;
   const staffCM = role !== "driver" && role !== "shipper";
-  const tabs = tabs1;
+  // ⭐ 2026-11-09 요금제 — 출근기록부·인사관리부는 베이직부터(라이트도 회사정보·조직도·내정보는 사용)
+  const { planId: planCM } = usePlan();
+  const tabs = planIncludes(planCM, "hr") ? tabs1 : tabs1.filter((t) => t !== "출근기록부" && t !== "인사관리부");
 
   // ⭐ 디자인 개편 — 관리자메뉴와 같은 왼쪽 메뉴바 + 상단 인사 카드(AdminShell 공용 레이아웃)
   const TAB_ICONS = { 회사정보: "building", 조직도: "users", "운임 규칙": "money", 내정보: "user", "내 이력서": "idcard", 출근기록부: "clock", 인사관리부: "idcard" };
