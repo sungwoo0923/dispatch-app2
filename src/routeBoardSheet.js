@@ -3,6 +3,8 @@
 //  parseBoardTab: 날짜 탭(여러 묶음 표: "…배차 내역(1센터)" 제목 → 날짜 줄 → 제목줄 → 데이터) → 묶음별 줄
 //  sheetToForm:   시트 제목줄을 읽어 양식 칸·묶음을 자동으로 만든다(새 화주사 양식 2~3분 세팅)
 
+import { colIndexes, headerRowsOf, normalizeBoardForm, PULL_ONLY } from "../functions/boardHeaderMatch.mjs"; // 🔗 2026-11-08 머리줄 자동 대조(업체명=거래처명 · 기사님요금=기사운임 …)
+
 const cell = (v) => String(v ?? "").replace(/\u00a0/g, " ").trim();
 export const nm = (s) => String(s || "").toLowerCase().replace(/[\s()（）[\]]/g, "");
 const DATE_RE = /(20\d{2})\s*년\s*(\d{1,2})\s*월\s*(\d{1,2})\s*일/;
@@ -22,16 +24,14 @@ export function tabDate(title, year = new Date().getFullYear(), loose = false) {
 }
 
 // 제목줄 찾기 — 양식 칸 이름이 3개 이상(칸이 적으면 2개) 들어 있는 줄
-function headerRows(rows, labels) {
-  const set = new Set(labels.map(nm));
-  const need = Math.max(2, Math.min(3, Math.ceil(set.size / 2)));
-  return rows.map((r, i) => ({ i, n: new Set(r.map(nm).filter((x) => set.has(x))).size })).filter((x) => x.n >= need).map((x) => x.i);
-}
+// 🔗 2026-11-08 글자가 달라도 같은 프로그램 칸이면(업체명=거래처명) 같은 열 — functions/boardHeaderMatch.mjs
+const headerRows = (rows, cols) => headerRowsOf(rows, cols);
 
-export function parseBoardTab(form, rawRows) {
+export function parseBoardTab(form0, rawRows) {
+  const form = normalizeBoardForm(form0);
   const rows = (rawRows || []).map((r) => (r || []).map(cell));
   const cols = form.columns.filter((c) => c.kind !== "no" && c.kind !== "sum");
-  const heads = headerRows(rows, cols.map((c) => c.label));
+  const heads = headerRows(rows, cols);
   const out = {}; form.groups.forEach((g) => { out[g.name] = []; });
   let date = "";
   const missing = new Set();
@@ -47,7 +47,7 @@ export function parseBoardTab(form, rawRows) {
     // 칸 위치 — 같은 이름이 여러 번이면(왼쪽=전날, 오른쪽=당일 등) 값이 가장 많은 쪽
     const idx = {};
     cols.forEach((c) => {
-      const cand = rows[hi].map((h, i) => (nm(h) === nm(c.label) ? i : -1)).filter((i) => i >= 0);
+      const cand = colIndexes(c, rows[hi]);
       if (!cand.length) { missing.add(c.label); return; }
       idx[c.id] = cand.map((i) => ({ i, n: data.filter((r) => cell(r[i])).length })).sort((a, b) => b.n - a.n || b.i - a.i)[0].i;
     });
@@ -118,12 +118,13 @@ const isTimeCol = (c) => c.field === "상차시간" || c.field === "하차시간
 const cmp = (c, v) => { const s = cell(v); if (isTimeCol(c)) return s.replace(/^0(\d)/, "$1"); if (c.field === "전화번호") return s.replace(/\D/g, ""); return s.replace(/\s+/g, ""); };
 export const colLetter = (i) => { let s = ""; let n = i + 1; while (n > 0) { const m = (n - 1) % 26; s = String.fromCharCode(65 + m) + s; n = Math.floor((n - 1) / 26); } return s; };
 
-export function planSheetWrite(form, rawRows, boardGroups) {
+export function planSheetWrite(form0, rawRows, boardGroups) {
+  const form = normalizeBoardForm(form0);
   const rows = (rawRows || []).map((r) => (r || []).map(cell));
-  const cols = form.columns.filter((c) => c.kind !== "no" && c.kind !== "sum");
-  const writeCols = cols.filter((c) => ownerOf(c) === "운송사"); // 시트에는 운송사 칸만 쓴다(화주가 입력한 칸은 건드리지 않음)
+  const cols = form.columns.filter((c) => c.kind !== "no" && c.kind !== "sum" && c.kind !== "calc");
+  const writeCols = cols.filter((c) => ownerOf(c) === "운송사" && !(c.kind === "field" && PULL_ONLY.has(c.field))); // 시트에는 운송사 칸만 쓴다(화주가 입력한 칸은 건드리지 않음)
   const nameCol = cols.find((c) => c.field === "하차지명");
-  const heads = headerRows(rows, cols.map((c) => c.label));
+  const heads = headerRows(rows, cols);
   const updates = []; const notFound = []; const usedGroups = new Set();
   if (!nameCol) return { updates, notFound: ["양식에 하차지명(도착지) 칸이 없습니다."], headers: heads.length };
   heads.forEach((hi, k) => {
@@ -134,7 +135,7 @@ export function planSheetWrite(form, rawRows, boardGroups) {
     usedGroups.add(g.name);
     const idx = {};
     cols.forEach((c) => {
-      const cand = rows[hi].map((h, i) => (nm(h) === nm(c.label) ? i : -1)).filter((i) => i >= 0);
+      const cand = colIndexes(c, rows[hi]);
       if (cand.length) idx[c.id] = cand.map((i) => ({ i, n: rows.slice(hi + 1, end).filter((r) => cell(r[i])).length })).sort((a, b) => b.n - a.n || b.i - a.i)[0].i;
     });
     if (idx[nameCol.id] == null) return;

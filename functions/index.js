@@ -6056,6 +6056,15 @@ exports.routeBoardSheet = functions.runWith({ timeoutSeconds: 540, memory: "512M
       // ⭐ 2026-11-03 기간 가져오기(입고일=탭 날짜 기준, 최대 120일)
       const okD = (x) => /^\d{4}-\d{2}-\d{2}$/.test(String(x || ""));
       let range = null;
+      // 🔗 2026-11-08 프로그램에서 고친 오더의 날짜(dates)만 맞추기 — 예전엔 "오늘~2주"만 봐서 지난 날짜(지난달 탭 등) 오더를 고치면 시트에 안 써졌다
+      //  (지운 줄 기억은 그대로 = soft · 하차일수만큼 뒤까지 · 최대 62일)
+      const ds = Array.isArray(body.dates) ? body.dates.map(String).filter(okD).sort() : [];
+      if (ds.length && !(okD(body.from) && okD(body.to))) {
+        const off = Math.max(0, parseInt(form.dropOffset, 10) || 0);
+        const lastD = new Date(`${ds[ds.length - 1]}T00:00:00Z`); lastD.setUTCDate(lastD.getUTCDate() + off + 1);
+        const a = ds[0]; const b = lastD.toISOString().slice(0, 10);
+        if ((Date.parse(b) - Date.parse(a)) / 864e5 <= 62) range = { from: a, to: b, soft: true };
+      }
       if (okD(body.from) && okD(body.to)) {
         const [a, b] = body.from <= body.to ? [body.from, body.to] : [body.to, body.from];
         if ((Date.parse(b) - Date.parse(a)) / 864e5 > 120) { res.status(400).json({ error: "기간은 120일까지 한 번에 가져올 수 있습니다." }); return; }

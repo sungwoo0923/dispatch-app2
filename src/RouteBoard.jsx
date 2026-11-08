@@ -24,7 +24,8 @@ import { kpConfirm, kpAlert } from "./kpDialog";
 import { profileToBoardColumns } from "../functions/sheetProfileCore.mjs"; // 🔗 2026-11-07 시트 프로필 → 배차표 칸
 import { useSheetProfiles, isOfficeFileError, sheetDemo } from "./sheetConnectApi";
 import { boardTabFor, boardRowsFor, profileToBoardForm, monthPatternOf, sheetDayOf, isMonthBoard } from "../functions/routeBoardMonth.mjs"; // 📅 2026-11-07 월별 탭 · 한 탭 양식
-import OfficeSheetCard from "./OfficeSheetCard"; // 📗 2026-11-07 엑셀(xlsx) 파일 안내
+import OfficeSheetCard from "./OfficeSheetCard";
+import { headerField, normalizeBoardForm, marginRate, enumValue } from "../functions/boardHeaderMatch.mjs"; // 🔗 2026-11-08 머리줄 자동 대조(업체명=거래처명 …) · 매익율 계산 // 📗 2026-11-07 엑셀(xlsx) 파일 안내
 const SheetConnectWizard = React.lazy(() => import("./SheetConnectWizard"));
 
 const DAYS = ["일", "월", "화", "수", "목", "금", "토"];
@@ -49,8 +50,12 @@ const parseHM = (v) => {
 const korTime = (hm) => { if (!hm) return ""; const [h, m] = hm.split(":").map(Number); return `${h < 12 ? "오전" : "오후"} ${h % 12 || 12}:${String(m).padStart(2, "0")}`; };
 
 // 칸 종류
-const KINDS = [["field", "프로그램 칸"], ["qty", "수량"], ["sum", "합계(자동)"], ["extra", "참고(보관)"], ["no", "순번(자동)"], ["date", "날짜(월별 탭)"]];
-const FIELDS = ["하차지명", "하차지주소", "차량번호", "이름", "전화번호", "상차시간", "하차시간", "메모", "거래처명", "청구운임", "기사운임", "화물내용", "차량톤수", "차량종류"];
+const KINDS = [["field", "프로그램 칸"], ["qty", "수량"], ["sum", "합계(자동)"], ["extra", "참고(보관)"], ["no", "순번(자동)"], ["date", "날짜(월별 탭)"], ["calc", "자동 계산(수수료·매익율)"]];
+const FIELDS = ["하차지명", "하차지주소", "차량번호", "이름", "전화번호", "상차시간", "하차시간", "메모", "거래처명", "청구운임", "기사운임", "화물내용", "차량톤수", "차량종류", "상차지명", "상차지주소", "배차상태", "지급방식", "배차방식"];
+const CALC_OPTS = ["수수료", "매익율"];
+const ENUM_F = new Set(["배차상태", "지급방식", "배차방식"]);
+// 🔗 2026-11-08 자동 계산 칸 값(수수료 = 청구 − 기사 · 매익율 = 수수료 ÷ 청구, 청구운임이 없으면 빈칸)
+const calcOf = (field, sale, drv) => { const a = toInt(sale); const b = toInt(drv); if (field === "매익율") return marginRate(a, b); return a || b ? (a - b).toLocaleString() : ""; };
 const TIME_FIELDS = new Set(["상차시간", "하차시간"]);
 const MONEY_FIELDS = new Set(["청구운임", "기사운임"]);
 // 칸 이름으로 종류 추천(새 양식 만들 때)
@@ -65,6 +70,11 @@ export function guessKind(label) {
   if (/^\d+(\.\d+)?(l|ml|kg|박스|box)?$/i.test(n) || /\d+(\.\d+)?l/i.test(n)) return { kind: "qty" };
   const hit = SYN.find(([names]) => names.some((x) => n === norm(x)));
   if (hit) return { kind: hit[1], field: hit[2] };
+  // 🔗 2026-11-08 동의어 사전(업체명 → 거래처명 · 기사님요금 → 기사운임 · 선/착불 → 지급방식 …)
+  const f = headerField(label);
+  if (f === "수수료" || f === "매익율") return { kind: "calc", field: f };
+  if (f === "순번") return { kind: "no" };
+  if (f && FIELDS.includes(f)) return { kind: "field", field: f };
   return { kind: "extra" };
 }
 const col = (label, kind, field) => ({ id: rid(), label, kind, ...(field ? { field } : {}) });
@@ -75,7 +85,13 @@ export const boardFromProfile = (p) => {
   const bf = profileToBoardForm(p, profileToBoardColumns(p, rid));
   return { ...BLANK(), name: p.name || "", sheetUrl: p.sheetUrl || "", sheetProfileId: p.id || "", dropOffset: 0, autoSync: false, columns: bf.columns, tabMode: bf.tabMode, tabPattern: bf.tabPattern, sheetTab: bf.sheetTab };
 };
-const BLANK = () => ({ name: "", client: "", dropOffset: 1, payMethod: "", groups: [{ name: "기본", 상차지명: "", 상차지주소: "", defaults: [] }], columns: [col("도착지", "field", "하차지명"), col("시군구", "field", "하차지주소"), col("차량번호", "field", "차량번호"), col("성명", "field", "이름"), col("휴대전화", "field", "전화번호"), col("비고", "field", "메모")] });
+// ⭐ 2026-11-08 새 양식 기본 칸 = 우리 프로그램 배차현황 순서(예전엔 태진 삼다수 시트 모양 — 도착지·시군구·성명·휴대전화)
+//  삼다수처럼 화주사 시트 모양이 따로 있으면 [구글시트에서 양식 만들기]가 시트 머리줄 그대로 칸을 만든다(SAMDASOO_COLS는 예시로 남김)
+const PROGRAM_COLS = () => [col("상차시간", "field", "상차시간"), col("하차시간", "field", "하차시간"), col("거래처명", "field", "거래처명"), col("상차지명", "field", "상차지명"), col("상차지주소", "field", "상차지주소"), col("하차지명", "field", "하차지명"), col("하차지주소", "field", "하차지주소"),
+  col("화물내용", "field", "화물내용"), col("차량종류", "field", "차량종류"), col("차량톤수", "field", "차량톤수"), col("차량번호", "field", "차량번호"), col("기사명", "field", "이름"), col("전화번호", "field", "전화번호"),
+  col("배차상태", "field", "배차상태"), col("청구운임", "field", "청구운임"), col("기사운임", "field", "기사운임"), col("수수료", "calc", "수수료"), col("지급방식", "field", "지급방식"), col("배차방식", "field", "배차방식"), col("메모", "field", "메모")];
+export const SAMDASOO_COLS = () => [col("도착지", "field", "하차지명"), col("시군구", "field", "하차지주소"), col("차량번호", "field", "차량번호"), col("성명", "field", "이름"), col("휴대전화", "field", "전화번호"), col("비고", "field", "메모")];
+const BLANK = (cols = PROGRAM_COLS) => ({ name: "", client: "", dropOffset: 1, payMethod: "", groups: [{ name: "기본", 상차지명: "", 상차지주소: "", defaults: [] }], columns: cols() });
 
 const card = "rounded-[18px] bg-white border border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_8px_20px_rgba(16,24,40,0.05)]";
 const inp = "h-10 w-full px-3 rounded-xl border border-[#DCE3EE] bg-white text-[14px] font-semibold text-[#0F1A30] outline-none focus:border-[#2D4C82]";
@@ -90,6 +106,7 @@ function rowFromOrder(form, o) {
     if (c.kind === "field") v[c.id] = TIME_FIELDS.has(c.field) ? (parseHM(o[c.field]) || String(o[c.field] || "")) : String(o[c.field] ?? "");
     else if (c.kind === "qty") v[c.id] = o.품목수량?.[c.label] ? String(o.품목수량[c.label]) : "";
     else if (c.kind === "extra") v[c.id] = String(o.추가정보?.[c.label] ?? "");
+    else if (c.kind === "calc") v[c.id] = calcOf(c.field, o.청구운임, o.기사운임);
   });
   return { key: o._id || o.id, _id: o._id || o.id, v, status: o.배차상태 || "", dirty: false, sheetGone: !!o.시트삭제됨, fare: o.청구운임 || "", fareManual: !!o.운임수동, extra: { 하차지담당자: o.하차지담당자, 하차지담당자번호: o.하차지담당자번호 } };
 }
@@ -100,7 +117,7 @@ function orderFromRow(form, g, r, i, date, co, isNew, prevStatus) {
   const rec = { 품목수량: {}, 추가정보: {} };
   form.columns.forEach((c) => {
     const val = String(r.v[c.id] ?? "").trim();
-    if (c.kind === "field") rec[c.field] = TIME_FIELDS.has(c.field) ? (parseHM(val) ? korTime(parseHM(val)) : val) : MONEY_FIELDS.has(c.field) ? String(toInt(val) || "") : val;
+    if (c.kind === "field") rec[c.field] = TIME_FIELDS.has(c.field) ? (parseHM(val) ? korTime(parseHM(val)) : val) : MONEY_FIELDS.has(c.field) ? String(toInt(val) || "") : ENUM_F.has(c.field) ? enumValue(c.field, val) : val;
     else if (c.kind === "qty") { if (toInt(val)) rec.품목수량[c.label] = toInt(val); }
     else if (c.kind === "extra") { if (val) rec.추가정보[c.label] = val; }
   });
@@ -126,7 +143,7 @@ function orderFromRow(form, g, r, i, date, co, isNew, prevStatus) {
   return {
     ...rec,
     상차일: date, 하차일: addDays(date, toInt(form.dropOffset)),
-    상차지명: g.상차지명 || g.name || "", 상차지주소: g.상차지주소 || "",
+    상차지명: rec.상차지명 || g.상차지명 || g.name || "", 상차지주소: rec.상차지주소 || g.상차지주소 || "", // 🔗 2026-11-08 시트에 상차지 칸이 있으면 그 값
     ...(r.extra?.하차지담당자 ? { 하차지담당자: r.extra.하차지담당자 } : {}),
     ...(r.extra?.하차지담당자번호 ? { 하차지담당자번호: r.extra.하차지담당자번호 } : {}),
     ...(form.payMethod ? { 지급방식: form.payMethod } : {}),
@@ -575,12 +592,17 @@ function FormEditor({ init, onClose, onSaved, co, clients = [], places = [] }) {
             <div key={c.id} className="flex flex-wrap items-center gap-2">
               <span className="w-6 text-[12px] font-black text-[#9AA9C3] text-right">{i + 1}</span>
               <input value={c.label} onChange={(e) => { const g = guessKind(e.target.value); setCol(i, c.label ? { label: e.target.value } : { label: e.target.value, ...g }); }} className={`${fieldInp} w-[150px]`} placeholder="칸 이름" />
-              <CustomSelect value={c.kind} onChange={(e) => setCol(i, { kind: e.target.value, field: e.target.value === "field" ? (c.field || guessKind(c.label).field || "메모") : undefined, role: e.target.value === "date" ? (c.role || "상차일") : undefined })} className={`${fieldInp} w-[130px]`}>
+              <CustomSelect value={c.kind} onChange={(e) => setCol(i, { kind: e.target.value, field: e.target.value === "field" ? (FIELDS.includes(c.field) ? c.field : guessKind(c.label).field && FIELDS.includes(guessKind(c.label).field) ? guessKind(c.label).field : "메모") : e.target.value === "calc" ? (CALC_OPTS.includes(c.field) ? c.field : "수수료") : undefined, role: e.target.value === "date" ? (c.role || "상차일") : undefined })} className={`${fieldInp} w-[130px]`}>
                 {KINDS.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
               </CustomSelect>
               {c.kind === "field" && (
                 <CustomSelect value={c.field || ""} onChange={(e) => setCol(i, { field: e.target.value })} className={`${fieldInp} w-[130px]`}>
                   {FIELDS.map((x) => <option key={x}>{x}</option>)}
+                </CustomSelect>
+              )}
+              {c.kind === "calc" && (
+                <CustomSelect value={c.field || "수수료"} onChange={(e) => setCol(i, { field: e.target.value })} className={`${fieldInp} w-[118px]`} title="프로그램이 계산(시트 값은 읽지도 쓰지도 않음)">
+                  {CALC_OPTS.map((x) => <option key={x}>{x}</option>)}
                 </CustomSelect>
               )}
               {c.kind === "date" && (
@@ -663,7 +685,7 @@ export default function RouteBoard({ companyName = "" }) {
 
   React.useEffect(() => {
     if (!co) return undefined;
-    const u1 = onSnapshot(query(collection(db, "routeBoards"), where("companyName", "==", co)), (s) => setForms(s.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => String(a.name).localeCompare(String(b.name), "ko"))), () => setForms([]));
+    const u1 = onSnapshot(query(collection(db, "routeBoards"), where("companyName", "==", co)), (s) => setForms(s.docs.map((d) => normalizeBoardForm({ id: d.id, ...d.data() })).sort((a, b) => String(a.name).localeCompare(String(b.name), "ko"))), () => setForms([]));
     const u2 = onSnapshot(collection(db, "drivers"), (s) => setDrivers(s.docs.map((d) => ({ id: d.id, ...d.data() })).filter((d) => d.차량번호)), () => setDrivers([]));
     const u3 = onSnapshot(collection(db, "places"), (s) => setPlaces(s.docs.map((d) => ({ _id: d.id, ...d.data() })).filter((p) => (!p.companyName || p.companyName === co) && p.업체명)), () => setPlaces([]));
     const u4 = onSnapshot(collection(db, "clients"), (s) => setClients(s.docs.map((d) => { const c = { id: d.id, ...d.data() }; return { ...c, 거래처명: String(c.거래처명 || c.업체명 || "").trim() }; })
@@ -1111,6 +1133,7 @@ export default function RouteBoard({ companyName = "" }) {
                               {c.kind === "no" ? <div className="text-center text-[#7A8AA6] font-bold">{i + 1}</div>
                                 : c.kind === "date" ? <div className="text-center text-[#7A8AA6] font-bold text-[12.5px] whitespace-nowrap">{dLabel(sheetDayOf(form, date))}</div>
                                 : c.kind === "sum" ? <div className="text-center font-black text-[#0F1A30]">{rowSum(form, r) || ""}</div>
+                                : c.kind === "calc" ? <div className="text-center font-bold text-[#3A4A66] tabular-nums" title="자동 계산(청구운임 − 기사운임)">{calcOf(c.field, r.v[colOf("청구운임")?.id] ?? r.fare, r.v[colOf("기사운임")?.id])}</div>
                                   : ["하차지명", "차량번호", "이름", "전화번호"].includes(c.field) ? (
                                     <BoardSuggest value={r.v[c.id] ?? ""} onChange={(v) => setCell(g.name, i, c, v)} onBlur={() => onLeave(g.name, i, c)} onKeyDown={onKey}
                                       onPick={(x) => (c.field === "하차지명" ? pickPlace(g.name, i, x) : pickDriver(g.name, i, x))}

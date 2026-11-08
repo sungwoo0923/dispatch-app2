@@ -5115,7 +5115,7 @@ const patchDispatch = async (_id, patch, knownPrev) => {
   }
   updateDoc(ref, _updatePayload).catch(e => console.error("patchDispatch 저장 오류:", e));
   // 💰 2026-11-06 고정노선(배차표) 오더 — 서버 자동 맞춤이 "시트가 바뀌었을 때만" 읽게 바뀌어, 프로그램에서 고친 값은 바로 시트에 쓴다(2.5초 묶음)
-  if (prev?.배차표Id) requestRouteSheetPush(prev.배차표Id);
+  if (prev?.배차표Id) requestRouteSheetPush(prev.배차표Id, 2500, prev.상차일); // 🔗 2026-11-08 고친 오더 날짜(지난 날짜도 시트에)
 
   // 운송사가 직접 등록해 "화주사 전송"으로 사본을 만든 오더는, 전송 이후 원본을 수정해도
   // 사본(화주사 화면이 실제로 구독하는 문서)에는 반영되지 않고 전송 시점 값으로 멈춰있던 버그가 있었다.

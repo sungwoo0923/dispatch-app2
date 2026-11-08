@@ -210,8 +210,9 @@ eq("일반화: 테스트운송 프로필은 테스트운송 오더만", [{ compa
 
 // ── 9) 배차표 양식 만들기 ──
 const board = C.profileToBoardColumns(profile, (() => { let i = 0; return () => `c${i++}`; })());
-eq("배차표 칸(시트 순서 · 계산열 뺌)", board.slice(0, 8).map((c) => [c.label, c.kind, c.field || ""]), [["순번", "no", ""], ["날짜", "extra", ""], ["거래처명", "field", "거래처명"], ["상차지", "extra", ""], ["상차지주소", "extra", ""], ["하차지주소", "field", "하차지주소"], ["하차지", "field", "하차지명"], ["화물정보", "field", "화물내용"]]);
-has("배차표 칸에 수식 칸 없음", !board.some((c) => ["배차상태", "수수료", "매익률(%)"].includes(c.label)));
+// 🔗 2026-11-08 상차지·상차지주소도 프로그램 칸 · 배차상태는 읽기만(field) · 수수료·매익률은 자동 계산 칸(calc — 시트에 안 씀)
+eq("배차표 칸(시트 순서)", board.slice(0, 8).map((c) => [c.label, c.kind, c.field || ""]), [["순번", "no", ""], ["날짜", "extra", ""], ["거래처명", "field", "거래처명"], ["상차지", "field", "상차지명"], ["상차지주소", "field", "상차지주소"], ["하차지주소", "field", "하차지주소"], ["하차지", "field", "하차지명"], ["화물정보", "field", "화물내용"]]);
+has("배차표 수식 칸: 수수료·매익률은 calc · 그 밖의 수식 칸 없음", board.filter((c) => ["수수료", "매익률(%)"].includes(c.label)).every((c) => c.kind === "calc") && board.filter((c) => c.label === "배차상태").every((c) => c.kind === "field" && c.field === "배차상태"));
 
 
 // ── 10) 서버 보내기(가짜 시트 · 가짜 DB) — 수식 칸 보호 · 합계 줄 위에 새 줄 · 오더 연결 기록 ──

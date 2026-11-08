@@ -13,6 +13,7 @@ import { pickUnassignedOrders } from "./unassignedRule"; // ⭐ 2026-11-05 PC·�
 import { useOrderHistory } from "./orderHistory";
 import { sheetApi, BoardSuggest } from "./RouteBoard";
 import { ownerOf, rateFor } from "./routeBoardSheet";
+import { normalizeBoardForm, marginRate, enumValue } from "../functions/boardHeaderMatch.mjs"; // 🔗 2026-11-08 머리줄 자동 대조 · 매익율
 import { useRouteCarrierSetting, useRouteCarrierFilter, saveRouteCarrierSetting, carriersInOrders, carrierKey, carrierOf } from "./routeCarriers"; // ⭐ 2026-11-05 운송업체 설정(정산·매출 포함 여부)
 
 import { isMyOrder } from "./driverEvents"; // ⭐ 2026-11-06 내 오더 판단(기사 수락/거절 알림과 같은 기준)
@@ -70,10 +71,12 @@ const TIME_FIELDS = new Set(["상차시간", "하차시간"]);
 const MONEY_FIELDS = new Set(["청구운임", "기사운임"]);
 
 // 표 머리글 — 선택·순번 + 상차일·상차지(묶음) + 시트 열 순서 + 배차상태·운임(시트에 없으면)
+// 🔗 2026-11-08 시트에 배차상태 · 청구/기사운임 · 수수료 칸이 이미 있으면(업체명=거래처명처럼 이름이 달라도) 그 자리에 보이고 끝에 또 붙이지 않는다
+const hasField = (cols, f) => cols.some((c) => (c.kind === "field" || c.kind === "calc") && c.field === f);
 export function fixedHeaderOf(form) {
   const cols = (form?.columns || []).filter((c) => c.kind !== "no");
-  const has = (f) => cols.some((c) => c.kind === "field" && c.field === f);
-  return ["선택", "순번", "담당자", "발주일", "입고일", "상차지", ...cols.map((c) => c.label), "배차상태", ...["청구운임", "기사운임"].filter((f) => !has(f)), "수수료"]; // ⭐ 2026-11-06 순번 다음 담당자
+  const has = (f) => hasField(cols, f);
+  return ["선택", "순번", "담당자", "발주일", "입고일", "상차지", ...cols.map((c) => c.label), ...(has("배차상태") ? [] : ["배차상태"]), ...["청구운임", "기사운임"].filter((f) => !has(f)), ...(has("수수료") ? [] : ["수수료"])]; // ⭐ 2026-11-06 순번 다음 담당자
 }
 // ⭐ 2026-11-03 리터(수량)·총계 칸은 색으로 구분 — 시트 열 이름이 "0.5L"·"총계"처럼 생겼으면 같은 모양으로
 export const frsLook = (c) => {
@@ -93,10 +96,13 @@ const valueOf = (c, row) => {
   if (c.kind === "qty") return row.품목수량?.[c.label] ? String(row.품목수량[c.label]) : "";
   if (c.id === CARRIER_VCOL) return carrierOf(row); // ⭐ 2026-11-06 양식에 운송업체 열이 없을 때 붙인 칸
   if (c.kind === "extra") return String(row.추가정보?.[c.label] ?? "");
+  if (c.kind === "calc") { const a = toInt(row.청구운임); const b = toInt(row.기사운임); return c.field === "매익율" ? marginRate(a, b) : a || b ? (a - b).toLocaleString() : ""; } // 🔗 2026-11-08 프로그램 계산(#DIV/0! 없음)
   if (c.kind === "sum") { const t = Object.values(row.품목수량 || {}).reduce((a, n) => a + toInt(n), 0); return t ? String(t) : ""; }
   // ⭐ 2026-11-03 시군구 칸은 시트에 적힌 그대로(여주시) — 오더에는 기사 길안내용 풀주소를 그대로 둔다
   if (c.field === "하차지주소") { const sv = row.시트기준값?.[c.id] ?? row.시트추가값?.[c.id]; if (sv != null && String(sv).trim()) return String(sv); const short = siGunGu(row.하차지주소); return short || String(row.하차지주소 ?? ""); }
-  const v = String(row[c.field] ?? "");
+  let v = String(row[c.field] ?? "");
+  if (!v && c.autoFrom === "extra") v = String(row.추가정보?.[c.label] ?? ""); // 🔗 2026-11-08 예전 참고 칸 값
+  if (MONEY_FIELDS.has(c.field)) return toInt(v) ? toInt(v).toLocaleString() : ""; // 🔗 2026-11-08 운임은 콤마
   return TIME_FIELDS.has(c.field) ? (parseHM(v) || v) : v;
 };
 
@@ -282,17 +288,25 @@ export function FixedRouteCells({ form, row, drivers = [], clients = [], onPatch
       return onPatch({ 차량번호: val, ...(d ? { 이름: d.이름 || "", 전화번호: d.전화번호 || "" } : !val ? { 이름: "", 전화번호: "" } : {}),
         ...(val && (row.배차상태 === "배차중" || !row.배차상태) ? { 배차상태: "배차완료" } : !val && row.배차상태 === "배차완료" ? { 배차상태: "배차중" } : {}) });
     }
+    if (c.kind === "calc") return undefined; // 자동 계산 칸
+    if (c.field === "배차상태" || c.field === "지급방식" || c.field === "배차방식") return onPatch({ [c.field]: enumValue(c.field, val) });
     if (TIME_FIELDS.has(c.field)) return onPatch({ [c.field]: parseHM(val) ? korTime(parseHM(val)) : val });
     if (MONEY_FIELDS.has(c.field)) { const n = toInt(val); const p = { [c.field]: n ? String(n) : "" }; const sale = c.field === "청구운임" ? n : toInt(row.청구운임); const drv = c.field === "기사운임" ? n : toInt(row.기사운임); return onPatch({ ...p, 수수료: String(sale - drv), ...(c.field === "청구운임" ? { 운임수동: !!n } : {}) }); } // 청구운임을 직접 고치면 단가표 자동 계산 멈춤(비우면 다시 자동)
     return onPatch({ [c.field]: val });
   };
-  const has = (f) => cols.some((c) => c.kind === "field" && c.field === f);
+  const has = (f) => hasField(cols, f);
   const money = (f) => (
     <td key={f} className={td} title={f === "청구운임" && row.단가표지역 ? `단가표 ${row.단가표지역} · 파렛당 ${Number(row.파렛단가 || 0).toLocaleString()}원${row.운임수동 ? " (직접 입력 — 자동 계산 멈춤)" : ""}` : f === "청구운임" && row.운임수동 ? "직접 입력한 운임(단가표 자동 계산 멈춤) — 비우면 다시 자동" : undefined}>
       <Cell value={toInt(row[f]) ? toInt(row[f]).toLocaleString() : ""} numeric disabled={disabled} onCommit={(v) => commit({ kind: "field", field: f }, v)} />
     </td>
   );
   const st = row.배차상태 || "배차중";
+  const statusChip = (
+    <>
+      <span className={`inline-flex items-center h-7 px-2.5 rounded-lg text-[12px] font-black ${st === "배차완료" ? "bg-[#1B2B4B] text-white" : st === "배차취소" ? "bg-red-50 text-red-600 border border-red-200" : "bg-white text-[#B54708] border border-[#F7C97A]"}`}>{st}</span>
+      {row.시트삭제됨 && <div className="mt-0.5 text-[10.5px] font-black text-red-600">시트에서 삭제됨</div>}
+    </>
+  );
   return (
     <>
       <td className={`${td} tabular-nums text-[13px] font-bold text-[#3A4A66]`} style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }} title="발주일(시트 왼쪽 날짜)">{String(row.발주일 || row.상차일 || "").slice(5).replace("-", ".")}</td>
@@ -308,6 +322,8 @@ export function FixedRouteCells({ form, row, drivers = [], clients = [], onPatch
         const look = frsLook(c);
         const bg = look ? "" : own === "운송사" ? "bg-[#F3F7FF]" : "";
         if (c.kind === "sum") return <td key={c.id} data-frs="sum" className={`${td} tabular-nums`}>{v}</td>;
+        if (c.kind === "calc") return <td key={c.id} className={`${td} text-[13.5px] font-black tabular-nums ${c.field === "수수료" && toInt(row.청구운임) - toInt(row.기사운임) < 0 ? "text-red-600" : "text-[#0F1A30]"}`} style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }} title="자동 계산(청구운임 − 기사운임)">{v}</td>;
+        if (c.kind === "field" && c.field === "배차상태") return <td key={c.id} className={td}>{statusChip}</td>;
         if (c.kind === "field" && DRV_KEY[c.field]) {
           const pick = (d) => onPatch({ 차량번호: d.차량번호 || "", 이름: d.이름 || "", 전화번호: d.전화번호 || "", ...(row.배차상태 === "배차중" || !row.배차상태 ? { 배차상태: "배차완료" } : {}) });
           return <td key={c.id} className={`${td} bg-[#F3F7FF] relative`} title="차량번호·이름·번호 일부만 쳐도 기사관리에서 찾아 채웁니다">{c.field === "차량번호" && st === "배차완료" && <LiveDriverChip order={row} variant="pin" />}<VehicleCell field={c.field} value={v} drivers={drivers} disabled={disabled} onPick={pick} onCommit={(x) => commit(c, x)} placeholder={c.field === "차량번호" && !v ? "미배차" : ""} />{/* ⭐ 2026-11-05 LIVE — 칩 대신 칸 왼쪽 위 6px 점(폭 0 · 칸 너비 그대로) */}</td>;
@@ -324,13 +340,10 @@ export function FixedRouteCells({ form, row, drivers = [], clients = [], onPatch
           </td>
         );
       })}
-      <td className={td}>
-        <span className={`inline-flex items-center h-7 px-2.5 rounded-lg text-[12px] font-black ${st === "배차완료" ? "bg-[#1B2B4B] text-white" : st === "배차취소" ? "bg-red-50 text-red-600 border border-red-200" : "bg-white text-[#B54708] border border-[#F7C97A]"}`}>{st}</span>
-        {row.시트삭제됨 && <div className="mt-0.5 text-[10.5px] font-black text-red-600">시트에서 삭제됨</div>}
-      </td>
+      {!has("배차상태") && <td className={td}>{statusChip}</td>}
       {!has("청구운임") && money("청구운임")}
       {!has("기사운임") && money("기사운임")}
-      <td className={`${td} text-[13.5px] font-black tabular-nums ${toInt(row.청구운임) - toInt(row.기사운임) < 0 ? "text-red-600" : "text-[#0F1A30]"}`} style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{(toInt(row.청구운임) - toInt(row.기사운임)).toLocaleString()}</td>
+      {!has("수수료") && <td className={`${td} text-[13.5px] font-black tabular-nums ${toInt(row.청구운임) - toInt(row.기사운임) < 0 ? "text-red-600" : "text-[#0F1A30]"}`} style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{(toInt(row.청구운임) - toInt(row.기사운임)).toLocaleString()}</td>}
     </>
   );
 }
@@ -723,7 +736,7 @@ export default function FixedRouteStatusHost({ company, dispatchData = [], carri
   const [sync, setSync] = React.useState({ at: 0, busy: false, err: "", last: null });
   React.useEffect(() => {
     if (!company) return undefined;
-    return onSnapshot(query(collection(db, "routeBoards"), where("companyName", "==", company)), (s) => setForms(s.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => String(a.name).localeCompare(String(b.name), "ko"))), () => setForms([]));
+    return onSnapshot(query(collection(db, "routeBoards"), where("companyName", "==", company)), (s) => setForms(s.docs.map((d) => normalizeBoardForm({ id: d.id, ...d.data() })).sort((a, b) => String(a.name).localeCompare(String(b.name), "ko"))), () => setForms([])); // 🔗 2026-11-08 머리줄 자동 대조
   }, [company]);
   const form = (forms || []).find((f) => f.id === formId) || (forms || [])[0] || null;
   React.useEffect(() => { try { if (form?.id) localStorage.setItem("kpFixedStatusForm", form.id); } catch { /* 무시 */ } }, [form?.id]);
@@ -894,7 +907,7 @@ function MobileFixedRouteBody({ form, rows, range, setRange, status, setStatus, 
   const patch = (r) => (p) => {
     const extra = p.배차상태 === "배차완료" && r.배차상태 !== "배차완료" ? { 배차확정일시: serverTimestamp(), 배차확정자: guard.me.name || auth.currentUser?.email?.split("@")[0] || "" }
       : p.배차상태 === "배차중" && r.배차상태 === "배차완료" ? { 배차확정일시: null, 배차확정자: null } : {};
-    requestRouteSheetPush(r.배차표Id || form.id); // 💰 2026-11-06 고친 값 바로 시트에
+    requestRouteSheetPush(r.배차표Id || form.id, 2500, r.상차일); // 💰 2026-11-06 고친 값 바로 시트에 · 🔗 2026-11-08 그 오더 날짜
     return updateDoc(doc(db, r.__col || "orders", r._id || r.id), { ...p, ...extra, 최종수정자: auth.currentUser?.email || "", updatedAt: Date.now() }).catch((e) => window.alert(`저장하지 못했습니다: ${e?.message || e}`));
   };
   const gi = (r) => { const i = (form.groups || []).findIndex((g) => g.name === r.배차표묶음); return i < 0 ? 999 : i; };

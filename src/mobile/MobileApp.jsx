@@ -4816,7 +4816,7 @@ const groupedByDate = useMemo(() => {
       // 이 수정폼(전체 편집) 저장 시에는 반영되지 않아, 상차일 등을 여기서 고쳐도
       // 화주사 화면(사본)에는 예전 값이 그대로 남아있던 버그가 있었다.
       syncShipperMirrorMobile(selectedOrder, docData).catch(() => {});
-      if (selectedOrder?.배차표Id) requestRouteSheetPush(selectedOrder.배차표Id); // 🚚 2026-11-07 고정노선 시트(PC와 같음)
+      if (selectedOrder?.배차표Id) requestRouteSheetPush(selectedOrder.배차표Id, 2500, selectedOrder.상차일); // 🚚 2026-11-07 고정노선 시트(PC와 같음)
 
       // ★ PC 거래처관리(places) 동기화 — 오더 자체 저장과는 무관한 주소록 동기화라서
       // 화주사 사본 동기화(바로 위)와 동일하게 기다리지 않고 백그라운드로 돌린다.
@@ -10928,7 +10928,7 @@ function QuickEditModal({ order, drivers, cardVersionB, onClose, onSuccess, disp
       // 🚚 2026-11-07 지급방식 "취소" → 배차취소(PC와 같음) · 이력 · 고정노선 시트
       applyPayTypeRuleMobile(order, patch);
       { const h = payTypeHistoryMobile(order, patch, auth.currentUser?.email); if (h.length) patch.history = arrayUnion(...h); }
-      if (order?.배차표Id) requestRouteSheetPush(order.배차표Id);
+      if (order?.배차표Id) requestRouteSheetPush(order.배차표Id, 2500, order.상차일);
       // ⭐ 속도개선(2026-10-28) — 예전엔 서버가 "저장됐다"고 답할 때까지(await) 기다려서, LTE가 약하면
       //   "저장 중…"이 몇 초씩 걸렸다. Firestore는 폰 화면에 먼저 바로 반영하고 서버 전송은 뒤에서
       //   알아서 끝내므로, 기다리지 않고 바로 닫는다. 서버 저장이 실패하면 그때 알림으로 알려준다.
@@ -11975,7 +11975,7 @@ function QuickEditSheet({ order, onClose, onSaved, cardVersionB, clients = [], b
       updateDoc(doc(db, order.__col || "dispatch", id), { ...changed, ...(_h.length ? { history: arrayUnion(..._h) } : {}), updatedAt: serverTimestamp(), _lastModified: Date.now() })
         .catch((err) => alert("저장 실패: " + (err?.message || err)));
       syncShipperMirrorMobile(order, changed).catch(() => {});
-      if (order?.배차표Id) requestRouteSheetPush(order.배차표Id);
+      if (order?.배차표Id) requestRouteSheetPush(order.배차표Id, 2500, order.상차일);
       onSaved(id, changed);
     } catch (e) {
       alert("저장 실패: " + (e?.message || e));

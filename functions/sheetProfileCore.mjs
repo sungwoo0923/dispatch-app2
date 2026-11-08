@@ -767,7 +767,9 @@ export function findAppendRow(profile, rows) {
 
 // ── 배차표 양식 만들기(프로필 → routeBoards 칸) ───────────
 //  배차표 화면(src/RouteBoard.jsx)이 쓰는 칸: field(프로그램 칸) · no(순번) · sum · extra(참고) · qty(수량)
-const BOARD_FIELDS = new Set(["하차지명", "하차지주소", "차량번호", "이름", "전화번호", "상차시간", "하차시간", "메모", "거래처명", "청구운임", "기사운임", "화물내용", "차량톤수", "차량종류"]);
+// 🔗 2026-11-08 + 상차지·배차상태·지급방식·배차방식(시트 값 그대로 프로그램 칸) · 수수료·매익율은 자동 계산 칸(calc, 시트 수식 보호) — functions/boardHeaderMatch.mjs와 같은 목록
+const BOARD_FIELDS = new Set(["하차지명", "하차지주소", "차량번호", "이름", "전화번호", "상차시간", "하차시간", "메모", "거래처명", "청구운임", "기사운임", "화물내용", "차량톤수", "차량종류", "상차지명", "상차지주소", "배차상태", "지급방식", "배차방식"]);
+const BOARD_CALC = new Set(["수수료", "매익율"]);
 export function profileToBoardColumns(profile, rid = () => Math.random().toString(36).slice(2, 10)) {
   const cols = [];
   const used = new Set();
@@ -775,7 +777,9 @@ export function profileToBoardColumns(profile, rid = () => Math.random().toStrin
     if (c.mode === "ignore" || c.mode === "id" || !c.header) return;
     if (c.field === "순번") { cols.push({ id: rid(), label: c.header, kind: "no" }); return; }
     if (c.mode === "data" && BOARD_FIELDS.has(c.field) && !used.has(c.field)) { used.add(c.field); cols.push({ id: rid(), label: c.header, kind: "field", field: c.field }); return; }
-    if (c.mode === "calc") return; // 계산열은 배차표에서 빼고(시트가 계산)
+    if (BOARD_CALC.has(c.field) && !used.has(c.field)) { used.add(c.field); cols.push({ id: rid(), label: c.header, kind: "calc", field: c.field }); return; } // 프로그램이 계산해 보여 줌
+    if (c.mode === "calc" && c.field === "배차상태" && !used.has(c.field)) { used.add(c.field); cols.push({ id: rid(), label: c.header, kind: "field", field: c.field }); return; } // 시트 수식 배차상태도 읽기만(서버는 시트에 쓰지 않음)
+    if (c.mode === "calc") return; // 그 밖의 계산열은 배차표에서 빼고(시트가 계산)
     cols.push({ id: rid(), label: c.header, kind: "extra" });
   });
   const labels = new Set();

@@ -202,7 +202,8 @@ eq("기간 탭(자동 연동)", M.boardTabsInRange(form, tabTitles, "2025-01-30"
   const q0 = { where: () => q0, get: async () => ({ docs: [] }) };
   const fdb = {
     collection: (name) => ({ ...q0, doc: (id) => ({ id, path: `${name}/${id}`, set: async () => {}, update: async () => {} }) }),
-    batch: () => ({ set: (ref, data) => made.push({ ref, data }), update: () => {}, delete: () => {}, commit: async () => {} }),
+    // 🔗 2026-11-08 기본거래처 자동 등록(clients)은 빼고 오더만
+    batch: () => ({ set: (ref, data) => { if (String(ref.path).startsWith("orders/")) made.push({ ref, data }); }, update: () => {}, delete: () => {}, commit: async () => {} }),
   };
   const sum = await RB.syncBoard({
     db: fdb, FieldValue: { serverTimestamp: () => 0 }, form, range: { from: "2025-01-01", to: "2025-01-31" },

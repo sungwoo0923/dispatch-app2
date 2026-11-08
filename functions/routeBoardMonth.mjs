@@ -5,6 +5,7 @@
 //   · 날짜 칸 = columns 중 kind "date"(role "상차일" | "하차일")
 //  이면 그 탭에서 날짜 칸이 그날인 줄만 남겨(다른 줄은 빈 줄로 바꿔 줄 번호는 그대로) 예전 규칙(parseBoardTab · planSheetWrite)에 넘긴다.
 import { tabMonth, detectMonthlyTabs } from "./sheetProfileCore.mjs";
+import { headerRowsOf, colIndexes } from "./boardHeaderMatch.mjs"; // 🔗 2026-11-08 머리줄 자동 대조(날짜/일자 · 업체명/거래처 …)
 
 const cell = (v) => String(v ?? "").replace(/ /g, " ").trim();
 const nm = (s) => String(s || "").toLowerCase().replace(/[\s()（）[\]]/g, "");
@@ -39,7 +40,8 @@ export function boardTabFor(form, tabs = [], ymd) {
   if (form.tabMode === "single") return form.sheetTab && tabs.includes(form.sheetTab) ? form.sheetTab : form.sheetTab ? "" : tabs[0] || "";
   const d = sheetDayOf(form, ymd); const y = +d.slice(0, 4); const mo = +d.slice(5, 7);
   const kind = form.tabPattern?.kind;
-  const hit = (k) => tabs.find((t) => { const x = tabMonth(t, y); return x && (!k || x.kind === k) && x.y === y && x.m === mo; });
+  // 🔗 2026-11-08 "25년11월"과 "25년11월의 사본"이 같이 있으면 이름이 딱 그 달인 탭(짧은 이름)을 먼저
+  const hit = (k) => tabs.filter((t) => { const x = tabMonth(t, y); return x && (!k || x.kind === k) && x.y === y && x.m === mo; }).sort((a, b) => a.length - b.length)[0];
   return hit(kind) || (kind && kind !== "m월" ? hit("") : "") || "";
 }
 // 기간(상차일 from~to)에 걸리는 탭들(서버 자동 연동)
@@ -53,9 +55,7 @@ export function boardTabsInRange(form, tabs = [], from, to) {
 
 // 머리줄(양식 칸 이름이 2~3개 이상 있는 줄) — routeBoardSync.headerRows와 같은 기준
 function headerRows(rows, form) {
-  const set = new Set(form.columns.filter((c) => c.kind !== "no" && c.kind !== "sum").map((c) => nm(c.label)));
-  const need = Math.max(2, Math.min(3, Math.ceil(set.size / 2)));
-  return rows.map((r, i) => ({ i, n: new Set((r || []).map(nm).filter((x) => set.has(x))).size })).filter((x) => x.n >= need).map((x) => x.i);
+  return headerRowsOf(rows, form.columns.filter((c) => c.kind !== "no" && c.kind !== "sum"));
 }
 // 줄마다 시트 날짜(병합 칸 · 빈 칸은 윗줄 날짜를 이어서) → Map(줄 번호 → "YYYY-MM-DD")
 export function rowDays(form, rawRows, tabTitle = "") {
@@ -67,7 +67,7 @@ export function rowDays(form, rawRows, tabTitle = "") {
   const heads = headerRows(rows, form);
   heads.forEach((hi, k) => {
     const end = k + 1 < heads.length ? heads[k + 1] : rows.length;
-    const ci = rows[hi].findIndex((h) => nm(h) === nm(dc.label));
+    const ci = colIndexes(dc, rows[hi])[0] ?? -1;
     if (ci < 0) return;
     let carry = "";
     for (let ri = hi + 1; ri < end; ri++) {
@@ -95,7 +95,7 @@ export function boardRowsFor(form, rawRows, ymd, tabTitle = "") {
     if (d !== want) return [];
     const out = [...(r || [])];
     const hi = [...heads].filter((h) => h < ri).pop();
-    const ci = hi != null ? (rawRows[hi] || []).findIndex((h) => nm(h) === nm(dc.label)) : -1;
+    const ci = hi != null ? (colIndexes(dc, (rawRows[hi] || []).map(cell))[0] ?? -1) : -1;
     if (ci >= 0) out[ci] = want;
     return out;
   });
