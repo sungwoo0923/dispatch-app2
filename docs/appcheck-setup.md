@@ -81,5 +81,5 @@ firebase deploy --only functions
 | Firestore 트리거 | `notify*` · `hub*OnWrite/OnCreate` · `archiveDeletedOrder` · `dedupeFcmToken` 등 `firestore.document` 전부 | 사람 요청이 아님 |
 
 확인하는 함수: 화면이 부르는 onRequest 전부(`sendPushNotification` · `tenantMigrate` · `driverSearch` · `checkEmail` · `freeDeletedEmail` · `linkDriverSignup` · `findCompany` · `companyReset` · `companyResetJob` · `companyResetPurge` · `contractNoticeRun` · `restoreDeleted` · `pushDiag` · `automation` · `gsheetMine` · `sheetOcr` · `routeBoardSheet` · `sheetConnect` · `sheetImport` · `platformStats` · `platformUsageNow` · `aiTeamChat`)
-+ 호출형 전부(`orderScanOcr` · `orderScanExtract` · `aiAssistantChat` · `payroll*` · `bizStatusCheck` · `weatherFor` · `integrationStatus` · `popbillAdmin` · `hubBindDevice` · `hubAdminResetDevice` · `hubAdminSetDriverLogin`).
++ 호출형 전부(`orderScanOcr` · `orderScanExtract` · `aiAssistantChat` · `payroll*` · `bizStatusCheck` · `weatherFor` · `integrationStatus` · `popbillAdmin` · `hubBindDevice` · `hubAdminResetDevice` · `hubAdminSetDriverLogin` · `refreshMyClaims` · `backfillClaims`).
 코드: `functions/appCheck.js`(서버) · `src/appCheckClient.js`(화면) · 테스트 `node scripts/appCheck.test.cjs`

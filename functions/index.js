@@ -6617,6 +6617,10 @@ Object.assign(exports, require("./hubTriggers").register({
   getAuth,
 }));
 
+// 🎫 2026-11-08 로그인 토큰 권한(custom claims) — 보안 규칙이 users 문서를 매번 읽지 않게(설명은 functions/authClaims.js 맨 위)
+//  claimsOnUserWrite · claimsOnHubMemberWrite · claimsOnPlanWrite · claimsOnCustomRoleWrite · claimsOnRoleOverrideWrite · refreshMyClaims · backfillClaims
+Object.assign(exports, require("./authClaims").register({ functions, db, getAuth, FieldValue, callOpts: appCheckCallOpts() })); // 🛡 호출형은 App Check 모드를 따른다
+
 // 🤖 2026-11-06 AI 팀 — 관리자센터에서 팀별(경리·재무·영업·운영·보안·홍보) Claude 에이전트와 대화.
 //  최고관리자·부관리자(role totalMaster)만. Claude API 키는 Firebase 비밀값 ANTHROPIC_API_KEY.
 //  (등록: firebase functions:secrets:set ANTHROPIC_API_KEY)

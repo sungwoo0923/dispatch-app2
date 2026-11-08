@@ -12,9 +12,59 @@ service cloud.firestore {
     function myUser() {
       return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
     }
+    // 🎫 2026-11-08 로그인 토큰 권한(custom claims) — functions/authClaims.js(서버)만 넣는다 · 사용자·화면은 못 바꾼다
+    //  토큰에 v == 1 이 있으면 users 문서를 읽지 않고 토큰 값으로 판단한다(요청마다 문서 읽기 1~3회 · 규칙 계산량 절약).
+    //  없으면(배포 직후 · 채우기 전 · 특이한 문서) 예전처럼 문서를 읽는다 → 규칙을 먼저 배포해도 아무도 잠기지 않는다.
+    //  · 최고관리자 권한(tm)은 토큰 + 문서로 한 번 더 확인(권한을 뺀 뒤 예전 토큰이 남아 있어도 열리지 않게)
+    //  · 토큰이 "미승인"이면 문서를 다시 본다(관리자가 승인하면 바로 열림 — 미승인 계정은 적어 비용이 거의 없다)
+    //  · 그 밖의 값(회사·역할·부서 등)은 바뀌면 화면이 바로 토큰을 새로 받는다(users/{uid}.claimsAt) — 최대 1시간(토큰 수명) 예전 값이 남을 수 있다
+    function ck() {
+      return request.auth != null && request.auth.token.get('v', 0) == 1;
+    }
+    function tk(k, d) {
+      return request.auth.token.get(k, d);
+    }
+    function myRole() {
+      return ck() ? tk('r', '') : myUser().get('role', '');
+    }
+    // 회사명 그대로(없으면 '') — myCo()는 없으면 기본 회사 '돌캐'(토큰은 회사명이 있는 문서에만 생긴다)
+    function myCoRaw() {
+      return ck() ? tk('co', '') : myUser().get('companyName', '');
+    }
+    function myIsMaster() {
+      return ck() ? tk('ms', false) == true : myUser().get('isMaster', false) == true;
+    }
+    function myLinkedCo() {
+      return ck() ? tk('sh', '') : linkedCoOf(myUser());
+    }
+    // 부서·직책 — 규칙의 이름 조건을 서버가 미리 계산해 둔 값
+    function myTeamFin() {
+      return ck() ? tk('fin', false) == true : string(myUser().get('team', '')).matches('.*(경리|회계|재무).*');
+    }
+    function myTeamPay() {
+      return ck() ? tk('pay', false) == true : myUser().get('team', '').matches('.*(재무|경리|회계|총무).*');
+    }
+    function myTeamHr() {
+      return ck() ? tk('hr', false) == true : string(myUser().get('team', '')).matches('.*인사.*');
+    }
+    function myTeamExec() {
+      return ck() ? tk('tx', false) == true : myUser().get('team', '') == '임원';
+    }
+    function myPosExec() {
+      return ck() ? tk('xp', false) == true : myUser().get('position', '') in ['이사', '상무', '전무', '부사장', '사장', '대표', '대표이사', '본부장', '임원'];
+    }
+    function myPosCeo() {
+      return ck() ? tk('ceo', false) == true : myUser().get('position', '') in ['대표', '대표이사', '사장'];
+    }
+    // 토큰 기준 승인(isApproved의 문서 기준과 같은 계산 — 계약종료 ce는 서버가 companyPlans를 보고 넣는다)
+    function claimApproved() {
+      return ck() && tk('ap', false) == true && tk('st', false) == true && tk('r', '') != 'cafeUser'
+        && (tk('r', '') == 'totalMaster' || tk('ce', false) != true);
+    }
     function isApproved() {
       return isSignedIn() && (
         request.auth.token.get('email', '') == "tjddnqkf@naver.com" ||
+        claimApproved() ||
         (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
          myUser().get('approved', true) != false &&
          myUser().get('employmentStatus', '') != '퇴사' &&
@@ -80,7 +130,9 @@ service cloud.firestore {
     function isTotalMasterUser() {
       return isSignedIn() && (
         request.auth.token.get('email', '') == "tjddnqkf@naver.com" ||
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "totalMaster"
+        // 🎫 토큰이 "최고관리자 아님"이면 문서를 읽지 않고 거절, "최고관리자"면 문서로 한 번 더 확인
+        ((!ck() || tk('tm', false) == true) &&
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "totalMaster")
       );
     }
 
@@ -90,7 +142,7 @@ service cloud.firestore {
     // 앱은 조회할 때 "companyName == 우리 회사" 조건을 붙여서 보낸다(규칙은 조회 조건을 보고 판단).
     // ────────────────────────────────────────────────────────────
     function myCo() {
-      return myUser().get('companyName', '돌캐');
+      return ck() ? tk('co', '') : myUser().get('companyName', '돌캐');
     }
     // 잠금 스위치 — 관리센터 › 운송사 분리에서 "예전 데이터 정리 → 서버 분리 켜기"를 한 뒤에만 회사 검사를 한다.
     // (켜기 전에는 예전 규칙과 똑같이 동작하므로, 이 규칙을 먼저 배포해도 기존 화면이 깨지지 않는다)
@@ -99,7 +151,7 @@ service cloud.firestore {
         get(/databases/$(database)/documents/systemConfig/tenancy).data.get('serverFilter', false) == true;
     }
     function isShipperUser() {
-      return myUser().get('role', '') == 'shipper';
+      return myRole() == 'shipper';
     }
     // 같은 운송사 직원·기사
     function coMatch(d) {
@@ -158,7 +210,7 @@ service cloud.firestore {
     // 🧾 기사에게 보내는 서류 — 지급명세서(driverStatements) · 과태료·사고 서류(fleetPenalties)
     //  직원(기사·화주 제외)은 같은 회사 전체, 기사는 본인 것만 읽고 "확인" 표시만 바꿀 수 있다.
     function isOfficeStaff() {
-      return isTotalMasterUser() || (isApproved() && !(myUser().get('role', '') in ['driver', 'shipper']));
+      return isTotalMasterUser() || (isApproved() && !(myRole() in ['driver', 'shipper']));
     }
     match /{dcol}/{id} {
       allow read: if dcol in ['driverStatements', 'fleetPenalties'] && (
@@ -205,7 +257,7 @@ service cloud.firestore {
     //  문서 이름 = 회사명이라 잠금 스위치와 상관없이 다른 회사는 못 본다.
     match /routeCarrierSettings/{co} {
       allow read: if fareRulesStaff(co);
-      allow create, update: if (isTotalMasterUser() || (isOfficeStaff() && myCo() == co && (isCompanyAdmin(co) || myUser().get('role', '') == 'test')))
+      allow create, update: if (isTotalMasterUser() || (isOfficeStaff() && myCo() == co && (isCompanyAdmin(co) || myRole() == 'test')))
         && request.resource.data.get('companyName', '') == co;
       allow delete: if isTotalMasterUser() || isCompanyAdmin(co);
     }
@@ -219,21 +271,21 @@ service cloud.firestore {
     // ⭐ 2026-11-03 회사 설정(공지 작성 권한 등) — 같은 회사는 읽고, 그 회사 마스터·최고관리자만 바꾼다
     match /companySettings/{co} {
       allow read: if isTotalMasterUser() || (isApproved() && myCo() == co);
-      allow write: if isTotalMasterUser() || (isApproved() && myCo() == co && myUser().get('isMaster', false) == true);
+      allow write: if isTotalMasterUser() || (isApproved() && myCo() == co && myIsMaster());
       // 사업자 목록(bizList)은 관리자·경리·인사도(공지 작성 권한은 못 바꿈)
       // ⭐ 2026-11-04 통합관리자(allMgr = 운송+경리+인사)·경리사무원(acctStaff)도
-      allow create: if isApproved() && myCo() == co && myUser().get('role', '') in ['admin', 'allMgr', 'hrAcct', 'hrManager', 'test', 'acctStaff']
+      allow create: if isApproved() && myCo() == co && myRole() in ['admin', 'allMgr', 'hrAcct', 'hrManager', 'test', 'acctStaff']
         && request.resource.data.keys().hasOnly(['companyName', 'bizList', 'bizListAt', 'bizMemory']);
-      allow update: if isApproved() && myCo() == co && myUser().get('role', '') in ['admin', 'allMgr', 'hrAcct', 'hrManager', 'test', 'acctStaff']
+      allow update: if isApproved() && myCo() == co && myRole() in ['admin', 'allMgr', 'hrAcct', 'hrManager', 'test', 'acctStaff']
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['companyName', 'bizList', 'bizListAt', 'bizMemory']);
       // ⭐ 2026-11-03 청구 사업자 기억(bizMemory: 거래처+상차지+하차지 → 사업자 이름) — 실무자(user)도 오더를 저장할 때 함께 기록한다(이 칸만)
-      allow update: if isApproved() && myCo() == co && myUser().get('role', '') in ['admin', 'allMgr', 'hrAcct', 'hrManager', 'test', 'acctStaff', 'hrStaff', 'user']
+      allow update: if isApproved() && myCo() == co && myRole() in ['admin', 'allMgr', 'hrAcct', 'hrManager', 'test', 'acctStaff', 'hrStaff', 'user']
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['bizMemory']);
     }
     // 🎨 2026-11-03 표 컬럼 색(회사 공용) — 그 회사 직원은 읽고, 둘러보기(viewer) 말고는 바꿀 수 있다
     match /colStyles/{co} {
       allow read: if isTotalMasterUser() || (isApproved() && myCo() == co);
-      allow write: if isTotalMasterUser() || (isApproved() && myCo() == co && myUser().get('role', '') != 'viewer'
+      allow write: if isTotalMasterUser() || (isApproved() && myCo() == co && myRole() != 'viewer'
         && request.resource.data.get('companyName', '') == co);
     }
     match /companyFeatures/{co} {
@@ -248,9 +300,9 @@ service cloud.firestore {
     //  아래 update 조건(조회전용 아닌 그 회사 직원 + 기능 켜짐 + companyName 유지) 그대로 통과 → 규칙 변경 없음
     match /fareRules/{co} {
       allow read: if fareRulesStaff(co);
-      allow create: if fareRulesStaff(co) && myUser().get('role', '') != 'viewer' && (isTotalMasterUser() || fareFeatureOn(co))
+      allow create: if fareRulesStaff(co) && myRole() != 'viewer' && (isTotalMasterUser() || fareFeatureOn(co))
         && request.resource.data.get('companyName', '') == co;
-      allow update: if fareRulesStaff(co) && myUser().get('role', '') != 'viewer' && (isTotalMasterUser() || fareFeatureOn(co))
+      allow update: if fareRulesStaff(co) && myRole() != 'viewer' && (isTotalMasterUser() || fareFeatureOn(co))
         && request.resource.data.get('companyName', '') == co;
       allow delete: if fareRulesStaff(co) && isCompanyAdmin(co);
     }
@@ -276,6 +328,9 @@ service cloud.firestore {
     // ⭐ 2026-11-02 점검 — 권한 관리에서 직접 만든 역할에 '자금관리' 메뉴를 켜면(읽기 → 조회, 쓰기 → 등록·수정·삭제) 자금 데이터도 허용
     //  (화면의 mergeCompanyRoles + getMenuAccess와 같은 순서: 운송사별 설정의 menus가 있으면 공통 역할 menus 대신 쓴다. 내장 역할은 제외)
     function fundsMenuLevel() {
+      return ck() ? tk('fm', 'hidden') : fundsMenuLevelDoc();
+    }
+    function fundsMenuLevelDoc() {
       let r = myUser().get('role', '');
       let p = /databases/$(database)/documents/customRoles/$(r);
       let ov = /databases/$(database)/documents/companyRoleOverrides/$(myUser().get('companyName', ''));
@@ -287,10 +342,10 @@ service cloud.firestore {
         && (exists(p) || o.size() > 0)) ? menus.get('자금관리', 'hidden') : 'hidden';
     }
     match /acctFunds/{id} {
-      allow read: if coMatch(resource.data) && (isTotalMasterUser() || myUser().get('role', '') in ['test', 'admin', 'hrAcct', 'allMgr'] || isExecRoleUser() || fundsMenuLevel() in ['read', 'write']);
-      allow create: if coCreate() && (isTotalMasterUser() || myUser().get('role', '') in ['test', 'admin', 'hrAcct', 'allMgr'] || fundsMenuLevel() == 'write');
-      allow update: if coMatch(resource.data) && coKeep() && (isTotalMasterUser() || myUser().get('role', '') in ['test', 'admin', 'hrAcct', 'allMgr'] || fundsMenuLevel() == 'write');
-      allow delete: if coMatch(resource.data) && (isTotalMasterUser() || myUser().get('role', '') in ['test', 'admin', 'hrAcct', 'allMgr'] || fundsMenuLevel() == 'write');
+      allow read: if coMatch(resource.data) && (isTotalMasterUser() || myRole() in ['test', 'admin', 'hrAcct', 'allMgr'] || isExecRoleUser() || fundsMenuLevel() in ['read', 'write']);
+      allow create: if coCreate() && (isTotalMasterUser() || myRole() in ['test', 'admin', 'hrAcct', 'allMgr'] || fundsMenuLevel() == 'write');
+      allow update: if coMatch(resource.data) && coKeep() && (isTotalMasterUser() || myRole() in ['test', 'admin', 'hrAcct', 'allMgr'] || fundsMenuLevel() == 'write');
+      allow delete: if coMatch(resource.data) && (isTotalMasterUser() || myRole() in ['test', 'admin', 'hrAcct', 'allMgr'] || fundsMenuLevel() == 'write');
     }
     // 화주사 주소록(places) — 화주 본인이 등록한 주소만
     match /places/{id} {
@@ -365,8 +420,8 @@ service cloud.firestore {
     //  · 예전 글(v 없음)은 예전 규칙(10초 배차신청 · contact/info 연락처)을 그대로 따른다.
     // ────────────────────────────────────────────────────────────
     function isMarketCompany() {
-      return isApproved() && !(myUser().get('role', '') in ['driver', 'shipper', 'cafeUser', 'viewer'])
-        && myUser().get('companyName', '') != '';
+      return isApproved() && !(myRole() in ['driver', 'shipper', 'cafeUser', 'viewer'])
+        && myCoRaw() != '';
     }
     function mkDoc(orderId) {
       return get(/databases/$(database)/documents/cafeOrders/$(orderId)).data;
@@ -501,13 +556,19 @@ service cloud.firestore {
         : (m.get('source', 'signup') != 'signup' ? 'lw:' + m.get('companyName', '')
           : (m.get('bizNo', '').replace('[^0-9]', '') != '' ? 'biz:' + m.get('bizNo', '').replace('[^0-9]', '') : 'uid:' + uid));
     }
+    // 🎫 허브 토큰 권한(hv == 1 — functions/authClaims.js) · 회사 키는 토큰(hk), 없으면 회원 문서로 계산
+    function hck() {
+      return request.auth != null && request.auth.token.get('hv', 0) == 1;
+    }
     function hubMyKey() {
-      return hubKeyOf(hubMe(), request.auth.uid);
+      return hck() ? tk('hk', '') : hubKeyOf(hubMe(), request.auth.uid);
     }
     // 승인된 허브 회원 — 로지스웹 계정으로 들어온 회원은 로지스웹 계정도 지금 유효해야 한다(퇴사·정지·계약종료 반영)
     function hubActive() {
-      return isSignedIn() && exists(hubPath(request.auth.uid)) && hubMe().get('status', '') == 'approved'
-        && (hubMe().get('source', '') == 'signup' || isApproved());
+      return isSignedIn() && (
+        (hck() && tk('hs', false) == true && (tk('hsg', false) == true || isApproved())) ||
+        (exists(hubPath(request.auth.uid)) && hubMe().get('status', '') == 'approved'
+          && (hubMe().get('source', '') == 'signup' || isApproved())));
     }
     function hubCanPost() {
       return hubActive() && hubMe().get('role', '') in ['shipper', 'carrier'];
@@ -539,7 +600,7 @@ service cloud.firestore {
     // 허브 가입 회원은 users 문서가 없다 — 없는 문서를 get()하면 오류가 나서 "A || 관리자" 전체가 거절되므로 exists()로 먼저 확인
     function hubAdmin() {
       return isSignedIn() && (request.auth.token.get('email', '') == "tjddnqkf@naver.com" ||
-        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        ((!ck() || tk('tm', false) == true) && exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', '') == 'totalMaster'));
     }
     // 기존 로지스웹 계정 연결 — users 문서와 회사(기사는 차량번호까지)가 같아야
@@ -946,8 +1007,8 @@ service cloud.firestore {
     match /hubPostRequests/{id} {
       allow read: if isSignedIn() && (resource.data.get('uid', '') == request.auth.uid || hubAdmin());
       allow create: if isApproved() && request.resource.data.get('uid', '') == request.auth.uid
-        && !(myUser().get('role', '') in ['driver', 'shipper', 'cafeUser', 'viewer'])
-        && (request.resource.data.get('companyName', '') == myUser().get('companyName', '') || isTotalMasterUser())
+        && !(myRole() in ['driver', 'shipper', 'cafeUser', 'viewer'])
+        && (request.resource.data.get('companyName', '') == myCoRaw() || isTotalMasterUser())
         && request.resource.data.get('status', '') == 'requested'
         && request.resource.data.get('lwOrderId', '') is string && request.resource.data.get('lwOrderId', '').size() > 0
         && request.resource.data.keys().hasOnly(['uid', 'companyName', 'lwOrderId', 'order', 'status', 'createdAt']);
@@ -1070,17 +1131,17 @@ service cloud.firestore {
     // 🧾 플랫폼 청구·입금 기록 — 최고관리자는 전부, 고객사는 자기 회사 청구서만 읽고 "입금 알림(payNotice)"만 남길 수 있다
     // ⭐ 2026-11-03 구독·결제 권한(src/billingAccess.js와 같은 기준) — 보기: 경리팀·재무·임원·대표 / 입금 알림: 경리팀·재무만
     function isBillingFinance() {
-      return myUser().get('role', '') in ['test', 'hrAcct', 'allMgr', 'acctStaff'] || string(myUser().get('team', '')).matches('.*(경리|회계|재무).*');
+      return myRole() in ['test', 'hrAcct', 'allMgr', 'acctStaff'] || myTeamFin();
     }
     function isBillingViewer() {
       return isBillingFinance() || isExecProfileUser();
     }
     match /platformInvoices/{id} {
       allow read: if isTotalMasterUser()
-        || (isApproved() && resource.data.company == myUser().get('companyName', '') && isBillingViewer());
+        || (isApproved() && resource.data.company == myCoRaw() && isBillingViewer());
       allow write: if isTotalMasterUser();
       allow update: if isApproved()
-        && resource.data.company == myUser().get('companyName', '')
+        && resource.data.company == myCoRaw()
         && isBillingFinance()
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['payNotice']);
     }
@@ -1089,15 +1150,15 @@ service cloud.firestore {
     //  ⭐ 2026-11-07 보안 — 다른 회사 항목을 덮어쓰거나 지우지 못하게(고치기는 같은 회사 이름의 항목만)
     match /publicCompanies/{id} {
       allow read: if true;
-      allow create: if isTotalMasterUser() || (isApproved() && !isShipperUser() && request.resource.data.get('companyName', '') == myUser().get('companyName', ''));
-      allow update: if isTotalMasterUser() || (isApproved() && !isShipperUser() && request.resource.data.get('companyName', '') == myUser().get('companyName', '')
-        && resource.data.get('companyName', '') == myUser().get('companyName', ''));
+      allow create: if isTotalMasterUser() || (isApproved() && !isShipperUser() && request.resource.data.get('companyName', '') == myCoRaw());
+      allow update: if isTotalMasterUser() || (isApproved() && !isShipperUser() && request.resource.data.get('companyName', '') == myCoRaw()
+        && resource.data.get('companyName', '') == myCoRaw());
       allow delete: if isTotalMasterUser();
     }
     //  ⭐ 2026-11-07 보안 — 한 건 조회는 우리 회사(화주는 연동 운송사) 것만 · 전체 목록은 최고관리자만(예전엔 로그인한 누구나 모든 회사 요금제·계약 상태)
     match /companyPlans/{company} {
-      allow get: if isTotalMasterUser() || (isSignedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid))
-        && (myUser().get('companyName', '돌캐') == company || linkedCoOf(myUser()) == company));
+      allow get: if isTotalMasterUser() || (isSignedIn() && (ck() || exists(/databases/$(database)/documents/users/$(request.auth.uid)))
+        && (myCo() == company || myLinkedCo() == company));
       allow list: if isTotalMasterUser();
       allow write: if isTotalMasterUser();
     }
@@ -1109,7 +1170,7 @@ service cloud.firestore {
     // 💳 요금제 변경 요청 — 고객사는 자기 회사 이름으로만 만들 수 있고, 처리는 최고관리자
     match /planRequests/{id} {
       // ⭐ 2026-11-01 요금제 변경 요청은 경리팀(경리·경리+인사·경리/회계 부서)만 · 2026-11-03 재무 부서 · 최고관리자 추가(임원·대표는 보기만)
-      allow create: if isTotalMasterUser() || (isApproved() && request.resource.data.company == myUser().get('companyName', '') && isBillingFinance());
+      allow create: if isTotalMasterUser() || (isApproved() && request.resource.data.company == myCoRaw() && isBillingFinance());
       allow read, update, delete: if isTotalMasterUser();
     }
     match /siteConfig/{docId} {
@@ -1157,8 +1218,8 @@ service cloud.firestore {
     function isHrStaff() {
       return isSignedIn() && (
         request.auth.token.get('email', '') == "tjddnqkf@naver.com" ||
-        myUser().get('role', '') in ['hrManager', 'hrAcct', 'allMgr', 'hrStaff', 'totalMaster'] ||
-        myUser().get('team', '').matches('.*인사.*'));
+        myRole() in ['hrManager', 'hrAcct', 'allMgr', 'hrStaff', 'totalMaster'] ||
+        myTeamHr());
     }
     function hireDateSame() {
       return resource == null ||
@@ -1182,7 +1243,7 @@ service cloud.firestore {
       return isTotalMasterUser() || (isApproved() && (
         (!isShipperUser() && (d.get('companyName', '돌캐') == myCo() || linkedCoOf(d) == myCo())) ||
         (isShipperUser() && (d.get('companyName', '') == myCo()
-          || (linkedCoOf(myUser()) != '' && d.get('companyName', '') == linkedCoOf(myUser()))))));
+          || (myLinkedCo() != '' && d.get('companyName', '') == myLinkedCo())))));
     }
     // 내가 관리할 수 있는 범위의 사람 — 같은 운송사 직원·기사 / 우리 회사에 연동된 화주 / (화주사 계정은) 같은 화주사 사람
     //  (규칙 계산 한도 1,000개 때문에 내 문서·역할·회사를 한 번만 읽어 넘긴다)
@@ -1192,9 +1253,8 @@ service cloud.firestore {
         || (shipper && d.get('role', '') == 'shipper' && d.get('companyName', '') == co);
     }
     function userInMyScope(d) {
-      let me = myUser();
-      return isApproved() && !(me.get('role', '') in ['driver', 'cafeUser', 'viewer'])
-        && scopeOf(d, me.get('companyName', '돌캐'), me.get('role', '') == 'shipper');
+      return isApproved() && !(myRole() in ['driver', 'cafeUser', 'viewer'])
+        && scopeOf(d, myCo(), myRole() == 'shipper');
     }
     // 역할·승인·권한·회사를 바꿀 수 있는 사람(회사 관리자급 · 인사 · 회사 마스터 · 화주사 마스터 · 임원 역할) — isCompanyAdmin · isHrStaff와 같은 기준
     function mgrOf(me) {
@@ -1204,15 +1264,17 @@ service cloud.firestore {
         || string(me.get('team', '')).matches('.*인사.*') || isExecRoleUser();
     }
     function userManager() {
-      return mgrOf(myUser());
+      return ck()
+        ? (tk('ms', false) == true || tk('r', '') in ['admin', 'allMgr', 'hrManager', 'hrAcct', 'hrStaff', 'totalMaster']
+          || (tk('r', '') == 'shipper' && tk('pm', false) == true) || tk('hr', false) == true || tk('exec', false) == true)
+        : mgrOf(myUser());
     }
     function userSensitiveKeys() {
       return ['role', 'approved', 'isMaster', 'permissions', 'subAdmin', 'subAdminPrevRole', 'companyName', 'linkedTransportCompany', 'companyCode', 'businessNumber'];
     }
     function otherUserWriteOk() {
-      let me = myUser();
-      let r = me.get('role', '');
-      let co = me.get('companyName', '돌캐');
+      let r = myRole();
+      let co = myCo();
       let shipper = r == 'shipper';
       let after = request.resource.data;
       let aff = resource == null ? after.keys() : after.diff(resource.data).affectedKeys();
@@ -1222,7 +1284,7 @@ service cloud.firestore {
           // 기사 승인·승인 해제(기사관리 · 기사 계정) — 같은 회사 사무 직원, 역할은 기사 그대로
           || (!shipper && after.get('role', '') == 'driver' && (resource == null || resource.data.get('role', '') == 'driver')
               && !aff.hasAny(['role', 'isMaster', 'permissions', 'subAdmin', 'subAdminPrevRole', 'companyName', 'linkedTransportCompany', 'companyCode']))
-          || mgrOf(me));
+          || userManager());
     }
     // 본인 문서 — 이미 승인된 계정은 회사·연동 운송사·마스터·권한·재직 상태를 스스로 못 바꾼다
     //  (예전엔 승인된 직원이 자기 companyName을 다른 회사로 바꾸면 그 회사 데이터가 바로 열렸다 · 퇴사 처리를 스스로 되돌릴 수 있었다)
@@ -1356,7 +1418,8 @@ service cloud.firestore {
     function isSuperEmail() {
       return request.auth.token.get('email', '') == "tjddnqkf@naver.com"
         // ⭐ 2026-11-05 부관리자 — 최고관리자와 같은 권한(최고관리자 본 계정이 지정: role totalMaster + subAdmin)
-        || (isSignedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        || (isSignedIn() && (!ck() || (tk('tm', false) == true && tk('sa', false) == true))
+            && exists(/databases/$(database)/documents/users/$(request.auth.uid))
             && myUser().get('role', '') == 'totalMaster' && myUser().get('subAdmin', false) == true);
     }
     // ⭐ 2026-11-05 다른 사람 계정에 최고관리자·부관리자 권한을 넣는 것은 최고관리자만(직원이 직원에게 올려 주던 구멍 막음)
@@ -1367,13 +1430,16 @@ service cloud.firestore {
         && request.resource.data.get('subAdmin', false) == (resource == null ? false : resource.data.get('subAdmin', false)));
     }
     function isCompanyAdmin(company) {
-      return isSuperEmail() || myUser().get('role', '') == 'totalMaster' ||
-        ((myUser().get('role', '') in ['admin', 'allMgr', 'hrManager', 'hrAcct'] || isExecRoleUser()) && myUser().get('companyName', '') == company);
+      return isTotalMasterUser() ||
+        ((myRole() in ['admin', 'allMgr', 'hrManager', 'hrAcct'] || isExecRoleUser()) && myCoRaw() == company);
     }
     // 👔 2026-10-31 권한 관리에서 "임원 화면"으로 정한 역할(직접 만든 역할) — 이름에 '임원'이 들어가고 화면 설정이 없으면 임원으로 본다
     // ⭐ 2026-11-02 점검 — 운송사별 권한(companyRoleOverrides/{회사}.roles)에서 만든 역할·"임원 화면" 지정도 임원으로 본다
     //  (화면의 mergeCompanyRoles + roleScreen과 같은 순서: 회사 설정 값이 공통 역할 값을 덮어쓴다)
     function isExecRoleUser() {
+      return ck() ? tk('exec', false) == true : isExecRoleUserDoc();
+    }
+    function isExecRoleUserDoc() {
       let r = myUser().get('role', '');
       let p = /databases/$(database)/documents/customRoles/$(r);
       let ov = /databases/$(database)/documents/companyRoleOverrides/$(myUser().get('companyName', ''));
@@ -1388,11 +1454,11 @@ service cloud.firestore {
     }
     // 💼 2026-11-01 경리(test)는 회사 결재 중 지출결의·근태(연차)·보고(사직서)만 읽는다 — 장부 가져오기·퇴직 정산·연차 계산
     function isAcctApprovalReader(d) {
-      return myUser().get('role', '') in ['test', 'acctStaff'] && myUser().get('companyName', '') == d.get('company', '')
+      return myRole() in ['test', 'acctStaff'] && myCoRaw() == d.get('company', '')
         && d.get('cat', '') in ['expense', 'leave', 'report'];
     }
     function isExecUser() {
-      return myUser().get('position', '') in ['이사', '상무', '전무', '부사장', '사장', '대표', '대표이사', '본부장', '임원'];
+      return myPosExec();
     }
     // ⭐ 2026-11-02 점검 — 결재 문서 수정 규칙 보조 함수(바뀐 필드 / 기안자의 결재 취소 요청 형식 확인)
     function apAff() {
@@ -1412,7 +1478,7 @@ service cloud.firestore {
     // ⭐ 2026-11-02 점검 — 결재 설정(approvalSettings/{회사}) 전용 규칙: 관리자·임원만 설정을 바꾸고,
     //  일반 직원은 본인 자동 승인 항목만(임원 표시 exec:true·임원 직책은 못 넣음). 일일업무일지 자동 승인은 임원·관리자만
     function isExecProfileUser() {
-      return isExecUser() || myUser().get('team', '') == '임원' || isExecRoleUser();
+      return isExecUser() || myTeamExec() || isExecRoleUser();
     }
     function approvalSettingsWriteOk(co) {
       let before = resource == null ? {} : resource.data;
@@ -1479,19 +1545,19 @@ service cloud.firestore {
         && resource.data.get('cancel', {}).get('status', '') != 'pending'
         && apAff().hasOnly(['paid', 'history', 'updatedAt', 'drafterUnread'])
         // ⭐ 2026-11-07 운송 관리자(admin)·최종 결재자는 지급 처리 불가 — 경리 역할·재무 부서만(통합관리자·통합인사관리자는 화면 전환으로 앱에서 한 번 더 막음)
-        && (myUser().get('role', '') in ['test', 'acctStaff', 'hrAcct', 'allMgr', 'totalMaster'] || myUser().get('team', '').matches('.*(재무|경리|회계|총무).*'))
-        && (myUser().get('companyName', '') == resource.data.get('company', '') || isTotalMasterUser());
+        && (myRole() in ['test', 'acctStaff', 'hrAcct', 'allMgr', 'totalMaster'] || myTeamPay())
+        && (myCoRaw() == resource.data.get('company', '') || isTotalMasterUser());
       allow delete: if false;
     }
 
     // 🗂 사내 게시판(자유·관리자·임원) — 볼 수 있는 사람만 읽고 쓴다
     // 임원게시판은 권한(임원 기준)을 정하기 전까지 최고관리자만
     function canSeeBoard(b) {
-      return b == 'free' || isSuperEmail() || myUser().get('role', '') == 'totalMaster'
-        || (b == 'admin' && (myUser().get('role', '') in ['admin', 'allMgr', 'hrManager', 'hrAcct'] || isExecRoleUser()));
+      return b == 'free' || isTotalMasterUser()
+        || (b == 'admin' && (myRole() in ['admin', 'allMgr', 'hrManager', 'hrAcct'] || isExecRoleUser()));
     }
     function isBoardAdmin() {
-      return isSuperEmail() || myUser().get('role', '') in ['admin', 'allMgr', 'totalMaster', 'hrManager', 'hrAcct'];
+      return isSuperEmail() || myRole() in ['admin', 'allMgr', 'totalMaster', 'hrManager', 'hrAcct'];
     }
     // ⭐ 2026-11-03 공지 작성 권한 — 회사 마스터가 정함(companySettings/{회사}.noticeWriters: admin | exec | all)
     function noticePolicy() {
@@ -1499,8 +1565,8 @@ service cloud.firestore {
         ? get(/databases/$(database)/documents/companySettings/$(myCo())).data.get('noticeWriters', 'admin') : 'admin';
     }
     function canPostNotice() {
-      return isBoardAdmin() || (isApproved() && !(myUser().get('role', '') in ['viewer', 'driver', 'shipper', 'cafeUser']) && (
-        myUser().get('isMaster', false) == true || noticePolicy() == 'all' || (noticePolicy() == 'exec' && myUser().get('team', '') == '임원')));
+      return isBoardAdmin() || (isApproved() && !(myRole() in ['viewer', 'driver', 'shipper', 'cafeUser']) && (
+        myIsMaster() || noticePolicy() == 'all' || (noticePolicy() == 'exec' && myTeamExec())));
     }
     // 💬 2026-11-03 댓글·좋아요(공지·게시판 공용, 문서 안 배열)
     //  likes: 내 uid 하나만 넣거나 뺄 수 있다(남의 좋아요는 못 건드림) · comments: 500개까지
@@ -1514,7 +1580,7 @@ service cloud.firestore {
       return request.resource.data.get('comments', []) is list && request.resource.data.get('comments', []).size() <= 500;
     }
     function canTalkUser() {
-      return isTotalMasterUser() || !(myUser().get('role', '') in ['viewer', 'driver', 'shipper', 'cafeUser']);
+      return isTotalMasterUser() || !(myRole() in ['viewer', 'driver', 'shipper', 'cafeUser']);
     }
     // 📢 공지사항 — 누구나 읽고, 쓰기·수정·삭제는 관리자(관리자·인사관리자·최고관리자)만
     //  🔒 2026-11-03 지정 공지(teams·targetUids) 비공개는 화면(notifyCore.canSeeTargetedNotice)과 서버 푸시에서 지킨다.
@@ -1523,17 +1589,17 @@ service cloud.firestore {
       // 🔒 같은 운송사 공지만 · 화주사는 화주 대상 공지만
       // ⭐ 2026-11-07 보안 — 화주는 연동 운송사의 화주 대상 공지만(예전엔 모든 운송사의 화주 공지가 보였다)
       allow read: if coMatch(resource.data) || (isApproved() && isShipperUser() && resource.data.get('audience', '') in ['shipper', 'all']
-          && linkedCoOf(myUser()) != '' && resource.data.get('companyName', '') == linkedCoOf(myUser()))
+          && myLinkedCo() != '' && resource.data.get('companyName', '') == myLinkedCo())
         // ⭐ 2026-11-03 기사 대상 공지(audiences에 driver) — 같은 회사 기사(승인된 계정)도 읽는다
-        || (isApproved() && myUser().get('role', '') == 'driver' && 'driver' in resource.data.get('audiences', []) && resource.data.get('companyName', '') == myCo());
+        || (isApproved() && myRole() == 'driver' && 'driver' in resource.data.get('audiences', []) && resource.data.get('companyName', '') == myCo());
       allow create: if coCreate() && canPostNotice();
       // 수정·삭제는 작성자 본인만(최고관리자 예외). 작성자 기록이 없는 옛 공지는 공지 작성 권한자가 관리
       allow update, delete: if coMatch(resource.data) && canPostNotice()
         && (resource.data.get('authorUid', '') == request.auth.uid || resource.data.get('authorUid', '') == ''
-            || isSuperEmail() || myUser().get('role', '') == 'totalMaster');
+            || isTotalMasterUser());
       // ⭐ 2026-11-04 관리자·마스터는 같은 회사 공지(임원이 올린 것 포함)를 삭제할 수 있다(수정은 작성자만)
       allow delete: if coMatch(resource.data) && isApproved()
-        && (myUser().get('role', '') in ['admin', 'allMgr'] || myUser().get('isMaster', false) == true);
+        && (myRole() in ['admin', 'allMgr'] || myIsMaster());
       // 읽음 표시는 같은 회사 직원 누구나
       allow update: if coMatch(resource.data) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['readBy']);
       // 💬 댓글·좋아요는 같은 회사 직원(조회전용·기사·화주 제외)
@@ -1546,10 +1612,10 @@ service cloud.firestore {
       allow read: if coMatch(resource.data);
       allow create: if coCreate();
       allow update: if coMatch(resource.data) && (resource.data.get('authorUid', '') == request.auth.uid || resource.data.get('authorUid', '') == ''
-        || isSuperEmail() || myUser().get('role', '') == 'totalMaster'
+        || isTotalMasterUser()
         || request.resource.data.diff(resource.data).affectedKeys().hasOnly(['readBy']));
       allow delete: if coMatch(resource.data) && (resource.data.get('authorUid', '') == request.auth.uid || resource.data.get('authorUid', '') == ''
-        || isSuperEmail() || myUser().get('role', '') == 'totalMaster');
+        || isTotalMasterUser());
     }
     match /boardPosts/{id} {
       allow read: if coMatch(resource.data) && canSeeBoard(resource.data.board);
@@ -1560,7 +1626,7 @@ service cloud.firestore {
             || (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['readBy', 'comments', 'likes'])
                 && likesOnlyMine() && commentsOk()));
       // 삭제는 작성자 본인만(최고관리자는 운영상 예외)
-      allow delete: if coMatch(resource.data) && canSeeBoard(resource.data.board) && (resource.data.get('authorUid', '') == request.auth.uid || isSuperEmail() || myUser().get('role', '') == 'totalMaster');
+      allow delete: if coMatch(resource.data) && canSeeBoard(resource.data.board) && (resource.data.get('authorUid', '') == request.auth.uid || isTotalMasterUser());
     }
     // sessionLogs — 아래 "보안 점검" 묶음에서 정함(최고관리자만 열람)
 
@@ -1578,7 +1644,7 @@ service cloud.firestore {
       allow read: if isTotalMasterUser() || (isApproved() && myCo() == co);
       allow write: if isTotalMasterUser();
       // ⭐ 2026-11-04 최고관리자가 "마스터 권한 관리"를 켠 회사(companyFeatures/{회사}.masterRolePerms)는 그 회사 마스터도 자기 회사 것만
-      allow write: if isApproved() && myCo() == co && myUser().get('isMaster', false) == true
+      allow write: if isApproved() && myCo() == co && myIsMaster()
         && exists(/databases/$(database)/documents/companyFeatures/$(co))
         && get(/databases/$(database)/documents/companyFeatures/$(co)).data.get('masterRolePerms', false) == true
         && request.resource.data.get('companyName', co) == co;
@@ -1653,9 +1719,9 @@ service cloud.firestore {
     // ════════════════════════════════════════════════════════════
     function payrollStaff() {
       return isTotalMasterUser() || (isApproved()
-        && !(myUser().get('role', '') in ['driver', 'shipper', 'cafeUser'])
-        && (myUser().get('role', '') in ['test', 'acctStaff', 'hrAcct', 'allMgr']
-          || myUser().get('team', '').matches('.*(재무|경리|회계|총무).*')));
+        && !(myRole() in ['driver', 'shipper', 'cafeUser'])
+        && (myRole() in ['test', 'acctStaff', 'hrAcct', 'allMgr']
+          || myTeamPay()));
     }
     function payUnlocked(co) {
       let p = /databases/$(database)/documents/payrollUnlocks/$(request.auth.uid);
@@ -1671,7 +1737,7 @@ service cloud.firestore {
     }
     // 연차 촉진 관리(발송·날짜 지정) — 인사팀(isHrStaff) + 회사 마스터
     function leaveManager() {
-      return isApproved() && (isHrStaff() || myUser().get('isMaster', false) == true);
+      return isApproved() && (isHrStaff() || myIsMaster());
     }
     function payCo(d) {
       return isTotalMasterUser() || d.get('companyName', '') == myCo();
@@ -1740,7 +1806,7 @@ service cloud.firestore {
     match /leavePromotions/{id} {
       allow read: if (resource != null && isSignedIn() && resource.data.get('uid', '') == request.auth.uid)
         || (resource == null && isApproved())
-        || ((leaveManager() || isTotalMasterUser() || (isApproved() && myUser().get('role', '') in ['test', 'acctStaff'])) && payCo(resource.data));
+        || ((leaveManager() || isTotalMasterUser() || (isApproved() && myRole() in ['test', 'acctStaff'])) && payCo(resource.data));
       allow create: if (leaveManager() || isTotalMasterUser()) && payCo(request.resource.data);
       allow update: if ((leaveManager() || isTotalMasterUser()) && payCo(resource.data)
           && request.resource.data.get('companyName', '') == resource.data.get('companyName', '')
@@ -1762,8 +1828,8 @@ service cloud.firestore {
     //  회사 설정(받는 사람 recipients{uid:true|false}): 그 회사 직원은 읽고, 최고관리자·회사 관리자(isCompanyAdmin)·마스터·대표 직책만 바꾼다
     match /dailyReportCompany/{co} {
       allow read: if isTotalMasterUser() || (isApproved() && myCo() == co);
-      allow create, update: if (isTotalMasterUser() || (isApproved() && myCo() == co && (isCompanyAdmin(co) || myUser().get('isMaster', false) == true
-          || myUser().get('position', '') in ['대표', '대표이사', '사장'])))
+      allow create, update: if (isTotalMasterUser() || (isApproved() && myCo() == co && (isCompanyAdmin(co) || myIsMaster()
+          || myPosCeo())))
         && request.resource.data.get('companyName', '') == co;
       allow delete: if isTotalMasterUser();
     }
@@ -1897,7 +1963,7 @@ service cloud.firestore {
     //  채팅 프로필(이름·사진·상태 문구) — 같은 회사(화주는 연동 운송사도)만 본다. 쓰기는 본인만, 회사 칸은 내 회사로만
     function chatProfileVisible(d) {
       return isTotalMasterUser() || (isApproved() && (d.get('company', '') == myCo()
-        || (isShipperUser() && linkedCoOf(myUser()) != '' && d.get('company', '') == linkedCoOf(myUser()))));
+        || (isShipperUser() && myLinkedCo() != '' && d.get('company', '') == myLinkedCo())));
     }
     match /chat_profiles/{uid} {
       allow get: if (isSignedIn() && request.auth.uid == uid) || chatProfileVisible(resource.data);
@@ -1919,9 +1985,9 @@ service cloud.firestore {
       allow read: if isTotalMasterUser()
         || (isSignedIn() && resource.data.get('userId', '') == request.auth.uid)
         || (isApproved() && !isShipperUser() && resource.data.get('companyName', '') == myCo())
-        || (isApproved() && isShipperUser() && linkedCoOf(myUser()) != '' && resource.data.get('companyName', '') == linkedCoOf(myUser()));
+        || (isApproved() && isShipperUser() && myLinkedCo() != '' && resource.data.get('companyName', '') == myLinkedCo());
       allow update: if isTotalMasterUser()
-        || (isApproved() && !isShipperUser() && !(myUser().get('role', '') in ['driver', 'viewer', 'cafeUser'])
+        || (isApproved() && !isShipperUser() && !(myRole() in ['driver', 'viewer', 'cafeUser'])
           && resource.data.get('companyName', '') == myCo()
           && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['companyName', 'status', 'type', 'companyCode', 'userId']))
         || (isSignedIn() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['address'])
@@ -1958,7 +2024,7 @@ service cloud.firestore {
       allow read: if isTotalMasterUser() || (isSignedIn() && resource.data.get('userId', '') == request.auth.uid)
         || (isOfficeStaff() && resource.data.get('transportCompany', '') == myCo());
       allow create: if isApproved() && request.resource.data.get('userId', '') == request.auth.uid
-        && (!isShipperUser() || request.resource.data.get('transportCompany', '') == linkedCoOf(myUser()));
+        && (!isShipperUser() || request.resource.data.get('transportCompany', '') == myLinkedCo());
       allow update: if isTotalMasterUser() || (isOfficeStaff() && resource.data.get('transportCompany', '') == myCo()
         && request.resource.data.get('transportCompany', '') == resource.data.get('transportCompany', '')
         && request.resource.data.get('userId', '') == resource.data.get('userId', ''));

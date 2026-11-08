@@ -18,10 +18,15 @@ service firebase.storage {
 
     // ⭐ 2026-11-06 로지스웹 허브 콜 — 회원 서류 · 프로필 사진 · 인수증 사진
     //  관리자 = 최고관리자 이메일 또는 users/{uid}.role == "totalMaster"(Firestore 규칙 isTotalMasterUser와 같은 기준)
+    // 🎫 2026-11-08 로그인 토큰 권한(custom claims, v == 1 — functions/authClaims.js가 서버에서만 넣는다 · firestore.rules ck()와 같다)
+    //  토큰이 있으면 Firestore 문서를 읽지 않는다(서비스 간 읽기 비용 절약). 최고관리자는 토큰 + 문서로 한 번 더 확인
+    function ck() {
+      return request.auth != null && request.auth.token.get('v', 0) == 1;
+    }
     function hubAdmin() {
       return request.auth != null && (
         request.auth.token.get('email', '') == "tjddnqkf@naver.com" ||
-        (firestore.exists(/databases/(default)/documents/users/$(request.auth.uid)) &&
+        ((!ck() || request.auth.token.get('tm', false) == true) && firestore.exists(/databases/(default)/documents/users/$(request.auth.uid)) &&
          firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.get('role', '') == 'totalMaster'));
     }
     function hubFileOk(maxMb) {
@@ -66,8 +71,17 @@ service firebase.storage {
     function payUser() {
       return firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data;
     }
+    // 토큰 기준(문서 기준과 같은 계산 — ap 승인 · st 재직 · r 역할 · pay 부서 재무·경리·회계·총무)
+    function payStaffClaims() {
+      return ck() && request.auth.token.get('ap', false) == true && request.auth.token.get('st', false) == true
+        && (request.auth.token.get('r', '') in ['test', 'acctStaff', 'hrAcct', 'allMgr']
+          || (!(request.auth.token.get('r', '') in ['driver', 'shipper', 'cafeUser']) && request.auth.token.get('pay', false) == true));
+    }
+    function payCoSt() {
+      return ck() ? request.auth.token.get('co', '') : payUser().get('companyName', '');
+    }
     function payStaffSt() {
-      return request.auth != null && (hubAdmin() || (
+      return request.auth != null && (hubAdmin() || payStaffClaims() || (
         firestore.exists(/databases/(default)/documents/users/$(request.auth.uid))
         && payUser().get('approved', true) != false
         && payUser().get('employmentStatus', '') != '퇴사'
@@ -79,7 +93,7 @@ service firebase.storage {
       return request.auth != null && firestore.exists(p)
         && firestore.get(p).data.get('companyName', '').replace('[/\\s#?\\[\\]]', '_') == coKey
         && firestore.get(p).data.expiresAt > request.time
-        && (hubAdmin() || payUser().get('companyName', '').replace('[/\\s#?\\[\\]]', '_') == coKey);
+        && (hubAdmin() || payCoSt().replace('[/\\s#?\\[\\]]', '_') == coKey);
     }
     match /payrollDocs/{coKey}/{uid}/{file} {
       allow read, delete: if payStaffSt() && payUnlockedSt(coKey);
