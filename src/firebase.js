@@ -30,6 +30,8 @@ import {
   arrayUnion,
 } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
+import { initializeAppCheck, ReCaptchaEnterpriseProvider, getToken as getAppCheckToken } from "firebase/app-check";
+import { setupAppCheck } from "./appCheckClient";
 import {
   getMessaging,
   onMessage,
@@ -60,6 +62,15 @@ export const DEFAULT_COMPANY = "돌캐";
 export const FUNCTIONS_BASE = USE_EMU ? "http://127.0.0.1:5001/demo-kpflow/us-central1" : `https://us-central1-${firebaseConfig.projectId}.cloudfunctions.net`;
 
 const app = initializeApp(firebaseConfig);
+// 🛡 2026-11-08 App Check — VITE_APPCHECK_SITE_KEY 가 없으면(설정 전·로컬) 아무것도 안 한다. 설명: src/appCheckClient.js · docs/appcheck-setup.md
+export const appCheck = setupAppCheck({
+  app,
+  sdk: { initializeAppCheck, ReCaptchaEnterpriseProvider, getToken: getAppCheckToken },
+  siteKey: import.meta.env.VITE_APPCHECK_SITE_KEY,
+  debug: import.meta.env.VITE_APPCHECK_DEBUG,
+  functionsBase: FUNCTIONS_BASE,
+  disabled: USE_EMU,
+});
 
 // ⭐ 2026-11-06 관리자메뉴 › 모바일 미리보기 — iframe(/app?kpmpv=1) 안의 앱은 저장소에서 로그인을 따로 찾지 않고
 //  "지금 이 창(부모)에 로그인한 계정"을 그대로 받아 쓴다. 예전엔 iframe이 IndexedDB에 남아 있던 다른 계정

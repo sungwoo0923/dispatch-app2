@@ -22,6 +22,8 @@ const isHubDriverEmail = (e) => /@hubdriver\.run25\.kr$/i.test(String(e || ""));
 function register({ functions, db, FieldValue, getAuth }) {
   const out = {};
   const HttpsError = functions.https.HttpsError;
+  // 🛡 2026-11-08 App Check — APPCHECK_MODE=enforce 일 때만 enforceAppCheck(functions/appCheck.js)
+  const onCall = (h) => functions.runWith(require("./appCheck").appCheckCallOpts()).https.onCall(h);
   const isAdmin = async (context) => {
     if (!context.auth) return false;
     if (context.auth.token?.email === MASTER) return true;
@@ -29,7 +31,7 @@ function register({ functions, db, FieldValue, getAuth }) {
     return u.exists && u.data().role === "totalMaster";
   };
 
-  out.hubBindDevice = functions.https.onCall(async (data, context) => {
+  out.hubBindDevice = onCall(async (data, context) => {
     if (!context.auth) throw new HttpsError("unauthenticated", "로그인해 주세요");
     const uid = context.auth.uid;
     const token = context.auth.token || {};
@@ -59,7 +61,7 @@ function register({ functions, db, FieldValue, getAuth }) {
     return { ok: true, bound: "moved", revoked: !!d.id };
   });
 
-  out.hubAdminResetDevice = functions.https.onCall(async (data, context) => {
+  out.hubAdminResetDevice = onCall(async (data, context) => {
     if (!(await isAdmin(context))) throw new HttpsError("permission-denied", "관리자만 할 수 있어요");
     const uid = String(data?.uid || "");
     if (!uid) throw new HttpsError("invalid-argument", "회원을 골라 주세요");
@@ -68,7 +70,7 @@ function register({ functions, db, FieldValue, getAuth }) {
     return { ok: true };
   });
 
-  out.hubAdminSetDriverLogin = functions.https.onCall(async (data, context) => {
+  out.hubAdminSetDriverLogin = onCall(async (data, context) => {
     if (!(await isAdmin(context))) throw new HttpsError("permission-denied", "관리자만 할 수 있어요");
     const uid = String(data?.uid || "");
     const ms = await db.collection("hubMembers").doc(uid).get();

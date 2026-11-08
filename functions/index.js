@@ -16,6 +16,9 @@ const fetch = require("node-fetch");
 const { GoogleAuth } = require("google-auth-library");
 
 initializeApp();
+// 🛡 2026-11-08 App Check — 모드(functions/.env APPCHECK_MODE=off|monitor|enforce) · 설명은 functions/appCheck.js · docs/appcheck-setup.md
+const { makeAppCheckGate, appCheckCallOpts, CORS_HEADERS: APPCHECK_CORS } = require("./appCheck");
+const { gate: appCheckGate } = makeAppCheckGate({ verifyToken: (t) => require("firebase-admin/app-check").getAppCheck().verifyToken(t) });
 
 const db = getFirestore();
 const messaging = getMessaging();
@@ -1320,8 +1323,9 @@ const PUSH_SEND_KEY = "kpflow-push-2026";
 exports.sendPushNotification = functions.https.onRequest(async (req, res) => {
   res.set("Access-Control-Allow-Origin", "*");
   res.set("Access-Control-Allow-Methods", "POST, OPTIONS");
-  res.set("Access-Control-Allow-Headers", "Authorization, Content-Type");
+  res.set("Access-Control-Allow-Headers", APPCHECK_CORS);
   if (req.method === "OPTIONS") { res.status(204).send(""); return; }
+  if (!(await appCheckGate(req, res, "sendPushNotification"))) return; // 🛡 App Check(functions/appCheck.js)
   if (req.method !== "POST") { res.status(405).send("POST만 허용됩니다."); return; }
 
   let body = req.body;
@@ -3606,8 +3610,9 @@ async function isTotalMasterReq(req) {
 exports.tenantMigrate = functions.runWith({ timeoutSeconds: 300, memory: "512MB" }).https.onRequest(async (req, res) => {
   res.set("Access-Control-Allow-Origin", "*");
   res.set("Access-Control-Allow-Methods", "POST, OPTIONS");
-  res.set("Access-Control-Allow-Headers", "Authorization, Content-Type");
+  res.set("Access-Control-Allow-Headers", APPCHECK_CORS);
   if (req.method === "OPTIONS") { res.status(204).send(""); return; }
+  if (!(await appCheckGate(req, res, "tenantMigrate"))) return; // 🛡 App Check(functions/appCheck.js)
   if (!(await isTotalMasterReq(req))) { res.status(403).json({ error: "FORBIDDEN" }); return; }
   const col = String(req.body?.col || "");
   const mode = String(req.body?.mode || "fill"); // fill(돌캐로 채우기) | scan(점검만) | purge(기준일 이전 삭제)
@@ -3678,7 +3683,9 @@ exports.tenantMigrate = functions.runWith({ timeoutSeconds: 300, memory: "512MB"
 exports.driverSearch = functions.https.onRequest(async (req, res) => {
   res.set("Access-Control-Allow-Origin", "*");
   res.set("Access-Control-Allow-Methods", "GET, OPTIONS");
+  res.set("Access-Control-Allow-Headers", APPCHECK_CORS);
   if (req.method === "OPTIONS") { res.status(204).send(""); return; }
+  if (!(await appCheckGate(req, res, "driverSearch"))) return; // 🛡 App Check(functions/appCheck.js)
   const date = String(req.query.date || "").trim();
   const vehicle = String(req.query.vehicle || "").replace(/\s/g, "");
   const name = String(req.query.name || "").trim();
@@ -3711,7 +3718,9 @@ exports.driverSearch = functions.https.onRequest(async (req, res) => {
 exports.checkEmail = functions.https.onRequest(async (req, res) => {
   res.set("Access-Control-Allow-Origin", "*");
   res.set("Access-Control-Allow-Methods", "GET, OPTIONS");
+  res.set("Access-Control-Allow-Headers", APPCHECK_CORS);
   if (req.method === "OPTIONS") { res.status(204).send(""); return; }
+  if (!(await appCheckGate(req, res, "checkEmail"))) return; // 🛡 App Check(functions/appCheck.js)
   if (req.query.ping === "1") { res.status(200).json({ ok: true }); return; }
   const e = String(req.query.e || "").trim();
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e) || e.length > 200) { res.status(400).json({ error: "BAD_EMAIL" }); return; }
@@ -3763,7 +3772,9 @@ async function freeAuthAccount(u) {
 exports.freeDeletedEmail = functions.https.onRequest(async (req, res) => {
   res.set("Access-Control-Allow-Origin", "*");
   res.set("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+  res.set("Access-Control-Allow-Headers", APPCHECK_CORS);
   if (req.method === "OPTIONS") { res.status(204).send(""); return; }
+  if (!(await appCheckGate(req, res, "freeDeletedEmail"))) return; // 🛡 App Check(functions/appCheck.js)
   const e = String(req.query.e || req.body?.e || "").trim().toLowerCase();
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e) || e.length > 200) { res.status(400).json({ error: "BAD_EMAIL" }); return; }
   try {
@@ -3818,8 +3829,9 @@ const drvFilled = (v) => {
 exports.linkDriverSignup = functions.https.onRequest(async (req, res) => {
   res.set("Access-Control-Allow-Origin", "*");
   res.set("Access-Control-Allow-Methods", "POST, OPTIONS");
-  res.set("Access-Control-Allow-Headers", "Authorization, Content-Type");
+  res.set("Access-Control-Allow-Headers", APPCHECK_CORS);
   if (req.method === "OPTIONS") { res.status(204).send(""); return; }
+  if (!(await appCheckGate(req, res, "linkDriverSignup"))) return; // 🛡 App Check(functions/appCheck.js)
   if (req.method !== "POST") { res.status(405).json({ error: "POST_ONLY" }); return; }
   try {
     const m = String(req.headers.authorization || "").match(/^Bearer (.+)$/);
@@ -3959,7 +3971,9 @@ exports.linkDriverSignup = functions.https.onRequest(async (req, res) => {
 exports.findCompany = functions.https.onRequest(async (req, res) => {
   res.set("Access-Control-Allow-Origin", "*");
   res.set("Access-Control-Allow-Methods", "GET, OPTIONS");
+  res.set("Access-Control-Allow-Headers", APPCHECK_CORS);
   if (req.method === "OPTIONS") { res.status(204).send(""); return; }
+  if (!(await appCheckGate(req, res, "findCompany"))) return; // 🛡 App Check(functions/appCheck.js)
   const q = String(req.query.q || "").trim().toLowerCase();
   const exact = req.query.exact === "1";
   const all = req.query.all === "1"; // 가입 화면이 열릴 때 목록을 한 번에 받아 입력 즉시 드롭다운으로 거른다
@@ -4007,7 +4021,7 @@ exports.findCompany = functions.https.onRequest(async (req, res) => {
 exports.lookupCompanyCode = functions.https.onRequest(async (req, res) => {
   res.set("Access-Control-Allow-Origin", "*");
   res.set("Access-Control-Allow-Methods", "GET, OPTIONS");
-  res.set("Access-Control-Allow-Headers", "Authorization, Content-Type");
+  res.set("Access-Control-Allow-Headers", APPCHECK_CORS);
   if (req.method === "OPTIONS") { res.status(204).send(""); return; }
 
   // ⭐ 사용자 요청 — 회사코드 찾기는 최고관리자만. 예전엔 로그인 없이 누구나 호출할 수 있었다.
@@ -4148,8 +4162,9 @@ function makeCompanyResetHandler(budgetMs) {
   return async function companyResetHandler(req, res) {
     res.set("Access-Control-Allow-Origin", "*");
     res.set("Access-Control-Allow-Methods", "POST, OPTIONS");
-    res.set("Access-Control-Allow-Headers", "Authorization, Content-Type");
+    res.set("Access-Control-Allow-Headers", APPCHECK_CORS);
     if (req.method === "OPTIONS") { res.status(204).send(""); return; }
+    if (!(await appCheckGate(req, res))) return; // 🛡 App Check(functions/appCheck.js)
     if (req.method !== "POST") { res.status(405).json({ error: "POST만 허용됩니다." }); return; }
     let body = req.body;
     if (typeof body === "string") { try { body = JSON.parse(body); } catch { body = {}; } }
@@ -4413,8 +4428,9 @@ const RESET_PURGE_WORD = "영구삭제";
 async function companyResetPurgeHandler(req, res) {
   res.set("Access-Control-Allow-Origin", "*");
   res.set("Access-Control-Allow-Methods", "POST, OPTIONS");
-  res.set("Access-Control-Allow-Headers", "Authorization, Content-Type");
+  res.set("Access-Control-Allow-Headers", APPCHECK_CORS);
   if (req.method === "OPTIONS") { res.status(204).send(""); return; }
+  if (!(await appCheckGate(req, res, "companyResetPurge"))) return; // 🛡 App Check(functions/appCheck.js)
   if (req.method !== "POST") { res.status(405).json({ error: "POST만 허용됩니다." }); return; }
   let body = req.body;
   if (typeof body === "string") { try { body = JSON.parse(body); } catch { body = {}; } }
@@ -4548,8 +4564,9 @@ exports.contractExpiryNotices = functions.pubsub
 exports.contractNoticeRun = functions.https.onRequest(async (req, res) => {
   res.set("Access-Control-Allow-Origin", "*");
   res.set("Access-Control-Allow-Methods", "POST, OPTIONS");
-  res.set("Access-Control-Allow-Headers", "Authorization, Content-Type");
+  res.set("Access-Control-Allow-Headers", APPCHECK_CORS);
   if (req.method === "OPTIONS") { res.status(204).send(""); return; }
+  if (!(await appCheckGate(req, res, "contractNoticeRun"))) return; // 🛡 App Check(functions/appCheck.js)
   try {
     const me = await requireTotalMaster(req);
     let body = req.body;
@@ -4719,8 +4736,9 @@ const trashRow = (col, id, at, data, by, source) => ({
 exports.restoreDeleted = functions.runWith({ timeoutSeconds: 300, memory: "512MB" }).https.onRequest(async (req, res) => {
   res.set("Access-Control-Allow-Origin", "*");
   res.set("Access-Control-Allow-Methods", "POST, OPTIONS");
-  res.set("Access-Control-Allow-Headers", "Authorization, Content-Type");
+  res.set("Access-Control-Allow-Headers", APPCHECK_CORS);
   if (req.method === "OPTIONS") { res.status(204).send(""); return; }
+  if (!(await appCheckGate(req, res, "restoreDeleted"))) return; // 🛡 App Check(functions/appCheck.js)
   if (req.method !== "POST") { res.status(405).json({ error: "POST만 허용됩니다." }); return; }
   let body = req.body;
   if (typeof body === "string") { try { body = JSON.parse(body); } catch { body = {}; } }
@@ -5198,8 +5216,9 @@ exports.notifyPlatformNotice = functions.firestore.document("platformNotices/{id
 exports.pushDiag = functions.runWith({ timeoutSeconds: 60, memory: "256MB" }).https.onRequest(async (req, res) => {
   res.set("Access-Control-Allow-Origin", "*");
   res.set("Access-Control-Allow-Methods", "POST, OPTIONS");
-  res.set("Access-Control-Allow-Headers", "Authorization, Content-Type");
+  res.set("Access-Control-Allow-Headers", APPCHECK_CORS);
   if (req.method === "OPTIONS") { res.status(204).send(""); return; }
+  if (!(await appCheckGate(req, res, "pushDiag"))) return; // 🛡 App Check(functions/appCheck.js)
   if (req.method !== "POST") { res.status(405).json({ error: "POST만 허용됩니다." }); return; }
   let body = req.body;
   if (typeof body === "string") { try { body = JSON.parse(body); } catch { body = {}; } }
@@ -5536,8 +5555,9 @@ exports.sendScheduledMails = functions.pubsub.schedule("every 5 minutes").timeZo
 exports.automation = functions.runWith({ timeoutSeconds: 300, memory: "512MB" }).https.onRequest(async (req, res) => {
   res.set("Access-Control-Allow-Origin", "*");
   res.set("Access-Control-Allow-Methods", "POST, OPTIONS");
-  res.set("Access-Control-Allow-Headers", "Authorization, Content-Type");
+  res.set("Access-Control-Allow-Headers", APPCHECK_CORS);
   if (req.method === "OPTIONS") { res.status(204).send(""); return; }
+  if (!(await appCheckGate(req, res, "automation"))) return; // 🛡 App Check(functions/appCheck.js)
   if (req.method !== "POST") { res.status(405).json({ error: "POST만 허용됩니다." }); return; }
   let body = req.body;
   if (typeof body === "string") { try { body = JSON.parse(body); } catch { body = {}; } }
@@ -5590,8 +5610,9 @@ exports.automation = functions.runWith({ timeoutSeconds: 300, memory: "512MB" })
 exports.gsheetMine = functions.runWith({ timeoutSeconds: 540, memory: "512MB" }).https.onRequest(async (req, res) => {
   res.set("Access-Control-Allow-Origin", "*");
   res.set("Access-Control-Allow-Methods", "POST, OPTIONS");
-  res.set("Access-Control-Allow-Headers", "Authorization, Content-Type");
+  res.set("Access-Control-Allow-Headers", APPCHECK_CORS);
   if (req.method === "OPTIONS") { res.status(204).send(""); return; }
+  if (!(await appCheckGate(req, res, "gsheetMine"))) return; // 🛡 App Check(functions/appCheck.js)
   if (req.method !== "POST") { res.status(405).json({ error: "POST만 허용됩니다." }); return; }
   let body = req.body;
   if (typeof body === "string") { try { body = JSON.parse(body); } catch { body = {}; } }
@@ -5808,8 +5829,9 @@ let _visionClient = null;
 exports.sheetOcr = functions.runWith({ timeoutSeconds: 120, memory: "512MB" }).https.onRequest(async (req, res) => {
   res.set("Access-Control-Allow-Origin", "*");
   res.set("Access-Control-Allow-Methods", "POST, OPTIONS");
-  res.set("Access-Control-Allow-Headers", "Authorization, Content-Type");
+  res.set("Access-Control-Allow-Headers", APPCHECK_CORS);
   if (req.method === "OPTIONS") { res.status(204).send(""); return; }
+  if (!(await appCheckGate(req, res, "sheetOcr"))) return; // 🛡 App Check(functions/appCheck.js)
   if (req.method !== "POST") { res.status(405).json({ error: "POST만 허용됩니다." }); return; }
   let body = req.body;
   if (typeof body === "string") { try { body = JSON.parse(body); } catch { body = {}; } }
@@ -5957,8 +5979,9 @@ exports.syncRouteBoards = functions.runWith({ timeoutSeconds: 300, memory: "512M
 exports.routeBoardSheet = functions.runWith({ timeoutSeconds: 540, memory: "512MB" }).https.onRequest(async (req, res) => {
   res.set("Access-Control-Allow-Origin", "*");
   res.set("Access-Control-Allow-Methods", "POST, OPTIONS");
-  res.set("Access-Control-Allow-Headers", "Authorization, Content-Type");
+  res.set("Access-Control-Allow-Headers", APPCHECK_CORS);
   if (req.method === "OPTIONS") { res.status(204).send(""); return; }
+  if (!(await appCheckGate(req, res, "routeBoardSheet"))) return; // 🛡 App Check(functions/appCheck.js)
   if (req.method !== "POST") { res.status(405).json({ error: "POST만 허용됩니다." }); return; }
   let body = req.body;
   if (typeof body === "string") { try { body = JSON.parse(body); } catch { body = {}; } }
@@ -6079,15 +6102,16 @@ const _sheetConnectHandler = makeSheetConnect({
   db, FieldValue, sheetsApiFor: guardedSheetsApiFor, officeSheets: guardedOfficeSheets, parseSpreadsheetId, quoteTab, requireStaff: guardedRequireStaff, requireAdminRole: guardedRequireAdminRole, sheetModifiedTime, setBulkMode, bumpDataVersion,
   makeAnthropic: () => (process.env.ANTHROPIC_API_KEY ? new (_orderScan.Anthropic)({ apiKey: process.env.ANTHROPIC_API_KEY, timeout: 30000, maxRetries: 1 }) : null),
 });
-exports.sheetConnect = functions.runWith({ secrets: ["ANTHROPIC_API_KEY"], timeoutSeconds: 540, memory: "1GB" }).https.onRequest((req, res) => sheetCaller.run({}, () => _sheetConnectHandler(req, res)));
+exports.sheetConnect = functions.runWith({ secrets: ["ANTHROPIC_API_KEY"], timeoutSeconds: 540, memory: "1GB" }).https.onRequest(async (req, res) => { if (!(await appCheckGate(req, res, "sheetConnect"))) return; return sheetCaller.run({}, () => _sheetConnectHandler(req, res)); }); // 🛡 App Check
 
 exports.sheetImport = functions
   .runWith({ timeoutSeconds: 540, memory: "1GB" })
   .https.onRequest(async (req, res) => {
     res.set("Access-Control-Allow-Origin", "*");
     res.set("Access-Control-Allow-Methods", "POST, OPTIONS");
-    res.set("Access-Control-Allow-Headers", "Authorization, Content-Type");
+    res.set("Access-Control-Allow-Headers", APPCHECK_CORS);
     if (req.method === "OPTIONS") { res.status(204).send(""); return; }
+    if (!(await appCheckGate(req, res, "sheetImport"))) return; // 🛡 App Check(functions/appCheck.js)
     if (req.method !== "POST") { res.status(405).json({ error: "POST만 허용됩니다." }); return; }
     let body = req.body;
     if (typeof body === "string") { try { body = JSON.parse(body); } catch { body = {}; } }
@@ -6418,8 +6442,9 @@ async function computePlatformStats({ full = true } = {}) {
 exports.platformStats = functions.runWith({ timeoutSeconds: 300, memory: "1GB" }).https.onRequest(async (req, res) => {
   res.set("Access-Control-Allow-Origin", "*");
   res.set("Access-Control-Allow-Methods", "POST, OPTIONS");
-  res.set("Access-Control-Allow-Headers", "Authorization, Content-Type");
+  res.set("Access-Control-Allow-Headers", APPCHECK_CORS);
   if (req.method === "OPTIONS") { res.status(204).send(""); return; }
+  if (!(await appCheckGate(req, res, "platformStats"))) return; // 🛡 App Check(functions/appCheck.js)
   if (req.method !== "POST") { res.status(405).json({ error: "POST만 허용됩니다." }); return; }
   try {
     const me = await requireAdminRole(req, {});
@@ -6549,8 +6574,9 @@ exports.platformUsageHourly = functions.runWith({ timeoutSeconds: 120, memory: "
 exports.platformUsageNow = functions.runWith({ timeoutSeconds: 120, memory: "256MB" }).https.onRequest(async (req, res) => {
   res.set("Access-Control-Allow-Origin", "*");
   res.set("Access-Control-Allow-Methods", "POST, OPTIONS");
-  res.set("Access-Control-Allow-Headers", "Authorization, Content-Type");
+  res.set("Access-Control-Allow-Headers", APPCHECK_CORS);
   if (req.method === "OPTIONS") { res.status(204).send(""); return; }
+  if (!(await appCheckGate(req, res, "platformUsageNow"))) return; // 🛡 App Check(functions/appCheck.js)
   if (req.method !== "POST") { res.status(405).json({ error: "POST만 허용됩니다." }); return; }
   try {
     const me = await requireAdminRole(req, {});
@@ -6609,8 +6635,9 @@ const aiTeams = require("./aiTeams");
 exports.aiTeamChat = functions.runWith({ secrets: ["ANTHROPIC_API_KEY"], timeoutSeconds: 300, memory: "512MB" }).https.onRequest(async (req, res) => {
   res.set("Access-Control-Allow-Origin", "*");
   res.set("Access-Control-Allow-Methods", "POST, OPTIONS");
-  res.set("Access-Control-Allow-Headers", "Authorization, Content-Type");
+  res.set("Access-Control-Allow-Headers", APPCHECK_CORS);
   if (req.method === "OPTIONS") { res.status(204).send(""); return; }
+  if (!(await appCheckGate(req, res, "aiTeamChat"))) return; // 🛡 App Check(functions/appCheck.js)
   if (req.method !== "POST") { res.status(405).json({ error: "POST만 허용됩니다." }); return; }
   const authz = String(req.get("Authorization") || "");
   const decoded = authz.startsWith("Bearer ") ? await getAuth().verifyIdToken(authz.slice(7)).catch(() => null) : null;
@@ -6650,7 +6677,7 @@ function bumpScanUsage(patch) {
   Object.entries(patch).forEach(([k, v]) => { if (v) inc[k] = FieldValue.increment(v); });
   return db.collection("platformUsage").doc(`m_${ym}`).set(inc, { merge: true }).catch(() => {});
 }
-exports.orderScanOcr = functions.runWith({ timeoutSeconds: 60, memory: "512MB" }).https.onCall(async (data, context) => {
+exports.orderScanOcr = functions.runWith({ timeoutSeconds: 60, memory: "512MB", ...appCheckCallOpts() }).https.onCall(async (data, context) => {
   try {
     return await _orderScan.runOcr({
       db, auth: context.auth, data,
@@ -6662,7 +6689,7 @@ exports.orderScanOcr = functions.runWith({ timeoutSeconds: 60, memory: "512MB" }
     });
   } catch (e) { throw scanHttpsError(e); }
 });
-exports.orderScanExtract = functions.runWith({ secrets: ["ANTHROPIC_API_KEY"], timeoutSeconds: 60, memory: "256MB" }).https.onCall(async (data, context) => {
+exports.orderScanExtract = functions.runWith({ secrets: ["ANTHROPIC_API_KEY"], timeoutSeconds: 60, memory: "256MB", ...appCheckCallOpts() }).https.onCall(async (data, context) => {
   try {
     return await _orderScan.runExtract({
       db, auth: context.auth, data,
@@ -6679,7 +6706,7 @@ exports.orderScanExtract = functions.runWith({ secrets: ["ANTHROPIC_API_KEY"], t
 //  사람마다 하루 질문 수 제한(aiAssistantUsage) · 사용 기록(aiAssistantLogs, 회사별 · 비밀값 없음)
 //  Claude API 키: Firebase 비밀값 ANTHROPIC_API_KEY(AI 팀 · 오더 스캔과 같은 키)
 const _aiAssistant = require("./aiAssistant");
-exports.aiAssistantChat = functions.runWith({ secrets: ["ANTHROPIC_API_KEY"], timeoutSeconds: 300, memory: "512MB" }).https.onCall(async (data, context) => {
+exports.aiAssistantChat = functions.runWith({ secrets: ["ANTHROPIC_API_KEY"], timeoutSeconds: 300, memory: "512MB", ...appCheckCallOpts() }).https.onCall(async (data, context) => {
   try {
     return await _aiAssistant.runAssistantChat({
       db, auth: context.auth, data,
@@ -6719,7 +6746,7 @@ exports.dailyReportPush = functions.runWith({ timeoutSeconds: 300, memory: "512M
    비밀번호는 payrollSecrets(서버만) · 잠금 해제는 payrollUnlocks/{uid}(30분) — firestore.rules가 급여 문서마다 확인
 ================================================================== */
 const _payrollPw = require("./payrollPw").makePayrollPw({ db, FieldValue, Timestamp, HttpsError: functions.https.HttpsError });
-const payCall = (fn) => functions.runWith({ timeoutSeconds: 30, memory: "256MB" }).https.onCall(async (data, context) => {
+const payCall = (fn) => functions.runWith({ timeoutSeconds: 30, memory: "256MB", ...appCheckCallOpts() }).https.onCall(async (data, context) => {
   try { return await fn(data || {}, context); } catch (e) {
     if (e instanceof functions.https.HttpsError) throw e;
     console.error("[급여 비밀번호] 실패:", e);
@@ -6746,7 +6773,7 @@ const pdHttpsError = (e) => {
   console.error("[연동] 오류:", e);
   return new functions.https.HttpsError("internal", "잠시 뒤 다시 해 주세요");
 };
-const pdCall = (fn, opts = {}) => functions.runWith({ secrets: ["DATA_GO_KR_KEY"], timeoutSeconds: 60, memory: "256MB", ...opts }).https.onCall(async (data, context) => {
+const pdCall = (fn, opts = {}) => functions.runWith({ secrets: ["DATA_GO_KR_KEY"], timeoutSeconds: 60, memory: "256MB", ...appCheckCallOpts(), ...opts }).https.onCall(async (data, context) => {
   try { return await fn(data, context.auth); } catch (e) { throw pdHttpsError(e); }
 });
 exports.bizStatusCheck = pdCall(_pd.bizStatusCheck);
@@ -6762,6 +6789,6 @@ const _popbillAdmin = _popbill.makePopbillAdmin({
   db, callerOf: _publicData.callerOf,
   getSecrets: () => (POPBILL_ON ? { linkId: process.env.POPBILL_LINK_ID || "", secretKey: process.env.POPBILL_SECRET_KEY || "" } : {}),
 });
-exports.popbillAdmin = functions.runWith({ ...(POPBILL_ON ? { secrets: ["POPBILL_LINK_ID", "POPBILL_SECRET_KEY"] } : {}), timeoutSeconds: 60, memory: "256MB" }).https.onCall(async (data, context) => {
+exports.popbillAdmin = functions.runWith({ ...(POPBILL_ON ? { secrets: ["POPBILL_LINK_ID", "POPBILL_SECRET_KEY"] } : {}), timeoutSeconds: 60, memory: "256MB", ...appCheckCallOpts() }).https.onCall(async (data, context) => {
   try { return await _popbillAdmin(data, context.auth); } catch (e) { throw pdHttpsError(e); }
 });

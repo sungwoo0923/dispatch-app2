@@ -683,6 +683,13 @@
     };
   })();
 </script>
+<script>
+  // 🛡 2026-11-08 App Check(홈페이지) — reCAPTCHA Enterprise 사이트 키를 넣으면 켜진다(비어 있으면 지금과 똑같이 동작).
+  //  키는 공개값(본체 VITE_APPCHECK_SITE_KEY와 같은 키) · 순서: docs/appcheck-setup.md
+  //  게시본 읽기(kp-site.js)와 도입 문의 저장이 이 토큰을 같이 보낸다 → Firestore App Check "적용" 전에 꼭 넣을 것
+  window.KP_APPCHECK_SITE_KEY = "";
+  if (window.KP_APPCHECK_SITE_KEY) window.kpAppCheckReady = new Promise(function (ok) { window.__kpAppCheckResolve = ok; });
+</script>
 <script src="kp-site.js"></script>
 
 <script type="module">
@@ -700,7 +707,14 @@
     appId: "1:273115387263:web:8ae6946cb01e265e55764a",
   };
   const app = initializeApp(firebaseConfig);
-  const db = getFirestore(app);
+  // 🛡 App Check — 사이트 키(위 KP_APPCHECK_SITE_KEY)가 있고 편집 화면이 아닐 때만
+  //  (Firestore를 쓰기 전에 켜야 문의 저장에도 토큰이 붙으므로 db 는 App Check 준비 뒤에 만든다)
+  const dbReady = !window.KP_APPCHECK_SITE_KEY ? Promise.resolve() : import("https://www.gstatic.com/firebasejs/10.14.1/firebase-app-check.js").then((AC) => {
+    const ac = AC.initializeAppCheck(app, { provider: new AC.ReCaptchaEnterpriseProvider(window.KP_APPCHECK_SITE_KEY), isTokenAutoRefreshEnabled: true });
+    window.__kpAppCheckResolve?.(() => AC.getToken(ac, false).then((r) => (r && !r.error ? r.token : "")).catch(() => ""));
+  }).catch((e) => { console.warn("[AppCheck] 초기화 실패:", e?.message || e); window.__kpAppCheckResolve?.(() => Promise.resolve("")); });
+  let db = null;
+  const getDb = () => dbReady.then(() => (db = db || getFirestore(app)));
 
   document.addEventListener("submit", async (e) => {
     if (e.target.id !== "inquiryForm") return;
@@ -727,7 +741,7 @@
     submitBtn.textContent = "전송 중...";
 
     try {
-      await addDoc(collection(db, "landingInquiries"), {
+      await addDoc(collection(await getDb(), "landingInquiries"), {
         companyName, name, phone, email, message,
         type: "무료체험",
         vehicles, staffCount, currentTool, extra,
