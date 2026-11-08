@@ -41,22 +41,22 @@ export default function DriverNotices({ companyName, uid }) {
   const unread = (n) => uid && !(n.readBy || []).includes(uid);
   const Row = ({ n, last }) => (
     <button type="button" onClick={() => setOpen(n)} style={{ width: "100%", textAlign: "left", display: "flex", alignItems: "center", gap: 10, padding: "11px 2px", background: "none", border: "none", borderBottom: last ? "none" : "1px solid #EEF2F8", cursor: "pointer" }}>
-      {n.pinned ? <span style={{ flexShrink: 0, fontSize: 10.5, fontWeight: 900, color: "#8FB0F0", background: "#0F1A30", borderRadius: 6, padding: "2px 6px" }}>고정</span>
-        : n.category && n.category !== "공지사항" ? <span style={{ flexShrink: 0, fontSize: 10.5, fontWeight: 900, color: "#1B2B4B", background: "#EEF3FC", borderRadius: 6, padding: "2px 6px" }}>{n.category}</span> : null}
-      <span style={{ flex: 1, minWidth: 0, fontSize: 14, fontWeight: unread(n) ? 900 : 700, color: unread(n) ? "#0F1A30" : "#3A4A66", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{n.title || "공지사항"}</span>
-      {unread(n) && <span style={{ flexShrink: 0, width: 16, height: 16, borderRadius: 8, background: "#1B2B4B", color: "#fff", fontSize: 9.5, fontWeight: 900, display: "flex", alignItems: "center", justifyContent: "center" }}>N</span>}
-      <span style={{ flexShrink: 0, fontSize: 12, fontWeight: 700, color: "#9AA9C3", fontFamily: MONO }}>{md(whenOf(n))}</span>
+      {n.pinned ? <span style={{ flexShrink: 0, fontSize: 13.5, fontWeight: 900, color: "#8FB0F0", background: "#0F1A30", borderRadius: 6, padding: "2px 6px" }}>고정</span>
+        : n.category && n.category !== "공지사항" ? <span style={{ flexShrink: 0, fontSize: 13.5, fontWeight: 900, color: "#1B2B4B", background: "#EEF3FC", borderRadius: 6, padding: "2px 6px" }}>{n.category}</span> : null}
+      <span style={{ flex: 1, minWidth: 0, fontSize: 16.5, fontWeight: unread(n) ? 900 : 700, color: unread(n) ? "#0F1A30" : "#3A4A66", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{n.title || "공지사항"}</span>
+      {unread(n) && <span style={{ flexShrink: 0, width: 16, height: 16, borderRadius: 8, background: "#1B2B4B", color: "#fff", fontSize: 12.5, fontWeight: 900, display: "flex", alignItems: "center", justifyContent: "center" }}>N</span>}
+      <span style={{ flexShrink: 0, fontSize: 14.5, fontWeight: 700, color: "#9AA9C3", fontFamily: MONO }}>{md(whenOf(n))}</span>
     </button>
   );
   const shown = all ? list : list.slice(0, 3);
   return (
-    <div style={{ background: "white", borderRadius: 16, padding: "14px 16px 6px", marginBottom: 12, boxShadow: "0 1px 6px rgba(0,0,0,0.06)", border: "1px solid #E3E8F0" }}>
+    <div style={{ background: "white", borderRadius: 20, padding: "14px 16px 6px", marginBottom: 12, boxShadow: "0 1px 2px rgba(15,26,48,.04), 0 10px 28px rgba(15,26,48,.06)", border: "1px solid #E6EBF3" }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 2 }}>
         <div>
-          <div style={{ fontSize: 10.5, fontWeight: 800, letterSpacing: "0.22em", color: "#4B6CB7", fontFamily: MONO }}>NOTICE</div>
-          <div style={{ fontSize: 15, fontWeight: 900, color: "#0F1A30" }}>회사 공지사항 <span style={{ fontSize: 12, color: "#9AA9C3", fontWeight: 700 }}>{list.length}</span></div>
+          <div style={{ fontSize: 13.5, fontWeight: 800, letterSpacing: "0.22em", color: "#4B6CB7", fontFamily: MONO }}>NOTICE</div>
+          <div style={{ fontSize: 17, fontWeight: 900, color: "#0F1A30" }}>회사 공지사항 <span style={{ fontSize: 14.5, color: "#9AA9C3", fontWeight: 700 }}>{list.length}</span></div>
         </div>
-        {list.length > 3 && <button type="button" onClick={() => setAll((v) => !v)} style={{ fontSize: 12.5, fontWeight: 800, color: "#2D4C82", background: "none", border: "none", cursor: "pointer" }}>{all ? "접기" : "전체 보기 ›"}</button>}
+        {list.length > 3 && <button type="button" onClick={() => setAll((v) => !v)} style={{ fontSize: 14.5, fontWeight: 800, color: "#2D4C82", background: "none", border: "none", cursor: "pointer" }}>{all ? "접기" : "전체 보기 ›"}</button>}
       </div>
       {shown.map((n, i) => <Row key={n.id} n={n} last={i === shown.length - 1} />)}
       {open && createPortal(
@@ -64,15 +64,15 @@ export default function DriverNotices({ companyName, uid }) {
           <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 560, maxHeight: "88vh", overflowY: "auto", background: "#fff", borderRadius: "22px 22px 0 0", paddingBottom: "env(safe-area-inset-bottom)" }}>
             <div style={{ position: "sticky", top: 0, padding: "16px 18px", color: "#fff", background: "linear-gradient(120deg,#0B1428 0%,#1B2B4B 65%,#2D4C82 100%)", display: "flex", alignItems: "flex-start", gap: 10 }}>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 10.5, fontWeight: 800, letterSpacing: "0.24em", color: "#8FB0F0", fontFamily: MONO }}>NOTICE · {md(whenOf(open))}</div>
-                <div style={{ fontSize: 17, fontWeight: 900, marginTop: 2, wordBreak: "break-word" }}>{open.title || "공지사항"}</div>
-                <div style={{ fontSize: 12, color: "rgba(255,255,255,.6)", marginTop: 2 }}>{open.author || ""}{open.category ? ` · ${open.category}` : ""}</div>
+                <div style={{ fontSize: 13.5, fontWeight: 800, letterSpacing: "0.24em", color: "#8FB0F0", fontFamily: MONO }}>NOTICE · {md(whenOf(open))}</div>
+                <div style={{ fontSize: 18, fontWeight: 900, marginTop: 2, wordBreak: "break-word" }}>{open.title || "공지사항"}</div>
+                <div style={{ fontSize: 14.5, color: "rgba(255,255,255,.6)", marginTop: 2 }}>{open.author || ""}{open.category ? ` · ${open.category}` : ""}</div>
               </div>
-              <button type="button" onClick={() => setOpen(null)} aria-label="닫기" style={{ width: 34, height: 34, borderRadius: 10, background: "rgba(255,255,255,.1)", border: "none", color: "#fff", fontWeight: 900, fontSize: 15 }}>✕</button>
+              <button type="button" onClick={() => setOpen(null)} aria-label="닫기" style={{ width: 34, height: 34, borderRadius: 10, background: "rgba(255,255,255,.1)", border: "none", color: "#fff", fontWeight: 900, fontSize: 17 }}>✕</button>
             </div>
             <div style={{ padding: "18px 18px 24px" }}>
-              <RichHtml html={open.contentHtml} text={open.content} className="text-[15px] text-[#1F2A44] leading-[1.85]" />
-              {open.image && <img src={open.image} alt="" style={{ width: "100%", height: "auto", borderRadius: 14, marginTop: 14, border: "1px solid #E3E8F0" }} />}
+              <RichHtml html={open.contentHtml} text={open.content} className="text-[17px] text-[#1F2A44] leading-[1.85]" />
+              {open.image && <img src={open.image} alt="" style={{ width: "100%", height: "auto", borderRadius: 16, marginTop: 14, border: "1px solid #E6EBF3" }} />}
             </div>
           </div>
         </div>, document.body)}

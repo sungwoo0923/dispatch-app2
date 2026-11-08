@@ -81,7 +81,7 @@ export default function DriverLogs({ driverId }) {
   };
 
   return (
-    <div className="text-sm text-gray-800 p-2">
+    <div className="text-[17px] text-gray-800 p-2">
       <div className="bg-white rounded-xl shadow p-4 mb-4">
         <div className="font-bold mb-2">근무 요약</div>
         <p>총 근무시간: {formatMin(summary.totalWork)}</p>
@@ -95,7 +95,7 @@ export default function DriverLogs({ driverId }) {
             <div key={l.id} className="py-2 border-b">
               [{l.mainStatus}] {l.subStatus}  
               <br />
-              <span className="text-xs text-gray-500">
+              <span className="text-[16.5px] text-gray-500">
                 {l.timestamp?.toDate()?.toLocaleString()}
               </span>
             </div>

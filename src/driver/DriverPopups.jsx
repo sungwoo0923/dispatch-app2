@@ -22,7 +22,7 @@ const FONT = '"Noto Sans KR", "Pretendard", sans-serif';
 export function RedBadge({ n, style }) {
   if (!n || n <= 0) return null;
   return (
-    <span style={{ minWidth: 20, height: 20, padding: "0 6px", borderRadius: 10, background: KP_RED, color: "#fff", fontSize: 12.5, fontWeight: 900,
+    <span style={{ minWidth: 22, height: 22, padding: "0 6px", borderRadius: 11, background: KP_RED, color: "#fff", fontSize: 13, fontWeight: 900,
       display: "inline-flex", alignItems: "center", justifyContent: "center", lineHeight: 1, boxShadow: "0 0 0 2px #fff", fontFamily: FONT, ...style }}>
       {n > 99 ? "99+" : n}
     </span>
@@ -31,8 +31,8 @@ export function RedBadge({ n, style }) {
 
 function Overlay({ children, z = 10050 }) {
   return (
-    <div style={{ position: "fixed", inset: 0, zIndex: z, background: "rgba(8,14,28,0.62)", display: "flex", alignItems: "center", justifyContent: "center", padding: "16px", fontFamily: FONT }}>
-      <div style={{ width: "100%", maxWidth: 440, maxHeight: "calc(100vh - 32px)", overflowY: "auto", borderRadius: 24, background: "#fff", boxShadow: "0 24px 60px rgba(8,14,28,0.5)" }}>
+    <div style={{ position: "fixed", inset: 0, zIndex: z, background: "rgba(8,14,28,0.62)", backdropFilter: "blur(4px)", WebkitBackdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center", padding: "16px", fontFamily: FONT }}>
+      <div className="kpd-sheet" style={{ width: "100%", maxWidth: 440, maxHeight: "calc(100vh - 32px)", overflowY: "auto", borderRadius: 28, background: "#fff", boxShadow: "0 30px 70px rgba(8,14,28,0.55), 0 0 0 1px rgba(160,190,255,.18)" }}>
         {children}
       </div>
     </div>
@@ -41,22 +41,22 @@ function Overlay({ children, z = 10050 }) {
 
 function Head({ en, title, sub }) {
   return (
-    <div style={{ padding: "20px 22px 18px", color: "#fff", borderRadius: "24px 24px 0 0", position: "relative", overflow: "hidden",
-      background: `linear-gradient(135deg, #0B1428 0%, ${NAVY1} 55%, ${NAVY2} 100%)` }}>
+    <div style={{ padding: "22px 22px 20px", color: "#fff", borderRadius: "28px 28px 0 0", position: "relative", overflow: "hidden",
+      background: "radial-gradient(420px 180px at 90% -30px, rgba(111,160,255,0.42), transparent 70%), linear-gradient(160deg, #070D1C 0%, #0F1D3A 52%, #1F3A6E 100%)" }}>
       <span style={{ position: "absolute", inset: 0, opacity: 0.08, pointerEvents: "none", backgroundImage: "linear-gradient(#fff 1px,transparent 1px),linear-gradient(90deg,#fff 1px,transparent 1px)", backgroundSize: "18px 18px" }} />
       <div style={{ position: "relative" }}>
-        {en && <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: "0.18em", color: ACC }}>{en}</div>}
+        {en && <div style={{ fontSize: 14.5, fontWeight: 800, letterSpacing: "0.18em", color: ACC }}>{en}</div>}
         <div style={{ fontSize: 24, fontWeight: 900, marginTop: en ? 4 : 0, letterSpacing: "-0.5px" }}>{title}</div>
-        {sub && <div style={{ fontSize: 16, color: "rgba(255,255,255,0.78)", marginTop: 4, lineHeight: 1.45 }}>{sub}</div>}
+        {sub && <div style={{ fontSize: 17, color: "rgba(255,255,255,0.78)", marginTop: 4, lineHeight: 1.45 }}>{sub}</div>}
       </div>
     </div>
   );
 }
 
 const bigBtn = (primary) => ({
-  width: "100%", minHeight: 64, borderRadius: 18, fontSize: 22, fontWeight: 900, cursor: "pointer", fontFamily: FONT, letterSpacing: "-0.3px",
+  width: "100%", minHeight: 64, borderRadius: 18, fontSize: 23, fontWeight: 900, cursor: "pointer", fontFamily: FONT, letterSpacing: "-0.3px",
   border: primary ? "none" : `2px solid ${NAVY1}`,
-  background: primary ? `linear-gradient(135deg, ${NAVY0}, ${NAVY1} 55%, ${NAVY2})` : "#fff",
+  background: primary ? "radial-gradient(260px 90px at 85% 0%, rgba(111,160,255,.45), transparent 70%), linear-gradient(135deg,#070D1C,#0F1D3A 50%,#2D4C82)" : "#fff",
   color: primary ? "#fff" : NAVY0,
   boxShadow: primary ? "0 12px 26px rgba(27,43,75,0.35)" : "none",
 });
@@ -95,23 +95,23 @@ export function CheckinPrompt({ driver, nearCheckIn, loading, onCheckin, onLater
         sub={nearCheckIn ? "아래 버튼을 누르면 바로 출근 처리됩니다." : "출근 버튼을 아직 안 누르셨어요."} />
       <div style={{ padding: "20px 20px 22px" }}>
         <div style={{ display: "flex", gap: 10, marginBottom: 18 }}>
-          <div style={{ flex: 1, borderRadius: 14, background: "#F5F8FD", border: "1px solid #DCE3EF", padding: "12px 14px" }}>
-            <div style={{ fontSize: 15, color: "#5B6B85", fontWeight: 700 }}>지금</div>
+          <div style={{ flex: 1, borderRadius: 16, background: "#F5F8FD", border: "1px solid #DCE3EF", padding: "12px 14px" }}>
+            <div style={{ fontSize: 17, color: "#5B6B85", fontWeight: 700 }}>지금</div>
             <div style={{ fontSize: 24, fontWeight: 900, color: NAVY0, marginTop: 2 }}>{info.hm}</div>
           </div>
-          <div style={{ flex: 1, borderRadius: 14, background: "#F5F8FD", border: "1px solid #DCE3EF", padding: "12px 14px" }}>
-            <div style={{ fontSize: 15, color: "#5B6B85", fontWeight: 700 }}>출근 시간</div>
+          <div style={{ flex: 1, borderRadius: 16, background: "#F5F8FD", border: "1px solid #DCE3EF", padding: "12px 14px" }}>
+            <div style={{ fontSize: 17, color: "#5B6B85", fontWeight: 700 }}>출근 시간</div>
             <div style={{ fontSize: 24, fontWeight: 900, color: start ? NAVY0 : "#9AA9C3", marginTop: 2 }}>{start || "미정"}</div>
           </div>
         </div>
         <button type="button" disabled={loading} onClick={onCheckin} style={{ ...bigBtn(true), minHeight: 84, fontSize: 28, opacity: loading ? 0.6 : 1 }}>
           {loading ? "처리중…" : "출근하기"}
         </button>
-        <button type="button" onClick={onLater} style={{ width: "100%", marginTop: 12, minHeight: 52, borderRadius: 14, border: "1.5px solid #DCE3EF", background: "#fff", color: "#3A4A66", fontSize: 17, fontWeight: 800, cursor: "pointer", fontFamily: FONT }}>
+        <button type="button" onClick={onLater} style={{ width: "100%", marginTop: 12, minHeight: 52, borderRadius: 16, border: "1.5px solid #DCE3EF", background: "#fff", color: "#3A4A66", fontSize: 18, fontWeight: 800, cursor: "pointer", fontFamily: FONT }}>
           나중에 (30분 뒤 다시 알려드려요)
         </button>
         {!start && (
-          <button type="button" onClick={onSetTime} style={{ width: "100%", marginTop: 10, border: "none", background: "transparent", color: NAVY2, fontSize: 16, fontWeight: 800, textDecoration: "underline", cursor: "pointer", fontFamily: FONT }}>
+          <button type="button" onClick={onSetTime} style={{ width: "100%", marginTop: 10, border: "none", background: "transparent", color: NAVY2, fontSize: 17, fontWeight: 800, textDecoration: "underline", cursor: "pointer", fontFamily: FONT }}>
             매일 출근 시간에 알림 받기 (시간 정하기)
           </button>
         )}
@@ -126,18 +126,18 @@ export function WorkStartSetting({ driver, onSave }) {
   const cur = driver?.출근시간 && parseHM(driver.출근시간) != null ? driver.출근시간 : "";
   const on = driver?.출근알림 !== false;
   return (
-    <div style={{ background: "#fff", borderRadius: 16, padding: "16px", marginBottom: 14, border: "1px solid #E3E8F0", boxShadow: "0 1px 6px rgba(0,0,0,0.05)", fontFamily: FONT }}>
-      <div style={{ fontSize: 18, fontWeight: 900, color: NAVY0 }}>출근 알림</div>
-      <div style={{ fontSize: 16, color: "#5B6B85", marginTop: 4, lineHeight: 1.5 }}>출근 10분 전과 출근 시간에 휴대폰 알림으로 알려드려요. (출근을 누르면 오지 않아요)</div>
+    <div style={{ background: "#fff", borderRadius: 20, padding: "16px", marginBottom: 14, border: "1px solid #E6EBF3", boxShadow: "0 1px 6px rgba(0,0,0,0.05)", fontFamily: FONT }}>
+      <div style={{ fontSize: 19, fontWeight: 900, color: NAVY0 }}>출근 알림</div>
+      <div style={{ fontSize: 17, color: "#5B6B85", marginTop: 4, lineHeight: 1.5 }}>출근 10분 전과 출근 시간에 휴대폰 알림으로 알려드려요. (출근을 누르면 오지 않아요)</div>
       <div style={{ display: "flex", gap: 10, alignItems: "center", marginTop: 12 }}>
         <select aria-label="출근 시간" value={cur} onChange={(e) => onSave({ 출근시간: e.target.value, ...(e.target.value ? { 출근알림: true } : {}) })}
-          style={{ flex: 1, minWidth: 0, height: 52, borderRadius: 12, border: `1.5px solid ${NAVY1}`, padding: "0 12px", fontSize: 20, fontWeight: 900, color: NAVY0, background: "#fff", fontFamily: FONT }}>
+          style={{ flex: 1, minWidth: 0, height: 52, borderRadius: 14, border: `1.5px solid ${NAVY1}`, padding: "0 12px", fontSize: 21, fontWeight: 900, color: NAVY0, background: "#fff", fontFamily: FONT }}>
           <option value="">출근 시간 선택</option>
           {TIME_OPTS.map((t) => <option key={t} value={t}>{t}</option>)}
           {cur && !TIME_OPTS.includes(cur) && <option value={cur}>{cur}</option>}
         </select>
         <button type="button" disabled={!cur} onClick={() => onSave({ 출근알림: !on })}
-          style={{ height: 52, padding: "0 16px", borderRadius: 12, border: "none", fontSize: 17, fontWeight: 900, cursor: cur ? "pointer" : "default", fontFamily: FONT,
+          style={{ height: 52, padding: "0 16px", borderRadius: 14, border: "none", fontSize: 18, fontWeight: 900, cursor: cur ? "pointer" : "default", fontFamily: FONT,
             background: cur && on ? NAVY1 : "#EEF2F8", color: cur && on ? "#fff" : "#9AA9C3" }}>
           {cur && on ? "알림 켜짐" : "알림 꺼짐"}
         </button>
@@ -153,8 +153,8 @@ function Row({ k, v, strong }) {
   if (!v) return null;
   return (
     <div style={{ display: "flex", gap: 12, padding: "10px 0", borderBottom: "1px solid #EEF2F8", alignItems: "baseline" }}>
-      <span style={{ width: 64, flexShrink: 0, fontSize: 16, fontWeight: 800, color: "#5B6B85" }}>{k}</span>
-      <span style={{ flex: 1, minWidth: 0, fontSize: strong ? 20 : 17, fontWeight: strong ? 900 : 700, color: NAVY0, wordBreak: "break-word", lineHeight: 1.4 }}>{v}</span>
+      <span style={{ width: 64, flexShrink: 0, fontSize: 17, fontWeight: 800, color: "#5B6B85" }}>{k}</span>
+      <span style={{ flex: 1, minWidth: 0, fontSize: strong ? 21 : 18, fontWeight: strong ? 900 : 700, color: NAVY0, wordBreak: "break-word", lineHeight: 1.4 }}>{v}</span>
     </div>
   );
 }
@@ -162,11 +162,11 @@ function Place({ tag, name, addr, at }) {
   return (
     <div style={{ padding: "12px 0", borderBottom: "1px solid #EEF2F8" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-        <span style={{ fontSize: 15, fontWeight: 900, color: "#fff", background: tag === "상차" ? NAVY1 : NAVY2, borderRadius: 8, padding: "3px 10px", flexShrink: 0 }}>{tag}</span>
-        <span style={{ fontSize: 20, fontWeight: 900, color: NAVY0, minWidth: 0, wordBreak: "break-word" }}>{name || "-"}</span>
+        <span style={{ fontSize: 17, fontWeight: 900, color: "#fff", background: tag === "상차" ? NAVY1 : NAVY2, borderRadius: 8, padding: "3px 10px", flexShrink: 0 }}>{tag}</span>
+        <span style={{ fontSize: 21, fontWeight: 900, color: NAVY0, minWidth: 0, wordBreak: "break-word" }}>{name || "-"}</span>
       </div>
-      {addr && <div style={{ fontSize: 16, color: "#3A4A66", marginTop: 4, lineHeight: 1.45, wordBreak: "break-word" }}>{addr}</div>}
-      {at && <div style={{ fontSize: 17, fontWeight: 800, color: NAVY2, marginTop: 4 }}>{at}</div>}
+      {addr && <div style={{ fontSize: 17, color: "#3A4A66", marginTop: 4, lineHeight: 1.45, wordBreak: "break-word" }}>{addr}</div>}
+      {at && <div style={{ fontSize: 18, fontWeight: 800, color: NAVY2, marginTop: 4 }}>{at}</div>}
     </div>
   );
 }
@@ -194,25 +194,25 @@ export function NewOrderPopup({ order: o, count = 1, loading, onAccept, onReject
             <button type="button" disabled={loading} onClick={() => setStep("reject")} style={{ ...bigBtn(false), flex: 1, opacity: loading ? 0.6 : 1 }}>거절</button>
             <button type="button" disabled={loading} onClick={onAccept} style={{ ...bigBtn(true), flex: 1.4, opacity: loading ? 0.6 : 1 }}>{loading ? "처리중…" : "승인"}</button>
           </div>
-          <button type="button" onClick={onLater} style={{ width: "100%", marginTop: 12, border: "none", background: "transparent", color: "#5B6B85", fontSize: 16, fontWeight: 700, cursor: "pointer", fontFamily: FONT }}>
+          <button type="button" onClick={onLater} style={{ width: "100%", marginTop: 12, border: "none", background: "transparent", color: "#5B6B85", fontSize: 17, fontWeight: 700, cursor: "pointer", fontFamily: FONT }}>
             나중에 보기 (홈 화면 오더 카드에서 다시 볼 수 있어요)
           </button>
         </div>
       ) : (
         <div style={{ padding: "18px 20px 20px" }}>
-          <div style={{ fontSize: 19, fontWeight: 900, color: NAVY0 }}>거절하는 이유 (선택)</div>
-          <div style={{ fontSize: 16, color: "#5B6B85", marginTop: 4 }}>고르거나 적어 주시면 담당자에게 전달됩니다. 비워도 됩니다.</div>
+          <div style={{ fontSize: 20, fontWeight: 900, color: NAVY0 }}>거절하는 이유 (선택)</div>
+          <div style={{ fontSize: 17, color: "#5B6B85", marginTop: 4 }}>고르거나 적어 주시면 담당자에게 전달됩니다. 비워도 됩니다.</div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 12 }}>
             {REJECT_REASONS.map((r) => (
-              <button key={r} type="button" onClick={() => setReason(r)} style={{ minHeight: 52, borderRadius: 12, fontSize: 16, fontWeight: 800, cursor: "pointer", fontFamily: FONT,
+              <button key={r} type="button" onClick={() => setReason(r)} style={{ minHeight: 52, borderRadius: 14, fontSize: 17, fontWeight: 800, cursor: "pointer", fontFamily: FONT,
                 border: `1.5px solid ${reason === r ? NAVY1 : "#DCE3EF"}`, background: reason === r ? NAVY1 : "#fff", color: reason === r ? "#fff" : NAVY0 }}>{r}</button>
             ))}
           </div>
           <textarea value={reason} onChange={(e) => setReason(e.target.value)} rows={2} placeholder="직접 적기"
-            style={{ width: "100%", marginTop: 10, boxSizing: "border-box", border: "1.5px solid #DCE3EF", borderRadius: 12, padding: "12px", fontSize: 17, fontFamily: FONT, resize: "none", outline: "none" }} />
+            style={{ width: "100%", marginTop: 10, boxSizing: "border-box", border: "1.5px solid #DCE3EF", borderRadius: 14, padding: "12px", fontSize: 18, fontFamily: FONT, resize: "none", outline: "none" }} />
           <div style={{ display: "flex", gap: 10, marginTop: 14 }}>
-            <button type="button" disabled={loading} onClick={() => setStep("view")} style={{ ...bigBtn(false), flex: 1, fontSize: 19 }}>돌아가기</button>
-            <button type="button" disabled={loading} onClick={() => onReject(reason.trim())} style={{ ...bigBtn(true), flex: 1.4, fontSize: 19, opacity: loading ? 0.6 : 1 }}>{loading ? "처리중…" : "거절하기"}</button>
+            <button type="button" disabled={loading} onClick={() => setStep("view")} style={{ ...bigBtn(false), flex: 1, fontSize: 20 }}>돌아가기</button>
+            <button type="button" disabled={loading} onClick={() => onReject(reason.trim())} style={{ ...bigBtn(true), flex: 1.4, fontSize: 20, opacity: loading ? 0.6 : 1 }}>{loading ? "처리중…" : "거절하기"}</button>
           </div>
         </div>
       )}
@@ -230,12 +230,12 @@ export function DeletedOrdersPopup({ notices, onConfirm, busy }) {
         {notices.map((n) => {
           const o = n.order || {};
           return (
-            <div key={n.id} style={{ borderRadius: 16, border: "1.5px solid #DCE3EF", background: "#F5F8FD", padding: "12px 14px", marginTop: 12 }}>
-              {o.거래처명 && <div style={{ fontSize: 16, fontWeight: 800, color: "#5B6B85" }}>{o.거래처명}</div>}
-              <div style={{ fontSize: 19, fontWeight: 900, color: NAVY0, marginTop: 2, lineHeight: 1.4, wordBreak: "break-word" }}>
+            <div key={n.id} style={{ borderRadius: 20, border: "1.5px solid #DCE3EF", background: "#F5F8FD", padding: "12px 14px", marginTop: 12 }}>
+              {o.거래처명 && <div style={{ fontSize: 17, fontWeight: 800, color: "#5B6B85" }}>{o.거래처명}</div>}
+              <div style={{ fontSize: 20, fontWeight: 900, color: NAVY0, marginTop: 2, lineHeight: 1.4, wordBreak: "break-word" }}>
                 {o.상차지명 || "-"} → {o.하차지명 || "-"}
               </div>
-              <div style={{ fontSize: 16, color: "#3A4A66", marginTop: 4 }}>
+              <div style={{ fontSize: 17, color: "#3A4A66", marginTop: 4 }}>
                 {[o.상차일 || o.상차시간 ? `상차 ${when(o.상차일, o.상차시간)}` : "", [o.차량톤수, o.화물내용].filter(Boolean).join(" · ")].filter(Boolean).join("  ·  ") || n.body || ""}
               </div>
             </div>
@@ -261,17 +261,17 @@ export function PushSetupCard({ kind, onEnable, onClose }) {
   return (
     <div style={{ borderRadius: 18, border: `2px solid ${NAVY1}`, background: "#fff", padding: "14px 16px", marginBottom: 14, fontFamily: FONT, boxShadow: "0 6px 18px rgba(27,43,75,0.12)" }}>
       <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
-        <span style={{ width: 40, height: 40, borderRadius: 12, background: NAVY1, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+        <span style={{ width: 40, height: 40, borderRadius: 14, background: NAVY1, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
           <svg width="22" height="22" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" /><path d="M13.73 21a2 2 0 0 1-3.46 0" /></svg>
         </span>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 18, fontWeight: 900, color: NAVY0 }}>{T[0]}</div>
-          {T[1].map((l, i) => <div key={i} style={{ fontSize: 16, color: "#3A4A66", marginTop: 4, lineHeight: 1.45 }}>{T[1].length > 1 ? `${i + 1}. ` : ""}{l}</div>)}
+          <div style={{ fontSize: 19, fontWeight: 900, color: NAVY0 }}>{T[0]}</div>
+          {T[1].map((l, i) => <div key={i} style={{ fontSize: 17, color: "#3A4A66", marginTop: 4, lineHeight: 1.45 }}>{T[1].length > 1 ? `${i + 1}. ` : ""}{l}</div>)}
         </div>
-        {onClose && <button type="button" aria-label="닫기" onClick={onClose} style={{ border: "none", background: "transparent", fontSize: 20, color: "#9AA9C3", cursor: "pointer", padding: 4 }}>✕</button>}
+        {onClose && <button type="button" aria-label="닫기" onClick={onClose} style={{ border: "none", background: "transparent", fontSize: 21, color: "#9AA9C3", cursor: "pointer", padding: 4 }}>✕</button>}
       </div>
       {kind === "default" && (
-        <button type="button" onClick={onEnable} style={{ ...bigBtn(true), marginTop: 12, minHeight: 56, fontSize: 20 }}>알림 켜기</button>
+        <button type="button" onClick={onEnable} style={{ ...bigBtn(true), marginTop: 12, minHeight: 56, fontSize: 21 }}>알림 켜기</button>
       )}
     </div>
   );

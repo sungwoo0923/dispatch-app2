@@ -234,14 +234,14 @@ export default function DriverLogin() {
   };
   const field = (key, label, input) => (
     <div className="mb-3">
-      <label className="block mb-1.5 text-[13.5px] font-black text-[#3A4A66]">{label}</label>
+      <label className="block mb-1.5 text-[15.5px] font-black text-[#3A4A66]">{label}</label>
       <div className="group flex items-center gap-2.5 h-[54px] px-3.5 rounded-2xl bg-[#F5F7FB] border border-[#E3E8F0] transition focus-within:bg-white focus-within:border-[#2D4C82] focus-within:shadow-[0_0_0_4px_rgba(45,76,130,0.10)]">
         <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" className="text-[#9AA9C3] group-focus-within:text-[#1B2B4B] shrink-0">{fieldIcon[key]}</svg>
         {input}
       </div>
     </div>
   );
-  const inputCls = "flex-1 min-w-0 bg-transparent outline-none text-[17px] font-bold text-[#0F1A30] placeholder:text-[#B4BFD0] placeholder:font-medium";
+  const inputCls = "flex-1 min-w-0 bg-transparent outline-none text-[18px] font-bold text-[#0F1A30] placeholder:text-[#B4BFD0] placeholder:font-medium";
 
   return (
     <>
@@ -261,24 +261,24 @@ export default function DriverLogin() {
           <LogisMark size={46} />
           <div>
             <div className="mb-2"><LogisWordmark height={16} /></div>
-            <div className="text-[10.5px] font-bold tracking-[0.3em] text-white/45">DRIVER APP</div>
+            <div className="text-[13.5px] font-bold tracking-[0.3em] text-white/45">DRIVER APP</div>
           </div>
         </div>
         <div className="relative">
-          <div className="flex items-center gap-2 text-[11.5px] font-extrabold tracking-[0.28em] text-[#8FB0F0]">
+          <div className="flex items-center gap-2 text-[13.5px] font-extrabold tracking-[0.28em] text-[#8FB0F0]">
             <span className="w-1.5 h-1.5 rounded-full bg-[#6E95E8] kp-pulse" /> SYSTEM ONLINE
           </div>
           <div className="mt-4 font-black leading-none tabular-nums" style={{ fontSize: 88, letterSpacing: "-0.02em", fontFamily: MONO }}>
             {pad(now.getHours())}<span className="kp-pulse text-white/40">:</span>{pad(now.getMinutes())}
             <span className="text-[30px] text-white/35 ml-2">{pad(now.getSeconds())}</span>
           </div>
-          <div className="mt-3 text-[15px] font-semibold text-white/60">
+          <div className="mt-3 text-[17px] font-semibold text-white/60">
             {now.toLocaleDateString("ko-KR", { year: "numeric", month: "long", day: "numeric", weekday: "long" })}
           </div>
           <div className="mt-10 text-[30px] font-black leading-snug tracking-tight">버튼 하나로<br />운행이 기록됩니다.</div>
-          <div className="mt-3 text-[14px] text-white/50 leading-relaxed">출근 · 상차 · 하차 · 인수증까지<br />기사님 업무를 한 화면에서 처리합니다.</div>
+          <div className="mt-3 text-[16.5px] text-white/50 leading-relaxed">출근 · 상차 · 하차 · 인수증까지<br />기사님 업무를 한 화면에서 처리합니다.</div>
         </div>
-        <div className="relative flex items-center gap-6 text-[11px] font-bold tracking-[0.2em] text-white/35">
+        <div className="relative flex items-center gap-6 text-[13.5px] font-bold tracking-[0.2em] text-white/35">
           <span>SECURE · TLS</span><span>GPS LIVE</span><span>© LogisWeb</span>
         </div>
       </div>
@@ -290,16 +290,16 @@ export default function DriverLogin() {
           <div className="lg:hidden flex flex-col items-center mb-4">
             <LogisMark size={52} style={{ filter: "drop-shadow(0 10px 24px rgba(15,26,48,0.25))" }} />
             <div className="mt-2.5 mb-1"><LogisTag height={13} chip /></div>
-            <div className="text-[10.5px] font-bold tracking-[0.3em] text-[#9AA9C3]">DRIVER APP</div>
-            <div className="mt-2 flex items-center gap-2 h-7 px-3 rounded-full bg-white border border-[#E3E8F0] text-[12px] font-bold text-[#0F1A30] tabular-nums" style={{ fontFamily: MONO }}>
+            <div className="text-[13.5px] font-bold tracking-[0.3em] text-[#9AA9C3]">DRIVER APP</div>
+            <div className="mt-2 flex items-center gap-2 h-7 px-3 rounded-full bg-white border border-[#E3E8F0] text-[14.5px] font-bold text-[#0F1A30] tabular-nums" style={{ fontFamily: MONO }}>
               <span className="w-1.5 h-1.5 rounded-full bg-[#4B6CB7] kp-pulse" />{pad(now.getHours())}:{pad(now.getMinutes())}<span className="text-[#9AA9C3]">:{pad(now.getSeconds())}</span>
             </div>
           </div>
 
           <div className="bg-white rounded-[26px] border border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_24px_60px_rgba(15,26,48,0.10)] px-5 sm:px-10 pt-6 sm:pt-9 pb-6 sm:pb-8">
-            <div className="text-[11.5px] font-extrabold tracking-[0.28em] text-[#4B6CB7]">DRIVER SIGN IN</div>
-            <h1 className="mt-1 text-[22px] sm:text-[26px] font-black text-[#0F1A30] tracking-tight">기사 로그인</h1>
-            <p className="text-[12.5px] sm:text-[13.5px] text-[#7A879C] mt-1 mb-5 sm:mb-7">소속 회사 · 차량번호 · 이름으로 로그인하세요</p>
+            <div className="text-[13.5px] font-extrabold tracking-[0.28em] text-[#4B6CB7]">DRIVER SIGN IN</div>
+            <h1 className="mt-1 text-[23px] sm:text-[26px] font-black text-[#0F1A30] tracking-tight">기사 로그인</h1>
+            <p className="text-[14.5px] sm:text-[15.5px] text-[#7A879C] mt-1 mb-5 sm:mb-7">소속 회사 · 차량번호 · 이름으로 로그인하세요</p>
 
             {field("company", "소속 운송사명", (
               <input value={companyNameState} onChange={(e) => setCompanyName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && login()} placeholder="소속된 운송사명 입력" className={inputCls} />
@@ -323,30 +323,30 @@ export default function DriverLogin() {
                 <div className="flex items-start gap-3">
                   <ErrBadge tone={error.tone} size={34} />
                   <div className="min-w-0">
-                    <div className="text-[17px] font-black text-[#0F1A30] leading-snug">{error.title}</div>
-                    <div className="mt-1 text-[14.5px] font-bold text-[#1B2B4B] leading-relaxed break-keep">{error.message}</div>
-                    {error.hint && <div className="mt-1 text-[13.5px] font-semibold text-[#5B6B85] leading-relaxed break-keep">{error.hint}</div>}
+                    <div className="text-[18px] font-black text-[#0F1A30] leading-snug">{error.title}</div>
+                    <div className="mt-1 text-[16.5px] font-bold text-[#1B2B4B] leading-relaxed break-keep">{error.message}</div>
+                    {error.hint && <div className="mt-1 text-[15.5px] font-semibold text-[#5B6B85] leading-relaxed break-keep">{error.hint}</div>}
                   </div>
                 </div>
               </div>
             )}
 
             <button onClick={() => login()} disabled={loggingIn}
-              className="w-full h-14 rounded-2xl text-white text-[17px] font-black tracking-[0.04em] flex items-center justify-center gap-2 shadow-[0_14px_28px_rgba(15,26,48,0.28)] hover:brightness-110 active:scale-[0.99] transition disabled:opacity-60"
+              className="w-full h-14 rounded-2xl text-white text-[18px] font-black tracking-[0.04em] flex items-center justify-center gap-2 shadow-[0_14px_28px_rgba(15,26,48,0.28)] hover:brightness-110 active:scale-[0.99] transition disabled:opacity-60"
               style={{ background: "linear-gradient(120deg, #0F1A30 0%, #1B2B4B 55%, #2D4C82 100%)" }}>
               {loggingIn ? "확인 중…" : "로그인"}
               {!loggingIn && <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M13 6l6 6-6 6" /></svg>}
             </button>
 
-            <div className="flex items-center gap-3 my-4 sm:my-6"><span className="flex-1 h-px bg-[#EEF1F6]" /><span className="text-[11px] font-bold tracking-[0.2em] text-[#C2CBD9]">OR</span><span className="flex-1 h-px bg-[#EEF1F6]" /></div>
+            <div className="flex items-center gap-3 my-4 sm:my-6"><span className="flex-1 h-px bg-[#EEF1F6]" /><span className="text-[13.5px] font-bold tracking-[0.2em] text-[#C2CBD9]">OR</span><span className="flex-1 h-px bg-[#EEF1F6]" /></div>
 
             <div className={`grid ${window.Capacitor?.isNativePlatform?.() ? "grid-cols-1" : "grid-cols-2"} gap-2.5`}>
-              <button onClick={() => navigate("/driver-register")} className="h-11 rounded-xl border border-[#0F1A30] text-[#0F1A30] text-[13.5px] font-black flex items-center justify-center hover:bg-[#0F1A30] hover:text-white transition">기사 등록하기</button>
+              <button onClick={() => navigate("/driver-register")} className="h-11 rounded-xl border border-[#0F1A30] text-[#0F1A30] text-[15.5px] font-black flex items-center justify-center hover:bg-[#0F1A30] hover:text-white transition">기사 등록하기</button>
               {/* 기사앱(APK)에서는 기사 전용이라 다른 유형 로그인을 숨긴다 */}
-              {!window.Capacitor?.isNativePlatform?.() && <button onClick={() => navigate("/login")} className="h-11 rounded-xl border border-[#E3E8F0] text-[#5B6B85] text-[13.5px] font-bold flex items-center justify-center hover:bg-[#F5F7FB] transition">다른 유형 로그인</button>}
+              {!window.Capacitor?.isNativePlatform?.() && <button onClick={() => navigate("/login")} className="h-11 rounded-xl border border-[#E3E8F0] text-[#5B6B85] text-[15.5px] font-bold flex items-center justify-center hover:bg-[#F5F7FB] transition">다른 유형 로그인</button>}
             </div>
           </div>
-          <div className="flex justify-center mt-4 text-[11px] font-bold tracking-[0.2em] text-[#B4BFD0]"><LogisTag height={7.5} chip text="DRIVER" /></div>
+          <div className="flex justify-center mt-4 text-[13.5px] font-bold tracking-[0.2em] text-[#B4BFD0]"><LogisTag height={7.5} chip text="DRIVER" /></div>
         </div>
       </div>
     </div>
@@ -356,8 +356,8 @@ export default function DriverLogin() {
       <div className="fixed inset-0 z-[100050] bg-[#060E1F]/55 flex items-center justify-center p-6" data-testid="driver-login-busy">
         <div className="w-full max-w-[320px] rounded-2xl bg-white shadow-2xl px-6 py-6 text-center">
           <div className="mx-auto w-12 h-12 rounded-full border-4 border-[#DCE3EE] border-t-[#2D4C82] animate-spin" />
-          <div className="mt-4 text-[18px] font-black text-[#0F1A30]">로그인 확인 중…</div>
-          <div className="mt-1 text-[14px] font-semibold text-[#5B6B85]">잠시만 기다려 주세요</div>
+          <div className="mt-4 text-[19px] font-black text-[#0F1A30]">로그인 확인 중…</div>
+          <div className="mt-1 text-[16.5px] font-semibold text-[#5B6B85]">잠시만 기다려 주세요</div>
         </div>
       </div>
     )}
@@ -370,20 +370,20 @@ export default function DriverLogin() {
             <div className="flex items-center gap-3">
               <ErrBadge tone={error.tone} size={44} dark />
               <div className="min-w-0">
-                <div className="text-[11px] font-extrabold tracking-[0.24em] text-[#8FB0F0]">{error.tone === "wait" ? "PENDING" : error.tone === "net" ? "NETWORK" : "LOGIN FAILED"}</div>
-                <div id="dlErrTitle" className="text-[21px] font-black leading-tight">{error.title}</div>
+                <div className="text-[13.5px] font-extrabold tracking-[0.24em] text-[#8FB0F0]">{error.tone === "wait" ? "PENDING" : error.tone === "net" ? "NETWORK" : "LOGIN FAILED"}</div>
+                <div id="dlErrTitle" className="text-[22px] font-black leading-tight">{error.title}</div>
               </div>
             </div>
           </div>
           <div className="px-6 py-5">
-            <p className="text-[16.5px] font-bold text-[#0F1A30] leading-relaxed break-keep">{error.message}</p>
-            {error.hint && <p className="mt-2.5 text-[15px] font-semibold text-[#5B6B85] leading-relaxed break-keep">{error.hint}</p>}
+            <p className="text-[17.5px] font-bold text-[#0F1A30] leading-relaxed break-keep">{error.message}</p>
+            {error.hint && <p className="mt-2.5 text-[17px] font-semibold text-[#5B6B85] leading-relaxed break-keep">{error.hint}</p>}
           </div>
           <div className={`px-6 pb-6 grid gap-2 ${error.code === "driver/not-registered" ? "grid-cols-2" : "grid-cols-1"}`}>
             {error.code === "driver/not-registered" && (
-              <button onClick={() => { setError(null); navigate("/driver-register"); }} className="h-14 rounded-2xl border-2 border-[#0F1A30] text-[#0F1A30] text-[16px] font-black">기사 등록하기</button>
+              <button onClick={() => { setError(null); navigate("/driver-register"); }} className="h-14 rounded-2xl border-2 border-[#0F1A30] text-[#0F1A30] text-[17px] font-black">기사 등록하기</button>
             )}
-            <button autoFocus onClick={() => setErrorPopup(false)} className="h-14 rounded-2xl text-white text-[17px] font-black" style={{ background: "linear-gradient(120deg, #0F1A30 0%, #1B2B4B 55%, #2D4C82 100%)" }}>확인</button>
+            <button autoFocus onClick={() => setErrorPopup(false)} className="h-14 rounded-2xl text-white text-[18px] font-black" style={{ background: "linear-gradient(120deg, #0F1A30 0%, #1B2B4B 55%, #2D4C82 100%)" }}>확인</button>
           </div>
         </div>
       </div>

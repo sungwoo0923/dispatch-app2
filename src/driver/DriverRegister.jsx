@@ -95,24 +95,24 @@ const STEPS = [
 ];
 
 const MONO = "'JetBrains Mono','SF Mono',ui-monospace,monospace";
-const inputCls = "w-full h-14 border-2 border-[#DCE3EE] rounded-2xl px-4 text-[18px] font-bold text-[#0F1A30] bg-white placeholder:text-[#9AA7BD] placeholder:font-semibold focus:outline-none focus:border-[#2D4C82] focus:ring-4 focus:ring-[#2D4C82]/10 transition";
+const inputCls = "w-full h-14 border-2 border-[#DCE3EE] rounded-2xl px-4 text-[19px] font-bold text-[#0F1A30] bg-white placeholder:text-[#9AA7BD] placeholder:font-semibold focus:outline-none focus:border-[#2D4C82] focus:ring-4 focus:ring-[#2D4C82]/10 transition";
 
 function Field({ label, req, hint, children }) {
   return (
     <div>
       <div className="flex items-baseline justify-between mb-2">
-        <label className="text-[16px] font-black text-[#1B2B4B]">{label}{req && <span className="text-[#2D4C82] ml-0.5">*</span>}</label>
-        {!req && <span className="text-[12px] font-bold text-[#9AA7BD]">선택</span>}
+        <label className="text-[17px] font-black text-[#1B2B4B]">{label}{req && <span className="text-[#2D4C82] ml-0.5">*</span>}</label>
+        {!req && <span className="text-[14.5px] font-bold text-[#9AA7BD]">선택</span>}
       </div>
       {children}
-      {hint && <p className="text-[13px] text-[#7A89A3] mt-1.5">{hint}</p>}
+      {hint && <p className="text-[15.5px] text-[#7A89A3] mt-1.5">{hint}</p>}
     </div>
   );
 }
 
 // 큰 선택 버튼 묶음 — 드롭다운 대신 한 번에 보이고 바로 누른다(같은 걸 다시 누르면 선택 해제)
 function Chips({ options, value, onPick, cols = 3, size = "md", label = (o) => o }) {
-  const h = size === "xs" ? "h-9 text-[13px]" : size === "sm" ? "h-10 text-[14px]" : "h-12 text-[15px]";
+  const h = size === "xs" ? "h-9 text-[15.5px]" : size === "sm" ? "h-10 text-[16.5px]" : "h-12 text-[17px]";
   return (
     <div className="grid gap-1.5" style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}>
       {options.map((o) => {
@@ -136,10 +136,10 @@ function Fold({ title, summary, open, onToggle, children }) {
     <div className={`rounded-2xl border ${open ? "border-[#2D4C82]/40 bg-[#F8FAFE]" : "border-[#DCE3EE] bg-white"}`}>
       <button type="button" onClick={onToggle} className="w-full flex items-center gap-3 px-4 h-14 text-left">
         <span className="flex-1 min-w-0">
-          <span className="block text-[15.5px] font-black text-[#0F1A30]">{title}</span>
-          {!open && summary && <span className="block text-[12.5px] font-bold text-[#2D4C82] truncate">{summary}</span>}
+          <span className="block text-[17px] font-black text-[#0F1A30]">{title}</span>
+          {!open && summary && <span className="block text-[14.5px] font-bold text-[#2D4C82] truncate">{summary}</span>}
         </span>
-        <span className="text-[13px] font-black text-[#7A89A3] shrink-0">{open ? "접기 ▲" : "열기 ▼"}</span>
+        <span className="text-[15.5px] font-black text-[#7A89A3] shrink-0">{open ? "접기 ▲" : "열기 ▼"}</span>
       </button>
       {open && <div className="px-4 pb-4 space-y-4">{children}</div>}
     </div>
@@ -152,13 +152,13 @@ function TermRow({ title, text, checked, onChange }) {
     <div className={`rounded-2xl border ${checked ? "border-[#2D4C82]/40 bg-[#F5F8FD]" : "border-[#DCE3EE] bg-white"}`}>
       <div className="flex items-center gap-3 px-3.5 h-14">
         <button type="button" onClick={() => onChange(!checked)} className="flex items-center gap-3 flex-1 min-w-0 text-left">
-          <span className={`w-7 h-7 shrink-0 rounded-full grid place-items-center text-[14px] font-black ${checked ? "bg-[#1B2B4B] text-white" : "border-2 border-[#C9D2E0] text-transparent"}`}>✓</span>
-          <span className="text-[15px] font-bold text-[#0F1A30] truncate">{title} <span className="text-[#2D4C82] text-[12px]">(필수)</span></span>
+          <span className={`w-7 h-7 shrink-0 rounded-full grid place-items-center text-[16.5px] font-black ${checked ? "bg-[#1B2B4B] text-white" : "border-2 border-[#C9D2E0] text-transparent"}`}>✓</span>
+          <span className="text-[17px] font-bold text-[#0F1A30] truncate">{title} <span className="text-[#2D4C82] text-[14.5px]">(필수)</span></span>
         </button>
-        <button type="button" onClick={() => setOpen((v) => !v)} className="text-[13px] font-bold text-[#7A89A3] px-2 h-9 shrink-0">{open ? "닫기" : "보기"}</button>
+        <button type="button" onClick={() => setOpen((v) => !v)} className="text-[15.5px] font-bold text-[#7A89A3] px-2 h-9 shrink-0">{open ? "닫기" : "보기"}</button>
       </div>
       {open && (
-        <div className="mx-3.5 mb-3 px-3 py-2.5 max-h-36 overflow-y-auto rounded-xl bg-white border border-[#EEF1F6] text-[12.5px] text-[#5B6B85] leading-relaxed whitespace-pre-wrap">{text}</div>
+        <div className="mx-3.5 mb-3 px-3 py-2.5 max-h-36 overflow-y-auto rounded-xl bg-white border border-[#EEF1F6] text-[14.5px] text-[#5B6B85] leading-relaxed whitespace-pre-wrap">{text}</div>
       )}
     </div>
   );
@@ -565,9 +565,9 @@ export default function DriverRegister() {
         <Field label="은행">
           {bank.bank && !bankOpen ? (
             <div className="flex items-center gap-3 h-14 px-3.5 rounded-2xl border-2 border-[#2D4C82]/40 bg-[#F5F8FD]">
-              <span className="w-8 h-8 rounded-xl bg-[#1B2B4B] text-white grid place-items-center text-[12px] font-black">{bank.bank.slice(0, 1)}</span>
-              <span className="flex-1 text-[17px] font-black text-[#0F1A30] truncate">{bank.bank}</span>
-              <button type="button" onClick={() => setBankOpen(true)} className="h-10 px-3.5 rounded-xl border border-[#C9D6EE] bg-white text-[14px] font-black text-[#1B2B4B]">변경</button>
+              <span className="w-8 h-8 rounded-xl bg-[#1B2B4B] text-white grid place-items-center text-[14.5px] font-black">{bank.bank.slice(0, 1)}</span>
+              <span className="flex-1 text-[18px] font-black text-[#0F1A30] truncate">{bank.bank}</span>
+              <button type="button" onClick={() => setBankOpen(true)} className="h-10 px-3.5 rounded-xl border border-[#C9D6EE] bg-white text-[16.5px] font-black text-[#1B2B4B]">변경</button>
             </div>
           ) : (
             <Chips options={BANK_NAMES} value={bank.bank} onPick={(b) => { if (b) { pickBank(b); setBankOpen(false); } }} cols={4} size="sm" label={(b) => b.replace(/\(.*\)/, "")} />
@@ -580,11 +580,11 @@ export default function DriverRegister() {
                 onChange={(e) => { setBankReset(false); setBank((v) => ({ ...v, acct: onlyDigits(e.target.value).slice(0, 16) })); }}
                 placeholder="숫자만 입력하면 하이픈 자동"
                 className={`${inputCls} pr-24 tabular-nums tracking-wider`} style={{ fontFamily: acctDigits ? MONO : undefined }} />
-              <span className={`absolute right-3 top-1/2 -translate-y-1/2 px-2 h-7 rounded-lg grid place-items-center text-[12px] font-black tabular-nums ${acctLens.includes(acctDigits.length) ? "bg-[#1B2B4B] text-white" : "bg-[#EEF2F8] text-[#5B6B85]"}`} style={{ fontFamily: MONO }}>
+              <span className={`absolute right-3 top-1/2 -translate-y-1/2 px-2 h-7 rounded-lg grid place-items-center text-[14.5px] font-black tabular-nums ${acctLens.includes(acctDigits.length) ? "bg-[#1B2B4B] text-white" : "bg-[#EEF2F8] text-[#5B6B85]"}`} style={{ fontFamily: MONO }}>
                 {acctDigits.length}{acctLens.length ? `/${acctLens.find((l) => l >= acctDigits.length) || acctLens[acctLens.length - 1]}` : ""}자리
               </span>
             </div>
-            <div className="mt-1.5 min-h-[18px] text-[12.5px] font-bold">
+            <div className="mt-1.5 min-h-[18px] text-[14.5px] font-bold">
               {bankReset ? <span className="text-[#2D4C82]">! 은행이 바뀌어 계좌번호를 초기화했습니다 — 다시 입력해 주세요</span>
                 : acctCheck && acctDigits ? <span className={acctCheck.level === "ok" ? "text-[#1B2B4B]" : acctCheck.level === "warn" ? "text-[#2D4C82]" : "text-[#7A89A3]"}>{acctCheck.level === "ok" ? "✓ " : "! "}{acctCheck.msg}</span>
                 : acctLens.length ? <span className="text-[#7A89A3]">{bank.bank} 계좌는 보통 {acctLens.join("·")}자리입니다</span> : null}
@@ -609,10 +609,10 @@ export default function DriverRegister() {
           {bizImg ? (
             <div className="relative rounded-2xl overflow-hidden border border-[#DCE3EE]">
               <img src={bizImg} alt="사업자등록증" className="w-full max-h-44 object-contain bg-[#F3F6FA]" />
-              <button type="button" onClick={() => setBizImg("")} className="absolute top-2 right-2 h-9 px-3 rounded-lg bg-[#0B1428]/80 text-white text-[13px] font-bold">다시 찍기</button>
+              <button type="button" onClick={() => setBizImg("")} className="absolute top-2 right-2 h-9 px-3 rounded-lg bg-[#0B1428]/80 text-white text-[15.5px] font-bold">다시 찍기</button>
             </div>
           ) : (
-            <button type="button" onClick={() => bizFileRef.current?.click()} className="w-full h-24 rounded-2xl border-2 border-dashed border-[#C9D2E0] text-[#5B6B85] text-[15px] font-bold active:bg-[#F5F8FD]">+ 촬영 또는 사진 선택</button>
+            <button type="button" onClick={() => bizFileRef.current?.click()} className="w-full h-24 rounded-2xl border-2 border-dashed border-[#C9D2E0] text-[#5B6B85] text-[17px] font-bold active:bg-[#F5F8FD]">+ 촬영 또는 사진 선택</button>
           )}
           <input ref={bizFileRef} type="file" accept="image/*" capture="environment" hidden onChange={async (e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) setBizImg(await compressImage(f, 1280, 0.72).catch(() => "")); /* ⭐ 2026-11-05 조금 더 줄여 가입 저장 시간 단축(글자는 충분히 읽힘) */ }} />
         </Field>
@@ -623,7 +623,7 @@ export default function DriverRegister() {
         </Field>
         <Field label="요청사항">
           <textarea value={requestNote} onChange={(e) => setRequestNote(e.target.value)} rows={2} placeholder="관리자에게 전달할 내용이 있으면 입력하세요"
-            className="w-full border-2 border-[#DCE3EE] rounded-2xl px-4 py-3 text-[16px] font-semibold text-[#0F1A30] placeholder:text-[#9AA7BD] focus:outline-none focus:border-[#2D4C82] focus:ring-4 focus:ring-[#2D4C82]/10 transition resize-none" />
+            className="w-full border-2 border-[#DCE3EE] rounded-2xl px-4 py-3 text-[17px] font-semibold text-[#0F1A30] placeholder:text-[#9AA7BD] focus:outline-none focus:border-[#2D4C82] focus:ring-4 focus:ring-[#2D4C82]/10 transition resize-none" />
         </Field>
       </Fold>
     </div>
@@ -635,16 +635,16 @@ export default function DriverRegister() {
       <div className="mx-auto w-20 h-20 rounded-full grid place-items-center text-[36px] font-black text-white" style={{ background: "linear-gradient(120deg,#0F1A30,#2D4C82)" }}>✓</div>
       {success === "linked" ? (
         <>
-          <h2 className="mt-5 text-[22px] font-black text-[#0F1A30]">등록된 기사 정보와 연결되었습니다</h2>
-          <p className="mt-2 text-[15.5px] font-bold text-[#5B6B85] leading-relaxed">승인 없이 바로 사용할 수 있습니다.<br />로그인 화면에서 <span className="text-[#1B2B4B]">로그인</span>만 눌러주세요.</p>
+          <h2 className="mt-5 text-[23px] font-black text-[#0F1A30]">등록된 기사 정보와 연결되었습니다</h2>
+          <p className="mt-2 text-[17px] font-bold text-[#5B6B85] leading-relaxed">승인 없이 바로 사용할 수 있습니다.<br />로그인 화면에서 <span className="text-[#1B2B4B]">로그인</span>만 눌러주세요.</p>
         </>
       ) : (
         <>
-          <h2 className="mt-5 text-[22px] font-black text-[#0F1A30]">등록 신청 완료</h2>
-          <p className="mt-2 text-[15.5px] font-bold text-[#5B6B85] leading-relaxed">관리자 승인 대기 중입니다.<br />승인 후 로그인이 가능합니다.</p>
+          <h2 className="mt-5 text-[23px] font-black text-[#0F1A30]">등록 신청 완료</h2>
+          <p className="mt-2 text-[17px] font-bold text-[#5B6B85] leading-relaxed">관리자 승인 대기 중입니다.<br />승인 후 로그인이 가능합니다.</p>
         </>
       )}
-      <button type="button" onClick={goLogin} disabled={leaving} className="mt-6 w-full h-14 rounded-2xl text-white font-black text-[17px] disabled:opacity-70" style={{ background: "linear-gradient(120deg,#0F1A30,#2D4C82)" }}>{leaving ? "마무리 중…" : "로그인 화면으로"}</button>
+      <button type="button" onClick={goLogin} disabled={leaving} className="mt-6 w-full h-14 rounded-2xl text-white font-black text-[18px] disabled:opacity-70" style={{ background: "linear-gradient(120deg,#0F1A30,#2D4C82)" }}>{leaving ? "마무리 중…" : "로그인 화면으로"}</button>
     </div>
   );
   else if (S.key === "basic") body = (
@@ -662,17 +662,17 @@ export default function DriverRegister() {
             autoComplete="off" autoCorrect="off" spellCheck={false} enterKeyHint="search"
             placeholder="소속된 운송사명을 검색하세요" className={`${inputCls} ${coPicked ? "pr-28 border-[#2D4C82] bg-[#F5F8FD]" : ""}`} />
           {coPicked && (
-            <span data-testid="co-picked" className="absolute right-3 top-1/2 -translate-y-1/2 h-9 px-3 rounded-xl bg-[#1B2B4B] text-white text-[14px] font-black grid place-items-center pointer-events-none">✓ 선택됨</span>
+            <span data-testid="co-picked" className="absolute right-3 top-1/2 -translate-y-1/2 h-9 px-3 rounded-xl bg-[#1B2B4B] text-white text-[16.5px] font-black grid place-items-center pointer-events-none">✓ 선택됨</span>
           )}
           {coOpen && coKey && coListState !== "fail" && (
             <div data-testid="co-list" className="absolute z-20 left-0 right-0 top-full mt-1.5 bg-white border-2 border-[#C9D6EE] rounded-2xl shadow-[0_18px_40px_rgba(15,26,48,.22)] overflow-hidden max-h-[300px] overflow-y-auto overscroll-contain">
-              {coListState === "loading" && <div className="px-4 py-4 text-[15px] font-bold text-[#7A89A3]">운송사 목록을 불러오는 중…</div>}
+              {coListState === "loading" && <div className="px-4 py-4 text-[17px] font-bold text-[#7A89A3]">운송사 목록을 불러오는 중…</div>}
               {coListState === "ok" && coMatches.length === 0 && (
                 <div className="px-4 py-4">
-                  <div className="text-[15.5px] font-black text-[#0F1A30]">'{companyName.trim()}' 운송사를 찾지 못했습니다</div>
-                  <div className="mt-1 text-[13.5px] font-semibold text-[#5B6B85]">글자를 조금만 쳐 보세요(예: 앞 두 글자).</div>
+                  <div className="text-[17px] font-black text-[#0F1A30]">'{companyName.trim()}' 운송사를 찾지 못했습니다</div>
+                  <div className="mt-1 text-[15.5px] font-semibold text-[#5B6B85]">글자를 조금만 쳐 보세요(예: 앞 두 글자).</div>
                   <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => { setCoManual(true); setCoOpen(false); setError(""); }}
-                    className="mt-3 w-full h-12 rounded-xl border-2 border-[#DCE3EE] text-[14.5px] font-black text-[#3A4A66] active:bg-[#F3F6FA]">목록에 없어요 — 입력한 이름 그대로 신청</button>
+                    className="mt-3 w-full h-12 rounded-xl border-2 border-[#DCE3EE] text-[16.5px] font-black text-[#3A4A66] active:bg-[#F3F6FA]">목록에 없어요 — 입력한 이름 그대로 신청</button>
                 </div>
               )}
               {coMatches.map((c) => {
@@ -681,10 +681,10 @@ export default function DriverRegister() {
                   <button key={c.companyName} type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => coPick(c)}
                     className={`w-full flex items-center gap-3 text-left px-4 min-h-[60px] py-3 border-b border-[#EEF1F6] last:border-0 ${on ? "bg-[#EEF3FC]" : "active:bg-[#EEF3FC] hover:bg-[#F5F8FD]"}`}>
                     <span className="flex-1 min-w-0">
-                      <span className="block text-[18px] font-black text-[#0F1A30] truncate">{c.companyName}</span>
-                      {c.address && <span className="block text-[13px] font-semibold text-[#7A89A3] truncate">{c.address}</span>}
+                      <span className="block text-[19px] font-black text-[#0F1A30] truncate">{c.companyName}</span>
+                      {c.address && <span className="block text-[15.5px] font-semibold text-[#7A89A3] truncate">{c.address}</span>}
                     </span>
-                    <span className={`shrink-0 h-9 px-3 rounded-xl grid place-items-center text-[14px] font-black ${on ? "bg-[#1B2B4B] text-white" : "border-2 border-[#C9D6EE] text-[#1B2B4B]"}`}>{on ? "✓ 선택됨" : "선택"}</span>
+                    <span className={`shrink-0 h-9 px-3 rounded-xl grid place-items-center text-[16.5px] font-black ${on ? "bg-[#1B2B4B] text-white" : "border-2 border-[#C9D6EE] text-[#1B2B4B]"}`}>{on ? "✓ 선택됨" : "선택"}</span>
                   </button>
                 );
               })}
@@ -692,7 +692,7 @@ export default function DriverRegister() {
           )}
         </div>
         {coManual && !coPicked && (
-          <div className="mt-2 rounded-xl bg-[#F5F8FD] border border-[#C9D6EE] px-3.5 py-2.5 text-[13.5px] font-bold text-[#1B2B4B]">입력한 이름 '{companyName.trim()}'(으)로 신청합니다. 운송사 정식 이름과 다르면 승인이 늦어질 수 있습니다.</div>
+          <div className="mt-2 rounded-xl bg-[#F5F8FD] border border-[#C9D6EE] px-3.5 py-2.5 text-[15.5px] font-bold text-[#1B2B4B]">입력한 이름 '{companyName.trim()}'(으)로 신청합니다. 운송사 정식 이름과 다르면 승인이 늦어질 수 있습니다.</div>
         )}
       </Field>
       <Field label="차량번호" req hint="띄어쓰기 없이 저장되며, 로그인할 때도 차량번호를 씁니다.">
@@ -709,10 +709,10 @@ export default function DriverRegister() {
         <button type="button" onClick={() => setMoreOpen((v) => !v)}
           className={`w-full flex items-center gap-3 px-4 h-16 rounded-2xl border-2 text-left ${moreOpen ? "border-[#2D4C82]/50 bg-[#F5F8FD]" : "border-dashed border-[#C9D2E0] bg-white"}`}>
           <span className="flex-1 min-w-0">
-            <span className="block text-[16px] font-black text-[#1B2B4B]">추가 정보(선택){moreCount ? <span className="ml-1.5 text-[#2D4C82]">{moreCount}개 입력</span> : null}</span>
-            <span className="block text-[12.5px] font-bold text-[#7A89A3] truncate">차종·톤수, 거주지, 계좌, 사업자 — 나중에 내 정보에서 입력해도 됩니다</span>
+            <span className="block text-[17px] font-black text-[#1B2B4B]">추가 정보(선택){moreCount ? <span className="ml-1.5 text-[#2D4C82]">{moreCount}개 입력</span> : null}</span>
+            <span className="block text-[14.5px] font-bold text-[#7A89A3] truncate">차종·톤수, 거주지, 계좌, 사업자 — 나중에 내 정보에서 입력해도 됩니다</span>
           </span>
-          <span className="text-[13px] font-black text-[#7A89A3] shrink-0">{moreOpen ? "접기 ▲" : "열기 ▼"}</span>
+          <span className="text-[15.5px] font-black text-[#7A89A3] shrink-0">{moreOpen ? "접기 ▲" : "열기 ▼"}</span>
         </button>
         {moreOpen && <div className="mt-2.5">{moreBody}</div>}
       </div>
@@ -730,17 +730,17 @@ export default function DriverRegister() {
         <div className="rounded-2xl border border-[#DCE3EE] divide-y divide-[#EEF1F6] overflow-hidden">
           {rows.map(([k, v]) => (
             <button key={k} type="button" onClick={() => go(0)} className="w-full flex items-center gap-3 px-4 h-12 text-left active:bg-[#F5F8FD]">
-              <span className="w-10 shrink-0 text-[12px] font-extrabold tracking-wider text-[#7A89A3]">{k}</span>
-              <span className="flex-1 min-w-0 text-[15px] font-black text-[#0F1A30] truncate tabular-nums">{v.filter(Boolean).join(" · ") || <span className="text-[#9AA7BD] font-bold">나중에 입력</span>}</span>
-              <span className="text-[12px] font-bold text-[#9AA7BD]">수정</span>
+              <span className="w-10 shrink-0 text-[14.5px] font-extrabold tracking-wider text-[#7A89A3]">{k}</span>
+              <span className="flex-1 min-w-0 text-[17px] font-black text-[#0F1A30] truncate tabular-nums">{v.filter(Boolean).join(" · ") || <span className="text-[#9AA7BD] font-bold">나중에 입력</span>}</span>
+              <span className="text-[14.5px] font-bold text-[#9AA7BD]">수정</span>
             </button>
           ))}
         </div>
         <button type="button" onClick={() => setAll(!allAgreed)}
           className={`w-full flex items-center gap-3 px-4 h-16 rounded-2xl text-left ${allAgreed ? "text-white" : "bg-[#F3F6FA] text-[#0F1A30] border-2 border-[#C9D2E0]"}`}
           style={allAgreed ? { background: "linear-gradient(120deg,#0F1A30,#2D4C82)" } : undefined}>
-          <span className={`w-8 h-8 rounded-full grid place-items-center text-[16px] font-black ${allAgreed ? "bg-white text-[#1B2B4B]" : "border-2 border-[#C9D2E0] text-transparent"}`}>✓</span>
-          <span className="text-[17px] font-black">약관 전체 동의</span>
+          <span className={`w-8 h-8 rounded-full grid place-items-center text-[17px] font-black ${allAgreed ? "bg-white text-[#1B2B4B]" : "border-2 border-[#C9D2E0] text-transparent"}`}>✓</span>
+          <span className="text-[18px] font-black">약관 전체 동의</span>
         </button>
         <div className="space-y-2">
           <TermRow title="서비스 이용약관" text={DRIVER_TERMS} checked={termsAgreed} onChange={setTermsAgreed} />
@@ -757,17 +757,17 @@ export default function DriverRegister() {
         {/* 상단 — 단계 표시 */}
         <div className="px-4 pb-4 text-white" style={{ paddingTop: "max(env(safe-area-inset-top), 14px)" }}>
           <div className="flex items-center justify-between">
-            <div className="text-[10.5px] font-extrabold tracking-[0.28em] text-[#8FB0F0]">DRIVER · SIGN UP</div>
+            <div className="text-[13.5px] font-extrabold tracking-[0.28em] text-[#8FB0F0]">DRIVER · SIGN UP</div>
             <div className="flex items-center gap-2">
-              <span className="text-[13px] font-bold text-white/70 tabular-nums" style={{ fontFamily: MONO }}>
+              <span className="text-[15.5px] font-bold text-white/70 tabular-nums" style={{ fontFamily: MONO }}>
                 <span className="text-white">{step + 1}</span> / {STEPS.length}
               </span>
               <LogisMark size={28} />
             </div>
           </div>
-          <div className="mt-2 text-[10px] font-extrabold tracking-[0.22em] text-white/45" style={{ fontFamily: MONO }}>{S.en}</div>
+          <div className="mt-2 text-[12.5px] font-extrabold tracking-[0.22em] text-white/45" style={{ fontFamily: MONO }}>{S.en}</div>
           <h1 className="text-[24px] font-black tracking-tight leading-tight">{S.title}</h1>
-          <p className="text-[14px] text-white/70 mt-0.5">{S.desc}</p>
+          <p className="text-[16.5px] text-white/70 mt-0.5">{S.desc}</p>
           <div className="mt-3 grid gap-1.5" style={{ gridTemplateColumns: `repeat(${STEPS.length}, minmax(0,1fr))` }}>
             {STEPS.map((s, i) => (
               <button key={s.key} type="button" aria-label={s.title} onClick={() => i < step && go(i)}
@@ -785,19 +785,19 @@ export default function DriverRegister() {
           {/* 하단 — 이전 / 다음 */}
           {!success && (
             <div className="px-4 pt-2.5 border-t border-[#EEF1F6] bg-white" style={{ paddingBottom: "max(env(safe-area-inset-bottom), 12px)" }}>
-              {error && <div className="mb-2.5 bg-[#0F1A30] text-white text-[14.5px] font-bold px-4 py-3 rounded-xl">{error}</div>}
+              {error && <div className="mb-2.5 bg-[#0F1A30] text-white text-[16.5px] font-bold px-4 py-3 rounded-xl">{error}</div>}
               <div className="flex gap-2">
                 <button type="button" onClick={prev} disabled={loading}
-                  className="h-14 w-[30%] rounded-2xl border-2 border-[#DCE3EE] bg-white text-[#3A4A66] font-black text-[16px] active:bg-[#F3F6FA] disabled:opacity-50">
+                  className="h-14 w-[30%] rounded-2xl border-2 border-[#DCE3EE] bg-white text-[#3A4A66] font-black text-[17px] active:bg-[#F3F6FA] disabled:opacity-50">
                   {step === 0 ? "로그인" : "이전"}
                 </button>
                 <button type="button" onClick={next} disabled={loading}
-                  className="h-14 flex-1 rounded-2xl text-white font-black text-[17px] transition disabled:opacity-60 shadow-[0_12px_26px_rgba(15,26,48,0.28)]" style={{ background: "linear-gradient(120deg,#0F1A30,#2D4C82)" }}>
+                  className="h-14 flex-1 rounded-2xl text-white font-black text-[18px] transition disabled:opacity-60 shadow-[0_12px_26px_rgba(15,26,48,0.28)]" style={{ background: "linear-gradient(120deg,#0F1A30,#2D4C82)" }}>
                   {loading ? "가입 신청 중…" : last ? "등록하기" : "다음"}
                 </button>
               </div>
               {step === 0 && !window.Capacitor?.isNativePlatform?.() && (
-                <div className="mt-2.5 text-center"><Link to="/login" className="text-[12.5px] text-[#7A89A3] hover:underline">다른 유형으로 로그인</Link></div>
+                <div className="mt-2.5 text-center"><Link to="/login" className="text-[14.5px] text-[#7A89A3] hover:underline">다른 유형으로 로그인</Link></div>
               )}
             </div>
           )}
@@ -809,8 +809,8 @@ export default function DriverRegister() {
           <div className="w-full max-w-[340px] rounded-2xl overflow-hidden bg-white shadow-[0_30px_80px_rgba(6,14,31,.45)]">
             <div className="px-6 pt-6 pb-5 text-white text-center" style={{ background: "linear-gradient(120deg,#0F1A30 0%,#1B2B4B 55%,#2D4C82 100%)" }}>
               <div className="mx-auto w-12 h-12 rounded-full border-4 border-white/20 border-t-[#8FB0F0] animate-spin" />
-              <div className="mt-3 text-[20px] font-black">가입 신청 중…</div>
-              <div className="mt-0.5 text-[13.5px] font-semibold text-white/70">화면을 닫지 말고 잠시만 기다려 주세요</div>
+              <div className="mt-3 text-[21px] font-black">가입 신청 중…</div>
+              <div className="mt-0.5 text-[15.5px] font-semibold text-white/70">화면을 닫지 말고 잠시만 기다려 주세요</div>
             </div>
             <div className="px-6 py-5 space-y-3">
               {["계정 만들기", "등록된 기사 정보 확인", "가입 정보 저장"].map((t, i) => {
@@ -819,8 +819,8 @@ export default function DriverRegister() {
                 const now = phase === n;
                 return (
                   <div key={t} className="flex items-center gap-3">
-                    <span className={`w-8 h-8 shrink-0 rounded-full grid place-items-center text-[14px] font-black ${done ? "bg-[#1B2B4B] text-white" : now ? "border-[3px] border-[#2D4C82] text-[#2D4C82]" : "border-2 border-[#DCE3EE] text-[#B4BFD0]"}`}>{done ? "✓" : n}</span>
-                    <span className={`text-[16px] font-black ${done ? "text-[#1B2B4B]" : now ? "text-[#0F1A30]" : "text-[#9AA7BD]"}`}>{t}{now ? " …" : ""}</span>
+                    <span className={`w-8 h-8 shrink-0 rounded-full grid place-items-center text-[16.5px] font-black ${done ? "bg-[#1B2B4B] text-white" : now ? "border-[3px] border-[#2D4C82] text-[#2D4C82]" : "border-2 border-[#DCE3EE] text-[#B4BFD0]"}`}>{done ? "✓" : n}</span>
+                    <span className={`text-[17px] font-black ${done ? "text-[#1B2B4B]" : now ? "text-[#0F1A30]" : "text-[#9AA7BD]"}`}>{t}{now ? " …" : ""}</span>
                   </div>
                 );
               })}

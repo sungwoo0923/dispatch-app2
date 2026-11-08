@@ -1,0 +1,98 @@
+/* ======================= src/driver/driverTheme.css =======================
+   ⭐ 2026-11-08 기사앱 리디자인 — 고급·디지털·깔끔 공통 테마 (기사앱 화면에만 적용: .kpd-root 안쪽)
+   - 글씨는 그대로(가독성 우선), 배경·카드·버튼 눌림·포커스·스크롤만 다듬는다 */
+
+.kpd-root {
+  --kpd-ink: #0B1428;
+  --kpd-navy: #1B2B4B;
+  --kpd-blue: #2D4C82;
+  --kpd-accent: #6FA0FF;
+  --kpd-line: #E6EBF3;
+  min-height: 100vh;
+  background:
+    radial-gradient(1200px 420px at 50% -120px, rgba(111, 160, 255, 0.10), transparent 70%),
+    linear-gradient(180deg, #F4F7FC 0%, #EEF2F8 100%);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  word-break: keep-all;
+  line-height: 1.45;
+}
+
+/* 숫자는 자리 맞춤(디지털 계기판 느낌) */
+.kpd-root { font-variant-numeric: tabular-nums; }
+
+/* 버튼 — 눌렀을 때 살짝 들어가는 반응(손가락 피드백) */
+.kpd-root button,
+.kpd-root a,
+.kpd-root label {
+  -webkit-tap-highlight-color: transparent;
+}
+.kpd-root button {
+  transition: transform 0.12s ease, box-shadow 0.2s ease, filter 0.2s ease, background 0.2s ease;
+}
+.kpd-root button:active:not(:disabled),
+.kpd-press:active {
+  transform: scale(0.975);
+  filter: brightness(0.97);
+}
+
+/* 입력칸 — 포커스 링(어디 입력 중인지 잘 보이게), 아이폰 확대 방지(16px 이상) */
+.kpd-root input,
+.kpd-root textarea,
+.kpd-root select {
+  font-size: max(16px, 1em);
+}
+.kpd-root input:focus,
+.kpd-root textarea:focus {
+  outline: none;
+  border-color: #6FA0FF !important;
+  box-shadow: 0 0 0 4px rgba(111, 160, 255, 0.22) !important;
+}
+
+/* 가로 스크롤 띠 스크롤바 숨김 */
+.kpd-root ::-webkit-scrollbar { width: 0; height: 0; }
+
+/* 헤더 디지털 스캔 라인 */
+@keyframes kpdScan {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+.kpd-scan {
+  position: absolute;
+  left: 0; right: 0; bottom: 0; height: 2px;
+  overflow: hidden;
+  pointer-events: none;
+}
+.kpd-scan::after {
+  content: "";
+  position: absolute; inset: 0;
+  background: linear-gradient(90deg, transparent, rgba(111, 160, 255, 0.95), transparent);
+  animation: kpdScan 3.6s ease-in-out infinite;
+}
+
+/* 상태 점 맥박 */
+@keyframes kpdPulse {
+  0% { box-shadow: 0 0 0 0 rgba(111, 160, 255, 0.55); }
+  70% { box-shadow: 0 0 0 10px rgba(111, 160, 255, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(111, 160, 255, 0); }
+}
+.kpd-pulse { animation: kpdPulse 2s ease-out infinite; }
+
+/* 화면 전환 페이드 */
+@keyframes kpdFade {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+.kpd-fade { animation: kpdFade 0.22s ease-out; }
+
+/* 모달 바텀시트 올라오기 */
+@keyframes kpdSheet {
+  from { transform: translateY(24px); opacity: 0; }
+  to { transform: none; opacity: 1; }
+}
+.kpd-sheet { animation: kpdSheet 0.22s ease-out; }
+
+@media (prefers-reduced-motion: reduce) {
+  .kpd-scan::after, .kpd-pulse, .kpd-fade, .kpd-sheet { animation: none; }
+}

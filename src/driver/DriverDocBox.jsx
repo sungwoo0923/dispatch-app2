@@ -14,12 +14,12 @@ import DriverSubmitDocs from "./DriverSubmitDocs";
 import { useDriverDocs, docProblems } from "../driverRequiredDocs";
 
 const toMs = (v) => (v?.toMillis ? v.toMillis() : v?.seconds ? v.seconds * 1000 : 0);
-const card = { background: "#fff", borderRadius: 16, border: "1px solid #E3E8F0", boxShadow: "0 1px 6px rgba(0,0,0,0.05)" };
+const card = { background: "#fff", borderRadius: 20, border: "1px solid #E6EBF3", boxShadow: "0 1px 6px rgba(0,0,0,0.05)" };
 const Sec = ({ en, title }) => (
   <div style={{ display: "flex", alignItems: "center", gap: 7, margin: "4px 0 8px 4px" }}>
     <span style={{ width: 6, height: 6, background: "#2D4C82", transform: "rotate(45deg)" }} />
-    <span style={{ fontSize: 9.5, fontWeight: 800, color: "#9AA9C3", letterSpacing: "0.22em", fontFamily: MONO }}>{en}</span>
-    <span style={{ fontSize: 13.5, fontWeight: 900, color: "#0F1A30" }}>{title}</span>
+    <span style={{ fontSize: 12.5, fontWeight: 800, color: "#9AA9C3", letterSpacing: "0.22em", fontFamily: MONO }}>{en}</span>
+    <span style={{ fontSize: 15.5, fontWeight: 900, color: "#0F1A30" }}>{title}</span>
   </div>
 );
 
@@ -70,26 +70,26 @@ export default function DriverDocBox({ uid, inbox, companyName = "" }) {
     const it = open.item;
     return (
       <div style={{ padding: 14 }}>
-        <button type="button" onClick={() => setOpen(null)} style={{ height: 38, padding: "0 14px", borderRadius: 12, border: "1px solid #DCE3EE", background: "#fff", fontSize: 13.5, fontWeight: 800, color: "#1B2B4B", marginBottom: 12 }}>← 서류함</button>
+        <button type="button" onClick={() => setOpen(null)} style={{ height: 38, padding: "0 14px", borderRadius: 14, border: "1px solid #DCE3EE", background: "#fff", fontSize: 15.5, fontWeight: 800, color: "#1B2B4B", marginBottom: 12 }}>← 서류함</button>
         {open.type === "pay" ? <StatementDoc st={it} /> : <PenaltyDoc p={it} onPhoto={(i) => setViewer({ images: it.photos || [], index: i })} />}
         {open.type === "pay" && (
           <button type="button" disabled={it.status === "confirmed"} onClick={() => confirmPay(it)}
-            style={{ width: "100%", height: 52, marginTop: 14, borderRadius: 14, border: "none", background: it.status === "confirmed" ? "#E3E8F0" : "linear-gradient(120deg,#0B1428,#2D4C82)", color: it.status === "confirmed" ? "#5B6B85" : "#fff", fontSize: 15.5, fontWeight: 900 }}>
+            style={{ width: "100%", height: 52, marginTop: 14, borderRadius: 16, border: "none", background: it.status === "confirmed" ? "#E3E8F0" : "linear-gradient(120deg,#0B1428,#2D4C82)", color: it.status === "confirmed" ? "#5B6B85" : "#fff", fontSize: 17, fontWeight: 900 }}>
             {it.status === "confirmed" ? "✓ 확인 완료" : "내용을 확인했습니다"}
           </button>
         )}
         {open.type === "pen" && (() => {
           const done = ["납부 완료", "이의 신청", "취소"].includes(it.status);
           const deduct = String(it.payer || "").startsWith("기사 부담");
-          if (done) return <div style={{ marginTop: 14, height: 52, borderRadius: 14, background: "#E3E8F0", color: "#3A4A66", fontSize: 15, fontWeight: 900, display: "flex", alignItems: "center", justifyContent: "center" }}>✓ {it.status}{it.settledBy ? ` (${it.settledBy})` : ""}</div>;
+          if (done) return <div style={{ marginTop: 14, height: 52, borderRadius: 16, background: "#E3E8F0", color: "#3A4A66", fontSize: 17, fontWeight: 900, display: "flex", alignItems: "center", justifyContent: "center" }}>✓ {it.status}{it.settledBy ? ` (${it.settledBy})` : ""}</div>;
           return (
             <div style={{ display: "grid", gridTemplateColumns: deduct || String(it.payer || "").startsWith("회사") ? "1fr" : "1fr 1.4fr", gap: 8, marginTop: 14 }}>
-              <button type="button" onClick={() => penAction(it, "object")} style={{ height: 52, borderRadius: 14, border: "1px solid #C9D6EE", background: "#fff", color: "#1B2B4B", fontSize: 15, fontWeight: 900 }}>이의 신청</button>
-              {!deduct && !String(it.payer || "").startsWith("회사") && <button type="button" onClick={() => penAction(it, "paid")} style={{ height: 52, borderRadius: 14, border: "none", background: "linear-gradient(120deg,#0B1428,#2D4C82)", color: "#fff", fontSize: 15.5, fontWeight: 900 }}>납부 완료</button>}
+              <button type="button" onClick={() => penAction(it, "object")} style={{ height: 52, borderRadius: 16, border: "1px solid #C9D6EE", background: "#fff", color: "#1B2B4B", fontSize: 17, fontWeight: 900 }}>이의 신청</button>
+              {!deduct && !String(it.payer || "").startsWith("회사") && <button type="button" onClick={() => penAction(it, "paid")} style={{ height: 52, borderRadius: 16, border: "none", background: "linear-gradient(120deg,#0B1428,#2D4C82)", color: "#fff", fontSize: 17, fontWeight: 900 }}>납부 완료</button>}
             </div>
           );
         })()}
-        {open.type === "pen" && String(it.payer || "").startsWith("기사 부담") && !["납부 완료", "취소"].includes(it.status) && <div style={{ marginTop: 8, fontSize: 12.5, color: "#7A89A3", textAlign: "center" }}>지급액에서 공제되면 자동으로 납부 완료됩니다</div>}
+        {open.type === "pen" && String(it.payer || "").startsWith("기사 부담") && !["납부 완료", "취소"].includes(it.status) && <div style={{ marginTop: 8, fontSize: 14.5, color: "#7A89A3", textAlign: "center" }}>지급액에서 공제되면 자동으로 납부 완료됩니다</div>}
         {viewer && <ImageViewer images={viewer.images} index={viewer.index} onClose={() => setViewer(null)} name={it.kind || "서류"} />}
       </div>
     );
@@ -99,34 +99,34 @@ export default function DriverDocBox({ uid, inbox, companyName = "" }) {
   return (
     <div style={{ padding: 14 }}>
       <div style={{ borderRadius: 20, padding: "18px 18px 14px", color: "#fff", marginBottom: 12, background: "linear-gradient(120deg,#0B1428 0%,#1B2B4B 60%,#2D4C82 100%)" }}>
-        <div style={{ fontFamily: MONO, fontSize: 10, fontWeight: 800, letterSpacing: "0.26em", color: "#8FB0F0" }}>DOCUMENTS</div>
-        <div style={{ fontSize: 21, fontWeight: 900 }}>서류함</div>
-        <div style={{ fontSize: 12, color: "rgba(255,255,255,.6)" }}>회사가 보낸 명세서·과태료 서류 · 회사에 낼 서류 제출</div>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6, marginTop: 12, padding: 4, borderRadius: 14, background: "rgba(255,255,255,.08)" }}>
+        <div style={{ fontFamily: MONO, fontSize: 12.5, fontWeight: 800, letterSpacing: "0.26em", color: "#8FB0F0" }}>DOCUMENTS</div>
+        <div style={{ fontSize: 22, fontWeight: 900 }}>서류함</div>
+        <div style={{ fontSize: 14.5, color: "rgba(255,255,255,.6)" }}>회사가 보낸 명세서·과태료 서류 · 회사에 낼 서류 제출</div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6, marginTop: 12, padding: 4, borderRadius: 16, background: "rgba(255,255,255,.08)" }}>
           {[["pay", "지급명세서", statements.filter((x) => !x.readAt).length], ["pen", "과태료·사고", penalties.filter((x) => !x.readAt).length], ["submit", "제출 서류", docNeed]].map(([k, l, n]) => (
-            <button key={k} type="button" onClick={() => setTab(k)} style={{ height: 38, borderRadius: 11, border: "none", whiteSpace: "nowrap", background: tab === k ? "#fff" : "transparent", color: tab === k ? "#0F1A30" : "rgba(255,255,255,.75)", fontSize: 12.5, fontWeight: 900 }}>
-              {l}{n ? <span style={{ marginLeft: 6, display: "inline-flex", minWidth: 18, height: 18, padding: "0 5px", borderRadius: 9, background: "#8FB0F0", color: "#0B1428", fontSize: 11, alignItems: "center", justifyContent: "center" }}>{n}</span> : null}
+            <button key={k} type="button" onClick={() => setTab(k)} style={{ height: 38, borderRadius: 11, border: "none", whiteSpace: "nowrap", background: tab === k ? "#fff" : "transparent", color: tab === k ? "#0F1A30" : "rgba(255,255,255,.75)", fontSize: 14.5, fontWeight: 900 }}>
+              {l}{n ? <span style={{ marginLeft: 6, display: "inline-flex", minWidth: 18, height: 18, padding: "0 5px", borderRadius: 9, background: "#8FB0F0", color: "#0B1428", fontSize: 13.5, alignItems: "center", justifyContent: "center" }}>{n}</span> : null}
             </button>
           ))}
         </div>
       </div>
       {tab === "submit" ? <DriverSubmitDocs uid={uid} companyName={companyName} /> : !list.length ? (
-        <div style={{ ...card, padding: "40px 16px", textAlign: "center", color: "#9AA9C3", fontSize: 13.5, fontWeight: 700 }}>{tab === "pay" ? "받은 지급명세서가 없습니다" : "받은 서류가 없습니다"}</div>
+        <div style={{ ...card, padding: "40px 16px", textAlign: "center", color: "#9AA9C3", fontSize: 15.5, fontWeight: 700 }}>{tab === "pay" ? "받은 지급명세서가 없습니다" : "받은 서류가 없습니다"}</div>
       ) : list.map((it) => (
         <button key={it.id} type="button" onClick={() => openItem(tab, it)} style={{ ...card, width: "100%", textAlign: "left", padding: "14px 16px", marginBottom: 8, display: "flex", alignItems: "center", gap: 12 }}>
-          <span style={{ width: 42, height: 42, borderRadius: 12, flexShrink: 0, background: it.readAt ? "#EEF2F8" : "#0F1A30", color: it.readAt ? "#5B6B85" : "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 900, fontFamily: MONO }}>
+          <span style={{ width: 42, height: 42, borderRadius: 14, flexShrink: 0, background: it.readAt ? "#EEF2F8" : "#0F1A30", color: it.readAt ? "#5B6B85" : "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14.5, fontWeight: 900, fontFamily: MONO }}>
             {tab === "pay" ? String(it.period || "").slice(5) + "월" : (it.kind || "").slice(0, 2)}
           </span>
           <span style={{ flex: 1, minWidth: 0 }}>
-            <span style={{ display: "block", fontSize: 14.5, fontWeight: it.readAt ? 700 : 900, color: "#0F1A30" }}>
+            <span style={{ display: "block", fontSize: 16.5, fontWeight: it.readAt ? 700 : 900, color: "#0F1A30" }}>
               {tab === "pay" ? `${it.period} 지급명세서` : `${it.kind} · ${it.date || ""}`}
-              {!it.readAt && <span style={{ marginLeft: 6, fontSize: 10.5, padding: "1px 6px", borderRadius: 6, background: "#1B2B4B", color: "#fff" }}>NEW</span>}
+              {!it.readAt && <span style={{ marginLeft: 6, fontSize: 13.5, padding: "1px 6px", borderRadius: 6, background: "#1B2B4B", color: "#fff" }}>NEW</span>}
             </span>
-            <span style={{ display: "block", fontSize: 12, color: "#7A89A3", marginTop: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+            <span style={{ display: "block", fontSize: 14.5, color: "#7A89A3", marginTop: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
               {tab === "pay" ? `${(it.trips || []).length}건 · ${it.status === "confirmed" ? "확인 완료" : "확인 필요"}` : (it.detail || it.place || it.payer || "")}
             </span>
           </span>
-          <span style={{ fontSize: 15, fontWeight: 900, color: "#0B1428", fontFamily: MONO, whiteSpace: "nowrap" }}>{won(tab === "pay" ? it.net : it.amount)}<span style={{ fontSize: 11 }}>원</span></span>
+          <span style={{ fontSize: 17, fontWeight: 900, color: "#0B1428", fontFamily: MONO, whiteSpace: "nowrap" }}>{won(tab === "pay" ? it.net : it.amount)}<span style={{ fontSize: 13.5 }}>원</span></span>
         </button>
       ))}
     </div>
@@ -165,23 +165,23 @@ export function DriverPayInfoCard({ uid, driver = {} }) {
           <>
             {[["입금 계좌", acctLine(driver.정산계좌) || "미등록"], ["사업자번호", driver.사업자번호 ? fmtBiz(driver.사업자번호) : "-"], ["상호", driver.사업자상호 || "-"]].map(([k, v]) => (
               <div key={k} style={{ display: "flex", justifyContent: "space-between", gap: 10, padding: "8px 0", borderBottom: "1px solid #EEF2F8" }}>
-                <span style={{ fontSize: 13, color: "#5B6B85", fontWeight: 600 }}>{k}</span>
-                <span style={{ fontSize: 13, color: "#1B2B4B", fontWeight: 800, textAlign: "right" }}>{v}</span>
+                <span style={{ fontSize: 15.5, color: "#5B6B85", fontWeight: 600 }}>{k}</span>
+                <span style={{ fontSize: 15.5, color: "#1B2B4B", fontWeight: 800, textAlign: "right" }}>{v}</span>
               </div>
             ))}
-            {chk && <div style={{ fontSize: 12, fontWeight: 700, color: chk.level === "ok" ? "#2D4C82" : "#7A89A3", marginTop: 8 }}>{chk.level === "ok" ? "✓ 계좌 형식 확인됨" : `! ${chk.msg}`}</div>}
-            <button type="button" onClick={() => setEdit(true)} style={{ width: "100%", height: 44, marginTop: 12, borderRadius: 12, border: "none", background: "#0F1A30", color: "#fff", fontSize: 14, fontWeight: 900 }}>정산 정보 수정</button>
+            {chk && <div style={{ fontSize: 14.5, fontWeight: 700, color: chk.level === "ok" ? "#2D4C82" : "#7A89A3", marginTop: 8 }}>{chk.level === "ok" ? "✓ 계좌 형식 확인됨" : `! ${chk.msg}`}</div>}
+            <button type="button" onClick={() => setEdit(true)} style={{ width: "100%", height: 44, marginTop: 12, borderRadius: 14, border: "none", background: "#0F1A30", color: "#fff", fontSize: 16.5, fontWeight: 900 }}>정산 정보 수정</button>
           </>
         ) : (
           <div style={{ display: "grid", gap: 10 }}>
             <BankAccountInput value={bank} onChange={setBank} compact noFav />
-            <input inputMode="numeric" value={fmtBiz(bizNo)} onChange={(e) => setBizNo(e.target.value)} placeholder="사업자등록번호 (선택)" style={{ height: 42, borderRadius: 12, border: "1px solid #DCE3EE", padding: "0 12px", fontSize: 14, fontWeight: 700 }} />
-            <input value={bizName} onChange={(e) => setBizName(e.target.value)} placeholder="상호 (선택)" style={{ height: 42, borderRadius: 12, border: "1px solid #DCE3EE", padding: "0 12px", fontSize: 14, fontWeight: 700 }} />
-            <button type="button" onClick={() => fileRef.current?.click()} style={{ height: 42, borderRadius: 12, border: "1.5px dashed #C9D2E0", background: "#fff", color: "#5B6B85", fontSize: 13, fontWeight: 800 }}>{img ? "✓ 사업자등록증 사진 선택됨" : "+ 사업자등록증 사진 (선택)"}</button>
+            <input inputMode="numeric" value={fmtBiz(bizNo)} onChange={(e) => setBizNo(e.target.value)} placeholder="사업자등록번호 (선택)" style={{ height: 42, borderRadius: 14, border: "1px solid #DCE3EE", padding: "0 12px", fontSize: 16.5, fontWeight: 700 }} />
+            <input value={bizName} onChange={(e) => setBizName(e.target.value)} placeholder="상호 (선택)" style={{ height: 42, borderRadius: 14, border: "1px solid #DCE3EE", padding: "0 12px", fontSize: 16.5, fontWeight: 700 }} />
+            <button type="button" onClick={() => fileRef.current?.click()} style={{ height: 42, borderRadius: 14, border: "1.5px dashed #C9D2E0", background: "#fff", color: "#5B6B85", fontSize: 15.5, fontWeight: 800 }}>{img ? "✓ 사업자등록증 사진 선택됨" : "+ 사업자등록증 사진 (선택)"}</button>
             <input ref={fileRef} type="file" accept="image/*" capture="environment" hidden onChange={async (e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) setImg(await compressImage(f, 1400, 0.8).catch(() => "")); }} />
             <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: 8 }}>
-              <button type="button" onClick={() => setEdit(false)} style={{ height: 44, borderRadius: 12, border: "1px solid #DCE3EE", background: "#fff", fontSize: 14, fontWeight: 800, color: "#5B6B85" }}>취소</button>
-              <button type="button" onClick={save} disabled={busy} style={{ height: 44, borderRadius: 12, border: "none", background: "#0F1A30", color: "#fff", fontSize: 14, fontWeight: 900 }}>{busy ? "저장 중…" : "저장"}</button>
+              <button type="button" onClick={() => setEdit(false)} style={{ height: 44, borderRadius: 14, border: "1px solid #DCE3EE", background: "#fff", fontSize: 16.5, fontWeight: 800, color: "#5B6B85" }}>취소</button>
+              <button type="button" onClick={save} disabled={busy} style={{ height: 44, borderRadius: 14, border: "none", background: "#0F1A30", color: "#fff", fontSize: 16.5, fontWeight: 900 }}>{busy ? "저장 중…" : "저장"}</button>
             </div>
           </div>
         )}

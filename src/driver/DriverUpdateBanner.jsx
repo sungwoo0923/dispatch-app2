@@ -59,17 +59,17 @@ export default function DriverUpdateBanner() {
     <div role="status" style={{ position: "relative", zIndex: 101, display: "flex", alignItems: "center", gap: 10, padding: "10px 14px",
       background: "linear-gradient(135deg,#0B1428,#1B2B4B 60%,#2D4C82)", color: "#fff", fontFamily: '"Noto Sans KR", sans-serif', boxShadow: "0 6px 16px rgba(11,20,40,.35)" }}>
       <span style={{ width: 9, height: 9, borderRadius: "50%", background: "#8FB0F0", boxShadow: "0 0 10px #8FB0F0", flexShrink: 0 }} />
-      <span style={{ flex: 1, minWidth: 0, fontSize: 16, fontWeight: 800, lineHeight: 1.35 }}>
+      <span style={{ flex: 1, minWidth: 0, fontSize: 17, fontWeight: 800, lineHeight: 1.35 }}>
         {isApk ? "앱 업데이트가 있어요" : "새 버전이 있어요"}
-        <span style={{ display: "block", fontSize: 13.5, fontWeight: 600, color: "rgba(207,224,255,.75)" }}>
+        <span style={{ display: "block", fontSize: 15.5, fontWeight: 600, color: "rgba(207,224,255,.75)" }}>
           {isApk ? "받은 파일을 눌러 [업데이트]를 눌러 주세요" : "누르면 바로 새 화면으로 바뀝니다"}
         </span>
       </span>
       <button type="button" onClick={() => (isApk ? (window.location.href = APK_URL) : hardReloadForUpdate())}
-        style={{ height: 44, padding: "0 16px", borderRadius: 12, border: "none", background: "#fff", color: "#0F1A30", fontSize: 17, fontWeight: 900, cursor: "pointer", flexShrink: 0, fontFamily: "inherit" }}>
+        style={{ height: 44, padding: "0 16px", borderRadius: 14, border: "none", background: "#fff", color: "#0F1A30", fontSize: 18, fontWeight: 900, cursor: "pointer", flexShrink: 0, fontFamily: "inherit" }}>
         {isApk ? "설치" : "업데이트"}
       </button>
-      <button type="button" aria-label="닫기" onClick={() => setHide(kind)} style={{ border: "none", background: "transparent", color: "rgba(255,255,255,.6)", fontSize: 20, cursor: "pointer", padding: 4, flexShrink: 0 }}>✕</button>
+      <button type="button" aria-label="닫기" onClick={() => setHide(kind)} style={{ border: "none", background: "transparent", color: "rgba(255,255,255,.6)", fontSize: 21, cursor: "pointer", padding: 4, flexShrink: 0 }}>✕</button>
     </div>
   );
 }
