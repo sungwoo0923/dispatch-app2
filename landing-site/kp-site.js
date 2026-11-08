@@ -198,7 +198,15 @@
 
   // ───────────── 방문자 화면 ─────────────
   function readLive() {
-    return fetch(REST, { cache: "no-store" }).then(function (r) { return r.ok ? r.json() : null; }).then(function (j) {
+    // 🛡 2026-11-08 App Check — 사이트 키가 설정돼 있으면 토큰을 붙인다(최대 2.5초 기다림, 없으면 그냥 보낸다) · index.html KP_APPCHECK_SITE_KEY
+    var acp = window.kpAppCheckReady
+      ? Promise.race([window.kpAppCheckReady.then(function (f) { return f(); }), new Promise(function (ok) { setTimeout(function () { ok(""); }, 2500); })]).catch(function () { return ""; })
+      : Promise.resolve("");
+    return acp.then(function (tok) {
+      var opt = { cache: "no-store" };
+      if (tok && !LOCAL) opt.headers = { "X-Firebase-AppCheck": tok };
+      return fetch(REST, opt);
+    }).then(function (r) { return r.ok ? r.json() : null; }).then(function (j) {
       var raw = j && j.fields && j.fields.homepage && j.fields.homepage.stringValue;
       return raw ? JSON.parse(raw) : null;
     }).catch(function () { return null; });

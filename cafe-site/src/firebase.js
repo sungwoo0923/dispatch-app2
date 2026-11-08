@@ -5,6 +5,8 @@
 import { initializeApp } from "firebase/app";
 import { getAuth, connectAuthEmulator } from "firebase/auth";
 import { getStorage, connectStorageEmulator } from "firebase/storage";
+import { initializeAppCheck, ReCaptchaEnterpriseProvider, getToken as getAppCheckToken } from "firebase/app-check";
+import { setupAppCheck } from "../../src/appCheckClient";
 import {
   initializeFirestore,
   getFirestore,
@@ -33,6 +35,16 @@ const EMU_ST = Number(import.meta.env.VITE_EMU_STORAGE_PORT || 9199);
 if (USE_EMU) firebaseConfig.projectId = "demo-kpflow"; // (Storage 버킷 이름은 본체와 같게 둔다 — 관리센터가 같은 서류를 본다)
 
 const app = initializeApp(firebaseConfig);
+// 🛡 2026-11-08 App Check — 허브 Vercel 프로젝트의 VITE_APPCHECK_SITE_KEY 가 없으면 아무것도 안 한다(본체와 같은 키를 써도 된다).
+//  설명: src/appCheckClient.js · docs/appcheck-setup.md. 서버 함수 주소로 가는 fetch 에 토큰 헤더를 붙이고, 호출형(httpsCallable)은 SDK가 붙인다.
+export const appCheck = setupAppCheck({
+  app,
+  sdk: { initializeAppCheck, ReCaptchaEnterpriseProvider, getToken: getAppCheckToken },
+  siteKey: import.meta.env.VITE_APPCHECK_SITE_KEY,
+  debug: import.meta.env.VITE_APPCHECK_DEBUG,
+  functionsBase: `https://us-central1-${firebaseConfig.projectId}.cloudfunctions.net`,
+  disabled: USE_EMU,
+});
 
 // ⭐ 2026-11-07 로그인 유지 — getAuth 기본 저장은 이 기기 IndexedDB(없으면 localStorage, 둘 다 browserLocal 계열)라
 //  앱(브라우저)을 껐다 켜도 로그아웃 전까지 계속 로그인돼 있다. 허브 차주 "한 번 로그인하면 계속" 요구가 이것으로 충족된다.

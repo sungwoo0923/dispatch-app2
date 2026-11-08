@@ -291,7 +291,7 @@ function makeSheetConnect(deps) {
   return async function handler(req, res) {
     res.set("Access-Control-Allow-Origin", "*");
     res.set("Access-Control-Allow-Methods", "POST, OPTIONS");
-    res.set("Access-Control-Allow-Headers", "Authorization, Content-Type");
+    res.set("Access-Control-Allow-Headers", "Authorization, Content-Type, X-Firebase-AppCheck"); // 🛡 App Check 헤더 허용
     if (req.method === "OPTIONS") { res.status(204).send(""); return; }
     if (req.method !== "POST") { res.status(405).json({ error: "POST만 허용됩니다." }); return; }
     let body = req.body;
