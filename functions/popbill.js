@@ -14,6 +14,7 @@
 //   getTaxInvoiceState(corpNum, mgtKey)        상태(getInfo)
 //   sendKakaoAlimtalk(corpNum, msg)            알림톡 1건(sendATS_one) — 실패하면 팝빌이 문자로 대체 발송(altSendType "C")
 //   sendSms(corpNum, msg)                      문자 1건(sendSMS)
+//   sendLms(corpNum, msg)                      장문 문자 1건(sendLMS) — 알림톡 실패 때 대체 발송
 //   checkBizStatus(corpNum, bNos)              휴폐업조회(checkCorpNums) — 국세청 조회의 대안
 //   bankAccountList(corpNum)                   계좌조회 서비스에 등록한 계좌(listBankAccount)
 //   bankTransactions(corpNum, q)               거래내역 수집 요청 → 완료 대기 → 조회(requestJob · getJobState · search)
@@ -100,6 +101,12 @@ function createPopbill({ linkId = "", secretKey = "", config = {}, loadSdk = () 
     sendSms: guard(async (corp, m = {}) => {
       if (!m.sender || !m.receiver || !m.content) throw Object.assign(new Error("보내는 번호 · 받는 번호 · 내용이 필요해요"), { code: "arg" });
       const receiptNum = await call(svc("message"), "sendSMS", [corp, onlyDigits(m.sender), onlyDigits(m.receiver), m.receiverName || "", String(m.content).slice(0, 90), m.reserveDT || "", !!m.ads, m.senderName || "", m.requestNum || "", userId(m)]);
+      return { receiptNum };
+    }),
+    // 장문 문자(LMS, 2,000바이트) — 알림톡이 실패했을 때 같은 내용을 문자로
+    sendLms: guard(async (corp, m = {}) => {
+      if (!m.sender || !m.receiver || !m.content) throw Object.assign(new Error("보내는 번호 · 받는 번호 · 내용이 필요해요"), { code: "arg" });
+      const receiptNum = await call(svc("message"), "sendLMS", [corp, onlyDigits(m.sender), onlyDigits(m.receiver), m.receiverName || "", String(m.subject || "").slice(0, 40), String(m.content).slice(0, 1000), m.reserveDT || "", !!m.ads, m.senderName || "", m.requestNum || "", userId(m)]);
       return { receiptNum };
     }),
     checkBizStatus: guard(async (corp, bNos = []) => {

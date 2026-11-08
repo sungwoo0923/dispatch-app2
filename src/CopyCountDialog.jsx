@@ -9,8 +9,10 @@ import CustomDatePicker from "./CustomDatePicker";
 const kstToday = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
 const MAX = 30;
 
-function CopyCountDialog({ title, sub, mobile, onDone }) {
+function CopyCountDialog({ title, sub, mobile, alimtalk, onDone }) {
   const today = kstToday();
+  // 💬 2026-11-08 알림톡 보내기(복사본 전체) — 처음 값은 회사 기본값(alimtalk), 안 넘기면 칸을 숨긴다
+  const [talk, setTalk] = React.useState(alimtalk === true);
   const [count, setCount] = React.useState(1);
   const [rows, setRows] = React.useState(() => [{ 상차일: today, 하차일: today }]);
   const [err, setErr] = React.useState("");
@@ -30,7 +32,7 @@ function CopyCountDialog({ title, sub, mobile, onDone }) {
   const submit = () => {
     const bad = rows.findIndex((r) => !r.상차일 || !r.하차일 || r.하차일 < r.상차일);
     if (bad >= 0) { setErr(`${bad + 1}번째 — 하차일이 상차일보다 앞설 수 없어요.`); return; }
-    onDone(rows.map((r) => ({ ...r })));
+    onDone(rows.map((r) => ({ ...r, ...(typeof alimtalk === "boolean" ? { 알림톡: talk } : {}) })));
   };
   React.useEffect(() => {
     const k = (e) => { if (e.key === "Escape") { e.stopPropagation(); onDone(null); } };
@@ -73,6 +75,19 @@ function CopyCountDialog({ title, sub, mobile, onDone }) {
             </div>
           ))}
         </div>
+        {typeof alimtalk === "boolean" && (
+          <div className="px-5 py-2.5 border-t border-[#E9EDF4] flex items-center gap-3" data-kp="copy-alimtalk">
+            <span className="inline-flex items-center justify-center min-w-8 h-8 px-1.5 rounded-lg shrink-0 text-[10.5px] font-black tracking-tight" style={{ background: talk ? "#FEE500" : "#F1F4F8", color: talk ? "#3C1E1E" : "#9AA9C3" }}>TALK</span>
+            <div className="min-w-0">
+              <div className="text-[13.5px] font-black text-[#0F1A30]">알림톡 보내기 <span className="ml-1 text-[11.5px] font-bold text-[#9AA9C3]">{talk === alimtalk ? "회사 기본값" : `복사본만 ${talk ? "켬" : "끔"}`}</span></div>
+              <div className="text-[12px] text-[#7A879C]">배차완료되면 거래처 담당자 · 기사에게 보내요 · 건당 약 8~15원</div>
+            </div>
+            <button type="button" role="switch" aria-checked={talk} aria-label="알림톡 보내기" onClick={() => setTalk((v) => !v)}
+              className={`ml-auto relative inline-flex shrink-0 w-11 h-6 rounded-full transition ${talk ? "bg-[#1B2B4B]" : "bg-[#D5DCE7]"}`}>
+              <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-all ${talk ? "left-[22px]" : "left-0.5"}`} />
+            </button>
+          </div>
+        )}
         {err && <div className="px-5 pb-1 text-[13px] font-bold text-[#D92D20]">{err}</div>}
         <div className="px-5 py-4 border-t border-[#E9EDF4] bg-[#F7F9FC] flex gap-2.5">
           <button type="button" onClick={() => onDone(null)} className="flex-1 h-11 rounded-xl border border-[#E3E8F0] bg-white text-[#3A4A66] text-[14px] font-extrabold hover:bg-[#F5F8FD]">취소</button>
