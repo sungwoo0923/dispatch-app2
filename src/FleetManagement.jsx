@@ -549,6 +549,13 @@ const FC_CSS = `
   .fc-route-card { transition: box-shadow .15s, border-color .15s; }
   @media (max-width: 640px) { .fc-kpi-code { display: none !important; } .fc-drv-card { flex-wrap: wrap; } .fc-card-btns { flex-direction: row !important; width: 100%; margin-left: 0 !important; padding-left: 0 !important; border-left: none !important; border-top: 1px solid #E8EDF4; padding-top: 10px; } .fc-card-btns > button { flex: 1; } } /* ⭐ 2026-11-05 휴대폰 — KPI 영문 코드가 제목과 겹쳐 숨김 */
   .fc-route-card:hover { box-shadow: 0 2px 4px rgba(16,24,40,.05), 0 14px 32px rgba(27,43,75,.10) !important; border-color: #C9D3E4 !important; }
+  .fc-route-card { transition: box-shadow .15s, border-color .15s, opacity .18s, filter .18s; }
+  .fc-route-card.fc-route-focus, .fc-route-card.fc-route-focus:hover { border-color: #06B6D4 !important; box-shadow: 0 0 0 2px rgba(6,182,212,.55), 0 0 22px rgba(6,182,212,.38), 0 10px 28px rgba(15,26,48,.14) !important; animation: fcFocusGlow 2.4s ease-in-out infinite; }
+  @keyframes fcFocusGlow { 0%,100% { box-shadow: 0 0 0 2px rgba(6,182,212,.55), 0 0 14px rgba(6,182,212,.28), 0 10px 28px rgba(15,26,48,.14); } 50% { box-shadow: 0 0 0 2px rgba(6,182,212,.85), 0 0 26px rgba(6,182,212,.48), 0 10px 28px rgba(15,26,48,.14); } }
+  .fc-focus-scan { position: absolute; left: 0; right: 0; top: 0; height: 2px; z-index: 2; background: linear-gradient(90deg, rgba(6,182,212,0), #06B6D4, rgba(6,182,212,0)); background-size: 40% 100%; background-repeat: no-repeat; animation: fcFocusScan 2.2s linear infinite; pointer-events: none; }
+  @keyframes fcFocusScan { 0% { background-position: -40% 0 } 100% { background-position: 140% 0 } }
+  .fc-route-card.fc-route-dim { opacity: .42; filter: saturate(.6); }
+  .fc-route-card.fc-route-dim:hover { opacity: .8; filter: none; }
 `;
 
 // 관제 패널 머리줄(영문 코드 + 제목 + 오른쪽 내용)
@@ -2851,7 +2858,7 @@ function VehicleSpecChip({ type, ton }) {
   );
 }
 
-function DriverRouteCard({ driver, orders, selectedDate, rangeEndDate, isSingleDay = true, todayStr, isOffDay, live, monthlyFareSum = 0, acceptRate = null, onOpenDetail, staff, canDelegate, onAssignManager, index, staffByEmail, dispatchData }) {
+function DriverRouteCard({ driver, orders, selectedDate, rangeEndDate, isSingleDay = true, todayStr, isOffDay, live, monthlyFareSum = 0, acceptRate = null, onOpenDetail, staff, canDelegate, onAssignManager, index, staffByEmail, dispatchData, focused = false, dimmed = false, onToggleFocus }) {
   const first = orders[0];
   const last = orders[orders.length - 1];
   const hasConflict = isOffDay && orders.length > 0;
@@ -2902,7 +2909,14 @@ function DriverRouteCard({ driver, orders, selectedDate, rangeEndDate, isSingleD
   ] : [];
 
   return (
-    <div className="fc-route-card" style={{ background: "#fff", border: `1px solid ${hasConflict ? "#f59e0b" : "#E3E8F0"}`, borderRadius: 14, overflow: "hidden", boxShadow: "0 1px 2px rgba(16,24,40,.04), 0 6px 16px rgba(16,24,40,.05)" }}>
+    // ⭐ 2026-11-09 기사정보 한 번 클릭 → 이 기사 노선만 포커스(시안 테두리·글로우), 다른 기사는 흐리게
+    <div className={`fc-route-card${focused ? " fc-route-focus" : ""}${dimmed ? " fc-route-dim" : ""}`} data-driver-card={driver.id} style={{ background: "#fff", border: `1px solid ${focused ? "#06B6D4" : hasConflict ? "#f59e0b" : "#E3E8F0"}`, borderRadius: 14, overflow: "hidden", position: "relative", boxShadow: focused ? "0 0 0 2px rgba(6,182,212,.55), 0 0 18px rgba(6,182,212,.35), 0 8px 24px rgba(15,26,48,.12)" : "0 1px 2px rgba(16,24,40,.04), 0 6px 16px rgba(16,24,40,.05)", transition: "opacity .18s, box-shadow .18s, border-color .18s" }}>
+      {focused && (
+        <>
+          <span className="fc-focus-scan" aria-hidden="true" />
+          <span aria-hidden="true" style={{ position: "absolute", top: 8, right: 10, zIndex: 3, fontFamily: FC_MONO, fontSize: 10.5, fontWeight: 800, letterSpacing: ".14em", color: "#06B6D4", background: "#0F1A30", border: "1px solid rgba(6,182,212,.6)", borderRadius: 5, padding: "2px 7px", boxShadow: "0 0 8px rgba(6,182,212,.45)", pointerEvents: "none" }}>● FOCUS</span>
+        </>
+      )}
       {/* 헤더: 기사 기본정보를 라벨 붙은 그리드로 — 값 글자는 짙은 색으로 가독성 확보 */}
       <div style={{ padding: "14px 16px", borderBottom: "1px solid #E8EDF4", background: "linear-gradient(180deg,#FBFCFE 0%,#F4F7FB 100%)", display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", rowGap: 14 }}>
         {/* ⭐ 사용자 요청 — 이름만 있던 자리에 차량번호/연락처도 같이 가로로 보여준다(지입/직영 뱃지는 그대로 유지). */}
@@ -2912,12 +2926,13 @@ function DriverRouteCard({ driver, orders, selectedDate, rangeEndDate, isSingleD
         <div style={{ display: "flex", alignItems: "center", gap: 10, flex: "0 1 auto", minWidth: 0, maxWidth: "100%" }}>
           <div
             className="fc-drv-card"
-            onDoubleClick={() => setJourneyOpen(true)}
-            title="더블클릭하면 이 기사의 전체 이동 노선을 봅니다"
+            onClick={(e) => { if (e.detail === 1) onToggleFocus?.(driver.id); }}
+            onDoubleClick={() => { onToggleFocus?.(driver.id, true); setJourneyOpen(true); }}
+            title="한 번 클릭: 이 기사 노선만 집중해서 보기 · 더블클릭: 전체 이동 노선 보기"
             style={{
             display: "flex", alignItems: "center", gap: 12, padding: "10px 16px 10px 12px", minWidth: "min(290px, 100%)", maxWidth: "100%", cursor: "pointer", userSelect: "none", position: "relative",
-            border: "1px solid #DCE3EF", borderLeft: `5px solid ${driver.등급 === "직영" ? "#0f766e" : NAVY}`, borderRadius: 12,
-            background: "#fff", boxShadow: "0 2px 8px rgba(27,43,75,0.08)",
+            border: `1px solid ${focused ? "#06B6D4" : "#DCE3EF"}`, borderLeft: `5px solid ${focused ? "#06B6D4" : driver.등급 === "직영" ? "#0f766e" : NAVY}`, borderRadius: 12,
+            background: focused ? "linear-gradient(180deg,#F0FDFF,#fff)" : "#fff", boxShadow: focused ? "0 0 0 1px rgba(6,182,212,.35), 0 0 12px rgba(6,182,212,.30)" : "0 2px 8px rgba(27,43,75,0.08)",
           }}>
             <div style={{ width: 46, height: 46, borderRadius: 12, flexShrink: 0, background: "linear-gradient(135deg,#2D4C82 0%,#0F1A30 100%)", boxShadow: "inset 0 0 0 1px rgba(207,224,255,.25), 0 4px 10px rgba(15,26,48,.25)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, fontWeight: 900 }}>
               {String(driver.이름 || "?").slice(0, 1)}
@@ -3960,6 +3975,15 @@ function RouteManagementTab({ drivers, dispatchData, liveDrivers = [], staff = [
   const [appliedStart, setAppliedStart] = useState(todayStr0);
   const [appliedEnd, setAppliedEnd] = useState(todayStr0);
   const [detailDriver, setDetailDriver] = useState(null);
+  // ⭐ 2026-11-09 기사 한 번 클릭 → 포커스(다시 클릭하면 해제, 다른 기사 클릭하면 전환, Esc 해제)
+  const [focusId, setFocusId] = useState(null);
+  const toggleFocus = (id, forceOn = false) => setFocusId((cur) => (forceOn ? id : cur === id ? null : id));
+  useEffect(() => {
+    if (!focusId) return undefined;
+    const onKey = (e) => { if (e.key === "Escape") setFocusId(null); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [focusId]);
   const [onlyIdle, setOnlyIdle] = useState(false); // 배차 없는(오늘 놀고 있는) 차량만 보기
   // ⭐ 사용자 요청 — 배차자마다 담당 지입차가 따로 있어서, 들어오자마자 "내 담당
   // 차량"부터 보여야 한다. 전체 차량을 보는 기능은 토글로 그대로 유지.
@@ -4215,6 +4239,9 @@ function RouteManagementTab({ drivers, dispatchData, liveDrivers = [], staff = [
               onAssignManager={onAssignManager}
               staffByEmail={staffByEmail}
               dispatchData={dispatchData}
+              focused={focusId === driver.id}
+              dimmed={!!focusId && focusId !== driver.id}
+              onToggleFocus={toggleFocus}
             />
           ))}
         </div>
@@ -6056,12 +6083,37 @@ function JoinTypePill({ v }) {
   return <span style={{ display: "inline-flex", alignItems: "center", height: 26, padding: "0 11px", borderRadius: 8, background: s.bg, color: s.color, border: `1px solid ${s.bd}`, fontSize: 14, fontWeight: 800, whiteSpace: "nowrap" }}>{k}</span>;
 }
 
+// ⭐ 2026-11-09 차량관리 표 정렬 — 숫자는 숫자로, 날짜(YYYY-MM-DD)는 날짜로, 나머지는 한글 가나다순. 빈 값은 항상 맨 뒤
+const VC_SORT_VAL = {
+  "차량번호": (r) => r.차량번호 || "",
+  "기사": (r) => r.이름 || "",
+  "가입유형": (r) => String(r.등급 || ""),
+  "차종": (r) => { const t = parseFloat(String(r.v?.톤 || "").replace(/[^0-9.]/g, "")); return Number.isFinite(t) ? t : String(r.v?.적재함 || ""); },
+  "모델·연식": (r) => { const y = Number(r.v?.연식); return Number.isFinite(y) && y > 0 ? y : String(r.v?.모델 || ""); },
+  "주행거리": (r) => Number(r.cs?.odometer) || "",
+  "엔진오일": (r) => { const oil = r.cs?.alerts?.find((a) => a.key === "engineOil"); return oil ? 10 - (oil.level || 0) : r.raw?.care?.items?.engineOil ? 20 : ""; },
+  "점검 알림": (r) => (r.cs?.alerts?.length ? -r.cs.alerts.length : ""),
+  "설정": (r) => (r.cs?.setupDone ? 1 : 0),
+};
+function vcCompare(a, b) {
+  const ea = a === "" || a == null, eb = b === "" || b == null;
+  if (ea || eb) return ea === eb ? 0 : ea ? 1 : -1;
+  if (typeof a === "number" && typeof b === "number") return a - b;
+  return String(a).localeCompare(String(b), "ko", { numeric: true });
+}
 function VehicleCareTab({ drivers = [], driversRaw = [], by = "" }) {
   const rawMap = useMemo(() => Object.fromEntries(driversRaw.map((r) => [r.id, r])), [driversRaw]);
   const [sel, setSel] = useState(null);
   const [filter, setFilter] = useState("all");
   const [q, setQ] = useState("");
   const [toast, setToast] = useState("");
+  // ⭐ 2026-11-09 컬럼명 클릭 정렬 — 오름(▲) → 내림(▼) → 해제(기본: 점검 급한 순), 내 화면에만 기억
+  const [sort, setSortRaw] = useState(() => { try { const x = JSON.parse(localStorage.getItem("vcSort") || "null"); if (x && x.k) return x; } catch { /* 무시 */ } return { k: "", d: 1 }; });
+  const sortBy = (k) => setSortRaw((p) => {
+    const n = p.k !== k ? { k, d: 1 } : p.d > 0 ? { k, d: -1 } : { k: "", d: 1 };
+    try { localStorage.setItem("vcSort", JSON.stringify(n)); } catch { /* 무시 */ }
+    return n;
+  });
   const rows = useMemo(() => drivers.map((d) => {
     const raw = rawMap[d.id] || {};
     return { ...d, raw, v: vehicleDefaults(raw), cs: careSummary({ vehicle: vehicleDefaults(raw), care: raw.care || {} }) };
@@ -6069,7 +6121,13 @@ function VehicleCareTab({ drivers = [], driversRaw = [], by = "" }) {
   const shown = rows
     .filter((r) => filter === "all" || (filter === "over" && r.cs.over) || (filter === "soon" && (r.cs.over || r.cs.soon)) || (filter === "none" && !r.cs.setupDone))
     .filter((r) => !q || [r.이름, r.차량번호].some((x) => String(x || "").includes(q)))
-    .sort((a, b) => (b.cs.over * 10 + b.cs.soon) - (a.cs.over * 10 + a.cs.soon));
+    .sort((a, b) => {
+      const urgent = (b.cs.over * 10 + b.cs.soon) - (a.cs.over * 10 + a.cs.soon);
+      if (!sort.k) return urgent;
+      const val = VC_SORT_VAL[sort.k];
+      const c = vcCompare(val ? val(a) : "", val ? val(b) : "");
+      return c !== 0 ? c * sort.d : urgent;
+    });
   const cur = rows.find((r) => r.id === sel) || null;
   const cnt = { all: rows.length, over: rows.filter((r) => r.cs.over).length, soon: rows.filter((r) => r.cs.over || r.cs.soon).length, none: rows.filter((r) => !r.cs.setupDone).length };
   const th = { padding: "12px 12px", fontSize: 14, fontWeight: 800, color: "#fff", whiteSpace: "nowrap", textAlign: "center" };
@@ -6126,7 +6184,11 @@ function VehicleCareTab({ drivers = [], driversRaw = [], by = "" }) {
           {/* ⭐ 2026-11-02 화면 점검 — 표는 가로 스크롤(터치 관성) */}
           {!narrow && <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch", maxWidth: "100%" }}>
             <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 900 }}>
-              <thead><tr style={{ background: "linear-gradient(90deg,#0F1A30,#1B2B4B)" }}>{["차량번호", "기사", "가입유형", "차종", "모델·연식", "주행거리", "엔진오일", "점검 알림", "설정"].map((h) => <th key={h} style={th}>{h}</th>)}</tr></thead>
+              <thead><tr style={{ background: "linear-gradient(90deg,#0F1A30,#1B2B4B)" }}>{["차량번호", "기사", "가입유형", "차종", "모델·연식", "주행거리", "엔진오일", "점검 알림", "설정"].map((h) => (
+                <th key={h} onClick={() => sortBy(h)} title="누르면 정렬 (오름 → 내림 → 해제)" style={{ ...th, cursor: "pointer", userSelect: "none", background: sort.k === h ? "rgba(143,176,240,.18)" : undefined }}>
+                  {h}<span style={{ marginLeft: 4, fontSize: 11, color: sort.k === h ? "#5EEAD4" : "rgba(143,176,240,.55)" }}>{sort.k === h ? (sort.d > 0 ? "▲" : "▼") : "↕"}</span>
+                </th>
+              ))}</tr></thead>
               <tbody>
                 {shown.length === 0 && <tr><td colSpan={9} style={{ ...td, color: "#5B6B85", padding: 40 }}>해당하는 차량이 없습니다</td></tr>}
                 {shown.map((r) => {
