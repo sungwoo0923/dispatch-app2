@@ -379,8 +379,12 @@ export function isLoaded(order, location) {
   if (!isPickupVisited(order)) return false;
   const pg = getCachedGeo(order.상차지주소);
   if (!pg || location?.lat == null || location?.lng == null) return false;
-  return haversineKm(location.lat, location.lng, pg.lat, pg.lng) > 1;
+  // ⭐ 2026-11-08 버그수정 — 상차지에 들른 뒤 1km만 벗어나도 "출발(상차 완료)"로 봐서, 아직 상차지 근처(주차·대기·
+  //  GPS 흔들림, "경기 김포시"처럼 시 단위 주소)인 차량이 관제에서 "하차이동"으로 보였다.
+  //  [상차완료]를 누르지 않았으면 상차지에서 3km 넘게 벗어났을 때만 출발로 본다.
+  return haversineKm(location.lat, location.lng, pg.lat, pg.lng) > LOAD_DEPART_KM;
 }
+const LOAD_DEPART_KM = 3;
 
 // ⭐ 수락한 오더가 여러 건이면 "먼저 수락한 오더"부터 진행한다(운송완료 전까지는 그 오더 기준).
 // 기사확인일시(수락 시각) 오름차순, 같으면 상차일·상차시간 순. 수락 시각이 아직 저장 전이면 맨 뒤.
@@ -482,6 +486,7 @@ export function computeFleetPhase({ driverStatus, orders = [], location }) {
       const loaded = isLoaded(active, location);
       if (!loaded) {
         if (pd != null && pd <= 1) return "상차지도착";
+        if (pd != null && pd <= LOAD_DEPART_KM && isPickupVisited(active)) return "상차지도착"; // 들렀고 아직 출발 전
         if (pd != null && pd <= 5 && !isPickupVisited(active)) return "상차지진입";
       } else {
         if (dd != null && dd <= 1) return "하차지도착";

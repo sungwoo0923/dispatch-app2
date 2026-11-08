@@ -58,8 +58,18 @@ export function pinIcon(label, color) {
   }));
 }
 
-export function MapGlue({ follow, center, fitKey, fitPoints }) {
+export function MapGlue({ follow, center, fitKey, fitPoints, onUserMove }) {
   const map = useMap();
+  // ⭐ 2026-11-08 지도를 손으로 끌거나 확대하면 "따라가기"를 끈다 — 예전엔 위치가 올 때마다 기사 쪽으로 되돌아가
+  //  휴대폰에서 지도가 "안 움직이는" 것처럼 보였다
+  React.useEffect(() => {
+    if (!onUserMove) return undefined;
+    const off = () => onUserMove();
+    map.on("dragstart", off); map.on("zoomstart", off);
+    const el = map.getContainer();
+    el.addEventListener("touchstart", off, { passive: true });
+    return () => { map.off("dragstart", off); map.off("zoomstart", off); el.removeEventListener("touchstart", off); };
+  }, [map, onUserMove]);
   React.useEffect(() => { const t = setTimeout(() => map.invalidateSize(), 140); return () => clearTimeout(t); }, [map]);
   const centerKey = center ? `${center[0].toFixed(5)},${center[1].toFixed(5)}` : "";
   React.useEffect(() => { if (follow && center) map.panTo(center, { animate: true, duration: 0.8 }); }, [follow, centerKey]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -264,6 +274,7 @@ export function LiveTrackView({ order, entry, track = [], pickupGeo, dropGeo, ph
   const tel = telOf(entry, order);
   const fitPoints = React.useMemo(() => [loc && [loc.lat, loc.lng], pickupGeo && [pickupGeo.lat, pickupGeo.lng], dropGeo && [dropGeo.lat, dropGeo.lng]].filter(Boolean), [loc?.lat, loc?.lng, pickupGeo, dropGeo]); // eslint-disable-line react-hooks/exhaustive-deps
   const onTileError = React.useCallback(() => setTileErr(true), []);
+  const stopFollow = React.useCallback(() => setFollow(false), []);
 
   if (!entry) {
     return (
@@ -286,7 +297,7 @@ export function LiveTrackView({ order, entry, track = [], pickupGeo, dropGeo, ph
   const map = (
     <div style={{ position: "relative", flex: 1, minHeight: mobile ? "46vh" : 0, minWidth: 0 }}>
       <BaseMap center={center} zoom={14} onTileError={onTileError}>
-        <MapGlue follow={follow} center={center} fitKey={fitKey} fitPoints={fitPoints} />
+        <MapGlue follow={follow} center={center} fitKey={fitKey} fitPoints={fitPoints} onUserMove={stopFollow} />
         <LeafletTrack points={track} showStatusChanges={false} />
         {pickupGeo && <Marker position={[pickupGeo.lat, pickupGeo.lng]} icon={pinIcon(`상차 · ${order?.상차지명 || ""}`.slice(0, 18), C.steel)} />}
         {dropGeo && <Marker position={[dropGeo.lat, dropGeo.lng]} icon={pinIcon(`하차 · ${order?.하차지명 || ""}`.slice(0, 18), "#5B6B85")} />}

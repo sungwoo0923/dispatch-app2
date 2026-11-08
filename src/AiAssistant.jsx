@@ -633,7 +633,7 @@ export default function AiAssistant({ dispatches = [], clients = [], places = []
   return (
     <>
       {mobile ? (
-        !open && <button type="button" data-testid="ai-fab" onClick={() => setOpen(true)} aria-label="AI 비서" style={{ position: "fixed", right: 16, bottom: 92, width: 52, height: 52, borderRadius: 18, border: "none", zIndex: 9990, color: "#fff", background: "linear-gradient(145deg,#0B1428,#1B2B4B 55%,#2D4C82)", boxShadow: "0 10px 24px rgba(15,26,48,0.35)", display: "flex", alignItems: "center", justifyContent: "center" }}>{sparkle}</button>
+        !open && <button type="button" data-testid="ai-fab" onClick={() => setOpen(true)} aria-label="AI 비서" style={{ position: "fixed", right: 24, bottom: "calc(94px + env(safe-area-inset-bottom, 0px))", width: 56, height: 56, borderRadius: 18, border: "none", zIndex: 9990, color: "#fff", background: "linear-gradient(145deg,#0B1428,#1B2B4B 55%,#2D4C82)", boxShadow: "0 10px 24px rgba(15,26,48,0.35)", display: "flex", alignItems: "center", justifyContent: "center" }}>{sparkle}</button>
       ) : (
         <FabButton bottom={24} active={open} title="AI 비서" onClick={() => setOpen(!open)}>{sparkle}</FabButton>
       )}

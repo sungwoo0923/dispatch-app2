@@ -41,8 +41,8 @@ import DetailFilterButton, { applyDetailFilter, DetailScope } from "./DetailFilt
 import { useCompanyBiz, bizOf, BizChip, BizPicker, BizFilter, bizMatch, printInfoForBiz, BizListEditor, BizScope, BizSelect, resolveBiz, rememberBiz, normBizKey, bankForBiz, bizInfoCardBlob } from "./companyBiz"; // ⭐ 2026-11-03 한 회사 · 여러 사업자 // ⭐ 2026-11-03 배차담당자 칸(등록자 + 차량 붙인 사람)
 import JSZip from "jszip";
 import { OrderWeather, BizCheck, bizGuardMain, ClientBizBulkButton, PopbillMemberCard } from "./publicDataMain"; // 🏛 2026-11-07 국세청 사업자 상태 · 기상청 날씨 · 팝빌 연동회원
-import { AlimtalkSettingsCard, BankAccountsCard, AlimtalkOrderToggle, AlimtalkOrderPanel, BankReviewQueue } from "./PopbillAuto"; // 💬🏦 2026-11-08 알림톡 배차 알림 · 은행 입금 자동 매칭
-import { alimtalkDefaultNow, watchAlimtalkDefault } from "./popbillAuto";
+import { BankAccountsCard, BankReviewQueue } from "./PopbillAuto"; // 🏦 2026-11-08 은행 입금 자동 매칭
+// 💬 2026-11-08 사장님 요청 — 카카오 알림톡은 PC·모바일 화면에서 모두 뺐다(새 오더는 알림톡:false → 서버 트리거가 보내지 않는다)
 import { buildArMonths as buildArMonthsCore, allocArDeposit as allocArDepositCore, allocKindOf, matchDeposits } from "./arMatch"; // 💰 2026-11-08 입금 매칭 공용 식(서버 계좌조회와 같은 파일)
 import { sendOrderTo24Proxy as sendOrderTo24 } from "../api/24CallProxy";
 import { useNewVersion, openUpdatePopup } from "./VersionCheck";
@@ -2782,8 +2782,8 @@ const submitCopyOrderPC = async (copyTarget, approvedShippers, cargoOverride) =>
   delete payload._transmittedToShipper;
   delete payload._transmittedAt;
   delete payload._gsheetSync; // ★ 원본의 구글시트 줄 연결값이 복사본에 딸려가면 원본 줄을 덮어쓰거나 지웠다
-  // 💬 2026-11-08 알림톡 — 복사 창에서 고른 값(없으면 회사 기본값) · 원본 발송 결과는 넘기지 않는다
-  payload.알림톡 = typeof copyTarget._알림톡 === "boolean" ? copyTarget._알림톡 : alimtalkDefaultNow();
+  // 💬 2026-11-08 알림톡은 화면에서 뺐다 — 복사본은 보내지 않고, 원본 발송 결과도 넘기지 않는다
+  payload.알림톡 = false;
   delete payload._알림톡;
   delete payload.알림톡결과;
 
@@ -2810,11 +2810,11 @@ const submitCopyOrderPC = async (copyTarget, approvedShippers, cargoOverride) =>
 // ⭐ 2026-11-06 [복사 등록] — "몇 건 복사?" 창(건마다 상차일·하차일, 처음엔 모두 오늘) → 그 수만큼 submitCopyOrderPC
 //   (지난 날짜 → 오늘, 화주사 전송 포인터 제거 등 submitCopyOrderPC 규칙은 그대로) · 취소/실패면 false, 성공이면 건수
 const submitCopyOrdersPC = async (copyTarget, approvedShippers, cargoOverride) => {
-  const plan = await askCopyDates({ title: "복사 등록", sub: `${copyTarget?.거래처명 || ""} ${copyTarget?.상차지명 ? `· ${copyTarget.상차지명} → ${copyTarget.하차지명 || ""}` : ""}`.trim() || undefined, alimtalk: alimtalkDefaultNow() });
+  const plan = await askCopyDates({ title: "복사 등록", sub: `${copyTarget?.거래처명 || ""} ${copyTarget?.상차지명 ? `· ${copyTarget.상차지명} → ${copyTarget.하차지명 || ""}` : ""}`.trim() || undefined });
   if (!plan || !plan.length) return false;
   let n = 0;
   for (const d of plan) {
-    const ok = await submitCopyOrderPC({ ...copyTarget, 상차일: d.상차일, 하차일: d.하차일, _알림톡: d.알림톡 }, approvedShippers, cargoOverride);
+    const ok = await submitCopyOrderPC({ ...copyTarget, 상차일: d.상차일, 하차일: d.하차일 }, approvedShippers, cargoOverride);
     if (ok === false) return n ? n : false;
     n += 1;
   }
@@ -4671,9 +4671,9 @@ const addDispatch = async (recordIn) => {
     }
   }
   if (record && "_restAck" in record) { record = { ...record }; delete record._restAck; }
-  // 💬 2026-11-08 알림톡 — 이 오더만 고른 값(true/false)이 없으면 회사 기본값(회사정보 › 알림톡 자동 전송) · 예전 발송 결과는 넘기지 않는다
+  // 💬 2026-11-08 알림톡은 화면에서 뺐다 — 새로 등록되는 오더는 모두 알림톡:false(서버가 보내지 않음) · 예전 발송 결과는 넘기지 않는다
   //  (PC · 모바일 등록 · AI 비서 · 오더 스캔 · 복사 등록이 모두 여기를 지난다)
-  if (record) { record = { ...record, 알림톡: typeof record.알림톡 === "boolean" ? record.알림톡 : alimtalkDefaultNow() }; delete record.알림톡결과; }
+  if (record) { record = { ...record, 알림톡: false }; delete record.알림톡결과; }
 
   const _id = crypto.randomUUID(); // ★ 무조건 새로 생성
 
@@ -6171,8 +6171,6 @@ function OrderInfoModal({ row, onClose, lunchByName }) {
                 </div>
               ))}
             </div>
-            {/* 💬 2026-11-08 알림톡 — 보낸 결과 · [알림톡 보내기] */}
-            {row._id && <AlimtalkOrderPanel row={row} canEdit={localStorage.getItem("role") !== "viewer"} />}
             {(row.메모 || row.전달사항) && card("NOTE", "메모 · 전달사항", (
               <div className="grid gap-2.5">
                 {row.메모 && kv("메모", row.메모, { wrap: true })}
@@ -7470,8 +7468,6 @@ function PcBootOverlay({ onDone, dept = null }) {
 }
 
 export default function DispatchApp({ role: realRole, user, userCompany = "", forceExec = false }) {
-  // 💬 2026-11-08 새 오더 "알림톡 보내기" 처음 값(회사 기본값)을 미리 받아 둔다 — addDispatch · 복사 등록이 쓴다
-  React.useEffect(() => { watchAlimtalkDefault(userCompany || localStorage.getItem("userCompany") || DEFAULT_COMPANY); }, [userCompany]);
   // 🔀 화면 전환 역할 — 통합인사관리자(hrAcct): 경리 ↔ 인사 / 통합관리자(allMgr): 운송 ↔ 경리 ↔ 인사. 상단 버튼으로 바꾼다
   //  경리사무원·인사사무원은 경리/인사 화면 역할로 동작(메뉴는 그 역할 설정) — customRoles.js SWITCH_ROLES·BASED_ROLES
   const roleView = useRoleView(realRole);
@@ -9793,15 +9789,6 @@ function CopyPanelExtras({ order, userNameMap }) {
     <>
       <button type="button" className={btn} onClick={() => setOpen("history")}>변경 이력</button>
       {open === "history" && createPortal(<OrderTimelineModal order={order} userName={nameOf} onClose={() => setOpen("")} />, document.body)}
-      {/* 💬 2026-11-08 알림톡 — 보낸 결과 · 다시 보내기 */}
-      {order?._id && <button type="button" className={btn} onClick={() => setOpen("talk")}>알림톡{order.알림톡결과?.status ? " · 기록" : ""}</button>}
-      {open === "talk" && createPortal(
-        <div className="fixed inset-0 z-[999999] bg-[#0B1428]/50 flex items-center justify-center p-4" onMouseDown={(e) => { if (e.target === e.currentTarget) setOpen(""); }}>
-          <div className="w-full max-w-[520px] rounded-2xl bg-white p-4 shadow-2xl space-y-3">
-            <div className="flex items-center"><span className="text-[15px] font-black text-[#0F1A30]">카카오 알림톡</span><button type="button" className="ml-auto text-[13px] font-bold text-[#5B6B85]" onClick={() => setOpen("")}>닫기</button></div>
-            <AlimtalkOrderPanel row={order} canEdit={localStorage.getItem("role") !== "viewer"} />
-          </div>
-        </div>, document.body)}
     </>
   );
 }
@@ -18212,10 +18199,6 @@ className={`
 
 </div>
 
-{/* 💬 2026-11-08 알림톡 보내기 — 처음 값은 회사 기본값(회사정보 › 알림톡 자동 전송), 이 오더만 바꿀 수 있다 */}
-<div className="col-span-full">
-  <AlimtalkOrderToggle company={userCompany || localStorage.getItem("userCompany") || DEFAULT_COMPANY} value={form.알림톡} onChange={(v) => onChange("알림톡", v)} />
-</div>
 
 {/* ================= 차량 제원표 모달 ================= */}
 {vehicleSpecOpen && (() => {
@@ -62713,8 +62696,6 @@ function CompanyProfile({ userCompany = "", role = "", userId = "" }) {
             {/* ⭐ 2026-11-03 한 회사 · 여러 사업자 — 오더마다 청구 사업자를 고른다 */}
             <BizListEditor company={companyName} canEdit={isAcctTeam || isAdmin || role === "hrManager"} />
             <PopbillMemberCard company={companyName} canEdit={isAdmin || role === "hrManager"} />
-            {/* 💬🏦 2026-11-08 팝빌 자동화 — 알림톡 배차 알림 · 은행 입금 자동 조회(팝빌 연결 전에도 미리 설정) */}
-            <AlimtalkSettingsCard company={companyName} canEdit={isAdmin || role === "hrManager"} defaultPhone={appData?.phone || appData?.연락처 || ""} />
             {/* ✉️ 2026-11-08 발신 메일 — 회사마다 자기 메일 계정으로(앱 비밀번호는 서버에만 · 암호화) */}
             <CompanyMailSettingsCard company={companyName} role={role} isMaster={myDocMailCP?.isMaster === true} myEmail={auth?.currentUser?.email || ""} />
             <BankAccountsCard company={companyName} canEdit={isAdmin || role === "hrManager"} />

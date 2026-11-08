@@ -352,10 +352,11 @@ tr.kp-evt-flash>td,.kp-evt-flash{animation:kpEvtFlash 1.3s ease-in-out 2}
 }
 
 // ─── 줄의 수락/거절 칩 ────────────────────────────────────────────────────────
-export function DriverAckChip({ row, className = "" }) {
+export function DriverAckChip({ row, className = "", hideAccept = false }) {
   useStoreVer();
   const a = driverAckOf(row);
   if (!a) return null;
+  if (hideAccept && a.kind === "accept") return null; // ⭐ 2026-11-08 모바일 등록내역은 "수락" 칩을 안 보인다(거절만)
   // 거절 칩은 다시 배차하기 전(차량번호 빈 칸)까지만 · 수락 칩은 배차완료 동안
   if (a.kind === "reject" && String(row.차량번호 || "").trim()) return null;
   if (a.kind === "accept" && row.배차상태 && row.배차상태 !== "배차완료") return null;

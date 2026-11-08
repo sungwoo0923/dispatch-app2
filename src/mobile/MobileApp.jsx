@@ -32,8 +32,7 @@ import InternalMessenger from "../InternalMessenger";
 import { subscribeOrderSync, deleteOrderWithLog, historyStartDate, pcLiveWindowStart } from "../orderHistory";
 import CustomDatePicker from "../CustomDatePicker";
 import { askCopyDates } from "../CopyCountDialog"; // ⭐ 2026-11-06 오더 복사 — 몇 건·건별 날짜
-import { AlimtalkOrderToggle, AlimtalkOrderPanel } from "../PopbillAuto"; // 💬 2026-11-08 알림톡 배차 알림(PC와 같음)
-import { alimtalkDefaultNow, watchAlimtalkDefault } from "../popbillAuto";
+// 💬 2026-11-08 사장님 요청 — 카카오 알림톡은 PC·모바일 화면에서 모두 뺐다(새 오더는 알림톡:false → 서버 트리거가 보내지 않는다)
 import { UrgentBadge, URGENT_BAR, URGENT_TINT } from "../urgentOrder"; // ⭐ 2026-11-06 긴급 오더 강조
 import MobileSelect from "./MobileSelect"; // ⭐ 2026-11-02 기본 select → 남색 바텀시트 선택기
 import RouteMapModal from "../RouteMapModal";
@@ -2090,8 +2089,6 @@ const mobileLiveStart = () => new Date(Date.now() + 9 * 3600e3 - MOBILE_LIVE_DAY
 const prevDayStr = (ymd) => { const d = new Date(`${ymd}T00:00:00Z`); d.setUTCDate(d.getUTCDate() - 1); return d.toISOString().slice(0, 10); };
 
 export default function MobileApp({ role: realRole, user, userCompany = "", forceExec = false }) {
-  // 💬 2026-11-08 새 오더 "알림톡 보내기" 처음 값(회사 기본값)을 미리 받아 둔다
-  React.useEffect(() => { watchAlimtalkDefault(getTenant() || userCompany || localStorage.getItem("userCompany") || DEFAULT_COMPANY); }, [userCompany]);
   useVehicleTypes(getTenant() || userCompany); // 🚚 2026-11-02 회사 공용 차량종류(추가한 이름이 모든 목록에 바로 보이게 구독 유지)
   // 🔀 화면 전환 역할 — 통합인사관리자(hrAcct): 경리 ↔ 인사 / 통합관리자(allMgr): 운송 ↔ 경리 ↔ 인사(메뉴 › 화면 전환)
   //  경리사무원·인사사무원은 경리/인사 화면 역할로 동작 — PC(DispatchApp)와 같은 customRoles.js useRoleView
@@ -4698,8 +4695,8 @@ const groupedByDate = useMemo(() => {
       메모: form.적요 || "",
       전달사항: form.전달사항 || "",
       전달사항고정: form.전달사항고정 === true,
-      // 💬 2026-11-08 알림톡 — 새 오더는 이 오더만 고른 값, 없으면 회사 기본값(PC addDispatch와 같음) · 수정은 오더 상세에서
-      ...(!form._editId ? { 알림톡: typeof form.알림톡 === "boolean" ? form.알림톡 : alimtalkDefaultNow() } : {}),
+      // 💬 2026-11-08 알림톡은 화면에서 뺐다 — 새 오더는 보내지 않음
+      ...(!form._editId ? { 알림톡: false } : {}),
 
       // ⭐ PC(addDispatch)는 항상 companyName을 명시적으로 써넣는데 모바일 등록은
       // 이 필드 자체가 아예 빠져있었다 — 화면 표시는 (companyName || "돌캐") 방식의
@@ -7149,7 +7146,8 @@ setOpenMemo={setOpenMemo}
             setPrevPage("list");
             setPage("form");
           }}
-          className={`fixed bottom-6 right-6 z-40 w-14 h-14 rounded-full text-white text-3xl flex items-center justify-center active:scale-95 transition-transform ${
+          style={{ bottom: "calc(24px + env(safe-area-inset-bottom, 0px))" }} /* ⭐ 2026-11-08 AI 비서 버튼(위)과 같은 세로줄·간격 */
+          className={`fixed right-6 z-40 w-14 h-14 rounded-full text-white text-3xl flex items-center justify-center active:scale-95 transition-transform ${
             cardVersionB
               ? "bg-[#1B2B4B] shadow-[0_4px_20px_rgba(27,43,75,0.35)]"
               : "bg-blue-500 shadow-lg"
@@ -11420,7 +11418,7 @@ const dropTime = order.하차시간 ? fmtDispatchTimeM(order.하차시간, order
             )}
             <div className="relative inline-block shrink-0">
               <TransportStatusBadge order={order} compact onClick={openReqModal} />
-              <DriverAckChip row={order} className="ml-1" />{/* ⭐ 2026-11-05 기사앱 수락/거절 */}
+              <DriverAckChip row={order} className="ml-1" hideAccept />{/* ⭐ 2026-11-05 기사앱 수락/거절 */}
               {isRecentlyEditedByShipper && !isEditRequested && (
                 <span title="화주사가 오더 정보를 수정했습니다"
                   className="absolute -bottom-1 -left-1 w-2.5 h-2.5 rounded-full bg-[#6E95E8] border-2 border-white" />
@@ -11580,7 +11578,7 @@ const dropTime = order.하차시간 ? fmtDispatchTimeM(order.하차시간, order
       </button>
       <div className="relative inline-flex items-center shrink-0">
         <TransportStatusBadge order={order} className="inline-flex items-center leading-none" onClick={openReqModal} flat compact />
-        <DriverAckChip row={order} className="ml-1" />{/* ⭐ 2026-11-05 기사앱 수락/거절 */}
+        <DriverAckChip row={order} className="ml-1" hideAccept />{/* ⭐ 2026-11-05 기사앱 수락/거절 */}
         {isRecentlyEditedByShipper && !isEditRequested && (
           <span title="화주사가 오더 정보를 수정했습니다" className="absolute -bottom-1 -left-1 w-2.5 h-2.5 rounded-full bg-[#4B6CB7] border-2 border-white" />
         )}
@@ -12998,8 +12996,6 @@ const handleAssignClick = () => {
       </div>
     </div>
 
-    {/* 💬 2026-11-08 알림톡 — 보낸 결과 · [알림톡 보내기] */}
-    {(order._id || order.id) && <div className="mt-3"><AlimtalkOrderPanel row={{ ...order, __col: order.__col || collName }} canEdit={localStorage.getItem("role") !== "viewer"} /></div>}
 
     {/* 메모 · 전달사항 · 수정이력 */}
     {((order.메모 || order.적요) || order.전달사항?.trim() || (Array.isArray(order.history) && order.history.length > 0)) && (
@@ -16742,12 +16738,6 @@ const pickDrop = (c) => {
         />
       </div>
 
-      {/* 💬 2026-11-08 알림톡 보내기 — 처음 값은 회사 기본값 · 이 오더만 바꿀 수 있다(신규 등록 때만) */}
-      {!form._editId && (
-        <div className="border-t border-gray-100 p-3">
-          <AlimtalkOrderToggle compact company={getTenant() || localStorage.getItem("userCompany") || userCompany || DEFAULT_COMPANY} value={form.알림톡} onChange={(v) => update("알림톡", v)} />
-        </div>
-      )}
 
       {/* PC 배차관리와 동일한 여러 건 등록 + 날짜 개별 지정 (신규 등록 시에만) */}
       {!form._editId && (

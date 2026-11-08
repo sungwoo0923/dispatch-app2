@@ -6833,9 +6833,12 @@ const getPopbillAdapter = async () => {
 const PB_RUN = POPBILL_ON ? { secrets: ["POPBILL_LINK_ID", "POPBILL_SECRET_KEY"] } : {};
 const _alimtalk = require("./alimtalk").makeAlimtalk({ db, FieldValue, getPopbill: getPopbillAdapter, callerOf: _publicData.callerOf });
 const _bankSync = require("./bankSync").makeBankSync({ db, FieldValue, getPopbill: getPopbillAdapter, callerOf: _publicData.callerOf });
+const ALIMTALK_OFF = true;
 exports.alimtalkOnOrderWrite = functions.runWith({ ...PB_RUN, timeoutSeconds: 60, memory: "256MB" }).firestore
   .document("{col}/{dispatchId}")
   .onWrite(async (change, context) => {
+    // 💬 2026-11-08 사장님 요청 — 알림톡 사용 안 함(PC·모바일 화면에서 뺐다). 다시 쓰려면 이 줄만 지운다
+    if (ALIMTALK_OFF) return null;
     const { col, dispatchId } = context.params;
     if (!["dispatch", "orders"].includes(col)) return null;
     const after = change.after.exists ? change.after.data() : null;
@@ -6848,6 +6851,7 @@ exports.alimtalkOnOrderWrite = functions.runWith({ ...PB_RUN, timeoutSeconds: 60
     return null;
   });
 exports.alimtalkSend = functions.runWith({ ...PB_RUN, timeoutSeconds: 60, memory: "256MB" }).https.onCall(async (data, context) => {
+  if (ALIMTALK_OFF) throw new functions.https.HttpsError("failed-precondition", "알림톡은 사용하지 않습니다");
   try { return await _alimtalk.sendManual(data, context.auth); } catch (e) { throw pdHttpsError(e); }
 });
 exports.bankDeposits = functions.runWith({ ...PB_RUN, timeoutSeconds: 120, memory: "512MB" }).https.onCall(async (data, context) => {

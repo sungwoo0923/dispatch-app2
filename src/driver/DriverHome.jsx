@@ -1077,6 +1077,15 @@ export default function DriverHome() {
   const inbox = useDriverInbox(uid); // ▤ 지급명세서·과태료 서류
   const myReqDocs = useDriverDocs(uid); // ▤ 회사에 낼 필수 서류(미제출·반려는 서류함 숫자에 더한다)
   const docNeed = (() => { const p = docProblems(myReqDocs); return p.missing + p.bad; })();
+  // ⭐ 2026-11-08 사장님 요청 — 서류함에 한 번 들어가 확인했으면 홈의 "회사에 낼 서류가 있어요" 카드는 숨긴다
+  //  (확인할 때의 개수를 기억 → 낼 서류가 그보다 늘어나면 다시 보인다 · 서류함 탭의 빨간 숫자는 그대로)
+  const [docSeenN, setDocSeenN] = useState(-1);
+  useEffect(() => { if (!uid) return; try { setDocSeenN(Number(localStorage.getItem(`kpDocSeen_${uid}`) ?? -1)); } catch (_) { /* 무시 */ } }, [uid]);
+  useEffect(() => {
+    if (activeTab !== "docs" || !uid) return;
+    try { localStorage.setItem(`kpDocSeen_${uid}`, String(docNeed)); } catch (_) { /* 무시 */ }
+    setDocSeenN(docNeed);
+  }, [activeTab, uid, docNeed]);
   const [statusLoading, setStatusLoading] = useState(false);
   const [toast, setToast] = useState("");
   const [companyDefaultLoc, setCompanyDefaultLoc] = useState(null);
@@ -2426,7 +2435,7 @@ export default function DriverHome() {
         <div className="kpd-fade" style={{ padding: "16px 16px 0" }}>
           {/* ⭐ 2026-11-05 새 오더 알림(푸시) 켜기 안내 — 아이폰: 홈 화면 앱으로 열고 [알림 켜기]를 눌러야 알림이 온다 */}
           {!pushCardHidden && <PushSetupCard kind={pushKind} onEnable={enablePush} onClose={hidePushCard} />}
-          {docNeed > 0 && (
+          {docNeed > 0 && docNeed > docSeenN && (
             <button type="button" onClick={() => { try { sessionStorage.setItem("kpDocTab", "submit"); } catch (_) { /* 무시 */ } setActiveTab("docs"); }}
               style={{ width: "100%", textAlign: "left", marginBottom: 12, padding: "12px 14px", borderRadius: 20, border: "1px solid #F5C2C2", background: "#FFF8F8", display: "flex", alignItems: "center", gap: 10 }}>
               <span style={{ width: 34, height: 34, borderRadius: 10, background: "#B42318", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 900, flexShrink: 0 }}>{docNeed}</span>
