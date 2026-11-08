@@ -96,3 +96,13 @@
 @media (prefers-reduced-motion: reduce) {
   .kpd-scan::after, .kpd-pulse, .kpd-fade, .kpd-sheet { animation: none; }
 }
+
+/* ⭐ 2026-11-08 앱 틀 — 실제 보이는 화면 높이(100dvh: 아이폰 Safari 아래 도구막대·홈 바 제외)에 맞춘다.
+   inset:0(=레이아웃 높이)만 쓰면 아이폰에서 하단바 아래쪽이 화면 밖으로 잘렸다 */
+.kpd-shell {
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  height: 100vh;
+  height: 100dvh;
+  min-height: 0;
+}

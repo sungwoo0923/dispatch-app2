@@ -618,7 +618,7 @@ function useDropCompleteGate(order, pos) {
   return { ok: false, msg: `하차지 1km 이내에서 운송완료 가능 (현재 약 ${km.toFixed(1)}km)` };
 }
 
-function ActiveOrderCard({ order: o, loading, onComplete, onRoundComplete, onCopy, pos, onConfirmChange, queued = false, queueNo = 0, photos = [], uploading = false, onUpload, onLoadComplete }) {
+function ActiveOrderCard({ order: o, loading, onComplete, onRoundComplete, onCopy, pos, onConfirmChange, queued = false, queueNo = 0, onLoadComplete }) {
   const rawGate = useDropCompleteGate(o, pos);
   // ⭐ 수락한 오더가 여러 건이면 먼저 수락한 오더부터 — 뒤 오더는 위치가 하차지 근처여도 운송완료 불가.
   // 또 상차지에 들른(상차한) 뒤에만 운송완료 가능 — 하차지 근처에서 오더를 받았다고 바로 완료되면 안 된다.
@@ -707,37 +707,7 @@ function ActiveOrderCard({ order: o, loading, onComplete, onRoundComplete, onCop
           )}
         </>
       )}
-      {/* ⭐ 이 오더의 사진 전송 — 올린 사진은 이 오더의 첨부로 들어간다 */}
-      {(() => {
-        const sentLoad = photos.some(p => p.actionType === "상차완료");
-        const sentDrop = photos.some(p => p.actionType === "하차완료");
-        // 상차 사진은 상차지에 있을 때(또는 상차 후), 하차 사진은 상차 후 하차지 1km 안에서만
-        const canLoad = !queued && !sentLoad && (atPickup || loaded);
-        const canDrop = !queued && !sentDrop && loaded && rawGate.ok;
-        const tile = (label, sent, enabled, actionType, hint) => (
-          <label key={label} style={{
-            flex: 1, padding: "14px 8px", minHeight: 64, borderRadius: 16, textAlign: "center", display: "block",
-            background: sent ? "#E8F0FF" : enabled ? "#ECFDF3" : "#F5F8FD",
-            border: `1.5px solid ${sent ? "#9DB6E6" : enabled ? "#22c55e" : "#E3E8F0"}`,
-            cursor: enabled && !uploading ? "pointer" : "default",
-          }}>
-            <div style={{ fontSize: 14.5, fontWeight: 800, color: sent ? "#1B2B4B" : enabled ? "#15803d" : "#9AA9C3" }}>{label} 사진</div>
-            <div style={{ fontSize: 15.5, fontWeight: 900, marginTop: 2, color: sent ? "#1B2B4B" : enabled ? "#1B2B4B" : "#9AA9C3" }}>
-              {sent ? "✓ 전송완료" : enabled ? (uploading ? "전송중..." : "탭하여 업로드") : hint}
-            </div>
-            {enabled && !sent && (
-              <input type="file" accept="image/*" capture="environment" style={{ display: "none" }}
-                onChange={e => { const f = e.target.files?.[0]; e.target.value = ""; if (f) onUpload?.(f, actionType); }} />
-            )}
-          </label>
-        );
-        return (
-          <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
-            {tile("상차완료", sentLoad, canLoad, "상차완료", queued ? "앞 오더 진행중" : "상차지 도착 후")}
-            {tile("하차완료", sentDrop, canDrop, "하차완료", queued ? "앞 오더 진행중" : loaded ? "하차지 도착 후" : "상차완료 후")}
-          </div>
-        );
-      })()}
+      {/* ⭐ 2026-11-08 사장님 요청 — 카드 안 상차·하차 사진 칸은 뺐다. 운송완료를 누르면 사진 올리기 창이 뜬다 */}
     </div>
   );
 }
@@ -1151,6 +1121,7 @@ export default function DriverHome() {
   const [lastCompletedOrderId, setLastCompletedOrderId] = useState(null);
   const [lastCompletedOrderCol, setLastCompletedOrderCol] = useState("orders");
   const [fleetPhotoUploading, setFleetPhotoUploading] = useState(false);
+  const [dropPhotoAsk, setDropPhotoAsk] = useState(null); // ⭐ 2026-11-08 운송완료 직후 사진 올리기 창 { orderId, col }
   const [logDetail, setLogDetail] = useState(null); // 운행일지 상세 팝업(오더 더블클릭)
   const logDetailRef = useRef(null);
   // ⭐ 사용자 요청 — 알림 종(🔔): 새 오더 도착/배차취소 등을 나중에 다시 확인할 수
@@ -1797,7 +1768,7 @@ export default function DriverHome() {
       });
       setLastCompletedOrderId(orderId);
       setLastCompletedOrderCol(col);
-      showToast("운송완료 처리되었습니다. 다음 배차를 받을 수 있습니다");
+      setDropPhotoAsk({ orderId, col });
     } catch (e) {
       showToast("처리 중 오류가 발생했습니다");
     } finally {
@@ -2157,7 +2128,7 @@ export default function DriverHome() {
   const dateStr = `${_td.getFullYear()}.${String(_td.getMonth()+1).padStart(2,"0")}.${String(_td.getDate()).padStart(2,"0")}`;
 
   return (
-    <div className="kpd-root" style={{ position: "fixed", inset: 0, display: "flex", flexDirection: "column", overflow: "hidden", fontFamily: '"Pretendard", "Noto Sans KR", sans-serif' }}>
+    <div className="kpd-root kpd-shell" style={{ display: "flex", flexDirection: "column", overflow: "hidden", fontFamily: '"Pretendard", "Noto Sans KR", sans-serif' }}>
       <style>{`@keyframes fmBlink { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }`}</style>
 
       {/* ⭐ 2026-11-05 가운데 큰 팝업 — 삭제된 오더 안내 > 새 오더 승인/거절 > 출근 안내 (한 번에 하나만) */}
@@ -2336,6 +2307,28 @@ export default function DriverHome() {
       )}
       {odoOn && changeSheet && uid && (
         <ChangeRecordSheet uid={uid} driver={driver} kind={changeSheet} by={`${driver.name || "기사"}(기사)`} onClose={() => setChangeSheet(null)} onDone={(m) => { setChangeSheet(null); showToast(m); }} />
+      )}
+
+      {/* ⭐ 2026-11-08 운송완료 직후 — 하차(인수증) 사진 올리기 창. [나중에]를 누르면 홈에 다시 올리기 칸이 남는다 */}
+      {dropPhotoAsk && (
+        <div style={{ position: "fixed", inset: 0, zIndex: 10060, background: "rgba(8,14,28,0.62)", backdropFilter: "blur(4px)", WebkitBackdropFilter: "blur(4px)", display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
+          <div className="kpd-sheet" style={{ width: "100%", maxWidth: 520, background: "#fff", borderRadius: "28px 28px 0 0", overflow: "hidden", paddingBottom: "max(18px, env(safe-area-inset-bottom))", boxShadow: "0 -20px 60px rgba(8,14,28,.45)" }}>
+            <div style={{ padding: "22px 22px 20px", color: "#fff", background: "radial-gradient(420px 180px at 90% -30px, rgba(111,160,255,0.42), transparent 70%), linear-gradient(160deg, #070D1C 0%, #0F1D3A 52%, #1F3A6E 100%)" }}>
+              <div style={{ fontSize: 14, fontWeight: 800, letterSpacing: "0.16em", color: "#9DBDFF" }}>COMPLETE · 운송완료</div>
+              <div style={{ fontSize: 25, fontWeight: 900, marginTop: 4 }}>운송완료 되었습니다 ✓</div>
+              <div style={{ fontSize: 17, color: "rgba(255,255,255,.8)", marginTop: 6, lineHeight: 1.45 }}>하차 사진(인수증)을 찍어 올려주세요</div>
+            </div>
+            <div style={{ padding: "20px", display: "flex", flexDirection: "column", gap: 10 }}>
+              <label style={{ width: "100%", minHeight: 68, borderRadius: 18, display: "flex", alignItems: "center", justifyContent: "center", gap: 10, fontSize: 21, fontWeight: 900, color: "#fff", cursor: fleetPhotoUploading ? "default" : "pointer", background: fleetPhotoUploading ? "#B4C0D3" : "radial-gradient(260px 90px at 85% 0%, rgba(111,160,255,.45), transparent 70%), linear-gradient(135deg,#070D1C,#0F1D3A 50%,#2D4C82)", boxShadow: "0 14px 30px rgba(15,29,58,.35)" }}>
+                📷 {fleetPhotoUploading ? "올리는 중..." : "사진 찍어 올리기"}
+                <input type="file" accept="image/*" capture="environment" style={{ display: "none" }} disabled={fleetPhotoUploading}
+                  onChange={async (e) => { const f = e.target.files?.[0]; e.target.value = ""; if (!f) return; const t = dropPhotoAsk; await handleFleetPhotoFile(f, "하차완료", t.orderId, t.col); setDropPhotoAsk(null); }} />
+              </label>
+              <button type="button" disabled={fleetPhotoUploading} onClick={() => { setDropPhotoAsk(null); showToast("운송완료 처리되었습니다. 사진은 홈에서 나중에 올릴 수 있어요"); }}
+                style={{ width: "100%", minHeight: 56, borderRadius: 18, border: "2px solid #C9D6EA", background: "#fff", color: "#1B2B4B", fontSize: 18, fontWeight: 900, cursor: "pointer" }}>나중에 올리기</button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* ⭐ 2026-11-05 업데이트 안내 띠 — 웹 새 버전 [업데이트] · APK 새 버전 [설치] */}
@@ -2607,9 +2600,6 @@ export default function DriverHome() {
                       ) : (
                         <ActiveOrderCard key={o._id} order={o} loading={orderActionLoading} pos={pos} onConfirmChange={handleConfirmChange}
                           queued={qi > 0} queueNo={qi + 1}
-                          photos={todayPhotos.filter(p => p.orderId === o._id)}
-                          uploading={fleetPhotoUploading}
-                          onUpload={(f, actionType) => handleFleetPhotoFile(f, actionType, o._id, o.__col || "orders")}
                           onComplete={() => handleCompleteOrder(o._id, o.__col)}
                           onLoadComplete={() => handleLoadComplete(o)}
                           onRoundComplete={(k) => handleRoundComplete(o, k)}
@@ -3744,7 +3734,7 @@ export default function DriverHome() {
       {/* ⭐ 2026-11-08 리디자인 — 화면 아래에 떠 있는 유리 독(dock), 글씨·아이콘 크게 */}
       <div style={{
         position: "relative", flexShrink: 0, zIndex: 200,
-        padding: "8px 10px calc(8px + env(safe-area-inset-bottom, 0px))",
+        padding: "8px 10px max(14px, calc(6px + env(safe-area-inset-bottom, 0px)))",
         background: "linear-gradient(180deg, rgba(238,242,248,0) 0%, rgba(238,242,248,.95) 40%)", marginTop: -8,
       }}>
       <div style={{
