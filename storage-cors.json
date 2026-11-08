@@ -1,0 +1,8 @@
+[
+  {
+    "origin": ["https://app.logisweb.co.kr", "https://hub.logisweb.co.kr", "https://www.logisweb.co.kr", "https://logisweb.co.kr", "https://dispatch-app2.vercel.app", "https://dispatch-app2-vskk.vercel.app", "http://localhost:5173"],
+    "method": ["GET", "HEAD"],
+    "responseHeader": ["Content-Type", "Content-Disposition", "Content-Length"],
+    "maxAgeSeconds": 3600
+  }
+]
