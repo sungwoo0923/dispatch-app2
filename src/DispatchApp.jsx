@@ -2921,6 +2921,7 @@ import { DriverGuideSendModal, GUIDE_BTN, guideSentLabel, isFleetGrade } from ".
 // ⭐ 2026-11-06 로지스웹 허브(운송사 간 오더 거래소) — [저장 + 허브 등록]
 import { MARKET_SHORT } from "./orderMarketConfig";
 import { shareToOrderMarket } from "./orderMarketShare"; // eslint-disable-line no-unused-vars -- 운송사 거래소(/exchange) 공유용으로 남겨 둠
+import { ensureUploadToken } from "./uploadTokenClient"; // ⭐ 2026-11-08 업로드 링크 토큰(발급 시각·만료)
 import { shareToHub } from "./hubShare"; // ⭐ 2026-11-07 [저장 + 허브 등록] = 로지스웹 허브(화물 콜)에 올리고 이 오더에 연결
 
 // 기사전달용 업로드 링크 단축 — /upload?id=...&t=... (길고 낯설어 기사들이 거부감을
@@ -2940,11 +2941,12 @@ function copyVarsOf(r, { 업로드링크 = "", cold = false, plate = "", name = 
   };
 }
 // 📋 기사복사용 업로드 링크(오더별 토큰) 발급 — 업로드 완료로 잠긴 토큰이면 새로 발급
+// ⭐ 2026-11-08 보안 — 토큰 발급 시각(업로드토큰발급)도 남긴다(서버가 30일 뒤 만료 처리 · 만료 2일 전부터 새로 발급)
 function issueUploadUrl(r) {
-  let token = r.업로드토큰;
-  if (!token || r.업로드잠금) {
-    token = crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`;
-    const patch = { 업로드토큰: token, 업로드잠금: false };
+  const { token, patch } = ensureUploadToken(r);
+  if (patch) {
+    // 같은 클릭에서 두 번 불려도(문구 + 공유 링크) 같은 토큰이 나오게 화면 데이터에도 바로 반영
+    try { Object.assign(r, patch); } catch { /* 고칠 수 없는 객체면 무시 */ }
     updateDoc(doc(db, "dispatch", r._id), patch).catch(() => {});
     if (r._transmittedOrderId) {
       updateDoc(doc(db, "orders", r._transmittedOrderId), patch).catch(() => {});
@@ -14909,7 +14911,8 @@ setCopyOpen(false);
       const dStr = r.상차일 || _todayStr(); // YYYY-MM-DD 유지
       const plate = r.차량번호 || "-";
       const name = r.이름 || "-";
-      const url = withCo(`${location.origin}/upload?id=${encodeURIComponent(r._id || "")}`);
+      // ⭐ 2026-11-08 보안 — 오더 id만 있는 링크는 전환 기간 뒤 막힌다 → 토큰이 든 짧은 링크로
+      const url = issueUploadUrl(r);
       return `[${bizOf(r, userCompany) || "운송사"} 운송장 업로드 안내]
 
 ✓ 상차일: ${dStr}
@@ -14921,7 +14924,7 @@ setCopyOpen(false);
     };
     const shareDispatch = async (r) => {
       const text = shareTextForRow(r);
-      const url = withCo(`${location.origin}/upload?id=${encodeURIComponent(r._id || "")}`);
+      const url = issueUploadUrl(r);
       if (isMobile && navigator.share) {
         try { await navigator.share({ title: `${userCompany || "운송사"} 업로드 안내`, text, url }); } catch { }
         return;
@@ -29561,7 +29564,7 @@ const openDailyCloseIssueDetail = (rowId) => {
   // 📌 공유 메시지 (기존 함수)
   // ------------------------
   const shareDispatch = (row) => {
-    const url = withCo(`${window.location.origin}/upload?id=${row._id}`);
+    const url = issueUploadUrl(row); // ⭐ 2026-11-08 보안 — 토큰이 든 짧은 링크
 
     const msg = `
 ▣ [배차 정보]

@@ -121,36 +121,27 @@ service cloud.firestore {
       return isApproved() && isShipperUser() && request.resource.data.get('shipperUid', '') == request.auth.uid;
     }
 
-    // 비로그인 상태(기사)가 업로드 페이지에서 건드릴 수 있는 필드는 이 3개뿐이다.
-    // 업로드토큰은 절대 포함하지 않는다 — 그건 로그인한 운송사 앱만 발급할 수 있어야
-    // 링크 잠금/재발급 로직이 실제로 의미가 있다.
-    // ⭐ 2026-11-02 점검 — 업로드 페이지(UploadPage.jsx)가 잠글 때 함께 쓰는 '업로드잠금해제만료'(비우기만)와
-    //  '재업로드완료알림'(true만)도 허용 — 예전엔 이 두 칸 때문에 링크 잠금·재업로드 완료 알림 저장 전체가 거부됐다
-    function isPublicOrderUpdate() {
-      let aff = request.resource.data.diff(resource.data).affectedKeys();
-      return aff.hasOnly(['attachCount', '위치공유중', '업로드잠금', '업로드잠금해제만료', '재업로드완료알림'])
-        && (!aff.hasAny(['업로드잠금해제만료']) || request.resource.data.get('업로드잠금해제만료', null) == null)
-        && (!aff.hasAny(['재업로드완료알림']) || request.resource.data.get('재업로드완료알림', false) == true);
-    }
+    // (예전 isPublicOrderUpdate — 로그인 없는 업로드 페이지의 오더 칸 수정 — 은 2026-11-08 서버 함수 uploadAccess로 옮겨 없앴다)
 
     // ────────────────────────────────────────────────────────────
     // 로그인 없이 접근하는 공개 배차/기사 관련 문서
     // (기사에게 문자/카톡으로 전달되는 인수증 업로드 링크, 통합 업로드 검색 링크)
     // ────────────────────────────────────────────────────────────
-    // 🔒 오더 — 한 건 조회(get)는 업로드 링크(오더 번호 = 추측 불가)를 위해 열어 두고,
-    //  목록 조회는 같은 운송사(또는 그 오더의 화주사)만. 기사 통합 업로드 검색은 서버 함수(driverSearch)로 옮겼다.
+    // 🔒 오더 — 읽기(한 건·목록)는 같은 운송사(또는 그 오더의 화주사)만.
+    //  ⭐ 2026-11-08 보안 — 예전엔 업로드 링크(로그인 없음)를 위해 한 건 조회(get)와 일부 칸 수정(isPublicOrderUpdate)을
+    //   "오더 id만 알면 누구나"로 열어 두었다. 이제 업로드 페이지는 서버 함수(uploadAccess)가 링크 토큰을 확인한 뒤 대신 읽고 쓴다.
+    //   목록의 "!locked()(잠금 전 누구나 — 로그인 안 한 사람 포함)"도 뺐다(잠금 전에도 승인된 계정만 — coMatch가 잠금 전엔 승인된 누구나).
+    //   기사 통합 업로드 검색은 서버 함수(driverSearch).
     match /orders/{id} {
-      allow get: if true;
-      allow list: if !locked() || coMatch(resource.data) || shipperOwns(resource.data);
+      allow get, list: if coMatch(resource.data) || shipperOwns(resource.data);
       allow create: if coCreate() || shipperCreate();
-      allow update: if (coMatch(resource.data) && coKeep()) || isPublicOrderUpdate() || shipperOwns(resource.data);
+      allow update: if (coMatch(resource.data) && coKeep()) || shipperOwns(resource.data);
       allow delete: if coMatch(resource.data) || shipperOwns(resource.data);
     }
     match /dispatch/{id} {
-      allow get: if true;
-      allow list: if !locked() || coMatch(resource.data) || shipperOwns(resource.data);
+      allow get, list: if coMatch(resource.data) || shipperOwns(resource.data);
       allow create: if coCreate() || shipperCreate();
-      allow update: if (coMatch(resource.data) && coKeep()) || isPublicOrderUpdate() || shipperOwns(resource.data);
+      allow update: if (coMatch(resource.data) && coKeep()) || shipperOwns(resource.data);
       allow delete: if coMatch(resource.data) || shipperOwns(resource.data);
     }
     match /dispatch_test/{id} {
@@ -159,9 +150,8 @@ service cloud.firestore {
       allow update: if coMatch(resource.data) && coKeep();
     }
     match /fixedClients/{id} {
-      allow get: if true;
-      allow list: if !locked() || coMatch(resource.data);
-      allow update: if (coMatch(resource.data) && coKeep()) || isPublicOrderUpdate();
+      allow get, list: if coMatch(resource.data);
+      allow update: if coMatch(resource.data) && coKeep();
       allow create: if coCreate();
       allow delete: if coMatch(resource.data);
     }
@@ -327,17 +317,23 @@ service cloud.firestore {
       allow delete: if isTotalMasterUser();
     }
 
-    // 인수증/서류 첨부 — 오더 문서 id만 알면 사진을 올리고 확인·삭제(되돌리기)할 수 있어야 한다.
-    // 첨부 문서 id는 추측 불가능한 Firestore 자동 id라 list를 막아도 기능에 지장이 없다.
+    // 인수증/서류 첨부 — 그 오더의 운송사(잠금 후) · 화주사만 읽고 쓴다.
     //  ⭐ 2026-11-07 보안 — 목록·수정은 그 오더의 운송사(잠금 후) · 화주사만(예전엔 승인된 누구나 다른 회사 오더 첨부 목록을 읽었다)
+    //  ⭐ 2026-11-08 보안 — 한 건 읽기·올리기·지우기도 같은 기준(예전엔 "오더 id만 알면 누구나" — 업로드 링크용).
+    //   업로드 링크(로그인 없음)는 서버 함수 uploadAccess가 토큰을 확인한 뒤 대신 올리고 지운다.
+    //   회사명 없는 예전 부모 문서(수동 업로드 driver_uploads 등)의 첨부는 승인된 사무 직원만 한 건 읽기(예전엔 누구나).
     function attParentOk(col, orderId) {
       let p = /databases/$(database)/documents/$(col)/$(orderId);
       return isTotalMasterUser() || (isApproved() && (!locked()
         || (exists(p) && ((!isShipperUser() && get(p).data.get('companyName', '') == myCo()) || shipperOwns(get(p).data)))));
     }
+    function attLegacyParentGet(col, orderId) {
+      let p = /databases/$(database)/documents/$(col)/$(orderId);
+      return isOfficeStaff() && exists(p) && !('companyName' in get(p).data);
+    }
     match /{col}/{orderId}/attachments/{attId} {
-      allow get, create, delete: if true;
-      allow list, update: if attParentOk(col, orderId);
+      allow get: if attParentOk(col, orderId) || attLegacyParentGet(col, orderId);
+      allow list, create, update, delete: if attParentOk(col, orderId);
     }
 
     // 수동 업로드(오더 id 없이 들어온 기사) — 새 메타 문서 생성만 허용, 조회는 로그인 사용자만.
@@ -1271,9 +1267,18 @@ service cloud.firestore {
       allow read: if isSignedIn() && resource.data.get('driverId', '') == request.auth.uid;
     }
     // 직원 쪽 읽기·쓰기는 아래 기사 기록 공용 규칙(looseRead)
+    // ⭐ 2026-11-08 보안 — 한 건 읽기는 ① 기사 본인(문서 이름이 내 uid이거나 uid 칸이 나) ② 같은 회사 사무 직원(기사·화주 제외)
+    //  ③ 최고관리자만. 예전엔 기사앱 로그인/가입이 선등록 문서(drivers/{차량번호})를 화면에서 읽느라 "로그인한 누구나"였다
+    //  (허브 가입 계정 등 아무 계정으로 차량번호만 넣으면 다른 회사 기사 이름·전화번호·차량 정보가 보였다).
+    //  이제 그 확인은 서버 함수(driverLoginLink · linkDriverSignup)가 한다. 회사명 없는 예전 문서는 기본 회사(돌캐) 것으로 본다.
+    function driverDocSelf(driverId) {
+      return isSignedIn() && (request.auth.uid == driverId || resource.data.get('uid', '') == request.auth.uid);
+    }
+    function driverDocStaff() {
+      return isTotalMasterUser() || (isOfficeStaff() && resource.data.get('companyName', '돌캐') == myCo());
+    }
     match /drivers/{driverId} {
-      // 기사앱 가입/로그인 때 차량번호 문서(PC 선등록) 확인용 단건 조회
-      allow get: if isSignedIn();
+      allow get: if driverDocSelf(driverId) || driverDocStaff();
       // 🔒 기사·지입차 목록은 같은 운송사만
       allow list: if coMatch(resource.data);
       allow create: if coCreate() || (isSignedIn() && request.auth.uid == driverId);

@@ -3678,40 +3678,14 @@ exports.tenantMigrate = functions.runWith({ timeoutSeconds: 300, memory: "512MB"
   res.status(200).json({ col, cursor, scanned, updated, done });
 });
 
-// 🔎 기사 통합 업로드 링크(/driver-upload) 검색 — 로그인 없는 화면이라, 서버 규칙을 잠근 뒤에는
-//  오더 목록을 직접 못 읽는다. 날짜·차량번호·이름(+회사)이 모두 맞는 오더만 필요한 칸만 돌려준다.
-exports.driverSearch = functions.https.onRequest(async (req, res) => {
-  res.set("Access-Control-Allow-Origin", "*");
-  res.set("Access-Control-Allow-Methods", "GET, OPTIONS");
-  res.set("Access-Control-Allow-Headers", APPCHECK_CORS);
-  if (req.method === "OPTIONS") { res.status(204).send(""); return; }
-  if (!(await appCheckGate(req, res, "driverSearch"))) return; // 🛡 App Check(functions/appCheck.js)
-  const date = String(req.query.date || "").trim();
-  const vehicle = String(req.query.vehicle || "").replace(/\s/g, "");
-  const name = String(req.query.name || "").trim();
-  const co = String(req.query.co || "").trim();
-  const fixed = req.query.source === "fixed";
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !vehicle || !name) { res.status(400).json({ error: "BAD_PARAMS" }); return; }
-  const pick = (id, col, x) => ({ _id: id, _col: col, 상차일: x.상차일 || x.날짜 || "", 차량번호: x.차량번호 || "", 이름: x.이름 || "", 거래처명: x.거래처명 || "",
-    상차지명: x.상차지명 || "", 하차지명: x.하차지명 || "", 화물내용: x.화물내용 || "", 배차상태: x.배차상태 || "", attachCount: x.attachCount || 0, 업로드토큰: x.업로드토큰 || "" });
-  const same = (x) => String(x.차량번호 || "").replace(/\s/g, "") === vehicle && String(x.이름 || "").trim() === name
-    && (!co || (String(x.companyName || x.company || "").trim() || "돌캐") === co);
-  try {
-    const out = [];
-    if (fixed) {
-      const s = await db.collection("fixedClients").where("날짜", "==", date).get();
-      s.docs.forEach((d) => { const x = d.data() || {}; if (same(x)) out.push(pick(d.id, "fixedClients", x)); });
-    } else {
-      for (const col of ["orders", "dispatch"]) {
-        const s = await db.collection(col).where("상차일", "==", date).get();
-        s.docs.forEach((d) => { const x = d.data() || {}; if (x.source !== "transport_transmit" && same(x)) out.push(pick(d.id, col, x)); });
-      }
-    }
-    res.status(200).json({ results: out });
-  } catch (e) {
-    res.status(500).json({ error: "SEARCH_FAILED" });
-  }
-});
+// ⭐ 2026-11-08 보안 — 기사 업로드 링크(uploadAccess) · 기사 통합 검색(driverSearch) · 기사 로그인 선등록 연결(driverLoginLink)은
+//  functions/uploadAccess.js 로 옮겼다(토큰 확인·요청 수 제한을 서버에서). 비밀값 UPLOAD_TOKEN_SECRET 필요.
+const _uploadAccess = require("./uploadAccess")({ functions, db, getAuth, FieldValue, Timestamp });
+exports.uploadAccess = _uploadAccess.uploadAccess;
+exports.driverSearch = _uploadAccess.driverSearch;
+exports.driverLoginLink = _uploadAccess.driverLoginLink;
+const _publicLimited = _uploadAccess.limited;
+const _publicIp = _uploadAccess.clientIp;
 
 // 📧 가입 화면 이메일 중복확인 — 로그인 전 화면은 보안 규칙상 users 목록을 못 읽어서
 //  "사용 중 여부"만 서버가 대신 알려준다(문서 내용은 돌려주지 않음). 삭제·탈퇴 계정은 재가입 허용.
@@ -3724,6 +3698,8 @@ exports.checkEmail = functions.https.onRequest(async (req, res) => {
   if (req.query.ping === "1") { res.status(200).json({ ok: true }); return; }
   const e = String(req.query.e || "").trim();
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e) || e.length > 200) { res.status(400).json({ error: "BAD_EMAIL" }); return; }
+  // ⭐ 2026-11-08 보안 — 로그인 전 공개 함수라 이메일 대량 확인(가입 여부 수집)을 막는다: IP당 10분 30회 · 같은 이메일 10분 10회
+  if (await _publicLimited(res, [[`ce:ip:${_publicIp(req)}`, 30, 10 * 60e3], [`ce:e:${e.toLowerCase()}`, 10, 10 * 60e3]])) return;
   try {
     const snap = await db.collection("users").where("email", "==", e).limit(5).get();
     let used = snap.docs.some((d) => !["deleted", "withdrawn"].includes(d.data().status));
@@ -3777,10 +3753,12 @@ exports.freeDeletedEmail = functions.https.onRequest(async (req, res) => {
   if (!(await appCheckGate(req, res, "freeDeletedEmail"))) return; // 🛡 App Check(functions/appCheck.js)
   const e = String(req.query.e || req.body?.e || "").trim().toLowerCase();
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e) || e.length > 200) { res.status(400).json({ error: "BAD_EMAIL" }); return; }
+  // ⭐ 2026-11-08 보안 — 요청 수 제한(IP당 1시간 10회 · 같은 이메일 1시간 3회) · 응답은 freed만(계정 있음/없음은 알려주지 않음)
+  if (await _publicLimited(res, [[`fd:ip:${_publicIp(req)}`, 10, 3600e3], [`fd:e:${e}`, 3, 3600e3]])) return;
   try {
     const u = await getAuth().getUserByEmail(e).catch(() => null);
-    if (!u) { res.status(200).json({ freed: false, exists: false }); return; }
-    if (!(await canFreeAuthAccount(u))) { res.status(200).json({ freed: false, exists: true }); return; }
+    if (!u) { res.status(200).json({ freed: false }); return; }
+    if (!(await canFreeAuthAccount(u))) { res.status(200).json({ freed: false }); return; }
     await freeAuthAccount(u);
     console.log(`♻ 삭제된 계정 이메일 해제: ${e}`);
     res.status(200).json({ freed: true });
@@ -3883,7 +3861,18 @@ exports.linkDriverSignup = functions.https.onRequest(async (req, res) => {
       const score = (samePhone ? 2 : 0) + (sameName ? 1 : 0);
       if (score > bestScore) { best = d; bestScore = score; }
     }
-    if (!best) { res.status(200).json({ linked: false }); return; }
+    if (!best) {
+      // ⭐ 2026-11-08 보안 — 화면이 drivers/{차량번호}를 직접 읽지 않게 됐다. 같은 회사에 이 차량번호 선등록 문서가 있는데
+      //  이름·휴대폰이 다르면 conflict(화면: "이미 등록된 차량번호인데 이름·회사명이 다릅니다") — 문서 내용은 돌려주지 않는다
+      const preKey = co && co !== PUSH_DEFAULT_COMPANY ? `${co}__${plate}` : plate;
+      const [p1, p2] = await Promise.all([
+        db.collection("drivers").doc(preKey).get(),
+        preKey !== plate ? db.collection("drivers").doc(plate).get() : Promise.resolve(null),
+      ]);
+      const conflict = (p1.exists && !p1.data().uid) || !!(p2?.exists && !p2.data().uid && String(p2.data().companyName || "").trim() === co);
+      res.status(200).json({ linked: false, ...(conflict ? { conflict: true } : {}) });
+      return;
+    }
 
     const base = { ...(best.data() || {}) };
     // 기사 입력값 — 비어 있지 않은 칸만 덮어쓴다

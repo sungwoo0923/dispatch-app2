@@ -53,6 +53,7 @@ import { useCompanyFeatures } from "./companyFeatures";
 import { lazyView } from "./lazyLoad";
 import { fmtPhone } from "./formatInput";
 import { runDelete, commitDeletes } from "./DeleteProgress"; // ⭐ 2026-11-05 삭제 진행 창 + 한 번에 삭제
+import { ensureUploadToken } from "./uploadTokenClient"; // ⭐ 2026-11-08 업로드 링크 토큰(발급 시각·만료)
 const VehicleLedger = lazyView(() => import("./VehicleLedger"));
 
 // ─── 상수 ────────────────────────────────────────────────────────────────────
@@ -1944,10 +1945,11 @@ function buildContactLine(name, phone) {
 // 기사전달용 업로드 링크 — DispatchApp.jsx buildShortUploadUrl과 동일하게 /u/{code}로
 // 줄여 shortLinks에 저장한다. 토큰이 없거나 잠겨있으면 새로 발급.
 function buildFleetUploadUrl(order) {
-  let token = order.업로드토큰;
-  if (!token || order.업로드잠금) {
-    token = (crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`);
-    updateDoc(doc(db, order.__col || "orders", order._id), { 업로드토큰: token, 업로드잠금: false }).catch(() => {});
+  // ⭐ 2026-11-08 보안 — 토큰 발급 시각도 남긴다(서버가 30일 뒤 만료 · 만료 2일 전부터 새로 발급)
+  const { token, patch } = ensureUploadToken(order);
+  if (patch) {
+    try { Object.assign(order, patch); } catch { /* 무시 */ }
+    updateDoc(doc(db, order.__col || "orders", order._id), patch).catch(() => {});
   }
   const code = String(token || "").replace(/[^a-zA-Z0-9]/g, "").slice(0, 8) || Math.random().toString(36).slice(2, 10);
   setDoc(doc(db, "shortLinks", code), { id: order._id, t: token, createdAt: serverTimestamp() }, { merge: true }).catch(() => {});
