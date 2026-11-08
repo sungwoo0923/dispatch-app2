@@ -20,7 +20,10 @@ import {
 } from "react-router-dom";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import { publishCompany, backfillPublicCompanies } from "./publicCompanies";
-import { auth, db, DEFAULT_COMPANY, IS_MOBILE_PREVIEW } from "./firebase";
+import { auth, db, DEFAULT_COMPANY, IS_MOBILE_PREVIEW, FUNCTIONS_BASE } from "./firebase";
+import { createClaimsSync, fetchCaller } from "./claimsSync";
+// 🎫 2026-11-08 로그인 토큰 권한 — users/{uid}.claimsAt 이 바뀌면 토큰을 새로 받는다(역할·승인 변경이 다시 로그인 없이 바로 적용 · src/claimsSync.js)
+const claimsSync = createClaimsSync({ getUser: () => auth.currentUser, call: fetchCaller(FUNCTIONS_BASE, () => auth.currentUser) });
 import { ContractEndedScreen, useContractStatusFor } from "./companyContract"; // ⭐ 2026-11-06 계약종료 — 회사 전체 접속 차단 화면
 import { setBlindViewerRole } from "./blind";
 import {
@@ -698,6 +701,7 @@ export default function App() {
         if (auth.currentUser?.uid !== u.uid) return;
         if (snap.exists()) {
           const data = snap.data();
+          if (!IS_MOBILE_PREVIEW) claimsSync.check(data.claimsAt);
           if (data.employmentStatus === "퇴사" && !isMasterEmail) {
             // ⭐ 2026-11-05 기사 로그인 화면이 확인 중이면 그 화면이 "퇴사 처리된 계정" 안내를 직접 띄운다(여기서 alert·로그아웃하면 안내가 사라짐)
             if (isDriverBusy() && data.role === "driver") { setRole(null); setApproved(false); setRoleFor(u.uid); setLoading(false); return; }

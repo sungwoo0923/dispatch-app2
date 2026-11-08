@@ -984,8 +984,60 @@ function TenancyPanel() {
           </div>
         )}
       </Card>
+      <ClaimsBackfill />
       <EmptyCompanyCheck />
     </div>
+  );
+}
+
+// 🎫 2026-11-08 로그인 토큰 권한(custom claims) 채우기 — 서버 함수 backfillClaims(functions/authClaims.js)를 끝날 때까지 이어서 부른다
+//  기존 직원·기사·화주·허브 회원 전체의 로그인 토큰에 회사·역할·승인 값을 넣는다(규칙이 users 문서를 매번 읽지 않게).
+//  채우기 전에도 규칙은 예전처럼 문서를 읽으므로 아무도 잠기지 않는다 · 도중에 멈춰도 다시 누르면 처음부터 다시(이미 같은 값은 건너뜀)
+function ClaimsBackfill() {
+  const [cfg, setCfg] = React.useState(null);
+  const [busy, setBusy] = React.useState(false);
+  const [prog, setProg] = React.useState(null);
+  const [msg, setMsg] = React.useState("");
+  React.useEffect(() => onSnapshot(doc(db, "systemConfig", "claims"), (s) => setCfg(s.exists() ? s.data() : {}), () => setCfg({})), []);
+  const callFn = async (data) => {
+    const token = await auth.currentUser?.getIdToken();
+    const r = await fetch(`${FUNCTIONS_BASE}/backfillClaims`, { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify({ data }) });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok || j.error) throw new Error(`${j.error?.message || r.status}${r.status === 404 ? " (서버 함수 배포가 필요합니다)" : ""}`);
+    return j.result;
+  };
+  const run = async () => {
+    if (!(await kpConfirm("모든 계정의 로그인 토큰에 회사·역할·승인 값을 넣습니다.\n· 300명씩 나눠서 진행합니다(창을 닫지 마세요)\n· 이미 같은 값인 계정은 건너뜁니다\n· 직원 화면은 자동으로 새 토큰을 받습니다(다시 로그인 필요 없음)\n진행할까요?"))) return;
+    setBusy(true); setMsg("");
+    const acc = { processed: 0, changed: 0, errors: 0 };
+    try {
+      let next = { phase: "users", cursor: "" };
+      while (next) {
+        setProg({ ...acc, phase: next.phase });
+        const r = await callFn({ ...next, limit: 300 });
+        acc.processed += r.processed || 0; acc.changed += r.changed || 0; acc.errors += r.errors || 0;
+        next = r.next;
+      }
+      setProg({ ...acc, phase: "done" });
+      await setDoc(doc(db, "systemConfig", "claims"), { backfilledAt: serverTimestamp(), ...acc }, { merge: true });
+      setMsg(`완료 — ${acc.processed.toLocaleString()}명 확인 · ${acc.changed.toLocaleString()}명 토큰 갱신${acc.errors ? ` · 실패 ${acc.errors}명(다시 실행해 주세요)` : ""}`);
+    } catch (e) { setMsg(`실패: ${e.message || e}`); } finally { setBusy(false); }
+  };
+  const when = cfg?.backfilledAt?.toDate ? cfg.backfilledAt.toDate().toLocaleString("ko-KR") : "";
+  return (
+    <Card code="CLAIMS" title="로그인 토큰 권한 채우기(보안 규칙 속도 개선)">
+      <div className="text-[13px] text-[#5B6B85] leading-relaxed">
+        보안 규칙이 요청마다 직원 문서(users)를 읽지 않고 로그인 토큰의 회사·역할·승인 값으로 판단하게 합니다(읽기 비용 · 속도 개선).
+        순서: <b>① 서버 함수 배포</b> → <b>② 여기서 실행</b> → <b>③ PC에서 규칙 배포</b>(<code className="text-[12px] font-bold text-[#1B2B4B]">firebase deploy --only firestore:rules,storage</code>).
+        이후 새 직원·역할 변경은 서버가 자동으로 처리합니다.
+      </div>
+      <div className="mt-3 flex flex-wrap items-center gap-3">
+        <button type="button" disabled={busy} onClick={run} className="h-10 px-5 rounded-xl bg-[#0F1A30] text-white text-[13.5px] font-black disabled:opacity-50 whitespace-nowrap">{busy ? "채우는 중…" : when ? "다시 실행" : "실행"}</button>
+        {when && <span className="text-[12.5px] text-[#5B6B85] whitespace-nowrap">마지막 실행 {when} · {Number(cfg?.processed || 0).toLocaleString()}명</span>}
+        {prog && busy && <span className="text-[12.5px] font-bold text-[#1B2B4B] whitespace-nowrap" style={{ fontVariantNumeric: "tabular-nums" }}>{prog.phase === "hub" ? "허브 회원" : "계정"} · {prog.processed.toLocaleString()}명 확인 · {prog.changed.toLocaleString()}명 갱신</span>}
+      </div>
+      {msg && <div className="mt-3 rounded-xl bg-[#0F1A30] text-white px-4 py-2.5 text-[13px] font-bold">{msg}</div>}
+    </Card>
   );
 }
 
