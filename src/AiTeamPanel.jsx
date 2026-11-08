@@ -15,10 +15,10 @@ const NUM = { fontFamily: MONO, fontVariantNumeric: "tabular-nums" };
 // ─── 팀 소개(화면용) — 서버 functions/aiTeams.js 의 TEAMS 와 key 를 맞춘다 ───
 export const AI_TEAMS = [
   { key: "acct", code: "ACC", name: "경리·회계팀", en: "ACCOUNTING", icon: "receipt", desc: "청구 · 입금 확인 · 미수금 · 요금제 변경 요청",
-    access: ["청구서", "요금제", "요금제 변경 요청"],
+    access: ["청구서", "청구 계산서", "요금표", "요금제", "요금제 변경 요청", "고객사 현황"],
     quick: ["이번 달 미납·연체 현황 알려줘", "입금 독촉이 필요한 회사를 금액 순으로 정리해줘", "이번 달 예상 청구액(요금제·초과 사용량) 회사별로 보여줘", "연체된 회사와 연체 개월 수 알려줘", "처리 안 된 요금제 변경 요청 있어?", "지난달 대비 이번 달 청구 금액 비교해줘"] },
   { key: "finance", code: "FIN", name: "재무팀", en: "FINANCE", icon: "trend", desc: "매출 추이 · 회수율 · 요금제 구성 분석",
-    access: ["청구서", "요금제", "고객사 현황"],
+    access: ["청구서", "청구 계산서", "요금표", "요금제", "고객사 현황"],
     quick: ["최근 6개월 매출 추이와 회수율 보고해줘", "요금제별 고객사 수와 매출 비중 정리해줘", "재무 위험 신호가 있는지 점검해줘"] },
   { key: "sales", code: "SAL", name: "영업팀", en: "SALES", icon: "star", desc: "도입 문의 → 견적 → 가입 → 요금제 파이프라인",
     access: ["도입 문의", "견적서", "가입 신청", "요금제"],
@@ -150,7 +150,7 @@ function saveChat(team, v) {
 }
 
 const TOOL_LABEL = {
-  get_invoices: "청구서", get_company_plans: "요금제", get_plan_requests: "요금제 변경 요청", get_inquiries: "도입 문의", get_sales_quotes: "견적서",
+  get_invoices: "청구서", get_billing_estimate: "청구 계산서", get_pricing: "요금표", get_company_plans: "요금제", get_plan_requests: "요금제 변경 요청", get_inquiries: "도입 문의", get_sales_quotes: "견적서",
   get_applications: "가입 신청", get_support_requests: "원격 지원", get_companies_overview: "고객사 현황", get_session_logs: "접속 이력", get_active_sessions: "접속 세션", get_platform_notices: "플랫폼 공지",
 };
 
