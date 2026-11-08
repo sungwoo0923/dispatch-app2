@@ -190,7 +190,8 @@ export function useMailData(uid) {
   const [inbox, setInbox] = React.useState(null);
   const [mine, setMine] = React.useState(null);
   React.useEffect(() => {
-    if (!uid) return undefined;
+    // 로그인 계정이 없으면(승인 전 둘러보기 등) 받을 메일도 없다 — 빈 메일함으로 보여 준다("불러오는 중"에 멈추지 않게)
+    if (!uid) { setInbox([]); setMine([]); return undefined; }
     const a = onSnapshot(query(collection(db, "internalMails"), where("to", "array-contains", uid)), (s) => setInbox(s.docs.map((d) => ({ id: d.id, ...d.data() }))), () => setInbox([]));
     const b = onSnapshot(query(collection(db, "internalMails"), where("fromUid", "==", uid)), (s) => setMine(s.docs.map((d) => ({ id: d.id, ...d.data() }))), () => setMine([]));
     return () => { a(); b(); };
