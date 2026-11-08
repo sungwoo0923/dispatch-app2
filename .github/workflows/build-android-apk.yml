@@ -7,6 +7,15 @@ on:
   # 누르는 것 없이도 항상 최신 코드로 APK가 만들어지게 한다.
   push:
     branches: [main]
+    # ⭐ 2026-11-08 — 화면(웹)만 고친 배포는 APK가 서비스 주소를 열어 바로 반영되므로 APK를 새로 만들지 않는다.
+    #  (예전엔 main에 올릴 때마다 APK 번호가 올라가 기사앱에 "앱 업데이트가 있어요 [설치]"가 매번 떴다)
+    #  안드로이드 네이티브·Capacitor 설정·플러그인(의존성)이 바뀔 때만 자동 빌드. 필요하면 Actions에서 "Run workflow"로 수동 빌드.
+    paths:
+      - "android/**"
+      - "capacitor.config.ts"
+      - "public/offline.html"
+      - "package-lock.json"
+      - ".github/workflows/build-android-apk.yml"
   workflow_dispatch:
     inputs:
       build_type:
