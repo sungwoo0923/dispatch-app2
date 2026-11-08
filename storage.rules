@@ -18,10 +18,15 @@ service firebase.storage {
 
     // ⭐ 2026-11-06 로지스웹 허브 콜 — 회원 서류 · 프로필 사진 · 인수증 사진
     //  관리자 = 최고관리자 이메일 또는 users/{uid}.role == "totalMaster"(Firestore 규칙 isTotalMasterUser와 같은 기준)
+    // 🎫 2026-11-08 로그인 토큰 권한(custom claims, v == 1 — functions/authClaims.js가 서버에서만 넣는다 · firestore.rules ck()와 같다)
+    //  토큰이 있으면 Firestore 문서를 읽지 않는다(서비스 간 읽기 비용 절약). 최고관리자는 토큰 + 문서로 한 번 더 확인
+    function ck() {
+      return request.auth != null && request.auth.token.get('v', 0) == 1;
+    }
     function hubAdmin() {
       return request.auth != null && (
         request.auth.token.get('email', '') == "tjddnqkf@naver.com" ||
-        (firestore.exists(/databases/(default)/documents/users/$(request.auth.uid)) &&
+        ((!ck() || request.auth.token.get('tm', false) == true) && firestore.exists(/databases/(default)/documents/users/$(request.auth.uid)) &&
          firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.get('role', '') == 'totalMaster'));
     }
     function hubFileOk(maxMb) {
@@ -66,8 +71,17 @@ service firebase.storage {
     function payUser() {
       return firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data;
     }
+    // 토큰 기준(문서 기준과 같은 계산 — ap 승인 · st 재직 · r 역할 · pay 부서 재무·경리·회계·총무)
+    function payStaffClaims() {
+      return ck() && request.auth.token.get('ap', false) == true && request.auth.token.get('st', false) == true
+        && (request.auth.token.get('r', '') in ['test', 'acctStaff', 'hrAcct', 'allMgr']
+          || (!(request.auth.token.get('r', '') in ['driver', 'shipper', 'cafeUser']) && request.auth.token.get('pay', false) == true));
+    }
+    function payCoSt() {
+      return ck() ? request.auth.token.get('co', '') : payUser().get('companyName', '');
+    }
     function payStaffSt() {
-      return request.auth != null && (hubAdmin() || (
+      return request.auth != null && (hubAdmin() || payStaffClaims() || (
         firestore.exists(/databases/(default)/documents/users/$(request.auth.uid))
         && payUser().get('approved', true) != false
         && payUser().get('employmentStatus', '') != '퇴사'
@@ -79,13 +93,68 @@ service firebase.storage {
       return request.auth != null && firestore.exists(p)
         && firestore.get(p).data.get('companyName', '').replace('[/\\s#?\\[\\]]', '_') == coKey
         && firestore.get(p).data.expiresAt > request.time
-        && (hubAdmin() || payUser().get('companyName', '').replace('[/\\s#?\\[\\]]', '_') == coKey);
+        && (hubAdmin() || payCoSt().replace('[/\\s#?\\[\\]]', '_') == coKey);
     }
     match /payrollDocs/{coKey}/{uid}/{file} {
       allow read, delete: if payStaffSt() && payUnlockedSt(coKey);
       allow create: if payStaffSt() && payUnlockedSt(coKey) && request.resource != null && request.resource.size < 15 * 1024 * 1024
         && (request.resource.contentType.matches('image/(png|jpeg|webp)') || request.resource.contentType == 'application/pdf');
       allow update: if false;
+    }
+
+    // 📎 2026-11-08 전자결재 첨부 파일 — approvals/{회사 키}/{문서 id}/{시각_파일명} (src/approvalFiles.js · src/ApprovalFiles.jsx)
+    //  회사 키 = 회사명에서 / 공백 # ? [ ] 를 _로 바꾼 값 · Firestore 문서는 users/{나} · approvals/{문서 id} 두 개만 읽는다
+    //  · 올리기: 같은 회사 승인된 사무 직원 + customMetadata.uploadedBy == 나
+    //            결재 문서가 아직 없으면(상신 전 작성 중) 누구 폴더든 새로 만들 수 있고, 있으면 그 문서의 기안자가 결재 진행 중(pending)일 때만
+    //            20MB 미만 · 사진(PNG·JPG·GIF·WEBP·HEIC·BMP, SVG 제외) · PDF · PPT/PPTX · XLS/XLSX · DOC/DOCX · HWP/HWPX · ZIP
+    //  · 읽기: 같은 회사 사무 직원 중 — 결재 참여자 · 회사 관리자 · 경리 · 임원(직책·임원 부서) · (승인된 사업계획서는 같은 회사 직원 누구나)
+    //          상신 전(문서 없음)에는 올린 사람만
+    //  · 지우기: 올린 사람만, 상신 전이거나 첫 결재자가 아직 승인하지 않은 진행 중·회수 문서의 기안자일 때만 · 덮어쓰기 없음
+    function apStUser() {
+      return firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data;
+    }
+    function apStaff(coKey) {
+      return request.auth != null && firestore.exists(/databases/(default)/documents/users/$(request.auth.uid))
+        && apStUser().get('approved', true) != false
+        && apStUser().get('employmentStatus', '') != '퇴사'
+        && !(apStUser().get('role', '') in ['driver', 'shipper', 'cafeUser', 'viewer'])
+        && apStUser().get('companyName', '').replace('[/\\s#?\\[\\]]', '_') == coKey;
+    }
+    function apDoc(docId) {
+      return /databases/(default)/documents/approvals/$(docId);
+    }
+    function apFileTypeOk() {
+      return request.resource.contentType.matches('image/(png|jpeg|gif|webp|heic|heif|bmp)')
+        || request.resource.contentType in ['application/pdf',
+          'application/vnd.ms-powerpoint', 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+          'application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+          'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+          'application/x-hwp', 'application/haansofthwp', 'application/vnd.hancom.hwp', 'application/vnd.hancom.hwpx',
+          'application/zip', 'application/x-zip-compressed'];
+    }
+    function apReaderOk(docId) {
+      let d = firestore.get(apDoc(docId)).data;
+      return request.auth.uid in d.get('participants', [])
+        || apStUser().get('role', '') in ['admin', 'allMgr', 'hrManager', 'hrAcct', 'totalMaster', 'test', 'acctStaff']
+        || apStUser().get('position', '') in ['이사', '상무', '전무', '부사장', '사장', '대표', '대표이사', '본부장', '임원']
+        || apStUser().get('team', '') == '임원'
+        || (d.get('form', '') == 'bizplan' && d.get('status', '') == 'approved');
+    }
+    match /approvals/{coKey}/{docId}/{file} {
+      allow read: if hubAdmin() || (apStaff(coKey) && (firestore.exists(apDoc(docId))
+        ? apReaderOk(docId)
+        : resource.metadata.get('uploadedBy', '') == request.auth.uid));
+      allow create: if resource == null && apStaff(coKey) && request.resource != null && request.resource.size < 20 * 1024 * 1024 && apFileTypeOk()
+        && request.resource.metadata.get('uploadedBy', '') == request.auth.uid
+        && (!firestore.exists(apDoc(docId))
+          || (firestore.get(apDoc(docId)).data.get('drafterUid', '') == request.auth.uid
+              && firestore.get(apDoc(docId)).data.get('status', '') == 'pending'));
+      allow update: if false;
+      allow delete: if apStaff(coKey) && resource.metadata.get('uploadedBy', '') == request.auth.uid
+        && (!firestore.exists(apDoc(docId))
+          || (firestore.get(apDoc(docId)).data.get('drafterUid', '') == request.auth.uid
+              && firestore.get(apDoc(docId)).data.get('status', '') in ['pending', 'withdrawn']
+              && firestore.get(apDoc(docId)).data.line[0].get('status', '') != 'approved'));
     }
 
     match /{allPaths=**} {

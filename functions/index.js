@@ -314,6 +314,7 @@ exports.notifyNewDispatch =
 
       const data = snap.data();
       if (data?.블라인드 === true) return; // ★ 블라인드 오더(최고관리자 전용)는 알림 제외
+      if (data?._seed) return; /* 🧪 테스트 데이터(_seed)는 알림 없음 */
       if (!data) return;
       // ⭐ 구글시트 가져오기로 한꺼번에 만든 예전 오더, 초기화 복원 중인 오더는 알림을 보내지 않는다
       if (data.importBatchId) return;
@@ -363,6 +364,7 @@ exports.notifyDispatchDone =
       const after = change.after.data();
       if (after?.블라인드 === true) return; // ★ 블라인드 오더(최고관리자 전용)는 알림 제외
       if (!before || !after) return;
+      if (after._seed) return; /* 🧪 테스트 데이터(_seed)는 알림 없음 */
       if (after.source === "transport_transmit") return; // 위와 동일한 이유로 사본은 스킵
 
       // 차량번호가 새로 생긴 경우만
@@ -402,6 +404,7 @@ exports.notifyRedispatch =
       const after = change.after.data();
       if (after?.블라인드 === true) return; // ★ 블라인드 오더(최고관리자 전용)는 알림 제외
       if (!before || !after) return;
+      if (after._seed) return; /* 🧪 테스트 데이터(_seed)는 알림 없음 */
       if (after.source === "transport_transmit") return;
 
       const prevCar = String(before["차량번호"] || "").trim();
@@ -441,6 +444,7 @@ exports.notifyDispatchCanceled =
       // ⭐ 블라인드 오더는 관리자 전체 알림만 제외하고, 배정된 기사 본인에게는 취소 알림을 보낸다
       const isBlind = after?.블라인드 === true;
       if (!before || !after) return;
+      if (after._seed) return; /* 🧪 테스트 데이터(_seed)는 알림 없음 */
       if (after.source === "transport_transmit") return;
 
       const prevStatus = String(before["배차상태"] || "").trim();
@@ -504,6 +508,7 @@ exports.notifyDispatchDeleted =
       const data = snap.data();
       const isBlind = data?.블라인드 === true; // 블라인드는 관리자 전체 알림만 제외(기사 본인 알림은 보냄)
       if (!data) return;
+      if (data._seed) return; /* 🧪 테스트 데이터(_seed)는 알림 없음 */
       // ⭐ 운송사 초기화·가져오기 취소처럼 한꺼번에 지우는 중에는 삭제 알림을 보내지 않는다
       if (await isBulkModeFor(data.companyName)) return;
       if (data.source === "transport_transmit") return;
@@ -606,6 +611,7 @@ exports.notifyFleetDriverNewOrder =
       if (!after) return; // 삭제는 별도 함수(notifyDispatchDeleted)에서 처리
       // ⭐ 가져오기로 만든 예전 오더·초기화 복원 중인 오더는 지입 기사에게 새 배차로 보내지 않는다
       if (!before && after.importBatchId) return;
+      if (after._seed) return; /* 🧪 테스트 데이터(_seed)는 알림 없음 */
       if (await isBulkModeFor(after.companyName)) return;
 
       // ⭐ 안전망 — 이 운송사 앱은 PC/모바일을 합쳐 "차량번호를 오더에 쓰는" 화면이
@@ -729,6 +735,7 @@ exports.notifyDispatcherOrderRejected =
       const before = change.before.data();
       const after = change.after.data();
       if (!before || !after) return;
+      if (after._seed) return; /* 🧪 테스트 데이터(_seed)는 알림 없음 */
       if (after["기사확인상태"] !== "거절" || before["기사확인상태"] === "거절") return;
 
       // ⭐ 2026-11-02 점검 — 예전엔 createdByUid(등록자)에게만 보내서, 화주앱에서 요청한 오더(createdByUid 없음)는
@@ -943,6 +950,7 @@ exports.notifyUnassignedUrgent = functions.pubsub
         if (data.source === "transport_transmit") continue; // 원본(dispatch)과 중복 방지
         if (data.urgentPushSentAt) continue; // 이미 이 오더는 알림을 보냈음
         if (data.블라인드 === true) continue; // ★ 블라인드 오더는 미배차 알림 제외
+        if (data._seed) continue; /* 🧪 테스트 데이터(_seed)는 알림 없음 */
 
         const t24 = normalizeTimeToHHMM(data["상차시간"]);
         if (!t24) continue;
@@ -1000,6 +1008,7 @@ exports.notifyFleetOrderModified =
       const before = change.before.data();
       const after = change.after.data();
       if (!before || !after) return;
+      if (after._seed) return; /* 🧪 테스트 데이터(_seed)는 알림 없음 */
       if (after["기사확인상태"] !== "수락" || before["기사확인상태"] !== "수락") return;
       if (after["배차상태"] === "배차취소") return;
       const plate = normalizePlateServer(after["차량번호"] || "");
@@ -1125,6 +1134,7 @@ exports.notifyFleetLateArrival = functions.pubsub
       for (const docSnap of snap.docs) {
         const o = docSnap.data();
         if (o.source === "transport_transmit") continue;
+        if (o._seed) continue; /* 🧪 테스트 데이터(_seed)는 알림 없음 */
         const plate = normalizePlateServer(o["차량번호"] || "");
         if (!plate) continue;
 
@@ -1279,6 +1289,7 @@ exports.notifyChatMessage = functions.firestore
   .onCreate(async (snap) => {
     const data = snap.data();
     if (!data?.roomId || !data?.senderUid) return;
+    if (data._seed) return; /* 🧪 테스트 데이터(_seed)는 알림 없음 */
     // ⭐ 2026-11-03 단체방 안내 문구(초대·나감·이름변경 = type "system")는 푸시 안 보냄 — 알림 폭탄 방지
     if (data.type === "system") return;
 
@@ -3384,6 +3395,7 @@ exports.syncDispatchToGoogleSheet =
 
       const after = change.after.exists ? change.after.data() : null;
       const before = change.before.exists ? change.before.data() : null;
+      if (after?._seed || (!after && before?._seed)) return; // 🧪 테스트 데이터는 구글시트로 보내지 않는다
 
       // ⭐ 전체 연결은 꺼져 있고(시트는 사람이 직접 작성) "내 오더만 보내기"만 켜져 있을 때(2026-10-26 개편):
       //    ① 지정 계정이 켠 시각 이후 새로 등록한 오더에 _gsheetMine(전송 대기) 표시만 단다 — 바로 보내지 않음
@@ -3678,40 +3690,14 @@ exports.tenantMigrate = functions.runWith({ timeoutSeconds: 300, memory: "512MB"
   res.status(200).json({ col, cursor, scanned, updated, done });
 });
 
-// 🔎 기사 통합 업로드 링크(/driver-upload) 검색 — 로그인 없는 화면이라, 서버 규칙을 잠근 뒤에는
-//  오더 목록을 직접 못 읽는다. 날짜·차량번호·이름(+회사)이 모두 맞는 오더만 필요한 칸만 돌려준다.
-exports.driverSearch = functions.https.onRequest(async (req, res) => {
-  res.set("Access-Control-Allow-Origin", "*");
-  res.set("Access-Control-Allow-Methods", "GET, OPTIONS");
-  res.set("Access-Control-Allow-Headers", APPCHECK_CORS);
-  if (req.method === "OPTIONS") { res.status(204).send(""); return; }
-  if (!(await appCheckGate(req, res, "driverSearch"))) return; // 🛡 App Check(functions/appCheck.js)
-  const date = String(req.query.date || "").trim();
-  const vehicle = String(req.query.vehicle || "").replace(/\s/g, "");
-  const name = String(req.query.name || "").trim();
-  const co = String(req.query.co || "").trim();
-  const fixed = req.query.source === "fixed";
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !vehicle || !name) { res.status(400).json({ error: "BAD_PARAMS" }); return; }
-  const pick = (id, col, x) => ({ _id: id, _col: col, 상차일: x.상차일 || x.날짜 || "", 차량번호: x.차량번호 || "", 이름: x.이름 || "", 거래처명: x.거래처명 || "",
-    상차지명: x.상차지명 || "", 하차지명: x.하차지명 || "", 화물내용: x.화물내용 || "", 배차상태: x.배차상태 || "", attachCount: x.attachCount || 0, 업로드토큰: x.업로드토큰 || "" });
-  const same = (x) => String(x.차량번호 || "").replace(/\s/g, "") === vehicle && String(x.이름 || "").trim() === name
-    && (!co || (String(x.companyName || x.company || "").trim() || "돌캐") === co);
-  try {
-    const out = [];
-    if (fixed) {
-      const s = await db.collection("fixedClients").where("날짜", "==", date).get();
-      s.docs.forEach((d) => { const x = d.data() || {}; if (same(x)) out.push(pick(d.id, "fixedClients", x)); });
-    } else {
-      for (const col of ["orders", "dispatch"]) {
-        const s = await db.collection(col).where("상차일", "==", date).get();
-        s.docs.forEach((d) => { const x = d.data() || {}; if (x.source !== "transport_transmit" && same(x)) out.push(pick(d.id, col, x)); });
-      }
-    }
-    res.status(200).json({ results: out });
-  } catch (e) {
-    res.status(500).json({ error: "SEARCH_FAILED" });
-  }
-});
+// ⭐ 2026-11-08 보안 — 기사 업로드 링크(uploadAccess) · 기사 통합 검색(driverSearch) · 기사 로그인 선등록 연결(driverLoginLink)은
+//  functions/uploadAccess.js 로 옮겼다(토큰 확인·요청 수 제한을 서버에서). 비밀값 UPLOAD_TOKEN_SECRET 필요.
+const _uploadAccess = require("./uploadAccess")({ functions, db, getAuth, FieldValue, Timestamp });
+exports.uploadAccess = _uploadAccess.uploadAccess;
+exports.driverSearch = _uploadAccess.driverSearch;
+exports.driverLoginLink = _uploadAccess.driverLoginLink;
+const _publicLimited = _uploadAccess.limited;
+const _publicIp = _uploadAccess.clientIp;
 
 // 📧 가입 화면 이메일 중복확인 — 로그인 전 화면은 보안 규칙상 users 목록을 못 읽어서
 //  "사용 중 여부"만 서버가 대신 알려준다(문서 내용은 돌려주지 않음). 삭제·탈퇴 계정은 재가입 허용.
@@ -3724,6 +3710,8 @@ exports.checkEmail = functions.https.onRequest(async (req, res) => {
   if (req.query.ping === "1") { res.status(200).json({ ok: true }); return; }
   const e = String(req.query.e || "").trim();
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e) || e.length > 200) { res.status(400).json({ error: "BAD_EMAIL" }); return; }
+  // ⭐ 2026-11-08 보안 — 로그인 전 공개 함수라 이메일 대량 확인(가입 여부 수집)을 막는다: IP당 10분 30회 · 같은 이메일 10분 10회
+  if (await _publicLimited(res, [[`ce:ip:${_publicIp(req)}`, 30, 10 * 60e3], [`ce:e:${e.toLowerCase()}`, 10, 10 * 60e3]])) return;
   try {
     const snap = await db.collection("users").where("email", "==", e).limit(5).get();
     let used = snap.docs.some((d) => !["deleted", "withdrawn"].includes(d.data().status));
@@ -3777,10 +3765,12 @@ exports.freeDeletedEmail = functions.https.onRequest(async (req, res) => {
   if (!(await appCheckGate(req, res, "freeDeletedEmail"))) return; // 🛡 App Check(functions/appCheck.js)
   const e = String(req.query.e || req.body?.e || "").trim().toLowerCase();
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e) || e.length > 200) { res.status(400).json({ error: "BAD_EMAIL" }); return; }
+  // ⭐ 2026-11-08 보안 — 요청 수 제한(IP당 1시간 10회 · 같은 이메일 1시간 3회) · 응답은 freed만(계정 있음/없음은 알려주지 않음)
+  if (await _publicLimited(res, [[`fd:ip:${_publicIp(req)}`, 10, 3600e3], [`fd:e:${e}`, 3, 3600e3]])) return;
   try {
     const u = await getAuth().getUserByEmail(e).catch(() => null);
-    if (!u) { res.status(200).json({ freed: false, exists: false }); return; }
-    if (!(await canFreeAuthAccount(u))) { res.status(200).json({ freed: false, exists: true }); return; }
+    if (!u) { res.status(200).json({ freed: false }); return; }
+    if (!(await canFreeAuthAccount(u))) { res.status(200).json({ freed: false }); return; }
     await freeAuthAccount(u);
     console.log(`♻ 삭제된 계정 이메일 해제: ${e}`);
     res.status(200).json({ freed: true });
@@ -3883,7 +3873,18 @@ exports.linkDriverSignup = functions.https.onRequest(async (req, res) => {
       const score = (samePhone ? 2 : 0) + (sameName ? 1 : 0);
       if (score > bestScore) { best = d; bestScore = score; }
     }
-    if (!best) { res.status(200).json({ linked: false }); return; }
+    if (!best) {
+      // ⭐ 2026-11-08 보안 — 화면이 drivers/{차량번호}를 직접 읽지 않게 됐다. 같은 회사에 이 차량번호 선등록 문서가 있는데
+      //  이름·휴대폰이 다르면 conflict(화면: "이미 등록된 차량번호인데 이름·회사명이 다릅니다") — 문서 내용은 돌려주지 않는다
+      const preKey = co && co !== PUSH_DEFAULT_COMPANY ? `${co}__${plate}` : plate;
+      const [p1, p2] = await Promise.all([
+        db.collection("drivers").doc(preKey).get(),
+        preKey !== plate ? db.collection("drivers").doc(plate).get() : Promise.resolve(null),
+      ]);
+      const conflict = (p1.exists && !p1.data().uid) || !!(p2?.exists && !p2.data().uid && String(p2.data().companyName || "").trim() === co);
+      res.status(200).json({ linked: false, ...(conflict ? { conflict: true } : {}) });
+      return;
+    }
 
     const base = { ...(best.data() || {}) };
     // 기사 입력값 — 비어 있지 않은 칸만 덮어쓴다
@@ -4707,6 +4708,7 @@ exports.archiveDeletedOrder = functions.firestore.document("{col}/{orderId}").on
   if (!["orders", "dispatch"].includes(col)) return;
   const data = snap.data();
   if (!data || data.source === "transport_transmit") return; // 화주사 전송 사본은 원본이 따로 있다
+  if (data._seed) return; // 🧪 테스트 데이터는 휴지통에 넣지 않는다
   const company = data.companyName || "돌캐";
   if (await isBulkModeFor(company)) return; // 운송사 초기화·가져오기 취소는 자체 보관함이 있다
   const log = await db.collection("deletedOrders").doc(`${col}_${orderId}`).get().catch(() => null);
@@ -4965,7 +4967,7 @@ exports.birthdayReminders = functions.pubsub.schedule("10 9 * * *").timeZone("As
   const [all, rs] = await Promise.all([db.collection("users").get(), db.collection("hrResumes").get().catch(() => null)]);
   const rsBirth = new Map((rs?.docs || []).map((d) => [d.id, d.data().birthDate || ""])); // 이력서에만 적힌 생년월일도
   const staff = all.docs.map((d) => ({ id: d.id, ...d.data() })).map((u) => ({ ...u, birthDate: u.birthDate || rsBirth.get(u.id) || "" }))
-    .filter((u) => !NON_STAFF_ROLES.has(u.role) && u.role !== "totalMaster" && u.approved !== false && u.employmentStatus !== "퇴사");
+    .filter((u) => !u._seed && !NON_STAFF_ROLES.has(u.role) && u.role !== "totalMaster" && u.approved !== false && u.employmentStatus !== "퇴사"); // 🧪 테스트용 가짜 직원 생일은 알리지 않는다
   const byCo = new Map();
   staff.forEach((u) => { const co = String(u.companyName || PUSH_DEFAULT_COMPANY).trim(); if (!byCo.has(co)) byCo.set(co, []); byCo.get(co).push(u); });
   for (const [co, list] of byCo) {
@@ -5020,6 +5022,7 @@ async function pushInternalMail(m) {
 }
 exports.notifyInternalMail = functions.firestore.document("internalMails/{id}").onCreate(async (snap) => {
   const m = snap.data() || {};
+  if (m._seed) return null; /* 🧪 테스트 데이터(_seed)는 알림 없음 */
   if (m.status === "draft" || m.status === "scheduled") return null; // 임시보관·예약 메일은 보낼 때 알린다
   if (m.kind === "approval") return null; // 전자결재 결과 기록 메일 — 푸시는 notifyApproval이 이미 보냈다
   if (m.kind === "handover") return null; // ⭐ 2026-11-03 인수인계 메일함 사본 — 푸시는 notifyHandover가 이미 보냈다
@@ -5034,6 +5037,7 @@ exports.notifyApproval = functions.firestore.document("approvals/{id}").onWrite(
   const b = chg.before.exists ? chg.before.data() : null;
   const a = chg.after.exists ? chg.after.data() : null;
   if (!a) return null;
+  if (a._seed) return null; /* 🧪 테스트 데이터(_seed)는 알림 없음 */
   const t = a.title || a.formLabel || "결재 문서";
   const turn = (d) => (d && d.status === "pending" ? d.line?.[d.step]?.uid : null);
   const cTurn = (d) => (d && d.status === "approved" && d.cancel?.status === "pending" ? d.cancel.line?.[d.cancel.step]?.uid : null);
@@ -5102,6 +5106,7 @@ async function sendNoticePush(n) {
 }
 exports.notifyNotice = functions.firestore.document("notices/{id}").onCreate(async (snap) => {
   const n = snap.data() || {};
+  if (n._seed) return null; /* 🧪 테스트 데이터(_seed)는 알림 없음 */
   // ⭐ 2026-11-02 인사발령 공문은 전 직원 사내메일(kind "hr") 푸시가 "인사발령" 알림으로 따로 나간다 — 공지 푸시까지 가면 같은 알림이 2번
   if (n.category === "인사발령") return null;
   // ⭐ 2026-11-03 예약 게시 — publishAt(ms)이 미래면 지금은 보내지 않고 sendScheduledNotices가 그 시각에 보낸다
@@ -5132,6 +5137,7 @@ exports.sendScheduledNotices = functions.pubsub.schedule("every 5 minutes").time
 //    (이 메일로는 따로 푸시하지 않는다 — notifyInternalMail이 kind "handover"는 건너뜀)
 exports.notifyHandover = functions.firestore.document("handovers/{id}").onCreate(async (snap, ctx) => {
   const h = snap.data() || {};
+  if (h._seed) return null; /* 🧪 테스트 데이터(_seed)는 알림 없음 */
   const company = String(h.companyName || PUSH_DEFAULT_COMPANY).trim();
   const fromList = Array.isArray(h.receiverUids) && h.receiverUids.length ? h.receiverUids
     : Array.isArray(h.receivers) && h.receivers.length ? h.receivers.map((r) => r && r.uid)
@@ -5368,6 +5374,7 @@ exports.notifySignup = functions.firestore.document("users/{uid}").onWrite(async
   const snap = chg.after;
   const u = snap.data() || {};
   const b = chg.before.exists ? chg.before.data() : null;
+  if (u._seed) return null; /* 🧪 테스트 데이터(_seed)는 알림 없음 */
   if (u.approved !== false || u.status === "deleted" || u.status === "withdrawn" || u.employmentStatus === "퇴사") return null;
   const becamePending = !b || b.approved !== false || ["deleted", "withdrawn"].includes(b.status) || b.employmentStatus === "퇴사";
   if (!becamePending) return null;
@@ -6628,6 +6635,10 @@ Object.assign(exports, require("./hubTriggers").register({
   getAuth,
 }));
 
+// 🎫 2026-11-08 로그인 토큰 권한(custom claims) — 보안 규칙이 users 문서를 매번 읽지 않게(설명은 functions/authClaims.js 맨 위)
+//  claimsOnUserWrite · claimsOnHubMemberWrite · claimsOnPlanWrite · claimsOnCustomRoleWrite · claimsOnRoleOverrideWrite · refreshMyClaims · backfillClaims
+Object.assign(exports, require("./authClaims").register({ functions, db, getAuth, FieldValue, callOpts: appCheckCallOpts() })); // 🛡 호출형은 App Check 모드를 따른다
+
 // 🤖 2026-11-06 AI 팀 — 관리자센터에서 팀별(경리·재무·영업·운영·보안·홍보) Claude 에이전트와 대화.
 //  최고관리자·부관리자(role totalMaster)만. Claude API 키는 Firebase 비밀값 ANTHROPIC_API_KEY.
 //  (등록: firebase functions:secrets:set ANTHROPIC_API_KEY)
@@ -6792,3 +6803,64 @@ const _popbillAdmin = _popbill.makePopbillAdmin({
 exports.popbillAdmin = functions.runWith({ ...(POPBILL_ON ? { secrets: ["POPBILL_LINK_ID", "POPBILL_SECRET_KEY"] } : {}), timeoutSeconds: 60, memory: "256MB", ...appCheckCallOpts() }).https.onCall(async (data, context) => {
   try { return await _popbillAdmin(data, context.auth); } catch (e) { throw pdHttpsError(e); }
 });
+
+// 💬🏦 2026-11-08 팝빌 자동화 — 카카오 알림톡 배차 알림(functions/alimtalk.js) · 은행 입금 자동 조회 → 미수금 매칭(functions/bankSync.js)
+//  팝빌이 꺼져 있으면(키 없음 · 스위치 꺼짐 · 연동회원 없음) 팝빌을 부르지 않고 "팝빌 연결 전"으로만 기록한다 — 키를 넣으면 그대로 켜진다
+const popbillSecrets = () => (POPBILL_ON ? { linkId: process.env.POPBILL_LINK_ID || "", secretKey: process.env.POPBILL_SECRET_KEY || "" } : {});
+const getPopbillAdapter = async () => {
+  const s = await db.collection("integrationConfig").doc("popbill").get().catch(() => null);
+  const { linkId = "", secretKey = "" } = popbillSecrets();
+  return _popbill.createPopbill({ linkId, secretKey, config: s?.exists ? s.data() || {} : {} });
+};
+const PB_RUN = POPBILL_ON ? { secrets: ["POPBILL_LINK_ID", "POPBILL_SECRET_KEY"] } : {};
+const _alimtalk = require("./alimtalk").makeAlimtalk({ db, FieldValue, getPopbill: getPopbillAdapter, callerOf: _publicData.callerOf });
+const _bankSync = require("./bankSync").makeBankSync({ db, FieldValue, getPopbill: getPopbillAdapter, callerOf: _publicData.callerOf });
+exports.alimtalkOnOrderWrite = functions.runWith({ ...PB_RUN, timeoutSeconds: 60, memory: "256MB" }).firestore
+  .document("{col}/{dispatchId}")
+  .onWrite(async (change, context) => {
+    const { col, dispatchId } = context.params;
+    if (!["dispatch", "orders"].includes(col)) return null;
+    const after = change.after.exists ? change.after.data() : null;
+    if (!after || after.알림톡 !== true || after._seed) return null; // 대부분의 쓰기는 여기서 끝(읽기 없음) · 🧪 테스트 가짜 데이터는 보내지 않는다
+    try {
+      if (await isBulkModeFor(after.companyName)) return null;
+      const r = await _alimtalk.onOrderWrite({ col, id: dispatchId, before: change.before.exists ? change.before.data() : null, after });
+      if (r && !r.skipped) console.log("[알림톡]", col, dispatchId, r.status);
+    } catch (e) { console.error("[알림톡] 실패:", col, dispatchId, e?.message || e); }
+    return null;
+  });
+exports.alimtalkSend = functions.runWith({ ...PB_RUN, timeoutSeconds: 60, memory: "256MB" }).https.onCall(async (data, context) => {
+  try { return await _alimtalk.sendManual(data, context.auth); } catch (e) { throw pdHttpsError(e); }
+});
+exports.bankDeposits = functions.runWith({ ...PB_RUN, timeoutSeconds: 120, memory: "512MB" }).https.onCall(async (data, context) => {
+  try { return await _bankSync.action(data, context.auth); } catch (e) { throw pdHttpsError(e); }
+});
+// 매시간 08:00~20:00(한국 시각) — 계좌를 켠 회사의 새 입금만 받아 맞춰 본다
+exports.bankDepositSync = functions.runWith({ ...PB_RUN, timeoutSeconds: 540, memory: "512MB" })
+  .pubsub.schedule("0 8-20 * * *").timeZone("Asia/Seoul").onRun(async () => {
+    const r = await _bankSync.syncAll().catch((e) => [{ error: String(e?.message || e) }]);
+    console.log("[계좌조회] 동기화:", JSON.stringify(r.map((x) => ({ company: x.company, new: x.new, auto: x.auto, review: x.review, off: x.off, error: x.error }))));
+    return null;
+  });
+/* ==================================================================
+   🧪 2026-11-08 테스트 회사 가짜 데이터 · 설명은 functions/seedTestCompany.js 맨 위
+   호출형 seedTestCompany({ action: seed|reset|refresh|clear|status, company: "테스트운송사", cursor })
+   · 최고관리자만 · 대상은 "테스트운송사"만(다른 이름은 거절) · 매주 월요일 새벽 날짜 맞추기(seedTestCompanyWeekly)
+================================================================== */
+const _seedTest = require("./seedTestCompany").makeSeedTestCompany({ db, FieldValue, Timestamp, setBulkMode: (c, on) => setBulkMode(c, on, { wait: on }) });
+const SEED_CODES = new Set(["invalid-argument", "permission-denied", "unauthenticated", "failed-precondition"]);
+exports.seedTestCompany = functions.runWith({ timeoutSeconds: 120, memory: "512MB" }).https.onCall(async (data, context) => {
+  try { return await _seedTest.handle(data || {}, context.auth); } catch (e) {
+    if (e instanceof functions.https.HttpsError) throw e;
+    if (e && SEED_CODES.has(e.code)) throw new functions.https.HttpsError(e.code, e.message);
+    console.error("[테스트 데이터] 실패:", e);
+    throw new functions.https.HttpsError("internal", "잠시 뒤 다시 해 주세요");
+  }
+});
+exports.seedTestCompanyWeekly = functions.runWith({ timeoutSeconds: 540, memory: "512MB" }).pubsub
+  .schedule("40 4 * * 1").timeZone("Asia/Seoul")
+  .onRun(async () => {
+    const r = await _seedTest.weekly().catch((e) => ({ error: String(e?.message || e) }));
+    console.log("[테스트 데이터] 매주 날짜 맞추기:", JSON.stringify(r));
+    return null;
+  });

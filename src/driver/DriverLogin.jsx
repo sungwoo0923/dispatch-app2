@@ -1,14 +1,13 @@
 // src/driver/DriverLogin.jsx
-import { coDocKey } from "../coKey";
 import React, { useState, useEffect, useRef } from "react";
-import { auth, db } from "../firebase";
+import { auth, db, FUNCTIONS_BASE } from "../firebase";
 import { createUserWithEmailAndPassword, signOut } from "firebase/auth";
-import { doc, getDoc, setDoc, deleteDoc, serverTimestamp } from "firebase/firestore";
+import { doc, getDoc } from "firebase/firestore";
 import { useNavigate } from "react-router-dom";
 import BigCheck from "../components/BigCheck";
 import { LogisMark, LogisWordmark, LogisTag } from "../brand"; // 🔷 2026-11-04 LogisWeb 로고
 import { legacyDriverEmail, scopedDriverEmail, signInDriver } from "./driverEmail";
-import { checkDriverUserDoc, describeDriverLoginError, driverLoginError, keepDriverLoginError, takeDriverLoginError, setDriverBusy, sameText } from "./driverLoginErrors"; // ⭐ 2026-11-05 실패 사유 안내
+import { checkDriverUserDoc, describeDriverLoginError, driverLoginError, keepDriverLoginError, takeDriverLoginError, setDriverBusy } from "./driverLoginErrors"; // ⭐ 2026-11-05 실패 사유 안내
 
 // ⭐ 사용자 요청 — 한 번 로그인한 폰에서는 소속회사명/차량번호/이름을 기억하고(정보 저장),
 // "자동 로그인"을 켜두면 로그인 화면에 들어오는 순간 저장된 정보로 바로 로그인한다.
@@ -112,7 +111,6 @@ export default function DriverLogin() {
         // 나서 선등록 문서가 실제로 있어도 절대 못 찾았다. 계정을 먼저 만들어 로그인 상태를
         // 확보한 뒤 조회하고, 선등록 문서가 없거나 이름·회사명이 다르면 방금 만든
         // 계정을 그 자리에서 삭제해 원상복구한다.
-        const normPlate = carNo.replace(/\s+/g, "").toUpperCase();
         let res;
         try {
           res = await createUserWithEmailAndPassword(auth, email, password);
@@ -127,70 +125,33 @@ export default function DriverLogin() {
         }
         uid = res.user.uid;
 
-        // ⭐ 2026-11-01 PC 선등록 문서 — 회사별 이름(회사__차량번호) 먼저, 없으면 예전 이름(차량번호)
-        // ⭐ 2026-11-05 두 문서를 동시에 읽는다(예전엔 차례로 읽어 왕복이 두 번)
-        const preKey = coDocKey(companyName, normPlate);
-        let preSnap, legacySnap;
+        // ⭐ 2026-11-08 보안 — PC 선등록 문서(drivers/{회사__차량번호} 또는 drivers/{차량번호})를 화면이 직접 읽지 않는다.
+        //  (예전엔 그래서 규칙이 "로그인한 누구나 drivers/{차량번호} 읽기"였고, 아무 계정이나 다른 회사 기사 이름·전화번호를 볼 수 있었다)
+        //  서버(driverLoginLink)가 이름·회사를 확인하고 users·drivers 문서를 만들고 선등록 문서를 정리한다. 결과 코드만 돌려준다.
+        let link = null;
         try {
-          [preSnap, legacySnap] = await Promise.all([
-            getDoc(doc(db, "drivers", preKey)),
-            preKey !== normPlate ? getDoc(doc(db, "drivers", normPlate)) : Promise.resolve(null),
-          ]);
-        } catch (readErr) {
-          await res.user.delete().catch(() => {});
-          throw readErr;
+          const idToken = await res.user.getIdToken();
+          const ctl = new AbortController();
+          const timer = setTimeout(() => ctl.abort(), 20000);
+          const r = await fetch(`${FUNCTIONS_BASE}/driverLoginLink`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` },
+            body: JSON.stringify({ companyName, carNo, name }),
+            signal: ctl.signal,
+          }).finally(() => clearTimeout(timer));
+          link = r.ok ? await r.json() : { error: r.status === 429 ? "rate" : "server" };
+        } catch (linkErr) {
+          link = { error: "network", cause: linkErr };
         }
-        if (!preSnap.exists() && legacySnap?.exists() && sameText(legacySnap.data().companyName, companyName)) preSnap = legacySnap;
-        const preId = preSnap.exists() ? preSnap.id : normPlate;
-        if (!preSnap.exists()) {
+        if (!link?.linked) {
           await res.user.delete().catch(() => {});
-          // 예전 이름 문서가 다른 운송사 것이면 "운송사가 다름"
-          if (legacySnap?.exists() && (legacySnap.data().companyName || "").trim()) throw driverLoginError("driver/company-mismatch");
+          if (link?.error === "network") throw driverLoginError("driver/network", { cause: link.cause });
+          if (link?.error === "rate") throw Object.assign(new Error("too many"), { code: "auth/too-many-requests" });
+          if (link?.error) throw driverLoginError("driver/network");
+          if (link?.code === "NAME_MISMATCH") throw driverLoginError("driver/name-mismatch");
+          if (link?.code === "COMPANY_MISMATCH") throw driverLoginError("driver/company-mismatch");
           throw failErr;
         }
-        const d = preSnap.data();
-        if (!sameText(d.이름 || d.name, name)) {
-          await res.user.delete().catch(() => {});
-          throw driverLoginError("driver/name-mismatch");
-        }
-        if (!sameText(d.companyName, companyName)) {
-          await res.user.delete().catch(() => {});
-          throw driverLoginError("driver/company-mismatch");
-        }
-
-        const phone = d.전화번호 || d.phone || "";
-        const common = {
-          uid, name, carNo, phone,
-          vehicleType: d.vehicleType || "",
-          차량종류: d.차량종류 || "", 차량톤수: d.차량톤수 || "",
-          거주지: d.거주지 || "", 요청사항: d.요청사항 || "",
-          companyName: (d.companyName || companyName).trim(),
-          // 관리자가 PC에서 직접 등록한 차량이므로 승인 절차 없이 바로 사용 가능하게 한다.
-          approved: true,
-        };
-        // ⭐ 버그수정 — PC 기사관리 화면은 drivers/{id} 문서를 이름/차량번호/전화번호(한글
-        // 필드)로 읽는데, 여기서 영문 필드(name/carNo/phone)만 썼더니 로그인 직후 PC
-        // 기사관리 목록에서 해당 기사 줄이 전부 "-"로 보였다(모바일 DriverHome은 반대로
-        // 영문 필드를 읽으므로 영문도 그대로 유지) — 양쪽 다 쓴다.
-        // ⭐ 2026-11-05 users·drivers 두 문서는 서로 기다릴 필요가 없어 동시에 쓴다(선등록 문서 정리는 users가 생긴 뒤)
-        await Promise.all([
-          setDoc(doc(db, "users", uid), {
-            ...common, email, role: "driver",
-            termsAgreed: true, privacyAgreed: true, gpsAgreed: true,
-            createdAt: serverTimestamp(),
-          }),
-          setDoc(doc(db, "drivers", uid), {
-            ...common,
-            이름: name, 차량번호: carNo, 전화번호: phone,
-            mainStatus: "대기", subStatus: "대기", status: "대기", state: "대기", goStatus: "대기",
-            active: false, totalDistance: 0,
-            등급: d.등급 || "일반", 담당자: d.담당자 || null, 근무요일: d.근무요일 || [], 메모: d.메모 || "",
-            등록자: d.등록자 || "",
-            createdAt: d.createdAt || serverTimestamp(),
-            updatedAt: serverTimestamp(),
-          }),
-        ]);
-        await deleteDoc(doc(db, "drivers", preId)).catch(() => {});
       }
 
       const snap = await getDoc(doc(db, "users", uid));

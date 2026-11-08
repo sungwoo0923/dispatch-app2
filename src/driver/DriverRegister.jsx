@@ -1,5 +1,4 @@
 // src/driver/DriverRegister.jsx
-import { coDocKey } from "../coKey";
 import React, { useState, useEffect, useRef } from "react";
 import { readPublicCompanies } from "../publicCompanies";
 import CustomDatePicker from "../CustomDatePicker";
@@ -8,7 +7,7 @@ import { fmtPhone } from "../formatInput";
 import { createUserWithEmailAndPassword, signOut } from "firebase/auth";
 import { legacyDriverEmail, scopedDriverEmail, legacyOwnerCompany } from "./driverEmail";
 import { setDriverBusy } from "./driverLoginErrors"; // ⭐ 2026-11-05 확인 중엔 App이 기사 화면으로 넘기지 않게
-import { doc, setDoc, getDoc, deleteDoc, serverTimestamp } from "firebase/firestore";
+import { doc, setDoc, serverTimestamp } from "firebase/firestore";
 import { useNavigate, Link } from "react-router-dom";
 import { addDoc, collection } from "firebase/firestore";
 import { BANK_NAMES, accountLengths, formatAccount, validateAccount, onlyDigits } from "../bankUtil";
@@ -312,9 +311,7 @@ export default function DriverRegister() {
     const vehicleType = [category, tonnage].filter(Boolean).join(" ");
     const phoneStr = fmtPhone(phone);
 
-    // ⭐ 사용자 요청 — 관리자가 PC 기사관리에서 미리 등록해둔 기사(인증 계정 없음)가 가입하면 그 값을 이어받는다.
-    // ⭐ 버그수정 — drivers 컬렉션은 보안규칙상 로그인한 사용자만 읽을 수 있어 계정을 먼저 만든 뒤 조회한다.
-    const normPlate = plate.toUpperCase();
+    // ⭐ 사용자 요청 — 관리자가 PC 기사관리에서 미리 등록해둔 기사(인증 계정 없음)가 가입하면 그 값을 이어받는다(서버 linkDriverSignup).
     const payInfo = {
       정산계좌: bank.acct ? { bank: bank.bank, acct: onlyDigits(bank.acct), holder: bank.holder.trim() } : null,
       사업자번호: onlyDigits(bizNo) || "",
@@ -359,16 +356,15 @@ export default function DriverRegister() {
 
       // ⭐ 2026-11-03 기사관리에 같은 차량번호 + (같은 휴대폰번호 또는 같은 이름) 기사가 있으면 서버가 연결·승인
       // ⭐ 2026-11-05 [원인 ②] 서버 연결 확인 → 선등록 문서 조회(2건)를 차례로 기다렸다 — 서로 상관없는 일이라 동시에 한다
-      const preKey = coDocKey(co, normPlate);
-      const [link, preSnap0, legacySnap] = await Promise.all([
+      // ⭐ 2026-11-08 보안 — 선등록 문서(drivers/{차량번호})는 화면이 직접 읽지 않는다. 서버가 연결하거나,
+      //  같은 회사에 이 차량번호가 이미 있는데 이름·휴대폰이 다르면 conflict만 알려준다(문서 내용은 주지 않음).
+      const [link] = await Promise.all([
         tryAutoLink(res.user, {
           companyName: co, carNo: plate, name: name.trim(), phone: phoneStr,
           차량종류: category, 차량톤수: tonnage, 거주지: residence, 요청사항: requestNote.trim(),
           hireDate: hireDate || "", ...payInfo,
           termsAgreed, privacyAgreed, gpsAgreed,
         }),
-        getDoc(doc(db, "drivers", preKey)).catch(() => null),
-        preKey !== normPlate ? getDoc(doc(db, "drivers", normPlate)).catch(() => null) : Promise.resolve(null),
       ]);
       mark("연결확인");
       if (link?.linked) {
@@ -382,24 +378,12 @@ export default function DriverRegister() {
         return;
       }
 
-      let preRegistered = null;
-      // ⭐ 2026-11-01 PC 선등록 문서 — 회사별 이름(회사__차량번호) 먼저, 없으면 예전 이름(차량번호)
-      let preSnap = preSnap0;
-      if (!preSnap?.exists() && legacySnap?.exists() && (legacySnap.data().companyName || "").trim() === co) preSnap = legacySnap;
-      const preId = preSnap?.exists() ? preSnap.id : normPlate;
-      if (preSnap?.exists()) {
-        const d = preSnap.data();
-        const sameName = (d.이름 || d.name || "").trim() === name.trim();
-        const sameCompany = (d.companyName || "").trim() === co;
-        if (sameName && sameCompany) {
-          preRegistered = d;
-        } else {
-          await res.user.delete().catch(() => {});
-          created = null;
-          setDriverBusy(false);
-          setError("이미 등록된 차량번호인데 이름·회사명이 다릅니다. 관리자에게 문의해주세요.");
-          return;
-        }
+      if (link?.conflict) {
+        await res.user.delete().catch(() => {});
+        created = null;
+        setDriverBusy(false);
+        setError("이미 등록된 차량번호인데 이름·회사명이 다릅니다. 관리자에게 문의해주세요.");
+        return;
       }
       setPhase(3);
 
@@ -451,16 +435,9 @@ export default function DriverRegister() {
           active: false,
           totalDistance: 0,
           approved: false,
-          createdAt: preRegistered?.createdAt || serverTimestamp(),
+          createdAt: serverTimestamp(),
           updatedAt: serverTimestamp(),
-          // 관리자가 PC에서 미리 지정해둔 값은 가입 입력값보다 우선해서 이어받는다.
-          ...(preRegistered ? {
-            등급: preRegistered.등급 || "일반",
-            담당자: preRegistered.담당자 || null,
-            근무요일: preRegistered.근무요일 || [],
-            메모: preRegistered.메모 || "",
-            등록자: preRegistered.등록자 || "",
-          } : {}),
+          // (PC 선등록 값 이어받기는 서버 linkDriverSignup이 연결할 때 한다)
         }),
       ]);
       mark("저장");
@@ -468,7 +445,6 @@ export default function DriverRegister() {
       // 뒤에서 마저 — 입사일(연차 계산용), 선등록 문서 정리(users 문서가 있어야 규칙 통과), 사업자등록증 사진
       finishInBackground([
         hireDate ? setDoc(doc(db, "userProfiles", uid), { hireDate }, { merge: true }).catch(() => {}) : null,
-        preRegistered ? deleteDoc(doc(db, "drivers", preId)).catch(() => {}) : null,
         bizDoc(uid),
       ].filter(Boolean));
       setPhase(4);

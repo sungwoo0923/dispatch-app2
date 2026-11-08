@@ -216,6 +216,7 @@ export const APPROVAL_FORMS = [
       { k: "account", label: "계정과목", type: "select", options: ACCOUNTS, def: "소모품비", half: true, direct: true },
       { k: "pay", label: "결제 수단", type: "select", options: PAY, def: "법인카드", half: true, direct: true },
       { k: "lines", label: "지출 내역", type: "spendLines", required: true },
+      { k: "planId", label: "관련 사업계획", type: "plan", ph: "해당 없으면 비워 두세요" },
       { k: "reason", label: "지출 사유", templates: ["사무용품 구매", "차량 정비·수리", "유류비 정산", "거래처 접대", "직원 복리후생(식대·간식)", "택배·운송비", "통신비", "교육·세미나", "긴급 부품 구매"], type: "textarea", required: true },
     ],
     prepare: (d) => spendPrepare(d), normalize: (d) => ({ ...d, lines: spendLinesOf(d, true) }),
@@ -229,6 +230,7 @@ export const APPROVAL_FORMS = [
       { k: "shop", label: "가맹점", type: "text", required: true },
       { k: "account", label: "계정과목", type: "select", options: ACCOUNTS, def: "복리후생비", direct: true },
       { k: "people", label: "사용 인원·참석자", type: "text", pick: "staffNames", ph: "직원을 고르거나 직접 입력(거래처 참석자 등)" },
+      { k: "planId", label: "관련 사업계획", type: "plan", ph: "해당 없으면 비워 두세요" },
       { k: "reason", label: "사용 목적", templates: ["거래처 미팅 식대", "직원 회식", "출장 경비", "사무용품 구매", "차량 유지비", "고객 접대", "업무용 소모품"], type: "textarea", required: true },
     ],
     amount: (d) => Number(d.amountV) || 0, summary: (d) => `${d.shop || ""} · ${won(d.amountV)}` },
@@ -267,6 +269,7 @@ export const APPROVAL_FORMS = [
       { k: "vendor", label: "구매처", type: "text" },
       { k: "need", label: "납기 희망일", type: "date" },
       { k: "place", label: "납품 장소", type: "text" },
+      { k: "planId", label: "관련 사업계획", type: "plan", ph: "해당 없으면 비워 두세요" },
       { k: "reason", label: "구매 사유", templates: ["기존 장비 노후 교체", "신규 입사자 지급", "업무 효율 개선", "소모품 재고 부족", "고장 수리 대체"], type: "textarea", required: true },
     ],
     amount: (d) => itemsTotal(d.items), summary: (d) => `${(d.items || [])[0]?.name || "품목"}${(d.items || []).length > 1 ? ` 외 ${d.items.length - 1}건` : ""} · ${won(itemsTotal(d.items))}` },
@@ -293,6 +296,27 @@ export const APPROVAL_FORMS = [
       { k: "budget", label: "소요 예산", type: "money" },
     ],
     amount: (d) => Number(d.budget) || 0, titleOf: (d) => d.subject, summary: (d) => d.subject || "" },
+  // 📑 2026-11-08 사업계획서 — 결재선에 경리·회계·재무(합의) · 임원 · 대표(최종)가 꼭 들어간다(src/bizPlan.js validateBizLine · firestore.rules apBizLineOk)
+  //  최종 승인되면 임원 화면 › 경영 분석 › 사업계획에 예산 · 집행액(연결된 지출결의 승인 금액) · 집행률이 보인다
+  { key: "bizplan", cat: "draft", label: "사업계획서", title: "사 업 계 획 서", code: "DB", lineRule: "bizplan", amountLabel: "총 예산",
+    fields: [
+      { k: "name", label: "사업명", type: "text", required: true, ph: "예) 천안 신규 물류 거점 구축" },
+      { k: "period", label: "사업 기간", type: "daterange", required: true, calendar: true },
+      { k: "dept", label: "담당 부서", type: "text", pick: "teams", half: true },
+      { k: "owner", label: "담당자", type: "text", pick: "staffName", half: true },
+      { k: "background", label: "추진 배경", type: "textarea", rows: 4, required: true, ph: "왜 이 사업을 하려는지 적어 주세요" },
+      { k: "goal", label: "목표", type: "textarea", rows: 3, required: true, ph: "이루려는 목표를 한두 문장으로" },
+      { k: "goals", label: "정량 목표", type: "goals" },
+      { k: "schedule", label: "세부 추진 일정", type: "schedule" },
+      { k: "budget", label: "예산 내역", type: "budget", required: true },
+      { k: "revenue", label: "예상 매출", type: "money", half: true },
+      { k: "profit", label: "예상 이익", type: "money", half: true },
+      { k: "payback", label: "투자 회수 기간(개월)", type: "number", unit: "개월" },
+      { k: "effect", label: "기대 효과", type: "textarea", rows: 3 },
+    ],
+    prepare: (d) => ({ ...d, goals: rowsOf({ type: "goals" }, d.goals), schedule: rowsOf({ type: "schedule" }, d.schedule), budget: rowsOf({ type: "budget" }, d.budget) }),
+    amount: (d) => costsTotal(d.budget), titleOf: (d) => d.name,
+    summary: (d) => `${d.name || ""}${d.period?.start ? ` · ${rangeText(d.period)}` : ""} · 예산 ${won(costsTotal(d.budget))}` },
   { key: "rate", cat: "draft", label: "운임·단가 변경 품의", title: "운 임 변 경 품 의 서", code: "DR",
     fields: [
       { k: "client", label: "거래처", type: "text", required: true, pick: "clients" },
@@ -503,6 +527,14 @@ export function wonKorean(n) {
   return out;
 }
 
+// 📑 사업계획서 표(정량 목표 · 추진 일정 · 예산) — 내용 있는 행만
+export function rowsOf(f, v) {
+  const rows = Array.isArray(v) ? v : [];
+  if (f.type === "goals") return rows.filter((r) => String(r.label || "").trim() || String(r.target || "").trim());
+  if (f.type === "schedule") return rows.filter((r) => String(r.when || "").trim() || String(r.what || "").trim());
+  if (f.type === "budget") return rows.filter((r) => String(r.label || "").trim() || Number(r.amount) > 0);
+  return rows;
+}
 export const formOf = (key) => APPROVAL_FORMS.find((f) => f.key === key) || APPROVAL_FORMS[0];
 export const formsOfCat = (cat) => APPROVAL_FORMS.filter((f) => f.cat === cat);
 
@@ -515,6 +547,9 @@ export function initialData(form) {
     if (f.type === "costs") d[f.k] = (f.preset || ["항목"]).map((l) => ({ label: l, amount: "" }));
     if (f.type === "daterange") d[f.k] = { start: "", end: "" };
     if (f.type === "checks") d[f.k] = [];
+    if (f.type === "goals") d[f.k] = [{ label: "", target: "", unit: "" }];
+    if (f.type === "schedule") d[f.k] = [{ when: "", what: "", who: "" }];
+    if (f.type === "budget") d[f.k] = [{ label: "", amount: "", note: "" }];
     if (f.type === "timerange") d[f.k] = { start: f.k === "hours" ? "09:00" : "", end: f.k === "hours" ? "18:00" : "" };
   });
   return d;
@@ -529,6 +564,8 @@ export function missingFields(form, d) {
     if (f.type === "notice") return false;
     if (f.type === "checks") return (v || []).length < (f.options || []).length;
     if (f.type === "items") return !(v || []).some((r) => String(r.name || "").trim() && Number(r.price));
+    if (f.type === "budget") return !(v || []).some((r) => String(r.label || "").trim() && Number(r.amount) > 0);
+    if (f.type === "goals" || f.type === "schedule") return !rowsOf(f, v).length;
     if (f.type === "spendLines") { const rows = spendLinesOf(d, true).filter(rowFilled); return !rows.length || rows.some((r) => !String(r.vendor || "").trim() || !(spendRowTotal(r) > 0)); }
     return v === undefined || v === null || String(v).trim() === "";
   }).map((f) => f.label);
@@ -540,12 +577,16 @@ export function fieldText(f, v, staff) {
   if (v === undefined || v === null || v === "") return "";
   if (f.type === "bank") return bankText(v);
   if (f.type === "spendLines") return (Array.isArray(v) ? v : []).filter(rowFilled).map((r, i) => `${i + 1}. ${r.date || ""} ${r.vendor || ""} ${r.memo || ""} ${won(spendRowTotal(r))}`.replace(/\s+/g, " ")).join("\n");
-  if (f.type === "daterange") { const n = dayDiff(v); const b = bizDays(v); return v.start ? `${rangeText(v)}${n ? ` (${n}일${b !== n ? ` · 주말·공휴일 빼고 ${b}일` : ""})` : ""}` : ""; }
+  if (f.type === "daterange") { const n = dayDiff(v); const b = f.calendar ? n : bizDays(v); return v.start ? `${rangeText(v)}${n ? ` (${n}일${b !== n ? ` · 주말·공휴일 빼고 ${b}일` : ""})` : ""}` : ""; }
   if (f.type === "money") return Number(v) ? won(v) : "";
   if (f.type === "checks") return (v || []).map((x) => `☑ ${x}`).join("\n");
   if (f.type === "timerange") { const t = (hm) => { if (!hm) return ""; const [h, m] = hm.split(":").map(Number); return `${h < 12 ? "오전" : "오후"} ${h % 12 || 12}:${String(m).padStart(2, "0")}`; }; return v?.start ? `${t(v.start)}${v.end ? ` ~ ${t(v.end)}` : ""}` : ""; }
   if (f.type === "time") { const m = /^(\d{1,2}):(\d{2})$/.exec(String(v)); if (!m) return String(v); const h = Number(m[1]); return `${h < 12 ? "오전" : "오후"} ${h % 12 || 12}:${m[2]}`; }
-  if (f.type === "number") return String(v);
+  if (f.type === "number") return `${v}${f.unit ? f.unit : ""}`;
+  if (f.type === "goals") return rowsOf(f, v).map((r, i) => `${i + 1}. ${r.label || ""} ${r.target || ""}${r.unit || ""}`.trim()).join("\n");
+  if (f.type === "schedule") return rowsOf(f, v).map((r) => [r.when, r.what, r.who].filter(Boolean).join(" · ")).join("\n");
+  if (f.type === "budget") return rowsOf(f, v).map((r) => `${r.label || ""} ${won(r.amount)}${r.note ? ` (${r.note})` : ""}`).join("\n");
+  if (f.type === "plan") return "";
   if (f.type === "staff") { const u = (staff || []).find((x) => x.uid === v); return u ? `${u.name}${u.position ? ` ${u.position}` : ""}` : ""; }
   return String(v);
 }

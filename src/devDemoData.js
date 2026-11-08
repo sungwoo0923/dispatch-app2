@@ -3,6 +3,8 @@
 //  URL에 demo=1 이 있을 때만 fsTenant.js가 orders/dispatch/drivers/clients/notices 목록 조회에 이 값을 돌려준다.
 //  배포 빌드에서는 fsTenant.js의 import.meta.env.DEV 분기가 통째로 빠져 이 파일도 포함되지 않는다.
 
+import { bizPlanStaff, bizPlanDemo } from "./bizPlanDemo"; // 📑 2026-11-08 사업계획서 점검(demoAp=1 · demoAp=nofin)
+
 export function isDemoOn() {
   try { return new URLSearchParams(window.location.search).get("demo") === "1"; } catch { return false; }
 }
@@ -263,6 +265,10 @@ export function demoDocSnap(ref, co) {
 export function demoDocsFor(col) {
   const pay = demoPayDocs(col);
   if (pay) return pay;
+  // 📑 2026-11-08 전자결재 결재선 점검 — 사무 직원(팀장 · 재무 · 상무 · 대표) + 가입 대기 기사
+  if (col === "approvals" && bizPlanStaff()) { const d = bizPlanDemo(demoCo || "테스트운송"); return [...d.plans, ...d.expenses].map((x) => fakeDoc(col, x.id, x)); }
+  if (col === "users" && bizPlanStaff()) return [...bizPlanStaff().map((u) => fakeDoc(col, u.uid, { ...u, approved: true, employmentStatus: "재직", email: `${u.uid}@demo.kp` })),
+    ...DEMO_SIGNUPS.map((u) => fakeDoc(col, u.id, { uid: u.id, role: "driver", name: u.name, approved: u.approved }))];
   if (col === "users" && demoPayOn()) return PAY_STAFF.map((u) => fakeDoc(col, u.id, { uid: u.id, approved: true, employmentStatus: "재직", ...u }));
   if (col === "users") return DEMO_SIGNUPS.map((u) => fakeDoc(col, u.id, { uid: u.id, role: "driver", email: `${u.carNo}@driver.run25.kr`, vehicleType: `${u.차량종류} ${u.차량톤수}`, termsAgreed: true, privacyAgreed: true, gpsAgreed: true, createdAt: demoTs(u.at), ...u, at: undefined }));
   if (col === "driver_documents") return [fakeDoc(col, "demo-dd-0", { driverId: "demo-u-0", docType: "bizReg", docLabel: "사업자등록증", status: "제출", fileName: "사업자등록증.jpg", fileType: "image/svg+xml", dataUrl: BIZ_SVG, uploadedAt: demoTs(2) }),

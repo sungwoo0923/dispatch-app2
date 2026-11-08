@@ -41,6 +41,9 @@ import DetailFilterButton, { applyDetailFilter, DetailScope } from "./DetailFilt
 import { useCompanyBiz, bizOf, BizChip, BizPicker, BizFilter, bizMatch, printInfoForBiz, BizListEditor, BizScope, BizSelect, resolveBiz, rememberBiz, normBizKey, bankForBiz, bizInfoCardBlob } from "./companyBiz"; // ⭐ 2026-11-03 한 회사 · 여러 사업자 // ⭐ 2026-11-03 배차담당자 칸(등록자 + 차량 붙인 사람)
 import JSZip from "jszip";
 import { OrderWeather, BizCheck, bizGuardMain, ClientBizBulkButton, PopbillMemberCard } from "./publicDataMain"; // 🏛 2026-11-07 국세청 사업자 상태 · 기상청 날씨 · 팝빌 연동회원
+import { AlimtalkSettingsCard, BankAccountsCard, AlimtalkOrderToggle, AlimtalkOrderPanel, BankReviewQueue } from "./PopbillAuto"; // 💬🏦 2026-11-08 알림톡 배차 알림 · 은행 입금 자동 매칭
+import { alimtalkDefaultNow, watchAlimtalkDefault } from "./popbillAuto";
+import { buildArMonths as buildArMonthsCore, allocArDeposit as allocArDepositCore, allocKindOf, matchDeposits } from "./arMatch"; // 💰 2026-11-08 입금 매칭 공용 식(서버 계좌조회와 같은 파일)
 import { sendOrderTo24Proxy as sendOrderTo24 } from "../api/24CallProxy";
 import { useNewVersion, openUpdatePopup } from "./VersionCheck";
 import CustomDatePicker, { KOREAN_HOLIDAYS, shortHolidayLabel } from "./CustomDatePicker"; // ⭐ 2026-11-04 특수운임 제거 — specialDemandInfo·weatherUtil 사용 안 함
@@ -2777,6 +2780,10 @@ const submitCopyOrderPC = async (copyTarget, approvedShippers, cargoOverride) =>
   delete payload._transmittedToShipper;
   delete payload._transmittedAt;
   delete payload._gsheetSync; // ★ 원본의 구글시트 줄 연결값이 복사본에 딸려가면 원본 줄을 덮어쓰거나 지웠다
+  // 💬 2026-11-08 알림톡 — 복사 창에서 고른 값(없으면 회사 기본값) · 원본 발송 결과는 넘기지 않는다
+  payload.알림톡 = typeof copyTarget._알림톡 === "boolean" ? copyTarget._알림톡 : alimtalkDefaultNow();
+  delete payload._알림톡;
+  delete payload.알림톡결과;
 
   const col = copyTarget.__col || "orders";
   await setDoc(doc(db, col, newId), payload);
@@ -2801,11 +2808,11 @@ const submitCopyOrderPC = async (copyTarget, approvedShippers, cargoOverride) =>
 // ⭐ 2026-11-06 [복사 등록] — "몇 건 복사?" 창(건마다 상차일·하차일, 처음엔 모두 오늘) → 그 수만큼 submitCopyOrderPC
 //   (지난 날짜 → 오늘, 화주사 전송 포인터 제거 등 submitCopyOrderPC 규칙은 그대로) · 취소/실패면 false, 성공이면 건수
 const submitCopyOrdersPC = async (copyTarget, approvedShippers, cargoOverride) => {
-  const plan = await askCopyDates({ title: "복사 등록", sub: `${copyTarget?.거래처명 || ""} ${copyTarget?.상차지명 ? `· ${copyTarget.상차지명} → ${copyTarget.하차지명 || ""}` : ""}`.trim() || undefined });
+  const plan = await askCopyDates({ title: "복사 등록", sub: `${copyTarget?.거래처명 || ""} ${copyTarget?.상차지명 ? `· ${copyTarget.상차지명} → ${copyTarget.하차지명 || ""}` : ""}`.trim() || undefined, alimtalk: alimtalkDefaultNow() });
   if (!plan || !plan.length) return false;
   let n = 0;
   for (const d of plan) {
-    const ok = await submitCopyOrderPC({ ...copyTarget, 상차일: d.상차일, 하차일: d.하차일 }, approvedShippers, cargoOverride);
+    const ok = await submitCopyOrderPC({ ...copyTarget, 상차일: d.상차일, 하차일: d.하차일, _알림톡: d.알림톡 }, approvedShippers, cargoOverride);
     if (ok === false) return n ? n : false;
     n += 1;
   }
@@ -2921,6 +2928,7 @@ import { DriverGuideSendModal, GUIDE_BTN, guideSentLabel, isFleetGrade } from ".
 // ⭐ 2026-11-06 로지스웹 허브(운송사 간 오더 거래소) — [저장 + 허브 등록]
 import { MARKET_SHORT } from "./orderMarketConfig";
 import { shareToOrderMarket } from "./orderMarketShare"; // eslint-disable-line no-unused-vars -- 운송사 거래소(/exchange) 공유용으로 남겨 둠
+import { ensureUploadToken } from "./uploadTokenClient"; // ⭐ 2026-11-08 업로드 링크 토큰(발급 시각·만료)
 import { shareToHub } from "./hubShare"; // ⭐ 2026-11-07 [저장 + 허브 등록] = 로지스웹 허브(화물 콜)에 올리고 이 오더에 연결
 
 // 기사전달용 업로드 링크 단축 — /upload?id=...&t=... (길고 낯설어 기사들이 거부감을
@@ -2940,11 +2948,12 @@ function copyVarsOf(r, { 업로드링크 = "", cold = false, plate = "", name = 
   };
 }
 // 📋 기사복사용 업로드 링크(오더별 토큰) 발급 — 업로드 완료로 잠긴 토큰이면 새로 발급
+// ⭐ 2026-11-08 보안 — 토큰 발급 시각(업로드토큰발급)도 남긴다(서버가 30일 뒤 만료 처리 · 만료 2일 전부터 새로 발급)
 function issueUploadUrl(r) {
-  let token = r.업로드토큰;
-  if (!token || r.업로드잠금) {
-    token = crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`;
-    const patch = { 업로드토큰: token, 업로드잠금: false };
+  const { token, patch } = ensureUploadToken(r);
+  if (patch) {
+    // 같은 클릭에서 두 번 불려도(문구 + 공유 링크) 같은 토큰이 나오게 화면 데이터에도 바로 반영
+    try { Object.assign(r, patch); } catch { /* 고칠 수 없는 객체면 무시 */ }
     updateDoc(doc(db, "dispatch", r._id), patch).catch(() => {});
     if (r._transmittedOrderId) {
       updateDoc(doc(db, "orders", r._transmittedOrderId), patch).catch(() => {});
@@ -4660,6 +4669,9 @@ const addDispatch = async (recordIn) => {
     }
   }
   if (record && "_restAck" in record) { record = { ...record }; delete record._restAck; }
+  // 💬 2026-11-08 알림톡 — 이 오더만 고른 값(true/false)이 없으면 회사 기본값(회사정보 › 알림톡 자동 전송) · 예전 발송 결과는 넘기지 않는다
+  //  (PC · 모바일 등록 · AI 비서 · 오더 스캔 · 복사 등록이 모두 여기를 지난다)
+  if (record) { record = { ...record, 알림톡: typeof record.알림톡 === "boolean" ? record.알림톡 : alimtalkDefaultNow() }; delete record.알림톡결과; }
 
   const _id = crypto.randomUUID(); // ★ 무조건 새로 생성
 
@@ -6157,6 +6169,8 @@ function OrderInfoModal({ row, onClose, lunchByName }) {
                 </div>
               ))}
             </div>
+            {/* 💬 2026-11-08 알림톡 — 보낸 결과 · [알림톡 보내기] */}
+            {row._id && <AlimtalkOrderPanel row={row} canEdit={localStorage.getItem("role") !== "viewer"} />}
             {(row.메모 || row.전달사항) && card("NOTE", "메모 · 전달사항", (
               <div className="grid gap-2.5">
                 {row.메모 && kv("메모", row.메모, { wrap: true })}
@@ -7454,6 +7468,8 @@ function PcBootOverlay({ onDone, dept = null }) {
 }
 
 export default function DispatchApp({ role: realRole, user, userCompany = "", forceExec = false }) {
+  // 💬 2026-11-08 새 오더 "알림톡 보내기" 처음 값(회사 기본값)을 미리 받아 둔다 — addDispatch · 복사 등록이 쓴다
+  React.useEffect(() => { watchAlimtalkDefault(userCompany || localStorage.getItem("userCompany") || DEFAULT_COMPANY); }, [userCompany]);
   // 🔀 화면 전환 역할 — 통합인사관리자(hrAcct): 경리 ↔ 인사 / 통합관리자(allMgr): 운송 ↔ 경리 ↔ 인사. 상단 버튼으로 바꾼다
   //  경리사무원·인사사무원은 경리/인사 화면 역할로 동작(메뉴는 그 역할 설정) — customRoles.js SWITCH_ROLES·BASED_ROLES
   const roleView = useRoleView(realRole);
@@ -9769,6 +9785,15 @@ function CopyPanelExtras({ order, userNameMap }) {
     <>
       <button type="button" className={btn} onClick={() => setOpen("history")}>변경 이력</button>
       {open === "history" && createPortal(<OrderTimelineModal order={order} userName={nameOf} onClose={() => setOpen("")} />, document.body)}
+      {/* 💬 2026-11-08 알림톡 — 보낸 결과 · 다시 보내기 */}
+      {order?._id && <button type="button" className={btn} onClick={() => setOpen("talk")}>알림톡{order.알림톡결과?.status ? " · 기록" : ""}</button>}
+      {open === "talk" && createPortal(
+        <div className="fixed inset-0 z-[999999] bg-[#0B1428]/50 flex items-center justify-center p-4" onMouseDown={(e) => { if (e.target === e.currentTarget) setOpen(""); }}>
+          <div className="w-full max-w-[520px] rounded-2xl bg-white p-4 shadow-2xl space-y-3">
+            <div className="flex items-center"><span className="text-[15px] font-black text-[#0F1A30]">카카오 알림톡</span><button type="button" className="ml-auto text-[13px] font-bold text-[#5B6B85]" onClick={() => setOpen("")}>닫기</button></div>
+            <AlimtalkOrderPanel row={order} canEdit={localStorage.getItem("role") !== "viewer"} />
+          </div>
+        </div>, document.body)}
     </>
   );
 }
@@ -14909,7 +14934,8 @@ setCopyOpen(false);
       const dStr = r.상차일 || _todayStr(); // YYYY-MM-DD 유지
       const plate = r.차량번호 || "-";
       const name = r.이름 || "-";
-      const url = withCo(`${location.origin}/upload?id=${encodeURIComponent(r._id || "")}`);
+      // ⭐ 2026-11-08 보안 — 오더 id만 있는 링크는 전환 기간 뒤 막힌다 → 토큰이 든 짧은 링크로
+      const url = issueUploadUrl(r);
       return `[${bizOf(r, userCompany) || "운송사"} 운송장 업로드 안내]
 
 ✓ 상차일: ${dStr}
@@ -14921,7 +14947,7 @@ setCopyOpen(false);
     };
     const shareDispatch = async (r) => {
       const text = shareTextForRow(r);
-      const url = withCo(`${location.origin}/upload?id=${encodeURIComponent(r._id || "")}`);
+      const url = issueUploadUrl(r);
       if (isMobile && navigator.share) {
         try { await navigator.share({ title: `${userCompany || "운송사"} 업로드 안내`, text, url }); } catch { }
         return;
@@ -18176,6 +18202,11 @@ className={`
     <span className="pointer-events-none absolute right-4 bottom-2.5 text-[10.5px] font-bold text-[#A7B3C6] tabular-nums" style={{ fontFamily: "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif", fontVariantNumeric: "tabular-nums" }}>{String(form.전달사항 || "").length}자</span>
   </section>
 
+</div>
+
+{/* 💬 2026-11-08 알림톡 보내기 — 처음 값은 회사 기본값(회사정보 › 알림톡 자동 전송), 이 오더만 바꿀 수 있다 */}
+<div className="col-span-full">
+  <AlimtalkOrderToggle company={userCompany || localStorage.getItem("userCompany") || DEFAULT_COMPANY} value={form.알림톡} onChange={(v) => onChange("알림톡", v)} />
 </div>
 
 {/* ================= 차량 제원표 모달 ================= */}
@@ -29561,7 +29592,7 @@ const openDailyCloseIssueDetail = (rowId) => {
   // 📌 공유 메시지 (기존 함수)
   // ------------------------
   const shareDispatch = (row) => {
-    const url = withCo(`${window.location.origin}/upload?id=${row._id}`);
+    const url = issueUploadUrl(row); // ⭐ 2026-11-08 보안 — 토큰이 든 짧은 링크
 
     const msg = `
 ▣ [배차 정보]
@@ -51773,6 +51804,12 @@ const patchMonthOnDoc = async (id, yyyymm, status, dateStr) => {
     if (!arCompany) return undefined;
     return onSnapshot(query(collection(db, "arPayments"), where("company", "==", arCompany)), (snap) => setArPayments(snap.docs.map(d => ({ id: d.id, ...d.data() }))), () => {});
   }, [arCompany]);
+  // 💰 2026-11-08 입금자명 → 거래처 별칭(입금 확인에서 확정하면 서버가 배운다 · bankAliases/{회사}.map)
+  const [bankAliasMap, setBankAliasMap] = useState({});
+  useEffect(() => {
+    if (!arCompany) return undefined;
+    return onSnapshot(doc(db, "bankAliases", arCompany), (s) => setBankAliasMap((s.exists() && s.data()?.map) || {}), () => setBankAliasMap({}));
+  }, [arCompany]);
   const arPaidMap = useMemo(() => {
     const m = new Map();
     arPayments.forEach(p => { const k = `${p.client}|${p.yyyymm}`; m.set(k, (m.get(k) || 0) + (Number(p.amount) || 0)); });
@@ -52722,41 +52759,9 @@ const handleBatchSettle = async (targetStatus) => {
   };
   // ⭐ 2026-11-07 입금 배분 규칙(입금 엑셀 자동 매칭 · 미수금 데스크 "입금 처리" 공용) — 식은 예전 그대로 옮겼다
   //  조회 기간의 미정산 달을 거래처별로 모으고(buildArMonths), 금액이 딱 맞는 달 → 없으면 오래된 달부터 채운다(allocArDeposit)
-  const buildArMonths = () => {
-      const isAllMonth = (ym) => ym >= `${yearFrom}-${monthFrom}` && ym <= `${yearTo}-${monthTo}`;
-      const book = new Map(); // client -> [{ k, yyyymm, rows, total, due, paid }]
-      (Array.isArray(dispatchData) ? dispatchData : []).forEach(r => {
-        if ((r.배차상태 || "") !== "배차완료" || !r.거래처명) return;
-        const ym = String(r.상차일 || "").slice(0, 7);
-        if (!isAllMonth(ym) || r.정산상태?.[ym] === "정산완료") return;
-        if (!book.has(r.거래처명)) book.set(r.거래처명, new Map());
-        const mm = book.get(r.거래처명);
-        if (!mm.has(ym)) mm.set(ym, { k: `${r.거래처명}|${ym}`, client: r.거래처명, yyyymm: ym, rows: [], total: 0 });
-        const e = mm.get(ym); e.rows.push(r); e.total += toInt(r.청구운임);
-      });
-      const months = new Map(); // client -> sorted list
-      book.forEach((mm, client) => months.set(client, [...mm.values()].filter(e => e.total > 0).map(e => {
-        const paid = arPaidMap.get(e.k) || 0;
-        return { ...e, paid, due: Math.round(e.total * 1.1), remain: Math.max(0, Math.round(e.total * 1.1) - paid) };
-      }).sort((a, b) => a.yyyymm.localeCompare(b.yyyymm))));
-      return months;
-  };
-  const allocArDeposit = (list, amount, remainOf, TOL = 10) => {
-          const exact = list.find(e => Math.abs(amount - remainOf(e)) <= TOL || (e.paid === 0 && amount === e.total));
-          let alloc = [];
-          if (exact) alloc = [{ e: exact, amount, full: true }];
-          else {
-            let left = amount;
-            for (const e of list) {
-              if (left <= 0) break;
-              const r = remainOf(e);
-              if (left + TOL >= r) { alloc.push({ e, amount: Math.min(left, r), full: true }); left -= r; }
-              else { alloc.push({ e, amount: left, full: false }); left = 0; }
-            }
-            if (left > TOL) alloc.over = left;
-          }
-          return { alloc, exact };
-  };
+  //  💰 2026-11-08 식은 functions/arMatchCore.mjs로 옮겼다(서버 팝빌 계좌조회 자동 매칭과 같은 파일) — 결과는 예전과 같다
+  const buildArMonths = () => buildArMonthsCore({ orders: dispatchData, paidMap: arPaidMap, inRange: (ym) => ym >= `${yearFrom}-${monthFrom}` && ym <= `${yearTo}-${monthTo}` });
+  const allocArDeposit = allocArDepositCore;
   const handleBankExcelUpload = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -52797,42 +52802,9 @@ const handleBatchSettle = async (targetStatus) => {
       //  ① 입금자명으로 거래처를 찾고 ② 그 거래처의 미정산 달 중 금액이 딱 맞는 달 → 정산완료
       //  ③ 딱 맞는 달이 없으면 오래된 달부터 채움 — 다 채운 달은 정산완료, 모자란 달은 일부입금, 남으면 초과입금
       //  ④ 입금자명이 어느 거래처와도 안 맞으면 금액이 딱 맞는 달이 하나뿐일 때만 "이름 확인" 제안
+      //  ⑤ 2026-11-08 "입금 확인"에서 확정할 때 배운 입금자명 별칭(bankAliases)도 먼저 본다 · 식은 functions/arMatchCore.mjs(matchDeposits)
       const months = buildArMonths(); // client -> sorted list
-      const nm = (x) => normalizeForMatch(x);
-      const findClient = (depName) => {
-        const d = nm(depName); if (!d || d.length < 2) return null;
-        let best = null;
-        months.forEach((list, client) => {
-          const c = nm(client); if (!c || !list.length) return;
-          if (d === c || d.includes(c) || (c.includes(d) && d.length >= 2)) { if (!best || c.length > nm(best).length) best = client; }
-        });
-        return best;
-      };
-      const TOL = 10;
-      const used = new Map(); // 같은 엑셀 안에서 이미 배분한 금액(k -> 금액)
-      const remainOf = (e) => Math.max(0, e.remain - (used.get(e.k) || 0));
-      const matches = []; const unmatched = [];
-      deposits.forEach(dep => {
-        const client = findClient(dep.name);
-        if (client) {
-          const list = months.get(client).filter(e => remainOf(e) > 0);
-          const { alloc, exact } = allocArDeposit(list, dep.amount, remainOf);
-          alloc.forEach(a => used.set(a.e.k, (used.get(a.e.k) || 0) + a.amount));
-          if (!alloc.length) { unmatched.push({ ...dep, reason: `${client} · 남은 미정산이 없습니다` }); return; }
-          const fulls = alloc.filter(a => a.full).length;
-          const kind = alloc.over ? "초과입금" : exact ? "정산완료" : alloc.some(a => !a.full) ? (fulls ? "정산+일부입금" : "일부입금") : "여러 달 정산";
-          matches.push({ deposit: dep, client, alloc: alloc.map(a => ({ k: a.e.k, yyyymm: a.e.yyyymm, amount: a.amount, full: a.full, due: a.e.due, rows: a.e.rows })), over: alloc.over || 0, kind, confidence: "이름일치" });
-          return;
-        }
-        // 입금자명으로 못 찾음 — 금액이 딱 맞는 달이 하나뿐이면 제안
-        const cands = [];
-        months.forEach((list) => list.forEach(e => { if (remainOf(e) > 0 && (Math.abs(dep.amount - remainOf(e)) <= TOL || dep.amount === e.total)) cands.push(e); }));
-        if (cands.length === 1) {
-          const e = cands[0];
-          used.set(e.k, (used.get(e.k) || 0) + dep.amount);
-          matches.push({ deposit: dep, client: e.client, alloc: [{ k: e.k, yyyymm: e.yyyymm, amount: dep.amount, full: true, due: e.due, rows: e.rows }], over: 0, kind: "정산완료", confidence: "금액만 일치" });
-        } else unmatched.push({ ...dep, reason: cands.length ? `금액이 같은 달이 ${cands.length}곳 · 직접 확인` : "맞는 거래처·금액 없음" });
-      });
+      const { matches, unmatched } = matchDeposits({ deposits, months, aliases: bankAliasMap });
       setBankMatchResult({ matches, unmatched, deposits });
     };
 
@@ -52840,12 +52812,6 @@ const handleBatchSettle = async (targetStatus) => {
   };
 
   // ★ 매칭용 정규화
-  const normalizeForMatch = (s = "") =>
-    String(s)
-      .replace(/\(주\)|㈜|주식회사|유한회사/g, "")
-      .replace(/\s+/g, "")
-      .replace(/[^가-힣a-zA-Z0-9]/g, "")
-      .toLowerCase();
 
   // ⭐ 매칭 결과 적용 — 다 채운 달은 정산완료, 모자란 달은 입금 기록(일부입금)으로 남긴다
   const applyOneMatch = async (m) => {
@@ -52879,7 +52845,7 @@ const handleBatchSettle = async (targetStatus) => {
   };
   // 이름까지 맞은 것만 한꺼번에(금액만 맞은 건 사람이 확인)
   const applyAllBankMatches = async () => {
-    const list = (bankMatchResult?.matches || []).filter(m => m.confidence === "이름일치");
+    const list = (bankMatchResult?.matches || []).filter(m => m.confidence === "이름일치" || m.confidence === "별칭");
     for (const m of list) await applyOneMatch(m);
     setBankMatchResult(prev => ({ ...prev, matches: prev.matches.filter(m => !list.includes(m)) }));
     sflowToast(`${list.length}건 입금 반영 완료`, "success");
@@ -53112,8 +53078,7 @@ const handleBatchSettle = async (targetStatus) => {
     const months = buildArMonths();
     const list = (months.get(arCur.client) || []).filter(e => e.remain > 0);
     const { alloc, exact } = allocArDeposit(list, amount, (e) => e.remain);
-    const fulls = alloc.filter(a => a.full).length;
-    const kind = alloc.over ? "초과입금" : exact ? "정산완료" : alloc.some(a => !a.full) ? (fulls ? "정산+일부입금" : "일부입금") : "여러 달 정산";
+    const kind = allocKindOf(alloc, exact);
     return { alloc: alloc.map(a => ({ k: a.e.k, yyyymm: a.e.yyyymm, amount: a.amount, full: a.full, due: a.e.due, rows: a.e.rows })), over: alloc.over || 0, kind };
   };
   const arQuickPay = async (amount, date, name) => {
@@ -54644,6 +54609,9 @@ const handleBatchSettle = async (targetStatus) => {
             </div>
           </div>
 
+          {/* 🏦 2026-11-08 은행 입금 자동 조회(팝빌) — 입금 확인 필요 N건 · 자동 반영 되돌리기 */}
+          <BankReviewQueue company={arCompany} clients={clientOptions8} isViewer={isViewer} />
+
           <ArOverview total={arKpi.total} supplyTotal={arKpi.supplyTotal} overdue={arKpi.overdue} clientCount={arKpi.clientCount} avgDays={arKpi.avgDays}
             aging={arKpi.aging} trend={arKpi.trend} months={arKpi.months} bucket={arBucket} setBucket={setArBucket} />
 
@@ -55313,7 +55281,7 @@ const handleBatchSettle = async (targetStatus) => {
 
           {bankMatchResult && (() => {
             const ms = bankMatchResult.matches;
-            const autoCount = ms.filter(m => m.confidence === "이름일치").length;
+            const autoCount = ms.filter(m => m.confidence === "이름일치" || m.confidence === "별칭").length;
             const KIND = { "정산완료": "bg-[#0F1A30] text-white", "여러 달 정산": "bg-[#0F1A30] text-white", "정산+일부입금": "bg-[#2D4C82] text-white", "일부입금": "bg-[#EEF3FB] text-[#1B2B4B]", "초과입금": "border border-[#0F1A30] text-[#0F1A30]" };
             return (
             <div className="kp-modal fixed inset-0 bg-[#0B1428]/55 backdrop-blur-[2px] flex items-end sm:items-center justify-center sm:p-4 z-[99999]" onClick={() => setBankMatchResult(null)}>
@@ -55340,7 +55308,7 @@ const handleBatchSettle = async (targetStatus) => {
                           <div className="flex items-center gap-2 flex-wrap">
                             <span className="text-[15px] font-black text-[#0F1A30]">{m.client}</span>
                             <span className={`text-[11.5px] font-extrabold px-2 py-0.5 rounded-full ${KIND[m.kind] || "bg-[#EEF3FB] text-[#1B2B4B]"}`}>{m.kind}</span>
-                            <span className={`text-[11px] font-bold ${m.confidence === "이름일치" ? "text-[#4B6CB7]" : "text-[#0F1A30] underline"}`}>{m.confidence === "이름일치" ? "입금자명 일치" : "금액만 일치 — 입금자 확인"}</span>
+                            <span className={`text-[11px] font-bold ${m.confidence !== "금액만 일치" ? "text-[#4B6CB7]" : "text-[#0F1A30] underline"}`}>{m.confidence === "별칭" ? "배운 입금자명" : m.confidence === "이름일치" ? "입금자명 일치" : "금액만 일치 — 입금자 확인"}</span>
                           </div>
                           <div className="text-[12.5px] text-[#5B6B85] mt-0.5">{m.deposit.date} · 입금자 {m.deposit.name || "-"} · <b className="text-[#0F1A30]">{m.deposit.amount.toLocaleString()}원</b></div>
                         </div>
@@ -62775,6 +62743,9 @@ function CompanyProfile({ userCompany = "", role = "", userId = "" }) {
             {/* ⭐ 2026-11-03 한 회사 · 여러 사업자 — 오더마다 청구 사업자를 고른다 */}
             <BizListEditor company={companyName} canEdit={isAcctTeam || isAdmin || role === "hrManager"} />
             <PopbillMemberCard company={companyName} canEdit={isAdmin || role === "hrManager"} />
+            {/* 💬🏦 2026-11-08 팝빌 자동화 — 알림톡 배차 알림 · 은행 입금 자동 조회(팝빌 연결 전에도 미리 설정) */}
+            <AlimtalkSettingsCard company={companyName} canEdit={isAdmin || role === "hrManager"} defaultPhone={appData?.phone || appData?.연락처 || ""} />
+            <BankAccountsCard company={companyName} canEdit={isAdmin || role === "hrManager"} />
             </div>
             </div>
           </>);

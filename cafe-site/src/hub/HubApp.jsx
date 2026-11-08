@@ -13,7 +13,10 @@ import { doc, getDoc } from "firebase/firestore";
 import { auth, db } from "../firebase";
 import { HI, Btn, Chip, Badge, Card, Empty, Seg, HubMark, NAVY_BG, HUB_CSS, NUMS, useToast, Avatar, selectCls, inputCls, Drawer, Field } from "./hubUi";
 import { ROLES, canPost, canTake, SIDO_LIST, sigunguOf, HUB_VEHICLES, HUB_TONS, tonValue, regionLL, kmBetweenLL, nearestRegion, ago, ACTIVE, speakText, routeText, manwon, kstYmd, tsMs, DOC_TYPES, isLinked, stageOf, payKind } from "./hubConstants";
-import { subscribeMember, subscribeBoard, refreshBoard, subscribeMine, subscribeCompanyPosts, subscribeNotices, markRead, updatePrefs, localSession, subscribeHubConfig, subscribeWallet, subscribeAnnouncements, enableHubPush, pushEnabledHere, disableHubPush, fetchPrivate, subscribeDevice } from "./hubApi";
+import { subscribeMember, subscribeBoard, refreshBoard, subscribeMine, subscribeCompanyPosts, subscribeNotices, markRead, updatePrefs, localSession, subscribeHubConfig, subscribeWallet, subscribeAnnouncements, enableHubPush, pushEnabledHere, disableHubPush, fetchPrivate, subscribeDevice, callHub } from "./hubApi";
+import { createClaimsSync } from "../../../src/claimsSync";
+// 🎫 2026-11-08 로그인 토큰 권한 — hubMembers/{uid}.claimsAt 이 바뀌면 토큰을 새로 받는다(승인·회사 키 변경이 다시 로그인 없이 바로 적용)
+const hubClaimsSync = createClaimsSync({ getUser: () => auth.currentUser, call: (name, data) => callHub(name, data) });
 import { getDeviceId, isMobileDevice, DriverPcBlock } from "./hubDevice";
 import { applyHubLists } from "./hubConstants";
 import HubWallet, { wonFull } from "./HubWallet";
@@ -234,7 +237,7 @@ export default function HubApp() {
   useEffect(() => {
     if (!authUser) { setMe(authUser === null ? null : undefined); return; }
     getDoc(doc(db, "users", authUser.uid)).then((s) => setIsAdmin(authUser.email === TOTAL_MASTER_EMAIL || (s.exists() && s.data().role === "totalMaster"))).catch(() => setIsAdmin(authUser.email === TOTAL_MASTER_EMAIL)).finally(() => setAdminChecked(true));
-    return subscribeMember(authUser.uid, (m) => setMe(m ? { ...m, uid: authUser.uid } : null));
+    return subscribeMember(authUser.uid, (m) => { setMe(m ? { ...m, uid: authUser.uid } : null); if (m) hubClaimsSync.check(m.claimsAt); });
   }, [authUser]);
   // 한 계정 한 기기 — 다른 기기에서 로그인하면 여기서 로그아웃
   useEffect(() => {

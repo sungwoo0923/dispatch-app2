@@ -1,0 +1,101 @@
+# 매일 점검 — 본 프로그램(미리보기 데모) · 허브 공개 화면 · 홈페이지를 브라우저로 돌아보고 단위 테스트를 돌린다.
+# 결과: GitHub › Actions › "매일 점검" › 실행 하나 › Artifacts(healthcheck-results). 실패하면 GitHub가 저장소 주인에게 메일을 보낸다.
+# 비밀값(secrets)은 쓰지 않는다. 설명: tools/healthcheck/README.md
+name: 매일 점검
+
+on:
+  schedule:
+    - cron: "13 20 * * *" # 매일 05:13 KST (= 전날 20:13 UTC)
+  workflow_dispatch:
+    inputs:
+      roles:
+        description: "점검할 역할(쉼표로, 비우면 전부) 예: admin,viewer"
+        type: string
+        required: false
+        default: ""
+
+concurrency:
+  group: healthcheck
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  healthcheck:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      NODE_OPTIONS: --max-old-space-size=6144
+      TZ: Asia/Seoul
+      OUT: healthcheck-results
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            cafe-site/package-lock.json
+            functions/package-lock.json
+
+      - name: 의존성 설치
+        run: |
+          npm ci --no-audit --no-fund
+          npm ci --no-audit --no-fund --prefix cafe-site
+          npm ci --no-audit --no-fund --prefix functions
+
+      - name: Playwright 브라우저 설치
+        run: npx playwright install --with-deps chromium
+
+      - name: 단위 테스트(인터넷·에뮬레이터 없이)
+        id: unit
+        continue-on-error: true
+        run: bash tools/healthcheck/unit.sh "$OUT"
+
+      - name: 서버 띄우기(본 프로그램 5236 · 허브 5237 · 홈페이지 5238)
+        run: |
+          mkdir -p "$OUT/logs"
+          nohup npx vite --port 5236 --strictPort --host 127.0.0.1 > "$OUT/logs/app.log" 2>&1 &
+          (cd cafe-site && nohup npx vite --port 5237 --strictPort --host 127.0.0.1 > "../$OUT/logs/hub.log" 2>&1 &)
+          nohup python3 -m http.server 5238 --bind 127.0.0.1 -d landing-site > "$OUT/logs/home.log" 2>&1 &
+          for port in 5236 5237 5238; do
+            for i in $(seq 1 120); do
+              if curl -sf -o /dev/null "http://127.0.0.1:$port/"; then echo "port $port ready"; break; fi
+              if [ "$i" = 120 ]; then echo "port $port did not start"; tail -50 "$OUT"/logs/*.log; exit 1; fi
+              sleep 2
+            done
+          done
+
+      - name: 화면 점검
+        id: crawl
+        continue-on-error: true
+        env:
+          HC_ROLES: ${{ github.event.inputs.roles }}
+        run: |
+          node tools/healthcheck/run.cjs --app http://127.0.0.1:5236 --hub http://127.0.0.1:5237 --home http://127.0.0.1:5238 --out "$OUT"
+
+      - name: 요약
+        if: always()
+        run: |
+          {
+            echo "## 단위 테스트"; echo '```'; cat "$OUT/unit/summary.txt" 2>/dev/null || echo "(없음)"; echo '```'
+            cat "$OUT/summary.md" 2>/dev/null || echo "(화면 점검 결과 없음)"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: 결과 올리기
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: healthcheck-results
+          path: ${{ env.OUT }}
+          retention-days: 14
+          if-no-files-found: warn
+
+      - name: 실패 판정
+        if: steps.unit.outcome != 'success' || steps.crawl.outcome != 'success'
+        run: |
+          echo "단위 테스트: ${{ steps.unit.outcome }} · 화면 점검: ${{ steps.crawl.outcome }}"
+          exit 1

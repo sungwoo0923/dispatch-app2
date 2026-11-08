@@ -4,7 +4,8 @@
 //    바로 만들어진다(인사발령 화면과 같은 방식). 결재선(결재·합의)과 참조자를 정해 [결재 상신].
 //  - 결재함: 내 차례(결재 대기)·진행 중·완료·반려·참조·회사 전체(관리자). 문서를 열어 승인/반려(의견)·회수·재기안·인쇄.
 //  - 결재선 관리: 자주 쓰는 결재선을 저장(개인/회사 공용).
-//  approvals/{id}: { company, docNo, cat, form, formLabel, title, summary, amount, days, data, images,
+//  approvals/{id}: { company, docNo, cat, form, formLabel, title, summary, amount, days, data, images(예전 사진 base64), files(📎 Storage 첨부 정보),
+//     planId(📑 관련 사업계획 문서 id · 지출결의·구매·법인카드), finIdx(📑 사업계획서 결재선의 경리·회계·재무 합의 칸 번호),
 //     drafterUid, drafter{uid,name,team,position}, line:[{uid,name,position,team,kind,status(wait|pending|approved|rejected),at,comment}],
 //     cc:[{uid,name}], ccUids, participants, step, status(pending|approved|rejected|withdrawn), createdAt, updatedAt, history:[…] }
 //  - 알림(2026-10-28 변경): 사내메일 대신 서버 트리거(notifyApproval)가 휴대폰 푸시, BannerCenter가 화면 배너.
@@ -36,8 +37,14 @@ import { useLeaveGuard, draftStore, confirmLeave } from "./leaveGuard";
 import {
   APPROVAL_CATS, APPROVAL_FORMS, formOf, formsOfCat, initialData, missingFields, fieldText, suggestLine,
   itemsTotal, costsTotal, fmtWon, dayDiff, bizDays, leaveEntitlement, leaveUseOf,
-  blankSpendRow, spendRowTotal, spendLinesOf, spendTotals, wonKorean,
+  blankSpendRow, spendRowTotal, spendLinesOf, spendTotals, wonKorean, rowsOf,
 } from "./approvalForms";
+import { needsBizLine, suggestBizLine, validateBizLine, isFinPerson, isCeoPerson, isExecNonCeo, PLAN_LINK_FORMS, budgetTotal } from "./bizPlan"; // 📑 2026-11-08 사업계획서
+import { ApprovalAttachInput, ApprovalAttachPanel, removeApFile } from "./ApprovalFiles"; // 📎 2026-11-08 첨부 파일(Storage)
+import { inDocDir, fmtSize, AP_FILE_COUNT } from "./approvalFiles";
+import { isPreviewMode } from "./fsTenant";
+import { isDemoOn } from "./devDemoData";
+import { bizPlanDemo } from "./bizPlanDemo";
 import { bankText } from "./bankUtil";
 import { leaveStatusOf } from "./leaveUtils"; // ⭐ 2026-11-07 연차 현황 공용 계산
 import { useLeaveBasis } from "./leaveBasis";
@@ -628,7 +635,22 @@ function PaidSeal({ paid, compact: c }) {
   );
 }
 
-export function ApprovalPaper({ form, data, title, line, cc, drafter, docNo, createdMs, staff, status, paperRef, paid }) {
+// 📑 2026-11-08 문서 안 작은 표(사업계획서 정량 목표 · 추진 일정 · 예산 내역)
+function PaperTable({ cols, rows, total, compact: c }) {
+  const tpl = cols.map((x) => x.w || "minmax(0,1fr)").join(" ");
+  return (
+    <div className={`border border-[#0F1A30]/40 ${c ? "text-[12.5px] -mx-1" : "text-[14px]"}`}>
+      <div className="grid bg-[#F5F7FB] font-black border-b border-[#0F1A30]/40" style={{ gridTemplateColumns: tpl }}>{cols.map((x, k) => <div key={x.h} className={`px-2 py-1.5 whitespace-nowrap ${x.right ? "text-right" : ""} ${k ? "border-l border-[#0F1A30]/30" : ""}`}>{x.h}</div>)}</div>
+      {(rows.length ? rows : [{}]).map((r, i) => (
+        <div key={i} className="grid border-b border-[#0F1A30]/20 last:border-b-0" style={{ gridTemplateColumns: tpl }}>
+          {cols.map((x, k) => <div key={x.h} className={`px-2 py-1.5 break-words min-w-0 ${x.right ? "text-right tabular-nums" : ""} ${x.bold ? "font-bold" : ""} ${k ? "border-l border-[#0F1A30]/20" : ""}`}>{rows.length ? x.get(r, i) : "\u00a0"}</div>)}
+        </div>
+      ))}
+      {total && <div className="grid bg-[#F5F7FB] border-t border-[#0F1A30]/40 font-black" style={{ gridTemplateColumns: tpl }}>{total.map((t, k) => <div key={k} className={`px-2 py-1.5 ${cols[k]?.right ? "text-right tabular-nums" : ""} ${k ? "border-l border-[#0F1A30]/20" : ""}`}>{t}</div>)}</div>}
+    </div>
+  );
+}
+export function ApprovalPaper({ form, data, title, line, cc, drafter, docNo, createdMs, staff, status, paperRef, paid, files, images }) {
   const cols = [{ uid: drafter?.uid, name: drafter?.name, position: drafter?.position || "기안", kind: "기안", status: "approved", at: createdMs }, ...(line || [])];
   // legacy 칸(예전 양식의 칸)은 값이 있는 예전 문서에서만, legacyOf 칸은 예전 칸에 값이 있고 자기 값이 비었으면 숨김
   const has = (k) => { const x = data?.[k]; return x !== undefined && x !== null && String(x).trim() !== ""; };
@@ -706,8 +728,24 @@ export function ApprovalPaper({ form, data, title, line, cc, drafter, docNo, cre
               </Cell>
             );
           }
+          // 📑 2026-11-08 사업계획서 표
+          if (f.type === "goals") return <Cell key={f.k} label={f.label} last={last}><PaperTable compact={c} rows={rowsOf(f, v)} cols={[{ h: "No", w: "34px", get: (r, i) => i + 1 }, { h: "항목", get: (r) => r.label || "" }, { h: "목표값", w: c ? "70px" : "120px", right: true, bold: true, get: (r) => r.target || "" }, { h: "단위", w: c ? "46px" : "70px", get: (r) => r.unit || "" }]} /></Cell>;
+          if (f.type === "schedule") return <Cell key={f.k} label={f.label} last={last}><PaperTable compact={c} rows={rowsOf(f, v)} cols={[{ h: "기간", w: c ? "88px" : "150px", get: (r) => r.when || "" }, { h: "내용", get: (r) => r.what || "" }, { h: "담당", w: c ? "60px" : "100px", get: (r) => r.who || "" }]} /></Cell>;
+          if (f.type === "budget") { const rows = rowsOf(f, v); return <Cell key={f.k} label={f.label} last={last}><PaperTable compact={c} rows={rows} total={["합계", budgetTotal(rows).toLocaleString("ko-KR"), ""]} cols={[{ h: "항목", get: (r) => r.label || "" }, { h: "금액(원)", w: c ? "92px" : "140px", right: true, bold: true, get: (r) => (Number(r.amount) ? Number(r.amount).toLocaleString("ko-KR") : "") }, { h: "비고", w: c ? "minmax(0,0.8fr)" : "minmax(0,0.9fr)", get: (r) => r.note || "" }]} /></Cell>; }
+          if (f.type === "plan") return <Cell key={f.k} label={f.label} last={last}>{data?.planName || (v ? "사업계획서" : <span className="text-[#B4BFD0]">-</span>)}</Cell>;
           return <Cell key={f.k} label={f.label} last={last}><span className={f.type === "money" ? "font-black" : ""}>{fieldText(f, v, staff) || <span className="text-[#B4BFD0]">-</span>}</span></Cell>;
         })}
+        {/* 📎 2026-11-08 첨부 목록(인쇄·PDF에도 파일 이름이 남는다) */}
+        {((files || []).length > 0 || (images || []).length > 0) && (
+          <div className="border-t border-[#0F1A30]/60" data-ap-paper-files>
+            <Cell label="첨부" last>
+              <div className="space-y-0.5">
+                {(files || []).map((f, i) => <div key={f.path || i} className="flex gap-2 min-w-0"><span className="shrink-0 tabular-nums text-[#5B6B85]">{i + 1}.</span><span className="min-w-0 break-all">{f.name}</span><span className="shrink-0 text-[#5B6B85] tabular-nums">({fmtSize(f.size)})</span></div>)}
+                {(images || []).length > 0 && <div className="flex gap-2"><span className="shrink-0 tabular-nums text-[#5B6B85]">{(files || []).length + 1}.</span><span>증빙 사진 {images.length}장</span></div>}
+              </div>
+            </Cell>
+          </div>
+        )}
       </div>
       {(() => {
         const amt = form.amount ? form.amount(data || {}) : 0;
@@ -718,7 +756,7 @@ export function ApprovalPaper({ form, data, title, line, cc, drafter, docNo, cre
           <div className={`mt-4 flex justify-end ${seal ? "items-center gap-4" : "gap-2"}`}>
             {seal && <PaidSeal paid={paid} compact={c} />}
             {days > 0 && <div className="px-4 py-2 border-2 border-[#0F1A30] text-[14px] font-black">사용 일수 {days}일</div>}
-            {amt > 0 && <div className="px-4 py-2 bg-[#0F1A30] text-white text-[15px] font-black">총액 {fmtWon(amt)}</div>}
+            {amt > 0 && <div className="px-4 py-2 bg-[#0F1A30] text-white text-[15px] font-black">{form.amountLabel || "총액"} {fmtWon(amt)}</div>}
           </div>
         );
       })()}
@@ -981,6 +1019,7 @@ function pickOptions(f, { staff, hr, refs, data } = {}) {
   switch (f.pick) {
     case "teams": return (hr?.teams || []).map((t) => ({ value: t, label: t }));
     case "positions": return (hr?.positionsFor ? hr.positionsFor(f.pickTeam ? data?.[f.pickTeam] || "" : "") : []).map((p) => ({ value: p, label: p }));
+    case "staffName":
     case "staffNames": return (staff || []).map((u) => ({ value: `${u.name || u.email || ""}${u.position ? ` ${u.position}` : ""}`.trim(), label: u.name || u.email || "", sub: u.position || "", group: u.team || "미배정" }))
       .filter((o) => o.label).sort((a, b) => String(a.group).localeCompare(String(b.group), "ko"));
     case "clients": return (refs?.clients || []).map((n) => ({ value: n, label: n }));
@@ -1059,8 +1098,50 @@ function SpendLinesInput({ value, onChange }) {
     </div>
   );
 }
+// 📑 2026-11-08 사업계획서 표 입력(정량 목표 · 추진 일정 · 예산 내역) — 행 추가·삭제, 금액 칸은 콤마
+function RowsInput({ value, onChange, cols, blank, addLabel = "+ 행 추가", total }) {
+  const rows = Array.isArray(value) && value.length ? value : [{ ...blank }];
+  const set = (i, k, v) => onChange(rows.map((r, j) => (j === i ? { ...r, [k]: v } : r)));
+  return (
+    <div className="space-y-1.5" data-rows-input>
+      {rows.map((r, i) => (
+        <div key={i} className="flex items-center gap-1.5">
+          {cols.map((c) => (c.money ? (
+            <div key={c.k} className={`relative ${c.w || "flex-1 min-w-0"}`}>
+              <input inputMode="numeric" value={r[c.k] ? Number(r[c.k]).toLocaleString("ko-KR") : ""} onChange={(e) => set(i, c.k, moneyIn(e.target.value))} placeholder={c.ph || "0"} aria-label={c.label} className={`${inp} pr-7 text-right tabular-nums`} />
+              <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[12.5px] font-bold text-[#5B6B85]">원</span>
+            </div>
+          ) : <input key={c.k} value={r[c.k] || ""} onChange={(e) => set(i, c.k, c.num ? e.target.value.replace(/[^\d.,-]/g, "") : e.target.value)} inputMode={c.num ? "decimal" : undefined} placeholder={c.ph || ""} aria-label={c.label} className={`${inp} ${c.w || "flex-1 min-w-0"} ${c.num ? "text-right tabular-nums" : ""}`} />))}
+          <button type="button" onClick={() => onChange(rows.length > 1 ? rows.filter((_, j) => j !== i) : [{ ...blank }])} aria-label={`${i + 1}번 행 삭제`} className="w-8 h-8 shrink-0 rounded-lg text-[#5B6B85] hover:bg-[#F5F8FD]">✕</button>
+        </div>
+      ))}
+      <div className="flex items-center justify-between">
+        <button type="button" onClick={() => onChange([...rows, { ...blank }])} className="text-[13.5px] font-bold text-[#4B6CB7]">{addLabel}</button>
+        {total}
+      </div>
+    </div>
+  );
+}
+// 📑 관련 사업계획 고르기 — 회사의 최종 승인된 사업계획서(지출결의서·구매요청서·법인카드 사용보고)
+function PlanSelect({ value, onChange, plans }) {
+  const list = plans || [];
+  return (
+    <div>
+      <CustomSelect openOnFocus value={value || ""} onChange={(e) => { const p = list.find((x) => x.id === e.target.value); onChange(e.target.value, p); }} className={inp}>
+        <option value="">해당 없음</option>
+        {list.map((p) => <option key={p.id} value={p.id}>{p.data?.name || p.title}{p.data?.period?.start ? ` (${p.data.period.start.slice(2).replace(/-/g, ".")}~)` : ""}</option>)}
+        {value && !list.some((p) => p.id === value) && <option value={value}>이전에 고른 사업계획</option>}
+      </CustomSelect>
+      <div className="mt-1 text-[12.5px] font-semibold text-[#5B6B85]">{list.length ? "고르면 이 지출이 그 사업의 집행액으로 잡혀요" : "아직 최종 승인된 사업계획서가 없어요"}</div>
+    </div>
+  );
+}
 function FieldInput({ f, value, onChange, staff, meUid, ctx }) {
-  if (f.pick) return <PickInput value={value} onChange={onChange} options={pickOptions(f, { ...ctx, staff })} placeholder={f.ph || `${f.label} 선택`} multi={f.pick === "staffNames"} addLabel="＋ 직원" />;
+  if (f.pick) return <PickInput value={value} onChange={onChange} options={pickOptions(f, { ...ctx, staff })} placeholder={f.ph || `${f.label} 선택`} multi={f.pick === "staffNames"} addLabel={f.pick === "staffName" ? "＋ 고르기" : "＋ 직원"} />;
+  if (f.type === "plan") return <PlanSelect value={value} onChange={onChange} plans={ctx?.plans} />;
+  if (f.type === "goals") return <RowsInput value={value} onChange={onChange} blank={{ label: "", target: "", unit: "" }} cols={[{ k: "label", label: "항목", ph: "항목(예: 월 매출)" }, { k: "target", label: "목표값", ph: "목표값", num: true, w: "!w-24 shrink-0" }, { k: "unit", label: "단위", ph: "단위", w: "!w-16 shrink-0" }]} addLabel="+ 목표 추가" />;
+  if (f.type === "schedule") return <RowsInput value={value} onChange={onChange} blank={{ when: "", what: "", who: "" }} cols={[{ k: "when", label: "기간", ph: "기간(예: 11월)", w: "!w-28 shrink-0" }, { k: "what", label: "내용", ph: "추진 내용" }, { k: "who", label: "담당", ph: "담당", w: "!w-20 shrink-0" }]} addLabel="+ 일정 추가" />;
+  if (f.type === "budget") return <RowsInput value={value} onChange={onChange} blank={{ label: "", amount: "", note: "" }} cols={[{ k: "label", label: "항목", ph: "항목(예: 임차 보증금)" }, { k: "amount", label: "금액", money: true, w: "!w-32 shrink-0" }, { k: "note", label: "비고", ph: "비고", w: "!w-24 shrink-0" }]} addLabel="+ 예산 항목 추가" total={<span className="text-[14px] font-black text-[#0F1A30]">합계 {fmtWon(budgetTotal(value))}</span>} />;
   if (f.type === "spendLines") return <SpendLinesInput value={value} onChange={onChange} />;
   if (f.type === "bank") return <BankAccountInput value={value} onChange={onChange} stacked />;
   if (f.type === "textarea" && f.templates) return <ReasonSelect f={f} value={value} onChange={onChange} />;
@@ -1098,7 +1179,9 @@ function FieldInput({ f, value, onChange, staff, meUid, ctx }) {
   }
   // ⭐ 2026-11-04 시간은 프로그램 공용 시간 고르기(오전/오후 · 시 · 분) — 값은 예전처럼 "HH:MM"
   if (f.type === "time") return <TimeSelect value={value || ""} onChange={onChange} emptyLabel="선택" minuteStep={10} className="!h-11" />;
-  if (f.type === "number") return <input type="number" inputMode="numeric" value={value ?? ""} onChange={(e) => onChange(e.target.value)} className={inp} />;
+  if (f.type === "number") return f.unit ? (
+    <div className="relative"><input type="number" inputMode="numeric" value={value ?? ""} onChange={(e) => onChange(e.target.value)} className={`${inp} pr-12 text-right`} /><span className="absolute right-3 top-1/2 -translate-y-1/2 text-[13.5px] font-bold text-[#5B6B85]">{f.unit}</span></div>
+  ) : <input type="number" inputMode="numeric" value={value ?? ""} onChange={(e) => onChange(e.target.value)} className={inp} />;
   if (f.type === "money") {
     return (
       <div className="relative">
@@ -1117,7 +1200,7 @@ function FieldInput({ f, value, onChange, staff, meUid, ctx }) {
           <span className="text-[#5B6B85] font-bold">~</span>
           <div className="flex-1 min-w-0"><CustomDatePicker value={v.end || ""} onChange={(e) => onChange({ ...v, end: e.target.value && v.start && e.target.value < v.start ? v.start : e.target.value })} className={inp} showIcon placeholder="종료일" /></div>
         </div>
-        {n > 0 && <div className="mt-1 text-[13px] font-bold text-[#1B2B4B]">총 {n}일{bizDays(v) !== n ? ` · 주말·공휴일 빼면 ${bizDays(v)}일` : ""}</div>}
+        {n > 0 && <div className="mt-1 text-[13px] font-bold text-[#1B2B4B]">총 {n}일{!f.calendar && bizDays(v) !== n ? ` · 주말·공휴일 빼면 ${bizDays(v)}일` : ""}</div>}
       </div>
     );
   }
@@ -1166,6 +1249,19 @@ function FieldInput({ f, value, onChange, staff, meUid, ctx }) {
   return <input value={value || ""} onChange={(e) => onChange(e.target.value)} placeholder={f.ph || ""} className={inp} />;
 }
 
+// 📑 2026-11-08 회사의 최종 승인된 사업계획서(관련 사업계획 고르기) — firestore.rules: 같은 회사 사무 직원은 승인된 사업계획서를 읽을 수 있다
+const demoApOn = () => { try { return !!(import.meta.env.DEV && isDemoOn()); } catch { return false; } };
+export function useApprovedPlans(company, enabled = true) {
+  const [list, setList] = React.useState([]);
+  React.useEffect(() => {
+    if (!enabled || !company) return undefined;
+    if (demoApOn() && isPreviewMode()) { setList(bizPlanDemo(company).plans.filter((d) => d.status === "approved")); return undefined; }
+    return onSnapshot(query(collection(db, "approvals"), where("company", "==", company), where("form", "==", "bizplan"), where("status", "==", "approved")),
+      (snap) => setList(snap.docs.map((d) => ({ id: d.id, ...d.data() })).filter((d) => d.form === "bizplan" && d.status === "approved").sort((a, b) => toMs(b.createdAt) - toMs(a.createdAt))), () => setList([]));
+  }, [company, enabled]);
+  return list;
+}
+
 // ─────────────────────────── 결재선 편집 ───────────────────────────
 function useLineTemplates(company, uid) {
   const [list, setList] = React.useState([]);
@@ -1181,14 +1277,39 @@ const pickUser = (staff, uid) => { const u = (staff || []).find((x) => x.uid ===
 // 👔 대표(대표·대표이사·사장)는 최종 결재자 — 결재자를 추가해도 사용자가 직접 순서를 바꾸지 않았다면 맨 뒤로
 const isCeoPos = (p) => /대표|사장/.test(String(p || "")) && !/부사장/.test(String(p || ""));
 const ceoLast = (list) => [...list.filter((x) => !isCeoPos(x.position)), ...list.filter((x) => isCeoPos(x.position))];
-function LineEditor({ line, setLine, cc, setCc, staff, me, company, cat }) {
+// 📑 사업계획서 결재선 점검표(필수 구성원) — 결재선 편집 칸 위
+function BizLineCheck({ line, staff, me }) {
+  const v = validateBizLine(line, staff, me);
+  const ppl = (line || []).map((x) => ({ ...x, ...((staff || []).find((u) => u.uid === x.uid) || {}) }));
+  const items = [
+    ["경리·회계·재무 합의", ppl.some((p) => isFinPerson(p) && p.kind === "합의"), "예산 검토"],
+    ["임원 결재", ppl.some((p) => isExecNonCeo(p) && (p.kind || "결재") === "결재") || !(staff || []).some((u) => u.uid !== me.uid && isExecNonCeo(u)), "대표 앞"],
+    ["대표 최종 결재", isCeoPerson(me) || (ppl.length > 0 && isCeoPerson(ppl[ppl.length - 1]) && (ppl[ppl.length - 1].kind || "결재") === "결재"), "맨 끝"],
+  ];
+  return (
+    <div className={`mb-3 rounded-xl border px-3.5 py-3 ${v.ok ? "border-[#C9D6EE] bg-[#F5F8FD]" : "border-[#0F1A30] bg-white"}`} data-bizline-check={v.ok ? "ok" : "bad"}>
+      <div className="text-[13px] font-black text-[#0F1A30]">사업계획서 필수 결재선</div>
+      <div className="mt-1.5 flex flex-wrap gap-1.5">
+        {items.map(([l, ok, sub]) => (
+          <span key={l} className={`h-7 px-2.5 rounded-lg text-[12.5px] font-black inline-flex items-center gap-1.5 ${ok ? "bg-[#1B2B4B] text-white" : "border border-dashed border-[#9AB0D6] text-[#3A4A66] bg-white"}`}>
+            <span aria-hidden>{ok ? "✓" : "○"}</span>{l}<span className={`font-semibold ${ok ? "text-white/70" : "text-[#8E9BB2]"}`}>{sub}</span>
+          </span>
+        ))}
+      </div>
+      {!v.ok && <div className="mt-2 text-[12.5px] font-semibold text-[#3A4A66] leading-relaxed break-keep" data-bizline-msg>{v.errors[0]}</div>}
+      {v.ok && v.warnings[0] && <div className="mt-2 text-[12.5px] font-semibold text-[#5B6B85] break-keep">{v.warnings[0]}</div>}
+    </div>
+  );
+}
+const suggestFor = (form, staff, me) => (needsBizLine(form?.key) ? suggestBizLine(staff, me) : suggestLine(staff, me));
+function LineEditor({ line, setLine, cc, setCc, staff, me, company, cat, form }) {
   const tpls = useLineTemplates(company, me.uid);
   const used = [me.uid, ...line.map((s) => s.uid)];
   const manualOrder = React.useRef(false); // ▲▼로 직접 순서를 바꿨으면 자동 정렬하지 않는다
   const addTo = (users) => setLine((p) => { const n = [...p, ...users]; return manualOrder.current ? n : ceoLast(n); });
   const move = (i, d) => setLine((p) => { manualOrder.current = true; const n = [...p]; const j = i + d; if (j < 0 || j >= n.length) return p; [n[i], n[j]] = [n[j], n[i]]; return n; });
   const load = (id) => {
-    if (id === "__auto") { manualOrder.current = false; setLine(suggestLine(staff, me)); return; }
+    if (id === "__auto") { manualOrder.current = false; setLine(suggestFor(form, staff, me)); return; }
     const t = tpls.find((x) => x.id === id);
     if (!t) return;
     setLine((t.steps || []).map((s) => ({ ...(pickUser(staff, s.uid) || s), kind: s.kind || "결재" })).filter((s) => s.uid !== me.uid));
@@ -1202,10 +1323,11 @@ function LineEditor({ line, setLine, cc, setCc, staff, me, company, cat }) {
   };
   return (
     <div className="space-y-3">
+      {needsBizLine(form?.key) && <BizLineCheck line={line} staff={staff} me={me} />}
       <div className="flex items-center gap-1.5">
         <CustomSelect openOnFocus value="" onChange={(e) => { load(e.target.value); e.target.value = ""; }} className={`${inp} flex-1`}>
           <option value="">결재선 불러오기…</option>
-          <option value="__auto">자동 추천(부서장 → 임원 → 대표)</option>
+          <option value="__auto">{needsBizLine(form?.key) ? "자동 추천(팀장 → 경리·회계·재무 합의 → 임원 → 대표)" : "자동 추천(부서장 → 임원 → 대표)"}</option>
           {tpls.filter((t) => !t.cats?.length || t.cats.includes(cat)).map((t) => <option key={t.id} value={t.id}>{t.shared ? "[공용] " : ""}{t.name}</option>)}
         </CustomSelect>
         <button type="button" onClick={save} disabled={!line.length} className="h-10 px-3 rounded-xl border border-[#DCE3EE] text-[13.5px] font-bold text-[#3A4A66] disabled:opacity-40 shrink-0">저장</button>
@@ -1329,7 +1451,7 @@ function runApprovedHooks(d, company, me) {
     defaultFundId(db, company, "expense").then((fundId) => setDoc(doc(db, "acctLedger", `appr_${d.id}`), {
       fundId, date: dd.date || dd.spendDate || new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10), type: "지출", account: dd.account || "기타",
       item: d.title || d.formLabel || "지출결의", amount: Number(d.amount) || 0, method: dd.pay || dd.method || "법인카드", vendor: dd.vendor || "",
-      memo: `전자결재 ${d.docNo || ""} · ${d.drafter?.name || ""}`, evidence: "전자결재", receipt: (d.images || [])[0] || "", sourceId: d.id, auto: "approval",
+      memo: `전자결재 ${d.docNo || ""} · ${d.drafter?.name || ""}`, evidence: "전자결재", receipt: (d.images || [])[0] || "", receiptFile: ((d.files || []).find((f) => String(f.type || "").startsWith("image/") || f.type === "application/pdf") || {}).path || "", sourceId: d.id, auto: "approval", ...(d.planId ? { planId: d.planId } : {}),
       companyName: company, createdAt: serverTimestamp(), createdBy: me?.email || "",
     }, { merge: true })).catch(() => {});
   }
@@ -1422,33 +1544,51 @@ function Composer({ company, me, staff, cat, preset, onDone, leave, getLive, myD
   const [line, setLine] = React.useState(init?.line || []);
   const [cc, setCc] = React.useState(init?.cc || []);
   const [images, setImages] = React.useState(init?.images || []);
+  // 📎 2026-11-08 첨부 파일(Storage) — 새 문서는 문서 id를 미리 정해 그 폴더(approvals/{회사}/{id}/)에 올린다(임시저장에도 id를 같이 남김)
+  const [docId] = React.useState(() => editId || (draft?.docId && draft.formKey ? draft.docId : doc(collection(db, "approvals")).id));
+  const [files, setFiles] = React.useState(() => (Array.isArray(init?.files) ? init.files.filter((f) => f?.path) : []));
+  const savedPaths = React.useRef(new Set(editId ? (preset?.files || []).map((f) => f.path) : []));
+  const [removed, setRemoved] = React.useState([]); // 수정 중 뺀 저장된 파일 — [수정 저장] 뒤에 지운다
   const [restored, setRestored] = React.useState(!!draft);
-  const dirty = !editId && JSON.stringify({ data, title, images, cc }) !== JSON.stringify({ data: initialData(form), title: "", images: [], cc: [] });
+  const dirty = !editId && JSON.stringify({ data, title, images, cc, files }) !== JSON.stringify({ data: initialData(form), title: "", images: [], cc: [], files: [] });
   useLeaveGuard(dirty, {
     label: form.label,
-    onSave: () => { if (!draftStore.set(draftKey, { formKey, data, title, line, cc, images })) draftStore.set(draftKey, { formKey, data, title, line, cc, images: [] }); },
-    onDiscard: () => draftStore.del(draftKey),
+    onSave: () => { if (!draftStore.set(draftKey, { formKey, data, title, line, cc, images, files, docId })) draftStore.set(draftKey, { formKey, data, title, line, cc, images: [], files, docId }); },
+    onDiscard: () => { draftStore.del(draftKey); files.filter((f) => inDocDir(f, company, docId) && !savedPaths.current.has(f.path)).forEach((f) => removeApFile(f).catch(() => {})); },
   });
+  const removeFile = (f) => {
+    setFiles((p) => p.filter((x) => x.path !== f.path));
+    if (savedPaths.current.has(f.path)) { setRemoved((p) => [...p, f]); return; } // 저장된 문서의 파일은 [수정 저장] 뒤에 지운다
+    if (inDocDir(f, company, docId)) removeApFile(f).catch(() => {}); // 방금 올린 파일 · 재기안해 가져온 예전 문서 파일은 목록에서만 뺀다
+  };
   const [busy, setBusy] = React.useState(false);
   const [msg, setMsg] = React.useState("");
-  const fileRef = React.useRef(null);
+  const [upBusy, setUpBusy] = React.useState(0); // 📎 올리는 중인 첨부 수
   const [lightbox, setLightbox] = React.useState(null); // ⭐ 2026-11-04 첨부 크게 보기
   const autoLined = React.useRef(!!init?.line?.length);
 
   // 결재선이 비어 있으면 직원 목록이 오는 대로 자동 추천
-  React.useEffect(() => { if (!autoLined.current && staff && staff.length) { autoLined.current = true; setLine(suggestLine(staff, me)); } }, [staff, me]);
-  const pickForm = (k) => { if (editId) return; setFormKey(k); setData(initialData(formOf(k))); setTitle(""); setMsg(""); setMissing([]); };
+  React.useEffect(() => { if (!autoLined.current && staff && staff.length) { autoLined.current = true; setLine(suggestFor(form, staff, me)); } }, [staff, me]); // eslint-disable-line react-hooks/exhaustive-deps
+  const pickForm = (k) => {
+    if (editId) return;
+    const nf = formOf(k);
+    // 📑 사업계획서로(또는 사업계획서에서) 바꾸면 결재선을 그 양식 규칙에 맞게 다시 추천
+    if (needsBizLine(nf.key) !== needsBizLine(form.key) && staff && staff.length) setLine(suggestFor(nf, staff, me));
+    setFormKey(k); setData(initialData(nf)); setTitle(""); setMsg(""); setMissing([]);
+  };
   // 입력 초기화 — 같은 양식을 처음 상태로(제목·내용·첨부·결재선 추천값). 저장된 문서에는 영향 없음
   const resetAll = async () => {
     if (!await kpConfirm("입력한 내용을 모두 지우고 처음 상태로 되돌릴까요?")) return;
-    setData(initialData(form)); setTitle(""); setImages([]); setCc([]); setMsg(""); draftStore.del(draftKey); setRestored(false);
-    setLine(staff && staff.length ? suggestLine(staff, me) : []);
+    files.filter((f) => inDocDir(f, company, docId) && !savedPaths.current.has(f.path)).forEach((f) => removeApFile(f).catch(() => {}));
+    setData(initialData(form)); setTitle(""); setImages([]); setFiles([]); setCc([]); setMsg(""); draftStore.del(draftKey); setRestored(false);
+    setLine(staff && staff.length ? suggestFor(form, staff, me) : []);
   };
   const [missing, setMissing] = React.useState([]);
   // ⭐ 2026-11-04 고르기 목록 — 부서·직책(인사 설정 hrSettings), 거래처·차량(이 양식이 쓸 때만 구독)
   const hrOpt = useHrOptions(company);
   const refs = useApprovalRefs(company, { clients: form.fields.some((f) => f.pick === "clients"), cars: form.fields.some((f) => f.pick === "cars" || f.pick === "carDriver") });
-  const fieldCtx = { hr: hrOpt, refs, data };
+  const plans = useApprovedPlans(company, form.fields.some((f) => f.type === "plan"));
+  const fieldCtx = { hr: hrOpt, refs, data, plans };
   const setField = (f, v) => setData((p) => { const n = { ...p, [f.k]: v }; const extra = form.autofill ? form.autofill(f.k, v, p, { staff }) : null; return extra ? { ...n, ...extra } : n; });
   const docName = String(form.title || form.label).replace(/\s+/g, "").replace(/·/g, "·");
   const autoTitle = `${todayDots()} ${docName}_${me.name || ""}${me.position ? ` ${me.position}` : ""}`; // ⭐ 2026-11-02 이름·직책 사이 띄어쓰기
@@ -1471,7 +1611,13 @@ function Composer({ company, me, staff, cat, preset, onDone, leave, getLive, myD
       return;
     }
     if (!line.length) { setMsg("결재자를 1명 이상 지정해 주세요."); return; }
-    const pd = form.prepare ? form.prepare(data) : data; // ⭐ 2026-11-02 지출결의 — 빈 행 빼고 예전 칸(지출처·입금계좌·지출일) 채움
+    // 📑 2026-11-08 사업계획서 — 경리·회계·재무 합의 · 임원 · 대표 최종 결재가 없으면 상신을 막는다(서버 규칙도 같은 검사)
+    const bizV = needsBizLine(form.key) ? validateBizLine(line, staff, me) : null;
+    if (bizV && !bizV.ok && !editId) { setMsg(bizV.errors.join(" ")); document.querySelector("[data-bizline-check]")?.scrollIntoView({ behavior: "smooth", block: "center" }); return; }
+    if (upBusy > 0) { setMsg("첨부 파일을 올리는 중이에요. 다 올라간 뒤 다시 눌러 주세요."); return; }
+    const pdRaw = form.prepare ? form.prepare(data) : data; // ⭐ 2026-11-02 지출결의 — 빈 행 빼고 예전 칸(지출처·입금계좌·지출일) 채움
+    const pd = form.fields.some((f) => f.type === "plan") && !pdRaw.planId ? { ...pdRaw, planId: "", planName: "" } : pdRaw;
+    const fileMeta = files.slice(0, AP_FILE_COUNT).map(({ name, size, type, path, uploadedBy, uploadedByName, at }) => ({ name, size, type, path, uploadedBy: uploadedBy || "", uploadedByName: uploadedByName || "", at: at || Date.now() }));
     if (editId) {
       const live = getLive?.(editId);
       if (!live || !canEdit(live, me.uid)) { setMsg("결재자가 이미 문서를 열어봐서 수정할 수 없습니다. 회수 후 재기안해 주세요."); return; }
@@ -1480,9 +1626,11 @@ function Composer({ company, me, staff, cat, preset, onDone, leave, getLive, myD
       try {
         const imgs = await fitApprovalImages(images); // ⭐ 2026-11-02 점검 — 첨부 이미지 크기 맞춤
         await updateDoc(doc(db, "approvals", editId), {
-          title: finalTitle, data: pd, images: imgs, summary: form.summary ? form.summary(pd) : "", amount: form.amount ? form.amount(pd) : 0, days: form.days ? form.days(pd) : 0,
+          title: finalTitle, data: pd, images: imgs, files: fileMeta, summary: form.summary ? form.summary(pd) : "", amount: form.amount ? form.amount(pd) : 0, days: form.days ? form.days(pd) : 0,
+          ...(PLAN_LINK_FORMS.includes(form.key) ? { planId: pd.planId || "" } : {}),
           updatedAt: serverTimestamp(), history: arrayUnion({ at: Date.now(), uid: me.uid, name: me.name, action: "수정", comment: "" }),
         });
+        removed.filter((f) => inDocDir(f, company, docId)).forEach((f) => removeApFile(f).catch(() => {}));
         onDone();
       } catch (e) { setMsg(e.message || "수정 실패"); } finally { setBusy(false); }
       return;
@@ -1501,7 +1649,9 @@ function Composer({ company, me, staff, cat, preset, onDone, leave, getLive, myD
       const payload = {
         company, docNo, cat, form: form.key, formLabel: form.label, title: finalTitle,
         summary: form.summary ? form.summary(pd) : "", amount: form.amount ? form.amount(pd) : 0, days: form.days ? form.days(pd) : 0,
-        data: pd, images: imgs, drafterUid: me.uid, drafter: { uid: me.uid, name: me.name, team: me.team || "", position: me.position || "" },
+        data: pd, images: imgs, files: fileMeta, drafterUid: me.uid, drafter: { uid: me.uid, name: me.name, team: me.team || "", position: me.position || "" },
+        ...(PLAN_LINK_FORMS.includes(form.key) && pd.planId ? { planId: pd.planId } : {}),
+        ...(bizV ? { finIdx: bizV.finIdx } : {}),
         line: L, cc, ccUids: cc.map((c) => c.uid), participants: [...new Set([me.uid, ...L.map((s) => s.uid), ...cc.map((c) => c.uid)])],
         step: auto ? L.length : 0, status: auto ? "approved" : "pending", createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
         history: [{ at: Date.now(), uid: me.uid, name: me.name, action: "상신", comment: "" }, ...(auto ? [{ at: Date.now(), uid: "auto", name: "자동 승인", action: "승인", comment: "임원 설정 — 일일 업무일지 자동 승인" }] : [])], redraftOf: preset?.id || null,
@@ -1513,7 +1663,8 @@ function Composer({ company, me, staff, cat, preset, onDone, leave, getLive, myD
         pre = runAutoApprove(payload, apSettings);
         if (pre.changed && pre.status === "pending") Object.assign(payload, { line: pre.line, step: pre.step, history: [...payload.history, ...pre.hist] });
       }
-      const ref = await addDoc(collection(db, "approvals"), payload);
+      const ref = doc(db, "approvals", docId); // 📎 첨부를 올린 폴더와 같은 문서 id
+      await setDoc(ref, payload);
       draftStore.del(draftKey);
       // 🤖 첫 결재자부터 자동 승인(부재·위임)이 켜져 있으면 바로 처리(상신 직후 한 번 더 저장)
       if (!auto && pre?.status === "approved") {
@@ -1564,25 +1715,24 @@ function Composer({ company, me, staff, cat, preset, onDone, leave, getLive, myD
               return (
                 <div key={f.k} id={`apf-${f.k}`} className={`block rounded-xl min-w-0 ${half(f) && f.type !== "bank" && f.type !== "time" ? "" : "col-span-2"} ${bad ? "ring-2 ring-[#2D4C82] ring-offset-4 bg-[#EEF3FC]" : ""}`}>
                   <span className={`flex items-center gap-1.5 text-[14.5px] font-black ${bad ? "text-[#0B1428]" : "text-[#3A4A66]"}`}>{f.label}{f.required && <span className="text-[#2D4C82]">*</span>}{bad && <span className="ml-auto h-5 px-2 rounded-md bg-[#0F1A30] text-white text-[12px] font-black inline-flex items-center">입력 필요</span>}</span>
-                  <div className="mt-1.5"><FieldInput f={f} value={data[f.k]} onChange={(v) => { setField(f, v); if (bad) setMissing((m) => m.filter((x) => x !== f.k)); }} staff={staff} meUid={me.uid} ctx={fieldCtx} /></div>
+                  <div className="mt-1.5"><FieldInput f={f} value={data[f.k]} onChange={(v, extra) => { if (f.type === "plan") setData((p) => ({ ...p, [f.k]: v, planName: extra ? String(extra.data?.name || extra.title || "") : "" })); else setField(f, v); if (bad) setMissing((m) => m.filter((x) => x !== f.k)); }} staff={staff} meUid={me.uid} ctx={fieldCtx} /></div>
                 </div>
               );
             })}
           </div>
-          <div>
-            <span className="text-[14.5px] font-black text-[#3A4A66]">증빙·첨부 이미지 <span className="font-semibold">({images.length}/3 · 영수증·진단서 등)</span></span>
-            <div className="mt-1.5 flex flex-wrap gap-2">
-              {images.map((src, i) => (
-                <div key={i} className="relative w-16 h-16 rounded-xl overflow-hidden border border-[#E3E8F0]">
-                  <button type="button" onClick={() => setLightbox(i)} title="크게 보기" className="block w-full h-full"><img src={src} alt={`첨부 ${i + 1}`} className="w-full h-full object-cover" /></button>
-                  <button type="button" onClick={() => setImages((p) => p.filter((_, k) => k !== i))} className="absolute top-0.5 right-0.5 w-5 h-5 rounded-full bg-[#0F1A30]/80 text-white text-[12px]">✕</button>
-                </div>
-              ))}
-              {images.length < 3 && <button type="button" onClick={() => fileRef.current?.click()} className="w-16 h-16 rounded-xl border-2 border-dashed border-[#C9D2E0] text-[#5B6B85] text-[12.5px] font-bold">+ 첨부</button>}
-              {lightbox !== null && <ImageLightbox images={images} start={lightbox} docNo={preset?.docNo || "새문서"} onClose={() => setLightbox(null)} />}
-              <input ref={fileRef} type="file" accept="image/*" multiple hidden onChange={async (e) => { const fs = [...(e.target.files || [])].slice(0, 3 - images.length); e.target.value = ""; try { const out = await Promise.all(fs.map((f) => compressImage(f, 1200, 0.72))); setImages((p) => [...p, ...out].slice(0, 3)); } catch { setMsg("이미지를 읽지 못했습니다."); } }} />
-            </div>
-          </div>
+          {/* 📎 2026-11-08 첨부 파일(모든 양식) — 사진·PDF·PPT·엑셀·워드·한글·ZIP, 파일당 20MB 미만 · 10개까지(Storage). 예전 문서의 사진 첨부는 아래에 그대로 */}
+          <ApprovalAttachInput company={company} docId={docId} me={me} files={files} setFiles={setFiles} onRemoveFile={removeFile} onError={setMsg} onBusy={setUpBusy}
+            legacy={images.length > 0 && (
+              <div className="mt-2 flex flex-wrap gap-2" data-ap-legacy-images>
+                {images.map((src, i) => (
+                  <div key={i} className="relative w-16 h-16 rounded-xl overflow-hidden border border-[#E3E8F0]">
+                    <button type="button" onClick={() => setLightbox(i)} title="크게 보기" className="block w-full h-full"><img src={src} alt={`첨부 ${i + 1}`} className="w-full h-full object-cover" /></button>
+                    <button type="button" onClick={() => setImages((p) => p.filter((_, k) => k !== i))} className="absolute top-0.5 right-0.5 w-5 h-5 rounded-full bg-[#0F1A30]/80 text-white text-[12px]">✕</button>
+                  </div>
+                ))}
+                {lightbox !== null && <ImageLightbox images={images} start={lightbox} docNo={preset?.docNo || "새문서"} onClose={() => setLightbox(null)} />}
+              </div>
+            )} />
         </div>
         <div className="rounded-2xl border border-[#E3E8F0] bg-white p-5">
           <div className="mb-3">
@@ -1594,7 +1744,7 @@ function Composer({ company, me, staff, cat, preset, onDone, leave, getLive, myD
               {line.map((s, i) => <div key={i} className="h-9 px-3 rounded-xl bg-[#F5F8FD] border border-[#E3E8F0] flex items-center gap-2 text-[14px]"><span className="w-6 h-6 rounded-lg bg-[#1B2B4B] text-white text-[12px] font-black flex items-center justify-center">{i + 1}</span><b className="text-[#0F1A30]">{s.name}</b><span className="text-[#5B6B85]">{s.position} · {s.kind || "결재"}</span></div>)}
               {cc.length > 0 && <div className="text-[13.5px] text-[#5B6B85] px-1">참조 {cc.map((c) => c.name).join(", ")}</div>}
             </div>
-          ) : <LineEditor line={line} setLine={setLine} cc={cc} setCc={setCc} staff={staff} me={me} company={company} cat={cat} />}
+          ) : <LineEditor line={line} setLine={setLine} cc={cc} setCc={setCc} staff={staff} me={me} company={company} cat={cat} form={form} />}
         </div>
         {msg && <div className="rounded-xl bg-[#0F1A30] text-white px-4 py-3 text-[14px] font-bold">⚠ {msg}</div>}
         {!editId && (
@@ -1612,7 +1762,7 @@ function Composer({ company, me, staff, cat, preset, onDone, leave, getLive, myD
             <span className="text-[13px] font-extrabold tracking-[0.2em] text-[#5A6A85] whitespace-nowrap" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>LIVE PREVIEW</span>
             <span className="text-[13px] font-bold text-[#5B6B85]">입력하는 대로 문서가 바로 만들어집니다</span>
           </div>
-          <FitPaper><ApprovalPaper form={form} data={data} title={finalTitle} line={line.map((s, i) => ({ ...s, status: i === 0 ? "pending" : "wait" }))} cc={cc} drafter={me} createdMs={Date.now()} staff={staff} /></FitPaper>
+          <FitPaper><ApprovalPaper form={form} data={data} title={finalTitle} line={line.map((s, i) => ({ ...s, status: i === 0 ? "pending" : "wait" }))} cc={cc} drafter={me} createdMs={Date.now()} staff={staff} files={files} images={images} /></FitPaper>
         </div>
       </div>
     </div>
@@ -1644,7 +1794,6 @@ function Viewer({ d, me, staff, company, onClose, onRedraft, onEdit, inline = fa
   const [busy, setBusy] = React.useState(false);
   const [cancelAsk, setCancelAsk] = React.useState(false);
   const [lightbox, setLightbox] = React.useState(null); // ⭐ 2026-11-04 첨부 크게 보기(번호)
-  const [allBusy, setAllBusy] = React.useState(false);
   const [signOpen, setSignOpen] = React.useState(false); // ✍ 내 서명·결재 표시 설정
   const [payAsk, setPayAsk] = React.useState(null); // 💸 { date, memo }
   const paperRef = React.useRef(null);
@@ -1802,27 +1951,9 @@ function Viewer({ d, me, staff, company, onClose, onRedraft, onEdit, inline = fa
   return wrap(
       <div className={inline ? "w-full h-[calc(100vh-190px)] min-h-[640px] bg-[#F4F6FA] rounded-[20px] border border-[#E3E8F0] overflow-hidden flex flex-row" : "w-full max-w-[1280px] h-full md:h-[92vh] bg-[#F4F6FA] md:rounded-[24px] overflow-y-auto md:overflow-hidden flex flex-col md:flex-row shadow-[0_24px_60px_rgba(15,26,48,0.4)]"} onClick={(e) => e.stopPropagation()}>
         <div className="md:flex-1 md:overflow-auto p-3 md:p-6 bg-[#E9EDF3] order-2 md:order-1">
-          <FitPaper><ApprovalPaper paperRef={paperRef} form={form} data={d.data} title={d.title} line={d.line} cc={d.cc} drafter={d.drafter} docNo={d.docNo} createdMs={toMs(d.createdAt)} staff={staff} status={d.status} paid={pstate === "paid" ? d.paid : null} /></FitPaper>
-          {(d.images || []).length > 0 && (
-            <div className="max-w-[780px] mx-auto mt-4 bg-white rounded-2xl p-4" data-ap-attachments>
-              <div className="flex items-center gap-2 mb-2.5">
-                <span className="text-[11px] font-extrabold tracking-[0.22em] text-[#4B6CB7]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>FILES</span>
-                <span className="text-[13.5px] font-black text-[#0F1A30] whitespace-nowrap">첨부 {d.images.length}장</span>
-                <span className="hidden sm:inline text-[12px] font-bold text-[#9AA9C3]">누르면 크게 보기</span>
-                <button type="button" disabled={allBusy} onClick={async () => { setAllBusy(true); try { await downloadAllAttachments(d.images, d.docNo); } catch (e) { window.alert(`다운로드 실패: ${e.message || e}`); } finally { setAllBusy(false); } }}
-                  className="ml-auto h-9 px-3.5 rounded-lg border border-[#DCE3EE] text-[13px] font-black text-[#1B2B4B] hover:border-[#4B6CB7] disabled:opacity-50 inline-flex items-center gap-1.5 whitespace-nowrap">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M12 4v11m0 0-4.5-4.5M12 15l4.5-4.5M5 20h14" /></svg>
-                  {allBusy ? "받는 중…" : "전체 다운로드"}
-                </button>
-              </div>
-              <div className="grid grid-cols-3 gap-2">{d.images.map((src, i) => (
-                <button key={i} type="button" onClick={() => setLightbox(i)} title={`첨부 ${i + 1} 크게 보기`} className="group relative block rounded-xl overflow-hidden border border-[#E3E8F0] focus:outline-none focus:ring-2 focus:ring-[#2D4C82]/40">
-                  <img src={src} alt={`첨부 ${i + 1}`} className="w-full h-28 sm:h-40 object-cover transition group-hover:scale-[1.02]" />
-                  <span className="absolute left-1.5 bottom-1.5 h-5 px-1.5 rounded-md bg-[#0F1A30]/80 text-white text-[10.5px] font-black grid place-items-center" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{i + 1}/{d.images.length}</span>
-                </button>
-              ))}</div>
-            </div>
-          )}
+          <FitPaper><ApprovalPaper paperRef={paperRef} form={form} data={d.data} title={d.title} line={d.line} cc={d.cc} drafter={d.drafter} docNo={d.docNo} createdMs={toMs(d.createdAt)} staff={staff} status={d.status} paid={pstate === "paid" ? d.paid : null} files={d.files} images={d.images} /></FitPaper>
+          {/* 📎 2026-11-08 첨부 — Storage 파일(목록·미리보기·저장) + 예전 사진 첨부(base64) · [첨부 모두 저장]은 ZIP 하나로 */}
+          <ApprovalAttachPanel files={d.files || []} images={d.images || []} docNo={d.docNo} onImage={(i) => setLightbox(i)} />
           {lightbox !== null && <ImageLightbox images={d.images || []} start={lightbox} docNo={d.docNo} onClose={() => setLightbox(null)} />}
           {signOpen && <SignatureModal me={me} onClose={() => setSignOpen(false)} />}
         </div>
@@ -2477,5 +2608,5 @@ export function ApprovalDocPreview({ d, company }) {
   const staff = useCompanyStaff(company || d?.company || "");
   if (!d) return null;
   const form = formOf(d.form);
-  return <FitPaper><ApprovalPaper form={form} data={d.data || {}} title={d.title} line={d.line} cc={d.cc} drafter={d.drafter} docNo={d.docNo} createdMs={toMs(d.createdAt)} staff={staff || []} status={d.status} paid={isPayDoc(d) ? d.paid : null} /></FitPaper>;
+  return <FitPaper><ApprovalPaper form={form} data={d.data || {}} title={d.title} line={d.line} cc={d.cc} drafter={d.drafter} docNo={d.docNo} createdMs={toMs(d.createdAt)} staff={staff || []} status={d.status} paid={isPayDoc(d) ? d.paid : null} files={d.files} images={d.images} /></FitPaper>;
 }
