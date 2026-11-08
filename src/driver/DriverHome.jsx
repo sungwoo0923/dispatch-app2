@@ -1188,18 +1188,11 @@ export default function DriverHome() {
   // 레이아웃 뷰포트 기준으로 고정되어 주소창이 접힌 동안 실제 화면보다 아래로
   // 밀려나 있다가, 접힌 만큼 다시 위로 끌어올려야 진짜 화면 하단에 맞는다.
   // window.visualViewport로 그 차이를 직접 측정해서 bottom 값을 보정한다.
-  const [navBottomOffset, setNavBottomOffset] = useState(0);
-  useEffect(() => {
-    const vv = window.visualViewport;
-    if (!vv) return;
-    const update = () => {
-      setNavBottomOffset(Math.max(0, window.innerHeight - vv.height - vv.offsetTop));
-    };
-    update();
-    vv.addEventListener("resize", update);
-    vv.addEventListener("scroll", update);
-    return () => { vv.removeEventListener("resize", update); vv.removeEventListener("scroll", update); };
-  }, []);
+  // ⭐ 2026-11-08 아이폰 하단바·상단 헤더가 화면 중간에 떠 보이던 문제 — 예전 visualViewport 보정값이 아이폰(홈 화면 앱)에서
+  //  수백 px로 잘못 계산돼 하단바를 위로 끌어올렸다. 이제 앱 전체를 "화면에 고정된 틀(헤더·내용·하단바)" 구조로 바꿔
+  //  내용만 안에서 스크롤한다 → 헤더·하단바가 항상 제자리(position:fixed/sticky 보정 불필요).
+  const scrollBoxRef = useRef(null);
+  useEffect(() => { try { scrollBoxRef.current?.scrollTo?.(0, 0); } catch (_) { /* 무시 */ } }, [activeTab]);
 
   useEffect(() => {
     return onAuthStateChanged(auth, (u) => {
@@ -2164,7 +2157,7 @@ export default function DriverHome() {
   const dateStr = `${_td.getFullYear()}.${String(_td.getMonth()+1).padStart(2,"0")}.${String(_td.getDate()).padStart(2,"0")}`;
 
   return (
-    <div className="kpd-root" style={{ minHeight: "100vh", paddingBottom: 112, fontFamily: '"Pretendard", "Noto Sans KR", sans-serif' }}>
+    <div className="kpd-root" style={{ position: "fixed", inset: 0, display: "flex", flexDirection: "column", overflow: "hidden", fontFamily: '"Pretendard", "Noto Sans KR", sans-serif' }}>
       <style>{`@keyframes fmBlink { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }`}</style>
 
       {/* ⭐ 2026-11-05 가운데 큰 팝업 — 삭제된 오더 안내 > 새 오더 승인/거절 > 출근 안내 (한 번에 하나만) */}
@@ -2310,7 +2303,7 @@ export default function DriverHome() {
       {/* 토스트 */}
       {toast && (
         <div style={{
-          position: "fixed", top: 16, left: "50%", transform: "translateX(-50%)",
+          position: "fixed", top: "calc(16px + env(safe-area-inset-top, 0px))", left: "50%", transform: "translateX(-50%)",
           background: "#1B2B4B", color: "white", fontSize: 15.5, fontWeight: 600,
           padding: "10px 20px", borderRadius: 24, zIndex: 10100, // ⭐ 2026-11-05 가운데 팝업(10050~) 위에도 보이게
           boxShadow: "0 4px 16px rgba(0,0,0,0.25)",
@@ -2322,7 +2315,7 @@ export default function DriverHome() {
       {/* 새 배차 알림 배너 — 배차등록 팝업과 동일하게 상단 중앙에 떴다가 자동으로 사라진다 */}
       {orderBanner && (
         <div style={{
-          position: "fixed", top: 16, left: "50%", transform: "translateX(-50%)",
+          position: "fixed", top: "calc(16px + env(safe-area-inset-top, 0px))", left: "50%", transform: "translateX(-50%)",
           background: "#1B2B4B", color: "white", fontSize: 16.5, fontWeight: 800,
           padding: "13px 22px", borderRadius: 20, zIndex: 10000,
           boxShadow: "0 8px 24px rgba(27,43,75,0.4)",
@@ -2351,15 +2344,15 @@ export default function DriverHome() {
       {/* ─── 상단 헤더 ─── */}
       {/* ⭐ 2026-10-29 리디자인 — 운송사 PC와 같은 네이비 그라데이션 + 디지털 격자 */}
       {/* ⭐ 2026-11-08 리디자인 — 딥 네이비 + 빛 번짐 + 미세 격자 + 하단 스캔 라인(디지털 계기판 느낌), 아래 모서리 둥글게 */}
-      <div style={{ background: "radial-gradient(520px 220px at 88% -40px, rgba(111,160,255,0.38), transparent 70%), linear-gradient(160deg, #070D1C 0%, #0F1D3A 52%, #1F3A6E 100%)", padding: "calc(14px + env(safe-area-inset-top, 0px)) 18px 18px", position: "sticky", top: 0, zIndex: 100, boxShadow: "0 14px 36px rgba(7,13,28,0.38)", overflow: "hidden", borderRadius: "0 0 26px 26px" }}>
+      <div style={{ background: "radial-gradient(520px 220px at 88% -40px, rgba(111,160,255,0.38), transparent 70%), linear-gradient(160deg, #070D1C 0%, #0F1D3A 52%, #1F3A6E 100%)", padding: activeTab === "home" ? "calc(14px + env(safe-area-inset-top, 0px)) 18px 18px" : "calc(12px + env(safe-area-inset-top, 0px)) 18px 14px", position: "relative", flexShrink: 0, zIndex: 100, boxShadow: "0 14px 36px rgba(7,13,28,0.38)", overflow: "hidden", borderRadius: "0 0 26px 26px" }}>
         <span style={{ position: "absolute", inset: 0, opacity: 0.07, pointerEvents: "none", backgroundImage: "linear-gradient(#fff 1px,transparent 1px),linear-gradient(90deg,#fff 1px,transparent 1px)", backgroundSize: "22px 22px", maskImage: "linear-gradient(180deg,#000,transparent)", WebkitMaskImage: "linear-gradient(180deg,#000,transparent)" }} />
         <span className="kpd-scan" />
-        <div style={{ position: "relative", display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+        <div style={{ position: "relative", display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: activeTab === "home" ? 14 : 0 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0 }}>
             <div style={{ width: 44, height: 44, borderRadius: 16, background: "rgba(255,255,255,0.10)", border: "1px solid rgba(255,255,255,0.16)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
               <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 7h13l5 5v5h-2M3 7v10h2m0 0a2 2 0 1 0 4 0m-4 0a2 2 0 1 1 4 0m0 0h6m0 0a2 2 0 1 0 4 0m-4 0a2 2 0 1 1 4 0" /></svg>
             </div>
-            <div style={{ minWidth: 0 }}>
+            <div style={{ minWidth: 0, overflow: "hidden" }}>
               <div style={{ fontSize: 12.5, color: "#8FB0F0", fontWeight: 800, letterSpacing: "0.26em", fontFamily: DRV_MONO, marginBottom: 4 }}><LogisTag height={7.5} text="DRIVER" /></div>
               <div style={{ fontSize: 20, fontWeight: 900, color: "white", letterSpacing: "-0.3px" }}>{driver.name || "-"}</div>
               <div style={{ fontSize: 14.5, color: "rgba(255,255,255,0.6)", marginTop: 1, fontFamily: DRV_MONO }}>{driver.carNo || "-"} {driver.vehicleType ? `· ${driver.vehicleType}` : ""}</div>
@@ -2381,16 +2374,14 @@ export default function DriverHome() {
                 {/* ⭐ 2026-11-05 새 알림은 빨간 숫자 배지로(예전: 남색 점이라 안 보였다) */}
                 {unreadNotifCount > 0 && <RedBadge n={unreadNotifCount} style={{ position: "absolute", top: -6, right: -8, boxShadow: "0 0 0 2px #1B2B4B" }} />}
               </button>
-              {/* 설정 버튼 */}
-              <button onClick={() => setActiveTab("settings")} style={{ background: "rgba(255,255,255,0.10)", border: "1px solid rgba(160,190,255,0.22)", borderRadius: 14, width: 44, height: 44, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                <svg width="21" height="21" fill="none" stroke="rgba(255,255,255,0.8)" strokeWidth="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-              </button>
+              {/* ⭐ 2026-11-08 헤더 설정 버튼은 뺐다(하단바 [설정]과 같음 · SOS가 이름 위를 가리던 문제) */}
             </div>
             <div style={{ fontSize: 13.5, color: "rgba(255,255,255,0.45)", fontFamily: DRV_MONO }}>{dateStr}</div>
           </div>
         </div>
 
-        {/* 현재 상태 표시 */}
+        {/* 현재 상태 표시 — 홈 탭에서만(다른 탭은 헤더를 얇게 해서 내용을 넓게) */}
+        {activeTab === "home" && (
         <div style={{
           position: "relative",
           background: "linear-gradient(135deg, rgba(255,255,255,0.10), rgba(255,255,255,0.04))", border: "1px solid rgba(160,190,255,0.22)", borderRadius: 20, padding: "14px 16px",
@@ -2430,7 +2421,11 @@ export default function DriverHome() {
             )}
           </div>
         </div>
+      )}
       </div>
+
+      {/* ─── 내용(이 안에서만 스크롤) ─── */}
+      <div ref={scrollBoxRef} style={{ flex: 1, minHeight: 0, overflowY: "auto", overflowX: "hidden", WebkitOverflowScrolling: "touch", overscrollBehavior: "contain", paddingBottom: 12 }}>
 
       {/* ─── 탭: 홈 ─── */}
       {activeTab === "docs" && <DriverDocBox uid={uid} inbox={inbox} companyName={driver?.companyName || ""} />}
@@ -2786,7 +2781,7 @@ export default function DriverHome() {
 
       {/* ─── 탭: 온도 관제 ─── */}
       {activeTab === "vehicle" && (
-        <div style={{ padding: "16px 16px 110px" }}>
+        <div style={{ padding: "16px 16px 24px" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 10, paddingLeft: 4 }}><span style={{ width: 6, height: 6, background: "#2D4C82", transform: "rotate(45deg)" }} /><span style={{ fontSize: 12.5, fontWeight: 800, color: "#9AA9C3", letterSpacing: "0.22em", fontFamily: DRV_MONO }}>VEHICLE</span><span style={{ fontSize: 16.5, fontWeight: 900, color: "#0F1A30", whiteSpace: "nowrap" }}>내 차량 관리</span><span style={{ marginLeft: "auto", fontSize: 14.5, fontWeight: 800, color: "#5B6B85", whiteSpace: "nowrap" }}>{driver.carNo || driver.차량번호 || ""}</span></div>
           <VehicleCarePanel driverId={uid} drv={driver} by={`${driver.name || driver.이름 || "기사"}(기사)`} onToast={showToast} />
         </div>
@@ -2913,21 +2908,120 @@ export default function DriverHome() {
       {activeTab === "settings" && (
         <div style={{ padding: "16px" }}>
 
-          {/* 기사 정보 */}
-          <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 8, paddingLeft: 4 }}><span style={{ width: 6, height: 6, background: "#2D4C82", transform: "rotate(45deg)" }} /><span style={{ fontSize: 12.5, fontWeight: 800, color: "#9AA9C3", letterSpacing: "0.22em", fontFamily: DRV_MONO }}>PROFILE</span><span style={{ fontSize: 15.5, fontWeight: 900, color: "#0F1A30" }}>기사 정보</span></div>
-          <div style={{ background: "white", borderRadius: 20, boxShadow: "0 1px 2px rgba(15,26,48,.04), 0 10px 28px rgba(15,26,48,.06)", border: "1px solid #E6EBF3", overflow: "hidden", marginBottom: 20 }}>
-            {[
-              ["이름", driver.name || "-"],
-              ["차량번호", driver.carNo || "-"],
-              ["차량종류", driver.vehicleType || "-"],
-              ["연락처", driver.phone ? formatPhone(driver.phone) : "-"],
-              ["현재 상태", currentStatus],
-            ].map(([label, value], i, arr) => (
-              <div key={label} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "13px 16px", borderBottom: i < arr.length - 1 ? "1px solid #EEF2F8" : "none" }}>
-                <span style={{ fontSize: 15.5, color: "#5B6B85", fontWeight: 600 }}>{label}</span>
-                <span style={{ fontSize: 15.5, color: "#1B2B4B", fontWeight: 700 }}>{value}</span>
+          {/* ⭐ 사용자 요청 — 차량종류/톤수/거주지/요청사항은 가입할 때만 입력하고 끝이
+              아니라, 기사 본인이 언제든 다시 수정할 수 있어야 한다(관리자도 PC
+              기사관리에서 동일하게 수정 가능). */}
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8, paddingLeft: 4, paddingRight: 2 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 7, paddingLeft: 4 }}><span style={{ width: 6, height: 6, background: "#2D4C82", transform: "rotate(45deg)" }} /><span style={{ fontSize: 12.5, fontWeight: 800, color: "#9AA9C3", letterSpacing: "0.22em", fontFamily: DRV_MONO }}>PROFILE</span><span style={{ fontSize: 15.5, fontWeight: 900, color: "#0F1A30" }}>내 정보</span></div>
+            {!vehicleInfoEdit && (
+              <button
+                onClick={() => {
+                  const parts = (driver.거주지 || "").split(" ");
+                  const province = RESIDENCE_PROVINCES.includes(parts[0]) ? parts[0] : "";
+                  const city = province && RESIDENCE_SUB_REGIONS[province] ? (parts.slice(1).join(" ") || "") : "";
+                  setVehicleInfoEdit({
+                    차량종류: driver.차량종류 || "",
+                    차량톤수: driver.차량톤수 || "",
+                    residenceProvince: province,
+                    residenceCity: city,
+                    요청사항: driver.요청사항 || "",
+                  });
+                }}
+                style={{ height: 40, fontSize: 15.5, fontWeight: 800, color: "#1B2B4B", background: "#fff", border: "1.5px solid #C9D6EA", borderRadius: 12, padding: "0 16px", cursor: "pointer" }}
+              >수정</button>
+            )}
+          </div>
+          <div style={{ background: "white", borderRadius: 20, boxShadow: "0 1px 2px rgba(15,26,48,.04), 0 10px 28px rgba(15,26,48,.06)", border: "1px solid #E6EBF3", padding: "6px 18px", marginBottom: 20 }}>
+            {!vehicleInfoEdit ? (
+              <div style={{ display: "flex", flexDirection: "column" }}>
+                {/* ⭐ 2026-11-08 기사 정보 + 차량/거주지 정보를 한 카드로 합침 */}
+                {[
+                  ["이름", driver.name || "-"],
+                  ["차량번호", driver.carNo || "-"],
+                  ["연락처", driver.phone ? formatPhone(driver.phone) : "-"],
+                  ["현재 상태", currentStatus],
+                  ["차량종류", driver.차량종류 || driver.vehicleType || "-"],
+                  ["톤수", driver.차량톤수 || "-"],
+                  ["거주지", driver.거주지 || "-"],
+                  ["요청사항", driver.요청사항 || "-"],
+                ].map(([label, value], i, arr) => (
+                  <div key={label} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, padding: "12px 0", borderBottom: i < arr.length - 1 ? "1px solid #EEF2F8" : "none" }}>
+                    <span style={{ fontSize: 16, color: "#5B6B85", fontWeight: 700, flexShrink: 0 }}>{label}</span>
+                    <span style={{ fontSize: 16.5, color: "#0B1428", fontWeight: 800, textAlign: "right", wordBreak: "break-word", minWidth: 0 }}>{value}</span>
+                  </div>
+                ))}
               </div>
-            ))}
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                  {/* ⭐ 2026-11-02 "직접입력"을 고르면 글자 칸이 열린다(예전엔 "직접입력"이라는 글자 자체가 저장됐다) */}
+                  {(() => {
+                    const cur = vehicleInfoEdit.차량종류 || "";
+                    const direct = vehicleInfoEdit.__vtDirect || (!!cur && !vehicleCats.includes(cur)) || cur === "직접입력";
+                    return (
+                      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                        <MobileSelect title="차량종류" value={direct ? "직접입력" : cur}
+                          onChange={e => { const v = e.target.value; setVehicleInfoEdit(p => v === "직접입력" ? ({ ...p, __vtDirect: true, 차량종류: vehicleCats.includes(p.차량종류 || "") ? "" : (p.차량종류 || "") }) : ({ ...p, __vtDirect: false, 차량종류: v })); }}
+                          style={{ padding: "12px 12px", minHeight: 50, borderRadius: 12, border: "1px solid #E6EBF3", fontSize: 15.5, background: "white", color: "#0F1A30", width: "100%" }}>
+                          <option value="">차량종류 선택</option>
+                          {vehicleCats.map(t => <option key={t} value={t}>{t}</option>)}
+                        </MobileSelect>
+                        {direct && (
+                          <input value={cur === "직접입력" ? "" : cur} placeholder="차량종류 입력 (예: 암롤)" autoFocus
+                            onChange={e => setVehicleInfoEdit(p => ({ ...p, __vtDirect: true, 차량종류: e.target.value }))}
+                            style={{ padding: "12px 12px", minHeight: 50, borderRadius: 12, border: "1px solid #C9D5EA", fontSize: 15.5, background: "white" }} />
+                        )}
+                      </div>
+                    );
+                  })()}
+                  <MobileSelect title="톤수" value={vehicleInfoEdit.차량톤수} onChange={e => setVehicleInfoEdit(p => ({ ...p, 차량톤수: e.target.value }))}
+                    style={{ padding: "12px 12px", minHeight: 50, borderRadius: 12, border: "1px solid #E6EBF3", fontSize: 15.5, background: "white", color: "#0F1A30", width: "100%" }}>
+                    <option value="">톤수 선택</option>
+                    {TON_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
+                  </MobileSelect>
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                  <MobileSelect title="거주지 (시/도)" value={vehicleInfoEdit.residenceProvince}
+                    onChange={e => setVehicleInfoEdit(p => ({ ...p, residenceProvince: e.target.value, residenceCity: "" }))}
+                    style={{ padding: "12px 12px", minHeight: 50, borderRadius: 12, border: "1px solid #E6EBF3", fontSize: 15.5, background: "white", color: "#0F1A30", width: "100%" }}>
+                    <option value="">거주지(시/도)</option>
+                    {RESIDENCE_PROVINCES.map(t => <option key={t} value={t}>{t}</option>)}
+                  </MobileSelect>
+                  {RESIDENCE_SUB_REGIONS[vehicleInfoEdit.residenceProvince] ? (
+                    <MobileSelect title="거주지 (시/군)" value={vehicleInfoEdit.residenceCity} onChange={e => setVehicleInfoEdit(p => ({ ...p, residenceCity: e.target.value }))}
+                      style={{ padding: "12px 12px", minHeight: 50, borderRadius: 12, border: "1px solid #E6EBF3", fontSize: 15.5, background: "white", color: "#0F1A30", width: "100%" }}>
+                      <option value="">시/군 선택</option>
+                      {RESIDENCE_SUB_REGIONS[vehicleInfoEdit.residenceProvince].map(t => <option key={t} value={t}>{t}</option>)}
+                    </MobileSelect>
+                  ) : <div />}
+                </div>
+                <textarea value={vehicleInfoEdit.요청사항} onChange={e => setVehicleInfoEdit(p => ({ ...p, 요청사항: e.target.value }))}
+                  rows={2} placeholder="요청사항"
+                  style={{ padding: "12px 12px", minHeight: 50, borderRadius: 12, border: "1px solid #E6EBF3", fontSize: 15.5, resize: "none" }} />
+                <div style={{ display: "flex", gap: 8 }}>
+                  <button onClick={() => setVehicleInfoEdit(null)}
+                    style={{ flex: 1, minHeight: 54, padding: "12px", borderRadius: 14, border: "1px solid #E6EBF3", background: "white", color: "#5B6B85", fontSize: 15.5, fontWeight: 700, cursor: "pointer" }}>취소</button>
+                  <button
+                    onClick={async () => {
+                      const residence = vehicleInfoEdit.residenceCity ? `${vehicleInfoEdit.residenceProvince} ${vehicleInfoEdit.residenceCity}` : vehicleInfoEdit.residenceProvince;
+                      const patch = {
+                        차량종류: vehicleInfoEdit.차량종류,
+                        차량톤수: vehicleInfoEdit.차량톤수,
+                        거주지: residence,
+                        요청사항: vehicleInfoEdit.요청사항.trim(),
+                        vehicleType: vehicleInfoEdit.차량종류 && vehicleInfoEdit.차량톤수 ? `${vehicleInfoEdit.차량종류} ${vehicleInfoEdit.차량톤수}` : driver.vehicleType || "",
+                      };
+                      try {
+                        await updateDoc(doc(db, "drivers", uid), patch);
+                        await updateDoc(doc(db, "users", uid), patch).catch(() => {});
+                        showToast("저장되었습니다");
+                        setVehicleInfoEdit(null);
+                      } catch (_) { showToast("저장 중 오류가 발생했습니다"); }
+                    }}
+                    style={{ flex: 1, minHeight: 54, padding: "12px", borderRadius: 14, border: "none", background: "#1B2B4B", color: "white", fontSize: 15.5, fontWeight: 700, cursor: "pointer" }}>저장</button>
+                </div>
+              </div>
+            )}
           </div>
 
           {uid && <DriverPayInfoCard uid={uid} driver={driver || {}} />}
@@ -2979,131 +3073,6 @@ export default function DriverHome() {
               </div>
             </>
           )}
-
-          {/* ⭐ 사용자 보고 — 아이폰은 아직 네이티브 앱이 없어(안드로이드만 우선 진행)
-              이 웹 브라우저 화면으로 쓰는데, iOS Safari는 화면이 꺼지거나 다른 화면으로
-              전환되면 몇 초 안에 위치 추적 자체를 멈춰버린다(OS 정책, 코드로 우회 불가).
-              그 상태에서는 관리자 화면 위치/상태도 그 시점에 멈춰버린 걸로 보인다 —
-              기사 본인에게 원인을 명확히 안내해, 운행 중엔 화면을 켜두도록 유도한다. */}
-          {!isNative() && (
-            <>
-              <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 8, paddingLeft: 4 }}><span style={{ width: 6, height: 6, background: "#2D4C82", transform: "rotate(45deg)" }} /><span style={{ fontSize: 12.5, fontWeight: 800, color: "#9AA9C3", letterSpacing: "0.22em", fontFamily: DRV_MONO }}>TRACKING</span><span style={{ fontSize: 15.5, fontWeight: 900, color: "#0F1A30" }}>위치 추적 안내</span></div>
-              <div style={{ background: "white", borderRadius: 20, boxShadow: "0 1px 2px rgba(15,26,48,.04), 0 10px 28px rgba(15,26,48,.06)", border: "1px solid #DCE3EF", padding: "14px 16px", marginBottom: 20 }}>
-                <div style={{ fontSize: 15.5, color: "#1B2B4B", fontWeight: 700, marginBottom: 4 }}>아이폰(웹) 백그라운드 위치 제한</div>
-                <div style={{ fontSize: 14.5, color: "#5B6B85", lineHeight: 1.5 }}>
-                  아이폰은 이 화면(웹브라우저)을 끄거나 다른 앱으로 전환하면 위치 전송이
-                  멈춥니다. 운행 중에는 이 화면을 켜둔 채로 다녀주세요. 화면을 다시 켜면
-                  위치가 즉시 갱신됩니다.
-                </div>
-              </div>
-            </>
-          )}
-
-          {/* ⭐ 사용자 요청 — 차량종류/톤수/거주지/요청사항은 가입할 때만 입력하고 끝이
-              아니라, 기사 본인이 언제든 다시 수정할 수 있어야 한다(관리자도 PC
-              기사관리에서 동일하게 수정 가능). */}
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8, paddingLeft: 4, paddingRight: 2 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 7, paddingLeft: 4 }}><span style={{ width: 6, height: 6, background: "#2D4C82", transform: "rotate(45deg)" }} /><span style={{ fontSize: 12.5, fontWeight: 800, color: "#9AA9C3", letterSpacing: "0.22em", fontFamily: DRV_MONO }}>VEHICLE</span><span style={{ fontSize: 15.5, fontWeight: 900, color: "#0F1A30" }}>차량 / 거주지 정보</span></div>
-            {!vehicleInfoEdit && (
-              <button
-                onClick={() => {
-                  const parts = (driver.거주지 || "").split(" ");
-                  const province = RESIDENCE_PROVINCES.includes(parts[0]) ? parts[0] : "";
-                  const city = province && RESIDENCE_SUB_REGIONS[province] ? (parts.slice(1).join(" ") || "") : "";
-                  setVehicleInfoEdit({
-                    차량종류: driver.차량종류 || "",
-                    차량톤수: driver.차량톤수 || "",
-                    residenceProvince: province,
-                    residenceCity: city,
-                    요청사항: driver.요청사항 || "",
-                  });
-                }}
-                style={{ fontSize: 14.5, fontWeight: 700, color: "#4B6CB7", background: "#EEF3FB", border: "none", borderRadius: 8, padding: "5px 11px", cursor: "pointer" }}
-              >수정</button>
-            )}
-          </div>
-          <div style={{ background: "white", borderRadius: 20, boxShadow: "0 1px 2px rgba(15,26,48,.04), 0 10px 28px rgba(15,26,48,.06)", border: "1px solid #E6EBF3", padding: "14px 16px", marginBottom: 20 }}>
-            {!vehicleInfoEdit ? (
-              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                {[["차량종류", driver.차량종류 || "-"], ["톤수", driver.차량톤수 || "-"], ["거주지", driver.거주지 || "-"], ["요청사항", driver.요청사항 || "-"]].map(([label, value]) => (
-                  <div key={label} style={{ display: "flex", justifyContent: "space-between" }}>
-                    <span style={{ fontSize: 15.5, color: "#5B6B85", fontWeight: 600 }}>{label}</span>
-                    <span style={{ fontSize: 15.5, color: "#1B2B4B", fontWeight: 700, textAlign: "right", maxWidth: 200 }}>{value}</span>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-                  {/* ⭐ 2026-11-02 "직접입력"을 고르면 글자 칸이 열린다(예전엔 "직접입력"이라는 글자 자체가 저장됐다) */}
-                  {(() => {
-                    const cur = vehicleInfoEdit.차량종류 || "";
-                    const direct = vehicleInfoEdit.__vtDirect || (!!cur && !vehicleCats.includes(cur)) || cur === "직접입력";
-                    return (
-                      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                        <MobileSelect title="차량종류" value={direct ? "직접입력" : cur}
-                          onChange={e => { const v = e.target.value; setVehicleInfoEdit(p => v === "직접입력" ? ({ ...p, __vtDirect: true, 차량종류: vehicleCats.includes(p.차량종류 || "") ? "" : (p.차량종류 || "") }) : ({ ...p, __vtDirect: false, 차량종류: v })); }}
-                          style={{ padding: "9px 10px", borderRadius: 8, border: "1px solid #E6EBF3", fontSize: 15.5, background: "white", color: "#0F1A30", width: "100%" }}>
-                          <option value="">차량종류 선택</option>
-                          {vehicleCats.map(t => <option key={t} value={t}>{t}</option>)}
-                        </MobileSelect>
-                        {direct && (
-                          <input value={cur === "직접입력" ? "" : cur} placeholder="차량종류 입력 (예: 암롤)" autoFocus
-                            onChange={e => setVehicleInfoEdit(p => ({ ...p, __vtDirect: true, 차량종류: e.target.value }))}
-                            style={{ padding: "9px 10px", borderRadius: 8, border: "1px solid #C9D5EA", fontSize: 15.5, background: "white" }} />
-                        )}
-                      </div>
-                    );
-                  })()}
-                  <MobileSelect title="톤수" value={vehicleInfoEdit.차량톤수} onChange={e => setVehicleInfoEdit(p => ({ ...p, 차량톤수: e.target.value }))}
-                    style={{ padding: "9px 10px", borderRadius: 8, border: "1px solid #E6EBF3", fontSize: 15.5, background: "white", color: "#0F1A30", width: "100%" }}>
-                    <option value="">톤수 선택</option>
-                    {TON_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
-                  </MobileSelect>
-                </div>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-                  <MobileSelect title="거주지 (시/도)" value={vehicleInfoEdit.residenceProvince}
-                    onChange={e => setVehicleInfoEdit(p => ({ ...p, residenceProvince: e.target.value, residenceCity: "" }))}
-                    style={{ padding: "9px 10px", borderRadius: 8, border: "1px solid #E6EBF3", fontSize: 15.5, background: "white", color: "#0F1A30", width: "100%" }}>
-                    <option value="">거주지(시/도)</option>
-                    {RESIDENCE_PROVINCES.map(t => <option key={t} value={t}>{t}</option>)}
-                  </MobileSelect>
-                  {RESIDENCE_SUB_REGIONS[vehicleInfoEdit.residenceProvince] ? (
-                    <MobileSelect title="거주지 (시/군)" value={vehicleInfoEdit.residenceCity} onChange={e => setVehicleInfoEdit(p => ({ ...p, residenceCity: e.target.value }))}
-                      style={{ padding: "9px 10px", borderRadius: 8, border: "1px solid #E6EBF3", fontSize: 15.5, background: "white", color: "#0F1A30", width: "100%" }}>
-                      <option value="">시/군 선택</option>
-                      {RESIDENCE_SUB_REGIONS[vehicleInfoEdit.residenceProvince].map(t => <option key={t} value={t}>{t}</option>)}
-                    </MobileSelect>
-                  ) : <div />}
-                </div>
-                <textarea value={vehicleInfoEdit.요청사항} onChange={e => setVehicleInfoEdit(p => ({ ...p, 요청사항: e.target.value }))}
-                  rows={2} placeholder="요청사항"
-                  style={{ padding: "9px 10px", borderRadius: 8, border: "1px solid #E6EBF3", fontSize: 15.5, resize: "none" }} />
-                <div style={{ display: "flex", gap: 8 }}>
-                  <button onClick={() => setVehicleInfoEdit(null)}
-                    style={{ flex: 1, padding: "9px", borderRadius: 8, border: "1px solid #E6EBF3", background: "white", color: "#5B6B85", fontSize: 15.5, fontWeight: 700, cursor: "pointer" }}>취소</button>
-                  <button
-                    onClick={async () => {
-                      const residence = vehicleInfoEdit.residenceCity ? `${vehicleInfoEdit.residenceProvince} ${vehicleInfoEdit.residenceCity}` : vehicleInfoEdit.residenceProvince;
-                      const patch = {
-                        차량종류: vehicleInfoEdit.차량종류,
-                        차량톤수: vehicleInfoEdit.차량톤수,
-                        거주지: residence,
-                        요청사항: vehicleInfoEdit.요청사항.trim(),
-                        vehicleType: vehicleInfoEdit.차량종류 && vehicleInfoEdit.차량톤수 ? `${vehicleInfoEdit.차량종류} ${vehicleInfoEdit.차량톤수}` : driver.vehicleType || "",
-                      };
-                      try {
-                        await updateDoc(doc(db, "drivers", uid), patch);
-                        await updateDoc(doc(db, "users", uid), patch).catch(() => {});
-                        showToast("저장되었습니다");
-                        setVehicleInfoEdit(null);
-                      } catch (_) { showToast("저장 중 오류가 발생했습니다"); }
-                    }}
-                    style={{ flex: 1, padding: "9px", borderRadius: 8, border: "none", background: "#1B2B4B", color: "white", fontSize: 15.5, fontWeight: 700, cursor: "pointer" }}>저장</button>
-                </div>
-              </div>
-            )}
-          </div>
 
           {/* 위치 설정 */}
           <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 8, paddingLeft: 4 }}><span style={{ width: 6, height: 6, background: "#2D4C82", transform: "rotate(45deg)" }} /><span style={{ fontSize: 12.5, fontWeight: 800, color: "#9AA9C3", letterSpacing: "0.22em", fontFamily: DRV_MONO }}>GPS</span><span style={{ fontSize: 15.5, fontWeight: 900, color: "#0F1A30" }}>위치 설정</span></div>
@@ -3770,14 +3739,16 @@ export default function DriverHome() {
         </div>
       )}
 
+      </div>
       {/* ─── 하단 탭 바 ─── */}
       {/* ⭐ 2026-11-08 리디자인 — 화면 아래에 떠 있는 유리 독(dock), 글씨·아이콘 크게 */}
       <div style={{
-        position: "fixed", bottom: navBottomOffset, left: 0, right: 0, zIndex: 200,
-        padding: "0 10px calc(10px + env(safe-area-inset-bottom, 0px))", pointerEvents: "none",
+        position: "relative", flexShrink: 0, zIndex: 200,
+        padding: "8px 10px calc(8px + env(safe-area-inset-bottom, 0px))",
+        background: "linear-gradient(180deg, rgba(238,242,248,0) 0%, rgba(238,242,248,.95) 40%)", marginTop: -8,
       }}>
       <div style={{
-        maxWidth: 560, margin: "0 auto", pointerEvents: "auto",
+        maxWidth: 560, margin: "0 auto",
         background: "rgba(255,255,255,0.86)", border: "1px solid rgba(214,224,240,0.9)", borderRadius: 24,
         backdropFilter: "blur(18px) saturate(1.6)", WebkitBackdropFilter: "blur(18px) saturate(1.6)",
         boxShadow: "0 12px 36px rgba(11,20,40,0.16), inset 0 1px 0 rgba(255,255,255,0.9)", display: "flex", padding: "6px 4px",
