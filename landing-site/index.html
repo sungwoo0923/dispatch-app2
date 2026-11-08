@@ -687,7 +687,7 @@
   // 🛡 2026-11-08 App Check(홈페이지) — reCAPTCHA Enterprise 사이트 키를 넣으면 켜진다(비어 있으면 지금과 똑같이 동작).
   //  키는 공개값(본체 VITE_APPCHECK_SITE_KEY와 같은 키) · 순서: docs/appcheck-setup.md
   //  게시본 읽기(kp-site.js)와 도입 문의 저장이 이 토큰을 같이 보낸다 → Firestore App Check "적용" 전에 꼭 넣을 것
-  window.KP_APPCHECK_SITE_KEY = "";
+  window.KP_APPCHECK_SITE_KEY = "6LddUxYuAAAAALdhtQCEl91b2mks0j89cYBRAhS8"; // reCAPTCHA Enterprise 사이트 키(공개용 값)
   if (window.KP_APPCHECK_SITE_KEY) window.kpAppCheckReady = new Promise(function (ok) { window.__kpAppCheckResolve = ok; });
 </script>
 <script src="kp-site.js"></script>
