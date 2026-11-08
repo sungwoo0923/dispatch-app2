@@ -55,7 +55,8 @@ export function tireInfo(drv = {}) {
   return { odo, lastKm, lastDate: last.date || "", nextKm, left, interval, level };
 }
 // 출근·퇴근 전에 오일 알림을 확인해야 하나
-export const needOilConfirm = (drv) => oilInfo(drv).level >= 1;
+// ⭐ 2026-11-08 점검 — 오늘 이미 확인했으면 다시 묻지 않는다(예전엔 확인 기록을 저장만 하고 안 읽어 출근·퇴근마다 다시 떴다)
+export const needOilConfirm = (drv) => oilInfo(drv).level >= 1 && drv?.oilAlertAck?.date !== today();
 
 // ─── 저장 ───
 async function save(uid, by, patch, log) {

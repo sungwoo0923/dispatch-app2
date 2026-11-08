@@ -1483,8 +1483,10 @@ export default function DriverHome() {
         ...logExtra,
       });
       showToast(`${isFinal ? "최종 퇴근" : newStatus} 처리되었습니다`);
+      return true;
     } catch (e) {
       showToast("처리 중 오류가 발생했습니다");
+      return false;
     } finally {
       setStatusLoading(false);
     }
@@ -1596,8 +1598,8 @@ export default function DriverHome() {
     setOdoBusy(true);
     try {
       await saveCheckoutKm(uid, `${driver?.name || "기사"}(기사)`, km);
-      await updateStatus(st, { odometer: km });
-      setOdoSheet(null);
+      // 퇴근 처리가 실패하면 창을 닫지 않는다(다시 누를 수 있게)
+      if (await updateStatus(st, { odometer: km })) setOdoSheet(null);
     } catch (e) {
       showToast("키로수 저장 중 오류가 발생했습니다");
     } finally { setOdoBusy(false); }
@@ -1657,7 +1659,16 @@ export default function DriverHome() {
       // ⭐ 사용자 요청 — 거절하면 이 오더는 다시 배차 전 상태(배차중)로 돌아가야 하고,
       // 4/5파트 배차현황에서도 차량번호/이름/전화번호가 사라져야 한다(이 기사에게
       // 배정됐던 흔적을 지워 담당자가 바로 다른 차량을 다시 배정할 수 있게).
-      await updateDoc(doc(db, rm.col || "orders", rm.orderId), {
+      // ⭐ 2026-11-08 점검 — 거절 창을 띄워 둔 사이 담당자가 다른 차량으로 바꿨으면 그 배차를 지우지 않는다
+      const ref = doc(db, rm.col || "orders", rm.orderId);
+      const cur = await getDoc(ref);
+      const norm = (v) => String(v || "").replace(/\s/g, "");
+      if (cur.exists() && norm(cur.data()?.차량번호) && norm(driver?.차량번호 || driver?.carNo) && norm(cur.data()?.차량번호) !== norm(driver?.차량번호 || driver?.carNo)) {
+        showToast("이미 다른 차량으로 배차가 바뀐 오더입니다");
+        setRejectModal(null); setRejectReason(""); setOrderBanner(null);
+        return;
+      }
+      await updateDoc(ref, {
         기사확인상태: "거절",
         기사거절사유: reason,
         기사확인일시: serverTimestamp(),
@@ -1681,7 +1692,7 @@ export default function DriverHome() {
     } finally {
       setOrderActionLoading(false);
     }
-  }, [rejectModal, rejectReason, orderActionLoading, driver?.name]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [rejectModal, rejectReason, orderActionLoading, driver?.name, driver?.차량번호, driver?.carNo]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ⭐ 수정확인 — 지금 내용을 새 기준값으로 저장하고 확인 시각을 남긴다(관리자 노선관리에 표시)
   const handleConfirmChange = useCallback(async (o) => {
@@ -1973,6 +1984,9 @@ export default function DriverHome() {
         updatedAt: serverTimestamp(),
       };
       if (prevStatus === "출근") undoUpdate.isFinalCheckout = false;
+      // ⭐ 2026-11-08 점검 — 최종퇴근을 되돌리면 "당일 종료" 표시를 풀고 그때 0으로 만든 오늘 누적거리를 되살린다
+      //  (예전엔 직전 상태가 늘 "퇴근"이라 isFinalCheckout이 남아 출근 버튼만 보이고 자동 출근도 막혔다)
+      if (lastLog.status === "최종퇴근") { undoUpdate.isFinalCheckout = false; undoUpdate.totalDistance = Number(lastLog.finalDistance) || 0; }
       await updateDoc(doc(db, "drivers", uid), undoUpdate);
       showToast(`'${lastLog.status}' 취소 → '${prevStatus}'`);
     } catch (_) {
@@ -2612,7 +2626,7 @@ export default function DriverHome() {
                       ) : (
                         <ActiveOrderCard key={o._id} order={o} loading={orderActionLoading} pos={pos} onConfirmChange={handleConfirmChange}
                           queued={qi > 0} queueNo={qi + 1}
-                          photos={todayPhotos.filter(p => p.orderId === o._id)}
+                          photos={allPhotoLogs.filter(p => p.orderId === o._id)}
                           uploading={fleetPhotoUploading}
                           onUpload={(f, actionType) => handleFleetPhotoFile(f, actionType, o._id, o.__col || "orders")}
                           onComplete={() => handleCompleteOrder(o._id, o.__col)}
@@ -2676,7 +2690,7 @@ export default function DriverHome() {
               // ⭐ 진행중 오더의 사진은 각 오더 카드 안에서 올린다. 여기는 "방금 운송완료한 오더"의
               // 하차 사진을 아직 안 올린 경우에만 보여준다(완료하면 카드가 사라지므로).
               const lastDone = lastCompletedOrderId;
-              const lastDropSent = lastDone ? todayPhotos.some(p => p.actionType === "하차완료" && p.orderId === lastDone) : true;
+              const lastDropSent = lastDone ? allPhotoLogs.some(p => p.actionType === "하차완료" && p.orderId === lastDone) : true;
               // 완료 후 관리자가 기사취소/오더삭제했으면(내 오더 목록에서 사라졌거나 취소됨) 띄우지 않는다
               const lastStillMine = lastDone && myOrders.some(x => x._id === lastDone && x.기사확인상태 === "완료" && x.배차상태 !== "배차취소" && x.상태 !== "취소");
               if (!lastDone || lastDropSent || !lastStillMine) return null;
@@ -2684,8 +2698,8 @@ export default function DriverHome() {
               const loadTargetCol = "orders";
               const dropTargetId = lastCompletedOrderId;
               const dropTargetCol = lastCompletedOrderCol;
-              const loadedToday = loadTargetId ? todayPhotos.some(p => p.actionType === "상차완료" && p.orderId === loadTargetId) : false;
-              const droppedToday = dropTargetId ? todayPhotos.some(p => p.actionType === "하차완료" && p.orderId === dropTargetId) : false;
+              const loadedToday = loadTargetId ? allPhotoLogs.some(p => p.actionType === "상차완료" && p.orderId === loadTargetId) : false;
+              const droppedToday = dropTargetId ? allPhotoLogs.some(p => p.actionType === "하차완료" && p.orderId === dropTargetId) : false;
               const canUploadLoad = !!loadTargetId && !loadedToday;
               const canUploadDrop = !!dropTargetId && !droppedToday;
               const tile = (label, sent, enabled, targetId, targetCol, actionType) => (
@@ -3302,7 +3316,7 @@ export default function DriverHome() {
                         </div>
                       ); })}
                       {(() => {
-                        const dayPhotos = todayPhotos.filter(p => p.logDate === calendarDayDetail.dateStr);
+                        const dayPhotos = allPhotoLogs.filter(p => p.logDate === calendarDayDetail.dateStr);
                         if (!dayPhotos.length) return null;
                         return (
                           <div style={{ marginTop: 14 }}>

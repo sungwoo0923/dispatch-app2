@@ -212,6 +212,15 @@ service cloud.firestore {
     function isOfficeStaff() {
       return isTotalMasterUser() || (isApproved() && !(myRole() in ['driver', 'shipper']));
     }
+    // 🔒 2026-11-08 — 기사가 바꿀 수 있는 상태값을 정해 둔다(예전엔 '취소'·'납부 완료'를 아무 서류에나 넣을 수 있었다)
+    //  · 지급명세서: 읽음(read)·확인(confirmed)만 · 과태료: 기사 확인·이의 신청, 납부 완료는 기사가 직접 내는 건(기사 부담·회사 부담 아님)만
+    function driverStatusOk(dcol) {
+      let st = request.resource.data.get('status', '');
+      let same = st == resource.data.get('status', '');
+      let payer = string(resource.data.get('payer', ''));
+      return same || (dcol == 'driverStatements' ? st in ['read', 'confirmed']
+        : (st in ['기사 확인', '이의 신청'] || (st == '납부 완료' && !payer.matches('^(기사 부담|회사).*'))));
+    }
     match /{dcol}/{id} {
       allow read: if dcol in ['driverStatements', 'fleetPenalties'] && (
         (isOfficeStaff() && coMatch(resource.data)) || (isSignedIn() && resource.data.get('driverId', '') == request.auth.uid));
@@ -219,7 +228,8 @@ service cloud.firestore {
       allow update: if dcol in ['driverStatements', 'fleetPenalties'] && (
         (isOfficeStaff() && coMatch(resource.data) && coKeep()) ||
         (isSignedIn() && resource.data.get('driverId', '') == request.auth.uid
-          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['readAt', 'confirmedAt', 'status', 'driverMemo', 'paidAt', 'objectedAt', 'driverAction'])));
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['readAt', 'confirmedAt', 'status', 'driverMemo', 'paidAt', 'objectedAt', 'driverAction'])
+          && driverStatusOk(dcol)));
       allow delete: if dcol in ['driverStatements', 'fleetPenalties'] && isOfficeStaff() && coMatch(resource.data);
     }
     // 📜 계약서 보관함(전자결재 › 계약서) — 직원만
