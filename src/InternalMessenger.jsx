@@ -1313,21 +1313,77 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
     try { localStorage.setItem("kpWin:messenger", JSON.stringify({ w: cw, h: ch, p: k })); } catch { /* 무시 */ }
   };
   // ⭐ 2026-11-07 창 끌어서 옮기기
+  // ⭐ 2026-11-09 창 아무 곳이나 눌러 끌면 이동(버튼·입력칸·링크·글자 위·스크롤바는 제외, 5px 넘게 움직여야 시작)
+  //  · 다른 PC(화면이 작은 PC)에서 창 머리가 화면 위로 나가 다시 못 끌어오던 문제 → 위치·크기를 항상 화면 안으로 보정
   const [winPos, setWinPos] = useState(MSG_WIN_POS);
+  const [vp, setVp] = useState(() => ({ w: window.innerWidth, h: window.innerHeight }));
+  useEffect(() => {
+    const h = () => setVp({ w: window.innerWidth, h: window.innerHeight });
+    window.addEventListener("resize", h); return () => window.removeEventListener("resize", h);
+  }, []);
+  // 화면에 들어가는 크기(저장된 크기가 화면보다 크면 줄여서 보여준다 — 저장값은 그대로)
+  const effW = mobileMode ? panelW : Math.max(320, Math.min(panelW, vp.w - 16));
+  const effH = mobileMode ? panelH : Math.max(300, Math.min(panelH, vp.h - 56));
+  // 창 머리(위 끌기·크기 버튼 34px 포함)가 항상 화면 안에 보이게
+  const clampWinPos = (left, top, w = effW, h = effH) => ({
+    left: Math.round(Math.max(0, Math.min(window.innerWidth - Math.min(w, window.innerWidth), left))),
+    top: Math.round(Math.max(40, Math.min(Math.max(40, window.innerHeight - h - 8), top))),
+  });
+  const shownPos = winPos && !mobileMode ? clampWinPos(winPos.left, winPos.top) : null;
+  const NO_DRAG = "input,textarea,select,button,a,label,[contenteditable],[contenteditable=''],[contenteditable='true'],[role='button'],[data-msg-forward],[data-kp-popup],video,audio,img[data-msg-zoom]";
+  const overText = (x, y) => {
+    try {
+      let node = null, off = 0;
+      if (document.caretPositionFromPoint) { const c = document.caretPositionFromPoint(x, y); node = c?.offsetNode; off = c?.offset || 0; }
+      else if (document.caretRangeFromPoint) { const r = document.caretRangeFromPoint(x, y); node = r?.startContainer; off = r?.startOffset || 0; }
+      if (!node || node.nodeType !== 3 || !node.textContent.trim()) return false;
+      const rg = document.createRange();
+      rg.setStart(node, Math.max(0, Math.min(off, node.length - 1))); rg.setEnd(node, Math.min(node.length, Math.max(off, 1)));
+      return Array.from(rg.getClientRects()).some((b) => x >= b.left - 1 && x <= b.right + 1 && y >= b.top - 1 && y <= b.bottom + 1);
+    } catch { return false; }
+  };
+  const onScrollbar = (el, x, y) => {
+    for (let n = el; n && n.nodeType === 1; n = n.parentElement) {
+      const b = n.getBoundingClientRect();
+      if (n.scrollHeight > n.clientHeight + 1 && x > b.left + n.clientLeft + n.clientWidth) return true;
+      if (n.scrollWidth > n.clientWidth + 1 && y > b.top + n.clientTop + n.clientHeight) return true;
+      if (n.hasAttribute?.("data-msg-win")) break;
+    }
+    return false;
+  };
   const startMovePanelDrag = (e) => {
     if (mobileMode || e.button !== 0) return;
-    e.preventDefault();
-    const box = e.currentTarget.closest("[data-msg-win]")?.getBoundingClientRect();
-    if (!box) return;
-    const offX = e.clientX - box.left, offY = e.clientY - box.top;
+    const handle = !!e.target.closest?.("[data-msg-move]");
+    if (!handle) {
+      if (e.target.closest?.(NO_DRAG) || e.target.closest?.("[data-msg-resize]")) return;
+      if (onScrollbar(e.target, e.clientX, e.clientY) || overText(e.clientX, e.clientY)) return;
+    } else e.preventDefault();
+    const win = e.currentTarget.closest("[data-msg-win]") || e.currentTarget;
+    const box = win.getBoundingClientRect();
+    const sx = e.clientX, sy = e.clientY;
+    const offX = sx - box.left, offY = sy - box.top;
+    let moving = handle;
     const onMove = (ev) => {
-      const left = Math.max(0, Math.min(window.innerWidth - 120, ev.clientX - offX));
-      const top = Math.max(40, Math.min(window.innerHeight - 60, ev.clientY - offY));
-      MSG_WIN_POS = { left, top };
+      if (!moving) {
+        if (Math.abs(ev.clientX - sx) < 5 && Math.abs(ev.clientY - sy) < 5) return;
+        moving = true;
+        document.body.style.userSelect = "none";
+        try { window.getSelection()?.removeAllRanges(); } catch { /* 무시 */ }
+      }
+      MSG_WIN_POS = clampWinPos(ev.clientX - offX, ev.clientY - offY, box.width, box.height);
       setWinPos(MSG_WIN_POS);
     };
-    const onUp = () => { document.removeEventListener("mousemove", onMove); document.removeEventListener("mouseup", onUp); document.body.style.userSelect = ""; };
-    document.body.style.userSelect = "none";
+    const onUp = () => {
+      document.removeEventListener("mousemove", onMove); document.removeEventListener("mouseup", onUp);
+      document.body.style.userSelect = "";
+      // 끌어서 옮긴 뒤 손을 뗄 때 아래 항목이 눌리지 않게(한 번만)
+      if (moving && !handle) {
+        const stop = (ce) => { ce.stopPropagation(); ce.preventDefault(); };
+        window.addEventListener("click", stop, { capture: true, once: true });
+        setTimeout(() => window.removeEventListener("click", stop, { capture: true }), 0);
+      }
+    };
+    if (handle) document.body.style.userSelect = "none";
     document.addEventListener("mousemove", onMove);
     document.addEventListener("mouseup", onUp);
   };
@@ -1336,9 +1392,9 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
     e.preventDefault();
     const startX = e.clientX;
     const startY = e.clientY;
-    const startW = panelW;
-    const startH = panelH;
-    const startPos = MSG_WIN_POS;
+    const startW = effW;
+    const startH = effH;
+    const startPos = shownPos;
     resizingRef.current = true;
     const onMove = (ev) => {
       if (!resizingRef.current) return;
@@ -1448,7 +1504,7 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
       border: "1px solid #e2e8f0",
     }}>
       {/* 왼쪽: 친구/채팅 목록 */}
-      <div style={{ width: Math.round(panelW * 240 / 700), flexShrink: 0, borderRight: "1px solid #e5e7eb", overflow: "hidden", display: "flex", flexDirection: "column" }}>
+      <div style={{ width: Math.round(effW * 240 / 700), flexShrink: 0, borderRight: "1px solid #e5e7eb", overflow: "hidden", display: "flex", flexDirection: "column" }}>
         {view === "profile" ? (
           <ProfileView
             myProfile={myProfile}
@@ -1883,13 +1939,13 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
 
       {/* 메신저 패널 */}
       {open && (
-        <div data-ro-allow data-msg-win style={{
-          position: "fixed", ...(winPos && !mobileMode ? { left: winPos.left, top: winPos.top } : { bottom: 24, right: 92 }),
-          width: panelW, height: panelH, zIndex: 99997, borderRadius: 22, boxShadow: "0 24px 60px rgba(15,26,48,0.35)",
+        <div data-ro-allow data-msg-win onMouseDown={startMovePanelDrag} style={{
+          position: "fixed", ...(shownPos ? { left: shownPos.left, top: shownPos.top } : { bottom: 24, right: Math.max(8, Math.min(92, vp.w - effW - 8)) }),
+          width: effW, height: effH, zIndex: 99997, borderRadius: 22, boxShadow: "0 24px 60px rgba(15,26,48,0.35)",
         }}>
           {/* 크기 버튼(작게·보통·크게) — 창 위쪽 오른편 */}
           {!mobileMode && (
-            <div data-msg-move onMouseDown={startMovePanelDrag} title="끌어서 옮기기" style={{ position: "absolute", top: -34, left: 0, height: 30, display: "flex", alignItems: "center", gap: 6, padding: "0 12px", borderRadius: 12, background: "#0F1A30", color: "#C9D7F2", boxShadow: "0 8px 20px rgba(15,26,48,0.3)", cursor: "move", userSelect: "none", fontSize: 12, fontWeight: 800, fontFamily: "'Noto Sans KR','Malgun Gothic',sans-serif" }}>
+            <div data-msg-move title="끌어서 옮기기 (창 빈 곳 어디든 끌어도 됩니다)" style={{ position: "absolute", top: -34, left: 0, height: 30, display: "flex", alignItems: "center", gap: 6, padding: "0 12px", borderRadius: 12, background: "#0F1A30", color: "#C9D7F2", boxShadow: "0 8px 20px rgba(15,26,48,0.3)", cursor: "move", userSelect: "none", fontSize: 12, fontWeight: 800, fontFamily: "'Noto Sans KR','Malgun Gothic',sans-serif" }}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2v20M2 12h20M12 2l-3 3M12 2l3 3M12 22l-3-3M12 22l3-3M2 12l3-3M2 12l3 3M22 12l-3-3M22 12l-3 3" /></svg>
               끌어서 옮기기
             </div>
@@ -1900,7 +1956,8 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
           </div>
           {/* 리사이즈 핸들 (패널 왼쪽 상단 모서리) */}
           <div
-            onMouseDown={startResizePanelDrag}
+            data-msg-resize
+            onMouseDown={(e) => { e.stopPropagation(); startResizePanelDrag(e); }}
             style={{
               position: "absolute", top: 0, left: 0,
               width: 22, height: 22, cursor: "nw-resize",
