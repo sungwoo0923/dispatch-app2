@@ -12,6 +12,7 @@
 //           목표 = companySettings.매출목표.순수매출목표(연간) ÷ 12
 //  · 받기 설정(DailyReportSettings) · 아침 요약 팝업(DailyReportPopupHost)도 이 파일에.
 import React from "react";
+import { planIncludes, useCompanyPlanId } from "./plans"; // 💳 2026-11-09 요금제 잠금
 import { doc, onSnapshot, collection, query, where } from "firebase/firestore";
 import { db } from "./firebase";
 import { OrdersWeatherStrip } from "./publicDataMain"; // 🌦 2026-11-07 운행 지역 날씨 · 특보
@@ -879,7 +880,9 @@ export function DailyReportPopupHost({ company, dispatchData = [], drivers = [],
   React.useEffect(() => { const t = setInterval(() => setNow(kstHm()), 60000); return () => clearInterval(t); }, []);
   const forced = (() => { try { return import.meta.env.DEV && new URLSearchParams(window.location.search).get("briefPopup") === "1"; } catch { return false; } })();
   const previewOnly = (() => { try { return import.meta.env.DEV && isBriefDemo() && !isDemoOn(); } catch { return false; } })(); // 둘러보기(demo 없이)는 팝업 안 띄움
-  const allowed = !previewOnly && canSeeBriefing({ isExec }) && co.recipients[uid] !== false;
+  // 💳 2026-11-09 요금제 — 일일 경영 보고는 스탠다드부터(메뉴가 잠긴 요금제에는 아침 팝업도 띄우지 않는다)
+  const planId = useCompanyPlanId(company);
+  const allowed = !previewOnly && canSeeBriefing({ isExec }) && co.recipients[uid] !== false && planIncludes(planId, "export");
   const p = pf.prefs;
   const dismissKey = `kpBriefDismiss:${uid}:${today}`;
   const laterKey = `kpBriefLater:${uid}:${today}`;
