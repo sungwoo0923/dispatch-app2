@@ -13,6 +13,9 @@ const MODEL = "claude-opus-5-5";
 const MAX_ROUNDS = 8; // 한 질문에 도구를 부르며 왕복하는 최대 횟수
 const MAX_HISTORY_BYTES = 600 * 1024;
 
+// ⭐ 2026-11-09 API 키 — secrets:set 때 붙은 줄바꿈·공백·따옴표 때문에 "키가 올바르지 않습니다"가 나는 경우가 많아 다듬어서 쓴다
+const cleanKey = () => String(process.env.ANTHROPIC_API_KEY || "").trim().replace(/^["']|["']$/g, "").trim();
+const keyHint = () => { const k = cleanKey(); return k ? `${k.slice(0, 10)}…${k.slice(-4)} (${k.length}자${String(process.env.ANTHROPIC_API_KEY || "") !== k ? " · 앞뒤 공백/따옴표 정리함" : ""})` : "없음"; };
 const kstNow = () => new Date(Date.now() + 9 * 3600e3);
 const kstDate = () => kstNow().toISOString().slice(0, 10);
 const tsMs = (v) => (v?.toMillis ? v.toMillis() : v?.seconds ? v.seconds * 1000 : typeof v === "number" ? v : typeof v === "string" && /^\d{4}-\d{2}-\d{2}/.test(v) ? Date.parse(v) || 0 : 0);
@@ -46,7 +49,15 @@ const TOOLS = {
       const sum = {};
       list.forEach((v) => { const s = v.status || "미청구"; sum[s] = sum[s] || { count: 0, amount: 0 }; sum[s].count += 1; sum[s].amount += Number(v.amount) || 0; });
       list.sort((a, b) => String(b.month).localeCompare(String(a.month)));
-      return { total: list.length, byStatus: sum, rows: list.slice(0, 200).map((v) => ({ company: v.company, month: v.month, amount: Number(v.amount) || 0, status: v.status || "미청구", paidAt: v.paidAt || "", payNotice: v.payNotice ? `${v.payNotice.name || ""} ${v.payNotice.date || ""}`.trim() : "" })) };
+      // ⭐ 2026-11-09 연체 판정 — 상태가 '연체'이거나, '청구' 상태로 청구 달이 이미 지난 건(이번 달 전) = 연체로 본다
+      const thisMonth = kstDate().slice(0, 7);
+      const monthsLate = (m) => { const [y, mo] = String(m || "").split("-").map(Number); const [ty, tm] = thisMonth.split("-").map(Number); return y && mo ? (ty - y) * 12 + (tm - mo) : 0; };
+      const overdue = list.filter((v) => (v.status === "연체") || (v.status === "청구" && String(v.month || "") < thisMonth))
+        .map((v) => ({ company: v.company, month: v.month, amount: Number(v.amount) || 0, status: v.status, monthsLate: monthsLate(v.month) }))
+        .sort((x, y) => y.amount - x.amount);
+      const overdueByCompany = {};
+      overdue.forEach((v) => { const o = overdueByCompany[v.company] || (overdueByCompany[v.company] = { company: v.company, months: 0, amount: 0, oldest: v.month }); o.months += 1; o.amount += v.amount; if (String(v.month) < String(o.oldest)) o.oldest = v.month; });
+      return { today: kstDate(), overdue, overdueByCompany: Object.values(overdueByCompany).sort((x, y) => y.amount - x.amount), total: list.length, byStatus: sum, rows: list.slice(0, 200).map((v) => ({ company: v.company, month: v.month, amount: Number(v.amount) || 0, status: v.status || "미청구", paidAt: v.paidAt || "", payNotice: v.payNotice ? `${v.payNotice.name || ""} ${v.payNotice.date || ""}`.trim() : "" })) };
     },
   },
   get_company_plans: {
@@ -55,6 +66,54 @@ const TOOLS = {
     async run(db) {
       const list = docs(await db.collection("companyPlans").get());
       return { total: list.length, rows: list.map((p) => ({ company: p.id, planId: p.planId || "", since: p.since || "" })) };
+    },
+  },
+  get_pricing: {
+    description: "요금제 관리에 저장된 요금표 — 요금제별 월 기본료·포함 직원/오더/지입차/저장 용량·도입비, 초과·추가 단가(추가 직원·초과 오더·지입차·저장 용량·세금계산서·문자 등). 금액 VAT 별도.",
+    input_schema: { type: "object", properties: {} },
+    async run(db) {
+      const s = await db.collection("siteConfig").doc("salesPricing").get();
+      const d = s.exists ? s.data() || {} : {};
+      const pick = ["extraSeat", "extraOrder", "fleetPerVehicle", "storageGB", "storagePerGB", "extraBizFee", "taxInvoiceFee", "alimtalkFee", "smsFee", "lmsFee", "setupFee", "migrationFee", "trainingFee", "routeBoardSetupFee", "devHourRate", "devDayRate", "annualFreeMonths", "semiDiscountRate", "waiveSetupMonths", "minContractMonths"];
+      return { saved: s.exists, plans: (d.plans || []).map((p) => ({ id: p.id, name: p.name, price: Number(p.price) || 0, seats: Number(p.seats) || 0, orders: Number(p.orders) || 0, fleet: Number(p.fleet) || 0, storageGB: p.storageGB ?? "", setupFee: p.setupFee ?? "" })), rates: Object.fromEntries(pick.filter((k) => d[k] != null).map((k) => [k, d[k]])) };
+    },
+  },
+  get_billing_estimate: {
+    description: "운송사별 이달(또는 지정 달) 청구 계산서 — 요금제 기본료 + 초과 사용량(직원 계정·월말 예상 오더·지입차·저장 용량) + 수납 관리에서 붙인 추가 항목 = 자동 계산액, 그리고 수납 원장에 저장된 확정 금액·상태. 청구서가 아직 저장되지 않은 회사도 포함. 사용량은 서버 집계(매일 새벽 갱신) 기준.",
+    input_schema: { type: "object", properties: { month: { type: "string", description: "YYYY-MM. 비우면 이번 달" }, company: { type: "string", description: "특정 회사만" } } },
+    async run(db, { month, company } = {}) {
+      const ym = /^\d{4}-\d{2}$/.test(String(month || "")) ? month : kstDate().slice(0, 7);
+      const [statsS, plansS, priceS, invS] = await Promise.all([
+        db.collection("siteConfig").doc("platformStats").get(), db.collection("companyPlans").get(),
+        db.collection("siteConfig").doc("salesPricing").get(), db.collection("platformInvoices").where("month", "==", ym).get(),
+      ]);
+      const stats = statsS.exists ? statsS.data() || {} : {};
+      const price = priceS.exists ? priceS.data() || {} : {};
+      const n = (v) => Number(v) || 0;
+      const planMap = {}; plansS.docs.forEach((d) => { planMap[d.id] = d.data() || {}; });
+      const invMap = {}; invS.docs.forEach((d) => { const v = d.data() || {}; invMap[normCo(v.company)] = v; });
+      const today = kstDate(); const isCur = ym === today.slice(0, 7);
+      const days = new Date(Number(ym.slice(0, 4)), Number(ym.slice(5, 7)), 0).getDate();
+      const dayNo = isCur ? Number(today.slice(8, 10)) : days;
+      let rows = (stats.companies || []).filter((c) => c.kind !== "shipper").map((c) => {
+        const cp = planMap[normCo(c.name)] || {};
+        const p = (price.plans || []).find((x) => x.id === cp.planId);
+        const orders = isCur ? n(c.m?.cnt) : n(c.pm?.cnt);
+        const projected = isCur && dayNo ? Math.round(orders / dayNo * days) : orders;
+        const inv = invMap[normCo(c.name)] || null;
+        const itemsTotal = (inv?.items || []).reduce((a, x) => a + n(x.amount), 0);
+        if (!p) return { company: c.name, plan: cp.planId ? `${cp.planId}(요금표에 없음)` : "미지정(공통 청구 기준)", staff: n(c.staff), ordersSoFar: orders, projectedOrders: projected, saved: inv ? { amount: n(inv.amount), status: inv.status || "미청구", manual: !!inv.amountManual } : null, itemsTotal };
+        const storageGB = Math.round(n(c.storageKB) / 1048576 * 100) / 100;
+        const limitGB = p.storageGB !== "" && p.storageGB != null ? n(p.storageGB) : n(price.storageGB);
+        const hasFleet = ["standard", "pro"].includes(cp.planId);
+        const extra = { seats: Math.max(0, n(c.staff) - n(p.seats)), orders: Math.max(0, projected - n(p.orders)), fleet: hasFleet ? Math.max(0, n(c.fleetJ) - n(p.fleet)) : 0, storageGB: Math.max(0, Math.ceil(storageGB - limitGB)) };
+        const fee = { base: n(p.price), seats: extra.seats * n(price.extraSeat), orders: extra.orders * n(price.extraOrder), fleet: extra.fleet * n(price.fleetPerVehicle), storage: extra.storageGB * n(price.storagePerGB), items: itemsTotal };
+        const auto = Object.values(fee).reduce((a, v) => a + v, 0);
+        return { company: c.name, plan: p.name, extraSeatsBought: n(cp.extraSeats), usage: { staff: n(c.staff), seatsIncluded: n(p.seats), ordersSoFar: orders, projectedOrders: projected, ordersIncluded: n(p.orders), fleet: n(c.fleetJ), fleetIncluded: n(p.fleet), storageGB, storageIncludedGB: limitGB }, extra, fee, autoTotal: auto, saved: inv ? { amount: n(inv.amount), status: inv.status || "미청구", manual: !!inv.amountManual, paidAt: inv.paidAt || "" } : null, billAmount: inv ? n(inv.amount) : auto };
+      });
+      if (company) rows = rows.filter((r) => normCo(r.company) === normCo(company));
+      rows.sort((a, b) => n(b.billAmount ?? b.autoTotal) - n(a.billAmount ?? a.autoTotal));
+      return { month: ym, basis: isCur ? `이번 달 ${dayNo}일까지 오더로 월말 예상` : "그달 실제 오더", statsUpdatedAt: kstStr(n(stats.updatedAtMs)), vat: "모든 금액 VAT 별도", total: rows.length, sumBill: rows.reduce((a, r) => a + n(r.billAmount), 0), rows };
     },
   },
   get_plan_requests: {
@@ -178,12 +237,12 @@ const COMMON = `
 const TEAMS = {
   acct: {
     name: "경리·회계팀",
-    tools: ["get_invoices", "get_company_plans", "get_plan_requests"],
-    role: "당신은 경리·회계팀장이다. 운송사별 월 이용료 청구, 입금 확인, 미수금·연체 관리, 요금제 변경 요청 처리를 맡는다. 미납·연체를 가장 먼저 짚고, 입금 독촉이 필요한 회사를 금액 큰 순서로 정리한다.",
+    tools: ["get_invoices", "get_billing_estimate", "get_pricing", "get_company_plans", "get_plan_requests", "get_companies_overview"],
+    role: "당신은 경리·회계팀장이다. [용어] 청구액 = 요금제 기본료 + 초과 사용량(직원 계정·오더·지입차·저장 용량) + 추가 항목, 모두 VAT 별도. 수납 원장(get_invoices)의 상태: 미청구(아직 안 보냄)·청구(입금 대기)·연체·입금완료. 연체 = 상태 '연체' 또는 청구 달이 지난 '청구' 건(overdue). 회수율 = 입금완료 금액 ÷ 청구 금액. 이번 달 청구 예정·예상은 get_billing_estimate(저장 안 된 회사 포함), 요금·단가 질문은 get_pricing을 먼저 조회한다. 계산이 들어간 답은 계산식(예: 349,000 + 직원 2명×20,000)을 함께 보여 준다. 질문이 모호하면 가장 그럴듯한 해석으로 답하고 끝에 어떤 기준으로 봤는지 한 줄로 밝힌다. 운송사별 월 이용료 청구, 입금 확인, 미수금·연체 관리, 요금제 변경 요청 처리를 맡는다. 미납·연체를 가장 먼저 짚고, 입금 독촉이 필요한 회사를 금액 큰 순서로 정리한다.",
   },
   finance: {
     name: "재무팀",
-    tools: ["get_invoices", "get_company_plans", "get_companies_overview"],
+    tools: ["get_invoices", "get_billing_estimate", "get_pricing", "get_company_plans", "get_companies_overview"],
     role: "당신은 재무팀장이다. 월별 매출 추이, 회수율(입금완료 ÷ 청구), 요금제 구성, 고객사 규모 대비 매출을 분석해 경영진에게 보고한다. 전월 대비 증감과 위험 신호를 숫자로 제시한다.",
   },
   sales: {
@@ -222,7 +281,7 @@ async function runTeamChat({ db, team, history, text }) {
   const prev = Array.isArray(history) ? history : [];
   if (Buffer.byteLength(JSON.stringify(prev)) > MAX_HISTORY_BYTES) throw Object.assign(new Error("대화가 너무 길어졌습니다. [새 대화]로 시작해 주세요."), { status: 413 });
 
-  const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+  const client = new Anthropic({ apiKey: cleanKey() });
   const messages = [...prev, { role: "user", content: `[오늘 ${kstDate()}] ${q}` }];
   const tools = toolDefs(team);
   const system = systemOf(team);
@@ -237,7 +296,7 @@ async function runTeamChat({ db, team, history, text }) {
       system,
       tools,
       messages,
-      output_config: { effort: "medium" },
+      output_config: { effort: team === "acct" || team === "finance" ? "high" : "medium" }, // ⭐ 2026-11-09 경리·재무는 숫자 정확도 우선
       cache_control: { type: "ephemeral" },
       // 안전 분류기가 거절하면 서버가 알아서 다른 모델로 이어서 답한다
       betas: ["server-side-fallback-2026-07-01"],
@@ -280,7 +339,7 @@ async function runTeamChat({ db, team, history, text }) {
 }
 
 function apiErrorMessage(e) {
-  if (e instanceof Anthropic.AuthenticationError) return { status: 502, msg: "Claude API 키가 올바르지 않습니다. Firebase 비밀값 ANTHROPIC_API_KEY를 확인해 주세요." };
+  if (e instanceof Anthropic.AuthenticationError) return { status: 502, msg: `Claude API 키가 올바르지 않습니다(등록된 키: ${keyHint()}). Claude Console(console.anthropic.com) › API Keys에서 키가 살아 있는지 확인하고, 새 키로 다시 등록·배포해 주세요: firebase functions:secrets:set ANTHROPIC_API_KEY → firebase deploy --only functions` };
   if (e instanceof Anthropic.PermissionDeniedError) return { status: 502, msg: "이 API 키로는 사용할 수 없는 기능입니다. Claude Console에서 키 권한을 확인해 주세요." };
   if (e instanceof Anthropic.RateLimitError) return { status: 429, msg: "요청이 너무 많습니다. 잠시 후 다시 시도해 주세요." };
   if (e instanceof Anthropic.BadRequestError) {
@@ -293,4 +352,4 @@ function apiErrorMessage(e) {
   return { status: e?.status || 500, msg: e?.message || String(e) };
 }
 
-module.exports = { runTeamChat, apiErrorMessage, TEAMS, TOOLS };
+module.exports = { runTeamChat, apiErrorMessage, TEAMS, TOOLS, cleanKey };
