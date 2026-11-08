@@ -6765,3 +6765,42 @@ const _popbillAdmin = _popbill.makePopbillAdmin({
 exports.popbillAdmin = functions.runWith({ ...(POPBILL_ON ? { secrets: ["POPBILL_LINK_ID", "POPBILL_SECRET_KEY"] } : {}), timeoutSeconds: 60, memory: "256MB" }).https.onCall(async (data, context) => {
   try { return await _popbillAdmin(data, context.auth); } catch (e) { throw pdHttpsError(e); }
 });
+
+// 💬🏦 2026-11-08 팝빌 자동화 — 카카오 알림톡 배차 알림(functions/alimtalk.js) · 은행 입금 자동 조회 → 미수금 매칭(functions/bankSync.js)
+//  팝빌이 꺼져 있으면(키 없음 · 스위치 꺼짐 · 연동회원 없음) 팝빌을 부르지 않고 "팝빌 연결 전"으로만 기록한다 — 키를 넣으면 그대로 켜진다
+const popbillSecrets = () => (POPBILL_ON ? { linkId: process.env.POPBILL_LINK_ID || "", secretKey: process.env.POPBILL_SECRET_KEY || "" } : {});
+const getPopbillAdapter = async () => {
+  const s = await db.collection("integrationConfig").doc("popbill").get().catch(() => null);
+  const { linkId = "", secretKey = "" } = popbillSecrets();
+  return _popbill.createPopbill({ linkId, secretKey, config: s?.exists ? s.data() || {} : {} });
+};
+const PB_RUN = POPBILL_ON ? { secrets: ["POPBILL_LINK_ID", "POPBILL_SECRET_KEY"] } : {};
+const _alimtalk = require("./alimtalk").makeAlimtalk({ db, FieldValue, getPopbill: getPopbillAdapter, callerOf: _publicData.callerOf });
+const _bankSync = require("./bankSync").makeBankSync({ db, FieldValue, getPopbill: getPopbillAdapter, callerOf: _publicData.callerOf });
+exports.alimtalkOnOrderWrite = functions.runWith({ ...PB_RUN, timeoutSeconds: 60, memory: "256MB" }).firestore
+  .document("{col}/{dispatchId}")
+  .onWrite(async (change, context) => {
+    const { col, dispatchId } = context.params;
+    if (!["dispatch", "orders"].includes(col)) return null;
+    const after = change.after.exists ? change.after.data() : null;
+    if (!after || after.알림톡 !== true) return null; // 대부분의 쓰기는 여기서 끝(읽기 없음)
+    try {
+      if (await isBulkModeFor(after.companyName)) return null;
+      const r = await _alimtalk.onOrderWrite({ col, id: dispatchId, before: change.before.exists ? change.before.data() : null, after });
+      if (r && !r.skipped) console.log("[알림톡]", col, dispatchId, r.status);
+    } catch (e) { console.error("[알림톡] 실패:", col, dispatchId, e?.message || e); }
+    return null;
+  });
+exports.alimtalkSend = functions.runWith({ ...PB_RUN, timeoutSeconds: 60, memory: "256MB" }).https.onCall(async (data, context) => {
+  try { return await _alimtalk.sendManual(data, context.auth); } catch (e) { throw pdHttpsError(e); }
+});
+exports.bankDeposits = functions.runWith({ ...PB_RUN, timeoutSeconds: 120, memory: "512MB" }).https.onCall(async (data, context) => {
+  try { return await _bankSync.action(data, context.auth); } catch (e) { throw pdHttpsError(e); }
+});
+// 매시간 08:00~20:00(한국 시각) — 계좌를 켠 회사의 새 입금만 받아 맞춰 본다
+exports.bankDepositSync = functions.runWith({ ...PB_RUN, timeoutSeconds: 540, memory: "512MB" })
+  .pubsub.schedule("0 8-20 * * *").timeZone("Asia/Seoul").onRun(async () => {
+    const r = await _bankSync.syncAll().catch((e) => [{ error: String(e?.message || e) }]);
+    console.log("[계좌조회] 동기화:", JSON.stringify(r.map((x) => ({ company: x.company, new: x.new, auto: x.auto, review: x.review, off: x.off, error: x.error }))));
+    return null;
+  });

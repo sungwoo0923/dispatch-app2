@@ -32,6 +32,8 @@ import InternalMessenger from "../InternalMessenger";
 import { subscribeOrderSync, deleteOrderWithLog, historyStartDate, pcLiveWindowStart } from "../orderHistory";
 import CustomDatePicker from "../CustomDatePicker";
 import { askCopyDates } from "../CopyCountDialog"; // ⭐ 2026-11-06 오더 복사 — 몇 건·건별 날짜
+import { AlimtalkOrderToggle, AlimtalkOrderPanel } from "../PopbillAuto"; // 💬 2026-11-08 알림톡 배차 알림(PC와 같음)
+import { alimtalkDefaultNow, watchAlimtalkDefault } from "../popbillAuto";
 import { UrgentBadge, URGENT_BAR, URGENT_TINT } from "../urgentOrder"; // ⭐ 2026-11-06 긴급 오더 강조
 import MobileSelect from "./MobileSelect"; // ⭐ 2026-11-02 기본 select → 남색 바텀시트 선택기
 import RouteMapModal from "../RouteMapModal";
@@ -2087,6 +2089,8 @@ const mobileLiveStart = () => new Date(Date.now() + 9 * 3600e3 - MOBILE_LIVE_DAY
 const prevDayStr = (ymd) => { const d = new Date(`${ymd}T00:00:00Z`); d.setUTCDate(d.getUTCDate() - 1); return d.toISOString().slice(0, 10); };
 
 export default function MobileApp({ role: realRole, user, userCompany = "", forceExec = false }) {
+  // 💬 2026-11-08 새 오더 "알림톡 보내기" 처음 값(회사 기본값)을 미리 받아 둔다
+  React.useEffect(() => { watchAlimtalkDefault(getTenant() || userCompany || localStorage.getItem("userCompany") || DEFAULT_COMPANY); }, [userCompany]);
   useVehicleTypes(getTenant() || userCompany); // 🚚 2026-11-02 회사 공용 차량종류(추가한 이름이 모든 목록에 바로 보이게 구독 유지)
   // 🔀 화면 전환 역할 — 통합인사관리자(hrAcct): 경리 ↔ 인사 / 통합관리자(allMgr): 운송 ↔ 경리 ↔ 인사(메뉴 › 화면 전환)
   //  경리사무원·인사사무원은 경리/인사 화면 역할로 동작 — PC(DispatchApp)와 같은 customRoles.js useRoleView
@@ -4693,6 +4697,8 @@ const groupedByDate = useMemo(() => {
       메모: form.적요 || "",
       전달사항: form.전달사항 || "",
       전달사항고정: form.전달사항고정 === true,
+      // 💬 2026-11-08 알림톡 — 새 오더는 이 오더만 고른 값, 없으면 회사 기본값(PC addDispatch와 같음) · 수정은 오더 상세에서
+      ...(!form._editId ? { 알림톡: typeof form.알림톡 === "boolean" ? form.알림톡 : alimtalkDefaultNow() } : {}),
 
       // ⭐ PC(addDispatch)는 항상 companyName을 명시적으로 써넣는데 모바일 등록은
       // 이 필드 자체가 아예 빠져있었다 — 화면 표시는 (companyName || "돌캐") 방식의
@@ -12991,6 +12997,9 @@ const handleAssignClick = () => {
       </div>
     </div>
 
+    {/* 💬 2026-11-08 알림톡 — 보낸 결과 · [알림톡 보내기] */}
+    {(order._id || order.id) && <div className="mt-3"><AlimtalkOrderPanel row={{ ...order, __col: order.__col || collName }} canEdit={localStorage.getItem("role") !== "viewer"} /></div>}
+
     {/* 메모 · 전달사항 · 수정이력 */}
     {((order.메모 || order.적요) || order.전달사항?.trim() || (Array.isArray(order.history) && order.history.length > 0)) && (
       <div className="mt-3 flex flex-wrap gap-1.5">
@@ -16731,6 +16740,13 @@ const pickDrop = (c) => {
           }
         />
       </div>
+
+      {/* 💬 2026-11-08 알림톡 보내기 — 처음 값은 회사 기본값 · 이 오더만 바꿀 수 있다(신규 등록 때만) */}
+      {!form._editId && (
+        <div className="border-t border-gray-100 p-3">
+          <AlimtalkOrderToggle compact company={getTenant() || localStorage.getItem("userCompany") || userCompany || DEFAULT_COMPANY} value={form.알림톡} onChange={(v) => update("알림톡", v)} />
+        </div>
+      )}
 
       {/* PC 배차관리와 동일한 여러 건 등록 + 날짜 개별 지정 (신규 등록 시에만) */}
       {!form._editId && (
