@@ -6840,6 +6840,8 @@ exports.bankDepositSync = functions.runWith({ ...PB_RUN, timeoutSeconds: 540, me
   .pubsub.schedule("0 8-20 * * *").timeZone("Asia/Seoul").onRun(async () => {
     const r = await _bankSync.syncAll().catch((e) => [{ error: String(e?.message || e) }]);
     console.log("[계좌조회] 동기화:", JSON.stringify(r.map((x) => ({ company: x.company, new: x.new, auto: x.auto, review: x.review, off: x.off, error: x.error }))));
+    return null;
+  });
 /* ==================================================================
    🧪 2026-11-08 테스트 회사 가짜 데이터 · 설명은 functions/seedTestCompany.js 맨 위
    호출형 seedTestCompany({ action: seed|reset|refresh|clear|status, company: "테스트운송사", cursor })
