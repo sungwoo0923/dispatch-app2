@@ -68,7 +68,7 @@ export default function SettingsProfile() {
           <Row label="업태/업종" value={`${data.bizType || "-"} / ${data.bizItem || "-"}`} />
           <Row label="사업자번호" value={data.businessNumber || data.bizNo} />
           <p className="text-[12px] text-gray-400 pt-1">
-            사업자번호 정보 수정이 필요할 경우 r15332525@daum.net 으로 변경된 사업자 등록증을 보내주시기 바랍니다.
+            사업자번호를 바꿔야 하면 연동된 운송사 담당자에게 바뀐 사업자등록증을 보내 주세요.
           </p>
         </div>
       </div>

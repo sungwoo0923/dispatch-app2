@@ -1960,6 +1960,19 @@ service cloud.firestore {
       allow read: if isTotalMasterUser() || (isOfficeStaff() && resource.data.get('companyName', '') == myCo());
       allow write: if false;
     }
+    // ✉️ 2026-11-08 운송사별 발신 메일(functions/companyMail.js — mailSettings · sendCompanyMail)
+    //  companyMailSettings/{회사}: 발신 주소 · 이름 · 메일 서비스 · 마지막 테스트(비밀 없음) — 같은 회사 직원이 읽고, 쓰기는 서버만
+    //  companyMailSecrets(앱 비밀번호 암호문) · companyMailUsage(하루 보낸 횟수) — 서버만
+    match /companyMailSettings/{co} {
+      allow read: if isTotalMasterUser() || (isOfficeStaff() && myCo() == co);
+      allow write: if false;
+    }
+    match /companyMailSecrets/{id} {
+      allow read, write: if false;
+    }
+    match /companyMailUsage/{id} {
+      allow read, write: if false;
+    }
 
     // ════════════════════════════════════════════════════════════
     // 🔒 2026-11-07 보안 점검 — 예전에 맨 아래 공용 규칙(승인된 계정이면 회사와 상관없이 읽기·쓰기)에 걸려 있던 컬렉션들
@@ -2216,7 +2229,9 @@ service cloud.firestore {
         // 🏛 2026-11-07 국세청 · 기상청 · 팝빌 연동 — 위에서 따로 정함(서버만 쓴다)
         'bizStatusCache', 'bizStatusUsage', 'weatherUsage', 'weatherCache', 'companyPopbill', 'integrationConfig',
         // 💬🏦 2026-11-08 팝빌 자동화(알림톡 · 계좌조회) — 위에서 따로 정함(빠지면 승인된 직원 누구나 다른 회사 입금 · 발송 기록을 읽는다)
-        'popbillSettings', 'bankSyncState', 'bankAliases', 'bankTxns', 'alimtalkLogs'];
+        'popbillSettings', 'bankSyncState', 'bankAliases', 'bankTxns', 'alimtalkLogs',
+        // ✉️ 2026-11-08 운송사별 발신 메일 — 위에서 따로 정함(빠지면 승인된 직원 누구나 다른 회사 메일 설정 · 암호문을 읽는다)
+        'companyMailSettings', 'companyMailSecrets', 'companyMailUsage'];
 
     }
   }

@@ -20,6 +20,7 @@ import { mirrorLeaveBasis } from "./leaveBasis"; // ⭐ 2026-11-07 회기 기준
 import { sendInternalMail } from "./InternalMail";
 import CustomDatePicker from "./CustomDatePicker";
 import { kpConfirm } from "./kpDialog";
+import { sendCompanyMail } from "./companyMail";
 
 const safeId = (s) => String(s || "").replace(/[/\s#?[\]]/g, "_").slice(0, 80); // Payroll.jsx와 같은 규칙
 const kstDay = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
@@ -93,7 +94,8 @@ export async function sendPromote({ company, u, row, kind, dates = [], withEmail
   await addDoc(collection(db, "hrNotices"), { companyName: company, uid: u.id, kind: kind === "n1" ? "leave1" : "leave2", link: "leavePlan", refId: id, title: t.subject, body: t.body, createdAt: serverTimestamp(), createdBy: by });
   await sendInternalMail({ company, to: [{ uid: u.id, name, team: u.team || "", position: u.position || "" }], subject: t.subject, body: t.body, kind: "hr", fromName: byName || "인사관리부", important: true }).catch(() => {});
   if (email) {
-    await fetch("/api/send-email", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ to: email, subject: t.subject, html: `<div style="font-family:'Malgun Gothic',sans-serif;font-size:15px;line-height:1.8;white-space:pre-wrap">${esc(t.body)}</div>`, fromName: `${company} 인사관리부` }) }).catch(() => {});
+    // ✉️ 2026-11-08 회사 메일 계정으로(회사정보 › 메일 설정 · 없으면 등록 안내 창) — 앱 알림 · 사내메일은 그대로 간다
+    await sendCompanyMail({ to: email, subject: t.subject, html: `<div style="font-family:'Malgun Gothic',sans-serif;font-size:15px;line-height:1.8;white-space:pre-wrap">${esc(t.body)}</div>`, fromName: `${company} 인사관리부`, log: { type: "연차 사용 촉진", client: name || "-", body: t.body } });
   }
 }
 
