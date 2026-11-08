@@ -8,7 +8,7 @@
 //  · 계산은 src/execAnalyticsCore.js(순수 함수) · 차트는 src/execCharts.js
 import React from "react";
 import { collection, onSnapshot, query, where } from "firebase/firestore";
-import { db } from "./firebase";
+import { db, auth } from "./firebase";
 import { useOrderHistory } from "./orderHistory";
 import { useCompanyRows } from "./companyColStore";
 import { loadAcctPayments } from "./acctPayments";
@@ -21,6 +21,8 @@ import { addDay, kstToday, fmt, man, eok, md, dateOf, toWon, isBizDay, rangeDays
 import { Delta, Card, Measure, Svg, Seg, Legend, useWidth, EBX_CSS } from "./DailyReport";
 import { plMonthly, receivables, dsoOf, clientTable, vehicleTable, priceWatch, cashForecast, salesTrend, liveRows, fleetIndex, monthsBack, ymOf, COGS_ACCOUNTS } from "./execAnalyticsCore";
 import { plBars, lines, cashLine, countBars } from "./execCharts";
+import { planExecution, planStatus } from "./bizPlan"; // 📑 2026-11-08 사업계획 탭
+import { bizPlanDemo } from "./bizPlanDemo";
 
 const demoOn = () => { try { return !!(import.meta.env.DEV && isDemoOn()); } catch { return false; } };
 const won = (v) => `${fmt(man(v))}만`;
@@ -159,7 +161,7 @@ function useExecData({ company, dispatchData, drivers, loadRange: lrProp, months
 }
 
 // ─────────────────────────── 경영 분석(탭) ───────────────────────────
-export const ANALYSIS_TABS = [["pl", "손익"], ["client", "거래처"], ["fleet", "기사·차량"], ["price", "단가"], ["cash", "현금흐름"], ["sales", "영업"]];
+export const ANALYSIS_TABS = [["pl", "손익"], ["client", "거래처"], ["fleet", "기사·차량"], ["price", "단가"], ["cash", "현금흐름"], ["sales", "영업"], ["plan", "사업계획"]];
 export default function ExecAnalysis({ company, dispatchData = [], drivers = [], loadRange, initialTab, canCash = false }) {
   // ⭐ 2026-11-08 현금흐름(자금 잔액)은 대표 직책만 — 자금현황 메뉴와 같은 기준
   const tabs = canCash ? ANALYSIS_TABS : ANALYSIS_TABS.filter(([k]) => k !== "cash");
@@ -176,7 +178,8 @@ export default function ExecAnalysis({ company, dispatchData = [], drivers = [],
             : tab === "fleet" ? <FleetTab {...data} {...v} />
               : tab === "price" ? <PriceTab {...data} {...v} />
                 : tab === "cash" && canCash ? <CashTab {...data} {...v} />
-                  : <SalesTab {...data} {...v} />
+                  : tab === "plan" ? <PlanTab company={company} demo={!!data.demo} today={data.today} {...v} />
+                    : <SalesTab {...data} {...v} />
       )}
     </ExecShell>
   );
@@ -509,6 +512,133 @@ function SalesTab({ rows, today, compact, wide }) {
       ))}
     </Card>
   </>);
+}
+
+// ─────────────────────────── 사업계획(📑 2026-11-08) ───────────────────────────
+//  최종 승인된 사업계획서 · 예산 대비 집행액(관련 사업계획으로 연결된 지출결의서·구매요청서·법인카드 사용보고의 승인 금액)
+//  읽기: firestore.rules — 임원(직책·임원 부서·임원 역할)은 같은 회사 사업계획서와 사업계획에 연결된 문서를 읽는다
+function useBizPlans(company, demo) {
+  const uid = auth.currentUser?.uid || "";
+  const mine = useApprovals(demo ? "" : uid);
+  const [co, setCo] = React.useState(null);
+  React.useEffect(() => {
+    if (demo || !company) return undefined;
+    return onSnapshot(query(collection(db, "approvals"), where("company", "==", company), where("form", "==", "bizplan")),
+      (snap) => setCo(snap.docs.map((d) => ({ id: d.id, ...d.data() }))), () => setCo([]));
+  }, [company, demo]);
+  const plans = React.useMemo(() => {
+    if (demo) return bizPlanDemo(company).plans;
+    const m = new Map(); [...(co || []), ...(mine || []).filter((d) => d.form === "bizplan" && d.company === company)].forEach((d) => m.set(d.id, d));
+    return [...m.values()].filter((d) => d.form === "bizplan" && d.status === "approved");
+  }, [demo, co, mine, company]);
+  const ids = plans.map((p) => p.id).sort().join(",");
+  const [exps, setExps] = React.useState({});
+  React.useEffect(() => {
+    if (demo || !company || !ids) return undefined;
+    const list = ids.split(",");
+    const offs = [];
+    for (let i = 0; i < list.length; i += 30) {
+      const chunk = list.slice(i, i + 30); const k = `c${i}`;
+      offs.push(onSnapshot(query(collection(db, "approvals"), where("company", "==", company), where("planId", "in", chunk)),
+        (snap) => setExps((p) => ({ ...p, [k]: snap.docs.map((d) => ({ id: d.id, ...d.data() })) })), () => setExps((p) => ({ ...p, [k]: [] }))));
+    }
+    return () => offs.forEach((f) => f());
+  }, [company, ids, demo]);
+  const expenses = React.useMemo(() => (demo ? bizPlanDemo(company).expenses : [...new Map(Object.values(exps).flat().concat((mine || []).filter((d) => d.planId)).map((d) => [d.id, d])).values()]), [demo, exps, mine, company]);
+  return { plans, expenses, loading: !demo && co === null };
+}
+const rateStr = (r) => (r == null ? "–" : `${r.toFixed(r >= 100 ? 0 : 1)}%`);
+function PlanBar({ ex }) {
+  const w = ex.rate == null ? 0 : Math.min(100, ex.rate);
+  return (
+    <div>
+      <div className="exa-bar" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(ex.rate || 0)} aria-label="예산 대비 집행률"><i style={{ width: `${w}%`, background: ex.over ? C.err : C.n3 }} /></div>
+      <div style={{ display: "flex", justifyContent: "space-between", marginTop: 6, fontSize: 15 }}>
+        <span style={{ color: C.t2 }}>집행률</span>
+        <b className="ebx-num" style={{ color: ex.over ? C.err : C.t1 }}>{rateStr(ex.rate)}{ex.over ? ` · ${fmt(ex.spent - ex.budget)}원 초과` : ""}</b>
+      </div>
+    </div>
+  );
+}
+function PlanTab({ company, demo, today, compact, wide, xl }) {
+  const { plans, expenses, loading } = useBizPlans(company, demo);
+  const [sel, setSel] = React.useState(null);
+  const rows = React.useMemo(() => plans.map((p) => { const ex = planExecution(p, expenses); return { ...p, ex, st: planStatus(p, today, ex) }; })
+    .sort((a, b) => Number(b.st.key === "over") - Number(a.st.key === "over") || String(b.data?.period?.start || "").localeCompare(String(a.data?.period?.start || ""))), [plans, expenses, today]);
+  const tot = rows.reduce((a, r) => ({ budget: a.budget + r.ex.budget, spent: a.spent + r.ex.spent, pend: a.pend + r.ex.pendingAmt }), { budget: 0, spent: 0, pend: 0 });
+  const overN = rows.filter((r) => r.ex.over).length;
+  const tagCls = (k) => (k === "over" ? "exa-tag hi" : k === "run" ? "exa-tag lo" : "exa-tag");
+  const cur = rows.find((r) => r.id === sel);
+  return (<>
+    <Stats compact={compact} items={[
+      { l: "승인된 사업계획", v: fmt(rows.length), u: "건", sub: `진행 중 ${rows.filter((r) => r.st.key === "run").length}건` },
+      { l: "총 예산", v: won(tot.budget), u: "원" },
+      { l: "집행액", v: won(tot.spent), u: "원", sub: tot.budget ? `예산의 ${rateStr((tot.spent / tot.budget) * 100)}` : undefined },
+      { l: "예산 초과", v: fmt(overN), u: "건", tone: overN ? C.err : undefined, sub: tot.pend ? `결재 중 지출 ${won(tot.pend)}원` : "결재 중 지출 없음" },
+    ]} />
+    <Card compact={compact} title="사업계획별 예산 집행" sub="최종 승인된 사업계획서 · 집행액은 관련 사업계획으로 연결된 지출 문서의 승인 금액이에요">
+      {loading && !rows.length ? <Empty>불러오는 중…</Empty> : !rows.length ? <Empty>최종 승인된 사업계획서가 아직 없어요. 전자결재 › 업무 기안·품의 › 사업계획서로 올릴 수 있어요.</Empty> : (
+        <div data-testid="exa-plan-cards" style={{ display: "grid", gridTemplateColumns: `repeat(${compact ? 1 : xl ? 3 : wide ? 3 : 2},minmax(0,1fr))`, gap: compact ? 12 : 16, marginTop: 16 }}>
+          {rows.map((r) => (
+            <button key={r.id} type="button" onClick={() => setSel(r.id)} data-testid="exa-plan-card" data-over={r.ex.over ? "1" : "0"}
+              style={{ textAlign: "left", font: "inherit", color: "inherit", background: "#fff", border: `1.5px solid ${r.ex.over ? C.err : C.line}`, borderRadius: 16, padding: compact ? 16 : 20, cursor: "pointer", display: "grid", gap: 12, minWidth: 0 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "flex-start" }}>
+                <b style={{ fontSize: 19, fontWeight: 800, lineHeight: 1.35, wordBreak: "keep-all", minWidth: 0 }}>{r.data?.name || r.title}</b>
+                <span className={tagCls(r.st.key)}>{r.st.label}</span>
+              </div>
+              <div style={{ fontSize: 15, color: C.t2 }}>{r.data?.period?.start ? `${r.data.period.start.replace(/-/g, ".")} ~ ${(r.data.period.end || "").replace(/-/g, ".")}` : "기간 미정"}{r.data?.dept || r.data?.owner ? ` · ${[r.data.dept, r.data.owner].filter(Boolean).join(" ")}` : ""}</div>
+              <div className="exa-kv" style={{ gridTemplateColumns: "repeat(3,minmax(0,1fr))", marginTop: 0 }}>
+                {[["예산", r.ex.budget], ["집행액", r.ex.spent], ["잔액", r.ex.remain]].map(([l, v]) => (
+                  <div key={l} style={{ minWidth: 0 }}><span style={{ display: "block", fontSize: 14 }}>{l}</span><b className="ebx-num" style={{ fontSize: 18, fontWeight: 800, color: l === "잔액" && v < 0 ? C.err : C.t1 }}>{won(v)}</b></div>
+                ))}
+              </div>
+              <PlanBar ex={r.ex} />
+              <div style={{ fontSize: 14, color: C.t3 }}>승인 지출 {r.ex.count}건{r.ex.pendingCount ? ` · 결재 중 ${r.ex.pendingCount}건 ${won(r.ex.pendingAmt)}원` : ""}{r.ex.paid ? ` · 지급완료 ${won(r.ex.paid)}원` : ""}</div>
+            </button>
+          ))}
+        </div>
+      )}
+      <Note>금액은 만원 단위예요. 지출결의서 · 구매요청서 · 법인카드 사용보고를 쓸 때 "관련 사업계획"을 고르면 여기 집행액에 더해져요.</Note>
+    </Card>
+    {cur && <PlanDetail r={cur} company={company} demo={demo} compact={compact} onClose={() => setSel(null)} />}
+  </>);
+}
+function PlanDetail({ r, company, demo, compact, onClose }) {
+  React.useEffect(() => { const k = (e) => { if (e.key === "Escape") onClose(); }; window.addEventListener("keydown", k); return () => window.removeEventListener("keydown", k); }, [onClose]);
+  const uid = auth.currentUser?.uid || "";
+  const part = !demo && (r.participants || []).includes(uid);
+  const openFull = () => { window.__kpOpenApproval = { id: r.id, page: "inbox" }; window.dispatchEvent(new Event("kp-open-approval")); onClose(); };
+  const docs = [...r.ex.docs.map((d) => ({ ...d, _st: d.paid?.at ? "지급완료" : "승인" })), ...r.ex.pendingDocs.map((d) => ({ ...d, _st: "결재 중" }))].sort((a, b) => tsMs(b.createdAt) - tsMs(a.createdAt));
+  return (
+    <div data-kp-dialog role="dialog" aria-modal="true" aria-label="사업계획 상세" data-testid="exa-plan-detail" style={{ position: "fixed", inset: 0, zIndex: 2147483400, background: "rgba(11,20,40,.55)", display: "flex", alignItems: compact ? "flex-end" : "center", justifyContent: "center", padding: compact ? 0 : 24 }} onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="ebx-card" style={{ width: "min(900px,100%)", maxHeight: compact ? "92vh" : "90vh", overflow: "auto", padding: compact ? 16 : 24, borderRadius: compact ? "20px 20px 0 0" : 20 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "flex-start" }}>
+          <div style={{ minWidth: 0 }}><h2 className="ebx-h2">{r.data?.name || r.title}</h2><div className="ebx-sub" style={{ marginTop: 4 }}>{r.docNo} · 기안 {r.drafter?.name || "-"} · {r.st.label}</div></div>
+          <div style={{ display: "flex", gap: 8 }}>{part && <button type="button" className="exa-open" onClick={openFull}>결재 문서 열기</button>}<button type="button" className="ebx-link" onClick={onClose}>닫기</button></div>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: compact ? "repeat(2,minmax(0,1fr))" : "repeat(4,minmax(0,1fr))", gap: 10, marginTop: 16 }}>
+          {[["예산", `${fmt(r.ex.budget)}원`], ["집행액", `${fmt(r.ex.spent)}원`], ["잔액", `${fmt(r.ex.remain)}원`], ["집행률", rateStr(r.ex.rate)]].map(([l, v]) => (
+            <div key={l} style={{ border: `1px solid ${C.line}`, borderRadius: 12, padding: "12px 14px" }}><div style={{ fontSize: 14, color: C.t2 }}>{l}</div><b className="ebx-num" style={{ fontSize: 19, color: (l === "잔액" && r.ex.remain < 0) || (l === "집행률" && r.ex.over) ? C.err : C.t1 }}>{v}</b></div>
+          ))}
+        </div>
+        <div style={{ marginTop: 14 }}><PlanBar ex={r.ex} /></div>
+        <h3 style={{ fontSize: 17, fontWeight: 800, marginTop: 22 }}>연결된 지출 {docs.length}건</h3>
+        {!docs.length ? <Empty>아직 연결된 지출이 없어요.</Empty> : (
+          <div style={{ marginTop: 8 }} data-testid="exa-plan-expenses">
+            {docs.map((d, i) => (
+              <div key={d.id} className={i ? "ebx-row" : ""} style={{ display: "flex", gap: 12, alignItems: "baseline", padding: "11px 0", fontSize: 15.5 }}>
+                <span style={{ color: C.t2, width: 52, flexShrink: 0 }} className="ebx-num">{(() => { const ms = tsMs(d.createdAt); return ms ? md(new Date(ms + 9 * 3600e3).toISOString().slice(0, 10)) : ""; })()}</span>
+                <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{d.title || d.formLabel}<span style={{ color: C.t3, fontSize: 14 }}> · {d.formLabel}</span></span>
+                <span className={d._st === "결재 중" ? "exa-tag" : "exa-tag lo"}>{d._st}</span>
+                <b className="ebx-num" style={{ width: 120, textAlign: "right", flexShrink: 0 }}>{fmt(d.amount)}원</b>
+              </div>
+            ))}
+          </div>
+        )}
+        <div style={{ marginTop: 18 }}><ApprovalDocPreview d={r} company={company} /></div>
+      </div>
+    </div>
+  );
 }
 
 // ─────────────────────────── 결재 대기 ───────────────────────────

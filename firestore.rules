@@ -1393,6 +1393,30 @@ service cloud.firestore {
     function apAff() {
       return request.resource.data.diff(resource.data).affectedKeys();
     }
+    // 📑 2026-11-08 사업계획서(form "bizplan") 필수 결재선 — 상신할 때 서버에서 한 번 더 본다(화면: src/bizPlan.js validateBizLine)
+    //  ① finIdx 번째 결재자 = 같은 회사의 경리·회계·재무 담당(권한 경리·경리사무원 또는 부서에 재무·경리·회계·총무)이고 '합의'
+    //  ② 맨 끝 결재자 = 같은 회사의 대표(직책 대표·대표이사·사장)이고 '결재' — 기안자가 대표면 ②는 빠진다
+    //  결재자 정보는 결재선에 적힌 값이 아니라 users/{uid} 문서로 확인한다(문서 읽기 2번).
+    //  ⚠ "임원 결재 포함"은 회사마다 임원이 없을 수 있어 화면에서만 막는다.
+    function apBizLineOk() {
+      let d = request.resource.data;
+      let n = d.line.size();
+      let fi = d.get('finIdx', -1);
+      let fin = get(/databases/$(database)/documents/users/$(d.line[fi].uid)).data;
+      let ceo = get(/databases/$(database)/documents/users/$(d.line[n - 1].uid)).data;
+      return n >= 2 && fi is int && fi >= 0 && fi < n - 1
+        && d.line[fi].get('kind', '') == '합의'
+        && fin.get('companyName', '') == myCo()
+        && (fin.get('role', '') in ['acctStaff', 'test'] || fin.get('team', '').matches('.*(재무|경리|회계|총무).*'))
+        && (myUser().get('position', '') in ['대표', '대표이사', '사장']
+          || (d.line[n - 1].get('kind', '결재') == '결재'
+              && ceo.get('companyName', '') == myCo()
+              && ceo.get('position', '') in ['대표', '대표이사', '사장']));
+    }
+    // 📎 2026-11-08 첨부 파일 정보(files: Storage 경로 목록) — 한 문서 10개까지
+    function apFilesOk() {
+      return !('files' in request.resource.data) || (request.resource.data.files is list && request.resource.data.files.size() <= 10);
+    }
     // 결재 취소 요청 — 승인된 문서에만, 처음 결재자부터 같은 인원으로 시작해야 한다(기안자가 자기 혼자 취소 결재선을 만드는 것 방지)
     function apCancelReqOk() {
       return resource.data.get('status', '') == 'approved'
@@ -1428,12 +1452,21 @@ service cloud.firestore {
       allow delete: if coMatch(resource.data) && isCompanyAdmin(co);
     }
     match /approvals/{id} {
+      // 📑 2026-11-08 사업계획서 읽기 — 조회 하나의 규칙 계산 한도(1000)를 넘지 않게 이 두 줄을 맨 앞에, 싼 조건(문서 칸)부터 둔다
+      //  ① 같은 회사 사무 직원은 최종 승인된 사업계획서를 읽는다(지출결의 "관련 사업계획" 고르기 · 조회는 company + form "bizplan" + status "approved")
+      allow read: if resource.data.get('form', '') == 'bizplan' && resource.data.get('status', '') == 'approved'
+        && isOfficeStaff() && resource.data.get('company', '') == myCo();
+      //  ② 임원(직책·임원 부서·임원 역할)은 같은 회사 사업계획서 전부와 사업계획에 연결된 지출 문서(planId)를 읽는다(경영 분석 › 사업계획)
+      allow read: if (resource.data.get('form', '') == 'bizplan' || resource.data.get('planId', '') != '')
+        && isApproved() && resource.data.get('company', '') == myCo() && isExecProfileUser();
       allow read: if isApproved() && (isTotalMasterUser() || !locked() || resource.data.companyName == myCo())
         && (request.auth.uid in resource.data.get('participants', []) || isCompanyAdmin(resource.data.get('company', '')) || isAcctApprovalReader(resource.data));
       // ⭐ 2026-11-02 점검 — HOME › 직원 일정(ExecSuite TeamSchedule)은 회사의 연차(cat=="leave") 결재만 조회 → 같은 회사 직원(기사·화주 제외)은 읽기 허용
       //  (조회는 company == 우리 회사 + cat == "leave" 조건으로 보내야 한다)
       allow read: if isOfficeStaff() && resource.data.get('cat', '') == 'leave' && resource.data.get('company', '') == myCo();
       allow create: if coCreate() && request.resource.data.get('drafterUid', '') == request.auth.uid
+        && apFilesOk()
+        && (request.resource.data.get('form', '') != 'bizplan' || apBizLineOk())
         && (request.resource.data.get('status', '') == 'pending'
           // 일일 업무일지 자동 승인 — 회사 결재 설정(approvalSettings/{회사}.autoApproveDaily)이 켜져 있을 때만
           || (request.resource.data.get('status', '') == 'approved' && request.resource.data.get('form', '') == 'daily'
@@ -1449,6 +1482,9 @@ service cloud.firestore {
         && request.resource.data.get('drafterUid', '') == resource.data.get('drafterUid', '')
         && request.resource.data.get('participants', []) == resource.data.get('participants', [])
         && request.resource.data.get('company', '') == resource.data.get('company', '')
+        // 📑📎 2026-11-08 양식은 못 바꾸고(사업계획서 결재선 검사를 비켜 가지 못하게) 첨부는 10개까지
+        && request.resource.data.get('form', '') == resource.data.get('form', '')
+        && apFilesOk()
         && (apAff().hasOnly(['ccReadBy', 'seenBy', 'drafterUnread', 'history', 'updatedAt', 'hiddenBy'])
           || (resource.data.get('status', '') == 'pending' && resource.data.line[resource.data.get('step', 0)].uid == request.auth.uid)
           || (resource.data.get('cancel', {}).get('status', '') == 'pending'

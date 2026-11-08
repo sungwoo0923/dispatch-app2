@@ -88,6 +88,61 @@ service firebase.storage {
       allow update: if false;
     }
 
+    // 📎 2026-11-08 전자결재 첨부 파일 — approvals/{회사 키}/{문서 id}/{시각_파일명} (src/approvalFiles.js · src/ApprovalFiles.jsx)
+    //  회사 키 = 회사명에서 / 공백 # ? [ ] 를 _로 바꾼 값 · Firestore 문서는 users/{나} · approvals/{문서 id} 두 개만 읽는다
+    //  · 올리기: 같은 회사 승인된 사무 직원 + customMetadata.uploadedBy == 나
+    //            결재 문서가 아직 없으면(상신 전 작성 중) 누구 폴더든 새로 만들 수 있고, 있으면 그 문서의 기안자가 결재 진행 중(pending)일 때만
+    //            20MB 미만 · 사진(PNG·JPG·GIF·WEBP·HEIC·BMP, SVG 제외) · PDF · PPT/PPTX · XLS/XLSX · DOC/DOCX · HWP/HWPX · ZIP
+    //  · 읽기: 같은 회사 사무 직원 중 — 결재 참여자 · 회사 관리자 · 경리 · 임원(직책·임원 부서) · (승인된 사업계획서는 같은 회사 직원 누구나)
+    //          상신 전(문서 없음)에는 올린 사람만
+    //  · 지우기: 올린 사람만, 상신 전이거나 첫 결재자가 아직 승인하지 않은 진행 중·회수 문서의 기안자일 때만 · 덮어쓰기 없음
+    function apStUser() {
+      return firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data;
+    }
+    function apStaff(coKey) {
+      return request.auth != null && firestore.exists(/databases/(default)/documents/users/$(request.auth.uid))
+        && apStUser().get('approved', true) != false
+        && apStUser().get('employmentStatus', '') != '퇴사'
+        && !(apStUser().get('role', '') in ['driver', 'shipper', 'cafeUser', 'viewer'])
+        && apStUser().get('companyName', '').replace('[/\\s#?\\[\\]]', '_') == coKey;
+    }
+    function apDoc(docId) {
+      return /databases/(default)/documents/approvals/$(docId);
+    }
+    function apFileTypeOk() {
+      return request.resource.contentType.matches('image/(png|jpeg|gif|webp|heic|heif|bmp)')
+        || request.resource.contentType in ['application/pdf',
+          'application/vnd.ms-powerpoint', 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+          'application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+          'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+          'application/x-hwp', 'application/haansofthwp', 'application/vnd.hancom.hwp', 'application/vnd.hancom.hwpx',
+          'application/zip', 'application/x-zip-compressed'];
+    }
+    function apReaderOk(docId) {
+      let d = firestore.get(apDoc(docId)).data;
+      return request.auth.uid in d.get('participants', [])
+        || apStUser().get('role', '') in ['admin', 'allMgr', 'hrManager', 'hrAcct', 'totalMaster', 'test', 'acctStaff']
+        || apStUser().get('position', '') in ['이사', '상무', '전무', '부사장', '사장', '대표', '대표이사', '본부장', '임원']
+        || apStUser().get('team', '') == '임원'
+        || (d.get('form', '') == 'bizplan' && d.get('status', '') == 'approved');
+    }
+    match /approvals/{coKey}/{docId}/{file} {
+      allow read: if hubAdmin() || (apStaff(coKey) && (firestore.exists(apDoc(docId))
+        ? apReaderOk(docId)
+        : resource.metadata.get('uploadedBy', '') == request.auth.uid));
+      allow create: if resource == null && apStaff(coKey) && request.resource != null && request.resource.size < 20 * 1024 * 1024 && apFileTypeOk()
+        && request.resource.metadata.get('uploadedBy', '') == request.auth.uid
+        && (!firestore.exists(apDoc(docId))
+          || (firestore.get(apDoc(docId)).data.get('drafterUid', '') == request.auth.uid
+              && firestore.get(apDoc(docId)).data.get('status', '') == 'pending'));
+      allow update: if false;
+      allow delete: if apStaff(coKey) && resource.metadata.get('uploadedBy', '') == request.auth.uid
+        && (!firestore.exists(apDoc(docId))
+          || (firestore.get(apDoc(docId)).data.get('drafterUid', '') == request.auth.uid
+              && firestore.get(apDoc(docId)).data.get('status', '') in ['pending', 'withdrawn']
+              && firestore.get(apDoc(docId)).data.line[0].get('status', '') != 'approved'));
+    }
+
     match /{allPaths=**} {
       allow read, write: if false;
     }
