@@ -1,3 +1,5 @@
+import { requireCaller } from "./_auth.js"; // 🔒 2026-11-08 로그인한 사용자만(Tmap 키 무단 사용 방지)
+
 // =========================
 // 주소 정리
 // =========================
@@ -13,7 +15,7 @@ export default async function handler(req, res) {
   // ✅ CORS 헤더
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
 
   if (req.method === "OPTIONS") {
     return res.status(200).end();
@@ -22,6 +24,7 @@ export default async function handler(req, res) {
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Method Not Allowed" });
   }
+  if (!(await requireCaller(req, res))) return;
 
   try {
     const { fromAddr, toAddr, viaPoints = [] } = req.body;
@@ -30,7 +33,7 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: "주소 누락" });
     }
 
-    const TMAP_KEY = "rmzwkLwH9N4i9ayxDj9GR6l8hyFDaEk52ZQs4yer";
+    const TMAP_KEY = process.env.TMAP_KEY || "rmzwkLwH9N4i9ayxDj9GR6l8hyFDaEk52ZQs4yer";
 
     // =========================
     // 0️⃣ 도로명 → 지번 변환

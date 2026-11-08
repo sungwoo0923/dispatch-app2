@@ -4505,7 +4505,7 @@ async function sendContractMail(to, subject, html) {
   const cfg = (await db.collection("siteConfig").doc("contractNotice").get().catch(() => null))?.data() || {};
   if (cfg.mailEnabled === false) return { ok: true, skipped: true, reason: "메일 끔" };
   const url = cfg.sendEmailUrl || process.env.KP_SEND_EMAIL_URL || DEFAULT_SEND_EMAIL_URL;
-  const r = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ to: to.join(","), subject, html, fromName: "LogisWeb 운영팀" }), timeout: 25000 });
+  const r = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json", ...(process.env.KP_API_SECRET ? { "x-kp-api-key": process.env.KP_API_SECRET } : {}) }, body: JSON.stringify({ to: to.join(","), subject, html, fromName: "LogisWeb 운영팀" }), timeout: 25000 });
   if (!r.ok) throw new Error(`메일 서버 오류 ${r.status}`);
   return { ok: true };
 }

@@ -73,6 +73,8 @@ import { useHrOptions } from "./hrConstants";
 import { AssetManager } from "./OfficeBooks";
 import { FundsWorkspace, FundsBoard, isCeoPosition } from "./FundsBoard";
 import { AccountingOverview, RetireDesk, useYearOrders } from "./AcctSuite";
+import { finLabOn } from "./finLab"; // 🧪 2026-11-08 경리 시범 기능(테스트운송사만)
+const JournalSuiteLazy = React.lazy(() => import("./FinanceLab").then((m) => ({ default: m.JournalSuite })));
 import HrHub from "./HrHub";
 import { usePayrollAccess } from "./payrollAccess"; // ⭐ 2026-11-06 직원 급여·연차 촉진 권한
 const PayrollCenterLazy = React.lazy(() => import("./Payroll"));
@@ -62924,7 +62926,9 @@ function AccountingWorkspace({ company, fixedRows = [], clients = [], drivers = 
   const payAcc = usePayrollAccess(company, auth.currentUser?.uid || "preview", role, auth.currentUser?.email || "");
   return (
     <KpSubNav code="ACCOUNTING" title="회계관리" icon="money" active={tab} onSelect={setTab}
-      items={[{ key: "overview", label: "회계 개요", en: "OVERVIEW", icon: "chart" }, { key: "book", label: "회계 장부", en: "LEDGER", icon: "sheet" }, ...(payAcc.canView ? [{ key: "payroll", label: "급여 계산", en: "PAYROLL", icon: "money" }] : []), { key: "retire", label: "퇴직 정산", en: "RETIREMENT", icon: "user" }]}>
+      items={[{ key: "overview", label: "회계 개요", en: "OVERVIEW", icon: "chart" }, { key: "book", label: "회계 장부", en: "LEDGER", icon: "sheet" }, ...(finLabOn(company) ? [{ key: "journal", label: "전표·재무제표", en: "BOOKKEEPING", icon: "sheet" }] : []), ...(payAcc.canView ? [{ key: "payroll", label: "급여 계산", en: "PAYROLL", icon: "money" }] : []), { key: "retire", label: "퇴직 정산", en: "RETIREMENT", icon: "user" }]}>
+      {/* 🧪 2026-11-08 전표·재무제표 시범 — 테스트운송사만(FinanceLab.finLabOn) */}
+      {tab === "journal" && finLabOn(company) && <React.Suspense fallback={<div className="py-24 text-center text-[14px] font-bold text-[#9AA9C3]">전표 화면 불러오는 중…</div>}><JournalSuiteLazy company={company} orders={yearRows} isViewer={isViewer} /></React.Suspense>}
       {tab === "payroll" && payAcc.canView && <React.Suspense fallback={<div className="py-24 text-center text-[14px] font-bold text-[#9AA9C3]">급여 화면 불러오는 중…</div>}><PayrollCenterLazy company={company} role={role} /></React.Suspense>}
       {tab === "overview" && <AccountingOverview company={company} orders={yearRows} drivers={drivers} />}
       {tab === "book" && (yearRows ? <AccountingDashboard dispatchData={yearRows} fixedRows={[]} clients={clients} drivers={drivers} isViewer={isViewer} /> : <div className="py-24 text-center text-[14px] font-bold text-[#9AA9C3]">올해 운행 내역을 불러오는 중…</div>)}

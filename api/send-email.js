@@ -1,4 +1,5 @@
 import nodemailer from "nodemailer";
+import { requireCaller } from "./_auth.js"; // 🔒 2026-11-08 로그인한 직원 또는 서버 키만
 
 // ⭐ 2026-11-06 보내는 사람(이름·이메일) 직접 입력 지원
 //  · 메일은 공용 발송 계정(SMTP 로그인 계정)으로만 보낼 수 있다 — 다음(Daum)·네이버·Gmail 같은 SMTP는
@@ -9,8 +10,9 @@ import nodemailer from "nodemailer";
 //  · 발송 계정은 Vercel 환경변수 SMTP_HOST·SMTP_PORT·SMTP_USER·SMTP_PASS로 바꿀 수 있다(없으면 예전 공용 계정).
 const SMTP_HOST = process.env.SMTP_HOST || "smtp.daum.net";
 const SMTP_PORT = Number(process.env.SMTP_PORT || 465);
-const SMTP_USER = process.env.SMTP_USER || "r15332525@daum.net";
-const SMTP_PASS = process.env.SMTP_PASS || "kzcvdgefuvltipso";
+// 🔒 2026-11-08 보안 점검 — 계정·비밀번호를 코드에 두지 않는다(공개 저장소에 노출돼 있었음 → 메일 계정 비밀번호를 바꾸고 Vercel 환경변수에만 넣을 것)
+const SMTP_USER = process.env.SMTP_USER || "";
+const SMTP_PASS = process.env.SMTP_PASS || "";
 
 const EMAIL_RE = /^[^\s@<>(),;:"[\]\\]+@[^\s@<>(),;:"[\]\\]+\.[^\s@<>(),;:"[\]\\]{2,}$/;
 // 표시 이름에 들어가면 헤더가 깨지는 글자(따옴표·꺾쇠·줄바꿈)를 뺀다
@@ -22,6 +24,10 @@ const splitList = (v) => (Array.isArray(v) ? v : String(v || "").split(/[,;\n]/)
 
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).end();
+  // 🔒 2026-11-08 예전엔 누구나 이 주소로 회사 메일 계정을 써서 아무에게나 메일을 보낼 수 있었다(스팸·피싱 중계)
+  const who = await requireCaller(req, res, { allowServerKey: true, blockRoles: ["driver", "cafeUser"] });
+  if (!who) return;
+  if (!SMTP_USER || !SMTP_PASS) return res.status(503).json({ error: "메일 발송 계정이 설정되지 않았습니다(Vercel 환경변수 SMTP_USER · SMTP_PASS).", code: "NO_SMTP" });
   const { to, subject, html, attachments: atts, fromName, fromEmail, replyTo } = req.body || {};
 
   // ── 입력 확인 ──

@@ -13,9 +13,10 @@ import { createCipheriv, createDecipheriv, createHmac } from "crypto";
 import https from "node:https";
 import http from "node:http";
 
-const AES_KEY = process.env.CALL24_AES_KEY || "946e5bf1c0a86333688d1d01561e06e3";
-const AES_IV  = process.env.CALL24_AES_IV  || "4eff880a505c8136";
-const API_KEY = process.env.CALL24_API_KEY  || "946e5bf1c0a863332f1c2a6977b9f08e";
+// 🔒 2026-11-08 보안 점검 — 키를 코드에 두지 않는다(공개 저장소에 노출돼 있었음 → 24시콜 마이페이지에서 재발급 후 Vercel 환경변수에만)
+const AES_KEY = process.env.CALL24_AES_KEY || "";
+const AES_IV  = process.env.CALL24_AES_IV  || "";
+const API_KEY = process.env.CALL24_API_KEY  || "";
 // 운영: 18099 / 테스트: 18091 (24시콜 마이페이지 "운영-서버/테스트-서버")
 export const BASE_URL = process.env.CALL24_BASE_URL || "https://api.15887924.com:18099";
 export const RELAY_URL = (process.env.CALL24_RELAY_URL || "").replace(/\/+$/, "");

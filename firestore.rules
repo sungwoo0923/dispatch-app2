@@ -347,6 +347,36 @@ service cloud.firestore {
       allow update: if coMatch(resource.data) && coKeep() && (isTotalMasterUser() || myRole() in ['test', 'admin', 'hrAcct', 'allMgr'] || fundsMenuLevel() == 'write');
       allow delete: if coMatch(resource.data) && (isTotalMasterUser() || myRole() in ['test', 'admin', 'hrAcct', 'allMgr'] || fundsMenuLevel() == 'write');
     }
+    // 📒 2026-11-08 계정과목 목록(회사별 · 문서 id = 회사명) — 같은 회사 직원은 읽고(지출결의 고르기), 추가·수정은 경리 담당만
+    //  경리 담당 = payrollStaff()(경리관리자·경리사무원·통합 역할·재무/경리/회계/총무 부서·최고관리자) · 화면 기준 src/acctAccounts.js
+    match /acctAccounts/{co} {
+      allow read: if isTotalMasterUser() || (isApproved() && myCo() == co);
+      allow create, update: if (isTotalMasterUser() || (payrollStaff() && myCo() == co))
+        && request.resource.data.get('companyName', '') == co
+        && request.resource.data.items is list && request.resource.data.items.size() <= 300;
+      allow delete: if isTotalMasterUser();
+    }
+    // 🧪 2026-11-08 경리 시범(테스트운송사) — 일반전표(acctJournal) · 자금 예측 예정 항목(acctPlanned)
+    //  읽기: 같은 회사의 자금 열람자(acctFunds 읽기와 같은 기준) + 경리 담당 · 쓰기·삭제: 경리 담당(payrollStaff)만 · 회사명은 못 바꾼다
+    match /acctJournal/{id} {
+      allow read: if acctLabCo(resource.data) && (acctLabReader() || payrollStaff());
+      allow create: if acctLabCo(request.resource.data) && payrollStaff()
+        && request.resource.data.lines is list && request.resource.data.lines.size() <= 50;
+      allow update: if acctLabCo(resource.data) && acctLabCo(request.resource.data) && payrollStaff();
+      allow delete: if acctLabCo(resource.data) && payrollStaff();
+    }
+    match /acctPlanned/{id} {
+      allow read: if acctLabCo(resource.data) && (acctLabReader() || payrollStaff());
+      allow create: if acctLabCo(request.resource.data) && payrollStaff();
+      allow update: if acctLabCo(resource.data) && acctLabCo(request.resource.data) && payrollStaff();
+      allow delete: if acctLabCo(resource.data) && payrollStaff();
+    }
+    function acctLabCo(d) {
+      return isTotalMasterUser() || (isApproved() && d.get('companyName', '') == myCo());
+    }
+    function acctLabReader() {
+      return isTotalMasterUser() || myRole() in ['test', 'admin', 'hrAcct', 'allMgr'] || isExecRoleUser() || fundsMenuLevel() in ['read', 'write'];
+    }
     // 화주사 주소록(places) — 화주 본인이 등록한 주소만
     match /places/{id} {
       allow read, update, delete: if isApproved() && isShipperUser() && resource.data.get('userId', '') == request.auth.uid;
@@ -2192,6 +2222,8 @@ service cloud.firestore {
         'payrollSettings', 'payrollEmployees', 'payrollRuns', 'payslips', 'hrNotices', 'leavePromotions',
         // 🔐 2026-11-07 급여 비밀번호 · 잠금 해제 · 틀린 횟수 — 위에서 따로 정함(서버만 쓴다)
         'payrollSecrets', 'payrollUnlocks', 'payrollPwAttempts',
+        // 📒 2026-11-08 계정과목 목록 · 일반전표 · 자금 예측 예정 항목 — 위에서 따로 정함(빠지면 같은 회사 직원 누구나 계정과목·전표를 고칠 수 있다)
+        'acctAccounts', 'acctJournal', 'acctPlanned',
         // 🤖 2026-11-06 AI 팀 사용 기록 — 위에서 따로 정함
         'aiTeamLogs',
         // 📊 2026-11-06 일일 경영 보고 — 위에서 따로 정함

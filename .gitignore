@@ -37,3 +37,4 @@ scripts/hubTests/fn/.env
 
 # 매일 점검 결과(tools/healthcheck)
 healthcheck-results/
+.env

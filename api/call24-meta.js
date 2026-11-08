@@ -1,8 +1,11 @@
 // 📡 24시콜 마스터 데이터(시/도·구/군·동, 차량톤수, 차량종류) 조회 — 전송 팝업의 드롭다운용.
 //  자유 입력은 글자 하나만 달라도 "-99"로 거부되므로 24시콜이 주는 값만 고르게 한다.
 import { call24, explain24, outboundIp, RELAY_URL } from "./_call24.js";
+import { requireCaller } from "./_auth.js";
 
 export default async function handler(req, res) {
+  // 🔒 2026-11-08 로그인한 직원만(예전엔 누구나 회사 24시콜 키로 오더를 올릴 수 있었다)
+  if (!(await requireCaller(req, res, { blockRoles: ["driver", "shipper", "cafeUser"] }))) return;
   if (req.method !== "POST") return res.status(405).json({ error: "Method Not Allowed" });
   try {
     const { type, sido, gugun, cargoTon } = req.body || {};

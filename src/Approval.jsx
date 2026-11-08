@@ -16,6 +16,7 @@
 //  - 승인 후 취소: 기안자가 「결재 취소 요청」(사유) → 같은 결재선이 다시 승인하면 "결재 취소"로 바뀐다.
 //    문서는 지우지 않고 모두의 보관함에 "결재 취소" 도장으로 남는다(감사 기록). 연차 사용일수도 자동 복구.
 import { defaultFundId } from "./ledgerAuto";
+import { useAccountList, addAccount, canEditAccounts } from "./acctAccounts"; // 📒 2026-11-08 계정과목(경리만 추가)
 import { runDelete } from "./DeleteProgress"; // ⭐ 2026-11-05 삭제 진행 창 + 한 번에 삭제
 import React from "react";
 import { kpConfirm, kpPrompt } from "./kpDialog";
@@ -877,6 +878,31 @@ function SelectDirect({ f, value, onChange }) {
   );
 }
 
+// 📒 2026-11-08 계정과목 — 회사 목록에서만 고른다(직접 입력 없음). 경리 담당에게만 [+ 추가](서버 규칙도 같은 기준)
+function AccountSelect({ f, value, onChange, company, me }) {
+  const list = useAccountList(company);
+  const v = String(value ?? "");
+  const canAdd = canEditAccounts(me);
+  const [busy, setBusy] = React.useState(false);
+  // 예전 문서에 직접 입력해 둔 값은 목록에 없더라도 그대로 보여 준다(바꾸면 목록 값으로)
+  const opts = v && !list.includes(v) ? [v, ...list] : list;
+  const add = async () => {
+    const name = await kpPrompt("추가할 계정과목 이름을 입력하세요 (경리만 추가할 수 있어요)", "");
+    if (name == null || !String(name).trim()) return;
+    setBusy(true);
+    try { const t = await addAccount(company, name); onChange(t); } catch (e) { window.alert(e.code === "permission-denied" ? "계정과목은 경리 담당만 추가할 수 있어요." : e.message); } finally { setBusy(false); }
+  };
+  return (
+    <div className="flex gap-1.5">
+      <CustomSelect openOnFocus value={v} onChange={(e) => onChange(e.target.value)} className={`${inp} flex-1 min-w-0`}>
+        {!v && <option value="">{f.label} 선택</option>}
+        {opts.map((o) => <option key={o} value={o}>{o}</option>)}
+      </CustomSelect>
+      {canAdd && <button type="button" disabled={busy} onClick={add} title="계정과목 추가(경리 전용)" className="shrink-0 h-11 px-3 rounded-xl border border-[#C9D6EE] bg-[#F5F8FD] text-[13.5px] font-black text-[#1B2B4B] disabled:opacity-50">+ 추가</button>}
+    </div>
+  );
+}
+
 // 🔎 검색 드롭다운(직원·부서·직책·거래처·차량) — 목록이 길어도 찾기 쉽게 검색칸 + 맨 아래 "✎ 직접 입력".
 //  화면 위에 띄우는 창(포털)이라 카드(overflow-hidden) 안에서도 잘리지 않고, 아래 공간이 모자라면 위로 연다(휴대폰 375px 폭에 맞춤).
 //  options: [{ value, label, sub?, group? }]
@@ -1146,6 +1172,7 @@ function FieldInput({ f, value, onChange, staff, meUid, ctx }) {
   if (f.type === "bank") return <BankAccountInput value={value} onChange={onChange} stacked />;
   if (f.type === "textarea" && f.templates) return <ReasonSelect f={f} value={value} onChange={onChange} />;
   if (f.type === "textarea") return <textarea value={value || ""} onChange={(e) => onChange(e.target.value)} rows={f.rows || 3} placeholder={f.ph || ""} className={`${inp} h-auto py-2 leading-relaxed resize-y`} />;
+  if (f.type === "account") return <AccountSelect f={f} value={value} onChange={onChange} company={ctx?.company} me={ctx?.me} />;
   if (f.type === "select" && f.direct) return <SelectDirect f={f} value={value} onChange={onChange} />;
   if (f.type === "select") return <CustomSelect openOnFocus value={value || ""} onChange={(e) => onChange(e.target.value)} className={inp}>{f.options.map((o) => <option key={o} value={o}>{o}</option>)}</CustomSelect>;
   if (f.type === "staff") return <StaffSelect value={value} onChange={onChange} staff={staff} exclude={[meUid]} placeholder="선택 안 함" />;
@@ -1588,7 +1615,7 @@ function Composer({ company, me, staff, cat, preset, onDone, leave, getLive, myD
   const hrOpt = useHrOptions(company);
   const refs = useApprovalRefs(company, { clients: form.fields.some((f) => f.pick === "clients"), cars: form.fields.some((f) => f.pick === "cars" || f.pick === "carDriver") });
   const plans = useApprovedPlans(company, form.fields.some((f) => f.type === "plan"));
-  const fieldCtx = { hr: hrOpt, refs, data, plans };
+  const fieldCtx = { hr: hrOpt, refs, data, plans, company, me };
   const setField = (f, v) => setData((p) => { const n = { ...p, [f.k]: v }; const extra = form.autofill ? form.autofill(f.k, v, p, { staff }) : null; return extra ? { ...n, ...extra } : n; });
   const docName = String(form.title || form.label).replace(/\s+/g, "").replace(/·/g, "·");
   const autoTitle = `${todayDots()} ${docName}_${me.name || ""}${me.position ? ` ${me.position}` : ""}`; // ⭐ 2026-11-02 이름·직책 사이 띄어쓰기

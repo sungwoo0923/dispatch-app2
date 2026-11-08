@@ -6,6 +6,7 @@ import ErrorBoundary, { isChunkLoadError, reloadOnce } from "./ErrorBoundary.jsx
 import "./index.css";
 import { preloadTmapWhenIdle } from "./tmapLoader";
 import { trimLocalStorage } from "./safeStorage";
+import "./apiAuthFetch"; // 🔒 /api/ 서버 함수 호출에 로그인 토큰 자동 첨부
 
 // ⭐ 2026-11-03 최고관리자 — 탭마다 다른 운송사를 열 수 있게 "지금 회사"(loginCompany·userCompany)를 탭별로 기억한다.
 //  예전엔 브라우저 전체에 하나라, 오른쪽 탭에서 돌캐로 들어가면 왼쪽 태진 탭도 몰래 돌캐로 바뀌어

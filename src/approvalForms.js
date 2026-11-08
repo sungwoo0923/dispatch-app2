@@ -76,7 +76,7 @@ export function leaveUseOf(d) {
   return null;
 }
 
-const ACCOUNTS = ["복리후생비", "여비교통비", "차량유지비", "운반비", "접대비", "소모품비", "통신비", "지급수수료", "교육훈련비", "도서인쇄비", "기타"];
+// 계정과목 목록은 src/acctAccounts.js(회사별 · 경리만 추가)
 const PAY = ["법인카드", "개인카드(정산 요청)", "계좌이체", "현금"];
 // 인사발령 구분(예전 문서의 "전보(부서 이동)"·"직책 변경"·"신규 임용"도 그대로 고를 수 있게 남김)
 export const PERSONNEL_KINDS = ["승진", "전보(부서 이동)", "직책 변경", "직무 변경", "신규 임용", "채용", "겸직", "파견", "휴직", "복직", "강등", "퇴직", "기타"];
@@ -213,7 +213,7 @@ export const APPROVAL_FORMS = [
   //    저장할 때 prepare()가 예전 칸(date·vendor·bank·items)도 첫 행/합계로 채워 장부 자동 기록·목록이 그대로 동작.
   { key: "spend", cat: "expense", label: "지출결의서", title: "지 출 결 의 서", code: "EX",
     fields: [
-      { k: "account", label: "계정과목", type: "select", options: ACCOUNTS, def: "소모품비", half: true, direct: true },
+      { k: "account", label: "계정과목", type: "account", def: "소모품비", half: true } /* ⭐ 2026-11-08 회사 계정과목 목록에서만 고름(직접 입력 없앰 · 추가는 경리만) */,
       { k: "pay", label: "결제 수단", type: "select", options: PAY, def: "법인카드", half: true, direct: true },
       { k: "lines", label: "지출 내역", type: "spendLines", required: true },
       { k: "planId", label: "관련 사업계획", type: "plan", ph: "해당 없으면 비워 두세요" },
@@ -228,7 +228,7 @@ export const APPROVAL_FORMS = [
       { k: "cardNo", label: "카드(뒤 4자리)", type: "text", ph: "1234", half: true },
       { k: "amountV", label: "사용 금액", type: "money", required: true, half: true },
       { k: "shop", label: "가맹점", type: "text", required: true },
-      { k: "account", label: "계정과목", type: "select", options: ACCOUNTS, def: "복리후생비", direct: true },
+      { k: "account", label: "계정과목", type: "account", def: "복리후생비" },
       { k: "people", label: "사용 인원·참석자", type: "text", pick: "staffNames", ph: "직원을 고르거나 직접 입력(거래처 참석자 등)" },
       { k: "planId", label: "관련 사업계획", type: "plan", ph: "해당 없으면 비워 두세요" },
       { k: "reason", label: "사용 목적", templates: ["거래처 미팅 식대", "직원 회식", "출장 경비", "사무용품 구매", "차량 유지비", "고객 접대", "업무용 소모품"], type: "textarea", required: true },

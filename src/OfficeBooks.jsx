@@ -15,7 +15,16 @@ import { CustomSelect } from "./CustomSelect";
 import { computeFunds, isCard, isCredit, last4, fundBadge } from "./fundsCalc";
 import { upsertAutoEntry } from "./ledgerAuto";
 import { ResponsiveContainer, ComposedChart, Bar, Line, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts";
-import { kpConfirm } from "./kpDialog";
+import { kpConfirm, kpPrompt } from "./kpDialog";
+import { useAccountList, addAccount, canEditAccounts } from "./acctAccounts"; // 📒 2026-11-08 회사 계정과목(경리만 추가)
+import { useMyProfile } from "./userNames";
+
+// 계정과목 추가(경리 담당만 — 서버 규칙도 같은 기준). 추가한 이름(실패·취소면 null)
+async function askAccount(company) {
+  const name = await kpPrompt("추가할 계정과목 이름 (지출결의에서도 같이 쓰여요)", "");
+  if (name == null || !String(name).trim()) return null;
+  try { return await addAccount(company, name); } catch (e) { alert(e.code === "permission-denied" ? "계정과목은 경리 담당만 추가할 수 있어요." : e.message); return null; }
+}
 
 export const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
 export const HERO_BG = "linear-gradient(rgba(143,176,240,.07) 1px, transparent 1px) 0 0/22px 22px, linear-gradient(90deg, rgba(143,176,240,.07) 1px, transparent 1px) 0 0/22px 22px, linear-gradient(120deg,#0B1428 0%,#1B2B4B 60%,#2D4C82 100%)";
@@ -143,6 +152,9 @@ export function CashBook({ company, isViewer = false }) {
   const recurring = useCompanyCol("acctRecurring", company);
   const funds = useCompanyCol("acctFunds", company);
   const [customAcc, setCustomAcc] = React.useState(false);
+  const coAccounts = useAccountList(company); // 📒 2026-11-08 회사 계정과목(지출결의와 같은 목록)
+  const myProfile = useMyProfile(auth.currentUser?.uid);
+  const canAcc = !isViewer && canEditAccounts(myProfile);
   const [photo, setPhoto] = React.useState(null); // 증빙 사진 보기·저장
   const [ym, setYm] = React.useState(kstDay().slice(0, 7));
   const [type, setType] = React.useState("전체");
@@ -407,7 +419,7 @@ export function CashBook({ company, isViewer = false }) {
           <div><Label>계정과목</Label>
             {(() => {
               // 기본 계정 + 이 회사가 직접 입력해 쓴 계정
-              const base = LEDGER_ACCOUNTS[edit.type];
+              const base = edit.type === "지출" ? [...new Set([...LEDGER_ACCOUNTS.지출, ...coAccounts])] : LEDGER_ACCOUNTS[edit.type];
               const used = [...new Set((rows || []).filter((r) => r.type === edit.type).map((r) => r.account).filter((a) => a && !base.includes(a)))];
               const all = [...base, ...used];
               const isCustom = customAcc || (edit.account && !all.includes(edit.account));
@@ -415,9 +427,10 @@ export function CashBook({ company, isViewer = false }) {
                 <>
                   <div className="flex flex-wrap gap-1.5">
                     {all.map((a) => <Chip key={a} on={!isCustom && edit.account === a} onClick={() => { setCustomAcc(false); setEdit((p) => ({ ...p, account: a })); }}>{a}</Chip>)}
-                    <Chip on={isCustom} onClick={() => { setCustomAcc(true); setEdit((p) => ({ ...p, account: "" })); }}>✎ 직접입력</Chip>
+                    {isCustom && edit.account && <Chip on>{edit.account}</Chip>}
+                    {/* ⭐ 2026-11-08 직접 입력 없앰 — 경리 담당만 회사 계정과목 목록에 [+ 추가](지출결의와 같은 목록) */}
+                    {canAcc && edit.type === "지출" && <Chip on={false} onClick={async () => { const t = await askAccount(company); if (t) { setCustomAcc(false); setEdit((p) => ({ ...p, account: t })); } }}>+ 계정과목 추가</Chip>}
                   </div>
-                  {isCustom && <input autoFocus value={edit.account} onChange={(e) => setEdit((p) => ({ ...p, account: e.target.value }))} className={`${inp} mt-2`} placeholder="계정과목을 직접 입력 (예: 차량리스료, 협회비)" />}
                 </>
               );
             })()}
@@ -478,8 +491,10 @@ export function CashBook({ company, isViewer = false }) {
 
 function RecurringEditor({ company, rows, ledger = [], funds = [], onClose }) {
   const [f, setF] = React.useState({ type: "지출", name: "", account: "임차료", amount: "", day: "25", method: "자동이체", vendor: "", fundId: "" });
-  const [custom, setCustom] = React.useState(false);
-  const accs = [...new Set([...LEDGER_ACCOUNTS[f.type], ...ledger.filter((r) => r.type === f.type).map((r) => r.account).filter(Boolean)])];
+  const coAccounts = useAccountList(company);
+  const myProfile = useMyProfile(auth.currentUser?.uid);
+  const canAcc = canEditAccounts(myProfile);
+  const accs = [...new Set([...LEDGER_ACCOUNTS[f.type], ...(f.type === "지출" ? coAccounts : []), ...ledger.filter((r) => r.type === f.type).map((r) => r.account).filter(Boolean)])];
   const add = async () => {
     if (!f.name.trim() || !toInt(f.amount)) return alert("이름과 금액을 입력해 주세요.");
     if (!String(f.account || "").trim()) return alert("계정과목을 입력해 주세요.");
@@ -490,17 +505,16 @@ function RecurringEditor({ company, rows, ledger = [], funds = [], onClose }) {
     <Sheet side en="CASH BOOK · RECURRING" title="고정비 · 정기 수입 관리" onClose={onClose} footer={<button type="button" onClick={onClose} className="flex-1 h-12 rounded-xl bg-[#0F1A30] text-white text-[15px] font-black">닫기</button>}>
       <div className="rounded-2xl bg-white border border-[#E3E8F0] p-4 space-y-3">
         <div className="grid grid-cols-2 gap-1 p-1 rounded-xl bg-[#F4F6FA] border border-[#E3E8F0]">
-          {["지출", "수입"].map((t) => <button key={t} type="button" onClick={() => { setCustom(false); setF((p) => ({ ...p, type: t, account: LEDGER_ACCOUNTS[t][0] })); }} className={`h-10 rounded-lg text-[14px] font-black ${f.type === t ? "bg-[#0F1A30] text-white" : "text-[#5B6B85]"}`}>매달 {t}</button>)}
+          {["지출", "수입"].map((t) => <button key={t} type="button" onClick={() => { setF((p) => ({ ...p, type: t, account: LEDGER_ACCOUNTS[t][0] })); }} className={`h-10 rounded-lg text-[14px] font-black ${f.type === t ? "bg-[#0F1A30] text-white" : "text-[#5B6B85]"}`}>매달 {t}</button>)}
         </div>
         <div className="grid grid-cols-2 gap-2">
           <div><Label>이름</Label><input value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} className={inp} placeholder={f.type === "지출" ? "예: 사무실 임대료" : "예: 주차장 임대수입"} /></div>
           <div><Label>금액</Label><input inputMode="numeric" value={f.amount ? won(f.amount) : ""} onChange={(e) => setF({ ...f, amount: e.target.value.replace(/[^\d]/g, "") })} className={`${inp} text-right`} /></div>
           <div><Label>계정과목</Label>
-            <CustomSelect value={custom ? "__custom" : f.account} onChange={(e) => { if (e.target.value === "__custom") { setCustom(true); setF({ ...f, account: "" }); } else { setCustom(false); setF({ ...f, account: e.target.value }); } }} className={inp}>
-              {accs.map((a) => <option key={a} value={a}>{a}</option>)}
-              <option value="__custom">✎ 직접입력</option>
+            <CustomSelect value={f.account} onChange={(e) => { if (e.target.value === "__add") { askAccount(company).then((t) => t && setF((p) => ({ ...p, account: t }))); } else setF({ ...f, account: e.target.value }); }} className={inp}>
+              {(accs.includes(f.account) || !f.account ? accs : [f.account, ...accs]).map((a) => <option key={a} value={a}>{a}</option>)}
+              {canAcc && f.type === "지출" && <option value="__add">+ 계정과목 추가(경리)</option>}
             </CustomSelect>
-            {custom && <input autoFocus value={f.account} onChange={(e) => setF({ ...f, account: e.target.value })} className={`${inp} mt-2`} placeholder="계정과목 직접 입력" />}
           </div>
           <div><Label>매달 (일)</Label><input inputMode="numeric" value={f.day} onChange={(e) => setF({ ...f, day: e.target.value.replace(/[^\d]/g, "").slice(0, 2) })} className={inp} /></div>
           {funds.length > 0 && <div className="col-span-2"><Label>나가는(들어오는) 통장·카드 <span className="font-semibold text-[#9AA9C3]">(장부에 넣으면 자금 잔액에 반영)</span></Label>

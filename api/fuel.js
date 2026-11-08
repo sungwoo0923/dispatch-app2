@@ -1,6 +1,9 @@
+import { requireCaller } from "./_auth.js";
+
 export default async function handler(req, res) {
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  const key  = "F251130200";
+  // 🔒 2026-11-08 로그인한 사용자만(오피넷 키 무단 사용 방지) · 다른 사이트에서 부르지 못하게 * 허용 없앰
+  if (!(await requireCaller(req, res))) return;
+  const key  = process.env.OPINET_KEY || "F251130200";
   const area = req.query.area || "01";
 
   const endpoints = [

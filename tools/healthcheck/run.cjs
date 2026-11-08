@@ -367,7 +367,8 @@ async function pool(tasks, n) {
 }
 
 (async () => {
-  const browser = await chromium.launch();
+  // HC_CHROME — 미리 설치된 Chromium 경로(저장소 Playwright 버전과 브라우저가 다를 때)
+  const browser = await chromium.launch(process.env.HC_CHROME ? { executablePath: process.env.HC_CHROME } : {});
   const tasks = [];
   if (ONLY.has("home") && HOME) tasks.push(async () => { log("홈페이지"); await simplePages(browser, "home", HOME, ["/", "/login.html"], { scroll: true }); });
   if (ONLY.has("hub") && HUB) tasks.push(async () => { log("허브 공개 화면"); await simplePages(browser, "hub", HUB, ["/", "/login", "/signup", "/login?role=driver&mode=hub", "/login?role=carrier&mode=logisweb", "/login?role=shipper&mode=hub", "/exchange"]); });

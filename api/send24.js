@@ -1,7 +1,8 @@
 // 📡 24시콜 오더 등록 — 매핑·암호화 후 _call24.js를 통해(중계 서버 또는 직접) 전송
 import { call24, explain24, outboundIp, RELAY_URL } from "./_call24.js";
+import { requireCaller } from "./_auth.js";
 
-const TMAP_KEY = "rmzwkLwH9N4i9ayxDj9GR6l8hyFDaEk52ZQs4yer";
+const TMAP_KEY = process.env.TMAP_KEY || "rmzwkLwH9N4i9ayxDj9GR6l8hyFDaEk52ZQs4yer";
 
 /* ─── 주소 분리 ─── */
 function splitAddr(addr = "") {
@@ -95,6 +96,8 @@ async function mapTo24Order(row) {
 }
 
 export default async function handler(req, res) {
+  // 🔒 2026-11-08 로그인한 직원만(예전엔 누구나 회사 24시콜 키로 오더를 올릴 수 있었다)
+  if (!(await requireCaller(req, res, { blockRoles: ["driver", "shipper", "cafeUser"] }))) return;
   if (req.method !== "POST") return res.status(405).json({ error: "Method Not Allowed" });
   try {
     const row = req.body || {};

@@ -16,6 +16,14 @@ import { CustomSelect } from "./CustomSelect";
 import { formatAccount, onlyDigits } from "./bankUtil";
 import { FUND_KINDS, CARD_COMPANIES, BANK_OPTIONS, computeFunds, toInt, isCard, isCredit, fundBadge, formatCardNo, last4 } from "./fundsCalc";
 import { kpConfirm } from "./kpDialog";
+import { finLabOn } from "./finLab"; // 🧪 2026-11-08 자금 예측 시범(테스트운송사만)
+import { useYearOrders } from "./AcctSuite";
+const CashForecastLazy = React.lazy(() => import("./FinanceLab").then((m) => ({ default: m.CashForecastPanel })));
+// 자금 예측 탭 — 열었을 때만 올해 오더(미수금 계산용)를 받는다
+function ForecastTab({ company, isViewer }) {
+  const orders = useYearOrders(company);
+  return <React.Suspense fallback={<div className="py-24 text-center text-[14px] font-bold text-[#9AA9C3]">자금 예측 불러오는 중…</div>}><CashForecastLazy company={company} orders={orders} isViewer={isViewer} /></React.Suspense>;
+}
 
 const won = (n) => Math.round(Number(n) || 0).toLocaleString("ko-KR");
 const short = (n) => { const a = Math.abs(n || 0); if (a >= 1e8) return `${(n / 1e8).toFixed(1)}억`; if (a >= 1e4) return `${Math.round(n / 1e4).toLocaleString()}만`; return Math.round(n || 0).toLocaleString(); };
@@ -276,8 +284,8 @@ export function FundsWorkspace({ company, isViewer = false }) {
   const [tab, setTab] = React.useState(() => { try { const v = sessionStorage.getItem("kpFundsTab"); sessionStorage.removeItem("kpFundsTab"); return v || "funds"; } catch { return "funds"; } });
   return (
     <KpSubNav code="FINANCE" title="자금관리" icon="wallet" active={tab} onSelect={setTab}
-      items={[{ key: "funds", label: "자금 현황", en: "TREASURY", icon: "wallet" }, { key: "book", label: "수입·지출 장부", en: "CASH BOOK", icon: "sheet" }]}>
-      {tab === "funds" ? <FundsBoard company={company} canEdit={!isViewer} /> : <CashBook company={company} isViewer={isViewer} />}
+      items={[{ key: "funds", label: "자금 현황", en: "TREASURY", icon: "wallet" }, { key: "book", label: "수입·지출 장부", en: "CASH BOOK", icon: "sheet" }, ...(finLabOn(company) ? [{ key: "forecast", label: "자금 예측", en: "FORECAST", icon: "chart" }] : [])]}>
+      {tab === "forecast" && finLabOn(company) ? <ForecastTab company={company} isViewer={isViewer} /> : tab === "book" ? <CashBook company={company} isViewer={isViewer} /> : <FundsBoard company={company} canEdit={!isViewer} />}
     </KpSubNav>
   );
 }
