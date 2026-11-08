@@ -24,6 +24,7 @@ import { ContractBuilder, ContractList, ContractTemplates } from "./ContractCent
 import { NotifTemplatePanel, LandingPageEditPanel, ShipperForceUpdatePanel } from "./AdminMenu";
 import { AdminSessionsPanel } from "./LoginManager";
 import CompanyResetPanel from "./CompanyResetPanel";
+const TestSeedPanel = React.lazy(() => import("./TestSeedPanel")); // 🧪 2026-11-08 테스트운송사 가짜 데이터
 import { ContractLifecyclePanel, SubAdminPanel } from "./ContractLifecycle"; // ⭐ 2026-11-06 이용 계약 · 부관리자
 import SheetImportPanel from "./SheetImportPanel";
 import NoticeBoard from "./NoticeBoard";
@@ -96,6 +97,7 @@ const SECTIONS = [
     { key: "sheetImport", label: "배차일지 가져오기", en: "IMPORT", icon: "sheet" },
     { key: "subAdmin", label: "부관리자", en: "SUB ADMIN", icon: "key" }, // ⭐ 2026-11-06 부관리자 목록 · 지정/해제
     { key: "companyReset", label: "운송사 초기화", en: "RESET", icon: "trash" },
+    { key: "testSeed", label: "테스트 데이터", en: "TEST DATA", icon: "sheet" }, // 🧪 2026-11-08 테스트운송사 가짜 데이터
   ] },
 ];
 const sectionOf = (tab) => SECTIONS.find((s) => s.items.some((i) => i.key === tab)) || SECTIONS[0];
@@ -1206,6 +1208,7 @@ function PlatformCenterInner({ user }) {
   else if (tab === "sheetImport") body = <><Hero en="DATA · IMPORT" title="배차일지 가져오기" desc="구글시트·엑셀 배차일지를 운송사 데이터로 옮깁니다(초기 세팅용)." /><SheetImportPanel /></>;
   // ⭐ 2026-11-06 운송사 초기화는 이제 관리센터에서만(배차 프로그램 관리자메뉴에서 뺐다) — 계약종료 + 초기화는 계약 › 이용 계약·만료
   else if (tab === "companyReset") body = <><Hero en="DATA · RESET" title="운송사 초기화" desc="운송사 데이터를 모두 지웁니다 — 7일 동안 보관함에서 복원할 수 있습니다. 계약을 끝내며 지우려면 계약 › 이용 계약·만료를 쓰세요." right={<button type="button" onClick={() => setTab("contract:life")} className="h-10 px-4 rounded-xl bg-white/10 ring-1 ring-white/20 text-[14px] font-black whitespace-nowrap">이용 계약·만료 ›</button>} /><CompanyResetPanel /></>;
+  else if (tab === "testSeed") body = <><Hero en="DATA · TEST DATA" title="테스트 데이터" desc="테스트운송사에 가짜 데이터를 채우거나 다시 채워요. 다른 운송사에는 넣을 수 없어요." /><React.Suspense fallback={<div className="py-20 text-center text-[#9AA9C3]">불러오는 중</div>}><TestSeedPanel /></React.Suspense></>;
   else if (tab === "contract:life") body = <><Hero en="CONTRACTS · LIFECYCLE" title="이용 계약·만료" desc="운송사별 계약 기간을 정하고, 만료 30·7·1일 전 안내를 보냅니다. 계약종료하면 데이터는 남기고 그 회사 사람은 접속할 수 없습니다." right={<Clock />} /><ContractLifecyclePanel openCompany={openCompany} /></>;
   else if (tab === "subAdmin") body = <><Hero en="SECURITY · SUB ADMIN" title="부관리자" desc="최고관리자와 같은 권한을 가진 부관리자(1명)를 보고 지정·해제합니다." /><SubAdminPanel /></>;
 
