@@ -1,0 +1,2 @@
+# 📝 업데이트 보관함 원본(public/updates.json) 갱신 — 실패해도 커밋은 막지 않는다
+node scripts/gen-updates.mjs >/dev/null 2>&1 && git add public/updates.json >/dev/null 2>&1 || true
