@@ -4474,13 +4474,13 @@ exports.companyResetPurge = onRequestV2(
      ① 알림(notifications — PC 홈·모바일 가운데 알림)  ② 메일(사람 메일 + 회사 청구 메일)을 보낸다.
    같은 안내는 두 번 보내지 않는다: companyPlans/{회사}.contractNotices["<종료일>_<30|7|1>"]에 기록(트랜잭션으로 먼저 잡음).
    종료일을 바꾸면 키가 바뀌어 새 일정으로 다시 안내한다. 계약종료(status "ended")된 회사는 건너뛴다.
-   메일은 배차 프로그램의 /api/send-email(Vercel, 공용 SMTP)로 보낸다 — 주소는 siteConfig/contractNotice.sendEmailUrl
-   (없으면 KP_SEND_EMAIL_URL 환경변수 → 기본 주소). 관리센터 › 이용 계약에서 "지금 확인"으로 바로 돌려볼 수 있다(contractNoticeRun).
+   ✉️ 2026-11-08 메일은 플랫폼 발송 계정(비밀값 PLATFORM_SMTP_USER · PLATFORM_SMTP_PASS — functions/companyMail.js sendPlatformMail)으로 보낸다.
+   비밀값이 없거나 "none"이면 메일만 건너뛰고 로그를 남긴다(알림은 그대로). 예전 /api/send-email(한 운송사 계정)은 닫았다.
+   관리센터 › 이용 계약에서 "지금 확인"으로 바로 돌려볼 수 있다(contractNoticeRun).
 ================================================================== */
 const CONTRACT_NOTICE_DAYS = [1, 7, 30];
 const CONTRACT_NOTICE_ROLES = ["test", "acctStaff", "hrAcct", "allMgr", "admin"];
 const CONTRACT_EXEC_POSITIONS = ["이사", "상무", "전무", "부사장", "사장", "대표", "대표이사", "본부장", "임원"];
-const DEFAULT_SEND_EMAIL_URL = "https://dispatch-app2-vskk.vercel.app/api/send-email";
 const ymdDiff = (a, b) => Math.round((Date.parse(`${b}T00:00:00Z`) - Date.parse(`${a}T00:00:00Z`)) / 86400000);
 const isContractNoticeUser = (u) => !!u && !["totalMaster", "driver", "shipper", "cafeUser"].includes(u.role) && u.approved !== false && u.employmentStatus !== "퇴사" && (
   CONTRACT_NOTICE_ROLES.includes(u.role) || u.isMaster === true || CONTRACT_EXEC_POSITIONS.includes(String(u.position || "").trim())
@@ -4500,14 +4500,16 @@ async function contractNoticeRecipients(company, plan) {
   return { people, mails: [...mails] };
 }
 
+// ✉️ 2026-11-08 운송사별 발신 메일 · 플랫폼 메일 — 설명은 functions/companyMail.js 맨 위
+const _companyMailLib = require("./companyMail");
+const getNodemailer = () => require("nodemailer");
+const sendPlatformMail = _companyMailLib.makePlatformMailer({ getNodemailer });
+const PLATFORM_MAIL_SECRETS = ["PLATFORM_SMTP_USER", "PLATFORM_SMTP_PASS"];
 async function sendContractMail(to, subject, html) {
   if (!to.length) return { ok: true, skipped: true };
   const cfg = (await db.collection("siteConfig").doc("contractNotice").get().catch(() => null))?.data() || {};
   if (cfg.mailEnabled === false) return { ok: true, skipped: true, reason: "메일 끔" };
-  const url = cfg.sendEmailUrl || process.env.KP_SEND_EMAIL_URL || DEFAULT_SEND_EMAIL_URL;
-  const r = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ to: to.join(","), subject, html, fromName: "LogisWeb 운영팀" }), timeout: 25000 });
-  if (!r.ok) throw new Error(`메일 서버 오류 ${r.status}`);
-  return { ok: true };
+  return sendPlatformMail(to, subject, html, { fromName: "LogisWeb 운영팀" });
 }
 
 async function runContractExpiryNotices({ dryRun = false, onlyCompany = "", by = "schedule" } = {}) {
@@ -4557,12 +4559,12 @@ async function runContractExpiryNotices({ dryRun = false, onlyCompany = "", by =
   console.log(`📅 계약 만료 안내 ${today}: ${out.length}건`, JSON.stringify(out).slice(0, 2000));
   return { today, results: out };
 }
-exports.contractExpiryNotices = functions.pubsub
+exports.contractExpiryNotices = functions.runWith({ secrets: PLATFORM_MAIL_SECRETS }).pubsub
   .schedule("every day 09:12")
   .timeZone("Asia/Seoul")
   .onRun(async () => { await runContractExpiryNotices(); return null; });
 // 관리센터 › 이용 계약 › "지금 확인" — { dryRun, company } (최고관리자만)
-exports.contractNoticeRun = functions.https.onRequest(async (req, res) => {
+exports.contractNoticeRun = functions.runWith({ secrets: PLATFORM_MAIL_SECRETS }).https.onRequest(async (req, res) => {
   res.set("Access-Control-Allow-Origin", "*");
   res.set("Access-Control-Allow-Methods", "POST, OPTIONS");
   res.set("Access-Control-Allow-Headers", APPCHECK_CORS);
@@ -6738,7 +6740,7 @@ exports.aiAssistantChat = functions.runWith({ secrets: ["ANTHROPIC_API_KEY"], ti
 /* ==================================================================
    📊 2026-11-06 일일 경영 보고(DAILY REPORT) — 임원 화면 역할에게 아침 푸시(·요약 메일)
    30분마다(06:00~10:00 사이에만 일함) 받는 시간이 된 사람에게 보낸다. 계산·대상은 functions/dailyReport.js.
-   메일은 계약 만료 안내와 같은 공용 메일 서버(/api/send-email · siteConfig/contractNotice.sendEmailUrl).
+   메일은 계약 만료 안내와 같은 플랫폼 발송 계정(PLATFORM_SMTP_USER · PLATFORM_SMTP_PASS — LogisWeb이 보내는 서비스 메일).
 ================================================================== */
 const _dailyReport = require("./dailyReport")({
   db, FieldValue, sendPushAndCleanup, userTokens,
@@ -6746,7 +6748,7 @@ const _dailyReport = require("./dailyReport")({
   validMail: (e) => validMail(e),
   defaultCompany: PUSH_DEFAULT_COMPANY,
 });
-exports.dailyReportPush = functions.runWith({ timeoutSeconds: 300, memory: "512MB" }).pubsub
+exports.dailyReportPush = functions.runWith({ secrets: PLATFORM_MAIL_SECRETS, timeoutSeconds: 300, memory: "512MB" }).pubsub
   .schedule("every 30 minutes")
   .timeZone("Asia/Seoul")
   .onRun(async () => { await _dailyReport.run(); return null; });
@@ -6768,6 +6770,22 @@ exports.payrollPwStatus = payCall(_payrollPw.status);
 exports.payrollPwSet = payCall(_payrollPw.setPw);
 exports.payrollPwVerify = payCall(_payrollPw.verify);
 exports.payrollLock = payCall(_payrollPw.lock);
+
+/* ==================================================================
+   ✉️ 2026-11-08 운송사별 발신 메일 — 설명은 functions/companyMail.js 맨 위
+   호출형 2개: mailSettings(회사정보 › 메일 설정 · 상태/저장/테스트/해제) · sendCompanyMail(회사 메일 보내기)
+   비밀값: MAIL_CRED_KEY(앱 비밀번호 암호화 키 · base64 32바이트 이상)
+================================================================== */
+const _companyMail = _companyMailLib.makeCompanyMail({ db, FieldValue, HttpsError: functions.https.HttpsError, getNodemailer });
+const mailCall = (fn, opts = {}) => functions.runWith({ secrets: ["MAIL_CRED_KEY"], timeoutSeconds: 60, memory: "256MB", ...appCheckCallOpts(), ...opts }).https.onCall(async (data, context) => {
+  try { return await fn(data || {}, context); } catch (e) {
+    if (e instanceof functions.https.HttpsError) throw e;
+    console.error("[회사 메일] 실패:", e);
+    throw new functions.https.HttpsError("internal", "잠시 뒤 다시 해 주세요");
+  }
+});
+exports.mailSettings = mailCall(_companyMail.mailSettings, { timeoutSeconds: 45 });
+exports.sendCompanyMail = mailCall(_companyMail.sendCompanyMail, { timeoutSeconds: 120, memory: "512MB" });
 
 // 🏛 2026-11-07 공공데이터(국세청 사업자 상태 · 기상청 예보 · 기상특보) + 팝빌 어댑터 — 설명은 functions/publicData.js · functions/popbill.js 맨 위
 //  키: Firebase 비밀값 DATA_GO_KR_KEY(공공데이터포털 일반 인증키, 아직 없으면 "none"으로 두면 화면이 조용히 숨긴다)

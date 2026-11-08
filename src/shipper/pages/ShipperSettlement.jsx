@@ -6,6 +6,7 @@ import { collection, query, where, onSnapshot, getDocs } from "firebase/firestor
 import { doc, getDoc } from "firebase/firestore";
 import { html2canvas } from "../../lazyLoad"; // ⭐ 2026-11-02 속도 — 캡처 라이브러리는 처음 캡처할 때 받는다
 import jsPDF from "jspdf";
+import { sendCompanyMail, isMailSetupNeeded } from "../../companyMail"; // ✉️ 2026-11-08 운송사별 발신 메일
 
 // 전화번호 하이픈 자동 포맷 (DispatchApp.jsx formatPhone과 동일 규칙)
 const formatPhone = (phone) => {
@@ -677,18 +678,15 @@ export default function ShipperSettlement() {
                     };
                     const bodyLines = emailBody.split("\n").map(l => `<p style="margin:0 0 4px 0">${l || "&nbsp;"}</p>`).join("");
                     const bodyHtml = `<div style="font-family:sans-serif;font-size:14px;color:#333;line-height:1.8;max-width:600px">${bodyLines}</div>`;
-                    const res = await fetch("/api/send-email", {
-                      method: "POST",
-                      headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({ to: emailTo, subject: emailSubject, html: bodyHtml, attachments: [attachment], fromName: userData?.companyName || "배차팀" }),
-                    });
-                    if (res.ok) {
+                    // ✉️ 2026-11-08 연동 운송사의 메일 계정으로 보낸다(답장은 내 계정 이메일로) — 서버 함수 sendCompanyMail
+                    const r = await sendCompanyMail({ to: emailTo, subject: emailSubject, html: bodyHtml, attachments: [attachment], fromName: userData?.companyName || "", log: { type: "정산내역서(화주)", client: userData?.companyName || "-", body: emailBody } });
+                    if (r.ok) {
                       alert(`${emailTo} 로 발송 완료`);
                       setEmailModalOpen(false);
+                    } else if (isMailSetupNeeded(r)) {
+                      alert("연동된 운송사가 아직 발신 메일을 등록하지 않았어요. 운송사 담당자에게 메일 설정을 요청해 주세요.");
                     } else {
-                      let errMsg = `서버 오류 (${res.status})`;
-                      try { const errData = await res.json(); errMsg = errData.error || errMsg; } catch {}
-                      alert(`발송 실패: ${errMsg}`);
+                      alert(`발송 실패: ${r.error}`);
                     }
                   } catch (e) {
                     alert("네트워크 오류로 발송 실패");
