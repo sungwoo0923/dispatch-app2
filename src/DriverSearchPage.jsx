@@ -4,8 +4,7 @@
 
 import CustomDatePicker from "./CustomDatePicker";
 import React, { useState, useEffect } from "react";
-import { db, FUNCTIONS_BASE } from "./firebase";
-import { collection, query, where, getDocs } from "firebase/firestore";
+import { FUNCTIONS_BASE } from "./firebase";
 import { LogisWordmark } from "./brand"; // 🔷 2026-11-04 LogisWeb 로고
 
 const cardStyle = {
@@ -77,7 +76,6 @@ export default function DriverSearchPage() {
   const sourceFixed = params.get("source") === "fixed";
   // 🏢 운송사가 보낸 링크에는 회사(co)가 붙어 있다 — 그 회사 오더만 찾는다(예전 링크는 회사 없이 그대로)
   const linkCo = (params.get("co") || "").trim();
-  const sameCo = (data) => !linkCo || (String(data.companyName || data.company || "").trim() || "돌캐") === linkCo;
   const [date, setDate] = useState(params.get("date") || todayKSTStr());
   const [vehicleNo, setVehicleNo] = useState(params.get("vehicle") || "");
   const [name, setName] = useState(params.get("name") || "");
@@ -106,61 +104,15 @@ export default function DriverSearchPage() {
     setResults(null);
 
     // 🔒 서버 검색 우선 — 서버 규칙으로 오더 목록이 잠긴 뒤에도, 날짜·차량번호·이름이 모두 맞는 오더만 받는다
+    // ⭐ 2026-11-08 보안 — 서버(driverSearch)만 쓴다. 로그인 없는 화면이 오더 목록을 직접 읽던 예전 방식은 규칙이 막는다.
+    //  결과에는 오더의 업로드토큰 대신 그 오더 하나에만 쓰이는 6시간짜리 허가증(grant)이 온다.
     try {
       const qs = new URLSearchParams({ date, vehicle: trimVehicle, name: trimName, ...(linkCo ? { co: linkCo } : {}), ...(sourceFixed ? { source: "fixed" } : {}) });
       const r = await fetch(`${FUNCTIONS_BASE}/driverSearch?${qs.toString()}`);
-      if (r.ok) {
-        const j = await r.json();
-        if (Array.isArray(j.results)) { setResults(j.results); setLoading(false); return; }
-      }
-    } catch { /* 서버 함수 배포 전 — 아래 직접 조회 */ }
-
-    try {
-      const matched = [];
-
-      if (sourceFixed) {
-        // 고정거래처관리 오더만 검색 (날짜 필드 사용)
-        try {
-          const snap = await getDocs(
-            query(collection(db, "fixedClients"), where("날짜", "==", date))
-          );
-          snap.forEach(d => {
-            const data = d.data();
-            const vn = String(data.차량번호 || "").replace(/\s/g, "");
-            const nm = String(data.이름 || "").trim();
-            if (vn === trimVehicle && nm === trimName && sameCo(data)) {
-              matched.push({ _id: d.id, _col: "fixedClients", 상차일: data.날짜, ...data });
-            }
-          });
-        } catch {
-          // collection may not exist
-        }
-      } else {
-        // 4/5파트 오더만 검색
-        const tryCollection = async (colName) => {
-          try {
-            const snap = await getDocs(
-              query(collection(db, colName), where("상차일", "==", date))
-            );
-            snap.forEach(d => {
-              const data = d.data();
-              // 화주사 전송 카피는 원본과 동일 오더이므로 검색결과 중복을 막기 위해 제외
-              if (data.source === "transport_transmit") return;
-              const vn = String(data.차량번호 || "").replace(/\s/g, "");
-              const nm = String(data.이름 || "").trim();
-              if (vn === trimVehicle && nm === trimName && sameCo(data)) {
-                matched.push({ _id: d.id, _col: colName, ...data });
-              }
-            });
-          } catch {
-            // collection may not exist
-          }
-        };
-        await tryCollection("orders");
-        await tryCollection("dispatch");
-      }
-
-      setResults(matched);
+      const j = await r.json().catch(() => null);
+      if (r.ok && Array.isArray(j?.results)) setResults(j.results);
+      else if (r.status === 429) setError("검색을 너무 여러 번 했습니다. 잠시 후 다시 시도해주세요.");
+      else setError("검색 중 오류가 발생했습니다. 다시 시도해주세요.");
     } catch (e) {
       console.error(e);
       setError("검색 중 오류가 발생했습니다. 다시 시도해주세요.");
@@ -173,12 +125,10 @@ export default function DriverSearchPage() {
     if (e.key === "Enter") handleSearch();
   };
 
-  const goToUpload = (id, token) => {
-    // 오더에 이미 업로드토큰이 발급되어 있는데(과거에 "기사전달용" 링크를 한 번이라도
-    // 만든 적이 있으면) 여기서 토큰 없이 넘어가면, /upload 쪽 잠금 로직이 "토큰이
-    // 안 맞는 예전 링크"로 오인해 업로드한 적이 없어도 "이미 업로드 완료"로 막아버렸다.
-    // 검색 결과에 이미 포함된 현재 토큰을 그대로 같이 넘겨 정상 접근되게 한다.
-    window.location.href = `/upload?id=${id}${token ? `&t=${token}` : ""}${linkCo ? `&co=${encodeURIComponent(linkCo)}` : ""}`;
+  // ⭐ 2026-11-08 보안 — 오더 업로드토큰 대신 서버가 준 허가증(g)·컬렉션(col)을 넘긴다(잠긴 오더는 서버가 "이미 업로드 완료"로 안내)
+  const goToUpload = (r) => {
+    const q = new URLSearchParams({ id: r._id, ...(r._col ? { col: r._col } : {}), ...(r.grant ? { g: r.grant } : {}), ...(linkCo ? { co: linkCo } : {}) });
+    window.location.href = `/upload?${q.toString()}`;
   };
 
   const statusLabel = (r) => {
@@ -324,7 +274,7 @@ export default function DriverSearchPage() {
                   return (
                     <button
                       key={r._id}
-                      onClick={() => goToUpload(r._id, r.업로드토큰)}
+                      onClick={() => goToUpload(r)}
                       style={{
                         background: "#f8fafc",
                         border: "1.5px solid #e2e8f0",

@@ -5,17 +5,13 @@
 // ─────────────────────────────────────────────────────────────
 
 import React, { useState, useEffect, useRef, useCallback } from "react";
-import { runDelete, commitDeletes } from "./DeleteProgress"; // ⭐ 2026-11-05 삭제 진행 창 + 한 번에 삭제
-import { db, DEFAULT_COMPANY } from "./firebase";
+import { runDelete } from "./DeleteProgress"; // ⭐ 2026-11-05 삭제 진행 창 + 한 번에 삭제
+import { db } from "./firebase";
+// ⭐ 2026-11-08 보안 — 오더·첨부는 서버(uploadAccess)가 링크 토큰을 확인한 뒤 대신 읽고 쓴다(보안 규칙이 로그인 없는 직접 접근을 막음)
+import { uploadApi, newUploadSession } from "./uploadTokenClient";
 import { LogisMark, LogisTag } from "./brand"; // 🔷 2026-11-04 LogisWeb 로고
 import {
   doc,
-  getDoc,
-  updateDoc,
-  increment,
-  deleteDoc,
-  collection,
-  addDoc,
   setDoc,
   serverTimestamp,
 } from "firebase/firestore";
@@ -29,7 +25,10 @@ import { kpConfirm } from "./kpDialog";
 export default function UploadPage() {
   const [orderId, setOrderId]     = useState(null);
   const [order, setOrder]         = useState(null);
-  const [status, setStatus]       = useState("loading"); // loading | ready | done | error | locked
+  const [status, setStatus]       = useState("loading"); // loading | ready | done | error | locked | expired
+  // ⭐ 2026-11-08 서버 확인용 — 링크 열쇠(id·t·g·col)와 이 화면만의 세션 키(방금 올린 사진만 지울 수 있게)
+  const accessRef = useRef({});
+  const sessionRef = useRef(newUploadSession());
   const [isManual, setIsManual]   = useState(false);
   const [confirmPopup, setConfirmPopup] = useState(false);
 
@@ -119,67 +118,28 @@ export default function UploadPage() {
     }
 
     setOrderId(id);
+    // 링크에 담긴 열쇠 — t: 오더 업로드토큰(기사전달용 링크) · g: 통합 검색이 준 6시간 허가증 · col: 검색 결과의 컬렉션
+    accessRef.current = { id, t: token || "", g: params.get("g") || "", col: params.get("col") || "" };
 
     (async () => {
-      try {
-        // orders(신규) → dispatch(기존) → dispatch_test(테스트) → fixedClients 순으로 검색
-        let snap = await getDoc(doc(db, "orders", id));
-        if (!snap.exists()) {
-          snap = await getDoc(doc(db, "dispatch", id));
-        }
-        if (!snap.exists()) {
-          snap = await getDoc(doc(db, "dispatch_test", id));
-        }
-        if (!snap.exists()) {
-          snap = await getDoc(doc(db, "fixedClients", id));
-        }
-        if (snap.exists()) {
-          const data = snap.data();
-          // 링크에 토큰이 발급되어 있는 오더는, 그 링크에 담긴 토큰이 현재
-          // 유효한 토큰과 일치할 때만 접근을 허용한다 — 업로드 완료 후 새 링크가
-          // 발급되면 예전에 전달된 링크(구 토큰)는 영구적으로 막힌다.
-          if (data.업로드토큰 && data.업로드토큰 !== token) {
-            setStatus("locked");
-            return;
-          }
-          // 운송사 담당자가 첨부파일 팝업에서 "재업로드 허용"을 누르면 이 만료시각이
-          // 30분 뒤로 찍힌다 — 아직 지나지 않았으면 잠긴 상태라도 예전 링크를 그대로
-          // 다시 쓸 수 있게 해준다(새 링크를 재발급/재전송할 필요 없음).
-          const unlockExpiry = data.업로드잠금해제만료 ? new Date(data.업로드잠금해제만료).getTime() : 0;
-          const tempUnlocked = unlockExpiry > Date.now();
-          if (data.업로드잠금 && !tempUnlocked) {
-            setStatus("locked");
-            return;
-          }
-          setOrderId(id);
-          setOrder({ _id: id, _col: snap.ref.parent.id, ...data });
-          setStatus("ready");
-        } else {
-          setStatus("error");
-        }
-      } catch (e) {
-        console.error(e);
-        setStatus("error");
+      // 서버가 orders → dispatch → dispatch_test → fixedClients 순으로 찾고, 토큰·잠금·만료를 확인한 뒤 화면에 필요한 칸만 준다.
+      //  · 토큰이 다르거나(새 링크 발급됨) 업로드 완료로 잠긴 링크 → locked
+      //  · 30일 지난 토큰 / 전환 기간이 끝난 예전 형식 링크 → expired
+      const r = await uploadApi({ action: "view", ...accessRef.current });
+      if (r.ok && r.order) {
+        accessRef.current.col = r.col;
+        if (r.payRule) setPaymentRule(r.payRule);
+        setOrder({ _id: id, _col: r.col, ...r.order });
+        setStatus("ready");
+        return;
       }
+      if (r.error === "LOCKED" || r.error === "BAD_TOKEN") setStatus("locked");
+      else if (r.error === "EXPIRED") setStatus("expired");
+      else { console.error("[업로드 링크 확인 실패]", r.error); setStatus("error"); }
     })();
   }, []);
 
-  // 오더의 소속 회사(companyName)에 맞는 결제일 규칙을 불러온다 — 회사별로 설정이
-  // 다를 수 있으므로 이 오더가 어느 회사 소속인지로 조회한다. 설정이 없으면 기본값 유지.
-  useEffect(() => {
-    if (!order) return;
-    const cname = (order.companyName || DEFAULT_COMPANY).trim();
-    (async () => {
-      try {
-        const snap = await getDoc(doc(db, "companySettings", cname));
-        const saved = snap.exists() ? snap.data()?.결제일규칙 : null;
-        if (saved) setPaymentRule(saved);
-      } catch (e) {
-        // 규칙 조회 실패시 기본값 그대로 사용
-      }
-    })();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [order?.companyName]);
+  // 결제일 규칙(회사별)은 서버가 오더와 함께 준다(위 view 응답의 payRule) — 로그인 없는 화면은 회사 설정을 직접 못 읽는다
 
   // ── 실시간 위치 공유 (무료 GPS 기반 — 이 페이지가 화면에 켜져 있는 동안만 동작) ──
   // 브라우저 Geolocation API로 좌표를 받아 오더 문서(+화주사 전송사본)에 기록한다.
@@ -203,18 +163,14 @@ export default function UploadPage() {
       setSharingLoc(false);
       return;
     }
-    const mirrorTarget = order._transmittedOrderId
-      ? { col: "orders", id: order._transmittedOrderId }
-      : (order.originCol && order.originId ? { col: order.originCol, id: order.originId } : null);
+    // 화주사 전송사본 쪽 실시간 위치 문서 id(서버가 알려줌)
+    const mirrorLiveId = order._mirrorLiveId || "";
 
     // 위치공유 on/off는 오더 문서에 한 번만 기록한다(운송사 PC 표의 "공유중" 점 표시용) —
     // 실제로 계속 바뀌는 좌표는 아래에서 오더 문서와 완전히 분리된 liveLocations
     // 컬렉션에만 써서, 운송사 PC의 전체 오더 목록 리스너가 GPS 갱신을 아예 감지하지
     // 못하게 한다 — 그래야 위치공유가 켜져 있는 내내 PC가 절대 끊기지 않는다.
-    updateDoc(doc(db, order._col, orderId), { 위치공유중: true }).catch(() => {});
-    if (mirrorTarget) {
-      updateDoc(doc(db, mirrorTarget.col, mirrorTarget.id), { 위치공유중: true }).catch(() => {});
-    }
+    uploadApi({ action: "loc", on: true, ...accessRef.current });
 
     watchIdRef.current = navigator.geolocation.watchPosition(
       (pos) => {
@@ -229,8 +185,8 @@ export default function UploadPage() {
         lastLocWriteRef.current = now;
         const payload = { 위치: { lat, lng }, 위치갱신일시: serverTimestamp() };
         setDoc(doc(db, "liveLocations", orderId), payload, { merge: true }).catch(() => {});
-        if (mirrorTarget) {
-          setDoc(doc(db, "liveLocations", mirrorTarget.id), payload, { merge: true }).catch(() => {});
+        if (mirrorLiveId) {
+          setDoc(doc(db, "liveLocations", mirrorLiveId), payload, { merge: true }).catch(() => {});
         }
       },
       (err) => {
@@ -243,10 +199,7 @@ export default function UploadPage() {
     return () => {
       if (watchIdRef.current != null) navigator.geolocation.clearWatch(watchIdRef.current);
       watchIdRef.current = null;
-      updateDoc(doc(db, order._col, orderId), { 위치공유중: false }).catch(() => {});
-      if (mirrorTarget) {
-        updateDoc(doc(db, mirrorTarget.col, mirrorTarget.id), { 위치공유중: false }).catch(() => {});
-      }
+      uploadApi({ action: "loc", on: false, ...accessRef.current }, { keepalive: true });
     };
   }, [sharingLoc, order, isManual, orderId, locConsent]);
 
@@ -335,36 +288,25 @@ export default function UploadPage() {
     setUploading(true);
     const results = [];
 
-    // 수동 모드: 업로드 전 메타 문서 먼저 생성
-    let targetCol = order?._col || "orders";
-    let targetId = orderId;
-
+    // 수동 모드: 업로드 전 메타 문서 먼저 생성(서버가 만들고, 이 화면의 세션 키로만 사진을 붙일 수 있다)
     if (isManual) {
-      try {
-        const metaDoc = await addDoc(collection(db, "driver_uploads"), {
-          상차일: manualDate,
-          차량번호: manualCar,
-          이름: manualName,
-          createdAt: serverTimestamp(),
-          source: "manual_upload",
-        });
-        targetCol = "driver_uploads";
-        targetId = metaDoc.id;
-        setOrderId(metaDoc.id);
-      } catch (e) {
-        console.error("메타 문서 생성 실패:", e);
-        alert("업로드 준비 실패: " + e.message);
+      const co = (new URLSearchParams(window.location.search).get("co") || "").trim();
+      const r = await uploadApi({ action: "manualStart", session: sessionRef.current, date: manualDate, car: manualCar, name: manualName, co });
+      if (!r.ok || !r.id) {
+        console.error("메타 문서 생성 실패:", r.error);
+        alert("업로드 준비 실패: " + (r.error === "RATE_LIMITED" ? "잠시 후 다시 시도해주세요." : (r.error || "")));
         setUploading(false);
         return;
       }
+      accessRef.current = { id: r.id, col: "driver_uploads", manualId: r.id };
+      setOrderId(r.id);
     }
-
-    // 운송사 원본 <-> 화주사 전송카피 간 첨부파일이 어느 쪽에서 올려도 양쪽에 동일하게 반영되도록 동기화
-    const mirrorTarget = (!isManual && order)
-      ? (order._transmittedOrderId
-          ? { col: "orders", id: order._transmittedOrderId }
-          : (order.originCol && order.originId ? { col: order.originCol, id: order.originId } : null))
-      : null;
+    const target = { ...accessRef.current, session: sessionRef.current };
+    const send = async (file, label) => {
+      const r = await withTimeout(uploadApi({ action: "addFile", ...target, file }, { timeoutMs: 40000 }), 45000, label);
+      if (!r.ok) throw new Error(r.error === "LOCKED" ? "이미 업로드가 완료된 링크입니다" : r.error === "TOO_LARGE" ? "파일이 너무 큽니다" : (r.error || "업로드 실패"));
+      return r.attId;
+    };
 
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
@@ -400,38 +342,12 @@ export default function UploadPage() {
         // 첫 번째 파일 업로드 시 서명 이미지도 저장
         if (i === 0 && sigRef.current && signed) {
           const sigBase64 = sigRef.current.toDataURL("image/png");
-          const sigPayload = {
-            base64: sigBase64,
-            name: "서명.png",
-            type: "image/png",
-            sizeKB: Math.round(sigBase64.length * 0.75 / 1024),
-            uploadedAt: serverTimestamp(),
-            source: "driver_signature",
-          };
-          const sigId = doc(collection(db, targetCol, targetId, "attachments")).id;
-          await withTimeout(setDoc(doc(db, targetCol, targetId, "attachments", sigId), sigPayload), 25000, "서명 저장");
-          if (mirrorTarget) {
-            try { await setDoc(doc(db, mirrorTarget.col, mirrorTarget.id, "attachments", sigId), sigPayload); }
-            catch (e) { console.warn("서명 동기화 실패(무시):", e); }
-          }
+          // 서버가 오더(+화주사 전송사본)에 같이 저장한다
+          await send({ base64: sigBase64, name: "서명.png", source: "driver_signature" }, "서명 저장");
         }
 
-        const filePayload = {
-          base64,
-          name: file.name,
-          type: "image/jpeg",
-          sizeKB,
-          uploadedAt: serverTimestamp(),
-          source: "driver_upload",
-        };
-        const fileId = doc(collection(db, targetCol, targetId, "attachments")).id;
-        await withTimeout(setDoc(doc(db, targetCol, targetId, "attachments", fileId), filePayload), 25000, "파일 업로드");
-        if (mirrorTarget) {
-          try {
-            await setDoc(doc(db, mirrorTarget.col, mirrorTarget.id, "attachments", fileId), filePayload);
-            await updateDoc(doc(db, mirrorTarget.col, mirrorTarget.id), { attachCount: increment(1) });
-          } catch (e) { console.warn("첨부 동기화 실패(무시):", e); }
-        }
+        // 서버가 오더(+화주사 전송사본)에 저장하고 첨부 수(attachCount)도 함께 올린다
+        const fileId = await send({ base64, name: file.name, source: "driver_upload" }, "파일 업로드");
         const docRef = { id: fileId };
 
         clearInterval(progressTimer);
@@ -447,27 +363,13 @@ export default function UploadPage() {
     }
 
     if (results.length > 0 && !isManual) {
-      try {
-        const parentRef = doc(db, targetCol, targetId);
-        await updateDoc(parentRef, { attachCount: increment(results.length) });
-      } catch(e) { console.error("카운트 업데이트 실패:", e); }
-
       // 안내 팝업에서 "등록"을 눌러 업로드가 완료되면, 이 링크(토큰)로는 다시
       // 접속할 수 없도록 잠근다 — 재업로드가 필요하면 운송사가 새 링크를 발급하거나
       // 첨부파일 팝업의 "재업로드 허용"으로 임시로 다시 열어줘야 한다. 임시 해제로
       // 들어와서 재업로드를 마친 경우 그 해제창을 즉시 닫아 바로 재잠금되게 한다.
-      // 이미 한 번 잠겨있던 상태(=재업로드 허용창을 통해 다시 들어온 경우)였다면,
-      // 운송사 담당자가 첨부파일 팝업에서 "재업로드 완료"를 알 수 있게 알림 플래그도 남긴다.
-      const isReupload = order?.업로드잠금 === true;
-      try {
-        const parentRef = doc(db, targetCol, targetId);
-        const lockPatch = { 업로드잠금: true, 업로드잠금해제만료: null };
-        if (isReupload) lockPatch.재업로드완료알림 = true;
-        await updateDoc(parentRef, lockPatch);
-        if (mirrorTarget) {
-          await updateDoc(doc(db, mirrorTarget.col, mirrorTarget.id), lockPatch).catch(() => {});
-        }
-      } catch (e) { console.error("업로드 잠금 처리 실패:", e); }
+      // 이미 한 번 잠겨있던 상태(=재업로드 허용창을 통해 다시 들어온 경우)였다면 서버가 "재업로드 완료" 알림 표시도 남긴다.
+      const r = await uploadApi({ action: "finish", ...target });
+      if (!r.ok) console.error("업로드 잠금 처리 실패:", r.error);
     }
 
     const failedCount = files.length - results.length;
@@ -575,18 +477,20 @@ export default function UploadPage() {
         )}
 
         {/* ── 오류 / 잠김 ── */}
-        {(status === "error" || status === "locked") && (
+        {(status === "error" || status === "locked" || status === "expired") && (
           <div className="kpu-card" style={{ textAlign: "center", padding: "40px 22px" }}>
             <div style={{ width: 60, height: 60, borderRadius: 20, margin: "0 auto 14px", background: "#F4F7FC", border: "1.5px solid #C9D3E4", display: "flex", alignItems: "center", justifyContent: "center" }}>
               {status === "locked"
                 ? <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#1B2B4B" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="4" y="11" width="16" height="10" rx="2" /><path d="M8 11V7a4 4 0 0 1 8 0v4" /></svg>
                 : <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#1B2B4B" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10 14a4.5 4.5 0 0 0 6.4 0l3-3a4.5 4.5 0 0 0-6.4-6.4l-1.2 1.2" /><path d="M14 10a4.5 4.5 0 0 0-6.4 0l-3 3a4.5 4.5 0 0 0 6.4 6.4l1.2-1.2" /><path d="M4 4l16 16" /></svg>}
             </div>
-            <div style={{ fontWeight: 900, fontSize: 18 }}>{status === "locked" ? "이미 업로드가 완료된 링크입니다" : "링크가 올바르지 않습니다"}</div>
+            <div style={{ fontWeight: 900, fontSize: 18 }}>{status === "locked" ? "이미 업로드가 완료된 링크입니다" : status === "expired" ? "사용 기간이 지난 링크입니다" : "링크가 올바르지 않습니다"}</div>
             <div style={{ color: "#64748b", fontSize: 14, marginTop: 8, lineHeight: 1.7 }}>
               {status === "locked"
                 ? <>이 링크로는 다시 접속하거나 재업로드할 수 없습니다.<br />재업로드가 필요하면 배차 담당자에게 새 링크를 요청해주세요.</>
-                : "배차 담당자에게 링크를 다시 요청해주세요."}
+                : status === "expired"
+                  ? <>보안을 위해 업로드 링크는 일정 기간만 쓸 수 있습니다.<br />배차 담당자에게 새 링크를 요청해주세요.</>
+                  : "배차 담당자에게 링크를 다시 요청해주세요."}
             </div>
           </div>
         )}
@@ -615,9 +519,11 @@ export default function UploadPage() {
                       onClick={async () => {
                         if (!(await kpConfirm("이 사진을 삭제하시겠습니까?"))) return;
                         try {
-                          const col = order?._col || "orders";
-                          // ⭐ 2026-11-05 삭제 진행 창 + 사진 삭제·첨부 수를 한 묶음으로
-                          await runDelete({ label: "사진", task: () => commitDeletes(db, [doc(db, col, orderId, "attachments", f.docId), (b) => b.update(doc(db, col, orderId), { attachCount: increment(-1) })]) });
+                          // ⭐ 2026-11-05 삭제 진행 창 · 2026-11-08 서버가 사진 삭제·첨부 수를 한 묶음으로(이 화면에서 방금 올린 사진만)
+                          await runDelete({ label: "사진", task: async () => {
+                            const r = await uploadApi({ action: "deleteFile", ...accessRef.current, session: sessionRef.current, attId: f.docId });
+                            if (!r.ok) throw new Error(r.error === "EXPIRED" ? "올린 지 오래된 사진은 담당자에게 삭제를 요청해주세요." : (r.error || "삭제 실패"));
+                          } });
                           setUploaded(prev => prev.filter((_, idx) => idx !== i));
                         } catch (e) { alert("삭제 실패: " + e.message); }
                       }}

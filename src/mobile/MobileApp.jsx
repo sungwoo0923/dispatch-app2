@@ -144,6 +144,7 @@ import { LiveDriverChip, FleetLiveButton, useFleetLivePublish } from "../liveFle
 import { useUiScreen, uiMenuItem, useUiConfigVersion } from "../uiConfig"; // ⭐ 2026-11-07 화면 편집 모드 — 메뉴 이름·순서·숨기기(권한은 그대로)
 import MyInfoTabs from "../MyInfoTabs"; // ⭐ 2026-11-07 내정보 안 탭(급여명세서 · 연차 사용 계획)
 import { kpConfirm } from "../kpDialog";
+import { ensureUploadToken } from "../uploadTokenClient"; // ⭐ 2026-11-08 업로드 링크 토큰(발급 시각·만료)
 
 
 
@@ -18635,14 +18636,13 @@ ${Number(order.청구운임||0).toLocaleString()}원 ${(()=>{const pt=order.지�
       const uploadUrl = (() => {
         const oid = order._id || order.id;
         const col = order.__col || order._col || "dispatch";
-        let token = order.업로드토큰;
-        if (!token || order.업로드잠금) {
-          token = crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`;
+        // ⭐ 2026-11-08 보안 — 토큰 발급 시각도 남긴다(서버가 30일 뒤 만료 · 만료 2일 전부터 새로 발급)
+        const { token, patch } = ensureUploadToken(order);
+        if (patch) {
           // ⭐ oid가 없으면(드물게 order 객체가 id를 못 들고 있는 경우) doc()이 그
           // 자리에서 예외를 던져 전체 복사 자체가 조용히 실패했다 — oid가 있을 때만
           // 문서 갱신을 시도하고, 없어도 링크 자체는(토큰만으로) 계속 만들어준다.
           if (oid) {
-            const patch = { 업로드토큰: token, 업로드잠금: false };
             updateDoc(doc(db, col, oid), patch).catch(() => {});
             if (order._transmittedOrderId) {
               updateDoc(doc(db, "orders", order._transmittedOrderId), patch).catch(() => {});
