@@ -2493,9 +2493,9 @@ export default function DriverHome() {
             </button>
           )}
           {inbox.unread > 0 && (
-            <button type="button" onClick={() => setActiveTab("docs")} style={{ width: "100%", textAlign: "left", marginBottom: 12, padding: "12px 14px", borderRadius: 20, border: "1px solid #C9D6EE", background: "#EEF3FC", color: "#0F1A30", cursor: "pointer", display: "flex", alignItems: "center", gap: 10 }}>
+            <button type="button" onClick={() => { try { sessionStorage.setItem("kpDocTab", inbox.firstTab || "pay"); } catch (_) { /* 무시 */ } setActiveTab("docs"); }} style={{ width: "100%", textAlign: "left", marginBottom: 12, padding: "12px 14px", borderRadius: 20, border: "1px solid #C9D6EE", background: "#EEF3FC", color: "#0F1A30", cursor: "pointer", display: "flex", alignItems: "center", gap: 10 }}>
               <span style={{ width: 34, height: 34, borderRadius: 10, background: "#0F1A30", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 900 }}>{inbox.unread}</span>
-              <span style={{ flex: 1 }}><b style={{ fontSize: 16.5 }}>새 서류가 도착했습니다</b><br /><span style={{ fontSize: 14.5, color: "#5B6B85" }}>지급명세서 · 과태료·사고 서류 — 눌러서 확인</span></span>
+              <span style={{ flex: 1 }}><b style={{ fontSize: 16.5 }}>{inbox.unreadCt && !inbox.unreadPay && !inbox.unreadPen ? "계약서 서명 요청이 왔습니다" : "새 서류가 도착했습니다"}</b><br /><span style={{ fontSize: 14.5, color: "#5B6B85" }}>{inbox.label || "서류함"} — 눌러서 확인</span></span>
               <span style={{ fontWeight: 900, color: "#2D4C82" }}>›</span>
             </button>
           )}

@@ -35,8 +35,14 @@ export function useDriverInbox(uid) {
     const u2 = onSnapshot(query(collection(db, "fleetPenalties"), where("driverId", "==", uid)), (s) => setPen(s.docs.map((d) => ({ id: d.id, ...d.data() })).filter((p) => p.published !== false)), () => setPen([]));
     return () => { u1(); u2(); u3(); };
   }, [uid]);
-  const unread = st.filter((x) => !x.readAt).length + pen.filter((x) => !x.readAt).length + ct.filter((x) => x.status !== "signed").length;
-  return { statements: st, penalties: pen, contracts: ct, unread };
+  const unreadPay = st.filter((x) => !x.readAt).length;
+  const unreadPen = pen.filter((x) => !x.readAt).length;
+  const unreadCt = ct.filter((x) => x.status !== "signed").length;
+  const unread = unreadPay + unreadPen + unreadCt;
+  // ⭐ 2026-11-10 홈 안내 문구를 실제로 온 서류 종류로("계약서 서명 요청 1건 · 지급명세서 1건")
+  const label = [unreadCt && `계약서 서명 요청 ${unreadCt}건`, unreadPay && `지급명세서 ${unreadPay}건`, unreadPen && `과태료·사고 서류 ${unreadPen}건`].filter(Boolean).join(" · ");
+  const firstTab = unreadCt ? "ct" : unreadPay ? "pay" : "pen";
+  return { statements: st, penalties: pen, contracts: ct, unread, unreadPay, unreadPen, unreadCt, label, firstTab };
 }
 
 export default function DriverDocBox({ uid, inbox, companyName = "" }) {
