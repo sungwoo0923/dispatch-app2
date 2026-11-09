@@ -11903,6 +11903,7 @@ const splitCargo = (t = "") => {
 };
 function QuickEditSheet({ order, onClose, onSaved, cardVersionB, clients = [], basicClients }) {
   const toNum = (v) => Number(String(v ?? "").replace(/[^\d-]/g, "")) || 0;
+  const [saving, setSaving] = useState(false); // ⭐ 2026-11-10 점검 — 빠져 있어 빠른 수정 창이 열리자마자 화면 오류(saving is not defined)
   const [f, setF] = useState(() => {
     const ton = splitTon(order.차량톤수 || order.톤수 || "");
     const cargo = splitCargo(order.화물내용 || "");
