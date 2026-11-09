@@ -563,11 +563,15 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
       serverMsgsRef.current = { roomId: activeRoom.id, list: serverMsgs };
       setMessages(prev => {
         // 서버에 없는 optimistic 메시지만 유지 (중복 방지)
+        // ⭐ 2026-11-09 서버 시각이 아직 안 찍힌(보내는 중) 문서는 createdAt이 비어 있어 예전엔 같은 말풍선이 잠깐 두 개 보였다 → 고유 번호(clientId)로 맞춘다
         const pendingOpt = prev.filter(m => m._optimistic && !serverMsgs.some(
-          r => r.senderUid === m.senderUid && r.text === m.text &&
-          Math.abs((r.createdAt?.toMillis?.() || 0) - (m.createdAt?.toMillis?.() || 0)) < 15000
+          r => (m.clientId && r.clientId === m.clientId) || (r.senderUid === m.senderUid && r.text === m.text &&
+          (!r.createdAt || Math.abs((r.createdAt?.toMillis?.() || 0) - (m.createdAt?.toMillis?.() || 0)) < 15000))
         ));
-        const all = [...serverMsgs, ...pendingOpt];
+        // 보내는 중인 내 문서(createdAt 비어 있음)는 화면의 임시 말풍선 시각을 이어받아 맨 위로 튀지 않게
+        const nowTs = { toMillis: () => Date.now(), toDate: () => new Date() };
+        const fixed = serverMsgs.map(r => (r.createdAt ? r : { ...r, createdAt: prev.find(m => m._optimistic && m.clientId && m.clientId === r.clientId)?.createdAt || nowTs }));
+        const all = [...fixed, ...pendingOpt];
         return all.sort((a, b) => (a.createdAt?.toMillis?.() || 0) - (b.createdAt?.toMillis?.() || 0));
       });
       if (isVisibleRef.current) markRead(activeRoom.id);
@@ -860,10 +864,18 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
   };
 
   // ── 메시지 전송 (pendingRoom이면 방 먼저 생성, optimistic update) ──
+  // ⭐ 2026-11-09 중복 전송 방지 — 같은 화면 그림(render) 안에서 Enter·클릭이 두 번 들어오면 둘 다 같은 input 값을 보고
+  //  메시지를 두 번 저장했다. 같은 글을 1초 안에 다시 보내는 호출은 무시하고, 메시지마다 고유 번호(clientId)로 문서 이름을 정해
+  //  혹시 두 번 저장돼도 한 문서로 합쳐지게 한다.
+  const sendGuardRef = useRef({ text: "", at: 0 });
   const sendMessage = async () => {
     if (!input.trim()) return;
     if (!activeRoom && !pendingRoom) return;
     const text = input.trim();
+    const g = sendGuardRef.current;
+    if (g.text === text && Date.now() - g.at < 1000) return;
+    sendGuardRef.current = { text, at: Date.now() };
+    const clientId = `${myUid}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     setInput("");
     const senderName = myProfile?.name || myEmail.split("@")[0];
     const now = new Date();
@@ -886,7 +898,7 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
     // 즉시 로컬 상태에 추가
     const tempId = `_opt_${Date.now()}`;
     setMessages(prev => [...prev, {
-      id: tempId, _optimistic: true,
+      id: tempId, _optimistic: true, clientId,
       roomId: room.id, text, type: "text",
       senderUid: myUid, senderName, senderPhoto: myProfile?.photo || "",
       createdAt: { toMillis: () => now.getTime(), toDate: () => now },
@@ -897,8 +909,8 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
 
     const others = room.members?.filter(uid => uid !== myUid) || [];
     const mentions = findMentions(text, room); // ⭐ 2026-11-06 @멘션
-    addDoc(collection(db, MSGS_COLL), {
-      roomId: room.id, text, type: "text",
+    setDoc(doc(db, MSGS_COLL, clientId), {
+      roomId: room.id, text, type: "text", clientId,
       senderUid: myUid, senderName, senderPhoto: myProfile?.photo || "",
       createdAt: serverTimestamp(), edited: false,
       readBy: [myUid], totalMembers: room.members?.length || 1, memberUids: room.members || [],
@@ -3027,6 +3039,9 @@ function ChatView({ room, roomName, roomPhoto, messages, myUid, myProfile, input
                 if (e.key === "Enter" || e.key === "Tab") { e.preventDefault(); pickMention(mentionHits[mention.idx] || mentionHits[0]); return; }
                 if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); setMention(null); return; }
               }
+              // ⭐ 2026-11-09 한글 조합 중 Enter는 건너뛴다 — 윈도 크롬·엣지 한글 입력기는 조합 중 Enter(keyCode 229)와 조합이 끝난 뒤 Enter를
+              //  연달아 보내서, 예전엔 같은 메시지가 두 번 보내졌다(태진 제보). 조합 중 것은 기본 동작만 막고 실제 전송은 뒤의 Enter 한 번만
+              if (e.key === "Enter" && !e.shiftKey && (e.nativeEvent.isComposing || e.keyCode === 229)) { e.preventDefault(); return; }
               if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); setMention(null); setShowQuick(false); onSend(); }
             }}
             onClick={e => trackMention(e.target)}
@@ -3040,7 +3055,7 @@ function ChatView({ room, roomName, roomPhoto, messages, myUid, myProfile, input
           <button type="button"
             onMouseDown={e => e.preventDefault()}
             onTouchStart={e => e.preventDefault()}
-            onTouchEnd={e => { e.stopPropagation(); if (input.trim()) onSend(); }}
+            onTouchEnd={e => { e.stopPropagation(); e.preventDefault(); if (input.trim()) onSend(); }} /* ⭐ 2026-11-09 터치 뒤 따라오는 click으로 한 번 더 보내지 않게 */
             onClick={onSend}
             disabled={!input.trim()}
             style={{
