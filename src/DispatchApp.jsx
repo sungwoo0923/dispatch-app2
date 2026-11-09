@@ -1,4 +1,5 @@
 // ===================== DispatchApp.jsx (PART 1/8) — START =====================
+import { isViewerNow } from "./blind"; // 🧾 특수운임 버튼(조회전용 숨김)
 import { MENU_FEATURE, planIncludes, openPlanLock, featureOn, useCompanyPlanId, PlanValueProvider, PlanValueSync, PlanLockHost, LockIcon, usePlan } from "./plans";
 import { kpConfirm, kpPrompt } from "./kpDialog";
 import { runDelete, commitDeletes, deleteDocsAtomic } from "./DeleteProgress"; // ⭐ 2026-11-05 삭제 진행 창 + 한 번에 삭제(writeBatch)
@@ -2924,7 +2925,7 @@ import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 // ⭐ 2026-11-02 운임규칙 — 회사별 운임 규칙(운임구분 → 기사운임·수수료 자동 계산)
 import FareRulesSettings from "./FareRulesSettings";
 import { useFareRules, FareTypeSelect, FareRuleHint, FarePctInput, fareFormChange, farePatchOf, findFareRule, applyFareRule, FareTypeBreakdown } from "./fareRules";
-import { ForkliftFeeRow, ForkliftChip, ForkliftDriverManager, ForkliftPayouts, forkliftApply, forkliftExcelCols, hasForklift, fkAmount } from "./forklift"; // 🏗 2026-11-09 지게차비용
+import { SpecialFareButton, ForkliftChip, paidOut, hasSpecial, ForkliftDriverManager, ForkliftPayouts, forkliftApply, forkliftExcelCols, hasForklift, fkAmount } from "./forklift"; // 🏗 2026-11-09 지게차비용
 import { useTableSort, sortRows, SortTh } from "./tableSort";
 import { useCompanyFeatures } from "./companyFeatures";
 import { BRAND, LogisMark, LogisWordmark, LogisTag } from "./brand";
@@ -3747,7 +3748,7 @@ const ORDER_SEARCH_FIELD = { client: "거래처명", pickup: "상차지명", dro
 const orderSortValue = (r, key, i) => {
   switch (key) {
     case "순번": return i; // 원래(기본) 순서
-    case "수수료": return _sortInt(r.청구운임) - _sortInt(r.기사운임) - _sortInt(r.지게차비용);
+    case "수수료": return _sortInt(r.청구운임) - _sortInt(r.기사운임) - _sortInt(r.외부지급합 ?? r.지게차비용);
     case "기사명": return r.이름;
     case "첨부": return r.attachCount || 0;
     case "전달상태": return r.업체전달상태 || "미전달";
@@ -4887,13 +4888,15 @@ const patchDispatch = async (_id, patch, knownPrev) => {
 
   // ⭐ 2026-11-01 청구운임·기사운임을 바꾸면 저장된 수수료도 같이 맞춘다 — 오더 수정 패널·표 칸 수정 등이
   //    운임만 바꾸고 수수료는 예전 값으로 남겨, 정산·매출(저장된 수수료를 먼저 읽음)에서 수익이 틀리게 나왔다.
-  if (("청구운임" in patch || "기사운임" in patch || "지게차비용" in patch)) {
+  if (("청구운임" in patch || "기사운임" in patch || "지게차비용" in patch || "외부지급합" in patch)) {
     const _n = (v) => Number(String(v ?? "").replace(/[^\d-]/g, "")) || 0;
     const sale = _n("청구운임" in patch ? patch.청구운임 : prev?.청구운임);
     const drv = _n("기사운임" in patch ? patch.기사운임 : prev?.기사운임);
     // 🏗 2026-11-09 지게차비용 — 수익 = 청구 − 기사 − 지게차
-    const fork = Math.max(0, _n("지게차비용" in patch ? patch.지게차비용 : prev?.지게차비용));
-    const prevAuto = _n(prev?.청구운임) - _n(prev?.기사운임) - Math.max(0, _n(prev?.지게차비용));
+    // 🧾 2026-11-09 특수운임 — 회사가 따로 주는 돈 = 외부지급합(없으면 지게차비용)
+    const outOf = (o) => Math.max(0, _n(o?.외부지급합 != null ? o.외부지급합 : o?.지게차비용));
+    const fork = "외부지급합" in patch ? Math.max(0, _n(patch.외부지급합)) : "지게차비용" in patch ? Math.max(0, _n(patch.지게차비용)) + Math.max(0, _n(prev?.외부지급합) - _n(prev?.지게차비용)) : outOf(prev);
+    const prevAuto = _n(prev?.청구운임) - _n(prev?.기사운임) - outOf(prev);
     const prevAuto0 = _n(prev?.청구운임) - _n(prev?.기사운임);
     const prevFee = prev?.수수료;
     // 예전 수수료가 비어 있거나 "청구-기사"와 같았던(자동 계산) 오더만 다시 계산한다 — 직접 넣은 수수료는 그대로
@@ -15481,6 +15484,8 @@ React.useEffect(() => {
   블라인드
 </button>
 )}
+{/* 🧾 2026-11-09 특수운임 적용 — 지게차비용·대기료·경유·할증 등(팝업). 블라인드와 같은 줄, 조회전용 외 모든 직원 */}
+{!isViewerNow() && <SpecialFareButton form={form} setForm={setForm} btnClass={dmToggleCls} />}
   {(areaFareHint || distanceFareEstimate) && (
     <div
       className="mt-2 flex items-center gap-3 bg-[#1B2B4B] rounded-lg px-4 py-2 text-sm cursor-pointer hover:bg-[#243a60] transition"
@@ -16288,7 +16293,7 @@ shadow-[0_1px_2px_rgba(16,24,40,0.04),0_12px_30px_rgba(16,24,40,0.07)]
                 </div>
               ) : <div />}
               {/* 🏗 2026-11-09 지게차비용 — 다중등록도 오더마다 */}
-              <div className="col-span-2"><ForkliftFeeRow form={currentMultiSlot} setForm={(fn) => setMultiRegSlots((prev) => prev.map((s, i) => (i === multiRegIdx ? (typeof fn === "function" ? fn(s) : fn) : s)))} /></div>
+              <div className="col-span-2"><SpecialFareButton form={currentMultiSlot} setForm={(fn) => setMultiRegSlots((prev) => prev.map((s, i) => (i === multiRegIdx ? (typeof fn === "function" ? fn(s) : fn) : s)))} /></div>
 
               <div className="col-span-2">
                 <label className={mrLabelCls}><EditableText id="orderForm.multi.label.메모" defaultText="메모" /></label>
@@ -17371,8 +17376,6 @@ className={`
         readOnly
       />
     </div>
-    {/* 🏗 2026-11-09 지게차비용 — 켜면 금액·지게차 기사·부담 방식 한 줄(꺼져 있으면 [+ 지게차] 칩만) */}
-    <div className="col-span-full -mt-0.5"><ForkliftFeeRow form={form} setForm={setForm} /></div>
   </>
 )}
 {/* ================= 경유지 추가 팝업 (멀티 입력) ================= */}
@@ -24372,7 +24375,7 @@ function RealtimeRowBase({
 }) {
   const sale = toInt(editedForRow?.청구운임 ?? r.청구운임);
   const drv = toInt(editedForRow?.기사운임 ?? r.기사운임);
-  const fee = sale - drv - fkAmount(r); // 🏗 2026-11-09 지게차비용(수익 = 청구 − 기사 − 지게차)
+  const fee = sale - drv - paidOut(r); // 🏗 2026-11-09 지게차비용(수익 = 청구 − 기사 − 지게차)
 
   const cell = isDark
     ? "px-2 py-1.5 text-[14px] font-medium text-gray-100 align-middle text-center whitespace-nowrap border-b border-gray-700"
@@ -30162,7 +30165,7 @@ const head = isDark
     row.화물내용=mergeViaCargoText(r.화물내용,[r.경유상차목록,r.경유하차목록])||"";
     row.차량종류=r.차량종류||"";
     row.차량톤수=mergeViaTonnage(r.차량톤수,[r.경유상차목록,r.경유하차목록])||"";
-    Object.assign(row,{차량번호:r.차량번호||"",기사명:r.이름||"",전화번호:r.전화번호||"",배차상태:r.배차상태||"",청구운임:toInt(r.청구운임),기사운임:toInt(r.기사운임),수수료:toInt(r.청구운임)-toInt(r.기사운임)-toInt(r.지게차비용),...(fareOn?{운임구분:r.운임구분||""}:{}),지급방식:r.지급방식||"",배차방식:r.배차방식||"",메모:r.메모||""});
+    Object.assign(row,{차량번호:r.차량번호||"",기사명:r.이름||"",전화번호:r.전화번호||"",배차상태:r.배차상태||"",청구운임:toInt(r.청구운임),기사운임:toInt(r.기사운임),수수료:toInt(r.청구운임)-toInt(r.기사운임)-toInt(r.외부지급합 ?? r.지게차비용),...(fareOn?{운임구분:r.운임구분||""}:{}),지급방식:r.지급방식||"",배차방식:r.배차방식||"",메모:r.메모||""});
     return row;
   });
   const ws=XLSX.utils.json_to_sheet(rowsExcel);const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,"실시간배차현황");XLSX.writeFile(wb,"실시간배차현황.xlsx");
@@ -31394,13 +31397,13 @@ value={copyTarget?.화물수량 || ""}
             </CpField>
 
             <CpField label="수수료">
-              {(() => { const _f = Number(copyTarget.청구운임||0) - Number(copyTarget.기사운임||0) - fkAmount(copyTarget); /* 🏗 지게차 */ return (
+              {(() => { const _f = Number(copyTarget.청구운임||0) - Number(copyTarget.기사운임||0) - paidOut(copyTarget); /* 🏗 지게차 */ return (
               <div className={`h-9 flex items-center justify-end bg-[#EEF2F8] border border-[#DCE4F0] rounded-lg px-2.5 font-black text-[15px] whitespace-nowrap tabular-nums ${_f < 0 ? "text-red-600" : "text-[#1B2B4B]"}`}>
                 {_f.toLocaleString()} 원
               </div>
               ); })()}
             </CpField>
-            <div className="col-span-full"><ForkliftFeeRow form={copyTarget} setForm={setCopyTarget} /></div>{/* 🏗 2026-11-09 지게차비용 */}
+            <div className="col-span-full"><SpecialFareButton form={copyTarget} setForm={setCopyTarget} /></div>{/* 🏗 2026-11-09 지게차비용 */}
 <CpField label="지급방식">
   <CompanyOptionPicker optKey="지급방식" placeholder="선택" noneLabel="선택" disabled={copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile"} className={cpInputStyle} value={copyTarget?.지급방식 ?? ""} onChange={(__v) => ((e)=>setCopyTarget(p=>({...p, 지급방식:e.target.value})))({ target: { value: __v } })} />
 </CpField>
@@ -33178,7 +33181,7 @@ value={copyTarget?.화물수량 || ""}
               </div>
             )}
             {/* 🏗 2026-11-09 지게차비용 */}
-            <div className="mb-3"><ForkliftFeeRow form={editTarget} setForm={(fn) => setEditTarget((p) => { const n = typeof fn === "function" ? fn(p) : fn; return { ...n, 수수료: Number(n.수수료) || 0 }; })} /></div>
+            <div className="mb-3"><SpecialFareButton form={editTarget} setForm={(fn) => setEditTarget((p) => { const n = typeof fn === "function" ? fn(p) : fn; return { ...n, 수수료: Number(n.수수료) || 0 }; })} /></div>
 
             {/* ------------------------------------------------ */}
             {/* 🔵 지급/배차 방식 */}
@@ -33340,7 +33343,7 @@ const ALLOWED_FIELDS = [
   "차량번호", "이름", "전화번호",
   "청구운임", "기사운임",
   "운임구분", "운임수동", // ⭐ 2026-11-02 운임규칙
-  "지게차비용", "지게차부담", "지게차기사ID", "지게차기사명", "지게차기사전화", "지게차회사", "지게차기사차감", "지게차청구추가", // 🏗 2026-11-09 지게차비용
+  "지게차비용", "지게차부담", "지게차기사ID", "지게차기사명", "지게차기사전화", "지게차회사", "지게차기사차감", "지게차청구추가", "특수운임", "특수기사차감", "특수청구추가", "외부지급합", // 🏗 2026-11-09 지게차비용
   "지급방식", "배차방식",
   "메모",
   "메모중요도",
@@ -38972,8 +38975,8 @@ if (first) {
         배차상태: r.배차상태 || "",
         청구운임: toMoney(r.청구운임),
         기사운임: toMoney(r.기사운임),
-        수수료: toMoney(r.청구운임) - toMoney(r.기사운임) - fkAmount(r), // 🏗 지게차
-        ...(hasForklift(r) ? forkliftExcelCols(r) : {}), // 🏗 2026-11-09 지게차비용·지게차기사·부담·지급
+        수수료: toMoney(r.청구운임) - toMoney(r.기사운임) - paidOut(r), // 🏗 지게차
+        ...(hasSpecial(r) ? forkliftExcelCols(r) : {}), // 🏗 2026-11-09 지게차비용·지게차기사·부담·지급
         ...(fareOn ? { 운임구분: r.운임구분 || "" } : {}), // ⭐ 2026-11-02 운임규칙
         지급방식: r.지급방식 || "",
         배차방식: r.배차방식 || "",
@@ -40108,7 +40111,7 @@ return (
             {pageRows.map((r, i) => {
   const id = getId(r);
   const row = edited[id] ? { ...r, ...edited[id] } : r;
-  const fee = toInt(row.청구운임) - toInt(row.기사운임) - fkAmount(row); // 🏗 지게차
+  const fee = toInt(row.청구운임) - toInt(row.기사운임) - paidOut(row); // 🏗 지게차
 
   const editableKeys = [
     "상차일", "상차시간", "하차일", "하차시간",
@@ -41516,7 +41519,7 @@ return (
               </div>
             )}
             {/* 🏗 2026-11-09 지게차비용 */}
-            <div className="mb-3"><ForkliftFeeRow form={editTarget} setForm={(fn) => setEditTarget((p) => { const n = typeof fn === "function" ? fn(p) : fn; return { ...n, 수수료: Number(n.수수료) || 0 }; })} /></div>
+            <div className="mb-3"><SpecialFareButton form={editTarget} setForm={(fn) => setEditTarget((p) => { const n = typeof fn === "function" ? fn(p) : fn; return { ...n, 수수료: Number(n.수수료) || 0 }; })} /></div>
 
             {/* ------------------------------------------------ */}
             {/* 🔵 지급/배차 방식 */}
@@ -41679,7 +41682,7 @@ return (
       "차량번호", "이름", "전화번호",
       "청구운임", "기사운임",
       "운임구분", "운임수동", // ⭐ 2026-11-02 운임규칙
-      "지게차비용", "지게차부담", "지게차기사ID", "지게차기사명", "지게차기사전화", "지게차회사", "지게차기사차감", "지게차청구추가", // 🏗 2026-11-09 지게차비용
+      "지게차비용", "지게차부담", "지게차기사ID", "지게차기사명", "지게차기사전화", "지게차회사", "지게차기사차감", "지게차청구추가", "특수운임", "특수기사차감", "특수청구추가", "외부지급합", // 🏗 2026-11-09 지게차비용
       "지급방식", "배차방식",
       "메모",
       "메모중요도",
@@ -42799,13 +42802,13 @@ setCopyPlaceOptions(list);
             </CpField>
 
             <CpField label="수수료">
-              {(() => { const _f = Number(copyTarget.청구운임||0) - Number(copyTarget.기사운임||0) - fkAmount(copyTarget); /* 🏗 지게차 */ return (
+              {(() => { const _f = Number(copyTarget.청구운임||0) - Number(copyTarget.기사운임||0) - paidOut(copyTarget); /* 🏗 지게차 */ return (
               <div className={`h-9 flex items-center justify-end bg-[#EEF2F8] border border-[#DCE4F0] rounded-lg px-2.5 font-black text-[15px] whitespace-nowrap tabular-nums ${_f < 0 ? "text-red-600" : "text-[#1B2B4B]"}`}>
                 {_f.toLocaleString()} 원
               </div>
               ); })()}
             </CpField>
-            <div className="col-span-full"><ForkliftFeeRow form={copyTarget} setForm={setCopyTarget} /></div>{/* 🏗 2026-11-09 지게차비용 */}
+            <div className="col-span-full"><SpecialFareButton form={copyTarget} setForm={setCopyTarget} /></div>{/* 🏗 2026-11-09 지게차비용 */}
 <CpField label="지급방식">
   <CompanyOptionPicker optKey="지급방식" placeholder="선택" noneLabel="선택" disabled={copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile"} className={cpInputStyle} value={copyTarget?.지급방식 ?? ""} onChange={(__v) => ((e)=>setCopyTarget(p=>({...p, 지급방식:e.target.value})))({ target: { value: __v } })} />
 </CpField>
@@ -49255,7 +49258,7 @@ function SettlementDetailPopup({ client, rows = [], onClose }) {
   const profit = sale - driver;
   // ⭐ 머리글 클릭 정렬 — 이 브라우저에만 기억
   const dpSort = useTableSort("settlement.detailPopup");
-  const dpRows = React.useMemo(() => sortRows(rows, dpSort.sort, (r, k) => (k === "매출" ? toInt(r.청구운임) : k === "수익" ? toInt(r.청구운임) - toInt(r.기사운임) - toInt(r.지게차비용) : r[k])), [rows, dpSort.sort]); // eslint-disable-line react-hooks/exhaustive-deps
+  const dpRows = React.useMemo(() => sortRows(rows, dpSort.sort, (r, k) => (k === "매출" ? toInt(r.청구운임) : k === "수익" ? toInt(r.청구운임) - toInt(r.기사운임) - toInt(r.외부지급합 ?? r.지게차비용) : r[k])), [rows, dpSort.sort]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center">
@@ -49283,7 +49286,7 @@ function SettlementDetailPopup({ client, rows = [], onClose }) {
                 <tr key={i} className="hover:bg-gray-50">
                   <td className="border p-1.5">{r.상차일}</td>
                   <td className="border p-1.5">{toInt(r.청구운임).toLocaleString()}</td>
-                  <td className="border p-1.5 text-emerald-600">{(toInt(r.청구운임) - toInt(r.기사운임) - toInt(r.지게차비용)).toLocaleString()}</td>
+                  <td className="border p-1.5 text-emerald-600">{(toInt(r.청구운임) - toInt(r.기사운임) - toInt(r.외부지급합 ?? r.지게차비용)).toLocaleString()}</td>
                 </tr>
               ))}
             </tbody>
@@ -49591,7 +49594,7 @@ const tableData = React.useMemo(() => {
           if (!ym) return;
           if (!monthly[ym]) monthly[ym] = { sale: 0, profit: 0, cnt: 0 };
           monthly[ym].sale   += toInt(r.청구운임);
-          monthly[ym].profit += toInt(r.청구운임) - toInt(r.기사운임) - toInt(r.지게차비용);
+          monthly[ym].profit += toInt(r.청구운임) - toInt(r.기사운임) - toInt(r.외부지급합 ?? r.지게차비용);
           monthly[ym].cnt    += 1;
         });
         const sortedMonths = Object.keys(monthly).sort().slice(-12);
@@ -51121,11 +51124,11 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                       <input autoComplete="off" className={cpInputStyle} value={copyTarget.기사운임 ? Number(copyTarget.기사운임).toLocaleString() : ""} onChange={(e) => { const v = e.target.value.replace(/[^\d]/g, ""); setCopyTarget(p => fareOnU ? fareFormChange(p, "기사운임", v, fareRU.rules) : forkliftApply(p, {...p, 기사운임: v}, "기사운임")); }} />
                     </CpField>
                     <CpField label="수수료">
-                      <div className={`h-9 flex items-center justify-end bg-[#EEF2F8] border border-[#DCE4F0] rounded-lg px-2.5 font-black text-[15px] whitespace-nowrap tabular-nums ${(Number(copyTarget.청구운임 || 0) - Number(copyTarget.기사운임 || 0) - fkAmount(copyTarget)) < 0 ? "text-red-600" : "text-[#1B2B4B]"}`}>
-                        {(Number(copyTarget.청구운임 || 0) - Number(copyTarget.기사운임 || 0) - fkAmount(copyTarget)).toLocaleString()} 원
+                      <div className={`h-9 flex items-center justify-end bg-[#EEF2F8] border border-[#DCE4F0] rounded-lg px-2.5 font-black text-[15px] whitespace-nowrap tabular-nums ${(Number(copyTarget.청구운임 || 0) - Number(copyTarget.기사운임 || 0) - paidOut(copyTarget)) < 0 ? "text-red-600" : "text-[#1B2B4B]"}`}>
+                        {(Number(copyTarget.청구운임 || 0) - Number(copyTarget.기사운임 || 0) - paidOut(copyTarget)).toLocaleString()} 원
                       </div>
                     </CpField>
-                    <div className="col-span-full"><ForkliftFeeRow form={copyTarget} setForm={setCopyTarget} /></div>{/* 🏗 2026-11-09 지게차비용 */}
+                    <div className="col-span-full"><SpecialFareButton form={copyTarget} setForm={setCopyTarget} /></div>{/* 🏗 2026-11-09 지게차비용 */}
                     <CpField label="지급방식">
                       <CompanyOptionPicker optKey="지급방식" placeholder="선택" noneLabel="선택" className={cpInputStyle} value={copyTarget?.지급방식 ?? ""} onChange={(__v) => ((e) => setCopyTarget(p => ({...p, 지급방식: e.target.value})))({ target: { value: __v } })} disabled={copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile"} />
                     </CpField>
@@ -56076,7 +56079,7 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
       case "기사운임": return toInt(r.기사운임);
       case "부가세(10%)": return Math.round(toInt(r.기사운임) * vatRate);
       case "산재보험료": return Math.round(toInt(r.기사운임) * insuranceRate / 100);
-      case "수수료": return toInt(r.청구운임) - toInt(r.기사운임) - toInt(r.지게차비용);
+      case "수수료": return toInt(r.청구운임) - toInt(r.기사운임) - toInt(r.외부지급합 ?? r.지게차비용);
       case "지급상태": return r.지급상태 || "지급중";
       default: return r[key];
     }
@@ -56140,7 +56143,7 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
       거래처명: r.거래처명 || "", 상차지명: r.상차지명 || "", 하차지명: r.하차지명 || "",
       차량번호: r.차량번호 || "", 기사명: r.이름 || "", 전화번호: r.전화번호 || "",
       청구운임: toInt(r.청구운임), 기사운임: toInt(r.기사운임),
-      수수료: toInt(r.청구운임) - toInt(r.기사운임) - fkAmount(r), // 🏗 지게차
+      수수료: toInt(r.청구운임) - toInt(r.기사운임) - paidOut(r), // 🏗 지게차
       ...(fareRP.on ? { 운임구분: r.운임구분 || "" } : {}),
       지급방식: r.지급방식 || "", 배차방식: r.배차방식 || "", 메모: r.메모 || "",
     }));
@@ -56470,7 +56473,7 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
                   <tr><td colSpan={16} className="text-center py-16 text-gray-500 text-[13px]">조회된 데이터가 없습니다.</td></tr>
                 ) : paySorted.map((r, i) => {
                   const isDone = (r.지급상태 || "지급중") === "지급완료";
-                  const fee = toInt(r.청구운임) - toInt(r.기사운임) - toInt(r.지게차비용);
+                  const fee = toInt(r.청구운임) - toInt(r.기사운임) - toInt(r.외부지급합 ?? r.지게차비용);
                   return (
                     <tr key={r._id || i} className={`${i % 2 === 0 ? "bg-white" : "bg-gray-50/60"} hover:bg-[#EEF3FC]/40 transition`}>
                       <td className="px-3 py-2.5 text-center border-b border-gray-100">

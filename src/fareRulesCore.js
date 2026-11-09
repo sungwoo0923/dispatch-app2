@@ -87,7 +87,7 @@ export function fareFormChange(form, key, value, rules, { asString = true, withF
     next.수수료 = out(sale - drv);
   }
   // 🏗 2026-11-09 지게차비용이 있는 오더 — 운임구분 계산 뒤 지게차를 다시 적용(기사 부담이면 기사운임에서 빼고 수익 = 청구 − 기사 − 지게차)
-  if (form && (toNum(form.지게차비용) > 0 || toNum(form.지게차기사차감) > 0 || toNum(form.지게차청구추가) > 0 || toNum(next.지게차비용) > 0)) return forkliftApply(form, next, key, { asString });
+  if (form && (toNum(form.지게차비용) > 0 || toNum(form.지게차기사차감) > 0 || toNum(form.지게차청구추가) > 0 || toNum(next.지게차비용) > 0 || (Array.isArray(form.특수운임) && form.특수운임.length) || toNum(form.특수기사차감) !== 0 || toNum(form.특수청구추가) > 0)) return forkliftApply(form, next, key, { asString });
   return next;
 }
 

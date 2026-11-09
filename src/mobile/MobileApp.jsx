@@ -136,7 +136,7 @@ import OrderScanModal, { scanDropDate } from "../OrderScanModal";
 import { mainScanAi } from "../orderScanApi"; // 🧠 2026-11-07 오더 스캔 정밀 인식(서버 글자 인식 · AI 칸 정리 · 회사별 학습)
 // ⭐ 2026-11-02 운임규칙 — 회사별 운임 규칙(운임구분 → 기사운임·수수료 자동)
 import { useFareRules, FareTypeSelect, FareRuleHint, FarePctInput, fareFormChange } from "../fareRules";
-import { ForkliftFeeRow, forkliftApply } from "../forklift"; // 🏗 2026-11-09 지게차비용
+import { SpecialFareButton, forkliftApply } from "../forklift"; import { isViewerNow } from "../blind"; // 🏗 2026-11-09 지게차비용
 import DetailFilterButton, { applyDetailFilter } from "../DetailFilter"; // 🔎 2026-11-03 세부검색(최대 3차)
 import { useFixedRouteAutoDispatch } from "../FixedRoutes"; // ⭐ 2026-11-05 고정노선 배차 이어서 만들기
 import { VehicleTypePicker, currentCustomVehicleTypes, useVehicleTypes } from "../vehicleTypes"; // 🚚 2026-11-02 회사 공용 차량종류
@@ -11940,7 +11940,7 @@ function QuickEditSheet({ order, onClose, onSaved, cardVersionB, clients = [], b
       [`${type}지담당자번호`]: primary?.phone || c.담당자번호 || "",
     }));
   };
-  const fee = toNum(f.청구운임) - toNum(f.기사운임) - toNum(f.지게차비용);
+  const fee = toNum(f.청구운임) - toNum(f.기사운임) - toNum(f.외부지급합 ?? f.지게차비용);
   const joinU = (v, u) => (u ? `${v}${u}` : v);
   // 손대지 않은 칸은 원래 글자 그대로 둔다("12 파레트" → "12파레트"처럼 바뀐 걸로 잡히지 않게)
   const [init] = useState(() => {
@@ -16437,6 +16437,8 @@ const pickDrop = (c) => {
                   블라인드
                 </button>
               )}
+              {/* 🧾 2026-11-09 특수운임 적용(지게차비용 등) — 아래에서 올라오는 시트 */}
+              {!isViewerNow() && <SpecialFareButton form={form} setForm={setForm} asString={false} mobile btnClass={(on) => `shrink-0 whitespace-nowrap px-2.5 py-1.5 text-[13px] font-bold rounded-lg border transition-all inline-flex items-center gap-1 ${on ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-600 border-gray-300"}`} />}
             </div>
           }
         />
@@ -16519,7 +16521,6 @@ const pickDrop = (c) => {
           </div>
         )}
         {/* 🏗 2026-11-09 지게차비용 — [+ 지게차] → 금액 · 지게차 기사 · 부담 방식 */}
-        <div className="py-1"><ForkliftFeeRow form={form} setForm={setForm} asString={false} compact /></div>
         <RowLabelInput
           label="청구운임"
           input={

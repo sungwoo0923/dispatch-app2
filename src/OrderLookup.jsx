@@ -112,7 +112,7 @@ export default function OrderLookupModal({ open, onClose, rows = [], nameOf = ()
     const data = result.map(({ r, mgr: n }, i) => ({
       순번: i + 1, 상차일: r.상차일 || "", 상차시간: r.상차시간 || "", 배차담당자: n, 거래처명: r.거래처명 || "",
       상차지명: r.상차지명 || "", 하차지명: r.하차지명 || "", 차량번호: r.차량번호 || "", 기사명: r.이름 || "", 전화번호: r.전화번호 || "",
-      배차상태: r.배차상태 || "", 청구운임: toInt(r.청구운임), 기사운임: toInt(r.기사운임), 수수료: toInt(r.청구운임) - toInt(r.기사운임) - toInt(r.지게차비용),
+      배차상태: r.배차상태 || "", 청구운임: toInt(r.청구운임), 기사운임: toInt(r.기사운임), 수수료: toInt(r.청구운임) - toInt(r.기사운임) - toInt(r.외부지급합 ?? r.지게차비용),
     }));
     const ws = XLSX.utils.json_to_sheet(data);
     const wb = XLSX.utils.book_new();

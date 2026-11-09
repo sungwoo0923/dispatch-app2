@@ -16,7 +16,7 @@ import CustomDatePicker from "./CustomDatePicker";
 import { CustomSelect } from "./CustomSelect";
 import { VehicleTypePicker } from "./vehicleTypes";
 import { useFareRules, FareTypeSelect, FareRuleHint, FarePctInput, fareFormChange } from "./fareRules";
-import { ForkliftFeeRow, forkliftApply, FORKLIFT_KEYS } from "./forklift"; // 🏗 2026-11-09 지게차비용
+import { SpecialFareButton, forkliftApply, FORKLIFT_KEYS, SPECIAL_KEYS, paidOut } from "./forklift"; // 🏗 2026-11-09 지게차비용
 import { CompanyOptionPicker } from "./companyOptionPicker"; // 🧾 2026-11-02 지급방식·배차방식·상/하차방법 공용 선택기(＋ 추가)
 import { fmtPhone } from "./formatInput";
 
@@ -90,6 +90,9 @@ const initForm = (o) => {
   // 🏗 2026-11-09 지게차비용
   ["지게차비용", "지게차기사차감", "지게차청구추가"].forEach((k) => { f[k] = o?.[k] ? String(toNum(o[k])) : ""; });
   ["지게차부담", "지게차기사ID", "지게차기사명", "지게차기사전화", "지게차회사"].forEach((k) => { f[k] = o?.[k] == null ? "" : String(o[k]); });
+  // 🧾 2026-11-09 특수운임(지게차 외) — 배열 그대로 · 반영해 둔 양
+  f.특수운임 = Array.isArray(o?.특수운임) ? o.특수운임 : [];
+  ["특수기사차감", "특수청구추가", "외부지급합"].forEach((k) => { f[k] = o?.[k] ? toNum(o[k]) : 0; });
   return f;
 };
 
@@ -153,7 +156,7 @@ export default function FleetOrderPanel({ order, onClose, onCopy, companyName = 
     });
   };
   const setFare = (k, v) => setForm((p) => (fareOn ? fareFormChange(p, k, v, fareR.rules, { withFee: false }) : forkliftApply(p, { ...p, [k]: v }, k)));
-  const fee = toNum(form.청구운임) - toNum(form.기사운임) - toNum(form.지게차비용);
+  const fee = toNum(form.청구운임) - toNum(form.기사운임) - paidOut(form); // 🧾 수익 = 청구 − 기사 − 회사가 따로 주는 돈(지게차·특수운임)
   const shipper = order?.source === "shipper" || order?.source === "shipper_mobile";
 
   const tryClose = React.useCallback(async () => {
@@ -171,11 +174,12 @@ export default function FleetOrderPanel({ order, onClose, onCopy, companyName = 
     try {
       const patch = { updatedAt: Date.now() };
       TEXT_KEYS.forEach((k) => { if (String(form[k] ?? "") !== String(base.current[k] ?? "")) patch[k] = String(form[k] ?? "").trim(); });
-      const moneyChanged = MONEY_KEYS.concat(["지게차비용", "지게차부담", "지게차기사ID"]).some((k) => String(form[k] ?? "") !== String(base.current[k] ?? ""));
+      const moneyChanged = MONEY_KEYS.concat(["지게차비용", "지게차부담", "지게차기사ID"]).some((k) => String(form[k] ?? "") !== String(base.current[k] ?? "")) || JSON.stringify(form.특수운임 || []) !== JSON.stringify(base.current.특수운임 || []);
       if (moneyChanged || "운임구분" in patch) {
         patch.청구운임 = toNum(form.청구운임);
         patch.기사운임 = toNum(form.기사운임);
-        patch.수수료 = patch.청구운임 - patch.기사운임 - toNum(form.지게차비용); // 🏗 수익 = 청구 − 기사 − 지게차
+        patch.수수료 = patch.청구운임 - patch.기사운임 - paidOut(form); // 🏗 수익 = 청구 − 기사 − 지게차·특수운임(회사 지급분)
+        SPECIAL_KEYS.forEach((k) => { if (JSON.stringify(form[k] ?? null) !== JSON.stringify(base.current[k] ?? null)) patch[k] = k === "특수운임" ? (form[k] || []) : toNum(form[k]); }); // 🧾 특수운임
         FORKLIFT_KEYS.concat(["지게차기사차감", "지게차청구추가"]).forEach((k) => { if (String(form[k] ?? "") !== String(base.current[k] ?? "")) patch[k] = k === "지게차비용" || k === "지게차기사차감" || k === "지게차청구추가" ? toNum(form[k]) : String(form[k] ?? ""); });
         if (String(form.운임구분 || "").trim()) patch.운임수동 = !!form.운임수동;
         if (String(form.운임구분 || "").trim() && String(form.운임구분수수료율 ?? "") !== "") patch.운임구분수수료율 = Number(form.운임구분수수료율) || 0; // ⭐ 2026-11-09 이 오더 수수료율
@@ -306,7 +310,7 @@ export default function FleetOrderPanel({ order, onClose, onCopy, companyName = 
                   <div className="flex items-center gap-1.5"><FareTypeSelect pct={form.운임구분수수료율} className="!h-9 !rounded-lg flex-1 min-w-0" rules={fareR.rules} value={form.운임구분 || ""} onChange={(v) => setFare("운임구분", v)} /><FarePctInput form={form} rules={fareR.rules} onChange={(v) => setFare("운임구분수수료율", v)} /></div>
                 </CpField>
               )}
-              <div className="col-span-full"><ForkliftFeeRow form={form} setForm={setForm} /></div>{/* 🏗 2026-11-09 지게차비용 */}
+              <div className="col-span-full"><SpecialFareButton form={form} setForm={setForm} /></div>{/* 🏗 2026-11-09 지게차비용 */}
               <CpField label="배차방식">
                 <CompanyOptionPicker optKey="배차방식" placeholder="선택" noneLabel="선택" className={cpInputStyle} value={form.배차방식 === "선택없음" ? "" : form.배차방식} onChange={(v) => set("배차방식")({ target: { value: v } })} />
               </CpField>

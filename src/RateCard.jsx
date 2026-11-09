@@ -181,7 +181,7 @@ function OrderDetailModal({ rows: rowsIn, bucket, fareField, onClose }) {
   const rows = useMemo(() => sortRows(rowsIn || [], odSort.sort, (r, k) => {
     if (k === "청구운임") return _rcInt(r.청구운임);
     if (k === "기사운임") return _rcInt(r.기사운임);
-    if (k === "수수료") return _rcInt(r.청구운임) - _rcInt(r.기사운임) - _rcInt(r.지게차비용);
+    if (k === "수수료") return _rcInt(r.청구운임) - _rcInt(r.기사운임) - _rcInt(r.외부지급합 ?? r.지게차비용);
     if (k === "혼적") return r.혼적 ? "혼적" : "독차";
     return r[RC_DETAIL_KEY[k] || k];
   }), [rowsIn, odSort.sort]);

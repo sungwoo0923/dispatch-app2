@@ -323,7 +323,7 @@ export function FixedRouteCells({ form, row, drivers = [], clients = [], onPatch
         const look = frsLook(c);
         const bg = look ? "" : own === "운송사" ? "bg-[#F3F7FF]" : "";
         if (c.kind === "sum") return <td key={c.id} data-frs="sum" className={`${td} tabular-nums`}>{v}</td>;
-        if (c.kind === "calc") return <td key={c.id} className={`${td} text-[13.5px] font-black tabular-nums ${c.field === "수수료" && toInt(row.청구운임) - toInt(row.기사운임) - toInt(row.지게차비용) < 0 ? "text-red-600" : "text-[#0F1A30]"}`} style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }} title="자동 계산(청구운임 − 기사운임)">{v}</td>;
+        if (c.kind === "calc") return <td key={c.id} className={`${td} text-[13.5px] font-black tabular-nums ${c.field === "수수료" && toInt(row.청구운임) - toInt(row.기사운임) - toInt(row.외부지급합 ?? row.지게차비용) < 0 ? "text-red-600" : "text-[#0F1A30]"}`} style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }} title="자동 계산(청구운임 − 기사운임)">{v}</td>;
         if (c.kind === "field" && c.field === "배차상태") return <td key={c.id} className={td}>{statusChip}</td>;
         if (c.kind === "field" && DRV_KEY[c.field]) {
           const pick = (d) => onPatch({ 차량번호: d.차량번호 || "", 이름: d.이름 || "", 전화번호: d.전화번호 || "", ...(row.배차상태 === "배차중" || !row.배차상태 ? { 배차상태: "배차완료" } : {}) });
@@ -344,7 +344,7 @@ export function FixedRouteCells({ form, row, drivers = [], clients = [], onPatch
       {!has("배차상태") && <td className={td}>{statusChip}</td>}
       {!has("청구운임") && money("청구운임")}
       {!has("기사운임") && money("기사운임")}
-      {!has("수수료") && <td className={`${td} text-[13.5px] font-black tabular-nums ${toInt(row.청구운임) - toInt(row.기사운임) - toInt(row.지게차비용) < 0 ? "text-red-600" : "text-[#0F1A30]"}`} style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{(toInt(row.청구운임) - toInt(row.기사운임) - toInt(row.지게차비용)).toLocaleString()}</td>}
+      {!has("수수료") && <td className={`${td} text-[13.5px] font-black tabular-nums ${toInt(row.청구운임) - toInt(row.기사운임) - toInt(row.외부지급합 ?? row.지게차비용) < 0 ? "text-red-600" : "text-[#0F1A30]"}`} style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{(toInt(row.청구운임) - toInt(row.기사운임) - toInt(row.외부지급합 ?? row.지게차비용)).toLocaleString()}</td>}
     </>
   );
 }

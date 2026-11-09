@@ -82,7 +82,7 @@ export function reportBasis(today, prefs) {
 export const isCancelledOrder = (r) => r?.배차상태 === "배차취소" || ["취소", "배차취소", "오더취소", "취소됨"].includes(r?.상태);
 export const dateOf = (r) => String(r?.상차일자 || r?.상차일 || r?.상차 || "").slice(0, 10);
 export const saleOf = (r) => toWon(r?.청구운임);
-export const profitOf = (r) => toWon(r?.청구운임) - toWon(r?.기사운임) - toWon(r?.지게차비용);
+export const profitOf = (r) => toWon(r?.청구운임) - toWon(r?.기사운임) - toWon(r?.외부지급합 ?? r?.지게차비용);
 export const isDone = (r) => (r?.배차상태 || "") === "배차완료";
 export const normPlate = (s) => String(s ?? "").replace(/\s+/g, "").toUpperCase();
 const clientOf = (r) => String(r?.거래처명 || "").trim() || "미지정";

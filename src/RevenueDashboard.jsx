@@ -160,7 +160,7 @@ export default function RevenueDashboard({ rows = [], targetMonth, forecast, yea
   // 일별 + 누적 레이스
   const daily = useMemo(() => {
     const cur = Array(daysInMonth + 1).fill(0), curP = Array(daysInMonth + 1).fill(0), prev = Array(32).fill(0);
-    monthRows.forEach((r) => { const d = Number(String(r.상차일).slice(8, 10)); cur[d] += toInt(r.청구운임); curP[d] += toInt(r.청구운임) - toInt(r.기사운임) - toInt(r.지게차비용); });
+    monthRows.forEach((r) => { const d = Number(String(r.상차일).slice(8, 10)); cur[d] += toInt(r.청구운임); curP[d] += toInt(r.청구운임) - toInt(r.기사운임) - toInt(r.외부지급합 ?? r.지게차비용); });
     prevRows.forEach((r) => { const d = Number(String(r.상차일).slice(8, 10)); if (d <= 31) prev[d] += toInt(r.청구운임); });
     let a = 0, b = 0;
     return Array.from({ length: daysInMonth }, (_, i) => {
@@ -202,7 +202,7 @@ export default function RevenueDashboard({ rows = [], targetMonth, forecast, yea
       const k = creatorOf(r) || "미지정";
       if (k === "최고관리자") return;
       const e = g[k] || (g[k] = { name: k, sale: 0, profit: 0, cnt: 0 });
-      e.sale += toInt(r.청구운임); e.profit += toInt(r.청구운임) - toInt(r.기사운임) - toInt(r.지게차비용); e.cnt += 1;
+      e.sale += toInt(r.청구운임); e.profit += toInt(r.청구운임) - toInt(r.기사운임) - toInt(r.외부지급합 ?? r.지게차비용); e.cnt += 1;
     });
     return Object.values(g).sort((a, b) => b.sale - a.sale).slice(0, 8);
   }, [monthRows, namesVer]); // eslint-disable-line react-hooks/exhaustive-deps
