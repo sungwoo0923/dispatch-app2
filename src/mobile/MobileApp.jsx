@@ -7952,8 +7952,12 @@ function MobileSideMenu({
   // ⭐ 2026-11-04 권한 관리 — 최고관리자가 켠 회사의 마스터만(자기 회사 것만)
   const coFeatM = useCompanyFeatures();
   const canPermsM = role !== "totalMaster" && mobileUsers?.find((u) => u.id === currentUser?.uid)?.isMaster === true && coFeatM.masterRolePerms === true;
+  // ⭐ 2026-11-09 계정 표시는 이름이 기본(회사 직원 목록에 없으면 내 프로필 이름 → 계정 표시 이름 → 아이디)
+  const myProfDrawer = useMyProfile(currentUser?.uid);
   const myName =
     mobileUsers?.find(u => u.id === currentUser?.uid)?.name ||
+    myProfDrawer?.name ||
+    currentUser?.displayName ||
     currentUser?.email ||
     "사용자";
 
@@ -8021,7 +8025,7 @@ function MobileSideMenu({
         dark ? "text-white" : "bg-white"
       }`} style={{ paddingTop: "env(safe-area-inset-top, 0px)", background: dark ? "linear-gradient(rgba(143,176,240,.05) 1px, transparent 1px) 0 0/22px 22px, linear-gradient(90deg, rgba(143,176,240,.05) 1px, transparent 1px) 0 0/22px 22px, linear-gradient(170deg, #060E1F 0%, #0F1A30 45%, #1B2B4B 100%)" : undefined }}>
 
-        {dark && <KpmDrawerHead myName={myName} role={role} loginTime={loginTime} onClose={onClose} fmtLoginTime={fmtLoginTime} />}
+        {dark && <KpmDrawerHead myName={myName} myId={currentUser?.email || ""} role={role} loginTime={loginTime} onClose={onClose} fmtLoginTime={fmtLoginTime} />}
         {/* 헤더 */}
         {!dark && <div className={`px-5 pt-5 pb-4 flex items-start justify-between gap-3 ${
           dark ? "border-b border-white/10" : "border-b border-[#EEF1F6]"
@@ -8333,7 +8337,8 @@ function MobileSideMenu({
 // 눌러야 펼쳐지면 된다. alwaysOpen이면 펼침/접기 버튼 없이 그냥 항상 보여준다.
 // ── 메뉴 B형 머리(디지털 시계 + 프로필) · 컨트롤 카드 · 화면 크기 3단계 ──
 const KPM_ROLE_KO = { totalMaster: "최고관리자", admin: "관리자", superadmin: "관리자", hrManager: "인사관리자", user: "실무자", test: "경리/회계", viewer: "조회전용" };
-function KpmDrawerHead({ myName, role, loginTime, onClose, fmtLoginTime }) {
+function KpmDrawerHead({ myName, myId = "", role, loginTime, onClose, fmtLoginTime }) {
+  const [showId, setShowId] = useState(false); // ⭐ 2026-11-09 누르면 아이디 ↔ 이름(기본은 이름)
   const [now, setNow] = useState(() => new Date());
   useEffect(() => { const t = setInterval(() => setNow(new Date()), 1000); return () => clearInterval(t); }, []);
   const p2 = (n) => String(n).padStart(2, "0");
@@ -8362,7 +8367,7 @@ function KpmDrawerHead({ myName, role, loginTime, onClose, fmtLoginTime }) {
         <span className="w-10 h-10 rounded-xl bg-white text-[#0F1A30] grid place-items-center text-[16px] font-black shrink-0">{String(myName || "?").slice(0, 1)}</span>
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5">
-            <span className="text-[14.5px] font-black truncate">{myName}</span>
+            <button type="button" onClick={() => setShowId((v) => !v)} title="눌러서 이름 ↔ 계정 아이디" className="text-[14.5px] font-black truncate text-left">{showId && myId ? myId : myName}</button>
             <span className="shrink-0 h-[18px] px-1.5 rounded-md bg-[#8FB0F0]/20 text-[#CFE0FF] text-[10px] font-black grid place-items-center">{KPM_ROLE_KO[role] || "직원"}</span>
           </div>
           <div className="text-[11px] text-white/45 truncate tabular-nums">{[co, fmtLoginTime(loginTime) && `접속 ${fmtLoginTime(loginTime)}`].filter(Boolean).join(" · ")}</div>

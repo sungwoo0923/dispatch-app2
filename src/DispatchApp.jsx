@@ -4,6 +4,7 @@ import { MENU_FEATURE, planIncludes, openPlanLock, featureOn, useCompanyPlanId, 
 import { kpConfirm, kpPrompt } from "./kpDialog";
 import { runDelete, commitDeletes, deleteDocsAtomic } from "./DeleteProgress"; // ⭐ 2026-11-05 삭제 진행 창 + 한 번에 삭제(writeBatch)
 import ProInsight from "./ProInsight";
+import NameIdToggle from "./NameIdToggle"; // ⭐ 2026-11-09 계정 이름 ↔ 아이디
 import DailyReport, { DailyReportPopupHost } from "./DailyReport"; // 📊 2026-11-06 일일 경영 보고(임원 화면 · 대표·임원 일일 보고서)
 import { canSeeBriefing, BRIEF_MENU, BRIEF_LABEL } from "./dailyReport";
 import { EXEC_MENUS, execMenuLabel } from "./execMenus"; // 📈 2026-11-08 임원 화면 · 경영 분석 · 결재 대기 · 직원 정보
@@ -3416,7 +3417,7 @@ const KP_SIDE_ICONS = {
   자금관리: "wallet", 비품관리: "list", 연차관리: "flag", 입퇴사관리: "check", 증명서발급: "stamp",
   결재함: "stamp", 직원일정: "clock", 자금현황: "wallet", 스케줄: "pin", 전자결재: "stamp", 일일경영보고: "chart", 경영분석: "chart", 결재대기: "stamp", 직원정보: "users",
 };
-function KpSideMenu({ open, onOpen, onClose, menuState, active, onSelect, company, email, groups = KP_SIDE_GROUPS }) {
+function KpSideMenu({ open, onOpen, onClose, menuState, active, onSelect, company, email, myName = "", groups = KP_SIDE_GROUPS }) {
   React.useEffect(() => {
     if (!open) return undefined;
     const onKey = (e) => { if (e.key === "Escape") onClose(); };
@@ -3490,7 +3491,7 @@ function KpSideMenu({ open, onOpen, onClose, menuState, active, onSelect, compan
             );
           })}
         </nav>
-        {email && <div className="px-5 py-4 border-t border-white/10 text-[12px] text-blue-100/60 truncate">{email}</div>}
+        {(email || myName) && <div className="px-5 py-4 border-t border-white/10 text-[12px] text-blue-100/60"><NameIdToggle name={myName || ""} id={email || ""} className="w-full hover:text-white" /></div>}
       </aside>
     </>
   );
@@ -8522,6 +8523,7 @@ return (
         onSelect={handleMenuClick}
         company={role === "totalMaster" ? (localStorage.getItem("loginCompany") || userCompany || "") : (userCompany || localStorage.getItem("userCompany") || "")}
         email={user?.email}
+        myName={myRealName || user?.displayName || ""}
         groups={deptMode ? DEPT_SIDE_GROUPS[deptMode] : KP_SIDE_GROUPS}
       />
       <BannerCenter />
@@ -8710,9 +8712,7 @@ return (
 
           {/* 우측 유저 영역 */}
           <div className="flex items-center gap-2 shrink-0 justify-end min-[1800px]:min-w-[180px]">
-            <span className="text-white/45 text-[12px] font-medium hidden min-[1800px]:block truncate max-w-[150px]">
-              {user?.email}
-            </span>
+            <NameIdToggle name={myRealName || user?.displayName || ""} id={user?.email || ""} className="text-white/60 hover:text-white text-[12px] font-semibold hidden min-[1800px]:block max-w-[150px]" />
             <MailHeaderButton company={role === "totalMaster" ? (localStorage.getItem("loginCompany") || userCompany || DEFAULT_COMPANY) : (userCompany || DEFAULT_COMPANY)} myName={myRealName} />
             {/* ⭐ 2026-11-02 원격지원 — 머리말 도움 버튼 */}
             {role !== "totalMaster" && (
