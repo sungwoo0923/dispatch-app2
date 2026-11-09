@@ -8,6 +8,7 @@ import React from "react";
 import { addDoc, collection, deleteDoc, doc, onSnapshot, query, serverTimestamp, where } from "firebase/firestore";
 import { db } from "./firebase";
 import { kpAlert, kpConfirm } from "./kpDialog";
+import { savePdf, printA4 } from "./a4Export"; // ⭐ 2026-11-10 서명본 PDF 저장·인쇄
 
 const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
 export const DC_STATUS = { sent: "발송", read: "열람", signed: "서명 완료" };
@@ -60,17 +61,24 @@ export function DriverContractSendBar({ company, me = {}, targets = [], valsFor,
 }
 
 // 발송 현황 — 발송 · 열람 · 서명 완료, 눌러서 서명된 계약서 보기
-export function DriverContractStatus({ company, Paper, specOf }) {
+export function DriverContractStatus({ company, Paper, specOf, board = false }) {
   const co = String(company || "").trim();
   const [rows, setRows] = React.useState([]);
   const [filter, setFilter] = React.useState("all");
   const [view, setView] = React.useState(null);
+  const [q, setQ] = React.useState("");
+  const [who, setWho] = React.useState("");
+  const paperRef = React.useRef(null);
   React.useEffect(() => {
     if (!co) return undefined;
     return onSnapshot(query(collection(db, "driverContracts"), where("companyName", "==", co)), (s) => setRows(s.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => toMs(b.sentAt) - toMs(a.sentAt))), () => setRows([]));
   }, [co]);
   const cnt = (k) => rows.filter((r) => (k === "all" ? true : r.status === k)).length;
-  const list = rows.filter((r) => filter === "all" || r.status === filter);
+  const drivers = [...new Set(rows.map((r) => r.driverName).filter(Boolean))].sort((a, b) => a.localeCompare(b, "ko"));
+  const qq = q.trim().toLowerCase();
+  const list = rows.filter((r) => (filter === "all" || r.status === filter) && (!who || r.driverName === who)
+    && (!qq || [r.driverName, r.차량번호, r.title].some((x) => String(x || "").toLowerCase().includes(qq))));
+  const fileName = (r) => `${r.title || "계약서"}_${r.driverName || ""}${r.status === "signed" ? "_서명본" : ""}`.replace(/[\\/:*?"<>|\s]+/g, "_");
   const remove = async (r) => {
     if (!(await kpConfirm(`${r.driverName}님에게 보낸 「${r.title}」을 지울까요?${r.status === "signed" ? "\n서명이 끝난 계약서입니다. 지우면 기사앱에서도 사라집니다." : "\n기사앱에서도 사라집니다."}`, { title: "발송 계약서 삭제", okText: "삭제", danger: true }))) return;
     await deleteDoc(doc(db, "driverContracts", r.id)).catch((e) => kpAlert(`삭제하지 못했어요: ${e?.message || e}`));
@@ -79,14 +87,47 @@ export function DriverContractStatus({ company, Paper, specOf }) {
     <div className="rounded-[18px] bg-white border border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_8px_20px_rgba(16,24,40,0.05)] p-5">
       <div className="flex items-center gap-2 mb-3 flex-wrap">
         <span className="text-[11px] font-extrabold tracking-[0.22em] text-[#4B6CB7]" style={{ fontFamily: MONO }}>SENT · DRIVER APP</span>
-        <span className="text-[16px] font-black text-[#0F1A30]">기사앱 발송 현황</span>
+        <span className="text-[16px] font-black text-[#0F1A30]">{board ? "기사앱 계약서 현황" : "기사앱 발송 현황"}</span>{board && <span className="text-[12.5px] font-bold text-[#7A89A3]">기사님이 열람·서명한 계약서가 자동으로 쌓입니다 · 줄을 누르면 서명본 보기·PDF 저장</span>}
         <div className="ml-auto inline-flex gap-1 p-1 rounded-xl bg-[#EEF2F8]">
           {[["all", "전체"], ["sent", "발송"], ["read", "열람"], ["signed", "서명 완료"]].map(([k, l]) => (
             <button key={k} type="button" onClick={() => setFilter(k)} className={`h-8 px-2.5 rounded-lg text-[12.5px] font-black ${filter === k ? "bg-[#0F1A30] text-white" : "text-[#3A4A66]"}`}>{l} {cnt(k)}</button>
           ))}
         </div>
       </div>
-      {!list.length ? <div className="py-8 text-center text-[13.5px] font-bold text-[#8E9BB2]">{rows.length ? "이 상태의 계약서가 없습니다" : "기사앱으로 보낸 계약서가 없습니다"}</div> : (
+      {board && (
+        <div className="flex items-center gap-2 mb-3 flex-wrap">
+          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="기사명·차량번호·계약서 검색" className="h-10 flex-1 min-w-[200px] px-3 rounded-xl border border-[#DCE3EE] text-[14px] outline-none focus:border-[#4B6CB7]" />
+          <select value={who} onChange={(e) => setWho(e.target.value)} className="h-10 px-3 rounded-xl border border-[#DCE3EE] text-[14px] font-bold text-[#1B2B4B] bg-white">
+            <option value="">기사 전체 ({drivers.length}명)</option>
+            {drivers.map((d) => <option key={d} value={d}>{d} ({rows.filter((r) => r.driverName === d).length})</option>)}
+          </select>
+        </div>
+      )}
+      {board && list.length > 0 && (
+        <div className="overflow-x-auto rounded-xl border border-[#E3E8F0]">
+          <table className="w-full text-[13.5px]" style={{ minWidth: 860 }}>
+            <thead><tr className="bg-[#1B2B4B] text-white">{["No", "기사", "차량번호", "계약서", "상태", "발송", "열람", "서명", "서명 방식", ""].map((h) => <th key={h} className="px-3 py-2.5 font-extrabold text-center whitespace-nowrap">{h}</th>)}</tr></thead>
+            <tbody>{list.map((r, i) => (
+              <tr key={r.id} className={`border-t border-[#EEF1F6] ${i % 2 ? "bg-[#FAFBFD]" : "bg-white"} hover:bg-[#EEF3FC] cursor-pointer`} onClick={() => setView(r)}>
+                <td className="px-3 py-2 text-center text-[#7A89A3] tabular-nums">{list.length - i}</td>
+                <td className="px-3 py-2 font-black text-[#0F1A30] whitespace-nowrap">{r.driverName || "-"}</td>
+                <td className="px-3 py-2 text-center whitespace-nowrap">{r.차량번호 || "-"}</td>
+                <td className="px-3 py-2 font-bold text-[#1B2B4B] truncate max-w-[260px]">{r.title || "-"}</td>
+                <td className="px-3 py-2 text-center"><span className={`h-7 px-2 rounded-lg text-[12px] font-black inline-flex items-center ${r.status === "signed" ? "bg-[#0F1A30] text-white" : r.status === "read" ? "bg-[#EEF3FC] text-[#2D4C82]" : "bg-[#F3F5F9] text-[#5B6B85]"}`}>{DC_STATUS[r.status] || r.status}</span></td>
+                <td className="px-3 py-2 text-center tabular-nums whitespace-nowrap text-[#5B6B85]">{fmtT(r.sentAt)}</td>
+                <td className="px-3 py-2 text-center tabular-nums whitespace-nowrap text-[#5B6B85]">{r.readAt ? fmtT(r.readAt) : "-"}</td>
+                <td className="px-3 py-2 text-center tabular-nums whitespace-nowrap font-bold text-[#0F1A30]">{r.signedAt ? fmtT(r.signedAt) : "-"}</td>
+                <td className="px-3 py-2 text-center whitespace-nowrap">{r.signedAt ? (r.signMethod === "stamp" ? "도장" : "손서명") : "-"}</td>
+                <td className="px-3 py-2 text-center whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                  <button type="button" onClick={() => setView(r)} className="h-8 px-2.5 rounded-lg border border-[#DCE3EE] text-[12px] font-black text-[#1B2B4B] mr-1">보기</button>
+                  <button type="button" onClick={() => remove(r)} className="h-8 w-8 rounded-lg text-[#7A879C] hover:bg-[#F3F5F9]" aria-label="삭제">✕</button>
+                </td>
+              </tr>
+            ))}</tbody>
+          </table>
+        </div>
+      )}
+      {board && list.length > 0 ? null : !list.length ? <div className="py-8 text-center text-[13.5px] font-bold text-[#8E9BB2]">{rows.length ? "조건에 맞는 계약서가 없습니다" : "기사앱으로 보낸 계약서가 없습니다"}</div> : (
         <div className="divide-y divide-[#EEF1F6] max-h-[360px] overflow-y-auto overscroll-contain">
           {list.map((r) => (
             <div key={r.id} className="flex items-center gap-2.5 py-2.5">
@@ -109,10 +150,12 @@ export function DriverContractStatus({ company, Paper, specOf }) {
                 <div className="text-[15.5px] font-black truncate">{view.driverName} · {view.title}</div>
                 <div className="text-[12px] text-white/60">{DC_STATUS[view.status]}{view.signedAt ? ` · ${fmtT(view.signedAt)} ${view.signMethod === "stamp" ? "도장" : "손서명"}` : ""}</div>
               </div>
-              <button type="button" onClick={() => setView(null)} className="ml-auto h-9 px-3.5 rounded-xl bg-white/10 border border-white/20 text-[13px] font-bold">닫기</button>
+              <button type="button" onClick={() => paperRef.current && savePdf(paperRef.current, fileName(view)).catch((e) => kpAlert(`저장하지 못했어요: ${e?.message || e}`))} className="ml-auto h-9 px-3.5 rounded-xl bg-white text-[#0F1A30] text-[13px] font-black">⤓ PDF 저장</button>
+              <button type="button" onClick={() => paperRef.current && printA4(paperRef.current, fileName(view)).catch(() => {})} className="h-9 px-3.5 rounded-xl bg-white/10 border border-white/20 text-[13px] font-bold">인쇄</button>
+              <button type="button" onClick={() => setView(null)} className="h-9 px-3.5 rounded-xl bg-white/10 border border-white/20 text-[13px] font-bold">닫기</button>
             </div>
             <div className="overflow-auto overscroll-contain p-4">
-              <div className="mx-auto [&_.kp-a4page]:shadow-[0_10px_30px_rgba(15,26,48,.18)]" style={{ width: 794 }}>
+              <div ref={paperRef} className="mx-auto [&_.kp-a4page]:shadow-[0_10px_30px_rgba(15,26,48,.18)]" style={{ width: 794 }}>
                 <Paper title={view.title} spec={specOf(view.kind, view.sub)} vals={view.vals || {}} clauses={view.clauses || []} signs={{ right: view.signImage || "" }} />
               </div>
             </div>
