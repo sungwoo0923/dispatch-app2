@@ -144,13 +144,14 @@ service firebase.storage {
       allow read: if hubAdmin() || (apStaff(coKey) && (firestore.exists(apDoc(docId))
         ? apReaderOk(docId)
         : resource.metadata.get('uploadedBy', '') == request.auth.uid));
-      allow create: if resource == null && apStaff(coKey) && request.resource != null && request.resource.size < 20 * 1024 * 1024 && apFileTypeOk()
+      // ⭐ 2026-11-09 최고관리자(hubAdmin)는 여러 회사를 오가며 쓰므로 어느 회사 폴더에도 올릴 수 있다(본인이 올린 표시·기안자 조건은 같음)
+      allow create: if resource == null && (apStaff(coKey) || hubAdmin()) && request.resource != null && request.resource.size < 20 * 1024 * 1024 && apFileTypeOk()
         && request.resource.metadata.get('uploadedBy', '') == request.auth.uid
         && (!firestore.exists(apDoc(docId))
           || (firestore.get(apDoc(docId)).data.get('drafterUid', '') == request.auth.uid
               && firestore.get(apDoc(docId)).data.get('status', '') in ['pending', 'withdrawn', 'rejected'])); // ⭐ 2026-11-09 회수·반려 문서를 고쳐 다시 올릴 때도
       allow update: if false;
-      allow delete: if apStaff(coKey) && resource.metadata.get('uploadedBy', '') == request.auth.uid
+      allow delete: if (apStaff(coKey) || hubAdmin()) && resource.metadata.get('uploadedBy', '') == request.auth.uid
         && (!firestore.exists(apDoc(docId))
           || (firestore.get(apDoc(docId)).data.get('drafterUid', '') == request.auth.uid
               && firestore.get(apDoc(docId)).data.get('status', '') in ['pending', 'withdrawn']
