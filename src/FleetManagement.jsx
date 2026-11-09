@@ -684,7 +684,7 @@ function DriverTable({ rows, selectedId, onSelect, onFocusMap, onContextMenu, to
               <td style={{ padding: "8px 10px", whiteSpace: "nowrap" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                   <span style={{ width: 8, height: 8, borderRadius: "50%", background: d.active ? HUD.teal : "#C3CDDD", boxShadow: "none", display: "inline-block", flexShrink: 0 }} title={d.active ? "접속중" : "미접속"} />
-                  <span style={{ color: sel ? "#fff" : HUD.text, fontWeight: 800, fontSize: 14.5 }}>{d.이름 || "-"}</span>
+                  <span style={{ color: sel ? "#0F1A30" : HUD.text, fontWeight: 800, fontSize: 14.5 }}>{d.이름 || "-"}</span>
                 </div>
               </td>
 
