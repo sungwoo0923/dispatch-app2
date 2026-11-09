@@ -2261,7 +2261,8 @@ const apStatusKeys = (sets, showPay = false) => AP_STATUS_TABS.filter(([k]) => !
 
 function Tabs({ tabs, tab, setTab }) {
   return (
-    <div className="flex items-center gap-1.5 px-5 pt-4 pb-3 border-b border-[#EEF1F6] overflow-x-auto no-scrollbar">
+    // ⭐ 2026-11-09 버튼이 많아 넘칠 때 좌우 스크롤바 표시(index.css .ap-tabs-scroll)
+    <div className="ap-tabs-scroll flex items-center gap-1.5 px-5 pt-4 pb-2 border-b border-[#EEF1F6] overflow-x-auto">
       {tabs.map(([k, l, n, unread]) => (
         <button key={k} type="button" onClick={() => setTab(k)} className={`relative h-9 px-4 rounded-full text-[14px] font-black shrink-0 border inline-flex items-center gap-1.5 ${tab === k ? "bg-[#0F1A30] text-white border-[#0F1A30]" : "bg-white text-[#5B6B85] border-[#DCE3EE]"}`}>
           {l}{n > 0 && <span className={`min-w-[20px] h-5 px-1.5 rounded-full text-[12px] flex items-center justify-center tabular-nums ${tab === k ? "bg-white text-[#0F1A30]" : "bg-[#EEF1F6] text-[#1B2B4B]"}`}>{n}</span>}

@@ -359,3 +359,11 @@ input[type="file"]::file-selector-button:hover { border-color: #2D4C82; backgrou
 .text-white\/55 { color: rgba(255, 255, 255, 0.72); }
 /* 입력칸 안내 글씨(placeholder) 기본색 — 값과 구분되게 연하게 두되 #9CA3AF(2.5:1)보다 한 단계 진하게(3:1). 화면마다 placeholder:text-… 로 정한 색은 그대로 */
 @layer base { input::placeholder, textarea::placeholder { color: #8591A6; } }
+
+/* ⭐ 2026-11-09 전자결재 결재함·내 기안함 상단 필터 — 좌우 스크롤바(얇게, 항상 보이게) */
+.ap-tabs-scroll { padding-bottom: 10px; }
+@supports not selector(::-webkit-scrollbar) { .ap-tabs-scroll { scrollbar-width: thin; scrollbar-color: #B8C4D8 #F1F4F9; } }
+.ap-tabs-scroll::-webkit-scrollbar { height: 8px; }
+.ap-tabs-scroll::-webkit-scrollbar-track { background: #F1F4F9; border-radius: 99px; }
+.ap-tabs-scroll::-webkit-scrollbar-thumb { background: #B8C4D8; border-radius: 99px; }
+.ap-tabs-scroll::-webkit-scrollbar-thumb:hover { background: #8FA3C2; }
