@@ -38,6 +38,7 @@ import MgrBadge, { setMgrNameMap } from "./MgrBadge";
 import { isUrgentOrder, UrgentBadge, urgentRowStyle } from "./urgentOrder"; // ⭐ 2026-11-06 긴급 오더 강조(모든 현황 공용)
 import BulkEditCopyModal from "./BulkEditCopy"; // 🗂 2026-11-09 우클릭 [일괄수정·복사]
 const ReceiptCenter = React.lazy(() => import("./ReceiptCenter")); // 🧾 2026-11-09 배차현황 › 인수증관리
+import { applyOwner } from "./orderOwner"; // 👤 2026-11-09 복사본 배차담당자
 import { askCopyDates } from "./CopyCountDialog"; // ⭐ 2026-11-06 복사 등록 — 몇 건·건별 날짜
 import { dispatchStatusOf, payTypeStatusPatch } from "./dispatchStatus"; // 🚚 2026-11-07 배차상태 공용 규칙
 import { requestRouteSheetPush } from "./routeSheetPush"; // 💰 2026-11-06 고정노선 오더 고치면 바로 시트에
@@ -2777,7 +2778,8 @@ const submitCopyOrderPC = async (copyTarget, approvedShippers, cargoOverride) =>
     // 전달사항은 패널을 열람하는 동안엔 항상 원본 그대로 보여주고(수정과 동일하게),
     // 실제로 "복사 등록"으로 새 오더를 만드는 이 시점에만 고정 여부를 확인한다 —
     // 고정을 켜둔 채로 복사한 경우에만 새 오더에도 전달사항이 함께 넘어간다.
-    전달사항: copyTarget.전달사항고정 === true ? (copyTarget.전달사항 || "") : "",
+    // 📝 2026-11-09 전달사항은 "고정"을 안 켜도 항상 복사본에 넘어간다(모바일 복사와 같게)
+    전달사항: copyTarget.전달사항 || "",
   };
   delete payload.화물수량;
   delete payload.화물타입;
@@ -2786,6 +2788,7 @@ const submitCopyOrderPC = async (copyTarget, approvedShippers, cargoOverride) =>
   delete payload._transmittedOrderId;
   delete payload._transmittedToShipper;
   delete payload._transmittedAt;
+  delete payload._owner;
   delete payload._gsheetSync; // ★ 원본의 구글시트 줄 연결값이 복사본에 딸려가면 원본 줄을 덮어쓰거나 지웠다
   // 🧹 2026-11-09 원본의 운행·지급 진행값(기사 수락/완료, 상차완료, 지급완료, 수정이력)이 복사본에 딸려가면
   //  새 오더가 처음부터 "운송완료·지급완료"로 보였다 — 복사본은 새 운행으로 시작
@@ -2797,6 +2800,8 @@ const submitCopyOrderPC = async (copyTarget, approvedShippers, cargoOverride) =>
     payload.배차확정일시 = serverTimestamp();
     payload.배차확정자 = auth.currentUser?.displayName || auth.currentUser?.email?.split("@")[0] || "";
   }
+  // 👤 2026-11-09 배차담당자 — 복사 창에서 고른 사람(처음엔 원본 담당자 그대로)
+  if (copyTarget._owner) applyOwner(payload, copyTarget._owner);
   // 💬 2026-11-08 알림톡은 화면에서 뺐다 — 복사본은 보내지 않고, 원본 발송 결과도 넘기지 않는다
   payload.알림톡 = false;
   delete payload._알림톡;
@@ -2825,11 +2830,11 @@ const submitCopyOrderPC = async (copyTarget, approvedShippers, cargoOverride) =>
 // ⭐ 2026-11-06 [복사 등록] — "몇 건 복사?" 창(건마다 상차일·하차일, 처음엔 모두 오늘) → 그 수만큼 submitCopyOrderPC
 //   (지난 날짜 → 오늘, 화주사 전송 포인터 제거 등 submitCopyOrderPC 규칙은 그대로) · 취소/실패면 false, 성공이면 건수
 const submitCopyOrdersPC = async (copyTarget, approvedShippers, cargoOverride) => {
-  const plan = await askCopyDates({ title: "복사 등록", sub: `${copyTarget?.거래처명 || ""} ${copyTarget?.상차지명 ? `· ${copyTarget.상차지명} → ${copyTarget.하차지명 || ""}` : ""}`.trim() || undefined });
+  const plan = await askCopyDates({ order: copyTarget, title: "복사 등록", sub: `${copyTarget?.거래처명 || ""} ${copyTarget?.상차지명 ? `· ${copyTarget.상차지명} → ${copyTarget.하차지명 || ""}` : ""}`.trim() || undefined });
   if (!plan || !plan.length) return false;
   let n = 0;
   for (const d of plan) {
-    const ok = await submitCopyOrderPC({ ...copyTarget, 상차일: d.상차일, 하차일: d.하차일 }, approvedShippers, cargoOverride);
+    const ok = await submitCopyOrderPC({ ...copyTarget, 상차일: d.상차일, 하차일: d.하차일, ...(d.담당자 ? { _owner: d.담당자 } : {}) }, approvedShippers, cargoOverride);
     if (ok === false) return n ? n : false;
     n += 1;
   }
@@ -12757,6 +12762,7 @@ const submitMultiRegister = async () => {
         수수료: String((parseInt(s.청구운임 || 0, 10) || 0) - (parseInt(s.기사운임 || 0, 10) || 0)),
         메모: s.메모 || "",
         긴급: !!s.긴급,
+        혼적: !!s.혼적, 독차: dokchaOn({ 혼적: !!s.혼적, 운행유형: s.운행유형 || "편도" }), // 🚚 2026-11-09 다중등록 혼적
         배차상태: s.지급방식 === "취소" ? "배차취소" : (슬롯기사확인상태.기사확인상태 === "대기" ? "승인대기" : (s.차량번호?.trim() ? "배차완료" : "배차중")),
         ...(fareOn ? farePatchOf(s) : {}), // ⭐ 2026-11-02 운임규칙
         등록일: _todayStr(),
@@ -16329,6 +16335,9 @@ shadow-[0_1px_2px_rgba(16,24,40,0.04),0_12px_30px_rgba(16,24,40,0.07)]
               <div className="col-span-2 flex items-center gap-2">
                 <input type="checkbox" id="mrUrgent" checked={!!currentMultiSlot.긴급} onChange={e => updateMultiSlot("긴급", e.target.checked)} />
                 <label htmlFor="mrUrgent" className="text-[13px] font-bold text-gray-700 cursor-pointer">긴급 오더</label>
+                {/* 🚚 2026-11-09 혼적 — 단일 등록과 같게(끄면 독차) */}
+                <input type="checkbox" id="mrMixed" className="ml-4" checked={!!currentMultiSlot.혼적} onChange={e => updateMultiSlot("혼적", e.target.checked)} />
+                <label htmlFor="mrMixed" className="text-[13px] font-bold text-gray-700 cursor-pointer">혼적</label>
               </div>
             </div>
 
@@ -35641,6 +35650,7 @@ function DispatchStatus({
   places = [],
   placeRows = [],
   timeOptions = [],
+  tonOptions = [], // ⭐ 2026-11-09 일괄수정 톤수 목록
   addDispatch,
   patchDispatch,
   removeDispatch,
@@ -41863,7 +41873,7 @@ return (
       {bulkEditRows && !bulkLegacy && (
         <BulkEditCopyModal rows={bulkEditRows} patchDispatch={patchDispatch} onClose={() => setBulkEditRows(null)} onDateShift={() => setDateShiftRows(bulkEditRows)}
           onLegacyEdit={() => setBulkLegacy(true)} onCopyOne={(o) => submitCopyOrderPC(o, approvedShippers)}
-          drivers={drivers} clients={clients} places={placeRows?.length ? placeRows : places} timeOptions={timeOptions}
+          drivers={drivers} clients={clients} places={placeRows?.length ? placeRows : places} timeOptions={timeOptions} tonOptions={tonOptions}
           vehicleTypes={withCustomVehicleTypes(VEHICLE_TYPES)} payTypes={PAY_TYPES} dispatchTypes={dropdownList("배차방식", ["24시", "직접배차", "인성", "고정기사", "로지스허브"])}
           isViewer={isViewer} toast={sflowToast} />
       )}

@@ -8,7 +8,9 @@
 //    등록 전 미리보기(총 N건). 등록은 오더 복사 패널의 [복사 등록]과 같은 함수(onCopyOne = submitCopyOrderPC).
 import React from "react";
 import CustomDatePicker from "./CustomDatePicker";
-import { CustomSelect } from "./CustomSelect"; // ⭐ 2026-11-09 브라우저 기본 select 대신 프로그램 드롭다운
+import { CustomSelect } from "./CustomSelect";
+import { subscribeUsersLive } from "./usersLive"; // 👤 2026-11-09 복사본 배차담당자
+import { staffOptionsOf, ownerOfOrder, matchOwner } from "./orderOwner"; // ⭐ 2026-11-09 브라우저 기본 select 대신 프로그램 드롭다운
 import { CompanyOptionPicker } from "./companyOptionPicker"; // 지급방식·배차방식은 회사 목록(배차관리와 같은 목록)
 
 const pad = (n) => String(n).padStart(2, "0");
@@ -98,7 +100,7 @@ export default function BulkEditCopyModal({
     const k = (e) => {
       if (e.key !== "Escape" || e.defaultPrevented) return;
       // 드롭다운·달력·확인창이 떠 있으면 그것만 닫히게(창 전체가 닫혀 고친 값이 날아가지 않게) — FleetOrderPanel과 같은 기준
-      if (document.querySelector("[data-kp-popup], [data-opt-menu], [data-vt-menu], [data-vt-dialog], [data-fare-menu], [data-kp-dialog]")) return;
+      if (document.querySelector("[data-kp-popup], [data-opt-menu], [data-vt-menu], [data-vt-dialog], [data-fare-menu], [data-kp-dialog], [data-cs-menu]")) return;
       onClose?.();
     };
     window.addEventListener("keydown", k);
@@ -107,11 +109,18 @@ export default function BulkEditCopyModal({
 
   const opts = React.useMemo(() => ({
     times: (timeOptions || []).filter(Boolean),
-    tons: (tonOptions?.length ? tonOptions : ["0.5톤", "1톤", "1.4톤", "2.5톤", "3.5톤", "5톤", "5톤축", "8톤", "9.5톤", "11톤", "14톤", "15톤", "18톤", "25톤"]).filter(Boolean),
+    // ⭐ 2026-11-09 톤수 — 기본 톤수 + 넘겨받은 목록 + 우리 회사 기사·선택한 오더에 실제로 쓰인 톤수(실시간배차현황·배차현황 같은 목록)
+    tons: (() => {
+      const base = ["0.5톤", "1톤", "1.4톤", "2.5톤", "3.5톤", "5톤", "5톤축", "8톤", "9.5톤", "11톤", "14톤", "15톤", "18톤", "25톤"];
+      const used = [...(drivers || []).map((d) => d?.차량톤수), ...(rows || []).map((r) => r?.차량톤수)].map((x) => String(x ?? "").trim()).filter((x) => x && x.length <= 12);
+      const all = [...new Set([...base, ...(tonOptions || []), ...used].filter(Boolean))];
+      const num = (t) => { const m = String(t).match(/[\d.]+/); return m ? parseFloat(m[0]) * (/kg/i.test(t) ? 0.001 : 1) : 999; };
+      return all.sort((a, b) => num(a) - num(b) || String(a).localeCompare(String(b), "ko"));
+    })(),
     vehicles: (vehicleTypes || []).filter(Boolean),
     pays: (payTypes || []).filter(Boolean),
     dispatches: (dispatchTypes || []).filter(Boolean),
-  }), [timeOptions, tonOptions, vehicleTypes, payTypes, dispatchTypes]);
+  }), [timeOptions, tonOptions, vehicleTypes, payTypes, dispatchTypes, drivers, rows]);
 
   const datalists = (
     <>
@@ -273,6 +282,14 @@ function CopyTab({ rows, opts, onCopyOne, onClose, isViewer, toast }) {
     return { id: idOf(r), 상차일: p, 하차일: addDays(p, gap), gap, 상차시간: r.상차시간 || "", 하차시간: r.하차시간 || "", count: 1, weekdaysOnly: false, on: true };
   }));
   const [busy, setBusy] = React.useState(null); // { done, total }
+  // 👤 배차담당자 — 처음엔 원본 담당자 · 오더마다(또는 전체) 바꿀 수 있다
+  const [staff, setStaff] = React.useState([]);
+  React.useEffect(() => subscribeUsersLive((list) => setStaff(staffOptionsOf(list))), []);
+  const origOwners = React.useMemo(() => rows.map((r) => matchOwner(ownerOfOrder(r), staff)), [rows, staff]);
+  const [owners, setOwners] = React.useState({}); // { 줄번호: key } — 안 바꾼 줄은 원본
+  const ownerOptsOf = (i) => { const o = origOwners[i]; return o && o.orig ? [o, ...staff] : staff; };
+  const ownerKeyOf = (i) => owners[i] ?? origOwners[i]?.key ?? "";
+  const ownerOf = (i) => ownerOptsOf(i).find((s) => s.key === ownerKeyOf(i)) || null;
   const setPlan = (i, patch) => setPlans((ps) => ps.map((p, k) => {
     if (k !== i) return p;
     const n = { ...p, ...patch };
@@ -304,6 +321,7 @@ function CopyTab({ rows, opts, onCopyOne, onClose, isViewer, toast }) {
         const src = rows[d.i]; const p = plans[d.i];
         const order = { ...src, 상차일: d.상차일, 하차일: d.하차일, 상차시간: p.상차시간, 하차시간: p.하차시간 };
         if (!keepDriver) { order.차량번호 = ""; order.이름 = ""; order.전화번호 = ""; order.기사확인상태 = null; }
+        const ow = ownerOf(d.i); if (ow && !ow.orig) order._owner = ow;
         const res = await onCopyOne(order);
         if (res === false) break;
         ok += 1; setBusy({ done: ok, total: expanded.length });
@@ -321,6 +339,13 @@ function CopyTab({ rows, opts, onCopyOne, onClose, isViewer, toast }) {
         <button type="button" onClick={applyFirst} className="h-[34px] px-4 rounded-lg bg-[#1B2B4B] text-white text-[13px] font-black">첫 오더 날짜 · 횟수 전체 적용</button>
         <span className="text-[12px] font-bold text-[#7A89A3] ml-1">전체 날짜</span>
         {[-1, 1, 7].map((n) => <button key={n} type="button" onClick={() => shiftAll(n)} className="h-[30px] px-2.5 rounded-lg border border-[#DCE3EE] bg-white text-[12px] font-bold text-[#1B2B4B]" style={MONO}>{n > 0 ? `+${n}` : n}일</button>)}
+        <span className="text-[12px] font-bold text-[#7A89A3] ml-3">배차담당자 전체</span>
+        <div className="w-[150px]">
+          <CustomSelect className={`${sel} text-left`} value="" placeholder="원본 담당자" onChange={(e) => { const v = e.target.value; setOwners(v === "__orig_all__" ? {} : Object.fromEntries(rows.map((_, i) => [i, v]))); }}>
+            <option value="__orig_all__">원본 담당자로</option>
+            {staff.map((s2) => <option key={s2.key} value={s2.key}>{s2.name}</option>)}
+          </CustomSelect>
+        </div>
         <div className="flex-1" />
         <label className="flex items-center gap-1.5 text-[12.5px] font-bold text-[#1B2B4B]"><input type="checkbox" checked={keepGap} onChange={(e) => setKeepGap(e.target.checked)} /> 상하차 간격 유지</label>
         <label className="flex items-center gap-1.5 text-[12.5px] font-bold text-[#1B2B4B] ml-3" title="끄면 기사·차량을 비우고 배차중으로 복사합니다"><input type="checkbox" checked={keepDriver} onChange={(e) => setKeepDriver(e.target.checked)} /> 기사·차량 유지</label>
@@ -354,6 +379,12 @@ function CopyTab({ rows, opts, onCopyOne, onClose, isViewer, toast }) {
                     <button key={l} type="button" onClick={() => setPlan(i, { 상차일: d })} className={`h-[26px] px-2.5 rounded-full text-[11.5px] font-bold border ${p.상차일 === d ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-[#1B2B4B] border-[#DCE3EE]"}`}>{l}</button>
                   ))}
                   {p.count > 1 && <label className="ml-1 flex items-center gap-1 text-[11.5px] font-bold text-[#5B6B85]"><input type="checkbox" checked={p.weekdaysOnly} onChange={(e) => setPlan(i, { weekdaysOnly: e.target.checked })} /> 주말 빼기</label>}
+                  <span className="ml-2 text-[11.5px] font-bold text-[#7A89A3]">담당</span>
+                  <div className="w-[160px]">
+                    <CustomSelect className={`${sel} !h-[26px] text-left`} value={ownerKeyOf(i)} placeholder="-" onChange={(e) => setOwners((m) => ({ ...m, [i]: e.target.value }))}>
+                      {ownerOptsOf(i).map((s2) => <option key={s2.key} value={s2.key}>{s2.orig ? `${s2.name} (원본)` : s2.name}</option>)}
+                    </CustomSelect>
+                  </div>
                   <span className="ml-auto text-[11.5px] font-bold text-[#5B6B85] truncate" style={MONO} title={dates.map((d) => fmtMD(d.상차일)).join(", ")}>
                     {dates.length ? `${dates.length}건 · ${fmtMD(dates[0].상차일)}${dates.length > 1 ? ` ~ ${fmtMD(dates[dates.length - 1].상차일)}` : ""}` : "복사 안 함"}
                   </span>

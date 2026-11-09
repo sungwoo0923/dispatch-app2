@@ -8,6 +8,7 @@ import React from "react";
 import { collection, doc, getDocs, increment, serverTimestamp, setDoc, updateDoc } from "firebase/firestore";
 import { db } from "./firebase";
 import CustomDatePicker from "./CustomDatePicker";
+import { CustomSelect } from "./CustomSelect"; // ⭐ 2026-11-09 브라우저 기본 선택칸 → 프로그램 드롭다운
 
 const pad = (n) => String(n).padStart(2, "0");
 const kstToday = () => { const d = new Date(Date.now() + 9 * 3600e3); return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`; };
@@ -103,9 +104,9 @@ export default function ReceiptCenter({ dispatchData = [], isViewer = false, toa
         <span className="w-[140px]"><CustomDatePicker value={from} max={to} onChange={(e) => setFrom(e.target.value)} className="h-9 w-full px-2 rounded-lg border border-[#DCE3EE] text-[13px] font-semibold" openOnFocus={false} /></span>
         <span className="text-[#9AA9C3]">~</span>
         <span className="w-[140px]"><CustomDatePicker value={to} min={from} onChange={(e) => setTo(e.target.value)} className="h-9 w-full px-2 rounded-lg border border-[#DCE3EE] text-[13px] font-semibold" openOnFocus={false} /></span>
-        <select value={client} onChange={(e) => setClient(e.target.value)} className="h-9 px-2 rounded-lg border border-[#DCE3EE] text-[13px] font-semibold min-w-[150px]">
+        <CustomSelect value={client} onChange={(e) => setClient(e.target.value)} className="h-9 px-2.5 rounded-lg border border-[#DCE3EE] bg-white text-[13px] font-semibold text-left min-w-[150px]">
           <option value="">전체 거래처</option>{clients.map((c) => <option key={c} value={c}>{c}</option>)}
-        </select>
+        </CustomSelect>
         <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="거래처·상하차지·차량번호·기사 검색" className="h-9 px-3 rounded-lg border border-[#DCE3EE] text-[13px] w-[240px]" />
         <div className="flex gap-1.5 ml-1">{chip("all", "전체", cnt.all)}{chip("has", "제출", cnt.has)}{chip("missing", "미제출", cnt.missing)}</div>
         <div className="flex-1" />
@@ -196,7 +197,7 @@ function ReceiptPanel({ row, isViewer, toast, onZip }) {
         {!isViewer && (
           <div onDragOver={(e) => { e.preventDefault(); setDrag(true); }} onDragLeave={() => setDrag(false)} onDrop={(e) => { e.preventDefault(); setDrag(false); upload(e.dataTransfer.files); }}
             className={`rounded-2xl border-2 border-dashed px-4 py-4 flex flex-wrap items-center gap-2 ${drag ? "border-[#4B6CB7] bg-[#EEF3FC]" : "border-[#C9D5EA] bg-[#F7F9FC]"}`}>
-            <select value={kind} onChange={(e) => setKind(e.target.value)} className="h-9 px-2 rounded-lg border border-[#DCE3EE] text-[13px] font-bold bg-white">{KINDS.map((k) => <option key={k}>{k}</option>)}</select>
+            <CustomSelect value={kind} onChange={(e) => setKind(e.target.value)} className="h-9 px-2.5 rounded-lg border border-[#DCE3EE] text-[13px] font-bold bg-white text-left min-w-[110px]">{KINDS.map((k) => <option key={k} value={k}>{k}</option>)}</CustomSelect>
             <div className="text-[12.5px] font-bold text-[#5B6B85] flex-1 min-w-[160px]">사진·PDF를 여기에 끌어다 놓거나</div>
             <button type="button" disabled={busy} onClick={() => inputRef.current?.click()} className="h-9 px-4 rounded-xl bg-[#0F1A30] text-white text-[13px] font-black disabled:opacity-50">{busy ? "올리는 중…" : "파일 선택"}</button>
             <input ref={inputRef} type="file" multiple accept="image/*,application/pdf" className="hidden" onChange={(e) => { upload(e.target.files); e.target.value = ""; }} />

@@ -97,7 +97,7 @@ export function installEscClose() {
   window.addEventListener("keydown", (e) => {
     if (e.key !== "Escape" || e.isComposing) return;
     // ⭐ 2026-11-09 지급방식·배차방식(data-opt-menu)·차량종류·운임구분 목록이 열려 있을 때도 양보 — 목록만 닫으려다 오더 창 전체가 닫혔다
-    if (document.querySelector("[data-kp-dialog],[data-kp-popup],[data-opt-menu],[data-vt-menu],[data-fare-menu]")) return;
+    if (document.querySelector("[data-kp-dialog],[data-kp-popup],[data-opt-menu],[data-vt-menu],[data-fare-menu],[data-cs-menu]")) return;
     // 맨 위(나중에 그려진) 화면 덮개·사이드바 찾기
     const overlays = [...document.querySelectorAll("body *")].filter((el) => {
       const cs = getComputedStyle(el);

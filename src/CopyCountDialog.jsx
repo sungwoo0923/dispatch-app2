@@ -5,12 +5,34 @@
 import React from "react";
 import { createRoot } from "react-dom/client";
 import CustomDatePicker from "./CustomDatePicker";
+import { CustomSelect } from "./CustomSelect";
+import { subscribeUsersLive } from "./usersLive";
+import { staffOptionsOf, ownerOfOrder, matchOwner } from "./orderOwner";
 
 const kstToday = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
 const MAX = 30;
 
-function CopyCountDialog({ title, sub, mobile, alimtalk, onDone }) {
+function CopyCountDialog({ title, sub, mobile, alimtalk, order, onDone }) {
   const today = kstToday();
+  // 👤 2026-11-09 배차담당자 — order(원본)를 넘기면 칸이 보인다 · 처음엔 원본 담당자 · 직원 목록에서 바꿀 수 있다
+  const [staff, setStaff] = React.useState([]);
+  const [ownerKey, setOwnerKey] = React.useState("");
+  const origOwner = React.useMemo(() => (order ? ownerOfOrder(order) : null), [order]);
+  React.useEffect(() => {
+    if (!order) return undefined;
+    return subscribeUsersLive((list) => setStaff(staffOptionsOf(list)));
+  }, [order]);
+  const ownerOpts = React.useMemo(() => {
+    if (!origOwner) return [];
+    const m = matchOwner(origOwner, staff);
+    return m && m.orig ? [m, ...staff] : staff;
+  }, [origOwner, staff]);
+  React.useEffect(() => {
+    if (!origOwner || ownerKey) return;
+    const m = matchOwner(origOwner, staff);
+    if (m) setOwnerKey(m.key);
+  }, [origOwner, staff, ownerKey]);
+  const ownerPicked = ownerOpts.find((s) => s.key === ownerKey) || null;
   // 💬 2026-11-08 알림톡 보내기(복사본 전체) — 처음 값은 회사 기본값(alimtalk), 안 넘기면 칸을 숨긴다
   const [talk, setTalk] = React.useState(alimtalk === true);
   const [count, setCount] = React.useState(1);
@@ -32,10 +54,10 @@ function CopyCountDialog({ title, sub, mobile, alimtalk, onDone }) {
   const submit = () => {
     const bad = rows.findIndex((r) => !r.상차일 || !r.하차일 || r.하차일 < r.상차일);
     if (bad >= 0) { setErr(`${bad + 1}번째 — 하차일이 상차일보다 앞설 수 없어요.`); return; }
-    onDone(rows.map((r) => ({ ...r, ...(typeof alimtalk === "boolean" ? { 알림톡: talk } : {}) })));
+    onDone(rows.map((r) => ({ ...r, ...(typeof alimtalk === "boolean" ? { 알림톡: talk } : {}), ...(order && ownerPicked ? { 담당자: ownerPicked } : {}) })));
   };
   React.useEffect(() => {
-    const k = (e) => { if (e.key === "Escape") { e.stopPropagation(); onDone(null); } };
+    const k = (e) => { if (e.key === "Escape") { if (document.querySelector("[data-cs-menu]")) return; e.stopPropagation(); onDone(null); } }; // 목록이 열려 있으면 목록만 닫는다
     window.addEventListener("keydown", k, true);
     return () => window.removeEventListener("keydown", k, true);
   }, [onDone]);
@@ -75,6 +97,18 @@ function CopyCountDialog({ title, sub, mobile, alimtalk, onDone }) {
             </div>
           ))}
         </div>
+        {order && (
+          <div className="px-5 py-2.5 border-t border-[#E9EDF4] flex items-center gap-3" data-kp="copy-owner">
+            <span className="text-[13.5px] font-black text-[#1B2B4B] shrink-0">배차담당자</span>
+            <div className="flex-1 min-w-0">
+              <CustomSelect value={ownerKey} onChange={(e) => setOwnerKey(e.target.value)} placeholder="담당자 선택"
+                className="h-9 w-full px-2.5 rounded-lg border border-[#DCE3EE] bg-white text-[13.5px] font-semibold text-[#0F1A30] text-left">
+                {ownerOpts.map((s) => <option key={s.key} value={s.key}>{s.orig ? `${s.name} (원본 담당자)` : s.name}</option>)}
+              </CustomSelect>
+            </div>
+            <span className="text-[11.5px] font-bold text-[#9AA9C3] shrink-0">{ownerPicked && origOwner && matchOwner(origOwner, staff)?.key === ownerKey ? "원본 그대로" : "바꿈"}</span>
+          </div>
+        )}
         {typeof alimtalk === "boolean" && (
           <div className="px-5 py-2.5 border-t border-[#E9EDF4] flex items-center gap-3" data-kp="copy-alimtalk">
             <span className="inline-flex items-center justify-center min-w-8 h-8 px-1.5 rounded-lg shrink-0 text-[10.5px] font-black tracking-tight" style={{ background: talk ? "#FEE500" : "#F1F4F8", color: talk ? "#3C1E1E" : "#9AA9C3" }}>TALK</span>

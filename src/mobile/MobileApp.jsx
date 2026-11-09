@@ -32,7 +32,8 @@ const MobileIntelView = lazyView(() => import("./MobileIntelView"));
 import InternalMessenger from "../InternalMessenger";
 import { subscribeOrderSync, deleteOrderWithLog, historyStartDate, pcLiveWindowStart } from "../orderHistory";
 import CustomDatePicker from "../CustomDatePicker";
-import { askCopyDates } from "../CopyCountDialog"; // ⭐ 2026-11-06 오더 복사 — 몇 건·건별 날짜
+import { askCopyDates } from "../CopyCountDialog";
+import { ownerOfOrder, applyOwner } from "../orderOwner"; // 👤 2026-11-09 복사본 배차담당자
 // ⭐ 2026-11-09 PC 등록 오더는 혼적여부 없이 혼적(true/false)만 저장한다 — 모바일 수정·복사창이 "독차"로 읽어 저장 때 혼적이 꺼지던 문제
 const mixLabelOf = (o) => o?.혼적여부 || (o?.혼적 === true ? "혼적" : "독차");
 // 💬 2026-11-08 사장님 요청 — 카카오 알림톡은 PC·모바일 화면에서 모두 뺐다(새 오더는 알림톡:false → 서버 트리거가 보내지 않는다)
@@ -4910,6 +4911,8 @@ const groupedByDate = useMemo(() => {
           // "배차한시간" 툴팁이 읽는 배차확정일시도 같이 남겨야 한다(없으면 항상 "-").
           ...(rowData.배차상태 === "배차완료" && !rowData.배차확정일시 ? { 배차확정일시: serverTimestamp(), 배차확정자: dispatcherName } : {}),
         };
+        delete finalData._owner;
+        if (form._owner) applyOwner(finalData, form._owner); // 👤 복사본 — 고른 배차담당자로
         const writePromise = setDoc(doc(db, collName, newId), finalData);
 
         // ★ PC 거래처관리(places) 동기화 — 오더 저장 자체와 무관하니 기다리지 않는다.
@@ -4960,6 +4963,11 @@ const groupedByDate = useMemo(() => {
     }
   };
   // 📦 오더복사 → 등록창 이동 (오늘 날짜 기준)
+// 👤 2026-11-09 복사본 배차담당자 — 복사 창에서 고른 사람, 못 골랐으면 원본 담당자 그대로
+const copyOwnerOf = (order, plan) => {
+  const o = plan?.[0]?.담당자 || ownerOfOrder(order || {});
+  return o && (o.name || o.email) ? { name: o.name || o.email, email: o.email || "" } : null;
+};
 const handleOrderDuplicate0 = (order, plan = null) => {
  const today = plan?.[0]?.상차일 || todayKST(); const todayDrop = plan?.[0]?.하차일 || today; // ⭐ 2026-11-06 복사 건수 창에서 고른 날짜
 
@@ -5031,6 +5039,7 @@ const handleOrderDuplicate0 = (order, plan = null) => {
     _editId: null,
     _returnToDetail: false,
     _pendingContactItems,
+    _owner: copyOwnerOf(order, plan), // 👤 2026-11-09 배차담당자 — 복사 창에서 고른 사람(처음엔 원본 담당자)
   });
 
   // ⭐ 2026-11-06 복사 건수 — 2건 이상이면 등록창의 "수량 + 날짜 개별 설정"으로 그대로 넘긴다(등록을 누르면 그 수만큼)
@@ -5101,6 +5110,7 @@ const handleOrderDuplicateWithDriver0 = (order, plan = null) => {
     _editId: null,
     _returnToDetail: false,
     _pendingContactItems,
+    _owner: copyOwnerOf(order, plan), // 👤 2026-11-09 배차담당자 — 복사 창에서 고른 사람(처음엔 원본 담당자)
   });
   // ⭐ 2026-11-06 복사 건수 — 2건 이상이면 등록창의 "수량 + 날짜 개별 설정"으로 그대로 넘긴다(등록을 누르면 그 수만큼)
   if (plan && plan.length > 1) { setMultiCount(plan.length); setUseSeparateDates(true); setOrderDates(plan.map((x) => x.상차일)); setOrderDropDates(plan.map((x) => x.하차일)); }
@@ -5112,8 +5122,8 @@ const handleOrderDuplicateWithDriver0 = (order, plan = null) => {
 };
 
 // ⭐ 2026-11-06 오더 복사 — 먼저 "몇 건 복사?" 창(건마다 상차일·하차일 · 처음엔 모두 오늘)
-const handleOrderDuplicate = async (order) => { const plan = await askCopyDates({ mobile: true, title: "오더 복사", sub: "몇 건을 복사할지 고르고 건마다 날짜를 정해 주세요. 등록창에서 확인 후 등록하면 그 수만큼 만들어져요." }); if (plan) handleOrderDuplicate0(order, plan); };
-const handleOrderDuplicateWithDriver = async (order) => { const plan = await askCopyDates({ mobile: true, title: "오더 복사(기사 포함)", sub: "몇 건을 복사할지 고르고 건마다 날짜를 정해 주세요. 등록창에서 확인 후 등록하면 그 수만큼 만들어져요." }); if (plan) handleOrderDuplicateWithDriver0(order, plan); };
+const handleOrderDuplicate = async (order) => { const plan = await askCopyDates({ mobile: true, order, title: "오더 복사", sub: "몇 건을 복사할지 고르고 건마다 날짜를 정해 주세요. 등록창에서 확인 후 등록하면 그 수만큼 만들어져요." }); if (plan) handleOrderDuplicate0(order, plan); };
+const handleOrderDuplicateWithDriver = async (order) => { const plan = await askCopyDates({ mobile: true, order, title: "오더 복사(기사 포함)", sub: "몇 건을 복사할지 고르고 건마다 날짜를 정해 주세요. 등록창에서 확인 후 등록하면 그 수만큼 만들어져요." }); if (plan) handleOrderDuplicateWithDriver0(order, plan); };
 
 // 운송사가 연동 화주사로 전송(자동/수동)한 오더를 삭제할 때, 화주사 화면이 실제로 구독하는
 // 사본 문서도 함께 지운다. 그러지 않으면 원본은 없어져도 화주사 화면에는 "배차중"으로
