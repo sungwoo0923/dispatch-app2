@@ -18,6 +18,29 @@ export function reloadOnce() {
   return true;
 }
 
+// 🧯 2026-11-10 [오류 보내기] — 로그인한 누구나 누를 수 있고, 최고관리자만 관리센터에서 본다(src/errorReport.js)
+export function ReportErrorButton({ error, section, dark = true }) {
+  const [st, setSt] = React.useState({ s: "idle" });
+  const send = async () => {
+    setSt({ s: "sending" });
+    try {
+      const { sendErrorReport } = await import("./errorReport");
+      const code = await sendErrorReport(error, section);
+      setSt({ s: "sent", code });
+    } catch (e) { setSt({ s: "fail", msg: String(e?.message || e).slice(0, 120) }); }
+  };
+  if (st.s === "sent") return <div style={{ fontSize: 13, fontWeight: 700, color: "#1F7A4D" }}>보냈습니다 · 오류 번호 <b style={{ fontFamily: "monospace", letterSpacing: 1 }}>{st.code}</b></div>;
+  return (
+    <span style={{ display: "inline-flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
+      <button type="button" onClick={send} disabled={st.s === "sending"}
+        style={{ height: dark ? 44 : 36, padding: dark ? "0 22px" : "0 14px", borderRadius: 10, border: "1px solid #DCE3EE", background: "#fff", color: "#1B2B4B", fontSize: dark ? 14 : 13, fontWeight: 700, cursor: "pointer", opacity: st.s === "sending" ? 0.6 : 1 }}>
+        {st.s === "sending" ? "보내는 중…" : "오류 보내기"}
+      </button>
+      {st.s === "fail" && <span style={{ fontSize: 11.5, color: "#B4342A" }}>보내지 못했어요 — {st.msg}</span>}
+    </span>
+  );
+}
+
 export default class ErrorBoundary extends React.Component {
   constructor(props) {
     super(props);
@@ -48,7 +71,7 @@ export default class ErrorBoundary extends React.Component {
             화면을 불러오는 중 오류가 발생했습니다
           </div>
           <div style={{ fontSize: 13, color: "#6b7280", marginBottom: 20 }}>
-            새로고침하면 대부분 해결됩니다. 계속되면 관리자에게 알려주세요.
+            새로고침하면 대부분 해결됩니다. 계속되면 [오류 보내기]를 눌러 주세요.
           </div>
           <button
             onClick={() => window.location.reload()}
@@ -60,6 +83,7 @@ export default class ErrorBoundary extends React.Component {
           >
             새로고침
           </button>
+          <div style={{ marginTop: 10 }}><ReportErrorButton error={this.state.error} section="전체 화면" /></div>
           {/* ⭐ 2026-11-10 원인 찾기용 — 오류 내용을 작게 보여 준다(캡처해서 보내면 바로 원인을 찾는다) */}
           <div style={{ marginTop: 18, maxWidth: 560, fontSize: 11, color: "#9AA9C3", wordBreak: "break-all", fontFamily: "monospace" }}>
             {String(this.state.error?.message || this.state.error || "").slice(0, 300)}
@@ -85,9 +109,10 @@ export class SectionBoundary extends React.Component {
     return (
       <div style={{ padding: "28px 20px", borderRadius: 18, border: "1px solid #F5C2C2", background: "#FFF8F8", textAlign: "center" }}>
         <div style={{ fontSize: 15, fontWeight: 800, color: "#1B2B4B" }}>{this.props.name || "이 화면"}을 불러오지 못했습니다</div>
-        <div style={{ fontSize: 12.5, color: "#6b7280", marginTop: 6 }}>아래 오류 내용을 캡처해서 관리자에게 보내 주세요.</div>
+        <div style={{ fontSize: 12.5, color: "#6b7280", marginTop: 6 }}>[오류 보내기]를 누르면 오류 내용이 바로 전달됩니다.</div>
         <div style={{ marginTop: 10, fontSize: 11, color: "#9AA9C3", wordBreak: "break-all", fontFamily: "monospace" }}>{msg}</div>
-        <div style={{ marginTop: 14, display: "flex", gap: 8, justifyContent: "center" }}>
+        <div style={{ marginTop: 14, display: "flex", gap: 8, justifyContent: "center", alignItems: "flex-start", flexWrap: "wrap" }}>
+          <ReportErrorButton error={this.state.error} section={this.props.name || "화면 일부"} dark={false} />
           <button type="button" onClick={() => this.setState({ error: null })} style={{ height: 36, padding: "0 14px", borderRadius: 10, border: "1px solid #DCE3EE", background: "#fff", fontWeight: 700 }}>다시 시도</button>
           {this.props.fallback && <button type="button" onClick={() => this.setState({ error: null, useFallback: true })} style={{ height: 36, padding: "0 14px", borderRadius: 10, border: "none", background: "#1B2B4B", color: "#fff", fontWeight: 700 }}>기본 화면으로 보기</button>}
         </div>

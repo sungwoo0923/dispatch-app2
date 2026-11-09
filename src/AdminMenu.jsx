@@ -37,6 +37,7 @@ import RolePermissionsPanel from "./RolePermissionsPanel";
 import { AdminSessionsPanel } from "./LoginManager";
 import SheetConnectHub from "./SheetConnectHub"; // 🔗 2026-11-07 구글시트 연동 한곳(가져오기 · 전송 · 연결 마법사)
 import TrashPanel from "./TrashPanel";
+const DataCheckPanel = React.lazy(() => import("./DataCheckPanel")); // 🩺 2026-11-10 데이터 점검(모양이 이상한 값 찾아 고치기)
 import { useCustomRoles, roleScreen, ROLE_LABELS, roleOptionsFrom, rolesForTeam } from "./customRoles";
 import { useCompanyFeatures } from "./companyFeatures"; // ⭐ 2026-11-04 마스터 권한 관리(회사별로 켬)
 import { EditableText } from "./EditMode";
@@ -874,6 +875,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
     sessionLogs: "접속이력",
     sheetHub: "구글시트 연동",
     trash: "휴지통",
+    dataCheck: "데이터 점검",
     permissions: "권한 관리",
     landingEdit: "랜딩페이지 편집",
     notifTemplate: "알림 문구 설정",
@@ -884,10 +886,10 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
   const tabGroups = [
     { key: "members", label: "회원 관리", tabs: ["members"] },
     { key: "shipperMgmt", label: "화주사 관리", tabs: ["linked", "transmit", "inquiries", "landingInquiries"] },
-    { key: "ops", label: "운영 관리", tabs: ["loginSessions", "sessionLogs", "permissions", "sheetHub", "trash"] }, // ⭐ 2026-11-06 운송사 초기화는 관리자 관리센터(보안·데이터 › 운송사 초기화)로만 옮김 · 🔗 2026-11-07 구글시트 메뉴 셋 → "구글시트 연동" 하나 · 블라인드 모드 · 화주사 강제 업데이트는 뺌(강제 업데이트는 관리센터에 남음)
+    { key: "ops", label: "운영 관리", tabs: ["loginSessions", "sessionLogs", "permissions", "sheetHub", "trash", "dataCheck"] }, // ⭐ 2026-11-06 운송사 초기화는 관리자 관리센터(보안·데이터 › 운송사 초기화)로만 옮김 · 🔗 2026-11-07 구글시트 메뉴 셋 → "구글시트 연동" 하나 · 블라인드 모드 · 화주사 강제 업데이트는 뺌(강제 업데이트는 관리센터에 남음)
     { key: "settings", label: "환경 설정", tabs: ["billing", "setup", "copyTemplate", "landingEdit", "notifTemplate"] },
   ]
-    .map((g) => ({ ...g, tabs: g.tabs.filter((t) => (!REQUIRES_MASTER_TABS.has(t) || isTotalMaster || (t === "permissions" && masterPerms)) && (t !== "billing" || billingAcc.view) && (t !== "sheetHub" || isTotalMaster || ["admin", "allMgr"].includes(myRoleEff))) })) // 💳 구독·결제는 경리·재무·임원·대표만(billingAccess.js)
+    .map((g) => ({ ...g, tabs: g.tabs.filter((t) => (!REQUIRES_MASTER_TABS.has(t) || isTotalMaster || (t === "permissions" && masterPerms)) && (t !== "billing" || billingAcc.view) && (t !== "sheetHub" || isTotalMaster || ["admin", "allMgr"].includes(myRoleEff)) && (t !== "dataCheck" || isTotalMaster || ["admin", "allMgr"].includes(myRoleEff))) })) // 💳 구독·결제는 경리·재무·임원·대표만(billingAccess.js)
     // 🏢 부서 관리자메뉴 — 경리: 회원 승인 + 구독·결제 / 인사: 회원(인사권) + 로그인 관리. 배차용(기사복사 문구·화주사 등)은 뺀다
     .map((g) => (deptMode ? { ...g, tabs: g.tabs.filter((t) => (DEPT_ADMIN_TABS[deptMode] || []).includes(t) || (t === "billing" && billingAcc.view)) } : g))
     .filter((g) => g.tabs.length > 0);
@@ -900,7 +902,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
   // ⭐ 디자인 개편 — 왼쪽 메뉴바(그룹별) + 상단 인사 카드 + 숫자 카드(AdminShell 공용 레이아웃)
   const TAB_ICONS = {
     members: "users", linked: "link", transmit: "send", inquiries: "chat", landingInquiries: "inbox",
-    loginSessions: "phone", companyReset: "trash", sheetHub: "sheet", trash: "trash", sessionLogs: "history", permissions: "key",
+    loginSessions: "phone", companyReset: "trash", sheetHub: "sheet", trash: "trash", sessionLogs: "history", permissions: "key", dataCheck: "check",
     landingEdit: "globe", notifTemplate: "bell", setup: "check", copyTemplate: "list", billing: "money",
   };
   const shellGroups = tabGroups.map((g) => ({
@@ -1491,6 +1493,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
           {/* ====== 구글시트 연동(연결된 시트 · 가져오기 · 보내기 · 매핑 수정) ====== */}
           {adminTab === "sheetHub" && (isTotalMaster || ["admin", "allMgr"].includes(myRoleEff)) && <SheetConnectHub company={effectiveCompany} isTotalMaster={isTotalMaster} />}
           {adminTab === "trash" && <TrashPanel company={autoCompany} />}
+          {adminTab === "dataCheck" && <React.Suspense fallback={<div className="py-16 text-center text-[#9AA9C3]">불러오는 중…</div>}><DataCheckPanel company={autoCompany} /></React.Suspense>}
 
           {/* ====== 접속이력 탭 (최고관리자 전용) ====== */}
           {adminTab === "sessionLogs" && isTotalMaster && (() => {

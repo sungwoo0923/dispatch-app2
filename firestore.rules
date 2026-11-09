@@ -1223,6 +1223,25 @@ service cloud.firestore {
     match /securityProfiles/{uid} {
       allow read, write: if false;
     }
+    // 🧯 2026-11-10 오류 신고(오류 화면의 [오류 보내기]) — 보내기는 로그인한 누구나(본인 uid로 · 크기 제한),
+    //  보기·처리완료·삭제는 최고관리자(관리센터 › 보안·데이터 › 오류 신고)만 · 보낸 사람도 다시 못 읽는다
+    match /errorReports/{docId} {
+      allow create: if isSignedIn()
+        && request.resource.data.keys().hasOnly(['uid', 'email', 'name', 'role', 'companyName', 'section', 'message', 'stack', 'url', 'ua', 'version', 'status', 'createdAt'])
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.status == 'new'
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.message is string && request.resource.data.message.size() <= 1000
+        && request.resource.data.get('stack', '') is string && request.resource.data.get('stack', '').size() <= 4000
+        && request.resource.data.get('url', '').size() <= 300 && request.resource.data.get('ua', '').size() <= 300
+        && request.resource.data.get('section', '').size() <= 80 && request.resource.data.get('companyName', '').size() <= 80
+        && request.resource.data.get('name', '').size() <= 60 && request.resource.data.get('email', '').size() <= 120
+        && request.resource.data.get('role', '').size() <= 30 && request.resource.data.get('version', '').size() <= 30;
+      allow read, delete: if isTotalMasterUser();
+      allow update: if isTotalMasterUser()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'doneBy', 'doneAt', 'memo'])
+        && request.resource.data.status in ['new', 'done'];
+    }
     // 서버 사용량(Cloud Monitoring 수집 결과) — 쓰기는 서버(Cloud Functions)만, 읽기는 최고관리자만
     match /platformUsage/{docId} {
       allow read: if isTotalMasterUser();
@@ -2242,6 +2261,8 @@ service cloud.firestore {
         'siteConfig', 'platformConfig', 'platformUsage', 'usageCounters',
         // ⭐ 2026-11-05 기사 가입 처리 기록 — 위에서 따로 정함
         'driverSignupLogs',
+        // 🧯 2026-11-10 오류 신고 · 🛡 보안 알림 — 위에서 따로 정함(빠지면 승인된 직원이 회사명 없는 문서를 만들거나 고칠 수 있다)
+        'errorReports', 'securityEvents', 'securityProfiles',
         // ⭐ 2026-11-06 문구 편집 모드 — 위에서 따로 정함(쓰기는 최고관리자만)
         'textOverrides', 'textOverridesPublic',
         // ⭐ 2026-11-07 화면 편집 모드 — 위에서 따로 정함(빠지면 승인된 직원 누구나 화면 설정을 고칠 수 있다)
