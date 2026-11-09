@@ -17,7 +17,7 @@ export default function SecurityEventsPanel() {
   React.useEffect(() => onSnapshot(query(collection(db, "securityEvents"), orderBy("atMs", "desc"), limit(500)),
     (s) => setRows(s.docs.map((d) => ({ id: d.id, ...d.data() }))), () => setRows([])), []);
   const list = (rows || []).filter((r) => (!f.level || r.level === f.level) && (!f.type || r.type === f.type) && (!f.co || r.company === f.co)
-    && (!f.unacked || !r.ack) && (!f.q || `${r.name} ${r.email} ${r.ip} ${r.detail}`.includes(f.q)));
+    && (!f.unacked || !r.ack) && (!f.q || [r.name, r.email, r.ip, r.detail].filter(Boolean).join(" ").includes(f.q)));
   const companies = [...new Set((rows || []).map((r) => r.company).filter(Boolean))].sort();
   const by = auth.currentUser?.email || "";
   const ack = (r) => updateDoc(doc(db, "securityEvents", r.id), { ack: true, ackBy: by, ackAt: serverTimestamp() }).catch((e) => window.alert(e.message));
