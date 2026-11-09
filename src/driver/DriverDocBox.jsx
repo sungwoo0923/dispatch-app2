@@ -12,6 +12,7 @@ import { compressImage } from "../InternalMail";
 import { kpConfirm, kpAlert } from "../kpDialog";
 import DriverSubmitDocs from "./DriverSubmitDocs";
 import { useDriverDocs, docProblems } from "../driverRequiredDocs";
+const DriverContractSign = React.lazy(() => import("./DriverContractSign")); // ⭐ 2026-11-10 계약서 서명(열 때만 불러온다)
 
 const toMs = (v) => (v?.toMillis ? v.toMillis() : v?.seconds ? v.seconds * 1000 : 0);
 const card = { background: "#fff", borderRadius: 20, border: "1px solid #E6EBF3", boxShadow: "0 1px 6px rgba(0,0,0,0.05)" };
@@ -26,14 +27,16 @@ const Sec = ({ en, title }) => (
 export function useDriverInbox(uid) {
   const [st, setSt] = React.useState([]);
   const [pen, setPen] = React.useState([]);
+  const [ct, setCt] = React.useState([]); // ⭐ 2026-11-10 회사가 보낸 운송계약서(서명 요청)
   React.useEffect(() => {
     if (!uid) return undefined;
+    const u3 = onSnapshot(query(collection(db, "driverContracts"), where("driverId", "==", uid)), (s) => setCt(s.docs.map((d) => ({ id: d.id, ...d.data() }))), () => setCt([]));
     const u1 = onSnapshot(query(collection(db, "driverStatements"), where("driverId", "==", uid)), (s) => setSt(s.docs.map((d) => ({ id: d.id, ...d.data() }))), () => setSt([]));
     const u2 = onSnapshot(query(collection(db, "fleetPenalties"), where("driverId", "==", uid)), (s) => setPen(s.docs.map((d) => ({ id: d.id, ...d.data() })).filter((p) => p.published !== false)), () => setPen([]));
-    return () => { u1(); u2(); };
+    return () => { u1(); u2(); u3(); };
   }, [uid]);
-  const unread = st.filter((x) => !x.readAt).length + pen.filter((x) => !x.readAt).length;
-  return { statements: st, penalties: pen, unread };
+  const unread = st.filter((x) => !x.readAt).length + pen.filter((x) => !x.readAt).length + ct.filter((x) => x.status !== "signed").length;
+  return { statements: st, penalties: pen, contracts: ct, unread };
 }
 
 export default function DriverDocBox({ uid, inbox, companyName = "" }) {
@@ -44,6 +47,7 @@ export default function DriverDocBox({ uid, inbox, companyName = "" }) {
   const [viewer, setViewer] = React.useState(null);
   const statements = [...(inbox?.statements || [])].sort((a, b) => String(b.period).localeCompare(String(a.period)));
   const penalties = [...(inbox?.penalties || [])].sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")));
+  const contracts = [...(inbox?.contracts || [])].sort((a, b) => toMs(b.sentAt) - toMs(a.sentAt));
   const openItem = (type, item) => {
     setOpen({ type, item });
     if (type === "pen" && (!item.status || item.status === "접수")) {
@@ -66,6 +70,7 @@ export default function DriverDocBox({ uid, inbox, companyName = "" }) {
     setOpen((o) => (o ? { ...o, item: { ...o.item, status: "confirmed" } } : o));
   };
 
+  if (open?.type === "ct") return <React.Suspense fallback={<div style={{ padding: 40, textAlign: "center", color: "#9AA9C3", fontWeight: 700 }}>계약서를 여는 중…</div>}><DriverContractSign item={open.item} onBack={() => setOpen(null)} /></React.Suspense>;
   if (open) {
     const it = open.item;
     return (
@@ -95,22 +100,35 @@ export default function DriverDocBox({ uid, inbox, companyName = "" }) {
     );
   }
 
-  const list = tab === "pay" ? statements : penalties;
+  const list = tab === "pay" ? statements : tab === "ct" ? contracts : penalties;
   return (
     <div style={{ padding: 14 }}>
       <div style={{ borderRadius: 20, padding: "18px 18px 14px", color: "#fff", marginBottom: 12, background: "linear-gradient(120deg,#0B1428 0%,#1B2B4B 60%,#2D4C82 100%)" }}>
         <div style={{ fontFamily: MONO, fontSize: 12.5, fontWeight: 800, letterSpacing: "0.26em", color: "#8FB0F0" }}>DOCUMENTS</div>
         <div style={{ fontSize: 22, fontWeight: 900 }}>서류함</div>
         <div style={{ fontSize: 14.5, color: "rgba(255,255,255,.6)" }}>회사가 보낸 명세서·과태료 서류 · 회사에 낼 서류 제출</div>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6, marginTop: 12, padding: 4, borderRadius: 16, background: "rgba(255,255,255,.08)" }}>
-          {[["pay", "지급명세서", statements.filter((x) => !x.readAt).length], ["pen", "과태료·사고", penalties.filter((x) => !x.readAt).length], ["submit", "제출 서류", docNeed]].map(([k, l, n]) => (
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 4, marginTop: 12, padding: 4, borderRadius: 16, background: "rgba(255,255,255,.08)" }}>
+          {[["pay", "명세서", statements.filter((x) => !x.readAt).length], ["ct", "계약서", contracts.filter((x) => x.status !== "signed").length], ["pen", "과태료", penalties.filter((x) => !x.readAt).length], ["submit", "제출 서류", docNeed]].map(([k, l, n]) => (
             <button key={k} type="button" onClick={() => setTab(k)} style={{ height: 38, borderRadius: 11, border: "none", whiteSpace: "nowrap", background: tab === k ? "#fff" : "transparent", color: tab === k ? "#0F1A30" : "rgba(255,255,255,.75)", fontSize: 14.5, fontWeight: 900 }}>
               {l}{n ? <span style={{ marginLeft: 6, display: "inline-flex", minWidth: 18, height: 18, padding: "0 5px", borderRadius: 9, background: "#8FB0F0", color: "#0B1428", fontSize: 13.5, alignItems: "center", justifyContent: "center" }}>{n}</span> : null}
             </button>
           ))}
         </div>
       </div>
-      {tab === "submit" ? <DriverSubmitDocs uid={uid} companyName={companyName} /> : !list.length ? (
+      {tab === "submit" ? <DriverSubmitDocs uid={uid} companyName={companyName} /> : tab === "ct" ? (
+        !list.length ? <div style={{ ...card, padding: "40px 16px", textAlign: "center", color: "#9AA9C3", fontSize: 15.5, fontWeight: 700 }}>받은 계약서가 없습니다</div>
+          : list.map((it) => (
+            <button key={it.id} type="button" onClick={() => setOpen({ type: "ct", item: it })} style={{ ...card, width: "100%", textAlign: "left", padding: "14px 16px", marginBottom: 8, display: "flex", alignItems: "center", gap: 12 }}>
+              <span style={{ width: 42, height: 42, borderRadius: 14, flexShrink: 0, background: it.status === "signed" ? "#EEF2F8" : "#0F1A30", color: it.status === "signed" ? "#5B6B85" : "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, fontWeight: 900 }}>{it.status === "signed" ? "✓" : "✎"}</span>
+              <span style={{ flex: 1, minWidth: 0 }}>
+                <span style={{ display: "block", fontSize: 16.5, fontWeight: it.status === "signed" ? 700 : 900, color: "#0F1A30", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                  {it.title}{it.status === "sent" && <span style={{ marginLeft: 6, fontSize: 13.5, padding: "1px 6px", borderRadius: 6, background: "#1B2B4B", color: "#fff" }}>NEW</span>}
+                </span>
+                <span style={{ display: "block", fontSize: 14.5, color: "#7A89A3", marginTop: 2 }}>{it.status === "signed" ? "서명 완료" : "서명이 필요합니다 — 눌러서 서명"}</span>
+              </span>
+            </button>
+          ))
+      ) : !list.length ? (
         <div style={{ ...card, padding: "40px 16px", textAlign: "center", color: "#9AA9C3", fontSize: 15.5, fontWeight: 700 }}>{tab === "pay" ? "받은 지급명세서가 없습니다" : "받은 서류가 없습니다"}</div>
       ) : list.map((it) => (
         <button key={it.id} type="button" onClick={() => openItem(tab, it)} style={{ ...card, width: "100%", textAlign: "left", padding: "14px 16px", marginBottom: 8, display: "flex", alignItems: "center", gap: 12 }}>

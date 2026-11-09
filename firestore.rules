@@ -236,6 +236,17 @@ service cloud.firestore {
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['readAt', 'confirmedAt', 'status', 'driverMemo', 'paidAt', 'objectedAt', 'driverAction'])));
       allow delete: if dcol in ['driverStatements', 'fleetPenalties'] && isOfficeStaff() && coMatch(resource.data);
     }
+    // ✍ 2026-11-10 기사앱으로 보낸 운송계약서(driverContracts) — 직원은 같은 회사 전체(발송·삭제), 기사는 본인 것만 읽고
+    //  열람(read)·서명(signed)만 할 수 있다. 서명한 뒤에는 기사가 다시 고칠 수 없다.
+    match /driverContracts/{id} {
+      allow read: if (isOfficeStaff() && coMatch(resource.data)) || (isSignedIn() && resource.data.get('driverId', '') == request.auth.uid);
+      allow create: if isOfficeStaff() && coCreate() && request.resource.data.get('status', '') == 'sent';
+      allow update: if (isOfficeStaff() && coMatch(resource.data) && coKeep())
+        || (isSignedIn() && resource.data.get('driverId', '') == request.auth.uid && resource.data.get('status', '') != 'signed'
+          && request.resource.data.get('status', '') in ['read', 'signed']
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['readAt', 'status', 'signedAt', 'signImage', 'signMethod', 'signName']));
+      allow delete: if isOfficeStaff() && coMatch(resource.data);
+    }
     // 📜 계약서 보관함(전자결재 › 계약서) — 직원만
     match /companyContracts/{id} {
       allow read, update, delete: if isOfficeStaff() && coMatch(resource.data);
@@ -2207,7 +2218,7 @@ service cloud.firestore {
       allow write: if !catchAllExcluded(col) && catchAllWrite();
     }
     function catchAllExcluded(col) {
-      return col in ['adminSecrets', 'resetBackups', 'resetLogs', 'resetJobs', 'resetLocks', 'loginSessions', 'orderTrash', 'recurringRuns', 'internalMails', 'approvals', 'boardPosts', 'notices', 'handovers', 'salesQuotes', 'contracts', 'platformNotices', 'platformInvoices', 'companyPlans', 'publicPricing', 'planRequests', 'userPrefs', 'companyRoleOverrides', 'customRoles', 'supportRequests', 'supportSessions', 'driverStatements', 'fleetPenalties', 'fixedRoutes', 'routeBoards', 'personalSchedules', 'publicCompanies', 'companyContracts',
+      return col in ['adminSecrets', 'resetBackups', 'resetLogs', 'resetJobs', 'resetLocks', 'loginSessions', 'orderTrash', 'recurringRuns', 'internalMails', 'approvals', 'boardPosts', 'notices', 'handovers', 'salesQuotes', 'contracts', 'platformNotices', 'platformInvoices', 'companyPlans', 'publicPricing', 'planRequests', 'userPrefs', 'companyRoleOverrides', 'customRoles', 'supportRequests', 'supportSessions', 'driverStatements', 'fleetPenalties', 'driverContracts', 'fixedRoutes', 'routeBoards', 'personalSchedules', 'publicCompanies', 'companyContracts',
         // 🔒 회사별로 잠근 컬렉션(위에서 따로 정함)
         'orders', 'dispatch', 'dispatch_test', 'fixedClients', 'drivers', 'clients', 'places', 'recurringOrders', 'deletedOrders',
         'driver_completed_archive', 'notifications', 'schedules', 'scheduledEmails', 'emailLogs', 'hrResumes', 'attendanceRequests',

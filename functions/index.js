@@ -5187,6 +5187,23 @@ async function sendNoticePush(n) {
   await sendPushAndCleanup(list, { notification: { title, body }, android: { priority: "high" } }, "공지사항").catch((e) => console.error("공지 푸시 실패:", e));
   return list.length;
 }
+// ✍ 2026-11-10 운송계약서 → 기사앱 — 회사가 기사님께 계약서를 보내면 그 기사 휴대폰으로 푸시(기사앱 › 서류함 › 계약서에서 서명)
+exports.driverContractPush = functions.firestore.document("driverContracts/{id}").onCreate(async (snap) => {
+  const c = snap.data() || {};
+  if (!c.driverId) return null;
+  const u = await db.collection("users").doc(String(c.driverId)).get().catch(() => null);
+  const ud = u?.exists ? u.data() || {} : null;
+  if (!ud || ud.driverPushEnabled === false) return null;
+  const tokens = userTokens(ud);
+  if (!tokens.length) return null;
+  await sendPushAndCleanup(tokens, {
+    notification: { title: "계약서 서명 요청", body: `${c.companyName || "운송사"}에서 「${c.title || "운송계약서"}」을 보냈습니다. 서류함에서 확인 후 서명해 주세요.` },
+    data: { type: "driver_contract", contractId: snap.id, tab: "docs" },
+    android: { priority: "high" },
+    apns: { payload: { aps: { sound: "default" } } },
+  }, "운송계약서").catch((e) => console.error("[운송계약서 푸시] 실패:", e));
+  return null;
+});
 exports.notifyNotice = functions.firestore.document("notices/{id}").onCreate(async (snap) => {
   const n = snap.data() || {};
   if (n._seed) return null; /* 🧪 테스트 데이터(_seed)는 알림 없음 */

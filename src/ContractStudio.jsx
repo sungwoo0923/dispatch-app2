@@ -15,6 +15,8 @@ import { savePng, savePdf, printA4 } from "./a4Export";
 import { fmtBizNo, fmtPhone } from "./formatInput";
 import { useCompanyRegInfo } from "./companyRegInfo";
 import { useCompanyBiz, printInfoForBiz, BizPicker } from "./companyBiz";
+import { ComboInput, TimeRangeInput, PickList, useStaffPeople, staffDetail, useClientRows } from "./contractInputs"; // ⭐ 2026-11-10 드롭다운·검색
+import { DriverContractSendBar, DriverContractStatus } from "./contractSend"; // ⭐ 2026-11-10 기사앱으로 여러 명 발송
 
 const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
 const card = "rounded-[18px] bg-white border border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_8px_20px_rgba(16,24,40,0.05)]";
@@ -41,7 +43,7 @@ function displayVals(spec, vals) {
 // A4 한 장 = 794×1123px(96dpi). 조항이 장 경계에서 잘리지 않게 장마다 나눠 담는다.
 const PAGE_W = 794, PAGE_H = 1123, PAD_Y = 60, PAD_X = 70, FOOT = 30;
 const CAP = PAGE_H - PAD_Y * 2 - FOOT;
-export function ContractPaper({ title, spec, vals, clauses, paperRef }) {
+export function ContractPaper({ title, spec, vals, clauses, paperRef, signs = {} }) {
   const dv = displayVals(spec, vals);
   const isClient = spec === contractSpec("client");
   const isLabor = Object.values(LABOR_KINDS).includes(spec);
@@ -68,7 +70,7 @@ export function ContractPaper({ title, spec, vals, clauses, paperRef }) {
       <div style={{ fontSize: 16, fontWeight: 900, marginTop: 10 }}>{korDate(vals.계약일) || "＿＿＿＿년 ＿＿월 ＿＿일"}</div>
     </div>,
     <div key="sign" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 18 }}>
-      {[left, right].map((p, i) => (
+      {[left, right].map((p, i) => { const sg = i === 0 ? signs.left : signs.right; return (
         <div key={i} style={{ border: "1.5px solid #0F1A30", borderRadius: 4, padding: "14px 16px", fontSize: 13.5, lineHeight: 1.9, color: "#0B1428" }}>
           <div style={{ fontWeight: 900, fontSize: 14.5, borderBottom: "1px solid #DCE3EE", paddingBottom: 6, marginBottom: 6 }}>{p.role}</div>
           <div>상호·성명 : <b>{p.name || ""}</b></div>
@@ -76,9 +78,11 @@ export function ContractPaper({ title, spec, vals, clauses, paperRef }) {
           <div>{p.birth ? "생년월일" : "사업자번호"} : {p.biz || ""}</div>
           <div style={{ overflowWrap: "anywhere" }}>주 소 : {p.addr || ""}</div>
           {p.tel !== undefined && <div>연 락 처 : {p.tel || ""}</div>}
-          <div style={{ textAlign: "right", marginTop: 10, fontWeight: 800 }}>(서명 또는 인) <span style={{ display: "inline-block", width: 44, height: 44, border: "1px dashed #7A879C", borderRadius: "50%", verticalAlign: "middle", marginLeft: 6 }} /></div>
+          <div style={{ textAlign: "right", marginTop: 10, fontWeight: 800 }}>(서명 또는 인) {sg
+            ? <img src={sg} alt="서명" style={{ display: "inline-block", maxWidth: 120, height: 52, objectFit: "contain", verticalAlign: "middle", marginLeft: 6 }} />
+            : <span style={{ display: "inline-block", width: 44, height: 44, border: "1px dashed #7A879C", borderRadius: "50%", verticalAlign: "middle", marginLeft: 6 }} />}</div>
         </div>
-      ))}
+      ); })}
     </div>,
   ];
   // 블록 높이를 재서 장을 나눈다
@@ -162,6 +166,10 @@ export default function ContractStudio({ company = "", me = {} }) {
   const [busy, setBusy] = React.useState(false);
   const paperRef = React.useRef(null);
   const drivers = useFleetDrivers();
+  const staff = useStaffPeople(co); // ⭐ 2026-11-10 근로계약서 — 사내 직원 검색
+  const clientRows = useClientRows(co); // ⭐ 2026-11-10 거래처 계약서 — 기본거래처 검색
+  const [picked, setPicked] = React.useState([]); // ⭐ 2026-11-10 운송계약서 — 여러 기사님 선택(발송 대상)
+  const [activeId, setActiveId] = React.useState(""); // 미리보기에 보이는 기사님
   const kind = tab === "box" ? null : tab;
   const subKey = kind === "driver" ? sub : kind === "labor" ? laborSub : kind === "free" ? freeKey : "";
   const spec = kind ? contractSpec(kind, subKey) : null;
@@ -224,9 +232,50 @@ export default function ContractStudio({ company = "", me = {} }) {
   };
   const setCl = (i, patch) => setClauses((p) => p.map((x, j) => (j === i ? { ...x, ...patch } : x)));
   const moveCl = (i, d) => setClauses((p) => { const a = [...p]; const j = i + d; if (j < 0 || j >= a.length) return p; [a[i], a[j]] = [a[j], a[i]]; return a; });
+  // 기사님 한 명의 정보 → 계약서 칸(을)
+  const driverPatch = (d) => ({ 을상호: d.사업자상호 || d.이름, 을대표: d.사업자상호 ? d.이름 : "", 을사업자번호: d.사업자번호 || "", 을주소: "", 을연락처: d.전화번호 !== "-" ? d.전화번호 : "", 차량번호: d.차량번호 !== "-" ? d.차량번호 : "", 차종: [d.차량톤수, d.차량종류].filter(Boolean).join(" ") });
   const pickDriver = (id) => {
     const d = drivers.find((x) => x.id === id); if (!d) return;
-    setVals((p) => ({ ...p, 을상호: d.사업자상호 || d.이름, 을대표: d.사업자상호 ? d.이름 : p.을대표, 을사업자번호: d.사업자번호 || p.을사업자번호, 을연락처: d.전화번호 !== "-" ? d.전화번호 : "", 차량번호: d.차량번호 !== "-" ? d.차량번호 : "", 차종: [d.차량톤수, d.차량종류].filter(Boolean).join(" ") }));
+    setActiveId(id);
+    setVals((p) => ({ ...p, ...driverPatch(d), 을대표: d.사업자상호 ? d.이름 : p.을대표, 을사업자번호: d.사업자번호 || p.을사업자번호, 을주소: p.을주소 || "" }));
+  };
+  const togglePick = (id) => setPicked((p) => {
+    const next = p.includes(id) ? p.filter((x) => x !== id) : [...p, id];
+    if (!p.includes(id) && (!activeId || !p.includes(activeId))) pickDriver(id); // 처음 고른 기사님을 미리보기로
+    if (p.includes(id) && activeId === id && next[0]) pickDriver(next[0]);
+    return next;
+  });
+  const toggleAll = (ids) => setPicked((p) => { const all = ids.every((x) => p.includes(x)); const next = all ? p.filter((x) => !ids.includes(x)) : [...new Set([...p, ...ids])]; if (!all && !activeId && next[0]) pickDriver(next[0]); return next; });
+  const pickedDrivers = picked.map((id) => drivers.find((d) => d.id === id)).filter(Boolean);
+  // 발송용 — 기사님마다 공통 입력값 + 그 기사님 정보(미리보기 중인 기사님은 화면에서 고친 값 그대로)
+  const valsFor = (d) => (d.id === activeId ? { ...vals } : { ...vals, ...driverPatch(d) });
+  const missingFor = (v) => (spec ? spec.fields.filter((f) => f.req && !String(v[f.k] || "").trim()).map((f) => f.label) : []);
+  // 👥 근로계약서 — 사내 직원을 고르면 가입·수정된 인사 정보를 그대로 채운다
+  const pickStaff = async (id) => {
+    const u = staff.find((x) => x.id === id); if (!u) return;
+    const d = await staffDetail(u);
+    setVals((p) => ({
+      ...p, 을상호: d.name, 을사업자번호: d.birth || p.을사업자번호 || "", 을주소: d.addr || p.을주소 || "", 을연락처: d.phone ? fmtPhone(d.phone) : p.을연락처 || "",
+      ...(d.hireDate ? { 시작일: d.hireDate } : {}),
+      ...(d.team || d.position ? { 업무: p.업무 || [d.team, d.position].filter(Boolean).join(" · ") } : {}),
+      ...(d.workStart && d.workEnd ? { 근로시간: `${d.workStart} ~ ${d.workEnd}` } : {}),
+    }));
+  };
+  // 🏢 거래처 계약서 — 기본거래처를 고르면 상호·대표자·사업자번호·주소를 채운다
+  const clientPatch = (c) => ({ 을상호: c.거래처명, 을대표: c.대표자 || "", 을사업자번호: c.사업자번호 ? fmtBizNo(c.사업자번호) : "", 을주소: c.주소 || "", ...(c.연락처 ? { 을연락처: fmtPhone(c.연락처) } : {}) });
+  const pickClient = (id) => { const c = clientRows.find((x) => x.id === id); if (c) setVals((p) => ({ ...p, ...clientPatch(c) })); };
+  // 📄 자율양식 — 상대방(을)을 거래처 · 직원 · 기사님 중에서
+  const partyRows = [
+    ...clientRows.map((c) => ({ id: `c:${c.id}`, title: c.거래처명, sub: [c.대표자, c.사업자번호].filter(Boolean).join(" · "), badge: "거래처" })),
+    ...staff.map((u) => ({ id: `s:${u.id}`, title: u.name, sub: [u.team, u.position].filter(Boolean).join(" · "), badge: "직원" })),
+    ...drivers.map((d) => ({ id: `d:${d.id}`, title: d.이름, sub: d.차량번호 !== "-" ? d.차량번호 : "", badge: "기사" })),
+  ];
+  const pickParty = (key) => {
+    const [t, id] = [key.slice(0, 1), key.slice(2)];
+    if (t === "c") return pickClient(id);
+    if (t === "s") return pickStaff(id);
+    const d = drivers.find((x) => x.id === id); if (d) setVals((p) => ({ ...p, ...driverPatch(d) }));
+    return undefined;
   };
   const title = spec ? (spec.title) : "";
 
@@ -331,8 +380,21 @@ export default function ContractStudio({ company = "", me = {} }) {
                     </div>
                   </div>
                   <div>
-                    <span className={lab}>기사님 불러오기 <span className="font-semibold text-[#7A879C]">(지입·직영·임대 등록 기사님)</span></span>
-                    <DriverSearch drivers={drivers} onPick={pickDriver} />
+                    <span className={lab}>기사님 불러오기 <span className="font-semibold text-[#7A879C]">(여러 명 체크 → 기사님마다 각자 정보로 발송)</span></span>
+                    <PickList multi rows={drivers.map((d) => ({ id: d.id, title: d.이름, sub: [d.차량번호 !== "-" ? d.차량번호 : "", d.전화번호 !== "-" ? d.전화번호 : ""].filter(Boolean).join(" · "), badge: `${d.등급}${d.appUid ? "" : " · 앱 미가입"}`, search: `${d.이름}${d.차량번호}${d.전화번호}${d.사업자상호 || ""}` }))}
+                      selected={picked} onToggle={togglePick} onToggleAll={toggleAll} placeholder="이름 · 차량번호 · 전화번호로 검색" empty="찾는 기사님이 없습니다" />
+                    {pickedDrivers.length > 0 && (
+                      <div className="mt-2 flex flex-wrap gap-1.5">
+                        {pickedDrivers.map((d) => (
+                          <span key={d.id} className={`h-8 pl-2.5 pr-1 rounded-lg border text-[12.5px] font-black inline-flex items-center gap-1 ${d.id === activeId ? "bg-[#0F1A30] border-[#0F1A30] text-white" : "bg-white border-[#DCE3EE] text-[#1B2B4B]"}`}>
+                            <button type="button" onClick={() => pickDriver(d.id)} title="이 기사님 정보로 미리보기">{d.이름}{!d.appUid && <span className="ml-1 opacity-60">(앱 미가입)</span>}</button>
+                            <button type="button" onClick={() => togglePick(d.id)} className="w-6 h-6 rounded-md opacity-70 hover:opacity-100" aria-label={`${d.이름} 빼기`}>✕</button>
+                          </span>
+                        ))}
+                        <button type="button" onClick={() => { setPicked([]); setActiveId(""); }} className="h-8 px-2.5 rounded-lg text-[12.5px] font-bold text-[#5B6B85] hover:bg-[#F3F5F9]">모두 빼기</button>
+                      </div>
+                    )}
+                    <div className="text-[12px] text-[#5B6B85] mt-1.5">이름을 누르면 그 기사님 정보로 미리보기가 바뀝니다 · 공통 조건(관리비·정산일 등)은 한 번만 입력하면 모두에게 같이 들어갑니다</div>
                   </div>
                 </>
               )}
@@ -342,6 +404,20 @@ export default function ContractStudio({ company = "", me = {} }) {
                   <div className="grid grid-cols-3 gap-1.5 p-1 rounded-xl bg-[#EEF2F8]">
                     {Object.keys(LABOR_KINDS).map((k) => <button key={k} type="button" onClick={() => setLaborSub(k)} className={`h-11 rounded-lg text-[15px] font-black ${laborSub === k ? "bg-[#0F1A30] text-white shadow" : "text-[#3A4A66]"}`}>{k === "단시간" ? "단시간(알바)" : k}</button>)}
                   </div>
+                </div>
+              )}
+              {tab === "labor" && (
+                <div>
+                  <span className={lab}>근로자 불러오기 <span className="font-semibold text-[#7A879C]">(사내 가입 직원 · 가입·수정한 인사 정보 그대로)</span></span>
+                  <PickList rows={staff.map((u) => ({ id: u.id, title: u.name, sub: [u.team, u.position, u.phone].filter(Boolean).join(" · "), search: `${u.name}${u.team || ""}${u.position || ""}${u.phone || ""}${u.email || ""}` }))}
+                    onPick={pickStaff} placeholder="이름 · 부서 · 직책 · 전화로 검색" empty="찾는 직원이 없습니다 — 아래 칸에 직접 입력해도 됩니다" />
+                </div>
+              )}
+              {tab === "client" && (
+                <div>
+                  <span className={lab}>거래처 불러오기 <span className="font-semibold text-[#7A879C]">(거래처관리 › 기본거래처)</span></span>
+                  <PickList rows={clientRows.map((c) => ({ id: c.id, title: c.거래처명, sub: [c.대표자, c.사업자번호].filter(Boolean).join(" · "), search: `${c.거래처명}${c.대표자 || ""}${c.사업자번호 || ""}` }))}
+                    onPick={pickClient} placeholder="거래처명 · 대표자 · 사업자번호로 검색" empty="찾는 거래처가 없습니다 — 아래 칸에 직접 입력해도 됩니다" />
                 </div>
               )}
               <div className="rounded-xl border border-[#DCE3EE] bg-[#F8FAFD] p-3">
@@ -377,6 +453,12 @@ export default function ContractStudio({ company = "", me = {} }) {
                   </CustomSelect>
                 </div>
               )}
+              {tab === "free" && (
+                <div>
+                  <span className={lab}>상대방(을) 불러오기 <span className="font-semibold text-[#7A879C]">(거래처 · 직원 · 기사님)</span></span>
+                  <PickList rows={partyRows} onPick={pickParty} placeholder="이름 · 상호로 검색" empty="찾는 상대방이 없습니다 — 아래 칸에 직접 입력해도 됩니다" />
+                </div>
+              )}
               <div className="text-[16px] font-black text-[#0F1A30] pt-1">{title}</div>
               {biz.multi && (
                 <div className="rounded-xl border border-[#DCE3EE] bg-[#F8FAFD] p-3">
@@ -390,6 +472,10 @@ export default function ContractStudio({ company = "", me = {} }) {
                   <label key={f.k} className={`block min-w-0 ${f.half ? "" : "col-span-2"}`}>
                     <span className={lab}>{f.label}{f.req && <span className="text-[#2D4C82]"> *</span>}</span>
                     {f.type === "date" ? <CustomDatePicker value={vals[f.k] || ""} onChange={(e) => set(f.k, e.target.value)} className={inp} showIcon placeholder="날짜 선택" />
+                      : f.type === "birth" ? <CustomDatePicker value={/^\d{4}-\d{2}-\d{2}$/.test(String(vals[f.k] || "")) ? vals[f.k] : ""} onChange={(e) => set(f.k, e.target.value)} className={inp} showIcon placeholder={vals[f.k] && !/^\d{4}-\d{2}-\d{2}$/.test(String(vals[f.k])) ? String(vals[f.k]) : "생년월일 선택"} />
+                      : f.type === "timeRange" ? <TimeRangeInput value={vals[f.k] || ""} onChange={(v) => set(f.k, v)} />
+                      : f.type === "breakRange" ? <TimeRangeInput value={vals[f.k] || ""} onChange={(v) => set(f.k, v)} withDuration defaults={["12:00", "13:00"]} />
+                      : f.opts ? <ComboInput value={vals[f.k] || ""} onChange={(v) => set(f.k, v)} opts={f.opts} placeholder={f.ph ? `예: ${f.ph}` : ""} className={inp} />
                       : f.type === "money" ? <input inputMode="numeric" value={vals[f.k] ? toInt(vals[f.k]).toLocaleString() : ""} onChange={(e) => set(f.k, e.target.value.replace(/[^\d]/g, ""))} placeholder="0" className={`${inp} text-right tabular-nums`} />
                         : f.type === "textarea" ? <textarea value={vals[f.k] || ""} onChange={(e) => set(f.k, e.target.value)} rows={3} placeholder={f.ph || "없음"} className={`${inp} h-auto py-2.5 leading-relaxed`} />
                           : <input value={vals[f.k] || ""} inputMode={/연락처$/.test(f.k) ? "tel" : undefined} onChange={(e) => set(f.k, /연락처$/.test(f.k) ? fmtPhone(e.target.value) : /사업자번호$/.test(f.k) && !/생년월일/.test(f.label || "") ? fmtBizNo(e.target.value) : e.target.value)} placeholder={f.ph || ""} className={inp} />}
@@ -417,6 +503,7 @@ export default function ContractStudio({ company = "", me = {} }) {
               </div>
               <button type="button" onClick={() => setClauses((p) => [...p, { title: `제${p.length + 1}조 ( )`, body: "" }])} className="mt-2.5 w-full h-11 rounded-xl border-2 border-dashed border-[#C9D2E0] text-[14px] font-black text-[#5B6B85] hover:bg-[#F7F9FC]">+ 조항 추가</button>
             </div>
+            {tab === "driver" && <DriverContractStatus company={co} Paper={ContractPaper} specOf={contractSpec} />}
             <div className="text-[12.5px] text-[#5B6B85] leading-relaxed px-1">※ 양식은 일반적인 기준으로 만든 초안입니다. 금액이 크거나 분쟁 가능성이 있는 계약은 전문가(노무사·변호사) 검토를 권장합니다.</div>
           </div>
           <div className="min-w-0">
@@ -430,6 +517,7 @@ export default function ContractStudio({ company = "", me = {} }) {
                   <button type="button" onClick={saveImage} className="h-10 px-3.5 rounded-xl border border-[#DCE3EE] text-[13.5px] font-black text-[#1B2B4B]">이미지 저장</button>
                   <button type="button" onClick={savePdfFile} className="h-10 px-3.5 rounded-xl border border-[#DCE3EE] text-[13.5px] font-black text-[#1B2B4B]">PDF 저장</button>
                   <button type="button" onClick={save} disabled={busy} className="h-10 px-5 rounded-xl bg-[#0F1A30] text-white text-[13.5px] font-black disabled:opacity-50">{busy ? "저장 중…" : "보관함 저장"}</button>
+                  {tab === "driver" && <DriverContractSendBar company={co} me={me} targets={pickedDrivers} valsFor={valsFor} missingFor={missingFor} kind={kind} sub={subKey} title={title} clauses={clauses} />}
                 </div>
               </div>
               <div className="relative rounded-2xl bg-[#E9EDF3] p-4 overflow-auto max-h-[calc(100vh-180px)]">
