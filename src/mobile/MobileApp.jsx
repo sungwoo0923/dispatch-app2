@@ -2856,6 +2856,7 @@ const [isRefreshing, setIsRefreshing] = useState(false);
   const [places, setPlaces] = useState([]);
   const [fixedClientRows, setFixedClientRows] = useState([]);
   const [refreshKey, setRefreshKey] = useState(0);
+  const liveRetryRef = useRef(0); const liveRetryTimerRef = useRef(null); // ⭐ 2026-11-10 실시간 구독 끊김 → 다시 연결
   // ⭐ 초기화·복원·가져오기 취소가 끝나면(서버가 systemConfig/dataVersion.{회사}에 시각을 남김) 이 폰에 불러둔
   //    예전 오더·마지막 동기화 시각을 비운다(최근 오더는 실시간 연결이 지운 것을 바로 반영) — 초기화한 회사 데이터가 모바일에 남던 문제
   useEffect(() => {
@@ -3054,7 +3055,7 @@ collections.forEach((name) => {
           bootSyncRef.current[ch.type] = (bootSyncRef.current[ch.type] || 0) + 1;
         });
         if (!snap.metadata.fromCache) {
-          serverSynced = true;
+          serverSynced = true; liveRetryRef.current = 0;
           bootSyncRef.current.done[name] = true;
           bootSyncRef.current.onProgress?.();
         }
@@ -3191,12 +3192,21 @@ collections.forEach((name) => {
           prevMap.set(change.doc.id, String(data.배차상태 || "").trim());
         }
       });
+    }, (err) => {
+      // ⭐ 2026-11-10 실시간 구독이 끊기면(권한 확인 전 시작·네트워크 등) 예전엔 오류를 받지 않아 그대로 멈췄다 —
+      //  어제 상차 오더(고정노선 입고일 = 오늘)는 실시간 구독으로만 받으므로 모바일 고정노선현황에서 통째로 빠졌다(PC는 대체 구독으로 다시 받음).
+      //  끊기면 잠시 뒤 다시 구독한다(3초 → 10초 → 30초 …, 최대 1분).
+      console.warn(`[모바일 실시간 ${name}] 구독 끊김 → 다시 연결`, err?.code || err);
+      const n = (liveRetryRef.current = (liveRetryRef.current || 0) + 1);
+      const wait = Math.min(60000, [3000, 10000, 30000][n - 1] || 60000);
+      clearTimeout(liveRetryTimerRef.current);
+      liveRetryTimerRef.current = setTimeout(() => setRefreshKey((k) => k + 1), wait);
     });
 
     unsubs.push(unsub);
   });
 
-  return () => unsubs.forEach((u) => u());
+  return () => { clearTimeout(liveRetryTimerRef.current); unsubs.forEach((u) => u()); };
 }, [refreshKey]);
 
 // ⭐ 앱을 완전히 껐다가(오래 백그라운드에 두거나 종료했다가) 다시 열면, PC나
