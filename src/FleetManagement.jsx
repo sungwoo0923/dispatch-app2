@@ -1,5 +1,6 @@
 // ======================= FleetManagement.jsx =======================
 import { subscribeUsersLive } from "./usersLive"; // ⭐ 2026-11-02 속도 — 직원 명부 구독 공유
+import { pickCompanyLoc } from "./officeLocSync"; // 📍 2026-11-09 출근지 한 곳 관리
 import useNarrow from "./useNarrow"; // ⭐ 2026-11-06 휴대폰 폭 카드 목록
 import { DriverGuideSendModal, guideSentLabel } from "./DriverAppGuide"; // ⭐ 2026-11-06 기사앱 안내 보내기
 import React, { useEffect, useState, useMemo, useCallback, useRef } from "react";
@@ -487,6 +488,34 @@ function PinConfirmModal({ onConfirmed, onCancel, title = "삭제 확인" }) {
 // 🛰 관제 화면 공용 — 숫자/영문 라벨용 고정폭 글씨 + 실시간 시계
 // ⭐ 2026-11-05 고정폭(디지털) 글씨는 흐릿해 보인다는 의견 → 상단 메뉴와 같은 기본 글씨체(이름은 호환용으로 유지)
 const FC_MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
+// 🛰 2026-11-09 관제현황 리디자인 — 3D 차량 분석(VehicleHologram)과 같은 디지털 톤
+const HUD = { bg: "#050B18", panel: "#071427", cyan: "#38E1FF", teal: "#2DF5C4", red: "#FF3B5C", amber: "#FFB547", line: "rgba(56,225,255,.26)", text: "#DDF6FF", sub: "#8FB7CC" };
+function HudKpi({ label, value, sub, code, icon, tone = "cyan", total }) {
+  const c = HUD[tone] || HUD.cyan;
+  const pct = total ? Math.max(0, Math.min(100, Math.round((Number(value) || 0) / total * 100))) : null;
+  return (
+    <div className="fc-hud-kpi" style={{ position: "relative", overflow: "hidden", borderRadius: 14, padding: "14px 16px 12px", border: `1px solid ${HUD.line}`, background: "linear-gradient(180deg, rgba(56,225,255,.07), rgba(56,225,255,.015))" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+          <span style={{ width: 28, height: 28, borderRadius: 8, display: "inline-flex", alignItems: "center", justifyContent: "center", background: "rgba(56,225,255,.1)", border: `1px solid ${HUD.line}`, flexShrink: 0 }}>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">{icon}</svg>
+          </span>
+          <span style={{ fontSize: 13.5, fontWeight: 800, color: HUD.text, whiteSpace: "nowrap" }}>{label}</span>
+        </span>
+        <span className="fc-kpi-code" style={{ display: "inline-flex", alignItems: "center", gap: 6, fontFamily: FC_MONO, fontSize: 11.5, fontWeight: 800, letterSpacing: "0.16em", color: HUD.sub }}>
+          <span className="fc-hud-pulse" style={{ width: 6, height: 6, borderRadius: 99, background: c, boxShadow: `0 0 8px ${c}` }} />{code}
+        </span>
+      </div>
+      <div style={{ display: "flex", alignItems: "baseline", gap: 6, marginTop: 10 }}>
+        <span style={{ fontFamily: FC_MONO, fontSize: 32, fontWeight: 900, lineHeight: 1, color: c, textShadow: `0 0 14px ${c}55`, fontVariantNumeric: "tabular-nums" }}>{value}</span>
+        {sub && <span style={{ fontSize: 13, fontWeight: 700, color: HUD.sub, whiteSpace: "nowrap" }}>{sub}</span>}
+      </div>
+      <div style={{ marginTop: 10, height: 3, borderRadius: 3, background: "rgba(56,225,255,.1)", overflow: "hidden" }}>
+        <div style={{ width: `${pct ?? 100}%`, height: "100%", background: `linear-gradient(90deg, ${c}, ${c}33)`, boxShadow: `0 0 8px ${c}` }} />
+      </div>
+    </div>
+  );
+}
 function FleetClock({ dark = true }) {
   const [now, setNow] = useState(() => new Date());
   useEffect(() => { const t = setInterval(() => setNow(new Date()), 1000); return () => clearInterval(t); }, []);
@@ -556,12 +585,27 @@ const FC_CSS = `
   @keyframes fcFocusScan { 0% { background-position: -40% 0 } 100% { background-position: 140% 0 } }
   .fc-route-card.fc-route-dim { opacity: .42; filter: saturate(.6); }
   .fc-route-card.fc-route-dim:hover { opacity: .8; filter: none; }
+  .fc-deck { position: relative; border-radius: 20px; padding: 14px; border: 1px solid rgba(56,225,255,.22);
+    background: radial-gradient(1100px 420px at 85% -10%, rgba(56,225,255,.12), transparent 60%), radial-gradient(800px 380px at -10% 110%, rgba(45,245,196,.08), transparent 60%), linear-gradient(rgba(56,225,255,.045) 1px, transparent 1px) 0 0/26px 26px, linear-gradient(90deg, rgba(56,225,255,.045) 1px, transparent 1px) 0 0/26px 26px, #050B18;
+    box-shadow: 0 18px 44px rgba(2,6,14,.35), inset 0 0 0 1px rgba(255,255,255,.02); display: flex; flex-direction: column; gap: 12px; overflow: hidden; }
+  .fc-deck-scan { position: absolute; inset: 0; pointer-events: none; background: repeating-linear-gradient(0deg, rgba(56,225,255,.035) 0 1px, transparent 1px 4px); border-radius: 20px; }
+  .fc-deck-scan::after { content: ""; position: absolute; left: 0; right: 0; height: 80px; background: linear-gradient(180deg, transparent, rgba(56,225,255,.08), transparent); animation: fcDeckScan 7s linear infinite; }
+  @keyframes fcDeckScan { 0% { top: -80px } 100% { top: 100% } }
+  @keyframes fcHudPulse { 0%,100% { opacity: 1 } 50% { opacity: .35 } }
+  .fc-hud-pulse { animation: fcHudPulse 1.8s ease-in-out infinite; }
+  .fc-deck > * { position: relative; }
+  .fc-deck .fc-hud-input { background: rgba(5,11,24,.85) !important; color: #DDF6FF !important; border-color: rgba(56,225,255,.26) !important; }
+  .fc-deck .fc-hud-input::placeholder { color: #5E7E92; }
+  .fc-deck .fc-hud-date input, .fc-deck .fc-hud-date button, .fc-deck .fc-hud-date > div { background: rgba(5,11,24,.85) !important; color: #DDF6FF !important; border-color: rgba(56,225,255,.26) !important; }
+  .fc-hud-table tbody tr td { color: #B9D6E6; }
+  .fc-hud-scroll::-webkit-scrollbar { width: 8px; height: 8px; } .fc-hud-scroll::-webkit-scrollbar-thumb { background: rgba(56,225,255,.25); border-radius: 8px; }
+  @media (max-width: 900px) { .fc-deck-kpis { grid-template-columns: repeat(2,1fr) !important; } .fc-deck-split { flex-direction: column !important; } .fc-deck-split > div { flex: 1 1 auto !important; } }
 `;
 
 // 관제 패널 머리줄(영문 코드 + 제목 + 오른쪽 내용)
 function FcPanelHead({ code, title, right, dark }) {
   return (
-    <div style={{ padding: "11px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexShrink: 0, background: dark ? "linear-gradient(90deg,#0F1A30,#1B2B4B)" : "#F7F9FC", borderBottom: dark ? "1px solid #0F1A30" : "1px solid #E8EDF4" }}>
+    <div style={{ padding: "11px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexShrink: 0, background: dark ? "linear-gradient(90deg,#071427,#0B1C36)" : "#F7F9FC", borderBottom: dark ? "1px solid rgba(56,225,255,.22)" : "1px solid #E8EDF4" }}>
       <span style={{ display: "inline-flex", alignItems: "center", gap: 9, minWidth: 0 }}>
         <span style={{ width: 7, height: 7, borderRadius: 2, background: dark ? "#8FB0F0" : NAVY, transform: "rotate(45deg)", flexShrink: 0 }} />
         {code && <span style={{ fontFamily: FC_MONO, fontSize: 12.5, fontWeight: 800, letterSpacing: "0.12em", color: dark ? "rgba(143,176,240,.9)" : "#5B6B85" }}>{code}</span>}
@@ -597,7 +641,7 @@ function todayKstStr() { return new Date(Date.now() + 9 * 3600000).toISOString()
 function DriverTable({ rows, selectedId, onSelect, onFocusMap, onContextMenu, todayPhotos = [], onViewPhotos, phaseById }) {
   if (rows.length === 0) {
     return (
-      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "52px 24px", color: "#5B6B85" }}>
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "52px 24px", color: "#7FA3B8" }}>
         <svg width="38" height="38" fill="none" stroke="currentColor" strokeWidth="1.4" viewBox="0 0 24 24" style={{ marginBottom: 12 }}>
           <circle cx="12" cy="12" r="10" /><path d="M12 8v4m0 4h.01" strokeLinecap="round" />
         </svg>
@@ -606,11 +650,11 @@ function DriverTable({ rows, selectedId, onSelect, onFocusMap, onContextMenu, to
     );
   }
   return (
-    <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 16 }}>
+    <table className="fc-hud-table" style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}>
       <thead>
-        <tr style={{ background: NAVY, position: "sticky", top: 0, zIndex: 1 }}>
+        <tr style={{ background: "#071427", position: "sticky", top: 0, zIndex: 1 }}>
           {COL_HEADERS.map(col => (
-            <th key={col} style={{ padding: "11px 14px", textAlign: "center", color: "#fff", fontWeight: 800, fontSize: 14, whiteSpace: "nowrap", letterSpacing: ".02em" }}>
+            <th key={col} style={{ padding: "9px 10px", textAlign: "center", color: HUD.sub, fontWeight: 800, fontSize: 12.5, whiteSpace: "nowrap", letterSpacing: ".08em", borderBottom: `1px solid ${HUD.line}` }}>
               {col}
             </th>
           ))}
@@ -620,7 +664,7 @@ function DriverTable({ rows, selectedId, onSelect, onFocusMap, onContextMenu, to
         {rows.map((d, idx) => {
           const sel = d.id === selectedId;
           // Use light-blue selection so text stays dark (readable)
-          const bg = sel ? "#dbeafe" : idx % 2 === 0 ? "#fff" : "#fafbfc";
+          const bg = sel ? "rgba(56,225,255,.14)" : idx % 2 === 0 ? "transparent" : "rgba(255,255,255,.025)";
           return (
             <tr
               key={d.id}
@@ -629,59 +673,59 @@ function DriverTable({ rows, selectedId, onSelect, onFocusMap, onContextMenu, to
               style={{
                 background: bg,
                 textAlign: "center",
-                borderBottom: "1px solid #f0f2f5",
-                borderLeft: sel ? `3px solid ${NAVY}` : "3px solid transparent",
+                borderBottom: "1px solid rgba(56,225,255,.09)",
+                borderLeft: sel ? `3px solid ${HUD.cyan}` : "3px solid transparent", boxShadow: sel ? "inset 0 0 18px rgba(56,225,255,.12)" : "none",
                 cursor: "pointer",
                 transition: "background .1s",
               }}
-              onMouseEnter={e => { if (!sel) e.currentTarget.style.background = "#eef2ff"; }}
+              onMouseEnter={e => { if (!sel) e.currentTarget.style.background = "rgba(56,225,255,.07)"; }}
               onMouseLeave={e => { if (!sel) e.currentTarget.style.background = bg; }}
             >
               {/* # */}
-              <td style={{ padding: "11px 14px", color: "#5B6B85", fontWeight: 600, fontSize: 15 }}>{idx + 1}</td>
+              <td style={{ padding: "8px 10px", color: "#7FA3B8", fontWeight: 600, fontSize: 13.5 }}>{idx + 1}</td>
 
               {/* 이름 */}
-              <td style={{ padding: "11px 14px", whiteSpace: "nowrap" }}>
+              <td style={{ padding: "8px 10px", whiteSpace: "nowrap" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <span style={{ width: 8, height: 8, borderRadius: "50%", background: d.active ? "#10b981" : "#d1d5db", display: "inline-block", flexShrink: 0 }} title={d.active ? "접속중" : "미접속"} />
-                  <span style={{ color: sel ? "#1e3a5f" : "#111827", fontWeight: 700, fontSize: 16 }}>{d.이름 || "-"}</span>
+                  <span style={{ width: 8, height: 8, borderRadius: "50%", background: d.active ? HUD.teal : "#3B5466", boxShadow: d.active ? `0 0 8px ${HUD.teal}` : "none", display: "inline-block", flexShrink: 0 }} title={d.active ? "접속중" : "미접속"} />
+                  <span style={{ color: sel ? "#fff" : HUD.text, fontWeight: 800, fontSize: 14.5 }}>{d.이름 || "-"}</span>
                 </div>
               </td>
 
               {/* 차량번호 */}
-              <td style={{ padding: "11px 14px", color: "#1B2B4B", whiteSpace: "nowrap", fontSize: 15, fontWeight: 700, letterSpacing: "0.04em" }}>
+              <td style={{ padding: "8px 10px", color: HUD.cyan, whiteSpace: "nowrap", fontSize: 14, fontWeight: 800, letterSpacing: "0.06em", fontFamily: FC_MONO }}>
                 {d.차량번호 || "-"}
               </td>
 
               {/* 차종 */}
-              <td style={{ padding: "11px 14px", color: "#374151", whiteSpace: "nowrap", fontSize: 15 }}>
+              <td style={{ padding: "8px 10px", color: "#B9D6E6", whiteSpace: "nowrap", fontSize: 13.5 }}>
                 {d.vehicleType || "-"}
               </td>
 
               {/* 현재상태 — ⭐ 출근/상차중 등 버튼 상태 대신 오더·위치 기반 통합 상태 */}
-              <td style={{ padding: "11px 14px", textAlign: "center" }}>
+              <td style={{ padding: "8px 10px", textAlign: "center" }}>
                 {(() => {
                   const ph = phaseById?.get(d.id) || "배차대기";
-                  return <span style={{ fontWeight: 800, fontSize: 15, color: FLEET_PHASE_COLORS[ph] || NAVY }}>{ph}</span>;
+                  return <span className="fc-phase" style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "2px 9px", borderRadius: 99, fontWeight: 800, fontSize: 13, color: "#fff", background: "rgba(255,255,255,.05)", border: `1px solid ${FLEET_PHASE_COLORS[ph] || HUD.line}` }}><span style={{ width: 6, height: 6, borderRadius: 99, background: FLEET_PHASE_COLORS[ph] || HUD.cyan, boxShadow: `0 0 6px ${FLEET_PHASE_COLORS[ph] || HUD.cyan}` }} />{ph}</span>;
                 })()}
               </td>
 
               {/* 속력 */}
-              <td style={{ padding: "11px 14px", whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }}>
+              <td style={{ padding: "8px 10px", whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }}>
                 {(d.speed || 0) > 0 ? (
-                  <span style={{ fontSize: 15, fontWeight: 700, color: (d.speed||0) > 80 ? "#ef4444" : "#1B2B4B" }}>{d.speed} km/h</span>
+                  <span style={{ fontSize: 13.5, fontWeight: 700, color: (d.speed||0) > 80 ? HUD.red : HUD.cyan, fontFamily: FC_MONO }}>{d.speed} km/h</span>
                 ) : (
-                  <span style={{ fontSize: 14, color: "#5B6B85" }}>–</span>
+                  <span style={{ fontSize: 14, color: "#7FA3B8" }}>–</span>
                 )}
               </td>
 
               {/* 주행시간 */}
-              <td style={{ padding: "11px 14px", whiteSpace: "nowrap" }}>
+              <td style={{ padding: "8px 10px", whiteSpace: "nowrap" }}>
                 {(() => {
                   const ws = d.workStartAt;
-                  if (!ws) return <span style={{ fontSize: 14, color: "#5B6B85" }}>–</span>;
+                  if (!ws) return <span style={{ fontSize: 14, color: "#7FA3B8" }}>–</span>;
                   const start = ws?.toDate?.() || (ws?.seconds ? new Date(ws.seconds * 1000) : null);
-                  if (!start) return <span style={{ fontSize: 14, color: "#5B6B85" }}>–</span>;
+                  if (!start) return <span style={{ fontSize: 14, color: "#7FA3B8" }}>–</span>;
                   const isOut = d.상태 === "퇴근" || d.상태 === "최종퇴근";
                   // ⭐ 버그수정 — 퇴근 처리 없이 며칠이 지나면 "40시간"처럼 출근 시점부터 계속
                   // 누적돼 보였다. 오늘 이전에 출근한 기록이면 오늘 0시부터만 세고 "퇴근 미처리" 표시.
@@ -694,45 +738,45 @@ function DriverTable({ rows, selectedId, onSelect, onFocusMap, onContextMenu, to
                   const m = Math.floor((ms % 3600000) / 60000);
                   return (
                     <span style={{ display: "inline-flex", flexDirection: "column", alignItems: "center", lineHeight: 1.2 }}>
-                      <span style={{ fontSize: 14, color: "#374151", fontVariantNumeric: "tabular-nums" }}>{h > 0 ? `${h}시간 ` : ""}{m}분</span>
-                      {carried && <span style={{ fontSize: 14, fontWeight: 700, color: "#d97706" }} title={`${start.getMonth() + 1}.${start.getDate()} 출근 후 퇴근 기록 없음`}>퇴근 미처리</span>}
+                      <span style={{ fontSize: 14, color: "#B9D6E6", fontVariantNumeric: "tabular-nums" }}>{h > 0 ? `${h}시간 ` : ""}{m}분</span>
+                      {carried && <span style={{ fontSize: 14, fontWeight: 700, color: HUD.amber }} title={`${start.getMonth() + 1}.${start.getDate()} 출근 후 퇴근 기록 없음`}>퇴근 미처리</span>}
                     </span>
                   );
                 })()}
               </td>
 
               {/* 이동거리 */}
-              <td style={{ padding: "11px 14px", color: "#374151", whiteSpace: "nowrap", fontSize: 15, fontVariantNumeric: "tabular-nums" }}>
+              <td style={{ padding: "8px 10px", color: "#B9D6E6", whiteSpace: "nowrap", fontSize: 13.5, fontVariantNumeric: "tabular-nums" }}>
                 {(d.총거리 || 0).toFixed(1)} km
               </td>
 
               {/* 업데이트 */}
-              <td style={{ padding: "11px 14px", color: "#5B6B85", whiteSpace: "nowrap", fontSize: 15 }}>
+              <td style={{ padding: "8px 10px", color: "#7FA3B8", whiteSpace: "nowrap", fontSize: 13.5 }}>
                 {timeAgo(d.updatedAt)}
               </td>
 
               {/* 활성화 */}
-              <td style={{ padding: "11px 12px", whiteSpace: "nowrap" }}>
-                <span style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "3px 9px", borderRadius: 20, background: d.active ? "#f0fdf4" : "#f3f4f6", border: `1px solid ${d.active ? "#86efac" : "#e5e7eb"}` }}>
-                  <span style={{ width: 6, height: 6, borderRadius: "50%", background: d.active ? "#10b981" : "#d1d5db", display: "inline-block", animation: d.active ? "fmBlink 2s ease-in-out infinite" : "none" }} />
-                  <span style={{ fontSize: 14, fontWeight: 700, color: d.active ? "#15803d" : "#5B6B85" }}>{d.active ? "활성" : "비활성"}</span>
+              <td style={{ padding: "8px 10px", whiteSpace: "nowrap" }}>
+                <span style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "3px 9px", borderRadius: 20, background: d.active ? "rgba(45,245,196,.1)" : "rgba(255,255,255,.04)", border: `1px solid ${d.active ? "rgba(45,245,196,.45)" : "rgba(143,183,204,.22)"}` }}>
+                  <span style={{ width: 6, height: 6, borderRadius: "50%", background: d.active ? HUD.teal : "#3B5466", display: "inline-block", animation: d.active ? "fmBlink 2s ease-in-out infinite" : "none" }} />
+                  <span style={{ fontSize: 14, fontWeight: 700, color: d.active ? HUD.teal : "#7FA3B8" }}>{d.active ? "활성" : "비활성"}</span>
                 </span>
               </td>
 
               {/* 첨부 사진 */}
-              <td style={{ padding: "11px 10px", whiteSpace: "nowrap", textAlign: "center" }}>
+              <td style={{ padding: "8px 8px", whiteSpace: "nowrap", textAlign: "center" }}>
                 {(() => {
                   const driverPhotos = todayPhotos.filter(p => p.uid === d.id);
-                  if (!driverPhotos.length) return <span style={{ fontSize: 14, color: "#5B6B85" }}>–</span>;
+                  if (!driverPhotos.length) return <span style={{ fontSize: 14, color: "#7FA3B8" }}>–</span>;
                   return (
                     <button
                       onClick={e => { e.stopPropagation(); onViewPhotos?.({ driverName: d.이름, photos: driverPhotos }); }}
                       style={{ position: "relative", display: "inline-flex", alignItems: "center", justifyContent: "center", width: 32, height: 32, borderRadius: 8, background: "transparent", border: "none", cursor: "pointer" }}
                       title="사진 보기"
-                      onMouseEnter={e => e.currentTarget.style.background = "rgba(27,43,75,0.08)"}
+                      onMouseEnter={e => e.currentTarget.style.background = "rgba(56,225,255,.12)"}
                       onMouseLeave={e => e.currentTarget.style.background = "transparent"}
                     >
-                      <svg width="16" height="16" fill="none" stroke={NAVY} strokeWidth="2" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+                      <svg width="16" height="16" fill="none" stroke={HUD.cyan} strokeWidth="2" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
                       <span style={{ position: "absolute", top: -4, right: -4, minWidth: 16, height: 16, background: "#059669", color: "white", fontSize: 14, fontWeight: 800, borderRadius: 999, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 3px", lineHeight: 1 }}>
                         {driverPhotos.length}
                       </span>
@@ -742,12 +786,12 @@ function DriverTable({ rows, selectedId, onSelect, onFocusMap, onContextMenu, to
               </td>
 
               {/* 지도 포커스 */}
-              <td style={{ padding: "11px 10px", whiteSpace: "nowrap" }}>
+              <td style={{ padding: "8px 8px", whiteSpace: "nowrap" }}>
                 {d.location && (
                   <button
                     onClick={e => { e.stopPropagation(); onFocusMap?.(d.location); onSelect(d); }}
                     title="지도에서 현재위치 보기"
-                    style={{ width: 28, height: 28, display: "flex", alignItems: "center", justifyContent: "center", border: "1px solid #e5e7eb", borderRadius: 7, background: "#f8f9fb", cursor: "pointer", color: NAVY, padding: 0, flexShrink: 0 }}
+                    style={{ width: 28, height: 28, display: "flex", alignItems: "center", justifyContent: "center", border: `1px solid ${HUD.line}`, borderRadius: 7, background: "rgba(56,225,255,.08)", cursor: "pointer", color: HUD.cyan, padding: 0, flexShrink: 0 }}
                   >
                     <svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                       <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z" strokeLinecap="round" strokeLinejoin="round"/>
@@ -990,7 +1034,7 @@ function DriverDetailPanel({ data, logs, onClose, onDeleteLogs, checkInLoc, comp
             label: "출근지",
             loc: checkInLoc,
             defaultLoc: companyDefaultLoc,
-            defaultLabel: "회사 기본 출근지",
+            defaultLabel: "회사 출근지(출근기록부)",
             onSet: onSetCheckInLoc,
             onClear: checkInLoc ? onClearCheckInLoc : null,
           },
@@ -6268,7 +6312,6 @@ export default function FleetManagement({ dispatchData = [], role = "", forceTab
   const [companyDefaultLoc, setCompanyDefaultLoc] = useState(null);
   const [checkInLocModal, setCheckInLocModal] = useState(null); // { driverId, driverName, initialLoc }
   const [dropLocModal, setDropLocModal] = useState(null); // { driverId, driverName, initialLoc }
-  const [companyLocModal, setCompanyLocModal] = useState(false);
 
   const [collisionAlerts, setCollisionAlerts] = useState([]);
   const [locChangeRequests, setLocChangeRequests] = useState([]);
@@ -6488,11 +6531,13 @@ export default function FleetManagement({ dispatchData = [], role = "", forceTab
   // ⭐ 2026-11-01 회사별 문서(fleet_settings/co_회사) — 예전 "default"는 모든 운송사가 같이 써서 한 회사가 바꾸면 다른 회사도 바뀌었다
   useEffect(() => {
     const co = getTenant() || DEFAULT_COMPANY;
-    let legacy = null; let mine = undefined;
-    const apply = () => setCompanyDefaultLoc(mine !== undefined ? mine : (co === DEFAULT_COMPANY ? legacy : null));
+    // 📍 2026-11-09 출근지 한 곳 관리 — 회사관리 › 출근기록부 출근지(companySettings.officeLocation)가 원본, 없을 때만 예전 값
+    let legacy = null; let mine = undefined; let office = null;
+    const apply = () => setCompanyDefaultLoc(pickCompanyLoc(office, mine !== undefined ? mine : (co === DEFAULT_COMPANY ? legacy : null)));
     const u1 = onSnapshot(doc(db, "fleet_settings", `co_${co}`), (snap) => { mine = snap.exists() ? (snap.data().defaultCheckInLocation || null) : undefined; apply(); }, (err) => console.error("fleet_settings:", err));
     const u2 = co === DEFAULT_COMPANY ? onSnapshot(doc(db, "fleet_settings", "default"), (snap) => { legacy = snap.exists() ? (snap.data().defaultCheckInLocation || null) : null; apply(); }, () => {}) : () => {};
-    return () => { u1(); u2(); };
+    const u3 = onSnapshot(doc(db, "companySettings", co), (snap) => { office = snap.exists() ? (snap.data()?.officeLocation || null) : null; apply(); }, () => {});
+    return () => { u1(); u2(); u3(); };
   }, []);
 
   // ── 출발지 변경 요청 구독 ───────────────────────────────────────────────
@@ -6953,13 +6998,6 @@ export default function FleetManagement({ dispatchData = [], role = "", forceTab
     } catch (e) { console.error("clear dropLocation:", e); }
   }, [selected]);
 
-  const handleSaveCompanyLoc = useCallback(async (loc) => {
-    try {
-      const co = getTenant() || DEFAULT_COMPANY;
-      await setDoc(doc(db, "fleet_settings", `co_${co}`), { defaultCheckInLocation: loc, companyName: co }, { merge: true });
-    } catch (e) { console.error("company loc save:", e); }
-    setCompanyLocModal(false);
-  }, []);
 
   // ─── 렌더 ────────────────────────────────────────────────────────────────
   return (
@@ -6992,14 +7030,6 @@ export default function FleetManagement({ dispatchData = [], role = "", forceTab
         </div>
 
         <div style={{ display: "flex", alignItems: "center", gap: 10, position: "relative", flexWrap: "wrap" }}>
-          <button
-            className="fc-hbtn"
-            onClick={() => setCompanyLocModal(true)}
-            style={{ display: "inline-flex", alignItems: "center", gap: 6, height: 38, padding: "0 15px", borderRadius: 10, border: "1px solid rgba(207,224,255,.25)", background: "rgba(255,255,255,.08)", cursor: "pointer", fontSize: 15, fontWeight: 700, color: "#fff" }}
-          >
-            <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.2" viewBox="0 0 24 24"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z" strokeLinecap="round" strokeLinejoin="round"/><circle cx="12" cy="10" r="3"/></svg>
-            기본 출근지
-          </button>
 
           <button
             className="fc-hbtn"
@@ -7108,13 +7138,21 @@ export default function FleetManagement({ dispatchData = [], role = "", forceTab
 
       {/* ═══ 관제현황 ═══ */}
       {mainTab === "tracking" && (
-        <>
+        <div className="fc-deck">
+          <div className="fc-deck-scan" />
+          {/* 🛰 2026-11-09 관제 덱 머리줄 */}
+          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+            <span className="fc-hud-pulse" style={{ width: 9, height: 9, borderRadius: 99, background: HUD.teal, boxShadow: `0 0 12px ${HUD.teal}` }} />
+            <span style={{ fontFamily: FC_MONO, fontSize: 12, fontWeight: 800, letterSpacing: "0.28em", color: HUD.cyan }}>FLEET CONTROL · LIVE</span>
+            <span style={{ fontSize: 17, fontWeight: 900, color: "#fff" }}>지입차 관제현황</span>
+            <span style={{ marginLeft: "auto", fontFamily: FC_MONO, fontSize: 12.5, fontWeight: 700, color: HUD.sub, letterSpacing: ".08em" }}>GPS {filteredRows.filter(d => d.location).length} / {drivers.length} UNITS</span>
+          </div>
           {/* KPI */}
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 12 }}>
-            <KpiCard label="총 등록" value={kpi.total} sub="전체 기사 수" code="TOTAL" icon={KPI_ICONS.truck} primary />
-            <KpiCard label="현재 접속중" value={kpi.connected} sub="앱 활성" code="ONLINE" icon={<><path d="M5 12.5a10 10 0 0 1 14 0M8.5 16a5 5 0 0 1 7 0" /><circle cx="12" cy="19.5" r="1" /></>} />
-            <KpiCard label="운송중" value={kpi.driving} sub="현재 주행" code="DRIVING" icon={KPI_ICONS.route} />
-            <KpiCard label="근무중" value={kpi.onDuty} sub="출근~복귀 합산" code="ON DUTY" icon={KPI_ICONS.user} />
+          <div className="fc-deck-kpis" style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 10 }}>
+            <HudKpi label="총 등록" value={kpi.total} sub="전체 기사" code="TOTAL" icon={KPI_ICONS.truck} tone="cyan" />
+            <HudKpi label="현재 접속중" value={kpi.connected} sub="앱 활성" code="ONLINE" tone="teal" total={kpi.total} icon={<><path d="M5 12.5a10 10 0 0 1 14 0M8.5 16a5 5 0 0 1 7 0" /><circle cx="12" cy="19.5" r="1" /></>} />
+            <HudKpi label="운송중" value={kpi.driving} sub="현재 주행" code="DRIVING" icon={KPI_ICONS.route} tone="amber" total={kpi.total} />
+            <HudKpi label="근무중" value={kpi.onDuty} sub="출근~복귀" code="ON DUTY" icon={KPI_ICONS.user} tone="cyan" total={kpi.total} />
           </div>
 
           {/* 출발지 변경 요청 */}
@@ -7183,7 +7221,7 @@ export default function FleetManagement({ dispatchData = [], role = "", forceTab
           )}
 
           {/* 검색 + 필터 + 동선 날짜 — 하나의 관제 툴바 */}
-          <div style={{ background: "#fff", border: "1px solid #E3E8F0", borderRadius: 14, boxShadow: "0 1px 2px rgba(16,24,40,.04)", padding: "12px 14px", display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+          <div style={{ background: "rgba(7,20,39,.78)", border: `1px solid ${HUD.line}`, borderRadius: 14, backdropFilter: "blur(6px)", padding: "10px 12px", display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
             <div style={{ position: "relative", flex: "1 1 240px", minWidth: 180 }}>
               <svg width="15" height="15" fill="none" stroke="#94A3B8" strokeWidth="2.2" viewBox="0 0 24 24" style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }}>
                 <circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" strokeLinecap="round" />
@@ -7193,10 +7231,11 @@ export default function FleetManagement({ dispatchData = [], role = "", forceTab
                 placeholder="기사명 / 차량번호 검색  예) 88어8888"
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
+                className="fc-hud-input"
                 style={{ width: "100%", height: 38, paddingLeft: 36, paddingRight: 10, border: "1px solid #DCE3EF", borderRadius: 10, fontSize: 15, color: "#111827", outline: "none", background: "#F7F9FC", boxSizing: "border-box" }}
               />
             </div>
-            <div style={{ display: "flex", gap: 3, flexWrap: "wrap", background: "#F1F4F9", border: "1px solid #E3E8F0", borderRadius: 10, padding: 3 }}>
+            <div style={{ display: "flex", gap: 3, flexWrap: "wrap", background: "rgba(5,11,24,.7)", border: `1px solid ${HUD.line}`, borderRadius: 10, padding: 3 }}>
               {FLEET_PHASE_FILTERS.map(opt => {
                 const active = statusFilter === opt;
                 return (
@@ -7205,9 +7244,9 @@ export default function FleetManagement({ dispatchData = [], role = "", forceTab
                     onClick={() => setStatusFilter(opt)}
                     style={{
                       height: 30, padding: "0 11px", borderRadius: 8, border: "none",
-                      background: active ? NAVY : "transparent",
-                      boxShadow: active ? "0 3px 8px rgba(27,43,75,.25)" : "none",
-                      color: active ? "#fff" : "#4b5563",
+                      background: active ? "rgba(56,225,255,.18)" : "transparent",
+                      boxShadow: active ? `inset 0 0 0 1px ${HUD.cyan}, 0 0 12px rgba(56,225,255,.25)` : "none",
+                      color: active ? "#fff" : HUD.sub,
                       fontSize: 14, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap",
                       display: "inline-flex", alignItems: "center", gap: 5,
                     }}
@@ -7220,9 +7259,9 @@ export default function FleetManagement({ dispatchData = [], role = "", forceTab
                 );
               })}
             </div>
-            <div style={{ display: "flex", alignItems: "center", gap: 6, paddingLeft: 10, borderLeft: "1px solid #E3E8F0" }}>
-              <span style={{ fontFamily: FC_MONO, fontSize: 12.5, fontWeight: 800, letterSpacing: "0.14em", color: "#5B6B85", whiteSpace: "nowrap" }}>TRACK</span>
-              <span style={{ fontSize: 14, fontWeight: 700, color: "#4b5563", whiteSpace: "nowrap" }}>동선 날짜</span>
+            <div className="fc-hud-date" style={{ display: "flex", alignItems: "center", gap: 6, paddingLeft: 10, borderLeft: `1px solid ${HUD.line}` }}>
+              <span style={{ fontFamily: FC_MONO, fontSize: 12, fontWeight: 800, letterSpacing: "0.18em", color: HUD.cyan, whiteSpace: "nowrap" }}>TRACK</span>
+              <span style={{ fontSize: 13.5, fontWeight: 700, color: HUD.sub, whiteSpace: "nowrap" }}>동선 날짜</span>
               <CustomDatePicker
                 value={selectedTrackDate}
                 onChange={e => { const v = e.target.value; if (v && v <= todayDate) setSelectedTrackDate(v); }}
@@ -7232,7 +7271,7 @@ export default function FleetManagement({ dispatchData = [], role = "", forceTab
               {selectedTrackDate !== yesterdayDate && (
                 <button
                   onClick={() => setSelectedTrackDate(yesterdayDate)}
-                  style={{ height: 34, padding: "0 11px", border: "1px solid #DCE3EF", borderRadius: 8, background: "white", color: "#374151", fontSize: 14, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" }}
+                  style={{ height: 34, padding: "0 11px", border: `1px solid ${HUD.line}`, borderRadius: 8, background: "rgba(255,255,255,.04)", color: HUD.text, fontSize: 14, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" }}
                 >
                   어제
                 </button>
@@ -7240,32 +7279,32 @@ export default function FleetManagement({ dispatchData = [], role = "", forceTab
               {selectedTrackDate !== todayDate && (
                 <button
                   onClick={() => setSelectedTrackDate(todayDate)}
-                  style={{ height: 34, padding: "0 11px", border: "none", borderRadius: 8, background: NAVY, color: "white", fontSize: 14, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" }}
+                  style={{ height: 34, padding: "0 11px", border: `1px solid ${HUD.cyan}`, borderRadius: 8, background: "rgba(56,225,255,.18)", color: "#fff", fontSize: 14, fontWeight: 800, cursor: "pointer", whiteSpace: "nowrap" }}
                 >
                   오늘
                 </button>
               )}
             </div>
-            <span style={{ marginLeft: "auto", whiteSpace: "nowrap", fontSize: 14, fontWeight: 700, color: "#5B6B85" }}>
-              <b style={{ fontFamily: FC_MONO, fontSize: 17, color: NAVY }}>{filteredRows.length}</b> / {drivers.length}명
+            <span style={{ marginLeft: "auto", whiteSpace: "nowrap", fontSize: 14, fontWeight: 700, color: HUD.sub }}>
+              <b style={{ fontFamily: FC_MONO, fontSize: 17, color: HUD.cyan }}>{filteredRows.length}</b> / {drivers.length}명
             </span>
           </div>
 
           {/* 테이블 + 지도 */}
-          <div style={{ display: "flex", gap: 16, alignItems: "stretch", minHeight: 520 }}>
-            <div style={{ flex: "0 0 40%", background: "#fff", border: "1px solid #E3E8F0", borderRadius: 14, overflow: "hidden", display: "flex", flexDirection: "column", minWidth: 0, boxShadow: "0 1px 2px rgba(16,24,40,.04), 0 8px 20px rgba(16,24,40,.05)" }}>
-              <FcPanelHead code="UNITS" title="기사 목록" right={<span style={{ fontFamily: FC_MONO, fontSize: 14, color: NAVY, fontWeight: 800 }}>{filteredRows.length}<span style={{ fontFamily: "inherit", fontSize: 14, color: "#5B6B85", fontWeight: 600 }}> 명</span></span>} />
-              <div style={{ flex: 1, overflowY: "auto", overflowX: "auto" }}>
+          <div className="fc-deck-split" style={{ display: "flex", gap: 12, alignItems: "stretch", minHeight: 520 }}>
+            <div style={{ flex: "0 0 42%", background: "rgba(7,20,39,.88)", border: `1px solid ${HUD.line}`, borderRadius: 14, overflow: "hidden", display: "flex", flexDirection: "column", minWidth: 0, boxShadow: "0 10px 26px rgba(2,6,14,.35)" }}>
+              <FcPanelHead dark code="UNITS" title="기사 목록" right={<span style={{ fontFamily: FC_MONO, fontSize: 14, color: HUD.cyan, fontWeight: 800 }}>{filteredRows.length}<span style={{ fontFamily: "inherit", fontSize: 14, color: "#5B6B85", fontWeight: 600 }}> 명</span></span>} />
+              <div className="fc-hud-scroll" style={{ flex: 1, overflowY: "auto", overflowX: "auto" }}>
                 <DriverTable phaseById={phaseById} rows={filteredRows} selectedId={selected?.id} onSelect={handleSelect} onFocusMap={handleFocusMap} onContextMenu={handleContextMenu} todayPhotos={todayDriverPhotos} onViewPhotos={setPhotoViewerPhotos} />
               </div>
             </div>
 
-            <div style={{ flex: "1 1 60%", border: "1px solid #0F1A30", borderRadius: 14, overflow: "hidden", minWidth: 0, minHeight: 520, position: "relative", isolation: "isolate", display: "flex", flexDirection: "column", boxShadow: "0 10px 26px rgba(15,26,48,.18)", background: "#0F1A30" }}>
+            <div style={{ flex: "1 1 58%", border: `1px solid ${HUD.line}`, borderRadius: 14, overflow: "hidden", minWidth: 0, minHeight: 520, position: "relative", isolation: "isolate", display: "flex", flexDirection: "column", boxShadow: "0 10px 26px rgba(15,26,48,.18)", background: "#0F1A30" }}>
               <FcPanelHead dark code="LIVE MAP" title="실시간 위치" right={<span style={{ fontFamily: FC_MONO, fontSize: 12.5, fontWeight: 800, letterSpacing: "0.12em", color: "#CFE0FF" }}>GPS · {filteredRows.filter(d => d.location).length} UNITS</span>} />
               <div style={{ position: "relative", flex: 1, minHeight: 0 }}>
               {/* 지도 네 모서리 조준선(HUD) */}
               {[{ top: 10, left: 10, b: "borderTop", c: "borderLeft" }, { top: 10, right: 10, b: "borderTop", c: "borderRight" }, { bottom: 10, left: 10, b: "borderBottom", c: "borderLeft" }, { bottom: 10, right: 10, b: "borderBottom", c: "borderRight" }].map((k, i) => (
-                <span key={i} style={{ position: "absolute", zIndex: 999, width: 18, height: 18, pointerEvents: "none", top: k.top, left: k.left, right: k.right, bottom: k.bottom, [k.b]: "2px solid rgba(27,43,75,.55)", [k.c]: "2px solid rgba(27,43,75,.55)" }} />
+                <span key={i} style={{ position: "absolute", zIndex: 999, width: 18, height: 18, pointerEvents: "none", top: k.top, left: k.left, right: k.right, bottom: k.bottom, [k.b]: `2px solid ${HUD.cyan}`, [k.c]: `2px solid ${HUD.cyan}`, filter: `drop-shadow(0 0 4px ${HUD.cyan})` }} />
               ))}
               <div style={{ position: "absolute", top: 12, left: 52, zIndex: 1000, display: "flex", alignItems: "center", gap: 8 }}>
                 <div style={{ background: "rgba(15,26,48,0.88)", border: "1px solid rgba(143,176,240,.35)", borderRadius: 9, padding: "6px 13px", fontSize: 14, fontWeight: 700, color: "#fff", backdropFilter: "blur(4px)", boxShadow: "0 4px 12px rgba(0,0,0,.18)", display: "flex", alignItems: "center", gap: 7 }}>
@@ -7341,7 +7380,7 @@ export default function FleetManagement({ dispatchData = [], role = "", forceTab
               <ActivityFeed logs={filteredActivityLogs} driversMap={driversMap} onDeleteAll={handleDeleteFeedLogs} />
             </div>
           </div>
-        </>
+        </div>
       )}
 
       {/* ═══ 노선관리 ═══ */}
@@ -7419,14 +7458,7 @@ export default function FleetManagement({ dispatchData = [], role = "", forceTab
         />
       )}
 
-      {companyLocModal && (
-        <CheckInLocModal
-          title="회사 기본 출근지 설정"
-          initialLoc={companyDefaultLoc}
-          onSave={handleSaveCompanyLoc}
-          onCancel={() => setCompanyLocModal(false)}
-        />
-      )}
+      {/* 📍 2026-11-09 "기본 출근지" 버튼·창 제거 — 회사 출근지는 회사관리 › 출근기록부 › 출근지 설정 한 곳에서 */}
 
       {/* 우클릭 컨텍스트 메뉴 */}
       {contextMenu && (

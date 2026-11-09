@@ -1,5 +1,6 @@
 // DriverHome.jsx — 지입기사 전용 앱 (리뉴얼)
 import React, { useEffect, useState, useRef, useCallback, useMemo } from "react";
+import { pickCompanyLoc } from "../officeLocSync"; // 📍 2026-11-09 출근지 한 곳 관리
 import { kpConfirm } from "../kpDialog";
 import { deleteDocsAtomic } from "../DeleteProgress"; // ⭐ 2026-11-05 삭제 진행 창 + 한 번에 삭제
 import { html2canvas } from "../lazyLoad"; // ⭐ 2026-11-02 속도 — 캡처 라이브러리는 처음 캡처할 때 받는다
@@ -1347,11 +1348,13 @@ export default function DriverHome() {
   useEffect(() => {
     const co = driver?.companyName || "";
     if (!co) return undefined;
-    let legacy = null; let mine;
-    const apply = () => setCompanyDefaultLoc(mine !== undefined ? mine : (co === DEFAULT_COMPANY ? legacy : null));
+    // 📍 2026-11-09 회사관리 › 출근기록부 출근지(companySettings.officeLocation)가 원본 — 못 읽으면(권한) 복사본(fleet_settings)
+    let legacy = null; let mine; let office = null;
+    const apply = () => setCompanyDefaultLoc(pickCompanyLoc(office, mine !== undefined ? mine : (co === DEFAULT_COMPANY ? legacy : null)));
     const u1 = onSnapshot(doc(db, "fleet_settings", `co_${co}`), (snap) => { mine = snap.exists() ? (snap.data().defaultCheckInLocation || null) : undefined; apply(); }, () => {});
     const u2 = co === DEFAULT_COMPANY ? onSnapshot(doc(db, "fleet_settings", "default"), (snap) => { legacy = snap.exists() ? (snap.data().defaultCheckInLocation || null) : null; apply(); }, () => {}) : () => {};
-    return () => { u1(); u2(); };
+    const u3 = onSnapshot(doc(db, "companySettings", co), (snap) => { office = snap.exists() ? (snap.data()?.officeLocation || null) : null; apply(); }, () => {});
+    return () => { u1(); u2(); u3(); };
   }, [driver?.companyName]);
 
   // 연락처 탭 "회사 연락처" — 회사마다 다른 배차팀 번호를 보여주기 위해, 로그인한

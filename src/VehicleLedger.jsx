@@ -21,6 +21,7 @@ import CustomDatePicker from "./CustomDatePicker"; // 📅 프로그램 달력(�
 import { careSummary, vehicleDefaults, TRUCK_MODELS } from "./vehicleCare";
 import { useVehicleTypes, VehicleTypePicker, VT_DEFAULTS } from "./vehicleTypes"; // 🚚 2026-11-02 회사 공용 차량종류
 import { fmtPhone as fmtPhoneLive } from "./formatInput"; // 입력 중 하이픈(02·031·010 등)
+import { upsertAutoEntry } from "./ledgerAuto"; // 🔧 2026-11-09 정비비 → 수입·지출 장부 자동
 import VehicleHologram, { twinModel, twinCareSummary } from "./VehicleHologram"; // ⭐ 2026-11-09 차량 3D 분석(디지털 트윈·타이어 위치별 교체)
 
 const C = { ink: "#0B1428", navy: "#0F1A30", mid: "#1B2B4B", blue: "#2D4C82", sky: "#8FB0F0", line: "#E3E8F0", soft: "#F4F6FA", sub: "#5B6B85", mute: "#5B6B85" /* ⭐ 2026-11-05 흐린 글씨 금지 — #9AA9C3 → #5B6B85 */, pale: "#EEF2F9" };
@@ -210,7 +211,13 @@ const EqDot = ({ on, label }) => (
 );
 
 // ── 기본 정보 입력 폼(등록·수정 공용) ──
-const BASIC_KEYS = ["차량번호", "용도", "톤수", "제조사", "모델", "연식", "회사", "차대번호", "보험사", "차주명", "유류카드사", "유류카드번호", "하이패스", "하이패스카드사", "하이패스카드번호", "하이패스유효기간", "하이패스구분", "하이패스단말기", "하이패스명의", "GPS", "덮개", "박스", "박스메모", "메모"];
+const BASIC_KEYS = ["차량번호", "용도", "톤수", "제조사", "모델", "연식", "회사", "차대번호", "보험사", "차주명", "유류카드사", "유류카드번호", "하이패스", "하이패스카드사", "하이패스카드번호", "하이패스유효기간", "하이패스구분", "하이패스단말기", "하이패스명의", "GPS", "덮개", "박스", "박스메모", "메모", "보험만기", "검사만기", "할부만기"];
+// 📅 2026-11-09 만기 자동 알림 — 보험·정기검사·할부(리스) 만기일 → 남은 일수(D-day). 30일 안이면 목록·대장에 표시
+const DUE_KEYS = [["보험만기", "보험"], ["검사만기", "정기검사"], ["할부만기", "할부·리스"]];
+const daysLeft = (d) => { const t = Date.parse(`${String(d || "").slice(0, 10)}T00:00:00+09:00`); if (!Number.isFinite(t)) return null; const k = new Date(Date.now() + 9 * 3600e3); const today0 = Date.UTC(k.getUTCFullYear(), k.getUTCMonth(), k.getUTCDate()) - 9 * 3600e3; return Math.round((t - today0) / 864e5); };
+export const dueList = (v) => DUE_KEYS.map(([k, label]) => ({ key: k, label, date: v?.[k] || "", d: daysLeft(v?.[k]) })).filter((x) => x.d !== null).sort((a, b) => a.d - b.d);
+const dueText = (x) => (x.d < 0 ? `${x.label} 만기 ${-x.d}일 지남` : x.d === 0 ? `${x.label} 오늘 만기` : `${x.label} D-${x.d}`);
+const dueTone = (d) => (d <= 7 ? { bg: "#0F1A30", fg: "#fff" } : d <= 30 ? { bg: "#DCE6F7", fg: "#1B2B4B" } : { bg: "#F1F4F9", fg: "#5B6B85" });
 const LEDGER_TYPE_BASE = Array.from(new Set([...VT_DEFAULTS, ...LEDGER_TYPE_EXTRA]));
 // ⭐ 2026-11-09 하이패스 카드 — 번호 4-4-4-4 하이픈 자동, 유효기간 MM/YY 자동
 const fmtCardNo = (x) => String(x || "").replace(/[^\d]/g, "").slice(0, 16).replace(/(\d{4})(?=\d)/g, "$1-");
@@ -246,6 +253,9 @@ function BasicForm({ v, set, purposeOpts, companyOpts, isNew, company }) {
         <Field label="회사(소속)">{sel("회사", companyOpts, { customPlaceholder: "소속·차주 회사" })}</Field>
         <Field label="차주명"><input {...f("차주명")} placeholder="차주 이름" /></Field>
         <Field label="보험사">{sel("보험사", INSURER_OPTS, { customPlaceholder: "보험사 이름" })}</Field>
+        <Field label="보험 만기일"><DateField value={v.보험만기 || ""} onChange={(x) => set({ ...v, 보험만기: x })} placeholder="만기일 선택" /></Field>
+        <Field label="정기검사 만료일"><DateField value={v.검사만기 || ""} onChange={(x) => set({ ...v, 검사만기: x })} placeholder="만료일 선택" /></Field>
+        <Field label="할부·리스 만기일"><DateField value={v.할부만기 || ""} onChange={(x) => set({ ...v, 할부만기: x })} placeholder="없으면 비워 두기" /></Field>
       </FormGroup>
       <FormGroup title="장비" code="EQUIPMENT">
         <Field label="유류카드 카드사">{sel("유류카드사", FUEL_CARD_OPTS, { customPlaceholder: "카드사 이름" })}</Field>
@@ -502,6 +512,17 @@ function Ledger({ v, co, appDriver, linkRaw, drivers, canEdit, by, narrow, purpo
     const patch = fn(s.data());
     tx.update(ref, { ...patch, updatedAt: Date.now(), updatedBy: by });
   });
+  // 🔧 2026-11-09 정비·구조변경 비용 → 회계 › 수입·지출 장부에 자동 지출 한 줄(같은 이력은 한 줄 · 삭제하면 빠짐). 장부 권한이 없으면 조용히 건너뜀
+  const syncRepairLedger = (kind, row, removed = false) => {
+    if (kind !== "repairs" && kind !== "structures") return;
+    const amt = removed ? 0 : (kind === "repairs" ? num(row.공가) + repairVat(row) : num(row.금액));
+    const plate = v.차량번호 || "";
+    upsertAutoEntry(db, `${v.id}_${row.id}`, {
+      company: co, date: row.일자, type: "지출", account: "차량유지비", amount: amt, vendor: row.업체 || "",
+      item: `${kind === "repairs" ? "차량 정비" : "구조변경"} · ${plate}${row.구분 ? ` · ${row.구분}` : ""}`,
+      memo: `차량관리대장 자동 — ${String(row.내용 || "").slice(0, 60)}`, auto: "vehrepair",
+    }).catch(() => {});
+  };
   const saveRow = async (kind, r, pendingFiles = []) => {
     const row = { ...r, id: r.id || uid() };
     if (kind === "driverHist") row.연락처 = fmtPhone(row.연락처);
@@ -512,11 +533,13 @@ function Ledger({ v, co, appDriver, linkRaw, drivers, canEdit, by, narrow, purpo
       return { [kind]: arr };
     });
     if (pendingFiles.length) await addFiles(kind, row, pendingFiles);
+    syncRepairLedger(kind, row);
     setEditor(null); if (!pendingFiles.length) toast("저장했습니다");
   };
   const delRow = async (kind, row) => {
     if (!(await kpConfirm(`이 줄을 삭제할까요?${row.files?.length ? ` (증빙 ${row.files.length}건도 함께 삭제)` : ""}`, { title: "이력 삭제", okText: "삭제", danger: true }))) return false;
     await mutate((d) => ({ [kind]: (d[kind] || []).filter((x) => x.id !== row.id) }));
+    syncRepairLedger(kind, row, true);
     deleteEvidence(row.files || []).catch(() => {});
     toast("삭제했습니다");
     return true;
@@ -702,6 +725,13 @@ function Ledger({ v, co, appDriver, linkRaw, drivers, canEdit, by, narrow, purpo
       </div>
 
       {/* 기본 정보 */}
+      {/* 📅 2026-11-09 만기 자동 알림(30일 안·지난 것) */}
+      {dueList(v).filter((x) => x.d <= 30).length > 0 && (
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", padding: "10px 14px", borderRadius: 12, background: "#0F1A30", color: "#fff" }}>
+          <span style={{ fontFamily: MONO, fontSize: 12, fontWeight: 800, letterSpacing: "0.16em", color: "#8FB0F0" }}>DUE</span>
+          {dueList(v).filter((x) => x.d <= 30).map((x) => <span key={x.key} style={{ padding: "3px 10px", borderRadius: 99, background: x.d <= 7 ? "#fff" : "rgba(255,255,255,.12)", color: x.d <= 7 ? "#0F1A30" : "#fff", fontSize: 13.5, fontWeight: 800 }}>{dueText(x)} · {x.date}</span>)}
+        </div>
+      )}
       <Section id="vl-basic" title="기본 정보" code="BASIC" right={canEdit && (edit ? <div style={{ display: "flex", gap: 6 }}><Btn onClick={() => setEdit(null)}>취소</Btn><Btn kind="primary" onClick={saveBasic}>저장</Btn></div> : <Btn onClick={startEdit}>수정</Btn>)}>
         <div style={{ padding: 16 }}>
           {edit ? <BasicForm v={edit} set={setEdit} purposeOpts={purposeOpts} companyOpts={companyOpts} company={co} /> : (<>
@@ -940,7 +970,7 @@ const COLS = [
   // ⭐ 2026-11-02 담당자는 순번 바로 뒤(고정 칸) — 누가 맡은 차량인지 먼저 보이게
   ["순번", "순번", 56], ["담당자", "담당자", 96], ["차량번호", "차량번호", 150], ["용도", "차량종류", 110], ["톤수", "톤수", 70], ["회사", "회사", 110], ["현재기사", "현재 기사", 118], ["가입유형", "가입유형", 96], ["기사연락처", "기사 연락처", 136], ["기사변경일", "기사 변경일", 116],
   ["차대번호", "차대번호", 180], ["보험사", "보험사", 90], ["유류카드번호", "유류", 120], ["하이패스", "하이패스", 100], ["GPS", "GPS", 80], ["덮개", "덮개", 70], ["박스", "박스", 90], ["차주명", "차주명", 90],
-  ["모델연식", "모델·연식", 140], ["주행거리", "주행거리", 110], ["엔진오일", "엔진오일", 100], ["점검알림", "점검 알림", 200],
+  ["모델연식", "모델·연식", 140], ["주행거리", "주행거리", 110], ["엔진오일", "엔진오일", 100], ["점검알림", "점검 알림", 200], ["만기", "만기 알림", 150],
 ];
 const EQ_KEYS = EQUIP.map((e) => e.key);
 
@@ -1062,6 +1092,7 @@ export default function VehicleLedger({ company = "", drivers = [], canEdit = tr
         용도: v.용도 || v.차량종류 || (virtual ? cv?.적재함 || "" : ""), 톤수: v.톤수 || cv?.톤 || "",
         현재기사: cur?.이름 || app?.이름 || "", 기사연락처: cur?.연락처 || app?.전화번호 || "", 기사변경일: cur?.시작 || "", fromApp: !cur && !!app,
         모델연식: [mdl, yr && `${yr}년`].filter(Boolean).join(" · "),
+        만기: (() => { const x = dueList(v)[0]; return x ? x.d : 99999; })(), dues: dueList(v),
         주행거리: cs?.odometer || 0, 점검알림: cs ? cs.alerts.length : -1, 엔진오일: cs0 ? (cs0.alerts.find((a) => a.key === "engineOil")?.level ?? (linkRaw?.care?.items?.engineOil ? 0 : -1)) : -2,
         yearCost: reps.filter((x) => String(x.일자 || "").startsWith(thisYear)).reduce((s, x) => s + num(x.공가) + repairVat(x), 0),
         monthCost: reps.filter((x) => String(x.일자 || "").startsWith(thisMonth)).reduce((s, x) => s + num(x.공가) + repairVat(x), 0),
@@ -1197,7 +1228,7 @@ export default function VehicleLedger({ company = "", drivers = [], canEdit = tr
   };
   const exportList = () => {
     const head = COLS.map((c) => c[1]).concat(["유류카드사", "박스 사용처", "메모", `${thisYear} 정비비`]);
-    const val = (r, k, i) => (k === "순번" ? i + 1 : k === "주행거리" ? (r.주행거리 || "") : k === "엔진오일" ? (careCells(r).oil?.text || (r.엔진오일 === 0 ? "정상" : "")) : k === "점검알림" ? (r.cs ? r.cs.alerts.map((a) => a.label).join(", ") : "") : r[k] || "");
+    const val = (r, k, i) => (k === "순번" ? i + 1 : k === "주행거리" ? (r.주행거리 || "") : k === "엔진오일" ? (careCells(r).oil?.text || (r.엔진오일 === 0 ? "정상" : "")) : k === "점검알림" ? (r.cs ? r.cs.alerts.map((a) => a.label).join(", ") : "") : k === "만기" ? (r.dues || []).map((x) => `${dueText(x)}(${x.date})`).join(", ") : r[k] || "");
     const aoa = [head, ...shown.map((r, i) => COLS.map(([k]) => val(r, k, i)).concat([r.유류카드사 || "", r.박스메모 || "", r.메모 || "", r.yearCost || ""]))];
     const ws = XLSX.utils.aoa_to_sheet(aoa); ws["!cols"] = head.map((h, i) => ({ wch: i < COLS.length ? Math.round(COLS[i][2] / 8) : 14 }));
     const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "차량 전체 현황");
@@ -1362,6 +1393,7 @@ export default function VehicleLedger({ company = "", drivers = [], canEdit = tr
                           }
                           if (k === "주행거리") return <td key={k} style={{ ...base, fontFamily: MONO, fontWeight: 800 }}>{r.cs?.odometer ? `${r.cs.odometer.toLocaleString()}km` : <span style={{ color: "#5B6B85" }}>-</span>}</td>;
                           if (k === "엔진오일") return <td key={k} style={base}>{cc.oil ? <span style={{ padding: "2px 8px", borderRadius: 6, background: cc.oil.level === 2 ? C.navy : "#DCE6F7", color: cc.oil.level === 2 ? "#fff" : C.mid, fontSize: 14, fontWeight: 800 }}>{cc.oil.text}</span> : cc.oilLast ? <span style={{ color: C.sub, fontSize: 14 }}>정상</span> : <span style={{ color: "#5B6B85", fontSize: 14 }}>{r.linkRaw ? "기록 없음" : "-"}</span>}</td>;
+                          if (k === "만기") return <td key={k} style={{ ...base, whiteSpace: "nowrap" }}>{r.dues?.length ? <span title={r.dues.map((x) => `${x.label} ${x.date}`).join("\n")} style={{ padding: "2px 8px", borderRadius: 6, background: dueTone(r.dues[0].d).bg, color: dueTone(r.dues[0].d).fg, fontSize: 13.5, fontWeight: 800 }}>{dueText(r.dues[0])}</span> : <span style={{ color: "#9AA9C3" }}>-</span>}</td>;
                           if (k === "점검알림") return <td key={k} style={{ ...base, textAlign: "left", maxWidth: 240, overflow: "hidden", textOverflow: "ellipsis" }}>{cc.alerts?.length ? cc.alerts.slice(0, 3).map((a) => a.label).join(" · ") + (cc.alerts.length > 3 ? ` 외 ${cc.alerts.length - 3}` : "") : <span style={{ color: "#5B6B85" }}>-</span>}</td>;
                           return <td key={k} style={{ ...base, color: val ? C.navy : "#5B6B85", fontFamily: ["기사변경일", "차대번호"].includes(k) ? MONO : undefined, fontSize: k === "차대번호" ? 14 : 14.5 }}>{val || "-"}</td>;
                         })}

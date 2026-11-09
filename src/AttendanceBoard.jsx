@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { isLateAt } from "./lateRule"; // ⏰ 2026-11-07 지각 기준 공용(출근시간 없으면 09:00)
+import { mirrorOfficeToFleet } from "./officeLocSync"; // 📍 2026-11-09 출근지 한 곳 관리
 import { runDelete } from "./DeleteProgress"; // ⭐ 2026-11-05 삭제 진행 창 + 한 번에 삭제
 import { workWindow } from "./autoAttendance";
 import { collection, deleteDoc, doc, onSnapshot, query, setDoc, where, addDoc, arrayUnion, getDocs } from "firebase/firestore";
@@ -195,7 +196,8 @@ export default function AttendanceBoard({ userCompany, role, user }) {
       // ⭐ 2026-11-01 좌표 함수는 경도를 lon으로 준다(예전엔 lng만 읽어 경도가 비고 자동 설정도 안 됐다)
       const lngV = c?.lng ?? c?.lon;
       if (!c?.lat || !lngV) return;
-      setDoc(doc(db, "companySettings", company), { officeLocation: { lat: Number(c.lat), lng: Number(lngV), address: companyAddr, auto: true } }, { merge: true }).catch(() => {});
+      const office = { lat: Number(c.lat), lng: Number(lngV), address: companyAddr, auto: true };
+      setDoc(doc(db, "companySettings", company), { officeLocation: office }, { merge: true }).then(() => mirrorOfficeToFleet(company, office)).catch(() => {});
     }).catch(() => {});
   }, [isAdmin, company, companyAddr, officeLocation]);
   const [findingAddr, setFindingAddr] = useState(false);
@@ -217,9 +219,9 @@ export default function AttendanceBoard({ userCompany, role, user }) {
     if (isNaN(lat) || isNaN(lng)) { alert("올바른 위도/경도를 입력해주세요."); return; }
     const r = officeRadii({ radius: radiusInput.inM, outRadius: radiusInput.outM });
     setSavingOffice(true);
-    await setDoc(doc(db, "companySettings", company), {
-      officeLocation: { lat, lng, address: officeInput.address || "", radius: r.inM, outRadius: r.outM }
-    }, { merge: true });
+    const office = { lat, lng, address: officeInput.address || "", radius: r.inM, outRadius: r.outM };
+    await setDoc(doc(db, "companySettings", company), { officeLocation: office }, { merge: true });
+    mirrorOfficeToFleet(company, office); // 📍 2026-11-09 지입차·기사앱 출근지도 같은 값으로
     radiusDirtyRef.current = false;
     setSavingOffice(false);
     setShowOfficePanel(false);

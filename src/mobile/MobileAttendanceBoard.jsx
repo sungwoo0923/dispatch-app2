@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { isLateAt } from "../lateRule"; // ⏰ 2026-11-07 지각 기준 공용(출근시간 없으면 09:00)
+import { mirrorOfficeToFleet } from "../officeLocSync"; // 📍 2026-11-09 출근지 한 곳 관리
 import { collection, doc, onSnapshot, query, setDoc, where } from "firebase/firestore";
 import { db, DEFAULT_COMPANY } from "../firebase";
 import { HourMinuteSelect } from "../kpTimePick"; // ⏱ 2026-11-07 시간은 프로그램 시·분 선택으로
@@ -153,9 +154,9 @@ export default function MobileAttendanceBoard({ userCompany, role, currentUser, 
     if (isNaN(lat) || isNaN(lng)) { alert("올바른 위도/경도를 입력해주세요."); return; }
     const r = officeRadii({ radius: radiusInput.inM, outRadius: radiusInput.outM });
     setSavingOffice(true);
-    await setDoc(doc(db, "companySettings", company), {
-      officeLocation: { lat, lng, address: officeInput.address || "", radius: r.inM, outRadius: r.outM }
-    }, { merge: true });
+    const office = { lat, lng, address: officeInput.address || "", radius: r.inM, outRadius: r.outM };
+    await setDoc(doc(db, "companySettings", company), { officeLocation: office }, { merge: true });
+    mirrorOfficeToFleet(company, office); // 📍 2026-11-09 지입차·기사앱 출근지도 같은 값으로
     radiusDirtyRef.current = false;
     setSavingOffice(false);
     setShowOfficePanel(false);
