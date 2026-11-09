@@ -2924,6 +2924,7 @@ import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 // ⭐ 2026-11-02 운임규칙 — 회사별 운임 규칙(운임구분 → 기사운임·수수료 자동 계산)
 import FareRulesSettings from "./FareRulesSettings";
 import { useFareRules, FareTypeSelect, FareRuleHint, FarePctInput, fareFormChange, farePatchOf, findFareRule, applyFareRule, FareTypeBreakdown } from "./fareRules";
+import { ForkliftFeeRow, ForkliftChip, ForkliftDriverManager, ForkliftPayouts, forkliftApply, forkliftExcelCols, hasForklift, fkAmount } from "./forklift"; // 🏗 2026-11-09 지게차비용
 import { useTableSort, sortRows, SortTh } from "./tableSort";
 import { useCompanyFeatures } from "./companyFeatures";
 import { BRAND, LogisMark, LogisWordmark, LogisTag } from "./brand";
@@ -3746,7 +3747,7 @@ const ORDER_SEARCH_FIELD = { client: "거래처명", pickup: "상차지명", dro
 const orderSortValue = (r, key, i) => {
   switch (key) {
     case "순번": return i; // 원래(기본) 순서
-    case "수수료": return _sortInt(r.청구운임) - _sortInt(r.기사운임);
+    case "수수료": return _sortInt(r.청구운임) - _sortInt(r.기사운임) - _sortInt(r.지게차비용);
     case "기사명": return r.이름;
     case "첨부": return r.attachCount || 0;
     case "전달상태": return r.업체전달상태 || "미전달";
@@ -4886,16 +4887,19 @@ const patchDispatch = async (_id, patch, knownPrev) => {
 
   // ⭐ 2026-11-01 청구운임·기사운임을 바꾸면 저장된 수수료도 같이 맞춘다 — 오더 수정 패널·표 칸 수정 등이
   //    운임만 바꾸고 수수료는 예전 값으로 남겨, 정산·매출(저장된 수수료를 먼저 읽음)에서 수익이 틀리게 나왔다.
-  if (("청구운임" in patch || "기사운임" in patch)) {
+  if (("청구운임" in patch || "기사운임" in patch || "지게차비용" in patch)) {
     const _n = (v) => Number(String(v ?? "").replace(/[^\d-]/g, "")) || 0;
     const sale = _n("청구운임" in patch ? patch.청구운임 : prev?.청구운임);
     const drv = _n("기사운임" in patch ? patch.기사운임 : prev?.기사운임);
-    const prevAuto = _n(prev?.청구운임) - _n(prev?.기사운임);
+    // 🏗 2026-11-09 지게차비용 — 수익 = 청구 − 기사 − 지게차
+    const fork = Math.max(0, _n("지게차비용" in patch ? patch.지게차비용 : prev?.지게차비용));
+    const prevAuto = _n(prev?.청구운임) - _n(prev?.기사운임) - Math.max(0, _n(prev?.지게차비용));
+    const prevAuto0 = _n(prev?.청구운임) - _n(prev?.기사운임);
     const prevFee = prev?.수수료;
     // 예전 수수료가 비어 있거나 "청구-기사"와 같았던(자동 계산) 오더만 다시 계산한다 — 직접 넣은 수수료는 그대로
-    const wasAuto = prevFee == null || String(prevFee).trim() === "" || _n(prevFee) === prevAuto;
+    const wasAuto = prevFee == null || String(prevFee).trim() === "" || _n(prevFee) === prevAuto || _n(prevFee) === prevAuto0;
     const feeGiven = "수수료" in patch && _n(patch.수수료) !== _n(prevFee);
-    if (wasAuto && !feeGiven) patch.수수료 = String(sale - drv);
+    if (wasAuto && !feeGiven) patch.수수료 = String(sale - drv - fork);
   }
 
   // ★ UI 즉시 반영 (optimistic update — Firestore 응답 기다리지 않음)
@@ -9116,6 +9120,7 @@ return (
             groups={[
               { label: "기사", items: [{ key: "drv", label: "기사관리", en: "DRIVERS", icon: "user", sub: ["전체", "일반", "직영", "지입", "임대", "블랙"].map((g) => ({ key: `d:${g}`, label: g === "전체" ? "전체 기사" : g, icon: g === "블랙" ? "alert" : g === "지입" ? "link" : g === "임대" ? "key" : "user", badge: g === "전체" ? 0 : (drivers || []).filter((d) => !isPendingSignupDriver(d) && (d.등급 || "일반") === g && (String(d.이름 || "").trim() || String(d.차량번호 || "").trim())).length, soft: true })) }] },
               { label: "기사 앱 계정", items: [{ key: "acc", label: "기사 앱 계정", en: "APP ACCOUNTS", icon: "phone", sub: [{ key: "acc:pending", label: "가입 승인", icon: "hourglass", badge: alertsNav.signupDriver || 0, badgeTitle: "기사 가입 승인 대기" }, { key: "acc:drivers", label: "승인된 기사", icon: "idcard" }] }] },
+              { label: "지게차", items: [{ key: "fork", label: "지게차 기사", en: "FORKLIFT", icon: "user" }] }, // 🏗 2026-11-09
               { label: "서류관리", items: [{ key: "docs", label: "서류관리", en: "DOCUMENTS", icon: "file", badge: drvCounts.docs || 0, red: true, sub: [{ key: "docs:driver", label: "기사 제출 서류", icon: "file", badge: drvCounts.docs || 0, red: true, badgeTitle: "새로 올라온 기사 서류" }, { key: "docs:penalty", label: "과태료 · 사고 서류", icon: "alert" }] }] },
             ]}>
             {기사관리Tab.startsWith("d:") && (
@@ -9131,6 +9136,7 @@ return (
             )}
             {기사관리Tab.startsWith("acc:") && <DriverAccounts company={deptCompany} isViewer={isViewer} tab={기사관리Tab.slice(4)} onTab={(t) => set기사관리Tab(`acc:${t}`)} />}
             {기사관리Tab === "docs:driver" && <DriverDocsReview company={deptCompany} isViewer={isViewer} />}
+            {기사관리Tab === "fork" && <ForkliftDriverManager isViewer={isViewer} />}
             {기사관리Tab === "docs:penalty" && <FleetManagement dispatchData={dispatchDataFiltered} role={role} forceTab="penalty" hideChrome />}
           </KpSubNav>
         )}
@@ -9262,7 +9268,7 @@ return (
         {정산관리Visited && (role === "admin" || role === "totalMaster" || role === "test" || isViewer || !!customRole) && (
           <div style={{ display: menu === "정산관리" ? undefined : "none" }}>
           <KpSubNav code="SETTLEMENT" title="정산관리" icon="receipt" active={정산관리Tab} onSelect={set정산관리Tab}
-            items={[{ key: "거래처정산", label: "거래처정산", en: "BILLING", icon: "receipt" }, { key: "지급관리", label: "용차지급관리", en: "PAYOUT", icon: "wallet" }, { key: "지입정산관리", label: "지입정산관리", en: "FLEET PAY", icon: "wallet" }]}>
+            items={[{ key: "거래처정산", label: "거래처정산", en: "BILLING", icon: "receipt" }, { key: "지급관리", label: "용차지급관리", en: "PAYOUT", icon: "wallet" }, { key: "지입정산관리", label: "지입정산관리", en: "FLEET PAY", icon: "wallet" }, { key: "지게차지급", label: "지게차 지급", en: "FORKLIFT", icon: "wallet" }]}>
           <DetailScope data={salesDispatchData} getters={mainDetailGet} title="세부검색 · 정산관리">{(settleRows, settleBtn) => (<>
           {/* 🔎 2026-11-03 세부검색 — 거래처정산·용차지급·지입정산 모두 이 조건으로 */}
           {/* ⭐ 2026-11-07 세부검색 버튼은 왼쪽 메뉴 윗줄(오른쪽 끝)로 — 머리 높이·왼쪽 끝 정렬 */}
@@ -9285,6 +9291,7 @@ return (
               isViewer={isViewer}
             />
           </div>
+          {정산관리Tab === "지게차지급" && <ForkliftPayouts orders={settleRows} patchDispatch={patchDispatchSafe} isViewer={isViewer} />}
           {정산관리Tab === "지입정산관리" && (
             <FleetSettlementMenu dispatchData={settleRows} companyName={(localStorage.getItem("loginCompany") || userCompany || localStorage.getItem("userCompany") || DEFAULT_COMPANY || "").trim()} />
           )}
@@ -12587,7 +12594,7 @@ const updateMultiSlot = (key, value) => {
       const sale = parseInt(next.청구운임 || 0, 10) || 0;
       const drv = parseInt(next.기사운임 || 0, 10) || 0;
       next.수수료 = String(sale - drv);
-      return next;
+      return forkliftApply(s, next, key);
     }
     return { ...s, [key]: value };
   }));
@@ -13010,7 +13017,7 @@ function swapPickupDrop() {
     const onChange = (key, value) => {
       // ⭐ 2026-11-02 운임규칙 — 운임구분·청구운임·기사운임 → 규칙대로 기사운임·수수료 자동 계산(기사운임을 직접 고치면 유지)
       if (fareOn && canMoney && (key === "운임구분" || key === "청구운임" || key === "기사운임" || key === "운임구분수수료율" || key === "__reapply")) {
-        setForm((p) => fareFormChange(p, key, value, fareR.rules));
+        setForm((p) => fareFormChange(p, key, value, fareR.rules)); // 🏗 지게차비용은 fareFormChange 안에서 같이 맞춤
         return;
       }
       if (canMoney && (key === "청구운임" || key === "기사운임")) {
@@ -13019,7 +13026,7 @@ function swapPickupDrop() {
           const sale = parseInt(next.청구운임 || 0, 10) || 0;
           const drv = parseInt(next.기사운임 || 0, 10) || 0;
           next.수수료 = String(sale - drv);
-          return next;
+          return forkliftApply(p, next, key); // 🏗 지게차비용(수익 = 청구 − 기사 − 지게차)
         });
         return;
       }
@@ -16280,6 +16287,8 @@ shadow-[0_1px_2px_rgba(16,24,40,0.04),0_12px_30px_rgba(16,24,40,0.07)]
                   <div className="flex items-center gap-1.5"><FareTypeSelect pct={currentMultiSlot.운임구분수수료율} compact className="flex-1 min-w-0" rules={fareR.rules} value={currentMultiSlot.운임구분 || ""} onChange={(v) => updateMultiSlot("운임구분", v)} /><FarePctInput compact form={currentMultiSlot} rules={fareR.rules} onChange={(v) => updateMultiSlot("운임구분수수료율", v)} /></div>
                 </div>
               ) : <div />}
+              {/* 🏗 2026-11-09 지게차비용 — 다중등록도 오더마다 */}
+              <div className="col-span-2"><ForkliftFeeRow form={currentMultiSlot} setForm={(fn) => setMultiRegSlots((prev) => prev.map((s, i) => (i === multiRegIdx ? (typeof fn === "function" ? fn(s) : fn) : s)))} /></div>
 
               <div className="col-span-2">
                 <label className={mrLabelCls}><EditableText id="orderForm.multi.label.메모" defaultText="메모" /></label>
@@ -17362,6 +17371,8 @@ className={`
         readOnly
       />
     </div>
+    {/* 🏗 2026-11-09 지게차비용 — 켜면 금액·지게차 기사·부담 방식 한 줄(꺼져 있으면 [+ 지게차] 칩만) */}
+    <div className="col-span-full -mt-0.5"><ForkliftFeeRow form={form} setForm={setForm} /></div>
   </>
 )}
 {/* ================= 경유지 추가 팝업 (멀티 입력) ================= */}
@@ -24361,7 +24372,7 @@ function RealtimeRowBase({
 }) {
   const sale = toInt(editedForRow?.청구운임 ?? r.청구운임);
   const drv = toInt(editedForRow?.기사운임 ?? r.기사운임);
-  const fee = sale - drv;
+  const fee = sale - drv - fkAmount(r); // 🏗 2026-11-09 지게차비용(수익 = 청구 − 기사 − 지게차)
 
   const cell = isDark
     ? "px-2 py-1.5 text-[14px] font-medium text-gray-100 align-middle text-center whitespace-nowrap border-b border-gray-700"
@@ -24721,7 +24732,7 @@ ${isHighlighted ? "animate-pulse bg-blue-100" : ""}
                         }
                       />
                     ) : (
-                      formatComma(r.기사운임)
+                      <>{formatComma(r.기사운임)}<ForkliftChip row={r} className="ml-1" /></>
                     )}
                   </td>
 
@@ -30151,7 +30162,7 @@ const head = isDark
     row.화물내용=mergeViaCargoText(r.화물내용,[r.경유상차목록,r.경유하차목록])||"";
     row.차량종류=r.차량종류||"";
     row.차량톤수=mergeViaTonnage(r.차량톤수,[r.경유상차목록,r.경유하차목록])||"";
-    Object.assign(row,{차량번호:r.차량번호||"",기사명:r.이름||"",전화번호:r.전화번호||"",배차상태:r.배차상태||"",청구운임:toInt(r.청구운임),기사운임:toInt(r.기사운임),수수료:toInt(r.청구운임)-toInt(r.기사운임),...(fareOn?{운임구분:r.운임구분||""}:{}),지급방식:r.지급방식||"",배차방식:r.배차방식||"",메모:r.메모||""});
+    Object.assign(row,{차량번호:r.차량번호||"",기사명:r.이름||"",전화번호:r.전화번호||"",배차상태:r.배차상태||"",청구운임:toInt(r.청구운임),기사운임:toInt(r.기사운임),수수료:toInt(r.청구운임)-toInt(r.기사운임)-toInt(r.지게차비용),...(fareOn?{운임구분:r.운임구분||""}:{}),지급방식:r.지급방식||"",배차방식:r.배차방식||"",메모:r.메모||""});
     return row;
   });
   const ws=XLSX.utils.json_to_sheet(rowsExcel);const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,"실시간배차현황");XLSX.writeFile(wb,"실시간배차현황.xlsx");
@@ -31363,7 +31374,7 @@ value={copyTarget?.화물수량 || ""}
       .replace(/[^\d-]/g, "")
       .replace(/(?!^)-/g, "");
 
-    setCopyTarget(p=> fareOn ? fareFormChange(p, "청구운임", v, fareR.rules) : ({...p, 청구운임: v})) // ⭐ 2026-11-02 운임규칙
+    setCopyTarget(p=> fareOn ? fareFormChange(p, "청구운임", v, fareR.rules) : forkliftApply(p, {...p, 청구운임: v}, "청구운임")) // ⭐ 2026-11-02 운임규칙
   }}
 />
             </CpField>
@@ -31377,18 +31388,19 @@ value={copyTarget?.화물수량 || ""}
       .replace(/[^\d-]/g, "")
       .replace(/(?!^)-/g, "");
 
-    setCopyTarget(p=> fareOn ? fareFormChange(p, "기사운임", v, fareR.rules) : ({...p, 기사운임: v})) // ⭐ 2026-11-02 운임규칙
+    setCopyTarget(p=> fareOn ? fareFormChange(p, "기사운임", v, fareR.rules) : forkliftApply(p, {...p, 기사운임: v}, "기사운임")) // ⭐ 2026-11-02 운임규칙
   }}
 />
             </CpField>
 
             <CpField label="수수료">
-              {(() => { const _f = Number(copyTarget.청구운임||0) - Number(copyTarget.기사운임||0); return (
+              {(() => { const _f = Number(copyTarget.청구운임||0) - Number(copyTarget.기사운임||0) - fkAmount(copyTarget); /* 🏗 지게차 */ return (
               <div className={`h-9 flex items-center justify-end bg-[#EEF2F8] border border-[#DCE4F0] rounded-lg px-2.5 font-black text-[15px] whitespace-nowrap tabular-nums ${_f < 0 ? "text-red-600" : "text-[#1B2B4B]"}`}>
                 {_f.toLocaleString()} 원
               </div>
               ); })()}
             </CpField>
+            <div className="col-span-full"><ForkliftFeeRow form={copyTarget} setForm={setCopyTarget} /></div>{/* 🏗 2026-11-09 지게차비용 */}
 <CpField label="지급방식">
   <CompanyOptionPicker optKey="지급방식" placeholder="선택" noneLabel="선택" disabled={copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile"} className={cpInputStyle} value={copyTarget?.지급방식 ?? ""} onChange={(__v) => ((e)=>setCopyTarget(p=>({...p, 지급방식:e.target.value})))({ target: { value: __v } })} />
 </CpField>
@@ -33165,6 +33177,8 @@ value={copyTarget?.화물수량 || ""}
                 <FareRuleHint form={editTarget} rules={fareR.rules} onReapply={() => setEditTarget((p) => { const n = fareFormChange(p, "__reapply", null, fareR.rules); return { ...n, 수수료: Number(n.수수료) || 0 }; })} />
               </div>
             )}
+            {/* 🏗 2026-11-09 지게차비용 */}
+            <div className="mb-3"><ForkliftFeeRow form={editTarget} setForm={(fn) => setEditTarget((p) => { const n = typeof fn === "function" ? fn(p) : fn; return { ...n, 수수료: Number(n.수수료) || 0 }; })} /></div>
 
             {/* ------------------------------------------------ */}
             {/* 🔵 지급/배차 방식 */}
@@ -33326,6 +33340,7 @@ const ALLOWED_FIELDS = [
   "차량번호", "이름", "전화번호",
   "청구운임", "기사운임",
   "운임구분", "운임수동", // ⭐ 2026-11-02 운임규칙
+  "지게차비용", "지게차부담", "지게차기사ID", "지게차기사명", "지게차기사전화", "지게차회사", "지게차기사차감", "지게차청구추가", // 🏗 2026-11-09 지게차비용
   "지급방식", "배차방식",
   "메모",
   "메모중요도",
@@ -38957,7 +38972,8 @@ if (first) {
         배차상태: r.배차상태 || "",
         청구운임: toMoney(r.청구운임),
         기사운임: toMoney(r.기사운임),
-        수수료: toMoney(r.청구운임) - toMoney(r.기사운임),
+        수수료: toMoney(r.청구운임) - toMoney(r.기사운임) - fkAmount(r), // 🏗 지게차
+        ...(hasForklift(r) ? forkliftExcelCols(r) : {}), // 🏗 2026-11-09 지게차비용·지게차기사·부담·지급
         ...(fareOn ? { 운임구분: r.운임구분 || "" } : {}), // ⭐ 2026-11-02 운임규칙
         지급방식: r.지급방식 || "",
         배차방식: r.배차방식 || "",
@@ -40092,7 +40108,7 @@ return (
             {pageRows.map((r, i) => {
   const id = getId(r);
   const row = edited[id] ? { ...r, ...edited[id] } : r;
-  const fee = toInt(row.청구운임) - toInt(row.기사운임);
+  const fee = toInt(row.청구운임) - toInt(row.기사운임) - fkAmount(row); // 🏗 지게차
 
   const editableKeys = [
     "상차일", "상차시간", "하차일", "하차시간",
@@ -40424,7 +40440,7 @@ return (
                           onChange={(e) => updateEdited(row, key, e.target.value)}
                         />
                       ) : (
-                        toInt(row[key]).toLocaleString()
+                        <>{toInt(row[key]).toLocaleString()}{key === "기사운임" && <ForkliftChip row={row} className="ml-1" />}</>
                       )}
                     </td>
                   ))}
@@ -41499,6 +41515,8 @@ return (
                 <FareRuleHint form={editTarget} rules={fareR.rules} onReapply={() => setEditTarget((p) => { const n = fareFormChange(p, "__reapply", null, fareR.rules); return { ...n, 수수료: Number(n.수수료) || 0 }; })} />
               </div>
             )}
+            {/* 🏗 2026-11-09 지게차비용 */}
+            <div className="mb-3"><ForkliftFeeRow form={editTarget} setForm={(fn) => setEditTarget((p) => { const n = typeof fn === "function" ? fn(p) : fn; return { ...n, 수수료: Number(n.수수료) || 0 }; })} /></div>
 
             {/* ------------------------------------------------ */}
             {/* 🔵 지급/배차 방식 */}
@@ -41661,6 +41679,7 @@ return (
       "차량번호", "이름", "전화번호",
       "청구운임", "기사운임",
       "운임구분", "운임수동", // ⭐ 2026-11-02 운임규칙
+      "지게차비용", "지게차부담", "지게차기사ID", "지게차기사명", "지게차기사전화", "지게차회사", "지게차기사차감", "지게차청구추가", // 🏗 2026-11-09 지게차비용
       "지급방식", "배차방식",
       "메모",
       "메모중요도",
@@ -42760,7 +42779,7 @@ setCopyPlaceOptions(list);
       .replace(/[^\d-]/g, "")
       .replace(/(?!^)-/g, "");
 
-    setCopyTarget(p=> fareOn ? fareFormChange(p, "청구운임", v, fareR.rules) : ({...p, 청구운임: v})) // ⭐ 2026-11-02 운임규칙
+    setCopyTarget(p=> fareOn ? fareFormChange(p, "청구운임", v, fareR.rules) : forkliftApply(p, {...p, 청구운임: v}, "청구운임")) // ⭐ 2026-11-02 운임규칙
   }}
 />
             </CpField>
@@ -42774,18 +42793,19 @@ setCopyPlaceOptions(list);
       .replace(/[^\d-]/g, "")
       .replace(/(?!^)-/g, "");
 
-    setCopyTarget(p=> fareOn ? fareFormChange(p, "기사운임", v, fareR.rules) : ({...p, 기사운임: v})) // ⭐ 2026-11-02 운임규칙
+    setCopyTarget(p=> fareOn ? fareFormChange(p, "기사운임", v, fareR.rules) : forkliftApply(p, {...p, 기사운임: v}, "기사운임")) // ⭐ 2026-11-02 운임규칙
   }}
 />
             </CpField>
 
             <CpField label="수수료">
-              {(() => { const _f = Number(copyTarget.청구운임||0) - Number(copyTarget.기사운임||0); return (
+              {(() => { const _f = Number(copyTarget.청구운임||0) - Number(copyTarget.기사운임||0) - fkAmount(copyTarget); /* 🏗 지게차 */ return (
               <div className={`h-9 flex items-center justify-end bg-[#EEF2F8] border border-[#DCE4F0] rounded-lg px-2.5 font-black text-[15px] whitespace-nowrap tabular-nums ${_f < 0 ? "text-red-600" : "text-[#1B2B4B]"}`}>
                 {_f.toLocaleString()} 원
               </div>
               ); })()}
             </CpField>
+            <div className="col-span-full"><ForkliftFeeRow form={copyTarget} setForm={setCopyTarget} /></div>{/* 🏗 2026-11-09 지게차비용 */}
 <CpField label="지급방식">
   <CompanyOptionPicker optKey="지급방식" placeholder="선택" noneLabel="선택" disabled={copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile"} className={cpInputStyle} value={copyTarget?.지급방식 ?? ""} onChange={(__v) => ((e)=>setCopyTarget(p=>({...p, 지급방식:e.target.value})))({ target: { value: __v } })} />
 </CpField>
@@ -49235,7 +49255,7 @@ function SettlementDetailPopup({ client, rows = [], onClose }) {
   const profit = sale - driver;
   // ⭐ 머리글 클릭 정렬 — 이 브라우저에만 기억
   const dpSort = useTableSort("settlement.detailPopup");
-  const dpRows = React.useMemo(() => sortRows(rows, dpSort.sort, (r, k) => (k === "매출" ? toInt(r.청구운임) : k === "수익" ? toInt(r.청구운임) - toInt(r.기사운임) : r[k])), [rows, dpSort.sort]); // eslint-disable-line react-hooks/exhaustive-deps
+  const dpRows = React.useMemo(() => sortRows(rows, dpSort.sort, (r, k) => (k === "매출" ? toInt(r.청구운임) : k === "수익" ? toInt(r.청구운임) - toInt(r.기사운임) - toInt(r.지게차비용) : r[k])), [rows, dpSort.sort]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center">
@@ -49263,7 +49283,7 @@ function SettlementDetailPopup({ client, rows = [], onClose }) {
                 <tr key={i} className="hover:bg-gray-50">
                   <td className="border p-1.5">{r.상차일}</td>
                   <td className="border p-1.5">{toInt(r.청구운임).toLocaleString()}</td>
-                  <td className="border p-1.5 text-emerald-600">{(toInt(r.청구운임) - toInt(r.기사운임)).toLocaleString()}</td>
+                  <td className="border p-1.5 text-emerald-600">{(toInt(r.청구운임) - toInt(r.기사운임) - toInt(r.지게차비용)).toLocaleString()}</td>
                 </tr>
               ))}
             </tbody>
@@ -49571,7 +49591,7 @@ const tableData = React.useMemo(() => {
           if (!ym) return;
           if (!monthly[ym]) monthly[ym] = { sale: 0, profit: 0, cnt: 0 };
           monthly[ym].sale   += toInt(r.청구운임);
-          monthly[ym].profit += toInt(r.청구운임) - toInt(r.기사운임);
+          monthly[ym].profit += toInt(r.청구운임) - toInt(r.기사운임) - toInt(r.지게차비용);
           monthly[ym].cnt    += 1;
         });
         const sortedMonths = Object.keys(monthly).sort().slice(-12);
@@ -51095,16 +51115,17 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                 <div className="px-5 py-3">
                   <div className="grid grid-cols-3 gap-x-5 gap-y-1.5">
                     <CpField label="청구운임">
-                      <input autoComplete="off" className={cpInputStyle} value={copyTarget.청구운임 ? Number(copyTarget.청구운임).toLocaleString() : ""} onChange={(e) => { const v = e.target.value.replace(/[^\d]/g, ""); setCopyTarget(p => fareOnU ? fareFormChange(p, "청구운임", v, fareRU.rules) : ({...p, 청구운임: v})); }} />
+                      <input autoComplete="off" className={cpInputStyle} value={copyTarget.청구운임 ? Number(copyTarget.청구운임).toLocaleString() : ""} onChange={(e) => { const v = e.target.value.replace(/[^\d]/g, ""); setCopyTarget(p => fareOnU ? fareFormChange(p, "청구운임", v, fareRU.rules) : forkliftApply(p, {...p, 청구운임: v}, "청구운임")); }} />
                     </CpField>
                     <CpField label="기사운임">
-                      <input autoComplete="off" className={cpInputStyle} value={copyTarget.기사운임 ? Number(copyTarget.기사운임).toLocaleString() : ""} onChange={(e) => { const v = e.target.value.replace(/[^\d]/g, ""); setCopyTarget(p => fareOnU ? fareFormChange(p, "기사운임", v, fareRU.rules) : ({...p, 기사운임: v})); }} />
+                      <input autoComplete="off" className={cpInputStyle} value={copyTarget.기사운임 ? Number(copyTarget.기사운임).toLocaleString() : ""} onChange={(e) => { const v = e.target.value.replace(/[^\d]/g, ""); setCopyTarget(p => fareOnU ? fareFormChange(p, "기사운임", v, fareRU.rules) : forkliftApply(p, {...p, 기사운임: v}, "기사운임")); }} />
                     </CpField>
                     <CpField label="수수료">
-                      <div className={`h-9 flex items-center justify-end bg-[#EEF2F8] border border-[#DCE4F0] rounded-lg px-2.5 font-black text-[15px] whitespace-nowrap tabular-nums ${(Number(copyTarget.청구운임 || 0) - Number(copyTarget.기사운임 || 0)) < 0 ? "text-red-600" : "text-[#1B2B4B]"}`}>
-                        {(Number(copyTarget.청구운임 || 0) - Number(copyTarget.기사운임 || 0)).toLocaleString()} 원
+                      <div className={`h-9 flex items-center justify-end bg-[#EEF2F8] border border-[#DCE4F0] rounded-lg px-2.5 font-black text-[15px] whitespace-nowrap tabular-nums ${(Number(copyTarget.청구운임 || 0) - Number(copyTarget.기사운임 || 0) - fkAmount(copyTarget)) < 0 ? "text-red-600" : "text-[#1B2B4B]"}`}>
+                        {(Number(copyTarget.청구운임 || 0) - Number(copyTarget.기사운임 || 0) - fkAmount(copyTarget)).toLocaleString()} 원
                       </div>
                     </CpField>
+                    <div className="col-span-full"><ForkliftFeeRow form={copyTarget} setForm={setCopyTarget} /></div>{/* 🏗 2026-11-09 지게차비용 */}
                     <CpField label="지급방식">
                       <CompanyOptionPicker optKey="지급방식" placeholder="선택" noneLabel="선택" className={cpInputStyle} value={copyTarget?.지급방식 ?? ""} onChange={(__v) => ((e) => setCopyTarget(p => ({...p, 지급방식: e.target.value})))({ target: { value: __v } })} disabled={copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile"} />
                     </CpField>
@@ -56055,7 +56076,7 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
       case "기사운임": return toInt(r.기사운임);
       case "부가세(10%)": return Math.round(toInt(r.기사운임) * vatRate);
       case "산재보험료": return Math.round(toInt(r.기사운임) * insuranceRate / 100);
-      case "수수료": return toInt(r.청구운임) - toInt(r.기사운임);
+      case "수수료": return toInt(r.청구운임) - toInt(r.기사운임) - toInt(r.지게차비용);
       case "지급상태": return r.지급상태 || "지급중";
       default: return r[key];
     }
@@ -56119,7 +56140,7 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
       거래처명: r.거래처명 || "", 상차지명: r.상차지명 || "", 하차지명: r.하차지명 || "",
       차량번호: r.차량번호 || "", 기사명: r.이름 || "", 전화번호: r.전화번호 || "",
       청구운임: toInt(r.청구운임), 기사운임: toInt(r.기사운임),
-      수수료: toInt(r.청구운임) - toInt(r.기사운임),
+      수수료: toInt(r.청구운임) - toInt(r.기사운임) - fkAmount(r), // 🏗 지게차
       ...(fareRP.on ? { 운임구분: r.운임구분 || "" } : {}),
       지급방식: r.지급방식 || "", 배차방식: r.배차방식 || "", 메모: r.메모 || "",
     }));
@@ -56449,7 +56470,7 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
                   <tr><td colSpan={16} className="text-center py-16 text-gray-500 text-[13px]">조회된 데이터가 없습니다.</td></tr>
                 ) : paySorted.map((r, i) => {
                   const isDone = (r.지급상태 || "지급중") === "지급완료";
-                  const fee = toInt(r.청구운임) - toInt(r.기사운임);
+                  const fee = toInt(r.청구운임) - toInt(r.기사운임) - toInt(r.지게차비용);
                   return (
                     <tr key={r._id || i} className={`${i % 2 === 0 ? "bg-white" : "bg-gray-50/60"} hover:bg-[#EEF3FC]/40 transition`}>
                       <td className="px-3 py-2.5 text-center border-b border-gray-100">
@@ -59111,7 +59132,7 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
                   </div>
                   {cmBiz.multi && (
                     <div className="col-span-2">
-                      <BizPicker biz={cmBiz} value={editClientModal.기본사업자 || ""} onChange={(v) => setEditClientModal(p => ({ ...p, 기본사업자: v }))} label="기본 청구 사업자" />
+                      <BizPicker biz={cmBiz} value={placeNewForm.기본사업자 || ""} onChange={(v) => setPlaceNewForm(p => ({ ...p, 기본사업자: v }))} label="기본 청구 사업자" />{/* ⭐ 2026-11-09 버그수정 — 신규 등록 창이 수정 창 값(editClientModal, 이때는 비어 있음)을 읽어 청구사업자가 여러 개인 회사에서 화면 오류가 났다 */}
                       <div className="text-[11px] text-gray-500 mt-1">이 거래처로 오더를 등록하면 청구 사업자가 자동으로 이걸로 맞춰집니다(등록 화면에서 바꿀 수 있음).</div>
                     </div>
                   )}
@@ -62850,7 +62871,7 @@ export function PcSettleMobile({ dispatchData = [], companyName = "", role = "",
   }, []);
   return (
     <KpSubNav code="SETTLEMENT" title="정산관리" icon="receipt" active={tab} onSelect={setTab}
-      items={[{ key: "거래처정산", label: "거래처정산", en: "BILLING", icon: "receipt" }, { key: "지급관리", label: "용차지급관리", en: "PAYOUT", icon: "wallet" }, { key: "지입정산관리", label: "지입정산관리", en: "FLEET PAY", icon: "wallet" }]}>
+      items={[{ key: "거래처정산", label: "거래처정산", en: "BILLING", icon: "receipt" }, { key: "지급관리", label: "용차지급관리", en: "PAYOUT", icon: "wallet" }, { key: "지입정산관리", label: "지입정산관리", en: "FLEET PAY", icon: "wallet" }, { key: "지게차지급", label: "지게차 지급", en: "FORKLIFT", icon: "wallet" }]}>
       {tab === "거래처정산"
         ? <ClientSettlement dispatchData={dispatchData} setDispatchData={() => {}} userCompany={companyName} clients={clients}
             setClients={(next) => (next || []).forEach(upsertClient)} upsertClient={upsertClient} showAlert={(m) => window.alert(m)}
@@ -62858,6 +62879,8 @@ export function PcSettleMobile({ dispatchData = [], companyName = "", role = "",
             cardImageUploading={cardImageUploading} setCardImageUploading={setCardImageUploading} isViewer={isViewer} />
         : tab === "지급관리"
         ? <PaymentManagement mobile dispatchData={dispatchData} patchDispatch={isViewer ? async () => {} : patchDispatch} companyName={companyName} canEditPayDay={role === "admin" || role === "totalMaster"} />
+        : tab === "지게차지급"
+        ? <ForkliftPayouts orders={dispatchData} patchDispatch={isViewer ? async () => {} : patchDispatch} isViewer={isViewer} />
         : <FleetSettlementMenu dispatchData={dispatchData} companyName={companyName} />}
     </KpSubNav>
   );

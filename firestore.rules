@@ -201,6 +201,20 @@ service cloud.firestore {
       allow create: if coCreate();
       allow update: if coMatch(resource.data) && coKeep();
     }
+    // 🏗 2026-11-09 지게차 기사(계좌 포함) · 거래처+상차지별 지게차 기본값 — 같은 회사 사무 직원만(기사·화주 제외)
+    match /forkliftDrivers/{id} {
+      allow get, list: if coMatch(resource.data) && !(myRole() in ['driver', 'shipper', 'cafeUser']);
+      allow update: if coMatch(resource.data) && coKeep() && !(myRole() in ['driver', 'shipper', 'cafeUser', 'viewer']);
+      allow create: if coCreate() && !(myRole() in ['driver', 'shipper', 'cafeUser', 'viewer']);
+      allow delete: if coMatch(resource.data) && !(myRole() in ['driver', 'shipper', 'cafeUser', 'viewer']);
+    }
+    match /forkliftPresets/{id} {
+      allow get: if resource == null && isApproved() && !(myRole() in ['driver', 'shipper', 'cafeUser']);
+      allow get, list: if coMatch(resource.data) && !(myRole() in ['driver', 'shipper', 'cafeUser']);
+      allow update: if coMatch(resource.data) && coKeep() && !(myRole() in ['driver', 'shipper', 'cafeUser', 'viewer']);
+      allow create: if coCreate() && !(myRole() in ['driver', 'shipper', 'cafeUser', 'viewer']);
+      allow delete: if coMatch(resource.data) && !(myRole() in ['driver', 'shipper', 'cafeUser', 'viewer']);
+    }
     match /fixedClients/{id} {
       allow get, list: if coMatch(resource.data);
       allow update: if coMatch(resource.data) && coKeep();

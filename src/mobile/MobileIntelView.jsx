@@ -302,7 +302,7 @@ function IntelDashboard({ dispatchData, accent = NAVY }) {
   const thisYear  = useMemo(() => dispatchData.filter(d => getY(d.상차일) === cyStr), [dispatchData, cyStr]);
 
   const tmRev  = useMemo(() => thisMonth.reduce((s, d) => s + toInt(d.청구운임), 0), [thisMonth]);
-  const tmProfit = useMemo(() => thisMonth.reduce((s, d) => s + toInt(d.청구운임) - toInt(d.기사운임), 0), [thisMonth]);
+  const tmProfit = useMemo(() => thisMonth.reduce((s, d) => s + toInt(d.청구운임) - toInt(d.기사운임) - toInt(d.지게차비용), 0), [thisMonth]);
   const lmRev  = useMemo(() => lastMonth.reduce((s, d) => s + toInt(d.청구운임), 0), [lastMonth]);
   const cyRev  = useMemo(() => thisYear.reduce((s, d) => s + toInt(d.청구운임), 0), [thisYear]);
   const tmTrend = lmRev > 0 ? ((tmRev - lmRev) / lmRev * 100) : 0;

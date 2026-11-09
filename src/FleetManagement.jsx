@@ -3504,7 +3504,7 @@ function DriverRouteDetailModal({ driver, dispatchData, onClose, role = "" }) {
     const rows = driverOrders.map(r => ({
       상차일: r.상차일 || "", 거래처명: r.거래처명 || "", 상차지명: r.상차지명 || "",
       하차지명: r.하차지명 || "", 차량종류: r.차량종류 || "", 배차상태: r.배차상태 || "",
-      청구운임: toWon(r.청구운임), 기사운임: toWon(r.기사운임), 수수료: toWon(r.청구운임) - toWon(r.기사운임),
+      청구운임: toWon(r.청구운임), 기사운임: toWon(r.기사운임), 수수료: toWon(r.청구운임) - toWon(r.기사운임) - toWon(r.지게차비용),
     }));
     const ws = XLSX.utils.json_to_sheet(rows);
     const wb = XLSX.utils.book_new();
