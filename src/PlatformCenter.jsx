@@ -25,6 +25,7 @@ import { ContractBuilder, ContractList, ContractTemplates } from "./ContractCent
 import { NotifTemplatePanel, LandingPageEditPanel, ShipperForceUpdatePanel } from "./AdminMenu";
 import { AdminSessionsPanel } from "./LoginManager";
 import CompanyResetPanel from "./CompanyResetPanel";
+const SecurityEventsPanel = React.lazy(() => import("./SecurityEventsPanel")); // 🛡 2026-11-09 보안 알림
 const TestSeedPanel = React.lazy(() => import("./TestSeedPanel")); // 🧪 2026-11-08 테스트운송사 가짜 데이터
 import { ContractLifecyclePanel, SubAdminPanel } from "./ContractLifecycle"; // ⭐ 2026-11-06 이용 계약 · 부관리자
 import SheetImportPanel from "./SheetImportPanel";
@@ -95,6 +96,7 @@ const SECTIONS = [
     { key: "tenancy", label: "운송사 분리", en: "ISOLATION", icon: "shield" },
     { key: "sessions", label: "로그인 관리", en: "SESSIONS", icon: "key" },
     { key: "sessionLogs", label: "접속 이력", en: "AUDIT LOG", icon: "history" },
+    { key: "securityEvents", label: "보안 알림", en: "THREATS", icon: "shield" }, // 🛡 2026-11-09 새 기기·해외 IP·새벽 접속·대량 다운로드·퇴사자 차단
     { key: "sheetImport", label: "배차일지 가져오기", en: "IMPORT", icon: "sheet" },
     { key: "subAdmin", label: "부관리자", en: "SUB ADMIN", icon: "key" }, // ⭐ 2026-11-06 부관리자 목록 · 지정/해제
     { key: "companyReset", label: "운송사 초기화", en: "RESET", icon: "trash" },
@@ -148,6 +150,7 @@ function TodayPanel({ go }) {
   const contracts = useCol("contracts");
   const inquiries = useCol("landingInquiries");
   const planReqs = useCol("planRequests");
+  const secEvents = useCol("securityEvents", "atMs", 100); // 🛡 2026-11-09 확인 안 한 보안 알림(높음·보통)
   const invoices = useCol("platformInvoices", null);
   const [apps, setApps] = React.useState([]);
   React.useEffect(() => onSnapshot(collection(db, "companyApplications"), (s) => setApps(s.docs.map((d) => d.data())), () => {}), []);
@@ -156,6 +159,7 @@ function TodayPanel({ go }) {
   const tasks = [
     // ⭐ 2026-11-02 원격지원 — 직원의 원격 지원 요청(승인 대기)을 맨 위에
     ...(live?.pending.support || []).map((r) => ({ code: "HELP", text: `${normCo(r.companyName) || "운송사"} ${r.name || ""} 원격 지원 요청`, sub: `${r.method === "remote" ? "원격 프로그램" : "화면 공유"} · ${String(r.message || "").slice(0, 40)}`, to: "support", lv: 3 })),
+    ...(secEvents || []).filter((e) => !e.ack && (e.level === "high" || e.level === "medium")).slice(0, 5).map((e) => ({ code: "SEC", text: `보안 알림 — ${e.company || "-"} ${e.name || e.email || ""} · ${({ new_device: "새 기기 로그인", foreign_ip: "해외 IP 접속", night_login: "새벽 접속", bulk_download: "대량 다운로드" })[e.type] || e.type}`, sub: e.detail || "", to: "securityEvents", lv: e.level === "high" ? 1 : 2 })),
     ...(planReqs || []).filter((r) => r.status === "요청").map((r) => ({ code: "PLAN", text: `${r.company} 요금제 변경 요청 → ${r.toName || r.to}`, sub: `${r.byName || r.by || ""} · 청구 › 수납 관리에서 요금제 지정`, to: "payments", lv: 2 })),
     ...(invoices || []).filter((v) => v.payNotice && v.status !== "입금완료").map((v) => ({ code: "PAID?", text: `${v.company} 입금 알림 — ${Number(v.amount || 0).toLocaleString()}원 (${v.month})`, sub: `${v.payNotice.name || ""} ${v.payNotice.date || ""} · 통장 확인 후 입금완료 처리`, to: "payments", lv: 2 })),
     ...(inquiries || []).filter((q) => !q.status || q.status === "신규").map((q) => ({ code: "LEAD", text: `${q.companyName || "업체"} 도입 문의 — 아직 연락 전`, sub: q.phone || "", to: "inquiries", lv: 2 })),
@@ -1215,6 +1219,7 @@ function PlatformCenterInner({ user }) {
   else if (tab === "landingEdit") body = <><Hero en="OPERATIONS · LANDING" title="랜딩페이지 편집" desc="로그인 전 홈페이지 문구·이미지를 바꿉니다." /><LandingPageEditPanel /></>;
   else if (tab === "sessions") body = <><Hero en="SECURITY · SESSIONS" title="로그인 관리" desc="지금 로그인 중인 모든 기기를 보고, 필요하면 강제로 내보냅니다." /><AdminSessionsPanel isTotalMaster company="" /></>;
   else if (tab === "sessionLogs") body = <SessionLogsPanel />;
+  else if (tab === "securityEvents") body = <React.Suspense fallback={<div className="py-16 text-center text-[#9AA9C3]">불러오는 중…</div>}><SecurityEventsPanel /></React.Suspense>;
   else if (tab === "tenancy") body = <TenancyPanel />;
   else if (tab === "sheetImport") body = <><Hero en="DATA · IMPORT" title="배차일지 가져오기" desc="구글시트·엑셀 배차일지를 운송사 데이터로 옮깁니다(초기 세팅용)." /><SheetImportPanel /></>;
   // ⭐ 2026-11-06 운송사 초기화는 이제 관리센터에서만(배차 프로그램 관리자메뉴에서 뺐다) — 계약종료 + 초기화는 계약 › 이용 계약·만료

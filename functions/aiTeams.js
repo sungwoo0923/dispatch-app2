@@ -212,6 +212,19 @@ const TOOLS = {
       return { totalSessions: list.length, people: Object.keys(byUser).length, byCompany: byCo, manyDevices: multi };
     },
   },
+  get_security_events: {
+    description: "보안 이벤트(securityEvents) — 새 기기 로그인·해외 IP 접속·새벽 접속·짧은 시간 대량 다운로드·퇴사자 계정 차단. 위험도(high/medium/low)·확인 여부(ack)·회사·사람·IP·국가·기기. 최근 순.",
+    input_schema: { type: "object", properties: { days: { type: "integer", description: "최근 며칠(기본 7, 최대 60)" }, type: { type: "string", enum: ["new_device", "foreign_ip", "night_login", "bulk_download", "resign_block", "rehire_unblock"] }, unackedOnly: { type: "boolean" } } },
+    async run(db, { days = 7, type, unackedOnly } = {}) {
+      const since = Date.now() - Math.min(60, Math.max(1, Number(days) || 7)) * 864e5;
+      let list = docs(await db.collection("securityEvents").orderBy("atMs", "desc").limit(500).get()).filter((e) => (Number(e.atMs) || 0) >= since);
+      if (type) list = list.filter((e) => e.type === type);
+      if (unackedOnly) list = list.filter((e) => !e.ack);
+      const byType = {}; const byLevel = {};
+      list.forEach((e) => { byType[e.type] = (byType[e.type] || 0) + 1; byLevel[e.level] = (byLevel[e.level] || 0) + 1; });
+      return { total: list.length, unacked: list.filter((e) => !e.ack).length, byType, byLevel, rows: list.slice(0, 200).map((e) => ({ at: kstStr(Number(e.atMs) || tsMs(e.at)), type: e.type, level: e.level, company: e.company || "", name: e.name || "", email: e.email || "", role: e.role || "", ip: e.ip || "", country: e.country || "", device: e.ua || "", detail: e.detail || "", ack: !!e.ack })) };
+    },
+  },
   get_platform_notices: {
     description: "플랫폼 공지(전체·회사별로 보낸 공지) 최근 목록.",
     input_schema: { type: "object", properties: { limit: { type: "integer", description: "기본 20, 최대 100" } } },
@@ -257,8 +270,8 @@ const TEAMS = {
   },
   security: {
     name: "보안팀",
-    tools: ["get_session_logs", "get_active_sessions", "get_companies_overview"],
-    role: "당신은 보안팀장이다. 로그인 기록과 접속 세션을 점검해 이상 징후(새벽 시간대 접속, 짧은 시간 여러 IP·기기, 한 계정의 과다 기기, 퇴사자·승인 대기 계정 활동 등)를 찾는다. 위험도(높음/보통/낮음)를 붙여 보고하고, 필요한 조치(관리자센터 › 보안·데이터 › 로그인 관리에서 강제 로그아웃 등)를 제안한다. 근거 없이 단정하지 않는다.",
+    tools: ["get_security_events", "get_session_logs", "get_active_sessions", "get_companies_overview"],
+    role: "당신은 보안팀장이다. 먼저 보안 이벤트(get_security_events — 새 기기·해외 IP·새벽 접속·짧은 시간 대량 다운로드·퇴사자 차단, 확인 안 한 건 우선)를 보고, 로그인 기록과 접속 세션을 점검해 이상 징후(새벽 시간대 접속, 짧은 시간 여러 IP·기기, 한 계정의 과다 기기, 퇴사자·승인 대기 계정 활동 등)를 찾는다. 위험도(높음/보통/낮음)를 붙여 보고하고, 필요한 조치(관리자센터 › 보안·데이터 › 로그인 관리에서 강제 로그아웃 등)를 제안한다. 근거 없이 단정하지 않는다.",
   },
   marketing: {
     name: "홍보팀",

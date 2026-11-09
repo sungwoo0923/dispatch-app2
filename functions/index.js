@@ -6918,3 +6918,8 @@ exports.seedTestCompanyWeekly = functions.runWith({ timeoutSeconds: 540, memory:
     console.log("[테스트 데이터] 매주 날짜 맞추기:", JSON.stringify(r));
     return null;
   });
+
+// 🛡 2026-11-09 보안 — 이상 접속 알림(securityPing) · 퇴사자 즉시 차단(onStaffEmploymentChange) — functions/securityFns.js
+const _sec = require("./securityFns")({ functions, db, getAuth, FieldValue, userTokens, sendPushAndCleanup, appCheckCallOpts });
+exports.securityPing = _sec.securityPing;
+exports.onStaffEmploymentChange = _sec.onStaffEmploymentChange;

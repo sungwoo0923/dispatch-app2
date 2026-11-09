@@ -80,6 +80,7 @@ const ShipperSignup = React.lazy(() => import("./shipper/ShipperSignup"));
 const ShipperPending = React.lazy(() => import("./shipper/ShipperPending"));
 
 import NoAccess from "./NoAccess";
+import { securityLoginPing } from "./securityWatch"; // 🛡 2026-11-09 이상 접속 알림
 const UploadPage = React.lazy(() => import("./UploadPage"));
 const DriverSearchPage = React.lazy(() => import("./DriverSearchPage"));
 const ShortLinkRedirect = React.lazy(() => import("./ShortLinkRedirect"));
@@ -754,6 +755,7 @@ export default function App() {
               event: "login",
               at: serverTimestamp(),
             }).then(pruneSessionLogs).catch(() => {});
+            securityLoginPing(u.uid, loginInfo.companyName); // 🛡 2026-11-09 새 기기·해외 IP·새벽 접속 판정(서버)
           }
           // approved !== false allows old accounts (undefined) and explicitly true
           // only blocks accounts explicitly set to false (new unapproved signups)

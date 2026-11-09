@@ -1212,6 +1212,17 @@ service cloud.firestore {
       allow read: if isTotalMasterUser();
       allow write: if false;
     }
+    // 🛡 2026-11-09 보안 이벤트(이상 접속·대량 다운로드·퇴사자 차단) — 기록은 서버(securityPing·퇴사 트리거)만,
+    //  최고관리자·부관리자는 보고 "확인 처리(ack·ackBy·ackAt)"만 할 수 있다 · 사람별 판정 기준(securityProfiles)은 서버만
+    match /securityEvents/{docId} {
+      allow read: if isTotalMasterUser();
+      allow update: if isTotalMasterUser()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['ack', 'ackBy', 'ackAt']);
+      allow create, delete: if false;
+    }
+    match /securityProfiles/{uid} {
+      allow read, write: if false;
+    }
     // 서버 사용량(Cloud Monitoring 수집 결과) — 쓰기는 서버(Cloud Functions)만, 읽기는 최고관리자만
     match /platformUsage/{docId} {
       allow read: if isTotalMasterUser();

@@ -27,7 +27,7 @@ export const AI_TEAMS = [
     access: ["원격 지원", "가입 신청", "고객사 현황", "접속 세션", "플랫폼 공지"],
     quick: ["오늘 처리해야 할 대기 건 전부 정리해줘", "승인 대기 중인 직원이 많은 운송사는?", "지금 접속이 없는 고객사(이탈 위험) 찾아줘"] },
   { key: "security", code: "SEC", name: "보안팀", en: "SECURITY", icon: "shield", desc: "로그인 기록 · 접속 세션 · 이상 징후 점검",
-    access: ["접속 이력", "접속 세션", "고객사 현황"],
+    access: ["보안 이벤트", "접속 이력", "접속 세션", "고객사 현황"],
     quick: ["최근 24시간 로그인 이상 징후 점검해줘", "기기를 너무 많이 쓰는 계정 있어?", "최근 7일 새벽 시간대 접속 기록 확인해줘"] },
   { key: "marketing", code: "MKT", name: "홍보팀", en: "MARKETING", icon: "send", desc: "홍보 아이디어 · 홈페이지 문구 · 공지·SNS 초안",
     access: ["도입 문의", "플랫폼 공지", "고객사 현황"],
@@ -151,7 +151,7 @@ function saveChat(team, v) {
 
 const TOOL_LABEL = {
   get_invoices: "청구서", get_billing_estimate: "청구 계산서", get_pricing: "요금표", get_company_plans: "요금제", get_plan_requests: "요금제 변경 요청", get_inquiries: "도입 문의", get_sales_quotes: "견적서",
-  get_applications: "가입 신청", get_support_requests: "원격 지원", get_companies_overview: "고객사 현황", get_session_logs: "접속 이력", get_active_sessions: "접속 세션", get_platform_notices: "플랫폼 공지",
+  get_applications: "가입 신청", get_support_requests: "원격 지원", get_companies_overview: "고객사 현황", get_security_events: "보안 이벤트", get_session_logs: "접속 이력", get_active_sessions: "접속 세션", get_platform_notices: "플랫폼 공지",
 };
 
 // ═══════════════════════ 팀 대화 화면 ═══════════════════════
