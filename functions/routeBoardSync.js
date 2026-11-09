@@ -42,14 +42,6 @@ function tabDate(title, year, loose = false) {
   if (m && +m[1] <= 12 && +m[2] <= 31) return `${year}-${pad(m[1])}-${pad(m[2])}`;
   return "";
 }
-// 🔗 2026-11-10 연도가 없는 탭 이름("01-03" · "1월3일" · "0103") — 오늘에서 가장 가까운 해로(예전엔 늘 올해라 12월 말엔 1월 탭, 1월 초엔 12월 탭을 못 읽었다)
-function nearTabDate(title, today, loose = false) {
-  const y = +String(today).slice(0, 4);
-  const d0 = tabDate(title, y, loose);
-  if (!d0 || /^\s*\d{2,4}[-./]\d{1,2}[-./]\d{1,2}/.test(cell(title))) return d0; // 연도가 적힌 탭은 그대로
-  const t0 = Date.parse(`${today}T00:00:00Z`);
-  return [y - 1, y, y + 1].map((yy) => tabDate(title, yy, loose)).filter(Boolean).sort((a, b) => Math.abs(Date.parse(`${a}T00:00:00Z`) - t0) - Math.abs(Date.parse(`${b}T00:00:00Z`) - t0))[0] || d0;
-}
 // 칸을 누가 입력하나 — 화면(routeBoardSheet.ownerOf)과 같은 기준
 const CARRIER_FIELDS = new Set(["차량번호", "이름", "전화번호", "상차시간", "하차시간", "청구운임", "기사운임", "차량톤수", "차량종류"]);
 function ownerOf(c) {
@@ -214,7 +206,7 @@ async function syncBoard({ db, FieldValue, form: form0, readTabs, readTab, write
   const monthMode = M.isMonthBoard(form);
   let tabs = form.fixedTab ? allTabs.filter((t) => t === form.fixedTab)
     : monthMode ? M.boardTabsInRange(form, allTabs, from, to)
-    : allTabs.filter((t) => { const d = nearTabDate(t, range ? from : today); return d && d >= from && d <= to; }); // 탭 이름 날짜 = 입고일
+    : allTabs.filter((t) => { const d = tabDate(t, y) || tabDate(t, y + 1); return d && d >= from && d <= to; }); // 탭 이름 날짜 = 입고일
   // 🔗 2026-11-08 월별 탭 양식인데 이번 달 탭이 아직 없으면(지난해 시트 · 달 바뀜 직후) 가장 최근 달 탭의 마지막 7일치를 맞춘다
   //  (예전엔 아무 탭도 안 읽어서 "시트를 고쳐도 프로그램에 안 들어오고, 프로그램에서 고쳐도 시트에 안 써지는" 상태였다)
   let lastDays = 0;
@@ -231,14 +223,11 @@ async function syncBoard({ db, FieldValue, form: form0, readTabs, readTab, write
   try { const cs = await db.collection("routeCarrierSettings").doc(co).get(); carrierSet = cs.exists ? cs.data() || null : null; } catch { carrierSet = null; }
   const rateMap = CF.rateMapOf(carrierSet);
   const farePatchOf = (o, patch) => (rateMap.size || o?.기사운임자동 ? CF.carrierFarePatch(CF.mergedOrder(o, patch), carrierSet, rateMap) : null);
-  let places = null; let drivers = null; let clientBiz = null;
+  let places = null; let drivers = null;
   const loadLookups = async () => {
     if (places) return;
-    const [p, d, cl] = await Promise.all([db.collection("places").where("companyName", "==", co).get(), db.collection("drivers").where("companyName", "==", co).get(),
-      db.collection("clients").where("companyName", "==", co).get().catch(() => ({ docs: [] }))]);
+    const [p, d] = await Promise.all([db.collection("places").where("companyName", "==", co).get(), db.collection("drivers").where("companyName", "==", co).get()]);
     places = p.docs.map((x) => x.data()); drivers = d.docs.map((x) => x.data()).filter((x) => x.차량번호);
-    // 🏢 2026-11-10 여러 사업자(태진·위드·가나) — 거래처의 기본 청구 사업자(clients.기본사업자) → 시트에서 만든 오더에도(예전엔 늘 기본 사업자로 잡혔다)
-    clientBiz = new Map(); cl.docs.forEach((x) => { const c = x.data() || {}; const b = cell(c.기본사업자); if (b) clientBiz.set(nm(c.거래처명 || c.업체명), b); });
   };
   const sum = { tabs: 0, created: 0, updated: 0, gone: 0, dates: [] };
   const hashes = { ...(form.syncHash || {}) };
@@ -249,9 +238,7 @@ async function syncBoard({ db, FieldValue, form: form0, readTabs, readTab, write
     let inDate; let date;
     if (mDate) { date = mDate; inDate = addDays(mDate, toInt(form.dropOffset)); }
     else {
-      const tabD = nearTabDate(tab, range ? from : today, !!form.fixedTab);
-      // ⚠ 2026-11-10 "날짜 하나 = 입고일" 규칙은 되돌림 — 기존 오더는 상차일로 찾기 때문에, 이 규칙이 켜지면
-      //  탭마다 하루 앞(전날 탭)의 오더를 잡아 고정노선현황에서 그 날 오더가 사라졌다(태진 26-11-10). 예전 규칙 그대로 둔다.
+      const tabD = tabDate(tab, y, !!form.fixedTab) || tabDate(tab, y + 1, !!form.fixedTab);
       inDate = p.date2 || tabD || ""; // 입고일(하차일)
       date = p.date || (tabD ? addDays(tabD, -toInt(form.dropOffset)) : ""); // 발주일(상차일)
       const chk = inDate || date;
@@ -270,38 +257,14 @@ async function syncBoard({ db, FieldValue, form: form0, readTabs, readTab, write
     const batch = db.batch(); let ops = 0; const pushes = []; const appends = []; const goneAll = [];
     for (const g of form.groups) {
       const mine = orders.filter((o) => (o.배차표묶음 || form.groups[0].name) === g.name).sort((a, b) => (a.배차표순번 || 0) - (b.배차표순번 || 0));
-      // 🔗 2026-11-10 줄 맞추기 열쇠 = 시트에서 마지막으로 본 도착지(시트도착지) — 예전엔 프로그램 하차지명이라
-      //  고정노선현황에서 도착지 글자를 고치면 다음 맞춤에서 "시트에서 지워진 줄"로 오더가 삭제되고 새 오더가 다시 생겼다(차량·기사·운임이 날아감)
-      const keyOf = (o) => nm(o.시트도착지 || o.하차지명);
-      const pool = {}; mine.forEach((o) => { const k = keyOf(o); (pool[k] = pool[k] || []).push(o); });
+      const pool = {}; mine.forEach((o) => { const k = nm(o.하차지명); (pool[k] = pool[k] || []).push(o); });
       const matched = new Set();
       let seq = mine.reduce((a, o) => Math.max(a, o.배차표순번 || 0), 0);
-      const rowsG = (p.groups[g.name] || []).filter((v) => nm(v[nameCol.id]));
-      const pre = rowsG.map((v) => (pool[nm(v[nameCol.id])] || []).shift() || null);
-      // 🔗 2026-11-10 도착지 글자만 바뀐 줄(시트에서 오타 고침 등) — 같은 줄 위치 + 같은 주소(주소 칸이 없으면 같은 수량)면 같은 오더로 본다
-      const byRow = new Set();
-      {
-        const taken = new Set(pre.filter(Boolean).map((o) => o.ref.path));
-        const addrCol = form.columns.find((c) => c.kind === "field" && c.field === "하차지주소");
-        const qtyCols = form.columns.filter((c) => c.kind === "qty");
-        const looksSame = (o, v) => {
-          const base = o.시트기준값 || {};
-          if (addrCol && v.__pos?.idx?.[addrCol.id] != null && base[addrCol.id] != null) return !!nm(cell(v[addrCol.id])) && nm(cell(v[addrCol.id])) === nm(base[addrCol.id]);
-          if (qtyCols.length) return qtyCols.some((c) => toInt(v[c.id])) && qtyCols.every((c) => toInt(v[c.id]) === toInt(base[c.id] ?? o.품목수량?.[c.label]));
-          return false;
-        };
-        rowsG.forEach((v, i) => {
-          if (pre[i] || v.__pos?.ri == null) return;
-          const o = mine.find((x) => !taken.has(x.ref.path) && !x.시트추가대기 && x.시트줄 === v.__pos.ri && looksSame(x, v));
-          if (o) { pre[i] = o; taken.add(o.ref.path); byRow.add(o.ref.path); }
-        });
-      }
-      for (let vi = 0; vi < rowsG.length; vi++) {
-        const v = rowsG[vi];
-        const k = nm(v[nameCol.id]);
-        const o = pre[vi];
+      for (const v of p.groups[g.name] || []) {
+        const k = nm(v[nameCol.id]); if (!k) continue;
+        const o = (pool[k] || []).shift();
         if (!o) {
-          const ci = cancelled.findIndex((x) => (x.배차표묶음 || form.groups[0].name) === g.name && keyOf(x) === k);
+          const ci = cancelled.findIndex((x) => (x.배차표묶음 || form.groups[0].name) === g.name && nm(x.하차지명) === k);
           if (ci >= 0) { cancelled.splice(ci, 1); continue; }
           const tk = tombKey(date, g.name, v[nameCol.id]);
           const tk2 = tombKey(date, "", v[nameCol.id]);
@@ -367,9 +330,6 @@ async function syncBoard({ db, FieldValue, form: form0, readTabs, readTab, write
           if (patch.거래처명) newClients.add(patch.거래처명);
           if (JSON.stringify(base0 || {}) !== JSON.stringify(nextBase)) patch.시트기준값 = nextBase;
           if (o.시트삭제됨) patch.시트삭제됨 = false;
-          { const sName = cell(v[nameCol.id]); // 🔗 2026-11-10 시트에서 도착지를 고친 줄은 프로그램에도 · 프로그램에서 고친 도착지는 그대로
-            if (byRow.has(o.ref.path) && cell(o.하차지명) !== sName) patch.하차지명 = sName;
-            if (o.시트도착지 !== sName) patch.시트도착지 = sName; }
           if (v.__pos && o.시트줄 !== v.__pos.ri) patch.시트줄 = v.__pos.ri; // ⭐ 시트 줄 위치(화면을 시트 순서대로)
           if (o.발주일 !== date) patch.발주일 = date;
           if (inDate && (o.입고일 !== inDate || o.하차일 !== inDate)) { patch.입고일 = inDate; patch.하차일 = inDate; }
@@ -386,7 +346,6 @@ async function syncBoard({ db, FieldValue, form: form0, readTabs, readTab, write
           const rfNew = rateFieldsOf(form, {}, qty, place?.주소 || rec.하차지주소 || "");
           // 🔗 2026-11-08 시트 줄의 거래처명(업체명)·상차지·배차상태가 우선 · 수수료는 프로그램 계산
           const clientName = rec.거래처명 || form.client || "";
-          const bizOf = cell(form.청구사업자) || clientBiz?.get(nm(clientName)) || "";
           if (clientName) newClients.add(clientName);
           const plateNow = drv?.차량번호 || rec.차량번호 || "";
           const st0 = rec.배차상태 && ["배차중", "배차완료", "배차취소"].includes(rec.배차상태) ? rec.배차상태 : "";
@@ -400,7 +359,7 @@ async function syncBoard({ db, FieldValue, form: form0, readTabs, readTab, write
             거래처명: clientName, 상차일: date, 하차일: inDate || addDays(date, toInt(form.dropOffset)), 발주일: date, 입고일: inDate || addDays(date, toInt(form.dropOffset)),
             상차지명: rec.상차지명 || g.상차지명 || g.name || "", 상차지주소: rec.상차지주소 || g.상차지주소 || "", ...(form.payMethod && !rec.지급방식 ? { 지급방식: form.payMethod } : {}),
             배차상태: st0 || (plateNow ? "배차완료" : "배차중"), 배차표Id: form.id, 배차표명: form.name || "", 배차표묶음: g.name, 배차표순번: seq,
-            ...(bizOf && !rec.청구사업자 ? { 청구사업자: bizOf } : {}), companyName: co, _id: id, 시트도착지: cell(v[nameCol.id]), 등록일: kstToday(), 작성자: "배차표 자동", 등록기기: "배차표", _autoSheet: true, 시트동기화: Date.now(), 시트줄: v.__pos?.ri ?? null,
+            companyName: co, _id: id, 등록일: kstToday(), 작성자: "배차표 자동", 등록기기: "배차표", _autoSheet: true, 시트동기화: Date.now(), 시트줄: v.__pos?.ri ?? null,
             시트기준값: Object.fromEntries(form.columns.filter((x) => !["no", "sum", "date", "calc"].includes(x.kind) && !(x.kind === "field" && x.field === "하차지명") && v.__pos?.idx?.[x.id] != null).map((x) => [x.id, cell(v[x.id])])),
             경유지_상차: [], 경유상차목록: [], 경유지_하차: [], 경유하차목록: [], 근무일자목록: [], 운행유형: "편도", 혼적여부: "독차",
             createdAt: FieldValue.serverTimestamp(), _lastModified: Date.now(),
@@ -518,4 +477,4 @@ async function syncBoard({ db, FieldValue, form: form0, readTabs, readTab, write
   return sum;
 }
 
-module.exports = { syncBoard, parseBoardTab, ownerOf, tabDate, nearTabDate, loadHM };
+module.exports = { syncBoard, parseBoardTab, ownerOf, tabDate, loadHM };

@@ -293,7 +293,6 @@ export function FixedRouteCells({ form, row, drivers = [], clients = [], onPatch
     if (c.field === "배차상태" || c.field === "지급방식" || c.field === "배차방식") return onPatch({ [c.field]: enumValue(c.field, val) });
     if (TIME_FIELDS.has(c.field)) return onPatch({ [c.field]: parseHM(val) ? korTime(parseHM(val)) : val });
     if (MONEY_FIELDS.has(c.field)) { const n = toInt(val); const p = { [c.field]: n ? String(n) : "" }; const sale = c.field === "청구운임" ? n : toInt(row.청구운임); const drv = c.field === "기사운임" ? n : toInt(row.기사운임); return onPatch({ ...p, 수수료: String(sale - drv), ...(c.field === "청구운임" ? { 운임수동: !!n } : {}), ...(c.field === "기사운임" ? { 기사운임자동: false } : {}) }); } // 💸 직접 넣은 기사운임 = 자동 계산 멈춤(비우면 다시 자동) // 청구운임을 직접 고치면 단가표 자동 계산 멈춤(비우면 다시 자동)
-    if (c.field === "하차지명" && row.배차표Id && !row.시트도착지) return onPatch({ 하차지명: val, 시트도착지: row.하차지명 || "" }); // 🔗 2026-11-10 시트 줄과 계속 맞도록(예전엔 도착지를 고치면 다음 맞춤에서 오더가 지워졌다)
     return onPatch({ [c.field]: val });
   };
   const has = (f) => hasField(cols, f);
