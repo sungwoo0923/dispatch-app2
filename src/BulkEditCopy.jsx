@@ -8,6 +8,8 @@
 //    등록 전 미리보기(총 N건). 등록은 오더 복사 패널의 [복사 등록]과 같은 함수(onCopyOne = submitCopyOrderPC).
 import React from "react";
 import CustomDatePicker from "./CustomDatePicker";
+import { CustomSelect } from "./CustomSelect"; // ⭐ 2026-11-09 브라우저 기본 select 대신 프로그램 드롭다운
+import { CompanyOptionPicker } from "./companyOptionPicker"; // 지급방식·배차방식은 회사 목록(배차관리와 같은 목록)
 
 const pad = (n) => String(n).padStart(2, "0");
 const ymdOf = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
@@ -68,14 +70,15 @@ const EDIT_FIELDS = [
 function FieldInput({ f, value, onChange, opts }) {
   const v = value ?? "";
   if (f.type === "date") return <CustomDatePicker value={v} onChange={(e) => onChange(e.target.value)} className={`${inp} text-left`} openOnFocus={false} />;
+  if (f.type === "pay" || f.type === "dispatch") return <CompanyOptionPicker optKey={f.type === "pay" ? "지급방식" : "배차방식"} placeholder="-" noneLabel="- (비움)" className={`${sel} text-left`} value={v} onChange={(x) => onChange(x)} />;
   const list = f.type === "time" ? opts.times : f.type === "vehicle" ? opts.vehicles : f.type === "ton" ? opts.tons : f.type === "pay" ? opts.pays : f.type === "dispatch" ? opts.dispatches : null;
   if (list) {
     const all = v && !list.includes(v) ? [v, ...list] : list;
     return (
-      <select className={sel} value={v} onChange={(e) => onChange(e.target.value)}>
+      <CustomSelect className={`${sel} text-left`} value={v} onChange={(e) => onChange(e.target.value)}>
         <option value="">-</option>
         {all.map((o) => <option key={o} value={o}>{o}</option>)}
-      </select>
+      </CustomSelect>
     );
   }
   if (f.type === "money") return <input className={`${inp} text-right`} style={MONO} inputMode="numeric" value={money(v)} onChange={(e) => onChange(digits(e.target.value))} placeholder="0" />;
@@ -92,7 +95,12 @@ export default function BulkEditCopyModal({
   // 스크롤 잠금(뒤 화면이 같이 움직이지 않게) + Esc 닫기
   React.useEffect(() => {
     const prev = document.body.style.overflow; document.body.style.overflow = "hidden";
-    const k = (e) => { if (e.key === "Escape") onClose?.(); };
+    const k = (e) => {
+      if (e.key !== "Escape" || e.defaultPrevented) return;
+      // 드롭다운·달력·확인창이 떠 있으면 그것만 닫히게(창 전체가 닫혀 고친 값이 날아가지 않게) — FleetOrderPanel과 같은 기준
+      if (document.querySelector("[data-kp-popup], [data-opt-menu], [data-vt-menu], [data-vt-dialog], [data-fare-menu], [data-kp-dialog]")) return;
+      onClose?.();
+    };
     window.addEventListener("keydown", k);
     return () => { document.body.style.overflow = prev; window.removeEventListener("keydown", k); };
   }, [onClose]);
@@ -176,18 +184,23 @@ function EditTab({ rows, opts, drivers, patchDispatch, onClose, onDateShift, onL
     const bad = changes.find(([r, c]) => { const p = c.상차일 ?? r.상차일, d = c.하차일 ?? r.하차일; return p && d && d < p; });
     if (bad) { window.alert(`하차일이 상차일보다 빠른 오더가 있습니다: ${bad[0].거래처명 || ""}`); return; }
     setBusy(true);
-    let ok = 0;
+    let ok = 0, skipped = 0;
     try {
       for (const [r, c] of changes) {
         // 기사 정보가 새로 들어가면 배차완료로(patchDispatch가 배차확정일시·기사 알림을 처리)
         const patch = { ...c };
         if ("차량번호" in c && String(c.차량번호 || "").trim() && !String(r.차량번호 || "").trim() && r.배차상태 === "배차중") patch.배차상태 = "배차완료";
-        await patchDispatch(idOf(r), patch, r);
+        const res = await patchDispatch(idOf(r), patch, r);
+        if (res === false) { skipped += 1; continue; } // 휴차 보류·운송완료 기사취소 확인에서 취소
         ok += 1;
       }
-      toast?.(`${ok}건 수정했습니다`, "success");
+      toast?.(`${ok}건 수정했습니다${skipped ? ` · ${skipped}건은 취소됨` : ""}`, "success");
       onClose?.();
-    } catch (e) { window.alert(`저장 중 오류: ${e?.message || e}`); } finally { setBusy(false); }
+    } catch (e) {
+      // 앞에서 저장된 건수를 알려 줘야 다시 눌러 중복 수정하지 않는다
+      window.alert(`${ok ? `${ok}건은 저장됐고, ` : ""}${ok + skipped + 1}번째 오더 저장 중 오류: ${e?.message || e}`);
+      if (ok) onClose?.();
+    } finally { setBusy(false); }
   };
   const allOn = checked.size === rows.length;
   const gridCols = "grid-cols-[repeat(20,minmax(0,1fr))]";
@@ -197,9 +210,9 @@ function EditTab({ rows, opts, drivers, patchDispatch, onClose, onDateShift, onL
         <div className="text-[12px] font-black text-[#1B2B4B] mr-1 self-center">선택 칸 일괄 입력</div>
         <div className="w-[150px]">
           <span className={lab}>칸</span>
-          <select className={sel} value={bulkKey} onChange={(e) => { setBulkKey(e.target.value); setBulkVal(""); }}>
+          <CustomSelect className={`${sel} text-left`} value={bulkKey} onChange={(e) => { setBulkKey(e.target.value); setBulkVal(""); }}>
             {EDIT_FIELDS.map((f) => <option key={f.key} value={f.key}>{f.label}</option>)}
-          </select>
+          </CustomSelect>
         </div>
         <div className="w-[220px]"><span className={lab}>값</span><FieldInput f={bulkField} value={bulkVal} onChange={setBulkVal} opts={opts} /></div>
         <button type="button" onClick={applyBulk} disabled={!checked.size} className="h-[34px] px-4 rounded-lg bg-[#1B2B4B] text-white text-[13px] font-black disabled:opacity-40">체크한 {checked.size}건에 적용</button>
@@ -295,9 +308,12 @@ function CopyTab({ rows, opts, onCopyOne, onClose, isViewer, toast }) {
         if (res === false) break;
         ok += 1; setBusy({ done: ok, total: expanded.length });
       }
-      toast?.(`${ok}건 복사 등록했습니다`, "success");
+      if (ok) toast?.(`${ok}건 복사 등록했습니다${ok < expanded.length ? ` (${expanded.length - ok}건은 등록 안 됨)` : ""}`, "success");
       if (ok === expanded.length) onClose?.();
-    } catch (e) { window.alert(`복사 중 오류: ${e?.message || e}`); } finally { setBusy(null); }
+    } catch (e) {
+      window.alert(`${ok ? `${ok}건은 등록됐고, ` : ""}복사 중 오류: ${e?.message || e}\n같은 오더가 겹치지 않게 배차현황에서 확인 후 남은 건만 다시 복사해 주세요.`);
+      if (ok) onClose?.();
+    } finally { setBusy(null); }
   };
   return (
     <>
@@ -328,9 +344,9 @@ function CopyTab({ rows, opts, onCopyOne, onClose, isViewer, toast }) {
                   <div className="col-span-3"><span className={lab}>하차일{keepGap ? ` (+${p.gap}일)` : ""}</span><CustomDatePicker value={p.하차일} min={p.상차일} disabled={keepGap} onChange={(e) => setPlan(i, { 하차일: e.target.value })} className={`${inp} text-left`} openOnFocus={false} /></div>
                   <div className="col-span-2"><span className={lab}>하차시간</span><FieldInput f={{ type: "time" }} value={p.하차시간} onChange={(v) => setPlan(i, { 하차시간: v })} opts={opts} /></div>
                   <div className="col-span-2"><span className={lab}>복사 횟수</span>
-                    <select className={sel} value={p.count} onChange={(e) => setPlan(i, { count: Number(e.target.value) })}>
+                    <CustomSelect className={`${sel} text-left`} value={p.count} onChange={(e) => setPlan(i, { count: Number(e.target.value) })}>
                       {Array.from({ length: 31 }, (_, k) => k + 1).map((n) => <option key={n} value={n}>{n === 1 ? "1건" : `${n}일 연속`}</option>)}
-                    </select>
+                    </CustomSelect>
                   </div>
                 </div>
                 <div className="mt-2 flex flex-wrap items-center gap-1.5">

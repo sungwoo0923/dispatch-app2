@@ -33,6 +33,8 @@ import InternalMessenger from "../InternalMessenger";
 import { subscribeOrderSync, deleteOrderWithLog, historyStartDate, pcLiveWindowStart } from "../orderHistory";
 import CustomDatePicker from "../CustomDatePicker";
 import { askCopyDates } from "../CopyCountDialog"; // ⭐ 2026-11-06 오더 복사 — 몇 건·건별 날짜
+// ⭐ 2026-11-09 PC 등록 오더는 혼적여부 없이 혼적(true/false)만 저장한다 — 모바일 수정·복사창이 "독차"로 읽어 저장 때 혼적이 꺼지던 문제
+const mixLabelOf = (o) => o?.혼적여부 || (o?.혼적 === true ? "혼적" : "독차");
 // 💬 2026-11-08 사장님 요청 — 카카오 알림톡은 PC·모바일 화면에서 모두 뺐다(새 오더는 알림톡:false → 서버 트리거가 보내지 않는다)
 import { UrgentBadge, URGENT_BAR, URGENT_TINT } from "../urgentOrder"; // ⭐ 2026-11-06 긴급 오더 강조
 import MobileSelect from "./MobileSelect"; // ⭐ 2026-11-02 기본 select → 남색 바텀시트 선택기
@@ -4689,6 +4691,7 @@ const groupedByDate = useMemo(() => {
       배차방식: (form.차량번호 || "").trim() ? (form.배차방식 || "") : "선택없음",
       혼적여부: form.혼적여부 || "독차",
       혼적: form.혼적여부 === "혼적",   // ← PC boolean 호환
+      ...(form.혼적여부 === "혼적" ? { 독차: false } : {}), // ⭐ 2026-11-09 PC에서 독차로 저장된 오더를 모바일에서 혼적으로 바꾸면 독차 표시가 남던 문제
       긴급: form.긴급 === true,          // ← PC 긴급 버튼과 동일 필드
       ...(canSeeBlind() ? { 블라인드: form.블라인드 === true } : {}), // ★ 최고관리자 전용 블라인드
       운행유형: form.운행유형 || "",     // ← PC 왕복/편도 버튼과 동일 필드
@@ -5008,12 +5011,13 @@ const handleOrderDuplicate0 = (order, plan = null) => {
     기사운임: 0,
     수수료: 0,
     산재보험료: 0,
+    ...(order.운임구분 ? { 운임구분: order.운임구분, 운임수동: false, ...(order.운임구분수수료율 != null && order.운임구분수수료율 !== "" ? { 운임구분수수료율: order.운임구분수수료율 } : {}) } : {}), // ⭐ 2026-11-09 기사 없이 복사해도 운임구분·오더별 수수료율 유지(기사 포함 복사와 같게)
 
     차량번호: "",
     기사명: "",
     전화번호: "",
 
-    혼적여부: order.혼적여부 || "독차",
+    혼적여부: mixLabelOf(order),
     긴급: order.긴급 === true,
     운행유형: order.운행유형 || "",
     회전수: Number(order.회전수) > 1 ? Number(order.회전수) : 1,
@@ -5085,7 +5089,7 @@ const handleOrderDuplicateWithDriver0 = (order, plan = null) => {
     차량번호: order.차량번호 || "",
     기사명: order.기사명 || "",
     전화번호: order.전화번호 || "",
-    혼적여부: order.혼적여부 || "독차",
+    혼적여부: mixLabelOf(order),
     긴급: order.긴급 === true,
     운행유형: order.운행유형 || "",
     회전수: Number(order.회전수) > 1 ? Number(order.회전수) : 1,
@@ -12426,7 +12430,7 @@ function MobileOrderDetail({
       산재보험료: order.산재보험료 || 0,
       ...(order.운임구분 ? { 운임구분: order.운임구분, 운임수동: !!order.운임수동, ...(order.운임구분수수료율 != null && order.운임구분수수료율 !== "" ? { 운임구분수수료율: order.운임구분수수료율 } : {}) } : {}), // ⭐ 2026-11-02 운임규칙 · 2026-11-09 오더별 수수료율
       차량번호: order.차량번호 || "",
-      혼적여부: order.혼적여부 || "독차",
+      혼적여부: mixLabelOf(order),
       긴급: order.긴급 === true,
       운행유형: order.운행유형 || "",
       회전수: Number(order.회전수) > 1 ? Number(order.회전수) : 1,
@@ -12913,7 +12917,7 @@ const handleAssignClick = () => {
       수수료: (Number(order.청구운임) || 0) - (Number(order.기사운임) || 0),
       산재보험료: order.산재보험료 || 0, 차량번호: carNo || "",
       ...(order.운임구분 ? { 운임구분: order.운임구분, 운임수동: !!order.운임수동, ...(order.운임구분수수료율 != null && order.운임구분수수료율 !== "" ? { 운임구분수수료율: order.운임구분수수료율 } : {}) } : {}), // ⭐ 2026-11-02 운임규칙 · 2026-11-09 오더별 수수료율
-      혼적여부: order.혼적여부 || "독차", 긴급: order.긴급 === true, 운행유형: order.운행유형 || "", 회전수: Number(order.회전수) > 1 ? Number(order.회전수) : 1,
+      혼적여부: mixLabelOf(order), 긴급: order.긴급 === true, 운행유형: order.운행유형 || "", 회전수: Number(order.회전수) > 1 ? Number(order.회전수) : 1,
       적요: order.메모 || "",
       전달사항: order.전달사항 || "",
       전달사항고정: order.전달사항고정 === true,
@@ -12932,7 +12936,7 @@ const handleAssignClick = () => {
     (order.차량톤수 || order.톤수) && { k: "톤수", v: hasWaypointCargo && totalKg > 0 ? toTonUnit(`${totalKg}kg`) : toTonUnit(order.차량톤수 || order.톤수) },
     order.화물내용 && { k: "화물", v: hasWaypointCargo && totalPallet > 0 ? `${totalPallet}파레트` : order.화물내용 },
     (order.차량종류 || order.차종) && { k: "차종", v: order.차량종류 || order.차종 },
-    order.혼적여부 && order.혼적여부 !== "독차" && { k: "혼적", v: order.혼적여부 },
+    mixLabelOf(order) !== "독차" && { k: "혼적", v: mixLabelOf(order) },
     { k: "배차방식", v: order.배차방식 || "-" },
     { k: "지급방식", v: order.지급방식 || "-" },
     order.운임구분 && { k: "운임구분", v: `${order.운임구분}${order.운임수동 ? " · 수동" : ""}` }, // ⭐ 2026-11-02 운임규칙
@@ -18250,7 +18254,7 @@ const pickDrop = (c) => {
                   배차방식: o.배차방식 || "",
                   // 청구운임은 새로 등록하는 오더이므로 이전 오더 값을 그대로
                   // 가져오면 안 되고, 사용자가 직접 새로 입력해야 한다.
-                  혼적여부: o.혼적여부 || "독차",
+                  혼적여부: mixLabelOf(o),
                 }));
                 setShowOrderCopyModal(false);
                 // ⭐ 2026-10-28 — 불러온 상/하차지에 담당자가 여러 명이면 담당자 선택창을 먼저(PC 오더복사와 동일)
@@ -22031,7 +22035,7 @@ function CanceledOrderDetailModal({ order: o, cardVersionB = false, mobileUsers 
           <Row label="톤수/차종" value={[o.톤수 || o.차량톤수, o.차종 || o.차량종류].filter(Boolean).join(" / ")} />
           <Row label="화물내용" value={o.화물내용} />
           <Row label="상/하차방법" value={[o.상차방법, o.하차방법].filter(Boolean).join(" / ")} />
-          <Row label="혼적여부" value={o.혼적여부} />
+          <Row label="혼적여부" value={mixLabelOf(o)} />
         </Section>
 
         <Section title="배차정보">

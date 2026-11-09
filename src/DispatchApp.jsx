@@ -2787,6 +2787,16 @@ const submitCopyOrderPC = async (copyTarget, approvedShippers, cargoOverride) =>
   delete payload._transmittedToShipper;
   delete payload._transmittedAt;
   delete payload._gsheetSync; // ★ 원본의 구글시트 줄 연결값이 복사본에 딸려가면 원본 줄을 덮어쓰거나 지웠다
+  // 🧹 2026-11-09 원본의 운행·지급 진행값(기사 수락/완료, 상차완료, 지급완료, 수정이력)이 복사본에 딸려가면
+  //  새 오더가 처음부터 "운송완료·지급완료"로 보였다 — 복사본은 새 운행으로 시작
+  ["기사확인상태", "기사확인일시", "기사확인값", "상차완료일시", "하차완료일시", "기사완료일시", "배차확정일시", "배차확정자", "배차완료일시",
+    "지급상태", "지급일", "지게차지급완료", "지게차지급일", "history", "최종수정자", "취소처리일시"].forEach((k) => { delete payload[k]; });
+  if ("상태" in copyTarget) payload.상태 = payload.배차상태;
+  if (payload.배차상태 === "배차완료") {
+    payload.배차완료일시 = Date.now();
+    payload.배차확정일시 = serverTimestamp();
+    payload.배차확정자 = auth.currentUser?.displayName || auth.currentUser?.email?.split("@")[0] || "";
+  }
   // 💬 2026-11-08 알림톡은 화면에서 뺐다 — 복사본은 보내지 않고, 원본 발송 결과도 넘기지 않는다
   payload.알림톡 = false;
   delete payload._알림톡;
@@ -12686,7 +12696,7 @@ const submitMultiRegister = async () => {
   }
   setMultiRegSaving(true);
   try {
-    await Promise.all(multiRegSlots.map(s => {
+    const _mrResults = await Promise.allSettled(multiRegSlots.map(s => {
       const 화물내용 = s.화물수량 ? `${s.화물수량}${s.화물타입 || ""}` : "";
       const 차량톤수 = s.톤수값 ? `${s.톤수값}${s.톤수타입 || ""}` : "";
       // ⭐ 단일 등록폼과 동일: 스마트검색 등으로 아직 기사관리에 없는 차량번호+
@@ -12753,8 +12763,12 @@ const submitMultiRegister = async () => {
         ...슬롯기사확인상태,
       });
     }));
-    setMultiRegOpen(false);
-    showAlert(`${multiRegSlots.length}건 등록되었습니다.`);
+    // ⭐ 2026-11-09 일부만 실패·취소돼도 "N건 등록"으로 보이고, 다시 누르면 성공한 건까지 중복 등록되던 문제 — 건수를 나눠 알린다
+    const _mrOk = _mrResults.filter(r => r.status === "fulfilled" && r.value !== false).length;
+    const _mrErr = _mrResults.find(r => r.status === "rejected");
+    if (_mrOk === multiRegSlots.length) { setMultiRegOpen(false); showAlert(`${_mrOk}건 등록되었습니다.`); }
+    else if (_mrOk > 0) { setMultiRegOpen(false); showAlert(`${_mrOk}건만 등록되었습니다(${multiRegSlots.length - _mrOk}건 실패·취소${_mrErr ? `: ${_mrErr.reason?.message || _mrErr.reason}` : ""}). 중복되지 않게 배차현황에서 확인 후 빠진 건만 다시 등록해 주세요.`); }
+    else if (_mrErr) { showAlert("등록 중 오류가 발생했습니다: " + (_mrErr.reason?.message || _mrErr.reason)); }
   } catch (e) {
     showAlert("등록 중 오류가 발생했습니다: " + (e?.message || e));
   } finally {
@@ -41849,7 +41863,7 @@ return (
       {bulkEditRows && !bulkLegacy && (
         <BulkEditCopyModal rows={bulkEditRows} patchDispatch={patchDispatch} onClose={() => setBulkEditRows(null)} onDateShift={() => setDateShiftRows(bulkEditRows)}
           onLegacyEdit={() => setBulkLegacy(true)} onCopyOne={(o) => submitCopyOrderPC(o, approvedShippers)}
-          drivers={drivers} clients={clients} places={places} timeOptions={timeOptions}
+          drivers={drivers} clients={clients} places={placeRows?.length ? placeRows : places} timeOptions={timeOptions}
           vehicleTypes={withCustomVehicleTypes(VEHICLE_TYPES)} payTypes={PAY_TYPES} dispatchTypes={dropdownList("배차방식", ["24시", "직접배차", "인성", "고정기사", "로지스허브"])}
           isViewer={isViewer} toast={sflowToast} />
       )}

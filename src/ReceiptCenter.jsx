@@ -17,7 +17,9 @@ const colOf = (r) => r?.__col || "orders";
 const srcOf = (a) => a?.base64 || a?.url || "";
 const isImg = (a) => /^data:image\//.test(srcOf(a)) || /^image\//.test(String(a?.type || ""));
 const KINDS = ["인수증", "전표", "하차사진", "기타"];
-const done = (r) => ["배차완료", "운송완료", "하차완료", "완료"].includes(String(r?.배차상태 || "")) || !!r?.운송완료일시 || !!r?.하차완료일시;
+// ⭐ 2026-11-09 '미제출'은 운행이 끝난 오더만 — 배차완료(기사만 정해짐)는 하차일이 지났을 때부터 센다(오늘 막 배차한 오더가 미제출로 잡히던 문제)
+const done = (r) => ["운송완료", "하차완료", "완료"].includes(String(r?.배차상태 || "")) || r?.기사확인상태 === "완료" || !!r?.운송완료일시 || !!r?.하차완료일시
+  || (String(r?.배차상태 || "") === "배차완료" && String(r?.하차일 || r?.상차일 || "") < kstToday());
 const safe = (s) => String(s || "").replace(/[\\/:*?"<>|]/g, "_").trim() || "첨부";
 
 function shrink(file, max = 1600, quality = 0.82) {
@@ -80,8 +82,9 @@ export default function ReceiptCenter({ dispatchData = [], isViewer = false, toa
       for (let i = 0; i < list.length; i += 1) {
         const r = list[i];
         const atts = await loadAtts(r);
-        const folder = zip.folder(safe(`${r.상차일 || ""}_${r.거래처명 || ""}_${r.차량번호 || r.이름 || ""}`));
-        for (let k = 0; k < atts.length; k += 1) { const a = atts[k]; if (!srcOf(a)) continue; folder.file(safe(a.name) || `${k + 1}.${extOf(a)}`, await dataUrlToBlob(srcOf(a))); files += 1; }
+        // 폴더·파일에 순번 — 같은 날·같은 기사 오더가 한 폴더로 섞이거나 같은 이름(사진.jpg 등)끼리 덮어쓰지 않게
+        const folder = zip.folder(safe(`${String(i + 1).padStart(3, "0")}_${r.상차일 || ""}_${r.거래처명 || ""}_${r.차량번호 || r.이름 || ""}`));
+        for (let k = 0; k < atts.length; k += 1) { const a = atts[k]; if (!srcOf(a)) continue; folder.file(`${k + 1}_${a.name ? safe(a.name) : `첨부.${extOf(a)}`}`, await dataUrlToBlob(srcOf(a))); files += 1; }
         setZipBusy(`${i + 1}/${list.length}`);
       }
       if (!files) { window.alert("내려받을 첨부가 없습니다."); return; }
@@ -157,7 +160,7 @@ function ReceiptPanel({ row, isViewer, toast, onZip }) {
   const [busy, setBusy] = React.useState(false);
   const [view, setView] = React.useState(null);
   const inputRef = React.useRef(null);
-  const reload = React.useCallback(() => { setErr(""); loadAtts(row).then(setAtts).catch((e) => { setAtts([]); setErr(e?.code === "permission-denied" ? "이 오더의 첨부를 볼 권한이 없습니다" : "첨부를 불러오지 못했습니다"); }); }, [row]);
+  const reload = React.useCallback(() => { setErr(""); loadAtts(row).then(setAtts).catch((e) => { setAtts([]); setErr(e?.code === "permission-denied" ? "이 오더의 첨부를 볼 권한이 없습니다" : "첨부를 불러오지 못했습니다"); }); }, [idOf(row), colOf(row), row?.attachCount]); // eslint-disable-line react-hooks/exhaustive-deps -- 다른 오더가 바뀔 때마다(실시간) 첨부 전체를 다시 읽지 않게
   React.useEffect(() => { reload(); }, [reload]);
   const upload = async (list) => {
     const files = [...(list || [])];
