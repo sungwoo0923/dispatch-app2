@@ -5408,7 +5408,7 @@ const markEditRequestSeen = async (order) => {
   const removeDriver = async (idOrIds) => {
     const ids = (Array.isArray(idOrIds) ? idOrIds : [idOrIds]).filter(Boolean);
     if (!ids.length) return;
-    return deleteDocsAtomic(db, ids.map((id) => doc(db, COLL.drivers, id)), { label: "기사" });
+    return removeDriversCascade(ids, drivers); // ⭐ 2026-11-10 연결된 기사앱 계정까지 정리
   };
 
   // ⭐ 2026-11-05 PC·모바일 일치 — 저장 내용은 모듈 함수 pcUpsertClient 하나(모바일 거래처관리도 같은 함수)
@@ -62891,6 +62891,24 @@ export function PcSettleMobile({ dispatchData = [], companyName = "", role = "",
     </KpSubNav>
   );
 }
+// 🗑 2026-11-10 기사 삭제 — 기사관리(drivers) 문서와 함께, 그 기사의 기사앱 계정(users/{uid}, role=driver)도 지운다.
+//  예전엔 drivers만 지워서 기사 제출 서류·기사 앱 계정·기사 등록 관리 목록에 계속 남았다(users 기준 목록).
+//  · 오더 기록(배차 데이터)은 그대로 둔다 · 계정은 역할이 기사(driver)인 것만 지운다(직원 계정은 절대 안 건드림)
+async function removeDriversCascade(ids, drivers = []) {
+  const res = await deleteDocsAtomic(db, ids.map((id) => doc(db, COLL.drivers, id)), { label: "기사" });
+  const uids = new Set();
+  ids.forEach((id) => {
+    const d = (drivers || []).find((x) => x?.id === id) || {};
+    [d.uid, id].forEach((u) => { if (u) uids.add(String(u)); });
+  });
+  for (const uid of uids) {
+    try {
+      const u = await getDoc(doc(db, "users", uid));
+      if (u.exists() && u.data()?.role === "driver") await deleteDoc(doc(db, "users", uid));
+    } catch (e) { console.warn("기사앱 계정 정리 실패:", uid, e?.code || e?.message); }
+  }
+  return res;
+}
 // 📱 2026-11-05 PC·모바일 일치 — 모바일 기사관리·거래처관리: PC 화면(DriverManagement·ClientManagement)을 그대로,
 //   저장도 PC와 같은 함수(pcUpsertDriver·pcUpsertClient·upsertPlace) · 조회전용이면 PC처럼 막는다
 const _mViewerBlock = async () => { window.alert("조회전용 권한으로는 수정/등록/삭제를 할 수 없습니다."); };
@@ -62900,8 +62918,8 @@ export function PcDriverMobile({ drivers = [], userCompany = "", role = "", isVi
   const remove = React.useCallback(async (idOrIds) => {
     const ids = (Array.isArray(idOrIds) ? idOrIds : [idOrIds]).filter(Boolean);
     if (!ids.length) return;
-    return deleteDocsAtomic(db, ids.map((id) => doc(db, COLL.drivers, id)), { label: "기사" });
-  }, []);
+    return removeDriversCascade(ids, drivers); // ⭐ 2026-11-10 연결된 기사앱 계정까지 정리
+  }, [drivers]);
   return <DriverManagement mobile drivers={drivers} upsertDriver={isViewer ? _mViewerBlock : upsert} removeDriver={isViewer ? _mViewerBlock : remove} showAlert={(m) => window.alert(m)} userCompany={userCompany} grade={grade} onGrade={setGrade} />;
 }
 export function PcClientMobile({ clients = [], places = [], userCompany = "", role = "", isViewer = false, initialTab = "하차지" }) {

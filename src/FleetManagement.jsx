@@ -1194,11 +1194,27 @@ function RegistrationTab({ usersMap, myCompanyName, driversRaw = [], myUid = nul
     return m;
   }, [driversRaw]);
 
+  // ⭐ 2026-11-10 기사앱 계정(uid)과 연결된 기사관리 문서 — 문서 이름이 uid이거나 uid 칸으로 연결
+  const rawByUid = useMemo(() => {
+    const m = {};
+    driversRaw.forEach(r => { if (r.uid) m[r.uid] = r; });
+    return m;
+  }, [driversRaw]);
+  const rawByPlate = useMemo(() => {
+    const m = {};
+    driversRaw.forEach(r => { const k = String(r.차량번호 || "").replace(/\s+/g, "").toUpperCase(); if (k && !m[k]) m[k] = r; });
+    return m;
+  }, [driversRaw]);
+  const rawOf = (uid, u) => rawById[uid] || rawByUid[uid] || rawByPlate[String(u?.carNo || "").replace(/\s+/g, "").toUpperCase()] || null;
+
   const driverList = useMemo(() => {
     const list = Object.entries(usersMap)
       .filter(([, u]) => !myCompanyName || !u.companyName || u.companyName === myCompanyName)
+      // ⭐ 2026-11-10 기사 등록 관리는 지입·직영·임대 기사만(화면 설명과 같게) — 예전엔 기사앱 계정만 있으면 다 보여서
+      //  기사관리에서 지운 기사(기사관리 문서 없음)도 등급 "일반"으로 남아 보였다
+      .filter(([uid, u]) => { const r = rawOf(uid, u); return !!r && ["지입", "직영", "임대"].includes(r.등급); })
       .map(([uid, u]) => {
-        const raw = rawById[uid] || {};
+        const raw = rawOf(uid, u) || {};
         const vt = String(u.vehicleType || raw.vehicleType || "").trim();
         const vtTon = (vt.match(/[\d.]+\s*(톤|t|T)/) || [""])[0];
         return {
@@ -1212,7 +1228,8 @@ function RegistrationTab({ usersMap, myCompanyName, driversRaw = [], myUid = nul
           담당자: raw.담당자 || null,
           online: isRecentlySeen(raw.updatedAt, raw.heartbeatAt),
           lastSeen: raw.heartbeatAt || raw.updatedAt || null,
-          hasDriverDoc: !!rawById[uid],
+          hasDriverDoc: !!rawOf(uid, u),
+          docId: rawOf(uid, u)?.id || uid, // ⭐ 2026-11-10 담당자 지정은 실제 기사관리 문서로
           appStatus: "joined",
         };
       });
@@ -1233,7 +1250,7 @@ function RegistrationTab({ usersMap, myCompanyName, driversRaw = [], myUid = nul
         appStatus: "none", raw: r,
       }));
     return [...list, ...extra];
-  }, [usersMap, rawById, myCompanyName, driversRaw]);
+  }, [usersMap, rawById, rawByUid, rawByPlate, myCompanyName, driversRaw]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const approved = useMemo(() => driverList.filter(d => d.approved), [driverList]);
   const mine = useMemo(() => approved.filter(d => myUid && d.담당자?.uid === myUid), [approved, myUid]);
@@ -1329,7 +1346,7 @@ function RegistrationTab({ usersMap, myCompanyName, driversRaw = [], myUid = nul
         <div style={{ fontSize: 16, fontWeight: 700, color: "#111827", whiteSpace: "nowrap" }}>{d.전화번호 ? formatPhone(d.전화번호) : "-"}</div>
         <div>
           {d.hasDriverDoc
-            ? <ManagerBadge driver={{ id: d.uid, 이름: d.이름, 담당자: d.담당자 }} staff={staff} canDelegate={canDelegate} onAssign={onAssignManager} big />
+            ? <ManagerBadge driver={{ id: d.docId || d.uid, 이름: d.이름, 담당자: d.담당자 }} staff={staff} canDelegate={canDelegate} onAssign={onAssignManager} big />
             : <span style={{ fontSize: 14, color: "#5B6B85", fontWeight: 700 }}>-</span>}
         </div>
         {d.noApp ? (
@@ -1369,7 +1386,7 @@ function RegistrationTab({ usersMap, myCompanyName, driversRaw = [], myUid = nul
           {d.noApp ? "앱 미가입" : d.online ? "● 앱 접속중" : `앱 접속 ${d.lastSeen ? timeAgo(d.lastSeen) : "기록 없음"}`}{sent ? ` · 안내 ${sent}` : ""}
         </div>
         <div style={{ marginTop: 8, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-          {d.hasDriverDoc && <ManagerBadge driver={{ id: d.uid, 이름: d.이름, 담당자: d.담당자 }} staff={staff} canDelegate={canDelegate} onAssign={onAssignManager} big />}
+          {d.hasDriverDoc && <ManagerBadge driver={{ id: d.docId || d.uid, 이름: d.이름, 담당자: d.담당자 }} staff={staff} canDelegate={canDelegate} onAssign={onAssignManager} big />}
           <span style={{ marginLeft: "auto", display: "flex", gap: 6, flexWrap: "wrap" }}>
             {d.noApp && <AppStatusBadge d={d.raw || {}} company={myCompanyName} />}
             {guideBtn(d)}

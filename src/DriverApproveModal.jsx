@@ -11,6 +11,7 @@ import { createPortal } from "react-dom";
 import { addDoc, collection, doc, getDocs, query, serverTimestamp, setDoc, where, writeBatch, deleteDoc } from "firebase/firestore";
 import { db, auth } from "./firebase";
 import { fmtPhone } from "./formatInput";
+import { CustomSelect } from "./CustomSelect"; // ⭐ 2026-11-10 가입유형·담당자 드롭다운
 
 const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
 export const DRIVER_JOIN_TYPES = ["지입", "직영", "임대"]; // 기사관리 등급(일반·직영·지입·임대·블랙) 중 기사앱 가입 기사 구분
@@ -185,11 +186,14 @@ function Info({ k, v, mono, wide }) {
 }
 const ReasonChip = ({ on, children }) => <span className={`px-1.5 h-[20px] inline-flex items-center rounded-md text-[11px] font-black ${on ? "bg-[#E7F0FF] text-[#2D4C82]" : "bg-[#FFF1E6] text-[#B54708]"}`}>{children}</span>;
 
-export default function DriverApproveModal({ u, signup, candidates = [], bizDoc, company, startReject = false, onClose, onDone }) {
+export default function DriverApproveModal({ u, signup, candidates = [], bizDoc, company, staff = [], startReject = false, onClose, onDone }) {
   const me = enteredOf(u, signup);
   const first = candidates.find((c) => c.samePlate);
   const [pick, setPick] = React.useState(first ? first.id : "new"); // 연동할 문서 id 또는 "new"
   const target = candidates.find((c) => c.id === pick) || null;
+  // ⭐ 2026-11-10 승인할 때 배차담당자(drivers.담당자 — 지입차관리와 같은 칸)도 같이 정한다
+  const [mgr, setMgr] = React.useState("__none");
+  React.useEffect(() => { const m = target?.data?.담당자?.uid; setMgr(m || "__none"); }, [target?.id]); // eslint-disable-line react-hooks/exhaustive-deps
   const tGrade = String(target?.data?.등급 || "").trim();
   const [type, setType] = React.useState(DRIVER_JOIN_TYPES.includes(tGrade) ? tGrade : DRIVER_JOIN_TYPES.includes(u.driverType) ? u.driverType : "지입");
   React.useEffect(() => { if (DRIVER_JOIN_TYPES.includes(tGrade)) setType(tGrade); }, [pick]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -217,7 +221,14 @@ export default function DriverApproveModal({ u, signup, candidates = [], bizDoc,
 
   const doApprove = async () => {
     setBusy(true); setErr("");
-    try { await approveDriverSignup({ u, signup, target, type, useInput, company }); onDone?.({ kind: target ? "link" : "approve", type, target }); }
+    try {
+      await approveDriverSignup({ u, signup, target, type, useInput, company });
+      const st = staff.find((x) => x.id === mgr);
+      if (mgr !== "__none" || target?.data?.담당자) {
+        await setDoc(doc(db, "drivers", u.id), { 담당자: st ? { uid: st.id, name: st.name || st.email || "" } : null }, { merge: true }).catch((e) => console.warn("담당자 지정 실패:", e?.code || e));
+      }
+      onDone?.({ kind: target ? "link" : "approve", type, target });
+    }
     catch (e) { console.error(e); setErr(`승인하지 못했습니다 — ${e?.code === "permission-denied" ? "권한이 없습니다(관리자·인사·경리 계정으로 다시 시도해 주세요)" : e?.message || "잠시 후 다시 시도해 주세요"}`); }
     finally { setBusy(false); }
   };
@@ -346,10 +357,17 @@ export default function DriverApproveModal({ u, signup, candidates = [], bizDoc,
 
               <div className={rejecting ? "hidden" : ""}>
                 <div className="text-[13px] font-black text-[#2D4C82] mb-2">가입유형</div>
-                <select value={type} onChange={(e) => setType(e.target.value)} data-testid="drv-type" className="w-full h-12 px-3.5 rounded-xl border-2 border-[#DCE3EE] bg-white text-[15.5px] font-black text-[#0F1A30] outline-none focus:border-[#2D4C82]">
+                <CustomSelect value={type} onChange={(e) => setType(e.target.value)} data-testid="drv-type" className="w-full h-12 px-3.5 rounded-xl border-2 border-[#DCE3EE] bg-white text-[15.5px] font-black text-[#0F1A30] outline-none focus:border-[#2D4C82]">
                   {DRIVER_JOIN_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
-                </select>
+                </CustomSelect>
                 <div className="mt-1.5 text-[12px] font-bold text-[#7A879C]">승인하면 기사관리 「{type}」 기사로 들어가고 지입차관리에도 바로 보입니다</div>
+                {/* ⭐ 2026-11-10 배차담당자 지정 */}
+                <div className="text-[13px] font-black text-[#2D4C82] mb-2 mt-4">배차담당자</div>
+                <CustomSelect value={mgr} onChange={(e) => setMgr(e.target.value)} data-testid="drv-mgr-pick" className="w-full h-12 px-3.5 rounded-xl border-2 border-[#DCE3EE] bg-white text-[15px] font-black text-[#0F1A30]">
+                  <option value="__none">담당자 미지정(나중에 지정)</option>
+                  {staff.map((x) => <option key={x.id} value={x.id}>{x.name || x.email}{x.position ? ` · ${x.position}` : ""}{x.team ? ` · ${x.team}` : ""}</option>)}
+                </CustomSelect>
+                <div className="mt-1.5 text-[12px] font-bold text-[#7A879C]">지입차관리 · 승인된 기사 카드에서도 언제든 바꿀 수 있습니다</div>
               </div>
 
               {rejecting && (

@@ -3,7 +3,7 @@
 //  2026-10-31 리디자인: 왼쪽 기사 목록(완비율 링) + 오른쪽 서류 갤러리(큰 미리보기), 칸마다 [저장] · 기사별 [전체 저장]
 import { subscribeUsersLive } from "./usersLive"; // ⭐ 2026-11-02 속도 — 직원 명부 구독 공유
 import React from "react";
-import { addDoc, collection, doc, onSnapshot, serverTimestamp, updateDoc } from "firebase/firestore";
+import { addDoc, collection, doc, onSnapshot, query, serverTimestamp, updateDoc, where } from "firebase/firestore";
 import { db, auth, DEFAULT_COMPANY } from "./firebase";
 import { DRIVER_REQUIRED_DOCS, useCompanyDriverDocs, docState, TONE, docProblems } from "./driverRequiredDocs";
 import { ImageViewer } from "./driverDocs";
@@ -13,6 +13,7 @@ import { kpPrompt } from "./kpDialog";
 const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
 const HERO = "linear-gradient(rgba(143,176,240,.07) 1px, transparent 1px) 0 0/22px 22px, linear-gradient(90deg, rgba(143,176,240,.07) 1px, transparent 1px) 0 0/22px 22px, linear-gradient(120deg,#0B1428 0%,#1B2B4B 60%,#2D4C82 100%)";
 const REQ = DRIVER_REQUIRED_DOCS.filter((d) => d.required);
+const plateKey = (v) => String(v || "").replace(/\s+/g, "").toUpperCase();
 
 // 서류 파일 저장(이미지·PDF)
 export function saveDocFile(x, who, label) {
@@ -54,7 +55,15 @@ export default function DriverDocsReview({ company, isViewer = false }) {
     });
   }, [company]);
 
-  const rows = (drivers || []).map((d) => {
+  // ⭐ 2026-11-10 기사관리에서 지운 기사(기사관리 문서 없음)는 목록에서 뺀다 — 예전엔 기사앱 계정만 보고 그대로 남았다
+  const [drvIds, setDrvIds] = React.useState(null);
+  React.useEffect(() => {
+    if (!company || company === DEFAULT_COMPANY) { setDrvIds(null); return undefined; } // 기본 회사는 회사명 없는 예전 기사 문서가 있어 거르지 않는다
+    return onSnapshot(query(collection(db, "drivers"), where("companyName", "==", company)), (s) => {
+      const ids = new Set(); s.docs.forEach((x) => { ids.add(x.id); const u = x.data()?.uid; if (u) ids.add(String(u)); const pk = plateKey(x.data()?.차량번호); if (pk) ids.add(`P:${pk}`); }); setDrvIds(ids);
+    }, () => setDrvIds(null));
+  }, [company]);
+  const rows = (drivers || []).filter((d) => !drvIds || drvIds.has(d.uid) || (plateKey(d.carNo) && drvIds.has(`P:${plateKey(d.carNo)}`))).map((d) => {
     const byType = docsBy?.[d.uid] || {};
     const p = docProblems(byType);
     const done = REQ.filter((r) => byType[r.key] && docState(byType[r.key]).tone !== "bad").length;

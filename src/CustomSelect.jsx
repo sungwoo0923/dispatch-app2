@@ -268,7 +268,8 @@ const CustomSelect = React.forwardRef(function CustomSelect(
             maxWidth: Math.max(menuRect.width, menuMaxContentWidth),
             maxHeight: menuRect.maxHeight,
           }}
-          className="z-[999999] overflow-auto bg-white border border-gray-200 rounded-lg shadow-xl py-1"
+          // ⭐ 2026-11-10 목록은 어떤 창(모달 z-2147482000 등)보다 위에 — 예전 z-999999라 기사 승인 창 안의 드롭다운이 창 뒤에 숨었다
+          className="z-[2147483100] overflow-auto bg-white border border-gray-200 rounded-lg shadow-xl py-1"
         >
           {options.length === 0 && (
             <div className="px-3 py-2 text-[13px] text-gray-400">항목 없음</div>
