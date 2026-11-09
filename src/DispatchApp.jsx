@@ -35,6 +35,8 @@ import * as XLSX from "xlsx";
 import OrderLookupModal from "./OrderLookup"; // ⭐ 2026-11-03 담당자·차량 조회
 import MgrBadge, { setMgrNameMap } from "./MgrBadge";
 import { isUrgentOrder, UrgentBadge, urgentRowStyle } from "./urgentOrder"; // ⭐ 2026-11-06 긴급 오더 강조(모든 현황 공용)
+import BulkEditCopyModal from "./BulkEditCopy"; // 🗂 2026-11-09 우클릭 [일괄수정·복사]
+const ReceiptCenter = React.lazy(() => import("./ReceiptCenter")); // 🧾 2026-11-09 배차현황 › 인수증관리
 import { askCopyDates } from "./CopyCountDialog"; // ⭐ 2026-11-06 복사 등록 — 몇 건·건별 날짜
 import { dispatchStatusOf, payTypeStatusPatch } from "./dispatchStatus"; // 🚚 2026-11-07 배차상태 공용 규칙
 import { requestRouteSheetPush } from "./routeSheetPush"; // 💰 2026-11-06 고정노선 오더 고치면 바로 시트에
@@ -9030,7 +9032,7 @@ return (
 
         {menu === "배차현황" && (
           <KpSubNav code="DISPATCH" title="배차현황" icon="truck" active={배차현황Tab} onSelect={set배차현황Tab}
-            items={(() => { const n = unseenUnassigned, ln = unseenList, fx = unseenFixed; /* ⭐ 2026-11-06 계정별 안 본 것만(전체 미배차 건수는 각 화면 안에 그대로) */ return [{ key: "배차현황", label: "배차현황", en: "ALL ORDERS", icon: "list", badge: drvCounts.orders + ln, badgeTitle: [drvCounts.orders && `기사 수락/거절 ${drvCounts.orders}건`, `새 미배차 ${ln}건 (전체 ${pcUnassigned.length}건)`].filter(Boolean).join(" · ") }, { key: "미배차현황", label: "미배차현황", en: "PENDING", icon: "hourglass", badge: n, badgeTitle: `새 미배차 ${n}건 (전체 ${pcUnassigned.length}건)` }, { key: "고정노선현황", label: "고정노선현황", en: "FIXED ROUTE", icon: "route", badge: fx, badgeTitle: `새 고정노선 미배차 ${fx}건 (전체 ${pcFixedUnassigned.length}건)` }]; })()}>
+            items={(() => { const n = unseenUnassigned, ln = unseenList, fx = unseenFixed; /* ⭐ 2026-11-06 계정별 안 본 것만(전체 미배차 건수는 각 화면 안에 그대로) */ return [{ key: "배차현황", label: "배차현황", en: "ALL ORDERS", icon: "list", badge: drvCounts.orders + ln, badgeTitle: [drvCounts.orders && `기사 수락/거절 ${drvCounts.orders}건`, `새 미배차 ${ln}건 (전체 ${pcUnassigned.length}건)`].filter(Boolean).join(" · ") }, { key: "미배차현황", label: "미배차현황", en: "PENDING", icon: "hourglass", badge: n, badgeTitle: `새 미배차 ${n}건 (전체 ${pcUnassigned.length}건)` }, { key: "고정노선현황", label: "고정노선현황", en: "FIXED ROUTE", icon: "route", badge: fx, badgeTitle: `새 고정노선 미배차 ${fx}건 (전체 ${pcFixedUnassigned.length}건)` }, { key: "인수증관리", label: "인수증관리", en: "RECEIPTS", icon: "receipt" }]; })()}>
             {배차현황Tab === "배차현황" && (
               <DispatchStatus
                 key={`ds-${viewResetKey}`}
@@ -9077,6 +9079,12 @@ return (
                 setCargoAddPopup={setCargoAddPopup}
                 approvedShippers={approvedShippers}
               />
+            )}
+            {/* 🧾 2026-11-09 인수증관리 — 기사앱 첨부 + 운송사 직접 업로드(인수증·전표) · 운송팀·경리팀 같이 */}
+            {배차현황Tab === "인수증관리" && (
+              <React.Suspense fallback={<div className="py-16 text-center text-[#9AA9C3]">불러오는 중…</div>}>
+                <ReceiptCenter dispatchData={dispatchDataFiltered} isViewer={isViewer} toast={sflowToast} />
+              </React.Suspense>
             )}
             {/* ⭐ 2026-11-03 고정노선현황 — 배차표 양식(화주사 구글시트) 오더를 배차현황과 같은 화면으로, 열은 시트 순서 · 시트 실시간 연동 */}
             {배차현황Tab === "고정노선현황" && (
@@ -26552,6 +26560,7 @@ const selectedSet = React.useMemo(() => new Set(selected), [selected]);
   const [scheduleChartRows, setScheduleChartRows] = React.useState(null); // 스케줄표 대상 오더들
   const [palletSlipRows, setPalletSlipRows] = React.useState(null); // 전표발행(물류기기 이동전표) 대상 오더(들)
   const [bulkEditRows, setBulkEditRows] = React.useState(null); // 일괄수정 대상 오더들
+  const [bulkLegacy, setBulkLegacy] = React.useState(false); // 🗂 2026-11-09 [운임·전달사항 상세] — 예전 일괄수정 창
   const [dateShiftRows, setDateShiftRows] = React.useState(null); // 날짜 일괄 이동 대상 오더들
 
   React.useEffect(() => {
@@ -30395,8 +30404,15 @@ const head = isDark
 {palletSlipRows && (
   <PalletSlipModal rows={palletSlipRows} clients={clients} userCompany={userCompany} userNameMap={userNameMap} patchDispatch={patchDispatch} onClose={() => setPalletSlipRows(null)} />
 )}
-{bulkEditRows && (
-  <BulkEditModal rows={bulkEditRows} patchDispatch={patchDispatch} onClose={() => setBulkEditRows(null)} onDateShift={() => setDateShiftRows(bulkEditRows)} />
+{bulkEditRows && !bulkLegacy && (
+  <BulkEditCopyModal rows={bulkEditRows} patchDispatch={patchDispatch} onClose={() => setBulkEditRows(null)} onDateShift={() => setDateShiftRows(bulkEditRows)}
+    onLegacyEdit={() => setBulkLegacy(true)} onCopyOne={(o) => submitCopyOrderPC(o, approvedShippers)}
+    drivers={drivers} clients={clients} places={placeRows} timeOptions={timeOptions} tonOptions={tonOptions}
+    vehicleTypes={withCustomVehicleTypes(VEHICLE_TYPES)} payTypes={PAY_TYPES} dispatchTypes={dropdownList("배차방식", ["24시", "직접배차", "인성", "고정기사", "로지스허브"])}
+    isViewer={isViewer} toast={sflowToast} />
+)}
+{bulkEditRows && bulkLegacy && (
+  <BulkEditModal rows={bulkEditRows} patchDispatch={patchDispatch} onClose={() => { setBulkLegacy(false); setBulkEditRows(null); }} onDateShift={() => setDateShiftRows(bulkEditRows)} />
 )}
 {dateShiftRows && (
   <BulkDateShiftModal rows={dateShiftRows} patchDispatch={patchDispatch} onClose={() => setDateShiftRows(null)} />
@@ -34074,16 +34090,18 @@ if (editTarget.하차지명) savePlaceSmart(editTarget.하차지명, editTarget.
           </button>
           {/* 일괄수정 — 2건 이상 선택했을 때만 활성화. 선택한 오더들을 한 화면에
               늘어놓고 운임/메모/전달사항 등을 일괄 또는 개별로 고쳐 한 번에 저장. */}
-          {selected.length > 1 && (
+          {(selected.length >= 1 || contextMenu?.row) && (
             <button
               className="w-full text-left px-3 py-2 rounded-lg text-[13px] font-semibold text-[#2A3852] hover:bg-[#0F1A30] hover:text-white flex items-center gap-2.5 transition-colors"
               onClick={() => {
-                setBulkEditRows(rows.filter(x => selected.includes(x._id)));
+                // 🗂 2026-11-09 1건부터 — 선택이 없으면 우클릭한 오더 1건
+                const picked = rows.filter(x => selected.includes(x._id));
+                setBulkLegacy(false); setBulkEditRows(picked.length ? picked : [contextMenu.row]);
                 setContextMenu(null);
               }}
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-              <EditableText id="realtime.ctxMenu.일괄수정" defaultText="일괄수정" /> ({selected.length}건)
+              <EditableText id="realtime.ctxMenu.일괄수정복사" defaultText="일괄수정·복사" /> ({Math.max(1, selected.length)}건)
             </button>
           )}
           {rtBiz.multi && (() => { const _id = contextMenu.row._id; const ids = selected.includes(_id) && selected.length > 1 ? [...selected] : [_id]; const cur = bizOf(contextMenu.row, rtBiz.defaultName); return (
@@ -39333,6 +39351,7 @@ const save = {
   const [scheduleChartRows, setScheduleChartRows] = React.useState(null); // 스케줄표 대상 오더들
   const [palletSlipRows, setPalletSlipRows] = React.useState(null); // 전표발행(물류기기 이동전표) 대상 오더(들)
   const [bulkEditRows, setBulkEditRows] = React.useState(null); // 일괄수정 대상 오더들
+  const [bulkLegacy, setBulkLegacy] = React.useState(false); // 🗂 2026-11-09 [운임·전달사항 상세] — 예전 일괄수정 창
   const [dateShiftRows, setDateShiftRows] = React.useState(null); // 날짜 일괄 이동 대상 오더들
   React.useEffect(() => {
     const close = () => setContextMenuDS(null);
@@ -41823,8 +41842,15 @@ return (
       {palletSlipRows && (
         <PalletSlipModal rows={palletSlipRows} clients={clients} userCompany={userCompany} userNameMap={userNameMap} patchDispatch={patchDispatch} onClose={() => setPalletSlipRows(null)} />
       )}
-      {bulkEditRows && (
-        <BulkEditModal rows={bulkEditRows} patchDispatch={patchDispatch} onClose={() => setBulkEditRows(null)} onDateShift={() => setDateShiftRows(bulkEditRows)} />
+      {bulkEditRows && !bulkLegacy && (
+        <BulkEditCopyModal rows={bulkEditRows} patchDispatch={patchDispatch} onClose={() => setBulkEditRows(null)} onDateShift={() => setDateShiftRows(bulkEditRows)}
+          onLegacyEdit={() => setBulkLegacy(true)} onCopyOne={(o) => submitCopyOrderPC(o, approvedShippers)}
+          drivers={drivers} clients={clients} places={places} timeOptions={timeOptions}
+          vehicleTypes={withCustomVehicleTypes(VEHICLE_TYPES)} payTypes={PAY_TYPES} dispatchTypes={dropdownList("배차방식", ["24시", "직접배차", "인성", "고정기사", "로지스허브"])}
+          isViewer={isViewer} toast={sflowToast} />
+      )}
+      {bulkEditRows && bulkLegacy && (
+        <BulkEditModal rows={bulkEditRows} patchDispatch={patchDispatch} onClose={() => { setBulkLegacy(false); setBulkEditRows(null); }} onDateShift={() => setDateShiftRows(bulkEditRows)} />
       )}
       {dateShiftRows && (
         <BulkDateShiftModal rows={dateShiftRows} patchDispatch={patchDispatch} onClose={() => setDateShiftRows(null)} />
@@ -44734,14 +44760,16 @@ setCopyPlaceOptions(list);
           </button>
           {/* 일괄수정 — 2건 이상 선택했을 때만 활성화. 선택한 오더들을 한 화면에
               늘어놓고 운임/메모/전달사항 등을 일괄 또는 개별로 고쳐 한 번에 저장. */}
-          {selected.size > 1 && (
+          {(selected.size >= 1 || contextMenuDS?.row) && (
             <button className="w-full text-left px-3 py-2 rounded-lg text-[13px] font-semibold text-[#2A3852] hover:bg-[#0F1A30] hover:text-white flex items-center gap-2.5 transition-colors"
               onClick={() => {
-                setBulkEditRows(filtered.filter(x => selected.has(getId(x))));
+                // 🗂 2026-11-09 1건부터 — 선택이 없으면 우클릭한 오더 1건
+                const picked = filtered.filter(x => selected.has(getId(x)));
+                setBulkLegacy(false); setBulkEditRows(picked.length ? picked : [contextMenuDS.row]);
                 setContextMenuDS(null);
               }}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-              <EditableText id="status.ctxMenu.일괄수정" defaultText="일괄수정" /> ({selected.size}건)
+              <EditableText id="status.ctxMenu.일괄수정복사" defaultText="일괄수정·복사" /> ({Math.max(1, selected.size)}건)
             </button>
           )}
           {dsBiz.multi && (() => { const _id = getId(contextMenuDS.row); const ids = selected.has(_id) && selected.size > 1 ? [...selected] : [_id]; const cur = bizOf(contextMenuDS.row, dsBiz.defaultName); return (
