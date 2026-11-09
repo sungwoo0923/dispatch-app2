@@ -3,6 +3,7 @@
 //  왼쪽: 유형 고르기 → 입력칸 → 조항(자동 셋팅, 자유롭게 수정·추가·삭제) / 오른쪽: A4 미리보기
 //  저장하면 보관함(companyContracts)에 남고, 이미지·PDF로 내려받거나 인쇄한다.
 import React from "react";
+import { focusField, alertAndFocus } from "./focusField"; // ⭐ 2026-11-10 필수 입력 칸으로 이동
 import { runDelete } from "./DeleteProgress"; // ⭐ 2026-11-05 삭제 진행 창 + 한 번에 삭제
 import { collection, addDoc, deleteDoc, doc, onSnapshot, query, serverTimestamp, updateDoc, where } from "firebase/firestore";
 import { db } from "./firebase";
@@ -285,7 +286,7 @@ export default function ContractStudio({ company = "", me = {} }) {
   const print = () => printA4(paperRef.current, title);
   const missing = spec ? spec.fields.filter((f) => f.req && !String(vals[f.k] || "").trim()).map((f) => f.label) : [];
   const save = async () => {
-    if (missing.length) return kpAlert(`필수 입력: ${missing.join(", ")}`);
+    if (missing.length) return alertAndFocus(kpAlert, `필수 입력이 비어 있습니다.\n· ${missing.join(", ")}\n\n[확인]을 누르면 그 칸으로 이동합니다.`, { label: missing[0] }); // ⭐ 2026-11-10 빈 칸으로 이동·표시
     setBusy(true);
     try {
       try { localStorage.setItem(aKey, JSON.stringify({ 갑상호: vals.갑상호, 갑대표: vals.갑대표, 갑사업자번호: vals.갑사업자번호, 갑주소: vals.갑주소, 갑연락처: vals.갑연락처 })); } catch { /* 무시 */ }
@@ -469,7 +470,7 @@ export default function ContractStudio({ company = "", me = {} }) {
               {info && <div className="text-[12px] font-bold text-[#5B6B85] -mt-1">우리 회사 칸은 회사정보에 등록된 값으로 자동 입력됩니다 · 고쳐 쓸 수 있어요</div>}
               <div className="grid grid-cols-2 gap-x-2.5 gap-y-3">
                 {spec.fields.map((f) => (
-                  <label key={f.k} className={`block min-w-0 ${f.half ? "" : "col-span-2"}`}>
+                  <label key={f.k} data-req-key={f.k} data-req-label={f.label} className={`block min-w-0 ${f.half ? "" : "col-span-2"}`}>
                     <span className={lab}>{f.label}{f.req && <span className="text-[#2D4C82]"> *</span>}</span>
                     {f.type === "date" ? <CustomDatePicker value={vals[f.k] || ""} onChange={(e) => set(f.k, e.target.value)} className={inp} showIcon placeholder="날짜 선택" />
                       : f.type === "birth" ? <CustomDatePicker value={/^\d{4}-\d{2}-\d{2}$/.test(String(vals[f.k] || "")) ? vals[f.k] : ""} onChange={(e) => set(f.k, e.target.value)} className={inp} showIcon placeholder={vals[f.k] && !/^\d{4}-\d{2}-\d{2}$/.test(String(vals[f.k])) ? String(vals[f.k]) : "생년월일 선택"} />
@@ -517,7 +518,7 @@ export default function ContractStudio({ company = "", me = {} }) {
                   <button type="button" onClick={saveImage} className="h-10 px-3.5 rounded-xl border border-[#DCE3EE] text-[13.5px] font-black text-[#1B2B4B]">이미지 저장</button>
                   <button type="button" onClick={savePdfFile} className="h-10 px-3.5 rounded-xl border border-[#DCE3EE] text-[13.5px] font-black text-[#1B2B4B]">PDF 저장</button>
                   <button type="button" onClick={save} disabled={busy} className="h-10 px-5 rounded-xl bg-[#0F1A30] text-white text-[13.5px] font-black disabled:opacity-50">{busy ? "저장 중…" : "보관함 저장"}</button>
-                  {tab === "driver" && <DriverContractSendBar company={co} me={me} targets={pickedDrivers} valsFor={valsFor} missingFor={missingFor} kind={kind} sub={subKey} title={title} clauses={clauses} />}
+                  {tab === "driver" && <DriverContractSendBar company={co} me={me} targets={pickedDrivers} valsFor={valsFor} missingFor={missingFor} onMissing={(d, label) => { if (d.id !== activeId) pickDriver(d.id); setTimeout(() => focusField({ label }), 150); }} kind={kind} sub={subKey} title={title} clauses={clauses} />}
                 </div>
               </div>
               <div className="relative rounded-2xl bg-[#E9EDF3] p-4 overflow-auto max-h-[calc(100vh-180px)]">

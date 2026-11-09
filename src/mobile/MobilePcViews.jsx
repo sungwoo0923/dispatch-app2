@@ -18,6 +18,7 @@ import DailyReport from "../DailyReport"; // 📊 2026-11-06 일일 경영 보�
 const ExecAnalysis = React.lazy(() => import("../ExecAnalytics")); // 📈 2026-11-08 임원 화면 · 경영 분석 · 결재 대기 · 직원 정보
 const ExecApprovalQueue = React.lazy(() => import("../ExecAnalytics").then((m) => ({ default: m.ExecApprovalQueue })));
 const ExecStaffInfo = React.lazy(() => import("../ExecStaffInfo"));
+const ContractStudioM = React.lazy(() => import("../ContractStudio")); // ⭐ 2026-11-10 모바일 전자결재 › 계약서
 import { OrderHistoryContext } from "../orderHistory";
 import StaffManager from "../StaffManager";
 import { DriverAccountsPage } from "../DriverAccounts"; // ⭐ 2026-11-05 모바일 기사 앱 계정(가입 승인)
@@ -168,12 +169,15 @@ function ApprovalView({ company, me, initialPage = "inbox" }) {
         { key: "expense", label: "비용·지출 결의", en: "EXPENSE", icon: "wallet" },
         { key: "draft", label: "업무 기안·품의", en: "PROPOSAL", icon: "file" },
         { key: "report", label: "업무 보고·인사", en: "REPORT", icon: "list" },
+        { key: "contract", label: "계약서", en: "CONTRACT", icon: "pen" }, // ⭐ 2026-11-10 모든 권한에 계약서(PC 홈과 같게)
         { key: "handover", label: "인수인계", en: "HANDOVER", icon: "link", badge: hoUnread },
         { key: "mine", label: "내 기안함", en: "MY DOCUMENTS", icon: "send", badge: counts.mineNew },
         { key: "lines", label: "결재선 관리", en: "LINES", icon: "route" },
       ] }]}>
       <div className="kp-m-pc kp-m-approval">
-        {page === "handover"
+        {page === "contract"
+          ? <React.Suspense fallback={null}><ContractStudioM company={company} me={me} /></React.Suspense>
+          : page === "handover"
           ? <HandoverCenter company={company} me={me} isViewer={me?.role === "viewer"} />
           : <ApprovalCenter company={company} me={me} page={page} setPage={setPage} openId={openId} onOpened={() => setOpenId(null)} />}
       </div>

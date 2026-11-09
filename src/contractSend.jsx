@@ -14,8 +14,17 @@ export const DC_STATUS = { sent: "발송", read: "열람", signed: "서명 완�
 const toMs = (v) => (v?.toMillis ? v.toMillis() : v?.seconds ? v.seconds * 1000 : 0);
 const fmtT = (v) => { const ms = toMs(v); if (!ms) return "-"; const d = new Date(ms + 9 * 3600e3); return `${d.getUTCMonth() + 1}/${d.getUTCDate()} ${String(d.getUTCHours()).padStart(2, "0")}:${String(d.getUTCMinutes()).padStart(2, "0")}`; };
 
+// ⭐ 2026-11-10 전송 실패 이유를 알기 쉽게
+function sendErrText(e) {
+  const c = String(e?.code || "");
+  if (c === "permission-denied") return "권한이 없어요(서버 보안 규칙이 아직 배포되지 않았거나, 이 계정이 같은 회사 직원이 아니에요). 관리자에게 'firestore:rules 배포'를 요청해 주세요";
+  if (c === "unavailable" || c === "deadline-exceeded") return "인터넷 연결이 불안정해요. 잠시 후 다시 보내 주세요";
+  if (c === "invalid-argument" || /Unsupported field value/i.test(String(e?.message || ""))) return "계약서 내용에 저장할 수 없는 값이 있어요. 칸을 다시 확인해 주세요";
+  if (c === "unauthenticated") return "로그인이 풀렸어요. 다시 로그인해 주세요";
+  return `보내지 못했어요${c ? ` (${c})` : ""}`;
+}
 // 발송 버튼 — targets: 고른 기사 목록, valsFor(d): 그 기사 정보로 채운 입력값
-export function DriverContractSendBar({ company, me = {}, targets = [], valsFor, kind, sub, title, clauses, missingFor }) {
+export function DriverContractSendBar({ company, me = {}, targets = [], valsFor, kind, sub, title, clauses, missingFor, onMissing }) {
   const [busy, setBusy] = React.useState(false);
   const noApp = targets.filter((d) => !d.appUid);
   const send = async () => {
@@ -23,21 +32,24 @@ export function DriverContractSendBar({ company, me = {}, targets = [], valsFor,
     const ok = targets.filter((d) => d.appUid);
     if (!ok.length) return kpAlert("고른 기사님이 모두 기사앱에 가입하지 않았습니다.\n기사앱 가입 후 보낼 수 있어요.");
     const miss = ok.map((d) => ({ d, m: missingFor?.(valsFor(d)) || [] })).filter((x) => x.m.length);
-    if (miss.length) return kpAlert(`필수 입력이 비어 있습니다.\n${miss.slice(0, 5).map((x) => `· ${x.d.이름}: ${x.m.join(", ")}`).join("\n")}`);
+    if (miss.length) { await kpAlert(`필수 입력이 비어 있습니다.\n${miss.slice(0, 5).map((x) => `· ${x.d.이름}: ${x.m.join(", ")}`).join("\n")}\n\n[확인]을 누르면 그 칸으로 이동합니다.`); onMissing?.(miss[0].d, miss[0].m[0]); return; } // ⭐ 2026-11-10 빈 칸으로 이동·표시
     if (!(await kpConfirm(`「${title}」을 기사님 ${ok.length}명에게 기사앱으로 보낼까요?\n\n· 기사님마다 각자 정보(성명·차량번호·연락처 등)로 따로 만들어집니다\n· 기사님은 기사앱 › 서류함 › 계약서에서 도장 사진 또는 손서명으로 서명합니다${noApp.length ? `\n· 기사앱 미가입 ${noApp.length}명은 빠집니다(${noApp.slice(0, 3).map((d) => d.이름).join(", ")}${noApp.length > 3 ? " 외" : ""})` : ""}`, { title: "운송계약서 발송", okText: `${ok.length}명에게 발송` }))) return;
+    if (!String(company || "").trim()) return kpAlert("회사 정보를 찾지 못해 보낼 수 없습니다. 새로고침 후 다시 시도해 주세요.");
     setBusy(true);
     let sent = 0; const fail = [];
+    // ⭐ 2026-11-10 저장할 수 없는 값(undefined 등)을 미리 걸러 낸다 — 예전엔 빈 칸 하나 때문에 전송 전체가 실패할 수 있었다
+    const clean = (o) => JSON.parse(JSON.stringify(o ?? null));
     for (const d of ok) {
       try {
         await addDoc(collection(db, "driverContracts"), {
           companyName: String(company || "").trim(), driverId: d.appUid, driverDocId: d.id, driverName: d.이름 || "", 차량번호: d.차량번호 !== "-" ? d.차량번호 : "",
-          kind, sub, title, vals: valsFor(d), clauses, status: "sent", sentAt: serverTimestamp(), by: me.name || "",
+          kind, sub: sub || "", title: title || "", vals: clean(valsFor(d)) || {}, clauses: clean(clauses) || [], status: "sent", sentAt: serverTimestamp(), by: me.name || "",
         });
         sent += 1;
-      } catch (e) { fail.push(`${d.이름}(${e?.code || e?.message || e})`); }
+      } catch (e) { fail.push(`${d.이름} — ${sendErrText(e)}`); }
     }
     setBusy(false);
-    kpAlert(`${sent}명에게 보냈습니다.${fail.length ? `\n실패: ${fail.join(", ")}` : ""}\n진행 상황은 아래 '기사앱 발송 현황'에서 볼 수 있어요.`);
+    kpAlert(`${sent}명에게 보냈습니다.${fail.length ? `\n\n보내지 못한 기사님:\n${fail.map((f) => `· ${f}`).join("\n")}` : ""}\n진행 상황은 아래 '기사앱 발송 현황'에서 볼 수 있어요.`);
   };
   return (
     <button type="button" onClick={send} disabled={busy || !targets.length}

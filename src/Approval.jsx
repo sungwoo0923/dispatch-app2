@@ -100,6 +100,10 @@ const isFinUser = (me) => FIN_ROLES.includes(me?.role) || acctViewOn(me?.role) |
 // ⭐ 2026-11-09 계정과목은 경리 권한만 정한다 — 경리관리자·경리사무원·통합관리자·통합인사관리자·최고관리자·경리/회계/재무/총무 부서
 //  (통합관리자·통합인사관리자는 화면 전환과 상관없이 — 계정 분류는 지급 처리와 달리 화면을 바꿀 필요 없음. 보안 규칙의 지급 권한과 같은 역할 목록)
 //  그 외 직원이 올린 지출결의는 계정과목이 비어 있고, 경리가 [지급 완료] 때 고른다(장부에도 반영)
+// ⭐ 2026-11-09 계정과목 선택지 — 기본 목록 + 이 회사 문서에서 직접 입력해 쓴 계정과목(경리가 지급 때 새로 추가한 것 포함)
+const _usedAccounts = new Set();
+export const rememberAccounts = (docs) => { (docs || []).forEach((d) => { [d?.data?.account, d?.paid?.account].forEach((a) => { const v = String(a || "").trim(); if (v && v.length <= 30) _usedAccounts.add(v); }); }); };
+export const accountOptions = () => [...new Set([...ACCOUNTS, ..._usedAccounts])];
 export const isAcctEditor = (me) => ["test", "acctStaff", "allMgr", "hrAcct", "totalMaster"].includes(me?.role) || FIN_TEAM.test(String(me?.team || ""));
 // null(지급 대상 아님) | "wait"(지급 대기) | "paid"(지급완료)
 export const payState = (d) => (!isPayDoc(d) || d.status !== "approved" ? null : d.paid?.at ? "paid" : "wait");
@@ -1614,6 +1618,7 @@ function Composer({ company, me, staff, cat, preset, onDone, leave, getLive, myD
         el.scrollIntoView({ behavior: "smooth", block: "center" });
         const t = el.querySelector("input:not([type=hidden]),textarea,button");
         t?.focus();
+        el.classList.remove("kp-req-flash"); void el.offsetWidth; el.classList.add("kp-req-flash"); setTimeout(() => el.classList.remove("kp-req-flash"), 3200); // ⭐ 2026-11-10 빨간 테두리 깜빡임(계약서와 같게)
       }, 30);
       return;
     }
@@ -1623,7 +1628,7 @@ function Composer({ company, me, staff, cat, preset, onDone, leave, getLive, myD
     if (bizV && !bizV.ok && !editId) { setMsg(bizV.errors.join(" ")); document.querySelector("[data-bizline-check]")?.scrollIntoView({ behavior: "smooth", block: "center" }); return; }
     if (upBusy > 0) { setMsg("첨부 파일을 올리는 중이에요. 다 올라간 뒤 다시 눌러 주세요."); return; }
     const pdRaw0 = form.prepare ? form.prepare(data) : data;
-    const pdRaw = form.fields.some((f) => f.k === "account") && !isAcctEditor(me) ? { ...pdRaw0, account: "" } : pdRaw0; // 계정과목은 경리가 지정 // ⭐ 2026-11-02 지출결의 — 빈 행 빼고 예전 칸(지출처·입금계좌·지출일) 채움
+    const pdRaw = pdRaw0; // ⭐ 2026-11-09 계정과목은 작성자 누구나 고른다(경리는 지급할 때 바꾸거나 새로 추가) // ⭐ 2026-11-02 지출결의 — 빈 행 빼고 예전 칸(지출처·입금계좌·지출일) 채움
     const pd = form.fields.some((f) => f.type === "plan") && !pdRaw.planId ? { ...pdRaw, planId: "", planName: "" } : pdRaw;
     const fileMeta = files.slice(0, AP_FILE_COUNT).map(({ name, size, type, path, uploadedBy, uploadedByName, at }) => ({ name, size, type, path, uploadedBy: uploadedBy || "", uploadedByName: uploadedByName || "", at: at || Date.now() }));
     if (editId) {
@@ -1723,7 +1728,7 @@ function Composer({ company, me, staff, cat, preset, onDone, leave, getLive, myD
               return (
                 <div key={f.k} id={`apf-${f.k}`} className={`block rounded-xl min-w-0 ${half(f) && f.type !== "bank" && f.type !== "time" ? "" : "col-span-2"} ${bad ? "ring-2 ring-[#2D4C82] ring-offset-4 bg-[#EEF3FC]" : ""}`}>
                   <span className={`flex items-center gap-1.5 text-[14.5px] font-black ${bad ? "text-[#0B1428]" : "text-[#3A4A66]"}`}>{f.label}{f.required && <span className="text-[#2D4C82]">*</span>}{bad && <span className="ml-auto h-5 px-2 rounded-md bg-[#0F1A30] text-white text-[12px] font-black inline-flex items-center">입력 필요</span>}</span>
-                  <div className="mt-1.5">{f.k === "account" && !isAcctEditor(me) ? <div className="h-11 px-3 rounded-xl border border-dashed border-[#C9D5EA] bg-[#F7F9FC] flex items-center text-[13.5px] font-bold text-[#7A89A3]">경리 담당자가 지급할 때 지정합니다</div> : <FieldInput f={f} value={data[f.k]} onChange={(v, extra) => { if (f.type === "plan") setData((p) => ({ ...p, [f.k]: v, planName: extra ? String(extra.data?.name || extra.title || "") : "" })); else setField(f, v); if (bad) setMissing((m) => m.filter((x) => x !== f.k)); }} staff={staff} meUid={me.uid} ctx={fieldCtx} />}</div>
+                  <div className="mt-1.5">{false ? null : <FieldInput f={f.k === "account" ? { ...f, options: accountOptions() } : f} value={data[f.k]} onChange={(v, extra) => { if (f.type === "plan") setData((p) => ({ ...p, [f.k]: v, planName: extra ? String(extra.data?.name || extra.title || "") : "" })); else setField(f, v); if (bad) setMissing((m) => m.filter((x) => x !== f.k)); }} staff={staff} meUid={me.uid} ctx={fieldCtx} />}</div>
                 </div>
               );
             })}
@@ -2035,11 +2040,10 @@ function Viewer({ d: d0, me, staff, company, onClose, onRedraft, onEdit, inline 
                   payAsk ? (
                     <div className="space-y-2">
                       <div><div className="text-[12px] font-bold text-[#5B6B85] mb-1">지급일</div><CustomDatePicker value={payAsk.date} onChange={(e) => setPayAsk((p) => ({ ...p, date: e.target.value || kstToday() }))} className={inp} showIcon /></div>
-                      {formOf(d.form)?.fields?.some((f) => f.k === "account") && isAcctEditor(me) && (
+                      {formOf(d.form)?.fields?.some((f) => f.k === "account") && (
                         <div><div className="text-[12px] font-bold text-[#5B6B85] mb-1">계정과목{!d.data?.account && <span className="ml-1 text-[#B42318]">(기안자가 비워 둠)</span>}</div>
-                          <CustomSelect value={payAsk.account || ""} onChange={(e) => setPayAsk((p) => ({ ...p, account: e.target.value }))} className={inp}>
-                            <option value="">선택</option>{ACCOUNTS.map((a) => <option key={a} value={a}>{a}</option>)}
-                          </CustomSelect></div>
+                          {/* ⭐ 2026-11-09 경리는 틀린 계정과목을 바꾸거나 목록에 없는 계정과목을 직접 입력(새로 쓴 계정과목은 이후 회사 문서의 선택지에 같이 나온다) */}
+                          <SelectDirect f={{ label: "계정과목", options: accountOptions() }} value={payAsk.account || ""} onChange={(v) => setPayAsk((p) => ({ ...p, account: v }))} /></div>
                       )}
                       <div><div className="text-[12px] font-bold text-[#5B6B85] mb-1">메모 (선택)</div><input value={payAsk.memo} onChange={(e) => setPayAsk((p) => ({ ...p, memo: e.target.value }))} placeholder="예) 국민은행 계좌이체" className={inp} /></div>
                       <div className="flex gap-2">
@@ -2488,10 +2492,12 @@ export default function ApprovalCenter({ company, me, page, setPage, openId, onO
   // ⭐ 2026-11-09 결재함은 들어올 때 항상 '지급 대기'부터
   React.useEffect(() => { setTab(page === "mine" ? "all" : "paywait"); }, [page]);
   React.useEffect(() => {
-    if (!admin || tab !== "company" || !company) return undefined;
+    // ⭐ 2026-11-09 버그수정 — 예전엔 '회사 전체' 탭을 눌렀을 때만 구독해서, 관리자가 지급완료·반려 등 다른 탭을 누르면
+    //  (내가 결재선에 없는 문서는) 0건이었다 → 결재함에서는 항상 구독해 모든 상태 탭에 회사 문서를 함께 센다
+    if (!admin || page !== "inbox" || !company) return undefined;
     return onSnapshot(query(collection(db, "approvals"), where("company", "==", company)),
       (s) => setCompanyAll(s.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => toMs(b.createdAt) - toMs(a.createdAt))), () => setCompanyAll([]));
-  }, [admin, tab, company]);
+  }, [admin, page, company]);
   // 💸 2026-11-04 지급 대기 — 경리(test)·관리자 역할은 참여하지 않은 지출 문서도 볼 수 있어(규칙상 읽기 허용) 회사 지출 결의를 따로 구독
   const payReader = isFinUser(me); // ⭐ 2026-11-07 지급 권한과 같은 기준
   const [payPool, setPayPool] = React.useState([]);
@@ -2528,7 +2534,10 @@ export default function ApprovalCenter({ company, me, page, setPage, openId, onO
   const hiddenL = (list || []).filter(isHidden);
   const inLine = (d) => (d.line || []).some((s) => s.uid === uid);
   // ⭐ 2026-11-09 결재함 필터 — 회사 전체(관리자)/전체 · 결재 대기(내 차례) · 지급 대기 · 지급완료 · 반려 · 결재 취소 · 회수 · 참조 · 삭제한 문서
-  const lineL = L.filter(inLine);
+  rememberAccounts(list); rememberAccounts(companyAll); rememberAccounts(payPool);
+  const lineL0 = L.filter(inLine);
+  // 관리자(회사 전체를 보는 사람)는 상태 탭에도 회사 문서 전체를 넣는다 — 결재 대기(내 차례)만 내 문서 기준
+  const lineL = admin && companyAll ? [...new Map([...lineL0, ...companyAll.filter((d) => !isHidden(d))].map((d) => [d.id, d])).values()].sort((a, b) => toMs(b.createdAt) - toMs(a.createdAt)) : lineL0;
   const payMine = [...new Map([...L, ...payPool.filter((d) => !isHidden(d))].map((d) => [d.id, d])).values()];
   const inboxStatus = apStatusSets(lineL, { pendingFilter: (d) => !myTurn(d, uid) });
   const sets = {
