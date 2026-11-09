@@ -9,7 +9,7 @@ import { db, auth } from "./firebase";
 import { getTenant } from "./fsTenant";
 
 export const COMPANY_FEATURES = [
-  { key: "fareRules", label: "운임 규칙", desc: "운임구분(일대·월대 등)별 수수료 자동 계산" },
+  { key: "fareRules", label: "운임 규칙", desc: "운임구분(일대·월대 등)별 수수료 자동 계산 — 모든 운송사 기본 켜짐(안 쓰는 곳만 끔)", defaultOn: true },
   { key: "vehicleLedger", label: "차량 관리대장", desc: "차량별 정비·변경·기사 탑승 이력, 장비(유류카드·하이패스·GPS·덮개·박스) 관리" },
   { key: "masterRolePerms", label: "마스터 권한 관리", desc: "회사 마스터가 관리자메뉴 › 권한 관리에서 자기 회사 역할별 메뉴(숨김·조회·수정)를 직접 설정" },
   { key: "orderManagerCol", label: "배차표 배차담당자 칸", desc: "실시간·배차현황·미배차 표에 오더 등록 직원 이름 표시" },
@@ -25,7 +25,7 @@ const resolveCompany = (company) => {
 
 const blank = () => {
   const o = { loaded: false };
-  COMPANY_FEATURES.forEach((f) => { o[f.key] = false; });
+  COMPANY_FEATURES.forEach((f) => { o[f.key] = !!f.defaultOn; }); // ⭐ 2026-11-09 기본 켜짐 기능(defaultOn)은 저장값이 없어도 켜짐
   return Object.freeze(o);
 };
 const EMPTY = blank();
@@ -44,7 +44,7 @@ function start(co, s) {
     s.unsub = onSnapshot(doc(db, "companyFeatures", co), (snap) => {
       const d = snap.exists() ? snap.data() || {} : {};
       const o = { loaded: true };
-      COMPANY_FEATURES.forEach((f) => { o[f.key] = d[f.key] === true; });
+      COMPANY_FEATURES.forEach((f) => { o[f.key] = f.defaultOn ? d[f.key] !== false : d[f.key] === true; }); // defaultOn = 끈(false) 회사만 꺼짐
       // 배열에 아직 없는 키도 true면 그대로 노출(다른 기능이 먼저 저장한 경우)
       Object.keys(d).forEach((k) => { if (!(k in o) && typeof d[k] === "boolean") o[k] = d[k]; });
       s.state = o; emit(s);
@@ -72,7 +72,7 @@ export function useCompanyFeatures(company) {
 }
 
 export function useCompanyFeature(company, key) {
-  return useCompanyFeatures(company)[key] === true;
+  return useCompanyFeatures(company)[key] === true; // defaultOn 기능도 위에서 true로 채워진다
 }
 
 // 최고관리자용 — 회사별 기능 켜기/끄기
