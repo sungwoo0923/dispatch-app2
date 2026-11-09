@@ -57511,7 +57511,22 @@ function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, sho
           <div className={`bg-white rounded-2xl shadow-2xl ${(editDriverModal.등급 === "지입" || editDriverModal.등급 === "직영" || editDriverModal.등급 === "임대") ? "w-[640px]" : "w-[480px]"} max-w-[96vw] max-h-[92vh] overflow-y-auto`} onClick={e => e.stopPropagation()}>
             <div className="px-6 py-4 flex items-center justify-between sticky top-0 z-10" style={{ background: "linear-gradient(120deg,#0B1428,#1B2B4B 70%,#2D4C82)" }}>
               <h3 className="text-white font-bold text-[15px]">기사 수정 — {editDriverModal.차량번호}{(editDriverModal.등급 === "지입" || editDriverModal.등급 === "직영" || editDriverModal.등급 === "임대") ? <span className="ml-2 px-2 py-0.5 rounded-md bg-white/15 text-[11.5px] font-black">{editDriverModal.등급}</span> : null}</h3>
-              <button onClick={() => setEditDriverModal(null)} className="text-white/60 hover:text-white text-xl">✕</button>
+              <div className="flex items-center gap-2">
+                {/* ⭐ 2026-11-09 차량관리로 바로 가기 — 지입차관리 › 차량 관리에서 이 차량 정보를 연다 */}
+                {String(editDriverModal.차량번호 || "").trim() && (
+                  <button type="button" title="지입차관리 › 차량 관리에서 이 차량 정보 열기"
+                    onClick={() => {
+                      const plate = String(editDriverModal.차량번호 || "").trim();
+                      setEditDriverModal(null);
+                      window.__kpVlOpenPlate = plate;
+                      try { sessionStorage.setItem("fm_tab", JSON.stringify("vehicle")); } catch { /* 무시 */ }
+                      window.dispatchEvent(new CustomEvent("kp-go-menu", { detail: "지입차관리" }));
+                      setTimeout(() => { window.dispatchEvent(new Event("kp-fm-vehicle")); window.dispatchEvent(new Event("kp-vl-open")); }, 60);
+                    }}
+                    className="h-8 px-3 rounded-lg bg-white/10 hover:bg-white/20 border border-white/25 text-white text-[12.5px] font-bold whitespace-nowrap">🚚 차량관리</button>
+                )}
+                <button onClick={() => setEditDriverModal(null)} className="text-white/60 hover:text-white text-xl">✕</button>
+              </div>
             </div>
             <div className={`${mobile ? "px-4 grid-cols-1" : "px-6 grid-cols-2"} py-5 grid gap-4`}>
               <div>

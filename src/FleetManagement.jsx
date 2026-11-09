@@ -6243,6 +6243,8 @@ export default function FleetManagement({ dispatchData = [], role = "", forceTab
   // 보여야 하므로, 기본 진입 탭을 실시간관제가 아닌 노선관리로 바꾼다.
   const [mainTab, setMainTab] = useState(() => { if (forceTab) return forceTab; const t = sfGet("fm_tab", "route"); return t === "settlement" ? "route" : t; });
   useEffect(() => { if (forceTab) setMainTab(forceTab); }, [forceTab]);
+  // ⭐ 2026-11-09 기사관리 › 기사 수정 [🚚 차량관리] → 차량 관리 탭으로
+  useEffect(() => { if (forceTab) return undefined; const h = () => setMainTab("vehicle"); window.addEventListener("kp-fm-vehicle", h); return () => window.removeEventListener("kp-fm-vehicle", h); }, [forceTab]);
   // ⭐ 2026-11-05 온도 관제·적재함 카메라 메뉴 삭제 — 예전에 기억된 탭으로 들어오면 관제현황으로
   useEffect(() => { if (mainTab === "temperature" || mainTab === "cargo-camera") setMainTab("tracking"); }, [mainTab]);
   // ⭐ 상단 메뉴 › 지입차관리 세부 메뉴에서 고른 모듈로 바로 이동

@@ -213,6 +213,7 @@ export function ledgerPrintHtml(v, co) {
     ["차량번호", v.차량번호], ["차량종류", v.용도 || v.차량종류], ["톤수", v.톤수], ["회사", v.회사],
     ["차대번호", v.차대번호], ["보험사", v.보험사], ["차주명", v.차주명], ["현재 기사", cur ? `${cur.이름} ${cur.연락처 || ""}` : ""],
     ["기사 변경일", cur?.시작], ["유류카드", [v.유류카드사, v.유류카드번호].filter(Boolean).join(" ")], ["하이패스", v.하이패스], ["GPS", v.GPS],
+    ["하이패스 카드", [v.하이패스카드사, v.하이패스카드번호, v.하이패스유효기간 && `유효 ${v.하이패스유효기간}`].filter(Boolean).join(" ")], ["하이패스 결제·단말", [v.하이패스구분, v.하이패스단말기, v.하이패스명의].filter(Boolean).join(" · ")],
     ["덮개", v.덮개], ["박스", [v.박스, v.박스메모].filter(Boolean).join(" · ")], ["메모", v.메모], ["", ""],
   ];
   const tbl = (title, heads, rows, foot) => `<h2>${esc(title)}</h2><table><thead><tr>${heads.map((h) => `<th>${esc(h)}</th>`).join("")}</tr></thead><tbody>${

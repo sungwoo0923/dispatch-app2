@@ -21,6 +21,7 @@ import CustomDatePicker from "./CustomDatePicker"; // 📅 프로그램 달력(�
 import { careSummary, vehicleDefaults, TRUCK_MODELS } from "./vehicleCare";
 import { useVehicleTypes, VehicleTypePicker, VT_DEFAULTS } from "./vehicleTypes"; // 🚚 2026-11-02 회사 공용 차량종류
 import { fmtPhone as fmtPhoneLive } from "./formatInput"; // 입력 중 하이픈(02·031·010 등)
+import VehicleHologram from "./VehicleHologram"; // ⭐ 2026-11-09 차량 3D 분석(디지털 트윈·타이어 위치별 교체)
 
 const C = { ink: "#0B1428", navy: "#0F1A30", mid: "#1B2B4B", blue: "#2D4C82", sky: "#8FB0F0", line: "#E3E8F0", soft: "#F4F6FA", sub: "#5B6B85", mute: "#5B6B85" /* ⭐ 2026-11-05 흐린 글씨 금지 — #9AA9C3 → #5B6B85 */, pale: "#EEF2F9" };
 // ⭐ 2026-11-05 고정폭 글씨 → 기본 글씨체(흐릿해 보인다는 의견)
@@ -209,8 +210,13 @@ const EqDot = ({ on, label }) => (
 );
 
 // ── 기본 정보 입력 폼(등록·수정 공용) ──
-const BASIC_KEYS = ["차량번호", "용도", "톤수", "제조사", "모델", "연식", "회사", "차대번호", "보험사", "차주명", "유류카드사", "유류카드번호", "하이패스", "GPS", "덮개", "박스", "박스메모", "메모"];
+const BASIC_KEYS = ["차량번호", "용도", "톤수", "제조사", "모델", "연식", "회사", "차대번호", "보험사", "차주명", "유류카드사", "유류카드번호", "하이패스", "하이패스카드사", "하이패스카드번호", "하이패스유효기간", "하이패스구분", "하이패스단말기", "하이패스명의", "GPS", "덮개", "박스", "박스메모", "메모"];
 const LEDGER_TYPE_BASE = Array.from(new Set([...VT_DEFAULTS, ...LEDGER_TYPE_EXTRA]));
+// ⭐ 2026-11-09 하이패스 카드 — 번호 4-4-4-4 하이픈 자동, 유효기간 MM/YY 자동
+const fmtCardNo = (x) => String(x || "").replace(/[^\d]/g, "").slice(0, 16).replace(/(\d{4})(?=\d)/g, "$1-");
+const fmtExpiry = (x) => { const d = String(x || "").replace(/[^\d]/g, "").slice(0, 4); return d.length > 2 ? `${d.slice(0, 2)}/${d.slice(2)}` : d; };
+const HIPASS_CARD_OPTS = ["KB국민", "신한", "삼성", "현대", "롯데", "하나", "우리", "BC", "NH농협", "IBK기업", "한국도로공사(선불)"];
+const HIPASS_TYPE_OPTS = ["후불(신용)", "후불(체크)", "선불(충전식)", "법인카드", "화물차 감면"];
 // 소제목 줄
 const FormGroup = ({ title, code, children }) => (
   <div style={{ border: `1px solid ${C.line}`, borderRadius: 14, overflow: "hidden" }}>
@@ -250,6 +256,17 @@ function BasicForm({ v, set, purposeOpts, companyOpts, isNew, company }) {
         <Field label="박스">{sel("박스", BOX_OPTS, { customPlaceholder: "박스 종류" })}</Field>
         <Field label="박스 사용처·제작사" wide><input {...f("박스메모")} placeholder="어디서 쓰는 박스인지 · 제작사" /></Field>
       </FormGroup>
+      {/* ⭐ 2026-11-09 하이패스가 있으면 카드 정보 전부 입력 */}
+      {hasEquip(v.하이패스) && (
+        <FormGroup title="하이패스 카드" code="HI-PASS">
+          <Field label="카드사">{sel("하이패스카드사", HIPASS_CARD_OPTS, { customPlaceholder: "카드사 이름" })}</Field>
+          <Field label="카드번호"><input value={v.하이패스카드번호 || ""} onChange={(e) => set({ ...v, 하이패스카드번호: fmtCardNo(e.target.value) })} inputMode="numeric" placeholder="0000-0000-0000-0000" style={{ ...inp, fontFamily: MONO, ...TAB }} /></Field>
+          <Field label="유효기간 (MM/YY)"><input value={v.하이패스유효기간 || ""} onChange={(e) => set({ ...v, 하이패스유효기간: fmtExpiry(e.target.value) })} inputMode="numeric" placeholder="MM/YY" style={{ ...inp, fontFamily: MONO, ...TAB }} /></Field>
+          <Field label="결제 구분">{sel("하이패스구분", HIPASS_TYPE_OPTS, { customPlaceholder: "결제 방식" })}</Field>
+          <Field label="단말기 번호"><input {...f("하이패스단말기")} placeholder="OBU 단말기 번호" /></Field>
+          <Field label="카드 명의"><input {...f("하이패스명의")} placeholder="명의자(회사·차주)" /></Field>
+        </FormGroup>
+      )}
       <Field label="메모" wide><textarea value={v.메모 || ""} onChange={(e) => set({ ...v, 메모: e.target.value })} rows={2} placeholder="메모" style={{ ...inp, height: "auto", padding: 10, resize: "vertical", fontFamily: "inherit" }} /></Field>
     </div>
   );
@@ -457,6 +474,7 @@ function Ledger({ v, co, appDriver, linkRaw, drivers, canEdit, by, narrow, purpo
   const [photo, setPhoto] = useState("");
   const [tlKind, setTlKind] = useState("all");
   const [tlMore, setTlMore] = useState(false);
+  const [holo, setHolo] = useState(false); // ⭐ 2026-11-09 3D 차량 분석 창
   const photoRef = useRef(null);
   useEffect(() => { let on = true; setPhoto(""); if (v.photo?.id) loadEvidence(v.photo).then((d) => { if (on) setPhoto(d); }).catch(() => {}); return () => { on = false; }; }, [v.photo?.id]);
   const uploadPhoto = async (file) => {
@@ -552,7 +570,7 @@ function Ledger({ v, co, appDriver, linkRaw, drivers, canEdit, by, narrow, purpo
   const exportXlsx = () => {
     const wb = XLSX.utils.book_new();
     const kv = [["항목", "내용"], ["차량번호", v.차량번호], ["차량종류", v.용도], ["톤수", v.톤수], ["회사", v.회사], ["차대번호", v.차대번호], ["보험사", v.보험사], ["차주명", v.차주명],
-      ["현재 기사", cur?.이름 || ""], ["기사 연락처", cur?.연락처 || ""], ["기사 변경일", cur?.시작 || ""], ["유류카드 카드사", v.유류카드사], ["유류카드 번호", v.유류카드번호], ["하이패스", v.하이패스], ["GPS", v.GPS], ["덮개", v.덮개], ["박스", v.박스], ["박스 사용처", v.박스메모], ["메모", v.메모]];
+      ["현재 기사", cur?.이름 || ""], ["기사 연락처", cur?.연락처 || ""], ["기사 변경일", cur?.시작 || ""], ["유류카드 카드사", v.유류카드사], ["유류카드 번호", v.유류카드번호], ["하이패스", v.하이패스], ["하이패스 카드사", v.하이패스카드사], ["하이패스 카드번호", v.하이패스카드번호], ["하이패스 유효기간", v.하이패스유효기간], ["하이패스 결제구분", v.하이패스구분], ["하이패스 단말기", v.하이패스단말기], ["하이패스 명의", v.하이패스명의], ["GPS", v.GPS], ["덮개", v.덮개], ["박스", v.박스], ["박스 사용처", v.박스메모], ["메모", v.메모]];
     const add = (name, aoa, w) => { const ws = XLSX.utils.aoa_to_sheet(aoa); ws["!cols"] = w.map((x) => ({ wch: x })); XLSX.utils.book_append_sheet(wb, ws, name); };
     add("기본정보", kv, [16, 40]);
     const rep = [...(v.repairs || [])].sort((a, b) => String(a.일자).localeCompare(String(b.일자)));
@@ -633,7 +651,10 @@ function Ledger({ v, co, appDriver, linkRaw, drivers, canEdit, by, narrow, purpo
         {drawer ? (
           <div style={{ width: "100%", display: "flex", alignItems: "center", gap: 8 }}>
             <span style={{ fontFamily: MONO, fontSize: 12.5, fontWeight: 800, letterSpacing: "0.12em", color: C.sky, flex: 1, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{narrow ? "VEHICLE" : "VEHICLE · 차량 정보"}</span>
+            {/* ⭐ 2026-11-09 순서: 기본 정보 수정 · 인쇄 · 엑셀 저장 · 닫기 */}
             {canEdit && !edit && <Btn kind="light" onClick={startEdit}>✎ 기본 정보 수정</Btn>}
+            <Btn kind="light" onClick={() => printHtml(ledgerPrintHtml(v, co))}>인쇄(A4)</Btn>
+            <Btn kind="light" onClick={exportXlsx}>엑셀 저장</Btn>
             <Btn kind="light" onClick={onBack} title="닫기 (Esc)">✕ 닫기</Btn>
           </div>
         ) : <div style={{ width: narrow ? "100%" : "auto" }}><Btn kind="light" onClick={onBack}>← 차량 목록</Btn></div>}
@@ -660,8 +681,8 @@ function Ledger({ v, co, appDriver, linkRaw, drivers, canEdit, by, narrow, purpo
           ))}
         </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          <Btn kind="light" onClick={() => printHtml(ledgerPrintHtml(v, co))}>인쇄(A4)</Btn>
-          <Btn kind="light" onClick={exportXlsx}>엑셀 저장</Btn>
+          <Btn kind="light" onClick={() => setHolo(true)} title="차량을 3D 홀로그램으로 보고 타이어·제원·상태를 분석" style={{ background: "linear-gradient(135deg, rgba(56,225,255,.28), rgba(45,245,196,.18))", border: "1px solid rgba(56,225,255,.6)", boxShadow: "0 0 14px rgba(56,225,255,.25)" }}>◈ 3D 차량 분석</Btn>
+          {!drawer && <><Btn kind="light" onClick={() => printHtml(ledgerPrintHtml(v, co))}>인쇄(A4)</Btn><Btn kind="light" onClick={exportXlsx}>엑셀 저장</Btn></>}
           {canEdit && !v.virtual && <Btn kind="light" onClick={removeVehicle}>차량 삭제</Btn>}
         </div>
         </div>
@@ -690,7 +711,7 @@ function Ledger({ v, co, appDriver, linkRaw, drivers, canEdit, by, narrow, purpo
             </div>
             <div style={{ marginTop: 14, fontSize: 14, fontWeight: 900, color: C.sub }}>장비</div>
             <div style={{ display: "grid", gridTemplateColumns: narrow ? "minmax(0,1fr)" : "repeat(5, minmax(0,1fr))", gap: 10, marginTop: 8 }}>
-              {[["유류카드", [v.유류카드사, v.유류카드번호].filter(Boolean).join(" · "), hasEquip(v.유류카드번호)], ["하이패스", v.하이패스, hasEquip(v.하이패스)], ["GPS", v.GPS, hasEquip(v.GPS)], ["덮개", v.덮개, hasEquip(v.덮개)], ["박스", [v.박스, v.박스메모].filter(Boolean).join(" · "), hasEquip(v.박스)]].map(([k, val, on]) => (
+              {[["유류카드", [v.유류카드사, v.유류카드번호].filter(Boolean).join(" · "), hasEquip(v.유류카드번호)], ["하이패스", [v.하이패스, v.하이패스카드사, v.하이패스카드번호, v.하이패스유효기간 && `유효 ${v.하이패스유효기간}`, v.하이패스구분, v.하이패스단말기 && `단말 ${v.하이패스단말기}`, v.하이패스명의 && `명의 ${v.하이패스명의}`].filter(Boolean).join(" · "), hasEquip(v.하이패스)], ["GPS", v.GPS, hasEquip(v.GPS)], ["덮개", v.덮개, hasEquip(v.덮개)], ["박스", [v.박스, v.박스메모].filter(Boolean).join(" · "), hasEquip(v.박스)]].map(([k, val, on]) => (
                 <div key={k} style={{ padding: "12px 14px", borderRadius: 12, background: on ? "linear-gradient(135deg,#0F1A30,#1B2B4B)" : C.soft, color: on ? "#fff" : C.mute, display: "flex", alignItems: narrow ? "center" : "flex-start", flexDirection: narrow ? "row" : "column", gap: narrow ? 10 : 2 }}>
                   <div style={{ fontSize: 14, fontWeight: 900, color: on ? C.sky : C.mute, minWidth: narrow ? 64 : 0 }}>{k}</div>
                   <div style={{ fontSize: 15, fontWeight: 800, wordBreak: "break-all" }}>{val || "없음"}</div>
@@ -843,6 +864,8 @@ function Ledger({ v, co, appDriver, linkRaw, drivers, canEdit, by, narrow, purpo
       </Section>
 
       <style>{VL_CSS}</style>
+      {holo && <VehicleHologram v={v} linkRaw={linkRaw} canEdit={canEdit} narrow={narrow} DateField={DateField} onClose={() => setHolo(false)}
+        onSave={async (fn, okMsg) => { try { await mutate((d) => fn(d)); toast(okMsg || "저장했습니다"); } catch (e) { toast(e?.message || "저장하지 못했습니다"); throw e; } }} />}
       {editor && <RowEditor kind={editor.kind} row={editor.row} kindOpts={kindOpts} onClose={() => setEditor(null)} onSave={(r, fs) => saveRow(editor.kind, r, fs)} onDelete={canEdit ? async () => { const ok = await delRow(editor.kind, editor.row); if (ok) setEditor(null); } : null} />}
       {drvForm && (
         <Modal title="기사 변경" onClose={() => setDrvForm(null)} width={560}
@@ -1082,6 +1105,18 @@ export default function VehicleLedger({ company = "", drivers = [], canEdit = tr
   // 대장 미작성 차량은 열어도 문서를 만들지 않으므로 docId로 고른다 → 처음 저장해 대장이 생기면 같은 칸이 진짜 대장으로 바뀐다
   const sel = rows.find((r) => r.id === selId) || rows.find((r) => r.virtual && r.docId === selId) || null;
   const selV = sel ? (sel.virtual ? { ...sel, id: sel.docId } : sel) : null;
+  // ⭐ 2026-11-09 기사관리 › 기사 수정 [🚚 차량관리] → 그 차량 정보를 바로 연다(window.__kpVlOpenPlate)
+  useEffect(() => {
+    const tryOpen = () => {
+      const plate = window.__kpVlOpenPlate; if (!plate || !loaded) return;
+      const r = rows.find((x) => plateCore(x.차량번호) === plateCore(plate));
+      window.__kpVlOpenPlate = "";
+      if (r) { setHot(r.id); openRow(r); } else { setQ(String(plate)); toast(`${plate} — 차량관리대장에 없는 차량입니다. [차량 등록]으로 추가하세요`); }
+    };
+    tryOpen();
+    window.addEventListener("kp-vl-open", tryOpen);
+    return () => window.removeEventListener("kp-vl-open", tryOpen);
+  }, [loaded, rows]); // eslint-disable-line react-hooks/exhaustive-deps
   const mineCount = useMemo(() => rows.filter((r) => (myUid && r.담당자Uid === myUid) || (!r.담당자Uid && myName && r.담당자 === myName)).length, [rows, myUid, myName]);
   // 기사가 나중에 기사앱에 가입하면(또는 기사관리에 등록되면) PC에서 넣어 둔 모델·연식을 기사 문서(기사앱 제원)에도 한 번 채워 준다
   const vSynced = useRef(new Set());
