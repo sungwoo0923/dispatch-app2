@@ -17,6 +17,7 @@ import { pushTenantBypass } from "./fsTenant";
 import KpSubNav from "./KpSubNav";
 import PlatformMonitor, { estimateBill, usePhone } from "./PlatformMonitor";
 // ⭐ 2026-11-02 관리자센터 — 실시간 계정·접속 층 + 운영 위젯
+import { useHelpAcks, helpNeededList, ackHelpNeeded } from "./helpNeeded"; // 🆘 2026-11-09 신규 운송사 "도움 필요"
 import { PlatformLiveProvider, usePlatformLive, mergeCompanies, LiveNowPanel, SignupTimeline, DupeWarning, HeaderLivePill, Panel as LivePanel, normCo } from "./PlatformLive";
 import { ShellIcon } from "./AdminShell";
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts";
@@ -144,7 +145,7 @@ function useCol(name, order = "createdAt", n = 300) {
 const msOf = (v) => (v?.toMillis ? v.toMillis() : v?.seconds ? v.seconds * 1000 : typeof v === "number" ? v : 0);
 
 // ═══════════════════════ 오늘 할 일 ═══════════════════════
-function TodayPanel({ go }) {
+function TodayPanel({ go, openCompany }) {
   const live = usePlatformLive(); // ⭐ 2026-11-02 관리자센터 — 운송사 가입 승인 대기 · 직원 승인 대기 · 비슷한 회사명
   const quotes = useCol("salesQuotes");
   const contracts = useCol("contracts");
@@ -154,6 +155,11 @@ function TodayPanel({ go }) {
   const invoices = useCol("platformInvoices", null);
   const [apps, setApps] = React.useState([]);
   React.useEffect(() => onSnapshot(collection(db, "companyApplications"), (s) => setApps(s.docs.map((d) => d.data())), () => {}), []);
+  // 🆘 2026-11-09 도움 필요 — 가입 7일 안 신규 운송사 중 오더 0건 · 기사 0명 · 직원 1명뿐
+  const [pStats, setPStats] = React.useState(null);
+  React.useEffect(() => onSnapshot(doc(db, "siteConfig", "platformStats"), (x) => setPStats(x.exists() ? x.data() : {}), () => setPStats({})), []);
+  const helpAcks = useHelpAcks();
+  const helpList = React.useMemo(() => (pStats ? helpNeededList(mergeCompanies(pStats.companies, live), Date.now(), helpAcks) : []), [pStats, live, helpAcks]);
   const today = ymd();
   const soonLimit = (() => { const d = new Date(); d.setMonth(d.getMonth() + 2); return ymd(d); })();
   const tasks = [
@@ -190,6 +196,23 @@ function TodayPanel({ go }) {
           </div>
         ))}
       </div>
+      {helpList.length > 0 && (
+        <Card code="HELP" title={`도움 필요 ${helpList.length}곳 — 가입 7일 안인데 아직 쓰기 시작을 못 한 운송사`} bodyClass="p-2">
+          {helpList.map(({ c, h }) => (
+            <div key={c.name} className="flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-[#F5F8FD] flex-wrap">
+              <span className="w-16 shrink-0 text-center py-1 rounded-md text-[10.5px] font-extrabold tracking-[0.12em] bg-[#B42318] text-white" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>HELP</span>
+              <span className="flex-1 min-w-[220px]">
+                <span className="block text-[14.5px] font-black text-[#0F1A30] truncate">{c.name} 가입 {h.day}일째 · {h.reasons.join(" · ")} — 먼저 연락해 보세요</span>
+                <span className="block text-[12px] text-[#7A89A3]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>대표 {c.rep || "-"} · {c.phone || "연락처 없음"} · 직원 {h.staff} · 기사 {h.drivers} · 오더 {h.orders}</span>
+              </span>
+              {c.phone && <a href={`tel:${String(c.phone).replace(/[^\d]/g, "")}`} className="h-9 px-3 rounded-lg bg-[#0F1A30] text-white text-[13px] font-black inline-flex items-center">📞 전화</a>}
+              <button type="button" onClick={() => (openCompany ? openCompany(c.name) : go("companies"))} className="h-9 px-3 rounded-lg border border-[#DCE3EE] text-[13px] font-black text-[#1B2B4B]">상세</button>
+              <button type="button" onClick={() => ackHelpNeeded(c.name).catch((e) => window.alert(e.message))} className="h-9 px-3 rounded-lg border border-[#DCE3EE] text-[13px] font-black text-[#5B6B85]">확인함</button>
+            </div>
+          ))}
+          <div className="px-3 pb-2 text-[11.5px] text-[#9AA9C3]">오더 수는 서버 집계(매일 새벽 · 대시보드 [지금 갱신]) 기준입니다. [확인함]을 누르면 이 목록에서 숨깁니다.</div>
+        </Card>
+      )}
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_380px] items-start">
       <Card code="QUEUE" title={`처리할 일 ${tasks.length}건`} bodyClass="p-2">
         {tasks.length === 0 ? <div className="py-14 text-center text-[#9AA9C3]">지금 처리할 일이 없습니다 ✓</div> : tasks.map((t, i) => (
@@ -1194,7 +1217,7 @@ function PlatformCenterInner({ user }) {
     body = (
       <PlatformMonitor bare tab={tab} onTab={setTab} onContract={(q) => openContract({ fromQuote: q })} focusCompany={focusCompany} onFocusDone={clearFocus} />
     );
-  } else if (tab === "todo") body = <TodayPanel go={setTab} />;
+  } else if (tab === "todo") body = <TodayPanel go={setTab} openCompany={openCompany} />;
   else if (tab === "live") body = <LiveTab openCompany={openCompany} />;
   else if (tab === "ai:hub") body = <AiTeamHub go={setTab} />; // 🤖 2026-11-06 AI 팀
   else if (tab.startsWith("ai:")) body = <AiTeamChat teamKey={tab.slice(3)} />;

@@ -15,6 +15,7 @@ import { PricingEditor, QuoteBuilder, QuoteHistory, useSalesPricing, applyPlanBi
 // ⭐ 2026-11-02 관리자센터 — 실시간 계정·접속(users·loginSessions) + 운영 위젯
 import { usePlatformLive, mergeCompanies, mergeShippers, StatsStamp, LiveNowPanel, SignupTimeline, PendingPanel, DupeWarning, HealthCard, StaffList, Spark, PLAN_NAMES } from "./PlatformLive";
 import { CustomSelect } from "./CustomSelect";
+import { useHelpAcks, helpNeededOf, ackHelpNeeded } from "./helpNeeded"; // 🆘 2026-11-09 신규 운송사 "도움 필요"
 import { fmtMoney, parseMoney } from "./formatInput";
 import { LogisTag } from "./brand"; // 🔷 2026-11-04 LogisWeb 로고
 
@@ -77,7 +78,7 @@ function statusOf(c, today) {
 // ⭐ 2026-11-02 관리자센터 — 타일에 스파크라인(spark)·누르기(onClick) 추가
 function Tile({ code, label, value, unit, foot, dark, spark, onClick }) {
   return (
-    <div onClick={onClick} className={dark ? "pm-tile-dark" : "pm-tile"} style={{ borderRadius: 16, padding: "15px 17px 13px", minWidth: 0, position: "relative", overflow: "hidden", cursor: onClick ? "pointer" : undefined }}>
+    <div onClick={onClick} className={dark ? "pm-tile-dark" : "pm-tile"} style={{ borderRadius: 16, padding: "15px 17px 13px", minWidth: 0, height: "100%", boxSizing: "border-box", position: "relative", overflow: "hidden", cursor: onClick ? "pointer" : undefined }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
         <span style={{ fontSize: 14.5, fontWeight: 800, color: dark ? "rgba(255,255,255,.8)" : "#4b5563", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{label}</span>
         <span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 11.5, fontWeight: 800, letterSpacing: "0.16em", color: dark ? "rgba(143,176,240,.85)" : "#94A3B8", whiteSpace: "nowrap" }}>{code}</span>
@@ -203,11 +204,12 @@ export default function PlatformMonitor({ demoStats = null, tab: tabProp, onTab,
   const daysInMonth = new Date(Number(today.slice(0, 4)), Number(today.slice(5, 7)), 0).getDate();
   // ⭐ 2026-11-02 관리자센터2 — 요금제가 지정된 회사(청구 › 수납 관리)는 요금제 관리 가격으로 청구 계산(예전엔 모든 회사를 공통 기본료로 계산해 요금제 가격과 달랐다)
   const sales = useSalesPricing();
+  const helpAcks = useHelpAcks();
   const companies = useMemo(() => mergeCompanies(stats?.companies, live).map((c) => {
     const bill = applyPlanBill(estimateBill(c, pricing, dayNo, daysInMonth), c, c.plan?.planId, sales);
     const inactiveDays = c.lastSeen ? Math.floor((Date.now() - c.lastSeen) / 86400000) : null;
-    return { ...c, bill, health: healthOf(c, today), status: statusOf(c, today), idle: daysAgo(c.lastOrder, today), inactiveDays };
-  }), [stats, live, pricing, dayNo, daysInMonth, today, sales]);
+    return { ...c, bill, health: healthOf(c, today), status: statusOf(c, today), idle: daysAgo(c.lastOrder, today), inactiveDays, help: helpNeededOf(c, Date.now(), helpAcks) };
+  }), [stats, live, pricing, dayNo, daysInMonth, today, sales, helpAcks]);
   const shippers = useMemo(() => mergeShippers(stats?.shippers, live), [stats, live]);
   const detail = detailName ? companies.find((c) => c.name === detailName) || null : null;
 
@@ -237,7 +239,8 @@ export default function PlatformMonitor({ demoStats = null, tab: tabProp, onTab,
       if (c.status.key === "dormant" && c.staff) a.push({ c, text: c.lastOrder ? `${c.idle}일째 오더 없음` : "아직 오더 없음", level: 2 });
       if (c.status.key === "drop") a.push({ c, text: `전월 같은 기간 대비 오더 ${Math.round((1 - c.m.cnt / c.pmSame.cnt) * 100)}% 감소`, level: 2 });
       if (c.pending) a.push({ c, text: `직원 승인 대기 ${c.pending}명`, level: 1 });
-      if (c.status.key === "new") a.push({ c, text: `신규 가입 · ${ymdOf(c.appliedAt)}`, level: 0 });
+      if (c.help) a.push({ c, text: `도움 필요 — 가입 ${c.help.day}일째 · ${c.help.reasons.join(" · ")}`, level: 2 });
+      else if (c.status.key === "new") a.push({ c, text: `신규 가입 · ${ymdOf(c.appliedAt)}`, level: 0 });
     });
     shippers.filter((s) => s.status === "pending").forEach((s) => a.push({ c: { name: s.name }, text: "화주사 가입 승인 대기", level: 1 }));
     return a.sort((x, y) => y.level - x.level);
@@ -247,6 +250,7 @@ export default function PlatformMonitor({ demoStats = null, tab: tabProp, onTab,
   const riskOf = (c) => ((c.staff || c.m.cnt) && (c.inactiveDays == null || c.inactiveDays >= 7) ? 100 : 0) + (c.status.key === "dormant" ? 50 : 0) + (c.status.key === "drop" ? 40 : 0) + (c.pending || 0) * 6 + (c.planReqs?.length || 0) * 12 + (c.status.key === "new" ? 8 : 0);
   const FILTERS = [
     ["all", "전체", () => true],
+    ["help", "도움 필요", (c) => !!c.help], // 🆘 2026-11-09 가입 7일 안 · 오더 0건/기사 0명/직원 1명
     ["online", "지금 접속", (c) => c.onlineNow > 0],
     ["inactive", "7일+ 미접속", (c) => c.inactiveDays == null || c.inactiveDays >= 7],
     ["dormant", "휴면·감소", (c) => ["dormant", "drop"].includes(c.status.key)],
@@ -312,7 +316,10 @@ export default function PlatformMonitor({ demoStats = null, tab: tabProp, onTab,
   // ⭐ 2026-11-06 운송사 상세(예전 오른쪽 서랍 내용) — 서랍과 운송사 관제의 오른쪽 칸이 같이 쓴다
   const renderDetail = (inPane = false) => (detail ? (
     <>
-              <div className="pm-hero" style={{ position: "sticky", top: inPane ? 64 : 0, zIndex: 2, padding: phone ? "calc(14px + env(safe-area-inset-top, 0px)) 16px 14px" : "20px 24px", color: "#fff" }}>
+              {/* ⭐ 2026-11-09 운송사 관제 오른쪽 칸에서는 머리를 고정하지 않는다(스크롤하면 아래 카드를 덮어 겹쳐 보였다) · 카드와 같은 여백·모서리 */}
+              <div className="pm-hero" style={inPane
+                ? { position: "relative", margin: phone ? "12px 12px 0" : "16px 16px 0", borderRadius: 16, overflow: "hidden", padding: phone ? "14px 16px" : "20px 24px", color: "#fff" }
+                : { position: "sticky", top: 0, zIndex: 2, padding: phone ? "calc(14px + env(safe-area-inset-top, 0px)) 16px 14px" : "20px 24px", color: "#fff", boxShadow: "0 6px 14px rgba(15,26,48,.18)" }}>
                 <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 12.5, letterSpacing: "0.24em", color: "#8FB0F0", fontWeight: 800 }}>CARRIER · {detail.code || "-"}</div>
@@ -326,12 +333,19 @@ export default function PlatformMonitor({ demoStats = null, tab: tabProp, onTab,
                 </div>
               </div>
               <div style={{ padding: phone ? 12 : 16, display: "flex", flexDirection: "column", gap: 12 }}>
+                {detail.help && (
+                  <div style={{ borderRadius: 12, background: "#FEF3F2", border: "1px solid #FECDCA", color: "#7A271A", padding: "10px 14px", display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                    <span style={{ fontSize: 14.5, fontWeight: 900, flex: 1, minWidth: 200 }}>🆘 도움 필요 — 가입 {detail.help.day}일째 · {detail.help.reasons.join(" · ")} · 먼저 연락해 보세요</span>
+                    {detail.phone && <a href={`tel:${String(detail.phone).replace(/[^\d]/g, "")}`} style={{ height: 34, padding: "0 12px", borderRadius: 9, background: "#B42318", color: "#fff", fontSize: 13.5, fontWeight: 900, display: "inline-flex", alignItems: "center", textDecoration: "none" }}>📞 {detail.phone}</a>}
+                    <button type="button" onClick={() => ackHelpNeeded(detail.name).catch((e) => window.alert(e.message))} style={{ height: 34, padding: "0 12px", borderRadius: 9, border: "1px solid #FDA29B", background: "#fff", color: "#7A271A", fontSize: 13.5, fontWeight: 900, cursor: "pointer" }}>확인함</button>
+                  </div>
+                )}
                 {(detail.inactiveDays == null || detail.inactiveDays >= 7) && (detail.staff > 0 || detail.m.cnt > 0) && (
                   <div style={{ borderRadius: 12, background: "#0F1A30", color: "#fff", padding: "10px 14px", fontSize: 14.5, fontWeight: 800 }}>
                     {detail.inactiveDays == null ? "이 회사는 접속 기록이 없습니다" : `${detail.inactiveDays}일째 아무도 접속하지 않았습니다`} — 연락해 사용 여부를 확인해 보세요.
                   </div>
                 )}
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0,1fr))", gap: 10 }}>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0,1fr))", gridAutoRows: "1fr", gap: 10, alignItems: "stretch" }}>{/* ⭐ 2026-11-09 카드 6개 같은 폭·같은 높이 */}
                   <Tile dark code="LIVE" label="지금 접속" value={detail.onlineNow || 0} unit="명" foot={`24시간 ${detail.online}명 · PC ${detail.onlinePc} · 모바일 ${detail.onlineMobile}`} />
                   <Tile code="STAFF" label="직원 계정" value={detail.staff} unit="명" foot={`관리자 ${detail.admins} · 승인 대기 ${detail.pending} · 기사 ${detail.drivers}`} />
                   <Tile code="ORDERS" label="이번 달 오더" value={detail.m.cnt.toLocaleString()} unit="건" foot={<>전월 같은 기간 <Delta cur={detail.m.cnt} prev={detail.pmSame?.cnt} /></>} />
@@ -552,6 +566,7 @@ export default function PlatformMonitor({ demoStats = null, tab: tabProp, onTab,
                           <span style={{ display: "block", fontSize: 13, fontWeight: 600, color: on ? "rgba(255,255,255,.7)" : "#7A879C", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>직원 {c.staff} · 기사 {c.drivers} · 이번 달 {c.m.cnt.toLocaleString()}건 · {ago(c.lastSeen)}</span>
                         </span>
                         {c.pending > 0 && <span style={{ flexShrink: 0, minWidth: 22, height: 22, padding: "0 6px", borderRadius: 11, background: on ? "#fff" : NAVY, color: on ? NAVY : "#fff", fontSize: 12.5, fontWeight: 900, display: "inline-flex", alignItems: "center", justifyContent: "center" }}>{c.pending}</span>}
+                        {c.help && <span title={`가입 ${c.help.day}일째 · ${c.help.reasons.join(" · ")}`} style={{ flexShrink: 0, height: 22, padding: "0 7px", borderRadius: 6, background: on ? "#fff" : "#B42318", color: on ? "#B42318" : "#fff", fontSize: 11.5, fontWeight: 900, display: "inline-flex", alignItems: "center", whiteSpace: "nowrap" }}>도움 필요</span>}
                         <span style={{ flexShrink: 0, fontSize: 13, fontWeight: 800, color: on ? "#fff" : NAVY }}>{c.status.label}</span>
                       </button>
                     );

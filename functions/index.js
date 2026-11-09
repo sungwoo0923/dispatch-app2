@@ -7022,3 +7022,34 @@ exports.vehicleCostMonthly = functions.runWith({ timeoutSeconds: 300, memory: "5
     console.log(`🚚 월 차량 비용 리포트 ${ym} — ${n}개 회사`);
     return null;
   });
+
+// 🆘 2026-11-09 신규 운송사 "도움 필요" — 매일 오전 9:20(KST) 가입 7일 안 · 오더 0건/기사 0명/직원 1명뿐인 운송사를 최고관리자에게 푸시
+//  계산은 functions/helpNeededCore.mjs(관리자센터 화면과 같은 기준) · 숫자는 서버 집계(siteConfig/platformStats, 매일 새벽 4시)
+//  [확인함](siteConfig/helpNeededAck)을 누른 회사는 빼고, 목록이 비면 보내지 않는다
+exports.helpNeededDaily = functions.runWith({ timeoutSeconds: 120, memory: "256MB" }).pubsub.schedule("20 9 * * *").timeZone("Asia/Seoul").onRun(async () => {
+  const HN = await import("./helpNeededCore.mjs");
+  const [statsS, plansS, ackS] = await Promise.all([
+    db.collection("siteConfig").doc("platformStats").get(),
+    db.collection("companyPlans").get(),
+    db.collection("siteConfig").doc("helpNeededAck").get(),
+  ]);
+  const plan = {}; plansS.docs.forEach((d) => { plan[String(d.id).trim()] = d.data() || {}; });
+  const acks = (ackS.exists && ackS.data()?.acks) || {};
+  const companies = ((statsS.exists && statsS.data()?.companies) || []).map((c) => ({ ...c, name: String(c.name || "").trim(), plan: plan[String(c.name || "").trim()] || null }));
+  const list = HN.helpNeededList(companies, Date.now(), acks);
+  if (!list.length) return null;
+  const tokens = [];
+  const tm = await db.collection("users").where("role", "==", "totalMaster").get();
+  tm.docs.forEach((d) => tokens.push(...userTokens(d.data())));
+  const me = await db.collection("users").where("email", "==", "tjddnqkf@naver.com").limit(1).get();
+  me.docs.forEach((d) => tokens.push(...userTokens(d.data())));
+  if (!tokens.length) return null;
+  const head = list.slice(0, 3).map(({ c, h }) => `${c.name}(${h.day}일째 · ${h.reasons.join("·")})`).join(", ");
+  await sendPushAndCleanup([...new Set(tokens)], {
+    notification: { title: `🆘 도움 필요 운송사 ${list.length}곳`, body: `${head}${list.length > 3 ? ` 외 ${list.length - 3}곳` : ""} — 관리자센터 › 오늘 할 일에서 연락해 보세요` },
+    android: { priority: "high" },
+    apns: { payload: { aps: { sound: "default" } } },
+  }, "helpNeeded");
+  console.log(`🆘 도움 필요 ${list.length}곳 알림`);
+  return null;
+});
