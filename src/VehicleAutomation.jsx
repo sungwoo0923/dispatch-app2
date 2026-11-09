@@ -98,7 +98,7 @@ export function ConsumablePlan({ linkRaw, vehicle, coIntervals = {}, compact = f
   const rows = useMemo(() => (linkRaw ? consumableRows(vehicle || linkRaw.vehicle || {}, linkRaw.care || {}, coIntervals) : []), [linkRaw, vehicle, coIntervals]);
   if (!linkRaw) return <div style={{ padding: 16, textAlign: "center", color: C.sub, fontSize: 14.5 }}>기사관리에 이 차량번호로 등록된 기사가 없어 교체 예정을 계산할 수 없습니다.</div>;
   const sorted = [...rows].sort((a, b) => b.level - a.level);
-  const odo = Number(linkRaw.care?.odometer) || 0;
+  const odo = Number(String(linkRaw.care?.odometer ?? "").replace(/[^\d.]/g, "")) || 0; // "120,000" 같은 글자도
   return (
     <div>
       <div style={{ fontSize: 14, fontWeight: 700, color: C.sub, marginBottom: 8 }}>현재 주행거리 <b style={{ color: C.navy, ...TAB }}>{odo ? `${won(odo)}km` : "미입력"}</b> · 정비 이력에 정비를 넣으면 마지막 교체가 자동으로 바뀝니다</div>

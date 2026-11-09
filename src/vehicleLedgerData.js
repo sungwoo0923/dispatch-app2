@@ -8,6 +8,7 @@
 //     Storage 규칙이 kp-planner/ 경로만 열려 있어 Firestore에 압축 base64로 나눠(조각당 ~900KB) 저장한다.
 import { doc, getDoc, writeBatch } from "firebase/firestore";
 import { db } from "./firebase";
+import { toYmd, arr } from "../functions/fleetCareCore.mjs";
 
 export const VL_COL = "vehicleLedger";
 export const VL_FILES = "vehicleLedgerFiles";
@@ -75,9 +76,37 @@ export function normDate(v) {
   return s;
 }
 
+// ⭐ 2026-11-09 실제 데이터 모양 방어 — 엑셀 가져오기·예전 버전·직접 수정으로 들어온 이상한 값(날짜가 Timestamp/숫자,
+//  글자 칸이 숫자, 이력 배열이 객체/없음, 차량번호 앞뒤 공백)을 화면이 쓰기 전에 한 번 정리한다(정렬·검색·그리기에서 오류 방지)
+const LEDGER_TEXT_KEYS = ["차량번호", "plateKey", "용도", "차량종류", "톤수", "제조사", "모델", "연식", "회사", "차대번호", "보험사", "차주명", "유류카드사", "유류카드번호", "하이패스", "하이패스카드사", "하이패스카드번호", "하이패스유효기간", "하이패스구분", "하이패스단말기", "하이패스명의", "GPS", "덮개", "박스", "박스메모", "메모"];
+const LEDGER_DATE_KEYS = ["보험만기", "검사만기", "할부만기"];
+const ROW_DATE_KEYS = ["일자", "시작", "종료", "날짜"];
+const ROW_TEXT_KEYS = ["구분", "내용", "업체", "이름", "연락처", "비고", "세부내용", "메모"];
+export const safeText = (x) => (x == null ? "" : typeof x === "string" ? x : typeof x === "number" || typeof x === "boolean" ? String(x) : toYmd(x));
+const safeDate = (x) => (typeof x === "string" ? toYmd(x) || x.trim() : toYmd(x));
+export function sanitizeLedger(v) {
+  if (!v || typeof v !== "object") return { repairs: [], structures: [], driverHist: [], logs: [] };
+  const o = { ...v };
+  LEDGER_TEXT_KEYS.forEach((k) => { if (k in o) o[k] = safeText(o[k]); });
+  if (typeof o.차량번호 === "string") o.차량번호 = o.차량번호.trim();
+  LEDGER_DATE_KEYS.forEach((k) => { if (k in o) o[k] = safeDate(o[k]); });
+  ["repairs", "structures", "driverHist", "logs"].forEach((k) => {
+    o[k] = arr(o[k]).map((r) => {
+      const x = { ...r };
+      ROW_DATE_KEYS.forEach((f) => { if (f in x) x[f] = safeDate(x[f]); });
+      ROW_TEXT_KEYS.forEach((f) => { if (f in x) x[f] = safeText(x[f]); });
+      if ("files" in x) x.files = arr(x.files);
+      return x;
+    });
+  });
+  if (o.tires != null && (typeof o.tires !== "object" || Array.isArray(o.tires))) delete o.tires;
+  if (o.photo != null && typeof o.photo !== "object") delete o.photo;
+  return o;
+}
+
 // 현재 기사 — 탑승 이력에서 종료일이 없는 가장 최근 줄
 export function currentDriver(v) {
-  const h = (v?.driverHist || []).filter((r) => !r.종료).sort((a, b) => String(b.시작 || "").localeCompare(String(a.시작 || "")));
+  const h = arr(v?.driverHist).filter((r) => !r.종료).sort((a, b) => String(b.시작 || "").localeCompare(String(a.시작 || "")));
   return h[0] || null;
 }
 

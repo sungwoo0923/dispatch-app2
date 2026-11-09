@@ -57538,7 +57538,7 @@ function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, sho
                         <td className="px-3 py-2.5 text-center whitespace-nowrap">{formatPhone(r.전화번호)||"-"}</td>
                         <td className="px-3 py-2.5 text-center whitespace-nowrap text-gray-500 text-[12px]">{displayRegDate(r) || "-"}</td>
                         <td className="px-3 py-2.5 text-center whitespace-nowrap text-gray-500">{(grade==="지입"||grade==="직영"||grade==="임대") ? (r.거주지 || "-") : "-"}</td>
-                        <td className="px-3 py-2.5 text-center whitespace-nowrap text-gray-500 text-[12px]">{(grade==="지입"||grade==="직영"||grade==="임대") ? ((r.근무요일 && r.근무요일.length) ? r.근무요일.join(",") : "-") : "-"}</td>
+                        <td className="px-3 py-2.5 text-center whitespace-nowrap text-gray-500 text-[12px]">{(grade==="지입"||grade==="직영"||grade==="임대") ? (Array.isArray(r.근무요일) && r.근무요일.length ? r.근무요일.join(",") : (typeof r.근무요일 === "string" && r.근무요일.trim()) || "-") : "-"}</td>
                         <td className="px-3 py-2.5 text-center">
                           <span className={`px-2.5 py-1 rounded-lg text-[12px] font-bold ${gradeBadge(grade)}`}>{grade}</span>
                         </td>
@@ -57704,7 +57704,7 @@ function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, sho
                         return (
                           <button key={d} type="button"
                             onClick={() => setEditDriverModal(p => {
-                              const cur = p.근무요일 || [];
+                              const cur = Array.isArray(p.근무요일) ? p.근무요일 : String(p.근무요일 || "").split(/[,\s·]+/).filter(Boolean);
                               return { ...p, 근무요일: cur.includes(d) ? cur.filter(x => x !== d) : [...cur, d] };
                             })}
                             className={`w-9 h-9 rounded-lg text-[12px] font-bold border transition ${on ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-500 border-gray-200 hover:border-[#1B2B4B]"}`}

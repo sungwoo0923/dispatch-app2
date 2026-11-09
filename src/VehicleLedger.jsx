@@ -14,7 +14,7 @@ import { db, auth } from "./firebase";
 import { kpConfirm } from "./kpDialog";
 import {
   VL_COL, PURPOSE_PRESETS, REPAIR_KINDS, TON_OPTS, INSURER_OPTS, FUEL_CARD_OPTS, HIPASS_OPTS, GPS_OPTS, COVER_OPTS, BOX_OPTS, LEDGER_TYPE_EXTRA, EQUIP, today, uid, won, num, normPlate, plateCore, vehicleDocId, hasEquip, fmtPhone, normDate,
-  currentDriver, parseSheetRows, saveEvidence, loadEvidence, deleteEvidence, dataUrlToBlobUrl, repairVat, ledgerPrintHtml, printHtml,
+  currentDriver, parseSheetRows, saveEvidence, loadEvidence, deleteEvidence, dataUrlToBlobUrl, repairVat, ledgerPrintHtml, printHtml, sanitizeLedger,
 } from "./vehicleLedgerData";
 import VehicleCarePanel from "./VehicleCarePanel";
 import CustomDatePicker from "./CustomDatePicker"; // 📅 프로그램 달력(배차관리와 같은 달력)
@@ -512,7 +512,7 @@ function Ledger({ v, co, appDriver, linkRaw, drivers, canEdit, by, narrow, purpo
       tx.set(ref, { ...base, ...patch, updatedAt: Date.now(), updatedBy: by });
       return;
     }
-    const patch = fn(s.data());
+    const patch = fn(sanitizeLedger(s.data()));
     tx.update(ref, { ...patch, updatedAt: Date.now(), updatedBy: by });
   });
   // 🔧 2026-11-09 정비·구조변경 비용 → 회계 › 수입·지출 장부에 자동 지출 한 줄(같은 이력은 한 줄 · 삭제하면 빠짐). 장부 권한이 없으면 조용히 건너뜀
@@ -713,7 +713,7 @@ function Ledger({ v, co, appDriver, linkRaw, drivers, canEdit, by, narrow, purpo
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 10, alignItems: narrow ? "stretch" : "flex-end", width: narrow ? "100%" : "auto" }}>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(3, auto)", gap: 8, alignItems: "stretch" }}>
-          {[["정비", `${reps.length}건`], [`${new Date().getFullYear()} 정비비`, won(reps.filter((r) => String(r.일자 || "").startsWith(String(new Date().getFullYear()))).reduce((s2, r) => s2 + num(r.공가) + repairVat(r), 0))], ["주행거리", linkRaw?.care?.odometer ? `${Number(linkRaw.care.odometer).toLocaleString()}km` : "-"]].map(([l, n]) => (
+          {[["정비", `${reps.length}건`], [`${new Date().getFullYear()} 정비비`, won(reps.filter((r) => String(r.일자 || "").startsWith(String(new Date().getFullYear()))).reduce((s2, r) => s2 + num(r.공가) + repairVat(r), 0))], ["주행거리", num(linkRaw?.care?.odometer) ? `${num(linkRaw.care.odometer).toLocaleString()}km` : "-"]].map(([l, n]) => (
             <div key={l} style={{ padding: "8px 12px", borderRadius: 12, border: "1px solid rgba(143,176,240,.28)", background: "rgba(255,255,255,.05)", minWidth: narrow ? 0 : 96 }}>
               <div style={{ fontSize: 14, fontWeight: 700, color: "rgba(255,255,255,.85)", whiteSpace: "nowrap" }}>{l}</div>
               <div style={{ fontFamily: MONO, fontSize: narrow ? 15 : 18, fontWeight: 800, whiteSpace: "nowrap", ...TAB }}>{n}</div>
@@ -1076,7 +1076,7 @@ export default function VehicleLedger({ company = "", drivers = [], canEdit = tr
   useEffect(() => {
     if (!co) return undefined;
     // fsTenant 자동 필터 대상이 아닌 컬렉션 → 항상 회사 조건을 직접 붙인다
-    return onSnapshot(query(collection(db, VL_COL), where("companyName", "==", co)), (s) => { setList(s.docs.map((d) => ({ id: d.id, ...d.data() }))); setLoaded(true); setErr(""); }, (e) => { setErr(e?.code || "error"); setLoaded(true); });
+    return onSnapshot(query(collection(db, VL_COL), where("companyName", "==", co)), (s) => { setList(s.docs.map((d) => sanitizeLedger({ id: d.id, ...d.data() }))); setLoaded(true); setErr(""); }, (e) => { setErr(e?.code || "error"); setLoaded(true); });
   }, [co]);
 
   // 기사관리(drivers) 연결 — 번호판으로(지역명 유무 무시)
@@ -1108,7 +1108,7 @@ export default function VehicleLedger({ company = "", drivers = [], canEdit = tr
       return {
         ...v, virtual, linkRaw, appDriver: app, cv, cs,
         가입유형: linkRaw?.등급 || "", // ⭐ 2026-11-05 가입유형(지입/직영/임대) 칸
-        담당자: linkRaw?.담당자?.name || "", 담당자Uid: linkRaw?.담당자?.uid || "", appJoined: !!linkRaw?.uid,
+        담당자: (typeof linkRaw?.담당자 === "string" ? linkRaw.담당자 : String(linkRaw?.담당자?.name || "")), 담당자Uid: String(linkRaw?.담당자?.uid || ""), appJoined: !!linkRaw?.uid,
         용도: v.용도 || v.차량종류 || (virtual ? cv?.적재함 || "" : ""), 톤수: v.톤수 || cv?.톤 || "",
         현재기사: cur?.이름 || app?.이름 || "", 기사연락처: cur?.연락처 || app?.전화번호 || "", 기사변경일: cur?.시작 || "", fromApp: !cur && !!app,
         모델연식: [mdl, yr && `${yr}년`].filter(Boolean).join(" · "),

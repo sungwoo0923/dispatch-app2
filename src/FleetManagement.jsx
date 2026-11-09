@@ -1214,8 +1214,8 @@ function RegistrationTab({ usersMap, myCompanyName, driversRaw = [], myUid = nul
         const vtTon = (vt.match(/[\d.]+\s*(톤|t|T)/) || [""])[0];
         return {
           uid, ...u,
-          이름: (raw.이름 || u.name || raw.name || "").trim() || "-",
-          차량번호: (raw.차량번호 || u.carNo || raw.carNo || "").trim() || "-",
+          이름: String(raw.이름 || u.name || raw.name || "").trim() || "-",
+          차량번호: String(raw.차량번호 || u.carNo || raw.carNo || "").trim() || "-",
           전화번호: raw.전화번호 || u.phone || raw.phone || "",
           차량종류: String(raw.차량종류 || u.차량종류 || vt.replace(vtTon, "") || "").trim() || "미입력",
           차량톤수: String(raw.차량톤수 || u.차량톤수 || vtTon || "").trim() || "미입력",
@@ -1257,7 +1257,7 @@ function RegistrationTab({ usersMap, myCompanyName, driversRaw = [], myUid = nul
       type: uniq(base.map(d => d.차량종류)).sort((a, b) => a.localeCompare(b, "ko")),
       ton: uniq(base.map(d => d.차량톤수)).sort((a, b) => regTonNum(a) - regTonNum(b)),
       grade: uniq(base.map(d => d.등급)),
-      mgr: uniq(base.map(d => d.담당자?.name || "담당자 미지정")).sort((a, b) => a.localeCompare(b, "ko")),
+      mgr: uniq(base.map(d => String(d.담당자?.name || "담당자 미지정"))).sort((a, b) => a.localeCompare(b, "ko")),
     };
   }, [base]);
 
@@ -6688,12 +6688,12 @@ export default function FleetManagement({ dispatchData = [], role = "", forceTab
       .filter(raw => raw.등급 === "지입" || raw.등급 === "직영" || raw.등급 === "임대")
       .map(raw => ({
         id: raw.id,
-        이름: (raw.이름 || raw.name || "").trim() || "-",
-        차량번호: (raw.차량번호 || raw.carNo || "").trim() || "-",
-        전화번호: (raw.전화번호 || raw.phone || "").trim() || "-",
+        이름: String(raw.이름 || raw.name || "").trim() || "-", // ⭐ 2026-11-09 엑셀로 들어온 숫자 값(전화번호 등)도 안전하게
+        차량번호: String(raw.차량번호 || raw.carNo || "").trim() || "-",
+        전화번호: String(raw.전화번호 || raw.phone || "").trim() || "-",
         등급: raw.등급,
         // ⭐ 노선관리 기사카드에 차량종류·톤수 표시(기사관리 입력값 우선, 없으면 기사앱 가입 정보)
-        차량종류: (raw.차량종류 || raw.vehicleType || "").trim(),
+        차량종류: String(raw.차량종류 || raw.vehicleType || "").trim(),
         차량톤수: String(raw.차량톤수 || raw.톤수 || "").trim(),
         거주지: raw.거주지 || "",
         근무요일: raw.근무요일 || [],

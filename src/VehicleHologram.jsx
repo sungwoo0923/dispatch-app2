@@ -11,6 +11,10 @@ import { doc, setDoc, serverTimestamp } from "firebase/firestore";
 import { db } from "./firebase";
 import { specFor, tonClass, CARE_ITEMS, itemStatus, careSummary, vehicleDefaults, CLASS_LABEL } from "./vehicleCare";
 import { num, repairVat } from "./vehicleLedgerData";
+import { toYmd, arr } from "../functions/fleetCareCore.mjs"; // ⭐ 2026-11-09 실제 데이터 모양 방어(날짜 Timestamp·숫자, 배열이 객체)
+const objOf = (x) => (x && typeof x === "object" && !Array.isArray(x) ? x : {});
+// 타이어 기록 한 줄 — 날짜는 YYYY-MM-DD 글자로, km는 숫자 글자로(화면에 객체가 그대로 그려지지 않게)
+const tireRec = (r) => { const o = objOf(r); return { ...o, date: toYmd(o.date), km: o.km == null || o.km === "" ? "" : String(num(o.km) || ""), brand: o.brand == null ? "" : String(o.brand), size: o.size == null ? "" : String(o.size) }; };
 
 const H = { bg: "#050B18", cyan: "#38E1FF", teal: "#2DF5C4", red: "#FF3B5C", amber: "#FFB547", line: "rgba(56,225,255,.28)", text: "#DDF6FF", sub: "#8FB7CC" };
 const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕',sans-serif";
@@ -205,15 +209,16 @@ const APP_SHARED = SPEC_FIELDS.filter((f) => f[3]);
 //  제원 값 우선순위: 기사앱과 같이 쓰는 칸 = 기사앱 값 > 대장 입력 > 톤수 일반 기준(기본값)
 //                   대장에만 있는 칸(전장·전폭·전고·총중량·출력·연료탱크) = 대장 입력 > 기본값
 export function twinModel(v = {}, linkRaw = null) {
-  const av = linkRaw?.vehicle || {};
-  const care = linkRaw?.care || {};
+  v = objOf(v);
+  const av = objOf(linkRaw?.vehicle);
+  const care = objOf(linkRaw?.care);
   const tonRaw = v.톤수 || av.톤 || "";
   const kind = v.용도 || v.차량종류 || av.적재함 || "";
   const key = normTonKey(tonRaw);
   const std = specFor(key, kind) || {};
   const gen = genFor(key) || {};
   const isTrailer = key === "추레라" || /추레라|트레일러|트랙터/.test(kind);
-  const spec = v.spec || {};
+  const spec = objOf(v.spec);
   const has = (x) => x !== undefined && x !== null && String(x).trim() !== "";
   const defOf = (k) => ({ 전장: gen.전장, 전폭: gen.전폭, 전고: gen.전고, 적재함길이: std.l, 적재함폭: std.w, 적재함높이: std.h || "", 최대적재: std.maxKg, 총중량: gen.총중량, 출력: gen.출력, 연료탱크: gen.연료탱크, 축: std.axle, 타이어수: std.tires, 타이어규격: "" }[k]);
   const valOf = (k, appK) => {
@@ -228,15 +233,17 @@ export function twinModel(v = {}, linkRaw = null) {
   const layoutCount = positions.length;
   const enteredCount = Number(String(vals.타이어수.v || "").replace(/[^\d]/g, "")) || 0;
   const cls = tonClass(key || tonRaw, kind);
-  const it = CARE_ITEMS.find((x) => x.key === "tire"); const [km0, mo0] = it[cls]; const ov = care.intervals?.tire || {};
-  const tireItem = { ...it, km: ov.km ?? km0, months: ov.months ?? mo0 };
-  const tires = v.tires || {};
+  const it = CARE_ITEMS.find((x) => x.key === "tire"); const [km0, mo0] = it[cls]; const ov = objOf(objOf(care.intervals).tire);
+  const pickN = (a, d) => (a == null || a === "" ? d : num(a));
+  const tireItem = { ...it, km: pickN(ov.km, km0), months: pickN(ov.months, mo0) };
+  const tires = Object.fromEntries(Object.entries(objOf(v.tires)).map(([k, r]) => [k, tireRec(r)]));
+  const careTire = care.items?.tire ? tireRec(care.items.tire) : null;
   const anyPos = positions.some((p) => tires[p.key] && (tires[p.key].date || tires[p.key].km));
   const tireState = {};
   positions.forEach((p) => {
     const rec = tires[p.key];
     if (rec && (rec.date || rec.km)) tireState[p.key] = { ...itemStatus(tireItem, { odometer: care.odometer, items: { tire: { km: rec.km, date: rec.date } } }), rec, base: "위치별 기록" };
-    else if (care.items?.tire && (care.items.tire.date || care.items.tire.km)) tireState[p.key] = { ...itemStatus(tireItem, care), rec: care.items.tire, base: "점검·소모품 전체 기록" };
+    else if (careTire && (careTire.date || careTire.km)) tireState[p.key] = { ...itemStatus(tireItem, care), rec: careTire, base: "점검·소모품 전체 기록" };
     else tireState[p.key] = { level: -1, text: "", base: "" };
   });
   const tireOver = positions.filter((p) => tireState[p.key].level === 2).length;
@@ -251,7 +258,7 @@ export function twinModel(v = {}, linkRaw = null) {
   const yr = Number(av.연식 || v.연식) || 0;
   const age = yr ? new Date().getFullYear() - yr : null;
   const y0 = String(new Date().getFullYear());
-  const yearCost = (v.repairs || []).filter((r) => String(r.일자 || "").startsWith(y0)).reduce((s2, r) => s2 + num(r.공가) + repairVat(r), 0); // 머리의 'OOOO 정비비'와 같은 계산
+  const yearCost = arr(v.repairs).filter((r) => toYmd(r.일자).startsWith(y0)).reduce((s2, r) => s2 + num(r.공가) + repairVat(r), 0); // 머리의 'OOOO 정비비'와 같은 계산
   // 점수: 점검 경고(타이어 포함) 기준 — 타이어는 개수만큼 추가 감점
   let score = 100 - over * 12 - soon * 4 - Math.max(0, tireOver - 1) * 3;
   if (age != null && age > 10) score -= Math.min(15, (age - 10) * 2);
@@ -288,7 +295,7 @@ export default function VehicleHologram({ v, linkRaw, canEdit, onClose, onSave, 
   // 타이어 선택·교체 기록
   const [selected, setSelected] = useState(new Set());
   const toggle = (k) => setSelected((s) => { const n = new Set(s); if (n.has(k)) n.delete(k); else n.add(k); return n; });
-  const [tf, setTf] = useState({ date: new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10), km: care.odometer ? String(care.odometer) : "", brand: "", size: "", memo: "" });
+  const [tf, setTf] = useState({ date: new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10), km: num(care.odometer) ? String(num(care.odometer)) : "", brand: "", size: "", memo: "" });
   const [busy, setBusy] = useState(false);
   const saveTires = async () => {
     if (!selected.size) return;
@@ -310,7 +317,7 @@ export default function VehicleHologram({ v, linkRaw, canEdit, onClose, onSave, 
         }
       }
       // 교체 시 주행거리가 지금 주행거리보다 크면 주행거리도 올린다(점검·소모품 화면과 같은 규칙)
-      if (linkRaw?.id && Number(rec.km) > (Number(care.odometer) || 0)) {
+      if (linkRaw?.id && Number(rec.km) > num(care.odometer)) {
         try { await setDoc(doc(db, "drivers", linkRaw.id), { care: { odometer: Number(rec.km), odometerAt: rec.date }, careUpdatedAt: serverTimestamp(), careUpdatedBy: by }, { merge: true }); } catch { /* 권한·오프라인 */ }
       }
       setSelected(new Set());
@@ -416,7 +423,7 @@ export default function VehicleHologram({ v, linkRaw, canEdit, onClose, onSave, 
                 <Row l="점검 지남" r={linkRaw || alerts.length ? `${over}건` : "기사 미연결"} c={over ? H.red : H.text} />
                 <Row l="곧 점검" r={linkRaw || alerts.length ? `${soon}건` : "-"} c={soon ? H.amber : H.text} />
                 <Row l="타이어 교체 필요" r={`${tireOver}개`} c={tireOver ? H.red : H.text} />
-                <Row l="주행거리" r={care.odometer ? `${Number(care.odometer).toLocaleString()}km` : "-"} />
+                <Row l="주행거리" r={num(care.odometer) ? `${num(care.odometer).toLocaleString()}km` : "-"} />
                 <Row l="차령" r={age != null ? `${age}년` : "-"} c={age > 10 ? H.amber : H.text} />
                 <Row l={`${y0} 정비비`} r={`${Math.round(yearCost).toLocaleString()}원`} />
               </div>

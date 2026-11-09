@@ -10,6 +10,7 @@ import { CustomSelect } from "./CustomSelect";
 import { useVehicleTypes } from "./vehicleTypes"; // 🚚 2026-11-02 회사 공용 차량종류
 import { CARE_DATES, CLASS_LABEL, FUELS, GEARS, TONS, VEHICLE_KINDS, careSummary, dateStatus, itemStatus, itemsFor, specFor, tonClass, today, vehicleDefaults, searchTruckModels, TRUCK_MODELS } from "./vehicleCare";
 import { kpConfirm } from "./kpDialog";
+import { normCare, normCareLogs } from "../functions/fleetCareCore.mjs"; // ⭐ 2026-11-09 실제 데이터 모양 방어(날짜 Timestamp·숫자 글자·배열 아님)
 
 const NAVY = "#1B2B4B";
 const INK = "#0F1A30";
@@ -105,11 +106,11 @@ export default function VehicleCarePanel({ driverId, drv = {}, by = "", staff = 
     try { await fn(); toast(okMsg); } catch (e) { toast(`저장 실패: ${e.message || e}`); } finally { setBusy(false); }
   };
   const vehicle = vehicleDefaults(drv);
-  const care = drv.care || {};
+  const care = normCare(drv.care);
   const items = itemsFor(vehicle, care);
   const sum = careSummary({ vehicle, care });
-  const logs = [...(drv.careLogs || [])].sort((a, b) => (b.at || 0) - (a.at || 0));
-  const odo = Number(care.odometer) || 0;
+  const logs = normCareLogs(drv.careLogs);
+  const odo = care.odometer;
 
   const tabs = [["summary", "요약"], ["items", "정비"], ["dates", "만기"], ["spec", "제원"], ["logs", "기록"]];
   return (
@@ -436,7 +437,7 @@ export function VehicleSetupWizard({ driverId, drv = {}, by = "", onClose, drive
   const [v, setV] = React.useState(base);
   const [odo, setOdo] = React.useState(drv.care?.odometer ? String(drv.care.odometer) : "");
   const [oil, setOil] = React.useState({ km: "", date: "" });
-  const [dates, setDates] = React.useState({ inspection: drv.care?.dates?.inspection || "", insurance: drv.care?.dates?.insurance || "" });
+  const [dates, setDates] = React.useState(() => { const c = normCare(drv.care); return { inspection: c.dates.inspection || "", insurance: c.dates.insurance || "" }; });
   const [busy, setBusy] = React.useState(false);
   const set = (k, x) => setV((p) => ({ ...p, [k]: x }));
   const s = specFor(v.톤, v.적재함);
