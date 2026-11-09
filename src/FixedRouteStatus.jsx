@@ -293,6 +293,7 @@ export function FixedRouteCells({ form, row, drivers = [], clients = [], onPatch
     if (c.field === "배차상태" || c.field === "지급방식" || c.field === "배차방식") return onPatch({ [c.field]: enumValue(c.field, val) });
     if (TIME_FIELDS.has(c.field)) return onPatch({ [c.field]: parseHM(val) ? korTime(parseHM(val)) : val });
     if (MONEY_FIELDS.has(c.field)) { const n = toInt(val); const p = { [c.field]: n ? String(n) : "" }; const sale = c.field === "청구운임" ? n : toInt(row.청구운임); const drv = c.field === "기사운임" ? n : toInt(row.기사운임); return onPatch({ ...p, 수수료: String(sale - drv), ...(c.field === "청구운임" ? { 운임수동: !!n } : {}), ...(c.field === "기사운임" ? { 기사운임자동: false } : {}) }); } // 💸 직접 넣은 기사운임 = 자동 계산 멈춤(비우면 다시 자동) // 청구운임을 직접 고치면 단가표 자동 계산 멈춤(비우면 다시 자동)
+    if (c.field === "하차지명" && row.배차표Id && !row.시트도착지) return onPatch({ 하차지명: val, 시트도착지: row.하차지명 || "" }); // 🔗 2026-11-10 시트 줄과 계속 맞도록(예전엔 도착지를 고치면 다음 맞춤에서 오더가 지워졌다)
     return onPatch({ [c.field]: val });
   };
   const has = (f) => hasField(cols, f);
@@ -803,7 +804,10 @@ export default function FixedRouteStatusHost({ company, dispatchData = [], carri
       <div className="text-[13.5px] text-[#7A8AA6] mt-1.5">지입차관리 › 고정노선 › [배차표]에서 화주사 구글시트로 양식을 먼저 만들어 주세요.</div>
     </div></div>
   );
-  const unassigned = pickUnassignedOrders(rows).length; // ⭐ 2026-11-05 PC·모바일 일치 — 메뉴 숫자와 같은 미배차 기준
+  const unList = pickUnassignedOrders(rows); // ⭐ 2026-11-05 PC·모바일 일치 — 메뉴 숫자와 같은 미배차 기준
+  const unassigned = unList.length;
+  // 🔗 2026-11-10 머리띠 미배차는 이 양식의 "모든 날짜" — 아래 목록(입고일 오늘)과 숫자가 달라 헷갈려서, 어느 날짜인지 같이 보여 준다
+  const unDates = [...new Set(unList.map((r) => String(r.입고일 || r.하차일 || r.상차일 || "").slice(5).replace("-", ".")).filter(Boolean))].sort();
   // ⭐ 2026-11-05 운송업체 설정 — 이 회사 양식 오더 전체(모든 양식)에서 업체 모으기 · 정산·매출 제외 건수
   // ⭐ 2026-11-06 화면 데이터(dispatchData)에는 숨긴 업체 오더가 없다 — 설정 창·숨김 건수는 숨긴 오더까지 담긴 carrierPoolRows로
   const companyRouteRows = (carrierPoolRows || dispatchData || []).filter((r) => r.배차표Id && formIdSet.has(r.배차표Id));
@@ -864,6 +868,7 @@ export default function FixedRouteStatusHost({ company, dispatchData = [], carri
             <div className="flex items-center gap-1.5 flex-wrap" data-kp="frs-status">
               <span className={`h-10 px-3.5 rounded-xl inline-flex items-center gap-2 text-[13px] font-black border whitespace-nowrap ${unassigned ? "bg-[#F7B955]/15 border-[#F7B955]/50 text-[#FCD9A0]" : "bg-white/[0.06] border-white/15 text-white/75"}`}>
                 미배차 <span className="text-[17px] tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{unassigned}</span>
+                {unDates.length > 0 && <span className="text-[11.5px] font-bold opacity-80 tabular-nums" title="이 양식의 전체 날짜 기준(아래 목록은 고른 입고일만)">입고 {unDates.slice(0, 2).join("·")}{unDates.length > 2 ? ` 외 ${unDates.length - 2}일` : ""}</span>}
               </span>
               <FleetLiveButton rows={rows} dark size="lg" />{/* ⭐ 2026-11-05 실시간 관제 */}
               {form?.sheetUrl ? (
