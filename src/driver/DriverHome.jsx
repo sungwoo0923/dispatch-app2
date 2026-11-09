@@ -28,6 +28,7 @@ import { onAuthStateChanged, signOut } from "firebase/auth";
 import { registerPlugin } from "@capacitor/core";
 import { useAddrGeo, computeFleetPhase, useFleetPhaseGeo, getCachedGeo, isPickupVisited, sortActiveOrders, isLoaded } from "../fleetGeo";
 import { snapshotOrder, changedFields, changedLabels, changeDiff } from "../orderChange";
+import { shouldAutoLoad } from "../autoLoadCore"; // 🚚 2026-11-10 자동 상차완료 판정
 import { accumulateOdometer } from "../../functions/driverDutyCore.mjs"; // 🚚 2026-11-09 키로수 누적 · 퇴근 미처리
 import { rotationCount, rotationDone, rotationLabel } from "../rotation";
 import { haversineKm } from "../tmapFareCalc";
@@ -1773,7 +1774,10 @@ export default function DriverHome() {
   useEffect(() => {
     const cur = sortActiveOrders(myOrders)[0];
     if (!cur || cur.상차완료일시 || !isPickupVisited(cur) || autoLoadRef.current.has(cur._id)) return;
-    if (isLoaded(cur, pos)) { autoLoadRef.current.add(cur._id); handleLoadComplete(cur, "자동출발"); }
+    // ⭐ 2026-11-10 실제로 상차지 반경 안에 들어와 머문 뒤 출발했을 때만 — 지나간 GPS 흔적·확인 안 한 오더 수정·재승인 직후는 자동 상차 안 함
+    const g = getCachedGeo(cur.상차지주소);
+    const distKm = g && pos?.lat != null ? haversineKm(pos.lat, pos.lng, g.lat, g.lng) : null;
+    if (shouldAutoLoad({ order: cur, distKm, pendingChange: changedFields(cur).length > 0 })) { autoLoadRef.current.add(cur._id); handleLoadComplete(cur, "자동출발"); }
   }, [myOrders, pos?.lat, pos?.lng, handleLoadComplete]);
 
   // ⭐ 회전 운행 — 중간 회차 완료(마지막 회차는 운송완료로 처리)

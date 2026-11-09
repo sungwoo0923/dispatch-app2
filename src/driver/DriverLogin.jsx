@@ -40,8 +40,9 @@ export default function DriverLogin() {
   useEffect(() => { readPublicCompanies().then(setCoList).catch(() => {}); }, []);
   const coNorm = (v) => String(v || "").replace(/\s+/g, "").toLowerCase();
   const coKey = coNorm(companyNameState);
-  const coMatches = coKey ? coList.filter((c) => coNorm(c.companyName).includes(coKey) && coNorm(c.companyName) !== coKey)
-    .sort((a, b) => coNorm(b.companyName).startsWith(coKey) - coNorm(a.companyName).startsWith(coKey) || a.companyName.localeCompare(b.companyName, "ko")).slice(0, 6) : [];
+  // ⭐ 2026-11-10 이름을 끝까지 똑같이 쳐도 목록에 남긴다(예전엔 정확히 같으면 빠져서 "태진"을 다 치면 드롭다운이 사라졌다) — 같은 이름은 맨 위 + ✓ 표시
+  const coMatches = coKey ? coList.filter((c) => coNorm(c.companyName).includes(coKey))
+    .sort((a, b) => (coNorm(b.companyName) === coKey) - (coNorm(a.companyName) === coKey) || coNorm(b.companyName).startsWith(coKey) - coNorm(a.companyName).startsWith(coKey) || a.companyName.localeCompare(b.companyName, "ko")).slice(0, 6) : [];
   const [rememberInfo, setRememberInfo] = useState(saved ? saved.remember !== false : true);
   const [autoLogin, setAutoLogin] = useState(saved ? saved.autoLogin === true : false);
   // ⭐ 2026-11-05 실패 안내 — { title, message, hint, tone }. 화면이 다시 그려져도 남도록 sessionStorage에도 둔다
@@ -278,7 +279,7 @@ export default function DriverLogin() {
 
             {field("company", "소속 운송사명", (
               <div className="relative">
-                <input value={companyNameState} onChange={(e) => { setCompanyName(e.target.value); setCoOpen(true); }} onFocus={() => setCoOpen(true)} onBlur={() => setTimeout(() => setCoOpen(false), 200)}
+                <input value={companyNameState} onChange={(e) => { setCompanyName(e.target.value); setCoOpen(true); }} onCompositionEnd={(e) => { setCompanyName(e.currentTarget.value); setCoOpen(true); }} onFocus={() => setCoOpen(true)} onBlur={() => setTimeout(() => setCoOpen(false), 200)}
                   onKeyDown={(e) => { if (e.key === "Enter" && !e.nativeEvent.isComposing) { if (coOpen && coMatches.length === 1) { e.preventDefault(); setCompanyName(coMatches[0].companyName); setCoOpen(false); return; } login(); } }}
                   autoComplete="off" autoCorrect="off" spellCheck={false} placeholder="소속된 운송사명 검색" className={inputCls} data-testid="login-co-input" />
                 {coOpen && coMatches.length > 0 && (
@@ -286,7 +287,10 @@ export default function DriverLogin() {
                     {coMatches.map((c) => (
                       <button key={c.companyName} type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => { setCompanyName(c.companyName); setCoOpen(false); }}
                         className="w-full text-left px-4 min-h-[54px] py-2.5 border-b border-[#EEF1F6] last:border-0 active:bg-[#EEF3FC] hover:bg-[#F5F8FD]">
-                        <span className="block text-[17px] font-black text-[#0F1A30] truncate">{c.companyName}</span>
+                        <span className="flex items-center gap-2">
+                          <span className="flex-1 min-w-0 block text-[17px] font-black text-[#0F1A30] truncate">{c.companyName}</span>
+                          {coNorm(c.companyName) === coKey && <span className="shrink-0 h-7 px-2.5 rounded-lg bg-[#1B2B4B] text-white text-[13.5px] font-black grid place-items-center">✓ 선택됨</span>}
+                        </span>
                         {c.address && <span className="block text-[14px] font-semibold text-[#7A89A3] truncate">{c.address}</span>}
                       </button>
                     ))}

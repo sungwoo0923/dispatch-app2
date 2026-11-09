@@ -6,6 +6,7 @@ import React, { useEffect, useState } from "react";
 import { db } from "./firebase";
 import { collection, onSnapshot, query, where } from "firebase/firestore";
 import { geocodeAddress, geocodeAddressDetail, getDrivingRouteByCoords, haversineKm } from "./tmapFareCalc";
+import { isLiveVisit } from "./autoLoadCore"; // 🚚 2026-11-10 자동 상차 판정
 
 // ─── 간단주소 ────────────────────────────────────────────────────────────────
 const METRO = { 서울: "서울", 부산: "부산", 대구: "대구", 인천: "인천", 광주: "광주", 대전: "대전", 울산: "울산", 세종: "세종" };
@@ -378,6 +379,8 @@ export function isLoaded(order, location) {
   if (!order) return false;
   if (order.상차완료일시) return true;
   if (!isPickupVisited(order)) return false;
+  // ⭐ 2026-11-10 지나간 GPS 흔적만으로 "다녀옴"이 된 경우는 상차한 것으로 보지 않는다(실제 반경 안 방문만 — autoLoadCore)
+  if (!isLiveVisit(order)) return false;
   const pg = getCachedGeo(order.상차지주소);
   if (!pg || location?.lat == null || location?.lng == null) return false;
   // ⭐ 2026-11-08 버그수정 — 상차지에 들른 뒤 1km만 벗어나도 "출발(상차 완료)"로 봐서, 아직 상차지 근처(주차·대기·
@@ -408,7 +411,8 @@ export function fleetStepIndex(order, phase) {
   if (phase === "상차지도착") return 2;
   if (phase === "하차지진입") return 4;
   if (phase === "하차지도착") return 5;
-  if (phase === "운송중") return (order?.상차완료일시 || isPickupVisited(order)) ? 3 : 0;
+  // ⭐ 2026-11-10 상차지에 들르기만 하고 상차완료 전이면 "하차이동"이 아니라 "상차지도착" 단계로(상차완료처럼 보이던 문제)
+  if (phase === "운송중") return order?.상차완료일시 ? 3 : (isPickupVisited(order) ? 2 : 0);
   return -1;
 }
 // ⭐ 사용자 요청 — 단계 이름: 상차이동·상차진입·상차지도착·하차이동·하차진입·하차지도착.
