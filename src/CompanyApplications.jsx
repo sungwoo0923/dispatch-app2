@@ -166,6 +166,20 @@ export default function CompanyApplications() {
     });
     return () => unsub();
   }, []);
+  // ⭐ 2026-11-09 회사에서 이미 승인한 "기존 회사 직원" 신청이 여기서 계속 '대기'로 보이던 문제 —
+  //  예전엔 회사 담당자의 신청서 상태 쓰기가 보안 규칙에 막혔다(지금은 허용). 이미 남은 건은 계정이 승인돼 있으면 여기서 승인으로 맞춘다.
+  const syncedRef = React.useRef(new Set());
+  useEffect(() => {
+    transportApps.filter((a) => a.status === "pending" && a.type === "기존" && a.userId && !syncedRef.current.has(a.id)).forEach((a) => {
+      syncedRef.current.add(a.id);
+      getDoc(doc(db, "users", a.userId)).then((u) => {
+        const d = u.exists() ? u.data() : null;
+        if (d && d.approved === true && d.employmentStatus !== "퇴사" && String(d.companyName || "").trim() === String(a.companyName || "").trim())
+          return updateDoc(doc(db, "transportApplications", a.id), { status: "approved", processedAt: serverTimestamp(), approvedVia: "company" });
+        return null;
+      }).catch(() => {});
+    });
+  }, [transportApps]);
 
   useEffect(() => {
     const q = query(

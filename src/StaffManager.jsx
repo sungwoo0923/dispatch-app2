@@ -9,6 +9,7 @@ import KpSubNav from "./KpSubNav";
 import { Sheet } from "./OfficeBooks";
 import { useRoleOptions } from "./customRoles";
 import { kpConfirm } from "./kpDialog";
+import { guardSeat } from "./plans"; // 👥 2026-11-09 직원 계정 한도
 
 const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
 function Loading() {
@@ -73,6 +74,8 @@ export default function StaffManager({ company, role, myUid, initialTab = "pendi
     const next = !u.approved;
     const who = u.name || u.이름 || u.email;
     if (!(await kpConfirm(next ? `"${who}"님을 승인할까요?` : `"${who}"님의 승인을 해제할까요?\n해제하면 로그인이 막힙니다.`))) return;
+    // 👥 2026-11-09 요금제 직원 계정 한도 — PC 관리자메뉴와 같이(다 찼으면 승인 막고 추가 계정 신청 안내)
+    if (next && !["driver", "shipper"].includes(u.role) && !(await guardSeat(u.companyName || company || DEFAULT_COMPANY, { isSuper: role === "totalMaster" }))) return;
     setBusy(u.id);
     try {
       await setDoc(doc(db, "users", u.id), { approved: next }, { merge: true });

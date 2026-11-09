@@ -1306,7 +1306,9 @@ service cloud.firestore {
     //  운송사 직원은 부서·직책도(경리·인사·임원 권한이 부서/직책 이름으로 정해진다) — 인사·관리자는 예외
     function selfKeepOk() {
       return resource == null || resource.data.get('approved', true) == false || isTotalMasterUser()
-        || (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['companyName', 'linkedTransportCompany', 'isMaster', 'permissions', 'subAdmin', 'subAdminPrevRole', 'employmentStatus', 'companyCode', 'resignedAt'])
+        || (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['companyName', 'linkedTransportCompany', 'permissions', 'subAdmin', 'subAdminPrevRole', 'employmentStatus', 'companyCode', 'resignedAt'])
+          // ⭐ 2026-11-09 마스터 위임 — 본인 마스터는 "내려놓기(true → false)"만 스스로 할 수 있다(예전엔 막혀 위임 후 마스터가 2명 남았다)
+          && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['isMaster']) || request.resource.data.get('isMaster', false) == false)
           && (resource.data.get('role', '') in ['shipper', 'cafeUser'] || isHrStaff() || isCompanyAdmin(myCo())
             || !request.resource.data.diff(resource.data).affectedKeys().hasAny(['team', 'position'])));
     }
@@ -2085,7 +2087,12 @@ service cloud.firestore {
           && resource.data.get('companyName', '') == myCo()
           && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['companyName', 'status', 'type', 'companyCode', 'userId']))
         || (isSignedIn() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['address'])
-          && resource.data.get('address', '') == '');
+          && resource.data.get('address', '') == '')
+        // ⭐ 2026-11-09 기존 회사 직원 가입 — 회사 승인 담당(마스터·관리자 등)이 직원을 승인/해제하면 신청서 상태도 같이 맞춘다
+        //  (예전엔 이 쓰기가 막혀 관리자센터 가입신청관리에 이미 승인된 직원이 계속 '대기'로 남았다)
+        || (isApproved() && userManager() && resource.data.get('companyName', '') == myCo() && resource.data.get('type', '') == '기존'
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'processedAt'])
+          && request.resource.data.get('status', '') in ['approved', 'pending']);
       allow delete: if isTotalMasterUser() || (isApproved() && resource.data.get('companyName', '') == myCo() && userManager());
     }
     // ── 🤝 화주사 가입·연동 신청서 — 신청한 본인 · 같은 화주사 · 연동을 신청받은 운송사 · 최고관리자만
