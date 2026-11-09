@@ -156,6 +156,8 @@ function DriverSearch({ drivers, onPick }) {
 export default function ContractStudio({ company = "", me = {} }) {
   const co = String(company || "").trim();
   const [tab, setTab] = React.useState("driver");
+  const lastKindRef = React.useRef("driver"); // ⭐ 2026-11-10 상단 탭 [계약서 작성]으로 돌아올 때 마지막으로 보던 계약서 종류
+  React.useEffect(() => { if (tab !== "box" && tab !== "signed") lastKindRef.current = tab; }, [tab]);
   const [sub, setSub] = React.useState("지입");
   const [laborSub, setLaborSub] = React.useState("정규직");
   const [tplName, setTplName] = React.useState(null); // 내 양식 이름 입력 중
@@ -334,19 +336,27 @@ export default function ContractStudio({ company = "", me = {} }) {
         </div>
       </div>
 
+      {/* ⭐ 2026-11-10 상단 탭 — 계약서 작성 / 기사앱 계약서 현황 / 계약서 보관함 */}
+      <div className="inline-flex p-1 rounded-2xl bg-[#EEF2F8] gap-1">
+        {[["write", "계약서 작성"], ["signed", "기사앱 계약서 현황"], ["box", `계약서 보관함 · ${docs.length}건`]].map(([k, l]) => {
+          const on = k === "write" ? (tab !== "box" && tab !== "signed") : tab === k;
+          return <button key={k} type="button" onClick={() => setTab(k === "write" ? (lastKindRef.current || "driver") : k)}
+            className={`h-11 px-5 rounded-xl text-[14px] font-black transition ${on ? "bg-[#0F1A30] text-white shadow-[0_6px_14px_rgba(15,26,48,0.25)]" : "text-[#3A4A66] hover:bg-white"}`}>{l}</button>;
+        })}
+      </div>
       {/* ⭐ 2026-10-31 계약서 종류 — 오른쪽 끝 버튼 대신 왼쪽 입력칸 맨 위에 드롭다운으로(시야에 바로 들어오게) */}
-      <div className="w-full max-w-[560px]">
+      {tab !== "box" && tab !== "signed" && <div className="w-full max-w-[560px]">
         <label className="block">
           <span className="block text-[11px] font-extrabold tracking-[0.22em] text-[#4B6CB7] mb-1.5" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>CONTRACT TYPE · 계약서 종류</span>
           <span className="relative block">
             <CustomSelect value={tab} onChange={(e) => setTab(e.target.value)}
               className="appearance-none w-full h-[52px] pl-12 pr-8 rounded-2xl border-2 border-[#1B2B4B] bg-white text-[16px] font-black text-[#0F1A30] outline-none shadow-[0_6px_18px_rgba(15,26,48,0.10)] focus:ring-4 focus:ring-[#2D4C82]/15 cursor-pointer">
-              {[["driver", "운송계약서 (지입·직영·임대)"], ["labor", "근로계약서"], ["client", "거래처 운송계약서"], ["free", "자율양식 계약서"], ["signed", "기사앱 계약서 현황 (발송·서명)"], ["box", `계약서 보관함 · ${docs.length}건`]].map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+              {[["driver", "운송계약서 (지입·직영·임대)"], ["labor", "근로계약서"], ["client", "거래처 운송계약서"], ["free", "자율양식 계약서"]].map(([k, l]) => <option key={k} value={k}>{l}</option>)}
             </CustomSelect>
             <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 w-8 h-8 rounded-xl bg-[#0F1A30] text-white grid place-items-center text-[14px]">{tab === "box" || tab === "signed" ? "▤" : "✎"}</span>
           </span>
         </label>
-      </div>
+      </div>}
 
       {tab === "signed" ? (
         <DriverContractStatus company={co} Paper={ContractPaper} specOf={contractSpec} board />
@@ -506,7 +516,6 @@ export default function ContractStudio({ company = "", me = {} }) {
               </div>
               <button type="button" onClick={() => setClauses((p) => [...p, { title: `제${p.length + 1}조 ( )`, body: "" }])} className="mt-2.5 w-full h-11 rounded-xl border-2 border-dashed border-[#C9D2E0] text-[14px] font-black text-[#5B6B85] hover:bg-[#F7F9FC]">+ 조항 추가</button>
             </div>
-            {tab === "driver" && <button type="button" onClick={() => setTab("signed")} className="w-full h-11 rounded-xl border border-[#DCE3EE] bg-white text-[13.5px] font-black text-[#1B2B4B] hover:border-[#4B6CB7]">▤ 기사앱으로 보낸 계약서 · 서명 현황 보기</button>}
             <div className="text-[12.5px] text-[#5B6B85] leading-relaxed px-1">※ 양식은 일반적인 기준으로 만든 초안입니다. 금액이 크거나 분쟁 가능성이 있는 계약은 전문가(노무사·변호사) 검토를 권장합니다.</div>
           </div>
           <div className="min-w-0">
