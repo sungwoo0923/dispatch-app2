@@ -59096,7 +59096,7 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
                   </div>
                   {cmBiz.multi && (
                     <div className="col-span-2">
-                      <BizPicker biz={cmBiz} value={editClientModal.기본사업자 || ""} onChange={(v) => setEditClientModal(p => ({ ...p, 기본사업자: v }))} label="기본 청구 사업자" />
+                      <BizPicker biz={cmBiz} value={placeNewForm.기본사업자 || ""} onChange={(v) => setPlaceNewForm(p => ({ ...p, 기본사업자: v }))} label="기본 청구 사업자" />{/* ⭐ 2026-11-09 버그수정 — 신규 등록 창이 수정 창 값(editClientModal, 이때는 비어 있음)을 읽어 청구사업자가 여러 개인 회사에서 화면 오류가 났다 */}
                       <div className="text-[11px] text-gray-500 mt-1">이 거래처로 오더를 등록하면 청구 사업자가 자동으로 이걸로 맞춰집니다(등록 화면에서 바꿀 수 있음).</div>
                     </div>
                   )}
