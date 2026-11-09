@@ -1,11 +1,10 @@
-// 기사 근무 계산 단위 테스트 — 주행거리 누적 · 퇴근 미처리 판단 · 오더 수정 비교
+// 기사 근무 계산 단위 테스트 — 주행거리 누적 · 근무 중 판단(퇴근처리 버튼) · 오더 수정 비교
 // 실행: node scripts/driverDuty.test.mjs
-import { accumulateOdometer, liveOdometer, missedCheckoutPlan, isOnDuty } from "../functions/driverDutyCore.mjs";
+import { accumulateOdometer, liveOdometer, isOnDuty } from "../functions/driverDutyCore.mjs";
 import { snapshotOrder, changedFields, changedLabels, changeDiff } from "../src/orderChange.js";
 
 let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) pass++; else { fail++; console.log("  ✗", m); } };
-const at = (s) => Date.parse(`${s}+09:00`);
 
 // ── 주행거리 누적
 let r = accumulateOdometer({ odometer: 100000, odoAccum: {} }, "2026-11-09", 100.04);
@@ -25,19 +24,6 @@ ok(liveOdometer({ status: "퇴근", isFinalCheckout: true, care: { odometer: 100
 ok(isOnDuty({ status: "출근" }) && isOnDuty({ status: "운행중" }), "출근·운행중 = 근무 중");
 ok(!isOnDuty({ status: "대기" }) && !isOnDuty({ status: "퇴근" }) && !isOnDuty({ status: "휴차" }), "대기(출근 전)·퇴근·휴차 = 근무 아님");
 ok(!isOnDuty({ status: "출근", isFinalCheckout: true }), "최종퇴근 후 = 근무 아님");
-
-// ── 퇴근 미처리
-const D = { status: "출근", workDate: "2026-11-09", 퇴근시간: "18:00" };
-ok(missedCheckoutPlan(D, at("2026-11-09T18:30:00"), at("2026-11-09T18:20:00")).stage === "none", "퇴근시간 +30분은 아직 없음");
-ok(missedCheckoutPlan(D, at("2026-11-09T19:10:00"), at("2026-11-09T19:05:00")).stage === "remind", "+1시간·이동 중 → 알림");
-ok(missedCheckoutPlan(D, at("2026-11-09T19:40:00"), at("2026-11-09T18:50:00")).stage === "flag", "+1시간·30분 넘게 정지 → 관제 퇴근 미처리");
-let p = missedCheckoutPlan(D, at("2026-11-10T00:10:00"), at("2026-11-09T19:12:00"));
-ok(p.stage === "auto" && p.date === "2026-11-09" && p.checkoutAt === at("2026-11-09T19:12:00"), "자정 지나면 자동 퇴근 · 마지막 이동 시각");
-p = missedCheckoutPlan(D, at("2026-11-10T07:00:00"), 0);
-ok(p.stage === "auto" && p.checkoutAt === at("2026-11-09T18:00:00"), "이동 기록 없으면 퇴근시간으로");
-ok(missedCheckoutPlan(D, at("2026-11-10T01:00:00"), at("2026-11-10T00:50:00")).stage === "none", "자정 넘겨 운행 중(최근 이동)이면 자동 퇴근 안 함");
-ok(missedCheckoutPlan({ status: "출근", workDate: "2026-11-09" }, at("2026-11-09T19:30:00"), at("2026-11-09T19:29:00")).stage === "none", "퇴근시간 없으면 19:00 기준(+1시간 전)");
-ok(missedCheckoutPlan({ status: "퇴근", isFinalCheckout: true, workDate: "2026-11-08" }, at("2026-11-09T09:00:00")).stage === "none", "이미 퇴근 → 대상 아님");
 
 // ── 오더 수정 비교(재승인 팝업)
 const base = { 상차지명: "경동", 상차지주소: "인천 서구", 하차지명: "부산", 기사운임: "300000", 전달사항: "" };

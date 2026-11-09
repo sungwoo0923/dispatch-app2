@@ -28,7 +28,7 @@ import { onAuthStateChanged, signOut } from "firebase/auth";
 import { registerPlugin } from "@capacitor/core";
 import { useAddrGeo, computeFleetPhase, useFleetPhaseGeo, getCachedGeo, isPickupVisited, sortActiveOrders, isLoaded } from "../fleetGeo";
 import { snapshotOrder, changedFields, changedLabels, changeDiff } from "../orderChange";
-import { accumulateOdometer, missedCheckoutPlan } from "../../functions/driverDutyCore.mjs"; // 🚚 2026-11-09 키로수 누적 · 퇴근 미처리
+import { accumulateOdometer } from "../../functions/driverDutyCore.mjs"; // 🚚 2026-11-09 키로수 누적 · 퇴근 미처리
 import { rotationCount, rotationDone, rotationLabel } from "../rotation";
 import { haversineKm } from "../tmapFareCalc";
 import VehicleCarePanel, { VehicleSetupWizard, shouldShowSetup } from "../VehicleCarePanel";
@@ -1488,36 +1488,7 @@ export default function DriverHome() {
   const updateStatusRef = useRef(null); // ⭐ 2026-11-05 오더 수락 시 자동 출근에서 최신 updateStatus를 부른다
   updateStatusRef.current = updateStatus;
 
-  // 🚚 2026-11-09 퇴근을 깜빡한 채 날짜가 바뀌었으면(다음날 앱을 열면) 지난 근무일을 자동 퇴근 처리한다.
-  //  퇴근 시각 = 그날 마지막으로 움직인 시각(없으면 퇴근시간) · 오늘 이동거리는 키로수에 누적 · "자동 퇴근" 표시를 남긴다
-  //  (서버 autoCheckoutDrivers가 자정 뒤에 먼저 처리했으면 isFinalCheckout이라 여기서는 할 일이 없다)
-  const autoOutRef = useRef(false);
-  useEffect(() => {
-    if (!uid || !driver || autoOutRef.current) return;
-    const lastMs = driver.lastMovedAt?.toMillis?.() || driver.updatedAt?.toMillis?.() || 0;
-    const plan = missedCheckoutPlan(driver, Date.now(), lastMs);
-    if (plan.stage !== "auto") return;
-    autoOutRef.current = true;
-    const dist = Number(driver.totalDistance) || 0;
-    const acc = accumulateOdometer({ odometer: driver.care?.odometer, odoAccum: driver.odoAccum }, plan.date, dist);
-    const upd = {
-      status: "퇴근", mainStatus: "퇴근", active: false, isFinalCheckout: true, totalDistance: 0, workDate: plan.date,
-      자동퇴근: { date: plan.date, at: plan.checkoutAt, by: "app" }, 퇴근미처리: deleteField(), updatedAt: serverTimestamp(),
-      ...(acc ? { [`odoAccum.${acc.day}`]: acc.record, ...(acc.add > 0 ? { "care.odometer": acc.odometer, "care.odometerAt": plan.date } : {}) } : {}),
-    };
-    (async () => {
-      try {
-        await updateDoc(doc(db, "drivers", uid), upd);
-        resetTotalDist();
-        await addDoc(collection(db, "driver_logs"), {
-          uid, driverName: driver.name || "", carNo: driver.carNo || "", companyName: driver.companyName || "",
-          status: "최종퇴근", mainStatus: "퇴근", auto: true, autoReason: "퇴근 미처리(날짜 바뀜)",
-          timestamp: Timestamp.fromMillis(plan.checkoutAt), finalDistance: dist, location: null,
-        });
-        showToast(`어제 퇴근이 안 되어 있어 ${new Date(plan.checkoutAt + 9 * 3600e3).toISOString().slice(11, 16)} 기준으로 자동 퇴근 처리했어요`);
-      } catch (e) { autoOutRef.current = false; }
-    })();
-  }, [uid, driver?.workDate, driver?.status, driver?.isFinalCheckout]); // eslint-disable-line react-hooks/exhaustive-deps
+  // 🚚 2026-11-09 자동 퇴근(날짜 바뀜)은 사용자 요청으로 뺐다 — 기사가 직접 퇴근, 운송사는 관제 [퇴근처리]
 
   // Active status → reset both refs so auto-checkin can fire again on next return
   useEffect(() => {
