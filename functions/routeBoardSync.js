@@ -250,10 +250,10 @@ async function syncBoard({ db, FieldValue, form: form0, readTabs, readTab, write
     if (mDate) { date = mDate; inDate = addDays(mDate, toInt(form.dropOffset)); }
     else {
       const tabD = nearTabDate(tab, range ? from : today, !!form.fixedTab);
-      // 🔗 2026-11-10 제목 위 날짜가 하나뿐이고 그게 탭 날짜(입고일)면 — 그건 입고일이다(예전엔 발주일로 읽어 상차일 = 하차일, 하차일수가 빠졌다)
-      const oneIsIn = !p.date2 && p.date && tabD && p.date === tabD && toInt(form.dropOffset) > 0;
+      // ⚠ 2026-11-10 "날짜 하나 = 입고일" 규칙은 되돌림 — 기존 오더는 상차일로 찾기 때문에, 이 규칙이 켜지면
+      //  탭마다 하루 앞(전날 탭)의 오더를 잡아 고정노선현황에서 그 날 오더가 사라졌다(태진 26-11-10). 예전 규칙 그대로 둔다.
       inDate = p.date2 || tabD || ""; // 입고일(하차일)
-      date = (!oneIsIn && p.date) || (tabD ? addDays(tabD, -toInt(form.dropOffset)) : ""); // 발주일(상차일)
+      date = p.date || (tabD ? addDays(tabD, -toInt(form.dropOffset)) : ""); // 발주일(상차일)
       const chk = inDate || date;
       if (!date || (!form.fixedTab && (chk < from || chk > to))) return {};
     }

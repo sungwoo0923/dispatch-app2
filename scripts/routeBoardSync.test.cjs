@@ -114,11 +114,12 @@ const orders = (db) => [...(db.cols.orders || new Map()).values()];
   ({ r } = await run(db2, f2, { [tabName]: sheetRows(inD, { rowsA: dup, rowsB: [] }) }));
   ok(r.created === 0 && !(r.deleted || r.gone), "다시 맞춰도 그대로(중복·삭제 없음)");
 
-  console.log("[6] 제목 위 날짜가 하나(입고일만)인 시트");
+  console.log("[6] 제목 위 날짜가 하나인 시트 — 예전 규칙(상차일 = 그 날짜) 유지");
   const db3 = fakeDb();
   await run(db3, form0, { [tabName]: sheetRows(inD, { dates: "one", rowsA, rowsB }) });
   const o3 = orders(db3);
-  ok(o3.length === 3 && o3.every((o) => o.하차일 === inD && o.상차일 === pick), `상차일 ${pick}(하차일 ${inD} − 하루) — 지금 상차일 ${o3[0]?.상차일} · 하차일 ${o3[0]?.하차일}`);
+  // ⚠ 2026-11-10 되돌림: 날짜 하나면 예전처럼 그 날짜 = 상차일(기존 오더를 상차일로 찾기 때문 — 바꾸면 전날 탭 오더를 잡는다)
+  ok(o3.length === 3 && o3.every((o) => o.하차일 === inD && o.상차일 === inD), `날짜 하나 → 상차일·하차일 모두 ${inD}(예전 규칙 유지) — 지금 상차일 ${o3[0]?.상차일} · 하차일 ${o3[0]?.하차일}`);
 
   console.log("[7] 연말 — 12월 말에 1월 탭(\"01-03\" 모양)도 읽는지");
   ok(tabDate("01-03", 2026) === "2026-01-03", "tabDate 기본");
