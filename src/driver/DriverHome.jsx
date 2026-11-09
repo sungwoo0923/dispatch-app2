@@ -34,6 +34,7 @@ import { rotationCount, rotationDone, rotationLabel } from "../rotation";
 import { haversineKm } from "../tmapFareCalc";
 import VehicleCarePanel, { VehicleSetupWizard, shouldShowSetup } from "../VehicleCarePanel";
 import { careSummary, vehicleDefaults } from "../vehicleCare";
+import { toYmd } from "../../functions/fleetCareCore.mjs";
 import DriverDocBox, { useDriverInbox, DriverPayInfoCard } from "./DriverDocBox";
 import DriverNotices from "./DriverNotices"; // ⭐ 2026-11-03 회사 공지(공개 대상 "기사")
 import { useDriverDocs, docProblems } from "../driverRequiredDocs";
@@ -1440,7 +1441,7 @@ export default function DriverHome() {
           // ⭐ 2026-11-09 지난 근무일 이동거리를 아직 키로수에 안 더했으면(최종퇴근 없이 넘어간 날) 지우기 전에 더한다
           if (driver?.workDate && driver.workDate !== today && !driver?.isFinalCheckout) {
             const acc0 = accumulateOdometer({ odometer: driver?.care?.odometer, odoAccum: driver?.odoAccum }, driver.workDate, driver?.totalDistance || 0);
-            if (acc0) { driverUpdate[`odoAccum.${acc0.day}`] = acc0.record; if (acc0.add > 0) { driverUpdate["care.odometer"] = acc0.odometer; driverUpdate["care.odometerAt"] = driver.workDate; } }
+            if (acc0) { driverUpdate[`odoAccum.${acc0.day}`] = acc0.record; if (acc0.add > 0) { driverUpdate["care.odometer"] = acc0.odometer; driverUpdate["care.odometerAt"] = toYmd(driver.workDate) || today; } }
           }
           driverUpdate.totalDistance = 0;
           driverUpdate.workDate = today;
