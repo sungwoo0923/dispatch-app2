@@ -399,8 +399,8 @@ export default function RolePermissionsPanel({ users: allUsers = [], roleLabels 
             <div className="bg-white rounded-2xl border border-gray-200 text-center py-20 text-[13px] text-gray-500">왼쪽에서 역할을 고르세요.</div>
           ) : (
             <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
-              <div className="px-6 py-4 border-b border-gray-100 flex flex-wrap items-center gap-3">
-                <div className="min-w-0 flex-1">
+              <div className="px-4 sm:px-6 py-4 border-b border-gray-100 flex flex-wrap items-center gap-3">
+                <div className="min-w-0 flex-1 basis-full sm:basis-auto">{/* 📱 2026-11-10 휴대폰 — 역할 이름 한 줄 전체, 버튼은 아래 줄 */}
                   <input value={draft.label} onChange={(e) => setDraft((d) => ({ ...d, label: e.target.value }))}
                     className="text-[19px] font-black text-[#1B2B4B] outline-none border-b-2 border-transparent focus:border-[#1B2B4B] bg-transparent w-full max-w-[320px]" />
                   <div className="text-[12px] text-gray-500 mt-0.5">{isBuiltin ? "기본 역할" : "직접 만든 역할"} · 직원 {members.length}명{dirty && <span className="ml-2 text-amber-600 font-bold">● 저장 안 됨</span>}</div>

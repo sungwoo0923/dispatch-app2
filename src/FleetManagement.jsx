@@ -4187,8 +4187,8 @@ function RouteManagementTab({ drivers, dispatchData, liveDrivers = [], staff = [
       </div>
 
       {/* 상단 바: 검색 + 어제/당일/내일 + 기간 조회 — 하나의 관제 툴바 */}
-      <div style={{ background: "#fff", border: "1px solid #E3E8F0", borderRadius: 14, boxShadow: "0 1px 2px rgba(16,24,40,.04)", padding: "12px 14px", display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 12 }}>
-        <div style={{ position: "relative", flex: "0 1 260px", minWidth: 200 }}>
+      <div className="kp-route-bar" style={{ background: "#fff", border: "1px solid #E3E8F0", borderRadius: 14, boxShadow: "0 1px 2px rgba(16,24,40,.04)", padding: "12px 14px", display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 12 }}>{/* 📱 2026-11-10 휴대폰 — kp-route-bar(index.css)로 줄 정리 */}
+        <div className="kp-rb-search" style={{ position: "relative", flex: "0 1 260px", minWidth: 200 }}>
           <svg width="15" height="15" fill="none" stroke="#94A3B8" strokeWidth="2.2" viewBox="0 0 24 24" style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }}>
             <circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" strokeLinecap="round" />
           </svg>
@@ -4222,6 +4222,7 @@ function RouteManagementTab({ drivers, dispatchData, liveDrivers = [], staff = [
         {/* ⭐ 사용자 요청 — 5파트(배차현황)와 동일한 시작일~종료일 + 조회 버튼. 날짜만
             바꾸고 아직 조회를 안 누른 상태면(draft !== applied) 버튼이 깜빡여 클릭을
             유도한다. */}
+        <div className="kp-rb-range" style={{ display: "contents" }}>
         <CustomDatePicker value={rangeStart} onChange={(e) => { setDayMode(""); setRangeStart(e.target.value); }}
           placeholder="시작일" className="h-[34px] px-3 rounded-lg text-[14px] font-bold border border-[#DCE3EE] bg-white cursor-pointer" />
         <span style={{ color: "#5B6B85", fontSize: 14 }}>~</span>
@@ -4233,7 +4234,8 @@ function RouteManagementTab({ drivers, dispatchData, liveDrivers = [], staff = [
           style={{ height: 34, padding: "0 16px", borderRadius: 8, border: "none", fontSize: 14, fontWeight: 800, cursor: "pointer", background: NAVY, color: "#fff" }}>
           조회
         </button>
-        <span style={{ fontFamily: FC_MONO, fontSize: 14, fontWeight: 700, color: "#5B6B85", padding: "0 10px", height: 28, display: "inline-flex", alignItems: "center", borderRadius: 7, background: "#F7F9FC", border: "1px solid #E3E8F0" }}>
+        </div>
+        <span className="kp-rb-label" style={{ fontFamily: FC_MONO, fontSize: 14, fontWeight: 700, color: "#5B6B85", padding: "0 10px", height: 28, display: "inline-flex", alignItems: "center", borderRadius: 7, background: "#F7F9FC", border: "1px solid #E3E8F0" }}>
           {isSingleDay ? `${appliedStart} (${weekdayKoOf(appliedStart)})` : `${appliedStart} ~ ${appliedEnd}`}
         </span>
         <button onClick={() => setOnlyIdle(v => !v)}

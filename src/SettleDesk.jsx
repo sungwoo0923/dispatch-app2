@@ -8,6 +8,7 @@ import { createPortal } from "react-dom";
 import { db } from "./firebase";
 import { collection, doc, onSnapshot, query, setDoc, where, serverTimestamp } from "firebase/firestore";
 import CustomDatePicker from "./CustomDatePicker";
+import useNarrow from "./useNarrow"; // 📱 2026-11-10 휴대폰 폭 — 단계 표시 2줄 · 명세서 표 칸 줄이기
 
 export const SD = { ink: "#0F1A30", navy: "#1B2B4B", blue: "#2D4C82", sub: "#5B6B85", mute: "#9AA9C3", line: "#E3E8F0", hair: "#EEF2F8", soft: "#F4F6FA", sky: "#8FB0F0", ice: "#CFE0FF" };
 const NUM = { fontVariantNumeric: "tabular-nums" };
@@ -141,21 +142,22 @@ export function StageBadge({ stage }) {
 export function StageStepper({ stage, history = [], onSet, disabled, sentHint }) {
   const cur = stageIdx(stage);
   const at = (k) => { const h = [...history].reverse().find((x) => x.stage === k); return h ? tsMs(h.at) : 0; };
+  const ph = useNarrow(640); // 📱 휴대폰 — 옆으로 밀지 않고 4칸씩 2줄
   return (
-    <div className="flex items-stretch gap-0 overflow-x-auto no-scrollbar" style={{ scrollbarWidth: "none" }}>
+    <div className={ph ? "grid grid-cols-4 gap-y-1" : "flex items-stretch gap-0 overflow-x-auto no-scrollbar"} style={{ scrollbarWidth: "none" }} data-kp="stmt-stepper">
       {STMT_STAGES.map((s, i) => {
         const done = i <= cur; const isCur = i === cur; const isNext = i === cur + 1;
         const t = i > 0 ? at(s.k) : 0;
         return (
           <React.Fragment key={s.k}>
-            {i > 0 && <div className="self-center h-[2px] min-w-[10px] flex-1" style={{ background: i <= cur ? SD.blue : SD.line }} />}
+            {i > 0 && !ph && <div className="self-center h-[2px] min-w-[10px] flex-1" style={{ background: i <= cur ? SD.blue : SD.line }} />}
             <button type="button" disabled={disabled || i === 0 || i === cur} onClick={() => onSet?.(s.k)}
               title={i === 0 ? s.hint : isCur ? "지금 단계" : i < cur ? `${s.label}(으)로 되돌리기` : `${s.label}(으)로 기록`}
-              className={`shrink-0 flex flex-col items-center gap-1 px-1.5 py-1 rounded-xl transition ${isNext && !disabled ? "hover:bg-[#EEF3FB]" : ""} disabled:cursor-default`}>
+              className={`shrink-0 flex flex-col items-center gap-1 ${ph ? "min-w-0 px-0.5" : "px-1.5"} py-1 rounded-xl transition ${isNext && !disabled ? "hover:bg-[#EEF3FB]" : ""} disabled:cursor-default`}>
               <span className={`w-8 h-8 rounded-full flex items-center justify-center text-[13px] font-black ${isCur ? "bg-[#0F1A30] text-white ring-4 ring-[#CFE0FF]" : done ? "bg-[#2D4C82] text-white" : isNext ? "bg-white text-[#1B2B4B] border-2 border-[#1B2B4B]" : "bg-white text-[#9AA9C3] border-2 border-[#DCE3EE]"}`} style={NUM}>
                 {done && !isCur && i > 0 ? <Ico d={IC.check} size={14} w={3} /> : i}
               </span>
-              <span className={`text-[13px] font-black whitespace-nowrap ${isCur ? "text-[#0F1A30]" : done ? "text-[#2D4C82]" : isNext ? "text-[#1B2B4B]" : "text-[#9AA9C3]"}`}>{s.label}</span>
+              <span className={`${ph ? "text-[12px]" : "text-[13px]"} font-black whitespace-nowrap ${isCur ? "text-[#0F1A30]" : done ? "text-[#2D4C82]" : isNext ? "text-[#1B2B4B]" : "text-[#9AA9C3]"}`}>{s.label}</span>
               <span className="text-[12px] font-bold text-[#9AA9C3] h-4" style={NUM}>{t ? fmtDay(t) : s.k === "발송" && sentHint ? sentHint : ""}</span>
             </button>
           </React.Fragment>
@@ -444,14 +446,16 @@ export function StatementLineGrid({ rows, included, onToggle, onToggleAll, onAmo
   const sup = incRows.reduce((s, r) => s + toInt(edit[r._id] ?? r.청구운임), 0);
   const vat = incRows.reduce((s, r) => s + Math.round(toInt(edit[r._id] ?? r.청구운임) * 0.1), 0);
   const allOn = rows.length > 0 && incRows.length === rows.length;
+  const ph = useNarrow(640); // 📱 2026-11-10 휴대폰 — No·세액 칸을 빼고 화면 폭에 맞춤(세액은 아래 합계에)
   return (
     <div className="rounded-2xl border border-[#E3E8F0] overflow-hidden bg-white">
       <div className="max-h-[460px] overflow-auto">
-        <table className="kp-sd w-full" style={{ tableLayout: "fixed", minWidth: 470 }}>
-          <colgroup><col style={{ width: 38 }} /><col style={{ width: 36 }} /><col style={{ width: 58 }} /><col /><col style={{ width: 118 }} /><col style={{ width: 78 }} /></colgroup>
+        <table className="kp-sd w-full" style={{ tableLayout: "fixed", minWidth: ph ? 0 : 470 }}>
+          {ph ? <colgroup><col style={{ width: 32 }} /><col style={{ width: 46 }} /><col /><col style={{ width: 96 }} /></colgroup>
+            : <colgroup><col style={{ width: 38 }} /><col style={{ width: 36 }} /><col style={{ width: 58 }} /><col /><col style={{ width: 118 }} /><col style={{ width: 78 }} /></colgroup>}
           <thead>
             <tr className="text-[13px] text-[#5B6B85]">
-              {[["", "c"], ["No", "c"], ["날짜", "l"], ["구간 · 기사 · 화물", "l"], ["공급가액", "r"], ["세액", "r"]].map(([h, a], i) => (
+              {[["", "c"], ["No", "c"], ["날짜", "l"], [ph ? "구간 · 기사" : "구간 · 기사 · 화물", "l"], ["공급가액", "r"], ["세액", "r"]].map(([h, a], i) => (ph && (i === 1 || i === 5)) ? null : (
                 <th key={i} className={`sticky top-0 z-[1] bg-[#F4F6FA] px-2 py-2.5 font-black ${a === "r" ? "text-right" : a === "c" ? "text-center" : "text-left"}`}>
                   {i === 0 ? <input type="checkbox" aria-label="모두 포함" className="w-4 h-4 accent-[#0F1A30]" checked={allOn} onChange={() => onToggleAll?.(!allOn)} /> : h}
                 </th>
@@ -465,8 +469,8 @@ export function StatementLineGrid({ rows, included, onToggle, onToggleAll, onAmo
               return (
                 <tr key={r._id} className={`border-t border-[#EEF2F8] ${on ? "" : "bg-[#FAFBFD]"}`}>
                   <td className="px-2 py-2 text-center"><input type="checkbox" aria-label="명세서에 넣기" className="w-4 h-4 accent-[#0F1A30]" checked={on} onChange={() => onToggle?.(r._id, !on)} /></td>
-                  <td className="px-2 py-2 text-center text-[13px] text-[#9AA9C3]" style={NUM}>{i + 1}</td>
-                  <td className={`px-2 py-2 text-[14px] whitespace-nowrap ${on ? "text-[#3A4A66]" : "text-[#9AA9C3] line-through"}`} style={NUM}>{String(r.상차일 || "").slice(5)}</td>
+                  {!ph && <td className="px-2 py-2 text-center text-[13px] text-[#9AA9C3]" style={NUM}>{i + 1}</td>}
+                  <td className={`${ph ? "px-1 text-[13px]" : "px-2 text-[14px]"} py-2 whitespace-nowrap ${on ? "text-[#3A4A66]" : "text-[#9AA9C3] line-through"}`} style={NUM}>{String(r.상차일 || "").slice(5)}</td>
                   <td className="px-2 py-2 min-w-0">
                     <button type="button" onClick={() => onOpenOrder?.(r)} className={`block max-w-full text-left truncate text-[14px] font-bold ${on ? "text-[#0F1A30]" : "text-[#9AA9C3] line-through"} hover:underline underline-offset-2`} title="오더 상세">
                       {r.상차지명 || r.상차지 || "-"} <span className="text-[#9AA9C3]">→</span> {r.하차지명 || r.하차지 || "-"}
@@ -486,7 +490,7 @@ export function StatementLineGrid({ rows, included, onToggle, onToggleAll, onAmo
                       }}
                       className="h-9 w-full rounded-lg border border-transparent hover:border-[#D5DDEA] focus:border-[#1B2B4B] focus:ring-2 focus:ring-[#1B2B4B]/10 bg-transparent focus:bg-white px-2 text-right text-[15px] font-black text-[#0F1A30] outline-none disabled:text-[#9AA9C3]" style={NUM} />
                   </td>
-                  <td className="px-2 py-2 text-right text-[14px] text-[#5B6B85]" style={NUM}>{on ? won(Math.round(toInt(edit[r._id] ?? r.청구운임) * 0.1)) : "-"}</td>
+                  {!ph && <td className="px-2 py-2 text-right text-[14px] text-[#5B6B85]" style={NUM}>{on ? won(Math.round(toInt(edit[r._id] ?? r.청구운임) * 0.1)) : "-"}</td>}
                 </tr>
               );
             })}

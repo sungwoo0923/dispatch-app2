@@ -9,6 +9,7 @@ import { db, auth } from "./firebase";
 import { createPortal } from "react-dom";
 import { deleteDocsAtomic } from "./DeleteProgress"; // ⭐ 2026-11-05 삭제 진행 창 + 한 번에 삭제
 import CustomDatePicker from "./CustomDatePicker";
+import useNarrow from "./useNarrow"; // 📱 2026-11-10 휴대폰 — 고정노선현황 표를 카드 목록으로
 import { pickUnassignedOrders } from "./unassignedRule"; // ⭐ 2026-11-05 PC·모바일 일치 — 미배차 기준 공용
 import { useOrderHistory } from "./orderHistory";
 import { sheetApi, BoardSuggest } from "./RouteBoard";
@@ -961,6 +962,13 @@ function MobileFixedRouteBody({ form, rows, range, setRange, status, setStatus, 
     .sort((a, b) => frIn(a).localeCompare(frIn(b)) || gi(a) - gi(b) || (a.시트줄 ?? 1e9) - (b.시트줄 ?? 1e9) || (a.배차표순번 || 0) - (b.배차표순번 || 0)), [inRange, status, q, qType, nameMap]); // eslint-disable-line react-hooks/exhaustive-deps
   const sum = React.useMemo(() => { const sale = list.reduce((s, r) => s + toInt(r.청구운임), 0); const drv = list.reduce((s, r) => s + toInt(r.기사운임), 0); return { sale, drv, fee: sale - drv }; }, [list]);
   const head = fixedHeaderOf(form).filter((h) => h !== "선택");
+  // 📱 2026-11-10 휴대폰 폭 — 넓은 표(가로 스크롤) 대신 줄마다 카드. 칸 이름은 머리글에서 가져와 각 칸 위에 작게 표시
+  const narrow = useNarrow(640);
+  const tblRef = React.useRef(null);
+  React.useLayoutEffect(() => {
+    const t = tblRef.current; if (!t || !narrow) return;
+    t.querySelectorAll("tbody tr.kp-frs-row").forEach((tr) => { Array.from(tr.children).forEach((td, i) => { const l = head[i] || ""; if (td.getAttribute("data-label") !== l) td.setAttribute("data-label", l); }); });
+  });
   const apply = (f = from, t = to) => { if (!f || !t) { window.alert("조회 기간을 입력해주세요."); return; } if (f > t) { window.alert("조회 시작일이 종료일보다 늦을 수 없습니다."); return; } setRange({ from: f, to: t }); setQ(qInput); setQType(qTypeInput); };
   const quick = (f, t) => { setFrom(f); setTo(t); setRange({ from: f, to: t }); };
   const td = kstDay();
@@ -1008,9 +1016,9 @@ function MobileFixedRouteBody({ form, rows, range, setRange, status, setStatus, 
           </div>
         ))}
       </div>
-      <div className="text-right text-[11.5px] font-bold text-[#7A8AA6]">{range.from === range.to ? range.from : `${range.from} ~ ${range.to}`} · {list.length}건 · 두 번 눌러 수정</div>
-      <div className="overflow-x-auto rounded-2xl border border-[#E3E8F0] bg-white" style={{ WebkitOverflowScrolling: "touch" }}>
-        <table className="text-[12.5px] border-separate border-spacing-0" style={{ minWidth: "max-content" }}>
+      <div className="text-right text-[11.5px] font-bold text-[#7A8AA6]">{range.from === range.to ? range.from : `${range.from} ~ ${range.to}`} · {list.length}건 · {narrow ? "[수정]을 눌러 고치기" : "두 번 눌러 수정"}</div>
+      <div className={narrow ? "" : "overflow-x-auto rounded-2xl border border-[#E3E8F0] bg-white"} style={{ WebkitOverflowScrolling: "touch" }}>
+        <table ref={tblRef} data-kp="frs-table" className={`text-[12.5px] border-separate border-spacing-0 ${narrow ? "kp-frs-cards" : ""}`} style={narrow ? undefined : { minWidth: "max-content" }}>
           <thead><tr>{head.map((h) => <th key={h} className="sticky top-0 bg-[#1B2B4B] text-white font-extrabold px-2 py-2 whitespace-nowrap border-r border-white/10">{h}</th>)}</tr></thead>
           <tbody>
             {list.length === 0 && <tr><td colSpan={head.length} className="py-10 text-center text-[#9AA9C3] font-semibold">조건에 맞는 오더가 없어요</td></tr>}
@@ -1021,12 +1029,12 @@ function MobileFixedRouteBody({ form, rows, range, setRange, status, setStatus, 
               return (
                 <tr key={id} data-lock={locked ? "1" : undefined} title={locked ? `🔒 ${ROUTE_LOCK_MSG}${owner ? ` (담당: ${owner})` : ""}` : undefined}
                   style={urgentRowStyle(r, {}, { tint: editId !== id })}
-                  className={`kp-frs-row ${editId === id ? "bg-[#EEF4FF] outline outline-2 -outline-offset-2 outline-[#2D4C82]" : i % 2 ? "bg-[#FAFBFD]" : "bg-white"}`}
+                  className={`kp-frs-row ${editId === id ? "kp-frs-editing " : ""}${editId === id ? "bg-[#EEF4FF] outline outline-2 -outline-offset-2 outline-[#2D4C82]" : i % 2 ? "bg-[#FAFBFD]" : "bg-white"}`}
                   onDoubleClick={() => { if (disabled) return; if (locked) { window.alert(`🔒 ${ROUTE_LOCK_MSG}${owner ? ` (담당: ${owner})` : ""}\n본인이 등록·배차한 오더만 고칠 수 있어요 · 마스터는 모든 오더 수정 가능`); return; } setEditId((c) => (c === id ? null : id)); }}
                   onKeyDown={(e) => { if (e.key === "Enter" && e.target.tagName === "INPUT" && !document.querySelector("[role=listbox]")) { e.target.blur(); setTimeout(() => setEditId(null), 220); } }}>
                   <td className="px-2 py-1.5 text-center font-bold text-[#5B6B85] border-b border-[#E9EDF4] border-r border-r-[#E3E8F0]">
                     {editId === id && !locked ? <button type="button" onClick={() => setEditId(null)} className="h-7 px-2 rounded-lg bg-[#1B2B4B] text-white text-[11px] font-black">완료</button>
-                      : <span className="inline-flex items-center gap-1">{i + 1}{locked && <svg data-kp="frs-lock" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#9AA9C3" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-label={ROUTE_LOCK_MSG}><rect x="5" y="11" width="14" height="10" rx="2" /><path d="M8 11V7a4 4 0 0 1 8 0v4" /></svg>}</span>}
+                      : <span className="inline-flex items-center gap-1">{narrow && <span className="kp-frs-no">No.</span>}{i + 1}{narrow && !disabled && !locked && <button type="button" data-kp="frs-edit" onClick={(e) => { e.stopPropagation(); setEditId(id); }} className="kp-frs-editbtn h-7 px-2.5 rounded-lg border border-[#DCE3EE] bg-white text-[#1B2B4B] text-[11.5px] font-black">수정</button>}{locked && <svg data-kp="frs-lock" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#9AA9C3" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-label={ROUTE_LOCK_MSG}><rect x="5" y="11" width="14" height="10" rx="2" /><path d="M8 11V7a4 4 0 0 1 8 0v4" /></svg>}</span>}
                   </td>
                   <FixedOwnerCell row={r} nameMap={nameMap} />{/* ⭐ 2026-11-06 담당자 */}
                   <FixedRouteCells form={form} row={r} drivers={drivers} clients={clients} disabled={disabled || locked} editing={editId === id && !locked} onPatch={patch(r)} />
