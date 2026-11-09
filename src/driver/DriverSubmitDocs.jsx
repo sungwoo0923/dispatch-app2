@@ -92,8 +92,8 @@ export default function DriverSubmitDocs({ uid, companyName = "" }) {
                 {d?.status === "반려" && d.rejectReason && <div style={{ fontSize: 13.5, color: "#B42318", marginTop: 3 }}>사유: {d.rejectReason}</div>}
               </div>
               {d?.dataUrl && (
-                <button type="button" onClick={async () => { try { const { saveDocFile } = await import("./docSave"); const m = await saveDocFile(d.dataUrl, d.fileName || def.label); if (m) kpAlert(m); } catch (e) { kpAlert(`저장하지 못했어요: ${e?.message || e}`); } }}
-                  title="내 휴대폰에 저장" style={{ height: 38, padding: "0 10px", borderRadius: 11, border: "1px solid #DCE3EE", background: "#fff", color: "#1B2B4B", fontSize: 14.5, fontWeight: 900, flexShrink: 0 }}>⤓</button>
+                <button type="button" onClick={async () => { try { const { saveDocFile } = await import("./docSave"); const m = await saveDocFile(d.dataUrl, d.fileName || def.label); if (m) kpAlert(m); } catch (e) { kpAlert(`공유하지 못했어요: ${e?.message || e}`); } }}
+                  title="공유" style={{ height: 38, padding: "0 10px", borderRadius: 11, border: "1px solid #DCE3EE", background: "#fff", color: "#1B2B4B", fontSize: 14.5, fontWeight: 900, flexShrink: 0 }}>공유</button>
               )}
               <button type="button" disabled={busy === def.key} onClick={() => pick(def)}
                 style={{ height: 38, padding: "0 12px", borderRadius: 11, border: "none", background: d && st.tone === "ok" ? "#EEF2F8" : "#0F1A30", color: d && st.tone === "ok" ? "#1B2B4B" : "#fff", fontSize: 14.5, fontWeight: 900, flexShrink: 0, whiteSpace: "nowrap", opacity: busy === def.key ? 0.5 : 1 }}>

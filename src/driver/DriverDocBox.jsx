@@ -86,7 +86,7 @@ export default function DriverDocBox({ uid, inbox, companyName = "" }) {
     if (saving || !open) return;
     setSaving(true);
     try { const m = await saveElementPdf(printRef.current, docTitle(open.type, open.item)); if (m) kpAlert(m); }
-    catch (e) { kpAlert(`저장하지 못했어요: ${e?.message || e}`); } finally { setSaving(false); }
+    catch (e) { kpAlert(`공유하지 못했어요: ${e?.message || e}`); } finally { setSaving(false); }
   };
   if (open?.type === "ct") return <React.Suspense fallback={<div style={{ padding: 40, textAlign: "center", color: "#9AA9C3", fontWeight: 700 }}>계약서를 여는 중…</div>}><DriverContractSign item={open.item} onBack={() => setOpen(null)} /></React.Suspense>;
   if (open) {
@@ -96,7 +96,7 @@ export default function DriverDocBox({ uid, inbox, companyName = "" }) {
         <button type="button" onClick={() => { setOpen(null); setZoomDoc(false); }} style={{ height: 38, padding: "0 14px", borderRadius: 14, border: "1px solid #DCE3EE", background: "#fff", fontSize: 15.5, fontWeight: 800, color: "#1B2B4B", marginBottom: 12 }}>← 서류함</button>
         <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
           <button type="button" onClick={() => setZoomDoc(true)} style={{ flex: 1, height: 42, borderRadius: 14, border: "1px solid #C9D6EE", background: "#fff", color: "#1B2B4B", fontSize: 15.5, fontWeight: 900 }}>🔍 크게 보기</button>
-          <button type="button" onClick={saveOpenPdf} disabled={saving} style={{ flex: 1, height: 42, borderRadius: 14, border: "none", background: "#0F1A30", color: "#fff", fontSize: 15.5, fontWeight: 900 }}>{saving ? "저장 중…" : "⤓ PDF 저장"}</button>
+          <button type="button" onClick={saveOpenPdf} disabled={saving} style={{ flex: 1, height: 42, borderRadius: 14, border: "none", background: "#0F1A30", color: "#fff", fontSize: 15.5, fontWeight: 900 }}>{saving ? "준비 중…" : "공유"}</button>
         </div>
         {open.type === "pay" ? <StatementDoc st={it} /> : <PenaltyDoc p={it} onPhoto={(i) => setViewer({ images: it.photos || [], index: i })} />}
         {/* 저장용 — 화면 밖에 넓게(760px) 그려 두고 PDF로 찍는다 */}

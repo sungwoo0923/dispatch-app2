@@ -46,11 +46,11 @@ export async function saveDocFile(src, name = "서류") {
   if (isNative()) {
     try {
       const r = await KpSave.save({ data: await blobToBase64(blob), name: file, mime, share: true });
-      return r?.downloaded ? "휴대폰 '다운로드/LogisWeb' 폴더에 저장했어요" : "공유 창에서 저장할 곳을 골라 주세요";
+      void r; return ""; // ⭐ 2026-11-10 기사앱은 "공유"로만 안내(공유 창에서 카톡·문자·파일 등으로 보내기)
     } catch (e) {
       // 예전 기사앱(저장 기능 없는 버전) — 새 기사앱으로 다시 설치해야 저장된다
       if (/not implemented|UNIMPLEMENTED|not available/i.test(String(e?.message || e?.code || e))) {
-        throw new Error("이 기사앱 버전은 저장 기능이 없어요. 새 기사앱으로 다시 설치하면 저장할 수 있어요.");
+        throw new Error("지금 쓰시는 기사앱에서는 공유가 안 돼요. 필요한 서류는 운송사에 요청해 주세요.");
       }
       throw e;
     }
@@ -61,7 +61,7 @@ export async function saveDocFile(src, name = "서류") {
     const f = new File([blob], file, { type: mime });
     if (phone && navigator.canShare?.({ files: [f] })) {
       await navigator.share({ files: [f], title: file });
-      return "공유 창에서 저장할 곳을 골라 주세요";
+      return "";
     }
   } catch (e) {
     if (e?.name === "AbortError") return "";

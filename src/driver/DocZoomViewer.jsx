@@ -69,7 +69,7 @@ export default function DocZoomViewer({ title = "서류", width = 794, onClose, 
           <div style={{ fontFamily: MONO, fontSize: 11.5, fontWeight: 800, letterSpacing: "0.24em", color: "#8FB0F0" }}>DOCUMENT</div>
           <div style={{ fontSize: 16, fontWeight: 900, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{title}</div>
         </div>
-        {onSave && <button type="button" style={{ ...btn, background: "#fff", color: "#0F1A30", border: "none" }} onClick={onSave} disabled={saving}>{saving ? "저장 중…" : "⤓ 저장"}</button>}
+        {onSave && <button type="button" style={{ ...btn, background: "#fff", color: "#0F1A30", border: "none" }} onClick={onSave} disabled={saving}>{saving ? "준비 중…" : "공유"}</button>}
         <button type="button" style={btn} onClick={onClose} aria-label="닫기">✕</button>
       </div>
       <div ref={box} onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={() => { pinch.current = null; }}

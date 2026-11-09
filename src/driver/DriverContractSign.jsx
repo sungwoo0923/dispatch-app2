@@ -90,7 +90,7 @@ export default function DriverContractSign({ item, onBack }) {
       await new Promise((r) => requestAnimationFrame(() => r()));
       const msg = await saveElementPdf(printRef.current, `${item.title || "계약서"}${signed ? "_서명본" : ""}`);
       if (msg) kpAlert(msg);
-    } catch (e) { kpAlert(`저장하지 못했어요: ${e?.message || e}`); } finally { setSaving(false); }
+    } catch (e) { kpAlert(`공유하지 못했어요: ${e?.message || e}`); } finally { setSaving(false); }
   };
   const paper = <ContractPaper title={item.title} spec={spec} vals={item.vals || {}} clauses={item.clauses || []} signs={{ right: shown }} />;
   const seg = (k, l) => (
@@ -106,7 +106,7 @@ export default function DriverContractSign({ item, onBack }) {
       </div>
       <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
         <button type="button" onClick={() => setZoomOpen(true)} style={{ flex: 1, height: 42, borderRadius: 14, border: "1px solid #C9D6EE", background: "#fff", color: "#1B2B4B", fontSize: 15.5, fontWeight: 900 }}>🔍 크게 보기</button>
-        <button type="button" onClick={savePdf} disabled={saving} style={{ flex: 1, height: 42, borderRadius: 14, border: "none", background: "#0F1A30", color: "#fff", fontSize: 15.5, fontWeight: 900 }}>{saving ? "저장 중…" : `⤓ PDF 저장${signed ? "(서명본)" : ""}`}</button>
+        <button type="button" onClick={savePdf} disabled={saving} style={{ flex: 1, height: 42, borderRadius: 14, border: "none", background: "#0F1A30", color: "#fff", fontSize: 15.5, fontWeight: 900 }}>{saving ? "준비 중…" : `공유${signed ? "(서명본)" : ""}`}</button>
       </div>
       <div ref={wrap} onClick={() => setZoomOpen(true)} title="눌러서 크게 보기" style={{ borderRadius: 16, background: "#E9EDF3", padding: 8, overflow: "hidden", cursor: "zoom-in" }}>
         <div style={{ width: 794 * scale, height: paperH ? paperH * scale : undefined, overflow: "hidden" }}>
