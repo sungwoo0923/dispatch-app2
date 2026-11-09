@@ -2248,7 +2248,8 @@ function apStatusSets(docs, { pendingFilter = () => true } = {}) {
   return {
     all: docs,
     pending: docs.filter((d) => d.status === "pending" && pendingFilter(d)),
-    approved: docs.filter((d) => d.status === "approved"),
+    // ⭐ 2026-11-09 지급 문서(지출 결의)는 '지급 대기·지급완료'에만 — '완료'에 같은 문서가 두 번 보이던 중복 제거
+    approved: docs.filter((d) => d.status === "approved" && !payState(d)),
     paywait: docs.filter((d) => payState(d) === "wait"),
     paid: docs.filter((d) => payState(d) === "paid"),
     rejected: docs.filter((d) => d.status === "rejected"),
@@ -2448,11 +2449,12 @@ export default function ApprovalCenter({ company, me, page, setPage, openId, onO
   }) : rawList), [rawList, nameOf]);
   const [open, setOpen] = React.useState(null);
   const [preset, setPreset] = React.useState(null);
-  const [tab, setTab] = React.useState("todo");
+  const [tab, setTab] = React.useState(() => (page === "mine" ? "all" : "paywait"));
   const [companyAll, setCompanyAll] = React.useState(null);
   const [lf, setLf] = React.useState({ q: "", from: "", to: "", who: "" }); // 목록 검색·기간·기안자
   const admin = isAdminRole(me.role);
-  React.useEffect(() => { setTab(page === "mine" ? "all" : "todo"); }, [page]);
+  // ⭐ 2026-11-09 결재함은 들어올 때 항상 '지급 대기'부터
+  React.useEffect(() => { setTab(page === "mine" ? "all" : "paywait"); }, [page]);
   React.useEffect(() => {
     if (!admin || tab !== "company" || !company) return undefined;
     return onSnapshot(query(collection(db, "approvals"), where("company", "==", company)),
@@ -2493,7 +2495,7 @@ export default function ApprovalCenter({ company, me, page, setPage, openId, onO
   const L = (list || []).filter((d) => !isHidden(d));
   const hiddenL = (list || []).filter(isHidden);
   const inLine = (d) => (d.line || []).some((s) => s.uid === uid);
-  // ⭐ 2026-11-09 결재함 필터를 내 기안함과 같게 — 결재 대기(내 차례) + 공용 상태 필터(전체·진행 중·완료·지급 대기·지급완료·반려·결재 취소·회수) + 참조·회사 전체·삭제한 문서
+  // ⭐ 2026-11-09 결재함 필터 — 회사 전체(관리자)/전체 · 결재 대기(내 차례) · 지급 대기 · 지급완료 · 반려 · 결재 취소 · 회수 · 참조 · 삭제한 문서
   const lineL = L.filter(inLine);
   const payMine = [...new Map([...L, ...payPool.filter((d) => !isHidden(d))].map((d) => [d.id, d])).values()];
   const inboxStatus = apStatusSets(lineL, { pendingFilter: (d) => !myTurn(d, uid) });
@@ -2522,7 +2524,7 @@ export default function ApprovalCenter({ company, me, page, setPage, openId, onO
   const cat = isCat ? catOf(page) : null;
   const heroTitle = isCat ? cat.label : page === "inbox" ? "결재함" : page === "mine" ? "내 기안함" : "결재선 관리";
   const heroEn = isCat ? cat.en : page === "inbox" ? "INBOX" : page === "mine" ? "MY DOCUMENTS" : "APPROVAL LINES";
-  const heroDesc = isCat ? cat.desc : page === "inbox" ? "결재 대기 문서를 처리하고 진행·완료 현황을 확인합니다." : page === "mine" ? "내가 올린 문서의 결재 진행 상황을 봅니다" : "자주 쓰는 결재 순서를 저장해 두고 문서 작성 때 불러옵니다";
+  const heroDesc = isCat ? cat.desc : page === "inbox" ? "지급 대기·결재 대기 문서를 처리하고 결재 현황을 확인합니다." : page === "mine" ? "내가 올린 문서의 결재 진행 상황을 봅니다" : "자주 쓰는 결재 순서를 저장해 두고 문서 작성 때 불러옵니다";
   const kpis = isCat
     ? (page === "leave" ? [[leave?.ent ? `잔여 ${leave.ent.label}` : "잔여 연차", leave?.ent ? `${leave.remain}일` : "-"], ["진행 중", mineSets.pending.filter((d) => d.cat === "leave").length]] : page === "expense" ? [["이번 달 승인 금액", fmtWon(spentMonth)], ["진행 중", mineSets.pending.filter((d) => d.cat === "expense").length]] : [["진행 중", mineSets.pending.filter((d) => d.cat === page).length], ["완료", mineSets.approved.filter((d) => d.cat === page).length]]) /* ⭐ 2026-11-02 점검 — 기안·품의/보고·인사 화면이 각자 자기 분류 문서 수를 세도록(page 기준) */
     : [["결재 대기", sets.todo.length], ["내 진행 문서", mineSets.pending.length], ["반려", mineSets.rejected.length]];
@@ -2535,10 +2537,10 @@ export default function ApprovalCenter({ company, me, page, setPage, openId, onO
           {(() => {
             // ⭐ 2026-10-31 탭 숫자는 그 탭의 문서 수(검색·기간 적용), 새 결과는 빨간 점으로 따로
             const F = (k) => applyListTools(k === "company" ? (companyAll || []) : (sets[k] || []), lf) || [];
-            const showPay = isFinUser(meFull) || sets.paywait.length > 0;
-            const statusKeys = apStatusKeys(sets, showPay);
-            const keys = ["todo", ...statusKeys.map(([k]) => k), "cc", ...(admin ? ["company"] : []), "hidden"];
-            const label = { todo: "결재 대기", ...Object.fromEntries(statusKeys), cc: "참조 문서", company: "회사 전체", hidden: "삭제한 문서" };
+            // ⭐ 2026-11-09 결재함 순서: 회사 전체 · 결재 대기 · 지급 대기 · 지급완료 · 반려 · 결재 취소 · 회수 · 참조 문서 · 삭제한 문서
+            //   '진행 중·완료'는 뺐다(회사 전체에서 상태로 보임) — 관리자가 아니면 회사 전체 대신 '전체'(내가 결재선에 있는 문서 전부)
+            const keys = [admin ? "company" : "all", "todo", "paywait", "paid", "rejected", "cancelled", "withdrawn", "cc", "hidden"];
+            const label = { all: "전체", company: "회사 전체", todo: "결재 대기", paywait: "지급 대기", paid: "지급완료", rejected: "반려", cancelled: "결재 취소", withdrawn: "회수", cc: "참조 문서", hidden: "삭제한 문서" };
             const pool = [...(list || []), ...(companyAll || [])];
             const drafters = [...new Map(pool.filter((d) => d.drafterUid).map((d) => [d.drafterUid, d.drafter?.name || "-"])).entries()].sort((a, b) => String(a[1]).localeCompare(String(b[1]), "ko"));
             return (<>
