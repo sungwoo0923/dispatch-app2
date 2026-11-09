@@ -135,7 +135,7 @@ import { tryAutoCheckIn, tryAutoCheckOut, undoAutoCheckOut } from "../autoAttend
 import OrderScanModal, { scanDropDate } from "../OrderScanModal";
 import { mainScanAi } from "../orderScanApi"; // 🧠 2026-11-07 오더 스캔 정밀 인식(서버 글자 인식 · AI 칸 정리 · 회사별 학습)
 // ⭐ 2026-11-02 운임규칙 — 회사별 운임 규칙(운임구분 → 기사운임·수수료 자동)
-import { useFareRules, FareTypeSelect, FareRuleHint, fareFormChange } from "../fareRules";
+import { useFareRules, FareTypeSelect, FareRuleHint, FarePctInput, fareFormChange } from "../fareRules";
 import DetailFilterButton, { applyDetailFilter } from "../DetailFilter"; // 🔎 2026-11-03 세부검색(최대 3차)
 import { useFixedRouteAutoDispatch } from "../FixedRoutes"; // ⭐ 2026-11-05 고정노선 배차 이어서 만들기
 import { VehicleTypePicker, currentCustomVehicleTypes, useVehicleTypes } from "../vehicleTypes"; // 🚚 2026-11-02 회사 공용 차량종류
@@ -4718,7 +4718,7 @@ const groupedByDate = useMemo(() => {
       기사운임,
       수수료,
       // ⭐ 2026-11-02 운임규칙 — 운임구분을 고른 적이 있거나(규칙 사용 회사) 원래 있던 오더만
-      ...(form.운임구분 !== undefined ? { 운임구분: form.운임구분 || "", 운임수동: !!form.운임수동 } : {}),
+      ...(form.운임구분 !== undefined ? { 운임구분: form.운임구분 || "", 운임수동: !!form.운임수동, ...(form.운임구분 && String(form.운임구분수수료율 ?? "") !== "" ? { 운임구분수수료율: Number(form.운임구분수수료율) || 0 } : {}) } : {}),
 
       // 상태 PC/모바일 동일 — 🚚 2026-11-07 지급방식 "취소"면 배차취소(PC와 같음 · 상태 칸은 PC처럼 그대로)
       배차상태: dispatchStatusOf({ 지급방식: form.지급방식, 차량번호: form.차량번호 }),
@@ -5079,7 +5079,7 @@ const handleOrderDuplicateWithDriver0 = (order, plan = null) => {
     기사운임: order.기사운임 || 0,
     수수료: (Number(order.청구운임) || 0) - (Number(order.기사운임) || 0),
     산재보험료: order.산재보험료 || 0,
-    ...(order.운임구분 ? { 운임구분: order.운임구분, 운임수동: !!order.운임수동 } : {}), // ⭐ 2026-11-02 운임규칙
+    ...(order.운임구분 ? { 운임구분: order.운임구분, 운임수동: !!order.운임수동, ...(order.운임구분수수료율 != null && order.운임구분수수료율 !== "" ? { 운임구분수수료율: order.운임구분수수료율 } : {}) } : {}), // ⭐ 2026-11-02 운임규칙 · 2026-11-09 오더별 수수료율
     차량번호: order.차량번호 || "",
     기사명: order.기사명 || "",
     전화번호: order.전화번호 || "",
@@ -10742,13 +10742,13 @@ function QuickEditModal({ order, drivers, cardVersionB, onClose, onSuccess, disp
   const [fee, setFee] = useState(order.기사운임 ? Number(order.기사운임).toLocaleString() : "");
   // ⭐ 2026-11-02 운임규칙 — 일부 수정 운임구분
   const fareRK = useFareRules();
-  const [fareT, setFareT] = useState({ 운임구분: order.운임구분 || "", 운임수동: !!order.운임수동 });
+  const [fareT, setFareT] = useState({ 운임구분: order.운임구분 || "", 운임수동: !!order.운임수동, 운임구분수수료율: order.운임구분수수료율 ?? "" }); // ⭐ 2026-11-09 이 오더 수수료율
   const fareK = (key, value) => {
     const num = (x) => (String(x).trim() === "" ? "" : Number(String(x).replace(/[^\d]/g, "")) || 0);
     const cur = { 청구운임: num(claim), 기사운임: num(fee), ...fareT };
     const n = fareFormChange(cur, key, key === "청구운임" || key === "기사운임" ? num(value) : value, fareRK.rules, { asString: false, withFee: false, emptyDriver: "" });
     const fmt = (x) => (x === "" || x == null ? "" : Number(x).toLocaleString());
-    setClaim(fmt(n.청구운임)); setFee(fmt(n.기사운임)); setFareT({ 운임구분: n.운임구분 || "", 운임수동: !!n.운임수동 });
+    setClaim(fmt(n.청구운임)); setFee(fmt(n.기사운임)); setFareT({ 운임구분: n.운임구분 || "", 운임수동: !!n.운임수동, 운임구분수수료율: n.운임구분수수료율 ?? "" });
   };
   const [payType, setPayType] = useState(order.지급방식 || "");
   const [dispType, setDispType] = useState(order.배차방식 || "");
@@ -10882,7 +10882,7 @@ function QuickEditModal({ order, drivers, cardVersionB, onClose, onSuccess, disp
       const patch = {
         청구운임: Number(String(claim).replace(/[^\d]/g, "")) || 0,
         기사운임: Number(String(fee).replace(/[^\d]/g, "")) || 0,
-        ...(fareRK.on && (fareT.운임구분 || order.운임구분) ? { 운임구분: fareT.운임구분 || "", 운임수동: !!fareT.운임수동 } : {}), // ⭐ 2026-11-02 운임규칙
+        ...(fareRK.on && (fareT.운임구분 || order.운임구분) ? { 운임구분: fareT.운임구분 || "", 운임수동: !!fareT.운임수동, ...(fareT.운임구분 && String(fareT.운임구분수수료율 ?? "") !== "" ? { 운임구분수수료율: Number(fareT.운임구분수수료율) || 0 } : {}) } : {}), // ⭐ 2026-11-02 운임규칙 · 2026-11-09 오더별 수수료율
         ...(isShipperOrder ? {} : { 지급방식: payType }),
         배차방식: dispType,
         업체전달상태: deliverState,
@@ -11001,6 +11001,7 @@ function QuickEditModal({ order, drivers, cardVersionB, onClose, onSuccess, disp
               <label className={labelCls}>운임구분</label>
               <div className="flex items-center gap-2 flex-wrap">
                 <FareTypeSelect className="flex-1 min-w-[150px] !h-[40px] !text-[14px]" rules={fareRK.rules} value={fareT.운임구분} onChange={(v) => fareK("운임구분", v)} />
+                <FarePctInput form={fareT} rules={fareRK.rules} onChange={(v) => fareK("운임구분수수료율", v)} />
                 <FareRuleHint form={{ ...fareT, 청구운임: String(claim).replace(/[^\d]/g, ""), 기사운임: String(fee).replace(/[^\d]/g, "") }} rules={fareRK.rules} onReapply={() => fareK("__reapply", null)} />
               </div>
             </div>
@@ -11907,7 +11908,7 @@ function QuickEditSheet({ order, onClose, onSaved, cardVersionB, clients = [], b
       톤수값: ton.v, 톤수타입: ton.u,
       청구운임: order.청구운임 ? toNum(order.청구운임).toLocaleString() : "",
       기사운임: order.기사운임 ? toNum(order.기사운임).toLocaleString() : "",
-      운임구분: order.운임구분 || "", 운임수동: !!order.운임수동, // ⭐ 2026-11-02 운임규칙
+      운임구분: order.운임구분 || "", 운임수동: !!order.운임수동, 운임구분수수료율: order.운임구분수수료율 ?? "", // ⭐ 2026-11-02 운임규칙 · 2026-11-09 오더별 수수료율
     };
   });
   const fareRQ = useFareRules(); // ⭐ 2026-11-02 운임규칙
@@ -11917,7 +11918,7 @@ function QuickEditSheet({ order, onClose, onSaved, cardVersionB, clients = [], b
     const v = key === "청구운임" || key === "기사운임" ? (String(value).trim() === "" ? "" : toNum(value)) : value;
     const n = fareFormChange(num, key, v, fareRQ.rules, { asString: false, withFee: false, emptyDriver: "" });
     const fmt = (x) => (x === "" || x == null ? "" : toNum(x).toLocaleString());
-    return { ...p, 운임구분: n.운임구분 || "", 운임수동: !!n.운임수동, 청구운임: fmt(n.청구운임), 기사운임: fmt(n.기사운임) };
+    return { ...p, 운임구분: n.운임구분 || "", 운임수동: !!n.운임수동, 운임구분수수료율: n.운임구분수수료율 ?? "", 청구운임: fmt(n.청구운임), 기사운임: fmt(n.기사운임) };
   });
   const set = (k) => (e) => setF(p => ({ ...p, [k]: e.target.value }));
   const setVal = (k) => (v) => setF(p => ({ ...p, [k]: v }));
@@ -11962,7 +11963,7 @@ function QuickEditSheet({ order, onClose, onSaved, cardVersionB, clients = [], b
       배차방식: f.배차방식, 지급방식: f.지급방식,
       화물내용: cargo, 차량종류: f.차량종류, 차종: f.차량종류, 차량톤수: ton, 톤수: ton,
       청구운임: toNum(f.청구운임), 기사운임: toNum(f.기사운임), 수수료: fee,
-      ...(fareRQ.on || order.운임구분 ? { 운임구분: f.운임구분 || "", ...(f.운임구분 ? { 운임수동: !!f.운임수동 } : {}) } : {}), // ⭐ 2026-11-02 운임규칙
+      ...(fareRQ.on || order.운임구분 ? { 운임구분: f.운임구분 || "", ...(f.운임구분 ? { 운임수동: !!f.운임수동 } : {}), ...(f.운임구분 && String(f.운임구분수수료율 ?? "") !== "" ? { 운임구분수수료율: Number(f.운임구분수수료율) || 0 } : {}) } : {}), // ⭐ 2026-11-02 운임규칙 · 2026-11-09 오더별 수수료율
     };
     // 바뀐 항목만 저장
     const changed = {};
@@ -12065,7 +12066,7 @@ function QuickEditSheet({ order, onClose, onSaved, cardVersionB, clients = [], b
             {fareRQ.on && (
               <QuickField label="운임구분">
                 <div className="flex flex-col gap-1">
-                  <FareTypeSelect className="w-full !h-[38px] !text-[14px]" rules={fareRQ.rules} value={f.운임구분 || ""} onChange={(v) => fareQ("운임구분", v)} />
+                  <div className="flex items-center gap-1.5"><FareTypeSelect className="flex-1 min-w-0 !h-[38px] !text-[14px]" rules={fareRQ.rules} value={f.운임구분 || ""} onChange={(v) => fareQ("운임구분", v)} /><FarePctInput form={f} rules={fareRQ.rules} onChange={(v) => fareQ("운임구분수수료율", v)} /></div>
                   <FareRuleHint form={{ ...f, 청구운임: f.청구운임 === "" ? "" : toNum(f.청구운임), 기사운임: toNum(f.기사운임) }} rules={fareRQ.rules} onReapply={() => fareQ("__reapply", null)} />
                 </div>
               </QuickField>
@@ -12413,7 +12414,7 @@ function MobileOrderDetail({
       기사운임: drv != null ? drv : (order.기사운임 || 0),
       수수료: (claim != null ? claim : (Number(order.청구운임)||0)) - (drv != null ? drv : (Number(order.기사운임)||0)),
       산재보험료: order.산재보험료 || 0,
-      ...(order.운임구분 ? { 운임구분: order.운임구분, 운임수동: !!order.운임수동 } : {}), // ⭐ 2026-11-02 운임규칙
+      ...(order.운임구분 ? { 운임구분: order.운임구분, 운임수동: !!order.운임수동, ...(order.운임구분수수료율 != null && order.운임구분수수료율 !== "" ? { 운임구분수수료율: order.운임구분수수료율 } : {}) } : {}), // ⭐ 2026-11-02 운임규칙 · 2026-11-09 오더별 수수료율
       차량번호: order.차량번호 || "",
       혼적여부: order.혼적여부 || "독차",
       긴급: order.긴급 === true,
@@ -12901,7 +12902,7 @@ const handleAssignClick = () => {
       청구운임: order.청구운임 || 0, 기사운임: order.기사운임 || 0,
       수수료: (Number(order.청구운임) || 0) - (Number(order.기사운임) || 0),
       산재보험료: order.산재보험료 || 0, 차량번호: carNo || "",
-      ...(order.운임구분 ? { 운임구분: order.운임구분, 운임수동: !!order.운임수동 } : {}), // ⭐ 2026-11-02 운임규칙
+      ...(order.운임구분 ? { 운임구분: order.운임구분, 운임수동: !!order.운임수동, ...(order.운임구분수수료율 != null && order.운임구분수수료율 !== "" ? { 운임구분수수료율: order.운임구분수수료율 } : {}) } : {}), // ⭐ 2026-11-02 운임규칙 · 2026-11-09 오더별 수수료율
       혼적여부: order.혼적여부 || "독차", 긴급: order.긴급 === true, 운행유형: order.운행유형 || "", 회전수: Number(order.회전수) > 1 ? Number(order.회전수) : 1,
       적요: order.메모 || "",
       전달사항: order.전달사항 || "",
@@ -15225,8 +15226,8 @@ const orderCopyList = useMemo(() => {
   const updateMoney = (key, value) =>
     
     setForm((p) => {
-      if (fareRM.on && (key === "청구운임" || key === "기사운임" || key === "운임구분" || key === "__reapply")) {
-        return fareFormChange(p, key, key === "운임구분" || key === "__reapply" ? value : toNumber(value), fareRM.rules, { asString: false });
+      if (fareRM.on && (key === "청구운임" || key === "기사운임" || key === "운임구분" || key === "운임구분수수료율" || key === "__reapply")) {
+        return fareFormChange(p, key, key === "운임구분" || key === "운임구분수수료율" || key === "__reapply" ? value : toNumber(value), fareRM.rules, { asString: false });
       }
       const next = { ...p, [key]: toNumber(value) };
       if (key === "청구운임" || key === "기사운임") {
@@ -16509,6 +16510,7 @@ const pickDrop = (c) => {
               input={
                 <div className="flex items-center gap-1.5 min-w-0">
                   <FareTypeSelect className="flex-1 min-w-0 !h-[38px] !text-[14px]" rules={fareRM.rules} value={form.운임구분 || ""} onChange={(v) => updateMoney("운임구분", v)} />
+                  <FarePctInput form={form} rules={fareRM.rules} onChange={(v) => updateMoney("운임구분수수료율", v)} />
                   <FareRuleHint className="shrink-0" form={form} rules={fareRM.rules} onReapply={() => updateMoney("__reapply", null)} />
                 </div>
               }

@@ -15,7 +15,7 @@ import { kpConfirm, kpAlert } from "./kpDialog";
 import CustomDatePicker from "./CustomDatePicker";
 import { CustomSelect } from "./CustomSelect";
 import { VehicleTypePicker } from "./vehicleTypes";
-import { useFareRules, FareTypeSelect, FareRuleHint, fareFormChange } from "./fareRules";
+import { useFareRules, FareTypeSelect, FareRuleHint, FarePctInput, fareFormChange } from "./fareRules";
 import { CompanyOptionPicker } from "./companyOptionPicker"; // 🧾 2026-11-02 지급방식·배차방식·상/하차방법 공용 선택기(＋ 추가)
 import { fmtPhone } from "./formatInput";
 
@@ -85,6 +85,7 @@ const initForm = (o) => {
   TEXT_KEYS.forEach((k) => { f[k] = o?.[k] == null ? "" : String(o[k]); });
   MONEY_KEYS.forEach((k) => { f[k] = o?.[k] === "" || o?.[k] == null ? "" : String(toNum(o[k])); });
   f.운임수동 = !!o?.운임수동;
+  f.운임구분수수료율 = o?.운임구분수수료율 == null ? "" : String(o.운임구분수수료율); // ⭐ 2026-11-09 이 오더 수수료율
   return f;
 };
 
@@ -172,6 +173,7 @@ export default function FleetOrderPanel({ order, onClose, onCopy, companyName = 
         patch.기사운임 = toNum(form.기사운임);
         patch.수수료 = patch.청구운임 - patch.기사운임;
         if (String(form.운임구분 || "").trim()) patch.운임수동 = !!form.운임수동;
+        if (String(form.운임구분 || "").trim() && String(form.운임구분수수료율 ?? "") !== "") patch.운임구분수수료율 = Number(form.운임구분수수료율) || 0; // ⭐ 2026-11-09 이 오더 수수료율
       }
       if (patch.거래처명 !== undefined && !patch.거래처명) delete patch.거래처명; // 거래처명은 비워 저장하지 않음
       // 서버 확인(ack)이 늦어도 화면은 바로 반영된다(Firestore 즉시 반영) — 1.2초 안에 거부되면 패널을 그대로 두고 알림,
@@ -296,7 +298,7 @@ export default function FleetOrderPanel({ order, onClose, onCopy, companyName = 
               </CpField>
               {fareOn && (
                 <CpField label={<>운임구분<FareRuleHint className="ml-1" form={form} rules={fareR.rules} onReapply={() => setFare("__reapply", null)} /></>}>
-                  <FareTypeSelect className="!h-9 !rounded-lg" rules={fareR.rules} value={form.운임구분 || ""} onChange={(v) => setFare("운임구분", v)} />
+                  <div className="flex items-center gap-1.5"><FareTypeSelect className="!h-9 !rounded-lg flex-1 min-w-0" rules={fareR.rules} value={form.운임구분 || ""} onChange={(v) => setFare("운임구분", v)} /><FarePctInput form={form} rules={fareR.rules} onChange={(v) => setFare("운임구분수수료율", v)} /></div>
                 </CpField>
               )}
               <CpField label="배차방식">

@@ -1797,7 +1797,7 @@ function BulkEditModal({ rows, patchDispatch, onClose, onDateShift }) {
   const FIELDS = fareRb.on ? [...BULK_EDIT_FIELDS, { key: "운임구분", label: "운임구분", type: "fare" }] : BULK_EDIT_FIELDS;
   const fareCell = (r, cur, key, value) => {
     const n = fareFormChange({ ...r, ...cur }, key, value, fareRb.rules, { withFee: false });
-    return { ...cur, 청구운임: n.청구운임 ?? "", 기사운임: n.기사운임 ?? "", 운임구분: n.운임구분 || "", 운임수동: !!n.운임수동 };
+    return { ...cur, 청구운임: n.청구운임 ?? "", 기사운임: n.기사운임 ?? "", 운임구분: n.운임구분 || "", 운임수동: !!n.운임수동, ...(n.운임구분수수료율 !== undefined ? { 운임구분수수료율: n.운임구분수수료율 } : {}) };
   };
   const isFareKey = (key) => fareRb.on && (key === "청구운임" || key === "기사운임" || key === "운임구분");
   const [bulkValues, setBulkValues] = React.useState({});
@@ -2923,7 +2923,7 @@ import { RecurringManagerModal, CloseReportModal } from "./AutomationPanels";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 // ⭐ 2026-11-02 운임규칙 — 회사별 운임 규칙(운임구분 → 기사운임·수수료 자동 계산)
 import FareRulesSettings from "./FareRulesSettings";
-import { useFareRules, FareTypeSelect, FareRuleHint, fareFormChange, farePatchOf, findFareRule, applyFareRule, FareTypeBreakdown } from "./fareRules";
+import { useFareRules, FareTypeSelect, FareRuleHint, FarePctInput, fareFormChange, farePatchOf, findFareRule, applyFareRule, FareTypeBreakdown } from "./fareRules";
 import { useTableSort, sortRows, SortTh } from "./tableSort";
 import { useCompanyFeatures } from "./companyFeatures";
 import { BRAND, LogisMark, LogisWordmark, LogisTag } from "./brand";
@@ -12579,7 +12579,7 @@ const updateMultiSlot = (key, value) => {
     // ⭐ 3파트 등록폼과 동일: 청구운임/기사운임을 입력할 때마다 수수료(차액)를
     // 자동으로 다시 계산한다.
     // ⭐ 2026-11-02 운임규칙 — 다중등록도 운임구분 → 기사운임·수수료 자동
-    if (fareOn && (key === "운임구분" || key === "청구운임" || key === "기사운임" || key === "__reapply")) {
+    if (fareOn && (key === "운임구분" || key === "청구운임" || key === "기사운임" || key === "운임구분수수료율" || key === "__reapply")) {
       return fareFormChange(s, key, value, fareR.rules);
     }
     if (key === "청구운임" || key === "기사운임") {
@@ -13009,7 +13009,7 @@ function swapPickupDrop() {
 
     const onChange = (key, value) => {
       // ⭐ 2026-11-02 운임규칙 — 운임구분·청구운임·기사운임 → 규칙대로 기사운임·수수료 자동 계산(기사운임을 직접 고치면 유지)
-      if (fareOn && canMoney && (key === "운임구분" || key === "청구운임" || key === "기사운임" || key === "__reapply")) {
+      if (fareOn && canMoney && (key === "운임구분" || key === "청구운임" || key === "기사운임" || key === "운임구분수수료율" || key === "__reapply")) {
         setForm((p) => fareFormChange(p, key, value, fareR.rules));
         return;
       }
@@ -16277,7 +16277,7 @@ shadow-[0_1px_2px_rgba(16,24,40,0.04),0_12px_30px_rgba(16,24,40,0.07)]
               {fareOn ? (
                 <div>
                   <label className={mrLabelCls}>운임구분 <FareRuleHint className="ml-1.5" form={currentMultiSlot} rules={fareR.rules} onReapply={() => updateMultiSlot("__reapply")} /></label>
-                  <FareTypeSelect compact className="w-full" rules={fareR.rules} value={currentMultiSlot.운임구분 || ""} onChange={(v) => updateMultiSlot("운임구분", v)} />
+                  <div className="flex items-center gap-1.5"><FareTypeSelect compact className="flex-1 min-w-0" rules={fareR.rules} value={currentMultiSlot.운임구분 || ""} onChange={(v) => updateMultiSlot("운임구분", v)} /><FarePctInput compact form={currentMultiSlot} rules={fareR.rules} onChange={(v) => updateMultiSlot("운임구분수수료율", v)} /></div>
                 </div>
               ) : <div />}
 
@@ -17352,6 +17352,7 @@ className={`
           <span className="ml-auto inline-flex items-center gap-1" data-fare-row="1">
             <FareRuleHint form={form} rules={fareR.rules} onReapply={() => onChange("__reapply")} />
             <FareTypeSelect compact align="right" id="order-fare-type" rules={fareR.rules} value={form.운임구분 || ""} placeholder="운임구분" onChange={(v) => onChange("운임구분", v)} />
+            <FarePctInput compact form={form} rules={fareR.rules} onChange={(v) => onChange("운임구분수수료율", v)} />{/* ⭐ 2026-11-09 이 오더만 수수료율 */}
           </span>
         )}
       </div>
@@ -29443,7 +29444,7 @@ const openDailyCloseIssueDetail = (rowId) => {
         const merged = { ...base, ...(prev[id] || {}) };
         if (!merged.운임구분 && key !== "운임구분") return { ...prev, [id]: { ...(prev[id] || {}), ...(key === "__reapply" ? {} : { [key]: value }) } };
         const n = fareFormChange(merged, key, value, fareR.rules);
-        return { ...prev, [id]: { ...(prev[id] || {}), ...(key === "__reapply" ? {} : { [key]: value }), 운임구분: n.운임구분 || "", 기사운임: n.기사운임, 수수료: n.수수료, 운임수동: !!n.운임수동 } };
+        return { ...prev, [id]: { ...(prev[id] || {}), ...(key === "__reapply" ? {} : { [key]: value }), 운임구분: n.운임구분 || "", 기사운임: n.기사운임, 수수료: n.수수료, 운임수동: !!n.운임수동, ...(n.운임구분수수료율 !== undefined ? { 운임구분수수료율: n.운임구분수수료율 } : {}) } };
       });
       return;
     }
@@ -31394,7 +31395,7 @@ value={copyTarget?.화물수량 || ""}
 {/* ⭐ 2026-11-02 운임규칙 — 오더 복사·수정 패널 운임구분 */}
 {fareOn && (
   <CpField label={<>운임구분<FareRuleHint className="ml-1" form={copyTarget} rules={fareR.rules} onReapply={() => setCopyTarget(p => fareFormChange(p, "__reapply", null, fareR.rules))} /></>}>
-    <FareTypeSelect className="!h-9 !rounded-lg" placeholder="운임구분 선택(수수료 자동)" rules={fareR.rules} value={copyTarget?.운임구분 || ""} onChange={(v) => setCopyTarget(p => fareFormChange(p, "운임구분", v, fareR.rules))} />
+    <div className="flex items-center gap-1.5"><FareTypeSelect className="!h-9 !rounded-lg flex-1 min-w-0" placeholder="운임구분 선택(수수료 자동)" rules={fareR.rules} value={copyTarget?.운임구분 || ""} onChange={(v) => setCopyTarget(p => fareFormChange(p, "운임구분", v, fareR.rules))} /><FarePctInput form={copyTarget} rules={fareR.rules} onChange={(v) => setCopyTarget(p => fareFormChange(p, "운임구분수수료율", v, fareR.rules))} /></div>
   </CpField>
 )}
 
@@ -33160,6 +33161,7 @@ value={copyTarget?.화물수량 || ""}
                 <label className="shrink-0">운임구분</label>
                 <FareTypeSelect className="min-w-[180px] !w-auto" rules={fareR.rules} value={editTarget.운임구분 || ""}
                   onChange={(v) => setEditTarget((p) => { const n = fareFormChange(p, "운임구분", v, fareR.rules); return { ...n, 수수료: Number(n.수수료) || 0 }; })} />
+                <FarePctInput form={editTarget} rules={fareR.rules} onChange={(v) => setEditTarget((p) => { const n = fareFormChange(p, "운임구분수수료율", v, fareR.rules); return { ...n, 수수료: Number(n.수수료) || 0 }; })} />{/* ⭐ 2026-11-09 이 오더만 수수료율 */}
                 <FareRuleHint form={editTarget} rules={fareR.rules} onReapply={() => setEditTarget((p) => { const n = fareFormChange(p, "__reapply", null, fareR.rules); return { ...n, 수수료: Number(n.수수료) || 0 }; })} />
               </div>
             )}
@@ -38623,7 +38625,7 @@ if (mode === "driver") {
         const cur0 = { ...(prev[getId(row)] || {}), ...(key === "__reapply" ? {} : { [key]: value }) };
         if (merged.운임구분 || key === "운임구분") {
           const n = fareFormChange(merged, key, value, fareR.rules, { asString: false });
-          Object.assign(cur0, { 운임구분: n.운임구분 || "", 기사운임: n.기사운임, 운임수동: !!n.운임수동 });
+          Object.assign(cur0, { 운임구분: n.운임구분 || "", 기사운임: n.기사운임, 운임수동: !!n.운임수동, ...(n.운임구분수수료율 !== undefined ? { 운임구분수수료율: n.운임구분수수료율 } : {}) });
         }
         cur0.수수료 = toInt(cur0.청구운임 ?? row.청구운임) - toInt(cur0.기사운임 ?? row.기사운임);
         return { ...prev, [getId(row)]: cur0 };
@@ -41493,6 +41495,7 @@ return (
                 <label className="shrink-0">운임구분</label>
                 <FareTypeSelect className="min-w-[180px] !w-auto" rules={fareR.rules} value={editTarget.운임구분 || ""}
                   onChange={(v) => setEditTarget((p) => { const n = fareFormChange(p, "운임구분", v, fareR.rules); return { ...n, 수수료: Number(n.수수료) || 0 }; })} />
+                <FarePctInput form={editTarget} rules={fareR.rules} onChange={(v) => setEditTarget((p) => { const n = fareFormChange(p, "운임구분수수료율", v, fareR.rules); return { ...n, 수수료: Number(n.수수료) || 0 }; })} />{/* ⭐ 2026-11-09 이 오더만 수수료율 */}
                 <FareRuleHint form={editTarget} rules={fareR.rules} onReapply={() => setEditTarget((p) => { const n = fareFormChange(p, "__reapply", null, fareR.rules); return { ...n, 수수료: Number(n.수수료) || 0 }; })} />
               </div>
             )}
@@ -42789,7 +42792,7 @@ setCopyPlaceOptions(list);
 {/* ⭐ 2026-11-02 운임규칙 — 오더 복사·수정 패널 운임구분 */}
 {fareOn && (
   <CpField label={<>운임구분<FareRuleHint className="ml-1" form={copyTarget} rules={fareR.rules} onReapply={() => setCopyTarget(p => fareFormChange(p, "__reapply", null, fareR.rules))} /></>}>
-    <FareTypeSelect className="!h-9 !rounded-lg" placeholder="운임구분 선택(수수료 자동)" rules={fareR.rules} value={copyTarget?.운임구분 || ""} onChange={(v) => setCopyTarget(p => fareFormChange(p, "운임구분", v, fareR.rules))} />
+    <div className="flex items-center gap-1.5"><FareTypeSelect className="!h-9 !rounded-lg flex-1 min-w-0" placeholder="운임구분 선택(수수료 자동)" rules={fareR.rules} value={copyTarget?.운임구분 || ""} onChange={(v) => setCopyTarget(p => fareFormChange(p, "운임구분", v, fareR.rules))} /><FarePctInput form={copyTarget} rules={fareR.rules} onChange={(v) => setCopyTarget(p => fareFormChange(p, "운임구분수수료율", v, fareR.rules))} /></div>
   </CpField>
 )}
 
@@ -51108,7 +51111,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                     {/* ⭐ 2026-11-02 운임규칙 — 운임구분(실시간·배차현황 패널과 같은 자리) */}
                     {fareOnU && (
                       <CpField label={<>운임구분<FareRuleHint className="ml-1" form={copyTarget} rules={fareRU.rules} onReapply={() => setCopyTarget(p => fareFormChange(p, "__reapply", null, fareRU.rules))} /></>}>
-                        <FareTypeSelect className="!h-9 !rounded-lg" rules={fareRU.rules} value={copyTarget?.운임구분 || ""} onChange={(v) => setCopyTarget(p => fareFormChange(p, "운임구분", v, fareRU.rules))} />
+                        <div className="flex items-center gap-1.5"><FareTypeSelect className="!h-9 !rounded-lg flex-1 min-w-0" rules={fareRU.rules} value={copyTarget?.운임구분 || ""} onChange={(v) => setCopyTarget(p => fareFormChange(p, "운임구분", v, fareRU.rules))} /><FarePctInput form={copyTarget} rules={fareRU.rules} onChange={(v) => setCopyTarget(p => fareFormChange(p, "운임구분수수료율", v, fareRU.rules))} /></div>
                       </CpField>
                     )}
                     <CpField label="배차방식">

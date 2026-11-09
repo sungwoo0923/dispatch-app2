@@ -7,6 +7,8 @@
 //    (끈 회사는 화면이 예전과 완전히 같다)
 //  · 계산: 수수료 = 퍼센트 ? 청구×값/100(원 단위 반올림) : 값 · 기사운임 = 청구 − 수수료
 //  · 오더 필드: 운임구분(규칙 이름) · 운임수동(true면 기사운임을 사람이 직접 고친 것 → 자동 계산하지 않음)
+//    · ⭐ 2026-11-09 운임구분수수료율 — 이 오더에 적용한 수수료(퍼센트면 %, 정액이면 원). 운임구분을 고르면 규칙 기본값이 채워지고
+//      오더마다 바꿀 수 있다(같은 월대라도 7% / 10%). 규칙 값을 나중에 바꿔도 저장된 오더의 값은 그대로. 없으면(예전 오더) 규칙 값
 //  · 규칙을 바꿔도 이미 저장된 오더는 다시 계산하지 않는다(새로 수정하거나 [↺ 규칙대로]를 누를 때만)
 import React from "react";
 import { createPortal } from "react-dom";
@@ -80,89 +82,9 @@ export function useFareRules(company) {
   }, [feats, feature, rd, co]);
 }
 
-const toNum = (v) => {
-  const n = Number(String(v ?? "").replace(/[^\d.-]/g, ""));
-  return Number.isFinite(n) ? n : 0;
-};
-
-// 규칙 한 개 적용 — 청구운임 → { 기사운임, 수수료 } (원 단위 정수)
-export function applyFareRule(rule, 청구운임) {
-  const sale = Math.round(toNum(청구운임));
-  if (!rule) return { 기사운임: sale, 수수료: 0 };
-  const v = toNum(rule.value);
-  const fee = rule.type === "fixed" ? Math.round(v) : Math.round((sale * v) / 100);
-  return { 기사운임: sale - fee, 수수료: fee };
-}
-
-export const findFareRule = (rules, name) => {
-  const n = String(name || "").trim();
-  if (!n) return null;
-  return (rules || []).find((r) => String(r?.name || "").trim() === n) || null;
-};
-
-// "퍼센트 7%" / "정액 30,000원"
-export const fareRuleCalcLabel = (rule) => {
-  if (!rule) return "";
-  const v = toNum(rule.value);
-  return rule.type === "fixed" ? `정액 ${Math.round(v).toLocaleString()}원` : `퍼센트 ${v}%`;
-};
-// "일대 7% 적용" / "월대 30,000원 적용"
-export const fareRuleHint = (rule) => {
-  if (!rule) return "";
-  const v = toNum(rule.value);
-  return `${rule.name} ${rule.type === "fixed" ? `${Math.round(v).toLocaleString()}원` : `${v}%`} 적용`;
-};
-
-// ── 입력 폼 공용 처리 ──
-//  form: 오더(또는 입력 중인 폼) · key: 바뀐 칸("운임구분"|"청구운임"|"기사운임"|"__reapply")
-//  반환: 새 객체(수수료가 있는 폼이면 수수료도 맞춤). asString=true면 금액을 문자열로 넣는다(입력 폼 대부분이 문자열).
-export function fareFormChange(form, key, value, rules, { asString = true, withFee = true, emptyDriver } = {}) {
-  const next = { ...form };
-  if (key !== "__reapply") next[key] = value;
-  const out = (n) => (asString ? String(n) : n);
-  const rule = findFareRule(rules, next.운임구분);
-  // ⭐ 2026-11-04 운임구분 해제 리셋 — 규칙이 있던 오더에서 운임구분을 "선택 안 함"으로 바꾸면
-  //  예전엔 운임수동만 끄고 규칙이 계산해 둔 기사운임을 그대로 남겨서 수수료도 옛 계산값으로 남았다.
-  //  → 기사운임을 비우고 운임수동도 끈다(수수료는 아래 공통 계산: 청구운임 − 0 = 청구운임).
-  if (key === "운임구분" && !rule && String(form?.운임구분 || "").trim() !== "") {
-    next.운임수동 = false;
-    next.기사운임 = emptyDriver !== undefined ? emptyDriver : (asString ? "" : 0);
-  } else if (key === "기사운임") {
-    // 사람이 기사운임을 고침 → 규칙 계산값과 다르면 수동으로 표시
-    if (rule && String(next.청구운임 ?? "") !== "") {
-      const calc = applyFareRule(rule, next.청구운임);
-      next.운임수동 = toNum(value) !== calc.기사운임;
-    }
-  } else if (key === "__reapply" || ((key === "운임구분" || key === "청구운임") && !next.운임수동)) {
-    if (key === "__reapply") next.운임수동 = false;
-    if (key === "운임구분" && !rule) next.운임수동 = false;
-    if (rule && String(next.청구운임 ?? "").replace(/[^\d-]/g, "") !== "") {
-      const r = applyFareRule(rule, next.청구운임);
-      next.기사운임 = out(r.기사운임);
-    }
-  }
-  if (withFee && (key === "청구운임" || key === "기사운임" || key === "운임구분" || key === "__reapply")) {
-    const sale = toNum(next.청구운임);
-    const drv = toNum(next.기사운임);
-    next.수수료 = out(sale - drv);
-  }
-  return next;
-}
-
-// 저장용 — 운임구분이 있으면 그 값 그대로, 없으면 필드를 만들지 않는다(다른 회사 오더 모양 그대로)
-export const farePatchOf = (form) => {
-  const n = String(form?.운임구분 || "").trim();
-  if (!n) return {};
-  return { 운임구분: n, 운임수동: !!form.운임수동 };
-};
-
-// 규칙대로 계산된 상태인지(힌트·↺ 버튼 표시용)
-export const fareIsManual = (form, rules) => {
-  const rule = findFareRule(rules, form?.운임구분);
-  if (!rule || String(form?.청구운임 ?? "") === "") return false;
-  if (form?.운임수동) return true;
-  return toNum(form?.기사운임) !== applyFareRule(rule, form.청구운임).기사운임;
-};
+// 계산(순수 함수)은 fareRulesCore.js — 화면들이 쓰던 이름 그대로 여기서 다시 내보낸다
+import { toNum, applyFareRule, findFareRule, farePctOf, effectiveFareRule, fareRuleCalcLabel, fareRuleHint, fareFormChange, farePatchOf, fareIsManual } from "./fareRulesCore.js";
+export { applyFareRule, findFareRule, farePctOf, effectiveFareRule, fareRuleCalcLabel, fareRuleHint, fareFormChange, farePatchOf, fareIsManual };
 
 // ⭐ 2026-11-04 운임구분 바로 추가 — 드롭다운에서 새 구분명 + %를 넣으면 회사 운임 규칙(fareRules/{회사}.rules)에 바로 추가
 //  · 회사관리 › 운임 규칙(FareRulesSettings.jsx)의 저장과 같은 모양: rules 항목 { id, name, type:"percent", value, active:true, memo:"" }
@@ -214,6 +136,34 @@ export async function removeFareRuleQuick(company, rule) {
     updatedBy: by,
   }, { merge: true });
   return nm;
+}
+
+// ⭐ 2026-11-09 운임구분 ✎ 수정 — 드롭다운 줄에서 바로 이름·수수료를 고친다(회사 공용 · 회사관리 › 운임 규칙과 같은 저장)
+//  · 이미 저장된 오더는 그대로(오더마다 운임구분수수료율을 따로 들고 있다) — 이름을 바꾸면 예전 오더는 예전 이름으로 남는다
+export async function updateFareRuleQuick(company, rule, { name, value }) {
+  const co = resolveCompany(company);
+  if (!co) throw new Error("회사 정보를 찾지 못했습니다");
+  const nm = String(name || "").trim();
+  const v = Number(String(value ?? "").replace(/[^\d.]/g, ""));
+  if (!nm) throw new Error("구분명을 입력하세요");
+  if (String(value ?? "").trim() === "" || !(v >= 0)) throw new Error(rule?.type === "fixed" ? "금액을 입력하세요" : "%를 입력하세요");
+  if (rule?.type !== "fixed" && v > 100) throw new Error("100% 이하로 입력하세요");
+  const cur = Array.isArray(getStore(co).state?.data?.rules) ? getStore(co).state.data.rules : [];
+  const same = (r) => (rule?.id ? r?.id === rule.id : String(r?.name || "").trim() === String(rule?.name || "").trim());
+  if (!cur.some(same)) throw new Error("이 운임구분을 찾지 못했습니다");
+  if (cur.some((r) => !same(r) && String(r?.name || "").trim() === nm)) throw new Error("같은 이름이 이미 있습니다");
+  const next = cur.map((r) => (same(r) ? { ...r, name: nm, value: v } : r));
+  const u = auth?.currentUser;
+  const by = u?.displayName || (u?.email || "").split("@")[0] || "";
+  const unit = rule?.type === "fixed" ? "원" : "%";
+  await setDoc(doc(db, "fareRules", co), {
+    companyName: co,
+    rules: next,
+    history: arrayUnion({ at: Date.now(), by, change: `규칙 수정 ${rule?.name}(${toNum(rule?.value)}${unit}) → ${nm}(${v}${unit}) · 운임구분에서 바로 수정` }),
+    updatedAt: serverTimestamp(),
+    updatedBy: by,
+  }, { merge: true });
+  return { ...rule, name: nm, value: v };
 }
 
 // ── 작은 UI 조각 ──
@@ -268,6 +218,22 @@ export function FareTypeSelect({ value, onChange, rules = [], className = "", di
       setAddErr(e?.code === "permission-denied" ? "추가 권한이 없습니다" : (e?.message || "추가하지 못했습니다"));
     } finally { setAddBusy(false); }
   };
+  // ⭐ 2026-11-09 ✎ 수정 — 아래 입력 줄을 "수정" 모드로 연다(editRule = 고치는 규칙)
+  const [editRule, setEditRule] = React.useState(null);
+  const startEdit = (o) => { setEditRule(o); setNf({ name: o.name, value: String(toNum(o.value)) }); setAdding(true); setAddErr(""); };
+  const submitEdit = async () => {
+    if (addBusy || !editRule) return;
+    setAddErr(""); setAddBusy(true);
+    try {
+      const nm = String(nf.name || "").trim();
+      await updateFareRuleQuick(company, editRule, nf);
+      if (String(value || "") === String(editRule.name) && nm !== String(editRule.name)) onChange?.(nm);
+      setAdding(false); setEditRule(null); setNf({ name: "", value: "" });
+    } catch (e) {
+      setAddErr(e?.code === "permission-denied" ? "수정 권한이 없습니다" : (e?.message || "수정하지 못했습니다"));
+    } finally { setAddBusy(false); }
+  };
+  const submitForm = () => (editRule ? submitEdit() : submitAdd());
   const delRule = async (o) => {
     if (!(await kpConfirm(`운임구분 '${o.name}'을(를) 삭제할까요?\n회사관리 › 운임 규칙에서도 빠집니다(회사 공용). 이미 저장된 오더 값은 그대로예요.`))) return;
     try { await removeFareRuleQuick(company, o); if (String(value || "") === String(o.name)) onChange?.(""); }
@@ -287,7 +253,7 @@ export function FareTypeSelect({ value, onChange, rules = [], className = "", di
     if (disabled) return;
     place();
     setAct(Math.max(0, opts.findIndex((o) => String(o.name) === String(value || ""))));
-    setAdding(false); setAddErr("");
+    setAdding(false); setAddErr(""); setEditRule(null);
     setOpen(true);
   };
   const pick = (o) => { setOpen(false); onChange?.(o.none ? "" : o.name); setTimeout(() => btn.current?.focus(), 0); };
@@ -362,6 +328,13 @@ export function FareTypeSelect({ value, onChange, rules = [], className = "", di
           : h(React.Fragment, null,
             h("span", { className: "flex-1 min-w-0 truncate text-[14.5px] font-extrabold text-[#0F1A30]" }, o.name, o.active === false ? h("span", { className: "ml-1 text-[11px] font-bold text-[#B54708]" }, "(사용 안 함)") : null),
             h("span", { className: "shrink-0 tabular-nums px-2 h-[22px] inline-flex items-center rounded-full bg-[#1B2B4B] text-[#E9C46A] text-[12.5px] font-black" }, o.type === "fixed" ? `고정 ${fmtRuleVal(o)}` : `수수료 ${fmtRuleVal(o)}`),
+            // ⭐ 2026-11-09 ✎ 운임구분 수정(이름·수수료) — 회사 공용
+            canAdd ? h("button", {
+              type: "button", title: `${o.name} 수정`, "aria-label": `${o.name} 수정`, "data-fare-edit": "1",
+              onMouseDown: (e) => { e.preventDefault(); e.stopPropagation(); },
+              onClick: (e) => { e.preventDefault(); e.stopPropagation(); startEdit(o); },
+              className: "shrink-0 w-7 h-7 rounded-lg grid place-items-center text-[#9AA9C3] hover:text-[#1B2B4B] hover:bg-[#EEF3FC] transition",
+            }, h("svg", { width: 14, height: 14, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2.2, strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": true }, h("path", { d: "M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z" }))) : null,
             // ⭐ 2026-11-06 🗑 운임구분 삭제(회사 공용) — 확인 후
             canAdd ? h("button", {
               type: "button", title: `${o.name} 삭제`, "aria-label": `${o.name} 삭제`, "data-fare-del": "1",
@@ -375,7 +348,7 @@ export function FareTypeSelect({ value, onChange, rules = [], className = "", di
       !adding
         ? h("button", {
           type: "button", "data-fare-add-open": "1",
-          onClick: () => { setAdding(true); setAddErr(""); },
+          onClick: () => { setEditRule(null); setNf({ name: "", value: "" }); setAdding(true); setAddErr(""); },
           className: "w-full h-[36px] px-2.5 rounded-xl flex items-center gap-2 text-left text-[13.5px] font-extrabold text-[#2D4C82] hover:bg-[#EEF3FC] transition",
         },
         h("span", { className: "w-4 h-4 rounded-full bg-[#1B2B4B] text-white grid place-items-center text-[12px] leading-none shrink-0" }, "+"),
@@ -383,28 +356,28 @@ export function FareTypeSelect({ value, onChange, rules = [], className = "", di
         h("span", { className: "text-[10px] font-extrabold tracking-[0.14em] text-[#8E9BB2]", style: { fontFamily: MONO, fontVariantNumeric: "tabular-nums" } }, "NEW"))
         : h("div", { className: "flex flex-col gap-1.5" },
           h("div", { className: "flex items-center justify-between px-1" },
-            h("span", { className: "text-[10px] font-extrabold tracking-[0.14em] text-[#4B6CB7]", style: { fontFamily: MONO, fontVariantNumeric: "tabular-nums" } }, "NEW FARE TYPE · %"),
-            h("button", { type: "button", onClick: () => { setAdding(false); setAddErr(""); }, className: "text-[11.5px] font-bold text-[#8E9BB2] hover:text-[#1B2B4B]" }, "취소")),
+            h("span", { className: "text-[10px] font-extrabold tracking-[0.14em] text-[#4B6CB7]", style: { fontFamily: MONO, fontVariantNumeric: "tabular-nums" } }, editRule ? `EDIT · ${editRule.name}` : "NEW FARE TYPE · %"),
+            h("button", { type: "button", onClick: () => { setAdding(false); setAddErr(""); setEditRule(null); }, className: "text-[11.5px] font-bold text-[#8E9BB2] hover:text-[#1B2B4B]" }, "취소")),
           h("div", { className: "flex items-center gap-1.5" },
             h("input", {
               autoFocus: true, autoComplete: "off", maxLength: 20, placeholder: "구분명 (예: 일대)", "data-fare-add-name": "1",
               value: nf.name, onChange: (e) => setNf((p) => ({ ...p, name: e.target.value })),
-              onKeyDown: (e) => { e.stopPropagation(); if (e.key === "Enter") { e.preventDefault(); submitAdd(); } if (e.key === "Escape") { e.preventDefault(); setAdding(false); } },
+              onKeyDown: (e) => { e.stopPropagation(); if (e.key === "Enter") { e.preventDefault(); submitForm(); } if (e.key === "Escape") { e.preventDefault(); setAdding(false); setEditRule(null); } },
               className: "flex-1 min-w-0 h-[34px] px-2.5 rounded-xl border border-[#C9D5EA] bg-white text-[13.5px] font-bold text-[#0F1A30] focus:outline-none focus:border-[#4B6CB7] focus:ring-2 focus:ring-[#4B6CB7]/15",
             }),
             h("span", { className: "relative shrink-0" },
               h("input", {
                 autoComplete: "off", inputMode: "decimal", placeholder: "7", "data-fare-add-value": "1",
                 value: nf.value, onChange: (e) => setNf((p) => ({ ...p, value: e.target.value.replace(/[^\d.]/g, "") })),
-                onKeyDown: (e) => { e.stopPropagation(); if (e.key === "Enter") { e.preventDefault(); submitAdd(); } if (e.key === "Escape") { e.preventDefault(); setAdding(false); } },
+                onKeyDown: (e) => { e.stopPropagation(); if (e.key === "Enter") { e.preventDefault(); submitForm(); } if (e.key === "Escape") { e.preventDefault(); setAdding(false); setEditRule(null); } },
                 className: "w-[62px] h-[34px] pl-2 pr-6 rounded-xl border border-[#C9D5EA] bg-white text-[13.5px] font-bold text-right tabular-nums text-[#0F1A30] focus:outline-none focus:border-[#4B6CB7] focus:ring-2 focus:ring-[#4B6CB7]/15",
                 style: { fontFamily: MONO, fontVariantNumeric: "tabular-nums" },
               }),
-              h("span", { className: "absolute right-2 top-1/2 -translate-y-1/2 text-[12px] font-extrabold text-[#6B7A99] pointer-events-none" }, "%")),
+              h("span", { className: "absolute right-2 top-1/2 -translate-y-1/2 text-[12px] font-extrabold text-[#6B7A99] pointer-events-none" }, editRule?.type === "fixed" ? "원" : "%")),
             h("button", {
-              type: "button", disabled: addBusy, onClick: submitAdd, "data-fare-add-save": "1",
+              type: "button", disabled: addBusy, onClick: submitForm, "data-fare-add-save": "1",
               className: "shrink-0 h-[34px] px-3 rounded-xl bg-[#1B2B4B] text-white text-[13px] font-extrabold hover:bg-[#0F1A30] disabled:opacity-50 transition",
-            }, addBusy ? "추가 중" : "추가")),
+            }, addBusy ? (editRule ? "저장 중" : "추가 중") : (editRule ? "저장" : "추가"))),
           addErr ? h("div", { className: "px-1 text-[12px] font-bold text-red-600" }, addErr) : null)) : null),
     document.body) : null);
 }
@@ -420,6 +393,30 @@ export function FareRuleHint({ form, rules, onReapply, className = "", dark = fa
     className: `${className} inline-flex items-center gap-1 whitespace-nowrap h-[24px] px-2 rounded-full text-[11.5px] font-extrabold transition ${dark ? "bg-amber-400/20 text-amber-200 hover:bg-amber-400/30" : "bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100"}`,
     title: `기사운임을 직접 고쳐서 ${rule.name} 규칙(${fareRuleHint(rule)})과 다릅니다. 누르면 규칙대로 다시 계산합니다`,
   }, "↺ 규칙대로");
+}
+
+// ⭐ 2026-11-09 오더별 수수료율 칸 — 운임구분을 고르면 규칙 기본값이 채워지고, 이 오더만 바꿀 수 있다
+//  onChange(v): 부르는 화면이 fareFormChange(form, "운임구분수수료율", v, rules)로 넘기면 기사운임·수수료가 다시 계산된다
+export function FarePctInput({ form, rules, onChange, className = "", compact = false, disabled = false }) {
+  const base = findFareRule(rules, form?.운임구분);
+  if (!base) return null;
+  const fixed = base.type === "fixed";
+  const raw = form?.운임구분수수료율;
+  const shown = raw === undefined || raw === null || String(raw) === "" ? String(toNum(base.value)) : String(raw);
+  const diff = farePctOf(form) !== null && farePctOf(form) !== toNum(base.value);
+  return h("span", { className: `relative inline-flex items-center shrink-0 ${className}`, "data-fare-pct": "1",
+    title: `이 오더의 수수료${fixed ? "(원)" : "율(%)"} — 운임구분 기본 ${fmtRuleVal(base)}. 바꾸면 기사운임·수수료가 다시 계산됩니다` },
+    h("input", {
+      type: "text", inputMode: "decimal", autoComplete: "off", disabled,
+      "aria-label": "이 오더 수수료율",
+      value: fixed && shown ? Number(shown).toLocaleString() : shown,
+      onChange: (e) => onChange?.(String(e.target.value).replace(/[^\d.]/g, "")),
+      onKeyDown: (e) => e.stopPropagation(),
+      onMouseDown: (e) => e.stopPropagation(),
+      className: `${compact ? "h-[26px] w-[64px] text-[12px] rounded-full" : fixed ? "h-[36px] w-[96px] text-[13.5px] rounded-[10px]" : "h-[36px] w-[70px] text-[13.5px] rounded-[10px]"} pl-2 pr-6 border ${diff ? "border-[#4B6CB7] bg-[#EEF3FC]" : "border-[#C9D5EA] bg-white"} text-right font-extrabold tabular-nums text-[#0F1A30] focus:outline-none focus:border-[#4B6CB7] focus:ring-2 focus:ring-[#4B6CB7]/15 disabled:opacity-50`,
+      style: { fontFamily: MONO, fontVariantNumeric: "tabular-nums" },
+    }),
+    h("span", { className: "absolute right-2 top-1/2 -translate-y-1/2 text-[11.5px] font-extrabold text-[#6B7A99] pointer-events-none" }, fixed ? "원" : "%"));
 }
 
 // 배열 → 운임구분별 합계 [{ name, count, sale, driver, fee }]
