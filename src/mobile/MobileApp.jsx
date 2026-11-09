@@ -1,5 +1,6 @@
 // ======================= src/mobile/MobileApp.jsx (PART 1/3) =======================
 import { MonthPicker } from "../kpInputs"; // 📅 2026-11-07 월 선택은 프로그램 달력으로
+import TourHost from "../OnboardingTour"; // 🧭 2026-11-10 첫 방문 안내
 import { subscribeUsersLive } from "../usersLive"; // ⭐ 2026-11-02 속도 — 직원 명부 구독 공유
 import { runDelete, deleteOrdersWithLogAtomic } from "../DeleteProgress"; // ⭐ 2026-11-05 삭제 진행 창 + 한 번에 삭제
 import { RichHtml } from "../richText"; // ⭐ 2026-11-03 공지 꾸민 글 보여주기
@@ -5881,6 +5882,8 @@ const title =
         </div>
       )}
       <CheckoutReminderHost uid={user?.uid} role={realRole} email={user?.email} />{/* ⭐ 2026-11-03 퇴근 10분 전 알림 */}
+      {/* 🧭 2026-11-10 첫 방문 안내(메뉴별 말풍선·[?] 도움말) — 기간·단계는 src/onboardingTour.js */}
+      {!["driver", "shipper"].includes(role) && <TourHost company={briefCompanyM} menu={page === "home" || page === "list" ? (page === "list" ? "배차현황" : "HOME") : (PAGE_MENU_M[page] || (page === "approval" ? "전자결재" : ""))} uid={user?.uid} />}
       <PersonalTodayHost uid={user?.uid} mobile />{/* ⭐ 2026-11-03 오늘 개인 일정 — 위쪽 알림줄 */}
       {/* ⭐ 2026-11-02 원격지원 — 요청 상태 막대 · 승인 배너 · 포인터 */}
       <RemoteSupportHost user={user} profile={myProfM} company={userCompany || localStorage.getItem("userCompany") || ""} mobile />

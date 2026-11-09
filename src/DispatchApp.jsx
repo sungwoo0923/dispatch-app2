@@ -12,6 +12,7 @@ import BulkUploadChooser, { downloadTemplateXlsx } from "./BulkUploadChooser";
 import { buildCopyText, getCopyTpl, useCopyTemplates } from "./copyTemplates";
 import { CopyTemplateHost, openCopyTemplateEditor } from "./CopyTemplateEditor";
 import OnboardingHost from "./Onboarding";
+import TourHost from "./OnboardingTour"; // 🧭 2026-11-10 첫 방문 안내
 import PlatformNoticeBanner from "./PlatformNoticeBanner";
 import { loadTmap } from "./tmapLoader";
 import { imeFocusRef } from "./imeFocus";
@@ -8562,6 +8563,8 @@ return (
       <PlanValueSync planId={planId} />
       <PlanLockHost userEmail={user?.email || ""} userName={myRealName || ""} canRequest={role === "totalMaster" || ["test", "hrAcct", "allMgr"].includes(realRole) || /경리|회계/.test(String(myProfileDoc?.team || ""))} />
       <OnboardingHost role={role} realRole={realRole} userCompany={userCompany} dept={deptMode} uid={user?.uid} myDoc={myProfileDoc} />
+      {/* 🧭 2026-11-10 첫 방문 안내(메뉴별 말풍선·[?] 도움말) — 기간·단계는 src/onboardingTour.js */}
+      <TourHost company={role === "totalMaster" ? (localStorage.getItem("loginCompany") || userCompany || "") : (userCompany || "")} menu={menu} uid={user?.uid} />
       {/* ===== 통합 헤더 네비 ===== */}
       <header className={`kp-topnav ${deptMode === "exec" ? "kp-topnav-exec" : ""} sticky top-0 z-50 mb-6 w-full`}>
 
@@ -8610,7 +8613,7 @@ return (
                      {/* ★ 태블릿/PC 공용 메뉴 — 전체 가로 스크롤 보장 */}
           {/* ⭐ 2026-11-02 화면 점검 — 메뉴가 넘치면 좌우 흐림 + ‹ › 버튼 표시(감싸는 relative 상자) */}
           <div className="relative flex-1 min-w-0 flex items-center">
-          <nav
+          <nav data-tour="nav-menu"
             ref={navScrollRefCb}
             onScroll={updateNavOverflow}
             /* ⭐ 가운데 정렬은 justify-center 대신 양끝 auto 여백으로 — justify-center는 화면이 좁으면 맨 앞(HOME)·맨 뒤 메뉴가 잘리고 스크롤로도 안 보였다 */
@@ -16544,7 +16547,7 @@ shadow-[0_1px_2px_rgba(16,24,40,0.04),0_12px_30px_rgba(16,24,40,0.07)]
     <div className="flex gap-2">
       <div className="relative flex-1" ref={comboRef}>
         <input autoComplete="off"
-          data-arrownav
+          data-arrownav data-tour="order-client"
           className={inputCls}
           placeholder="거래처 검색/입력"
           value={clientQuery || form.거래처명}
@@ -18504,7 +18507,7 @@ className={`
     {/* 버튼 */}
   <div className="col-span-full flex justify-end gap-2.5 mt-2 pt-4 border-t border-[#EDF1F7]">{/* ⭐ 2026-11-02 화면 점검 — col-span-full */}
     <button
-      type="submit"
+      type="submit" data-tour="order-save"
       className={`${DM_BTN_PRIMARY} !h-11 !px-7 !text-[13.5px]`}
     >
       <DmIcon name="check" size={15} />저장

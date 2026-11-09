@@ -53,7 +53,7 @@ export function tourFor(team, isAdmin) {
 
 function Overlay({ children, onClose }) {
   return (
-    <div className="fixed inset-0 z-[100060] bg-[#0B1428]/70 backdrop-blur-[3px] flex items-center justify-center p-4" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose?.(); }}>
+    <div data-kp-onboarding="1" className="fixed inset-0 z-[100060] bg-[#0B1428]/70 backdrop-blur-[3px] flex items-center justify-center p-4" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose?.(); }}>
       {children}
     </div>
   );

@@ -357,7 +357,7 @@ export function SpecialFareButton({ form, setForm, asString = true, disabled = f
   const cls = (typeof btnClass === "function" ? btnClass(on) : btnClass) || `inline-flex items-center gap-1.5 h-9 px-3 rounded-xl border text-[13px] font-extrabold whitespace-nowrap transition ${on ? "bg-[#1B2B4B] text-white border-[#1B2B4B] shadow-[0_4px_12px_rgba(27,43,75,0.22)]" : "bg-white text-[#5B6B85] border-[#DCE3EE] hover:border-[#2D4C82] hover:text-[#0F1A30]"}`;
   return (
     <>
-      <button type="button" disabled={disabled} onClick={() => setOpen(true)} data-special-fare={on ? "on" : "off"} aria-pressed={on}
+      <button type="button" disabled={disabled} onClick={() => setOpen(true)} data-tour="special-fare" data-special-fare={on ? "on" : "off"} aria-pressed={on}
         title={on ? specialLines(form).join("\n") : "지게차비용·대기료·경유·할증 등 특수한 운임을 넣습니다"} className={`${cls} ${className}`}>
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M12 3v18M5 8h11a3 3 0 0 1 0 6H8a3 3 0 0 0 0 6h11" /></svg>
         특수운임{on ? <span className="ml-0.5 px-1.5 h-[18px] inline-flex items-center rounded-md bg-[#E9C46A] text-[#0F1A30] text-[11px] font-black tabular-nums">{specialBadgeText(form)}</span> : " 적용"}
