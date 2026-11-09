@@ -13,7 +13,8 @@
 import React from "react";
 import { runDelete } from "./DeleteProgress"; // ⭐ 2026-11-05 삭제 진행 창 + 한 번에 삭제
 import { createPortal } from "react-dom";
-import { collection, doc, onSnapshot, query, where, getDocs, setDoc, addDoc, updateDoc, deleteDoc, serverTimestamp, writeBatch } from "firebase/firestore";
+import { carrierFarePatch, mergedOrder, rateMapOf } from "../functions/carrierFareCore.mjs"; // 💸 2026-11-09 운송업체별 수수료율 → 기사운임 자동
+import { collection, doc, getDoc, onSnapshot, query, where, getDocs, setDoc, addDoc, updateDoc, deleteDoc, serverTimestamp, writeBatch } from "firebase/firestore";
 import { db, auth, FUNCTIONS_BASE } from "./firebase";
 import { parseBoardTab, sheetToForm, tabDate, planSheetWrite, nm as sheetNm, ownerOf, parseRateSheet, rateFor } from "./routeBoardSheet"; // ⭐ 2026-11-02 구글시트 날짜 탭 불러오기
 import { coDocKey } from "./coKey";
@@ -958,6 +959,11 @@ export default function RouteBoard({ companyName = "" }) {
     setBusy("save");
     try {
       const prevById = new Map((orders || []).map((o) => [o._id, o]));
+      // 💸 2026-11-09 운송업체별 수수료율 → 비어 있는 기사운임 자동(functions/carrierFareCore.mjs · 서버 routeBoardSync와 같은 규칙)
+      let carrierSet = null;
+      try { const cs = await getDoc(doc(db, "routeCarrierSettings", co)); carrierSet = cs.exists() ? cs.data() : null; } catch { carrierSet = null; }
+      const rateMap = rateMapOf(carrierSet);
+      const drvCol = form.columns.find((c) => c.kind === "field" && c.field === "기사운임");
       let saved = 0;
       const writes = [];
       form.groups.forEach((g) => {
@@ -982,6 +988,8 @@ export default function RouteBoard({ companyName = "" }) {
             const addrTouched = form.columns.some((c) => c.kind === "field" && ["하차지명", "하차지주소"].includes(c.field) && t.has(c.id));
             if (r.fareOverride == null && (prev.운임수동 || (!qtyTouched && !addrTouched && toInt(prev.청구운임)))) { delete data.청구운임; delete data.단가표지역; delete data.파렛단가; if (!("기사운임" in data)) delete data.수수료; }
           }
+          if (drvCol && (r.touched || []).includes(drvCol.id)) data.기사운임자동 = false; // 직접 넣은(또는 지운) 기사운임 — 비었으면 아래에서 다시 자동
+          if (rateMap.size || prev?.기사운임자동) { const fp = carrierFarePatch(mergedOrder(prev || {}, data), carrierSet, rateMap); if (fp) Object.assign(data, fp); }
           writes.push(setDoc(doc(db, "orders", id), { ...data, _id: id }, { merge: true }));
           saved += 1;
         });

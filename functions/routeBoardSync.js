@@ -217,6 +217,12 @@ async function syncBoard({ db, FieldValue, form: form0, readTabs, readTab, write
     if (latest) { tabs = [latest.t]; lastDays = 7; }
   }
   const co = form.companyName;
+  // 💸 2026-11-09 운송업체별 수수료율(routeCarrierSettings/{회사}.carriers[].rate) → 비어 있는 기사운임 자동 계산(functions/carrierFareCore.mjs)
+  const CF = await import("./carrierFareCore.mjs");
+  let carrierSet = null;
+  try { const cs = await db.collection("routeCarrierSettings").doc(co).get(); carrierSet = cs.exists ? cs.data() || null : null; } catch { carrierSet = null; }
+  const rateMap = CF.rateMapOf(carrierSet);
+  const farePatchOf = (o, patch) => (rateMap.size || o?.기사운임자동 ? CF.carrierFarePatch(CF.mergedOrder(o, patch), carrierSet, rateMap) : null);
   let places = null; let drivers = null;
   const loadLookups = async () => {
     if (places) return;
@@ -286,11 +292,12 @@ async function syncBoard({ db, FieldValue, form: form0, readTabs, readTab, write
             else if (ownerOf(c) === "화주" || !pv) pull = !same(c, sv, pv) && (ownerOf(c) === "화주" || !!sv);
             else push = !same(c, sv, pv) && !(c.kind === "field" && NO_PUSH.has(c.field));
             if (push && (NO_PUSH_FIELD.has(c.field) || (!pv && c.autoFrom === "extra"))) push = false; // 🔗 2026-11-08 배차상태(시트 수식) · 예전 참고 칸 빈 값은 시트에 쓰지 않음
+            if (push && o.기사운임자동 === true && c.kind === "field" && (c.field === "기사운임" || c.field === "수수료")) push = false; // 💸 2026-11-09 수수료율로 자동 계산한 기사운임은 시트에 쓰지 않음(시트 칸·수식 보호)
             if (pull) {
               if (c.kind === "qty") { if (toInt(sv)) qtyNow[c.label] = toInt(sv); else delete qtyNow[c.label]; qtyChanged = true; }
               else if (c.kind === "extra") patch[`추가정보.${c.label}`] = sv;
               else if (c.field === "하차지주소") { if (sv && !nm(o.하차지주소 || "").includes(nm(sv))) patch.하차지주소 = sv; }
-              else { const { rec } = fieldsOf({ columns: [c] }, v, ""); patch[c.field] = rec[c.field] ?? sv; if (c.field === "차량번호") plateChanged = true; if (c.field === "배차상태" && !patch.배차상태) delete patch.배차상태; }
+              else { const { rec } = fieldsOf({ columns: [c] }, v, ""); patch[c.field] = rec[c.field] ?? sv; if (c.field === "차량번호") plateChanged = true; if (c.field === "배차상태" && !patch.배차상태) delete patch.배차상태; if (c.field === "기사운임" && toInt(patch.기사운임)) patch.기사운임자동 = false; /* 💸 시트에서 들어온 기사운임 = 사람이 넣은 값 */ }
               nextBase[c.id] = sv;
             } else if (push) {
               pushes.push({ a1: `${colLetter(ci)}${pos.ri + 1}`, value: pv });
@@ -315,6 +322,7 @@ async function syncBoard({ db, FieldValue, form: form0, readTabs, readTab, write
             if (plate && (o.배차상태 === "배차중" || !o.배차상태)) patch.배차상태 = "배차완료";
             if (!plate && o.배차상태 === "배차완료") patch.배차상태 = "배차중";
           }
+          { const fp = farePatchOf(o, patch); if (fp) Object.assign(patch, fp); } // 💸 2026-11-09 운송업체 수수료율 → 기사운임·수수료 자동
           if (("청구운임" in patch || "기사운임" in patch) && !("수수료" in patch)) { // 🔗 2026-11-08 수수료 = 청구 − 기사(프로그램 계산)
             const sale = toInt("청구운임" in patch ? patch.청구운임 : o.청구운임); const drv = toInt("기사운임" in patch ? patch.기사운임 : o.기사운임);
             patch.수수료 = sale || drv ? String(sale - drv) : "";
@@ -342,7 +350,7 @@ async function syncBoard({ db, FieldValue, form: form0, readTabs, readTab, write
           const plateNow = drv?.차량번호 || rec.차량번호 || "";
           const st0 = rec.배차상태 && ["배차중", "배차완료", "배차취소"].includes(rec.배차상태) ? rec.배차상태 : "";
           const fee = rec.청구운임 || rec.기사운임 ? { 수수료: String(toInt(rec.청구운임) - toInt(rec.기사운임)) } : {};
-          batch.set(db.collection("orders").doc(id), {
+          const nd = {
             ...rec, 품목수량: qty, 추가정보: extra, ...cargoText(qty),
             ...(place?.주소 ? { 하차지주소: place.주소 } : {}),
             ...(pc ? { 하차지담당자: pc.name || "", 하차지담당자번호: pc.phone || "" } : {}),
@@ -355,7 +363,9 @@ async function syncBoard({ db, FieldValue, form: form0, readTabs, readTab, write
             시트기준값: Object.fromEntries(form.columns.filter((x) => !["no", "sum", "date", "calc"].includes(x.kind) && !(x.kind === "field" && x.field === "하차지명") && v.__pos?.idx?.[x.id] != null).map((x) => [x.id, cell(v[x.id])])),
             경유지_상차: [], 경유상차목록: [], 경유지_하차: [], 경유하차목록: [], 근무일자목록: [], 운행유형: "편도", 혼적여부: "독차",
             createdAt: FieldValue.serverTimestamp(), _lastModified: Date.now(),
-          });
+          };
+          { const fp = farePatchOf(nd, {}); if (fp) Object.assign(nd, fp); } // 💸 2026-11-09 운송업체 수수료율 → 기사운임·수수료 자동
+          batch.set(db.collection("orders").doc(id), nd);
           ops += 1; sum.created += 1;
         }
       }
@@ -379,6 +389,7 @@ async function syncBoard({ db, FieldValue, form: form0, readTabs, readTab, write
 
             else if (c.kind === "field" && c.field === "하차지명") v = cell(o.하차지명);
             else v = o.시트추가값?.[c.id] != null ? cell(o.시트추가값[c.id]) : sheetForm(c, o);
+            if (o.기사운임자동 === true && c.kind === "field" && (c.field === "기사운임" || c.field === "수수료")) v = ""; // 💸 자동 계산 기사운임은 시트에 안 씀
             if (v) vals.push({ ci, value: v });
             if (c.kind !== "no" && c.kind !== "sum" && c.kind !== "date" && !(c.kind === "field" && c.field === "하차지명")) base[c.id] = v;
           });

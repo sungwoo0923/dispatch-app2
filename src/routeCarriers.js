@@ -2,7 +2,8 @@
 // ⭐ 2026-11-05 고정노선현황 › 운송업체 설정 — 정산·매출에 넣을 운송업체 고르기(회사별)
 //  · 화주사 구글시트 배차표의 "운송업체" 칸은 양식 열(kind:"extra", 이름에 운송업체/운송사)이라
 //    오더에는 추가정보["운송업체"](= 열 이름) 로 저장된다(functions/routeBoardSync.js fieldsOf · src/RouteBoard.jsx).
-//  · 설정: routeCarrierSettings/{회사} = { companyName, carriers:[{ name, on }], removed:[이름], updatedAt, updatedBy }
+//  · 설정: routeCarrierSettings/{회사} = { companyName, carriers:[{ name, on, rate? }], removed:[이름], updatedAt, updatedBy }
+//      rate = 💸 2026-11-09 수수료율(%) — 비어 있는 기사운임을 청구운임 × (1 − rate%)로 자동 계산(functions/carrierFareCore.mjs)
 //      on:false(선택 해제) 또는 removed(삭제)인 운송업체의 고정노선 오더(배차표Id 있는 오더)는 정산·매출 계산에서 뺀다.
 //  · 기본값: 설정을 한 번도 저장하지 않은 회사는 지금과 똑같이 전부 포함(필터 없음).
 //    시트에 새로 생긴 업체(설정에 아직 없는 이름)는 포함한다.
@@ -18,6 +19,7 @@ import { doc, onSnapshot, setDoc } from "firebase/firestore";
 import { getTenant } from "./fsTenant";
 import { db, auth } from "./firebase";
 import { isDemoOn } from "./devDemoData";
+import { cleanRate } from "../functions/carrierFareCore.mjs"; // 💸 2026-11-09 업체별 수수료율
 
 const COL = "routeCarrierSettings";
 const CARRIER_KEY_RE = /운송업체|운송사/;
@@ -118,7 +120,8 @@ export async function saveRouteCarrierSetting(company, { carriers = [], removed 
   const co = coOf(company);
   if (!co) throw new Error("회사 정보가 없습니다");
   const seen = new Set();
-  const clean = carriers.map((c) => ({ name: String(c?.name || "").trim(), on: c?.on !== false }))
+  // 💸 2026-11-09 업체별 수수료율(rate, %) — 켜기/끄기와 상관없이 업체마다(functions/carrierFareCore.mjs)
+  const clean = carriers.map((c) => { const rate = cleanRate(c?.rate); return { name: String(c?.name || "").trim(), on: c?.on !== false, ...(rate != null ? { rate } : {}) }; })
     .filter((c) => c.name && !seen.has(carrierKey(c.name)) && seen.add(carrierKey(c.name)));
   const live = new Set(clean.map((c) => carrierKey(c.name)));
   const rm = [...new Set(removed.map((n) => String(n || "").trim()).filter((n) => n && !live.has(carrierKey(n))))];

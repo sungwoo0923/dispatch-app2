@@ -14,6 +14,7 @@ import { useOrderHistory } from "./orderHistory";
 import { sheetApi, BoardSuggest } from "./RouteBoard";
 import { ownerOf, rateFor } from "./routeBoardSheet";
 import { normalizeBoardForm, marginRate, enumValue } from "../functions/boardHeaderMatch.mjs"; // 🔗 2026-11-08 머리줄 자동 대조 · 매익율
+import { cleanRate, recalcTargets, carrierFarePatch, mergedOrder, rateMapOf } from "../functions/carrierFareCore.mjs"; // 💸 2026-11-09 운송업체별 수수료율 → 기사운임 자동
 import { useRouteCarrierSetting, useRouteCarrierFilter, saveRouteCarrierSetting, carriersInOrders, carrierKey, carrierOf } from "./routeCarriers"; // ⭐ 2026-11-05 운송업체 설정(정산·매출 포함 여부)
 
 import { isMyOrder } from "./driverEvents"; // ⭐ 2026-11-06 내 오더 판단(기사 수락/거절 알림과 같은 기준)
@@ -291,12 +292,12 @@ export function FixedRouteCells({ form, row, drivers = [], clients = [], onPatch
     if (c.kind === "calc") return undefined; // 자동 계산 칸
     if (c.field === "배차상태" || c.field === "지급방식" || c.field === "배차방식") return onPatch({ [c.field]: enumValue(c.field, val) });
     if (TIME_FIELDS.has(c.field)) return onPatch({ [c.field]: parseHM(val) ? korTime(parseHM(val)) : val });
-    if (MONEY_FIELDS.has(c.field)) { const n = toInt(val); const p = { [c.field]: n ? String(n) : "" }; const sale = c.field === "청구운임" ? n : toInt(row.청구운임); const drv = c.field === "기사운임" ? n : toInt(row.기사운임); return onPatch({ ...p, 수수료: String(sale - drv), ...(c.field === "청구운임" ? { 운임수동: !!n } : {}) }); } // 청구운임을 직접 고치면 단가표 자동 계산 멈춤(비우면 다시 자동)
+    if (MONEY_FIELDS.has(c.field)) { const n = toInt(val); const p = { [c.field]: n ? String(n) : "" }; const sale = c.field === "청구운임" ? n : toInt(row.청구운임); const drv = c.field === "기사운임" ? n : toInt(row.기사운임); return onPatch({ ...p, 수수료: String(sale - drv), ...(c.field === "청구운임" ? { 운임수동: !!n } : {}), ...(c.field === "기사운임" ? { 기사운임자동: false } : {}) }); } // 💸 직접 넣은 기사운임 = 자동 계산 멈춤(비우면 다시 자동) // 청구운임을 직접 고치면 단가표 자동 계산 멈춤(비우면 다시 자동)
     return onPatch({ [c.field]: val });
   };
   const has = (f) => hasField(cols, f);
   const money = (f) => (
-    <td key={f} className={td} title={f === "청구운임" && row.단가표지역 ? `단가표 ${row.단가표지역} · 파렛당 ${Number(row.파렛단가 || 0).toLocaleString()}원${row.운임수동 ? " (직접 입력 — 자동 계산 멈춤)" : ""}` : f === "청구운임" && row.운임수동 ? "직접 입력한 운임(단가표 자동 계산 멈춤) — 비우면 다시 자동" : undefined}>
+    <td key={f} className={td} title={f === "청구운임" && row.단가표지역 ? `단가표 ${row.단가표지역} · 파렛당 ${Number(row.파렛단가 || 0).toLocaleString()}원${row.운임수동 ? " (직접 입력 — 자동 계산 멈춤)" : ""}` : f === "청구운임" && row.운임수동 ? "직접 입력한 운임(단가표 자동 계산 멈춤) — 비우면 다시 자동" : f === "기사운임" && row.기사운임자동 ? "운송업체 수수료율로 자동 계산한 기사운임 — 직접 고치면 자동 계산이 멈춥니다(비우면 다시 자동)" : undefined} data-auto={f === "기사운임" && row.기사운임자동 ? "1" : undefined}>
       <Cell value={toInt(row[f]) ? toInt(row[f]).toLocaleString() : ""} numeric disabled={disabled} onCommit={(v) => commit({ kind: "field", field: f }, v)} />
     </td>
   );
@@ -549,7 +550,7 @@ export function RouteCarrierModal({ company, rows = [], disabled = false, onClos
   const list = React.useMemo(() => {
     const saved = Array.isArray(setting?.carriers) ? setting.carriers : [];
     const removed = new Set((setting?.removed || []).map(carrierKey));
-    const out = saved.map((c) => ({ name: c.name, on: c.on !== false, isNew: false }));
+    const out = saved.map((c) => ({ name: c.name, on: c.on !== false, rate: cleanRate(c.rate), isNew: false })); // 💸 rate = 업체별 수수료율(%)
     const have = new Set(out.map((c) => carrierKey(c.name)));
     found.forEach((f) => { const k = carrierKey(f.name); if (!have.has(k) && !removed.has(k)) { have.add(k); out.push({ name: f.name, on: true, isNew: !!setting }); } });
     return out.map((c) => ({ ...c, count: countOf.get(carrierKey(c.name)) || 0 }));
@@ -565,7 +566,30 @@ export function RouteCarrierModal({ company, rows = [], disabled = false, onClos
     catch (e) { setMsg({ t: /permission/i.test(String(e?.code || e?.message || "")) ? "저장 권한이 없습니다(관리자만 가능). 최고관리자에게 보안 규칙 배포를 확인해 주세요." : `저장하지 못했습니다: ${e?.message || e}`, err: true }); return false; }
     finally { setBusy(false); }
   };
-  const base = () => list.map((c) => ({ name: c.name, on: c.on }));
+  const base = () => list.map((c) => ({ name: c.name, on: c.on, rate: c.rate }));
+  // 💸 2026-11-09 업체별 수수료율 — 저장하면 그 업체의 고정노선 오더 중 기사운임이 비었거나 자동 계산된 오더를 바로 다시 계산
+  //  (기사운임 = 청구운임 × (1 − 수수료율%) · 수수료 = 청구 − 기사 · 사람이 넣은 기사운임은 그대로 — functions/carrierFareCore.mjs)
+  const setRate = async (name, raw) => {
+    const r = cleanRate(raw);
+    const cur = list.find((c) => c.name === name);
+    if (!cur || (cur.rate ?? null) === r) return;
+    const next = base().map((c) => (c.name === name ? { ...c, rate: r } : c));
+    const ok = await persist(next, removedOf(), r == null ? `'${name}' 수수료율을 지웠습니다` : `'${name}' 수수료율 ${r}% 저장`);
+    if (!ok) return;
+    const targets = recalcTargets(rows, { carriers: next });
+    if (!targets.length) { setMsg({ t: `${r == null ? `'${name}' 수수료율을 지웠습니다` : `'${name}' 수수료율 ${r}% 저장`} · 다시 계산할 오더 없음`, err: false }); return; }
+    setBusy(true);
+    try {
+      const by = auth.currentUser?.email || "";
+      for (let i = 0; i < targets.length; i += 400) {
+        const b = writeBatch(db);
+        targets.slice(i, i + 400).forEach(({ order, patch }) => b.update(doc(db, order.__col || "orders", order._id || order.id), { ...patch, 최종수정자: by, updatedAt: Date.now() }));
+        await b.commit();
+      }
+      setMsg({ t: `'${name}' 수수료율 ${r == null ? "지움" : `${r}%`} · 기사운임 ${targets.length.toLocaleString()}건 자동 계산`, err: false });
+    } catch (e) { setMsg({ t: `수수료율은 저장했지만 오더 다시 계산에 실패했습니다: ${e?.message || e}`, err: true }); }
+    finally { setBusy(false); }
+  };
   const removedOf = () => [...(setting?.removed || [])];
   const toggle = (name) => persist(base().map((c) => (c.name === name ? { ...c, on: !c.on } : c)), removedOf(), `'${name}' ${list.find((c) => c.name === name)?.on ? "숨겼습니다(화면·정산·매출에서 빠짐)" : "다시 보이게 했습니다(화면·정산·매출 포함)"}`);
   const setAll = (on) => persist(base().map((c) => ({ ...c, on })), removedOf(), on ? "모두 보이게 했습니다" : "모두 숨겼습니다");
@@ -634,6 +658,14 @@ export function RouteCarrierModal({ company, rows = [], disabled = false, onClos
                   {!c.on && <span className="inline-flex items-center h-[18px] px-1.5 rounded-md bg-[#FFF1EE] text-[#B42318] text-[10.5px] font-black">숨김 · 정산 제외</span>}
                 </div>
               </div>
+              {/* 💸 2026-11-09 업체별 수수료율(%) — 켜기/끄기와 상관없이 · 비어 있는 기사운임 자동 계산 */}
+              <label className="shrink-0 flex items-center gap-1" title="수수료율(%) — 기사운임이 비어 있으면 청구운임 × (1 − 수수료율)로 자동 계산합니다. 비우면 자동 계산 안 함">
+                <span className="text-[11.5px] font-bold text-[#7A8AA6] hidden sm:inline">수수료</span>
+                <input key={`${c.name}_${c.rate ?? ""}`} defaultValue={c.rate ?? ""} disabled={busy || !canEdit} inputMode="decimal" placeholder="–" data-kp="carrier-rate"
+                  onBlur={(e) => setRate(c.name, e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.nativeEvent.isComposing) e.currentTarget.blur(); }}
+                  className="w-[62px] h-9 px-2 rounded-lg border border-[#DCE3EE] bg-white text-right text-[14px] font-black text-[#0F1A30] tabular-nums outline-none focus:border-[#2D4C82] disabled:opacity-60" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }} />
+                <span className="text-[13px] font-black text-[#5B6B85]">%</span>
+              </label>
               {canEdit && <button type="button" disabled={busy} onClick={() => remove(c.name)} title="목록에서 삭제(화면·정산·매출에서 빠짐)"
                 className="shrink-0 w-9 h-9 rounded-lg inline-flex items-center justify-center text-[#9AA9C3] hover:text-[#B42318] hover:bg-[#FFF1EE] disabled:opacity-50">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3" /></svg>
@@ -895,6 +927,8 @@ function MobileFixedRouteBody({ form, rows, range, setRange, status, setStatus, 
   const [qInput, setQInput] = React.useState(q);
   const [qTypeInput, setQTypeInput] = React.useState(qType);
   const nameMap = useUserNameMap(); // ⭐ 2026-11-06 배차담당자 이름(직원 목록 공용 구독)
+  const { setting: carrierSet } = useRouteCarrierSetting(); // 💸 2026-11-09 운송업체별 수수료율
+  const carrierRateMap = React.useMemo(() => rateMapOf(carrierSet), [carrierSet]);
   const guard = useRouteEditGuard(role); // ⭐ 2026-11-06 담당자만 수정(마스터는 전부)
   const [from, setFrom] = React.useState(range.from);
   const [to, setTo] = React.useState(range.to);
@@ -904,7 +938,10 @@ function MobileFixedRouteBody({ form, rows, range, setRange, status, setStatus, 
   const off = Math.max(0, toInt(form.dropOffset)) + 3; // ⭐ 2026-11-06 PC와 같게 — 하차일수 + 주말 여유 3일
   React.useEffect(() => { if (range.from) loadRange(addDaysStr(range.from, -off), range.to || range.from); }, [range.from, range.to, off, loadRange]);
   // ⭐ 2026-11-06 처음 배차(차량 넣기)하면 배차한 사람을 남긴다(PC patchDispatch와 같은 칸) → 그 사람이 이 오더의 담당자
-  const patch = (r) => (p) => {
+  const patch = (r) => (p0) => {
+    // 💸 2026-11-09 운송업체 수수료율 — 청구운임·운송업체를 고치거나 기사운임을 비우면 기사운임·수수료 자동(사람이 넣은 기사운임은 그대로)
+    const fp = carrierFarePatch(mergedOrder(r, p0), carrierSet, carrierRateMap);
+    const p = fp ? { ...p0, ...fp } : p0;
     const extra = p.배차상태 === "배차완료" && r.배차상태 !== "배차완료" ? { 배차확정일시: serverTimestamp(), 배차확정자: guard.me.name || auth.currentUser?.email?.split("@")[0] || "" }
       : p.배차상태 === "배차중" && r.배차상태 === "배차완료" ? { 배차확정일시: null, 배차확정자: null } : {};
     requestRouteSheetPush(r.배차표Id || form.id, 2500, r.상차일); // 💰 2026-11-06 고친 값 바로 시트에 · 🔗 2026-11-08 그 오더 날짜
