@@ -7,6 +7,7 @@
 //  · ForkliftPayouts        정산관리 › 지게차 지급 (지게차 기사별 합계 · 지급완료 · 엑셀)
 //  저장: forkliftDrivers/{id} · forkliftPresets/{회사__거래처__상차지} — 회사명은 fsTenant가 붙이고 거른다
 import React from "react";
+import { createPortal } from "react-dom";
 import * as XLSX from "xlsx";
 import { addDoc, collection, deleteDoc, doc, getDoc, onSnapshot, serverTimestamp, setDoc, writeBatch } from "firebase/firestore";
 import { db } from "./firebase";
@@ -19,6 +20,7 @@ import { bumpForkliftPayout } from "./ledgerAuto"; // 지급완료 → 수입·�
 import {
   FORKLIFT_MODES, FORKLIFT_UPLOAD_COLS, fkAmount, fkMode, fkModeLabel, fkPresetKey, forkliftApply, forkliftClear,
   forkliftPayoutGroups, forkliftRowFromSheet, forkliftSummary, hasForklift,
+  SPECIAL_TYPES, SPECIAL_MODES, sfItems, sfMode, sfPayee, sfName, hasSpecial, specialCount, specialTotal, specialLines, specialApplyAll, orderProfit, paidOut, fkNum,
 } from "./forkliftCore";
 
 export * from "./forkliftCore";
@@ -229,6 +231,7 @@ function ForkliftPicker({ value, name, onPick, disabled }) {
         <div className="absolute z-[100030] mt-1 w-[280px] rounded-xl bg-white border border-[#DCE3EE] shadow-[0_18px_40px_rgba(15,26,48,0.18)] p-1.5">
           <input autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="이름·전화·회사 검색" className="h-9 w-full px-2.5 rounded-lg border border-[#E3E8F0] text-[13px] mb-1" />
           <div className="max-h-[220px] overflow-y-auto">
+            <button type="button" onClick={() => { onPick({ id: "", 이름: "", 전화번호: "", 지게차회사: "" }); setOpen(false); setQ(""); }} className={`w-full text-left px-2.5 py-2 rounded-lg hover:bg-[#EEF3FC] text-[13px] font-bold text-[#7A89A3] ${!value && !name ? "bg-[#EEF3FC]" : ""}`}>선택 안 함 · 나중에 정하기</button>
             {shown.length === 0 && <div className="py-4 text-center text-[12.5px] text-[#9AA9C3]">{list.length ? "검색 결과 없음" : "등록된 지게차 기사가 없습니다"}</div>}
             {shown.map((d) => (
               <button key={d.id} type="button" onClick={() => { onPick(d); setOpen(false); setQ(""); }} className={`w-full text-left px-2.5 py-2 rounded-lg hover:bg-[#EEF3FC] ${d.id === value ? "bg-[#EEF3FC]" : ""}`}>
@@ -336,16 +339,189 @@ export function ForkliftFeeRow({ form, setForm, asString = true, disabled = fals
   );
 }
 
+
+// ─── 🧾 2026-11-09 [특수운임 적용] 버튼 + 팝업 ───
+//  지게차비용(지게차 기사·부담 방식) + 대기료·수작업·경유·할증·통행료·기타를 한 팝업에서 넣고 [적용]
+//  form · setForm(updater) · asString: 예전 ForkliftFeeRow와 같음 · btnClass: 버튼 모양(배차관리 토글 버튼 등) · mobile: 아래에서 올라오는 시트
+export function specialBadgeText(o) {
+  if (!hasSpecial(o)) return "";
+  const n = specialCount(o);
+  if (n === 1 && hasForklift(o)) return `지게차 ${won(fkAmount(o))}`;
+  if (n === 1) return `${sfName(sfItems(o)[0])} ${won(fkNum(sfItems(o)[0].금액))}`;
+  return `${n}건 · ${won(specialTotal(o))}`;
+}
+export function SpecialFareButton({ form, setForm, asString = true, disabled = false, btnClass, mobile = false, className = "" }) {
+  const [open, setOpen] = React.useState(false);
+  if (!form) return null;
+  const on = hasSpecial(form);
+  const cls = (typeof btnClass === "function" ? btnClass(on) : btnClass) || `inline-flex items-center gap-1.5 h-9 px-3 rounded-xl border text-[13px] font-extrabold whitespace-nowrap transition ${on ? "bg-[#1B2B4B] text-white border-[#1B2B4B] shadow-[0_4px_12px_rgba(27,43,75,0.22)]" : "bg-white text-[#5B6B85] border-[#DCE3EE] hover:border-[#2D4C82] hover:text-[#0F1A30]"}`;
+  return (
+    <>
+      <button type="button" disabled={disabled} onClick={() => setOpen(true)} data-special-fare={on ? "on" : "off"} aria-pressed={on}
+        title={on ? specialLines(form).join("\n") : "지게차비용·대기료·경유·할증 등 특수한 운임을 넣습니다"} className={`${cls} ${className}`}>
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M12 3v18M5 8h11a3 3 0 0 1 0 6H8a3 3 0 0 0 0 6h11" /></svg>
+        특수운임{on ? <span className="ml-0.5 px-1.5 h-[18px] inline-flex items-center rounded-md bg-[#E9C46A] text-[#0F1A30] text-[11px] font-black tabular-nums">{specialBadgeText(form)}</span> : " 적용"}
+      </button>
+      {open && <SpecialFareModal form={form} asString={asString} mobile={mobile} onClose={() => setOpen(false)} onApply={(fn) => { setForm(fn); setOpen(false); }} />}
+    </>
+  );
+}
+function SpecialFareModal({ form, asString, mobile, onClose, onApply }) {
+  const isMobile = mobile || (typeof window !== "undefined" && window.innerWidth < 768);
+  const [fork, setFork] = React.useState(() => ({ 지게차비용: fkAmount(form) || "", 지게차부담: hasForklift(form) ? fkMode(form) : "기사", 지게차기사ID: form.지게차기사ID || "", 지게차기사명: form.지게차기사명 || "", 지게차기사전화: form.지게차기사전화 || "", 지게차회사: form.지게차회사 || "" }));
+  const [items, setItems] = React.useState(() => {
+    const m = {}; sfItems(form).forEach((it) => { m[it.종류 || "기타"] = { ...it, 금액: fkNum(it.금액) }; }); return m;
+  });
+  const [sel, setSel] = React.useState(() => (hasForklift(form) || !sfItems(form).length ? "지게차" : (sfItems(form)[0].종류 || "기타")));
+  const [remember, setRemember] = React.useState(true);
+  const [preset] = useForkliftPreset(form);
+  React.useEffect(() => { const k = (e) => { if (e.key === "Escape") { e.stopPropagation(); onClose(); } }; window.addEventListener("keydown", k, true); return () => window.removeEventListener("keydown", k, true); }, [onClose]);
+  const itemList = Object.values(items).filter((x) => fkNum(x.금액) > 0);
+  const draft = { fork: fkNum(fork.지게차비용) > 0 ? fork : null, items: itemList };
+  // 미리보기 — 특수운임을 모두 걷어낸 원래 운임 → 적용 후
+  const base = specialApplyAll(form, {}, { asString });
+  const after = specialApplyAll(form, draft, { asString });
+  const amtOf = (k) => (k === "지게차" ? fkNum(fork.지게차비용) : fkNum(items[k]?.금액));
+  const t = SPECIAL_TYPES.find((x) => x.key === sel) || SPECIAL_TYPES[0];
+  const it = items[sel] || { 종류: sel, 이름: "", 금액: "", 부담: t.mode, 받는사람: t.payee, 메모: "" };
+  const setIt = (patch) => setItems((p) => ({ ...p, [sel]: { ...(p[sel] || it), ...patch } }));
+  const removeSel = () => {
+    if (sel === "지게차") setFork((f) => ({ ...f, 지게차비용: "", 지게차기사ID: "", 지게차기사명: "", 지게차기사전화: "", 지게차회사: "" }));
+    else setItems((p) => { const n = { ...p }; delete n[sel]; return n; });
+  };
+  const apply = () => {
+    const res = specialApplyAll(form, draft, { asString });
+    if (remember && hasForklift(res)) rememberForkliftPreset(res);
+    onApply(() => res);
+  };
+  const moneyInput = (val, onCh) => (
+    <div className="relative">
+      <input inputMode="numeric" autoFocus value={fkNum(val) ? won(fkNum(val)) : ""} placeholder="0" onChange={(e) => onCh(e.target.value.replace(/[^\d]/g, ""))}
+        onKeyDown={(e) => { e.stopPropagation(); if (e.key === "Enter") apply(); }}
+        className="h-12 w-full pl-3 pr-9 rounded-xl border border-[#C9D5EA] bg-white text-right text-[20px] font-black tabular-nums text-[#0F1A30] outline-none focus:border-[#2D4C82] focus:ring-2 focus:ring-[#4B6CB7]/15" style={{ fontFamily: MONO, fontSize: isMobile ? 20 : undefined }} />
+      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[13px] font-bold text-[#7A89A3]">원</span>
+    </div>
+  );
+  const modeSeg = (cur, onPick, allowed) => (
+    <div className="grid grid-cols-3 gap-1 rounded-xl border border-[#C9D5EA] bg-white p-1">
+      {SPECIAL_MODES.map((m) => {
+        const ok = allowed.includes(m.key);
+        return (
+          <button key={m.key} type="button" disabled={!ok} title={ok ? m.label : "배차 기사에게 주는 돈은 기사운임에서 뺄 수 없습니다"} onClick={() => onPick(m.key)}
+            className={`h-10 rounded-lg text-[12.5px] font-black whitespace-nowrap ${cur === m.key ? "bg-[#0F1A30] text-white" : ok ? "text-[#3A4A66] hover:bg-[#EEF3FC]" : "text-[#C3CDDD] cursor-not-allowed"}`}>{m.short}</button>
+        );
+      })}
+    </div>
+  );
+  const lbl = (txt) => <div className="text-[11.5px] font-extrabold tracking-[0.08em] text-[#5B6B85] mb-1.5">{txt}</div>;
+  const c = (n) => won(n);
+  const diffRow = (name, a, b) => (
+    <div className="flex items-center justify-between gap-2 text-[13px]">
+      <span className="font-bold text-[#5B6B85]">{name}</span>
+      <span className="tabular-nums font-black text-[#0F1A30]" style={{ fontFamily: MONO }}>{a === b ? c(b) : <>{c(a)} <span className="text-[#9AA9C3]">→</span> <span className={b > a ? "text-[#2D4C82]" : "text-[#B4342A]"}>{c(b)}</span></>}</span>
+    </div>
+  );
+  const listCol = (
+    <div className={isMobile ? "flex gap-1.5 overflow-x-auto pb-1 -mx-1 px-1" : "flex flex-col gap-1"}>
+      {SPECIAL_TYPES.map((x) => {
+        const a = amtOf(x.key); const act = sel === x.key;
+        return (
+          <button key={x.key} type="button" onClick={() => setSel(x.key)} data-sf-type={x.key}
+            className={`${isMobile ? "shrink-0 h-10 px-3" : "w-full px-3 py-2.5"} rounded-xl text-left border transition ${act ? "bg-[#0F1A30] border-[#0F1A30] text-white" : a ? "bg-[#EEF3FC] border-[#C9D5EA] text-[#0F1A30]" : "bg-white border-[#E3E8F0] text-[#3A4A66] hover:border-[#9AA9C3]"}`}>
+            <div className="flex items-center gap-2">
+              <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${a ? "bg-[#E9C46A]" : act ? "bg-white/40" : "bg-[#C9D5EA]"}`} />
+              <span className="text-[13px] font-black whitespace-nowrap">{x.key === "기타" && items.기타?.이름 ? items.기타.이름 : x.label}</span>
+              {!isMobile && a > 0 && <span className={`ml-auto text-[12px] font-black tabular-nums ${act ? "text-[#E9C46A]" : "text-[#2D4C82]"}`}>{c(a)}</span>}
+            </div>
+            {!isMobile && <div className={`mt-0.5 pl-3.5 text-[11px] font-semibold ${act ? "text-white/55" : "text-[#9AA9C3]"}`}>{x.desc}</div>}
+          </button>
+        );
+      })}
+    </div>
+  );
+  const editor = sel === "지게차" ? (
+    <div className="space-y-4">
+      {preset && fkAmount(preset) > 0 && !fkNum(fork.지게차비용) && (
+        <button type="button" onClick={() => setFork({ 지게차비용: fkAmount(preset), 지게차부담: fkMode(preset), 지게차기사ID: preset.지게차기사ID || "", 지게차기사명: preset.지게차기사명 || "", 지게차기사전화: preset.지게차기사전화 || "", 지게차회사: preset.지게차회사 || "" })}
+          className="w-full rounded-xl bg-[#0F1A30] text-white px-3 py-2.5 text-[12.5px] font-bold flex items-center gap-2 text-left">
+          <span className="w-1.5 h-1.5 rounded-full bg-[#8FB0F0] animate-pulse shrink-0" /><span className="flex-1">이 상차지는 지게차 {c(fkAmount(preset))}{preset.지게차기사명 ? ` · ${preset.지게차기사명}` : ""}</span><b className="text-[#8FB0F0]">[불러오기]</b>
+        </button>
+      )}
+      <div>{lbl("지게차비용")}{moneyInput(fork.지게차비용, (v) => setFork((f) => ({ ...f, 지게차비용: v })))}</div>
+      <div>{lbl("지게차 기사 (비워 둬도 됩니다)")}<ForkliftPicker value={fork.지게차기사ID || ""} name={fork.지게차기사명 || ""} onPick={(d) => setFork((f) => ({ ...f, 지게차기사ID: d.id || "", 지게차기사명: d.이름 || "", 지게차기사전화: d.전화번호 || "", 지게차회사: d.지게차회사 || "" }))} /></div>
+      <div>{lbl("누가 부담하나요")}{modeSeg(fkMode(fork), (k) => setFork((f) => ({ ...f, 지게차부담: k })), ["기사", "회사", "청구"])}</div>
+      <label className="inline-flex items-center gap-1.5 text-[12px] font-bold text-[#7A89A3]"><input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} />이 거래처·상차지에 기억(다음에 [불러오기])</label>
+    </div>
+  ) : (
+    <div className="space-y-4">
+      {sel === "기타" && <div>{lbl("항목 이름")}<input value={it.이름 || ""} onChange={(e) => setIt({ 이름: e.target.value })} onKeyDown={(e) => e.stopPropagation()} placeholder="예: 상차 보조비" className={inp} /></div>}
+      <div>{lbl(sel === "기타" ? "금액" : t.label)}{moneyInput(it.금액, (v) => setIt({ 금액: v }))}</div>
+      <div>{lbl("누가 받나요")}
+        <div className="grid grid-cols-2 gap-1 rounded-xl border border-[#C9D5EA] bg-white p-1">
+          {[["기사", "배차 기사에게 더 줌"], ["외부", "회사가 따로 지급"]].map(([k, l]) => (
+            <button key={k} type="button" onClick={() => setIt({ 받는사람: k, 부담: sfMode({ ...it, 받는사람: k }) })}
+              className={`h-10 rounded-lg text-[12.5px] font-black ${sfPayee(it) === k ? "bg-[#0F1A30] text-white" : "text-[#3A4A66] hover:bg-[#EEF3FC]"}`}>{l}</button>
+          ))}
+        </div>
+      </div>
+      <div>{lbl("누가 부담하나요")}{modeSeg(sfMode(it), (k) => setIt({ 부담: k }), sfPayee(it) === "기사" ? ["회사", "청구"] : ["기사", "회사", "청구"])}</div>
+      <div>{lbl("메모 (선택)")}<input value={it.메모 || ""} onChange={(e) => setIt({ 메모: e.target.value })} onKeyDown={(e) => e.stopPropagation()} placeholder={sfPayee(it) === "외부" ? "받는 곳·사람" : "사유"} className={inp} /></div>
+    </div>
+  );
+  const n = (draft.fork ? 1 : 0) + itemList.length;
+  const body = (
+    <div className={`fixed inset-0 z-[100060] bg-[#0B1428]/55 backdrop-blur-[2px] flex ${isMobile ? "items-end" : "items-center justify-center p-4"}`} onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }} data-special-modal="1">
+      <div className={`bg-[#F4F6FA] shadow-[0_30px_80px_rgba(0,0,0,0.45)] overflow-hidden flex flex-col ${isMobile ? "w-full max-h-[92vh] rounded-t-[24px]" : "w-full max-w-[860px] max-h-[90vh] rounded-[22px]"}`} onMouseDown={(e) => e.stopPropagation()}>
+        <div className="relative px-5 py-4 text-white" style={{ background: "linear-gradient(120deg,#0B1428 0%,#1B2B4B 60%,#2D4C82 100%)" }}>
+          {isMobile && <div className="absolute left-1/2 -translate-x-1/2 top-1.5 w-10 h-1 rounded-full bg-white/30" />}
+          <div className="flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <div className="text-[10.5px] font-extrabold tracking-[0.3em] text-[#8FB0F0]" style={{ fontFamily: MONO }}>SPECIAL FARE</div>
+              <div className="text-[18px] font-black mt-0.5">특수운임 적용</div>
+              <div className="text-[12px] text-white/60 mt-0.5 truncate">{[form.거래처명, form.상차지명 && `${form.상차지명} → ${form.하차지명 || ""}`].filter(Boolean).join(" · ") || "이 오더"}</div>
+            </div>
+            <button type="button" onClick={onClose} className="shrink-0 h-9 px-3 rounded-xl bg-white/10 border border-white/20 text-[13px] font-bold hover:bg-white/20">닫기 ✕</button>
+          </div>
+        </div>
+        <div className={`flex-1 overflow-y-auto ${isMobile ? "p-4 space-y-4" : "p-5 grid grid-cols-[230px_1fr] gap-5"}`}>
+          {listCol}
+          <div className="rounded-[18px] bg-white border border-[#E3E8F0] p-4">
+            <div className="flex items-center justify-between mb-3">
+              <div className="text-[15px] font-black text-[#0F1A30]">{sel === "기타" && it.이름 ? it.이름 : t.label}</div>
+              {amtOf(sel) > 0 && <button type="button" onClick={removeSel} className="h-8 px-2.5 rounded-lg border border-[#E3E8F0] text-[12px] font-black text-[#B4342A] hover:bg-[#FDECEC]">빼기</button>}
+            </div>
+            <div key={sel}>{editor}</div>
+          </div>
+        </div>
+        <div className="border-t border-[#E3E8F0] bg-white px-5 py-3.5" style={isMobile ? { paddingBottom: "max(14px, env(safe-area-inset-bottom))" } : undefined}>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-x-5 gap-y-1 mb-2.5" data-sf-preview="1">
+            {diffRow("청구운임", fkNum(base.청구운임), fkNum(after.청구운임))}
+            {diffRow("기사운임", fkNum(base.기사운임), fkNum(after.기사운임))}
+            {diffRow("수익", orderProfit(base), orderProfit(after))}
+          </div>
+          {paidOut(after) > 0 && <div className="text-[11.5px] font-bold text-[#7A89A3] mb-2">회사가 따로 지급 {c(paidOut(after))}원{hasForklift(after) ? ` (지게차 ${c(fkAmount(after))}${after.지게차기사명 ? ` · ${after.지게차기사명}` : ""})` : ""}</div>}
+          <div className="flex gap-2">
+            <button type="button" onClick={onClose} className="flex-1 h-11 rounded-xl border border-[#DCE3EE] text-[14px] font-black text-[#3A4A66] hover:bg-[#F4F6FA]">취소</button>
+            <button type="button" onClick={apply} data-sf-apply="1" className="flex-[2] h-11 rounded-xl bg-[#0F1A30] text-white text-[14px] font-black hover:bg-[#1B2B4B]">{n ? `적용 · ${n}건` : "적용(특수운임 없음)"}</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+  return createPortal(body, document.body);
+}
+
 // 표 칸 옆 작은 표시
 export function ForkliftChip({ row, className = "" }) {
-  if (!hasForklift(row)) return null;
+  if (!hasSpecial(row)) return null;
+  const only = specialCount(row) === 1 && hasForklift(row);
   return (
     <span className={`inline-flex items-center px-1.5 h-[18px] rounded-md bg-[#1B2B4B] text-[#E9C46A] text-[10.5px] font-black tabular-nums whitespace-nowrap align-middle ${className}`}
-      title={`지게차 ${won(fkAmount(row))}원 · ${row.지게차기사명 || "기사 미지정"} · ${fkModeLabel(row)}${row.지게차지급완료 ? " · 지급완료" : ""}`}>지게차 {won(fkAmount(row))}</span>
+      title={specialLines(row).join("\n") + (hasForklift(row) && row.지게차지급완료 ? "\n지게차 지급완료" : "")}>{only ? `지게차 ${won(fkAmount(row))}` : `특수 ${specialCount(row)}`}</span>
   );
 }
 // 엑셀 내보내기 공용 열
-export const forkliftExcelCols = (r) => ({ 지게차비용: fkAmount(r) || "", 지게차기사: r?.지게차기사명 || "", 지게차부담: hasForklift(r) ? fkModeLabel(r) : "", 지게차지급: hasForklift(r) ? (r.지게차지급완료 ? "지급완료" : "미지급") : "" });
+export const forkliftExcelCols = (r) => ({ 특수운임: specialLines(r).join(" / "), 지게차비용: fkAmount(r) || "", 지게차기사: r?.지게차기사명 || "", 지게차부담: hasForklift(r) ? fkModeLabel(r) : "", 지게차지급: hasForklift(r) ? (r.지게차지급완료 ? "지급완료" : "미지급") : "" });
 
 // ─── 정산관리 › 지게차 지급 ───
 export function ForkliftPayouts({ orders = [], patchDispatch, isViewer = false }) {

@@ -463,7 +463,7 @@ export function QueryPage({ rows = [], clients = [] }) {
     if (!applied) return null;
     const list = rows.filter((r) => { const d = String(r.상차일 || ""); return d >= applied.from && d <= applied.to && (!applied.client || String(r.거래처명 || "").trim() === applied.client); });
     const days = {};
-    list.forEach((r) => { const d = String(r.상차일).slice(0, 10); const e = days[d] || (days[d] = { sale: 0, profit: 0, cnt: 0 }); e.sale += toInt(r.청구운임); e.profit += toInt(r.청구운임) - toInt(r.기사운임) - toInt(r.지게차비용); e.cnt += 1; });
+    list.forEach((r) => { const d = String(r.상차일).slice(0, 10); const e = days[d] || (days[d] = { sale: 0, profit: 0, cnt: 0 }); e.sale += toInt(r.청구운임); e.profit += toInt(r.청구운임) - toInt(r.기사운임) - toInt(r.외부지급합 ?? r.지게차비용); e.cnt += 1; });
     const routes = {}, cars = {};
     list.forEach((r) => {
       const k = `${r.상차지명 || r.출발지 || "-"} → ${r.하차지명 || r.도착지 || "-"}`;

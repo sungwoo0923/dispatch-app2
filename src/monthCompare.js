@@ -207,7 +207,7 @@ export const ANOMALY_TYPES = [
   { type: "역마진", tone: "bad", amountLabel: "손해 금액", amount: (r) => toWon(r.기사운임) - toWon(r.청구운임), desc: "기사운임이 청구운임보다 큰 오더" },
   { type: "기사운임 미입력", tone: "warn", amountLabel: "청구운임", amount: (r) => toWon(r.청구운임), desc: "기사운임이 비어 수익이 실제보다 크게 잡힌 오더" },
   { type: "수익 0원", tone: "warn", amountLabel: "청구운임", amount: (r) => toWon(r.청구운임), desc: "청구운임 = 기사운임" },
-  { type: "저마진", tone: "warn", amountLabel: "수익", amount: (r) => toWon(r.청구운임) - toWon(r.기사운임) - toWon(r.지게차비용), desc: "수익률 5% 미만" },
+  { type: "저마진", tone: "warn", amountLabel: "수익", amount: (r) => toWon(r.청구운임) - toWon(r.기사운임) - toWon(r.외부지급합 ?? r.지게차비용), desc: "수익률 5% 미만" },
 ];
 
 // ── 쉬운 설명: "매출은 늘었는데 왜 수익은 그대로인가" ─────────────────────
@@ -221,7 +221,7 @@ export function explainGap(res) {
   const gap = B.profit - expected; // 음수면 덜 번 것
   const reasons = [];
   const used = new Set();
-  const impactOf = (list) => list.reduce((acc, r) => acc + (toWon(r.청구운임) - toWon(r.기사운임) - toWon(r.지게차비용)) - toWon(r.청구운임) * A.rate, 0);
+  const impactOf = (list) => list.reduce((acc, r) => acc + (toWon(r.청구운임) - toWon(r.기사운임) - toWon(r.외부지급합 ?? r.지게차비용)) - toWon(r.청구운임) * A.rate, 0);
 
   const noSale = listB.filter((r) => anomalyOf(r)?.type === "청구운임 미입력");
   if (noSale.length) {

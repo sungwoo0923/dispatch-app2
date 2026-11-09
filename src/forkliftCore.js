@@ -32,58 +32,127 @@ export const fkAmount = (o) => Math.max(0, fkNum(o?.지게차비용));
 export const hasForklift = (o) => fkAmount(o) > 0;
 export const fkModeLabel = (o) => (FORKLIFT_MODES.find((m) => m.key === fkMode(o)) || FORKLIFT_MODES[0]).short;
 
-// 수익(수수료) — 매출·정산·보고서가 모두 이 식을 쓴다
-export const orderProfit = (o) => fkNum(o?.청구운임) - fkNum(o?.기사운임) - fkAmount(o);
+// ─── 🧾 2026-11-09 특수운임(지게차 외) — 오더.특수운임 = [{ 종류, 이름, 금액, 부담, 받는사람, 메모 }] ───
+//  받는사람: "기사"(배차 기사에게 더 줌 — 대기료·경유·할증·통행료) | "외부"(회사가 따로 지급 — 인력·주차장 등)
+//  부담: "기사"(기사운임에서 차감, 외부일 때만) | "회사"(회사 몫에서) | "청구"(거래처에 추가 청구)
+//   · 받는사람=기사 → 기사운임 +금액, 청구면 청구운임 +금액(수익 그대로), 회사면 수익 −금액
+//   · 받는사람=외부 → 회사가 따로 지급(외부지급합), 기사 부담이면 기사운임 −금액, 청구면 청구운임 +금액
+//  지금 운임에 반영해 둔 양: 특수기사차감(기사운임에서 뺀 양, 음수 = 더한 양) · 특수청구추가 — 바꾸거나 빼면 이 값 기준으로 되돌린다
+//  외부지급합 = 지게차비용 + 외부 항목 합(회사가 따로 주는 돈) — 수익 = 청구 − 기사 − 외부지급합
+export const SPECIAL_TYPES = [
+  { key: "지게차", label: "지게차비용", payee: "외부", mode: "기사", desc: "지게차 기사에게 회사가 지급" },
+  { key: "대기료", label: "대기료", payee: "기사", mode: "청구", desc: "상하차 대기 시간 보상" },
+  { key: "수작업", label: "수작업·인력 상하차비", payee: "외부", mode: "청구", desc: "인력·수작업 상하차 인건비" },
+  { key: "경유", label: "경유(추가 상하차지)", payee: "기사", mode: "청구", desc: "추가 상차·하차지 운임" },
+  { key: "할증", label: "야간·휴일·긴급 할증", payee: "기사", mode: "청구", desc: "야간·주말·긴급 운행" },
+  { key: "통행료", label: "통행료·주차비", payee: "기사", mode: "청구", desc: "기사가 낸 통행료·주차비 보전" },
+  { key: "기타", label: "기타(직접 입력)", payee: "기사", mode: "청구", desc: "이름을 직접 정하는 항목" },
+];
+export const SPECIAL_MODES = [
+  { key: "기사", label: "기사운임에서 차감", short: "기사 차감" },
+  { key: "회사", label: "회사 몫에서 부담", short: "회사 부담" },
+  { key: "청구", label: "거래처에 추가 청구", short: "추가 청구" },
+];
+export const SPECIAL_KEYS = ["특수운임", "특수기사차감", "특수청구추가", "외부지급합"];
+export const sfType = (k) => SPECIAL_TYPES.find((t) => t.key === k) || SPECIAL_TYPES[SPECIAL_TYPES.length - 1];
+export const sfItems = (o) => (Array.isArray(o?.특수운임) ? o.특수운임 : []).filter((x) => x && fkNum(x.금액) > 0);
+export const sfPayee = (it) => (it?.받는사람 === "외부" || it?.받는사람 === "기사" ? it.받는사람 : sfType(it?.종류).payee);
+export const sfMode = (it) => {
+  const m = ["기사", "회사", "청구"].includes(it?.부담) ? it.부담 : sfType(it?.종류).mode;
+  return sfPayee(it) === "기사" && m === "기사" ? "청구" : m; // 기사에게 주는 돈을 기사에게서 뺄 수는 없다
+};
+export const sfName = (it) => (String(it?.이름 || "").trim() || sfType(it?.종류).label);
+export function sfTotals(o) {
+  let D = 0, C = 0, ext = 0;
+  for (const it of sfItems(o)) {
+    const a = Math.max(0, fkNum(it.금액)); const m = sfMode(it);
+    if (sfPayee(it) === "기사") D -= a; else { ext += a; if (m === "기사") D += a; }
+    if (m === "청구") C += a;
+  }
+  return { D, C, ext };
+}
+// 회사가 따로 지급하는 돈 합계(지게차 + 외부 특수운임)
+export const paidOut = (o) => fkAmount(o) + sfTotals(o).ext;
+export const hasSpecial = (o) => hasForklift(o) || sfItems(o).length > 0;
+export const specialCount = (o) => (hasForklift(o) ? 1 : 0) + sfItems(o).length;
+export const specialTotal = (o) => fkAmount(o) + sfItems(o).reduce((s, it) => s + fkNum(it.금액), 0);
+// 내역 한 줄씩(표 칩 툴팁 · 엑셀)
+export function specialLines(o) {
+  const c = (n) => Math.round(n).toLocaleString("ko-KR");
+  const out = [];
+  if (hasForklift(o)) out.push(`지게차 ${c(fkAmount(o))} (${fkModeLabel(o)}${o.지게차기사명 ? ` · ${o.지게차기사명}` : ""})`);
+  for (const it of sfItems(o)) out.push(`${sfName(it)} ${c(fkNum(it.금액))} (${(SPECIAL_MODES.find((m) => m.key === sfMode(it)) || {}).short || ""}${sfPayee(it) === "외부" ? " · 따로 지급" : ""}${it.메모 ? ` · ${it.메모}` : ""})`);
+  return out;
+}
 
-// 지게차 칸·운임 칸이 바뀐 뒤 기사운임·청구운임·수수료를 맞춘다
+// 수익(수수료) — 매출·정산·보고서가 모두 이 식을 쓴다
+export const orderProfit = (o) => fkNum(o?.청구운임) - fkNum(o?.기사운임) - paidOut(o);
+
+// 지게차·특수운임 칸·운임 칸이 바뀐 뒤 기사운임·청구운임·수수료를 맞춘다
 //  prev = 바뀌기 전 오더, next = 바뀐 값을 넣은 오더, key = 바뀐 칸
-//  · 지게차 칸(금액·방식)을 바꾸면: 예전에 빼/더해 둔 금액을 되돌리고 새 금액을 다시 적용
+//  · 지게차·특수운임을 바꾸면(key 지게차비용·지게차부담·__forklift·특수운임·__special): 예전에 빼/더해 둔 금액을 되돌리고 새로 적용
 //  · 사람이 기사운임을 직접 고치면: 그 값을 "기사가 받는 돈"으로 그대로 둔다
-//  · 운임구분 계산 등으로 기사운임이 새로 계산되면(지게차 전 금액): 기사 부담이면 그만큼 다시 뺀다
+//  · 운임구분 계산 등으로 기사운임이 새로 계산되면(특수운임 전 금액): 기사 쪽 조정분을 다시 적용
 //  · 청구운임을 사람이 고치면 그대로(그 값이 청구 총액)
 export function forkliftApply(prev, next, key, { asString = true } = {}) {
   const F = fkAmount(next);
-  // 지게차가 없고 예전에도 없었으면 그대로(다른 오더 모양을 바꾸지 않는다)
-  if (!F && !fkNum(prev?.지게차기사차감) && !fkNum(prev?.지게차청구추가)) return next;
+  const st = sfTotals(next);
+  const pD = fkNum(prev?.지게차기사차감) + fkNum(prev?.특수기사차감);
+  const pC = fkNum(prev?.지게차청구추가) + fkNum(prev?.특수청구추가);
+  const hadSpecial = Array.isArray(prev?.특수운임) && prev.특수운임.length > 0;
+  // 지게차·특수운임이 없고 예전에도 없었으면 그대로(다른 오더 모양을 바꾸지 않는다)
+  if (!F && !st.D && !st.C && !st.ext && !pD && !pC && !hadSpecial && !fkAmount(prev) && !fkNum(prev?.외부지급합)) return next;
   const out = { ...next };
   const mode = fkMode(next);
-  const wantD = mode === "기사" ? F : 0;
-  const wantC = mode === "청구" ? F : 0;
-  const pD = fkNum(prev?.지게차기사차감);
-  const pC = fkNum(prev?.지게차청구추가);
+  const fD = mode === "기사" ? F : 0;
+  const fC = mode === "청구" ? F : 0;
+  const wantD = fD + st.D;
+  const wantC = fC + st.C;
   const fmt = (n) => (asString ? String(n) : n);
   const hadMoney = (v) => v != null && String(v).trim() !== "";
-  const touchedFork = key === "지게차비용" || key === "지게차부담" || key === "__forklift";
-  if (touchedFork) {
+  const touched = ["지게차비용", "지게차부담", "__forklift", "특수운임", "__special"].includes(key);
+  if (touched) {
     if (hadMoney(next.기사운임) || pD || wantD) out.기사운임 = fmt(fkNum(next.기사운임) + pD - wantD);
     if (hadMoney(next.청구운임) || pC || wantC) out.청구운임 = fmt(fkNum(next.청구운임) - pC + wantC);
   } else if (key !== "기사운임" && fkNum(next.기사운임) !== fkNum(prev?.기사운임) && wantD) {
-    // 기사운임이 다른 계산(운임구분 등)으로 새로 정해짐 = 지게차 빼기 전 금액
+    // 기사운임이 다른 계산(운임구분 등)으로 새로 정해짐 = 특수운임 반영 전 금액
     out.기사운임 = fmt(fkNum(next.기사운임) - wantD);
   } else if (key !== "기사운임" && wantD !== pD) {
     out.기사운임 = fmt(fkNum(next.기사운임) + pD - wantD);
   }
-  out.지게차기사차감 = wantD;
-  out.지게차청구추가 = wantC;
-  if (!F) { out.지게차기사차감 = 0; out.지게차청구추가 = 0; }
-  if (hadMoney(out.청구운임) || hadMoney(out.기사운임) || F) out.수수료 = fmt(fkNum(out.청구운임) - fkNum(out.기사운임) - F);
+  out.지게차기사차감 = F ? fD : 0;
+  out.지게차청구추가 = F ? fC : 0;
+  out.특수기사차감 = st.D;
+  out.특수청구추가 = st.C;
+  out.외부지급합 = F + st.ext;
+  if (hadMoney(out.청구운임) || hadMoney(out.기사운임) || F || st.ext) out.수수료 = fmt(fkNum(out.청구운임) - fkNum(out.기사운임) - F - st.ext);
   return out;
 }
 
-// 지게차를 뺄 때(끄기) — 빼/더해 둔 금액을 되돌리고 지게차 칸을 비운다
+// 지게차를 뺄 때(끄기) — 빼/더해 둔 금액을 되돌리고 지게차 칸을 비운다(다른 특수운임은 그대로)
 export function forkliftClear(o, opts) {
   const cleared = { ...o, 지게차비용: "", 지게차기사ID: "", 지게차기사명: "", 지게차기사전화: "", 지게차회사: "" };
   const out = forkliftApply(o, cleared, "__forklift", opts);
   out.지게차부담 = ""; out.지게차기사차감 = 0; out.지게차청구추가 = 0;
-  const has = (v) => v != null && String(v).trim() !== "";
-  if (has(out.청구운임) || has(out.기사운임)) out.수수료 = (opts?.asString === false) ? fkNum(out.청구운임) - fkNum(out.기사운임) : String(fkNum(out.청구운임) - fkNum(out.기사운임));
+  return out;
+}
+// 특수운임 전부 적용(팝업 [적용]) — fork = 지게차 칸 값(없으면 지게차 없음), items = 지게차 외 항목
+export function specialApplyAll(o, { fork = null, items = [] } = {}, opts) {
+  const f = fork && fkNum(fork.지게차비용) > 0
+    ? { 지게차비용: String(fkNum(fork.지게차비용)), 지게차부담: fkMode(fork), 지게차기사ID: fork.지게차기사ID || "", 지게차기사명: fork.지게차기사명 || "", 지게차기사전화: fork.지게차기사전화 || "", 지게차회사: fork.지게차회사 || "" }
+    : { 지게차비용: "", 지게차부담: "", 지게차기사ID: "", 지게차기사명: "", 지게차기사전화: "", 지게차회사: "" };
+  const list = (items || []).filter((x) => x && fkNum(x.금액) > 0).map((x) => ({
+    종류: x.종류 || "기타", 이름: String(x.이름 || "").trim(), 금액: fkNum(x.금액), 부담: sfMode(x), 받는사람: sfPayee(x), 메모: String(x.메모 || "").trim(),
+  }));
+  const out = forkliftApply(o, { ...o, ...f, 특수운임: list }, "__special", opts);
+  if (!f.지게차비용) { out.지게차부담 = ""; out.지게차기사차감 = 0; out.지게차청구추가 = 0; }
   return out;
 }
 
 // 화면 요약 한 줄 — "청구 500,000 · 기사 300,000 · 지게차 100,000 · 수익 100,000"
 export function forkliftSummary(o) {
   const c = (n) => Math.round(n).toLocaleString("ko-KR");
-  return `청구 ${c(fkNum(o?.청구운임))} · 기사 ${c(fkNum(o?.기사운임))} · 지게차 ${c(fkAmount(o))} · 수익 ${c(orderProfit(o))}`;
+  return `청구 ${c(fkNum(o?.청구운임))} · 기사 ${c(fkNum(o?.기사운임))} · ${sfItems(o).length ? `특수 ${c(specialTotal(o))}` : `지게차 ${c(fkAmount(o))}`} · 수익 ${c(orderProfit(o))}`;
 }
 
 // 상차지 기억(지게차 기본값) 키 — 거래처 + 상차지명(공백·대소문자 무시)

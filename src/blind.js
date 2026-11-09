@@ -2,10 +2,14 @@
 // 최고관리자 외에는 어떤 배차 목록에도 노출되지 않는다. 로그인한 사용자의 역할은
 // App.jsx가 setBlindViewerRole()로 알려준다.
 let viewerIsTotalMaster = false;
+let viewerRoleNow = "";
 
 export function setBlindViewerRole(role, email) {
   viewerIsTotalMaster = role === "totalMaster" || email === "tjddnqkf@naver.com";
+  viewerRoleNow = String(role || "");
 }
+// ⭐ 2026-11-09 조회전용 계정인지(특수운임 적용 버튼 숨김용)
+export const isViewerNow = () => viewerRoleNow === "viewer";
 export function canSeeBlind() {
   return viewerIsTotalMaster;
 }
