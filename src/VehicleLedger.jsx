@@ -21,7 +21,7 @@ import CustomDatePicker from "./CustomDatePicker"; // 📅 프로그램 달력(�
 import { careSummary, vehicleDefaults, TRUCK_MODELS } from "./vehicleCare";
 import { useVehicleTypes, VehicleTypePicker, VT_DEFAULTS } from "./vehicleTypes"; // 🚚 2026-11-02 회사 공용 차량종류
 import { fmtPhone as fmtPhoneLive } from "./formatInput"; // 입력 중 하이픈(02·031·010 등)
-import VehicleHologram from "./VehicleHologram"; // ⭐ 2026-11-09 차량 3D 분석(디지털 트윈·타이어 위치별 교체)
+import VehicleHologram, { twinModel, twinCareSummary } from "./VehicleHologram"; // ⭐ 2026-11-09 차량 3D 분석(디지털 트윈·타이어 위치별 교체)
 
 const C = { ink: "#0B1428", navy: "#0F1A30", mid: "#1B2B4B", blue: "#2D4C82", sky: "#8FB0F0", line: "#E3E8F0", soft: "#F4F6FA", sub: "#5B6B85", mute: "#5B6B85" /* ⭐ 2026-11-05 흐린 글씨 금지 — #9AA9C3 → #5B6B85 */, pale: "#EEF2F9" };
 // ⭐ 2026-11-05 고정폭 글씨 → 기본 글씨체(흐릿해 보인다는 의견)
@@ -578,6 +578,10 @@ function Ledger({ v, co, appDriver, linkRaw, drivers, canEdit, by, narrow, purpo
       ["합계", "", "", "", "", rep.reduce((s, r) => s + num(r.공가), 0), rep.reduce((s, r) => s + repairVat(r), 0), rep.reduce((s, r) => s + num(r.공가) + repairVat(r), 0), "", ""]], [12, 12, 40, 16, 15, 12, 11, 12, 20, 6]);
     add("구조변경", [["일자", "내용", "업체", "금액", "비고"], ...(v.structures || []).map((r) => [r.일자, r.내용, r.업체, num(r.금액), r.비고])], [12, 40, 16, 12, 20]);
     add("기사탑승", [["시작", "종료", "기사", "연락처", "비고"], ...(v.driverHist || []).map((r) => [r.시작, r.종료 || "현재", r.이름, r.연락처, r.비고])], [12, 12, 12, 15, 20]);
+    // ⭐ 2026-11-09 3D 차량 분석 — 제원(입력·기사앱·기본값 구분) + 타이어 위치별 교체
+    const tw = twinModel(v, linkRaw);
+    add("제원", [["항목", "값", "출처"], ...Object.entries(tw.vals).map(([k, x]) => [k, x.v === "" ? "" : String(x.v), x.src])], [14, 18, 10]);
+    add("타이어", [["위치", "교체일", "교체 km", "브랜드", "규격", "메모", "상태"], ...tw.positions.map((p) => { const st = tw.tireState[p.key]; const r = st.base === "위치별 기록" ? st.rec : null; return [p.label, r?.date || "", r?.km ? Number(r.km) : "", r?.brand || "", r?.size || "", r?.memo || "", st.level === 2 ? "교체 시기 지남" : st.level === 1 ? "곧 교체" : st.level === 0 ? "정상" : "기록 없음"]; })], [18, 12, 10, 14, 12, 20, 14]);
     add("변경기타이력", [["일자", "내용", "변경/이력", "날짜", "세부내용", "비고"], ...(v.logs || []).map((r) => [r.일자, r.내용, r.구분, r.날짜, r.세부내용, r.비고])], [12, 20, 10, 12, 40, 24]);
     XLSX.writeFile(wb, `차량관리대장_${normPlate(v.차량번호)}_${today()}.xlsx`);
   };
@@ -864,7 +868,7 @@ function Ledger({ v, co, appDriver, linkRaw, drivers, canEdit, by, narrow, purpo
       </Section>
 
       <style>{VL_CSS}</style>
-      {holo && <VehicleHologram v={v} linkRaw={linkRaw} canEdit={canEdit} narrow={narrow} DateField={DateField} onClose={() => setHolo(false)}
+      {holo && <VehicleHologram v={v} linkRaw={linkRaw} by={by} canEdit={canEdit} narrow={narrow} DateField={DateField} onClose={() => setHolo(false)}
         onSave={async (fn, okMsg) => { try { await mutate((d) => fn(d)); toast(okMsg || "저장했습니다"); } catch (e) { toast(e?.message || "저장하지 못했습니다"); throw e; } }} />}
       {editor && <RowEditor kind={editor.kind} row={editor.row} kindOpts={kindOpts} onClose={() => setEditor(null)} onSave={(r, fs) => saveRow(editor.kind, r, fs)} onDelete={canEdit ? async () => { const ok = await delRow(editor.kind, editor.row); if (ok) setEditor(null); } : null} />}
       {drvForm && (
@@ -1045,7 +1049,9 @@ export default function VehicleLedger({ company = "", drivers = [], canEdit = tr
       const linkRaw = drvByPlate.get(plateCore(v.차량번호)) || (cur?.driverId && plateCore(drvById.get(cur.driverId)?.차량번호) === plateCore(v.차량번호) ? drvById.get(cur.driverId) : null) || null;
       const app = linkRaw ? { id: linkRaw.id, 이름: linkRaw.이름 || linkRaw.name || "", 전화번호: fmtPhone(linkRaw.전화번호 || linkRaw.phone || ""), 등급: linkRaw.등급 || "" } : null;
       const cv = linkRaw ? vehicleDefaults(linkRaw) : null;
-      const cs = linkRaw ? careSummary({ vehicle: cv, care: linkRaw.care || {} }) : null;
+      const cs0 = linkRaw ? careSummary({ vehicle: cv, care: linkRaw.care || {} }) : null;
+      // ⭐ 2026-11-09 3D 차량 분석의 위치별 타이어 교체 결과를 점검 알림에 합친다(기사 미연결 차량도 타이어 알림은 보이게)
+      const cs = (v.tires && Object.keys(v.tires).length) ? twinCareSummary(v, linkRaw) : cs0;
       const reps = v.repairs || [];
       const av = linkRaw?.vehicle || {}; // 기사앱에 실제로 입력된 제원(추정값 아님)
       const mdl = [av.제조사 || v.제조사, av.모델 || v.모델].filter(Boolean).join(" "); const yr = av.연식 || v.연식 || "";
@@ -1056,7 +1062,7 @@ export default function VehicleLedger({ company = "", drivers = [], canEdit = tr
         용도: v.용도 || v.차량종류 || (virtual ? cv?.적재함 || "" : ""), 톤수: v.톤수 || cv?.톤 || "",
         현재기사: cur?.이름 || app?.이름 || "", 기사연락처: cur?.연락처 || app?.전화번호 || "", 기사변경일: cur?.시작 || "", fromApp: !cur && !!app,
         모델연식: [mdl, yr && `${yr}년`].filter(Boolean).join(" · "),
-        주행거리: cs?.odometer || 0, 점검알림: cs ? cs.alerts.length : -1, 엔진오일: cs ? (cs.alerts.find((a) => a.key === "engineOil")?.level ?? (linkRaw?.care?.items?.engineOil ? 0 : -1)) : -2,
+        주행거리: cs?.odometer || 0, 점검알림: cs ? cs.alerts.length : -1, 엔진오일: cs0 ? (cs0.alerts.find((a) => a.key === "engineOil")?.level ?? (linkRaw?.care?.items?.engineOil ? 0 : -1)) : -2,
         yearCost: reps.filter((x) => String(x.일자 || "").startsWith(thisYear)).reduce((s, x) => s + num(x.공가) + repairVat(x), 0),
         monthCost: reps.filter((x) => String(x.일자 || "").startsWith(thisMonth)).reduce((s, x) => s + num(x.공가) + repairVat(x), 0),
       };
