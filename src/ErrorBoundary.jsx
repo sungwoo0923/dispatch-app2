@@ -60,9 +60,38 @@ export default class ErrorBoundary extends React.Component {
           >
             새로고침
           </button>
+          {/* ⭐ 2026-11-10 원인 찾기용 — 오류 내용을 작게 보여 준다(캡처해서 보내면 바로 원인을 찾는다) */}
+          <div style={{ marginTop: 18, maxWidth: 560, fontSize: 11, color: "#9AA9C3", wordBreak: "break-all", fontFamily: "monospace" }}>
+            {String(this.state.error?.message || this.state.error || "").slice(0, 300)}
+          </div>
         </div>
       );
     }
     return this.props.children;
+  }
+}
+
+// ⭐ 2026-11-10 화면 일부만 감싸는 오류 경계 — 그 부분만 안내로 바꾸고 나머지 프로그램은 그대로 쓴다
+export class SectionBoundary extends React.Component {
+  constructor(props) { super(props); this.state = { error: null }; }
+  static getDerivedStateFromError(error) { return { error }; }
+  componentDidCatch(error, info) {
+    console.error(`[SectionBoundary:${this.props.name || ""}]`, error, info?.componentStack);
+    if (isChunkLoadError(error)) reloadOnce();
+  }
+  render() {
+    if (!this.state.error) return this.props.children;
+    const msg = String(this.state.error?.message || this.state.error || "").slice(0, 300);
+    return (
+      <div style={{ padding: "28px 20px", borderRadius: 18, border: "1px solid #F5C2C2", background: "#FFF8F8", textAlign: "center" }}>
+        <div style={{ fontSize: 15, fontWeight: 800, color: "#1B2B4B" }}>{this.props.name || "이 화면"}을 불러오지 못했습니다</div>
+        <div style={{ fontSize: 12.5, color: "#6b7280", marginTop: 6 }}>아래 오류 내용을 캡처해서 관리자에게 보내 주세요.</div>
+        <div style={{ marginTop: 10, fontSize: 11, color: "#9AA9C3", wordBreak: "break-all", fontFamily: "monospace" }}>{msg}</div>
+        <div style={{ marginTop: 14, display: "flex", gap: 8, justifyContent: "center" }}>
+          <button type="button" onClick={() => this.setState({ error: null })} style={{ height: 36, padding: "0 14px", borderRadius: 10, border: "1px solid #DCE3EE", background: "#fff", fontWeight: 700 }}>다시 시도</button>
+          {this.props.fallback && <button type="button" onClick={() => this.setState({ error: null, useFallback: true })} style={{ height: 36, padding: "0 14px", borderRadius: 10, border: "none", background: "#1B2B4B", color: "#fff", fontWeight: 700 }}>기본 화면으로 보기</button>}
+        </div>
+      </div>
+    );
   }
 }

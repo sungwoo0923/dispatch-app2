@@ -51,6 +51,7 @@ import FleetOrderPanel from "./FleetOrderPanel"; // ⭐ 2026-11-02 노선관리 
 import { careSummary, vehicleDefaults } from "./vehicleCare";
 // ⭐ 2026-11-02 차량관리대장 — 회사별 맞춤 기능(companyFeatures.vehicleLedger)이 켜진 회사에만 모듈이 보인다
 import { useCompanyFeatures } from "./companyFeatures";
+import { SectionBoundary } from "./ErrorBoundary"; // ⭐ 2026-11-10 차량관리 오류가 프로그램 전체를 멈추지 않게
 import { lazyView } from "./lazyLoad";
 import { fmtPhone } from "./formatInput";
 import { runDelete, commitDeletes } from "./DeleteProgress"; // ⭐ 2026-11-05 삭제 진행 창 + 한 번에 삭제
@@ -7444,8 +7445,8 @@ export default function FleetManagement({ dispatchData = [], role = "", forceTab
 
       {/* ═══ 기사 등록 관리 ═══ */}
       {/* ⭐ 2026-11-02 차량관리대장 — 맞춤 기능이 켜진 회사는 같은 "차량 관리" 메뉴가 확장판(전체 현황 + 관리대장 + 기존 점검·소모품)으로 */}
-      {mainTab === "vehicle" && vlOn && <VehicleLedger company={getTenant() || myCompanyName} drivers={driversRaw} canEdit={role !== "viewer"} myName={companyStaffRaw.find(u => u.id === myUid)?.name || ""} by={`${companyStaffRaw.find(u => u.id === myUid)?.name || auth.currentUser?.email || "직원"}(직원)`} />}
-      {mainTab === "vehicle" && !vlOn && <VehicleCareTab drivers={routeDrivers} driversRaw={driversRaw} by={`${companyStaffRaw.find(u => u.id === myUid)?.name || auth.currentUser?.email || "직원"}(직원)`} />}
+      {mainTab === "vehicle" && vlOn && <SectionBoundary name="차량 관리대장"><VehicleLedger company={getTenant() || myCompanyName} drivers={driversRaw} canEdit={role !== "viewer"} myName={companyStaffRaw.find(u => u.id === myUid)?.name || ""} by={`${companyStaffRaw.find(u => u.id === myUid)?.name || auth.currentUser?.email || "직원"}(직원)`} /></SectionBoundary>}
+      {mainTab === "vehicle" && !vlOn && <SectionBoundary name="차량 관리"><VehicleCareTab drivers={routeDrivers} driversRaw={driversRaw} by={`${companyStaffRaw.find(u => u.id === myUid)?.name || auth.currentUser?.email || "직원"}(직원)`} /></SectionBoundary>}
       {mainTab === "registration" && <RegistrationTab usersMap={usersMap} myCompanyName={myCompanyName} driversRaw={driversRaw} myUid={myUid} staff={companyStaff} canDelegate={canDelegate} onAssignManager={assignDriverManager} />}
 
         </div>
