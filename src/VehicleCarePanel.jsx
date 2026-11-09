@@ -122,7 +122,7 @@ export default function VehicleCarePanel({ driverId, drv = {}, by = "", staff = 
         ))}
       </div>
 
-      {tab === "summary" && <Summary {...{ driverId, by, vehicle, care, sum, odo, logs, busy, run, setTab }} />}
+      {tab === "summary" && <Summary {...{ driverId, by, vehicle, care, sum, odo, logs, busy, run, setTab, staff }} />}
       {tab === "items" && <Items {...{ driverId, by, items, care, odo, busy, run, staff, large }} />}
       {tab === "dates" && <Dates {...{ driverId, by, care, busy, run, large }} />}
       {tab === "spec" && <Spec {...{ driverId, by, vehicle, busy, run, large }} />}
@@ -134,7 +134,9 @@ export default function VehicleCarePanel({ driverId, drv = {}, by = "", staff = 
 }
 
 // ─── 요약 ───
-function Summary({ driverId, by, vehicle, care, sum, odo, logs, busy, run, setTab }) {
+function Summary({ driverId, by, vehicle, care, sum, odo, logs, busy, run, setTab, staff }) {
+  // ⭐ 2026-11-10 기사는 처음 넣은 뒤로 키로수를 고칠 수 없다(운행 거리 누적 기준 · 고의 수정 방지) — 운송사 화면(staff)만 수정
+  const lockOdo = !staff && odo > 0;
   const [km, setKm] = React.useState("");
   const fuel = fuelStats(logs);
   const month = today().slice(0, 7);
@@ -154,10 +156,14 @@ function Summary({ driverId, by, vehicle, care, sum, odo, logs, busy, run, setTa
         </div>
         <div style={{ fontFamily: MONO, fontSize: 30, fontWeight: 800, marginTop: 4, whiteSpace: "nowrap" }}>{odo ? odo.toLocaleString() : "—"}<span style={{ fontSize: 14, marginLeft: 4, opacity: 0.6 }}>km</span></div>
         <div style={{ fontSize: 13, color: "rgba(255,255,255,.72)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{care.odometerAt ? `${care.odometerAt} 기준` : "아직 입력 전"} · {CLASS_LABEL[tonClass(vehicle.톤, vehicle.적재함)]} 정비 기준</div>
+        {lockOdo ? (
+          <div style={{ marginTop: 10, fontSize: 13, fontWeight: 700, color: "rgba(255,255,255,.8)" }}>운행할수록 자동으로 쌓입니다 · 수정은 운송사 담당자에게 요청하세요</div>
+        ) : (
         <div style={{ display: "flex", gap: 6, marginTop: 10 }}>
           <input inputMode="numeric" value={comma(km)} onChange={(e) => setKm(e.target.value.replace(/[^\d]/g, ""))} placeholder="현재 계기판 km" style={{ ...inp, height: 40, background: "rgba(255,255,255,.95)" }} />
           <button type="button" disabled={busy} onClick={submit} style={{ ...btn(false), border: "none" }}>입력</button>
         </div>
+        )}
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(3,minmax(0,1fr))", gap: 6, marginTop: 8 }}>
@@ -423,7 +429,7 @@ export function ModelSearch({ value, onPick, ton, maker, style, placeholder }) {
   );
 }
 
-export function VehicleSetupWizard({ driverId, drv = {}, by = "", onClose }) {
+export function VehicleSetupWizard({ driverId, drv = {}, by = "", onClose, driverMode = false }) {
   const vtKinds = useVehicleTypes(undefined, VEHICLE_KINDS); // 🚚 2026-11-02 회사 공용 차량종류
   const base = vehicleDefaults(drv);
   const [step, setStep] = React.useState(0);
@@ -444,7 +450,7 @@ export function VehicleSetupWizard({ driverId, drv = {}, by = "", onClose }) {
       const items = (oil.km || oil.date) ? { engineOil: { km: num(oil.km) || null, date: oil.date || null } } : {};
       await save(driverId, by, {
         vehicle: { ...v, ...spec }, 차량톤수: v.톤 || drv.차량톤수 || "", 차량종류: v.적재함 || drv.차량종류 || "",
-        care: { setupDone: true, ...(km ? { odometer: km, odometerAt: today() } : {}), items, dates: Object.fromEntries(Object.entries(dates).filter(([, x]) => x)) },
+        care: { setupDone: true, ...(km && !(driverMode && Number(drv.care?.odometer) > 0) ? { odometer: km, odometerAt: today() } : {}), items, dates: Object.fromEntries(Object.entries(dates).filter(([, x]) => x)) },
       }, { kind: "기본설정", date: today(), km: km || null, memo: "차량 기본 설정" });
       onClose?.(true);
     } catch (e) { window.alert(`저장 실패: ${e.message || e}`); } finally { setBusy(false); }
@@ -452,8 +458,9 @@ export function VehicleSetupWizard({ driverId, drv = {}, by = "", onClose }) {
   const field = (label, el) => <label style={{ display: "block", marginTop: 10 }}><div style={lbl}>{label}</div>{el}</label>;
   const sheet = typeof window !== "undefined" && window.innerWidth < 640; // 휴대폰은 아래에서 올라오는 시트, PC는 화면 중앙
   return (
-    <div style={{ position: "fixed", inset: 0, zIndex: 99990, background: "rgba(11,20,40,.55)", display: "flex", alignItems: sheet ? "flex-end" : "center", justifyContent: "center", padding: sheet ? 0 : 16 }}>
-      <div style={{ width: "100%", maxWidth: 520, maxHeight: "92vh", overflowY: "auto", background: "#F4F6FA", borderRadius: sheet ? "22px 22px 0 0" : 22, boxShadow: "0 30px 80px rgba(11,20,40,.45)", paddingBottom: "calc(16px + env(safe-area-inset-bottom, 0px))" }}>
+    <div style={{ position: "fixed", inset: 0, zIndex: 100050, background: "rgba(11,20,40,.55)", display: "flex", alignItems: sheet ? "flex-end" : "center", justifyContent: "center", padding: sheet ? 0 : 16 }}>
+      {/* ⭐ 2026-11-10 휴대폰에서 [다음]까지 스크롤이 안 되던 문제 — 92vh는 주소창·하단바가 있는 아이폰에서 화면보다 커서 아래가 가려졌다 → 실제 보이는 높이(dvh) 기준 · 팝업 안에서만 스크롤 */}
+      <div style={{ width: "100%", maxWidth: 520, maxHeight: "min(92vh, calc(100dvh - 12px - env(safe-area-inset-top, 0px)))", overflowY: "auto", overscrollBehavior: "contain", WebkitOverflowScrolling: "touch", background: "#F4F6FA", borderRadius: sheet ? "22px 22px 0 0" : 22, boxShadow: "0 30px 80px rgba(11,20,40,.45)", paddingBottom: "calc(16px + env(safe-area-inset-bottom, 0px))" }}>
         <div style={{ padding: "18px 18px 16px", color: "#fff", borderRadius: "22px 22px 0 0", background: "linear-gradient(135deg,#0B1428 0%,#1B2B4B 60%,#2D4C82 100%)" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <span style={{ fontFamily: MONO, fontSize: 10, fontWeight: 800, letterSpacing: "0.24em", color: "#8FB0F0" }}>VEHICLE SETUP · {step + 1}/{steps.length}</span>
@@ -482,8 +489,11 @@ export function VehicleSetupWizard({ driverId, drv = {}, by = "", onClose }) {
             <label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 12, fontSize: 14, fontWeight: 700 }}><input type="checkbox" checked={!!v.냉동기} onChange={(e) => set("냉동기", e.target.checked)} />냉동기 장착 차량</label>
           </>}
           {step === 2 && <>
-            {field("지금 계기판 주행거리 (km)", <input inputMode="numeric" value={comma(odo)} onChange={(e) => setOdo(e.target.value.replace(/[^\d]/g, ""))} placeholder="예: 125000" style={{ ...inp, height: 48, fontSize: 20, fontFamily: MONO }} />)}
-            <div style={{ fontSize: 12, color: "#7A879C", marginTop: 6 }}>계기판의 ODO(총 주행거리) 숫자를 그대로 넣어주세요. 이후엔 '차량' 탭에서 수시로 바꿀 수 있습니다.</div>
+            {/* ⭐ 2026-11-10 기사앱 — 처음 로그인 때 넣은 키로수는 여기서 바꾸지 않는다(운송사만 수정) */}
+            {driverMode && Number(drv.care?.odometer) > 0
+              ? field("지금 계기판 주행거리 (km)", <div style={{ ...inp, height: 48, fontSize: 20, fontFamily: MONO, display: "flex", alignItems: "center", background: "#EEF2F8" }}>{Number(drv.care.odometer).toLocaleString()}</div>)
+              : field("지금 계기판 주행거리 (km)", <input inputMode="numeric" value={comma(odo)} onChange={(e) => setOdo(e.target.value.replace(/[^\d]/g, ""))} placeholder="예: 125000" style={{ ...inp, height: 48, fontSize: 20, fontFamily: MONO }} />)}
+            <div style={{ fontSize: 12, color: "#7A879C", marginTop: 6 }}>{driverMode ? "처음 넣은 키로수부터 운행 거리가 자동으로 쌓입니다. 수정은 운송사 담당자에게 요청하세요." : "계기판의 ODO(총 주행거리) 숫자를 그대로 넣어주세요."}</div>
           </>}
           {step === 3 && <>
             <div style={{ fontSize: 12.5, color: "#5B6B85", marginTop: 8 }}>마지막으로 엔진오일을 간 때를 알면 다음 교환 시기를 알려드립니다. 모르면 비워두세요.</div>

@@ -341,11 +341,12 @@ export function RemainEtaText({ order, driverId, location, phase, style, etaStyl
 // ⭐ 사용자 요청 — 지입 기사는 출근/상차중/하차중/복귀중/퇴근 버튼 상태 대신
 //   배차대기 / 오더확인중 / 운송중 / 상차지진입 / 상차지도착 / 하차지진입 / 하차지도착 / 휴차
 // 로 통일해서 보여준다(기사님이 출근만 누르고 오더가 없으면 "배차대기").
-export const FLEET_PHASE_FILTERS = ["전체", "배차대기", "운송중", "상차지진입", "상차지도착", "하차지진입", "하차지도착", "휴차"];
+// ⭐ 2026-11-10 출근 버튼을 누르기 전은 "출근전"(예전엔 배차대기로 보여 출근한 것처럼 보였다) · 퇴근 후는 "퇴근"
+export const FLEET_PHASE_FILTERS = ["전체", "출근전", "배차대기", "운송중", "상차지진입", "상차지도착", "하차지진입", "하차지도착", "휴차", "퇴근"];
 export const FLEET_PHASE_COLORS = {
   "배차대기": "#92400e", "오더확인중": "#d97706", "운송중": "#1B2B4B",
   "상차지진입": "#2563eb", "상차지도착": "#7c3aed", "하차지진입": "#ea580c", "하차지도착": "#db2777",
-  "휴차": "#6b7280",
+  "휴차": "#6b7280", "출근전": "#64748b", "퇴근": "#475569",
 };
 
 export function getCachedGeo(addr) {
@@ -496,6 +497,9 @@ export function computeFleetPhase({ driverStatus, orders = [], location }) {
     return "운송중";
   }
   if (live.some(r => r.기사확인상태 === "대기")) return "오더확인중";
+  // ⭐ 2026-11-10 오더가 없을 때 — 출근 전이면 "출근전", 퇴근했으면 "퇴근", 출근 후에만 "배차대기"
+  if (driverStatus === "퇴근" || driverStatus === "최종퇴근") return "퇴근";
+  if (driverStatus !== "출근") return "출근전";
   return "배차대기";
 }
 

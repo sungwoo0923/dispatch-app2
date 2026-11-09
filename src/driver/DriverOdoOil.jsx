@@ -89,7 +89,7 @@ async function saveChange(uid, by, kind, value, date) {
 function Sheet({ children, onClose }) {
   return (
     <div onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: 10060, background: "rgba(8,14,28,0.62)", backdropFilter: "blur(4px)", WebkitBackdropFilter: "blur(4px)", display: "flex", alignItems: "flex-end", justifyContent: "center", fontFamily: FONT }}>
-      <div className="kpd-sheet" onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 520, maxHeight: "92vh", overflowY: "auto", background: "#fff", borderRadius: "28px 28px 0 0", boxShadow: "0 -20px 60px rgba(8,14,28,.45)", paddingBottom: "max(18px, env(safe-area-inset-bottom))" }}>
+      <div className="kpd-sheet" onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 520, maxHeight: "min(92vh, calc(100dvh - 16px - env(safe-area-inset-top, 0px)))", overflowY: "auto", overscrollBehavior: "contain", background: "#fff", borderRadius: "28px 28px 0 0", boxShadow: "0 -20px 60px rgba(8,14,28,.45)", paddingBottom: "max(18px, env(safe-area-inset-bottom))" }}>
         {children}
       </div>
     </div>
@@ -153,6 +153,43 @@ export function OdoCheckoutSheet({ driver, final = false, busy = false, onSubmit
         <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 16 }}>
           <button type="button" disabled={busy || !value} onClick={submit} style={bigBtn(true, busy || !value)}>{busy ? "처리중..." : final ? "입력하고 최종 퇴근" : "입력하고 퇴근"}</button>
           <button type="button" disabled={busy} onClick={onClose} style={{ ...bigBtn(false), minHeight: 56, fontSize: 18 }}>취소</button>
+        </div>
+      </div>
+    </Sheet>
+  );
+}
+
+// ─── 0) 처음 로그인 — 현재 키로수(필수 · 건너뛰기 없음) ───
+// ⭐ 2026-11-10 기사가 처음 들어오면 가장 먼저 계기판 키로수를 받는다. 한 번 넣으면 기사앱에서는 고칠 수 없고(운송사만 수정),
+//  이후 운행 거리 누적의 출발점이 된다. 저장: drivers/{uid}.care.odometer · odometerAt + odoStartKm · odoStartAt · odoLockedByDriver
+export const needFirstOdo = (drv) => !!drv && !(Number(drv?.care?.odometer) > 0) && !drv?.odoStartAt;
+export async function saveFirstOdo(uid, by, value) {
+  await save(uid, by, { care: { odometer: value, odometerAt: today() }, odoStartKm: value, odoStartAt: Date.now(), odoLockedByDriver: true },
+    { kind: "주행거리", date: today(), km: value, memo: "처음 로그인 · 현재 키로수" });
+}
+export function OdoFirstSheet({ uid, by, onDone }) {
+  const [v, setV] = useState("");
+  const [err, setErr] = useState("");
+  const [busy, setBusy] = useState(false);
+  const value = num(v);
+  const submit = async () => {
+    setErr("");
+    if (!value) { setErr("계기판 키로수를 입력해주세요"); return; }
+    if (!(await kpConfirm(`현재 키로수 ${km(value)}가 맞나요?\n한 번 저장하면 기사앱에서는 바꿀 수 없습니다(운송사에서만 수정).`, { okText: "맞아요" }))) return;
+    setBusy(true);
+    try { await saveFirstOdo(uid, by, value); onDone?.(value); }
+    catch (e) { setErr(`저장하지 못했습니다: ${e?.message || e}`); }
+    finally { setBusy(false); }
+  };
+  return (
+    <Sheet>
+      <SheetHead tag="START · 처음 설정" title="현재 키로수를 입력해주세요" sub="계기판의 총 주행거리(ODO) 숫자를 그대로 넣어주세요. 이 숫자부터 운행 거리가 쌓입니다." />
+      <div style={{ padding: "20px 20px 4px" }} data-testid="odo-first">
+        <KmInput value={v} onChange={(x) => { setV(x); setErr(""); }} autoFocus placeholder="예: 125,000" />
+        <div style={{ fontSize: 15.5, fontWeight: 700, color: "#5B6B85", marginTop: 10, lineHeight: 1.5 }}>꼭 입력해야 다음으로 넘어갑니다. 잘못 넣었으면 운송사 담당자에게 수정을 요청하세요.</div>
+        {err && <div style={{ fontSize: 17, fontWeight: 900, color: "#D92D20", marginTop: 10, textAlign: "center" }}>{err}</div>}
+        <div style={{ marginTop: 16 }}>
+          <button type="button" disabled={busy || !value} onClick={submit} style={bigBtn(true, busy || !value)}>{busy ? "저장 중..." : "저장하고 시작"}</button>
         </div>
       </div>
     </Sheet>

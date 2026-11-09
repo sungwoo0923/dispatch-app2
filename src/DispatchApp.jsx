@@ -24704,7 +24704,7 @@ ${isHighlighted ? "animate-pulse bg-blue-100" : ""}
                       </button>
                     )}
                     {/* ⭐ 2026-11-05 기사앱 수락(초록)/거절(빨강 · 사유는 마우스 올리면) — 안 본 것은 잠깐 맥박 */}
-                    <DriverAckChip row={r} className="ml-1" />
+                    <DriverAckChip row={r} className="ml-1" hideAccept />{/* ⭐ 2026-11-10 "수락" 칩은 안 보임(거절만 · 수락은 알림·토스트로) */}
                   </div>
                   </td>
                   {/* 청구운임 */}
@@ -40429,7 +40429,7 @@ return (
                         onEditClick={(e) => { e.stopPropagation(); if (row.수정요청) markEditRequestSeen(row); setEditReqPopup(row); }}
                       />
                     )}
-                    <DriverAckChip row={row} className="ml-1" />{/* ⭐ 2026-11-05 기사앱 수락/거절 */}
+                    <DriverAckChip row={row} className="ml-1" hideAccept />{/* ⭐ 2026-11-05 기사앱 수락/거절 · 2026-11-10 수락 칩은 숨김(거절만) */}
                   </div>
                   </td>
 

@@ -61,7 +61,7 @@ export default function DriverNotices({ companyName, uid }) {
       {shown.map((n, i) => <Row key={n.id} n={n} last={i === shown.length - 1} />)}
       {open && createPortal(
         <div onClick={() => setOpen(null)} style={{ position: "fixed", inset: 0, zIndex: 99990, background: "rgba(11,20,40,0.55)", display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
-          <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 560, maxHeight: "88vh", overflowY: "auto", background: "#fff", borderRadius: "22px 22px 0 0", paddingBottom: "env(safe-area-inset-bottom)" }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 560, maxHeight: "min(88vh, calc(100dvh - 32px))", overscrollBehavior: "contain", overflowY: "auto", background: "#fff", borderRadius: "22px 22px 0 0", paddingBottom: "env(safe-area-inset-bottom)" }}>
             <div style={{ position: "sticky", top: 0, padding: "16px 18px", color: "#fff", background: "linear-gradient(120deg,#0B1428 0%,#1B2B4B 65%,#2D4C82 100%)", display: "flex", alignItems: "flex-start", gap: 10 }}>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 13.5, fontWeight: 800, letterSpacing: "0.24em", color: "#8FB0F0", fontFamily: MONO }}>NOTICE · {md(whenOf(open))}</div>

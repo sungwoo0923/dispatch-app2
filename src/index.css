@@ -367,3 +367,8 @@ input[type="file"]::file-selector-button:hover { border-color: #2D4C82; backgrou
 .ap-tabs-scroll::-webkit-scrollbar-track { background: #F1F4F9; border-radius: 99px; }
 .ap-tabs-scroll::-webkit-scrollbar-thumb { background: #B8C4D8; border-radius: 99px; }
 .ap-tabs-scroll::-webkit-scrollbar-thumb:hover { background: #8FA3C2; }
+
+/* 🪟 2026-11-10 팝업 안 스크롤 상자는 끝에 닿아도 뒤 화면으로 스크롤이 넘어가지 않게(전역 · src/modalScrollLock.js와 함께) */
+.fixed .overflow-y-auto, .fixed .overflow-auto, .fixed .overflow-y-scroll, .fixed.overflow-y-auto, .fixed.overflow-auto {
+  overscroll-behavior: contain;
+}

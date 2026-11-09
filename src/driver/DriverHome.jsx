@@ -41,12 +41,12 @@ import MobileSelect from "../mobile/MobileSelect"; // ⭐ 2026-11-02 기본 sele
 import { LogisTag } from "../brand"; // 🔷 2026-11-04 LogisWeb 로고
 // ⭐ 2026-11-05 출근 안내·새 오더 승인/거절·삭제 오더 안내 팝업, 빨간 숫자 배지, 알림 켜기 안내, 긴급 연락처(차량 담당자)
 import DriverUpdateBanner from "./DriverUpdateBanner"; // ⭐ 2026-11-05 웹·APK 업데이트 안내
-import { CheckinPrompt, shouldPromptCheckin, WorkStartSetting, NewOrderPopup, ModifiedOrderPopup, DeletedOrdersPopup, PushSetupCard, RedBadge, useEmergencyContact, KP_RED } from "./DriverPopups";
+import { CheckinPrompt, shouldPromptCheckin, WorkStartSetting, NewOrderPopup, ModifiedOrderPopup, DeletedOrdersPopup, PushSetupCard, RedBadge, useEmergencyContact, KP_RED, UrgentMemo } from "./DriverPopups";
 import CustomDatePicker from "../CustomDatePicker"; // 📅 2026-11-07 날짜는 프로그램 달력으로
 import "./driverTheme.css"; // ⭐ 2026-11-08 기사앱 리디자인 공통 테마
 import { useCompanyFeature } from "../companyFeatures";
 // ⭐ 2026-11-08 업체 요청(회사별 기능) — 퇴근 키로수 입력 · 엔진오일(5만km, 4만km 알림)·타이어 표시
-import { ODO_OIL_FEATURE, needOilConfirm, saveCheckoutKm, saveOilAck, oilInfo, OdoCheckoutSheet, OilAlertSheet, ChangeRecordSheet, OilTireCard } from "./DriverOdoOil";
+import { ODO_OIL_FEATURE, needOilConfirm, saveCheckoutKm, saveOilAck, oilInfo, OdoCheckoutSheet, OilAlertSheet, ChangeRecordSheet, OilTireCard, needFirstOdo, OdoFirstSheet } from "./DriverOdoOil";
 
 // ⭐ 오더 타임라인 — 기사 행동(수락/거절/수정확인/상차지도착/상차완료/운송완료 등)을
 // 오더 문서의 기사타임라인 배열에 "덮어쓰지 않고" 계속 쌓는다(관리자 지입차관리 타임라인).
@@ -257,7 +257,7 @@ function getActions(status, isFinalCheckout) {
         { label: "상차 시작", status: "상차중", primary: true },
         { label: "대기", status: "대기", primary: false },
         { label: "휴식", status: "휴식", primary: false },
-        { label: "휴차 처리", status: "휴차", primary: false },
+        // ⭐ 2026-11-10 출근 후에는 휴차 대신 퇴근(같은 뜻) — 휴차 처리는 출근 전에만
         { label: "퇴근", status: "퇴근", primary: false },
       ];
     case "상차중":
@@ -492,6 +492,8 @@ function OrderDetailBody({ o, onCopy, changed = [] }) {
   return (
     <div style={{ display: "flex", flexDirection: "column" }}>
       <style>{`@keyframes kpRedBlink { 0%,100% { opacity: 1; } 50% { opacity: .35; } }`}</style>
+      {/* ⭐ 2026-11-10 긴급 오더·메모는 맨 위에(아래 전달사항 칸은 긴급이 아닐 때만) */}
+      {o.긴급 === true && <UrgentMemo order={o} compact />}
       <LocBlock title="상차" name={o.상차지명} addr={o.상차지주소} when={fmtDT(o.상차일, o.상차시간)} manager={o.상차지담당자} managerPhone={o.상차지담당자번호} onCopy={onCopy}
         chName={any("상차지명")} chAddr={any("상차지주소")} chWhen={any("상차일", "상차시간")} chManager={any("상차지담당자", "상차지담당자번호")} />
       {/* 🛣 경유·거점 — 여러 곳을 들르는 오더(고정노선 등)는 순서대로 보여준다(하차지별 운임이 있으면 함께) */}
@@ -546,7 +548,7 @@ function OrderDetailBody({ o, onCopy, changed = [] }) {
           ))}
         </div>
       )}
-      {o.전달사항 && (
+      {o.전달사항 && o.긴급 !== true && (
         <div style={{ fontSize: 16.5, fontWeight: 700, color: "#1B2B4B", background: "linear-gradient(135deg,#F2F6FD,#EAF0FB)", border: "1px solid #D5E0F2", padding: "12px 14px", borderRadius: 14, marginTop: 10, wordBreak: "break-word", lineHeight: 1.5, ...(any("전달사항") ? CHG : {}) }}>
           전달사항: {o.전달사항}
         </div>
@@ -2179,9 +2181,8 @@ export default function DriverHome() {
     } else if (currentStatus === "출근") {
       actions = [
         { label: "대기", status: "__대기중__", primary: true, disabled: true, pressed: true },
-        { label: "휴차 처리", status: "휴차", primary: false },
-        // ⭐ 2026-11-08 업체 요청 — 퇴근 키로수 입력 기능이 켜진 회사만 지입 기사에게도 [퇴근] 버튼
-        ...(odoOn ? [{ label: "퇴근 (키로수 입력)", status: "퇴근", primary: false }] : []),
+        // ⭐ 2026-11-10 출근 후에는 [휴차] 대신 [퇴근]만(휴차와 퇴근은 같은 뜻) — 휴차 처리는 출근 전에만
+        { label: odoOn ? "퇴근 (키로수 입력)" : "퇴근", status: "퇴근", primary: false },
       ];
     } else {
       actions = [
@@ -2386,7 +2387,7 @@ export default function DriverHome() {
       {/* ⭐ 2026-11-08 운송완료 직후 — 하차(인수증) 사진 올리기 창. [나중에]를 누르면 홈에 다시 올리기 칸이 남는다 */}
       {dropPhotoAsk && (
         <div style={{ position: "fixed", inset: 0, zIndex: 10060, background: "rgba(8,14,28,0.62)", backdropFilter: "blur(4px)", WebkitBackdropFilter: "blur(4px)", display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
-          <div className="kpd-sheet" style={{ width: "100%", maxWidth: 520, background: "#fff", borderRadius: "28px 28px 0 0", overflow: "hidden", paddingBottom: "max(18px, env(safe-area-inset-bottom))", boxShadow: "0 -20px 60px rgba(8,14,28,.45)" }}>
+          <div className="kpd-sheet" style={{ width: "100%", maxWidth: 520, background: "#fff", borderRadius: "28px 28px 0 0", overflowX: "hidden", overflowY: "auto", maxHeight: "calc(100dvh - 12px)", overscrollBehavior: "contain", paddingBottom: "max(18px, env(safe-area-inset-bottom))", boxShadow: "0 -20px 60px rgba(8,14,28,.45)" }}>
             <div style={{ padding: "22px 22px 20px", color: "#fff", background: "radial-gradient(420px 180px at 90% -30px, rgba(111,160,255,0.42), transparent 70%), linear-gradient(160deg, #070D1C 0%, #0F1D3A 52%, #1F3A6E 100%)" }}>
               <div style={{ fontSize: 14, fontWeight: 800, letterSpacing: "0.16em", color: "#9DBDFF" }}>COMPLETE · 운송완료</div>
               <div style={{ fontSize: 25, fontWeight: 900, marginTop: 4 }}>운송완료 되었습니다 ✓</div>
@@ -2397,6 +2398,12 @@ export default function DriverHome() {
                 📷 {fleetPhotoUploading ? "올리는 중..." : "사진 찍어 올리기"}
                 <input type="file" accept="image/*" capture="environment" style={{ display: "none" }} disabled={fleetPhotoUploading}
                   onChange={async (e) => { const f = e.target.files?.[0]; e.target.value = ""; if (!f) return; const t = dropPhotoAsk; await handleFleetPhotoFile(f, "하차완료", t.orderId, t.col); setDropPhotoAsk(null); }} />
+              </label>
+              {/* ⭐ 2026-11-10 사진 보관함(앨범)에서 고르기 — 이미 찍어 둔 인수증 사진, 여러 장 가능 */}
+              <label data-testid="drop-photo-album" style={{ width: "100%", minHeight: 60, borderRadius: 18, display: "flex", alignItems: "center", justifyContent: "center", gap: 10, fontSize: 19, fontWeight: 900, color: "#1B2B4B", cursor: fleetPhotoUploading ? "default" : "pointer", background: "#EEF3FC", border: "2px solid #C9D6EA" }}>
+                🖼 사진 보관함에서 선택
+                <input type="file" accept="image/*" multiple style={{ display: "none" }} disabled={fleetPhotoUploading}
+                  onChange={async (e) => { const files = [...(e.target.files || [])]; e.target.value = ""; if (!files.length) return; const t = dropPhotoAsk; for (const f of files) await handleFleetPhotoFile(f, "하차완료", t.orderId, t.col); setDropPhotoAsk(null); }} />
               </label>
               <button type="button" disabled={fleetPhotoUploading} onClick={() => { setDropPhotoAsk(null); showToast("운송완료 처리되었습니다. 사진은 홈에서 나중에 올릴 수 있어요"); }}
                 style={{ width: "100%", minHeight: 56, borderRadius: 18, border: "2px solid #C9D6EA", background: "#fff", color: "#1B2B4B", fontSize: 18, fontWeight: 900, cursor: "pointer" }}>나중에 올리기</button>
@@ -2492,7 +2499,9 @@ export default function DriverHome() {
       </div>
 
       {/* ─── 내용(이 안에서만 스크롤) ─── */}
-      <div ref={scrollBoxRef} style={{ flex: 1, minHeight: 0, overflowY: "auto", overflowX: "hidden", WebkitOverflowScrolling: "touch", overscrollBehavior: "contain", paddingBottom: 12 }}>
+      {/* ⭐ 2026-11-10 WebkitOverflowScrolling(touch)을 뺐다 — 아이폰에서 이 상자 안의 고정 팝업(운행일지 상세·달력·사진 올리기)이
+          상자와 같이 움직이거나 잘려 [닫기]까지 스크롤이 안 됐다(요즘 아이폰은 기본으로 관성 스크롤이라 없어도 된다) */}
+      <div ref={scrollBoxRef} style={{ flex: 1, minHeight: 0, overflowY: "auto", overflowX: "hidden", overscrollBehavior: "contain", paddingBottom: 12 }}>
 
       {/* ─── 탭: 홈 ─── */}
       {activeTab === "docs" && <DriverDocBox uid={uid} inbox={inbox} companyName={driver?.companyName || ""} />}
@@ -2759,7 +2768,8 @@ export default function DriverHome() {
                     {sent ? "✓ 전송완료" : enabled ? (fleetPhotoUploading ? "전송중..." : "탭하여 업로드") : "미전송"}
                   </div>
                   {enabled && !sent && (
-                    <input type="file" accept="image/*" capture="environment" style={{ display: "none" }}
+                    // ⭐ 2026-11-10 capture를 빼서 휴대폰이 "사진 찍기 / 사진 보관함" 중 고르게 한다
+                    <input type="file" accept="image/*" style={{ display: "none" }}
                       onChange={e => { const f = e.target.files?.[0]; e.target.value = ""; if (f) handleFleetPhotoFile(f, actionType, targetId, targetCol); }} />
                   )}
                 </label>
@@ -2797,7 +2807,8 @@ export default function DriverHome() {
           {/* 이전 상태로 되돌리기 */}
           {/* ⭐ 지입 기사님이 오더를 받았거나 운송 중이면 되돌리기를 막는다
               (운송 중에 휴차/출근 등 이전 상태로 돌아가면 관리자 화면 상태가 꼬인다) */}
-          {todayLogs.length > 0 && !driver.isFinalCheckout && !(isFleetDriver && hasActiveDispatch) && (
+          {/* ⭐ 2026-11-10 사용자 요청 — "이전 상태로 되돌리기" 버튼은 없앤다(기록 꼬임 방지) */}
+          {false && todayLogs.length > 0 && !driver.isFinalCheckout && !(isFleetDriver && hasActiveDispatch) && (
             <div style={{ marginBottom: 14 }}>
               <button
                 onClick={handleUndoLastStatus}
@@ -2851,8 +2862,12 @@ export default function DriverHome() {
         </div>
       )}
 
-      {vehicleSetup && uid && (
-        <VehicleSetupWizard driverId={uid} drv={driver} by={`${driver.name || driver.이름 || "기사"}(기사)`} onClose={(done) => { setVehicleSetup(false); if (done) { showToast("차량 설정이 저장되었습니다"); setActiveTab("vehicle"); } }} />
+      {/* ⭐ 2026-11-10 처음 로그인 — 현재 키로수(필수)를 가장 먼저, 저장하면 아래 차량 기본 설정이 이어서 뜬다 */}
+      {uid && driver && needFirstOdo(driver) && (
+        <OdoFirstSheet uid={uid} by={`${driver.name || driver.이름 || "기사"}(기사)`} onDone={() => showToast("현재 키로수를 저장했습니다")} />
+      )}
+      {vehicleSetup && uid && !(driver && needFirstOdo(driver)) && (
+        <VehicleSetupWizard driverMode driverId={uid} drv={driver} by={`${driver.name || driver.이름 || "기사"}(기사)`} onClose={(done) => { setVehicleSetup(false); if (done) { showToast("차량 설정이 저장되었습니다"); setActiveTab("vehicle"); } }} />
       )}
 
       {activeTab === "temperature" && (
@@ -3305,8 +3320,8 @@ export default function DriverHome() {
 
           {/* 달력 날짜 상세 팝업 */}
           {calendarDayDetail && (
-            <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", zIndex: 9998, display: "flex", alignItems: "flex-end", justifyContent: "center" }} onClick={() => setCalendarDayDetail(null)}>
-              <div style={{ background: "white", borderRadius: "20px 20px 0 0", padding: "0 0 32px", width: "100%", maxWidth: 480, boxShadow: "0 -8px 32px rgba(0,0,0,0.2)", maxHeight: "80vh", overflowY: "auto" }} onClick={e => e.stopPropagation()}>
+            <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", zIndex: 100030, display: "flex", alignItems: "flex-end", justifyContent: "center" }} onClick={() => setCalendarDayDetail(null)}>
+              <div style={{ background: "white", borderRadius: "20px 20px 0 0", padding: "0 0 32px", width: "100%", maxWidth: 480, boxShadow: "0 -8px 32px rgba(0,0,0,0.2)", maxHeight: "min(80vh, calc(100dvh - 24px))", overflowY: "auto", overscrollBehavior: "contain" }} onClick={e => e.stopPropagation()}>
                 <div style={{ background: "#1B2B4B", padding: "18px 20px 16px", borderRadius: "20px 20px 0 0", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                   <div style={{ color: "white", fontWeight: 800, fontSize: 17 }}>{calendarDayDetail.dateStr}</div>
                   <button onClick={() => setCalendarDayDetail(null)} style={{ background: "none", border: "none", color: "rgba(255,255,255,0.5)", fontSize: 23, cursor: "pointer", lineHeight: 1 }}>×</button>
@@ -3584,8 +3599,8 @@ export default function DriverHome() {
               } catch (_) { showToast("이미지 저장에 실패했습니다"); }
             };
             return (
-              <div onClick={() => setLogDetail(null)} style={{ position: "fixed", inset: 0, zIndex: 9999, background: "rgba(15,23,42,.55)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
-                <div onClick={e => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, maxHeight: "88vh", overflowY: "auto", background: "#fff", borderRadius: 20 }}>
+              <div onClick={() => setLogDetail(null)} style={{ position: "fixed", inset: 0, zIndex: 100040, background: "rgba(15,23,42,.55)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+                <div onClick={e => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, maxHeight: "min(88vh, calc(100dvh - 32px))", overflowY: "auto", overscrollBehavior: "contain", background: "#fff", borderRadius: 20 }}>
                   <div ref={logDetailRef} style={{ padding: "18px 18px 8px", background: "#fff" }}>
                     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                       <div style={{ fontSize: 19, fontWeight: 900, color: "#0F1A30" }}>운행일지</div>
@@ -3679,8 +3694,8 @@ export default function DriverHome() {
 
       {/* ─── 사진 업로드 모달 ─── */}
       {photoModal && (
-        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.55)", zIndex:9999, display:"flex", alignItems:"flex-end", justifyContent:"center" }}>
-          <div style={{ background:"white", borderRadius:"20px 20px 0 0", width:"100%", maxWidth:480, boxShadow:"0 -8px 32px rgba(0,0,0,0.25)", paddingBottom:"max(24px, env(safe-area-inset-bottom))" }}>
+        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.55)", zIndex:100040, display:"flex", alignItems:"flex-end", justifyContent:"center" }}>
+          <div style={{ background:"white", borderRadius:"20px 20px 0 0", width:"100%", maxWidth:480, boxShadow:"0 -8px 32px rgba(0,0,0,0.25)", paddingBottom:"max(24px, env(safe-area-inset-bottom))", maxHeight:"calc(100dvh - 12px)", overflowY:"auto", overscrollBehavior:"contain" }}>
             <div style={{ background:"#1B2B4B", padding:"18px 20px 16px", borderRadius:"20px 20px 0 0", display:"flex", alignItems:"center", justifyContent:"space-between" }}>
               <div>
                 <div style={{ color:"white", fontWeight:800, fontSize:17 }}>{photoModal.actionLabel}</div>
@@ -3696,7 +3711,7 @@ export default function DriverHome() {
                 {/* 카메라 직접 촬영 */}
                 <label style={{ display:"block", width:"100%", padding:"15px", borderRadius:14, background:"#1B2B4B", color:"white", fontSize:17, fontWeight:700, textAlign:"center", cursor: photoUploading ? "not-allowed" : "pointer", opacity: photoUploading ? 0.6 : 1, boxShadow:"0 4px 16px rgba(27,43,75,0.25)" }}>
                   {photoUploading ? "업로드 중..." : "카메라로 촬영"}
-                  <input type="file" accept="image/*" capture="environment" style={{ display:"none" }} disabled={photoUploading}
+                  <input type="file" accept="image/*" style={{ display:"none" }} disabled={photoUploading}
                     onChange={e => { const f = e.target.files?.[0]; if (f) handlePhotoUpload(f); e.target.value=""; }} />
                 </label>
                 {/* 앨범 선택 */}

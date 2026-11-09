@@ -4,6 +4,7 @@ import { auth, db, FUNCTIONS_BASE } from "../firebase";
 import { createUserWithEmailAndPassword, signOut } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
 import { useNavigate } from "react-router-dom";
+import { readPublicCompanies } from "../publicCompanies"; // ⭐ 2026-11-10 소속 운송사명 검색 드롭다운
 import BigCheck from "../components/BigCheck";
 import { LogisMark, LogisWordmark, LogisTag } from "../brand"; // 🔷 2026-11-04 LogisWeb 로고
 import { legacyDriverEmail, scopedDriverEmail, signInDriver } from "./driverEmail";
@@ -33,6 +34,14 @@ export default function DriverLogin() {
   const [companyNameState, setCompanyName] = useState(keep ? saved.companyName || "" : "");
   const [carNoState, setCarNo] = useState(keep ? saved.carNo || "" : "");
   const [nameState, setName] = useState(keep ? saved.name || "" : "");
+  // ⭐ 2026-11-10 소속 운송사명 — 가입 화면처럼 입력하면 공개 운송사 목록에서 찾아 고른다(목록에 없어도 입력값 그대로 로그인 가능)
+  const [coList, setCoList] = useState([]);
+  const [coOpen, setCoOpen] = useState(false);
+  useEffect(() => { readPublicCompanies().then(setCoList).catch(() => {}); }, []);
+  const coNorm = (v) => String(v || "").replace(/\s+/g, "").toLowerCase();
+  const coKey = coNorm(companyNameState);
+  const coMatches = coKey ? coList.filter((c) => coNorm(c.companyName).includes(coKey) && coNorm(c.companyName) !== coKey)
+    .sort((a, b) => coNorm(b.companyName).startsWith(coKey) - coNorm(a.companyName).startsWith(coKey) || a.companyName.localeCompare(b.companyName, "ko")).slice(0, 6) : [];
   const [rememberInfo, setRememberInfo] = useState(saved ? saved.remember !== false : true);
   const [autoLogin, setAutoLogin] = useState(saved ? saved.autoLogin === true : false);
   // ⭐ 2026-11-05 실패 안내 — { title, message, hint, tone }. 화면이 다시 그려져도 남도록 sessionStorage에도 둔다
@@ -268,7 +277,22 @@ export default function DriverLogin() {
             <p className="text-[14.5px] sm:text-[15.5px] text-[#7A879C] mt-1 mb-5 sm:mb-7">소속 회사 · 차량번호 · 이름으로 로그인하세요</p>
 
             {field("company", "소속 운송사명", (
-              <input value={companyNameState} onChange={(e) => setCompanyName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && login()} placeholder="소속된 운송사명 입력" className={inputCls} />
+              <div className="relative">
+                <input value={companyNameState} onChange={(e) => { setCompanyName(e.target.value); setCoOpen(true); }} onFocus={() => setCoOpen(true)} onBlur={() => setTimeout(() => setCoOpen(false), 200)}
+                  onKeyDown={(e) => { if (e.key === "Enter" && !e.nativeEvent.isComposing) { if (coOpen && coMatches.length === 1) { e.preventDefault(); setCompanyName(coMatches[0].companyName); setCoOpen(false); return; } login(); } }}
+                  autoComplete="off" autoCorrect="off" spellCheck={false} placeholder="소속된 운송사명 검색" className={inputCls} data-testid="login-co-input" />
+                {coOpen && coMatches.length > 0 && (
+                  <div data-testid="login-co-list" className="absolute z-30 left-0 right-0 top-full mt-1.5 bg-white border-2 border-[#C9D6EE] rounded-2xl shadow-[0_18px_40px_rgba(15,26,48,.22)] overflow-hidden max-h-[300px] overflow-y-auto overscroll-contain">
+                    {coMatches.map((c) => (
+                      <button key={c.companyName} type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => { setCompanyName(c.companyName); setCoOpen(false); }}
+                        className="w-full text-left px-4 min-h-[54px] py-2.5 border-b border-[#EEF1F6] last:border-0 active:bg-[#EEF3FC] hover:bg-[#F5F8FD]">
+                        <span className="block text-[17px] font-black text-[#0F1A30] truncate">{c.companyName}</span>
+                        {c.address && <span className="block text-[14px] font-semibold text-[#7A89A3] truncate">{c.address}</span>}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
             ))}
             {field("car", "차량번호", (
               <input value={carNoState} onChange={(e) => setCarNo(e.target.value)} onKeyDown={(e) => e.key === "Enter" && login()} placeholder="예: 경기97가1234" className={inputCls} />

@@ -32,7 +32,7 @@ export function RedBadge({ n, style }) {
 function Overlay({ children, z = 10050 }) {
   return (
     <div style={{ position: "fixed", inset: 0, zIndex: z, background: "rgba(8,14,28,0.62)", backdropFilter: "blur(4px)", WebkitBackdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center", padding: "16px", fontFamily: FONT }}>
-      <div className="kpd-sheet" style={{ width: "100%", maxWidth: 440, maxHeight: "calc(100vh - 32px)", overflowY: "auto", borderRadius: 28, background: "#fff", boxShadow: "0 30px 70px rgba(8,14,28,0.55), 0 0 0 1px rgba(160,190,255,.18)" }}>
+      <div className="kpd-sheet" style={{ width: "100%", maxWidth: 440, maxHeight: "min(calc(100vh - 32px), calc(100dvh - 32px))", overflowY: "auto", overscrollBehavior: "contain", borderRadius: 28, background: "#fff", boxShadow: "0 30px 70px rgba(8,14,28,0.55), 0 0 0 1px rgba(160,190,255,.18)" }}>
         {children}
       </div>
     </div>
@@ -170,6 +170,28 @@ function Place({ tag, name, addr, at }) {
     </div>
   );
 }
+// ⭐ 2026-11-10 긴급 메모 — 긴급 오더(o.긴급)거나 전달사항·메모가 있으면 눈에 띄게. 오더 받을 때 팝업·승인 후 오더 카드 공통
+//  · 긴급 오더: 진한 남색 바탕 + 빨간 점 깜빡임 "긴급" · 메모가 길면 접었다가 누르면 펼친다
+export function UrgentMemo({ order: o, compact = false }) {
+  const [open, setOpen] = useState(!compact);
+  if (!o) return null;
+  const memo = String(o.전달사항 || o.메모 || "").trim();
+  const urgent = o.긴급 === true;
+  if (!urgent && !memo) return null;
+  const long = memo.length > 40;
+  return (
+    <div data-testid="urgent-memo" onClick={() => long && setOpen((v) => !v)} role={long ? "button" : undefined}
+      style={{ margin: "10px 0 4px", borderRadius: 16, padding: "12px 14px", background: urgent ? "linear-gradient(135deg,#0B1428,#1B2B4B)" : "#F2F6FD", border: urgent ? "2px solid #D92D20" : "1px solid #D5E0F2", color: urgent ? "#fff" : "#1B2B4B", cursor: long ? "pointer" : "default", fontFamily: FONT }}>
+      <style>{`@keyframes kpUrgDot { 0%,100% { opacity: 1 } 50% { opacity: .25 } }`}</style>
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        {urgent && <span style={{ width: 10, height: 10, borderRadius: "50%", background: "#F04438", animation: "kpUrgDot 1.1s ease-in-out infinite", flexShrink: 0 }} />}
+        <span style={{ fontSize: 16, fontWeight: 900, letterSpacing: "0.04em", color: urgent ? "#FECDCA" : "#4B6CB7" }}>{urgent ? "긴급 오더" : "메모"}{memo && urgent ? " · 메모 확인" : ""}</span>
+        {long && <span style={{ marginLeft: "auto", fontSize: 14, fontWeight: 800, opacity: 0.75 }}>{open ? "접기 ▲" : "펼치기 ▼"}</span>}
+      </div>
+      {memo && <div style={{ marginTop: 6, fontSize: 17.5, fontWeight: 800, lineHeight: 1.45, wordBreak: "break-word", ...(open ? {} : { overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }) }}>{memo}</div>}
+    </div>
+  );
+}
 export const REJECT_REASONS = ["차량 정비 중이에요", "거리가 너무 멀어요", "시간이 안 맞아요", "다른 운행 중이에요"];
 
 export function NewOrderPopup({ order: o, count = 1, loading, onAccept, onReject, onLater }) {
@@ -184,12 +206,12 @@ export function NewOrderPopup({ order: o, count = 1, loading, onAccept, onReject
       <Head en="NEW ORDER" title="새 오더가 도착했어요" sub={[o.거래처명, count > 1 ? `수락 대기 ${count}건` : ""].filter(Boolean).join(" · ")} />
       {step === "view" ? (
         <div style={{ padding: "8px 20px 20px" }}>
+          <UrgentMemo order={o} />
           <Place tag="상차" name={o.상차지명} addr={o.상차지주소} at={when(o.상차일, o.상차시간)} />
           <Place tag="하차" name={o.하차지명} addr={o.하차지주소} at={when(o.하차일, o.하차시간)} />
           <Row k="화물" v={o.화물내용} />
           <Row k="톤수" v={tonType} />
           <Row k="운임" v={pay} strong />
-          <Row k="메모" v={o.전달사항 || o.메모} />
           <div style={{ display: "flex", gap: 10, marginTop: 18 }}>
             <button type="button" disabled={loading} onClick={() => setStep("reject")} style={{ ...bigBtn(false), flex: 1, opacity: loading ? 0.6 : 1 }}>거절</button>
             <button type="button" disabled={loading} onClick={onAccept} style={{ ...bigBtn(true), flex: 1.4, opacity: loading ? 0.6 : 1 }}>{loading ? "처리중…" : "승인"}</button>
