@@ -41,11 +41,15 @@ export async function removeApFile(f) {
   await deleteObject(sRef(storage, f.path)).catch((e) => { if (e?.code !== "storage/object-not-found") throw e; });
 }
 const blobCache = new Map();
+// ⭐ 2026-11-09 첨부가 "불러오는 중"에서 멈추던 문제 — 저장소 응답이 없으면 SDK가 최대 2분 동안 조용히 다시 시도하고,
+//  그 멈춘 요청이 캐시에 남아 문서를 다시 열어도 계속 멈춰 있었다 → 25초가 지나면 실패로 끝내고(캐시도 지움) 이유와 [다시 시도]를 보여 준다
+const AP_BLOB_TIMEOUT = 25000;
 export async function apFileBlob(f) {
   if (!f?.path) throw new Error("파일 위치가 없어요");
   if (localUrls.has(f.path)) return (await fetch(localUrls.get(f.path))).blob();
   if (blobCache.has(f.path)) return blobCache.get(f.path);
-  const p = getBlob(sRef(storage, f.path)).then((b) => (f.type && b.type !== f.type ? new Blob([b], { type: f.type }) : b));
+  const timeout = new Promise((_, rej) => setTimeout(() => { const e = new Error("응답 없음"); e.code = "timeout"; rej(e); }, AP_BLOB_TIMEOUT));
+  const p = Promise.race([getBlob(sRef(storage, f.path)), timeout]).then((b) => (f.type && b.type !== f.type ? new Blob([b], { type: f.type }) : b));
   blobCache.set(f.path, p);
   p.catch(() => blobCache.delete(f.path));
   return p;
@@ -89,29 +93,42 @@ export async function saveAllApFiles({ files = [], images = [], docNo = "" }) {
   saveBlob(await zip.generateAsync({ type: "blob" }), `${base}_첨부${items.length}개.zip`);
 }
 
-// 미리보기용 blob 주소(화면에 보이는 동안만)
+// 불러오기 실패 이유 — 사용자에게 보여 줄 말(괄호 안 코드는 문의할 때 알려 주면 원인을 바로 찾는다)
+export function apFileErrText(e) {
+  const c = String(e?.code || "");
+  if (c === "storage/unauthorized") return "이 파일을 볼 권한이 없어요 (storage/unauthorized)";
+  if (c === "storage/object-not-found") return "파일이 저장소에 없어요 — 기안자가 올리는 중 창을 닫았을 수 있어요. 기안자에게 다시 첨부를 요청해 주세요 (object-not-found)";
+  if (c === "timeout" || c === "storage/retry-limit-exceeded") return "저장소 응답이 없어요 — 인터넷·회사 방화벽에서 firebasestorage.googleapis.com 접속이 막혔는지 확인해 주세요";
+  if (c === "storage/unauthenticated") return "로그인이 풀렸어요 — 다시 로그인해 주세요";
+  return `파일을 불러오지 못했어요${c ? ` (${c})` : ""}`;
+}
+// 미리보기용 blob 주소(화면에 보이는 동안만) · retry()로 다시 받기
 function useBlobUrl(f, on = true) {
   const [url, setUrl] = React.useState("");
   const [err, setErr] = React.useState("");
+  const [tick, setTick] = React.useState(0);
   React.useEffect(() => {
     if (!on || !f?.path) return undefined;
     let alive = true; let u = "";
-    apFileBlob(f).then((b) => { if (!alive) return; u = URL.createObjectURL(b); setUrl(u); }).catch((e) => { if (alive) setErr(e?.code === "storage/unauthorized" ? "이 파일을 볼 권한이 없어요" : "파일을 불러오지 못했어요"); });
+    setErr("");
+    apFileBlob(f).then((b) => { if (!alive) return; u = URL.createObjectURL(b); setUrl(u); }).catch((e) => { if (alive) setErr(apFileErrText(e)); });
     return () => { alive = false; if (u) setTimeout(() => URL.revokeObjectURL(u), 1000); };
-  }, [f?.path, on]); // eslint-disable-line react-hooks/exhaustive-deps
-  return { url, err };
+  }, [f?.path, on, tick]); // eslint-disable-line react-hooks/exhaustive-deps
+  const retry = () => { if (f?.path) blobCache.delete(f.path); setErr(""); setUrl(""); setTick((n) => n + 1); };
+  return { url, err, retry };
 }
-function Thumb({ f, onOpen }) {
-  const { url, err } = useBlobUrl(f, fileKind(f) === "image" && canPreview(f));
+function Thumb({ f, onOpen, onUrl }) {
+  const { url, err, retry } = useBlobUrl(f, fileKind(f) === "image" && canPreview(f));
+  React.useEffect(() => { onUrl?.(f.path, url); }, [url]); // eslint-disable-line react-hooks/exhaustive-deps
   return (
-    <button type="button" onClick={onOpen} title={`${f.name} 크게 보기`} className="relative block w-full rounded-xl overflow-hidden border border-[#E3E8F0] bg-[#F5F7FA] focus:outline-none focus:ring-2 focus:ring-[#2D4C82]/40">
-      {url ? <img src={url} alt={f.name} className="w-full h-28 sm:h-36 object-cover" /> : <div className="w-full h-28 sm:h-36 grid place-items-center text-[12px] font-bold text-[#8E9BB2]">{err || "불러오는 중"}</div>}
+    <button type="button" onClick={() => onOpen(url)} title={`${f.name} 크게 보기`} className="relative block w-full rounded-xl overflow-hidden border border-[#E3E8F0] bg-[#F5F7FA] focus:outline-none focus:ring-2 focus:ring-[#2D4C82]/40">
+      {url ? <img src={url} alt={f.name} className="w-full h-28 sm:h-36 object-cover" /> : <div className="w-full h-28 sm:h-36 grid place-items-center content-center gap-1 px-2 text-center text-[12px] font-bold text-[#8E9BB2]">{err ? <><span className="text-[#9A1F15] leading-snug">{err}</span><span role="button" tabIndex={0} onClick={(e) => { e.stopPropagation(); retry(); }} onKeyDown={(e) => { if (e.key === "Enter") { e.stopPropagation(); retry(); } }} className="h-7 px-2.5 rounded-md border border-[#DCE3EE] bg-white text-[#2D4C82] inline-flex items-center">다시 시도</span></> : "불러오는 중"}</div>}
       <span className="absolute left-1.5 bottom-1.5 right-1.5 h-5 px-1.5 rounded-md bg-[#0F1A30]/80 text-white text-[10.5px] font-bold truncate text-left leading-5">{f.name}</span>
     </button>
   );
 }
 function Viewer({ f, onClose }) {
-  const { url, err } = useBlobUrl(f, true);
+  const { url, err, retry } = useBlobUrl(f, true);
   const k = fileKind(f);
   return (
     <div className="mt-3 rounded-2xl border border-[#DCE3EE] bg-[#F5F7FA] overflow-hidden" data-ap-file-view={k}>
@@ -120,7 +137,7 @@ function Viewer({ f, onClose }) {
         <span className="flex-1 min-w-0 truncate text-[13.5px] font-black text-[#0F1A30]">{f.name}</span>
         <button type="button" onClick={onClose} className="h-8 px-3 rounded-lg border border-[#DCE3EE] text-[12.5px] font-black text-[#3A4A66]">닫기</button>
       </div>
-      {err ? <div className="p-6 text-center text-[13.5px] font-bold text-[#5B6B85]">{err}</div>
+      {err ? <div className="p-6 text-center text-[13.5px] font-bold text-[#9A1F15] grid gap-2 justify-items-center">{err}<button type="button" onClick={retry} className="h-8 px-3 rounded-lg border border-[#DCE3EE] bg-white text-[12.5px] font-black text-[#2D4C82]">다시 시도</button></div>
         : !url ? <div className="p-6 text-center text-[13.5px] font-bold text-[#8E9BB2]">불러오는 중…</div>
           : k === "pdf" ? <object data={url} type="application/pdf" className="w-full block bg-white" style={{ height: "min(72vh, 820px)" }} aria-label={f.name}><iframe src={url} title={f.name} className="w-full block" style={{ height: "min(72vh, 820px)", border: 0 }} /></object>
             : <div className="p-3 grid place-items-center bg-[#0F1A30]/[0.04]"><img src={url} alt={f.name} className="max-w-full object-contain" style={{ maxHeight: "72vh" }} /></div>}
@@ -201,14 +218,23 @@ export function ApprovalAttachInput({ company, docId, me, files, setFiles, onRem
 }
 
 // 문서 보기 — 첨부 목록 · 사진 썸네일 · PDF 미리보기 · 하나씩/모두 저장
-export function ApprovalAttachPanel({ files = [], images = [], docNo, onImage }) {
+export function ApprovalAttachPanel({ files = [], images = [], docNo, onImage, onGallery }) {
   const [view, setView] = React.useState(null);
   const [busy, setBusy] = React.useState("");
+  const urls = React.useRef({}); // 불러온 사진 파일 path → blob 주소(크게 보기용)
   const list = (files || []).filter((f) => f?.path);
   const imgs = list.filter((f) => fileKind(f) === "image" && canPreview(f));
+  // ⭐ 2026-11-09 사진 파일을 누르면 예전 사진과 같은 확대 창(이미지 저장·좌우 넘기기) — 예전 사진 + 불러온 사진 파일을 한 줄로
+  const openGallery = (f) => {
+    const loaded = imgs.filter((x) => urls.current[x.path]);
+    if (!onGallery || !urls.current[f.path]) { setView(view === f.path ? null : f.path); return; } // 아직 못 불러왔으면 아래 미리보기(이유·다시 시도)
+    const srcs = [...(images || []), ...loaded.map((x) => urls.current[x.path])];
+    const names = [...(images || []).map(() => ""), ...loaded.map((x) => x.name || "")];
+    onGallery({ srcs, names, start: (images || []).length + loaded.findIndex((x) => x.path === f.path) });
+  };
   const n = list.length + (images || []).length;
   if (!n) return null;
-  const run = async (k, fn) => { setBusy(k); try { await fn(); } catch (e) { window.alert(`저장하지 못했어요: ${e?.code === "storage/unauthorized" ? "이 파일을 볼 권한이 없어요" : e.message || e}`); } finally { setBusy(""); } };
+  const run = async (k, fn) => { setBusy(k); try { await fn(); } catch (e) { window.alert(`저장하지 못했어요: ${e?.code ? apFileErrText(e) : e.message || e}`); } finally { setBusy(""); } };
   const cur = list.find((f) => f.path === view);
   return (
     <div className="max-w-[780px] mx-auto mt-4 bg-white rounded-2xl p-4" data-ap-attachments>
@@ -228,11 +254,11 @@ export function ApprovalAttachPanel({ files = [], images = [], docNo, onImage })
               <img src={src} alt={`사진 ${i + 1}`} className="w-full h-28 sm:h-36 object-cover" />
             </button>
           ))}
-          {imgs.map((f) => <Thumb key={f.path} f={f} onOpen={() => setView(view === f.path ? null : f.path)} />)}
+          {imgs.map((f) => <Thumb key={f.path} f={f} onUrl={(p, u) => { if (u) urls.current[p] = u; else delete urls.current[p]; }} onOpen={() => openGallery(f)} />)}
         </div>
       )}
       <div className="space-y-1.5">
-        {list.map((f) => <FileRow key={f.path} f={f} busy={busy === f.path} active={view === f.path} onPreview={() => setView(view === f.path ? null : f.path)} onSave={() => run(f.path, () => saveApFile(f))} />)}
+        {list.map((f) => <FileRow key={f.path} f={f} busy={busy === f.path} active={view === f.path} onPreview={() => (imgs.includes(f) && urls.current[f.path] ? openGallery(f) : setView(view === f.path ? null : f.path))} onSave={() => run(f.path, () => saveApFile(f))} />)}
       </div>
       {cur && <Viewer f={cur} onClose={() => setView(null)} />}
     </div>

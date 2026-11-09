@@ -127,8 +127,8 @@ const saveBlob = (blob, name) => {
   setTimeout(() => URL.revokeObjectURL(url), 5000);
 };
 const isTouchDevice = () => typeof window !== "undefined" && !!window.matchMedia?.("(pointer: coarse)").matches;
-async function downloadAttachment(src, docNo, i) {
-  const name = attName(docNo, i, src);
+async function downloadAttachment(src, docNo, i, realName = "") {
+  const name = realName || attName(docNo, i, src); // ⭐ 2026-11-09 새 첨부(파일)는 올린 파일 이름 그대로
   const blob = await srcToBlob(src);
   // 휴대폰 — 공유 시트(사진에 저장)가 되면 그쪽으로, 아니면 파일 내려받기
   if (isTouchDevice()) {
@@ -140,21 +140,22 @@ async function downloadAttachment(src, docNo, i) {
   }
   saveBlob(blob, name);
 }
-async function downloadAllAttachments(images, docNo) {
+async function downloadAllAttachments(images, docNo, names = []) {
   const list = (images || []).filter(Boolean);
   if (!list.length) return;
-  if (list.length === 1) { await downloadAttachment(list[0], docNo, 0); return; }
+  if (list.length === 1) { await downloadAttachment(list[0], docNo, 0, names[0]); return; }
   try {
     const { default: JSZip } = await import("jszip");
     const zip = new JSZip();
-    for (let i = 0; i < list.length; i += 1) zip.file(attName(docNo, i, list[i]), await srcToBlob(list[i]));
+    for (let i = 0; i < list.length; i += 1) zip.file(names[i] || attName(docNo, i, list[i]), await srcToBlob(list[i]));
     saveBlob(await zip.generateAsync({ type: "blob" }), `${safeName(docNo || "전자결재")}_첨부${list.length}장.zip`);
   } catch {
     // 압축이 안 되면 한 장씩 차례로
     for (let i = 0; i < list.length; i += 1) { saveBlob(await srcToBlob(list[i]), attName(docNo, i, list[i])); await new Promise((r) => setTimeout(r, 350)); }
   }
 }
-function ImageLightbox({ images, start = 0, docNo, onClose }) {
+// names: 이름이 있는 첨부(새 첨부 파일)는 그 이름으로 보이고 저장된다 — 예전 사진(images)은 비워 둔다
+function ImageLightbox({ images, start = 0, docNo, onClose, names = [] }) {
   const n = (images || []).length;
   const [i, setI] = React.useState(Math.min(Math.max(0, start), Math.max(0, n - 1)));
   const [busy, setBusy] = React.useState("");
@@ -178,10 +179,10 @@ function ImageLightbox({ images, start = 0, docNo, onClose }) {
       <div className="shrink-0 px-3 sm:px-5 py-3 flex items-center gap-2 text-white" style={{ paddingTop: "max(12px, env(safe-area-inset-top))" }} onClick={(e) => e.stopPropagation()}>
         <div className="min-w-0 flex-1">
           <div className="text-[10.5px] font-extrabold tracking-[0.26em] text-[#8FB0F0]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>ATTACHMENT · {i + 1} / {n}</div>
-          <div className="text-[13.5px] font-bold text-white/80 truncate">{attName(docNo, i, src)}</div>
+          <div className="text-[13.5px] font-bold text-white/80 truncate">{names[i] || attName(docNo, i, src)}</div>
         </div>
-        <button type="button" disabled={!!busy} onClick={() => run("one", () => downloadAttachment(src, docNo, i))} className={`${btn} bg-white text-[#0F1A30]`}>{busy === "one" ? "저장 중…" : "이미지 저장"}</button>
-        {n > 1 && <button type="button" disabled={!!busy} onClick={() => run("all", () => downloadAllAttachments(images, docNo))} className={`${btn} hidden sm:inline-flex bg-white/10 border border-white/20 text-white`}>{busy === "all" ? "받는 중…" : "전체 다운로드"}</button>}
+        <button type="button" disabled={!!busy} onClick={() => run("one", () => downloadAttachment(src, docNo, i, names[i]))} className={`${btn} bg-white text-[#0F1A30]`}>{busy === "one" ? "저장 중…" : "이미지 저장"}</button>
+        {n > 1 && <button type="button" disabled={!!busy} onClick={() => run("all", () => downloadAllAttachments(images, docNo, names))} className={`${btn} hidden sm:inline-flex bg-white/10 border border-white/20 text-white`}>{busy === "all" ? "받는 중…" : "전체 다운로드"}</button>}
         <button type="button" onClick={onClose} aria-label="닫기" className="w-10 h-10 rounded-xl bg-white/10 border border-white/20 text-white font-black shrink-0">✕</button>
       </div>
       <div className="relative flex-1 min-h-0 flex items-center justify-center px-2 sm:px-16"
@@ -1953,8 +1954,11 @@ function Viewer({ d, me, staff, company, onClose, onRedraft, onEdit, inline = fa
         <div className="md:flex-1 md:overflow-auto p-3 md:p-6 bg-[#E9EDF3] order-2 md:order-1">
           <FitPaper><ApprovalPaper paperRef={paperRef} form={form} data={d.data} title={d.title} line={d.line} cc={d.cc} drafter={d.drafter} docNo={d.docNo} createdMs={toMs(d.createdAt)} staff={staff} status={d.status} paid={pstate === "paid" ? d.paid : null} files={d.files} images={d.images} /></FitPaper>
           {/* 📎 2026-11-08 첨부 — Storage 파일(목록·미리보기·저장) + 예전 사진 첨부(base64) · [첨부 모두 저장]은 ZIP 하나로 */}
-          <ApprovalAttachPanel files={d.files || []} images={d.images || []} docNo={d.docNo} onImage={(i) => setLightbox(i)} />
-          {lightbox !== null && <ImageLightbox images={d.images || []} start={lightbox} docNo={d.docNo} onClose={() => setLightbox(null)} />}
+          {/* ⭐ 2026-11-09 새로 올린 사진 파일도 예전 사진처럼 누르면 크게 보기 · 이미지 저장(onGallery) */}
+          <ApprovalAttachPanel files={d.files || []} images={d.images || []} docNo={d.docNo} onImage={(i) => setLightbox(i)} onGallery={(g) => setLightbox(g)} />
+          {lightbox !== null && (typeof lightbox === "object"
+            ? <ImageLightbox images={lightbox.srcs} names={lightbox.names} start={lightbox.start} docNo={d.docNo} onClose={() => setLightbox(null)} />
+            : <ImageLightbox images={d.images || []} start={lightbox} docNo={d.docNo} onClose={() => setLightbox(null)} />)}
           {signOpen && <SignatureModal me={me} onClose={() => setSignOpen(false)} />}
         </div>
         <aside className="w-full md:w-[360px] shrink-0 bg-white md:border-l border-[#E3E8F0] flex flex-col order-1 md:order-2">
@@ -2248,7 +2252,8 @@ function apStatusSets(docs, { pendingFilter = () => true } = {}) {
   return {
     all: docs,
     pending: docs.filter((d) => d.status === "pending" && pendingFilter(d)),
-    approved: docs.filter((d) => d.status === "approved"),
+    // ⭐ 2026-11-09 지급 문서(지출 결의)는 '지급 대기·지급완료'에만 — '완료'에 같은 문서가 두 번 보이던 중복 제거
+    approved: docs.filter((d) => d.status === "approved" && !payState(d)),
     paywait: docs.filter((d) => payState(d) === "wait"),
     paid: docs.filter((d) => payState(d) === "paid"),
     rejected: docs.filter((d) => d.status === "rejected"),
@@ -2260,7 +2265,8 @@ const apStatusKeys = (sets, showPay = false) => AP_STATUS_TABS.filter(([k]) => !
 
 function Tabs({ tabs, tab, setTab }) {
   return (
-    <div className="flex items-center gap-1.5 px-5 pt-4 pb-3 border-b border-[#EEF1F6] overflow-x-auto no-scrollbar">
+    // ⭐ 2026-11-09 버튼이 많아 넘칠 때 좌우 스크롤바 표시(index.css .ap-tabs-scroll)
+    <div className="ap-tabs-scroll flex items-center gap-1.5 px-5 pt-4 pb-2 border-b border-[#EEF1F6] overflow-x-auto">
       {tabs.map(([k, l, n, unread]) => (
         <button key={k} type="button" onClick={() => setTab(k)} className={`relative h-9 px-4 rounded-full text-[14px] font-black shrink-0 border inline-flex items-center gap-1.5 ${tab === k ? "bg-[#0F1A30] text-white border-[#0F1A30]" : "bg-white text-[#5B6B85] border-[#DCE3EE]"}`}>
           {l}{n > 0 && <span className={`min-w-[20px] h-5 px-1.5 rounded-full text-[12px] flex items-center justify-center tabular-nums ${tab === k ? "bg-white text-[#0F1A30]" : "bg-[#EEF1F6] text-[#1B2B4B]"}`}>{n}</span>}
@@ -2448,11 +2454,12 @@ export default function ApprovalCenter({ company, me, page, setPage, openId, onO
   }) : rawList), [rawList, nameOf]);
   const [open, setOpen] = React.useState(null);
   const [preset, setPreset] = React.useState(null);
-  const [tab, setTab] = React.useState("todo");
+  const [tab, setTab] = React.useState(() => (page === "mine" ? "all" : "paywait"));
   const [companyAll, setCompanyAll] = React.useState(null);
   const [lf, setLf] = React.useState({ q: "", from: "", to: "", who: "" }); // 목록 검색·기간·기안자
   const admin = isAdminRole(me.role);
-  React.useEffect(() => { setTab(page === "mine" ? "all" : "todo"); }, [page]);
+  // ⭐ 2026-11-09 결재함은 들어올 때 항상 '지급 대기'부터
+  React.useEffect(() => { setTab(page === "mine" ? "all" : "paywait"); }, [page]);
   React.useEffect(() => {
     if (!admin || tab !== "company" || !company) return undefined;
     return onSnapshot(query(collection(db, "approvals"), where("company", "==", company)),
@@ -2493,7 +2500,7 @@ export default function ApprovalCenter({ company, me, page, setPage, openId, onO
   const L = (list || []).filter((d) => !isHidden(d));
   const hiddenL = (list || []).filter(isHidden);
   const inLine = (d) => (d.line || []).some((s) => s.uid === uid);
-  // ⭐ 2026-11-09 결재함 필터를 내 기안함과 같게 — 결재 대기(내 차례) + 공용 상태 필터(전체·진행 중·완료·지급 대기·지급완료·반려·결재 취소·회수) + 참조·회사 전체·삭제한 문서
+  // ⭐ 2026-11-09 결재함 필터 — 회사 전체(관리자)/전체 · 결재 대기(내 차례) · 지급 대기 · 지급완료 · 반려 · 결재 취소 · 회수 · 참조 · 삭제한 문서
   const lineL = L.filter(inLine);
   const payMine = [...new Map([...L, ...payPool.filter((d) => !isHidden(d))].map((d) => [d.id, d])).values()];
   const inboxStatus = apStatusSets(lineL, { pendingFilter: (d) => !myTurn(d, uid) });
@@ -2522,7 +2529,7 @@ export default function ApprovalCenter({ company, me, page, setPage, openId, onO
   const cat = isCat ? catOf(page) : null;
   const heroTitle = isCat ? cat.label : page === "inbox" ? "결재함" : page === "mine" ? "내 기안함" : "결재선 관리";
   const heroEn = isCat ? cat.en : page === "inbox" ? "INBOX" : page === "mine" ? "MY DOCUMENTS" : "APPROVAL LINES";
-  const heroDesc = isCat ? cat.desc : page === "inbox" ? "결재 대기 문서를 처리하고 진행·완료 현황을 확인합니다." : page === "mine" ? "내가 올린 문서의 결재 진행 상황을 봅니다" : "자주 쓰는 결재 순서를 저장해 두고 문서 작성 때 불러옵니다";
+  const heroDesc = isCat ? cat.desc : page === "inbox" ? "지급 대기·결재 대기 문서를 처리하고 결재 현황을 확인합니다." : page === "mine" ? "내가 올린 문서의 결재 진행 상황을 봅니다" : "자주 쓰는 결재 순서를 저장해 두고 문서 작성 때 불러옵니다";
   const kpis = isCat
     ? (page === "leave" ? [[leave?.ent ? `잔여 ${leave.ent.label}` : "잔여 연차", leave?.ent ? `${leave.remain}일` : "-"], ["진행 중", mineSets.pending.filter((d) => d.cat === "leave").length]] : page === "expense" ? [["이번 달 승인 금액", fmtWon(spentMonth)], ["진행 중", mineSets.pending.filter((d) => d.cat === "expense").length]] : [["진행 중", mineSets.pending.filter((d) => d.cat === page).length], ["완료", mineSets.approved.filter((d) => d.cat === page).length]]) /* ⭐ 2026-11-02 점검 — 기안·품의/보고·인사 화면이 각자 자기 분류 문서 수를 세도록(page 기준) */
     : [["결재 대기", sets.todo.length], ["내 진행 문서", mineSets.pending.length], ["반려", mineSets.rejected.length]];
@@ -2535,10 +2542,10 @@ export default function ApprovalCenter({ company, me, page, setPage, openId, onO
           {(() => {
             // ⭐ 2026-10-31 탭 숫자는 그 탭의 문서 수(검색·기간 적용), 새 결과는 빨간 점으로 따로
             const F = (k) => applyListTools(k === "company" ? (companyAll || []) : (sets[k] || []), lf) || [];
-            const showPay = isFinUser(meFull) || sets.paywait.length > 0;
-            const statusKeys = apStatusKeys(sets, showPay);
-            const keys = ["todo", ...statusKeys.map(([k]) => k), "cc", ...(admin ? ["company"] : []), "hidden"];
-            const label = { todo: "결재 대기", ...Object.fromEntries(statusKeys), cc: "참조 문서", company: "회사 전체", hidden: "삭제한 문서" };
+            // ⭐ 2026-11-09 결재함 순서: 회사 전체 · 결재 대기 · 지급 대기 · 지급완료 · 반려 · 결재 취소 · 회수 · 참조 문서 · 삭제한 문서
+            //   '진행 중·완료'는 뺐다(회사 전체에서 상태로 보임) — 관리자가 아니면 회사 전체 대신 '전체'(내가 결재선에 있는 문서 전부)
+            const keys = [admin ? "company" : "all", "todo", "paywait", "paid", "rejected", "cancelled", "withdrawn", "cc", "hidden"];
+            const label = { all: "전체", company: "회사 전체", todo: "결재 대기", paywait: "지급 대기", paid: "지급완료", rejected: "반려", cancelled: "결재 취소", withdrawn: "회수", cc: "참조 문서", hidden: "삭제한 문서" };
             const pool = [...(list || []), ...(companyAll || [])];
             const drafters = [...new Map(pool.filter((d) => d.drafterUid).map((d) => [d.drafterUid, d.drafter?.name || "-"])).entries()].sort((a, b) => String(a[1]).localeCompare(String(b[1]), "ko"));
             return (<>

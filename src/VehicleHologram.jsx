@@ -7,7 +7,10 @@
 //  저장 위치: 차량관리대장 문서(vehicleLedger) — spec: { 제원 키: 값 }, tires: { 위치키: { date, km, brand, size, memo } }
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { doc, setDoc, serverTimestamp } from "firebase/firestore";
+import { db } from "./firebase";
 import { specFor, tonClass, CARE_ITEMS, itemStatus, careSummary, vehicleDefaults, CLASS_LABEL } from "./vehicleCare";
+import { num, repairVat } from "./vehicleLedgerData";
 
 const H = { bg: "#050B18", cyan: "#38E1FF", teal: "#2DF5C4", red: "#FF3B5C", amber: "#FFB547", line: "rgba(56,225,255,.28)", text: "#DDF6FF", sub: "#8FB7CC" };
 const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕',sans-serif";
@@ -195,8 +198,13 @@ function TireMap({ axles, positions, tireState, selected, onTire }) {
   );
 }
 
-// ── 본 창 ──
-export default function VehicleHologram({ v, linkRaw, canEdit, onClose, onSave, DateField, narrow }) {
+// 기사앱(기사 문서 vehicle)과 같이 쓰는 제원 — 3D에서 입력하면 기사앱·점검 화면에도 같은 값
+const APP_SHARED = SPEC_FIELDS.filter((f) => f[3]);
+
+// ── 계산 모델(순수 함수) — 3D 창·차량 목록·엑셀이 모두 같은 값을 쓴다 ──
+//  제원 값 우선순위: 기사앱과 같이 쓰는 칸 = 기사앱 값 > 대장 입력 > 톤수 일반 기준(기본값)
+//                   대장에만 있는 칸(전장·전폭·전고·총중량·출력·연료탱크) = 대장 입력 > 기본값
+export function twinModel(v = {}, linkRaw = null) {
   const av = linkRaw?.vehicle || {};
   const care = linkRaw?.care || {};
   const tonRaw = v.톤수 || av.톤 || "";
@@ -206,33 +214,62 @@ export default function VehicleHologram({ v, linkRaw, canEdit, onClose, onSave, 
   const gen = genFor(key) || {};
   const isTrailer = key === "추레라" || /추레라|트레일러|트랙터/.test(kind);
   const spec = v.spec || {};
-  // 값 = 대장에 입력한 값 > 기사앱 제원 > 톤수 일반 기준(기본값)
+  const has = (x) => x !== undefined && x !== null && String(x).trim() !== "";
   const defOf = (k) => ({ 전장: gen.전장, 전폭: gen.전폭, 전고: gen.전고, 적재함길이: std.l, 적재함폭: std.w, 적재함높이: std.h || "", 최대적재: std.maxKg, 총중량: gen.총중량, 출력: gen.출력, 연료탱크: gen.연료탱크, 축: std.axle, 타이어수: std.tires, 타이어규격: "" }[k]);
   const valOf = (k, appK) => {
-    if (spec[k] !== undefined && spec[k] !== "") return { v: spec[k], src: "입력" };
-    if (appK && av[appK] !== undefined && av[appK] !== "" && av[appK] !== null) return { v: av[appK], src: "기사앱" };
+    if (appK && has(av[appK])) return { v: av[appK], src: has(spec[k]) && String(spec[k]) === String(av[appK]) ? "입력" : "기사앱" };
+    if (has(spec[k])) return { v: spec[k], src: "입력" };
     const d = defOf(k);
-    return d !== undefined && d !== "" && d !== null ? { v: d, src: "기본값" } : { v: "", src: "" };
+    return has(d) ? { v: d, src: "기본값" } : { v: "", src: "" };
   };
   const vals = Object.fromEntries(SPEC_FIELDS.map(([k, , , appK]) => [k, valOf(k, appK)]));
-  const axles = useMemo(() => axleLayout(vals.타이어수.v, String(vals.축.v || ""), isTrailer), [vals.타이어수.v, vals.축.v, isTrailer]); // eslint-disable-line react-hooks/exhaustive-deps
-  const positions = useMemo(() => tirePositions(axles), [axles]);
-
-  // 타이어 상태 — 위치별 기록 > 점검·소모품의 '타이어 교체' 기록(전체 기준)
+  const axles = axleLayout(vals.타이어수.v, String(vals.축.v || ""), isTrailer);
+  const positions = tirePositions(axles);
+  const layoutCount = positions.length;
+  const enteredCount = Number(String(vals.타이어수.v || "").replace(/[^\d]/g, "")) || 0;
   const cls = tonClass(key || tonRaw, kind);
-  const tireItem = (() => { const it = CARE_ITEMS.find((x) => x.key === "tire"); const [km, months] = it[cls]; const ov = care.intervals?.tire || {}; return { ...it, km: ov.km ?? km, months: ov.months ?? months }; })();
+  const it = CARE_ITEMS.find((x) => x.key === "tire"); const [km0, mo0] = it[cls]; const ov = care.intervals?.tire || {};
+  const tireItem = { ...it, km: ov.km ?? km0, months: ov.months ?? mo0 };
   const tires = v.tires || {};
-  const tireState = useMemo(() => {
-    const out = {};
-    positions.forEach((p) => {
-      const rec = tires[p.key];
-      if (rec && (rec.date || rec.km)) out[p.key] = { ...itemStatus(tireItem, { odometer: care.odometer, items: { tire: { km: rec.km, date: rec.date } } }), rec, base: "위치별 기록" };
-      else if (care.items?.tire && (care.items.tire.date || care.items.tire.km)) out[p.key] = { ...itemStatus(tireItem, care), rec: care.items.tire, base: "점검·소모품 전체 기록" };
-      else out[p.key] = { level: -1, text: "", base: "" };
-    });
-    return out;
-  }, [positions, tires, care]); // eslint-disable-line react-hooks/exhaustive-deps
+  const anyPos = positions.some((p) => tires[p.key] && (tires[p.key].date || tires[p.key].km));
+  const tireState = {};
+  positions.forEach((p) => {
+    const rec = tires[p.key];
+    if (rec && (rec.date || rec.km)) tireState[p.key] = { ...itemStatus(tireItem, { odometer: care.odometer, items: { tire: { km: rec.km, date: rec.date } } }), rec, base: "위치별 기록" };
+    else if (care.items?.tire && (care.items.tire.date || care.items.tire.km)) tireState[p.key] = { ...itemStatus(tireItem, care), rec: care.items.tire, base: "점검·소모품 전체 기록" };
+    else tireState[p.key] = { level: -1, text: "", base: "" };
+  });
+  const tireOver = positions.filter((p) => tireState[p.key].level === 2).length;
+  const tireSoon = positions.filter((p) => tireState[p.key].level === 1).length;
+  const tireNone = positions.filter((p) => tireState[p.key].level === -1).length;
+  // 점검·소모품 경고 — 위치별 타이어 기록이 있으면 '타이어 교체' 경고는 위치별 결과로 바꾼다(두 번 세지 않게)
+  const cs0 = linkRaw ? careSummary({ vehicle: vehicleDefaults(linkRaw), care }) : null;
+  let alerts = (cs0?.alerts || []).filter((a) => !(anyPos && a.key === "tire"));
+  if (anyPos && (tireOver || tireSoon)) alerts = [{ key: "tire", label: "타이어", level: tireOver ? 2 : 1, text: tireOver ? `${tireOver}개 교체 시기 지남` : `${tireSoon}개 곧 교체` }, ...alerts];
+  alerts.sort((a, b) => b.level - a.level);
+  const over = alerts.filter((a) => a.level === 2).length, soon = alerts.filter((a) => a.level === 1).length;
+  const yr = Number(av.연식 || v.연식) || 0;
+  const age = yr ? new Date().getFullYear() - yr : null;
+  const y0 = String(new Date().getFullYear());
+  const yearCost = (v.repairs || []).filter((r) => String(r.일자 || "").startsWith(y0)).reduce((s2, r) => s2 + num(r.공가) + repairVat(r), 0); // 머리의 'OOOO 정비비'와 같은 계산
+  // 점수: 점검 경고(타이어 포함) 기준 — 타이어는 개수만큼 추가 감점
+  let score = 100 - over * 12 - soon * 4 - Math.max(0, tireOver - 1) * 3;
+  if (age != null && age > 10) score -= Math.min(15, (age - 10) * 2);
+  if (!linkRaw) score -= 5;
+  score = Math.max(0, Math.min(100, Math.round(score)));
+  return { av, care, tonRaw, kind, key, std, gen, isTrailer, spec, defOf, vals, axles, positions, layoutCount, enteredCount, cls, tireItem, tires, anyPos, tireState, tireOver, tireSoon, tireNone, cs0, alerts, over, soon, yr, age, y0, yearCost, score };
+}
+// 차량 목록용 — 점검 요약(careSummary와 같은 모양)에 위치별 타이어 결과를 합친다
+export function twinCareSummary(v, linkRaw) {
+  const m = twinModel(v, linkRaw);
+  if (!m.cs0 && !m.alerts.length) return null;
+  return { ...(m.cs0 || { missing: 0, odometer: 0, odometerAt: "", setupDone: false }), alerts: m.alerts, over: m.over, soon: m.soon, tireOver: m.tireOver };
+}
 
+// ── 본 창 ──
+export default function VehicleHologram({ v, linkRaw, canEdit, onClose, onSave, DateField, narrow, by = "" }) {
+  const M = useMemo(() => twinModel(v, linkRaw), [v, linkRaw]);
+  const { av, care, tonRaw, kind, key, isTrailer, spec, defOf, vals, axles, positions, cls, tireItem, tireState, tireOver, tireNone, alerts, over, soon, age, yr, y0, yearCost, score } = M;
   // 회전(드래그) — 놓으면 천천히 흔들림
   const [ry, setRy] = useState(-18);
   const [drag, setDrag] = useState(null);
@@ -260,10 +297,22 @@ export default function VehicleHologram({ v, linkRaw, canEdit, onClose, onSave, 
       const rec = { date: tf.date, km: String(tf.km || "").replace(/[^\d]/g, ""), brand: tf.brand.trim(), size: tf.size.trim(), memo: tf.memo.trim(), at: Date.now() };
       const labels = positions.filter((p) => selected.has(p.key)).map((p) => p.label);
       await onSave((d) => {
-        const next = { ...(d.tires || {}) }; selected.forEach((k) => { next[k] = rec; });
+        const next = { ...(d.tires || {}) }; selected.forEach((k) => { next[k] = { ...rec, label: positions.find((p) => p.key === k)?.label || k }; });
         const log = { id: Math.random().toString(36).slice(2, 10), 일자: rec.date, 내용: "타이어 교체", 구분: "이력", 날짜: rec.date, 세부내용: `${labels.join(", ")}${rec.brand ? ` · ${rec.brand}` : ""}${rec.size ? ` ${rec.size}` : ""}${rec.km ? ` · ${Number(rec.km).toLocaleString()}km` : ""}`, 비고: rec.memo, createdAt: Date.now() };
         return { tires: next, logs: [...(d.logs || []), log] };
       }, `타이어 ${selected.size}개 교체를 기록했습니다`);
+      // 모든 위치에 기록이 생기면 점검·소모품의 '타이어 교체'(기사 문서)도 가장 오래된 기록으로 맞춘다 → 두 화면 판정이 같게
+      if (linkRaw?.id) {
+        const all = positions.map((p) => (selected.has(p.key) ? rec : M.tires[p.key])).filter((r) => r && (r.date || r.km));
+        if (all.length === positions.length) {
+          const oldest = [...all].sort((a, b) => String(a.date || "").localeCompare(String(b.date || "")) || (Number(a.km) || 0) - (Number(b.km) || 0))[0];
+          try { await setDoc(doc(db, "drivers", linkRaw.id), { care: { items: { tire: { km: Number(oldest.km) || null, date: oldest.date || "" } } }, careUpdatedAt: serverTimestamp(), careUpdatedBy: by }, { merge: true }); } catch { /* 권한·오프라인 */ }
+        }
+      }
+      // 교체 시 주행거리가 지금 주행거리보다 크면 주행거리도 올린다(점검·소모품 화면과 같은 규칙)
+      if (linkRaw?.id && Number(rec.km) > (Number(care.odometer) || 0)) {
+        try { await setDoc(doc(db, "drivers", linkRaw.id), { care: { odometer: Number(rec.km), odometerAt: rec.date }, careUpdatedAt: serverTimestamp(), careUpdatedBy: by }, { merge: true }); } catch { /* 권한·오프라인 */ }
+      }
       setSelected(new Set());
     } finally { setBusy(false); }
   };
@@ -278,25 +327,20 @@ export default function VehicleHologram({ v, linkRaw, canEdit, onClose, onSave, 
   const saveSpec = async () => {
     const clean = Object.fromEntries(Object.entries(specEdit).map(([k, x]) => [k, String(x ?? "").trim()]).filter(([, x]) => x !== ""));
     await onSave(() => ({ spec: clean }), "제원을 저장했습니다");
+    // 기사앱과 같이 쓰는 칸은 기사 문서(vehicle)에도 저장 → 기사앱·점검·소모품 화면에 같은 값(바꾼 칸만, 지운 칸은 지움)
+    if (linkRaw?.id) {
+      const patch = {};
+      APP_SHARED.forEach(([k, , , appK]) => { const nv = clean[k] ?? ""; const old = av[appK] ?? ""; if (String(nv) !== String(old)) patch[appK] = /^\d+(\.\d+)?$/.test(nv) && !["타이어규격", "축"].includes(k) ? Number(nv) : nv; });
+      if (Object.keys(patch).length) {
+        try { await setDoc(doc(db, "drivers", linkRaw.id), { vehicle: patch, careUpdatedAt: serverTimestamp(), careUpdatedBy: by }, { merge: true }); } catch { /* 권한·오프라인 — 대장에는 저장됨 */ }
+      }
+    }
     setSpecEdit(null);
   };
 
-  // 스마트 분석
-  const cs = linkRaw ? careSummary({ vehicle: vehicleDefaults(linkRaw), care }) : null;
-  const tireOver = positions.filter((p) => tireState[p.key]?.level === 2).length;
-  const tireSoon = positions.filter((p) => tireState[p.key]?.level === 1).length;
-  const tireNone = positions.filter((p) => tireState[p.key]?.level === -1).length;
-  const yr = Number(av.연식 || v.연식) || 0;
-  const age = yr ? new Date().getFullYear() - yr : null;
-  const reps = v.repairs || [];
-  const y0 = String(new Date().getFullYear());
-  const yearCost = reps.filter((r) => String(r.일자 || "").startsWith(y0)).reduce((s, r) => s + (Number(String(r.공가 || 0).replace(/[^\d-]/g, "")) || 0) * 1.1, 0);
-  let score = 100;
-  score -= (cs?.over || 0) * 12 + (cs?.soon || 0) * 4 + tireOver * 6 + tireSoon * 2;
-  if (age != null && age > 10) score -= Math.min(15, (age - 10) * 2);
-  if (!linkRaw) score -= 5;
-  score = Math.max(0, Math.min(100, Math.round(score)));
+  // 스마트 분석 — twinModel 결과 그대로
   const grade = score >= 85 ? ["최상", H.teal] : score >= 70 ? ["양호", H.cyan] : score >= 50 ? ["주의", H.amber] : ["위험", H.red];
+  const tireMismatch = M.enteredCount && M.enteredCount !== M.layoutCount;
   const defCount = SPEC_FIELDS.filter(([k]) => vals[k].src === "기본값").length;
 
   useEffect(() => {
@@ -369,22 +413,23 @@ export default function VehicleHologram({ v, linkRaw, canEdit, onClose, onSave, 
                 <text x="56" y="78" textAnchor="middle" fontSize="13" fontWeight="800" fill={grade[1]}>{grade[0]}</text>
               </svg>
               <div style={{ flex: 1, display: "grid", gap: 6, fontSize: 14, fontWeight: 700 }}>
-                <Row l="점검 지남" r={cs ? `${cs.over}건` : "기사 미연결"} c={cs?.over ? H.red : H.text} />
-                <Row l="곧 점검" r={cs ? `${cs.soon}건` : "-"} c={cs?.soon ? H.amber : H.text} />
+                <Row l="점검 지남" r={linkRaw || alerts.length ? `${over}건` : "기사 미연결"} c={over ? H.red : H.text} />
+                <Row l="곧 점검" r={linkRaw || alerts.length ? `${soon}건` : "-"} c={soon ? H.amber : H.text} />
                 <Row l="타이어 교체 필요" r={`${tireOver}개`} c={tireOver ? H.red : H.text} />
                 <Row l="주행거리" r={care.odometer ? `${Number(care.odometer).toLocaleString()}km` : "-"} />
                 <Row l="차령" r={age != null ? `${age}년` : "-"} c={age > 10 ? H.amber : H.text} />
                 <Row l={`${y0} 정비비`} r={`${Math.round(yearCost).toLocaleString()}원`} />
               </div>
             </div>
-            {cs?.alerts?.length > 0 && (
+            {alerts.length > 0 && (
               <div style={{ marginTop: 12, display: "flex", flexWrap: "wrap", gap: 6 }}>
-                {cs.alerts.slice(0, 8).map((a) => <span key={a.key} style={{ padding: "4px 10px", borderRadius: 99, fontSize: 13.5, fontWeight: 800, border: `1px solid ${levelColor(a.level)}`, color: levelColor(a.level), background: a.level === 2 ? "rgba(255,59,92,.12)" : "rgba(255,181,71,.08)" }} className={a.level === 2 ? "vh-alert-text" : ""}>{a.label} · {a.text}</span>)}
+                {alerts.slice(0, 8).map((a) => <span key={a.key} style={{ padding: "4px 10px", borderRadius: 99, fontSize: 13.5, fontWeight: 800, border: `1px solid ${levelColor(a.level)}`, color: levelColor(a.level), background: a.level === 2 ? "rgba(255,59,92,.12)" : "rgba(255,181,71,.08)" }} className={a.level === 2 ? "vh-alert-text" : ""}>{a.label} · {a.text}</span>)}
               </div>
             )}
             <div style={{ marginTop: 12, fontSize: 13.5, color: H.sub, lineHeight: 1.6 }}>
               {CLASS_LABEL[cls]} 정비 기준 · 타이어 교체 주기 {tireItem.km ? `${tireItem.km.toLocaleString()}km` : ""}{tireItem.km && tireItem.months ? " / " : ""}{tireItem.months ? `${tireItem.months}개월` : ""} 중 먼저 오는 쪽
               {tireNone > 0 && <><br />타이어 {tireNone}개는 교체 기록이 없습니다</>}
+              {!care.odometer && <><br />주행거리가 없어 교체일(개월) 기준으로만 판단합니다 — 점검·소모품에서 주행거리를 넣으면 km 기준도 함께 봅니다</>}
             </div>
           </div>
 
@@ -436,10 +481,11 @@ export default function VehicleHologram({ v, linkRaw, canEdit, onClose, onSave, 
           <div style={{ ...card, gridColumn: narrow ? "auto" : "2 / 3", gridRow: narrow ? "auto" : "2 / span 1" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
               <div style={{ ...cap, marginBottom: 0, flex: 1 }}>SPEC · 제원</div>
-              {canEdit && !specEdit && <button type="button" style={hbtn(false)} onClick={() => setSpecEdit(Object.fromEntries(SPEC_FIELDS.map(([k]) => [k, spec[k] ?? ""])))}>✎ 제원 입력</button>}
+              {canEdit && !specEdit && <button type="button" style={hbtn(false)} onClick={() => setSpecEdit(Object.fromEntries(SPEC_FIELDS.map(([k]) => [k, vals[k].src && vals[k].src !== "기본값" ? String(vals[k].v) : (spec[k] ?? "")])))}>✎ 제원 입력</button>}
               {specEdit && <><button type="button" style={hbtn(false)} onClick={() => setSpecEdit(null)}>취소</button><button type="button" style={hbtn(true)} onClick={saveSpec}>저장</button></>}
             </div>
             {defCount > 0 && !specEdit && <div style={{ fontSize: 13, color: H.amber, fontWeight: 800, marginBottom: 8 }}>입력하지 않은 {defCount}개 항목은 {key || "톤수"} 일반 기준값(기본값)으로 보여 줍니다</div>}
+            {tireMismatch ? <div style={{ fontSize: 13, color: H.amber, fontWeight: 800, marginBottom: 8 }}>타이어 개수 {M.enteredCount}개는 일반 배치가 없어 {M.layoutCount}개 배치로 그립니다(축 구성·개수를 확인하세요)</div> : null}
             {!key && <div style={{ fontSize: 13, color: H.amber, fontWeight: 800, marginBottom: 8 }}>톤수를 입력하면 일반 제원이 자동으로 채워집니다</div>}
             <div style={{ display: "grid", gap: 4 }}>
               {SPEC_FIELDS.map(([k, l, unit]) => {
