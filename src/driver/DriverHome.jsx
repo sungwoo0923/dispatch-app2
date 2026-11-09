@@ -20,13 +20,15 @@ import {
   serverTimestamp,
   increment,
   arrayUnion,
+  Timestamp, deleteField, // 🚚 2026-11-09 자동 퇴근(지난 시각 기록 · 퇴근 미처리 표시 지우기)
   arrayRemove, // ⭐ 2026-11-02 점검 — 네이티브(APK) 푸시 토큰 저장 시 fcmTokensOut에서 이 기기 토큰을 빼기 위해 추가
 } from "firebase/firestore";
 import { setDoc, updateDoc } from "../orderWrite"; // ★ 오더 수정시각 자동 기록(여러 사용자 실시간 일치)
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import { registerPlugin } from "@capacitor/core";
 import { useAddrGeo, computeFleetPhase, useFleetPhaseGeo, getCachedGeo, isPickupVisited, sortActiveOrders, isLoaded } from "../fleetGeo";
-import { snapshotOrder, changedFields, changedLabels } from "../orderChange";
+import { snapshotOrder, changedFields, changedLabels, changeDiff } from "../orderChange";
+import { accumulateOdometer, missedCheckoutPlan } from "../../functions/driverDutyCore.mjs"; // 🚚 2026-11-09 키로수 누적 · 퇴근 미처리
 import { rotationCount, rotationDone, rotationLabel } from "../rotation";
 import { haversineKm } from "../tmapFareCalc";
 import VehicleCarePanel, { VehicleSetupWizard, shouldShowSetup } from "../VehicleCarePanel";
@@ -39,7 +41,7 @@ import MobileSelect from "../mobile/MobileSelect"; // ⭐ 2026-11-02 기본 sele
 import { LogisTag } from "../brand"; // 🔷 2026-11-04 LogisWeb 로고
 // ⭐ 2026-11-05 출근 안내·새 오더 승인/거절·삭제 오더 안내 팝업, 빨간 숫자 배지, 알림 켜기 안내, 긴급 연락처(차량 담당자)
 import DriverUpdateBanner from "./DriverUpdateBanner"; // ⭐ 2026-11-05 웹·APK 업데이트 안내
-import { CheckinPrompt, shouldPromptCheckin, WorkStartSetting, NewOrderPopup, DeletedOrdersPopup, PushSetupCard, RedBadge, useEmergencyContact, KP_RED } from "./DriverPopups";
+import { CheckinPrompt, shouldPromptCheckin, WorkStartSetting, NewOrderPopup, ModifiedOrderPopup, DeletedOrdersPopup, PushSetupCard, RedBadge, useEmergencyContact, KP_RED } from "./DriverPopups";
 import CustomDatePicker from "../CustomDatePicker"; // 📅 2026-11-07 날짜는 프로그램 달력으로
 import "./driverTheme.css"; // ⭐ 2026-11-08 기사앱 리디자인 공통 테마
 import { useCompanyFeature } from "../companyFeatures";
@@ -662,10 +664,10 @@ function ActiveOrderCard({ order: o, loading, onComplete, onRoundComplete, onCop
           <div style={{ fontSize: 15.5, fontWeight: 800, color: "#0F1A30", animation: "kpRedBlink 1.4s ease-in-out infinite" }}>
             ⚠ 담당자가 오더를 수정했습니다
           </div>
-          <div style={{ fontSize: 14.5, color: "#3A4A66", marginTop: 3 }}>변경 항목: <b>{labels.join(", ")}</b> — 아래 빨간 글씨를 확인해주세요</div>
+          <div style={{ fontSize: 14.5, color: "#3A4A66", marginTop: 3 }}>변경 항목: <b>{labels.join(", ")}</b> — 확인 후 재승인 또는 거절해 주세요</div>
           <button onClick={() => onConfirmChange?.(o)} disabled={loading}
             style={{ width: "100%", marginTop: 8, padding: "11px", borderRadius: 10, border: "none", background: "#0F1A30", color: "#fff", fontWeight: 800, fontSize: 16.5, cursor: "pointer" }}>
-            수정확인
+            바뀐 내용 보기 · 재승인/거절
           </button>
         </div>
       )}
@@ -894,6 +896,8 @@ function useGpsTracking(uid, driverData) {
         totalDistRef.current += distDelta;
         updateData.totalDistance = totalDistRef.current;
       }
+      // ⭐ 2026-11-09 마지막으로 실제 움직인 시각 — 퇴근 미처리 판단(오래 멈춰 있음)·자동 퇴근 시각에 쓴다
+      if (distDelta > 0.05) updateData.lastMovedAt = serverTimestamp();
       const lastStore = lastGpsStoreRef.current;
       const storeDelta = lastStore ? calcDist(lastStore.lat, lastStore.lng, lat, lng) : 999;
       const nowMs = Date.now();
@@ -1430,6 +1434,11 @@ export default function DriverHome() {
         driverUpdate.isFinalCheckout = false;
         // 날짜가 바뀌었거나 최종퇴근 후 재출근 시 거리 초기화
         if (driver?.workDate !== today || driver?.isFinalCheckout) {
+          // ⭐ 2026-11-09 지난 근무일 이동거리를 아직 키로수에 안 더했으면(최종퇴근 없이 넘어간 날) 지우기 전에 더한다
+          if (driver?.workDate && driver.workDate !== today && !driver?.isFinalCheckout) {
+            const acc0 = accumulateOdometer({ odometer: driver?.care?.odometer, odoAccum: driver?.odoAccum }, driver.workDate, driver?.totalDistance || 0);
+            if (acc0) { driverUpdate[`odoAccum.${acc0.day}`] = acc0.record; if (acc0.add > 0) { driverUpdate["care.odometer"] = acc0.odometer; driverUpdate["care.odometerAt"] = driver.workDate; } }
+          }
           driverUpdate.totalDistance = 0;
           driverUpdate.workDate = today;
           resetTotalDist();
@@ -1438,12 +1447,21 @@ export default function DriverHome() {
       // Capture before updateDoc — Firestore optimistic update may zero driver.totalDistance
       const finalDistance = isFinal ? (driver?.totalDistance || 0) : 0;
       if (isFinal) {
+        // ⭐ 2026-11-09 주행거리 누적 — 처음 넣은 계기판 키로수 + 오늘 출근~퇴근 이동거리(같은 날 한 번만 · 서버도 같은 기록을 본다)
+        //  퇴근 때 계기판 값을 직접 넣은 회사(퇴근 키로수 입력)는 그 값이 기준이고 이동거리는 기록만 남긴다
+        const acc = accumulateOdometer({ odometer: driver?.care?.odometer, odoAccum: driver?.odoAccum }, driver?.workDate || today, finalDistance, { manual: extraLog?.odometer ?? null });
+        if (acc) {
+          driverUpdate[`odoAccum.${acc.day}`] = acc.record;
+          if (!acc.manual && acc.add > 0) { driverUpdate["care.odometer"] = acc.odometer; driverUpdate["care.odometerAt"] = today; }
+        }
         // 최종퇴근: 오늘 누적거리 기록 후 다음날을 위해 초기화
         driverUpdate.workDate = today;
         driverUpdate.totalDistance = 0;
         driverUpdate.isFinalCheckout = true;
         resetTotalDist();
       }
+      // 🚚 2026-11-09 퇴근·출근하면 관제의 "퇴근 미처리" 표시를 지운다
+      if (isFinal || newStatus === "출근" || firestoreStatus === "퇴근") driverUpdate.퇴근미처리 = deleteField();
       await updateDoc(doc(db, "drivers", uid), driverUpdate);
       const logExtra = { ...(isFinal ? { finalDistance } : {}), ...(extraLog || {}) };
       await addDoc(collection(db, "driver_logs"), {
@@ -1467,6 +1485,37 @@ export default function DriverHome() {
   }, [uid, statusLoading, pos, driver, resetTotalDist]);
   const updateStatusRef = useRef(null); // ⭐ 2026-11-05 오더 수락 시 자동 출근에서 최신 updateStatus를 부른다
   updateStatusRef.current = updateStatus;
+
+  // 🚚 2026-11-09 퇴근을 깜빡한 채 날짜가 바뀌었으면(다음날 앱을 열면) 지난 근무일을 자동 퇴근 처리한다.
+  //  퇴근 시각 = 그날 마지막으로 움직인 시각(없으면 퇴근시간) · 오늘 이동거리는 키로수에 누적 · "자동 퇴근" 표시를 남긴다
+  //  (서버 autoCheckoutDrivers가 자정 뒤에 먼저 처리했으면 isFinalCheckout이라 여기서는 할 일이 없다)
+  const autoOutRef = useRef(false);
+  useEffect(() => {
+    if (!uid || !driver || autoOutRef.current) return;
+    const lastMs = driver.lastMovedAt?.toMillis?.() || driver.updatedAt?.toMillis?.() || 0;
+    const plan = missedCheckoutPlan(driver, Date.now(), lastMs);
+    if (plan.stage !== "auto") return;
+    autoOutRef.current = true;
+    const dist = Number(driver.totalDistance) || 0;
+    const acc = accumulateOdometer({ odometer: driver.care?.odometer, odoAccum: driver.odoAccum }, plan.date, dist);
+    const upd = {
+      status: "퇴근", mainStatus: "퇴근", active: false, isFinalCheckout: true, totalDistance: 0, workDate: plan.date,
+      자동퇴근: { date: plan.date, at: plan.checkoutAt, by: "app" }, 퇴근미처리: deleteField(), updatedAt: serverTimestamp(),
+      ...(acc ? { [`odoAccum.${acc.day}`]: acc.record, ...(acc.add > 0 ? { "care.odometer": acc.odometer, "care.odometerAt": plan.date } : {}) } : {}),
+    };
+    (async () => {
+      try {
+        await updateDoc(doc(db, "drivers", uid), upd);
+        resetTotalDist();
+        await addDoc(collection(db, "driver_logs"), {
+          uid, driverName: driver.name || "", carNo: driver.carNo || "", companyName: driver.companyName || "",
+          status: "최종퇴근", mainStatus: "퇴근", auto: true, autoReason: "퇴근 미처리(날짜 바뀜)",
+          timestamp: Timestamp.fromMillis(plan.checkoutAt), finalDistance: dist, location: null,
+        });
+        showToast(`어제 퇴근이 안 되어 있어 ${new Date(plan.checkoutAt + 9 * 3600e3).toISOString().slice(11, 16)} 기준으로 자동 퇴근 처리했어요`);
+      } catch (e) { autoOutRef.current = false; }
+    })();
+  }, [uid, driver?.workDate, driver?.status, driver?.isFinalCheckout]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Active status → reset both refs so auto-checkin can fire again on next return
   useEffect(() => {
@@ -1635,7 +1684,9 @@ export default function DriverHome() {
       // 배정됐던 흔적을 지워 담당자가 바로 다른 차량을 다시 배정할 수 있게).
       await updateDoc(doc(db, rm.col || "orders", rm.orderId), {
         기사확인상태: "거절",
-        기사거절사유: reason,
+        기사거절사유: rm.modified ? (reason ? `수정된 오더 거절 — ${reason}` : "수정된 오더 거절") : reason,
+        // ⭐ 2026-11-09 수정된 오더를 거절 — 담당자 알림 문구가 달라진다(서버 notifyDispatcherOrderRejected)
+        ...(rm.modified ? { 수정거절: true, 수정거절항목: changedLabels(changedFields(myOrders.find((x) => x._id === rm.orderId) || {})) } : { 수정거절: false }),
         기사확인일시: serverTimestamp(),
         ...tlLog("거절", driver?.name, { detail: reason }),
         차량번호: "",
@@ -1649,7 +1700,7 @@ export default function DriverHome() {
         배차방식: "",
       });
       setOrderBanner(null);
-      showToast("오더를 거절했습니다");
+      showToast(rm.modified ? "수정된 오더를 거절했습니다 — 담당자에게 알렸어요" : "오더를 거절했습니다");
       setRejectModal(null);
       setRejectReason("");
     } catch (e) {
@@ -1657,7 +1708,7 @@ export default function DriverHome() {
     } finally {
       setOrderActionLoading(false);
     }
-  }, [rejectModal, rejectReason, orderActionLoading, driver?.name]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [rejectModal, rejectReason, orderActionLoading, driver?.name, myOrders]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ⭐ 수정확인 — 지금 내용을 새 기준값으로 저장하고 확인 시각을 남긴다(관리자 노선관리에 표시)
   const handleConfirmChange = useCallback(async (o) => {
@@ -1667,9 +1718,10 @@ export default function DriverHome() {
         기사확인값: snapshotOrder(o),
         수정확인일시: serverTimestamp(),
         수정확인항목: changedLabels(changedFields(o)),
-        ...tlLog("수정확인", driver?.name, { detail: changedLabels(changedFields(o)).join(", ") }),
+        수정재승인: true, // ⭐ 2026-11-09 재승인(예전 "수정확인")
+        ...tlLog("재승인", driver?.name, { detail: changedLabels(changedFields(o)).join(", ") }),
       });
-      showToast("수정 내용을 확인했습니다");
+      showToast("바뀐 내용으로 재승인했습니다");
     } catch (e) {
       showToast("처리 중 오류가 발생했습니다");
     }
@@ -2033,6 +2085,11 @@ export default function DriverHome() {
     ? myOrders.filter(o => o.기사확인상태 === "대기" && o.배차상태 !== "배차취소" && o.상태 !== "취소" && !laterOrderIdsRef.current.has(o._id))
     : [];
   const popupOrder = popupOrders[0] || null;
+  // (2-1) ⭐ 2026-11-09 수정된 오더 재승인 팝업 — 수락한 오더를 담당자가 고치면 새 오더처럼 다시 띄운다
+  //  "나중에 보기"는 그 수정 내용(바뀐 값 묶음)에 대해서만 — 담당자가 또 고치면 다시 뜬다
+  const modSig = (o) => `${o._id}|${changeDiff(o).map((d) => d.label + ":" + d.after).join("|")}`;
+  const modifiedOrders = myOrders.filter(o => o.기사확인상태 === "수락" && o.배차상태 !== "배차취소" && o.상태 !== "취소" && changedFields(o).length > 0 && !laterOrderIdsRef.current.has(modSig(o)));
+  const modOrder = modifiedOrders[0] || null;
   // (3) 삭제된 오더 안내 — driver_notifications(deleted·popup, 아직 [확인] 안 누름)
   const deletedNotices = notifications.filter(n => n.deleted && n.popup && !n.popupAck);
   const [deletedBusy, setDeletedBusy] = useState(false);
@@ -2151,6 +2208,11 @@ export default function DriverHome() {
           onAccept={() => handleAcceptOrder(popupOrder._id, popupOrder.__col)}
           onReject={(reason) => handleRejectOrderSubmit({ orderId: popupOrder._id, col: popupOrder.__col }, reason)}
           onLater={() => { laterOrderIdsRef.current.add(popupOrder._id); setLaterTick(t => t + 1); }} />
+      ) : modOrder && !rejectModal ? (
+        <ModifiedOrderPopup order={modOrder} diff={changeDiff(modOrder)} count={modifiedOrders.length} loading={orderActionLoading}
+          onReapprove={() => handleConfirmChange(modOrder)}
+          onReject={(reason) => handleRejectOrderSubmit({ orderId: modOrder._id, col: modOrder.__col, modified: true }, reason)}
+          onLater={() => { laterOrderIdsRef.current.add(modSig(modOrder)); setLaterTick(t => t + 1); }} />
       ) : showCheckinPrompt && !collisionAlert ? (
         <CheckinPrompt driver={driver} nearCheckIn={nearCheckIn} loading={statusLoading}
           onCheckin={() => handleActionButton({ status: "출근" })}
@@ -2610,7 +2672,7 @@ export default function DriverHome() {
                           onReject={() => { setRejectModal({ orderId: o._id, col: o.__col }); setRejectReason(""); }}
                           onCopy={copyText} />
                       ) : (
-                        <ActiveOrderCard key={o._id} order={o} loading={orderActionLoading} pos={pos} onConfirmChange={handleConfirmChange}
+                        <ActiveOrderCard key={o._id} order={o} loading={orderActionLoading} pos={pos} onConfirmChange={(x) => { laterOrderIdsRef.current.delete(modSig(x)); setLaterTick(t => t + 1); }}
                           queued={qi > 0} queueNo={qi + 1}
                           onComplete={() => handleCompleteOrder(o._id, o.__col)}
                           onLoadComplete={() => handleLoadComplete(o)}

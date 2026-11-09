@@ -220,6 +220,69 @@ export function NewOrderPopup({ order: o, count = 1, loading, onAccept, onReject
   );
 }
 
+// ─────────────────────────────── 수정된 오더(재승인) ───────────────────────────────
+// ⭐ 2026-11-09 배차 후 담당자가 오더를 고치면 새 오더 팝업처럼 다시 띄운다 — 바뀐 칸만 깜빡이고 이전값 → 새값.
+//  [재승인] = 바뀐 내용으로 계속 운행 · [거절] = 배차가 빠지고(미배차) 담당자에게 알림·푸시
+export function ModifiedOrderPopup({ order: o, diff = [], count = 1, loading, onReapprove, onReject, onLater }) {
+  const [step, setStep] = useState("view");
+  const [reason, setReason] = useState("");
+  useEffect(() => { setStep("view"); setReason(""); }, [o?._id]);
+  if (!o) return null;
+  const changed = new Set(diff.map((d) => d.label));
+  const blink = (label) => (changed.has(label) ? { animation: "kpModBlink 1.1s ease-in-out infinite", borderRadius: 12, background: "#FFF1F0", margin: "0 -8px", padding: "0 8px" } : null);
+  const tonType = [o.차량톤수, o.차량종류].filter(Boolean).join(" ");
+  const pay = [won(o.기사운임), o.지급방식].filter(Boolean).join(" · ");
+  return (
+    <Overlay z={10065}>
+      <style>{`@keyframes kpModBlink{0%,100%{box-shadow:inset 0 0 0 2px ${KP_RED}}50%{box-shadow:inset 0 0 0 2px transparent}}@keyframes kpModTxt{0%,100%{opacity:1}50%{opacity:.35}}`}</style>
+      <Head en="ORDER UPDATED" title="오더가 수정되었습니다" sub={[o.거래처명, count > 1 ? `확인 대기 ${count}건` : ""].filter(Boolean).join(" · ")} />
+      {step === "view" ? (
+        <div style={{ padding: "8px 20px 20px" }}>
+          <div style={{ borderRadius: 16, border: `1.5px solid ${KP_RED}`, background: "#FFF6F5", padding: "10px 12px", marginTop: 8 }}>
+            <div style={{ fontSize: 17, fontWeight: 900, color: KP_RED }}>바뀐 내용 {diff.length}가지</div>
+            {diff.map((d) => (
+              <div key={d.label} style={{ marginTop: 8 }}>
+                <div style={{ fontSize: 16, fontWeight: 800, color: "#5B6B85" }}>{d.label}</div>
+                <div style={{ fontSize: 16, color: "#8E9BB2", textDecoration: "line-through", wordBreak: "break-word" }}>{d.before}</div>
+                <div style={{ fontSize: 19, fontWeight: 900, color: NAVY0, wordBreak: "break-word", animation: "kpModTxt 1.1s ease-in-out infinite" }}>→ {d.after}</div>
+              </div>
+            ))}
+          </div>
+          <div style={blink("상차지") || blink("상차일시")}><Place tag="상차" name={o.상차지명} addr={o.상차지주소} at={when(o.상차일, o.상차시간)} /></div>
+          <div style={blink("하차지") || blink("하차일시")}><Place tag="하차" name={o.하차지명} addr={o.하차지주소} at={when(o.하차일, o.하차시간)} /></div>
+          <div style={blink("화물정보")}><Row k="화물" v={o.화물내용} /><Row k="톤수" v={tonType} /></div>
+          <div style={blink("운임") || blink("지급방식")}><Row k="운임" v={pay} strong /></div>
+          <div style={blink("전달사항")}><Row k="메모" v={o.전달사항 || o.메모} /></div>
+          <div style={{ display: "flex", gap: 10, marginTop: 18 }}>
+            <button type="button" disabled={loading} onClick={() => setStep("reject")} style={{ ...bigBtn(false), flex: 1, opacity: loading ? 0.6 : 1 }}>거절</button>
+            <button type="button" disabled={loading} onClick={onReapprove} style={{ ...bigBtn(true), flex: 1.4, opacity: loading ? 0.6 : 1 }}>{loading ? "처리중…" : "재승인"}</button>
+          </div>
+          <button type="button" onClick={onLater} style={{ width: "100%", marginTop: 12, border: "none", background: "transparent", color: "#5B6B85", fontSize: 17, fontWeight: 700, cursor: "pointer", fontFamily: FONT }}>
+            나중에 보기 (홈 화면 오더 카드에서 다시 볼 수 있어요)
+          </button>
+        </div>
+      ) : (
+        <div style={{ padding: "18px 20px 20px" }}>
+          <div style={{ fontSize: 20, fontWeight: 900, color: NAVY0 }}>수정된 오더를 거절할까요?</div>
+          <div style={{ fontSize: 17, color: "#5B6B85", marginTop: 4 }}>거절하면 이 오더에서 내 배차가 빠지고 담당자에게 알림이 갑니다. 이유는 선택이에요.</div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 12 }}>
+            {["바뀐 내용으로는 운행이 어려워요", ...REJECT_REASONS].map((r) => (
+              <button key={r} type="button" onClick={() => setReason(r)} style={{ minHeight: 52, borderRadius: 14, fontSize: 17, fontWeight: 800, cursor: "pointer", fontFamily: FONT,
+                border: `1.5px solid ${reason === r ? NAVY1 : "#DCE3EF"}`, background: reason === r ? NAVY1 : "#fff", color: reason === r ? "#fff" : NAVY0 }}>{r}</button>
+            ))}
+          </div>
+          <textarea value={reason} onChange={(e) => setReason(e.target.value)} rows={2} placeholder="직접 적기"
+            style={{ width: "100%", marginTop: 10, boxSizing: "border-box", border: "1.5px solid #DCE3EF", borderRadius: 14, padding: "12px", fontSize: 18, fontFamily: FONT, resize: "none", outline: "none" }} />
+          <div style={{ display: "flex", gap: 10, marginTop: 14 }}>
+            <button type="button" disabled={loading} onClick={() => setStep("view")} style={{ ...bigBtn(false), flex: 1, fontSize: 20 }}>돌아가기</button>
+            <button type="button" disabled={loading} onClick={() => onReject(reason.trim())} style={{ ...bigBtn(true), flex: 1.4, fontSize: 20, opacity: loading ? 0.6 : 1 }}>{loading ? "처리중…" : "거절하기"}</button>
+          </div>
+        </div>
+      )}
+    </Overlay>
+  );
+}
+
 // ─────────────────────────────── 삭제된 오더 ───────────────────────────────
 export function DeletedOrdersPopup({ notices, onConfirm, busy }) {
   if (!notices?.length) return null;

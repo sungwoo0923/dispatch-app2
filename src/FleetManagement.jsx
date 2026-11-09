@@ -54,6 +54,7 @@ import { useCompanyFeatures } from "./companyFeatures";
 import { lazyView } from "./lazyLoad";
 import { fmtPhone } from "./formatInput";
 import { runDelete, commitDeletes } from "./DeleteProgress"; // ⭐ 2026-11-05 삭제 진행 창 + 한 번에 삭제
+import { missedInfo, forceCheckout, liveOdometer } from "./driverDuty"; // 🚚 2026-11-09 퇴근 미처리 · 대신 퇴근 · 누적 키로수
 import { ensureUploadToken } from "./uploadTokenClient"; // ⭐ 2026-11-08 업로드 링크 토큰(발급 시각·만료)
 const VehicleLedger = lazyView(() => import("./VehicleLedger"));
 
@@ -739,7 +740,7 @@ function DriverTable({ rows, selectedId, onSelect, onFocusMap, onContextMenu, to
                   return (
                     <span style={{ display: "inline-flex", flexDirection: "column", alignItems: "center", lineHeight: 1.2 }}>
                       <span style={{ fontSize: 14, color: "#B9D6E6", fontVariantNumeric: "tabular-nums" }}>{h > 0 ? `${h}시간 ` : ""}{m}분</span>
-                      {carried && <span style={{ fontSize: 14, fontWeight: 700, color: HUD.amber }} title={`${start.getMonth() + 1}.${start.getDate()} 출근 후 퇴근 기록 없음`}>퇴근 미처리</span>}
+                      {(() => { const mi = d.raw ? missedInfo(d.raw) : { show: false }; return (carried || mi.show) && <span style={{ fontSize: 14, fontWeight: 700, color: HUD.amber }} title={mi.show ? mi.title : `${start.getMonth() + 1}.${start.getDate()} 출근 후 퇴근 기록 없음`}>{mi.show ? mi.text : "퇴근 미처리"}</span>; })()}
                     </span>
                   );
                 })()}
@@ -1002,6 +1003,18 @@ function DriverDetailPanel({ data, logs, onClose, onDeleteLogs, checkInLoc, comp
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 7, flexWrap: "wrap" }}>
             <StatusBadge status={data.상태} size={9} />
+            {/* 🚚 2026-11-09 퇴근을 깜빡한 기사 — 운송사가 대신 퇴근 처리(마지막 이동 시각 기준 · 오늘 이동거리는 키로수에 누적) */}
+            {data.raw && missedInfo(data.raw).show && (
+              <button type="button" title={missedInfo(data.raw).title}
+                onClick={async () => {
+                  if (!(await kpConfirm(`${data.이름} 기사를 대신 퇴근 처리할까요?\n마지막으로 움직인 시각으로 퇴근이 기록되고, 오늘 이동거리는 누적 키로수에 더해집니다.`))) return;
+                  try { const r = await forceCheckout(data.raw, auth.currentUser?.displayName || auth.currentUser?.email || ""); alert(`퇴근 처리했습니다 (${new Date(r.at + 9 * 3600e3).toISOString().slice(11, 16)} 기준)`); }
+                  catch (e) { alert(`퇴근 처리 실패: ${e?.message || e}`); }
+                }}
+                style={{ height: 30, padding: "0 12px", borderRadius: 8, border: "1px solid #d97706", background: "#FFF7ED", color: "#B45309", fontSize: 14, fontWeight: 800, cursor: "pointer" }}>
+                {missedInfo(data.raw).text} · 대신 퇴근
+              </button>
+            )}
             {dwellMs !== null && dwellMs > 60000 && (
               <span style={{ fontSize: 15, color: "#5B6B85" }}>
                 현재 상태 <strong style={{ color: "#374151" }}>{formatMs(dwellMs)}</strong> 경과
@@ -1017,6 +1030,8 @@ function DriverDetailPanel({ data, logs, onClose, onDeleteLogs, checkInLoc, comp
           { label: "이동거리", val: sessionGpsDist != null && sessionGpsDist > 0 ? `${sessionGpsDist.toFixed(2)} km` : `${(data.총거리 || 0).toFixed(2)} km` },
           { label: "근무시간", val: sessionWorkMs != null && sessionWorkMs > 0 ? formatMs(sessionWorkMs) : (sessionIsActive ? formatMs(Date.now() - (resolveTs(data.workStartAt)?.getTime()||Date.now())) : formatMinutes(data.근무시간)) },
           { label: "접속상태", val: data.active ? "접속중" : "미접속", color: data.active ? "#10b981" : "#5B6B85" },
+          // 🚚 2026-11-09 누적 키로수 — 처음 넣은 계기판 값 + 출근~퇴근 이동거리(운행 중이면 오늘 이동 포함). 고치기는 차량관리에서(기사는 못 고침)
+          data.raw && liveOdometer(data.raw) ? { label: "누적 키로수", val: `${liveOdometer(data.raw).toLocaleString()} km` } : null,
           data.location ? { label: "현재 좌표", val: `${data.location.lat.toFixed(4)}, ${data.location.lng.toFixed(4)}` } : null,
         ].filter(Boolean).map(({ label, val, color }) => (
           <div key={label} style={{ background: "#f8f9fb", borderRadius: 9, padding: "13px 15px", border: "1px solid #eaecf0" }}>
@@ -6246,7 +6261,7 @@ function VehicleCareTab({ drivers = [], driversRaw = [], by = "" }) {
                       <td style={td}><JoinTypePill v={r.등급 || r.raw?.등급} /></td>
                       <td style={td}>{[r.v.톤, r.v.적재함].filter(Boolean).join(" ") || "-"}</td>
                       <td style={{ ...td, color: "#5B6B85" }}>{[r.v.모델, r.v.연식 && `${r.v.연식}년`].filter(Boolean).join(" · ") || "-"}</td>
-                      <td style={{ ...td, fontFamily: FC_MONO, fontWeight: 800 }}>{r.cs.odometer ? `${r.cs.odometer.toLocaleString()}km` : "-"}<div style={{ fontSize: 14, color: "#5B6B85", fontFamily: "inherit", fontWeight: 600 }}>{r.cs.odometerAt}</div></td>
+                      <td style={{ ...td, fontFamily: FC_MONO, fontWeight: 800 }}>{r.cs.odometer ? `${r.cs.odometer.toLocaleString()}km` : "-"}<div style={{ fontSize: 14, color: "#5B6B85", fontFamily: "inherit", fontWeight: 600 }}>{r.cs.odometerAt}{/* 🚚 2026-11-09 운행 중이면 오늘 이동거리(퇴근 때 누적) */}{r.raw && liveOdometer(r.raw) > r.cs.odometer ? ` · 운행 중 +${(liveOdometer(r.raw) - r.cs.odometer).toLocaleString()}km` : ""}</div></td>
                       <td style={td}>{oil ? <span style={{ padding: "2px 8px", borderRadius: 6, background: oil.level === 2 ? "#0F1A30" : "#DCE6F7", color: oil.level === 2 ? "#fff" : NAVY, fontSize: 14, fontWeight: 800 }}>{oil.text}</span> : oilLast ? <span style={{ color: "#5B6B85", fontSize: 14 }}>정상</span> : <span style={{ color: "#5B6B85", fontSize: 14 }}>기록 없음</span>}</td>
                       <td style={{ ...td, textAlign: "left", maxWidth: 260, overflow: "hidden", textOverflow: "ellipsis" }}>{r.cs.alerts.length ? r.cs.alerts.slice(0, 3).map((a) => a.label).join(" · ") : <span style={{ color: "#5B6B85" }}>-</span>}{r.cs.alerts.length > 3 ? ` 외 ${r.cs.alerts.length - 3}` : ""}</td>
                       <td style={td}>{r.cs.setupDone ? <span style={{ fontSize: 14, color: "#5B6B85", fontWeight: 700 }}>완료</span> : <span style={{ padding: "2px 8px", borderRadius: 6, border: "1px solid #DCE3EF", fontSize: 14, fontWeight: 800, color: "#5B6B85" }}>미설정</span>}</td>
@@ -6633,6 +6648,8 @@ export default function FleetManagement({ dispatchData = [], role = "", forceTab
           checkInLocation: raw.checkInLocation || null,
           dropLocation: raw.dropLocation || null,
           담당자: raw.담당자 || null,
+          // 🚚 2026-11-09 퇴근 미처리 표시·대신 퇴근·누적 키로수(src/driverDuty.js)에 원본 값이 필요하다
+          raw,
         };
       })
       .sort((a, b) => statusPriority(a) - statusPriority(b));

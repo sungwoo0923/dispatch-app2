@@ -49,3 +49,14 @@ export function modificationStatus(o) {
   if (at) return { kind: "confirmed", at, labels: Array.isArray(o.수정확인항목) ? o.수정확인항목 : [] };
   return null;
 }
+
+// ⭐ 2026-11-09 오더 수정 재승인 팝업 — 바뀐 묶음별로 이전값 → 새값 (기사앱 팝업에서 바뀐 칸만 깜빡임)
+//  [{ label, fields, before, after }] — 값은 묶음 안 칸들을 " · "로 이어 붙인 글
+export function changeDiff(o) {
+  const base = o?.기사확인값;
+  if (!base || typeof base !== "object") return [];
+  const set = new Set(changedFields(o));
+  const join = (src, fields) => fields.map((f) => normF(f, src?.[f])).filter(Boolean).join(" · ");
+  return WATCH_GROUPS.filter((g) => g.fields.some((f) => set.has(f)))
+    .map((g) => ({ label: g.label, fields: g.fields, before: join(base, g.fields) || "(없음)", after: join(o, g.fields) || "(없음)" }));
+}

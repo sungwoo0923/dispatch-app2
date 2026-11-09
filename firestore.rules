@@ -1356,12 +1356,19 @@ service cloud.firestore {
     function driverDocStaff() {
       return isTotalMasterUser() || (isOfficeStaff() && resource.data.get('companyName', '돌캐') == myCo());
     }
+    function driverOdoNoDecrease() {
+      let o = resource.data.get('care', {}).get('odometer', 0);
+      let n = request.resource.data.get('care', {}).get('odometer', 0);
+      return !(o is number) || !(n is number) || o == 0 || n >= o;
+    }
     match /drivers/{driverId} {
       allow get: if driverDocSelf(driverId) || driverDocStaff();
       // 🔒 기사·지입차 목록은 같은 운송사만
       allow list: if coMatch(resource.data);
       allow create: if coCreate() || (isSignedIn() && request.auth.uid == driverId);
-      allow update: if (coMatch(resource.data) && coKeep()) || (isSignedIn() && request.auth.uid == driverId);
+      // 🚚 2026-11-09 누적 키로수 — 기사 본인은 계기판 키로수(care.odometer)를 줄일 수 없다(처음 입력 · 퇴근 누적 · 퇴근 때 계기판 입력은 늘어나기만).
+      //  고치기(줄이기)는 운송사 직원만(위 coMatch 경로)
+      allow update: if (coMatch(resource.data) && coKeep() && (myRole() != 'driver' || driverOdoNoDecrease())) || (isSignedIn() && request.auth.uid == driverId && driverOdoNoDecrease());
       // 가입 후 선등록 문서(drivers/{차량번호}) 정리 — 승인 전에는 본인 차량번호 문서만
       // ⭐ 2026-11-02 점검 — 기본 회사가 아닌 운송사의 선등록 문서(회사__차량번호)도 본인이 정리할 수 있게(중복 기사 문서 방지)
       allow delete: if coMatch(resource.data) || (isSignedIn() &&

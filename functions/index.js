@@ -764,8 +764,11 @@ exports.notifyDispatcherOrderRejected =
       const driverLabel = `${before["이름"] || after["이름"] || "기사"}(${before["차량번호"] || after["차량번호"] || "-"})`;
       await sendPushAndCleanup(token, {
         notification: {
-          title: "오더가 거절되었습니다",
-          body: `${driverLabel}님이 오더를 거절했습니다${after["기사거절사유"] ? `: ${after["기사거절사유"]}` : ""}`,
+          // ⭐ 2026-11-09 수정된 오더를 기사가 거절(재승인 팝업) — 배차가 빠졌으니 다시 배차해야 한다
+          title: after["수정거절"] ? "수정된 오더를 기사가 거절했습니다" : "오더가 거절되었습니다",
+          body: after["수정거절"]
+            ? `${driverLabel}님이 수정된 오더(${(after["수정거절항목"] || []).join("·") || "변경 내용"})를 거절했습니다 — 배차가 빠졌습니다. 다시 배차해 주세요.`
+            : `${driverLabel}님이 오더를 거절했습니다${after["기사거절사유"] ? `: ${after["기사거절사유"]}` : ""}`,
         },
         data: { type: "fleet_order_rejected", orderId: context.params.dispatchId },
         android: { priority: "high" },
@@ -843,6 +846,84 @@ exports.remindDriverCheckin = functions.runWith({ timeoutSeconds: 120, memory: "
       sent++;
     }
     if (sent) console.log(`⏰ 출근 알림 ${sent}건 발송 (${ymd} ${Math.floor(nowMin / 60)}:${String(nowMin % 60).padStart(2, "0")})`);
+    return null;
+  });
+
+/* ==============================
+   🚚 2026-11-09 퇴근 미처리 대응 — 15분마다(한국시간). 계산은 functions/driverDutyCore.mjs(기사앱·관제와 같은 기준)
+   - 퇴근시간(drivers.퇴근시간, 없으면 19:00) + 1시간이 지났는데 근무 중 → 기사에게 "퇴근 처리할까요?" 알림·푸시(하루 한 번)
+   - 거기에 30분 넘게 이동이 없음 → drivers.퇴근미처리 = { date, since, idleMin } (관제 "퇴근 미처리" 표시)
+   - 날짜가 바뀜(자정 지남) + 최근 30분 이동 없음 → 자동 퇴근: 마지막 이동 시각으로 최종퇴근 기록 · 오늘 이동거리를 키로수에 누적
+     (drivers.자동퇴근 = { date, at, by: "server" } · driver_logs 최종퇴근 auto:true)
+============================== */
+exports.driverDutyWatch = functions.runWith({ timeoutSeconds: 120, memory: "256MB" }).pubsub
+  .schedule("every 15 minutes").timeZone("Asia/Seoul").onRun(async () => {
+    const DC = await import("./driverDutyCore.mjs");
+    const snap = await db.collection("drivers").where("active", "==", true).get().catch((e) => { console.warn("퇴근 미처리 조회 실패:", e?.message || e); return null; });
+    if (!snap || snap.empty) return null;
+    const now = Date.now();
+    let reminded = 0, flagged = 0, auto = 0;
+    for (const dd of snap.docs) {
+      const d = dd.data();
+      const uid = d.uid || "";
+      if (!uid || uid !== dd.id) continue; // 기사앱에 가입·연결된 문서만
+      const lastMs = d.lastMovedAt?.toMillis?.() || d.updatedAt?.toMillis?.() || 0;
+      const plan = DC.missedCheckoutPlan(d, now, lastMs);
+      if (plan.stage === "none") continue;
+      if (plan.stage === "auto") {
+        try {
+          await db.runTransaction(async (tx) => {
+            const cur = await tx.get(dd.ref);
+            const c = cur.data() || {};
+            const p2 = DC.missedCheckoutPlan(c, Date.now(), c.lastMovedAt?.toMillis?.() || c.updatedAt?.toMillis?.() || 0);
+            if (p2.stage !== "auto") return;
+            const dist = Number(c.totalDistance) || 0;
+            const acc = DC.accumulateOdometer({ odometer: c.care?.odometer, odoAccum: c.odoAccum }, p2.date, dist);
+            const upd = {
+              status: "퇴근", mainStatus: "퇴근", active: false, isFinalCheckout: true, totalDistance: 0, workDate: p2.date,
+              자동퇴근: { date: p2.date, at: p2.checkoutAt, by: "server" }, 퇴근미처리: FieldValue.delete(), updatedAt: FieldValue.serverTimestamp(),
+            };
+            if (acc) { upd[`odoAccum.${acc.day}`] = acc.record; if (acc.add > 0) { upd["care.odometer"] = acc.odometer; upd["care.odometerAt"] = p2.date; } }
+            tx.update(dd.ref, upd);
+            tx.set(db.collection("driver_logs").doc(), {
+              uid, driverName: c.name || "", carNo: c.carNo || "", companyName: c.companyName || "",
+              status: "최종퇴근", mainStatus: "퇴근", auto: true, autoReason: "퇴근 미처리(자정 지남)",
+              timestamp: Timestamp.fromMillis(p2.checkoutAt), finalDistance: dist, location: null,
+            });
+          });
+          auto++;
+        } catch (e) { console.warn("자동 퇴근 실패:", uid, e?.message || e); }
+        continue;
+      }
+      // remind / flag — 같은 날 알림은 한 번만(driver_notifications/checkout_{uid}_{날짜})
+      const title = "퇴근 처리할까요?";
+      const body = "퇴근시간이 지났어요. 운행이 끝났으면 기사앱에서 [퇴근]을 눌러 주세요. (계속 운행 중이면 무시하셔도 돼요)";
+      let fresh = true;
+      try {
+        await db.collection("driver_notifications").doc(`checkout_${uid}_${plan.date}`).create({
+          driverId: uid, type: "checkout", title, body, createdAt: FieldValue.serverTimestamp(), read: false,
+          ...(d.companyName ? { companyName: d.companyName } : {}),
+        });
+      } catch (e) { fresh = false; }
+      if (fresh) {
+        const u = await db.collection("users").doc(uid).get().then((x) => (x.exists ? x.data() : null)).catch(() => null);
+        const tokens = u && u.driverPushEnabled !== false ? userTokens(u) : [];
+        if (tokens.length) {
+          await sendPushAndCleanup(tokens, {
+            notification: { title, body },
+            data: { type: "driver_checkout", tag: `checkout-${plan.date}` },
+            android: { priority: "high" },
+            apns: { payload: { aps: { sound: "default" } } },
+          }, "기사 퇴근 미처리 알림");
+        }
+        reminded++;
+      }
+      if (plan.stage === "flag" && d.퇴근미처리?.date !== plan.date) {
+        await dd.ref.update({ 퇴근미처리: { date: plan.date, since: now, idleMin: plan.idleMin ?? null } }).catch(() => {});
+        flagged++;
+      }
+    }
+    if (reminded || flagged || auto) console.log(`🚚 퇴근 미처리 — 알림 ${reminded} · 관제 표시 ${flagged} · 자동 퇴근 ${auto}`);
     return null;
   });
 
@@ -1028,7 +1109,7 @@ exports.notifyFleetOrderModified =
 
       const route = `${after["상차지명"] || "-"} → ${after["하차지명"] || "-"}`;
       const title = "오더가 수정되었습니다";
-      const body = `${after["거래처명"] ? after["거래처명"] + " " : ""}${route} 오더의 ${labels.join("·")} 정보가 변경되었습니다. 앱에서 확인 후 "수정확인"을 눌러주세요.`;
+      const body = `${after["거래처명"] ? after["거래처명"] + " " : ""}${route} 오더의 ${labels.join("·")} 정보가 변경되었습니다. 앱에서 바뀐 내용을 보고 [재승인] 또는 [거절]을 눌러주세요.`;
 
       await db.collection("driver_notifications").add({
         driverId: driverDoc.id, type: "order_modified", orderId: dispatchId,
