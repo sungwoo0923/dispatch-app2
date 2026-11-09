@@ -12,6 +12,8 @@ import { compressImage } from "../InternalMail";
 import { kpConfirm, kpAlert } from "../kpDialog";
 import DriverSubmitDocs from "./DriverSubmitDocs";
 import { useDriverDocs, docProblems } from "../driverRequiredDocs";
+import DocZoomViewer from "./DocZoomViewer"; // ⭐ 2026-11-10 서류 확대 보기
+import { saveElementPdf } from "./docSave"; // ⭐ 2026-11-10 서류 PDF 저장(기사앱·아이폰·PC)
 const DriverContractSign = React.lazy(() => import("./DriverContractSign")); // ⭐ 2026-11-10 계약서 서명(열 때만 불러온다)
 
 const toMs = (v) => (v?.toMillis ? v.toMillis() : v?.seconds ? v.seconds * 1000 : 0);
@@ -51,6 +53,9 @@ export default function DriverDocBox({ uid, inbox, companyName = "" }) {
   const docNeed = (() => { const p = docProblems(myDocs); return p.missing + p.bad; })();
   const [open, setOpen] = React.useState(null); // { type, item }
   const [viewer, setViewer] = React.useState(null);
+  const [zoomDoc, setZoomDoc] = React.useState(false);
+  const [saving, setSaving] = React.useState(false);
+  const printRef = React.useRef(null);
   const statements = [...(inbox?.statements || [])].sort((a, b) => String(b.period).localeCompare(String(a.period)));
   const penalties = [...(inbox?.penalties || [])].sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")));
   const contracts = [...(inbox?.contracts || [])].sort((a, b) => toMs(b.sentAt) - toMs(a.sentAt));
@@ -76,13 +81,27 @@ export default function DriverDocBox({ uid, inbox, companyName = "" }) {
     setOpen((o) => (o ? { ...o, item: { ...o.item, status: "confirmed" } } : o));
   };
 
+  const docTitle = (type, it) => (type === "pay" ? `${it.period || ""} 지급명세서` : `${it.kind || "서류"}_${it.date || ""}`);
+  const saveOpenPdf = async () => {
+    if (saving || !open) return;
+    setSaving(true);
+    try { const m = await saveElementPdf(printRef.current, docTitle(open.type, open.item)); if (m) kpAlert(m); }
+    catch (e) { kpAlert(`저장하지 못했어요: ${e?.message || e}`); } finally { setSaving(false); }
+  };
   if (open?.type === "ct") return <React.Suspense fallback={<div style={{ padding: 40, textAlign: "center", color: "#9AA9C3", fontWeight: 700 }}>계약서를 여는 중…</div>}><DriverContractSign item={open.item} onBack={() => setOpen(null)} /></React.Suspense>;
   if (open) {
     const it = open.item;
     return (
       <div style={{ padding: 14 }}>
-        <button type="button" onClick={() => setOpen(null)} style={{ height: 38, padding: "0 14px", borderRadius: 14, border: "1px solid #DCE3EE", background: "#fff", fontSize: 15.5, fontWeight: 800, color: "#1B2B4B", marginBottom: 12 }}>← 서류함</button>
+        <button type="button" onClick={() => { setOpen(null); setZoomDoc(false); }} style={{ height: 38, padding: "0 14px", borderRadius: 14, border: "1px solid #DCE3EE", background: "#fff", fontSize: 15.5, fontWeight: 800, color: "#1B2B4B", marginBottom: 12 }}>← 서류함</button>
+        <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+          <button type="button" onClick={() => setZoomDoc(true)} style={{ flex: 1, height: 42, borderRadius: 14, border: "1px solid #C9D6EE", background: "#fff", color: "#1B2B4B", fontSize: 15.5, fontWeight: 900 }}>🔍 크게 보기</button>
+          <button type="button" onClick={saveOpenPdf} disabled={saving} style={{ flex: 1, height: 42, borderRadius: 14, border: "none", background: "#0F1A30", color: "#fff", fontSize: 15.5, fontWeight: 900 }}>{saving ? "저장 중…" : "⤓ PDF 저장"}</button>
+        </div>
         {open.type === "pay" ? <StatementDoc st={it} /> : <PenaltyDoc p={it} onPhoto={(i) => setViewer({ images: it.photos || [], index: i })} />}
+        {/* 저장용 — 화면 밖에 넓게(760px) 그려 두고 PDF로 찍는다 */}
+        <div aria-hidden style={{ position: "fixed", left: -10000, top: 0, width: 760, pointerEvents: "none" }}><div ref={printRef} style={{ width: 760, background: "#fff", padding: 8 }}>{open.type === "pay" ? <StatementDoc st={it} /> : <PenaltyDoc p={it} wide />}</div></div>
+        {zoomDoc && <DocZoomViewer title={docTitle(open.type, it)} width={760} onClose={() => setZoomDoc(false)} onSave={saveOpenPdf} saving={saving}>{open.type === "pay" ? <StatementDoc st={it} /> : <PenaltyDoc p={it} wide onPhoto={(i) => { setZoomDoc(false); setViewer({ images: it.photos || [], index: i }); }} />}</DocZoomViewer>}
         {open.type === "pay" && (
           <button type="button" disabled={it.status === "confirmed"} onClick={() => confirmPay(it)}
             style={{ width: "100%", height: 52, marginTop: 14, borderRadius: 16, border: "none", background: it.status === "confirmed" ? "#E3E8F0" : "linear-gradient(120deg,#0B1428,#2D4C82)", color: it.status === "confirmed" ? "#5B6B85" : "#fff", fontSize: 17, fontWeight: 900 }}>

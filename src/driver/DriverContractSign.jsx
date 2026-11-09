@@ -10,6 +10,8 @@ import { ContractPaper } from "../ContractStudio";
 import { contractSpec } from "../contractTemplates";
 import { compressImage } from "../InternalMail";
 import { kpAlert, kpConfirm } from "../kpDialog";
+import DocZoomViewer from "./DocZoomViewer"; // ⭐ 2026-11-10 확대 보기
+import { saveElementPdf } from "./docSave"; // ⭐ 2026-11-10 PDF 저장(기사앱·아이폰·PC)
 
 const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
 
@@ -48,6 +50,9 @@ export default function DriverContractSign({ item, onBack }) {
   const [signed, setSigned] = React.useState(item.status === "signed" ? item : null);
   const fileRef = React.useRef(null);
   const wrap = React.useRef(null);
+  const [zoomOpen, setZoomOpen] = React.useState(false);
+  const [saving, setSaving] = React.useState(false);
+  const printRef = React.useRef(null); // 저장용 원래 크기 계약서(화면 밖)
   const [scale, setScale] = React.useState(0.42);
   const inner = React.useRef(null);
   const [paperH, setPaperH] = React.useState(0); // 줄인 만큼 높이도 줄인다(transform은 자리를 그대로 차지)
@@ -78,6 +83,16 @@ export default function DriverContractSign({ item, onBack }) {
       kpAlert("서명했습니다. 회사에 전달되었어요.");
     } catch (e) { kpAlert(`서명하지 못했어요: ${e?.message || e}`); } finally { setBusy(false); }
   };
+  const savePdf = async () => {
+    if (saving) return;
+    setSaving(true);
+    try {
+      await new Promise((r) => requestAnimationFrame(() => r()));
+      const msg = await saveElementPdf(printRef.current, `${item.title || "계약서"}${signed ? "_서명본" : ""}`);
+      if (msg) kpAlert(msg);
+    } catch (e) { kpAlert(`저장하지 못했어요: ${e?.message || e}`); } finally { setSaving(false); }
+  };
+  const paper = <ContractPaper title={item.title} spec={spec} vals={item.vals || {}} clauses={item.clauses || []} signs={{ right: shown }} />;
   const seg = (k, l) => (
     <button type="button" onClick={() => { setMethod(k); setImg(""); }} style={{ flex: 1, height: 42, borderRadius: 12, border: "none", background: method === k ? "#0F1A30" : "transparent", color: method === k ? "#fff" : "#3A4A66", fontSize: 15.5, fontWeight: 900 }}>{l}</button>
   );
@@ -89,13 +104,20 @@ export default function DriverContractSign({ item, onBack }) {
         <div style={{ fontSize: 20, fontWeight: 900 }}>{item.title}</div>
         <div style={{ fontSize: 14.5, color: "rgba(255,255,255,.65)" }}>{signed ? "✓ 서명 완료" : "내용을 끝까지 읽고 아래에서 서명해 주세요"}</div>
       </div>
-      <div ref={wrap} style={{ borderRadius: 16, background: "#E9EDF3", padding: 8, overflow: "hidden" }}>
+      <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
+        <button type="button" onClick={() => setZoomOpen(true)} style={{ flex: 1, height: 42, borderRadius: 14, border: "1px solid #C9D6EE", background: "#fff", color: "#1B2B4B", fontSize: 15.5, fontWeight: 900 }}>🔍 크게 보기</button>
+        <button type="button" onClick={savePdf} disabled={saving} style={{ flex: 1, height: 42, borderRadius: 14, border: "none", background: "#0F1A30", color: "#fff", fontSize: 15.5, fontWeight: 900 }}>{saving ? "저장 중…" : `⤓ PDF 저장${signed ? "(서명본)" : ""}`}</button>
+      </div>
+      <div ref={wrap} onClick={() => setZoomOpen(true)} title="눌러서 크게 보기" style={{ borderRadius: 16, background: "#E9EDF3", padding: 8, overflow: "hidden", cursor: "zoom-in" }}>
         <div style={{ width: 794 * scale, height: paperH ? paperH * scale : undefined, overflow: "hidden" }}>
           <div ref={inner} style={{ width: 794, transform: `scale(${scale})`, transformOrigin: "top left" }}>
-            <ContractPaper title={item.title} spec={spec} vals={item.vals || {}} clauses={item.clauses || []} signs={{ right: shown }} />
+            {paper}
           </div>
         </div>
       </div>
+      {/* 저장용 — 화면 밖에 원래 크기(794px)로 그려 두고 PDF로 찍는다 */}
+      <div aria-hidden style={{ position: "fixed", left: -10000, top: 0, width: 794, pointerEvents: "none" }}><div ref={printRef} style={{ width: 794, background: "#fff" }}>{paper}</div></div>
+      {zoomOpen && <DocZoomViewer title={item.title || "계약서"} onClose={() => setZoomOpen(false)} onSave={savePdf} saving={saving}>{paper}</DocZoomViewer>}
       {!signed ? (
         <div style={{ background: "#fff", borderRadius: 20, border: "1px solid #E6EBF3", padding: 16, marginTop: 12 }}>
           <div style={{ fontSize: 16.5, fontWeight: 900, color: "#0F1A30", marginBottom: 10 }}>서명하기</div>

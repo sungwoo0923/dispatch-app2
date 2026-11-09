@@ -61,6 +61,20 @@ export async function savePng(el, name) {
   const a = document.createElement("a"); a.href = c.toDataURL("image/png"); a.download = `${name}.png`; a.click();
 }
 
+// ⭐ 2026-11-10 기사앱 서류 저장 — PDF를 파일(Blob)로 만들어 돌려준다(공유 시트·앱 저장용)
+export async function pdfBlobOf(el) {
+  const pages = await pagesOf(el);
+  const { jsPDF } = await import("jspdf");
+  const pdf = new jsPDF({ unit: "mm", format: "a4" });
+  const M = 8; const W = 210 - M * 2;
+  pages.forEach((c, i) => {
+    if (i) pdf.addPage();
+    const h = (c.height * W) / c.width;
+    pdf.addImage(c.toDataURL("image/jpeg", 0.92), "JPEG", M, M, W, Math.min(h, 297 - M * 2));
+  });
+  return pdf.output("blob");
+}
+
 export async function savePdf(el, name) {
   const pages = await pagesOf(el);
   const { jsPDF } = await import("jspdf");

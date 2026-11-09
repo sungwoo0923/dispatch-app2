@@ -151,7 +151,11 @@ export function ImageViewer({ images = [], index = 0, onClose, name = "사진" }
   }, [images.length, onClose]);
   const src = images[i];
   if (!src) return null;
-  const save = () => { const a = document.createElement("a"); a.href = src; a.download = `${name}_${i + 1}.jpg`; a.click(); };
+  // ⭐ 2026-11-10 기사앱(APK)·아이폰에서도 실제로 저장되게 — 공유 창/다운로드 폴더(docSave.js)
+  const save = async () => {
+    try { const { saveDocFile } = await import("./driver/docSave"); const m = await saveDocFile(src, `${name}_${i + 1}`); if (m) window.alert(m); }
+    catch (e) { window.alert(`저장하지 못했어요: ${e?.message || e}`); }
+  };
   const btn = { width: 44, height: 44, borderRadius: 12, border: "1px solid rgba(255,255,255,.2)", background: "rgba(255,255,255,.1)", color: "#fff", fontSize: 18, fontWeight: 900, cursor: "pointer" };
   const onTouchStart = (e) => {
     if (e.touches.length === 2) { const [a, b] = e.touches; pinch.current = { d: Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY), z }; }
