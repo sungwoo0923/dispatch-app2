@@ -16,6 +16,7 @@ import BankAccountInput from "./BankAccountInput";
 import BulkUploadChooser, { downloadTemplateXlsx } from "./BulkUploadChooser";
 import { fmtPhone } from "./formatInput";
 import { kpAlert, kpConfirm } from "./kpDialog";
+import { MonthPicker } from "./kpInputs";
 import { bumpForkliftPayout } from "./ledgerAuto"; // 지급완료 → 수입·지출 장부 자동
 import {
   FORKLIFT_MODES, FORKLIFT_UPLOAD_COLS, fkAmount, fkMode, fkModeLabel, fkPresetKey, forkliftApply, forkliftClear,
@@ -559,7 +560,7 @@ export function ForkliftPayouts({ orders = [], patchDispatch, isViewer = false }
     <div className="p-4 space-y-3" data-forklift-payouts>
       <div className="rounded-[18px] bg-white border border-[#E3E8F0] px-4 py-3 flex flex-wrap items-center gap-2">
         <div className="mr-auto"><div className="text-[10.5px] font-extrabold tracking-[0.22em] text-[#4B6CB7]" style={{ fontFamily: MONO }}>FORKLIFT PAYOUT</div><div className="text-[16px] font-black text-[#0F1A30]">지게차 지급</div><div className="text-[12px] text-[#7A89A3]">오더에 넣은 지게차비용을 지게차 기사별로 모아 지급합니다(배차취소 제외 · 상차일 기준)</div></div>
-        <input type="month" value={ym} onChange={(e) => setYm(e.target.value)} className="h-9 px-2 rounded-lg border border-[#DCE3EE] text-[13px] font-bold" />
+        <MonthPicker value={ym} onChange={setYm} clearable placeholder="전체 기간" /* ⭐ 2026-11-09 브라우저 월 선택(영문 표시) → 프로그램 달력 */ />
         <div className="inline-flex rounded-lg border border-[#DCE3EE] p-0.5">{["미지급", "지급완료", "전체"].map((k) => <button key={k} type="button" onClick={() => setOnly(k)} className={`h-8 px-3 rounded-md text-[12.5px] font-black ${only === k ? "bg-[#0F1A30] text-white" : "text-[#5B6B85]"}`}>{k}</button>)}</div>
         <button type="button" onClick={exportXlsx} className="h-9 px-3 rounded-lg border border-[#DCE3EE] text-[13px] font-black text-[#1B2B4B]">엑셀</button>
       </div>

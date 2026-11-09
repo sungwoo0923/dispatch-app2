@@ -183,6 +183,54 @@ export function PrepaidToggle({ on, onChange, excluded = 0, label = "선불·착
   );
 }
 
+// ⭐ 2026-11-09 거래처정산 2분할 — 왼쪽 거래처 목록(이 달 · 단계 · 합계). 고르면 오른쪽 명세서가 바뀐다
+//  넓은 화면(2xl)은 세로 목록, 그보다 좁으면 가로로 넘겨 보는 줄
+export function StatementClientRail({ month, setMonth, groups = [], sel, onSel, onBoard }) {
+  const [q, setQ] = React.useState("");
+  const shown = React.useMemo(() => {
+    const nq = q.trim().toLowerCase().replace(/\s+/g, "");
+    return groups.filter((g) => !nq || String(g.client || "").toLowerCase().replace(/\s+/g, "").includes(nq));
+  }, [groups, q]);
+  const [y, m] = String(month || "").split("-").map(Number);
+  const shift = (n) => { const d = new Date(Date.UTC(y, m - 1 + n, 1)); setMonth(d.toISOString().slice(0, 7)); };
+  const total = groups.reduce((s, g) => s + (g.total || 0), 0);
+  const closed = groups.filter((g) => g.stage === "마감").length;
+  const boxRef = React.useRef(null);
+  React.useEffect(() => { try { boxRef.current?.querySelector("[data-on='1']")?.scrollIntoView({ block: "nearest", inline: "nearest" }); } catch (e) { /* 무시 */ } }, [sel, month, shown.length]);
+  return (
+    <div ref={boxRef} className={`${sdCard} p-3 min-w-0 2xl:sticky 2xl:top-3`} data-testid="stmt-client-rail">
+      <div className="flex items-center gap-1.5">
+        <button type="button" onClick={() => shift(-1)} className="w-9 h-9 rounded-lg border border-[#D5DDEA] text-[#1B2B4B] flex items-center justify-center hover:bg-[#F4F6FA]" aria-label="이전 달" data-testid="stmt-rail-prev"><Ico d={IC.back} size={15} /></button>
+        <div className="flex-1 min-w-0 text-center whitespace-nowrap text-[#0F1A30]" style={NUM}><span className="text-[12px] font-bold text-[#5B6B85] mr-1">{y}</span><span className="text-[16px] font-black">{m}월</span></div>
+        <button type="button" onClick={() => shift(1)} className="w-9 h-9 rounded-lg border border-[#D5DDEA] text-[#1B2B4B] flex items-center justify-center hover:bg-[#F4F6FA]" aria-label="다음 달"><Ico d={IC.next} size={15} /></button>
+        {onBoard && <button type="button" onClick={onBoard} className="h-9 px-2.5 rounded-lg border border-[#D5DDEA] text-[13px] font-bold text-[#1B2B4B] hover:bg-[#F4F6FA] inline-flex items-center gap-1 whitespace-nowrap" title="단계 보드로 한눈에 보기 · 여러 곳 한 번에 처리"><Ico d={IC.grid} size={14} />보드</button>}
+      </div>
+      <div className="mt-2 flex items-center justify-between text-[12.5px] font-bold text-[#5B6B85]" style={NUM}>
+        <span>거래처 {groups.length}곳 · 마감 {closed}</span><span className="text-[#0F1A30] font-black">{shortWon(total)}</span>
+      </div>
+      {groups.length > 6 && <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="거래처 찾기" className={`${sdInp} mt-2 h-9`} />}
+      <div className="mt-2 flex 2xl:flex-col gap-1.5 overflow-x-auto 2xl:overflow-x-visible 2xl:max-h-[calc(100vh-260px)] 2xl:overflow-y-auto no-scrollbar" style={{ scrollbarWidth: "thin" }}>
+        {shown.length === 0 && <div className="px-2 py-6 text-center text-[13px] font-bold text-[#9AA9C3] w-full">{groups.length ? "찾는 거래처가 없어요" : "이 달에 청구할 오더가 없어요"}</div>}
+        {shown.map((g) => {
+          const on = g.client === sel;
+          return (
+            <button key={g.key} type="button" onClick={() => onSel(g)} data-testid="stmt-rail-item" data-on={on ? "1" : "0"}
+              className={`shrink-0 2xl:shrink text-left rounded-xl px-3 py-2 border transition min-w-[180px] 2xl:min-w-0 ${on ? "bg-[#0F1A30] border-[#0F1A30] text-white" : "bg-white border-[#E3E8F0] hover:border-[#B8C4D8] hover:bg-[#F8FAFD]"}`}>
+              <div className="flex items-center gap-2 min-w-0">
+                <span className={`text-[14px] font-black truncate flex-1 ${on ? "text-white" : "text-[#0F1A30]"}`}>{g.client}</span>
+                <span className={`text-[12px] font-black px-1.5 h-5 rounded-md inline-flex items-center whitespace-nowrap ${on ? "bg-white/15 text-white" : stageIdx(g.stage) === 0 ? "border border-dashed border-[#B8C4D8] text-[#5B6B85]" : stageIdx(g.stage) === 6 ? "bg-[#0F1A30] text-white" : "bg-[#EEF3FB] text-[#1B2B4B]"}`}>{stageLabel(g.stage)}</span>
+              </div>
+              <div className={`mt-0.5 flex items-center justify-between text-[12.5px] font-bold ${on ? "text-white/70" : "text-[#5B6B85]"}`} style={NUM}>
+                <span>{(g.count || 0).toLocaleString()}건</span><span className={on ? "text-white font-black" : "text-[#0F1A30] font-black"}>{(g.total || 0).toLocaleString()}원</span>
+              </div>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 export function StatementBoard({ month, setMonth, recentMonths = [], groups, onOpen, onAdvance, onBulk, onManual, bizLabel, tools = null }) {
   const [stageF, setStageF] = React.useState("");
   const [q, setQ] = React.useState("");

@@ -2921,7 +2921,7 @@ import PersonnelOrder, { OrderNoticeHistory } from "./PersonnelOrder";
 import OrderScanModal, { looksLikeOrder, scanDropDate } from "./OrderScanModal";
 import { mainScanAi } from "./orderScanApi"; // 🧠 2026-11-07 오더 스캔 정밀 인식(서버 글자 인식 · AI 칸 정리 · 회사별 학습)
 import KpSubNav, { SubNavBar, useIsPhone } from "./KpSubNav";
-import { useArDesk, PrepaidToggle, arDeskId, stageIdx, stageLabel, AGING, agingKey, StatementBoard, StatementLineGrid, StatementHistory, StageStepper, StageRecordModal, StageBadge, KpModal, ArOverview, ArClientList, ArAccrualMap, ArDetail, AR_STATUS, sdBtn, sdBtnPri, sdInp, Ico, IC } from "./SettleDesk"; // 🧾 2026-11-07 거래명세서 단계 보드 · 미수금 데스크
+import { useArDesk, PrepaidToggle, StatementClientRail, arDeskId, stageIdx, stageLabel, AGING, agingKey, StatementBoard, StatementLineGrid, StatementHistory, StageStepper, StageRecordModal, StageBadge, KpModal, ArOverview, ArClientList, ArAccrualMap, ArDetail, AR_STATUS, sdBtn, sdBtnPri, sdInp, Ico, IC } from "./SettleDesk"; // 🧾 2026-11-07 거래명세서 단계 보드 · 미수금 데스크
 import RevenueDashboard from "./RevenueDashboard";
 import { TargetPage, ClientsPage, TrendPage, YearlyPage, QueryPage } from "./RevenuePages";
 import { RecurringManagerModal, CloseReportModal } from "./AutomationPanels";
@@ -9303,6 +9303,7 @@ return (
               cardImageUploading={cardImageUploading}
               setCardImageUploading={setCardImageUploading}
               isViewer={isViewer}
+              active={정산관리Tab === "거래처정산"}
             />
           </div>
           {정산관리Tab === "지게차지급" && <ForkliftPayouts orders={settleRows} patchDispatch={patchDispatchSafe} isViewer={isViewer} />}
@@ -51251,7 +51252,7 @@ function ArClientInfo({ client, name, upsertClient, isViewer }) {
   );
 }
 
-function ClientSettlement({ dispatchData, setDispatchData, userCompany = "", clients = [], setClients, upsertClient, showAlert = (m) => alert(m), patchDispatch, cardImage, setCardImage, cardImageUploading, setCardImageUploading, isViewer = false }) {
+function ClientSettlement({ dispatchData, setDispatchData, userCompany = "", clients = [], setClients, upsertClient, showAlert = (m) => alert(m), patchDispatch, cardImage, setCardImage, cardImageUploading, setCardImageUploading, isViewer = false, active = true }) {
   // ⭐ 2026-11-03 여러 사업자 — 거래명세서·미수금은 청구 사업자 하나씩(공급자 정보·직인·계좌가 사업자마다 다름)
   const csBiz = useCompanyBiz(getTenant() || userCompany);
   const [csBizSel, setCsBizSel] = React.useState("");
@@ -52922,7 +52923,7 @@ const handleBatchSettle = async (targetStatus) => {
   const csPhone = useIsPhone();
   const kstYm = (n = 0) => { const d = new Date(Date.now() + 9 * 3600e3); d.setUTCDate(1); d.setUTCMonth(d.getUTCMonth() + n); return d.toISOString().slice(0, 7); };
   const [pipeMonth, setPipeMonth] = useState(() => kstYm(-1));
-  const [invView, setInvView] = useState("board"); // board(단계 보드) | edit(명세서 편집)
+  const [invView, setInvView] = useState("edit"); // ⭐ 2026-11-09 기본 = 2분할 명세서 편집(왼쪽 거래처 목록) · board(단계 보드)는 버튼으로
   const [manualOpen, setManualOpen] = useState(false); // 직접 조회 팝업
   const [stageAsk, setStageAsk] = useState(null); // { stage, groups }
   const [pendingSend, setPendingSend] = useState(false);
@@ -52972,6 +52973,7 @@ const handleBatchSettle = async (targetStatus) => {
     setStart(monthStart(ym)); setEnd(monthEnd(ym)); setSearched(true); setDropdownOpen(false);
     setInvView("edit");
     if (send) setPendingSend(true);
+    try { localStorage.setItem(`kp_stmt_last_${arCompany || ""}_${csBizCur || ""}`, c); } catch (e) { /* 저장 안 돼도 괜찮음 */ }
   };
   // 편집 중인 명세서가 한 달 · 한 거래처면 단계 기록 대상
   const stmtYm = searchType === "거래처명" && client && start && end && start.slice(0, 7) === end.slice(0, 7) && start === monthStart(start.slice(0, 7)) && end === monthEnd(start.slice(0, 7)) ? start.slice(0, 7) : "";
@@ -53034,6 +53036,22 @@ const handleBatchSettle = async (targetStatus) => {
   };
   const pipeNav = useMemo(() => [...pipeGroups].sort((a, b) => stageIdx(a.stage) - stageIdx(b.stage) || b.total - a.total), [pipeGroups]);
   const navIdx = stmtYm === pipeMonth ? pipeNav.findIndex(g => g.client === client) : -1;
+  // ⭐ 2026-11-09 들어오면 마지막으로 본 거래처(없으면 목록 맨 위)를 바로 연다 — 항상 2분할
+  const stmtLastOf = () => { try { return localStorage.getItem(`kp_stmt_last_${arCompany || ""}_${csBizCur || ""}`) || ""; } catch (e) { return ""; } };
+  const pickStmtGroup = (list) => { const last = stmtLastOf(); return list.find(g => g.client === last) || list[0] || null; };
+  useEffect(() => {
+    if (tab !== "invoice" || invView !== "edit" || searched || manualOpen || !pipeNav.length) return;
+    const g = pickStmtGroup(pipeNav);
+    if (g) openStmt(g.client, g.yyyymm);
+  }, [tab, invView, searched, manualOpen, pipeNav]); // eslint-disable-line react-hooks/exhaustive-deps
+  // 왼쪽 목록에서 달을 바꾸면 — 같은 거래처가 그 달에도 있으면 그대로, 없으면 그 달 맨 위 거래처
+  const changeStmtMonth = (ym) => {
+    setPipeMonth(ym);
+    const list = [...groupsOfMonth(ym)].sort((a, b) => stageIdx(a.stage) - stageIdx(b.stage) || b.total - a.total);
+    const g = list.find(x => x.client === client) || pickStmtGroup(list);
+    if (g) openStmt(g.client, ym);
+    else { setStart(monthStart(ym)); setEnd(monthEnd(ym)); }
+  };
 
   // ── 미수금 데스크 ──
   const [arSel, setArSel] = useState("");
@@ -53208,7 +53226,8 @@ const handleBatchSettle = async (targetStatus) => {
     {/* ⭐ 2026-11-05 kp-settle — 정산 화면 글씨 크게(index.css: 표 14.5px · 금액 15.5px 굵게 · 작은 글씨 한 단계씩) */}
     <div className="kp-settle min-w-0">
       {/* ⭐ 2026-11-07 머리 — 화면 제목 · 탭은 왼쪽 메뉴 윗줄 왼쪽, 청구 사업자는 오른쪽(왼쪽 메뉴 머리와 높이·왼쪽 끝 정렬) */}
-      <SubNavBar side="left" order={0} fallbackClass="mb-3 flex items-center gap-3 flex-wrap rounded-2xl px-4 py-2.5 text-white bg-[#1B2B4B]">
+      {/* ⭐ 2026-11-09 다른 탭(용차지급 · 지입정산 · 지게차 지급)에선 숨겨져 있어도 위 줄에 거래명세서 탭이 남던 문제 → 보일 때만 */}
+      {active && <SubNavBar side="left" order={0} fallbackClass="mb-3 flex items-center gap-3 flex-wrap rounded-2xl px-4 py-2.5 text-white bg-[#1B2B4B]">
         <div className="leading-tight shrink-0 hidden sm:block">
           <div className="text-[11px] font-extrabold tracking-[0.24em] text-[#8FB0F0]" style={{ fontVariantNumeric: "tabular-nums" }}>{tab === "invoice" ? "STATEMENT" : tab === "unsettledMonth" ? "RECEIVABLES" : "OUTBOX"}</div>
           <div className="text-[16px] font-black text-white">{tab === "invoice" ? "거래명세서" : tab === "unsettledMonth" ? "미수금관리" : "보낸메일함"}</div>
@@ -53222,8 +53241,8 @@ const handleBatchSettle = async (targetStatus) => {
             </button>
           ))}
         </div>
-      </SubNavBar>
-      {csBiz.multi && (
+      </SubNavBar>}
+      {active && csBiz.multi && (
         <SubNavBar side="right" order={0}>
           <div className="flex items-center gap-2" title={`거래명세서 · 미수금 · 메일이 ${csBizCur} 이름 · 사업자번호 · 계좌 · 직인으로 나가요`}>
             <div className="leading-tight text-right hidden lg:block">
@@ -53262,7 +53281,11 @@ const handleBatchSettle = async (targetStatus) => {
           )}
 
           {invView === "edit" && (
-            <div className="space-y-3">
+            <div className="grid grid-cols-1 2xl:grid-cols-[264px_minmax(0,1fr)] gap-3 items-start">
+              {/* ⭐ 2026-11-09 항상 2분할 — 왼쪽 거래처 목록(이 달) · 오른쪽 명세서 편집 + 미리보기 */}
+              <StatementClientRail month={pipeMonth} setMonth={changeStmtMonth} groups={pipeNav} sel={stmtYm === pipeMonth ? client : ""}
+                onSel={(g) => openStmt(g.client, g.yyyymm)} />
+            <div className="space-y-3 min-w-0">
               {/* 편집 머리 — 돌아가기 · 거래처 · 기간 · 이전/다음 · 작성 저장 · 발송 */}
               <div className={`${csCard} px-4 py-3 flex items-center gap-3 flex-wrap`}>
                 <button type="button" onClick={() => { setInvView("board"); if (stmtYm) setPipeMonth(stmtYm); }} className={sdBtn}><Ico d={IC.back} size={15} w={2.4} />단계 보드</button>
@@ -53312,7 +53335,7 @@ const handleBatchSettle = async (targetStatus) => {
                   {!searched ? (
                     <div className={`${csCard} px-5 py-10 text-center`}>
                       <div className="text-[16px] font-black text-[#0F1A30]">거래처를 조회해 주세요</div>
-                      <div className="text-[14px] mt-1 text-[#9AA9C3]">단계 보드에서 거래처를 열거나, 다른 조회로 기사명 · 기간을 직접 고를 수 있어요</div>
+                      <div className="text-[14px] mt-1 text-[#9AA9C3]">왼쪽 목록에서 거래처를 고르거나, 다른 조회로 기사명 · 기간을 직접 고를 수 있어요</div>
                       <button type="button" onClick={() => setManualOpen(true)} className={`${sdBtnPri} mt-4`}><Ico d={IC.search} size={15} />조회하기</button>
                     </div>
                   ) : rowsInvoice.length === 0 ? (
@@ -53650,6 +53673,7 @@ const handleBatchSettle = async (targetStatus) => {
               </div>
             </div>
               </div>
+            </div>
             </div>
           )}
 
