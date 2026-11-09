@@ -65,3 +65,35 @@ export function bizPlanDemo(company = "테스트운송") {
   cache = { key, plans, expenses };
   return cache;
 }
+
+// 🧪 2026-11-09 결재함·내 기안함 필터 점검(demoAp=box) — 둘러보기 계정(preview)이 기안자·결재자인 문서를 상태별로 하나씩
+export function apBoxDemo(company = "테스트운송") {
+  const me = { uid: "preview", name: "둘러보기", team: "배차팀", position: "대리" };
+  const st = { uid: "dap-st", name: "정사원", team: "배차팀", position: "사원" };
+  const tl = { uid: "dap-tl", name: "김배차", team: "배차팀", position: "팀장" };
+  const mk = (id, o) => {
+    const drafter = o.mine ? me : st;
+    const line = o.mine ? [{ ...tl, kind: "결재", status: o.status === "pending" ? "wait" : "approved" }] : [{ ...me, kind: "결재", status: o.step === 0 && o.status === "pending" ? "wait" : "approved" }, { ...tl, kind: "결재", status: "wait" }];
+    return { id, company, docNo: `DB-${id}`, cat: o.cat || "draft", form: o.cat === "expense" ? "spend" : "general", formLabel: o.cat === "expense" ? "지출결의서" : "기안서",
+      title: o.title, summary: o.title, amount: o.amount || 0, status: o.status, step: o.step ?? 0, drafterUid: drafter.uid, drafter, line,
+      participants: [...new Set([drafter.uid, ...line.map((x) => x.uid)])], ...(o.paid ? { paid: { at: Date.now() - 864e5, date: ymd(-1), by: "dap-fin", byName: "이재무" } } : {}),
+      createdAt: ts(o.ago || 1), updatedAt: ts(o.ago || 1) };
+  };
+  return [
+    mk("m-pend", { mine: true, title: "[내 기안] 진행 중 기안", status: "pending", ago: 1 }),
+    mk("m-appr", { mine: true, title: "[내 기안] 완료 기안", status: "approved", ago: 2 }),
+    mk("m-wait", { mine: true, cat: "expense", amount: 120000, title: "[내 기안] 지급 대기 지출", status: "approved", ago: 3 }),
+    mk("m-paid", { mine: true, cat: "expense", amount: 80000, paid: true, title: "[내 기안] 지급완료 지출", status: "approved", ago: 4 }),
+    mk("m-rej", { mine: true, title: "[내 기안] 반려 기안", status: "rejected", ago: 5 }),
+    mk("m-can", { mine: true, title: "[내 기안] 결재 취소 기안", status: "cancelled", ago: 6 }),
+    mk("m-wd", { mine: true, title: "[내 기안] 회수 기안", status: "withdrawn", ago: 7 }),
+    mk("i-todo", { title: "[결재] 내 차례", status: "pending", step: 0, ago: 1 }),
+    mk("i-prog", { title: "[결재] 다음 결재자 진행 중", status: "pending", step: 1, ago: 2 }),
+    mk("i-appr", { title: "[결재] 완료 기안", status: "approved", step: 2, ago: 3 }),
+    mk("i-wait", { cat: "expense", amount: 300000, title: "[결재] 지급 대기 지출", status: "approved", step: 2, ago: 4 }),
+    mk("i-paid", { cat: "expense", amount: 50000, paid: true, title: "[결재] 지급완료 지출", status: "approved", step: 2, ago: 5 }),
+    mk("i-rej", { title: "[결재] 반려 기안", status: "rejected", step: 1, ago: 6 }),
+    mk("i-can", { title: "[결재] 결재 취소 기안", status: "cancelled", step: 2, ago: 7 }),
+    mk("i-wd", { title: "[결재] 회수 기안", status: "withdrawn", step: 1, ago: 8 }),
+  ];
+}

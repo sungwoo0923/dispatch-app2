@@ -2240,6 +2240,24 @@ const applyListTools = (docs, f) => {
   });
 };
 
+// ⭐ 2026-11-09 결재함·내 기안함 상태 필터 공용 — 같은 순서·같은 이름·같은 판정(지급 대기·지급완료는 해당 문서가 있을 때만 보인다)
+export const AP_STATUS_TABS = [["all", "전체"], ["pending", "진행 중"], ["approved", "완료"], ["paywait", "지급 대기"], ["paid", "지급완료"], ["rejected", "반려"], ["cancelled", "결재 취소"], ["withdrawn", "회수"]];
+const PAY_TAB_KEYS = ["paywait", "paid"];
+// 상태별 묶음 — pendingFilter로 "진행 중"의 범위를 정한다(결재함은 내 차례인 문서를 '결재 대기'로 따로 빼서 진행 중에서 제외)
+function apStatusSets(docs, { pendingFilter = () => true } = {}) {
+  return {
+    all: docs,
+    pending: docs.filter((d) => d.status === "pending" && pendingFilter(d)),
+    approved: docs.filter((d) => d.status === "approved"),
+    paywait: docs.filter((d) => payState(d) === "wait"),
+    paid: docs.filter((d) => payState(d) === "paid"),
+    rejected: docs.filter((d) => d.status === "rejected"),
+    cancelled: docs.filter((d) => d.status === "cancelled"),
+    withdrawn: docs.filter((d) => d.status === "withdrawn"),
+  };
+}
+const apStatusKeys = (sets, showPay = false) => AP_STATUS_TABS.filter(([k]) => !PAY_TAB_KEYS.includes(k) || showPay || sets.paywait.length || sets.paid.length);
+
 function Tabs({ tabs, tab, setTab }) {
   return (
     <div className="flex items-center gap-1.5 px-5 pt-4 pb-3 border-b border-[#EEF1F6] overflow-x-auto no-scrollbar">
@@ -2475,22 +2493,23 @@ export default function ApprovalCenter({ company, me, page, setPage, openId, onO
   const L = (list || []).filter((d) => !isHidden(d));
   const hiddenL = (list || []).filter(isHidden);
   const inLine = (d) => (d.line || []).some((s) => s.uid === uid);
+  // ⭐ 2026-11-09 결재함 필터를 내 기안함과 같게 — 결재 대기(내 차례) + 공용 상태 필터(전체·진행 중·완료·지급 대기·지급완료·반려·결재 취소·회수) + 참조·회사 전체·삭제한 문서
+  const lineL = L.filter(inLine);
+  const payMine = [...new Map([...L, ...payPool.filter((d) => !isHidden(d))].map((d) => [d.id, d])).values()];
+  const inboxStatus = apStatusSets(lineL, { pendingFilter: (d) => !myTurn(d, uid) });
   const sets = {
     todo: L.filter((d) => myTurn(d, uid)),
-    progress: L.filter((d) => d.status === "pending" && inLine(d) && !myTurn(d, uid)),
-    done: L.filter((d) => d.status === "approved" && inLine(d)),
-    rejected: L.filter((d) => d.status === "rejected" && inLine(d)),
-    cancelled: L.filter((d) => d.status === "cancelled" && inLine(d)),
+    ...inboxStatus,
+    // 💸 지급 대기·지급완료 — 내가 결재선에 있는 문서 + 내가 지급 처리할 수 있는 회사 지출 결의(경리·재무, 오래된 것부터)
+    paywait: [...new Map([...inboxStatus.paywait, ...payMine.filter((d) => payState(d) === "wait" && canPay(d, meFull))].map((d) => [d.id, d])).values()]
+      .sort((a, b) => toMs(a.updatedAt || a.createdAt) - toMs(b.updatedAt || b.createdAt)),
+    paid: [...new Map([...inboxStatus.paid, ...payMine.filter((d) => payState(d) === "paid" && canPay(d, meFull))].map((d) => [d.id, d])).values()],
     cc: L.filter((d) => (d.ccUids || []).includes(uid)),
     company: companyAll,
     hidden: hiddenL,
-    // 💸 내가 지급 처리할 수 있는 지급 대기 문서(오래된 것부터)
-    paywait: [...new Map([...L, ...payPool.filter((d) => !isHidden(d))].map((d) => [d.id, d])).values()]
-      .filter((d) => payState(d) === "wait" && canPay(d, meFull)).sort((a, b) => toMs(a.updatedAt || a.createdAt) - toMs(b.updatedAt || b.createdAt)),
   };
   const mineL = L.filter((d) => d.drafterUid === uid);
-  const mineSets = { all: mineL, pending: mineL.filter((d) => d.status === "pending"), approved: mineL.filter((d) => d.status === "approved"),
-    paywait: mineL.filter((d) => payState(d) === "wait"), paid: mineL.filter((d) => payState(d) === "paid"), rejected: mineL.filter((d) => d.status === "rejected"), cancelled: mineL.filter((d) => d.status === "cancelled"), withdrawn: mineL.filter((d) => d.status === "withdrawn") };
+  const mineSets = apStatusSets(mineL);
   const redraft = (d) => { setOpen(null); setPreset({ ...d, editId: null }); setPage(d.cat); };
   const edit = (d) => { setOpen(null); setPreset({ ...d, editId: d.id }); setPage(d.cat); };
   const unreadIn = (arr) => (arr || []).filter((d) => mineUnread(d, uid)).length;
@@ -2517,8 +2536,9 @@ export default function ApprovalCenter({ company, me, page, setPage, openId, onO
             // ⭐ 2026-10-31 탭 숫자는 그 탭의 문서 수(검색·기간 적용), 새 결과는 빨간 점으로 따로
             const F = (k) => applyListTools(k === "company" ? (companyAll || []) : (sets[k] || []), lf) || [];
             const showPay = isFinUser(meFull) || sets.paywait.length > 0;
-            const keys = ["todo", ...(showPay ? ["paywait"] : []), "progress", "done", "rejected", "cancelled", "cc", ...(admin ? ["company"] : []), "hidden"];
-            const label = { todo: "결재 대기", paywait: "지급 대기", progress: "진행 중", done: "결재 완료", rejected: "반려", cancelled: "결재 취소", cc: "참조 문서", company: "회사 전체", hidden: "삭제한 문서" };
+            const statusKeys = apStatusKeys(sets, showPay);
+            const keys = ["todo", ...statusKeys.map(([k]) => k), "cc", ...(admin ? ["company"] : []), "hidden"];
+            const label = { todo: "결재 대기", ...Object.fromEntries(statusKeys), cc: "참조 문서", company: "회사 전체", hidden: "삭제한 문서" };
             const pool = [...(list || []), ...(companyAll || [])];
             const drafters = [...new Map(pool.filter((d) => d.drafterUid).map((d) => [d.drafterUid, d.drafter?.name || "-"])).entries()].sort((a, b) => String(a[1]).localeCompare(String(b[1]), "ko"));
             return (<>
@@ -2534,7 +2554,7 @@ export default function ApprovalCenter({ company, me, page, setPage, openId, onO
           {(() => {
             // ⭐ 2026-10-31 숫자는 문서 수(예전엔 "새 결과" 수라 목록 2건인데 1로 보이고, 열어 보면 숫자가 사라졌다) — 새 결과는 빨간 점
             const M = (k) => applyListTools(mineSets[k] || [], lf) || [];
-            const keys = [["all", "전체"], ["pending", "진행 중"], ["approved", "완료"], ...(mineSets.paywait.length || mineSets.paid.length ? [["paywait", "지급 대기"], ["paid", "지급완료"]] : []), ["rejected", "반려"], ["cancelled", "결재 취소"], ["withdrawn", "회수"]];
+            const keys = apStatusKeys(mineSets);
             return (<>
               <Tabs tab={tab} setTab={setTab} tabs={keys.map(([k, l]) => [k, l, M(k).length, unreadIn(M(k))])} />
               <ListTools f={lf} setF={setLf} />
