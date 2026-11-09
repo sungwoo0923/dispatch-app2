@@ -2910,7 +2910,8 @@ import NotifyCenter from "./NotifyCenter"; // ⭐ 2026-11-03 알림 통합 — �
 import { RemoteSupportHost, openRemoteSupport, SUPPORT_ICON } from "./RemoteSupport"; // ⭐ 2026-11-02 원격지원 —
 import OrderCongratsPopup from "./OrderCongratsPopup";
 import BirthdayPopup from "./BirthdayPopup";
-import { tryAutoCheckIn } from "./autoAttendance";
+import { tryAutoCheckIn, kstToday as checkInToday } from "./autoAttendance";
+import { shouldAttempt as shouldAttemptCheckIn, applyResult as applyCheckInResult, TICK_MS as CHECKIN_TICK_MS } from "./autoCheckInPlan"; // ⏰ 2026-11-09 자동 출근 재시도 규칙
 import PersonnelOrder, { OrderNoticeHistory } from "./PersonnelOrder";
 import OrderScanModal, { looksLikeOrder, scanDropDate } from "./OrderScanModal";
 import { mainScanAi } from "./orderScanApi"; // 🧠 2026-11-07 오더 스캔 정밀 인식(서버 글자 인식 · AI 칸 정리 · 회사별 학습)
@@ -7594,21 +7595,39 @@ useEffect(() => {
     if (!company) return; // 회사 정보 로딩 전에는 실행하지 않음 (잘못된 companyName 저장 방지)
     // ⭐ 2026-11-02 자동 출근 — 각자 출근시간 3시간 전 ~ 퇴근시간 사이에만(자정·새벽에 열면 출근으로 찍히던 문제), 반차 반영.
     //  PC는 위치 대신 시간으로만 판단(회사 PC를 켜는 것 = 출근). 너무 이르면 5분마다 다시 확인한다(공통 규칙: src/autoAttendance.js)
+    // ⭐ 2026-11-09 열 때 한 번만 시도하던 것을 → 탭이 다시 보일 때 · 창 포커스 · 인터넷 재연결 · 5분마다도 시도(src/autoCheckInPlan.js)
+    //  (브라우저를 켜 둔 채 다음날 들어오거나, 로그인 직후 저장이 한 번 실패하면 브라우저를 껐다 켜야만 출근되던 문제)
     let stop = false; let timer = null;
+    let st = { doneDay: "", busy: false, nextAt: 0 };
     const userName = user?.displayName || user?.email?.split("@")[0] || "사용자";
-    const attempt = async () => {
+    const attempt = async (force = false) => {
       if (stop) return;
-      const r = await tryAutoCheckIn({ uid: user.uid, name: userName, company, source: "auto" }).catch(() => ({ ok: false }));
+      const today = checkInToday(); // tryAutoCheckIn과 같은 날짜 기준(KST)
+      if (!shouldAttemptCheckIn(st, today, Date.now(), force)) return;
+      st = { ...st, busy: true };
+      const r = await tryAutoCheckIn({ uid: user.uid, name: userName, company, source: "auto" }).catch(() => ({ ok: false, reason: "error" }));
       if (stop) return;
-      if (r.ok) {
-        if (window.__sflowShowToast) window.__sflowShowToast(`${r.leave ? `${r.leave} · ` : ""}출근 처리되었습니다 (${new Date().toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })})`, "success");
-        return;
-      }
-      if (r.weekend) { setWeekendCheckPopup(true); return; }
-      if (r.reason === "early") timer = setTimeout(attempt, 5 * 60 * 1000);
+      st = applyCheckInResult(st, today, r, Date.now());
+      if (r.ok && window.__sflowShowToast) window.__sflowShowToast(`${r.leave ? `${r.leave} · ` : ""}출근 처리되었습니다 (${new Date().toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })})`, "success");
+      if (st.weekendPopup) setWeekendCheckPopup(true);
+      if (!st.doneDay || st.doneDay !== today) { clearTimeout(timer); timer = setTimeout(() => attempt(), Math.max(1000, st.nextAt - Date.now())); }
     };
-    attempt();
-    return () => { stop = true; clearTimeout(timer); };
+    const onVisible = () => { if (document.visibilityState === "visible") attempt(true); };
+    const onFocus = () => attempt(true);
+    const onOnline = () => attempt(true);
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("focus", onFocus);
+    window.addEventListener("online", onOnline);
+    window.addEventListener("pageshow", onFocus); // 뒤로가기 캐시(bfcache)로 다시 열린 경우
+    const tick = setInterval(() => attempt(), CHECKIN_TICK_MS); // 켜 둔 채 자정을 넘긴 경우
+    attempt(true);
+    return () => {
+      stop = true; clearTimeout(timer); clearInterval(tick);
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("focus", onFocus);
+      window.removeEventListener("online", onOnline);
+      window.removeEventListener("pageshow", onFocus);
+    };
   }, [user?.uid, userCompany, role]);
 
   const handleWeekendCheckIn = async (checkIn) => {
