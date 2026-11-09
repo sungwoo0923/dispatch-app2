@@ -372,3 +372,6 @@ input[type="file"]::file-selector-button:hover { border-color: #2D4C82; backgrou
 .fixed .overflow-y-auto, .fixed .overflow-auto, .fixed .overflow-y-scroll, .fixed.overflow-y-auto, .fixed.overflow-auto {
   overscroll-behavior: contain;
 }
+
+/* ⭐ 2026-11-10 엣지 미니 도구창 — 버튼·표 머리·메뉴 글자는 선택되지 않게(복사할 일이 없는 곳) */
+button, th, nav, [role="button"], [role="tab"] { -webkit-user-select: none; user-select: none; }

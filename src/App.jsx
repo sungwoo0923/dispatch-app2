@@ -346,7 +346,7 @@ export default function App() {
   //  안드로이드 태블릿 UA(…Android… "Mobile" 없음)는 isSmartPhone()이 참이라 MobileApp이 뜨는데, 동시에 태블릿 판정도 참이어서
   //  아래 이펙트가 viewport를 width=1200으로 바꿔(분할화면에서는 0.3배 축소) 모바일 화면이 깨알같이/겹쳐 보일 수 있었다.
   //  또 분할화면에 들어가거나 나와서 화면 폭이 768px을 넘나들면(태블릿·PC UA) 모바일↔PC 화면을 다시 고른다(유튜브처럼).
-  const [, setPhoneLayout] = useState(() => isSmartPhone());
+  const [phoneLayout, setPhoneLayout] = useState(() => isSmartPhone());
   useEffect(() => {
     let t = null;
     const checkTablet = () => setIsTablet(isTabletDevice() && !isSmartPhone());
@@ -848,7 +848,10 @@ export default function App() {
     return <KpSplash />;
   }
 
-  const isMobile = isSmartPhone();
+  // ⭐ 2026-11-10 화면(PC/모바일) 선택은 처음 정한 값(터치 기기만 화면 크기가 바뀌면 다시 고름) — 예전엔 App이 다시 그려질 때마다
+  //  창 폭을 다시 재서, PC에서 창이 잠깐 768px보다 좁아진 순간(엣지 사이드바·분할·확대) 사용자 문서 갱신 등으로 App이 다시 그려지면
+  //  PC 화면이 모바일 화면으로 바뀌었다가 돌아오며 처음 로딩 화면이 다시 떴다(작성 중이던 내용도 사라짐).
+  const isMobile = phoneLayout;
 
   // ⭐ 2026-11-08 기사앱 안 — 기사 계정이 아니면(역할 확인 전 포함) 어떤 화면도 그리지 않는다(사무실 화면이 잠깐도 보이지 않게).
   //  위 효과가 로그아웃하면 기사 로그인 화면이 "기사 전용 앱이에요" 안내와 함께 열린다.

@@ -2,7 +2,9 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App.jsx";
-import ErrorBoundary, { isChunkLoadError, reloadOnce } from "./ErrorBoundary.jsx";
+import ErrorBoundary, { isChunkLoadError } from "./ErrorBoundary.jsx";
+import { markStaleBuild } from "./staleReload.js";
+import { installNoDblSelect } from "./noDblSelect.js";
 import "./index.css";
 import { preloadTmapWhenIdle } from "./tmapLoader";
 import { trimLocalStorage } from "./safeStorage";
@@ -82,8 +84,12 @@ preloadTmapWhenIdle();
 })();
 
 // ⭐ 2026-11-01 새 버전 배포 직후 예전 화면 조각 파일을 못 불러오면(로그인 직후 /choose 등) 자동으로 한 번 새로고침
-window.addEventListener("vite:preloadError", (e) => { if (reloadOnce()) e.preventDefault?.(); });
-window.addEventListener("unhandledrejection", (event) => { if (isChunkLoadError(event?.reason)) reloadOnce(); });
+// ⭐ 2026-11-10 뒤에서(미리 받기 등) 생긴 실패는 바로 새로고침하지 않는다 — 쓰던 중 로딩 화면으로 넘어가던 원인.
+//  preloadError는 기본 동작(오류 던지기)만 막고 실제 import 실패로 넘긴다 → 사용자가 연 화면이면 ErrorBoundary가 한 번 새로고침,
+//  뒤에서 부른 것(catch됨)이면 조용히 끝, 아무도 안 받은 실패면 안내 띠만.
+window.addEventListener("vite:preloadError", (e) => { e.preventDefault?.(); markStaleBuild(); });
+window.addEventListener("unhandledrejection", (event) => { if (isChunkLoadError(event?.reason)) { event.preventDefault?.(); markStaleBuild(); } });
+installNoDblSelect(); // ⭐ 2026-11-10 엣지 미니 도구창(더블클릭 글자 선택) 끄기
 
 // --------------------------------------------------
 // React Render
