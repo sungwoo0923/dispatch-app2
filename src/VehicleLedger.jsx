@@ -8,7 +8,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { runDelete } from "./DeleteProgress"; // ⭐ 2026-11-05 삭제 진행 창 + 한 번에 삭제
 import { createPortal } from "react-dom";
-import { collection, doc, onSnapshot, query, where, setDoc, deleteDoc, runTransaction, serverTimestamp } from "firebase/firestore";
+import { collection, doc, onSnapshot, query, where, setDoc, deleteDoc, runTransaction, serverTimestamp, updateDoc } from "firebase/firestore";
 import * as XLSX from "xlsx";
 import { db, auth } from "./firebase";
 import { kpConfirm } from "./kpDialog";
@@ -22,7 +22,9 @@ import { careSummary, vehicleDefaults, TRUCK_MODELS } from "./vehicleCare";
 import { useVehicleTypes, VehicleTypePicker, VT_DEFAULTS } from "./vehicleTypes"; // 🚚 2026-11-02 회사 공용 차량종류
 import { fmtPhone as fmtPhoneLive } from "./formatInput"; // 입력 중 하이픈(02·031·010 등)
 import { upsertAutoEntry } from "./ledgerAuto"; // 🔧 2026-11-09 정비비 → 수입·지출 장부 자동
-import VehicleHologram, { twinModel, twinCareSummary } from "./VehicleHologram"; // ⭐ 2026-11-09 차량 3D 분석(디지털 트윈·타이어 위치별 교체)
+import VehicleHologram, { twinModel, twinCareSummary } from "./VehicleHologram";
+import { useCareSettings, CareIntervalsModal, ConsumablePlan, CostReportModal, CardReconModal } from "./VehicleAutomation"; // 🚚 2026-11-09 소모품 주기 · 월 비용 리포트 · 카드 대조
+import { careItemsFromRepairs } from "../functions/fleetCareCore.mjs"; // ⭐ 2026-11-09 차량 3D 분석(디지털 트윈·타이어 위치별 교체)
 
 const C = { ink: "#0B1428", navy: "#0F1A30", mid: "#1B2B4B", blue: "#2D4C82", sky: "#8FB0F0", line: "#E3E8F0", soft: "#F4F6FA", sub: "#5B6B85", mute: "#5B6B85" /* ⭐ 2026-11-05 흐린 글씨 금지 — #9AA9C3 → #5B6B85 */, pale: "#EEF2F9" };
 // ⭐ 2026-11-05 고정폭 글씨 → 기본 글씨체(흐릿해 보인다는 의견)
@@ -211,7 +213,7 @@ const EqDot = ({ on, label }) => (
 );
 
 // ── 기본 정보 입력 폼(등록·수정 공용) ──
-const BASIC_KEYS = ["차량번호", "용도", "톤수", "제조사", "모델", "연식", "회사", "차대번호", "보험사", "차주명", "유류카드사", "유류카드번호", "하이패스", "하이패스카드사", "하이패스카드번호", "하이패스유효기간", "하이패스구분", "하이패스단말기", "하이패스명의", "GPS", "덮개", "박스", "박스메모", "메모", "보험만기", "검사만기", "할부만기"];
+const BASIC_KEYS = ["차량번호", "용도", "톤수", "제조사", "모델", "연식", "회사", "차대번호", "보험사", "차주명", "유류카드사", "유류카드번호", "하이패스", "하이패스카드사", "하이패스카드번호", "하이패스유효기간", "하이패스구분", "하이패스단말기", "하이패스명의", "GPS", "덮개", "박스", "박스메모", "메모", "보험만기", "검사만기", "할부만기", "보험료"];
 // 📅 2026-11-09 만기 자동 알림 — 보험·정기검사·할부(리스) 만기일 → 남은 일수(D-day). 30일 안이면 목록·대장에 표시
 const DUE_KEYS = [["보험만기", "보험"], ["검사만기", "정기검사"], ["할부만기", "할부·리스"]];
 const daysLeft = (d) => { const t = Date.parse(`${String(d || "").slice(0, 10)}T00:00:00+09:00`); if (!Number.isFinite(t)) return null; const k = new Date(Date.now() + 9 * 3600e3); const today0 = Date.UTC(k.getUTCFullYear(), k.getUTCMonth(), k.getUTCDate()) - 9 * 3600e3; return Math.round((t - today0) / 864e5); };
@@ -253,6 +255,7 @@ function BasicForm({ v, set, purposeOpts, companyOpts, isNew, company }) {
         <Field label="회사(소속)">{sel("회사", companyOpts, { customPlaceholder: "소속·차주 회사" })}</Field>
         <Field label="차주명"><input {...f("차주명")} placeholder="차주 이름" /></Field>
         <Field label="보험사">{sel("보험사", INSURER_OPTS, { customPlaceholder: "보험사 이름" })}</Field>
+        <Field label="연 보험료(원)"><input {...f("보험료")} value={v.보험료 ? won(num(v.보험료)) : ""} onChange={(e) => set({ ...v, 보험료: e.target.value.replace(/[^\d]/g, "") })} inputMode="numeric" placeholder="월 비용 리포트에 ÷12로 반영" style={{ ...inp, textAlign: "right", fontVariantNumeric: "tabular-nums" }} /></Field>
         <Field label="보험 만기일"><DateField value={v.보험만기 || ""} onChange={(x) => set({ ...v, 보험만기: x })} placeholder="만기일 선택" /></Field>
         <Field label="정기검사 만료일"><DateField value={v.검사만기 || ""} onChange={(x) => set({ ...v, 검사만기: x })} placeholder="만료일 선택" /></Field>
         <Field label="할부·리스 만기일"><DateField value={v.할부만기 || ""} onChange={(x) => set({ ...v, 할부만기: x })} placeholder="없으면 비워 두기" /></Field>
@@ -326,8 +329,8 @@ function Evidence({ files = [], onAdd, onRemove, canEdit, compact }) {
 const HIST = {
   repairs: {
     title: "수리·정비 이력", code: "REPAIR",
-    fields: [["일자", "date"], ["구분", "kind"], ["내용", "textarea", "정비내용"], ["업체", "text"], ["업체번호", "phone"], ["공가", "money", "공가금액"], ["부가세", "vat", "부가세(10% 자동)"], ["비고", "text"]],
-    empty: () => ({ 일자: today(), 구분: "", 내용: "", 업체: "", 업체번호: "", 공가: "", 부가세: "", 비고: "", files: [] }),
+    fields: [["일자", "date"], ["구분", "kind"], ["주행거리", "money", "정비 때 주행거리(km)"], ["내용", "textarea", "정비내용"], ["업체", "text"], ["업체번호", "phone"], ["공가", "money", "공가금액"], ["부가세", "vat", "부가세(10% 자동)"], ["비고", "text"]],
+    empty: () => ({ 일자: today(), 구분: "", 주행거리: "", 내용: "", 업체: "", 업체번호: "", 공가: "", 부가세: "", 비고: "", files: [] }),
   },
   structures: {
     title: "구조변경 이력", code: "STRUCTURE",
@@ -468,7 +471,7 @@ function Section({ id, title, code, right, children }) {
 const th = { position: "sticky", top: 0, zIndex: 1, background: C.mid, color: "#fff", padding: "10px 10px", fontSize: 14, fontWeight: 800, whiteSpace: "nowrap", textAlign: "center" };
 const td = { padding: "10px 10px", fontSize: 14.5, fontWeight: 600, color: C.navy, borderTop: "1px solid #EEF1F6", verticalAlign: "top" };
 
-function Ledger({ v, co, appDriver, linkRaw, drivers, canEdit, by, narrow, purposeOpts, companyOpts, kindOpts, onBack, toast, drawer = false, editSignal = 0 }) {
+function Ledger({ v, co, appDriver, linkRaw, drivers, canEdit, by, narrow, purposeOpts, companyOpts, kindOpts, onBack, toast, drawer = false, editSignal = 0, coIntervals = {} }) {
   const ref = doc(db, VL_COL, v.id);
   const [edit, setEdit] = useState(null); // 기본 정보 수정 중 값
   const [editor, setEditor] = useState(null); // { kind, row }
@@ -523,6 +526,15 @@ function Ledger({ v, co, appDriver, linkRaw, drivers, canEdit, by, narrow, purpo
       memo: `차량관리대장 자동 — ${String(row.내용 || "").slice(0, 60)}`, auto: "vehrepair",
     }).catch(() => {});
   };
+  // 🚚 2026-11-09 정비 이력 → 점검·소모품 "마지막 교체" 자동(기사 문서 care.items · 정비 내용 글자로 항목 찾기 · 더 새로운 기록만)
+  const syncCareFromRepairs = (repairs) => {
+    if (!linkRaw?.id) return;
+    const up = careItemsFromRepairs(repairs, linkRaw.care?.items || {});
+    const keys = Object.keys(up);
+    if (!keys.length) return;
+    const patch = {}; keys.forEach((k) => { patch[`care.items.${k}`] = { km: up[k].km === "" ? null : up[k].km, date: up[k].date, from: "ledger" }; });
+    updateDoc(doc(db, "drivers", linkRaw.id), patch).then(() => toast(`점검·소모품 마지막 교체 ${keys.length}개 자동 반영`)).catch(() => {});
+  };
   const saveRow = async (kind, r, pendingFiles = []) => {
     const row = { ...r, id: r.id || uid() };
     if (kind === "driverHist") row.연락처 = fmtPhone(row.연락처);
@@ -534,6 +546,7 @@ function Ledger({ v, co, appDriver, linkRaw, drivers, canEdit, by, narrow, purpo
     });
     if (pendingFiles.length) await addFiles(kind, row, pendingFiles);
     syncRepairLedger(kind, row);
+    if (kind === "repairs") syncCareFromRepairs([...(v.repairs || []).filter((x) => x.id !== row.id), row]);
     setEditor(null); if (!pendingFiles.length) toast("저장했습니다");
   };
   const delRow = async (kind, row) => {
@@ -629,7 +642,7 @@ function Ledger({ v, co, appDriver, linkRaw, drivers, canEdit, by, narrow, purpo
     ["차량번호", v.차량번호], ["차량종류", v.용도], ["톤수", v.톤수], ["모델", [appVeh.제조사 || v.제조사, appVeh.모델 || v.모델].filter(Boolean).join(" ")], ["연식", (appVeh.연식 || v.연식) ? `${appVeh.연식 || v.연식}년` : ""], ["회사", v.회사], ["차대번호", v.차대번호], ["보험사", v.보험사], ["차주명", v.차주명],
     ["현재 기사", cur ? cur.이름 : appDriver ? `${appDriver.이름} (기사관리)` : ""], ["기사 연락처", cur ? cur.연락처 : appDriver?.전화번호 || ""], ["기사 변경일", cur?.시작 || ""],
   ];
-  const nav = [["vl-basic", "기본 정보"], ["vl-care", "점검·소모품"], ["vl-timeline", "타임라인"], ["vl-repairs", `정비 ${reps.length}`], ["vl-structures", `구조변경 ${(v.structures || []).length}`], ["vl-driverHist", `기사 ${(v.driverHist || []).length}`], ["vl-logs", `변경·기타 ${(v.logs || []).length}`]];
+  const nav = [["vl-basic", "기본 정보"], ["vl-care", "점검·소모품"], ["vl-consumables", "교체 예정"], ["vl-timeline", "타임라인"], ["vl-repairs", `정비 ${reps.length}`], ["vl-structures", `구조변경 ${(v.structures || []).length}`], ["vl-driverHist", `기사 ${(v.driverHist || []).length}`], ["vl-logs", `변경·기타 ${(v.logs || []).length}`]];
   // 타임라인 — 정비·구조변경·기사 탑승·변경/기타를 날짜순으로
   const TL = { repairs: ["정비", C.blue], structures: ["구조변경", "#6B5BD2"], driverHist: ["기사", "#0E8A6A"], logs: ["변경·기타", C.sub] };
   const events = [
@@ -766,6 +779,11 @@ function Ledger({ v, co, appDriver, linkRaw, drivers, canEdit, by, narrow, purpo
         </div>
       </Section>
 
+      {/* 🚚 2026-11-09 소모품 교체 예정 — 주기(차량별 > 회사별 > 기본) · 마지막 교체 · 다음 예정 km·날짜 · 정상/임박/초과 */}
+      <Section id="vl-consumables" title="소모품 교체 예정" code="CONSUMABLES">
+        <div style={{ padding: narrow ? 12 : "14px 18px" }}><ConsumablePlan linkRaw={linkRaw} coIntervals={coIntervals} compact={narrow} /></div>
+      </Section>
+
       {/* 타임라인 */}
       <Section id="vl-timeline" title="이력 타임라인" code="TIMELINE" right={<div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
         {[["all", "전체"], ...Object.entries(TL).map(([k, [l]]) => [k, l])].map(([k, l]) => <button key={k} type="button" onClick={() => setTlKind(k)} style={{ height: 32, padding: "0 12px", borderRadius: 99, border: `1px solid ${tlKind === k ? C.mid : "#D5DDEA"}`, background: tlKind === k ? C.mid : "#fff", color: tlKind === k ? "#fff" : C.sub, fontSize: 14, fontWeight: 800, cursor: "pointer" }}>{l}</button>)}
@@ -801,7 +819,7 @@ function Ledger({ v, co, appDriver, linkRaw, drivers, canEdit, by, narrow, purpo
       {/* 수리·정비 */}
       <Section id="vl-repairs" title="수리·정비 이력" code="REPAIR" right={<div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
         <div style={{ width: 120 }}><LedgerSelect compact allowCustom={false} value={year} onChange={(x) => { setYear(x || "all"); setMonth(0); }} noneLabel="전체" placeholder="전체" options={[...years.map((y) => ({ v: y, label: `${y}년` })), { v: "all", label: "전체" }]} style={{ height: 38 }} /></div>
-        {canEdit && <Btn kind="primary" onClick={() => setEditor({ kind: "repairs", row: null })}>+ 정비 추가</Btn>}
+        {canEdit && <Btn kind="primary" onClick={() => setEditor({ kind: "repairs", row: { 주행거리: linkRaw?.care?.odometer ? String(linkRaw.care.odometer) : "" } })}>+ 정비 추가</Btn>}
       </div>}>
         <div style={{ padding: "14px 16px", display: "flex", gap: 16, flexWrap: "wrap", alignItems: "stretch", borderBottom: `1px solid #EEF1F6` }}>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0,1fr))", gap: 8, flex: narrow ? "1 1 100%" : "0 0 400px" }}>
@@ -1049,6 +1067,8 @@ export default function VehicleLedger({ company = "", drivers = [], canEdit = tr
   const [opening, setOpening] = useState("");
   const [msg, setMsg] = useState("");
   const by = byProp || `${myName || auth.currentUser?.email || "직원"}`;
+  const coIntervals = useCareSettings(co); // 🚚 2026-11-09 회사별 소모품 주기
+  const [autoView, setAutoView] = useState(""); // "intervals" | "cost" | "cards"
   const toast = (m) => { setMsg(m); setTimeout(() => setMsg(""), 2400); };
   const pick = (id) => { setSelId(id); try { if (id) sessionStorage.setItem("vlSel", id); else sessionStorage.removeItem("vlSel"); } catch { /* 무시 */ } };
   const setModeP = (m) => { setMode(m); try { localStorage.setItem("vlMode", m); } catch { /* 무시 */ } };
@@ -1079,7 +1099,7 @@ export default function VehicleLedger({ company = "", drivers = [], canEdit = tr
       const linkRaw = drvByPlate.get(plateCore(v.차량번호)) || (cur?.driverId && plateCore(drvById.get(cur.driverId)?.차량번호) === plateCore(v.차량번호) ? drvById.get(cur.driverId) : null) || null;
       const app = linkRaw ? { id: linkRaw.id, 이름: linkRaw.이름 || linkRaw.name || "", 전화번호: fmtPhone(linkRaw.전화번호 || linkRaw.phone || ""), 등급: linkRaw.등급 || "" } : null;
       const cv = linkRaw ? vehicleDefaults(linkRaw) : null;
-      const cs0 = linkRaw ? careSummary({ vehicle: cv, care: linkRaw.care || {} }) : null;
+      const cs0 = linkRaw ? careSummary({ vehicle: cv, care: linkRaw.care || {} }, coIntervals) : null;
       // ⭐ 2026-11-09 3D 차량 분석의 위치별 타이어 교체 결과를 점검 알림에 합친다(기사 미연결 차량도 타이어 알림은 보이게)
       const cs = (v.tires && Object.keys(v.tires).length) ? twinCareSummary(v, linkRaw) : cs0;
       const reps = v.repairs || [];
@@ -1115,7 +1135,7 @@ export default function VehicleLedger({ company = "", drivers = [], canEdit = tr
       out.push(mk({ id: `virt:${d.id}`, docId: vehicleDocId(co, key), 차량번호: plate, driverHist: [], repairs: [], structures: [], logs: [], __base }, true));
     });
     return out;
-  }, [list, fleetDrivers, drvByPlate, drvById, thisYear, thisMonth, co]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [list, fleetDrivers, drvByPlate, drvById, thisYear, thisMonth, co, coIntervals]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const vtCo = useVehicleTypes(); // 🚚 2026-11-02 회사 공용 차량종류(추가한 이름도 용도·형태 목록에)
   const purposeOpts = useMemo(() => Array.from(new Set([...PURPOSE_PRESETS, ...vtCo.custom, ...list.map((v) => v.용도).filter(Boolean)])), [list, vtCo.custom]);
@@ -1338,6 +1358,10 @@ export default function VehicleLedger({ company = "", drivers = [], canEdit = tr
             )}
             {canEdit && <Btn onClick={() => setImporting(true)}>엑셀 가져오기</Btn>}
             <Btn onClick={exportList} disabled={!shown.length}>엑셀 내보내기</Btn>
+            {/* 🚚 2026-11-09 차량관리 자동화 */}
+            <Btn onClick={() => setAutoView("cost")} title="차량별 정비·소모품·유류·하이패스·보험 합계와 km당 비용">월 비용 리포트</Btn>
+            <Btn onClick={() => setAutoView("cards")} title="하이패스·유류카드 이용내역 엑셀을 올려 차량·운행일과 대조">카드 대조</Btn>
+            {canEdit && <Btn onClick={() => setAutoView("intervals")} title="회사 기준 정비·소모품 교체 주기">소모품 주기</Btn>}
             {canEdit && <Btn kind="primary" onClick={() => setCreating({})}>+ 차량 등록</Btn>}
           </div>
         </div>
@@ -1414,9 +1438,12 @@ export default function VehicleLedger({ company = "", drivers = [], canEdit = tr
         </Modal>
       )}
       {importing && <ImportModal existing={list} onClose={() => setImporting(false)} onImport={importRows} />}
+      {autoView === "intervals" && <CareIntervalsModal co={co} intervals={coIntervals} by={by} onClose={() => setAutoView("")} />}
+      {autoView === "cost" && <CostReportModal co={co} vehicles={list} drivers={drivers} onClose={() => setAutoView("")} />}
+      {autoView === "cards" && <CardReconModal co={co} vehicles={list} drivers={drivers} by={by} canEdit={canEdit} onClose={() => setAutoView("")} />}
       {selV && (
         <LedgerDrawer key={selV.id} narrow={narrow} onClose={closeDrawer}>
-          <Ledger v={selV} co={co} appDriver={selV.appDriver} linkRaw={selV.linkRaw} drivers={drivers} canEdit={canEdit} by={by} narrow={narrow} purposeOpts={purposeOpts} companyOpts={companyOpts} kindOpts={kindOpts} onBack={closeDrawer} toast={toast} drawer editSignal={editReq.id === selV.id ? editReq.n : 0} />
+          <Ledger coIntervals={coIntervals} v={selV} co={co} appDriver={selV.appDriver} linkRaw={selV.linkRaw} drivers={drivers} canEdit={canEdit} by={by} narrow={narrow} purposeOpts={purposeOpts} companyOpts={companyOpts} kindOpts={kindOpts} onBack={closeDrawer} toast={toast} drawer editSignal={editReq.id === selV.id ? editReq.n : 0} />
         </LedgerDrawer>
       )}
       <style>{VL_CSS}</style>

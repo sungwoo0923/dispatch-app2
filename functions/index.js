@@ -6923,3 +6923,102 @@ exports.seedTestCompanyWeekly = functions.runWith({ timeoutSeconds: 540, memory:
 const _sec = require("./securityFns")({ functions, db, getAuth, FieldValue, userTokens, sendPushAndCleanup, appCheckCallOpts });
 exports.securityPing = _sec.securityPing;
 exports.onStaffEmploymentChange = _sec.onStaffEmploymentChange;
+/* ==============================
+   🚚 2026-11-09 차량관리 자동화 — 계산은 functions/fleetCareCore.mjs(차량관리대장·기사앱과 같은 기준)
+   ① vehicleCareReminders(매일 08:40 한국시간): 정비·소모품·만기(보험·검사·할부)가 다가오면
+      기사에게 기사앱 알림(driver_notifications/care_{uid}_{날짜}) + 푸시, 담당 직원(없으면 회사 관리자)에게 차량 요약 알림.
+      같은 항목·같은 단계(남은 500km·D-7·D-1·당일·지남은 7일마다)는 한 번만 — drivers.careNotified 에 단계 기록
+   ② vehicleCostMonthly(매월 1일 09:10): 지난달 차량별 비용 리포트 → vehicleCostReports/{회사}_{YYYY-MM} 저장 + 관리자 알림
+============================== */
+async function fleetCompanyManagers(co) {
+  const s = await db.collection("users").where("companyName", "==", co).get().catch(() => null);
+  if (!s) return [];
+  return s.docs.map((d) => ({ uid: d.id, ...d.data() }))
+    .filter((u) => u.approved !== false && u.employmentStatus !== "퇴사" && (u.isMaster === true || ["admin", "allMgr"].includes(u.role)));
+}
+// ⭐ 2026-11-09 이름 충돌 방지 — 기존 vehicleCareReminders(drivers.care 검사·보험 알림)는 그대로 두고, 새 정비·소모품 예정 알림은 별도 함수
+exports.vehicleMaintReminders = functions.runWith({ timeoutSeconds: 300, memory: "512MB" }).pubsub
+  .schedule("40 8 * * *").timeZone("Asia/Seoul").onRun(async () => {
+    const FC = await import("./fleetCareCore.mjs");
+    const today = kstDateStr();
+    const [drvSnap, vlSnap, setSnap] = await Promise.all([
+      db.collection("drivers").where("등급", "in", ["지입", "직영", "임대"]).get(),
+      db.collection("vehicleLedger").get(),
+      db.collection("vehicleCareSettings").get(),
+    ]);
+    const pc = (s) => String(s || "").replace(/[^0-9가-힣A-Za-z]/g, "").replace(/^[가-힣]+(?=\d)/, "");
+    const ledgerBy = new Map(); vlSnap.docs.forEach((d) => { const v = d.data(); if (v.차량번호) ledgerBy.set(`${v.companyName}|${pc(v.차량번호)}`, v); });
+    const intBy = new Map(); setSnap.docs.forEach((d) => { const x = d.data(); if (x.companyName) intBy.set(x.companyName, x.intervals || {}); });
+    const forStaff = new Map(); // toUid → { co, lines[] }
+    const managersCache = new Map();
+    let sent = 0;
+    for (const dd of drvSnap.docs) {
+      const d = dd.data();
+      const co = String(d.companyName || "").trim();
+      const plate = d.차량번호 || d.carNo || "";
+      const ledger = ledgerBy.get(`${co}|${pc(plate)}`) || null;
+      const plan = FC.carePushPlan(d, ledger, intBy.get(co) || {}, today);
+      const changed = JSON.stringify(plan.nextState) !== JSON.stringify(d.careNotified || {});
+      if (!plan.notify.length) { if (changed) await dd.ref.update({ careNotified: plan.nextState }).catch(() => {}); continue; }
+      const lines = plan.notify.map((x) => x.text);
+      const uid = d.uid || "";
+      if (uid && uid === dd.id) {
+        const title = "차량 정비 예정 알림";
+        const body = `${plate} · ${lines.slice(0, 3).join(" · ")}${lines.length > 3 ? ` 외 ${lines.length - 3}건` : ""}`;
+        let fresh = true;
+        try {
+          await db.collection("driver_notifications").doc(`care_${uid}_${today}`).create({ driverId: uid, type: "vehicle_care", title, body, items: plan.notify, createdAt: FieldValue.serverTimestamp(), read: false, ...(co ? { companyName: co } : {}) });
+        } catch (e) { fresh = false; }
+        if (fresh) {
+          const u = await db.collection("users").doc(uid).get().then((x) => (x.exists ? x.data() : null)).catch(() => null);
+          const tokens = u && u.driverPushEnabled !== false ? userTokens(u) : [];
+          if (tokens.length) {
+            await sendPushAndCleanup(tokens, { notification: { title, body }, data: { type: "vehicle_care", tag: `care-${today}` }, android: { priority: "high" }, apns: { payload: { aps: { sound: "default" } } } }, "차량 정비 예정 알림");
+          }
+          sent++;
+        }
+      }
+      // 담당 직원(지입차 담당자) — 없으면 회사 관리자
+      let targets = d.담당자?.uid ? [d.담당자.uid] : null;
+      if (!targets && co) {
+        if (!managersCache.has(co)) managersCache.set(co, (await fleetCompanyManagers(co)).map((u) => u.uid));
+        targets = managersCache.get(co);
+      }
+      (targets || []).forEach((t) => { const g = forStaff.get(t) || { co, lines: [] }; g.lines.push(`${plate}${d.이름 || d.name ? `(${d.이름 || d.name})` : ""}: ${lines.join(", ")}`); forStaff.set(t, g); });
+      await dd.ref.update({ careNotified: plan.nextState }).catch(() => {});
+    }
+    for (const [toUid, g] of forStaff) {
+      const msg = `[차량 정비 예정] ${g.lines.length}대 — ${g.lines.slice(0, 5).join(" / ")}${g.lines.length > 5 ? ` 외 ${g.lines.length - 5}대` : ""} · 지입차관리 › 차량관리에서 확인`;
+      await db.collection("notifications").doc(`vcare_${toUid}_${today}`).set({ toUid, type: "vehicle_care", msg, companyName: g.co, lines: g.lines.slice(0, 50), read: false, createdAt: FieldValue.serverTimestamp() }).catch(() => {});
+    }
+    console.log(`🚚 차량 정비 예정 — 기사 알림 ${sent}건 · 직원 요약 ${forStaff.size}명 (${today})`);
+    return null;
+  });
+
+exports.vehicleCostMonthly = functions.runWith({ timeoutSeconds: 300, memory: "512MB" }).pubsub
+  .schedule("10 9 1 * *").timeZone("Asia/Seoul").onRun(async () => {
+    const FC = await import("./fleetCareCore.mjs");
+    const ym = FC.prevYm(kstDateStr());
+    const vlSnap = await db.collection("vehicleLedger").get();
+    const byCo = new Map();
+    vlSnap.docs.forEach((d) => { const v = { id: d.id, ...d.data() }; const co = String(v.companyName || "").trim(); if (!co || !v.차량번호) return; if (!byCo.has(co)) byCo.set(co, []); byCo.get(co).push(v); });
+    let n = 0;
+    for (const [co, vehicles] of byCo) {
+      const [dSnap, tSnap] = await Promise.all([
+        db.collection("drivers").where("companyName", "==", co).get().catch(() => null),
+        db.collection("vehicleCardTx").where("companyName", "==", co).where("ym", "==", ym).get().catch(() => null),
+      ]);
+      const rep = FC.monthlyCostReport({ vehicles, drivers: dSnap ? dSnap.docs.map((x) => x.data()) : [], txs: tSnap ? tSnap.docs.map((x) => x.data()) : [], ym });
+      if (!rep.rows.length) continue;
+      const key = `${co}_${ym}`.replace(/\//g, "_");
+      await db.collection("vehicleCostReports").doc(key).set({ companyName: co, ym, sum: rep.sum, rows: rep.rows.slice(0, 300), createdAt: FieldValue.serverTimestamp() });
+      const top = rep.rows.slice(0, 3).map((r) => `${r.plate} ${Math.round(r.total).toLocaleString()}원`).join(", ");
+      const msg = `[${ym.replace("-", "년 ")}월 차량 비용] ${rep.rows.length}대 합계 ${Math.round(rep.sum.total || 0).toLocaleString()}원${rep.sum.perKm ? ` · km당 ${rep.sum.perKm.toLocaleString()}원` : ""} — 많은 차량: ${top} · 지입차관리 › 차량관리 › [월 비용 리포트]`;
+      for (const u of await fleetCompanyManagers(co)) {
+        await db.collection("notifications").doc(`vcost_${key}_${u.uid}`).set({ toUid: u.uid, type: "vehicle_cost", msg, companyName: co, ym, read: false, createdAt: FieldValue.serverTimestamp() }).catch(() => {});
+      }
+      n++;
+    }
+    console.log(`🚚 월 차량 비용 리포트 ${ym} — ${n}개 회사`);
+    return null;
+  });

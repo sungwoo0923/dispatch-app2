@@ -336,18 +336,18 @@ service cloud.firestore {
     // ⭐ 2026-11-02 점검 — approvalSettings(결재 설정)는 아래 전자결재 쪽 전용 규칙으로 옮김(누구나 임원 자동 승인을 켜던 문제)
     match /{tcol}/{id} {
       allow read: if tcol in ['clients', 'places', 'recurringOrders', 'deletedOrders', 'driver_completed_archive', 'notifications',
-          'schedules', 'scheduledEmails', 'emailLogs', 'hrResumes', 'attendanceRequests', 'attendanceChangeRequests', 'acctPayments', 'approvalLines', 'acctLedger', 'acctRecurring', 'officeAssets', 'execSchedules', 'companyRules', 'hrSettings', 'retireCases', 'vehicleLedger', 'vehicleLedgerFiles', 'vehicleTypes', 'arDesk']
+          'schedules', 'scheduledEmails', 'emailLogs', 'hrResumes', 'attendanceRequests', 'attendanceChangeRequests', 'acctPayments', 'approvalLines', 'acctLedger', 'acctRecurring', 'officeAssets', 'execSchedules', 'companyRules', 'hrSettings', 'retireCases', 'vehicleLedger', 'vehicleLedgerFiles', 'vehicleTypes', 'arDesk', 'vehicleCardTx', 'vehicleCareSettings', 'vehicleCostReports']
         // ⭐ 2026-11-02 점검 — 없는 문서를 getDoc하면 resource가 null이라 coMatch(resource.data)가 오류 → 거부되던 문제
         //  (ledgerAuto.js 자동 장부의 "새 줄인지" 확인). 없는 문서는 승인된 계정이면 "없음"만 알 수 있게 허용
         && ((resource == null && isApproved()) || coMatch(resource.data));
       allow create: if tcol in ['clients', 'places', 'recurringOrders', 'deletedOrders', 'driver_completed_archive', 'notifications',
-          'schedules', 'scheduledEmails', 'emailLogs', 'hrResumes', 'attendanceRequests', 'attendanceChangeRequests', 'acctPayments', 'approvalLines', 'acctLedger', 'acctRecurring', 'officeAssets', 'execSchedules', 'companyRules', 'hrSettings', 'retireCases', 'vehicleLedger', 'vehicleLedgerFiles', 'vehicleTypes', 'arDesk']
+          'schedules', 'scheduledEmails', 'emailLogs', 'hrResumes', 'attendanceRequests', 'attendanceChangeRequests', 'acctPayments', 'approvalLines', 'acctLedger', 'acctRecurring', 'officeAssets', 'execSchedules', 'companyRules', 'hrSettings', 'retireCases', 'vehicleLedger', 'vehicleLedgerFiles', 'vehicleTypes', 'arDesk', 'vehicleCardTx', 'vehicleCareSettings', 'vehicleCostReports']
         && coCreate();
       allow update: if tcol in ['clients', 'places', 'recurringOrders', 'deletedOrders', 'driver_completed_archive', 'notifications',
-          'schedules', 'scheduledEmails', 'emailLogs', 'hrResumes', 'attendanceRequests', 'attendanceChangeRequests', 'acctPayments', 'approvalLines', 'acctLedger', 'acctRecurring', 'officeAssets', 'execSchedules', 'companyRules', 'hrSettings', 'retireCases', 'vehicleLedger', 'vehicleLedgerFiles', 'vehicleTypes', 'arDesk']
+          'schedules', 'scheduledEmails', 'emailLogs', 'hrResumes', 'attendanceRequests', 'attendanceChangeRequests', 'acctPayments', 'approvalLines', 'acctLedger', 'acctRecurring', 'officeAssets', 'execSchedules', 'companyRules', 'hrSettings', 'retireCases', 'vehicleLedger', 'vehicleLedgerFiles', 'vehicleTypes', 'arDesk', 'vehicleCardTx', 'vehicleCareSettings', 'vehicleCostReports']
         && coMatch(resource.data) && coKeep();
       allow delete: if tcol in ['clients', 'places', 'recurringOrders', 'deletedOrders', 'driver_completed_archive', 'notifications',
-          'schedules', 'scheduledEmails', 'emailLogs', 'hrResumes', 'attendanceRequests', 'attendanceChangeRequests', 'acctPayments', 'approvalLines', 'acctLedger', 'acctRecurring', 'officeAssets', 'execSchedules', 'companyRules', 'hrSettings', 'retireCases', 'vehicleLedger', 'vehicleLedgerFiles', 'vehicleTypes', 'arDesk']
+          'schedules', 'scheduledEmails', 'emailLogs', 'hrResumes', 'attendanceRequests', 'attendanceChangeRequests', 'acctPayments', 'approvalLines', 'acctLedger', 'acctRecurring', 'officeAssets', 'execSchedules', 'companyRules', 'hrSettings', 'retireCases', 'vehicleLedger', 'vehicleLedgerFiles', 'vehicleTypes', 'arDesk', 'vehicleCardTx', 'vehicleCareSettings', 'vehicleCostReports']
         && coMatch(resource.data);
     }
     // 💰 자금(통장·현금 잔액) — 경리(test)·관리자(대표 등)만. 화면에서는 경리 + 대표 직책만 보이게 한다
@@ -2236,6 +2236,8 @@ service cloud.firestore {
         'attendanceChangeRequests', 'acctPayments', 'approvalLines', 'acctLedger', 'acctRecurring', 'officeAssets', 'execSchedules', 'companyRules', 'hrSettings', 'retireCases', 'approvalSettings', 'acctFunds',
         // ⭐ 2026-11-02 운임규칙 · 회사별 맞춤 기능(위에서 따로 정함)
         'fareRules', 'companyFeatures', 'companySettings', 'vehicleLedger', 'vehicleLedgerFiles', 'vehicleTypes',
+        // 🚚 2026-11-09 차량관리 자동화 — 카드 이용내역 · 회사별 소모품 주기 · 월 비용 리포트(위 회사 데이터 규칙에서 따로 정함)
+        'vehicleCardTx', 'vehicleCareSettings', 'vehicleCostReports',
         // 💰 2026-11-04 플랫폼 운영 문서 — 위에서 따로 정함(예전엔 siteConfig가 이 목록에 없어 승인된 고객사 직원도 요금·관제 집계를 읽을 수 있었다)
         'siteConfig', 'platformConfig', 'platformUsage', 'usageCounters',
         // ⭐ 2026-11-05 기사 가입 처리 기록 — 위에서 따로 정함

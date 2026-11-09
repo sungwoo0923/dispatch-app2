@@ -46,13 +46,6 @@ const SPEC = {
 // 탑차·윙바디 적재함 내측 높이 기본값(cm) — 톤급마다 대략값
 const BOX_H = (ton) => (/^1(\.4)?톤/.test(ton) ? 170 : /^(2\.5|3\.5)톤/.test(ton) ? 210 : /^5톤/.test(ton) ? 235 : 245);
 
-export function tonClass(ton = "", kind = "") {
-  const t = String(ton);
-  if (/라보|다마스/.test(kind) || /^(1|1\.4)톤/.test(t) || /^0\./.test(t)) return "small";
-  if (/^(2\.5|3\.5|5)톤/.test(t)) return "mid";
-  if (t) return "large";
-  return "small";
-}
 export const CLASS_LABEL = { small: "소형 (1~1.4톤)", mid: "중형 (2.5~5톤)", large: "대형 (8톤 이상)" };
 
 export function specFor(ton = "", kind = "") {
@@ -62,83 +55,12 @@ export function specFor(ton = "", kind = "") {
   return { ...s, h: box ? BOX_H(ton) : 0, euro6: true, reefer: /냉장|냉동/.test(kind) };
 }
 
-// ─── 정비 항목 — km 또는 개월 중 먼저 오는 쪽 ───
-//  소형=포터·봉고(디젤 가혹조건) / 중형=마이티·메가트럭 / 대형=파비스·엑시언트(장수명 오일 기준)
-export const CARE_ITEMS = [
-  { key: "engineOil", label: "엔진오일·오일필터", short: "엔진오일", small: [7500, 6], mid: [15000, 6], large: [30000, 6], must: true },
-  { key: "airFilter", label: "에어클리너(에어필터)", short: "에어필터", small: [15000, 12], mid: [20000, 12], large: [40000, 12] },
-  { key: "fuelFilter", label: "연료필터(수분 배출 포함)", short: "연료필터", small: [30000, 24], mid: [20000, 12], large: [30000, 12] },
-  { key: "transOil", label: "미션오일", short: "미션오일", small: [60000, 48], mid: [80000, 48], large: [100000, 48] },
-  { key: "diffOil", label: "데후(디퍼런셜)오일", short: "데후오일", small: [60000, 48], mid: [80000, 48], large: [100000, 48] },
-  { key: "brake", label: "브레이크 패드·라이닝 점검", short: "브레이크", small: [20000, 12], mid: [20000, 12], large: [30000, 12] },
-  { key: "tireRotate", label: "타이어 위치교환", short: "타이어 위치", small: [10000, 0], mid: [15000, 0], large: [20000, 0] },
-  { key: "tire", label: "타이어 교체", short: "타이어", small: [50000, 48], mid: [80000, 48], large: [100000, 48] },
-  { key: "coolant", label: "냉각수(부동액)", short: "냉각수", small: [40000, 24], mid: [60000, 24], large: [100000, 24] },
-  { key: "battery", label: "배터리", short: "배터리", small: [0, 36], mid: [0, 36], large: [0, 36] },
-  { key: "grease", label: "그리스 주입(샤시)", short: "그리스", small: [0, 0], mid: [5000, 1], large: [5000, 1] },
-  { key: "dpf", label: "DPF·요소수 필터 점검", short: "DPF", small: [0, 0], mid: [100000, 24], large: [100000, 24] },
-  { key: "reefer", label: "냉동기 점검(오일·벨트·가스)", short: "냉동기", small: [0, 6], mid: [0, 6], large: [0, 6], reefer: true },
-];
-// 날짜(만기) 항목 — 며칠 남았는지로 경고
-export const CARE_DATES = [
-  { key: "inspection", label: "자동차 정기(종합)검사 만료", short: "정기검사", hint: "사업용 화물차는 차령 2년 초과 시 매년 검사" },
-  { key: "insurance", label: "자동차보험 만기", short: "자동차보험" },
-  { key: "cargoInsurance", label: "적재물배상책임보험 만기", short: "적재물보험" },
-  { key: "tacho", label: "운행기록장치(타코) 점검", short: "타코 점검" },
-  { key: "contract", label: "지입계약 만료", short: "지입계약" },
-];
+// ─── 정비 항목·주기·상태 — ⭐ 2026-11-09 서버(정비 예정 알림)와 같이 쓰려고 functions/fleetCareCore.mjs로 옮겼다(이름 그대로 다시 내보냄)
+//  소모품 추가: 브레이크오일 · 벨트 · 와이퍼 · 회사별 주기(vehicleCareSettings/{회사}.intervals)
+import { tonClass, CARE_ITEMS, CARE_DATES, itemsFor, itemStatus, dateStatus, careSummary, kstToday } from "../functions/fleetCareCore.mjs";
+export { tonClass, CARE_ITEMS, CARE_DATES, itemsFor, itemStatus, dateStatus, careSummary };
+export const today = kstToday;
 
-// 이 차량에 해당하는 정비 항목과 주기 (회사가 바꾼 주기 우선)
-export function itemsFor(vehicle = {}, care = {}) {
-  const cls = tonClass(vehicle.톤 || vehicle.ton, vehicle.적재함);
-  const reefer = !!vehicle.냉동기 || /냉장|냉동/.test(vehicle.적재함 || "");
-  return CARE_ITEMS.filter((it) => (!it.reefer || reefer)).map((it) => {
-    const [km, months] = it[cls];
-    const ov = care.intervals?.[it.key] || {};
-    return { ...it, km: ov.km ?? km, months: ov.months ?? months };
-  }).filter((it) => it.km || it.months);
-}
-
-const DAY = 86400000;
-export const today = () => { const d = new Date(Date.now() + 9 * 3600e3); return d.toISOString().slice(0, 10); };
-const addMonths = (ymd, m) => { const d = new Date(`${ymd}T00:00:00`); d.setMonth(d.getMonth() + m); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
-const daysTo = (ymd) => Math.round((new Date(`${ymd}T00:00:00`) - new Date(`${today()}T00:00:00`)) / DAY);
-
-// 항목 하나의 상태 — level: 2 지남 / 1 곧(남은 10% 또는 30일) / 0 정상 / -1 기록 없음
-export function itemStatus(it, care = {}) {
-  const last = care.items?.[it.key] || {};
-  const odo = Number(care.odometer) || 0;
-  if (!last.km && !last.date) return { level: -1, text: "기록 없음" };
-  let level = 0; const parts = [];
-  if (it.km && last.km != null && last.km !== "" && odo) {
-    const left = Number(last.km) + it.km - odo;
-    parts.push(left < 0 ? `${Math.abs(left).toLocaleString()}km 초과` : `${left.toLocaleString()}km 남음`);
-    if (left < 0) level = 2; else if (left <= it.km * 0.1) level = Math.max(level, 1);
-  }
-  if (it.months && last.date) {
-    const due = addMonths(last.date, it.months); const d = daysTo(due);
-    parts.push(d < 0 ? `${due} 지남` : `${due}까지`);
-    if (d < 0) level = 2; else if (d <= 30) level = Math.max(level, 1);
-  }
-  return { level, text: parts.join(" · ") || "확인 필요" };
-}
-export function dateStatus(ymd) {
-  if (!ymd) return { level: -1, text: "미입력" };
-  const d = daysTo(ymd);
-  if (d < 0) return { level: 2, text: `${-d}일 지남` };
-  if (d <= 30) return { level: 1, text: `D-${d}` };
-  return { level: 0, text: `D-${d}` };
-}
-// 차량 요약 — 목록·홈 경고용 (가장 급한 항목들)
-export function careSummary(drv = {}) {
-  const vehicle = drv.vehicle || {}; const care = drv.care || {};
-  const list = [
-    ...itemsFor(vehicle, care).map((it) => ({ key: it.key, label: it.short, ...itemStatus(it, care) })),
-    ...CARE_DATES.map((d) => ({ key: d.key, label: d.short, ...dateStatus(care.dates?.[d.key]) })),
-  ];
-  const alerts = list.filter((x) => x.level >= 1).sort((a, b) => b.level - a.level);
-  return { alerts, over: alerts.filter((x) => x.level === 2).length, soon: alerts.filter((x) => x.level === 1).length, missing: list.filter((x) => x.level === -1).length, odometer: Number(care.odometer) || 0, odometerAt: care.odometerAt || "", setupDone: !!care.setupDone };
-}
 // 기사 문서의 톤·적재함(가입 때 고른 값) → 제원 기본값
 export function vehicleDefaults(drv = {}) {
   const ton = drv.vehicle?.톤 || drv.차량톤수 || drv.톤수 || "";
