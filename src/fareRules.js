@@ -407,7 +407,9 @@ export function FarePctInput({ form, rules, onChange, className = "", compact = 
   if (!base) return null;
   const fixed = base.type === "fixed";
   const raw = form?.운임구분수수료율;
-  const shown = raw === undefined || raw === null || String(raw) === "" ? String(toNum(base.value)) : String(raw);
+  // ⭐ 2026-11-09 지울 수 있게 — 한 번도 안 건드린 오더(undefined)만 기본값을 채워 보여주고, 사용자가 지운 칸("")은 비워 둔 채 흐린 기본값(placeholder)만 보인다
+  //  (예전엔 빈칸이면 곧바로 기본값 7이 다시 채워져 7을 지우고 5를 넣을 수 없었다). 빈칸이면 계산은 기본값으로.
+  const shown = raw === undefined || raw === null ? String(toNum(base.value)) : String(raw);
   const diff = farePctOf(form) !== null && farePctOf(form) !== toNum(base.value);
   return h("span", { className: `relative inline-flex items-center shrink-0 ${className}`, "data-fare-pct": "1",
     title: `이 오더의 수수료${fixed ? "(원)" : "율(%)"} — 운임구분 기본 ${fmtRuleVal(base)}. 바꾸면 기사운임·수수료가 다시 계산됩니다` },
@@ -415,6 +417,8 @@ export function FarePctInput({ form, rules, onChange, className = "", compact = 
       type: "text", inputMode: "decimal", autoComplete: "off", disabled,
       "aria-label": "이 오더 수수료율",
       value: fixed && shown ? Number(shown).toLocaleString() : shown,
+      placeholder: String(fixed ? toNum(base.value).toLocaleString() : toNum(base.value)),
+      onFocus: (e) => { try { e.target.select(); } catch { /* 무시 */ } }, // 누르면 전체 선택 → 바로 새 숫자 입력
       onChange: (e) => onChange?.(String(e.target.value).replace(/[^\d.]/g, "")),
       onKeyDown: (e) => e.stopPropagation(),
       onMouseDown: (e) => e.stopPropagation(),
