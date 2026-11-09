@@ -22,6 +22,7 @@ import {
   FORKLIFT_MODES, FORKLIFT_UPLOAD_COLS, fkAmount, fkMode, fkModeLabel, fkPresetKey, forkliftApply, forkliftClear,
   forkliftPayoutGroups, forkliftRowFromSheet, forkliftSummary, hasForklift,
   SPECIAL_TYPES, SPECIAL_MODES, sfItems, sfMode, sfPayee, sfName, hasSpecial, specialCount, specialTotal, specialLines, specialApplyAll, orderProfit, paidOut, fkNum,
+  forkliftTransferRows,
 } from "./forkliftCore";
 
 export * from "./forkliftCore";
@@ -556,6 +557,17 @@ export function ForkliftPayouts({ orders = [], patchDispatch, isViewer = false }
     groups.forEach((g) => g.rows.forEach((r) => { const d = dMap[r.지게차기사ID] || {}; rows.push({ 지게차기사: g.name, 전화번호: fmtPhone(d.전화번호 || g.phone), 지게차회사: d.지게차회사 || g.company, 은행: d.은행 || "", 계좌번호: d.계좌번호 || "", 예금주: d.예금주 || "", 상차일: r.상차일 || "", 거래처: r.거래처명 || "", 상차지: r.상차지명 || "", 하차지: r.하차지명 || "", 지게차비용: fkAmount(r), 부담: fkModeLabel(r), 지급: r.지게차지급완료 ? "지급완료" : "미지급", 지급일: r.지게차지급일 || "" }); }));
     const ws = XLSX.utils.json_to_sheet(rows); const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "지게차지급"); XLSX.writeFile(wb, `지게차지급_${ym || "전체"}.xlsx`);
   };
+  // ⭐ 2026-11-09 이체 엑셀 — 은행 대량이체에 바로 올리는 양식(기사별 미지급 합계 · 계좌 없는 기사는 빼고 알려 줌)
+  const exportTransfer = async () => {
+    const { rows, missing, total } = forkliftTransferRows(groups, dMap, { ym, payer: getTenant() });
+    if (!rows.length) { await kpAlert(missing.length ? `미지급 기사 모두 계좌가 등록돼 있지 않아요.\n\n${missing.join(", ")}\n\n지게차 기사 관리에서 계좌를 먼저 등록해 주세요.` : "이 기간에 지급할(미지급) 지게차비가 없어요."); return; }
+    if (missing.length && !(await kpConfirm(`계좌가 없는 기사 ${missing.length}명은 이체 엑셀에서 빠져요.\n\n${missing.join(", ")}\n\n나머지 ${rows.length}명(${total.toLocaleString()}원)만 받을까요?`))) return;
+    const ws = XLSX.utils.json_to_sheet(rows, { header: ["은행", "계좌번호", "예금주", "금액", "받는분 통장표시", "내 통장표시", "메모"] });
+    ws["!cols"] = [{ wch: 12 }, { wch: 18 }, { wch: 10 }, { wch: 12 }, { wch: 14 }, { wch: 14 }, { wch: 24 }];
+    rows.forEach((_, i) => { const c = ws[XLSX.utils.encode_cell({ r: i + 1, c: 1 })]; if (c) { c.t = "s"; c.v = String(c.v); } }); // 계좌번호 앞자리 0이 사라지지 않게 글자로
+    const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "대량이체");
+    XLSX.writeFile(wb, `지게차지급_이체_${ym || "전체"}.xlsx`);
+  };
   return (
     <div className="p-4 space-y-3" data-forklift-payouts>
       <div className="rounded-[18px] bg-white border border-[#E3E8F0] px-4 py-3 flex flex-wrap items-center gap-2">
@@ -563,6 +575,7 @@ export function ForkliftPayouts({ orders = [], patchDispatch, isViewer = false }
         <MonthPicker value={ym} onChange={setYm} clearable placeholder="전체 기간" /* ⭐ 2026-11-09 브라우저 월 선택(영문 표시) → 프로그램 달력 */ />
         <div className="inline-flex rounded-lg border border-[#DCE3EE] p-0.5">{["미지급", "지급완료", "전체"].map((k) => <button key={k} type="button" onClick={() => setOnly(k)} className={`h-8 px-3 rounded-md text-[12.5px] font-black ${only === k ? "bg-[#0F1A30] text-white" : "text-[#5B6B85]"}`}>{k}</button>)}</div>
         <button type="button" onClick={exportXlsx} className="h-9 px-3 rounded-lg border border-[#DCE3EE] text-[13px] font-black text-[#1B2B4B]">엑셀</button>
+        <button type="button" onClick={exportTransfer} disabled={!sum.unpaid} data-testid="fk-transfer-xlsx" title="기사별 미지급 합계를 은행 대량이체 양식(은행·계좌번호·예금주·금액·통장표시)으로 받아요" className="h-9 px-3 rounded-lg bg-[#0F1A30] text-white text-[13px] font-black disabled:opacity-40">이체 엑셀</button>
       </div>
       <div className="grid grid-cols-3 gap-3">
         {[["지게차비 합계", sum.total], ["미지급", sum.unpaid], ["지급완료", sum.paid]].map(([k, v], i) => (

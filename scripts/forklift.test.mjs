@@ -1,5 +1,5 @@
 // 지게차비용 계산 단위 테스트 — node scripts/forklift.test.mjs
-import { forkliftApply, forkliftClear, orderProfit, forkliftPayoutGroups, forkliftRowFromSheet, fkPresetKey, forkliftSummary } from "../src/forkliftCore.js";
+import { forkliftApply, forkliftClear, orderProfit, forkliftPayoutGroups, forkliftRowFromSheet, fkPresetKey, forkliftSummary, forkliftTransferRows } from "../src/forkliftCore.js";
 import { fareFormChange } from "../src/fareRulesCore.js";
 
 let pass = 0, fail = 0;
@@ -66,6 +66,16 @@ eq(forkliftRowFromSheet({ 이름: "홍길동", 전화번호: "010-1234-5678", �
 eq(forkliftRowFromSheet({ 전화번호: "0101" }).errors, ["이름 없음", "전화번호 자리수"], "업로드 오류 표시");
 eq(fkPresetKey({ 거래처명: "경동 ", 상차지명: "경동 본사" }), "경동__경동본사", "상차지 기억 키");
 eq(forkliftSummary(set(base, "지게차비용", "100000")), "청구 500,000 · 기사 300,000 · 지게차 100,000 · 수익 100,000", "요약 문구");
+
+// 이체 엑셀
+{
+  const o = (id, amt, paid = false) => ({ 지게차기사ID: id, 지게차기사명: id === "a" ? "김지게" : "박지게", 지게차사용: true, 지게차비용: String(amt), 지게차부담: "운송사", 지게차지급완료: paid, 배차상태: "배차완료" });
+  const gs = forkliftPayoutGroups([o("a", 50000), o("a", 30000), o("a", 20000, true), o("b", 40000)]);
+  const t = forkliftTransferRows(gs, { a: { 은행: "KB국민", 계좌번호: "012-34-5678", 예금주: "김지게" } }, { ym: "2026-11", payer: "큐런네트웍스 주식회사" });
+  eq(t.rows.length, gs.some((g) => g.unpaid > 0 && g.id === "a") ? 1 : 0, "이체: 계좌 있는 기사만");
+  if (t.rows[0]) { eq(t.rows[0].금액, 80000, "이체: 미지급만 합계"); eq(t.rows[0].계좌번호, "012345678", "이체: 계좌번호 숫자만(앞 0 유지)"); eq(t.rows[0]["받는분 통장표시"].length <= 7, true, "이체: 통장표시 7자"); }
+  eq(t.missing.includes("박지게") || !gs.some((g) => g.id === "b" && g.unpaid > 0), true, "이체: 계좌 없는 기사 이름");
+}
 
 console.log(`지게차비용 단위 테스트: 통과 ${pass} · 실패 ${fail}`);
 process.exit(fail ? 1 : 0);

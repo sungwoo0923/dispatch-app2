@@ -53042,6 +53042,29 @@ const handleBatchSettle = async (targetStatus) => {
     }
     setStageAsk({ stage: action, groups });
   };
+  // ⭐ 2026-11-09 입금 확인 → 자동 마감: 미수금관리에서 그 달 오더가 모두 "정산완료"(다 채운 입금 · 정산완료 처리)가 되면
+  //  작성~계산서 발행 단계의 명세서를 "마감"으로 바꾼다. 일부 입금은 정산완료가 아니라서 마감되지 않는다. 한 번 마감한 곳은 다시 안 건드림
+  const autoCloseDone = useRef(new Set());
+  useEffect(() => {
+    if (isViewer || !arCompany || !desk.stmts?.size || !billRows.length) return;
+    const byKey = new Map();
+    billRows.forEach(r => { const ym = String(r.상차일 || "").slice(0, 7); const k = `${r.거래처명}|${ym}`; if (!byKey.has(k)) byKey.set(k, []); byKey.get(k).push(r); });
+    const todo = [];
+    desk.stmts.forEach((d) => {
+      if ((d.biz || "") !== (csBizCur || "") || !d.client || !d.yyyymm) return;
+      const i = stageIdx(d.stage); if (i < 1 || i >= 6) return;
+      const k = `${d.client}|${d.yyyymm}`; if (autoCloseDone.current.has(`${csBizCur}|${k}`)) return;
+      const ex = new Set(d.excludedIds || []);
+      const rows = (byKey.get(k) || []).filter(r => !ex.has(r._id));
+      if (rows.length && rows.every(r => r.정산상태?.[d.yyyymm] === "정산완료")) todo.push(d);
+    });
+    if (!todo.length) return;
+    todo.forEach(d => autoCloseDone.current.add(`${csBizCur}|${d.client}|${d.yyyymm}`));
+    (async () => {
+      for (const d of todo) { try { await setStmtStage(d.client, d.yyyymm, "마감", { note: "입금 확인 — 자동 마감", extra: { autoClosed: true } }); } catch (e) { /* 무시 */ } }
+      sflowToast(todo.length === 1 ? `${todo[0].client} ${Number(String(todo[0].yyyymm).slice(5))}월 입금 확인 — 마감했어요` : `입금 확인 ${todo.length}곳 마감했어요`, "success");
+    })();
+  }, [billRows, desk.stmts, csBizCur, isViewer, arCompany]); // eslint-disable-line react-hooks/exhaustive-deps
   const saveStageAsk = async ({ date, note }) => {
     const t = stageAsk; if (!t) return;
     setStageAsk(null);
@@ -53295,10 +53318,11 @@ const handleBatchSettle = async (targetStatus) => {
           )}
 
           {invView === "edit" && (
-            <div className="grid grid-cols-1 2xl:grid-cols-[264px_minmax(0,1fr)] gap-3 items-start">
+            <div className="grid grid-cols-1 xl:grid-cols-[200px_minmax(0,1fr)] min-[1800px]:grid-cols-[256px_minmax(0,1fr)] gap-3 items-start">
               {/* ⭐ 2026-11-09 항상 2분할 — 왼쪽 거래처 목록(이 달) · 오른쪽 명세서 편집 + 미리보기 */}
               <StatementClientRail month={pipeMonth} setMonth={changeStmtMonth} groups={pipeNav} sel={stmtYm === pipeMonth ? client : ""}
-                onSel={(g) => openStmt(g.client, g.yyyymm)} />
+                onSel={(g) => openStmt(g.client, g.yyyymm)} disabled={isViewer}
+                onBulkSend={(gs) => onStmtBulk("발송", gs)} />
             <div className="space-y-3 min-w-0">
               {/* 편집 머리 — 돌아가기 · 거래처 · 기간 · 이전/다음 · 작성 저장 · 발송 */}
               <div className={`${csCard} px-4 py-3 flex items-center gap-3 flex-wrap`}>
@@ -53340,7 +53364,7 @@ const handleBatchSettle = async (targetStatus) => {
                 <div className="rounded-2xl border border-dashed border-[#C9D3E3] bg-white px-4 py-3 text-[14px] text-[#5B6B85]">거래처 한 곳 · 한 달(1일~말일)로 열면 발송 · 확인 · 계산서 · 마감 단계를 기록할 수 있어요</div>
               ) : null}
 
-              <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,44fr)_minmax(0,56fr)] gap-3 items-start">
+              <div className="grid grid-cols-1 2xl:grid-cols-[minmax(0,44fr)_minmax(0,56fr)] gap-3 items-start">{/* ⭐ 2026-11-09 왼쪽 거래처 목록이 늘 있으니 편집·미리보기 나란히는 넓은 화면(1536px~)만, 그보다 좁으면 위(편집)·아래(미리보기) */}
                 <div className="space-y-3 min-w-0">
                   {searched && (
                     <PrepaidToggle on={invIncPrepaid} onChange={toggleInvPrepaid} excluded={invPrepaidOut} disabled={isViewer}
@@ -54261,7 +54285,9 @@ const handleBatchSettle = async (targetStatus) => {
               setBatchSendList([]);
               setBatchSendOpen(false);
             } else {
-              showAlert(`발송 완료 (실패 ${failed.length}건: ${failed.map(f => f.name).join(", ")})`);
+              const okN = batchSendList.length - failed.length;
+              setBatchSendList(prev => prev.filter(x => failed.some(f => f.name === x.name))); // ⭐ 2026-11-09 보낸 곳은 목록에서 빼고 실패한 곳만 남겨 다시 보낼 수 있게
+              showAlert(`발송 결과: 성공 ${okN}곳 · 실패 ${failed.length}곳\n\n실패: ${failed.map(f => `${f.name}(${f.reason})`).join(", ")}`);
             }
           }}
           className="flex-1 py-2.5 rounded-xl bg-[#1B2B4B] text-white font-bold text-[13px] hover:bg-[#0F1A30] disabled:opacity-50 transition"

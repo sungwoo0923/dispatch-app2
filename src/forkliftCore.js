@@ -180,6 +180,24 @@ export function forkliftPayoutGroups(orders = []) {
   return [...m.values()].sort((a, b) => b.unpaid - a.unpaid || b.total - a.total);
 }
 
+// ⭐ 2026-11-09 지게차 지급 이체 엑셀(은행 대량이체 양식) — 기사별 미지급 합계 한 줄
+//  · 계좌(은행·계좌번호)가 없는 기사는 빼고 missing 에 이름을 담는다 · 계좌번호는 숫자만 · 통장 표시는 7자까지(은행 대부분 한도)
+export function forkliftTransferRows(groups = [], dMap = {}, { ym = "", payer = "" } = {}) {
+  const cut = (v, n = 7) => String(v || "").replace(/\s+/g, "").slice(0, n);
+  const rows = []; const missing = [];
+  for (const g of groups || []) {
+    const unpaidRows = (g.rows || []).filter((r) => !r.지게차지급완료);
+    const amount = unpaidRows.reduce((a, r) => a + fkAmount(r), 0);
+    if (!(amount > 0)) continue;
+    const d = dMap[String(g.rows?.[0]?.지게차기사ID || "")] || dMap[g.id] || {};
+    const bank = String(d.은행 || "").trim(); const acct = String(d.계좌번호 || "").replace(/\D/g, "");
+    if (!bank || !acct) { missing.push(g.name || "미지정"); continue; }
+    rows.push({ 은행: bank, 계좌번호: acct, 예금주: String(d.예금주 || g.name || "").trim(), 금액: amount,
+      "받는분 통장표시": cut(payer || "지게차비"), "내 통장표시": cut(`지게차${g.name || ""}`), 메모: `${ym || "전체"} 지게차비 ${unpaidRows.length}건` });
+  }
+  return { rows, missing, total: rows.reduce((a, r) => a + r.금액, 0) };
+}
+
 // 지게차 기사 대용량 업로드 한 줄 검사
 export const FORKLIFT_UPLOAD_COLS = ["이름", "전화번호", "지게차회사", "은행", "계좌번호", "예금주", "메모"];
 export function forkliftRowFromSheet(row = {}) {

@@ -185,8 +185,14 @@ export function PrepaidToggle({ on, onChange, excluded = 0, label = "선불·착
 
 // ⭐ 2026-11-09 거래처정산 2분할 — 왼쪽 거래처 목록(이 달 · 단계 · 합계). 고르면 오른쪽 명세서가 바뀐다
 //  넓은 화면(2xl)은 세로 목록, 그보다 좁으면 가로로 넘겨 보는 줄
-export function StatementClientRail({ month, setMonth, groups = [], sel, onSel, onBoard }) {
+// ⭐ 2026-11-09 월말 일괄 발송 — [일괄 발송]을 누르면 "작성 완료" 거래처를 골라 한 번에 보낸다(발송 목록 창에서 메일 확인 후 발송)
+//  ⭐ 입금 확인으로 자동 마감된 곳은 "입금 확인" 표시
+export const stmtReady = (g) => stageIdx(g?.stage) === 1 && (g?.count || 0) > 0;
+export function StatementClientRail({ month, setMonth, groups = [], sel, onSel, onBoard, onBulkSend, disabled = false }) {
   const [q, setQ] = React.useState("");
+  const [pick, setPick] = React.useState(false);
+  const [chosen, setChosen] = React.useState(() => new Set());
+  React.useEffect(() => { setChosen(new Set()); }, [month]);
   const shown = React.useMemo(() => {
     const nq = q.trim().toLowerCase().replace(/\s+/g, "");
     return groups.filter((g) => !nq || String(g.client || "").toLowerCase().replace(/\s+/g, "").includes(nq));
@@ -195,33 +201,64 @@ export function StatementClientRail({ month, setMonth, groups = [], sel, onSel, 
   const shift = (n) => { const d = new Date(Date.UTC(y, m - 1 + n, 1)); setMonth(d.toISOString().slice(0, 7)); };
   const total = groups.reduce((s, g) => s + (g.total || 0), 0);
   const closed = groups.filter((g) => g.stage === "마감").length;
+  const ready = groups.filter(stmtReady);
+  const picked = groups.filter((g) => chosen.has(g.key) && stmtReady(g));
+  const toggle = (k) => setChosen((p) => { const n = new Set(p); n.has(k) ? n.delete(k) : n.add(k); return n; });
+  const sendPicked = () => {
+    if (!picked.length || !onBulkSend) return;
+    onBulkSend(picked);
+    setPick(false); setChosen(new Set());
+  };
   const boxRef = React.useRef(null);
   React.useEffect(() => { try { boxRef.current?.querySelector("[data-on='1']")?.scrollIntoView({ block: "nearest", inline: "nearest" }); } catch (e) { /* 무시 */ } }, [sel, month, shown.length]);
   return (
-    <div ref={boxRef} className={`${sdCard} p-3 min-w-0 2xl:sticky 2xl:top-3`} data-testid="stmt-client-rail">
+    <div ref={boxRef} className={`${sdCard} p-3 min-w-0 xl:sticky xl:top-3`} data-testid="stmt-client-rail">
       <div className="flex items-center gap-1.5">
-        <button type="button" onClick={() => shift(-1)} className="w-9 h-9 rounded-lg border border-[#D5DDEA] text-[#1B2B4B] flex items-center justify-center hover:bg-[#F4F6FA]" aria-label="이전 달" data-testid="stmt-rail-prev"><Ico d={IC.back} size={15} /></button>
+        <button type="button" onClick={() => shift(-1)} className="w-9 h-9 shrink-0 rounded-lg border border-[#D5DDEA] text-[#1B2B4B] flex items-center justify-center hover:bg-[#F4F6FA]" aria-label="이전 달" data-testid="stmt-rail-prev"><Ico d={IC.back} size={15} /></button>
         <div className="flex-1 min-w-0 text-center whitespace-nowrap text-[#0F1A30]" style={NUM}><span className="text-[12px] font-bold text-[#5B6B85] mr-1">{y}</span><span className="text-[16px] font-black">{m}월</span></div>
-        <button type="button" onClick={() => shift(1)} className="w-9 h-9 rounded-lg border border-[#D5DDEA] text-[#1B2B4B] flex items-center justify-center hover:bg-[#F4F6FA]" aria-label="다음 달"><Ico d={IC.next} size={15} /></button>
+        <button type="button" onClick={() => shift(1)} className="w-9 h-9 shrink-0 rounded-lg border border-[#D5DDEA] text-[#1B2B4B] flex items-center justify-center hover:bg-[#F4F6FA]" aria-label="다음 달"><Ico d={IC.next} size={15} /></button>
         {onBoard && <button type="button" onClick={onBoard} className="h-9 px-2.5 rounded-lg border border-[#D5DDEA] text-[13px] font-bold text-[#1B2B4B] hover:bg-[#F4F6FA] inline-flex items-center gap-1 whitespace-nowrap" title="단계 보드로 한눈에 보기 · 여러 곳 한 번에 처리"><Ico d={IC.grid} size={14} />보드</button>}
       </div>
-      <div className="mt-2 flex items-center justify-between text-[12.5px] font-bold text-[#5B6B85]" style={NUM}>
-        <span>거래처 {groups.length}곳 · 마감 {closed}</span><span className="text-[#0F1A30] font-black">{shortWon(total)}</span>
+      <div className="mt-2 flex items-center justify-between gap-2 text-[12.5px] font-bold text-[#5B6B85]" style={NUM}>
+        <span className="truncate">거래처 {groups.length}곳 · 마감 {closed}</span><span className="text-[#0F1A30] font-black whitespace-nowrap">{shortWon(total)}</span>
       </div>
+      {onBulkSend && !disabled && (
+        !pick ? (
+          <button type="button" onClick={() => { setPick(true); setChosen(new Set(ready.map((g) => g.key))); }} disabled={!ready.length} data-testid="stmt-rail-bulk"
+            className="mt-2 w-full h-9 rounded-lg border border-[#D5DDEA] bg-white text-[13px] font-bold text-[#1B2B4B] hover:bg-[#F4F6FA] inline-flex items-center justify-center gap-1.5 whitespace-nowrap disabled:opacity-40"
+            title={ready.length ? "작성 완료한 거래처를 골라 명세서 메일을 한 번에 보내요" : "작성 완료한 거래처가 없어요"}>
+            <Ico d={IC.send} size={14} />일괄 발송{ready.length ? <span className="min-w-[20px] h-5 px-1 rounded-md bg-[#EEF2F8] text-[#0F1A30] text-[12px] font-black inline-flex items-center justify-center" style={NUM}>{ready.length}</span> : null}
+          </button>
+        ) : (
+          <div className="mt-2 rounded-xl border border-[#1B2B4B] bg-[#F4F7FC] p-2" data-testid="stmt-rail-pick">
+            <div className="flex items-center justify-between flex-wrap gap-x-2 gap-y-0.5 text-[12.5px] font-black text-[#0F1A30]">
+              <span className="whitespace-nowrap" style={NUM}>{picked.length}곳 선택 · 작성 완료 {ready.length}곳</span>
+              <button type="button" onClick={() => setChosen(picked.length === ready.length ? new Set() : new Set(ready.map((g) => g.key)))} className="text-[12px] font-bold text-[#1B2B4B] underline underline-offset-2 whitespace-nowrap">{picked.length === ready.length ? "모두 해제" : "모두 선택"}</button>
+            </div>
+            <div className="mt-2 flex gap-1.5">
+              <button type="button" onClick={() => { setPick(false); setChosen(new Set()); }} className="h-9 px-3 rounded-lg border border-[#D5DDEA] bg-white text-[13px] font-bold text-[#1B2B4B] whitespace-nowrap">취소</button>
+              <button type="button" onClick={sendPicked} disabled={!picked.length} data-testid="stmt-rail-send" className="flex-1 h-9 px-2 rounded-lg bg-[#0F1A30] text-white text-[13px] font-black whitespace-nowrap disabled:opacity-40">{picked.length}곳 발송</button>
+            </div>
+          </div>
+        )
+      )}
       {groups.length > 6 && <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="거래처 찾기" className={`${sdInp} mt-2 h-9`} />}
-      <div className="mt-2 flex 2xl:flex-col gap-1.5 overflow-x-auto 2xl:overflow-x-visible 2xl:max-h-[calc(100vh-260px)] 2xl:overflow-y-auto no-scrollbar" style={{ scrollbarWidth: "thin" }}>
+      <div className="mt-2 flex xl:flex-col gap-1.5 overflow-x-auto xl:overflow-x-visible xl:max-h-[calc(100vh-280px)] xl:overflow-y-auto no-scrollbar" style={{ scrollbarWidth: "thin" }}>
         {shown.length === 0 && <div className="px-2 py-6 text-center text-[13px] font-bold text-[#9AA9C3] w-full">{groups.length ? "찾는 거래처가 없어요" : "이 달에 청구할 오더가 없어요"}</div>}
         {shown.map((g) => {
-          const on = g.client === sel;
+          const on = !pick && g.client === sel;
+          const can = pick && stmtReady(g);
+          const checked = can && chosen.has(g.key);
           return (
-            <button key={g.key} type="button" onClick={() => onSel(g)} data-testid="stmt-rail-item" data-on={on ? "1" : "0"}
-              className={`shrink-0 2xl:shrink text-left rounded-xl px-3 py-2 border transition min-w-[180px] 2xl:min-w-0 ${on ? "bg-[#0F1A30] border-[#0F1A30] text-white" : "bg-white border-[#E3E8F0] hover:border-[#B8C4D8] hover:bg-[#F8FAFD]"}`}>
+            <button key={g.key} type="button" onClick={() => (pick ? can && toggle(g.key) : onSel(g))} data-testid="stmt-rail-item" data-on={on ? "1" : "0"}
+              className={`shrink-0 xl:shrink text-left rounded-xl px-3 py-2 border transition min-w-[180px] xl:min-w-0 ${on ? "bg-[#0F1A30] border-[#0F1A30] text-white" : checked ? "bg-[#EEF3FB] border-[#1B2B4B]" : pick && !can ? "bg-white border-[#E3E8F0] opacity-45 cursor-default" : "bg-white border-[#E3E8F0] hover:border-[#B8C4D8] hover:bg-[#F8FAFD]"}`}>
               <div className="flex items-center gap-2 min-w-0">
+                {pick && <span className={`w-4 h-4 shrink-0 rounded border inline-flex items-center justify-center ${checked ? "bg-[#0F1A30] border-[#0F1A30] text-white" : "border-[#B8C4D8] bg-white"}`}>{checked && <Ico d={IC.check} size={11} w={3} />}</span>}
                 <span className={`text-[14px] font-black truncate flex-1 ${on ? "text-white" : "text-[#0F1A30]"}`}>{g.client}</span>
                 <span className={`text-[12px] font-black px-1.5 h-5 rounded-md inline-flex items-center whitespace-nowrap ${on ? "bg-white/15 text-white" : stageIdx(g.stage) === 0 ? "border border-dashed border-[#B8C4D8] text-[#5B6B85]" : stageIdx(g.stage) === 6 ? "bg-[#0F1A30] text-white" : "bg-[#EEF3FB] text-[#1B2B4B]"}`}>{stageLabel(g.stage)}</span>
               </div>
-              <div className={`mt-0.5 flex items-center justify-between text-[12.5px] font-bold ${on ? "text-white/70" : "text-[#5B6B85]"}`} style={NUM}>
-                <span>{(g.count || 0).toLocaleString()}건</span><span className={on ? "text-white font-black" : "text-[#0F1A30] font-black"}>{(g.total || 0).toLocaleString()}원</span>
+              <div className={`mt-0.5 flex items-center justify-between gap-2 text-[12.5px] font-bold ${on ? "text-white/70" : "text-[#5B6B85]"}`} style={NUM}>
+                <span className="whitespace-nowrap truncate min-w-0">{(g.count || 0).toLocaleString()}건{g.settled ? <span className={`ml-1 ${on ? "text-white" : "text-[#1E6B4A]"}`} title="미수금관리에서 입금 확인(정산완료)">· 입금</span> : null}{pick && can && !g.email ? <span className="ml-1 text-[#A6400E]">· 메일 없음</span> : null}</span><span className={`whitespace-nowrap ${on ? "text-white font-black" : "text-[#0F1A30] font-black"}`}>{(g.total || 0).toLocaleString()}원</span>
               </div>
             </button>
           );
