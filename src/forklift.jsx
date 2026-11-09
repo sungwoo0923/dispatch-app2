@@ -517,7 +517,7 @@ export function ForkliftChip({ row, className = "" }) {
   const only = specialCount(row) === 1 && hasForklift(row);
   return (
     <span className={`inline-flex items-center px-1.5 h-[18px] rounded-md bg-[#1B2B4B] text-[#E9C46A] text-[10.5px] font-black tabular-nums whitespace-nowrap align-middle ${className}`}
-      title={specialLines(row).join("\n") + (hasForklift(row) && row.지게차지급완료 ? "\n지게차 지급완료" : "")}>{only ? `지게차 ${won(fkAmount(row))}` : `특수 ${specialCount(row)}`}</span>
+      title={specialLines(row).join("\n") + (hasForklift(row) && row.지게차지급완료 ? "\n지게차 지급완료" : "")}>{only ? "지게차" : `특수 ${specialCount(row)}`}</span>
   );
 }
 // 엑셀 내보내기 공용 열

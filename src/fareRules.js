@@ -72,7 +72,7 @@ export function useFareRules(company) {
   return React.useMemo(() => {
     const d = feature ? rd.data : null;
     const rules = Array.isArray(d?.rules) ? d.rules : [];
-    const enabled = feature && !!d?.enabled;
+    const enabled = feature && d?.enabled !== false; // ⭐ 2026-11-09 운임 규칙 문서가 아직 없어도 켜짐(회사관리 › 운임 규칙에서 끈 회사만 꺼짐)
     return {
       loaded: feats.loaded && (!feature || rd.loaded),
       feature, enabled, on: enabled, company: co, data: d, rules,
