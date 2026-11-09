@@ -129,7 +129,9 @@ const saveBlob = (blob, name) => {
 const isTouchDevice = () => typeof window !== "undefined" && !!window.matchMedia?.("(pointer: coarse)").matches;
 async function downloadAttachment(src, docNo, i, realName = "") {
   const name = realName || attName(docNo, i, src); // ⭐ 2026-11-09 새 첨부(파일)는 올린 파일 이름 그대로
-  const blob = await srcToBlob(src);
+  let blob;
+  try { blob = await srcToBlob(src); }
+  catch (e) { if (/^https?:/.test(String(src || ""))) { window.open(src, "_blank", "noopener"); return; } throw e; } // ⭐ 2026-11-09 저장소 내려받기가 막힌 환경(CORS) — 새 탭으로 열어 거기서 저장
   // 휴대폰 — 공유 시트(사진에 저장)가 되면 그쪽으로, 아니면 파일 내려받기
   if (isTouchDevice()) {
     let file = null;

@@ -4,7 +4,7 @@
 //  · 둘러보기(/preview)에서는 서버에 올리지 않고 이 창 안에서만 파일을 들고 있는다(미리보기 점검용)
 //  · 내려받기는 getBlob(로그인한 사람의 권한으로 받음 — 공개 주소를 만들지 않는다)
 import React from "react";
-import { ref as sRef, uploadBytes, getBlob, deleteObject } from "firebase/storage";
+import { ref as sRef, uploadBytes, getBlob, getDownloadURL, deleteObject } from "firebase/storage";
 import { storage } from "./firebase";
 import { isPreviewMode } from "./fsTenant";
 import { AP_FILE_ACCEPT, AP_FILE_COUNT, KIND_LABEL, apFilePath, canPreview, checkApFile, fileKind, fmtSize, safeFileName } from "./approvalFiles";
@@ -71,24 +71,38 @@ const saveBlob = (blob, name) => {
   document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 5000);
 };
-export async function saveApFile(f) { saveBlob(await apFileBlob(f), f.name || "첨부"); }
+// ⭐ 2026-11-09 저장소 CORS 설정이 없거나 막힌 환경 — getBlob(파일 내용 받기)은 브라우저가 막지만, 보기 주소(getDownloadURL)는
+//  <img>·<iframe>·새 탭으로 열 때 CORS가 필요 없다. 권한 문제가 아니면 보기 주소로 대신 보여 준다(권한은 보안 규칙이 그대로 검사).
+const urlCache = new Map();
+const isPermErr = (e) => ["storage/unauthorized", "storage/unauthenticated", "storage/object-not-found"].includes(String(e?.code || ""));
+export async function apFileViewUrl(f) {
+  if (!f?.path) throw new Error("파일 위치가 없어요");
+  if (localUrls.has(f.path)) return localUrls.get(f.path);
+  if (!urlCache.has(f.path)) { const p = getDownloadURL(sRef(storage, f.path)); urlCache.set(f.path, p); p.catch(() => urlCache.delete(f.path)); }
+  return urlCache.get(f.path);
+}
+export async function saveApFile(f) {
+  try { saveBlob(await apFileBlob(f), f.name || "첨부"); }
+  catch (e) { if (isPermErr(e)) throw e; window.open(await apFileViewUrl(f), "_blank", "noopener"); } // 내려받기가 막히면 새 탭으로 열기(거기서 저장)
+}
 // 첨부 모두 저장 — 파일 + 예전 사진 첨부를 한 ZIP으로(1개면 그대로)
 export async function saveAllApFiles({ files = [], images = [], docNo = "" }) {
   const base = safeFileName(docNo || "전자결재");
   const ext = (src) => { const m = /^data:image\/([a-z0-9+.-]+)/i.exec(String(src || "")); const e = (m?.[1] || "jpeg").toLowerCase(); return e === "jpeg" ? "jpg" : e; };
   const items = [
     ...(images || []).filter(Boolean).map((src, i) => ({ name: `${base}_사진${i + 1}.${ext(src)}`, get: () => dataUrlBlob(src) })),
-    ...(files || []).filter((f) => f?.path).map((f) => ({ name: safeFileName(f.name), get: () => apFileBlob(f) })),
+    ...(files || []).filter((f) => f?.path).map((f) => ({ name: safeFileName(f.name), f, get: () => apFileBlob(f) })),
   ];
   if (!items.length) return;
-  if (items.length === 1) { saveBlob(await items[0].get(), items[0].name); return; }
+  if (items.length === 1) { if (items[0].f) { await saveApFile(items[0].f); return; } saveBlob(await items[0].get(), items[0].name); return; }
   const { default: JSZip } = await import("jszip");
   const zip = new JSZip();
   const seen = new Map();
   for (const it of items) {
     let n = it.name; const c = seen.get(n) || 0; seen.set(n, c + 1);
     if (c) n = n.replace(/(\.[^.]+)?$/, (m) => `(${c + 1})${m}`);
-    zip.file(n, await it.get());
+    try { zip.file(n, await it.get()); }
+    catch (e) { if (it.f && !isPermErr(e)) { window.open(await apFileViewUrl(it.f), "_blank", "noopener"); continue; } throw e; } // 내려받기 막힘 → 그 파일은 새 탭
   }
   saveBlob(await zip.generateAsync({ type: "blob" }), `${base}_첨부${items.length}개.zip`);
 }
@@ -111,10 +125,15 @@ function useBlobUrl(f, on = true) {
     if (!on || !f?.path) return undefined;
     let alive = true; let u = "";
     setErr("");
-    apFileBlob(f).then((b) => { if (!alive) return; u = URL.createObjectURL(b); setUrl(u); }).catch((e) => { if (alive) setErr(apFileErrText(e)); });
+    // ⭐ 2026-11-09 화면에 보여 줄 때는 보기 주소(getDownloadURL)를 먼저 — CORS 설정과 상관없이 바로 뜬다. 실패하면(권한 외) 파일 내용 받기로
+    apFileViewUrl(f).then((v) => { if (alive) setUrl(v); }).catch((e) => {
+      if (!alive) return;
+      if (isPermErr(e)) { setErr(apFileErrText(e)); return; }
+      apFileBlob(f).then((b) => { if (!alive) return; u = URL.createObjectURL(b); setUrl(u); }).catch((e2) => { if (alive) setErr(apFileErrText(e2)); });
+    });
     return () => { alive = false; if (u) setTimeout(() => URL.revokeObjectURL(u), 1000); };
   }, [f?.path, on, tick]); // eslint-disable-line react-hooks/exhaustive-deps
-  const retry = () => { if (f?.path) blobCache.delete(f.path); setErr(""); setUrl(""); setTick((n) => n + 1); };
+  const retry = () => { if (f?.path) { blobCache.delete(f.path); urlCache.delete(f.path); } setErr(""); setUrl(""); setTick((n) => n + 1); };
   return { url, err, retry };
 }
 function Thumb({ f, onOpen, onUrl }) {
