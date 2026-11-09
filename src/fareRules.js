@@ -174,9 +174,12 @@ const h = React.createElement;
 //  compact: 작은 알약 버튼(라벨 줄·표 칸) / 기본: 입력칸 높이(40px)
 const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
 const fmtRuleVal = (r) => (r.type === "fixed" ? `${Math.round(toNum(r.value)).toLocaleString()}원` : `${toNum(r.value)}%`);
-export function FareTypeSelect({ value, onChange, rules = [], className = "", disabled = false, compact = false, placeholder = "운임구분", id, align = "left", noneLabel = "선택 안 함 · 직접 계산", extraOpts = [], allowAdd = true, company }) {
+export function FareTypeSelect({ value, onChange, pct, rules = [], className = "", disabled = false, compact = false, placeholder = "운임구분", id, align = "left", noneLabel = "선택 안 함 · 직접 계산", extraOpts = [], allowAdd = true, company }) {
   const list = (rules || []).filter((r) => r && String(r.name || "").trim() && (r.active !== false || String(r.name) === String(value || "")));
-  const cur = list.find((r) => String(r.name) === String(value || "")) || null;
+  const cur0 = list.find((r) => String(r.name) === String(value || "")) || null;
+  // ⭐ 2026-11-09 이 오더만 바꾼 수수료율(pct)이 있으면 선택된 운임구분 표시에 그 값을 쓴다(규칙 기본값은 그대로)
+  const pctSet = cur0 && pct !== undefined && pct !== null && String(pct).trim() !== "" && Number.isFinite(Number(pct));
+  const cur = pctSet ? { ...cur0, value: Number(pct), _base: cur0.value } : cur0;
   const curExtra = extraOpts.find((o) => String(o.name) === String(value || "")) || null;
   const [open, setOpen] = React.useState(false);
   const [pos, setPos] = React.useState(null);
@@ -327,7 +330,9 @@ export function FareTypeSelect({ value, onChange, rules = [], className = "", di
           : o.extra ? h("span", { className: "flex-1 text-[13px] font-extrabold text-[#5B6B85]" }, o.label)
           : h(React.Fragment, null,
             h("span", { className: "flex-1 min-w-0 truncate text-[14.5px] font-extrabold text-[#0F1A30]" }, o.name, o.active === false ? h("span", { className: "ml-1 text-[11px] font-bold text-[#B54708]" }, "(사용 안 함)") : null),
-            h("span", { className: "shrink-0 tabular-nums px-2 h-[22px] inline-flex items-center rounded-full bg-[#1B2B4B] text-[#E9C46A] text-[12.5px] font-black" }, o.type === "fixed" ? `고정 ${fmtRuleVal(o)}` : `수수료 ${fmtRuleVal(o)}`),
+            // ⭐ 2026-11-09 고른 줄은 이 오더 값으로, 기본값과 다르면 "기본 7%"를 옆에 작게
+            (sel && pctSet && toNum(cur.value) !== toNum(o.value)) ? h("span", { className: "shrink-0 text-[11px] font-bold text-[#8E9BB2] tabular-nums" }, `기본 ${fmtRuleVal(o)}`) : null,
+            h("span", { className: "shrink-0 tabular-nums px-2 h-[22px] inline-flex items-center rounded-full bg-[#1B2B4B] text-[#E9C46A] text-[12.5px] font-black" }, (() => { const v = sel && pctSet ? cur : o; return v.type === "fixed" ? `고정 ${fmtRuleVal(v)}` : `수수료 ${fmtRuleVal(v)}`; })()),
             // ⭐ 2026-11-09 ✎ 운임구분 수정(이름·수수료) — 회사 공용
             canAdd ? h("button", {
               type: "button", title: `${o.name} 수정`, "aria-label": `${o.name} 수정`, "data-fare-edit": "1",

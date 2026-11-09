@@ -16277,7 +16277,7 @@ shadow-[0_1px_2px_rgba(16,24,40,0.04),0_12px_30px_rgba(16,24,40,0.07)]
               {fareOn ? (
                 <div>
                   <label className={mrLabelCls}>운임구분 <FareRuleHint className="ml-1.5" form={currentMultiSlot} rules={fareR.rules} onReapply={() => updateMultiSlot("__reapply")} /></label>
-                  <div className="flex items-center gap-1.5"><FareTypeSelect compact className="flex-1 min-w-0" rules={fareR.rules} value={currentMultiSlot.운임구분 || ""} onChange={(v) => updateMultiSlot("운임구분", v)} /><FarePctInput compact form={currentMultiSlot} rules={fareR.rules} onChange={(v) => updateMultiSlot("운임구분수수료율", v)} /></div>
+                  <div className="flex items-center gap-1.5"><FareTypeSelect pct={currentMultiSlot.운임구분수수료율} compact className="flex-1 min-w-0" rules={fareR.rules} value={currentMultiSlot.운임구분 || ""} onChange={(v) => updateMultiSlot("운임구분", v)} /><FarePctInput compact form={currentMultiSlot} rules={fareR.rules} onChange={(v) => updateMultiSlot("운임구분수수료율", v)} /></div>
                 </div>
               ) : <div />}
 
@@ -17351,7 +17351,7 @@ className={`
         {fareOn && (
           <span className="ml-auto inline-flex items-center gap-1" data-fare-row="1">
             <FareRuleHint form={form} rules={fareR.rules} onReapply={() => onChange("__reapply")} />
-            <FareTypeSelect compact align="right" id="order-fare-type" rules={fareR.rules} value={form.운임구분 || ""} placeholder="운임구분" onChange={(v) => onChange("운임구분", v)} />
+            <FareTypeSelect pct={form.운임구분수수료율} compact align="right" id="order-fare-type" rules={fareR.rules} value={form.운임구분 || ""} placeholder="운임구분" onChange={(v) => onChange("운임구분", v)} />
             <FarePctInput compact form={form} rules={fareR.rules} onChange={(v) => onChange("운임구분수수료율", v)} />{/* ⭐ 2026-11-09 이 오더만 수수료율 */}
           </span>
         )}
@@ -31395,7 +31395,7 @@ value={copyTarget?.화물수량 || ""}
 {/* ⭐ 2026-11-02 운임규칙 — 오더 복사·수정 패널 운임구분 */}
 {fareOn && (
   <CpField label={<>운임구분<FareRuleHint className="ml-1" form={copyTarget} rules={fareR.rules} onReapply={() => setCopyTarget(p => fareFormChange(p, "__reapply", null, fareR.rules))} /></>}>
-    <div className="flex items-center gap-1.5"><FareTypeSelect className="!h-9 !rounded-lg flex-1 min-w-0" placeholder="운임구분 선택(수수료 자동)" rules={fareR.rules} value={copyTarget?.운임구분 || ""} onChange={(v) => setCopyTarget(p => fareFormChange(p, "운임구분", v, fareR.rules))} /><FarePctInput form={copyTarget} rules={fareR.rules} onChange={(v) => setCopyTarget(p => fareFormChange(p, "운임구분수수료율", v, fareR.rules))} /></div>
+    <div className="flex items-center gap-1.5"><FareTypeSelect pct={copyTarget?.운임구분수수료율} className="!h-9 !rounded-lg flex-1 min-w-0" placeholder="운임구분 선택(수수료 자동)" rules={fareR.rules} value={copyTarget?.운임구분 || ""} onChange={(v) => setCopyTarget(p => fareFormChange(p, "운임구분", v, fareR.rules))} /><FarePctInput form={copyTarget} rules={fareR.rules} onChange={(v) => setCopyTarget(p => fareFormChange(p, "운임구분수수료율", v, fareR.rules))} /></div>
   </CpField>
 )}
 
@@ -33159,7 +33159,7 @@ value={copyTarget?.화물수량 || ""}
             {fareOn && (
               <div className="mb-3 flex items-center gap-2 flex-wrap">
                 <label className="shrink-0">운임구분</label>
-                <FareTypeSelect className="min-w-[180px] !w-auto" rules={fareR.rules} value={editTarget.운임구분 || ""}
+                <FareTypeSelect pct={editTarget.운임구분수수료율} className="min-w-[180px] !w-auto" rules={fareR.rules} value={editTarget.운임구분 || ""}
                   onChange={(v) => setEditTarget((p) => { const n = fareFormChange(p, "운임구분", v, fareR.rules); return { ...n, 수수료: Number(n.수수료) || 0 }; })} />
                 <FarePctInput form={editTarget} rules={fareR.rules} onChange={(v) => setEditTarget((p) => { const n = fareFormChange(p, "운임구분수수료율", v, fareR.rules); return { ...n, 수수료: Number(n.수수료) || 0 }; })} />{/* ⭐ 2026-11-09 이 오더만 수수료율 */}
                 <FareRuleHint form={editTarget} rules={fareR.rules} onReapply={() => setEditTarget((p) => { const n = fareFormChange(p, "__reapply", null, fareR.rules); return { ...n, 수수료: Number(n.수수료) || 0 }; })} />
@@ -41493,7 +41493,7 @@ return (
             {fareOn && (
               <div className="mb-3 flex items-center gap-2 flex-wrap">
                 <label className="shrink-0">운임구분</label>
-                <FareTypeSelect className="min-w-[180px] !w-auto" rules={fareR.rules} value={editTarget.운임구분 || ""}
+                <FareTypeSelect pct={editTarget.운임구분수수료율} className="min-w-[180px] !w-auto" rules={fareR.rules} value={editTarget.운임구분 || ""}
                   onChange={(v) => setEditTarget((p) => { const n = fareFormChange(p, "운임구분", v, fareR.rules); return { ...n, 수수료: Number(n.수수료) || 0 }; })} />
                 <FarePctInput form={editTarget} rules={fareR.rules} onChange={(v) => setEditTarget((p) => { const n = fareFormChange(p, "운임구분수수료율", v, fareR.rules); return { ...n, 수수료: Number(n.수수료) || 0 }; })} />{/* ⭐ 2026-11-09 이 오더만 수수료율 */}
                 <FareRuleHint form={editTarget} rules={fareR.rules} onReapply={() => setEditTarget((p) => { const n = fareFormChange(p, "__reapply", null, fareR.rules); return { ...n, 수수료: Number(n.수수료) || 0 }; })} />
@@ -42792,7 +42792,7 @@ setCopyPlaceOptions(list);
 {/* ⭐ 2026-11-02 운임규칙 — 오더 복사·수정 패널 운임구분 */}
 {fareOn && (
   <CpField label={<>운임구분<FareRuleHint className="ml-1" form={copyTarget} rules={fareR.rules} onReapply={() => setCopyTarget(p => fareFormChange(p, "__reapply", null, fareR.rules))} /></>}>
-    <div className="flex items-center gap-1.5"><FareTypeSelect className="!h-9 !rounded-lg flex-1 min-w-0" placeholder="운임구분 선택(수수료 자동)" rules={fareR.rules} value={copyTarget?.운임구분 || ""} onChange={(v) => setCopyTarget(p => fareFormChange(p, "운임구분", v, fareR.rules))} /><FarePctInput form={copyTarget} rules={fareR.rules} onChange={(v) => setCopyTarget(p => fareFormChange(p, "운임구분수수료율", v, fareR.rules))} /></div>
+    <div className="flex items-center gap-1.5"><FareTypeSelect pct={copyTarget?.운임구분수수료율} className="!h-9 !rounded-lg flex-1 min-w-0" placeholder="운임구분 선택(수수료 자동)" rules={fareR.rules} value={copyTarget?.운임구분 || ""} onChange={(v) => setCopyTarget(p => fareFormChange(p, "운임구분", v, fareR.rules))} /><FarePctInput form={copyTarget} rules={fareR.rules} onChange={(v) => setCopyTarget(p => fareFormChange(p, "운임구분수수료율", v, fareR.rules))} /></div>
   </CpField>
 )}
 
@@ -51111,7 +51111,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                     {/* ⭐ 2026-11-02 운임규칙 — 운임구분(실시간·배차현황 패널과 같은 자리) */}
                     {fareOnU && (
                       <CpField label={<>운임구분<FareRuleHint className="ml-1" form={copyTarget} rules={fareRU.rules} onReapply={() => setCopyTarget(p => fareFormChange(p, "__reapply", null, fareRU.rules))} /></>}>
-                        <div className="flex items-center gap-1.5"><FareTypeSelect className="!h-9 !rounded-lg flex-1 min-w-0" rules={fareRU.rules} value={copyTarget?.운임구분 || ""} onChange={(v) => setCopyTarget(p => fareFormChange(p, "운임구분", v, fareRU.rules))} /><FarePctInput form={copyTarget} rules={fareRU.rules} onChange={(v) => setCopyTarget(p => fareFormChange(p, "운임구분수수료율", v, fareRU.rules))} /></div>
+                        <div className="flex items-center gap-1.5"><FareTypeSelect pct={copyTarget?.운임구분수수료율} className="!h-9 !rounded-lg flex-1 min-w-0" rules={fareRU.rules} value={copyTarget?.운임구분 || ""} onChange={(v) => setCopyTarget(p => fareFormChange(p, "운임구분", v, fareRU.rules))} /><FarePctInput form={copyTarget} rules={fareRU.rules} onChange={(v) => setCopyTarget(p => fareFormChange(p, "운임구분수수료율", v, fareRU.rules))} /></div>
                       </CpField>
                     )}
                     <CpField label="배차방식">

@@ -298,7 +298,7 @@ export default function FleetOrderPanel({ order, onClose, onCopy, companyName = 
               </CpField>
               {fareOn && (
                 <CpField label={<>운임구분<FareRuleHint className="ml-1" form={form} rules={fareR.rules} onReapply={() => setFare("__reapply", null)} /></>}>
-                  <div className="flex items-center gap-1.5"><FareTypeSelect className="!h-9 !rounded-lg flex-1 min-w-0" rules={fareR.rules} value={form.운임구분 || ""} onChange={(v) => setFare("운임구분", v)} /><FarePctInput form={form} rules={fareR.rules} onChange={(v) => setFare("운임구분수수료율", v)} /></div>
+                  <div className="flex items-center gap-1.5"><FareTypeSelect pct={form.운임구분수수료율} className="!h-9 !rounded-lg flex-1 min-w-0" rules={fareR.rules} value={form.운임구분 || ""} onChange={(v) => setFare("운임구분", v)} /><FarePctInput form={form} rules={fareR.rules} onChange={(v) => setFare("운임구분수수료율", v)} /></div>
                 </CpField>
               )}
               <CpField label="배차방식">
