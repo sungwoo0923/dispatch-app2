@@ -263,7 +263,7 @@ export function NotifyModal({ item, index = 1, total = 1, company = "", mobile =
         </ScrollBody>
         {/* 버튼 */}
         <div className="shrink-0 flex justify-center gap-2 px-4 sm:px-7 py-3 border-t border-[#EEF1F6] bg-[#F8FAFD]" style={mobile ? { paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 12px)" } : undefined}>
-          <button type="button" onClick={onClose} className="h-10 px-5 min-w-[96px] rounded-xl border border-[#DCE3EE] bg-white text-[13.5px] font-black text-[#1B2B4B] whitespace-nowrap" data-testid="notify-close">{total > 1 ? "닫고 다음" : "닫기"}</button>
+          <button type="button" onClick={onClose} className="h-10 px-5 min-w-[96px] rounded-xl border border-[#DCE3EE] bg-white text-[13.5px] font-black text-[#1B2B4B] whitespace-nowrap" data-testid="notify-close">{total > 1 ? "다음" : "닫기"}</button>
           {item.src === "platform"
             /* ⭐ 2026-11-04 플랫폼 공지 — "공지사항에서 열기" 대신 "다시 보지 않기"(PC·모바일 어디서 눌러도 계정 전체에서 다시 안 뜸) */
             ? <button type="button" onClick={() => onNever?.(item)} className="h-10 px-5 rounded-xl bg-[#0F1A30] text-white text-[13.5px] font-black whitespace-nowrap" data-testid="notify-never">다시 보지 않기</button>

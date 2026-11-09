@@ -175,7 +175,7 @@ async function boot(p, extra) {
 }
 async function closePopups(p) {
   for (let i = 0; i < 3; i++) {
-    const btn = await p.$('text=닫고 다음');
+    const btn = await p.$('text=다음');
     if (btn) { await btn.click().catch(() => {}); await p.waitForTimeout(300); } else break;
   }
 }

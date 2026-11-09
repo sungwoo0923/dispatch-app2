@@ -9,10 +9,16 @@ import { db, DEFAULT_COMPANY } from "./firebase";
 
 // ⭐ 2026-11-02 점검 — 계정 없는 직원(noAccount: 인사 기록용으로만 등록)은 로그인할 수 없으므로 인사 담당자로 보지 않는다
 //  (이 사람만 인사팀에 있으면 마스터의 인사권이 사라져 아무도 인사 업무를 못 하던 문제)
+// ⭐ 2026-11-09 인사 담당 판정은 "부서 이름"이 아니라 실제 권한 기준 — 인사팀에 있어도 권한을 운송·경리 등으로 바꾸면 인사 담당이 아니다
+//  (예전엔 부서가 인사팀이면 권한을 바꿔도 "인사 담당자가 있어 부서·직책·퇴사는 인사팀에서" 안내로 마스터가 잠겼다)
+//  인사 권한 = 인사관리자 · 인사사무원 · 통합인사관리자 · 통합관리자 + 회사가 만든 역할 중 이름에 "인사"가 들어간 역할(customRoles가 알려 줌)
+const HR_ROLES = ["hrManager", "hrAcct", "allMgr", "hrStaff"];
+let hrCustomKeys = new Set();
+export const setHrCustomRoleKeys = (keys) => { hrCustomKeys = new Set(keys || []); };
+export const isHrRoleKey = (role) => HR_ROLES.includes(role) || hrCustomKeys.has(role);
 export const isHrStaffUser = (u) =>
   !!u && !u.noAccount && u.approved !== false && u.employmentStatus !== "퇴사" &&
-  !["driver", "shipper", "cafeUser", "totalMaster"].includes(u.role) &&
-  (["hrManager", "hrAcct", "allMgr", "hrStaff"].includes(u.role) || /인사/.test(String(u.team || "")));
+  !["driver", "shipper", "cafeUser", "totalMaster"].includes(u.role) && isHrRoleKey(u.role);
 
 // 나(exceptUid)를 뺀 인사 담당자가 있는지
 export const companyHasHrStaff = (users, exceptUid) =>

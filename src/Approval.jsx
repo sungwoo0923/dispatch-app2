@@ -37,7 +37,7 @@ import { useLeaveGuard, draftStore, confirmLeave } from "./leaveGuard";
 import {
   APPROVAL_CATS, APPROVAL_FORMS, formOf, formsOfCat, initialData, missingFields, fieldText, suggestLine,
   itemsTotal, costsTotal, fmtWon, dayDiff, bizDays, leaveEntitlement, leaveUseOf,
-  blankSpendRow, spendRowTotal, spendLinesOf, spendTotals, wonKorean, rowsOf,
+  blankSpendRow, spendRowTotal, spendLinesOf, spendTotals, wonKorean, rowsOf, ACCOUNTS,
 } from "./approvalForms";
 import { needsBizLine, suggestBizLine, validateBizLine, isFinPerson, isCeoPerson, isExecNonCeo, PLAN_LINK_FORMS, budgetTotal } from "./bizPlan"; // 📑 2026-11-08 사업계획서
 import { ApprovalAttachInput, ApprovalAttachPanel, removeApFile } from "./ApprovalFiles"; // 📎 2026-11-08 첨부 파일(Storage)
@@ -97,6 +97,10 @@ const acctViewOn = (role) => {
   try { const v = localStorage.getItem(key); return role === "hrAcct" ? v !== "hr" : v === "acct"; } catch { return false; }
 };
 const isFinUser = (me) => FIN_ROLES.includes(me?.role) || acctViewOn(me?.role) || FIN_TEAM.test(String(me?.team || ""));
+// ⭐ 2026-11-09 계정과목은 경리 권한만 정한다 — 경리관리자·경리사무원·통합관리자·통합인사관리자·최고관리자·경리/회계/재무/총무 부서
+//  (통합관리자·통합인사관리자는 화면 전환과 상관없이 — 계정 분류는 지급 처리와 달리 화면을 바꿀 필요 없음. 보안 규칙의 지급 권한과 같은 역할 목록)
+//  그 외 직원이 올린 지출결의는 계정과목이 비어 있고, 경리가 [지급 완료] 때 고른다(장부에도 반영)
+export const isAcctEditor = (me) => ["test", "acctStaff", "allMgr", "hrAcct", "totalMaster"].includes(me?.role) || FIN_TEAM.test(String(me?.team || ""));
 // null(지급 대상 아님) | "wait"(지급 대기) | "paid"(지급완료)
 export const payState = (d) => (!isPayDoc(d) || d.status !== "approved" ? null : d.paid?.at ? "paid" : "wait");
 // ⭐ 2026-11-07 지급완료된 지출결의는 결재 취소 요청을 막는다(경리가 지급완료를 먼저 취소) — firestore.rules apCancelReqOk와 같은 조건
@@ -1618,7 +1622,8 @@ function Composer({ company, me, staff, cat, preset, onDone, leave, getLive, myD
     const bizV = needsBizLine(form.key) ? validateBizLine(line, staff, me) : null;
     if (bizV && !bizV.ok && !editId) { setMsg(bizV.errors.join(" ")); document.querySelector("[data-bizline-check]")?.scrollIntoView({ behavior: "smooth", block: "center" }); return; }
     if (upBusy > 0) { setMsg("첨부 파일을 올리는 중이에요. 다 올라간 뒤 다시 눌러 주세요."); return; }
-    const pdRaw = form.prepare ? form.prepare(data) : data; // ⭐ 2026-11-02 지출결의 — 빈 행 빼고 예전 칸(지출처·입금계좌·지출일) 채움
+    const pdRaw0 = form.prepare ? form.prepare(data) : data;
+    const pdRaw = form.fields.some((f) => f.k === "account") && !isAcctEditor(me) ? { ...pdRaw0, account: "" } : pdRaw0; // 계정과목은 경리가 지정 // ⭐ 2026-11-02 지출결의 — 빈 행 빼고 예전 칸(지출처·입금계좌·지출일) 채움
     const pd = form.fields.some((f) => f.type === "plan") && !pdRaw.planId ? { ...pdRaw, planId: "", planName: "" } : pdRaw;
     const fileMeta = files.slice(0, AP_FILE_COUNT).map(({ name, size, type, path, uploadedBy, uploadedByName, at }) => ({ name, size, type, path, uploadedBy: uploadedBy || "", uploadedByName: uploadedByName || "", at: at || Date.now() }));
     if (editId) {
@@ -1718,7 +1723,7 @@ function Composer({ company, me, staff, cat, preset, onDone, leave, getLive, myD
               return (
                 <div key={f.k} id={`apf-${f.k}`} className={`block rounded-xl min-w-0 ${half(f) && f.type !== "bank" && f.type !== "time" ? "" : "col-span-2"} ${bad ? "ring-2 ring-[#2D4C82] ring-offset-4 bg-[#EEF3FC]" : ""}`}>
                   <span className={`flex items-center gap-1.5 text-[14.5px] font-black ${bad ? "text-[#0B1428]" : "text-[#3A4A66]"}`}>{f.label}{f.required && <span className="text-[#2D4C82]">*</span>}{bad && <span className="ml-auto h-5 px-2 rounded-md bg-[#0F1A30] text-white text-[12px] font-black inline-flex items-center">입력 필요</span>}</span>
-                  <div className="mt-1.5"><FieldInput f={f} value={data[f.k]} onChange={(v, extra) => { if (f.type === "plan") setData((p) => ({ ...p, [f.k]: v, planName: extra ? String(extra.data?.name || extra.title || "") : "" })); else setField(f, v); if (bad) setMissing((m) => m.filter((x) => x !== f.k)); }} staff={staff} meUid={me.uid} ctx={fieldCtx} /></div>
+                  <div className="mt-1.5">{f.k === "account" && !isAcctEditor(me) ? <div className="h-11 px-3 rounded-xl border border-dashed border-[#C9D5EA] bg-[#F7F9FC] flex items-center text-[13.5px] font-bold text-[#7A89A3]">경리 담당자가 지급할 때 지정합니다</div> : <FieldInput f={f} value={data[f.k]} onChange={(v, extra) => { if (f.type === "plan") setData((p) => ({ ...p, [f.k]: v, planName: extra ? String(extra.data?.name || extra.title || "") : "" })); else setField(f, v); if (bad) setMissing((m) => m.filter((x) => x !== f.k)); }} staff={staff} meUid={me.uid} ctx={fieldCtx} />}</div>
                 </div>
               );
             })}
@@ -1790,7 +1795,16 @@ function Progress({ d }) {
   );
 }
 
-function Viewer({ d, me, staff, company, onClose, onRedraft, onEdit, inline = false, canHr = false }) {
+function Viewer({ d: d0, me, staff, company, onClose, onRedraft, onEdit, inline = false, canHr = false }) {
+  // ⭐ 2026-11-09 지급완료 확정 직후 화면 반영 — 저장은 됐는데 목록 구독이 늦게 도착하면 도장이 안 찍히고 [지급 완료 확정]이 그대로 보여
+  //  한 번 더 누르게 됐다(실제 테스트운송사 문서에 '지급 완료'가 두 번 기록됨). 저장이 끝나면 화면에 바로 반영하고, 서버 값이 오면 그 값을 쓴다.
+  const [paidLocal, setPaidLocal] = React.useState(undefined); // undefined = 서버 값 그대로 · 객체 = 지급완료 · null = 지급 취소
+  React.useEffect(() => {
+    if (paidLocal === undefined) return;
+    if ((paidLocal && d0?.paid?.at) || (paidLocal === null && !d0?.paid?.at)) setPaidLocal(undefined);
+  }, [d0?.paid?.at, paidLocal]);
+  React.useEffect(() => { setPaidLocal(undefined); }, [d0?.id]);
+  const d = React.useMemo(() => (paidLocal === undefined ? d0 : { ...d0, paid: paidLocal }), [d0, paidLocal]);
   const apCfg = useApprovalSettings(company);
   const form = formOf(d.form);
   const [comment, setComment] = React.useState("");
@@ -1892,12 +1906,14 @@ function Viewer({ d, me, staff, company, onClose, onRedraft, onEdit, inline = fa
   const doPay = async () => {
     const date = payAsk?.date || kstToday();
     const memo = String(payAsk?.memo || "").trim();
+    const account = String(payAsk?.account || d.data?.account || "").trim(); // ⭐ 2026-11-09 계정과목(경리가 지급 때 지정)
+    if (payState(d) === "paid") return; // 이미 지급완료(두 번 처리 방지)
     if (!await kpConfirm(`「${d.title}」\n${fmtWon(d.amount)}을 ${date} 지급 완료로 처리할까요?\n기안자(${d.drafter?.name || ""})에게 알림이 갑니다.`)) return;
     setBusy(true);
     try {
       const now = Date.now();
       await updateDoc(doc(db, "approvals", d.id), {
-        paid: { at: now, by: me.uid, byName: me.name || "", date, memo },
+        paid: { at: now, by: me.uid, byName: me.name || "", date, memo, ...(account ? { account } : {}) },
         ...(d.drafterUid !== me.uid ? { drafterUnread: true } : {}),
         history: arrayUnion({ at: now, uid: me.uid, name: me.name || "", action: "지급 완료", comment: `지급일 ${date}${memo ? ` · ${memo}` : ""}` }),
         updatedAt: serverTimestamp(),
@@ -1909,6 +1925,8 @@ function Viewer({ d, me, staff, company, onClose, onRedraft, onEdit, inline = fa
           body: `[지급 완료] ${d.title} — ${fmtWon(d.amount)} 지급되었습니다.\n\n· 문서번호: ${d.docNo}\n· 지급일: ${date}\n· 처리: ${me.name || ""}${memo ? `\n· 메모: ${memo}` : ""}\n\n홈 › 전자결재 › 내 기안함에서 확인하세요.`,
         }).catch(() => {});
       }
+      setPaidLocal({ at: now, by: me.uid, byName: me.name || "", date, memo, ...(account ? { account } : {}) }); // 화면에 바로 도장
+      if (account) setDoc(doc(db, "acctLedger", `appr_${d.id}`), { account }, { merge: true }).catch(() => {}); // 장부 계정과목도 맞춘다
       setPayAsk(null);
     } catch (e) { window.alert(`지급 완료 처리 실패: ${e.message}`); } finally { setBusy(false); }
   };
@@ -1921,6 +1939,7 @@ function Viewer({ d, me, staff, company, onClose, onRedraft, onEdit, inline = fa
         history: arrayUnion({ at: Date.now(), uid: me.uid, name: me.name || "", action: "지급 취소", comment: d.paid?.date ? `지급일 ${d.paid.date} 처리 취소` : "" }),
         updatedAt: serverTimestamp(),
       });
+      setPaidLocal(null); // 화면에 바로 지급 대기로
       // ⭐ 2026-11-04 지급 취소도 기안자에게 사내메일
       if (d.drafterUid && d.drafterUid !== me.uid) {
         sendInternalMail({
@@ -2009,13 +2028,19 @@ function Viewer({ d, me, staff, company, onClose, onRedraft, onEdit, inline = fa
                 </div>
                 {pstate === "paid" ? (
                   <>
-                    <div className="text-[13px] text-[#3A4A66] leading-relaxed break-words">지급일 <b className="text-[#0F1A30] tabular-nums">{d.paid.date || ymd(d.paid.at)}</b> · 처리 {d.paid.byName || "-"}{d.paid.memo ? <><br />메모 {d.paid.memo}</> : null}</div>
+                    <div className="text-[13px] text-[#3A4A66] leading-relaxed break-words">지급일 <b className="text-[#0F1A30] tabular-nums">{d.paid.date || ymd(d.paid.at)}</b> · 처리 {d.paid.byName || "-"}{d.paid.account ? <> · 계정과목 <b className="text-[#0F1A30]">{d.paid.account}</b></> : null}{d.paid.memo ? <><br />메모 {d.paid.memo}</> : null}</div>
                     {payable && <button type="button" disabled={busy} onClick={undoPay} className="h-9 px-3.5 rounded-lg border border-[#DCE3EE] bg-white text-[13px] font-black text-[#5B6B85] disabled:opacity-50">지급 취소</button>}
                   </>
                 ) : payable ? (
                   payAsk ? (
                     <div className="space-y-2">
                       <div><div className="text-[12px] font-bold text-[#5B6B85] mb-1">지급일</div><CustomDatePicker value={payAsk.date} onChange={(e) => setPayAsk((p) => ({ ...p, date: e.target.value || kstToday() }))} className={inp} showIcon /></div>
+                      {formOf(d.form)?.fields?.some((f) => f.k === "account") && isAcctEditor(me) && (
+                        <div><div className="text-[12px] font-bold text-[#5B6B85] mb-1">계정과목{!d.data?.account && <span className="ml-1 text-[#B42318]">(기안자가 비워 둠)</span>}</div>
+                          <CustomSelect value={payAsk.account || ""} onChange={(e) => setPayAsk((p) => ({ ...p, account: e.target.value }))} className={inp}>
+                            <option value="">선택</option>{ACCOUNTS.map((a) => <option key={a} value={a}>{a}</option>)}
+                          </CustomSelect></div>
+                      )}
                       <div><div className="text-[12px] font-bold text-[#5B6B85] mb-1">메모 (선택)</div><input value={payAsk.memo} onChange={(e) => setPayAsk((p) => ({ ...p, memo: e.target.value }))} placeholder="예) 국민은행 계좌이체" className={inp} /></div>
                       <div className="flex gap-2">
                         <button type="button" onClick={() => setPayAsk(null)} className="flex-1 h-11 rounded-xl border border-[#DCE3EE] text-[14px] font-bold text-[#5B6B85]">닫기</button>
@@ -2023,7 +2048,7 @@ function Viewer({ d, me, staff, company, onClose, onRedraft, onEdit, inline = fa
                       </div>
                     </div>
                   ) : (
-                    <button type="button" disabled={busy} onClick={() => setPayAsk({ date: kstToday(), memo: "" })} className="w-full h-12 rounded-xl text-white text-[15px] font-black shadow-[0_10px_22px_rgba(15,26,48,0.25)] disabled:opacity-50" style={{ background: "linear-gradient(120deg,#0F1A30,#2D4C82)" }}>₩ 지급 완료 처리</button>
+                    <button type="button" disabled={busy} onClick={() => setPayAsk({ date: kstToday(), memo: "", account: d.data?.account || "" })} className="w-full h-12 rounded-xl text-white text-[15px] font-black shadow-[0_10px_22px_rgba(15,26,48,0.25)] disabled:opacity-50" style={{ background: "linear-gradient(120deg,#0F1A30,#2D4C82)" }}>₩ 지급 완료 처리</button>
                   )
                 ) : (
                   <div className="text-[12.5px] text-[#5B6B85] leading-relaxed">결재가 끝나 재무·경리 담당자의 지급을 기다리고 있습니다. 지급되면 알림이 갑니다.</div>

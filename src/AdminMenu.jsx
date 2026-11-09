@@ -315,12 +315,23 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
     if (!canAdmin) return;
     if (u.id === me?.uid && u.isMaster) return alert("본인의 마스터는 해제할 수 없습니다. 다른 직원을 먼저 마스터로 지정해 주세요.");
     const next = !u.isMaster;
+    // ⭐ 2026-11-09 마스터는 운송사마다 1명 — 회사 마스터가 다른 직원을 마스터로 지정하면 "위임"으로 처리(본인은 마스터에서 빠짐)
+    if (next && !isTotalMaster) { await delegateMaster(u); return; }
     if (!await kpConfirm(next ? `"${u.name || u.email}"님을 마스터로 지정할까요?\n마스터는 직원 승인·권한을 정하고, 인사 담당자가 없을 때는 부서·직책·퇴사도 처리합니다.` : `"${u.name || u.email}"님의 마스터를 해제할까요?`)) return;
     const history = [...(u.personnelHistory || []), { date: todayStr(), type: next ? "마스터 지정" : "마스터 해제", detail: meDoc?.name || me?.email || "" }];
     await setDoc(doc(db, "users", u.id), { isMaster: next, ...(next ? { role: "admin" } : {}), personnelHistory: history }, { merge: true });
+    if (next) await demoteOtherMasters(u, `마스터 변경 → ${u.name || u.email}`); // 최고관리자가 새 마스터를 지정하면 기존 마스터는 해제(1명 유지)
     if (manageUser?.id === u.id) setManageUser((prev) => ({ ...prev, isMaster: next, ...(next ? { role: "admin" } : {}), personnelHistory: history }));
   };
 
+  // 같은 회사의 다른 마스터 해제(최고관리자가 지정·위임할 때 — 마스터 1명 유지)
+  const demoteOtherMasters = async (u, detail) => {
+    const co = u.companyName || DEFAULT_COMPANY; const day = todayStr();
+    const others = users.filter((x) => x.id !== u.id && x.isMaster === true && x.role !== "shipper" && (x.companyName || DEFAULT_COMPANY) === co);
+    for (const x of others) {
+      await setDoc(doc(db, "users", x.id), { isMaster: false, personnelHistory: [...(x.personnelHistory || []), { date: day, type: "마스터 해제", detail }] }, { merge: true }).catch(() => {});
+    }
+  };
   // 👑 2026-11-01 마스터 위임 — 마스터(최초 가입자)가 다른 재직 직원에게 마스터를 넘기고 본인은 마스터에서 빠진다
   const canDelegateMaster = (u) => !!u && (isCompanyMaster || isTotalMaster) && u.id !== me?.uid && !u.isMaster && u.approved !== false
     && u.employmentStatus !== "퇴사" && !["driver", "shipper", "cafeUser", "totalMaster"].includes(u.role);
@@ -332,6 +343,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
     try {
       await setDoc(doc(db, "users", u.id), { isMaster: true, role: "admin", personnelHistory: [...(u.personnelHistory || []), { date: day, type: "마스터 위임 받음", detail: by }] }, { merge: true });
       if (!isTotalMaster && meDoc) await setDoc(doc(db, "users", meDoc.id), { isMaster: false, personnelHistory: [...(meDoc.personnelHistory || []), { date: day, type: "마스터 위임", detail: who }] }, { merge: true });
+      if (isTotalMaster) await demoteOtherMasters(u, `마스터 위임 → ${who}`); // ⭐ 2026-11-09 최고관리자가 위임하면 그 회사 기존 마스터 해제(예전엔 2명 남음)
       alert(`"${who}"님에게 마스터를 위임했습니다.`);
     } catch (e) { alert(`위임 실패: ${e.message}`); }
   };

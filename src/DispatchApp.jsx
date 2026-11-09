@@ -60622,7 +60622,10 @@ function MyProfilePage({ user, todayStats, myStats, cardImage, setCardImage, car
   const ROLE_NAME = ROLE_LABELS;
   // ⭐ 2026-11-02 점검 — 권한 배지에 내부 키(hrAcct·r_xxx) 대신 한글 이름 표시(사용자 정의 역할 이름 포함)
   const customRolesMP = useCustomRoles();
-  const roleLabel = (customRolesMP || []).find((r) => r.key === role)?.label || ROLE_NAME[role] || "-";
+  // ⭐ 2026-11-09 통합관리자·통합인사관리자는 화면(운송·경리·인사)을 바꿔도 내정보 권한은 실제 역할 그대로("통합관리자")
+  const myDocMP = useMyProfile(user?.uid);
+  const roleKeyMP = ["allMgr", "hrAcct"].includes(myDocMP?.role) ? myDocMP.role : role;
+  const roleLabel = (customRolesMP || []).find((r) => r.key === roleKeyMP)?.label || ROLE_NAME[roleKeyMP] || "-";
   const displayName = myName || user?.displayName || (user?.email || "").split("@")[0];
   const phone = myInfo.전화번호 || myInfo.phone || "";
   const title = [myInfo.team, myInfo.position].filter(Boolean).join(" · ");

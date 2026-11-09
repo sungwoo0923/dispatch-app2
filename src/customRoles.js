@@ -1,4 +1,5 @@
 import React from "react";
+import { setHrCustomRoleKeys } from "./hrHandover"; // ⭐ 2026-11-09 인사 담당 판정(권한 기준)
 import { db } from "./firebase";
 import { collection, onSnapshot, setDoc, deleteDoc, doc, deleteField } from "firebase/firestore";
 import { getTenant } from "./fsTenant";
@@ -278,6 +279,8 @@ export function useRoleOptions() {
     const options = roleOptionsFrom(customRoles);
     const label = (k) => options.find(([x]) => x === k)?.[1] || ROLE_LABELS[k] || k || "-";
     const execKeys = customRoles.filter((r) => roleScreen(r) === "exec").map((r) => r.key);
+    // ⭐ 2026-11-09 인사 담당 판정용 — 회사가 만든 역할 중 이름에 "인사"가 들어간 역할(임원 화면 제외)
+    setHrCustomRoleKeys(customRoles.filter((r) => roleScreen(r) !== "exec" && !BASE_ROLE_OPTIONS.some(([k]) => k === r.key) && /인사/.test(String(r.label || ""))).map((r) => r.key));
     // 🏢 부서에 맞는 권한만 — keep: 지금 권한이 목록에 없어도 맨 앞에 남겨 둘 값
     const forTeam = (team, keep) => { const l = rolesForTeam(team, options, customRoles); return keep && !l.some(([k]) => k === keep) ? [[keep, label(keep)], ...l] : l; };
     const fits = (role, team) => rolesForTeam(team, options, customRoles).some(([k]) => k === role);
