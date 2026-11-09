@@ -16,6 +16,8 @@ import KpSubNav from "./KpSubNav";
 import CustomDatePicker from "./CustomDatePicker";
 import ApprovalCenter, { myTurn, useApprovalCounts, useApprovalSettings, setAutoApproveDaily } from "./Approval";
 import HandoverCenter, { useHandoverUnread } from "./HandoverCenter";
+import { approvalNavItems } from "./menuTree"; // ⭐ 2026-11-10 메뉴 통일
+const ContractStudioX = React.lazy(() => import("./ContractStudio")); // ⭐ 2026-11-10 부서·임원 화면 전자결재 › 계약서
 import { buildPastStats } from "./HomeDeck";
 import { useRouteCarrierFilter } from "./routeCarriers"; // ⭐ 2026-11-05 고정노선 운송업체 설정(끈 업체 오더는 매출에서 뺌)
 import { pcLiveWindowStart, pcPrevDay } from "./orderHistory";
@@ -691,17 +693,10 @@ export function ApprovalWorkspace({ company, me }) {
   const hoUnread = useHandoverUnread(me?.uid);
   return (
     <KpSubNav code="E-APPROVAL" title="전자결재" icon="stamp" active={page} onSelect={setPage}
-      groups={[{ label: "전자결재", items: [
-        { key: "inbox", label: "결재함", en: "INBOX", icon: "stamp", badge: counts.todo },
-        { key: "leave", label: "근태·휴가 신청", en: "ATTENDANCE", icon: "clock" },
-        { key: "expense", label: "비용·지출 결의", en: "EXPENSE", icon: "wallet" },
-        { key: "draft", label: "업무 기안·품의", en: "PROPOSAL", icon: "file" },
-        { key: "report", label: "업무 보고·인사", en: "REPORT", icon: "list" },
-        { key: "handover", label: "인수인계", en: "HANDOVER", icon: "link", badge: hoUnread },
-        { key: "mine", label: "내 기안함", en: "MY DOCUMENTS", icon: "send", badge: counts.mineNew },
-        { key: "lines", label: "결재선 관리", en: "LINES", icon: "route" },
-      ] }]}>
-      {page === "handover"
+      groups={[{ label: "전자결재", items: approvalNavItems("", { inbox: { badge: counts.todo }, handover: { badge: hoUnread }, mine: { badge: counts.mineNew } }) }]}>{/* ⭐ 2026-11-10 메뉴 통일(menuTree) — 계약서 포함 */}
+      {page === "contract"
+        ? <React.Suspense fallback={null}><ContractStudioX company={company} me={me} /></React.Suspense>
+        : page === "handover"
         ? <HandoverCenter company={company} me={me} isViewer={me?.role === "viewer"} />
         : <ApprovalCenter company={company} me={me} page={page} setPage={setPage} />}
     </KpSubNav>

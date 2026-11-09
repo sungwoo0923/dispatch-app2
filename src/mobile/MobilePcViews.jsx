@@ -3,6 +3,7 @@
 //  PC와 같은 구성·디자인으로. PC 화면 컴포넌트를 그대로 불러오고, 휴대폰 폭에서는 PC의 왼쪽 메뉴가
 //  위쪽 가로 탭(KpSubNav 휴대폰 모드)으로 바뀐다. 이 파일은 메뉴를 열 때만 불러온다(첫 로딩 속도 유지).
 import React from "react";
+import { approvalNavItems } from "../menuTree"; // ⭐ 2026-11-10 메뉴 통일
 import { doc, setDoc, getDocs, updateDoc, deleteDoc, query, where, collection, serverTimestamp, onSnapshot } from "firebase/firestore";
 import { db, DEFAULT_COMPANY } from "../firebase";
 import KpSubNav from "../KpSubNav";
@@ -163,17 +164,7 @@ function ApprovalView({ company, me, initialPage = "inbox" }) {
   const hoUnread = useHandoverUnread(me?.uid);
   return (
     <KpSubNav code="E-APPROVAL" title="전자결재" icon="stamp" active={page} onSelect={setPage}
-      groups={[{ label: "전자결재", items: [
-        { key: "inbox", label: "결재함", en: "INBOX", icon: "stamp", badge: counts.todo },
-        { key: "leave", label: "근태·휴가 신청", en: "ATTENDANCE", icon: "clock" },
-        { key: "expense", label: "비용·지출 결의", en: "EXPENSE", icon: "wallet" },
-        { key: "draft", label: "업무 기안·품의", en: "PROPOSAL", icon: "file" },
-        { key: "report", label: "업무 보고·인사", en: "REPORT", icon: "list" },
-        { key: "contract", label: "계약서", en: "CONTRACT", icon: "pen" }, // ⭐ 2026-11-10 모든 권한에 계약서(PC 홈과 같게)
-        { key: "handover", label: "인수인계", en: "HANDOVER", icon: "link", badge: hoUnread },
-        { key: "mine", label: "내 기안함", en: "MY DOCUMENTS", icon: "send", badge: counts.mineNew },
-        { key: "lines", label: "결재선 관리", en: "LINES", icon: "route" },
-      ] }]}>
+      groups={[{ label: "전자결재", items: approvalNavItems("", { inbox: { badge: counts.todo }, handover: { badge: hoUnread }, mine: { badge: counts.mineNew } }) }]}>{/* ⭐ 2026-11-10 메뉴 통일(menuTree) */}
       <div className="kp-m-pc kp-m-approval">
         {page === "contract"
           ? <React.Suspense fallback={null}><ContractStudioM company={company} me={me} /></React.Suspense>

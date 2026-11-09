@@ -1,4 +1,5 @@
-import { OrdersWeatherStrip } from "./publicDataMain"; // 🌦 2026-11-07 오늘 운행 지역 날씨 · 특보
+import { OrdersWeatherStrip } from "./publicDataMain";
+import { approvalNavItems } from "./menuTree"; // ⭐ 2026-11-10 메뉴 통일 // 🌦 2026-11-07 오늘 운행 지역 날씨 · 특보
 import NoticeBoard, { canSeeNotice } from "./NoticeBoard";
 import { runDelete } from "./DeleteProgress"; // ⭐ 2026-11-05 삭제 진행 창 + 한 번에 삭제
 import { useBoardNoticesWithPlatform } from "./PlatformNoticeBanner";
@@ -938,18 +939,11 @@ export default function HomeDashboard({ role, user, userCompany = "", pending, d
           { key: "teamsched", label: "직원 일정", en: "TEAM SCHEDULE", icon: "clock" },
           { key: "rules", label: "사내 규정", en: "RULES", icon: "list" },
         ] },
-        { label: "전자결재", items: [
-          { key: "ap:inbox", label: "결재함", en: "INBOX", icon: "stamp", badge: apCounts.todo, badgeTitle: "내 결재 차례" },
-          { key: "ap:leave", label: "근태·휴가 신청", en: "ATTENDANCE", icon: "clock" },
-          { key: "ap:expense", label: "비용·지출 결의", en: "EXPENSE", icon: "wallet" },
-          { key: "ap:draft", label: "업무 기안·품의", en: "PROPOSAL", icon: "file" },
-          { key: "ap:report", label: "업무 보고·인사", en: "REPORT", icon: "list" },
-          { key: "ap:contract", label: "계약서", en: "CONTRACT", icon: "pen" },
-          // ⭐ 2026-10-31 인수인계는 전자결재 안으로(모바일 전자결재와 같은 화면)
-          { key: "ap:handover", label: "인수인계", en: "HANDOVER", icon: "link", badge: unreadHandoverCountNav, badgeTitle: "내 미확인" },
-          { key: "ap:mine", label: "내 기안함", en: "MY DOCUMENTS", icon: "send", badge: apCounts.mineNew, badgeTitle: "새 결재 결과(승인·반려·취소)" },
-          { key: "ap:lines", label: "결재선 관리", en: "LINES", icon: "route" },
-        ] },
+        { label: "전자결재", items: approvalNavItems("ap:", { // ⭐ 2026-11-10 메뉴 통일(menuTree) — 상단 전자결재·모바일과 같은 목록
+          inbox: { badge: apCounts.todo, badgeTitle: "내 결재 차례" },
+          handover: { badge: unreadHandoverCountNav, badgeTitle: "내 미확인" },
+          mine: { badge: apCounts.mineNew, badgeTitle: "새 결재 결과(승인·반려·취소)" },
+        }) },
         { label: "커뮤니케이션 센터", items: [
           { key: "mail", label: "사내메일함", en: "MAILBOX", icon: "mail", badge: mailCounts.unread, badgeTitle: "안 읽은 메일", red: true, // ⭐ 2026-11-03 카톡처럼 빨간 숫자
             sub: MAIL_FOLDERS.map((f) => ({ key: `mail:${f.key}`, label: f.label, icon: f.icon, badge: folderBadge(f.key, mailCounts), soft: !["inbox", "unread"].includes(f.key), red: ["inbox", "unread"].includes(f.key) })) },
