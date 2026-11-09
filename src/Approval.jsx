@@ -127,8 +127,8 @@ const saveBlob = (blob, name) => {
   setTimeout(() => URL.revokeObjectURL(url), 5000);
 };
 const isTouchDevice = () => typeof window !== "undefined" && !!window.matchMedia?.("(pointer: coarse)").matches;
-async function downloadAttachment(src, docNo, i) {
-  const name = attName(docNo, i, src);
+async function downloadAttachment(src, docNo, i, realName = "") {
+  const name = realName || attName(docNo, i, src); // ⭐ 2026-11-09 새 첨부(파일)는 올린 파일 이름 그대로
   const blob = await srcToBlob(src);
   // 휴대폰 — 공유 시트(사진에 저장)가 되면 그쪽으로, 아니면 파일 내려받기
   if (isTouchDevice()) {
@@ -140,21 +140,22 @@ async function downloadAttachment(src, docNo, i) {
   }
   saveBlob(blob, name);
 }
-async function downloadAllAttachments(images, docNo) {
+async function downloadAllAttachments(images, docNo, names = []) {
   const list = (images || []).filter(Boolean);
   if (!list.length) return;
-  if (list.length === 1) { await downloadAttachment(list[0], docNo, 0); return; }
+  if (list.length === 1) { await downloadAttachment(list[0], docNo, 0, names[0]); return; }
   try {
     const { default: JSZip } = await import("jszip");
     const zip = new JSZip();
-    for (let i = 0; i < list.length; i += 1) zip.file(attName(docNo, i, list[i]), await srcToBlob(list[i]));
+    for (let i = 0; i < list.length; i += 1) zip.file(names[i] || attName(docNo, i, list[i]), await srcToBlob(list[i]));
     saveBlob(await zip.generateAsync({ type: "blob" }), `${safeName(docNo || "전자결재")}_첨부${list.length}장.zip`);
   } catch {
     // 압축이 안 되면 한 장씩 차례로
     for (let i = 0; i < list.length; i += 1) { saveBlob(await srcToBlob(list[i]), attName(docNo, i, list[i])); await new Promise((r) => setTimeout(r, 350)); }
   }
 }
-function ImageLightbox({ images, start = 0, docNo, onClose }) {
+// names: 이름이 있는 첨부(새 첨부 파일)는 그 이름으로 보이고 저장된다 — 예전 사진(images)은 비워 둔다
+function ImageLightbox({ images, start = 0, docNo, onClose, names = [] }) {
   const n = (images || []).length;
   const [i, setI] = React.useState(Math.min(Math.max(0, start), Math.max(0, n - 1)));
   const [busy, setBusy] = React.useState("");
@@ -178,10 +179,10 @@ function ImageLightbox({ images, start = 0, docNo, onClose }) {
       <div className="shrink-0 px-3 sm:px-5 py-3 flex items-center gap-2 text-white" style={{ paddingTop: "max(12px, env(safe-area-inset-top))" }} onClick={(e) => e.stopPropagation()}>
         <div className="min-w-0 flex-1">
           <div className="text-[10.5px] font-extrabold tracking-[0.26em] text-[#8FB0F0]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>ATTACHMENT · {i + 1} / {n}</div>
-          <div className="text-[13.5px] font-bold text-white/80 truncate">{attName(docNo, i, src)}</div>
+          <div className="text-[13.5px] font-bold text-white/80 truncate">{names[i] || attName(docNo, i, src)}</div>
         </div>
-        <button type="button" disabled={!!busy} onClick={() => run("one", () => downloadAttachment(src, docNo, i))} className={`${btn} bg-white text-[#0F1A30]`}>{busy === "one" ? "저장 중…" : "이미지 저장"}</button>
-        {n > 1 && <button type="button" disabled={!!busy} onClick={() => run("all", () => downloadAllAttachments(images, docNo))} className={`${btn} hidden sm:inline-flex bg-white/10 border border-white/20 text-white`}>{busy === "all" ? "받는 중…" : "전체 다운로드"}</button>}
+        <button type="button" disabled={!!busy} onClick={() => run("one", () => downloadAttachment(src, docNo, i, names[i]))} className={`${btn} bg-white text-[#0F1A30]`}>{busy === "one" ? "저장 중…" : "이미지 저장"}</button>
+        {n > 1 && <button type="button" disabled={!!busy} onClick={() => run("all", () => downloadAllAttachments(images, docNo, names))} className={`${btn} hidden sm:inline-flex bg-white/10 border border-white/20 text-white`}>{busy === "all" ? "받는 중…" : "전체 다운로드"}</button>}
         <button type="button" onClick={onClose} aria-label="닫기" className="w-10 h-10 rounded-xl bg-white/10 border border-white/20 text-white font-black shrink-0">✕</button>
       </div>
       <div className="relative flex-1 min-h-0 flex items-center justify-center px-2 sm:px-16"
@@ -1953,8 +1954,11 @@ function Viewer({ d, me, staff, company, onClose, onRedraft, onEdit, inline = fa
         <div className="md:flex-1 md:overflow-auto p-3 md:p-6 bg-[#E9EDF3] order-2 md:order-1">
           <FitPaper><ApprovalPaper paperRef={paperRef} form={form} data={d.data} title={d.title} line={d.line} cc={d.cc} drafter={d.drafter} docNo={d.docNo} createdMs={toMs(d.createdAt)} staff={staff} status={d.status} paid={pstate === "paid" ? d.paid : null} files={d.files} images={d.images} /></FitPaper>
           {/* 📎 2026-11-08 첨부 — Storage 파일(목록·미리보기·저장) + 예전 사진 첨부(base64) · [첨부 모두 저장]은 ZIP 하나로 */}
-          <ApprovalAttachPanel files={d.files || []} images={d.images || []} docNo={d.docNo} onImage={(i) => setLightbox(i)} />
-          {lightbox !== null && <ImageLightbox images={d.images || []} start={lightbox} docNo={d.docNo} onClose={() => setLightbox(null)} />}
+          {/* ⭐ 2026-11-09 새로 올린 사진 파일도 예전 사진처럼 누르면 크게 보기 · 이미지 저장(onGallery) */}
+          <ApprovalAttachPanel files={d.files || []} images={d.images || []} docNo={d.docNo} onImage={(i) => setLightbox(i)} onGallery={(g) => setLightbox(g)} />
+          {lightbox !== null && (typeof lightbox === "object"
+            ? <ImageLightbox images={lightbox.srcs} names={lightbox.names} start={lightbox.start} docNo={d.docNo} onClose={() => setLightbox(null)} />
+            : <ImageLightbox images={d.images || []} start={lightbox} docNo={d.docNo} onClose={() => setLightbox(null)} />)}
           {signOpen && <SignatureModal me={me} onClose={() => setSignOpen(false)} />}
         </div>
         <aside className="w-full md:w-[360px] shrink-0 bg-white md:border-l border-[#E3E8F0] flex flex-col order-1 md:order-2">

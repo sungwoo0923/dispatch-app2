@@ -117,10 +117,11 @@ function useBlobUrl(f, on = true) {
   const retry = () => { if (f?.path) blobCache.delete(f.path); setErr(""); setUrl(""); setTick((n) => n + 1); };
   return { url, err, retry };
 }
-function Thumb({ f, onOpen }) {
+function Thumb({ f, onOpen, onUrl }) {
   const { url, err, retry } = useBlobUrl(f, fileKind(f) === "image" && canPreview(f));
+  React.useEffect(() => { onUrl?.(f.path, url); }, [url]); // eslint-disable-line react-hooks/exhaustive-deps
   return (
-    <button type="button" onClick={onOpen} title={`${f.name} 크게 보기`} className="relative block w-full rounded-xl overflow-hidden border border-[#E3E8F0] bg-[#F5F7FA] focus:outline-none focus:ring-2 focus:ring-[#2D4C82]/40">
+    <button type="button" onClick={() => onOpen(url)} title={`${f.name} 크게 보기`} className="relative block w-full rounded-xl overflow-hidden border border-[#E3E8F0] bg-[#F5F7FA] focus:outline-none focus:ring-2 focus:ring-[#2D4C82]/40">
       {url ? <img src={url} alt={f.name} className="w-full h-28 sm:h-36 object-cover" /> : <div className="w-full h-28 sm:h-36 grid place-items-center content-center gap-1 px-2 text-center text-[12px] font-bold text-[#8E9BB2]">{err ? <><span className="text-[#9A1F15] leading-snug">{err}</span><span role="button" tabIndex={0} onClick={(e) => { e.stopPropagation(); retry(); }} onKeyDown={(e) => { if (e.key === "Enter") { e.stopPropagation(); retry(); } }} className="h-7 px-2.5 rounded-md border border-[#DCE3EE] bg-white text-[#2D4C82] inline-flex items-center">다시 시도</span></> : "불러오는 중"}</div>}
       <span className="absolute left-1.5 bottom-1.5 right-1.5 h-5 px-1.5 rounded-md bg-[#0F1A30]/80 text-white text-[10.5px] font-bold truncate text-left leading-5">{f.name}</span>
     </button>
@@ -217,11 +218,20 @@ export function ApprovalAttachInput({ company, docId, me, files, setFiles, onRem
 }
 
 // 문서 보기 — 첨부 목록 · 사진 썸네일 · PDF 미리보기 · 하나씩/모두 저장
-export function ApprovalAttachPanel({ files = [], images = [], docNo, onImage }) {
+export function ApprovalAttachPanel({ files = [], images = [], docNo, onImage, onGallery }) {
   const [view, setView] = React.useState(null);
   const [busy, setBusy] = React.useState("");
+  const urls = React.useRef({}); // 불러온 사진 파일 path → blob 주소(크게 보기용)
   const list = (files || []).filter((f) => f?.path);
   const imgs = list.filter((f) => fileKind(f) === "image" && canPreview(f));
+  // ⭐ 2026-11-09 사진 파일을 누르면 예전 사진과 같은 확대 창(이미지 저장·좌우 넘기기) — 예전 사진 + 불러온 사진 파일을 한 줄로
+  const openGallery = (f) => {
+    const loaded = imgs.filter((x) => urls.current[x.path]);
+    if (!onGallery || !urls.current[f.path]) { setView(view === f.path ? null : f.path); return; } // 아직 못 불러왔으면 아래 미리보기(이유·다시 시도)
+    const srcs = [...(images || []), ...loaded.map((x) => urls.current[x.path])];
+    const names = [...(images || []).map(() => ""), ...loaded.map((x) => x.name || "")];
+    onGallery({ srcs, names, start: (images || []).length + loaded.findIndex((x) => x.path === f.path) });
+  };
   const n = list.length + (images || []).length;
   if (!n) return null;
   const run = async (k, fn) => { setBusy(k); try { await fn(); } catch (e) { window.alert(`저장하지 못했어요: ${e?.code ? apFileErrText(e) : e.message || e}`); } finally { setBusy(""); } };
@@ -244,11 +254,11 @@ export function ApprovalAttachPanel({ files = [], images = [], docNo, onImage })
               <img src={src} alt={`사진 ${i + 1}`} className="w-full h-28 sm:h-36 object-cover" />
             </button>
           ))}
-          {imgs.map((f) => <Thumb key={f.path} f={f} onOpen={() => setView(view === f.path ? null : f.path)} />)}
+          {imgs.map((f) => <Thumb key={f.path} f={f} onUrl={(p, u) => { if (u) urls.current[p] = u; else delete urls.current[p]; }} onOpen={() => openGallery(f)} />)}
         </div>
       )}
       <div className="space-y-1.5">
-        {list.map((f) => <FileRow key={f.path} f={f} busy={busy === f.path} active={view === f.path} onPreview={() => setView(view === f.path ? null : f.path)} onSave={() => run(f.path, () => saveApFile(f))} />)}
+        {list.map((f) => <FileRow key={f.path} f={f} busy={busy === f.path} active={view === f.path} onPreview={() => (imgs.includes(f) && urls.current[f.path] ? openGallery(f) : setView(view === f.path ? null : f.path))} onSave={() => run(f.path, () => saveApFile(f))} />)}
       </div>
       {cur && <Viewer f={cur} onClose={() => setView(null)} />}
     </div>
