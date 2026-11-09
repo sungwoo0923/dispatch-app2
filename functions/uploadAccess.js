@@ -290,26 +290,12 @@ module.exports = function makeUploadAccess({ functions, db, getAuth, FieldValue,
   //  방금 만든 로그인 계정과 연결한다. 이름·회사가 맞을 때만, 서버가 users·drivers 문서를 쓰고 선등록 문서를 지운다.
   //  (예전엔 화면이 drivers/{차량번호}를 직접 읽었고, 그래서 규칙이 "로그인한 누구나 읽기"였다)
   //  응답: { linked:true, companyName } | { linked:false, code: NOT_FOUND | NAME_MISMATCH | COMPANY_MISMATCH | ALREADY }
-  const driverLoginLink = functions.https.onRequest(async (req, res) => {
-    if (cors(req, res)) return;
-    if (req.method !== "POST") { res.status(405).json({ error: "POST_ONLY" }); return; }
+  // 선등록 기사(PC 기사관리에서 먼저 만든 drivers 문서) → 이 로그인 계정(uid)으로 연결. driverLoginLink · driverSignIn(functions/driverAuth.js)이 같이 쓴다.
+  //  name이 비어 있으면(휴대폰번호로 확인한 로그인) 선등록 문서의 이름을 쓴다 — 휴대폰 확인은 부른 쪽이 먼저 한다.
+  async function linkPre({ uid, email, co, carNo, name }) {
     try {
-      const tok = await bearerUser(req);
-      if (!tok) { res.status(401).json({ error: "NO_TOKEN" }); return; }
-      if (await limited(res, [[`dl:uid:${tok.uid}`, 10, 10 * 60e3], [`dl:ip:${clientIp(req)}`, 60, 10 * 60e3]])) return;
-      const b = req.body && typeof req.body === "object" ? req.body : {};
-      const co = String(b.companyName || "").trim().slice(0, 100);
-      const carNo = String(b.carNo || "").trim().slice(0, 30);
-      const name = String(b.name || "").trim().slice(0, 40);
-      if (!co || !carNo || !name) { res.status(400).json({ error: "BAD_PARAMS" }); return; }
-      const email = String(tok.email || "").toLowerCase();
-      const local = carNo.replace(/ /g, "").toLowerCase();
-      if (!email.endsWith("@driver.run25.kr") || !(email.startsWith(`${local}@`) || email.startsWith(`${local}.c`))) {
-        res.status(403).json({ error: "NOT_DRIVER_ACCOUNT" }); return;
-      }
-      const uid = tok.uid;
       const userRef = db.collection("users").doc(uid);
-      if ((await userRef.get()).exists) { res.status(200).json({ linked: false, code: "ALREADY" }); return; }
+      if ((await userRef.get()).exists) { return { linked: false, code: "ALREADY" }; }
       const plate = C.plateOf(carNo);
       const preKey = C.coDocKey(co, plate);
       const [preSnap, legacySnap] = await Promise.all([
@@ -317,7 +303,7 @@ module.exports = function makeUploadAccess({ functions, db, getAuth, FieldValue,
         preKey !== plate ? db.collection("drivers").doc(plate).get() : Promise.resolve(null),
       ]);
       const j = C.judgePreRegistered({ pre: preSnap.exists ? preSnap.data() : null, legacy: legacySnap?.exists ? legacySnap.data() : null, name, companyName: co, uid });
-      if (!j.ok) { res.status(200).json({ linked: false, code: j.code }); return; }
+      if (!j.ok) return { linked: false, code: j.code };
       const src = j.use === "pre" ? preSnap : legacySnap;
       const d = src.data() || {};
       const phone = d.전화번호 || d.phone || "";
@@ -349,7 +335,33 @@ module.exports = function makeUploadAccess({ functions, db, getAuth, FieldValue,
         if (src.id !== uid) t.delete(src.ref);
       });
       console.log(`🔗 기사 로그인 선등록 연결: ${co} ${plate} → drivers/${uid} (예전 ${src.id})`);
-      res.status(200).json({ linked: true, companyName: common.companyName });
+      return { linked: true, companyName: common.companyName };
+    } catch (e) {
+      if (e?.code === "GONE") return { linked: false, code: "NOT_FOUND" };
+      if (e?.code === "ALREADY") return { linked: false, code: "ALREADY" };
+      throw e;
+    }
+  }
+
+  const driverLoginLink = functions.https.onRequest(async (req, res) => {
+    if (cors(req, res)) return;
+    if (req.method !== "POST") { res.status(405).json({ error: "POST_ONLY" }); return; }
+    try {
+      const tok = await bearerUser(req);
+      if (!tok) { res.status(401).json({ error: "NO_TOKEN" }); return; }
+      if (await limited(res, [[`dl:uid:${tok.uid}`, 10, 10 * 60e3], [`dl:ip:${clientIp(req)}`, 60, 10 * 60e3]])) return;
+      const b = req.body && typeof req.body === "object" ? req.body : {};
+      const co = String(b.companyName || "").trim().slice(0, 100);
+      const carNo = String(b.carNo || "").trim().slice(0, 30);
+      const name = String(b.name || "").trim().slice(0, 40);
+      if (!co || !carNo || !name) { res.status(400).json({ error: "BAD_PARAMS" }); return; }
+      const email = String(tok.email || "").toLowerCase();
+      const local = carNo.replace(/ /g, "").toLowerCase();
+      if (!email.endsWith("@driver.run25.kr") || !(email.startsWith(`${local}@`) || email.startsWith(`${local}.c`))) {
+        res.status(403).json({ error: "NOT_DRIVER_ACCOUNT" }); return;
+      }
+      const r = await linkPre({ uid: tok.uid, email, co, carNo, name });
+      res.status(200).json(r);
     } catch (e) {
       if (e?.code === "GONE") { res.status(200).json({ linked: false, code: "NOT_FOUND" }); return; }
       if (e?.code === "ALREADY") { res.status(200).json({ linked: false, code: "ALREADY" }); return; }
@@ -358,5 +370,5 @@ module.exports = function makeUploadAccess({ functions, db, getAuth, FieldValue,
     }
   });
 
-  return { uploadAccess, driverSearch, driverLoginLink, rateLimit, limited, clientIp, _crypto: crypto };
+  return { uploadAccess, driverSearch, driverLoginLink, linkPre, isStaffOf, bearerUser, cors, rateLimit, limited, clientIp, _crypto: crypto };
 };

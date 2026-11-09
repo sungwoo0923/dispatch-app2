@@ -3695,7 +3695,17 @@ exports.tenantMigrate = functions.runWith({ timeoutSeconds: 300, memory: "512MB"
 const _uploadAccess = require("./uploadAccess")({ functions, db, getAuth, FieldValue, Timestamp });
 exports.uploadAccess = _uploadAccess.uploadAccess;
 exports.driverSearch = _uploadAccess.driverSearch;
-exports.driverLoginLink = _uploadAccess.driverLoginLink;
+// 🔐 2026-11-08 기사 로그인이 차량번호 + 휴대폰번호(driverSignIn)로 바뀌어 더 쓰지 않는다 — 이름만으로 선등록 기사를 가져가지 못하게 닫는다
+exports.driverLoginLink = functions.https.onRequest((req, res) => {
+  res.set("Access-Control-Allow-Origin", "*");
+  if (req.method === "OPTIONS") { res.set("Access-Control-Allow-Headers", APPCHECK_CORS); res.status(204).send(""); return; }
+  res.status(410).json({ error: "GONE", use: "driverSignIn" });
+});
+// 🔐 2026-11-08 기사앱 로그인 — 차량번호 + 휴대폰번호, 본인 휴대폰(등록 기기)에서만(functions/driverAuth.js)
+const _driverAuth = require("./driverAuth")({ functions, db, getAuth, FieldValue, ua: _uploadAccess, appCheckGate });
+exports.driverSignIn = _driverAuth.driverSignIn;
+exports.driverResetDevice = _driverAuth.driverResetDevice;
+exports.driverAuthMigrate = _driverAuth.driverAuthMigrate;
 const _publicLimited = _uploadAccess.limited;
 const _publicIp = _uploadAccess.clientIp;
 
@@ -3870,7 +3880,10 @@ exports.linkDriverSignup = functions.https.onRequest(async (req, res) => {
       const xd = drvDigits(x.전화번호 || x.phone);
       const samePhone = myDigits.length >= 9 && xd.length >= 9 && xd === myDigits;
       const sameName = drvName(x.이름 || x.name) !== "" && drvName(x.이름 || x.name) === drvName(name);
-      const score = (samePhone ? 2 : 0) + (sameName ? 1 : 0);
+      // 🔐 2026-11-08 — 휴대폰번호가 같을 때만 자동 연결(예전엔 이름만 같아도 연결·승인돼, 차량번호와 이름만 알면
+      //  남의 선등록 기사 자리를 가져가 내 휴대폰번호로 바꿀 수 있었다). 이름은 같은 번호 후보끼리 고를 때만 쓴다.
+      if (!samePhone) continue;
+      const score = 2 + (sameName ? 1 : 0);
       if (score > bestScore) { best = d; bestScore = score; }
     }
     if (!best) {

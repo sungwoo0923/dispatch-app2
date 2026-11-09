@@ -987,6 +987,7 @@ function TenancyPanel() {
         )}
       </Card>
       <ClaimsBackfill />
+      <DriverAuthMigrate />
       <EmptyCompanyCheck />
     </div>
   );
@@ -995,6 +996,47 @@ function TenancyPanel() {
 // 🎫 2026-11-08 로그인 토큰 권한(custom claims) 채우기 — 서버 함수 backfillClaims(functions/authClaims.js)를 끝날 때까지 이어서 부른다
 //  기존 직원·기사·화주·허브 회원 전체의 로그인 토큰에 회사·역할·승인 값을 넣는다(규칙이 users 문서를 매번 읽지 않게).
 //  채우기 전에도 규칙은 예전처럼 문서를 읽으므로 아무도 잠기지 않는다 · 도중에 멈춰도 다시 누르면 처음부터 다시(이미 같은 값은 건너뜀)
+// 🔐 2026-11-08 기사 로그인 전환 — 예전 기사 계정(비밀번호 = 차량번호)을 모두 임의 비밀번호로 바꾼다(서버 driverAuthMigrate).
+//  이후 기사님은 차량번호 + 휴대폰번호로, 처음 로그인한 본인 휴대폰에서만 로그인된다. 한 번만 실행하면 된다.
+function DriverAuthMigrate() {
+  const [busy, setBusy] = React.useState(false);
+  const [msg, setMsg] = React.useState("");
+  const [cfg, setCfg] = React.useState(null);
+  React.useEffect(() => onSnapshot(doc(db, "systemConfig", "driverAuth"), (s) => setCfg(s.exists() ? s.data() : {}), () => setCfg({})), []);
+  const run = async () => {
+    if (!(await kpConfirm("모든 기사 계정의 예전 비밀번호(차량번호)를 없앱니다.\n· 기사님들은 한 번 로그아웃되고, 다음부터 차량번호 + 휴대폰번호로 로그인합니다\n· 처음 로그인한 휴대폰이 그 기사님의 등록 휴대폰이 됩니다\n· 휴대폰번호가 등록 안 된 기사님은 기사관리에서 번호를 먼저 넣어 주세요\n진행할까요?"))) return;
+    setBusy(true); setMsg("");
+    let after = null; let changed = 0; let skipped = 0;
+    try {
+      for (;;) {
+        const token = await auth.currentUser?.getIdToken();
+        const r = await fetch(`${FUNCTIONS_BASE}/driverAuthMigrate`, { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify({ after }) });
+        const j = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(`${j.error || r.status}${r.status === 404 ? " (서버 함수 배포가 필요합니다)" : ""}`);
+        changed += j.changed || 0; skipped += j.skipped || 0;
+        setMsg(`진행 중 — ${changed.toLocaleString()}명 변경`);
+        if (!j.next) break;
+        after = j.next;
+      }
+      await setDoc(doc(db, "systemConfig", "driverAuth"), { migratedAt: serverTimestamp(), changed, skipped }, { merge: true });
+      setMsg(`완료 — 기사 ${changed.toLocaleString()}명 비밀번호 변경${skipped ? ` · 건너뜀 ${skipped}명` : ""}`);
+    } catch (e) { setMsg(`실패: ${e.message || e}`); } finally { setBusy(false); }
+  };
+  const when = cfg?.migratedAt?.toDate ? cfg.migratedAt.toDate().toLocaleString("ko-KR") : "";
+  return (
+    <Card code="DRIVER-AUTH" title="기사 로그인 전환(차량번호 + 휴대폰번호 · 본인 휴대폰)">
+      <div className="text-[13px] text-[#5B6B85] leading-relaxed">
+        예전 기사 계정은 비밀번호가 차량번호라 번호판만 알면 로그인할 수 있었습니다. 순서: <b>① 서버 함수 · 앱 배포</b> → <b>② 여기서 한 번 실행</b>.
+        실행하면 차량번호만으로는 로그인할 수 없고, 기사님은 다음 로그인 때 휴대폰번호를 입력합니다.
+      </div>
+      <div className="mt-3 flex flex-wrap items-center gap-3">
+        <button type="button" disabled={busy} onClick={run} className="h-10 px-5 rounded-xl bg-[#0F1A30] text-white text-[13.5px] font-black disabled:opacity-50 whitespace-nowrap">{busy ? "바꾸는 중…" : when ? "다시 실행" : "실행"}</button>
+        {when && <span className="text-[12.5px] text-[#5B6B85] whitespace-nowrap">마지막 실행 {when} · {Number(cfg?.changed || 0).toLocaleString()}명</span>}
+        {msg && <span className="text-[12.5px] font-bold text-[#1B2B4B]">{msg}</span>}
+      </div>
+    </Card>
+  );
+}
 function ClaimsBackfill() {
   const [cfg, setCfg] = React.useState(null);
   const [busy, setBusy] = React.useState(false);

@@ -3,11 +3,11 @@
 //  카드: 차량번호 번호판 · 차종·톤수 · 연락처 · 거주지 · 필수 서류 완비율 · 가입일 → 승인/거절, 승인 해제
 import React from "react";
 import { collection, doc, onSnapshot, query, setDoc, updateDoc, where } from "firebase/firestore";
-import { db, DEFAULT_COMPANY } from "./firebase";
+import { auth, db, DEFAULT_COMPANY, FUNCTIONS_BASE } from "./firebase";
 import { useCompanyDriverDocs, docProblems, DRIVER_REQUIRED_DOCS, docState } from "./driverRequiredDocs";
 import { BookHero, Chip, MONO } from "./OfficeBooks";
 import { fmtPhone } from "./formatInput";
-import { kpConfirm } from "./kpDialog";
+import { kpConfirm, kpAlert } from "./kpDialog";
 // ⭐ 2026-11-05 승인·거절은 프로그램 창(입력 정보 전체 · 가입유형 · 기존 기사 연동)으로 — 브라우저 확인창 대신
 import DriverApproveModal, { findDriverCandidates } from "./DriverApproveModal";
 
@@ -51,6 +51,25 @@ export default function DriverAccounts({ company, isViewer = false, tab = "pendi
     return onSnapshot(query(collection(db, "driverSignupLogs"), where("companyName", "==", company)), (s) => setLogs(s.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => (b.at?.seconds || 0) - (a.at?.seconds || 0)).slice(0, 8)), () => setLogs([]));
   }, [company, tab]);
   const signupOf = (u) => drvDocs.find((d) => d.id === u.id)?.data || null;
+  // 🔐 2026-11-08 기사 등록 기기(본인 휴대폰에서만 로그인) — 휴대폰을 바꾼 기사는 "기기 초기화" 후 새 휴대폰에서 로그인
+  const [devices, setDevices] = React.useState({});
+  React.useEffect(() => {
+    if (!company || tab !== "drivers") return undefined;
+    return onSnapshot(query(collection(db, "driverDevices"), where("companyName", "==", company)), (s) => setDevices(Object.fromEntries(s.docs.map((d) => [d.id, d.data()]))), () => setDevices({}));
+  }, [company, tab]);
+  const resetDevice = async (u) => {
+    if (isViewer) return;
+    if (!await kpConfirm(`${u.name || "기사"}님의 등록 휴대폰을 초기화할까요?\n지금 휴대폰은 로그아웃되고, 다음에 로그인하는 휴대폰이 새로 등록됩니다.\n(휴대폰을 바꾸거나 앱을 다시 설치한 경우에만 해 주세요)`)) return;
+    setBusy(u.id);
+    try {
+      const idToken = await auth.currentUser?.getIdToken();
+      const r = await fetch(`${FUNCTIONS_BASE}/driverResetDevice`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken || ""}` }, body: JSON.stringify({ uid: u.id }) });
+      if (!r.ok) throw new Error(r.status === 403 ? "권한이 없어요(운송사 직원만)" : `서버 오류 ${r.status}`);
+      setFlash(`${u.name || "기사"}님 등록 휴대폰을 초기화했습니다 — 새 휴대폰에서 로그인하면 등록됩니다`);
+    } catch (e) {
+      kpAlert(`초기화하지 못했어요: ${e?.message || e}`);
+    } finally { setBusy(""); }
+  };
   React.useEffect(() => {
     if (!company) return undefined;
     return onSnapshot(query(collection(db, "users"), where("companyName", "==", company)), (s) => setUsers(s.docs.map((d) => ({ id: d.id, ...d.data() })).filter((u) => u.role === "driver" && (u.companyName || DEFAULT_COMPANY) === company)), () => setUsers([]));
@@ -124,13 +143,19 @@ export default function DriverAccounts({ company, isViewer = false, tab = "pendi
                   {!p.missing && !p.wait && !p.bad && <span className="px-2 py-1 rounded-lg bg-[#32D583]/15 text-[#6CE9A6]">● 서류 완비</span>}
                 </div>
                 {!isViewer && (
-                  <div className="mt-auto flex gap-2">
+                  <div className="mt-auto flex flex-wrap gap-2">
                     {tab === "pending" ? (
                       <>
                         <button type="button" onClick={() => setOpen({ id: u.id, reject: true })} className="h-11 px-4 rounded-xl border border-white/20 text-[14px] font-black text-white/75">거절</button>
                         <button type="button" data-testid="drv-card-approve" onClick={() => setOpen({ id: u.id, reject: false })} className="flex-1 h-11 rounded-xl bg-white text-[#0F1A30] text-[15px] font-black disabled:opacity-50">승인</button>
                       </>
-                    ) : <button type="button" disabled={busy === u.id} onClick={() => unapprove(u)} className="ml-auto h-10 px-4 rounded-xl border border-[#FDA29B]/40 text-[13.5px] font-black text-[#FDA29B]">승인 해제</button>}
+                    ) : (
+                      <>
+                        <span className="self-center text-[12.5px] font-bold text-white/60" title="본인 휴대폰에서만 로그인됩니다">📱 {devices[u.id]?.id ? `등록 휴대폰 있음${tsDay(devices[u.id].lastAt) ? ` · 최근 ${tsDay(devices[u.id].lastAt)}` : ""}` : "등록 휴대폰 없음(다음 로그인 때 등록)"}</span>
+                        {devices[u.id]?.id && <button type="button" data-testid="drv-reset-device" disabled={busy === u.id} onClick={() => resetDevice(u)} className="ml-auto h-10 px-3 rounded-xl border border-white/25 text-[13.5px] font-black text-white/80">기기 초기화</button>}
+                        <button type="button" disabled={busy === u.id} onClick={() => unapprove(u)} className={`${devices[u.id]?.id ? "" : "ml-auto "}h-10 px-4 rounded-xl border border-[#FDA29B]/40 text-[13.5px] font-black text-[#FDA29B]`}>승인 해제</button>
+                      </>
+                    )}
                   </div>
                 )}
               </div>

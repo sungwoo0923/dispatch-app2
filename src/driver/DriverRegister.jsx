@@ -5,7 +5,7 @@ import CustomDatePicker from "../CustomDatePicker";
 import { auth, db, FUNCTIONS_BASE } from "../firebase";
 import { fmtPhone } from "../formatInput";
 import { createUserWithEmailAndPassword, signOut } from "firebase/auth";
-import { legacyDriverEmail, scopedDriverEmail, legacyOwnerCompany } from "./driverEmail";
+import { legacyDriverEmail, scopedDriverEmail, legacyOwnerCheck, randomDriverPassword } from "./driverEmail";
 import { setDriverBusy } from "./driverLoginErrors"; // ⭐ 2026-11-05 확인 중엔 App이 기사 화면으로 넘기지 않게
 import { doc, setDoc, serverTimestamp } from "firebase/firestore";
 import { useNavigate, Link } from "react-router-dom";
@@ -306,7 +306,8 @@ export default function DriverRegister() {
     const plate = plateOf(carNo);
     const co = (coPicked || companyName).trim();
     let email = legacyDriverEmail(plate);
-    const password = plate;
+    // 🔐 2026-11-08 계정 비밀번호는 아무도 모르는 임의 값 — 로그인은 차량번호 + 휴대폰번호로 서버(driverSignIn)가 확인한다
+    const password = randomDriverPassword();
     // vehicleType은 기존 화면들이 "카고 3.5톤" 식 한 줄 문자열로 읽던 필드라 하위호환으로 함께 저장(선택 입력이라 비어 있을 수 있음)
     const vehicleType = [category, tonnage].filter(Boolean).join(" ");
     const phoneStr = fmtPhone(phone);
@@ -344,8 +345,8 @@ export default function DriverRegister() {
       } catch (e) {
         // ⭐ 2026-11-01 같은 차량번호가 다른 운송사에 이미 있으면 회사별 계정으로 가입
         if (e?.code !== "auth/email-already-in-use") throw e;
-        const owner = await legacyOwnerCompany(auth, db, plate);
-        if (owner.replace(/\s+/g, "") === co.replace(/\s+/g, "")) throw e;
+        const owner = await legacyOwnerCheck(FUNCTIONS_BASE, co, plate);
+        if (!owner.exists || owner.sameCompany) throw e;
         email = scopedDriverEmail(co, plate);
         res = await createUserWithEmailAndPassword(auth, email, password);
       }
@@ -369,7 +370,7 @@ export default function DriverRegister() {
       mark("연결확인");
       if (link?.linked) {
         created = null;
-        try { localStorage.setItem(SAVED_LOGIN_KEY, JSON.stringify({ remember: true, autoLogin: false, companyName: co, carNo: plate, name: name.trim() })); } catch { /* 저장 실패 무시 */ }
+        try { localStorage.setItem(SAVED_LOGIN_KEY, JSON.stringify({ remember: true, autoLogin: false, companyName: co, carNo: plate, phone: phoneStr, name: name.trim() })); } catch { /* 저장 실패 무시 */ }
         // ⭐ 2026-11-05 사진 저장은 완료 화면을 띄운 뒤 뒤에서 마저 한다
         finishInBackground([bizDoc(uid)]);
         setPhase(4);
@@ -382,7 +383,7 @@ export default function DriverRegister() {
         await res.user.delete().catch(() => {});
         created = null;
         setDriverBusy(false);
-        setError("이미 등록된 차량번호인데 이름·회사명이 다릅니다. 관리자에게 문의해주세요.");
+        setError("운송사에 이미 등록된 차량번호인데, 기사관리에 적힌 휴대폰번호와 입력하신 번호가 다릅니다(또는 번호가 없습니다). 운송사에 휴대폰번호 확인을 요청해 주세요.");
         return;
       }
       setPhase(3);
@@ -612,7 +613,7 @@ export default function DriverRegister() {
       {success === "linked" ? (
         <>
           <h2 className="mt-5 text-[23px] font-black text-[#0F1A30]">등록된 기사 정보와 연결되었습니다</h2>
-          <p className="mt-2 text-[17px] font-bold text-[#5B6B85] leading-relaxed">승인 없이 바로 사용할 수 있습니다.<br />로그인 화면에서 <span className="text-[#1B2B4B]">로그인</span>만 눌러주세요.</p>
+          <p className="mt-2 text-[17px] font-bold text-[#5B6B85] leading-relaxed">승인 없이 바로 사용할 수 있습니다.<br />로그인 화면에서 <span className="text-[#1B2B4B]">차량번호 · 휴대폰번호</span>로 로그인해 주세요.</p>
         </>
       ) : (
         <>
@@ -671,7 +672,7 @@ export default function DriverRegister() {
           <div className="mt-2 rounded-xl bg-[#F5F8FD] border border-[#C9D6EE] px-3.5 py-2.5 text-[15.5px] font-bold text-[#1B2B4B]">입력한 이름 '{companyName.trim()}'(으)로 신청합니다. 운송사 정식 이름과 다르면 승인이 늦어질 수 있습니다.</div>
         )}
       </Field>
-      <Field label="차량번호" req hint="띄어쓰기 없이 저장되며, 로그인할 때도 차량번호를 씁니다.">
+      <Field label="차량번호" req hint="띄어쓰기 없이 저장되며, 로그인 아이디로 씁니다(비밀번호는 휴대폰번호).">
         <input value={carNo} onChange={(e) => setCarNo(plateOf(e.target.value))} onKeyDown={onEnter} placeholder="예: 경기97가1234" className={inputCls} />
       </Field>
       <Field label="이름" req>

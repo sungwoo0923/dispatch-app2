@@ -44,12 +44,12 @@ const norm = (v) => String(v || "").replace(/\s+/g, "").toLowerCase();
 export const sameText = (a, b) => norm(a) === norm(b);
 
 // users/{uid} 문서로 로그인 가능 여부 판단 — 통과하면 null, 아니면 실패 코드
-export function checkDriverUserDoc(u, { name, companyName }) {
+export function checkDriverUserDoc(u, { name, companyName } = {}) {
   if (!u) return "driver/no-user-doc";
   if (u.role !== "driver") return "driver/not-driver";
   // 이름·운송사가 다르면 그 이유를 먼저 알려준다(남의 계정 상태를 먼저 보여주지 않게)
-  if (u.name && !sameText(u.name, name)) return "driver/name-mismatch";
-  if (u.companyName && !sameText(u.companyName, companyName)) return "driver/company-mismatch";
+  if (name && u.name && !sameText(u.name, name)) return "driver/name-mismatch";
+  if (companyName && u.companyName && !sameText(u.companyName, companyName)) return "driver/company-mismatch";
   const st = String(u.employmentStatus || "").trim();
   const status = String(u.status || "").trim().toLowerCase();
   if (st === "퇴사" || ["deleted", "withdrawn", "퇴사"].includes(status)) return "driver/retired";
@@ -72,14 +72,19 @@ export function describeDriverLoginError(err, ctx = {}) {
   const nm = String(ctx.name || "").trim();
   const reason = String(err?.reason || "").trim();
   const base = { code: code || "unknown" };
-  if (code === "driver/empty") return { ...base, tone: "error", title: "입력하지 않은 칸이 있습니다", message: `${err.field || "소속 운송사명 · 차량번호 · 이름"} 칸이 비어 있습니다.`, hint: "세 칸을 모두 채운 뒤 로그인을 눌러주세요." };
+  if (code === "driver/empty") return { ...base, tone: "error", title: "입력하지 않은 칸이 있습니다", message: `${err.field || "소속 운송사명 · 차량번호 · 휴대폰번호"} 칸이 비어 있습니다.`, hint: "세 칸을 모두 채운 뒤 로그인을 눌러주세요." };
+  // 🔐 2026-11-08 차량번호 + 휴대폰번호 · 본인 휴대폰에서만
+  if (code === "driver/bad-phone") return { ...base, tone: "error", title: "휴대폰번호를 확인해 주세요", message: "휴대폰번호를 숫자로 끝까지 입력해 주세요.", hint: "예: 010-1234-5678" };
+  if (code === "driver/phone-mismatch") return { ...base, tone: "error", title: "휴대폰번호가 다릅니다", message: `차량번호 ${plate || ""}로 등록된 휴대폰번호와 입력하신 번호가 다릅니다.`, hint: "가입할 때 적은 본인 휴대폰번호를 입력해 주세요. 번호를 바꾸셨다면 소속 운송사에 새 번호 등록을 요청해 주세요." };
+  if (code === "driver/no-phone") return { ...base, tone: "error", title: "등록된 휴대폰번호가 없습니다", message: "이 차량번호에는 아직 휴대폰번호가 등록되어 있지 않습니다.", hint: "소속 운송사에 기사관리에서 휴대폰번호를 등록해 달라고 요청해 주세요." };
+  if (code === "driver/device-mismatch") return { ...base, tone: "stop", title: "등록된 휴대폰이 아닙니다", message: "기사 계정은 처음 로그인한 본인 휴대폰에서만 쓸 수 있습니다.", hint: "휴대폰을 바꾸셨거나 앱을 다시 설치하셨다면 소속 운송사에 '기기 초기화'를 요청한 뒤 새 휴대폰에서 로그인해 주세요." };
   if (NETWORK_CODES.has(code) || (typeof navigator !== "undefined" && navigator.onLine === false))
     return { ...base, code: code || "driver/network", tone: "net", title: "인터넷 연결이 불안정합니다", message: "서버에 연결하지 못해 로그인을 확인하지 못했습니다.", hint: "와이파이나 데이터가 켜져 있는지 확인한 뒤 다시 눌러주세요." };
   if (code === "auth/too-many-requests") return { ...base, tone: "stop", title: "잠시 후 다시 시도해 주세요", message: "로그인 시도가 너무 많아 잠시 막혔습니다.", hint: "1~2분 정도 기다렸다가 다시 로그인해 주세요." };
   if (code === "auth/user-disabled" || code === "driver/suspended") return { ...base, tone: "stop", title: "사용이 정지된 계정입니다", message: "관리자가 이 기사 계정의 사용을 정지했습니다.", hint: "소속 운송사 관리자에게 문의해 주세요." };
   if (code === "driver/retired") return { ...base, tone: "stop", title: "퇴사 처리된 계정입니다", message: "이 기사 계정은 퇴사 처리되어 로그인할 수 없습니다.", hint: "다시 일하시게 되었다면 소속 운송사 관리자에게 문의해 주세요." };
   if (code === "driver/pending") return { ...base, tone: "wait", title: "승인 대기 중입니다", message: `${co ? `'${co}' ` : ""}관리자가 가입 신청을 아직 승인하지 않았습니다.`, hint: "승인되면 같은 정보로 바로 로그인할 수 있습니다. 급하시면 운송사에 연락해 주세요." };
-  if (code === "driver/rejected") return { ...base, tone: "stop", title: "가입 신청이 거절되었습니다", message: reason ? `거절 사유: ${reason}` : "소속 운송사 관리자가 가입 신청을 거절했습니다.", hint: "운송사명·차량번호·이름이 맞는지 확인하고 운송사 관리자에게 문의해 주세요." };
+  if (code === "driver/rejected") return { ...base, tone: "stop", title: "가입 신청이 거절되었습니다", message: reason ? `거절 사유: ${reason}` : "소속 운송사 관리자가 가입 신청을 거절했습니다.", hint: "운송사명·차량번호·휴대폰번호가 맞는지 확인하고 운송사 관리자에게 문의해 주세요." };
   if (code === "driver/name-mismatch") return { ...base, tone: "error", title: "이름이 다릅니다", message: `차량번호 ${plate || ""}로 등록된 기사 이름과 입력하신 이름${nm ? `('${nm}')` : ""}이 다릅니다.`.replace(/\s+로/, "로"), hint: "가입할 때 적은 실명을 띄어쓰기 없이 정확히 입력해 주세요." };
   if (code === "driver/company-mismatch" || code === "driver/other-company") return { ...base, tone: "error", title: "소속 운송사가 다릅니다", message: `차량번호 ${plate || ""}는 ${co ? `'${co}'` : "입력하신 운송사"} 소속으로 등록되어 있지 않습니다.`, hint: "가입할 때 고른 운송사명을 정확히 입력해 주세요. 다른 운송사로 옮기셨다면 그 운송사로 새로 기사 등록을 해주세요." };
   if (code === "driver/not-driver") return { ...base, tone: "error", title: "기사 계정이 아닙니다", message: "이 정보는 운송사 직원 또는 화주사 계정입니다.", hint: "가입하신 로그인 화면(운송사/화주사)에서 로그인해 주세요." };

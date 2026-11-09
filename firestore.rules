@@ -184,17 +184,26 @@ service cloud.firestore {
     //   "오더 id만 알면 누구나"로 열어 두었다. 이제 업로드 페이지는 서버 함수(uploadAccess)가 링크 토큰을 확인한 뒤 대신 읽고 쓴다.
     //   목록의 "!locked()(잠금 전 누구나 — 로그인 안 한 사람 포함)"도 뺐다(잠금 전에도 승인된 계정만 — coMatch가 잠금 전엔 승인된 누구나).
     //   기사 통합 업로드 검색은 서버 함수(driverSearch).
+    // 🔒 2026-11-08 기사 계정은 오더의 운임·금액·정산 칸을 바꿀 수 없고, 오더를 만들거나 지울 수도 없다
+    //  (기사앱이 쓰는 칸 — 기사확인상태 · 상차/하차 완료 · 사진 · 거절 사유 · 배차 해제 등 — 은 그대로 된다)
+    function notDriver() { return myRole() != 'driver'; }
+    function driverOrderEditOk() {
+      return notDriver() || !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+        '기사운임', '청구운임', '수수료', '실수수료', '공급가액', '공급가', '부가세', '금액', '총청구금액', '청구금액',
+        '운임', '운임구분', '운임수동', '운임보정', '단가', '지급방식', '결제방식', '입금액', '수금액', '입금일', '지급일',
+        '정산상태', '정산완료', '지급완료', '세금계산서', '계산서발행', 'companyName', 'shipperCompany', 'shipperUid', '거래처명']);
+    }
     match /orders/{id} {
       allow get, list: if coMatch(resource.data) || shipperOwns(resource.data);
-      allow create: if coCreate() || shipperCreate();
-      allow update: if (coMatch(resource.data) && coKeep()) || shipperOwns(resource.data);
-      allow delete: if coMatch(resource.data) || shipperOwns(resource.data);
+      allow create: if (coCreate() && notDriver()) || shipperCreate();
+      allow update: if (coMatch(resource.data) && coKeep() && driverOrderEditOk()) || shipperOwns(resource.data);
+      allow delete: if (coMatch(resource.data) && notDriver()) || shipperOwns(resource.data);
     }
     match /dispatch/{id} {
       allow get, list: if coMatch(resource.data) || shipperOwns(resource.data);
-      allow create: if coCreate() || shipperCreate();
-      allow update: if (coMatch(resource.data) && coKeep()) || shipperOwns(resource.data);
-      allow delete: if coMatch(resource.data) || shipperOwns(resource.data);
+      allow create: if (coCreate() && notDriver()) || shipperCreate();
+      allow update: if (coMatch(resource.data) && coKeep() && driverOrderEditOk()) || shipperOwns(resource.data);
+      allow delete: if (coMatch(resource.data) && notDriver()) || shipperOwns(resource.data);
     }
     match /dispatch_test/{id} {
       allow read, delete: if coMatch(resource.data);
@@ -231,6 +240,11 @@ service cloud.firestore {
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['readAt', 'confirmedAt', 'status', 'driverMemo', 'paidAt', 'objectedAt', 'driverAction'])
           && driverStatusOk(dcol)));
       allow delete: if dcol in ['driverStatements', 'fleetPenalties'] && isOfficeStaff() && coMatch(resource.data);
+    }
+    // 🔐 2026-11-08 기사 등록 기기(본인 휴대폰에서만 로그인) — 서버 함수(driverSignIn · driverResetDevice)만 쓴다
+    match /driverDevices/{uid} {
+      allow read: if isSignedIn() && (request.auth.uid == uid || (isOfficeStaff() && coMatch(resource.data)));
+      allow write: if false;
     }
     // 📜 계약서 보관함(전자결재 › 계약서) — 직원만
     match /companyContracts/{id} {
@@ -2207,7 +2221,7 @@ service cloud.firestore {
     function catchAllExcluded(col) {
       return col in ['adminSecrets', 'resetBackups', 'resetLogs', 'resetJobs', 'resetLocks', 'loginSessions', 'orderTrash', 'recurringRuns', 'internalMails', 'approvals', 'boardPosts', 'notices', 'handovers', 'salesQuotes', 'contracts', 'platformNotices', 'platformInvoices', 'companyPlans', 'publicPricing', 'planRequests', 'userPrefs', 'companyRoleOverrides', 'customRoles', 'supportRequests', 'supportSessions', 'driverStatements', 'fleetPenalties', 'fixedRoutes', 'routeBoards', 'personalSchedules', 'publicCompanies', 'companyContracts',
         // 🔒 회사별로 잠근 컬렉션(위에서 따로 정함)
-        'orders', 'dispatch', 'dispatch_test', 'fixedClients', 'drivers', 'clients', 'places', 'recurringOrders', 'deletedOrders',
+        'orders', 'dispatch', 'dispatch_test', 'fixedClients', 'drivers', 'driverDevices', 'clients', 'places', 'recurringOrders', 'deletedOrders',
         'driver_completed_archive', 'notifications', 'schedules', 'scheduledEmails', 'emailLogs', 'hrResumes', 'attendanceRequests',
         'attendanceChangeRequests', 'acctPayments', 'approvalLines', 'acctLedger', 'acctRecurring', 'officeAssets', 'execSchedules', 'companyRules', 'hrSettings', 'retireCases', 'approvalSettings', 'acctFunds',
         // ⭐ 2026-11-02 운임규칙 · 회사별 맞춤 기능(위에서 따로 정함)

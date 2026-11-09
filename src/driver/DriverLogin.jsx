@@ -1,12 +1,12 @@
 // src/driver/DriverLogin.jsx
 import React, { useState, useEffect, useRef } from "react";
 import { auth, db, FUNCTIONS_BASE } from "../firebase";
-import { createUserWithEmailAndPassword, signOut } from "firebase/auth";
+import { signOut } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
 import { useNavigate } from "react-router-dom";
 import BigCheck from "../components/BigCheck";
 import { LogisMark, LogisWordmark, LogisTag } from "../brand"; // 🔷 2026-11-04 LogisWeb 로고
-import { legacyDriverEmail, scopedDriverEmail, signInDriver } from "./driverEmail";
+import { signInDriver } from "./driverEmail";
 import { checkDriverUserDoc, describeDriverLoginError, driverLoginError, keepDriverLoginError, takeDriverLoginError, setDriverBusy } from "./driverLoginErrors"; // ⭐ 2026-11-05 실패 사유 안내
 
 // ⭐ 사용자 요청 — 한 번 로그인한 폰에서는 소속회사명/차량번호/이름을 기억하고(정보 저장),
@@ -31,7 +31,7 @@ export default function DriverLogin() {
   const keep = saved && saved.remember !== false;
   const [companyNameState, setCompanyName] = useState(keep ? saved.companyName || "" : "");
   const [carNoState, setCarNo] = useState(keep ? saved.carNo || "" : "");
-  const [nameState, setName] = useState(keep ? saved.name || "" : "");
+  const [phoneState, setPhone] = useState(keep ? saved.phone || "" : "");
   const [rememberInfo, setRememberInfo] = useState(saved ? saved.remember !== false : true);
   const [autoLogin, setAutoLogin] = useState(saved ? saved.autoLogin === true : false);
   // ⭐ 2026-11-05 실패 안내 — { title, message, hint, tone }. 화면이 다시 그려져도 남도록 sessionStorage에도 둔다
@@ -55,7 +55,7 @@ export default function DriverLogin() {
       sessionStorage.removeItem("driverJustLoggedOut");
       const sv = loadSaved();
       // 방금 실패 안내가 떠 있으면 자동 로그인으로 다시 시도하지 않는다(같은 실패가 반복되며 안내가 사라짐)
-      if (!justLoggedOut && !restoredErrRef.current && sv?.autoLogin && sv.companyName && sv.carNo && sv.name) login(sv);
+      if (!justLoggedOut && !restoredErrRef.current && sv?.autoLogin && sv.companyName && sv.carNo && sv.phone) login(sv);
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -66,22 +66,21 @@ export default function DriverLogin() {
   //  /driver-home이 다시 /driver-login으로 돌려보내 이 화면이 새로 그려졌고(error 상태 초기화 + 진입 시 로그아웃),
   //  기사님 눈에는 "새로고침되고 아무 안내 없이 로그인 화면"으로 보였다. 확인 중에는 App이 이동하지 않도록
   //  setDriverBusy(true)로 알리고, 안내는 sessionStorage에도 남겨 재마운트돼도 보이게 한다.
+  // 🔐 2026-11-08 아이디 = 차량번호, 비밀번호 = 등록한 휴대폰번호, 본인 휴대폰(처음 로그인한 기기)에서만.
+  //  확인은 서버(driverSignIn)가 한다 — PC 기사관리 선등록 기사도 휴대폰번호가 맞으면 서버가 계정을 만들고 연결한다.
   const login = async (override) => {
     // override: 자동 로그인 시 저장된 값(아직 state 반영 전일 수 있어 직접 받는다)
     const companyName = String(override?.companyName ?? companyNameState).trim();
     const carNo = String(override?.carNo ?? carNoState).trim();
-    const name = String(override?.name ?? nameState).trim();
+    const phone = String(override?.phone ?? phoneState).trim();
     if (busyRef.current) return;
-    const ctx = { companyName, carNo, name };
+    const ctx = { companyName, carNo };
     setError(null);
-    const empty = [!companyName && "소속 운송사명", !carNo && "차량번호", !name && "이름"].filter(Boolean);
+    const empty = [!companyName && "소속 운송사명", !carNo && "차량번호", !phone && "휴대폰번호"].filter(Boolean);
     if (empty.length) {
       setError(describeDriverLoginError(driverLoginError("driver/empty", { field: empty.join(" · ") }), ctx));
       return;
     }
-
-    let email = legacyDriverEmail(carNo);
-    const password = carNo;
 
     busyRef.current = true;
     setLoggingIn(true);
@@ -89,74 +88,11 @@ export default function DriverLogin() {
     let ok = false;
     try {
       if (typeof navigator !== "undefined" && navigator.onLine === false) throw driverLoginError("driver/network");
-      let uid;
-      try {
-        // ⭐ 2026-11-01 예전 계정 → 회사별 계정 순서로 로그인(다른 운송사 같은 차량번호 대응)
-        const r = await signInDriver(auth, db, companyName, carNo);
-        uid = r.uid;
-        email = r.email;
-      } catch (signInErr) {
-        // ⭐ 2026-11-05 인터넷 끊김·시도 과다·정지 계정은 계정 만들기를 시도하지 않고 바로 안내
-        if (["auth/network-request-failed", "auth/too-many-requests", "auth/user-disabled"].includes(signInErr?.code)) throw signInErr;
-        // 다른 운송사 계정만 있었으면 "운송사가 다름", 그 외에는 "등록된 차량번호 없음"으로 안내
-        const failErr = signInErr?.code === "driver/other-company" ? signInErr : driverLoginError("driver/not-registered", { cause: signInErr });
-        // ⭐ 사용자 요청 — 관리자가 PC 기사관리에서 지입차를 미리 등록해두면(차량번호로
-        // 문서만 만들어짐, 인증 계정은 아직 없음) 그 기사님이 여기서 바로 로그인하려 해도
-        // 로그인용 계정 자체가 없어 매번 실패했다(기사 등록 화면을 따로 거쳐야만 했음).
-        // 로그인 시도 중 "그런 계정이 없음" 류 오류가 나면, 입력한 차량번호로 미리
-        // 등록된 문서가 있는지 확인해서 이름·회사명이 맞으면 바로 그 자리에서 계정을
-        // 만들어 이어받는다 — 기사 입장에서는 그냥 "로그인"만 하면 되는 경험이 된다.
-        // ⭐ 버그수정 — drivers 컬렉션은 보안규칙상 로그인한 사용자만 읽을 수 있는데,
-        // 이 조회를 계정 생성보다 먼저 하면 아직 비로그인 상태라 매번 permission-denied가
-        // 나서 선등록 문서가 실제로 있어도 절대 못 찾았다. 계정을 먼저 만들어 로그인 상태를
-        // 확보한 뒤 조회하고, 선등록 문서가 없거나 이름·회사명이 다르면 방금 만든
-        // 계정을 그 자리에서 삭제해 원상복구한다.
-        let res;
-        try {
-          res = await createUserWithEmailAndPassword(auth, email, password);
-        } catch (createErr) {
-          if (createErr?.code === "auth/network-request-failed") throw createErr;
-          // 예전 계정 이름을 다른 운송사 기사가 쓰고 있으면 회사별 계정으로 만든다
-          if (createErr?.code !== "auth/email-already-in-use") throw failErr;
-          try {
-            email = scopedDriverEmail(companyName, carNo);
-            res = await createUserWithEmailAndPassword(auth, email, password);
-          } catch (e2) { throw e2?.code === "auth/network-request-failed" ? e2 : failErr; }
-        }
-        uid = res.user.uid;
-
-        // ⭐ 2026-11-08 보안 — PC 선등록 문서(drivers/{회사__차량번호} 또는 drivers/{차량번호})를 화면이 직접 읽지 않는다.
-        //  (예전엔 그래서 규칙이 "로그인한 누구나 drivers/{차량번호} 읽기"였고, 아무 계정이나 다른 회사 기사 이름·전화번호를 볼 수 있었다)
-        //  서버(driverLoginLink)가 이름·회사를 확인하고 users·drivers 문서를 만들고 선등록 문서를 정리한다. 결과 코드만 돌려준다.
-        let link = null;
-        try {
-          const idToken = await res.user.getIdToken();
-          const ctl = new AbortController();
-          const timer = setTimeout(() => ctl.abort(), 20000);
-          const r = await fetch(`${FUNCTIONS_BASE}/driverLoginLink`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` },
-            body: JSON.stringify({ companyName, carNo, name }),
-            signal: ctl.signal,
-          }).finally(() => clearTimeout(timer));
-          link = r.ok ? await r.json() : { error: r.status === 429 ? "rate" : "server" };
-        } catch (linkErr) {
-          link = { error: "network", cause: linkErr };
-        }
-        if (!link?.linked) {
-          await res.user.delete().catch(() => {});
-          if (link?.error === "network") throw driverLoginError("driver/network", { cause: link.cause });
-          if (link?.error === "rate") throw Object.assign(new Error("too many"), { code: "auth/too-many-requests" });
-          if (link?.error) throw driverLoginError("driver/network");
-          if (link?.code === "NAME_MISMATCH") throw driverLoginError("driver/name-mismatch");
-          if (link?.code === "COMPANY_MISMATCH") throw driverLoginError("driver/company-mismatch");
-          throw failErr;
-        }
-      }
+      const { uid } = await signInDriver(auth, FUNCTIONS_BASE, { companyName, carNo, phone });
 
       const snap = await getDoc(doc(db, "users", uid));
       const u = snap.exists() ? snap.data() : null;
-      const bad = checkDriverUserDoc(u, { name, companyName });
+      const bad = checkDriverUserDoc(u, { companyName });
       if (bad) throw driverLoginError(bad, { reason: u?.rejectReason || u?.rejectedReason || u?.거절사유 || "" });
 
       localStorage.setItem("role", "driver");
@@ -165,7 +101,7 @@ export default function DriverLogin() {
         const remember = override ? true : rememberInfo;
         const auto = override ? true : autoLogin;
         localStorage.setItem(SAVED_KEY, JSON.stringify(remember
-          ? { remember: true, autoLogin: auto, companyName, carNo, name }
+          ? { remember: true, autoLogin: auto, companyName, carNo, phone, name: u?.name || "" }
           : { remember: false, autoLogin: false }));
       } catch { /* 저장 실패 무시 */ }
       ok = true;
@@ -191,7 +127,7 @@ export default function DriverLogin() {
   const fieldIcon = {
     company: <><path d="M3 21h18" /><path d="M5 21V7l7-4 7 4v14" /><path d="M9 9h1M14 9h1M9 13h1M14 13h1M9 17h1M14 17h1" /></>,
     car: <><rect x="1" y="6" width="13" height="10" rx="1.5" /><path d="M14 9h4l3 3.5V16h-7z" /><circle cx="5.5" cy="17.5" r="1.8" /><circle cx="17.5" cy="17.5" r="1.8" /></>,
-    name: <><circle cx="12" cy="8" r="4" /><path d="M4 21c0-4 4-6 8-6s8 2 8 6" /></>,
+    phone: <><rect x="6" y="2" width="12" height="20" rx="2.5" /><path d="M11 18h2" /></>,
   };
   const field = (key, label, input) => (
     <div className="mb-3">
@@ -260,7 +196,7 @@ export default function DriverLogin() {
           <div className="bg-white rounded-[26px] border border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_24px_60px_rgba(15,26,48,0.10)] px-5 sm:px-10 pt-6 sm:pt-9 pb-6 sm:pb-8">
             <div className="text-[13.5px] font-extrabold tracking-[0.28em] text-[#4B6CB7]">DRIVER SIGN IN</div>
             <h1 className="mt-1 text-[23px] sm:text-[26px] font-black text-[#0F1A30] tracking-tight">기사 로그인</h1>
-            <p className="text-[14.5px] sm:text-[15.5px] text-[#7A879C] mt-1 mb-5 sm:mb-7">소속 회사 · 차량번호 · 이름으로 로그인하세요</p>
+            <p className="text-[14.5px] sm:text-[15.5px] text-[#7A879C] mt-1 mb-5 sm:mb-7">차량번호 · 휴대폰번호로 로그인하세요</p>
 
             {field("company", "소속 운송사명", (
               <input value={companyNameState} onChange={(e) => setCompanyName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && login()} placeholder="소속된 운송사명 입력" className={inputCls} />
@@ -268,9 +204,10 @@ export default function DriverLogin() {
             {field("car", "차량번호", (
               <input value={carNoState} onChange={(e) => setCarNo(e.target.value)} onKeyDown={(e) => e.key === "Enter" && login()} placeholder="예: 경기97가1234" className={inputCls} />
             ))}
-            {field("name", "기사 이름", (
-              <input value={nameState} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && login()} placeholder="이름" className={inputCls} />
+            {field("phone", "휴대폰번호 (비밀번호)", (
+              <input value={phoneState} type="password" inputMode="numeric" autoComplete="current-password" onChange={(e) => setPhone(e.target.value.replace(/[^\d-]/g, "").slice(0, 13))} onKeyDown={(e) => e.key === "Enter" && login()} placeholder="가입할 때 적은 휴대폰번호" className={`${inputCls} tabular-nums tracking-wide`} />
             ))}
+            <div className="-mt-1 mb-2 text-[13.5px] font-semibold text-[#7A879C] leading-snug break-keep">처음 로그인한 본인 휴대폰에서만 쓸 수 있어요. 휴대폰을 바꾸면 소속 운송사에 '기기 초기화'를 요청해 주세요.</div>
 
             {/* ⭐ 정보 저장 / 자동 로그인 */}
             <div className="flex items-center justify-between mt-3 mb-4">

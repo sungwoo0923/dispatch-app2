@@ -20,6 +20,7 @@ TESTS=(
   scripts/hubTests/scan_map.test.mjs
   scripts/journalCore.test.mjs
   scripts/cashForecast.test.mjs
+  scripts/driverAuth.test.cjs
 )
 fail=0
 : > "$OUT/summary.txt"
