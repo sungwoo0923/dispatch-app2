@@ -53053,6 +53053,7 @@ const handleBatchSettle = async (targetStatus) => {
     desk.stmts.forEach((d) => {
       if ((d.biz || "") !== (csBizCur || "") || !d.client || !d.yyyymm) return;
       const i = stageIdx(d.stage); if (i < 1 || i >= 6) return;
+      if (d.autoClosed) return; // 한 번 자동 마감한 명세서는 직접 되돌리면 다시 마감하지 않는다
       const k = `${d.client}|${d.yyyymm}`; if (autoCloseDone.current.has(`${csBizCur}|${k}`)) return;
       const ex = new Set(d.excludedIds || []);
       const rows = (byKey.get(k) || []).filter(r => !ex.has(r._id));
