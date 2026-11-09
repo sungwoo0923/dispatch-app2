@@ -43,6 +43,23 @@ export async function bumpDriverPayout(db, { date, amount, count = 1, company })
   }, { merge: true });
 }
 
+// 🏗 2026-11-09 지게차 기사 지급(지급일별 합계) — 정산관리 › 지게차 지급 [지급완료]/[지급 취소]
+export async function bumpForkliftPayout(db, { date, amount, count = 1, company }) {
+  const co = coOf(company); const d = String(date || kstDay()).slice(0, 10); const amt = toInt(amount);
+  if (!co || !amt) return;
+  const ref = doc(db, "acctLedger", `auto_fkpay_${safeId(co)}_${d}`);
+  let fresh = false;
+  try { fresh = !(await getDoc(ref)).exists(); } catch { fresh = false; }
+  if (fresh && amt < 0) return;
+  const fundId = fresh ? await defaultFundId(db, co, "drvpay") : undefined;
+  await setDoc(ref, {
+    companyName: co, date: d, type: "지출", account: "운반비", item: "지게차비 지급(정산관리 자동)", method: "계좌이체", vendor: "지게차 기사",
+    memo: "정산관리 › 지게차 지급 [지급완료] 합계 — 자동 반영", evidence: "자동", auto: "fkpay",
+    amount: increment(amt), count: increment(count), updatedAt: serverTimestamp(),
+    ...(fresh ? { fundId: fundId || "", receipt: "", createdAt: serverTimestamp(), createdBy: auth.currentUser?.email || "" } : {}),
+  }, { merge: true });
+}
+
 // 거래처 수금 1건
 export async function addClientCollection(db, { name, amount, year, company }) {
   const co = coOf(company); const amt = toInt(amount);

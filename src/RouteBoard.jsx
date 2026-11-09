@@ -138,7 +138,7 @@ function orderFromRow(form, g, r, i, date, co, isNew, prevStatus) {
     const n = toInt(r.fareOverride);
     if (n) Object.assign(rec, { 청구운임: String(n), 운임수동: true }); else rec.운임수동 = false;
   }
-  if (rec.청구운임 || rec.기사운임) rec.수수료 = String(toInt(rec.청구운임) - toInt(rec.기사운임));
+  if (rec.청구운임 || rec.기사운임) rec.수수료 = String(toInt(rec.청구운임) - toInt(rec.기사운임) - toInt(rec.지게차비용));
   rec.차량번호 = normPlate(rec.차량번호 || "") ? String(rec.차량번호).trim() : "";
   const keepStatus = prevStatus && !["배차중", "배차완료", ""].includes(prevStatus);
   return {

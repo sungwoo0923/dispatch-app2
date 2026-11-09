@@ -1,5 +1,6 @@
 // ======================= src/fareRulesCore.js =======================
 // 운임 규칙 계산(순수 함수 — firebase·화면 없음). src/fareRules.js가 다시 내보내고 scripts/fareRules.test.mjs가 시험한다.
+import { forkliftApply } from "./forkliftCore.js"; // 🏗 2026-11-09 지게차비용
 export const toNum = (v) => {
   const n = Number(String(v ?? "").replace(/[^\d.-]/g, ""));
   return Number.isFinite(n) ? n : 0;
@@ -85,6 +86,8 @@ export function fareFormChange(form, key, value, rules, { asString = true, withF
     const drv = toNum(next.기사운임);
     next.수수료 = out(sale - drv);
   }
+  // 🏗 2026-11-09 지게차비용이 있는 오더 — 운임구분 계산 뒤 지게차를 다시 적용(기사 부담이면 기사운임에서 빼고 수익 = 청구 − 기사 − 지게차)
+  if (form && (toNum(form.지게차비용) > 0 || toNum(form.지게차기사차감) > 0 || toNum(form.지게차청구추가) > 0 || toNum(next.지게차비용) > 0)) return forkliftApply(form, next, key, { asString });
   return next;
 }
 

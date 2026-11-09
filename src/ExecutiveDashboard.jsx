@@ -333,8 +333,8 @@ function OverviewTab({ data }) {
   });
   const tmUpRev = thisMonthUpToToday.reduce((s, d) => s + toInt(d.청구운임), 0);
   const lmSameRev = lastMonthSameRange.reduce((s, d) => s + toInt(d.청구운임), 0);
-  const tmUpProfit = thisMonthUpToToday.reduce((s, d) => s + toInt(d.청구운임) - toInt(d.기사운임), 0);
-  const lmSameProfit = lastMonthSameRange.reduce((s, d) => s + toInt(d.청구운임) - toInt(d.기사운임), 0);
+  const tmUpProfit = thisMonthUpToToday.reduce((s, d) => s + toInt(d.청구운임) - toInt(d.기사운임) - toInt(d.지게차비용), 0);
+  const lmSameProfit = lastMonthSameRange.reduce((s, d) => s + toInt(d.청구운임) - toInt(d.기사운임) - toInt(d.지게차비용), 0);
   const syncRevChg = lmSameRev > 0 ? ((tmUpRev - lmSameRev) / lmSameRev * 100) : null;
   const syncCntChg = lastMonthSameRange.length > 0 ? ((thisMonthUpToToday.length - lastMonthSameRange.length) / lastMonthSameRange.length * 100) : null;
   const syncProfitChg = lmSameProfit > 0 ? ((tmUpProfit - lmSameProfit) / lmSameProfit * 100) : null;
@@ -347,7 +347,7 @@ function OverviewTab({ data }) {
       return {
         month: `${String(d.getMonth() + 1).padStart(2, "0")}월`,
         매출: rows.reduce((s, x) => s + toInt(x.청구운임), 0),
-        수익: rows.reduce((s, x) => s + toInt(x.청구운임) - toInt(x.기사운임), 0),
+        수익: rows.reduce((s, x) => s + toInt(x.청구운임) - toInt(x.기사운임) - toInt(x.지게차비용), 0),
         건수: rows.length,
       };
     });
@@ -421,7 +421,7 @@ function OverviewTab({ data }) {
             {[
               { label: "매출", curr: tmRev, prev: lmRev },
               { label: "오더 건수", curr: thisMonth.length, prev: lastMonth.length },
-              { label: "수익", curr: thisMonth.reduce((s,d)=>s+toInt(d.청구운임)-toInt(d.기사운임),0), prev: lastMonth.reduce((s,d)=>s+toInt(d.청구운임)-toInt(d.기사운임),0) },
+              { label: "수익", curr: thisMonth.reduce((s,d)=>s+toInt(d.청구운임)-toInt(d.기사운임)-toInt(d.지게차비용),0), prev: lastMonth.reduce((s,d)=>s+toInt(d.청구운임)-toInt(d.기사운임)-toInt(d.지게차비용),0) },
             ].map(({ label, curr, prev }) => {
               const pct = prev > 0 ? ((curr - prev) / prev * 100) : 0;
               const up = curr >= prev;
@@ -501,7 +501,7 @@ function RevenueTab({ data }) {
       month: `${mo}월`,
       올해: cyRows.reduce((s, d) => s + toInt(d.청구운임), 0),
       전년: lyRows.reduce((s, d) => s + toInt(d.청구운임), 0),
-      올해수익: cyRows.reduce((s, d) => s + toInt(d.청구운임) - toInt(d.기사운임), 0),
+      올해수익: cyRows.reduce((s, d) => s + toInt(d.청구운임) - toInt(d.기사운임) - toInt(d.지게차비용), 0),
     };
   }), [data]);
 
@@ -581,7 +581,7 @@ function ClientTab({ data }) {
       m[k] = m[k] || { count: 0, revenue: 0, profit: 0 };
       m[k].count++;
       m[k].revenue += toInt(d.청구운임);
-      m[k].profit += toInt(d.청구운임) - toInt(d.기사운임);
+      m[k].profit += toInt(d.청구운임) - toInt(d.기사운임) - toInt(d.지게차비용);
     });
     const all = Object.entries(m)
       .map(([name, v]) => ({ name, ...v, margin: v.revenue > 0 ? (v.profit / v.revenue * 100) : 0 }))
