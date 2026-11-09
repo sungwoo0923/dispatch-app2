@@ -59,7 +59,7 @@ export function checkApFile(file, count = 0) {
   return { ok: true, type };
 }
 
-export const apCoKey = (co) => String(co || "").replace(/[/\s#?[\]]/g, "_");
+export const apCoKey = (co) => String(co || "").trim().replace(/[/\s#?[\]]/g, "_"); // ⭐ 2026-11-09 앞뒤 공백 제거(storage.rules와 같게)
 export const safeFileName = (name) => String(name || "file").replace(/[\\/:*?"<>|#[\]\s]+/g, "_").replace(/^\.+/, "").slice(-90) || "file";
 export const apFileDir = (co, docId) => `approvals/${apCoKey(co)}/${docId}/`;
 export const apFilePath = (co, docId, name, at = Date.now()) => `${apFileDir(co, docId)}${at}_${safeFileName(name)}`;

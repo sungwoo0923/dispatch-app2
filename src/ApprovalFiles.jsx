@@ -165,7 +165,7 @@ export function ApprovalAttachInput({ company, docId, me, files, setFiles, onRem
       setUploading((p) => [...p, tmp]);
       uploadApFile(file, { company, docId, me, count: 0 })
         .then((meta) => setFiles((p) => [...p, meta].slice(0, AP_FILE_COUNT)))
-        .catch((e) => onError?.(`${file.name} 올리기 실패: ${e?.code === "storage/unauthorized" ? "권한이 없어요(같은 회사 직원·기안자만 올릴 수 있어요)" : e.message || e}`))
+        .catch((e) => onError?.(`${file.name} 올리기 실패: ${e?.code === "storage/unauthorized" ? "권한이 없어요 — 같은 회사 직원·기안자만 올릴 수 있어요. 계속 안 되면 관리자에게 '파일 저장소 보안 규칙(storage) 배포'를 요청해 주세요" : e.message || e}`))
         .finally(() => setUploading((p) => p.filter((x) => x !== tmp)));
     }
     if (errs.length) onError?.(errs.join(" "));

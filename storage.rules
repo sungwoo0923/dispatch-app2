@@ -118,7 +118,7 @@ service firebase.storage {
         && apStUser().get('approved', true) != false
         && apStUser().get('employmentStatus', '') != '퇴사'
         && !(apStUser().get('role', '') in ['driver', 'shipper', 'cafeUser', 'viewer'])
-        && apStUser().get('companyName', '').replace('[/\\s#?\\[\\]]', '_') == coKey;
+        && apStUser().get('companyName', '').trim().replace('[/\\s#?\\[\\]]', '_') == coKey; // ⭐ 2026-11-09 회사명 앞뒤 공백이 있어도 같은 회사로
     }
     function apDoc(docId) {
       return /databases/(default)/documents/approvals/$(docId);
@@ -148,7 +148,7 @@ service firebase.storage {
         && request.resource.metadata.get('uploadedBy', '') == request.auth.uid
         && (!firestore.exists(apDoc(docId))
           || (firestore.get(apDoc(docId)).data.get('drafterUid', '') == request.auth.uid
-              && firestore.get(apDoc(docId)).data.get('status', '') == 'pending'));
+              && firestore.get(apDoc(docId)).data.get('status', '') in ['pending', 'withdrawn', 'rejected'])); // ⭐ 2026-11-09 회수·반려 문서를 고쳐 다시 올릴 때도
       allow update: if false;
       allow delete: if apStaff(coKey) && resource.metadata.get('uploadedBy', '') == request.auth.uid
         && (!firestore.exists(apDoc(docId))
