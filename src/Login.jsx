@@ -10,6 +10,7 @@ import { Link } from "react-router-dom";
 import { db, doc, onSnapshot } from "./firebase";
 import KpTruck3D from "./KpTruck3D";
 import { LogisMark, LogisWordmark } from "./brand"; // 🔷 2026-11-04 LogisWeb 로고
+import { isDesktopBrowser } from "./driver/driverAppContext"; // 🖥 2026-11-10 PC에서는 차주(기사) 로그인 숨김
 
 const DEFAULT_FOOTER = "© 2025 LogisWeb. All rights reserved.";
 const FONT_FAMILY_MAP = {
@@ -82,7 +83,10 @@ export default function Login() {
   const c = config || {};
 
   // 마지막에 고른 계정 종류(이 기기 기준)
-  const [lastRole] = useState(() => { try { return localStorage.getItem(LAST_ROLE_KEY) || "transport"; } catch { return "transport"; } });
+  // 🖥 2026-11-10 차주(기사)는 휴대폰 기사앱에서만 — PC 웹에서는 운송사 · 화주사만 보인다
+  const pc = isDesktopBrowser();
+  const roles = pc ? ROLES.filter((r) => r.key !== "driver") : ROLES;
+  const [lastRole] = useState(() => { try { const v = localStorage.getItem(LAST_ROLE_KEY) || "transport"; return pc && v === "driver" ? "transport" : v; } catch { return "transport"; } });
   const remember = (key) => { try { localStorage.setItem(LAST_ROLE_KEY, key); } catch { /* 무시 */ } };
   const hasHistory = (() => { try { return !!localStorage.getItem(LAST_ROLE_KEY); } catch { return false; } })();
 
@@ -179,7 +183,7 @@ export default function Login() {
               </div>
             </div>
             <div className="flex flex-col gap-2.5">
-              {ROLES.map((r, i) => {
+              {roles.map((r, i) => {
                 const main = r.key === lastRole;
                 return (
                   <Link key={r.key} to={r.to} onClick={() => remember(r.key)}
@@ -205,11 +209,19 @@ export default function Login() {
               })}
             </div>
 
+            {pc && (
+              <a href="/driver-guide" data-kp="login-driver-hint" className="mt-2.5 flex items-center gap-3 rounded-[16px] px-4 py-3 bg-white/[0.04] ring-1 ring-white/10 hover:bg-white/[0.08] transition" style={{ animation: "kpLoginIn .5s ease .28s both" }}>
+                <span className="w-8 h-8 rounded-[10px] bg-white/[0.08] ring-1 ring-white/10 flex items-center justify-center shrink-0"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#CFE0FF" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="6" y="2" width="12" height="20" rx="2.5" /><path d="M11 18h2" /></svg></span>
+                <span className="flex-1 min-w-0"><span className="block text-[13px] font-black">차주(기사)는 휴대폰에서 로그인해요</span><span className="block text-[11.5px] text-white/50 truncate">LogisWeb 기사앱 설치 안내 보기</span></span>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" className="text-white/50 shrink-0"><path d="M9 6l6 6-6 6" /></svg>
+              </a>
+            )}
+
             {/* 회원가입 — 계정 종류별 */}
             <div className="mt-5 flex items-center justify-between gap-2 rounded-[16px] max-[340px]:flex-col max-[340px]:items-stretch bg-white/[0.04] ring-1 ring-white/10 px-4 py-3" style={{ animation: "kpLoginIn .5s ease .32s both" }}>
               <span className="text-[12.5px] font-bold text-white/55 whitespace-nowrap">회원가입</span>
               <div className="flex items-center justify-end gap-1 text-[12.5px] font-black whitespace-nowrap max-[340px]:justify-between">
-                {ROLES.map((r) => (
+                {roles.map((r) => (
                   <Link key={r.key} to={r.signup} onClick={() => remember(r.key)} className="px-2.5 h-7 inline-flex items-center rounded-full bg-white/[0.07] hover:bg-white/[0.14] text-white transition">{r.title.replace(" (기사)", "")}</Link>
                 ))}
               </div>

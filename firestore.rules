@@ -342,6 +342,19 @@ service cloud.firestore {
       allow write: if isTotalMasterUser() || (isApproved() && myCo() == co && myRole() != 'viewer'
         && request.resource.data.get('companyName', '') == co);
     }
+    // 🧩 2026-11-10 컬럼 수정 — 계정마다 내 배치(본인만) · 회사 전체 적용 배치(같은 회사 직원 읽기 · 조회전용 빼고 쓰기)
+    match /colLayouts/{uid} {
+      allow read: if request.auth != null && request.auth.uid == uid;
+      allow write: if request.auth != null && request.auth.uid == uid && isApproved()
+        && request.resource.data.get('uid', '') == uid
+        && (isTotalMasterUser() || request.resource.data.get('companyName', '') == myCo());
+    }
+    match /colLayoutsCompany/{co} {
+      allow read: if isTotalMasterUser() || (isApproved() && myCo() == co);
+      allow write: if isTotalMasterUser() || (isApproved() && myCo() == co && myRole() != 'viewer'
+        && myRole() != 'driver' && myRole() != 'shipper'
+        && request.resource.data.get('companyName', '') == co);
+    }
     match /companyFeatures/{co} {
       allow read: if isTotalMasterUser() || (isApproved() && myCo() == co);
       allow write: if isTotalMasterUser();
@@ -2338,7 +2351,7 @@ service cloud.firestore {
         'users', 'userProfiles', 'chat_rooms', 'chat_messages', 'chat_profiles', 'transportApplications', 'companyApplications',
         'companyEditRequests', 'inquiries', 'landingInquiries', 'shipper_orders', 'userSeenNotifs', 'userSettings', 'arPayments', 'multiRateSheets',
         'plManual', 'systemConfig', 'sessionLogs', 'shortLinks', 'driver_documents', 'driver_uploads', 'liveLocations', 'hubDevices',
-        'routeCarrierSettings', 'colStyles', 'transportApplications', 'driverSignupLogs',
+        'routeCarrierSettings', 'colStyles', 'colLayouts', 'colLayoutsCompany', 'transportApplications', 'driverSignupLogs',
         'driver_logs', 'gps_tracks', 'driver_photo_logs', 'driver_notifications', 'location_change_requests', 'emergency_alerts',
         'collision_alerts', 'cargo_temp', 'cargo_camera', 'deliverySignatureHistory', 'attendance', 'holidays', 'fleet_settings', 'importBatches',
         //  서버(Cloud Functions)만 쓰는 기록 · sheetRegistry(구글시트 주인 회사 — functions/sheetGuard.js, 화면이 쓰면 남의 시트를 가로챌 수 있다)

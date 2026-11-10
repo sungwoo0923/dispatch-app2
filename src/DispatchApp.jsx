@@ -8604,7 +8604,8 @@ return (
                   <LogisWordmark height={12} sub="dispatch" />
                 </a>
                 {co && (
-                  <span className="ml-1 px-2.5 h-7 inline-flex items-center rounded-lg bg-white/[0.07] border border-white/10 text-[13px] font-bold text-white/90 truncate max-w-[120px]">
+                  // ⭐ 2026-11-10 긴 운송사명도 잘리지 않게(길면 글씨만 살짝 작게)
+                  <span title={co} data-kp="hdr-company" className={`ml-1 px-2.5 h-7 inline-flex items-center rounded-lg bg-white/[0.07] border border-white/10 font-bold text-white/90 whitespace-nowrap shrink-0 ${co.length > 8 ? "text-[12px]" : "text-[13px]"}`}>
                     {co}
                   </span>
                 )}

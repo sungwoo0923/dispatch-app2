@@ -100,7 +100,7 @@ function Detail({ e, checks, canEdit, me, onClose, onAct, phone }) {
         </div>
         {e.status === "지급완료" ? <span className="ml-auto shrink-0 whitespace-nowrap inline-flex items-center h-7 px-2.5 rounded-lg bg-white border-2 border-[#B42318] text-[#B42318] text-[12px] font-black" data-kp="vex-paid-chip">지급완료{e.paidDate ? ` · ${String(e.paidDate).slice(5).replace("-", ".")}` : ""}</span> : <span className={`ml-auto ${lv === "ok" ? "inline-flex items-center h-7 px-2.5 rounded-lg bg-[#1B2B4B] text-white text-[12px] font-black" : "inline-flex items-center gap-1.5 h-7 px-2.5 rounded-lg bg-white border border-[#0B1428] text-[#0B1428] text-[12px] font-black"}`}>{lv !== "ok" && <Dot lv={lv} />}{lv === "ok" ? "자동 점검 통과" : checkHeadline(checks)}</span>}
       </div>
-      <button type="button" onClick={() => setZoom(true)} className="relative h-[250px] bg-[#1a2233] flex items-center justify-center overflow-hidden" title="크게 보기">
+      <button type="button" onClick={() => setZoom(true)} className={`relative ${phone ? "h-[250px]" : "h-[440px] 2xl:h-[520px]"} bg-[#1a2233] flex items-center justify-center overflow-hidden`} title="크게 보기">
         <span className="absolute left-3 top-3 text-[10px] font-black tracking-[0.2em] text-[#8FB0F0] bg-[#0B1428]/70 px-2 py-1 rounded-md">SCANNED</span>
         {e.image ? <img src={e.image} alt="영수증" className="max-h-full max-w-full object-contain" /> : <span className="text-white/50 text-[13px]">사진 없음</span>}
         {e.status === "지급완료" && <span className="absolute inset-0 flex items-center justify-center"><PaidStamp date={e.paidDate} /></span>}
@@ -238,7 +238,7 @@ export function VehicleExpenseInbox({ company, drivers = [], canEdit = true, me 
           <button type="button" onClick={() => setMonth(shiftYm(month, 1))} className="w-9 h-full text-[#1B2B4B] font-black">›</button>
         </span>
       </div>
-      <div className={narrow ? "space-y-3" : "grid grid-cols-[minmax(0,1fr)_400px] gap-3.5 items-start"}>
+      <div className={narrow ? "space-y-3" : "grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-3.5 items-start"}>
         <div className="rounded-2xl bg-white border border-[#E3E8F0] overflow-hidden flex flex-col min-w-0">
           {narrow ? (
             <div>

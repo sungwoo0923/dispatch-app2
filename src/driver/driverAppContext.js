@@ -16,6 +16,18 @@ export function isNativeApk() {
   try { return typeof window !== "undefined" && !!window.Capacitor?.isNativePlatform?.(); } catch { return false; }
 }
 
+// 🖥 2026-11-10 PC(데스크톱) 브라우저인가 — 기사 로그인은 휴대폰(기사앱 · 모바일 브라우저)에서만
+export function isDesktopBrowser() {
+  try {
+    if (typeof window === "undefined") return false;
+    if (isNativeApk()) return false;
+    const ua = navigator.userAgent || "";
+    if (/Android|iPhone|iPad|iPod|Mobile|Windows Phone/i.test(ua)) return false;
+    if (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1) return false; // 아이패드(데스크톱 모드)
+    return true;
+  } catch { return false; }
+}
+
 export function isStandaloneDisplay() {
   try {
     if (typeof window === "undefined") return false;

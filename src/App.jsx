@@ -68,6 +68,7 @@ const ShipperMobileApp = React.lazy(() => import("./mobile/ShipperMobileApp"));
 // 열 때마다 다운로드/해석 시간이 늘었다. 필요할 때만 불러오도록 지연 로딩으로 바꾼다.
 const DriverHome = React.lazy(() => import("./driver/DriverHome"));
 const DriverLogin = React.lazy(() => import("./driver/DriverLogin"));
+import DriverPcGate from "./driver/DriverPcGate"; // 🖥 2026-11-10 기사 로그인 · 가입은 휴대폰에서만
 const DriverRegister = React.lazy(() => import("./driver/DriverRegister"));
 
 import Login from "./Login";
@@ -1060,11 +1061,11 @@ export default function App() {
 
           <Route
             path="/driver-login"
-            element={user && role === "driver" && approved && !driverBusy ? <Navigate to="/driver-home" replace /> : <DriverLogin />}
+            element={user && role === "driver" && approved && !driverBusy ? <Navigate to="/driver-home" replace /> : <DriverPcGate><DriverLogin /></DriverPcGate>}
           />
           <Route
             path="/driver-register"
-            element={user && role === "driver" && approved && !driverBusy ? <Navigate to="/driver-home" replace /> : <DriverRegister />}
+            element={user && role === "driver" && approved && !driverBusy ? <Navigate to="/driver-home" replace /> : <DriverPcGate><DriverRegister /></DriverPcGate>}
           />
           <Route
             path="/driver-home"

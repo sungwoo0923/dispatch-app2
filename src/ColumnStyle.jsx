@@ -8,6 +8,8 @@ import { createPortal } from "react-dom";
 import { doc, onSnapshot, setDoc, serverTimestamp } from "firebase/firestore";
 import { db, auth } from "./firebase";
 import { getTenant } from "./fsTenant";
+import { thText, headCells, tableKey } from "./colTableKey";
+import { useColumnLayoutHost, ColumnLayoutModal, canLayout, hideOne, hiddenCount, layoutOf, resetMyLayout } from "./ColumnLayout";
 
 const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
 const LS = "kpColStyle:v1";
@@ -24,15 +26,7 @@ const save = () => {
     .catch((e) => { console.warn("[colStyles] 저장 실패", e?.code || e); try { window.dispatchEvent(new CustomEvent("kp-colstyle-error")); } catch { /* 무시 */ } });
 };
 
-const thText = (th) => String(th?.innerText || th?.textContent || "").replace(/[▲▼↕⇅]/g, "").replace(/\s+/g, " ").trim();
-const headCells = (table) => { const tr = table?.tHead?.rows?.[table.tHead.rows.length - 1]; return tr ? [...tr.cells] : []; };
-// 표 이름 — 머리글 앞쪽 이름들(선택칸 등 빈 이름 제외) + 칸 수
-const tableKey = (table) => {
-  if (table?.dataset?.kpTable) return table.dataset.kpTable;
-  const names = headCells(table).map(thText).filter(Boolean);
-  return `${names.slice(0, 5).join("|")}#${names.length}`;
-};
-
+// 표 알아보기는 컬럼 수정과 같이 쓴다(옮긴 표도 원래 이름으로)
 const PALETTE = {
   bg: ["", "#FFFFFF", "#F4F6FA", "#EEF3FB", "#DCE7F8", "#E8F1EC", "#FFF7E0", "#FFF3B0", "#FBEAEA", "#2D4C82", "#1B2B4B", "#0F1A30"],
   color: ["", "#0F1A30", "#1B2B4B", "#2D4C82", "#4B6CB7", "#5B6B85", "#9AA9C3", "#1F7A4D", "#B7791F", "#C53030", "#FFFFFF"],
@@ -40,18 +34,21 @@ const PALETTE = {
 const SIZES = ["", 12, 13, 14, 15, 16, 18, 20];
 const WEIGHTS = [["", "기본"], [500, "보통"], [700, "굵게"], [900, "아주 굵게"]];
 
-function css(tid, idx, st) {
+function css(tid, idx, st, ci) {
   const out = [];
   const one = (p) => [p.bg && `background:${p.bg}!important`, p.color && `color:${p.color}!important`, p.size && `font-size:${p.size}px!important`, p.weight && `font-weight:${p.weight}!important`].filter(Boolean).join(";");
   const inner = (p) => [p.color && `color:${p.color}!important`, p.size && `font-size:${p.size}px!important`, p.weight && `font-weight:${p.weight}!important`].filter(Boolean).join(";");
   const T = `table[data-kpcs="${tid}"]`;
+  // 컬럼 수정으로 옮긴 표는 칸 번호표(data-kpci)로 — 자리가 바뀌어도 색이 따라간다
+  const H = ci != null ? `th[data-kpci="${ci}"]` : `th:nth-child(${idx})`;
+  const D = ci != null ? `td[data-kpci="${ci}"]` : `td:nth-child(${idx})`;
   if (st.head && one(st.head)) {
-    out.push(`${T}>thead>tr:last-child>th:nth-child(${idx}){${one(st.head)}}`);
-    if (inner(st.head)) out.push(`${T}>thead>tr:last-child>th:nth-child(${idx}) *{${inner(st.head)}}`);
+    out.push(`${T}>thead>tr:last-child>${H}{${one(st.head)}}`);
+    if (inner(st.head)) out.push(`${T}>thead>tr:last-child>${H} *{${inner(st.head)}}`);
   }
   if (st.cell && one(st.cell)) {
-    out.push(`${T}>tbody>tr>td:nth-child(${idx}){${one(st.cell)}}`);
-    if (inner(st.cell)) out.push(`${T}>tbody>tr>td:nth-child(${idx}) *:not(button):not(svg):not(path){${inner(st.cell)}}`);
+    out.push(`${T}>tbody>tr>${D}{${one(st.cell)}}`);
+    if (inner(st.cell)) out.push(`${T}>tbody>tr>${D} *:not(button):not(svg):not(path){${inner(st.cell)}}`);
   }
   return out.join("\n");
 }
@@ -65,7 +62,7 @@ function rebuild(styleEl) {
     const map = STORE[tableKey(t)];
     if (!map) { if (t.dataset.kpcs) delete t.dataset.kpcs; return; }
     if (!t.dataset.kpcs) t.dataset.kpcs = `t${++tidSeq}`;
-    headCells(t).forEach((th, i) => { const st = map[thText(th)]; if (st) rules.push(css(t.dataset.kpcs, i + 1, st)); });
+    headCells(t).forEach((th, i) => { const st = map[thText(th)]; if (st) rules.push(css(t.dataset.kpcs, i + 1, st, t.dataset.kplid ? th.dataset.kpci : null)); });
   });
   const txt = rules.join("\n");
   if (styleEl.textContent !== txt) styleEl.textContent = txt;
@@ -183,6 +180,7 @@ function StyleModal({ target, onClose }) {
 // 앱에 한 번만 붙인다 — 머리글 오른쪽 클릭 메뉴 + 저장된 색을 표에 입히기
 export default function ColumnStyleHost({ company = "" }) {
   const co = String(getTenant() || company || "").trim();
+  useColumnLayoutHost(co); // 🧩 2026-11-10 컬럼 수정(계정마다 · 회사 전체 적용)
   // 회사 공용 색 — 실시간으로 받아 온다(먼저 이 PC에 기억한 걸로 바로 그리고, 서버 값이 오면 바꾼다)
   React.useEffect(() => {
     CO = co;
@@ -203,6 +201,10 @@ export default function ColumnStyleHost({ company = "" }) {
   React.useEffect(() => { const h = () => { setErr(true); setTimeout(() => setErr(false), 4000); }; window.addEventListener("kp-colstyle-error", h); return () => window.removeEventListener("kp-colstyle-error", h); }, []);
   const [menu, setMenu] = React.useState(null);
   const [target, setTarget] = React.useState(null);
+  const [layTable, setLayTable] = React.useState(null); // 컬럼 수정 창
+  const [toast, setToast] = React.useState("");
+  React.useEffect(() => { if (!toast) return undefined; const t = setTimeout(() => setToast(""), 3200); return () => clearTimeout(t); }, [toast]);
+  React.useEffect(() => { const h = () => setToast("컬럼 배치를 서버에 저장하지 못했습니다 · 이 PC에만 적용됩니다"); window.addEventListener("kp-collayout-error", h); const h2 = (e) => setToast(String(e.detail || "")); window.addEventListener("kp-col-toast", h2); return () => { window.removeEventListener("kp-collayout-error", h); window.removeEventListener("kp-col-toast", h2); }; }, []);
   const styleRef = React.useRef(null);
 
   React.useEffect(() => {
@@ -213,9 +215,10 @@ export default function ColumnStyleHost({ company = "" }) {
     const mo = new MutationObserver((list) => { for (const m of list) { if (m.target?.closest?.("thead") || [...m.addedNodes].some((n) => n.nodeType === 1 && (n.tagName === "TABLE" || n.querySelector?.("table")))) { run(); return; } } });
     mo.observe(document.body, { childList: true, subtree: true });
     const sub = () => rebuild(el); subs.add(sub);
+    window.addEventListener("kp-collayout-applied", sub);
     const onStore = () => {};
     window.addEventListener("storage", onStore);
-    return () => { mo.disconnect(); subs.delete(sub); window.removeEventListener("storage", onStore); clearTimeout(t); el.remove(); };
+    return () => { mo.disconnect(); subs.delete(sub); window.removeEventListener("kp-collayout-applied", sub); window.removeEventListener("storage", onStore); clearTimeout(t); el.remove(); };
   }, []);
 
   React.useEffect(() => {
@@ -226,12 +229,16 @@ export default function ColumnStyleHost({ company = "" }) {
       if (!table || !col) return;
       e.preventDefault();
       const z = parseFloat(document.getElementById("root")?.style.zoom) || 1;
-      setMenu({ x: e.clientX / z, y: e.clientY / z, tkey: tableKey(table), col });
+      setMenu({ x: e.clientX / z, y: e.clientY / z, tkey: tableKey(table), col, table, th, lay: canLayout(table), hid: hiddenCount(table), custom: !!layoutOf(tableKey(table)) });
     };
-    const close = () => setMenu(null);
+    // 열자마자 이어지는 부드러운 스크롤(표 · 아래 가로 스크롤바 맞추기)로 바로 닫히지 않게 0.5초는 둔다
+    let openedAt = 0;
+    const close = () => { if (Date.now() - openedAt > 500) setMenu(null); };
+    const onCtxAt = () => { openedAt = Date.now(); };
+    document.addEventListener("contextmenu", onCtxAt, true);
     document.addEventListener("contextmenu", onCtx);
     window.addEventListener("scroll", close, true);
-    return () => { document.removeEventListener("contextmenu", onCtx); window.removeEventListener("scroll", close, true); };
+    return () => { document.removeEventListener("contextmenu", onCtxAt, true); document.removeEventListener("contextmenu", onCtx); window.removeEventListener("scroll", close, true); };
   }, []);
 
   const has = menu && STORE[menu.tkey]?.[menu.col];
@@ -240,7 +247,7 @@ export default function ColumnStyleHost({ company = "" }) {
       {menu && createPortal(
         <div className="fixed inset-0 z-[2147483000]" onMouseDown={() => setMenu(null)} onContextMenu={(e) => { e.preventDefault(); setMenu(null); }}>
           <div className="absolute w-[200px] rounded-xl bg-white border border-[#DCE3EE] shadow-[0_16px_36px_rgba(15,26,48,.22)] py-1.5 overflow-hidden"
-            style={{ left: Math.min(menu.x, window.innerWidth - 210), top: Math.min(menu.y, window.innerHeight - 120) }} onMouseDown={(e) => e.stopPropagation()}>
+            style={{ left: Math.min(menu.x, window.innerWidth - 210), top: Math.min(menu.y, window.innerHeight - 250) }} onMouseDown={(e) => e.stopPropagation()}>
             <div className="px-3 pt-0.5 pb-1.5 border-b border-[#EEF2F8] mb-1">
               <div className="text-[9.5px] font-extrabold tracking-[0.22em] text-[#9AA9C3]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>COLUMN</div>
               <div className="text-[13px] font-black text-[#0F1A30] truncate">{menu.col}</div>
@@ -248,6 +255,22 @@ export default function ColumnStyleHost({ company = "" }) {
             <button type="button" onClick={() => { setTarget({ tkey: menu.tkey, col: menu.col }); setMenu(null); }} className="w-full h-9 px-3 flex items-center gap-2 text-left text-[13px] font-bold text-[#0F1A30] hover:bg-[#EEF2F8]">
               <span className="w-5 h-5 rounded-md" style={{ background: "conic-gradient(#0F1A30 0 25%,#4B6CB7 0 50%,#DCE7F8 0 75%,#FFF3B0 0)" }} />색 변경
             </button>
+            <div className="h-px bg-[#EEF2F8] my-1" />
+            <button type="button" disabled={!menu.lay} data-kp="ctx-col-layout" onClick={() => { setLayTable(menu.table); setMenu(null); }} className="w-full h-9 px-3 flex items-center gap-2 text-left text-[13px] font-bold text-[#0F1A30] hover:bg-[#EEF2F8] disabled:opacity-40 disabled:hover:bg-transparent">
+              <span className="w-5 h-5 rounded-md bg-[#0F1A30] text-white flex items-center justify-center"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="5" height="16" rx="1" /><rect x="10" y="4" width="5" height="16" rx="1" /><path d="M19 9l2 2-2 2" /></svg></span>컬럼 수정
+              {menu.hid > 0 && <span className="ml-auto h-5 px-1.5 inline-flex items-center rounded-md bg-[#EEF3FC] text-[#2D4C82] text-[10.5px] font-black">숨김 {menu.hid}</span>}
+            </button>
+            {menu.lay && (
+              <button type="button" data-kp="ctx-col-hide" onClick={() => { const id = hideOne(menu.table, menu.th); setMenu(null); setToast(id ? `“${id}” 칸을 숨겼어요 · 컬럼 수정에서 다시 보이게 할 수 있어요` : "최소 1칸은 보여야 해요"); }} className="w-full h-9 px-3 flex items-center gap-2 text-left text-[13px] font-bold text-[#0F1A30] hover:bg-[#EEF2F8]">
+                <span className="w-5 h-5 rounded-md border border-[#D5DDEA] text-[#5B6B85] flex items-center justify-center"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><path d="M3 3l18 18M2.5 12S6 6 12 6c1.6 0 3 .4 4.3 1M21.5 12S18 18 12 18c-1.6 0-3-.4-4.3-1" /></svg></span>이 칸 숨기기
+              </button>
+            )}
+            {menu.lay && menu.custom && (
+              <button type="button" data-kp="ctx-col-reset" onClick={() => { resetMyLayout(tableKey(menu.table)); setMenu(null); setToast("이 표를 기본 배치로 돌렸어요"); }} className="w-full h-9 px-3 flex items-center gap-2 text-left text-[13px] font-bold text-[#5B6B85] hover:bg-[#EEF2F8]">
+                <span className="w-5 h-5 rounded-md border border-dashed border-[#C9D3E3] flex items-center justify-center text-[11px]">↺</span>기본 배치로
+              </button>
+            )}
+            {!menu.lay && <div className="px-3 pb-1 text-[11px] text-[#9AA9C3] leading-snug">머리글이 두 줄인 표는 컬럼 수정을 쓸 수 없어요</div>}
             {has && (
               <button type="button" onClick={() => { const m = { ...(STORE[menu.tkey] || {}) }; delete m[menu.col]; STORE = { ...STORE }; if (Object.keys(m).length) STORE[menu.tkey] = m; else delete STORE[menu.tkey]; save(); setMenu(null); }} className="w-full h-9 px-3 flex items-center gap-2 text-left text-[13px] font-bold text-[#5B6B85] hover:bg-[#EEF2F8]">
                 <span className="w-5 h-5 rounded-md border border-dashed border-[#C9D3E3]" />색 원래대로
@@ -258,6 +281,8 @@ export default function ColumnStyleHost({ company = "" }) {
         document.body
       )}
       {target && <StyleModal target={target} onClose={() => setTarget(null)} />}
+      {layTable && <ColumnLayoutModal table={layTable} onClose={() => setLayTable(null)} />}
+      {toast && createPortal(<div data-kp="col-toast" className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[2147483200] px-4 py-2.5 rounded-xl bg-[#0F1A30] text-white text-[12.5px] font-bold shadow-[0_12px_30px_rgba(6,12,26,.4)]">{toast}</div>, document.body)}
       {err && createPortal(<div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[2147483200] px-4 py-2.5 rounded-xl bg-[#0F1A30] text-white text-[12.5px] font-bold shadow-[0_12px_30px_rgba(6,12,26,.4)]">색 설정을 회사 전체에 저장하지 못했습니다 · 이 PC에만 적용됩니다</div>, document.body)}
     </>
   );
