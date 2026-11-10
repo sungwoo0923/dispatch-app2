@@ -2205,6 +2205,13 @@ function DocList({ docs, onOpen, empty, uid, compact = false }) {
               <span className="text-[14.5px] font-black text-[#0F1A30] truncate min-w-0 max-w-full">{d.title}</span>
             </div>
             <div className="text-[13.5px] text-[#5B6B85] truncate mt-0.5">{compact ? `${d.drafter?.name || ""} ${d.drafter?.position || ""} · ` : ""}{d.summary}</div>
+            {/* ⭐ 2026-11-10 진행 중이면 지금 누구 차례인지(휴대폰은 결재 진행 막대가 숨겨져 '진행 중'만 보였다) */}
+            {d.status === "pending" && d.line?.[d.step] && (
+              <div className="mt-0.5 text-[12.5px] font-bold truncate" data-kp="ap-turn">
+                {myTurn(d, uid) ? <span className="text-[#0F1A30]">내가 결재할 차례</span>
+                  : <span className="text-[#2D4C82]">현재 결재 · {d.line[d.step].name || ""} {d.line[d.step].position || ""} ({(d.step || 0) + 1}/{d.line.length})</span>}
+              </div>
+            )}
           </div>
           <div className={`${compact ? "hidden" : "hidden xl:block"} text-right shrink-0 w-[120px]`}>
             <div className="text-[14px] font-bold text-[#3A4A66]">{d.drafter?.name} {d.drafter?.position}</div>
@@ -2609,14 +2616,15 @@ export default function ApprovalCenter({ company, me, page, setPage, openId, onO
             const F = (k) => applyListTools(k === "company" ? (companyAll || []) : (sets[k] || []), lf) || [];
             // ⭐ 2026-11-09 결재함 순서: 회사 전체 · 결재 대기 · 지급 대기 · 지급완료 · 반려 · 결재 취소 · 회수 · 참조 문서 · 삭제한 문서
             //   '진행 중·완료'는 뺐다(회사 전체에서 상태로 보임) — 관리자가 아니면 회사 전체 대신 '전체'(내가 결재선에 있는 문서 전부)
-            const keys = [admin ? "company" : "all", "todo", "paywait", "paid", "rejected", "cancelled", "withdrawn", "cc", "hidden"];
-            const label = { all: "전체", company: "회사 전체", todo: "결재 대기", paywait: "지급 대기", paid: "지급완료", rejected: "반려", cancelled: "결재 취소", withdrawn: "회수", cc: "참조 문서", hidden: "삭제한 문서" };
+            // ⭐ 2026-11-10 '진행 중'(다른 결재자 차례) 탭 다시 — 회사 전체에 "진행 중" 문서가 여러 건인데 '결재 대기'(내 차례)는 0건이라 헷갈린다는 의견
+            const keys = [admin ? "company" : "all", "todo", "pending", "paywait", "paid", "rejected", "cancelled", "withdrawn", "cc", "hidden"];
+            const label = { all: "전체", company: "회사 전체", todo: "결재 대기(내 차례)", pending: "진행 중(다른 결재자)", paywait: "지급 대기", paid: "지급완료", rejected: "반려", cancelled: "결재 취소", withdrawn: "회수", cc: "참조 문서", hidden: "삭제한 문서" };
             const pool = [...(list || []), ...(companyAll || [])];
             const drafters = [...new Map(pool.filter((d) => d.drafterUid).map((d) => [d.drafterUid, d.drafter?.name || "-"])).entries()].sort((a, b) => String(a[1]).localeCompare(String(b[1]), "ko"));
             return (<>
               <Tabs tab={tab} setTab={setTab} tabs={keys.map((k) => [k, label[k], F(k).length, k === "cc" ? F(k).filter((d) => ccUnread(d, uid)).length : 0])} />
               <ListTools f={lf} setF={setLf} drafters={drafters} />
-              <DocList compact={wide} uid={uid} docs={tab === "company" ? (companyAll === null ? null : F("company")) : (list === null ? null : F(tab))} onOpen={(d) => setOpen(d.id)} empty={lf.q || lf.from || lf.who ? "조건에 맞는 문서가 없습니다" : tab === "todo" ? "결재할 문서가 없습니다" : tab === "paywait" ? "지급을 기다리는 문서가 없습니다" : "문서가 없습니다"} />
+              <DocList compact={wide} uid={uid} docs={tab === "company" ? (companyAll === null ? null : F("company")) : (list === null ? null : F(tab))} onOpen={(d) => setOpen(d.id)} empty={lf.q || lf.from || lf.who ? "조건에 맞는 문서가 없습니다" : tab === "todo" ? `내가 결재할 문서가 없습니다${(sets.pending || []).length ? ` · 다른 결재자 차례인 문서 ${sets.pending.length}건은 [진행 중]에 있어요` : ""}` : tab === "paywait" ? "지급을 기다리는 문서가 없습니다" : "문서가 없습니다"} />
             </>);
           })()}
         </div>
