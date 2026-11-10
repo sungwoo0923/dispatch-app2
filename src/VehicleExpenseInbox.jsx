@@ -8,6 +8,7 @@ import React from "react";
 import { createPortal } from "react-dom";
 import { kpConfirm, kpPrompt } from "./kpDialog";
 import useNarrow from "./useNarrow";
+import { useBackClose } from "./mobileBack"; // 🔙 휴대폰 뒤로가기로 상세 닫기
 import { mainBiz } from "./publicDataMain";
 import { VEX_KINDS, VEX_PAYS, vexKindLabel, vexPayLabel, won, toNum, autoChecks, checkLevel, checkHeadline, fmtBizNo, spendPresetOf,
   PHOTO_CYCLES, PHOTO_DOWS, PHOTO_PARTS, photoPeriod, daysLeft, photoTargetOk } from "./vehicleExpenseCore";
@@ -75,6 +76,8 @@ function Zoom({ src, onClose }) {
 
 function Detail({ e, checks, canEdit, me, onClose, onAct, phone }) {
   const [zoom, setZoom] = React.useState(false);
+  useBackClose(!!phone && !!e && !zoom, onClose);
+  useBackClose(zoom, () => setZoom(false));
   const [edit, setEdit] = React.useState(null);
   if (!e) return <div className="rounded-2xl bg-white border border-[#E3E8F0] h-full min-h-[300px] flex items-center justify-center text-[13.5px] text-[#9AA9C3] font-bold">왼쪽 목록에서 영수증을 고르세요</div>;
   const lv = checkLevel(checks);

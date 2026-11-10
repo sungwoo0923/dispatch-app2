@@ -2,7 +2,8 @@
 import { subscribeUsersLive } from "./usersLive"; // ⭐ 2026-11-02 속도 — 직원 명부 구독 공유
 import { pickCompanyLoc } from "./officeLocSync"; // 📍 2026-11-09 출근지 한 곳 관리
 import useNarrow from "./useNarrow"; // ⭐ 2026-11-06 휴대폰 폭 카드 목록
-import { VehicleExpenseInbox, VehiclePhotoBoard } from "./VehicleExpenseInbox"; // 🧾 2026-11-10 차량 비용 영수증 · 정기 차량 사진
+import { VehicleExpenseInbox, VehiclePhotoBoard } from "./VehicleExpenseInbox";
+import { useBackClose } from "./mobileBack"; // 🔙 2026-11-10 덮어 뜬 창 뒤로가기로 닫기 // 🧾 2026-11-10 차량 비용 영수증 · 정기 차량 사진
 import { DriverGuideSendModal, guideSentLabel } from "./DriverAppGuide"; // ⭐ 2026-11-06 기사앱 안내 보내기
 import React, { useEffect, useState, useMemo, useCallback, useRef } from "react";
 import { kpConfirm } from "./kpDialog";
@@ -4200,7 +4201,7 @@ function RouteManagementTab({ drivers, dispatchData, liveDrivers = [], staff = [
             style={{ width: "100%", height: 36, paddingLeft: 36, paddingRight: 10, borderRadius: 10, border: "1px solid #DCE3EF", background: "#F7F9FC", fontSize: 14, outline: "none", boxSizing: "border-box" }}
           />
         </div>
-        <div style={{ display: "flex", gap: 3, background: "#F1F4F9", border: "1px solid #E3E8F0", borderRadius: 10, padding: 3 }}>
+        <div className="kp-rb-days" style={{ display: "flex", gap: 3, background: "#F1F4F9", border: "1px solid #E3E8F0", borderRadius: 10, padding: 3 }}>
           {["yesterday", "today", "tomorrow"].map((mode, i) => {
             const labels = ["어제", "당일", "내일"];
             const active = dayMode === mode;
@@ -6203,6 +6204,7 @@ function VehicleCareTab({ drivers = [], driversRaw = [], by = "" }) {
       return c !== 0 ? c * sort.d : urgent;
     });
   const cur = rows.find((r) => r.id === sel) || null;
+  useBackClose(!!cur, () => setSel(null)); // 🔙 2026-11-10 휴대폰 뒤로가기 = 닫기
   const cnt = { all: rows.length, over: rows.filter((r) => r.cs.over).length, soon: rows.filter((r) => r.cs.over || r.cs.soon).length, none: rows.filter((r) => !r.cs.setupDone).length };
   const th = { padding: "12px 12px", fontSize: 14, fontWeight: 800, color: "#fff", whiteSpace: "nowrap", textAlign: "center" };
   const td = { padding: "13px 12px", fontSize: 15, fontWeight: 700, color: "#0F1A30", whiteSpace: "nowrap", borderTop: "1px solid #EEF1F6", textAlign: "center" };

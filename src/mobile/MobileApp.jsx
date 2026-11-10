@@ -45,6 +45,7 @@ import { canSeeNotice } from "../NoticeBoard";
 import React, { useState, useMemo, useEffect, useRef, startTransition, useSyncExternalStore } from "react";
 import { withCo, getTenant } from "../fsTenant";
 // 📱 PC와 같은 화면(매출관리·운임조회·단가표·지입차관리·전자결재·직원관리) — 메뉴를 열 때만 불러온다
+import { runMobileBack } from "../mobileBack"; // 🔙 2026-11-10 덮어 뜬 창 뒤로가기로 닫기
 const MobilePcView = React.lazy(() => import("./MobilePcViews"));
 import { useMobileAlerts } from "./mobileAlerts";
 import { useRouteBoardIds } from "../routeBoardIds"; // ⭐ 2026-11-05 고정노선 미배차 메뉴 숫자
@@ -2341,6 +2342,12 @@ useEffect(() => {
   window.history.pushState(null, '', window.location.href);
 
   const handlePopState = () => {
+    // 🔙 2026-11-10 위에 덮어 뜬 창(차량 관리대장 등)이 있으면 그 창만 닫는다
+    if (runMobileBack()) {
+      window.history.pushState(null, '', window.location.href);
+      backPressCountRef.current = 0;
+      return;
+    }
     if (innerBackRef.current && innerBackRef.current()) {
       window.history.pushState(null, '', window.location.href);
       backPressCountRef.current = 0;

@@ -300,6 +300,12 @@ table tbody tr.kp-row-hit:hover td {
   .kp-route-bar .kp-rb-range > button { flex-shrink: 0; }
   .kp-route-bar .kp-rb-label { display: none !important; }
   .kp-route-bar > button { flex: 1 1 0; justify-content: center; }
+  /* 어제 · 당일 · 내일 — 한 줄 전체, 세 칸 같은 폭 */
+  .kp-route-bar .kp-rb-days { flex: 1 1 100%; }
+  .kp-route-bar .kp-rb-days > button { flex: 1 1 0; height: 34px !important; }
+  /* 날짜 칸 · 조회 높이 맞춤 */
+  .kp-route-bar .kp-rb-range input, .kp-route-bar .kp-rb-range > button { height: 38px !important; }
+  .kp-route-bar > button { height: 40px !important; }
 }
 
 /* 📱 아이폰 Safari — 상단바(translateZ로 따로 그려짐)가 화면 안의 팝업(position: fixed)보다 위에 그려져

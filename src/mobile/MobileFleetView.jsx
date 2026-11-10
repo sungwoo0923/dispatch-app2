@@ -17,6 +17,7 @@ import { modificationStatus } from "../orderChange";
 import VehicleCarePanel from "../VehicleCarePanel";
 import { careSummary, vehicleDefaults } from "../vehicleCare";
 import CustomDatePicker from "../CustomDatePicker"; // 📅 2026-11-07 날짜는 프로그램 달력으로
+import MobileSelect from "./MobileSelect"; // 📱 2026-11-10 상태 필터 — 버튼 10개 대신 드롭다운
 
 const NAVY = "#1B2B4B";
 // 전화번호 하이픈 자동 포맷 (DispatchApp.jsx formatPhone과 동일 규칙)
@@ -1122,23 +1123,23 @@ export default function MobileFleetView({ dispatchData = [], userCompany = "", o
               style={{ width: "100%", paddingLeft: 36, paddingRight: 12, paddingTop: 10, paddingBottom: 10, border: "1px solid #E3E8F0", borderRadius: 10, fontSize: 14, outline: "none", background: "#F5F8FD", boxSizing: "border-box" }}
             />
           </div>
-          {/* 상태 필터 */}
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 6, paddingBottom: 8, marginBottom: 4 }}>{/* ⭐ 2026-11-06 상태 칩은 줄바꿈 — 옆으로 밀지 않아도 전부 보인다 */}
-            {STATUS_OPTS.map(opt => {
-              const active = statusFilter === opt;
-              return (
-                <button key={opt} onClick={() => setStatusFilter(opt)} style={{
-                  padding: "5px 12px", borderRadius: 99, border: active ? `1.5px solid ${NAVY}` : "1px solid #E3E8F0",
-                  background: active ? NAVY : "white", color: active ? "#fff" : "#3A4A66",
-                  fontSize: 14, fontWeight: 600, whiteSpace: "nowrap", cursor: "pointer", flexShrink: 0,
-                }}>
-                  {opt}
-                </button>
-              );
-            })}
-          </div>
-
-          <div style={{ fontSize: 14, color: "#5B6B85", marginBottom: 8, fontWeight: 600 }}>{filtered.length}명 표시</div>
+          {/* 상태 필터 — ⭐ 2026-11-10 버튼 10개가 두 줄로 깔려 정신없다는 의견 → 드롭다운 하나(상태마다 인원 수) + 표시 인원 */}
+          {(() => {
+            const kw = searchQ.trim().replace(/\s/g, "");
+            const base = scopedDrivers.filter(d => !kw || (d.차량번호 || "").replace(/\s/g, "").includes(kw) || d.이름.includes(kw));
+            const cnt = (opt) => opt === "전체" ? base.length : base.filter(d => { const ph = phaseOf(d); return ph === opt || (opt === "배차대기" && ph === "오더확인중"); }).length;
+            return (
+              <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+                <span style={{ fontSize: 13, fontWeight: 800, color: "#5B6B85", flexShrink: 0 }}>상태</span>
+                <div style={{ flex: 1, minWidth: 0 }} data-kp="fleet-status">
+                  <MobileSelect title="기사 상태" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="w-full h-10 px-3 rounded-[10px] border border-[#E3E8F0] bg-white text-[14px] font-bold text-[#0F1A30]">
+                    {STATUS_OPTS.map(opt => <option key={opt} value={opt}>{`${opt} · ${cnt(opt)}명`}</option>)}
+                  </MobileSelect>
+                </div>
+                <span style={{ fontSize: 14, color: "#5B6B85", fontWeight: 700, flexShrink: 0, fontVariantNumeric: "tabular-nums" }}>{filtered.length}명 표시</span>
+              </div>
+            );
+          })()}
 
           {filtered.length === 0 ? (
             <div style={{ padding: "32px 0", textAlign: "center", color: "#5B6B85", fontSize: 14 }}>

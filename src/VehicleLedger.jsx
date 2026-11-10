@@ -8,6 +8,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { runDelete } from "./DeleteProgress"; // ⭐ 2026-11-05 삭제 진행 창 + 한 번에 삭제
 import { createPortal } from "react-dom";
+import { useBackClose } from "./mobileBack"; // 🔙 2026-11-10 휴대폰 뒤로가기로 닫기
 import { collection, doc, onSnapshot, query, where, setDoc, deleteDoc, runTransaction, serverTimestamp, updateDoc } from "firebase/firestore";
 import * as XLSX from "xlsx";
 import { db, auth } from "./firebase";
@@ -474,6 +475,7 @@ const td = { padding: "10px 10px", fontSize: 14.5, fontWeight: 600, color: C.nav
 function Ledger({ v, co, appDriver, linkRaw, drivers, canEdit, by, narrow, purposeOpts, companyOpts, kindOpts, onBack, toast, drawer = false, editSignal = 0, coIntervals = {} }) {
   const ref = doc(db, VL_COL, v.id);
   const [edit, setEdit] = useState(null); // 기본 정보 수정 중 값
+  const [moreOpen, setMoreOpen] = useState(false); // 📱 휴대폰 [⋯] 인쇄 · 엑셀
   const [editor, setEditor] = useState(null); // { kind, row }
   const appVeh = linkRaw?.vehicle || {}; // 기사앱(기사 문서)에 입력된 제원 — 모델·연식은 기사앱과 같은 곳을 쓴다
   const startEdit = () => { setEdit(Object.fromEntries(BASIC_KEYS.map((k) => [k, (["제조사", "모델", "연식"].includes(k) ? (appVeh[k] || v[k]) : v[k]) || ""]))); setTimeout(() => document.getElementById("vl-basic")?.scrollIntoView({ behavior: "smooth", block: "start" }), 30); };
@@ -691,11 +693,36 @@ function Ledger({ v, co, appDriver, linkRaw, drivers, canEdit, by, narrow, purpo
         {drawer ? (
           <div style={{ width: "100%", display: "flex", alignItems: "center", gap: 8 }}>
             <span style={{ fontFamily: MONO, fontSize: 12.5, fontWeight: 800, letterSpacing: "0.12em", color: C.sky, flex: 1, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{narrow ? "VEHICLE" : "VEHICLE · 차량 정보"}</span>
-            {/* ⭐ 2026-11-09 순서: 기본 정보 수정 · 인쇄 · 엑셀 저장 · 닫기 */}
-            {canEdit && !edit && <Btn kind="light" onClick={startEdit}>✎ 기본 정보 수정</Btn>}
-            <Btn kind="light" onClick={() => printHtml(ledgerPrintHtml(v, co))}>인쇄(A4)</Btn>
-            <Btn kind="light" onClick={exportXlsx}>엑셀 저장</Btn>
-            <Btn kind="light" onClick={onBack} title="닫기 (Esc)">✕ 닫기</Btn>
+            {narrow ? (
+              /* 📱 2026-11-10 휴대폰 — 왼쪽 위 [‹ 뒤로] · 오른쪽 [✎ 수정] [⋯](인쇄 · 엑셀) — 버튼 4개가 한 줄에 몰려 닫기가 안 보이던 문제 */
+              <>
+                <button type="button" data-kp="vl-back" onClick={onBack} style={{ order: -2, height: 38, padding: "0 14px 0 10px", borderRadius: 11, border: "1px solid rgba(143,176,240,.35)", background: "rgba(255,255,255,.12)", color: "#fff", fontSize: 15, fontWeight: 900, display: "inline-flex", alignItems: "center", gap: 4, cursor: "pointer", flexShrink: 0 }}>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6" /></svg>뒤로
+                </button>
+                {canEdit && !edit && <Btn kind="light" onClick={startEdit}>✎ 수정</Btn>}
+                <span style={{ position: "relative", flexShrink: 0 }}>
+                  <Btn kind="light" onClick={() => setMoreOpen((o) => !o)} title="더보기">⋯</Btn>
+                  {moreOpen && (
+                    <>
+                      <span onClick={() => setMoreOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 1 }} />
+                      <span data-kp="vl-more" style={{ position: "absolute", right: 0, top: 42, zIndex: 2, minWidth: 150, background: "#fff", borderRadius: 12, boxShadow: "0 14px 34px rgba(11,20,40,.28)", border: `1px solid ${C.line}`, overflow: "hidden", display: "flex", flexDirection: "column" }}>
+                        {[["인쇄(A4)", () => printHtml(ledgerPrintHtml(v, co))], ["엑셀 저장", exportXlsx]].map(([l, fn]) => (
+                          <button key={l} type="button" onClick={() => { setMoreOpen(false); fn(); }} style={{ height: 46, padding: "0 16px", border: "none", borderBottom: `1px solid ${C.line}`, background: "#fff", color: C.ink || "#0F1A30", fontSize: 15, fontWeight: 800, textAlign: "left", cursor: "pointer" }}>{l}</button>
+                        ))}
+                      </span>
+                    </>
+                  )}
+                </span>
+              </>
+            ) : (
+              <>
+                {/* ⭐ 2026-11-09 순서: 기본 정보 수정 · 인쇄 · 엑셀 저장 · 닫기 */}
+                {canEdit && !edit && <Btn kind="light" onClick={startEdit}>✎ 기본 정보 수정</Btn>}
+                <Btn kind="light" onClick={() => printHtml(ledgerPrintHtml(v, co))}>인쇄(A4)</Btn>
+                <Btn kind="light" onClick={exportXlsx}>엑셀 저장</Btn>
+                <Btn kind="light" onClick={onBack} title="닫기 (Esc)">✕ 닫기</Btn>
+              </>
+            )}
           </div>
         ) : <div style={{ width: narrow ? "100%" : "auto" }}><Btn kind="light" onClick={onBack}>← 차량 목록</Btn></div>}
         <button type="button" onClick={() => canEdit && photoRef.current?.click()} title={canEdit ? "차량 사진 바꾸기" : ""} style={{ position: "relative", width: narrow ? 92 : 132, height: narrow ? 70 : 96, borderRadius: 14, border: "1px solid rgba(143,176,240,.35)", background: photo ? `center/cover no-repeat url(${photo})` : "rgba(255,255,255,.06)", display: "flex", alignItems: "center", justifyContent: "center", cursor: canEdit ? "pointer" : "default", flexShrink: 0, overflow: "hidden", padding: 0 }}>
@@ -942,6 +969,7 @@ function Ledger({ v, co, appDriver, linkRaw, drivers, canEdit, by, narrow, purpo
 // ⭐ 2026-11-02 오른쪽에서 밀려 나오는 차량 정보·수정 패널(예전엔 화면 전체가 대장으로 바뀌어 위에서 수정창이 열렸다)
 function LedgerDrawer({ onClose, onDouble, narrow, children }) {
   const openedAt = useRef(Date.now());
+  useBackClose(true, onClose); // 🔙 휴대폰 뒤로가기(안드로이드 버튼 · 아이폰 밀기) = 닫기
   const [shown, setShown] = useState(false);
   useEffect(() => { const t = requestAnimationFrame(() => setShown(true)); return () => cancelAnimationFrame(t); }, []);
   useEffect(() => {
