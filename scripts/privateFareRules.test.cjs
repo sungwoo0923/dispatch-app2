@@ -37,6 +37,8 @@ async function t(name, fn) {
   await t("만들기: 일반 직원 거절", () => assertFails(setDoc(doc(ST, S), { companyName: "큐런", viewers: ["staff"] })));
   await t("만들기: 다른 회사 마스터 거절", () => assertFails(setDoc(doc(OT, S), { companyName: "큐런", viewers: ["other"] })));
   await t("만들기: 빈 viewers 거절", () => assertFails(setDoc(doc(MA, S), { companyName: "큐런", viewers: [] })));
+  await t("만들기: 최고관리자가 다른 회사 대신 켜기", () => assertSucceeds(setDoc(doc(TM, "privateFareSettings/비운송"), { companyName: "비운송", viewers: ["other"] })));
+  await t("읽기: 최고관리자가 켠 뒤 담당자 아니면 거절", () => assertFails(getDoc(doc(TM, "privateFareSettings/비운송"))));
   await t("만들기: 같은 회사 마스터가 담당자만 넣어 만들기", () => assertSucceeds(setDoc(doc(MA, S), { companyName: "큐런", viewers: ["owner"], clients: [{ name: "홍길거래처", mode: "add", value: 100000 }] })));
   await t("설정 읽기: 담당자", () => assertSucceeds(getDoc(doc(OW, S))));
   await t("설정 읽기: 마스터(담당자 아님) 거절", () => assertFails(getDoc(doc(MA, S))));
