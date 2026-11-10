@@ -29,6 +29,7 @@ import { withCo, getTenant } from "./fsTenant";
 const DEV_DEMO_REVENUE = import.meta.env.DEV && (() => { try { return window.location.pathname === "/preview" && new URLSearchParams(window.location.search).get("demo") === "1"; } catch { return false; } })();
 import { coDocKey } from "./coKey";
 import { createPortal } from "react-dom";
+import DriverContextMenu, { driverCopyText, copyToClipboard } from "./DriverContextMenu"; // 🖱 2026-11-10 기사관리 오른쪽 클릭 메뉴
 import { useDriverEditChoice, DriverEditButton, SamePlateChips, driversOfPlate, pickDriverFor, isRegisteredCombo, saveDriverChoice } from "./DriverEditChoice"; // ⭐ 2026-11-05 매칭된 기사 이름·전화 [수정]
 import { Navigate, useNavigate } from "react-router-dom";
 import { CartesianGrid, Line, LineChart, BarChart, Bar, Cell, LabelList, PieChart, Pie, ResponsiveContainer, Tooltip, XAxis, YAxis, Legend } from "recharts";
@@ -56916,6 +56917,26 @@ function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, sho
   const [page, setPage] = React.useState(1);
   const perPage = 20;
   const [editDriverModal, setEditDriverModal] = React.useState(null); // 더블클릭 수정 팝업
+  const [drvCtx, setDrvCtx] = React.useState(null); // 🖱 2026-11-10 오른쪽 클릭 메뉴 { x, y, rows }
+  const [drvToast, setDrvToast] = React.useState("");
+  // 체크한 기사 — 화면 표 순서대로(검색으로 안 보이는 체크 기사는 뒤에)
+  const selectedInOrder = () => { const seen = new Set(); const out = []; [...filtered, ...drivers].forEach((d) => { if (d?.id && selected.has(d.id) && !seen.has(d.id)) { seen.add(d.id); out.push(d); } }); return out; };
+  // ⌨ 체크한 기사가 있으면 Ctrl+C = "차량번호 이름 전화번호" 한 줄에 한 명(입력칸에 커서가 있거나 글자를 드래그했으면 평소처럼)
+  React.useEffect(() => {
+    if (mobile) return undefined;
+    const k = async (e) => {
+      if (!(e.ctrlKey || e.metaKey) || String(e.key).toLowerCase() !== "c" || !selected.size) return;
+      const a = document.activeElement; if (a && (a.tagName === "INPUT" || a.tagName === "TEXTAREA" || a.isContentEditable)) return;
+      if (String(window.getSelection?.() || "").trim()) return;
+      const rows = selectedInOrder(); if (!rows.length) return;
+      e.preventDefault();
+      const ok = await copyToClipboard(driverCopyText(rows, "all"));
+      setDrvToast(ok ? `복사했습니다 · 차량번호 · 이름 · 전화번호 ${rows.length}명` : "복사하지 못했어요");
+    };
+    window.addEventListener("keydown", k);
+    return () => window.removeEventListener("keydown", k);
+  });
+  React.useEffect(() => { if (!drvToast) return undefined; const t = setTimeout(() => setDrvToast(""), 2200); return () => clearTimeout(t); }, [drvToast]);
 
   // 기사정리 팝업 상태
   const [cleanupOpen, setCleanupOpen] = React.useState(false);
@@ -57563,7 +57584,14 @@ function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, sho
                     return (
                       <tr key={`${docId}_${i}`}
                         className={`transition hover:bg-blue-50/40 cursor-pointer ${mgrLast ? "border-b-2 border-[#1B2B4B]/30" : "border-b border-gray-100"} ${mgrHit ? "kp-row-hit" : grade==="블랙" ? "bg-gray-100" : i%2===0 ? "bg-white" : "bg-gray-50/50"}`}
-                        onDoubleClick={() => setEditDriverModal({ ...r })}>
+                        onDoubleClick={() => setEditDriverModal({ ...r })}
+                        onContextMenu={(e) => {
+                          // 🖱 2026-11-10 오른쪽 클릭 — 체크한 기사 위에서 누르면 체크한 기사 전부, 아니면 이 기사만
+                          e.preventDefault();
+                          const _z = parseFloat(document.getElementById("root")?.style.zoom) || 1;
+                          const rows = selected.has(docId) && selected.size > 1 ? selectedInOrder() : [r];
+                          setDrvCtx({ x: e.clientX / _z, y: e.clientY / _z, rows });
+                        }}>
                         <td className="px-3 py-2.5 text-center" style={mgrHit ? { boxShadow: "inset 4px 0 0 #E9C46A" } : undefined}>
                           <input autoComplete="off" type="checkbox" checked={selected.has(docId)} onChange={(e) => { e.stopPropagation(); toggleOne(docId); }} onClick={e => e.stopPropagation()} />
                         </td>
@@ -57808,6 +57836,25 @@ function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, sho
           </div>
         </div>
       )}
+
+      {/* 🖱 2026-11-10 기사 오른쪽 클릭 메뉴 · 복사 알림 */}
+      {drvCtx && (
+        <DriverContextMenu x={drvCtx.x} y={drvCtx.y} rows={drvCtx.rows} readOnly={false /* 조회전용은 upsertDriverSafe · removeDriverSafe가 막는다 */} onClose={() => setDrvCtx(null)}
+          onCopied={(ok, t, label) => setDrvToast(ok ? `복사했습니다 · ${label}${drvCtx.rows.length > 1 ? ` ${drvCtx.rows.length}명` : ""}` : "복사하지 못했어요")}
+          onEdit={(r) => setEditDriverModal({ ...r })}
+          onGuide={(rows) => setGuideFor(rows)}
+          onGrade={async (rows, g) => {
+            if (rows.length > 1 && !(await kpConfirm(`${rows.length}명의 등급을 「${g}」(으)로 바꿀까요?`))) return;
+            for (const r of rows) { const { vehicle: _v, care: _c, careLogs: _cl, ...rest } = r; await upsertDriver({ ...rest, 등급: g, ...(g === "블랙" ? { 팝업표시: true } : {}) }); }
+            setDrvToast(`등급을 「${g}」(으)로 바꿨습니다${rows.length > 1 ? ` · ${rows.length}명` : ""}`);
+          }}
+          onDelete={async (rows) => {
+            if (!(await kpConfirm(`${rows.length > 1 ? `${rows.length}명을` : `${rows[0]?.차량번호 || ""} ${rows[0]?.이름 || ""} 기사를`} 삭제할까요?`))) return;
+            await removeDriver(rows.map((r) => r.id));
+            setSelected((prev) => { const n = new Set(prev); rows.forEach((r) => n.delete(r.id)); return n; });
+          }} />
+      )}
+      {drvToast && <div data-kp="drv-toast" className="fixed left-1/2 -translate-x-1/2 bottom-8 z-[999999] px-4 h-11 rounded-xl bg-[#0F1A30] text-white text-[14px] font-bold flex items-center gap-2 shadow-[0_12px_30px_rgba(11,20,40,0.35)]"><span className="w-1.5 h-1.5 rounded-full bg-[#8FB0F0]" />{drvToast}</div>}
 
       {/* ===== 기사정리 팝업 ===== */}
       {cleanupOpen && (
