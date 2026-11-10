@@ -16,6 +16,22 @@ service firebase.storage {
         && (request.resource.contentType.matches('image/.*') || request.resource.contentType == 'application/pdf');
     }
 
+    // 🏢 2026-11-10 PnK PROJECT 인트라넷 자료실 — pnk/files/{자료 번호}/{파일}
+    //  구성원만(Firestore pnkMembers status active · 대표). adminOnly 자료는 관리자만. 올리기 50MB 미만.
+    //  자료 문서(pnkFiles/{fileId})를 먼저 만들고 파일을 올린다 — 문서에 적힌 올린 사람 · 관리자만 바꾸고 지운다.
+    match /pnk/files/{fileId}/{file} {
+      function pnkMem() { return firestore.get(/databases/(default)/documents/pnkMembers/$(request.auth.uid)).data; }
+      function pnkStaffS() {
+        return request.auth != null && (hubAdmin() || (firestore.exists(/databases/(default)/documents/pnkMembers/$(request.auth.uid)) && pnkMem().get('status', '') == 'active'));
+      }
+      function pnkAdminS() { return hubAdmin() || (pnkStaffS() && pnkMem().get('role', '') in ['owner', 'admin']); }
+      function pnkFileDoc() { return firestore.get(/databases/(default)/documents/pnkFiles/$(fileId)).data; }
+      allow read: if pnkStaffS() && (pnkFileDoc().get('adminOnly', false) != true || pnkAdminS());
+      allow create, update: if pnkStaffS() && request.resource.size < 50 * 1024 * 1024
+        && (pnkFileDoc().uploaderUid == request.auth.uid || pnkAdminS());
+      allow delete: if pnkStaffS() && (pnkFileDoc().uploaderUid == request.auth.uid || pnkAdminS());
+    }
+
     // ⭐ 2026-11-06 로지스웹 허브 콜 — 회원 서류 · 프로필 사진 · 인수증 사진
     //  관리자 = 최고관리자 이메일 또는 users/{uid}.role == "totalMaster"(Firestore 규칙 isTotalMasterUser와 같은 기준)
     // 🎫 2026-11-08 로그인 토큰 권한(custom claims, v == 1 — functions/authClaims.js가 서버에서만 넣는다 · firestore.rules ck()와 같다)

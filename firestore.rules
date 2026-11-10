@@ -2339,6 +2339,104 @@ service cloud.firestore {
       allow read, update, delete: if isTotalMasterUser();
     }
 
+    // ────────────────────────────────────────────────────────────
+    // 🏢 PnK PROJECT 사내 인트라넷(pnk-site, 2026-11-10) — 로지스웹 고객사와 상관없는 본사 전용 데이터
+    //  구성원 = pnkMembers/{uid} 문서가 status "active" 인 계정. 대표 = 최고관리자(isTotalMasterUser).
+    //  관리자 = 대표 또는 role "owner" · "admin". 로지스웹 고객사 직원은 구성원 문서가 없으면 아무것도 못 본다.
+    //  ⚠ 아래 컬렉션은 맨 아래 catchAllExcluded 목록에도 넣었다(빠지면 공용 규칙이 덮는다).
+    // ────────────────────────────────────────────────────────────
+    function pnkDoc() {
+      return /databases/$(database)/documents/pnkMembers/$(request.auth.uid);
+    }
+    function pnkStaff() {
+      return isSignedIn() && (isTotalMasterUser() || (exists(pnkDoc()) && get(pnkDoc()).data.get('status', '') == 'active'));
+    }
+    function pnkAdmin() {
+      return isSignedIn() && (isTotalMasterUser() || (exists(pnkDoc()) && get(pnkDoc()).data.get('status', '') == 'active'
+        && get(pnkDoc()).data.get('role', '') in ['owner', 'admin']));
+    }
+    function pnkOnly(keys) {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(keys);
+    }
+    // 구성원 — 본인은 "승인 대기 · 직원"으로만 가입 요청, 이름·연락처만 고친다. 역할·상태는 관리자(대표 역할은 대표만)
+    match /pnkMembers/{uid} {
+      allow read: if isSignedIn() && (request.auth.uid == uid || pnkStaff());
+      allow create: if isSignedIn() && (
+        (request.auth.uid == uid && request.resource.data.uid == uid && request.resource.data.status == 'pending' && request.resource.data.role == 'staff'
+          && request.resource.data.get('mailId', '') == '')
+        || (request.auth.uid == uid && isTotalMasterUser())
+        || (pnkAdmin() && request.resource.data.get('role', '') != 'owner'));
+      allow update: if isSignedIn() && (
+        (request.auth.uid == uid && pnkOnly(['name', 'phone', 'bio', 'birthday', 'updatedAt']))
+        || (pnkAdmin() && (isTotalMasterUser() || (request.resource.data.get('role', '') != 'owner' && resource.data.get('role', '') != 'owner'))));
+      allow delete: if pnkAdmin() && (isTotalMasterUser() || resource.data.get('role', '') != 'owner');
+    }
+    // 공지 · 게시판 · 회의록 — 공지는 관리자만 쓰기. 누구나 읽음 표시(readBy)만 남길 수 있다
+    match /pnkPosts/{id} {
+      allow read: if pnkStaff();
+      allow create: if pnkStaff() && request.resource.data.authorUid == request.auth.uid
+        && (request.resource.data.board != 'notice' || pnkAdmin());
+      allow update: if pnkStaff() && (
+        ((resource.data.authorUid == request.auth.uid || pnkAdmin()) && request.resource.data.authorUid == resource.data.authorUid
+          && request.resource.data.board == resource.data.board)
+        || pnkOnly(['readBy', 'updatedAt']));
+      allow delete: if pnkStaff() && (resource.data.authorUid == request.auth.uid || pnkAdmin());
+      match /comments/{cid} {
+        allow read: if pnkStaff();
+        allow create: if pnkStaff() && request.resource.data.authorUid == request.auth.uid;
+        allow delete: if pnkStaff() && (resource.data.authorUid == request.auth.uid || pnkAdmin());
+      }
+    }
+    // 자료실 — adminOnly 자료는 관리자만 보고 올린다
+    match /pnkFiles/{id} {
+      allow read: if pnkStaff() && (resource.data.get('adminOnly', false) != true || pnkAdmin());
+      allow create: if pnkStaff() && request.resource.data.uploaderUid == request.auth.uid
+        && (request.resource.data.get('adminOnly', false) != true || pnkAdmin());
+      allow update, delete: if pnkStaff() && (resource.data.uploaderUid == request.auth.uid || pnkAdmin());
+    }
+    // 업무 · 일정 · 영업 · 서비스 현황 — 구성원 누구나(지우기는 만든 사람 또는 관리자)
+    match /pnkTasks/{id} {
+      allow read, update: if pnkStaff();
+      allow create: if pnkStaff() && request.resource.data.createdBy == request.auth.uid;
+      allow delete: if pnkStaff() && (resource.data.createdBy == request.auth.uid || pnkAdmin());
+    }
+    match /pnkEvents/{id} {
+      allow read, update: if pnkStaff();
+      allow create: if pnkStaff() && request.resource.data.createdBy == request.auth.uid;
+      allow delete: if pnkStaff() && (resource.data.createdBy == request.auth.uid || pnkAdmin());
+    }
+    match /pnkSales/{id} {
+      allow read, update: if pnkStaff();
+      allow create: if pnkStaff() && request.resource.data.createdBy == request.auth.uid;
+      allow delete: if pnkStaff() && (resource.data.createdBy == request.auth.uid || pnkAdmin());
+    }
+    match /pnkServices/{id} {
+      allow read: if pnkStaff();
+      allow write: if pnkAdmin();
+    }
+    match /pnkReleases/{id} {
+      allow read: if pnkStaff();
+      allow create: if pnkStaff() && request.resource.data.createdBy == request.auth.uid;
+      allow update, delete: if pnkStaff() && (resource.data.createdBy == request.auth.uid || pnkAdmin());
+    }
+    // 회사 정보 — info 는 구성원 모두 읽기, secure(계좌 · 인증서 위치 등)는 관리자만. 쓰기는 관리자
+    match /pnkCompany/{docId} {
+      allow read: if pnkStaff() && (docId != 'secure' || pnkAdmin());
+      allow write: if pnkAdmin();
+    }
+    // 매출 · 비용 장부 — 관리자만
+    match /pnkFinance/{id} {
+      allow read, write: if pnkAdmin();
+    }
+    // 사내메일 — 보낸 사람 · 받는 사람만 읽는다. 받은 사람은 읽음 · 휴지통 · 별표 표시만 바꾼다(내용은 못 고침)
+    match /pnkMail/{id} {
+      allow read: if pnkStaff() && (request.auth.uid in resource.data.toUids || resource.data.fromUid == request.auth.uid);
+      allow create: if pnkStaff() && request.resource.data.fromUid == request.auth.uid
+        && request.resource.data.toUids is list && request.resource.data.toUids.size() <= 50;
+      allow update: if pnkStaff() && (request.auth.uid in resource.data.toUids || resource.data.fromUid == request.auth.uid)
+        && pnkOnly(['readBy', 'trashBy', 'starBy', 'updatedAt']);
+    }
+
     // ⭐ 2026-11-07 공용 규칙도 회사 검사 — 따로 규칙이 없는 컬렉션은 "문서의 companyName == 내 회사"인 문서만(최고관리자는 전체).
     //  예전: 승인된 계정이면 회사와 상관없이 모두 읽고 쓰기(users·메신저·기사 위치·운송사 신청서·시스템 스위치까지 — 이 목록에 없던 컬렉션 전부)
     //  ⚠ 따로 규칙을 둔 컬렉션은 반드시 아래 제외 목록에 넣는다(규칙은 "하나라도 허용하면 허용" — 빠지면 이 규칙이 따로 정한 규칙을 덮는다)
@@ -2356,7 +2454,10 @@ service cloud.firestore {
       allow write: if !catchAllExcluded(col) && catchAllWrite();
     }
     function catchAllExcluded(col) {
-      return col in ['adminSecrets', 'resetBackups', 'resetLogs', 'resetJobs', 'resetLocks', 'loginSessions', 'orderTrash', 'recurringRuns', 'internalMails', 'approvals', 'boardPosts', 'notices', 'handovers', 'salesQuotes', 'contracts', 'platformNotices', 'platformInvoices', 'companyPlans', 'publicPricing', 'planRequests', 'userPrefs', 'companyRoleOverrides', 'customRoles', 'supportRequests', 'supportSessions', 'driverStatements', 'fleetPenalties', 'driverContracts', 'fixedRoutes', 'routeBoards', 'personalSchedules', 'publicCompanies', 'companyContracts',
+      return col in [
+        // 🏢 2026-11-10 PnK PROJECT 사내 인트라넷 — 위에서 따로 정함(빠지면 로지스웹 고객사 직원이 읽고 쓸 수 있다)
+        'pnkMembers', 'pnkPosts', 'pnkFiles', 'pnkTasks', 'pnkEvents', 'pnkSales', 'pnkServices', 'pnkReleases', 'pnkCompany', 'pnkFinance', 'pnkMail',
+        'adminSecrets', 'resetBackups', 'resetLogs', 'resetJobs', 'resetLocks', 'loginSessions', 'orderTrash', 'recurringRuns', 'internalMails', 'approvals', 'boardPosts', 'notices', 'handovers', 'salesQuotes', 'contracts', 'platformNotices', 'platformInvoices', 'companyPlans', 'publicPricing', 'planRequests', 'userPrefs', 'companyRoleOverrides', 'customRoles', 'supportRequests', 'supportSessions', 'driverStatements', 'fleetPenalties', 'driverContracts', 'fixedRoutes', 'routeBoards', 'personalSchedules', 'publicCompanies', 'companyContracts',
         // 🔒 회사별로 잠근 컬렉션(위에서 따로 정함)
         'orders', 'dispatch', 'dispatch_test', 'fixedClients', 'drivers', 'clients', 'places', 'recurringOrders', 'deletedOrders',
         'driver_completed_archive', 'notifications', 'schedules', 'scheduledEmails', 'emailLogs', 'hrResumes', 'attendanceRequests',
