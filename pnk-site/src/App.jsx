@@ -108,7 +108,9 @@ export default function App() {
 }
 
 
-// ───────────────────────── 왼쪽 메뉴 + 본문 ─────────────────────────
+const todayLabel = () => { const d = new Date(Date.now() + 9 * 3600e3); return `${d.getUTCMonth() + 1}월 ${d.getUTCDate()}일 (${"일월화수목금토"[d.getUTCDay()]})`; };
+
+// ───────────────────────── 왼쪽 메뉴 + 위쪽 줄 + 본문 ─────────────────────────
 function Shell({ children }) {
   const me = useMeCtx();
   const loc = useLocation();
@@ -130,26 +132,25 @@ function Shell({ children }) {
   };
   const groups = UI.menuOf(cfg, MENU).map((g) => ({ ...g, items: g.items.filter((it) => (!it.admin || me.isAdmin) && (!it.owner || me.owner) && (!it.hidden || UI.isEditing())) })).filter((g) => g.items.length);
 
+  const here = groups.flatMap((g) => g.items.map((it) => ({ g, it }))).find((x) => (x.it.to === "/" ? loc.pathname === "/" : loc.pathname.startsWith(x.it.to)));
+
   const side = (
-    <aside id="pnk-side" className="w-[236px] shrink-0 h-full flex flex-col text-white" style={{ background: "linear-gradient(180deg, #16264A 0%, #1B2B4B 55%, #14213D 100%)" }}>
-      <div className="px-5 pt-6 pb-5 border-b border-white/10 flex items-center gap-3">
-        <img src="/brand/pnk-mark-192.png" alt="" className="w-10 h-10 rounded-xl bg-white shrink-0" />
-        <div className="min-w-0">
-          <div className="text-[10.5px] font-extrabold tracking-[0.18em] text-blue-200/70">{cfg.theme?.brandSub || "INTRANET"}</div>
-          <div className="text-[15px] font-black truncate">{cfg.theme?.brandTitle || "PnK PROJECT"}</div>
-        </div>
+    <aside id="pnk-side" className="w-[224px] shrink-0 h-full flex flex-col text-white bg-navy-900">
+      <div className="px-5 h-14 shrink-0 flex items-center gap-2.5">
+        <img src="/brand/pnk-mark-192.png" alt="" className="w-8 h-8 rounded-lg bg-white shrink-0" />
+        <div className="text-[15px] font-black truncate">{cfg.theme?.brandTitle || "PnK PROJECT"}</div>
       </div>
-      <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-5 no-scrollbar">
+      <nav className="flex-1 overflow-y-auto px-3 pt-2 pb-4 space-y-4 no-scrollbar">
         {groups.map((g) => (
           <div key={g.label || "top"}>
-            {g.label && <div className="px-3 mb-1.5 text-[11px] font-bold text-blue-200/75">{g.label}</div>}
-            <div className="space-y-1">
+            {g.label && <div className="px-3 mb-1 text-[11px] font-bold text-blue-200/60">{g.label}</div>}
+            <div className="space-y-0.5">
               {g.items.map((it) => {
                 const b = it.badge ? badges[it.badge] : 0;
                 return (
                   <NavLink key={it.to} to={it.to} end={it.to === "/"}
-                    className={({ isActive }) => cx("w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-[13.5px] font-semibold transition",
-                      isActive ? "bg-white text-navy shadow-[0_6px_16px_rgba(0,0,0,0.18)]" : "text-blue-50/80 hover:bg-white/[0.08] hover:text-white")}>
+                    className={({ isActive }) => cx("w-full flex items-center gap-3 px-3 h-10 rounded-lg text-[13.5px] transition",
+                      isActive ? "bg-white text-navy font-black" : "font-semibold text-blue-50/80 hover:bg-white/[0.08] hover:text-white")}>
                     {({ isActive }) => (<>
                       <Icon name={it.icon} size={18} className={isActive ? "text-navy" : "text-blue-200/80"} />
                       <span className={cx("flex-1 text-left truncate", it.hidden && "line-through opacity-50")}>{it.label}</span>
@@ -179,7 +180,7 @@ function Shell({ children }) {
     <div className="md:flex md:h-screen md:overflow-hidden">
       <div className="hidden md:block h-full">{side}</div>
       {/* 휴대폰: 위쪽 줄 + 햄버거 메뉴 */}
-      <header className="md:hidden sticky top-0 z-30 h-14 px-4 flex items-center gap-3 text-white" style={{ background: "#1B2B4B" }}>
+      <header className="md:hidden sticky top-0 z-30 h-14 px-4 flex items-center gap-3 text-white bg-navy-900">
         <button type="button" onClick={() => setOpen(true)} className="w-9 h-9 -ml-1 rounded-lg flex items-center justify-center hover:bg-white/10" aria-label="메뉴"><Icon name="menu" size={20} /></button>
         <img src="/brand/pnk-mark-64.png" alt="" className="w-7 h-7 rounded-lg bg-white" />
         <div className="text-[15px] font-black flex-1">PnK PROJECT</div>
@@ -191,9 +192,25 @@ function Shell({ children }) {
           <div className="flex-1 bg-black/40" />
         </div>
       )}
-      <main id="pnk-main" className="flex-1 min-w-0 md:h-full md:overflow-y-auto px-4 md:px-7 py-5 md:py-6">
-        <div className="w-full max-w-[1600px] mx-auto">{children}</div>
-      </main>
+      <div className="flex-1 min-w-0 md:h-full flex flex-col">
+        {/* PC: 위쪽 줄 — 지금 화면 위치 · 날짜 · 메일/결재 바로가기 */}
+        <div id="pnk-top" className="hidden md:flex shrink-0 h-14 px-7 items-center gap-2 bg-white border-b border-line">
+          <div className="flex-1 min-w-0 flex items-center gap-2 text-[13.5px]">
+            {here?.g.label && <><span className="font-semibold text-[#5A6A86]">{here.g.label}</span><span className="text-[#C0C8D6]">/</span></>}
+            <span className="font-black text-navy-950 truncate">{here?.it.label || ""}</span>
+          </div>
+          <span className="text-[13px] font-bold text-[#3A4A66] tnum mr-2">{todayLabel()}</span>
+          {[["/mail", "mail", "사내메일", badges.mail], ["/approvals", "stamp", "전자결재", badges.approval], ["/notice", "megaphone", "사내 공지", badges.notice]].map(([to, icon, label, n]) => (
+            <NavLink key={to} to={to} title={label} className={({ isActive }) => cx("relative w-9 h-9 rounded-lg flex items-center justify-center transition", isActive ? "bg-navy-100 text-navy" : "text-[#5A6A86] hover:bg-navy-50 hover:text-navy")}>
+              <Icon name={icon} size={19} />
+              {n > 0 && <span className="absolute -top-0.5 -right-0.5 min-w-[17px] h-[17px] px-1 rounded-full text-[10px] font-black flex items-center justify-center" style={{ background: "#FF3B30", color: "#fff" }}>{n}</span>}
+            </NavLink>
+          ))}
+        </div>
+        <main id="pnk-main" className="flex-1 min-w-0 min-h-0 md:overflow-y-auto px-4 md:px-7 py-5 md:py-6">
+          <div className="w-full max-w-[1600px] mx-auto">{children}</div>
+        </main>
+      </div>
       {me.owner && <React.Suspense fallback={null}><EditLayer me={me} menu={MENU} /></React.Suspense>}
     </div>
   );

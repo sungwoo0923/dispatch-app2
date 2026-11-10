@@ -11,15 +11,14 @@ import { MonthPicker } from "../../src/kpInputs.jsx";
 
 export const cx = (...a) => a.filter(Boolean).join(" ");
 
-export function Card({ title, en, right, children, className = "", pad = true }) {
+// 카드 · 화면 머리 · 숫자 카드 — 한 가지 모양(흰 바탕 · 얇은 테두리)으로 통일. en(영문 작은 글씨)은 받기만 하고 그리지 않는다
+const CARD = "bg-white rounded-2xl border border-line shadow-[0_1px_2px_rgba(16,24,40,0.04)]";
+export function Card({ title, right, children, className = "", pad = true }) {
   return (
-    <section className={cx("bg-white rounded-[20px] border border-line shadow-[0_1px_2px_rgba(16,24,40,0.04),0_10px_28px_rgba(16,24,40,0.06)]", className)}>
+    <section className={cx(CARD, className)}>
       {(title || right) && (
-        <div className="flex items-center gap-3 px-5 pt-4 pb-3 border-b border-[#EEF1F6]">
-          <div className="min-w-0 flex-1">
-            {en && <div className="text-[10.5px] font-extrabold tracking-[0.16em] text-[#7A8AA8]">{en}</div>}
-            {title && <h2 className="text-[16px] font-black text-navy-950 truncate">{title}</h2>}
-          </div>
+        <div className="flex items-center gap-3 px-5 h-[52px] border-b border-[#EEF1F6]">
+          <h2 className="min-w-0 flex-1 text-[15px] font-black text-navy-950 truncate">{title}</h2>
           {right}
         </div>
       )}
@@ -28,26 +27,22 @@ export function Card({ title, en, right, children, className = "", pad = true })
   );
 }
 
-// 상단 인사 카드(로지스웹 AdminShell 히어로와 같은 그라데이션)
-export function Hero({ en, title, desc, children }) {
+// 화면 머리 — 제목 · 한 줄 요약 · 오른쪽 버튼(모든 화면이 같은 자리 · 같은 모양)
+export function Hero({ title, desc, children }) {
   return (
-    <section className="relative overflow-hidden rounded-[26px] px-6 md:px-8 py-6 md:py-7 text-white mb-5 shadow-[0_14px_34px_rgba(27,43,75,0.25)]"
-      style={{ background: "linear-gradient(120deg, #1B2B4B 0%, #233B66 55%, #2D4C82 100%)" }}>
-      <div className="absolute -right-16 -top-20 w-72 h-72 rounded-full bg-white/[0.06]" />
-      <div className="absolute right-40 -bottom-24 w-56 h-56 rounded-full bg-white/[0.05]" />
-      <div className="relative">
-        {en && <div className="text-[11px] font-extrabold tracking-[0.18em] text-blue-200/80">{en}</div>}
-        <h1 className="mt-1 text-[22px] md:text-[26px] font-black tracking-tight">{title}</h1>
-        {desc && <p className="mt-1.5 text-[14px] font-medium text-blue-50/90">{desc}</p>}
-        {children && <div className="mt-4 flex flex-wrap gap-2">{children}</div>}
+    <header className="flex flex-wrap items-center gap-x-4 gap-y-3 mb-5 min-h-[40px]">
+      <div className="min-w-0 flex-1 flex flex-wrap items-baseline gap-x-3 gap-y-1">
+        <h1 className="text-[22px] font-black tracking-tight text-navy-950 whitespace-nowrap">{title}</h1>
+        {desc && <p className="text-[13.5px] font-semibold text-navy-600 min-w-0">{desc}</p>}
       </div>
-    </section>
+      {children && <div className="flex flex-wrap items-center gap-2">{children}</div>}
+    </header>
   );
 }
-export function HeroBtn({ icon, children, onClick, active }) {
+export function HeroBtn({ icon, children, onClick, active, sub }) {
   return (
-    <button type="button" onClick={onClick} className={cx("flex items-center gap-2 px-4 py-2 rounded-full text-[13px] font-bold ring-1 transition",
-      active ? "bg-white text-navy ring-white" : "bg-white/10 ring-white/20 hover:bg-white/20")}>
+    <button type="button" onClick={onClick} className={cx("inline-flex items-center gap-1.5 h-10 px-4 rounded-xl text-[13.5px] font-black transition whitespace-nowrap",
+      sub && !active ? "bg-white text-navy border border-[#DCE3EE] hover:border-navy-500" : "bg-navy text-white hover:bg-navy-700")}>
       {icon && <Icon name={icon} size={16} />}{children}
     </button>
   );
@@ -56,12 +51,12 @@ export function HeroBtn({ icon, children, onClick, active }) {
 export function Stat({ icon, label, value, sub, onClick }) {
   const C = onClick ? "button" : "div";
   return (
-    <C type={onClick ? "button" : undefined} onClick={onClick} className={cx("text-left bg-white rounded-[20px] border border-line shadow-[0_1px_2px_rgba(16,24,40,0.04),0_10px_28px_rgba(16,24,40,0.06)] px-5 py-4 flex items-center gap-4 min-w-0", onClick && "hover:border-navy-500 transition")}>
-      <div className="w-11 h-11 rounded-2xl flex items-center justify-center shrink-0 bg-navy-100 text-navy"><Icon name={icon} size={21} /></div>
+    <C type={onClick ? "button" : undefined} onClick={onClick} className={cx(CARD, "text-left px-5 py-4 flex items-center gap-4 min-w-0", onClick && "hover:border-navy-500 transition")}>
+      <div className="w-11 h-11 rounded-xl flex items-center justify-center shrink-0 bg-navy-100 text-navy"><Icon name={icon} size={21} /></div>
       <div className="min-w-0">
-        <div className="text-[13px] font-bold text-gray-600 truncate">{label}</div>
+        <div className="text-[13px] font-bold text-[#3A4A66] truncate">{label}</div>
         <div className="text-[24px] font-black text-navy-950 tnum leading-tight truncate">{value}</div>
-        {sub && <div className="text-[12px] font-semibold text-[#7A8AA8] truncate">{sub}</div>}
+        {sub && <div className="text-[12px] font-semibold text-navy-600 truncate">{sub}</div>}
       </div>
     </C>
   );
@@ -220,10 +215,10 @@ export function Chip({ children, tone = "navy", className = "" }) {
 // 위쪽 탭(화면 안 작은 메뉴)
 export function Tabs({ items, value, onChange }) {
   return (
-    <div className="flex gap-1 p-1 bg-white border border-line rounded-2xl overflow-x-auto no-scrollbar mb-4 w-fit max-w-full">
+    <div className="flex gap-1 p-1 bg-white border border-line rounded-xl overflow-x-auto no-scrollbar mb-4 w-fit max-w-full">
       {items.map((it) => (
         <button key={it.key} type="button" onClick={() => onChange(it.key)}
-          className={cx("h-9 px-4 rounded-xl text-[13px] font-black whitespace-nowrap transition", value === it.key ? "bg-navy text-white" : "text-[#5A6A86] hover:bg-navy-50")}>
+          className={cx("h-9 px-4 rounded-lg text-[13px] font-black whitespace-nowrap transition", value === it.key ? "bg-navy text-white" : "text-[#5A6A86] hover:bg-navy-50")}>
           {it.label}{it.badge > 0 && <span className="ml-1.5 text-[11px] opacity-80">{it.badge}</span>}
         </button>
       ))}

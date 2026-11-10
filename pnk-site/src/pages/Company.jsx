@@ -25,12 +25,12 @@ export default function Company() {
 
   return (
     <div>
-      <Hero en="COMPANY" title={info?.name || "PnK PROJECT"} desc="법인 정보 · 서비스 바로가기 · 브랜드 자료">
+      <Hero title={info?.name || "PnK PROJECT"}>
         {me.isAdmin && <HeroBtn icon="pen" onClick={() => setEdit("info")}>정보 고치기</HeroBtn>}
       </Hero>
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-4 md:gap-5">
-        <Card en="CORPORATE" title="법인 기본 정보" className="xl:col-span-2" right={<Btn kind="ghost" onClick={() => copy(INFO_FIELDS.map(([k, l]) => `${l}: ${info?.[k] || ""}`).join("\n"))}>전체 복사</Btn>}>
+        <Card title="법인 기본 정보" className="xl:col-span-2" right={<Btn kind="ghost" onClick={() => copy(INFO_FIELDS.map(([k, l]) => `${l}: ${info?.[k] || ""}`).join("\n"))}>전체 복사</Btn>}>
           <dl className="grid grid-cols-1 md:grid-cols-2 gap-x-8">
             {INFO_FIELDS.map(([k, l]) => (
               <div key={k} className="flex items-center gap-3 py-3 border-b border-[#EEF1F6]">
@@ -42,7 +42,7 @@ export default function Company() {
           </dl>
         </Card>
 
-        <Card en="BRAND" title="브랜드">
+        <Card title="브랜드">
           <div className="rounded-2xl bg-white border border-line flex items-center justify-center p-6"><img src="/brand/pnk-logo-600.png" alt="PnK PROJECT 로고" className="w-40" /></div>
           <div className="mt-3 grid grid-cols-2 gap-2">
             <a href="/brand/pnk-logo-600.png" download="PnK-PROJECT-logo.png"><Btn kind="ghost" icon="download" className="w-full">전체 로고</Btn></a>
@@ -53,7 +53,7 @@ export default function Company() {
           ))}</div>
         </Card>
 
-        <Card en="SHORTCUTS" title="서비스 바로가기" className="xl:col-span-2" right={me.isAdmin && <Btn kind="ghost" icon="pen" onClick={() => setEdit("links")}>바꾸기</Btn>}>
+        <Card title="서비스 바로가기" className="xl:col-span-2" right={me.isAdmin && <Btn kind="ghost" icon="pen" onClick={() => setEdit("links")}>바꾸기</Btn>}>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {links.map((l) => (
               <a key={l.url} href={l.url} target="_blank" rel="noreferrer" className="flex items-center gap-3 rounded-2xl border border-line px-4 py-3.5 hover:border-navy-500 transition">
@@ -66,7 +66,7 @@ export default function Company() {
 
         {me.isAdmin && <MailServer me={me} info={info} />}
         {me.isAdmin && (
-          <Card en="ADMIN ONLY" title="관리자 전용" right={<Btn kind="ghost" icon="pen" onClick={() => setEdit("secure")}>고치기</Btn>}>
+          <Card title="관리자 전용" right={<Btn kind="ghost" icon="pen" onClick={() => setEdit("secure")}>고치기</Btn>}>
             <div className="text-[12.5px] font-bold text-[#7A8AA8] mb-1">법인 계좌</div>
             <div className="text-[14px] font-black tnum mb-4">{secure?.bank || <span className="text-[#C0C8D6] font-medium">미입력</span>}</div>
             <div className="text-[12.5px] font-bold text-[#7A8AA8] mb-1.5">운영 계정 · 서비스 목록</div>

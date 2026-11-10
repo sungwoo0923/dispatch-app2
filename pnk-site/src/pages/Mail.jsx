@@ -10,7 +10,7 @@ import { collection, doc, serverTimestamp, setDoc } from "firebase/firestore";
 import { getDownloadURL, ref as sref, uploadBytes } from "firebase/storage";
 import { db, storage } from "../firebase";
 import { MAIL_DOMAIN, fmtTime, kstDateTime, mailAddr, patchRow, useCol, useDocLive, where } from "../pnkApi";
-import { Btn, Card, Empty, Field, Input, Loading, Modal, Textarea, cx, fail } from "../ui";
+import { Btn, Chip, Empty, Field, Hero, HeroBtn, Input, Loading, Modal, Textarea, cx, fail } from "../ui";
 import Icon from "../icons";
 
 const BOXES = [
@@ -63,38 +63,29 @@ export default function Mail() {
 
   return (
     <div>
-      <section className="relative overflow-hidden rounded-[26px] px-6 md:px-8 py-6 text-white mb-5 shadow-[0_14px_34px_rgba(27,43,75,0.25)]" style={{ background: "linear-gradient(120deg, #1B2B4B 0%, #233B66 55%, #2D4C82 100%)" }}>
-        <div className="absolute -right-16 -top-20 w-72 h-72 rounded-full bg-white/[0.06]" />
-        <div className="relative flex flex-col md:flex-row md:items-center gap-4">
-          <div className="flex-1">
-            <div className="text-[11px] font-extrabold tracking-[0.18em] text-blue-200/80">MAIL</div>
-            <h1 className="mt-1 text-[24px] font-black">사내메일</h1>
-            <p className="mt-1 text-[14px] text-blue-50/90">내 주소 <b className="tnum">{myAddr || "아직 없음 — 관리자에게 메일 아이디를 받아 주세요"}</b></p>
-          </div>
-          <button type="button" onClick={() => setWrite({})} className="flex items-center justify-center gap-2 h-11 px-5 rounded-2xl bg-white text-navy text-[14px] font-black shadow"><Icon name="pen" size={17} />메일 쓰기</button>
-        </div>
-      </section>
+      <Hero title="사내메일" desc={<span className="tnum">{myAddr || "메일 주소 없음 — 관리자에게 요청"}</span>}>
+        <Chip tone={external ? "green" : "gray"}>{external ? "외부 메일 연결됨" : "사내 전용"}</Chip>
+        <HeroBtn icon="pen" onClick={() => setWrite({})}>메일 쓰기</HeroBtn>
+      </Hero>
 
-      <div className="grid grid-cols-1 lg:grid-cols-[200px_minmax(0,380px)_1fr] gap-4">
+      {/* 메일함 · 목록 · 읽기를 한 판에 */}
+      <div className="bg-white rounded-2xl border border-line overflow-hidden lg:grid lg:grid-cols-[190px_minmax(0,380px)_1fr] lg:h-[calc(100vh-170px)] lg:min-h-[480px]">
         {/* 메일함 */}
-        <div className="flex lg:flex-col gap-1 overflow-x-auto no-scrollbar">
+        <div className="flex lg:flex-col gap-1 p-2 overflow-x-auto no-scrollbar border-b lg:border-b-0 lg:border-r border-[#EEF1F6]">
           {BOXES.map((b) => (
             <button key={b.key} type="button" onClick={() => { setBox(b.key); setSp({}); }}
-              className={cx("flex items-center gap-2.5 h-11 px-3.5 rounded-xl text-[13.5px] font-bold whitespace-nowrap transition", box === b.key ? "bg-navy text-white" : "bg-white border border-line text-[#3A4A66] hover:border-navy-500")}>
+              className={cx("flex items-center gap-2.5 h-10 px-3 rounded-lg text-[13.5px] whitespace-nowrap transition", box === b.key ? "bg-navy text-white font-black" : "font-bold text-[#3A4A66] hover:bg-navy-50")}>
               <Icon name={b.icon} size={17} /><span className="flex-1 text-left">{b.label}</span>
               {b.key === "inbox" && unread > 0 && <span className="min-w-[20px] h-5 px-1.5 rounded-full text-[11px] font-black flex items-center justify-center" style={{ background: "#FF3B30", color: "#fff" }}>{unread}</span>}
             </button>
           ))}
-          <div className="hidden lg:block mt-3 rounded-2xl bg-white border border-line p-3.5 text-[12px] leading-relaxed text-[#5A6A86]">
-            {external ? <><b className="text-navy">외부 메일 연결됨</b><br />네이버 · 구글 등 바깥 주소로도 보내고 받습니다. 받는 사람 칸에 메일 주소를 그대로 넣으세요.</> : <><b className="text-navy">외부 메일 연결 전</b><br />지금은 PnK 구성원끼리만 주고받습니다. 회사 정보 › 메일 서버에서 <span className="tnum">@{MAIL_DOMAIN}</span> 연결 후 외부로도 보내고 받습니다.</>}
-          </div>
         </div>
 
         {/* 목록 */}
-        <Card pad={false} className={cx(cur && "hidden lg:block")}>
+        <div className={cx("min-h-0 flex flex-col lg:border-r border-[#EEF1F6]", cur && "hidden lg:flex")}>
           <div className="p-3 border-b border-[#EEF1F6] relative"><Icon name="search" size={16} className="absolute left-6 top-6 text-[#7A8AA8]" /><Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="메일 검색" className="pl-9" /></div>
           {!inbox || !sent ? <Loading /> : list.length === 0 ? <Empty icon="inbox">메일이 없습니다.</Empty> : (
-            <ul className="divide-y divide-[#EEF1F6] max-h-[70vh] overflow-y-auto">
+            <ul className="divide-y divide-[#EEF1F6] flex-1 min-h-0 overflow-y-auto">
               {list.map((m) => {
                 const isUnread = m.toUids?.includes(uid) && !m.readBy?.[uid];
                 const who = box === "sent" ? `받는 사람: ${(m.to || []).map((x) => x.name || x.addr).join(", ")}` : m.fromName || m.fromAddr;
@@ -113,11 +104,11 @@ export default function Mail() {
               })}
             </ul>
           )}
-        </Card>
+        </div>
 
         {/* 읽기 */}
         {cur ? (
-          <Card pad={false}>
+          <div className="min-h-0 overflow-y-auto">
             <div className="px-5 md:px-7 pt-5 pb-4 border-b border-[#EEF1F6]">
               <button type="button" onClick={() => setSp({})} className="lg:hidden mb-3 text-[13px] font-bold text-navy-500">← 목록</button>
               <div className="flex items-start gap-2">
@@ -149,9 +140,9 @@ export default function Mail() {
               {cur.html && <Btn kind="ghost" icon="eye" onClick={() => setHtml((v) => !v)}>{html ? "글자로 보기" : "원문(HTML) 보기"}</Btn>}
               <Btn kind="ghost" icon="trash" onClick={() => toggle(cur, "trashBy").then(() => setSp({}))}>{cur.trashBy?.[uid] ? "휴지통에서 꺼내기" : "휴지통으로"}</Btn>
             </div>
-          </Card>
+          </div>
         ) : (
-          <Card className="hidden lg:flex items-center justify-center"><Empty icon="mail">메일을 고르면 여기에 내용이 보입니다.</Empty></Card>
+          <div className="hidden lg:flex items-center justify-center"><Empty icon="mail">메일을 골라 주세요</Empty></div>
         )}
       </div>
 

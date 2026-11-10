@@ -30,18 +30,31 @@ const authMsg = (er) => (er.code === "pnk/no-empno" ? "등록되지 않은 사�
         : er.code === "auth/weak-password" ? "비밀번호는 8자 이상으로 정해 주세요."
           : er.code === "auth/network-request-failed" ? "인터넷 연결을 확인해 주세요." : errMsg(er));
 
+// 로그인 틀 — PC: 왼쪽 회사 이름(네이비) + 오른쪽 입력 / 휴대폰: 입력만
 function Frame({ children, wide }) {
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 relative overflow-hidden" style={{ background: "radial-gradient(90% 70% at 50% 0%, #2D4C82 0%, #1B2B4B 45%, #0F1A30 100%)" }}>
-      <div className="absolute -left-24 -bottom-24 w-[420px] h-[420px] rounded-full bg-white/[0.04]" />
-      <div className="absolute -right-20 -top-28 w-[360px] h-[360px] rounded-full bg-white/[0.05]" />
-      <div className={cx("relative w-full bg-white rounded-[28px] shadow-[0_30px_80px_rgba(0,0,0,0.35)] overflow-hidden", wide ? "max-w-[520px]" : "max-w-[420px]")}>
-        <div className="px-7 pt-7 pb-5 flex flex-col items-center border-b border-[#EEF1F6]">
-          <img src="/brand/pnk-logo-600.png" alt="PnK PROJECT" className="w-24" />
-          <div className="mt-2 text-[11px] font-extrabold tracking-[0.24em] text-[#7A8AA8]">HEADQUARTERS INTRANET</div>
+    <div className="min-h-screen flex bg-white">
+      <div className="hidden lg:flex w-[44%] max-w-[620px] flex-col justify-between p-12 text-white bg-navy-900">
+        <div className="flex items-center gap-3">
+          <img src="/brand/pnk-mark-192.png" alt="" className="w-10 h-10 rounded-xl bg-white" />
+          <div className="text-[17px] font-black">PnK PROJECT</div>
         </div>
-        <div className="p-7">{children}</div>
-        <div className="px-7 pb-5 text-center text-[11px] text-[#A0ABBE]">© PnK PROJECT · 로지스웹 · 로지스웹 허브 · 기사앱</div>
+        <div>
+          <div className="text-[38px] leading-[1.25] font-black tracking-tight">사내 인트라넷</div>
+          <div className="mt-4 flex flex-wrap gap-2">
+            {["사내메일", "전자결재", "근태 · 휴가", "업무 · 일정"].map((t) => <span key={t} className="h-8 px-3 rounded-lg bg-white/10 text-[13px] font-bold flex items-center">{t}</span>)}
+          </div>
+        </div>
+        <div className="text-[12.5px] font-semibold text-blue-100/70">© PnK PROJECT</div>
+      </div>
+      <div className="flex-1 min-w-0 flex items-center justify-center px-5 py-10">
+        <div className={cx("w-full", wide ? "max-w-[480px]" : "max-w-[380px]")}>
+          <div className="lg:hidden flex items-center gap-2.5 mb-7">
+            <img src="/brand/pnk-mark-192.png" alt="" className="w-9 h-9 rounded-xl border border-line" />
+            <div className="text-[16px] font-black text-navy-950">PnK PROJECT 인트라넷</div>
+          </div>
+          {children}
+        </div>
       </div>
     </div>
   );
@@ -67,15 +80,12 @@ export function Login() {
   const [terms, setTerms] = React.useState(null);
   return (
     <Frame wide={mode === "signup"}>
-      <div className="grid grid-cols-2 gap-1 p-1 bg-navy-50 rounded-2xl mb-5">
+      <div className="flex gap-6 mb-6 border-b border-line">
         {[["login", "로그인"], ["signup", "회원가입"]].map(([k, l]) => (
-          <button key={k} type="button" onClick={() => setMode(k)} className={cx("h-10 rounded-xl text-[14px] font-black transition", (mode === k || (mode === "status" && k === "login")) ? "bg-white text-navy shadow" : "text-[#7A8AA8]")}>{l}</button>
+          <button key={k} type="button" onClick={() => setMode(k)} className={cx("pb-3 -mb-px text-[20px] font-black border-b-[3px] transition", (mode === k || (mode === "status" && k === "login")) ? "text-navy-950 border-navy" : "text-[#A0ABBE] border-transparent hover:text-navy")}>{l}</button>
         ))}
       </div>
       {mode === "login" ? <LoginForm onStatus={() => setMode("status")} /> : mode === "status" ? <StatusForm onBack={() => setMode("login")} /> : <SignupForm onDone={() => setMode("login")} showTerm={setTerms} />}
-      <div className="mt-5 flex justify-center gap-3 text-[11.5px] text-[#7A8AA8]">
-        {TERMS.filter((t) => t.required).map((t) => <button key={t.key} type="button" onClick={() => setTerms(t)} className="hover:text-navy underline-offset-2 hover:underline">{t.key === "service" ? "이용약관" : "개인정보 처리"}</button>)}
-      </div>
       {terms && <Modal open title={terms.title} onClose={() => setTerms(null)} footer={<Btn onClick={() => setTerms(null)}>확인</Btn>}><div className="text-[13.5px] leading-[1.8] whitespace-pre-wrap text-[#22304D]">{terms.body}</div></Modal>}
     </Frame>
   );
@@ -127,14 +137,13 @@ function LoginForm({ onStatus }) {
       <div className="flex items-center gap-4 pt-1">
         <Check checked={saveId} onChange={setSaveId}>사번 · 이메일 저장</Check>
         <Check checked={auto} onChange={setAuto}>자동 로그인</Check>
-        <button type="button" onClick={reset} className="ml-auto text-[12.5px] font-semibold text-[#7A8AA8] hover:text-navy">비밀번호 찾기</button>
       </div>
-      {!auto && <div className="text-[11.5px] text-[#7A8AA8]">자동 로그인을 끄면 브라우저를 닫을 때 로그아웃됩니다(공용 PC 권장).</div>}
       {msg && <div className="text-[12.5px] font-semibold text-rose-600 bg-rose-50 rounded-xl px-3 py-2">{msg}</div>}
       <Btn type="submit" disabled={busy} className="w-full h-12 text-[15px]">{busy ? "로그인 중…" : "로그인"}</Btn>
-      <div className="flex items-center justify-between pt-1 text-[11.5px] text-[#7A8AA8]">
-        <span>PnK PROJECT 직원 전용 · 로지스웹 계정으로는 들어올 수 없습니다</span>
-        <button type="button" onClick={onStatus} className="font-bold text-navy hover:underline shrink-0 ml-2">사번이 아직 없나요?</button>
+      <div className="flex items-center justify-center gap-3 pt-2 text-[13px] font-bold text-navy">
+        <button type="button" onClick={reset} className="hover:underline">비밀번호 찾기</button>
+        <span className="w-px h-3 bg-[#DCE3EE]" />
+        <button type="button" onClick={onStatus} className="hover:underline">가입 신청 상태 확인</button>
       </div>
     </form>
   );
@@ -183,12 +192,11 @@ function StatusForm({ onBack }) {
   return (
     <form onSubmit={go} className="space-y-3">
       <div className="text-[15px] font-black text-navy-950">가입 신청 상태 확인</div>
-      <p className="text-[12.5px] text-[#5A6A86]">회원가입 때 넣은 이메일 · 비밀번호를 넣으세요. 승인되면 사번이 보입니다.</p>
       <Field label="이메일"><Input type="email" value={id} onChange={(e) => setId(e.target.value)} /></Field>
       <Field label="비밀번호"><Input type="password" value={pw} onChange={(e) => setPw(e.target.value)} /></Field>
       {res && <div className={cx("rounded-xl px-3 py-2.5", res.tone === "green" ? "bg-emerald-50 text-emerald-800" : res.tone === "red" ? "bg-rose-50 text-rose-700" : "bg-navy-50 text-navy")}><div className="text-[13.5px] font-black">{res.t}</div><div className="text-[12.5px] mt-0.5">{res.d}</div></div>}
       <Btn type="submit" disabled={busy} className="w-full h-11">{busy ? "확인 중…" : "확인"}</Btn>
-      <button type="button" onClick={onBack} className="w-full text-[12.5px] font-semibold text-[#7A8AA8] hover:text-navy">← 로그인으로</button>
+      <button type="button" onClick={onBack} className="w-full text-[13px] font-bold text-navy hover:underline">← 로그인으로</button>
     </form>
   );
 }
@@ -224,8 +232,8 @@ function SignupForm({ onDone, showTerm }) {
         <div className="mt-2.5 pt-2.5 border-t border-[#EEF1F6] space-y-2">
           {TERMS.map((t) => (
             <div key={t.key} className="flex items-center gap-2">
-              <Check checked={agree[t.key]} onChange={(v) => setAgree({ ...agree, [t.key]: v })}><span className={t.required ? "text-navy font-black" : "text-[#7A8AA8]"}>{t.required ? "[필수]" : "[선택]"}</span> {t.title.replace("(선택) ", "")}</Check>
-              <button type="button" onClick={() => showTerm(t)} className="ml-auto text-[12px] text-[#7A8AA8] hover:text-navy shrink-0">보기</button>
+              <Check checked={agree[t.key]} onChange={(v) => setAgree({ ...agree, [t.key]: v })}><span className={t.required ? "text-navy font-black" : "text-[#5A6A86]"}>{t.required ? "[필수]" : "[선택]"}</span> {t.title.replace("(선택) ", "")}</Check>
+              <button type="button" onClick={() => showTerm(t)} className="ml-auto text-[12.5px] font-bold text-navy hover:underline shrink-0">보기</button>
             </div>
           ))}
         </div>
@@ -243,7 +251,7 @@ function SignupForm({ onDone, showTerm }) {
       </div>
       {msg && <div className="text-[12.5px] font-semibold text-rose-600 bg-rose-50 rounded-xl px-3 py-2">{msg}</div>}
       <Btn onClick={go} disabled={busy} className="w-full h-12 text-[15px]">{busy ? "가입 중…" : "가입 신청"}</Btn>
-      <p className="text-[11.5px] leading-relaxed text-[#7A8AA8] text-center">가입 신청 → 대표 · 관리자 승인 → 사번 발급 후 <button type="button" onClick={onDone} className="text-navy font-bold underline">로그인</button>(사번 · 이메일 · 비밀번호)합니다.<br />PnK PROJECT 직원 전용입니다. 로지스웹에서 쓰는 이메일은 쓸 수 없으니 다른 이메일로 가입해 주세요.</p>
+      <div className="text-[13px] font-bold text-navy text-center">승인되면 사번이 발급됩니다 · <button type="button" onClick={onDone} className="underline">로그인으로</button></div>
     </div>
   );
 }
@@ -265,19 +273,19 @@ export function JoinGate({ me }) {
     <div className="text-center py-2">
       <div className="w-14 h-14 mx-auto rounded-2xl bg-navy-100 text-navy flex items-center justify-center mb-3"><Icon name={icon} size={26} /></div>
       <div className="text-[17px] font-black text-navy-950">{title}</div>
-      <p className="mt-2 text-[13px] text-[#5A6A86] leading-relaxed">{children}</p>
+      <p className="mt-2 text-[13.5px] font-semibold text-[#3A4A66] leading-relaxed">{children}</p>
     </div>
   );
   return (
     <Frame>
       {me.needEmpNo ? <Status icon="idcard" title="사번 발급 대기 중입니다">승인은 되었지만 아직 사번이 없습니다.<br />대표 · 관리자가 사번을 주면 바로 들어갈 수 있습니다.</Status>
-        : st === "pending" ? <Status icon="hourglass" title="가입 신청이 접수되었습니다">대표 · 관리자가 승인하면서 사번을 드립니다.<br />승인되면 사번으로도 로그인할 수 있습니다.<br /><span className="text-[#7A8AA8]">{me.user.email}</span></Status>
+        : st === "pending" ? <Status icon="hourglass" title="가입 신청이 접수되었습니다">대표 · 관리자가 승인하면서 사번을 드립니다.<br />승인되면 사번으로도 로그인할 수 있습니다.<br />{me.user.email}</Status>
           : st === "off" ? <Status icon="shield" title="사용이 중지된 계정입니다">관리자에게 문의해 주세요.</Status>
             : me.logisweb ? <Status icon="shield" title="로지스웹 계정으로는 들어올 수 없습니다">사내 인트라넷은 PnK PROJECT 직원 전용입니다.<br />로그아웃한 뒤 [회원가입]에서 직원으로 가입해 주세요.</Status>
             : (
               <div className="space-y-3">
                 <div className="text-[15px] font-black text-navy-950">PnK PROJECT 구성원 가입 요청</div>
-                <p className="text-[12.5px] text-[#5A6A86]">{me.user.email} 계정으로 요청합니다.</p>
+                <div className="text-[13px] font-bold text-navy">{me.user.email}</div>
                 <Field label="이름"><Input value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} /></Field>
                 <div className="grid grid-cols-2 gap-2">
                   <Field label="부서"><Select custom value={f.dept} onChange={(e) => setF({ ...f, dept: e.target.value })} options={DEPT_ORDER} placeholder="선택 · 직접 입력" /></Field>
@@ -289,7 +297,7 @@ export function JoinGate({ me }) {
                 <Btn onClick={send} disabled={busy} className="w-full h-11">가입 요청 보내기</Btn>
               </div>
             )}
-      <button type="button" onClick={() => signOut(auth)} className="mt-4 w-full text-[12.5px] font-semibold text-[#7A8AA8] hover:text-navy">다른 계정으로 로그인</button>
+      <button type="button" onClick={() => signOut(auth)} className="mt-4 w-full text-[13px] font-bold text-navy hover:underline">다른 계정으로 로그인</button>
     </Frame>
   );
 }
@@ -351,19 +359,18 @@ function SmsStep({ me, phone }) {
       <div className="text-center">
         <div className="w-14 h-14 mx-auto rounded-2xl bg-navy text-white flex items-center justify-center mb-3"><Icon name="shield" size={26} /></div>
         <div className="text-[17px] font-black text-navy-950">처음 로그인하는 기기입니다</div>
-        <p className="mt-1.5 text-[12.5px] text-[#5A6A86] leading-relaxed">{phone ? <>등록된 휴대폰 {maskPhone(phone)}으로 인증번호를 보냅니다.</> : <>인증번호를 받을 본인 휴대폰 번호를 넣어 주세요.<br />이 번호가 계정에 등록됩니다.</>}</p>
+        <p className="mt-1.5 text-[13.5px] font-semibold text-[#3A4A66]">{phone ? <>{maskPhone(phone)} 으로 인증번호를 보냅니다</> : <>본인 휴대폰 번호를 넣어 주세요</>}</p>
       </div>
       {!phone && !sent && <input value={num} onChange={(e) => setNum(e.target.value.replace(/[^\d]/g, "").slice(0, 11).replace(/^(\d{3})(\d{3,4})(\d{4})$/, "$1-$2-$3"))} inputMode="tel" autoFocus placeholder="010-0000-0000" className="w-full h-14 rounded-2xl border-2 border-[#DCE3EE] focus:border-navy text-center text-[20px] font-black outline-none tabular-nums" />}
       {!sent ? <Btn type="button" onClick={send} disabled={busy === "send" || !okPhone} className="w-full h-12 text-[15px]">{busy === "send" ? "문자 보내는 중…" : "인증번호 받기"}</Btn> : (
         <>
           <input value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))} inputMode="numeric" autoComplete="one-time-code" autoFocus placeholder="● ● ● ● ● ●" className="w-full h-14 rounded-2xl border-2 border-[#DCE3EE] focus:border-navy text-center text-[24px] font-black tracking-[0.45em] outline-none tabular-nums" />
-          <div className="flex items-center justify-between text-[12.5px]"><span className="text-[#5A6A86]">문자로 받은 6자리를 넣어 주세요</span><button type="button" onClick={send} disabled={left > 0 || busy === "send"} className="font-bold text-navy disabled:text-[#A9B4C8]">{left > 0 ? `다시 받기 ${left}초` : "다시 받기"}</button></div>
+          <div className="flex items-center justify-end text-[13px]"><button type="button" onClick={send} disabled={left > 0 || busy === "send"} className="font-bold text-navy disabled:text-[#A9B4C8]">{left > 0 ? `다시 받기 ${left}초` : "다시 받기"}</button></div>
           <Btn type="submit" disabled={busy === "verify" || code.length !== 6} className="w-full h-12 text-[15px]">{busy === "verify" ? "확인 중…" : "인증 확인"}</Btn>
         </>
       )}
       {msg && <div className="text-[12.5px] font-semibold text-rose-600 bg-rose-50 rounded-xl px-3 py-2 text-center">{msg}</div>}
       <div ref={holder} />
-      <div className="text-[11.5px] text-[#7A8AA8] text-center leading-relaxed">문자 인증은 처음 로그인하는 기기에서만 합니다.<br />다음부터 이 기기에서는 2차 비밀번호만 확인합니다.</div>
     </form>
   );
 }
@@ -387,7 +394,7 @@ export function MfaGate({ me }) {
       if (r.needSms) { setSetup(false); setSms({ phone: r.phone || "" }); setBusy(false); } else me.passMfa();
     } catch (er) { setMsg(er.message || "확인하지 못했습니다"); setCode(""); if (setup) setFirst(""); setBusy(false); }
   };
-  const other = <button type="button" onClick={() => signOut(auth)} className="mt-3 w-full text-[12.5px] font-semibold text-[#7A8AA8] hover:text-navy">다른 계정으로 로그인</button>;
+  const other = <button type="button" onClick={() => signOut(auth)} className="mt-3 w-full text-[13px] font-bold text-navy hover:underline">다른 계정으로 로그인</button>;
   if (sms) return <Frame><SmsStep me={me} phone={sms.phone} />{other}</Frame>;
   return (
     <Frame>
@@ -395,11 +402,10 @@ export function MfaGate({ me }) {
         <div className="text-center">
           <div className="w-14 h-14 mx-auto rounded-2xl bg-navy text-white flex items-center justify-center mb-3"><Icon name="shield" size={26} /></div>
           <div className="text-[17px] font-black text-navy-950">{setup ? (first ? "한 번 더 넣어 주세요" : "2차 비밀번호 만들기") : "2차 인증"}</div>
-          <p className="mt-1.5 text-[12.5px] text-[#5A6A86] leading-relaxed">{me.sub ? "부관리자" : "최고관리자"} 계정은 비밀번호 다음에 2차 비밀번호를 한 번 더 확인합니다.<br />{setup ? (first ? "방금 정한 2차 비밀번호를 똑같이 넣어 주세요." : "영문 · 숫자 8자 이상으로 정해 주세요. 로그인 비밀번호와 다르게 정하세요.") : `${me.user.email}`}</p>
+          <p className="mt-1.5 text-[13.5px] font-semibold text-[#3A4A66]">{setup ? (first ? "같은 값을 한 번 더" : "영문 · 숫자 8자 이상") : me.user.email}</p>
         </div>
         <SecureKeypad value={code} onChange={setCode} onSubmit={go} disabled={busy || !!info.error} submitLabel={busy ? "확인 중…" : setup ? (first ? "정하고 들어가기" : "다음") : "확인"} />
         {msg && <div className="text-[12.5px] font-semibold text-rose-600 bg-rose-50 rounded-xl px-3 py-2 text-center">{msg}</div>}
-        <div className="text-[11.5px] text-[#7A8AA8] text-center leading-relaxed">처음 로그인하는 기기에서는 휴대폰 문자 인증을 한 번 더 합니다.<br />2차 비밀번호를 잊으면 {me.sub ? "최고관리자에게 초기화를 요청하세요." : "개발 담당에게 초기화를 요청하세요."}</div>
       </div>
       {other}
     </Frame>

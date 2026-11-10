@@ -26,7 +26,7 @@ export default function Customers() {
   const load = (force) => { setBusy(true); loadPlatform(force).then(setData).finally(() => setBusy(false)); };
   React.useEffect(() => { load(false); }, []);
 
-  if (!me.owner) return <><Hero en="CUSTOMERS" title="고객사 · 가입자" /><Card><Empty icon="shield">대표(최고관리자) 계정에서만 볼 수 있습니다.</Empty></Card></>;
+  if (!me.owner) return <><Hero title="고객사 · 가입자" /><Card><Empty icon="shield">대표(최고관리자) 계정에서만 볼 수 있습니다.</Empty></Card></>;
   if (data === undefined) return <Loading />;
   if (!data) return <Card><Empty icon="alert">고객사 데이터를 읽지 못했습니다.</Empty></Card>;
 
@@ -50,9 +50,9 @@ export default function Customers() {
 
   return (
     <div>
-      <Hero en="CUSTOMERS · SUBSCRIBERS" title="고객사 · 가입자" desc={`로지스웹을 쓰는 운송사 · 직원 · 기사 · 화주 현황 (불러온 시각 ${fmtTime(data.at)})`}>
-        <HeroBtn icon="refresh" onClick={() => load(true)}>{busy ? "불러오는 중…" : "새로고침"}</HeroBtn>
-        <a href={PLATFORM} target="_blank" rel="noreferrer" className="flex items-center gap-2 px-4 py-2 rounded-full text-[13px] font-bold bg-white text-navy">관리자 관리센터에서 처리 <Icon name="link" size={14} /></a>
+      <Hero title="고객사 · 가입자" desc={`로지스웹을 쓰는 운송사 · 직원 · 기사 · 화주 현황 (불러온 시각 ${fmtTime(data.at)})`}>
+        <HeroBtn sub icon="refresh" onClick={() => load(true)}>{busy ? "불러오는 중…" : "새로고침"}</HeroBtn>
+        <a href={PLATFORM} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 h-10 px-4 rounded-xl text-[13.5px] font-black bg-navy text-white hover:bg-navy-700">관리자 관리센터에서 처리 <Icon name="link" size={14} /></a>
       </Hero>
 
       <div className="grid grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6 gap-3 md:gap-4 mb-5">
@@ -65,7 +65,7 @@ export default function Customers() {
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-4 md:gap-5 mb-5">
-        <Card en="GROWTH" title="월별 신규 가입 (12개월)" className="xl:col-span-2">
+        <Card title="월별 신규 가입 (12개월)" className="xl:col-span-2">
           <div className="h-[260px] -ml-3">
             <ResponsiveContainer>
               <BarChart data={trend} barGap={2}>
@@ -81,7 +81,7 @@ export default function Customers() {
             </ResponsiveContainer>
           </div>
         </Card>
-        <Card en="PLANS" title="요금제 분포">
+        <Card title="요금제 분포">
           <div className="h-[200px]">
             <ResponsiveContainer>
               <PieChart>
@@ -100,7 +100,7 @@ export default function Customers() {
         </Card>
       </div>
 
-      <Card en="BILLING" title="최근 6개월 청구 · 입금" className="mb-5">
+      <Card title="최근 6개월 청구 · 입금" className="mb-5">
         <div className="h-[200px] -ml-3">
           <ResponsiveContainer>
             <BarChart data={invTrend}>
@@ -162,11 +162,11 @@ export default function Customers() {
         </Card>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-5">
-          <QueueCard title="운송사 가입 승인 대기" en="CARRIER" rows={data.pendingTransport} line={(a) => [a.companyName, `${a.name || a.representative || ""} ${a.phone || ""}`, a.createdAt]} />
-          <QueueCard title="화주사 가입 승인 대기" en="SHIPPER" rows={data.pendingShipper} line={(a) => [a.companyName || a.name, a.phone || "", a.createdAt]} />
-          <QueueCard title="새 도입 문의 (홈페이지)" en="LEADS" rows={data.inquiries.filter((x) => !x.status || x.status === "신규")} line={(a) => [a.companyName || "업체", `${a.name || ""} ${a.phone || ""}`, a.createdAt]} />
-          <QueueCard title="처리 안 한 오류 신고" en="ERRORS" rows={data.errors.filter((r) => r.status !== "done")} line={(a) => [`${a.companyName || "-"} · ${a.section || ""}`, String(a.message || "").slice(0, 60), a.createdAt]} />
-          <QueueCard title="원격지원 요청" en="SUPPORT" rows={data.support} line={(a) => [a.companyName || a.name || "-", a.message || "", a.createdAt]} />
+          <QueueCard title="운송사 가입 승인 대기" rows={data.pendingTransport} line={(a) => [a.companyName, `${a.name || a.representative || ""} ${a.phone || ""}`, a.createdAt]} />
+          <QueueCard title="화주사 가입 승인 대기" rows={data.pendingShipper} line={(a) => [a.companyName || a.name, a.phone || "", a.createdAt]} />
+          <QueueCard title="새 도입 문의 (홈페이지)" rows={data.inquiries.filter((x) => !x.status || x.status === "신규")} line={(a) => [a.companyName || "업체", `${a.name || ""} ${a.phone || ""}`, a.createdAt]} />
+          <QueueCard title="처리 안 한 오류 신고" rows={data.errors.filter((r) => r.status !== "done")} line={(a) => [`${a.companyName || "-"} · ${a.section || ""}`, String(a.message || "").slice(0, 60), a.createdAt]} />
+          <QueueCard title="원격지원 요청" rows={data.support} line={(a) => [a.companyName || a.name || "-", a.message || "", a.createdAt]} />
         </div>
       )}
     </div>
@@ -175,7 +175,7 @@ export default function Customers() {
 
 function QueueCard({ title, en, rows, line }) {
   return (
-    <Card en={en} title={title} right={<Chip tone={rows.length ? "red" : "gray"}>{rows.length}건</Chip>} pad={false}>
+    <Card title={title} right={<Chip tone={rows.length ? "red" : "gray"}>{rows.length}건</Chip>} pad={false}>
       {rows.length === 0 ? <div className="py-6 text-center text-[13px] text-[#7A8AA8]">처리할 것이 없습니다.</div> : (
         <ul className="divide-y divide-[#EEF1F6]">
           {rows.slice().sort((a, b) => tsMs(b.createdAt) - tsMs(a.createdAt)).slice(0, 8).map((r, i) => { const [a, b, at] = line(r); return (

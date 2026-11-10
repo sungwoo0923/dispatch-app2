@@ -82,10 +82,16 @@ npm run build
 4. **Firebase 콘솔 › Authentication › 설정 › 승인된 도메인**에 `www.pnkproject.com`, `pnkproject.com` 추가(로그인 · 비밀번호 찾기 메일)
 5. `main` 에 합치면 자동 배포(`claude/*` 브랜치는 배포 안 됨). 검색엔진에는 안 뜨게 `noindex`.
 
-## 외부 메일(@pnkproject.com) 연결 — 회사 정보 › 메일 서버(관리자) 화면에 순서가 나온다
+## 외부 메일(@pnkproject.com) 연결 — 회사 정보 › 외부 메일 연결(관리자) 화면에 순서 · 링크가 나온다
 
-지금 사내메일은 구성원끼리만 오간다. 외부로 보내고 받으려면:
-1. pnkproject.com 도메인 관리(가비아) 접속 권한
-2. 메일 발송 서비스(예: Amazon SES · Resend) 가입 → 도메인 인증(SPF · DKIM DNS 레코드)
-3. 받기: MX 레코드를 수신 서비스로 → 수신 웹훅이 서버 함수로 → `pnkMail`에 저장
-4. 서버 함수(`functions/`)에 발송 · 수신 함수 추가, 화면은 `pnkCompany/info.mailExternal` 켜면 외부 주소 허용
+구성원끼리는 바로 오간다. 네이버 · 구글 등 바깥과 주고받으려면(Mailgun 기준):
+1. Mailgun 가입 → Domains › Add new domain 에 `pnkproject.com`(mg. 없이 · US)
+2. 가비아 DNS 관리(dns.gabia.com)에 Mailgun 이 보여 주는 TXT 2 · MX 2 · CNAME 1 추가 → Mailgun Verify
+3. Mailgun SMTP 비밀번호(postmaster@pnkproject.com) → 인트라넷 화면에 저장 → 테스트 메일(성공하면 외부 보내기 켜짐)
+4. 받기: 인트라넷 [받기 주소] 만들기 → Mailgun › Receiving › Create route(Match Recipient `.*@pnkproject.com` → Forward 받기 주소)
+5. 구성원 메일 아이디: 구성원 › 구성원 관리에서 정한다(`아이디@pnkproject.com`)
+
+## 화면 모양(2026-11-11 정리)
+
+- 모든 화면: 위쪽 줄(위치 · 날짜 · 메일/결재/공지 바로가기) + `Hero`(제목 · 한 줄 요약 · 버튼) + 흰 `Card` — `src/ui.jsx`
+- 영문 작은 글씨(en) · 회색 설명글은 쓰지 않는다. 로그인 화면은 왼쪽 회사 이름 + 오른쪽 입력

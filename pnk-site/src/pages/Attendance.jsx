@@ -83,11 +83,11 @@ export default function Attendance() {
 
   return (
     <div>
-      <Hero en="ATTENDANCE" title="출퇴근 · 근태" desc={`근무 시간 ${work.start} ~ ${work.end} · 한국 시간 기준`} />
+      <Hero title="출퇴근 · 근태" desc={`근무 시간 ${work.start} ~ ${work.end} · 한국 시간 기준`} />
 
       <div className="grid grid-cols-1 xl:grid-cols-[420px_1fr] gap-4 md:gap-5 mb-5">
         {/* 출퇴근 카드 */}
-        <section className="relative overflow-hidden rounded-[26px] p-6 text-white shadow-[0_14px_34px_rgba(27,43,75,0.25)]" style={{ background: "linear-gradient(150deg, #14213D 0%, #1B2B4B 50%, #2D4C82 100%)" }}>
+        <section className="relative overflow-hidden rounded-2xl p-6 text-white bg-navy">
           <div className="absolute -right-10 -top-14 w-56 h-56 rounded-full bg-white/[0.06]" />
           <div className="relative">
             <div className="text-[13px] font-bold text-blue-100/85">{Number(today.slice(5, 7))}월 {Number(today.slice(8))}일 {WEEK[dow(today)]}요일 · {me.member?.name} ({me.member?.empNo})</div>
@@ -110,7 +110,7 @@ export default function Attendance() {
         </section>
 
         {/* 오늘 우리 회사 */}
-        <Card en="TODAY" title="오늘 출근 현황" right={<Chip>{(todayRows || []).length} / {(members || []).length}명</Chip>}>
+        <Card title="오늘 출근 현황" right={<Chip>{(todayRows || []).length} / {(members || []).length}명</Chip>}>
           <div className="grid grid-cols-1 sm:grid-cols-2 2xl:grid-cols-3 gap-2">
             {(members || []).map((mm) => {
               const r = (todayRows || []).find((x) => x.uid === mm.uid);
@@ -222,7 +222,7 @@ function FixModal({ r, onClose }) {
   };
   return (
     <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="bg-white rounded-[22px] w-full max-w-[420px] p-5 space-y-3">
+      <div className="bg-white rounded-2xl w-full max-w-[420px] p-5 space-y-3">
         <div className="text-[16px] font-black">{r.name} · {r.date} 근태 고치기</div>
         <div className="grid grid-cols-2 gap-3">
           <Field label="출근"><HourMinuteInput value={inT} onChange={(e) => setIn(e.target.value)} /></Field>

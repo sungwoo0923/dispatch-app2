@@ -8,7 +8,7 @@ import {
   DEFAULT_LINKS, SERVICES, hm, SERVICE_STATUS, addRow, by, fmtTime, invoiceByMonth, limit, loadPlatform, orderBy, productLabel,
   stageLabel, useCol, useDocLive, where, ymd, won,
 } from "../pnkApi";
-import { Btn, Card, Chip, Empty, Input, Stat, cx, fail } from "../ui";
+import { Btn, Card, Chip, Empty, Hero, Input, Stat, cx, fail } from "../ui";
 import Icon from "../icons";
 
 const WEEK = ["일", "월", "화", "수", "목", "금", "토"];
@@ -77,27 +77,13 @@ export default function Home() {
   return (
     <div>
       {/* 인사 */}
-      <section className="relative overflow-hidden rounded-[26px] px-6 md:px-8 py-6 md:py-7 text-white mb-5 shadow-[0_14px_34px_rgba(27,43,75,0.25)]"
-        style={{ background: "linear-gradient(120deg, #1B2B4B 0%, #233B66 55%, #2D4C82 100%)" }}>
-        <div className="absolute -right-16 -top-20 w-72 h-72 rounded-full bg-white/[0.06]" />
-        <div className="absolute right-40 -bottom-24 w-56 h-56 rounded-full bg-white/[0.05]" />
-        <div className="relative flex flex-col lg:flex-row lg:items-end gap-5">
-          <div className="flex-1 min-w-0">
-            <div className="text-[13px] font-bold text-blue-100/85">{d.getUTCMonth() + 1}월 {d.getUTCDate()}일 {WEEK[d.getUTCDay()]}요일 <span className="tnum ml-1 text-white">{hm(now)}</span> · PnK PROJECT 본사</div>
-            <h1 className="mt-1.5 text-[24px] md:text-[28px] font-black tracking-tight">{me.member?.name || ""}님, {greet()}</h1>
-            <p className="mt-2 text-[14px] font-medium text-blue-50/90">
-              내 업무 {mine.length}건{overdue ? ` (기한 지남 ${overdue})` : ""} · 오늘 일정 {todayEvents.length}건 · 안 읽은 메일 {unread.length}통
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {links.map((l) => (
-              <a key={l.url} href={l.url} target="_blank" rel="noreferrer" className="flex items-center gap-2 px-4 py-2 rounded-full text-[13px] font-bold bg-white/10 ring-1 ring-white/20 hover:bg-white/20">
-                {l.label}<Icon name="link" size={14} />
-              </a>
-            ))}
-          </div>
-        </div>
-      </section>
+      <Hero title={`${me.member?.name || ""}님, ${greet()}`} desc={<>{d.getUTCMonth() + 1}월 {d.getUTCDate()}일 {WEEK[d.getUTCDay()]}요일 <span className="tnum">{hm(now)}</span></>}>
+        {links.map((l) => (
+          <a key={l.url} href={l.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 h-9 px-3.5 rounded-xl text-[13px] font-bold bg-white text-navy border border-[#DCE3EE] hover:border-navy-500">
+            {l.label}<Icon name="link" size={14} />
+          </a>
+        ))}
+      </Hero>
 
       {/* 숫자 카드 */}
       <div className="grid grid-cols-2 xl:grid-cols-4 gap-3 md:gap-4 mb-5">
@@ -113,7 +99,7 @@ export default function Home() {
         {/* 왼쪽 2칸 */}
         <div className="xl:col-span-2 space-y-4 md:space-y-5">
           {me.owner && (
-            <Card en="HQ CONTROL" title="로지스웹 사업 관제" right={<Link to="/customers" className="text-[12.5px] font-bold text-navy-500">자세히</Link>}>
+            <Card title="로지스웹 사업 관제" right={<Link to="/customers" className="text-[12.5px] font-bold text-navy-500">자세히</Link>}>
               {plat === undefined ? <div className="h-[220px] flex items-center justify-center text-[13px] text-[#7A8AA8]">불러오는 중…</div> : !plat ? <Empty>고객사 데이터를 읽지 못했습니다.</Empty> : (
                 <div className="grid grid-cols-1 lg:grid-cols-[1fr_220px] gap-5">
                   <div className="h-[220px] -ml-3">
@@ -154,7 +140,7 @@ export default function Home() {
           )}
 
           {/* 서비스 상태 */}
-          <Card en="SERVICES" title="서비스 상태" right={<Link to="/services" className="text-[12.5px] font-bold text-navy-500">서비스 현황</Link>}>
+          <Card title="서비스 상태" right={<Link to="/services" className="text-[12.5px] font-bold text-navy-500">서비스 현황</Link>}>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {SERVICES.map((s) => {
                 const st = SERVICE_STATUS.find((x) => x.key === (svc[s.key]?.status || "ok"));
@@ -174,7 +160,7 @@ export default function Home() {
           </Card>
 
           {/* 최근 글 */}
-          <Card en="NEWS" title="최근 공지 · 게시글" right={<Link to="/notice" className="text-[12.5px] font-bold text-navy-500">전체</Link>} pad={false}>
+          <Card title="최근 공지 · 게시글" right={<Link to="/notice" className="text-[12.5px] font-bold text-navy-500">전체</Link>} pad={false}>
             {!posts ? null : posts.length === 0 ? <Empty icon="megaphone">아직 올라온 글이 없습니다.</Empty> : (
               <ul className="divide-y divide-[#EEF1F6]">
                 {posts.map((p) => (
@@ -194,21 +180,19 @@ export default function Home() {
         {/* 오른쪽 */}
         <div className="space-y-4 md:space-y-5">
           <div className="grid grid-cols-2 gap-3">
-            <Link to="/attendance" className="rounded-[20px] p-4 text-white shadow-[0_10px_28px_rgba(27,43,75,0.2)]" style={{ background: "linear-gradient(150deg,#1B2B4B,#2D4C82)" }}>
-              <div className="text-[11px] font-extrabold tracking-[0.16em] text-blue-200/80">ATTENDANCE</div>
-              <div className="mt-1 text-[15px] font-black">{!myAtt ? "출근 전" : myAtt.outAt ? "퇴근 완료" : "근무 중"}</div>
+            <Link to="/attendance" className="rounded-2xl p-4 text-white bg-navy">
+              <div className="text-[15px] font-black">{!myAtt ? "출근 전" : myAtt.outAt ? "퇴근 완료" : "근무 중"}</div>
               <div className="text-[12px] text-blue-100/85 tnum">{myAtt?.inAt ? `${hm(new Date(myAtt.inAt))} 출근` : "누르면 출근 화면"}{myAtt?.outAt ? ` · ${hm(new Date(myAtt.outAt))} 퇴근` : ""}</div>
               <div className="mt-3 h-9 rounded-xl bg-white text-navy text-[13.5px] font-black flex items-center justify-center">{!myAtt ? "출근하기" : myAtt.outAt ? "기록 보기" : "퇴근하기"}</div>
               <div className="mt-2 text-[11.5px] text-blue-100/70">오늘 출근 {(att || []).length} / {(members || []).length}명</div>
             </Link>
-            <Link to="/approvals" className="rounded-[20px] p-4 bg-white border border-line shadow-[0_10px_28px_rgba(16,24,40,0.06)] hover:border-navy-500 transition">
-              <div className="text-[11px] font-extrabold tracking-[0.16em] text-[#7A8AA8]">E-APPROVAL</div>
-              <div className="mt-1 text-[15px] font-black">결재할 문서</div>
+            <Link to="/approvals" className="rounded-2xl p-4 bg-white border border-line hover:border-navy-500 transition">
+              <div className="text-[15px] font-black">결재할 문서</div>
               <div className="text-[34px] font-black tnum leading-tight">{myTurn.length}<span className="text-[14px] ml-0.5">건</span></div>
               <div className="text-[12px] text-[#7A8AA8]">내가 올린 진행 중 {myUp.length}건</div>
             </Link>
           </div>
-          <Card en="MY TASKS" title="내 업무" right={<Link to="/tasks" className="text-[12.5px] font-bold text-navy-500">보드</Link>}>
+          <Card title="내 업무" right={<Link to="/tasks" className="text-[12.5px] font-bold text-navy-500">보드</Link>}>
             <div className="flex gap-2 mb-3">
               <Input value={quick} onChange={(e) => setQuick(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.nativeEvent.isComposing) addQuick(); }} placeholder="오늘 할 일 바로 추가" />
               <Btn icon="plus" onClick={addQuick} aria-label="추가" />
@@ -227,7 +211,7 @@ export default function Home() {
             )}
           </Card>
 
-          <Card en="SCHEDULE" title="다가오는 일정" right={<Link to="/calendar" className="text-[12.5px] font-bold text-navy-500">달력</Link>}>
+          <Card title="다가오는 일정" right={<Link to="/calendar" className="text-[12.5px] font-bold text-navy-500">달력</Link>}>
             {(events || []).length === 0 && followUps.length === 0 ? <div className="text-[13px] text-[#7A8AA8] py-3 text-center">예정된 일정이 없습니다.</div> : (
               <ul className="space-y-2">
                 {followUps.slice(0, 3).map((s) => (
@@ -246,7 +230,7 @@ export default function Home() {
             )}
           </Card>
 
-          <Card en="INBOX" title="안 읽은 메일" right={<Link to="/mail" className="text-[12.5px] font-bold text-navy-500">메일함</Link>} pad={false}>
+          <Card title="안 읽은 메일" right={<Link to="/mail" className="text-[12.5px] font-bold text-navy-500">메일함</Link>} pad={false}>
             {unread.length === 0 ? <div className="text-[13px] text-[#7A8AA8] py-6 text-center">새 메일이 없습니다.</div> : (
               <ul className="divide-y divide-[#EEF1F6]">
                 {unread.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0)).slice(0, 5).map((m) => (

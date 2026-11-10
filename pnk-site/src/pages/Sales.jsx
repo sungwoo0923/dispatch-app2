@@ -35,7 +35,7 @@ export default function Sales() {
 
   return (
     <div>
-      <Hero en="SALES PIPELINE" title="영업 관리" desc="도입 문의부터 계약까지 — 다음 연락일은 일정과 대시보드에 자동으로 뜹니다.">
+      <Hero title="영업 관리">
         <HeroBtn icon="plus" onClick={() => setEdit({})}>영업 대상 추가</HeroBtn>
       </Hero>
       <div className="grid grid-cols-2 xl:grid-cols-4 gap-3 md:gap-4 mb-5">
@@ -46,7 +46,7 @@ export default function Sales() {
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-[1fr_360px] gap-4 md:gap-5 mb-5">
-        <Card en="FUNNEL" title="단계별 영업 현황">
+        <Card title="단계별 영업 현황">
           <div className="h-[210px]">
             <ResponsiveContainer>
               <BarChart data={funnel} layout="vertical" margin={{ left: 10, right: 30 }}>
@@ -61,7 +61,7 @@ export default function Sales() {
             </ResponsiveContainer>
           </div>
         </Card>
-        <Card en="FOLLOW UP" title="연락할 곳" pad={false}>
+        <Card title="연락할 곳" pad={false}>
           {due.length === 0 ? <div className="py-8 text-center text-[13px] text-[#7A8AA8]">오늘까지 연락할 곳이 없습니다.</div> : (
             <ul className="divide-y divide-[#EEF1F6]">
               {due.slice(0, 6).map((s) => (
@@ -86,7 +86,7 @@ export default function Sales() {
             const items = list.filter((s) => s.stage === st.key);
             const sum = items.reduce((a, s) => a + (Number(s.value) || 0), 0);
             return (
-              <div key={st.key} className="w-[260px] shrink-0 snap-start rounded-[20px] bg-[#E9EDF4] p-2.5">
+              <div key={st.key} className="w-[260px] shrink-0 snap-start rounded-2xl bg-[#E9EDF4] p-2.5">
                 <div className="px-2 pt-1 pb-2.5">
                   <div className="flex items-center gap-2"><span className="text-[14px] font-black">{st.label}</span><span className="ml-auto text-[12px] font-black text-[#5A6A86] bg-white rounded-lg px-2 h-6 flex items-center">{items.length}</span></div>
                   <div className="text-[11.5px] font-bold text-[#7A8AA8] tnum">월 {won(sum)}</div>

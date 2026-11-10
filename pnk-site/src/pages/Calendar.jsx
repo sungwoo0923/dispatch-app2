@@ -41,7 +41,7 @@ export default function CalendarPage() {
 
   return (
     <div>
-      <Hero en="CALENDAR" title="일정" desc="회사 일정 · 영업 연락 · 업무 기한을 한 달력에서 봅니다.">
+      <Hero title="일정">
         <HeroBtn icon="plus" onClick={() => setEdit({ date: sel })}>일정 추가</HeroBtn>
       </Hero>
       <div className="grid grid-cols-1 xl:grid-cols-[1fr_340px] gap-4 md:gap-5">
@@ -84,7 +84,7 @@ export default function CalendarPage() {
           </div>
         </Card>
 
-        <Card en={sel === today ? "TODAY" : "DAY"} title={`${Number(sel.slice(5, 7))}월 ${Number(sel.slice(8))}일 (${WEEK[new Date(sel).getDay()]})`} right={<Btn kind="soft" icon="plus" onClick={() => setEdit({ date: sel })}>추가</Btn>}>
+        <Card title={`${Number(sel.slice(5, 7))}월 ${Number(sel.slice(8))}일 (${WEEK[new Date(sel).getDay()]})`} right={<Btn kind="soft" icon="plus" onClick={() => setEdit({ date: sel })}>추가</Btn>}>
           {selItems.length === 0 ? <div className="py-8 text-center text-[13px] text-[#7A8AA8]">일정이 없습니다.<br /><span className="text-[12px]">달력 날짜를 두 번 누르면 바로 추가</span></div> : (
             <ul className="space-y-2">
               {selItems.map((x) => (

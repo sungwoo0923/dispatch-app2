@@ -28,7 +28,7 @@ export default function Tasks() {
 
   return (
     <div>
-      <Hero en="TASK BOARD" title="업무 보드" desc="서비스별 할 일을 나누고, 누가 무엇을 하는지 함께 봅니다.">
+      <Hero title="업무 보드">
         <HeroBtn icon="plus" onClick={() => setEdit({})}>업무 추가</HeroBtn>
       </Hero>
 
@@ -55,9 +55,8 @@ export default function Tasks() {
               .sort((a, b) => (c.key === "done" ? (b.doneAt || 0) - (a.doneAt || 0) : String(a.due || "9999").localeCompare(String(b.due || "9999"))));
             return (
               <div key={c.key} onDragOver={(e) => e.preventDefault()} onDrop={() => { if (drag && drag.status !== c.key) move(drag, c.key); setDrag(null); }}
-                className={cx("rounded-[22px] p-3 min-h-[300px] transition", drag ? "bg-navy-100/70 ring-2 ring-dashed ring-navy-500/30" : "bg-[#E9EDF4]")}>
+                className={cx("rounded-2xl p-3 min-h-[300px] transition", drag ? "bg-navy-100/70 ring-2 ring-dashed ring-navy-500/30" : "bg-[#E9EDF4]")}>
                 <div className="flex items-center gap-2 px-2 pt-1 pb-3">
-                  <span className="text-[10.5px] font-extrabold tracking-[0.16em] text-[#7A8AA8]">{c.en}</span>
                   <span className="text-[14.5px] font-black">{c.label}</span>
                   <span className="ml-auto text-[12px] font-black text-[#5A6A86] bg-white rounded-lg px-2 h-6 flex items-center tnum">{items.length}</span>
                 </div>

@@ -29,7 +29,7 @@ export default function Files() {
 
   return (
     <div>
-      <Hero en="ARCHIVE" title="자료실" desc={`회사 문서를 한곳에 — ${list.length}개 · 전체 ${size(used)}`}>
+      <Hero title="자료실" desc={`회사 문서를 한곳에 — ${list.length}개 · 전체 ${size(used)}`}>
         <HeroBtn icon="upload" onClick={() => setUp(true)}>올리기</HeroBtn>
       </Hero>
       <div className="grid grid-cols-1 lg:grid-cols-[220px_1fr] gap-4 md:gap-5">

@@ -34,8 +34,7 @@ export default function Board({ mode }) {
 
   return (
     <div>
-      <Hero en={mode === "notice" ? "NOTICE" : "BOARD"} title={mode === "notice" ? "사내 공지" : "게시판 · 회의록"}
-        desc={mode === "notice" ? "회사 전체에 알릴 내용 — 누가 읽었는지 확인할 수 있습니다." : "자유롭게 의견을 나누고, 회의 내용은 회의록에 남겨 주세요."}>
+      <Hero title={mode === "notice" ? "사내 공지" : "게시판 · 회의록"}>
         {canWrite && <HeroBtn icon="pen" onClick={() => setEdit({})}>{mode === "notice" ? "공지 쓰기" : "글쓰기"}</HeroBtn>}
       </Hero>
 

@@ -40,7 +40,7 @@ export default function Approvals() {
 
   return (
     <div>
-      <Hero en="E-APPROVAL" title="전자결재" desc={`내 결재 차례 ${todo.length}건 · 내가 올린 진행 중 문서 ${myPending}건`}>
+      <Hero title="전자결재" desc={`내 결재 차례 ${todo.length}건 · 내가 올린 진행 중 문서 ${myPending}건`}>
         <HeroBtn icon="pen" onClick={() => setWrite("pick")}>새 문서 쓰기</HeroBtn>
       </Hero>
 

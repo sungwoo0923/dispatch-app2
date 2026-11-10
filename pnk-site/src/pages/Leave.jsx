@@ -33,12 +33,12 @@ export default function Leave() {
 
   return (
     <div>
-      <Hero en="LEAVE" title="휴가" desc={`${year}년 연차 ${annual}일 · 사용 ${used}일 · 남은 ${left}일`}>
+      <Hero title="휴가" desc={`${year}년 연차 ${annual}일 · 사용 ${used}일 · 남은 ${left}일`}>
         <HeroBtn icon="plus" onClick={() => nav("/approvals?new=leave")}>휴가 신청</HeroBtn>
       </Hero>
 
       <div className="grid grid-cols-1 xl:grid-cols-[360px_1fr] gap-4 md:gap-5 mb-5">
-        <Card en="MY LEAVE" title="내 연차">
+        <Card title="내 연차">
           <div className="relative h-[200px]">
             <ResponsiveContainer><PieChart><Pie data={pie} dataKey="v" innerRadius={66} outerRadius={90} startAngle={90} endAngle={-270} stroke="none">{pie.map((p, i) => <Cell key={i} fill={p.c} />)}</Pie></PieChart></ResponsiveContainer>
             <div className="absolute inset-0 flex flex-col items-center justify-center">
@@ -55,7 +55,7 @@ export default function Leave() {
           <Btn className="w-full mt-4 h-11" icon="plus" onClick={() => nav("/approvals?new=leave")}>휴가 신청서 쓰기</Btn>
         </Card>
 
-        <Card en="TEAM" title="다가오는 팀 휴가" pad={false}>
+        <Card title="다가오는 팀 휴가" pad={false}>
           {upcoming.length === 0 ? <Empty icon="flag">예정된 휴가가 없습니다.</Empty> : (
             <ul className="divide-y divide-[#EEF1F6]">
               {upcoming.map((e) => (
@@ -71,7 +71,7 @@ export default function Leave() {
         </Card>
       </div>
 
-      <Card en="REQUESTS" title="내 휴가 신청 내역" pad={false} className="mb-5">
+      <Card title="내 휴가 신청 내역" pad={false} className="mb-5">
         {myReq.length === 0 ? <Empty icon="calendar">신청한 휴가가 없습니다.</Empty> : (
           <div className="overflow-x-auto">
             <table className="w-full text-[13.5px] min-w-[560px]">
@@ -91,7 +91,7 @@ export default function Leave() {
       </Card>
 
       {me.isAdmin && (
-        <Card en="ALL MEMBERS" title={`${year}년 전체 연차 현황 (관리자)`} pad={false}>
+        <Card title={`${year}년 전체 연차 현황 (관리자)`} pad={false}>
           <div className="overflow-x-auto">
             <table className="w-full text-[13.5px] min-w-[560px]">
               <thead><tr className="text-left text-[12px] text-[#7A8AA8] bg-[#F8FAFD]">{["사번", "이름", "부서", "연차", "사용", "남음", ""].map((h) => <th key={h} className="px-4 py-2.5 font-bold">{h}</th>)}</tr></thead>

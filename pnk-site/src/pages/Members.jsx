@@ -22,13 +22,13 @@ export default function Members() {
 
   return (
     <div>
-      <Hero en="PEOPLE" title="구성원 · 조직도" desc={`PnK PROJECT 구성원 ${active.length}명${pending.length && me.isAdmin ? ` · 가입 승인 대기 ${pending.length}명` : ""}`}>
-        <HeroBtn icon="user" onClick={() => setMine(true)}>내 정보 고치기</HeroBtn>
+      <Hero title="구성원 · 조직도" desc={`PnK PROJECT 구성원 ${active.length}명${pending.length && me.isAdmin ? ` · 가입 승인 대기 ${pending.length}명` : ""}`}>
+        <HeroBtn sub icon="user" onClick={() => setMine(true)}>내 정보 고치기</HeroBtn>
       </Hero>
       <Tabs items={[{ key: "org", label: "조직도" }, { key: "list", label: "연락처" }, ...(me.isAdmin ? [{ key: "admin", label: "구성원 관리", badge: pending.length }] : [])]} value={tab} onChange={setTab} />
 
       {!rows ? <Loading /> : tab === "org" ? (
-        <div className="bg-white rounded-[22px] border border-line p-5 md:p-8 overflow-x-auto">
+        <div className="bg-white rounded-2xl border border-line p-5 md:p-8 overflow-x-auto">
           <div className="min-w-[600px] flex flex-col items-center">
             <div className="rounded-2xl px-6 py-4 text-white text-center shadow-lg" style={{ background: "linear-gradient(120deg,#1B2B4B,#2D4C82)" }}>
               <img src="/brand/pnk-mark-64.png" alt="" className="w-9 h-9 rounded-lg bg-white mx-auto mb-1.5" />
@@ -62,7 +62,7 @@ export default function Members() {
       ) : tab === "list" ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-3">
           {active.map((m) => (
-            <div key={m.uid} className="bg-white rounded-[20px] border border-line p-4 flex gap-3">
+            <div key={m.uid} className="bg-white rounded-2xl border border-line p-4 flex gap-3">
               <div className="w-12 h-12 rounded-2xl bg-navy text-white text-[16px] font-black flex items-center justify-center shrink-0">{m.name.slice(0, 1)}</div>
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-1.5"><span className="text-[15px] font-black">{m.name}</span><span className="text-[12px] text-[#7A8AA8] font-bold">{m.dept} {m.title} · {m.empNo}</span>{m.role !== "staff" && <Chip tone="dark" className="ml-auto">{ROLE_LABEL[m.role]}</Chip>}</div>
@@ -78,7 +78,7 @@ export default function Members() {
       ) : (
         <div className="space-y-4">
           {pending.length > 0 && (
-            <Card en="APPROVAL" title="가입 승인 대기" pad={false}>
+            <Card title="가입 승인 대기" pad={false}>
               <ul className="divide-y divide-[#EEF1F6]">{pending.map((m) => (
                 <li key={m.uid} className="flex flex-col sm:flex-row sm:items-center gap-2 px-5 py-3">
                   <div className="flex-1 min-w-0"><b>{m.name}</b> <span className="text-[12.5px] text-[#7A8AA8]">{m.dept} {m.title} · {m.email} · {m.phone}</span></div>
@@ -87,7 +87,7 @@ export default function Members() {
               ))}</ul>
             </Card>
           )}
-          <Card en="MEMBERS" title="전체 구성원" pad={false}>
+          <Card title="전체 구성원" pad={false}>
             <div className="overflow-x-auto">
               <table className="w-full text-[13.5px] min-w-[700px]">
                 <thead><tr className="text-left text-[12px] text-[#7A8AA8] bg-[#F8FAFD]">{["사번", "이름", "부서 · 직책", "로그인 계정", "사내메일", "역할", "상태", ""].map((h) => <th key={h} className="px-4 py-2.5 font-bold">{h}</th>)}</tr></thead>

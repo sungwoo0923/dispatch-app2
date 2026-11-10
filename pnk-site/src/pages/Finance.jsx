@@ -51,10 +51,10 @@ export default function Finance() {
 
   return (
     <div>
-      <Hero en="FINANCE · P&L" title="매출 · 손익" desc="PnK PROJECT 전체(로지스웹 · 허브 · 홈페이지 · 기사앱)의 돈 흐름 — 관리자만 볼 수 있습니다.">
+      <Hero title="매출 · 손익">
+        <MonthPicker value={month} onChange={(v) => v && setMonth(v)} />
+        <HeroBtn sub icon="plus" onClick={() => setEdit({ kind: "expense", date: ymd() })}>비용 입력</HeroBtn>
         <HeroBtn icon="plus" onClick={() => setEdit({ kind: "income", date: ymd() })}>매출 입력</HeroBtn>
-        <HeroBtn icon="plus" onClick={() => setEdit({ kind: "expense", date: ymd() })}>비용 입력</HeroBtn>
-        <MonthPicker dark value={month} onChange={(v) => v && setMonth(v)} />
       </Hero>
 
       {!rows ? <Loading /> : (<>
@@ -66,7 +66,7 @@ export default function Finance() {
         </div>
 
         <div className="grid grid-cols-1 xl:grid-cols-3 gap-4 md:gap-5 mb-5">
-          <Card en="12 MONTHS" title="월별 손익" className="xl:col-span-2">
+          <Card title="월별 손익" className="xl:col-span-2">
             <div className="h-[280px] -ml-3">
               <ResponsiveContainer>
                 <ComposedChart data={trend}>
@@ -82,7 +82,7 @@ export default function Finance() {
               </ResponsiveContainer>
             </div>
           </Card>
-          <Card en="COST MIX" title={`${Number(month.slice(5))}월 비용 구성`}>
+          <Card title={`${Number(month.slice(5))}월 비용 구성`}>
             {expPie.length === 0 ? <Empty icon="pie">비용 기록이 없습니다.</Empty> : (<>
               <div className="h-[180px]"><ResponsiveContainer><PieChart>
                 <Pie data={expPie} dataKey="value" nameKey="name" innerRadius={50} outerRadius={80} paddingAngle={2} stroke="none">{expPie.map((_, i) => <Cell key={i} fill={NAVY[i % NAVY.length]} />)}</Pie>
@@ -96,7 +96,7 @@ export default function Finance() {
         </div>
 
         <div className="grid grid-cols-1 xl:grid-cols-3 gap-4 md:gap-5 mb-5">
-          <Card en="BY SERVICE" title="서비스별 매출 · 비용" className="xl:col-span-2">
+          <Card title="서비스별 매출 · 비용" className="xl:col-span-2">
             {byProd.length === 0 ? <Empty>이달 기록이 없습니다.</Empty> : (
               <ul className="space-y-4">{byProd.map((p) => (
                 <li key={p.key}>
@@ -109,7 +109,7 @@ export default function Finance() {
               ))}</ul>
             )}
           </Card>
-          <Card en="LOGISWEB BILLING" title="로지스웹 수납 연동">
+          <Card title="로지스웹 수납 연동">
             {!me.owner ? <div className="text-[13px] text-[#7A8AA8]">대표 계정에서 로지스웹 수납 관리 금액을 불러옵니다.</div> : !inv ? <div className="text-[13px] text-[#7A8AA8] py-4">{plat ? `${month} 청구 기록이 없습니다.` : "불러오는 중…"}</div> : (
               <div className="space-y-2">
                 {[["청구", inv.billed], ["입금 완료", inv.paid], ["연체", inv.overdue]].map(([k, v]) => (
@@ -121,7 +121,7 @@ export default function Finance() {
           </Card>
         </div>
 
-        <Card en="LEDGER" title={`${month} 장부`} right={<span className="text-[12.5px] text-[#7A8AA8]">{cur.length}건</span>} pad={false}>
+        <Card title={`${month} 장부`} right={<span className="text-[12.5px] text-[#7A8AA8]">{cur.length}건</span>} pad={false}>
           {cur.length === 0 ? <Empty icon="receipt">이달 기록이 없습니다. 위 [매출 입력] · [비용 입력]으로 적어 주세요.</Empty> : (
             <div className="overflow-x-auto">
               <table className="w-full text-[13.5px] min-w-[640px]">

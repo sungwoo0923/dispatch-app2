@@ -26,7 +26,7 @@ export default function Services() {
 
   return (
     <div>
-      <Hero en="SERVICES" title="서비스 현황" desc={issues.length ? `확인이 필요한 서비스 ${issues.length}개 — ${issues.map((s) => s.label).join(", ")}` : "모든 서비스가 정상입니다."}>
+      <Hero title="서비스 현황" desc={issues.length ? `확인이 필요한 서비스 ${issues.length}개 — ${issues.map((s) => s.label).join(", ")}` : "모든 서비스가 정상입니다."}>
         <HeroBtn icon="plus" onClick={() => setRelEdit({})}>업데이트 기록</HeroBtn>
       </Hero>
 
@@ -36,7 +36,7 @@ export default function Services() {
           const open = (tasks || []).filter((t) => t.product === s.key && t.status !== "done");
           const last = (rel || []).find((r) => r.product === s.key);
           return (
-            <div key={s.key} className="relative overflow-hidden bg-white rounded-[22px] border border-line shadow-[0_10px_28px_rgba(16,24,40,0.06)] p-5 flex flex-col">
+            <div key={s.key} className="relative overflow-hidden bg-white rounded-2xl border border-line p-5 flex flex-col">
               <div className={cx("absolute inset-x-0 top-0 h-1", st.key === "ok" ? "bg-emerald-500" : st.key === "issue" ? "bg-rose-500" : "bg-amber-500")} />
               <div className="flex items-start gap-3">
                 <div className="w-12 h-12 rounded-2xl bg-navy text-white flex items-center justify-center shrink-0"><Icon name={s.icon} size={22} /></div>
@@ -62,7 +62,7 @@ export default function Services() {
         })}
       </div>
 
-      <Card en="RELEASE NOTES" title="업데이트 기록" right={
+      <Card title="업데이트 기록" right={
         <div className="flex gap-1 overflow-x-auto no-scrollbar">{[{ key: "", label: "전체" }, ...SERVICES].map((s) => <button key={s.key} type="button" onClick={() => setFilter(s.key)} className={cx("h-8 px-3 rounded-lg text-[12px] font-black whitespace-nowrap", filter === s.key ? "bg-navy text-white" : "bg-navy-50 text-[#5A6A86]")}>{s.label}</button>)}</div>}>
         {(rel || []).filter((r) => !filter || r.product === filter).length === 0 ? <div className="py-8 text-center text-[13px] text-[#7A8AA8]">아직 기록이 없습니다. 배포할 때마다 [업데이트 기록]으로 남겨 두면 고객 안내 · 인수인계에 씁니다.</div> : (
           <ol className="relative border-l-2 border-navy-100 ml-3 space-y-5">

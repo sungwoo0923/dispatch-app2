@@ -29,21 +29,23 @@ export default function MailServer({ me, info }) {
   const pick = (k) => { const p = PRESETS.find((x) => x.key === k); setF((x) => ({ ...x, preset: k, host: p.host, port: String(p.port), security: p.security, user: p.user || x.user })); };
   const external = info?.mailExternal === true;
   const lastTest = info?.mailServer?.lastTest;
+  const A = (href, label) => <a href={href} target="_blank" rel="noreferrer" className="font-black text-navy underline underline-offset-2">{label}</a>;
   const step = (n, done, title, body) => (
     <li className="flex gap-3">
       <span className={cx("w-7 h-7 rounded-full text-[12px] font-black flex items-center justify-center shrink-0", done ? "bg-emerald-500 text-white" : "bg-navy-100 text-navy")}>{done ? "✓" : n}</span>
-      <div className="min-w-0 flex-1 pb-4"><div className="text-[14px] font-black">{title}</div><div className="text-[12.5px] text-[#5A6A86] leading-relaxed mt-0.5">{body}</div></div>
+      <div className="min-w-0 flex-1 pb-4"><div className="text-[14px] font-black">{title}</div><div className="text-[13px] text-[#3A4A66] leading-relaxed mt-0.5">{body}</div></div>
     </li>
   );
   return (
-    <Card en="MAIL SERVER · ADMIN" title={`외부 메일 연결 (@${MAIL_DOMAIN})`} className="xl:col-span-3" right={<Chip tone={external ? "green" : "gray"}>{external ? "연결됨" : "연결 전"}</Chip>}>
+    <Card title={`외부 메일 연결 (@${MAIL_DOMAIN})`} className="xl:col-span-3" right={<Chip tone={external ? "green" : "gray"}>{external ? "연결됨" : "연결 전"}</Chip>}>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <ol>
-          {step(1, true, "가비아에서 도메인 구입", `${MAIL_DOMAIN} — 네임서버는 "가비아 네임서버 사용", 하이웍스 · 호스팅은 신청하지 않습니다.`)}
-          {step(2, !!st?.server, "Mailgun 가입 → 도메인 추가 → 가비아 DNS에 레코드 넣기", <>Mailgun › Sending › Domains › Add New Domain 에 <b>{MAIL_DOMAIN}</b>. 알려 주는 TXT(SPF · DKIM) · MX(mxa/mxb.mailgun.org) · CNAME(email) 을 가비아 › DNS 관리 › 레코드 추가 에 그대로 넣고 Verify. DMARC: TXT <b>_dmarc</b> = <code>v=DMARC1; p=none;</code></>)}
-          {step(3, !!st?.server, "SMTP 계정 만들기 → 오른쪽에 넣고 저장", "Mailgun › Domain settings › SMTP credentials 에서 postmaster@ 계정 비밀번호를 만들어 넣습니다(채팅 · 메신저에 붙여 넣지 마세요).")}
-          {step(4, external, "테스트 메일 보내기", "내 네이버 · 구글 주소로 테스트 메일이 오면 외부 보내기가 켜집니다.")}
-          {step(5, false, "받기 연결", <>Mailgun › Receiving › Create route — Expression: <b>Match Recipient</b> <code>.*@{MAIL_DOMAIN}</code> · Action: <b>Forward</b> 에 아래 [받기 주소]를 넣고 저장. 바깥에서 보낸 메일이 받은메일함에 들어옵니다.</>)}
+          {step(1, true, "가비아 도메인", <>{MAIL_DOMAIN} · 네임서버는 가비아 그대로</>)}
+          {step(2, !!st?.server, "Mailgun 가입 → 도메인 추가", <>{A("https://signup.mailgun.com/new/signup", "Mailgun 가입")} → {A("https://app.mailgun.com/mg/sending/domains", "Domains › Add new domain")} 에 <b>{MAIL_DOMAIN}</b> (mg. 붙이지 않기 · 지역 US)</>)}
+          {step(3, !!st?.server, "가비아 DNS에 레코드 넣기", <>{A("https://dns.gabia.com", "가비아 DNS 관리")} › {MAIL_DOMAIN} › 설정 › 레코드 추가. Mailgun 이 보여 주는 TXT 2개 · MX 2개 · CNAME 1개를 그대로. 호스트는 <b>@</b>(도메인 자체) 또는 앞부분만(<code>email</code>, <code>xx._domainkey</code>), MX · CNAME 값 끝에는 점(<code>mxa.mailgun.org.</code>). 넣은 뒤 Mailgun 에서 Verify</>)}
+          {step(4, !!st?.server, "SMTP 비밀번호 → 오른쪽에 저장", <>Mailgun › Domain settings › SMTP credentials › postmaster@{MAIL_DOMAIN} › Reset password</>)}
+          {step(5, external, "테스트 메일 보내기", "내 네이버 · 구글 주소로 도착하면 외부 보내기가 켜집니다")}
+          {step(6, false, "받기 연결", <>오른쪽 [받기 주소] 만들기 → {A("https://app.mailgun.com/mg/receiving/routes", "Mailgun › Receiving › Create route")} — Match Recipient <code>.*@{MAIL_DOMAIN}</code> · Forward 에 받기 주소 붙여 넣기</>)}
         </ol>
         <div className="space-y-3">
           {err && <div className="rounded-xl bg-rose-50 text-rose-700 text-[12.5px] font-bold px-3 py-2">{err} — 서버 함수(pnkMailAdmin)가 아직 배포되지 않았을 수 있습니다.</div>}
