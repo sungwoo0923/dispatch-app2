@@ -44,6 +44,15 @@ const stKey = (company) => `kpPayGateSt:${company}:${auth.currentUser?.uid || ""
 const readSt = (company) => { try { const v = JSON.parse(sessionStorage.getItem(stKey(company)) || "null"); return v && typeof v === "object" ? v : null; } catch { return null; } };
 const writeSt = (company, r) => { try { const { unlockedUntil, lockUntil, ...keep } = r || {}; void unlockedUntil; void lockUntil; sessionStorage.setItem(stKey(company), JSON.stringify(keep)); } catch { /* 무시 */ } };
 const stPending = new Map(); // 회사 → { at, p }
+// ⭐ 2026-11-10 잠금 해제가 느리던 문제 — 비밀번호 확인 서버(payrollPwVerify)는 자주 안 불려서 매번 처음 켜지느라(콜드 스타트) 몇 초씩 걸렸다.
+//  급여 화면에 들어오면(비밀번호를 치는 동안) 미리 한 번 깨워 둔다 — 아무것도 읽거나 쓰지 않는 호출 · 4분에 한 번만
+let warmAt = 0;
+export function warmPayrollVerify() {
+  if (demo() || Date.now() - warmAt < 4 * 60000) return;
+  warmAt = Date.now();
+  // 로그인 토큰 없이 부른다 — 예전 서버(warm 처리 전)에 닿아도 "로그인 필요"로 끝나서 틀린 횟수로 세지 않는다
+  fetch(`${FUNCTIONS_BASE}/payrollPwVerify`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ data: { warm: true } }) }).catch(() => { warmAt = 0; });
+}
 export function prefetchPayrollStatus(company, { force = false } = {}) {
   if (!company) return Promise.resolve(null);
   const key = `${company}:${auth.currentUser?.uid || ""}`;
@@ -121,7 +130,7 @@ export default function PayrollGate({ company, canAdmin = false, children }) {
   const [now, setNow] = React.useState(Date.now());
   const lastAct = React.useRef(Date.now());
   const load = React.useCallback((force = false) => prefetchPayrollStatus(company, { force }).then((r) => { setSt(r); if (demo() || !uid) setUntil(r.unlockedUntil || 0); }).catch((e) => setSt({ error: e.message })), [company, uid]);
-  React.useEffect(() => { load(); }, [load]);
+  React.useEffect(() => { load(); warmPayrollVerify(); }, [load]);
   // 서버 잠금 해제 문서(다른 탭에서 잠그거나 비밀번호가 바뀌면 바로 잠김)
   React.useEffect(() => {
     if (demo() || !uid) return undefined;

@@ -10,6 +10,9 @@ import { createPortal } from "react-dom";
 import { ShellIcon } from "./AdminShell";
 import { confirmLeave } from "./leaveGuard";
 import { useSubnavTarget } from "./navMenus";
+import { useNewVersion, openUpdatePopup } from "./VersionCheck";
+/* global __APP_VERSION__ */
+const APP_VER = typeof __APP_VERSION__ !== "undefined" ? __APP_VERSION__ : "dev";
 // ⭐ 2026-11-03 red: true인 항목(사내메일 등)은 카톡처럼 진한 빨강 바탕 + 흰 숫자(테마가 rose를 남색으로 바꿔도 그대로)
 const redStyle = (it) => (it?.red && typeof it.badge === "number" ? { background: "#FF3B30", color: "#fff", fontWeight: 900 } : undefined);
 // ✋ 작성 중인 문서가 있으면 메뉴를 옮기기 전에 저장할지 묻는다(전자결재·증명서 등)
@@ -110,6 +113,7 @@ export default function KpSubNav({ code = "MENU", title, icon = "dashboard", ite
   const top = React.useContext(SubNavTopCtx);
   React.useLayoutEffect(() => { top?.claim?.(); }, [top?.claim]); // eslint-disable-line react-hooks/exhaustive-deps
   const [slots, setLeft, setRight] = useTopSlots();
+  const newVer = useNewVersion(); // 🛰 2026-11-10 새 버전이 나오면 왼쪽 메뉴 머리(제목 옆)에 업데이트 안내 · 버전은 맨 아래
   const [collapsed, setCollapsed] = useState(() => { try { return localStorage.getItem("kpSubNavCollapsed") === "1"; } catch { return false; } });
   const toggle = () => setCollapsed((v) => { try { localStorage.setItem("kpSubNavCollapsed", v ? "0" : "1"); } catch { /* 저장 실패 무시 */ } return !v; });
   // 🖥 2026-11-10 화면 맞춤 › 크게 보기 — 왼쪽 메뉴를 접어 표 자리를 넓힌다(끄면 원래대로)
@@ -173,14 +177,26 @@ export default function KpSubNav({ code = "MENU", title, icon = "dashboard", ite
         style={{ width: collapsed ? 72 : 228, background: "linear-gradient(180deg, #16264A 0%, #1B2B4B 55%, #14213D 100%)" }}
       >
         <div className={`shrink-0 border-b border-white/10 flex items-center gap-3 ${collapsed ? "px-0 justify-center" : "px-4"}`} style={{ height: SUBNAV_HEAD_H }}>
-          <button type="button" onClick={collapsed ? toggle : undefined} title={collapsed ? "메뉴 펼치기" : undefined} className={`w-10 h-10 rounded-xl bg-white/10 ring-1 ring-white/15 flex items-center justify-center shrink-0 ${collapsed ? "cursor-pointer hover:bg-white/20" : "cursor-default"}`}>
+          <button type="button" onClick={collapsed ? (newVer ? openUpdatePopup : toggle) : undefined} title={collapsed ? (newVer ? `새 버전 v${newVer.version || ""} — 눌러서 업데이트` : "메뉴 펼치기") : undefined} className={`relative w-10 h-10 rounded-xl bg-white/10 ring-1 ring-white/15 flex items-center justify-center shrink-0 ${collapsed ? "cursor-pointer hover:bg-white/20" : "cursor-default"}`}>
             <ShellIcon name={icon} size={19} />
+            {collapsed && newVer && <span className="kp-subnav-newdot absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-[#CFE0FF]" />}
           </button>
           {!collapsed && (
-            <div className="min-w-0">
+            <div className="min-w-0 flex-1">
               <div style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 10, fontWeight: 800, letterSpacing: "0.22em" }} className="text-blue-200/70">{code}</div>
               <div className="text-[15.5px] font-bold truncate">{title}</div>
             </div>
+          )}
+          {!collapsed && newVer && (
+            <button type="button" onClick={openUpdatePopup} data-kp="subnav-update"
+              title={`새 버전 v${newVer.version || ""}이 배포되었습니다 — 눌러서 업데이트`}
+              className="shrink-0 inline-flex flex-col items-center justify-center gap-0.5 h-11 px-2 rounded-xl bg-white/[0.08] border border-[#8FB0F0]/60 hover:bg-white/[0.16] transition">
+              <span className="inline-flex items-center gap-1">
+                <span className="kp-subnav-newdot w-1.5 h-1.5 rounded-full bg-[#CFE0FF]" />
+                <span className="px-1.5 h-4 inline-flex items-center rounded-full bg-white text-[#0F1A30] text-[9.5px] font-black tracking-wider">NEW</span>
+              </span>
+              <span className="text-[10.5px] font-extrabold text-white/90 leading-none">업데이트</span>
+            </button>
           )}
         </div>
         <nav className={`flex-1 overflow-y-auto py-4 space-y-5 no-scrollbar ${collapsed ? "px-2" : "px-3"}`}>
@@ -226,6 +242,15 @@ export default function KpSubNav({ code = "MENU", title, icon = "dashboard", ite
             </div>
           )}
         </nav>
+        {/* 🛰 2026-11-10 버전 표시(상단바에서 옮김) — 새 버전이 있으면 눌러서 업데이트 */}
+        <button type="button" onClick={newVer ? openUpdatePopup : undefined} data-kp="subnav-version"
+          title={newVer ? `새 버전 v${newVer.version || ""}이 배포되었습니다 — 눌러서 업데이트` : `현재 버전 v${APP_VER}`}
+          className={`shrink-0 mx-3 mt-2 -mb-1 h-7 rounded-lg inline-flex items-center justify-center gap-1.5 text-[11px] tabular-nums font-bold ${newVer ? "bg-white/[0.08] border border-[#8FB0F0]/60 text-white/90 hover:bg-white/[0.16] cursor-pointer" : "text-white/45 cursor-default"} ${collapsed ? "!mx-2 !text-[9.5px]" : ""}`}
+          style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>
+          {newVer && !collapsed && <span className="px-1.5 h-4 inline-flex items-center rounded-full bg-white text-[#0F1A30] text-[9.5px] font-black tracking-wider">NEW</span>}
+          v{APP_VER}
+          {newVer && <span className="kp-subnav-newdot w-1.5 h-1.5 rounded-full bg-[#CFE0FF]" />}
+        </button>
         <button type="button" onClick={toggle} className={`relative z-[5] shrink-0 h-10 rounded-xl text-[12.5px] font-bold border flex items-center justify-center gap-2 ${collapsed ? "mx-2 my-3 !h-12 flex-col !gap-0.5 !text-[10.5px] bg-white/10 text-white border-white/20 hover:bg-white/20" : "m-3 text-blue-100/70 hover:text-white hover:bg-white/[0.08] border-white/10"}`} title={collapsed ? "메뉴 펼치기" : "메뉴 접기"}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ transform: collapsed ? "rotate(180deg)" : "none" }}><path d="M15 6l-6 6 6 6" /></svg>
           {collapsed ? "펼치기" : "메뉴 접기"}

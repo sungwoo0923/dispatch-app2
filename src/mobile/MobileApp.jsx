@@ -5494,7 +5494,7 @@ const pcViewMe = { uid: currentUser?.uid || user?.uid, name: pcViewMeDoc.name ||
 const title =
   page === "list" ? "등록내역"
   : page === "ratecard" ? "단가표"
-  : page === "form" ? (form._editId ? "수정하기" : "화물등록")
+  : page === "form" ? (form._editId ? "수정하기" : "오더등록")
   : page === "notice" ? "공지사항"
   : page === "schedule" ? "일정"
   : page === "fare" ? "자사운임표"
@@ -5892,6 +5892,7 @@ const title =
         <DriverEventToasts mobile onView={(e) => {
           if (e.kind === "doc") { markDriverSeen("docs"); setPage("dept:driverdocs"); return; }
           if (e.kind === "sos") { markDriverSeen("sos"); setPage("fleet"); return; }
+          if (e.kind === "checkout") { markDriverSeen("checkout"); setPage("fleet"); return; } // ⭐ 2026-11-10 담당 기사 퇴근
           markDriverSeen("orders");
           if (e.row?.배차표Id) { setPage("fixedroute"); return; }
           setShowMenu(false); setPage("list"); setTimeout(() => focusOrderRow(e.id), 300);
@@ -7972,9 +7973,28 @@ function MobileSideMenu({
     const r = requestAnimationFrame(() => { if (el) el.scrollTop = SIDE_MENU_SCROLL; }); // 펼쳐지는 섹션이 그려진 뒤 한 번 더
     return () => cancelAnimationFrame(r);
   }, []);
+  // ⭐ 2026-11-10 메뉴 잘못 눌림 방지 — 메뉴를 연 직후 권한·요금제 확인이 끝나며 항목이 늦게 끼어들거나(급여 계산·기사관리 등)
+  //   스크롤 위치가 되돌려지면 목록이 밀린다 → 누르려던 줄 대신 위/아래 줄이 눌렸다.
+  //   목록이 움직인 직후(0.45초)나 누르는 동안 줄이 움직였으면 그 탭은 무시한다(다시 누르면 들어간다)
+  const tapGuard = useRef({ shiftAt: 0 });
+  useEffect(() => {
+    const el = menuScrollRef.current; if (!el) return undefined;
+    const isItem = (n) => n.nodeType === 1 && (n.matches?.(".kp-m-drawer-item") || n.querySelector?.(".kp-m-drawer-item"));
+    const mo = new MutationObserver((ms) => { if (ms.some((m) => [...m.addedNodes, ...m.removedNodes].some(isItem))) tapGuard.current.shiftAt = Date.now(); });
+    mo.observe(el, { childList: true, subtree: true });
+    const onScroll = () => { tapGuard.current.shiftAt = Date.now(); };
+    el.addEventListener("scroll", onScroll, { passive: true });
+    return () => { mo.disconnect(); el.removeEventListener("scroll", onScroll); };
+  }, []);
   const isAdminRole = ["admin", "totalMaster", "superadmin"].includes(role);
   // ⭐ 2026-11-06 직원 급여·연차 촉진 메뉴 — 권한은 users 문서 역할 기준(payrollAccess.js · 보안 규칙과 같음)
   const payM = usePayrollAccess((localStorage.getItem("loginCompany") || localStorage.getItem("userCompany") || "").trim(), currentUser?.uid, role, currentUser?.email || "");
+  // ⭐ 2026-11-10 급여 계산이 보이면 메뉴를 연 순간 급여 화면 묶음·잠금 상태를 미리 받고 비밀번호 확인 서버를 깨워 둔다(누르면 바로 · 잠금 해제도 빠르게)
+  useEffect(() => {
+    if (!payM.canView) return;
+    const co = (localStorage.getItem("loginCompany") || localStorage.getItem("userCompany") || "").trim();
+    import("../Payroll").then((m) => m.prefetchPayroll?.(co)).catch(() => {});
+  }, [payM.canView]);
   const planIdM = useCompanyPlanId((role === "totalMaster" ? (localStorage.getItem("loginCompany") || "") : (localStorage.getItem("userCompany") || localStorage.getItem("loginCompany") || "")).trim()); // ⭐ 2026-11-05 PC와 같은 요금제 잠금
   // ⭐ 2026-11-09 요금제에 없는 메뉴(지입차관리·전자결재·인사·회계 등)는 모바일에서도 숨김 — PC MENU_FEATURE와 같은 기준
   const ok = (m) => menuOk(m) && (!MENU_FEATURE[m] || planIncludes(planIdM, MENU_FEATURE[m]));
@@ -8050,7 +8070,7 @@ function MobileSideMenu({
   const dark = cardVersionB;
 
   return (
-    <>
+    <MenuTapCtx.Provider value={tapGuard}>
     <div className="fixed inset-0 z-40">
       <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={onClose} />
       <div className={`absolute left-0 top-0 bottom-0 ${dark ? "w-[84vw] max-w-[330px]" : "w-[78vw] max-w-[300px]"} shadow-[12px_0_40px_rgba(15,26,48,0.3)] flex flex-col rounded-r-[24px] overflow-hidden ${
@@ -8092,7 +8112,7 @@ function MobileSideMenu({
             일반 스크롤바로 오르내리게 통합했다. */}
         <div ref={menuScrollRef} onScroll={(e) => { SIDE_MENU_SCROLL = e.currentTarget.scrollTop; }} className="flex-1 min-h-0 overflow-y-auto overscroll-contain py-1" style={{ WebkitOverflowScrolling: "touch", paddingBottom: "max(env(safe-area-inset-bottom, 0px), 16px)" }}>
           {/* ⭐ 2026-10-31 — PC 메뉴와 같은 구성·권한 규칙(DispatchApp menuState)으로 정리.
-              실무자: 매출관리 숨김 / 경리·회계: 화물등록·단가표 숨김 / 관리자 전용 메뉴: 관리자·마스터·조회전용 /
+              실무자: 매출관리 숨김 / 경리·회계: 오더등록·단가표 숨김 / 관리자 전용 메뉴: 관리자·마스터·조회전용 /
               최고관리자 전용(관리센터·구글시트·블라인드·회사코드조회)은 최고관리자만.
               일정(휴가)·인수인계는 전자결재 안으로, 자사운임표는 통합운임조회 안으로 합쳤다(중복 메뉴 정리). */}
           {/* 🏢 경리·인사 권한 — 배차·운임·지입차 메뉴 대신 부서 업무 메뉴 */}
@@ -8162,22 +8182,41 @@ function MobileSideMenu({
               {/* ⭐ 2026-11-05 직원 가입 승인과 기사 가입 승인(기사 앱 계정)을 나눔 — 숫자도 각각 */}
               {staffSignupOk && <MenuItem label="직원 가입 승인" icon="users" onClick={() => onGo?.("staff")} badge={alertCounts?.signupStaff || null} dark={dark} />}
               {staffSignupOk && <MenuItem label="기사 앱 계정 · 가입 승인" icon="truck" onClick={() => onGo?.("drvacc")} badge={alertCounts?.signupDriver || null} dark={dark} />}
-              {staffSignupOk && <MenuItem label="기사 서류" icon="file" onClick={() => onGo?.("dept:driverdocs")} badge={alertCounts?.drvDocs || null} dark={dark} />}
               {ok("기사관리") && <MenuItem label="기사관리" icon="user" onClick={() => onGo?.("drivers")} badge={staffSignupOk ? (alertCounts?.signupDriver || null) : null} dark={dark} />}{/* ⭐ 2026-11-05 PC 경리·인사도 기사관리를 본다 */}
+              {(staffSignupOk || ok("기사관리")) && <MenuItem label="기사 서류" icon="file" onClick={() => onGo?.("dept:driverdocs")} badge={alertCounts?.drvDocs || null} dark={dark} />}{/* ⭐ 2026-11-10 PC처럼 기사관리를 보면 기사 서류도 본다 */}
             </MenuSection>
           )}
+          {/* ⭐ 2026-11-10 메뉴 정리 — 일반배차관리(용차·외부기사 오더와 기사) · 지입차관리(고정노선·지입차·기사 서류)로 나눔
+              기사 서류는 PC처럼 기사관리를 볼 수 있으면 보인다(PC 기사관리 › 서류관리 · 관리자 전용 아님) */}
           {!deptMode && (
-          <MenuSection title="배차관리" en="DISPATCH" dark={dark} alwaysOpen>
-            {ok("배차현황") && <MenuItem label="등록내역" icon="list" onClick={onGoList} badge={((alertCounts?.drvOrders || 0) + (listUnseenCount || 0)) || null} dark={dark} />}{/* ⭐ 2026-11-06 기사 수락/거절(본 시각 기준) + 안 본 미배차 */}{/* ⭐ 2026-11-05 PC·모바일 일치 — 기사 수락/거절이 없으면 PC 배차현황 탭처럼 미배차 숫자 */}{/* ⭐ 2026-11-05 기사 수락/거절 */}
-            {role !== "test" && ok("배차관리") && <MenuItem label="화물등록" icon="truck" onClick={onGoCreate} dark={dark} />}
+          <MenuSection title="일반배차관리" en="DISPATCH" dark={dark} alwaysOpen>
+            {role !== "test" && ok("배차관리") && <MenuItem label="오더등록" icon="truck" onClick={onGoCreate} dark={dark} />}
+            {ok("배차현황") && <MenuItem label="등록내역" icon="list" onClick={onGoList} badge={((alertCounts?.drvOrders || 0) + (listUnseenCount || 0)) || null} dark={dark} />}{/* ⭐ 2026-11-06 기사 수락/거절(본 시각 기준) + 안 본 미배차 */}
             {ok("배차관리") && <MenuItem label="미배차현황" icon="alert" onClick={onGoUnassigned} badge={unassignedCount > 0 ? unassignedCount : null} dark={dark} />}
-            {ok("배차현황") && <MenuItem label="고정노선현황" icon="route" onClick={() => onGo?.("fixedroute")} badge={fixedUnassignedCount > 0 ? fixedUnassignedCount : null} dark={dark} />}
-            {/* ⭐ 2026-11-05 PC·모바일 일치 — PC 기사관리·거래처관리와 같은 화면(PC에서 그 메뉴를 보는 권한만) */}
+            {/* ⭐ 2026-11-05 PC·모바일 일치 — PC 기사관리와 같은 화면(PC에서 그 메뉴를 보는 권한만) */}
             {PC_DRIVER_MENU_ROLES.has(role) && ok("기사관리") && <MenuItem label="기사관리" icon="user" onClick={() => onGo?.("drivers")} badge={staffSignupOk ? (alertCounts?.signupDriver || null) : null} dark={dark} />}
-            {PC_CLIENT_MENU_ROLES.has(role) && ok("거래처관리") && <MenuItem label="거래처관리" icon="building" onClick={() => onGo?.("clients")} dark={dark} />}{/* ⭐ 2026-11-03 구글시트 배차표 */}
-            {ok("지입차관리") && <MenuItem label="지입차관리" icon="route" onClick={onGoFleet} badge={alertCounts?.drvSos || null} dark={dark} />}{/* ⭐ 2026-11-03 배차관리 안으로 */}
           </MenuSection>
           )}
+          {!deptMode && ((ok("배차현황")) || ok("지입차관리") || (PC_DRIVER_MENU_ROLES.has(role) && ok("기사관리"))) && (
+          <MenuSection title="지입차관리" en="FLEET" dark={dark} alwaysOpen>
+            {ok("배차현황") && <MenuItem label="고정노선현황" icon="route" onClick={() => onGo?.("fixedroute")} badge={fixedUnassignedCount > 0 ? fixedUnassignedCount : null} dark={dark} />}
+            {ok("지입차관리") && <MenuItem label="지입차관리" icon="truck" onClick={onGoFleet} badge={alertCounts?.drvSos || null} dark={dark} />}
+            {PC_DRIVER_MENU_ROLES.has(role) && ok("기사관리") && <MenuItem label="기사 서류" icon="file" onClick={() => onGo?.("dept:driverdocs")} badge={alertCounts?.drvDocs || null} dark={dark} />}
+          </MenuSection>
+          )}
+          {!deptMode && (<>
+          <MenuSection title="운임" en="FARE" dark={dark} alwaysOpen>
+            {ok("운임조회") && <MenuItem label="통합운임조회" icon="globe" onClick={onGoNationalFare} dark={dark} />}
+            {role !== "test" && ok("단가표") && <MenuItem label="단가표" icon="money" onClick={onGoRateCard} dark={dark} />}
+          </MenuSection>
+          <MenuSection title="매출 · 거래처" en="REVENUE" dark={dark} alwaysOpen>
+            {canRevenue && ok("매출관리") && <MenuItem label="매출관리" icon="chart" onClick={onGoSales} dark={dark} />}
+            {/* ⭐ 2026-11-05 PC·모바일 일치 — PC 매출·정산 묶음의 정산관리·인사이트(PC와 같은 권한·요금제) */}
+            {(canRevenue || /^role_/.test(String(role || ""))) && ok("정산관리") && <MenuItem label="정산관리" icon="receipt" onClick={() => onGo?.("dept:settle")} dark={dark} />}
+            {PC_CLIENT_MENU_ROLES.has(role) && ok("거래처관리") && <MenuItem label="거래처관리" icon="building" onClick={() => onGo?.("clients")} dark={dark} />}
+            {(role === "admin" || role === "totalMaster") && ok("인사이트") && planIncludes(planIdM, "insight") && <MenuItem label="인사이트" icon="trend" onClick={onGoIntel} dark={dark} />}
+          </MenuSection>
+          </>)}
           {!deptMode && (["영업관리", "인사관리부", "회계관리", "자금관리", "비품관리", "증명서발급"].some(deptOk) || payM.canView || payM.leaveViewer) && (
             <MenuSection title="부서 업무" en="DEPARTMENT" dark={dark} alwaysOpen>
               {payM.canView && <MenuItem label="급여 계산" icon="money" onClick={() => onGo?.("dept:payroll")} dark={dark} />}{/* ⭐ 2026-11-07 경리·회계 부서만 */}
@@ -8202,23 +8241,10 @@ function MobileSideMenu({
             <MenuItem label="사내 규정" icon="list" onClick={() => onGo?.("dept:rules")} dark={dark} />
             {fareMenu.feature && role !== "driver" && role !== "shipper" && <MenuItem label="운임 규칙" icon="money" onClick={() => onGo?.("dept:farerules")} dark={dark} />}{/* ⭐ 2026-11-02 운임규칙 */}
           </MenuSection>
-          {!deptMode && (<>
-          <MenuSection title="운임" en="FARE" dark={dark} alwaysOpen>
-            {ok("운임조회") && <MenuItem label="통합운임조회" icon="globe" onClick={onGoNationalFare} dark={dark} />}
-            {role !== "test" && ok("단가표") && <MenuItem label="단가표" icon="money" onClick={onGoRateCard} dark={dark} />}
-          </MenuSection>
-          <MenuSection title="기사 · 매출" en="FLEET · REVENUE" dark={dark} alwaysOpen>
-            {canRevenue && ok("매출관리") && <MenuItem label="매출관리" icon="chart" onClick={onGoSales} dark={dark} />}
-            {/* ⭐ 2026-11-05 PC·모바일 일치 — PC 매출·정산 묶음의 정산관리·인사이트(PC와 같은 권한·요금제) */}
-            {(canRevenue || /^role_/.test(String(role || ""))) && ok("정산관리") && <MenuItem label="정산관리" icon="receipt" onClick={() => onGo?.("dept:settle")} dark={dark} />}
-            {(role === "admin" || role === "totalMaster") && ok("인사이트") && planIncludes(planIdM, "insight") && <MenuItem label="인사이트" icon="trend" onClick={onGoIntel} dark={dark} />}
-          </MenuSection>
-          </>)}
           {canAdminMenu && !deptMode && (
-            <MenuSection title="관리자 전용 메뉴" en="ADMIN" dark={dark} alwaysOpen>
+            <MenuSection title="관리자 전용" en="ADMIN" dark={dark} alwaysOpen>
               <MenuItem label="직원 관리" icon="users" onClick={() => onGo?.("staff")} badge={alertCounts?.signupStaff || null} dark={dark} />
               <MenuItem label="기사 앱 계정 · 가입 승인" icon="truck" onClick={() => onGo?.("drvacc")} badge={alertCounts?.signupDriver || null} dark={dark} />
-              <MenuItem label="기사 서류" icon="file" onClick={() => onGo?.("dept:driverdocs")} badge={alertCounts?.drvDocs || null} dark={dark} />{/* ⭐ 2026-11-05 기사앱 서류 업로드 숫자 */}
               {canPermsM && <MenuItem label="권한 관리" icon="key" onClick={() => onGo?.("perms")} dark={dark} />}
             </MenuSection>
           )}
@@ -8370,7 +8396,7 @@ function MobileSideMenu({
         </div>
       );
     })()}
-    </>
+    </MenuTapCtx.Provider>
   );
 }
 
@@ -8467,6 +8493,7 @@ function KpmDrawerControls({ alarmEnabled, toggleAlarm, uiScale, setUiScale, car
   );
 }
 
+const MenuTapCtx = React.createContext(null); // ⭐ 2026-11-10 메뉴 잘못 눌림 방지(MobileSideMenu tapGuard)
 const MENU_SECTION_OPEN = {}; // ⭐ 2026-11-04 펼친 메뉴 묶음 기억(메뉴를 다시 열어도 그대로)
 function MenuSection({ title, en, children, dark, alwaysOpen = false }) {
   const [open, setOpen0] = useState(() => !!MENU_SECTION_OPEN[title]);
@@ -8520,10 +8547,23 @@ function MenuItem({ onClick, ...rest }) {
   if (ui.hidden) return null;
   return <MenuItemBase {...rest} label={ui.label} uiKey={rest.label} uiStyle={ui.order !== undefined || ui.dim ? { order: ui.order, opacity: ui.dim ? 0.45 : undefined } : undefined} onClick={onClick ? () => { confirmLeave().then((ok) => { if (ok) onClick(); }); } : onClick} />;
 }
-function MenuItemBase({ label, onClick, badge, dark, icon, uiKey, uiStyle }) {
+function MenuItemBase({ label, onClick: onClick0, badge, dark, icon, uiKey, uiStyle }) {
+  // ⭐ 2026-11-10 누를 때 목록이 움직였으면(늦게 뜬 항목·스크롤) 그 탭은 무시 — 옆 메뉴로 잘못 들어가지 않게
+  const guard = React.useContext(MenuTapCtx);
+  const down = React.useRef(null);
+  const onPointerDown = (e) => { down.current = { at: Date.now(), y: e.clientY, top: e.currentTarget.getBoundingClientRect().top }; };
+  const onClick = onClick0 ? (e) => {
+    const d = down.current; down.current = null;
+    if (guard && d) {
+      const sh = guard.current.shiftAt;
+      const moved = Math.abs(e.currentTarget.getBoundingClientRect().top - d.top) > 4 || (e.clientY && Math.abs(e.clientY - d.y) > 12);
+      if (moved || (sh && sh >= d.at - 450)) return;
+    }
+    onClick0(e);
+  } : onClick0;
   if (dark) {
     return (
-      <button type="button" onClick={onClick} data-kp-menu={uiKey} style={uiStyle}
+      <button type="button" onClick={onClick} onPointerDown={onPointerDown} data-kp-menu={uiKey} style={uiStyle}
         className="kp-m-drawer-item w-full flex items-center gap-3 px-2.5 h-[46px] rounded-xl text-left transition-colors hover:bg-white/[0.07] active:bg-white/[0.12]">
         <span className="w-8 h-8 rounded-[10px] shrink-0 grid place-items-center bg-gradient-to-br from-[#2D4C82]/70 to-[#16264A] ring-1 ring-white/10 text-[#CFE0FF]">
           <ShellIcon name={icon || "dashboard"} size={15} />
@@ -8538,7 +8578,7 @@ function MenuItemBase({ label, onClick, badge, dark, icon, uiKey, uiStyle }) {
     );
   }
   return (
-    <button data-kp-menu={uiKey} style={uiStyle}
+    <button data-kp-menu={uiKey} style={uiStyle} onPointerDown={onPointerDown}
       className={`kp-m-drawer-item w-full flex items-center justify-between px-5 py-2.5 text-[14px] font-semibold transition-colors ${
         dark ? "text-white/90 hover:bg-white/10 active:bg-white/[0.16]" : "text-[#1F2A44] hover:bg-[#F1F4F9] active:bg-[#E8EDF5]"
       }`}
@@ -22736,6 +22776,7 @@ function MobileSettingsPage({ onBack, cardVersionB, setCardVersionB, alarmEnable
       W("마감보고", "마감 보고", "하루 마감(매출·배차 요약) 보고가 오면"),
     ],
     dispatch: [
+      W("기사퇴근", "담당 기사 퇴근", "내가 담당자인 기사가 퇴근하면"), // ⭐ 2026-11-10 서버 notifyDriverCheckout
       W("결재요청", "결재 요청", "내가 결재할 차례가 되면"),
       W("결재결과", "결재 결과", "내가 올린 연차·문서가 승인·반려되면"),
       ...(isAdminLike ? [W("가입신청", "가입 신청", "새 직원·기사가 가입을 신청하면"), W("마감보고", "마감 보고", "하루 마감 보고가 오면")] : []),
@@ -22756,7 +22797,7 @@ function MobileSettingsPage({ onBack, cardVersionB, setCardVersionB, alarmEnable
     { title: "공통 알림", items: COMMON_PUSH },
   ];
   const PUSH_PREF_TYPES = PUSH_GROUPS.flatMap((g) => g.items);
-  const PUSH_PREF_DEFAULT_ON = ["긴급배차", "미배차", "결재요청", "결재결과", "공지사항", "사내메일", "인사발령", "마감보고", "가입신청", "메신저", "생일", "인수인계"];
+  const PUSH_PREF_DEFAULT_ON = ["긴급배차", "미배차", "결재요청", "결재결과", "공지사항", "사내메일", "인사발령", "마감보고", "가입신청", "메신저", "생일", "인수인계", "기사퇴근"];
   const isPushPrefOn = (prefs, key) => {
     const v = prefs?.[key];
     if (v === true || v === false) return v;

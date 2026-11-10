@@ -107,13 +107,16 @@ function makePayrollPw({ db, FieldValue, Timestamp, HttpsError }) {
   }
 
   async function verify(data, context) {
+    // ⭐ 2026-11-10 미리 깨우기 — 잠금 화면이 뜨면 화면이 먼저 한 번 부른다(비밀번호를 치는 동안 서버가 켜져 있게). 아무것도 읽거나 쓰지 않는다
+    if (data?.warm === true) return { ok: false, warm: true };
     const w = await who(context, data);
     if (!w.staff) throw err("permission-denied", "급여관리는 경리 담당자만 열 수 있어요");
-    const sec = await secretRef(w.key).get();
+    const aRef = attemptRef(w.key, w.uid);
+    // ⭐ 2026-11-10 속도 — 비밀번호 문서·틀린 횟수 문서를 한 번에 읽는다
+    const [sec, aSnap] = await Promise.all([secretRef(w.key).get(), aRef.get()]);
     // ⭐ 2026-11-08 처음 비밀번호(DEFAULT_PW) — 아직 정한 비밀번호가 없으면 000000으로 열고, 경리 관리자는 바로 바꾸게 한다
     const noPw = !sec.exists || !sec.data().hash;
-    const aRef = attemptRef(w.key, w.uid);
-    const a = (await aRef.get()).data() || {};
+    const a = aSnap.data() || {};
     const now = Date.now();
     if ((Number(a.lockUntil) || 0) > now) return { ok: false, lockUntil: Number(a.lockUntil), left: 0 };
     if (noPw ? String(data?.password ?? "") !== DEFAULT_PW : !checkPw(data?.password, sec.data())) {
@@ -127,8 +130,7 @@ function makePayrollPw({ db, FieldValue, Timestamp, HttpsError }) {
       await aRef.set({ fails, locks: Number(a.locks) || 0, lockUntil: 0, lastFailAt: now, uid: w.uid, companyName: w.company }, { merge: true });
       return { ok: false, left: MAX_FAILS - fails };
     }
-    await aRef.delete().catch(() => {});
-    const expiresAt = await issueUnlock(w);
+    const [, expiresAt] = await Promise.all([aSnap.exists ? aRef.delete().catch(() => {}) : null, issueUnlock(w)]);
     return { ok: true, expiresAt, mustChange: noPw };
   }
 

@@ -8,6 +8,9 @@
 //     거절하면 차량번호·이름·전화번호가 지워지므로 기사 이름은 타임라인에서 꺼낸다.
 //   · 기사 서류 업로드 — driver_documents { status:"제출", uploadedAt, driverId, docLabel }
 //   · 긴급상황(SOS) — emergency_alerts { resolved:false, timestamp, driverName, carNo }
+//   · ⭐ 2026-11-10 담당 기사 퇴근 — driver_logs { status:"퇴근"|"최종퇴근", managerUid(= 기사의 담당자), logDate(오늘) }
+//     기사앱이 퇴근할 때 담당자 uid를 같이 적는다 → 나(담당자) + 오늘 것만 구독(같음 조건 2개라 색인 추가 없음)
+//     휴대폰 푸시는 서버(functions notifyDriverCheckout)가 따로 보낸다
 //
 //  ▸ 읽기 비용
 //   · 수락/거절: 새 구독 없음. 화면이 이미 구독 중인 "어제~내일" 오더 배열(recentDispatchData)을
@@ -59,7 +62,8 @@ const S = {
   orderEvents: [],      // { key, id, col, kind:"accept"|"reject", at, driver, reason, row }
   docs: [],             // { key, id, at, driver, label }
   sos: [],              // { key, id, at, driver, carNo }
-  seen: { orders: 0, docs: 0, sos: 0 },
+  checkout: [],         // { key, id, at, driver, carNo, km, final }
+  seen: { orders: 0, docs: 0, sos: 0, checkout: 0 },
   server: null,
   toasts: [],           // { ...event, tid, born }
   ver: 0,
@@ -85,7 +89,7 @@ export function setDriverEventPrefs(patch) {
 function loadSeen(uid) {
   const l = ls.get(seenKey(uid), {});
   const sv = S.server || {};
-  return { orders: Math.max(+l.orders || 0, tsMs(sv.orders)), docs: Math.max(+l.docs || 0, tsMs(sv.docs)), sos: Math.max(+l.sos || 0, tsMs(sv.sos)) };
+  return { orders: Math.max(+l.orders || 0, tsMs(sv.orders)), docs: Math.max(+l.docs || 0, tsMs(sv.docs)), sos: Math.max(+l.sos || 0, tsMs(sv.sos)), checkout: Math.max(+l.checkout || 0, tsMs(sv.checkout)) };
 }
 function ensureUser(uid) {
   if (!uid || S.uid === uid) return;
@@ -99,7 +103,7 @@ export function setDriverSeenServer(v) {
   S.server = v;
   if (!S.uid) return;
   const n = loadSeen(S.uid);
-  if (n.orders !== S.seen.orders || n.docs !== S.seen.docs || n.sos !== S.seen.sos) { S.seen = n; emit(); }
+  if (n.orders !== S.seen.orders || n.docs !== S.seen.docs || n.sos !== S.seen.sos || n.checkout !== S.seen.checkout) { S.seen = n; emit(); }
 }
 let _srvTimer = null;
 export function markDriverSeen(kind) {
@@ -108,7 +112,7 @@ export function markDriverSeen(kind) {
   const now = Date.now();
   let changed = false;
   kinds.forEach((k) => {
-    const latest = Math.max(0, ...(k === "orders" ? S.orderEvents : k === "docs" ? S.docs : S.sos).map((e) => e.at));
+    const latest = Math.max(0, ...(k === "orders" ? S.orderEvents : k === "docs" ? S.docs : k === "checkout" ? S.checkout : S.sos).map((e) => e.at));
     if (latest > (S.seen[k] || 0)) { S.seen = { ...S.seen, [k]: now }; changed = true; }
   });
   if (!changed) return;
@@ -230,6 +234,7 @@ function playDing(tone = "soft") {
 // ─── 서류·긴급 구독(앱 머리말에서 한 번) ───────────────────────────────────────
 export function useDriverEventFeeds({ uid, company, canDocs = false, canSos = true }) {
   React.useEffect(() => { if (uid) { ensureUser(uid); emit(); } }, [uid]);
+  useDriverCheckoutFeed(uid, String(company || "").trim()); // ⭐ 2026-11-10 담당 기사 퇴근
   const co = String(company || "").trim();
   const [names, setNames] = React.useState(null);
   React.useEffect(() => {
@@ -286,6 +291,31 @@ export function useDriverEventFeeds({ uid, company, canDocs = false, canSos = tr
   }, [uid, canSos, co]);
 }
 
+// ⭐ 2026-11-10 담당 기사 퇴근 — 내가 담당자인 기사의 오늘 퇴근 기록(기사앱이 managerUid·logDate를 적는다)
+const kstToday = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
+export function useDriverCheckoutFeed(uid, company) {
+  const [day, setDay] = React.useState(kstToday);
+  React.useEffect(() => { const t = setInterval(() => setDay(kstToday()), 60000); return () => clearInterval(t); }, []);
+  React.useEffect(() => {
+    if (!uid || uid === "preview" || !company) { if (S.checkout.length) { S.checkout = []; emit(); } return undefined; }
+    // 회사 조건은 보안 규칙(같은 회사 기록만 목록 조회)과 맞추려고 같이 건다
+    return onSnapshot(query(collection(db, "driver_logs"), where("companyName", "==", company), where("managerUid", "==", uid), where("logDate", "==", day)), (s) => {
+      const list = [];
+      s.docs.forEach((x) => {
+        const d = x.data() || {};
+        if (d.status !== "퇴근" && d.status !== "최종퇴근") return;
+        if (d.auto) return; // 운송사가 대신 퇴근처리한 것은 제외
+        const at = tsMs(d.timestamp) || Date.now();
+        list.push({ key: `out:${x.id}`, id: x.id, at, kind: "checkout", driverId: d.uid || "", driver: d.driverName || "", carNo: d.carNo || "", km: Number(d.odometer) || 0, final: d.status === "최종퇴근" });
+      });
+      list.sort((a, b) => b.at - a.at);
+      S.checkout = list;
+      queueToasts(list, "checkout");
+      emit();
+    }, () => { S.checkout = []; emit(); });
+  }, [uid, day, company]);
+}
+
 // 메뉴 숫자 — { orders, docs, sos, total }
 export function useDriverEventCounts() {
   useStoreVer();
@@ -293,11 +323,12 @@ export function useDriverEventCounts() {
   const d = S.docs.filter((e) => e.at > (S.seen.docs || 0)).length;
   // 긴급은 처리(resolved)될 때까지 계속 센다 — 봤다고 숫자가 사라지면 놓칠 수 있다
   const s = S.sos.length;
-  return { orders: o, docs: d, sos: s, sosUnseen: S.sos.filter((e) => e.at > (S.seen.sos || 0)).length, total: o + d + s };
+  const co = S.checkout.filter((e) => e.at > (S.seen.checkout || 0)).length; // 담당 기사 퇴근(종 숫자에만)
+  return { orders: o, docs: d, sos: s, checkout: co, sosUnseen: S.sos.filter((e) => e.at > (S.seen.sos || 0)).length, total: o + d + s };
 }
 export function useDriverEventList() {
   useStoreVer();
-  return { orders: S.orderEvents, docs: S.docs, sos: S.sos, seen: S.seen };
+  return { orders: S.orderEvents, docs: S.docs, sos: S.sos, checkout: S.checkout, seen: S.seen };
 }
 
 // ─── 카카오톡 스타일 빨간 숫자 ─────────────────────────────────────────────────
@@ -378,6 +409,7 @@ const KIND_UI = {
   reject: { label: "기사 거절", en: "REJECTED", c: "#FF6B61", bg: "rgba(255,59,48,.16)" },
   doc: { label: "서류 제출", en: "DOCUMENT", c: "#8FB0F0", bg: "rgba(143,176,240,.16)" },
   sos: { label: "긴급 상황", en: "EMERGENCY", c: "#FF6B61", bg: "rgba(255,59,48,.2)" },
+  checkout: { label: "기사 퇴근", en: "CHECK-OUT", c: "#CFE0FF", bg: "rgba(143,176,240,.18)" },
 };
 const hm = (ms) => new Date(ms).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" });
 function orderSummary(r) {
@@ -389,6 +421,7 @@ export function driverEventText(e) {
   if (e.kind === "accept") return { head: `${e.driver || "기사"}님이 오더를 수락했습니다`, sub: orderSummary(e.row) };
   if (e.kind === "reject") return { head: `${e.driver || "기사"}님이 오더를 거절했습니다`, sub: orderSummary(e.row), reason: e.reason };
   if (e.kind === "doc") return { head: `${e.driver || "기사"}님이 ${e.label}을(를) 올렸습니다`, sub: "기사관리 › 기사 제출 서류에서 확인" };
+  if (e.kind === "checkout") return { head: `${e.driver || "기사"}님이 ${e.final ? "최종 " : ""}퇴근했습니다`, sub: [e.carNo, e.km ? `계기판 ${e.km.toLocaleString()}km` : "", "담당 기사"].filter(Boolean).join(" · ") };
   return { head: `긴급 상황 · ${e.driver || ""} ${e.carNo || ""}`.trim(), sub: "지입차관리 › 관제현황에서 위치 확인" };
 }
 
@@ -413,6 +446,7 @@ function Toast({ t, mobile, onView }) {
         <div style={{ width: 36, height: 36, borderRadius: 11, background: ui.bg, display: "grid", placeItems: "center", flexShrink: 0 }}>
           {t.kind === "accept" ? <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={ui.c} strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg>
             : t.kind === "reject" ? <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={ui.c} strokeWidth="2.8" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg>
+            : t.kind === "checkout" ? <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={ui.c} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9" /></svg>
             : t.kind === "doc" ? <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={ui.c} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" /><path d="M14 3v5h5M9 14h6M9 17h4" /></svg>
             : <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={ui.c} strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3l9.5 17h-19z" /><path d="M12 10v4M12 17.5v.01" /></svg>}
         </div>
@@ -478,14 +512,15 @@ export function DriverEventBell({ enabled, onToggleEnabled, onView, isAdmin = fa
   const toggle = () => {
     const r = btn.current?.getBoundingClientRect();
     if (r) setPos({ top: r.bottom + 8, right: Math.max(8, window.innerWidth - r.right) });
-    setOpen((v) => !v);
+    setOpen((v) => { if (!v && c.checkout) setTimeout(() => markDriverSeen("checkout"), 1500); return !v; }); // 퇴근 알림은 알림함을 열어 보면 읽음
   };
   const items = [
     ...L.sos.map((e) => ({ ...e, src: "sos", unseen: true })),
     ...L.orders.map((e) => ({ ...e, src: "orders", unseen: e.at > (L.seen.orders || 0) })),
     ...L.docs.map((e) => ({ ...e, src: "docs", unseen: e.at > (L.seen.docs || 0) })),
+    ...(L.checkout || []).map((e) => ({ ...e, src: "checkout", unseen: e.at > (L.seen.checkout || 0) })),
   ].sort((a, b) => (b.kind === "sos") - (a.kind === "sos") || b.at - a.at).slice(0, 30);
-  const total = c.orders + c.docs + c.sos;
+  const total = c.orders + c.docs + c.sos + (c.checkout || 0);
   const stroke = dark ? "white" : "#1B2B4B";
   return (
     <>
@@ -506,7 +541,7 @@ export function DriverEventBell({ enabled, onToggleEnabled, onView, isAdmin = fa
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 2 }}>
                 <span style={{ fontSize: 16, fontWeight: 900 }}>기사 알림</span>
                 <KakaoBadge n={total} />
-                <button type="button" onClick={() => markDriverSeen(["orders", "docs", "sos"])} style={{ marginLeft: "auto", fontSize: 12, fontWeight: 800, color: "#CFE0FF", background: "rgba(255,255,255,.08)", border: "1px solid rgba(255,255,255,.14)", borderRadius: 8, height: 26, padding: "0 9px" }}>모두 읽음</button>
+                <button type="button" onClick={() => markDriverSeen(["orders", "docs", "sos", "checkout"])} style={{ marginLeft: "auto", fontSize: 12, fontWeight: 800, color: "#CFE0FF", background: "rgba(255,255,255,.08)", border: "1px solid rgba(255,255,255,.14)", borderRadius: 8, height: 26, padding: "0 9px" }}>모두 읽음</button>
               </div>
             </div>
             <div style={{ maxHeight: mobile ? "55vh" : 380, overflowY: "auto", overscrollBehavior: "contain" }}>
@@ -516,10 +551,10 @@ export function DriverEventBell({ enabled, onToggleEnabled, onView, isAdmin = fa
                 return (
                   <button key={e.key} type="button" onClick={() => { setOpen(false); onView?.(e); }}
                     style={{ width: "100%", textAlign: "left", display: "flex", gap: 10, padding: "11px 16px", borderBottom: "1px solid #EEF2F8", background: e.unseen ? "#F5F8FD" : "#fff" }}>
-                    <span style={{ marginTop: 5, width: 8, height: 8, borderRadius: 999, background: e.unseen ? (e.kind === "accept" ? "#12B76A" : e.kind === "doc" ? "#2D4C82" : KAKAO_RED) : "#CBD5E1", flexShrink: 0 }} />
+                    <span style={{ marginTop: 5, width: 8, height: 8, borderRadius: 999, background: e.unseen ? (e.kind === "accept" ? "#12B76A" : e.kind === "doc" || e.kind === "checkout" ? "#2D4C82" : KAKAO_RED) : "#CBD5E1", flexShrink: 0 }} />
                     <span style={{ minWidth: 0, flex: 1 }}>
                       <span style={{ display: "flex", gap: 6, alignItems: "center" }}>
-                        <span style={{ fontSize: 11.5, fontWeight: 800, color: e.kind === "accept" ? "#067647" : e.kind === "doc" ? "#2D4C82" : "#B42318" }}>{ui.label}</span>
+                        <span style={{ fontSize: 11.5, fontWeight: 800, color: e.kind === "accept" ? "#067647" : e.kind === "doc" || e.kind === "checkout" ? "#2D4C82" : "#B42318" }}>{ui.label}</span>
                         <span style={{ marginLeft: "auto", fontSize: 11.5, fontWeight: 700, color: "#9AA9C3", fontVariantNumeric: "tabular-nums" }}>{hm(e.at)}</span>
                       </span>
                       <span style={{ display: "block", fontSize: 13.5, fontWeight: 800, color: "#0F1A30", marginTop: 1 }}>{tx.head}</span>

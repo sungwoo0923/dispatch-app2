@@ -35,6 +35,7 @@ import { haversineKm } from "../tmapFareCalc";
 import VehicleCarePanel, { VehicleSetupWizard, shouldShowSetup } from "../VehicleCarePanel";
 import { VehicleExpenseCards, PhotoDueCard } from "./DriverVehicleExpense"; // 🧾 2026-11-10 비용 영수증 · 정기 차량 사진
 import { careSummary, vehicleDefaults } from "../vehicleCare";
+import { vehicleDocId, normPlate, insurerPhone } from "../vehicleLedgerData"; // 🚨 2026-11-10 교통사고 접수 → 내 차량 보험사 번호
 import { toYmd } from "../../functions/fleetCareCore.mjs";
 import DriverDocBox, { useDriverInbox, DriverPayInfoCard } from "./DriverDocBox";
 import DriverNotices from "./DriverNotices"; // ⭐ 2026-11-03 회사 공지(공개 대상 "기사")
@@ -1366,6 +1367,23 @@ export default function DriverHome() {
     return () => { u1(); u2(); u3(); };
   }, [driver?.companyName]);
 
+  // 🚨 2026-11-10 연락처 › 교통사고 접수 — 차량 관리(vehicleLedger)에 정한 내 차량 보험사 번호(없으면 빈칸)
+  const [insurer, setInsurer] = useState(null); // { name, phone }
+  useEffect(() => {
+    const co = driver?.companyName; const plate = driver?.차량번호 || driver?.carNo || "";
+    if (!co || !plate || activeTab !== "contacts") return;
+    let off = false;
+    (async () => {
+      try {
+        let d = await getDoc(doc(db, "vehicleLedger", vehicleDocId(co, plate)));
+        let v = d.exists() ? d.data() : null;
+        if (!v) { const q = await getDocs(query(collection(db, "vehicleLedger"), where("companyName", "==", co), where("plateKey", "==", normPlate(plate)))); v = q.docs[0]?.data() || null; }
+        if (!off) setInsurer(v ? { name: String(v.보험사 || "").trim(), phone: insurerPhone(v) } : null);
+      } catch { if (!off) setInsurer(null); }
+    })();
+    return () => { off = true; };
+  }, [driver?.companyName, driver?.차량번호, driver?.carNo, activeTab]);
+
   // 연락처 탭 "회사 연락처" — 회사마다 다른 배차팀 번호를 보여주기 위해, 로그인한
   // 기사님이 소속된 회사의 transportApplications(가입 시 등록한 사업자정보)에서
   // 전화번호를 읽어온다(예전엔 "돌캐" 번호가 모든 회사 기사에게 고정 표시됐었음).
@@ -1477,6 +1495,9 @@ export default function DriverHome() {
         companyName: driver?.companyName || "",
         status: newStatus,        // 로그에는 "최종퇴근" 그대로 기록
         mainStatus: firestoreStatus,
+        // ⭐ 2026-11-10 담당자 알림 — 기사관리에서 정한 내 담당자(PC·모바일 알림 구독용) · 오늘 날짜(같음 조건 조회)
+        managerUid: driver?.담당자 && typeof driver.담당자 === "object" ? driver.담당자.uid || "" : "",
+        logDate: today,
         timestamp: serverTimestamp(),
         location: (pos && (pos.accuracy == null || pos.accuracy <= 100)) ? { lat: pos.lat, lng: pos.lng } : null,
         ...logExtra,
@@ -2528,8 +2549,6 @@ export default function DriverHome() {
             );
           })()}
 
-          {/* ⭐ 2026-11-08 업체 요청 — 주행거리·엔진오일·타이어 카드(기능 켜진 회사만) */}
-          {odoOn && <OilTireCard driver={driver} onRecord={(k) => setChangeSheet(k)} />}
 
           {/* 오늘 요약 카드 */}
           <div style={{ borderRadius: 20, padding: "16px", marginBottom: 14, color: "#fff", boxShadow: "0 16px 32px rgba(11,20,40,0.28)", border: "1px solid #0B1428",
@@ -2829,6 +2848,9 @@ export default function DriverHome() {
               </div>
             </div>
           )}
+
+          {/* ⭐ 2026-11-08 업체 요청 — 주행거리·엔진오일·타이어 카드(기능 켜진 회사만) · ⭐ 2026-11-10 홈 맨 아래 · 접힌 한 줄로 */}
+          {odoOn && <div style={{ marginTop: 14 }}><OilTireCard driver={driver} onRecord={(k) => setChangeSheet(k)} /></div>}
         </div>
       )}
 
@@ -2928,7 +2950,8 @@ export default function DriverHome() {
               section: "도로·운송 지원",
               items: [
                 { name: "한국도로공사", number: "1588-2504", tel: "15882504", desc: "고속도로 긴급출동" },
-                { name: "교통사고 접수", number: "112", tel: "112", desc: "경찰청 교통사고" },
+                // 🚨 2026-11-10 경찰(112)과 겹쳐서 — 내 차량 보험사 사고접수 번호(차량 관리에서 보험사를 안 정했으면 빈칸)
+                { name: "교통사고 접수", number: insurer?.phone ? formatPhone(insurer.phone) : "", tel: String(insurer?.phone || "").replace(/[^0-9]/g, ""), desc: insurer?.name ? `${insurer.name} 사고접수` : "보험사 미설정" },
                 { name: "민원·행정 안내", number: "110", tel: "110", desc: "정부24 콜센터" },
               ],
             },
@@ -2943,11 +2966,13 @@ export default function DriverHome() {
                   </div>
                   <div style={{ fontSize: 16.5, fontWeight: 700, color: "#3A4A66", marginRight: 10, fontVariantNumeric: "tabular-nums" }}>{item.number}</div>
                   <a
-                    href={`tel:${item.tel}`}
+                    href={item.tel ? `tel:${item.tel}` : undefined}
+                    aria-disabled={!item.tel}
+                    onClick={item.tel ? undefined : (e) => e.preventDefault()}
                     style={{
                       display: "inline-flex", alignItems: "center", justifyContent: "center",
                       width: 38, height: 38, borderRadius: 10,
-                      background: "#1B2B4B", color: "white",
+                      background: item.tel ? "#1B2B4B" : "#C9D2E0", color: "white", pointerEvents: item.tel ? "auto" : "none",
                       textDecoration: "none", flexShrink: 0,
                     }}
                   >
