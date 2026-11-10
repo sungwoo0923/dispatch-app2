@@ -3,7 +3,8 @@ import { subscribeUsersLive } from "./usersLive"; // ⭐ 2026-11-02 속도 — �
 import { pickCompanyLoc } from "./officeLocSync"; // 📍 2026-11-09 출근지 한 곳 관리
 import useNarrow from "./useNarrow"; // ⭐ 2026-11-06 휴대폰 폭 카드 목록
 import { VehicleExpenseInbox, VehiclePhotoBoard } from "./VehicleExpenseInbox";
-import { useBackClose } from "./mobileBack"; // 🔙 2026-11-10 덮어 뜬 창 뒤로가기로 닫기 // 🧾 2026-11-10 차량 비용 영수증 · 정기 차량 사진
+import { useBackClose } from "./mobileBack";
+import { sendText } from "./smsSend"; // 💬 2026-11-10 PC 문자 보내기 // 🔙 2026-11-10 덮어 뜬 창 뒤로가기로 닫기 // 🧾 2026-11-10 차량 비용 영수증 · 정기 차량 사진
 import { DriverGuideSendModal, guideSentLabel } from "./DriverAppGuide"; // ⭐ 2026-11-06 기사앱 안내 보내기
 import React, { useEffect, useState, useMemo, useCallback, useRef } from "react";
 import { kpConfirm } from "./kpDialog";
@@ -1975,7 +1976,7 @@ function handleSendToDriver(driver, orders, selectedDate, rangeEndDate) {
   try { navigator.clipboard?.writeText(text); } catch {}
   const phone = (driver.전화번호 || "").replace(/[^\d]/g, "");
   if (phone && phone.length >= 9) {
-    window.location.href = `sms:${phone}?body=${encodeURIComponent(text)}`;
+    sendText({ phones: [phone], body: text }); // 💬 2026-11-10 회사 설정(휴대폰과 연결 · 회사 번호 문자)
   } else {
     window.alert("배차 내용이 클립보드에 복사되었습니다.\n카카오톡/문자에 붙여넣기 하세요.");
   }
@@ -2326,7 +2327,7 @@ function OrderCopyModal({ order, driver, onClose }) {
               <button
                 onClick={() => {
                   const phone = (smsConfirm.phone || "").replace(/[^\d]/g, "");
-                  if (phone) window.location.href = `sms:${phone}?body=${encodeURIComponent(smsConfirm.body)}`;
+                  if (phone) sendText({ phones: [phone], body: smsConfirm.body }); // 💬 2026-11-10
                   onClose();
                 }}
                 style={{ flex: 1, padding: "10px 0", borderRadius: 9, border: "none", background: NAVY, color: "#fff", fontWeight: 700, fontSize: 14, cursor: "pointer" }}

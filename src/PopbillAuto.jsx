@@ -15,6 +15,7 @@ import {
   ALIMTALK_TEMPLATES, ALIMTALK_COST_NOTE, alimtalkChipOf, isAssignedDone,
 } from "./popbillAuto";
 import { POPBILL_BANKS, bankNameOf, maskAccount } from "./arMatch";
+import { SMS_MODES, smsInfo } from "./smsSend";
 
 const TONE = { ok: ["#E9F5EE", "#1F7A4D"], warn: ["#FFF4E0", "#9A5B00"], error: ["#FDECEC", "#B4342A"], muted: ["#F3F5F9", "#6B7A93"], info: ["#EEF3FA", "#2D4C82"] };
 export function Chip({ tone = "muted", children, title, testId }) {
@@ -139,10 +140,82 @@ export function AlimtalkSettingsCard({ company, canEdit, defaultPhone = "" }) {
           <span className="ml-auto"><Switch on={v.smsFallback} disabled={dis} label="문자로 보내기" onChange={(on) => set({ smsFallback: on })} /></span>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
-          <span className="text-[12.5px] font-semibold text-[#7A879C]">비용 {ALIMTALK_COST_NOTE} · 팝빌 충전금에서 빠져요</span>
+          <span className="text-[12.5px] font-semibold text-[#7A879C]">보낸 건수만큼 월말에 로지스웹이 청구해요</span>
           {canEdit && <span className="ml-auto flex gap-1.5">
             {draft && <button type="button" className={btn} onClick={() => { setDraft(null); setMsg(""); }} disabled={busy}>되돌리기</button>}
             <button type="button" className={btnPri} onClick={() => save()} disabled={busy || !draft} data-testid="alimtalk-save">{busy ? "저장 중" : "저장"}</button>
+          </span>}
+        </div>
+        {!canEdit && <div className="text-[12.5px] text-[#7A879C]">회사 관리자만 바꿀 수 있어요</div>}
+        {msg && <div className="text-[13px] font-semibold text-[#5B6B85]">{msg}</div>}
+      </div>
+    </div>
+  );
+}
+
+// ─────────────── 회사정보 › 문자 보내기(2026-11-10) ───────────────
+//  보내는 방식(휴대폰과 연결 · 회사 번호 문자 · 자동) · 발신번호 · 이번 달 사용량과 예상 청구액(로지스웹이 월말 청구)
+export function SmsSettingsCard({ company, canEdit }) {
+  const raw = useAutoSettings(company);
+  const link = usePopbillLink(company);
+  const cur = { mode: raw?.sms?.mode || "phone", senderNumber: String(raw?.sms?.senderNumber || raw?.alimtalk?.senderNumber || "").replace(/[^\d]/g, "") };
+  const [draft, setDraft] = React.useState(null);
+  const [busy, setBusy] = React.useState(false);
+  const [msg, setMsg] = React.useState("");
+  const [info, setInfo] = React.useState(null);
+  const v = draft || cur;
+  const dis = !canEdit || busy || raw === null;
+  React.useEffect(() => { let alive = true; smsInfo().then((r) => { if (alive) setInfo(r); }).catch(() => { if (alive) setInfo({ error: true }); }); return () => { alive = false; }; }, [company]);
+  const save = async () => {
+    setBusy(true); setMsg("");
+    try { await saveAutoSettings(company, { sms: { mode: v.mode, senderNumber: String(v.senderNumber || "").replace(/[^\d]/g, "") } }); setDraft(null); setMsg("저장했어요"); }
+    catch (e) { setMsg(e?.code === "permission-denied" ? "회사 관리자만 바꿀 수 있어요" : e?.message || "저장하지 못했어요"); }
+    finally { setBusy(false); }
+  };
+  const u = info?.usage || { sms: 0, lms: 0, alimtalk: 0 };
+  const pr = info?.price || null;
+  const total = pr ? u.sms * pr.sms + u.lms * pr.lms + u.alimtalk * pr.alimtalk : null;
+  const ym = info?.month || new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 7);
+  return (
+    <div className="rounded-[20px] border border-[#E3E8F0] bg-white overflow-hidden shadow-[0_1px_2px_rgba(16,24,40,0.04)]" data-testid="sms-settings">
+      <CardHead en="MESSAGE · SMS" title="문자 보내기" sub="PC에서 기사 · 거래처에게 보내는 문자" right={<LinkChip link={link} />} />
+      <div className="p-4 space-y-4">
+        <div>
+          <div className="text-[12.5px] font-black text-[#3A4A66] mb-1.5">보내는 방식</div>
+          <div className="grid gap-2">
+            {SMS_MODES.map(([k, l, d]) => (
+              <button key={k} type="button" disabled={dis} onClick={() => { setDraft({ ...v, mode: k }); setMsg(""); }} data-testid={`sms-mode-${k}`}
+                className={`text-left rounded-xl border px-4 py-3 flex items-center gap-3 transition disabled:opacity-60 ${v.mode === k ? "border-[#0F1A30] bg-[#F5F8FD]" : "border-[#E3E8F0] bg-white hover:border-[#C9D3E3]"}`}>
+                <span className={`w-[18px] h-[18px] rounded-full border-2 shrink-0 flex items-center justify-center ${v.mode === k ? "border-[#0F1A30]" : "border-[#C9D3E3]"}`}>{v.mode === k && <span className="w-2 h-2 rounded-full bg-[#0F1A30]" />}</span>
+                <span className="min-w-0"><span className="block text-[14px] font-black text-[#0F1A30]">{l}</span><span className="block text-[12.5px] text-[#5B6B85]">{d}</span></span>
+              </button>
+            ))}
+          </div>
+        </div>
+        {v.mode !== "phone" && (
+          <label className="block"><div className="text-[12.5px] font-black text-[#3A4A66] mb-1">발신번호</div>
+            <input className={inp} inputMode="tel" value={fmtPhone(v.senderNumber)} placeholder="팝빌에 등록한 회사 번호" disabled={dis} onChange={(e) => { setDraft({ ...v, senderNumber: e.target.value.replace(/[^\d]/g, "") }); setMsg(""); }} />
+            <div className="mt-1 text-[12px] text-[#7A879C]">법에 따라 미리 등록한 번호로만 보낼 수 있어요(팝빌 › 발신번호 등록)</div>
+          </label>
+        )}
+        <div className="rounded-xl bg-[#0F1A30] text-white px-4 py-3" data-testid="sms-usage">
+          <div className="flex items-center"><span className="text-[10.5px] font-extrabold tracking-[0.22em] text-[#8FB0F0]">USAGE · {ym.replace("-", ".")}</span><span className="ml-auto text-[12px] text-white/55">월말 로지스웹 청구</span></div>
+          <div className="mt-2 grid grid-cols-3 gap-2">
+            {[["단문", u.sms, pr?.sms], ["장문", u.lms, pr?.lms], ["알림톡", u.alimtalk, pr?.alimtalk]].map(([l, n, p]) => (
+              <div key={l} className="rounded-lg bg-white/[0.07] border border-white/10 px-2.5 py-2">
+                <div className="text-[11.5px] text-white/55 font-bold">{l}{p != null ? ` · ${p}원` : ""}</div>
+                <div className="text-[18px] font-black tabular-nums">{Number(n || 0).toLocaleString()}<span className="text-[11px] text-white/50 ml-0.5">건</span></div>
+              </div>
+            ))}
+          </div>
+          <div className="mt-2 flex items-baseline"><span className="text-[12.5px] text-white/60">이번 달 예상 청구액(부가세 별도)</span><span className="ml-auto text-[20px] font-black tabular-nums">{total != null ? `${Math.round(total).toLocaleString()}원` : "-"}</span></div>
+          {info?.error && <div className="mt-1 text-[11.5px] text-white/50">서버에서 사용량을 아직 못 읽었어요</div>}
+        </div>
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-[12.5px] font-semibold text-[#7A879C]">{v.mode === "phone" ? "휴대폰과 연결은 요금이 청구되지 않아요" : "90자(한글 45자) 넘으면 장문으로 보내요"}</span>
+          {canEdit && <span className="ml-auto flex gap-1.5">
+            {draft && <button type="button" className={btn} onClick={() => { setDraft(null); setMsg(""); }} disabled={busy}>되돌리기</button>}
+            <button type="button" className={btnPri} onClick={save} disabled={busy || !draft} data-testid="sms-save">{busy ? "저장 중" : "저장"}</button>
           </span>}
         </div>
         {!canEdit && <div className="text-[12.5px] text-[#7A879C]">회사 관리자만 바꿀 수 있어요</div>}

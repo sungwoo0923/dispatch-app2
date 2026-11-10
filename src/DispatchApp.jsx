@@ -29,6 +29,7 @@ import { withCo, getTenant } from "./fsTenant";
 const DEV_DEMO_REVENUE = import.meta.env.DEV && (() => { try { return window.location.pathname === "/preview" && new URLSearchParams(window.location.search).get("demo") === "1"; } catch { return false; } })();
 import { coDocKey } from "./coKey";
 import { createPortal } from "react-dom";
+import { sendText } from "./smsSend"; // 💬 2026-11-10 PC 문자 보내기(휴대폰과 연결 · 회사 번호 문자)
 import DriverContextMenu, { driverCopyText, copyToClipboard } from "./DriverContextMenu"; // 🖱 2026-11-10 기사관리 오른쪽 클릭 메뉴
 import { useDriverEditChoice, DriverEditButton, SamePlateChips, driversOfPlate, pickDriverFor, isRegisteredCombo, saveDriverChoice } from "./DriverEditChoice"; // ⭐ 2026-11-05 매칭된 기사 이름·전화 [수정]
 import { Navigate, useNavigate } from "react-router-dom";
@@ -48,7 +49,7 @@ import DetailFilterButton, { applyDetailFilter, DetailScope } from "./DetailFilt
 import { useCompanyBiz, bizOf, BizPicker, BizFilter, bizMatch, printInfoForBiz, BizListEditor, BizScope, BizSelect, bizColorOf, bizStripeProps, BizLegend, resolveBiz, rememberBiz, normBizKey, bankForBiz, bizInfoCardBlob } from "./companyBiz"; // ⭐ 2026-11-03 한 회사 · 여러 사업자 // ⭐ 2026-11-03 배차담당자 칸(등록자 + 차량 붙인 사람)
 import JSZip from "jszip";
 import { OrderWeather, BizCheck, bizGuardMain, ClientBizBulkButton, PopbillMemberCard } from "./publicDataMain"; // 🏛 2026-11-07 국세청 사업자 상태 · 기상청 날씨 · 팝빌 연동회원
-import { BankAccountsCard, BankReviewQueue } from "./PopbillAuto"; // 🏦 2026-11-08 은행 입금 자동 매칭
+import { BankAccountsCard, BankReviewQueue, SmsSettingsCard, AlimtalkSettingsCard } from "./PopbillAuto"; // 🏦 2026-11-08 은행 입금 자동 매칭
 // 💬 2026-11-08 사장님 요청 — 카카오 알림톡은 PC·모바일 화면에서 모두 뺐다(새 오더는 알림톡:false → 서버 트리거가 보내지 않는다)
 import { buildArMonths as buildArMonthsCore, allocArDeposit as allocArDepositCore, allocKindOf, matchDeposits } from "./arMatch"; // 💰 2026-11-08 입금 매칭 공용 식(서버 계좌조회와 같은 파일)
 import { sendOrderTo24Proxy as sendOrderTo24 } from "../api/24CallProxy";
@@ -25092,7 +25093,7 @@ function OptimalMatchModal({ row, dispatchData, onClose, companyName }) {
   const sendTo = (phones) => {
     const list = [...new Set(phones.filter(Boolean))];
     if (!list.length) return;
-    window.location.href = `sms:${list.join(",")}?body=${encodeURIComponent(smsBody)}`;
+    sendText({ phones: list, body: smsBody }); // 💬 2026-11-10 회사 설정(휴대폰과 연결 · 회사 번호 문자)
   };
 
   const toggle = (key) => setSelected(prev => {
@@ -34072,7 +34073,7 @@ if (editTarget.하차지명) savePlaceSmart(editTarget.하차지명, editTarget.
                     })();
                     return `안녕하세요. ${dateStr} ${r.상차시간||""} ${r.상차지명||""} → ${r.하차지명||""} 건 관련하여 연락드립니다.`;
                   })();
-              window.location.href = `sms:${phones.join(",")}?body=${encodeURIComponent(body)}`;
+              sendText({ phones, body }); // 💬 2026-11-10 회사 설정(휴대폰과 연결 · 회사 번호 문자)
               setContextMenu(null);
             }}
           >
@@ -34754,7 +34755,7 @@ setConfirmChange(null);
                   className="flex-1 py-2.5 rounded-xl bg-[#1B2B4B] text-white text-[13px] font-semibold hover:bg-[#243d6a] transition"
                   onClick={() => {
                     const phone = smsConfirm4.phone.replace(/[^\d]/g, "");
-                    window.location.href = `sms:${phone}?body=${encodeURIComponent(smsConfirm4.body)}`;
+                    sendText({ phones: [phone], body: smsConfirm4.body }); // 💬 2026-11-10
                     setSmsConfirm4(null);
                   }}
                 ><EditableText id="misc.btn.31248.문자 보내기" defaultText="문자 보내기" /></button>
@@ -34781,7 +34782,7 @@ setConfirmChange(null);
                 <button
                   className="flex-1 py-2.5 rounded-xl bg-[#1B2B4B] text-white text-[13px] font-semibold hover:bg-[#243d6a] transition"
                   onClick={() => {
-                    window.location.href = `sms:${bulkUploadConfirm4.phones.join(",")}?body=${encodeURIComponent(bulkUploadConfirm4.body)}`;
+                    sendText({ phones: bulkUploadConfirm4.phones, body: bulkUploadConfirm4.body }); // 💬 2026-11-10
                     setBulkUploadConfirm4(null);
                   }}
                 ><EditableText id="misc.btn.31275.메시지 창 열기" defaultText="메시지 창 열기" /></button>
@@ -43911,7 +43912,7 @@ setCopyPlaceOptions(list);
                 <button
                   onClick={() => {
                     const phone = smsConfirm5.phone.replace(/[^\d]/g, "");
-                    window.location.href = `sms:${phone}?body=${encodeURIComponent(smsConfirm5.body)}`;
+                    sendText({ phones: [phone], body: smsConfirm5.body }); // 💬 2026-11-10
                     setSmsConfirm5(null);
                   }}
                   className="flex-1 py-2.5 rounded-xl bg-[#1B2B4B] text-white text-[13px] font-medium"
@@ -43938,7 +43939,7 @@ setCopyPlaceOptions(list);
                 <button
                   className="flex-1 py-2.5 rounded-xl bg-[#1B2B4B] text-white text-[13px] font-medium"
                   onClick={() => {
-                    window.location.href = `sms:${bulkUploadConfirm5.phones.join(",")}?body=${encodeURIComponent(bulkUploadConfirm5.body)}`;
+                    sendText({ phones: bulkUploadConfirm5.phones, body: bulkUploadConfirm5.body }); // 💬 2026-11-10
                     setBulkUploadConfirm5(null);
                   }}
                 ><EditableText id="misc.btn.40050.메시지 창 열기" defaultText="메시지 창 열기" /></button>
@@ -44748,7 +44749,7 @@ setCopyPlaceOptions(list);
                     })();
                     return `안녕하세요. ${dateStr} ${r.상차시간||""} ${r.상차지명||""} → ${r.하차지명||""} 건 관련하여 연락드립니다.`;
                   })();
-              window.location.href = `sms:${phones.join(",")}?body=${encodeURIComponent(body)}`;
+              sendText({ phones, body }); // 💬 2026-11-10 회사 설정(휴대폰과 연결 · 회사 번호 문자)
               setContextMenuDS(null);
             }}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
@@ -62892,6 +62893,11 @@ function CompanyProfile({ userCompany = "", role = "", userId = "" }) {
             <div className="grid grid-cols-1 2xl:grid-cols-2 gap-5 items-start">
               <PopbillMemberCard company={companyName} canEdit={isAdmin || role === "hrManager"} />
               <BankAccountsCard company={companyName} canEdit={isAdmin || role === "hrManager"} />
+            </div>
+            {/* 💬 2026-11-10 문자 보내기(휴대폰과 연결 · 회사 번호 문자) · 카카오 알림톡 — 사용한 만큼 월말 로지스웹 청구 */}
+            <div className="grid grid-cols-1 2xl:grid-cols-2 gap-5 items-start">
+              <SmsSettingsCard company={companyName} canEdit={isAdmin || role === "hrManager"} />
+              <AlimtalkSettingsCard company={companyName} canEdit={isAdmin || role === "hrManager"} />
             </div>
             {/* ✉️ 2026-11-08 발신 메일 — 회사마다 자기 메일 계정으로(앱 비밀번호는 서버에만 · 암호화) */}
             <CompanyMailSettingsCard company={companyName} role={role} isMaster={myDocMailCP?.isMaster === true} myEmail={auth?.currentUser?.email || ""} />

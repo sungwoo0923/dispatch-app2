@@ -7,6 +7,7 @@
 //  · 알림톡이 실패하면 문자(장문)로 다시 보낸다 — 회사 설정 smsFallback이 꺼져 있으면 안 보냄
 //  · 기록(alimtalkLogs)에는 번호 가운데를 가리고, 내용 · 비밀값은 남기지 않는다
 const COLS = ["dispatch", "orders"];
+const { addUsage } = require("./smsSend");
 const err = (code, msg) => Object.assign(new Error(msg), { code });
 
 function makeAlimtalk({ db, FieldValue, getPopbill, callerOf, now = () => Date.now(), loadCore }) {
@@ -76,6 +77,8 @@ function makeAlimtalk({ db, FieldValue, getPopbill, callerOf, now = () => Date.n
       else r = await deliver(pb, member, settings, t, rc, C.alimtalkContent(t, vars), key);
       items[t] = { ...r, at: now() };
       await ref.set({ ...base, ...r, doneAt: now() }, { merge: true });
+      // 💬 2026-11-10 운송사별 월 사용량(로지스웹이 월말 청구) — 알림톡 성공 · 문자로 대신 보낸 건
+      if (r.status === "sent" || r.status === "sms") await addUsage(db, FieldValue, co, at, r.status === "sent" ? { alimtalk: 1 } : { lms: 1 });
     }
     Object.keys(items).forEach((k) => { if (items[k].status === "dup") delete items[k]; });
     if (!Object.keys(items).length) return { status: "dup", items: {} };

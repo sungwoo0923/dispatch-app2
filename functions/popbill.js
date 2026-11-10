@@ -15,6 +15,7 @@
 //   sendKakaoAlimtalk(corpNum, msg)            알림톡 1건(sendATS_one) — 실패하면 팝빌이 문자로 대체 발송(altSendType "C")
 //   sendSms(corpNum, msg)                      문자 1건(sendSMS)
 //   sendLms(corpNum, msg)                      장문 문자 1건(sendLMS) — 알림톡 실패 때 대체 발송
+//   getBalance · getChargeUrl · getUnitCost   문자 포인트 잔액 · 충전 페이지 · 단가
 //   checkBizStatus(corpNum, bNos)              휴폐업조회(checkCorpNums) — 국세청 조회의 대안
 //   bankAccountList(corpNum)                   계좌조회 서비스에 등록한 계좌(listBankAccount)
 //   bankTransactions(corpNum, q)               거래내역 수집 요청 → 완료 대기 → 조회(requestJob · getJobState · search)
@@ -109,6 +110,14 @@ function createPopbill({ linkId = "", secretKey = "", config = {}, loadSdk = () 
       const receiptNum = await call(svc("message"), "sendLMS", [corp, onlyDigits(m.sender), onlyDigits(m.receiver), m.receiverName || "", String(m.subject || "").slice(0, 40), String(m.content).slice(0, 1000), m.reserveDT || "", !!m.ads, m.senderName || "", m.requestNum || "", userId(m)]);
       return { receiptNum };
     }),
+    // 💬 2026-11-10 문자 포인트 — 잔액 · 충전 페이지 주소(30초 유효) · 단가(로지스웹이 파트너 포인트로 내고 운송사에는 월말 청구)
+    getBalance: guard(async (corp) => ({ balance: Number(await call(svc("message"), "getBalance", [corp])) || 0 })),
+    getChargeUrl: guard(async (corp, opts = {}) => ({ url: await call(svc("message"), "getChargeURL", [corp, userId(opts)]) })),
+    // 문자 단가(원) — SMS · LMS
+    getUnitCost: guard(async (corp) => ({
+      sms: Number(await call(svc("message"), "getUnitCost", [corp, "SMS"])) || 0,
+      lms: Number(await call(svc("message"), "getUnitCost", [corp, "LMS"])) || 0,
+    })),
     checkBizStatus: guard(async (corp, bNos = []) => {
       const list = [...new Set((Array.isArray(bNos) ? bNos : [bNos]).map(onlyDigits).filter((x) => x.length === 10))].slice(0, 1000);
       if (!list.length) throw Object.assign(new Error("조회할 사업자번호가 없어요"), { code: "arg" });

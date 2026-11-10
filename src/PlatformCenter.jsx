@@ -83,7 +83,8 @@ const SECTIONS = [
   { key: "billing", label: "청구", en: "BILLING", icon: "money", items: [
     { key: "billing", label: "요금·청구", en: "BILLING", icon: "money" },
     { key: "payments", label: "수납 관리", en: "COLLECTION", icon: "wallet" },
-    { key: "usage", label: "사용량·한도", en: "USAGE", icon: "server" }, // ⭐ 2026-11-03 요금제 한도 대비 사용량·초과 요금
+    { key: "usage", label: "사용량·한도", en: "USAGE", icon: "server" },
+    { key: "msgUsage", label: "문자·알림톡 사용량", en: "MESSAGES", icon: "chat" }, // 💬 2026-11-10 운송사별 월 사용량 → 월말 청구 // ⭐ 2026-11-03 요금제 한도 대비 사용량·초과 요금
     { key: "cost", label: "비용·손익", en: "COST · P&L", icon: "trend" }, // 💰 2026-11-04 매출 vs 서버·운영 지출 · 운송사별 원가 · 손익분기
   ] },
   { key: "ops", label: "운영", en: "OPERATIONS", icon: "server", items: [
@@ -145,6 +146,70 @@ function useCol(name, order = "createdAt", n = 300) {
   return list;
 }
 const msOf = (v) => (v?.toMillis ? v.toMillis() : v?.seconds ? v.seconds * 1000 : typeof v === "number" ? v : 0);
+
+// ═══════════════════════ 💬 문자 · 알림톡 사용량(2026-11-10) ═══════════════════════
+//  팝빌은 로지스웹이 한꺼번에 내고, 운송사별 월 사용량(messageUsage — 서버가 셈)에 단가를 곱해 월말에 청구한다
+//  단가: platformConfig/messagePricing { sms, lms, alimtalk }(원 · 부가세 별도) — 운송사 화면 "이번 달 예상 청구액"도 이 값
+function MessageUsagePanel() {
+  const [ym, setYm] = React.useState(() => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 7));
+  const [rows, setRows] = React.useState(null);
+  const [price, setPrice] = React.useState(null);
+  const [draft, setDraft] = React.useState(null);
+  const [msg, setMsg] = React.useState("");
+  React.useEffect(() => onSnapshot(query(collection(db, "messageUsage"), where("month", "==", ym)), (s) => setRows(s.docs.map((d) => ({ id: d.id, ...d.data() }))), () => setRows([])), [ym]);
+  React.useEffect(() => onSnapshot(doc(db, "platformConfig", "messagePricing"), (s) => setPrice(s.exists() ? s.data() : {}), () => setPrice({})), []);
+  const P = { sms: Number(price?.sms ?? 20), lms: Number(price?.lms ?? 50), alimtalk: Number(price?.alimtalk ?? 15) };
+  const v = draft || P;
+  const shift = (n) => { const [y, m] = ym.split("-").map(Number); setYm(new Date(Date.UTC(y, m - 1 + n, 1)).toISOString().slice(0, 7)); };
+  const list = (rows || []).map((r) => ({ ...r, sms: Number(r.sms) || 0, lms: Number(r.lms) || 0, alimtalk: Number(r.alimtalk) || 0 }))
+    .map((r) => ({ ...r, amount: r.sms * P.sms + r.lms * P.lms + r.alimtalk * P.alimtalk })).sort((a, b) => b.amount - a.amount);
+  const sum = list.reduce((a, r) => ({ sms: a.sms + r.sms, lms: a.lms + r.lms, alimtalk: a.alimtalk + r.alimtalk, amount: a.amount + r.amount }), { sms: 0, lms: 0, alimtalk: 0, amount: 0 });
+  const savePrice = async () => { await setDoc(doc(db, "platformConfig", "messagePricing"), { sms: Number(v.sms) || 0, lms: Number(v.lms) || 0, alimtalk: Number(v.alimtalk) || 0, updatedAt: serverTimestamp() }, { merge: true }); setDraft(null); setMsg("단가를 저장했어요"); };
+  const csv = () => {
+    const head = ["운송사", "월", "단문", "장문", "알림톡", "청구액(원·부가세 별도)"];
+    const lines = [head, ...list.map((r) => [r.company, ym, r.sms, r.lms, r.alimtalk, Math.round(r.amount)])].map((l) => l.join(",")).join("\n");
+    const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob(["\ufeff" + lines], { type: "text/csv" })); a.download = `문자알림톡사용량_${ym}.csv`; a.click();
+  };
+  const cell = "px-3 py-2.5 border-b border-[#EEF1F6] text-[13.5px] tabular-nums";
+  return (
+    <>
+      <Hero en="BILLING · MESSAGES" title="문자 · 알림톡 사용량" desc="팝빌은 로지스웹이 내고, 운송사별 사용량에 단가를 곱해 월말에 청구해요"
+        right={<div className="flex gap-2"><div className="rounded-2xl bg-white/[0.08] border border-white/10 px-3.5 py-2"><div className="text-[11.5px] text-white/55 font-bold">{ym.replace("-", ".")} 청구 합계</div><div className="text-[20px] font-black tabular-nums">{Math.round(sum.amount).toLocaleString()}원</div></div></div>} />
+      <div className="grid lg:grid-cols-[300px_minmax(0,1fr)] gap-3 items-start">
+        <div className="rounded-2xl bg-white border border-[#E3E8F0] p-4 space-y-3" data-kp="msg-price">
+          <div className="text-[10.5px] font-extrabold tracking-[0.22em] text-[#9AA9C3]">UNIT PRICE · 원 · 부가세 별도</div>
+          {[["sms", "단문(SMS)"], ["lms", "장문(LMS)"], ["alimtalk", "알림톡"]].map(([k, l]) => (
+            <label key={k} className="flex items-center gap-2"><span className="w-[78px] shrink-0 whitespace-nowrap text-[13px] font-bold text-[#3A4A66]">{l}</span>
+              <input inputMode="numeric" value={String(v[k] ?? "")} onChange={(e) => { setDraft({ ...v, [k]: e.target.value.replace(/[^\d.]/g, "") }); setMsg(""); }} className="flex-1 min-w-0 w-full h-9 px-3 rounded-lg border border-[#DCE3EE] text-[14px] font-black text-right tabular-nums" />
+              <span className="text-[12.5px] text-[#7A8AA6]">원</span></label>
+          ))}
+          <button type="button" disabled={!draft} onClick={savePrice} className="w-full h-10 rounded-xl bg-[#0F1A30] text-white text-[13.5px] font-black disabled:opacity-40">단가 저장</button>
+          <div className="text-[12px] text-[#7A8AA6] leading-relaxed">운송사 회사정보 › 문자 보내기의 "이번 달 예상 청구액"에도 이 단가가 쓰여요. 팝빌 원가는 팝빌 › 요금 안내에서 확인하세요.</div>
+          {msg && <div className="text-[12.5px] font-bold text-[#2D4C82]">{msg}</div>}
+        </div>
+        <div className="rounded-2xl bg-white border border-[#E3E8F0] overflow-hidden min-w-0">
+          <div className="px-4 py-3 flex items-center gap-2 border-b border-[#EEF1F6]">
+            <span className="inline-flex items-center h-9 rounded-lg border border-[#E3E8F0] overflow-hidden"><button type="button" onClick={() => shift(-1)} className="w-9 h-full font-black text-[#1B2B4B]">‹</button><span className="px-1 text-[13.5px] font-black tabular-nums">{ym.replace("-", ".")}</span><button type="button" onClick={() => shift(1)} className="w-9 h-full font-black text-[#1B2B4B]">›</button></span>
+            <span className="text-[12.5px] font-bold text-[#7A8AA6]">{list.length}개 운송사</span>
+            <button type="button" onClick={csv} disabled={!list.length} className="ml-auto h-9 px-3 rounded-lg border border-[#DCE3EE] text-[13px] font-black text-[#1B2B4B] disabled:opacity-40">엑셀(CSV)</button>
+          </div>
+          <table className="w-full border-separate border-spacing-0">
+            <thead><tr>{["운송사", "단문", "장문", "알림톡", "청구액"].map((h, i) => <th key={h} className={`text-[11.5px] font-extrabold text-[#7A8AA6] px-3 py-2.5 bg-[#F8FAFC] border-b border-[#E3E8F0] ${i ? "text-right" : "text-left"}`}>{h}</th>)}</tr></thead>
+            <tbody>
+              {rows === null && <tr><td colSpan={5} className="py-12 text-center text-[13px] text-[#9AA9C3]">불러오는 중…</td></tr>}
+              {rows && !list.length && <tr><td colSpan={5} className="py-12 text-center text-[13px] text-[#9AA9C3]">이 달에 보낸 문자 · 알림톡이 없어요</td></tr>}
+              {list.map((r) => (
+                <tr key={r.id}><td className={`${cell} font-black`}>{r.company}</td><td className={`${cell} text-right`}>{r.sms.toLocaleString()}</td><td className={`${cell} text-right`}>{r.lms.toLocaleString()}</td><td className={`${cell} text-right`}>{r.alimtalk.toLocaleString()}</td><td className={`${cell} text-right font-black`}>{Math.round(r.amount).toLocaleString()}원</td></tr>
+              ))}
+              {list.length > 0 && <tr className="bg-[#F8FAFC]"><td className={`${cell} font-black`}>합계</td><td className={`${cell} text-right font-black`}>{sum.sms.toLocaleString()}</td><td className={`${cell} text-right font-black`}>{sum.lms.toLocaleString()}</td><td className={`${cell} text-right font-black`}>{sum.alimtalk.toLocaleString()}</td><td className={`${cell} text-right font-black`}>{Math.round(sum.amount).toLocaleString()}원</td></tr>}
+            </tbody>
+          </table>
+          <div className="px-4 py-3 text-[12px] text-[#7A8AA6]">수납 관리에서 이 달 청구서를 만들 때 위 금액을 "문자 · 알림톡" 항목으로 더해 주세요.</div>
+        </div>
+      </div>
+    </>
+  );
+}
 
 // ═══════════════════════ 오늘 할 일 ═══════════════════════
 function TodayPanel({ go, openCompany }) {
@@ -1235,6 +1300,7 @@ function PlatformCenterInner({ user }) {
   else if (tab === "hubMembers") body = <><Hero en="CLIENTS · HUB MEMBERS" title="허브 회원 승인" desc="로지스웹 허브(화물 콜)에 가입 신청한 차주 · 화주 · 운송사의 신청서와 서류를 확인하고 승인 · 거절합니다. 로지스웹 계정으로 들어온 회원은 자동 승인되어 여기서 정지만 할 수 있습니다." /><React.Suspense fallback={<div className="py-20 text-center text-[#9AA9C3]">불러오는 중…</div>}><HubMembersAdmin me={user} /></React.Suspense></>;
   else if (tab === "payments") body = <PaymentsPanel />;
   else if (tab === "usage") body = <UsagePanel />;
+  else if (tab === "msgUsage") body = <MessageUsagePanel />;
   else if (tab === "cost") body = <React.Suspense fallback={<div className="py-20 text-center text-[#9AA9C3]">불러오는 중…</div>}><CostPanel openUsage={() => setTab("usage")} /></React.Suspense>;
   else if (tab === "notices") body = <NoticesPanel />;
   else if (tab === "notifTemplate") body = <><Hero en="OPERATIONS · MESSAGES" title="알림 문구" desc="배차 알림 등 자동 발송 문구를 관리합니다." /><NotifTemplatePanel /></>;

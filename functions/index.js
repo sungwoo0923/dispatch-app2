@@ -6882,6 +6882,15 @@ exports.alimtalkOnOrderWrite = functions.runWith({ ...PB_RUN, timeoutSeconds: 60
     } catch (e) { console.error("[알림톡] 실패:", col, dispatchId, e?.message || e); }
     return null;
   });
+// 💬 2026-11-10 문자 보내기(팝빌) — 휴대폰과 연결이 없는 PC · 운송사마다 자기 팝빌 포인트(functions/smsSend.js)
+const _smsSend = require("./smsSend").makeSmsSend({ db, FieldValue, getPopbill: getPopbillAdapter, callerOf: _publicData.callerOf });
+exports.smsSend = functions.runWith({ ...PB_RUN, timeoutSeconds: 120, memory: "256MB", ...appCheckCallOpts() }).https.onCall(async (data, context) => {
+  try { return await _smsSend.send(data, context.auth); } catch (e) { throw pdHttpsError(e); }
+});
+exports.smsInfo = functions.runWith({ ...PB_RUN, timeoutSeconds: 30, memory: "256MB", ...appCheckCallOpts() }).https.onCall(async (data, context) => {
+  try { return await _smsSend.info(data, context.auth); } catch (e) { throw pdHttpsError(e); }
+});
+
 exports.alimtalkSend = functions.runWith({ ...PB_RUN, timeoutSeconds: 60, memory: "256MB" }).https.onCall(async (data, context) => {
   if (ALIMTALK_OFF) throw new functions.https.HttpsError("failed-precondition", "알림톡은 사용하지 않습니다");
   try { return await _alimtalk.sendManual(data, context.auth); } catch (e) { throw pdHttpsError(e); }
