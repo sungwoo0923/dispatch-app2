@@ -2,9 +2,9 @@
 // 📎 2026-11-08 전자결재 첨부 파일 — 올리기(작성 화면) · 목록·미리보기·저장(문서 보기)
 //  저장 위치·검사 규칙은 src/approvalFiles.js, 서버 규칙은 storage.rules › approvals/{회사 키}/{문서 id}/{파일}
 //  · 둘러보기(/preview)에서는 서버에 올리지 않고 이 창 안에서만 파일을 들고 있는다(미리보기 점검용)
-//  · 내려받기는 getBlob(로그인한 사람의 권한으로 받음 — 공개 주소를 만들지 않는다)
+//  · 내려받기는 보기 주소(getDownloadURL — 보안 규칙이 권한 검사)로 받고, 브라우저가 막으면 /api/ap-file 이 대신 받아 준다
 import React from "react";
-import { ref as sRef, uploadBytes, getBlob, getDownloadURL, deleteObject } from "firebase/storage";
+import { ref as sRef, uploadBytes, getDownloadURL, deleteObject } from "firebase/storage";
 import { storage } from "./firebase";
 import { isPreviewMode } from "./fsTenant";
 import { AP_FILE_ACCEPT, AP_FILE_COUNT, KIND_LABEL, apFilePath, canPreview, checkApFile, fileKind, fmtSize, safeFileName } from "./approvalFiles";
@@ -44,12 +44,21 @@ const blobCache = new Map();
 // ⭐ 2026-11-09 첨부가 "불러오는 중"에서 멈추던 문제 — 저장소 응답이 없으면 SDK가 최대 2분 동안 조용히 다시 시도하고,
 //  그 멈춘 요청이 캐시에 남아 문서를 다시 열어도 계속 멈춰 있었다 → 25초가 지나면 실패로 끝내고(캐시도 지움) 이유와 [다시 시도]를 보여 준다
 const AP_BLOB_TIMEOUT = 25000;
+// ⭐ 2026-11-10 [저장]을 눌러도 파일로 안 받아지고 새 탭으로만 열리던 문제 — 저장소 CORS 설정이 없으면 브라우저가 파일 내용 받기를 막는다.
+//  ① 보기 주소로 바로 받기(CORS가 되어 있으면 여기서 끝) → ② 막히면 우리 서버(/api/ap-file)가 대신 받아 준다 → 둘 다 안 되면 예전처럼 새 탭
+async function fetchApBlob(f) {
+  const url = await apFileViewUrl(f); // 권한은 여기서 보안 규칙이 검사
+  try { const r = await fetch(url); if (r.ok) return await r.blob(); } catch { /* CORS 막힘 → 중계로 */ }
+  const r2 = await fetch(`/api/ap-file?u=${encodeURIComponent(url)}&name=${encodeURIComponent(f.name || "file")}`);
+  if (!r2.ok || r2.headers.get("x-ap-file") !== "1") { const e = new Error("내려받기 막힘"); e.code = "blocked"; throw e; }
+  return r2.blob();
+}
 export async function apFileBlob(f) {
   if (!f?.path) throw new Error("파일 위치가 없어요");
   if (localUrls.has(f.path)) return (await fetch(localUrls.get(f.path))).blob();
   if (blobCache.has(f.path)) return blobCache.get(f.path);
   const timeout = new Promise((_, rej) => setTimeout(() => { const e = new Error("응답 없음"); e.code = "timeout"; rej(e); }, AP_BLOB_TIMEOUT));
-  const p = Promise.race([getBlob(sRef(storage, f.path)), timeout]).then((b) => (f.type && b.type !== f.type ? new Blob([b], { type: f.type }) : b));
+  const p = Promise.race([fetchApBlob(f), timeout]).then((b) => (f.type && b.type !== f.type ? new Blob([b], { type: f.type }) : b));
   blobCache.set(f.path, p);
   p.catch(() => blobCache.delete(f.path));
   return p;

@@ -17,6 +17,12 @@
         "icn1"
       ]
     },
+    "api/ap-file.js": {
+      "maxDuration": 30,
+      "regions": [
+        "icn1"
+      ]
+    },
     "api/send-email.js": {
       "maxDuration": 30,
       "regions": [
