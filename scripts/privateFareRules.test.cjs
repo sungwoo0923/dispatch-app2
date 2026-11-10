@@ -1,5 +1,5 @@
 // 🔒 2026-11-10 비공개 청구운임 — 보안 규칙 테스트(Firestore 에뮬레이터 전용)
-//  privateFareSettings/{회사}(viewers만 읽기·고치기 · 처음 만들기는 같은 회사 마스터/관리자) · /fares(viewers만)
+//  privateFareSettings/{회사}(읽기: viewers·최고관리자 · 만들기·고치기: 최고관리자만) · /fares(viewers만)
 //  실행 예: firebase emulators:exec --only firestore --project demo-kpflow "node scripts/privateFareRules.test.cjs"
 const fs = require("fs");
 const path = require("path");
@@ -35,19 +35,19 @@ async function t(name, fn) {
 
   await t("없을 때: 직원도 '없음' 확인", () => assertSucceeds(getDoc(doc(ST, S))));
   await t("만들기: 일반 직원 거절", () => assertFails(setDoc(doc(ST, S), { companyName: "큐런", viewers: ["staff"] })));
+  await t("만들기: 같은 회사 마스터 거절(최고관리자만)", () => assertFails(setDoc(doc(MA, S), { companyName: "큐런", viewers: ["owner"] })));
   await t("만들기: 다른 회사 마스터 거절", () => assertFails(setDoc(doc(OT, S), { companyName: "큐런", viewers: ["other"] })));
-  await t("만들기: 빈 viewers 거절", () => assertFails(setDoc(doc(MA, S), { companyName: "큐런", viewers: [] })));
-  await t("만들기: 최고관리자가 다른 회사 대신 켜기", () => assertSucceeds(setDoc(doc(TM, "privateFareSettings/비운송"), { companyName: "비운송", viewers: ["other"] })));
-  await t("읽기: 최고관리자가 켠 뒤 담당자 아니면 거절", () => assertFails(getDoc(doc(TM, "privateFareSettings/비운송"))));
-  await t("만들기: 같은 회사 마스터가 담당자만 넣어 만들기", () => assertSucceeds(setDoc(doc(MA, S), { companyName: "큐런", viewers: ["owner"], clients: [{ name: "홍길거래처", mode: "add", value: 100000 }] })));
+  await t("만들기: 빈 viewers 거절", () => assertFails(setDoc(doc(TM, S), { companyName: "큐런", viewers: [] })));
+  await t("만들기: 최고관리자가 담당자 지정", () => assertSucceeds(setDoc(doc(TM, S), { companyName: "큐런", viewers: ["owner"], clients: [{ name: "홍길거래처", mode: "add", value: 100000 }] })));
   await t("설정 읽기: 담당자", () => assertSucceeds(getDoc(doc(OW, S))));
+  await t("설정 읽기: 최고관리자", () => assertSucceeds(getDoc(doc(TM, S))));
   await t("설정 읽기: 마스터(담당자 아님) 거절", () => assertFails(getDoc(doc(MA, S))));
   await t("설정 읽기: 직원 거절", () => assertFails(getDoc(doc(ST, S))));
-  await t("설정 읽기: 최고관리자 거절", () => assertFails(getDoc(doc(TM, S))));
   await t("설정 고치기: 마스터가 자기 넣기 거절", () => assertFails(setDoc(doc(MA, S), { companyName: "큐런", viewers: ["owner", "master"] })));
-  await t("설정 고치기: 담당자", () => assertSucceeds(updateDoc(doc(OW, S), { clients: [{ name: "홍길거래처", mode: "manual", value: 0 }] })));
-  await t("설정 고치기: 회사명 바꾸기 거절", () => assertFails(updateDoc(doc(OW, S), { companyName: "비운송" })));
-  await t("설정 지우기 거절", () => assertFails(deleteDoc(doc(OW, S))));
+  await t("설정 고치기: 담당자 거절(최고관리자만)", () => assertFails(updateDoc(doc(OW, S), { viewers: ["owner", "staff"] })));
+  await t("설정 고치기: 최고관리자", () => assertSucceeds(updateDoc(doc(TM, S), { companyName: "큐런", viewers: ["owner"], clients: [{ name: "홍길거래처", mode: "manual", value: 0 }] })));
+  await t("설정 고치기: 회사명 바꾸기 거절", () => assertFails(updateDoc(doc(TM, S), { companyName: "비운송" })));
+  await t("설정 지우기 거절", () => assertFails(deleteDoc(doc(TM, S))));
   await t("설정 목록 거절", () => assertFails(getDocs(collection(ST, "privateFareSettings"))));
   const F = `${S}/fares/o1`;
   await t("금액 쓰기: 담당자", () => assertSucceeds(setDoc(doc(OW, F), { orderId: "o1", client: "홍길거래처", base: 400000, amount: 500000 })));

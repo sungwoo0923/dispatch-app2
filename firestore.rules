@@ -1929,18 +1929,16 @@ service cloud.firestore {
     //  privateFareSettings/{회사 키} = { companyName, viewers:[uid], clients:[{ name, mode, value }], updatedAt, updatedBy }
     //  privateFareSettings/{회사 키}/fares/{오더 id} = { orderId, client, date, base(그때 공개 청구운임), amount, memo, updatedAt, updatedBy }
     //  · 금액(fares)은 viewers에 든 사람만 읽고 쓴다 — 회사 마스터·관리자·최고관리자도 viewers가 아니면 못 본다
-    //  · 설정 처음 만들기: 같은 회사 마스터(또는 관리자)가 자기 회사 문서로(최고관리자는 어느 회사든 대신 켜 줌) · 그 뒤 고치기는 viewers만(마스터가 몰래 자기를 넣지 못하게)
-    //  · 설정 문서 읽기: viewers만(어느 거래처가 비공개인지도 알면 안 되므로) · 지우기 없음
+    //  · 설정(켜기·볼 사람·거래처 규칙) 만들기·고치기는 최고관리자만(2026-11-10 업체 요청 — 회사 직원·담당자 스스로는 못 바꾼다)
+    //  · 설정 문서 읽기: viewers · 최고관리자(어느 거래처가 비공개인지 직원은 알면 안 되므로) · 지우기 없음
     //  · 문서가 없을 때 "없음"만 확인하는 읽기는 승인된 직원 허용(화면이 메뉴를 보일지 판단)
     match /privateFareSettings/{co} {
-      allow get: if isSignedIn() && (resource == null ? isApproved() : request.auth.uid in resource.data.get('viewers', []));
+      allow get: if isSignedIn() && (resource == null ? isApproved() : (request.auth.uid in resource.data.get('viewers', []) || isTotalMasterUser()));
       allow list: if false;
-      // 처음 만들기 — 같은 회사 마스터·관리자, 또는 최고관리자(고객사 대신 켜 주기 · 만든 뒤에는 viewers가 아니면 못 본다)
-      allow create: if request.resource.data.viewers is list && request.resource.data.viewers.size() > 0 && request.resource.data.viewers.size() <= 10
-        && request.resource.data.get('companyName', '') != ''
-        && (isTotalMasterUser()
-          || (isApproved() && !isShipperUser() && request.resource.data.get('companyName', '') == myCo() && (myIsMaster() || myRole() == 'admin')));
-      allow update: if isSignedIn() && request.auth.uid in resource.data.get('viewers', [])
+      allow create: if isTotalMasterUser()
+        && request.resource.data.viewers is list && request.resource.data.viewers.size() > 0 && request.resource.data.viewers.size() <= 10
+        && request.resource.data.get('companyName', '') != '';
+      allow update: if isTotalMasterUser()
         && request.resource.data.get('companyName', '') == resource.data.get('companyName', '')
         && request.resource.data.viewers is list && request.resource.data.viewers.size() > 0 && request.resource.data.viewers.size() <= 10;
       allow delete: if false;
