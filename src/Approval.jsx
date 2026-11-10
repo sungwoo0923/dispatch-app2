@@ -2521,12 +2521,12 @@ export default function ApprovalCenter({ company, me, page, setPage, openId, onO
     setPreset(next);
     return true;
   };
-  const [tab, setTab] = React.useState(() => (page === "mine" ? "all" : "paywait"));
+  const [tab, setTab] = React.useState("all");
   const [companyAll, setCompanyAll] = React.useState(null);
   const [lf, setLf] = React.useState({ q: "", from: "", to: "", who: "" }); // 목록 검색·기간·기안자
   const admin = isAdminRole(me.role);
   // ⭐ 2026-11-09 결재함은 들어올 때 항상 '지급 대기'부터
-  React.useEffect(() => { setTab(page === "mine" ? "all" : "paywait"); }, [page]);
+  React.useEffect(() => { setTab("all"); }, [page]); // ⭐ 2026-11-10 결재함도 내 기안함처럼 '전체'부터
   React.useEffect(() => {
     // ⭐ 2026-11-09 버그수정 — 예전엔 '회사 전체' 탭을 눌렀을 때만 구독해서, 관리자가 지급완료·반려 등 다른 탭을 누르면
     //  (내가 결재선에 없는 문서는) 0건이었다 → 결재함에서는 항상 구독해 모든 상태 탭에 회사 문서를 함께 센다
@@ -2575,7 +2575,7 @@ export default function ApprovalCenter({ company, me, page, setPage, openId, onO
   // 관리자(회사 전체를 보는 사람)는 상태 탭에도 회사 문서 전체를 넣는다 — 결재 대기(내 차례)만 내 문서 기준
   const lineL = admin && companyAll ? [...new Map([...lineL0, ...companyAll.filter((d) => !isHidden(d))].map((d) => [d.id, d])).values()].sort((a, b) => toMs(b.createdAt) - toMs(a.createdAt)) : lineL0;
   const payMine = [...new Map([...L, ...payPool.filter((d) => !isHidden(d))].map((d) => [d.id, d])).values()];
-  const inboxStatus = apStatusSets(lineL, { pendingFilter: (d) => !myTurn(d, uid) });
+  const inboxStatus = apStatusSets(lineL); // ⭐ 2026-11-10 내 기안함과 같은 판정 — 진행 중 = 진행 중인 문서 전부(내 차례는 "내 차례" 표시)
   const sets = {
     todo: L.filter((d) => myTurn(d, uid)),
     ...inboxStatus,
@@ -2613,18 +2613,19 @@ export default function ApprovalCenter({ company, me, page, setPage, openId, onO
         <div className="rounded-2xl bg-white border border-[#E3E8F0] overflow-hidden">
           {(() => {
             // ⭐ 2026-10-31 탭 숫자는 그 탭의 문서 수(검색·기간 적용), 새 결과는 빨간 점으로 따로
-            const F = (k) => applyListTools(k === "company" ? (companyAll || []) : (sets[k] || []), lf) || [];
+            const F = (k) => applyListTools(sets[k] || [], lf) || [];
             // ⭐ 2026-11-09 결재함 순서: 회사 전체 · 결재 대기 · 지급 대기 · 지급완료 · 반려 · 결재 취소 · 회수 · 참조 문서 · 삭제한 문서
             //   '진행 중·완료'는 뺐다(회사 전체에서 상태로 보임) — 관리자가 아니면 회사 전체 대신 '전체'(내가 결재선에 있는 문서 전부)
-            // ⭐ 2026-11-10 '진행 중'(다른 결재자 차례) 탭 다시 — 회사 전체에 "진행 중" 문서가 여러 건인데 '결재 대기'(내 차례)는 0건이라 헷갈린다는 의견
-            const keys = [admin ? "company" : "all", "todo", "pending", "paywait", "paid", "rejected", "cancelled", "withdrawn", "cc", "hidden"];
-            const label = { all: "전체", company: "회사 전체", todo: "결재 대기(내 차례)", pending: "진행 중(다른 결재자)", paywait: "지급 대기", paid: "지급완료", rejected: "반려", cancelled: "결재 취소", withdrawn: "회수", cc: "참조 문서", hidden: "삭제한 문서" };
+            // ⭐ 2026-11-10 결재함 필터 = 내 기안함과 똑같이 — 전체 · 진행 중 · 완료 · (지급 대기 · 지급완료) · 반려 · 결재 취소 · 회수 + 참조 문서 · 삭제한 문서
+            //   관리자의 '전체'는 회사 문서 전체(예전 '회사 전체'), 내 차례인 문서는 목록에 "내 차례" 표시로 구분
+            const keys = [...apStatusKeys(sets).map(([k]) => k), "cc", "hidden"];
+            const label = { ...Object.fromEntries(AP_STATUS_TABS), cc: "참조 문서", hidden: "삭제한 문서" };
             const pool = [...(list || []), ...(companyAll || [])];
             const drafters = [...new Map(pool.filter((d) => d.drafterUid).map((d) => [d.drafterUid, d.drafter?.name || "-"])).entries()].sort((a, b) => String(a[1]).localeCompare(String(b[1]), "ko"));
             return (<>
               <Tabs tab={tab} setTab={setTab} tabs={keys.map((k) => [k, label[k], F(k).length, k === "cc" ? F(k).filter((d) => ccUnread(d, uid)).length : 0])} />
               <ListTools f={lf} setF={setLf} drafters={drafters} />
-              <DocList compact={wide} uid={uid} docs={tab === "company" ? (companyAll === null ? null : F("company")) : (list === null ? null : F(tab))} onOpen={(d) => setOpen(d.id)} empty={lf.q || lf.from || lf.who ? "조건에 맞는 문서가 없습니다" : tab === "todo" ? `내가 결재할 문서가 없습니다${(sets.pending || []).length ? ` · 다른 결재자 차례인 문서 ${sets.pending.length}건은 [진행 중]에 있어요` : ""}` : tab === "paywait" ? "지급을 기다리는 문서가 없습니다" : "문서가 없습니다"} />
+              <DocList compact={wide} uid={uid} docs={list === null || (admin && companyAll === null) ? null : F(tab)} onOpen={(d) => setOpen(d.id)} empty={lf.q || lf.from || lf.who ? "조건에 맞는 문서가 없습니다" : tab === "pending" ? "진행 중인 문서가 없습니다" : tab === "paywait" ? "지급을 기다리는 문서가 없습니다" : "문서가 없습니다"} />
             </>);
           })()}
         </div>
