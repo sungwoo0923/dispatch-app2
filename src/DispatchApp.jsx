@@ -57000,6 +57000,9 @@ function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, sho
   // ⭐ 2026-11-02 담당자 칸 머리를 누르면 담당자 목록 → 고른 담당자의 차량이 맨 위로(줄 강조) · 다시 고르면 해제
   const [mgrFocus, setMgrFocus] = React.useState("");
   const [mgrMenu, setMgrMenu] = React.useState(null); // { left, top }
+  // 📱 2026-11-11 휴대폰 — 팝업을 화면 맨 위(body)에 직접 그린다. 글자 크기를 키우면(#root zoom) 아이폰에서 화면 안 팝업(position: fixed)이
+  //  본문 길이만큼만 그려져 아래가 잘렸다. PC는 그대로.
+  const mPop = (node) => (mobile ? createPortal(<div className="kp-m-pc kp-m-cm">{node}</div>, document.body) : node);
   const mgrOf = (r) => String(r?.담당자?.name || "").trim();
   const mgrCounts = React.useMemo(() => {
     const m = new Map();
@@ -57276,7 +57279,7 @@ function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, sho
       </div>
 
       {/* 신규 등록 팝업 */}
-      {showAddForm && (
+      {showAddForm && mPop(
         <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/40">
           <div className="bg-white rounded-2xl shadow-2xl w-[600px] max-w-[94vw] max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
             <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between">
@@ -57471,7 +57474,7 @@ function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, sho
             const rows = [["차량번호", r.차량번호], ["이름", r.이름], ["전화번호", formatPhone(r.전화번호)], ["등급", g], ["차량", [r.차량톤수, r.차량종류].filter(Boolean).join(" ")], ["등록일", displayRegDate(r)],
               ...(fleet ? [["담당자", r.담당자?.name], ["거주지", r.거주지], ["근무요일", Array.isArray(r.근무요일) ? r.근무요일.join(",") : ""], ["요청사항", r.요청사항]] : []),
               ["메모", r.메모], ["메모 팝업", (r.메모 || "").trim() ? (g === "블랙" || r.팝업표시 === true ? "ON" : "OFF") : ""], ["앱 안내", guideSentLabel(r)]].filter(([, v]) => String(v || "").trim());
-            return (
+            return mPop(
               <div className="fixed inset-0 z-[99990] bg-[#0B1428]/50 flex items-end" onClick={() => setMSheet(null)}>
                 <div className="w-full max-h-[88vh] overflow-y-auto rounded-t-[22px] bg-white" onClick={(e) => e.stopPropagation()}>
                   <div className="px-4 py-4 text-white flex items-start gap-3" style={{ background: "linear-gradient(120deg,#0B1428,#1B2B4B 70%,#2D4C82)" }}>
@@ -57623,7 +57626,7 @@ function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, sho
 
       {guideFor && <DriverGuideSendModal drivers={guideFor} company={userCompany} onClose={() => setGuideFor(null)} />}
       {/* ===== 기사 수정 팝업 (더블클릭) ===== */}
-      {editDriverModal && (
+      {editDriverModal && mPop(
         <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/40">
           <div className={`bg-white rounded-2xl shadow-2xl ${(editDriverModal.등급 === "지입" || editDriverModal.등급 === "직영" || editDriverModal.등급 === "임대") ? "w-[640px]" : "w-[480px]"} max-w-[96vw] max-h-[92vh] overflow-y-auto`} onClick={e => e.stopPropagation()}>
             <div className="px-6 py-4 flex items-center justify-between sticky top-0 z-10" style={{ background: "linear-gradient(120deg,#0B1428,#1B2B4B 70%,#2D4C82)" }}>
@@ -57816,7 +57819,7 @@ function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, sho
       {drvToast && <div data-kp="drv-toast" className="fixed left-1/2 -translate-x-1/2 bottom-8 z-[999999] px-4 h-11 rounded-xl bg-[#0F1A30] text-white text-[14px] font-bold flex items-center gap-2 shadow-[0_12px_30px_rgba(11,20,40,0.35)]"><span className="w-1.5 h-1.5 rounded-full bg-[#8FB0F0]" />{drvToast}</div>}
 
       {/* ===== 기사정리 팝업 ===== */}
-      {cleanupOpen && (
+      {cleanupOpen && mPop(
         <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/50">
           <div className="bg-white rounded-2xl shadow-2xl w-[820px] max-w-[96vw] max-h-[85vh] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
             {/* 헤더 */}

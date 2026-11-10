@@ -7,6 +7,7 @@
 //  · AI 서버를 못 쓰면(키 없음·오류·횟수 초과) 화면에 있는 데이터로 답하는 기본 답변으로 이어간다
 //  · 경리(acct)·인사(hr)·임원(exec) 화면은 그 팀 비서(인사말·빠른 버튼·서버 도구가 다르다)
 import React, { useState, useRef, useEffect, useCallback } from "react";
+import { createPortal } from "react-dom";
 import { addDoc, collection, serverTimestamp } from "firebase/firestore";
 import { FabButton, useWinSize, ResizeGrip, WinHeader } from "./FloatDock";
 import { AI_MODES, useTeamData, teamButtons, teamAnswer } from "./aiTeamModes";
@@ -395,6 +396,56 @@ function ScheduleCard({ msg, onSave, onCancel }) {
   );
 }
 
+// 📱 2026-11-11 모바일 AI 비서 버튼 — 손가락으로 끌어 옮길 수 있다(밑에 깔린 버튼을 누를 수 있게). 놓은 자리는 이 기기에 기억.
+//  살짝 누르면 열기, 6px 넘게 움직이면 옮기기. 화면 확대(#root zoom)와 상관없이 손가락 위치 그대로 따라오게 body에 직접 그린다.
+const AI_FAB_KEY = "kpAiFabPos";
+const AI_FAB = 56;
+function MobileAiFab({ onOpen, children }) {
+  const clamp = (p) => {
+    const w = window.innerWidth; const h = window.innerHeight;
+    return { x: Math.min(Math.max(6, p.x), w - AI_FAB - 6), y: Math.min(Math.max(50, p.y), h - AI_FAB - 70) };
+  };
+  const [pos, setPos] = useState(() => {
+    try { const v = JSON.parse(localStorage.getItem(AI_FAB_KEY) || "null"); if (v && Number.isFinite(v.x) && Number.isFinite(v.y)) return clamp(v); } catch { /* 무시 */ }
+    return null; // 처음엔 오른쪽 아래(예전 자리)
+  });
+  const [drag, setDrag] = useState(false);
+  const st = useRef(null);
+  useEffect(() => {
+    const on = () => setPos((p) => (p ? clamp(p) : p));
+    window.addEventListener("resize", on);
+    return () => window.removeEventListener("resize", on);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const down = (e) => {
+    const r = e.currentTarget.getBoundingClientRect();
+    st.current = { sx: e.clientX, sy: e.clientY, ox: e.clientX - r.left, oy: e.clientY - r.top, moved: false };
+    try { e.currentTarget.setPointerCapture(e.pointerId); } catch { /* 무시 */ }
+  };
+  const move = (e) => {
+    const s = st.current; if (!s) return;
+    if (!s.moved && Math.hypot(e.clientX - s.sx, e.clientY - s.sy) < 6) return;
+    s.moved = true; setDrag(true);
+    setPos(clamp({ x: e.clientX - s.ox, y: e.clientY - s.oy }));
+  };
+  const up = (e) => {
+    const s = st.current; st.current = null; setDrag(false);
+    if (!s) return;
+    if (!s.moved) { onOpen(); return; }
+    const p = clamp({ x: e.clientX - s.ox, y: e.clientY - s.oy });
+    setPos(p);
+    try { localStorage.setItem(AI_FAB_KEY, JSON.stringify(p)); } catch { /* 무시 */ }
+  };
+  const place = pos ? { left: pos.x, top: pos.y } : { right: 24, bottom: "calc(94px + env(safe-area-inset-bottom, 0px))" };
+  return createPortal(
+    <button type="button" data-testid="ai-fab" aria-label="AI 비서 (끌어서 옮기기)"
+      onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={() => { st.current = null; setDrag(false); }}
+      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onOpen(); } }}
+      style={{ position: "fixed", ...place, width: AI_FAB, height: AI_FAB, borderRadius: 18, border: "none", zIndex: 9990, color: "#fff", touchAction: "none", userSelect: "none", WebkitUserSelect: "none", WebkitTouchCallout: "none",
+        background: "linear-gradient(145deg,#0B1428,#1B2B4B 55%,#2D4C82)", boxShadow: drag ? "0 16px 34px rgba(15,26,48,0.5)" : "0 10px 24px rgba(15,26,48,0.35)", transform: drag ? "scale(1.08)" : "none", opacity: drag ? 0.92 : 1,
+        transition: drag ? "none" : "transform .15s, box-shadow .15s", display: "flex", alignItems: "center", justifyContent: "center" }}>{children}</button>,
+    document.body);
+}
+
 /**
  * props
  *  dispatches · clients · places · drivers — 화면이 이미 들고 있는 우리 회사 데이터(고르기 목록 · 기본 답변 · 확인 카드의 지금 값)
@@ -764,7 +815,7 @@ export default function AiAssistant({ dispatches = [], clients = [], places = []
       {/* ⭐ 2026-11-09 모바일 전체 화면 비서 위로 달력·선택 목록(본문에 띄우는 창)이 보이게 */}
       {mobile && open && <style>{`[class~="z-[999999]"]{z-index:2147481000 !important}`}</style>}
       {mobile ? (
-        !open && <button type="button" data-testid="ai-fab" onClick={() => setOpen(true)} aria-label="AI 비서" style={{ position: "fixed", right: 24, bottom: "calc(94px + env(safe-area-inset-bottom, 0px))", width: 56, height: 56, borderRadius: 18, border: "none", zIndex: 9990, color: "#fff", background: "linear-gradient(145deg,#0B1428,#1B2B4B 55%,#2D4C82)", boxShadow: "0 10px 24px rgba(15,26,48,0.35)", display: "flex", alignItems: "center", justifyContent: "center" }}>{sparkle}</button>
+        !open && <MobileAiFab onOpen={() => setOpen(true)}>{sparkle}</MobileAiFab>
       ) : (
         <FabButton bottom={24} active={open} title="AI 비서" onClick={() => setOpen(!open)}>{sparkle}</FabButton>
       )}

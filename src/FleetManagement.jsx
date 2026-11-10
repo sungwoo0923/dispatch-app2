@@ -1909,21 +1909,19 @@ function ManagerBadge({ driver, staff, canDelegate, onAssign, big = false }) {
       <span style={{ fontSize: big ? 15 : 14, fontWeight: big ? 800 : 700, color: mgr ? (big ? "#111827" : "#374151") : (big ? "#5B6B85" : "#5B6B85") }}>
         {mgr ? mgr.name : "담당자 미지정"}
       </span>
+      {/* ⭐ 2026-11-11 담당자 고르기 — "위임" 글자 버튼 대신 목록을 여는 선택 칸(▾) */}
       {canDelegate && (
         <button
           type="button"
           onClick={() => setOpen(true)}
-          style={{ padding: big ? "3px 10px" : "2px 8px", borderRadius: 6, border: "1px solid #d1d5db", background: "#fff", color: big ? "#374151" : "#5B6B85", fontSize: big ? 14 : 14, fontWeight: 700, cursor: "pointer" }}
+          style={{ display: "inline-flex", alignItems: "center", gap: 4, height: big ? 34 : 28, padding: big ? "0 10px" : "0 8px", borderRadius: 8, border: "1px solid #C9D3E3", background: "#fff", color: "#1B2B4B", fontSize: 14, fontWeight: 800, cursor: "pointer", whiteSpace: "nowrap" }}
         >
-          위임
+          담당자 선택
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6" /></svg>
         </button>
       )}
-      {/* ⭐ 버그수정 — 예전엔 position:absolute로 버튼 바로 밑에 띄웠는데, 이 카드의
-          바깥 div가 둥근 모서리 때문에 overflow:hidden이라 메뉴가 잘려서(화면엔
-          안 보이게) "눌러도 아무 반응 없음"처럼 보였다. 화면 중앙 모달로 바꿔
-          어떤 카드에서 눌러도 항상 보이게 한다. */}
-      {open && (
-        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.4)", zIndex: 10050, display: "flex", alignItems: "center", justifyContent: "center" }} onClick={() => setOpen(false)}>
+      {open && createPortal(
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.4)", zIndex: 100050, display: "flex", alignItems: "center", justifyContent: "center" }} onClick={() => setOpen(false)}>
           <div style={{ background: "#fff", borderRadius: 12, width: 280, maxHeight: "70vh", overflowY: "auto", boxShadow: "0 10px 40px rgba(0,0,0,.3)" }} onClick={e => e.stopPropagation()}>
             <div style={{ padding: "14px 16px", borderBottom: "1px solid #f0f2f5", fontSize: 15, fontWeight: 800, color: NAVY }}>
               {driver.이름} 담당자 위임
@@ -1950,7 +1948,8 @@ function ManagerBadge({ driver, staff, canDelegate, onAssign, big = false }) {
               )}
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
