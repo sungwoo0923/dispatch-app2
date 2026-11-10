@@ -19,8 +19,10 @@ export const GUIDE_SECTIONS = [
   { id: "iphone", title: "기사앱 설치 · 아이폰", img: "/guide/driver-install-iphone.jpg" },
   { id: "login-android", title: "로그인 · 안드로이드", img: "/guide/driver-login-android.jpg" },
   { id: "login-iphone", title: "로그인 · 아이폰", img: "/guide/driver-login-iphone.jpg" },
+  { id: "first-run", title: "처음 로그인하면(키로수 · 차량 설정)", img: "/guide/driver-first-run.jpg" },
   { id: "menu", title: "기사앱 메뉴 설명", img: "/guide/driver-menu.jpg" },
   { id: "orders", title: "오더 받기 · 취소", img: "/guide/driver-orders.jpg" },
+  { id: "expense", title: "영수증 · 차량 사진 올리기", img: "/guide/driver-expense.jpg" },
 ];
 
 const FLEET = ["지입", "직영", "임대"];
@@ -217,7 +219,7 @@ export function DriverGuidePage() {
           <h1 className="text-[24px] font-black mt-1 leading-tight">{co ? `${co} ` : ""}기사앱 설치·사용 안내</h1>
           <p className="text-[15px] text-white/80 mt-1.5 leading-relaxed">아래 순서대로 따라 하시면 됩니다. 그림을 누르면 크게 볼 수 있어요.</p>
           <div className="grid grid-cols-2 gap-2 mt-4">
-            <a href={APK_URL} className={`${btn} bg-white text-[#0F1A30] ${android ? "ring-4 ring-[#8FB0F0]" : ""}`}>안드로이드 앱 받기</a>
+            <a href={APK_URL} download="LogisWeb-Driver.apk" className={`${btn} bg-white text-[#0F1A30] ${android ? "ring-4 ring-[#8FB0F0]" : ""}`}>⬇ 안드로이드 앱 받기</a>
             <a href={IPHONE_URL} className={`${btn} bg-white/10 border border-white/30 text-white ${ios ? "ring-4 ring-[#8FB0F0]" : ""}`}>아이폰으로 접속</a>
           </div>
         </header>
@@ -235,6 +237,15 @@ export function DriverGuidePage() {
             <a href={s.img} target="_blank" rel="noreferrer" className="block rounded-2xl overflow-hidden bg-white border border-[#E3E8F0] shadow-sm">
               <img src={s.img} alt={s.title} loading={i < 2 ? "eager" : "lazy"} className="w-full h-auto block" />
             </a>
+            {s.id === "android" && (
+              <div className="mt-3 rounded-2xl bg-[#0F1A30] text-white p-4" data-kp="guide-apk-download">
+                <a href={APK_URL} download="LogisWeb-Driver.apk" className="flex items-center justify-center gap-2 h-16 rounded-2xl bg-white text-[#0F1A30] text-[19px] font-black active:scale-[0.98]">
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3v12M6 11l6 6 6-6M4 21h16" /></svg>
+                  기사앱 바로 다운로드
+                </a>
+                <p className="mt-2.5 text-[14px] text-white/80 leading-relaxed text-center">누르면 <b className="text-white">LogisWeb-Driver.apk</b> 파일이 바로 받아져요<br />다운로드 완료 → <b className="text-white">[열기]</b> (놓쳤으면 화면 위 알림창에서 누르기)</p>
+              </div>
+            )}
           </section>
         ))}
         <footer className="px-5 pt-8 text-center text-[14px] text-[#5B6B85] leading-relaxed">

@@ -62309,10 +62309,32 @@ function shrinkImageForDoc(file, { max = 1600, quality = 0.8, keepAlpha = false 
   });
 }
 
+// 📋 2026-11-10 회사정보 — 게시판처럼 한 줄씩, 누르면 그 내용만 펼친다
+function CpFold({ id, no, title, sub, badge, done, open, onToggle, children }) {
+  return (
+    <div className={`border-b border-[#EEF1F6] last:border-b-0 ${open ? "bg-[#FAFBFD]" : ""}`} data-kp={`cp-fold-${id}`}>
+      <button type="button" onClick={onToggle} aria-expanded={open}
+        className="w-full flex items-center gap-3 px-4 sm:px-5 py-3.5 text-left hover:bg-[#F5F8FD] transition">
+        <span className="w-7 text-[12px] font-black text-[#9AA9C3] tabular-nums shrink-0">{String(no).padStart(2, "0")}</span>
+        <div className="min-w-0 flex-1 flex flex-col sm:flex-row sm:items-baseline sm:gap-3">
+          <span className="text-[14.5px] font-black text-[#0F1A30] whitespace-nowrap">{title}</span>
+          <span className="text-[12.5px] text-[#7A879C] truncate">{sub}</span>
+        </div>
+        {badge != null && <span className={`shrink-0 h-6 px-2 inline-flex items-center rounded-md text-[11.5px] font-black tabular-nums ${done ? "bg-[#0F1A30] text-white" : "bg-[#F1F4F9] text-[#7A879C]"}`}>{badge}</span>}
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" className={`shrink-0 text-[#7A879C] transition-transform ${open ? "rotate-180" : ""}`}><path d="M6 9l6 6 6-6" /></svg>
+      </button>
+      {open && <div className="cp-fold-body px-3 sm:px-5 pb-5">{children}</div>}
+    </div>
+  );
+}
+
 function CompanyProfile({ userCompany = "", role = "", userId = "" }) {
   const companyName = (userCompany || localStorage.getItem("loginCompany") || localStorage.getItem("userCompany") || "").trim();
   const currentUserId = userId || auth?.currentUser?.uid || localStorage.getItem("uid") || "";
   const isAdmin = role === "admin" || role === "totalMaster";
+  const isTotalMaster = role === "totalMaster"; // 🔒 팝빌 · 문자 · 알림톡은 아직 준비 중 — 최고관리자만 본다
+  const [cpOpen, setCpOpen] = React.useState(() => { try { return sessionStorage.getItem("kpCpOpen") || ""; } catch { return ""; } });
+  const cpToggle = (k) => setCpOpen((o) => { const n = o === k ? "" : k; try { sessionStorage.setItem("kpCpOpen", n); } catch { /* 무시 */ } return n; });
   // ⭐ 2026-11-01 사업자등록증·직인 등록은 경리·인사만, 정산계좌 입력·수정은 경리만(다운로드·복사는 누구나)
   const myTeamCP = (() => { try { return String(window.__kpMeTeam || ""); } catch { return ""; } })();
   const isAcctTeam = ["test", "hrAcct", "allMgr", "acctStaff", "totalMaster"].includes(role) || /경리|회계/.test(myTeamCP);
@@ -62722,6 +62744,16 @@ function CompanyProfile({ userCompany = "", role = "", userId = "" }) {
             </aside>
 
             <div className="space-y-5 min-w-0">
+            <div className={`${KP_CARD} overflow-hidden min-w-0`} data-kp="cp-board">
+              <div className="px-4 sm:px-5 py-3 border-b border-[#EEF1F6] flex items-baseline gap-2 bg-white">
+                <span className="text-[10px] font-extrabold tracking-[0.22em] text-[#4B6CB7]">COMPANY</span>
+                <span className="text-[15px] font-black text-[#0F1A30]">회사 정보</span>
+                <span className="ml-auto text-[12px] text-[#9AA9C3]">항목을 누르면 펼쳐져요</span>
+              </div>
+            {(() => { let no = 0; const F = (id, title, sub, badge, done, body) => <CpFold key={id} id={id} no={++no} title={title} sub={sub} badge={badge} done={done} open={cpOpen === id} onToggle={() => cpToggle(id)}>{body}</CpFold>;
+              const infoN = rows.filter((r) => r[1]).length; const docN = (filePreviewSrc ? 1 : 0) + (appData?.직인이미지 ? 1 : 0);
+              return [
+            F("info", "기본 정보", "거래명세서·명함 등에 쓰이는 회사 정보", `${infoN}/${rows.length}`, infoN === rows.length, <>
             {/* 기본 정보 */}
               <section className={`${KP_CARD} p-4 sm:p-5 min-w-0`}>
                 <div className="flex items-start gap-3 pb-3 mb-3.5 border-b border-[#EEF1F6]">
@@ -62741,9 +62773,8 @@ function CompanyProfile({ userCompany = "", role = "", userId = "" }) {
                     </button>
                   ))}
                 </div>
-              </section>
-
-            <div className="grid grid-cols-1 2xl:grid-cols-[minmax(0,1fr)_minmax(0,460px)] gap-5 items-start">
+              </section></>),
+            F("docs", "회사 서류", "사업자등록증 · 직인(도장)", `${docN}/2`, docN === 2, <>
             {/* 회사 서류 */}
             <section className={`${KP_CARD} p-4 sm:p-5 min-w-0`}>
               <div className="pb-3 mb-3.5 border-b border-[#EEF1F6]">
@@ -62808,8 +62839,8 @@ function CompanyProfile({ userCompany = "", role = "", userId = "" }) {
                 </div>
               ))}
             </div>
-            </section>
-
+            </section></>),
+            F("bank", "정산 계좌", "청구서·거래명세서에 표시되는 입금 계좌", appData?.계좌은행 ? "등록됨" : "미등록", !!appData?.계좌은행, <>
             {/* 정산 계좌 */}
               <section className={`${KP_CARD} p-4 sm:p-5 min-w-0`}>
                 <div className="flex items-start pb-3 mb-3.5 border-b border-[#EEF1F6]">
@@ -62885,22 +62916,26 @@ function CompanyProfile({ userCompany = "", role = "", userId = "" }) {
                     </div>
                   </div>
                 )}
-              </section>
+              </section></>),
+            /* ⭐ 2026-11-03 한 회사 · 여러 사업자 — 오더마다 청구 사업자를 고른다 */
+            F("biz", "사업자 목록", "한 회사 · 여러 사업자 — 오더마다 청구 사업자 선택", null, false,
+              <BizListEditor company={companyName} canEdit={isAcctTeam || isAdmin || role === "hrManager"} />),
+            /* ✉️ 2026-11-08 발신 메일 — 회사마다 자기 메일 계정으로(앱 비밀번호는 서버에만 · 암호화) */
+            F("mail", "발신 메일", "명세서·청구서를 보낼 회사 메일 계정", null, false,
+              <CompanyMailSettingsCard company={companyName} role={role} isMaster={myDocMailCP?.isMaster === true} myEmail={auth?.currentUser?.email || ""} />),
+            /* 🔒 2026-11-10 팝빌 · 입금 자동 조회 · 문자 · 알림톡 — 아직 준비 중이라 최고관리자만 */
+            ...(isTotalMaster ? [
+              F("popbill", "팝빌 연동회원", "세금계산서 · 알림톡 · 계좌조회 (준비 중 · 최고관리자만 보임)", null, false,
+                <PopbillMemberCard company={companyName} canEdit={isAdmin || role === "hrManager"} />),
+              F("bankAuto", "입금 자동 조회", "미수금 자동 매칭 (준비 중 · 최고관리자만 보임)", null, false,
+                <BankAccountsCard company={companyName} canEdit={isAdmin || role === "hrManager"} />),
+              F("sms", "문자 보내기", "PC에서 기사 · 거래처에게 보내는 문자 (준비 중 · 최고관리자만 보임)", null, false,
+                <SmsSettingsCard company={companyName} canEdit={isAdmin || role === "hrManager"} />),
+              F("alimtalk", "카카오 알림톡 배차 알림", "배차완료되면 자동으로 (준비 중 · 최고관리자만 보임)", null, false,
+                <AlimtalkSettingsCard company={companyName} canEdit={isAdmin || role === "hrManager"} />),
+            ] : []),
+              ]; })()}
             </div>
-
-            {/* ⭐ 2026-11-03 한 회사 · 여러 사업자 — 오더마다 청구 사업자를 고른다 */}
-            <BizListEditor company={companyName} canEdit={isAcctTeam || isAdmin || role === "hrManager"} />
-            <div className="grid grid-cols-1 2xl:grid-cols-2 gap-5 items-start">
-              <PopbillMemberCard company={companyName} canEdit={isAdmin || role === "hrManager"} />
-              <BankAccountsCard company={companyName} canEdit={isAdmin || role === "hrManager"} />
-            </div>
-            {/* 💬 2026-11-10 문자 보내기(휴대폰과 연결 · 회사 번호 문자) · 카카오 알림톡 — 사용한 만큼 월말 로지스웹 청구 */}
-            <div className="grid grid-cols-1 2xl:grid-cols-2 gap-5 items-start">
-              <SmsSettingsCard company={companyName} canEdit={isAdmin || role === "hrManager"} />
-              <AlimtalkSettingsCard company={companyName} canEdit={isAdmin || role === "hrManager"} />
-            </div>
-            {/* ✉️ 2026-11-08 발신 메일 — 회사마다 자기 메일 계정으로(앱 비밀번호는 서버에만 · 암호화) */}
-            <CompanyMailSettingsCard company={companyName} role={role} isMaster={myDocMailCP?.isMaster === true} myEmail={auth?.currentUser?.email || ""} />
             </div>
             </div>
           </>);
