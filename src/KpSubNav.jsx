@@ -112,6 +112,11 @@ export default function KpSubNav({ code = "MENU", title, icon = "dashboard", ite
   const [slots, setLeft, setRight] = useTopSlots();
   const [collapsed, setCollapsed] = useState(() => { try { return localStorage.getItem("kpSubNavCollapsed") === "1"; } catch { return false; } });
   const toggle = () => setCollapsed((v) => { try { localStorage.setItem("kpSubNavCollapsed", v ? "0" : "1"); } catch { /* 저장 실패 무시 */ } return !v; });
+  // 🖥 2026-11-10 화면 맞춤 › 크게 보기 — 왼쪽 메뉴를 접어 표 자리를 넓힌다(끄면 원래대로)
+  React.useEffect(() => {
+    const h = (e) => { const v = !!e.detail; setCollapsed(v); try { localStorage.setItem("kpSubNavCollapsed", v ? "1" : "0"); } catch { /* 무시 */ } };
+    window.addEventListener("kp-subnav-collapse", h); return () => window.removeEventListener("kp-subnav-collapse", h);
+  }, []);
   const gs = groups || [{ label: "", items: items || [] }];
   // ⭐ 2026-11-01 상단 메뉴에서 고른 세부 메뉴로 바로 이동(navMenus.jsx)
   // ⭐ 2026-11-01 버그수정 — 하위메뉴를 sub로 준 화면(기사관리·홈 메일함 등)은 하위 항목이 이동 대상에서 빠져 눌러도 안 움직였다(kidsOf로 sub·children 모두)

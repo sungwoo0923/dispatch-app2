@@ -15,9 +15,9 @@ let FIT_T = null; // 지금 맞춘 표
 const zoomOf = (t) => parseFloat(t?.style.zoom) || 1;
 const zoomNow = () => (FIT_T && FIT_T.isConnected ? zoomOf(FIT_T) : 1);
 const emit = () => { try { window.dispatchEvent(new Event("kp-screen-fit")); } catch { /* 무시 */ } };
-function clearFit() { if (FIT_T) { FIT_T.style.zoom = ""; delete FIT_T.dataset.kpfit; } FIT_T = null; emit(); }
+function clearFit() { if (FIT_T) { FIT_T.style.zoom = ""; delete FIT_T.dataset.kpfit; delete FIT_T.dataset.kpfitBig; } FIT_T = null; emit(); }
 function setTableZoom(t, z) {
-  if (FIT_T && FIT_T !== t) { FIT_T.style.zoom = ""; delete FIT_T.dataset.kpfit; }
+  if (FIT_T && FIT_T !== t) { FIT_T.style.zoom = ""; delete FIT_T.dataset.kpfit; delete FIT_T.dataset.kpfitBig; }
   const v = Math.round(z * 100) / 100;
   t.style.zoom = v === 1 ? "" : String(v); t.dataset.kpfit = String(v); FIT_T = t; emit();
 }
@@ -42,9 +42,11 @@ function naturalWidth(t) {
   t.style.width = pw; t.style.maxWidth = pm; t.style.zoom = pz;
   return w;
 }
+let BIG = false; // 크게 보기 — 칸 안쪽 여백을 줄여 같은 폭에 더 크게
 export function fitNow() {
   const t = mainTable();
   if (!t) return null;
+  if (BIG) t.dataset.kpfitBig = "1"; else delete t.dataset.kpfitBig;
   const sp = scrollParent(t);
   const avail = (sp || t.parentElement).clientWidth - 2;
   const nat = naturalWidth(t);
@@ -63,6 +65,15 @@ export function fitNow() {
 // DispatchApp(PC 화면)에 한 번 — menu가 바뀌면 다시 맞춘다
 export function useScreenFit(menu) {
   const on = usePref("fit") === true;
+  const big = usePref("fitBig") === true;
+  BIG = on && big;
+  // 크게 보기 켤 때 왼쪽 메뉴 접기 · 끌 때 원래대로
+  const prevBig = React.useRef(null);
+  React.useEffect(() => {
+    const now = on && big;
+    if (prevBig.current !== null && prevBig.current !== now) { try { window.dispatchEvent(new CustomEvent("kp-subnav-collapse", { detail: now })); } catch { /* 무시 */ } }
+    prevBig.current = now;
+  }, [on, big]);
   const [pct, setPct] = React.useState(() => Math.round(zoomNow() * 100));
   React.useEffect(() => { const h = () => setPct(Math.round(zoomNow() * 100)); window.addEventListener("kp-screen-fit", h); return () => window.removeEventListener("kp-screen-fit", h); }, []);
   React.useEffect(() => {
@@ -77,19 +88,27 @@ export function useScreenFit(menu) {
     let mt = 0; const mo = new MutationObserver(() => { if (mt) return; mt = setTimeout(() => { mt = 0; const t = mainTable(); if (t && t !== last) run(); }, 1500); });
     const r = rootEl(); if (r) mo.observe(r, { childList: true, subtree: true });
     return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(rt); clearTimeout(mt); clearFit(); window.removeEventListener("resize", onResize); window.removeEventListener("kp-collayout-applied", onResize); mo.disconnect(); };
-  }, [on, menu]);
+  }, [on, big, menu]);
   const toggle = () => setPref("fit", !on);
-  return { on, pct, toggle };
+  const toggleBig = () => { if (!on) setPref("fit", true); setPref("fitBig", !(on && big)); };
+  return { on, big: on && big, pct, toggle, toggleBig };
 }
 
 export function ScreenFitButton({ fit }) {
   return (
-    <button type="button" onClick={fit.toggle} data-kp="screen-fit"
-      title={fit.on ? "화면 맞춤 켜짐 — 표가 한 화면에 꽉 차게 자동으로 배율을 맞춥니다(누르면 끄고 100%로)" : "누르면 지금 모니터 크기에 맞춰 표 전체(선택 ~ 끝 칸)가 한 화면에 보이게 자동으로 맞춥니다"}
-      className={`kp-chip-btn text-[12px] transition inline-flex items-center gap-1.5 ${fit.on ? "!bg-white !text-[#0F1A30] !border-white" : ""}`}>
-      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" /></svg>
-      {fit.on ? <span className="tabular-nums">맞춤 {fit.pct}%</span> : "화면 맞춤"}
-    </button>
+    <div className="inline-flex items-center gap-1">
+      <button type="button" onClick={fit.toggle} data-kp="screen-fit"
+        title={fit.on ? "화면 맞춤 켜짐 — 표가 한 화면에 꽉 차게 자동으로 배율을 맞춥니다(누르면 끄고 100%로)" : "누르면 지금 모니터 크기에 맞춰 표 전체(선택 ~ 끝 칸)가 한 화면에 보이게 자동으로 맞춥니다"}
+        className={`kp-chip-btn text-[12px] transition inline-flex items-center gap-1.5 ${fit.on ? "!bg-white !text-[#0F1A30] !border-white" : ""}`}>
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" /></svg>
+        {fit.on ? <span className="tabular-nums">맞춤 {fit.pct}%</span> : "화면 맞춤"}
+      </button>
+      <button type="button" onClick={fit.toggleBig} data-kp="screen-fit-big"
+        title={fit.big ? "크게 보기 켜짐 — 칸 여백을 줄이고 왼쪽 메뉴를 접어 표 글씨를 더 크게(누르면 끄기)" : "한 화면은 그대로, 칸 여백을 줄이고 왼쪽 메뉴를 접어 표 글씨를 더 크게 봅니다"}
+        className={`kp-chip-btn text-[12px] transition inline-flex items-center gap-1 ${fit.big ? "!bg-white !text-[#0F1A30] !border-white" : ""}`}>
+        <span className="font-black text-[13px] leading-none">가</span><span className="font-black text-[10px] leading-none -ml-0.5">+</span>크게 보기
+      </button>
+    </div>
   );
 }
 
@@ -101,7 +120,8 @@ export function BrowserZoomNotice({ fit }) {
   const [closed, setClosed] = React.useState(() => { try { return sessionStorage.getItem(NOTICE_OFF) === "1"; } catch { return false; } });
   const never = usePref("zoomNoticeOff") === true;
   React.useEffect(() => { let t = null; const h = () => { clearTimeout(t); t = setTimeout(() => setZ(browserZoom()), 250); }; window.addEventListener("resize", h); return () => { clearTimeout(t); window.removeEventListener("resize", h); }; }, []);
-  if (never || closed || Math.abs(z - 100) < 10 || window.innerWidth < 900) return null;
+  // 크게(110%↑) 쓰는 건 화면 맞춤이 켜져 있으면 괜찮다 — 작게(90%↓) 볼 때만 안내
+  if (never || closed || Math.abs(z - 100) < 10 || (z > 100 && fit?.on) || window.innerWidth < 900) return null;
   const close = () => { setClosed(true); try { sessionStorage.setItem(NOTICE_OFF, "1"); } catch { /* 무시 */ } };
   return createPortal(
     <div data-kp="zoom-notice" className="fixed left-1/2 -translate-x-1/2 top-[74px] z-[2147482000] w-[min(720px,94vw)]">
