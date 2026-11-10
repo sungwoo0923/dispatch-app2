@@ -41,7 +41,7 @@ import {
   blankSpendRow, spendRowTotal, spendLinesOf, spendTotals, wonKorean, rowsOf, ACCOUNTS,
 } from "./approvalForms";
 import { needsBizLine, suggestBizLine, validateBizLine, isFinPerson, isCeoPerson, isExecNonCeo, PLAN_LINK_FORMS, budgetTotal } from "./bizPlan"; // 📑 2026-11-08 사업계획서
-import { ApprovalAttachInput, ApprovalAttachPanel, removeApFile } from "./ApprovalFiles"; // 📎 2026-11-08 첨부 파일(Storage)
+import { ApprovalAttachInput, ApprovalAttachPanel, removeApFile, apUrlBlob } from "./ApprovalFiles"; // 📎 2026-11-08 첨부 파일(Storage)
 import { inDocDir, fmtSize, AP_FILE_COUNT } from "./approvalFiles";
 import { isPreviewMode } from "./fsTenant";
 import { isDemoOn } from "./devDemoData";
@@ -120,6 +120,7 @@ const safeName = (s) => String(s || "").replace(/[\\/:*?"<>|\s]+/g, "_").slice(0
 const attName = (docNo, i, src) => `${safeName(docNo || "전자결재")}_첨부${i + 1}.${extOf(src)}`;
 async function srcToBlob(src) {
   const s = String(src || "");
+  if (/^https:\/\/firebasestorage\.googleapis\.com\//.test(s)) return apUrlBlob(s); // ⭐ 2026-11-10 저장소 사진 — 브라우저가 막으면(CORS) 중계로 받는다(예전엔 새 탭으로만 열렸다)
   if (!s.startsWith("data:")) return (await fetch(s)).blob();
   const [head, body] = s.split(",");
   const mime = /data:([^;,]+)/.exec(head)?.[1] || "image/jpeg";

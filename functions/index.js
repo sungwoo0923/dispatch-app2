@@ -6870,7 +6870,7 @@ exports.pnkMailOnCreate = functions.runWith({ secrets: ["MAIL_CRED_KEY"], timeou
 exports.pnkMailInbound = functions.runWith({ timeoutSeconds: 120, memory: "512MB" }).https.onRequest((req, res) =>
   _pnkMail.inbound(req, res).catch((e) => { console.error("[PnK 메일] 받기 오류", e); res.status(500).send("error"); }));
 // 🏢 2026-11-10 PnK 인트라넷 — 최고관리자 · 부관리자 2차 인증(8자리 2차 비밀번호) · 설명은 functions/pnkMfa.js 맨 위
-const _pnkMfa = require("./pnkMfa").makePnkMfa({ db, HttpsError: functions.https.HttpsError, Timestamp: require("firebase-admin/firestore").Timestamp });
+const _pnkMfa = require("./pnkMfa").makePnkMfa({ db, HttpsError: functions.https.HttpsError, Timestamp: require("firebase-admin/firestore").Timestamp, verifyIdToken: (t) => getAuth().verifyIdToken(t) });
 exports.pnkMfa = functions.runWith({ timeoutSeconds: 30, memory: "256MB", ...appCheckCallOpts() }).https.onCall(async (data, context) => {
   try { return await _pnkMfa(data || {}, context); } catch (e) {
     if (e instanceof functions.https.HttpsError) throw e;

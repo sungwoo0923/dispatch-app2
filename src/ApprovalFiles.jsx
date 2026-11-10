@@ -46,12 +46,19 @@ const blobCache = new Map();
 const AP_BLOB_TIMEOUT = 25000;
 // ⭐ 2026-11-10 [저장]을 눌러도 파일로 안 받아지고 새 탭으로만 열리던 문제 — 저장소 CORS 설정이 없으면 브라우저가 파일 내용 받기를 막는다.
 //  ① 보기 주소로 바로 받기(CORS가 되어 있으면 여기서 끝) → ② 막히면 우리 서버(/api/ap-file)가 대신 받아 준다 → 둘 다 안 되면 예전처럼 새 탭
-async function fetchApBlob(f) {
-  const url = await apFileViewUrl(f); // 권한은 여기서 보안 규칙이 검사
+// 저장소 주소 → 파일 내용. 전자결재 확대 창의 [이미지 저장](src/Approval.jsx)도 같이 쓴다
+export async function apUrlBlob(url, name = "file") {
   try { const r = await fetch(url); if (r.ok) return await r.blob(); } catch { /* CORS 막힘 → 중계로 */ }
-  const r2 = await fetch(`/api/ap-file?u=${encodeURIComponent(url)}&name=${encodeURIComponent(f.name || "file")}`);
-  if (!r2.ok || r2.headers.get("x-ap-file") !== "1") { const e = new Error("내려받기 막힘"); e.code = "blocked"; throw e; }
+  let r2 = null;
+  try { r2 = await fetch(`/api/ap-file?u=${encodeURIComponent(url)}&name=${encodeURIComponent(name || "file")}`, { cache: "no-store" }); } catch (e) { console.warn("[첨부] 내려받기 중계 연결 실패", e); }
+  if (!r2 || !r2.ok || r2.headers.get("x-ap-file") !== "1") {
+    console.warn("[첨부] 내려받기 중계 실패", r2 ? `${r2.status} ${await r2.text().catch(() => "")}`.slice(0, 200) : "");
+    const e = new Error("내려받기 막힘"); e.code = "blocked"; throw e;
+  }
   return r2.blob();
+}
+async function fetchApBlob(f) {
+  return apUrlBlob(await apFileViewUrl(f), f.name); // 권한은 보기 주소를 만들 때 보안 규칙이 검사
 }
 export async function apFileBlob(f) {
   if (!f?.path) throw new Error("파일 위치가 없어요");

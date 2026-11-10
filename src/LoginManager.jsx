@@ -12,6 +12,7 @@ import { collection, query, where, onSnapshot } from "firebase/firestore";
 import { updatePassword, reauthenticateWithCredential, EmailAuthProvider } from "firebase/auth";
 import { useMfaPrompt, PcVerifySection, MASTER_EMAIL, mfaErrorText } from "./MfaModal";
 import { doc as fsDoc } from "firebase/firestore";
+import { AdminCodeChange } from "./AdminGate"; // 🔐 2026-11-10 2차 비밀번호 바꾸기
 import {
   SESSIONS_COLL, KIND_LABEL, END_REASON_LABEL, getMySessionId, endSessions, sessionLastMs, timeAgo, getDeviceLabel, isTotalMasterRole,
 } from "./loginSessions";
@@ -180,7 +181,13 @@ export default function LoginManager({ user }) {
       </Section>
 
       {isMaster && (
-        <Section title="PC 로그인 2차 인증 (휴대폰 문자)" desc="최고관리자 전용 — PC에서 로그인할 때 비밀번호 다음에 휴대폰으로 받은 인증번호 6자리를 한 번 더 입력합니다. 모바일은 묻지 않습니다.">
+        <Section title="2차 비밀번호" desc="최고관리자 · 부관리자 — 로그인할 때 비밀번호 다음에 넣는 2차 비밀번호(8자 이상)를 바꿉니다. PnK 인트라넷과 같은 2차 비밀번호를 씁니다.">
+          <AdminCodeChange />
+        </Section>
+      )}
+
+      {isMaster && (
+        <Section title="새 기기 문자 인증 (휴대폰)" desc="최고관리자 · 부관리자 — 처음 로그인하는 기기(PC · 휴대폰)에서만 2차 비밀번호 다음에 이 번호로 인증번호 6자리를 한 번 확인합니다. 한 번 확인한 기기는 다시 묻지 않습니다.">
           <PcVerifySection user={user} phone={pcPhone} />
         </Section>
       )}

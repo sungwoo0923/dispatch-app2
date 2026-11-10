@@ -158,6 +158,9 @@ self.addEventListener("fetch", (event) => {
   // 에러(네트워크 오류/CORS 등)가 호출부에 그대로 전달되게 한다.
   if (url.origin !== self.location.origin) return;
 
+  // ⭐ 2026-11-10 서버 함수(/api/…)는 건드리지 않는다 — 캐시하면 안 되고, 실패했을 때 진짜 오류 대신 "Offline"(503)으로 바뀌어 원인을 알 수 없었다
+  if (url.pathname.startsWith("/api/")) return;
+
   // sw.js 자체는 캐시하지 않음
   if (url.pathname === "/sw.js") return;
   // 접속 버전 확인 파일도 캐시하지 않음(항상 서버 최신값)

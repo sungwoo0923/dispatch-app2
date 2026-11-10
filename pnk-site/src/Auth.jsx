@@ -3,13 +3,15 @@
 //  · 로그인: 사번(PNK-0001) + 이메일 + 비밀번호(셋 다 맞아야) · [사번 · 이메일 저장] · [자동 로그인] · 사번 없는 사람은 [가입 신청 상태 확인]만
 //  · 로지스웹 계정(users 문서가 있는 계정)은 들어올 수 없다 — 최고관리자 · 부관리자만 예외(규칙도 같음)
 //  · 회원가입: 약관 동의(필수 2 · 선택 1) → 로그인 계정 만들기 → 가입 요청(승인 대기) → 대표 · 관리자가 승인하며 사번 발급
-//  · 2차 인증: 최고관리자 · 부관리자는 비밀번호 다음에 8자리 2차 비밀번호(처음 한 번 정함) — 서버 확인(functions/pnkMfa.js)
+//  · 2차 인증: 최고관리자 · 부관리자는 비밀번호 다음에 8자 이상 2차 비밀번호(화면 키패드, 처음 한 번 정함) — 서버 확인(functions/pnkMfa.js)
+//  · 🔐 2026-11-10 처음 로그인하는 기기에서만 3차 휴대폰 문자 인증(통과하면 그 기기를 기억) — 로지스웹 본체(src/AdminGate.jsx)와 같은 방식 · 같은 2차 비밀번호
 import React from "react";
 import {
   browserLocalPersistence, browserSessionPersistence, createUserWithEmailAndPassword, sendPasswordResetEmail,
-  setPersistence, signInWithEmailAndPassword, signOut, updateProfile,
+  setPersistence, signInWithEmailAndPassword, signOut, updateProfile, RecaptchaVerifier, signInWithPhoneNumber,
 } from "firebase/auth";
-import { auth, callFn, db, sideConn } from "./firebase";
+import { auth, callFn, db, sideConn, phoneConn } from "./firebase";
+import SecureKeypad, { adminDeviceId } from "../../src/SecureKeypad";
 import { normEmpNo, requestJoin } from "./pnkApi";
 import { doc, getDoc } from "firebase/firestore";
 import { TERMS, TERMS_VERSION } from "./pnkTerms";
@@ -96,7 +98,7 @@ function LoginForm({ onStatus }) {
     e.preventDefault();
     const no = normEmpNo(emp);
     if (!no || !id.trim() || !pw) { setMsg("사번 · 이메일 · 비밀번호를 모두 넣어 주세요."); return; }
-    if (!/^PNK-\d{4,6}$/.test(no)) { setMsg("사번은 PNK-0001 형식입니다(숫자만 넣어도 됩니다)."); return; }
+    if (!/^PNK-\d{4,6}$/.test(no)) { setMsg("사번을 다시 확인해 주세요."); return; }
     setBusy(true); setMsg(""); flash = "";
     try {
       await applyPersistence(auto);
@@ -114,7 +116,7 @@ function LoginForm({ onStatus }) {
   };
   return (
     <form onSubmit={go} className="space-y-3">
-      <Field label="사번"><Input value={emp} onChange={(e) => setEmp(e.target.value.toUpperCase())} onBlur={() => setEmp((v) => normEmpNo(v))} placeholder="PNK-0001" autoFocus={!emp} className="h-12 text-[15px] tnum font-bold" /></Field>
+      <Field label="사번"><Input value={emp} onChange={(e) => setEmp(e.target.value.toUpperCase())} onBlur={() => setEmp((v) => normEmpNo(v))} autoFocus={!emp} className="h-12 text-[15px] tnum font-bold" /></Field>
       <Field label="이메일"><Input type="email" autoComplete="username" value={id} onChange={(e) => setId(e.target.value)} placeholder="가입한 이메일" className="h-12 text-[15px]" /></Field>
       <Field label="비밀번호">
         <div className="relative">
@@ -293,45 +295,113 @@ export function JoinGate({ me }) {
 }
 
 // ───────────────────────── 2차 인증(최고관리자 · 부관리자) ─────────────────────────
-export function MfaGate({ me }) {
-  const info = me.mfaInfo || {};
-  const setup = info.required && !info.hasCode && !info.error;
+const e164 = (p) => { const d = String(p || "").replace(/\D/g, ""); return d.startsWith("82") ? `+${d}` : d.startsWith("0") ? `+82${d.slice(1)}` : d ? `+${d}` : ""; };
+const maskPhone = (p) => { const d = String(p || "").replace(/\D/g, "").replace(/^82/, "0"); return d.length >= 10 ? `${d.slice(0, 3)}-****-${d.slice(-4)}` : String(p || ""); };
+const smsMsg = (er) => ({
+  "auth/invalid-verification-code": "인증번호가 맞지 않습니다.", "auth/code-expired": "인증번호 시간이 지났습니다. 다시 받아 주세요.",
+  "auth/too-many-requests": "요청이 많아 잠시 막혔습니다. 잠시 뒤 다시 해 주세요.", "auth/invalid-phone-number": "휴대폰 번호를 다시 확인해 주세요.",
+  "auth/captcha-check-failed": "보안 확인에 실패했습니다. 새로고침한 뒤 다시 해 주세요.", "auth/network-request-failed": "인터넷 연결을 확인해 주세요.",
+}[er?.code] || er?.message || "확인하지 못했습니다");
+
+// 3차 — 처음 로그인하는 기기: 휴대폰 문자 인증 → 서버가 확인하고 이 기기를 기억한다
+function SmsStep({ me, phone }) {
+  const [num, setNum] = React.useState("");
+  const [sent, setSent] = React.useState(false);
   const [code, setCode] = React.useState("");
-  const [code2, setCode2] = React.useState("");
-  const [show, setShow] = React.useState(false);
-  const [busy, setBusy] = React.useState(false);
-  const [msg, setMsg] = React.useState(info.error ? `서버에 연결하지 못했습니다(${info.error}). 잠시 뒤 새로고침해 주세요.` : info.locked ? "여러 번 틀려 잠겼습니다. 10분 뒤 다시 해 주세요." : "");
-  const go = async (e) => {
-    e?.preventDefault();
-    setMsg("");
-    if (code.length < 8) { setMsg("8자 이상 넣어 주세요."); return; }
-    if (setup && code !== code2) { setMsg("확인이 맞지 않습니다."); return; }
-    setBusy(true);
+  const [busy, setBusy] = React.useState("");
+  const [msg, setMsg] = React.useState("");
+  const [left, setLeft] = React.useState(0);
+  const holder = React.useRef(null);
+  const verifier = React.useRef(null);
+  const confirmRef = React.useRef(null);
+  const target = phone || e164(num);
+  const okPhone = /^\+8210\d{7,8}$/.test(target);
+  React.useEffect(() => { if (left <= 0) return undefined; const t = setTimeout(() => setLeft((v) => v - 1), 1000); return () => clearTimeout(t); }, [left]);
+  React.useEffect(() => () => { try { verifier.current?.clear(); } catch { /* 무시 */ } }, []);
+  const send = async () => {
+    if (!okPhone) { setMsg("휴대폰 번호를 010-0000-0000 형식으로 넣어 주세요."); return; }
+    setBusy("send"); setMsg("");
     try {
-      await callFn("pnkMfa")({ action: setup ? "setup" : "verify", code, remember: autoLoginOn() });
+      const pa = phoneConn();
+      try { verifier.current?.clear(); } catch { /* 무시 */ }
+      if (holder.current) holder.current.innerHTML = "";
+      const el = document.createElement("div");
+      holder.current?.appendChild(el);
+      verifier.current = new RecaptchaVerifier(pa, el, { size: "invisible" });
+      confirmRef.current = await signInWithPhoneNumber(pa, target, verifier.current);
+      setSent(true); setLeft(60); setCode("");
+    } catch (er) { setMsg(smsMsg(er)); } finally { setBusy(""); }
+  };
+  const sentOnce = React.useRef(false);
+  React.useEffect(() => { if (phone && !sentOnce.current) { sentOnce.current = true; send(); } }, [phone]); // eslint-disable-line react-hooks/exhaustive-deps
+  const verify = async (e) => {
+    e?.preventDefault();
+    if (code.length !== 6 || !confirmRef.current) { setMsg("문자로 받은 6자리 숫자를 넣어 주세요."); return; }
+    setBusy("verify"); setMsg("");
+    try {
+      const cred = await confirmRef.current.confirm(code);
+      const idToken = await cred.user.getIdToken();
+      await signOut(phoneConn()).catch(() => {});
+      await callFn("pnkMfa")({ action: "trust", idToken, dev: adminDeviceId(), ua: navigator.userAgent });
       me.passMfa();
-    } catch (er) { setMsg(er.message || "확인하지 못했습니다"); setBusy(false); }
+    } catch (er) { setMsg(smsMsg(er)); setBusy(""); }
   };
   return (
+    <form onSubmit={verify} className="space-y-4">
+      <div className="text-center">
+        <div className="w-14 h-14 mx-auto rounded-2xl bg-navy text-white flex items-center justify-center mb-3"><Icon name="shield" size={26} /></div>
+        <div className="text-[17px] font-black text-navy-950">처음 로그인하는 기기입니다</div>
+        <p className="mt-1.5 text-[12.5px] text-[#5A6A86] leading-relaxed">{phone ? <>등록된 휴대폰 {maskPhone(phone)}으로 인증번호를 보냅니다.</> : <>인증번호를 받을 본인 휴대폰 번호를 넣어 주세요.<br />이 번호가 계정에 등록됩니다.</>}</p>
+      </div>
+      {!phone && !sent && <input value={num} onChange={(e) => setNum(e.target.value.replace(/[^\d]/g, "").slice(0, 11).replace(/^(\d{3})(\d{3,4})(\d{4})$/, "$1-$2-$3"))} inputMode="tel" autoFocus placeholder="010-0000-0000" className="w-full h-14 rounded-2xl border-2 border-[#DCE3EE] focus:border-navy text-center text-[20px] font-black outline-none tabular-nums" />}
+      {!sent ? <Btn type="button" onClick={send} disabled={busy === "send" || !okPhone} className="w-full h-12 text-[15px]">{busy === "send" ? "문자 보내는 중…" : "인증번호 받기"}</Btn> : (
+        <>
+          <input value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))} inputMode="numeric" autoComplete="one-time-code" autoFocus placeholder="● ● ● ● ● ●" className="w-full h-14 rounded-2xl border-2 border-[#DCE3EE] focus:border-navy text-center text-[24px] font-black tracking-[0.45em] outline-none tabular-nums" />
+          <div className="flex items-center justify-between text-[12.5px]"><span className="text-[#5A6A86]">문자로 받은 6자리를 넣어 주세요</span><button type="button" onClick={send} disabled={left > 0 || busy === "send"} className="font-bold text-navy disabled:text-[#A9B4C8]">{left > 0 ? `다시 받기 ${left}초` : "다시 받기"}</button></div>
+          <Btn type="submit" disabled={busy === "verify" || code.length !== 6} className="w-full h-12 text-[15px]">{busy === "verify" ? "확인 중…" : "인증 확인"}</Btn>
+        </>
+      )}
+      {msg && <div className="text-[12.5px] font-semibold text-rose-600 bg-rose-50 rounded-xl px-3 py-2 text-center">{msg}</div>}
+      <div ref={holder} />
+      <div className="text-[11.5px] text-[#7A8AA8] text-center leading-relaxed">문자 인증은 처음 로그인하는 기기에서만 합니다.<br />다음부터 이 기기에서는 2차 비밀번호만 확인합니다.</div>
+    </form>
+  );
+}
+
+export function MfaGate({ me }) {
+  const info = me.mfaInfo || {};
+  const [setup, setSetup] = React.useState(!!(info.required && !info.hasCode && !info.error));
+  const [first, setFirst] = React.useState(""); // 만들 때 첫 번째로 넣은 값
+  const [code, setCode] = React.useState("");
+  const [busy, setBusy] = React.useState(false);
+  const [sms, setSms] = React.useState(null); // { phone } — 처음 로그인하는 기기
+  const [msg, setMsg] = React.useState(info.error ? `서버에 연결하지 못했습니다(${info.error}). 잠시 뒤 새로고침해 주세요.` : info.locked ? "여러 번 틀려 잠겼습니다. 10분 뒤 다시 해 주세요." : "");
+  const go = async (v) => {
+    setMsg("");
+    if (setup && !first) { setFirst(v); setCode(""); return; }
+    if (setup && first !== v) { setMsg("두 번 넣은 값이 다릅니다. 처음부터 다시 정해 주세요."); setFirst(""); setCode(""); return; }
+    setBusy(true);
+    try {
+      const r = (await callFn("pnkMfa")({ action: setup ? "setup" : "verify", code: v, remember: autoLoginOn(), dev: adminDeviceId() })).data || {};
+      setCode(""); setFirst("");
+      if (r.needSms) { setSetup(false); setSms({ phone: r.phone || "" }); setBusy(false); } else me.passMfa();
+    } catch (er) { setMsg(er.message || "확인하지 못했습니다"); setCode(""); if (setup) setFirst(""); setBusy(false); }
+  };
+  const other = <button type="button" onClick={() => signOut(auth)} className="mt-3 w-full text-[12.5px] font-semibold text-[#7A8AA8] hover:text-navy">다른 계정으로 로그인</button>;
+  if (sms) return <Frame><SmsStep me={me} phone={sms.phone} />{other}</Frame>;
+  return (
     <Frame>
-      <form onSubmit={go} className="space-y-4">
+      <div className="space-y-3">
         <div className="text-center">
           <div className="w-14 h-14 mx-auto rounded-2xl bg-navy text-white flex items-center justify-center mb-3"><Icon name="shield" size={26} /></div>
-          <div className="text-[17px] font-black text-navy-950">{setup ? "2차 비밀번호 만들기" : "2차 인증"}</div>
-          <p className="mt-1.5 text-[12.5px] text-[#5A6A86] leading-relaxed">{me.sub ? "부관리자" : "최고관리자"} 계정은 비밀번호 다음에 2차 비밀번호를 한 번 더 확인합니다.<br />{setup ? "영문 · 숫자 8자 이상으로 정해 주세요. 로그인 비밀번호와 다르게 정하세요." : `${me.user.email}`}</p>
+          <div className="text-[17px] font-black text-navy-950">{setup ? (first ? "한 번 더 넣어 주세요" : "2차 비밀번호 만들기") : "2차 인증"}</div>
+          <p className="mt-1.5 text-[12.5px] text-[#5A6A86] leading-relaxed">{me.sub ? "부관리자" : "최고관리자"} 계정은 비밀번호 다음에 2차 비밀번호를 한 번 더 확인합니다.<br />{setup ? (first ? "방금 정한 2차 비밀번호를 똑같이 넣어 주세요." : "영문 · 숫자 8자 이상으로 정해 주세요. 로그인 비밀번호와 다르게 정하세요.") : `${me.user.email}`}</p>
         </div>
-        <div className="relative">
-          <input value={code} onChange={(e) => setCode(e.target.value.replace(/\s/g, "").slice(0, 20))} type={show ? "text" : "password"} autoFocus autoComplete="one-time-code" maxLength={20}
-            placeholder="••••••••" className="w-full h-14 rounded-2xl border-2 border-[#DCE3EE] focus:border-navy text-center text-[22px] font-black tracking-[0.35em] outline-none tabular-nums" />
-          <button type="button" onClick={() => setShow((v) => !v)} className="absolute right-4 top-4 text-[#7A8AA8]" aria-label="보기"><Icon name="eye" size={20} /></button>
-        </div>
-        <div className="flex justify-center gap-1.5">{Array.from({ length: 8 }).map((_, i) => <span key={i} className={cx("w-2.5 h-2.5 rounded-full transition", i < code.length ? "bg-navy" : "bg-[#DCE3EE]")} />)}</div>
-        {setup && <input value={code2} onChange={(e) => setCode2(e.target.value.replace(/\s/g, "").slice(0, 20))} type={show ? "text" : "password"} maxLength={20} placeholder="한 번 더" className="w-full h-12 rounded-2xl border-2 border-[#DCE3EE] focus:border-navy text-center text-[18px] font-black tracking-[0.3em] outline-none" />}
+        <SecureKeypad value={code} onChange={setCode} onSubmit={go} disabled={busy || !!info.error} submitLabel={busy ? "확인 중…" : setup ? (first ? "정하고 들어가기" : "다음") : "확인"} />
         {msg && <div className="text-[12.5px] font-semibold text-rose-600 bg-rose-50 rounded-xl px-3 py-2 text-center">{msg}</div>}
-        <Btn type="submit" disabled={busy || !!info.error} className="w-full h-12 text-[15px]">{busy ? "확인 중…" : setup ? "정하고 들어가기" : "확인"}</Btn>
-        <div className="text-[11.5px] text-[#7A8AA8] text-center leading-relaxed">{autoLoginOn() ? "자동 로그인 중에는 30일 동안 다시 묻지 않습니다." : "다시 로그인하거나 12시간이 지나면 다시 묻습니다."}<br />2차 비밀번호를 잊으면 {me.sub ? "최고관리자에게 초기화를 요청하세요." : "개발 담당에게 초기화를 요청하세요(Firebase pnkMfaSecrets 삭제)."}</div>
-      </form>
-      <button type="button" onClick={() => signOut(auth)} className="mt-3 w-full text-[12.5px] font-semibold text-[#7A8AA8] hover:text-navy">다른 계정으로 로그인</button>
+        <div className="text-[11.5px] text-[#7A8AA8] text-center leading-relaxed">처음 로그인하는 기기에서는 휴대폰 문자 인증을 한 번 더 합니다.<br />2차 비밀번호를 잊으면 {me.sub ? "최고관리자에게 초기화를 요청하세요." : "개발 담당에게 초기화를 요청하세요."}</div>
+      </div>
+      {other}
     </Frame>
   );
 }

@@ -4,6 +4,7 @@
 //  · 받는 주소는 우리 저장소의 approvals/ 폴더 + 토큰이 붙은 보기 주소만(다른 주소는 거절) — 권한 검사는 보기 주소를 만들 때 보안 규칙이 이미 했다
 //  · 내용은 흘려보낸다(스트리밍) — 20MB 파일도 받는다
 import { Readable } from "node:stream";
+import { pipeline } from "node:stream/promises";
 
 const PREFIX = "https://firebasestorage.googleapis.com/v0/b/dispatch-app-9b92f.firebasestorage.app/o/approvals%2F";
 
@@ -15,7 +16,7 @@ export default async function handler(req, res) {
   }
   try {
     const r = await fetch(u);
-    if (!r.ok || !r.body) { res.status(r.status || 502).json({ error: "fetch failed" }); return; }
+    if (!r.ok || !r.body) { res.status(r.status === 404 ? 404 : r.status === 403 ? 403 : 502).json({ error: `storage ${r.status}` }); return; }
     const name = String(req.query?.name || "file").replace(/[\r\n"\\/]+/g, "_").slice(0, 120);
     res.setHeader("Content-Type", r.headers.get("content-type") || "application/octet-stream");
     const len = r.headers.get("content-length");
@@ -24,7 +25,7 @@ export default async function handler(req, res) {
     res.setHeader("Cache-Control", "private, no-store");
     res.setHeader("X-Ap-File", "1"); // 화면 쪽에서 "진짜 파일 응답"인지 확인하는 표시
     res.status(200);
-    Readable.fromWeb(r.body).on("error", () => res.end()).pipe(res);
+    await pipeline(Readable.fromWeb(r.body), res); // 다 보낼 때까지 기다린다(먼저 끝내면 중간에 끊긴다)
   } catch (e) {
     if (!res.headersSent) res.status(502).json({ error: String(e?.message || e) });
     else res.end();

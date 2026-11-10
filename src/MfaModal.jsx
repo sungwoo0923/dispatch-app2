@@ -339,7 +339,7 @@ function phoneAuthInstance() {
 }
 
 // 문자 보내기 → 6자리 확인. 매번 새 reCAPTCHA 칸을 만들어 "이미 그려짐" 오류를 피한다.
-function usePhoneCheck(holderRef) {
+export function usePhoneCheck(holderRef) {
   const confirmRef = React.useRef(null);
   const verifierRef = React.useRef(null);
   const clear = () => { try { verifierRef.current?.clear(); } catch { /* 무시 */ } verifierRef.current = null; };
@@ -362,10 +362,12 @@ function usePhoneCheck(holderRef) {
   };
   const confirm = async (code) => {
     if (!confirmRef.current) throw Object.assign(new Error("인증번호를 먼저 받아주세요."), { code: "auth/missing-verification-id" });
-    await confirmRef.current.confirm(code);
+    const cred = await confirmRef.current.confirm(code);
+    const idToken = await cred?.user?.getIdToken?.().catch(() => "") || ""; // 🔐 2026-11-10 서버가 "이 번호로 문자 인증을 마쳤다"를 확인하는 데 쓴다(AdminGate)
     lastPcSend = { phone: "", at: 0, confirm: null };
     await signOut(phoneAuthInstance()).catch(() => {});
     clear();
+    return idToken;
   };
   return { send, confirm };
 }
@@ -434,13 +436,13 @@ export function PcVerifySection({ user: userProp, phone }) {
   };
   const remove = async () => {
     if (!pw) return setMsg({ type: "err", text: "해제하려면 현재 비밀번호를 입력해 주세요." });
-    if (!(await kpConfirm("PC 2차 인증을 해제할까요? 해제하면 PC에서도 비밀번호만으로 로그인됩니다."))) return;
+    if (!(await kpConfirm("등록한 휴대폰 번호를 지울까요? 지우면 다음에 처음 로그인하는 기기에서 번호를 새로 등록합니다."))) return;
     setBusy("rm"); setMsg({ type: "", text: "" });
     try {
       await reauth(user, pw, askMfa);
       await setDoc(doc(db, "users", user.uid), { pcVerifyPhone: deleteField() }, { merge: true });
       setPw("");
-      setMsg({ type: "ok", text: "PC 2차 인증을 해제했습니다." });
+      setMsg({ type: "ok", text: "등록한 휴대폰 번호를 지웠습니다." });
     } catch (e) { setMsg({ type: "err", text: mfaErrorText(e) }); } finally { setBusy(""); }
   };
   const removeLegacy = async (f) => {
@@ -477,7 +479,7 @@ export function PcVerifySection({ user: userProp, phone }) {
           </div>
           <div className="flex-1 min-w-0">
             <div className="text-[14px] font-bold text-emerald-800">사용 중 · {maskPhone(phone)}</div>
-            <div className="text-[12px] text-emerald-700/80">PC에서 로그인할 때마다 이 번호로 인증번호 문자가 옵니다 (모바일은 묻지 않음)</div>
+            <div className="text-[12px] text-emerald-700/80">처음 로그인하는 기기(PC · 휴대폰)에서만 이 번호로 인증번호 문자가 옵니다</div>
           </div>
           <button onClick={() => { setEditing(true); setNewPhone(""); setSentTo(""); setMsg({ type: "", text: "" }); }} className="shrink-0 px-3 py-2 rounded-xl border border-[#1B2B4B]/30 text-[#1B2B4B] text-[12.5px] font-bold hover:bg-white">번호 변경</button>
         </div>
@@ -493,7 +495,7 @@ export function PcVerifySection({ user: userProp, phone }) {
               await setDoc(doc(db, "users", user.uid), { pcVerifyPhone: sentTo }, { merge: true });
               markPcMfaPassed(user.uid);
               setSentTo(""); setEditing(false);
-              setMsg({ type: "ok", text: "등록되었습니다. 다음에 PC에서 로그인할 때부터 문자 인증번호를 입력합니다." });
+              setMsg({ type: "ok", text: "등록되었습니다. 처음 로그인하는 기기에서 이 번호로 문자 인증을 합니다." });
             }}
             onCancel={() => setSentTo("")}
           />

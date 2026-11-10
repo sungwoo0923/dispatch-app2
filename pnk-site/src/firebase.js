@@ -95,3 +95,14 @@ export function sideConn() {
   side = { auth: sAuth, db: sDb };
   return side;
 }
+
+// 🔐 2026-11-10 처음 로그인하는 기기 문자 인증 전용 — 본 로그인(auth)에 영향을 주지 않는 연결(전화 인증으로 잠깐 로그인 → 토큰만 받고 바로 로그아웃)
+let phoneSide = null;
+export function phoneConn() {
+  if (phoneSide) return phoneSide;
+  const a = getApps2().find((x) => x.name === "pnk-phone") || initApp2(firebaseConfig, "pnk-phone");
+  phoneSide = getAuth2(a);
+  setPersistence2(phoneSide, inMemoryPersistence).catch(() => {});
+  if (USE_EMU) { try { connectAuthEmu2(phoneSide, `http://127.0.0.1:${EMU_AUTH}`, { disableWarnings: true }); } catch { /* 무시 */ } }
+  return phoneSide;
+}

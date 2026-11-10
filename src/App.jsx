@@ -31,7 +31,7 @@ import {
   KIND_LABEL, END_REASON_LABEL, sessionLastMs, timeAgo,
 } from "./loginSessions";
 import { LoginManagerModal } from "./LoginManager";
-import { PcVerifyGate, isPcMfaPassed } from "./MfaModal";
+import { AdminLoginGate, isAdminGatePassed, adminAuthTime, ADMIN_GATE_EVENT } from "./AdminGate"; // 🔐 2026-11-10 2차 비밀번호(키패드) + 처음 보는 기기만 문자
 import { DRIVER_BUSY_EVENT, isDriverBusy } from "./driver/driverLoginErrors"; // ⭐ 2026-11-05 기사 로그인 확인 중 표시
 import { initDriverAppContext, markDriverAppOnlyKick } from "./driver/driverAppContext"; // ⭐ 2026-11-08 기사앱(APK·홈 화면 기사앱)은 기사 계정만
 // ⭐ 2026-11-08 기사앱 안인지 — 안드로이드 APK 또는 기사 화면에서 "홈 화면에 추가"한 기사앱(실행 중 standalone). 열릴 때 한 번 정한다
@@ -308,18 +308,26 @@ export default function App() {
       setSessionBusy(false);
     }
   };
-  // ⭐ 최고관리자 PC 2차 인증 — PC에서 로그인하면 등록된 휴대폰으로 문자 인증을 통과해야 프로그램이 열린다(모바일 제외)
+  // 🔐 2026-11-10 최고관리자 · 부관리자 보안 확인 — ① 비밀번호 → ② 2차 비밀번호(키패드) → ③ 처음 로그인하는 기기만 휴대폰 문자 (PC · 모바일 모두)
+  //  예전: PC에서만 12시간마다 문자 인증(PcVerifyGate). 설명은 src/AdminGate.jsx 맨 위
   const [masterPcPhone, setMasterPcPhone] = useState(null); // null = 아직 모름
   const [pcMfaTick, setPcMfaTick] = useState(0);
+  const [adminAuthAt, setAdminAuthAt] = useState(null); // 이번 로그인 시각(토큰 auth_time) — null = 아직 모름
   useEffect(() => {
     const h = () => setPcMfaTick((v) => v + 1);
-    window.addEventListener("kp-pc-mfa-ok", h);
-    window.addEventListener("storage", h); // 다른 탭에서 인증하면 이 탭도 바로 열린다
-    return () => { window.removeEventListener("kp-pc-mfa-ok", h); window.removeEventListener("storage", h); };
+    window.addEventListener(ADMIN_GATE_EVENT, h);
+    window.addEventListener("storage", h); // 다른 탭에서 통과하면 이 탭도 바로 열린다
+    return () => { window.removeEventListener(ADMIN_GATE_EVENT, h); window.removeEventListener("storage", h); };
   }, []);
-  // ⭐ PC 화면(DispatchApp)을 보여줄 때만 — 화면을 고르는 기준(isSmartPhone)과 똑같이 판단해야 폴더블·분할화면에서 모바일인데 묻는 일이 없다
+  const adminGateOn = !!(user && role === "totalMaster" && !IS_MOBILE_PREVIEW && !isPreviewMode());
+  useEffect(() => {
+    if (!adminGateOn) { setAdminAuthAt(null); return undefined; }
+    let alive = true;
+    adminAuthTime(user).then((t) => { if (alive) setAdminAuthAt(t); });
+    return () => { alive = false; };
+  }, [adminGateOn, user]);
   const isPcDevice = !isSmartPhone();
-  const needPcMfa = !!(user && role === "totalMaster" && isPcDevice && masterPcPhone && !isPcMfaPassed(user.uid)) && pcMfaTick >= 0;
+  const needPcMfa = adminGateOn && pcMfaTick >= 0 && (adminAuthAt === null || !isAdminGatePassed(user.uid, adminAuthAt));
   // 아직 번호를 등록하지 않았으면(PC에서) 로그인할 때 한 번 안내한다
   const [mfaNag, setMfaNag] = useState(false);
   const [mfaSetupOpen, setMfaSetupOpen] = useState(false);
@@ -929,10 +937,10 @@ export default function App() {
         </div>
       )}
 
-      {/* ⭐ 최고관리자 PC 2차 인증 화면 — 통과 전까지 프로그램을 가린다 */}
-      {needPcMfa && !sessionConflict && (
-        <PcVerifyGate uid={user.uid} phone={masterPcPhone} onCancel={() => signOut(auth).catch(() => {})} />
-      )}
+      {/* 🔐 최고관리자 · 부관리자 보안 확인 — 통과 전까지 프로그램을 가린다(2차 비밀번호 → 처음 보는 기기만 문자) */}
+      {needPcMfa && !sessionConflict && (adminAuthAt === null
+        ? <div className="fixed inset-0 z-[100002]" style={{ background: "linear-gradient(135deg, #061832 0%, #0B2554 50%, #0D2B66 100%)" }} />
+        : <AdminLoginGate key={`${user.uid}:${adminAuthAt}`} user={user} authTime={adminAuthAt} sub={user.email !== TOTAL_MASTER_EMAIL} onCancel={() => signOut(auth).catch(() => {})} />)}
 
       {/* ⭐ 최고관리자 2차 인증 등록 안내 */}
       {mfaNag && !needPcMfa && !sessionConflict && user && (

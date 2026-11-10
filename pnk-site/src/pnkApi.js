@@ -15,6 +15,7 @@ import {
   addDoc, collection, deleteDoc, doc, getDoc, getDocs, limit, onSnapshot, orderBy, query, serverTimestamp, setDoc, updateDoc, where,
 } from "firebase/firestore";
 import { auth, callFn, db } from "./firebase";
+import { adminDeviceId } from "../../src/SecureKeypad"; // 🔐 기기 구분 값(처음 보는 기기만 문자 인증)
 
 // 최고관리자(대표) 이메일 — firestore.rules isTotalMasterUser() 와 같은 기준(규칙이 서버에서 다시 확인한다)
 export const OWNER_EMAILS = ["tjddnqkf@naver.com"];
@@ -223,7 +224,7 @@ export function useMe() {
       if (owner) {
         let r = null;
         try {
-          r = (await Promise.race([callFn("pnkMfa")({ action: "status" }), new Promise((_, no) => setTimeout(() => no(new Error("서버 응답이 늦습니다")), 10000))])).data;
+          r = (await Promise.race([callFn("pnkMfa")({ action: "status", dev: adminDeviceId() }), new Promise((_, no) => setTimeout(() => no(new Error("서버 응답이 늦습니다")), 10000))])).data;
         } catch (e) { r = { required: true, error: e.message || "서버 연결 실패" }; }
         if (!alive) return;
         if (r.required && !r.valid) {
