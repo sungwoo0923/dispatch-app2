@@ -50,7 +50,8 @@ let warmAt = 0;
 export function warmPayrollVerify() {
   if (demo() || Date.now() - warmAt < 4 * 60000) return;
   warmAt = Date.now();
-  call("payrollPwVerify", { warm: true }).catch(() => { warmAt = 0; });
+  // 로그인 토큰 없이 부른다 — 예전 서버(warm 처리 전)에 닿아도 "로그인 필요"로 끝나서 틀린 횟수로 세지 않는다
+  fetch(`${FUNCTIONS_BASE}/payrollPwVerify`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ data: { warm: true } }) }).catch(() => { warmAt = 0; });
 }
 export function prefetchPayrollStatus(company, { force = false } = {}) {
   if (!company) return Promise.resolve(null);
