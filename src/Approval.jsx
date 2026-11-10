@@ -16,7 +16,7 @@
 //  - 승인 후 취소: 기안자가 「결재 취소 요청」(사유) → 같은 결재선이 다시 승인하면 "결재 취소"로 바뀐다.
 //    문서는 지우지 않고 모두의 보관함에 "결재 취소" 도장으로 남는다(감사 기록). 연차 사용일수도 자동 복구.
 import { defaultFundId } from "./ledgerAuto";
-import { syncExpensesWithApproval } from "./vehicleExpense"; // 🧾 2026-11-10 차량 비용 영수증 ↔ 지출결의 상태
+import { syncExpensesWithApproval, syncExpensesPaid } from "./vehicleExpense"; // 🧾 2026-11-10 차량 비용 영수증 ↔ 지출결의 상태
 import { runDelete } from "./DeleteProgress"; // ⭐ 2026-11-05 삭제 진행 창 + 한 번에 삭제
 import React from "react";
 import { kpConfirm, kpPrompt } from "./kpDialog";
@@ -1936,6 +1936,7 @@ function Viewer({ d: d0, me, staff, company, onClose, onRedraft, onEdit, inline 
         }).catch(() => {});
       }
       setPaidLocal({ at: now, by: me.uid, byName: me.name || "", date, memo, ...(account ? { account } : {}) }); // 화면에 바로 도장
+      if (Array.isArray(d.data?.vexIds) && d.data.vexIds.length) syncExpensesPaid(d, { at: now, date, byName: me.name || "" }); // 🧾 차량 비용 영수증 → 지급완료 도장
       if (account) setDoc(doc(db, "acctLedger", `appr_${d.id}`), { account }, { merge: true }).catch(() => {}); // 장부 계정과목도 맞춘다
       setPayAsk(null);
     } catch (e) { window.alert(`지급 완료 처리 실패: ${e.message}`); } finally { setBusy(false); }
@@ -1950,6 +1951,7 @@ function Viewer({ d: d0, me, staff, company, onClose, onRedraft, onEdit, inline 
         updatedAt: serverTimestamp(),
       });
       setPaidLocal(null); // 화면에 바로 지급 대기로
+      if (Array.isArray(d.data?.vexIds) && d.data.vexIds.length) syncExpensesPaid(d, null); // 🧾 영수증도 다시 승인(지급 대기)
       // ⭐ 2026-11-04 지급 취소도 기안자에게 사내메일
       if (d.drafterUid && d.drafterUid !== me.uid) {
         sendInternalMail({

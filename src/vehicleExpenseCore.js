@@ -24,9 +24,10 @@ export const VEX_PAYS = [
 export const vexPayLabel = (k) => (VEX_PAYS.find((x) => x.k === k) || {}).label || "";
 export const vexPayAp = (k) => (VEX_PAYS.find((x) => x.k === k) || {}).ap || "개인카드(정산 요청)";
 
-// 상태: 접수(사무실 미확인) → 확인 → 결재중 → 승인 · 반려(기사에게 다시 올려 달라고)
-export const VEX_STATUS = ["접수", "확인", "결재중", "승인", "반려"];
-export const vexDriverStatus = (s) => ({ 접수: "확인 중", 확인: "확인 완료", 결재중: "결재 중", 승인: "승인", 반려: "다시 올려주세요" }[s] || s || "확인 중");
+// 상태: 접수(사무실 미확인) → 확인 → 결재중 → 승인 → 지급완료(전자결재에서 지급 완료 처리) · 반려(기사에게 다시 올려 달라고)
+export const VEX_STATUS = ["접수", "확인", "결재중", "승인", "지급완료", "반려"];
+export const vexDriverStatus = (s) => ({ 접수: "확인 중", 확인: "확인 완료", 결재중: "결재 중", 승인: "승인", 지급완료: "지급 완료", 반려: "다시 올려주세요" }[s] || s || "확인 중");
+export const vexDone = (s) => s === "승인" || s === "지급완료";
 
 const pad = (n) => String(n).padStart(2, "0");
 const digits = (v) => String(v ?? "").replace(/[^\d]/g, "");
@@ -47,6 +48,8 @@ export const fmtBizNo = (v) => { const d = digits(v); return d.length === 10 ? `
 
 // ── 영수증 글 해석 ──
 const SKIP_VENDOR = /영수증|매출전표|카드|고객용|가맹점용|신용|승인|거래|일시|사업자|대표|전화|tel|주소|합계|금액|부가세|과세|면세|합\s*계|no\.|pos|\d{2,}/i;
+// 스캔 앱 · 영수증 재발행 안내 문구(상호로 잘못 잡히던 것) — "휴대폰으로 스캔하면", "영수증 재발행" 등
+const SCAN_BANNER = /스캔|scan|재발행|재출력|휴대폰|QR|큐알|앱\s*설치|다운로드|www\.|http/i;
 const AMOUNT_LABEL = /(합\s*계|총\s*액|총\s*금\s*액|받을\s*금액|결제\s*금액|승인\s*금액|청구\s*금액|판매\s*총액|결\s*제|총\s*합계|TOTAL)/i;
 const ITEM_WORDS = /(엔진\s*오일|오일|필터|에어\s*필터|연료\s*필터|타이어|휠|얼라인|브레이크|패드|라이닝|디스크|배터리|밧데리|와이퍼|부동액|냉각수|미션|데후|벨트|공임|정비|수리|교환|교체|점검|세차|판금|도색|유리|전구|램프|그리스|요소수|DPF|부품)/;
 function moneyIn(s) {
@@ -79,7 +82,13 @@ export function parseReceiptText(text) {
   const cardLast4 = (flat.match(/[*xX#]{2,}[\s-]*[*xX#]*[\s-]*(\d{4})(?!\d)/) || ["", ""])[1];
   // 상호 — "상호 · 가맹점" 이름 다음 글, 없으면 위쪽에서 처음 나오는 이름 같은 줄
   let vendor = (flat.match(/(?:상\s*호|가맹점\s*명?|업\s*체\s*명)\s*[:：]?\s*([가-힣A-Za-z0-9&()'’·.\s]{2,30}?)(?=\s{1,}(?:사업자|대표|전화|TEL|주소|\d{3}-)|$)/i) || ["", ""])[1].trim();
-  if (!vendor) vendor = (lines.slice(0, 6).find((l) => /[가-힣]{2,}/.test(l) && !SKIP_VENDOR.test(l) && l.length <= 30) || "").trim();
+  // ⭐ 2026-11-10 사업자번호와 같은 줄 앞쪽이 상호인 영수증이 많다("본뚝집 완정역점 / 109-30-12251 / 박정원")
+  if (!vendor && bizNo) {
+    const bl = lines.find((l) => l.replace(/[^\d]/g, "").includes(bizNo));
+    const before = bl ? bl.split(/\d{3}\s*-?\s*\d{2}\s*-?\s*\d{5}/)[0].replace(/(사업자\s*(등록)?\s*(번호)?|상\s*호|가맹점\s*명?)\s*[:：]?/g, "").replace(/[/|:·,\s]+$/g, "").trim() : "";
+    if (/[가-힣A-Za-z]{2,}/.test(before) && before.length <= 30 && !SCAN_BANNER.test(before)) vendor = before;
+  }
+  if (!vendor) vendor = (lines.slice(0, 6).find((l) => /[가-힣]{2,}/.test(l) && !SKIP_VENDOR.test(l) && !SCAN_BANNER.test(l) && l.length <= 30) || "").trim();
   // 품목 — 정비 낱말이 있는 줄(금액 빼고)
   const items = lines.filter((l) => ITEM_WORDS.test(l) && !AMOUNT_LABEL.test(l)).map((l) => l.replace(/(\d{1,3}(?:,\d{3})+|\d{4,8})\s*원?$/, "").replace(/\s{2,}/g, " ").trim()).filter((l) => l.length >= 2).slice(0, 6);
   const kinds = [];

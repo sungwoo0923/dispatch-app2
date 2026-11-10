@@ -1638,6 +1638,20 @@ service cloud.firestore {
               && exists(/databases/$(database)/documents/approvalSettings/$(request.resource.data.get('company', '')))
               && get(/databases/$(database)/documents/approvalSettings/$(request.resource.data.get('company', ''))).data.get('autoApproveDaily', false) == true))
         && request.auth.uid in request.resource.data.get('participants', []);
+      // ⭐ 2026-11-10 지급완료 규칙을 참여자 규칙보다 앞에 — 경리가 그 문서의 결재자(참여자)이기도 하면 앞 규칙 계산이 한도(1000)를 다 써서
+      //  지급 완료 처리가 PERMISSION_DENIED로 막혔다(테스트: scripts/approvalPayRules.test.cjs). 싼 조건(문서 칸)부터 본다.
+      // ⭐ 2026-11-04 전자결재 서명 — 지출결의 지급완료(paid) 처리·취소
+      //  최종 승인된 비용·지출 결의(cat expense)만, 바꿀 수 있는 칸은 paid·history·updatedAt·drafterUnread 뿐.
+      //  누를 수 있는 사람: 같은 회사의 경리(test)·경리사무원·hrAcct·allMgr(경리 화면)·최고관리자, 부서 이름에 재무·경리·회계·총무가 든 직원
+      //  (Approval.jsx canPay와 같은 조건 — 결재 취소 진행 중에는 안 됨)
+      allow update: if isApproved()
+        && resource.data.get('status', '') == 'approved'
+        && resource.data.get('cat', '') == 'expense'
+        && resource.data.get('cancel', {}).get('status', '') != 'pending'
+        && apAff().hasOnly(['paid', 'history', 'updatedAt', 'drafterUnread'])
+        // ⭐ 2026-11-07 운송 관리자(admin)·최종 결재자는 지급 처리 불가 — 경리 역할·재무 부서만(통합관리자·통합인사관리자는 화면 전환으로 앱에서 한 번 더 막음)
+        && (myRole() in ['test', 'acctStaff', 'hrAcct', 'allMgr', 'totalMaster'] || myTeamPay())
+        && (myCoRaw() == resource.data.get('company', '') || isTotalMasterUser());
       // 기안자·참여자 수정 — 기안자·참여자 목록과 회사는 못 바꾼다(결재 진행·회수·의견·읽음)
       // ⭐ 2026-11-02 점검 — 참조자·기안자가 status/line을 직접 바꿔 스스로 최종 승인하던 문제:
       //  읽음·의견·보관함 표시는 참여자 누구나, 결재선(line/step)·승인은 "지금 내 차례"인 결재자만,
@@ -1664,18 +1678,6 @@ service cloud.firestore {
       // 회사 관리자(결재함 › 회사 전체)는 참여자가 아니어도 "내 보관함에서 삭제/되돌리기"(hiddenBy)만 바꿀 수 있다
       allow update: if isApproved() && isCompanyAdmin(resource.data.get('company', ''))
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['hiddenBy']);
-      // ⭐ 2026-11-04 전자결재 서명 — 지출결의 지급완료(paid) 처리·취소
-      //  최종 승인된 비용·지출 결의(cat expense)만, 바꿀 수 있는 칸은 paid·history·updatedAt·drafterUnread 뿐.
-      //  누를 수 있는 사람: 같은 회사의 경리(test)·경리사무원·hrAcct·allMgr(경리 화면)·최고관리자, 부서 이름에 재무·경리·회계·총무가 든 직원
-      //  (Approval.jsx canPay와 같은 조건 — 결재 취소 진행 중에는 안 됨)
-      allow update: if isApproved()
-        && resource.data.get('status', '') == 'approved'
-        && resource.data.get('cat', '') == 'expense'
-        && resource.data.get('cancel', {}).get('status', '') != 'pending'
-        && apAff().hasOnly(['paid', 'history', 'updatedAt', 'drafterUnread'])
-        // ⭐ 2026-11-07 운송 관리자(admin)·최종 결재자는 지급 처리 불가 — 경리 역할·재무 부서만(통합관리자·통합인사관리자는 화면 전환으로 앱에서 한 번 더 막음)
-        && (myRole() in ['test', 'acctStaff', 'hrAcct', 'allMgr', 'totalMaster'] || myTeamPay())
-        && (myCoRaw() == resource.data.get('company', '') || isTotalMasterUser());
       allow delete: if false;
     }
 

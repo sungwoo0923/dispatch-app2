@@ -8,7 +8,8 @@ import React from "react";
 import { createPortal } from "react-dom";
 import { kpConfirm, kpPrompt } from "./kpDialog";
 import useNarrow from "./useNarrow";
-import { useBackClose } from "./mobileBack"; // 🔙 휴대폰 뒤로가기로 상세 닫기
+import { useBackClose } from "./mobileBack";
+import { PaidStamp } from "./PaidStamp"; // 💸 지급완료 도장 // 🔙 휴대폰 뒤로가기로 상세 닫기
 import { mainBiz } from "./publicDataMain";
 import { VEX_KINDS, VEX_PAYS, vexKindLabel, vexPayLabel, won, toNum, autoChecks, checkLevel, checkHeadline, fmtBizNo, spendPresetOf,
   PHOTO_CYCLES, PHOTO_DOWS, PHOTO_PARTS, photoPeriod, daysLeft, photoTargetOk } from "./vehicleExpenseCore";
@@ -20,7 +21,7 @@ const kstYmd = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10
 const tsMs = (v) => (v?.toMillis ? v.toMillis() : v?.seconds ? v.seconds * 1000 : typeof v === "number" ? v : 0);
 const at = (v) => { const ms = tsMs(v); return ms ? new Date(ms + 9 * 3600e3).toISOString().slice(5, 16).replace("-", ".").replace("T", " ") : ""; };
 const shiftYm = (ym, n) => { const [y, m] = ym.split("-").map(Number); const d = new Date(Date.UTC(y, m - 1 + n, 1)); return d.toISOString().slice(0, 7); };
-const STATUS_TABS = [["접수", "미확인"], ["확인", "확인 완료"], ["결재중", "결재 중"], ["승인", "완료"], ["반려", "반려"], ["all", "전체"]];
+const STATUS_TABS = [["접수", "미확인"], ["확인", "확인 완료"], ["결재중", "결재 중"], ["승인", "승인(지급 대기)"], ["지급완료", "지급완료"], ["반려", "반려"], ["all", "전체"]];
 
 const Hero = ({ en, title, desc, kpis }) => (
   <div className="rounded-[22px] px-5 sm:px-6 py-5 text-white flex flex-wrap items-end gap-4"
@@ -54,22 +55,25 @@ const dotCls = (lv) => (lv === "bad" ? "bg-[#D92D20]" : lv === "warn" ? "bg-whit
 const Dot = ({ lv }) => <i className={`inline-block w-2 h-2 rounded-full shrink-0 ${dotCls(lv)}`} />;
 const statusChip = (s) => {
   const base = "inline-flex items-center gap-1 h-6 px-2 rounded-[7px] text-[11.5px] font-black whitespace-nowrap";
+  if (s === "지급완료") return `${base} bg-white text-[#B42318] border border-[#B42318]`;
   if (s === "승인") return `${base} bg-[#1B2B4B] text-white`;
   if (s === "반려") return `${base} bg-white text-[#0B1428] border border-[#0B1428]`;
   if (s === "결재중") return `${base} bg-[#EEF3FB] text-[#2D4C82]`;
   if (s === "확인") return `${base} bg-white text-[#1B2B4B] border border-[#C9D3E3]`;
   return `${base} bg-[#F4F6FA] text-[#5B6B85]`;
 };
-const statusName = (s) => ({ 접수: "미확인", 확인: "확인 완료", 결재중: "결재 중", 승인: "승인", 반려: "반려" }[s] || s);
+const statusName = (s) => ({ 접수: "미확인", 확인: "확인 완료", 결재중: "결재 중", 승인: "승인", 지급완료: "지급완료", 반려: "반려" }[s] || s);
+
 const btn = "h-9 px-3.5 rounded-[11px] text-[13px] font-black inline-flex items-center justify-center gap-1.5 whitespace-nowrap border";
 const btnW = `${btn} bg-white border-[#E3E8F0] text-[#1B2B4B] disabled:opacity-40`;
 const btnD = `${btn} bg-[#0B1428] border-[#0B1428] text-white disabled:opacity-40`;
 
 // 사진 크게 보기
-function Zoom({ src, onClose }) {
+function Zoom({ src, onClose, paidDate, paid }) {
   return createPortal(
     <div className="fixed inset-0 z-[100000] bg-[#0B1428]/85 flex items-center justify-center p-4" onClick={onClose}>
       <img src={src} alt="영수증" className="max-w-full max-h-full rounded-lg bg-white" />
+      {paid && <span className="absolute inset-0 flex items-center justify-center"><PaidStamp date={paidDate} size={1.4} /></span>}
       <button type="button" onClick={onClose} className="absolute top-4 right-4 w-10 h-10 rounded-xl bg-white/10 text-white text-[18px]">✕</button>
     </div>, document.body);
 }
@@ -94,11 +98,12 @@ function Detail({ e, checks, canEdit, me, onClose, onAct, phone }) {
           <div className="text-[16px] font-black mt-0.5 truncate">{e.driverName || "기사"} · {(e.kinds || []).map(vexKindLabel).join(" · ") || "비용"}</div>
           <div className="text-[12px] text-[#7A8AA6] mt-0.5" style={NUM}>{e.carNo} · 올린 시각 {at(e.createdAt)}</div>
         </div>
-        <span className={`ml-auto ${lv === "ok" ? "inline-flex items-center h-7 px-2.5 rounded-lg bg-[#1B2B4B] text-white text-[12px] font-black" : "inline-flex items-center gap-1.5 h-7 px-2.5 rounded-lg bg-white border border-[#0B1428] text-[#0B1428] text-[12px] font-black"}`}>{lv !== "ok" && <Dot lv={lv} />}{lv === "ok" ? "자동 점검 통과" : checkHeadline(checks)}</span>
+        {e.status === "지급완료" ? <span className="ml-auto shrink-0 whitespace-nowrap inline-flex items-center h-7 px-2.5 rounded-lg bg-white border-2 border-[#B42318] text-[#B42318] text-[12px] font-black" data-kp="vex-paid-chip">지급완료{e.paidDate ? ` · ${String(e.paidDate).slice(5).replace("-", ".")}` : ""}</span> : <span className={`ml-auto ${lv === "ok" ? "inline-flex items-center h-7 px-2.5 rounded-lg bg-[#1B2B4B] text-white text-[12px] font-black" : "inline-flex items-center gap-1.5 h-7 px-2.5 rounded-lg bg-white border border-[#0B1428] text-[#0B1428] text-[12px] font-black"}`}>{lv !== "ok" && <Dot lv={lv} />}{lv === "ok" ? "자동 점검 통과" : checkHeadline(checks)}</span>}
       </div>
       <button type="button" onClick={() => setZoom(true)} className="relative h-[250px] bg-[#1a2233] flex items-center justify-center overflow-hidden" title="크게 보기">
         <span className="absolute left-3 top-3 text-[10px] font-black tracking-[0.2em] text-[#8FB0F0] bg-[#0B1428]/70 px-2 py-1 rounded-md">SCANNED</span>
         {e.image ? <img src={e.image} alt="영수증" className="max-h-full max-w-full object-contain" /> : <span className="text-white/50 text-[13px]">사진 없음</span>}
+        {e.status === "지급완료" && <span className="absolute inset-0 flex items-center justify-center"><PaidStamp date={e.paidDate} /></span>}
         <span className="absolute right-3 bottom-3 text-[11px] font-black text-white bg-[#0B1428]/70 px-2 py-1 rounded-md">크게 보기</span>
       </button>
       <div className="px-4 sm:px-5 py-3">
@@ -130,7 +135,7 @@ function Detail({ e, checks, canEdit, me, onClose, onAct, phone }) {
         ))}
         {(e.rejectReason && e.status === "반려") && <div className="mt-3 rounded-xl border border-[#0B1428] px-3 py-2 text-[12.5px] font-bold">반려 사유 · {e.rejectReason}</div>}
         {e.apNote && e.status === "확인" && <div className="mt-3 rounded-xl bg-[#F4F6FA] px-3 py-2 text-[12.5px] font-bold text-[#5B6B85]">{e.apNote} · 다시 지출결의할 수 있어요</div>}
-        {e.apDocNo && <div className="mt-3 rounded-xl bg-[#EEF3FB] px-3 py-2 text-[12.5px] font-bold text-[#2D4C82]">전자결재 {e.apDocNo} · {e.status === "승인" ? "최종 승인" : "결재 진행 중"}</div>}
+        {e.apDocNo && <div className="mt-3 rounded-xl bg-[#EEF3FB] px-3 py-2 text-[12.5px] font-bold text-[#2D4C82]">전자결재 {e.apDocNo} · {e.status === "지급완료" ? `지급 완료${e.paidDate ? ` ${e.paidDate}` : ""}${e.paidBy ? ` · ${e.paidBy}` : ""}` : e.status === "승인" ? "최종 승인 · 지급 대기" : "결재 진행 중"}</div>}
       </div>
       {canEdit && (
         <div className="px-4 sm:px-5 pb-4 pt-1 flex flex-wrap gap-2">
@@ -142,7 +147,7 @@ function Detail({ e, checks, canEdit, me, onClose, onAct, phone }) {
           {["접수", "확인"].includes(e.status) && <button type="button" data-kp="vex-spend-one" onClick={() => onAct("spend", [e])} className={btnD}>지출결의 작성</button>}
         </div>
       )}
-      {zoom && e.image && <Zoom src={e.image} onClose={() => setZoom(false)} />}
+      {zoom && e.image && <Zoom src={e.image} paid={e.status === "지급완료"} paidDate={e.paidDate} onClose={() => setZoom(false)} />}
     </div>
   );
   if (phone) return createPortal(<div className="fixed inset-0 z-[9000] bg-[#F4F6FA] overflow-y-auto p-3 pb-24">{body}</div>, document.body);
@@ -175,7 +180,7 @@ export function VehicleExpenseInbox({ company, drivers = [], canEdit = true, me 
   const rows = inMonth.filter((e) => (tab === "all" || e.status === tab) && (!ql || [e.driverName, e.carNo, e.vendor, e.memo, ...(e.kinds || []).map(vexKindLabel)].join(" ").toLowerCase().includes(ql)));
   const pending = list.filter((e) => ["접수", "확인"].includes(e.status));
   const needCheck = pending.filter((e) => checkLevel(checksOf(e)) !== "ok").length;
-  const approvedSum = list.filter((e) => e.status === "승인" && String(e.date || "").slice(0, 7) === kstYmd().slice(0, 7)).reduce((a, e) => a + toNum(e.amount), 0);
+  const approvedSum = list.filter((e) => (e.status === "승인" || e.status === "지급완료") && String(e.date || "").slice(0, 7) === kstYmd().slice(0, 7)).reduce((a, e) => a + toNum(e.amount), 0);
   const curE = list.find((e) => e.id === cur) || (!narrow ? rows[0] : null) || null;
   const selRows = rows.filter((e) => sel.has(e.id));
   const selSum = selRows.reduce((a, e) => a + toNum(e.amount), 0);

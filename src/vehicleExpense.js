@@ -121,6 +121,16 @@ export async function syncExpensesWithApproval(ap, status) {
   }));
   await b.commit().catch((e) => console.warn("[차량 비용 영수증] 결재 상태 반영 실패:", e?.message || e));
 }
+// 💸 2026-11-10 지급 완료 처리(전자결재) → 영수증 "지급완료"(지급일) · 지급 취소 → 다시 "승인"
+export async function syncExpensesPaid(ap, paid) {
+  const ids = Array.isArray(ap?.data?.vexIds) ? ap.data.vexIds.filter(Boolean) : [];
+  if (!ids.length) return;
+  const b = writeBatch(db);
+  ids.forEach((id) => b.update(doc(db, "vehicleExpenses", id), paid
+    ? { status: "지급완료", paidDate: paid.date || "", paidAt: paid.at || Date.now(), paidBy: paid.byName || "", approvalId: ap.id || "", apDocNo: ap.docNo || "", updatedAt: serverTimestamp() }
+    : { status: "승인", paidDate: "", paidAt: 0, paidBy: "", updatedAt: serverTimestamp() }));
+  await b.commit().catch((e) => console.warn("[차량 비용 영수증] 지급 상태 반영 실패:", e?.message || e));
+}
 // 영수증 → 전자결재 지출결의서 화면 열기(PC 홈 › 전자결재 · 모바일 전자결재 둘 다)
 export function openSpendComposer(preset) {
   try { sessionStorage.setItem("kpApPreset", JSON.stringify(preset)); } catch { /* 사진이 너무 크면 사진만 빼고 */

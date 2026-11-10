@@ -23,6 +23,9 @@ ok("영수증 글 → 상호·사업자번호·날짜·시간·합계·승인번
 const b = parseReceiptText("한국타이어 T'station 오산점\n26/11/02 09:10\n타이어 교체 2개 480,000원\n현금영수증\n합 계 480,000");
 assert.equal(b.date, "2026-11-02"); assert.equal(b.amount, 480000); assert.ok(b.kinds.includes("tire")); assert.equal(b.pay, "cash");
 ok("두 자리 연도 · 현금영수증 · 합계 띄어쓰기");
+const c2 = parseReceiptText("휴대폰으로 스캔하면\n[영수증]-재발행\n본뚝집 완정역점 / 109-30-12251 / 박정원\n2026-09-29 12:22:46\n합계 금액 10,900\n승인번호: 26770420");
+assert.equal(c2.vendor, "본뚝집 완정역점"); assert.equal(c2.amount, 10900);
+ok("상호 — 사업자번호 줄 앞쪽 · 스캔 앱 안내 문구는 건너뜀");
 
 assert.equal(bizNoOk("1258134567"), bizNoOk("125-81-34567"));
 const base = { id: "x", amount: 85000, scan: { amount: 85000 }, bizNo: "", date: "2026-11-08", createdAt: Date.parse("2026-11-08T06:00:00Z"), captured: true, takenAt: Date.parse("2026-11-08T05:39:00Z"), kinds: ["engineOil"], km: 184320, cardApproval: "30128841", imgHash: "f".repeat(64) };

@@ -6,6 +6,7 @@
 //  정기 사진: 칸을 누르면 카메라 → 찍는 즉시 저장(보내기 버튼 없음) · 계기판은 주행거리 숫자도(선택)
 import React from "react";
 import { VEX_KINDS, VEX_PAYS, vexKindLabel, vexDriverStatus, won, toNum, photoPeriod, daysLeft, photoTargetOk } from "../vehicleExpenseCore";
+import { PaidStamp } from "../PaidStamp"; // 💸 지급완료 도장(사무실 화면과 같은 모양)
 import { prepPhoto, scanReceipt, submitExpense, resubmitExpense, useDriverExpenses, usePhotoSettings, useDriverPeriodPhotos, savePeriodPhoto } from "../vehicleExpense";
 
 const INK = "#0B1428"; const NAVY = "#1B2B4B"; const BLUE = "#2D4C82"; const SKY = "#8FB0F0";
@@ -39,7 +40,7 @@ const chip = (kind) => {
   if (kind === "wait") return { ...base, background: "#fff", color: NAVY, border: "1px solid #C9D3E3" };
   return { ...base, background: "#EEF3FB", color: BLUE };
 };
-const statusKind = (s) => (s === "승인" ? "ok" : s === "반려" ? "no" : "ing");
+const statusKind = (s) => (s === "승인" || s === "지급완료" ? "ok" : s === "반려" ? "no" : "ing");
 const Dot = () => <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#D92D20", display: "inline-block" }} />;
 const bigBtn = (dark = true, extra = {}) => ({ height: 62, borderRadius: 18, border: dark ? "none" : `1px solid ${LINE}`, background: dark ? INK : "#fff", color: dark ? "#fff" : INK, fontSize: 18, fontWeight: 900, display: "flex", alignItems: "center", justifyContent: "center", gap: 10, width: "100%", cursor: "pointer", fontFamily: FONT, ...extra });
 
@@ -221,7 +222,12 @@ function ExpenseDetail({ e, onClose, onToast }) {
         </div>
         <div style={{ ...NUM, fontSize: 32, fontWeight: 900, margin: "12px 0" }}>{won(e.amount)}<span style={{ fontSize: 16, marginLeft: 3 }}>원</span></div>
         {e.status === "반려" && <div style={{ background: "#fff", border: `1px solid ${INK}`, borderRadius: 14, padding: "12px 14px", fontSize: 15, fontWeight: 800, marginBottom: 12 }}>사무실 메시지 · {e.rejectReason || "영수증을 다시 올려주세요"}</div>}
-        {e.image && <img src={e.image} alt="영수증" style={{ width: "100%", borderRadius: 14, border: `1px solid ${LINE}`, background: "#fff" }} />}
+        {e.image && (
+          <div style={{ position: "relative" }}>
+            <img src={e.image} alt="영수증" style={{ width: "100%", borderRadius: 14, border: `1px solid ${LINE}`, background: "#fff", display: "block" }} />
+            {e.status === "지급완료" && <span style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center" }}><PaidStamp date={e.paidDate} size={1.1} /></span>}
+          </div>
+        )}
       </div>
       {e.status === "반려" && <Foot><button type="button" disabled={busy} onClick={P.camera} style={bigBtn(true)}><Ico d={IC.camera} size={22} w={2.2} />{busy ? "보내는 중…" : "다시 찍어서 보내기"}</button></Foot>}
     </Sheet>
