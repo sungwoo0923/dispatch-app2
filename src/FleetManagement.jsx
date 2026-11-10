@@ -2,6 +2,7 @@
 import { subscribeUsersLive } from "./usersLive"; // ⭐ 2026-11-02 속도 — 직원 명부 구독 공유
 import { pickCompanyLoc } from "./officeLocSync"; // 📍 2026-11-09 출근지 한 곳 관리
 import useNarrow from "./useNarrow"; // ⭐ 2026-11-06 휴대폰 폭 카드 목록
+import { VehicleExpenseInbox, VehiclePhotoBoard } from "./VehicleExpenseInbox"; // 🧾 2026-11-10 차량 비용 영수증 · 정기 차량 사진
 import { DriverGuideSendModal, guideSentLabel } from "./DriverAppGuide"; // ⭐ 2026-11-06 기사앱 안내 보내기
 import React, { useEffect, useState, useMemo, useCallback, useRef } from "react";
 import { kpConfirm } from "./kpDialog";
@@ -6321,7 +6322,7 @@ export default function FleetManagement({ dispatchData = [], role = "", forceTab
   // ⭐ 2026-11-05 온도 관제·적재함 카메라 메뉴 삭제 — 예전에 기억된 탭으로 들어오면 관제현황으로
   useEffect(() => { if (mainTab === "temperature" || mainTab === "cargo-camera") setMainTab("tracking"); }, [mainTab]);
   // ⭐ 상단 메뉴 › 지입차관리 세부 메뉴에서 고른 모듈로 바로 이동
-  useSubnavTarget(hideChrome ? "" : "FLEET CONTROL", ["tracking", "route", "fixed", "history", "attendance", "vehicle", "registration"], setMainTab);
+  useSubnavTarget(hideChrome ? "" : "FLEET CONTROL", ["tracking", "route", "fixed", "history", "attendance", "vehicle", "expense", "photos", "registration"], setMainTab);
 
   // Data — init from sessionStorage so page appears populated immediately on re-mount
   const [driversRaw, setDriversRaw] = useState(() => sfGet("fm_drivers_raw", []));
@@ -7106,6 +7107,9 @@ export default function FleetManagement({ dispatchData = [], role = "", forceTab
             ["attendance", "출근기록부", "ATT", <><rect x="4" y="4" width="16" height="17" rx="2" /><path d="M8 2v4M16 2v4M4 10h16" /></>],
             // ⭐ 2026-11-05 온도 관제·적재함 카메라 메뉴 삭제(화면 코드는 남겨 둠 — 메뉴에서만 뺌)
             ["vehicle", "차량 관리", "CARE", <><rect x="1" y="6" width="14" height="10" rx="1.5" /><path d="M15 10h4l3 3v3h-7z" /><circle cx="6" cy="18" r="1.8" /><circle cx="18" cy="18" r="1.8" /></>],
+            // 🧾 2026-11-10 기사앱에서 올린 정비·수리 영수증(자동 점검 → 지출결의) · 정기 차량 사진(주기 설정 · 제출 현황)
+            ["expense", "차량 비용 영수증", "EXP", <><path d="M6 2h12v20l-3-2-3 2-3-2-3 2z" /><path d="M9 7h6M9 11h6M9 15h4" /></>],
+            ["photos", "정기 차량 사진", "PHOTO", <><path d="M3 7h4l2-3h6l2 3h4v13H3z" /><circle cx="12" cy="13" r="4" /></>],
             // ⭐ 2026-10-31 과태료·사고 서류는 기사관리 › 서류관리로 옮겼다(화면은 forceTab="penalty"로 그대로 씀)
             ["registration", "기사 등록 관리", "REG", <><circle cx="10" cy="8" r="4" /><path d="M3 20c0-4 3-7 7-7M17 14v6M14 17h6" /></>],
           ].map(([key, label, code, icon]) => {
@@ -7449,6 +7453,8 @@ export default function FleetManagement({ dispatchData = [], role = "", forceTab
       {/* ⭐ 2026-11-02 차량관리대장 — 맞춤 기능이 켜진 회사는 같은 "차량 관리" 메뉴가 확장판(전체 현황 + 관리대장 + 기존 점검·소모품)으로 */}
       {mainTab === "vehicle" && vlOn && <SectionBoundary name="차량 관리대장"><VehicleLedger company={getTenant() || myCompanyName} drivers={driversRaw} canEdit={role !== "viewer"} myName={companyStaffRaw.find(u => u.id === myUid)?.name || ""} by={`${companyStaffRaw.find(u => u.id === myUid)?.name || auth.currentUser?.email || "직원"}(직원)`} /></SectionBoundary>}
       {mainTab === "vehicle" && !vlOn && <SectionBoundary name="차량 관리"><VehicleCareTab drivers={routeDrivers} driversRaw={driversRaw} by={`${companyStaffRaw.find(u => u.id === myUid)?.name || auth.currentUser?.email || "직원"}(직원)`} /></SectionBoundary>}
+      {mainTab === "expense" && <SectionBoundary name="차량 비용 영수증"><VehicleExpenseInbox company={getTenant() || myCompanyName} drivers={driversRaw} canEdit={role !== "viewer"} me={{ uid: myUid, name: companyStaffRaw.find(u => u.id === myUid)?.name || "" }} /></SectionBoundary>}
+      {mainTab === "photos" && <SectionBoundary name="정기 차량 사진"><VehiclePhotoBoard company={getTenant() || myCompanyName} drivers={driversRaw} canEdit={role !== "viewer"} myName={companyStaffRaw.find(u => u.id === myUid)?.name || ""} /></SectionBoundary>}
       {mainTab === "registration" && <RegistrationTab usersMap={usersMap} myCompanyName={myCompanyName} driversRaw={driversRaw} myUid={myUid} staff={companyStaff} canDelegate={canDelegate} onAssignManager={assignDriverManager} />}
 
         </div>

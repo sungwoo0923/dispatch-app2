@@ -33,6 +33,7 @@ import { accumulateOdometer } from "../../functions/driverDutyCore.mjs"; // 🚚
 import { rotationCount, rotationDone, rotationLabel } from "../rotation";
 import { haversineKm } from "../tmapFareCalc";
 import VehicleCarePanel, { VehicleSetupWizard, shouldShowSetup } from "../VehicleCarePanel";
+import { VehicleExpenseCards, PhotoDueCard } from "./DriverVehicleExpense"; // 🧾 2026-11-10 비용 영수증 · 정기 차량 사진
 import { careSummary, vehicleDefaults } from "../vehicleCare";
 import { toYmd } from "../../functions/fleetCareCore.mjs";
 import DriverDocBox, { useDriverInbox, DriverPayInfoCard } from "./DriverDocBox";
@@ -2503,6 +2504,7 @@ export default function DriverHome() {
 
           {/* ⭐ 2026-11-03 회사 공지사항 — 공개 대상에 "기사"가 들어간 공지(최신순) */}
           <DriverNotices companyName={driver?.companyName || ""} uid={uid} />
+          <PhotoDueCard uid={uid} driver={driver} onOpen={() => setActiveTab("vehicle")} />{/* 🧾 2026-11-10 정기 차량 사진 마감 임박 */}
 
           {/* 🚚 차량 정비·만기 알림 — 누르면 차량 탭 */}
           {(() => {
@@ -2834,6 +2836,7 @@ export default function DriverHome() {
       {activeTab === "vehicle" && (
         <div style={{ padding: "16px 16px 24px" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 10, paddingLeft: 4 }}><span style={{ width: 6, height: 6, background: "#2D4C82", transform: "rotate(45deg)" }} /><span style={{ fontSize: 12.5, fontWeight: 800, color: "#9AA9C3", letterSpacing: "0.22em", fontFamily: DRV_MONO }}>VEHICLE</span><span style={{ fontSize: 16.5, fontWeight: 900, color: "#0F1A30", whiteSpace: "nowrap" }}>내 차량 관리</span><span style={{ marginLeft: "auto", fontSize: 14.5, fontWeight: 800, color: "#5B6B85", whiteSpace: "nowrap" }}>{driver.carNo || driver.차량번호 || ""}</span></div>
+          <VehicleExpenseCards uid={uid} driver={driver} onToast={showToast} />{/* 🧾 2026-11-10 영수증 · 정기 사진(큰 버튼) */}
           <VehicleCarePanel driverId={uid} drv={driver} by={`${driver.name || driver.이름 || "기사"}(기사)`} onToast={showToast} />
         </div>
       )}

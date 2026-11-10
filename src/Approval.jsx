@@ -16,6 +16,7 @@
 //  - 승인 후 취소: 기안자가 「결재 취소 요청」(사유) → 같은 결재선이 다시 승인하면 "결재 취소"로 바뀐다.
 //    문서는 지우지 않고 모두의 보관함에 "결재 취소" 도장으로 남는다(감사 기록). 연차 사용일수도 자동 복구.
 import { defaultFundId } from "./ledgerAuto";
+import { syncExpensesWithApproval } from "./vehicleExpense"; // 🧾 2026-11-10 차량 비용 영수증 ↔ 지출결의 상태
 import { runDelete } from "./DeleteProgress"; // ⭐ 2026-11-05 삭제 진행 창 + 한 번에 삭제
 import React from "react";
 import { kpConfirm, kpPrompt } from "./kpDialog";
@@ -1449,6 +1450,8 @@ function LeaveCard({ leave, thisDays }) {
 // ⚙ 결재 설정(회사별) — 일일 업무일지 자동 승인(임원이 켜고 끈다)
 // 🔗 최종 승인 후 연동(장부·사직서·육아휴직) — 결재자가 승인할 때와 자동 승인될 때 모두 같은 처리
 function runApprovedHooks(d, company, me) {
+  // 🧾 2026-11-10 차량 비용 영수증에서 만든 지출결의 → 영수증 "승인"(기사앱에도 승인)
+  if (Array.isArray(d.data?.vexIds) && d.data.vexIds.length) syncExpensesWithApproval(d, "approved");
   // 🗂 인사발령 품의 최종 승인 → 대상자 인사 정보에 "결재 완료 발령"(인사기록 › 인사발령에서 [결재 내용 불러오기] → 공문 게시)
   if (d.form === "personnel" && d.data?.target) {
     const x = d.data;
@@ -1679,6 +1682,7 @@ function Composer({ company, me, staff, cat, preset, onDone, leave, getLive, myD
       const ref = doc(db, "approvals", docId); // 📎 첨부를 올린 폴더와 같은 문서 id
       await setDoc(ref, payload);
       draftStore.del(draftKey);
+      if (Array.isArray(pd.vexIds) && pd.vexIds.length && payload.status === "pending") syncExpensesWithApproval({ ...payload, id: ref.id }, "pending"); // 🧾 영수증 → 결재 중
       // 🤖 첫 결재자부터 자동 승인(부재·위임)이 켜져 있으면 바로 처리(상신 직후 한 번 더 저장)
       if (!auto && pre?.status === "approved") {
         const r = runAutoApprove({ ...payload, id: ref.id }, apSettings);
@@ -1884,6 +1888,7 @@ function Viewer({ d: d0, me, staff, company, onClose, onRedraft, onEdit, inline 
       }
       await updateDoc(doc(db, "approvals", d.id), patch);
       if (patch.status === "approved") runApprovedHooks(d, company, me);
+      if (Array.isArray(d.data?.vexIds) && d.data.vexIds.length && ["rejected", "withdrawn", "cancelled"].includes(patch.status)) syncExpensesWithApproval(d, patch.status); // 🧾 영수증 → 다시 결의할 수 있게
       // ⭐ 2026-11-02 점검 — 결재 취소가 최종 승인되면 승인 때 자동 연동한 것을 되돌린다(지출 장부 줄 삭제·사직 퇴사예정·인사발령 대기 해제). 육아휴직·출산휴가 재직 상태는 이전 값을 몰라 인사관리부에서 직접 바꿔야 함
       if (patch.status === "cancelled") {
         if (d.cat === "expense") deleteDoc(doc(db, "acctLedger", `appr_${d.id}`)).catch(() => {});
@@ -2485,6 +2490,30 @@ export default function ApprovalCenter({ company, me, page, setPage, openId, onO
   }) : rawList), [rawList, nameOf]);
   const [open, setOpen] = React.useState(null);
   const [preset, setPreset] = React.useState(null);
+  // 🧾 2026-11-10 다른 화면(지입차관리 › 차량 비용 영수증 [지출결의 작성])에서 넘겨준 자동 입력값 — sessionStorage kpApPreset
+  React.useEffect(() => {
+    const take = () => {
+      let p = null;
+      try { p = JSON.parse(sessionStorage.getItem("kpApPreset") || "null"); } catch { p = null; }
+      if (!p || !p.cat) return;
+      if (p.cat !== page) { setPage?.(p.cat); return; }
+      try { sessionStorage.removeItem("kpApPreset"); } catch { /* 무시 */ }
+      setPreset(p);
+    };
+    take();
+    window.addEventListener("kp-ap-preset", take);
+    return () => window.removeEventListener("kp-ap-preset", take);
+  }, [page]); // eslint-disable-line react-hooks/exhaustive-deps
+  // 건별 지출결의 — 한 장 상신하면 다음 영수증 지출결의서를 이어서 연다
+  const nextQueued = () => {
+    let q = [];
+    try { q = JSON.parse(sessionStorage.getItem("kpApPresetQueue") || "[]"); } catch { q = []; }
+    if (!Array.isArray(q) || !q.length) return false;
+    const [next, ...rest] = q;
+    try { if (rest.length) sessionStorage.setItem("kpApPresetQueue", JSON.stringify(rest)); else sessionStorage.removeItem("kpApPresetQueue"); } catch { /* 무시 */ }
+    setPreset(next);
+    return true;
+  };
   const [tab, setTab] = React.useState(() => (page === "mine" ? "all" : "paywait"));
   const [companyAll, setCompanyAll] = React.useState(null);
   const [lf, setLf] = React.useState({ q: "", from: "", to: "", who: "" }); // 목록 검색·기간·기안자
@@ -2641,9 +2670,9 @@ export default function ApprovalCenter({ company, me, page, setPage, openId, onO
 
       {isCat && (
         <>
-          <Composer key={`${page}-${preset?.editId || preset?.id || "new"}${page === "report" && canHr ? "-hr" : ""}`} canHr={canHr} myDocs={mineL} company={company} me={meFull} staff={staff} cat={page} preset={preset?.cat === page ? preset : null}
+          <Composer key={`${page}-${preset?.editId || preset?.id || preset?.presetKey || "new"}${page === "report" && canHr ? "-hr" : ""}`} canHr={canHr} myDocs={mineL} company={company} me={meFull} staff={staff} cat={page} preset={preset?.cat === page ? preset : null}
             leave={leave} getLive={(id) => (list || []).find((x) => x.id === id)}
-            onDone={() => { setPreset(null); setPage("mine"); }} />
+            onDone={() => { if (preset?.presetKey && nextQueued()) return; setPreset(null); setPage("mine"); }} />
         </>
       )}
 

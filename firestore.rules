@@ -236,6 +236,34 @@ service cloud.firestore {
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['readAt', 'confirmedAt', 'status', 'driverMemo', 'paidAt', 'objectedAt', 'driverAction'])));
       allow delete: if dcol in ['driverStatements', 'fleetPenalties'] && isOfficeStaff() && coMatch(resource.data);
     }
+    // 🧾 2026-11-10 차량 비용 영수증(vehicleExpenses) — 기사는 본인 영수증만 올리고(내 회사 이름 · 상태 접수) 읽는다.
+    //  기사가 고칠 수 있는 건 "반려 → 다시 찍어 올리기"(사진 · 상태 접수)와 아직 확인 전(접수) 영수증 지우기뿐. 직원은 같은 회사 전체.
+    match /vehicleExpenses/{id} {
+      allow create: if isSignedIn() && request.resource.data.get('driverId', '') == request.auth.uid
+        && request.resource.data.get('companyName', '') == myCo() && request.resource.data.get('status', '') == '접수';
+      allow read: if (isSignedIn() && resource.data.get('driverId', '') == request.auth.uid) || (isOfficeStaff() && coMatch(resource.data));
+      allow update: if (isOfficeStaff() && coMatch(resource.data) && coKeep())
+        || (isSignedIn() && resource.data.get('driverId', '') == request.auth.uid && resource.data.get('status', '') == '반려'
+          && request.resource.data.get('status', '') == '접수'
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['image', 'imgHash', 'takenAt', 'captured', 'status', 'rejectReason', 'updatedAt']));
+      allow delete: if (isOfficeStaff() && coMatch(resource.data))
+        || (isSignedIn() && resource.data.get('driverId', '') == request.auth.uid && resource.data.get('status', '') == '접수');
+    }
+    // 📷 정기 차량 사진 — 설정(vehiclePhotoSettings/{회사})은 같은 회사 누구나 읽고 사무 직원만 바꾼다.
+    //  사진(vehiclePhotos/{uid_기간_부위})은 기사가 본인 것만 올리고 다시 찍기(덮어쓰기)할 수 있다. 직원은 같은 회사 전체.
+    match /vehiclePhotoSettings/{co} {
+      allow read: if isTotalMasterUser() || (isSignedIn() && myCo() == co);
+      allow write: if isOfficeStaff() && (isTotalMasterUser() || myCo() == co) && request.resource.data.get('companyName', '') == co;
+    }
+    match /vehiclePhotos/{id} {
+      allow create: if isSignedIn() && request.resource.data.get('driverId', '') == request.auth.uid
+        && request.resource.data.get('companyName', '') == myCo() && id.matches(request.auth.uid + '_.*');
+      allow update: if (isOfficeStaff() && coMatch(resource.data) && coKeep())
+        || (isSignedIn() && resource.data.get('driverId', '') == request.auth.uid && request.resource.data.get('driverId', '') == request.auth.uid
+          && request.resource.data.get('companyName', '') == resource.data.get('companyName', ''));
+      allow read: if (isSignedIn() && resource.data.get('driverId', '') == request.auth.uid) || (isOfficeStaff() && coMatch(resource.data));
+      allow delete: if isOfficeStaff() && coMatch(resource.data);
+    }
     // ✍ 2026-11-10 기사앱으로 보낸 운송계약서(driverContracts) — 직원은 같은 회사 전체(발송·삭제), 기사는 본인 것만 읽고
     //  열람(read)·서명(signed)만 할 수 있다. 서명한 뒤에는 기사가 다시 고칠 수 없다.
     match /driverContracts/{id} {
@@ -2257,6 +2285,8 @@ service cloud.firestore {
         'fareRules', 'companyFeatures', 'companySettings', 'vehicleLedger', 'vehicleLedgerFiles', 'vehicleTypes',
         // 🚚 2026-11-09 차량관리 자동화 — 카드 이용내역 · 회사별 소모품 주기 · 월 비용 리포트(위 회사 데이터 규칙에서 따로 정함)
         'vehicleCardTx', 'vehicleCareSettings', 'vehicleCostReports',
+        // 🧾 2026-11-10 차량 비용 영수증 · 정기 차량 사진(위에서 따로 정함 — 빠지면 같은 회사 기사가 다른 기사 영수증을 고칠 수 있다)
+        'vehicleExpenses', 'vehiclePhotoSettings', 'vehiclePhotos',
         // 💰 2026-11-04 플랫폼 운영 문서 — 위에서 따로 정함(예전엔 siteConfig가 이 목록에 없어 승인된 고객사 직원도 요금·관제 집계를 읽을 수 있었다)
         'siteConfig', 'platformConfig', 'platformUsage', 'usageCounters',
         // ⭐ 2026-11-05 기사 가입 처리 기록 — 위에서 따로 정함

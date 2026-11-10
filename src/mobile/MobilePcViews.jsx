@@ -128,6 +128,8 @@ const FLEET_MODULES = [
   // ⭐ 2026-11-05 온도 관제·적재함 카메라 메뉴 삭제
   { key: "vehicle", label: "차량 관리", en: "CARE", icon: "truck" },
   // ⭐ 2026-11-06 과태료·사고 서류는 PC처럼 기사관리 안으로 옮김(모바일 기사관리 › 과태료·사고 서류)
+  { key: "expense", label: "차량 비용 영수증", en: "EXP", icon: "file" }, // 🧾 2026-11-10
+  { key: "photos", label: "정기 차량 사진", en: "PHOTO", icon: "pin" },
   { key: "registration", label: "기사 등록 관리", en: "REG", icon: "user" },
 ];
 function FleetView({ dispatchData, userCompany, role, onRegisterBack }) {

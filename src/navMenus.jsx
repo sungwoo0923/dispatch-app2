@@ -25,7 +25,7 @@ export const MENU_SUBS = {
   인사관리부: { code: "HUMAN RESOURCES", items: [["edit", "인사관리 › 직원관리"], ["rec:이력서", "인사관리 › 이력서"], ["rec:근태/근속", "인사관리 › 근태 · 근속"], ["rec:인사발령", "인사관리 › 인사발령"], ["rec:인사발령 이력", "인사관리 › 인사발령 이력"], ["register", "직원 등록"], ["attendance", "출근기록부"], ["leave", "연차 관리"], ["settings", "직책·부서 설정"], ["rules", "사내 규정"], ["obit", "부고 알림"]] }, // ⭐ 2026-11-10 메뉴 통일
   회사관리: { code: "COMPANY", items: [["회사정보", "회사정보"], ["조직도", "조직도"], ["운임 규칙", "운임 규칙"], ["내정보", "내정보"], ["내 이력서", "내 이력서"], ["출근기록부", "출근기록부"]] }, // ⭐ 2026-11-10 메뉴 통일 — 회사관리 왼쪽 메뉴와 같게(요금제·권한에 따라 빠지는 칸은 화면을 열면 맞춰짐)
   운임조회: { code: "FARE LOOKUP", items: [["전국운임조회", "전국운임조회"], ["자사운임표", "자사운임표"]] },
-  지입차관리: { code: "FLEET CONTROL", items: [["tracking", "관제현황"], ["route", "노선관리"], ["fixed", "고정노선"], ["history", "이력 조회"], ["attendance", "출근기록부"], ["vehicle", "차량 관리"], ["registration", "기사 등록 관리"]] },
+  지입차관리: { code: "FLEET CONTROL", items: [["tracking", "관제현황"], ["route", "노선관리"], ["fixed", "고정노선"], ["history", "이력 조회"], ["attendance", "출근기록부"], ["vehicle", "차량 관리"], ["expense", "차량 비용 영수증"], ["photos", "정기 차량 사진"], ["registration", "기사 등록 관리"]] },
   관리자메뉴: { code: "ADMIN", items: [["members", "회원 관리"], ["linked", "연동 화주사"], ["loginSessions", "로그인 관리"], ["setup", "초기 설정 · 튜토리얼"]] }, // 관리자메뉴는 권한마다 칸이 크게 달라 공통 칸만 — 화면을 한 번 열면 그 사람이 실제로 보는 칸으로 맞춰진다(registerSubnav)
 };
 
