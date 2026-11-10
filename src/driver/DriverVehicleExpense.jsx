@@ -5,9 +5,10 @@
 //  영수증: ① 찍기(카메라/사진첩) → ② 무엇을 했나요(큰 타일 · 여러 개) → ③ 자동으로 읽은 금액·정비소·날짜 확인 + 결제 수단 → 보내기
 //  정기 사진: 칸을 누르면 카메라 → 찍는 즉시 저장(보내기 버튼 없음) · 계기판은 주행거리 숫자도(선택)
 import React from "react";
+import { kpConfirm } from "../kpDialog";
 import { VEX_KINDS, VEX_PAYS, vexKindLabel, vexDriverStatus, won, toNum, photoPeriod, daysLeft, photoTargetOk } from "../vehicleExpenseCore";
 import { PaidStamp } from "../PaidStamp"; // 💸 지급완료 도장(사무실 화면과 같은 모양)
-import { prepPhoto, scanReceipt, submitExpense, resubmitExpense, useDriverExpenses, usePhotoSettings, useDriverPeriodPhotos, savePeriodPhoto } from "../vehicleExpense";
+import { prepPhoto, scanReceipt, submitExpense, resubmitExpense, deleteExpense, canDeleteExpense, useDriverExpenses, usePhotoSettings, useDriverPeriodPhotos, savePeriodPhoto } from "../vehicleExpense";
 
 const INK = "#0B1428"; const NAVY = "#1B2B4B"; const BLUE = "#2D4C82"; const SKY = "#8FB0F0";
 const LINE = "#E3E8F0"; const MUTE = "#7A8AA6"; const BG = "#F4F6FA";
@@ -205,6 +206,38 @@ function ExpenseWizard({ uid, driver, onClose, onToast }) {
   );
 }
 
+// 📋 2026-11-10 내가 올린 영수증 전체 목록([더보기]) — 달마다 묶고 합계
+function ExpenseList({ list, onOpen, onClose }) {
+  const months = [...new Set(list.map((e) => String(e.date || "").slice(0, 7)))].sort().reverse();
+  return (
+    <Sheet>
+      <TopBar title="내가 올린 영수증" onBack={onClose} />
+      <div style={{ flex: 1, overflowY: "auto", padding: 16 }} data-kp="vex-all">
+        {months.map((m) => {
+          const rows = list.filter((e) => String(e.date || "").slice(0, 7) === m);
+          return (
+            <div key={m || "none"} style={{ marginBottom: 16 }}>
+              <div style={{ display: "flex", alignItems: "baseline", margin: "0 4px 8px" }}>
+                <span style={{ fontSize: 16, fontWeight: 900 }}>{m ? `${Number(m.slice(0, 4))}년 ${Number(m.slice(5))}월` : "날짜 없음"}</span>
+                <span style={{ marginLeft: "auto", fontSize: 14, color: MUTE, fontWeight: 800, ...NUM }}>{rows.length}건 · {won(rows.reduce((a, e) => a + toNum(e.amount), 0))}원</span>
+              </div>
+              <div style={{ background: "#fff", border: `1px solid ${LINE}`, borderRadius: 18, overflow: "hidden" }}>
+                {rows.map((e, i) => (
+                  <button key={e.id} type="button" data-kp="vex-item" onClick={() => onOpen(e.id)} style={{ width: "100%", display: "flex", alignItems: "center", gap: 12, padding: "13px 14px", border: "none", borderTop: i ? "1px solid #EEF1F6" : "none", background: "#fff", cursor: "pointer", textAlign: "left", fontFamily: FONT, color: INK }}>
+                    {e.image ? <img src={e.image} alt="" style={{ width: 40, height: 50, objectFit: "cover", borderRadius: 8, border: `1px solid ${LINE}`, flexShrink: 0 }} /> : <span style={{ width: 40, height: 50, borderRadius: 8, background: BG, flexShrink: 0 }} />}
+                    <span style={{ flex: 1, minWidth: 0 }}><span style={{ display: "block", fontSize: 16, fontWeight: 900, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{(e.kinds || []).map(vexKindLabel).join(" · ")}{e.memo ? ` · ${e.memo}` : ""}</span><span style={{ display: "block", fontSize: 13, color: MUTE, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{md(e.date)} · {e.vendor || "정비소"}</span></span>
+                    <span style={{ textAlign: "right", flexShrink: 0 }}><span style={{ display: "block", ...NUM, fontSize: 16, fontWeight: 900 }}>{won(e.amount)}</span><span style={{ ...chip(statusKind(e.status)), marginTop: 3 }}>{e.status === "반려" && <Dot />}{vexDriverStatus(e.status)}</span></span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </Sheet>
+  );
+}
+
 // 내가 올린 영수증 하나(누르면 크게 · 반려면 다시 찍기)
 function ExpenseDetail({ e, onClose, onToast }) {
   const [busy, setBusy] = React.useState(false);
@@ -229,7 +262,17 @@ function ExpenseDetail({ e, onClose, onToast }) {
           </div>
         )}
       </div>
-      {e.status === "반려" && <Foot><button type="button" disabled={busy} onClick={P.camera} style={bigBtn(true)}><Ico d={IC.camera} size={22} w={2.2} />{busy ? "보내는 중…" : "다시 찍어서 보내기"}</button></Foot>}
+      {(e.status === "반려" || canDeleteExpense(e)) && (
+        <Foot>
+          {e.status === "반려" && <button type="button" disabled={busy} onClick={P.camera} style={bigBtn(true)}><Ico d={IC.camera} size={22} w={2.2} />{busy ? "보내는 중…" : "다시 찍어서 보내기"}</button>}
+          {/* 🗑 2026-11-10 지출결의로 넘어가기 전(확인 중 · 확인 완료 · 반려)이면 기사도 지울 수 있다 */}
+          {canDeleteExpense(e) && <button type="button" data-kp="vex-del" disabled={busy} onClick={async () => {
+            if (!(await kpConfirm("이 영수증을 지울까요?\n지우면 사무실에서도 사라집니다.", { okText: "지우기", danger: true }))) return;
+            setBusy(true);
+            try { await deleteExpense(e.id); onToast?.("영수증을 지웠습니다"); onClose(); } catch (er) { onToast?.(`지우지 못했어요: ${er.message || er}`); setBusy(false); }
+          }} style={bigBtn(false, { height: 54, fontSize: 16, color: "#B42318" })}>영수증 지우기</button>}
+        </Foot>
+      )}
     </Sheet>
   );
 }
@@ -329,7 +372,8 @@ function PeriodPhotoSheet({ uid, driver, settings, onClose, onToast }) {
 export function VehicleExpenseCards({ uid, driver, onToast }) {
   const list = useDriverExpenses(uid) || [];
   const settings = usePhotoSettings(String(driver?.companyName || "").trim());
-  const [open, setOpen] = React.useState(""); // wizard | photo | id
+  const [open, setOpen] = React.useState(""); // wizard | photo | all | id
+  const [back, setBack] = React.useState(""); // 상세를 목록에서 열었으면 닫을 때 목록으로
   const photoOn = !!settings?.on && photoTargetOk(settings, driver);
   const per = settings ? photoPeriod(settings, kstYmd()) : null;
   const photos = useDriverPeriodPhotos(photoOn ? uid : null, per?.key) || [];
@@ -359,20 +403,26 @@ export function VehicleExpenseCards({ uid, driver, onToast }) {
         <>
           <div style={{ display: "flex", alignItems: "center", gap: 7, margin: "18px 2px 8px", fontSize: 14, fontWeight: 900 }}><span style={{ width: 6, height: 6, background: BLUE, transform: "rotate(45deg)", display: "inline-block" }} />내가 올린 영수증<span style={{ marginLeft: "auto", fontSize: 13, color: MUTE, fontWeight: 700 }}>이번 달 {monthN}건</span></div>
           <div style={{ background: "#fff", border: `1px solid ${LINE}`, borderRadius: 18, overflow: "hidden" }}>
-            {list.slice(0, 5).map((e, i) => (
+            {list.slice(0, 1).map((e, i) => (
               <button key={e.id} type="button" data-kp="vex-item" onClick={() => setOpen(e.id)} style={{ width: "100%", display: "flex", alignItems: "center", gap: 12, padding: "13px 14px", border: "none", borderTop: i ? "1px solid #EEF1F6" : "none", background: "#fff", cursor: "pointer", textAlign: "left", fontFamily: FONT, color: INK }}>
                 {e.image ? <img src={e.image} alt="" style={{ width: 40, height: 50, objectFit: "cover", borderRadius: 8, border: `1px solid ${LINE}`, flexShrink: 0 }} /> : <span style={{ width: 40, height: 50, borderRadius: 8, background: BG, flexShrink: 0 }} />}
                 <span style={{ flex: 1, minWidth: 0 }}><span style={{ display: "block", fontSize: 16, fontWeight: 900, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{(e.kinds || []).map(vexKindLabel).join(" · ")}{e.memo ? ` · ${e.memo}` : ""}</span><span style={{ display: "block", fontSize: 13, color: MUTE, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{md(e.date)} · {e.vendor || "정비소"}</span></span>
                 <span style={{ textAlign: "right", flexShrink: 0 }}><span style={{ display: "block", ...NUM, fontSize: 16, fontWeight: 900 }}>{won(e.amount)}</span><span style={{ ...chip(statusKind(e.status)), marginTop: 3 }}>{e.status === "반려" && <Dot />}{vexDriverStatus(e.status)}</span></span>
               </button>
             ))}
+            {list.length > 1 && (
+              <button type="button" data-kp="vex-more" onClick={() => setOpen("all")} style={{ width: "100%", height: 50, border: "none", borderTop: "1px solid #EEF1F6", background: "#F8FAFC", color: NAVY, fontSize: 15, fontWeight: 900, cursor: "pointer", fontFamily: FONT, display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
+                더보기 · 전체 {list.length}건<Ico d={IC.chev} size={16} color={NAVY} w={2.6} />
+              </button>
+            )}
           </div>
           {list.find((e) => e.status === "반려") && <div style={{ fontSize: 13, color: MUTE, margin: "8px 4px" }}>반려 사유: {list.find((e) => e.status === "반려").rejectReason || "다시 올려주세요"} · 눌러서 다시 찍기</div>}
         </>
       )}
       {open === "wizard" && <ExpenseWizard uid={uid} driver={driver} onClose={() => setOpen("")} onToast={onToast} />}
       {open === "photo" && settings && <PeriodPhotoSheet uid={uid} driver={driver} settings={settings} onClose={() => setOpen("")} onToast={onToast} />}
-      {detail && <ExpenseDetail e={detail} onClose={() => setOpen("")} onToast={onToast} />}
+      {(open === "all" || (detail && back === "all")) && <ExpenseList list={list} onOpen={(id) => { setBack("all"); setOpen(id); }} onClose={() => { setBack(""); setOpen(""); }} />}
+      {detail && <ExpenseDetail e={detail} onClose={() => setOpen(back === "all" ? "all" : "")} onToast={onToast} />}
     </div>
   );
 }

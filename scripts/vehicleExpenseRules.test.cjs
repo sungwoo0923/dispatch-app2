@@ -1,7 +1,7 @@
 // 🧾 2026-11-10 차량 비용 영수증 · 정기 차량 사진 보안 규칙 테스트 — Firestore 에뮬레이터
 //  실행: firebase emulators:exec --only firestore --project demo-kpflow "node scripts/vehicleExpenseRules.test.cjs"
 //  (@firebase/rules-unit-testing · firebase 필요 — NODE_PATH로 넘겨도 된다. 포트 EMU_FS_PORT(기본 8080))
-//  ① 기사: 본인 영수증만 올림(내 회사 · 상태 접수) · 본인 것만 읽음 · 상태를 마음대로 못 바꿈 · 반려된 것만 다시 올림 · 확인 전만 지움
+//  ① 기사: 본인 영수증만 올림(내 회사 · 상태 접수) · 본인 것만 읽음 · 상태를 마음대로 못 바꿈 · 반려된 것만 다시 올림 · 지출결의 전(접수·확인·반려)만 지움
 //  ② 직원: 같은 회사 영수증 읽기 · 확인 · 반려 · 고치기 / 다른 회사는 못 봄 · 화주는 못 봄
 //  ③ 정기 사진: 기사 본인 문서 id(uid_)만 · 설정은 사무 직원만 바꾸고 같은 회사 누구나 읽음
 const fs = require("fs");
@@ -47,8 +47,15 @@ const exp = (over = {}) => ({ companyName: A, driverId: "drvA", driverName: "김
   await t("기사 — 반려된 영수증 다시 찍어 올리기", () => assertSucceeds(updateDoc(doc(D, "vehicleExpenses", "eRej"), { image: "data:y", imgHash: "ab", takenAt: 1, captured: true, status: "접수", rejectReason: "" })));
   await t("기사 — 다른 기사 반려 영수증 고치기 막힘", () => assertFails(updateDoc(doc(D2, "vehicleExpenses", "eRej"), { image: "data:z", status: "접수" })));
   await t("기사 — 확인 전(접수) 본인 영수증 지우기", () => assertSucceeds(deleteDoc(doc(D, "vehicleExpenses", "e1"))));
-  await env.withSecurityRulesDisabled(async (c) => { await setDoc(doc(c.firestore(), "vehicleExpenses", "e1"), exp({ status: "확인" })); });
-  await t("기사 — 확인된 영수증 지우기 막힘", () => assertFails(deleteDoc(doc(D, "vehicleExpenses", "e1"))));
+  await env.withSecurityRulesDisabled(async (c) => {
+    const db = c.firestore();
+    await setDoc(doc(db, "vehicleExpenses", "e1"), exp({ status: "확인" }));
+    await setDoc(doc(db, "vehicleExpenses", "eIng"), exp({ status: "결재중", approvalId: "ap1" }));
+    await setDoc(doc(db, "vehicleExpenses", "ePaid"), exp({ status: "지급완료", approvalId: "ap1" }));
+  });
+  await t("기사 — 확인 완료(지출결의 전) 영수증 지우기", () => assertSucceeds(deleteDoc(doc(D, "vehicleExpenses", "e1"))));
+  await t("기사 — 결재 중 영수증 지우기 막힘", () => assertFails(deleteDoc(doc(D, "vehicleExpenses", "eIng"))));
+  await t("기사 — 지급완료 영수증 지우기 막힘", () => assertFails(deleteDoc(doc(D, "vehicleExpenses", "ePaid"))));
 
   await t("직원 — 같은 회사 목록 읽기", () => assertSucceeds(getDocs(query(collection(SA, "vehicleExpenses"), where("companyName", "==", A)))));
   await t("직원 — 확인 · 반려 · 고치기", () => assertSucceeds(updateDoc(doc(SA, "vehicleExpenses", "e2"), { status: "반려", rejectReason: "다시" })));
@@ -56,6 +63,8 @@ const exp = (over = {}) => ({ companyName: A, driverId: "drvA", driverName: "김
   await t("다른 회사 직원 — 읽기 막힘", () => assertFails(getDoc(doc(SB, "vehicleExpenses", "e2"))));
   await t("다른 회사 직원 — 고치기 막힘", () => assertFails(updateDoc(doc(SB, "vehicleExpenses", "e2"), { status: "확인" })));
   await t("화주 — 읽기 막힘", () => assertFails(getDoc(doc(SH, "vehicleExpenses", "e2"))));
+  await t("다른 회사 직원 — 삭제 막힘", () => assertFails(deleteDoc(doc(SB, "vehicleExpenses", "e2"))));
+  await t("직원 — 같은 회사 영수증 삭제", () => assertSucceeds(deleteDoc(doc(SA, "vehicleExpenses", "e2"))));
 
   await t("정기 사진 — 기사 본인 문서 올리기", () => assertSucceeds(setDoc(doc(D, "vehiclePhotos", "drvA_W2026-11-09_앞"), { companyName: A, driverId: "drvA", periodKey: "W2026-11-09", part: "앞", image: "data:x" })));
   await t("정기 사진 — 같은 칸 다시 찍기(덮어쓰기)", () => assertSucceeds(setDoc(doc(D, "vehiclePhotos", "drvA_W2026-11-09_앞"), { companyName: A, driverId: "drvA", periodKey: "W2026-11-09", part: "앞", image: "data:y" })));

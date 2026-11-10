@@ -13,7 +13,7 @@ import { PaidStamp } from "./PaidStamp"; // 💸 지급완료 도장 // 🔙 휴
 import { mainBiz } from "./publicDataMain";
 import { VEX_KINDS, VEX_PAYS, vexKindLabel, vexPayLabel, won, toNum, autoChecks, checkLevel, checkHeadline, fmtBizNo, spendPresetOf,
   PHOTO_CYCLES, PHOTO_DOWS, PHOTO_PARTS, photoPeriod, daysLeft, photoTargetOk } from "./vehicleExpenseCore";
-import { useCompanyExpenses, setExpenseStatus, patchExpense, openSpendComposer, usePhotoSettings, savePhotoSettings, useCompanyPeriodPhotos, notifyDriver } from "./vehicleExpense";
+import { useCompanyExpenses, setExpenseStatus, patchExpense, openSpendComposer, usePhotoSettings, savePhotoSettings, useCompanyPeriodPhotos, notifyDriver, deleteExpense, canDeleteExpense } from "./vehicleExpense";
 
 const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
 const NUM = { fontVariantNumeric: "tabular-nums" };
@@ -140,6 +140,10 @@ function Detail({ e, checks, canEdit, me, onClose, onAct, phone }) {
       {canEdit && (
         <div className="px-4 sm:px-5 pb-4 pt-1 flex flex-wrap gap-2">
           {e.phone && <a href={`tel:${e.phone}`} className={btnW}>정비소 전화</a>}
+          {/* 🗑 2026-11-10 삭제 — 지출결의로 넘어가기 전만(결재 중 · 승인 · 지급완료는 전자결재 문서를 먼저 회수 · 반려) */}
+          {canDeleteExpense(e)
+            ? <button type="button" data-kp="vex-delete" onClick={() => onAct("delete", [e])} className={`${btn} bg-white border-[#F1C4BF] text-[#B42318]`}>삭제</button>
+            : <span className="self-center text-[12px] font-bold text-[#7A8AA6]" data-kp="vex-delete-lock">전자결재에 올라간 영수증은 삭제할 수 없어요</span>}
           {!edit && ["접수", "확인"].includes(e.status) && <button type="button" onClick={() => setEdit({ vendor: e.vendor || "", amount: String(e.amount || ""), date: e.date || "", bizNo: e.bizNo || "", pay: e.pay || "personalCard" })} className={btnW}>고치기</button>}
           <span className="flex-1" />
           {["접수", "확인"].includes(e.status) && <button type="button" data-kp="vex-reject" onClick={() => onAct("reject", [e])} className={btnW}>반려</button>}
@@ -191,6 +195,14 @@ export function VehicleExpenseInbox({ company, drivers = [], canEdit = true, me 
     const ids = items.map((e) => e.id);
     if (!ids.length) return;
     if (kind === "confirm") { await setExpenseStatus(ids, "확인", { by: me.name || "" }); setSel(new Set()); return; }
+    if (kind === "delete") {
+      const ok = items.filter(canDeleteExpense);
+      const locked = items.length - ok.length;
+      if (!ok.length) { await kpConfirm("전자결재에 올라간 영수증(결재 중 · 승인 · 지급완료)은 삭제할 수 없어요.\n전자결재 문서를 먼저 회수하거나 반려해 주세요.", { okText: "확인" }); return; }
+      if (!(await kpConfirm(`영수증 ${ok.length}건을 삭제할까요?${locked ? `\n(전자결재에 올라간 ${locked}건은 빼고)` : ""}\n기사앱에서도 사라지고 되돌릴 수 없습니다.`, { okText: "삭제", danger: true }))) return;
+      for (const e of ok) { await deleteExpense(e.id); notifyDriver(e.driverId, company, "사무실에서 영수증을 삭제했어요", `${(e.kinds || []).map(vexKindLabel).join("·")} ${won(e.amount)}원 · ${String(e.date || "").slice(5).replace("-", ".")}`); }
+      setSel(new Set()); setCur(null); return;
+    }
     if (kind === "reject") {
       const reason = await kpPrompt(`${items.length}건을 반려할까요? 기사앱에 보일 사유를 적어 주세요`, "영수증 글씨가 잘 안 보여요 · 다시 찍어 주세요", { okText: "반려" });
       if (reason == null) return;
@@ -275,6 +287,7 @@ export function VehicleExpenseInbox({ company, drivers = [], canEdit = true, me 
               <div className="rounded-2xl bg-[#0B1428] text-white px-4 py-3 flex flex-wrap items-center gap-2.5" data-kp="vex-bar">
                 <span className="text-[13px] text-white/60">선택</span><span className="text-[18px] font-black" style={NUM}>{selRows.length}건 · {won(selSum)}원</span>
                 <span className="flex-1" />
+                <button type="button" data-kp="vex-delete-sel" onClick={() => act("delete", selRows)} className={`${btn} bg-white/[0.08] border-white/[0.16] text-[#FFB4AB]`}>삭제</button>
                 <button type="button" onClick={() => act("reject", selRows)} className={`${btn} bg-white/[0.08] border-white/[0.16] text-white`}>반려</button>
                 <button type="button" onClick={() => act("confirm", selRows.filter((e) => e.status === "접수"))} className={`${btn} bg-white/[0.08] border-white/[0.16] text-white`}>확인</button>
                 <button type="button" data-kp="vex-spend-each" onClick={() => act("each", selRows)} className={`${btn} bg-white/[0.08] border-white/[0.16] text-white`}>건별 지출결의 ({selRows.length}장)</button>

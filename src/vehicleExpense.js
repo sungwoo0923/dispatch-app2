@@ -93,6 +93,8 @@ export async function resubmitExpense(id, photo, captured) {
   await updateDoc(doc(db, "vehicleExpenses", id), { image: photo.dataUrl, imgHash: photo.hash || "", takenAt: photo.takenAt || 0, captured: !!captured, status: "접수", rejectReason: "", updatedAt: serverTimestamp() });
 }
 export const deleteExpense = (id) => deleteDoc(doc(db, "vehicleExpenses", id));
+// 🗑 2026-11-10 지울 수 있는 상태 — 지출결의로 넘어가기 전(접수 · 확인 · 반려)만. 결재 중 · 승인 · 지급완료는 전자결재 문서와 묶여 있어 못 지운다
+export const canDeleteExpense = (e) => ["접수", "확인", "반려"].includes(e?.status || "접수") && !e?.approvalId;
 
 // ── 기사앱 알림함(driver_notifications — 기사앱이 이미 구독 중) ──
 export const notifyDriver = (driverId, company, title, body, type = "vehicle_care") => (driverId
