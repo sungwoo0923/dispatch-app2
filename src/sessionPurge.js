@@ -40,15 +40,22 @@ export function noteSignedInUid(uid) {
 }
 
 let clearing = false;
+// 로그아웃 정리로 Firestore를 이미 껐는지 — 새로 고침이 막혔는데(나가기 확인 창에서 "머무르기" 등) 다시 로그인하면
+//  꺼진 Firestore로는 읽기·저장이 모두 멈추므로, 로그인할 때 이 값을 보고 새로 고친다(App.jsx)
+export function firestoreWasShutDown() { return clearing; }
 // 로그아웃 때 — 저장값 + 기기 저장본(IndexedDB)을 지우고 새로 고친다(한 번만)
 export async function purgeOnSignOut(db) {
   if (clearing) return;
   clearing = true;
   purgeAccountStorage();
   try { localStorage.removeItem(LAST_UID); } catch { /* 무시 */ }
+  // ⚠️ 2026-11-10 — 다른 탭(같은 앱)이 저장소를 열고 있으면 clearIndexedDbPersistence가 끝나지 않고 기다리기만 해서
+  //  새로 고침이 안 됐다 → Firestore는 이미 꺼진(terminate) 채로 화면이 남아, 다시 로그인해도 모든 저장이 "저장 중…"에서 멈췄다
+  //  (콘솔: "Firestore shutting down"). 지우기는 최대 2초만 기다리고, 무슨 일이 있어도 새로 고친다.
+  const wait = (p, ms) => Promise.race([p, new Promise((ok) => setTimeout(ok, ms))]);
   try {
-    await terminate(db);
-    await clearIndexedDbPersistence(db);
+    await wait(terminate(db), 1500);
+    await wait(clearIndexedDbPersistence(db), 2000);
   } catch (e) {
     // 다른 탭이 같은 저장소를 쓰고 있으면 지우지 못한다 — 다음 로그아웃 때 다시 시도(서버 규칙이 다른 회사 문서는 새로 내려주지 않음)
     console.warn("[로그아웃 정리] 기기 저장본 지우기 실패:", e?.message || e);

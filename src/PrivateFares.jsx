@@ -7,10 +7,10 @@
 //    privateFareSettings/{회사 키}/fares/{오더id} = { orderId, client, date, route, base(그때 공개 청구운임), amount(실제 청구), memo }
 //  ▸ 누가 보나 — firestore.rules가 지킨다(scripts/privateFareRules.test.cjs)
 //    · 금액·설정은 viewers에 든 사람만(회사 마스터·관리자·최고관리자도 viewers가 아니면 못 본다)
-//    · 처음 켜기: 같은 회사 마스터(또는 관리자)가 담당자를 고른다 → 그 뒤로는 담당자만 고친다
+//    · 켜기·설정(볼 사람·거래처 규칙): 최고관리자만 — 그 운송사로 들어가서 매출관리 › 비공개 청구에서 지정(회사 직원·담당자는 못 바꾼다)
 //  ▸ 거래처 규칙(실제 청구 자동 계산) — 직접 입력 · 공개 청구운임 + 정액 · 공개 청구운임 × 비율(%)
 //    오더마다 직접 고친 값이 있으면 그 값이 우선
-//  ▸ 화면: 매출관리 › 리포트 도구 › [비공개 청구](담당자에게만 보임 · 권한 확인은 DispatchApp usePrivateFareAccessLazy) — PC·모바일(같은 매출관리 화면)
+//  ▸ 화면: 매출관리 › 리포트 도구 › [비공개 청구](최고관리자·담당자에게만 보임 · 권한 확인은 DispatchApp usePrivateFareAccessLazy) — PC·모바일(같은 매출관리 화면)
 import React from "react";
 import { createPortal } from "react-dom";
 import { collection, doc, onSnapshot, serverTimestamp, setDoc, updateDoc } from "firebase/firestore";
@@ -24,6 +24,18 @@ const toNum = (v) => Number(String(v ?? "").replace(/[^\d-]/g, "")) || 0;
 const won = (n) => `${Math.round(Number(n) || 0).toLocaleString("ko-KR")}`;
 const kstYm = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 7);
 const CANCEL = /취소/;
+// 저장이 끝나지 않을 때(서버 응답 없음 · 연결이 끊긴 창) 버튼이 "저장 중…"에 영원히 멈추지 않게
+const SAVE_TIMEOUT = "save-timeout";
+function withTimeout(p, ms = 15000) {
+  let t;
+  return Promise.race([p, new Promise((_, no) => { t = setTimeout(() => no(Object.assign(new Error(SAVE_TIMEOUT), { code: SAVE_TIMEOUT })), ms); })]).finally(() => clearTimeout(t));
+}
+function saveErrText(e) {
+  const c = String(e?.code || "");
+  if (c === SAVE_TIMEOUT) return "서버가 응답하지 않아요 — 화면을 새로고침(F5)한 뒤 다시 저장해 주세요";
+  if (c.includes("permission")) return "권한이 없어요 — 비공개 청구 설정은 최고관리자만 할 수 있어요";
+  return `저장하지 못했어요 (${c || e?.message || "오류"})`;
+}
 export const PF_MODES = [["manual", "직접 입력"], ["add", "공개 청구운임 + 정액"], ["rate", "공개 청구운임 × 비율"]];
 
 // 거래처 규칙으로 계산한 실제 청구(직접 입력 규칙이면 0 → 오더마다 넣는다)
@@ -56,7 +68,7 @@ function useCompanyStaff(company) {
 const btn = "h-9 px-3.5 rounded-[10px] text-[13px] font-bold border transition inline-flex items-center gap-1.5";
 const inp = "h-9 px-3 rounded-[10px] border border-[#DCE3EF] text-[14px] font-bold text-[#0F1A30] bg-white outline-none focus:border-[#2D4C82]";
 
-// ── 처음 켜기(마스터·관리자) / 설정(담당자) ──
+// ── 켜기 · 설정(최고관리자만) ──
 function SettingsForm({ company, settings, clientNames, onDone, first = false }) {
   const staff = useCompanyStaff(company);
   const me = auth.currentUser?.uid || "";
@@ -71,7 +83,6 @@ function SettingsForm({ company, settings, clientNames, onDone, first = false })
     if (!viewers.length) return setMsg("볼 사람을 한 명 이상 골라 주세요");
     if (viewers.length > 10) return setMsg("볼 사람은 10명까지예요");
     if (!rules.length) return setMsg("비공개로 청구할 거래처를 하나 이상 넣어 주세요");
-    if (!first && !viewers.includes(me) && !window.confirm("나를 빼면 저장 뒤 이 화면을 더 볼 수 없어요. 계속할까요?")) return;
     setBusy(true);
     try {
       const data = {
@@ -80,11 +91,10 @@ function SettingsForm({ company, settings, clientNames, onDone, first = false })
         updatedAt: serverTimestamp(), updatedBy: me,
       };
       const ref = doc(db, "privateFareSettings", coKey(company));
-      if (first) await setDoc(ref, { ...data, createdAt: serverTimestamp(), createdBy: me });
-      else await updateDoc(ref, data);
+      await withTimeout(first ? setDoc(ref, { ...data, createdAt: serverTimestamp(), createdBy: me }) : updateDoc(ref, data));
       onDone?.(data);
     } catch (e) {
-      setMsg(String(e?.code || "").includes("permission") ? "권한이 없어요 — 처음 켜기는 회사 마스터·관리자, 그 뒤로는 담당자만 할 수 있어요" : `저장하지 못했어요 (${e?.code || e?.message || "오류"})`);
+      setMsg(saveErrText(e));
     } finally { setBusy(false); }
   };
   const freeClients = clientNames.filter((n) => !rules.some((r) => r.name === n));
@@ -94,7 +104,7 @@ function SettingsForm({ company, settings, clientNames, onDone, first = false })
         <div className="text-[14px] font-black text-[#0F1A30]">볼 사람 <span className="text-[12.5px] font-bold text-[#7A879C]">— 여기 넣은 사람만 실제 청구 금액을 봅니다(마스터·관리자도 넣지 않으면 못 봄)</span></div>
         <div className="mt-2 flex flex-wrap gap-1.5">
           {viewers.map((id) => (
-            <span key={id} className="h-8 pl-3 pr-1 rounded-full bg-[#0F1A30] text-white text-[13px] font-bold inline-flex items-center gap-1">{nameOf(id)}{id === me ? " (나)" : ""}
+            <span key={id} className="h-8 pl-3 pr-1 rounded-full bg-[#0F1A30] text-white text-[13px] font-bold inline-flex items-center gap-1">{nameOf(id)}
               <button type="button" onClick={() => setViewers((v) => v.filter((x) => x !== id))} className="w-6 h-6 rounded-full hover:bg-white/20" aria-label="빼기">×</button>
             </span>
           ))}
@@ -149,12 +159,12 @@ function FareRow({ r, saved, rule, company, onSaved }) {
     if (String(v).trim() === "" || n === cur.amount) return;
     setBusy(true);
     try {
-      await setDoc(doc(db, "privateFareSettings", coKey(company), "fares", String(id)), {
+      await withTimeout(setDoc(doc(db, "privateFareSettings", coKey(company), "fares", String(id)), {
         orderId: String(id), client: r.거래처명 || "", date: String(r.상차일 || "").slice(0, 10), route: `${r.상차지명 || ""} → ${r.하차지명 || ""}`,
         base, amount: n, updatedAt: serverTimestamp(), updatedBy: auth.currentUser?.uid || "",
-      }, { merge: true });
+      }, { merge: true }));
       onSaved?.();
-    } catch (e) { window.alert(`저장하지 못했어요 (${e?.code || "오류"})`); } finally { setBusy(false); }
+    } catch (e) { window.alert(saveErrText(e)); } finally { setBusy(false); }
   };
   const diff = cur.amount ? cur.amount - base : 0;
   return (
@@ -244,8 +254,9 @@ function MainView({ company, settings, dispatchData }) {
 }
 
 // 매출관리 › 리포트 도구에서 여는 창
-export default function PrivateFaresModal({ company, dispatchData = [], clients = [], access, onClose }) {
-  const [tab, setTab] = React.useState("main");
+export default function PrivateFaresModal({ company, dispatchData = [], clients = [], access, canSet = false, onClose }) {
+  const canSee = !!access?.viewer; // 금액은 볼 사람만(최고관리자도 볼 사람이 아니면 설정만)
+  const [tab, setTab] = React.useState(canSee ? "main" : "set");
   const clientNames = React.useMemo(() => Array.from(new Set([
     ...(clients || []).map((c) => String(c?.거래처명 || c?.name || "").trim()),
     ...(dispatchData || []).map((r) => String(r?.거래처명 || "").trim()),
@@ -256,10 +267,10 @@ export default function PrivateFaresModal({ company, dispatchData = [], clients 
       <div className="w-full md:max-w-[1100px] max-h-full md:max-h-[92vh] flex flex-col bg-[#F4F6FA] md:rounded-[22px] overflow-hidden shadow-[0_24px_64px_rgba(15,26,48,0.35)]" onClick={(e) => e.stopPropagation()}>
         <div className="px-5 md:px-6 py-4 text-white flex items-center gap-3" style={{ background: "linear-gradient(120deg,#0B1428,#1B2B4B 60%,#2D4C82)", paddingTop: "max(16px, env(safe-area-inset-top))" }}>
           <div className="min-w-0 flex-1">
-            <div className="text-[11px] font-extrabold tracking-[0.24em] text-[#8FB0F0]" style={NUM}>PRIVATE BILLING · 담당자 전용</div>
-            <div className="text-[19px] font-black">비공개 청구운임</div>
+            <div className="text-[11px] font-extrabold tracking-[0.24em] text-[#8FB0F0]" style={NUM}>PRIVATE BILLING · {canSet ? "최고관리자 설정" : "담당자 전용"}</div>
+            <div className="text-[19px] font-black">비공개 청구운임 <span className="text-[13px] font-bold text-white/60">{company}</span></div>
           </div>
-          {!first && <div className="inline-flex p-1 rounded-xl bg-white/10">
+          {!first && canSee && canSet && <div className="inline-flex p-1 rounded-xl bg-white/10">
             {[["main", "실제 청구"], ["set", "설정"]].map(([k, l]) => <button key={k} type="button" onClick={() => setTab(k)} className={`h-8 px-3 rounded-lg text-[13px] font-black ${tab === k ? "bg-white text-[#0F1A30]" : "text-white/75"}`}>{l}</button>)}
           </div>}
           <button type="button" onClick={onClose} className="w-9 h-9 rounded-xl bg-white/10 hover:bg-white/20 grid place-items-center" aria-label="닫기">×</button>
@@ -269,12 +280,12 @@ export default function PrivateFaresModal({ company, dispatchData = [], clients 
             <>
               <div className="mb-4 rounded-2xl bg-white border border-[#E3E8F0] px-4 py-3 text-[13.5px] font-bold text-[#3A4A66] leading-relaxed">
                 직원들이 보는 청구운임과 별도로, <b>정한 사람만</b> 실제 청구 금액을 기록·확인합니다. 예) 홍길거래처 청구운임 400,000 → 실제 청구 500,000.<br />
-                켜고 나면 설정은 <b>볼 사람만</b> 바꿀 수 있어요(마스터·관리자라도 볼 사람이 아니면 금액을 못 봅니다).
+                켜기·설정(볼 사람·거래처)은 <b>최고관리자만</b> 할 수 있고, 금액은 <b>볼 사람만</b> 봅니다(마스터·관리자·최고관리자라도 볼 사람이 아니면 금액을 못 봅니다).
               </div>
               <SettingsForm company={company} settings={null} clientNames={clientNames} first onDone={() => { onClose?.(); window.dispatchEvent(new Event("kp-private-fare-changed")); }} />
             </>
-          ) : tab === "set"
-            ? <SettingsForm company={company} settings={access?.settings} clientNames={clientNames} onDone={() => setTab("main")} />
+          ) : canSet && (tab === "set" || !canSee)
+            ? <SettingsForm company={company} settings={access?.settings} clientNames={clientNames} onDone={() => { if (canSee) setTab("main"); else onClose?.(); }} />
             : <MainView company={company} settings={access?.settings} dispatchData={dispatchData} />}
         </div>
       </div>

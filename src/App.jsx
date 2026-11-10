@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef } from "react";
 import { setTenant, setTenantRole, setServerFilter, setPreviewMode, isPreviewMode } from "./fsTenant";
-import { purgeOnSignOut, noteSignedInUid } from "./sessionPurge"; // 🔒 2026-11-07 계정 바꿀 때 앞 사람(다른 회사) 데이터 정리
+import { purgeOnSignOut, noteSignedInUid, firestoreWasShutDown } from "./sessionPurge"; // 🔒 2026-11-07 계정 바꿀 때 앞 사람(다른 회사) 데이터 정리
 import { setUsageMeter } from "./usageMeter"; // 💰 2026-11-04 회사별 서버 사용량 표본
 import { setPreviewPlan } from "./plans";
 import { installEscClose, installAlertShim } from "./kpDialog";
@@ -708,6 +708,7 @@ export default function App() {
         setLoading(false);
         return;
       }
+      if (firestoreWasShutDown()) { try { window.location.reload(); } catch { /* 무시 */ } return; } // 🔧 2026-11-10 꺼진 Firestore로 다시 로그인하면 저장이 멈춘다 → 새로 고침
       setUser(u);
       const isMasterEmail = u.email === TOTAL_MASTER_EMAIL;
       // 🔒 운송사 분리 2단계 스위치(관리센터에서 예전 데이터 정리 후 켜짐) — 로그인 때마다 최신 값으로
