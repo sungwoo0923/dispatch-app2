@@ -20,6 +20,8 @@ let UID = ""; let CO = "";
 let MINE = {};   // { [표]: { order:[칸], hidden:[칸], base:회사적용번호, reset? } }
 let COMP = {};   // { [표]: { order, hidden, v, by, byName, at } }
 let DRAFT = null; // 수정 창이 열려 있는 동안 미리보기 { tkey, order, hidden }
+let PREFS = {};   // 🖥 2026-11-10 계정별 화면 설정(화면 맞춤 등) — 내 배치 문서에 같이 저장
+const prefSubs = new Set();
 const subs = new Set();
 const notify = () => subs.forEach((f) => f());
 const lsKey = () => `kpColLayout:v1:${UID}`;
@@ -43,8 +45,22 @@ const err = (e) => { console.warn("[colLayouts] 저장 실패", e?.code || e); t
 const saveMine = () => {
   cacheMine(); notify();
   if (!UID) return Promise.resolve();
-  return setDoc(doc(db, "colLayouts", UID), { uid: UID, companyName: CO, layouts: MINE, updatedAt: serverTimestamp() }).catch(err);
+  return setDoc(doc(db, "colLayouts", UID), { uid: UID, companyName: CO, layouts: MINE, prefs: PREFS, updatedAt: serverTimestamp() }).catch(err);
 };
+// 계정별 화면 설정 — 어느 PC에서 로그인해도 같은 설정
+const lsPrefKey = () => `kpUiPrefs:v1:${UID}`;
+export const getPref = (k) => PREFS[k];
+export function setPref(k, v) {
+  PREFS = { ...PREFS, [k]: v };
+  try { localStorage.setItem(lsPrefKey(), JSON.stringify(PREFS)); } catch { /* 무시 */ }
+  prefSubs.forEach((f) => f());
+  if (UID) setDoc(doc(db, "colLayouts", UID), { uid: UID, companyName: CO, layouts: MINE, prefs: PREFS, updatedAt: serverTimestamp() }).catch(err);
+}
+export function usePref(k) {
+  const [, f] = React.useReducer((x) => x + 1, 0);
+  React.useEffect(() => { prefSubs.add(f); return () => prefSubs.delete(f); }, []);
+  return PREFS[k];
+}
 // 내 화면에만 저장
 export function saveMyLayout(tkey, order, hidden) {
   const c = COMP[tkey];
@@ -67,7 +83,7 @@ export async function applyCompanyLayout(tkey, order, hidden) {
   COMP = { ...COMP, [tkey]: entry }; cacheComp();
   MINE = { ...MINE, [tkey]: { order: [...order], hidden: [...hidden], base: v, at: v } }; cacheMine(); notify();
   await setDoc(doc(db, "colLayoutsCompany", CO), { companyName: CO, layouts: { [tkey]: entry }, updatedAt: serverTimestamp(), updatedBy: auth?.currentUser?.email || "" }, { merge: true });
-  if (UID) await setDoc(doc(db, "colLayouts", UID), { uid: UID, companyName: CO, layouts: MINE, updatedAt: serverTimestamp() }).catch(err);
+  if (UID) await setDoc(doc(db, "colLayouts", UID), { uid: UID, companyName: CO, layouts: MINE, prefs: PREFS, updatedAt: serverTimestamp() }).catch(err);
 }
 // 회사 공통 배치 해제 — 각자 저장한 배치는 그대로, 따로 저장 안 한 사람은 기본으로
 export async function clearCompanyLayout(tkey) {
@@ -178,13 +194,15 @@ export function useColumnLayoutHost(company) {
   React.useEffect(() => {
     UID = uid;
     try { MINE = uid ? JSON.parse(localStorage.getItem(lsKey()) || "{}") || {} : {}; } catch { MINE = {}; }
-    notify();
+    try { PREFS = uid ? JSON.parse(localStorage.getItem(lsPrefKey()) || "{}") || {} : {}; } catch { PREFS = {}; }
+    notify(); prefSubs.forEach((f) => f());
     if (!uid) return undefined;
     let un = null;
     try {
       un = onSnapshot(doc(db, "colLayouts", uid), (s) => {
         const d = s.exists() ? s.data() || {} : {};
         MINE = d.layouts && typeof d.layouts === "object" ? d.layouts : {}; cacheMine(); notify();
+        if (s.exists() && d.prefs && typeof d.prefs === "object") { PREFS = d.prefs; try { localStorage.setItem(lsPrefKey(), JSON.stringify(PREFS)); } catch { /* 무시 */ } prefSubs.forEach((f) => f()); }
       }, (e) => console.warn("[colLayouts] 읽기 실패", e?.code || e));
     } catch { /* 무시 */ }
     return () => { try { un?.(); } catch { /* 무시 */ } };

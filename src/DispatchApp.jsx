@@ -75,6 +75,7 @@ import FixedRouteStatusHost, { FixedRouteCells, fixedHeaderOf, fixedLookOf, useR
 import { carrierOf } from "./routeCarriers"; // ⭐ 2026-11-06 고정노선현황 운송사 검색
 import { useRouteCarrierFilter } from "./routeCarriers"; // ⭐ 2026-11-05 고정노선 운송업체 설정 — 끈 업체 오더는 정산·매출에서 뺀다
 import ColumnStyleHost from "./ColumnStyle"; // 🎨 2026-11-03 컬럼명 오른쪽 클릭 → 색 변경 // ⭐ 2026-11-03 배차현황 › 고정노선현황
+import { useScreenFit, ScreenFitButton, BrowserZoomNotice } from "./ScreenFit"; // 🖥 2026-11-10 화면 맞춤 · 브라우저 확대 안내
 import { usePendingSignups, isPendingSignupDriver } from "./pendingSignups";
 import { NavHover, emitSubnav } from "./navMenus";
 import { publishDriverOrderRows, useDriverEventFeeds, useDriverEventCounts, setDriverSeenServer, setDriverToastsMuted, markDriverSeen, focusOrderRow, DriverEventToasts, DriverEventBell, DriverAckChip, KakaoBadge } from "./driverEvents"; // ⭐ 2026-11-05 기사앱 수락/거절·서류·긴급 알림(토스트·빨간 숫자·종)
@@ -8072,6 +8073,7 @@ useEffect(() => {
   const tonOptions = useMemo(() => Array.from({ length: 25 }, (_, i) => `${i + 1}톤`), []);
 
  const [menu, setMenu] = useState("HOME");
+ const screenFit = useScreenFit(menu); // 🖥 2026-11-10 화면 맞춤(계정별 기억)
  // 🔔 전자결재 배너를 누르면 홈으로 옮긴다 — 문서 열기는 HomeDashboard가 window.__kpOpenApproval을 받아서 한다
  useEffect(() => {
    const h = () => setMenu("HOME");
@@ -8781,6 +8783,9 @@ return (
             {/* ⭐ 2026-11-01 출근·퇴근 버튼 — 일반 화면은 홈 관제 데크(시계 옆)에, 부서 화면(경리·인사·임원)은 홈 데크가 없어 여기 */}
             {/* 출근·퇴근 버튼은 각 팀 홈 대시보드(시계 옆)에 있다 */}
 
+            {/* 🖥 2026-11-10 화면 맞춤 — 표 전체가 한 화면에 보이게 자동 배율 */}
+            <ScreenFitButton fit={screenFit} />
+
             {/* ⭐ 최적화 버튼 — 새로고침 없이 현재 화면(배차관리/실시간배차현황/배차현황)의
                 누적된 렌더링 상태만 가볍게 초기화한다. */}
             <button
@@ -8949,6 +8954,7 @@ return (
 
       {/* ---------------- 화면 렌더링 ---------------- */}
       <ColumnStyleHost company={userCompany || localStorage.getItem("userCompany") || ""} />
+      <BrowserZoomNotice fit={screenFit} />
       <main className={`kp-main ${menu === "HOME" || menu === BRIEF_MENU || EXEC_MENUS.includes(menu) ? "kp-main-bare" : ""} rounded shadow p-4 w-full min-w-0 ${darkMode ? "bg-gray-900 text-gray-100" : "bg-white text-gray-900"}`}>
         {!darkMode && <KpPageHeader menu={menu} />}
         {menu === "HOME" && (

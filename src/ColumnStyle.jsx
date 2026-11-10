@@ -228,8 +228,8 @@ export default function ColumnStyleHost({ company = "" }) {
       const table = th.closest("table"); const col = thText(th);
       if (!table || !col) return;
       e.preventDefault();
-      const z = parseFloat(document.getElementById("root")?.style.zoom) || 1;
-      setMenu({ x: e.clientX / z, y: e.clientY / z, tkey: tableKey(table), col, table, th, lay: canLayout(table), hid: hiddenCount(table), custom: !!layoutOf(tableKey(table)) });
+      // 메뉴는 body에 그린다(화면 배율과 상관없이 마우스 자리 그대로)
+      setMenu({ x: e.clientX, y: e.clientY, tkey: tableKey(table), col, table, th, lay: canLayout(table), hid: hiddenCount(table), custom: !!layoutOf(tableKey(table)) });
     };
     // 열자마자 이어지는 부드러운 스크롤(표 · 아래 가로 스크롤바 맞추기)로 바로 닫히지 않게 0.5초는 둔다
     let openedAt = 0;
