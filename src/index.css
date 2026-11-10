@@ -454,3 +454,7 @@ button, th, nav, [role="button"], [role="tab"] { -webkit-user-select: none; user
 
 /* 🖥 2026-11-10 화면 맞춤 › 크게 보기 — 칸 안쪽 여백만 줄여 같은 폭에 더 크게 보이게 */
 table[data-kpfit-big] > * > tr > th, table[data-kpfit-big] > * > tr > td { padding-left: 4px !important; padding-right: 4px !important; }
+
+/* 🛰 2026-11-10 왼쪽 메뉴(KpSubNav) 새 버전 표시 — 깜빡이는 점 */
+@keyframes kpSubnavNewDot { 0%,100% { opacity: 1 } 50% { opacity: .3 } }
+.kp-subnav-newdot { animation: kpSubnavNewDot 1.2s ease-in-out infinite; box-shadow: 0 0 8px #8FB0F0; }

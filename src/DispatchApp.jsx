@@ -53,7 +53,6 @@ import { BankAccountsCard, BankReviewQueue, SmsSettingsCard, AlimtalkSettingsCar
 // 💬 2026-11-08 사장님 요청 — 카카오 알림톡은 PC·모바일 화면에서 모두 뺐다(새 오더는 알림톡:false → 서버 트리거가 보내지 않는다)
 import { buildArMonths as buildArMonthsCore, allocArDeposit as allocArDepositCore, allocKindOf, matchDeposits } from "./arMatch"; // 💰 2026-11-08 입금 매칭 공용 식(서버 계좌조회와 같은 파일)
 import { sendOrderTo24Proxy as sendOrderTo24 } from "../api/24CallProxy";
-import { useNewVersion, openUpdatePopup } from "./VersionCheck";
 import CustomDatePicker, { KOREAN_HOLIDAYS, shortHolidayLabel } from "./CustomDatePicker"; // ⭐ 2026-11-04 특수운임 제거 — specialDemandInfo·weatherUtil 사용 안 함
 import { DateTimeSelect } from "./kpTimePick"; // ⏱ 2026-11-04 예약발송 날짜·시간 — 프로그램 달력 + 시간 드롭다운
 // ⭐ 2026-11-02 속도 — 관리자메뉴(엑셀 가져오기 등 포함)는 열 때 받는다. 직원 명부 구독은 usersLive 하나를 공유
@@ -7564,13 +7563,7 @@ useEffect(() => {
   // 자체에 있어 그대로 유지되므로(추가 읽기 발생 없음), 현재 보고 있는 화면
   // 컴포넌트만 key를 바꿔 강제로 다시 마운트시키는 방식이다 — 브라우저 새로고침과
   // 달리 다른 탭에 열어둔 팝업/스크롤 위치 등은 그대로 두고 지금 화면만 초기화된다.
-  const [viewResetKey, setViewResetKey] = React.useState(0);
-  const [optimizing, setOptimizing] = React.useState(false);
-  const handleOptimizeClick = () => {
-    setOptimizing(true);
-    setViewResetKey((k) => k + 1);
-    setTimeout(() => setOptimizing(false), 900);
-  };
+  const [viewResetKey] = React.useState(0); // 🧹 2026-11-10 [최적화] 버튼은 없앴다 — key는 그대로 둠(항상 0)
 
   // ⭐ 예약 이메일 발송 체커 — 진짜 서버 크론이 아니라, 이 회사 소속 계정이 프로그램을
   // 열어두고 있는 동안 1분마다 예약시각이 지난 이메일을 대신 발송해주는 방식이다(브라우저
@@ -7755,21 +7748,12 @@ useEffect(() => {
   }, [user?.uid]);
   const darkMode = false;
 
-  // ★ 글씨 크기 조절
-  const [fontScale, setFontScale] = useState(() => {
-    const saved = localStorage.getItem("appFontScale");
-    return saved ? parseFloat(saved) : 1.0;
-  });
-  const [fontSettingsOpen, setFontSettingsOpen] = useState(false);
+  // ★ 글씨 크기 — 2026-11-10 상단바 [가] 버튼을 없애면서 예전에 바꿔 둔 배율이 남아 되돌릴 수 없게 되지 않도록 100%로 맞춘다
+  //   (크게 보려면 상단바 [가+ 크게 보기])
   React.useEffect(() => {
-    document.documentElement.style.setProperty("--font-scale", fontScale);
-  }, [fontScale]);
-  const updateFontScale = (scale) => {
-    const v = Math.round(scale * 20) / 20; // 0.05 단위
-    setFontScale(v);
-    localStorage.setItem("appFontScale", v);
-    document.documentElement.style.setProperty("--font-scale", v);
-  };
+    try { localStorage.removeItem("appFontScale"); } catch { /* 무시 */ }
+    document.documentElement.style.setProperty("--font-scale", 1);
+  }, []);
   // ❌ 삭제 (중복 선언 오류 원인)
   // const [dispatchData, setDispatchData] = useState([]);  
   // ---------------- Firestore 실시간 훅 ----------------
@@ -8183,7 +8167,6 @@ const [revenuePasswordLoaded, setRevenuePasswordLoaded] = React.useState(false);
 const [revenuePasswordError, setRevenuePasswordError] = React.useState(""); // 불러오기 실패 사유
 const [revenuePasswordRetry, setRevenuePasswordRetry] = React.useState(0);
 const [revenuePwSetupOpen, setRevenuePwSetupOpen] = React.useState(false); // ★ 잠금 화면에서 비밀번호 변경
-const newVer = useNewVersion(); // ★ 새 버전이 배포되면 버전 표시 옆에 NEW(누르면 업데이트 안내)
 
   // ---------------- 역할별 차단 메뉴 ----------------
   // 최고관리자가 새로 만든 커스텀 권한(역할) — 메뉴별 접근범위(숨김/조회/조회+수정)를
@@ -8622,19 +8605,7 @@ return (
                     {co}
                   </span>
                 )}
-                {newVer ? (
-                  <button
-                    onClick={openUpdatePopup}
-                    title={`새 버전 v${newVer.version || ""}이 배포되었습니다 — 눌러서 업데이트`}
-                    className="kp-newver shrink-0 inline-flex items-center gap-1.5 h-6 pl-1.5 pr-2 rounded-full bg-white/[0.08] border border-[#8FB0F0]/60 text-[11px] tabular-nums font-bold text-white/85 hover:bg-white/[0.16] cursor-pointer"
-                  >
-                    <span className="px-1.5 h-4 inline-flex items-center rounded-full bg-white text-[#0F1A30] text-[9.5px] font-black tracking-wider">NEW</span>
-                    v{__APP_VERSION__}
-                    <span className="kp-newver-dot w-1.5 h-1.5 rounded-full bg-[#CFE0FF]" />
-                  </button>
-                ) : (
-                  <span className="hidden min-[2050px]:inline text-[11px] tabular-nums text-white/45 shrink-0">v{__APP_VERSION__}</span>
-                )}
+                {/* 🛰 2026-11-10 버전 표시·새 버전 안내는 왼쪽 메뉴(KpSubNav) 머리·맨 아래로 옮김 */}
                 <EditModeToggleButton className="ml-1" />
               </div>
             );
@@ -8791,61 +8762,7 @@ return (
             {/* 🖥 2026-11-10 화면 맞춤 — 표 전체가 한 화면에 보이게 자동 배율 */}
             <ScreenFitButton fit={screenFit} />
 
-            {/* ⭐ 최적화 버튼 — 새로고침 없이 현재 화면(배차관리/실시간배차현황/배차현황)의
-                누적된 렌더링 상태만 가볍게 초기화한다. */}
-            <button
-              onClick={handleOptimizeClick}
-              disabled={optimizing}
-              className="kp-chip-btn text-[12px] transition disabled:opacity-50"
-              title="오더를 많이 등록/조회하다 화면이 버벅이면 눌러주세요 — 새로고침 없이 현재 화면만 가볍게 초기화합니다"
-            >
-              {optimizing ? "최적화 중..." : "최적화"}
-            </button>
-
-            {/* 글씨 크기 조절 버튼 */}
-            <div className="relative">
-              <button
-                onClick={() => setFontSettingsOpen(v => !v)}
-                className="kp-icon-btn text-[13px] font-black transition"
-                title="글씨 크기 조절"
-              >
-                가
-              </button>
-              {fontSettingsOpen && (
-                <div
-                  className="absolute right-0 top-full mt-1 bg-white rounded-xl shadow-2xl border border-gray-200 p-4 z-[9999]"
-                  style={{ width: 240 }}
-                  onMouseLeave={() => setFontSettingsOpen(false)}
-                >
-                  <div className="text-[13px] font-bold text-[#1B2B4B] mb-3">글씨 크기</div>
-                  <div className="flex items-center gap-2 mb-3">
-                    <button
-                      onClick={() => updateFontScale(Math.max(0.8, fontScale - 0.05))}
-                      className="w-7 h-7 rounded-lg bg-gray-100 text-gray-700 font-bold text-base hover:bg-gray-200 flex items-center justify-center"
-                    >−</button>
-                    <input autoComplete="off"
-                      type="range" min="0.8" max="1.6" step="0.05"
-                      value={fontScale}
-                      onChange={e => updateFontScale(parseFloat(e.target.value))}
-                      className="flex-1"
-                    />
-                    <button
-                      onClick={() => updateFontScale(Math.min(1.6, fontScale + 0.05))}
-                      className="w-7 h-7 rounded-lg bg-gray-100 text-gray-700 font-bold text-base hover:bg-gray-200 flex items-center justify-center"
-                    >+</button>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-[12px] text-gray-500">
-                      크기: <b className="text-[#1B2B4B]">{Math.round(fontScale * 100)}%</b>
-                    </span>
-                    <button
-                      onClick={() => updateFontScale(1.0)}
-                      className="text-[11px] px-2 py-1 rounded bg-gray-100 hover:bg-gray-200 text-gray-600"
-                    ><EditableText id="misc.btn.6575.기본값" defaultText="기본값" /></button>
-                  </div>
-                </div>
-              )}
-            </div>
+            {/* 🧹 2026-11-10 [최적화]·[가](글씨 크기) 버튼은 상단바에서 뺌 — 저장된 글씨 크기는 그대로 적용 */}
 
             <button
               onClick={logout}
