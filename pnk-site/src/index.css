@@ -1,0 +1,20 @@
+@import url("https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700;800;900&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* PnK PROJECT 인트라넷 — 로지스웹과 같은 글꼴 · 바탕색 */
+html, body {
+  font-family: "Noto Sans KR", "Apple SD Gothic Neo", "맑은 고딕", "Malgun Gothic", system-ui, sans-serif;
+  background: #F4F6FA;
+  color: #0F1A30;
+  letter-spacing: -0.3px;
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+}
+body { overflow-x: hidden; }
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { scrollbar-width: none; }
+.tnum { font-variant-numeric: tabular-nums; }
+input, select, textarea, button { font: inherit; letter-spacing: inherit; }

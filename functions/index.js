@@ -6852,6 +6852,33 @@ const mailCall = (fn, opts = {}) => functions.runWith({ secrets: ["MAIL_CRED_KEY
 exports.mailSettings = mailCall(_companyMail.mailSettings, { timeoutSeconds: 45 });
 exports.sendCompanyMail = mailCall(_companyMail.sendCompanyMail, { timeoutSeconds: 120, memory: "512MB" });
 
+/* ==================================================================
+   🏢 2026-11-10 PnK PROJECT 인트라넷 사내메일 — 외부 보내기 · 받기(설명은 functions/pnkMail.js 맨 위)
+   · pnkMailAdmin(호출형): 발송 서버 저장 · 테스트 · 받기 주소 토큰 — 대표 · 인트라넷 관리자만
+   · pnkMailOnCreate(트리거): pnkMail 에 외부 주소(extTo)가 있으면 회사 발송 서버(SMTP)로 보낸다
+   · pnkMailInbound(HTTPS): 메일 수신 서비스가 받은 메일을 넘겨주는 주소(?key=토큰)
+   비밀값: MAIL_CRED_KEY(위 회사 메일과 같은 키 — 새 비밀값 없음)
+================================================================== */
+const _pnkMail = require("./pnkMail").makePnkMail({
+  db, FieldValue, HttpsError: functions.https.HttpsError, getNodemailer, lib: _companyMailLib,
+  getBucket: () => require("firebase-admin/storage").getStorage().bucket(),
+  getMailParser: () => require("mailparser"),
+});
+exports.pnkMailAdmin = mailCall(_pnkMail.admin, { timeoutSeconds: 60 });
+exports.pnkMailOnCreate = functions.runWith({ secrets: ["MAIL_CRED_KEY"], timeoutSeconds: 120, memory: "512MB" })
+  .firestore.document("pnkMail/{id}").onCreate((snap) => _pnkMail.onCreate(snap).catch((e) => { console.error("[PnK 메일] 발송 오류", e); return snap.ref.update({ extStatus: "failed", extError: "서버 오류 — 잠시 뒤 다시 보내 주세요" }).catch(() => null); }));
+exports.pnkMailInbound = functions.runWith({ timeoutSeconds: 120, memory: "512MB" }).https.onRequest((req, res) =>
+  _pnkMail.inbound(req, res).catch((e) => { console.error("[PnK 메일] 받기 오류", e); res.status(500).send("error"); }));
+// 🏢 2026-11-10 PnK 인트라넷 — 최고관리자 · 부관리자 2차 인증(8자리 2차 비밀번호) · 설명은 functions/pnkMfa.js 맨 위
+const _pnkMfa = require("./pnkMfa").makePnkMfa({ db, HttpsError: functions.https.HttpsError, Timestamp: require("firebase-admin/firestore").Timestamp });
+exports.pnkMfa = functions.runWith({ timeoutSeconds: 30, memory: "256MB", ...appCheckCallOpts() }).https.onCall(async (data, context) => {
+  try { return await _pnkMfa(data || {}, context); } catch (e) {
+    if (e instanceof functions.https.HttpsError) throw e;
+    console.error("[PnK 2차 인증] 실패:", e);
+    throw new functions.https.HttpsError("internal", "잠시 뒤 다시 해 주세요");
+  }
+});
+
 // 🏛 2026-11-07 공공데이터(국세청 사업자 상태 · 기상청 예보 · 기상특보) + 팝빌 어댑터 — 설명은 functions/publicData.js · functions/popbill.js 맨 위
 //  키: Firebase 비밀값 DATA_GO_KR_KEY(공공데이터포털 일반 인증키, 아직 없으면 "none"으로 두면 화면이 조용히 숨긴다)
 //   등록: firebase functions:secrets:set DATA_GO_KR_KEY

@@ -369,5 +369,5 @@ function makePlatformMailer({ getNodemailer, env = process.env, log = console })
 module.exports = {
   PRESETS, NOT_CONFIGURED, NOT_CONFIGURED_MSG, EMAIL_RE, MAX_ATTACH_B64,
   safeId, presetOfEmail, resolveSmtp, parseKey, encryptSecret, decryptSecret, smtpErrorText, cleanAttachments, splitList,
-  makeCompanyMail, makePlatformMailer,
+  makeCompanyMail, makePlatformMailer, makeTransport,
 };
