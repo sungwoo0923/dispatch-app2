@@ -19,7 +19,7 @@ export const PLAN_DEFAULTS = [
 
 // 기능표 — min: 이 요금제부터 사용 가능
 export const FEATURE_ROWS = [
-  { key: "dispatch", label: "배차관리 · 실시간배차현황 · 배차현황", min: "lite" },
+  { key: "dispatch", label: "오더등록 · 실시간배차현황 · 배차현황", min: "lite" },
   { key: "master", label: "거래처 · 하차지 · 기사 관리", min: "lite" },
   { key: "fare", label: "단가표 · 전국 운임조회", min: "lite" },
   { key: "driverApp", label: "기사앱 · 업로드링크 · 기사복사", min: "lite" },

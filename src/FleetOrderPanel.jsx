@@ -323,7 +323,7 @@ export default function FleetOrderPanel({ order, onClose, onCopy, companyName = 
             </div>
           </section>
           <div className="flex items-center justify-between gap-3 text-[12.5px] font-semibold text-[#9AA9C3]">
-            <span>저장하면 배차관리·배차현황·기사앱에 바로 반영됩니다 · 금액은 숫자로, 수수료는 청구운임 − 기사운임으로 저장</span>
+            <span>저장하면 오더등록·배차현황·기사앱에 바로 반영됩니다 · 금액은 숫자로, 수수료는 청구운임 − 기사운임으로 저장</span>
             <span className="whitespace-nowrap" style={{ fontFamily: MONO }}>Esc 닫기</span>
           </div>
         </div>

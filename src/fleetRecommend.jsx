@@ -151,7 +151,7 @@ export function ReturnTripSuggest({ base, dispatchData = [], limit = 8 }) {
               <div style={{ fontSize: 14, fontWeight: 900, color: NAVY, whiteSpace: "nowrap" }}>{r.청구운임 ? won(r.청구운임) : ""}</div>
             </div>
           ))}
-          <div style={{ fontSize: 12, fontWeight: 700, color: "#4b5563" }}>거리는 기준 위치 → 상차지 직선거리입니다. 배차는 배차관리에서 차량번호를 입력해 진행하세요.</div>
+          <div style={{ fontSize: 12, fontWeight: 700, color: "#4b5563" }}>거리는 기준 위치 → 상차지 직선거리입니다. 배차는 오더등록에서 차량번호를 입력해 진행하세요.</div>
         </div>
       )}
     </div>

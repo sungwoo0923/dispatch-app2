@@ -118,7 +118,7 @@ export function ForkliftDriverManager({ isViewer = false }) {
         <div className="mr-auto">
           <div className="text-[10.5px] font-extrabold tracking-[0.22em] text-[#4B6CB7]" style={{ fontFamily: MONO }}>FORKLIFT DRIVERS</div>
           <div className="text-[16px] font-black text-[#0F1A30]">지게차 기사 <span className="text-[13px] text-[#7A89A3] font-bold">{list.length}명</span></div>
-          <div className="text-[12px] text-[#7A89A3]">오더의 지게차비용을 받는 기사 — 배차관리 [+ 지게차]에서 고르고, 정산관리 › 지게차 지급에서 지급합니다</div>
+          <div className="text-[12px] text-[#7A89A3]">오더의 지게차비용을 받는 기사 — 오더등록 [+ 지게차]에서 고르고, 정산관리 › 지게차 지급에서 지급합니다</div>
         </div>
         <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="이름·전화·회사 검색" className="h-9 w-52 px-3 rounded-lg border border-[#DCE3EE] text-[13px] font-semibold" />
         {!isViewer && <button type="button" onClick={() => setChooser(true)} className="h-9 px-3 rounded-lg border border-[#DCE3EE] text-[13px] font-black text-[#1B2B4B] hover:border-[#4B6CB7]">대용량 업로드</button>}

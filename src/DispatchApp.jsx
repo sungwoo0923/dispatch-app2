@@ -7,7 +7,7 @@ import ProInsight from "./ProInsight";
 import NameIdToggle from "./NameIdToggle"; // ⭐ 2026-11-09 계정 이름 ↔ 아이디
 import DailyReport, { DailyReportPopupHost } from "./DailyReport"; // 📊 2026-11-06 일일 경영 보고(임원 화면 · 대표·임원 일일 보고서)
 import { canSeeBriefing, BRIEF_MENU, BRIEF_LABEL } from "./dailyReport";
-import { EXEC_MENUS, execMenuLabel } from "./execMenus"; // 📈 2026-11-08 임원 화면 · 경영 분석 · 결재 대기 · 직원 정보
+import { EXEC_MENUS, execMenuLabel, menuName } from "./execMenus"; // 📈 2026-11-08 임원 화면 · 경영 분석 · 결재 대기 · 직원 정보
 import BulkUploadChooser, { downloadTemplateXlsx } from "./BulkUploadChooser";
 import { buildCopyText, getCopyTpl, useCopyTemplates } from "./copyTemplates";
 import { CopyTemplateHost, openCopyTemplateEditor } from "./CopyTemplateEditor";
@@ -3380,7 +3380,7 @@ function KpPageHeader({ menu }) {
       <div className="min-w-0">
         <div className="text-[10.5px] font-extrabold tracking-[0.28em] text-[#4B6CB7]" style={{ fontFamily: KP_MONO, fontVariantNumeric: "tabular-nums" }}>{meta.en}</div>
         <div className="flex items-baseline gap-3 min-w-0">
-          <h2 className="text-[21px] font-black text-[#0F1A30] tracking-tight leading-tight whitespace-nowrap">{menu}</h2>
+          <h2 className="text-[21px] font-black text-[#0F1A30] tracking-tight leading-tight whitespace-nowrap">{menuName(menu)}</h2>
           <span className="text-[13.5px] text-[#5B6B85] font-medium truncate">{meta.desc}</span>
         </div>
       </div>
@@ -15336,7 +15336,7 @@ React.useEffect(() => {
       <>
         <div className="flex items-center gap-4 mb-3">
 
-  <h2 className="text-lg font-bold"><EditableText id="popup.title.배차관리 폼" defaultText="배차관리" /></h2>
+  <h2 className="text-lg font-bold"><EditableText id="popup.title.배차관리 폼" defaultText="오더등록" /></h2>
 
   <FuelSlideWidget />
 

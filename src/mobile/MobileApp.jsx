@@ -22776,7 +22776,7 @@ function MobileSettingsPage({ onBack, cardVersionB, setCardVersionB, alarmEnable
       W("마감보고", "마감 보고", "하루 마감(매출·배차 요약) 보고가 오면"),
     ],
     dispatch: [
-      W("기사퇴근", "담당 기사 퇴근", "내가 담당자인 기사가 퇴근하면"), // ⭐ 2026-11-10 서버 notifyDriverCheckout
+      W("기사출퇴근", "담당 기사 출근·퇴근", "내가 담당자인 기사가 출근하거나 퇴근하면"), // ⭐ 2026-11-10 서버 notifyDriverCheckout
       W("결재요청", "결재 요청", "내가 결재할 차례가 되면"),
       W("결재결과", "결재 결과", "내가 올린 연차·문서가 승인·반려되면"),
       ...(isAdminLike ? [W("가입신청", "가입 신청", "새 직원·기사가 가입을 신청하면"), W("마감보고", "마감 보고", "하루 마감 보고가 오면")] : []),
@@ -22797,7 +22797,7 @@ function MobileSettingsPage({ onBack, cardVersionB, setCardVersionB, alarmEnable
     { title: "공통 알림", items: COMMON_PUSH },
   ];
   const PUSH_PREF_TYPES = PUSH_GROUPS.flatMap((g) => g.items);
-  const PUSH_PREF_DEFAULT_ON = ["긴급배차", "미배차", "결재요청", "결재결과", "공지사항", "사내메일", "인사발령", "마감보고", "가입신청", "메신저", "생일", "인수인계", "기사퇴근"];
+  const PUSH_PREF_DEFAULT_ON = ["긴급배차", "미배차", "결재요청", "결재결과", "공지사항", "사내메일", "인사발령", "마감보고", "가입신청", "메신저", "생일", "인수인계", "기사출퇴근"];
   const isPushPrefOn = (prefs, key) => {
     const v = prefs?.[key];
     if (v === true || v === false) return v;

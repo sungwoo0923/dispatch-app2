@@ -160,7 +160,7 @@ export default function MonthCloseCheck({ dispatchData = [], onClose, isViewer =
                             {fixed ? <span style={{ fontSize: 13, color: "#5B6B86", fontWeight: 700 }}>고정거래처</span>
                               : savedIds[r._id] && !dirty ? <span style={{ fontSize: 13, color: "#1B2B4B", fontWeight: 900, background: "#EEF3FB", borderRadius: 99, padding: "3px 10px" }}>저장됨</span>
                               : editable ? <button onClick={() => save(r)} disabled={!dirty || saving[r._id]} style={{ height: 36, padding: "0 16px", borderRadius: 10, border: "none", background: dirty ? NAVY : "#EEF2F7", color: dirty ? "#fff" : "#9AA8C2", fontSize: 14, fontWeight: 800, cursor: dirty ? "pointer" : "default" }}>{saving[r._id] ? "저장 중…" : "저장"}</button>
-                              : <span style={{ fontSize: 13, color: "#5B6B86", fontWeight: 700 }}>배차관리에서 수정</span>}
+                              : <span style={{ fontSize: 13, color: "#5B6B86", fontWeight: 700 }}>오더등록에서 수정</span>}
                           </td>
                         </tr>
                       );
