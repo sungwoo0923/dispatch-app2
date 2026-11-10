@@ -48004,12 +48004,12 @@ function Settlement({ dispatchData, fixedRows = [], clients = [], places = [], i
   const [monthCloseOpen, setMonthCloseOpen] = React.useState(false); // ★ 월 마감 점검
   const [staffPerfOpen, setStaffPerfOpen] = React.useState(false); // ★ 배차담당자별 실적(관리자 전용)
   // 🔒 2026-11-10 비공개 청구운임 — 정한 담당자만(처음 켜기는 관리자) · 금액은 별도 보관(src/PrivateFares.jsx · firestore.rules)
-  const pfCompany = String(userCompany || "").trim();
+  const pfCompany = String(getTenant() || userCompany || "").trim(); // 최고관리자는 지금 보고 있는 회사
   const [pfVer, setPfVer] = React.useState(0);
   React.useEffect(() => { const h = () => setPfVer((n) => n + 1); window.addEventListener("kp-private-fare-changed", h); return () => window.removeEventListener("kp-private-fare-changed", h); }, []);
   const pfAccess = usePrivateFareAccessLazy(pfCompany, pfVer);
   const [pfOpen, setPfOpen] = React.useState(false);
-  const pfShow = !pfAccess.loading && (pfAccess.viewer || (!pfAccess.exists && role === "admin" && !isViewer));
+  const pfShow = !pfAccess.loading && (pfAccess.viewer || (!pfAccess.exists && (role === "admin" || role === "totalMaster") && !isViewer)); // 처음 켜기: 그 회사 관리자 · 최고관리자(대신 켜 주기)
   // ⭐ 매출관리 — 선택한 연도 전체 + 고른 달 기준 3개월 전(전월 비교·마감 점검·담당자 실적)까지만 불러온다.
   // 월 비교 분석은 아무 달이나 고를 수 있어 열 때 전체를 불러온다.
   {
